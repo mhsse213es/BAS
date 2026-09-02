@@ -207,3 +207,33 @@ func TestGenerateHTML_GlossaryDataSourcesAndMitigations(t *testing.T) {
 		t.Errorf("expected joined mitigations in output")
 	}
 }
+
+// TestGenerateHTML_ScreenMediaResetsPageMinHeight regression-tests the
+// on-screen counterpart of the 2026-08-20 print/PDF blank-page fix. The base
+// `.page`/`.inner` rules force min-height:297mm (a full A4 page) so a short
+// Section (e.g. an ATT&CK Tactic Breakdown table for a 2-tactic run) renders
+// as a full physical page with a large blank void below its actual content.
+// @media print already resets this to min-height:0 (the 2026-08-20 fix), but
+// that reset never applied to on-screen viewing (@media screen only adds
+// box-shadow/border-radius) -- so the same class of bug is still live for
+// anyone opening the HTML report in a browser rather than printing/exporting
+// it. This test asserts the @media screen block carries the same min-height
+// reset the @media print block already has.
+func TestGenerateHTML_ScreenMediaResetsPageMinHeight(t *testing.T) {
+	now := time.Date(2026, 7, 1, 12, 0, 0, 0, time.UTC)
+	rep := robustnessReport(now)
+	var buf bytes.Buffer
+	if err := GenerateHTML(&buf, rep, nil); err != nil {
+		t.Fatalf("GenerateHTML errored after %d bytes: %v", buf.Len(), err)
+	}
+	out := buf.String()
+	screenStart := strings.Index(out, "@media screen{")
+	screenEnd := strings.Index(out, "@media print{")
+	if screenStart == -1 || screenEnd == -1 || screenEnd < screenStart {
+		t.Fatalf("could not locate @media screen{...}@media print{ block in rendered CSS")
+	}
+	screenBlock := out[screenStart:screenEnd]
+	if !strings.Contains(screenBlock, ".page,.page .inner{min-height:0}") {
+		t.Errorf("expected @media screen to reset .page/.inner min-height like @media print does, got block:\n%s", screenBlock)
+	}
+}

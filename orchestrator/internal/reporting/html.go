@@ -581,7 +581,15 @@ code{font-family:"Cascadia Code","Consolas","SF Mono",monospace;font-size:0.85em
   position:relative;page-break-after:always;break-after:page;overflow:hidden}
 .page:last-child{page-break-after:avoid;break-after:avoid}
 @media screen{body{background:#c8d0da;padding:24px 0}
-  .page{box-shadow:0 6px 32px rgba(0,0,0,0.22);margin:0 auto 28px;border-radius:2px}}
+  .page{box-shadow:0 6px 32px rgba(0,0,0,0.22);margin:0 auto 28px;border-radius:2px}
+  /* Same fix as @media print below (2026-08-20), applied to on-screen
+     viewing: the base .page/.inner rules force min-height:297mm (a full A4
+     page) unconditionally, so a Section with sparse content (e.g. a 2-tactic
+     ATT&CK breakdown) still renders as a full physical page height in the
+     browser, leaving a large blank void below its actual content. The print
+     fix only reset this under @media print; on-screen viewing needs the
+     same reset for the same reason. */
+  .page,.page .inner{min-height:0}}
 @media print{body{background:#fff;padding:0}
   /* Fix for large near-blank pages in print/PDF output (2026-08-20).
      Every report Section gets its own .page div, and .page{page-break-
