@@ -31,6 +31,29 @@ const (
 	svcNameLegacy = "BASAgent"
 )
 
+// unquoteServicePath strips a single matching pair of surrounding double
+// quotes from a service's registry BinaryPathName, if present.
+// mgr.CreateService (golang.org/x/sys/windows/svc/mgr, via
+// syscall.EscapeArg) wraps any exe path containing a space -- every
+// default "Program Files" install qualifies -- in literal quote characters
+// before storing it as the service's ImagePath. cfg.BinaryPathName read
+// back from an existing service therefore is not a clean filesystem path
+// on its own: every call site that passes it straight to a raw
+// path-consuming API breaks on the embedded quote characters. Confirmed
+// live -- MoveFileEx(..., MOVEFILE_DELAY_UNTIL_REBOOT) against a real
+// installed service's unmodified BinaryPathName fails with
+// ERROR_INVALID_NAME, leaving the old binary on disk forever after
+// uninstall; os.WriteFile fails outright since '"' is not a legal
+// character in a Windows filename. Only strips a genuinely matched
+// leading+trailing pair -- a lone stray quote (which should never happen,
+// but must never be silently mangled) is left untouched.
+func unquoteServicePath(s string) string {
+	if len(s) >= 2 && s[0] == '"' && s[len(s)-1] == '"' {
+		return s[1 : len(s)-1]
+	}
+	return s
+}
+
 // stopRequested signals agentSvc.Execute()'s own select loop from the
 // WS-command goroutine (agent.go's stopSelf), so a remote stop while
 // running as a Windows service goes through the same clean SERVICE_STOPPED
@@ -232,7 +255,7 @@ func migrateLegacyServiceName() error {
 	if err != nil {
 		return fmt.Errorf("query legacy service config: %w", err)
 	}
-	binaryPath := cfg.BinaryPathName
+	binaryPath := unquoteServicePath(cfg.BinaryPathName)
 
 	legacyParamKey := paramKeyFor(svcNameLegacy)
 	serverURL, envLabel := readServiceParamsFrom(svcNameLegacy)
@@ -311,7 +334,7 @@ func svcUpdate() error {
 	if err != nil {
 		return fmt.Errorf("query service config: %w", err)
 	}
-	installedPath := cfg.BinaryPathName
+	installedPath := unquoteServicePath(cfg.BinaryPathName)
 
 	// Stop the service
 	fmt.Printf("[*] Stopping %s...\n", svcName)
@@ -450,7 +473,7 @@ func uninstallServiceRegistration(m *mgr.Mgr, name string) (removed bool, err er
 	// registration -- needed below to schedule the exe for delayed deletion.
 	var binaryPath string
 	if cfg, cfgErr := s.Config(); cfgErr == nil {
-		binaryPath = cfg.BinaryPathName
+		binaryPath = unquoteServicePath(cfg.BinaryPathName)
 	}
 
 	// Stop, confirming via poll like svcUpdate does; if the service is still
@@ -583,7 +606,7 @@ func platformSelfUninstall() error {
 
 	var binaryPath string
 	if cfg, cfgErr := s.Config(); cfgErr == nil {
-		binaryPath = cfg.BinaryPathName
+		binaryPath = unquoteServicePath(cfg.BinaryPathName)
 	}
 
 	if err := s.Delete(); err != nil {

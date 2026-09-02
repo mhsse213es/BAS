@@ -181,6 +181,62 @@ func TestScheduleBinaryDeleteOnReboot_EmptyPathErrors(t *testing.T) {
 	}
 }
 
+// TestUnquoteServicePath regression-tests the root cause of a real
+// resurrection bug: mgr.CreateService (golang.org/x/sys/windows/svc/mgr,
+// via syscall.EscapeArg) wraps any exe path containing a space -- every
+// default "Program Files" install qualifies -- in literal double-quote
+// characters before storing it as the service's registry BinaryPathName.
+// Every call site that reads cfg.BinaryPathName back and treats it as a
+// clean filesystem path (scheduleBinaryDeleteOnReboot via MoveFileEx,
+// os.WriteFile in svcUpdate, another CreateService call in
+// migrateServiceRegistration) breaks on the embedded quote characters --
+// confirmed live via MoveFileEx returning ERROR_INVALID_NAME
+// ("The filename, directory name, or volume label syntax is incorrect")
+// against a real ImagePath read back from a real installed service.
+func TestUnquoteServicePath(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"quoted path with space", `"C:\Program Files\BASAgent\bas_agent.exe"`, `C:\Program Files\BASAgent\bas_agent.exe`},
+		{"unquoted path unchanged", `C:\NoSpace\agent.exe`, `C:\NoSpace\agent.exe`},
+		{"empty string unchanged", "", ""},
+		{"single leading quote left alone (malformed, not a matched pair)", `"C:\Program Files\agent.exe`, `"C:\Program Files\agent.exe`},
+		{"single trailing quote left alone (malformed, not a matched pair)", `C:\Program Files\agent.exe"`, `C:\Program Files\agent.exe"`},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := unquoteServicePath(c.in)
+			if got != c.want {
+				t.Errorf("unquoteServicePath(%q) = %q, want %q", c.in, got, c.want)
+			}
+		})
+	}
+}
+
+// TestScheduleBinaryDeleteOnReboot_QuotedPathFailsWithoutUnquoting is the
+// direct end-to-end reproduction of the live bug: a path exactly as
+// cfg.BinaryPathName would return it for a real "Program Files" install
+// (quotes included) must fail against the real Win32 MoveFileEx call --
+// proving scheduleBinaryDeleteOnReboot itself genuinely cannot handle a
+// quoted path, so the fix has to happen at the caller (stripping the
+// quotes before this function is ever invoked), not inside this function.
+func TestScheduleBinaryDeleteOnReboot_QuotedPathFailsWithoutUnquoting(t *testing.T) {
+	f, err := os.CreateTemp("", "bas-uninstall-quoted-test-*.tmp")
+	if err != nil {
+		t.Fatalf("create temp file: %v", err)
+	}
+	path := f.Name()
+	f.Close()
+	defer os.Remove(path)
+
+	quoted := `"` + path + `"`
+	if err := scheduleBinaryDeleteOnReboot(quoted); err == nil {
+		t.Fatal("expected scheduleBinaryDeleteOnReboot to fail against a quoted path (embedded \" characters are not valid in a Win32 path), but it succeeded")
+	}
+}
+
 const testRunKeyPath = `Software\Microsoft\Windows\CurrentVersion\Run`
 
 func TestRemoveRegistryRunValue_RemovesExistingValue(t *testing.T) {
