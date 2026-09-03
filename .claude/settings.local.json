@@ -712,7 +712,8 @@
       "Bash(bash -n \"packaging/hardening/harden.sh\")",
       "PowerShell(Get-ChildItem C:\\\\Users\\\\Administrator\\\\Downloads\\\\Audspect_Cloud\\\\dist\\\\ -File | Select-Object Name, @{n='MB';e={[math]::Round\\($_.Length/1MB,1\\)}}, LastWriteTime | Format-Table -AutoSize; Get-Content C:\\\\Users\\\\Administrator\\\\Downloads\\\\Audspect_Cloud\\\\dist\\\\bas-install-1.7.7\\\\VERSION)",
       "Bash(PYTHONIOENCODING=utf-8 python -c ' *)",
-      "Bash(sort -t: -k3 -n -r)"
+      "Bash(sort -t: -k3 -n -r)",
+      "Bash(perl -pi -e 's/\\\\r\\\\n/\\\\n/' agent/platform_posix.go)"
     ]
   }
 }
