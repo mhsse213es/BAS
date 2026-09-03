@@ -107,6 +107,45 @@ type ExecResult struct {
 	CleanupResidual []string  `json:"cleanupResidual,omitempty"`
 	RequestedPriv   string    `json:"requestedPriv,omitempty"`
 	ExecutedAs      string    `json:"executedAs,omitempty"`
+	// Termination records HOW a step ended when the agent itself ended it, and
+	// what it was doing at that instant. Nil for a step that exited on its own,
+	// nil for pooled steps (their output does not flow through the executor's
+	// capped buffers), and nil from agents predating the field -- readers must
+	// treat nil as "not reported", never as "no output".
+	Termination *StepTermination `json:"termination,omitempty"`
+}
+
+// Termination reasons. Single-valued, in this precedence order: the execute
+// deadline is why WE killed the step, so it outranks a cancel that arrived in
+// the same instant, and both outrank the pipe-abandonment backstop.
+const (
+	TermExecutionTimeout = "execution_timeout"  // our own execute deadline fired
+	TermScenarioCancel   = "scenario_cancelled" // operator Stop / run abort / agent shutdown
+	TermPipesAbandoned   = "pipes_abandoned"    // cmd.WaitDelay elapsed; a descendant held the pipes
+)
+
+// StepTermination is structured evidence about an agent-terminated step, kept
+// separate from the human-readable error text so analysis never has to parse a
+// sentence.
+//
+// It deliberately carries measurements only. The execute deadline is pure
+// wall-clock and cannot tell a slow-but-working step from a wedged one; these
+// fields do not resolve that either. A step still writing when it was killed
+// suggests its timeout is too tight; one silent for the whole window suggests
+// it was stuck. Both are suggestions. Nothing here feeds scoring -- a
+// terminated step stays ERROR and stays excluded from the score, exactly as
+// before.
+type StepTermination struct {
+	// Reason is one of the Term* constants above.
+	Reason string `json:"reason"`
+	// ElapsedMs is how long the step ran before it was terminated.
+	ElapsedMs int64 `json:"elapsedMs"`
+	// OutputBytes is stdout and stderr combined, counting bytes discarded past
+	// the retention cap as well as those kept.
+	OutputBytes int64 `json:"outputBytes"`
+	// SilenceMs is how long the step had been producing nothing when it was
+	// terminated. Equal to ElapsedMs when it never wrote at all.
+	SilenceMs int64 `json:"silenceMs"`
 }
 
 // SimCheckResult carries the pre-interpreted result of a single built-in

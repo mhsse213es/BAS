@@ -3,6 +3,8 @@ package scenario
 import (
 	"encoding/json"
 	"time"
+
+	"github.com/audspect/bas/internal/models"
 )
 
 // PrivSpec declares the privilege tier(s) a scenario step may run under.
@@ -379,6 +381,12 @@ type ExecResult struct {
 	//   "system"     → NT AUTHORITY\SYSTEM
 	//   ""           → unannotated legacy step (agent's own context)
 	ExecutedAs string `json:"executedAs,omitempty"`
+	// Termination mirrors the agent's protocol.StepTermination: how the agent
+	// ended a step it terminated itself, and what the step was doing at that
+	// instant. Nil for a step that exited on its own, for pooled steps, and for
+	// any agent predating the field. Nil means "not reported" — never "no
+	// output" — so a reader must omit the evidence rather than assert silence.
+	Termination *models.StepTermination `json:"termination,omitempty"`
 }
 
 // SimCheckResult carries the pre-interpreted result of a single built-in local check.

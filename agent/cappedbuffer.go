@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"sync"
+	"time"
 )
 
 // cappedBuffer retains at most limit bytes of what a step writes, while
@@ -34,7 +35,8 @@ type cappedBuffer struct {
 	mu    sync.Mutex
 	buf   []byte
 	limit int
-	total int64 // everything the child produced, retained or not
+	total int64     // everything the child produced, retained or not
+	last  time.Time // when the child last wrote; zero if it never did
 }
 
 func newCappedBuffer(limit int) *cappedBuffer {
@@ -46,6 +48,14 @@ func (c *cappedBuffer) Write(p []byte) (int, error) {
 	defer c.mu.Unlock()
 
 	c.total += int64(len(p))
+	// Stamp when the child last wrote. The execute deadline is pure wall-clock:
+	// a step that is slow but genuinely working is killed by the same code, at
+	// the same moment, as one wedged on a dead socket. This timestamp does not
+	// resolve that -- output is evidence of activity, not proof of progress, and
+	// a process can print the same line forever -- but it is the difference
+	// between reporting "killed at 120s" and "killed at 120s, still writing
+	// 0.3s earlier". Costs one clock read per 32 KB copy chunk.
+	c.last = time.Now()
 	// Retain the head: the first bytes of a step's output are what identify
 	// what it did. Everything past the limit is counted and dropped.
 	if room := c.limit - len(c.buf); room > 0 {
@@ -77,4 +87,12 @@ func (c *cappedBuffer) Total() int64 {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.total
+}
+
+// Written reports how much the child wrote and when it last wrote. last is the
+// zero Time when nothing was ever written.
+func (c *cappedBuffer) Written() (total int64, last time.Time) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.total, c.last
 }

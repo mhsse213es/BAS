@@ -103,6 +103,36 @@ type SimulationResult struct {
 	TimedOut  bool      `json:"timedOut,omitempty"`
 	PID       int       `json:"pid,omitempty"`
 	StartedAt time.Time `json:"startedAt"`
+	// Termination is the agent's structured record of a step the agent itself
+	// ended. Carried here — not only rendered into Details — so the whole
+	// result lands in raw_result JSONB and per-technique timeout budgets can
+	// later be derived by querying, instead of by parsing a sentence. Nil for a
+	// step that exited on its own and for any agent predating the field.
+	Termination *StepTermination `json:"termination,omitempty"`
+}
+
+// Termination reasons reported by the agent (agent/protocol/messages.go).
+const (
+	TermExecutionTimeout = "execution_timeout"  // the agent's own execute deadline fired
+	TermScenarioCancel   = "scenario_cancelled" // operator Stop / run abort / agent shutdown
+	TermPipesAbandoned   = "pipes_abandoned"    // a descendant outlived the kill and held the output pipes
+)
+
+// StepTermination is measured evidence about a step the agent terminated: how
+// it ended, how long it had run, how much it had written, and how long it had
+// been silent.
+//
+// It exists because the execute deadline is pure wall-clock and so cannot tell
+// a slow-but-working step from a wedged one. These numbers do not settle that
+// either — output is evidence of activity, not proof of progress. They are
+// recorded so timeout budgets can be set from observed distributions rather
+// than intuition. Nothing here is an input to scoring: a terminated step is
+// ERROR and stays excluded from the score whether it was busy or silent.
+type StepTermination struct {
+	Reason      string `json:"reason"`
+	ElapsedMs   int64  `json:"elapsedMs"`
+	OutputBytes int64  `json:"outputBytes"`
+	SilenceMs   int64  `json:"silenceMs"`
 }
 
 // SkipReasonPolicyPrivilege marks a SimulationResult synthesized server-side

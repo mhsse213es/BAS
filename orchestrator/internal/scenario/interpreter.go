@@ -75,8 +75,9 @@ func Interpret(step Step, result ExecResult) models.SimulationResult {
 	if result.TimedOut {
 		checkResult = models.ResultError
 		details = fmt.Sprintf(
-			"Execution error (timed out): the step was killed after %s without completing, so its partial output is not evidence that a control blocked or allowed the technique. Re-run with a longer timeout to obtain a measurable result.",
-			(time.Duration(result.DurationMs) * time.Millisecond).Round(time.Second))
+			"Execution error (timed out): the step was killed after %s without completing, so its partial output is not evidence that a control blocked or allowed the technique.%s Re-run with a longer timeout to obtain a measurable result.",
+			(time.Duration(result.DurationMs)*time.Millisecond).Round(time.Second),
+			terminationEvidence(result.Termination))
 	} else {
 		switch framework {
 		case "art":
@@ -124,6 +125,7 @@ func Interpret(step Step, result ExecResult) models.SimulationResult {
 		Command:             step.Command,
 		ExitCode:            result.ExitCode,
 		TimedOut:            result.TimedOut,
+		Termination:         result.Termination,
 		PID:                 result.PID,
 		StartedAt:           result.StartedAt,
 	}

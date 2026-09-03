@@ -94,6 +94,82 @@ func graceSeconds(step ScenarioStep) int {
 	return defaultGraceSec
 }
 
+// stepTermination builds the structured record for a step the agent itself
+// ended. Returns nil when the step exited on its own — the record exists to
+// explain OUR kills, not to annotate normal completion.
+//
+// endedAt is when cmd.Wait returned; stdout and stderr are the step's capped
+// buffers. Silence is measured against the later of the two streams' last
+// write, because a step writing only to stderr is still a step producing
+// output.
+//
+// Evidence only. See protocol.StepTermination: nothing computed here changes
+// how the step is scored.
+func stepTermination(reason string, before, endedAt time.Time, stdout, stderr *cappedBuffer) *protocol.StepTermination {
+	if reason == "" {
+		return nil
+	}
+	outBytes, outLast := stdout.Written()
+	errBytes, errLast := stderr.Written()
+	last := outLast
+	if errLast.After(last) {
+		last = errLast
+	}
+
+	elapsed := endedAt.Sub(before)
+	// A step that never wrote has been silent for its whole run.
+	silence := elapsed
+	if !last.IsZero() {
+		silence = endedAt.Sub(last)
+	}
+	if silence < 0 {
+		// A write can land between endedAt and this read; report zero rather
+		// than a negative duration.
+		silence = 0
+	}
+	if silence > elapsed {
+		silence = elapsed
+	}
+
+	return &protocol.StepTermination{
+		Reason:      reason,
+		ElapsedMs:   elapsed.Milliseconds(),
+		OutputBytes: outBytes + errBytes,
+		SilenceMs:   silence.Milliseconds(),
+	}
+}
+
+// terminationEvidence renders a StepTermination as the operator-facing tail of
+// an agent note: "; output=4.2 MB; last output=0.3s ago". Kept factual — it
+// reports what was written and when, and draws no conclusion about whether the
+// step was making progress.
+func terminationEvidence(t *protocol.StepTermination) string {
+	if t == nil {
+		return ""
+	}
+	if t.OutputBytes == 0 {
+		return "; output=0 bytes; no output at any point"
+	}
+	return fmt.Sprintf("; output=%s; last output=%s ago",
+		humanBytes(t.OutputBytes),
+		(time.Duration(t.SilenceMs) * time.Millisecond).Round(100*time.Millisecond))
+}
+
+// humanBytes formats a byte count for an operator, not a machine — the exact
+// figure travels in StepTermination.OutputBytes.
+func humanBytes(n int64) string {
+	const unit = 1024
+	if n < unit {
+		return fmt.Sprintf("%d bytes", n)
+	}
+	div, exp := int64(unit), 0
+	for n/div >= unit && exp < 3 {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f %cB", float64(n)/float64(div), "KMGT"[exp])
+}
+
 func execStep(parentCtx context.Context, step ScenarioStep, pool *HostPool) protocol.ExecResult {
 	timeout := executeSeconds(step)
 	grace := graceSeconds(step)
@@ -281,6 +357,24 @@ func execStep(parentCtx context.Context, step ScenarioStep, pool *HostPool) prot
 		}
 	}
 
+	// How this step ended, if the agent ended it. Single-valued and ordered:
+	// the execute deadline is why WE killed it, so it outranks a cancel landing
+	// in the same instant, and both outrank the pipe-abandonment backstop.
+	termReason := ""
+	switch {
+	case timedOut:
+		termReason = protocol.TermExecutionTimeout
+	case parentCtx.Err() != nil:
+		termReason = protocol.TermScenarioCancel
+	case errors.Is(err, exec.ErrWaitDelay):
+		termReason = protocol.TermPipesAbandoned
+	}
+	// endedAt is derived from dur rather than read fresh, so the record's
+	// ElapsedMs is the same number the result reports as DurationMs — a report
+	// showing two slightly different runtimes for one step invites exactly the
+	// wrong question.
+	termination := stepTermination(termReason, before, before.Add(time.Duration(dur)*time.Millisecond), stdout, stderr)
+
 	if timedOut {
 		exitCode = -1
 		// Emitted unconditionally. This used to be written only when stderr was
@@ -293,7 +387,13 @@ func execStep(parentCtx context.Context, step ScenarioStep, pool *HostPool) prot
 		// actually classifies on; this line is the human-readable evidence and
 		// the fallback for anything reading text. Agent notes live outside the
 		// output cap, so this cannot itself be truncated away.
-		agentNotes = append(agentNotes, fmt.Sprintf("step exceeded execute timeout of %ds", timeout))
+		//
+		// The evidence tail says what the step was writing when it died. The
+		// leading "exceeded execute timeout" phrase is load-bearing and must
+		// not move: the server's fallback timeout detection keys on it for
+		// results from agents that predate the structured flag.
+		agentNotes = append(agentNotes, fmt.Sprintf("step exceeded execute timeout of %ds%s",
+			timeout, terminationEvidence(termination)))
 	}
 
 	// WaitDelay elapsed: the step's process tree was killed, but something in it
@@ -346,6 +446,7 @@ func execStep(parentCtx context.Context, step ScenarioStep, pool *HostPool) prot
 		Blocked:       blocked,
 		BlockedReason: blockedReason,
 		TimedOut:      timedOut,
+		Termination:   termination,
 		RequestedPriv: step.RequiresPriv,
 		ExecutedAs:    executedAs,
 	}

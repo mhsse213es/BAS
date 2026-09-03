@@ -241,10 +241,13 @@ func classifyExecution(r ExecResult, combined string) (ExecutionOutcome, ErrorRe
 	// a control success. Interpret applies the same guard for every framework;
 	// this one keeps the ART path correct when classifyExecution is called
 	// directly. The structured flag is authoritative -- the "exceeded execute
-	// timeout" text below is only a fallback, and it is absent whenever the
-	// step wrote anything of its own to stderr.
+	// timeout" text below is only a fallback. That text is now emitted
+	// unconditionally by the agent (it used to be suppressed whenever the step
+	// wrote anything of its own to stderr, which lost it for exactly the noisy
+	// steps that needed it most), but the structured flag stays authoritative.
 	if r.TimedOut {
-		return OutcomeError, ErrTimeout, "Execution error (timed out): step killed at its execute deadline without completing; partial output is not a security result"
+		return OutcomeError, ErrTimeout, "Execution error (timed out): step killed at its execute deadline without completing; partial output is not a security result." +
+			terminationEvidence(r.Termination)
 	}
 
 	// Explicit skip marker (missing payload, technique not in store).
