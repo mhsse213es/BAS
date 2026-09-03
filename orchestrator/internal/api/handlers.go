@@ -2,7 +2,9 @@ package api
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -1140,6 +1142,44 @@ func (h *Handler) DownloadAgent(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		jsonError(w, "could not stat agent binary", http.StatusInternalServerError)
 		return
+	}
+
+	// Verify the bytes we are about to hand out against the SIGNED manifest
+	// (BINARIES.sha256, itself RSA-verified at load by LoadManifestVerified).
+	//
+	// This is a supply-chain control, and the strongest one available here: an
+	// attacker with write access to ./agents could previously swap a binary and
+	// every endpoint that downloaded afterwards would install it. Nothing caught
+	// that — the manifest was untouched (so no tamper event fired), and the
+	// `trusted` flag on enrol/heartbeat is computed from a hash the AGENT
+	// self-reports, which a malicious agent simply lies about.
+	//
+	// Checked on demand rather than in the 15s watcher because these are 5-8 MB
+	// files: hashing them on every poll would be wasteful, and verifying at
+	// serve time is stronger anyway since it attests the exact bytes delivered.
+	if h := h.manifest; h != nil && h.Loaded() {
+		want, listed := h.KnownHash(entry.filename)
+		if !listed {
+			log.Printf("[!!] TAMPER: agent binary %q is not listed in the signed manifest — refusing to serve", entry.filename)
+			jsonError(w, "agent binary failed integrity verification", http.StatusInternalServerError)
+			return
+		}
+		sum := sha256.New()
+		if _, err := io.Copy(sum, f); err != nil {
+			jsonError(w, "could not verify agent binary", http.StatusInternalServerError)
+			return
+		}
+		if got := hex.EncodeToString(sum.Sum(nil)); got != want {
+			log.Printf("[!!] TAMPER: agent binary %q hash mismatch — manifest %s, on disk %s — refusing to serve",
+				entry.filename, want, got)
+			jsonError(w, "agent binary failed integrity verification", http.StatusInternalServerError)
+			return
+		}
+		// Rewind: the hash read consumed the file, and ServeContent needs it whole.
+		if _, err := f.Seek(0, io.SeekStart); err != nil {
+			jsonError(w, "could not rewind agent binary", http.StatusInternalServerError)
+			return
+		}
 	}
 
 	w.Header().Set("Content-Type", entry.mimeType)

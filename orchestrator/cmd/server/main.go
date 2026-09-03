@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
@@ -690,7 +691,18 @@ func main() {
 		Severity string
 	}{
 		{Path: "./agents/BINARIES.sha256", Severity: "critical"},
+		// The manifest's signature. Without it, deleting the .sig would go
+		// unnoticed while the orchestrator ran; the next restart would fail
+		// closed, but only then.
+		{Path: "./agents/BINARIES.sha256.sig", Severity: "critical"},
 		{Path: cfg.LicensePath, Severity: "critical"},
+		// index.html is hash-verified at startup (StaticHandler), but that check
+		// runs ONCE. http.FileServer reads from disk per request, so a console
+		// edited while the orchestrator is running was served immediately and
+		// went undetected until the next restart — an attacker could alter
+		// displayed scores, hide findings, or inject script. Watching it closes
+		// the running-process window.
+		{Path: filepath.Join(resolveWWWRoot(), "index.html"), Severity: "critical"},
 	})
 	integrity.WatchDir(cfg.ScenariosDir, "critical")
 	go integrity.StartWatcher(context.Background(), pool, hub)

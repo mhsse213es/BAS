@@ -1,6 +1,7 @@
 // Package integrity — watcher.go
-// Polls the critical on-disk paths every 15 seconds and detects any change
-// in file size or modification time. Uses only stdlib (no fsnotify dep) so
+// Polls the critical on-disk paths every 15 seconds and detects any change in
+// file CONTENT (SHA-256), so an edit that preserves size and mtime is still
+// caught. Uses only stdlib (no fsnotify dep) so
 // the binary stays self-contained. On a detected change it:
 //  1. Logs a structured TAMPER ALERT.
 //  2. Inserts a row into the tamper_events Postgres table.
@@ -13,6 +14,9 @@ package integrity
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"io"
 	"log"
 	"os"
 	"path/filepath"
@@ -34,13 +38,39 @@ type TamperBroadcaster interface {
 // dispatching a scenario to an agent.
 var DispatchBlocked atomic.Bool
 
-// watchedFile holds the last-seen metadata for a single file.
+// watchedFile holds the last-seen state of a single file.
+//
+// The baseline is a SHA-256 of the CONTENT, not size+modTime. Stat metadata is
+// attacker-controlled: an edit that preserves the byte count and then restores
+// the timestamp (touch -r, or any tool that copies mtime) was invisible to the
+// previous comparison. For signed scenarios that was defence-in-depth — the
+// signature still failed at load — but BINARIES.sha256, the licence and
+// index.html had the stat comparison as their only protection.
+//
+// Cost is bounded by watching small files only: the index page and a handful of
+// config/manifest files. Large served artifacts (agent binaries) are verified
+// on download against the signed manifest instead, which is both cheaper and
+// stronger, since it checks the exact bytes handed to an endpoint.
 type watchedFile struct {
 	path     string
 	severity string // "critical" | "warning"
-	size     int64
-	modTime  time.Time
+	hash     string // SHA-256 of content; "" when the file does not exist
 	exists   bool
+}
+
+// hashFile returns the SHA-256 of path's contents, streaming so a large file
+// never has to be held in memory.
+func hashFile(path string) (string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
 var (
@@ -87,14 +117,14 @@ func WatchDir(dir, severity string) {
 }
 
 func snapshotFile(wf *watchedFile) {
-	fi, err := os.Stat(wf.path)
+	h, err := hashFile(wf.path)
 	if err != nil {
 		wf.exists = false
+		wf.hash = ""
 		return
 	}
 	wf.exists = true
-	wf.size = fi.Size()
-	wf.modTime = fi.ModTime()
+	wf.hash = h
 }
 
 // StartWatcher begins the polling loop. It blocks forever; run in a goroutine.
@@ -125,28 +155,27 @@ func checkAll(pool *pgxpool.Pool, broadcaster TamperBroadcaster) {
 			continue
 		}
 
-		fi, err := os.Stat(wf.path)
+		nowHash, err := hashFile(wf.path)
 		nowExists := err == nil
 
 		switch {
 		case wf.exists && !nowExists:
-			// File deleted.
+			// File deleted (or became unreadable).
 			recordTamper(pool, broadcaster, wf.path, "remove", wf.severity)
 			wf.exists = false
+			wf.hash = ""
 
 		case !wf.exists && nowExists:
 			// File appeared (re-created after deletion or new file in dir watch).
 			recordTamper(pool, broadcaster, wf.path, "create", wf.severity)
 			wf.exists = true
-			wf.size = fi.Size()
-			wf.modTime = fi.ModTime()
+			wf.hash = nowHash
 
 		case wf.exists && nowExists:
-			// Check for modification.
-			if fi.Size() != wf.size || fi.ModTime().After(wf.modTime) {
+			// Content comparison: catches an edit that preserved size and mtime.
+			if nowHash != wf.hash {
 				recordTamper(pool, broadcaster, wf.path, "write", wf.severity)
-				wf.size = fi.Size()
-				wf.modTime = fi.ModTime()
+				wf.hash = nowHash
 			}
 		}
 	}
