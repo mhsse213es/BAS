@@ -175,8 +175,43 @@ func TestWireShapeMatchesAgent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	const want = `{"domains":[{"domain":"process"}],"scope":"local","risk":"observation"}`
+	// observesFootprint is present because T1057 reads the process table, which
+	// every concurrently running step perturbs. Reads/Writes are absent here
+	// (omitempty) since this technique still uses the per-technique form.
+	const want = `{"domains":[{"domain":"process"}],"scope":"local","risk":"observation","observesFootprint":true}`
 	if string(raw) != want {
 		t.Errorf("wire shape drift:\n got %s\nwant %s", raw, want)
+	}
+}
+
+// Process Discovery observes BAS's own execution footprint: under concurrency
+// `ps aux` returns the agent's other in-flight atomics, so its evidence is
+// contaminated by the very parallelism that makes it fast. It was shipped as a
+// plain observation, i.e. parallel-safe, which is a bug in that model rather
+// than a trade-off worth keeping.
+//
+// The footprint barrier is what expresses this: no other step declares "I write
+// the process table", yet every step does simply by running.
+func TestResourceProfileFor_ProcessDiscoveryObservesFootprint(t *testing.T) {
+	p := ResourceProfileFor("T1057")
+	if p == nil {
+		t.Fatal("T1057 has no profile")
+	}
+	if !p.ObservesFootprint {
+		t.Error("T1057 (Process Discovery) must be marked ObservesFootprint — its evidence includes BAS's own processes")
+	}
+}
+
+// Techniques that do NOT read the footprint must stay ordinary observations, or
+// marking becomes a blanket serializer and the parallelism is lost.
+func TestResourceProfileFor_NonFootprintObserversAreUnmarked(t *testing.T) {
+	for _, id := range []string{"T1012", "T1016"} {
+		p := ResourceProfileFor(id)
+		if p == nil {
+			continue // not in the curated set; nothing to assert
+		}
+		if p.ObservesFootprint {
+			t.Errorf("%s must not be marked ObservesFootprint — it does not observe BAS's execution surface", id)
+		}
 	}
 }

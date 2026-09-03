@@ -14,9 +14,29 @@ import "strings"
 // gates that invariant. We label conservatively: only unambiguously read-only
 // discovery techniques get a profile; everything else stays unlabeled (serial).
 type ResourceProfile struct {
+	// Reads/Writes declare direction PER RESOURCE, for per-atomic profiles. When
+	// either is non-empty the agent ignores Domains/Scope/Risk. A single Risk
+	// cannot express "reads process, writes filesystem" — observation
+	// under-locks the write, modification over-locks the read.
+	Reads  []ResourceLock `json:"reads,omitempty"`
+	Writes []ResourceLock `json:"writes,omitempty"`
+
+	// Domains/Scope/Risk are the per-technique form the curated map below still
+	// uses; profiles migrate to Reads/Writes incrementally.
 	Domains []ResourceLock `json:"domains,omitempty"`
 	Scope   string         `json:"scope,omitempty"`
 	Risk    string         `json:"risk,omitempty"`
+
+	// ObservesFootprint marks a technique whose EVIDENCE observes the surface
+	// BAS's own execution perturbs — the process table, shared temp dirs, the
+	// auth log, the kernel ring buffer. No step declares "I write the process
+	// table", yet every step does simply by running, so no ordinary resource can
+	// express this hazard.
+	//
+	// The agent turns this into an EXCLUSIVE hold on its footprint barrier while
+	// ordinary steps hold it shared — see sched.footprintKey. The polarity is
+	// inverted from an ordinary read and must not be "simplified" back.
+	ObservesFootprint bool `json:"observesFootprint,omitempty"`
 }
 
 // ResourceLock names one resource domain a step touches. Key optionally narrows
@@ -80,6 +100,20 @@ func observe(domain string) *ResourceProfile {
 	}
 }
 
+// observeFootprint is observe() for a technique whose evidence reads the surface
+// BAS's own execution perturbs. Such a step needs the host quiet to get a stable
+// reading, so the agent gives it an exclusive hold on the footprint barrier —
+// it runs alongside nothing, even though it writes nothing.
+//
+// Reach for this whenever a technique enumerates processes, tails an auth log,
+// reads the kernel ring buffer, or lists a shared temp directory: under
+// concurrency those all return the agent's own in-flight atomics.
+func observeFootprint(domain string) *ResourceProfile {
+	p := observe(domain)
+	p.ObservesFootprint = true
+	return p
+}
+
 // discoveryProfiles is the conservative first label set: well-known ATT&CK
 // discovery techniques that only enumerate/read host state and never modify it.
 // These dominate the full ART sweep, so labelling them read-only is where the
@@ -116,13 +150,15 @@ var discoveryProfiles = map[string]*ResourceProfile{
 	// simple, fast reg query/Get-Item reads. Kept; that one atomic is a known
 	// narrow exception.
 	"T1012": observe(domRegistry), // Query Registry
-	"T1057": observe(domProcess),  // Process Discovery
-	"T1007": observe(domProcess),  // System Service Discovery
-	"T1518": observe(domProcess),  // Software Discovery
-	"T1010": observe(domProcess),  // Application Window Discovery
-	"T1082": observe(domProcess),  // System Information Discovery
-	"T1033": observe(domProcess),  // System Owner/User Discovery
-	"T1124": observe(domProcess),  // System Time Discovery
+	// Footprint observer: ps/tasklist returns the agent's own in-flight atomics
+	// under concurrency, so its evidence is contaminated by parallelism itself.
+	"T1057": observeFootprint(domProcess), // Process Discovery
+	"T1007": observe(domProcess),          // System Service Discovery
+	"T1518": observe(domProcess),          // Software Discovery
+	"T1010": observe(domProcess),          // Application Window Discovery
+	"T1082": observe(domProcess),          // System Information Discovery
+	"T1033": observe(domProcess),          // System Owner/User Discovery
+	"T1124": observe(domProcess),          // System Time Discovery
 	// T1016 (System Network Configuration Discovery) -- Test 9's
 	// `nslookup -timeout=12` is bounded but borderline: a retry or two could
 	// push it past the 20s cap. Only 1 of 9 atomics, and softer risk than the
@@ -131,7 +167,11 @@ var discoveryProfiles = map[string]*ResourceProfile{
 	// T1049 (System Network Connections Discovery) -- Test 7 runs SharpView's
 	// ACL scanner, Kerberoasting, and domain-share discovery, all known-slow
 	// against a live AD domain. Only 1 of 7 atomics. Kept.
-	"T1049": observe(domNetwork), // System Network Connections Discovery
+	// Footprint observer: netstat/ss list connections BY OWNING PROCESS, so the
+	// output includes the agent's own orchestrator socket plus any connection a
+	// concurrently running atomic opens. Marked conservatively -- per-atomic
+	// command text should confirm it when atomic profiles are authored.
+	"T1049": observeFootprint(domNetwork), // System Network Connections Discovery
 	// T1018 (Remote System Discovery) -- 5 of 6 Linux atomics are fast local
 	// reads (arp -a, ip neighbour/route show, netstat -r, ip tcp_metrics
 	// show). Only "Test 7: sweep" (a sequential, unthrottled `ping -c 1` of
