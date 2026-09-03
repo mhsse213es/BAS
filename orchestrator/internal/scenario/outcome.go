@@ -233,6 +233,20 @@ func withEvidence(headline, combined string) string {
 func classifyExecution(r ExecResult, combined string) (ExecutionOutcome, ErrorReason, string) {
 	lower := strings.ToLower(combined)
 
+	// A step killed on its own deadline produced no result, so its partial
+	// output cannot be evidence of a security outcome. This MUST stay ahead of
+	// blockSignature below: a timed-out `grep -ri password /` emits thousands of
+	// "Permission denied" lines, which blockSignature reads as an access-denied
+	// block and would score PASS -- counting a technique that never finished as
+	// a control success. Interpret applies the same guard for every framework;
+	// this one keeps the ART path correct when classifyExecution is called
+	// directly. The structured flag is authoritative -- the "exceeded execute
+	// timeout" text below is only a fallback, and it is absent whenever the
+	// step wrote anything of its own to stderr.
+	if r.TimedOut {
+		return OutcomeError, ErrTimeout, "Execution error (timed out): step killed at its execute deadline without completing; partial output is not a security result"
+	}
+
 	// Explicit skip marker (missing payload, technique not in store).
 	if first := strings.TrimSpace(firstLine(combined)); len(first) >= 5 && strings.EqualFold(first[:5], "skip:") {
 		return OutcomeSkipped, ErrNone, strings.TrimSpace(first[5:])

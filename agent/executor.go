@@ -283,9 +283,17 @@ func execStep(parentCtx context.Context, step ScenarioStep, pool *HostPool) prot
 
 	if timedOut {
 		exitCode = -1
-		if strings.TrimSpace(stderr.String()) == "" {
-			agentNotes = append(agentNotes, fmt.Sprintf("step exceeded execute timeout of %ds", timeout))
-		}
+		// Emitted unconditionally. This used to be written only when stderr was
+		// otherwise empty, so any step that produced output of its own lost the
+		// one line saying it had been killed -- and the server's fallback
+		// timeout detection keys on this exact text. A `grep -ri password /`
+		// that fills stderr with "Permission denied" is precisely the case that
+		// needs the marker most, because that output otherwise reads as a
+		// security block. The structured TimedOut flag below is what the server
+		// actually classifies on; this line is the human-readable evidence and
+		// the fallback for anything reading text. Agent notes live outside the
+		// output cap, so this cannot itself be truncated away.
+		agentNotes = append(agentNotes, fmt.Sprintf("step exceeded execute timeout of %ds", timeout))
 	}
 
 	// WaitDelay elapsed: the step's process tree was killed, but something in it

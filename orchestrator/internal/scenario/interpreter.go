@@ -45,13 +45,47 @@ func Interpret(step Step, result ExecResult) models.SimulationResult {
 	var checkResult models.CheckResult
 	var details string
 
-	switch framework {
-	case "art":
-		checkResult, details = interpretART(result, combined)
-	case "caldera":
-		checkResult, details = interpretCaldera(result, combined)
-	default:
-		checkResult, details = interpretCustom(result, combined)
+	// A step the agent killed on its own deadline never reached a result, so
+	// nothing in its partial output is evidence of anything. This is checked
+	// BEFORE the framework interpreters because every one of them would
+	// otherwise read that partial output as a security outcome:
+	//
+	//   - interpretART -> classifyExecution -> blockSignature matches
+	//     "permission denied" and returns PASS. Observed live 2026-09-03:
+	//     T1552.001 Test 3 (`grep -ri password /`) emits thousands of
+	//     "grep: /proc/...: Permission denied" lines, ran 123001ms, was killed
+	//     at its 120s deadline, and was scored PASS -- a technique that never
+	//     completed counted as a control success, inflating the prevention
+	//     score.
+	//   - interpretCaldera matches "blocked"/"restricted" BEFORE its execution-
+	//     error check, so the same partial output scores PASS there too.
+	//   - interpretCustom returns PASS on exit 0, and matches "access denied"
+	//     or "blocked" on any non-zero exit.
+	//
+	// The agent has always reported TimedOut on the wire (types.go); no
+	// interpreter consulted it. Doing so here fixes ART, Caldera and custom
+	// checks together, on every platform, and for results from already-deployed
+	// agents -- this is server-side classification, so no agent upgrade is
+	// needed for the correction to take effect.
+	//
+	// ERROR (not FAIL) is the honest verdict: we cannot claim the control
+	// allowed the technique either. The step is excluded from scoring rather
+	// than counted for or against the endpoint. See classifyOutcome in
+	// internal/reporting, which excludes ResultError.
+	if result.TimedOut {
+		checkResult = models.ResultError
+		details = fmt.Sprintf(
+			"Execution error (timed out): the step was killed after %s without completing, so its partial output is not evidence that a control blocked or allowed the technique. Re-run with a longer timeout to obtain a measurable result.",
+			(time.Duration(result.DurationMs) * time.Millisecond).Round(time.Second))
+	} else {
+		switch framework {
+		case "art":
+			checkResult, details = interpretART(result, combined)
+		case "caldera":
+			checkResult, details = interpretCaldera(result, combined)
+		default:
+			checkResult, details = interpretCustom(result, combined)
+		}
 	}
 
 	var skipReason string
