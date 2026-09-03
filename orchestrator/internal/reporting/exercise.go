@@ -147,7 +147,20 @@ func ExerciseReportHTML(w io.Writer, rep *ExerciseReport) error {
 		"kindIcon": kindIcon,
 		"evClass":  evClass,
 		"seq":      func(i int) int { return i + 1 },
-		"lower":    strings.ToLower,
+		// Accepts any, not string. The template calls this on
+		// .Execution.Status, whose type is exercise.ExecStatus -- a DEFINED
+		// string type, which Go does not consider assignable to a string
+		// parameter. text/template therefore failed the call with "wrong type
+		// for value; expected string; got exercise.ExecStatus", aborting the
+		// render at that field for every exercise report.
+		//
+		// This went unnoticed because ExerciseReportHTML writes straight to the
+		// http.ResponseWriter: Execute had already streamed the document up to
+		// that point and committed a 200, so the handler's jsonError could not
+		// change the status and merely appended JSON to a truncated page. The
+		// existing handler test asserted only status 200 and the presence of
+		// "<html", both of which a truncated response satisfies.
+		"lower": func(v any) string { return strings.ToLower(fmt.Sprint(v)) },
 		"joinStrs": strings.Join,
 		"scoreBar": func(f float64) int {
 			v := int(f)

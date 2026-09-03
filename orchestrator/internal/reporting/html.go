@@ -926,13 +926,18 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 
   <div class="cover-header">
     <div class="clogo">
-      {{if .logoDarkUri}}<img src="{{.logoDarkUri}}" alt="Audspect BAS" style="height:32px;filter:brightness(0) invert(1);opacity:0.9">{{else}}
-      <div class="clogo-mark">A</div>
+      {{/* The configured logo image replaces only the "A" mark tile, never the
+           wordmark. It used to replace the whole lockup, so on any deployment
+           with a logo configured -- which is the normal case, the PNG is
+           embedded at build time -- the product name vanished from the cover of
+           every report, in HTML and PDF alike. An <img> carries no extractable
+           text either, so the name was absent from the document entirely rather
+           than merely invisible. The name must appear on every report. */}}
+      {{if .logoDarkUri}}<img src="{{.logoDarkUri}}" alt="Audspect BAS" style="height:32px;filter:brightness(0) invert(1);opacity:0.9">{{else}}<div class="clogo-mark">A</div>{{end}}
       <div>
         <div class="clogo-name">Aud<span>spect</span> BAS</div>
         <div class="clogo-sub">Breach &amp; Attack Simulation Platform</div>
       </div>
-      {{end}}
     </div>
   </div>
 
