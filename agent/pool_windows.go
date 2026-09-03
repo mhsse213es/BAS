@@ -4,7 +4,6 @@ package main
 
 import (
 	"bufio"
-	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -97,10 +96,22 @@ type hostResp struct {
 
 // psHost is a single long-lived powershell.exe running hostHarness.
 type psHost struct {
-	cmd    *exec.Cmd
-	stdin  io.WriteCloser
-	resp   chan string // one stdout line per executed request
-	errBuf *bytes.Buffer
+	cmd   *exec.Cmd
+	stdin io.WriteCloser
+	resp  chan string // one stdout line per executed request
+	// errBuf retains the FIRST maxOutputBytes of the host's stderr and counts
+	// the rest. It was a plain bytes.Buffer, which is a real leak here in a way
+	// it is not for a per-step capture: this host is long-lived, so every stderr
+	// byte from every pooled step accumulated for the agent's whole run and was
+	// never freed. Nothing reads the field either -- it exists to explain a
+	// wedged host after the fact -- so an unbounded buffer was paying memory
+	// indefinitely for a diagnostic almost never consulted.
+	//
+	// Capping must not stop the drain: the goroutine below io.Copy's stderr into
+	// this, and if that copy ever stopped, the OS pipe would fill and the
+	// PowerShell host would block on write, hanging every pooled step.
+	// cappedBuffer's Write always returns (len(p), nil) for exactly this reason.
+	errBuf *cappedBuffer
 	dead   int32
 }
 
@@ -137,7 +148,7 @@ func startHost() (*psHost, error) {
 		return nil, err
 	}
 
-	h := &psHost{cmd: cmd, stdin: stdin, resp: make(chan string, 4), errBuf: &bytes.Buffer{}}
+	h := &psHost{cmd: cmd, stdin: stdin, resp: make(chan string, 4), errBuf: newCappedBuffer(maxOutputBytes)}
 	go h.readLoop(stdout)
 	go func() { _, _ = io.Copy(h.errBuf, stderr) }()
 	return h, nil

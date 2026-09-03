@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"io"
 	"strings"
 	"testing"
 	"time"
@@ -164,5 +165,41 @@ func TestHostPoolTimeout(t *testing.T) {
 	r2, ok2 := p.Run(context.Background(), obsStep("after", `Write-Output ok`))
 	if !ok2 || !strings.Contains(r2.Stdout, "ok") {
 		t.Errorf("pool unusable after timeout recycle: ok=%v out=%q", ok2, r2.Stdout)
+	}
+}
+
+// A pooled host is long-lived, so its stderr sink must be bounded AND must keep
+// draining forever.
+//
+// It was a plain bytes.Buffer that nothing ever read or reset: every stderr byte
+// from every pooled step accumulated for the agent's whole run. Unlike a
+// per-step capture, there is no natural end to reclaim it.
+//
+// The drain half matters as much as the bound. io.Copy feeds this buffer from
+// the host's stderr pipe; if the copy ever stopped -- as it would if the writer
+// returned an error or a short count once full -- the OS pipe would fill and the
+// PowerShell host would block on write, hanging every step routed to it. So this
+// asserts io.Copy consumes the WHOLE stream while retention stays capped.
+func TestPSHostStderrBufferIsBoundedAndKeepsDraining(t *testing.T) {
+	h := &psHost{errBuf: newCappedBuffer(maxOutputBytes)}
+
+	const line = "powershell : some error text on stderr\n"
+	const reps = 100000 // ~3.8 MB, far past the cap
+	written, err := io.Copy(h.errBuf, strings.NewReader(strings.Repeat(line, reps)))
+	if err != nil {
+		t.Fatalf("io.Copy returned %v — the drain stopped, which would block the host on a full stderr pipe", err)
+	}
+
+	if want := int64(len(line) * reps); written != want {
+		t.Errorf("io.Copy consumed %d bytes, want %d — the whole stream must be drained", written, want)
+	}
+	if got := h.errBuf.Total(); got != written {
+		t.Errorf("Total() = %d, want %d", got, written)
+	}
+	if retained := len(h.errBuf.buf); retained > maxOutputBytes {
+		t.Errorf("retained %d bytes, exceeds the %d cap — the host's stderr is still unbounded", retained, maxOutputBytes)
+	}
+	if !strings.Contains(h.errBuf.String(), "output truncated") {
+		t.Error("truncation is not reported, so a reader cannot tell stderr was dropped")
 	}
 }
