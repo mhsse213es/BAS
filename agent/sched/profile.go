@@ -20,6 +20,20 @@ package sched
 // A nil profile, an empty Domains list, Scope=="global", or an unrecognised Risk
 // all resolve to an exclusive global lock — i.e. the step runs serially.
 type ResourceProfile struct {
+	// Reads and Writes declare direction PER RESOURCE. When either is non-empty
+	// they take precedence and Domains/Scope/Risk are ignored.
+	//
+	// A single Risk cannot express "reads process, writes filesystem":
+	// observation under-locks the write (unsafe), modification over-locks the
+	// read (safe but needlessly serial). Tolerable per technique, since whole
+	// techniques skew one way; constant at atomic granularity, where reading a
+	// config and writing a temp artifact is the common shape.
+	Reads  []ResourceLock `json:"reads,omitempty"`
+	Writes []ResourceLock `json:"writes,omitempty"`
+
+	// Domains/Scope/Risk are the per-technique form, retained so profiles
+	// migrate incrementally. An atomic without Reads/Writes still resolves
+	// through this path unchanged.
 	Domains []ResourceLock `json:"domains,omitempty"`
 	Scope   string         `json:"scope,omitempty"`
 	Risk    string         `json:"risk,omitempty"`

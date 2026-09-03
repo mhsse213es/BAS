@@ -74,7 +74,25 @@ func resolve(p *ResourceProfile) []lockReq {
 	// observer — see footprintKey, and do not invert this.
 	writes[footprintKey] = p != nil && p.ObservesFootprint
 
-	if p == nil || p.Scope == "global" || len(p.Domains) == 0 || !knownRisk(p.Risk) {
+	if p != nil && (len(p.Reads) > 0 || len(p.Writes) > 0) {
+		// Per-atomic form: direction is declared per resource, so Domains/Risk
+		// are not consulted at all.
+		writes[globalKey] = false // shared barrier: coexists with other scoped steps
+		for _, set := range []struct {
+			resources []ResourceLock
+			exclusive bool
+		}{{p.Reads, false}, {p.Writes, true}} {
+			for _, d := range set.resources {
+				k, ok := lockKeyFor(d)
+				if !ok {
+					return escalate(writes[footprintKey])
+				}
+				// A write dominates a read of the same resource: one exclusive
+				// hold, never a shared and an exclusive hold on one key.
+				writes[k] = writes[k] || set.exclusive
+			}
+		}
+	} else if p == nil || p.Scope == "global" || len(p.Domains) == 0 || !knownRisk(p.Risk) {
 		// Unlabeled / global / unrecognised → exclusive global barrier → serial.
 		writes[globalKey] = true
 	} else {
