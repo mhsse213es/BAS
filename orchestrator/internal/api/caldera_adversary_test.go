@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -96,4 +97,39 @@ func TestRunCalderaAdversary_ExecutionPolicyFiltersStep(t *testing.T) {
 			t.Fatalf("policy_skipped_results = %+v, want 1 policy-privilege skip", skipped)
 		}
 	})
+}
+
+// GetCalderaAdversary interpolates {adversaryId} straight into the Caldera
+// API URL, and the route is open to any authenticated user (tierAny). A value
+// containing path separators would therefore let a read-only caller reach
+// other /api/v2 endpoints using the server's stored Caldera key, so the
+// handler must reject it before any request is issued -- asserted here by
+// failing the test if the fake Caldera server is contacted at all.
+func TestGetCalderaAdversary_RejectsPathTraversalID(t *testing.T) {
+	var hits int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&hits, 1)
+		http.NotFound(w, r)
+	}))
+	defer srv.Close()
+
+	h := New(nil, ws.NewHub(), scenario.NewEngine(t.TempDir()), "").WithCaldera(srv.URL, "")
+
+	for _, id := range []string{
+		"../../agents",
+		"adv-1/../../agents",
+		"adv-1?fields=all",
+		"adv 1",
+		"",
+	} {
+		rec := httptest.NewRecorder()
+		req := withURLParam(httptest.NewRequest(http.MethodGet, "/api/caldera/adversaries/x", nil), "adversaryId", id)
+		h.GetCalderaAdversary(rec, req)
+		if rec.Code != http.StatusBadRequest {
+			t.Errorf("adversaryId %q: status = %d, want 400", id, rec.Code)
+		}
+	}
+	if n := atomic.LoadInt32(&hits); n != 0 {
+		t.Fatalf("Caldera was contacted %d time(s) for rejected IDs; want 0", n)
+	}
 }

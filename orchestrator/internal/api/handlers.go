@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -4426,10 +4427,18 @@ func (h *Handler) GetCalderaAdversaries(w http.ResponseWriter, r *http.Request) 
 	respond(w, out)
 }
 
+// calderaSafeID allows only alphanumeric characters, hyphens, and underscores
+// (max 128 chars). Caldera IDs are UUIDs, so this is not restrictive in
+// practice — it exists because the ID is interpolated straight into a Caldera
+// API URL below, and a value containing "/" or ".." would let any authenticated
+// caller reach other /api/v2 endpoints using the server's stored Caldera key.
+// Mirrors scenario.safeID, which guards the same interpolation on the run path.
+var calderaSafeID = regexp.MustCompile(`^[a-zA-Z0-9_-]{1,128}$`)
+
 // GET /api/caldera/adversaries/{adversaryId} — single adversary with ability chain.
 func (h *Handler) GetCalderaAdversary(w http.ResponseWriter, r *http.Request) {
 	adversaryID := chi.URLParam(r, "adversaryId")
-	if len(adversaryID) == 0 || len(adversaryID) > 128 {
+	if !calderaSafeID.MatchString(adversaryID) {
 		jsonError(w, "invalid adversary ID", http.StatusBadRequest)
 		return
 	}
