@@ -158,59 +158,85 @@ where `S` on `/etc` conflicts with `IX` on `/etc`. `RWMutex` offers two modes an
 a larger change than the profile work and carries its own deadlock-ordering burden. **Deferred, not
 solved.**
 
+### Granularity is fixed per domain, and may not be mixed
+
+Each domain is registered in the vocabulary as **either** whole-domain **or** keyed. A single domain
+may not be addressed both ways.
+
+This is forced by the lock primitive. With only shared/exclusive modes, these three properties
+cannot hold simultaneously:
+
+1. two whole-domain **readers** run concurrently,
+2. a whole-domain reader **excludes** a keyed writer beneath it,
+3. two keyed **writers** of distinct keys run concurrently.
+
+Any assignment of shared/exclusive that buys (2) costs (1) or (3). It is the same intention-lock
+problem as the subtree case, one level up: (2) is `S` conflicting with `IX`, which two-mode locks
+cannot express.
+
+**Forbidding mixed granularity removes the need for (2) entirely**, so (1) and (3) are both kept.
+
+An earlier draft of this spec instead made a whole-domain read take an exclusive root hold. That
+buys (2) at the cost of (1) — and since **every profile shipped today is a whole-domain read**
+(`observe(domain)` sets no `Key`), it would have serialized all 15 of them against each other and
+destroyed the parallelism that currently exists. Recorded here because the rule is superficially
+appealing and someone will propose it again.
+
 ### Resolution rules
 
-| declaration | locks acquired |
-|---|---|
-| keyed read `d/k` | `shared` on `d` (root), `shared` on `d/k` |
-| keyed write `d/k` | `shared` on `d` (root), `exclusive` on `d/k` |
-| whole-domain read `d` (empty key) | **`exclusive` on `d`** |
-| whole-domain write `d` (empty key) | `exclusive` on `d` |
+| domain kind | declaration | locks acquired |
+|---|---|---|
+| whole-domain | read `d` | `shared` on `d` |
+| whole-domain | write `d` | `exclusive` on `d` |
+| keyed | read `d/k` | `shared` on `d/k` |
+| keyed | write `d/k` | `exclusive` on `d/k` |
 
-The third row is the one to read twice. *"I read this entire domain"* means *"nothing may modify
-anything within it"*, which is an exclusive hold on the root. The cost is that two whole-domain
-readers serialize against each other unnecessarily. That is squarely inside the core invariant:
-unnecessary serialization is permitted; unsafe concurrency is not.
+No root lock is required in a keyed domain, because whole-domain access is not permitted there.
+The whole-domain rows preserve today's behaviour exactly.
+
+**Escalation covers every other case.** An unparseable key, a keyed declaration in a whole-domain
+domain (or the reverse), or an unregistered domain resolves to the **exclusive global barrier** —
+fully serial. This is strictly more conservative than degrading to a domain-level lock, needs no root
+lock to be correct, and is trivially safe.
+
+> Amends the settled decision *"unknown/unparseable → empty key → whole-domain exclusive"*.
+> Escalating to the global barrier instead is required for correctness once mixed granularity is
+> forbidden, and is more conservative in every case.
 
 **Writes dominate reads for the same resource.** An atomic declaring both a read and a write of the
 same canonical resource acquires one **exclusive** hold, not a shared and an exclusive hold.
 `resolve()` already implements this (`writes[k] = writes[k] || exclusive`); the behaviour is
 retained and becomes a stated contract rather than an implementation detail.
 
-### Required change to `resolve()` — the root lock is new
+### Why today's key-joining hole disappears
 
-Today `resolve()` builds a single lock key per declared resource:
+Today `resolve()` builds one lock key per resource:
 
 ```go
 k := d.Domain
 if d.Key != "" { k += "/" + d.Key }
 ```
 
-So `filesystem` (whole domain) and `filesystem//tmp/a` (keyed) are **different keys that do not
-conflict**. A step declaring a whole-domain read would run concurrently with a step declaring a
-keyed write inside it.
+so `filesystem` and `filesystem//tmp/a` are different keys that do **not** conflict. That hole is
+latent (nothing sets a `Key` today) but would go live the moment keyed profiles exist.
 
-**This hole is latent rather than live**: every profile shipped today uses `observe(domain)`, which
-sets no `Key`, so all current locks are whole-domain and the case never arises. **It becomes live the
-moment keyed per-atomic profiles are introduced** — which is the entire point of this design.
-
-Therefore keyed access must additionally take a **shared hold on the bare domain root**, which is
-what makes a whole-domain exclusive hold conflict with every keyed access beneath it. This is a
-prerequisite change, not an optimisation, and it must land before or with the first keyed profile.
-
-Canonicalisation also owns the key-joining form, so that a domain and a key whose leading separator
-would otherwise produce `filesystem//tmp/a` yield one stable spelling.
+Fixing granularity per domain closes it without a root lock: in a keyed domain the bare form is
+never produced, and in a whole-domain domain the keyed form never is. Canonicalisation still owns
+the joining form so that a leading separator yields one stable spelling rather than
+`filesystem//tmp/a`.
 
 ### Worked cases
 
 | pair | resolution | outcome |
 |---|---|---|
-| write `fs:/tmp/a` vs write `fs:/tmp/b` | shared root; distinct exclusive leaves | concurrent |
+| write `fs:/tmp/a` vs write `fs:/tmp/b` (`fs` keyed) | distinct exclusive leaves | concurrent |
 | read `fs:/tmp/a` vs write `fs:/tmp/a` | conflict at leaf | serial |
-| read whole `fs` vs write `fs:/tmp/a` | exclusive root vs shared root | serial |
-| write whole `fs` vs anything in `fs` | exclusive root | serial |
-| read `svc:sshd` vs read `svc:sshd` | shared/shared at leaf | concurrent |
+| read `fs` whole-domain, `fs` registered keyed | invalid → global barrier | serial |
+| read `process` vs read `process` (`process` whole-domain) | shared/shared | concurrent — **today's behaviour** |
+| read `process` vs write `process` | shared vs exclusive | serial |
+| read `svc:sshd` vs read `svc:sshd` (`svc` keyed) | shared/shared at leaf | concurrent |
 | read `svc:sshd` vs write `svc:sshd` | conflict at leaf | serial |
+| any unparseable key | global barrier | serial |
 
 ### Consequence to enforce in review
 
