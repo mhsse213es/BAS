@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"encoding/base64"
 	"errors"
@@ -133,16 +132,26 @@ func execStep(parentCtx context.Context, step ScenarioStep, pool *HostPool) prot
 
 	cmd := buildCmd(ctx, step)
 
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
+	// Bounded at the writer, not after the fact: memory stays capped while the
+	// step is still running. cappedBuffer keeps draining past the limit so the
+	// child can never block on a full pipe -- see its doc comment.
+	stdout := newCappedBuffer(maxOutputBytes)
+	stderr := newCappedBuffer(maxOutputBytes)
+	cmd.Stdout = stdout
+	cmd.Stderr = stderr
 	// Never let an interactive prompt block the step on stdin (see helper).
 	cmd.Stdin = declinePromptInput()
+
+	// The agent's own diagnostics (timeout, abandoned pipes) are collected here
+	// rather than written into stderr above. Appending them to a capped buffer
+	// would let a step that already produced 8 KB of stderr silently discard the
+	// one line explaining why it failed.
+	var agentNotes []string
 
 	// Hard bound on cmd.Wait itself -- the last line of defence, and the only
 	// one that holds on every platform.
 	//
-	// Because Stdout/Stderr above are bytes.Buffers rather than *os.File,
+	// Because Stdout/Stderr above are in-process writers rather than *os.File,
 	// os/exec spawns goroutines copying from OS pipes into them, and Wait
 	// blocks until the process exits AND every write end of those pipes is
 	// closed. A descendant that inherited the pipe keeps it open after the
@@ -275,7 +284,7 @@ func execStep(parentCtx context.Context, step ScenarioStep, pool *HostPool) prot
 	if timedOut {
 		exitCode = -1
 		if strings.TrimSpace(stderr.String()) == "" {
-			fmt.Fprintf(&stderr, "step exceeded execute timeout of %ds", timeout)
+			agentNotes = append(agentNotes, fmt.Sprintf("step exceeded execute timeout of %ds", timeout))
 		}
 	}
 
@@ -288,8 +297,8 @@ func execStep(parentCtx context.Context, step ScenarioStep, pool *HostPool) prot
 	if errors.Is(err, exec.ErrWaitDelay) {
 		exitCode = -1
 		log.Printf("[exec] %s: output pipes abandoned after WaitDelay — a descendant survived the process-group kill", step.TaskID)
-		fmt.Fprintf(&stderr, "\n[agent] step output abandoned after %ds: a child process outlived the kill and kept the output pipe open; captured output may be truncated",
-			grace+waitDelaySlackSec)
+		agentNotes = append(agentNotes, fmt.Sprintf("[agent] step output abandoned after %ds: a child process outlived the kill and kept the output pipe open; captured output may be truncated",
+			grace+waitDelaySlackSec))
 	}
 
 	// The step was still in-flight when the scenario itself was cancelled
@@ -301,7 +310,19 @@ func execStep(parentCtx context.Context, step ScenarioStep, pool *HostPool) prot
 	if !timedOut && parentCtx.Err() != nil {
 		exitCode = -1
 		if strings.TrimSpace(stderr.String()) == "" {
-			stderr.WriteString("step interrupted by scenario cancellation")
+			agentNotes = append(agentNotes, "step interrupted by scenario cancellation")
+		}
+	}
+
+	// Agent notes are appended AFTER the capped child output, so the explanation
+	// of a failure is never the thing the cap discards.
+	stderrOut := stderr.String()
+	if len(agentNotes) > 0 {
+		joined := strings.Join(agentNotes, "\n")
+		if strings.TrimSpace(stderrOut) == "" {
+			stderrOut = joined
+		} else {
+			stderrOut += "\n" + joined
 		}
 	}
 
@@ -310,8 +331,8 @@ func execStep(parentCtx context.Context, step ScenarioStep, pool *HostPool) prot
 		PID:           stepPID,
 		StartedAt:     before,
 		ExitCode:      exitCode,
-		Stdout:        trimOutput(stdout.Bytes()),
-		Stderr:        trimOutput(stderr.Bytes()),
+		Stdout:        stdout.String(),
+		Stderr:        stderrOut,
 		DurationMs:    dur,
 		ExecutedAt:    time.Now(),
 		Blocked:       blocked,
