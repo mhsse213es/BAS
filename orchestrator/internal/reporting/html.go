@@ -675,20 +675,27 @@ code{font-family:"Cascadia Code","Consolas","SF Mono",monospace;font-size:0.85em
      a visible page-like card and the bars sit on its real edges. */
   .ph,.pf,.footer{display:none !important}
 
-  /* No running replacement is printed in its place, deliberately. Two were
-     tried and measured, and both failed on a real render:
+  /* The classification bar prints on every physical sheet via a repeating
+     table footer. Everything after the cover lives in one .runsheet table
+     whose tfoot Chrome repeats at the bottom of each sheet AND reserves
+     vertical space for -- the space reservation is the whole point, and it is
+     what the two simpler approaches could not do:
        - position:fixed with padding-bottom on .inner: padding reserves space
          only where a Section ENDS, so a Section spilling across a sheet
          boundary printed its content UNDER the bar (a SECTION heading at
          y=816pt beneath a footer starting at y=820pt).
-       - the same, with @page{margin-bottom} + PreferCSSPageSize to reserve the
-         band on every sheet: Chrome then anchored the fixed element to the top
-         of the page (y=21.9pt), dropped it from some sheets entirely, and
-         changed the paper width from 595.92pt to 594.96pt.
-     The cover carries the classification prominently and is full-bleed by
-     design, which is what rules out the device-margin approach that would make
-     Chrome's own displayHeaderFooter work. Per-sheet classification marking is
-     therefore a separate change with a real trade-off, not a tidy-up. */}
+       - the same, with @page{margin-bottom} + PreferCSSPageSize: Chrome then
+         anchored the fixed element to the TOP of the page (y=21.9pt), dropped
+         it from some sheets entirely, and changed the paper width from
+         595.92pt to 594.96pt.
+     Chrome's own displayHeaderFooter would also reserve space correctly, but
+     it needs a non-zero device margin, and that margin would apply to the
+     cover too and put a white band across its full-bleed navy panel. The
+     table footer needs no device margin, so the cover stays full-bleed -- and
+     the cover sits OUTSIDE .runsheet, so it keeps its own classification pill
+     instead of getting the bar. The rule itself lives with the other .runsheet
+     declarations below, not here -- see the note there. */
+}
 @media screen and (max-width:700px){
   body{padding:0}
   .page{width:100%;min-height:unset;overflow:visible;border-radius:0;box-shadow:none;margin:0 0 16px}
@@ -770,6 +777,35 @@ code{font-family:"Cascadia Code","Consolas","SF Mono",monospace;font-size:0.85em
   padding:2px 8px;border-radius:3px}
 .pf{margin-top:auto;padding-top:12px;border-top:1px solid #f0f4f8;
   display:flex;justify-content:space-between;align-items:center;font-size:0.58rem;color:#9ab0c8}
+
+/* Running classification footer — see the @media print block for the mechanism.
+   .runsheet is a layout wrapper, not a data table, so it has to opt out of
+   every generic table rule in this stylesheet (font-size, margin, collapsed
+   borders, and the print-only table-layout:fixed and th,td padding that exist
+   for the wide data tables). The child combinators keep these overrides off
+   the real tables nested inside the cell. */
+.runsheet{width:100%;margin:0;border-collapse:collapse;border:0;
+  font-size:inherit;table-layout:auto}
+.runsheet>tbody>tr>td,.runsheet>tfoot>tr>td{padding:0;border:0;background:none;
+  vertical-align:top}
+/* The footer group is declared here as the default and hidden for screen just
+   below, rather than being switched on inside @media print. Either would work;
+   this keeps the rule next to the other .runsheet declarations it has to
+   coexist with. The @media screen block must sit immediately after the rule it
+   overrides -- the stylesheet's main screen block is far earlier, and an
+   equal-specificity rule later in source order wins regardless of a matching
+   media query. */
+.runsheet>tfoot{display:table-footer-group}
+/* Hidden on screen: there the per-section .pf still sits on a real card edge. */
+@media screen{.runsheet>tfoot{display:none}}
+.runfoot{display:flex;justify-content:space-between;align-items:baseline;
+  /* The tfoot's height IS the space Chrome reserves on every sheet, so this
+     padding is the only thing keeping the last line of content off the rule
+     above the bar. At 7px the tightest sheet cleared the bar by 2.9pt. */
+  padding:14px 48px 10px;border-top:1px solid #eef1f6;
+  font-size:0.56rem;color:#9ab0c8;letter-spacing:0.02em}
+.runfoot-class{font-weight:800;text-transform:uppercase;letter-spacing:0.08em;
+  color:#c2410c;white-space:nowrap}
 /* legacy footer alias */
 .footer{margin-top:auto;padding-top:12px;border-top:1px solid #f0f4f8;
   display:flex;justify-content:space-between;align-items:center;font-size:0.58rem;color:#9ab0c8}
@@ -1096,6 +1132,17 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
   </div>
 </div>
 </div>
+
+<!-- Everything past the cover is wrapped in one table so its tfoot repeats the
+     classification bar on every printed sheet, with space reserved for it. -->
+<table class="runsheet">
+<tfoot><tr><td>
+  <div class="runfoot">
+    <span>Aud<span style="color:#0d9488">spect</span> BAS &nbsp;&#183;&nbsp; {{.agent.hostname}}{{if .agent.ipAddress}} &nbsp;&#183;&nbsp; {{.agent.ipAddress}}{{end}} &nbsp;&#183;&nbsp; Generated {{fmtTime .generatedAt}}</span>
+    <span class="runfoot-class">Confidential &mdash; Authorised Recipients Only</span>
+  </div>
+</td></tr></tfoot>
+<tbody><tr><td>
 
 <!-- ═══ 1. EXECUTIVE SUMMARY ════════════════════════════════════════════ -->
 <div class="page">
@@ -3539,6 +3586,9 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 </div>
 </div>
 {{end}}
+
+</td></tr></tbody>
+</table>
 
 </body>
 </html>`

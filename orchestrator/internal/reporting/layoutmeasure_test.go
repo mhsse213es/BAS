@@ -128,3 +128,65 @@ func TestMeasurePrintLayout(t *testing.T) {
 		t.Logf("  %2d. right=%7.1f  width=%7.1f  left=%7.1f  %s", i+1, r.Right, r.W, r.Left, r.Sel)
 	}
 }
+
+// TestProbeRunFooter reports how the browser actually lays out the repeating
+// classification footer under print emulation. Diagnostic only.
+func TestProbeRunFooter(t *testing.T) {
+	path := os.Getenv("AUDSPECT_LAYOUT_HTML")
+	if path == "" {
+		t.Skip("set AUDSPECT_LAYOUT_HTML")
+	}
+	allocCtx, cancelAlloc := chromedp.NewExecAllocator(context.Background(),
+		append(chromedp.DefaultExecAllocatorOptions[:], chromedp.Flag("headless", "new"))...)
+	defer cancelAlloc()
+	ctx, cancel := chromedp.NewContext(allocCtx)
+	defer cancel()
+	ctx, cancelT := context.WithTimeout(ctx, 90*time.Second)
+	defer cancelT()
+
+	const js = `(() => {
+  const out = {};
+  const q = (sel) => {
+    const el = document.querySelector(sel);
+    if (!el) return 'MISSING';
+    const cs = getComputedStyle(el);
+    const r = el.getBoundingClientRect();
+    return {display: cs.display, visibility: cs.visibility, height: r.height,
+            top: r.top + window.scrollY, width: r.width, text: (el.innerText||'').slice(0,60)};
+  };
+  out.table = q('table.runsheet');
+  out.tfoot = q('table.runsheet > tfoot');
+  out.tfootTd = q('table.runsheet > tfoot > tr > td');
+  out.runfoot = q('.runfoot');
+  out.tbodyTd = q('table.runsheet > tbody > tr > td');
+  out.ph = q('.ph');
+  out.mediaPrint = window.matchMedia('print').matches;
+  return JSON.stringify(out);
+})()`
+
+	var out string
+	if err := chromedp.Run(ctx,
+		chromedp.EmulateViewport(794, 1123),
+		chromedp.Navigate("file:///"+path),
+		chromedp.ActionFunc(func(c context.Context) error {
+			return emulation.SetEmulatedMedia().WithMedia("print").Do(c)
+		}),
+		chromedp.Sleep(1200*time.Millisecond),
+		chromedp.Evaluate(js, &out),
+	); err != nil {
+		t.Fatalf("probe: %v", err)
+	}
+	t.Logf("print-media layout: %s", out)
+
+	var screen string
+	if err := chromedp.Run(ctx,
+		chromedp.ActionFunc(func(c context.Context) error {
+			return emulation.SetEmulatedMedia().WithMedia("screen").Do(c)
+		}),
+		chromedp.Sleep(600*time.Millisecond),
+		chromedp.Evaluate(js, &screen),
+	); err != nil {
+		t.Fatalf("screen probe: %v", err)
+	}
+	t.Logf("screen-media layout: %s", screen)
+}
