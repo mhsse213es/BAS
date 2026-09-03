@@ -12,12 +12,27 @@ import (
 )
 
 func buildCmd(ctx context.Context, step ScenarioStep) *exec.Cmd {
+	var cmd *exec.Cmd
 	switch strings.ToLower(step.Executor) {
 	case "sh":
-		return exec.CommandContext(ctx, "sh", "-c", step.Command)
+		cmd = exec.CommandContext(ctx, "sh", "-c", step.Command)
 	default:
-		return exec.CommandContext(ctx, "bash", "-c", step.Command)
+		cmd = exec.CommandContext(ctx, "bash", "-c", step.Command)
 	}
+	// Put the shell in its own process group so terminateStepJob can signal the
+	// WHOLE tree with kill(-pgid). Without this the child shares the agent's
+	// group, so a group kill is impossible and exec.CommandContext's own
+	// cancellation -- which is cmd.Process.Kill(), a single-PID SIGKILL -- reaps
+	// only the direct child. A shell that forks (pipelines, &&, subshells,
+	// backgrounded work) then leaves descendants running that still hold the
+	// inherited stdout/stderr pipe open, and cmd.Wait blocks on those pipes
+	// forever even though the step's deadline fired on time.
+	//
+	// applyExecutionContext only fills SysProcAttr when it is nil and otherwise
+	// just sets Credential, so setting it here is safe alongside user-context
+	// switching.
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	return cmd
 }
 
 // runCleanup executes the step's cleanup command and returns a verdict:

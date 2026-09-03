@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -68,6 +69,12 @@ func CheckPayloadQuarantine(payloads []protocol.Payload, dir string) string {
 // one: enough for a killed command's tree to wind down before forced termination.
 const defaultGraceSec = 3
 
+// waitDelaySlackSec is how long past the grace window cmd.WaitDelay allows
+// before abandoning the stdout/stderr pipes. It only ever elapses when
+// terminateStepJob's process-group kill failed to free them, so it is a
+// backstop, not a routine cost.
+const waitDelaySlackSec = 5
+
 // executeSeconds resolves the step's execute-timeout (layer 2). Precedence:
 // curated TimeoutProfile.ExecuteSec → legacy TimeoutSec → 120s blanket default.
 func executeSeconds(step ScenarioStep) int {
@@ -131,6 +138,23 @@ func execStep(parentCtx context.Context, step ScenarioStep, pool *HostPool) prot
 	cmd.Stderr = &stderr
 	// Never let an interactive prompt block the step on stdin (see helper).
 	cmd.Stdin = declinePromptInput()
+
+	// Hard bound on cmd.Wait itself -- the last line of defence, and the only
+	// one that holds on every platform.
+	//
+	// Because Stdout/Stderr above are bytes.Buffers rather than *os.File,
+	// os/exec spawns goroutines copying from OS pipes into them, and Wait
+	// blocks until the process exits AND every write end of those pipes is
+	// closed. A descendant that inherited the pipe keeps it open after the
+	// direct child is killed, so Wait could block forever even though the
+	// deadline fired on schedule -- leaving the step permanently RUNNING, with
+	// the exit-code and timeout-marker code below unreachable. Cancel could not
+	// clear it either: cancellation only cancels parentCtx, which converges on
+	// this same blocked call, so repeated operator "Stop" presses were no-ops.
+	// WaitDelay makes Wait give up on those pipes and return ErrWaitDelay,
+	// keeping the run moving. Sized past the grace window so the orderly
+	// terminateStepJob path below gets its chance first.
+	cmd.WaitDelay = time.Duration(grace)*time.Second + waitDelaySlackSec*time.Second
 
 	// Resolve execution context (user / admin / system). On Windows this may
 	// switch to the logged-in user's token via WTS; on POSIX it is a no-op.
@@ -253,6 +277,19 @@ func execStep(parentCtx context.Context, step ScenarioStep, pool *HostPool) prot
 		if strings.TrimSpace(stderr.String()) == "" {
 			fmt.Fprintf(&stderr, "step exceeded execute timeout of %ds", timeout)
 		}
+	}
+
+	// WaitDelay elapsed: the step's process tree was killed, but something in it
+	// still held the output pipes, so os/exec abandoned them and returned early.
+	// Say so rather than shipping an unexplained exit -1 — stdout/stderr here are
+	// whatever was captured before the pipes were dropped, so the step's output
+	// may be truncated, and a reader deserves to know that. Note this leaves a
+	// process alive on the host: worth surfacing, not silently swallowing.
+	if errors.Is(err, exec.ErrWaitDelay) {
+		exitCode = -1
+		log.Printf("[exec] %s: output pipes abandoned after WaitDelay — a descendant survived the process-group kill", step.TaskID)
+		fmt.Fprintf(&stderr, "\n[agent] step output abandoned after %ds: a child process outlived the kill and kept the output pipe open; captured output may be truncated",
+			grace+waitDelaySlackSec)
 	}
 
 	// The step was still in-flight when the scenario itself was cancelled
