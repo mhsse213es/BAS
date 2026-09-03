@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"time"
@@ -378,10 +379,8 @@ func (h *Handler) GetCampaignReport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.auditLog(r, "report.export", chi.URLParam(r, "id"), map[string]any{"format": "html", "type": "campaign"}, "ok")
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := reporting.GenerateHTML(w, rep, nil); err != nil {
-		log.Printf("[api] campaign report html: %v", err)
-	}
+	writeBufferedReport(w, "text/html; charset=utf-8", "", "campaign report html",
+		func(out io.Writer) error { return reporting.GenerateHTML(out, rep, nil) })
 }
 
 // GET /api/campaigns/{id}/pdf — fleet-wide PDF report.

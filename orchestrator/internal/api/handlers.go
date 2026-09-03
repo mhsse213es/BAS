@@ -4656,10 +4656,8 @@ func (h *Handler) GetFullReportHTML(w http.ResponseWriter, r *http.Request) {
 
 	compRows := h.complianceRows(r.Context(), agentID, filter)
 
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := reporting.GenerateHTML(w, report, compRows); err != nil {
-		log.Printf("[api] generate HTML report: %v", err)
-	}
+	writeBufferedReport(w, "text/html; charset=utf-8", "", "generate HTML report",
+		func(out io.Writer) error { return reporting.GenerateHTML(out, report, compRows) })
 }
 
 // complianceRows builds the per-framework compliance summary rows by aggregating
@@ -5324,10 +5322,8 @@ func (h *Handler) GetRunReport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.auditLog(r, "report.export", runID, map[string]any{"format": "html", "type": "run"}, "ok")
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := reporting.GenerateHTML(w, report, nil); err != nil {
-		log.Printf("[api] generate run report HTML: %v", err)
-	}
+	writeBufferedReport(w, "text/html; charset=utf-8", "", "generate run report HTML",
+		func(out io.Writer) error { return reporting.GenerateHTML(out, report, nil) })
 }
 
 // GET /api/scenarios/runs/{runId}/report.json

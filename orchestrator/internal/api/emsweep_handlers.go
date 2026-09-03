@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"slices"
@@ -207,10 +208,8 @@ func (h *Handler) GetEMSweepReport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.auditLog(r, "report.export", id, map[string]any{"format": "html", "type": "em_sweep"}, "ok")
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := reporting.GenerateHTML(w, rep, nil); err != nil {
-		log.Printf("[api] em sweep report html: %v", err)
-	}
+	writeBufferedReport(w, "text/html; charset=utf-8", "", "em sweep report html",
+		func(out io.Writer) error { return reporting.GenerateHTML(out, rep, nil) })
 }
 
 // GET /api/em/sweeps/{id}/pdf

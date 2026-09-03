@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -484,11 +485,10 @@ func (h *Handler) GetExerciseReportJSON(w http.ResponseWriter, r *http.Request) 
 		jsonError(w, err.Error(), http.StatusNotFound)
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, buildReportFilename("Exercise_Report", id, "json")))
-	if err := reporting.ExerciseReportJSON(w, rep); err != nil {
-		jsonError(w, err.Error(), http.StatusInternalServerError)
-	}
+	writeBufferedReport(w, "application/json",
+		fmt.Sprintf(`attachment; filename="%s"`, buildReportFilename("Exercise_Report", id, "json")),
+		"exercise report json",
+		func(out io.Writer) error { return reporting.ExerciseReportJSON(out, rep) })
 }
 
 // GET /api/exercises/executions/{id}/report.html
@@ -499,10 +499,8 @@ func (h *Handler) GetExerciseReportHTML(w http.ResponseWriter, r *http.Request) 
 		jsonError(w, err.Error(), http.StatusNotFound)
 		return
 	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := reporting.ExerciseReportHTML(w, rep); err != nil {
-		jsonError(w, err.Error(), http.StatusInternalServerError)
-	}
+	writeBufferedReport(w, "text/html; charset=utf-8", "", "exercise report html",
+		func(out io.Writer) error { return reporting.ExerciseReportHTML(out, rep) })
 }
 
 // GET /api/exercises/executions/{id}/report.pdf
@@ -513,11 +511,10 @@ func (h *Handler) GetExerciseReportPDF(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, err.Error(), http.StatusNotFound)
 		return
 	}
-	w.Header().Set("Content-Type", "application/pdf")
-	w.Header().Set("Content-Disposition", fmt.Sprintf(`inline; filename="%s"`, buildReportFilename("Exercise_Report", id, "pdf")))
-	if err := reporting.ExerciseReportPDF(r.Context(), w, rep); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-	}
+	writeBufferedReport(w, "application/pdf",
+		fmt.Sprintf(`inline; filename="%s"`, buildReportFilename("Exercise_Report", id, "pdf")),
+		"exercise report pdf",
+		func(out io.Writer) error { return reporting.ExerciseReportPDF(r.Context(), out, rep) })
 }
 
 // GET /api/exercises/executions/{id}/report.csv
@@ -528,11 +525,10 @@ func (h *Handler) GetExerciseReportCSV(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, err.Error(), http.StatusNotFound)
 		return
 	}
-	w.Header().Set("Content-Type", "text/csv")
-	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, buildReportFilename("Exercise_Report", id, "csv")))
-	if err := reporting.ExerciseReportCSV(w, rep); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-	}
+	writeBufferedReport(w, "text/csv",
+		fmt.Sprintf(`attachment; filename="%s"`, buildReportFilename("Exercise_Report", id, "csv")),
+		"exercise report csv",
+		func(out io.Writer) error { return reporting.ExerciseReportCSV(out, rep) })
 }
 
 // POST /api/exercises/executions/{id}/evidence

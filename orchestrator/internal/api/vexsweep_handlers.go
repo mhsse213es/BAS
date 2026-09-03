@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"strings"
@@ -210,10 +211,8 @@ func (h *Handler) GetSweepReport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.auditLog(r, "report.export", id, map[string]any{"format": "html", "type": "sweep"}, "ok")
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := reporting.GenerateHTML(w, rep, nil); err != nil {
-		log.Printf("[api] sweep report html: %v", err)
-	}
+	writeBufferedReport(w, "text/html; charset=utf-8", "", "sweep report html",
+		func(out io.Writer) error { return reporting.GenerateHTML(out, rep, nil) })
 }
 
 // GET /api/vex/sweeps/{id}/pdf
