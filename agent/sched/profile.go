@@ -23,6 +23,12 @@ type ResourceProfile struct {
 	Domains []ResourceLock `json:"domains,omitempty"`
 	Scope   string         `json:"scope,omitempty"`
 	Risk    string         `json:"risk,omitempty"`
+
+	// ObservesFootprint marks a step whose EVIDENCE observes the surface that
+	// BAS's own execution perturbs — the process table, shared temp dirs, the
+	// auth log, the kernel ring buffer. Such a step needs the surface quiet, so
+	// it takes the footprint barrier exclusively. See footprintKey.
+	ObservesFootprint bool `json:"observesFootprint,omitempty"`
 }
 
 // ResourceLock names one resource the step touches. Key optionally narrows the
@@ -55,6 +61,24 @@ type TimeoutProfile struct {
 // This makes a global step mutually exclusive with every other step without the
 // scheduler needing an explicit dependency graph.
 const globalKey = "*global*"
+
+// footprintKey is the quiescence barrier for BAS's own execution footprint —
+// the process table, temp files, auth log and kernel ring buffer that every
+// running step perturbs simply by existing. A step observing that surface
+// cannot get a stable reading while other steps run, and no declared resource
+// expresses this: nothing else declares "I write the process table", yet
+// everything does.
+//
+// POLARITY IS INVERTED FROM ORDINARY READS AND MUST NOT BE "SIMPLIFIED":
+//
+//	ordinary step      -> SHARED    ("I perturb the surface")
+//	footprint observer -> EXCLUSIVE ("I require the surface quiet")
+//
+// Modelling this the intuitive way — everyone *writes* the footprint, the
+// observer *reads* it — gives every step an exclusive hold, so every pair
+// conflicts, and parallelism is disabled entirely while still appearing
+// correct. TestFootprint_TwoOrdinaryStepsDoNotConflictOnFootprint guards it.
+const footprintKey = "*footprint*"
 
 // Recognised risk levels. Observation maps to a read lock; modification and
 // persistence map to a write lock.

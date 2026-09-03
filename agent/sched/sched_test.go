@@ -45,13 +45,33 @@ func TestResolveModificationTakesWriteLocks(t *testing.T) {
 	}
 }
 
+// isFullySerial reports whether a resolved lock set means "runs alone": the
+// exclusive global barrier and no per-domain locks.
+//
+// The footprint barrier is expected alongside it and deliberately ignored here.
+// Every step holds it — shared for ordinary execution — because an observer must
+// exclude unlabeled steps too, or their processes contaminate its reading. These
+// assertions used to be `len(got) != 1`, which conflated "holds no domain locks"
+// with "holds exactly one lock"; the barrier makes the difference visible.
+func isFullySerial(got map[string]bool) bool {
+	if got[globalKey] != true {
+		return false
+	}
+	for k := range got {
+		if k != globalKey && k != footprintKey {
+			return false // a per-domain lock means it is not running alone
+		}
+	}
+	return true
+}
+
 func TestResolveGlobalScopeIsExclusive(t *testing.T) {
 	got := keyMode(resolve(&ResourceProfile{
 		Domains: []ResourceLock{{Domain: "wmi-secpolicy"}},
 		Scope:   "global", Risk: RiskModification,
 	}))
-	if len(got) != 1 || got[globalKey] != true {
-		t.Errorf("global-scope step must resolve to a single exclusive global lock, got %v", got)
+	if !isFullySerial(got) {
+		t.Errorf("global-scope step must resolve to the exclusive global lock and no domain locks, got %v", got)
 	}
 }
 
@@ -63,7 +83,7 @@ func TestResolveDefaultsToSerial(t *testing.T) {
 	}
 	for name, p := range cases {
 		got := keyMode(resolve(p))
-		if len(got) != 1 || got[globalKey] != true {
+		if !isFullySerial(got) {
 			t.Errorf("%s: must default to exclusive global lock (serial), got %v", name, got)
 		}
 	}

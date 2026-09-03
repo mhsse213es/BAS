@@ -24,6 +24,12 @@ type lockReq struct {
 func resolve(p *ResourceProfile) []lockReq {
 	writes := map[string]bool{} // lock key -> needs exclusive hold
 
+	// Every step participates in the footprint barrier, including a fully-serial
+	// one: an observer must exclude unlabeled steps too, or their processes
+	// contaminate its reading. Shared for ordinary execution, exclusive for an
+	// observer — see footprintKey, and do not invert this.
+	writes[footprintKey] = p != nil && p.ObservesFootprint
+
 	if p == nil || p.Scope == "global" || len(p.Domains) == 0 || !knownRisk(p.Risk) {
 		// Unlabeled / global / unrecognised → exclusive global barrier → serial.
 		writes[globalKey] = true
