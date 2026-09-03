@@ -497,9 +497,12 @@ func _loadLogos() {
 		if err != nil {
 			continue
 		}
-		_logoLight = "data:image/png;base64," + base64.StdEncoding.EncodeToString(data)
+		// keyOutWhite strips the PNGs' opaque white background so the mark can
+		// sit on the dark cover as itself. See logoalpha.go: without it the
+		// cover showed a blank white tile where the shield should be.
+		_logoLight = "data:image/png;base64," + base64.StdEncoding.EncodeToString(keyOutWhite(data))
 		if dark, err2 := os.ReadFile(filepath.Join(candidate, "images", "logo.png")); err2 == nil {
-			_logoDark = "data:image/png;base64," + base64.StdEncoding.EncodeToString(dark)
+			_logoDark = "data:image/png;base64," + base64.StdEncoding.EncodeToString(keyOutWhite(dark))
 		}
 		return
 	}
@@ -657,7 +660,35 @@ code{font-family:"Cascadia Code","Consolas","SF Mono",monospace;font-size:0.85em
 
   .fc,.scard,.gloss-item{page-break-inside:avoid;break-inside:avoid}
   thead{display:table-header-group}
-  .ph,.pf{page-break-inside:avoid}}
+
+  /* Per-section header/footer bars must not print (2026-09-04).
+     .ph and .pf were page furniture: every report Section is its own .page
+     div, and while .page{page-break-after:always} held, one Section WAS one
+     physical sheet, so the bars landed at the sheet's top and bottom. The
+     2026-08-20 blank-page fix let Sections flow onto a shared sheet, which
+     left those bars stranded wherever a Section happened to begin and end --
+     a real report came back with three "audspecterver — <Section>" footers
+     and three "Audspect BAS | ... | CONFIDENTIAL" headers stacked down the
+     middle of one page. Neither marks a page any more, and each Section
+     already announces itself with its SECTION n title, so printing them adds
+     nothing and costs legibility. They still render on screen, where .page is
+     a visible page-like card and the bars sit on its real edges. */
+  .ph,.pf,.footer{display:none !important}
+
+  /* No running replacement is printed in its place, deliberately. Two were
+     tried and measured, and both failed on a real render:
+       - position:fixed with padding-bottom on .inner: padding reserves space
+         only where a Section ENDS, so a Section spilling across a sheet
+         boundary printed its content UNDER the bar (a SECTION heading at
+         y=816pt beneath a footer starting at y=820pt).
+       - the same, with @page{margin-bottom} + PreferCSSPageSize to reserve the
+         band on every sheet: Chrome then anchored the fixed element to the top
+         of the page (y=21.9pt), dropped it from some sheets entirely, and
+         changed the paper width from 595.92pt to 594.96pt.
+     The cover carries the classification prominently and is full-bleed by
+     design, which is what rules out the device-margin approach that would make
+     Chrome's own displayHeaderFooter work. Per-sheet classification marking is
+     therefore a separate change with a real trade-off, not a tidy-up. */}
 @media screen and (max-width:700px){
   body{padding:0}
   .page{width:100%;min-height:unset;overflow:visible;border-radius:0;box-shadow:none;margin:0 0 16px}
@@ -957,7 +988,7 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
            every report, in HTML and PDF alike. An <img> carries no extractable
            text either, so the name was absent from the document entirely rather
            than merely invisible. The name must appear on every report. */}}
-      {{if .logoDarkUri}}<img src="{{.logoDarkUri}}" alt="Audspect BAS" style="height:32px;filter:brightness(0) invert(1);opacity:0.9">{{else}}<div class="clogo-mark">A</div>{{end}}
+      {{if .logoDarkUri}}<img src="{{.logoDarkUri}}" alt="Audspect BAS" style="height:34px;display:block">{{else}}<div class="clogo-mark">A</div>{{end}}
       <div>
         <div class="clogo-name">Aud<span>spect</span> BAS</div>
         <div class="clogo-sub">Breach &amp; Attack Simulation Platform</div>
