@@ -631,6 +631,30 @@ code{font-family:"Cascadia Code","Consolas","SF Mono",monospace;font-size:0.85em
      htmlpdf.go measures this on every render and names any element still
      forcing the document wide. */
   .cover{overflow:hidden}
+  /* Wide tables must never force the DOCUMENT wider than the page (2026-09-03).
+     Chrome shrink-to-fits an overflowing print job, so ONE 13-column table
+     (the per-technique detection detail: Technique/Tactic/Sev/Execution/
+     Requested Priv/Executed As/Detection/Alert Source/EventID/Threat-Process/
+     MTTD/Cleanup/Blocking Control) was rendering all 45 pages at ~79% and body
+     text at ~6pt. Measured in a real report: document 1003px against 793.7px
+     of paper.
+       - table-layout:fixed makes the existing width:100% AUTHORITATIVE. Under
+         the default auto layout it is only a suggestion that min-content width
+         overrides, which is exactly what those columns were doing.
+       - white-space:normal needs !important: the nowrap declarations are inline
+         style attributes on individual cells, which a stylesheet cannot
+         otherwise beat.
+       - overflow-wrap:anywhere (not break-word) because only "anywhere" also
+         reduces the MIN-CONTENT width -- break-word wraps visually but leaves
+         the table's minimum width unchanged, so the overflow would remain.
+         (No backticks in this comment: the whole template is a Go raw string
+         literal, so one would terminate it.)
+       - tighter cell padding buys back ~150px on a 13-column row.
+     logPrintLayoutWidth in htmlpdf.go reports any element still forcing the
+     document wide, so a future regression names itself. */
+  table{table-layout:fixed}
+  th,td{white-space:normal !important;overflow-wrap:anywhere;padding:5px 6px}
+
   .fc,.scard,.gloss-item{page-break-inside:avoid;break-inside:avoid}
   thead{display:table-header-group}
   .ph,.pf{page-break-inside:avoid}}
