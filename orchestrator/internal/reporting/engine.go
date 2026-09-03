@@ -1317,6 +1317,37 @@ type TrendSummary struct {
 // is "previous". History is capped to the most recent few, oldest-first for
 // display. With fewer than two scored runs the trend is simply marked absent —
 // we never invent a baseline.
+// sameScenarioRuns narrows a run list to those sharing the newest run's
+// scenario, preserving order.
+//
+// A prevention score is a percentage of whatever techniques that scenario
+// happens to test, so it is only comparable within one scenario. The per-agent
+// report's run list is the endpoint's last 20 runs of ANY scenario, and
+// comparing the top two produced deltas that measured nothing: a first-ever
+// Full Linux Sweep at 2% over 53 techniques read as a "-8.0 point regression"
+// against an unrelated earlier scenario at 10% over a different set.
+//
+// Scoping to the newest run's scenario also keeps the page internally
+// consistent — the heatmap, top findings and objective risks are all built from
+// that same latest run.
+//
+// Matched on ScenarioName because that is what the run list carries and what a
+// reader sees; renaming a scenario therefore starts a fresh trend, which is the
+// safe direction (a spurious baseline, never a spurious regression).
+func sameScenarioRuns(runs []RunSummary) []RunSummary {
+	if len(runs) == 0 {
+		return runs
+	}
+	want := runs[0].ScenarioName
+	out := make([]RunSummary, 0, len(runs))
+	for _, r := range runs {
+		if r.ScenarioName == want {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
 func buildTrendSummary(runs []RunSummary) TrendSummary {
 	var scored []RunSummary
 	for _, r := range runs {
@@ -1602,7 +1633,7 @@ func (e *Engine) Build(ctx context.Context, agentID string, filter string) (*Ful
 	report.TopFindings = buildTopFindings(latestResults, latestScenarioName)
 	report.ObjectiveRisks = buildObjectiveRisks(latestResults)
 	report.Detection = buildDetectionSummary(latestResults)
-	report.TrendAnalysis = buildTrendSummary(report.Runs)
+	report.TrendAnalysis = buildTrendSummary(sameScenarioRuns(report.Runs))
 	report.AttackPath = buildAttackPath(latestResults)
 	report.AttackFlow = BuildAttackFlow(latestResults)
 	report.AttackFlowSummary = summariseAttackFlow(report.AttackFlow)
@@ -1935,14 +1966,38 @@ func (e *Engine) BuildFromRun(ctx context.Context, runID string, filter string) 
 		TotalTechniques: score.TotalTechniques, FailedTechniques: score.FailedTechniques,
 	}}
 
-	// Trend: a per-run report still shows the endpoint's programme trend, not just
-	// this run in isolation. Pull the agent's scored run history for the comparison.
+	// Trend: compare this run against EARLIER runs OF THE SAME SCENARIO on this
+	// endpoint.
+	//
+	// Two things this query is careful about, both of which were wrong before:
+	//
+	//  1. scenario_id is filtered. Without it "previous" was the endpoint's last
+	//     run of ANY scenario, so a first-ever Full Linux Sweep scoring 2% over
+	//     53 techniques was compared against an unrelated earlier scenario
+	//     scoring 10% over a different technique set, and the report announced a
+	//     -8.0 point "regression" that measured nothing. A prevention percentage
+	//     is only comparable within the same technique set.
+	//
+	//  2. Only runs STRICTLY EARLIER than this one are fetched, and this run is
+	//     prepended as the current point. buildTrendSummary treats element 0 as
+	//     current, and ordering the endpoint's runs by started_at DESC made the
+	//     NEWEST run current -- so re-rendering an older run's report showed a
+	//     different run's score as "current".
+	//
+	// An unscored run (still running, or errored) gets no trend at all: with no
+	// final score there is nothing honest to compare, and the report renders
+	// "Baseline — first scored assessment".
 	var trendRuns []RunSummary
+	if status == "completed" || status == "partial" {
+		trendRuns = append(trendRuns, report.Runs[0])
+	}
 	if trows, terr := e.db.Query(ctx,
 		`SELECT id, status, score, started_at
 		   FROM scenario_runs
-		  WHERE agent_id = $1 AND status IN ('completed','partial')
-		  ORDER BY started_at DESC LIMIT 20`, agentID); terr == nil {
+		  WHERE agent_id = $1 AND scenario_id = $2 AND id <> $3
+		    AND started_at < $4 AND status IN ('completed','partial')
+		  ORDER BY started_at DESC LIMIT 20`,
+		agentID, scenarioID, runID, startedAt); terr == nil {
 		defer trows.Close()
 		for trows.Next() {
 			var rs RunSummary
