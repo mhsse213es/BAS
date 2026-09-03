@@ -26,7 +26,7 @@ func TestMISPClient_Stats_CountsRawEventsAndFilteredActors(t *testing.T) {
 	}))
 	defer server.Close()
 
-	c := NewMISPClient(server.URL, "test-key", nil, nil)
+	c := NewMISPClient(server.URL, "test-key", nil, nil, false)
 	actors, err := c.Fetch()
 	if err != nil {
 		t.Fatalf("Fetch: %v", err)
@@ -50,7 +50,7 @@ func TestMISPClient_Stats_RecordsErrorOnFailedFetch(t *testing.T) {
 	}))
 	defer server.Close()
 
-	c := NewMISPClient(server.URL, "test-key", nil, nil)
+	c := NewMISPClient(server.URL, "test-key", nil, nil, false)
 	if _, err := c.Fetch(); err == nil {
 		t.Fatal("expected error for HTTP 500")
 	}

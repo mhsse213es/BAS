@@ -1022,6 +1022,12 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		// providers (Splunk, QRadar, ...) that don't have tenant/client/secret.
 		`ALTER TABLE detection_connectors ADD COLUMN IF NOT EXISTS base_url  text NOT NULL DEFAULT ''`,
 		`ALTER TABLE detection_connectors ADD COLUMN IF NOT EXISTS api_token text NOT NULL DEFAULT ''`,
+		// insecure_tls: per-connector opt-out of TLS certificate verification,
+		// for on-prem appliances presenting a self-signed cert. Defaults false
+		// (verify) — these connectors carry the customer's API token, so the
+		// insecure path has to be a deliberate operator choice. Same setting
+		// name and meaning as internal/ticketing's insecure_tls.
+		`ALTER TABLE detection_connectors ADD COLUMN IF NOT EXISTS insecure_tls boolean NOT NULL DEFAULT false`,
 
 		// ── EPP Response Actions ─────────────────────────────────────────────
 		// action_connectors: one row per CrowdStrike/Defender response-action
@@ -1097,6 +1103,10 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 			last_error        text        NOT NULL DEFAULT '',
 			updated_at        timestamptz NOT NULL DEFAULT NOW()
 		)`,
+		// See detection_connectors.insecure_tls above — same opt-out, same
+		// verify-by-default reasoning. MISP in particular is commonly deployed
+		// air-gapped behind a self-signed cert.
+		`ALTER TABLE threat_intel_config ADD COLUMN IF NOT EXISTS insecure_tls boolean NOT NULL DEFAULT false`,
 
 		// taxii_connector_config: one row per configured TAXII 2.1 server
 		// (e.g. FS-ISAC, HC-ISAC) -- unlike threat_intel_config's one-row-
@@ -1124,6 +1134,8 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 			created_at        timestamptz NOT NULL DEFAULT NOW(),
 			updated_at        timestamptz NOT NULL DEFAULT NOW()
 		)`,
+		// See detection_connectors.insecure_tls above.
+		`ALTER TABLE taxii_connector_config ADD COLUMN IF NOT EXISTS insecure_tls boolean NOT NULL DEFAULT false`,
 
 		// taxii_ingested_objects: the idempotency ledger. A poll re-seeing an
 		// unchanged (connector_id, stix_id, modified) triple short-circuits

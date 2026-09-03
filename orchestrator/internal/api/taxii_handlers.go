@@ -14,7 +14,8 @@ func taxiiConfigToJSON(c taxii.ConnectorConfig) map[string]any {
 		"id": c.ID, "name": c.Name, "serverUrl": c.ServerURL, "apiRoot": c.APIRoot,
 		"collectionId": c.CollectionID, "authType": c.AuthType, "username": c.Username,
 		"hasPassword": c.Password != "", "hasClientCert": c.ClientCert != "", "hasClientKey": c.ClientKey != "",
-		"enabled": c.Enabled, "lastPollAt": c.LastPollAt, "lastPollStatus": c.LastPollStatus,
+		"insecureTls": c.InsecureTLS,
+		"enabled":     c.Enabled, "lastPollAt": c.LastPollAt, "lastPollStatus": c.LastPollStatus,
 		"lastPollSummary": c.LastPollSummary, "lastError": c.LastError,
 		"createdAt": c.CreatedAt, "updatedAt": c.UpdatedAt,
 	}
@@ -30,6 +31,7 @@ type taxiiConnectorBody struct {
 	Password     string `json:"password"`
 	ClientCert   string `json:"clientCert"`
 	ClientKey    string `json:"clientKey"`
+	InsecureTLS  bool   `json:"insecureTls"`
 	Enabled      bool   `json:"enabled"`
 }
 
@@ -84,7 +86,7 @@ func (h *Handler) CreateTAXIIConnector(w http.ResponseWriter, r *http.Request) {
 	created, err := h.taxiiStore.Create(r.Context(), taxii.ConnectorConfig{
 		Name: body.Name, ServerURL: body.ServerURL, APIRoot: body.APIRoot, CollectionID: body.CollectionID,
 		AuthType: body.AuthType, Username: body.Username, Password: body.Password,
-		ClientCert: body.ClientCert, ClientKey: body.ClientKey, Enabled: body.Enabled,
+		ClientCert: body.ClientCert, ClientKey: body.ClientKey, InsecureTLS: body.InsecureTLS, Enabled: body.Enabled,
 	})
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
@@ -116,7 +118,7 @@ func (h *Handler) UpdateTAXIIConnector(w http.ResponseWriter, r *http.Request) {
 	updated, err := h.taxiiStore.Update(r.Context(), id, taxii.ConnectorConfig{
 		Name: body.Name, ServerURL: body.ServerURL, APIRoot: body.APIRoot, CollectionID: body.CollectionID,
 		AuthType: body.AuthType, Username: body.Username, Password: body.Password,
-		ClientCert: body.ClientCert, ClientKey: body.ClientKey, Enabled: body.Enabled,
+		ClientCert: body.ClientCert, ClientKey: body.ClientKey, InsecureTLS: body.InsecureTLS, Enabled: body.Enabled,
 	}, body.Password == "", body.ClientCert == "", body.ClientKey == "")
 	if err != nil {
 		if err == taxii.ErrNotFound {
@@ -172,6 +174,7 @@ func (h *Handler) TestTAXIIConnector(w http.ResponseWriter, r *http.Request) {
 	}
 	client := taxii.NewClient(taxii.ConnectorConfig{
 		ServerURL: body.ServerURL, AuthType: body.AuthType, Username: body.Username, Password: body.Password,
+		InsecureTLS: body.InsecureTLS,
 	})
 	disc, err := client.Discover(r.Context())
 	if err != nil {

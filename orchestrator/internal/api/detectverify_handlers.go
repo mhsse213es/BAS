@@ -20,7 +20,7 @@ import (
 func (h *Handler) ListDetectionConnectors(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.db.Query(r.Context(),
 		`SELECT id, name, provider, enabled, auto_verify, azure_tenant_id, workspace_id, base_url,
-		        verify_delay_seconds, created_at, updated_at
+		        insecure_tls, verify_delay_seconds, created_at, updated_at
 		   FROM detection_connectors ORDER BY created_at ASC`)
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
@@ -36,6 +36,7 @@ func (h *Handler) ListDetectionConnectors(w http.ResponseWriter, r *http.Request
 		TenantID           string    `json:"tenantId"`
 		WorkspaceID        string    `json:"workspaceId"`
 		BaseURL            string    `json:"baseUrl"`
+		InsecureTLS        bool      `json:"insecureTls"`
 		VerifyDelaySeconds int       `json:"verifyDelaySeconds"`
 		CreatedAt          time.Time `json:"createdAt"`
 		UpdatedAt          time.Time `json:"updatedAt"`
@@ -44,7 +45,7 @@ func (h *Handler) ListDetectionConnectors(w http.ResponseWriter, r *http.Request
 	for rows.Next() {
 		var rv row
 		if err := rows.Scan(&rv.ID, &rv.Name, &rv.Provider, &rv.Enabled, &rv.AutoVerify,
-			&rv.TenantID, &rv.WorkspaceID, &rv.BaseURL, &rv.VerifyDelaySeconds, &rv.CreatedAt, &rv.UpdatedAt); err != nil {
+			&rv.TenantID, &rv.WorkspaceID, &rv.BaseURL, &rv.InsecureTLS, &rv.VerifyDelaySeconds, &rv.CreatedAt, &rv.UpdatedAt); err != nil {
 			continue
 		}
 		out = append(out, rv)
@@ -69,6 +70,7 @@ func (h *Handler) CreateDetectionConnector(w http.ResponseWriter, r *http.Reques
 		WorkspaceID        string `json:"workspaceId"`
 		BaseURL            string `json:"baseUrl"`
 		APIToken           string `json:"apiToken"`
+		InsecureTLS        bool   `json:"insecureTls"`
 		VerifyDelaySeconds int    `json:"verifyDelaySeconds"`
 	}
 	if json.NewDecoder(r.Body).Decode(&req) != nil || req.Name == "" || req.Provider == "" {
@@ -88,10 +90,10 @@ func (h *Handler) CreateDetectionConnector(w http.ResponseWriter, r *http.Reques
 	var id string
 	err := h.db.QueryRow(r.Context(),
 		`INSERT INTO detection_connectors
-		 (name, provider, enabled, auto_verify, azure_tenant_id, client_id, client_secret, workspace_id, base_url, api_token, verify_delay_seconds)
-		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id`,
+		 (name, provider, enabled, auto_verify, azure_tenant_id, client_id, client_secret, workspace_id, base_url, api_token, insecure_tls, verify_delay_seconds)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING id`,
 		req.Name, req.Provider, req.Enabled, req.AutoVerify,
-		req.TenantID, req.ClientID, req.ClientSecret, req.WorkspaceID, req.BaseURL, req.APIToken, req.VerifyDelaySeconds,
+		req.TenantID, req.ClientID, req.ClientSecret, req.WorkspaceID, req.BaseURL, req.APIToken, req.InsecureTLS, req.VerifyDelaySeconds,
 	).Scan(&id)
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
@@ -115,6 +117,7 @@ func (h *Handler) UpdateDetectionConnector(w http.ResponseWriter, r *http.Reques
 		WorkspaceID        string `json:"workspaceId"`
 		BaseURL            string `json:"baseUrl"`
 		APIToken           string `json:"apiToken"`
+		InsecureTLS        bool   `json:"insecureTls"`
 		VerifyDelaySeconds int    `json:"verifyDelaySeconds"`
 	}
 	if json.NewDecoder(r.Body).Decode(&req) != nil {
@@ -137,10 +140,11 @@ func (h *Handler) UpdateDetectionConnector(w http.ResponseWriter, r *http.Reques
 	ct, err := h.db.Exec(r.Context(),
 		`UPDATE detection_connectors SET name=$1, enabled=$2, auto_verify=$3, azure_tenant_id=$4,
 		        client_id=$5, client_secret=$6, workspace_id=$7, base_url=$8, api_token=$9,
-		        verify_delay_seconds=$10, updated_at=NOW()
-		  WHERE id=$11`,
+		        insecure_tls=$10, verify_delay_seconds=$11, updated_at=NOW()
+		  WHERE id=$12`,
 		req.Name, req.Enabled, req.AutoVerify, req.TenantID,
-		req.ClientID, req.ClientSecret, req.WorkspaceID, req.BaseURL, req.APIToken, req.VerifyDelaySeconds, id)
+		req.ClientID, req.ClientSecret, req.WorkspaceID, req.BaseURL, req.APIToken,
+		req.InsecureTLS, req.VerifyDelaySeconds, id)
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -197,11 +201,11 @@ func (h *Handler) loadDetectionConnector(ctx context.Context, id string) (*detec
 	var cfg detectverify.Config
 	err := h.db.QueryRow(ctx,
 		`SELECT id, name, provider, enabled, auto_verify, azure_tenant_id, client_id, client_secret,
-		        workspace_id, base_url, api_token, verify_delay_seconds
+		        workspace_id, base_url, api_token, insecure_tls, verify_delay_seconds
 		   FROM detection_connectors WHERE id=$1`, id,
 	).Scan(&cfg.ID, &cfg.Name, &cfg.Provider, &cfg.Enabled, &cfg.AutoVerify,
 		&cfg.TenantID, &cfg.ClientID, &cfg.ClientSecret, &cfg.WorkspaceID,
-		&cfg.BaseURL, &cfg.APIToken, &cfg.VerifyDelaySeconds)
+		&cfg.BaseURL, &cfg.APIToken, &cfg.InsecureTLS, &cfg.VerifyDelaySeconds)
 	if err != nil {
 		return nil, err
 	}

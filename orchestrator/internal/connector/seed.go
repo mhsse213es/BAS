@@ -58,7 +58,7 @@ func SeedFromEnv(ctx context.Context, pool *pgxpool.Pool, cfg SeedConfig) error 
 // separately by LoadActivitySourcesFromDB -- it's an ActivitySource, not a
 // Source.
 func LoadSourcesFromDB(ctx context.Context, pool *pgxpool.Pool, sectors, regions []string) ([]Source, error) {
-	rows, err := pool.Query(ctx, `SELECT connector, base_url, api_key FROM threat_intel_config WHERE enabled = true`)
+	rows, err := pool.Query(ctx, `SELECT connector, base_url, api_key, insecure_tls FROM threat_intel_config WHERE enabled = true`)
 	if err != nil {
 		return nil, err
 	}
@@ -66,13 +66,14 @@ func LoadSourcesFromDB(ctx context.Context, pool *pgxpool.Pool, sectors, regions
 	var sources []Source
 	for rows.Next() {
 		var conn, baseURL, apiKey string
-		if err := rows.Scan(&conn, &baseURL, &apiKey); err != nil {
+		var insecureTLS bool
+		if err := rows.Scan(&conn, &baseURL, &apiKey, &insecureTLS); err != nil {
 			return nil, err
 		}
 		switch conn {
 		case "misp":
 			if baseURL != "" && apiKey != "" {
-				sources = append(sources, NewMISPClient(baseURL, apiKey, sectors, regions))
+				sources = append(sources, NewMISPClient(baseURL, apiKey, sectors, regions, insecureTLS))
 			}
 		case "opencti":
 			if baseURL != "" && apiKey != "" {

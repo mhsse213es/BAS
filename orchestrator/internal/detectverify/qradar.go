@@ -2,7 +2,6 @@ package detectverify
 
 import (
 	"context"
-	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -26,12 +25,9 @@ type qradarConnector struct {
 
 func newQRadarConnector(cfg Config) *qradarConnector {
 	return &qradarConnector{
-		baseURL:  strings.TrimRight(cfg.BaseURL, "/"),
-		secToken: cfg.APIToken,
-		httpClient: &http.Client{
-			Timeout:   30 * time.Second,
-			Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}},
-		},
+		baseURL:      strings.TrimRight(cfg.BaseURL, "/"),
+		secToken:     cfg.APIToken,
+		httpClient:   httpClientFor(cfg, 30*time.Second),
 		pollInterval: 2 * time.Second,
 		maxPolls:     30,
 	}

@@ -25,20 +25,26 @@ type MISPClient struct {
 	lastTools     []intelligence.Tool
 }
 
-// NewMISPClient creates a MISP client. Skips TLS verification for self-signed
-// certs common in air-gapped MISP deployments.
-func NewMISPClient(baseURL, apiKey string, sectors, regions []string) *MISPClient {
+// NewMISPClient creates a MISP client. TLS verification is on by default:
+// every request carries the operator's MISP API key, so accepting any
+// certificate would hand that key to anyone able to intercept the
+// connection. Air-gapped MISP deployments do commonly present a self-signed
+// cert — those opt out explicitly via insecureTLS (the threat_intel_config
+// .insecure_tls column), matching the insecure_tls setting internal/ticketing
+// already uses for the same trade-off.
+func NewMISPClient(baseURL, apiKey string, sectors, regions []string, insecureTLS bool) *MISPClient {
+	httpClient := &http.Client{Timeout: 30 * time.Second}
+	if insecureTLS {
+		httpClient.Transport = &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec
+		}
+	}
 	return &MISPClient{
-		baseURL: strings.TrimRight(baseURL, "/"),
-		apiKey:  apiKey,
-		sectors: sectors,
-		regions: regions,
-		httpClient: &http.Client{
-			Timeout: 30 * time.Second,
-			Transport: &http.Transport{
-				TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-			},
-		},
+		baseURL:    strings.TrimRight(baseURL, "/"),
+		apiKey:     apiKey,
+		sectors:    sectors,
+		regions:    regions,
+		httpClient: httpClient,
 	}
 }
 

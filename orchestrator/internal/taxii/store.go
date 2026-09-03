@@ -22,7 +22,7 @@ func NewStore(pool *pgxpool.Pool) *Store {
 }
 
 const configCols = `id, name, server_url, api_root, collection_id, auth_type, username, password,
-	client_cert, client_key, enabled, last_poll_at, last_poll_status, last_poll_summary, last_error,
+	client_cert, client_key, insecure_tls, enabled, last_poll_at, last_poll_status, last_poll_summary, last_error,
 	created_at, updated_at`
 
 func scanConfig(row interface {
@@ -31,7 +31,7 @@ func scanConfig(row interface {
 	var c ConnectorConfig
 	var summaryJSON []byte
 	err := row.Scan(&c.ID, &c.Name, &c.ServerURL, &c.APIRoot, &c.CollectionID, &c.AuthType, &c.Username,
-		&c.Password, &c.ClientCert, &c.ClientKey, &c.Enabled, &c.LastPollAt, &c.LastPollStatus, &summaryJSON,
+		&c.Password, &c.ClientCert, &c.ClientKey, &c.InsecureTLS, &c.Enabled, &c.LastPollAt, &c.LastPollStatus, &summaryJSON,
 		&c.LastError, &c.CreatedAt, &c.UpdatedAt)
 	if err != nil {
 		return ConnectorConfig{}, err
@@ -45,10 +45,10 @@ func (s *Store) Create(ctx context.Context, c ConnectorConfig) (ConnectorConfig,
 		c.AuthType = "none"
 	}
 	row := s.pool.QueryRow(ctx,
-		`INSERT INTO taxii_connector_config (name, server_url, api_root, collection_id, auth_type, username, password, client_cert, client_key, enabled)
-		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+		`INSERT INTO taxii_connector_config (name, server_url, api_root, collection_id, auth_type, username, password, client_cert, client_key, insecure_tls, enabled)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
 		 RETURNING `+configCols,
-		c.Name, c.ServerURL, c.APIRoot, c.CollectionID, c.AuthType, c.Username, c.Password, c.ClientCert, c.ClientKey, c.Enabled)
+		c.Name, c.ServerURL, c.APIRoot, c.CollectionID, c.AuthType, c.Username, c.Password, c.ClientCert, c.ClientKey, c.InsecureTLS, c.Enabled)
 	return scanConfig(row)
 }
 
@@ -107,11 +107,11 @@ func (s *Store) Update(ctx context.Context, id string, c ConnectorConfig, keepPa
 		   password = CASE WHEN $8 THEN password ELSE $9 END,
 		   client_cert = CASE WHEN $10 THEN client_cert ELSE $11 END,
 		   client_key = CASE WHEN $12 THEN client_key ELSE $13 END,
-		   enabled = $14, updated_at = NOW()
+		   insecure_tls = $14, enabled = $15, updated_at = NOW()
 		 WHERE id = $1
 		 RETURNING `+configCols,
 		id, c.Name, c.ServerURL, c.APIRoot, c.CollectionID, c.AuthType, c.Username,
-		keepPassword, c.Password, keepClientCert, c.ClientCert, keepClientKey, c.ClientKey, c.Enabled)
+		keepPassword, c.Password, keepClientCert, c.ClientCert, keepClientKey, c.ClientKey, c.InsecureTLS, c.Enabled)
 	updated, err := scanConfig(row)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ConnectorConfig{}, ErrNotFound

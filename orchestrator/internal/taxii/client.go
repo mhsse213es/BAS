@@ -15,22 +15,24 @@ import (
 const mediaType = "application/taxii+json;version=2.1"
 
 // Client speaks the TAXII 2.1 Collections API (discovery -> API root ->
-// collections -> paginated objects). Skips TLS verification for self-signed
-// certs, matching MISPClient's existing precedent for on-prem/air-gapped
-// deployments.
+// collections -> paginated objects). TLS verification is on by default —
+// basic-auth credentials travel on every request, so accepting any
+// certificate would expose them. On-prem TAXII servers presenting a
+// self-signed cert opt out per-connector via ConnectorConfig.InsecureTLS,
+// matching MISPClient's and internal/ticketing's insecure_tls setting.
 type Client struct {
 	cfg        ConnectorConfig
 	httpClient *http.Client
 }
 
 func NewClient(cfg ConnectorConfig) *Client {
-	return &Client{
-		cfg: cfg,
-		httpClient: &http.Client{
-			Timeout:   30 * time.Second,
-			Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}},
-		},
+	httpClient := &http.Client{Timeout: 30 * time.Second}
+	if cfg.InsecureTLS {
+		httpClient.Transport = &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec
+		}
 	}
+	return &Client{cfg: cfg, httpClient: httpClient}
 }
 
 type Discovery struct {

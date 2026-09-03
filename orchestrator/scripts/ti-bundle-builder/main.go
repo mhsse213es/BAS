@@ -24,6 +24,7 @@ import (
 func main() {
 	mispURL := flag.String("misp-url", "", "MISP base URL")
 	mispKey := flag.String("misp-key", "", "MISP API key")
+	mispInsecureTLS := flag.Bool("misp-insecure-tls", false, "skip TLS verification against MISP (self-signed certs on air-gapped instances)")
 	openctiURL := flag.String("opencti-url", "", "OpenCTI base URL")
 	openctiKey := flag.String("opencti-key", "", "OpenCTI API key")
 	sectors := flag.String("sectors", "", "comma-separated target sectors, e.g. financial-services,banking")
@@ -34,7 +35,7 @@ func main() {
 
 	var sources []connector.Source
 	if *mispURL != "" && *mispKey != "" {
-		sources = append(sources, connector.NewMISPClient(*mispURL, *mispKey, splitCSV(*sectors), splitCSV(*regions)))
+		sources = append(sources, connector.NewMISPClient(*mispURL, *mispKey, splitCSV(*sectors), splitCSV(*regions), *mispInsecureTLS))
 		fmt.Printf("[+] MISP source: %s\n", *mispURL)
 	}
 	if *openctiURL != "" && *openctiKey != "" {

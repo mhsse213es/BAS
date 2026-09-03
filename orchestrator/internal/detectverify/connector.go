@@ -12,8 +12,10 @@ package detectverify
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"time"
 )
 
@@ -44,7 +46,23 @@ type Config struct {
 	WorkspaceID        string // Sentinel only; empty for Defender XDR
 	BaseURL            string // Splunk/QRadar: management API base URL
 	APIToken           string // Splunk/QRadar: bearer token
+	InsecureTLS        bool   // skip TLS verification (self-signed on-prem appliances)
 	VerifyDelaySeconds int
+}
+
+// httpClientFor builds the HTTP client the Splunk/QRadar/Trellix connectors
+// use. TLS verification is ON by default: these connectors carry the
+// customer's API token to their SIEM/EDR, so silently accepting any
+// certificate would expose that token to anyone able to intercept the
+// connection. Operators whose appliance presents a self-signed certificate
+// opt out per-connector via the insecure_tls column, mirroring the
+// insecure_tls setting internal/ticketing already uses for the same reason.
+func httpClientFor(cfg Config, timeout time.Duration) *http.Client {
+	c := &http.Client{Timeout: timeout}
+	if cfg.InsecureTLS {
+		c.Transport = &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}} //nolint:gosec
+	}
+	return c
 }
 
 // VerifyRequest is one expectation to check against a provider, scoped to a

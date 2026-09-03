@@ -22,22 +22,23 @@ func (h *Handler) GetThreatIntelConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var baseURL, status, lastError string
-	var enabled bool
+	var enabled, insecureTLS bool
 	err := h.db.QueryRow(r.Context(),
-		`SELECT base_url, enabled, last_sync_status, last_error FROM threat_intel_config WHERE connector = $1`, conn,
-	).Scan(&baseURL, &enabled, &status, &lastError)
+		`SELECT base_url, enabled, insecure_tls, last_sync_status, last_error FROM threat_intel_config WHERE connector = $1`, conn,
+	).Scan(&baseURL, &enabled, &insecureTLS, &status, &lastError)
 	if err != nil {
 		// No row has ever been saved for this connector -- "configured: false"
 		// tells the frontend this is a genuine first-time setup, so its
 		// save-confirmation "you're about to overwrite an existing value"
 		// modal (which only makes sense once real values are already in
 		// place) can stay hidden until an actual update happens.
-		respond(w, map[string]any{"baseUrl": "", "enabled": false, "lastSyncStatus": "never", "lastError": "", "configured": false})
+		respond(w, map[string]any{"baseUrl": "", "enabled": false, "insecureTls": false, "lastSyncStatus": "never", "lastError": "", "configured": false})
 		return
 	}
 	respond(w, map[string]any{
 		"baseUrl":        baseURL,
 		"enabled":        enabled,
+		"insecureTls":    insecureTLS,
 		"lastSyncStatus": status,
 		"lastError":      lastError,
 		"configured":     true,
@@ -57,23 +58,25 @@ func (h *Handler) PutThreatIntelConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
-		BaseURL string `json:"baseUrl"`
-		APIKey  string `json:"apiKey"`
-		Enabled bool   `json:"enabled"`
+		BaseURL     string `json:"baseUrl"`
+		APIKey      string `json:"apiKey"`
+		Enabled     bool   `json:"enabled"`
+		InsecureTLS bool   `json:"insecureTls"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		jsonError(w, "invalid request body", http.StatusBadRequest)
 		return
 	}
 	_, err := h.db.Exec(r.Context(),
-		`INSERT INTO threat_intel_config (connector, base_url, api_key, enabled, updated_at)
-		 VALUES ($1, $2, $3, $4, NOW())
+		`INSERT INTO threat_intel_config (connector, base_url, api_key, enabled, insecure_tls, updated_at)
+		 VALUES ($1, $2, $3, $4, $5, NOW())
 		 ON CONFLICT (connector) DO UPDATE SET
 		   base_url = EXCLUDED.base_url,
 		   api_key = CASE WHEN EXCLUDED.api_key = '' THEN threat_intel_config.api_key ELSE EXCLUDED.api_key END,
 		   enabled = EXCLUDED.enabled,
+		   insecure_tls = EXCLUDED.insecure_tls,
 		   updated_at = NOW()`,
-		conn, body.BaseURL, body.APIKey, body.Enabled,
+		conn, body.BaseURL, body.APIKey, body.Enabled, body.InsecureTLS,
 	)
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
@@ -177,8 +180,9 @@ func (h *Handler) TestThreatIntelConfig(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	var body struct {
-		BaseURL string `json:"baseUrl"`
-		APIKey  string `json:"apiKey"`
+		BaseURL     string `json:"baseUrl"`
+		APIKey      string `json:"apiKey"`
+		InsecureTLS bool   `json:"insecureTls"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		jsonError(w, "invalid request body", http.StatusBadRequest)
@@ -200,7 +204,7 @@ func (h *Handler) TestThreatIntelConfig(w http.ResponseWriter, r *http.Request) 
 	var src connector.Source
 	switch conn {
 	case "misp":
-		src = connector.NewMISPClient(body.BaseURL, body.APIKey, nil, nil)
+		src = connector.NewMISPClient(body.BaseURL, body.APIKey, nil, nil, body.InsecureTLS)
 	case "opencti":
 		src = connector.NewOpenCTIClient(body.BaseURL, body.APIKey, nil)
 	}

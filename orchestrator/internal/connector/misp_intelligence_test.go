@@ -62,7 +62,7 @@ func TestMISPClient_FetchIntelligence_OneCampaignNoMalware(t *testing.T) {
 	server := mispServer(t, index, details)
 	defer server.Close()
 
-	c := NewMISPClient(server.URL, "test-key", nil, nil)
+	c := NewMISPClient(server.URL, "test-key", nil, nil, false)
 	actors, err := c.Fetch()
 	if err != nil {
 		t.Fatalf("Fetch: %v", err)
@@ -124,7 +124,7 @@ func TestMISPClient_FetchIntelligence_MultipleMalwareClusters(t *testing.T) {
 	server := mispServer(t, index, details)
 	defer server.Close()
 
-	c := NewMISPClient(server.URL, "test-key", nil, nil)
+	c := NewMISPClient(server.URL, "test-key", nil, nil, false)
 	if _, err := c.Fetch(); err != nil {
 		t.Fatalf("Fetch: %v", err)
 	}
@@ -192,7 +192,7 @@ func TestMISPClient_FetchIntelligence_ExtractsTools(t *testing.T) {
 	server := mispServer(t, index, details)
 	defer server.Close()
 
-	c := NewMISPClient(server.URL, "test-key", nil, nil)
+	c := NewMISPClient(server.URL, "test-key", nil, nil, false)
 	if _, err := c.Fetch(); err != nil {
 		t.Fatalf("Fetch: %v", err)
 	}
@@ -251,7 +251,7 @@ func TestMISPClient_FetchIntelligence_MalwareCampaignIDMatchesCampaignID(t *test
 	server := mispServer(t, index, details)
 	defer server.Close()
 
-	c := NewMISPClient(server.URL, "test-key", nil, nil)
+	c := NewMISPClient(server.URL, "test-key", nil, nil, false)
 	if _, err := c.Fetch(); err != nil {
 		t.Fatalf("Fetch: %v", err)
 	}

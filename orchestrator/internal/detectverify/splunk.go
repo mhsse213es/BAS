@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"bytes"
 	"context"
-	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -19,8 +18,9 @@ import (
 // the requested window, via the REST search-export endpoint. Authenticates
 // with a bearer token (Splunk HEC/auth token or session key).
 //
-// TLS verification is disabled by default, matching the MISP connector —
-// on-prem Splunk management ports commonly present self-signed certs.
+// TLS verification is on by default; on-prem Splunk management ports
+// commonly present self-signed certs, so operators opt out per-connector
+// via Config.InsecureTLS rather than the connector deciding for them.
 type splunkConnector struct {
 	exportURL  string // overridable in tests; defaults to <baseURL>/services/search/jobs/export
 	uiBase     string // overridable in tests; defaults to baseURL
@@ -31,13 +31,10 @@ type splunkConnector struct {
 func newSplunkConnector(cfg Config) *splunkConnector {
 	base := strings.TrimRight(cfg.BaseURL, "/")
 	return &splunkConnector{
-		exportURL: base + "/services/search/jobs/export",
-		uiBase:    base,
-		token:     cfg.APIToken,
-		httpClient: &http.Client{
-			Timeout:   30 * time.Second,
-			Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}},
-		},
+		exportURL:  base + "/services/search/jobs/export",
+		uiBase:     base,
+		token:      cfg.APIToken,
+		httpClient: httpClientFor(cfg, 30*time.Second),
 	}
 }
 

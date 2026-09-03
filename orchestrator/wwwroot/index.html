@@ -4361,6 +4361,11 @@ body.theme-slate {
              style="width:100%;padding:0.5rem 0.7rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:0.82rem;font-family:inherit">
     </div>
 
+    <label style="display:flex;align-items:center;gap:0.4rem;margin-top:0.6rem"
+           title="Only enable for an on-prem TAXII server presenting a self-signed certificate. Disabling verification exposes the credentials above to interception.">
+      <input type="checkbox" id="taxii-conn-insecure-tls"> Skip TLS certificate verification
+    </label>
+
     <label style="display:flex;align-items:center;gap:0.4rem;margin-top:0.6rem">
       <input type="checkbox" id="taxii-conn-enabled"> Enabled
     </label>
@@ -17854,13 +17859,18 @@ function loadThreatIntelConfig(name) {
   var panel = document.getElementById('ti-' + name + '-config-panel');
   if (!panel || ROLE !== 'admin') { if (panel) panel.innerHTML = ''; return; }
   apicall('/api/threat-intel/' + name + '/config').then(function(cfg) {
-    TI_CONNECTOR_LOADED[name] = { baseUrl: cfg.baseUrl || '', enabled: !!cfg.enabled, configured: !!cfg.configured };
+    TI_CONNECTOR_LOADED[name] = { baseUrl: cfg.baseUrl || '', enabled: !!cfg.enabled, insecureTls: !!cfg.insecureTls, configured: !!cfg.configured };
     var urlField = name === 'otx' ? '' :
       '<input id="ti-' + name + '-url" type="text" placeholder="Base URL" value="' + x(cfg.baseUrl || '') + '" class="inp-sm" style="flex:1">';
+    // MISP is the only curated source whose client honours this -- OTX is a
+    // hosted service with a valid cert, and the OpenCTI client always verifies.
+    var insecureField = name !== 'misp' ? '' :
+      '<label class="tiny muted" style="display:flex;align-items:center;gap:0.3rem" title="Only enable for an air-gapped MISP presenting a self-signed certificate. Disabling verification exposes your API key to interception."><input type="checkbox" id="ti-' + name + '-insecure" ' + (cfg.insecureTls ? 'checked' : '') + '> Skip TLS verify</label>';
     panel.innerHTML =
       '<div class="kpi-row">' +
         urlField +
         '<input id="ti-' + name + '-key" type="password" placeholder="API key (leave blank to keep current)" class="inp-sm" style="flex:1">' +
+        insecureField +
         '<label class="tiny muted" style="display:flex;align-items:center;gap:0.3rem"><input type="checkbox" id="ti-' + name + '-enabled" ' + (cfg.enabled ? 'checked' : '') + '> Enabled</label>' +
       '</div>' +
       '<div class="kpi-row" style="margin-top:0.5rem">' +
@@ -17876,11 +17886,13 @@ function testConnectorConfig(name) {
   var resultEl = document.getElementById('ti-' + name + '-test-result');
   resultEl.textContent = 'Testing…';
   var urlEl = document.getElementById('ti-' + name + '-url');
+  var insecureEl = document.getElementById('ti-' + name + '-insecure');
   apicall('/api/threat-intel/' + name + '/config/test', {
     method: 'POST',
     body: JSON.stringify({
       baseUrl: urlEl ? urlEl.value : '',
-      apiKey: document.getElementById('ti-' + name + '-key').value
+      apiKey: document.getElementById('ti-' + name + '-key').value,
+      insecureTls: !!(insecureEl && insecureEl.checked)
     })
   }).then(function(res) {
     resultEl.textContent = res.ok ? ('OK — ' + res.actorCount + ' actors visible') : ('Failed: ' + res.error);
@@ -17896,17 +17908,20 @@ function saveConnectorConfig(name) {
   var newUrl = urlEl ? urlEl.value : '';
   var newKey = document.getElementById('ti-' + name + '-key').value;
   var newEnabled = document.getElementById('ti-' + name + '-enabled').checked;
-  var payload = { baseUrl: newUrl, apiKey: newKey, enabled: newEnabled };
+  var insecureEl = document.getElementById('ti-' + name + '-insecure');
+  var newInsecure = !!(insecureEl && insecureEl.checked);
+  var payload = { baseUrl: newUrl, apiKey: newKey, enabled: newEnabled, insecureTls: newInsecure };
 
-  var prev = TI_CONNECTOR_LOADED[name] || { baseUrl: '', enabled: false, configured: false };
+  var prev = TI_CONNECTOR_LOADED[name] || { baseUrl: '', enabled: false, insecureTls: false, configured: false };
   var urlChanged = urlEl && newUrl !== prev.baseUrl;
   var keyChanged = newKey !== '';
   var enabledChanged = newEnabled !== prev.enabled;
+  var insecureChanged = insecureEl && newInsecure !== prev.insecureTls;
 
   // A genuine first-time setup has nothing to overwrite -- the confirm
   // modal exists to warn "you're about to replace an existing value", which
   // is meaningless (and confusing) before any value has ever been saved.
-  if (!prev.configured || (!urlChanged && !keyChanged && !enabledChanged)) {
+  if (!prev.configured || (!urlChanged && !keyChanged && !enabledChanged && !insecureChanged)) {
     doSaveConnectorConfig(name, payload); // nothing to confirm
     return;
   }
@@ -17915,6 +17930,7 @@ function saveConnectorConfig(name) {
   if (urlChanged) rows += _diffRow('Base URL', prev.baseUrl, newUrl);
   rows += _diffSecretRow('API key', keyChanged);
   if (enabledChanged) rows += _diffRow('Enabled', prev.enabled ? 'Yes' : 'No', newEnabled ? 'Yes' : 'No');
+  if (insecureChanged) rows += _diffRow('Skip TLS verify', prev.insecureTls ? 'Yes' : 'No', newInsecure ? 'Yes' : 'No');
 
   openConfirmDiffModal('Confirm ' + TI_CONNECTOR_LABELS[name] + ' Config Change', rows, function() {
     doSaveConnectorConfig(name, payload);
@@ -18011,6 +18027,7 @@ function openTAXIIConnectorModal(id) {
     document.getElementById('taxii-conn-auth-type').value = 'none';
     document.getElementById('taxii-conn-username').value = '';
     document.getElementById('taxii-conn-password').value = '';
+    document.getElementById('taxii-conn-insecure-tls').checked = false;
     document.getElementById('taxii-conn-enabled').checked = false;
     taxiiToggleAuthFields();
     document.getElementById('taxii-connector-overlay').classList.add('open');
@@ -18027,6 +18044,7 @@ function openTAXIIConnectorModal(id) {
   document.getElementById('taxii-conn-auth-type').value = c.authType || 'none';
   document.getElementById('taxii-conn-username').value = c.username || '';
   document.getElementById('taxii-conn-password').value = ''; // never round-tripped -- blank means "keep current"
+  document.getElementById('taxii-conn-insecure-tls').checked = !!c.insecureTls;
   document.getElementById('taxii-conn-enabled').checked = !!c.enabled;
   taxiiToggleAuthFields();
   document.getElementById('taxii-connector-overlay').classList.add('open');
@@ -18046,6 +18064,7 @@ function taxiiFormPayload() {
     authType: document.getElementById('taxii-conn-auth-type').value,
     username: document.getElementById('taxii-conn-username').value,
     password: document.getElementById('taxii-conn-password').value,
+    insecureTls: document.getElementById('taxii-conn-insecure-tls').checked,
     enabled: document.getElementById('taxii-conn-enabled').checked
   };
 }

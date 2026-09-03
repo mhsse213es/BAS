@@ -234,7 +234,7 @@ func TestScheduler_Sync_PersistsCampaignsAndMalwareFromIntelligenceSource(t *tes
 		})
 		defer server.Close()
 
-		mispClient := NewMISPClient(server.URL, "test-key", nil, nil)
+		mispClient := NewMISPClient(server.URL, "test-key", nil, nil, false)
 		s := NewScheduler([]Source{mispClient}, NewGenerator(t.TempDir(), nil, nil, nil), scenario.NewEngine(t.TempDir()), 24, pool, nil)
 
 		s.sync()

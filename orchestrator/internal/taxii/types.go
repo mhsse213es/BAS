@@ -16,6 +16,7 @@ type ConnectorConfig struct {
 	Password        string // plaintext at rest, matching threat_intel_config.api_key's precedent
 	ClientCert      string // reserved, unused Phase 1
 	ClientKey       string // reserved, unused Phase 1
+	InsecureTLS     bool   // skip TLS verification (self-signed on-prem TAXII servers)
 	Enabled         bool
 	LastPollAt      *time.Time
 	LastPollStatus  string // "never" | "ok" | "error"

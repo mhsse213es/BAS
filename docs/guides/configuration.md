@@ -116,6 +116,20 @@ All SMTP variables are optional. Required only if the Purple Team Exercise Engin
 
 Sector and region filters apply as OR conditions — intelligence matching any listed sector or region is included.
 
+### TLS certificate verification
+
+Outbound connectors verify the TLS certificate of the system they connect to. This is deliberate: every one of these connections carries an API key or password, and accepting any certificate would expose that credential to anyone able to intercept the connection.
+
+Appliances that present a self-signed certificate — common for air-gapped MISP and on-prem TAXII/QRadar/Splunk deployments — need verification turned off explicitly, per connector:
+
+| Connector | Where to set it |
+|---|---|
+| MISP | **Settings → Threat Intelligence → MISP → Skip TLS verify** |
+| TAXII | **Settings → TAXII Connectors → (edit) → Skip TLS certificate verification** |
+| Splunk / QRadar / Trellix | `"insecureTls": true` on `POST`/`PUT /api/detectverify/configs` |
+
+Prefer installing the appliance's CA certificate on the orchestrator host over disabling verification.
+
 ---
 
 ## Docker Compose `.env` File Example

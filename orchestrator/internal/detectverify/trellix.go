@@ -2,7 +2,6 @@ package detectverify
 
 import (
 	"context"
-	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -39,13 +38,10 @@ func newTrellixConnector(cfg Config) *trellixConnector {
 		base = "https://api.manage.trellix.com"
 	}
 	return &trellixConnector{
-		baseURL: strings.TrimRight(base, "/"),
-		token:   cfg.APIToken,
-		httpClient: &http.Client{
-			Timeout:   30 * time.Second,
-			Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}},
-		},
-		pageSize: 100,
+		baseURL:    strings.TrimRight(base, "/"),
+		token:      cfg.APIToken,
+		httpClient: httpClientFor(cfg, 30*time.Second),
+		pageSize:   100,
 	}
 }
 
