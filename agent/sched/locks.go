@@ -21,6 +21,50 @@ type lockReq struct {
 //
 // Resolution is deterministic and the output is sorted by key, so every goroutine
 // acquires overlapping locks in the same order — the scheduler cannot deadlock.
+// lockKeyFor validates one declared resource against the domain vocabulary and
+// returns its canonical lock key. ok=false means the declaration cannot be
+// verified by THIS build and must escalate — never be trusted as written.
+//
+// Validation lives here, at the lock boundary, rather than only server-side
+// where profiles are authored. Profiles cross a version boundary; if the agent
+// accepted a key it cannot parse, the core invariant would hold only when server
+// and agent versions agree, instead of holding locally and unconditionally.
+func lockKeyFor(d ResourceLock) (string, bool) {
+	kind, known := LookupDomain(d.Domain)
+	if !known {
+		return "", false
+	}
+	switch kind {
+	case KindWholeDomain:
+		// A key here means the author addressed the domain at a granularity it
+		// is not registered for — the declaration does not mean what it says.
+		if d.Key != "" {
+			return "", false
+		}
+		return d.Domain, true
+	case KindKeyed:
+		ck, ok := CanonicaliseKey(d.Domain, d.Key)
+		if !ok {
+			return "", false // unparseable, or whole-domain access to a keyed domain
+		}
+		return d.Domain + "/" + ck, true
+	}
+	return "", false
+}
+
+// escalate returns the lock set for a declaration that cannot be trusted: the
+// exclusive global barrier, i.e. fully serial. Always correct, never optimistic.
+//
+// The footprint hold is carried through rather than dropped — an escalated step
+// still perturbs the observation surface, so a footprint observer must still
+// exclude it.
+func escalate(observesFootprint bool) []lockReq {
+	return []lockReq{
+		{key: footprintKey, write: observesFootprint},
+		{key: globalKey, write: true},
+	}
+}
+
 func resolve(p *ResourceProfile) []lockReq {
 	writes := map[string]bool{} // lock key -> needs exclusive hold
 
@@ -37,9 +81,11 @@ func resolve(p *ResourceProfile) []lockReq {
 		writes[globalKey] = false // shared barrier: coexists with other scoped steps
 		exclusive := p.Risk != RiskObservation
 		for _, d := range p.Domains {
-			k := d.Domain
-			if d.Key != "" {
-				k += "/" + d.Key
+			k, ok := lockKeyFor(d)
+			if !ok {
+				// One unverifiable resource condemns the whole profile: we cannot
+				// know what else it touches, so it runs alone.
+				return escalate(writes[footprintKey])
 			}
 			writes[k] = writes[k] || exclusive
 		}

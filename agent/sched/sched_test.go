@@ -27,8 +27,18 @@ func TestResolveObservationTakesReadLocks(t *testing.T) {
 	if got[globalKey] != false {
 		t.Errorf("global barrier should be shared (read) for a scoped step, got write=%v", got[globalKey])
 	}
-	if got["registry"] != false || got["filesystem/C:\\temp"] != false {
-		t.Errorf("observation domains should be read locks: %v", got)
+	// Assert PRESENCE as well as mode. `got[k] != false` alone passes vacuously
+	// for a key that isn't there at all, since a missing map entry reads as
+	// false — which silently hid the canonical spelling of the filesystem key.
+	for _, k := range []string{"registry", "filesystem/c:/temp"} {
+		mode, present := got[k]
+		if !present {
+			t.Errorf("expected a lock on %q, got %v", k, got)
+			continue
+		}
+		if mode != false {
+			t.Errorf("observation domain %q should be a read lock, got write=%v", k, mode)
+		}
 	}
 }
 

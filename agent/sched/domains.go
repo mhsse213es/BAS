@@ -32,17 +32,23 @@ const (
 // from this map is unknown, and an unknown domain escalates to the exclusive
 // global barrier rather than being trusted.
 //
-// Every domain is whole-domain today, mirroring the profiles in
-// orchestrator/internal/scenario/resource.go, all of which are observe(domain)
-// with no Key. That is what preserves current parallelism: two whole-domain
-// readers take shared locks and still overlap. Registering one of these as
-// keyed would invalidate every declaration that uses it.
+// Granularity here must match how each domain is actually declared. Every
+// domain a shipped profile uses is whole-domain (all are observe(domain) with
+// no Key), which is what preserves current parallelism: two whole-domain readers
+// take shared locks and still overlap. Re-registering one of those as keyed
+// would invalidate every declaration that uses it and silently serialize them.
 var domainRegistry = map[string]DomainKind{
+	// In use by shipped profiles (process 9, network 3, wmi-secpolicy 2,
+	// registry 1) — all as observe(domain) with no Key, so all whole-domain.
 	"registry":      KindWholeDomain,
-	"filesystem":    KindWholeDomain,
 	"process":       KindWholeDomain,
 	"network":       KindWholeDomain,
 	"wmi-secpolicy": KindWholeDomain,
+
+	// Keyed: no shipped profile declares it, and it is the domain where
+	// per-atomic keys earn their keep — two atomics writing distinct temp paths
+	// should overlap, while two writing the same fixed path must not.
+	"filesystem": KindKeyed,
 }
 
 // LookupDomain reports the granularity registered for name, and whether name is
@@ -75,22 +81,36 @@ func CanonicaliseKey(domain, key string) (string, bool) {
 
 	switch domain {
 	case "filesystem":
-		// Relative paths have no stable identity: the same string denotes
-		// different files depending on the step's working directory.
-		if !strings.HasPrefix(key, "/") {
-			return "", false
-		}
+		// Separators are normalised first so one path has one spelling on either
+		// platform; the agent runs on Windows and POSIX, and profiles are
+		// authored server-side for a target platform.
+		k := strings.ReplaceAll(key, `\`, "/")
+
 		// Reject ".." BEFORE cleaning, not after: path.Clean would resolve it
 		// lexically and the check would never fire. Lexical resolution is also
 		// unsound -- /a/b/../c is not /a/c when b is a symlink -- so a path
 		// containing ".." names no identity we can trust. Same aliasing hazard
-		// the spec handles by declaring the domain instead of a key.
-		for _, seg := range strings.Split(key, "/") {
+		// the design handles by declaring the domain instead of a key.
+		for _, seg := range strings.Split(k, "/") {
 			if seg == ".." {
 				return "", false
 			}
 		}
-		return path.Clean(key), true
+
+		switch {
+		case strings.HasPrefix(k, "/"):
+			// POSIX absolute; case-sensitive.
+			return path.Clean(k), true
+		case isWindowsAbs(k):
+			// Windows absolute. NTFS is case-insensitive, so fold — otherwise
+			// C:/Temp and c:/temp would be two keys for one resource and would
+			// not conflict.
+			return strings.ToLower(path.Clean(k)), true
+		default:
+			// Relative paths have no stable identity: the same string denotes
+			// different files depending on the step's working directory.
+			return "", false
+		}
 
 	case "registry":
 		// Windows registry paths are case-insensitive; fold so two spellings of
@@ -107,4 +127,14 @@ func CanonicaliseKey(domain, key string) (string, bool) {
 		}
 		return c, true
 	}
+}
+
+// isWindowsAbs reports whether p (already separator-normalised to "/") is an
+// absolute Windows path — a drive letter, as in "c:/temp".
+func isWindowsAbs(p string) bool {
+	if len(p) < 3 || p[1] != ':' || p[2] != '/' {
+		return false
+	}
+	c := p[0]
+	return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
 }
