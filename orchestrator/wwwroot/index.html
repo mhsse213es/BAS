@@ -11886,13 +11886,54 @@ function submitReport() {
   }).catch(function(e) { showToast('Generate failed: ' + e.message, 'err'); });
 }
 
+// verdictCounts is the single source of truth for turning a run into
+// pass/fail/not-measured counts, so every view that shows them agrees.
+//
+// ERROR and SKIPPED are neither pass nor fail: internal/models/score.go
+// excludes them from the security score entirely, because they answer "did the
+// BAS hit a problem", not "did a control allow the technique". Several views
+// used to derive passes by subtraction (total - fail), which silently reported
+// every errored step as a control success -- a run whose detail read
+// "Total 29, Pass 0, Fail 9, Skipped 1, Errored 19" was listed as
+// "9 fail / 20 pass".
+//
+// Prefers the server-computed score; falls back to counting verdicts directly
+// for a run that has no score yet. The fallback mirrors score.go, where
+// 'blocked' counts as passed.
+function verdictCounts(r) {
+  var sc = r && r.score;
+  if (sc && typeof sc.totalTechniques !== 'undefined') {
+    return {
+      total:       sc.totalTechniques || 0,
+      pass:        sc.passedTechniques || 0,
+      fail:        sc.failedTechniques || 0,
+      notMeasured: (sc.erroredTechniques || 0) + (sc.skippedTechniques || 0)
+    };
+  }
+  var results = (r && r.results) || [];
+  var by = function(fn) { return results.filter(fn).length; };
+  return {
+    total:       results.length,
+    pass:        by(function(c) { return c.result === 'pass' || c.result === 'blocked'; }),
+    fail:        by(function(c) { return c.result === 'fail'; }),
+    notMeasured: by(function(c) { return c.result === 'error' || c.result === 'skipped'; })
+  };
+}
+
+// verdictBadge renders the compact "N fail / N pass / N n/a" summary. The
+// not-measured segment is shown, never folded away, so a reader can account for
+// every technique in the total.
+function verdictBadge(r, emptyLabel) {
+  var v = verdictCounts(r);
+  if (!v.total) return emptyLabel;
+  return v.fail + ' fail / ' + v.pass + ' pass' + (v.notMeasured ? ' / ' + v.notMeasured + ' n/a' : '');
+}
+
 // runRowHtml renders one individual (non-sweep-collapsed) run's <tr> --
 // extracted unchanged from loadRuns() so it can also be reused for a sweep
 // row's per-sweep fetch-failure fallback (see loadRuns() below).
 function runRowHtml(r) {
-  var cnt = (r.results || []).length;
-  var fail = (r.results || []).filter(function(c) { return c.result === 'fail'; }).length;
-  var badge = cnt ? (fail + ' fail / ' + (cnt - fail) + ' pass') : '—';
+  var badge = verdictBadge(r, '—');
   var scoreHtml = '—';
   if (r.score && typeof r.score.preventionScore !== 'undefined') {
     var prevPct = Math.round(r.score.preventionScore || 0);
@@ -13802,9 +13843,13 @@ function viewRunResults(run) {
   document.getElementById('results-overlay').classList.add('run-mode');
   document.getElementById('results-title').textContent = run.name + ' — Results';
   var results = run.results || [];
+  // Counted, not derived by subtraction: `results.length - fail - skipped` folded
+  // every ERRORED step into pass, which drove both the summary line and the
+  // Detection Rate card (a run with 0 real passes and 19 errors showed 66%).
+  var _v = verdictCounts(run);
   var skipped = results.filter(function(c) { return c.result === 'skipped'; }).length;
-  var fail = results.filter(function(c) { return c.result === 'fail'; }).length;
-  var pass = results.length - fail - skipped;
+  var fail = _v.fail;
+  var pass = _v.pass;
 
   var alertText = "";
   if (typeof run.alertsTotal !== 'undefined' && run.alertsTotal > 0) {
@@ -13923,14 +13968,21 @@ function viewRunResults(run) {
     // here is backed by fabricated data -- a missing value renders '—'.
     (function() {
       var detRate = results.length ? Math.round(pass * 100 / results.length) : 0;
-      var deltaHtml = (typeof s.previousPreventionScore !== 'undefined' && s.previousPreventionScore !== null)
+      // Gate on trend, not on previousPreventionScore. That field is documented
+      // as "0 if Baseline", so a run with no prior is indistinguishable from one
+      // whose prior genuinely scored 0% -- and the card announced
+      // "→ 0 pts vs last run" on a first-ever run, right beside a RISK LEVEL
+      // card correctly reading "Baseline". score.go sets Trend to "Baseline"
+      // exactly when prev == nil, so it is the honest signal.
+      var deltaHtml = (s.trend && s.trend !== 'Baseline' &&
+                       typeof s.previousPreventionScore !== 'undefined' && s.previousPreventionScore !== null)
         ? (function() {
             var delta = Math.round(prevPct - s.previousPreventionScore);
             var arrow = delta > 0 ? '↑' : delta < 0 ? '↓' : '→';
             var col = delta > 0 ? 'var(--success)' : delta < 0 ? 'var(--danger)' : 'var(--muted)';
             return '<span style="color:' + col + '">' + arrow + ' ' + Math.abs(delta) + ' pts vs last run</span>';
           })()
-        : '';
+        : '<span style="color:var(--muted)">baseline — no prior run</span>';
       function kpiGaugeCard(label, value, sub) {
         return '<div class="kpi-card" style="display:flex;align-items:center;gap:0.75rem">' +
           '<div class="ring" style="width:64px;height:64px">' + gaugeSVG(value, 64, 8) +
@@ -16008,9 +16060,7 @@ function openSweepDrilldown(sweepId) {
       '<button class="btn btn-outline btn-sm" onclick="window.open(\'/api/vex/sweeps/' + encodeURIComponent(sweepId) + '/report\',\'_blank\')" title="Open the combined sweep report">&#8599; HTML Report</button> ' +
       '<button class="btn btn-outline btn-sm" onclick="downloadSweepReport(\'' + x(sweepId) + '\')" title="Download the combined sweep report as a PDF file">&#8595; PDF Report</button>';
     document.getElementById('sweep-drilldown-list').innerHTML = childRuns.map(function(r) {
-      var cnt = (r.results || []).length;
-      var fail = (r.results || []).filter(function(c) { return c.result === 'fail'; }).length;
-      var badge = cnt ? (fail + ' fail / ' + (cnt - fail) + ' pass') : r.status;
+      var badge = verdictBadge(r, r.status);
       var liveBtn = (r.id && r.status === 'running')
         ? '<button class="btn btn-outline btn-sm" onclick="openRunPanel(\'' + x(r.id) + '\',\'' + x(r.name).replace(/'/g,'&#39;') + '\',' + ((r.progress && r.progress.stepsTotal) || 0) + ',\'' + x(r.mode||'') + '\',\'' + x(r.maxPrivilege||'') + '\')">&#9673; Live</button> '
         : '';
@@ -21091,9 +21141,7 @@ function renderEMSweepProgress(sw, runs) {
     var r = runsByScenario[layerId];
     var actionHtml = '';
     if (r) {
-      var cnt = (r.results || []).length;
-      var fail = (r.results || []).filter(function(c) { return c.result === 'fail'; }).length;
-      var badge = cnt ? (fail + ' fail / ' + (cnt - fail) + ' pass') : r.status;
+      var badge = verdictBadge(r, r.status);
       if (r.id && r.status === 'running') {
         actionHtml = '<button class="btn btn-outline btn-sm" onclick="openRunPanel(\'' + x(r.id) + '\',\'' + x(r.name).replace(/'/g,'&#39;') + '\',' + ((r.progress && r.progress.stepsTotal) || 0) + ',\'' + x(r.mode||'') + '\',\'' + x(r.maxPrivilege||'') + '\')">&#9673; Live</button>';
       } else if (cnt) {
