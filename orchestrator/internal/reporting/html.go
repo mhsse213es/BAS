@@ -618,6 +618,19 @@ code{font-family:"Cascadia Code","Consolas","SF Mono",monospace;font-size:0.85em
   .page .inner{display:block}
   .page{width:100%;margin:0;box-shadow:none;overflow:visible;page-break-after:auto;break-after:auto}
   .page:first-child{page-break-after:always;break-after:page}
+  /* Re-clip the cover's decorative bleed in print (2026-09-03). .cover-accent
+     and .cover-accent2 are positioned with right:-100px so they bleed off the
+     page edge; on screen .page{overflow:hidden} clips them, but the
+     overflow:visible above (part of the blank-page fix) un-clips them, making
+     the DOCUMENT wider than the paper. Chrome then shrinks the whole job to
+     fit, so every point of type and spacing renders smaller than the CSS
+     specifies -- measured at 0.708x on a real 45-page report: body text at
+     5.3pt where the CSS asks ~7.6pt. Clipping on .cover specifically keeps
+     the blank-page fix intact (the cover is one full page by design, so it
+     never needs to overflow onto another). logPrintLayoutWidth in
+     htmlpdf.go measures this on every render and names any element still
+     forcing the document wide. */
+  .cover{overflow:hidden}
   .fc,.scard,.gloss-item{page-break-inside:avoid;break-inside:avoid}
   thead{display:table-header-group}
   .ph,.pf{page-break-inside:avoid}}
@@ -1132,28 +1145,28 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 {{/* ── Privilege Assessment block ── */}}
 {{$ps := .privilegeSummary}}
 {{if or $ps.user $ps.admin $ps.system}}
-<div style="margin-bottom:18px;padding:14px 16px;background:rgba(13,17,23,0.5);border:1px solid #30363d;border-radius:8px">
-  <div style="font-size:0.62rem;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:#6e7681;margin-bottom:10px">&#x1F6E1; Privilege Assessment</div>
-  <div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid #21262d">
+<div style="margin-bottom:18px;padding:14px 16px;background:var(--surface);border:1px solid var(--line);border-radius:8px">
+  <div style="font-size:0.62rem;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:var(--muted);margin-bottom:10px">&#x1F6E1; Privilege Assessment</div>
+  <div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid var(--line)">
     <div style="text-align:center">
-      <div style="font-size:1.3rem;font-weight:900;color:#fff">{{sumInts $ps.user $ps.admin $ps.system}}</div>
-      <div style="font-size:0.58rem;color:#6e7681;white-space:nowrap">Techniques Tested</div>
+      <div style="font-size:1.3rem;font-weight:900;color:var(--ink)">{{sumInts $ps.user $ps.admin $ps.system}}</div>
+      <div style="font-size:0.58rem;color:var(--muted);white-space:nowrap">Techniques Tested</div>
     </div>
     {{if $ps.user}}<div style="text-align:center">
-      <div style="font-size:1.3rem;font-weight:900;color:#c9d1d9">{{$ps.user}}</div>
-      <div style="font-size:0.58rem;color:#6e7681;white-space:nowrap">Standard User</div>
+      <div style="font-size:1.3rem;font-weight:900;color:var(--ink)">{{$ps.user}}</div>
+      <div style="font-size:0.58rem;color:var(--muted);white-space:nowrap">Standard User</div>
     </div>{{end}}
     {{if or $ps.admin $ps.system}}<div style="text-align:center">
       <div style="font-size:1.3rem;font-weight:900;color:#d29922">{{sumInts $ps.admin $ps.system}}</div>
-      <div style="font-size:0.58rem;color:#6e7681;white-space:nowrap">Required Elevation</div>
+      <div style="font-size:0.58rem;color:var(--muted);white-space:nowrap">Required Elevation</div>
     </div>{{end}}
     {{if $ps.fallbacks}}<div style="text-align:center">
-      <div style="font-size:1.3rem;font-weight:900;color:#9aa5b5">{{$ps.fallbacks}}</div>
-      <div style="font-size:0.58rem;color:#6e7681;white-space:nowrap">WTS Fallbacks</div>
+      <div style="font-size:1.3rem;font-weight:900;color:var(--ink)">{{$ps.fallbacks}}</div>
+      <div style="font-size:0.58rem;color:var(--muted);white-space:nowrap">WTS Fallbacks</div>
     </div>{{end}}
   </div>
   {{$psc := privSummaryConclusion .privilegeSummary}}
-  {{if $psc}}<div style="font-size:0.78rem;color:#c9d1d9;line-height:1.7">{{$psc}}</div>{{end}}
+  {{if $psc}}<div style="font-size:0.78rem;color:var(--ink);line-height:1.7">{{$psc}}</div>{{end}}
 </div>
 {{end}}
 
@@ -1622,19 +1635,19 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 {{if .attackFlow}}
 
 <div style="display:flex;gap:10px;margin-bottom:18px;flex-wrap:wrap">
-  <div style="flex:1;min-width:80px;border:1px solid #30363d;border-top:3px solid #238636;border-radius:4px;padding:8px 12px">
+  <div style="flex:1;min-width:80px;border:1px solid var(--line);border-top:3px solid #238636;border-radius:4px;padding:8px 12px">
     <div style="font-size:1.3rem;font-weight:700;color:#238636">{{.attackFlowSummary.blocked}}</div>
     <div style="font-size:0.68rem;text-transform:uppercase;letter-spacing:.06em;color:#6e7681">Blocked</div>
   </div>
-  <div style="flex:1;min-width:80px;border:1px solid #30363d;border-top:3px solid #d29922;border-radius:4px;padding:8px 12px">
+  <div style="flex:1;min-width:80px;border:1px solid var(--line);border-top:3px solid #d29922;border-radius:4px;padding:8px 12px">
     <div style="font-size:1.3rem;font-weight:700;color:#d29922">{{.attackFlowSummary.detected}}</div>
     <div style="font-size:0.68rem;text-transform:uppercase;letter-spacing:.06em;color:#6e7681">Detected</div>
   </div>
-  <div style="flex:1;min-width:80px;border:1px solid #30363d;border-top:3px solid #b58800;border-radius:4px;padding:8px 12px">
+  <div style="flex:1;min-width:80px;border:1px solid var(--line);border-top:3px solid #b58800;border-radius:4px;padding:8px 12px">
     <div style="font-size:1.3rem;font-weight:700;color:#b58800">{{.attackFlowSummary.logged}}</div>
     <div style="font-size:0.68rem;text-transform:uppercase;letter-spacing:.06em;color:#6e7681">Logged</div>
   </div>
-  <div style="flex:1;min-width:80px;border:1px solid #30363d;border-top:3px solid #da3633;border-radius:4px;padding:8px 12px">
+  <div style="flex:1;min-width:80px;border:1px solid var(--line);border-top:3px solid #da3633;border-radius:4px;padding:8px 12px">
     <div style="font-size:1.3rem;font-weight:700;color:#da3633">{{.attackFlowSummary.bypassed}}</div>
     <div style="font-size:0.68rem;text-transform:uppercase;letter-spacing:.06em;color:#6e7681">Bypassed</div>
   </div>
@@ -2712,7 +2725,7 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
             {{if and .requestedPrivMin (ne .requestedPrivMin "Legacy")}}<span style="color:#9aa5b5;font-size:0.63rem;margin-left:4px">&#9492; min: {{.requestedPrivMin}}{{if and .requestedPrivPref (ne .requestedPrivPref "Legacy")}} / preferred: {{.requestedPrivPref}}{{end}}</span>{{end}}
           </div>
         </div>
-        {{$pc := privConclusion .executedAs .execVerdict}}{{if $pc}}<div style="font-size:0.75rem;color:#c9d1d9;line-height:1.65;padding:8px 12px;background:#0d1117;border-radius:6px;border-left:3px solid #30363d;margin-bottom:7px">{{$pc}}</div>{{end}}
+        {{$pc := privConclusion .executedAs .execVerdict}}{{if $pc}}<div style="font-size:0.75rem;color:var(--ink);line-height:1.65;padding:8px 12px;background:var(--surface);border-radius:6px;border-left:3px solid var(--faint);margin-bottom:7px">{{$pc}}</div>{{end}}
         {{end}}
         <div class="fc-detail-row">
           <div class="fc-detail-label">Blocked By</div>

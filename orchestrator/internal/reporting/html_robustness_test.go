@@ -237,3 +237,42 @@ func TestGenerateHTML_ScreenMediaResetsPageMinHeight(t *testing.T) {
 		t.Errorf("expected @media screen to reset .page/.inner min-height like @media print does, got block:\n%s", screenBlock)
 	}
 }
+
+// TestReportTemplate_NoDarkThemeColours guards against dark-theme markup
+// surviving in what is a light report (body{background:#fff;color:#1a2332}).
+//
+// Found 2026-09-03 by measuring a real rendered PDF: the Privilege Assessment
+// panel carried background:rgba(13,17,23,0.5) with color:#fff on its headline
+// number, so it rendered as a grey box with near-invisible white text. A
+// per-step privilege callout used a solid background:#0d1117, and four
+// attack-flow cards used a #30363d border. All are GitHub dark-palette values
+// left over from an earlier dark report design.
+//
+// NOT a print/PDF bug: the same inline styles apply on screen, so the panel was
+// equally broken in the browser.
+//
+// This asserts against the TEMPLATE SOURCE rather than rendered output, and
+// deliberately so. The first version of this test rendered robustnessReport()
+// and searched the HTML -- but that fixture populates neither privilegeSummary
+// nor attackFlow, so every affected block sat inside an untaken {{if}} and the
+// test passed against the unfixed template. Checking the source covers every
+// conditional branch regardless of what a fixture happens to exercise.
+//
+// Banning dark BACKGROUNDS is what makes the light-text case unreachable too:
+// color:#fff is legitimate on the cover, which really does have a dark navy
+// band (.cover{background:#0b1420}), so it is not banned directly -- without a
+// dark box to sit on, white text cannot go invisible.
+func TestReportTemplate_NoDarkThemeColours(t *testing.T) {
+	banned := map[string]string{
+		"rgba(13,17,23": "dark panel background — use var(--surface)",
+		"#0d1117":       "dark panel background — use var(--surface)",
+		"#c9d1d9":       "dark-theme body text — use var(--ink)",
+		"#30363d":       "dark-theme border — use var(--line)",
+		"#21262d":       "dark-theme border — use var(--line)",
+	}
+	for colour, guidance := range banned {
+		if strings.Contains(reportHTML, colour) {
+			t.Errorf("dark-theme colour %s present in the light report template: %s", colour, guidance)
+		}
+	}
+}

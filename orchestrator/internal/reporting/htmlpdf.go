@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/chromedp/cdproto/emulation"
 	"github.com/chromedp/cdproto/page"
 	"github.com/chromedp/chromedp"
 
@@ -173,6 +174,7 @@ func doRenderPDF(ctx context.Context, ws string, html []byte) ([]byte, error) {
 			return page.SetDocumentContent(ft.Frame.ID, string(html)).Do(ctx)
 		}),
 		chromedp.Sleep(350*time.Millisecond), // let layout + web fonts settle
+		chromedp.ActionFunc(logPrintLayoutWidth),
 		chromedp.ActionFunc(func(ctx context.Context) error {
 			buf, _, err := printToPDFParams().Do(ctx)
 			if err != nil {
@@ -186,6 +188,82 @@ func doRenderPDF(ctx context.Context, ws string, html []byte) ([]byte, error) {
 		return nil, err
 	}
 	return pdf, nil
+}
+
+// a4WidthCSSPx is the A4 portrait width in CSS pixels: 210mm at the CSS
+// definition of 96px per inch. Chrome lays a print job out at the paper width,
+// so the document should measure this and no more.
+const a4WidthCSSPx = 793.7
+
+// logPrintLayoutWidth measures the document under PRINT media emulation, just
+// before the PDF is produced, and logs how wide Chrome actually laid it out.
+//
+// Why this exists: a real rendered report was measured (2026-09-03) at a
+// uniform 0.708 scale — body type at 5.3pt where the CSS asks for ~7.6pt, and
+// .inner padding at 25.5pt where the CSS asks for 36pt. Type and padding
+// shrinking by the same factor rules out a font-size bug and points at a
+// document-level scale. 1/0.708 = 1.414 = the A4 aspect ratio exactly, which
+// suggests the layout is happening at 297mm and being scaled down to fit a
+// 210mm page — but the cause was NOT established from the CSS, and nothing in
+// the template sets zoom, transform:scale or @page.
+//
+// So this measures rather than assumes. scrollWidth greater than a4WidthCSSPx
+// means some element is forcing the document wider than the paper, and the
+// offending selector is named in the same log line. Emulating print media
+// first matters: @media print changes .page from a fixed 210mm to width:100%
+// and turns .page overflow from hidden to visible, so measuring under screen
+// media would report a different (and irrelevant) width.
+//
+// Diagnostic only — it never fails a render. A report that prints slightly
+// small is worth far more to a client than no report at all.
+func logPrintLayoutWidth(ctx context.Context) error {
+	if err := emulation.SetEmulatedMedia().WithMedia("print").Do(ctx); err != nil {
+		log.Printf("[report/pdf] layout probe: could not emulate print media: %v", err)
+		return nil
+	}
+
+	var probe struct {
+		ScrollWidth float64 `json:"scrollWidth"`
+		ClientWidth float64 `json:"clientWidth"`
+		BodyScroll  float64 `json:"bodyScroll"`
+		Widest      string  `json:"widest"`
+		WidestPx    float64 `json:"widestPx"`
+	}
+	// Walks every element and reports the one whose right edge extends furthest,
+	// so the log names the actual offender instead of just the symptom.
+	const js = `(() => {
+  const d = document.documentElement, b = document.body;
+  let widest = '', widestPx = 0;
+  for (const el of document.querySelectorAll('*')) {
+    const r = el.getBoundingClientRect();
+    const right = r.left + r.width + window.scrollX;
+    if (right > widestPx) {
+      widestPx = right;
+      widest = el.tagName.toLowerCase() +
+        (el.id ? '#' + el.id : '') +
+        (el.className && typeof el.className === 'string' && el.className.trim()
+          ? '.' + el.className.trim().split(/\s+/).join('.') : '');
+    }
+  }
+  return {scrollWidth: d.scrollWidth, clientWidth: d.clientWidth,
+          bodyScroll: b ? b.scrollWidth : 0, widest, widestPx};
+})()`
+	if err := chromedp.Evaluate(js, &probe).Do(ctx); err != nil {
+		log.Printf("[report/pdf] layout probe: evaluate failed: %v", err)
+		return nil
+	}
+
+	if probe.ScrollWidth > a4WidthCSSPx+1 {
+		log.Printf("[report/pdf] LAYOUT OVERFLOW: document is %.1f CSS px wide under print media, paper is %.1f "+
+			"(%.3fx) — Chrome shrinks to fit, so all type and spacing render %.1f%% smaller than the CSS specifies. "+
+			"Widest element: %s at right edge %.1f px (html.scrollWidth=%.1f body.scrollWidth=%.1f clientWidth=%.1f)",
+			probe.ScrollWidth, a4WidthCSSPx, probe.ScrollWidth/a4WidthCSSPx,
+			100*(1-a4WidthCSSPx/probe.ScrollWidth),
+			probe.Widest, probe.WidestPx, probe.ScrollWidth, probe.BodyScroll, probe.ClientWidth)
+		return nil
+	}
+	log.Printf("[report/pdf] layout width OK: %.1f CSS px under print media (paper %.1f)", probe.ScrollWidth, a4WidthCSSPx)
+	return nil
 }
 
 // printToPDFParams builds the CDP print-to-PDF request: A4 portrait, zero
