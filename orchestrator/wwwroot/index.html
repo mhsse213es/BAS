@@ -1934,9 +1934,9 @@ body.theme-slate {
               Linux
             </div>
             <div class="agent-dl-btns">
-              <a class="btn btn-sm btn-outline" href="/api/agents/download/linux-amd64-deb" download>.deb x86_64</a>
-              <a class="btn btn-sm btn-outline" href="/api/agents/download/linux-arm64-deb" download>.deb ARM64</a>
-              <a class="btn btn-sm btn-outline" href="/api/agents/download/linux-amd64-rpm" download>.rpm x86_64</a>
+              <a class="btn btn-sm btn-outline" href="/api/agents/download/linux-amd64-deb" download onclick="updateLinuxDownloadCmd('amd64','deb')">.deb x86_64</a>
+              <a class="btn btn-sm btn-outline" href="/api/agents/download/linux-arm64-deb" download onclick="updateLinuxDownloadCmd('arm64','deb')">.deb ARM64</a>
+              <a class="btn btn-sm btn-outline" href="/api/agents/download/linux-amd64-rpm" download onclick="updateLinuxDownloadCmd('amd64','rpm')">.rpm x86_64</a>
             </div>
             <div class="agent-dl-hint">Ubuntu 20.04+, Debian 10+, RHEL/Rocky 8+</div>
             <div class="agent-dl-usage" style="margin-bottom:0">
@@ -18743,6 +18743,17 @@ function escHtml(s) {
 var _agtDetailId = null;
 var _agtLogTier = 'operational';
 var _agtLogRefresh = null;
+
+function updateLinuxDownloadCmd(arch, type) {
+  // Update Linux installation commands based on selected architecture and package type
+  // arch: 'amd64' or 'arm64'
+  // type: 'deb' or 'rpm'
+  if (type === 'deb') {
+    document.getElementById('linux-deb-cmd').textContent = 'sudo dpkg -i bas-agent-linux-' + arch + '.deb && sudo systemctl start bas-agent';
+  } else if (type === 'rpm') {
+    document.getElementById('linux-rpm-cmd').textContent = 'sudo rpm -i bas-agent-linux-' + arch + '.rpm && sudo systemctl start bas-agent';
+  }
+}
 
 function openAgentDetail(agentId) {
   _agtDetailId = agentId;
