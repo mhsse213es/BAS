@@ -1775,6 +1775,13 @@ func (h *Handler) dispatchRun(ctx context.Context, sc *scenario.Scenario, agentI
 		}
 		return "", "", err
 	}
+	// Phase 0A: run-level wall-clock instrumentation (scenario_runs path,
+	// distinct from internal/exercise). Granularity is per-run, not
+	// per-technique -- the agent dispatches a whole scenario in one WS
+	// message and reports back once, so per-step timing lives in the
+	// agent's own journal, not here. This measures orchestrator-side
+	// overhead only: record-creation → WS-send → result-received.
+	log.Printf("[perf] execution_id=%s dispatch_queued_at=%s", runID, time.Now().UTC().Format(time.RFC3339Nano))
 
 	// Posture mode (default): local_check scenarios use built-in read-only agent
 	// checks — no ART/Caldera and no system changes.
@@ -1792,6 +1799,7 @@ func (h *Handler) dispatchRun(ctx context.Context, sc *scenario.Scenario, agentI
 			h.markRunFailed(context.Background(), runID, "Agent is offline — could not deliver the run")
 			return "", "offline", nil
 		}
+		log.Printf("[perf] execution_id=%s dispatch_sent_at=%s", runID, time.Now().UTC().Format(time.RFC3339Nano))
 		log.Printf("[scenario] dispatched posture-check %s → agent %s (run %s)", sc.ID, agentID, runID)
 		return runID, "", nil
 	}
@@ -2011,6 +2019,7 @@ func (h *Handler) dispatchRun(ctx context.Context, sc *scenario.Scenario, agentI
 		h.markRunFailed(context.Background(), runID, "Agent is offline — could not deliver the run")
 		return "", "offline", nil
 	}
+	log.Printf("[perf] execution_id=%s dispatch_sent_at=%s", runID, time.Now().UTC().Format(time.RFC3339Nano))
 
 	log.Printf("[scenario] dispatched %s → agent %s (run %s)", sc.ID, agentID, runID)
 	return runID, "", nil
@@ -2489,6 +2498,11 @@ func (h *Handler) SubmitScenarioResult(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "invalid payload — expected {runId, scenarioId, agentId, results}", http.StatusBadRequest)
 		return
 	}
+	// Phase 0A: closes the span opened by dispatch_queued_at/dispatch_sent_at
+	// in dispatchRun. dispatch_sent_at → result_received_at covers agent
+	// execution (all steps, run internally) + the WS round trip -- the
+	// orchestrator has no visibility inside that window at this granularity.
+	log.Printf("[perf] execution_id=%s result_received_at=%s", raw.RunID, time.Now().UTC().Format(time.RFC3339Nano))
 
 	// Look up the scenario to get framework context for interpretation
 	sc, _ := h.engine.Get(raw.ScenarioID)
