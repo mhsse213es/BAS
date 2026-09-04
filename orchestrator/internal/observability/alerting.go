@@ -1,7 +1,6 @@
 package observability
 
 import (
-	"context"
 	"fmt"
 	"sync"
 	"time"
