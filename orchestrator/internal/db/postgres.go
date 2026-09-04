@@ -1719,6 +1719,43 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		   JOIN sla_policy sp ON sp.severity = pf.severity
 		  WHERE pf.status = 'open'
 		    AND NOT EXISTS (SELECT 1 FROM finding_slas fs WHERE fs.posture_finding_id = pf.id)`,
+
+		`CREATE TABLE IF NOT EXISTS execution_attempts (
+			id                  text        PRIMARY KEY DEFAULT gen_random_uuid()::text,
+			source              text        NOT NULL CHECK (source IN ('art', 'caldera', 'exercise')),
+			granularity         text        NOT NULL CHECK (granularity IN ('run', 'step')),
+			source_execution_id text        NOT NULL,
+			source_attempt_id   text        NOT NULL,
+			technique_id        text,
+
+			status              text        NOT NULL CHECK (status IN (
+				'pending','dispatched','running','completed','timed_out',
+				'cancelled','abandoned','failed_to_dispatch','skipped'
+			)),
+			skip_reason         text,
+
+			created_at          timestamptz NOT NULL DEFAULT NOW(),
+			dispatch_queued_at  timestamptz,
+			dispatch_sent_at    timestamptz,
+			started_at          timestamptz,
+			completed_at        timestamptz,
+			decision_at         timestamptz,
+
+			result              jsonb,
+
+			CONSTRAINT execution_attempts_skip_reason_ck CHECK (
+				(status = 'skipped' AND skip_reason IS NOT NULL) OR
+				(status <> 'skipped' AND skip_reason IS NULL)
+			),
+			CONSTRAINT execution_attempts_decision_at_ck CHECK (
+				(status = 'skipped' AND decision_at IS NOT NULL) OR
+				(status <> 'skipped' AND decision_at IS NULL)
+			),
+			UNIQUE (source, source_attempt_id)
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_execution_attempts_execution ON execution_attempts(source_execution_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_execution_attempts_technique ON execution_attempts(technique_id) WHERE technique_id IS NOT NULL`,
+		`CREATE INDEX IF NOT EXISTS idx_execution_attempts_status ON execution_attempts(status)`,
 	}
 
 	for _, s := range stmts {
