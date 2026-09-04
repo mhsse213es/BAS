@@ -851,6 +851,10 @@ func (a *Agent) collectAndSubmitDetections(runID string, runStart time.Time) {
 	time.Sleep(graceWait)
 	from := runStart.Add(-5 * time.Second)
 	to := time.Now()
+	if posixDetectionGatedOff() {
+		log.Printf("[detect] run %s: POSIX detection submission is gated off; not collecting", runID)
+		return
+	}
 	alerts, truncated := collectAlerts(from, to, maxEvents, maxBytes)
 	if len(alerts) == 0 {
 		log.Printf("[detect] run %s: no alerts collected in window", runID)

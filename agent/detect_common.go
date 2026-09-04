@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"io"
 	"os"
+	"runtime"
 
 	"audspect/agent/protocol"
 )
@@ -93,4 +94,24 @@ func tailFile(p string, limit int64) ([]byte, bool, error) {
 	}
 	b, _ := readCapped(f, int(size)+1)
 	return b, truncated, nil
+}
+
+// posixDetectionSubmitEnabled gates whether Linux and macOS agents submit
+// collected alerts to the server.
+//
+// It is OFF because the server's correlation rule scores a bare timestamp match
+// as a detection: any alert landing inside a step's window marks that technique
+// "detected", so a single unrelated systemd unit failure would report a 100%
+// detection rate. That is tolerable-ish against the Windows alert-tier channels
+// the rule was tuned for, and badly wrong against a general-purpose system log.
+//
+// Collection itself is complete and verified; only the submission is held back.
+// Turn this on once the server distinguishes an attributable detection from
+// mere co-occurrence, and not before -- an inflated detection rate reaching a
+// client is worse than no detection data at all.
+const posixDetectionSubmitEnabled = false
+
+// posixDetectionGatedOff reports whether this agent must withhold detections.
+func posixDetectionGatedOff() bool {
+	return !posixDetectionSubmitEnabled && runtime.GOOS != "windows"
 }
