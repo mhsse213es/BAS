@@ -99,17 +99,21 @@ func tailFile(p string, limit int64) ([]byte, bool, error) {
 // posixDetectionSubmitEnabled gates whether Linux and macOS agents submit
 // collected alerts to the server.
 //
-// It is OFF because the server's correlation rule scores a bare timestamp match
-// as a detection: any alert landing inside a step's window marks that technique
-// "detected", so a single unrelated systemd unit failure would report a 100%
-// detection rate. That is tolerable-ish against the Windows alert-tier channels
-// the rule was tuned for, and badly wrong against a general-purpose system log.
+// It was OFF while the server scored a bare timestamp match as a detection: any
+// alert landing inside a step's window marked that technique "detected", so a
+// single unrelated systemd unit failure reported a 100% detection rate. That
+// was tolerable against the Windows alert-tier channels the rule was tuned for
+// and badly wrong against a general-purpose system log.
 //
-// Collection itself is complete and verified; only the submission is held back.
-// Turn this on once the server distinguishes an attributable detection from
-// mere co-occurrence, and not before -- an inflated detection rate reaching a
-// client is worse than no detection data at all.
-const posixDetectionSubmitEnabled = false
+// The server now requires an attribution signal -- a vendor detect ID, a threat
+// name, an EDR provider, a kernel denial or a security subsystem -- before
+// calling anything detected, and reports an unattributed in-window alert as
+// "logged" instead. See orchestrator/internal/detect/attribution.go.
+//
+// ONE CAVEAT WORTH KEEPING IN MIND: agents and servers upgrade independently. A
+// new agent reporting to a server older than that change would still have its
+// POSIX alerts scored the old way. Ship the server first.
+const posixDetectionSubmitEnabled = true
 
 // posixDetectionGatedOff reports whether this agent must withhold detections.
 func posixDetectionGatedOff() bool {

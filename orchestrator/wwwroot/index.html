@@ -15161,6 +15161,7 @@ function renderRunReportExtra(rep) {
     var bigStyle2 = 'font-size:1.3rem;font-weight:700;line-height:1.1';
     var detCol = sum.detectionRate >= 70 ? 'var(--success)' : sum.detectionRate >= 40 ? 'var(--warning)' : 'var(--danger)';
     var undCol = sum.undetectedRate <= 20 ? 'var(--success)' : sum.undetectedRate <= 50 ? 'var(--warning)' : 'var(--danger)';
+    var nCards = 2;
     var cards =
       '<div style="' + dimStyle2 + '"><div style="' + labelStyle2 + '">Detection Rate</div>' +
         '<div style="' + bigStyle2 + ';color:' + detCol + '">' + (sum.detectionRate || 0) + '%</div>' +
@@ -15168,13 +15169,23 @@ function renderRunReportExtra(rep) {
       '<div style="' + dimStyle2 + '"><div style="' + labelStyle2 + '">Undetected</div>' +
         '<div style="' + bigStyle2 + ';color:' + undCol + '">' + (sum.undetectedRate || 0) + '%</div>' +
         '<div style="font-size:0.62rem;color:var(--muted);margin-top:0.1rem">succeeded, no alert — blind spot</div></div>';
+    // Logged: an alert landed in the window but nothing attributed it to a
+    // control. Without this tile the two rates above stop summing to 100 with
+    // no explanation, which reads as a bug rather than as the honest gap it is.
+    if (sum.logged) {
+      cards += '<div style="' + dimStyle2 + '"><div style="' + labelStyle2 + '">Logged</div>' +
+        '<div style="' + bigStyle2 + ';color:var(--warning)">' + (sum.loggedRate || 0) + '%</div>' +
+        '<div style="font-size:0.62rem;color:var(--muted);margin-top:0.1rem">activity in window, not attributed</div></div>';
+      nCards++;
+    }
     if (sum.mttdMs) {
       cards += '<div style="' + dimStyle2 + '"><div style="' + labelStyle2 + '">MTTD</div>' +
         '<div style="' + bigStyle2 + ';color:var(--text)">' + Math.round(sum.mttdMs / 1000) + 's</div>' +
         '<div style="font-size:0.62rem;color:var(--muted);margin-top:0.1rem">mean time to detect</div></div>';
+      nCards++;
     }
     var detHtml = '<div style="' + panel + '"><div style="' + hdr + '">Detection Coverage</div>' +
-      '<div style="display:grid;grid-template-columns:repeat(' + (sum.mttdMs ? 3 : 2) + ',1fr);gap:0.5rem">' + cards + '</div>';
+      '<div style="display:grid;grid-template-columns:repeat(' + nCards + ',1fr);gap:0.5rem">' + cards + '</div>';
 
     if (dTechs.length > 0) {
       var rows2 = dTechs.map(function(d) {

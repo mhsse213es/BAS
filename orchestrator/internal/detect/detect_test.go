@@ -64,13 +64,18 @@ func TestCorrelateAndScore(t *testing.T) {
 	}
 }
 
-func TestCorrelateLowConfidence(t *testing.T) {
+func TestCorrelateUnattributedIsLogged(t *testing.T) {
 	base := time.Date(2026, 6, 16, 10, 0, 0, 0, time.UTC)
 	steps := []ExecutedStep{mkResult("T1059", "fail", base)}
 	alerts := []AlertRecord{{Provider: "Service Control Manager", EventID: 7045,
 		Timestamp: base.Add(2 * time.Second)}} // in window, not a detection
 	dets := Correlate(steps, alerts, 5*time.Minute, defaultDefenderDetectIDs())
-	if dets[0].Verdict != "detected" || dets[0].Confidence != "low" {
-		t.Fatalf("expected detected/low, got %+v", dets[0])
+	// It lands in the window and nothing else, which is what this test always
+	// described. "logged" now says that instead of overstating it as a detection.
+	if dets[0].Verdict != "logged" {
+		t.Fatalf("expected logged, got %+v", dets[0])
+	}
+	if dets[0].Alert == nil {
+		t.Fatal("the co-occurring alert must still be attached for review")
 	}
 }

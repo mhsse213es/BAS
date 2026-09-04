@@ -97,17 +97,10 @@ func (h *Handler) SubmitRunDetections(w http.ResponseWriter, r *http.Request) {
 	highFidelity := 0
 	detectIDs := detect.DefenderDetectIDs()
 	for _, alert := range body.Alerts {
-		isHigh := false
-		if detectIDs[alert.EventID] {
-			isHigh = true
-		}
-		if alert.ThreatName != "" {
-			isHigh = true
-		}
-		if detect.IsEDRProvider(alert.Provider) && alert.ThreatName != "" {
-			isHigh = true
-		}
-		if isHigh {
+		// Same attribution rule Correlate uses. Keeping a second copy here is
+		// how the two drifted: this one also demanded a threat name alongside
+		// an EDR provider, so every POSIX alert scored as pure noise.
+		if detect.IsAttributable(alert, detectIDs) {
 			highFidelity++
 		}
 	}
@@ -143,10 +136,15 @@ func (h *Handler) SubmitRunDetections(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// "logged" counts techniques with an in-window alert that nothing attributed
+	// to a control. Reported alongside the rates so a low detection rate reads
+	// correctly: those are leads to review, not detections.
 	respond(w, map[string]any{
 		"runId":              runID,
 		"detectionRate":      sum.DetectionRate,
 		"undetectedRate":     sum.UndetectedRate,
+		"logged":             sum.Logged,
+		"loggedRate":         sum.LoggedRate,
 		"mttdMs":             sum.MTTDMs,
 		"alerts":             totalAlerts,
 		"alertsTotal":        totalAlerts,

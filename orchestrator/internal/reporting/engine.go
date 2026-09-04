@@ -749,7 +749,20 @@ func BuildAttackFlow(results []models.SimulationResult) []AttackFlowNode {
 
 		case models.ResultFail:
 			det := classifyDetection(r.Events)
-			if r.DetectionVerdict == "detected" || r.DetectionAlert != nil {
+			if r.DetectionVerdict == "logged" {
+				// An alert landed in the step's window but nothing attributed
+				// it to a control. The alert is attached for review, so the
+				// DetectionAlert != nil fallback below would otherwise promote
+				// it to "detected" and undo the correlator's honesty.
+				node.Verdict = "logged"
+				node.VerdictLabel = "Logged — No Alert Raised"
+				if r.DetectionAlert != nil {
+					node.ControlName = r.DetectionAlert.Provider
+				} else {
+					node.ControlName = det.Source
+				}
+				node.DetectionSource = det.Source
+			} else if r.DetectionVerdict == "detected" || r.DetectionAlert != nil {
 				node.Verdict = "detected"
 				node.VerdictLabel = "Detected — Not Stopped"
 				if r.DetectionAlert != nil {

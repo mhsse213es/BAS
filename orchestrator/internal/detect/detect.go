@@ -29,8 +29,8 @@ type ExecutedStep struct {
 
 type TechniqueDetection struct {
 	TechniqueID     string           `json:"techniqueId"`
-	Verdict         string           `json:"verdict"`               // prevented|detected|undetected
-	Confidence      string           `json:"confidence,omitempty"`  // high|low when detected
+	Verdict         string           `json:"verdict"`               // prevented|detected|logged|undetected
+	Confidence      string           `json:"confidence,omitempty"`  // high|medium when detected
 	MatchedBy       []string         `json:"matchedBy,omitempty"`
 	Alert           *AlertRecord     `json:"alert,omitempty"`
 	TimeToDetectMs  int64            `json:"timeToDetectMs,omitempty"`
@@ -42,9 +42,11 @@ type DetectionSummary struct {
 	Prevented      int   `json:"prevented"`
 	Detected       int   `json:"detected"`
 	Undetected     int   `json:"undetected"`
+	Logged         int   `json:"logged"`
 	PreventionRate int   `json:"preventionRate"`
 	DetectionRate  int   `json:"detectionRate"`
 	UndetectedRate int   `json:"undetectedRate"`
+	LoggedRate     int   `json:"loggedRate"`
 	MTTDMs         int64 `json:"mttdMs"`
 }
 
@@ -63,9 +65,15 @@ func DefenderDetectIDs() map[int]bool { return defaultDefenderDetectIDs() }
 
 // Correlate maps alerts to executed steps by time window. A step matches an alert
 // when alert.ts ∈ [step.ExecutedAt, step.ExecutedAt+window]. Prevented steps are
-// never detected. The first matching alert wins (earliest). Confidence is high
-// when the alert is a bona-fide detection (Defender detect id / non-empty threat
-// name / EDR provider), else low. error/skipped steps are excluded entirely.
+// never detected. The first matching alert wins (earliest). error/skipped steps
+// are excluded entirely.
+//
+// The window decides WHICH alert is relevant; it does not decide that a
+// detection occurred. That takes an attribution signal (see attribution.go) --
+// a vendor detect ID, a threat name, an EDR provider, a kernel denial or a
+// security subsystem. A match with no such signal is "logged": worth showing an
+// analyst, but not counted as a detection, because on a general-purpose system
+// log something is almost always being written inside any five-minute window.
 func Correlate(steps []ExecutedStep, alerts []AlertRecord, window time.Duration, detectIDs map[int]bool) []TechniqueDetection {
 	out := make([]TechniqueDetection, 0, len(steps))
 	for _, s := range steps {
@@ -108,23 +116,22 @@ func Correlate(steps []ExecutedStep, alerts []AlertRecord, window time.Duration,
 			out = append(out, TechniqueDetection{TechniqueID: s.TechniqueID, Verdict: "undetected"})
 			continue
 		}
-		matchedBy := []string{"timestamp"}
-		conf := "low"
-		if detectIDs[best.EventID] {
-			matchedBy = append(matchedBy, "defenderDetectId")
-			conf = "high"
-		}
-		if best.ThreatName != "" {
-			matchedBy = append(matchedBy, "threatName")
-			conf = "high"
-		}
-		if IsEDRProvider(best.Provider) && best.ThreatName != "" {
-			matchedBy = append(matchedBy, "edrProvider")
-			conf = "high"
-		}
+		signals := attributionSignals(*best, detectIDs)
+		matchedBy := append([]string{"timestamp"}, signals...)
 		alertCopy := *best
+		if len(signals) == 0 {
+			// In the window, but nothing attributes it to a control acting.
+			// "logged" says exactly that, and the alert rides along so an
+			// analyst can judge it. Calling this "detected" is what produced a
+			// 100% detection rate from unrelated background noise.
+			out = append(out, TechniqueDetection{
+				TechniqueID: s.TechniqueID, Verdict: "logged",
+				MatchedBy: matchedBy, Alert: &alertCopy,
+			})
+			continue
+		}
 		out = append(out, TechniqueDetection{
-			TechniqueID: s.TechniqueID, Verdict: "detected", Confidence: conf,
+			TechniqueID: s.TechniqueID, Verdict: "detected", Confidence: confidenceFor(signals),
 			MatchedBy: matchedBy, Alert: &alertCopy,
 			TimeToDetectMs: best.Timestamp.Sub(s.ExecutedAt).Milliseconds(),
 		})
@@ -147,18 +154,25 @@ func Score(dets []TechniqueDetection) DetectionSummary {
 			s.Detected++
 			ttdSum += d.TimeToDetectMs
 			ttdN++
+		case "logged":
+			// The step ran and something was logged, but nothing attributed it
+			// to a control. It is executed and it is NOT a detection; counting
+			// it anywhere else would either inflate the rate or hide the step.
+			s.Executed++
+			s.Logged++
 		case "undetected":
 			s.Executed++
 			s.Undetected++
 		}
 	}
-	notPrevented := s.Detected + s.Undetected
+	notPrevented := s.Detected + s.Undetected + s.Logged
 	if s.Executed > 0 {
 		s.PreventionRate = pct(s.Prevented, s.Executed)
 	}
 	if notPrevented > 0 {
 		s.DetectionRate = pct(s.Detected, notPrevented)
 		s.UndetectedRate = pct(s.Undetected, notPrevented)
+		s.LoggedRate = pct(s.Logged, notPrevented)
 	}
 	if ttdN > 0 {
 		s.MTTDMs = ttdSum / ttdN
