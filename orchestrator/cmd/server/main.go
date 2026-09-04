@@ -628,6 +628,14 @@ func main() {
 		if err := handler.ReapAbandonedRuns(ctx); err != nil {
 			log.Printf("[dispatch] abandoned-run watchdog: %v", err)
 		}
+		// Runs the same tick too -- the run-level wall-clock budget
+		// (staleRunGuard, 2h). Previously enforced only reactively at a
+		// new dispatch to the same agent; this makes it proactive so a
+		// run wedged on a still-reachable agent doesn't sit "running"
+		// forever. See ReapStaleRuns.
+		if err := handler.ReapStaleRuns(ctx); err != nil {
+			log.Printf("[dispatch] stale-run watchdog: %v", err)
+		}
 	})
 	defer dispatchWatchdogScheduler.Stop()
 

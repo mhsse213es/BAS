@@ -141,3 +141,55 @@ func (h *Handler) ReapAbandonedRuns(ctx context.Context) error {
 	}
 	return nil
 }
+
+// ReapStaleRuns marks any 'running' scenario_run 'partial' once it has run
+// past staleRunGuard, regardless of agent status. This is the run-level
+// wall-clock budget that was previously enforced only reactively -- see
+// runIsStale, checked exclusively at dispatchRun's concurrency guard, which
+// requires a NEW dispatch to that exact agent to ever fire. A run wedged on
+// an agent that stays reachable (heartbeating normally) but never confirms
+// completion nor honors command_cancel would otherwise sit "running" forever
+// unless someone happens to start another run on the same agent.
+// ReapAbandonedRuns already covers the agent-offline case on its own,
+// shorter guard (5m); this reaper is the backstop for everything else,
+// mirroring its structure: match rows first, then UPDATE each with its own
+// "AND status = 'running'" re-check so a run that completes between the
+// SELECT and the UPDATE is never clobbered.
+func (h *Handler) ReapStaleRuns(ctx context.Context) error {
+	rows, err := h.db.Query(ctx,
+		`SELECT id, agent_id FROM scenario_runs
+		  WHERE status = 'running'
+		    AND started_at < NOW() - make_interval(secs => $1)`,
+		int(staleRunGuard.Seconds()),
+	)
+	if err != nil {
+		return err
+	}
+	type staleRun struct{ id, agentID string }
+	var stale []staleRun
+	for rows.Next() {
+		var r staleRun
+		if err := rows.Scan(&r.id, &r.agentID); err != nil {
+			continue
+		}
+		stale = append(stale, r)
+	}
+	rows.Close()
+
+	for _, r := range stale {
+		tag, err := h.db.Exec(ctx,
+			`UPDATE scenario_runs SET status = 'partial', completed_at = NOW()
+			  WHERE id = $1 AND status = 'running'`,
+			r.id,
+		)
+		if err != nil {
+			log.Printf("[dispatch] reap stale run %s: %v", r.id, err)
+			continue
+		}
+		if tag.RowsAffected() > 0 {
+			h.markVariantRunPartial(ctx, r.id)
+			log.Printf("[dispatch] run %s on agent %s exceeded wall-clock budget (%s) — marked partial", r.id, r.agentID, staleRunGuard)
+		}
+	}
+	return nil
+}

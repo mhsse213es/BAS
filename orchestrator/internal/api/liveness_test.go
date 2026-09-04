@@ -128,3 +128,49 @@ func TestReapAbandonedRuns_DoesNotConflictWithLateResultSubmission(t *testing.T)
 		})
 	})
 }
+
+// TestReapStaleRuns_MarksPartialAfterWallClockBudget is the regression test
+// for the run-level wall-clock budget gap: a run wedged on a still-reachable
+// agent (heartbeating normally, never confirms completion) previously sat
+// "running" forever because staleRunGuard was only checked reactively at a
+// new dispatch to that exact agent. ReapStaleRuns makes it proactive.
+func TestReapStaleRuns_MarksPartialAfterWallClockBudget(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "")
+		ctx := context.Background()
+
+		// Agent alive (fresh heartbeat) but run started well past
+		// staleRunGuard (2h) -- must be reaped by wall-clock alone.
+		seedRunRow(t, pool, "run-wedged", "sc-wallclock", "agent-wedged-alive", "running")
+		if _, err := pool.Exec(ctx,
+			`UPDATE scenario_runs SET started_at = NOW() - interval '3 hours' WHERE id='run-wedged'`); err != nil {
+			t.Fatalf("age the run: %v", err)
+		}
+
+		// Run within budget -- must NOT be reaped.
+		seedRunRow(t, pool, "run-fresh", "sc-wallclock", "agent-fresh", "running")
+
+		if err := h.ReapStaleRuns(ctx); err != nil {
+			t.Fatalf("ReapStaleRuns: %v", err)
+		}
+
+		var status string
+		var completedAt *time.Time
+		if err := pool.QueryRow(ctx, `SELECT status, completed_at FROM scenario_runs WHERE id = 'run-wedged'`).Scan(&status, &completedAt); err != nil {
+			t.Fatalf("query run-wedged: %v", err)
+		}
+		if status != "partial" || completedAt == nil {
+			t.Fatalf("run-wedged status = %q completedAt = %v, want partial with completedAt set", status, completedAt)
+		}
+
+		if err := pool.QueryRow(ctx, `SELECT status FROM scenario_runs WHERE id = 'run-fresh'`).Scan(&status); err != nil {
+			t.Fatalf("query run-fresh: %v", err)
+		}
+		if status != "running" {
+			t.Fatalf("run-fresh status = %q, want running (still within staleRunGuard)", status)
+		}
+	})
+}
