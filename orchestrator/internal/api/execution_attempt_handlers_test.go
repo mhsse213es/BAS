@@ -76,3 +76,73 @@ func TestSubmitScenarioResult_CompletesExecutionAttempt(t *testing.T) {
 		}
 	})
 }
+
+func TestExecutionAttemptsSchema_SkipConsistencyConstraints(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+
+		// A skipped row WITHOUT skip_reason must be rejected.
+		_, err := pool.Exec(ctx,
+			`INSERT INTO execution_attempts (source, granularity, source_execution_id, source_attempt_id, status, created_at, decision_at)
+			 VALUES ('exercise', 'step', 'exec-1', 'attempt-bad-1', 'skipped', NOW(), NOW())`)
+		if err == nil {
+			t.Error("expected constraint violation: skipped row without skip_reason")
+		}
+
+		// A skipped row WITHOUT decision_at must be rejected.
+		_, err = pool.Exec(ctx,
+			`INSERT INTO execution_attempts (source, granularity, source_execution_id, source_attempt_id, status, skip_reason, created_at)
+			 VALUES ('exercise', 'step', 'exec-1', 'attempt-bad-2', 'skipped', 'condition_false', NOW())`)
+		if err == nil {
+			t.Error("expected constraint violation: skipped row without decision_at")
+		}
+
+		// A non-skipped row WITH skip_reason set must be rejected.
+		_, err = pool.Exec(ctx,
+			`INSERT INTO execution_attempts (source, granularity, source_execution_id, source_attempt_id, status, skip_reason, created_at)
+			 VALUES ('exercise', 'step', 'exec-1', 'attempt-bad-3', 'completed', 'condition_false', NOW())`)
+		if err == nil {
+			t.Error("expected constraint violation: completed row with skip_reason set")
+		}
+
+		// A valid skipped row must succeed.
+		_, err = pool.Exec(ctx,
+			`INSERT INTO execution_attempts (source, granularity, source_execution_id, source_attempt_id, status, skip_reason, created_at, decision_at)
+			 VALUES ('exercise', 'step', 'exec-1', 'attempt-good-1', 'skipped', 'condition_false', NOW(), NOW())`)
+		if err != nil {
+			t.Errorf("valid skipped row should succeed: %v", err)
+		}
+	})
+}
+
+func TestExecutionAttemptsSchema_IdempotentOnRetry(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		insert := `INSERT INTO execution_attempts (source, granularity, source_execution_id, source_attempt_id, status, created_at)
+		            VALUES ('art', 'run', 'exec-idem', 'attempt-idem-1', 'pending', NOW())
+		            ON CONFLICT (source, source_attempt_id) DO NOTHING`
+
+		if _, err := pool.Exec(ctx, insert); err != nil {
+			t.Fatalf("first insert: %v", err)
+		}
+		if _, err := pool.Exec(ctx, insert); err != nil {
+			t.Fatalf("second insert (retry) should not error: %v", err)
+		}
+
+		var count int
+		if err := pool.QueryRow(ctx,
+			`SELECT COUNT(*) FROM execution_attempts WHERE source_attempt_id = 'attempt-idem-1'`,
+		).Scan(&count); err != nil {
+			t.Fatalf("count query: %v", err)
+		}
+		if count != 1 {
+			t.Errorf("row count = %d, want 1 (retry must not create a duplicate)", count)
+		}
+	})
+}
