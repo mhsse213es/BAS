@@ -92,28 +92,3 @@ $out | ConvertTo-Json -Depth 3 -Compress
 	sort.Slice(recs, func(i, j int) bool { return recs[i].Timestamp.After(recs[j].Timestamp) })
 	return capRecords(recs, maxEvents, maxBytes)
 }
-
-// capRecords keeps at most maxEvents records and ≤ maxBytes of JSON (newest-first).
-func capRecords(recs []protocol.AlertRecord, maxEvents, maxBytes int) ([]protocol.AlertRecord, bool) {
-	truncated := false
-	if len(recs) > maxEvents {
-		recs = recs[:maxEvents]
-		truncated = true
-	}
-	for {
-		b, _ := json.Marshal(recs)
-		if len(b) <= maxBytes || len(recs) == 0 {
-			break
-		}
-		recs = recs[:len(recs)-1]
-		truncated = true
-	}
-	return recs, truncated
-}
-
-func truncate(s string, n int) string {
-	if len(s) > n {
-		return s[:n]
-	}
-	return s
-}

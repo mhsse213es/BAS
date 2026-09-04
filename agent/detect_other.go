@@ -1,4 +1,4 @@
-//go:build !windows
+//go:build !windows && !linux && !darwin
 
 package main
 
@@ -8,7 +8,9 @@ import (
 	"audspect/agent/protocol"
 )
 
-// collectAlerts is a no-op on non-Windows agents in v1.
+// collectAlerts has no implementation on platforms outside windows/linux/darwin.
+// Returning (nil,false) is the honest answer: it says "this agent did not look",
+// which the server must not read as "nothing detected anything".
 func collectAlerts(from, to time.Time, maxEvents, maxBytes int) ([]protocol.AlertRecord, bool) {
 	return nil, false
 }
