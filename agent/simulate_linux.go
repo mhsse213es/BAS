@@ -142,7 +142,7 @@ func knownPostureScenarios() []string {
 // (that runs under the cis-ubuntu-l1 scenario); this is a faster representative
 // subset covering the controls most likely to let an attacker in.
 func safeSimChecks() []SimCategory {
-	return []SimCategory{
+	base := []SimCategory{
 		{Phase: "credential-access", Checks: []SimCheck{
 			checkSSHRootLogin(),
 			checkSSHEmptyPasswords(),
@@ -185,6 +185,10 @@ func safeSimChecks() []SimCategory {
 			checkSSHProtocol2(),
 		}},
 	}
+	// Section B of the POSIX posture coverage map: checks that are net-new on
+	// both platforms, sharing their evaluators with the macOS agent so the same
+	// endpoint state scores the same on either OS. See simulate_sectionb_linux.go.
+	return append(base, linuxSectionBChecks()...)
 }
 
 func RunScenarioChecks(scenarioID string) []SimCategory {

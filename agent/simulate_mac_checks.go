@@ -302,3 +302,81 @@ func checkSUIDBinaries() SimCheck {
 			return evalSUIDBinaries(out)
 		})
 }
+
+// ── Section B · net-new on both platforms ───────────────────────────────────
+//
+// The evaluators these feed live in simulate_posix_posture.go and are shared
+// with the Linux agent, so the same endpoint state produces the same verdict on
+// either OS. Only the reads differ.
+
+// macSectionBChecks returns the macOS half of section B.
+func macSectionBChecks() []SimCategory {
+	return []SimCategory{
+		{Phase: "credential-hygiene", Checks: []SimCheck{checkCredentialFilePerms()}},
+		{Phase: "remote-access", Checks: []SimCheck{checkRemoteAccessSoftware()}},
+		{Phase: "trust-store", Checks: []SimCheck{checkTrustStore()}},
+		{Phase: "persistence", Checks: []SimCheck{checkUserLaunchAgentPerms()}},
+	}
+}
+
+func checkCredentialFilePerms() SimCheck {
+	return check("T1552.001", "Credential Files Readable Only by Owner", "credential-hygiene", "Critical",
+		"A private key or cloud credential readable by another local account hands over working access directly — nothing has to be cracked.",
+		"Restore owner-only access: chmod 600 on the affected files, and chmod 700 on ~/.ssh.",
+		func() (string, string) {
+			findings, scanned := scanCredentialStores(homeDirsUnder("/Users"))
+			return evalCredentialFiles(findings, scanned)
+		})
+}
+
+func checkRemoteAccessSoftware() SimCheck {
+	return check("T1219", "Remote Access Software Present", "remote-access", "High",
+		"Remote access and RMM tools provide an inbound path that bypasses the network perimeter entirely, and are the usual route in support-desk fraud.",
+		"Remove unsanctioned remote access tools, or bring them under managed policy with logging.",
+		func() (string, string) {
+			out, err := cmdOut("ps", "-axco", "command")
+			if err != nil && strings.TrimSpace(out) == "" {
+				return "skipped", "Could not enumerate running processes; remote access software was not assessed."
+			}
+			running := parsePsCommands([]byte(out))
+			return evalRemoteAccessSoftware(matchRemoteAccess(running, pathExists))
+		})
+}
+
+// macTrustAnchorDirs are where an administrator drops a certificate authority
+// for system-wide trust outside the keychain UI.
+var macTrustAnchorDirs = []string{
+	"/Library/Keychains/CustomAnchors",
+	"/private/etc/ssl/certs",
+}
+
+func checkTrustStore() SimCheck {
+	return check("T1553.004", "No Locally Added Root Certificates", "trust-store", "High",
+		"Whoever holds the private key for a trusted root can mint certificates this endpoint accepts, which is how TLS interception is established.",
+		"Review added anchors in Keychain Access → System → Certificates and remove any that are not justified.",
+		func() (string, string) {
+			roots, readable := certFilesIn(macTrustAnchorDirs)
+			return evalTrustStore(roots, readable)
+		})
+}
+
+// userLaunchAgentDirs is the per-user persistence surface. Section A covers the
+// system directories under /Library; these are the ones inside each home, which
+// run as that user at every login.
+func userLaunchAgentDirs() []string {
+	var dirs []string
+	for _, home := range homeDirsUnder("/Users") {
+		dirs = append(dirs, home+"/Library/LaunchAgents")
+	}
+	return dirs
+}
+
+func checkUserLaunchAgentPerms() SimCheck {
+	return check("T1543.001", "User LaunchAgents Writable Only by Owner", "persistence", "High",
+		"A plist another account can write into a user's LaunchAgents runs as that user at every login, which is persistence plus a foothold in their session.",
+		"Restore owner-only access: chmod 755 on ~/Library/LaunchAgents.",
+		func() (string, string) {
+			return evalWritableDirs("user LaunchAgents", dirModes(userLaunchAgentDirs()),
+				"executes as that user at every login")
+		})
+}

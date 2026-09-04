@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"io/fs"
 	"regexp"
 	"sort"
 	"strconv"
@@ -409,31 +408,6 @@ func evalCronAccess(allowExists bool, allowContent string, denyExists bool) (str
 	}
 	return "fail", "Neither cron.allow nor cron.deny exists — any local user may schedule recurring jobs, " +
 		"which is a persistence surface that survives reboot."
-}
-
-// evalLaunchDirPerms checks the launchd directories an attacker would drop a
-// persistence plist into. Root-owned and root-writable only is the safe state.
-func evalLaunchDirPerms(modes map[string]fs.FileMode) (string, string) {
-	if len(modes) == 0 {
-		return "skipped", "launchd directory permissions could not be read; the persistence surface was not measured."
-	}
-	var bad []string
-	paths := make([]string, 0, len(modes))
-	for p := range modes {
-		paths = append(paths, p)
-	}
-	sort.Strings(paths)
-	for _, p := range paths {
-		// 0o022 = group-write or other-write.
-		if modes[p].Perm()&0o022 != 0 {
-			bad = append(bad, fmt.Sprintf("%s (%04o)", p, modes[p].Perm()))
-		}
-	}
-	if len(bad) > 0 {
-		return "fail", fmt.Sprintf("Writable by non-root: %s. A user who can write here gains persistence that runs as root at boot.",
-			strings.Join(bad, ", "))
-	}
-	return "pass", fmt.Sprintf("All %d launchd directories are writable only by root.", len(paths))
 }
 
 // ---------------------------------------------------------------------------

@@ -221,7 +221,8 @@ func safeSimChecks() []SimCategory {
 	// the Linux agent already runs. Kept in simulate_mac_checks.go and appended
 	// here so this list stays the single place that says what a macOS
 	// assessment covers.
-	return append(base, macSectionAChecks()...)
+	base = append(base, macSectionAChecks()...)
+	return append(base, macSectionBChecks()...)
 }
 
 // ── Defense Evasion ─────────────────────────────────────────────────────────
