@@ -172,6 +172,10 @@ func (e *Executor) advance(ctx context.Context, ex *Execution) error {
 				_, _ = e.evidence.Append(ctx, ex.ID, se.ID, "trigger_fired", "system", "trigger_registry",
 					map[string]any{"step_type": string(ps.Type), "payload": payload})
 				_ = e.store.RecordEvent(ctx, ex.ID, ps.ID, "step_completed", "system", payload)
+				if e.metrics != nil && se.StartedAt != nil {
+					duration := time.Since(*se.StartedAt).Seconds()
+					e.metrics.ExecutionDuration.WithLabelValues(string(ps.Type)).Observe(duration)
+				}
 				done[ps.ID] = true
 				continue
 			}
@@ -182,6 +186,10 @@ func (e *Executor) advance(ctx context.Context, ex *Execution) error {
 			_ = e.store.SetStepResult(ctx, ex.ID, ps.ID, map[string]any{"timed_out": true})
 			_ = e.store.SetStepStatus(ctx, ex.ID, ps.ID, StepCompleted, "")
 			_ = e.store.RecordEvent(ctx, ex.ID, ps.ID, "timeout", "system", nil)
+			if e.metrics != nil && se.StartedAt != nil {
+				duration := time.Since(*se.StartedAt).Seconds()
+				e.metrics.ExecutionDuration.WithLabelValues(string(ps.Type)).Observe(duration)
+			}
 			done[ps.ID] = true
 		}
 
@@ -244,6 +252,10 @@ func (e *Executor) advance(ctx context.Context, ex *Execution) error {
 		if !e.evalCondition(ctx, ps.Condition, ex.ID, byID) {
 			_ = e.store.SetStepStatus(ctx, ex.ID, ps.ID, StepSkipped, "condition false")
 			_ = e.store.RecordEvent(ctx, ex.ID, ps.ID, "skipped", "system", map[string]any{"reason": "condition false"})
+			if e.metrics != nil && se != nil && se.StartedAt != nil {
+				duration := time.Since(*se.StartedAt).Seconds()
+				e.metrics.ExecutionDuration.WithLabelValues(string(ps.Type)).Observe(duration)
+			}
 			continue
 		}
 		if se == nil {
@@ -258,6 +270,11 @@ func (e *Executor) advance(ctx context.Context, ex *Execution) error {
 			log.Printf("[exercise] dispatch %s/%s: %v", ex.ID, ps.ID, err)
 			_ = e.store.SetStepStatus(ctx, ex.ID, ps.ID, StepFailed, err.Error())
 			_ = e.store.RecordEvent(ctx, ex.ID, ps.ID, "failed", "system", map[string]any{"error": err.Error()})
+			if e.metrics != nil && se.StartedAt != nil {
+				duration := time.Since(*se.StartedAt).Seconds()
+				e.metrics.ExecutionDuration.WithLabelValues(string(ps.Type)).Observe(duration)
+				e.metrics.ExecutionErrors.WithLabelValues(string(ps.Type), "dispatch_error").Inc()
+			}
 		}
 	}
 	return nil
