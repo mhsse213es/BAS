@@ -568,6 +568,7 @@ func main() {
 		WithEPSSFile(cfg.EPSSFile).
 		WithAgentSecret(cfg.AgentSecret).
 		WithMetricsToken(cfg.MetricsToken).
+		WithMetrics(exMetrics).
 		WithManifest(manifest).
 		WithCompliance(complianceMapper).
 		WithControlHealth(controlHealthMapper).

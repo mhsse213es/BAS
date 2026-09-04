@@ -28,6 +28,7 @@ import (
 	"github.com/audspect/bas/internal/analytics"
 	"github.com/audspect/bas/internal/artifactgen"
 	"github.com/audspect/bas/internal/auth"
+	"github.com/audspect/bas/internal/observability"
 	"github.com/audspect/bas/internal/compliance"
 	"github.com/audspect/bas/internal/connector"
 	"github.com/audspect/bas/internal/controlhealth"
@@ -133,6 +134,9 @@ type Handler struct {
 	// same opt-in-by-default-off posture as BAS_DB_BREAKGLASS_PASSWORD
 	// and API rate limiting.
 	metricsToken string
+	// metricsRegistry is the observability metrics registry.
+	// nil when not configured.
+	metricsRegistry *observability.MetricsRegistry
 }
 
 // New creates a Handler.
@@ -210,6 +214,12 @@ func (h *Handler) WithTicketing(m *ticketing.Manager) *Handler {
 // WithMetricsToken configures the optional bearer token gating GET /metrics.
 func (h *Handler) WithMetricsToken(token string) *Handler {
 	h.metricsToken = token
+	return h
+}
+
+// WithMetrics attaches the observability metrics registry.
+func (h *Handler) WithMetrics(reg *observability.MetricsRegistry) *Handler {
+	h.metricsRegistry = reg
 	return h
 }
 
