@@ -62,10 +62,30 @@ type TimeoutProfile struct {
 // keeps a parallel step from waiting forever on a wedged sibling's locks.
 var discoveryTimeout = &TimeoutProfile{ScheduleSec: 30, ExecuteSec: 20, GraceSec: 3}
 
+// timeoutOverrides holds per-technique exceptions to discoveryTimeout, curated
+// from OBSERVED StepTermination data (see scripts/curate-timeout-budgets.sql
+// and project memory: project_timeout_scored_as_pass.md, Step C), not
+// intuition. Empty until real evidence justifies an entry.
+//
+// T1018 (Remote System Discovery): staging run 2026-09-04 recorded a real
+// termination at 20,011ms with silenceMs=0 -- the atomic (Test 7: an
+// unthrottled 254-host ping sweep, see ResourceProfileFor's T1018 comment)
+// was actively producing output for the ENTIRE window, not wedged. The
+// shared 20s discoveryTimeout kills it mid-work every time. ScheduleSec is
+// raised to comfortably exceed the new ExecuteSec (not just enough to run
+// it) so a queued sibling's own schedule bound doesn't expire first and
+// silently starve behind this step's lock.
+var timeoutOverrides = map[string]*TimeoutProfile{
+	"T1018": {ScheduleSec: 310, ExecuteSec: 300, GraceSec: 10},
+}
+
 // TimeoutProfileFor returns the curated timeout for a technique, or nil when the
 // technique is not in the conservative discovery set (→ the agent uses the step's
 // own timeout / engine default).
 func TimeoutProfileFor(techniqueID string) *TimeoutProfile {
+	if override, ok := timeoutOverrides[techniqueID]; ok {
+		return override
+	}
 	if ResourceProfileFor(techniqueID) != nil {
 		return discoveryTimeout
 	}

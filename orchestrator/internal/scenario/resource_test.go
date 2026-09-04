@@ -156,6 +156,29 @@ func TestTimeoutProfileForOnlyDiscovery(t *testing.T) {
 	}
 }
 
+// TestTimeoutProfileForT1018Override is the regression test for the Step C
+// evidence-backed override: staging recorded a real T1018 termination at
+// 20,011ms with silenceMs=0 (actively producing output, not wedged) against
+// the shared 20s discoveryTimeout. See project memory:
+// project_timeout_scored_as_pass.md.
+func TestTimeoutProfileForT1018Override(t *testing.T) {
+	got := TimeoutProfileFor("T1018")
+	if got == nil {
+		t.Fatal("T1018 should still get a curated timeout")
+	}
+	if got.ExecuteSec != 300 {
+		t.Errorf("T1018 ExecuteSec = %d, want 300 (evidence-backed override, not the shared 20s discovery default)", got.ExecuteSec)
+	}
+	if got.ScheduleSec <= got.ExecuteSec {
+		t.Errorf("T1018 ScheduleSec = %d must exceed ExecuteSec = %d, or a queued sibling's own schedule bound expires before this step can finish", got.ScheduleSec, got.ExecuteSec)
+	}
+	// Other discovery techniques must be unaffected by the override.
+	other := TimeoutProfileFor("T1082")
+	if other.ExecuteSec != 20 {
+		t.Errorf("T1082 ExecuteSec = %d, want unchanged 20s -- the T1018 override must not leak to other techniques", other.ExecuteSec)
+	}
+}
+
 func TestTimeoutWireShapeMatchesAgent(t *testing.T) {
 	raw, err := json.Marshal(TimeoutProfileFor("T1057"))
 	if err != nil {
