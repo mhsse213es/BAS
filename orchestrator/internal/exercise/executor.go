@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/audspect/bas/internal/observability"
 	"github.com/audspect/bas/internal/verification"
 )
 
@@ -26,6 +27,7 @@ type Executor struct {
 	scheduler    Scheduler
 	dispatch     AgentDispatchFn
 	verification VerificationReader
+	metrics      *observability.MetricsRegistry
 }
 
 // VerificationReader is the narrow read interface the detection bridge
@@ -47,6 +49,12 @@ func NewExecutor(store *Store, evidence *EvidenceChain, registry *Registry, sche
 		scheduler: scheduler,
 		dispatch:  dispatch,
 	}
+}
+
+// WithMetrics attaches a metrics registry for observability instrumentation.
+func (e *Executor) WithMetrics(reg *observability.MetricsRegistry) *Executor {
+	e.metrics = reg
+	return e
 }
 
 // SetDispatch wires the BAS run dispatch function after construction.
@@ -376,7 +384,7 @@ func (e *Executor) handleTeams(teams *TeamsInjector) func(context.Context, *Exec
 	}
 }
 
-func (e *Executor) handleAgentTask(_ context.Context, ex *Execution, ps *PlanStep, se *StepExecution) error {
+func (e *Executor) handleAgentTask(ctx context.Context, ex *Execution, ps *PlanStep, se *StepExecution) error {
 	cfg := ps.Config.AgentTask
 	if cfg == nil || (cfg.ScenarioID == "" && cfg.TechniqueID == "") {
 		return e.store.SetStepStatus(context.Background(), ex.ID, ps.ID, StepFailed, "missing agent_task config")
@@ -386,7 +394,18 @@ func (e *Executor) handleAgentTask(_ context.Context, ex *Execution, ps *PlanSte
 	}
 	go func() {
 		bctx := context.Background()
+		// Add correlation IDs for observability
+		bctx = observability.WithRunID(bctx, ex.ID)
+		bctx = observability.WithTaskID(bctx, ps.ID)
+		if cfg.AgentID != "" {
+			bctx = observability.WithAgentID(bctx, cfg.AgentID)
+		}
+		// Record dispatch latency
+		start := time.Now()
 		runID, err := e.dispatch(cfg.AgentID, cfg.ScenarioID, cfg.TechniqueID, ex.ExecutionPolicy)
+		if e.metrics != nil {
+			e.metrics.AgentDispatchLatency.WithLabelValues(cfg.AgentID).Observe(time.Since(start).Seconds())
+		}
 		if err != nil {
 			_ = e.store.SetStepStatus(bctx, ex.ID, ps.ID, StepFailed, err.Error())
 			return

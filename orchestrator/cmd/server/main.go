@@ -18,6 +18,7 @@ import (
 	"github.com/audspect/bas/config"
 	"github.com/audspect/bas/internal/api"
 	"github.com/audspect/bas/internal/auth"
+	"github.com/audspect/bas/internal/observability"
 	"github.com/audspect/bas/internal/compliance"
 	"github.com/audspect/bas/internal/connector"
 	"github.com/audspect/bas/internal/controlhealth"
@@ -475,8 +476,9 @@ func main() {
 		teamsInj = exercise.NewTeamsInjector(cfg.TeamsWebhookURL)
 	}
 	exRegistry := exercise.NewRegistry()
-	exScheduler := exercise.NewPollScheduler(5 * time.Second)
-	exExecutor := exercise.NewExecutor(exStore, exChain, exRegistry, exScheduler, nil)
+	exMetrics := observability.NewMetricsRegistry()
+	exScheduler := exercise.NewPollScheduler(5 * time.Second).WithMetrics(exMetrics)
+	exExecutor := exercise.NewExecutor(exStore, exChain, exRegistry, exScheduler, nil).WithMetrics(exMetrics)
 	exExecutor.WithVerification(verificationStore)
 	exExecutor.RegisterBuiltins(smtpInj, smsInj, slackInj, teamsInj)
 	exExecutor.RegisterBuiltinTriggers()
