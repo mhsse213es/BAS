@@ -269,6 +269,7 @@ func (e *Executor) advance(ctx context.Context, ex *Execution) error {
 		// Phase 0A: Record when this step was selected for dispatch
 		now := time.Now()
 		se.PollSelectedAt = &now
+		log.Printf("[perf] execution_id=%s poll_selected_at=%s", se.ExecutionID, now.Format(time.RFC3339Nano))
 		if err := e.dispatchStep(ctx, ex, &ps, se); err != nil {
 			log.Printf("[exercise] dispatch %s/%s: %v", ex.ID, ps.ID, err)
 			_ = e.store.SetStepStatus(ctx, ex.ID, ps.ID, StepFailed, err.Error())
@@ -434,15 +435,18 @@ func (e *Executor) handleAgentTask(ctx context.Context, ex *Execution, ps *PlanS
 		// Phase 0A: Record when dispatch was sent
 		dispatchSentTime := time.Now()
 		se.DispatchSentAt = &dispatchSentTime
+		log.Printf("[perf] execution_id=%s dispatch_sent_at=%s", se.ExecutionID, dispatchSentTime.Format(time.RFC3339Nano))
 		result := map[string]any{"bas_run_id": runID}
 		_ = e.store.SetStepResult(bctx, ex.ID, ps.ID, result)
 		// Phase 0A: Record when result was received and stored
 		resultReceivedTime := time.Now()
 		se.ResultReceivedAt = &resultReceivedTime
+		log.Printf("[perf] execution_id=%s result_received_at=%s", se.ExecutionID, resultReceivedTime.Format(time.RFC3339Nano))
 		_ = e.store.SetStepStatus(bctx, ex.ID, ps.ID, StepCompleted, "")
 		// Phase 0A: Record when scoring is completed (step completion)
 		scoringCompletedTime := time.Now()
 		se.ScoringCompletedAt = &scoringCompletedTime
+		log.Printf("[perf] execution_id=%s scoring_completed_at=%s", se.ExecutionID, scoringCompletedTime.Format(time.RFC3339Nano))
 		_, _ = e.evidence.Append(bctx, ex.ID, se.ID, "agent_task_dispatched", "system", "bas_engine",
 			map[string]any{"run_id": runID, "agent_id": cfg.AgentID})
 		_ = e.store.RecordEvent(bctx, ex.ID, ps.ID, "step_completed", "system", result)
