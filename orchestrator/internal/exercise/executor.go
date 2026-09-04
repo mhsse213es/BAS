@@ -264,6 +264,9 @@ func (e *Executor) advance(ctx context.Context, ex *Execution) error {
 				log.Printf("[exercise] create step_exec %s/%s: %v", ex.ID, ps.ID, err)
 				continue
 			}
+			if err := e.store.UpsertExecutionAttempt(ctx, newSE); err != nil {
+				log.Printf("[phase0b] upsert execution_attempt for step %s: %v", newSE.ID, err)
+			}
 			se = newSE
 		}
 		// Phase 0A: Record when this step was selected for dispatch
@@ -464,7 +467,13 @@ func (e *Executor) handleWait(_ context.Context, ex *Execution, ps *PlanStep, se
 	se.Status = StepWaiting
 	_ = e.store.RecordEvent(context.Background(), ex.ID, ps.ID, "step_waiting",
 		"system", map[string]any{"wait_until": deadline})
-	return e.store.UpsertStepExecution(context.Background(), se)
+	if err := e.store.UpsertStepExecution(context.Background(), se); err != nil {
+		return err
+	}
+	if err := e.store.UpsertExecutionAttempt(context.Background(), se); err != nil {
+		log.Printf("[phase0b] upsert execution_attempt for step %s: %v", se.ID, err)
+	}
+	return nil
 }
 
 func (e *Executor) handleApproval(_ context.Context, ex *Execution, ps *PlanStep, se *StepExecution) error {
@@ -475,7 +484,13 @@ func (e *Executor) handleApproval(_ context.Context, ex *Execution, ps *PlanStep
 		map[string]any{"prompt": ps.Config.ApprovalPrompt, "approver_roles": ps.Config.ApproverRoles})
 	_ = e.store.RecordEvent(context.Background(), ex.ID, ps.ID, "step_waiting", "system",
 		map[string]any{"prompt": ps.Config.ApprovalPrompt})
-	return e.store.UpsertStepExecution(context.Background(), se)
+	if err := e.store.UpsertStepExecution(context.Background(), se); err != nil {
+		return err
+	}
+	if err := e.store.UpsertExecutionAttempt(context.Background(), se); err != nil {
+		log.Printf("[phase0b] upsert execution_attempt for step %s: %v", se.ID, err)
+	}
+	return nil
 }
 
 func (e *Executor) handleWebhook(_ context.Context, ex *Execution, ps *PlanStep, _ *StepExecution) error {
@@ -514,7 +529,13 @@ func (e *Executor) handleWaitForAgent(_ context.Context, ex *Execution, ps *Plan
 	}
 	_ = e.store.RecordEvent(context.Background(), ex.ID, ps.ID, "step_waiting", "system",
 		map[string]any{"waiting_for": "bas_run_complete"})
-	return e.store.UpsertStepExecution(context.Background(), se)
+	if err := e.store.UpsertStepExecution(context.Background(), se); err != nil {
+		return err
+	}
+	if err := e.store.UpsertExecutionAttempt(context.Background(), se); err != nil {
+		log.Printf("[phase0b] upsert execution_attempt for step %s: %v", se.ID, err)
+	}
+	return nil
 }
 
 // handleWaitForDetection enters StepWaiting; trigger fires when edr_detected or
@@ -525,7 +546,13 @@ func (e *Executor) handleWaitForDetection(_ context.Context, ex *Execution, ps *
 	se.StartedAt = &now
 	_ = e.store.RecordEvent(context.Background(), ex.ID, ps.ID, "step_waiting", "system",
 		map[string]any{"waiting_for": "detection_evidence"})
-	return e.store.UpsertStepExecution(context.Background(), se)
+	if err := e.store.UpsertStepExecution(context.Background(), se); err != nil {
+		return err
+	}
+	if err := e.store.UpsertExecutionAttempt(context.Background(), se); err != nil {
+		log.Printf("[phase0b] upsert execution_attempt for step %s: %v", se.ID, err)
+	}
+	return nil
 }
 
 // handleWaitForWebhook mints a hook token, enters StepWaiting, and stores the
@@ -546,7 +573,13 @@ func (e *Executor) handleWaitForWebhook(_ context.Context, ex *Execution, ps *Pl
 	se.Result = map[string]any{"hook_token": token, "hook_path": "/x/hook/" + token}
 	_ = e.store.RecordEvent(context.Background(), ex.ID, ps.ID, "step_waiting", "system",
 		map[string]any{"hook_token": token})
-	return e.store.UpsertStepExecution(context.Background(), se)
+	if err := e.store.UpsertStepExecution(context.Background(), se); err != nil {
+		return err
+	}
+	if err := e.store.UpsertExecutionAttempt(context.Background(), se); err != nil {
+		log.Printf("[phase0b] upsert execution_attempt for step %s: %v", se.ID, err)
+	}
+	return nil
 }
 
 // ── Trigger functions ─────────────────────────────────────────────────────────
@@ -772,6 +805,9 @@ func (e *Executor) LaunchExecution(ctx context.Context, execID string) error {
 		se := &StepExecution{ExecutionID: execID, StepID: ps.ID, StepType: ps.Type, Status: StepPending}
 		if err := e.store.UpsertStepExecution(ctx, se); err != nil {
 			return err
+		}
+		if err := e.store.UpsertExecutionAttempt(ctx, se); err != nil {
+			log.Printf("[phase0b] upsert execution_attempt for step %s: %v", se.ID, err)
 		}
 	}
 	_ = e.store.RecordEvent(ctx, execID, "", "started", "system", nil)

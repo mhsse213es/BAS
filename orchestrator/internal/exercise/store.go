@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/audspect/bas/internal/exercise/tracker"
+	"github.com/audspect/bas/internal/models"
 )
 
 // Store handles all DB operations for the exercise engine.
@@ -326,6 +327,67 @@ func (s *Store) UpsertStepExecution(ctx context.Context, se *StepExecution) erro
 		se.ExecutionID, se.StepID, string(se.StepType), string(se.Status),
 		se.Attempt, se.ScheduledAt, result, se.Error,
 	).Scan(&se.ID, &se.CreatedAt)
+}
+
+// executionAttemptStatusFromStepStatus maps internal/exercise's StepStatus
+// onto the unified ExecutionAttemptStatus enum. See
+// docs/superpowers/specs/2026-09-04-phase0b-execution-attempt-design.md.
+func executionAttemptStatusFromStepStatus(s StepStatus) models.ExecutionAttemptStatus {
+	switch s {
+	case StepPending:
+		return models.ExecutionAttemptPending
+	case StepRunning:
+		return models.ExecutionAttemptRunning
+	case StepWaiting:
+		return models.ExecutionAttemptRunning // waiting-for-event is still an in-progress attempt
+	case StepCompleted:
+		return models.ExecutionAttemptCompleted
+	case StepFailed:
+		return models.ExecutionAttemptCompleted // the step ran; scoring (not this table) judges the outcome
+	case StepCancelled:
+		return models.ExecutionAttemptCancelled
+	case StepSkipped:
+		return models.ExecutionAttemptSkipped
+	default:
+		return models.ExecutionAttemptPending
+	}
+}
+
+// UpsertExecutionAttempt writes the unified ExecutionAttempt row for one
+// StepExecution. source_attempt_id = StepExecution.ID -- accepts the known
+// gap (see spec) that a retried step reuses the same ID, since
+// UpsertStepExecution itself already collapses retries into one row.
+func (s *Store) UpsertExecutionAttempt(ctx context.Context, se *StepExecution) error {
+	status := executionAttemptStatusFromStepStatus(se.Status)
+	// technique_id stays NULL for all exercise steps in this phase --
+	// threading the real technique ID requires the PlanStep, which this
+	// method does not receive. Accepted gap per spec (see design doc,
+	// section on internal/exercise integration).
+	var techniqueID string
+
+	if status == models.ExecutionAttemptSkipped {
+		_, err := s.db.Exec(ctx,
+			`INSERT INTO execution_attempts
+				(source, granularity, source_execution_id, source_attempt_id, technique_id, status, skip_reason, created_at, decision_at)
+			 VALUES ('exercise', 'step', $1, $2, NULLIF($3, ''), 'skipped', $4, NOW(), NOW())
+			 ON CONFLICT (source, source_attempt_id) DO UPDATE
+			   SET status = 'skipped', skip_reason = $4, decision_at = NOW()`,
+			se.ExecutionID, se.ID, techniqueID, string(models.SkipReasonConditionFalse),
+		)
+		return err
+	}
+
+	_, err := s.db.Exec(ctx,
+		`INSERT INTO execution_attempts
+			(source, granularity, source_execution_id, source_attempt_id, technique_id, status, created_at)
+		 VALUES ('exercise', 'step', $1, $2, NULLIF($3, ''), $4, NOW())
+		 ON CONFLICT (source, source_attempt_id) DO UPDATE
+		   SET status = $4,
+		       dispatch_sent_at = CASE WHEN $4 IN ('dispatched','running') AND execution_attempts.dispatch_sent_at IS NULL THEN NOW() ELSE execution_attempts.dispatch_sent_at END,
+		       completed_at = CASE WHEN $4 = 'completed' THEN NOW() ELSE execution_attempts.completed_at END`,
+		se.ExecutionID, se.ID, techniqueID, string(status),
+	)
+	return err
 }
 
 func (s *Store) SetStepStatus(ctx context.Context, execID, stepID string, status StepStatus, errMsg string) error {
