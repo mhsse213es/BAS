@@ -11987,12 +11987,12 @@ function runRowHtml(r) {
           ? '<button class="btn btn-outline btn-sm" id="pause-btn-' + x(r.id) + '" onclick="resumeRun(\'' + x(r.id) + '\')">&#9654; Resume</button> '
           : '<button class="btn btn-outline btn-sm" id="pause-btn-' + x(r.id) + '" onclick="pauseRun(\'' + x(r.id) + '\')">&#10073;&#10073; Pause</button> ';
       }
-      if (cnt) {
+      if (verdictCounts(r).total) {
         acts += '<button class="btn btn-outline btn-sm" onclick=\'viewRunResults(' + JSON.stringify(r).replace(/'/g,"&#39;") + ')\'>' + badge + '</button>';
       } else if (r.id && r.status !== 'running' && r.progress) {
         // A cancelled/partial run never gets the agent's one atomic
         // `results` write (see cancelScenarioRun/forceCancelAfterGracePeriod
-        // in internal/api/handlers.go), so cnt is always 0 here -- but the
+        // in internal/api/handlers.go), so verdictCounts(r).total is always 0 here -- but the
         // per-step pass/fail counts already streamed in live via
         // SubmitRunEvents (r.progress) and the same per-step detail is
         // still queryable from run_events, so openRunPanel's timeline is
@@ -16076,12 +16076,12 @@ function openSweepDrilldown(sweepId) {
         ? '<button class="btn btn-outline btn-sm" onclick="openRunPanel(\'' + x(r.id) + '\',\'' + x(r.name).replace(/'/g,'&#39;') + '\',' + ((r.progress && r.progress.stepsTotal) || 0) + ',\'' + x(r.mode||'') + '\',\'' + x(r.maxPrivilege||'') + '\')">&#9673; Live</button> '
         : '';
       // A cancelled/partial technique run never gets the agent's one atomic
-      // `results` write, so cnt is always 0 -- but its per-step pass/fail
+      // `results` write, so verdictCounts(r).total is always 0 -- but its per-step pass/fail
       // counts already streamed in live (r.progress) and the same detail is
       // still queryable from run_events via openRunPanel, so this reuses
       // that real data instead of a plain, unclickable status label.
       var resultBtn;
-      if (cnt) {
+      if (verdictCounts(r).total) {
         resultBtn = '<button class="btn btn-outline btn-sm" onclick=\'viewRunResults(' + JSON.stringify(r).replace(/'/g,"&#39;") + ')\'>' + badge + '</button>';
       } else if (r.id && r.status !== 'running' && r.progress) {
         var pr = r.progress;
@@ -21155,11 +21155,11 @@ function renderEMSweepProgress(sw, runs) {
       var badge = verdictBadge(r, r.status);
       if (r.id && r.status === 'running') {
         actionHtml = '<button class="btn btn-outline btn-sm" onclick="openRunPanel(\'' + x(r.id) + '\',\'' + x(r.name).replace(/'/g,'&#39;') + '\',' + ((r.progress && r.progress.stepsTotal) || 0) + ',\'' + x(r.mode||'') + '\',\'' + x(r.maxPrivilege||'') + '\')">&#9673; Live</button>';
-      } else if (cnt) {
+      } else if (verdictCounts(r).total) {
         actionHtml = '<button class="btn btn-outline btn-sm" onclick=\'viewRunResults(' + JSON.stringify(r).replace(/'/g,"&#39;") + ')\'>' + badge + '</button>';
       } else if (r.id && r.progress) {
         // A cancelled/partial layer (e.g. the agent disconnected mid-sweep)
-        // never gets the agent's one atomic `results` write, so cnt is 0 --
+        // never gets the agent's one atomic `results` write, so verdictCounts(r).total is 0 --
         // but its per-step pass/fail counts already streamed in live
         // (r.progress) and are still queryable via openRunPanel, so this
         // reuses that real data instead of leaving a completed-but-halted
