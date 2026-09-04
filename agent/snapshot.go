@@ -53,6 +53,15 @@ var listCategoryPrefixes = map[string]string{
 	"schtasks":  "schtask:",
 	"startup":   "startup:",
 	"cron_dirs": "cron:",
+
+	// POSIX persistence surfaces. launch_items is the macOS analogue of
+	// startup, systemd_units covers unit files on disk rather than only the
+	// units currently loaded, and autostart is the Linux analogue of the
+	// Windows Startup folder.
+	"launch_items":  "launch:",
+	"systemd_units": "unit:",
+	"autostart":     "autostart:",
+	"at_jobs":       "atjob:",
 }
 
 // diffSnapshots returns normalized keys for every item present in after but
@@ -85,8 +94,16 @@ func diffSnapshots(before, after *SystemSnapshot) []string {
 		if strings.HasPrefix(key, "reg:") {
 			continue // handled by diffRegistry above
 		}
-		beforeBlob, ok := before.Files[key]
-		if !ok || bytes.Equal(beforeBlob, afterBlob) {
+		// A key absent from before and present after is a CREATED artifact --
+		// a dropped /etc/ld.so.preload, a planted authorized_keys, a new
+		// LaunchAgent plist. Skipping those (the previous behaviour) meant a
+		// run that leaked one still produced a clean cleanup verdict, because
+		// the most dangerous case looked identical to no change at all.
+		//
+		// Removal is not the mirror of this: after.Files is what is iterated,
+		// so a file that existed before and is gone now simply does not appear,
+		// which is correct -- deleting a file is not leaving an artifact behind.
+		if beforeBlob, ok := before.Files[key]; ok && bytes.Equal(beforeBlob, afterBlob) {
 			continue
 		}
 		diff = append(diff, key)

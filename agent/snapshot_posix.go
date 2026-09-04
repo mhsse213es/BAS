@@ -64,6 +64,28 @@ func captureSnapshot(runID string) *SystemSnapshot {
 		s.Files["iptables"] = out
 	}
 
+	// SSH authorized_keys, per home. A key appended here is persistence that
+	// survives password changes and leaves no process behind, and it was not
+	// captured at all. Held in Files rather than Lists so the revert restores
+	// the original content instead of deleting the whole file -- the artifact
+	// is usually one added line, not the file.
+	for _, home := range homeDirsUnder(posixHomeContainer, posixExtraHomes...) {
+		path := filepath.Join(home, ".ssh", "authorized_keys")
+		if content, err := os.ReadFile(path); err == nil {
+			s.Files[path] = content
+		}
+	}
+
+	// Pending at(1) jobs — the one-shot sibling of cron.
+	if out, err := snapCmd("atq"); err == nil {
+		for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+			if f := strings.Fields(line); len(f) > 0 {
+				s.Lists["at_jobs"] = append(s.Lists["at_jobs"], f[0])
+			}
+		}
+	}
+
+	capturePlatformExtras(s)
 	return s
 }
 
@@ -141,6 +163,7 @@ func revertFromSnapshot(s *SystemSnapshot) []string {
 		}
 	}
 
+	reverted = append(reverted, revertPlatformExtras(s)...)
 	return reverted
 }
 
