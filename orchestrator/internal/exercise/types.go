@@ -233,18 +233,22 @@ type Target struct {
 
 // StepExecution is the runtime state of a single PlanStep within an Execution.
 type StepExecution struct {
-	ID          string                 `json:"id"`
-	ExecutionID string                 `json:"execution_id"`
-	StepID      string                 `json:"step_id"`
-	StepType    StepType               `json:"step_type"`
-	Status      StepStatus             `json:"status"`
-	Attempt     int                    `json:"attempt"`
-	ScheduledAt *time.Time             `json:"scheduled_at,omitempty"`
-	StartedAt   *time.Time             `json:"started_at,omitempty"`
-	CompletedAt *time.Time             `json:"completed_at,omitempty"`
-	Result      map[string]interface{} `json:"result,omitempty"`
-	Error       string                 `json:"error,omitempty"`
-	CreatedAt   time.Time              `json:"created_at"`
+	ID                 string                 `json:"id"`
+	ExecutionID        string                 `json:"execution_id"`
+	StepID             string                 `json:"step_id"`
+	StepType           StepType               `json:"step_type"`
+	Status             StepStatus             `json:"status"`
+	Attempt            int                    `json:"attempt"`
+	ScheduledAt        *time.Time             `json:"scheduled_at,omitempty"`
+	StartedAt          *time.Time             `json:"started_at,omitempty"`
+	CompletedAt        *time.Time             `json:"completed_at,omitempty"`
+	Result             map[string]interface{} `json:"result,omitempty"`
+	Error              string                 `json:"error,omitempty"`
+	CreatedAt          time.Time              `json:"created_at"`
+	PollSelectedAt     *time.Time             `json:"poll_selected_at,omitempty"`     // Phase 0A: when executor polled and selected this step
+	DispatchSentAt     *time.Time             `json:"dispatch_sent_at,omitempty"`     // Phase 0A: when dispatch was sent to agent/handler
+	ResultReceivedAt   *time.Time             `json:"result_received_at,omitempty"`   // Phase 0A: when result was received from agent/handler
+	ScoringCompletedAt *time.Time             `json:"scoring_completed_at,omitempty"` // Phase 0A: when scoring/verdicts were assigned
 }
 
 // Evidence is one tamper-evident record in the exercise chain.
@@ -381,17 +385,17 @@ type VarDef struct {
 // Template is a parameterized exercise plan blueprint.
 // Templates ship with the platform; operators can also author custom ones.
 type Template struct {
-	ID          string     `json:"id"`
-	Name        string     `json:"name"`
-	Version     int        `json:"version"`
-	Category    string     `json:"category"` // "phishing" | "ransomware" | "insider" | …
-	Description string     `json:"description"`
-	Variables   []VarDef   `json:"variables"`
-	Steps       []PlanStep `json:"steps"`
-	BuiltIn     bool       `json:"built_in"`
-	Author      string     `json:"author"`
-	CreatedAt   time.Time  `json:"created_at"`
-	UpdatedAt   time.Time  `json:"updated_at"`
+	ID          string           `json:"id"`
+	Name        string           `json:"name"`
+	Version     int              `json:"version"`
+	Category    string           `json:"category"` // "phishing" | "ransomware" | "insider" | …
+	Description string           `json:"description"`
+	Variables   []VarDef         `json:"variables"`
+	Steps       []PlanStep       `json:"steps"`
+	BuiltIn     bool             `json:"built_in"`
+	Author      string           `json:"author"`
+	CreatedAt   time.Time        `json:"created_at"`
+	UpdatedAt   time.Time        `json:"updated_at"`
 	Metadata    TemplateMetadata `json:"metadata,omitempty"`
 }
 
