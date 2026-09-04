@@ -135,6 +135,85 @@ type StepTermination struct {
 	SilenceMs   int64  `json:"silenceMs"`
 }
 
+// ExecutionSource identifies which framework produced an ExecutionAttempt.
+type ExecutionSource string
+
+const (
+	ExecutionSourceART      ExecutionSource = "art"
+	ExecutionSourceCaldera  ExecutionSource = "caldera"
+	ExecutionSourceExercise ExecutionSource = "exercise"
+)
+
+// ExecutionGranularity distinguishes a run-level attempt (ART/Caldera today
+// -- the agent executes a whole scenario in one round trip and reports back
+// once) from a step-level attempt (internal/exercise, which already tracks
+// per-step state via StepExecution).
+type ExecutionGranularity string
+
+const (
+	GranularityRun  ExecutionGranularity = "run"
+	GranularityStep ExecutionGranularity = "step"
+)
+
+// ExecutionAttemptStatus answers "did execution happen?" -- deliberately
+// separate from scoring verdict (PASS/FAIL/ERROR/SKIPPED), which answers
+// "what did the execution mean?". A completed attempt can score FAIL; that
+// is not a contradiction.
+type ExecutionAttemptStatus string
+
+const (
+	ExecutionAttemptPending           ExecutionAttemptStatus = "pending"
+	ExecutionAttemptDispatched        ExecutionAttemptStatus = "dispatched"
+	ExecutionAttemptRunning           ExecutionAttemptStatus = "running"
+	ExecutionAttemptCompleted         ExecutionAttemptStatus = "completed"
+	ExecutionAttemptTimedOut          ExecutionAttemptStatus = "timed_out"
+	ExecutionAttemptCancelled         ExecutionAttemptStatus = "cancelled"
+	ExecutionAttemptAbandoned         ExecutionAttemptStatus = "abandoned"
+	ExecutionAttemptFailedToDispatch  ExecutionAttemptStatus = "failed_to_dispatch"
+	ExecutionAttemptSkipped           ExecutionAttemptStatus = "skipped"
+)
+
+// SkipReason explains WHY an ExecutionAttempt has status=skipped. Extensible
+// application-level vocabulary, not a DB enum -- new values can be added
+// without a migration.
+type SkipReason string
+
+const (
+	SkipReasonConditionFalse          SkipReason = "condition_false"
+	SkipReasonPrerequisiteUnsatisfied SkipReason = "prerequisite_unsatisfied"
+	SkipReasonCancelledBeforeDispatch SkipReason = "scenario_cancelled_before_dispatch"
+	SkipReasonDependencyFailed        SkipReason = "dependency_failed"
+)
+
+// ExecutionAttempt is the unified execution-lifecycle record spanning both
+// execution engines (ART/Caldera scenario_runs and internal/exercise). See
+// docs/superpowers/specs/2026-09-04-phase0b-execution-attempt-design.md.
+//
+// SourceExecutionID and SourceAttemptID are deliberately loose text fields,
+// not real foreign keys -- SourceExecutionID points into either
+// scenario_runs.id or exercise Execution.ID depending on Source, and a real
+// FK would force picking one, breaking the unification.
+type ExecutionAttempt struct {
+	ID                  string                  `json:"id,omitempty"`
+	Source              ExecutionSource         `json:"source"`
+	Granularity         ExecutionGranularity    `json:"granularity"`
+	SourceExecutionID   string                  `json:"sourceExecutionId"`
+	SourceAttemptID     string                  `json:"sourceAttemptId"`
+	TechniqueID         string                  `json:"techniqueId,omitempty"`
+
+	Status              ExecutionAttemptStatus  `json:"status"`
+	SkipReason          SkipReason              `json:"skipReason,omitempty"`
+
+	CreatedAt           time.Time               `json:"createdAt"`
+	DispatchQueuedAt    *time.Time              `json:"dispatchQueuedAt,omitempty"`
+	DispatchSentAt      *time.Time              `json:"dispatchSentAt,omitempty"`
+	StartedAt           *time.Time              `json:"startedAt,omitempty"`
+	CompletedAt         *time.Time              `json:"completedAt,omitempty"`
+	DecisionAt          *time.Time              `json:"decisionAt,omitempty"`
+
+	Result              map[string]interface{}  `json:"result,omitempty"`
+}
+
 // SkipReasonPolicyPrivilege marks a SimulationResult synthesized server-side
 // because a step's RequiresPriv exceeded the run's MaxPrivilege execution
 // policy — the step was never dispatched to the agent at all.
