@@ -71,15 +71,6 @@ func enumerateSecurityProducts() (products []string, diag []string) {
 	return enumerateSecurityProductsIn("/")
 }
 
-// productKind is the report prefix, and the reason the widest inventory stays
-// honest: a preventive control and a log shipper must not read alike.
-type productKind string
-
-const (
-	kindEDR       productKind = "EDR"
-	kindTelemetry productKind = "Telemetry"
-)
-
 // productSig identifies one security product by any of three independent
 // signals. Matching any one of them is enough to report presence; which one
 // matched is carried through to the output so a reader can tell "running" from
