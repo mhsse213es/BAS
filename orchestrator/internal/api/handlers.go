@@ -1775,6 +1775,14 @@ func (h *Handler) dispatchRun(ctx context.Context, sc *scenario.Scenario, agentI
 		}
 		return "", "", err
 	}
+	// Phase 0B: create the ExecutionAttempt row for this run.
+	source := models.ExecutionSourceART
+	if sc.CalderaAllWindows || len(sc.CalderaAbilities) > 0 || sc.CalderaAdversaryID != "" {
+		source = models.ExecutionSourceCaldera
+	}
+	if err := h.insertExecutionAttempt(ctx, source, runID); err != nil {
+		log.Printf("[phase0b] insert execution_attempt for run %s: %v", runID, err)
+	}
 	// Phase 0A: run-level wall-clock instrumentation (scenario_runs path,
 	// distinct from internal/exercise). Granularity is per-run, not
 	// per-technique -- the agent dispatches a whole scenario in one WS
@@ -1797,7 +1805,11 @@ func (h *Handler) dispatchRun(ctx context.Context, sc *scenario.Scenario, agentI
 		})
 		if !sent {
 			h.markRunFailed(context.Background(), runID, "Agent is offline — could not deliver the run")
+			_ = h.updateExecutionAttemptStatus(context.Background(), runID, "failed_to_dispatch", "dispatch_sent_at")
 			return "", "offline", nil
+		}
+		if err := h.updateExecutionAttemptStatus(ctx, runID, "dispatched", "dispatch_sent_at"); err != nil {
+			log.Printf("[phase0b] update execution_attempt dispatched for run %s: %v", runID, err)
 		}
 		log.Printf("[perf] execution_id=%s dispatch_sent_at=%s", runID, time.Now().UTC().Format(time.RFC3339Nano))
 		log.Printf("[scenario] dispatched posture-check %s → agent %s (run %s)", sc.ID, agentID, runID)
@@ -2017,7 +2029,11 @@ func (h *Handler) dispatchRun(ctx context.Context, sc *scenario.Scenario, agentI
 	})
 	if !sent {
 		h.markRunFailed(context.Background(), runID, "Agent is offline — could not deliver the run")
+		_ = h.updateExecutionAttemptStatus(context.Background(), runID, "failed_to_dispatch", "dispatch_sent_at")
 		return "", "offline", nil
+	}
+	if err := h.updateExecutionAttemptStatus(ctx, runID, "dispatched", "dispatch_sent_at"); err != nil {
+		log.Printf("[phase0b] update execution_attempt dispatched for run %s: %v", runID, err)
 	}
 	log.Printf("[perf] execution_id=%s dispatch_sent_at=%s", runID, time.Now().UTC().Format(time.RFC3339Nano))
 
@@ -2503,6 +2519,9 @@ func (h *Handler) SubmitScenarioResult(w http.ResponseWriter, r *http.Request) {
 	// execution (all steps, run internally) + the WS round trip -- the
 	// orchestrator has no visibility inside that window at this granularity.
 	log.Printf("[perf] execution_id=%s result_received_at=%s", raw.RunID, time.Now().UTC().Format(time.RFC3339Nano))
+	if err := h.updateExecutionAttemptStatus(r.Context(), raw.RunID, "completed", "completed_at"); err != nil {
+		log.Printf("[phase0b] update execution_attempt completed for run %s: %v", raw.RunID, err)
+	}
 
 	// Look up the scenario to get framework context for interpretation
 	sc, _ := h.engine.Get(raw.ScenarioID)
@@ -2965,6 +2984,43 @@ func (h *Handler) CancelRun(w http.ResponseWriter, r *http.Request) {
 var errRunNotFound = fmt.Errorf("run not found")
 var errRunNotRunning = fmt.Errorf("run not running")
 
+// insertExecutionAttempt creates a 'pending' ExecutionAttempt row for a new
+// ART/Caldera scenario_runs dispatch. See
+// docs/superpowers/specs/2026-09-04-phase0b-execution-attempt-design.md.
+func (h *Handler) insertExecutionAttempt(ctx context.Context, source models.ExecutionSource, runID string) error {
+	_, err := h.db.Exec(ctx,
+		`INSERT INTO execution_attempts
+			(source, granularity, source_execution_id, source_attempt_id, status, created_at)
+		 VALUES ($1, 'run', $2, $2, 'pending', NOW())
+		 ON CONFLICT (source, source_attempt_id) DO NOTHING`,
+		string(source), runID,
+	)
+	return err
+}
+
+// updateExecutionAttemptStatus transitions an existing ExecutionAttempt row.
+// timestampCol must be one of the known timestamp column names -- callers
+// pass a fixed string literal, never user input, so this is not a SQL
+// injection risk despite the string concatenation.
+func (h *Handler) updateExecutionAttemptStatus(ctx context.Context, runID, status, timestampCol string) error {
+	q := fmt.Sprintf(
+		`UPDATE execution_attempts SET status = $1, %s = NOW() WHERE source_attempt_id = $2`,
+		timestampCol,
+	)
+	_, err := h.db.Exec(ctx, q, status, runID)
+	return err
+}
+
+// markExecutionAttemptSkipped transitions an ExecutionAttempt to skipped,
+// satisfying the schema's skip_reason/decision_at CHECK constraints.
+func (h *Handler) markExecutionAttemptSkipped(ctx context.Context, runID string, reason models.SkipReason) error {
+	_, err := h.db.Exec(ctx,
+		`UPDATE execution_attempts SET status = 'skipped', skip_reason = $1, decision_at = NOW() WHERE source_attempt_id = $2`,
+		string(reason), runID,
+	)
+	return err
+}
+
 // cancelScenarioRun cancels an in-flight scenario_run -- notifies the agent
 // to stop gracefully (completed steps kept, run marked partial by the
 // agent's own result submission), or marks it partial immediately if the
@@ -2992,6 +3048,7 @@ func (h *Handler) cancelScenarioRun(ctx context.Context, runID string) (agentID,
 			`UPDATE scenario_runs SET status = 'partial', completed_at = NOW()
 			  WHERE id = $1 AND status = 'running'`, runID)
 		h.markVariantRunPartial(ctx, runID)
+		_ = h.updateExecutionAttemptStatus(ctx, runID, "abandoned", "completed_at")
 		return agentID, "partial", nil
 	}
 
@@ -3007,6 +3064,7 @@ func (h *Handler) cancelScenarioRun(ctx context.Context, runID string) (agentID,
 	// afterward: SubmitScenarioResult has no status guard (see its own
 	// comment) and will happily reconcile a late submission.
 	go h.forceCancelAfterGracePeriod(runID, agentID)
+	_ = h.updateExecutionAttemptStatus(ctx, runID, "cancelled", "completed_at")
 
 	return agentID, "cancelling", nil
 }
