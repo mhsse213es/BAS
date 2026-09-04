@@ -1,0 +1,151 @@
+id: windows-discovery-validation
+name: Windows Discovery Validation - Slow Enumeration Techniques
+description: >
+  Dedicated validation scenario for discovery techniques that legitimately
+  require extended execution time on real systems: file discovery (recursive
+  scans), domain/account enumeration (LDAP queries), and remote system discovery
+  (network sweeps).
+
+  These techniques were previously excluded from standard discovery scenarios
+  due to timeout constraints (120s default). This scenario configures each
+  technique with a 300s timeout to capture realistic behavior on large systems:
+  - Multi-TB filesystems for T1083
+  - 10K+ user domains for T1087.002
+  - Large subnets for T1018
+
+  Expected verdicts:
+    PASS  = EDR/SIEM detected the discovery activity
+    FAIL  = enumeration completed without generating an alert
+    SKIP  = atomic requires a tool not installed or domain access unavailable
+
+  Note: These techniques are particularly important in real environments where
+  scale is the difference between detection and evasion. A 10-second recursive
+  scan on a small test system is not representative of production behavior.
+
+author: Audspect Research
+executable: true
+supported_os: [windows]
+tags:
+  - discovery
+  - windows
+  - enumeration
+  - validation
+  - slow-running
+  - mitre-attack
+  - t1083
+  - t1087
+  - t1018
+
+mitre_phases:
+  - discovery
+
+steps:
+  - name: "Windows File Discovery (T1083) - Recursive Scan"
+    technique_id: T1083
+    executor: powershell
+    requires_priv: user
+    timeout:
+      executeSec: 300
+      graceSec: 10
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Read-only recursive directory enumeration starting from common user paths (Desktop, Documents, Downloads, AppData). No files are read or modified. Generates extensive directory listing telemetry."
+    telemetry:
+      - "Sysmon EID 1: powershell.exe spawning with Get-ChildItem -Recurse"
+      - "EDR/SIEM: high-volume directory enumeration activity"
+      - "Filesystem: read-only access to directory entries"
+    detection:
+      - "EDR: mass recursive directory enumeration from user context"
+      - "Behavioral: file-discovery pattern matching pre-staging behavior"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $searchPaths = @(
+        [Environment]::GetFolderPath('Desktop'),
+        [Environment]::GetFolderPath('MyDocuments'),
+        (Join-Path $env:USERPROFILE 'Downloads'),
+        (Join-Path $env:USERPROFILE 'AppData')
+      )
+      $foundCount = 0
+      foreach ($path in $searchPaths) {
+        if (-not (Test-Path $path)) { continue }
+        $foundCount += @(Get-ChildItem -Path $path -Recurse -ErrorAction SilentlyContinue -File).Count
+      }
+      Write-Output "BAS-SIM: File discovery completed - enumerated $foundCount files"
+
+  - name: "Windows Domain Account Discovery (T1087.002) - LDAP Query"
+    technique_id: T1087.002
+    executor: powershell
+    requires_priv: user
+    timeout:
+      executeSec: 300
+      graceSec: 10
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Read-only LDAP query to domain controller for all user accounts. No modifications. Generates LDAP query telemetry and directory access logs."
+    telemetry:
+      - "Sysmon EID 3: LDAP port 389/636 connection to domain controller"
+      - "Security EID 5156: network connection to LDAP service"
+      - "Directory: LDAP query audit log entry"
+    detection:
+      - "EDR: LDAP enumeration query from non-admin user context"
+      - "SIEM: bulk LDAP attribute query (>100 users)"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      try {
+        $domain = [System.DirectoryServices.ActiveDirectory.Domain]::GetCurrentDomain()
+        $domainObj = New-Object System.DirectoryServices.DirectoryEntry("LDAP://$($domain.Name)")
+        $searcher = New-Object System.DirectoryServices.DirectorySearcher($domainObj)
+        $searcher.Filter = '(&(objectClass=user)(objectCategory=person))'
+        $searcher.PageSize = 1000
+        $results = $searcher.FindAll()
+        Write-Output "BAS-SIM: Domain account discovery completed - found $($results.Count) user accounts"
+        $results.Dispose()
+        $searcher.Dispose()
+      } catch {
+        Write-Output "BAS-SIM: Domain account discovery skipped - not in domain or insufficient permissions"
+      }
+
+  - name: "Windows Remote System Discovery (T1018) - Network Sweep"
+    technique_id: T1018
+    executor: powershell
+    requires_priv: user
+    timeout:
+      executeSec: 300
+      graceSec: 10
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Network ping sweep of local subnet to identify active systems. No connections beyond ICMP. Generates network telemetry and ICMP traffic."
+    telemetry:
+      - "Sysmon EID 3: ICMP echo requests to subnet hosts"
+      - "Security EID 5156: ICMP protocol activity"
+      - "Network: ping sweep traffic to multiple destinations"
+    detection:
+      - "EDR: ICMP sweep to multiple local subnet addresses"
+      - "Network: bulk ping activity from single source"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      try {
+        $ipconfig = ipconfig /all
+        $gateway = [regex]::Matches($ipconfig, 'Default Gateway\s*\.\s*:\s*(\d+\.\d+\.\d+\.\d+)') | ForEach-Object { $_.Groups[1].Value } | Select-Object -First 1
+        if ($gateway) {
+          $subnet = $gateway -replace '\.\d+$', '.0/24'
+          $octets = $gateway -split '\.'
+          $baseIP = "$($octets[0]).$($octets[1]).$($octets[2])"
+          Write-Output "BAS-SIM: Scanning subnet $baseIP.0/24 for active systems"
+          $activeCount = 0
+          1..254 | ForEach-Object {
+            if (Test-Connection -ComputerName "$baseIP.$_" -Count 1 -Quiet -ErrorAction SilentlyContinue) {
+              $activeCount++
+            }
+          }
+          Write-Output "BAS-SIM: Network discovery completed - found $activeCount active hosts on local subnet"
+        }
+      } catch {
+        Write-Output "BAS-SIM: Network discovery skipped - unable to determine local subnet"
+      }

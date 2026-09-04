@@ -18,10 +18,13 @@ description: >
   Use this scenario to tune your detection rules (process ancestry, command
   argument matching on systeminfo/whoami/net/tasklist/reg/wmic patterns).
 
-  T1083 (File and Directory Discovery) is deliberately excluded: its real
-  Windows atomics are full recursive scans (dir /s c:\, Get-ChildItem
-  -Recurse) that risk running past a reasonable timeout and producing false
-  TIMEOUT verdicts instead of real PASS/FAIL.
+  T1083 (File and Directory Discovery) is excluded from this scenario because its
+  real Windows atomics (dir /s c:\, Get-ChildItem -Recurse) are full recursive
+  scans that legitimately run 180+ seconds on large disks. Use the dedicated
+  'windows-file-discovery-validation' scenario instead, which sets timeout to
+  300s to accurately capture file enumeration detection without false TIMEOUT
+  verdicts. Running T1083 in this scenario at the 120s default would produce
+  false negatives instead of real PASS/FAIL results.
 author: Audspect Research
 executable: true
 supported_os: [windows]

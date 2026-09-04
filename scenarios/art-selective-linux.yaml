@@ -11,6 +11,14 @@ description: >
   Note: an unmodified run is a large run  -  substantially more steps than a
   one-per-technique sweep, so expect a correspondingly longer runtime on a
   single endpoint. An agent runs one scenario at a time; starting another
+
+  ⚠️  TIMEOUT ADVISORY: Several techniques legitimately require >120s on real
+  systems. Consider using custom timeouts for slow-running techniques:
+    - T1083 (File Discovery): 300s recommended
+    - T1087.002 (Domain Account Discovery): 300s recommended
+    - T1018 (Remote System Discovery): 300s recommended
+    - T1526 (Cloud Infrastructure Discovery): 300s recommended
+  Without custom timeouts, these may timeout and be incorrectly scored.
   mid-run is rejected.
 author: Audspect Research
 executable: true

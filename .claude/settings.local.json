@@ -715,7 +715,9 @@
       "Bash(sort -t: -k3 -n -r)",
       "Bash(perl -pi -e 's/\\\\r\\\\n/\\\\n/' agent/platform_posix.go)",
       "Bash(powershell -Command \"\\(Get-PSDrive C\\).Free/1GB\")",
-      "Bash(powershell -Command \"'{0:N1} GB free' -f \\(\\(Get-PSDrive C\\).Free/1GB\\)\")"
+      "Bash(powershell -Command \"'{0:N1} GB free' -f \\(\\(Get-PSDrive C\\).Free/1GB\\)\")",
+      "Bash(sort -t: -k3 -rn)",
+      "Bash(xargs -I {} basename {})"
     ]
   }
 }
