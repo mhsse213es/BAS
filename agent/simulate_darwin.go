@@ -189,7 +189,7 @@ func cscrfChecks() []SimCategory {
 // inspects configuration via built-in tools (spctl, csrutil, fdesetup,
 // socketfilterfw, launchctl, sshd_config). Nothing on the endpoint is modified.
 func safeSimChecks() []SimCategory {
-	return []SimCategory{
+	base := []SimCategory{
 		{Phase: "defense-evasion", Checks: []SimCheck{
 			checkGatekeeper(),
 			checkSIP(),
@@ -214,8 +214,14 @@ func safeSimChecks() []SimCategory {
 		}},
 		{Phase: "impact", Checks: []SimCheck{
 			checkApplicationFirewall(),
+			checkFirewallStealth(),
 		}},
 	}
+	// Section A of the POSIX posture coverage map: macOS equivalents of checks
+	// the Linux agent already runs. Kept in simulate_mac_checks.go and appended
+	// here so this list stays the single place that says what a macOS
+	// assessment covers.
+	return append(base, macSectionAChecks()...)
 }
 
 // ── Defense Evasion ─────────────────────────────────────────────────────────
