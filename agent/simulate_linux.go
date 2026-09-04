@@ -188,7 +188,8 @@ func safeSimChecks() []SimCategory {
 	// Section B of the POSIX posture coverage map: checks that are net-new on
 	// both platforms, sharing their evaluators with the macOS agent so the same
 	// endpoint state scores the same on either OS. See simulate_sectionb_linux.go.
-	return append(base, linuxSectionBChecks()...)
+	base = append(base, linuxSectionBChecks()...)
+	return append(base, linuxSectionB2Checks()...)
 }
 
 func RunScenarioChecks(scenarioID string) []SimCategory {

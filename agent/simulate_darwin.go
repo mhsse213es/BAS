@@ -222,7 +222,8 @@ func safeSimChecks() []SimCategory {
 	// here so this list stays the single place that says what a macOS
 	// assessment covers.
 	base = append(base, macSectionAChecks()...)
-	return append(base, macSectionBChecks()...)
+	base = append(base, macSectionBChecks()...)
+	return append(base, macSectionB2Checks()...)
 }
 
 // ── Defense Evasion ─────────────────────────────────────────────────────────

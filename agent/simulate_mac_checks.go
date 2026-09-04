@@ -380,3 +380,164 @@ func checkUserLaunchAgentPerms() SimCheck {
 				"executes as that user at every login")
 		})
 }
+
+// ── Section B, second tranche ───────────────────────────────────────────────
+
+func macSectionB2Checks() []SimCategory {
+	return []SimCategory{
+		{Phase: "recovery-readiness", Checks: []SimCheck{
+			checkBackupMechanism(), checkLocalSnapshots(),
+		}},
+		{Phase: "network", Checks: []SimCheck{checkCleartextServices()}},
+		{Phase: "collection", Checks: []SimCheck{
+			checkScreenRecordingConsent(), checkInputMonitoringConsent(),
+		}},
+		{Phase: "data-protection", Checks: []SimCheck{
+			checkRemovableMedia(), checkBrowserCredentialStores(), checkBrowserExtensions(),
+		}},
+	}
+}
+
+func checkBackupMechanism() SimCheck {
+	return check("T1486", "Backup Mechanism Present", "recovery-readiness", "High",
+		"Ransomware that encrypts files in place is survivable only if a restore point exists somewhere.",
+		"Configure Time Machine to a destination that is not permanently mounted, or an equivalent managed backup.",
+		func() (string, string) {
+			out, err := cmdOut("tmutil", "destinationinfo")
+			if err != nil && strings.TrimSpace(out) == "" {
+				return evalBackupMechanism(nil, false)
+			}
+			if strings.Contains(strings.ToLower(out), "no destinations configured") {
+				return evalBackupMechanism(nil, true)
+			}
+			return evalBackupMechanism([]string{"Time Machine (destination configured)"}, true)
+		})
+}
+
+func checkLocalSnapshots() SimCheck {
+	return check("T1490", "Local Recovery Snapshots Present", "recovery-readiness", "High",
+		"Without a local snapshot there is nothing on this endpoint to roll back to after in-place encryption.",
+		"Ensure Time Machine is enabled so APFS local snapshots are taken automatically.",
+		func() (string, string) {
+			out, err := cmdOut("tmutil", "listlocalsnapshots", "/")
+			if err != nil && strings.TrimSpace(out) == "" {
+				return evalLocalSnapshots(nil, false)
+			}
+			var snaps []string
+			for _, line := range strings.Split(out, "\n") {
+				if s := strings.TrimSpace(line); strings.Contains(s, "com.apple.TimeMachine") {
+					snaps = append(snaps, s)
+				}
+			}
+			return evalLocalSnapshots(snaps, true)
+		})
+}
+
+func checkCleartextServices() SimCheck {
+	return check("T1048.003", "Cleartext Network Services Not Loaded", "network", "High",
+		"telnet, ftp and their relatives carry credentials and data in the clear, readable by anything on the network path.",
+		"Unload the service and use an encrypted equivalent: sudo launchctl disable system/com.apple.telnetd.",
+		func() (string, string) {
+			out, err := cmdOut("launchctl", "list")
+			if err != nil && strings.TrimSpace(out) == "" {
+				return evalCleartextServices(nil, false)
+			}
+			return evalCleartextServices(parseLaunchctlCleartext(out), true)
+		})
+}
+
+// tccSystemDB is the system-wide consent database. Reading it needs Full Disk
+// Access, which the agent may not hold -- evalTCCGrants reports that rather
+// than treating an unreadable database as "nothing is granted".
+const tccSystemDB = "/Library/Application Support/com.apple.TCC/TCC.db"
+
+func tccGrantsFor(service string) ([]tccGrant, bool) {
+	out, err := cmdOut("sqlite3", tccSystemDB,
+		"SELECT client, auth_value FROM access WHERE service='"+service+"';")
+	if err != nil {
+		return nil, false
+	}
+	return parseTCCRows(out), true
+}
+
+func checkScreenRecordingConsent() SimCheck {
+	return check("T1113", "Screen Recording Consent Grants", "collection", "High",
+		"An application holding screen-recording consent can capture everything the user sees, including credentials as they are typed into a browser.",
+		"Review System Settings → Privacy & Security → Screen Recording and revoke anything unrecognised.",
+		func() (string, string) {
+			rows, ok := tccGrantsFor("kTCCServiceScreenCapture")
+			return evalTCCGrants("Screen Recording", rows, ok)
+		})
+}
+
+func checkInputMonitoringConsent() SimCheck {
+	return check("T1056.001", "Input Monitoring Consent Grants", "collection", "Critical",
+		"An application holding input-monitoring consent sees every keystroke, which is a keylogger by definition regardless of intent.",
+		"Review System Settings → Privacy & Security → Input Monitoring and revoke anything unrecognised.",
+		func() (string, string) {
+			rows, ok := tccGrantsFor("kTCCServiceListenEvent")
+			return evalTCCGrants("Input Monitoring", rows, ok)
+		})
+}
+
+func checkRemovableMedia() SimCheck {
+	return check("T1091", "Removable Storage Restricted", "data-protection", "Medium",
+		"Unrestricted removable storage is both an exfiltration path out and a malware delivery path in.",
+		"Push a Restrictions configuration profile from MDM that disallows or forces read-only mounting of external media.",
+		func() (string, string) {
+			// Removable-media policy on macOS arrives as an MDM profile. Without
+			// enrolment there is no policy surface to read, which is the
+			// Constrained condition rather than an absence of restriction.
+			out, err := cmdOut("profiles", "status", "-type", "enrollment")
+			if err != nil && strings.TrimSpace(out) == "" {
+				return evalRemovableMediaPolicy("", false)
+			}
+			if !strings.Contains(strings.ToLower(out), "mdm enrollment: yes") {
+				return evalRemovableMediaPolicy("", false)
+			}
+			listed, _ := cmdOut("profiles", "-P")
+			if strings.Contains(listed, "com.apple.systemuiserver") ||
+				strings.Contains(strings.ToLower(listed), "restrictions") {
+				return evalRemovableMediaPolicy("an MDM Restrictions profile is installed", true)
+			}
+			return evalRemovableMediaPolicy("", true)
+		})
+}
+
+// macBrowserRoots returns the Chromium-family and Firefox data roots for every
+// user home on this Mac.
+func macBrowserRoots() (chromium, firefox []string) {
+	for _, home := range homeDirsUnder("/Users") {
+		support := home + "/Library/Application Support"
+		chromium = append(chromium,
+			support+"/Google/Chrome",
+			support+"/Microsoft Edge",
+			support+"/BraveSoftware/Brave-Browser",
+			support+"/Chromium",
+		)
+		firefox = append(firefox, support+"/Firefox/Profiles")
+	}
+	return chromium, firefox
+}
+
+func checkBrowserCredentialStores() SimCheck {
+	return check("T1555.003", "Browser Saved-Password Stores", "data-protection", "High",
+		"Saved browser passwords are reusable credentials, and are the first thing infostealer malware collects.",
+		"Move saved credentials into a managed password manager and disable the browser's own password store by policy.",
+		func() (string, string) {
+			chromium, firefox := macBrowserRoots()
+			stores, profiles, _ := scanBrowserData(chromium, firefox)
+			return evalBrowserCredentialStores(stores, profiles)
+		})
+}
+
+func checkBrowserExtensions() SimCheck {
+	return check("T1176", "Browser Extensions Installed", "data-protection", "Medium",
+		"An extension reads and rewrites every page the user visits, including the ones they authenticate to.",
+		"Restrict installation to an allow-list via managed browser policy.",
+		func() (string, string) {
+			chromium, firefox := macBrowserRoots()
+			_, profiles, extensions := scanBrowserData(chromium, firefox)
+			return evalBrowserExtensions(extensions, profiles > 0)
+		})
+}
