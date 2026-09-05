@@ -569,8 +569,8 @@ code {
 .s-paused::before { background: #fbbf24; }
 .s-empty      { background: rgba(122,148,176,0.08); color: var(--muted); border: 1px solid rgba(122,148,176,0.15); }
 .s-empty::before { background: var(--muted); }
-.s-stopped    { background: var(--warning-dim); color: #fbbf24; border: 1px solid var(--warning-border); }
-.s-stopped::before { background: #fbbf24; }
+.s-stopped    { background: var(--danger-dim); color: #f87171; border: 1px solid var(--danger-border); }
+.s-stopped::before { background: #f87171; }
 .s-agent_disconnected { background: var(--warning-dim); color: #fbbf24; border: 1px solid var(--warning-border); }
 .s-agent_disconnected::before { background: #fbbf24; }
 
@@ -12092,7 +12092,7 @@ function renderSweepRow(payload) {
   var badge = totalCnt ? (totalFail + ' fail / ' + (totalCnt - totalFail) + ' pass') : '—';
   var progressLabel = sw.status === 'running'
     ? sw.completedVariants + '/' + sw.totalVariants + ' variants'
-    : sw.totalTechniques + ' technique(s)';
+    : sw.totalTechniques + ' atomic test(s)';
   var agent = agents.find(function(a) { return a.agentId === sw.agentId; });
   var agentLabel = agent ? agent.hostname : sw.agentId;
   return '<tr>' +
@@ -19724,7 +19724,7 @@ function pollVexSweeps() {
 function reportVexSweepFinished(sweepId) {
   apicall('/api/vex/sweeps/' + sweepId).then(function(sw) {
     if (sw.status === 'completed') {
-      showToast('Full sweep complete — ' + sw.totalTechniques + ' techniques (' + sw.agentId + ')', 'ok');
+      showToast('Full sweep complete — ' + sw.totalTechniques + ' atomic tests (' + sw.agentId + ')', 'ok');
       loadVariantStats();
       loadVariantCoverage();
     } else if (sw.status === 'stopped') {
@@ -19759,7 +19759,7 @@ function renderVexSweepList(sweeps) {
       '<div style="height:5px;background:var(--border);border-radius:3px;overflow:hidden">' +
         '<div style="height:5px;background:var(--accent);border-radius:3px;width:' + pct + '%;transition:width 0.5s ease"></div>' +
       '</div>' +
-      '<div class="tiny muted" style="margin-top:0.35rem">Technique ' + (sw.currentIndex + 1) + '/' + sw.totalTechniques + ': ' + x(sw.currentTechnique) + '</div>' +
+      '<div class="tiny muted" style="margin-top:0.35rem">Atomic test ' + (sw.currentIndex + 1) + '/' + sw.totalTechniques + ': ' + x(sw.currentTechnique) + '</div>' +
       '<div class="tiny muted" id="vex-sweep-variant-' + x(sw.id) + '">Loading current variant…</div>' +
     '</div>';
   }).join('');
