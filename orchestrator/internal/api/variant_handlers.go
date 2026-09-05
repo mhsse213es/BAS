@@ -17,6 +17,27 @@ import (
 	"github.com/audspect/bas/internal/vexsweep"
 )
 
+// vexAgentOSCompatibilityError checks that the target agent's classified OS
+// is Windows. Unlike scheduleOSCompatibilityError's per-scenario SupportedOS
+// check, this is a flat constraint -- every variant Template the generator
+// produces is Windows-only PowerShell (internal/variant/generator.go
+// hardcodes Platform: "windows"), so there is no per-technique variability
+// to check against. An agent with no os_version on record (not yet
+// enrolled, or no agents row at all) or an unrecognized OS string is
+// treated as compatible -- same "unrestricted when unclassified" convention
+// as revalOSCompatible. Returns nil when compatible.
+func (h *Handler) vexAgentOSCompatibilityError(ctx context.Context, agentID string) error {
+	var osVersion string
+	if err := h.db.QueryRow(ctx, `SELECT os_version FROM agents WHERE agent_id = $1`, agentID).Scan(&osVersion); err != nil {
+		return nil // no record -- unclassified, treated as compatible
+	}
+	agentOS := classifyAgentOS(osVersion)
+	if agentOS == "" || agentOS == "windows" {
+		return nil
+	}
+	return fmt.Errorf("this technique requires a Windows agent -- agent %s is running %s", agentID, osVersion)
+}
+
 // cmdPreview returns the first 120 chars of a command for UI display.
 func cmdPreview(s string) string {
 	if len(s) <= 120 {
@@ -85,6 +106,10 @@ func (h *Handler) RunVariants(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.AgentID == "" || req.TechniqueID == "" {
 		jsonError(w, "agentId and techniqueId required", http.StatusBadRequest)
+		return
+	}
+	if err := h.vexAgentOSCompatibilityError(r.Context(), req.AgentID); err != nil {
+		jsonError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 	if h.vexSweep != nil {

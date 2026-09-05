@@ -14,6 +14,82 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+func TestVexAgentOSCompatibilityError(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := New(pool, ws.NewHub(), nil, testJWTSecret)
+		seedActiveAgent(t, pool, "vex-os-win", "Windows Server 2022")
+		seedActiveAgent(t, pool, "vex-os-linux", "Ubuntu 22.04 LTS")
+		seedActiveAgent(t, pool, "vex-os-mac", "macOS 14 Sonoma")
+		seedActiveAgent(t, pool, "vex-os-unrecognized", "SomeUnknownOS 1.0")
+
+		cases := []struct {
+			agentID   string
+			wantError bool
+		}{
+			{"vex-os-win", false},
+			{"vex-os-linux", true},
+			{"vex-os-mac", true},
+			{"vex-os-unrecognized", false},
+			{"vex-os-does-not-exist", false}, // no agents row at all -- unclassified, treated as compatible
+		}
+		for _, c := range cases {
+			err := h.vexAgentOSCompatibilityError(context.Background(), c.agentID)
+			if c.wantError && err == nil {
+				t.Errorf("agent %s: got nil error, want a Windows-required error", c.agentID)
+			}
+			if !c.wantError && err != nil {
+				t.Errorf("agent %s: got error %v, want nil", c.agentID, err)
+			}
+		}
+	})
+}
+
+func TestRunVariants_NonWindowsAgent_Rejected(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := New(pool, ws.NewHub(), nil, testJWTSecret)
+		seedActiveAgent(t, pool, "vex-run-linux", "Ubuntu 22.04 LTS")
+		userID := seedUser(t, pool, "vex-os-user-1", "password123", "admin", true)
+		body, _ := json.Marshal(map[string]string{"agentId": "vex-run-linux", "techniqueId": "T1059.001"})
+		req := authedRequest(t, http.MethodPost, "/api/variants/run", bytes.NewReader(body), auth.RoleAdmin, userID)
+		rec := callAuthed(h.RunVariants, req)
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("status = %d, want 400 (Linux agent against a Windows-only technique), body: %s", rec.Code, rec.Body.String())
+		}
+	})
+}
+
+func TestRunVariants_WindowsAgent_PassesOSCheck(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := New(pool, ws.NewHub(), nil, testJWTSecret)
+		seedActiveAgent(t, pool, "vex-run-win", "Windows Server 2022")
+		userID := seedUser(t, pool, "vex-os-user-2", "password123", "admin", true)
+		// command+executor override bypasses ART/Caldera content resolution
+		// entirely (resolveTemplates' first branch) -- isolates this test to
+		// the OS check itself, not full content-loading. With no agent
+		// actually connected to the hub, dispatch fails with
+		// vexsweep.ErrAgentOffline (500) -- a status distinct from the OS
+		// check's 400, proving the OS check let this request through.
+		body, _ := json.Marshal(map[string]string{
+			"agentId": "vex-run-win", "techniqueId": "T1059.001",
+			"command": "whoami", "executor": "powershell",
+		})
+		req := authedRequest(t, http.MethodPost, "/api/variants/run", bytes.NewReader(body), auth.RoleAdmin, userID)
+		rec := callAuthed(h.RunVariants, req)
+		if rec.Code == http.StatusBadRequest {
+			t.Fatalf("status = 400, want the OS check to pass for a Windows agent, body: %s", rec.Body.String())
+		}
+	})
+}
+
 func TestDispatchVariantForSweep_NoARTStoreReturnsError(t *testing.T) {
 	// h.artStore is nil in this bare Handler (no WithART/WithContentSeed
 	// called) -- resolveTemplates' ART-fallback path must surface a clear

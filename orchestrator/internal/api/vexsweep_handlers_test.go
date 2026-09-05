@@ -26,6 +26,45 @@ func testVexSweepDispatcher(store *vexsweep.Store) *vexsweep.Dispatcher {
 	})
 }
 
+func TestCreateVexSweep_NonWindowsAgent_Rejected(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := New(pool, ws.NewHub(), nil, testJWTSecret).WithVexSweep(vexsweep.NewStore(pool), testVexSweepDispatcher(vexsweep.NewStore(pool)))
+		seedActiveAgent(t, pool, "vex-sweep-linux", "Ubuntu 22.04 LTS")
+		userID := seedUser(t, pool, "sweep-os-user-1", "password123", "admin", true)
+		body, _ := json.Marshal(map[string]string{"agentId": "vex-sweep-linux", "mode": "sequential"})
+		req := authedRequest(t, http.MethodPost, "/api/vex/sweeps", bytes.NewReader(body), auth.RoleAdmin, userID)
+		rec := callAuthed(h.CreateVexSweep, req)
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("status = %d, want 400 (Linux agent -- every variant technique requires Windows), body: %s", rec.Code, rec.Body.String())
+		}
+	})
+}
+
+func TestCreateVexSweep_WindowsAgent_PassesOSCheck(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		// No WithART/WithContentSeed -- artStore is nil, so a request that
+		// clears the OS check falls through to the existing "ART content not
+		// loaded" 503 (TestCreateVexSweep_RejectsWhenNoARTStoreLoaded's exact
+		// path), which is distinct from the OS check's own 400 -- proving the
+		// OS check let a Windows agent through.
+		h := New(pool, ws.NewHub(), nil, testJWTSecret).WithVexSweep(vexsweep.NewStore(pool), testVexSweepDispatcher(vexsweep.NewStore(pool)))
+		seedActiveAgent(t, pool, "vex-sweep-win", "Windows Server 2022")
+		userID := seedUser(t, pool, "sweep-os-user-2", "password123", "admin", true)
+		body, _ := json.Marshal(map[string]string{"agentId": "vex-sweep-win", "mode": "sequential"})
+		req := authedRequest(t, http.MethodPost, "/api/vex/sweeps", bytes.NewReader(body), auth.RoleAdmin, userID)
+		rec := callAuthed(h.CreateVexSweep, req)
+		if rec.Code == http.StatusBadRequest {
+			t.Fatalf("status = 400, want the OS check to pass for a Windows agent, body: %s", rec.Body.String())
+		}
+	})
+}
+
 func TestCreateVexSweep_RejectsWhenNoARTStoreLoaded(t *testing.T) {
 	// No WithART/WithContentSeed called -- artStore is nil, so the handler
 	// cannot resolve a technique list and must fail cleanly, not panic.
