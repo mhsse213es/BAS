@@ -160,6 +160,22 @@ func TestHostPoolTimeout(t *testing.T) {
 	if r.ExitCode != -1 {
 		t.Errorf("expected exit -1 on timeout, got %d", r.ExitCode)
 	}
+	if !r.TimedOut {
+		t.Error("expected TimedOut=true")
+	}
+	// A pooled timeout used to return Termination=nil unconditionally (the
+	// pooled protocol has no live buffer to measure OutputBytes/SilenceMs
+	// from), which left this exact case with zero timeout evidence. Reason and
+	// ElapsedMs are real signal even without those two fields.
+	if r.Termination == nil {
+		t.Fatal("expected a non-nil Termination record for a pooled timeout")
+	}
+	if r.Termination.Reason != protocol.TermExecutionTimeout {
+		t.Errorf("Termination.Reason = %q, want %q", r.Termination.Reason, protocol.TermExecutionTimeout)
+	}
+	if r.Termination.ElapsedMs <= 0 {
+		t.Errorf("Termination.ElapsedMs = %d, want > 0", r.Termination.ElapsedMs)
+	}
 
 	// Pool must still serve commands after recycling the timed-out host.
 	r2, ok2 := p.Run(context.Background(), obsStep("after", `Write-Output ok`))

@@ -109,9 +109,13 @@ type ExecResult struct {
 	ExecutedAs      string    `json:"executedAs,omitempty"`
 	// Termination records HOW a step ended when the agent itself ended it, and
 	// what it was doing at that instant. Nil for a step that exited on its own,
-	// nil for pooled steps (their output does not flow through the executor's
-	// capped buffers), and nil from agents predating the field -- readers must
-	// treat nil as "not reported", never as "no output".
+	// and nil from agents predating the field -- readers must treat nil as "not
+	// reported", never as "no output". A pooled step (Windows warm-host path)
+	// that times out gets a partial record: Reason and ElapsedMs are real, but
+	// OutputBytes and SilenceMs are always 0 -- the pooled protocol has no live
+	// buffer to measure them from once a response never arrives. Do not read a
+	// pooled termination's OutputBytes==0/SilenceMs==0 as "produced no output"
+	// or "fully silent"; it means "not measurable here", same spirit as nil.
 	Termination *StepTermination `json:"termination,omitempty"`
 }
 

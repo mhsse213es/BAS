@@ -220,6 +220,16 @@ func (h *psHost) exec(ctx context.Context, step ScenarioStep) (res protocol.Exec
 		// Step timeout or scenario cancel: the command may still be running in the
 		// host, so the host is no longer reusable — discard it. The result is owned
 		// by us (no fall-back re-run).
+		//
+		// Reason mirrors the same precedence executor.go's direct-exec path uses
+		// (deadline outranks a cancel landing at the same instant): ctx here is
+		// context.WithTimeout(parentCtx, executeSeconds), so DeadlineExceeded means
+		// our own execute deadline fired, and anything else (Canceled, forwarded
+		// from parentCtx) means the scenario itself was stopped.
+		reason := protocol.TermScenarioCancel
+		if ctx.Err() == context.DeadlineExceeded {
+			reason = protocol.TermExecutionTimeout
+		}
 		return protocol.ExecResult{
 			TaskID:     step.TaskID,
 			ExitCode:   -1,
@@ -227,6 +237,17 @@ func (h *psHost) exec(ctx context.Context, step ScenarioStep) (res protocol.Exec
 			DurationMs: time.Since(start).Milliseconds(),
 			ExecutedAt: time.Now(),
 			TimedOut:   true,
+			// OutputBytes and SilenceMs are deliberately left at zero, not measured:
+			// the pooled protocol is one request line out, one response line back
+			// over the host's stdin/stdout, so there is no live buffer to inspect
+			// once the response never arrives — unlike the direct-exec path's
+			// cappedBuffer, there is nothing to read Written() from here. Reason and
+			// ElapsedMs are still real signal (this step genuinely hit its deadline,
+			// and exactly when) — better than the nil this path used to return.
+			Termination: &protocol.StepTermination{
+				Reason:    reason,
+				ElapsedMs: time.Since(start).Milliseconds(),
+			},
 		}, true, false
 	}
 }
