@@ -20,6 +20,16 @@ func TestEventForResult(t *testing.T) {
 		{"fail", protocol.ExecResult{ExitCode: 1}, "completed", "fail"},
 		{"blocked", protocol.ExecResult{ExitCode: -1, Blocked: true}, "completed", "blocked"},
 		{"timeout", protocol.ExecResult{ExitCode: -1, TimedOut: true}, "timeout", ""},
+		// ExitCode -1 with neither TimedOut nor Blocked set is this codebase's
+		// own agent-side sentinel for "we didn't get a real result" (see
+		// executor.go's cmd.Start() failure, WaitDelay-abandoned, and
+		// scenario-cancellation paths, which all set exactly this shape) --
+		// never a genuine command exit code. Must report as "error", not
+		// "fail": a step whose process never even launched (e.g. "fork/exec
+		// ...: Access is denied") is not evidence a control failed to block
+		// anything, and the frontend's VERDICT_LABEL already renders "error"
+		// as a neutral "Error" badge distinct from "Not Prevented".
+		{"execution-error (process never launched)", protocol.ExecResult{ExitCode: -1}, "completed", "error"},
 	}
 	for _, c := range cases {
 		typ, verdict := eventForResult(c.res)

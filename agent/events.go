@@ -22,13 +22,21 @@ type RunEvent struct {
 
 // eventForResult derives the terminal event type and verdict from a step result.
 // Timeout takes priority (an explicit "ran, did not return" verdict); a security
-// block is a completed step with verdict "blocked"; otherwise pass/fail by exit.
+// block is a completed step with verdict "blocked"; ExitCode -1 with neither of
+// those flags set is this codebase's own agent-side sentinel for "we didn't get
+// a real result" (cmd.Start() failure, WaitDelay-abandoned, scenario-cancellation
+// -- see executor.go) rather than a genuine command exit code, so it reports
+// "error", never "fail" -- a step whose process never even launched is not
+// evidence a control failed to block anything. Otherwise pass/fail by exit.
 func eventForResult(r protocol.ExecResult) (typ, verdict string) {
 	if r.TimedOut {
 		return "timeout", ""
 	}
 	if r.Blocked {
 		return "completed", "blocked"
+	}
+	if r.ExitCode == -1 {
+		return "completed", "error"
 	}
 	if r.ExitCode == 0 {
 		return "completed", "pass"
