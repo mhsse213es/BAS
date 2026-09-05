@@ -1,15 +1,81 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 
 	"github.com/audspect/bas/internal/auth"
 	"github.com/audspect/bas/internal/jobs"
+	"github.com/audspect/bas/internal/scenario"
 )
+
+// scheduleOSCompatibilityError checks every agent a scheduled assessment
+// would target -- both directly-listed agentIDs and the current members of
+// groupIDs (resolved fresh via jobsStore.ResolveGroupAgentIDs, the same
+// membership rule spawnDueSchedules itself uses at fire time) -- against the
+// scenario's SupportedOS. Mirrors RunScenario's existing interactive OS
+// guard (handlers.go's classifyAgentOS/SupportedOS check) so a schedule can
+// never be created or edited into a state that is guaranteed to fire and
+// skip everything. An empty SupportedOS means unrestricted (same convention
+// as revalOSCompatible). Returns nil when compatible or when there is
+// nothing to check.
+func (h *Handler) scheduleOSCompatibilityError(ctx context.Context, sc *scenario.Scenario, agentIDs []string, groupIDs []int64) error {
+	if len(sc.SupportedOS) == 0 {
+		return nil
+	}
+	targets := append([]string{}, agentIDs...)
+	if len(groupIDs) > 0 && h.jobsStore != nil {
+		groupAgentIDs, err := h.jobsStore.ResolveGroupAgentIDs(ctx, groupIDs)
+		if err != nil {
+			return err
+		}
+		targets = append(targets, groupAgentIDs...)
+	}
+	if len(targets) == 0 {
+		return nil
+	}
+
+	rows, err := h.db.Query(ctx, `SELECT agent_id, hostname, os_version FROM agents WHERE agent_id = ANY($1)`, targets)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	var incompatible []string
+	for rows.Next() {
+		var agentID, hostname, osVersion string
+		if err := rows.Scan(&agentID, &hostname, &osVersion); err != nil {
+			return err
+		}
+		agentOS := classifyAgentOS(osVersion)
+		if agentOS == "" {
+			continue // unrecognized OS string -- unrestricted, same as revalOSCompatible
+		}
+		compatible := false
+		for _, o := range sc.SupportedOS {
+			if strings.EqualFold(o, agentOS) {
+				compatible = true
+				break
+			}
+		}
+		if !compatible {
+			incompatible = append(incompatible, fmt.Sprintf("%s (%s)", hostname, osVersion))
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	if len(incompatible) > 0 {
+		return fmt.Errorf("scenario '%s' supports %v but the following target(s) are incompatible: %s",
+			sc.Name, sc.SupportedOS, strings.Join(incompatible, ", "))
+	}
+	return nil
+}
 
 // POST /api/scheduled-assessments
 // Mode-conditional permission: posture needs CanExecuteRemediation (the
@@ -95,12 +161,17 @@ func (h *Handler) CreateScheduledAssessment(w http.ResponseWriter, r *http.Reque
 		jsonError(w, "scenario engine not loaded", http.StatusServiceUnavailable)
 		return
 	}
-	if _, ok := h.engine.Get(req.ScenarioID); !ok {
+	sc, ok := h.engine.Get(req.ScenarioID)
+	if !ok {
 		jsonError(w, "scenario not found", http.StatusNotFound)
 		return
 	}
 	if h.jobsStore == nil {
 		jsonError(w, "job engine not loaded", http.StatusServiceUnavailable)
+		return
+	}
+	if err := h.scheduleOSCompatibilityError(r.Context(), sc, req.AgentIDs, req.GroupIDs); err != nil {
+		jsonError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -237,7 +308,8 @@ func (h *Handler) UpdateScheduledAssessment(w http.ResponseWriter, r *http.Reque
 		jsonError(w, "scenario engine not loaded", http.StatusServiceUnavailable)
 		return
 	}
-	if _, ok := h.engine.Get(req.ScenarioID); !ok {
+	sc, ok := h.engine.Get(req.ScenarioID)
+	if !ok {
 		jsonError(w, "scenario not found", http.StatusNotFound)
 		return
 	}
@@ -249,6 +321,10 @@ func (h *Handler) UpdateScheduledAssessment(w http.ResponseWriter, r *http.Reque
 	existing, err := h.jobsStore.GetSchedule(r.Context(), scheduleID)
 	if err != nil || existing.Type != "scheduled_assessment" {
 		jsonError(w, "schedule not found", http.StatusNotFound)
+		return
+	}
+	if err := h.scheduleOSCompatibilityError(r.Context(), sc, req.AgentIDs, req.GroupIDs); err != nil {
+		jsonError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 

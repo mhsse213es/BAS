@@ -160,6 +160,180 @@ func TestCreateScheduledAssessment_LabMode_Rejected(t *testing.T) {
 	})
 }
 
+// registerOSFixtureScenario saves a minimal posture-capable scenario with a
+// specific SupportedOS, for the OS-compatibility guard tests below. Distinct
+// scenario IDs across tests avoid Engine.Save collisions within the same
+// t.TempDir()-backed engine.
+func registerOSFixtureScenario(t *testing.T, eng *scenario.Engine, id string, supportedOS []string) {
+	t.Helper()
+	sc := &scenario.Scenario{
+		ID: id, Name: "OS Fixture " + id, LocalCheck: true, SupportedOS: supportedOS,
+		Steps: []scenario.Step{{
+			Name: "Fixture Check", TechniqueID: "T1082", CheckID: "fixture-os-check",
+			Framework: "custom", Executor: "local", Command: "echo PASS: fixture", TimeoutSec: 10,
+		}},
+	}
+	if err := eng.Save(sc); err != nil {
+		t.Fatalf("register OS fixture scenario: %v", err)
+	}
+}
+
+func TestCreateScheduledAssessment_OSMismatch_Rejected(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		eng := scenario.NewEngine(t.TempDir())
+		registerOSFixtureScenario(t, eng, "os-fixture-mismatch", []string{"windows"})
+		jobsStore := jobs.NewStore(pool)
+		h := New(pool, ws.NewHub(), eng, "").WithJobsDispatcher(jobsStore, jobs.NewDispatcher(jobsStore))
+		seedActiveAgent(t, pool, "sa-os-linux", "Ubuntu 22.04 LTS")
+
+		body, _ := json.Marshal(map[string]any{
+			"scenarioId": "os-fixture-mismatch", "mode": "posture", "agentIds": []string{"sa-os-linux"},
+			"recurrenceType": "weekly", "dayOfWeek": 1, "timeOfDay": "02:00", "timezone": "UTC",
+		})
+		req := httptest.NewRequest(http.MethodPost, "/x", bytes.NewReader(body))
+		req = req.WithContext(auth.ContextWithClaims(req.Context(), &auth.Claims{UserID: "analyst-1", Role: auth.RoleAnalyst}))
+		w := httptest.NewRecorder()
+		h.CreateScheduledAssessment(w, req)
+		if w.Code != http.StatusBadRequest {
+			t.Fatalf("status = %d, want 400 (Windows-only scenario against a Linux agent), body = %s", w.Code, w.Body.String())
+		}
+	})
+}
+
+func TestCreateScheduledAssessment_OSMatch_Accepted(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		eng := scenario.NewEngine(t.TempDir())
+		registerOSFixtureScenario(t, eng, "os-fixture-match", []string{"linux"})
+		jobsStore := jobs.NewStore(pool)
+		h := New(pool, ws.NewHub(), eng, "").WithJobsDispatcher(jobsStore, jobs.NewDispatcher(jobsStore))
+		seedActiveAgent(t, pool, "sa-os-linux-2", "Ubuntu 22.04 LTS")
+
+		body, _ := json.Marshal(map[string]any{
+			"scenarioId": "os-fixture-match", "mode": "posture", "agentIds": []string{"sa-os-linux-2"},
+			"recurrenceType": "weekly", "dayOfWeek": 1, "timeOfDay": "02:00", "timezone": "UTC",
+		})
+		req := httptest.NewRequest(http.MethodPost, "/x", bytes.NewReader(body))
+		req = req.WithContext(auth.ContextWithClaims(req.Context(), &auth.Claims{UserID: "analyst-1", Role: auth.RoleAnalyst}))
+		w := httptest.NewRecorder()
+		h.CreateScheduledAssessment(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200 (Linux scenario against a Linux agent), body = %s", w.Code, w.Body.String())
+		}
+	})
+}
+
+func TestCreateScheduledAssessment_MultiPlatformScenario_AcceptsEitherOS(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		eng := scenario.NewEngine(t.TempDir())
+		registerOSFixtureScenario(t, eng, "os-fixture-multi", []string{"windows", "linux"})
+		jobsStore := jobs.NewStore(pool)
+		h := New(pool, ws.NewHub(), eng, "").WithJobsDispatcher(jobsStore, jobs.NewDispatcher(jobsStore))
+		seedActiveAgent(t, pool, "sa-os-win", "Windows Server 2022")
+		seedActiveAgent(t, pool, "sa-os-lin", "Ubuntu 22.04 LTS")
+
+		body, _ := json.Marshal(map[string]any{
+			"scenarioId": "os-fixture-multi", "mode": "posture", "agentIds": []string{"sa-os-win", "sa-os-lin"},
+			"recurrenceType": "weekly", "dayOfWeek": 1, "timeOfDay": "02:00", "timezone": "UTC",
+		})
+		req := httptest.NewRequest(http.MethodPost, "/x", bytes.NewReader(body))
+		req = req.WithContext(auth.ContextWithClaims(req.Context(), &auth.Claims{UserID: "analyst-1", Role: auth.RoleAnalyst}))
+		w := httptest.NewRecorder()
+		h.CreateScheduledAssessment(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200 (multi-platform scenario accepts both a Windows and a Linux agent), body = %s", w.Code, w.Body.String())
+		}
+	})
+}
+
+func TestCreateScheduledAssessment_GroupTarget_OSMismatch_Rejected(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		eng := scenario.NewEngine(t.TempDir())
+		registerOSFixtureScenario(t, eng, "os-fixture-group", []string{"windows"})
+		jobsStore := jobs.NewStore(pool)
+		h := New(pool, ws.NewHub(), eng, "").WithJobsDispatcher(jobsStore, jobs.NewDispatcher(jobsStore))
+
+		var groupID int64
+		if err := pool.QueryRow(context.Background(),
+			`INSERT INTO agent_groups (name) VALUES ('OS Mismatch Group') RETURNING id`).Scan(&groupID); err != nil {
+			t.Fatalf("insert group: %v", err)
+		}
+		if _, err := pool.Exec(context.Background(),
+			`INSERT INTO agents (agent_id, hostname, os_version, state, group_id) VALUES ('sa-os-group-linux','h','Ubuntu 22.04 LTS','active',$1)`,
+			groupID); err != nil {
+			t.Fatalf("seed grouped agent: %v", err)
+		}
+
+		body, _ := json.Marshal(map[string]any{
+			"scenarioId": "os-fixture-group", "mode": "posture", "groupIds": []int64{groupID},
+			"recurrenceType": "weekly", "dayOfWeek": 1, "timeOfDay": "02:00", "timezone": "UTC",
+		})
+		req := httptest.NewRequest(http.MethodPost, "/x", bytes.NewReader(body))
+		req = req.WithContext(auth.ContextWithClaims(req.Context(), &auth.Claims{UserID: "analyst-1", Role: auth.RoleAnalyst}))
+		w := httptest.NewRecorder()
+		h.CreateScheduledAssessment(w, req)
+		if w.Code != http.StatusBadRequest {
+			t.Fatalf("status = %d, want 400 (group's only member is an incompatible Linux agent), body = %s", w.Code, w.Body.String())
+		}
+	})
+}
+
+func TestUpdateScheduledAssessment_OSMismatch_Rejected(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		eng := scenario.NewEngine(t.TempDir())
+		registerFixtureScenario(t, eng, "fixture-check")
+		registerOSFixtureScenario(t, eng, "os-fixture-update-mismatch", []string{"windows"})
+		jobsStore := jobs.NewStore(pool)
+		h := New(pool, ws.NewHub(), eng, "").WithJobsDispatcher(jobsStore, jobs.NewDispatcher(jobsStore))
+		seedActiveAgent(t, pool, "sa-os-update-linux", "Ubuntu 22.04 LTS")
+
+		createBody, _ := json.Marshal(map[string]any{
+			"scenarioId": "fixture-scenario", "mode": "posture", "agentIds": []string{"sa-os-update-linux"},
+			"recurrenceType": "weekly", "dayOfWeek": 1, "timeOfDay": "02:00", "timezone": "UTC",
+		})
+		createReq := httptest.NewRequest(http.MethodPost, "/x", bytes.NewReader(createBody))
+		createReq = createReq.WithContext(auth.ContextWithClaims(createReq.Context(), &auth.Claims{UserID: "analyst-1", Role: auth.RoleAnalyst}))
+		createW := httptest.NewRecorder()
+		h.CreateScheduledAssessment(createW, createReq)
+		if createW.Code != http.StatusOK {
+			t.Fatalf("setup create: status = %d, body = %s", createW.Code, createW.Body.String())
+		}
+		var created struct {
+			ScheduleID string `json:"scheduleId"`
+		}
+		json.Unmarshal(createW.Body.Bytes(), &created)
+
+		// Edit the schedule to point at the Windows-only scenario -- the same
+		// Linux agent is now incompatible.
+		updateBody, _ := json.Marshal(map[string]any{
+			"scenarioId": "os-fixture-update-mismatch", "mode": "posture", "agentIds": []string{"sa-os-update-linux"},
+			"recurrenceType": "weekly", "dayOfWeek": 1, "timeOfDay": "02:00", "timezone": "UTC",
+		})
+		updateReq := httptest.NewRequest(http.MethodPut, "/x", bytes.NewReader(updateBody))
+		updateReq = updateReq.WithContext(auth.ContextWithClaims(updateReq.Context(), &auth.Claims{UserID: "analyst-1", Role: auth.RoleAnalyst}))
+		updateReq = withURLParam(updateReq, "id", created.ScheduleID)
+		updateW := httptest.NewRecorder()
+		h.UpdateScheduledAssessment(updateW, updateReq)
+		if updateW.Code != http.StatusBadRequest {
+			t.Fatalf("status = %d, want 400 (edited-in Windows-only scenario against a Linux agent), body = %s", updateW.Code, updateW.Body.String())
+		}
+	})
+}
+
 func TestListScheduledAssessments_OnlyReturnsScheduledAssessmentType(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping container-backed test in -short mode")

@@ -21467,6 +21467,9 @@ function schedWizardSet(step) {
   document.getElementById('sched-wz-back').style.display = (step > 1) ? '' : 'none';
   document.getElementById('sched-wz-next').style.display = (step < 4) ? '' : 'none';
   document.getElementById('sched-create-btn').style.display = (step === 4) ? '' : 'none';
+  // Re-evaluate agent platform compatibility every time step 2 is entered --
+  // covers Back-then-forward after switching the step-1 scenario selection.
+  if (step === 2) renderSchedAgentList();
   if (step === 3) renderSchedModeRecurrencePane();
   if (step === 4) renderSchedReview();
 }
@@ -21510,16 +21513,53 @@ function renderSchedGroupNode(node) {
   return html;
 }
 
+// schedClassifyOS mirrors the server's classifyAgentOS (internal/api/handlers.go)
+// exactly, so an agent's compatibility badge in this wizard never disagrees
+// with the server-side scheduleOSCompatibilityError backstop that actually
+// enforces it.
+function schedClassifyOS(osVersion) {
+  var lower = (osVersion || '').toLowerCase();
+  if (lower.indexOf('windows') !== -1) return 'windows';
+  if (lower.indexOf('darwin') !== -1 || lower.indexOf('macos') !== -1 || lower.indexOf('mac os') !== -1) return 'darwin';
+  if (lower.indexOf('linux') !== -1 || lower.indexOf('ubuntu') !== -1 || lower.indexOf('debian') !== -1 ||
+      lower.indexOf('centos') !== -1 || lower.indexOf('rhel') !== -1 || lower.indexOf('fedora') !== -1 ||
+      lower.indexOf('kali') !== -1 || lower.indexOf('arch') !== -1) return 'linux';
+  return '';
+}
+
+// schedAgentCompatible mirrors revalOSCompatible's "empty = unrestricted" rule:
+// an empty supportedOS list, or an agent whose OS string doesn't classify to
+// anything recognized, is treated as compatible rather than blocked.
+function schedAgentCompatible(agent, supportedOS) {
+  if (!supportedOS || !supportedOS.length) return true;
+  var agentOS = schedClassifyOS(agent.osVersion);
+  if (!agentOS) return true;
+  return supportedOS.some(function(o) { return o.toLowerCase() === agentOS; });
+}
+
+function schedSelectedScenarioSupportedOS() {
+  var sc = scenarios.find(function(s) { return s.id === document.getElementById('sched-scenario').value; });
+  return (sc && sc.supportedOs) || [];
+}
+
 function renderSchedAgentList() {
   var root = document.getElementById('sched-agent-list');
   if (!root) return;
   if (!SCHED.agentsAll.length) { root.innerHTML = '<div class="empty">No agents registered.</div>'; return; }
+  var supportedOS = schedSelectedScenarioSupportedOS();
   root.innerHTML = SCHED.agentsAll.map(function(a) {
+    var compatible = schedAgentCompatible(a, supportedOS);
+    // A previously-checked agent that's now incompatible (scenario changed
+    // after selection) must not stay silently selected.
+    if (!compatible && SCHED.selAgents[a.agentId]) delete SCHED.selAgents[a.agentId];
     var checked = SCHED.selAgents[a.agentId] ? ' checked' : '';
-    return '<label style="display:flex;align-items:center;gap:0.5rem;padding:0.25rem 0.3rem;cursor:pointer">' +
-      '<input type="checkbox"' + checked + ' onchange="schedToggleAgent(\'' + x(a.agentId) + '\',this.checked)">' +
-      '<code style="font-size:0.72rem">' + x(a.agentId) + '</code><span class="tiny muted">' + x(a.hostname) + '</span></label>';
+    var disabled = compatible ? '' : ' disabled';
+    var warn = compatible ? '' : ' <span class="tiny" style="color:var(--danger)">Platform mismatch</span>';
+    return '<label style="display:flex;align-items:center;gap:0.5rem;padding:0.25rem 0.3rem;cursor:' + (compatible ? 'pointer' : 'not-allowed') + ';opacity:' + (compatible ? '1' : '0.55') + '">' +
+      '<input type="checkbox"' + checked + disabled + ' onchange="schedToggleAgent(\'' + x(a.agentId) + '\',this.checked)">' +
+      '<code style="font-size:0.72rem">' + x(a.agentId) + '</code><span class="tiny muted">' + x(a.hostname) + ' — ' + x(a.osVersion || 'Unknown OS') + '</span>' + warn + '</label>';
   }).join('');
+  document.getElementById('sched-agent-cnt').textContent = '(' + Object.keys(SCHED.selAgents).length + ' selected)';
 }
 
 function renderSchedModeRecurrencePane() {
@@ -21642,6 +21682,18 @@ function submitScheduledAssessment() {
   if (!payload.scenarioId) { showToast('Select a scenario', 'err'); return; }
   if (!payload.agentIds.length && !payload.groupIds.length) { showToast('Select at least one target group or agent', 'err'); return; }
   if (payload.mode === 'telemetry' && !payload.reason) { showToast('Reason is required for a telemetry-mode schedule', 'err'); return; }
+  // Defensive backstop -- the wizard already disables incompatible agent
+  // checkboxes, but re-check here in case the scenario changed after step 2
+  // without a re-render, or a group's membership includes one at submit time
+  // (groups aren't filtered client-side; the server does the real check).
+  var supportedOS = schedSelectedScenarioSupportedOS();
+  var incompatible = SCHED.agentsAll.filter(function(a) {
+    return payload.agentIds.indexOf(a.agentId) !== -1 && !schedAgentCompatible(a, supportedOS);
+  });
+  if (incompatible.length) {
+    showToast('Selected agent(s) do not support the platform required by this scenario.', 'err');
+    return;
+  }
 
   var btn = document.getElementById('sched-create-btn');
   btn.disabled = true;
