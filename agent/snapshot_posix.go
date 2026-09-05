@@ -5,7 +5,6 @@ package main
 import (
 	"bytes"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 )
@@ -97,17 +96,13 @@ func revertFromSnapshot(s *SystemSnapshot) []string {
 		switch path {
 		case "crontab:user":
 			if current, err := snapCmd("crontab", "-l"); err == nil && !bytes.Equal(current, original) {
-				cmd := exec.Command("crontab", "-")
-				cmd.Stdin = bytes.NewReader(original)
-				if cmd.Run() == nil {
+				if snapCmdRunStdin("crontab", original, "-") == nil {
 					reverted = append(reverted, "crontab: user crontab restored")
 				}
 			}
 		case "iptables":
 			if current, err := snapCmd("iptables-save"); err == nil && !bytes.Equal(current, original) {
-				cmd := exec.Command("iptables-restore")
-				cmd.Stdin = bytes.NewReader(original)
-				if cmd.Run() == nil {
+				if snapCmdRunStdin("iptables-restore", original) == nil {
 					reverted = append(reverted, "iptables: rules restored")
 				}
 			}
@@ -141,8 +136,8 @@ func revertFromSnapshot(s *SystemSnapshot) []string {
 		"--no-legend", "--plain", "--no-pager"); err == nil {
 		for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
 			if f := strings.Fields(line); len(f) > 0 && !origSvcs[f[0]] {
-				exec.Command("systemctl", "stop", f[0]).Run()    //nolint
-				exec.Command("systemctl", "disable", f[0]).Run() //nolint
+				snapCmdRun("systemctl", "stop", f[0])    //nolint
+				snapCmdRun("systemctl", "disable", f[0]) //nolint
 				reverted = append(reverted, "service stopped: "+f[0])
 			}
 		}

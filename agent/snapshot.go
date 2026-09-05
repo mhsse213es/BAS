@@ -36,11 +36,39 @@ func toSet(items []string) map[string]bool {
 	return s
 }
 
-// snapCmd runs a command with a 10-second timeout and returns combined output.
+// cmdTimeout bounds every external command snapshot/revert code runs. A var,
+// not a const, so tests can shrink it to prove the timeout mechanism
+// actually fires without waiting the real 10s.
+var cmdTimeout = 10 * time.Second
+
+// snapCmd runs a command with a bounded timeout and returns combined output.
 func snapCmd(name string, args ...string) ([]byte, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), cmdTimeout)
 	defer cancel()
 	return exec.CommandContext(ctx, name, args...).Output()
+}
+
+// snapCmdRun runs a mutating command with the same bounded timeout as
+// snapCmd, discarding output -- for revert operations where only
+// success/failure matters. Every mutation in revertFromSnapshot must go
+// through this, never raw exec.Command: revertFromSnapshot runs after every
+// step has already reported completion but before submitResults (see
+// runScenario in agent.go), so a hung command here strands the whole run at
+// status 'running' forever even though every technique already finished.
+func snapCmdRun(name string, args ...string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), cmdTimeout)
+	defer cancel()
+	return exec.CommandContext(ctx, name, args...).Run()
+}
+
+// snapCmdRunStdin is snapCmdRun's counterpart for a command that reads its
+// input from stdin (crontab -, iptables-restore) instead of args.
+func snapCmdRunStdin(name string, stdin []byte, args ...string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), cmdTimeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, name, args...)
+	cmd.Stdin = bytes.NewReader(stdin)
+	return cmd.Run()
 }
 
 // listCategoryPrefixes maps each SystemSnapshot.Lists category key to the

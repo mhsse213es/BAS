@@ -1,10 +1,86 @@
 package main
 
 import (
+	"io"
+	"os"
 	"reflect"
 	"sort"
 	"testing"
+	"time"
 )
+
+// TestHelperProcess lets the test binary itself act as an external command,
+// so the snapCmdRun/snapCmdRunStdin tests below don't depend on any real
+// system binary being present or behaving the same across
+// Windows/Linux/macOS -- the standard os/exec self-reinvocation pattern.
+// A no-op during a normal `go test` run: only does anything when the guard
+// env var is set, which the tests below set only on the child process they
+// spawn via snapCmdRun(os.Args[0], ...).
+func TestHelperProcess(t *testing.T) {
+	if os.Getenv("SNAPCMD_HELPER_PROCESS") != "1" {
+		return
+	}
+	switch os.Getenv("SNAPCMD_HELPER_MODE") {
+	case "sleep":
+		time.Sleep(10 * time.Second)
+	case "succeed":
+		// no-op, exit 0
+	case "echo_stdin_check":
+		data, _ := io.ReadAll(os.Stdin)
+		if string(data) != "expected-payload" {
+			os.Exit(1)
+		}
+	}
+	os.Exit(0)
+}
+
+// TestSnapCmdRun_TimesOutOnHungCommand proves the timeout mechanism actually
+// kills a hung child rather than merely being present in the code -- without
+// it, revertFromSnapshot's mutation calls could block the scenario run from
+// ever submitting its final result (see cmdTimeout's doc comment).
+func TestSnapCmdRun_TimesOutOnHungCommand(t *testing.T) {
+	orig := cmdTimeout
+	cmdTimeout = 150 * time.Millisecond
+	defer func() { cmdTimeout = orig }()
+
+	os.Setenv("SNAPCMD_HELPER_PROCESS", "1")
+	os.Setenv("SNAPCMD_HELPER_MODE", "sleep")
+	defer os.Unsetenv("SNAPCMD_HELPER_PROCESS")
+	defer os.Unsetenv("SNAPCMD_HELPER_MODE")
+
+	start := time.Now()
+	err := snapCmdRun(os.Args[0], "-test.run=TestHelperProcess")
+	elapsed := time.Since(start)
+
+	if err == nil {
+		t.Fatal("snapCmdRun() error = nil, want a timeout error for a command that outlives cmdTimeout")
+	}
+	if elapsed > 3*time.Second {
+		t.Fatalf("snapCmdRun() took %v, want it bounded near cmdTimeout (150ms), not the helper's full 10s sleep -- the timeout did not actually kill the child", elapsed)
+	}
+}
+
+func TestSnapCmdRun_SucceedsForFastCommand(t *testing.T) {
+	os.Setenv("SNAPCMD_HELPER_PROCESS", "1")
+	os.Setenv("SNAPCMD_HELPER_MODE", "succeed")
+	defer os.Unsetenv("SNAPCMD_HELPER_PROCESS")
+	defer os.Unsetenv("SNAPCMD_HELPER_MODE")
+
+	if err := snapCmdRun(os.Args[0], "-test.run=TestHelperProcess"); err != nil {
+		t.Fatalf("snapCmdRun() error = %v, want nil for a command that exits 0 well within the timeout", err)
+	}
+}
+
+func TestSnapCmdRunStdin_PassesStdinToChild(t *testing.T) {
+	os.Setenv("SNAPCMD_HELPER_PROCESS", "1")
+	os.Setenv("SNAPCMD_HELPER_MODE", "echo_stdin_check")
+	defer os.Unsetenv("SNAPCMD_HELPER_PROCESS")
+	defer os.Unsetenv("SNAPCMD_HELPER_MODE")
+
+	if err := snapCmdRunStdin(os.Args[0], []byte("expected-payload"), "-test.run=TestHelperProcess"); err != nil {
+		t.Fatalf("snapCmdRunStdin() error = %v, want nil -- helper verifies it received the exact stdin payload", err)
+	}
+}
 
 func snap(lists map[string][]string, files map[string][]byte) *SystemSnapshot {
 	s := newSnapshot("test-run")

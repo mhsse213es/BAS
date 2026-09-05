@@ -5,7 +5,6 @@ package main
 import (
 	"bytes"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 )
@@ -194,8 +193,7 @@ func revertFromSnapshot(s *SystemSnapshot) []string {
 		currentValues := parseRegValues(current)
 		for name := range currentValues {
 			if !origValues[name] {
-				cmd := exec.Command("reg", "delete", key, "/v", name, "/f")
-				if cmd.Run() == nil {
+				if snapCmdRun("reg", "delete", key, "/v", name, "/f") == nil {
 					reverted = append(reverted, "registry removed: "+key+`\`+name)
 				}
 			}
@@ -216,8 +214,7 @@ func revertFromSnapshot(s *SystemSnapshot) []string {
 			}
 			name := strings.Trim(fields[0], `"`)
 			if !origTasks[name] {
-				cmd := exec.Command("schtasks", "/delete", "/tn", name, "/f")
-				if cmd.Run() == nil {
+				if snapCmdRun("schtasks", "/delete", "/tn", name, "/f") == nil {
 					reverted = append(reverted, "schtask deleted: "+name)
 				}
 			}
@@ -233,8 +230,8 @@ func revertFromSnapshot(s *SystemSnapshot) []string {
 			}
 			name := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(line), "SERVICE_NAME:"))
 			if name != "" && !origSvcs[name] {
-				exec.Command("sc", "stop", name).Run()                         //nolint
-				exec.Command("sc", "config", name, "start=", "disabled").Run() //nolint
+				snapCmdRun("sc", "stop", name)                         //nolint
+				snapCmdRun("sc", "config", name, "start=", "disabled") //nolint
 				reverted = append(reverted, "service stopped: "+name)
 			}
 		}
