@@ -8346,7 +8346,10 @@ function renderAgentRows() {
           '<button class="row-menu-item" onclick="closeAllRowMenus();openAgentDetail(\'' + x(a.agentId) + '\')">&#128269; Detail</button>' +
           '<button class="row-menu-item" onclick="closeAllRowMenus();openModal(null,\'' + x(a.agentId) + '\')">&#9654; Run simulation</button>' +
           '<button class="row-menu-item" onclick="closeAllRowMenus();safeScan(\'' + x(a.agentId) + '\')">&#128737; Safe Scan</button>' +
-          '<button class="row-menu-item" onclick="closeAllRowMenus();openFullReport(\'' + x(a.agentId) + '\')">&#128196; Report</button>' +
+          '<button class="row-menu-item" onclick="closeAllRowMenus();openFullReport(\'' + x(a.agentId) + '\')">&#128196; Report (HTML)</button>' +
+          '<button class="row-menu-item" onclick="closeAllRowMenus();downloadFullReportPDF(\'' + x(a.agentId) + '\')">&#8595; Report (PDF)</button>' +
+          '<button class="row-menu-item" onclick="closeAllRowMenus();downloadFullReportCSV(\'' + x(a.agentId) + '\')">&#8595; Report (CSV)</button>' +
+          '<button class="row-menu-item" onclick="closeAllRowMenus();downloadFullReportJSON(\'' + x(a.agentId) + '\')">&#8595; Report (JSON)</button>' +
           '<button class="row-menu-item" onclick="closeAllRowMenus();downloadAuditPack(\'' + x(a.agentId) + '\')">&#8659; Download audit pack</button>' +
           (ROLE === 'admin' ?
             '<button class="row-menu-item" onclick="closeAllRowMenus();moveAgentToGroupPrompt(\'' + x(a.agentId) + '\')">&#128193; Move to group…</button>' : '') +
@@ -19416,6 +19419,38 @@ function openFullReport(agentId) {
     window.open('/api/report/full/html?agentId=' + encodeURIComponent(agentId) + query, '_blank');
   });
 }
+// downloadFullReportPDF/CSV/JSON mirror downloadRunReport's save-as-file
+// pattern (an <a download> click, not window.open) for the agent-level Full
+// Report's other three formats -- previously only the HTML variant
+// (openFullReport above) was reachable from the UI at all, even though the
+// backend has had PDF/CSV endpoints all along and JSON is new.
+function downloadFullReportPDF(agentId) {
+  showDownloadOptions('Agent Posture PDF Report', function(filter) {
+    var query = filter ? '?filter=' + encodeURIComponent(filter) : '';
+    var a = document.createElement('a');
+    a.href = '/api/report/full/pdf?agentId=' + encodeURIComponent(agentId) + (query ? '&' + query.slice(1) : '');
+    a.download = buildReportFilename('BAS_Report', agentId, 'pdf');
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  });
+}
+function downloadFullReportCSV(agentId) {
+  showDownloadOptions('Agent Posture Forensic CSV', function(filter) {
+    var query = filter ? '?filter=' + encodeURIComponent(filter) : '';
+    var a = document.createElement('a');
+    a.href = '/api/report/full/csv?agentId=' + encodeURIComponent(agentId) + (query ? '&' + query.slice(1) : '');
+    a.download = buildReportFilename('BAS_Forensic', agentId, 'csv');
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  });
+}
+function downloadFullReportJSON(agentId) {
+  showDownloadOptions('Agent Posture JSON Report', function(filter) {
+    var query = filter ? '?filter=' + encodeURIComponent(filter) : '';
+    var a = document.createElement('a');
+    a.href = '/api/report/full/json?agentId=' + encodeURIComponent(agentId) + (query ? '&' + query.slice(1) : '');
+    a.download = buildReportFilename('BAS_Report', agentId, 'json');
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  });
+}
 
 function downloadAuditPack(agentId) {
   showToast('Preparing audit pack…', 'ok');
@@ -20533,6 +20568,20 @@ function renderVariantRun(detail) {
   }
   html += '</span>';
   html += '</div>';
+
+  // Report actions -- this variant run is a real scenario_runs row underneath
+  // (see dispatchVariantRun), so it already has full report data behind it
+  // via the same per-run endpoints a regular scenario run uses. Only shown
+  // once the run reaches a terminal state -- a running run's report would
+  // just be an incomplete snapshot.
+  if (run.scenarioRunId && run.status !== 'running') {
+    html += '<div style="display:flex;gap:0.4rem;flex-wrap:wrap;margin-bottom:0.75rem">';
+    html += '<button class="btn btn-outline btn-sm" onclick="openRunReport(\'' + x(run.scenarioRunId) + '\')" title="Open the HTML report">&#8599; HTML Report</button>';
+    html += '<button class="btn btn-outline btn-sm" onclick="downloadRunReport(\'' + x(run.scenarioRunId) + '\')" title="Download the report as a PDF file">&#8595; PDF</button>';
+    html += '<button class="btn btn-outline btn-sm" onclick="downloadRunCSV(\'' + x(run.scenarioRunId) + '\')" title="Download the forensic CSV (one row per variant)">&#8595; CSV</button>';
+    html += '<button class="btn btn-outline btn-sm" onclick="exportRunJSON(\'' + x(run.scenarioRunId) + '\')" title="Download the raw run data as JSON">&#8595; JSON</button>';
+    html += '</div>';
+  }
 
   html += '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:0.5rem;margin-bottom:0.75rem">';
   html += vexMini('Total', summary.total, 'var(--text)');
