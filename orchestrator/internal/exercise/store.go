@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -631,6 +632,22 @@ func (s *Store) hasEvidenceType(ctx context.Context, stepExecID, evType string) 
 	return n > 0, err
 }
 
+// EarliestEvidenceTimestamp returns when the first evidence record of evType
+// was recorded for a step, or nil if none exists yet -- not an error, just
+// not-yet-reported.
+func (s *Store) EarliestEvidenceTimestamp(ctx context.Context, stepExecID, evType string) (*time.Time, error) {
+	var ts time.Time
+	err := s.db.QueryRow(ctx,
+		`SELECT created_at FROM exercise_evidence
+		 WHERE step_execution_id=$1 AND evidence_type=$2
+		 ORDER BY created_at ASC LIMIT 1`, stepExecID, evType,
+	).Scan(&ts)
+	if err != nil {
+		return nil, nil
+	}
+	return &ts, nil
+}
+
 // CountEvidenceByType returns a map[evidence_type]count for an execution.
 func (s *Store) CountEvidenceByType(ctx context.Context, execID string) (map[string]int, error) {
 	rows, err := s.db.Query(ctx,
@@ -673,6 +690,42 @@ func (s *Store) BASRunStatus(ctx context.Context, runID string) (string, error) 
 		return "", nil // not found — not an error for trigger polling
 	}
 	return status, nil
+}
+
+// BASRunDetection reads the DetectionVerdict already computed by
+// SubmitRunDetections (internal/api/detection_handlers.go, the reference
+// pipeline) for one technique within a scenario_run. ok=false (no error)
+// means either the technique isn't in this run's results at all, or it is
+// but was never detection-scored -- the agent found zero alerts in its
+// post-run sweep and never called the detections endpoint at all (see
+// agent/agent.go's collectAndSubmitDetections). Both are legitimate,
+// common outcomes, never treated as an error.
+func (s *Store) BASRunDetection(ctx context.Context, runID, techniqueID string) (verdict, confidence, alertProvider string, mttdMs int64, ok bool, err error) {
+	var resultsRaw []byte
+	if err := s.db.QueryRow(ctx,
+		`SELECT results FROM scenario_runs WHERE id = $1`, runID,
+	).Scan(&resultsRaw); err != nil {
+		return "", "", "", 0, false, err
+	}
+	var results []models.SimulationResult
+	if err := json.Unmarshal(resultsRaw, &results); err != nil {
+		return "", "", "", 0, false, err
+	}
+	for _, r := range results {
+		if r.Technique.ID != techniqueID {
+			continue
+		}
+		if r.DetectionVerdict == "" {
+			return "", "", "", 0, false, nil
+		}
+		if r.DetectionAlert != nil {
+			mttdMs = r.DetectionAlert.MTTDMs
+			alertProvider = r.DetectionAlert.Provider
+			confidence = r.DetectionAlert.Confidence
+		}
+		return r.DetectionVerdict, confidence, alertProvider, mttdMs, true, nil
+	}
+	return "", "", "", 0, false, nil
 }
 
 // CountEvidenceForExec counts evidence records of the given types in an

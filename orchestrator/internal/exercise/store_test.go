@@ -5,6 +5,7 @@ import (
 	"flag"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/audspect/bas/internal/testutil"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -482,4 +483,127 @@ func TestStore_ClosedPool_ErrorsNotPanic(t *testing.T) {
 	if _, err := store.CountEvidenceByType(ctx, "x"); err == nil {
 		t.Error("CountEvidenceByType: want error on closed pool")
 	}
+}
+
+func TestBASRunDetection_ReturnsDetectionVerdictForTechnique(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		store := NewStore(pool)
+		ctx := context.Background()
+		runID := "bas-run-detection-test-1"
+		agentID := "agent-detection-test"
+		if _, err := pool.Exec(ctx,
+			`INSERT INTO agents (agent_id, hostname, state) VALUES ($1,'h','active')`, agentID); err != nil {
+			t.Fatalf("seed agent: %v", err)
+		}
+		resultsJSON := `[{"technique":{"id":"T1003.002"},"detectionVerdict":"detected","detectionAlert":{"channel":"Microsoft-Windows-Windows Defender/Operational","provider":"Windows Defender","confidence":"high","mttdMs":4200}}]`
+		if _, err := pool.Exec(ctx,
+			`INSERT INTO scenario_runs (id, scenario_id, agent_id, status, results) VALUES ($1,'sc','`+agentID+`','completed',$2::jsonb)`,
+			runID, resultsJSON); err != nil {
+			t.Fatalf("seed scenario_run: %v", err)
+		}
+
+		verdict, confidence, provider, mttdMs, ok, err := store.BASRunDetection(ctx, runID, "T1003.002")
+		if err != nil {
+			t.Fatalf("BASRunDetection: %v", err)
+		}
+		if !ok {
+			t.Fatal("ok = false, want true (matching technique with a detection verdict exists)")
+		}
+		if verdict != "detected" {
+			t.Errorf("verdict = %q, want %q", verdict, "detected")
+		}
+		if confidence != "high" {
+			t.Errorf("confidence = %q, want %q", confidence, "high")
+		}
+		if mttdMs != 4200 {
+			t.Errorf("mttdMs = %d, want 4200", mttdMs)
+		}
+		if provider != "Windows Defender" {
+			t.Errorf("provider = %q, want %q", provider, "Windows Defender")
+		}
+
+		// A technique not present in results: ok=false, no error.
+		_, _, _, _, ok2, err2 := store.BASRunDetection(ctx, runID, "T9999")
+		if err2 != nil {
+			t.Fatalf("BASRunDetection (missing technique): %v", err2)
+		}
+		if ok2 {
+			t.Error("ok = true for a technique not in results, want false")
+		}
+	})
+}
+
+func TestBASRunDetection_UnscoredTechniqueReturnsNotOK(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		store := NewStore(pool)
+		ctx := context.Background()
+		runID := "bas-run-detection-test-2"
+		agentID := "agent-detection-test-2"
+		if _, err := pool.Exec(ctx,
+			`INSERT INTO agents (agent_id, hostname, state) VALUES ($1,'h','active')`, agentID); err != nil {
+			t.Fatalf("seed agent: %v", err)
+		}
+		// A completed run whose agent never found any alerts -- SubmitRunDetections
+		// never ran (see agent/agent.go's collectAndSubmitDetections: it returns
+		// early when len(alerts)==0), so DetectionVerdict is genuinely empty, not
+		// an error. Must not be reported as ok=true with a fabricated verdict.
+		resultsJSON := `[{"technique":{"id":"T1003.002"}}]`
+		if _, err := pool.Exec(ctx,
+			`INSERT INTO scenario_runs (id, scenario_id, agent_id, status, results) VALUES ($1,'sc','`+agentID+`','completed',$2::jsonb)`,
+			runID, resultsJSON); err != nil {
+			t.Fatalf("seed scenario_run: %v", err)
+		}
+
+		_, _, _, _, ok, err := store.BASRunDetection(ctx, runID, "T1003.002")
+		if err != nil {
+			t.Fatalf("BASRunDetection: %v", err)
+		}
+		if ok {
+			t.Error("ok = true for a technique with no DetectionVerdict, want false")
+		}
+	})
+}
+
+func TestEarliestEvidenceTimestamp_ReturnsFirstMatchingRecord(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		store := NewStore(pool)
+		chain := NewEvidenceChain(store)
+		ctx := context.Background()
+		execID := seedExecution(t, store)
+		se := &StepExecution{ExecutionID: execID, StepID: "s1", StepType: StepTypeSendEmail, Status: StepCompleted}
+		if err := store.UpsertStepExecution(ctx, se); err != nil {
+			t.Fatalf("UpsertStepExecution: %v", err)
+		}
+
+		if ts, err := store.EarliestEvidenceTimestamp(ctx, se.ID, "phishing_reported"); err != nil {
+			t.Fatalf("EarliestEvidenceTimestamp (none yet): %v", err)
+		} else if ts != nil {
+			t.Errorf("ts = %v, want nil before any evidence exists", ts)
+		}
+
+		if _, err := chain.Append(ctx, execID, se.ID, "phishing_reported", "target", "tracker", map[string]any{}); err != nil {
+			t.Fatalf("append phishing_reported: %v", err)
+		}
+		before := time.Now()
+
+		ts, err := store.EarliestEvidenceTimestamp(ctx, se.ID, "phishing_reported")
+		if err != nil {
+			t.Fatalf("EarliestEvidenceTimestamp: %v", err)
+		}
+		if ts == nil {
+			t.Fatal("ts = nil, want a real timestamp after evidence was appended")
+		}
+		if ts.After(before) {
+			t.Errorf("ts = %v, want it at or before %v (recorded when the evidence was appended)", ts, before)
+		}
+	})
 }
