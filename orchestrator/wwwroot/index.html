@@ -11970,7 +11970,7 @@ function runRowHtml(r) {
                 '<span style="color:var(--muted);font-size:0.6rem">pass</span> / ' +
                 '<span style="color:var(--danger);font-weight:600">' + pr.stepsFailed + '</span>' +
                 '<span style="color:var(--muted);font-size:0.6rem">fail</span>' +
-                (pr.stepsTimeout ? ' / <span style="color:var(--warning);font-weight:600">' + pr.stepsTimeout + '</span><span style="color:var(--muted);font-size:0.6rem">to</span>' : '') +
+                (pr.stepsTimeout ? ' / <span style="color:var(--warning);font-weight:600">' + pr.stepsTimeout + '</span><span style="color:var(--muted);font-size:0.6rem">timeout</span>' : '') +
                 '<span style="color:var(--muted);font-size:0.65rem;margin-left:0.35rem">' + pr.stepsDone + '/' + pr.stepsTotal + ' partial</span>';
   }
   return '<tr>' +
