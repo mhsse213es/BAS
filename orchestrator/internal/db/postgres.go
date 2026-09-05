@@ -91,6 +91,12 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		`ALTER TABLE agents ADD COLUMN IF NOT EXISTS stopped_by  text`,
 		`ALTER TABLE agents ADD COLUMN IF NOT EXISTS stopped_at  timestamptz`,
 		`ALTER TABLE agents ADD COLUMN IF NOT EXISTS stop_reason text`,
+		// Phase 0C: domain-joined is the first environmental prerequisite fact.
+		// NULL = agent has never reported it (POSIX in this phase, or a
+		// pre-upgrade Windows agent) -- the dispatch-time gate treats NULL as
+		// "unknown, never skip on it." See
+		// docs/superpowers/specs/2026-09-05-phase0c-prerequisite-evaluation-design.md.
+		`ALTER TABLE agents ADD COLUMN IF NOT EXISTS domain_joined boolean`,
 
 		`CREATE TABLE IF NOT EXISTS scenario_runs (
 			id             text        PRIMARY KEY DEFAULT gen_random_uuid()::text,

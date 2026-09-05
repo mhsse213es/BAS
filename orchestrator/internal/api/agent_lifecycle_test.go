@@ -212,6 +212,55 @@ func TestHeartbeat_IdempotentAndTimestampAdvances(t *testing.T) {
 	})
 }
 
+func TestHeartbeat_PersistsDomainJoined(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := New(pool, ws.NewHub(), nil, "")
+		agentID := "agent-domain-joined-hb"
+
+		body, _ := json.Marshal(map[string]any{
+			"agentId": agentID, "hostname": "h", "status": "idle", "domainJoined": true,
+		})
+		rec := httptest.NewRecorder()
+		h.Heartbeat(rec, httptest.NewRequest(http.MethodPost, "/api/heartbeat", bytes.NewReader(body)))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+		}
+
+		var domainJoined *bool
+		if err := pool.QueryRow(context.Background(),
+			`SELECT domain_joined FROM agents WHERE agent_id = $1`, agentID,
+		).Scan(&domainJoined); err != nil {
+			t.Fatalf("read domain_joined: %v", err)
+		}
+		if domainJoined == nil || !*domainJoined {
+			t.Fatalf("domain_joined = %v, want true", domainJoined)
+		}
+
+		// A heartbeat that omits the field must NOT clobber the known value
+		// back to NULL -- an agent's later heartbeat that doesn't resend a
+		// fact isn't a signal that the fact became unknown again. (This
+		// mirrors the existing security_products guard at handlers.go:1251.)
+		body2, _ := json.Marshal(map[string]any{"agentId": agentID, "hostname": "h", "status": "idle"})
+		rec2 := httptest.NewRecorder()
+		h.Heartbeat(rec2, httptest.NewRequest(http.MethodPost, "/api/heartbeat", bytes.NewReader(body2)))
+		if rec2.Code != http.StatusOK {
+			t.Fatalf("second heartbeat: status = %d", rec2.Code)
+		}
+		var stillDomainJoined *bool
+		if err := pool.QueryRow(context.Background(),
+			`SELECT domain_joined FROM agents WHERE agent_id = $1`, agentID,
+		).Scan(&stillDomainJoined); err != nil {
+			t.Fatalf("read domain_joined after omitted-field heartbeat: %v", err)
+		}
+		if stillDomainJoined == nil || !*stillDomainJoined {
+			t.Fatalf("domain_joined after omitted-field heartbeat = %v, want still true (must not be clobbered to NULL)", stillDomainJoined)
+		}
+	})
+}
+
 func TestHeartbeat_Concurrent(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping container-backed test in -short mode")

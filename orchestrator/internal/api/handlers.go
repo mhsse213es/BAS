@@ -1256,6 +1256,15 @@ func (h *Handler) Heartbeat(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Persist domain-joined status only when the heartbeat reports it (nil
+	// omitted, per omitempty) -- an agent's later heartbeat that doesn't
+	// resend the fact must not clobber a known value back to unknown.
+	if hb.DomainJoined != nil {
+		_, _ = h.db.Exec(r.Context(),
+			`UPDATE agents SET domain_joined = $2 WHERE agent_id = $1`,
+			hb.AgentID, *hb.DomainJoined)
+	}
+
 	// Quarantine if manifest is loaded and the binary hash is not recognised.
 	// Only transition active→quarantined, never overwrite an already-quarantined agent.
 	if hb.BinaryHash != "" && h.manifest != nil && h.manifest.Loaded() && !trusted {
