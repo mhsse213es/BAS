@@ -56,6 +56,13 @@ import (
 	"github.com/audspect/bas/internal/ws"
 )
 
+// Version is the running build's version, baked in at build time via
+// packaging/build.sh's `-X main.Version=${VERSION}` ldflag (VERSION is
+// derived from the nearest git tag). Left at "dev" for local/unpackaged
+// builds. Propagated to internal/api.Version in main() so /ready can
+// report it to the frontend.
+var Version = "dev"
+
 // runHealthcheck is invoked as `orchestrator --healthcheck` by Docker's
 // container HEALTHCHECK (packaging/compose/docker-compose.yml). The image
 // is gcr.io/distroless/static-debian12 -- no shell, no wget/curl -- so a
@@ -89,6 +96,7 @@ func main() {
 
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
+	api.Version = Version
 
 	cfgPath := "config.json"
 	if len(os.Args) > 1 {

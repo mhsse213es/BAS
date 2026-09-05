@@ -1516,7 +1516,7 @@ body.theme-slate {
         </div>
       </div>
     </nav>
-    <div class="sidebar-footer">v1.7.6 &nbsp;&middot;&nbsp; On-Premise</div>
+    <div class="sidebar-footer"><span id="sidebar-version">v&mdash;</span> &nbsp;&middot;&nbsp; On-Premise</div>
   </aside>
 
   <div class="main-wrapper">
@@ -5150,6 +5150,17 @@ var _pwForced = false;
 var LICENSE_INFO = null; // populated by the pre-login /api/license/status check below
 
 window.addEventListener('DOMContentLoaded', function() {
+  // Sidebar footer version: reflects the running build's actual version
+  // (baked in at build time via packaging/build.sh -> main.Version ->
+  // /ready's "version" field) instead of a hand-edited string that drifts
+  // from what's actually deployed. Silently keeps the placeholder on
+  // failure -- this is cosmetic, never worth surfacing an error for.
+  fetch('/ready').then(function(r) { return r.json(); }).then(function(info) {
+    if (info && info.version) {
+      document.getElementById('sidebar-version').textContent = 'v' + info.version;
+    }
+  }).catch(function() {});
+
   fetch('/api/license/status').then(function(r) { return r.json(); }).then(function(info) {
     LICENSE_INFO = info;
     if (info.state === 'locked') {

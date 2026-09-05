@@ -17,6 +17,11 @@ import (
 	"github.com/audspect/bas/internal/jobs"
 )
 
+// Version is set once at startup (cmd/server/main.go) from the build-time
+// Version var, so /ready can report the running build's actual version to
+// the frontend instead of a hardcoded string. "dev" for unpackaged builds.
+var Version = "dev"
+
 // Every label below is bounded-cardinality by construction: method is one
 // of a handful of HTTP verbs, route is chi's matched pattern (e.g.
 // "/api/sla/policies/{severity}"), status is an HTTP status code, type is
@@ -121,16 +126,18 @@ func (h *Handler) handleReady(w http.ResponseWriter, r *http.Request) {
 		dbReady.Set(0)
 		w.WriteHeader(http.StatusServiceUnavailable)
 		json.NewEncoder(w).Encode(map[string]any{
-			"status": "not_ready",
-			"checks": map[string]string{"database": err.Error()},
+			"status":  "not_ready",
+			"version": Version,
+			"checks":  map[string]string{"database": err.Error()},
 		})
 		return
 	}
 	dbReady.Set(1)
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]any{
-		"status": "ready",
-		"checks": map[string]string{"database": "ok"},
+		"status":  "ready",
+		"version": Version,
+		"checks":  map[string]string{"database": "ok"},
 	})
 }
 
