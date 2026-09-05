@@ -4267,6 +4267,14 @@ body.theme-slate {
           <input type="number" id="sched-concurrency" min="1"
                  style="width:100%;padding:0.5rem 0.7rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:0.82rem;font-family:inherit">
         </div>
+
+        <div style="margin-top:0.6rem">
+          <label class="modal-lbl">Initiative (optional)</label>
+          <select id="sched-initiative" style="width:100%;padding:0.5rem 0.7rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:0.82rem;font-family:inherit">
+            <option value="">— None —</option>
+          </select>
+          <p class="sub2" style="margin-top:0.4rem">Every job this schedule spawns is automatically added to the selected initiative.</p>
+        </div>
       </div>
 
       <!-- Step 4: Review & Authorize (Task 6) -->
@@ -19600,7 +19608,12 @@ function showVexStatHelp(label, help) {
 
 function populateVexAgents() {
   apicall('/api/agents').then(function(agents) {
-    var online = (agents || []).filter(function(a) { return a.status !== 'offline'; });
+    // Every variant Template the generator produces is Windows-only
+    // PowerShell (internal/variant/generator.go), so a non-Windows agent
+    // can never run anything dispatched from this panel -- excluded
+    // outright rather than shown-disabled, since there's no per-technique
+    // variability like Scheduled Assessments' per-scenario SupportedOS.
+    var online = (agents || []).filter(function(a) { return a.status !== 'offline' && schedClassifyOS(a.osVersion) !== 'linux' && schedClassifyOS(a.osVersion) !== 'darwin'; });
     var opts = '<option value="">Select agent…</option>' +
       online.map(function(a) {
         return '<option value="' + x(a.agentId) + '">' + x(a.hostname || a.agentId) + '</option>';
@@ -19862,8 +19875,12 @@ function vexRunFullSweep() {
   var advanced = document.getElementById('vex-sweep-advanced') ? document.getElementById('vex-sweep-advanced').checked : false;
 
   if (_vexTargetMode === 'group') {
-    var resolved = vexResolvedGroupAgents();
-    if (!resolved.length) { showToast('Select at least one group with agents', 'err'); return; }
+    var beforeOSFilter = vexResolvedGroupAgents();
+    var resolved = vexFilterWindowsAgents(beforeOSFilter);
+    if (!resolved.length) { showToast('Select at least one group with a Windows agent — every variant technique requires Windows', 'err'); return; }
+    if (resolved.length < beforeOSFilter.length) {
+      showToast((beforeOSFilter.length - resolved.length) + ' non-Windows agent(s) in the selected group(s) were skipped.', 'ok');
+    }
     openSweepPreview('variant', { targetMode: 'group', agents: resolved, mode: mode, advanced: advanced });
     return;
   }
@@ -20116,12 +20133,16 @@ function runVariants() {
       showToast('Group/All-Agent targeting requires exactly one technique — uncheck the rest, or switch to Individual for a multi-technique run.', 'err');
       return;
     }
-    var resolved = _vexRunTargetMode === 'group' ? vexRunResolvedGroupAgents() : agents.slice();
-    if (!resolved.length) { showToast('Select at least one group with agents', 'err'); return; }
+    var beforeOSFilter = _vexRunTargetMode === 'group' ? vexRunResolvedGroupAgents() : agents.slice();
+    var resolved = vexFilterWindowsAgents(beforeOSFilter);
+    if (!resolved.length) { showToast('Select at least one group with a Windows agent — every variant technique requires Windows', 'err'); return; }
+    var skipped = beforeOSFilter.length - resolved.length;
     var techId = techniques[0];
 
-    if (resolved.length > 1) {
-      if (!confirm('Run ' + techId + ' on ' + resolved.length + ' agent(s)?')) return;
+    if (resolved.length > 1 || skipped > 0) {
+      var msg = 'Run ' + techId + ' on ' + resolved.length + ' agent(s)?';
+      if (skipped > 0) msg += ' (' + skipped + ' non-Windows agent(s) skipped)';
+      if (!confirm(msg)) return;
     }
 
     // Each dispatch is independent: a rejected promise or a {error:...}
@@ -21253,7 +21274,10 @@ var SCHED = {
   step: 1,
   editingId: null,        // null when creating; the schedule's ID when editing
   editPrefillMode: '',    // consumed once by renderSchedModeRecurrencePane's first render --
-  editPrefillTimezone: '' // see that function for why Mode/Timezone need this indirection
+  editPrefillTimezone: '', // see that function for why Mode/Timezone need this indirection
+  initiativesActive: [],   // GET /api/initiatives?state=active, fetched fresh when the wizard opens
+  editPrefillInitiativeId: '' // same indirection as editPrefillMode -- #sched-initiative has no
+                               // <option>s until initiativesActive's fetch resolves and populates it
 };
 
 function loadScheduledAssessments() {
@@ -21368,6 +21392,7 @@ function openSchedWizard() {
   SCHED.editingId = null;
   SCHED.editPrefillMode = '';
   SCHED.editPrefillTimezone = '';
+  SCHED.editPrefillInitiativeId = '';
   document.getElementById('sched-wz-title').textContent = 'New Scheduled Assessment';
   document.getElementById('sched-create-btn').textContent = 'Create Schedule';
   document.getElementById('sched-group-cnt').textContent = '(0 selected)';
@@ -21382,13 +21407,15 @@ function openSchedWizard() {
   document.getElementById('sched-concurrency').value = '';
   var sel = document.getElementById('sched-scenario');
   sel.innerHTML = scenarios.map(function(s) { return '<option value="' + x(s.id) + '">' + x(s.name) + '</option>'; }).join('');
-  Promise.all([apicall('/api/agent-groups'), apicall('/api/agents')]).then(function(res) {
+  Promise.all([apicall('/api/agent-groups'), apicall('/api/agents'), apicall('/api/initiatives?state=active')]).then(function(res) {
     SCHED.groupsAccessDenied = !!(res[0] && res[0].error);
     SCHED.groups = Array.isArray(res[0]) ? res[0] : [];
     SCHED.groupsById = schedFlattenGroupNames(SCHED.groups, {});
     SCHED.agentsAll = Array.isArray(res[1]) ? res[1] : [];
+    SCHED.initiativesActive = (res[2] && res[2].initiatives) || [];
     renderSchedGroupTree();
     renderSchedAgentList();
+    renderSchedInitiativeSelect();
   }).catch(function(e) { showToast(e.message, 'err'); });
   document.getElementById('sched-overlay').classList.add('open');
   schedWizardSet(1);
@@ -21420,6 +21447,7 @@ function openSchedWizardForEdit(id) {
   SCHED.editingId = sch.ID;
   SCHED.editPrefillMode = sch.Mode || 'posture';
   SCHED.editPrefillTimezone = sch.Timezone || '';
+  SCHED.editPrefillInitiativeId = sch.InitiativeID || '';
 
   document.getElementById('sched-wz-title').textContent = 'Edit Scheduled Assessment';
   document.getElementById('sched-create-btn').textContent = 'Save Changes';
@@ -21438,13 +21466,15 @@ function openSchedWizardForEdit(id) {
   sel.innerHTML = scenarios.map(function(s) { return '<option value="' + x(s.id) + '">' + x(s.name) + '</option>'; }).join('');
   sel.value = payload.scenarioId || '';
 
-  Promise.all([apicall('/api/agent-groups'), apicall('/api/agents')]).then(function(res) {
+  Promise.all([apicall('/api/agent-groups'), apicall('/api/agents'), apicall('/api/initiatives?state=active')]).then(function(res) {
     SCHED.groupsAccessDenied = !!(res[0] && res[0].error);
     SCHED.groups = Array.isArray(res[0]) ? res[0] : [];
     SCHED.groupsById = schedFlattenGroupNames(SCHED.groups, {});
     SCHED.agentsAll = Array.isArray(res[1]) ? res[1] : [];
+    SCHED.initiativesActive = (res[2] && res[2].initiatives) || [];
     renderSchedGroupTree();
     renderSchedAgentList();
+    renderSchedInitiativeSelect();
   }).catch(function(e) { showToast(e.message, 'err'); });
   document.getElementById('sched-overlay').classList.add('open');
   schedWizardSet(1);
@@ -21537,6 +21567,19 @@ function schedAgentCompatible(agent, supportedOS) {
   return supportedOS.some(function(o) { return o.toLowerCase() === agentOS; });
 }
 
+// vexFilterWindowsAgents drops non-Windows agents from a resolved
+// group/all-agent target list -- every variant Template is Windows-only
+// PowerShell (internal/variant/generator.go), so this is a flat filter, not
+// a per-scenario compatibility check like schedAgentCompatible. An agent
+// whose OS string doesn't classify to anything recognized stays included
+// (same "unrestricted when unclassified" convention used throughout).
+function vexFilterWindowsAgents(list) {
+  return (list || []).filter(function(a) {
+    var os = schedClassifyOS(a.osVersion);
+    return os !== 'linux' && os !== 'darwin';
+  });
+}
+
 function schedSelectedScenarioSupportedOS() {
   var sc = scenarios.find(function(s) { return s.id === document.getElementById('sched-scenario').value; });
   return (sc && sc.supportedOs) || [];
@@ -21560,6 +21603,23 @@ function renderSchedAgentList() {
       '<code style="font-size:0.72rem">' + x(a.agentId) + '</code><span class="tiny muted">' + x(a.hostname) + ' — ' + x(a.osVersion || 'Unknown OS') + '</span>' + warn + '</label>';
   }).join('');
   document.getElementById('sched-agent-cnt').textContent = '(' + Object.keys(SCHED.selAgents).length + ' selected)';
+}
+
+// renderSchedInitiativeSelect populates #sched-initiative from
+// SCHED.initiativesActive, applying SCHED.editPrefillInitiativeId the same
+// way renderSchedModeRecurrencePane applies editPrefillMode -- the fetch
+// that fills initiativesActive resolves after schedWizardSet(1) has already
+// run, so an earlier direct .value= assignment would be a no-op. If the
+// schedule's current initiative isn't in the active list (closed/archived
+// since scheduling, or simply not yet loaded), the assignment silently
+// fails and the select falls back to "None" -- same fallback behavior
+// #sched-mode already has for a no-longer-valid previous selection.
+function renderSchedInitiativeSelect() {
+  var sel = document.getElementById('sched-initiative');
+  if (!sel) return;
+  sel.innerHTML = '<option value="">— None —</option>' +
+    SCHED.initiativesActive.map(function(it) { return '<option value="' + x(it.ID) + '">' + x(it.Name) + '</option>'; }).join('');
+  sel.value = SCHED.editPrefillInitiativeId || '';
 }
 
 function renderSchedModeRecurrencePane() {
@@ -21636,6 +21696,8 @@ function schedBuildPayload() {
   if (endDate) body.endDate = new Date(endDate).toISOString();
   var conc = document.getElementById('sched-concurrency').value;
   if (conc) body.concurrencyLimit = Number(conc);
+  var initiativeId = document.getElementById('sched-initiative').value;
+  if (initiativeId) body.initiativeId = initiativeId;
   return body;
 }
 
@@ -21650,6 +21712,7 @@ function renderSchedReview() {
     : payload.recurrenceType === 'daily' ? 'Daily · ' + payload.timeOfDay
     : payload.recurrenceType === 'monthly' ? 'Monthly · Day ' + payload.dayOfMonth + ' · ' + payload.timeOfDay
     : 'Weekly · ' + SCHED_DOW[payload.dayOfWeek] + ' · ' + payload.timeOfDay;
+  var initiative = SCHED.initiativesActive.find(function(it) { return it.ID === payload.initiativeId; });
 
   var html = '<div style="font-size:0.82rem;line-height:1.9">' +
     '<div><strong>Scenario:</strong> ' + x(sc ? sc.name : payload.scenarioId) + '</div>' +
@@ -21658,6 +21721,7 @@ function renderSchedReview() {
     '<div><strong>Recurrence:</strong> ' + x(recurrenceLine) + ' · ' + x(payload.timezone) + '</div>' +
     '<div><strong>Concurrency:</strong> ' + x(payload.concurrencyLimit || 'Unlimited') + '</div>' +
     '<div><strong>End date:</strong> ' + x(payload.endDate ? new Date(payload.endDate).toLocaleDateString() : 'None') + '</div>' +
+    '<div><strong>Initiative:</strong> ' + x(initiative ? initiative.Name : 'None') + '</div>' +
     '</div>';
 
   var authWrap = '';
