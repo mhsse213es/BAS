@@ -14,8 +14,12 @@ import (
 // techniqueIndex/totalTechniques (0-based index, full sweep length) let the
 // implementation label the dispatched run for the agent's local console and
 // flag the sweep's last technique so the agent also shows a rolled-up
-// sweep-wide result. Mirrors internal/emsweep.DispatchFn.
-type DispatchFn func(ctx context.Context, sweepID, agentID, techniqueID, baseType, mode string, includeAdvanced bool, techniqueIndex, totalTechniques int) (scenarioRunID, variantRunID string, totalVariants int, err error)
+// sweep-wide result. baseID selects which specific atomic test / ability to
+// resolve techniqueID against ("" = the first match, same convention as
+// resolveBaseCommand); a technique with multiple atomic tests gets one
+// dispatch call per test, each with its own baseID. Mirrors
+// internal/emsweep.DispatchFn.
+type DispatchFn func(ctx context.Context, sweepID, agentID, techniqueID, baseType, baseID, mode string, includeAdvanced bool, techniqueIndex, totalTechniques int) (scenarioRunID, variantRunID string, totalVariants int, err error)
 
 // VariantRunStatusFn reports a variant run's current status
 // ("running"/"completed"/"failed"/"partial"), read directly from
@@ -159,7 +163,11 @@ func (d *Dispatcher) resume(ctx context.Context, sw Sweep) {
 	if sw.CurrentIndex < len(sw.BaseTypes) && sw.BaseTypes[sw.CurrentIndex] != "" {
 		baseType = sw.BaseTypes[sw.CurrentIndex]
 	}
-	scenarioRunID, variantRunID, _, err := d.dispatch(ctx, sw.ID, sw.AgentID, sw.Techniques[sw.CurrentIndex], baseType, sw.Mode, sw.IncludeAdvanced, sw.CurrentIndex, len(sw.Techniques))
+	baseID := ""
+	if sw.CurrentIndex < len(sw.BaseIDs) {
+		baseID = sw.BaseIDs[sw.CurrentIndex]
+	}
+	scenarioRunID, variantRunID, _, err := d.dispatch(ctx, sw.ID, sw.AgentID, sw.Techniques[sw.CurrentIndex], baseType, baseID, sw.Mode, sw.IncludeAdvanced, sw.CurrentIndex, len(sw.Techniques))
 	if err != nil {
 		if errors.Is(err, ErrAgentOffline) {
 			if merr := d.store.MarkDisconnected(ctx, sw.ID, sw.CurrentIndex); merr != nil {
@@ -230,7 +238,11 @@ func (d *Dispatcher) dispatchNext(ctx context.Context, sw Sweep, justFinishedCou
 	if nextIdx < len(sw.BaseTypes) && sw.BaseTypes[nextIdx] != "" {
 		baseType = sw.BaseTypes[nextIdx]
 	}
-	scenarioRunID, variantRunID, _, err := d.dispatch(ctx, sw.ID, sw.AgentID, sw.Techniques[nextIdx], baseType, sw.Mode, sw.IncludeAdvanced, nextIdx, len(sw.Techniques))
+	baseID := ""
+	if nextIdx < len(sw.BaseIDs) {
+		baseID = sw.BaseIDs[nextIdx]
+	}
+	scenarioRunID, variantRunID, _, err := d.dispatch(ctx, sw.ID, sw.AgentID, sw.Techniques[nextIdx], baseType, baseID, sw.Mode, sw.IncludeAdvanced, nextIdx, len(sw.Techniques))
 	if err != nil {
 		if errors.Is(err, ErrAgentOffline) {
 			if merr := d.store.MarkDisconnected(ctx, sw.ID, nextIdx); merr != nil {

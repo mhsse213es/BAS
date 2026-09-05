@@ -16,7 +16,15 @@ type Sweep struct {
 	TechniqueVariantCounts []int
 	// BaseTypes is parallel to Techniques -- BaseTypes[i] ("art" or
 	// "caldera") is the source Techniques[i] should be resolved against.
-	BaseTypes            []string
+	BaseTypes []string
+	// BaseIDs is parallel to Techniques -- BaseIDs[i] is the specific atomic
+	// test / ability name (resolveBaseCommand's baseID) Techniques[i] should
+	// resolve against, so a technique with multiple atomic tests gets one
+	// sweep entry per test rather than always resolving to the first. "" at
+	// a slot means "resolve to the first match" -- both the pre-fan-out
+	// default and every existing sweep's persisted state (see store.go's
+	// backward-compat fill, matching BaseTypes' own precedent).
+	BaseIDs              []string
 	CurrentIndex         int
 	CurrentVariantRunID  string
 	CurrentScenarioRunID string

@@ -666,6 +666,7 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 			techniques               text[]      NOT NULL,
 			technique_variant_counts int[]       NOT NULL,
 			base_types               text[]      NOT NULL DEFAULT '{}',
+			base_ids                 text[]      NOT NULL DEFAULT '{}',
 			current_index            int         NOT NULL DEFAULT 0,
 			current_variant_run_id   text        NOT NULL DEFAULT '',
 			current_scenario_run_id  text        NOT NULL DEFAULT '',
@@ -1562,6 +1563,18 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		// ART-only.
 		`ALTER TABLE vex_sweeps ADD COLUMN IF NOT EXISTS base_types text[] NOT NULL DEFAULT '{}'`,
 		`UPDATE vex_sweeps SET base_types = (SELECT array_agg('art'::text) FROM unnest(techniques)) WHERE base_types = '{}' AND array_length(techniques,1) > 0`,
+
+		// base_ids is parallel to techniques -- base_ids[i] is the specific
+		// atomic test / ability name techniques[i] resolves against, added so
+		// a technique with multiple atomic tests gets one sweep entry per
+		// test instead of always resolving to the first (see
+		// vexsweep.Sweep.BaseIDs). Existing rows default to '{}' and are
+		// backfilled to an array of '' per technique -- '' is
+		// resolveBaseCommand's existing "resolve to the first match"
+		// convention, so every sweep created before this change keeps its
+		// original resolved behavior.
+		`ALTER TABLE vex_sweeps ADD COLUMN IF NOT EXISTS base_ids text[] NOT NULL DEFAULT '{}'`,
+		`UPDATE vex_sweeps SET base_ids = (SELECT array_agg(''::text) FROM unnest(techniques)) WHERE base_ids = '{}' AND array_length(techniques,1) > 0`,
 
 		// Sweep agent-disconnect resilience: a sweep whose agent drops mid-run
 		// transitions to 'agent_disconnected' (a new status value -- no CHECK

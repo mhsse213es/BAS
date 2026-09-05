@@ -28,7 +28,7 @@ func TestDispatcher_Tick_DispatchesFirstTechniqueForNewSweep(t *testing.T) {
 		d := NewDispatcher(store, func(ctx context.Context, variantRunID string) (string, error) {
 			return "running", nil // nothing has "completed" yet in this test
 		})
-		d.SetDispatch(func(ctx context.Context, sweepID, agentID, techniqueID, baseType, mode string, includeAdvanced bool, techniqueIndex, totalTechniques int) (string, string, int, error) {
+		d.SetDispatch(func(ctx context.Context, sweepID, agentID, techniqueID, baseType, baseID, mode string, includeAdvanced bool, techniqueIndex, totalTechniques int) (string, string, int, error) {
 			dispatchedTechniques = append(dispatchedTechniques, techniqueID)
 			return "sr-1", "vr-1", 33, nil
 		})
@@ -42,6 +42,49 @@ func TestDispatcher_Tick_DispatchesFirstTechniqueForNewSweep(t *testing.T) {
 		got, _ := store.Get(ctx, sw.ID)
 		if got.CurrentVariantRunID != "vr-1" || got.CurrentScenarioRunID != "sr-1" {
 			t.Fatalf("after first tick: %+v, want CurrentVariantRunID=vr-1 CurrentScenarioRunID=sr-1", got)
+		}
+	})
+}
+
+func TestDispatcher_Tick_PassesBaseIDForMultiAtomicTechnique(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		store := NewStore(pool)
+		// Two sweep entries for the SAME technique -- one per atomic test --
+		// distinguished only by BaseIDs, mirroring what CreateVexSweep now
+		// builds for a technique with multiple ART atomic tests.
+		sw, err := store.Create(ctx, Sweep{
+			AgentID: "agent-tick-baseid", Mode: "sequential",
+			Techniques: []string{"T1059.001", "T1059.001"}, TechniqueVariantCounts: []int{56, 56},
+			BaseTypes: []string{"art", "art"}, BaseIDs: []string{"Test 1: Local Script", "Test 2: Remote Script"},
+			TotalVariants: 112,
+		})
+		if err != nil {
+			t.Fatalf("Create: %v", err)
+		}
+		// Seed: technique index 0 already dispatched as vr-1, same setup
+		// TestDispatcher_Tick_AdvancesWhenCurrentTechniqueFinishes uses.
+		if err := store.AdvanceToNext(ctx, sw.ID, 0, 0, "vr-1", "sr-1"); err != nil {
+			t.Fatalf("seed AdvanceToNext: %v", err)
+		}
+
+		var dispatchedBaseIDs []string
+		d := NewDispatcher(store, func(ctx context.Context, variantRunID string) (string, error) {
+			return "completed", nil // vr-1 (index 0) finishes -- advances to index 1
+		})
+		d.SetDispatch(func(ctx context.Context, sweepID, agentID, techniqueID, baseType, baseID, mode string, includeAdvanced bool, techniqueIndex, totalTechniques int) (string, string, int, error) {
+			dispatchedBaseIDs = append(dispatchedBaseIDs, baseID)
+			return "sr-2", "vr-2", 56, nil
+		})
+
+		if err := d.Tick(ctx); err != nil {
+			t.Fatalf("Tick: %v", err)
+		}
+		if len(dispatchedBaseIDs) != 1 || dispatchedBaseIDs[0] != "Test 2: Remote Script" {
+			t.Fatalf("dispatchedBaseIDs = %v, want [Test 2: Remote Script]", dispatchedBaseIDs)
 		}
 	})
 }
@@ -74,7 +117,7 @@ func TestDispatcher_Tick_AdvancesWhenCurrentTechniqueFinishes(t *testing.T) {
 			}
 			return "running", nil
 		})
-		d.SetDispatch(func(ctx context.Context, sweepID, agentID, techniqueID, baseType, mode string, includeAdvanced bool, techniqueIndex, totalTechniques int) (string, string, int, error) {
+		d.SetDispatch(func(ctx context.Context, sweepID, agentID, techniqueID, baseType, baseID, mode string, includeAdvanced bool, techniqueIndex, totalTechniques int) (string, string, int, error) {
 			dispatchedTechniques = append(dispatchedTechniques, techniqueID)
 			return "sr-2", "vr-2", 12, nil
 		})
@@ -113,7 +156,7 @@ func TestDispatcher_Tick_CompletesSweepAfterLastTechnique(t *testing.T) {
 		d := NewDispatcher(store, func(ctx context.Context, variantRunID string) (string, error) {
 			return "completed", nil
 		})
-		d.SetDispatch(func(ctx context.Context, sweepID, agentID, techniqueID, baseType, mode string, includeAdvanced bool, techniqueIndex, totalTechniques int) (string, string, int, error) {
+		d.SetDispatch(func(ctx context.Context, sweepID, agentID, techniqueID, baseType, baseID, mode string, includeAdvanced bool, techniqueIndex, totalTechniques int) (string, string, int, error) {
 			t.Fatal("dispatch should not be called -- no techniques remain after the last one")
 			return "", "", 0, nil
 		})
@@ -146,7 +189,7 @@ func TestDispatcher_Tick_MarksFailedOnDispatchError(t *testing.T) {
 		d := NewDispatcher(store, func(ctx context.Context, variantRunID string) (string, error) {
 			return "running", nil
 		})
-		d.SetDispatch(func(ctx context.Context, sweepID, agentID, techniqueID, baseType, mode string, includeAdvanced bool, techniqueIndex, totalTechniques int) (string, string, int, error) {
+		d.SetDispatch(func(ctx context.Context, sweepID, agentID, techniqueID, baseType, baseID, mode string, includeAdvanced bool, techniqueIndex, totalTechniques int) (string, string, int, error) {
 			return "", "", 0, errors.New("agent not connected")
 		})
 
@@ -190,7 +233,7 @@ func TestDispatcher_Tick_ForceCancelsStuckTechniqueAfterThreshold(t *testing.T) 
 		d := NewDispatcher(store, func(ctx context.Context, variantRunID string) (string, error) {
 			return "running", nil // never finishes -- simulates a truly hung technique
 		})
-		d.SetDispatch(func(ctx context.Context, sweepID, agentID, techniqueID, baseType, mode string, includeAdvanced bool, techniqueIndex, totalTechniques int) (string, string, int, error) {
+		d.SetDispatch(func(ctx context.Context, sweepID, agentID, techniqueID, baseType, baseID, mode string, includeAdvanced bool, techniqueIndex, totalTechniques int) (string, string, int, error) {
 			t.Fatal("dispatch should not be called -- the current technique never leaves running in this test")
 			return "", "", 0, nil
 		})
@@ -233,7 +276,7 @@ func TestDispatcher_Tick_DoesNotForceCancelBeforeThreshold(t *testing.T) {
 		d := NewDispatcher(store, func(ctx context.Context, variantRunID string) (string, error) {
 			return "running", nil
 		})
-		d.SetDispatch(func(ctx context.Context, sweepID, agentID, techniqueID, baseType, mode string, includeAdvanced bool, techniqueIndex, totalTechniques int) (string, string, int, error) {
+		d.SetDispatch(func(ctx context.Context, sweepID, agentID, techniqueID, baseType, baseID, mode string, includeAdvanced bool, techniqueIndex, totalTechniques int) (string, string, int, error) {
 			t.Fatal("dispatch should not be called")
 			return "", "", 0, nil
 		})
@@ -278,7 +321,7 @@ func TestDispatcher_Tick_DoesNotReTriggerCancelOnSubsequentTicks(t *testing.T) {
 		d := NewDispatcher(store, func(ctx context.Context, variantRunID string) (string, error) {
 			return "running", nil // still stuck across every tick in this test
 		})
-		d.SetDispatch(func(ctx context.Context, sweepID, agentID, techniqueID, baseType, mode string, includeAdvanced bool, techniqueIndex, totalTechniques int) (string, string, int, error) {
+		d.SetDispatch(func(ctx context.Context, sweepID, agentID, techniqueID, baseType, baseID, mode string, includeAdvanced bool, techniqueIndex, totalTechniques int) (string, string, int, error) {
 			t.Fatal("dispatch should not be called")
 			return "", "", 0, nil
 		})
@@ -331,7 +374,7 @@ func TestDispatcher_Tick_RetriesStuckCancelAfterFailedAttempt(t *testing.T) {
 		d := NewDispatcher(store, func(ctx context.Context, variantRunID string) (string, error) {
 			return "running", nil // still stuck across every tick in this test
 		})
-		d.SetDispatch(func(ctx context.Context, sweepID, agentID, techniqueID, baseType, mode string, includeAdvanced bool, techniqueIndex, totalTechniques int) (string, string, int, error) {
+		d.SetDispatch(func(ctx context.Context, sweepID, agentID, techniqueID, baseType, baseID, mode string, includeAdvanced bool, techniqueIndex, totalTechniques int) (string, string, int, error) {
 			t.Fatal("dispatch should not be called")
 			return "", "", 0, nil
 		})
@@ -386,7 +429,7 @@ func TestDispatcher_Tick_ForceCancelsStuckTechniqueEvenIfStatusCheckErrors(t *te
 		d := NewDispatcher(store, func(ctx context.Context, variantRunID string) (string, error) {
 			return "", errors.New("simulated persistent status-check failure")
 		})
-		d.SetDispatch(func(ctx context.Context, sweepID, agentID, techniqueID, baseType, mode string, includeAdvanced bool, techniqueIndex, totalTechniques int) (string, string, int, error) {
+		d.SetDispatch(func(ctx context.Context, sweepID, agentID, techniqueID, baseType, baseID, mode string, includeAdvanced bool, techniqueIndex, totalTechniques int) (string, string, int, error) {
 			t.Fatal("dispatch should not be called")
 			return "", "", 0, nil
 		})
@@ -429,7 +472,7 @@ func TestDispatcher_Tick_IgnoresStoppedAndFailedSweeps(t *testing.T) {
 			t.Fatal("status check should not be called for a stopped sweep")
 			return "", nil
 		})
-		d.SetDispatch(func(ctx context.Context, sweepID, agentID, techniqueID, baseType, mode string, includeAdvanced bool, techniqueIndex, totalTechniques int) (string, string, int, error) {
+		d.SetDispatch(func(ctx context.Context, sweepID, agentID, techniqueID, baseType, baseID, mode string, includeAdvanced bool, techniqueIndex, totalTechniques int) (string, string, int, error) {
 			t.Fatal("dispatch should not be called for a stopped sweep")
 			return "", "", 0, nil
 		})
@@ -465,7 +508,7 @@ func TestDispatcher_Tick_PausesOnDisconnectAndCancelsInFlightRun(t *testing.T) {
 		d := NewDispatcher(store, func(ctx context.Context, variantRunID string) (string, error) {
 			return "running", nil
 		})
-		d.SetDispatch(func(ctx context.Context, sweepID, agentID, techniqueID, baseType, mode string, includeAdvanced bool, techniqueIndex, totalTechniques int) (string, string, int, error) {
+		d.SetDispatch(func(ctx context.Context, sweepID, agentID, techniqueID, baseType, baseID, mode string, includeAdvanced bool, techniqueIndex, totalTechniques int) (string, string, int, error) {
 			t.Fatal("dispatch should not be called -- the sweep must pause, not advance")
 			return "", "", 0, nil
 		})
@@ -512,7 +555,7 @@ func TestDispatcher_Tick_WaitsIndefinitelyWhileDisconnected(t *testing.T) {
 			t.Fatal("status should not be checked -- no run is in flight while disconnected")
 			return "", nil
 		})
-		d.SetDispatch(func(ctx context.Context, sweepID, agentID, techniqueID, baseType, mode string, includeAdvanced bool, techniqueIndex, totalTechniques int) (string, string, int, error) {
+		d.SetDispatch(func(ctx context.Context, sweepID, agentID, techniqueID, baseType, baseID, mode string, includeAdvanced bool, techniqueIndex, totalTechniques int) (string, string, int, error) {
 			t.Fatal("dispatch should not be called -- agent is still offline")
 			return "", "", 0, nil
 		})
@@ -560,7 +603,7 @@ func TestDispatcher_Tick_ResumesInterruptedTechniqueOnReconnect(t *testing.T) {
 			t.Fatal("status should not be checked this tick")
 			return "", nil
 		})
-		d.SetDispatch(func(ctx context.Context, sweepID, agentID, techniqueID, baseType, mode string, includeAdvanced bool, techniqueIndex, totalTechniques int) (string, string, int, error) {
+		d.SetDispatch(func(ctx context.Context, sweepID, agentID, techniqueID, baseType, baseID, mode string, includeAdvanced bool, techniqueIndex, totalTechniques int) (string, string, int, error) {
 			dispatchedTechniques = append(dispatchedTechniques, techniqueID)
 			if techniqueIndex != 1 {
 				t.Fatalf("techniqueIndex = %d, want 1", techniqueIndex)
@@ -602,7 +645,7 @@ func TestDispatcher_Tick_ExistingBehaviorUnaffectedWhenConnectedFnNotSet(t *test
 		d := NewDispatcher(store, func(ctx context.Context, variantRunID string) (string, error) {
 			return "running", nil
 		})
-		d.SetDispatch(func(ctx context.Context, sweepID, agentID, techniqueID, baseType, mode string, includeAdvanced bool, techniqueIndex, totalTechniques int) (string, string, int, error) {
+		d.SetDispatch(func(ctx context.Context, sweepID, agentID, techniqueID, baseType, baseID, mode string, includeAdvanced bool, techniqueIndex, totalTechniques int) (string, string, int, error) {
 			dispatched = append(dispatched, techniqueID)
 			return "sr-1", "vr-1", 5, nil
 		})
@@ -633,7 +676,7 @@ func TestDispatcher_Tick_PausesInsteadOfFailingOnOfflineRaceDuringDispatch(t *te
 		d := NewDispatcher(store, func(ctx context.Context, variantRunID string) (string, error) {
 			return "running", nil
 		})
-		d.SetDispatch(func(ctx context.Context, sweepID, agentID, techniqueID, baseType, mode string, includeAdvanced bool, techniqueIndex, totalTechniques int) (string, string, int, error) {
+		d.SetDispatch(func(ctx context.Context, sweepID, agentID, techniqueID, baseType, baseID, mode string, includeAdvanced bool, techniqueIndex, totalTechniques int) (string, string, int, error) {
 			return "", "", 0, ErrAgentOffline
 		})
 		d.SetConnected(func(agentID string) bool { return true })

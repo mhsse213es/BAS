@@ -629,6 +629,39 @@ func (h *Handler) resolveBaseCommand(techniqueID, baseType, baseID, cmdOverride,
 	return step.Command, step.Executor, step.Name, nil
 }
 
+// sweepEntriesForTechnique resolves one Full Sweep entry per atomic
+// test/ability in steps, instead of the single entry resolveBaseCommand's
+// steps[0] fallback would otherwise collapse a whole technique to. Guarded
+// against custom payload families: resolveTemplates' family branch
+// (loadPayloadFamilies) ignores baseID entirely and always returns the same
+// family-combined template set no matter which atomic test/ability is
+// passed, so fanning out per step for a technique that has families defined
+// would dispatch identical duplicates -- that case collapses to the single
+// pre-fan-out entry instead, exactly like the family branch already behaves
+// for RunVariants/dispatchVariantForSweep.
+func (h *Handler) sweepEntriesForTechnique(ctx context.Context, techID, baseType string, steps []scenario.ScenarioStep, includeAdvanced bool) (techIDs []string, counts []int, baseTypes, baseIDs []string, total int) {
+	families, _ := h.loadPayloadFamilies(ctx, techID)
+	if len(families) > 0 {
+		templates, _, err := h.resolveTemplates(ctx, techID, baseType, "", "", "", includeAdvanced)
+		if err != nil || len(templates) == 0 {
+			return nil, nil, nil, nil, 0
+		}
+		return []string{techID}, []int{len(templates)}, []string{baseType}, []string{""}, len(templates)
+	}
+	for _, step := range steps {
+		templates, resolvedBaseID, err := h.resolveTemplates(ctx, techID, baseType, step.Name, "", "", includeAdvanced)
+		if err != nil || len(templates) == 0 {
+			continue
+		}
+		techIDs = append(techIDs, techID)
+		counts = append(counts, len(templates))
+		baseTypes = append(baseTypes, baseType)
+		baseIDs = append(baseIDs, resolvedBaseID)
+		total += len(templates)
+	}
+	return
+}
+
 // dispatchVariantRun creates DB records and dispatches via the WebSocket
 // pipeline. sweepName/sweepLabel/sweepFinal are forwarded onto the outgoing
 // ScenarioCommand -- empty/false for the ad-hoc (non-sweep) caller.
@@ -738,8 +771,8 @@ func (h *Handler) dispatchVariantRun(
 // techniqueIndex/totalTechniques label the dispatched run for the agent's
 // local console and flag the sweep's last technique -- see
 // scenario.ScenarioCommand's SweepName/SweepLabel/SweepFinal doc comment.
-func (h *Handler) dispatchVariantForSweep(ctx context.Context, sweepID, agentID, techniqueID, baseType, mode string, includeAdvanced bool, techniqueIndex, totalTechniques int) (scenarioRunID, variantRunID string, totalVariants int, err error) {
-	templates, baseID, err := h.resolveTemplates(ctx, techniqueID, baseType, "", "", "", includeAdvanced)
+func (h *Handler) dispatchVariantForSweep(ctx context.Context, sweepID, agentID, techniqueID, baseType, requestedBaseID, mode string, includeAdvanced bool, techniqueIndex, totalTechniques int) (scenarioRunID, variantRunID string, totalVariants int, err error) {
+	templates, baseID, err := h.resolveTemplates(ctx, techniqueID, baseType, requestedBaseID, "", "", includeAdvanced)
 	if err != nil {
 		return "", "", 0, err
 	}

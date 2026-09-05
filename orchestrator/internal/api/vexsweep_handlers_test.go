@@ -196,6 +196,133 @@ func TestCreateVexSweep_CombinesARTAndCalderaTechniques(t *testing.T) {
 	})
 }
 
+func TestCreateVexSweep_MultiAtomicTestTechnique_OneEntryPerTest(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		if _, err := pool.Exec(ctx,
+			`INSERT INTO techniques (technique_id, name, tactic) VALUES ('T1059.001','PowerShell','execution')
+			 ON CONFLICT (technique_id) DO NOTHING`); err != nil {
+			t.Fatalf("seed technique: %v", err)
+		}
+		// Three distinct ART atomic tests for the SAME technique -- before
+		// the fan-out fix, CreateVexSweep would only ever resolve the first
+		// (test_index 0) and produce a single sweep entry for T1059.001.
+		for i, name := range []string{"multi-test-a", "multi-test-b", "multi-test-c"} {
+			if _, err := pool.Exec(ctx,
+				`INSERT INTO art_atomic_tests (technique_id, test_index, name, executor, command)
+				 VALUES ('T1059.001', $1, $2, 'powershell', 'Get-Process')`, i, name); err != nil {
+				t.Fatalf("seed art_atomic_tests %s: %v", name, err)
+			}
+		}
+		artStore, err := scenario.NewARTStoreFromDB(ctx, pool, nil)
+		if err != nil {
+			t.Fatalf("NewARTStoreFromDB: %v", err)
+		}
+
+		store := vexsweep.NewStore(pool)
+		h := New(pool, ws.NewHub(), nil, testJWTSecret).
+			WithVexSweep(store, testVexSweepDispatcher(store)).
+			WithART(artStore)
+		userID := seedUser(t, pool, "sweep-multiatomic-user", "password123", "admin", true)
+		body, _ := json.Marshal(map[string]string{"agentId": "agent-multiatomic", "mode": "sequential"})
+		req := authedRequest(t, http.MethodPost, "/api/vex/sweeps", bytes.NewReader(body), auth.RoleAdmin, userID)
+		rec := callAuthed(h.CreateVexSweep, req)
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("status = %d, want 201, body: %s", rec.Code, rec.Body.String())
+		}
+		var got struct {
+			Techniques []string `json:"techniques"`
+			BaseIDs    []string `json:"baseIds"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+			t.Fatalf("unmarshal response: %v", err)
+		}
+		if len(got.Techniques) != len(got.BaseIDs) {
+			t.Fatalf("techniques/baseIds length mismatch: %d vs %d", len(got.Techniques), len(got.BaseIDs))
+		}
+		seenBaseIDs := map[string]bool{}
+		for i, tech := range got.Techniques {
+			if tech == "T1059.001" {
+				seenBaseIDs[got.BaseIDs[i]] = true
+			}
+		}
+		want := []string{"multi-test-a", "multi-test-b", "multi-test-c"}
+		for _, w := range want {
+			if !seenBaseIDs[w] {
+				t.Errorf("missing sweep entry for T1059.001/%s -- got techniques=%v baseIds=%v", w, got.Techniques, got.BaseIDs)
+			}
+		}
+		if len(seenBaseIDs) != 3 {
+			t.Errorf("expected exactly 3 distinct sweep entries for T1059.001 (one per atomic test), got %d: %v", len(seenBaseIDs), seenBaseIDs)
+		}
+	})
+}
+
+func TestCreateVexSweep_TechniqueWithPayloadFamilies_NotDuplicatedPerAtomicTest(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		if _, err := pool.Exec(ctx,
+			`INSERT INTO techniques (technique_id, name, tactic) VALUES ('T1059.001','PowerShell','execution')
+			 ON CONFLICT (technique_id) DO NOTHING`); err != nil {
+			t.Fatalf("seed technique: %v", err)
+		}
+		// Two ART atomic tests for this technique...
+		for i, name := range []string{"family-test-a", "family-test-b"} {
+			if _, err := pool.Exec(ctx,
+				`INSERT INTO art_atomic_tests (technique_id, test_index, name, executor, command)
+				 VALUES ('T1059.001', $1, $2, 'powershell', 'Get-Process')`, i, name); err != nil {
+				t.Fatalf("seed art_atomic_tests %s: %v", name, err)
+			}
+		}
+		// ...AND a custom payload family. resolveTemplates' family branch
+		// (loadPayloadFamilies) ignores baseID entirely, so without the
+		// sweepEntriesForTechnique guard this would incorrectly produce one
+		// duplicate sweep entry per atomic test above (2), instead of the
+		// single family-combined entry.
+		if _, err := pool.Exec(ctx,
+			`INSERT INTO payload_families (technique_id, name, payload) VALUES ('T1059.001', 'custom-family', 'Write-Host hi')`); err != nil {
+			t.Fatalf("seed payload_families: %v", err)
+		}
+		artStore, err := scenario.NewARTStoreFromDB(ctx, pool, nil)
+		if err != nil {
+			t.Fatalf("NewARTStoreFromDB: %v", err)
+		}
+
+		store := vexsweep.NewStore(pool)
+		h := New(pool, ws.NewHub(), nil, testJWTSecret).
+			WithVexSweep(store, testVexSweepDispatcher(store)).
+			WithART(artStore)
+		userID := seedUser(t, pool, "sweep-family-user", "password123", "admin", true)
+		body, _ := json.Marshal(map[string]string{"agentId": "agent-family", "mode": "sequential"})
+		req := authedRequest(t, http.MethodPost, "/api/vex/sweeps", bytes.NewReader(body), auth.RoleAdmin, userID)
+		rec := callAuthed(h.CreateVexSweep, req)
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("status = %d, want 201, body: %s", rec.Code, rec.Body.String())
+		}
+		var got struct {
+			Techniques []string `json:"techniques"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+			t.Fatalf("unmarshal response: %v", err)
+		}
+		count := 0
+		for _, tech := range got.Techniques {
+			if tech == "T1059.001" {
+				count++
+			}
+		}
+		if count != 1 {
+			t.Errorf("T1059.001 appears %d times, want exactly 1 (payload-families branch must collapse to a single entry, not fan out per atomic test): %v", count, got.Techniques)
+		}
+	})
+}
+
 func TestGetActiveVexSweep_404WhenNoneRunning(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping container-backed test in -short mode")

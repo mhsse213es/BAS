@@ -20,7 +20,7 @@ func NewStore(pool *pgxpool.Pool) *Store {
 	return &Store{pool: pool}
 }
 
-const sweepCols = `id, agent_id, mode, include_advanced, techniques, technique_variant_counts, base_types,
+const sweepCols = `id, agent_id, mode, include_advanced, techniques, technique_variant_counts, base_types, base_ids,
 	current_index, current_variant_run_id, current_scenario_run_id, current_technique_started_at,
 	completed_variants, total_variants, status, error, created_by, started_at, completed_at, disconnected_at`
 
@@ -28,7 +28,7 @@ func scanSweep(row interface {
 	Scan(dest ...any) error
 }) (Sweep, error) {
 	var sw Sweep
-	err := row.Scan(&sw.ID, &sw.AgentID, &sw.Mode, &sw.IncludeAdvanced, &sw.Techniques, &sw.TechniqueVariantCounts, &sw.BaseTypes,
+	err := row.Scan(&sw.ID, &sw.AgentID, &sw.Mode, &sw.IncludeAdvanced, &sw.Techniques, &sw.TechniqueVariantCounts, &sw.BaseTypes, &sw.BaseIDs,
 		&sw.CurrentIndex, &sw.CurrentVariantRunID, &sw.CurrentScenarioRunID, &sw.CurrentTechniqueStartedAt,
 		&sw.CompletedVariants, &sw.TotalVariants, &sw.Status, &sw.Error, &sw.CreatedBy, &sw.StartedAt, &sw.CompletedAt, &sw.DisconnectedAt)
 	return sw, err
@@ -45,11 +45,18 @@ func (s *Store) Create(ctx context.Context, sw Sweep) (Sweep, error) {
 			sw.BaseTypes[i] = "art"
 		}
 	}
+	// Same backward-compat convention as BaseTypes above -- callers that
+	// haven't been updated to pass BaseIDs (existing tests, any future
+	// single-atomic-per-technique caller) default every slot to "", which
+	// resolveBaseCommand already treats as "resolve to the first match".
+	if len(sw.BaseIDs) == 0 && len(sw.Techniques) > 0 {
+		sw.BaseIDs = make([]string, len(sw.Techniques))
+	}
 	row := s.pool.QueryRow(ctx,
-		`INSERT INTO vex_sweeps (agent_id, mode, include_advanced, techniques, technique_variant_counts, base_types, total_variants, created_by)
-		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+		`INSERT INTO vex_sweeps (agent_id, mode, include_advanced, techniques, technique_variant_counts, base_types, base_ids, total_variants, created_by)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
 		 RETURNING `+sweepCols,
-		sw.AgentID, sw.Mode, sw.IncludeAdvanced, sw.Techniques, sw.TechniqueVariantCounts, sw.BaseTypes, sw.TotalVariants, sw.CreatedBy)
+		sw.AgentID, sw.Mode, sw.IncludeAdvanced, sw.Techniques, sw.TechniqueVariantCounts, sw.BaseTypes, sw.BaseIDs, sw.TotalVariants, sw.CreatedBy)
 	created, err := scanSweep(row)
 	if err != nil {
 		if isUniqueViolation(err) {

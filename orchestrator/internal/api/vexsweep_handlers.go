@@ -65,28 +65,27 @@ func (h *Handler) CreateVexSweep(w http.ResponseWriter, r *http.Request) {
 	techniques := make([]string, 0, len(metas))
 	counts := make([]int, 0, len(metas))
 	baseTypes := make([]string, 0, len(metas))
+	baseIDs := make([]string, 0, len(metas))
 	total := 0
+	// One sweep entry per (technique, atomic test/ability) pair, not one per
+	// technique -- see sweepEntriesForTechnique's doc comment.
 	for _, m := range metas {
-		templates, _, err := h.resolveTemplates(ctx, m.ID, "art", "", "", "", req.IncludeAdvanced)
-		if err != nil || len(templates) == 0 {
-			continue // matches vexRunFullSweep's own behavior of skipping techniques with no generated variants
-		}
-		techniques = append(techniques, m.ID)
-		counts = append(counts, len(templates))
-		baseTypes = append(baseTypes, "art")
-		total += len(templates)
+		ids, cnts, bts, bids, t := h.sweepEntriesForTechnique(ctx, m.ID, "art", h.artStore.GetSteps(m.ID), req.IncludeAdvanced)
+		techniques = append(techniques, ids...)
+		counts = append(counts, cnts...)
+		baseTypes = append(baseTypes, bts...)
+		baseIDs = append(baseIDs, bids...)
+		total += t
 	}
 	// Append Caldera abilities after every ART technique -- a combined
 	// sweep runs ART first, then Caldera, per technique-index order.
 	for _, techID := range h.calderaStore.ListTechniqueIDs() {
-		templates, _, err := h.resolveTemplates(ctx, techID, "caldera", "", "", "", req.IncludeAdvanced)
-		if err != nil || len(templates) == 0 {
-			continue
-		}
-		techniques = append(techniques, techID)
-		counts = append(counts, len(templates))
-		baseTypes = append(baseTypes, "caldera")
-		total += len(templates)
+		ids, cnts, bts, bids, t := h.sweepEntriesForTechnique(ctx, techID, "caldera", h.calderaStore.GetAbilities(techID), req.IncludeAdvanced)
+		techniques = append(techniques, ids...)
+		counts = append(counts, cnts...)
+		baseTypes = append(baseTypes, bts...)
+		baseIDs = append(baseIDs, bids...)
+		total += t
 	}
 	if len(techniques) == 0 {
 		jsonError(w, "no techniques with generatable variants found", http.StatusUnprocessableEntity)
@@ -101,7 +100,7 @@ func (h *Handler) CreateVexSweep(w http.ResponseWriter, r *http.Request) {
 
 	sw, err := h.vexSweep.Create(ctx, vexsweep.Sweep{
 		AgentID: req.AgentID, Mode: mode, IncludeAdvanced: req.IncludeAdvanced,
-		Techniques: techniques, TechniqueVariantCounts: counts, BaseTypes: baseTypes, TotalVariants: total, CreatedBy: createdBy,
+		Techniques: techniques, TechniqueVariantCounts: counts, BaseTypes: baseTypes, BaseIDs: baseIDs, TotalVariants: total, CreatedBy: createdBy,
 	})
 	if err != nil {
 		if err == vexsweep.ErrAgentAlreadySweeping {
@@ -313,7 +312,7 @@ func sweepToJSON(db *pgxpool.Pool, sw vexsweep.Sweep) map[string]any {
 	}
 	return map[string]any{
 		"id": sw.ID, "agentId": sw.AgentID, "mode": sw.Mode, "includeAdvanced": sw.IncludeAdvanced,
-		"techniques": sw.Techniques, "baseTypes": sw.BaseTypes, "currentIndex": sw.CurrentIndex,
+		"techniques": sw.Techniques, "baseTypes": sw.BaseTypes, "baseIds": sw.BaseIDs, "currentIndex": sw.CurrentIndex,
 		"currentTechnique": currentTechnique(sw), "currentVariantRunId": sw.CurrentVariantRunID,
 		"currentScenarioRunId": sw.CurrentScenarioRunID, "completedVariants": live,
 		"totalVariants": sw.TotalVariants, "totalTechniques": len(sw.Techniques),
