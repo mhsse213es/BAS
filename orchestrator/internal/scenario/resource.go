@@ -75,8 +75,16 @@ var discoveryTimeout = &TimeoutProfile{ScheduleSec: 30, ExecuteSec: 20, GraceSec
 // raised to comfortably exceed the new ExecuteSec (not just enough to run
 // it) so a queued sibling's own schedule bound doesn't expire first and
 // silently starve behind this step's lock.
+//
+// Follow-up, same day: the first 300s budget ALSO proved insufficient --
+// staging recorded a second real termination at 300,268ms, again
+// silenceMs=0 (still actively writing at the exact ceiling, not wedged).
+// Doubled to 600s on that evidence. If this recurs, that is the signal
+// project memory (project_timeout_scored_as_pass.md) flags for Plan B
+// (liveness-based extension with a hard ceiling) instead of another guess
+// at a fixed number.
 var timeoutOverrides = map[string]*TimeoutProfile{
-	"T1018": {ScheduleSec: 310, ExecuteSec: 300, GraceSec: 10},
+	"T1018": {ScheduleSec: 610, ExecuteSec: 600, GraceSec: 10},
 }
 
 // TimeoutProfileFor returns the curated timeout for a technique, or nil when the
