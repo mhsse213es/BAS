@@ -1637,6 +1637,13 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS initiative_id text NOT NULL DEFAULT ''`,
 		`CREATE INDEX IF NOT EXISTS idx_jobs_initiative_id ON jobs (initiative_id) WHERE initiative_id <> ''`,
 
+		// job_schedules.initiative_id: when set, every Job a schedule spawns
+		// is auto-assigned to this initiative (see Dispatcher.spawnDueSchedules)
+		// instead of requiring a manual per-occurrence attach afterward. Same
+		// unconstrained-text, no-FK convention as jobs.initiative_id above.
+		`ALTER TABLE job_schedules ADD COLUMN IF NOT EXISTS initiative_id text NOT NULL DEFAULT ''`,
+		`CREATE INDEX IF NOT EXISTS idx_job_schedules_initiative_id ON job_schedules (initiative_id) WHERE initiative_id <> ''`,
+
 		// fail_reason: a genuine, human-readable explanation for why a run's
 		// status became 'failed' (dispatch-time only -- e.g. agent offline,
 		// malformed scenario content, every step lab-only in a non-lab mode).

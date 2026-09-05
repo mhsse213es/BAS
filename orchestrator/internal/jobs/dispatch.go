@@ -237,6 +237,15 @@ func (d *Dispatcher) spawnDueSchedules(ctx context.Context) {
 			log.Printf("[jobs] schedule %s: spawn failed: %v -- will retry next tick", sch.ID, err)
 			continue
 		}
+		if sch.InitiativeID != "" {
+			// Best-effort: an initiative attach failing must never undo or
+			// block a real spawn that already happened -- same "observational
+			// write can't fail a real operation" rule as elsewhere in this
+			// codebase (e.g. ExecutionAttempt mirroring).
+			if _, err := d.store.SetJobInitiative(ctx, newJob.ID, sch.InitiativeID); err != nil {
+				log.Printf("[jobs] schedule %s: assign job %s to initiative %s: %v", sch.ID, newJob.ID, sch.InitiativeID, err)
+			}
+		}
 		d.store.MarkScheduleOccurrenceHandled(ctx, sch.ID, occurrence, newJob.ID)
 		log.Printf("[jobs] schedule %s: spawned job %s for occurrence %v", sch.ID, newJob.ID, occurrence)
 	}

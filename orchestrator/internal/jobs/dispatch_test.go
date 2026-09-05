@@ -339,6 +339,54 @@ func TestTick_SpawnsDueSchedule(t *testing.T) {
 	})
 }
 
+func TestTick_SpawnsDueSchedule_AssignsSpawnedJobToInitiative(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		store := NewStore(pool)
+		var initiativeID string
+		if err := pool.QueryRow(ctx,
+			`INSERT INTO initiatives (name, description, state, created_by) VALUES ('Q3 Hardening', '', 'active', 'user-1') RETURNING id`,
+		).Scan(&initiativeID); err != nil {
+			t.Fatalf("seed initiative: %v", err)
+		}
+
+		payload, _ := json.Marshal(map[string]string{"remediationId": "enable_windows_firewall", "reason": "weekly"})
+		sch, err := store.CreateSchedule(ctx, Schedule{
+			Type: "batch_remediation", Payload: payload, AgentIDs: []string{"sched-agent-init-1"},
+			DayOfWeek: int(time.Now().UTC().Weekday()), TimeOfDay: "00:00", Timezone: "UTC", Enabled: true, CreatedBy: "user-1",
+			InitiativeID: initiativeID,
+		})
+		if err != nil {
+			t.Fatalf("CreateSchedule: %v", err)
+		}
+
+		d := NewDispatcher(store)
+		d.SetDispatch(func(ctx context.Context, j Job, target JobTarget) (string, error) { return "ref-" + target.AgentID, nil })
+		d.SetStatus(func(ctx context.Context, jobType, refID string) (string, string, bool) { return TargetStateDispatched, "", false })
+
+		if err := d.Tick(ctx); err != nil {
+			t.Fatalf("Tick: %v", err)
+		}
+		got, err := store.GetSchedule(ctx, sch.ID)
+		if err != nil {
+			t.Fatalf("GetSchedule: %v", err)
+		}
+		if got.LastSpawnedJobID == "" {
+			t.Fatal("schedule was not spawned -- LastSpawnedJobID is empty")
+		}
+		spawned, err := store.Get(ctx, got.LastSpawnedJobID)
+		if err != nil {
+			t.Fatalf("Get(spawned job): %v", err)
+		}
+		if spawned.InitiativeID != initiativeID {
+			t.Errorf("spawned.InitiativeID = %q, want %q -- schedule's InitiativeID should auto-assign the spawned job", spawned.InitiativeID, initiativeID)
+		}
+	})
+}
+
 func TestTick_SkipsScheduleWhenPreviousSpawnStillActive(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping container-backed test in -short mode")

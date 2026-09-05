@@ -52,6 +52,11 @@ type Schedule struct {
 	ApprovedAt      *time.Time
 	ApprovalVersion int
 	Reason          string
+
+	// InitiativeID, when set, is auto-assigned to every Job this schedule
+	// spawns (see Dispatcher.spawnDueSchedules) -- "" means unassigned, same
+	// convention as jobs.Job.InitiativeID.
+	InitiativeID string
 }
 
 var errInvalidTimeOfDay = errors.New("invalid time-of-day, want HH:MM")
@@ -179,7 +184,7 @@ func nextOccurrenceMonthly(sch Schedule, now time.Time, loc *time.Location) (tim
 	return time.Time{}, false
 }
 
-const scheduleColumns = `id, type, payload, agent_ids, day_of_week, time_of_day, timezone, enabled, created_by, created_at, last_occurrence_at, last_spawned_job_id, recurrence_type, run_at, day_of_month, end_date, concurrency_limit, group_ids, mode, approved_by, approved_at, approval_version, reason`
+const scheduleColumns = `id, type, payload, agent_ids, day_of_week, time_of_day, timezone, enabled, created_by, created_at, last_occurrence_at, last_spawned_job_id, recurrence_type, run_at, day_of_month, end_date, concurrency_limit, group_ids, mode, approved_by, approved_at, approval_version, reason, initiative_id`
 
 func scanSchedule(row interface {
 	Scan(dest ...any) error
@@ -189,7 +194,7 @@ func scanSchedule(row interface {
 	err := row.Scan(&sch.ID, &sch.Type, &sch.Payload, &agentIDsRaw, &sch.DayOfWeek, &sch.TimeOfDay,
 		&sch.Timezone, &sch.Enabled, &sch.CreatedBy, &sch.CreatedAt, &sch.LastOccurrenceAt, &sch.LastSpawnedJobID,
 		&sch.RecurrenceType, &sch.RunAt, &sch.DayOfMonth, &sch.EndDate, &sch.ConcurrencyLimit, &groupIDsRaw,
-		&sch.Mode, &sch.ApprovedBy, &sch.ApprovedAt, &sch.ApprovalVersion, &sch.Reason)
+		&sch.Mode, &sch.ApprovedBy, &sch.ApprovedAt, &sch.ApprovalVersion, &sch.Reason, &sch.InitiativeID)
 	if err != nil {
 		return Schedule{}, err
 	}
@@ -214,11 +219,11 @@ func (s *Store) CreateSchedule(ctx context.Context, sch Schedule) (Schedule, err
 	var id string
 	if err := s.pool.QueryRow(ctx,
 		`INSERT INTO job_schedules (type, payload, agent_ids, day_of_week, time_of_day, timezone, enabled, created_by,
-		    recurrence_type, run_at, day_of_month, end_date, concurrency_limit, group_ids, mode, approved_by, approved_at, approval_version, reason)
-		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19) RETURNING id`,
+		    recurrence_type, run_at, day_of_month, end_date, concurrency_limit, group_ids, mode, approved_by, approved_at, approval_version, reason, initiative_id)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20) RETURNING id`,
 		sch.Type, []byte(sch.Payload), agentIDsJSON, sch.DayOfWeek, sch.TimeOfDay, sch.Timezone, sch.Enabled, sch.CreatedBy,
 		sch.RecurrenceType, sch.RunAt, sch.DayOfMonth, sch.EndDate, sch.ConcurrencyLimit, groupIDsJSON,
-		sch.Mode, sch.ApprovedBy, sch.ApprovedAt, sch.ApprovalVersion, sch.Reason,
+		sch.Mode, sch.ApprovedBy, sch.ApprovedAt, sch.ApprovalVersion, sch.Reason, sch.InitiativeID,
 	).Scan(&id); err != nil {
 		return Schedule{}, err
 	}
@@ -243,11 +248,11 @@ func (s *Store) UpdateSchedule(ctx context.Context, id string, sch Schedule) (Sc
 		`UPDATE job_schedules SET
 		    payload=$1, agent_ids=$2, group_ids=$3, day_of_week=$4, time_of_day=$5, timezone=$6, enabled=$7,
 		    recurrence_type=$8, run_at=$9, day_of_month=$10, end_date=$11, concurrency_limit=$12,
-		    mode=$13, approved_by=$14, approved_at=$15, approval_version=$16, reason=$17
-		 WHERE id=$18`,
+		    mode=$13, approved_by=$14, approved_at=$15, approval_version=$16, reason=$17, initiative_id=$18
+		 WHERE id=$19`,
 		[]byte(sch.Payload), agentIDsJSON, groupIDsJSON, sch.DayOfWeek, sch.TimeOfDay, sch.Timezone, sch.Enabled,
 		sch.RecurrenceType, sch.RunAt, sch.DayOfMonth, sch.EndDate, sch.ConcurrencyLimit,
-		sch.Mode, sch.ApprovedBy, sch.ApprovedAt, sch.ApprovalVersion, sch.Reason, id,
+		sch.Mode, sch.ApprovedBy, sch.ApprovedAt, sch.ApprovalVersion, sch.Reason, sch.InitiativeID, id,
 	); err != nil {
 		return Schedule{}, err
 	}

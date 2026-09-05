@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/audspect/bas/internal/auth"
+	"github.com/audspect/bas/internal/initiatives"
 	"github.com/audspect/bas/internal/jobs"
 	"github.com/audspect/bas/internal/scenario"
 	"github.com/audspect/bas/internal/ws"
@@ -330,6 +331,145 @@ func TestUpdateScheduledAssessment_OSMismatch_Rejected(t *testing.T) {
 		h.UpdateScheduledAssessment(updateW, updateReq)
 		if updateW.Code != http.StatusBadRequest {
 			t.Fatalf("status = %d, want 400 (edited-in Windows-only scenario against a Linux agent), body = %s", updateW.Code, updateW.Body.String())
+		}
+	})
+}
+
+func TestCreateScheduledAssessment_ActiveInitiative_Accepted(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		eng := scenario.NewEngine(t.TempDir())
+		registerFixtureScenario(t, eng, "fixture-check")
+		jobsStore := jobs.NewStore(pool)
+		initStore := initiatives.NewStore(pool)
+		h := New(pool, ws.NewHub(), eng, "").WithJobsDispatcher(jobsStore, jobs.NewDispatcher(jobsStore)).WithInitiatives(initStore)
+
+		it, err := initStore.Create(context.Background(), "Q3 Hardening", "", "admin-1")
+		if err != nil {
+			t.Fatalf("seed initiative: %v", err)
+		}
+
+		body, _ := json.Marshal(map[string]any{
+			"scenarioId": "fixture-scenario", "mode": "posture", "agentIds": []string{"sa-init-1"},
+			"recurrenceType": "weekly", "dayOfWeek": 1, "timeOfDay": "02:00", "timezone": "UTC",
+			"initiativeId": it.ID,
+		})
+		req := httptest.NewRequest(http.MethodPost, "/x", bytes.NewReader(body))
+		req = req.WithContext(auth.ContextWithClaims(req.Context(), &auth.Claims{UserID: "analyst-1", Role: auth.RoleAnalyst}))
+		w := httptest.NewRecorder()
+		h.CreateScheduledAssessment(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200 (active initiative should be accepted), body = %s", w.Code, w.Body.String())
+		}
+		var resp struct {
+			ScheduleID string `json:"scheduleId"`
+		}
+		json.Unmarshal(w.Body.Bytes(), &resp)
+		got, err := jobsStore.GetSchedule(context.Background(), resp.ScheduleID)
+		if err != nil {
+			t.Fatalf("GetSchedule: %v", err)
+		}
+		if got.InitiativeID != it.ID {
+			t.Errorf("got.InitiativeID = %q, want %q", got.InitiativeID, it.ID)
+		}
+	})
+}
+
+func TestCreateScheduledAssessment_UnknownInitiative_404(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		eng := scenario.NewEngine(t.TempDir())
+		registerFixtureScenario(t, eng, "fixture-check")
+		jobsStore := jobs.NewStore(pool)
+		initStore := initiatives.NewStore(pool)
+		h := New(pool, ws.NewHub(), eng, "").WithJobsDispatcher(jobsStore, jobs.NewDispatcher(jobsStore)).WithInitiatives(initStore)
+
+		body, _ := json.Marshal(map[string]any{
+			"scenarioId": "fixture-scenario", "mode": "posture", "agentIds": []string{"sa-init-2"},
+			"recurrenceType": "weekly", "dayOfWeek": 1, "timeOfDay": "02:00", "timezone": "UTC",
+			"initiativeId": "does-not-exist",
+		})
+		req := httptest.NewRequest(http.MethodPost, "/x", bytes.NewReader(body))
+		req = req.WithContext(auth.ContextWithClaims(req.Context(), &auth.Claims{UserID: "analyst-1", Role: auth.RoleAnalyst}))
+		w := httptest.NewRecorder()
+		h.CreateScheduledAssessment(w, req)
+		if w.Code != http.StatusNotFound {
+			t.Fatalf("status = %d, want 404 (unknown initiative), body = %s", w.Code, w.Body.String())
+		}
+	})
+}
+
+func TestCreateScheduledAssessment_ClosedInitiative_409(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		eng := scenario.NewEngine(t.TempDir())
+		registerFixtureScenario(t, eng, "fixture-check")
+		jobsStore := jobs.NewStore(pool)
+		initStore := initiatives.NewStore(pool)
+		h := New(pool, ws.NewHub(), eng, "").WithJobsDispatcher(jobsStore, jobs.NewDispatcher(jobsStore)).WithInitiatives(initStore)
+
+		it, err := initStore.Create(context.Background(), "Retired Initiative", "", "admin-1")
+		if err != nil {
+			t.Fatalf("seed initiative: %v", err)
+		}
+		if _, err := initStore.Close(context.Background(), it.ID); err != nil {
+			t.Fatalf("close initiative: %v", err)
+		}
+
+		body, _ := json.Marshal(map[string]any{
+			"scenarioId": "fixture-scenario", "mode": "posture", "agentIds": []string{"sa-init-3"},
+			"recurrenceType": "weekly", "dayOfWeek": 1, "timeOfDay": "02:00", "timezone": "UTC",
+			"initiativeId": it.ID,
+		})
+		req := httptest.NewRequest(http.MethodPost, "/x", bytes.NewReader(body))
+		req = req.WithContext(auth.ContextWithClaims(req.Context(), &auth.Claims{UserID: "analyst-1", Role: auth.RoleAnalyst}))
+		w := httptest.NewRecorder()
+		h.CreateScheduledAssessment(w, req)
+		if w.Code != http.StatusConflict {
+			t.Fatalf("status = %d, want 409 (closed initiative), body = %s", w.Code, w.Body.String())
+		}
+	})
+}
+
+func TestCreateScheduledAssessment_NoInitiative_Unaffected(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		eng := scenario.NewEngine(t.TempDir())
+		registerFixtureScenario(t, eng, "fixture-check")
+		jobsStore := jobs.NewStore(pool)
+		// Deliberately no WithInitiatives call -- h.initiativesStore stays nil,
+		// proving an empty initiativeId never touches the initiative layer.
+		h := New(pool, ws.NewHub(), eng, "").WithJobsDispatcher(jobsStore, jobs.NewDispatcher(jobsStore))
+
+		body, _ := json.Marshal(map[string]any{
+			"scenarioId": "fixture-scenario", "mode": "posture", "agentIds": []string{"sa-init-4"},
+			"recurrenceType": "weekly", "dayOfWeek": 1, "timeOfDay": "02:00", "timezone": "UTC",
+		})
+		req := httptest.NewRequest(http.MethodPost, "/x", bytes.NewReader(body))
+		req = req.WithContext(auth.ContextWithClaims(req.Context(), &auth.Claims{UserID: "analyst-1", Role: auth.RoleAnalyst}))
+		w := httptest.NewRecorder()
+		h.CreateScheduledAssessment(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200 (no initiative should behave exactly as before), body = %s", w.Code, w.Body.String())
+		}
+		var resp struct {
+			ScheduleID string `json:"scheduleId"`
+		}
+		json.Unmarshal(w.Body.Bytes(), &resp)
+		got, err := jobsStore.GetSchedule(context.Background(), resp.ScheduleID)
+		if err != nil {
+			t.Fatalf("GetSchedule: %v", err)
+		}
+		if got.InitiativeID != "" {
+			t.Errorf("got.InitiativeID = %q, want empty", got.InitiativeID)
 		}
 	})
 }

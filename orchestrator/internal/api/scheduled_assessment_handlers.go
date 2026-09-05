@@ -11,9 +11,50 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/audspect/bas/internal/auth"
+	"github.com/audspect/bas/internal/initiatives"
 	"github.com/audspect/bas/internal/jobs"
 	"github.com/audspect/bas/internal/scenario"
 )
+
+// scheduleInitiativeError carries the HTTP status validateScheduleInitiative
+// wants for a given failure, alongside jsonError's usual plain message.
+type scheduleInitiativeError struct {
+	status int
+	msg    string
+}
+
+func (e *scheduleInitiativeError) Error() string { return e.msg }
+
+// scheduleInitiativeErrorStatus extracts the status a
+// validateScheduleInitiative error carries, defaulting to 500 for anything
+// else (a real, unexpected store error).
+func scheduleInitiativeErrorStatus(err error) int {
+	if e, ok := err.(*scheduleInitiativeError); ok {
+		return e.status
+	}
+	return http.StatusInternalServerError
+}
+
+// validateScheduleInitiative mirrors SetJobInitiative's own validation
+// (internal/api/initiative_handlers.go) exactly, so a schedule can never be
+// created or edited to reference an initiative that endpoint would itself
+// refuse to attach a job to. "" is always valid (no initiative).
+func (h *Handler) validateScheduleInitiative(ctx context.Context, initiativeID string) error {
+	if initiativeID == "" {
+		return nil
+	}
+	if h.initiativesStore == nil {
+		return &scheduleInitiativeError{status: http.StatusServiceUnavailable, msg: "initiative layer not loaded"}
+	}
+	target, err := h.initiativesStore.Get(ctx, initiativeID)
+	if err != nil {
+		return &scheduleInitiativeError{status: http.StatusNotFound, msg: "initiative not found"}
+	}
+	if target.State != initiatives.StateActive {
+		return &scheduleInitiativeError{status: http.StatusConflict, msg: "initiative is " + target.State + ", not active"}
+	}
+	return nil
+}
 
 // scheduleOSCompatibilityError checks every agent a scheduled assessment
 // would target -- both directly-listed agentIDs and the current members of
@@ -103,6 +144,7 @@ func (h *Handler) CreateScheduledAssessment(w http.ResponseWriter, r *http.Reque
 		EndDate          *time.Time `json:"endDate"`
 		ConcurrencyLimit int        `json:"concurrencyLimit"`
 		Reason           string     `json:"reason"`
+		InitiativeID     string     `json:"initiativeId"`
 	}
 	if json.NewDecoder(r.Body).Decode(&req) != nil || req.ScenarioID == "" {
 		jsonError(w, "scenarioId is required", http.StatusBadRequest)
@@ -174,6 +216,10 @@ func (h *Handler) CreateScheduledAssessment(w http.ResponseWriter, r *http.Reque
 		jsonError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+	if err := h.validateScheduleInitiative(r.Context(), req.InitiativeID); err != nil {
+		jsonError(w, err.Error(), scheduleInitiativeErrorStatus(err))
+		return
+	}
 
 	claims, _ := auth.ClaimsFrom(r.Context())
 	var approvedBy string
@@ -211,7 +257,7 @@ func (h *Handler) CreateScheduledAssessment(w http.ResponseWriter, r *http.Reque
 		RecurrenceType: req.RecurrenceType, RunAt: req.RunAt, DayOfWeek: req.DayOfWeek, DayOfMonth: req.DayOfMonth,
 		TimeOfDay: req.TimeOfDay, Timezone: tz, EndDate: req.EndDate, ConcurrencyLimit: req.ConcurrencyLimit,
 		Enabled: true, CreatedBy: actorID, Mode: req.Mode, ApprovedBy: approvedBy, ApprovedAt: approvedAt,
-		ApprovalVersion: approvalVersion, Reason: req.Reason,
+		ApprovalVersion: approvalVersion, Reason: req.Reason, InitiativeID: req.InitiativeID,
 	})
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
@@ -220,6 +266,7 @@ func (h *Handler) CreateScheduledAssessment(w http.ResponseWriter, r *http.Reque
 	h.auditLog(r, "jobs.schedule.create", sch.ID, map[string]any{
 		"scenarioId": req.ScenarioID, "mode": req.Mode, "recurrenceType": req.RecurrenceType,
 		"agentCount": len(req.AgentIDs), "groupCount": len(req.GroupIDs), "approvedBy": approvedBy,
+		"initiativeId": req.InitiativeID,
 	}, "created")
 	respond(w, map[string]any{"scheduleId": sch.ID})
 }
@@ -250,6 +297,7 @@ func (h *Handler) UpdateScheduledAssessment(w http.ResponseWriter, r *http.Reque
 		EndDate          *time.Time `json:"endDate"`
 		ConcurrencyLimit int        `json:"concurrencyLimit"`
 		Reason           string     `json:"reason"`
+		InitiativeID     string     `json:"initiativeId"`
 	}
 	if json.NewDecoder(r.Body).Decode(&req) != nil || req.ScenarioID == "" {
 		jsonError(w, "scenarioId is required", http.StatusBadRequest)
@@ -327,6 +375,10 @@ func (h *Handler) UpdateScheduledAssessment(w http.ResponseWriter, r *http.Reque
 		jsonError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+	if err := h.validateScheduleInitiative(r.Context(), req.InitiativeID); err != nil {
+		jsonError(w, err.Error(), scheduleInitiativeErrorStatus(err))
+		return
+	}
 
 	claims, _ := auth.ClaimsFrom(r.Context())
 	var approvedBy string
@@ -359,7 +411,7 @@ func (h *Handler) UpdateScheduledAssessment(w http.ResponseWriter, r *http.Reque
 		RecurrenceType: req.RecurrenceType, RunAt: req.RunAt, DayOfWeek: req.DayOfWeek, DayOfMonth: req.DayOfMonth,
 		TimeOfDay: req.TimeOfDay, Timezone: tz, EndDate: req.EndDate, ConcurrencyLimit: req.ConcurrencyLimit,
 		Enabled: true, Mode: req.Mode, ApprovedBy: approvedBy, ApprovedAt: approvedAt,
-		ApprovalVersion: approvalVersion, Reason: req.Reason,
+		ApprovalVersion: approvalVersion, Reason: req.Reason, InitiativeID: req.InitiativeID,
 	})
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
@@ -369,6 +421,7 @@ func (h *Handler) UpdateScheduledAssessment(w http.ResponseWriter, r *http.Reque
 		"scenarioId": req.ScenarioID, "mode": req.Mode, "recurrenceType": req.RecurrenceType,
 		"agentCount": len(req.AgentIDs), "groupCount": len(req.GroupIDs), "approvedBy": approvedBy,
 		"previousApprovalVersion": existing.ApprovalVersion, "newApprovalVersion": approvalVersion,
+		"initiativeId": req.InitiativeID,
 	}, "updated")
 	respond(w, map[string]any{"scheduleId": sch.ID})
 }

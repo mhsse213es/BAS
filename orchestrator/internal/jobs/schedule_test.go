@@ -264,6 +264,61 @@ func TestCreateSchedule_RoundTripsScheduledAssessmentFields(t *testing.T) {
 	})
 }
 
+func TestCreateSchedule_RoundTripsInitiativeID(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		store := NewStore(pool)
+		created, err := store.CreateSchedule(ctx, Schedule{
+			Type: "scheduled_assessment", Payload: json.RawMessage(`{}`), AgentIDs: []string{"sa-1"},
+			DayOfWeek: 1, TimeOfDay: "02:00", Timezone: "UTC", Enabled: true, CreatedBy: "user-1",
+			InitiativeID: "init-123",
+		})
+		if err != nil {
+			t.Fatalf("CreateSchedule: %v", err)
+		}
+		if created.InitiativeID != "init-123" {
+			t.Errorf("created.InitiativeID = %q, want init-123", created.InitiativeID)
+		}
+
+		got, err := store.GetSchedule(ctx, created.ID)
+		if err != nil {
+			t.Fatalf("GetSchedule: %v", err)
+		}
+		if got.InitiativeID != "init-123" {
+			t.Errorf("got.InitiativeID = %q, want init-123", got.InitiativeID)
+		}
+
+		updated, err := store.UpdateSchedule(ctx, created.ID, Schedule{
+			Payload: json.RawMessage(`{}`), AgentIDs: []string{"sa-1"}, DayOfWeek: 1, TimeOfDay: "02:00",
+			Timezone: "UTC", Enabled: true, InitiativeID: "init-456",
+		})
+		if err != nil {
+			t.Fatalf("UpdateSchedule: %v", err)
+		}
+		if updated.InitiativeID != "init-456" {
+			t.Errorf("updated.InitiativeID = %q, want init-456", updated.InitiativeID)
+		}
+
+		// Updating with InitiativeID left as "" clears it -- same "whole
+		// struct replaces editable fields" convention UpdateSchedule already
+		// uses for every other editable field (see
+		// TestUpdateSchedule_PersistsEditableFieldsAndPreservesIdentity).
+		cleared, err := store.UpdateSchedule(ctx, created.ID, Schedule{
+			Payload: json.RawMessage(`{}`), AgentIDs: []string{"sa-1"}, DayOfWeek: 1, TimeOfDay: "02:00",
+			Timezone: "UTC", Enabled: true,
+		})
+		if err != nil {
+			t.Fatalf("UpdateSchedule (clear): %v", err)
+		}
+		if cleared.InitiativeID != "" {
+			t.Errorf("cleared.InitiativeID = %q, want empty", cleared.InitiativeID)
+		}
+	})
+}
+
 func TestNextOccurrenceSince_Once(t *testing.T) {
 	loc, _ := time.LoadLocation("UTC")
 	runAt := time.Date(2026, 8, 10, 2, 0, 0, 0, loc)
