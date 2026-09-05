@@ -110,6 +110,7 @@ func (e *Executor) RegisterBuiltinTriggers() {
 	e.triggers.Register(StepTypeWaitForAgent, e.triggerWaitForAgent)
 	e.triggers.Register(StepTypeWaitForDetection, e.triggerWaitForDetection)
 	e.triggers.Register(StepTypeWaitForWebhook, e.triggerWaitForWebhook)
+	e.triggers.Register(StepTypeAgentTask, e.triggerWaitForBASDetection)
 }
 
 func (e *Executor) tick(ctx context.Context) error {
@@ -443,20 +444,26 @@ func (e *Executor) handleAgentTask(ctx context.Context, ex *Execution, ps *PlanS
 		dispatchSentTime := time.Now()
 		se.DispatchSentAt = &dispatchSentTime
 		log.Printf("[perf] execution_id=%s dispatch_sent_at=%s", se.ExecutionID, dispatchSentTime.Format(time.RFC3339Nano))
-		result := map[string]any{"bas_run_id": runID}
-		_ = e.store.SetStepResult(bctx, ex.ID, ps.ID, result)
-		// Phase 0A: Record when result was received and stored
-		resultReceivedTime := time.Now()
-		se.ResultReceivedAt = &resultReceivedTime
-		log.Printf("[perf] execution_id=%s result_received_at=%s", se.ExecutionID, resultReceivedTime.Format(time.RFC3339Nano))
-		_ = e.store.SetStepStatus(bctx, ex.ID, ps.ID, StepCompleted, "")
-		// Phase 0A: Record when scoring is completed (step completion)
-		scoringCompletedTime := time.Now()
-		se.ScoringCompletedAt = &scoringCompletedTime
-		log.Printf("[perf] execution_id=%s scoring_completed_at=%s", se.ExecutionID, scoringCompletedTime.Format(time.RFC3339Nano))
+		// Phase 1: wait for detection (Track 1) instead of completing
+		// immediately -- see triggerWaitForBASDetection, registered against
+		// this same StepTypeAgentTask in RegisterBuiltinTriggers.
+		se.Status = StepWaiting
+		se.StartedAt = &dispatchSentTime
+		se.Result = map[string]any{"bas_run_id": runID}
+		if err := e.store.UpsertStepExecution(bctx, se); err != nil {
+			log.Printf("[exercise] agent_task %s/%s: upsert waiting state: %v", ex.ID, ps.ID, err)
+			return
+		}
+		// UpsertStepExecution (unlike SetStepStatus) does not itself mirror
+		// ExecutionAttempt -- every other raw-upsert transition into
+		// StepWaiting (handleWait, handleApproval, handleWaitForAgent) makes
+		// this same explicit call afterward.
+		if err := e.store.UpsertExecutionAttempt(bctx, se); err != nil {
+			log.Printf("[phase0b] upsert execution_attempt for step %s: %v", se.ID, err)
+		}
 		_, _ = e.evidence.Append(bctx, ex.ID, se.ID, "agent_task_dispatched", "system", "bas_engine",
 			map[string]any{"run_id": runID, "agent_id": cfg.AgentID})
-		_ = e.store.RecordEvent(bctx, ex.ID, ps.ID, "step_completed", "system", result)
+		_ = e.store.RecordEvent(bctx, ex.ID, ps.ID, "step_waiting", "system", map[string]any{"waiting_for": "bas_run_detection", "bas_run_id": runID})
 	}()
 	return nil
 }
@@ -601,6 +608,84 @@ func (e *Executor) triggerWaitForAgent(ctx context.Context, _ *Execution, _ *Pla
 		return true, map[string]any{"bas_run_id": runID, "bas_run_status": status}, nil
 	}
 	return false, nil, nil
+}
+
+// basDetectionGraceSecs bounds how long a dispatched agent_task step waits,
+// after its underlying scenario_run goes terminal, for detection data that
+// may simply never arrive -- the agent only calls the detections endpoint at
+// all when its post-run alert sweep finds something (agent/agent.go's
+// collectAndSubmitDetections, graceWait=90s then returns early on zero
+// alerts). 120s covers that 90s plus sweep/network margin without asserting
+// this number is final -- evidence-adjustable later the same way this
+// codebase's timeout budgets already are (see project memory
+// project_timeout_scored_as_pass.md).
+const basDetectionGraceSecs = 120
+
+func (e *Executor) triggerWaitForBASDetection(ctx context.Context, _ *Execution, ps *PlanStep, se *StepExecution) (bool, map[string]any, error) {
+	runID, _ := se.Result["bas_run_id"].(string)
+	if runID == "" {
+		return false, nil, nil
+	}
+	status, err := e.store.BASRunStatus(ctx, runID)
+	if err != nil {
+		return false, nil, err
+	}
+	if status != "completed" && status != "failed" && status != "cancelled" && status != "partial" {
+		return false, nil, nil // still running -- keep waiting
+	}
+
+	techniqueID := ""
+	if ps.Config.AgentTask != nil {
+		techniqueID = ps.Config.AgentTask.TechniqueID
+	}
+	payload := map[string]any{"bas_run_id": runID, "bas_run_status": status}
+	// Phase 0A: both breadcrumbs land together here -- the underlying run's
+	// terminal status (the "result") is only known once this trigger has
+	// already decided the step is done, unlike the synchronous
+	// pre-Phase-1 handleAgentTask which logged them inline moments apart.
+	complete := func() (bool, map[string]any, error) {
+		now := time.Now()
+		se.ResultReceivedAt = &now
+		se.ScoringCompletedAt = &now
+		log.Printf("[perf] execution_id=%s result_received_at=%s scoring_completed_at=%s", se.ExecutionID, now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano))
+		return true, payload, nil
+	}
+	if techniqueID == "" {
+		// Whole-scenario dispatch (no single TechniqueID) -- Phase 1 scopes
+		// Track 1 to the single-technique case; complete without a detection
+		// verdict rather than guessing which of a multi-technique run's
+		// results applies.
+		return complete()
+	}
+
+	verdict, confidence, provider, mttdMs, ok, err := e.store.BASRunDetection(ctx, runID, techniqueID)
+	if err != nil {
+		return false, nil, err
+	}
+	if ok {
+		payload["detection_verdict"] = verdict
+		if confidence != "" {
+			payload["detection_confidence"] = confidence
+		}
+		if mttdMs > 0 {
+			payload["detection_mttd_ms"] = mttdMs
+		}
+		if provider != "" {
+			payload["detection_alert_provider"] = provider
+		}
+		return complete()
+	}
+
+	// Not yet scored. If the run only just went terminal, the agent's 90s
+	// grace + sweep may still be in flight -- keep waiting up to the bound.
+	if se.StartedAt != nil && time.Since(*se.StartedAt) < basDetectionGraceSecs*time.Second {
+		return false, nil, nil
+	}
+	// Grace window elapsed with nothing scored -- most likely the agent found
+	// zero alerts and never called the detections endpoint at all. Complete
+	// with no detection_verdict key rather than waiting forever or
+	// fabricating a verdict.
+	return complete()
 }
 
 func (e *Executor) triggerWaitForDetection(ctx context.Context, ex *Execution, ps *PlanStep, se *StepExecution) (bool, map[string]any, error) {

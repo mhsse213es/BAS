@@ -590,10 +590,11 @@ func TestEarliestEvidenceTimestamp_ReturnsFirstMatchingRecord(t *testing.T) {
 			t.Errorf("ts = %v, want nil before any evidence exists", ts)
 		}
 
+		before := time.Now()
 		if _, err := chain.Append(ctx, execID, se.ID, "phishing_reported", "target", "tracker", map[string]any{}); err != nil {
 			t.Fatalf("append phishing_reported: %v", err)
 		}
-		before := time.Now()
+		after := time.Now()
 
 		ts, err := store.EarliestEvidenceTimestamp(ctx, se.ID, "phishing_reported")
 		if err != nil {
@@ -602,8 +603,14 @@ func TestEarliestEvidenceTimestamp_ReturnsFirstMatchingRecord(t *testing.T) {
 		if ts == nil {
 			t.Fatal("ts = nil, want a real timestamp after evidence was appended")
 		}
-		if ts.After(before) {
-			t.Errorf("ts = %v, want it at or before %v (recorded when the evidence was appended)", ts, before)
+		// The DB records created_at on its own clock, not the Go test
+		// process's -- a strict comparison against a Go-side time.Now()
+		// flakes under real (sub-millisecond) clock skew between the test
+		// process and the Postgres container. Bound by a window wide enough
+		// to absorb that skew instead.
+		skew := 2 * time.Second
+		if ts.Before(before.Add(-skew)) || ts.After(after.Add(skew)) {
+			t.Errorf("ts = %v, want it within [%v, %v] (recorded when the evidence was appended, allowing clock skew)", ts, before, after)
 		}
 	})
 }

@@ -989,3 +989,129 @@ func TestBridgeVerifiedDetections_ReferencedStepNotYetCompletedKeepsWaiting(t *t
 		}
 	})
 }
+
+// TestHandleAgentTask_WaitsForAndPropagatesDetection drives a real Executor
+// through a real fake agent to a terminal scenario_run with a real
+// SubmitRunDetections-equivalent write, then asserts the agent_task
+// StepExecution picks up the resulting DetectionVerdict -- proving Track 1
+// reuses the existing pipeline's already-computed result instead of
+// duplicating correlation logic.
+func TestHandleAgentTask_WaitsForAndPropagatesDetection(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		runID := "bas-run-track1-test"
+		agentID := "agent-track1-test"
+		if _, err := pool.Exec(context.Background(),
+			`INSERT INTO agents (agent_id, hostname, state) VALUES ($1,'h','active')`, agentID); err != nil {
+			t.Fatalf("seed agent: %v", err)
+		}
+
+		e, store := newTestExecutor(pool)
+		e.SetDispatch(func(agentID, scenarioID, techniqueID string, policy scenario.ExecutionPolicy) (string, error) {
+			return runID, nil
+		})
+		e.RegisterBuiltinTriggers()
+
+		execID := seedExecution(t, store)
+		ps := &PlanStep{ID: "dump-creds", Type: StepTypeAgentTask,
+			Config: StepConfig{AgentTask: &AgentTaskConfig{AgentID: agentID, TechniqueID: "T1003.002"}}}
+		ex := &Execution{ID: execID}
+
+		if err := e.handleAgentTask(context.Background(), ex, ps, &StepExecution{ExecutionID: execID, StepID: ps.ID}); err != nil {
+			t.Fatalf("handleAgentTask: %v", err)
+		}
+		// handleAgentTask dispatches asynchronously (existing goroutine) -- give it
+		// a moment to reach StepWaiting with bas_run_id set.
+		deadline := time.Now().Add(3 * time.Second)
+		var se *StepExecution
+		for time.Now().Before(deadline) {
+			var err error
+			se, err = store.GetStepExecByStepID(context.Background(), execID, ps.ID)
+			if err == nil && se.Status == StepWaiting {
+				break
+			}
+			time.Sleep(50 * time.Millisecond)
+		}
+		if se == nil || se.Status != StepWaiting {
+			t.Fatalf("step never reached StepWaiting, got %+v", se)
+		}
+		if se.Result["bas_run_id"] != runID {
+			t.Fatalf("bas_run_id = %v, want %q", se.Result["bas_run_id"], runID)
+		}
+
+		// Seed the underlying scenario_run as a terminal, detection-scored run --
+		// exactly what SubmitRunDetections would have produced.
+		resultsJSON := `[{"technique":{"id":"T1003.002"},"detectionVerdict":"detected","detectionAlert":{"channel":"Microsoft-Windows-Windows Defender/Operational","provider":"Windows Defender","confidence":"high","mttdMs":3100}}]`
+		if _, err := pool.Exec(context.Background(),
+			`INSERT INTO scenario_runs (id, scenario_id, agent_id, status, results) VALUES ($1,'sc','`+agentID+`','completed',$2::jsonb)`,
+			runID, resultsJSON); err != nil {
+			t.Fatalf("seed scenario_run: %v", err)
+		}
+
+		triggered, payload, err := e.triggerWaitForBASDetection(context.Background(), ex, ps, se)
+		if err != nil {
+			t.Fatalf("triggerWaitForBASDetection: %v", err)
+		}
+		if !triggered {
+			t.Fatal("triggered = false, want true (run is terminal and detection-scored)")
+		}
+		if payload["detection_verdict"] != "detected" {
+			t.Errorf("payload[detection_verdict] = %v, want %q", payload["detection_verdict"], "detected")
+		}
+		if payload["detection_confidence"] != "high" {
+			t.Errorf("payload[detection_confidence] = %v, want %q", payload["detection_confidence"], "high")
+		}
+		if payload["detection_mttd_ms"] != int64(3100) {
+			t.Errorf("payload[detection_mttd_ms] = %v, want 3100", payload["detection_mttd_ms"])
+		}
+	})
+}
+
+// TestTriggerWaitForBASDetection_TerminalWithNoAlertsCompletesAfterGrace
+// covers the common case where the agent found zero alerts and never called
+// the detections endpoint at all -- the trigger must eventually fire with no
+// fabricated verdict, not wait forever.
+func TestTriggerWaitForBASDetection_TerminalWithNoAlertsCompletesAfterGrace(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		e, store := newTestExecutor(pool)
+		runID := "bas-run-track1-nograce-test"
+		agentID := "agent-track1-nograce-test"
+		if _, err := pool.Exec(context.Background(),
+			`INSERT INTO agents (agent_id, hostname, state) VALUES ($1,'h','active')`, agentID); err != nil {
+			t.Fatalf("seed agent: %v", err)
+		}
+		resultsJSON := `[{"technique":{"id":"T1003.002"}}]`
+		if _, err := pool.Exec(context.Background(),
+			`INSERT INTO scenario_runs (id, scenario_id, agent_id, status, results) VALUES ($1,'sc','`+agentID+`','completed',$2::jsonb)`,
+			runID, resultsJSON); err != nil {
+			t.Fatalf("seed scenario_run: %v", err)
+		}
+
+		execID := seedExecution(t, store)
+		ps := &PlanStep{ID: "dump-creds", Type: StepTypeAgentTask,
+			Config: StepConfig{AgentTask: &AgentTaskConfig{AgentID: agentID, TechniqueID: "T1003.002"}}}
+		ex := &Execution{ID: execID}
+		// startedInPast simulates the trigger being checked well after the run
+		// went terminal -- past the detection grace window -- without the test
+		// needing to actually sleep 120s.
+		startedInPast := time.Now().Add(-3 * time.Minute)
+		se := &StepExecution{ExecutionID: execID, StepID: ps.ID, Status: StepWaiting, StartedAt: &startedInPast,
+			Result: map[string]any{"bas_run_id": runID}}
+
+		triggered, payload, err := e.triggerWaitForBASDetection(context.Background(), ex, ps, se)
+		if err != nil {
+			t.Fatalf("triggerWaitForBASDetection: %v", err)
+		}
+		if !triggered {
+			t.Fatal("triggered = false, want true (grace window elapsed, must not wait forever)")
+		}
+		if _, has := payload["detection_verdict"]; has {
+			t.Errorf("payload = %+v, want no detection_verdict key (never scored, not a fabricated verdict)", payload)
+		}
+	})
+}
