@@ -2,11 +2,15 @@ package api
 
 import (
 	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
 	"github.com/audspect/bas/internal/scenario"
 	"github.com/audspect/bas/internal/ws"
+	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -67,13 +71,116 @@ func TestSubmitScenarioResult_CompletesExecutionAttempt(t *testing.T) {
 		})
 
 		var status string
+		var result []byte
 		if err := pool.QueryRow(context.Background(),
-			`SELECT status FROM execution_attempts WHERE source_attempt_id = $1`, runID,
-		).Scan(&status); err != nil {
+			`SELECT status, result FROM execution_attempts WHERE source_attempt_id = $1`, runID,
+		).Scan(&status, &result); err != nil {
 			t.Fatalf("query execution_attempts: %v", err)
 		}
 		if status != "completed" {
 			t.Errorf("status = %q, want completed", status)
+		}
+		// The spec requires the raw agent payload to land in `result`.
+		if len(result) == 0 {
+			t.Fatal("result jsonb must carry the raw agent payload, got NULL/empty")
+		}
+		var decoded scenario.RawRunResult
+		if err := json.Unmarshal(result, &decoded); err != nil {
+			t.Fatalf("result is not valid JSON: %v (%s)", err, string(result))
+		}
+		if decoded.RunID != runID || len(decoded.Results) != 1 {
+			t.Errorf("result payload = %+v, want the submitted payload for run %s", decoded, runID)
+		}
+	})
+}
+
+// TestDispatchRun_OfflineAgentMarksFailedToDispatch covers the review's
+// finding that dispatch-time failures stranded the attempt row at 'pending':
+// markRunFailed is now the choke point that also marks the attempt
+// failed_to_dispatch. It also asserts the corrected timestamp semantics —
+// "never reached the agent" must not record a dispatch_sent_at.
+func TestDispatchRun_OfflineAgentMarksFailedToDispatch(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "")
+		agentID := "agent-ea-offline"
+		seedActiveAgent(t, pool, agentID, "Linux")
+		// Deliberately no fake agent on the hub — SendToAgent fails.
+
+		sc, _ := minimalLiveScenario(t, "int-ea-offline")
+		ctx := context.Background()
+		runID, skipReason, err := h.dispatchRun(ctx, sc, agentID, dispatchOpts{Mode: "telemetry", ConfirmLive: true})
+		if err != nil {
+			t.Fatalf("dispatchRun: %v", err)
+		}
+		if skipReason != "offline" {
+			t.Fatalf("skipReason = %q, want offline", skipReason)
+		}
+		// runID is empty on the offline path; the row is keyed by the run that
+		// was inserted, so find it via the scenario_runs row for this agent.
+		var attemptID, status string
+		var dispatchSentAt, completedAt *time.Time
+		if err := pool.QueryRow(ctx,
+			`SELECT ea.source_attempt_id, ea.status, ea.dispatch_sent_at, ea.completed_at
+			   FROM execution_attempts ea
+			   JOIN scenario_runs sr ON sr.id = ea.source_attempt_id
+			  WHERE sr.agent_id = $1`, agentID,
+		).Scan(&attemptID, &status, &dispatchSentAt, &completedAt); err != nil {
+			t.Fatalf("query execution_attempts: %v (runID=%q)", err, runID)
+		}
+		if status != "failed_to_dispatch" {
+			t.Errorf("status = %q, want failed_to_dispatch", status)
+		}
+		if dispatchSentAt != nil {
+			t.Errorf("dispatch_sent_at = %v, want NULL (the run never reached the agent)", dispatchSentAt)
+		}
+		if completedAt == nil {
+			t.Error("completed_at must be populated for a terminal failed_to_dispatch row")
+		}
+	})
+}
+
+// TestSafeScan_CreatesExecutionAttemptRow covers the review's finding that
+// TriggerScan/SafeScan INSERT into scenario_runs directly, bypassing
+// dispatchRun, and so produced no attempt row at all.
+func TestSafeScan_CreatesExecutionAttemptRow(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		_, engine := minimalLiveScenario(t, "safe-simulation")
+		h := New(pool, ws.NewHub(), engine, "")
+		agentID := "agent-ea-safescan"
+		seedActiveAgent(t, pool, agentID, "Linux")
+		fake := startFakeAgent(t, h.hub, agentID)
+		defer fake.Disconnect(t)
+
+		req := httptest.NewRequest(http.MethodPost, "/api/scan/safe/"+agentID, nil)
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("agentId", agentID)
+		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+		rec := httptest.NewRecorder()
+		h.SafeScan(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("SafeScan status = %d, body = %s", rec.Code, rec.Body.String())
+		}
+
+		var source, granularity, status string
+		if err := pool.QueryRow(context.Background(),
+			`SELECT ea.source, ea.granularity, ea.status
+			   FROM execution_attempts ea
+			   JOIN scenario_runs sr ON sr.id = ea.source_attempt_id
+			  WHERE sr.agent_id = $1`, agentID,
+		).Scan(&source, &granularity, &status); err != nil {
+			t.Fatalf("query execution_attempts: %v", err)
+		}
+		if source != "art" || granularity != "run" {
+			t.Errorf("source/granularity = %q/%q, want art/run", source, granularity)
+		}
+		if status != "pending" {
+			t.Errorf("status = %q, want pending", status)
 		}
 	})
 }

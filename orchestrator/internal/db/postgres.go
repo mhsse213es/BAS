@@ -1735,6 +1735,10 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 			skip_reason         text,
 
 			created_at          timestamptz NOT NULL DEFAULT NOW(),
+			-- dispatch_queued_at is written by the ART/Caldera (source='art'/'caldera')
+			-- path only; exercise steps leave it NULL -- use source/granularity to
+			-- discriminate; the exercise engine's queue timing lives in the executor's
+			-- own Phase 0A StepExecution.PollSelectedAt instead.
 			dispatch_queued_at  timestamptz,
 			dispatch_sent_at    timestamptz,
 			started_at          timestamptz,

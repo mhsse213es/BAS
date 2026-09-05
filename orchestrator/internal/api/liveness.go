@@ -136,7 +136,7 @@ func (h *Handler) ReapAbandonedRuns(ctx context.Context) error {
 			continue
 		}
 		if tag.RowsAffected() > 0 {
-			_ = h.updateExecutionAttemptStatus(ctx, a.id, "abandoned", "completed_at")
+			_ = h.updateExecutionAttemptStatus(ctx, a.id, models.ExecutionAttemptAbandoned, "completed_at")
 			log.Printf("[dispatch] run %s on agent %s abandoned (agent offline beyond %s) — marked partial", a.id, a.agentID, abandonedRunGuard)
 		}
 	}
@@ -189,7 +189,7 @@ func (h *Handler) ReapStaleRuns(ctx context.Context) error {
 		}
 		if tag.RowsAffected() > 0 {
 			h.markVariantRunPartial(ctx, r.id)
-			_ = h.updateExecutionAttemptStatus(ctx, r.id, "timed_out", "completed_at")
+			_ = h.updateExecutionAttemptStatus(ctx, r.id, models.ExecutionAttemptTimedOut, "completed_at")
 			log.Printf("[dispatch] run %s on agent %s exceeded wall-clock budget (%s) — marked partial", r.id, r.agentID, staleRunGuard)
 		}
 	}

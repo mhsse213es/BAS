@@ -1430,6 +1430,13 @@ func (h *Handler) TriggerScan(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	// Phase 0B: this path INSERTs into scenario_runs directly, bypassing
+	// dispatchRun, but still reaches every instrumented terminal path — without
+	// its own attempt row those later UPDATEs would match zero rows. Always
+	// 'art': posture scans never use Caldera.
+	if err := h.insertExecutionAttempt(r.Context(), models.ExecutionSourceART, runID); err != nil {
+		log.Printf("[phase0b] insert execution_attempt for run %s: %v", runID, err)
+	}
 
 	h.persistStepMeta(r.Context(), runID, steps)
 
@@ -1478,6 +1485,10 @@ func (h *Handler) SafeScan(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
 		return
+	}
+	// Phase 0B: see TriggerScan — same direct-INSERT bypass of dispatchRun.
+	if err := h.insertExecutionAttempt(r.Context(), models.ExecutionSourceART, runID); err != nil {
+		log.Printf("[phase0b] insert execution_attempt for run %s: %v", runID, err)
 	}
 
 	sent := h.hub.SendToAgent(agentID, models.WSMessage{
@@ -1677,6 +1688,16 @@ func (h *Handler) markRunFailed(ctx context.Context, runID string, reason string
 	_, _ = h.db.Exec(ctx,
 		`UPDATE scenario_runs SET status = 'failed', fail_reason = $1, completed_at = NOW() WHERE id = $2`,
 		reason, runID)
+	// Phase 0B: every run that reaches this function died before the agent
+	// ever got it, so mirror the terminal state onto the ExecutionAttempt row
+	// here rather than at each of the callers -- this is the single choke
+	// point for dispatch-time failure. failed_to_dispatch means "never reached
+	// the agent", so completed_at (a terminal timestamp) is written and
+	// dispatch_sent_at deliberately stays NULL. Non-fatal: an observational
+	// table must never break a real scenario operation.
+	if err := h.updateExecutionAttemptStatus(ctx, runID, models.ExecutionAttemptFailedToDispatch, "completed_at"); err != nil {
+		log.Printf("[phase0b] update execution_attempt failed_to_dispatch for run %s: %v", runID, err)
+	}
 }
 
 func (h *Handler) dispatchRun(ctx context.Context, sc *scenario.Scenario, agentID string, o dispatchOpts) (runID string, skipReason string, err error) {
@@ -1804,11 +1825,11 @@ func (h *Handler) dispatchRun(ctx context.Context, sc *scenario.Scenario, agentI
 			},
 		})
 		if !sent {
+			// markRunFailed also marks the ExecutionAttempt failed_to_dispatch.
 			h.markRunFailed(context.Background(), runID, "Agent is offline — could not deliver the run")
-			_ = h.updateExecutionAttemptStatus(context.Background(), runID, "failed_to_dispatch", "dispatch_sent_at")
 			return "", "offline", nil
 		}
-		if err := h.updateExecutionAttemptStatus(ctx, runID, "dispatched", "dispatch_sent_at"); err != nil {
+		if err := h.updateExecutionAttemptStatus(ctx, runID, models.ExecutionAttemptDispatched, "dispatch_sent_at"); err != nil {
 			log.Printf("[phase0b] update execution_attempt dispatched for run %s: %v", runID, err)
 		}
 		log.Printf("[perf] execution_id=%s dispatch_sent_at=%s", runID, time.Now().UTC().Format(time.RFC3339Nano))
@@ -1980,6 +2001,12 @@ func (h *Handler) dispatchRun(ctx context.Context, sc *scenario.Scenario, agentI
 		if err != nil {
 			return "", "", fmt.Errorf("complete all-skipped run: %w", err)
 		}
+		// Phase 0B: nothing was ever dispatched — the run was decided, not
+		// executed. Without this the attempt row would read 'pending' forever,
+		// which a consumer would misread as "queued, never dispatched".
+		if err := h.markExecutionAttemptSkipped(context.Background(), runID, models.SkipReasonPrerequisiteUnsatisfied); err != nil {
+			log.Printf("[phase0b] mark execution_attempt skipped for run %s: %v", runID, err)
+		}
 		return runID, "", nil
 	}
 
@@ -2028,11 +2055,11 @@ func (h *Handler) dispatchRun(ctx context.Context, sc *scenario.Scenario, agentI
 		Data:    cmd,
 	})
 	if !sent {
+		// markRunFailed also marks the ExecutionAttempt failed_to_dispatch.
 		h.markRunFailed(context.Background(), runID, "Agent is offline — could not deliver the run")
-		_ = h.updateExecutionAttemptStatus(context.Background(), runID, "failed_to_dispatch", "dispatch_sent_at")
 		return "", "offline", nil
 	}
-	if err := h.updateExecutionAttemptStatus(ctx, runID, "dispatched", "dispatch_sent_at"); err != nil {
+	if err := h.updateExecutionAttemptStatus(ctx, runID, models.ExecutionAttemptDispatched, "dispatch_sent_at"); err != nil {
 		log.Printf("[phase0b] update execution_attempt dispatched for run %s: %v", runID, err)
 	}
 	log.Printf("[perf] execution_id=%s dispatch_sent_at=%s", runID, time.Now().UTC().Format(time.RFC3339Nano))
@@ -2519,7 +2546,16 @@ func (h *Handler) SubmitScenarioResult(w http.ResponseWriter, r *http.Request) {
 	// execution (all steps, run internally) + the WS round trip -- the
 	// orchestrator has no visibility inside that window at this granularity.
 	log.Printf("[perf] execution_id=%s result_received_at=%s", raw.RunID, time.Now().UTC().Format(time.RFC3339Nano))
-	if err := h.updateExecutionAttemptStatus(r.Context(), raw.RunID, "completed", "completed_at"); err != nil {
+	// Phase 0B: the attempt row also carries the raw agent payload in its
+	// `result` jsonb column. Re-marshalling the already-unmarshalled payload
+	// (rather than storing the request body verbatim) guarantees valid UTF-8
+	// JSON reaches Postgres even if an agent's captured stdout was not.
+	rawResultJSON, marshalErr := json.Marshal(raw)
+	if marshalErr != nil {
+		log.Printf("[phase0b] marshal raw result for run %s: %v", raw.RunID, marshalErr)
+		rawResultJSON = nil
+	}
+	if err := h.markExecutionAttemptCompleted(r.Context(), raw.RunID, rawResultJSON); err != nil {
 		log.Printf("[phase0b] update execution_attempt completed for run %s: %v", raw.RunID, err)
 	}
 
@@ -3002,23 +3038,57 @@ func (h *Handler) insertExecutionAttempt(ctx context.Context, source models.Exec
 // timestampCol must be one of the known timestamp column names -- callers
 // pass a fixed string literal, never user input, so this is not a SQL
 // injection risk despite the string concatenation.
-func (h *Handler) updateExecutionAttemptStatus(ctx context.Context, runID, status, timestampCol string) error {
+//
+// A zero-row UPDATE is not a pgx error: if no ExecutionAttempt row was ever
+// inserted for this run, err is nil and the miss would be invisible. Log it
+// explicitly so a missing write site surfaces instead of silently producing
+// an incomplete table.
+func (h *Handler) updateExecutionAttemptStatus(ctx context.Context, runID string, status models.ExecutionAttemptStatus, timestampCol string) error {
 	q := fmt.Sprintf(
 		`UPDATE execution_attempts SET status = $1, %s = NOW() WHERE source_attempt_id = $2`,
 		timestampCol,
 	)
-	_, err := h.db.Exec(ctx, q, status, runID)
-	return err
+	tag, err := h.db.Exec(ctx, q, string(status), runID)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		log.Printf("[phase0b] update execution_attempt %s for run %s matched 0 rows — no attempt row exists for this run", status, runID)
+	}
+	return nil
+}
+
+// markExecutionAttemptCompleted transitions an ExecutionAttempt to completed
+// and persists the agent's result payload, which the spec requires the
+// `result` jsonb column to carry.
+func (h *Handler) markExecutionAttemptCompleted(ctx context.Context, runID string, result []byte) error {
+	tag, err := h.db.Exec(ctx,
+		`UPDATE execution_attempts SET status = 'completed', completed_at = NOW(), result = $1 WHERE source_attempt_id = $2`,
+		result, runID,
+	)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		log.Printf("[phase0b] update execution_attempt completed for run %s matched 0 rows — no attempt row exists for this run", runID)
+	}
+	return nil
 }
 
 // markExecutionAttemptSkipped transitions an ExecutionAttempt to skipped,
 // satisfying the schema's skip_reason/decision_at CHECK constraints.
 func (h *Handler) markExecutionAttemptSkipped(ctx context.Context, runID string, reason models.SkipReason) error {
-	_, err := h.db.Exec(ctx,
+	tag, err := h.db.Exec(ctx,
 		`UPDATE execution_attempts SET status = 'skipped', skip_reason = $1, decision_at = NOW() WHERE source_attempt_id = $2`,
 		string(reason), runID,
 	)
-	return err
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		log.Printf("[phase0b] update execution_attempt skipped for run %s matched 0 rows — no attempt row exists for this run", runID)
+	}
+	return nil
 }
 
 // cancelScenarioRun cancels an in-flight scenario_run -- notifies the agent
@@ -3048,7 +3118,7 @@ func (h *Handler) cancelScenarioRun(ctx context.Context, runID string) (agentID,
 			`UPDATE scenario_runs SET status = 'partial', completed_at = NOW()
 			  WHERE id = $1 AND status = 'running'`, runID)
 		h.markVariantRunPartial(ctx, runID)
-		_ = h.updateExecutionAttemptStatus(ctx, runID, "abandoned", "completed_at")
+		_ = h.updateExecutionAttemptStatus(ctx, runID, models.ExecutionAttemptAbandoned, "completed_at")
 		return agentID, "partial", nil
 	}
 
@@ -3064,7 +3134,7 @@ func (h *Handler) cancelScenarioRun(ctx context.Context, runID string) (agentID,
 	// afterward: SubmitScenarioResult has no status guard (see its own
 	// comment) and will happily reconcile a late submission.
 	go h.forceCancelAfterGracePeriod(runID, agentID)
-	_ = h.updateExecutionAttemptStatus(ctx, runID, "cancelled", "completed_at")
+	_ = h.updateExecutionAttemptStatus(ctx, runID, models.ExecutionAttemptCancelled, "completed_at")
 
 	return agentID, "cancelling", nil
 }
