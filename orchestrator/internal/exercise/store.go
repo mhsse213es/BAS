@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"strings"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -358,6 +359,28 @@ func executionAttemptStatusFromStepStatus(s StepStatus) models.ExecutionAttemptS
 // gap (see spec) that a retried step reuses the same ID, since
 // UpsertStepExecution itself already collapses retries into one row.
 func (s *Store) UpsertExecutionAttempt(ctx context.Context, se *StepExecution) error {
+	return s.upsertExecutionAttempt(ctx, se, models.SkipReasonConditionFalse)
+}
+
+// skipReasonFromMessage maps the free-text reason a SetStepStatus caller passes
+// alongside StepSkipped onto the typed SkipReason enum. The executor has
+// exactly one skip site today (evalCondition returning false, which passes
+// "condition false"); anything unrecognized falls back to condition_false
+// rather than writing NULL, which the skip_reason CHECK constraint rejects.
+func skipReasonFromMessage(msg string) models.SkipReason {
+	switch {
+	case strings.Contains(strings.ToLower(msg), "depend"):
+		return models.SkipReasonDependencyFailed
+	default:
+		// "condition false" and anything else not yet enumerated.
+		return models.SkipReasonConditionFalse
+	}
+}
+
+// upsertExecutionAttempt is UpsertExecutionAttempt with an explicit skip
+// reason, used by the SetStepStatus mirror so a skip records WHY it was
+// skipped instead of assuming a single hardcoded reason.
+func (s *Store) upsertExecutionAttempt(ctx context.Context, se *StepExecution, skipReason models.SkipReason) error {
 	status := executionAttemptStatusFromStepStatus(se.Status)
 	// technique_id stays NULL for all exercise steps in this phase --
 	// threading the real technique ID requires the PlanStep, which this
@@ -372,19 +395,26 @@ func (s *Store) UpsertExecutionAttempt(ctx context.Context, se *StepExecution) e
 			 VALUES ('exercise', 'step', $1, $2, NULLIF($3, ''), 'skipped', $4, NOW(), NOW())
 			 ON CONFLICT (source, source_attempt_id) DO UPDATE
 			   SET status = 'skipped', skip_reason = $4, decision_at = NOW()`,
-			se.ExecutionID, se.ID, techniqueID, string(models.SkipReasonConditionFalse),
+			se.ExecutionID, se.ID, techniqueID, string(skipReason),
 		)
 		return err
 	}
 
+	// skip_reason/decision_at are cleared on a non-skip transition: the schema's
+	// CHECK constraints allow them only on status='skipped', so leaving a prior
+	// skip's values behind would make every later update of that row fail.
+	// 'cancelled' is terminal for an exercise step (AbortExecution), so it
+	// stamps completed_at alongside 'completed'.
 	_, err := s.db.Exec(ctx,
 		`INSERT INTO execution_attempts
 			(source, granularity, source_execution_id, source_attempt_id, technique_id, status, created_at)
 		 VALUES ('exercise', 'step', $1, $2, NULLIF($3, ''), $4, NOW())
 		 ON CONFLICT (source, source_attempt_id) DO UPDATE
 		   SET status = $4,
+		       skip_reason = NULL,
+		       decision_at = NULL,
 		       dispatch_sent_at = CASE WHEN $4 IN ('dispatched','running') AND execution_attempts.dispatch_sent_at IS NULL THEN NOW() ELSE execution_attempts.dispatch_sent_at END,
-		       completed_at = CASE WHEN $4 = 'completed' THEN NOW() ELSE execution_attempts.completed_at END`,
+		       completed_at = CASE WHEN $4 IN ('completed','cancelled') THEN NOW() ELSE execution_attempts.completed_at END`,
 		se.ExecutionID, se.ID, techniqueID, string(status),
 	)
 	return err
@@ -400,7 +430,31 @@ func (s *Store) SetStepStatus(ctx context.Context, execID, stepID string, status
 	}
 	q += ` WHERE execution_id=$3 AND step_id=$4`
 	_, err := s.db.Exec(ctx, q, args...)
-	return err
+	if err != nil {
+		return err
+	}
+	// Phase 0B: SetStepStatus is the single choke point for every terminal
+	// exercise step transition (completed/failed/cancelled/skipped) as well as
+	// running, so the ExecutionAttempt mirror lives here rather than at the ~30
+	// executor call sites. Non-fatal by design: an observational table must
+	// never fail a real exercise operation.
+	s.mirrorExecutionAttempt(ctx, execID, stepID, status, errMsg)
+	return nil
+}
+
+// mirrorExecutionAttempt writes the ExecutionAttempt row matching a step's new
+// status. source_attempt_id is the exercise_step_executions row id, resolved
+// the same way the executor resolves it for evidence records.
+func (s *Store) mirrorExecutionAttempt(ctx context.Context, execID, stepID string, status StepStatus, errMsg string) {
+	stepExecID, err := s.stepExecIDForStep(ctx, execID, stepID)
+	if err != nil {
+		log.Printf("[phase0b] resolve step_execution id for %s/%s: %v", execID, stepID, err)
+		return
+	}
+	se := &StepExecution{ID: stepExecID, ExecutionID: execID, StepID: stepID, Status: status}
+	if err := s.upsertExecutionAttempt(ctx, se, skipReasonFromMessage(errMsg)); err != nil {
+		log.Printf("[phase0b] upsert execution_attempt for step %s: %v", stepExecID, err)
+	}
 }
 
 func (s *Store) SetStepResult(ctx context.Context, execID, stepID string, result map[string]interface{}) error {
