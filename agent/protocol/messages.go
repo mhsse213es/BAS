@@ -105,6 +105,12 @@ type ExecResult struct {
 	TimedOut        bool      `json:"timedOut,omitempty"`
 	CleanupVerdict  string    `json:"cleanupVerdict,omitempty"`
 	CleanupResidual []string  `json:"cleanupResidual,omitempty"`
+	// CleanupError captures the cleanup command's own stderr and exit code
+	// when CleanupVerdict is "partial" or "leaked" -- empty on "reverted".
+	// Without this, a failed cleanup had no diagnostic trail anywhere: only
+	// the post-hoc snapshot-diff residual (what's still there), never why
+	// the cleanup script itself didn't remove it.
+	CleanupError string `json:"cleanupError,omitempty"`
 	RequestedPriv   string    `json:"requestedPriv,omitempty"`
 	ExecutedAs      string    `json:"executedAs,omitempty"`
 	// Termination records HOW a step ended when the agent itself ended it, and

@@ -3,7 +3,9 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"strings"
@@ -35,23 +37,33 @@ func buildCmd(ctx context.Context, step ScenarioStep) *exec.Cmd {
 	return cmd
 }
 
-// runCleanup executes the step's cleanup command and returns a verdict:
-// "reverted" (exit 0), "partial" (non-zero exit), or "leaked" (start/timeout failure).
-func runCleanup(step ScenarioStep) string {
+// runCleanup executes the step's cleanup command and returns a verdict --
+// "reverted" (exit 0), "partial" (non-zero exit), or "leaked" (start/timeout
+// failure) -- plus a detail string. detail is empty on success; on failure it
+// captures the cleanup command's own stderr and exit code, which used to be
+// silently discarded, leaving a "partial"/"leaked" verdict with no way to
+// tell why the cleanup script didn't remove what it was supposed to.
+func runCleanup(step ScenarioStep) (verdict, detail string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "bash", "-c", step.Cleanup)
 	if step.PayloadDir != "" {
 		cmd.Env = append(os.Environ(), "BAS_PAYLOAD_DIR="+step.PayloadDir)
 	}
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
 	err := cmd.Run()
 	if err == nil {
-		return "reverted"
+		return "reverted", ""
 	}
 	if ctx.Err() != nil {
-		return "leaked"
+		return "leaked", fmt.Sprintf("cleanup timed out after 30s: %s", trimOutput(stderr.Bytes()))
 	}
-	return "partial"
+	exitCode := -1
+	if exitErr, ok := err.(*exec.ExitError); ok {
+		exitCode = exitErr.ExitCode()
+	}
+	return "partial", fmt.Sprintf("exit %d: %s", exitCode, trimOutput(stderr.Bytes()))
 }
 
 func collectRecentEvents(_ context.Context, _ time.Time) []string {

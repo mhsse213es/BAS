@@ -192,7 +192,7 @@ func execStep(parentCtx context.Context, step ScenarioStep, pool *HostPool) prot
 		if r, ok := pool.Run(ctx, step); ok {
 			r.Events = collectRecentEvents(parentCtx, before)
 			if step.Cleanup != "" {
-				r.CleanupVerdict = runCleanup(step)
+				r.CleanupVerdict, r.CleanupError = runCleanup(step)
 				r.CleanupResidual, r.CleanupVerdict = reconcileCleanupVerdict(
 					preCleanupSnap, captureSnapshotLite(step.TaskID), r.CleanupVerdict)
 			}
@@ -454,7 +454,7 @@ func execStep(parentCtx context.Context, step ScenarioStep, pool *HostPool) prot
 	result.Events = collectRecentEvents(parentCtx, before)
 
 	if step.Cleanup != "" {
-		result.CleanupVerdict = runCleanup(step)
+		result.CleanupVerdict, result.CleanupError = runCleanup(step)
 		result.CleanupResidual, result.CleanupVerdict = reconcileCleanupVerdict(
 			preCleanupSnap, captureSnapshotLite(step.TaskID), result.CleanupVerdict)
 	}

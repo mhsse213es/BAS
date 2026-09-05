@@ -371,6 +371,10 @@ type ExecResult struct {
 	// agent/executor.go's reconcileCleanupVerdict). Nil when no cleanup was
 	// defined or the agent's before/after snapshot pair wasn't captured.
 	CleanupResidual []string `json:"cleanupResidual,omitempty"`
+	// CleanupError captures the cleanup command's own stderr and exit code
+	// when CleanupVerdict is "partial" or "leaked" -- see
+	// agent/protocol.ExecResult.CleanupError for why this exists.
+	CleanupError string `json:"cleanupError,omitempty"`
 	// RequestedPriv mirrors the step's requires_priv declaration. Empty for
 	// unannotated (legacy) steps.
 	RequestedPriv string `json:"requestedPriv,omitempty"`

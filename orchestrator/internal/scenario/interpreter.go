@@ -118,6 +118,7 @@ func Interpret(step Step, result ExecResult) models.SimulationResult {
 		Events:              result.Events,
 		CleanupVerdict:      result.CleanupVerdict,
 		CleanupResidual:     result.CleanupResidual,
+		CleanupError:        result.CleanupError,
 		RequestedPriv:       result.RequestedPriv,
 		RequestedPrivMin:    step.RequiresPriv.Minimum,
 		RequestedPrivPref:   step.RequiresPriv.Preferred,

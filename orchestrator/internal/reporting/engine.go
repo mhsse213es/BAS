@@ -471,6 +471,9 @@ type TechniqueRow struct {
 	// buildEnvRestoration for how it's cross-referenced against reverted[] to
 	// produce the "rescued" verdict.
 	CleanupResidual []string `json:"cleanupResidual,omitempty"`
+	// CleanupError is the cleanup command's own stderr+exit code when
+	// CleanupVerdict is partial/leaked -- see models.SimulationResult.CleanupError.
+	CleanupError string `json:"cleanupError,omitempty"`
 	ControlName     string   `json:"controlName,omitempty"`   // specific control that blocked (Defender ASR, AppLocker, WDAC)
 	ControlRuleID   string   `json:"controlRuleId,omitempty"` // ASR GUID or AppLocker policy name
 	// RequestedPriv is the effective tier sent to the agent (PrivSpec.Effective()).
@@ -1112,6 +1115,7 @@ func buildTechniqueMatrix(results []models.SimulationResult, dets []DetectionTec
 			DurationMs:        r.DurationMs,
 			CleanupVerdict:    r.CleanupVerdict,
 			CleanupResidual:   r.CleanupResidual,
+			CleanupError:      r.CleanupError,
 			RequestedPriv:     privLabel(r.RequestedPriv),
 			RequestedPrivMin:  privLabel(r.RequestedPrivMin),
 			RequestedPrivPref: privLabel(r.RequestedPrivPref),
