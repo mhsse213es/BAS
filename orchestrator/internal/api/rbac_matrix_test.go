@@ -156,6 +156,7 @@ var routeMatrix = []routeCase{
 	{http.MethodGet, "/api/report/full/html", tierAny, ""},
 	{http.MethodGet, "/api/report/full/pdf", tierAny, ""},
 	{http.MethodGet, "/api/report/full/csv", tierAny, ""},
+	{http.MethodGet, "/api/report/full/json", tierAny, ""},
 	{http.MethodGet, "/api/report/audit-pack", tierAny, ""},
 	{http.MethodGet, "/api/compliance/frameworks", tierAny, ""},
 	{http.MethodGet, "/api/compliance/report", tierAny, ""},

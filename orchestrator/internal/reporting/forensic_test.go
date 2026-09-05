@@ -93,3 +93,91 @@ func TestForensicCSV_StepNameColumn(t *testing.T) {
 		t.Error("both rows have the same Technique ID/Name but must show distinct Step Names")
 	}
 }
+
+// colIndex finds a column by its exact header text, failing the test if the
+// header is missing -- robust against the columns being reordered later.
+func colIndex(t *testing.T, header []string, name string) int {
+	t.Helper()
+	for i, h := range header {
+		if h == name {
+			return i
+		}
+	}
+	t.Fatalf("CSV header missing a %q column", name)
+	return -1
+}
+
+// TestForensicCSV_DetectionAlertCleanupBlockingControlColumns proves the
+// richer per-technique fields the HTML/PDF report already shows --
+// detection provider/confidence/MTTD, cleanup verdict/error, and the
+// specific blocking control -- are also present in the forensic CSV, not
+// just the flat 16-column table it shipped with before.
+func TestForensicCSV_DetectionAlertCleanupBlockingControlColumns(t *testing.T) {
+	results := []models.SimulationResult{
+		{
+			Technique:        models.AttackTechnique{ID: "T1003", Name: "OS Credential Dumping", Tactic: "credential-access"},
+			Result:           models.ResultFail,
+			DetectionVerdict: "detected",
+			DetectionAlert:   &models.DetectionAlert{Provider: "CrowdStrike Falcon", Confidence: "high", MTTDMs: 4200},
+			CleanupVerdict:   "partial",
+			CleanupError:     "access denied removing staged payload",
+			BlockingControl:  &models.BlockingControl{Name: "Defender ASR: Block credential stealing"},
+		},
+	}
+	var buf bytes.Buffer
+	WriteForensicCSV(&buf, "Test Scenario", results, "", 0)
+	rows, err := csv.NewReader(&buf).ReadAll()
+	if err != nil {
+		t.Fatalf("parse csv: %v", err)
+	}
+	if len(rows) != 2 {
+		t.Fatalf("expected 2 rows (header + 1), got %d", len(rows))
+	}
+	header, row := rows[0], rows[1]
+
+	cases := map[string]string{
+		"Detection":            "Detected",
+		"Detection Provider":   "CrowdStrike Falcon",
+		"Detection Confidence": "high",
+		"MTTD (ms)":            "4200",
+		"Cleanup Verdict":      "partial",
+		"Cleanup Error":        "access denied removing staged payload",
+		"Blocking Control":     "Defender ASR: Block credential stealing",
+	}
+	for col, want := range cases {
+		got := row[colIndex(t, header, col)]
+		if got != want {
+			t.Errorf("column %q = %q, want %q", col, got, want)
+		}
+	}
+}
+
+// TestForensicCSV_DetectionVerdictPreferredOverEventClassifier proves the
+// CSV's Detection column can never disagree with the HTML/PDF report for
+// the same result: DetectionVerdict (populated by the post-run detection
+// sweep, SubmitRunDetections) must win over the older
+// classifyDetection(r.Events) heuristic, exactly as engine.go's own
+// "DetectionVerdict... is preferred" comment documents. A FAIL result with
+// empty Events would classify as "None" via the legacy heuristic alone --
+// proving DetectionVerdict="detected" overrides that, not just coexists
+// with it.
+func TestForensicCSV_DetectionVerdictPreferredOverEventClassifier(t *testing.T) {
+	results := []models.SimulationResult{
+		{
+			Technique:        models.AttackTechnique{ID: "T1003", Name: "OS Credential Dumping", Tactic: "credential-access"},
+			Result:           models.ResultFail,
+			Events:           nil, // legacy classifier alone would say "None"
+			DetectionVerdict: "detected",
+		},
+	}
+	var buf bytes.Buffer
+	WriteForensicCSV(&buf, "Test Scenario", results, "", 0)
+	rows, err := csv.NewReader(&buf).ReadAll()
+	if err != nil {
+		t.Fatalf("parse csv: %v", err)
+	}
+	got := rows[1][colIndex(t, rows[0], "Detection")]
+	if got != "Detected" {
+		t.Errorf("Detection = %q, want %q (DetectionVerdict must win over the empty-Events legacy classifier)", got, "Detected")
+	}
+}

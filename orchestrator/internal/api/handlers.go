@@ -5265,6 +5265,72 @@ func (h *Handler) GetFullReportPDF(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// GET /api/report/full/json?agentId=X
+// Returns the same data HTML/PDF render, as a single JSON document: the
+// FullReport structure (executive summary, kill chain, attack path,
+// readiness scores, KEV exposure, variant coverage, and everything else
+// reportingEngine.Build assembles), the per-framework compliance summary
+// both HTML and PDF append, and the raw per-technique results PDF's detail
+// section pulls separately. A consumer (SIEM ingestion, custom tooling)
+// gets everything the visual reports show without scraping HTML or
+// parsing a PDF.
+func (h *Handler) GetFullReportJSON(w http.ResponseWriter, r *http.Request) {
+	if h.reportingEngine == nil {
+		jsonError(w, "reporting engine not loaded", http.StatusServiceUnavailable)
+		return
+	}
+	agentID := r.URL.Query().Get("agentId")
+	if agentID == "" {
+		jsonError(w, "agentId required", http.StatusBadRequest)
+		return
+	}
+	filter := r.URL.Query().Get("filter")
+	report, err := h.reportingEngine.Build(r.Context(), agentID, filter)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	var resultsRaw []byte
+	h.db.QueryRow(r.Context(),
+		`SELECT results FROM scenario_runs
+		  WHERE agent_id = $1 AND status IN ('completed','partial')
+		  ORDER BY started_at DESC LIMIT 1`, agentID,
+	).Scan(&resultsRaw)
+	var results []models.SimulationResult
+	if len(resultsRaw) > 0 {
+		json.Unmarshal(resultsRaw, &results)
+	}
+	results = reporting.FilterResults(results, filter)
+
+	host := report.Agent.Hostname
+	if host == "" {
+		host = agentID
+	}
+	scenPart := sanitizeFilename(report.ScenarioName)
+	if scenPart == "" {
+		scenPart = "report"
+	}
+	filterSuffix := ""
+	if filter != "" && filter != "all" {
+		filterSuffix = "-" + filter
+	}
+	fname := buildReportFilename("BAS_Report", scenPart+"-"+host+filterSuffix, "json")
+
+	b, err := json.MarshalIndent(struct {
+		Report            *reporting.FullReport             `json:"report"`
+		ComplianceSummary []reporting.ComplianceSummaryRow   `json:"complianceSummary,omitempty"`
+		Results           []models.SimulationResult          `json:"results,omitempty"`
+	}{report, h.complianceRows(r.Context(), agentID, filter), results}, "", "  ")
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, fname))
+	w.Write(b)
+}
+
 // GET /api/report/full/csv?agentId=X
 // Streams the forensic CSV (one row per technique result) for the agent's latest
 // completed/partial run — the SOC/auditor evidence layer beside the executive report.

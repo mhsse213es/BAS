@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -88,6 +89,7 @@ func TestFullReport_MissingAgentID_Matrix(t *testing.T) {
 			{"html", h.GetFullReportHTML, "/api/report/full/html"},
 			{"pdf", h.GetFullReportPDF, "/api/report/full/pdf"},
 			{"csv", h.GetFullReportCSV, "/api/report/full/csv"},
+			{"json", h.GetFullReportJSON, "/api/report/full/json"},
 			{"auditpack", h.GetAuditPack, "/api/report/audit-pack"},
 		}
 		for _, c := range cases {
@@ -120,6 +122,59 @@ func TestGetFullReportPDF_Success(t *testing.T) {
 		}
 		if !regexp.MustCompile(`filename="Audspect_BAS_Report_.*\.pdf"`).MatchString(rec.Header().Get("Content-Disposition")) {
 			t.Fatalf("content-disposition = %q", rec.Header().Get("Content-Disposition"))
+		}
+	})
+}
+
+// TestGetFullReportJSON_Success proves the JSON export carries everything
+// HTML/PDF render: the FullReport structure (Report), the per-framework
+// compliance summary (ComplianceSummary), and the raw per-technique results
+// PDF's detail section pulls separately (Results) -- not just a subset.
+func TestGetFullReportJSON_Success(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		seedReportableRun(t, pool, "fr-json", "agent-fr-json", reportRunOpts{})
+		h := newReportingHandler(t, pool, nil)
+		rec := httptest.NewRecorder()
+		h.GetFullReportJSON(rec, fullReq("/api/report/full/json", "agent-fr-json"))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200, body = %s", rec.Code, rec.Body.String())
+		}
+		if rec.Header().Get("Content-Type") != "application/json" {
+			t.Fatalf("content-type = %q, want application/json", rec.Header().Get("Content-Type"))
+		}
+		if !regexp.MustCompile(`filename=".*\.json"`).MatchString(rec.Header().Get("Content-Disposition")) {
+			t.Fatalf("content-disposition = %q, want a .json filename", rec.Header().Get("Content-Disposition"))
+		}
+		var out struct {
+			Report struct {
+				ScenarioName string `json:"scenarioName"`
+			} `json:"report"`
+			ComplianceSummary []struct {
+				Framework string `json:"framework"`
+			} `json:"complianceSummary"`
+			Results []struct {
+				Technique struct {
+					ID string `json:"id"`
+				} `json:"technique"`
+			} `json:"results"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
+			t.Fatalf("response is not valid JSON: %v\nbody: %s", err, rec.Body.String())
+		}
+		if len(out.ComplianceSummary) == 0 {
+			t.Error("expected at least one compliance summary row (a mapper is attached via newReportingHandler)")
+		}
+		foundTechnique := false
+		for _, r := range out.Results {
+			if r.Technique.ID == "T1059.001" {
+				foundTechnique = true
+			}
+		}
+		if !foundTechnique {
+			t.Errorf("results missing seeded technique T1059.001: %+v", out.Results)
 		}
 	})
 }
