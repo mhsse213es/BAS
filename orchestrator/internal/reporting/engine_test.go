@@ -451,7 +451,8 @@ func TestBuildEnvRestoration_RescuedWhenResidualMatchesReverted(t *testing.T) {
 
 func TestBuildEnvRestoration_LeakedWhenResidualHasNoMatch(t *testing.T) {
 	matrix := []TechniqueRow{
-		{TechniqueID: "T1053.005", CleanupVerdict: "leaked", CleanupResidual: []string{"tmp:/tmp/evil"}},
+		{TechniqueID: "T1070.001", TechniqueName: "Indicator Removal", StepName: "Clear logs",
+			CleanupVerdict: "partial", CleanupResidual: []string{"tmp:/tmp/evil"}, CleanupError: "exit 1: Access is denied."},
 	}
 	reverted := []string{"schtask deleted: \\Unrelated\\Task"}
 
@@ -463,8 +464,43 @@ func TestBuildEnvRestoration_LeakedWhenResidualHasNoMatch(t *testing.T) {
 	if e.StepsLeaked != 1 {
 		t.Errorf("StepsLeaked = %d, want 1", e.StepsLeaked)
 	}
-	if matrix[0].CleanupVerdict != "leaked" {
-		t.Errorf("matrix[0].CleanupVerdict = %q, want unchanged %q", matrix[0].CleanupVerdict, "leaked")
+	if matrix[0].CleanupVerdict != "partial" {
+		t.Errorf("matrix[0].CleanupVerdict = %q, want unchanged %q", matrix[0].CleanupVerdict, "partial")
+	}
+	// TestBuildEnvRestoration_LeakedWhenResidualHasNoMatch doubles as the
+	// regression test for LeakedItems: the aggregate StepsLeaked count alone
+	// can't say WHICH step leaked, WHAT's still on the endpoint, or WHY the
+	// cleanup script didn't remove it -- this is the per-step detail an
+	// operator actually needs.
+	if len(e.LeakedItems) != 1 {
+		t.Fatalf("LeakedItems = %d entries, want 1", len(e.LeakedItems))
+	}
+	item := e.LeakedItems[0]
+	if item.TechniqueID != "T1070.001" || item.StepName != "Clear logs" {
+		t.Errorf("LeakedItems[0] = %+v, want TechniqueID=T1070.001 StepName=%q", item, "Clear logs")
+	}
+	if len(item.Residual) != 1 || item.Residual[0] != "tmp:/tmp/evil" {
+		t.Errorf("LeakedItems[0].Residual = %v, want [tmp:/tmp/evil]", item.Residual)
+	}
+	if item.Error != "exit 1: Access is denied." {
+		t.Errorf("LeakedItems[0].Error = %q, want the cleanup command's own captured detail", item.Error)
+	}
+}
+
+// TestBuildEnvRestoration_RescuedItemExcludedFromLeakedItems confirms a step
+// the whole-run safety net later confirmed removed never appears in the
+// per-step leaked-detail list -- it was reclassified "rescued" before the
+// LeakedItems population loop runs, so it must not double-report as a leak.
+func TestBuildEnvRestoration_RescuedItemExcludedFromLeakedItems(t *testing.T) {
+	matrix := []TechniqueRow{
+		{TechniqueID: "T1053.005", CleanupVerdict: "leaked", CleanupResidual: []string{"schtask:\\Evil\\Task"}},
+	}
+	reverted := []string{"schtask deleted: \\Evil\\Task"}
+
+	e := buildEnvRestoration(matrix, reverted)
+
+	if len(e.LeakedItems) != 0 {
+		t.Errorf("LeakedItems = %+v, want empty -- a rescued step is not a leak", e.LeakedItems)
 	}
 }
 

@@ -3673,6 +3673,26 @@ type EnvRestoration struct {
 	RunCount       int `json:"runCount,omitempty"`
 	RunsClean      int `json:"runsClean,omitempty"`
 	RunsWithIssues int `json:"runsWithIssues,omitempty"`
+	// LeakedItems names each step whose cleanup did not fully succeed --
+	// the aggregate StepsLeaked count alone can't say which step, what's
+	// still on the endpoint, or why the cleanup script didn't remove it.
+	// Populated from the same post-reconciliation verdict StepsLeaked
+	// counts from, so a step the whole-run safety net later confirmed
+	// removed (verdict "rescued") never appears here.
+	LeakedItems []LeakedCleanupItem `json:"leakedItems,omitempty"`
+}
+
+// LeakedCleanupItem is one step's cleanup-failure detail: which step, what
+// the snapshot diff found still present, and why the cleanup command itself
+// didn't remove it (empty Error if the agent predates CleanupError, or the
+// command produced no stderr).
+type LeakedCleanupItem struct {
+	TechniqueID   string   `json:"techniqueId"`
+	TechniqueName string   `json:"techniqueName"`
+	StepName      string   `json:"stepName,omitempty"`
+	Verdict       string   `json:"verdict"` // "partial" | "leaked"
+	Residual      []string `json:"residual,omitempty"`
+	Error         string   `json:"error,omitempty"`
 }
 
 // revertedKeyPrefixes maps each human-readable prefix revertFromSnapshot
@@ -3756,6 +3776,14 @@ func buildEnvRestoration(matrix []TechniqueRow, reverted []string) EnvRestoratio
 		case "partial", "leaked":
 			e.StepsWithCleanup++
 			e.StepsLeaked++
+			e.LeakedItems = append(e.LeakedItems, LeakedCleanupItem{
+				TechniqueID:   r.TechniqueID,
+				TechniqueName: r.TechniqueName,
+				StepName:      r.StepName,
+				Verdict:       r.CleanupVerdict,
+				Residual:      r.CleanupResidual,
+				Error:         r.CleanupError,
+			})
 		default:
 			e.StepsNoCleanup++
 		}

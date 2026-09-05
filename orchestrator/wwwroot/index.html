@@ -15139,6 +15139,31 @@ function renderRunReportExtra(rep) {
         '</div>';
     }
 
+    // Leaked-item detail: the aggregate "N step(s) leaked" line above can't
+    // say WHICH step, WHAT's still on the endpoint, or WHY the cleanup
+    // script didn't remove it -- envR.leakedItems (internal/reporting's
+    // LeakedCleanupItem) carries exactly that, one entry per non-rescued
+    // partial/leaked step.
+    var erLeakedHtml = '';
+    if (envR && envR.leakedItems && envR.leakedItems.length > 0) {
+      erLeakedHtml = '<div style="font-size:0.6rem;color:var(--danger);text-transform:uppercase;letter-spacing:.06em;margin-top:0.6rem;margin-bottom:0.35rem">Residual Changes (' + envR.leakedItems.length + ')</div>' +
+        '<div style="background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:0.5rem 0.6rem;font-size:0.72rem;color:var(--text);line-height:1.5">' +
+          envR.leakedItems.map(function(item) {
+            var title = x(item.techniqueId) + (item.stepName ? ' — ' + x(item.stepName) : '') + (item.techniqueName ? ' (' + x(item.techniqueName) + ')' : '');
+            var residualLine = (item.residual && item.residual.length > 0)
+              ? '<div style="color:var(--warning);margin-top:2px">Left on endpoint: <code>' + x(item.residual.join(', ')) + '</code></div>'
+              : '';
+            var errorLine = item.error
+              ? '<div style="color:var(--muted);margin-top:2px;font-family:monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="' + x(item.error) + '">Cleanup error: ' + x(item.error) + '</div>'
+              : '';
+            return '<div style="margin-bottom:0.5rem;padding-bottom:0.5rem;border-bottom:1px solid rgba(34,50,74,0.4)">' +
+              '<div style="font-weight:600">' + title + ' <span style="font-weight:400;color:var(--muted);text-transform:capitalize">(' + x(item.verdict) + ')</span></div>' +
+              residualLine + errorLine +
+            '</div>';
+          }).join('') +
+        '</div>';
+    }
+
     html += '<div style="' + panel + ';border-left:3px solid ' + erBorderCol + ';background:' + erBg + '">' +
       '<div style="' + hdr + ';display:flex;align-items:center;justify-content:space-between">' +
         '<span>Environment Restoration</span>' +
@@ -15157,6 +15182,7 @@ function renderRunReportExtra(rep) {
       '</div>' +
       (erLeaked > 0 ? '<div style="font-size:0.72rem;color:var(--danger);margin-bottom:4px">&#9888; ' + erLeaked + ' step(s) leaked &nbsp;&#8226;&nbsp; ' + erCleaned + ' cleaned</div>' : '') +
       (envR && envR.stepsRescued > 0 ? '<div style="font-size:0.72rem;color:var(--warning);margin-bottom:4px">&#9888; ' + envR.stepsRescued + ' step(s) cleaned by the safety-net sweep, not by their own script</div>' : '') +
+      erLeakedHtml +
       erItemsHtml +
     '</div>';
   }
