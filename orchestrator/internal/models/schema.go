@@ -230,6 +230,17 @@ const SkipReasonMissingContent = "missing-content"
 // executable command at all.
 const SkipReasonPlatformUnavailable = "platform-unavailable"
 
+// SkipReasonPrerequisiteMissing marks a SimulationResult synthesized
+// server-side because a curated technique's required environmental fact
+// (e.g. domain_joined) did not match the target agent's known value. Do not
+// confuse with the differently-typed, differently-spelled SkipReason enum
+// value SkipReasonPrerequisiteUnsatisfied ("prerequisite_unsatisfied",
+// underscored) above -- that one is ExecutionAttempt.SkipReason's vocabulary
+// (a typed SkipReason), this one is SimulationResult.SkipReason's (a plain
+// string, hyphenated like its siblings on this line). The two fields belong
+// to different tables and must never be assigned each other's constants.
+const SkipReasonPrerequisiteMissing = "prerequisite-missing"
+
 // DetectionAlert is the alert record that matched this technique during the
 // post-run detection sweep. Mirrors detect.AlertRecord (server-side package)
 // but kept in models so it serialises cleanly with SimulationResult.

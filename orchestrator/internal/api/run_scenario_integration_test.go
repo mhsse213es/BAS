@@ -268,6 +268,119 @@ func TestRunScenarioIntegration_MaxPrivilegeFiltersStep(t *testing.T) {
 	})
 }
 
+// TestRunScenarioIntegration_SkipsStepMissingPrerequisite mirrors
+// TestRunScenarioIntegration_MaxPrivilegeFiltersStep's shape for the new
+// environmental-prerequisite filter: T1087.002 requires domain_joined=true
+// (see scenario.PrerequisiteFor); against a non-domain-joined agent it must
+// be skipped while an unrelated step in the same run dispatches normally.
+func TestRunScenarioIntegration_SkipsStepMissingPrerequisite(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		steps := []scenario.Step{
+			{Name: "unrelated-step", TechniqueID: "T1082", Framework: "custom", Command: "echo hi",
+				RequiresPriv: scenario.PrivSpec{Minimum: "user"}},
+			{Name: "domain-step", TechniqueID: "T1087.002", Framework: "custom", Command: "echo domain",
+				RequiresPriv: scenario.PrivSpec{Minimum: "user"}},
+		}
+		sc, engine := minimalLiveScenario(t, "int-prereq-missing", steps...)
+		h := New(pool, ws.NewHub(), engine, "")
+		agentID := "int-agent-prereq-missing"
+		seedActiveAgent(t, pool, agentID, "Windows")
+		if _, err := pool.Exec(context.Background(),
+			`UPDATE agents SET domain_joined = false WHERE agent_id = $1`, agentID); err != nil {
+			t.Fatalf("seed domain_joined=false: %v", err)
+		}
+		fake := startFakeAgent(t, h.hub, agentID)
+		defer fake.Disconnect(t)
+
+		rec := httptest.NewRecorder()
+		h.RunScenario(rec, runScenarioReq(sc.ID, map[string]any{
+			"agentId": agentID, "mode": "telemetry", "confirmLive": true,
+		}))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+		}
+		var resp map[string]any
+		_ = json.Unmarshal(rec.Body.Bytes(), &resp)
+		runID, _ := resp["runId"].(string)
+		if runID == "" {
+			t.Fatalf("resp = %+v, want a non-empty runId", resp)
+		}
+
+		env := fake.WaitForMessage(t, 2*time.Second)
+		var cmd scenario.ScenarioCommand
+		if err := json.Unmarshal(env.Data, &cmd); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		if len(cmd.Steps) != 1 || cmd.Steps[0].Name != "unrelated-step" {
+			t.Fatalf("cmd.Steps = %+v, want exactly [unrelated-step] (domain-step must be filtered)", cmd.Steps)
+		}
+
+		var skippedJSON []byte
+		if err := pool.QueryRow(context.Background(),
+			`SELECT policy_skipped_results FROM scenario_runs WHERE id = $1`, runID,
+		).Scan(&skippedJSON); err != nil {
+			t.Fatalf("read policy_skipped_results: %v", err)
+		}
+		var skipped []models.SimulationResult
+		if err := json.Unmarshal(skippedJSON, &skipped); err != nil {
+			t.Fatalf("unmarshal policy_skipped_results: %v", err)
+		}
+		if len(skipped) != 1 {
+			t.Fatalf("policy_skipped_results = %d entries, want 1", len(skipped))
+		}
+		if skipped[0].Result != models.ResultSkipped {
+			t.Errorf("skipped[0].Result = %q, want %q", skipped[0].Result, models.ResultSkipped)
+		}
+		if skipped[0].SkipReason != models.SkipReasonPrerequisiteMissing {
+			t.Errorf("skipped[0].SkipReason = %q, want %q", skipped[0].SkipReason, models.SkipReasonPrerequisiteMissing)
+		}
+		if skipped[0].Technique.ID != "T1087.002" {
+			t.Errorf("skipped[0].Technique.ID = %q, want T1087.002", skipped[0].Technique.ID)
+		}
+	})
+}
+
+// TestRunScenarioIntegration_UnknownDomainJoinedNeverGates confirms the
+// Error-handling contract: an agent that has never reported domain_joined
+// (NULL) must never have a curated technique skipped on its account.
+func TestRunScenarioIntegration_UnknownDomainJoinedNeverGates(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		steps := []scenario.Step{
+			{Name: "domain-step", TechniqueID: "T1087.002", Framework: "custom", Command: "echo domain",
+				RequiresPriv: scenario.PrivSpec{Minimum: "user"}},
+		}
+		sc, engine := minimalLiveScenario(t, "int-prereq-unknown", steps...)
+		h := New(pool, ws.NewHub(), engine, "")
+		agentID := "int-agent-prereq-unknown"
+		seedActiveAgent(t, pool, agentID, "Windows") // domain_joined left NULL -- never set
+		fake := startFakeAgent(t, h.hub, agentID)
+		defer fake.Disconnect(t)
+
+		rec := httptest.NewRecorder()
+		h.RunScenario(rec, runScenarioReq(sc.ID, map[string]any{
+			"agentId": agentID, "mode": "telemetry", "confirmLive": true,
+		}))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+		}
+
+		env := fake.WaitForMessage(t, 2*time.Second)
+		var cmd scenario.ScenarioCommand
+		if err := json.Unmarshal(env.Data, &cmd); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		if len(cmd.Steps) != 1 || cmd.Steps[0].Name != "domain-step" {
+			t.Fatalf("cmd.Steps = %+v, want [domain-step] dispatched normally (domain_joined unknown must never gate)", cmd.Steps)
+		}
+	})
+}
+
 // The operator's chosen mode and privilege ceiling were previously discarded
 // after dispatch -- only their downstream effects (which steps got skipped)
 // were visible, with no way to tell "was this the admin run or the no-limit

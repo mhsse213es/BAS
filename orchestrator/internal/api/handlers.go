@@ -1666,6 +1666,20 @@ func synthesizeSkippedContentResult(sk scenario.CalderaSkippedAbility) models.Si
 	return sim
 }
 
+// synthesizePrerequisiteSkipResult mirrors synthesizePolicySkipResult for a
+// step whose curated environmental prerequisite (scenario.PrerequisiteFor)
+// does not match the target agent's known fact value.
+func synthesizePrerequisiteSkipResult(st scenario.ScenarioStep, spec scenario.PrerequisiteSpec) models.SimulationResult {
+	step := scenario.Step{TechniqueID: st.TechniqueID, Name: st.Name, Framework: st.Framework}
+	result := scenario.ExecResult{
+		TaskID: st.TaskID,
+		Stdout: fmt.Sprintf("SKIP: requires %s=%v, agent reports otherwise", spec.Fact, spec.Required),
+	}
+	sim := scenario.Interpret(step, result)
+	sim.SkipReason = models.SkipReasonPrerequisiteMissing
+	return sim
+}
+
 // applyGeneratedArtifacts substitutes a fresh value for every curated artifact-identity
 // token still present in steps (artResolveArgs left them literal for exactly this
 // purpose) and registers each substitution in the IOC registry. Best-effort -- a
@@ -1985,6 +1999,29 @@ func (h *Handler) dispatchRun(ctx context.Context, sc *scenario.Scenario, agentI
 		}
 		steps = kept
 	}
+
+	// Environmental prerequisite filter: a curated technique whose required
+	// fact doesn't match the agent's known value is skipped, never dispatched.
+	// domainJoined == nil (agent has never reported it) means "unknown, do
+	// not gate" -- see the Error-handling section of the Phase 0C spec.
+	var domainJoined *bool
+	h.db.QueryRow(ctx,
+		`SELECT domain_joined FROM agents WHERE agent_id = $1`, agentID,
+	).Scan(&domainJoined)
+	if domainJoined != nil {
+		kept := make([]scenario.ScenarioStep, 0, len(steps))
+		for _, st := range steps {
+			if spec, ok := scenario.PrerequisiteFor(st.TechniqueID); ok && spec.Fact == "domain_joined" {
+				if *domainJoined != spec.Required {
+					skippedResults = append(skippedResults, synthesizePrerequisiteSkipResult(st, spec))
+					continue
+				}
+			}
+			kept = append(kept, st)
+		}
+		steps = kept
+	}
+
 	if len(skippedResults) > 0 {
 		log.Printf("[scenario] run %s: %d step(s)/ability(ies) skipped pre-dispatch (policy and/or Caldera resolution)",
 			runID, len(skippedResults))
