@@ -176,6 +176,35 @@ func TestScore_NoiseAloneScoresZeroDetectionRate(t *testing.T) {
 	}
 }
 
+// A recipient reporting a simulated phishing email through the exercise's own
+// tracking is a real, human-confirmed control reaction -- just not an
+// endpoint one. It must attribute the same way the five endpoint signals do.
+func TestCorrelate_UserReportIsADetection(t *testing.T) {
+	d := correlateOne(t, AlertRecord{
+		Channel: "exercise-report", Provider: "exercise-tracking",
+	})
+	if d.Verdict != "detected" {
+		t.Fatalf("Verdict = %q, want detected", d.Verdict)
+	}
+	if !hasMatch(d.MatchedBy, "userReported") {
+		t.Errorf("MatchedBy = %v, want userReported", d.MatchedBy)
+	}
+}
+
+// An ordinary endpoint alert must never gain userReported just because it
+// happens to land in the window -- that signal is exclusively for the
+// exercise's own report channel.
+func TestCorrelate_EndpointAlertNeverGetsUserReported(t *testing.T) {
+	d := correlateOne(t, AlertRecord{
+		Channel: "Microsoft-Windows-Windows Defender/Operational",
+		Provider: "Microsoft-Windows-Windows Defender", EventID: 1116,
+		ThreatName: "Trojan:Win32/Meterpreter",
+	})
+	if hasMatch(d.MatchedBy, "userReported") {
+		t.Errorf("MatchedBy = %v, unexpectedly included userReported", d.MatchedBy)
+	}
+}
+
 func hasMatch(list []string, want string) bool {
 	for _, s := range list {
 		if s == want {

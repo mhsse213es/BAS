@@ -59,6 +59,16 @@ func attributionSignals(a AlertRecord, detectIDs map[int]bool) []string {
 		out = append(out, "securitySubsystem")
 	}
 
+	// A simulated-phishing recipient reported it through the exercise's own
+	// tracking/report mechanism (internal/exercise's phishing_reported
+	// evidence, translated into this shape) -- a real, human-confirmed
+	// control reaction, just not an endpoint one. Distinct from the five
+	// signals above (all endpoint/EDR/kernel-audit concepts) but
+	// participates in the exact same attribution/verdict/scoring model.
+	if a.Channel == "exercise-report" {
+		out = append(out, "userReported")
+	}
+
 	return out
 }
 
