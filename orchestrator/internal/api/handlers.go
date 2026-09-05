@@ -2990,8 +2990,8 @@ var errRunNotRunning = fmt.Errorf("run not running")
 func (h *Handler) insertExecutionAttempt(ctx context.Context, source models.ExecutionSource, runID string) error {
 	_, err := h.db.Exec(ctx,
 		`INSERT INTO execution_attempts
-			(source, granularity, source_execution_id, source_attempt_id, status, created_at)
-		 VALUES ($1, 'run', $2, $2, 'pending', NOW())
+			(source, granularity, source_execution_id, source_attempt_id, status, created_at, dispatch_queued_at)
+		 VALUES ($1, 'run', $2, $2, 'pending', NOW(), NOW())
 		 ON CONFLICT (source, source_attempt_id) DO NOTHING`,
 		string(source), runID,
 	)

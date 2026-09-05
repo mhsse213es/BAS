@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/audspect/bas/internal/scenario"
 	"github.com/audspect/bas/internal/ws"
@@ -143,6 +144,61 @@ func TestExecutionAttemptsSchema_IdempotentOnRetry(t *testing.T) {
 		}
 		if count != 1 {
 			t.Errorf("row count = %d, want 1 (retry must not create a duplicate)", count)
+		}
+	})
+}
+
+func TestExecutionAttempt_FullLifecycle_DispatchToCompletion(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "")
+		agentID := "agent-ea-e2e"
+		seedActiveAgent(t, pool, agentID, "Linux")
+		fake := startFakeAgent(t, h.hub, agentID)
+		defer fake.Disconnect(t)
+
+		sc, _ := minimalLiveScenario(t, "int-ea-e2e")
+		ctx := context.Background()
+		runID, _, err := h.dispatchRun(ctx, sc, agentID, dispatchOpts{Mode: "telemetry", ConfirmLive: true})
+		if err != nil {
+			t.Fatalf("dispatchRun: %v", err)
+		}
+		fake.WaitForMessage(t, 2*time.Second)
+
+		// Confirm 'dispatched' status after dispatch.
+		var status string
+		if err := pool.QueryRow(ctx, `SELECT status FROM execution_attempts WHERE source_attempt_id = $1`, runID).Scan(&status); err != nil {
+			t.Fatalf("query after dispatch: %v", err)
+		}
+		if status != "dispatched" {
+			t.Fatalf("status after dispatch = %q, want dispatched", status)
+		}
+
+		// Agent submits its result.
+		submitResultOK(t, h, scenario.RawRunResult{
+			RunID: runID, ScenarioID: sc.ID, AgentID: agentID,
+			Results: []scenario.ExecResult{{TaskID: "t0", ExitCode: 0, Stdout: "PASS"}},
+		})
+
+		// Confirm 'completed' status, and every timestamp column populated
+		// through the lifecycle is non-null in the expected order.
+		var dispatchQueuedAt, dispatchSentAt, completedAt *time.Time
+		if err := pool.QueryRow(ctx,
+			`SELECT dispatch_queued_at, dispatch_sent_at, completed_at FROM execution_attempts WHERE source_attempt_id = $1`,
+			runID,
+		).Scan(&dispatchQueuedAt, &dispatchSentAt, &completedAt); err != nil {
+			t.Fatalf("query after completion: %v", err)
+		}
+		if dispatchQueuedAt == nil || dispatchSentAt == nil || completedAt == nil {
+			t.Fatalf("expected all three timestamps populated, got queued=%v sent=%v completed=%v", dispatchQueuedAt, dispatchSentAt, completedAt)
+		}
+		if !dispatchQueuedAt.Before(*dispatchSentAt) {
+			t.Error("dispatch_queued_at must be before dispatch_sent_at")
+		}
+		if !dispatchSentAt.Before(*completedAt) {
+			t.Error("dispatch_sent_at must be before completed_at")
 		}
 	})
 }
