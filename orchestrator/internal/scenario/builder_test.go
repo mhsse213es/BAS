@@ -98,3 +98,74 @@ func TestBuildSteps_ARTSelectivePlatform_MatchesARTAllPlatform(t *testing.T) {
 		t.Errorf("len(selSteps) = %d, want 2", len(selSteps))
 	}
 }
+
+// TestDedupeStepIdentity_DisambiguatesRepeatedTechniqueAndName proves the
+// unit mechanism directly: a Caldera adversary profile can legitimately
+// repeat the same ability (same TechniqueID + Name) at multiple points in
+// its kill chain, which -- since TaskID is a pure content hash of the two --
+// would otherwise collapse two distinct step instances onto one TaskID.
+func TestDedupeStepIdentity_DisambiguatesRepeatedTechniqueAndName(t *testing.T) {
+	steps := []ScenarioStep{
+		{TechniqueID: "T1082", Name: "System Information Discovery"},
+		{TechniqueID: "T1082", Name: "System Information Discovery"},
+		{TechniqueID: "T1082", Name: "System Information Discovery"},
+		{TechniqueID: "T1059", Name: "PowerShell Execution"}, // unrelated, untouched
+	}
+	for i := range steps {
+		steps[i].TaskID = TaskID(steps[i].TechniqueID, steps[i].Name)
+	}
+	origFirstTaskID := steps[0].TaskID
+	origFirstName := steps[0].Name
+
+	dedupeStepIdentity(steps)
+
+	if steps[0].TaskID != origFirstTaskID || steps[0].Name != origFirstName {
+		t.Errorf("first occurrence changed: TaskID=%q Name=%q, want unchanged %q/%q",
+			steps[0].TaskID, steps[0].Name, origFirstTaskID, origFirstName)
+	}
+	seen := map[string]bool{}
+	for i, s := range steps {
+		if seen[s.TaskID] {
+			t.Fatalf("step %d: TaskID %q collides with an earlier step -- dedup did not disambiguate it", i, s.TaskID)
+		}
+		seen[s.TaskID] = true
+		// TaskID must always be recomputable FROM the (possibly disambiguated)
+		// Name -- this is what keeps scenario.Interpret's independent
+		// TaskID(step.TechniqueID, step.Name) recomputation consistent with
+		// what was actually dispatched, instead of colliding all over again
+		// one layer down at SimulationResult.ID.
+		if want := TaskID(s.TechniqueID, s.Name); s.TaskID != want {
+			t.Errorf("step %d: TaskID %q does not match TaskID(TechniqueID, Name) = %q -- Interpret() would recompute a different, colliding ID", i, s.TaskID, want)
+		}
+	}
+	if steps[3].Name != "PowerShell Execution" {
+		t.Errorf("unrelated step's Name changed to %q, want unchanged", steps[3].Name)
+	}
+}
+
+// TestBuildSteps_DisambiguatesDuplicateAbilityAcrossKillChain proves the
+// fix end-to-end through BuildSteps (not just the standalone dedup
+// function) -- two explicit steps sharing the exact same TechniqueID+Name,
+// simulating what a Caldera adversary profile repeating the same ability
+// produces, must come out with distinct TaskIDs.
+func TestBuildSteps_DisambiguatesDuplicateAbilityAcrossKillChain(t *testing.T) {
+	sc := &Scenario{
+		Steps: []Step{
+			{Name: "Discovery Check", TechniqueID: "T1082", Framework: "custom", Command: "echo hi"},
+			{Name: "Discovery Check", TechniqueID: "T1082", Framework: "custom", Command: "echo hi"},
+		},
+	}
+	steps, _, err := BuildSteps(sc, "", "", nil, "windows")
+	if err != nil {
+		t.Fatalf("BuildSteps: %v", err)
+	}
+	if len(steps) != 2 {
+		t.Fatalf("len(steps) = %d, want 2", len(steps))
+	}
+	if steps[0].TaskID == steps[1].TaskID {
+		t.Fatalf("both steps got TaskID %q -- duplicate ability across the kill chain still collides", steps[0].TaskID)
+	}
+	if steps[0].Name == steps[1].Name {
+		t.Errorf("both steps kept Name %q -- Interpret() would recompute the same colliding TaskID from it", steps[0].Name)
+	}
+}

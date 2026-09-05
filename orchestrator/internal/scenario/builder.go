@@ -24,6 +24,37 @@ func TaskID(techniqueID, name string) string {
 	return hex.EncodeToString(h[:])[:8]
 }
 
+// dedupeStepIdentity disambiguates steps that would otherwise share an
+// identical (TechniqueID, Name) pair -- and therefore an identical TaskID,
+// a pure content hash of the two. This is a real, legitimate case, not a
+// hash collision: a Caldera adversary profile (or an ability list) commonly
+// repeats the same ability -- a recon/discovery check, say -- at multiple
+// points in its kill chain. Without this, two distinct step instances
+// collapse onto one TaskID: SubmitScenarioResult's stepMap lookup
+// misattributes one step's identity to the other, and the browser's live
+// progress panel (keyed by taskId) silently overwrites one step's events
+// with the other's, undercounting the run's real step total.
+//
+// Disambiguates by rewriting Name and TaskID together, never TaskID alone,
+// so every downstream recomputation from (TechniqueID, Name) --
+// scenario.Interpret's SimulationResult.ID chief among them -- stays
+// consistent with what was actually dispatched instead of colliding all
+// over again one layer down. Only the 2nd+ occurrence of any
+// (TechniqueID, Name) pair is touched; the first keeps its original Name
+// and TaskID unchanged, so a scenario with no duplicates builds
+// byte-identical steps to before this function existed.
+func dedupeStepIdentity(steps []ScenarioStep) {
+	seen := make(map[string]int, len(steps))
+	for i := range steps {
+		key := steps[i].TechniqueID + "|" + steps[i].Name
+		seen[key]++
+		if n := seen[key]; n > 1 {
+			steps[i].Name = fmt.Sprintf("%s (#%d)", steps[i].Name, n)
+			steps[i].TaskID = TaskID(steps[i].TechniqueID, steps[i].Name)
+		}
+	}
+}
+
 // StepMeta is the per-task metadata the server retains after dispatch so it can
 // interpret results from dynamically-built steps (ART/Caldera modes), whose
 // definitions are NOT stored in the scenario's static Steps. Persisted with the
@@ -85,6 +116,7 @@ func BuildSteps(sc *Scenario, calderaURL, calderaKey string, artStore *ARTStore,
 	if err != nil {
 		return nil, skipped, err
 	}
+	dedupeStepIdentity(steps)
 	AttachProfiles(steps)
 	return steps, skipped, nil
 }
