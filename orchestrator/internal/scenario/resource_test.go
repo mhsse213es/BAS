@@ -180,6 +180,34 @@ func TestTimeoutProfileForT1018Override(t *testing.T) {
 	}
 }
 
+// TestTimeoutProfileForT1087002Override is the regression test for the
+// second Step C evidence-backed override: staging recorded a real T1087.002
+// termination at exactly 20,002ms (exit=-1, timedOut=true) against the
+// shared 20s discoveryTimeout during the BlackCat kill-chain scenario
+// (2026-09-05). Curated at T1018's original starting budget (300s) rather
+// than its doubled 600s, since this technique lacks T1018's
+// silenceMs=0-actively-producing-output proof (it runs through the Windows
+// PowerShell pool path, which has no live buffer to measure silence from).
+func TestTimeoutProfileForT1087002Override(t *testing.T) {
+	got := TimeoutProfileFor("T1087.002")
+	if got == nil {
+		t.Fatal("T1087.002 should get a curated timeout")
+	}
+	if got.ExecuteSec != 300 {
+		t.Errorf("T1087.002 ExecuteSec = %d, want 300 (evidence-backed override, not the shared 20s discovery default)", got.ExecuteSec)
+	}
+	if got.ScheduleSec <= got.ExecuteSec {
+		t.Errorf("T1087.002 ScheduleSec = %d must exceed ExecuteSec = %d, or a queued sibling's own schedule bound expires before this step can finish", got.ScheduleSec, got.ExecuteSec)
+	}
+	// The T1018 override and the shared default must both be unaffected.
+	if t1018 := TimeoutProfileFor("T1018"); t1018.ExecuteSec != 600 {
+		t.Errorf("T1018 ExecuteSec = %d, want unchanged 600 -- the T1087.002 override must not leak", t1018.ExecuteSec)
+	}
+	if other := TimeoutProfileFor("T1082"); other.ExecuteSec != 20 {
+		t.Errorf("T1082 ExecuteSec = %d, want unchanged 20s -- the T1087.002 override must not leak to other techniques", other.ExecuteSec)
+	}
+}
+
 // TestPrerequisiteForT1087002 is the regression test for the first
 // evidence-backed prerequisite entry: T1087.002 (Account Discovery: Domain
 // Account) is meaningless against a non-domain-joined host, confirmed

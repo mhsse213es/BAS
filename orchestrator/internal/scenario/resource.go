@@ -83,8 +83,22 @@ var discoveryTimeout = &TimeoutProfile{ScheduleSec: 30, ExecuteSec: 20, GraceSec
 // project memory (project_timeout_scored_as_pass.md) flags for Plan B
 // (liveness-based extension with a hard ceiling) instead of another guess
 // at a fixed number.
+//
+// T1087.002 (Account Discovery: Domain Account): staging run 2026-09-05
+// (BlackCat kill-chain scenario) recorded a real termination at exactly
+// 20,002ms (exit=-1, timedOut=true) against the shared 20s discoveryTimeout.
+// Weaker evidence than T1018's: this technique runs through the Windows
+// PowerShell pool path, which has no live output buffer to measure
+// silenceMs from (see agent/pool_windows.go, fixed in 70fc69f to at least
+// report Reason+ElapsedMs on a pooled timeout) -- so there is no
+// "silenceMs=0, actively producing output" proof, only confirmation it hit
+// the wall. Given the same class of technique (broad AD/domain
+// enumeration, plausibly slow against a large or slow-responding domain
+// controller) and the same shared-default mismatch, curated at T1018's
+// original starting budget rather than guessing higher without evidence.
 var timeoutOverrides = map[string]*TimeoutProfile{
-	"T1018": {ScheduleSec: 610, ExecuteSec: 600, GraceSec: 10},
+	"T1018":     {ScheduleSec: 610, ExecuteSec: 600, GraceSec: 10},
+	"T1087.002": {ScheduleSec: 310, ExecuteSec: 300, GraceSec: 10},
 }
 
 // TimeoutProfileFor returns the curated timeout for a technique, or nil when the
