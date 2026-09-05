@@ -4013,8 +4013,12 @@ func (h *Handler) GetAdversaryTemplates(w http.ResponseWriter, r *http.Request) 
 }
 
 // POST /api/adversary-templates/{id}/run — dispatches one or more runs from a
-// template. Each requested source (bas/art/caldera) is dispatched independently
-// via dispatchRun so all standard guards apply per-source. Analyst+.
+// template against one or more target agents. Each requested source
+// (bas/art/caldera) is dispatched independently via dispatchRun, for each
+// resolved target agent independently, so all standard guards apply
+// per-source-per-agent -- one agent's OS mismatch or busy state can never
+// block another agent's dispatch, exactly like Full Sweep's and Scheduled
+// Assessments' own group-targeting isolation. Analyst+.
 func (h *Handler) RunAdversaryTemplate(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	tmpl, ok := adversaryTemplateByID(id)
@@ -4024,7 +4028,9 @@ func (h *Handler) RunAdversaryTemplate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		AgentID            string                   `json:"agentId"`
+		AgentID            string                   `json:"agentId"` // kept for backward compat -- folded into AgentIDs below
+		AgentIDs           []string                 `json:"agentIds"`
+		GroupIDs           []int64                  `json:"groupIds"`
 		Mode               string                   `json:"mode"`
 		ConfirmLive        bool                     `json:"confirmLive"`
 		ConfirmLab         bool                     `json:"confirmLab"`
@@ -4038,8 +4044,33 @@ func (h *Handler) RunAdversaryTemplate(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "invalid request: "+err.Error(), http.StatusBadRequest)
 		return
 	}
-	if req.AgentID == "" {
-		jsonError(w, "agentId required", http.StatusBadRequest)
+
+	targetIDs := append([]string{}, req.AgentIDs...)
+	if req.AgentID != "" {
+		targetIDs = append(targetIDs, req.AgentID)
+	}
+	if len(req.GroupIDs) > 0 {
+		if h.jobsStore == nil {
+			jsonError(w, "job engine not loaded -- required to resolve group targets", http.StatusServiceUnavailable)
+			return
+		}
+		groupAgentIDs, gerr := h.jobsStore.ResolveGroupAgentIDs(r.Context(), req.GroupIDs)
+		if gerr != nil {
+			jsonError(w, gerr.Error(), http.StatusInternalServerError)
+			return
+		}
+		targetIDs = append(targetIDs, groupAgentIDs...)
+	}
+	seen := make(map[string]bool, len(targetIDs))
+	targets := make([]string, 0, len(targetIDs))
+	for _, t := range targetIDs {
+		if t != "" && !seen[t] {
+			seen[t] = true
+			targets = append(targets, t)
+		}
+	}
+	if len(targets) == 0 {
+		jsonError(w, "at least one agentId or groupId is required", http.StatusBadRequest)
 		return
 	}
 
@@ -4050,9 +4081,10 @@ func (h *Handler) RunAdversaryTemplate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	type result struct {
-		Source string `json:"source"`
-		RunID  string `json:"runId,omitempty"`
-		Reason string `json:"reason,omitempty"`
+		AgentID string `json:"agentId"`
+		Source  string `json:"source"`
+		RunID   string `json:"runId,omitempty"`
+		Reason  string `json:"reason,omitempty"`
 	}
 	var dispatched, skipped []result
 
@@ -4061,72 +4093,74 @@ func (h *Handler) RunAdversaryTemplate(w http.ResponseWriter, r *http.Request) {
 		Reason: req.Reason, InitiatedBy: uid, MaxPrivilege: req.ExecutionPolicy.MaxPrivilege,
 	}
 
-	// BAS-native scenario dispatch.
-	if req.UseBAS && tmpl.BASScenarioID != "" {
-		sc, exists := h.engine.Get(tmpl.BASScenarioID)
-		if !exists {
-			skipped = append(skipped, result{Source: "bas", Reason: "scenario not loaded: " + tmpl.BASScenarioID})
-		} else {
-			runID, skip, err := h.dispatchRun(r.Context(), sc, req.AgentID, base)
-			switch {
-			case err != nil:
-				skipped = append(skipped, result{Source: "bas", Reason: err.Error()})
-			case skip != "":
-				skipped = append(skipped, result{Source: "bas", Reason: skip})
-			default:
-				dispatched = append(dispatched, result{Source: "bas", RunID: runID})
-				h.auditLog(r, "template.run.bas", runID, map[string]any{"template": id, "scenario": tmpl.BASScenarioID}, "ok")
+	for _, agentID := range targets {
+		// BAS-native scenario dispatch.
+		if req.UseBAS && tmpl.BASScenarioID != "" {
+			sc, exists := h.engine.Get(tmpl.BASScenarioID)
+			if !exists {
+				skipped = append(skipped, result{AgentID: agentID, Source: "bas", Reason: "scenario not loaded: " + tmpl.BASScenarioID})
+			} else {
+				runID, skip, err := h.dispatchRun(r.Context(), sc, agentID, base)
+				switch {
+				case err != nil:
+					skipped = append(skipped, result{AgentID: agentID, Source: "bas", Reason: err.Error()})
+				case skip != "":
+					skipped = append(skipped, result{AgentID: agentID, Source: "bas", Reason: skip})
+				default:
+					dispatched = append(dispatched, result{AgentID: agentID, Source: "bas", RunID: runID})
+					h.auditLog(r, "template.run.bas", runID, map[string]any{"template": id, "scenario": tmpl.BASScenarioID, "agentId": agentID}, "ok")
+				}
 			}
 		}
-	}
 
-	// ART technique dispatch — synthesizes an ad-hoc scenario carrying the
-	// template's curated technique list, mirroring the Caldera adversary
-	// branch below rather than depending on a standalone "selective"
-	// scenario in the catalog (the operator-facing "Selective" scenarios
-	// were removed; only Full Sweep remains there).
-	if req.UseART && len(tmpl.ARTTechniques) > 0 {
-		synthSc := &scenario.Scenario{
-			ID:            "art-adversary-" + id,
-			Name:          tmpl.Name + " (ART)",
-			ARTTechniques: tmpl.ARTTechniques,
-			Executable:    true,
-			SupportedOS:   []string{"windows"},
-		}
-		artOpts := base
-		artOpts.Techniques = tmpl.ARTTechniques
-		runID, skip, err := h.dispatchRun(r.Context(), synthSc, req.AgentID, artOpts)
-		switch {
-		case err != nil:
-			skipped = append(skipped, result{Source: "art", Reason: err.Error()})
-		case skip != "":
-			skipped = append(skipped, result{Source: "art", Reason: skip})
-		default:
-			dispatched = append(dispatched, result{Source: "art", RunID: runID})
-			h.auditLog(r, "template.run.art", runID, map[string]any{"template": id, "techniques": tmpl.ARTTechniques}, "ok")
-		}
-	}
-
-	// Caldera adversary dispatch — the frontend resolves the name hint to a UUID.
-	if req.CalderaAdversaryID != "" {
-		if len(req.CalderaAdversaryID) > 128 {
-			skipped = append(skipped, result{Source: "caldera", Reason: "adversary ID invalid"})
-		} else {
+		// ART technique dispatch — synthesizes an ad-hoc scenario carrying the
+		// template's curated technique list, mirroring the Caldera adversary
+		// branch below rather than depending on a standalone "selective"
+		// scenario in the catalog (the operator-facing "Selective" scenarios
+		// were removed; only Full Sweep remains there).
+		if req.UseART && len(tmpl.ARTTechniques) > 0 {
 			synthSc := &scenario.Scenario{
-				ID:                 "caldera-adversary-" + req.CalderaAdversaryID,
-				CalderaAdversaryID: req.CalderaAdversaryID,
-				Executable:         true,
-				SupportedOS:        []string{"windows"},
+				ID:            "art-adversary-" + id,
+				Name:          tmpl.Name + " (ART)",
+				ARTTechniques: tmpl.ARTTechniques,
+				Executable:    true,
+				SupportedOS:   []string{"windows"},
 			}
-			runID, skip, err := h.dispatchRun(r.Context(), synthSc, req.AgentID, base)
+			artOpts := base
+			artOpts.Techniques = tmpl.ARTTechniques
+			runID, skip, err := h.dispatchRun(r.Context(), synthSc, agentID, artOpts)
 			switch {
 			case err != nil:
-				skipped = append(skipped, result{Source: "caldera", Reason: err.Error()})
+				skipped = append(skipped, result{AgentID: agentID, Source: "art", Reason: err.Error()})
 			case skip != "":
-				skipped = append(skipped, result{Source: "caldera", Reason: skip})
+				skipped = append(skipped, result{AgentID: agentID, Source: "art", Reason: skip})
 			default:
-				dispatched = append(dispatched, result{Source: "caldera", RunID: runID})
-				h.auditLog(r, "template.run.caldera", runID, map[string]any{"template": id, "adversaryId": req.CalderaAdversaryID}, "ok")
+				dispatched = append(dispatched, result{AgentID: agentID, Source: "art", RunID: runID})
+				h.auditLog(r, "template.run.art", runID, map[string]any{"template": id, "techniques": tmpl.ARTTechniques, "agentId": agentID}, "ok")
+			}
+		}
+
+		// Caldera adversary dispatch — the frontend resolves the name hint to a UUID.
+		if req.CalderaAdversaryID != "" {
+			if len(req.CalderaAdversaryID) > 128 {
+				skipped = append(skipped, result{AgentID: agentID, Source: "caldera", Reason: "adversary ID invalid"})
+			} else {
+				synthSc := &scenario.Scenario{
+					ID:                 "caldera-adversary-" + req.CalderaAdversaryID,
+					CalderaAdversaryID: req.CalderaAdversaryID,
+					Executable:         true,
+					SupportedOS:        []string{"windows"},
+				}
+				runID, skip, err := h.dispatchRun(r.Context(), synthSc, agentID, base)
+				switch {
+				case err != nil:
+					skipped = append(skipped, result{AgentID: agentID, Source: "caldera", Reason: err.Error()})
+				case skip != "":
+					skipped = append(skipped, result{AgentID: agentID, Source: "caldera", Reason: skip})
+				default:
+					dispatched = append(dispatched, result{AgentID: agentID, Source: "caldera", RunID: runID})
+					h.auditLog(r, "template.run.caldera", runID, map[string]any{"template": id, "adversaryId": req.CalderaAdversaryID, "agentId": agentID}, "ok")
+				}
 			}
 		}
 	}
