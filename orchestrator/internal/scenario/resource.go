@@ -100,6 +100,32 @@ func TimeoutProfileFor(techniqueID string) *TimeoutProfile {
 	return nil
 }
 
+// PrerequisiteSpec names a static fact a technique requires to be true (or
+// false) about the target agent before it is worth dispatching. See
+// docs/superpowers/specs/2026-09-05-phase0c-prerequisite-evaluation-design.md.
+type PrerequisiteSpec struct {
+	Fact     string // "domain_joined" is the only fact that exists in this phase
+	Required bool   // the value Fact must equal for the step to be eligible
+}
+
+// prerequisiteOverrides holds curated, evidence-backed per-technique
+// prerequisites -- same discipline as timeoutOverrides above: one
+// evidence-backed entry at a time, never guessed.
+//
+// T1087.002 (Account Discovery: Domain Account): confirmed present in real
+// staging traffic (2026-09-05) -- genuinely meaningless against a
+// non-domain-joined host, since there is no domain account list to enumerate.
+var prerequisiteOverrides = map[string]PrerequisiteSpec{
+	"T1087.002": {Fact: "domain_joined", Required: true},
+}
+
+// PrerequisiteFor returns the curated prerequisite for a technique, or
+// (zero, false) if none is curated -- the technique dispatches unconditionally.
+func PrerequisiteFor(techniqueID string) (PrerequisiteSpec, bool) {
+	spec, ok := prerequisiteOverrides[techniqueID]
+	return spec, ok
+}
+
 // Resource domains and risk levels — kept in sync with the agent's sched package.
 // domFilesystem currently has no consumer in discoveryProfiles below (T1083,
 // its only user, was removed 2026-08-20 -- see that map's doc comment) but

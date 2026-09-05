@@ -180,6 +180,29 @@ func TestTimeoutProfileForT1018Override(t *testing.T) {
 	}
 }
 
+// TestPrerequisiteForT1087002 is the regression test for the first
+// evidence-backed prerequisite entry: T1087.002 (Account Discovery: Domain
+// Account) is meaningless against a non-domain-joined host, confirmed
+// present in real staging traffic 2026-09-05. Mirrors
+// TestTimeoutProfileForT1018Override's shape. See project memory /
+// docs/superpowers/specs/2026-09-05-phase0c-prerequisite-evaluation-design.md.
+func TestPrerequisiteForT1087002(t *testing.T) {
+	got, ok := PrerequisiteFor("T1087.002")
+	if !ok {
+		t.Fatal("T1087.002 should have a curated prerequisite")
+	}
+	if got.Fact != "domain_joined" {
+		t.Errorf("Fact = %q, want %q", got.Fact, "domain_joined")
+	}
+	if !got.Required {
+		t.Error("Required = false, want true (T1087.002 needs domain_joined=true)")
+	}
+	// Other techniques must be unaffected by the override.
+	if _, ok := PrerequisiteFor("T1082"); ok {
+		t.Error("T1082 should have no curated prerequisite -- the T1087.002 entry must not leak")
+	}
+}
+
 func TestTimeoutWireShapeMatchesAgent(t *testing.T) {
 	raw, err := json.Marshal(TimeoutProfileFor("T1057"))
 	if err != nil {
