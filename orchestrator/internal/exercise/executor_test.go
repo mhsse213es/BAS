@@ -1115,3 +1115,83 @@ func TestTriggerWaitForBASDetection_TerminalWithNoAlertsCompletesAfterGrace(t *t
 		}
 	})
 }
+
+// TestAdvance_ScoresPhishingReportedAsDetection drives a real Executor tick
+// over a completed send_email step carrying phishing_reported evidence, and
+// asserts it gains a detection_verdict via the same detect.Correlate
+// attribution engine the ART/Caldera path uses -- proving Track 2 is not a
+// second scoring interpretation.
+func TestAdvance_ScoresPhishingReportedAsDetection(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		e, store := newTestExecutor(pool)
+		chain := NewEvidenceChain(store)
+		ctx := context.Background()
+		execID := seedExecution(t, store)
+
+		// StartedAt must be recent -- scoreExerciseNativeDetection uses it as
+		// the technique's ExecutedAt, and Correlate's window-match compares it
+		// against the report's timestamp (also "now", from chain.Append). A
+		// zero-value StartedAt would sit outside even a 30-day window and the
+		// alert would never match.
+		sentAt := time.Now()
+		se := &StepExecution{ExecutionID: execID, StepID: "phish1", StepType: StepTypeSendEmail, Status: StepCompleted, StartedAt: &sentAt}
+		if err := store.UpsertStepExecution(ctx, se); err != nil {
+			t.Fatalf("UpsertStepExecution: %v", err)
+		}
+		if _, err := chain.Append(ctx, execID, se.ID, "phishing_reported", "target", "tracker", map[string]any{}); err != nil {
+			t.Fatalf("append phishing_reported: %v", err)
+		}
+
+		ex := &Execution{ID: execID}
+		ps := &PlanStep{ID: "phish1", Type: StepTypeSendEmail,
+			Config: StepConfig{Email: &EmailConfig{To: []string{"target@example.com"}}}}
+
+		if err := e.scoreExerciseNativeDetection(ctx, ex, ps, se); err != nil {
+			t.Fatalf("scoreExerciseNativeDetection: %v", err)
+		}
+
+		updated, err := store.GetStepExecByStepID(ctx, execID, "phish1")
+		if err != nil {
+			t.Fatalf("GetStepExecByStepID: %v", err)
+		}
+		if updated.Result["detection_verdict"] != "detected" {
+			t.Errorf("detection_verdict = %v, want %q", updated.Result["detection_verdict"], "detected")
+		}
+	})
+}
+
+// TestAdvance_NoPhishingReportLeavesNoDetectionVerdict confirms a send_email
+// step with no report evidence is not scored as anything -- absence of a
+// report is not itself a verdict in Phase 1's scope.
+func TestAdvance_NoPhishingReportLeavesNoDetectionVerdict(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		e, store := newTestExecutor(pool)
+		ctx := context.Background()
+		execID := seedExecution(t, store)
+
+		se := &StepExecution{ExecutionID: execID, StepID: "phish2", StepType: StepTypeSendEmail, Status: StepCompleted}
+		if err := store.UpsertStepExecution(ctx, se); err != nil {
+			t.Fatalf("UpsertStepExecution: %v", err)
+		}
+		ex := &Execution{ID: execID}
+		ps := &PlanStep{ID: "phish2", Type: StepTypeSendEmail}
+
+		if err := e.scoreExerciseNativeDetection(ctx, ex, ps, se); err != nil {
+			t.Fatalf("scoreExerciseNativeDetection: %v", err)
+		}
+
+		updated, err := store.GetStepExecByStepID(ctx, execID, "phish2")
+		if err != nil {
+			t.Fatalf("GetStepExecByStepID: %v", err)
+		}
+		if _, has := updated.Result["detection_verdict"]; has {
+			t.Errorf("Result = %+v, want no detection_verdict key (no report evidence)", updated.Result)
+		}
+	})
+}

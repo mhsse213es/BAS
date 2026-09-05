@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/audspect/bas/internal/detect"
 	"github.com/audspect/bas/internal/observability"
 	"github.com/audspect/bas/internal/verification"
 )
@@ -214,6 +215,31 @@ func (e *Executor) advance(ctx context.Context, ex *Execution) error {
 				_ = e.store.RecordEvent(ctx, ex.ID, ps.ID, "timeout", "system", nil)
 				done[ps.ID] = true
 			}
+		}
+	}
+
+	// Track 2: score exercise-native detection (phishing_reported) for
+	// completed send_email steps not yet scored. Separate pass from the
+	// trigger loop above -- this operates on already-StepCompleted steps
+	// (an enrichment pass), not StepWaiting ones.
+	planStepByID := make(map[string]*PlanStep, len(plan.Steps))
+	for i := range plan.Steps {
+		planStepByID[plan.Steps[i].ID] = &plan.Steps[i]
+	}
+	for i := range stepExecs {
+		se := &stepExecs[i]
+		if se.StepType != StepTypeSendEmail || se.Status != StepCompleted {
+			continue
+		}
+		if _, scored := se.Result["detection_verdict"]; scored {
+			continue
+		}
+		matchedStep, ok := planStepByID[se.StepID]
+		if !ok {
+			continue
+		}
+		if err := e.scoreExerciseNativeDetection(ctx, ex, matchedStep, se); err != nil {
+			log.Printf("[exercise] score detection %s/%s: %v", ex.ID, se.StepID, err)
 		}
 	}
 
@@ -686,6 +712,68 @@ func (e *Executor) triggerWaitForBASDetection(ctx context.Context, _ *Execution,
 	// with no detection_verdict key rather than waiting forever or
 	// fabricating a verdict.
 	return complete()
+}
+
+// scoreExerciseNativeDetection is Track 2: normalizes phishing_reported
+// evidence into a synthetic detect.AlertRecord and scores it through
+// detect.Correlate -- the same attribution engine (via the new userReported
+// signal, internal/detect/attribution.go) the ART/Caldera path uses, not a
+// second interpretation. detect.Score is deliberately NOT called here: it
+// aggregates DetectionRate/MTTDMs/etc. ACROSS a run's many techniques,
+// which has nothing to add at single-step granularity -- every per-detection
+// field this function needs (Verdict, Confidence, TimeToDetectMs) already
+// lives on Correlate's own per-technique detect.TechniqueDetection result.
+// Phase 1 scope: send_email steps only. A step with no phishing_reported
+// evidence is left unscored (no detection_verdict key) -- absence of a
+// report is not itself a verdict.
+func (e *Executor) scoreExerciseNativeDetection(ctx context.Context, ex *Execution, ps *PlanStep, se *StepExecution) error {
+	reportedAt, err := e.store.EarliestEvidenceTimestamp(ctx, se.ID, "phishing_reported")
+	if err != nil {
+		return err
+	}
+	if reportedAt == nil {
+		return nil
+	}
+
+	techniqueID := "T1566.001" // simulated phishing attachment/link -- the one technique this track scores in Phase 1
+	sentAt := se.StartedAt
+	if sentAt == nil {
+		sentAt = se.CompletedAt
+	}
+	if sentAt == nil {
+		sentAt = &ex.CreatedAt
+	}
+	// Verdict must be "fail" (not "completed") -- detect.go's isExecuted/
+	// isPrevented only recognize "pass"|"blocked"|"fail" ("pass"/"blocked"
+	// mean the control PREVENTED the technique; "fail" means it executed and
+	// needs alert-correlation, which is exactly this case: the phishing email
+	// was not blocked, it reached the recipient, who then reported it).
+	steps := []detect.ExecutedStep{{TechniqueID: techniqueID, Verdict: "fail", ExecutedAt: *sentAt}}
+	alerts := []detect.AlertRecord{{
+		Channel: "exercise-report", Provider: "exercise-tracking", Timestamp: *reportedAt,
+		Message: "recipient reported the simulated phishing email",
+	}}
+	// Window wide enough to never be the limiting factor -- a phishing report
+	// can legitimately arrive hours or days after send, unlike an EDR alert's
+	// tight post-execution window. detectIDs is nil (irrelevant here; only
+	// meaningful for the Windows-Defender-specific signal).
+	dets := detect.Correlate(steps, alerts, 30*24*time.Hour, nil)
+
+	for _, d := range dets {
+		if d.TechniqueID != techniqueID || d.Verdict == "" {
+			continue
+		}
+		payload := map[string]any{"detection_verdict": d.Verdict}
+		if d.Confidence != "" {
+			payload["detection_confidence"] = d.Confidence
+		}
+		if d.TimeToDetectMs > 0 {
+			payload["detection_mttd_ms"] = d.TimeToDetectMs
+		}
+		merged := mergeMaps(se.Result, payload)
+		return e.store.SetStepResult(ctx, ex.ID, ps.ID, merged)
+	}
+	return nil
 }
 
 func (e *Executor) triggerWaitForDetection(ctx context.Context, ex *Execution, ps *PlanStep, se *StepExecution) (bool, map[string]any, error) {
