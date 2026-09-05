@@ -249,7 +249,11 @@ func (e *Executor) advance(ctx context.Context, ex *Execution) error {
 		if !ready {
 			continue
 		}
-		if !e.evalCondition(ctx, ps.Condition, ex.ID, byID) {
+		stepAgentID := ""
+		if ps.Config.AgentTask != nil {
+			stepAgentID = ps.Config.AgentTask.AgentID
+		}
+		if !e.evalCondition(ctx, ps.Condition, ex.ID, byID, stepAgentID) {
 			_ = e.store.SetStepStatus(ctx, ex.ID, ps.ID, StepSkipped, "condition false")
 			_ = e.store.RecordEvent(ctx, ex.ID, ps.ID, "skipped", "system", map[string]any{"reason": "condition false"})
 			if e.metrics != nil && se != nil && se.StartedAt != nil {
@@ -730,7 +734,7 @@ func mintHookToken() (string, error) {
 
 // ── Condition evaluator ───────────────────────────────────────────────────────
 
-func (e *Executor) evalCondition(ctx context.Context, cond, execID string, byID map[string]*StepExecution) bool {
+func (e *Executor) evalCondition(ctx context.Context, cond, execID string, byID map[string]*StepExecution, agentID string) bool {
 	cond = strings.TrimSpace(cond)
 	if cond == "" || cond == "always" || cond == "true" {
 		return true
@@ -739,6 +743,9 @@ func (e *Executor) evalCondition(ctx context.Context, cond, execID string, byID 
 		return false
 	}
 	parts := strings.SplitN(cond, ":", 3)
+	if len(parts) == 3 && parts[0] == "agent" {
+		return e.agentFact(ctx, agentID, parts[1], parts[2])
+	}
 	if len(parts) != 3 || parts[0] != "step" {
 		log.Printf("[exercise] unknown condition: %q", cond)
 		return true
@@ -785,6 +792,30 @@ func (e *Executor) evalCondition(ctx context.Context, cond, execID string, byID 
 		log.Printf("[exercise] unknown predicate %q in condition %q", predicate, cond)
 		return true
 	}
+}
+
+// agentFact evaluates an "agent:<fact>:<expected>" condition against the
+// current step's target agent. agentID == "" (a step type with no
+// AgentTaskConfig, e.g. send_email/wait/approval) or an unrecognised fact
+// name fails open (true) -- structurally inapplicable is not "unsatisfied,"
+// same philosophy as evalCondition's own unknown-predicate default. A nil
+// (never-reported) domain_joined value also fails open, per the Phase 0C
+// spec's Error-handling contract: unknown facts never gate.
+func (e *Executor) agentFact(ctx context.Context, agentID, fact, expected string) bool {
+	if agentID == "" {
+		log.Printf("[exercise] agent: condition on a step with no target agent")
+		return true
+	}
+	if fact != "domain_joined" {
+		log.Printf("[exercise] unknown agent fact %q", fact)
+		return true
+	}
+	domainJoined, err := e.store.AgentDomainJoined(ctx, agentID)
+	if err != nil || domainJoined == nil {
+		return true
+	}
+	want := expected == "true"
+	return *domainJoined == want
 }
 
 // ── Lifecycle helpers ─────────────────────────────────────────────────────────

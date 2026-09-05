@@ -747,3 +747,17 @@ func (s *Store) SumDurationByType(ctx context.Context, execID, fromType, toType 
 	}
 	return int(secs), nil
 }
+
+// AgentDomainJoined returns the agent's known domain-joined status, or nil if
+// the agent has never reported it (or doesn't exist). Same nil-means-unknown
+// contract as the ART/Caldera side's equivalent lookup in dispatchRun.
+func (s *Store) AgentDomainJoined(ctx context.Context, agentID string) (*bool, error) {
+	var domainJoined *bool
+	err := s.db.QueryRow(ctx,
+		`SELECT domain_joined FROM agents WHERE agent_id = $1`, agentID,
+	).Scan(&domainJoined)
+	if err != nil {
+		return nil, err
+	}
+	return domainJoined, nil
+}

@@ -147,43 +147,91 @@ func TestEvalCondition_PredicateMatrix(t *testing.T) {
 		byID := map[string]*StepExecution{"s1": se}
 
 		// literals
-		if !e.evalCondition(ctx, "", execID, byID) || !e.evalCondition(ctx, "always", execID, byID) || !e.evalCondition(ctx, "true", execID, byID) {
+		if !e.evalCondition(ctx, "", execID, byID, "") || !e.evalCondition(ctx, "always", execID, byID, "") || !e.evalCondition(ctx, "true", execID, byID, "") {
 			t.Fatal("empty/always/true must be true")
 		}
-		if e.evalCondition(ctx, "false", execID, byID) || e.evalCondition(ctx, "never", execID, byID) {
+		if e.evalCondition(ctx, "false", execID, byID, "") || e.evalCondition(ctx, "never", execID, byID, "") {
 			t.Fatal("false/never must be false")
 		}
 		// evidence-based
-		if !e.evalCondition(ctx, "step:s1:clicked", execID, byID) {
+		if !e.evalCondition(ctx, "step:s1:clicked", execID, byID, "") {
 			t.Fatal("clicked should be true (link_clicked evidence present)")
 		}
-		if e.evalCondition(ctx, "step:s1:not_clicked", execID, byID) {
+		if e.evalCondition(ctx, "step:s1:not_clicked", execID, byID, "") {
 			t.Fatal("not_clicked should be false")
 		}
-		if e.evalCondition(ctx, "step:s1:reported", execID, byID) {
+		if e.evalCondition(ctx, "step:s1:reported", execID, byID, "") {
 			t.Fatal("reported should be false (no phishing_reported evidence)")
 		}
 		// status-based
-		if !e.evalCondition(ctx, "step:s1:succeeded", execID, byID) {
+		if !e.evalCondition(ctx, "step:s1:succeeded", execID, byID, "") {
 			t.Fatal("succeeded should be true for a completed no-error step")
 		}
-		if e.evalCondition(ctx, "step:s1:failed", execID, byID) {
+		if e.evalCondition(ctx, "step:s1:failed", execID, byID, "") {
 			t.Fatal("failed should be false for a completed step")
 		}
 		// timed_out via result
 		se.Result = map[string]any{"timed_out": true}
-		if !e.evalCondition(ctx, "step:s1:timeout", execID, byID) {
+		if !e.evalCondition(ctx, "step:s1:timeout", execID, byID, "") {
 			t.Fatal("timeout should be true when result.timed_out is true")
 		}
-		if e.evalCondition(ctx, "step:s1:no_timeout", execID, byID) {
+		if e.evalCondition(ctx, "step:s1:no_timeout", execID, byID, "") {
 			t.Fatal("no_timeout should be false when timed_out is true")
 		}
 		// unknown predicate/format → defaults to true (fail-open per code)
-		if !e.evalCondition(ctx, "step:s1:mystery", execID, byID) {
+		if !e.evalCondition(ctx, "step:s1:mystery", execID, byID, "") {
 			t.Fatal("unknown predicate should default to true")
 		}
-		if !e.evalCondition(ctx, "garbage", execID, byID) {
+		if !e.evalCondition(ctx, "garbage", execID, byID, "") {
 			t.Fatal("unknown format should default to true")
+		}
+	})
+}
+
+// TestEvalCondition_AgentDomainJoinedPredicate covers the new agent: predicate
+// namespace, sibling to the existing step: namespace. true/false/unknown-agent
+// mirror the existing step: predicate tests' coverage shape.
+func TestEvalCondition_AgentDomainJoinedPredicate(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		e, _ := newTestExecutor(pool)
+		ctx := context.Background()
+
+		joinedAgent := "exercise-agent-domain-joined"
+		notJoinedAgent := "exercise-agent-domain-not-joined"
+		unknownAgent := "exercise-agent-domain-unknown"
+		if _, err := pool.Exec(ctx,
+			`INSERT INTO agents (agent_id, hostname, state, domain_joined) VALUES ($1,'h','active',true)`, joinedAgent); err != nil {
+			t.Fatalf("seed joined agent: %v", err)
+		}
+		if _, err := pool.Exec(ctx,
+			`INSERT INTO agents (agent_id, hostname, state, domain_joined) VALUES ($1,'h','active',false)`, notJoinedAgent); err != nil {
+			t.Fatalf("seed not-joined agent: %v", err)
+		}
+		if _, err := pool.Exec(ctx,
+			`INSERT INTO agents (agent_id, hostname, state) VALUES ($1,'h','active')`, unknownAgent); err != nil {
+			t.Fatalf("seed unknown agent: %v", err)
+		}
+
+		byID := map[string]*StepExecution{}
+		if !e.evalCondition(ctx, "agent:domain_joined:true", "exec-x", byID, joinedAgent) {
+			t.Error("joined agent should satisfy agent:domain_joined:true")
+		}
+		if e.evalCondition(ctx, "agent:domain_joined:true", "exec-x", byID, notJoinedAgent) {
+			t.Error("not-joined agent should fail agent:domain_joined:true")
+		}
+		if !e.evalCondition(ctx, "agent:domain_joined:false", "exec-x", byID, notJoinedAgent) {
+			t.Error("not-joined agent should satisfy agent:domain_joined:false")
+		}
+		// Unknown (NULL) or no agent at all: fail open (true), same philosophy
+		// as an unrecognised predicate defaulting to true.
+		if !e.evalCondition(ctx, "agent:domain_joined:true", "exec-x", byID, unknownAgent) {
+			t.Error("agent with unknown domain_joined should fail open (true)")
+		}
+		if !e.evalCondition(ctx, "agent:domain_joined:true", "exec-x", byID, "") {
+			t.Error("no agent (empty agentID) should fail open (true)")
 		}
 	})
 }
