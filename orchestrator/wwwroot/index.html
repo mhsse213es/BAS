@@ -2615,11 +2615,33 @@ body.theme-slate {
           <div style="font-size:0.72rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:700;margin-bottom:0.5rem">Execution Sources</div>
           <div id="tmpl-run-sources" style="display:flex;flex-direction:column;gap:0.5rem;margin-bottom:1.1rem;padding:0.75rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius)"></div>
 
-          <label style="font-size:0.72rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:700;display:block;margin-bottom:0.35rem">Target Agent</label>
-          <select id="tmpl-run-agent" style="width:100%;padding:0.5rem;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:6px;margin-bottom:0.85rem;font-size:0.8rem"></select>
+          <label style="font-size:0.72rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:700;display:block;margin-bottom:0.35rem">Target</label>
+          <div style="display:flex;gap:0.9rem;flex-wrap:wrap;margin-bottom:0.4rem">
+            <label style="display:flex;align-items:center;gap:0.3rem;cursor:pointer;font-size:0.78rem;color:var(--muted)">
+              <input type="radio" name="tmpl-run-target-mode" value="individual" checked onchange="setTmplTargetMode('individual')"> Individual
+            </label>
+            <label style="display:flex;align-items:center;gap:0.3rem;cursor:pointer;font-size:0.78rem;color:var(--muted)">
+              <input type="radio" name="tmpl-run-target-mode" value="group" onchange="setTmplTargetMode('group')"> Group(s)
+            </label>
+            <label id="tmpl-run-all-label" style="display:none;align-items:center;gap:0.3rem;cursor:pointer;font-size:0.78rem;color:var(--muted)">
+              <input type="radio" name="tmpl-run-target-mode" value="all" onchange="setTmplTargetMode('all')"> All Agents
+            </label>
+          </div>
+          <div id="tmpl-run-individual-wrap">
+            <div id="tmpl-run-agent-list" style="max-height:140px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;padding:0.35rem;background:var(--surface)"></div>
+            <p class="tiny muted" id="tmpl-run-agent-cnt" style="margin:0.3rem 0 0">0 selected</p>
+          </div>
+          <div id="tmpl-run-group-wrap" style="display:none">
+            <div id="tmpl-run-group-list" style="max-height:140px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;padding:0.35rem;background:var(--surface)"></div>
+            <p class="tiny muted" id="tmpl-run-group-summary" style="margin:0.3rem 0 0"></p>
+          </div>
+          <div id="tmpl-run-all-wrap" style="display:none">
+            <p class="tiny muted" style="margin:0">Every agent will be targeted (Admin only).</p>
+          </div>
+          <div id="tmpl-run-os-warn" style="margin:0.5rem 0 0.85rem;font-size:0.76rem"></div>
 
           <label style="font-size:0.72rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:700;display:block;margin-bottom:0.35rem">Execution Mode</label>
-          <select id="tmpl-run-mode" onchange="renderTmplWarn()" style="width:100%;padding:0.5rem;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:6px;margin-bottom:0.85rem;font-size:0.8rem">
+          <select id="tmpl-run-mode" onchange="renderTmplWarn();renderTmplOSCompat();" style="width:100%;padding:0.5rem;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:6px;margin-bottom:0.85rem;font-size:0.8rem">
             <option value="posture">Posture — read-only checks only</option>
             <option value="telemetry" selected>Telemetry — real execution, production-safe</option>
             <option value="lab">Lab — full fidelity (isolated range only)</option>
@@ -9821,13 +9843,13 @@ function openTmplRun(templateId) {
   var srcRows = '';
   if (tmpl.basScenarioId) {
     srcRows += '<label style="display:flex;align-items:flex-start;gap:0.6rem;cursor:pointer;font-size:0.82rem">' +
-      '<input type="checkbox" id="tmpl-src-bas" checked style="margin-top:2px">' +
+      '<input type="checkbox" id="tmpl-src-bas" checked onchange="renderTmplOSCompat()" style="margin-top:2px">' +
       '<span><span class="utl-badge utl-bas" style="margin-right:4px">BAS</span>' +
       '<strong>' + x(tmpl.basScenarioId) + '</strong> — native scenario</span></label>';
   }
   if (tmpl.artTechniques && tmpl.artTechniques.length) {
     srcRows += '<label style="display:flex;align-items:flex-start;gap:0.6rem;cursor:pointer;font-size:0.82rem">' +
-      '<input type="checkbox" id="tmpl-src-art" checked style="margin-top:2px">' +
+      '<input type="checkbox" id="tmpl-src-art" checked onchange="renderTmplOSCompat()" style="margin-top:2px">' +
       '<span><span class="utl-badge utl-art" style="margin-right:4px">ART</span>' +
       tmpl.artTechniques.length + ' techniques — ' + tmpl.artTechniques.slice(0,3).join(', ') + (tmpl.artTechniques.length > 3 ? '…' : '') + '</span></label>';
   }
@@ -9837,25 +9859,25 @@ function openTmplRun(templateId) {
       : '<span class="utl-badge" style="background:var(--elevated);border-color:var(--border);color:var(--muted);margin-right:4px">Emu</span>' +
         x(tmpl.calderaAdversaryName) + ' <em style="color:var(--muted)">(not found in Caldera — unchecked)</em>';
     srcRows += '<label style="display:flex;align-items:flex-start;gap:0.6rem;cursor:pointer;font-size:0.82rem">' +
-      '<input type="checkbox" id="tmpl-src-caldera"' + (_tmplCalderaID ? ' checked' : '') + ' style="margin-top:2px">' +
+      '<input type="checkbox" id="tmpl-src-caldera"' + (_tmplCalderaID ? ' checked' : '') + ' onchange="renderTmplOSCompat()" style="margin-top:2px">' +
       '<span>' + calLabel + '</span></label>';
   }
   if (srcsEl) srcsEl.innerHTML = srcRows || '<span style="color:var(--muted);font-size:0.8rem">No sources configured for this template.</span>';
 
-  // Populate agent dropdown.
-  var agentSel = document.getElementById('tmpl-run-agent');
-  if (agentSel) {
-    var opts = (agents || []).filter(function(a) { return a.status !== 'offline'; })
-      .map(function(a) {
-        var os = a.osVersion ? ' [' + (a.osVersion.toLowerCase().indexOf('windows') !== -1 ? 'Win' : 'Other') + ']' : '';
-        return '<option value="' + x(a.agentId) + '">' + x(a.agentId) + ' — ' + x(a.hostname) + os + '</option>';
-      }).join('');
-    agentSel.innerHTML = opts || '<option value="">No online agents</option>';
-  }
+  // Reset target selection state and (re)render whichever mode is active.
+  _tmplSelAgents = {};
+  _tmplGroupSel = {};
+  _tmplTargetMode = 'individual';
+  var allLabel = document.getElementById('tmpl-run-all-label');
+  if (allLabel) allLabel.style.display = (ROLE === 'admin') ? 'flex' : 'none';
+  var indRadio = document.querySelector('input[name="tmpl-run-target-mode"][value="individual"]');
+  if (indRadio) indRadio.checked = true;
+  setTmplTargetMode('individual');
 
   document.getElementById('tmpl-run-mode').value = 'telemetry';
   document.getElementById('tmpl-run-reason').value = '';
   renderTmplWarn();
+  renderTmplOSCompat();
   var overlay = document.getElementById('tmpl-run-overlay');
   if (overlay) { overlay.style.display = 'flex'; }
 }
@@ -9864,6 +9886,104 @@ function closeTmplRun() {
   var overlay = document.getElementById('tmpl-run-overlay');
   if (overlay) overlay.style.display = 'none';
   _tmplRunID = null; _tmplCalderaID = '';
+}
+
+var _tmplTargetMode = 'individual'; // 'individual' | 'group' | 'all'
+var _tmplSelAgents = {}; // { [agentId]: true } for checked agents in Individual mode
+var _tmplGroupSel = {};  // { [groupId]: true } for checked groups in Group(s) mode
+
+// setTmplTargetMode switches the run modal between its individual-agent
+// checkbox list, the group checkbox list, and the All Agents notice,
+// clearing the OTHER modes' selection state so a stale pick can't silently
+// leak into a dispatch. Mirrors setVexRunTargetMode's exact pattern.
+function setTmplTargetMode(mode) {
+  _tmplTargetMode = mode;
+  if (mode !== 'individual') _tmplSelAgents = {};
+  if (mode !== 'group') _tmplGroupSel = {};
+  var indWrap = document.getElementById('tmpl-run-individual-wrap');
+  var grpWrap = document.getElementById('tmpl-run-group-wrap');
+  var allWrap = document.getElementById('tmpl-run-all-wrap');
+  if (indWrap) indWrap.style.display = mode === 'individual' ? 'block' : 'none';
+  if (grpWrap) grpWrap.style.display = mode === 'group' ? 'block' : 'none';
+  if (allWrap) allWrap.style.display = mode === 'all' ? 'block' : 'none';
+  if (mode === 'individual') renderTmplAgentList();
+  if (mode === 'group') renderTmplGroupList();
+  renderTmplOSCompat();
+}
+
+function renderTmplAgentList() {
+  var list = document.getElementById('tmpl-run-agent-list');
+  if (!list) return;
+  var online = (agents || []).filter(function(a) { return a.status !== 'offline'; });
+  if (!online.length) {
+    list.innerHTML = '<p class="tiny muted" style="margin:0">No online agents.</p>';
+  } else {
+    list.innerHTML = online.map(function(a) {
+      return '<label style="display:flex;align-items:center;gap:0.5rem;padding:0.25rem 0.3rem;cursor:pointer">' +
+        '<input type="checkbox" ' + (_tmplSelAgents[a.agentId] ? 'checked' : '') +
+        ' onchange="_tmplSelAgents[\'' + x(a.agentId) + '\']=this.checked;renderTmplAgentCount();renderTmplOSCompat()">' +
+        '<code style="font-size:0.72rem">' + x(a.agentId) + '</code>' +
+        '<span class="tiny muted">' + x(a.hostname) + ' — ' + x(a.osVersion || 'Unknown OS') + '</span></label>';
+    }).join('');
+  }
+  renderTmplAgentCount();
+}
+
+function renderTmplAgentCount() {
+  var el = document.getElementById('tmpl-run-agent-cnt');
+  if (!el) return;
+  var n = Object.keys(_tmplSelAgents).filter(function(k) { return _tmplSelAgents[k]; }).length;
+  el.textContent = n + ' selected';
+}
+
+// renderTmplGroupList mirrors renderVexRunGroupList's exact pattern -- same
+// gpFlattenGroups/agentGroupTree helpers every other group-targeting panel
+// in this file already uses.
+function renderTmplGroupList() {
+  var list = document.getElementById('tmpl-run-group-list');
+  if (!list) return;
+  var options = gpFlattenGroups(agentGroupTree, 0, null, []);
+  if (!options.length) {
+    list.innerHTML = '<p class="tiny muted" style="margin:0">No agent groups have been created yet.</p>';
+    renderTmplGroupSummary();
+    return;
+  }
+  var countMap = {};
+  (function walk(nodes) {
+    (nodes || []).forEach(function(n) { countMap[n.id] = n.totalAgentCount; walk(n.children); });
+  })(agentGroupTree);
+  list.innerHTML = options.map(function(o) {
+    return '<label style="display:flex;align-items:center;gap:0.5rem;padding:0.25rem 0.3rem;cursor:pointer">' +
+      '<input type="checkbox" ' + (_tmplGroupSel[o.id] ? 'checked' : '') +
+      ' onchange="_tmplGroupSel[' + o.id + ']=this.checked;renderTmplGroupSummary();renderTmplOSCompat()">' +
+      '<span style="font-size:0.8rem">' + x(o.label) + '</span>' +
+      '<span class="tiny muted">(' + (countMap[o.id] || 0) + ' agents)</span></label>';
+  }).join('');
+  renderTmplGroupSummary();
+}
+
+function tmplResolvedGroupAgents() {
+  var selectedGroupIds = Object.keys(_tmplGroupSel).filter(function(k) { return _tmplGroupSel[k]; }).map(Number);
+  return resolveGroupTargetAgents(selectedGroupIds);
+}
+
+function renderTmplGroupSummary() {
+  var el = document.getElementById('tmpl-run-group-summary');
+  if (!el) return;
+  var selectedCount = Object.keys(_tmplGroupSel).filter(function(k) { return _tmplGroupSel[k]; }).length;
+  if (!selectedCount) { el.textContent = 'No groups selected.'; return; }
+  el.textContent = tmplResolvedGroupAgents().length + ' agent(s) across ' + selectedCount + ' group(s).';
+}
+
+// tmplResolvedTargetAgents returns the full agent objects currently
+// targeted, whichever mode is active -- the single source of truth both
+// renderTmplOSCompat (preview) and confirmTmplRun (submit) resolve against,
+// so they can never disagree about who's targeted.
+function tmplResolvedTargetAgents() {
+  if (_tmplTargetMode === 'group') return tmplResolvedGroupAgents();
+  if (_tmplTargetMode === 'all') return (agents || []).filter(function(a) { return a.status !== 'offline'; });
+  var selectedIds = Object.keys(_tmplSelAgents).filter(function(k) { return _tmplSelAgents[k]; });
+  return (agents || []).filter(function(a) { return selectedIds.indexOf(a.agentId) !== -1; });
 }
 
 function renderTmplWarn() {
@@ -9879,9 +9999,91 @@ function renderTmplWarn() {
   }
 }
 
+// renderTmplOSCompat shows a live warning when one or more CHECKED sources
+// won't run on some of the currently targeted agents -- ART and Caldera are
+// always Windows-only (hardcoded server-side, see RunAdversaryTemplate's
+// synthSc literals); BAS inherits whatever supportedOs the referenced
+// scenario itself declares. Unlike Scheduled Assessments/Variant Executor,
+// this is informational, not a hard filter: dispatchRun evaluates each
+// (agent, source) pair independently, so a Linux agent can legitimately
+// still run a Linux-compatible BAS source while ART/Caldera get skipped on
+// it -- excluding it from the target list outright would incorrectly block
+// that partial run. Only warns in telemetry/lab mode, matching
+// dispatchRun's own OS gate exactly (posture mode never blocks on OS).
+// Aggregates across every agent tmplResolvedTargetAgents() currently
+// returns, whichever target mode (individual/group/all) is active.
+function renderTmplOSCompat() {
+  var warnEl = document.getElementById('tmpl-run-os-warn');
+  var btn = document.getElementById('tmpl-run-confirm-btn');
+  if (!warnEl) return;
+
+  var tmpl = _templates.find(function(t) { return t.id === _tmplRunID; });
+  var mode = (document.getElementById('tmpl-run-mode') || {}).value;
+  var targets = tmpl ? tmplResolvedTargetAgents() : [];
+
+  if (!tmpl || !targets.length || mode === 'posture') {
+    warnEl.innerHTML = '';
+    if (btn) btn.disabled = false;
+    return;
+  }
+
+  var checkedSources = [];
+  if ((document.getElementById('tmpl-src-bas') || {}).checked) {
+    var basSc = scenarios.find(function(s) { return s.id === tmpl.basScenarioId; });
+    checkedSources.push({ label: 'BAS', supportedOS: (basSc && basSc.supportedOs) || [] });
+  }
+  if ((document.getElementById('tmpl-src-art') || {}).checked) {
+    checkedSources.push({ label: 'ART', supportedOS: ['windows'] });
+  }
+  if ((document.getElementById('tmpl-src-caldera') || {}).checked) {
+    checkedSources.push({ label: 'Caldera', supportedOS: ['windows'] });
+  }
+
+  if (!checkedSources.length) {
+    warnEl.innerHTML = '';
+    if (btn) btn.disabled = false;
+    return;
+  }
+
+  // Per-source: how many targeted agents can't run it.
+  var skipCounts = checkedSources.map(function(src) {
+    var n = targets.filter(function(a) { return !schedAgentCompatible(a, src.supportedOS); }).length;
+    return { label: src.label, count: n };
+  }).filter(function(s) { return s.count > 0; });
+
+  // Agents with zero viable checked sources -- entirely excluded from this run.
+  var deadAgents = targets.filter(function(a) {
+    return checkedSources.every(function(src) { return !schedAgentCompatible(a, src.supportedOS); });
+  });
+
+  if (!skipCounts.length) {
+    warnEl.innerHTML = '';
+    if (btn) btn.disabled = false;
+    return;
+  }
+
+  var skipLines = skipCounts.map(function(s) {
+    return x(s.label) + ' skipped on ' + s.count + '/' + targets.length + ' agent(s)';
+  }).join(' · ');
+
+  if (deadAgents.length === targets.length) {
+    warnEl.innerHTML = '<div style="padding:0.5rem 0.65rem;background:rgba(218,54,51,.1);border:1px solid rgba(218,54,51,.3);border-radius:var(--radius);color:#f85149">' +
+      'No selected source can run on any targeted agent — ' + x(skipLines) + '.</div>';
+    if (btn) btn.disabled = true;
+    return;
+  }
+
+  var deadNote = deadAgents.length
+    ? ' ' + deadAgents.length + '/' + targets.length + ' targeted agent(s) can run none of the selected sources and will be entirely skipped.'
+    : '';
+  warnEl.innerHTML = '<div style="padding:0.5rem 0.65rem;background:rgba(210,153,34,.1);border:1px solid rgba(210,153,34,.3);border-radius:var(--radius);color:var(--warning)">' +
+    x(skipLines) + ' (require Windows).' + x(deadNote) + '</div>';
+  if (btn) btn.disabled = false;
+}
+
 function confirmTmplRun() {
-  var agentId = (document.getElementById('tmpl-run-agent') || {}).value;
-  if (!agentId) { showToast('Select a target agent', 'err'); return; }
+  var targets = tmplResolvedTargetAgents();
+  if (!targets.length) { showToast('Select at least one target agent or group', 'err'); return; }
   var mode    = document.getElementById('tmpl-run-mode').value;
   var reason  = (document.getElementById('tmpl-run-reason').value || '').trim();
   var useBAS  = !!(document.getElementById('tmpl-src-bas') || {}).checked;
@@ -9892,6 +10094,7 @@ function confirmTmplRun() {
     showToast('Select at least one execution source', 'err');
     return;
   }
+  if (targets.length > 1 && !confirm('Launch this template on ' + targets.length + ' agent(s)?')) return;
 
   var btn = document.getElementById('tmpl-run-confirm-btn');
   if (btn) { btn.disabled = true; btn.textContent = 'Launching…'; }
@@ -9899,18 +10102,21 @@ function confirmTmplRun() {
   apicall('/api/adversary-templates/' + encodeURIComponent(_tmplRunID) + '/run', {
     method: 'POST',
     body: JSON.stringify({
-      agentId: agentId, mode: mode, confirmLive: true, confirmLab: mode === 'lab',
+      agentIds: targets.map(function(a) { return a.agentId; }),
+      mode: mode, confirmLive: true, confirmLab: mode === 'lab',
       reason: reason || ('Template: ' + _tmplRunID),
       useBas: useBAS, useArt: useART,
       calderaAdversaryId: calderaId
     })
   }).then(function(r) {
     closeTmplRun();
-    var n = (r.dispatched || []).length;
-    var skip = (r.skipped || []).length;
-    var msg = n + ' run' + (n !== 1 ? 's' : '') + ' dispatched';
-    if (skip) msg += ' (' + skip + ' skipped)';
-    showToast(msg, 'ok');
+    var dispatched = r.dispatched || [], skippedList = r.skipped || [];
+    var agentsDispatched = {};
+    dispatched.forEach(function(d) { agentsDispatched[d.agentId] = true; });
+    var msg = dispatched.length + ' run' + (dispatched.length !== 1 ? 's' : '') + ' dispatched' +
+      (targets.length > 1 ? ' across ' + Object.keys(agentsDispatched).length + ' agent(s)' : '');
+    if (skippedList.length) msg += ' (' + skippedList.length + ' skipped)';
+    showToast(msg, dispatched.length ? 'ok' : 'err');
     loadRuns();
     showTab('runs');
   }).catch(function(e) {
@@ -11979,7 +12185,14 @@ function runRowHtml(r) {
                 '<span style="color:var(--danger);font-weight:600">' + pr.stepsFailed + '</span>' +
                 '<span style="color:var(--muted);font-size:0.6rem">fail</span>' +
                 (pr.stepsTimeout ? ' / <span style="color:var(--warning);font-weight:600">' + pr.stepsTimeout + '</span><span style="color:var(--muted);font-size:0.6rem">timeout</span>' : '') +
-                '<span style="color:var(--muted);font-size:0.65rem;margin-left:0.35rem">' + pr.stepsDone + '/' + pr.stepsTotal + ' partial</span>';
+                // "live" -- this is the best-effort per-step event snapshot
+                // (steps_done/steps_total from SubmitRunEvents), not the
+                // authoritative run status. It can legitimately show N/N
+                // while the run itself is still 'running' if the agent's
+                // final result submission hasn't landed yet -- "partial"
+                // previously appeared here unconditionally, which read as
+                // the run having ended incomplete even at N/N.
+                '<span style="color:var(--muted);font-size:0.65rem;margin-left:0.35rem">' + pr.stepsDone + '/' + pr.stepsTotal + ' live</span>';
   }
   return '<tr>' +
     '<td>' + fmtRunIdCode(r.id) + '</td>' +
