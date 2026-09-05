@@ -8,11 +8,12 @@ import (
 )
 
 type Identity struct {
-	AgentID   string
-	Hostname  string
-	IPAddress string
-	OSVersion string
-	Username  string
+	AgentID      string
+	Hostname     string
+	IPAddress    string
+	OSVersion    string
+	Username     string
+	DomainJoined *bool
 }
 
 func collectIdentity() Identity {
@@ -33,11 +34,12 @@ func collectIdentity() Identity {
 	agentID := hex.EncodeToString(h[:])[:16]
 
 	return Identity{
-		AgentID:   agentID,
-		Hostname:  hostname,
-		IPAddress: getOutboundIP(),
-		OSVersion: getOSVersion(),
-		Username:  username,
+		AgentID:      agentID,
+		Hostname:     hostname,
+		IPAddress:    getOutboundIP(),
+		OSVersion:    getOSVersion(),
+		Username:     username,
+		DomainJoined: getDomainJoined(),
 	}
 }
 

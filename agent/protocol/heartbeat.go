@@ -13,6 +13,7 @@ type Heartbeat struct {
 	Hostname      string `json:"hostname"`
 	IPAddress     string `json:"ipAddress"`
 	OSVersion     string `json:"osVersion"`
+	DomainJoined  *bool  `json:"domainJoined,omitempty"`
 	Username      string `json:"username"`
 	Status        string `json:"status"`
 	EnvLabel      string `json:"envLabel"`

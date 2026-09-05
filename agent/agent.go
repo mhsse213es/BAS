@@ -219,6 +219,7 @@ func (a *Agent) sendHeartbeat(status string) {
 		Hostname:      a.id.Hostname,
 		IPAddress:     a.id.IPAddress,
 		OSVersion:     a.id.OSVersion,
+		DomainJoined:  a.id.DomainJoined,
 		Username:      a.id.Username,
 		Status:        status,
 		EnvLabel:      a.cfg.EnvLabel,
