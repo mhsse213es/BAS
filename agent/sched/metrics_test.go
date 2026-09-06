@@ -68,7 +68,7 @@ func TestRun_RecordsQueueLockAndExecutionForEverySuccessfulJob(t *testing.T) {
 			Run:    func(ctx context.Context) { time.Sleep(time.Millisecond) },
 		}
 	}
-	Run(context.Background(), 2, NewLockManager(), jobs, nil, rec)
+	Run(context.Background(), 2, NewLockManager(), jobs, nil, WithRecorder(rec))
 
 	q, l, e, timeouts, panics := rec.snapshot()
 	if q != n {
@@ -122,7 +122,7 @@ func TestRun_ScheduleTimeoutReportsLockWaitButNotExecutionTime(t *testing.T) {
 
 	done := make(chan struct{})
 	go func() {
-		Run(context.Background(), 2, lm, []Job{holder, waiter}, nil, rec)
+		Run(context.Background(), 2, lm, []Job{holder, waiter}, nil, WithRecorder(rec))
 		close(done)
 	}()
 
@@ -156,7 +156,7 @@ func TestRun_JobPanicIsRecorded(t *testing.T) {
 		{Run: func(ctx context.Context) { panic("boom") }},
 		{Run: func(ctx context.Context) { /* fine */ }},
 	}
-	Run(context.Background(), 1, NewLockManager(), jobs, nil, rec)
+	Run(context.Background(), 1, NewLockManager(), jobs, nil, WithRecorder(rec))
 
 	_, _, e, _, panics := rec.snapshot()
 	if panics != 1 {

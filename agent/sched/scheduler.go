@@ -28,6 +28,33 @@ type Job struct {
 	Queued time.Time
 }
 
+// RunOption configures optional Run behavior. Each new cross-cutting concern
+// (telemetry, admission control, and whatever Phase 4+ adds) gets its own
+// With* constructor instead of a new positional parameter, so Run's core
+// signature -- the deterministic (ctx, workers, lm, jobs, gate) correctness
+// contract -- never has to change again.
+type RunOption func(*runConfig)
+
+type runConfig struct {
+	rec     Recorder
+	limiter *ConcurrencyLimiter
+}
+
+// WithRecorder attaches a Recorder that receives per-job telemetry (see
+// Recorder). Run and runJob never branch on it: it is pure observation.
+func WithRecorder(rec Recorder) RunOption {
+	return func(c *runConfig) { c.rec = rec }
+}
+
+// WithConcurrencyLimiter caps how many jobs may hold locks and execute at
+// once, independent of `workers`. See ConcurrencyLimiter -- this is the
+// admission layer: it decides how MUCH work runs, never whether two jobs may
+// safely overlap (the lock system decides that, unconditionally, regardless
+// of what the limiter allows through).
+func WithConcurrencyLimiter(l *ConcurrencyLimiter) RunOption {
+	return func(c *runConfig) { c.limiter = l }
+}
+
 // Run executes jobs across `workers` goroutines, holding each job's resource
 // locks for the duration of its Run so that conflicting jobs never overlap.
 // Non-conflicting jobs run concurrently. Jobs are dispatched in submission order
@@ -42,22 +69,20 @@ type Job struct {
 //
 // Deadlock-freedom: a job in the queue holds no locks, so no running job can ever
 // wait on a lock held by a not-yet-started job; combined with canonical-order
-// acquisition (see resolve/LockManager), the scheduler cannot deadlock.
-//
-// rec, if provided (at most one -- trailing variadic so every existing caller
-// and test is source-compatible), receives per-job telemetry. See Recorder.
-// Run and runJob never branch on it: it is pure observation, added to measure
-// the scheduler before any adaptive admission layer is built on top of it.
-func Run(ctx context.Context, workers int, lm *LockManager, jobs []Job, gate *Gate, rec ...Recorder) {
+// acquisition (see resolve/LockManager), the scheduler cannot deadlock. A
+// WithConcurrencyLimiter admission gate sits strictly before lock resolution
+// in the per-job path below and never changes this: it can only delay a job
+// that has not yet started, exactly like the worker channel itself.
+func Run(ctx context.Context, workers int, lm *LockManager, jobs []Job, gate *Gate, opts ...RunOption) {
 	if workers < 1 {
 		workers = 1
 	}
 	if lm == nil {
 		lm = NewLockManager()
 	}
-	var r Recorder
-	if len(rec) > 0 {
-		r = rec[0]
+	var cfg runConfig
+	for _, o := range opts {
+		o(&cfg)
 	}
 	ch := make(chan Job)
 	var wg sync.WaitGroup
@@ -66,10 +91,10 @@ func Run(ctx context.Context, workers int, lm *LockManager, jobs []Job, gate *Ga
 		go func() {
 			defer wg.Done()
 			for j := range ch {
-				if r != nil && !j.Queued.IsZero() {
+				if cfg.rec != nil && !j.Queued.IsZero() {
 					// Measured at dequeue, before the pause gate: this is contention
 					// for a free worker, not the operator's deliberate pause.
-					r.QueueWait(time.Since(j.Queued))
+					cfg.rec.QueueWait(time.Since(j.Queued))
 				}
 				if ctx.Err() != nil {
 					continue // cancelled: drain the channel without running
@@ -78,7 +103,15 @@ func Run(ctx context.Context, workers int, lm *LockManager, jobs []Job, gate *Ga
 				if ctx.Err() != nil {
 					continue // cancel can race with a pause -- re-check before running
 				}
-				runJob(ctx, lm, j, r)
+				if cfg.limiter != nil {
+					if !cfg.limiter.Acquire(ctx) {
+						continue // ctx cancelled while waiting for an admission slot
+					}
+					runJob(ctx, lm, j, cfg.rec)
+					cfg.limiter.Release()
+					continue
+				}
+				runJob(ctx, lm, j, cfg.rec)
 			}
 		}()
 	}

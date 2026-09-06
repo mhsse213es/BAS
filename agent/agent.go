@@ -766,7 +766,14 @@ func (a *Agent) runScenario(ctx context.Context, cmd protocol.ScenarioCommand) {
 	gaugeDone := make(chan struct{})
 	go runGaugeSampler(a.logger, &startedJobs, &finishedJobs, total, gaugeSampleInterval, gaugeDone)
 
-	sched.Run(ctx, workers, sched.NewLockManager(), jobs, gate, metrics)
+	// Admission ceiling defaults to the worker count -- a true no-op today
+	// (Run can never have more than `workers` jobs past the channel at once
+	// regardless), since nothing yet drives it below that. It exists so a
+	// future pressure controller has a ceiling to lower without any scheduler
+	// change: see sched.ConcurrencyLimiter.
+	limiter := sched.NewConcurrencyLimiter(workers)
+	sched.Run(ctx, workers, sched.NewLockManager(), jobs, gate,
+		sched.WithRecorder(metrics), sched.WithConcurrencyLimiter(limiter))
 
 	close(gaugeDone)
 	metrics.report(a.logger, total)
