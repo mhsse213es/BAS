@@ -65,13 +65,8 @@ lands in `agent_telemetry` — query it directly (`psql` or `GET /api/agents/{id
 - [ ] **A `setup.conf` for the staging box** — either the original used for `--install` (needed for
   `--upgrade`, Track B only) or reconstructed per `upgrade-guide.md`'s "setup.conf Reference". Not
   needed for Track A alone.
-- [ ] **Decide the version number.** Last built package is `1.8.3` (`dist/bas-install-1.8.3.zip`,
-  built 2026-09-05, i.e. *before* any of this session's work). This rollout is a real behavior
-  change (new admission/pressure control loop) but zero breaking changes and zero schema migrations
-  — a patch or minor bump both fit; this plan uses **`1.8.4`** as a placeholder throughout. Confirm
-  the actual number against whatever versioning convention the team is currently following (not
-  verified in this investigation — `docs/guides/release-notes.md` is itself stale at `v1.7.3`, well
-  behind the `1.8.3` package already built, so don't infer a convention from it).
+- [x] **Version number: `1.8.4`** — confirmed by the user 2026-09-06. Last built package was `1.8.3`
+  (`dist/bas-install-1.8.3.zip`, built 2026-09-05, i.e. *before* any of this session's work).
 
 ---
 
@@ -89,9 +84,9 @@ cd C:\Users\Administrator\Downloads\Audspect_Cloud
 .\packaging\windows-build.ps1 -Version 1.8.4 -SkipBuild:$false
 ```
 
-(Omit `-Customer`/`-CustomerID`/`-Days` for an internal staging build — those only matter for a
-customer-specific licensed delivery ZIP. If this script demands them, pass placeholder values and
-note that the generated `.lic` from this run is for staging only, not for any client delivery.)
+(Confirmed by reading the script: `-Customer`/`-CustomerID` default to empty strings and license
+generation is skipped entirely when either is blank — so omitting them for this internal staging
+build is safe and produces no `.lic` file, exactly right since this isn't a customer delivery.)
 
 This produces `dist\bas-install-1.8.4\` containing (among other things) the Windows agent binary,
 Linux/macOS agent binaries, `agents\BINARIES.sha256` + `.sig`, and `install.sh`/`uninstall.sh`.
