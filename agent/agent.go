@@ -707,7 +707,7 @@ func (a *Agent) runScenario(ctx context.Context, cmd protocol.ScenarioCommand) {
 				emit(RunEvent{Type: "timeout", TaskID: step.TaskID, TechniqueID: step.TechniqueID, StepName: step.Name,
 					Payload: map[string]any{"reason": "schedule"}})
 			},
-			Run: func(ctx context.Context) {
+			Run: func(ctx context.Context) bool {
 				atomic.AddInt64(&startedJobs, 1)
 				defer atomic.AddInt64(&finishedJobs, 1)
 				n := atomic.AddInt64(&completed, 1)
@@ -743,7 +743,7 @@ func (a *Agent) runScenario(ctx context.Context, cmd protocol.ScenarioCommand) {
 							ran[i] = true
 							emit(RunEvent{Type: "completed", TaskID: step.TaskID, TechniqueID: step.TechniqueID, StepName: step.Name,
 								Payload: map[string]any{"verdict": "blocked"}})
-							return
+							return false
 						}
 						log.Printf("[*]   staged %d payload(s) to %s", len(step.Payloads), stepDir)
 					}
@@ -769,6 +769,7 @@ func (a *Agent) runScenario(ctx context.Context, cmd protocol.ScenarioCommand) {
 					payload["reason"] = "execute"
 				}
 				emit(RunEvent{Type: typ, TaskID: step.TaskID, TechniqueID: step.TechniqueID, StepName: step.Name, Payload: payload})
+				return false
 			},
 		}
 	}

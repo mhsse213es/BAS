@@ -143,10 +143,11 @@ func (c *tracker) peak() int {
 func makeJobs(n int, p *ResourceProfile, tr *tracker) []Job {
 	jobs := make([]Job, n)
 	for i := range jobs {
-		jobs[i] = Job{Resource: p, Run: func(ctx context.Context) {
+		jobs[i] = Job{Resource: p, Run: func(ctx context.Context) bool {
 			tr.enter()
 			time.Sleep(25 * time.Millisecond)
 			tr.leave()
+			return false
 		}}
 	}
 	return jobs
@@ -225,10 +226,11 @@ func TestRandomizedNoDeadlock(t *testing.T) {
 			}
 			p = &ResourceProfile{Domains: ds, Scope: "local", Risk: risks[rng.Intn(len(risks))]}
 		}
-		jobs = append(jobs, Job{Resource: p, Run: func(ctx context.Context) {
+		jobs = append(jobs, Job{Resource: p, Run: func(ctx context.Context) bool {
 			mu.Lock()
 			done++
 			mu.Unlock()
+			return false
 		}})
 	}
 
@@ -283,8 +285,8 @@ func TestRunJobReleasesLocksOnPanic(t *testing.T) {
 	reg := &ResourceProfile{Domains: []ResourceLock{{Domain: "registry"}}, Scope: "local", Risk: RiskModification}
 	var ran2 bool
 	jobs := []Job{
-		{Resource: reg, Run: func(context.Context) { panic("boom") }},
-		{Resource: reg, Run: func(context.Context) { ran2 = true }},
+		{Resource: reg, Run: func(context.Context) bool { panic("boom") }},
+		{Resource: reg, Run: func(context.Context) bool { ran2 = true; return false }},
 	}
 	Run(context.Background(), 2, NewLockManager(), jobs, nil)
 	if !ran2 {
@@ -307,7 +309,7 @@ func TestScheduleTimeoutFires(t *testing.T) {
 		Resource:          &ResourceProfile{Scope: "global", Risk: RiskModification},
 		Schedule:          20 * time.Millisecond,
 		OnScheduleTimeout: func() { toFired = true },
-		Run:               func(context.Context) { ran = true },
+		Run:               func(context.Context) bool { ran = true; return false },
 	}
 	Run(context.Background(), 1, lm, []Job{job}, nil)
 	if !toFired {
@@ -334,7 +336,7 @@ func TestScheduleTimeoutNotFiredOnCancel(t *testing.T) {
 		Resource:          &ResourceProfile{Scope: "global", Risk: RiskModification},
 		Schedule:          20 * time.Millisecond,
 		OnScheduleTimeout: func() { toFired = true },
-		Run:               func(context.Context) {},
+		Run:               func(context.Context) bool { return false },
 	}, nil)
 	if toFired {
 		t.Error("schedule timeout fired on a cancelled scenario — abort misreported as timeout")
@@ -350,12 +352,13 @@ func TestCancellationStopsDispatch(t *testing.T) {
 	var mu sync.Mutex
 	jobs := make([]Job, 100)
 	for i := range jobs {
-		jobs[i] = Job{Run: func(ctx context.Context) {
+		jobs[i] = Job{Run: func(ctx context.Context) bool {
 			mu.Lock()
 			ran++
 			mu.Unlock()
 			cancel() // cancel after the first job starts
 			time.Sleep(2 * time.Millisecond)
+			return false
 		}}
 	}
 	Run(ctx, 1, NewLockManager(), jobs, nil)
@@ -373,15 +376,17 @@ func TestRun_GateHoldsNewJobsButFinishesInFlight(t *testing.T) {
 	release := make(chan struct{})
 
 	jobs := []Job{
-		{Run: func(ctx context.Context) {
+		{Run: func(ctx context.Context) bool {
 			atomic.AddInt32(&started, 1)
 			close(firstStarted)
 			<-release // held "in flight" until the test says go
 			atomic.AddInt32(&finished, 1)
+			return false
 		}},
-		{Run: func(ctx context.Context) {
+		{Run: func(ctx context.Context) bool {
 			atomic.AddInt32(&started, 1)
 			atomic.AddInt32(&finished, 1)
+			return false
 		}},
 	}
 
@@ -427,8 +432,9 @@ func TestRun_RiskGateDefersModificationUntilPolicyAdmits(t *testing.T) {
 	started := make(chan struct{})
 	job := Job{
 		Resource: &ResourceProfile{Scope: "local", Risk: RiskModification},
-		Run: func(ctx context.Context) {
+		Run: func(ctx context.Context) bool {
 			close(started)
+			return false
 		},
 	}
 
@@ -460,7 +466,7 @@ func TestRun_RiskGateDefersModificationUntilPolicyAdmits(t *testing.T) {
 // Run without WithRiskGate -- still works unmodified.
 func TestRun_NilRiskGateIsSafe(t *testing.T) {
 	ran := false
-	jobs := []Job{{Run: func(ctx context.Context) { ran = true }}}
+	jobs := []Job{{Run: func(ctx context.Context) bool { ran = true; return false }}}
 	Run(context.Background(), 1, NewLockManager(), jobs, nil) // no WithRiskGate at all
 	if !ran {
 		t.Error("job did not run")
@@ -475,8 +481,8 @@ func TestRun_RiskGateRecordsAdmissionWaitViaRecorder(t *testing.T) {
 	rec := &fakeRecorder{}
 	gate := NewRiskGate() // default policy: admits everything immediately
 	jobs := []Job{
-		{Resource: &ResourceProfile{Risk: RiskObservation}, Run: func(ctx context.Context) {}},
-		{Resource: &ResourceProfile{Risk: RiskModification}, Run: func(ctx context.Context) {}},
+		{Resource: &ResourceProfile{Risk: RiskObservation}, Run: func(ctx context.Context) bool { return false }},
+		{Resource: &ResourceProfile{Risk: RiskModification}, Run: func(ctx context.Context) bool { return false }},
 	}
 	Run(context.Background(), 2, NewLockManager(), jobs, nil, WithRecorder(rec), WithRiskGate(gate))
 

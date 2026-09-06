@@ -82,7 +82,7 @@ func TestRun_RecordsQueueLockAndExecutionForEverySuccessfulJob(t *testing.T) {
 	for i := range jobs {
 		jobs[i] = Job{
 			Queued: time.Now().Add(-10 * time.Millisecond),
-			Run:    func(ctx context.Context) { time.Sleep(time.Millisecond) },
+			Run:    func(ctx context.Context) bool { time.Sleep(time.Millisecond); return false },
 		}
 	}
 	Run(context.Background(), 2, NewLockManager(), jobs, nil, WithRecorder(rec))
@@ -123,9 +123,10 @@ func TestRun_ScheduleTimeoutReportsLockWaitButNotExecutionTime(t *testing.T) {
 	holder := Job{
 		Resource: &ResourceProfile{Scope: "global"},
 		Queued:   time.Now(),
-		Run: func(ctx context.Context) {
+		Run: func(ctx context.Context) bool {
 			close(holderStarted)
 			<-releaseHolder
+			return false
 		},
 	}
 	waiter := Job{
@@ -170,8 +171,8 @@ func TestRun_ScheduleTimeoutReportsLockWaitButNotExecutionTime(t *testing.T) {
 func TestRun_JobPanicIsRecorded(t *testing.T) {
 	rec := &fakeRecorder{}
 	jobs := []Job{
-		{Run: func(ctx context.Context) { panic("boom") }},
-		{Run: func(ctx context.Context) { /* fine */ }},
+		{Run: func(ctx context.Context) bool { panic("boom") }},
+		{Run: func(ctx context.Context) bool { return false /* fine */ }},
 	}
 	Run(context.Background(), 1, NewLockManager(), jobs, nil, WithRecorder(rec))
 
@@ -189,7 +190,7 @@ func TestRun_JobPanicIsRecorded(t *testing.T) {
 // scheduler's other call sites or tests need to change.
 func TestRun_NilRecorderIsSafe(t *testing.T) {
 	ran := false
-	jobs := []Job{{Run: func(ctx context.Context) { ran = true }}}
+	jobs := []Job{{Run: func(ctx context.Context) bool { ran = true; return false }}}
 	Run(context.Background(), 1, NewLockManager(), jobs, nil) // no Recorder arg at all
 	if !ran {
 		t.Error("job did not run")

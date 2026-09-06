@@ -10,10 +10,14 @@ import (
 
 // Job is one step the scheduler runs. Resource is the step's lock profile (nil →
 // serial). Run performs the work and must honour ctx for cancellation; results
-// are captured by the caller via the closure, so Run returns nothing.
+// are captured by the caller via the closure.
 type Job struct {
 	Resource *ResourceProfile
-	Run      func(ctx context.Context)
+	// Run performs the work and reports whether this attempt's outcome
+	// warrants a retry (per the caller's own classification of what it ran --
+	// sched has no opinion on what "retryable" means). Ignored once a Job's
+	// retry budget is exhausted or the outcome already succeeded.
+	Run      func(ctx context.Context) (shouldRetry bool)
 	// Schedule bounds how long the job may wait to acquire its resource locks. On
 	// expiry the job is not run and OnScheduleTimeout fires instead. 0 → wait as
 	// long as needed (bounded in practice by the holders' execute timeouts).
@@ -148,7 +152,7 @@ func Run(ctx context.Context, workers int, lm *LockManager, jobs []Job, gate *Ga
 // runJob acquires a job's locks (bounded by its schedule timeout), runs it, and
 // guarantees the locks are released — even if Run panics, so one faulty step can
 // neither crash the agent nor wedge the scheduler by holding a lock forever.
-func runJob(ctx context.Context, lm *LockManager, j Job, rec Recorder) {
+func runJob(ctx context.Context, lm *LockManager, j Job, rec Recorder) (shouldRetry bool) {
 	reqs := resolve(j.Resource)
 
 	lockWaitStart := time.Now()
@@ -164,14 +168,15 @@ func runJob(ctx context.Context, lm *LockManager, j Job, rec Recorder) {
 	if !ok {
 		// AcquireCtx failed: a cancelled scenario (ctx done) is a normal abort —
 		// skip silently. Otherwise the schedule timeout fired: record it so the
-		// step is never silently stuck.
+		// step is never silently stuck. Either way, never retried -- contention
+		// for a resource is not the step failing.
 		if ctx.Err() == nil && j.OnScheduleTimeout != nil {
 			if rec != nil {
 				rec.ScheduleTimeout()
 			}
 			j.OnScheduleTimeout()
 		}
-		return
+		return false
 	}
 
 	defer lm.Release(reqs)
@@ -181,15 +186,17 @@ func runJob(ctx context.Context, lm *LockManager, j Job, rec Recorder) {
 			if rec != nil {
 				rec.JobPanic()
 			}
+			shouldRetry = false
 		}
 	}()
 	if j.Run != nil {
 		execStart := time.Now()
-		j.Run(ctx)
+		shouldRetry = j.Run(ctx)
 		if rec != nil {
 			rec.ExecutionTime(time.Since(execStart))
 		}
 	}
+	return shouldRetry
 }
 
 // DefaultWorkers returns a sane worker count for an endpoint: one per CPU, capped

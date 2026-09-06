@@ -71,7 +71,7 @@ func makeWorldJobs(rng *rand.Rand, w *world, domains []string, n int, verdicts [
 		}
 		p := &ResourceProfile{Domains: locks, Scope: "local", Risk: RiskModification}
 		idx, ks := i, keys
-		jobs[i] = Job{Resource: p, Run: func(ctx context.Context) {
+		jobs[i] = Job{Resource: p, Run: func(ctx context.Context) bool {
 			for _, d := range ks {
 				*w.cells[d] = id
 			}
@@ -84,6 +84,7 @@ func makeWorldJobs(rng *rand.Rand, w *world, domains []string, n int, verdicts [
 				}
 			}
 			verdicts[idx] = clean
+			return false
 		}}
 	}
 	return jobs
@@ -142,10 +143,11 @@ func TestMislabelIsDetectable(t *testing.T) {
 			// MISLABEL: observation → read lock → same-domain writers overlap.
 			p := &ResourceProfile{Domains: []ResourceLock{{Domain: d}}, Scope: "local", Risk: RiskObservation}
 			idx := i
-			jobs[i] = Job{Resource: p, Run: func(ctx context.Context) {
+			jobs[i] = Job{Resource: p, Run: func(ctx context.Context) bool {
 				*w.cells[d] = id
 				linger()
 				verdicts[idx] = (*w.cells[d] == id)
+				return false
 			}}
 		}
 		Run(context.Background(), 8, NewLockManager(), jobs, nil)
