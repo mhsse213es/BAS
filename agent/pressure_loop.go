@@ -143,12 +143,16 @@ func (a *Agent) pressureLoopTick(ctrl *pressure.Controller, gate *errorLogGate) 
 	a.scenarioMu.Lock()
 	limiter := a.activeLimiter
 	workers := a.activeWorkers
+	riskGate := a.activeRiskGate
 	a.scenarioMu.Unlock()
 	if workers == 0 {
 		workers = sched.DefaultWorkers()
 	}
 
 	level, _ := pressureTick(ctrl, limiter, workers, hostCPU, hostMem)
+	if riskGate != nil {
+		riskGate.SetPolicy(func(risk string) bool { return riskAllowedForLevel(level, risk) })
+	}
 
 	a.logger.Metric("host_cpu_percent", hostCPU, "percent")
 	a.logger.Metric("host_mem_percent", hostMem, "percent")

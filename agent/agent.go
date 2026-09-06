@@ -37,13 +37,14 @@ type Agent struct {
 	// run as paused).
 	pauseGate   *sched.Gate
 	pauseEmit   func(RunEvent)
-	// activeLimiter and activeWorkers belong to whichever run is currently
-	// active, exactly like pauseGate/pauseEmit above (nil/0 when idle or
-	// between runs) -- the Phase 4 pressure loop reads these every tick under
-	// scenarioMu to know which limiter to adjust and what its un-throttled
-	// ceiling should be.
-	activeLimiter *sched.ConcurrencyLimiter
-	activeWorkers int
+	// activeLimiter, activeWorkers, and activeRiskGate belong to whichever run
+	// is currently active, exactly like pauseGate/pauseEmit above (nil/0 when
+	// idle or between runs) -- the pressure loop reads these every tick under
+	// scenarioMu to know which limiter/gate to adjust and what its
+	// un-throttled ceiling should be.
+	activeLimiter  *sched.ConcurrencyLimiter
+	activeWorkers  int
+	activeRiskGate *sched.RiskGate
 	binaryHash    string           // SHA-256 of own binary, computed once at startup
 	logger      *Logger          // 3-tier structured logger
 	localSt     *LocalAgentState // in-memory state for local status API
@@ -663,6 +664,7 @@ func (a *Agent) runScenario(ctx context.Context, cmd protocol.ScenarioCommand) {
 		a.pauseEmit = nil
 		a.activeLimiter = nil
 		a.activeWorkers = 0
+		a.activeRiskGate = nil
 		a.scenarioMu.Unlock()
 	}()
 
@@ -776,16 +778,19 @@ func (a *Agent) runScenario(ctx context.Context, cmd protocol.ScenarioCommand) {
 	go runGaugeSampler(a.logger, &startedJobs, &finishedJobs, total, gaugeSampleInterval, gaugeDone)
 
 	// Admission ceiling defaults to the worker count -- a no-op until the
-	// Phase 4 pressure loop's ticker (agent/pressure_loop.go) observes
-	// sustained host pressure and calls SetLimit to lower it.
+	// pressure loop's ticker (agent/pressure_loop.go) observes sustained host
+	// pressure and calls SetLimit to lower it. riskGate similarly starts at
+	// its default admit-everything policy until the pressure loop narrows it.
 	limiter := sched.NewConcurrencyLimiter(workers)
+	riskGate := sched.NewRiskGate()
 	a.scenarioMu.Lock()
 	a.activeLimiter = limiter
 	a.activeWorkers = workers
+	a.activeRiskGate = riskGate
 	a.scenarioMu.Unlock()
 
 	sched.Run(ctx, workers, sched.NewLockManager(), jobs, gate,
-		sched.WithRecorder(metrics), sched.WithConcurrencyLimiter(limiter))
+		sched.WithRecorder(metrics), sched.WithConcurrencyLimiter(limiter), sched.WithRiskGate(riskGate))
 
 	close(gaugeDone)
 	metrics.report(a.logger, total)
