@@ -9,6 +9,26 @@ import (
 	"audspect/agent/protocol"
 )
 
+func TestIsRetryableResult(t *testing.T) {
+	cases := []struct {
+		name string
+		r    protocol.ExecResult
+		want bool
+	}{
+		{"blocked always non-retryable", protocol.ExecResult{Blocked: true, ExitCode: 1}, false},
+		{"blocked even with exit 0", protocol.ExecResult{Blocked: true, ExitCode: 0}, false},
+		{"timed out is retryable", protocol.ExecResult{TimedOut: true}, true},
+		{"success is not retryable", protocol.ExecResult{ExitCode: 0}, false},
+		{"nonzero exit (fail) is retryable", protocol.ExecResult{ExitCode: 1}, true},
+		{"exit -1 (error) is retryable", protocol.ExecResult{ExitCode: -1}, true},
+	}
+	for _, c := range cases {
+		if got := isRetryableResult(c.r); got != c.want {
+			t.Errorf("%s: isRetryableResult() = %v, want %v", c.name, got, c.want)
+		}
+	}
+}
+
 func TestEventForResult(t *testing.T) {
 	cases := []struct {
 		name    string

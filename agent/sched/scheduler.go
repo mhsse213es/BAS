@@ -148,7 +148,7 @@ func Run(ctx context.Context, workers int, lm *LockManager, jobs []Job, gate *Ga
 
 					if cfg.riskGate != nil {
 						admissionStart := time.Now()
-						if !cfg.riskGate.Allow(ctx, effectiveRisk(j.Resource)) {
+						if !cfg.riskGate.Allow(ctx, EffectiveRisk(j.Resource)) {
 							break // ctx cancelled while deferred
 						}
 						if cfg.rec != nil {

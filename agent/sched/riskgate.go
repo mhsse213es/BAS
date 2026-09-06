@@ -93,13 +93,15 @@ func (g *RiskGate) Allow(ctx context.Context, risk string) bool {
 // as read-only is not assumed safe to prioritize under pressure either.
 const RiskUnknown = "unknown"
 
-// effectiveRisk resolves a job's risk classification for admission purposes.
+// EffectiveRisk resolves a job's risk classification for admission purposes.
 // A Reads/Writes-populated profile also has no Risk field set today by
 // convention (see ResourceProfile's own doc comment) -- no curated profile in
 // this codebase currently uses that form, so in practice "empty Risk" means
 // "no curated profile exists for this step," which is exactly the
-// RiskUnknown case this function returns for.
-func effectiveRisk(p *ResourceProfile) string {
+// RiskUnknown case this function returns for. Exported (not just used
+// internally by Run for RiskGate.Allow) because package main now needs it
+// too, to choose a retry policy before a Job is even constructed (Phase 7).
+func EffectiveRisk(p *ResourceProfile) string {
 	if p == nil || p.Risk == "" {
 		return RiskUnknown
 	}

@@ -48,6 +48,30 @@ func riskAllowedForLevel(level pressure.Level, risk string) bool {
 	return risk == sched.RiskObservation
 }
 
+// retryPolicyForRisk maps a step's effective risk classification to a retry
+// policy. Observation steps are non-modifying, so retrying them carries no
+// side-effect-compounding risk -- they get a more generous budget.
+// Modification steps can compound real side effects on a repeat, so they get
+// a conservative budget. A step with no curated profile (sched.RiskUnknown)
+// is treated the same as Modification, for the same conservative-by-default
+// reasoning EffectiveRisk itself already applies.
+func retryPolicyForRisk(risk string) sched.RetryPolicy {
+	if risk == sched.RiskObservation {
+		return sched.RetryPolicy{
+			MaxAttempts: 4, // 1 initial + 3 retries
+			Backoff: func(attempt int) time.Duration {
+				return time.Duration(1<<(attempt-1)) * time.Second // 1s, 2s, 4s
+			},
+		}
+	}
+	return sched.RetryPolicy{
+		MaxAttempts: 2, // 1 initial + 1 retry
+		Backoff: func(attempt int) time.Duration {
+			return 5 * time.Second
+		},
+	}
+}
+
 // pressureTick performs one sampling-to-decision cycle given an
 // already-taken host sample: feeds it to ctrl, computes the resulting
 // ceiling, and applies it to limiter if one is active (nil-safe -- a nil

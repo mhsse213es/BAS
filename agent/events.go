@@ -44,6 +44,19 @@ func eventForResult(r protocol.ExecResult) (typ, verdict string) {
 	return "completed", "fail"
 }
 
+// isRetryableResult classifies whether a step's outcome warrants a retry.
+// Mirrors eventForResult's classification: TimedOut -> retryable, Blocked ->
+// never (a security control already caught this; retrying is pointless and
+// could look like an attack loop), ExitCode == 0 -> success (never
+// retryable), any other nonzero exit (fail or the -1 error sentinel) ->
+// retryable.
+func isRetryableResult(r protocol.ExecResult) bool {
+	if r.Blocked {
+		return false
+	}
+	return r.TimedOut || r.ExitCode != 0
+}
+
 // eventEmitter buffers RunEvents on a bounded channel and flushes them to the
 // server in batches. Emitting never blocks the run: if the queue is full (server
 // unreachable), the oldest event is dropped and a throttled warning is logged.

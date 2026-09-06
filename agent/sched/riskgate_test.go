@@ -96,8 +96,8 @@ func TestEffectiveRisk(t *testing.T) {
 		{"persistence", &ResourceProfile{Risk: RiskPersistence}, RiskPersistence},
 	}
 	for _, c := range cases {
-		if got := effectiveRisk(c.p); got != c.want {
-			t.Errorf("%s: effectiveRisk() = %q, want %q", c.name, got, c.want)
+		if got := EffectiveRisk(c.p); got != c.want {
+			t.Errorf("%s: EffectiveRisk() = %q, want %q", c.name, got, c.want)
 		}
 	}
 }

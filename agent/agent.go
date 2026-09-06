@@ -621,6 +621,7 @@ func (a *Agent) runScenario(ctx context.Context, cmd protocol.ScenarioCommand) {
 	// deterministic (identical to a serial run) regardless of completion order.
 	results := make([]protocol.ExecResult, total)
 	ran := make([]bool, total)
+	attemptCounters := make([]int32, total)
 	var completed int64
 	// started/finished feed runGaugeSampler's active/queued gauges below --
 	// separate from `completed` (which is really "dispatched", used only for
@@ -684,12 +685,16 @@ func (a *Agent) runScenario(ctx context.Context, cmd protocol.ScenarioCommand) {
 			schedDur = time.Duration(schedSec) * time.Second
 		}
 
+		risk := sched.EffectiveRisk(step.Resource)
+		retryPolicy := retryPolicyForRisk(risk)
+
 		emit(RunEvent{Type: "queued", TaskID: step.TaskID, TechniqueID: step.TechniqueID, StepName: step.Name})
 
 		jobs[i] = sched.Job{
 			Resource: step.Resource,
 			Schedule: schedDur,
 			Queued:   time.Now(),
+			Retry:    retryPolicy,
 			OnScheduleTimeout: func() {
 				atomic.AddInt64(&startedJobs, 1)
 				atomic.AddInt64(&finishedJobs, 1)
@@ -769,7 +774,15 @@ func (a *Agent) runScenario(ctx context.Context, cmd protocol.ScenarioCommand) {
 					payload["reason"] = "execute"
 				}
 				emit(RunEvent{Type: typ, TaskID: step.TaskID, TechniqueID: step.TechniqueID, StepName: step.Name, Payload: payload})
-				return false
+
+				retry := isRetryableResult(r)
+				attemptNum := atomic.AddInt32(&attemptCounters[i], 1)
+				if retry && int(attemptNum) < retryPolicy.MaxAttempts {
+					log.Printf("[*]   [%d/%d] %s will retry (attempt %d/%d)", i+1, total, step.TechniqueID, attemptNum, retryPolicy.MaxAttempts)
+					emit(RunEvent{Type: "retrying", TaskID: step.TaskID, TechniqueID: step.TechniqueID, StepName: step.Name,
+						Payload: map[string]any{"attempt": int(attemptNum), "maxAttempts": retryPolicy.MaxAttempts}})
+				}
+				return retry
 			},
 		}
 	}

@@ -9,6 +9,30 @@ import (
 	"audspect/agent/sched"
 )
 
+func TestRetryPolicyForRisk(t *testing.T) {
+	cases := []struct {
+		risk        string
+		wantMax     int
+		wantBackoff []time.Duration // Backoff(1), Backoff(2), Backoff(3)
+	}{
+		{sched.RiskObservation, 4, []time.Duration{1 * time.Second, 2 * time.Second, 4 * time.Second}},
+		{sched.RiskModification, 2, []time.Duration{5 * time.Second}},
+		{sched.RiskUnknown, 2, []time.Duration{5 * time.Second}},
+		{"some-other-unrecognized-value", 2, []time.Duration{5 * time.Second}},
+	}
+	for _, c := range cases {
+		p := retryPolicyForRisk(c.risk)
+		if p.MaxAttempts != c.wantMax {
+			t.Errorf("retryPolicyForRisk(%q).MaxAttempts = %d, want %d", c.risk, p.MaxAttempts, c.wantMax)
+		}
+		for i, want := range c.wantBackoff {
+			if got := p.Backoff(i + 1); got != want {
+				t.Errorf("retryPolicyForRisk(%q).Backoff(%d) = %v, want %v", c.risk, i+1, got, want)
+			}
+		}
+	}
+}
+
 func TestCeilingForLevel(t *testing.T) {
 	cases := []struct {
 		level   pressure.Level
