@@ -713,10 +713,32 @@ func (a *Agent) runScenario(ctx context.Context, cmd protocol.ScenarioCommand) {
 					Payload: map[string]any{"reason": "schedule"}})
 			},
 			Run: func(ctx context.Context) bool {
-				atomic.AddInt64(&startedJobs, 1)
-				defer atomic.AddInt64(&finishedJobs, 1)
-				n := atomic.AddInt64(&completed, 1)
-				a.localSt.UpdateProgress(int(n), total, "Execution", step.TechniqueID+" — "+step.Name)
+				// firstAttempt is read before attemptCounters[i] is incremented below
+				// (Phase 7 invokes this closure once per retry attempt, not once per
+				// step) -- startedJobs/completed/UpdateProgress must fire exactly
+				// once per step, not once per attempt, or a retrying step inflates
+				// them past total.
+				firstAttempt := atomic.LoadInt32(&attemptCounters[i]) == 0
+				var willRetry bool
+				if firstAttempt {
+					atomic.AddInt64(&startedJobs, 1)
+				}
+				defer func() {
+					// finishedJobs must likewise fire only once the step is truly
+					// done (no further attempt coming), not once per attempt.
+					// willRetry's bool zero value (false) is exactly right for both
+					// early-return paths (quarantine block below, and Phase 8's
+					// future circuit-breaker skip) -- they never reach the
+					// assignment further down, so this still counts them as
+					// terminal.
+					if !willRetry {
+						atomic.AddInt64(&finishedJobs, 1)
+					}
+				}()
+				if firstAttempt {
+					n := atomic.AddInt64(&completed, 1)
+					a.localSt.UpdateProgress(int(n), total, "Execution", step.TechniqueID+" — "+step.Name)
+				}
 				log.Printf("[*]   [%d/%d] %s (%s) — %s", i+1, total, step.TechniqueID, step.Executor, step.Name)
 				a.logger.Sec("info", cmd.ScenarioID, cmd.RunID, step.TaskID, step.TechniqueID,
 					"scenario_step", fmt.Sprintf("[%d/%d] %s executor=%s", i+1, total, step.Name, step.Executor))
@@ -777,12 +799,13 @@ func (a *Agent) runScenario(ctx context.Context, cmd protocol.ScenarioCommand) {
 
 				retry := isRetryableResult(r)
 				attemptNum := atomic.AddInt32(&attemptCounters[i], 1)
-				if retry && int(attemptNum) < retryPolicy.MaxAttempts {
+				willRetry = retry && int(attemptNum) < retryPolicy.MaxAttempts
+				if willRetry {
 					log.Printf("[*]   [%d/%d] %s will retry (attempt %d/%d)", i+1, total, step.TechniqueID, attemptNum, retryPolicy.MaxAttempts)
 					emit(RunEvent{Type: "retrying", TaskID: step.TaskID, TechniqueID: step.TechniqueID, StepName: step.Name,
 						Payload: map[string]any{"attempt": int(attemptNum), "maxAttempts": retryPolicy.MaxAttempts}})
 				}
-				return retry
+				return willRetry
 			},
 		}
 	}
