@@ -21,6 +21,11 @@ type Job struct {
 	// OnScheduleTimeout records a schedule-timeout verdict for the step when its
 	// locks could not be acquired within Schedule. Never called on scenario abort.
 	OnScheduleTimeout func()
+	// Queued is when the caller submitted this job (before Run's dispatch loop
+	// even starts), used only to report QueueWait to an optional Recorder. Zero
+	// value simply skips that one report -- everything else about the job is
+	// unaffected.
+	Queued time.Time
 }
 
 // Run executes jobs across `workers` goroutines, holding each job's resource
@@ -38,12 +43,21 @@ type Job struct {
 // Deadlock-freedom: a job in the queue holds no locks, so no running job can ever
 // wait on a lock held by a not-yet-started job; combined with canonical-order
 // acquisition (see resolve/LockManager), the scheduler cannot deadlock.
-func Run(ctx context.Context, workers int, lm *LockManager, jobs []Job, gate *Gate) {
+//
+// rec, if provided (at most one -- trailing variadic so every existing caller
+// and test is source-compatible), receives per-job telemetry. See Recorder.
+// Run and runJob never branch on it: it is pure observation, added to measure
+// the scheduler before any adaptive admission layer is built on top of it.
+func Run(ctx context.Context, workers int, lm *LockManager, jobs []Job, gate *Gate, rec ...Recorder) {
 	if workers < 1 {
 		workers = 1
 	}
 	if lm == nil {
 		lm = NewLockManager()
+	}
+	var r Recorder
+	if len(rec) > 0 {
+		r = rec[0]
 	}
 	ch := make(chan Job)
 	var wg sync.WaitGroup
@@ -52,6 +66,11 @@ func Run(ctx context.Context, workers int, lm *LockManager, jobs []Job, gate *Ga
 		go func() {
 			defer wg.Done()
 			for j := range ch {
+				if r != nil && !j.Queued.IsZero() {
+					// Measured at dequeue, before the pause gate: this is contention
+					// for a free worker, not the operator's deliberate pause.
+					r.QueueWait(time.Since(j.Queued))
+				}
 				if ctx.Err() != nil {
 					continue // cancelled: drain the channel without running
 				}
@@ -59,7 +78,7 @@ func Run(ctx context.Context, workers int, lm *LockManager, jobs []Job, gate *Ga
 				if ctx.Err() != nil {
 					continue // cancel can race with a pause -- re-check before running
 				}
-				runJob(ctx, lm, j)
+				runJob(ctx, lm, j, r)
 			}
 		}()
 	}
@@ -76,20 +95,27 @@ func Run(ctx context.Context, workers int, lm *LockManager, jobs []Job, gate *Ga
 // runJob acquires a job's locks (bounded by its schedule timeout), runs it, and
 // guarantees the locks are released — even if Run panics, so one faulty step can
 // neither crash the agent nor wedge the scheduler by holding a lock forever.
-func runJob(ctx context.Context, lm *LockManager, j Job) {
+func runJob(ctx context.Context, lm *LockManager, j Job, rec Recorder) {
 	reqs := resolve(j.Resource)
 
+	lockWaitStart := time.Now()
 	acqCtx, cancel := ctx, context.CancelFunc(func() {})
 	if j.Schedule > 0 {
 		acqCtx, cancel = context.WithTimeout(ctx, j.Schedule)
 	}
 	ok := lm.AcquireCtx(acqCtx, reqs)
 	cancel()
+	if rec != nil {
+		rec.LockWait(time.Since(lockWaitStart))
+	}
 	if !ok {
 		// AcquireCtx failed: a cancelled scenario (ctx done) is a normal abort —
 		// skip silently. Otherwise the schedule timeout fired: record it so the
 		// step is never silently stuck.
 		if ctx.Err() == nil && j.OnScheduleTimeout != nil {
+			if rec != nil {
+				rec.ScheduleTimeout()
+			}
 			j.OnScheduleTimeout()
 		}
 		return
@@ -99,10 +125,17 @@ func runJob(ctx context.Context, lm *LockManager, j Job) {
 	defer func() {
 		if p := recover(); p != nil {
 			log.Printf("[sched] recovered panic in step: %v", p)
+			if rec != nil {
+				rec.JobPanic()
+			}
 		}
 	}()
 	if j.Run != nil {
+		execStart := time.Now()
 		j.Run(ctx)
+		if rec != nil {
+			rec.ExecutionTime(time.Since(execStart))
+		}
 	}
 }
 

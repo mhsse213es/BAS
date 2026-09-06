@@ -614,6 +614,10 @@ func (a *Agent) runScenario(ctx context.Context, cmd protocol.ScenarioCommand) {
 	results := make([]protocol.ExecResult, total)
 	ran := make([]bool, total)
 	var completed int64
+	// started/finished feed runGaugeSampler's active/queued gauges below --
+	// separate from `completed` (which is really "dispatched", used only for
+	// the local progress bar and incremented before a step even begins).
+	var startedJobs, finishedJobs int64
 
 	workers := cmd.Workers
 	if workers < 1 {
@@ -674,7 +678,10 @@ func (a *Agent) runScenario(ctx context.Context, cmd protocol.ScenarioCommand) {
 		jobs[i] = sched.Job{
 			Resource: step.Resource,
 			Schedule: schedDur,
+			Queued:   time.Now(),
 			OnScheduleTimeout: func() {
+				atomic.AddInt64(&startedJobs, 1)
+				atomic.AddInt64(&finishedJobs, 1)
 				n := atomic.AddInt64(&completed, 1)
 				a.localSt.UpdateProgress(int(n), total, "Execution", step.TechniqueID+" — "+step.Name)
 				log.Printf("[*]   [%d/%d] %s — schedule timeout after %ds (locks unavailable)", i+1, total, step.TechniqueID, schedSec)
@@ -690,6 +697,8 @@ func (a *Agent) runScenario(ctx context.Context, cmd protocol.ScenarioCommand) {
 					Payload: map[string]any{"reason": "schedule"}})
 			},
 			Run: func(ctx context.Context) {
+				atomic.AddInt64(&startedJobs, 1)
+				defer atomic.AddInt64(&finishedJobs, 1)
 				n := atomic.AddInt64(&completed, 1)
 				a.localSt.UpdateProgress(int(n), total, "Execution", step.TechniqueID+" — "+step.Name)
 				log.Printf("[*]   [%d/%d] %s (%s) — %s", i+1, total, step.TechniqueID, step.Executor, step.Name)
@@ -753,7 +762,14 @@ func (a *Agent) runScenario(ctx context.Context, cmd protocol.ScenarioCommand) {
 		}
 	}
 
-	sched.Run(ctx, workers, sched.NewLockManager(), jobs, gate)
+	metrics := &runMetrics{}
+	gaugeDone := make(chan struct{})
+	go runGaugeSampler(a.logger, &startedJobs, &finishedJobs, total, gaugeSampleInterval, gaugeDone)
+
+	sched.Run(ctx, workers, sched.NewLockManager(), jobs, gate, metrics)
+
+	close(gaugeDone)
+	metrics.report(a.logger, total)
 
 	// Collect completed results in submission order. On cancellation the
 	// scheduler skips not-yet-started jobs, so some indices stay unran.

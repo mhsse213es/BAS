@@ -335,7 +335,7 @@ func TestScheduleTimeoutNotFiredOnCancel(t *testing.T) {
 		Schedule:          20 * time.Millisecond,
 		OnScheduleTimeout: func() { toFired = true },
 		Run:               func(context.Context) {},
-	})
+	}, nil)
 	if toFired {
 		t.Error("schedule timeout fired on a cancelled scenario — abort misreported as timeout")
 	}
