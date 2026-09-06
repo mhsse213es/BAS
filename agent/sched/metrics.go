@@ -40,4 +40,7 @@ type Recorder interface {
 	// RiskGate, whether or not it was ever actually deferred, mirroring how
 	// QueueWait is recorded for every job regardless of how long it waited.
 	AdmissionWait(d time.Duration)
+	// Retry reports one retry attempt about to happen -- called once per
+	// retry (a Job that retries twice calls this twice), never once per Job.
+	Retry()
 }

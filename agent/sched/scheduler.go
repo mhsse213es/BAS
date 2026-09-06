@@ -30,6 +30,10 @@ type Job struct {
 	// value simply skips that one report -- everything else about the job is
 	// unaffected.
 	Queued time.Time
+	// Retry bounds how many times this Job's full admission-and-execute
+	// cycle repeats on a retryable outcome. The zero value (MaxAttempts 0)
+	// means exactly one attempt, identical to every Job before this phase.
+	Retry RetryPolicy
 }
 
 // RunOption configures optional Run behavior. Each new cross-cutting concern
@@ -118,24 +122,54 @@ func Run(ctx context.Context, workers int, lm *LockManager, jobs []Job, gate *Ga
 				if ctx.Err() != nil {
 					continue // cancel can race with a pause -- re-check before running
 				}
-				if cfg.riskGate != nil {
-					admissionStart := time.Now()
-					if !cfg.riskGate.Allow(ctx, effectiveRisk(j.Resource)) {
-						continue // ctx cancelled while deferred
+
+				maxAttempts := j.Retry.maxAttempts()
+				for attempt := 1; attempt <= maxAttempts; attempt++ {
+					if attempt > 1 {
+						if cfg.rec != nil {
+							cfg.rec.Retry()
+						}
+						// Backoff holds neither the admission slot nor the lock --
+						// both were already released at the end of the prior
+						// attempt below -- so a step backing off never idle-holds a
+						// scarce resource other steps may be waiting on.
+						select {
+						case <-time.After(j.Retry.backoff(attempt - 1)):
+						case <-ctx.Done():
+						}
+						if ctx.Err() != nil {
+							break
+						}
+						gate.Wait(ctx)
+						if ctx.Err() != nil {
+							break
+						}
 					}
-					if cfg.rec != nil {
-						cfg.rec.AdmissionWait(time.Since(admissionStart))
+
+					if cfg.riskGate != nil {
+						admissionStart := time.Now()
+						if !cfg.riskGate.Allow(ctx, effectiveRisk(j.Resource)) {
+							break // ctx cancelled while deferred
+						}
+						if cfg.rec != nil {
+							cfg.rec.AdmissionWait(time.Since(admissionStart))
+						}
+					}
+
+					var retry bool
+					if cfg.limiter != nil {
+						if !cfg.limiter.Acquire(ctx) {
+							break // ctx cancelled while waiting for an admission slot
+						}
+						retry = runJob(ctx, lm, j, cfg.rec)
+						cfg.limiter.Release()
+					} else {
+						retry = runJob(ctx, lm, j, cfg.rec)
+					}
+					if !retry || attempt == maxAttempts {
+						break
 					}
 				}
-				if cfg.limiter != nil {
-					if !cfg.limiter.Acquire(ctx) {
-						continue // ctx cancelled while waiting for an admission slot
-					}
-					runJob(ctx, lm, j, cfg.rec)
-					cfg.limiter.Release()
-					continue
-				}
-				runJob(ctx, lm, j, cfg.rec)
 			}
 		}()
 	}

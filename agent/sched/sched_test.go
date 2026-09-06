@@ -486,8 +486,192 @@ func TestRun_RiskGateRecordsAdmissionWaitViaRecorder(t *testing.T) {
 	}
 	Run(context.Background(), 2, NewLockManager(), jobs, nil, WithRecorder(rec), WithRiskGate(gate))
 
-	_, _, _, admission, _, _ := rec.snapshot()
+	_, _, _, admission, _, _, _ := rec.snapshot()
 	if admission != 2 {
 		t.Errorf("AdmissionWait recorded %d times, want 2 (once per job that passed through the configured RiskGate)", admission)
+	}
+}
+
+func TestRun_RetryDefaultIsSingleAttempt(t *testing.T) {
+	var calls int32
+	jobs := []Job{{Run: func(ctx context.Context) bool {
+		atomic.AddInt32(&calls, 1)
+		return true
+	}}}
+	Run(context.Background(), 1, NewLockManager(), jobs, nil)
+	if got := atomic.LoadInt32(&calls); got != 1 {
+		t.Errorf("calls = %d, want 1 (zero-value Retry means exactly one attempt)", got)
+	}
+}
+
+func TestRun_RetriesUpToMaxAttempts(t *testing.T) {
+	var calls int32
+	jobs := []Job{{
+		Retry: RetryPolicy{MaxAttempts: 3, Backoff: func(int) time.Duration { return time.Millisecond }},
+		Run: func(ctx context.Context) bool {
+			atomic.AddInt32(&calls, 1)
+			return true
+		},
+	}}
+	Run(context.Background(), 1, NewLockManager(), jobs, nil)
+	if got := atomic.LoadInt32(&calls); got != 3 {
+		t.Errorf("calls = %d, want exactly 3 (MaxAttempts), never more", got)
+	}
+}
+
+func TestRun_RetryStopsOnNonRetryableOutcome(t *testing.T) {
+	var calls int32
+	jobs := []Job{{
+		Retry: RetryPolicy{MaxAttempts: 5, Backoff: func(int) time.Duration { return time.Millisecond }},
+		Run: func(ctx context.Context) bool {
+			atomic.AddInt32(&calls, 1)
+			return false
+		},
+	}}
+	Run(context.Background(), 1, NewLockManager(), jobs, nil)
+	if got := atomic.LoadInt32(&calls); got != 1 {
+		t.Errorf("calls = %d, want 1 -- a non-retryable outcome must stop the loop immediately", got)
+	}
+}
+
+// TestRun_RetryReleasesLimiterAndLockBetweenAttempts is the core property of
+// this design: an independent acquire attempted during the backoff window
+// must succeed promptly, proving the slot and lock are genuinely free, not
+// idle-held across the sleep.
+func TestRun_RetryReleasesLimiterAndLockBetweenAttempts(t *testing.T) {
+	p := &ResourceProfile{Domains: []ResourceLock{{Domain: "registry"}}, Scope: "local", Risk: RiskModification}
+	limiter := NewConcurrencyLimiter(1)
+	lm := NewLockManager()
+
+	backoffStarted := make(chan struct{})
+	releaseBackoff := make(chan struct{})
+	var attempts int32
+	jobs := []Job{{
+		Resource: p,
+		Retry: RetryPolicy{MaxAttempts: 2, Backoff: func(int) time.Duration {
+			close(backoffStarted)
+			<-releaseBackoff
+			return 0
+		}},
+		Run: func(ctx context.Context) bool {
+			n := atomic.AddInt32(&attempts, 1)
+			return n == 1 // retry once, then succeed
+		},
+	}}
+
+	done := make(chan struct{})
+	go func() {
+		Run(context.Background(), 1, lm, jobs, nil, WithConcurrencyLimiter(limiter))
+		close(done)
+	}()
+
+	<-backoffStarted
+	// While the job is deliberately parked inside its backoff callback (attempt
+	// 1 already released its slot and lock -- see Run's loop ordering), both
+	// must be independently acquirable right now.
+	if !limiter.Acquire(context.Background()) {
+		t.Fatal("ConcurrencyLimiter slot not free during backoff -- it's being held idle")
+	}
+	limiter.Release()
+	reqs := resolve(p)
+	if !lm.AcquireCtx(context.Background(), reqs) {
+		t.Fatal("resource lock not free during backoff -- it's being held idle")
+	}
+	lm.Release(reqs)
+
+	close(releaseBackoff)
+	<-done
+}
+
+func TestRun_RetryBackoffInterruptedByContextCancel(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	jobs := []Job{{
+		Retry: RetryPolicy{MaxAttempts: 5, Backoff: func(int) time.Duration { return time.Minute }},
+		Run: func(ctx context.Context) bool {
+			return true
+		},
+	}}
+
+	done := make(chan struct{})
+	go func() {
+		Run(ctx, 1, NewLockManager(), jobs, nil)
+		close(done)
+	}()
+
+	time.Sleep(20 * time.Millisecond) // let attempt 1 finish and enter backoff
+	cancel()
+
+	select {
+	case <-done:
+		// expected: cancellation interrupts the backoff immediately
+	case <-time.After(1 * time.Second):
+		t.Fatal("Run did not return promptly after ctx cancel during a long backoff")
+	}
+}
+
+func TestRun_PanicDuringAttemptIsNotRetried(t *testing.T) {
+	rec := &fakeRecorder{}
+	var calls int32
+	jobs := []Job{{
+		Retry: RetryPolicy{MaxAttempts: 3, Backoff: func(int) time.Duration { return time.Millisecond }},
+		Run: func(ctx context.Context) bool {
+			atomic.AddInt32(&calls, 1)
+			panic("boom")
+		},
+	}}
+	Run(context.Background(), 1, NewLockManager(), jobs, nil, WithRecorder(rec))
+	if got := atomic.LoadInt32(&calls); got != 1 {
+		t.Errorf("calls = %d, want 1 -- a panic must never be retried", got)
+	}
+	_, _, _, _, _, panics, _ := rec.snapshot()
+	if panics != 1 {
+		t.Errorf("panics = %d, want 1", panics)
+	}
+}
+
+func TestRun_ScheduleTimeoutIsNeverRetried(t *testing.T) {
+	p := &ResourceProfile{Domains: []ResourceLock{{Domain: "exclusive"}}, Scope: "global"}
+	lm := NewLockManager()
+	reqs := resolve(p)
+	if !lm.AcquireCtx(context.Background(), reqs) {
+		t.Fatal("setup: failed to pre-hold the lock")
+	}
+	defer lm.Release(reqs)
+
+	var timeoutCalls, runCalls int32
+	jobs := []Job{{
+		Resource: p,
+		Schedule: 20 * time.Millisecond,
+		OnScheduleTimeout: func() {
+			atomic.AddInt32(&timeoutCalls, 1)
+		},
+		Retry: RetryPolicy{MaxAttempts: 3, Backoff: func(int) time.Duration { return time.Millisecond }},
+		Run: func(ctx context.Context) bool {
+			atomic.AddInt32(&runCalls, 1)
+			return true
+		},
+	}}
+	Run(context.Background(), 1, lm, jobs, nil)
+
+	if got := atomic.LoadInt32(&timeoutCalls); got != 1 {
+		t.Errorf("OnScheduleTimeout calls = %d, want exactly 1", got)
+	}
+	if got := atomic.LoadInt32(&runCalls); got != 0 {
+		t.Errorf("Run calls = %d, want 0 -- schedule timeout must never reach Run", got)
+	}
+}
+
+func TestRun_RetryRecordsRetryCountViaRecorder(t *testing.T) {
+	rec := &fakeRecorder{}
+	jobs := []Job{{
+		Retry: RetryPolicy{MaxAttempts: 4, Backoff: func(int) time.Duration { return time.Millisecond }},
+		Run: func(ctx context.Context) bool {
+			return true
+		},
+	}}
+	Run(context.Background(), 1, NewLockManager(), jobs, nil, WithRecorder(rec))
+	_, _, _, _, _, _, retries := rec.snapshot()
+	if retries != 3 {
+		t.Errorf("retries = %d, want 3 (MaxAttempts - 1)", retries)
 	}
 }
