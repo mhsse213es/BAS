@@ -94,6 +94,7 @@ func main() {
 	go agent.startLocalAPI()
 	go agent.runSpoolDrainer()
 	go agent.runDisconnectWatchdog()
+	go agent.runPressureLoop()
 	agent.sendHeartbeat("idle")
 
 	quit := make(chan os.Signal, 1)
