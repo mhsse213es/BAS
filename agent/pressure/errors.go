@@ -9,3 +9,10 @@ import "errors"
 // (0, 0, nil), specifically so callers' ordinary skip-this-tick-on-error
 // handling takes care of it automatically -- see agent/pressure_loop.go.
 var ErrNoBaseline = errors.New("pressure: no baseline sample yet")
+
+var (
+	errShortProcStat       = errors.New("pressure: /proc/stat: unexpected format")
+	errShortProcMeminfo    = errors.New("pressure: /proc/meminfo: MemTotal not found")
+	errShortProcSelfStat   = errors.New("pressure: /proc/self/stat: unexpected format")
+	errShortProcSelfStatus = errors.New("pressure: /proc/self/status: VmRSS not found")
+)
