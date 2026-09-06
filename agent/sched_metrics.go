@@ -33,6 +33,7 @@ type runMetrics struct {
 
 	scheduleTimeouts int64
 	jobPanics        int64
+	retryCount       int64
 
 	admissionWaitTotal time.Duration
 	admissionWaitMax   time.Duration
@@ -97,6 +98,10 @@ func (m *runMetrics) JobPanic() {
 	atomic.AddInt64(&m.jobPanics, 1)
 }
 
+func (m *runMetrics) Retry() {
+	atomic.AddInt64(&m.retryCount, 1)
+}
+
 func (m *runMetrics) AdmissionWait(d time.Duration) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -147,6 +152,9 @@ func (m *runMetrics) report(logger metricSink, total int) {
 			logger.Metric("sched_admission_defer_wait_avg_ms", float64(deferTotal.Milliseconds())/float64(deferN), "ms")
 			logger.Metric("sched_admission_defer_wait_max_ms", float64(deferMax.Milliseconds()), "ms")
 		}
+	}
+	if retries := atomic.LoadInt64(&m.retryCount); retries > 0 {
+		logger.Metric("sched_retry_count", float64(retries), "count")
 	}
 }
 

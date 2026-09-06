@@ -91,6 +91,32 @@ func TestRunMetrics_ReportSkipsAveragesForUnusedDimensions(t *testing.T) {
 	}
 }
 
+func TestRunMetrics_Retry_EmitsRetryCount(t *testing.T) {
+	m := &runMetrics{}
+	m.Retry()
+	m.Retry()
+	m.Retry()
+
+	sink := newFakeMetricSink()
+	m.report(sink, 5)
+
+	if got := sink.values("sched_retry_count"); len(got) != 1 || got[0] != 3 {
+		t.Errorf("sched_retry_count = %v, want [3]", got)
+	}
+}
+
+func TestRunMetrics_Retry_NoCallsEmitsNothing(t *testing.T) {
+	m := &runMetrics{}
+	m.ExecutionTime(10 * time.Millisecond) // some unrelated activity, no retries
+
+	sink := newFakeMetricSink()
+	m.report(sink, 1)
+
+	if got := sink.values("sched_retry_count"); len(got) != 0 {
+		t.Errorf("sched_retry_count = %v, want no emission (no retries recorded)", got)
+	}
+}
+
 func TestRunGaugeSampler_ReportsActiveAndQueuedThenStopsOnDone(t *testing.T) {
 	var started, finished int64
 	atomic.StoreInt64(&started, 3)
