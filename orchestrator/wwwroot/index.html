@@ -19004,6 +19004,7 @@ function escHtml(s) {
 var _agtDetailId = null;
 var _agtLogTier = 'operational';
 var _agtLogRefresh = null;
+var _agtLogTelemetryMetric = ''; // '' = All Metrics
 
 function updateLinuxDownloadCmd(arch, type) {
   // Update Linux installation commands based on selected architecture and package type
@@ -19168,21 +19169,51 @@ function loadAgtScenarios(agentId) {
   }).catch(function(e) { pane.innerHTML = '<div style="padding:1rem;color:var(--danger)">' + x(e.message) + '</div>'; });
 }
 
+// _AGT_TELEMETRY_METRICS groups every metric name the agent actually emits
+// (see agent/agent.go and agent/sched_metrics.go's logger.Metric(...) call
+// sites) so the Telemetry filter dropdown never lists a metric that can't
+// appear in the data -- and so a newly-added logger.Metric(...) call is a
+// one-line addition here, not a guess.
+var _AGT_TELEMETRY_METRICS = [
+  { group: 'Health',       metrics: ['heartbeat_latency_ms', 'scenario_duration_ms'] },
+  { group: 'Connectivity', metrics: ['ws_reconnect_attempts', 'ws_connection_duration_seconds'] },
+  { group: 'Scheduler',    metrics: ['sched_jobs_total', 'sched_timeout_count', 'sched_panic_count',
+                                      'sched_queue_wait_avg_ms', 'sched_queue_wait_max_ms',
+                                      'sched_lock_wait_avg_ms', 'sched_lock_wait_max_ms',
+                                      'sched_execution_avg_ms', 'sched_execution_max_ms',
+                                      'sched_active_jobs', 'sched_queued_jobs'] }
+];
+
 // ── Logs tab ──────────────────────────────────────────────────────────────────
 function loadAgtLogs(agentId, tier) {
   _agtLogTier = tier;
+  if (tier !== 'telemetry') _agtLogTelemetryMetric = '';
   var pane = document.getElementById('agt-tab-logs');
   var url = tier === 'security'  ? '/api/agents/' + encodeURIComponent(agentId) + '/logs/security' :
             tier === 'telemetry' ? '/api/agents/' + encodeURIComponent(agentId) + '/telemetry' :
                                    '/api/agents/' + encodeURIComponent(agentId) + '/logs/operational';
+  if (tier === 'telemetry' && _agtLogTelemetryMetric) {
+    url += '?metric=' + encodeURIComponent(_agtLogTelemetryMetric);
+  }
   var tierBtns =
-    '<div style="display:flex;gap:0.4rem;padding:0.75rem 1.25rem;border-bottom:1px solid var(--border);flex-shrink:0">' +
+    '<div style="display:flex;gap:0.4rem;align-items:center;padding:0.75rem 1.25rem;border-bottom:1px solid var(--border);flex-shrink:0">' +
     ['operational','security','telemetry'].map(function(t) {
       return '<button class="tier-btn' + (t===tier?' active':'') + '" onclick="loadAgtLogs(\'' + x(agentId) + '\',\'' + t + '\')">' + t.charAt(0).toUpperCase()+t.slice(1) + '</button>';
     }).join('') +
+    (tier === 'telemetry'
+      ? '<select onchange="_agtLogTelemetryMetric=this.value;loadAgtLogs(\'' + x(agentId) + '\',\'telemetry\')" ' +
+        'style="margin-left:0.5rem;background:var(--elevated);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:0.25rem 0.4rem;font-size:0.78rem">' +
+        '<option value=""' + (_agtLogTelemetryMetric===''?' selected':'') + '>All Metrics</option>' +
+        _AGT_TELEMETRY_METRICS.map(function(g) {
+          return '<optgroup label="' + x(g.group) + '">' + g.metrics.map(function(m) {
+            return '<option value="' + x(m) + '"' + (_agtLogTelemetryMetric===m?' selected':'') + '>' + x(m) + '</option>';
+          }).join('') + '</optgroup>';
+        }).join('') +
+        '</select>'
+      : '') +
     '</div>';
 
-  apicall(url + '?limit=100').then(function(rows) {
+  apicall(url + (url.indexOf('?')>=0 ? '&' : '?') + 'limit=100').then(function(rows) {
     var tbody = '';
     if (!rows || !rows.length) {
       tbody = '<tr><td colspan="4" style="padding:0.8rem;color:var(--muted);text-align:center">No ' + tier + ' logs yet</td></tr>';
@@ -19225,49 +19256,94 @@ function loadAgtLogs(agentId, tier) {
 }
 
 // ── Health tab ────────────────────────────────────────────────────────────────
+// metricSparklineCard renders one metric's stat row + SVG trend line from
+// already-fetched telemetry rows (as returned by GET .../telemetry, newest
+// first). Generalized from the original heartbeat-only chart below so every
+// tile on the Agent Health grid shares one rendering path instead of each
+// metric growing its own copy.
+//
+// opts: { title, unit ('ms'/'' etc), data (raw API rows or null/[]),
+//         decimals (rounding, default 0), thresholds ({warn,danger}, values
+//         above tint amber/red -- omit for metrics with no natural danger
+//         level, e.g. a plain count), footnote (optional caption) }
+function metricSparklineCard(opts) {
+  var title = opts.title, unit = opts.unit || '', decimals = opts.decimals || 0;
+  var open = '<div style="background:var(--elevated);border:1px solid var(--border);border-radius:6px;padding:0.85rem">' +
+    '<div style="font-size:0.72rem;color:var(--muted);text-transform:uppercase;margin-bottom:0.5rem">' + x(title) + '</div>';
+  var data = opts.data;
+  if (!data || data.length < 2) {
+    return open + '<div style="color:var(--muted);font-size:0.78rem;padding:0.5rem 0 0.25rem">Not enough data yet</div></div>';
+  }
+  var points = data.slice().reverse(); // oldest first
+  var values = points.map(function(p) { return p.value; });
+  var maxVal = Math.max.apply(null, values) || 1;
+  var minVal = Math.min.apply(null, values);
+  var avg = values.reduce(function(a,b){return a+b;},0)/values.length;
+  var mul = Math.pow(10, decimals);
+  var fmt = function(v) { return Math.round(v*mul)/mul; };
+  var colorFor = function(v) {
+    if (!opts.thresholds) return '#2fd8c3';
+    if (v > opts.thresholds.danger) return '#da3633';
+    if (v > opts.thresholds.warn) return '#d29922';
+    return '#2fd8c3';
+  };
+  var svgW = 280, svgH = 90, pad = 10;
+  var scaleX = (svgW - pad*2) / (points.length - 1);
+  var scaleY = (svgH - pad*2) / (maxVal - minVal || 1);
+  var pathD = points.map(function(p, i) {
+    var px = pad + i * scaleX, py = svgH - pad - (p.value - minVal) * scaleY;
+    return (i===0?'M':'L') + px.toFixed(1) + ',' + py.toFixed(1);
+  }).join(' ');
+  var dots = points.map(function(p, i) {
+    var px = pad + i * scaleX, py = svgH - pad - (p.value - minVal) * scaleY;
+    return '<circle cx="' + px.toFixed(1) + '" cy="' + py.toFixed(1) + '" r="2.5" fill="' + colorFor(p.value) + '" opacity="0.85"><title>' + fmt(p.value) + unit + ' · ' + fmtTs(p.createdAt) + '</title></circle>';
+  }).join('');
+  var latest = values[values.length - 1];
+  return open +
+    '<div style="display:flex;gap:0.9rem;margin-bottom:0.5rem;font-size:0.74rem">' +
+    '<div><span style="color:var(--muted)">latest</span> <strong style="color:' + colorFor(latest) + '">' + fmt(latest) + unit + '</strong></div>' +
+    '<div><span style="color:var(--muted)">avg</span> <strong>' + fmt(avg) + unit + '</strong></div>' +
+    '<div><span style="color:var(--muted)">max</span> <strong>' + fmt(maxVal) + unit + '</strong></div>' +
+    '</div>' +
+    '<svg viewBox="0 0 ' + svgW + ' ' + svgH + '" style="width:100%;height:90px;display:block">' +
+    '<path d="' + pathD + '" fill="none" stroke="var(--accent)" stroke-width="1.5" opacity="0.8"/>' +
+    dots +
+    '</svg>' +
+    (opts.footnote ? '<div style="margin-top:0.4rem;color:var(--muted);font-size:0.66rem">' + x(opts.footnote) + '</div>' : '') +
+    '</div>';
+}
+
+// _AGT_HEALTH_CHARTS is the curated diagnostic set: not every emitted metric
+// (see _AGT_TELEMETRY_METRICS for the full list, browsable via the Telemetry
+// tab's dropdown) earns a permanent chart -- these are the ones an operator
+// actually needs trend visibility on at a glance.
+var _AGT_HEALTH_CHARTS = [
+  { metric: 'heartbeat_latency_ms',    title: 'Heartbeat Latency',     unit: 'ms', thresholds: {warn:150, danger:500}, footnote: 'Red >500ms, amber >150ms' },
+  { metric: 'ws_reconnect_attempts',   title: 'WS Reconnect Attempts', unit: '' },
+  { metric: 'sched_queued_jobs',       title: 'Queue Depth',           unit: '' },
+  { metric: 'sched_lock_wait_avg_ms',  title: 'Lock Wait (avg)',       unit: 'ms', decimals: 1 },
+  { metric: 'sched_execution_avg_ms',  title: 'Execution Time (avg)',  unit: 'ms', decimals: 1 },
+  { metric: 'sched_active_jobs',       title: 'Active Jobs',           unit: '' }
+];
+
 function loadAgtHealth(agentId) {
   var pane = document.getElementById('agt-tab-health');
   pane.innerHTML = '<div style="color:var(--muted);padding:1rem">Loading…</div>';
-  apicall('/api/agents/' + encodeURIComponent(agentId) + '/telemetry?metric=heartbeat_latency_ms&limit=100').then(function(data) {
-    if (!data || data.length < 2) {
-      pane.innerHTML = '<div style="padding:1rem;color:var(--muted)">Not enough telemetry data yet — data appears after the first few heartbeats.</div>';
-      return;
-    }
-    var points = data.slice().reverse(); // oldest first
-    var values = points.map(function(p) { return p.value; });
-    var maxVal = Math.max.apply(null, values) || 1;
-    var minVal = Math.min.apply(null, values);
-    var avg    = Math.round(values.reduce(function(a,b){return a+b;},0)/values.length);
-    var svgW = 540, svgH = 120, pad = 16;
-    var scaleX = (svgW - pad*2) / (points.length - 1);
-    var scaleY = (svgH - pad*2) / (maxVal - minVal || 1);
-    var pathD = points.map(function(p, i) {
-      var px = pad + i * scaleX;
-      var py = svgH - pad - (p.value - minVal) * scaleY;
-      return (i===0?'M':'L') + px.toFixed(1) + ',' + py.toFixed(1);
-    }).join(' ');
-    var dots = points.map(function(p, i) {
-      var px = pad + i * scaleX;
-      var py = svgH - pad - (p.value - minVal) * scaleY;
-      var col = p.value > 500 ? '#da3633' : p.value > 150 ? '#d29922' : '#2fd8c3';
-      return '<circle cx="' + px.toFixed(1) + '" cy="' + py.toFixed(1) + '" r="3" fill="' + col + '" opacity="0.7"><title>' + Math.round(p.value) + 'ms · ' + fmtTs(p.createdAt) + '</title></circle>';
+
+  Promise.all(_AGT_HEALTH_CHARTS.map(function(c) {
+    // Each metric fetched independently, with its own fallback: one metric
+    // having no data yet (e.g. a freshly-enrolled agent with no scenario
+    // runs) must not blank the whole grid.
+    return apicall('/api/agents/' + encodeURIComponent(agentId) + '/telemetry?metric=' + encodeURIComponent(c.metric) + '&limit=100')
+      .catch(function() { return []; });
+  })).then(function(results) {
+    var cards = _AGT_HEALTH_CHARTS.map(function(c, i) {
+      return metricSparklineCard({ title: c.title, unit: c.unit, data: results[i], decimals: c.decimals, thresholds: c.thresholds, footnote: c.footnote });
     }).join('');
-    pane.innerHTML =
-      '<div style="padding:1rem 1.25rem">' +
-      '<div style="display:flex;gap:1.5rem;margin-bottom:1rem;font-size:0.8rem">' +
-      '<div><div style="color:var(--muted);font-size:0.7rem;text-transform:uppercase">Samples</div><div style="font-size:1rem;font-weight:600">' + points.length + '</div></div>' +
-      '<div><div style="color:var(--muted);font-size:0.7rem;text-transform:uppercase">Avg Latency</div><div style="font-size:1rem;font-weight:600;color:var(--accent)">' + avg + 'ms</div></div>' +
-      '<div><div style="color:var(--muted);font-size:0.7rem;text-transform:uppercase">Min</div><div style="font-size:1rem;font-weight:600;color:var(--success)">' + Math.round(minVal) + 'ms</div></div>' +
-      '<div><div style="color:var(--muted);font-size:0.7rem;text-transform:uppercase">Max</div><div style="font-size:1rem;font-weight:600;color:' + (maxVal>500?'var(--danger)':'var(--warning)') + '">' + Math.round(maxVal) + 'ms</div></div>' +
-      '</div>' +
-      '<div style="background:var(--elevated);border:1px solid var(--border);border-radius:4px;overflow:hidden">' +
-      '<svg viewBox="0 0 ' + svgW + ' ' + svgH + '" style="width:100%;height:120px">' +
-      '<path d="' + pathD + '" fill="none" stroke="var(--accent)" stroke-width="1.5" opacity="0.8"/>' +
-      dots +
-      '</svg></div>' +
-      '<div style="margin-top:0.6rem;color:var(--muted);font-size:0.72rem">Heartbeat latency (ms) — last ' + points.length + ' samples. Red &gt;500ms, amber &gt;150ms.</div>' +
-      '</div>';
-  }).catch(function(e) { pane.innerHTML = '<div style="padding:1rem;color:var(--danger)">' + x(e.message) + '</div>'; });
+    pane.innerHTML = '<div style="padding:1rem 1.25rem;display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:0.85rem">' + cards + '</div>';
+  }).catch(function(e) {
+    pane.innerHTML = '<div style="padding:1rem;color:var(--danger)">' + x(e.message) + '</div>';
+  });
 }
 
 // ── Risk tab ──────────────────────────────────────────────────────────────────
