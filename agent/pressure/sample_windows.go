@@ -62,10 +62,10 @@ var (
 	hostCPUHasPrev                  bool
 )
 
-// sampleHost returns host-wide CPU and memory utilization as 0-100
+// SampleHost returns host-wide CPU and memory utilization as 0-100
 // percentages. See package pressure's sample_<os>.go doc convention for the
 // error contract (genuine failure or ErrNoBaseline on the first call).
-func sampleHost() (cpuPercent, memPercent float64, err error) {
+func SampleHost() (cpuPercent, memPercent float64, err error) {
 	var mem memoryStatusEx
 	mem.dwLength = uint32(unsafe.Sizeof(mem))
 	ret, _, callErr := procGlobalMemoryStatusEx.Call(uintptr(unsafe.Pointer(&mem)))
@@ -117,12 +117,12 @@ var (
 	selfCPUHasPrev   bool
 )
 
-// sampleSelf returns this agent process's own CPU and memory utilization.
+// SampleSelf returns this agent process's own CPU and memory utilization.
 // Attribution-only -- see the design spec's "Host vs. agent readings"; never
 // fed into Controller.Observe.
-func sampleSelf() (cpuPercent, memPercent float64, err error) {
+func SampleSelf() (cpuPercent, memPercent float64, err error) {
 	// Memory: GetProcessMemoryInfo gives our own working-set size; divide by
-	// total physical memory (fetched fresh, independent of sampleHost's own
+	// total physical memory (fetched fresh, independent of SampleHost's own
 	// call -- these two functions must not share hidden state) for a percent.
 	var mem memoryStatusEx
 	mem.dwLength = uint32(unsafe.Sizeof(mem))

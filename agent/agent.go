@@ -37,7 +37,14 @@ type Agent struct {
 	// run as paused).
 	pauseGate   *sched.Gate
 	pauseEmit   func(RunEvent)
-	binaryHash  string           // SHA-256 of own binary, computed once at startup
+	// activeLimiter and activeWorkers belong to whichever run is currently
+	// active, exactly like pauseGate/pauseEmit above (nil/0 when idle or
+	// between runs) -- the Phase 4 pressure loop reads these every tick under
+	// scenarioMu to know which limiter to adjust and what its un-throttled
+	// ceiling should be.
+	activeLimiter *sched.ConcurrencyLimiter
+	activeWorkers int
+	binaryHash    string           // SHA-256 of own binary, computed once at startup
 	logger      *Logger          // 3-tier structured logger
 	localSt     *LocalAgentState // in-memory state for local status API
 	secProducts []string         // installed security products, enumerated once at startup (guarded by mu)
@@ -654,6 +661,8 @@ func (a *Agent) runScenario(ctx context.Context, cmd protocol.ScenarioCommand) {
 		a.scenarioMu.Lock()
 		a.pauseGate = nil
 		a.pauseEmit = nil
+		a.activeLimiter = nil
+		a.activeWorkers = 0
 		a.scenarioMu.Unlock()
 	}()
 
@@ -766,12 +775,15 @@ func (a *Agent) runScenario(ctx context.Context, cmd protocol.ScenarioCommand) {
 	gaugeDone := make(chan struct{})
 	go runGaugeSampler(a.logger, &startedJobs, &finishedJobs, total, gaugeSampleInterval, gaugeDone)
 
-	// Admission ceiling defaults to the worker count -- a true no-op today
-	// (Run can never have more than `workers` jobs past the channel at once
-	// regardless), since nothing yet drives it below that. It exists so a
-	// future pressure controller has a ceiling to lower without any scheduler
-	// change: see sched.ConcurrencyLimiter.
+	// Admission ceiling defaults to the worker count -- a no-op until the
+	// Phase 4 pressure loop's ticker (agent/pressure_loop.go) observes
+	// sustained host pressure and calls SetLimit to lower it.
 	limiter := sched.NewConcurrencyLimiter(workers)
+	a.scenarioMu.Lock()
+	a.activeLimiter = limiter
+	a.activeWorkers = workers
+	a.scenarioMu.Unlock()
+
 	sched.Run(ctx, workers, sched.NewLockManager(), jobs, gate,
 		sched.WithRecorder(metrics), sched.WithConcurrencyLimiter(limiter))
 

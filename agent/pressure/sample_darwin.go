@@ -108,11 +108,11 @@ func hostCPUPercentFromTop() (float64, error) {
 	return 0, errShortTop
 }
 
-// sampleHost returns host-wide CPU and memory utilization as 0-100
+// SampleHost returns host-wide CPU and memory utilization as 0-100
 // percentages. Unlike Windows/Linux, `top`'s single-shot summary is already
 // delta-computed by the OS, so this never returns ErrNoBaseline for CPU --
 // only a genuine command-execution or parse failure produces a non-nil error.
-func sampleHost() (cpuPercent, memPercent float64, err error) {
+func SampleHost() (cpuPercent, memPercent float64, err error) {
 	memPercent, err = hostMemPercent()
 	if err != nil {
 		return 0, 0, err
@@ -124,12 +124,12 @@ func sampleHost() (cpuPercent, memPercent float64, err error) {
 	return cpuPercent, memPercent, nil
 }
 
-// sampleSelf shells out to `ps -o rss=,%cpu= -p <pid>` for this process,
+// SampleSelf shells out to `ps -o rss=,%cpu= -p <pid>` for this process,
 // which gives both this process's RSS (KB) and an OS-computed %CPU (already
 // normalized as "percent of one core" by ps) in a single call -- no manual
 // delta or ErrNoBaseline handling needed here either, matching the host
 // function's rationale above.
-func sampleSelf() (cpuPercent, memPercent float64, err error) {
+func SampleSelf() (cpuPercent, memPercent float64, err error) {
 	pid := os.Getpid()
 	out, err := exec.Command("ps", "-o", "rss=,%cpu=", "-p", strconv.Itoa(pid)).Output()
 	if err != nil {

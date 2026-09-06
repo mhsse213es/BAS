@@ -99,7 +99,7 @@ var (
 	hostCPUHasPrev                  bool
 )
 
-func sampleHost() (cpuPercent, memPercent float64, err error) {
+func SampleHost() (cpuPercent, memPercent float64, err error) {
 	memPercent, err = readProcMeminfoPercent()
 	if err != nil {
 		return 0, 0, err
@@ -182,7 +182,7 @@ var (
 	selfCPUHasPrev   bool
 )
 
-func sampleSelf() (cpuPercent, memPercent float64, err error) {
+func SampleSelf() (cpuPercent, memPercent float64, err error) {
 	rssKB, err := readProcSelfVmRSSKB()
 	if err != nil {
 		return 0, 0, err
@@ -224,7 +224,7 @@ func sampleSelf() (cpuPercent, memPercent float64, err error) {
 }
 
 // readProcMeminfoTotalKB reads just MemTotal from /proc/meminfo, for
-// converting sampleSelf's absolute RSS reading into a percentage.
+// converting SampleSelf's absolute RSS reading into a percentage.
 func readProcMeminfoTotalKB() (uint64, error) {
 	f, err := os.Open("/proc/meminfo")
 	if err != nil {
