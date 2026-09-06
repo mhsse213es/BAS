@@ -466,3 +466,22 @@ func TestRun_NilRiskGateIsSafe(t *testing.T) {
 		t.Error("job did not run")
 	}
 }
+
+// TestRun_RiskGateRecordsAdmissionWaitViaRecorder proves Run's worker loop
+// actually reports AdmissionWait to a configured Recorder when a RiskGate is
+// also configured -- not just that the job eventually runs (already proven
+// above), but that the observability hook fires.
+func TestRun_RiskGateRecordsAdmissionWaitViaRecorder(t *testing.T) {
+	rec := &fakeRecorder{}
+	gate := NewRiskGate() // default policy: admits everything immediately
+	jobs := []Job{
+		{Resource: &ResourceProfile{Risk: RiskObservation}, Run: func(ctx context.Context) {}},
+		{Resource: &ResourceProfile{Risk: RiskModification}, Run: func(ctx context.Context) {}},
+	}
+	Run(context.Background(), 2, NewLockManager(), jobs, nil, WithRecorder(rec), WithRiskGate(gate))
+
+	_, _, _, admission, _, _ := rec.snapshot()
+	if admission != 2 {
+		t.Errorf("AdmissionWait recorded %d times, want 2 (once per job that passed through the configured RiskGate)", admission)
+	}
+}

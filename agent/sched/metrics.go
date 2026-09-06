@@ -34,4 +34,10 @@ type Recorder interface {
 	// failure worth counting distinctly from a step that ran and legitimately
 	// scored FAIL.
 	JobPanic()
+	// AdmissionWait reports how long a job waited at an optional admission
+	// gate (see RiskGate) before being admitted -- near-zero when nothing
+	// deferred it. Recorded for every job that passed through a configured
+	// RiskGate, whether or not it was ever actually deferred, mirroring how
+	// QueueWait is recorded for every job regardless of how long it waited.
+	AdmissionWait(d time.Duration)
 }

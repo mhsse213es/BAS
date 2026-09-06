@@ -33,7 +33,22 @@ type runMetrics struct {
 
 	scheduleTimeouts int64
 	jobPanics        int64
+
+	admissionWaitTotal time.Duration
+	admissionWaitMax   time.Duration
+	admissionWaitN     int64
+
+	admissionDeferTotal time.Duration
+	admissionDeferMax   time.Duration
+	admissionDeferN     int64
 }
+
+// admissionDeferThreshold: an AdmissionWait below this is "admitted
+// instantly" (the RiskGate's policy already allowed it) rather than
+// genuinely deferred -- named, not a bare magic number, matching this
+// codebase's established style (see defaultGraceSec/waitDelaySlackSec in
+// agent/executor.go).
+const admissionDeferThreshold = 10 * time.Millisecond
 
 var _ sched.Recorder = (*runMetrics)(nil)
 
@@ -82,6 +97,23 @@ func (m *runMetrics) JobPanic() {
 	atomic.AddInt64(&m.jobPanics, 1)
 }
 
+func (m *runMetrics) AdmissionWait(d time.Duration) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.admissionWaitTotal += d
+	if d > m.admissionWaitMax {
+		m.admissionWaitMax = d
+	}
+	m.admissionWaitN++
+	if d >= admissionDeferThreshold {
+		m.admissionDeferTotal += d
+		if d > m.admissionDeferMax {
+			m.admissionDeferMax = d
+		}
+		m.admissionDeferN++
+	}
+}
+
 // report emits one summary Metric per dimension. Called once, after
 // sched.Run returns.
 func (m *runMetrics) report(logger metricSink, total int) {
@@ -89,6 +121,8 @@ func (m *runMetrics) report(logger metricSink, total int) {
 	queueTotal, queueMax, queueN := m.queueWaitTotal, m.queueWaitMax, m.queueWaitN
 	lockTotal, lockMax, lockN := m.lockWaitTotal, m.lockWaitMax, m.lockWaitN
 	execTotal, execMax, execN := m.execTotal, m.execMax, m.execN
+	admissionN := m.admissionWaitN
+	deferTotal, deferMax, deferN := m.admissionDeferTotal, m.admissionDeferMax, m.admissionDeferN
 	m.mu.Unlock()
 
 	logger.Metric("sched_jobs_total", float64(total), "count")
@@ -105,6 +139,14 @@ func (m *runMetrics) report(logger metricSink, total int) {
 	if execN > 0 {
 		logger.Metric("sched_execution_avg_ms", float64(execTotal.Milliseconds())/float64(execN), "ms")
 		logger.Metric("sched_execution_max_ms", float64(execMax.Milliseconds()), "ms")
+	}
+	if admissionN > 0 {
+		logger.Metric("sched_admission_allowed_count", float64(admissionN), "count")
+		logger.Metric("sched_admission_deferred_count", float64(deferN), "count")
+		if deferN > 0 {
+			logger.Metric("sched_admission_defer_wait_avg_ms", float64(deferTotal.Milliseconds())/float64(deferN), "ms")
+			logger.Metric("sched_admission_defer_wait_max_ms", float64(deferMax.Milliseconds()), "ms")
+		}
 	}
 }
 

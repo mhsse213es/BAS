@@ -131,3 +131,47 @@ func TestRunGaugeSampler_ReportsActiveAndQueuedThenStopsOnDone(t *testing.T) {
 		t.Errorf("sampler kept emitting after done was closed: %d -> %d samples", nBefore, nAfter)
 	}
 }
+
+func TestRunMetrics_AdmissionWait_EmitsAllowedAndDeferredCounts(t *testing.T) {
+	m := &runMetrics{}
+	// 3 near-instant admissions (never deferred) + 2 genuinely deferred ones.
+	m.AdmissionWait(1 * time.Millisecond)
+	m.AdmissionWait(2 * time.Millisecond)
+	m.AdmissionWait(0)
+	m.AdmissionWait(50 * time.Millisecond)
+	m.AdmissionWait(150 * time.Millisecond)
+
+	sink := newFakeMetricSink()
+	m.report(sink, 5)
+
+	if got := sink.values("sched_admission_allowed_count"); len(got) != 1 || got[0] != 5 {
+		t.Errorf("sched_admission_allowed_count = %v, want [5] (every AdmissionWait call counts)", got)
+	}
+	if got := sink.values("sched_admission_deferred_count"); len(got) != 1 || got[0] != 2 {
+		t.Errorf("sched_admission_deferred_count = %v, want [2] (only calls above admissionDeferThreshold)", got)
+	}
+	if got := sink.values("sched_admission_defer_wait_avg_ms"); len(got) != 1 || got[0] != 100 {
+		t.Errorf("sched_admission_defer_wait_avg_ms = %v, want [100] ((50+150)/2, excluding the 3 non-deferred)", got)
+	}
+	if got := sink.values("sched_admission_defer_wait_max_ms"); len(got) != 1 || got[0] != 150 {
+		t.Errorf("sched_admission_defer_wait_max_ms = %v, want [150]", got)
+	}
+}
+
+// TestRunMetrics_AdmissionWait_NoCallsEmitsNothing proves a run with no
+// RiskGate configured (AdmissionWait never called) doesn't emit misleading
+// zero-value admission metrics -- same "only emit dimensions that happened"
+// convention as the existing lock/queue-wait tests.
+func TestRunMetrics_AdmissionWait_NoCallsEmitsNothing(t *testing.T) {
+	m := &runMetrics{}
+	m.ExecutionTime(10 * time.Millisecond) // some other dimension did happen
+
+	sink := newFakeMetricSink()
+	m.report(sink, 1)
+
+	for _, name := range []string{"sched_admission_allowed_count", "sched_admission_deferred_count", "sched_admission_defer_wait_avg_ms", "sched_admission_defer_wait_max_ms"} {
+		if got := sink.values(name); len(got) != 0 {
+			t.Errorf("%s = %v, want no emission (AdmissionWait never called)", name, got)
+		}
+	}
+}

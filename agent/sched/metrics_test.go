@@ -10,12 +10,13 @@ import (
 // fakeRecorder is a test double for Recorder, safe for concurrent use since
 // Run invokes it from multiple worker goroutines.
 type fakeRecorder struct {
-	mu         sync.Mutex
-	queueWaits []time.Duration
-	lockWaits  []time.Duration
-	execTimes  []time.Duration
-	timeouts   int
-	panics     int
+	mu             sync.Mutex
+	queueWaits     []time.Duration
+	lockWaits      []time.Duration
+	execTimes      []time.Duration
+	admissionWaits []time.Duration
+	timeouts       int
+	panics         int
 }
 
 func (f *fakeRecorder) QueueWait(d time.Duration) {
@@ -48,10 +49,26 @@ func (f *fakeRecorder) JobPanic() {
 	f.panics++
 }
 
-func (f *fakeRecorder) snapshot() (queue, lock, exec int, timeouts, panics int) {
+func (f *fakeRecorder) AdmissionWait(d time.Duration) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	return len(f.queueWaits), len(f.lockWaits), len(f.execTimes), f.timeouts, f.panics
+	f.admissionWaits = append(f.admissionWaits, d)
+}
+
+func (f *fakeRecorder) snapshot() (queue, lock, exec, admission int, timeouts, panics int) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return len(f.queueWaits), len(f.lockWaits), len(f.execTimes), len(f.admissionWaits), f.timeouts, f.panics
+}
+
+func TestFakeRecorder_AdmissionWait(t *testing.T) {
+	f := &fakeRecorder{}
+	f.AdmissionWait(5 * time.Millisecond)
+	f.AdmissionWait(50 * time.Millisecond)
+	_, _, _, admission, _, _ := f.snapshot()
+	if admission != 2 {
+		t.Errorf("admission wait count = %d, want 2", admission)
+	}
 }
 
 // TestRun_RecordsQueueLockAndExecutionForEverySuccessfulJob proves the three
@@ -70,7 +87,7 @@ func TestRun_RecordsQueueLockAndExecutionForEverySuccessfulJob(t *testing.T) {
 	}
 	Run(context.Background(), 2, NewLockManager(), jobs, nil, WithRecorder(rec))
 
-	q, l, e, timeouts, panics := rec.snapshot()
+	q, l, e, _, timeouts, panics := rec.snapshot()
 	if q != n {
 		t.Errorf("QueueWait calls = %d, want %d", q, n)
 	}
@@ -131,7 +148,7 @@ func TestRun_ScheduleTimeoutReportsLockWaitButNotExecutionTime(t *testing.T) {
 	close(releaseHolder)
 	<-done
 
-	q, l, e, timeouts, _ := rec.snapshot()
+	q, l, e, _, timeouts, _ := rec.snapshot()
 	if q != 2 {
 		t.Errorf("QueueWait calls = %d, want 2", q)
 	}
@@ -158,7 +175,7 @@ func TestRun_JobPanicIsRecorded(t *testing.T) {
 	}
 	Run(context.Background(), 1, NewLockManager(), jobs, nil, WithRecorder(rec))
 
-	_, _, e, _, panics := rec.snapshot()
+	_, _, e, _, _, panics := rec.snapshot()
 	if panics != 1 {
 		t.Errorf("JobPanic calls = %d, want 1", panics)
 	}

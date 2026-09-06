@@ -115,8 +115,12 @@ func Run(ctx context.Context, workers int, lm *LockManager, jobs []Job, gate *Ga
 					continue // cancel can race with a pause -- re-check before running
 				}
 				if cfg.riskGate != nil {
+					admissionStart := time.Now()
 					if !cfg.riskGate.Allow(ctx, effectiveRisk(j.Resource)) {
 						continue // ctx cancelled while deferred
+					}
+					if cfg.rec != nil {
+						cfg.rec.AdmissionWait(time.Since(admissionStart))
 					}
 				}
 				if cfg.limiter != nil {
