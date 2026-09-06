@@ -221,6 +221,97 @@ func TestConcurrencyLimiter_FIFOOrderUnderContention(t *testing.T) {
 	}
 }
 
+// TestConcurrencyLimiter_CancelWhileQueuedRemovesTicket proves a cancelled
+// waiter's ticket is fully removed from the queue -- it must not leave a
+// phantom entry that blocks whoever is queued behind it.
+func TestConcurrencyLimiter_CancelWhileQueuedRemovesTicket(t *testing.T) {
+	l := NewConcurrencyLimiter(1)
+	if !l.Acquire(context.Background()) {
+		t.Fatal("first Acquire should succeed immediately")
+	}
+
+	firstCtx, firstCancel := context.WithCancel(context.Background())
+	firstResult := make(chan bool, 1)
+	go func() { firstResult <- l.Acquire(firstCtx) }()
+	time.Sleep(20 * time.Millisecond) // let it actually queue
+
+	secondResult := make(chan bool, 1)
+	go func() { secondResult <- l.Acquire(context.Background()) }()
+	time.Sleep(20 * time.Millisecond) // let it actually queue behind the first
+
+	firstCancel()
+	select {
+	case ok := <-firstResult:
+		if ok {
+			t.Error("cancelled first waiter's Acquire returned true")
+		}
+	case <-time.After(1 * time.Second):
+		t.Fatal("cancelled first waiter's Acquire did not return")
+	}
+
+	l.Release() // free the original slot; the second (still-waiting) caller should get it
+	select {
+	case ok := <-secondResult:
+		if !ok {
+			t.Error("second waiter's Acquire returned false -- it was never cancelled")
+		}
+	case <-time.After(1 * time.Second):
+		t.Fatal("second waiter was never admitted -- the cancelled first waiter's ticket likely blocked the queue")
+	}
+}
+
+// TestConcurrencyLimiter_CancelRaceWithGrantDoesNotLeakSlot targets the
+// specific race cancelWaiting exists to handle: a waiter's ctx cancelling
+// at close to the same instant grantLocked closes that waiter's ticket.
+// Regardless of which way the inherent select race resolves, Active() must
+// never exceed the limit afterward, and the slot must remain usable.
+func TestConcurrencyLimiter_CancelRaceWithGrantDoesNotLeakSlot(t *testing.T) {
+	for i := 0; i < 200; i++ { // repeat: this exercises a genuine goroutine-scheduling race
+		l := NewConcurrencyLimiter(1)
+		if !l.Acquire(context.Background()) {
+			t.Fatal("first Acquire should succeed immediately")
+		}
+
+		ctx, cancel := context.WithCancel(context.Background())
+		result := make(chan bool, 1)
+		go func() { result <- l.Acquire(ctx) }()
+		time.Sleep(2 * time.Millisecond) // let it actually queue
+
+		var wg sync.WaitGroup
+		wg.Add(2)
+		go func() { defer wg.Done(); l.Release() }() // races grantLocked against...
+		go func() { defer wg.Done(); cancel() }()     // ...cancellation, deliberately
+		wg.Wait()
+
+		ok := <-result
+		if got := l.Active(); got > 1 {
+			t.Fatalf("iteration %d: Active() = %d after the race, want <= 1 (limit) -- a slot leaked", i, got)
+		}
+
+		// If the waiter actually won the slot (ok == true), it is a
+		// successful Acquire per the type's contract and this test must
+		// pair it with exactly one Release. If it lost (ok == false), the
+		// slot was already given back internally -- either cancelWaiting
+		// found the ticket still queued and simply removed it (nothing was
+		// ever granted), or it found the ticket already granted-and-gone
+		// and called Release() itself on the waiter's behalf. Calling
+		// Release() again here in the ok == false case would double-free
+		// and drive Active() negative, so it must NOT happen.
+		if ok {
+			l.Release()
+		}
+		if got := l.Active(); got != 0 {
+			t.Fatalf("iteration %d: Active() = %d after settling the race, want 0", i, got)
+		}
+
+		// Whichever way the race went, the limiter must still work.
+		if !l.Acquire(context.Background()) {
+			t.Fatalf("iteration %d: limiter unusable after the race", i)
+		}
+		l.Release()
+	}
+}
+
 // TestRun_ConcurrencyLimiterCapsBelowWorkerCount is the end-to-end proof:
 // with 6 worker goroutines but a limiter capped at 2, no more than 2 jobs are
 // ever inside runJob (holding locks / executing) simultaneously, even though
