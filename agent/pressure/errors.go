@@ -16,3 +16,9 @@ var (
 	errShortProcSelfStat   = errors.New("pressure: /proc/self/stat: unexpected format")
 	errShortProcSelfStatus = errors.New("pressure: /proc/self/status: VmRSS not found")
 )
+
+var (
+	errShortVMStat = errors.New("pressure: vm_stat/sysctl: unexpected output")
+	errShortTop    = errors.New("pressure: top: unexpected output")
+	errShortPS     = errors.New("pressure: ps: unexpected output")
+)
