@@ -15,12 +15,6 @@ import (
 const (
 	version           = "2.1.0"
 	heartbeatInterval = 30 * time.Second
-	// wsReconnectDelay is the agent's own reconnect-retry pacing after a dial
-	// failure or a dropped connection. The WS keepalive timing itself
-	// (wsPongWait/wsWriteWait) moved to agent/protocol/websocket.go -- both
-	// the real agent and loadgen share that keepalive contract, but each
-	// retries differently, so reconnect pacing stays here.
-	wsReconnectDelay = 5 * time.Second
 )
 
 func main() {

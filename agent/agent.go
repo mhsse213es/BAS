@@ -1075,26 +1075,46 @@ func (a *Agent) runLocalScan(ctx context.Context, scenarioID, runID string, sele
 }
 
 func (a *Agent) connectWS() {
+	// attempt counts consecutive failed/bounced connections. It drives the
+	// exponential-backoff delay before the next dial and is reset only once a
+	// connection proves itself genuinely established (see wsShouldResetBackoff) —
+	// never merely because Dial returned no error. Across a fleet, this plus
+	// wsJitter's full jitter is what keeps a server restart from bringing every
+	// agent back in lockstep.
+	attempt := 0
 	for {
 		conn, err := protocol.DialAgentWS(a.cfg.ServerURL, a.id.AgentID, a.cfg.AgentSecret)
 		if err != nil {
-			log.Printf("[!] WS connect failed: %v — retry in 5s", err)
-			time.Sleep(wsReconnectDelay)
+			delay := wsReconnectBackoff(attempt)
+			log.Printf("[!] WS connect failed: %v — retry in %s (attempt %d)", err, delay.Round(time.Millisecond), attempt+1)
+			a.logger.Op("warn", "connectivity", fmt.Sprintf("WebSocket dial failed (attempt %d): %v — retrying in %s", attempt+1, err, delay.Round(time.Millisecond)))
+			attempt++
+			time.Sleep(delay)
 			continue
 		}
-		log.Printf("[+] WS connected: %s", a.cfg.ServerURL)
-		a.logger.Op("info", "connectivity", fmt.Sprintf("WebSocket connected to %s", a.cfg.ServerURL))
+		log.Printf("[+] WS connected: %s (after %d attempt(s))", a.cfg.ServerURL, attempt+1)
+		a.logger.Op("info", "connectivity", fmt.Sprintf("WebSocket connected to %s (after %d attempt(s))", a.cfg.ServerURL, attempt+1))
+		a.logger.Metric("ws_reconnect_attempts", float64(attempt), "count")
 		// Flush events buffered while the connection was down.
 		go a.logger.Flush()
+
+		connectedAt := time.Now()
+		gotMessage := false
 
 		for {
 			msg, err := protocol.ReadMessage(conn)
 			if err != nil {
-				log.Printf("[!] WS read: %v — reconnecting", err)
-				a.logger.Op("warn", "connectivity", fmt.Sprintf("WebSocket disconnected: %v", err))
+				heldFor := time.Since(connectedAt)
+				log.Printf("[!] WS read: %v — reconnecting (connection held %s)", err, heldFor.Round(time.Millisecond))
+				a.logger.Op("warn", "connectivity", fmt.Sprintf("WebSocket disconnected after %s: %v", heldFor.Round(time.Millisecond), err))
+				a.logger.Metric("ws_connection_duration_seconds", heldFor.Seconds(), "seconds")
 				conn.Close()
+				if wsShouldResetBackoff(heldFor, gotMessage) {
+					attempt = 0
+				}
 				break
 			}
+			gotMessage = true
 
 			switch msg.Type {
 			case "command_scenario":
@@ -1191,6 +1211,8 @@ func (a *Agent) connectWS() {
 			}
 		}
 
-		time.Sleep(wsReconnectDelay)
+		delay := wsReconnectBackoff(attempt)
+		attempt++
+		time.Sleep(delay)
 	}
 }
