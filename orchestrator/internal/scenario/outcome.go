@@ -195,6 +195,8 @@ func classifySkipReason(detail string) string {
 		strings.Contains(lower, "caldera not configured"),
 		strings.Contains(lower, "caldera ability") && strings.Contains(lower, "not found"):
 		return models.SkipReasonPlatformUnavailable
+	case strings.Contains(lower, "circuit breaker"):
+		return models.SkipReasonCircuitOpen
 	}
 	return ""
 }

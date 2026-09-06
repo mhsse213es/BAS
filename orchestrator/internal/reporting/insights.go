@@ -323,6 +323,13 @@ func buildExecutiveConclusion(s ExecutiveSummary, ins Insights, det DetectionSum
 	if skip.Policy > 0 {
 		fmt.Fprintf(&b, "%d techniques requiring administrative privileges were intentionally excluded by the execution policy. ", skip.Policy)
 	}
+	if skip.Scheduler > 0 {
+		technique, was := "techniques", "were"
+		if skip.Scheduler == 1 {
+			technique, was = "technique", "was"
+		}
+		fmt.Fprintf(&b, "%d %s %s automatically suppressed by the scheduler after repeated failures earlier in the run — not an environment or platform limitation. ", skip.Scheduler, technique, was)
+	}
 	if ins.Least != nil && ins.Least.PassPct < 100 {
 		fmt.Fprintf(&b, "Protection is weakest in %s (%d%% prevented). ", humanizeTactic(ins.Least.Tactic), ins.Least.PassPct)
 	}

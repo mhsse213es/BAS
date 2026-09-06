@@ -466,3 +466,24 @@ func TestBuildExecutiveConclusion_PolicySkipSentence(t *testing.T) {
 		t.Errorf("conclusion = %q, want no policy sentence when Policy=0 (Content/Platform skips get no narrative)", withoutPolicy)
 	}
 }
+
+func TestBuildExecutiveConclusion_SchedulerSkipSentence(t *testing.T) {
+	s := ExecutiveSummary{PassedTechniques: 20, FailedTechniques: 6, PreventionScore: 76.9}
+	withScheduler := buildExecutiveConclusion(s, Insights{}, DetectionSummary{}, nil, SkipBreakdown{Scheduler: 3})
+	if !strings.Contains(withScheduler, "3 techniques were automatically suppressed by the scheduler") {
+		t.Errorf("conclusion = %q, want a scheduler-skip sentence naming 3", withScheduler)
+	}
+	if strings.Contains(withScheduler, "environment or platform limitation") == false {
+		t.Errorf("conclusion = %q, want the sentence to explicitly rule out a platform/environment cause", withScheduler)
+	}
+
+	single := buildExecutiveConclusion(s, Insights{}, DetectionSummary{}, nil, SkipBreakdown{Scheduler: 1})
+	if !strings.Contains(single, "1 technique was automatically suppressed") {
+		t.Errorf("conclusion = %q, want singular \"technique was\" for count 1", single)
+	}
+
+	withoutScheduler := buildExecutiveConclusion(s, Insights{}, DetectionSummary{}, nil, SkipBreakdown{Content: 3, Platform: 2})
+	if strings.Contains(withoutScheduler, "suppressed by the scheduler") {
+		t.Errorf("conclusion = %q, want no scheduler sentence when Scheduler=0", withoutScheduler)
+	}
+}

@@ -1212,14 +1212,18 @@ func buildPrivilegeSummary(matrix []TechniqueRow) PrivilegeSummary {
 
 // SkipBreakdown counts Result=Skipped entries by SkipReason.
 type SkipBreakdown struct {
-	Policy   int `json:"policy"`
-	Content  int `json:"content"`
-	Platform int `json:"platform"`
+	Policy    int `json:"policy"`
+	Content   int `json:"content"`
+	Platform  int `json:"platform"`
+	Scheduler int `json:"scheduler"`
 }
 
 // buildSkipBreakdown counts skipped results by SkipReason. An empty or
 // unrecognized reason falls into Platform — an unclassified skip is still an
-// environment gap, not a policy decision.
+// environment gap, not a policy decision. SkipReasonCircuitOpen is the one
+// exception: it's Audspect's own scheduler declining to run the step (see
+// SkipReasonCircuitOpen's doc comment), the opposite of an environment gap,
+// so it gets its own Scheduler bucket rather than falling into Platform.
 func buildSkipBreakdown(results []models.SimulationResult) SkipBreakdown {
 	var sb SkipBreakdown
 	for _, r := range results {
@@ -1231,6 +1235,8 @@ func buildSkipBreakdown(results []models.SimulationResult) SkipBreakdown {
 			sb.Policy++
 		case models.SkipReasonMissingContent:
 			sb.Content++
+		case models.SkipReasonCircuitOpen:
+			sb.Scheduler++
 		default:
 			sb.Platform++
 		}

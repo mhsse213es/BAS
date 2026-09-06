@@ -242,6 +242,13 @@ const SkipReasonPlatformUnavailable = "platform-unavailable"
 // to different tables and must never be assigned each other's constants.
 const SkipReasonPrerequisiteMissing = "prerequisite-missing"
 
+// SkipReasonCircuitOpen marks a skip caused by Audspect's own scheduler
+// declining to run the step -- its circuit breaker had already tripped for
+// the step's technique or resource domain after repeated failures earlier
+// in the run. Not an environment/platform gap: this is the scheduler's own
+// policy decision, the opposite of SkipReasonPlatformUnavailable.
+const SkipReasonCircuitOpen = "circuit-open"
+
 // DetectionAlert is the alert record that matched this technique during the
 // post-run detection sweep. Mirrors detect.AlertRecord (server-side package)
 // but kept in models so it serialises cleanly with SimulationResult.

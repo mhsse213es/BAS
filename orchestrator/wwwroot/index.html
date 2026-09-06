@@ -16074,7 +16074,7 @@ function submitIOCImport() {
   };
 
   var VERDICT_COLOR = { pass: 'var(--success)', fail: 'var(--danger)', blocked: 'var(--warning)', error: 'var(--danger)' };
-  var VERDICT_LABEL = { pass: 'Prevented', fail: 'Not Prevented', blocked: 'Blocked (AV)', error: 'Error', schedule: 'Timeout', execute: 'Timeout' };
+  var VERDICT_LABEL = { pass: 'Prevented', fail: 'Not Prevented', blocked: 'Blocked (AV)', error: 'Error', schedule: 'Timeout', execute: 'Timeout', skipped: 'Skipped (Scheduler)' };
 
   // Looks up ATT&CK technique name + tactic from the ART catalog. Falls back
   // gracefully when artCatalog hasn't loaded yet (e.g. technique picker not opened).

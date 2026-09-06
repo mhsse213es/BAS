@@ -286,6 +286,7 @@ func TestClassifySkipReason(t *testing.T) {
 		{"malformed step no command", "No command defined for step 'my-step'", models.SkipReasonPlatformUnavailable},
 		{"caldera not configured", "Caldera not configured — set CALDERA_URL to enable ability abc123", models.SkipReasonPlatformUnavailable},
 		{"caldera ability not found", "Caldera ability abc123 not found", models.SkipReasonPlatformUnavailable},
+		{"circuit breaker open", "circuit breaker open for technique:T1055, domain:registry", models.SkipReasonCircuitOpen},
 		{"unrecognized text", "some future skip reason nobody has written yet", ""},
 	}
 	for _, c := range cases {
