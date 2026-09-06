@@ -6,18 +6,32 @@ import (
 )
 
 // RiskGate blocks a job until an externally-set policy admits its risk
-// classification, or ctx is cancelled. Mechanically identical to
-// ConcurrencyLimiter (same sync.Cond + ctx-bridge pattern, for the same
-// reason: sync.Cond.Wait isn't itself cancellable) but answers a different
-// question -- ConcurrencyLimiter asks "how many jobs may run"; RiskGate asks
-// "is this kind of job eligible to run at all right now." The two compose
-// independently and neither has any awareness of the other.
+// classification, or ctx is cancelled. Uses the same sync.Cond +
+// ctx-bridge pattern ConcurrencyLimiter used before Phase 6 (see below)
+// for the same reason: sync.Cond.Wait isn't itself cancellable. RiskGate
+// answers a different question than ConcurrencyLimiter -- ConcurrencyLimiter
+// asks "how many jobs may run"; RiskGate asks "is this kind of job eligible
+// to run at all right now." The two compose independently and neither has
+// any awareness of the other.
 //
 // sched has no notion of "pressure" -- the policy is an opaque predicate the
 // caller (package main, which does know about pressure.Level) swaps in via
 // SetPolicy whenever conditions change. This mirrors how ConcurrencyLimiter's
 // SetLimit takes a plain int, with the Level -> int mapping (ceilingForLevel)
 // living entirely in package main.
+//
+// Unlike ConcurrencyLimiter (which moved to an explicit FIFO ticket queue in
+// Phase 6 -- see limiter.go), RiskGate deliberately keeps sync.Cond's
+// broadcast-wake-all. The two types only look symmetric on the surface:
+// ConcurrencyLimiter.Acquire allocates from a scarce, countable resource
+// (active < limit), so which of several blocked callers wins a post-wakeup
+// race is a genuine, real starvation risk -- one caller can in principle
+// keep losing that race indefinitely. Allow's wait loop instead evaluates a
+// pure predicate (policy(risk)) that consumes nothing; every waiter whose
+// risk the new policy admits is independently and correctly woken by
+// Broadcast, with zero contention between them. A FIFO grant here would
+// actually be wrong: it would only wake one waiter at a time when several
+// different risk classes might have simultaneously become eligible.
 type RiskGate struct {
 	mu     sync.Mutex
 	cond   *sync.Cond
