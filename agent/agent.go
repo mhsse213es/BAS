@@ -755,12 +755,16 @@ func (a *Agent) runScenario(ctx context.Context, cmd protocol.ScenarioCommand) {
 
 				emit(RunEvent{Type: "started", TaskID: step.TaskID, TechniqueID: step.TechniqueID, StepName: step.Name})
 
-				if cb.anyOpen(breakerKeys) {
-					log.Printf("[!]   [%d/%d] %s skipped -- circuit breaker open for %s", i+1, total, step.TechniqueID, strings.Join(breakerKeys, ", "))
+				// Only block a step's first attempt -- a retry that already wrote a real
+				// result to results[i] must never have it silently clobbered by a breaker
+				// that opened after that attempt ran.
+				if firstAttempt && cb.anyOpen(breakerKeys) {
+					keys := strings.Join(breakerKeys, ", ")
+					log.Printf("[!]   [%d/%d] %s skipped -- circuit breaker open for %s", i+1, total, step.TechniqueID, keys)
 					results[i] = protocol.ExecResult{
 						TaskID:     step.TaskID,
 						ExitCode:   -1,
-						Stdout:     fmt.Sprintf("skip: circuit breaker open for %s", strings.Join(breakerKeys, ", ")),
+						Stdout:     fmt.Sprintf("skip: circuit breaker open for %s", keys),
 						ExecutedAt: time.Now(),
 					}
 					ran[i] = true

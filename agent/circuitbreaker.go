@@ -83,8 +83,14 @@ func (b *circuitBreaker) recordAll(keys []string, success bool) {
 // in: its technique, plus one key per declared resource domain. A step with
 // no curated ResourceProfile or no declared Domains still gets its
 // technique key -- the domain axis only participates when domains are
-// actually declared, mirroring how ResourceProfile itself only narrows
-// locking when populated.
+// actually declared.
+//
+// This only covers the Domains form of ResourceProfile. A profile using the
+// newer Reads/Writes form (which takes precedence over Domains when
+// populated, per ResourceProfile's own doc comment) gets no domain-scoped
+// breaker key today, only its technique key. That is a known, currently
+// latent gap -- no production code populates Reads/Writes yet -- not an
+// intentional mirror of ResourceProfile's own precedence behavior.
 func breakerKeysForStep(techniqueID string, p *sched.ResourceProfile) []string {
 	keys := []string{"technique:" + techniqueID}
 	if p == nil {
