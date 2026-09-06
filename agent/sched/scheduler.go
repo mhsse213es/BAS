@@ -36,8 +36,9 @@ type Job struct {
 type RunOption func(*runConfig)
 
 type runConfig struct {
-	rec     Recorder
-	limiter *ConcurrencyLimiter
+	rec      Recorder
+	limiter  *ConcurrencyLimiter
+	riskGate *RiskGate
 }
 
 // WithRecorder attaches a Recorder that receives per-job telemetry (see
@@ -53,6 +54,16 @@ func WithRecorder(rec Recorder) RunOption {
 // of what the limiter allows through).
 func WithConcurrencyLimiter(l *ConcurrencyLimiter) RunOption {
 	return func(c *runConfig) { c.limiter = l }
+}
+
+// WithRiskGate attaches a RiskGate that must admit a job's effective risk
+// classification before it proceeds to lock acquisition. Checked between the
+// pause gate and the ConcurrencyLimiter, in that order: an operator pause
+// always takes precedence, then risk-based deferral, then raw concurrency
+// admission, then lock correctness -- each layer strictly narrows what the
+// layer below it ever sees.
+func WithRiskGate(g *RiskGate) RunOption {
+	return func(c *runConfig) { c.riskGate = g }
 }
 
 // Run executes jobs across `workers` goroutines, holding each job's resource
@@ -102,6 +113,11 @@ func Run(ctx context.Context, workers int, lm *LockManager, jobs []Job, gate *Ga
 				gate.Wait(ctx) // blocks here while paused; no-op if gate is nil or unpaused
 				if ctx.Err() != nil {
 					continue // cancel can race with a pause -- re-check before running
+				}
+				if cfg.riskGate != nil {
+					if !cfg.riskGate.Allow(ctx, effectiveRisk(j.Resource)) {
+						continue // ctx cancelled while deferred
+					}
 				}
 				if cfg.limiter != nil {
 					if !cfg.limiter.Acquire(ctx) {

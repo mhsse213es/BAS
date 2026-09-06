@@ -415,3 +415,54 @@ func TestRun_GateHoldsNewJobsButFinishesInFlight(t *testing.T) {
 		t.Fatalf("started=%d finished=%d, want 2/2 after Resume", s, f)
 	}
 }
+
+// TestRun_RiskGateDefersModificationUntilPolicyAdmits proves the full
+// integration: a job whose effective risk the gate's current policy rejects
+// must not start running until SetPolicy admits it, then proceeds normally
+// through the existing lock/timeout machinery unchanged.
+func TestRun_RiskGateDefersModificationUntilPolicyAdmits(t *testing.T) {
+	gate := NewRiskGate()
+	gate.SetPolicy(func(risk string) bool { return risk == RiskObservation })
+
+	started := make(chan struct{})
+	job := Job{
+		Resource: &ResourceProfile{Scope: "local", Risk: RiskModification},
+		Run: func(ctx context.Context) {
+			close(started)
+		},
+	}
+
+	done := make(chan struct{})
+	go func() {
+		Run(context.Background(), 1, NewLockManager(), []Job{job}, nil, WithRiskGate(gate))
+		close(done)
+	}()
+
+	select {
+	case <-started:
+		t.Fatal("job started despite RiskGate policy rejecting its risk classification")
+	case <-time.After(30 * time.Millisecond):
+		// expected: still blocked
+	}
+
+	gate.SetPolicy(func(risk string) bool { return true })
+
+	select {
+	case <-started:
+		// expected
+	case <-time.After(1 * time.Second):
+		t.Fatal("job never started after SetPolicy admitted its risk classification")
+	}
+	<-done
+}
+
+// TestRun_NilRiskGateIsSafe proves the existing (pre-Phase-5) call shape --
+// Run without WithRiskGate -- still works unmodified.
+func TestRun_NilRiskGateIsSafe(t *testing.T) {
+	ran := false
+	jobs := []Job{{Run: func(ctx context.Context) { ran = true }}}
+	Run(context.Background(), 1, NewLockManager(), jobs, nil) // no WithRiskGate at all
+	if !ran {
+		t.Error("job did not run")
+	}
+}
