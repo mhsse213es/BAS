@@ -671,6 +671,15 @@ func (a *Agent) runScenario(ctx context.Context, cmd protocol.ScenarioCommand) {
 
 	emitCritical(RunEvent{Type: "run_started", Payload: map[string]any{"stepsTotal": total, "mode": cmd.Mode}})
 
+	// Constructed here (before the jobs-building loop below) rather than
+	// alongside limiter/riskGate: the Run closures built inside that loop
+	// reference cb, and Go requires a local variable's declaration to
+	// textually precede any reference to it in the enclosing function --
+	// unlike limiter/riskGate, cb is used inside those closures, not just
+	// later at sched.Run(). Same per-run lifecycle as limiter/riskGate
+	// otherwise (fresh breaker state per scenario run).
+	cb := newCircuitBreaker(circuitBreakerThreshold)
+
 	jobs := make([]sched.Job, total)
 	for i := range steps {
 		step := steps[i] // per-job copy (PayloadDir/Env set below)
@@ -687,6 +696,7 @@ func (a *Agent) runScenario(ctx context.Context, cmd protocol.ScenarioCommand) {
 
 		risk := sched.EffectiveRisk(step.Resource)
 		retryPolicy := retryPolicyForRisk(risk)
+		breakerKeys := breakerKeysForStep(step.TechniqueID, step.Resource)
 
 		emit(RunEvent{Type: "queued", TaskID: step.TaskID, TechniqueID: step.TechniqueID, StepName: step.Name})
 
@@ -744,6 +754,20 @@ func (a *Agent) runScenario(ctx context.Context, cmd protocol.ScenarioCommand) {
 					"scenario_step", fmt.Sprintf("[%d/%d] %s executor=%s", i+1, total, step.Name, step.Executor))
 
 				emit(RunEvent{Type: "started", TaskID: step.TaskID, TechniqueID: step.TechniqueID, StepName: step.Name})
+
+				if cb.anyOpen(breakerKeys) {
+					log.Printf("[!]   [%d/%d] %s skipped -- circuit breaker open for %s", i+1, total, step.TechniqueID, strings.Join(breakerKeys, ", "))
+					results[i] = protocol.ExecResult{
+						TaskID:     step.TaskID,
+						ExitCode:   -1,
+						Stdout:     fmt.Sprintf("skip: circuit breaker open for %s", strings.Join(breakerKeys, ", ")),
+						ExecutedAt: time.Now(),
+					}
+					ran[i] = true
+					emit(RunEvent{Type: "completed", TaskID: step.TaskID, TechniqueID: step.TechniqueID, StepName: step.Name,
+						Payload: map[string]any{"verdict": "skipped", "reason": "circuit_open"}})
+					return false
+				}
 
 				// Stage payloads into a per-step subdir so concurrent steps never
 				// collide on BAS_PAYLOAD_DIR. Steps without payloads use the run dir.
@@ -804,6 +828,15 @@ func (a *Agent) runScenario(ctx context.Context, cmd protocol.ScenarioCommand) {
 					log.Printf("[*]   [%d/%d] %s will retry (attempt %d/%d)", i+1, total, step.TechniqueID, attemptNum, retryPolicy.MaxAttempts)
 					emit(RunEvent{Type: "retrying", TaskID: step.TaskID, TechniqueID: step.TechniqueID, StepName: step.Name,
 						Payload: map[string]any{"attempt": int(attemptNum), "maxAttempts": retryPolicy.MaxAttempts}})
+				} else {
+					// Terminal outcome for this step (success, or its own retry
+					// budget exhausted): record it against every key it touched.
+					// success iff not retryable -- a genuine pass, or a
+					// non-retryable block encountered mid-execution (as opposed to
+					// the pre-execution quarantine early-return above, which is
+					// never recorded at all -- a security-control block is not
+					// evidence the underlying domain/technique is broken).
+					cb.recordAll(breakerKeys, !retry)
 				}
 				return willRetry
 			},
