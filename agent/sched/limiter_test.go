@@ -173,6 +173,54 @@ func TestConcurrencyLimiter_SetLimitBelowActiveDoesNotPreempt(t *testing.T) {
 	}
 }
 
+// TestConcurrencyLimiter_FIFOOrderUnderContention proves Acquire admits
+// blocked callers in strict arrival order, not in whatever order the
+// goroutine scheduler happens to wake them. With 20 waiters and a
+// Broadcast-and-race implementation, the odds of them landing in exact
+// arrival order by chance are astronomically small (~1/20!), so this
+// test fails almost every run against the old sync.Cond code and must
+// pass every run against the FIFO queue.
+func TestConcurrencyLimiter_FIFOOrderUnderContention(t *testing.T) {
+	const n = 20
+	l := NewConcurrencyLimiter(1)
+	if !l.Acquire(context.Background()) {
+		t.Fatal("first Acquire should succeed immediately")
+	}
+
+	var mu sync.Mutex
+	var admitted []int
+	var wg sync.WaitGroup
+	for i := 0; i < n; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			if !l.Acquire(context.Background()) {
+				t.Errorf("Acquire(%d) returned false with an uncancelled context", i)
+				return
+			}
+			mu.Lock()
+			admitted = append(admitted, i)
+			mu.Unlock()
+			l.Release()
+		}(i)
+		// Let goroutine i actually reach the queue before launching i+1, so
+		// arrival order is deterministic even though admission order (what
+		// this test checks) is not guaranteed by the old implementation.
+		time.Sleep(5 * time.Millisecond)
+	}
+
+	l.Release() // free the setup slot; admission cascades through the queue from here
+	wg.Wait()
+
+	mu.Lock()
+	defer mu.Unlock()
+	for i, got := range admitted {
+		if got != i {
+			t.Fatalf("admission order = %v, want strictly increasing 0..%d (arrival order) -- goroutine %d was admitted out of turn at position %d", admitted, n-1, got, i)
+		}
+	}
+}
+
 // TestRun_ConcurrencyLimiterCapsBelowWorkerCount is the end-to-end proof:
 // with 6 worker goroutines but a limiter capped at 2, no more than 2 jobs are
 // ever inside runJob (holding locks / executing) simultaneously, even though
