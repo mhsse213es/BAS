@@ -31,6 +31,23 @@ func ceilingForLevel(level pressure.Level, workers int) int {
 	}
 }
 
+// riskAllowedForLevel decides whether a job of this risk classification may
+// be admitted under the given pressure level. Pure and independently
+// testable -- mirrors ceilingForLevel's shape exactly. Normal admits
+// everything; High and Critical both defer anything that isn't
+// RiskObservation (RiskUnknown included, per effectiveRisk's conservative
+// default) -- collapsed to one policy for both non-Normal levels rather than
+// giving Critical its own stricter rule, since Phase 4's ceiling (workers/2
+// vs 1) already differentiates the two levels along a separate axis, and
+// there is no evidence yet that High's risk policy is insufficient at
+// Critical.
+func riskAllowedForLevel(level pressure.Level, risk string) bool {
+	if level == pressure.LevelNormal {
+		return true
+	}
+	return risk == sched.RiskObservation
+}
+
 // pressureTick performs one sampling-to-decision cycle given an
 // already-taken host sample: feeds it to ctrl, computes the resulting
 // ceiling, and applies it to limiter if one is active (nil-safe -- a nil

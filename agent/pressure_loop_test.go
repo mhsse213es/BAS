@@ -91,3 +91,29 @@ func TestErrorLogGate_RateLimitsRepeatedErrors(t *testing.T) {
 func fixedTestTime() time.Time {
 	return time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 }
+
+func TestRiskAllowedForLevel(t *testing.T) {
+	cases := []struct {
+		level pressure.Level
+		risk  string
+		want  bool
+	}{
+		{pressure.LevelNormal, sched.RiskObservation, true},
+		{pressure.LevelNormal, sched.RiskModification, true},
+		{pressure.LevelNormal, sched.RiskPersistence, true},
+		{pressure.LevelNormal, sched.RiskUnknown, true},
+		{pressure.LevelHigh, sched.RiskObservation, true},
+		{pressure.LevelHigh, sched.RiskModification, false},
+		{pressure.LevelHigh, sched.RiskPersistence, false},
+		{pressure.LevelHigh, sched.RiskUnknown, false},
+		{pressure.LevelCritical, sched.RiskObservation, true},
+		{pressure.LevelCritical, sched.RiskModification, false},
+		{pressure.LevelCritical, sched.RiskPersistence, false},
+		{pressure.LevelCritical, sched.RiskUnknown, false},
+	}
+	for _, c := range cases {
+		if got := riskAllowedForLevel(c.level, c.risk); got != c.want {
+			t.Errorf("riskAllowedForLevel(%v, %q) = %v, want %v", c.level, c.risk, got, c.want)
+		}
+	}
+}
