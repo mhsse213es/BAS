@@ -425,7 +425,16 @@ func TestTick_SkipsScheduleWhenPreviousSpawnStillActive(t *testing.T) {
 		if err != nil {
 			t.Fatalf("CreateSchedule: %v", err)
 		}
-		if err := store.MarkScheduleOccurrenceHandled(ctx, sch.ID, time.Now().UTC().Add(-1*time.Hour), stillRunning.ID); err != nil {
+		// The previous occurrence must be a full week before ref (far beyond
+		// scheduleJitterWindow's 2-minute dedup tolerance), so this week's
+		// due occurrence is recognized as new rather than deduped away --
+		// otherwise nextOccurrenceSince never returns ok=true and the
+		// LastSpawnedJobID check below is never reached at all. A second,
+		// independent time.Now() call here (instead of reusing ref) would
+		// reintroduce that exact bug, since it's always >= ref by a few
+		// microseconds (monotonic clock), which the 2-minute tolerance can't
+		// absorb.
+		if err := store.MarkScheduleOccurrenceHandled(ctx, sch.ID, ref.Add(-7*24*time.Hour), stillRunning.ID); err != nil {
 			t.Fatalf("MarkScheduleOccurrenceHandled: %v", err)
 		}
 
