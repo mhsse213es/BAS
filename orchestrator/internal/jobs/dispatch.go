@@ -247,7 +247,10 @@ func (d *Dispatcher) spawnDueSchedules(ctx context.Context) {
 			}
 		}
 		d.store.MarkScheduleOccurrenceHandled(ctx, sch.ID, occurrence, newJob.ID)
-		log.Printf("[jobs] schedule %s: spawned job %s for occurrence %v", sch.ID, newJob.ID, occurrence)
+		offset := jitterOffset(sch.ID, scheduleJitterWindow)
+		nominal := occurrence.Add(-offset)
+		log.Printf("[jobs] schedule %s: spawned job %s for occurrence %v (nominal %v, jitter %v)",
+			sch.ID, newJob.ID, occurrence, nominal, offset)
 	}
 }
 
