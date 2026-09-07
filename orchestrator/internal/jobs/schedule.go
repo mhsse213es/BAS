@@ -152,13 +152,14 @@ func nextOccurrenceDaily(sch Schedule, now time.Time, loc *time.Location) (time.
 	nowLocal := now.In(loc)
 	for daysBack := 0; daysBack < 2; daysBack++ {
 		candidate := time.Date(nowLocal.Year(), nowLocal.Month(), nowLocal.Day()-daysBack, hh, mm, 0, 0, loc)
-		if candidate.After(now) {
+		jittered := candidate.Add(jitterOffset(sch.ID, scheduleJitterWindow))
+		if jittered.After(now) {
 			continue
 		}
-		if sch.LastOccurrenceAt != nil && !candidate.After(*sch.LastOccurrenceAt) {
+		if sch.LastOccurrenceAt != nil && !jittered.After(*sch.LastOccurrenceAt) {
 			return time.Time{}, false
 		}
-		return candidate.UTC(), true
+		return jittered.UTC(), true
 	}
 	return time.Time{}, false
 }
@@ -171,13 +172,17 @@ func nextOccurrenceWeekly(sch Schedule, now time.Time, loc *time.Location) (time
 	nowLocal := now.In(loc)
 	for daysBack := 0; daysBack < 7; daysBack++ {
 		candidate := time.Date(nowLocal.Year(), nowLocal.Month(), nowLocal.Day()-daysBack, hh, mm, 0, 0, loc)
-		if int(candidate.Weekday()) != sch.DayOfWeek || candidate.After(now) {
+		if int(candidate.Weekday()) != sch.DayOfWeek {
 			continue
 		}
-		if sch.LastOccurrenceAt != nil && !candidate.After(*sch.LastOccurrenceAt) {
+		jittered := candidate.Add(jitterOffset(sch.ID, scheduleJitterWindow))
+		if jittered.After(now) {
+			continue
+		}
+		if sch.LastOccurrenceAt != nil && !jittered.After(*sch.LastOccurrenceAt) {
 			return time.Time{}, false
 		}
-		return candidate.UTC(), true
+		return jittered.UTC(), true
 	}
 	return time.Time{}, false
 }
@@ -194,13 +199,17 @@ func nextOccurrenceMonthly(sch Schedule, now time.Time, loc *time.Location) (tim
 		// below rejects that roll-over instead of misfiring in the wrong
 		// month.
 		candidate := time.Date(nowLocal.Year(), nowLocal.Month()-time.Month(monthsBack), sch.DayOfMonth, hh, mm, 0, 0, loc)
-		if candidate.Day() != sch.DayOfMonth || candidate.After(now) {
+		if candidate.Day() != sch.DayOfMonth {
 			continue
 		}
-		if sch.LastOccurrenceAt != nil && !candidate.After(*sch.LastOccurrenceAt) {
+		jittered := candidate.Add(jitterOffset(sch.ID, scheduleJitterWindow))
+		if jittered.After(now) {
+			continue
+		}
+		if sch.LastOccurrenceAt != nil && !jittered.After(*sch.LastOccurrenceAt) {
 			return time.Time{}, false
 		}
-		return candidate.UTC(), true
+		return jittered.UTC(), true
 	}
 	return time.Time{}, false
 }

@@ -35,7 +35,7 @@ func TestNextOccurrenceSince_FirstOccurrenceEverChecked(t *testing.T) {
 	if !ok {
 		t.Fatal("nextOccurrenceSince() ok = false, want true (first-ever check should find last Friday)")
 	}
-	want := time.Date(2026, 8, 7, 23, 0, 0, 0, time.UTC) // the preceding Friday
+	want := time.Date(2026, 8, 7, 23, 0, 0, 0, time.UTC).Add(jitterOffset(sch.ID, scheduleJitterWindow)) // the preceding Friday, jittered
 	if !occurrence.Equal(want) {
 		t.Errorf("occurrence = %v, want %v", occurrence, want)
 	}
@@ -43,7 +43,7 @@ func TestNextOccurrenceSince_FirstOccurrenceEverChecked(t *testing.T) {
 
 func TestNextOccurrenceSince_AlreadyHandled_ReturnsNotOK(t *testing.T) {
 	sch := Schedule{DayOfWeek: 5, TimeOfDay: "23:00", Timezone: "UTC"}
-	already := time.Date(2026, 8, 7, 23, 0, 0, 0, time.UTC)
+	already := time.Date(2026, 8, 7, 23, 0, 0, 0, time.UTC).Add(jitterOffset(sch.ID, scheduleJitterWindow))
 	sch.LastOccurrenceAt = &already
 	now := time.Date(2026, 8, 10, 12, 0, 0, 0, time.UTC) // still the same week, no new Friday yet
 	_, ok := nextOccurrenceSince(sch, now)
@@ -69,7 +69,7 @@ func TestNextOccurrenceSince_TimezoneConversion(t *testing.T) {
 	if !ok {
 		t.Fatal("nextOccurrenceSince() ok = false, want true")
 	}
-	want := time.Date(2026, 8, 7, 17, 30, 0, 0, time.UTC)
+	want := time.Date(2026, 8, 7, 17, 30, 0, 0, time.UTC).Add(jitterOffset(sch.ID, scheduleJitterWindow))
 	if !occurrence.Equal(want) {
 		t.Errorf("occurrence = %v, want %v (UTC equivalent of Friday 23:00 IST)", occurrence, want)
 	}
@@ -345,10 +345,11 @@ func TestNextOccurrenceSince_Once(t *testing.T) {
 func TestNextOccurrenceSince_Daily(t *testing.T) {
 	loc, _ := time.LoadLocation("UTC")
 	sch := Schedule{RecurrenceType: "daily", TimeOfDay: "14:00", Timezone: "UTC"}
+	offset := jitterOffset(sch.ID, scheduleJitterWindow)
 
 	now := time.Date(2026, 8, 10, 14, 5, 0, 0, loc)
 	occ, ok := nextOccurrenceSince(sch, now)
-	want := time.Date(2026, 8, 10, 14, 0, 0, 0, loc)
+	want := time.Date(2026, 8, 10, 14, 0, 0, 0, loc).Add(offset)
 	if !ok || !occ.Equal(want) {
 		t.Errorf("got occ=%v ok=%v, want %v/true", occ, ok, want)
 	}
@@ -359,7 +360,7 @@ func TestNextOccurrenceSince_Daily(t *testing.T) {
 	}
 	tomorrow := now.Add(24 * time.Hour)
 	occ2, ok := nextOccurrenceSince(sch, tomorrow)
-	wantTomorrow := time.Date(2026, 8, 11, 14, 0, 0, 0, loc)
+	wantTomorrow := time.Date(2026, 8, 11, 14, 0, 0, 0, loc).Add(offset)
 	if !ok || !occ2.Equal(wantTomorrow) {
 		t.Errorf("next day: got occ=%v ok=%v, want %v/true", occ2, ok, wantTomorrow)
 	}
@@ -370,7 +371,7 @@ func TestNextOccurrenceSince_Weekly_EmptyRecurrenceTypeAliasesToWeekly(t *testin
 	sch := Schedule{RecurrenceType: "", DayOfWeek: 1, TimeOfDay: "09:00", Timezone: "UTC"} // Monday
 	now := time.Date(2026, 8, 11, 9, 30, 0, 0, loc)                                        // a Tuesday, 9:30
 	occ, ok := nextOccurrenceSince(sch, now)
-	want := time.Date(2026, 8, 10, 9, 0, 0, 0, loc) // the Monday before
+	want := time.Date(2026, 8, 10, 9, 0, 0, 0, loc).Add(jitterOffset(sch.ID, scheduleJitterWindow)) // the Monday before, jittered
 	if !ok || !occ.Equal(want) {
 		t.Errorf("got occ=%v ok=%v, want %v/true", occ, ok, want)
 	}
@@ -381,7 +382,7 @@ func TestNextOccurrenceSince_Monthly(t *testing.T) {
 	sch := Schedule{RecurrenceType: "monthly", DayOfMonth: 1, TimeOfDay: "03:00", Timezone: "UTC"}
 	now := time.Date(2026, 8, 5, 0, 0, 0, 0, loc) // Aug 5, after Aug 1's slot
 	occ, ok := nextOccurrenceSince(sch, now)
-	want := time.Date(2026, 8, 1, 3, 0, 0, 0, loc)
+	want := time.Date(2026, 8, 1, 3, 0, 0, 0, loc).Add(jitterOffset(sch.ID, scheduleJitterWindow))
 	if !ok || !occ.Equal(want) {
 		t.Errorf("got occ=%v ok=%v, want %v/true", occ, ok, want)
 	}
@@ -394,5 +395,95 @@ func TestNextOccurrenceSince_EndDate_StopsSpawning(t *testing.T) {
 	now := time.Date(2026, 8, 10, 9, 30, 0, 0, loc) // well after EndDate
 	if _, ok := nextOccurrenceSince(sch, now); ok {
 		t.Error("after EndDate: got ok=true, want false")
+	}
+}
+
+func TestNextOccurrenceDaily_JitterShiftsOccurrence(t *testing.T) {
+	loc, _ := time.LoadLocation("UTC")
+	now := time.Date(2026, 8, 10, 14, 5, 0, 0, loc)
+
+	// "test-schedule-1" has a positive jitterOffset (~+34.5s).
+	positive := Schedule{ID: "test-schedule-1", RecurrenceType: "daily", TimeOfDay: "14:00", Timezone: "UTC"}
+	if off := jitterOffset(positive.ID, scheduleJitterWindow); off <= 0 {
+		t.Fatalf("test fixture assumption broken: jitterOffset(%q) = %v, want > 0 -- pick a different ID", positive.ID, off)
+	}
+	occ, ok := nextOccurrenceSince(positive, now)
+	want := time.Date(2026, 8, 10, 14, 0, 0, 0, loc).Add(jitterOffset(positive.ID, scheduleJitterWindow))
+	if !ok || !occ.Equal(want) {
+		t.Errorf("positive-offset ID: got occ=%v ok=%v, want %v/true", occ, ok, want)
+	}
+
+	// "test-schedule-2" has a negative jitterOffset (~-66s).
+	negative := Schedule{ID: "test-schedule-2", RecurrenceType: "daily", TimeOfDay: "14:00", Timezone: "UTC"}
+	if off := jitterOffset(negative.ID, scheduleJitterWindow); off >= 0 {
+		t.Fatalf("test fixture assumption broken: jitterOffset(%q) = %v, want < 0 -- pick a different ID", negative.ID, off)
+	}
+	occ2, ok := nextOccurrenceSince(negative, now)
+	want2 := time.Date(2026, 8, 10, 14, 0, 0, 0, loc).Add(jitterOffset(negative.ID, scheduleJitterWindow))
+	if !ok || !occ2.Equal(want2) {
+		t.Errorf("negative-offset ID: got occ=%v ok=%v, want %v/true", occ2, ok, want2)
+	}
+}
+
+func TestNextOccurrenceDaily_JitterCrossesDayBoundary(t *testing.T) {
+	loc, _ := time.LoadLocation("UTC")
+	sch := Schedule{ID: "sched-g", RecurrenceType: "daily", TimeOfDay: "00:01", Timezone: "UTC"}
+	offset := jitterOffset(sch.ID, scheduleJitterWindow)
+	if offset >= -60*time.Second {
+		t.Fatalf("test fixture assumption broken: jitterOffset(%q) = %v, want <= -60s to cross the day boundary from 00:01 -- pick a different ID", sch.ID, offset)
+	}
+
+	now := time.Date(2026, 8, 10, 1, 0, 0, 0, loc) // well after midnight
+	occ, ok := nextOccurrenceSince(sch, now)
+	want := time.Date(2026, 8, 10, 0, 1, 0, 0, loc).Add(offset)
+	if !ok || !occ.Equal(want) {
+		t.Errorf("got occ=%v ok=%v, want %v/true", occ, ok, want)
+	}
+	if occ.UTC().Day() != 9 {
+		t.Errorf("occurrence lands on day %d, want day 9 (the prior calendar day) -- jitter should have pushed a 00:01 nominal time backward across midnight", occ.UTC().Day())
+	}
+}
+
+func TestNextOccurrenceOnce_JitterDoesNotApply(t *testing.T) {
+	runAt := time.Date(2026, 8, 10, 9, 0, 0, 0, time.UTC)
+	sch := Schedule{ID: "sched-d", RecurrenceType: "once", RunAt: &runAt, Timezone: "UTC", TimeOfDay: "00:00"}
+	if off := jitterOffset(sch.ID, scheduleJitterWindow); off == 0 {
+		t.Fatalf("test fixture assumption broken: jitterOffset(%q) = 0, want nonzero -- pick a different ID", sch.ID)
+	}
+	now := runAt.Add(time.Hour)
+	occurrence, ok := nextOccurrenceSince(sch, now)
+	if !ok {
+		t.Fatal("nextOccurrenceSince() ok = false, want true")
+	}
+	if !occurrence.Equal(runAt) {
+		t.Errorf("occurrence = %v, want %v (exact RunAt, unaffected by jitter)", occurrence, runAt)
+	}
+}
+
+func TestNextOccurrenceWeekly_JitterShiftsOccurrence(t *testing.T) {
+	loc, _ := time.LoadLocation("UTC")
+	sch := Schedule{ID: "sched-b", RecurrenceType: "weekly", DayOfWeek: 1, TimeOfDay: "09:00", Timezone: "UTC"} // Monday
+	if off := jitterOffset(sch.ID, scheduleJitterWindow); off <= 0 {
+		t.Fatalf("test fixture assumption broken: jitterOffset(%q) = %v, want > 0 -- pick a different ID", sch.ID, off)
+	}
+	now := time.Date(2026, 8, 11, 9, 30, 0, 0, loc) // a Tuesday, 9:30
+	occ, ok := nextOccurrenceSince(sch, now)
+	want := time.Date(2026, 8, 10, 9, 0, 0, 0, loc).Add(jitterOffset(sch.ID, scheduleJitterWindow)) // the Monday before, jittered
+	if !ok || !occ.Equal(want) {
+		t.Errorf("got occ=%v ok=%v, want %v/true", occ, ok, want)
+	}
+}
+
+func TestNextOccurrenceMonthly_JitterShiftsOccurrence(t *testing.T) {
+	loc, _ := time.LoadLocation("UTC")
+	sch := Schedule{ID: "sched-e", RecurrenceType: "monthly", DayOfMonth: 1, TimeOfDay: "03:00", Timezone: "UTC"}
+	if off := jitterOffset(sch.ID, scheduleJitterWindow); off >= 0 {
+		t.Fatalf("test fixture assumption broken: jitterOffset(%q) = %v, want < 0 -- pick a different ID", sch.ID, off)
+	}
+	now := time.Date(2026, 8, 5, 0, 0, 0, 0, loc) // Aug 5, after Aug 1's slot
+	occ, ok := nextOccurrenceSince(sch, now)
+	want := time.Date(2026, 8, 1, 3, 0, 0, 0, loc).Add(jitterOffset(sch.ID, scheduleJitterWindow))
+	if !ok || !occ.Equal(want) {
+		t.Errorf("got occ=%v ok=%v, want %v/true", occ, ok, want)
 	}
 }
