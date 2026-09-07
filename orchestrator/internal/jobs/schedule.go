@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"hash/fnv"
 	"strconv"
 	"strings"
 	"time"
@@ -77,6 +78,26 @@ func parseTimeOfDay(s string) (hour, minute int, err error) {
 		return 0, 0, errInvalidTimeOfDay
 	}
 	return hour, minute, nil
+}
+
+// scheduleJitterWindow bounds how far a schedule's effective trigger time
+// can drift from its nominal TimeOfDay -- small enough to stay well within
+// user expectations of "9am daily", large enough to break up clusters of
+// schedules sharing a common nominal time. See
+// docs/superpowers/specs/2026-09-07-scheduled-assessment-jitter-design.md.
+const scheduleJitterWindow = 2 * time.Minute
+
+// jitterOffset derives a stable per-schedule offset in [-window, +window],
+// deterministic from the schedule's own ID -- same offset every time this
+// process (or any future process) computes it, no stored state, no
+// reconciliation needed across restarts. Production schedules always have
+// a real DB-assigned id (Store.CreateSchedule's `RETURNING id`); an empty
+// ID is purely a test-fixture artifact, never a real production value.
+func jitterOffset(scheduleID string, window time.Duration) time.Duration {
+	h := fnv.New64a()
+	h.Write([]byte(scheduleID))
+	span := int64(2*window) + 1
+	return time.Duration(int64(h.Sum64()%uint64(span))) - window
 }
 
 // nextOccurrenceSince finds the most recent past occurrence of sch's
