@@ -680,6 +680,14 @@ func (a *Agent) runScenario(ctx context.Context, cmd protocol.ScenarioCommand) {
 	// otherwise (fresh breaker state per scenario run).
 	cb := newCircuitBreaker(circuitBreakerThreshold)
 
+	// Also constructed here, ahead of its usual position alongside
+	// gaugeDone/limiter/riskGate below, for the same forward-reference
+	// reason as cb: the Run closures call metrics.BreakerOpened/
+	// BreakerSuppressed directly (breaker telemetry, not part of
+	// sched.Recorder -- see sched_metrics.go), so metrics must exist
+	// before those closures are built.
+	metrics := &runMetrics{}
+
 	jobs := make([]sched.Job, total)
 	for i := range steps {
 		step := steps[i] // per-job copy (PayloadDir/Env set below)
@@ -759,6 +767,7 @@ func (a *Agent) runScenario(ctx context.Context, cmd protocol.ScenarioCommand) {
 				// result to results[i] must never have it silently clobbered by a breaker
 				// that opened after that attempt ran.
 				if firstAttempt && cb.anyOpen(breakerKeys) {
+					metrics.BreakerSuppressed()
 					keys := strings.Join(breakerKeys, ", ")
 					log.Printf("[!]   [%d/%d] %s skipped -- circuit breaker open for %s", i+1, total, step.TechniqueID, keys)
 					results[i] = protocol.ExecResult{
@@ -840,14 +849,15 @@ func (a *Agent) runScenario(ctx context.Context, cmd protocol.ScenarioCommand) {
 					// the pre-execution quarantine early-return above, which is
 					// never recorded at all -- a security-control block is not
 					// evidence the underlying domain/technique is broken).
-					cb.recordAll(breakerKeys, !retry)
+					for range cb.recordAll(breakerKeys, !retry) {
+						metrics.BreakerOpened()
+					}
 				}
 				return willRetry
 			},
 		}
 	}
 
-	metrics := &runMetrics{}
 	gaugeDone := make(chan struct{})
 	go runGaugeSampler(a.logger, &startedJobs, &finishedJobs, total, gaugeSampleInterval, gaugeDone)
 

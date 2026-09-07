@@ -35,6 +35,9 @@ type runMetrics struct {
 	jobPanics        int64
 	retryCount       int64
 
+	breakerOpens      int64
+	breakerSuppressed int64
+
 	admissionWaitTotal time.Duration
 	admissionWaitMax   time.Duration
 	admissionWaitN     int64
@@ -102,6 +105,24 @@ func (m *runMetrics) Retry() {
 	atomic.AddInt64(&m.retryCount, 1)
 }
 
+// BreakerOpened records one circuit breaker key transitioning from closed to
+// open this run. Not part of sched.Recorder -- Phase 8's circuitBreaker
+// lives in package main (agent/circuitbreaker.go), not agent/sched, so its
+// call sites (agent.go's runScenario) call this directly, the same way they
+// call cb.recordAll directly, rather than through the scheduler's Recorder
+// interface which only covers agent/sched's own internal recording.
+func (m *runMetrics) BreakerOpened() {
+	atomic.AddInt64(&m.breakerOpens, 1)
+}
+
+// BreakerSuppressed records one step being skipped because a circuit
+// breaker it depends on was already open -- once per skipped step, not once
+// per breaker key the step touched (a step can carry multiple keys via
+// breakerKeysForStep, but it's skipped or it isn't).
+func (m *runMetrics) BreakerSuppressed() {
+	atomic.AddInt64(&m.breakerSuppressed, 1)
+}
+
 func (m *runMetrics) AdmissionWait(d time.Duration) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -155,6 +176,12 @@ func (m *runMetrics) report(logger metricSink, total int) {
 	}
 	if retries := atomic.LoadInt64(&m.retryCount); retries > 0 {
 		logger.Metric("sched_retry_count", float64(retries), "count")
+	}
+	if opens := atomic.LoadInt64(&m.breakerOpens); opens > 0 {
+		logger.Metric("sched_breaker_open_count", float64(opens), "count")
+	}
+	if suppressed := atomic.LoadInt64(&m.breakerSuppressed); suppressed > 0 {
+		logger.Metric("sched_breaker_suppressed_count", float64(suppressed), "count")
 	}
 }
 

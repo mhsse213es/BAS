@@ -117,6 +117,39 @@ func TestRunMetrics_Retry_NoCallsEmitsNothing(t *testing.T) {
 	}
 }
 
+func TestRunMetrics_Breaker_EmitsOpenAndSuppressedCounts(t *testing.T) {
+	m := &runMetrics{}
+	m.BreakerOpened()
+	m.BreakerOpened()
+	m.BreakerSuppressed()
+	m.BreakerSuppressed()
+	m.BreakerSuppressed()
+
+	sink := newFakeMetricSink()
+	m.report(sink, 5)
+
+	if got := sink.values("sched_breaker_open_count"); len(got) != 1 || got[0] != 2 {
+		t.Errorf("sched_breaker_open_count = %v, want [2]", got)
+	}
+	if got := sink.values("sched_breaker_suppressed_count"); len(got) != 1 || got[0] != 3 {
+		t.Errorf("sched_breaker_suppressed_count = %v, want [3]", got)
+	}
+}
+
+func TestRunMetrics_Breaker_NoCallsEmitsNothing(t *testing.T) {
+	m := &runMetrics{}
+	m.ExecutionTime(10 * time.Millisecond) // some unrelated activity, no breaker events
+
+	sink := newFakeMetricSink()
+	m.report(sink, 1)
+
+	for _, name := range []string{"sched_breaker_open_count", "sched_breaker_suppressed_count"} {
+		if got := sink.values(name); len(got) != 0 {
+			t.Errorf("%s = %v, want no emission (no breaker events recorded)", name, got)
+		}
+	}
+}
+
 func TestRunGaugeSampler_ReportsActiveAndQueuedThenStopsOnDone(t *testing.T) {
 	var started, finished int64
 	atomic.StoreInt64(&started, 3)

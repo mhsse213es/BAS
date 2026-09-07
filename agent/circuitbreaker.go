@@ -57,26 +57,38 @@ func (b *circuitBreaker) anyOpen(keys []string) bool {
 // terminal outcome (never called per individual retry attempt -- only once
 // a step's own Phase 7 retry sequence is genuinely done). success resets
 // the count to 0; a failure increments it and opens the breaker once it
-// reaches threshold.
-func (b *circuitBreaker) recordOutcome(key string, success bool) {
+// reaches threshold. Returns true iff this call is the one that just
+// transitioned key from closed to open (false on every other call,
+// including one against a key that was already open) -- callers use this
+// to count open *transitions* for telemetry, not every failure recorded
+// against an already-open key.
+func (b *circuitBreaker) recordOutcome(key string, success bool) bool {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if success {
 		b.consecutive[key] = 0
 		b.open[key] = false
-		return
+		return false
 	}
+	wasOpen := b.open[key]
 	b.consecutive[key]++
 	if b.consecutive[key] >= b.threshold {
 		b.open[key] = true
 	}
+	return b.open[key] && !wasOpen
 }
 
-// recordAll records the same terminal outcome against every one of keys.
-func (b *circuitBreaker) recordAll(keys []string, success bool) {
+// recordAll records the same terminal outcome against every one of keys,
+// returning the subset of keys that just transitioned open (see
+// recordOutcome) -- empty, never nil, when none did.
+func (b *circuitBreaker) recordAll(keys []string, success bool) []string {
+	opened := []string{}
 	for _, k := range keys {
-		b.recordOutcome(k, success)
+		if b.recordOutcome(k, success) {
+			opened = append(opened, k)
+		}
 	}
+	return opened
 }
 
 // breakerKeysForStep returns every circuit-breaker key a step participates

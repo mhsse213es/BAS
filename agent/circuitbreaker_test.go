@@ -11,14 +11,30 @@ func TestCircuitBreaker_OpensAfterConsecutiveFailures(t *testing.T) {
 	if b.isOpen("technique:T1055") {
 		t.Fatal("breaker should start closed")
 	}
-	b.recordOutcome("technique:T1055", false)
-	b.recordOutcome("technique:T1055", false)
+	if justOpened := b.recordOutcome("technique:T1055", false); justOpened {
+		t.Fatal("1st of 3 failures should not report a just-opened transition")
+	}
+	if justOpened := b.recordOutcome("technique:T1055", false); justOpened {
+		t.Fatal("2nd of 3 failures should not report a just-opened transition")
+	}
 	if b.isOpen("technique:T1055") {
 		t.Fatal("breaker should still be closed after only 2 of 3 failures")
 	}
-	b.recordOutcome("technique:T1055", false)
+	if justOpened := b.recordOutcome("technique:T1055", false); !justOpened {
+		t.Fatal("3rd failure should report the just-opened transition")
+	}
 	if !b.isOpen("technique:T1055") {
 		t.Fatal("breaker should be open after 3 consecutive failures")
+	}
+}
+
+func TestCircuitBreaker_RecordOutcomeOnlyReportsTransitionOnce(t *testing.T) {
+	b := newCircuitBreaker(3)
+	b.recordOutcome("technique:T1055", false)
+	b.recordOutcome("technique:T1055", false)
+	b.recordOutcome("technique:T1055", false) // opens here
+	if justOpened := b.recordOutcome("technique:T1055", false); justOpened {
+		t.Fatal("a failure against an already-open key must not report another transition")
 	}
 }
 
