@@ -66,7 +66,19 @@ recurring schedules' due-time computation.
   a log line only (see below); an API/UI surface for a predicted next-fire
   time is a reasonable follow-up but is its own pass.
 - **No DB migration.** The jitter offset is derived deterministically from
-  the existing `Schedule.ID`, not stored — see below.
+  the existing `Schedule.ID`, not stored — see below. This alone doesn't
+  make existing rows safe at deploy time, though: every schedule row today
+  has `LastOccurrenceAt` written by the pre-jitter code, in the old
+  nominal-only convention (no offset applied). The dedup check in
+  `nextOccurrenceDaily`/`Weekly`/`Monthly` therefore compares the new
+  jittered instant against `LastOccurrenceAt` with a `scheduleJitterWindow`
+  tolerance, not a bare `After` comparison — see "Where it's applied" below
+  — specifically so a `LastOccurrenceAt` written under either the old or
+  new convention for the same slot is recognized as already-handled. That
+  tolerance is what makes "no data migration needed" actually true, rather
+  than only apparently true (a bare `After` comparison would re-fire
+  roughly half of all existing schedules — those with a positive offset —
+  at the moment this feature deploys).
 
 ## Design
 
@@ -125,7 +137,10 @@ Inside `nextOccurrenceDaily`, `nextOccurrenceWeekly`, and
    scheduleJitterWindow))`.
 4. Use `jittered` (not `candidate`) for the `After(now)` due-check, the
    `LastOccurrenceAt` dedup check, and the final returned `occurrence`
-   value (what `MarkScheduleOccurrenceHandled` persists).
+   value (what `MarkScheduleOccurrenceHandled` persists). The dedup check
+   itself compares `jittered` against `LastOccurrenceAt` with a
+   `scheduleJitterWindow` tolerance (not a bare `After`) — see the "No DB
+   migration" note above for why.
 
 A small consequence worth naming explicitly: a schedule with `TimeOfDay`
 near midnight and a negative offset can have its effective instant land on
@@ -136,6 +151,22 @@ backward-search loops in `nextOccurrenceDaily`/`Weekly`/`Monthly`
 (`daysBack`/`monthsBack`) already tolerate small offsets from the nominal
 calendar boundary; ±2min is far smaller than the day/week/month windows
 those loops already search.
+
+The converse case is worth naming too. Because the backward-search loops
+key off the *current local calendar day* (`nowLocal.Day()` at `daysBack :=
+0`), jitter cannot be *detected* before a schedule's local day begins — the
+loop simply never evaluates a candidate for a day that hasn't started yet.
+So a schedule whose `TimeOfDay` is itself within `scheduleJitterWindow` of
+local midnight gets reduced, not full, spread benefit: it can still fire up
+to 2 minutes *late* (a positive offset pushes it forward into the new day,
+same as any other schedule), but a *negative* offset that would properly
+jitter it to an instant before midnight is clamped to firing right at (or
+just after) midnight instead of at its "true" jittered instant before
+midnight, because that earlier instant falls on a day the loop hasn't
+reached yet on this tick. This affects this spec's own motivating example
+of "many schedules default to `00:00`" specifically — those schedules see
+only the positive half of the jitter window in practice, not the full
+±2min spread.
 
 ### Observability
 

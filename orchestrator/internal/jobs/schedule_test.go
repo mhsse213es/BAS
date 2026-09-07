@@ -487,3 +487,56 @@ func TestNextOccurrenceMonthly_JitterShiftsOccurrence(t *testing.T) {
 		t.Errorf("got occ=%v ok=%v, want %v/true", occ, ok, want)
 	}
 }
+
+// The following three tests guard against the deploy-boundary duplicate-spawn
+// bug: every schedule row in production had LastOccurrenceAt written by the
+// pre-jitter code, in the old nominal (unjittered) convention. If the dedup
+// check compared the new jittered occurrence directly against that old
+// nominal LastOccurrenceAt with no tolerance, any schedule ID with a positive
+// jitterOffset would see jittered.After(LastOccurrenceAt) == true for the
+// slot that was JUST spawned under the old code, and re-fire it.
+
+func TestNextOccurrenceDaily_JitterDoesNotReFireAlreadyHandledSlot(t *testing.T) {
+	loc, _ := time.LoadLocation("UTC")
+	sch := Schedule{ID: "test-schedule-1", RecurrenceType: "daily", TimeOfDay: "14:00", Timezone: "UTC"}
+	if off := jitterOffset(sch.ID, scheduleJitterWindow); off <= 0 {
+		t.Fatalf("test fixture assumption broken: jitterOffset(%q) = %v, want > 0 -- pick a different ID", sch.ID, off)
+	}
+	// Simulate a row written by the old pre-jitter code (or this same slot
+	// already being handled): LastOccurrenceAt holds the nominal,
+	// unjittered time of today's slot.
+	nominal := time.Date(2026, 8, 10, 14, 0, 0, 0, loc)
+	sch.LastOccurrenceAt = &nominal
+	now := time.Date(2026, 8, 10, 14, 5, 0, 0, loc) // after the jittered instant
+	if _, ok := nextOccurrenceSince(sch, now); ok {
+		t.Error("nextOccurrenceSince() ok = true, want false -- slot already handled under the old nominal convention must not re-fire")
+	}
+}
+
+func TestNextOccurrenceWeekly_JitterDoesNotReFireAlreadyHandledSlot(t *testing.T) {
+	loc, _ := time.LoadLocation("UTC")
+	sch := Schedule{ID: "sched-b", RecurrenceType: "weekly", DayOfWeek: 1, TimeOfDay: "09:00", Timezone: "UTC"} // Monday
+	if off := jitterOffset(sch.ID, scheduleJitterWindow); off <= 0 {
+		t.Fatalf("test fixture assumption broken: jitterOffset(%q) = %v, want > 0 -- pick a different ID", sch.ID, off)
+	}
+	nominal := time.Date(2026, 8, 10, 9, 0, 0, 0, loc) // the Monday, nominal (unjittered)
+	sch.LastOccurrenceAt = &nominal
+	now := time.Date(2026, 8, 11, 9, 30, 0, 0, loc) // a Tuesday, well after the jittered instant
+	if _, ok := nextOccurrenceSince(sch, now); ok {
+		t.Error("nextOccurrenceSince() ok = true, want false -- slot already handled under the old nominal convention must not re-fire")
+	}
+}
+
+func TestNextOccurrenceMonthly_JitterDoesNotReFireAlreadyHandledSlot(t *testing.T) {
+	loc, _ := time.LoadLocation("UTC")
+	sch := Schedule{ID: "test-schedule-1", RecurrenceType: "monthly", DayOfMonth: 1, TimeOfDay: "03:00", Timezone: "UTC"}
+	if off := jitterOffset(sch.ID, scheduleJitterWindow); off <= 0 {
+		t.Fatalf("test fixture assumption broken: jitterOffset(%q) = %v, want > 0 -- pick a different ID", sch.ID, off)
+	}
+	nominal := time.Date(2026, 8, 1, 3, 0, 0, 0, loc) // Aug 1's slot, nominal (unjittered)
+	sch.LastOccurrenceAt = &nominal
+	now := time.Date(2026, 8, 5, 0, 0, 0, 0, loc) // Aug 5, well after the jittered instant
+	if _, ok := nextOccurrenceSince(sch, now); ok {
+		t.Error("nextOccurrenceSince() ok = true, want false -- slot already handled under the old nominal convention must not re-fire")
+	}
+}

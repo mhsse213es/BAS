@@ -156,7 +156,7 @@ func nextOccurrenceDaily(sch Schedule, now time.Time, loc *time.Location) (time.
 		if jittered.After(now) {
 			continue
 		}
-		if sch.LastOccurrenceAt != nil && !jittered.After(*sch.LastOccurrenceAt) {
+		if sch.LastOccurrenceAt != nil && !jittered.After(sch.LastOccurrenceAt.Add(scheduleJitterWindow)) {
 			return time.Time{}, false
 		}
 		return jittered.UTC(), true
@@ -179,7 +179,7 @@ func nextOccurrenceWeekly(sch Schedule, now time.Time, loc *time.Location) (time
 		if jittered.After(now) {
 			continue
 		}
-		if sch.LastOccurrenceAt != nil && !jittered.After(*sch.LastOccurrenceAt) {
+		if sch.LastOccurrenceAt != nil && !jittered.After(sch.LastOccurrenceAt.Add(scheduleJitterWindow)) {
 			return time.Time{}, false
 		}
 		return jittered.UTC(), true
@@ -206,7 +206,7 @@ func nextOccurrenceMonthly(sch Schedule, now time.Time, loc *time.Location) (tim
 		if jittered.After(now) {
 			continue
 		}
-		if sch.LastOccurrenceAt != nil && !jittered.After(*sch.LastOccurrenceAt) {
+		if sch.LastOccurrenceAt != nil && !jittered.After(sch.LastOccurrenceAt.Add(scheduleJitterWindow)) {
 			return time.Time{}, false
 		}
 		return jittered.UTC(), true

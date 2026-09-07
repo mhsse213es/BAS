@@ -300,12 +300,15 @@ func TestTick_SpawnsDueSchedule(t *testing.T) {
 		ctx := context.Background()
 		store := NewStore(pool)
 		payload, _ := json.Marshal(map[string]string{"remediationId": "enable_windows_firewall", "reason": "weekly"})
-		// A schedule whose weekly slot is definitely in the past relative to
-		// "now" and has never been checked (LastOccurrenceAt nil) -- today's
-		// weekday at 00:00 UTC is always at or before "now" for any test run.
+		// A schedule whose weekly slot is at least an hour in the past
+		// relative to "now" (comfortably beyond scheduleJitterWindow) and
+		// has never been checked (LastOccurrenceAt nil) -- guaranteed due
+		// regardless of when this test runs or which way a schedule's ID
+		// happens to jitter.
+		ref := time.Now().UTC().Add(-1 * time.Hour)
 		sch, err := store.CreateSchedule(ctx, Schedule{
 			Type: "batch_remediation", Payload: payload, AgentIDs: []string{"sched-agent-1"},
-			DayOfWeek: int(time.Now().UTC().Weekday()), TimeOfDay: "00:00", Timezone: "UTC", Enabled: true, CreatedBy: "user-1",
+			DayOfWeek: int(ref.Weekday()), TimeOfDay: ref.Format("15:04"), Timezone: "UTC", Enabled: true, CreatedBy: "user-1",
 		})
 		if err != nil {
 			t.Fatalf("CreateSchedule: %v", err)
@@ -354,9 +357,15 @@ func TestTick_SpawnsDueSchedule_AssignsSpawnedJobToInitiative(t *testing.T) {
 		}
 
 		payload, _ := json.Marshal(map[string]string{"remediationId": "enable_windows_firewall", "reason": "weekly"})
+		// A schedule whose weekly slot is at least an hour in the past
+		// relative to "now" (comfortably beyond scheduleJitterWindow) and
+		// has never been checked (LastOccurrenceAt nil) -- guaranteed due
+		// regardless of when this test runs or which way a schedule's ID
+		// happens to jitter.
+		ref := time.Now().UTC().Add(-1 * time.Hour)
 		sch, err := store.CreateSchedule(ctx, Schedule{
 			Type: "batch_remediation", Payload: payload, AgentIDs: []string{"sched-agent-init-1"},
-			DayOfWeek: int(time.Now().UTC().Weekday()), TimeOfDay: "00:00", Timezone: "UTC", Enabled: true, CreatedBy: "user-1",
+			DayOfWeek: int(ref.Weekday()), TimeOfDay: ref.Format("15:04"), Timezone: "UTC", Enabled: true, CreatedBy: "user-1",
 			InitiativeID: initiativeID,
 		})
 		if err != nil {
@@ -403,9 +412,15 @@ func TestTick_SkipsScheduleWhenPreviousSpawnStillActive(t *testing.T) {
 			t.Fatalf("SetJobState: %v", err)
 		}
 
+		// A schedule whose weekly slot is at least an hour in the past
+		// relative to "now" (comfortably beyond scheduleJitterWindow) and
+		// has never been checked (LastOccurrenceAt nil) -- guaranteed due
+		// regardless of when this test runs or which way a schedule's ID
+		// happens to jitter.
+		ref := time.Now().UTC().Add(-1 * time.Hour)
 		sch, err := store.CreateSchedule(ctx, Schedule{
 			Type: "batch_remediation", Payload: payload, AgentIDs: []string{"sched-agent-2"},
-			DayOfWeek: int(time.Now().UTC().Weekday()), TimeOfDay: "00:00", Timezone: "UTC", Enabled: true, CreatedBy: "user-1",
+			DayOfWeek: int(ref.Weekday()), TimeOfDay: ref.Format("15:04"), Timezone: "UTC", Enabled: true, CreatedBy: "user-1",
 		})
 		if err != nil {
 			t.Fatalf("CreateSchedule: %v", err)
@@ -439,9 +454,15 @@ func TestTick_DisabledScheduleNeverSpawns(t *testing.T) {
 		ctx := context.Background()
 		store := NewStore(pool)
 		payload, _ := json.Marshal(map[string]string{"remediationId": "enable_windows_firewall", "reason": "weekly"})
+		// A schedule whose weekly slot is at least an hour in the past
+		// relative to "now" (comfortably beyond scheduleJitterWindow) and
+		// has never been checked (LastOccurrenceAt nil) -- guaranteed due
+		// regardless of when this test runs or which way a schedule's ID
+		// happens to jitter.
+		ref := time.Now().UTC().Add(-1 * time.Hour)
 		sch, err := store.CreateSchedule(ctx, Schedule{
 			Type: "batch_remediation", Payload: payload, AgentIDs: []string{"sched-agent-3"},
-			DayOfWeek: int(time.Now().UTC().Weekday()), TimeOfDay: "00:00", Timezone: "UTC", Enabled: true, CreatedBy: "user-1",
+			DayOfWeek: int(ref.Weekday()), TimeOfDay: ref.Format("15:04"), Timezone: "UTC", Enabled: true, CreatedBy: "user-1",
 		})
 		if err != nil {
 			t.Fatalf("CreateSchedule: %v", err)
