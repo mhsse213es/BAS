@@ -111,3 +111,57 @@ func TestWsReconnectBackoff_NeverExceedsCap(t *testing.T) {
 		}
 	}
 }
+
+func TestWsBackoffDelayCapped_UsesGivenCeiling(t *testing.T) {
+	cases := []struct {
+		attempt int
+		max     time.Duration
+		want    time.Duration
+	}{
+		{0, 5 * time.Second, 1 * time.Second},
+		{1, 5 * time.Second, 2 * time.Second},
+		{2, 5 * time.Second, 4 * time.Second},
+		{3, 5 * time.Second, 5 * time.Second}, // 8s would exceed the 5s cap
+		{100, 5 * time.Second, 5 * time.Second},
+	}
+	for _, c := range cases {
+		got := wsBackoffDelayCapped(c.attempt, c.max)
+		if got != c.want {
+			t.Errorf("wsBackoffDelayCapped(%d, %s) = %s, want %s", c.attempt, c.max, got, c.want)
+		}
+	}
+}
+
+func TestWsBackoffDelay_MatchesCappedWithWsBackoffMax(t *testing.T) {
+	// wsBackoffDelay must stay byte-for-byte equivalent to the general
+	// function called with the existing package ceiling -- this is what
+	// proves the refactor changed nothing about existing behavior.
+	for attempt := 0; attempt <= 10; attempt++ {
+		got := wsBackoffDelay(attempt)
+		want := wsBackoffDelayCapped(attempt, wsBackoffMax)
+		if got != want {
+			t.Errorf("wsBackoffDelay(%d) = %s, want %s (wsBackoffDelayCapped with wsBackoffMax)", attempt, got, want)
+		}
+	}
+}
+
+func TestWsProxyAuthReconnectBackoff_WithinProxyAuthCeiling(t *testing.T) {
+	for attempt := 0; attempt <= 20; attempt++ {
+		got := wsProxyAuthReconnectBackoff(attempt)
+		if got < 0 || got > proxyAuthBackoffMax {
+			t.Errorf("wsProxyAuthReconnectBackoff(%d) = %s, want within [0, %s]", attempt, got, proxyAuthBackoffMax)
+		}
+	}
+}
+
+func TestProxyAuthBackoffMax_ExceedsNormalCeiling(t *testing.T) {
+	// Guards against someone "simplifying" proxyAuthBackoffMax back down to
+	// wsBackoffMax -- the whole point of this constant is that it's higher.
+	if proxyAuthBackoffMax <= wsBackoffMax {
+		t.Fatalf("proxyAuthBackoffMax (%s) must exceed wsBackoffMax (%s)", proxyAuthBackoffMax, wsBackoffMax)
+	}
+	delay := wsBackoffDelayCapped(20, proxyAuthBackoffMax)
+	if delay != proxyAuthBackoffMax {
+		t.Fatalf("wsBackoffDelayCapped(20, proxyAuthBackoffMax) = %s, want %s (should have saturated)", delay, proxyAuthBackoffMax)
+	}
+}
