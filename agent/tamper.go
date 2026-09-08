@@ -144,6 +144,67 @@ func readEncryptedSecretFrom(regKey string) string {
 	return secret
 }
 
+// StoreProxyCredentials DPAPI-encrypts the proxy password and writes both the
+// username (plain — not a secret) and the encrypted password blob to the
+// service Parameters registry key, mirroring StoreEncryptedSecret's pattern
+// for the agent secret. Not called from any production code path in this
+// pass (see the plan's Global Constraints) — exported for a future
+// install-flow fast-follow; operators configure this via BAS_PROXY_USER/
+// BAS_PROXY_PASSWORD environment variables today, same as AgentSecret's own
+// documented override path.
+func StoreProxyCredentials(user, password string) error {
+	k, _, err := registry.CreateKey(registry.LOCAL_MACHINE, paramKey, registry.SET_VALUE)
+	if err != nil {
+		return fmt.Errorf("registry create key: %w", err)
+	}
+	defer k.Close()
+	if err := k.SetStringValue("BAS_PROXY_USER", user); err != nil {
+		return fmt.Errorf("write BAS_PROXY_USER: %w", err)
+	}
+	if password == "" {
+		// Clear any previously stored password rather than leaving it in
+		// place -- an empty password here means "no password configured
+		// now", not "leave whatever was there before".
+		if err := k.DeleteValue("BAS_PROXY_PASSWORD_ENC"); err != nil && err != registry.ErrNotExist {
+			return fmt.Errorf("clear BAS_PROXY_PASSWORD_ENC: %w", err)
+		}
+		return nil
+	}
+	blob, err := EncryptSecret(password)
+	if err != nil {
+		return fmt.Errorf("encrypt proxy password: %w", err)
+	}
+	return k.SetStringValue("BAS_PROXY_PASSWORD_ENC", hex.EncodeToString(blob))
+}
+
+// ReadProxyCredentials reads the proxy username and DPAPI-decrypts the proxy
+// password from the service Parameters registry key. Returns ("", "") if
+// either is absent — mirrors ReadEncryptedSecret's "absent or fails ->
+// empty" contract, since an agent with no configured proxy credentials is a
+// normal, common case, not an error.
+func ReadProxyCredentials() (user, password string) {
+	k, err := registry.OpenKey(registry.LOCAL_MACHINE, paramKey, registry.QUERY_VALUE)
+	if err != nil {
+		return "", ""
+	}
+	defer k.Close()
+	user, _, _ = k.GetStringValue("BAS_PROXY_USER")
+	hexBlob, _, err := k.GetStringValue("BAS_PROXY_PASSWORD_ENC")
+	if err != nil || hexBlob == "" {
+		return user, ""
+	}
+	blob, err := hex.DecodeString(hexBlob)
+	if err != nil {
+		return user, ""
+	}
+	password, err = DecryptSecret(blob)
+	if err != nil {
+		log.Printf("[config] proxy password DPAPI decrypt failed: %v", err)
+		return user, ""
+	}
+	return user, password
+}
+
 // readBinaryHashFrom reads the BAS_BINARY_HASH value stored at regKey (see
 // StoreBinaryHash), or "" if absent. Used by migrateLegacyServiceName to
 // carry the hash forward from svcNameLegacy before it is deleted.

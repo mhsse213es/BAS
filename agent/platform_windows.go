@@ -126,3 +126,9 @@ func platformRestoreOnShutdown() {
 func readEncryptedSecretPlatform() string {
 	return ReadEncryptedSecret()
 }
+
+// readProxyCredentialsPlatform returns the DPAPI-decrypted proxy credentials
+// from the registry (Windows service installs).
+func readProxyCredentialsPlatform() (user, password string) {
+	return ReadProxyCredentials()
+}

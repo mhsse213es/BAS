@@ -6,9 +6,11 @@ import (
 )
 
 type Config struct {
-	ServerURL   string
-	EnvLabel    string
-	AgentSecret string // shared secret for X-Agent-Token + result HMAC signing
+	ServerURL     string
+	EnvLabel      string
+	AgentSecret   string // shared secret for X-Agent-Token + result HMAC signing
+	ProxyUser     string // forward-proxy username, Basic auth only (NTLM needs none)
+	ProxyPassword string // forward-proxy password, Basic auth only
 }
 
 func loadConfig() Config {
@@ -31,6 +33,11 @@ func loadConfig() Config {
 	if agentSecret == "" {
 		agentSecret = readEncryptedSecretPlatform()
 	}
+	proxyUser := os.Getenv("BAS_PROXY_USER")
+	proxyPassword := os.Getenv("BAS_PROXY_PASSWORD")
+	if proxyUser == "" && proxyPassword == "" {
+		proxyUser, proxyPassword = readProxyCredentialsPlatform()
+	}
 	if serverURL == "" {
 		serverURL = "http://localhost:9000"
 	}
@@ -38,8 +45,10 @@ func loadConfig() Config {
 		envLabel = "Production"
 	}
 	return Config{
-		ServerURL:   strings.TrimRight(serverURL, "/"),
-		EnvLabel:    envLabel,
-		AgentSecret: agentSecret,
+		ServerURL:     strings.TrimRight(serverURL, "/"),
+		EnvLabel:      envLabel,
+		AgentSecret:   agentSecret,
+		ProxyUser:     proxyUser,
+		ProxyPassword: proxyPassword,
 	}
 }

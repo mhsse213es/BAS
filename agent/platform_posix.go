@@ -26,5 +26,17 @@ var posixReadAgentSecret = readAgentSecret
 // Server: line and made it look like a server fault.
 func readEncryptedSecretPlatform() string { return posixReadAgentSecret() }
 
+// posixReadProxyCredentials indirects readProxyCredentials the same way
+// posixReadAgentSecret indirects readAgentSecret above, for the same
+// testing reason.
+var posixReadProxyCredentials = readProxyCredentials
+
+// readProxyCredentialsPlatform returns the proxy credentials from the
+// installed service config (see readProxyCredentials in
+// service_linux.go / service_darwin.go).
+func readProxyCredentialsPlatform() (user, password string) {
+	return posixReadProxyCredentials()
+}
+
 // platformRestoreOnShutdown is a no-op on non-Windows.
 func platformRestoreOnShutdown() {}

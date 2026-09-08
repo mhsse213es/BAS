@@ -63,3 +63,29 @@ func TestLoadConfig_NoServiceConfigYieldsEmptySecret(t *testing.T) {
 		t.Errorf("AgentSecret = %q, want empty when there is no config to read", got)
 	}
 }
+
+func TestLoadConfig_ProxyCredentials_EnvVarTakesPriority(t *testing.T) {
+	t.Setenv("BAS_PROXY_USER", "env-user")
+	t.Setenv("BAS_PROXY_PASSWORD", "env-pass")
+	orig := posixReadProxyCredentials
+	posixReadProxyCredentials = func() (string, string) { return "file-user", "file-pass" }
+	defer func() { posixReadProxyCredentials = orig }()
+
+	cfg := loadConfig()
+	if cfg.ProxyUser != "env-user" || cfg.ProxyPassword != "env-pass" {
+		t.Errorf("ProxyUser/ProxyPassword = %q/%q, want env-user/env-pass (env var must win)", cfg.ProxyUser, cfg.ProxyPassword)
+	}
+}
+
+func TestLoadConfig_ProxyCredentials_FallsBackToPlatformWhenEnvAbsent(t *testing.T) {
+	t.Setenv("BAS_PROXY_USER", "")
+	t.Setenv("BAS_PROXY_PASSWORD", "")
+	orig := posixReadProxyCredentials
+	posixReadProxyCredentials = func() (string, string) { return "file-user", "file-pass" }
+	defer func() { posixReadProxyCredentials = orig }()
+
+	cfg := loadConfig()
+	if cfg.ProxyUser != "file-user" || cfg.ProxyPassword != "file-pass" {
+		t.Errorf("ProxyUser/ProxyPassword = %q/%q, want file-user/file-pass (fallback)", cfg.ProxyUser, cfg.ProxyPassword)
+	}
+}

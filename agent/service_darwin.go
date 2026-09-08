@@ -23,7 +23,10 @@ func svcInstall(serverURL, envLabel, secret string) error {
 	if err := os.MkdirAll(darwinConfigDir, 0755); err != nil {
 		return fmt.Errorf("create config dir: %w", err)
 	}
-	cfg := fmt.Sprintf("BAS_SERVER_URL=%s\nBAS_ENV_LABEL=%s\nBAS_AGENT_SECRET=%s\n", serverURL, envLabel, secret)
+	proxyUser := os.Getenv("BAS_PROXY_USER")
+	proxyPassword := os.Getenv("BAS_PROXY_PASSWORD")
+	cfg := fmt.Sprintf("BAS_SERVER_URL=%s\nBAS_ENV_LABEL=%s\nBAS_AGENT_SECRET=%s\nBAS_PROXY_USER=%s\nBAS_PROXY_PASSWORD=%s\n",
+		serverURL, envLabel, secret, proxyUser, proxyPassword)
 	if err := os.WriteFile(darwinConfigFile, []byte(cfg), 0600); err != nil {
 		return fmt.Errorf("write config: %w", err)
 	}
@@ -121,6 +124,27 @@ func readAgentSecret() string {
 		}
 	}
 	return ""
+}
+
+// readProxyCredentials reads BAS_PROXY_USER/BAS_PROXY_PASSWORD from the
+// config file written at install time, mirroring readAgentSecret's rationale
+// for the agent secret: a service-managed agent already has these injected
+// as real env vars via EnvironmentFile=, but code that runs outside that
+// context (or before the file exists) needs this fallback.
+func readProxyCredentials() (user, password string) {
+	data, err := os.ReadFile(darwinConfigFile)
+	if err != nil {
+		return "", ""
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if v, ok := strings.CutPrefix(line, "BAS_PROXY_USER="); ok {
+			user = v
+		} else if v, ok := strings.CutPrefix(line, "BAS_PROXY_PASSWORD="); ok {
+			password = v
+		}
+	}
+	return user, password
 }
 
 // darwinLaunchdLabel matches the <key>Label</key> written into the plist by
