@@ -16,6 +16,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/gorilla/websocket"
+
 	"audspect/agent/protocol"
 	"audspect/agent/sched"
 )
@@ -1205,11 +1207,15 @@ func (a *Agent) connectWS() {
 	// never merely because Dial returned no error. Across a fleet, this plus
 	// wsJitter's full jitter is what keeps a server restart from bringing every
 	// agent back in lockstep.
+	dialer := &websocket.Dialer{NetDialContext: proxyAwareNetDialContext(a.cfg)}
 	attempt := 0
 	for {
-		conn, err := protocol.DialAgentWS(a.cfg.ServerURL, a.id.AgentID, a.cfg.AgentSecret)
+		conn, err := protocol.DialAgentWSWithDialer(a.cfg.ServerURL, a.id.AgentID, a.cfg.AgentSecret, dialer)
 		if err != nil {
 			delay := wsReconnectBackoff(attempt)
+			if errors.Is(err, ErrProxyCredentialsRejected) {
+				delay = wsProxyAuthReconnectBackoff(attempt)
+			}
 			log.Printf("[!] WS connect failed: %v — retry in %s (attempt %d)", err, delay.Round(time.Millisecond), attempt+1)
 			a.logger.Op("warn", "connectivity", fmt.Sprintf("WebSocket dial failed (attempt %d): %v — retrying in %s", attempt+1, err, delay.Round(time.Millisecond)))
 			attempt++

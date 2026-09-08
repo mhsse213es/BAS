@@ -21,11 +21,20 @@ const (
 )
 
 // DialAgentWS connects to /ws/agent and arms the ping/pong keepalive
-// handshake. Shared by the real agent and loadgen -- the single
-// network-calling implementation of the WS connect step. Reconnect timing
-// is the caller's concern (the real agent and loadgen each retry
-// differently), so this makes exactly one connection attempt and returns.
+// handshake, using the default dialer (no custom proxy handling). Shared by
+// the real agent and loadgen -- the single network-calling implementation of
+// the WS connect step. Reconnect timing is the caller's concern (the real
+// agent and loadgen each retry differently), so this makes exactly one
+// connection attempt and returns.
 func DialAgentWS(serverURL, agentID, agentSecret string) (*websocket.Conn, error) {
+	return DialAgentWSWithDialer(serverURL, agentID, agentSecret, websocket.DefaultDialer)
+}
+
+// DialAgentWSWithDialer is DialAgentWS with an explicit *websocket.Dialer --
+// the real agent uses this with a proxy-aware NetDialContext (see
+// agent/proxyauth.go's proxyAwareNetDialContext); loadgen and every other
+// caller keeps using DialAgentWS, unaffected by this addition.
+func DialAgentWSWithDialer(serverURL, agentID, agentSecret string, dialer *websocket.Dialer) (*websocket.Conn, error) {
 	rawURL := strings.Replace(serverURL, "http://", "ws://", 1)
 	rawURL = strings.Replace(rawURL, "https://", "wss://", 1)
 
@@ -40,7 +49,7 @@ func DialAgentWS(serverURL, agentID, agentSecret string) (*websocket.Conn, error
 	}
 	u.RawQuery = q.Encode()
 
-	conn, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
+	conn, _, err := dialer.Dial(u.String(), nil)
 	if err != nil {
 		return nil, fmt.Errorf("WS dial: %w", err)
 	}

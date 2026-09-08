@@ -1,7 +1,9 @@
 package protocol
 
 import (
+	"context"
 	"encoding/json"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -59,6 +61,70 @@ func TestReadMessage_MalformedFrameReturnsError(t *testing.T) {
 
 	if _, err := ReadMessage(conn); err == nil {
 		t.Fatal("ReadMessage: want error decoding malformed JSON, got nil")
+	}
+}
+
+func TestDialAgentWSWithDialer_UsesSuppliedDialer(t *testing.T) {
+	upgrader := websocket.Upgrader{}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		conn.WriteJSON(WSMessage{Type: "command_cancel"})
+	}))
+	defer server.Close()
+
+	dialCalled := false
+	dialer := &websocket.Dialer{
+		NetDialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+			dialCalled = true
+			var d net.Dialer
+			return d.DialContext(ctx, network, addr)
+		},
+	}
+
+	conn, err := DialAgentWSWithDialer(server.URL, "a1", "", dialer)
+	if err != nil {
+		t.Fatalf("DialAgentWSWithDialer: %v", err)
+	}
+	defer conn.Close()
+
+	if !dialCalled {
+		t.Error("supplied dialer's NetDialContext was never called -- DialAgentWSWithDialer did not use it")
+	}
+
+	msg, err := ReadMessage(conn)
+	if err != nil {
+		t.Fatalf("ReadMessage: %v", err)
+	}
+	if msg.Type != "command_cancel" {
+		t.Errorf("msg.Type = %q, want command_cancel", msg.Type)
+	}
+}
+
+func TestDialAgentWS_StillWorksUnchanged(t *testing.T) {
+	// Regression guard: DialAgentWS itself (the function loadgen calls) must
+	// keep working exactly as before now that it's a thin wrapper.
+	upgrader := websocket.Upgrader{}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		conn.WriteJSON(WSMessage{Type: "command_cancel"})
+	}))
+	defer server.Close()
+
+	conn, err := DialAgentWS(server.URL, "a1", "")
+	if err != nil {
+		t.Fatalf("DialAgentWS: %v", err)
+	}
+	defer conn.Close()
+	if _, err := ReadMessage(conn); err != nil {
+		t.Fatalf("ReadMessage: %v", err)
 	}
 }
 
