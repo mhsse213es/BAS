@@ -15,14 +15,17 @@ var gif1x1 = []byte{
 
 func (t *Tracker) handleOpen(w http.ResponseWriter, r *http.Request, tok *TrackToken) {
 	if tok.UsedCount == 0 {
+		// r.RemoteAddr is already trust-aware here -- see handler.go's
+		// HandleWebhook for the full rationale (same shared router, same
+		// trustedRealIP middleware upstream).
 		payload := map[string]any{
 			"target_id": tok.TargetID,
-			"ip":        realIP(r),
+			"ip":        r.RemoteAddr,
 			"ua":        r.UserAgent(),
 			"ts":        time.Now().UTC(),
 		}
 		_ = t.recorder.Record(r.Context(), tok.ExecutionID, tok.StepExecID,
-			"email_opened", tok.TargetID, realIP(r), payload)
+			"email_opened", tok.TargetID, r.RemoteAddr, payload)
 	}
 	w.Header().Set("Content-Type", "image/gif")
 	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")

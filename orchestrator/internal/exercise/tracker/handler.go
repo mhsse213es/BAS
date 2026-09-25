@@ -4,7 +4,6 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"strings"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -81,8 +80,17 @@ func (t *Tracker) HandleWebhook(w http.ResponseWriter, r *http.Request) {
 		if wh, ok := t.tokens.(WebhookStore); ok {
 			_ = wh.InsertWebhookCall(r.Context(), tok.Token, tok.ExecutionID, tok.StepExecID, body)
 		}
+		// r.RemoteAddr is already trust-aware by this point: Tracker's routes
+		// are mounted on the same chi router as the rest of the API (see
+		// internal/api/routes.go), whose top-level trustedRealIP middleware
+		// rewrites it from a forwarded-for header ONLY when the direct peer
+		// is a trusted (private/loopback) reverse-proxy address -- never
+		// from an untrusted direct client. This package previously had its
+		// own, separately vulnerable copy of that logic (unconditionally
+		// trusting X-Forwarded-For), which would have re-introduced the
+		// same IP-spoofing hole on top of the shared fix.
 		_ = t.recorder.Record(r.Context(), tok.ExecutionID, tok.StepExecID,
-			"webhook_received", realIP(r), "inbound_webhook",
+			"webhook_received", r.RemoteAddr, "inbound_webhook",
 			map[string]any{"token": tok.Token, "content_type": r.Header.Get("Content-Type")})
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`{"status":"ok"}`))
@@ -102,11 +110,4 @@ func (t *Tracker) withToken(w http.ResponseWriter, r *http.Request, token string
 		return
 	}
 	fn(tok)
-}
-
-func realIP(r *http.Request) string {
-	if v := r.Header.Get("X-Forwarded-For"); v != "" {
-		return strings.SplitN(v, ",", 2)[0]
-	}
-	return r.RemoteAddr
 }

@@ -23,7 +23,11 @@ import (
 func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler http.Handler, rateLimitPerMin, rateLimitBurst int, tracker ...*exercisetracker.Tracker) http.Handler {
 	r := chi.NewRouter()
 
-	r.Use(middleware.RealIP)
+	// trustedRealIP (realip.go) replaces chi's own middleware.RealIP, which
+	// unconditionally trusts X-Forwarded-For/X-Real-IP -- spoofable by any
+	// direct client in this product's default (no bundled reverse proxy)
+	// deployment. See that file's doc comment for the full rationale.
+	r.Use(trustedRealIP)
 	r.Use(RequestLoggingMiddleware)
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.StripSlashes)
