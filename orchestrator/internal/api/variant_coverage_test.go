@@ -249,6 +249,87 @@ func TestComputeVariantTechniqueSummary_AggregatesAndFindsBestBypass(t *testing.
 	})
 }
 
+// TestComputeVariantTechniqueSummary_MultipleTechniques_BatchedCorrectly pins
+// the exact behavior the N+1 fix changed: fetchBestBypassIDs' single
+// IN(...)/DISTINCT ON query and the pgx.Batch upsert must independently
+// resolve and persist the correct summary for EACH technique in a run that
+// covers more than one -- not just the single-technique case the original
+// test above already pinned. It seeds two techniques: one with a qualifying
+// bypassed result (must get a non-nil best_bypass_variant_id pointing at
+// that exact row) and one with only blocked results and no
+// scenario_variant_results row at all (must get bypassed=0 and a NULL
+// best_bypass_variant_id, proving a technique absent from the batched
+// lookup's result set is handled safely, not confused with another
+// technique's row).
+func TestComputeVariantTechniqueSummary_MultipleTechniques_BatchedCorrectly(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		runID := "cvts-multi-run"
+		// Only T1059.001 gets a persisted variant-results row -- T1055 has no
+		// bypassed/detected/logged result to find, simulating a technique
+		// where every variant was blocked.
+		seedVariantResult(t, pool, "cvts-multi-bestA", runID, "T1059.001", "base-1", "v-bypass", "base64", "system", "com", "bypassed")
+
+		results := []models.SimulationResult{
+			{ID: "a-blocked", Result: models.ResultPass, Technique: models.AttackTechnique{ID: "T1059.001", Name: "PowerShell", Tactic: "execution"}},
+			{ID: "a-bypassed", Result: models.ResultFail, Technique: models.AttackTechnique{ID: "T1059.001", Name: "PowerShell", Tactic: "execution"}},
+			{ID: "b-blocked-1", Result: models.ResultPass, Technique: models.AttackTechnique{ID: "T1055", Name: "Process Injection", Tactic: "defense-evasion"}},
+			{ID: "b-blocked-2", Result: models.ResultPass, Technique: models.AttackTechnique{ID: "T1055", Name: "Process Injection", Tactic: "defense-evasion"}},
+		}
+		meta := map[string]scenario.StepMeta{
+			"a-blocked":   {TechniqueID: "T1059.001", BaseTaskID: "base-1", VariantSpec: &scenario.VariantSpec{Encoding: "plain", Privilege: "user", ExecContext: "direct"}},
+			"a-bypassed":  {TechniqueID: "T1059.001", BaseTaskID: "base-1", VariantSpec: &scenario.VariantSpec{Encoding: "base64", Privilege: "system", ExecContext: "com"}},
+			"b-blocked-1": {TechniqueID: "T1055", BaseTaskID: "base-2", VariantSpec: &scenario.VariantSpec{Encoding: "plain", Privilege: "user", ExecContext: "direct"}},
+			"b-blocked-2": {TechniqueID: "T1055", BaseTaskID: "base-2", VariantSpec: &scenario.VariantSpec{Encoding: "charcode", Privilege: "user", ExecContext: "direct"}},
+		}
+		h := variantHandler(t, pool)
+		h.computeVariantTechniqueSummary(context.Background(), runID, results, meta)
+
+		rows, err := pool.Query(context.Background(),
+			`SELECT technique_id, variants_executed, blocked, bypassed, best_bypass_variant_id
+			   FROM scenario_variant_technique_summary WHERE run_id=$1 ORDER BY technique_id`, runID)
+		if err != nil {
+			t.Fatalf("query summary rows: %v", err)
+		}
+		defer rows.Close()
+
+		type row struct {
+			techID                   string
+			total, blocked, bypassed int
+			bestBypassID             *string
+		}
+		var got []row
+		for rows.Next() {
+			var r row
+			if err := rows.Scan(&r.techID, &r.total, &r.blocked, &r.bypassed, &r.bestBypassID); err != nil {
+				t.Fatalf("scan: %v", err)
+			}
+			got = append(got, r)
+		}
+		if len(got) != 2 {
+			t.Fatalf("got %d summary rows, want 2 (one per technique): %+v", len(got), got)
+		}
+
+		// T1055 sorts before T1059.001 lexically.
+		t1055, t1059 := got[0], got[1]
+		if t1055.techID != "T1055" || t1055.total != 2 || t1055.blocked != 2 || t1055.bypassed != 0 {
+			t.Fatalf("T1055 row = %+v, want total=2 blocked=2 bypassed=0", t1055)
+		}
+		if t1055.bestBypassID != nil {
+			t.Errorf("T1055 best_bypass_variant_id = %v, want nil (no qualifying result, and no cross-contamination from T1059.001's row)", *t1055.bestBypassID)
+		}
+
+		if t1059.techID != "T1059.001" || t1059.total != 2 || t1059.blocked != 1 || t1059.bypassed != 1 {
+			t.Fatalf("T1059.001 row = %+v, want total=2 blocked=1 bypassed=1", t1059)
+		}
+		if t1059.bestBypassID == nil || *t1059.bestBypassID != "cvts-multi-bestA" {
+			t.Fatalf("T1059.001 best_bypass_variant_id = %v, want cvts-multi-bestA", t1059.bestBypassID)
+		}
+	})
+}
+
 func TestGetVariantCoverage_AggregatesOncePerTechnique(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping container-backed test in -short mode")

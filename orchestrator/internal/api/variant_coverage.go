@@ -10,6 +10,8 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/audspect/bas/internal/models"
 	"github.com/audspect/bas/internal/scenario"
@@ -161,54 +163,112 @@ func (h *Handler) computeVariantTechniqueSummary(
 		}
 	}
 
+	if len(byTech) == 0 {
+		return
+	}
+	techIDs := make([]string, 0, len(byTech))
+	for techID := range byTech {
+		techIDs = append(techIDs, techID)
+	}
+	bestBypassByTech := fetchBestBypassIDs(ctx, h.db, runID, techIDs)
+
+	// Batched upsert: one pipelined round trip for every technique in this
+	// run instead of one Exec per technique (see fetchBestBypassIDs' doc
+	// comment for why the lookup above is batched the same way -- this
+	// function previously issued 2 serial DB round trips PER TECHNIQUE,
+	// meaning a run covering dozens of techniques could issue 60-80+
+	// round trips here alone).
+	const upsert = `
+		INSERT INTO scenario_variant_technique_summary
+		  (run_id, technique_id, technique_name, tactic, variants_executed,
+		   blocked, detected, logged, bypassed, errors, skipped,
+		   best_bypass_variant_id, encodings_tested, privileges_tested, contexts_tested)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+		ON CONFLICT (run_id, technique_id) DO UPDATE SET
+		  variants_executed      = EXCLUDED.variants_executed,
+		  blocked                = EXCLUDED.blocked,
+		  detected               = EXCLUDED.detected,
+		  logged                 = EXCLUDED.logged,
+		  bypassed               = EXCLUDED.bypassed,
+		  errors                 = EXCLUDED.errors,
+		  skipped                = EXCLUDED.skipped,
+		  best_bypass_variant_id = EXCLUDED.best_bypass_variant_id,
+		  encodings_tested       = EXCLUDED.encodings_tested,
+		  privileges_tested      = EXCLUDED.privileges_tested,
+		  contexts_tested        = EXCLUDED.contexts_tested,
+		  computed_at            = NOW()`
+
+	batch := &pgx.Batch{}
 	for techID, a := range byTech {
 		total := a.blocked + a.detected + a.logged + a.bypassed + a.errors + a.skipped
-
-		// Best bypass: most dangerous allowed result by privilege > context > encoding.
-		// Ordering: bypassed > detected > logged; then privilege tier; then exec context; then encoding.
-		var bestID *string
-		h.db.QueryRow(ctx, `
-			SELECT id FROM scenario_variant_results
-			WHERE run_id = $1 AND technique_id = $2
-			  AND verdict IN ('bypassed','detected','logged')
-			ORDER BY
-			  CASE verdict   WHEN 'bypassed'       THEN 3 WHEN 'detected'      THEN 2 WHEN 'logged'         THEN 1 ELSE 0 END DESC,
-			  CASE privilege WHEN 'system'         THEN 3 WHEN 'admin'         THEN 2                        ELSE 1 END DESC,
-			  CASE execution_context
-			                 WHEN 'com'            THEN 4 WHEN 'scheduled-task' THEN 3 WHEN 'wmi'            THEN 2 ELSE 1 END DESC,
-			  CASE encoding  WHEN 'charcode'       THEN 3 WHEN 'base64'        THEN 2                        ELSE 1 END DESC
-			LIMIT 1`,
-			runID, techID,
-		).Scan(&bestID)
-
-		encs := setToSlice(a.encodings)
-		privs := setToSlice(a.privileges)
-		ctxs := setToSlice(a.contexts)
-
-		_, _ = h.db.Exec(ctx, `
-			INSERT INTO scenario_variant_technique_summary
-			  (run_id, technique_id, technique_name, tactic, variants_executed,
-			   blocked, detected, logged, bypassed, errors, skipped,
-			   best_bypass_variant_id, encodings_tested, privileges_tested, contexts_tested)
-			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
-			ON CONFLICT (run_id, technique_id) DO UPDATE SET
-			  variants_executed      = EXCLUDED.variants_executed,
-			  blocked                = EXCLUDED.blocked,
-			  detected               = EXCLUDED.detected,
-			  logged                 = EXCLUDED.logged,
-			  bypassed               = EXCLUDED.bypassed,
-			  errors                 = EXCLUDED.errors,
-			  skipped                = EXCLUDED.skipped,
-			  best_bypass_variant_id = EXCLUDED.best_bypass_variant_id,
-			  encodings_tested       = EXCLUDED.encodings_tested,
-			  privileges_tested      = EXCLUDED.privileges_tested,
-			  contexts_tested        = EXCLUDED.contexts_tested,
-			  computed_at            = NOW()`,
+		batch.Queue(upsert,
 			runID, techID, techName[techID], techTactic[techID], total,
 			a.blocked, a.detected, a.logged, a.bypassed, a.errors, a.skipped,
-			bestID, encs, privs, ctxs,
+			bestBypassByTech[techID], setToSlice(a.encodings), setToSlice(a.privileges), setToSlice(a.contexts),
 		)
 	}
+	br := h.db.SendBatch(ctx, batch)
+	for range byTech {
+		_, _ = br.Exec()
+	}
+	_ = br.Close()
+}
+
+// fetchBestBypassIDs finds, for every technique in techIDs, the single
+// "most dangerous allowed result" variant (same priority ordering
+// computeVariantTechniqueSummary always used: bypassed > detected > logged;
+// then privilege tier; then exec context; then encoding) -- in ONE query
+// for the whole run, via Postgres's DISTINCT ON. This is provably
+// equivalent to running the original per-technique
+// "ORDER BY <same 4 CASE expressions> LIMIT 1" query once per technique:
+// DISTINCT ON (technique_id) requires its leading ORDER BY column to be
+// technique_id, and picks exactly one row per technique_id group using the
+// SAME remaining ORDER BY columns to decide which one -- so grouping by
+// technique_id here and ordering by technique_id first, then the identical
+// 4 priority expressions, selects the identical winning row per technique
+// that N separate LIMIT-1 queries would have. A technique with no
+// bypassed/detected/logged result at all simply has no row in the result
+// set (matching the original's silent nil on ErrNoRows), which the
+// map access below correctly returns as a nil *string --
+// scenario_variant_technique_summary.best_bypass_variant_id stores that as
+// SQL NULL exactly as before.
+func fetchBestBypassIDs(ctx context.Context, db *pgxpool.Pool, runID string, techIDs []string) map[string]*string {
+	placeholders := make([]string, len(techIDs))
+	args := make([]any, 0, len(techIDs)+1)
+	args = append(args, runID)
+	for i, id := range techIDs {
+		placeholders[i] = fmt.Sprintf("$%d", i+2)
+		args = append(args, id)
+	}
+
+	result := make(map[string]*string, len(techIDs))
+	rows, err := db.Query(ctx, `
+		SELECT DISTINCT ON (technique_id) technique_id, id
+		FROM scenario_variant_results
+		WHERE run_id = $1 AND technique_id IN (`+strings.Join(placeholders, ",")+`)
+		  AND verdict IN ('bypassed','detected','logged')
+		ORDER BY technique_id,
+		  CASE verdict   WHEN 'bypassed'       THEN 3 WHEN 'detected'      THEN 2 WHEN 'logged'         THEN 1 ELSE 0 END DESC,
+		  CASE privilege WHEN 'system'         THEN 3 WHEN 'admin'         THEN 2                        ELSE 1 END DESC,
+		  CASE execution_context
+		                 WHEN 'com'            THEN 4 WHEN 'scheduled-task' THEN 3 WHEN 'wmi'            THEN 2 ELSE 1 END DESC,
+		  CASE encoding  WHEN 'charcode'       THEN 3 WHEN 'base64'        THEN 2                        ELSE 1 END DESC`,
+		args...,
+	)
+	if err != nil {
+		// Matches the original's own error-tolerant behavior (it never
+		// checked QueryRow/Scan's error either) -- every technique simply
+		// gets no best-bypass id, same as if none had qualified.
+		return result
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var techID, id string
+		if rows.Scan(&techID, &id) == nil {
+			result[techID] = &id
+		}
+	}
+	return result
 }
 
 // ── GET /api/scenarios/runs/{runId}/variant-coverage ──────────────────────────
