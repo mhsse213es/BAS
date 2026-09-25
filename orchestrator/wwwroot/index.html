@@ -1289,6 +1289,26 @@ body.theme-slate {
   background: var(--accent);
   color: #fff;
 }
+
+/* ── Utility classes (incremental inline-style cleanup) ──────
+   Each replaces an exact, single-declaration inline style="" value
+   that appeared repeatedly across the markup. Scope note: only
+   applied where the element had no other class, so there is no
+   cascade-order interaction with any component class to reason
+   about -- see the audit notes wherever these are used alongside
+   an existing class in a later cleanup pass. */
+.u-muted   { color: var(--muted); }
+.u-danger  { color: var(--danger); }
+.u-success { color: var(--success); }
+.u-warning { color: var(--warning); }
+.u-text    { color: var(--text); }
+.u-flex1   { flex: 1; }
+.u-pointer { cursor: pointer; }
+.u-center  { text-align: center; }
+.u-w100    { width: 100%; }
+.u-mb-1    { margin-bottom: 1rem; }
+.u-mt-06   { margin-top: 0.6rem; }
+.u-fw600   { font-weight: 600; }
 </style>
 </head>
 <body>
@@ -1308,7 +1328,7 @@ body.theme-slate {
 ">
   <span style="font-size:18px">&#9888;</span>
   <strong style="letter-spacing:.5px">INTEGRITY ALERT</strong>
-  <span id="tamper-banner-msg" style="flex:1"></span>
+  <span id="tamper-banner-msg" class="u-flex1"></span>
   <button id="tamper-banner-ack" onclick="ackAllTamperEvents()" style="
     background:#fff2;border:1px solid rgba(255,255,255,.4);
     color:#fff;border-radius:6px;padding:4px 14px;
@@ -1662,7 +1682,7 @@ body.theme-slate {
                   <th style="padding:0.45rem 0.75rem;text-align:right;font-size:0.7rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em">Runs</th>
                 </tr>
               </thead>
-              <tbody id="dash-trends-table" style="color:var(--text)"></tbody>
+              <tbody id="dash-trends-table" class="u-text"></tbody>
             </table>
           </div>
         </div>
@@ -1981,7 +2001,7 @@ body.theme-slate {
 
       <!-- Settings (admin only) -->
       <div id="tab-settings" style="display:none">
-        <div style="margin-bottom:1rem">
+        <div class="u-mb-1">
           <h1 style="font-family:var(--font-display);font-size:1.5rem;font-weight:700;letter-spacing:-0.02em;margin:0 0 0.3rem;color:var(--text)">Settings</h1>
           <div style="font-size:0.8rem;color:var(--muted)">Manage team access, the simulation engine, threat-intel sync, and content.</div>
         </div>
@@ -2025,7 +2045,7 @@ body.theme-slate {
               </tbody>
             </table>
             <div style="padding:0.6rem 0.9rem;border-top:1px solid var(--border);font-size:0.72rem;color:var(--muted)">
-              <strong style="color:var(--text)">Base Simulations</strong> = the raw ART atomic test count (Windows). <strong style="color:var(--text)">Available Variants</strong> = Variant Engine multiplier (PS: 3 encodings × 3 privilege tiers × 4 exec contexts, minus the unreliable SYSTEM+COM combination = 33×; CMD: 3 privilege tiers × 4 exec contexts, minus SYSTEM+COM = 11×). <strong style="color:var(--text)">Unique ATT&amp;CK techniques</strong> is the most meaningful coverage figure — deduplicated across all sources.
+              <strong class="u-text">Base Simulations</strong> = the raw ART atomic test count (Windows). <strong class="u-text">Available Variants</strong> = Variant Engine multiplier (PS: 3 encodings × 3 privilege tiers × 4 exec contexts, minus the unreliable SYSTEM+COM combination = 33×; CMD: 3 privilege tiers × 4 exec contexts, minus SYSTEM+COM = 11×). <strong class="u-text">Unique ATT&amp;CK techniques</strong> is the most meaningful coverage figure — deduplicated across all sources.
             </div>
           </div>
         </div>
@@ -2823,11 +2843,11 @@ body.theme-slate {
             <!-- Rate bars -->
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.65rem;margin-bottom:1rem" id="ca-rates">
               <div>
-                <div style="display:flex;justify-content:space-between;font-size:0.72rem;margin-bottom:3px"><span style="color:var(--muted)">Prevention Rate</span><span id="ca-prev-rate" style="font-weight:700;color:var(--success)">—</span></div>
+                <div style="display:flex;justify-content:space-between;font-size:0.72rem;margin-bottom:3px"><span class="u-muted">Prevention Rate</span><span id="ca-prev-rate" style="font-weight:700;color:var(--success)">—</span></div>
                 <div style="height:8px;background:var(--elevated);border-radius:4px;overflow:hidden"><div id="ca-prev-bar" style="height:100%;background:var(--success);width:0%;transition:width .4s"></div></div>
               </div>
               <div>
-                <div style="display:flex;justify-content:space-between;font-size:0.72rem;margin-bottom:3px"><span style="color:var(--muted)">Detection Coverage</span><span id="ca-det-rate" style="font-weight:700;color:var(--warning)">—</span></div>
+                <div style="display:flex;justify-content:space-between;font-size:0.72rem;margin-bottom:3px"><span class="u-muted">Detection Coverage</span><span id="ca-det-rate" style="font-weight:700;color:var(--warning)">—</span></div>
                 <div style="height:8px;background:var(--elevated);border-radius:4px;overflow:hidden"><div id="ca-det-bar" style="height:100%;background:var(--warning);width:0%;transition:width .4s"></div></div>
               </div>
             </div>
@@ -2836,14 +2856,14 @@ body.theme-slate {
               <div>
                 <div style="font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:0.4rem">By Tactic</div>
                 <div class="tbl-wrap"><table id="ca-tactic-tbl" style="font-size:0.76rem">
-                  <thead><tr><th>Tactic</th><th style="text-align:center">Prevented</th><th style="text-align:center">Detected</th><th style="text-align:center;color:var(--danger)">Missed</th></tr></thead>
+                  <thead><tr><th>Tactic</th><th class="u-center">Prevented</th><th class="u-center">Detected</th><th style="text-align:center;color:var(--danger)">Missed</th></tr></thead>
                   <tbody id="ca-tactic-body"><tr><td colspan="4" class="empty">No data</td></tr></tbody>
                 </table></div>
               </div>
               <div>
                 <div style="font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:0.4rem">Missed Techniques — prioritize these</div>
                 <div class="tbl-wrap"><table id="ca-missed-tbl" style="font-size:0.76rem">
-                  <thead><tr><th>Technique</th><th>Name</th><th style="text-align:center">Runs</th></tr></thead>
+                  <thead><tr><th>Technique</th><th>Name</th><th class="u-center">Runs</th></tr></thead>
                   <tbody id="ca-missed-body"><tr><td colspan="3" class="empty">No gaps</td></tr></tbody>
                 </table></div>
               </div>
@@ -2865,7 +2885,7 @@ body.theme-slate {
                 <div>
                   <div style="font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:0.4rem">Prevention by Tier</div>
                   <div class="tbl-wrap"><table id="priv-tier-tbl" style="font-size:0.76rem">
-                    <thead><tr><th>Tier</th><th style="text-align:center">Attempted</th><th style="text-align:center">Prevented</th><th style="text-align:center;color:var(--danger)">Missed</th><th style="text-align:center">Rate</th></tr></thead>
+                    <thead><tr><th>Tier</th><th class="u-center">Attempted</th><th class="u-center">Prevented</th><th style="text-align:center;color:var(--danger)">Missed</th><th class="u-center">Rate</th></tr></thead>
                     <tbody id="priv-tier-body"><tr><td colspan="5" class="empty">No data</td></tr></tbody>
                   </table></div>
                 </div>
@@ -3022,7 +3042,7 @@ body.theme-slate {
             <div class="tiny muted" style="margin-bottom:0.75rem">Tag the high-value assets the collectors can't infer. A crown-jewel tag makes a host show up in crown-jewel exposure and scoring; tier-0 marks a custom domain-compromise target. Criticality/Flags feed the Exposure Explorer's risk score — see the Exposure Explorer tab. Tags follow the host across reachability and SharpHound identities.</div>
             <div class="tbl-wrap">
               <table>
-                <thead><tr><th>Host</th><th>Crown-Jewel Tag</th><th>Segment</th><th style="text-align:center">Tier-0</th><th>Criticality</th><th>Flags</th><th></th></tr></thead>
+                <thead><tr><th>Host</th><th>Crown-Jewel Tag</th><th>Segment</th><th class="u-center">Tier-0</th><th>Criticality</th><th>Flags</th><th></th></tr></thead>
                 <tbody id="ap-assets-body"><tr><td colspan="7" class="empty">Loading…</td></tr></tbody>
               </table>
             </div>
@@ -3055,7 +3075,7 @@ body.theme-slate {
               </label>
               <!-- current graph context — neutral, informational -->
               <div id="ap-current-ctx" style="display:none;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:0.5rem 0.75rem;margin-bottom:0.75rem;font-size:0.78rem;color:var(--muted)">
-                Current graph: <span id="ap-current-ctx-ts" style="color:var(--text)"></span>
+                Current graph: <span id="ap-current-ctx-ts" class="u-text"></span>
                 &mdash; a new collection will refresh the attack path graph.
               </div>
               <div style="display:flex;gap:0.5rem">
@@ -3126,7 +3146,7 @@ body.theme-slate {
             <!-- Overview -->
             <div style="margin-bottom:1.1rem">
               <div style="font-weight:700;color:var(--text);margin-bottom:0.35rem;font-size:0.88rem">What is Attack Path Validation?</div>
-              <div style="color:var(--muted)">Identifies potential lateral movement paths from a compromised endpoint by validating reachability and administrative relationships between systems. It does not exploit targets or perform vulnerability scanning. Instead it builds an attack graph from collected connectivity and privilege information, then computes blast radius, choke points, and chains to Domain Admin or Crown Jewel assets.</div>
+              <div class="u-muted">Identifies potential lateral movement paths from a compromised endpoint by validating reachability and administrative relationships between systems. It does not exploit targets or perform vulnerability scanning. Instead it builds an attack graph from collected connectivity and privilege information, then computes blast radius, choke points, and chains to Domain Admin or Crown Jewel assets.</div>
             </div>
 
             <!-- Prerequisites -->
@@ -3162,26 +3182,26 @@ body.theme-slate {
               <details>
                 <summary style="cursor:pointer;color:var(--accent);font-size:0.75rem;list-style:none">Technical Details &#9660;</summary>
                 <div style="display:flex;flex-direction:column;gap:0.55rem;margin-top:0.5rem">
-                  <div><strong style="color:var(--text)">1 · Local identity</strong>
+                  <div><strong class="u-text">1 · Local identity</strong>
                     <ul style="margin:0.25rem 0 0 1.1rem;padding:0;list-style:disc;color:var(--muted)">
                       <li>Enumerates all <strong>Local Administrators</strong> and emits an <code>admin-to</code> edge for each</li>
                       <li>Enumerates <strong>Interactive Sessions</strong> and emits a <code>has-session</code> edge per logged-on user</li>
                     </ul>
                   </div>
-                  <div><strong style="color:var(--text)">2 · Reachability probes</strong> (TCP connect, 1.5 s timeout, against your explicit target list only)
+                  <div><strong class="u-text">2 · Reachability probes</strong> (TCP connect, 1.5 s timeout, against your explicit target list only)
                     <ul style="margin:0.25rem 0 0 1.1rem;padding:0;list-style:disc;color:var(--muted)">
                       <li>SMB — TCP 445</li>
                       <li>WinRM — TCP 5985</li>
                       <li>RDP — TCP 3389</li>
                     </ul>
                   </div>
-                  <div><strong style="color:var(--text)">3 · SharpHound</strong> (domain-joined hosts only, if enabled)
+                  <div><strong class="u-text">3 · SharpHound</strong> (domain-joined hosts only, if enabled)
                     <ul style="margin:0.25rem 0 0 1.1rem;padding:0;list-style:disc;color:var(--muted)">
                       <li>Receives binary from server, executes it, uploads raw output ZIP</li>
                       <li>Server parses and merges AD edges — agent never interprets the output</li>
                     </ul>
                   </div>
-                  <div><strong style="color:var(--text)">4 · Upload</strong> — all nodes and edges submitted to the server; server rebuilds and analyzes the graph</div>
+                  <div><strong class="u-text">4 · Upload</strong> — all nodes and edges submitted to the server; server rebuilds and analyzes the graph</div>
                 </div>
               </details>
             </div>
@@ -3212,10 +3232,10 @@ body.theme-slate {
             <div style="margin-bottom:1.1rem">
               <div style="font-weight:700;color:var(--text);margin-bottom:0.5rem;font-size:0.88rem">What the graph tells you</div>
               <div style="display:flex;flex-direction:column;gap:0.45rem;color:var(--muted)">
-                <div><strong style="color:var(--text)">Paths to Domain Admin</strong> — potential privilege escalation chains leading to tagged Domain Controllers or Crown Jewel assets, computed by traversing observed relationships. Only available when AD data (SharpHound or domain-joined collection) is present.</div>
-                <div><strong style="color:var(--text)">Blast Radius</strong> — estimated number of distinct hosts reachable from the selected endpoint by chaining SMB / WinRM / RDP edges. A blast radius of 12 means: from this starting point an attacker with credentials could potentially reach 12 other systems.</div>
-                <div><strong style="color:var(--text)">Choke Points</strong> — hosts that appear in many attack paths. Compromising or hardening a choke point significantly increases or reduces attacker reach across the entire fleet.</div>
-                <div><strong style="color:var(--text)">Crown Jewel Exposure</strong> — attack paths that terminate at a host you have tagged as a Crown Jewel (ERP, backup server, payment gateway, etc.). Tags are set in <em>Tag Assets</em>.</div>
+                <div><strong class="u-text">Paths to Domain Admin</strong> — potential privilege escalation chains leading to tagged Domain Controllers or Crown Jewel assets, computed by traversing observed relationships. Only available when AD data (SharpHound or domain-joined collection) is present.</div>
+                <div><strong class="u-text">Blast Radius</strong> — estimated number of distinct hosts reachable from the selected endpoint by chaining SMB / WinRM / RDP edges. A blast radius of 12 means: from this starting point an attacker with credentials could potentially reach 12 other systems.</div>
+                <div><strong class="u-text">Choke Points</strong> — hosts that appear in many attack paths. Compromising or hardening a choke point significantly increases or reduces attacker reach across the entire fleet.</div>
+                <div><strong class="u-text">Crown Jewel Exposure</strong> — attack paths that terminate at a host you have tagged as a Crown Jewel (ERP, backup server, payment gateway, etc.). Tags are set in <em>Tag Assets</em>.</div>
               </div>
             </div>
 
@@ -3253,18 +3273,18 @@ body.theme-slate {
             <!-- Confidence -->
             <div style="margin-bottom:1.1rem;padding:0.75rem 1rem;background:rgba(47,129,247,0.07);border-left:3px solid var(--accent);border-radius:0 6px 6px 0">
               <div style="font-weight:600;color:var(--text);margin-bottom:0.3rem;font-size:0.83rem">&#9432; Interpreting results</div>
-              <div style="color:var(--muted)">Attack paths represent <strong>potential</strong> attacker movement based on observed relationships. They are not proof that exploitation is possible. An <code>smb</code> edge means TCP 445 accepted a connection — it does not confirm valid credentials exist. A path to Domain Admin means the relationship chain is present in the graph — not that every step is exploitable without additional access. Use paths to prioritise hardening and segmentation, not as a confirmed attack roadmap.</div>
+              <div class="u-muted">Attack paths represent <strong>potential</strong> attacker movement based on observed relationships. They are not proof that exploitation is possible. An <code>smb</code> edge means TCP 445 accepted a connection — it does not confirm valid credentials exist. A path to Domain Admin means the relationship chain is present in the graph — not that every step is exploitable without additional access. Use paths to prioritise hardening and segmentation, not as a confirmed attack roadmap.</div>
             </div>
 
             <!-- Security impact -->
             <div style="margin-bottom:0.5rem">
               <div style="font-weight:700;color:var(--text);margin-bottom:0.4rem;font-size:0.88rem">Security impact of collection</div>
               <div style="display:flex;flex-direction:column;gap:0.3rem">
-                <div style="display:flex;align-items:flex-start;gap:0.5rem"><span style="color:var(--success);font-size:0.9rem;flex-shrink:0">&#10003;</span><span style="color:var(--muted)">No exploits executed — TCP connect probes only, no authentication</span></div>
-                <div style="display:flex;align-items:flex-start;gap:0.5rem"><span style="color:var(--success);font-size:0.9rem;flex-shrink:0">&#10003;</span><span style="color:var(--muted)">No target modification — nothing is written to remote systems</span></div>
-                <div style="display:flex;align-items:flex-start;gap:0.5rem"><span style="color:var(--success);font-size:0.9rem;flex-shrink:0">&#10003;</span><span style="color:var(--muted)">Read-only enumeration using standard Windows APIs</span></div>
-                <div style="display:flex;align-items:flex-start;gap:0.5rem"><span style="color:var(--success);font-size:0.9rem;flex-shrink:0">&#10003;</span><span style="color:var(--muted)">Minimal network traffic — one TCP SYN per port per target (three probes per host)</span></div>
-                <div style="display:flex;align-items:flex-start;gap:0.5rem"><span style="color:var(--success);font-size:0.9rem;flex-shrink:0">&#10003;</span><span style="color:var(--muted)">No propagation — agent never moves to or executes on any remote host</span></div>
+                <div style="display:flex;align-items:flex-start;gap:0.5rem"><span style="color:var(--success);font-size:0.9rem;flex-shrink:0">&#10003;</span><span class="u-muted">No exploits executed — TCP connect probes only, no authentication</span></div>
+                <div style="display:flex;align-items:flex-start;gap:0.5rem"><span style="color:var(--success);font-size:0.9rem;flex-shrink:0">&#10003;</span><span class="u-muted">No target modification — nothing is written to remote systems</span></div>
+                <div style="display:flex;align-items:flex-start;gap:0.5rem"><span style="color:var(--success);font-size:0.9rem;flex-shrink:0">&#10003;</span><span class="u-muted">Read-only enumeration using standard Windows APIs</span></div>
+                <div style="display:flex;align-items:flex-start;gap:0.5rem"><span style="color:var(--success);font-size:0.9rem;flex-shrink:0">&#10003;</span><span class="u-muted">Minimal network traffic — one TCP SYN per port per target (three probes per host)</span></div>
+                <div style="display:flex;align-items:flex-start;gap:0.5rem"><span style="color:var(--success);font-size:0.9rem;flex-shrink:0">&#10003;</span><span class="u-muted">No propagation — agent never moves to or executes on any remote host</span></div>
               </div>
             </div>
 
@@ -3343,7 +3363,7 @@ body.theme-slate {
         <div id="findings-toolbar" style="margin-bottom:0.9rem"></div>
         <div class="tbl-wrap">
           <table>
-            <thead><tr><th id="findings-th-check" style="display:none;width:28px"><input type="checkbox" id="findings-chk-all" onchange="toggleAllFindingChecks(this.checked)" style="cursor:pointer"></th><th>Finding</th><th>Technique</th><th>Severity</th><th>Control</th><th>Agent</th><th>Status</th><th>Age</th><th id="findings-th-ticket" style="display:none">Ticket</th><th id="findings-th-triage" style="display:none"></th></tr></thead>
+            <thead><tr><th id="findings-th-check" style="display:none;width:28px"><input type="checkbox" id="findings-chk-all" onchange="toggleAllFindingChecks(this.checked)" class="u-pointer"></th><th>Finding</th><th>Technique</th><th>Severity</th><th>Control</th><th>Agent</th><th>Status</th><th>Age</th><th id="findings-th-ticket" style="display:none">Ticket</th><th id="findings-th-triage" style="display:none"></th></tr></thead>
             <tbody id="findings-body"><tr><td colspan="10" class="empty">No findings yet.</td></tr></tbody>
           </table>
         </div>
@@ -3437,7 +3457,7 @@ body.theme-slate {
           <div id="ioc-import-err" style="display:none;margin-top:0.5rem;font-size:0.75rem;color:var(--danger)"></div>
           <div class="modal-actions">
             <button class="btn btn-outline btn-sm" onclick="closeIOCImportModal()">Cancel</button>
-            <span style="flex:1"></span>
+            <span class="u-flex1"></span>
             <button id="ioc-import-submit-btn" class="btn btn-primary btn-sm" onclick="submitIOCImport()">Import</button>
           </div>
         </div>
@@ -3461,7 +3481,7 @@ body.theme-slate {
 
       <!-- Reports -->
       <div id="tab-verification" style="display:none">
-        <div style="margin-bottom:1rem">
+        <div class="u-mb-1">
           <h1 style="font-family:var(--font-display);font-size:1.5rem;font-weight:700;letter-spacing:-0.02em;margin:0 0 0.3rem;color:var(--text)">Detection Verification</h1>
           <div style="font-size:0.8rem;color:var(--muted)">Attest whether off-host controls (SIEM, identity, cloud, DLP, network) actually detected each simulated technique. Attestations are immutable, evidence is SHA-256 hashed at upload, and every action is written to the audit log.</div>
         </div>
@@ -3471,7 +3491,7 @@ body.theme-slate {
             <option value="">Select a run…</option>
           </select>
           <div id="vf-domain-chips" style="display:flex;gap:0.4rem;flex-wrap:wrap"></div>
-          <div style="flex:1"></div>
+          <div class="u-flex1"></div>
           <span id="vf-summary" style="font-size:0.78rem;color:var(--muted)"></span>
         </div>
 
@@ -3481,7 +3501,7 @@ body.theme-slate {
       </div>
 
       <div id="tab-reports" style="display:none">
-        <div style="margin-bottom:1rem">
+        <div class="u-mb-1">
           <h1 style="font-family:var(--font-display);font-size:1.5rem;font-weight:700;letter-spacing:-0.02em;margin:0 0 0.3rem;color:var(--text)">Reports</h1>
           <div style="font-size:0.8rem;color:var(--muted)">Generate evidence reports from your validated results. History re-generates on download — no stale copies.</div>
         </div>
@@ -3904,7 +3924,7 @@ body.theme-slate {
                 <svg viewBox="0 0 20 20" fill="none" stroke="var(--accent)" stroke-width="1.6" style="width:16px;height:16px;flex-shrink:0"><path d="M3 10a7 7 0 1 1 14 0A7 7 0 0 1 3 10z"/><path d="m10 7 3 3-3 3M7 10h6"/></svg>
                 Full Variant Sweep
               </div>
-              <div class="tiny muted">Run all <strong id="vex-sweep-tech-count" style="color:var(--text)">—</strong> Windows-runnable ART techniques<span id="vex-sweep-caldera-count"></span> sequentially · <span id="vex-sweep-total-variants" style="color:var(--text)">—</span> total variants ·
+              <div class="tiny muted">Run all <strong id="vex-sweep-tech-count" class="u-text">—</strong> Windows-runnable ART techniques<span id="vex-sweep-caldera-count"></span> sequentially · <span id="vex-sweep-total-variants" class="u-text">—</span> total variants ·
                 <button type="button" class="btn btn-sm" onclick="showVexStatHelp('Windows-runnable ART techniques','This is the subset of ART techniques that have at least one Windows atomic test — see Settings → Simulation Engine for the full breakdown (total ART techniques, how many are Windows-runnable, and total atomic tests across all of them). Techniques with Linux/macOS-only atomics are excluded here since this sweep only runs on Windows agents.')" title="Why this number?" style="padding:0 3px;line-height:1;font-size:0.68rem;color:var(--muted);background:transparent;border:none;text-decoration:underline;cursor:pointer">why this number?</button>
                 · <span class="tiny muted">runs technique-by-technique; you can see live progress</span></div>
             </div>
@@ -4189,7 +4209,7 @@ body.theme-slate {
 
     <div class="modal-actions wz-actions">
       <button class="btn btn-outline btn-sm" onclick="closeModal()">Cancel</button>
-      <span style="flex:1"></span>
+      <span class="u-flex1"></span>
       <button id="wz-back" class="btn btn-outline btn-sm" onclick="wizardNav(-1)" style="display:none">&#8592; Back</button>
       <button id="wz-next" class="btn btn-primary btn-sm" onclick="wizardNav(1)">Next &#8594;</button>
       <button id="modal-run-btn" class="btn btn-outline-green btn-sm" onclick="confirmRun()" style="display:none">&#9654; Run</button>
@@ -4251,7 +4271,7 @@ body.theme-slate {
           <input type="datetime-local" id="sched-runat" style="width:100%;padding:0.5rem 0.7rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:0.82rem;font-family:inherit">
         </div>
 
-        <div id="sched-dow-wrap" style="margin-top:0.6rem">
+        <div id="sched-dow-wrap" class="u-mt-06">
           <label class="modal-lbl">Day of week</label>
           <select id="sched-dow">
             <option value="0">Sunday</option><option value="1">Monday</option><option value="2">Tuesday</option>
@@ -4266,31 +4286,31 @@ body.theme-slate {
                  style="width:100%;padding:0.5rem 0.7rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:0.82rem;font-family:inherit">
         </div>
 
-        <div id="sched-time-wrap" style="margin-top:0.6rem">
+        <div id="sched-time-wrap" class="u-mt-06">
           <label class="modal-lbl">Time</label>
           <input type="time" id="sched-timeofday" value="02:00"
                  style="width:100%;padding:0.5rem 0.7rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:0.82rem;font-family:inherit">
         </div>
 
-        <div style="margin-top:0.6rem">
+        <div class="u-mt-06">
           <label class="modal-lbl">Timezone (IANA)</label>
           <input type="text" id="sched-timezone" placeholder="e.g. Asia/Kolkata"
                  style="width:100%;padding:0.5rem 0.7rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:0.82rem;font-family:inherit">
         </div>
 
-        <div style="margin-top:0.6rem">
+        <div class="u-mt-06">
           <label class="modal-lbl">End date (optional)</label>
           <input type="date" id="sched-enddate"
                  style="width:100%;padding:0.5rem 0.7rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:0.82rem;font-family:inherit">
         </div>
 
-        <div style="margin-top:0.6rem">
+        <div class="u-mt-06">
           <label class="modal-lbl">Concurrency limit (optional — blank means unlimited)</label>
           <input type="number" id="sched-concurrency" min="1"
                  style="width:100%;padding:0.5rem 0.7rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:0.82rem;font-family:inherit">
         </div>
 
-        <div style="margin-top:0.6rem">
+        <div class="u-mt-06">
           <label class="modal-lbl">Initiative (optional)</label>
           <select id="sched-initiative" style="width:100%;padding:0.5rem 0.7rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:0.82rem;font-family:inherit">
             <option value="">— None —</option>
@@ -4307,7 +4327,7 @@ body.theme-slate {
 
     <div class="modal-actions wz-actions">
       <button class="btn btn-outline btn-sm" onclick="closeSchedWizard()">Cancel</button>
-      <span style="flex:1"></span>
+      <span class="u-flex1"></span>
       <button id="sched-wz-back" class="btn btn-outline btn-sm" onclick="schedWizardNav(-1)" style="display:none">&#8592; Back</button>
       <button id="sched-wz-next" class="btn btn-primary btn-sm" onclick="schedWizardNav(1)">Next &#8594;</button>
       <button id="sched-create-btn" class="btn btn-outline-green btn-sm" onclick="submitScheduledAssessment()" style="display:none">Create Schedule</button>
@@ -4348,7 +4368,7 @@ body.theme-slate {
 
     <div class="modal-actions">
       <button class="btn btn-outline btn-sm" onclick="closeRespondModal()">Cancel</button>
-      <span style="flex:1"></span>
+      <span class="u-flex1"></span>
       <button id="respond-submit-btn" class="btn btn-outline-green btn-sm" onclick="submitRespondAction()">&#9654; Execute</button>
     </div>
   </div>
@@ -4404,7 +4424,7 @@ body.theme-slate {
 
     <div class="modal-actions">
       <button class="btn btn-outline btn-sm" onclick="testTAXIIConnectorForm()">Test Connection</button>
-      <span style="flex:1"></span>
+      <span class="u-flex1"></span>
       <button class="btn btn-outline btn-sm" onclick="closeTAXIIConnectorModal()">Cancel</button>
       <button class="btn btn-primary btn-sm" id="taxii-conn-save-btn" onclick="saveTAXIIConnectorForm()">Save</button>
     </div>
@@ -4427,7 +4447,7 @@ body.theme-slate {
 
     <div class="modal-actions">
       <button class="btn btn-outline btn-sm" onclick="closeStopAgentModal()">Cancel</button>
-      <span style="flex:1"></span>
+      <span class="u-flex1"></span>
       <button id="stop-agent-submit-btn" class="btn btn-sm" style="color:#fff;background:var(--danger)" onclick="submitStopAgent()">&#9209; Stop Agent</button>
     </div>
   </div>
@@ -4449,7 +4469,7 @@ body.theme-slate {
 
     <div class="modal-actions">
       <button class="btn btn-outline btn-sm" onclick="closeUninstallAgentModal()">Cancel</button>
-      <span style="flex:1"></span>
+      <span class="u-flex1"></span>
       <button id="uninstall-agent-submit-btn" class="btn btn-sm" style="color:#fff;background:var(--danger)" onclick="submitUninstallAgent()">&#128465; Uninstall Agent</button>
     </div>
   </div>
@@ -4471,7 +4491,7 @@ body.theme-slate {
 
     <div class="modal-actions">
       <button class="btn btn-outline btn-sm" onclick="closeRemoveAgentModal()">Cancel</button>
-      <span style="flex:1"></span>
+      <span class="u-flex1"></span>
       <button id="remove-agent-submit-btn" class="btn btn-sm" style="color:#fff;background:var(--danger)" onclick="submitRemoveAgent()">&#128465; Force Remove</button>
     </div>
   </div>
@@ -4487,7 +4507,7 @@ body.theme-slate {
     <div id="confirm-diff-body" style="margin:0.6rem 0"></div>
     <div class="modal-actions">
       <button class="btn btn-outline btn-sm" onclick="closeConfirmDiffModal()">Cancel</button>
-      <span style="flex:1"></span>
+      <span class="u-flex1"></span>
       <button id="confirm-diff-submit-btn" class="btn btn-primary btn-sm" onclick="runConfirmDiffModal()">Save</button>
     </div>
   </div>
@@ -4498,10 +4518,10 @@ body.theme-slate {
   <div class="modal" style="width:400px">
     <h3 id="gp-title">Move to Group</h3>
     <label class="modal-lbl">Group</label>
-    <select id="gp-select" style="width:100%"></select>
+    <select id="gp-select" class="u-w100"></select>
     <div class="modal-actions">
       <button class="btn btn-outline btn-sm" onclick="closeGroupPicker()">Cancel</button>
-      <span style="flex:1"></span>
+      <span class="u-flex1"></span>
       <button class="btn btn-primary btn-sm" onclick="submitGroupPicker()">Move</button>
     </div>
   </div>
@@ -4620,8 +4640,8 @@ body.theme-slate {
     <div id="cmp-target-agents-wrap">
       <label class="modal-lbl" style="margin-top:0.6rem;display:block">Agents <span class="tiny muted" id="cmp-target-cnt">(0 selected)</span></label>
       <div style="display:flex;gap:0.5rem;margin-bottom:0.4rem">
-        <select id="cmp-filter-os" onchange="renderCampaignTargets()" style="flex:1"><option value="">All OS</option><option value="windows">Windows</option><option value="linux">Linux</option><option value="darwin">macOS</option></select>
-        <select id="cmp-filter-env" onchange="renderCampaignTargets()" style="flex:1"><option value="">All environments</option></select>
+        <select id="cmp-filter-os" onchange="renderCampaignTargets()" class="u-flex1"><option value="">All OS</option><option value="windows">Windows</option><option value="linux">Linux</option><option value="darwin">macOS</option></select>
+        <select id="cmp-filter-env" onchange="renderCampaignTargets()" class="u-flex1"><option value="">All environments</option></select>
         <button class="btn btn-outline btn-sm" onclick="cmpSelectAllFiltered()">Select all</button>
       </div>
       <div id="cmp-targets" style="max-height:200px;overflow:auto;border:1px solid var(--border);border-radius:var(--radius);padding:0.4rem"></div>
@@ -5558,10 +5578,10 @@ function _riskScoreColor(score) {
   return score >= 80 ? 'var(--success)' : score >= 50 ? 'var(--warning)' : 'var(--danger)';
 }
 function _riskTrendBadge(trend) {
-  if (trend === 'Improving') return '<span style="color:var(--success)">&#8593; Improving</span>';
-  if (trend === 'Declining') return '<span style="color:var(--danger)">&#8595; Declining</span>';
-  if (trend === 'Stable') return '<span style="color:var(--muted)">&#8594; Stable</span>';
-  return '<span style="color:var(--muted)">—</span>';
+  if (trend === 'Improving') return '<span class="u-success">&#8593; Improving</span>';
+  if (trend === 'Declining') return '<span class="u-danger">&#8595; Declining</span>';
+  if (trend === 'Stable') return '<span class="u-muted">&#8594; Stable</span>';
+  return '<span class="u-muted">—</span>';
 }
 function renderAgentRiskSummary(rows) {
   var tb = document.getElementById('agent-risk-body');
@@ -5582,7 +5602,7 @@ function renderAgentRiskSummary(rows) {
       '<td>' + x(a.hostname || a.agentId) + '</td>' +
       (a.measurable
         ? '<td style="color:' + _riskScoreColor(a.healthScore) + ';font-weight:700">' + a.healthScore + '</td>'
-        : '<td style="color:var(--muted)" title="Nothing collected for this endpoint yet — an absent score is not a safe score">— no data</td>') +
+        : '<td class="u-muted" title="Nothing collected for this endpoint yet — an absent score is not a safe score">— no data</td>') +
       '<td>' + (a.criticalityRisk || 0) + '</td>' +
       '<td>' + _riskTrendBadge(a.trend) + '</td>' +
       '<td>' + x(a.topDeficitCategory || '—') + '</td>' +
@@ -5697,7 +5717,7 @@ function renderInitiativesList() {
     var col = initiativeStateColor(it.State);
     var menuId = 'init-menu-' + idx;
     var canDelete = it.State === 'archived' && ROLE === 'admin';
-    return '<tr onclick="openInitiativeDrawer(\'' + x(it.ID) + '\')" style="cursor:pointer">' +
+    return '<tr onclick="openInitiativeDrawer(\'' + x(it.ID) + '\')" class="u-pointer">' +
       '<td>' + x(it.Name) + '</td>' +
       '<td><span class="badge" style="color:' + col + ';border-color:' + col + '">' + initiativeStateLabel(it.State) + '</span></td>' +
       '<td>' + x(it.CreatedBy || '—') + '</td>' +
@@ -5762,7 +5782,7 @@ function renderInitiativeDrawer(it, progress, jobs) {
     : '<tr><td colspan="6" class="empty">No jobs attached yet. This initiative tracks related remediation jobs and their overall progress.</td></tr>';
 
   document.getElementById('init-drawer-body').innerHTML =
-    '<div style="margin-bottom:1rem">' +
+    '<div class="u-mb-1">' +
       '<span class="badge" style="color:' + col + ';border-color:' + col + '">' + initiativeStateLabel(it.State) + '</span> ' +
       '<span class="tiny muted">Created by ' + x(it.CreatedBy || '—') + ' · ' + x(fmtDate(it.CreatedAt)) + '</span>' +
     '</div>' +
@@ -6020,8 +6040,8 @@ function vfRenderQueue() {
   var rows = items.map(function(i, idx) {
     var badge = '<span style="font-size:0.7rem;font-weight:700;color:' + vfStatusColor(i.status) + '">' + vfStatusLabel(i.status) + '</span>';
     var wf = (i.workflowState && i.workflowState !== 'Approved' && i.workflowState !== 'Pending') ? '<div style="font-size:0.62rem;color:var(--warning)">' + x(i.workflowState) + '</div>' : '';
-    var analyst = i.verifiedBy ? x(i.verifiedBy) : '<span style="color:var(--muted)">—</span>';
-    var ev = i.evidenceCount ? ('<span style="color:var(--accent)">' + i.evidenceCount + ' file' + (i.evidenceCount===1?'':'s') + '</span>') : '<span style="color:var(--muted)">—</span>';
+    var analyst = i.verifiedBy ? x(i.verifiedBy) : '<span class="u-muted">—</span>';
+    var ev = i.evidenceCount ? ('<span style="color:var(--accent)">' + i.evidenceCount + ' file' + (i.evidenceCount===1?'':'s') + '</span>') : '<span class="u-muted">—</span>';
     return '<tr style="border-top:1px solid var(--border)">' +
       '<td style="padding:0.6rem 0.8rem">' + badge + wf + '</td>' +
       '<td style="padding:0.6rem 0.8rem"><code style="font-size:0.72rem">' + x(i.techniqueId) + '</code></td>' +
@@ -6080,7 +6100,7 @@ function vfSelect(expId) {
               '<button class="btn btn-outline btn-sm" onclick="vfSubmit(\'' + x(i.expectationId) + '\',\'NeedsReview\')">Submit for Review</button>' +
               '<button class="btn btn-outline-red btn-sm" onclick="vfSubmit(\'' + x(i.expectationId) + '\',\'Rejected\')">Reject</button>'
             : '<button class="btn btn-primary btn-sm" onclick="vfSubmit(\'' + x(i.expectationId) + '\',\'NeedsReview\')">Submit for Review</button>') +
-          '<span style="flex:1"></span>' +
+          '<span class="u-flex1"></span>' +
           '<button class="btn btn-outline btn-sm" onclick="vfToggleHistory(\'' + x(i.expectationId) + '\')">History</button>' +
         '</div>'
       : '<div style="font-size:0.78rem;color:var(--muted)">You do not have permission to verify. <button class="btn btn-outline btn-sm" onclick="vfToggleHistory(\'' + x(i.expectationId) + '\')">View History</button></div>') +
@@ -6152,11 +6172,11 @@ function vfLoadEvidence(verificationId) {
     var canDel = vfCan('verification:evidence:delete');
     host.innerHTML = list.map(function(e) {
       return '<div style="display:flex;align-items:center;gap:0.6rem;padding:0.4rem 0.55rem;border:1px solid var(--border);border-radius:6px;margin-bottom:0.35rem;font-size:0.76rem">' +
-        '<span style="color:var(--success)">&#10003;</span>' +
+        '<span class="u-success">&#10003;</span>' +
         '<a href="/api/evidence/' + encodeURIComponent(e.id) + '/download" style="color:var(--accent);text-decoration:none">' + x(e.displayFilename || e.originalFilename) + '</a>' +
-        '<span style="color:var(--muted)">' + vfBytes(e.size) + '</span>' +
+        '<span class="u-muted">' + vfBytes(e.size) + '</span>' +
         '<span style="color:var(--muted);font-family:monospace;font-size:0.66rem" title="' + x(e.hashAlgorithm) + ': ' + x(e.contentHash) + '">' + x((e.contentHash||'').substring(0,12)) + '…</span>' +
-        '<span style="flex:1"></span>' +
+        '<span class="u-flex1"></span>' +
         '<span style="color:var(--muted);font-size:0.68rem">' + x(e.uploadedBy||'') + '</span>' +
         (canDel ? '<button class="btn btn-outline-red btn-sm" onclick="vfDeleteEvidence(\'' + x(e.id) + '\',\'' + x(verificationId) + '\')">Delete</button>' : '') +
         '</div>';
@@ -6194,12 +6214,12 @@ function vfToggleHistory(expId) {
       h.map(function(r) {
         return '<div style="display:flex;gap:0.6rem;font-size:0.74rem;padding:0.35rem 0;border-bottom:1px solid var(--border)">' +
           '<span style="font-weight:700;color:' + vfStatusColor(r.active ? (r.workflowState==='Approved'?r.result:r.workflowState) : r.result) + '">' + x(r.result) + '</span>' +
-          '<span style="color:var(--muted)">' + x(r.workflowState) + '</span>' +
-          '<span style="color:var(--muted)">' + x(r.source) + '</span>' +
-          '<span style="flex:1"></span>' +
-          '<span style="color:var(--muted)">' + x(r.verifiedBy||'') + '</span>' +
-          '<span style="color:var(--muted)">' + fmtDate(r.verifiedAt) + '</span>' +
-          (r.active ? '<span style="color:var(--success)">current</span>' : '<span style="color:var(--muted)">superseded</span>') +
+          '<span class="u-muted">' + x(r.workflowState) + '</span>' +
+          '<span class="u-muted">' + x(r.source) + '</span>' +
+          '<span class="u-flex1"></span>' +
+          '<span class="u-muted">' + x(r.verifiedBy||'') + '</span>' +
+          '<span class="u-muted">' + fmtDate(r.verifiedAt) + '</span>' +
+          (r.active ? '<span class="u-success">current</span>' : '<span class="u-muted">superseded</span>') +
           '</div>';
       }).join('');
   }).catch(function(){ host.innerHTML = '<div style="font-size:0.74rem;color:var(--danger)">Failed to load history.</div>'; });
@@ -6270,8 +6290,8 @@ function loadExposureAssets() {
       return;
     }
     body.innerHTML = assets.map(function(a) {
-      return '<tr style="cursor:pointer" onclick="openExposureDetail(\'' + x(a.asset.hostKey) + '\')">' +
-        '<td style="font-weight:600">' + x(a.asset.label) + '</td>' +
+      return '<tr class="u-pointer" onclick="openExposureDetail(\'' + x(a.asset.hostKey) + '\')">' +
+        '<td class="u-fw600">' + x(a.asset.label) + '</td>' +
         '<td>' + (a.asset.managed ? '<span class="badge">Managed</span>' : '<span class="badge" style="color:var(--muted)">Discovered</span>') + '</td>' +
         '<td style="color:' + apColor(a.exposureScore) + ';font-weight:700">' + a.exposureScore + '</td>' +
         '<td>' + a.attackPathScore + '</td>' +
@@ -6441,7 +6461,7 @@ function renderExposure(exp) {
   var rows = (exp.worst || []).map(function(it) {
     var over = it.daysOpen > exp.thresholdDays;
     return '<tr>' +
-      '<td><div style="font-weight:600">' + x(it.techniqueId) + '</div>' +
+      '<td><div class="u-fw600">' + x(it.techniqueId) + '</div>' +
         '<div class="tiny muted">' + x(it.techniqueName) + '</div></td>' +
       '<td class="tiny">' + x(it.severity) + '</td>' +
       '<td style="' + (over ? 'color:var(--danger);font-weight:700' : '') + '">' + it.daysOpen + '</td>' +
@@ -6476,7 +6496,7 @@ function recCoverageBadge(state) {
 
 function covStatusCell(val) {
   if (val === null) return '<span class="tiny muted">N/A</span>';
-  return val ? '<span style="color:var(--success)">&#10003;</span>' : '<span class="tiny muted">&mdash;</span>';
+  return val ? '<span class="u-success">&#10003;</span>' : '<span class="tiny muted">&mdash;</span>';
 }
 
 function loadCoverageActors() {
@@ -6512,7 +6532,7 @@ function loadCoverageMatrix() {
       empty.style.display = 'none';
       body.innerHTML = rows.map(function(r) {
         return '<tr>' +
-          '<td style="font-weight:600">' + x(r.techniqueId) + '</td>' +
+          '<td class="u-fw600">' + x(r.techniqueId) + '</td>' +
           '<td>' + covStatusCell(r.simulationExists) + '</td>' +
           '<td>' + covStatusCell(r.detectionProfileExists) + '</td>' +
           '<td>' + covStatusCell(r.purpleExerciseExists) + '</td>' +
@@ -6539,8 +6559,8 @@ function tpTierBadge(tier) {
 }
 
 function tpTrendCell(trend, delta) {
-  if (trend === 'up') return '<span style="color:var(--success)">&#9650; +' + delta + '</span>';
-  if (trend === 'down') return '<span style="color:var(--danger)">&#9660; ' + delta + '</span>';
+  if (trend === 'up') return '<span class="u-success">&#9650; +' + delta + '</span>';
+  if (trend === 'down') return '<span class="u-danger">&#9660; ' + delta + '</span>';
   if (trend === 'stable') return '<span class="tiny muted">&mdash;</span>';
   return '<span class="tiny muted">New</span>';
 }
@@ -6559,8 +6579,8 @@ function loadThreatPriorityActors() {
       }
       empty.style.display = 'none';
       body.innerHTML = TP_ACTOR_CACHE.map(function(a) {
-        return '<tr style="cursor:pointer" onclick=\'showThreatPriorityDetail(' + JSON.stringify(a.actorName).replace(/'/g, "&#39;") + ')\'>' +
-          '<td style="font-weight:600">' + x(a.actorName) + '</td>' +
+        return '<tr class="u-pointer" onclick=\'showThreatPriorityDetail(' + JSON.stringify(a.actorName).replace(/'/g, "&#39;") + ')\'>' +
+          '<td class="u-fw600">' + x(a.actorName) + '</td>' +
           '<td>' + tpTierBadge(a.tier) + '</td>' +
           '<td>' + x(a.score) + '</td>' +
           '<td>' + tpTrendCell(a.trend, a.trendDelta) + '</td>' +
@@ -6598,7 +6618,7 @@ function renderThreatPriorityDetail(d) {
   var factors = (d.factors || []).map(function(f) {
     var val = f.available ? f.rawScore.toFixed(0) + '%' : 'Not yet validated';
     return '<div style="display:flex;justify-content:space-between;padding:0.4rem 0;border-bottom:1px solid var(--border)">' +
-      '<div><div style="font-weight:600">' + x(f.name) + '</div><div class="tiny muted">' + x(f.explanation) + '</div></div>' +
+      '<div><div class="u-fw600">' + x(f.name) + '</div><div class="tiny muted">' + x(f.explanation) + '</div></div>' +
       '<div style="font-weight:700">' + x(val) + '</div>' +
       '</div>';
   }).join('');
@@ -6617,7 +6637,7 @@ function renderThreatPriorityDetail(d) {
 
   var techCoverage = (d.techniqueCoverage || []);
   document.getElementById('tp-detail-coverage').innerHTML = techCoverage.length
-    ? '<table style="width:100%"><thead><tr><th>Technique</th><th>Content</th><th>Prevention</th><th>Detection</th></tr></thead><tbody>' +
+    ? '<table class="u-w100"><thead><tr><th>Technique</th><th>Content</th><th>Prevention</th><th>Detection</th></tr></thead><tbody>' +
       techCoverage.map(function(tc) {
         var content = [
           tc.hasSimulation ? '<span class="tool-tag">Sim</span>' : '',
@@ -6649,7 +6669,7 @@ function renderThreatPriorityDetail(d) {
         function row(label, val) {
           return '<div style="display:flex;gap:0.5rem;padding:0.14rem 0">' +
             '<span style="min-width:5.5rem;color:var(--muted);flex-shrink:0">' + label + '</span>' +
-            '<span style="flex:1">' + val + '</span></div>';
+            '<span class="u-flex1">' + val + '</span></div>';
         }
         return '<div style="border:1px solid var(--border);border-radius:var(--radius);padding:0.6rem 0.75rem">' +
           '<div style="font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--accent);margin-bottom:0.4rem">' + x(s.source) + '</div>' +
@@ -6669,7 +6689,7 @@ function renderThreatPriorityDetail(d) {
   if (techEvidence.length) {
     evidenceCard.style.display = '';
     document.getElementById('tp-detail-evidence').innerHTML =
-      '<table style="width:100%"><thead><tr><th>Technique</th><th>Via</th><th>Confidence</th><th>Since</th></tr></thead><tbody>' +
+      '<table class="u-w100"><thead><tr><th>Technique</th><th>Via</th><th>Confidence</th><th>Since</th></tr></thead><tbody>' +
       techEvidence.map(function(e) {
         var via = e.via ? (e.via + (e.viaName ? ' (' + x(e.viaName) + ')' : '')) : '<span class="muted">direct</span>';
         var since = e.startTime ? x(fmtDate(e.startTime)) : '<span class="muted">&mdash;</span>';
@@ -6682,7 +6702,7 @@ function renderThreatPriorityDetail(d) {
 
   var hist = (d.history || []);
   document.getElementById('tp-detail-history').innerHTML = hist.length
-    ? '<table style="width:100%"><thead><tr><th>Date</th><th>Score</th></tr></thead><tbody>' +
+    ? '<table class="u-w100"><thead><tr><th>Date</th><th>Score</th></tr></thead><tbody>' +
       hist.map(function(h) { return '<tr><td>' + x(new Date(h.recordedAt).toLocaleDateString()) + '</td><td>' + x(h.score) + '</td></tr>'; }).join('') +
       '</tbody></table>'
     : '<span class="muted">No history yet.</span>';
@@ -6725,7 +6745,7 @@ function renderRecommendations(data) {
     if (t.epssPercentile) threat.push('<span class="badge">EPSS ' + Math.round(t.epssPercentile) + '</span>');
     if (t.threatActors) threat.push('<span class="badge">' + t.threatActors + ' group' + (t.threatActors === 1 ? '' : 's') + '</span>');
     return '<tr>' +
-      '<td><div style="font-weight:600">' + x(t.techniqueId) + '</div>' +
+      '<td><div class="u-fw600">' + x(t.techniqueId) + '</div>' +
         '<div class="tiny muted">' + x(t.name) + '</div></td>' +
       '<td class="tiny">' + x(t.tactic) + '</td>' +
       '<td><span style="color:' + recTierColor(t.tier) + ';font-weight:700">' + t.score + '</span>' +
@@ -6931,7 +6951,7 @@ function loadOpenAEVScenarios(type, bodyId, emptyId) {
     }
     empty.style.display = 'none';
     body.innerHTML = list.map(function(sc) {
-      return '<tr style="cursor:pointer" onclick="openOpenAEVDetail(\'' + x(sc.OpenAEVScenarioID) + '\')">' +
+      return '<tr class="u-pointer" onclick="openOpenAEVDetail(\'' + x(sc.OpenAEVScenarioID) + '\')">' +
         '<td>' + x(sc.Name) + '</td>' +
         '<td>' + x(sc.Category) + '</td>' +
         '<td>' + x(sc.Severity) + '</td>' +
@@ -7059,7 +7079,7 @@ function loadExercisesTab() {
       var abortBtn = live
         ? '<button class="btn btn-outline-red btn-sm" onclick="event.stopPropagation();abortExecution(\'' + x(e.id) + '\')">&#9632; Abort</button>'
         : '';
-      return '<tr style="cursor:pointer" onclick="openExerciseDetail(\'' + x(e.id) + '\')">' +
+      return '<tr class="u-pointer" onclick="openExerciseDetail(\'' + x(e.id) + '\')">' +
         '<td>' + x(e.name || e.plan_id) + '</td>' +
         '<td><span class="badge">' + x(e.status) + (live ? ' <span class="tiny" style="opacity:.7">&#9679; live</span>' : '') + '</span></td>' +
         '<td class="tiny">' + progress + '</td>' +
@@ -7289,7 +7309,7 @@ function apScoreDriversHtml(drivers) {
   if (!drivers || !drivers.length) return '<div class="tiny muted" style="margin-top:0.4rem">No score driver detail available.</div>';
   return '<div style="display:flex;flex-direction:column;gap:0.25rem;margin-top:0.4rem">' + drivers.map(function(d) {
     var ok = d.deficit === 0;
-    var mark = ok ? '<span style="color:var(--success)">&#10003;</span>' : '<span style="color:var(--warning)">&#9888;</span>';
+    var mark = ok ? '<span class="u-success">&#10003;</span>' : '<span class="u-warning">&#9888;</span>';
     var deficitStr = ok ? 'no deficit' : '-' + d.deficit.toFixed(1) + ' pts';
     return '<div class="tiny" style="display:flex;justify-content:space-between;gap:0.5rem"><span>' + mark + ' ' + x(d.label) + '</span><span class="muted">' + deficitStr + '</span></div>';
   }).join('') + '</div>';
@@ -7329,7 +7349,7 @@ function apGraphScopeInterp(s) {
   return size + ' — ' + hosts + ' host' + (hosts === 1 ? '' : 's') + ' observed. ' + adNote;
 }
 function apScopeCard(s) {
-  var sub = (s.users || 0) + ' users · ' + (s.groups || 0) + ' groups · ' + (s.edges || 0) + ' edges<br><span style="color:var(--muted)">' + x(apGraphScopeInterp(s)) + '</span>';
+  var sub = (s.users || 0) + ' users · ' + (s.groups || 0) + ' groups · ' + (s.edges || 0) + ' edges<br><span class="u-muted">' + x(apGraphScopeInterp(s)) + '</span>';
   return apCard('Graph Scope', (s.hosts || 0) + ' hosts', 'var(--text)', sub);
 }
 function apCoverageConfidencePanel(coverage, confidence) {
@@ -7434,15 +7454,15 @@ function loadAPHistory() {
     tb.innerHTML = rows.map(function(r) {
       var ts = r.collectedAt ? new Date(r.collectedAt).toLocaleString('en-GB',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}) : '—';
       var statusBadge = r.status === 'completed'
-        ? '<span style="color:var(--success)">&#10003; Completed</span>'
-        : '<span style="color:var(--danger)">&#10005; ' + x(r.status) + (r.errorMsg ? ': ' + x(r.errorMsg.slice(0,40)) : '') + '</span>';
+        ? '<span class="u-success">&#10003; Completed</span>'
+        : '<span class="u-danger">&#10005; ' + x(r.status) + (r.errorMsg ? ': ' + x(r.errorMsg.slice(0,40)) : '') + '</span>';
       return '<tr>' +
         '<td style="font-family:var(--font-mono);font-size:0.76rem">' + ts + '</td>' +
         '<td>' + x(r.hostname || r.agentId) + '</td>' +
         '<td style="text-align:right">' + (r.nodeCount || 0) + '</td>' +
         '<td style="text-align:right">' + (r.edgeCount || 0) + '</td>' +
         '<td style="text-align:right">' + _fmtDuration(r.durationMs) + '</td>' +
-        '<td style="text-align:center">' + (r.sharpHound ? '&#10003;' : '&#8212;') + '</td>' +
+        '<td class="u-center">' + (r.sharpHound ? '&#10003;' : '&#8212;') + '</td>' +
         '<td>' + statusBadge + '</td>' +
         '</tr>';
     }).join('');
@@ -7600,10 +7620,10 @@ function apDiscoverSubnet() {
 
 // Renders a timeline step. state: 'done' | 'active' | 'pending' | 'warn'
 function _apStep(state, title, detail) {
-  var icon = state === 'done' ? '<span style="color:var(--success)">&#10003;</span>'
+  var icon = state === 'done' ? '<span class="u-success">&#10003;</span>'
     : state === 'active' ? '<span style="animation:spin 1s linear infinite;display:inline-block">&#9696;</span>'
-    : state === 'warn' ? '<span style="color:var(--warning)">&#9888;</span>'
-    : '<span style="color:var(--muted)">&#9675;</span>';
+    : state === 'warn' ? '<span class="u-warning">&#9888;</span>'
+    : '<span class="u-muted">&#9675;</span>';
   var titleColor = state === 'pending' ? 'var(--muted)' : 'var(--text)';
   return '<div style="display:flex;gap:0.7rem;align-items:flex-start;padding:0.55rem 0;border-bottom:1px solid var(--border)">' +
     '<div style="width:1.2rem;text-align:center;flex-shrink:0;margin-top:0.05rem;font-size:0.9rem">' + icon + '</div>' +
@@ -7840,7 +7860,7 @@ function _apOnCollected(msg) {
   var nodes = d.nodes || 0;
   var edges = d.edges || 0;
   var step1Html = tl.children.length > 0 ? tl.children[0].outerHTML : _apStep('done', 'Command dispatched', '');
-  step1Html = step1Html.replace(/animation:spin[^"]+/g, '').replace(/<span[^>]*>&#9696;<\/span>/, '<span style="color:var(--success)">&#10003;</span>').replace(/<span[^>]*>&#9675;<\/span>/, '<span style="color:var(--success)">&#10003;</span>');
+  step1Html = step1Html.replace(/animation:spin[^"]+/g, '').replace(/<span[^>]*>&#9696;<\/span>/, '<span class="u-success">&#10003;</span>').replace(/<span[^>]*>&#9675;<\/span>/, '<span class="u-success">&#10003;</span>');
   tl.innerHTML =
     step1Html +
     _apStep('done', 'Agent finished probing at ' + _apTimestamp(), label + ' completed TCP probes across all targets.') +
@@ -7903,7 +7923,7 @@ function renderAPAssets() {
         (a.label && a.label.toUpperCase() !== (a.hostKey || '').toUpperCase() ? '<div class="tiny muted">' + x(a.hostKey) + '</div>' : '') + '</td>' +
       '<td><input id="apt-cj-' + i + '" value="' + x(a.crownJewel || '') + '" placeholder="e.g. ERP, FileServer" style="' + AP_INPUT_STYLE + '"></td>' +
       '<td><input id="apt-seg-' + i + '" value="' + x(a.segment || '') + '" placeholder="e.g. server-vlan" style="' + AP_INPUT_STYLE + '"></td>' +
-      '<td style="text-align:center"><input type="checkbox" id="apt-hv-' + i + '"' + (a.highValue ? ' checked' : '') + '></td>' +
+      '<td class="u-center"><input type="checkbox" id="apt-hv-' + i + '"' + (a.highValue ? ' checked' : '') + '></td>' +
       '<td><select id="apt-crit-' + i + '" style="' + AP_INPUT_STYLE + '">' + tierOpts + '</select></td>' +
       '<td style="font-size:0.72rem;white-space:nowrap">' +
         '<label style="margin-right:0.4rem"><input type="checkbox" id="apt-if-' + i + '"' + (a.internetFacing ? ' checked' : '') + '> Internet</label>' +
@@ -9094,7 +9114,7 @@ function renderCampaignRows() {
     var targetLabel = c.targetType === 'group'
       ? (CMP.groupsById[c.targetGroupId] || ('Group #' + c.targetGroupId))
       : c.targetType === 'all' ? 'All Agents' : 'Agents';
-    return '<tr style="cursor:pointer" onclick="openCampaignDetail(\'' + x(c.id) + '\')">' +
+    return '<tr class="u-pointer" onclick="openCampaignDetail(\'' + x(c.id) + '\')">' +
       '<td><div class="cell-main">' + x(c.name) + '</div><div class="tiny muted" style="font-family:var(--font-mono);font-size:0.6rem">' + x(c.id) + (c.createdBy ? ' · ' + x(c.createdBy) : '') + '</div></td>' +
       '<td class="tiny muted">' + x(c.scenarioName) + '<div class="tiny muted" style="opacity:0.75">' + x(targetLabel) + '</div></td>' +
       '<td class="tiny">' + (s.dispatched || 0) + '/' + (s.targets || 0) + (s.skipped ? ' <span class="tiny muted">(' + s.skipped + ' skipped)</span>' : '') + '</td>' +
@@ -9134,7 +9154,7 @@ function openCampaignDetail(id) {
     var banner = (s.status === 'running')
       ? '<div class="dash-panel" style="margin-bottom:1.25rem;border-color:' + (s.paused ? 'var(--warning)' : 'var(--accent)') + '"><div class="dash-panel-body" style="display:flex;align-items:center;gap:1rem">' +
         (cds.live ? '<span class="dot-live"></span>' : '<span class="sbadge s-paused" style="flex-shrink:0">paused</span>') +
-        '<div style="flex:1"><div style="font-weight:600">' + (s.paused ? 'Campaign paused — ' : 'Campaign in progress — ') + (s.dispatched || 0) + '/' + (s.targets || 0) + ' agents dispatched</div>' +
+        '<div class="u-flex1"><div class="u-fw600">' + (s.paused ? 'Campaign paused — ' : 'Campaign in progress — ') + (s.dispatched || 0) + '/' + (s.targets || 0) + ' agents dispatched</div>' +
         '<div class="prog" style="margin-top:0.5rem"><i style="width:' + (s.progress || 0) + '%"></i></div></div>' +
         '<div style="font-family:var(--font-display);font-size:1.4rem;font-weight:700">' + (s.progress || 0) + '%</div></div></div>'
       : '';
@@ -9156,7 +9176,7 @@ function openCampaignDetail(id) {
         c.skips.map(function(k) { return '<div style="display:flex;gap:0.6rem;padding:0.3rem 0;border-bottom:1px solid var(--border);font-size:0.8rem"><code>' + x(k.agentId) + '</code><span class="tiny muted" style="margin-left:auto">' + x(k.reason) + '</span></div>'; }).join('') + '</div></div>'
       : '';
     // ── run summary ──
-    var kv = function(k, v) { return '<div style="display:flex;gap:0.6rem;padding:0.35rem 0;border-bottom:1px solid var(--border);font-size:0.8rem"><span style="color:var(--muted);min-width:120px">' + k + '</span><span style="flex:1">' + v + '</span></div>'; };
+    var kv = function(k, v) { return '<div style="display:flex;gap:0.6rem;padding:0.35rem 0;border-bottom:1px solid var(--border);font-size:0.8rem"><span style="color:var(--muted);min-width:120px">' + k + '</span><span class="u-flex1">' + v + '</span></div>'; };
     var targetKv = c.targetType === 'group'
       ? 'Agent Group — ' + x(CMP.groupsById[c.targetGroupId] || ('Group #' + c.targetGroupId))
       : c.targetType === 'all' ? 'All Agents' : (s.targets || 0) + ' agents selected';
@@ -9423,24 +9443,24 @@ function selectTIPack(type) {
   apicall('/api/ti/suggest-pack?type=' + encodeURIComponent(type)).then(function(pack) {
     _tiPackData = pack;
     if (!pack || !pack.hasData) {
-      info.innerHTML = '<span style="color:var(--danger)">No data available for this pack — run more scenarios or reseed content first.</span>';
+      info.innerHTML = '<span class="u-danger">No data available for this pack — run more scenarios or reseed content first.</span>';
       preview.style.display = '';
       return;
     }
     var tacticSet = {};
     (pack.techniques || []).forEach(function(t) { if (t.tactic) tacticSet[t.tactic] = true; });
     var tacticCount = Object.keys(tacticSet).length;
-    var ransomNote = pack.ransomwareCount > 0 ? ' &middot; <strong style="color:var(--warning)">' + pack.ransomwareCount + ' ransomware-linked</strong>' : '';
+    var ransomNote = pack.ransomwareCount > 0 ? ' &middot; <strong class="u-warning">' + pack.ransomwareCount + ' ransomware-linked</strong>' : '';
     var kevNote = pack.totalKevCves > 0 ? ' &middot; ' + pack.totalKevCves + ' KEV CVEs' : '';
     info.innerHTML = (_tiPackIcons[type] || '') + ' <strong>' + x(pack.packName) + '</strong><br>' +
-      '<span style="color:var(--muted)">' + x(pack.description) + '</span><br>' +
+      '<span class="u-muted">' + x(pack.description) + '</span><br>' +
       '<span style="font-size:0.75rem;margin-top:4px;display:inline-block"><strong>' + pack.techniqueCount + '</strong> techniques &middot; <strong>' + tacticCount + '</strong> tactics' + kevNote + ransomNote + '</span>';
     preview.style.display = '';
     // Pre-fill campaign name
     var nameEl = document.getElementById('cmp-name');
     if (!nameEl.value) nameEl.value = pack.suggestedName || '';
   }).catch(function() {
-    info.innerHTML = '<span style="color:var(--danger)">Failed to fetch pack data.</span>';
+    info.innerHTML = '<span class="u-danger">Failed to fetch pack data.</span>';
     preview.style.display = '';
   });
 }
@@ -9631,8 +9651,8 @@ function loadReadinessTrends() {
     var summary = document.getElementById('dash-trends-kpis');
     if (summary) {
       summary.innerHTML =
-        '<span style="margin-right:1rem"><strong style="color:var(--success)">' + improved + '</strong> improved</span>' +
-        '<span style="margin-right:1rem"><strong style="color:var(--danger)">' + regressed + '</strong> regressed</span>' +
+        '<span style="margin-right:1rem"><strong class="u-success">' + improved + '</strong> improved</span>' +
+        '<span style="margin-right:1rem"><strong class="u-danger">' + regressed + '</strong> regressed</span>' +
         '<span><strong>' + data.total + '</strong> actors tracked</span>';
     }
     // Trend table — show top 10 by most recent prevention, sorted worst-first
@@ -9642,7 +9662,7 @@ function loadReadinessTrends() {
         ? '<span style="color:var(--success);font-weight:700">&#8679; +' + t.preventionDelta.toFixed(1) + '%</span>'
         : t.direction === 'down'
         ? '<span style="color:var(--danger);font-weight:700">&#8681; ' + t.preventionDelta.toFixed(1) + '%</span>'
-        : '<span style="color:var(--muted)">&#8213;</span>';
+        : '<span class="u-muted">&#8213;</span>';
       var prevColor = t.latestPrevention >= 80 ? 'var(--success)' : t.latestPrevention >= 50 ? 'var(--warning)' : 'var(--danger)';
       return '<tr>' +
         '<td style="font-size:0.8rem;font-weight:600">' + x(t.actorName) + '</td>' +
@@ -9860,7 +9880,7 @@ function openTmplRun(templateId) {
     var calLabel = _tmplCalderaID
       ? '<span class="utl-badge utl-emu" style="margin-right:4px">Emu</span>' + x(tmpl.calderaAdversaryName) + ' adversary'
       : '<span class="utl-badge" style="background:var(--elevated);border-color:var(--border);color:var(--muted);margin-right:4px">Emu</span>' +
-        x(tmpl.calderaAdversaryName) + ' <em style="color:var(--muted)">(not found in Caldera — unchecked)</em>';
+        x(tmpl.calderaAdversaryName) + ' <em class="u-muted">(not found in Caldera — unchecked)</em>';
     srcRows += '<label style="display:flex;align-items:flex-start;gap:0.6rem;cursor:pointer;font-size:0.82rem">' +
       '<input type="checkbox" id="tmpl-src-caldera"' + (_tmplCalderaID ? ' checked' : '') + ' onchange="renderTmplOSCompat()" style="margin-top:2px">' +
       '<span>' + calLabel + '</span></label>';
@@ -10474,7 +10494,7 @@ function renderPrivilegeCoverage(pc) {
       var barW = Math.min(100, rate);
       return '<tr style="' + bg + '">' +
         '<td><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:' + col + ';margin-right:5px"></span>' + lbl + '</td>' +
-        '<td style="text-align:center">' + t.attempted + '</td>' +
+        '<td class="u-center">' + t.attempted + '</td>' +
         '<td style="text-align:center;color:var(--success)">' + t.prevented + '</td>' +
         '<td style="text-align:center;color:' + (t.missed > 0 ? 'var(--danger)' : 'var(--muted)') + ';font-weight:' + (t.missed > 0 ? '700' : '400') + '">' + t.missed + '</td>' +
         '<td style="min-width:90px">' +
@@ -10580,11 +10600,11 @@ function renderUTL() {
   var rows = filtered.map(function(t, i) {
     var bg = i % 2 === 0 ? '' : 'background:rgba(255,255,255,.02)';
     var verdict = cov[t.techniqueId] || '';
-    var vdot = verdict === 'pass'  ? '<span style="color:var(--success)">●</span>' :
-               verdict === 'fail'  ? '<span style="color:var(--danger)">●</span>'  :
-               verdict === 'error' ? '<span style="color:var(--muted)">●</span>'   : '';
+    var vdot = verdict === 'pass'  ? '<span class="u-success">●</span>' :
+               verdict === 'fail'  ? '<span class="u-danger">●</span>'  :
+               verdict === 'error' ? '<span class="u-muted">●</span>'   : '';
     function cell(n, cls) {
-      return '<td style="text-align:center">' +
+      return '<td class="u-center">' +
         (n > 0 ? '<span class="utl-num"><span class="utl-badge ' + cls + '">' + n + '</span></span>'
                : '<span class="utl-zero">—</span>') + '</td>';
     }
@@ -10599,7 +10619,7 @@ function renderUTL() {
       cell(t.emuCount,   'utl-emu') +
       cell(t.atomicCount,'utl-atomic') +
       '<td style="text-align:center;font-family:var(--font-mono);font-size:0.78rem;color:var(--text)">' + t.totalVariants + '</td>' +
-      '<td style="text-align:center">' + srcBadge + '</td>' +
+      '<td class="u-center">' + srcBadge + '</td>' +
     '</tr>';
   }).join('');
 
@@ -10652,7 +10672,7 @@ function renderCovToolbar() {
     .map(function(o) { return '<button class="' + (COV_VIEW === o[0] ? 'on' : '') + '" onclick="setCovView(\'' + o[0] + '\')">' + o[1] + '</button>'; }).join('');
   var badge = function(col, l, v) { return '<span class="sbadge" style="background:transparent;border:1px solid var(--border);color:' + col + '">' + v + ' ' + l + '</span>'; };
   document.getElementById('cov-toolbar').innerHTML =
-    '<div class="cov-seg">' + seg + '</div><span style="flex:1"></span>' +
+    '<div class="cov-seg">' + seg + '</div><span class="u-flex1"></span>' +
     badge('var(--success)', 'Prevented', c.cov) + badge('var(--warning)', 'Detected', c.part) +
     badge('var(--danger)', 'Missed', c.gap) + badge('var(--muted)', 'Untested', c.none);
 }
@@ -10665,7 +10685,7 @@ function openTechnique(id) {
     e = e || {};
     document.getElementById('results-title').textContent = id + ' — ' + (e.name || 'Technique');
     document.getElementById('results-export').innerHTML = '';
-    var row = function(k, v) { return v && v.length ? '<div style="display:flex;gap:0.6rem;padding:0.35rem 0;border-bottom:1px solid var(--border);font-size:0.8rem"><span style="color:var(--muted);min-width:120px">' + k + '</span><span style="flex:1">' + v + '</span></div>' : ''; };
+    var row = function(k, v) { return v && v.length ? '<div style="display:flex;gap:0.6rem;padding:0.35rem 0;border-bottom:1px solid var(--border);font-size:0.8rem"><span style="color:var(--muted);min-width:120px">' + k + '</span><span class="u-flex1">' + v + '</span></div>' : ''; };
     var list = function(a) { return (a || []).map(x).join(', '); };
     var body = '<div style="margin-bottom:0.9rem"><span class="sbadge" style="background:transparent;border:1px solid ' + meta[1] + ';color:' + meta[1] + '">' + meta[0] + '</span></div>' +
       row('Tactics', list(e.tactics)) + row('Platforms', list(e.platforms)) +
@@ -10834,7 +10854,7 @@ function renderFindingsRows() {
   if (!l.length) { tb.innerHTML = '<tr><td colspan="' + colCount + '" class="empty">No findings' + (FINDING_TAB === 'all' ? ' yet.' : ' in this state.') + '</td></tr>'; return; }
   tb.innerHTML = l.map(function(f) {
     var checkCell = (_findingsBulkMode && canPush)
-      ? '<td onclick="event.stopPropagation()" style="padding:0.2rem 0.5rem"><input type="checkbox" ' + (_findingsSelected[f.id] ? 'checked' : '') + ' onchange="toggleFindingCheck(\'' + x(f.id) + '\')" style="cursor:pointer"></td>'
+      ? '<td onclick="event.stopPropagation()" style="padding:0.2rem 0.5rem"><input type="checkbox" ' + (_findingsSelected[f.id] ? 'checked' : '') + ' onchange="toggleFindingCheck(\'' + x(f.id) + '\')" class="u-pointer"></td>'
       : '';
     var isTicketed = _ticketCandidateIds && (f.status === 'open' || f.status === 'triaged') && !_ticketCandidateIds.has(f.id);
     var ticketCell = '';
@@ -10856,7 +10876,7 @@ function renderFindingsRows() {
         + ' style="font-size:0.72rem;padding:0.2rem 0.35rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--muted);cursor:pointer">'
         + '<option value="">Set…</option>' + opts + '</select></td>';
     }
-    return '<tr style="cursor:pointer" onclick="openFinding(\'' + x(f.id) + '\')">'
+    return '<tr class="u-pointer" onclick="openFinding(\'' + x(f.id) + '\')">'
       + checkCell
       + '<td class="cell-main">' + x(f.techniqueName || f.techniqueId) + (f.reopenedCount > 0 ? ' <span class="sbadge s-partial">reopened</span>' : '') + '</td>'
       + '<td><span class="tech-id">' + x(f.techniqueId) + '</span></td>'
@@ -10882,7 +10902,7 @@ function openFinding(id) {
     _currentFinding = f;
     var e = f.enrichment || {};
     document.getElementById('results-title').textContent = (f.techniqueName || f.techniqueId) + ' — Finding';
-    var row = function(k, v) { return v && v.length ? '<div style="display:flex;gap:0.6rem;padding:0.35rem 0;border-bottom:1px solid var(--border);font-size:0.8rem"><span style="color:var(--muted);min-width:140px">' + k + '</span><span style="flex:1">' + v + '</span></div>' : ''; };
+    var row = function(k, v) { return v && v.length ? '<div style="display:flex;gap:0.6rem;padding:0.35rem 0;border-bottom:1px solid var(--border);font-size:0.8rem"><span style="color:var(--muted);min-width:140px">' + k + '</span><span class="u-flex1">' + v + '</span></div>' : ''; };
     var list = function(a) { return (a || []).map(x).join(', '); };
     var canPush = (ROLE === 'admin' || ROLE === 'analyst');
     var pushBtn = canPush ? '<button class="btn btn-outline btn-sm" onclick="pushFindingToITSM(\'' + x(f.id) + '\')">+ Ticket</button>' : '';
@@ -10931,7 +10951,7 @@ function openFinding(id) {
       row('Exposure age', formatFindingAge(f)) +
       vbHtml +
       (e.description ? '<div style="margin-top:0.8rem;font-size:0.8rem;color:var(--text-dim);line-height:1.5">' + x(e.description) + '</div>' : '') +
-      (e.url ? '<div style="margin-top:0.6rem"><a href="' + x(e.url) + '" target="_blank" rel="noopener" style="color:var(--accent);font-size:0.78rem">View on attack.mitre.org →</a></div>' : '') +
+      (e.url ? '<div class="u-mt-06"><a href="' + x(e.url) + '" target="_blank" rel="noopener" style="color:var(--accent);font-size:0.78rem">View on attack.mitre.org →</a></div>' : '') +
       (canPush
         ? '<div style="margin-top:1rem;padding-top:0.75rem;border-top:1px solid var(--border)">' +
             '<div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:0.4rem">ITSM Tickets</div>' +
@@ -12006,7 +12026,7 @@ function loadReports() {
       return '<div class="rep-row">' +
         '<div class="rep-ic">' + d + '</div>' +
         '<div class="rep-main"><div class="rep-host">' + x(host) + '</div>' +
-          '<div class="rep-sub">Reports on: <strong style="color:var(--text)">' + x(lastName || 'unnamed scenario') + '</strong> (latest run) · ' + n + ' run' + (n === 1 ? '' : 's') + ' total · last ' + ago(byAgent[id].last) + '</div></div>' +
+          '<div class="rep-sub">Reports on: <strong class="u-text">' + x(lastName || 'unnamed scenario') + '</strong> (latest run) · ' + n + ' run' + (n === 1 ? '' : 's') + ' total · last ' + ago(byAgent[id].last) + '</div></div>' +
         '<div class="rep-acts">' +
           '<button class="btn btn-outline btn-sm" onclick="genAgentReport(\'' + x(id) + '\',\'posture\',\'pdf\')">PDF Report</button>' +
           '<button class="btn btn-outline btn-sm" onclick="genAgentReport(\'' + x(id) + '\',\'posture\',\'csv\')">CSV</button>' +
@@ -13256,7 +13276,7 @@ function renderPickerList() {
     return '<label style="display:flex;align-items:flex-start;gap:0.55rem;padding:0.4rem 0.5rem;border-bottom:1px solid var(--border);' +
       (_pickerReadOnly ? '' : 'cursor:pointer;') + 'font-size:0.8rem">' +
       checkbox +
-      '<span style="flex:1">' +
+      '<span class="u-flex1">' +
         '<span style="font-weight:600;color:var(--accent)">' + x(label) + '</span>' +
         (it.name ? ' <span>' + x(it.name) + '</span>' : '') + cbadge + extraBadges +
         (meta ? '<br><span class="card-meta">' + x(meta) + '</span>' : '') +
@@ -13416,7 +13436,7 @@ function renderModalSelection() {
     if (cached === undefined) {
       _postureSummaryCache[cacheKey] = 'pending';
       note.style.display = 'block';
-      note.innerHTML = '<span style="color:var(--muted)">Loading check catalog…</span>';
+      note.innerHTML = '<span class="u-muted">Loading check catalog…</span>';
       apicall('/api/posture/catalog?agentId=' + encodeURIComponent(agentId) + '&scenario=' + encodeURIComponent(id))
         .then(function(d) {
           var html = '';
@@ -13446,7 +13466,7 @@ function renderModalSelection() {
         });
     } else if (cached === 'pending') {
       note.style.display = 'block';
-      note.innerHTML = '<span style="color:var(--muted)">Loading check catalog…</span>';
+      note.innerHTML = '<span class="u-muted">Loading check catalog…</span>';
     } else if (cached) {
       note.style.display = 'block';
       note.innerHTML = cached;
@@ -14089,9 +14109,9 @@ function viewRunResults(run) {
   var alertText = "";
   if (typeof run.alertsTotal !== 'undefined' && run.alertsTotal > 0) {
     if (run.alertsHighFidelity > 0) {
-      alertText = ' &nbsp;&middot;&nbsp; Simulation generated <strong style="color:var(--warning)">' + run.alertsTotal + ' alerts</strong> (<strong style="color:var(--accent)">' + run.alertsHighFidelity + ' high-fidelity</strong>)';
+      alertText = ' &nbsp;&middot;&nbsp; Simulation generated <strong class="u-warning">' + run.alertsTotal + ' alerts</strong> (<strong style="color:var(--accent)">' + run.alertsHighFidelity + ' high-fidelity</strong>)';
     } else {
-      alertText = ' &nbsp;&middot;&nbsp; Simulation generated <strong style="color:var(--warning)">' + run.alertsTotal + ' alerts</strong>';
+      alertText = ' &nbsp;&middot;&nbsp; Simulation generated <strong class="u-warning">' + run.alertsTotal + ' alerts</strong>';
     }
   } else if (typeof run.alertsTotal !== 'undefined' && run.alertsTotal === 0 && (run.status === 'completed' || run.status === 'partial')) {
     alertText = ' &nbsp;&middot;&nbsp; No alerts generated';
@@ -14138,7 +14158,7 @@ function viewRunResults(run) {
     document.getElementById('results-summary').innerHTML =
       '<span style="color:var(--danger);font-weight:600">' + fail + ' fail</span>' +
       ' &nbsp;/&nbsp; <span style="color:var(--success);font-weight:600">' + pass + ' pass</span>' +
-      (skipped ? ' &nbsp;/&nbsp; <span style="color:var(--muted)">' + skipped + ' skipped</span>' : '') +
+      (skipped ? ' &nbsp;/&nbsp; <span class="u-muted">' + skipped + ' skipped</span>' : '') +
       ' &nbsp;&middot;&nbsp; ' + results.length + ' total &nbsp;&middot;&nbsp; Agent: <code>' + x(run.agentId) + '</code>' +
       runSettingsText +
       subsetText +
@@ -14217,7 +14237,7 @@ function viewRunResults(run) {
             var col = delta > 0 ? 'var(--success)' : delta < 0 ? 'var(--danger)' : 'var(--muted)';
             return '<span style="color:' + col + '">' + arrow + ' ' + Math.abs(delta) + ' pts vs last run</span>';
           })()
-        : '<span style="color:var(--muted)">baseline — no prior run</span>';
+        : '<span class="u-muted">baseline — no prior run</span>';
       function kpiGaugeCard(label, value, sub) {
         return '<div class="kpi-card" style="display:flex;align-items:center;gap:0.75rem">' +
           '<div class="ring" style="width:64px;height:64px">' + gaugeSVG(value, 64, 8) +
@@ -14265,12 +14285,12 @@ function viewRunResults(run) {
         '</div>' +
       '</div>' +
       '<div style="background:var(--bg);border:1px solid var(--border);border-radius:3px;padding:0.4rem 0.75rem;margin-bottom:0.75rem;font-size:0.72rem;color:var(--muted);display:flex;gap:1.25rem;flex-wrap:wrap">' +
-        '<span>Total: <strong style="color:var(--text)">' + (s.totalTechniques || 0) + '</strong></span>' +
-        '<span style="color:var(--success)">Pass: <strong>' + (s.passedTechniques || 0) + '</strong></span>' +
-        '<span style="color:var(--danger)">Fail: <strong>' + (s.failedTechniques || 0) + '</strong></span>' +
-        (s.skippedTechniques ? '<span>Skipped: <strong style="color:var(--muted)">' + s.skippedTechniques + '</strong></span>' : '') +
-        (s.erroredTechniques ? '<span>Errored: <strong style="color:var(--warning)">' + s.erroredTechniques + '</strong></span>' : '') +
-        '<span>Confidence: <strong style="color:var(--text)">' + (s.confidence || 0) + '%</strong></span>' +
+        '<span>Total: <strong class="u-text">' + (s.totalTechniques || 0) + '</strong></span>' +
+        '<span class="u-success">Pass: <strong>' + (s.passedTechniques || 0) + '</strong></span>' +
+        '<span class="u-danger">Fail: <strong>' + (s.failedTechniques || 0) + '</strong></span>' +
+        (s.skippedTechniques ? '<span>Skipped: <strong class="u-muted">' + s.skippedTechniques + '</strong></span>' : '') +
+        (s.erroredTechniques ? '<span>Errored: <strong class="u-warning">' + s.erroredTechniques + '</strong></span>' : '') +
+        '<span>Confidence: <strong class="u-text">' + (s.confidence || 0) + '%</strong></span>' +
         (s.previousPreventionScore ? '<span>Prev Prevention: <strong>' + Math.round(s.previousPreventionScore) + '%</strong></span>' : '') +
       '</div>';
 
@@ -14539,7 +14559,7 @@ function viewRunResults(run) {
     }
     var rows = items.map(function(item) {
       return '<div style="display:flex;align-items:baseline;gap:0.5rem;padding:0.3rem 0;border-bottom:1px solid rgba(34,50,74,0.45);font-size:0.78rem">' +
-        '<span style="color:var(--muted)">&bull;</span><span>' + x(item) + '</span>' +
+        '<span class="u-muted">&bull;</span><span>' + x(item) + '</span>' +
       '</div>';
     }).join('');
     return '<div style="padding:0.5rem 0">' +
@@ -14773,7 +14793,7 @@ function renderDetectionValidationTab(rep, run) {
 
   var sources = (rep.detectionSources || []).map(function(s) {
     return '<span style="display:inline-flex;align-items:center;gap:0.3rem;background:var(--elevated);border:1px solid var(--border);border-radius:999px;padding:0.15rem 0.6rem;font-size:0.72rem;color:var(--text)">' +
-      '<span style="color:var(--success)">&#10003;</span>' + x(s.product) + '</span>';
+      '<span class="u-success">&#10003;</span>' + x(s.product) + '</span>';
   }).join(' ');
 
   var runTs = run && (run.completedAt || run.startedAt);
@@ -14789,7 +14809,7 @@ function renderDetectionValidationTab(rep, run) {
       var badge = '<span style="background:' + color + '22;color:' + color + ';border:1px solid ' + color + '55;border-radius:3px;font-size:0.67rem;font-weight:700;padding:0.1rem 0.4rem">' + x(label) + '</span>';
       var providerBadge = row.provider
         ? '<span style="font-size:0.68rem;color:var(--muted);background:var(--elevated);border:1px solid var(--border);border-radius:3px;padding:0.03rem 0.3rem">' + x(row.provider) + '</span>'
-        : '<span style="color:var(--muted)">&mdash;</span>';
+        : '<span class="u-muted">&mdash;</span>';
       return '<tr><td style="font-family:monospace;font-size:0.72rem;padding:0.3rem 0.5rem">' + x(row.techniqueId) + '</td>' +
              '<td style="padding:0.3rem 0.5rem">' + badge + '</td>' +
              '<td style="padding:0.3rem 0.5rem">' + providerBadge + '</td>' +
@@ -14799,15 +14819,15 @@ function renderDetectionValidationTab(rep, run) {
   el.innerHTML =
     '<div style="padding:1rem 0 0.5rem">' +
       '<div style="display:flex;gap:1.5rem;margin-bottom:0.75rem;flex-wrap:wrap">' +
-        '<div style="text-align:center">' +
+        '<div class="u-center">' +
           '<div style="font-size:1.7rem;font-weight:700;color:' + covColor + '">' + coverage + '%</div>' +
           '<div style="font-size:0.68rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Detection Coverage</div>' +
         '</div>' +
-        '<div style="text-align:center">' +
+        '<div class="u-center">' +
           '<div style="font-size:1.7rem;font-weight:700;color:var(--danger)">' + missRate + '%</div>' +
           '<div style="font-size:0.68rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Detection Miss Rate</div>' +
         '</div>' +
-        '<div style="text-align:center">' +
+        '<div class="u-center">' +
           '<div style="font-size:1.7rem;font-weight:700">' + verifiedFindings + '</div>' +
           '<div style="font-size:0.68rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Verified Findings</div>' +
         '</div>' +
@@ -14853,15 +14873,15 @@ function loadSIEMCorrelationPanel(runId) {
     el.innerHTML =
       '<div style="padding:1rem 0 0.5rem">' +
         '<div style="display:flex;gap:1.5rem;margin-bottom:1rem;flex-wrap:wrap">' +
-          '<div style="text-align:center">' +
+          '<div class="u-center">' +
             '<div style="font-size:1.7rem;font-weight:700;color:' + color + '">' + detRate + '%</div>' +
             '<div style="font-size:0.68rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">SIEM Detection Rate</div>' +
           '</div>' +
-          '<div style="text-align:center">' +
+          '<div class="u-center">' +
             '<div style="font-size:1.7rem;font-weight:700;color:var(--danger)">' + undetRate + '%</div>' +
             '<div style="font-size:0.68rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">SIEM Miss Rate</div>' +
           '</div>' +
-          '<div style="text-align:center">' +
+          '<div class="u-center">' +
             '<div style="font-size:1.7rem;font-weight:700">' + (c.totalAlerts || 0) + '</div>' +
             '<div style="font-size:0.68rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Total Alerts</div>' +
           '</div>' +
@@ -14958,7 +14978,7 @@ function renderVariantCoverage(data) {
               '<span style="color:var(--muted);font-size:0.68rem">' + x(t.techniqueName) + '</span>' +
               verdictBadge('bypassed') +
             '</div>' +
-            '<div style="font-size:0.7rem;color:var(--fg);margin-bottom:0.25rem"><span style="color:var(--muted)">Best Bypass: </span><strong>' + x(bypassLabel) + '</strong></div>' +
+            '<div style="font-size:0.7rem;color:var(--fg);margin-bottom:0.25rem"><span class="u-muted">Best Bypass: </span><strong>' + x(bypassLabel) + '</strong></div>' +
             proxyHtml +
             '<div style="margin-top:0.2rem"><span style="color:var(--muted);font-size:0.66rem">Detection: </span><span style="color:' + detCol + ';font-size:0.68rem;font-weight:600">' + detectionNote + '</span></div>' +
           '</div>' +
@@ -14982,7 +15002,7 @@ function renderVariantCoverage(data) {
     }).join('');
 
     bypassHtml =
-      '<div style="margin-bottom:1rem">' +
+      '<div class="u-mb-1">' +
         '<div style="font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--danger);margin-bottom:0.55rem;padding-bottom:0.3rem;border-bottom:1px solid var(--border)">' +
           '&#9888; Bypass Findings (' + bypassedTechs.length + ')' +
         '</div>' +
@@ -15013,7 +15033,7 @@ function renderVariantCoverage(data) {
   }).join('');
 
   var tableHtml =
-    '<div style="margin-bottom:1rem">' +
+    '<div class="u-mb-1">' +
       '<div style="font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--accent);margin-bottom:0.55rem;padding-bottom:0.3rem;border-bottom:1px solid var(--border)">Technique Coverage</div>' +
       '<div style="overflow-x:auto">' +
         '<table style="width:100%;border-collapse:collapse;font-size:0.72rem">' +
@@ -15381,7 +15401,7 @@ function renderRunReportExtra(rep) {
               ? '<div style="color:var(--muted);margin-top:2px;font-family:monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="' + x(item.error) + '">Cleanup error: ' + x(item.error) + '</div>'
               : '';
             return '<div style="margin-bottom:0.5rem;padding-bottom:0.5rem;border-bottom:1px solid rgba(34,50,74,0.4)">' +
-              '<div style="font-weight:600">' + title + ' <span style="font-weight:400;color:var(--muted);text-transform:capitalize">(' + x(item.verdict) + ')</span></div>' +
+              '<div class="u-fw600">' + title + ' <span style="font-weight:400;color:var(--muted);text-transform:capitalize">(' + x(item.verdict) + ')</span></div>' +
               residualLine + errorLine +
             '</div>';
           }).join('') +
@@ -15395,7 +15415,7 @@ function renderRunReportExtra(rep) {
       '</div>' +
       '<div style="display:flex;align-items:flex-start;gap:12px;margin-bottom:0.5rem">' +
         '<div style="font-size:1.8rem;line-height:1;color:' + erTextCol + ';flex-shrink:0">' + erIcon + '</div>' +
-        '<div style="flex:1">' +
+        '<div class="u-flex1">' +
           '<div style="font-size:0.92rem;font-weight:700;color:' + erTextCol + '">' + erRate.toFixed(1) + '% Clean &mdash; ' + erLabel + '</div>' +
           '<div style="font-size:0.75rem;color:var(--text);margin-top:3px;line-height:1.4">' + erSummary + '</div>' +
         '</div>' +
@@ -15465,7 +15485,7 @@ function renderRunReportExtra(rep) {
           ttd +
         '</div>';
       }).join('');
-      detHtml += '<div style="margin-top:0.6rem">' + rows2 + '</div>';
+      detHtml += '<div class="u-mt-06">' + rows2 + '</div>';
     }
 
     if (rep.detectionSources && rep.detectionSources.length > 0) {
@@ -15634,9 +15654,9 @@ function renderRunIOCList() {
           '<div><div class="kpi-label">Extracted</div><div>' + (ind.extractedAt ? ago(ind.extractedAt) : '—') + '</div></div>' +
           '<div><div class="kpi-label">Seen in techniques</div><div>' + (techs || '<span class="muted">—</span>') + '</div></div>' +
         '</div>' +
-        (tags ? '<div style="margin-top:0.6rem"><div class="kpi-label" style="margin-bottom:0.3rem">Threat tags</div>' + tags + '</div>' : '') +
-        ((ind.malwareFamilies || []).length ? '<div style="margin-top:0.6rem"><div class="kpi-label" style="margin-bottom:0.2rem">Malware families</div>' + x(ind.malwareFamilies.join(', ')) + '</div>' : '') +
-        ((ind.adversaryNames || []).length ? '<div style="margin-top:0.6rem"><div class="kpi-label" style="margin-bottom:0.2rem">Associated actors</div>' + x(ind.adversaryNames.join(', ')) + '</div>' : '') +
+        (tags ? '<div class="u-mt-06"><div class="kpi-label" style="margin-bottom:0.3rem">Threat tags</div>' + tags + '</div>' : '') +
+        ((ind.malwareFamilies || []).length ? '<div class="u-mt-06"><div class="kpi-label" style="margin-bottom:0.2rem">Malware families</div>' + x(ind.malwareFamilies.join(', ')) + '</div>' : '') +
+        ((ind.adversaryNames || []).length ? '<div class="u-mt-06"><div class="kpi-label" style="margin-bottom:0.2rem">Associated actors</div>' + x(ind.adversaryNames.join(', ')) + '</div>' : '') +
       '</div>';
     return '<div style="border:1px solid var(--border);border-radius:var(--radius);margin-bottom:0.5rem;overflow:hidden">' +
       '<div style="display:flex;align-items:center;gap:0.75rem;padding:0.6rem 1rem;cursor:pointer" onclick="toggleRunIOCRow(' + idx + ')">' +
@@ -15930,7 +15950,7 @@ function renderIOCRegistryTable() {
   }
   tbody.innerHTML = _iocRegistryRows.map(function(row, idx) {
     var suppressedBadge = row.suppressed ? ' <span class="sbadge" style="background:rgba(154,169,188,.12);color:var(--muted)" title="' + x(row.suppressionReason || '') + '">suppressed</span>' : '';
-    return '<tr style="cursor:pointer" onclick="openIOCDetail(' + idx + ')">' +
+    return '<tr class="u-pointer" onclick="openIOCDetail(' + idx + ')">' +
       '<td><span class="tiny" style="background:var(--elevated);border:1px solid var(--border);border-radius:4px;padding:1px 7px">' + x(IOC_TYPE_LABEL_REGISTRY[row.type] || row.type) + '</span></td>' +
       '<td><code style="font-size:0.8rem">' + x(row.value) + '</code>' + suppressedBadge + '</td>' +
       '<td class="tiny muted">' + x(row.source || '—') + '</td>' +
@@ -15979,7 +15999,7 @@ function openIOCDetail(idx) {
   document.getElementById('results-export').innerHTML = '';
 
   var rowHtml = function(k, v) {
-    return v ? '<div style="display:flex;gap:0.6rem;padding:0.35rem 0;border-bottom:1px solid var(--border);font-size:0.8rem"><span style="color:var(--muted);min-width:120px">' + k + '</span><span style="flex:1">' + v + '</span></div>' : '';
+    return v ? '<div style="display:flex;gap:0.6rem;padding:0.35rem 0;border-bottom:1px solid var(--border);font-size:0.8rem"><span style="color:var(--muted);min-width:120px">' + k + '</span><span class="u-flex1">' + v + '</span></div>' : '';
   };
   var body =
     rowHtml('Source', x(row.source || '—')) +
@@ -16205,7 +16225,7 @@ function submitIOCImport() {
           (s.tactic || durHtml
             ? '<div style="display:flex;align-items:center;gap:0.35rem;margin-top:0.12rem;margin-left:1.25rem;font-size:0.7rem;color:var(--muted);overflow:hidden">' +
                 tacticHtml +
-                '<span style="flex:1"></span>' +
+                '<span class="u-flex1"></span>' +
                 durHtml +
               '</div>'
             : '') +
@@ -16458,7 +16478,7 @@ function renderEvidencePanel(c) {
   function kv(label, valueHtml) {
     return '<div style="display:flex;gap:0.75rem;padding:0.18rem 0;border-bottom:1px solid rgba(34,50,74,0.4);min-height:1.6rem;align-items:flex-start">'
       + '<span style="min-width:6.5rem;color:var(--muted);font-size:0.69rem;flex-shrink:0;padding-top:0.05rem">' + label + '</span>'
-      + '<span style="color:var(--text)">' + valueHtml + '</span>'
+      + '<span class="u-text">' + valueHtml + '</span>'
       + '</div>';
   }
 
@@ -17971,7 +17991,7 @@ function complianceTile(fw) {
         '<div class="kpi-value" style="font-size:1.6rem;line-height:1.1;color:' + scoreColor + '">' + scoreStr + '</div>' +
       '</div>' +
       '<div style="font-size:0.62rem;text-align:right;color:var(--muted);line-height:1.5;flex-shrink:0;margin-left:0.5rem">' +
-        '<div style="font-weight:600">' + x(fw.regulator) + '</div>' +
+        '<div class="u-fw600">' + x(fw.regulator) + '</div>' +
         (hasData ? '<div>' + fw.totalControls + ' controls</div>' : '') +
       '</div>' +
     '</div>' +
@@ -18066,11 +18086,11 @@ function loadCalderaStatus() {
   apicall('/api/caldera/status').then(function(d) {
     var dot;
     if (d.reachable) {
-      dot = '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--success);margin-right:6px;vertical-align:middle"></span><span style="color:var(--success)">Connected</span>';
+      dot = '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--success);margin-right:6px;vertical-align:middle"></span><span class="u-success">Connected</span>';
     } else if (d.httpStatus === 401) {
-      dot = '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--warning);margin-right:6px;vertical-align:middle"></span><span style="color:var(--warning)">Auth Error — wrong API key</span>';
+      dot = '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--warning);margin-right:6px;vertical-align:middle"></span><span class="u-warning">Auth Error — wrong API key</span>';
     } else {
-      dot = '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--danger);margin-right:6px;vertical-align:middle"></span><span style="color:var(--danger)">Unreachable</span>';
+      dot = '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--danger);margin-right:6px;vertical-align:middle"></span><span class="u-danger">Unreachable</span>';
     }
     document.getElementById('cs-caldera-status').innerHTML = dot;
     document.getElementById('cs-caldera-url').textContent = d.url || '(not configured)';
@@ -18099,7 +18119,7 @@ function loadCalderaStatus() {
     var errEl = document.getElementById('cs-caldera-error');
     if (errEl) { errEl.textContent = e.message; errEl.style.display = ''; }
     document.getElementById('cs-caldera-status').innerHTML =
-      '<span style="color:var(--danger)">Error checking status</span>';
+      '<span class="u-danger">Error checking status</span>';
   }).finally(function() {
     if (btn) btn.disabled = false;
   });
@@ -18161,14 +18181,14 @@ function runConfirmDiffModal() {
 function _diffRow(label, oldVal, newVal) {
   return '<div class="tiny" style="margin-bottom:0.4rem"><span class="muted">' + x(label) + ':</span><br>' +
     '<span style="color:var(--danger);text-decoration:line-through">' + x(oldVal || '(empty)') + '</span><br>' +
-    '<span style="color:var(--success)">' + x(newVal || '(empty)') + '</span></div>';
+    '<span class="u-success">' + x(newVal || '(empty)') + '</span></div>';
 }
 
 // A secret/password field never round-trips its real value to the browser, so it
 // can only ever say whether it will change, never show old/new text.
 function _diffSecretRow(label, changed) {
   return '<div class="tiny" style="margin-bottom:0.4rem"><span class="muted">' + x(label) + ':</span> ' +
-    (changed ? '<span style="color:var(--warning)">will be replaced</span>' : '<span class="muted">unchanged (kept)</span>') + '</div>';
+    (changed ? '<span class="u-warning">will be replaced</span>' : '<span class="muted">unchanged (kept)</span>') + '</div>';
 }
 
 // ── Threat Intel connector config (MISP/OpenCTI/OTX) — editable, matching
@@ -18485,9 +18505,9 @@ function loadARTContentStatus() {
   apicall('/api/art/content/status').then(function(d) {
     var statusEl = document.getElementById('cs-art-status');
     if (d.seeded) {
-      statusEl.innerHTML = '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--success);margin-right:6px;vertical-align:middle"></span><span style="color:var(--success)">Seeded</span>';
+      statusEl.innerHTML = '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--success);margin-right:6px;vertical-align:middle"></span><span class="u-success">Seeded</span>';
     } else {
-      statusEl.innerHTML = '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--warning);margin-right:6px;vertical-align:middle"></span><span style="color:var(--warning)">Not seeded</span>';
+      statusEl.innerHTML = '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--warning);margin-right:6px;vertical-align:middle"></span><span class="u-warning">Not seeded</span>';
     }
     document.getElementById('cs-art-version').textContent = d.version || '(unversioned)';
     var loaded = d.techniquesLoaded != null ? d.techniquesLoaded : (d.techniqueCount || 0);
@@ -18528,7 +18548,7 @@ function loadARTContentStatus() {
       d.importedAt ? new Date(d.importedAt).toLocaleString() : '—';
   }).catch(function(e) {
     document.getElementById('cs-art-status').innerHTML =
-      '<span style="color:var(--danger)">Error checking status</span>';
+      '<span class="u-danger">Error checking status</span>';
   }).finally(function() {
     if (btn) btn.disabled = false;
   });
@@ -19075,7 +19095,7 @@ function loadAgtOverview(agentId) {
         (a.status !== 'offline' && !a.wsConnected ? ' <span class="sbadge s-paused" title="Heartbeat is reaching the server, but the WebSocket task channel is down -- dispatching a run to this agent will fail until it reconnects. Often a proxy/firewall blocking the WS Upgrade handshake.">&#9888; Task channel down</span>' : '')) +
       kv('Lifecycle',    '<span class="sbadge s-' + x(a.state||'active') + '" style="color:' + stateColor + '">' + x(a.state||'active') + '</span>') +
       kv('Last Seen',    ago(a.lastUpdate)) + kv('Enrolled', a.enrolledAt ? ago(a.enrolledAt) : '—') +
-      kv('Binary Trusted', a.binaryTrusted ? '<span style="color:var(--success)">&#10003; Verified</span>' : '<span style="color:var(--warning)">&#9888; Unverified</span>') +
+      kv('Binary Trusted', a.binaryTrusted ? '<span class="u-success">&#10003; Verified</span>' : '<span class="u-warning">&#9888; Unverified</span>') +
       '</div>' +
       (a.state === 'quarantined' ? '<div style="background:rgba(218,54,51,.12);border:1px solid var(--danger);border-radius:4px;padding:0.6rem 0.85rem;color:var(--danger);font-size:0.78rem;margin-bottom:0.75rem">&#9888; Agent is QUARANTINED — binary hash mismatch detected. Scenario dispatch is blocked. Restore to Active once the issue is resolved.</div>' : '') +
       (a.state === 'restricted'  ? '<div style="background:rgba(210,153,34,.12);border:1px solid var(--warning);border-radius:4px;padding:0.6rem 0.85rem;color:var(--warning);font-size:0.78rem;margin-bottom:0.75rem">&#9888; Agent is RESTRICTED — scenario dispatch is blocked by policy. Restore to Active to re-enable.</div>' : '') +
@@ -19146,7 +19166,7 @@ function loadAgtScenarios(agentId) {
       var score = r.score ? Math.round(r.score.preventionScore || 0) : null;
       var scoreHtml = score !== null
         ? '<span style="color:' + (score>=70?'var(--success)':score>=40?'var(--warning)':'var(--danger)') + '">' + score + '%</span>'
-        : '<span style="color:var(--muted)">—</span>';
+        : '<span class="u-muted">—</span>';
       var statusColor = {completed:'var(--success)',running:'var(--accent)',partial:'var(--warning)',failed:'var(--danger)'}[r.status] || 'var(--muted)';
       return '<tr>' +
         '<td>' + x(r.name||r.scenarioId) + '</td>' +
@@ -19303,9 +19323,9 @@ function metricSparklineCard(opts) {
   var latest = values[values.length - 1];
   return open +
     '<div style="display:flex;gap:0.9rem;margin-bottom:0.5rem;font-size:0.74rem">' +
-    '<div><span style="color:var(--muted)">latest</span> <strong style="color:' + colorFor(latest) + '">' + fmt(latest) + unit + '</strong></div>' +
-    '<div><span style="color:var(--muted)">avg</span> <strong>' + fmt(avg) + unit + '</strong></div>' +
-    '<div><span style="color:var(--muted)">max</span> <strong>' + fmt(maxVal) + unit + '</strong></div>' +
+    '<div><span class="u-muted">latest</span> <strong style="color:' + colorFor(latest) + '">' + fmt(latest) + unit + '</strong></div>' +
+    '<div><span class="u-muted">avg</span> <strong>' + fmt(avg) + unit + '</strong></div>' +
+    '<div><span class="u-muted">max</span> <strong>' + fmt(maxVal) + unit + '</strong></div>' +
     '</div>' +
     '<svg viewBox="0 0 ' + svgW + ' ' + svgH + '" style="width:100%;height:90px;display:block">' +
     '<path d="' + pathD + '" fill="none" stroke="var(--accent)" stroke-width="1.5" opacity="0.8"/>' +
@@ -19401,9 +19421,9 @@ function renderAgtRisk(health) {
 
   if ((health.trend.newFindings || []).length || (health.trend.resolvedFindings || []).length) {
     h += '<div class="tiny muted" style="margin-bottom:1rem">' +
-      (health.trend.newFindings.length ? '<span style="color:var(--danger)">' + health.trend.newFindings.length + ' new</span>' : '') +
+      (health.trend.newFindings.length ? '<span class="u-danger">' + health.trend.newFindings.length + ' new</span>' : '') +
       (health.trend.newFindings.length && health.trend.resolvedFindings.length ? ', ' : '') +
-      (health.trend.resolvedFindings.length ? '<span style="color:var(--success)">' + health.trend.resolvedFindings.length + ' resolved</span>' : '') +
+      (health.trend.resolvedFindings.length ? '<span class="u-success">' + health.trend.resolvedFindings.length + ' resolved</span>' : '') +
       ' since 7 days ago</div>';
   }
 
@@ -20075,7 +20095,7 @@ function renderVexSweepList(sweeps) {
     var disconnected = sw.status === 'agent_disconnected';
     return '<div class="card" style="margin-top:0.5rem;padding:0.75rem 1rem" id="vex-sweep-card-' + x(sw.id) + '">' +
       '<div style="display:flex;justify-content:space-between;align-items:center;font-size:0.78rem;margin-bottom:0.3rem">' +
-        '<span style="font-weight:600">' + x(sw.agentId) +
+        '<span class="u-fw600">' + x(sw.agentId) +
           (disconnected ? ' <span class="sbadge s-agent_disconnected">Agent Disconnected</span>' : '') + '</span>' +
         '<span style="display:flex;align-items:center;gap:0.6rem">' +
           (disconnected ? '' : '<span style="font-weight:700;color:var(--accent)">' + pct + '%</span>') +
@@ -20357,19 +20377,19 @@ function loadVariantCoverage() {
     }
     var html = '<div class="tbl-wrap"><table><thead><tr>' +
       '<th>Technique</th><th>Tactic</th><th>Total</th>' +
-      '<th style="color:var(--success)">Prevented</th>' +
-      '<th style="color:var(--danger)">Allowed</th>' +
-      '<th style="color:var(--muted)">Errors</th>' +
+      '<th class="u-success">Prevented</th>' +
+      '<th class="u-danger">Allowed</th>' +
+      '<th class="u-muted">Errors</th>' +
       '<th>First Bypass</th>' +
       '</tr></thead><tbody>';
     rows.forEach(function(row) {
       var fp = row.firstBypass
         ? '<span style="font-family:var(--font-mono);color:var(--warning);font-size:0.74rem">' + x(row.firstBypass) + '</span>'
-        : '<span style="color:var(--success)">None</span>';
+        : '<span class="u-success">None</span>';
       html += '<tr>' +
         '<td><span class="badge badge-mono" style="font-family:var(--font-mono)">' + x(row.techniqueId) + '</span></td>' +
         '<td style="color:var(--muted);font-size:0.8rem">' + x(row.tactic || '—') + '</td>' +
-        '<td style="text-align:center">' + (row.totalTested || 0) + '</td>' +
+        '<td class="u-center">' + (row.totalTested || 0) + '</td>' +
         '<td style="text-align:center;color:var(--success);font-weight:600">' + (row.prevented || 0) + '</td>' +
         '<td style="text-align:center;color:var(--danger);font-weight:600">' + (row.allowed || 0) + '</td>' +
         '<td style="text-align:center;color:var(--muted)">' + (row.errored || 0) + '</td>' +
@@ -20800,7 +20820,7 @@ function loadRansomwareReadiness(runs) {
     var pctLabel = pct !== null ? pct + '%' : 'no data';
     return '<div style="margin-bottom:0.5rem">' +
       '<div style="display:flex;justify-content:space-between;font-size:0.76rem;margin-bottom:0.2rem">' +
-        '<span style="color:var(--text)">' + cfg.icon + ' ' + x(cfg.label) + '</span>' +
+        '<span class="u-text">' + cfg.icon + ' ' + x(cfg.label) + '</span>' +
         '<span style="font-weight:600;color:' + col + '">' + pctLabel + '</span>' +
       '</div>' +
       '<div style="height:5px;background:var(--elevated);border-radius:3px;overflow:hidden">' +
@@ -20963,7 +20983,7 @@ function loadEmTab() {
         '</div>' +
         '<div style="border-top:1px solid var(--border);padding:0.5rem 1rem;display:flex;gap:0.5rem;align-items:center">' +
           (run ? '<a style="font-size:0.75rem;color:var(--accent);cursor:pointer" onclick=\'viewRunResults(' + JSON.stringify(run).replace(/'/g,"&#39;") + ')\'>View report →</a>' : '') +
-          '<span style="flex:1"></span>' +
+          '<span class="u-flex1"></span>' +
           ((ROLE === 'admin' || ROLE === 'analyst') ? '<button class="btn btn-outline btn-sm" style="font-size:0.72rem;padding:0.2rem 0.6rem" onclick="cloneScenario(\'' + x(e.id) + '\')" title="Clone into an editable custom scenario">&#9112; Clone</button>' : '') +
           (canRun ? '<button class="btn btn-outline btn-sm" style="font-size:0.72rem;padding:0.2rem 0.6rem" onclick="emRunLayer(\'' + x(e.id) + '\')" title="Run this layer">&#9654; Run</button>' : '') +
         '</div>' +
@@ -21327,9 +21347,9 @@ function _renderVexVariantDetail(source, techId) {
       var riskColor = v.riskLevel === 'ADVANCED' ? 'var(--danger)' : v.riskLevel === 'MODERATE' ? 'var(--warning)' : 'var(--success)';
       return '<div style="background:var(--elevated);border:1px solid var(--border);border-radius:6px;padding:0.4rem 0.55rem;font-size:0.72rem">' +
         '<div style="display:flex;gap:0.6rem;flex-wrap:wrap;color:var(--muted)">' +
-          '<span>Encoding: <b style="color:var(--text)">' + x(v.encoding || '—') + '</b></span>' +
-          '<span>Context: <b style="color:var(--text)">' + x(v.execContext || '—') + '</b></span>' +
-          '<span>Evasion: <b style="color:var(--text)">' + x(v.evasion || 'none') + '</b></span>' +
+          '<span>Encoding: <b class="u-text">' + x(v.encoding || '—') + '</b></span>' +
+          '<span>Context: <b class="u-text">' + x(v.execContext || '—') + '</b></span>' +
+          '<span>Evasion: <b class="u-text">' + x(v.evasion || 'none') + '</b></span>' +
           '<span>Risk: <b style="color:' + riskColor + '">' + x(v.riskLevel || '—') + '</b></span>' +
         '</div>' +
       '</div>';
@@ -21464,14 +21484,14 @@ function _renderEMLayerDetail(layerId) {
       var badges =
         (st.risk ? '<span class="sbadge" style="background:rgba(0,0,0,0.15);color:' + riskCol + '">' + x(st.risk) + ' risk</span>' : '') +
         (st.reversible ? '<span class="sbadge" style="background:rgba(35,134,54,0.15);color:var(--success)">reversible</span>' : '');
-      var telemetry = (st.telemetry || []).length ? '<div style="color:var(--muted);line-height:1.4;margin-top:0.2rem"><strong style="color:var(--text)">Telemetry:</strong> ' + st.telemetry.map(x).join(' · ') + '</div>' : '';
-      var detection = (st.detection || []).length ? '<div style="color:var(--muted);line-height:1.4;margin-top:0.2rem"><strong style="color:var(--text)">Detection:</strong> ' + st.detection.map(x).join(' · ') + '</div>' : '';
-      var blast = st.blastRadius ? '<div style="color:var(--muted);line-height:1.4;margin-top:0.2rem"><strong style="color:var(--text)">What it does:</strong> ' + x(st.blastRadius) + '</div>' : '';
+      var telemetry = (st.telemetry || []).length ? '<div style="color:var(--muted);line-height:1.4;margin-top:0.2rem"><strong class="u-text">Telemetry:</strong> ' + st.telemetry.map(x).join(' · ') + '</div>' : '';
+      var detection = (st.detection || []).length ? '<div style="color:var(--muted);line-height:1.4;margin-top:0.2rem"><strong class="u-text">Detection:</strong> ' + st.detection.map(x).join(' · ') + '</div>' : '';
+      var blast = st.blastRadius ? '<div style="color:var(--muted);line-height:1.4;margin-top:0.2rem"><strong class="u-text">What it does:</strong> ' + x(st.blastRadius) + '</div>' : '';
       var noDetail = (!blast && !telemetry && !detection) ? '<div style="color:var(--muted);margin-top:0.2rem">No additional details available for this step.</div>' : '';
       return '<div style="background:var(--elevated);border:1px solid var(--border);border-radius:6px;padding:0.45rem 0.6rem;font-size:0.72rem">' +
         '<div style="display:flex;align-items:center;gap:0.4rem;flex-wrap:wrap">' +
           (st.techniqueId ? '<span style="font-family:var(--font-mono);color:var(--text);font-weight:600">' + x(st.techniqueId) + '</span>' : '') +
-          '<span style="color:var(--text)">' + x(st.name || '') + '</span>' +
+          '<span class="u-text">' + x(st.name || '') + '</span>' +
           badges +
         '</div>' +
         blast + telemetry + detection + noDetail +
