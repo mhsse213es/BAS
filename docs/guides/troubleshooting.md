@@ -86,11 +86,11 @@ Unlike an older `.env`-based flow, the admin account is **not** auto-generated �
 **Checks:**
 
 1. **Verify agent service is running:**
-   - Windows: `Get-Service "BASAgent"` (no space in the service name)
+   - Windows: `Get-Service "Audspect Agent"` (the service *name* has a space; a pre-rebrand endpoint may still be registered under the legacy name `BASAgent` until its next `--update`, which auto-migrates it)
    - Linux: `sudo systemctl status bas-agent`
 
 2. **Verify server URL in agent config:**
-   - Windows: config is stored in the registry, not a file — `Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Services\BASAgent\Parameters"` and check `BAS_SERVER_URL`
+   - Windows: config is stored in the registry, not a file — `Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Services\Audspect Agent\Parameters"` and check `BAS_SERVER_URL`
    - Linux: `cat /etc/bas-agent/config`
    - The URL must be reachable from the endpoint (not `localhost`)
 
@@ -99,7 +99,7 @@ Unlike an older `.env`-based flow, the admin account is **not** auto-generated �
    - Linux: `nc -zv <server-ip> 9443`
 
 4. **Check agent logs:**
-   - Windows: `C:\ProgramData\BASAgent\logs` (or Event Viewer → Windows Logs → Application → Source: "BASAgent")
+   - Windows: `C:\ProgramData\BASAgent\logs` (this data directory still uses the pre-rebrand name — only the *service* name changed) — or Event Viewer → Windows Logs → Application → Source: "Audspect Agent"
    - Linux: `journalctl -u bas-agent -n 50`
 
 **Common error messages:**

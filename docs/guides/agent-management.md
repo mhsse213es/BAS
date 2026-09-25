@@ -63,7 +63,7 @@ Open PowerShell **as Administrator**:
   -install
 ```
 
-The agent installs as the `BASAgent` Windows service (auto-start). The tray icon and status console display "BAS Agent" as a friendly title, but the actual service name (for `Get-Service`, `sc.exe`, etc.) is `BASAgent`, no space.
+The agent installs as the `Audspect Agent` Windows service (auto-start; the Windows Service Manager's own `DisplayName` field reads "Audspect - BAS Platform Agent"). The tray icon and status console window separately display "BAS Agent" as a friendly title — that's the tray window's own title, unrelated to the service name below it. The actual service name (for `Get-Service`, `sc.exe`, etc.) is `Audspect Agent`, with a space — quote it in commands: `Get-Service "Audspect Agent"`. An endpoint enrolled before the Audspect rebrand may still show the legacy service name `BASAgent`; it's migrated automatically on the endpoint's next `-update`.
 
 **Uninstall (locally, on the endpoint):**
 ```powershell
@@ -172,7 +172,7 @@ An Unverified result can mean the agent binary was replaced on the endpoint, or 
 ### Windows — Group Policy / SCCM
 
 ```powershell
-if (-not (Get-Service "BASAgent" -ErrorAction SilentlyContinue)) {
+if (-not (Get-Service "Audspect Agent" -ErrorAction SilentlyContinue)) {
     & "\\fileserver\bas\bas-agent.exe" `
       -server https://192.168.1.50:9443 `
       -secret "your-secret" `
