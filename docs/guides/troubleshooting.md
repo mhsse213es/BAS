@@ -153,6 +153,21 @@ This is expected if agents are running a version not included in the current man
 
 ---
 
+### 2.5 Proxy authentication failures
+
+**Symptom:** An agent behind a corporate forward proxy never connects — logs show repeated `WS connect failed` retries with no other obvious cause (server URL correct, port reachable, no certificate error). This is expected if the proxy requires authentication: see [Installation Guide → 7.2 Agent Outbound Proxy Authentication](installation.md#72-agent-outbound-proxy-authentication) for how to configure it. The messages below tell you exactly what's missing.
+
+**Checks:** same log locations as [2.1](#21-agent-not-appearing-in-the-dashboard) above.
+
+| Agent log contains | Meaning | Fix |
+|---|---|---|
+| `SSPI unavailable on this platform` | Proxy offered NTLM, but this agent isn't on Windows (NTLM is Windows-only) | Configure `BAS_PROXY_USER`/`BAS_PROXY_PASSWORD` for Basic auth instead, if the proxy also offers it — otherwise this proxy cannot be used from a non-Windows agent |
+| `no Basic credentials configured (set BAS_PROXY_USER/BAS_PROXY_PASSWORD)` | Proxy offered Basic, no credentials are set | Set `BAS_PROXY_USER`/`BAS_PROXY_PASSWORD` — see Installation Guide 7.2 for the exact mechanism per platform |
+| `no supported mechanism was offered` | Proxy requires auth but offered neither NTLM nor Basic | This proxy uses a mechanism the agent doesn't support (e.g. Kerberos/Negotiate) — not currently supported; contact the network team about enabling Basic or NTLM for this agent's traffic |
+| `proxy rejected the configured credentials` | A username/password (or, on Windows, the machine's own NTLM identity) was actually sent and the proxy rejected it — this is a **confirmed** rejection, not a missing-config case | Verify `BAS_PROXY_USER`/`BAS_PROXY_PASSWORD` are correct. On Windows with NTLM: check whether the proxy's access rule is scoped to named user accounts only — the agent authenticates as its machine account (`DOMAIN\COMPUTERNAME$`), see the caveat in Installation Guide 7.2. **Retries on this specific error back off far slower than usual (up to 30 minutes) specifically to avoid repeatedly hammering a wrong credential against an AD-integrated proxy and tripping its account lockout policy** — if you just fixed the credential, restart the agent service rather than waiting for the next retry |
+
+---
+
 ## Section 3 — Scenario Execution
 
 ### 3.1 Run stuck at "Running" indefinitely

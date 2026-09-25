@@ -231,6 +231,8 @@ Receive a new delivery ZIP from Audspect. Follow the [Upgrade Guide](upgrade-gui
 
 ## 7. Proxy Environments
 
+### 7.1 Server: Docker Daemon Proxy
+
 If the server itself is behind an HTTP proxy (relevant only if you need `docker pull` for something beyond the bundled images — the bundle itself never requires internet access):
 
 ```bash
@@ -243,6 +245,21 @@ Environment="NO_PROXY=localhost,127.0.0.1,192.168.0.0/16"
 EOF
 sudo systemctl daemon-reload && sudo systemctl restart docker
 ```
+
+### 7.2 Agent: Outbound Proxy Authentication
+
+If an **agent's own outbound connection** to the orchestrator (not the server's Docker daemon above) has to pass through an authenticating corporate forward proxy — common for branch-office endpoints in BFSI/AD-integrated environments — the agent supports two mechanisms: **NTLM** (Windows only) and **HTTP Basic** (every platform). `HTTP_PROXY`/`HTTPS_PROXY`/`NO_PROXY` continue to determine *which* proxy the agent uses, exactly as they always have; these settings only add *authentication* to that proxy connection.
+
+**NTLM (Windows only) — no configuration needed.** The agent authenticates as its own Windows Service identity via SSPI; no password is requested, stored, or transmitted for this path. This is the primary mechanism on Windows and is attempted first whenever a proxy offers it.
+
+> **Know this before you troubleshoot it:** the agent service runs as `LocalSystem`, so NTLM authenticates to the proxy as the machine's own domain computer account (`DOMAIN\COMPUTERNAME$`), not a named user account. A proxy ACL scoped to specific *user* accounts only will reject this — the NTLM handshake itself completes normally, the proxy just declines the identity. If agents behind an NTLM proxy are consistently rejected, confirm the proxy's access rule permits computer accounts (or the specific OU/group they belong to), not just user accounts.
+
+**HTTP Basic (every platform) — set `BAS_PROXY_USER`/`BAS_PROXY_PASSWORD`.** Used automatically as a fallback when NTLM isn't available (non-Windows, or Windows with SSPI unavailable) and the proxy offers Basic. How you set it differs by platform:
+
+- **Linux/macOS:** if `BAS_PROXY_USER`/`BAS_PROXY_PASSWORD` are already set in the environment when you run the agent's own `-install` command (see [Agent Management Guide → Install on Linux](agent-management.md#install-on-linux) / [Install on macOS](agent-management.md#install-on-macos) — not this guide's Section 3, which covers the server install), the agent persists them into `/etc/bas-agent/config` as `BAS_PROXY_USER=<value>` and `BAS_PROXY_PASSWORD_B64=<base64>` — the password is base64-encoded specifically because `systemd`/`launchd` apply shell-style unquoting to this file's values, which would otherwise silently corrupt a password containing `$`, `"`, `'`, `\`, a leading `#`, or whitespace. Editing this file directly to rotate the password requires re-encoding it yourself (`echo -n '<password>' | base64`) into the `_B64` field — do not paste a plain-text password into `BAS_PROXY_PASSWORD_B64`. An environment variable set directly always takes priority over this stored value, letting you override without reinstalling (the same behavior `BAS_AGENT_SECRET` already has).
+- **Windows:** there is currently no install-time persistence for proxy credentials (unlike the agent secret, which does get written to the registry at `-install`) — set `BAS_PROXY_USER`/`BAS_PROXY_PASSWORD` as **persistent System-level environment variables** (not user-level — a Windows Service inherits machine-level environment variables, not a signed-in user's session ones), so the service picks them up on every start, including after a reboot. `setx BAS_PROXY_USER "..." /M` and `setx BAS_PROXY_PASSWORD "..." /M` from an elevated prompt set these at machine scope; the running service must be restarted to pick up a change (`Restart-Service "Audspect Agent"`).
+
+**If neither mechanism is usable**, the agent's own connection log names exactly what's missing rather than a generic connection failure — see **Troubleshooting → Proxy authentication failures** for the exact message shapes and what to do about each.
 
 ---
 
