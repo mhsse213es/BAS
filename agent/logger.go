@@ -58,13 +58,17 @@ type Logger struct {
 	fileDay map[string]string // eventType → current date "2006-01-02"
 }
 
-// NewLogger creates and starts a Logger.
-func NewLogger(agentID, serverURL, secret string) *Logger {
+// NewLogger creates and starts a Logger. Takes the full Config (not just
+// ServerURL/AgentSecret) so its client can be built proxy-aware the same
+// way newAgent's own client is -- log-shipping is real HTTPS traffic to the
+// orchestrator, not local I/O, so it needs the same CONNECT negotiation
+// support as every other outbound call.
+func NewLogger(cfg Config, agentID string) *Logger {
 	l := &Logger{
 		agentID:   agentID,
-		serverURL: serverURL,
-		secret:    secret,
-		client:    &http.Client{Timeout: 15 * time.Second},
+		serverURL: cfg.ServerURL,
+		secret:    cfg.AgentSecret,
+		client:    &http.Client{Timeout: 15 * time.Second, Transport: &http.Transport{DialContext: proxyAwareNetDialContext(cfg), Proxy: nil}},
 		buf:       make([]LogEvent, 0, logBufferCap),
 		files:     make(map[string]*os.File),
 		fileDay:   make(map[string]string),

@@ -183,7 +183,7 @@ func TestPressureLoopTick_SetsRiskGatePolicyOnActiveGate(t *testing.T) {
 	a := &Agent{
 		activeRiskGate: riskGate,
 		activeWorkers:  8,
-		logger:         NewLogger("test-agent", "", ""),
+		logger:         NewLogger(Config{}, "test-agent"),
 	}
 	ctrl := pressure.NewController()
 	gate := newErrorLogGate()
@@ -212,7 +212,7 @@ func TestPressureLoopTick_SetsRiskGatePolicyOnActiveGate(t *testing.T) {
 // TestPressureLoopTick_NilRiskGateIsSafe proves the no-run-in-progress case
 // never panics -- pressureLoopTick must tolerate a.activeRiskGate == nil.
 func TestPressureLoopTick_NilRiskGateIsSafe(t *testing.T) {
-	a := &Agent{logger: NewLogger("test-agent", "", "")}
+	a := &Agent{logger: NewLogger(Config{}, "test-agent")}
 	ctrl := pressure.NewController()
 	gate := newErrorLogGate()
 	a.pressureLoopTick(ctrl, gate) // must not panic

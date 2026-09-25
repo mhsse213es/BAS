@@ -102,8 +102,8 @@ func newAgent(cfg Config, id Identity) *Agent {
 		cfg:       cfg,
 		id:        id,
 		status:    "idle",
-		client:    &http.Client{Timeout: 30 * time.Second},
-		logger:    NewLogger(id.AgentID, cfg.ServerURL, cfg.AgentSecret),
+		client:    &http.Client{Timeout: 30 * time.Second, Transport: &http.Transport{DialContext: proxyAwareNetDialContext(cfg), Proxy: nil}},
+		logger:    NewLogger(cfg, id.AgentID),
 		localSt:   newLocalAgentState(),
 		spoolKick: make(chan struct{}, 1),
 	}

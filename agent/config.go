@@ -33,11 +33,7 @@ func loadConfig() Config {
 	if agentSecret == "" {
 		agentSecret = readEncryptedSecretPlatform()
 	}
-	proxyUser := os.Getenv("BAS_PROXY_USER")
-	proxyPassword := os.Getenv("BAS_PROXY_PASSWORD")
-	if proxyUser == "" && proxyPassword == "" {
-		proxyUser, proxyPassword = readProxyCredentialsPlatform()
-	}
+	proxyUser, proxyPassword := resolveProxyCredentials()
 	if serverURL == "" {
 		serverURL = "http://localhost:9000"
 	}
@@ -51,4 +47,20 @@ func loadConfig() Config {
 		ProxyUser:     proxyUser,
 		ProxyPassword: proxyPassword,
 	}
+}
+
+// resolveProxyCredentials returns the proxy credentials to use: BAS_PROXY_USER/
+// BAS_PROXY_PASSWORD env vars first (matching AgentSecret's own documented
+// override behavior -- operators can override without reinstalling), falling
+// back to platform-secure storage. Shared by loadConfig (the running-agent
+// path) and notifyServerUnenroll (the standalone --uninstall CLI path,
+// which has no in-memory Config to read from) so the priority logic can't
+// drift between the two.
+func resolveProxyCredentials() (user, password string) {
+	user = os.Getenv("BAS_PROXY_USER")
+	password = os.Getenv("BAS_PROXY_PASSWORD")
+	if user == "" && password == "" {
+		user, password = readProxyCredentialsPlatform()
+	}
+	return user, password
 }
