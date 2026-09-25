@@ -9663,7 +9663,7 @@ function loadReadinessTrends() {
         : t.direction === 'down'
         ? '<span style="color:var(--danger);font-weight:700">&#8681; ' + t.preventionDelta.toFixed(1) + '%</span>'
         : '<span class="u-muted">&#8213;</span>';
-      var prevColor = t.latestPrevention >= 80 ? 'var(--success)' : t.latestPrevention >= 50 ? 'var(--warning)' : 'var(--danger)';
+      var prevColor = _riskScoreColor(t.latestPrevention);
       return '<tr>' +
         '<td style="font-size:0.8rem;font-weight:600">' + x(t.actorName) + '</td>' +
         '<td style="text-align:right;font-weight:700;color:' + prevColor + '">' + t.latestPrevention.toFixed(0) + '%</td>' +
@@ -10722,16 +10722,13 @@ function loadSLAReport() {
     renderSLARecentlyResolved(rep.recentlyResolved || []);
   }).catch(function(err) { showToast('Failed to load SLA report: ' + err.message, 'error'); });
 }
-function slaRateColor(pct) {
-  return pct >= 80 ? 'var(--success)' : pct >= 50 ? 'var(--warning)' : 'var(--danger)';
-}
 // slaRateDisplay renders "-" instead of a misleading "0.0%" (in danger red)
 // when nothing has resolved yet in this bucket -- complianceRate is 0 by
 // definition when onTime+late===0 (see internal/slareport.complianceRate),
 // but that means "no data yet", not "failing".
 function slaRateDisplay(onTime, late, rate) {
   if (onTime + late === 0) return { text: '—', color: 'var(--muted)' };
-  return { text: rate.toFixed(1) + '%', color: slaRateColor(rate) };
+  return { text: rate.toFixed(1) + '%', color: _riskScoreColor(rate) };
 }
 function renderSLAKPIs(overall) {
   var tile = function(lbl, val, col) {
@@ -14207,7 +14204,7 @@ function viewRunResults(run) {
     var trend   = s.trend || 'Baseline';
     var cls     = s.classification || '';
 
-    var prevCol = prevPct >= 80 ? 'var(--success)' : prevPct >= 50 ? 'var(--warning)' : 'var(--danger)';
+    var prevCol = _riskScoreColor(prevPct);
     var expCol  = expVal  <= 20 ? 'var(--success)' : expVal  <= 50 ? 'var(--warning)' : 'var(--danger)';
     var covCol  = 'var(--accent)'; // breadth metric — neutral; low single-run coverage is expected, not "bad"
     var trendCol = trend === 'Improving' ? 'var(--success)' :
@@ -14327,7 +14324,7 @@ function viewRunResults(run) {
       var tbRows = ordered.map(function(t) {
         var e = tb[t];
         var pct = e.passPct || 0;
-        var barCol = pct >= 80 ? 'var(--success)' : pct >= 50 ? 'var(--warning)' : 'var(--danger)';
+        var barCol = _riskScoreColor(pct);
         return '<div style="display:flex;align-items:center;gap:0.6rem;padding:0.28rem 0">' +
           '<span style="min-width:135px;font-size:0.72rem;text-transform:capitalize">' + x(t.replace(/-/g, ' ')) + '</span>' +
           '<div style="flex:1;height:7px;background:var(--bg);border-radius:4px;overflow:hidden">' +
@@ -14398,6 +14395,10 @@ function viewRunResults(run) {
   window._evidenceResults = results;
   results.forEach(function(c, i) { c._eidx = i; });
 
+  function resultColor(c) {
+    return c.result === 'pass' ? 'var(--success)' : c.result === 'skipped' ? 'var(--muted)' : 'var(--danger)';
+  }
+
   var byTactic = {};
   results.forEach(function(c) {
     var tactic = (c.technique && c.technique.tactic) || 'other';
@@ -14407,7 +14408,7 @@ function viewRunResults(run) {
 
   var checksHtml = Object.keys(byTactic).map(function(tactic) {
     var checks = byTactic[tactic].map(function(c) {
-      var col = c.result === 'pass' ? 'var(--success)' : c.result === 'skipped' ? 'var(--muted)' : 'var(--danger)';
+      var col = resultColor(c);
       var fw = (c.framework || 'custom').toLowerCase();
       var fwColor = fw === 'art' ? 'var(--accent)' : fw === 'caldera' ? '#bc8cff' : 'var(--muted)';
       var fwBadge = '<span style="font-size:0.6rem;font-weight:700;text-transform:uppercase;background:rgba(255,255,255,0.06);color:' + fwColor + ';border-radius:2px;padding:1px 5px;margin-left:3px">' + x(fw) + '</span>';
@@ -14474,7 +14475,7 @@ function viewRunResults(run) {
     }
     var rows = events.map(function(c) {
       var t = bestTime(c);
-      var col = c.result === 'pass' ? 'var(--success)' : c.result === 'skipped' ? 'var(--muted)' : 'var(--danger)';
+      var col = resultColor(c);
       var techId = (c.technique && c.technique.id) ? '<code style="font-size:0.68rem;color:var(--muted)">' + x(c.technique.id) + '</code> ' : '';
       var detBadge = c.detectionVerdict
         ? '<span style="font-size:0.6rem;font-weight:600;text-transform:uppercase;background:rgba(255,255,255,0.04);color:var(--accent);border-radius:2px;padding:1px 5px;margin-left:0.35rem">' + x(c.detectionVerdict) + '</span>'
@@ -14515,9 +14516,9 @@ function viewRunResults(run) {
     return ordered.map(function(t) {
       var e = tb[t];
       var pct = e.passPct || 0;
-      var barCol = pct >= 80 ? 'var(--success)' : pct >= 50 ? 'var(--warning)' : 'var(--danger)';
+      var barCol = _riskScoreColor(pct);
       var techs = (byTactic[t] || []).map(function(c) {
-        var col = c.result === 'pass' ? 'var(--success)' : c.result === 'skipped' ? 'var(--muted)' : 'var(--danger)';
+        var col = resultColor(c);
         var techId = (c.technique && c.technique.id) ? '<code style="font-size:0.65rem;color:var(--muted)">' + x(c.technique.id) + '</code> ' : '';
         var detBadge = c.detectionVerdict
           ? '<span style="font-size:0.58rem;font-weight:600;text-transform:uppercase;color:var(--accent);margin-left:0.4rem">' + x(c.detectionVerdict) + '</span>'
@@ -17821,7 +17822,7 @@ function loadDashboard() {
         var d = tacticMap[tactic];
         var total = d.pass + d.fail;
         var pct = total ? Math.round((d.pass / total) * 100) : 0;
-        var col = pct >= 80 ? 'var(--success)' : pct >= 50 ? 'var(--warning)' : 'var(--danger)';
+        var col = _riskScoreColor(pct);
         return '<div class="bar-row">' +
           '<div class="bar-label"><span style="text-transform:capitalize">' + x(tactic) + '</span><span style="color:' + col + '">' + pct + '%</span></div>' +
           '<div class="bar-track"><div class="bar-fill" style="width:' + pct + '%;background:' + col + '"></div></div>' +
@@ -20803,9 +20804,9 @@ function loadRansomwareReadiness(runs) {
   // Score gauge + category bars
   var catKeys = Object.keys(cats);
   var scoreHtml = overallPct !== null
-    ? '<div style="display:flex;align-items:center;justify-content:center;width:80px;height:80px;border-radius:50%;background:conic-gradient(' + (overallPct >= 80 ? 'var(--success)' : overallPct >= 50 ? 'var(--warning)' : 'var(--danger)') + ' ' + overallPct + '%, var(--elevated) 0%);flex-shrink:0">' +
+    ? '<div style="display:flex;align-items:center;justify-content:center;width:80px;height:80px;border-radius:50%;background:conic-gradient(' + _riskScoreColor(overallPct) + ' ' + overallPct + '%, var(--elevated) 0%);flex-shrink:0">' +
         '<div style="width:58px;height:58px;border-radius:50%;background:var(--surface);display:flex;flex-direction:column;align-items:center;justify-content:center">' +
-          '<span style="font-size:1.1rem;font-weight:700;line-height:1;color:' + (overallPct >= 80 ? 'var(--success)' : overallPct >= 50 ? 'var(--warning)' : 'var(--danger)') + '">' + overallPct + '</span>' +
+          '<span style="font-size:1.1rem;font-weight:700;line-height:1;color:' + _riskScoreColor(overallPct) + '">' + overallPct + '</span>' +
           '<span style="font-size:0.55rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.04em">score</span>' +
         '</div>' +
       '</div>'
@@ -20816,7 +20817,7 @@ function loadRansomwareReadiness(runs) {
     var total = d.pass + d.fail;
     var pct = total ? Math.round(d.pass / total * 100) : null;
     var cfg = RR_CATS[k] || { label: k.replace(/-/g, ' '), icon: '' };
-    var col = pct === null ? 'var(--muted)' : pct >= 80 ? 'var(--success)' : pct >= 50 ? 'var(--warning)' : 'var(--danger)';
+    var col = pct === null ? 'var(--muted)' : _riskScoreColor(pct);
     var pctLabel = pct !== null ? pct + '%' : 'no data';
     return '<div style="margin-bottom:0.5rem">' +
       '<div style="display:flex;justify-content:space-between;font-size:0.76rem;margin-bottom:0.2rem">' +
@@ -20924,7 +20925,7 @@ function loadEmTab() {
         summaryEl.innerHTML = '<div class="empty" style="padding:0.5rem">Run one or more EM scenarios to generate coverage data.</div>';
       } else {
         var overallPct = (totalPass + totalFail) ? Math.round(totalPass / (totalPass + totalFail) * 100) : 0;
-        var col = overallPct >= 80 ? 'var(--success)' : overallPct >= 50 ? 'var(--warning)' : 'var(--danger)';
+        var col = _riskScoreColor(overallPct);
         summaryEl.innerHTML =
           '<div style="display:flex;align-items:center;gap:2rem;flex-wrap:wrap">' +
             emSummaryBig(overallPct + '%', 'Overall Score', col) +
@@ -20953,7 +20954,7 @@ function loadEmTab() {
         });
       }
       var pct = (p + f) ? Math.round(p / (p + f) * 100) : null;
-      var col = pct === null ? 'var(--muted)' : pct >= 80 ? 'var(--success)' : pct >= 50 ? 'var(--warning)' : 'var(--danger)';
+      var col = pct === null ? 'var(--muted)' : _riskScoreColor(pct);
       // A completed run with zero pass/fail (every step errored — e.g. the agent
       // couldn't even launch the process) is NOT the same as "never run": it has
       // a real timestamp and a real report. Only fall back to "Not run" when
