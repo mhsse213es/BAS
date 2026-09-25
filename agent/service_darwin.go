@@ -3,6 +3,7 @@
 package main
 
 import (
+	"encoding/base64"
 	"fmt"
 	"os"
 	"os/exec"
@@ -24,9 +25,21 @@ func svcInstall(serverURL, envLabel, secret string) error {
 		return fmt.Errorf("create config dir: %w", err)
 	}
 	proxyUser := os.Getenv("BAS_PROXY_USER")
+	if strings.ContainsAny(proxyUser, "\r\n") {
+		return fmt.Errorf("BAS_PROXY_USER must not contain newlines")
+	}
 	proxyPassword := os.Getenv("BAS_PROXY_PASSWORD")
-	cfg := fmt.Sprintf("BAS_SERVER_URL=%s\nBAS_ENV_LABEL=%s\nBAS_AGENT_SECRET=%s\nBAS_PROXY_USER=%s\nBAS_PROXY_PASSWORD=%s\n",
-		serverURL, envLabel, secret, proxyUser, proxyPassword)
+	// Base64-encoded, under a DIFFERENT key than the raw BAS_PROXY_PASSWORD
+	// env var an operator can set directly -- systemd/launchd apply
+	// shell-like unquoting to EnvironmentFile= values, which would silently
+	// corrupt a password containing $, ", ', \, a leading #, or whitespace
+	// if written raw. Base64 sidesteps that entirely. readProxyCredentials
+	// below decodes it; loadConfig's own raw-env-var path is untouched and
+	// still takes priority when an operator sets BAS_PROXY_PASSWORD
+	// directly (not via this file).
+	proxyPasswordB64 := base64.StdEncoding.EncodeToString([]byte(proxyPassword))
+	cfg := fmt.Sprintf("BAS_SERVER_URL=%s\nBAS_ENV_LABEL=%s\nBAS_AGENT_SECRET=%s\nBAS_PROXY_USER=%s\nBAS_PROXY_PASSWORD_B64=%s\n",
+		serverURL, envLabel, secret, proxyUser, proxyPasswordB64)
 	if err := os.WriteFile(darwinConfigFile, []byte(cfg), 0600); err != nil {
 		return fmt.Errorf("write config: %w", err)
 	}
@@ -140,8 +153,10 @@ func readProxyCredentials() (user, password string) {
 		line = strings.TrimSpace(line)
 		if v, ok := strings.CutPrefix(line, "BAS_PROXY_USER="); ok {
 			user = v
-		} else if v, ok := strings.CutPrefix(line, "BAS_PROXY_PASSWORD="); ok {
-			password = v
+		} else if v, ok := strings.CutPrefix(line, "BAS_PROXY_PASSWORD_B64="); ok {
+			if decoded, err := base64.StdEncoding.DecodeString(v); err == nil {
+				password = string(decoded)
+			}
 		}
 	}
 	return user, password

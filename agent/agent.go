@@ -1207,7 +1207,7 @@ func (a *Agent) connectWS() {
 	// never merely because Dial returned no error. Across a fleet, this plus
 	// wsJitter's full jitter is what keeps a server restart from bringing every
 	// agent back in lockstep.
-	dialer := &websocket.Dialer{NetDialContext: proxyAwareNetDialContext(a.cfg)}
+	dialer := &websocket.Dialer{HandshakeTimeout: 45 * time.Second, NetDialContext: proxyAwareNetDialContext(a.cfg)}
 	attempt := 0
 	for {
 		conn, err := protocol.DialAgentWSWithDialer(a.cfg.ServerURL, a.id.AgentID, a.cfg.AgentSecret, dialer)

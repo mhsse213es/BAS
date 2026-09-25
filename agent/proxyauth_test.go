@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"errors"
+	"fmt"
 	"net"
 	"net/http"
 	"testing"
@@ -160,4 +161,51 @@ func TestProxyAwareNetDialContext_NoProxyConfigured_DialsDirect(t *testing.T) {
 		t.Fatalf("dial: %v", err)
 	}
 	conn.Close()
+}
+
+func TestDialThroughProxy_BasicChallengeWithBody_RetrySucceedsDespiteUndrainedBody(t *testing.T) {
+	proxy := newFakeConnectProxy(t, func(conn net.Conn) {
+		defer conn.Close()
+		br := bufio.NewReader(conn)
+		req, err := http.ReadRequest(br)
+		if err != nil || req.Method != http.MethodConnect {
+			return
+		}
+		// A real proxy's 407 carries a body (e.g. an HTML "access denied"
+		// page) -- deliver the headers and body in SEPARATE writes to
+		// simulate real TCP segmentation, which is what exposes an
+		// undrained-body bug that a single combined write would hide.
+		body := "<html><body>Access Denied</body></html>"
+		conn.Write([]byte(fmt.Sprintf("HTTP/1.1 407 Proxy Authentication Required\r\nProxy-Authenticate: Basic realm=\"corp\"\r\nContent-Length: %d\r\nContent-Type: text/html\r\n\r\n", len(body))))
+		time.Sleep(10 * time.Millisecond)
+		conn.Write([]byte(body))
+
+		req2, err := http.ReadRequest(br)
+		if err != nil || req2.Method != http.MethodConnect {
+			return
+		}
+		auth := req2.Header.Get("Proxy-Authorization")
+		if auth != "Basic YnJhbmNoLXVzZXI6czNjcjN0" { // base64("branch-user:s3cr3t")
+			conn.Write([]byte("HTTP/1.1 407 Proxy Authentication Required\r\nProxy-Authenticate: Basic realm=\"corp\"\r\n\r\n"))
+			return
+		}
+		conn.Write([]byte("HTTP/1.1 200 Connection Established\r\n\r\n"))
+		time.Sleep(50 * time.Millisecond)
+	})
+
+	conn, err := dialThroughProxy(context.Background(), proxy.addr(), "target.example:9443", "branch-user", "s3cr3t")
+	if err != nil {
+		t.Fatalf("dialThroughProxy: %v (an undrained 407 body would corrupt this retry's response parsing)", err)
+	}
+	conn.Close()
+}
+
+func TestParseProxyAuthenticate_SplitsCommaSeparatedChallengeList(t *testing.T) {
+	offered := parseProxyAuthenticate([]string{`NTLM, Basic realm="corp"`})
+	if !offered["ntlm"] {
+		t.Error(`offered["ntlm"] = false, want true (comma-separated list must still detect NTLM)`)
+	}
+	if !offered["basic"] {
+		t.Error(`offered["basic"] = false, want true (comma-separated list must still detect Basic)`)
+	}
 }

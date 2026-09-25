@@ -4,7 +4,9 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"encoding/base64"
+	"errors"
 	"net"
 	"net/http"
 	"strings"
@@ -51,7 +53,7 @@ func TestAttemptNTLMProxyAuth_SendsWellFormedType1Message(t *testing.T) {
 	}
 	defer conn.Close()
 
-	go attemptNTLMProxyAuth(conn, "target.example:9443")
+	go attemptNTLMProxyAuth(conn, bufio.NewReader(conn), "target.example:9443")
 
 	select {
 	case auth := <-type1Received:
@@ -85,4 +87,43 @@ func timeoutChan(t *testing.T) <-chan struct{} {
 		close(ch)
 	}()
 	return ch
+}
+
+func TestDialThroughProxy_BothOffered_AttemptsNTLMFirstNoFallbackToBasic(t *testing.T) {
+	var authAttempts []string
+	proxy := newFakeConnectProxy(t, func(conn net.Conn) {
+		defer conn.Close()
+		br := bufio.NewReader(conn)
+		req, err := http.ReadRequest(br)
+		if err != nil || req.Method != http.MethodConnect {
+			return
+		}
+		conn.Write([]byte("HTTP/1.1 407 Proxy Authentication Required\r\nProxy-Authenticate: NTLM\r\nProxy-Authenticate: Basic realm=\"corp\"\r\n\r\n"))
+
+		req2, err := http.ReadRequest(br)
+		if err != nil {
+			return
+		}
+		authAttempts = append(authAttempts, req2.Header.Get("Proxy-Authorization"))
+		// Deliberately fail the NTLM handshake (no valid Type2 challenge in
+		// this response) -- this test only cares about WHICH scheme was
+		// attempted first and whether a hard NTLM failure falls back to
+		// Basic in the same attempt (it must not), not whether the full
+		// handshake succeeds.
+		conn.Write([]byte("HTTP/1.1 407 Proxy Authentication Required\r\n\r\n"))
+	})
+
+	_, err := dialThroughProxy(context.Background(), proxy.addr(), "target.example:9443", "branch-user", "s3cr3t")
+	if err == nil {
+		t.Fatal("dialThroughProxy: want error (NTLM handshake deliberately fails in this test setup), got nil")
+	}
+	if errors.Is(err, ErrProxyCredentialsRejected) {
+		t.Error("a hard NTLM negotiation failure (missing Type2 challenge) must NOT be treated as a confirmed-rejected credential")
+	}
+	if len(authAttempts) != 1 {
+		t.Fatalf("proxy saw %d authenticated CONNECT attempt(s), want exactly 1 (no fallback to Basic in the same attempt)", len(authAttempts))
+	}
+	if !strings.HasPrefix(authAttempts[0], "NTLM ") {
+		t.Fatalf("first Proxy-Authorization = %q, want NTLM prefix -- NTLM must be attempted before Basic when both are offered", authAttempts[0])
+	}
 }

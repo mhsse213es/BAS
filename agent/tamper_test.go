@@ -5,6 +5,13 @@ package main
 import "testing"
 
 func TestStoreAndReadProxyCredentials_RoundTrips(t *testing.T) {
+	origUser, origPassword := ReadProxyCredentials()
+	t.Cleanup(func() {
+		if err := StoreProxyCredentials(origUser, origPassword); err != nil {
+			t.Logf("cleanup: failed to restore original proxy credentials: %v", err)
+		}
+	})
+
 	if err := StoreProxyCredentials("branch-svc-account", "s3cr3t-p@ss"); err != nil {
 		t.Fatalf("StoreProxyCredentials: %v", err)
 	}
@@ -18,6 +25,13 @@ func TestStoreAndReadProxyCredentials_RoundTrips(t *testing.T) {
 }
 
 func TestReadProxyCredentials_AbsentReturnsEmpty(t *testing.T) {
+	origUser, origPassword := ReadProxyCredentials()
+	t.Cleanup(func() {
+		if err := StoreProxyCredentials(origUser, origPassword); err != nil {
+			t.Logf("cleanup: failed to restore original proxy credentials: %v", err)
+		}
+	})
+
 	// Overwrite with an empty password, then confirm an absent
 	// BAS_PROXY_PASSWORD_ENC value (never written) reads back as "" rather
 	// than erroring -- an agent with no configured proxy credentials is the
