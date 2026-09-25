@@ -8297,12 +8297,17 @@ function requestAgentsLiveRefresh() {
     for (var i = 1; i < targetDepth; i++) chain = chain.then(loadMoreAgents);
   }, 800);
 }
+// statTileCard renders one label/value KPI tile (no footer line) -- the
+// plain "kpi-card stat-tile" shape shared by the agent, SLA, and findings
+// tile rows. Distinct from apCard (always shows a sub-line) and the
+// footer/icon-bearing tile() variants defined locally where they're used.
+function statTileCard(lbl, val, col) {
+  return '<div class="kpi-card stat-tile"><div class="stat-top"><div><div class="kpi-label">' + lbl +
+    '</div><div class="kpi-value" style="color:' + col + '">' + val + '</div></div></div></div>';
+}
 function renderAgentTiles() {
   var b = agentTotals;
-  var tile = function(lbl, val, col) {
-    return '<div class="kpi-card stat-tile"><div class="stat-top"><div><div class="kpi-label">' + lbl +
-      '</div><div class="kpi-value" style="color:' + col + '">' + val + '</div></div></div></div>';
-  };
+  var tile = statTileCard;
   var el = document.getElementById('agent-tiles');
   if (el) el.innerHTML =
     tile('Total agents', b.online + b.degraded + b.offline, 'var(--text)') +
@@ -10731,11 +10736,7 @@ function slaRateDisplay(onTime, late, rate) {
   return { text: rate.toFixed(1) + '%', color: _riskScoreColor(rate) };
 }
 function renderSLAKPIs(overall) {
-  var tile = function(lbl, val, col) {
-    return '<div class="kpi-card stat-tile"><div class="stat-top">' +
-      '<div><div class="kpi-label">' + lbl + '</div><div class="kpi-value" style="color:' + col + '">' + val + '</div></div>' +
-      '</div></div>';
-  };
+  var tile = statTileCard;
   var rate = slaRateDisplay(overall.onTime, overall.late, overall.complianceRate);
   document.getElementById('sla-rpt-kpis').innerHTML =
     tile('Compliance Rate', rate.text, rate.color) +
@@ -10817,10 +10818,7 @@ function renderFindingsTiles() {
     if (age > maxAge) maxAge = age;
   });
   var ageCol = maxAge >= 90 ? 'var(--danger)' : maxAge >= 30 ? 'var(--warning)' : 'var(--success)';
-  var tile = function(lbl, val, col) {
-    return '<div class="kpi-card stat-tile"><div class="stat-top"><div><div class="kpi-label">' + lbl +
-      '</div><div class="kpi-value" style="color:' + col + '">' + val + '</div></div></div></div>';
-  };
+  var tile = statTileCard;
   document.getElementById('findings-tiles').innerHTML =
     tile('Open findings', open, open ? 'var(--danger)' : 'var(--success)') +
     tile('Attack Surface Age', open ? maxAge + ' days' : '0 days', ageCol) +
@@ -11751,14 +11749,22 @@ function submitRespondAction() {
   }).catch(function(e) { btn.disabled = false; showToast(e.message, 'err'); });
 }
 
+// _openAgentActionModal is the shared shape behind Stop/Uninstall/Remove
+// Agent's open functions below: set the target-hostname subtitle, clear
+// the reason field, show the overlay. idPrefix matches each modal's own
+// element-id convention ('stop-agent', 'uninstall-agent', 'remove-agent').
+function _openAgentActionModal(hostname, idPrefix) {
+  document.getElementById(idPrefix + '-target-sub').textContent = 'Target: ' + hostname;
+  document.getElementById(idPrefix + '-reason').value = '';
+  document.getElementById(idPrefix + '-overlay').classList.add('open');
+}
+
 // ── Stop Agent ───────────────────────────────────────────────────────────────
 var _stopAgentTargetId = null;
 
 function openStopAgentModal(agentId, hostname) {
   _stopAgentTargetId = agentId;
-  document.getElementById('stop-agent-target-sub').textContent = 'Target: ' + hostname;
-  document.getElementById('stop-agent-reason').value = '';
-  document.getElementById('stop-agent-overlay').classList.add('open');
+  _openAgentActionModal(hostname, 'stop-agent');
 }
 
 function closeStopAgentModal() {
@@ -11792,9 +11798,7 @@ var _uninstallAgentTargetId = null;
 
 function openUninstallAgentModal(agentId, hostname) {
   _uninstallAgentTargetId = agentId;
-  document.getElementById('uninstall-agent-target-sub').textContent = 'Target: ' + hostname;
-  document.getElementById('uninstall-agent-reason').value = '';
-  document.getElementById('uninstall-agent-overlay').classList.add('open');
+  _openAgentActionModal(hostname, 'uninstall-agent');
 }
 
 function closeUninstallAgentModal() {
@@ -11829,9 +11833,7 @@ var _removeAgentTargetId = null;
 
 function openRemoveAgentModal(agentId, hostname) {
   _removeAgentTargetId = agentId;
-  document.getElementById('remove-agent-target-sub').textContent = 'Target: ' + hostname;
-  document.getElementById('remove-agent-reason').value = '';
-  document.getElementById('remove-agent-overlay').classList.add('open');
+  _openAgentActionModal(hostname, 'remove-agent');
 }
 
 function closeRemoveAgentModal() {
