@@ -14066,11 +14066,9 @@ function downloadBuilderYaml() {
   if (!sc) return;
   var yaml = scenarioToYaml(sc);
   var blob = new Blob([yaml], { type: 'text/yaml' });
-  var a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = sc.id + '.yaml';
-  document.body.appendChild(a); a.click(); document.body.removeChild(a);
-  URL.revokeObjectURL(a.href);
+  var href = URL.createObjectURL(blob);
+  triggerDownload(href, sc.id + '.yaml');
+  URL.revokeObjectURL(href);
 }
 
 // scenarioToYaml emits a YAML file the server can re-import (snake_case keys).
@@ -16788,6 +16786,21 @@ document.getElementById('dl-confirm-btn').onclick = function() {
   }
 };
 
+// triggerDownload creates a temporary <a>, sets href/download, and clicks
+// it to start a browser save-as -- the DOM-manipulation core every
+// download*/export*Xxx function below shares (previously each of the 12
+// call sites hand-wrote this same create/append/click/remove sequence).
+// Callers that build the href from a Blob (URL.createObjectURL) keep that
+// object URL in their own local variable so they can revoke it afterward
+// -- triggerDownload only takes the final href string, nothing more.
+function triggerDownload(href, filename) {
+  var a = document.createElement('a');
+  a.href = href;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+}
 // buildReportFilename mirrors the backend's identically-named Go helper
 // (internal/api/handlers.go) so every downloaded report -- whether the
 // server streams it directly or the browser saves it via an <a download>
@@ -16804,12 +16817,10 @@ function buildReportFilename(reportType, scope, ext) {
 }
 
 function exportRunJSON(runId) {
-  var a = document.createElement('a');
-  a.href = '/api/scenarios/runs/' + encodeURIComponent(runId) + '/export';
-  a.download = buildReportFilename('Run_Export', runId.substring(0, 8), 'json');
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
+  triggerDownload(
+    '/api/scenarios/runs/' + encodeURIComponent(runId) + '/export',
+    buildReportFilename('Run_Export', runId.substring(0, 8), 'json')
+  );
 }
 function openRunReport(runId) {
   showDownloadOptions('Simulation HTML Report', function(filter) {
@@ -16828,10 +16839,10 @@ function openRunReport(runId) {
 function downloadRunReport(runId) {
   showDownloadOptions('Simulation Report', function(filter) {
     var query = filter ? '?filter=' + encodeURIComponent(filter) : '';
-    var a = document.createElement('a');
-    a.href = '/api/scenarios/runs/' + encodeURIComponent(runId) + '/pdf' + query;
-    a.download = buildReportFilename('BAS_Report', runId.substring(0, 8), 'pdf');
-    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    triggerDownload(
+      '/api/scenarios/runs/' + encodeURIComponent(runId) + '/pdf' + query,
+      buildReportFilename('BAS_Report', runId.substring(0, 8), 'pdf')
+    );
   });
 }
 function openCampaignReport(id) {
@@ -16844,46 +16855,44 @@ function openCampaignReport(id) {
 function downloadCampaignReport(id) {
   showDownloadOptions('Campaign Report', function(filter) {
     var query = filter ? '?filter=' + encodeURIComponent(filter) : '';
-    var a = document.createElement('a');
-    a.href = '/api/campaigns/' + encodeURIComponent(id) + '/pdf' + query;
-    a.download = buildReportFilename('Campaign_Report', id.substring(0, 8), 'pdf');
-    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    triggerDownload(
+      '/api/campaigns/' + encodeURIComponent(id) + '/pdf' + query,
+      buildReportFilename('Campaign_Report', id.substring(0, 8), 'pdf')
+    );
   });
 }
 // downloadSweepReport mirrors downloadCampaignReport for the sweep report.
 function downloadSweepReport(id) {
-  var a = document.createElement('a');
-  a.href = '/api/vex/sweeps/' + encodeURIComponent(id) + '/pdf';
-  a.download = buildReportFilename('Variant_Sweep', id.substring(0, 8), 'pdf');
-  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  triggerDownload(
+    '/api/vex/sweeps/' + encodeURIComponent(id) + '/pdf',
+    buildReportFilename('Variant_Sweep', id.substring(0, 8), 'pdf')
+  );
 }
 // downloadEMSweepReport mirrors downloadSweepReport for the EM sweep's combined report.
 function downloadEMSweepReport(id) {
-  var a = document.createElement('a');
-  a.href = '/api/em/sweeps/' + encodeURIComponent(id) + '/pdf';
-  a.download = buildReportFilename('Endpoint_Mastery_Sweep', id.substring(0, 8), 'pdf');
-  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  triggerDownload(
+    '/api/em/sweeps/' + encodeURIComponent(id) + '/pdf',
+    buildReportFilename('Endpoint_Mastery_Sweep', id.substring(0, 8), 'pdf')
+  );
 }
 function downloadCampaignCSV(id) {
   showDownloadOptions('Campaign Forensic CSV', function(filter) {
-    var a = document.createElement('a');
     var query = filter ? '?filter=' + encodeURIComponent(filter) : '';
-    a.href = '/api/campaigns/' + encodeURIComponent(id) + '/forensic.csv' + query;
     var suffix = (filter && filter !== 'all') ? '-' + filter : '';
-    a.download = buildReportFilename('Campaign_Forensic', id.substring(0, 8) + suffix, 'csv');
-    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    triggerDownload(
+      '/api/campaigns/' + encodeURIComponent(id) + '/forensic.csv' + query,
+      buildReportFilename('Campaign_Forensic', id.substring(0, 8) + suffix, 'csv')
+    );
   });
 }
 function downloadRunCSV(runId) {
   showDownloadOptions('Simulation Forensic CSV', function(filter) {
-    var a = document.createElement('a');
     var query = filter ? '?filter=' + encodeURIComponent(filter) : '';
-    a.href = '/api/scenarios/runs/' + encodeURIComponent(runId) + '/forensic.csv' + query;
     var suffix = (filter && filter !== 'all') ? '-' + filter : '';
-    a.download = buildReportFilename('BAS_Forensic', runId.substring(0, 8) + suffix, 'csv');
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+    triggerDownload(
+      '/api/scenarios/runs/' + encodeURIComponent(runId) + '/forensic.csv' + query,
+      buildReportFilename('BAS_Forensic', runId.substring(0, 8) + suffix, 'csv')
+    );
   });
 }
 function frameworkDisplayName(fw) {
@@ -19537,28 +19546,28 @@ function openFullReport(agentId) {
 function downloadFullReportPDF(agentId) {
   showDownloadOptions('Agent Posture PDF Report', function(filter) {
     var query = filter ? '?filter=' + encodeURIComponent(filter) : '';
-    var a = document.createElement('a');
-    a.href = '/api/report/full/pdf?agentId=' + encodeURIComponent(agentId) + (query ? '&' + query.slice(1) : '');
-    a.download = buildReportFilename('BAS_Report', agentId, 'pdf');
-    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    triggerDownload(
+      '/api/report/full/pdf?agentId=' + encodeURIComponent(agentId) + (query ? '&' + query.slice(1) : ''),
+      buildReportFilename('BAS_Report', agentId, 'pdf')
+    );
   });
 }
 function downloadFullReportCSV(agentId) {
   showDownloadOptions('Agent Posture Forensic CSV', function(filter) {
     var query = filter ? '?filter=' + encodeURIComponent(filter) : '';
-    var a = document.createElement('a');
-    a.href = '/api/report/full/csv?agentId=' + encodeURIComponent(agentId) + (query ? '&' + query.slice(1) : '');
-    a.download = buildReportFilename('BAS_Forensic', agentId, 'csv');
-    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    triggerDownload(
+      '/api/report/full/csv?agentId=' + encodeURIComponent(agentId) + (query ? '&' + query.slice(1) : ''),
+      buildReportFilename('BAS_Forensic', agentId, 'csv')
+    );
   });
 }
 function downloadFullReportJSON(agentId) {
   showDownloadOptions('Agent Posture JSON Report', function(filter) {
     var query = filter ? '?filter=' + encodeURIComponent(filter) : '';
-    var a = document.createElement('a');
-    a.href = '/api/report/full/json?agentId=' + encodeURIComponent(agentId) + (query ? '&' + query.slice(1) : '');
-    a.download = buildReportFilename('BAS_Report', agentId, 'json');
-    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    triggerDownload(
+      '/api/report/full/json?agentId=' + encodeURIComponent(agentId) + (query ? '&' + query.slice(1) : ''),
+      buildReportFilename('BAS_Report', agentId, 'json')
+    );
   });
 }
 
@@ -19576,12 +19585,7 @@ function downloadAuditPack(agentId) {
     }
     return resp.blob().then(function(blob) {
       var url = URL.createObjectURL(blob);
-      var a = document.createElement('a');
-      a.href = url;
-      a.download = buildReportFilename('Audit_Pack', agentId, 'zip');
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
+      triggerDownload(url, buildReportFilename('Audit_Pack', agentId, 'zip'));
       setTimeout(function() { URL.revokeObjectURL(url); }, 10000);
     });
   }).catch(function(e) { showToast('Audit pack failed: ' + e.message, 'err'); });
