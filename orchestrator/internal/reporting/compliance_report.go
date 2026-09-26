@@ -9,6 +9,7 @@ import (
 	"io"
 	"math"
 	"strings"
+	"time"
 
 	"github.com/audspect/bas/internal/compliance"
 )
@@ -25,7 +26,13 @@ import (
 // the main report's visual language (Segoe UI, the same palette, A4 print
 // geometry, CONFIDENTIAL classification) so a Chrome-rendered PDF matches the
 // rest of the product.
-func RenderComplianceHTML(w io.Writer, cr *compliance.ComplianceReport, generatedBy string) error {
+// ComplianceTrendPoint is one point of the compliance-over-time trend.
+type ComplianceTrendPoint struct {
+	Date          time.Time
+	CompliancePct float64
+}
+
+func RenderComplianceHTML(w io.Writer, cr *compliance.ComplianceReport, generatedBy string, trend ...ComplianceTrendPoint) error {
 	if cr == nil {
 		return fmt.Errorf("compliance report is nil")
 	}
@@ -47,7 +54,12 @@ func RenderComplianceHTML(w io.Writer, cr *compliance.ComplianceReport, generate
 		ScopeLabel  string
 		Attestation Attestation
 		Brand       brandView
-	}{cr, complianceScopeLabel(cr), att, brandingView()}
+		TrendPoints string
+		TrendLast   float64
+		TrendDelta  float64
+		HasTrend    bool
+	}{cr, complianceScopeLabel(cr), att, brandingView(),
+		complianceTrendSparkline(trend), trendLast(trend), trendDelta(trend), len(trend) >= 2}
 
 	var buf bytes.Buffer
 	if err := tmpl.Execute(&buf, data); err != nil {
@@ -64,9 +76,9 @@ func RenderComplianceHTML(w io.Writer, cr *compliance.ComplianceReport, generate
 // document. There is deliberately no fpdf fallback here — this is a new
 // deliverable with no legacy fpdf renderer to maintain, and the whole point of
 // P0 was to stop maintaining two divergent render paths.
-func RenderCompliancePDF(ctx context.Context, w io.Writer, cr *compliance.ComplianceReport, generatedBy string) error {
+func RenderCompliancePDF(ctx context.Context, w io.Writer, cr *compliance.ComplianceReport, generatedBy string, trend ...ComplianceTrendPoint) error {
 	var html bytes.Buffer
-	if err := RenderComplianceHTML(&html, cr, generatedBy); err != nil {
+	if err := RenderComplianceHTML(&html, cr, generatedBy, trend...); err != nil {
 		return err
 	}
 	pdf, err := htmlToPDF(ctx, html.Bytes())
@@ -178,6 +190,40 @@ func complianceResultColor(result string) string {
 }
 
 func compliancePct(f float64) string { return fmt.Sprintf("%.1f%%", f) }
+
+// complianceTrendSparkline builds an SVG polyline "points" string (200×36
+// viewBox) from compliance-over-time points (oldest→newest). Empty for <2.
+func complianceTrendSparkline(pts []ComplianceTrendPoint) string {
+	if len(pts) < 2 {
+		return ""
+	}
+	const w, h = 200.0, 36.0
+	n := len(pts)
+	var b strings.Builder
+	for i, p := range pts {
+		x := float64(i) / float64(n-1) * w
+		y := h - (p.CompliancePct/100.0)*h // higher % sits higher
+		if i > 0 {
+			b.WriteByte(' ')
+		}
+		fmt.Fprintf(&b, "%.1f,%.1f", x, y)
+	}
+	return b.String()
+}
+
+func trendLast(pts []ComplianceTrendPoint) float64 {
+	if len(pts) == 0 {
+		return 0
+	}
+	return pts[len(pts)-1].CompliancePct
+}
+
+func trendDelta(pts []ComplianceTrendPoint) float64 {
+	if len(pts) < 2 {
+		return 0
+	}
+	return pts[len(pts)-1].CompliancePct - pts[0].CompliancePct
+}
 
 var _complianceTmpl *template.Template
 
@@ -335,6 +381,15 @@ tr:nth-child(even) td{background:#fafbfd}
         <div class="lbl" style="margin-top:12px">Passing / Tested<b>{{.Summary.PassingControls}} / {{.Summary.TestedControls}}</b></div>
       </div>
     </div>
+    {{if .HasTrend}}
+    <div class="cover-attest" style="padding-top:14px">
+      <b>Compliance trend</b> &mdash; now {{pct .TrendLast}}
+      {{if gt .TrendDelta 0.0}}<span style="color:#34d399">&#9650; +{{printf "%.1f" .TrendDelta}} pts</span>{{else if lt .TrendDelta 0.0}}<span style="color:#f87171">&#9660; {{printf "%.1f" .TrendDelta}} pts</span>{{else}}<span style="color:#94a3b8">&#9644; flat</span>{{end}} since first assessment<br>
+      <svg width="240" height="42" viewBox="0 0 200 36" preserveAspectRatio="none" style="margin-top:6px">
+        <polyline points="{{.TrendPoints}}" fill="none" stroke="#38bdf8" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </div>
+    {{end}}
     <div class="cover-attest">
       <b>Tamper-evidence &mdash; {{.Attestation.Algorithm}}</b><br>
       Digest (SHA-256): <span class="mono">{{.Attestation.ContentSHA256}}</span><br>
