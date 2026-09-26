@@ -241,9 +241,17 @@ func (e *Engine) WriteAuditPack(ctx context.Context, agentID string, mapper *com
 	if f, err := zw.Create(prefix + "MANIFEST.sha256"); err == nil {
 		f.Write(manifestBytes)
 	}
+	// Compute the attestation once so SIGNATURE.txt (human) and attestation.json
+	// (machine-readable, consumed by POST /api/report/verify) never disagree.
+	att := Attest(manifestBytes, generatedBy)
+	agentLabel := fmt.Sprintf("%s (%s)", report.Agent.Hostname, agentID)
 	if f, err := zw.Create(prefix + "SIGNATURE.txt"); err == nil {
-		agentLabel := fmt.Sprintf("%s (%s)", report.Agent.Hostname, agentID)
-		f.Write(SignManifest(manifestBytes, agentLabel, generatedBy))
+		f.Write(RenderSignatureText(att, agentLabel))
+	}
+	if f, err := zw.Create(prefix + "attestation.json"); err == nil {
+		enc := json.NewEncoder(f)
+		enc.SetIndent("", "  ")
+		enc.Encode(att)
 	}
 
 	return nil
@@ -278,6 +286,7 @@ Contents
   README.txt              This file
   MANIFEST.sha256         Per-file SHA-256 checksums (verify with: sha256sum -c MANIFEST.sha256)
   SIGNATURE.txt           Signed digest of MANIFEST.sha256 — proves the pack is unaltered
+  attestation.json        Machine-readable signature (for automated verification via the console)
   executive-report.pdf    Print-ready enterprise assessment report (PDF)
   summary.json            Full machine-readable report (JSON)
   executive-report.html   Human-readable HTML report — open in a browser
