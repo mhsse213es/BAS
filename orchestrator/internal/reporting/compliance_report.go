@@ -3,6 +3,7 @@ package reporting
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"html/template"
 	"io"
@@ -24,7 +25,7 @@ import (
 // the main report's visual language (Segoe UI, the same palette, A4 print
 // geometry, CONFIDENTIAL classification) so a Chrome-rendered PDF matches the
 // rest of the product.
-func RenderComplianceHTML(w io.Writer, cr *compliance.ComplianceReport) error {
+func RenderComplianceHTML(w io.Writer, cr *compliance.ComplianceReport, generatedBy string) error {
 	if cr == nil {
 		return fmt.Errorf("compliance report is nil")
 	}
@@ -32,12 +33,20 @@ func RenderComplianceHTML(w io.Writer, cr *compliance.ComplianceReport) error {
 	if err != nil {
 		return err
 	}
+	// Tamper-evidence (P0-2): attest over the report's canonical JSON — the
+	// stable underlying data, not the rendered HTML (which embeds the digest
+	// and would otherwise be self-referential). A verifier can fetch the same
+	// report as format=json and recompute this digest.
+	canonical, _ := json.Marshal(cr)
+	att := Attest(canonical, generatedBy)
+
 	// Controls are grouped by domain in template order; the mapper already
 	// emits Domains and Controls, so no re-derivation is needed here.
 	data := struct {
 		*compliance.ComplianceReport
-		ScopeLabel string
-	}{cr, complianceScopeLabel(cr)}
+		ScopeLabel  string
+		Attestation Attestation
+	}{cr, complianceScopeLabel(cr), att}
 
 	var buf bytes.Buffer
 	if err := tmpl.Execute(&buf, data); err != nil {
@@ -54,9 +63,9 @@ func RenderComplianceHTML(w io.Writer, cr *compliance.ComplianceReport) error {
 // document. There is deliberately no fpdf fallback here — this is a new
 // deliverable with no legacy fpdf renderer to maintain, and the whole point of
 // P0 was to stop maintaining two divergent render paths.
-func RenderCompliancePDF(ctx context.Context, w io.Writer, cr *compliance.ComplianceReport) error {
+func RenderCompliancePDF(ctx context.Context, w io.Writer, cr *compliance.ComplianceReport, generatedBy string) error {
 	var html bytes.Buffer
-	if err := RenderComplianceHTML(&html, cr); err != nil {
+	if err := RenderComplianceHTML(&html, cr, generatedBy); err != nil {
 		return err
 	}
 	pdf, err := htmlToPDF(ctx, html.Bytes())
@@ -233,6 +242,14 @@ body{font-family:"Segoe UI",system-ui,-apple-system,Helvetica,Arial,sans-serif;
 .cover-ring .lbl b{display:block;color:#fff;font-size:1.05rem;font-weight:700;margin-top:3px}
 .cover-conf{position:absolute;bottom:16mm;left:20mm;font-size:.72rem;letter-spacing:2px;
   color:#f87171;border:1px solid #7f1d1d;border-radius:3px;padding:4px 10px;text-transform:uppercase}
+.cover-attest{margin-top:26px;border-top:1px solid #1e293b;padding-top:12px;max-width:560px;
+  font-size:.68rem;color:#94a3b8;line-height:1.5}
+.cover-attest b{color:#cbd5e1;font-weight:600}
+.cover-attest .mono{font-family:"Cascadia Code","Consolas",monospace;color:#7dd3fc;word-break:break-all}
+.attest-box{border:1px solid var(--line);border-radius:6px;background:var(--surface);
+  padding:12px 14px;margin-top:16px;font-size:.74rem;color:var(--muted);line-height:1.6}
+.attest-box b{color:var(--ink)}
+.attest-box .mono{font-family:"Cascadia Code","Consolas",monospace;color:#0b5;word-break:break-all;color:var(--navy)}
 
 /* header / footer */
 .ph{display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid var(--navy);
@@ -315,6 +332,12 @@ tr:nth-child(even) td{background:#fafbfd}
         <div class="lbl">Control Coverage<b>{{pct .Summary.CoveragePercent}}</b></div>
         <div class="lbl" style="margin-top:12px">Passing / Tested<b>{{.Summary.PassingControls}} / {{.Summary.TestedControls}}</b></div>
       </div>
+    </div>
+    <div class="cover-attest">
+      <b>Tamper-evidence &mdash; {{.Attestation.Algorithm}}</b><br>
+      Digest (SHA-256): <span class="mono">{{.Attestation.ContentSHA256}}</span><br>
+      Tool {{.Attestation.ToolVersion}} &middot; Generated {{.Attestation.GeneratedAt.Format "02 Jan 2006 15:04 UTC"}}{{if .Attestation.GeneratedBy}} &middot; by {{.Attestation.GeneratedBy}}{{end}}
+      {{if .Attestation.Signature}}<br>Signature: <span class="mono">{{.Attestation.Signature}}</span>{{end}}
     </div>
   </div>
   <div class="cover-conf">Confidential</div>
@@ -430,6 +453,13 @@ tr:nth-child(even) td{background:#fafbfd}
 {{else}}
 <p class="none">No controls resolved for this framework.</p>
 {{end}}
+
+<div class="attest-box">
+  <b>Report authenticity.</b> This report carries a {{.Attestation.Algorithm}} attestation over its canonical data.
+  Digest (SHA-256): <span class="mono">{{.Attestation.ContentSHA256}}</span>.
+  {{if .Attestation.Signature}}The signature binds this digest to the generating Audspect deployment, its tool version ({{.Attestation.ToolVersion}}){{if .Attestation.GeneratedBy}}, and the operator who produced it{{end}}; only that deployment can reproduce a valid signature.{{else}}Report signing is not configured on this deployment, so the digest detects modification but is not authenticated.{{end}}
+  To verify, request the same report as JSON (<span class="mono">format=json</span>) and recompute the SHA-256 of its canonical bytes.
+</div>
 
 <div class="pf"><span>{{.Framework.Name}} — Control Detail</span><span>Audspect BAS &middot; Confidential</span></div>
 </div>

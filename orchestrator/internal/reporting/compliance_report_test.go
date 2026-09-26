@@ -44,7 +44,7 @@ func TestRenderComplianceHTML(t *testing.T) {
 	cr := buildTestComplianceReport(t)
 
 	var buf bytes.Buffer
-	if err := RenderComplianceHTML(&buf, cr); err != nil {
+	if err := RenderComplianceHTML(&buf, cr, "analyst@bank.example"); err != nil {
 		t.Fatalf("RenderComplianceHTML: %v", err)
 	}
 	out := buf.String()
@@ -82,8 +82,78 @@ func TestRenderComplianceHTML(t *testing.T) {
 
 func TestRenderComplianceHTML_Nil(t *testing.T) {
 	var buf bytes.Buffer
-	if err := RenderComplianceHTML(&buf, nil); err == nil {
+	if err := RenderComplianceHTML(&buf, nil, ""); err == nil {
 		t.Error("expected error for nil report, got nil")
+	}
+}
+
+// TestRenderComplianceHTML_Attestation verifies the tamper-evidence block (P0-2)
+// renders and reflects whether signing is enabled.
+func TestRenderComplianceHTML_Attestation(t *testing.T) {
+	cr := buildTestComplianceReport(t)
+
+	// Signed path.
+	SetSigningSecret("unit-test-deployment-secret-key-32bytes!!")
+	t.Cleanup(func() { SetSigningSecret("") })
+	var signed bytes.Buffer
+	if err := RenderComplianceHTML(&signed, cr, "analyst@bank.example"); err != nil {
+		t.Fatal(err)
+	}
+	s := signed.String()
+	if !strings.Contains(s, "HMAC-SHA256") {
+		t.Error("signed report should advertise HMAC-SHA256")
+	}
+	if !strings.Contains(s, "Digest (SHA-256)") {
+		t.Error("report missing SHA-256 digest line")
+	}
+	if !strings.Contains(s, "analyst@bank.example") {
+		t.Error("report missing generator identity")
+	}
+
+	// Unsigned path (no key) still emits a digest, no signature.
+	SetSigningSecret("")
+	var unsigned bytes.Buffer
+	if err := RenderComplianceHTML(&unsigned, cr, ""); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(unsigned.String(), "SHA-256 (unsigned)") {
+		t.Error("unsigned report should say SHA-256 (unsigned)")
+	}
+}
+
+// TestAttestationSignAndVerify checks the HMAC attestation round-trips and that
+// tampering with the content is detected.
+func TestAttestationSignAndVerify(t *testing.T) {
+	SetSigningSecret("deployment-secret-for-attestation-tests!")
+	t.Cleanup(func() { SetSigningSecret("") })
+
+	att := Attest([]byte("hello report"), "user-123")
+	if att.Algorithm != "HMAC-SHA256" || att.Signature == "" {
+		t.Fatalf("expected signed attestation, got %+v", att)
+	}
+	ok, err := att.Verify()
+	if err != nil || !ok {
+		t.Fatalf("Verify failed: ok=%v err=%v", ok, err)
+	}
+	// Tamper: a different digest must fail verification.
+	tampered := att
+	tampered.ContentSHA256 = strings.Repeat("0", 64)
+	if ok, _ := tampered.Verify(); ok {
+		t.Error("tampered attestation verified as valid")
+	}
+}
+
+// TestBuildManifest checks the manifest is sha256sum-compatible and sorted.
+func TestBuildManifest(t *testing.T) {
+	out := string(BuildManifest([]ManifestEntry{
+		{Path: "z.json", SHA256: "bbb"},
+		{Path: "a.txt", SHA256: "aaa"},
+	}))
+	if !strings.HasPrefix(out, "aaa  a.txt\n") {
+		t.Errorf("manifest not sorted / wrong format:\n%s", out)
+	}
+	if !strings.Contains(out, "bbb  z.json") {
+		t.Errorf("manifest missing entry:\n%s", out)
 	}
 }
 
@@ -94,7 +164,7 @@ func TestRenderCompliancePDF_NoSidecar(t *testing.T) {
 	t.Setenv("CHROME_WS_URL", "")
 	cr := buildTestComplianceReport(t)
 	var buf bytes.Buffer
-	if err := RenderCompliancePDF(context.Background(), &buf, cr); err == nil {
+	if err := RenderCompliancePDF(context.Background(), &buf, cr, ""); err == nil {
 		t.Error("expected error when chrome sidecar unconfigured, got nil")
 	}
 }
