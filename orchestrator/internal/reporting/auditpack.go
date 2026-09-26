@@ -4,6 +4,8 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -22,7 +24,12 @@ import (
 //	runs/<runId>-<scenarioName>.json
 //	compliance/NIST_CSF_2.csv  (and other frameworks)
 //	agent-inventory.json
-func (e *Engine) WriteAuditPack(ctx context.Context, agentID string, mapper *compliance.Mapper, w io.Writer) error {
+//	MANIFEST.sha256   (per-file SHA-256, `sha256sum -c`-compatible)
+//	SIGNATURE.txt     (signed digest of MANIFEST.sha256 — tamper-evidence)
+//
+// generatedBy is the authenticated identity that requested the pack; it is
+// recorded in the signature block so a recipient knows who produced it.
+func (e *Engine) WriteAuditPack(ctx context.Context, agentID string, mapper *compliance.Mapper, generatedBy string, w io.Writer) error {
 	report, err := e.Build(ctx, agentID, "")
 	if err != nil {
 		return fmt.Errorf("build report: %w", err)
@@ -77,21 +84,37 @@ func (e *Engine) WriteAuditPack(ctx context.Context, agentID string, mapper *com
 	dirName := fmt.Sprintf("Audspect_Audit_Pack_%s_%s", sanitize(scope), time.Now().UTC().Format("2006-01-02_15-04-05"))
 	prefix := dirName + "/"
 
+	// add writes one pack file and records its SHA-256 in the manifest. Every
+	// pack entry goes through here so the manifest is exhaustive — a file that
+	// bypassed this helper would be unverifiable and silently trusted, which is
+	// exactly the gap P0-2 closes. Paths are stored WITHOUT the dirName prefix
+	// so `sha256sum -c MANIFEST.sha256` works from inside the extracted folder.
+	var manifest []ManifestEntry
+	add := func(name string, write func(io.Writer)) {
+		f, err := zw.Create(prefix + name)
+		if err != nil {
+			return
+		}
+		hsh := sha256.New()
+		write(io.MultiWriter(f, hsh))
+		manifest = append(manifest, ManifestEntry{Path: name, SHA256: hex.EncodeToString(hsh.Sum(nil))})
+	}
+
 	// README.txt
-	if f, err := zw.Create(prefix + "README.txt"); err == nil {
-		fmt.Fprintf(f, readmeTmpl,
+	add("README.txt", func(out io.Writer) {
+		fmt.Fprintf(out, readmeTmpl,
 			report.Agent.Hostname, report.Agent.IPAddress,
 			report.Agent.OSVersion, report.Agent.EnvLabel,
 			time.Now().UTC().Format("02 Jan 2006, 15:04 UTC"),
 		)
-	}
+	})
 
 	// summary.json
-	if f, err := zw.Create(prefix + "summary.json"); err == nil {
-		enc := json.NewEncoder(f)
+	add("summary.json", func(out io.Writer) {
+		enc := json.NewEncoder(out)
 		enc.SetIndent("", "  ")
 		enc.Encode(report)
-	}
+	})
 
 	// Generate HTML once; reuse for both the HTML entry and Chrome PDF.
 	// Buffering avoids running GenerateHTML twice and gives Chrome the same
@@ -100,38 +123,38 @@ func (e *Engine) WriteAuditPack(ctx context.Context, agentID string, mapper *com
 	htmlErr := GenerateHTML(&htmlBuf, report, compSummaries)
 
 	// executive-report.html
-	if f, err := zw.Create(prefix + "executive-report.html"); err == nil {
+	add("executive-report.html", func(out io.Writer) {
 		if htmlErr == nil {
-			f.Write(htmlBuf.Bytes())
+			out.Write(htmlBuf.Bytes())
 		} else {
-			fmt.Fprintf(f, "HTML generation failed: %v", htmlErr)
+			fmt.Fprintf(out, "HTML generation failed: %v", htmlErr)
 		}
-	}
+	})
 
 	// executive-report.pdf — Chrome renders the buffered HTML (new design).
 	// Use a fresh background context so the Chrome render is not subject to the
 	// HTTP write deadline, which may be nearly exhausted by the time we reach
 	// this entry (report build + JSON + HTML entries take ~10-20 s; the server
 	// write timeout is 90 s and Chrome can take up to 45 s).
-	if f, err := zw.Create(prefix + "executive-report.pdf"); err == nil {
+	add("executive-report.pdf", func(out io.Writer) {
 		pdfWritten := false
 		if htmlErr == nil && htmlBuf.Len() > 0 {
 			chromeCtx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 			if pdf, perr := htmlToPDF(chromeCtx, htmlBuf.Bytes()); perr == nil && len(pdf) > 0 {
-				f.Write(pdf)
+				out.Write(pdf)
 				pdfWritten = true
 			}
 			cancel()
 		}
 		if !pdfWritten {
-			if ferr := RenderReportPDF(f, report, latestResults); ferr != nil {
-				fmt.Fprintf(f, "PDF generation failed: %v", ferr)
+			if ferr := RenderReportPDF(out, report, latestResults); ferr != nil {
+				fmt.Fprintf(out, "PDF generation failed: %v", ferr)
 			}
 		}
-	}
+	})
 
 	// agent-inventory.json
-	if f, err := zw.Create(prefix + "agent-inventory.json"); err == nil {
+	add("agent-inventory.json", func(out io.Writer) {
 		inv := map[string]interface{}{
 			"agentId":             report.Agent.AgentID,
 			"hostname":            report.Agent.Hostname,
@@ -144,10 +167,10 @@ func (e *Engine) WriteAuditPack(ctx context.Context, agentID string, mapper *com
 			"securityTools":       report.SecurityTools,
 			"detectionCategories": report.DetectionCategories,
 		}
-		enc := json.NewEncoder(f)
+		enc := json.NewEncoder(out)
 		enc.SetIndent("", "  ")
 		enc.Encode(inv)
-	}
+	})
 
 	// runs/<runId>.json — last 10 runs with full results
 	rows, err := e.db.Query(ctx,
@@ -168,20 +191,20 @@ func (e *Engine) WriteAuditPack(ctx context.Context, agentID string, mapper *com
 			if len(idShort) > 8 {
 				idShort = idShort[:8]
 			}
-			fname := prefix + "runs/" + sanitize(runName) + "-" + idShort + ".json"
-			if f, err := zw.Create(fname); err == nil {
+			name := "runs/" + sanitize(runName) + "-" + idShort + ".json"
+			add(name, func(out io.Writer) {
 				var results []models.SimulationResult
 				var score models.Score
 				json.Unmarshal(resultsRaw, &results)
 				json.Unmarshal(scoreRaw, &score)
-				enc := json.NewEncoder(f)
+				enc := json.NewEncoder(out)
 				enc.SetIndent("", "  ")
 				enc.Encode(map[string]interface{}{
 					"id": runID, "scenarioName": runName, "status": status,
 					"startedAt": startedAt, "completedAt": completedAt,
 					"score": score, "results": results,
 				})
-			}
+			})
 		}
 	}
 
@@ -192,34 +215,35 @@ func (e *Engine) WriteAuditPack(ctx context.Context, agentID string, mapper *com
 			if err != nil {
 				continue
 			}
-			fname := prefix + "compliance/" + fw.ID + ".csv"
-			if f, err := zw.Create(fname); err == nil {
-				compliance.WriteCSV(f, cr)
-			}
+			add("compliance/"+fw.ID+".csv", func(out io.Writer) {
+				compliance.WriteCSV(out, cr)
+			})
 		}
 	} else if mapper != nil {
 		// Write empty headers so the folder exists
 		for _, fw := range mapper.Frameworks() {
-			fname := prefix + "compliance/" + fw.ID + ".csv"
-			if f, err := zw.Create(fname); err == nil {
+			fw := fw
+			add("compliance/"+fw.ID+".csv", func(out io.Writer) {
 				emptyReport := &compliance.ComplianceReport{
 					Framework: fw,
 					AgentID:   agentID,
 				}
-				compliance.WriteCSV(f, emptyReport)
-			}
+				compliance.WriteCSV(out, emptyReport)
+			})
 		}
 	}
 
-	// Pack manifest for integrity
-	if f, err := zw.Create(prefix + "MANIFEST.txt"); err == nil {
-		var buf bytes.Buffer
-		fmt.Fprintf(&buf, "Audspect BAS Audit Pack\n")
-		fmt.Fprintf(&buf, "Agent:     %s (%s)\n", report.Agent.Hostname, agentID)
-		fmt.Fprintf(&buf, "Generated: %s\n", time.Now().UTC().Format(time.RFC3339))
-		fmt.Fprintf(&buf, "Runs:      %d\n", len(report.Runs))
-		fmt.Fprintf(&buf, "Risk:      %s (%d/100)\n", report.Summary.Classification, report.Summary.RiskScore)
-		f.Write(buf.Bytes())
+	// ── Integrity manifest + signature (tamper-evidence, P0-2) ──────────────
+	// MANIFEST.sha256 lists every file above; SIGNATURE.txt binds a digest of
+	// that manifest to the generator identity/time with an HMAC signature. Both
+	// are written last and are intentionally NOT self-listed in the manifest.
+	manifestBytes := BuildManifest(manifest)
+	if f, err := zw.Create(prefix + "MANIFEST.sha256"); err == nil {
+		f.Write(manifestBytes)
+	}
+	if f, err := zw.Create(prefix + "SIGNATURE.txt"); err == nil {
+		agentLabel := fmt.Sprintf("%s (%s)", report.Agent.Hostname, agentID)
+		f.Write(SignManifest(manifestBytes, agentLabel, generatedBy))
 	}
 
 	return nil
@@ -252,7 +276,8 @@ Generated:   %s
 Contents
 --------
   README.txt              This file
-  MANIFEST.txt            Pack summary (agent, risk score, run count)
+  MANIFEST.sha256         Per-file SHA-256 checksums (verify with: sha256sum -c MANIFEST.sha256)
+  SIGNATURE.txt           Signed digest of MANIFEST.sha256 — proves the pack is unaltered
   executive-report.pdf    Print-ready enterprise assessment report (PDF)
   summary.json            Full machine-readable report (JSON)
   executive-report.html   Human-readable HTML report — open in a browser
@@ -266,6 +291,11 @@ Usage
 2. executive-report.html is the same report for on-screen viewing in a browser.
 3. Import compliance/*.csv into Excel or your GRC platform.
 4. Attach summary.json to your ticketing system for automated processing.
+
+Verifying integrity
+-------------------
+  cd into this folder and run:  sha256sum -c MANIFEST.sha256
+  Every file must report "OK". See SIGNATURE.txt to authenticate the manifest.
 
 Frameworks in compliance/
   NIST_CSF_2.csv        NIST Cybersecurity Framework 2.0

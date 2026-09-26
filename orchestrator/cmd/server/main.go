@@ -333,6 +333,12 @@ func main() {
 	log.Println("[+] Rule Library ready")
 
 	// ── Reporting Engine ──────────────────────────────────────────────────
+	// Report tamper-evidence (P0-2): stamp the build version into attestations
+	// and derive the report-signing HMAC key from the JWT secret so signatures
+	// work out of the box on every deployment (domain-separated from token
+	// signing inside SetSigningSecret). Empty secret ⇒ digests only, no HMAC.
+	reporting.ToolVersion = Version
+	reporting.SetSigningSecret(cfg.JWTSecret)
 	reportingEngine := reporting.NewEngine(pool).
 		WithScenarios(engine).
 		WithVerifications(verificationStore).

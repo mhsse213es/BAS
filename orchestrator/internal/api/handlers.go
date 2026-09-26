@@ -5407,8 +5407,12 @@ func (h *Handler) GetAuditPack(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/zip")
 	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, fname))
 
+	generatedBy := ""
+	if claims, ok := auth.ClaimsFrom(r.Context()); ok {
+		generatedBy = claims.UserID
+	}
 	h.auditLog(r, "report.export", agentID, map[string]any{"format": "zip", "type": "audit_pack"}, "ok")
-	if err := h.reportingEngine.WriteAuditPack(r.Context(), agentID, h.complianceMapper, w); err != nil {
+	if err := h.reportingEngine.WriteAuditPack(r.Context(), agentID, h.complianceMapper, generatedBy, w); err != nil {
 		log.Printf("[api] audit pack: %v", err)
 	}
 }
@@ -5535,23 +5539,32 @@ func (h *Handler) GetComplianceReport(w http.ResponseWriter, r *http.Request) {
 		// Styled, standalone, per-control compliance deliverable (P0-1): the
 		// same ControlResult/DomainResult/evidence that CSV/JSON expose, but
 		// rendered as an auditor-facing document instead of a spreadsheet.
+		// generatedBy stamps the tamper-evidence attestation (P0-2).
+		genBy := ""
+		if claims, ok := auth.ClaimsFrom(r.Context()); ok {
+			genBy = claims.UserID
+		}
 		writeBufferedReport(w, "text/html; charset=utf-8",
 			fmt.Sprintf(`inline; filename="%s"`, buildReportFilename("Compliance_Report", scope, "html")),
 			"generate compliance HTML report",
-			func(out io.Writer) error { return reporting.RenderComplianceHTML(out, report) })
+			func(out io.Writer) error { return reporting.RenderComplianceHTML(out, report, genBy) })
 
 	case "pdf":
 		// Prefer the Chrome-sidecar PDF (pixel-identical to the HTML form). If
 		// the sidecar is unconfigured/unreachable, fall back to serving the
 		// styled HTML inline so the operator always receives a document rather
 		// than a 500 — same resilience posture as the full report's PDF path.
+		genBy := ""
+		if claims, ok := auth.ClaimsFrom(r.Context()); ok {
+			genBy = claims.UserID
+		}
 		var pbuf bytes.Buffer
-		if err := reporting.RenderCompliancePDF(r.Context(), &pbuf, report); err != nil {
+		if err := reporting.RenderCompliancePDF(r.Context(), &pbuf, report, genBy); err != nil {
 			log.Printf("[api] compliance pdf: %v — serving HTML fallback", err)
 			writeBufferedReport(w, "text/html; charset=utf-8",
 				fmt.Sprintf(`inline; filename="%s"`, buildReportFilename("Compliance_Report", scope, "html")),
 				"generate compliance HTML report",
-				func(out io.Writer) error { return reporting.RenderComplianceHTML(out, report) })
+				func(out io.Writer) error { return reporting.RenderComplianceHTML(out, report, genBy) })
 			return
 		}
 		w.Header().Set("Content-Type", "application/pdf")
