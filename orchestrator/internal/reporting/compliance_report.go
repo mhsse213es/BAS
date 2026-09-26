@@ -46,7 +46,8 @@ func RenderComplianceHTML(w io.Writer, cr *compliance.ComplianceReport, generate
 		*compliance.ComplianceReport
 		ScopeLabel  string
 		Attestation Attestation
-	}{cr, complianceScopeLabel(cr), att}
+		Brand       brandView
+	}{cr, complianceScopeLabel(cr), att, brandingView()}
 
 	var buf bytes.Buffer
 	if err := tmpl.Execute(&buf, data); err != nil {
@@ -301,13 +302,14 @@ tr:nth-child(even) td{background:#fafbfd}
 .dot{width:10px;height:10px;border-radius:3px;display:inline-block}
 .none{color:var(--muted);font-size:.8rem;padding:6px 0}
 </style>
+<style>:root{--accent:{{.Brand.AccentCSS}}}</style>
 </head>
 <body>
 
 <!-- ═══ COVER ═══ -->
 <div class="page">
 <div class="cover">
-  <div class="cover-logo">Aud<span>spect</span> BAS</div>
+  <div class="cover-logo">{{.Brand.LogoHTML}}</div>
   <div style="margin-top:auto">
     <div class="cover-cat">Regulatory Compliance Report</div>
     <div class="cover-title">{{.Framework.Name}}</div>
@@ -348,7 +350,7 @@ tr:nth-child(even) td{background:#fafbfd}
 <div class="page">
 <div class="inner">
 <div class="ph">
-  <div class="ph-logo">Aud<span>spect</span> BAS</div>
+  <div class="ph-logo">{{.Brand.LogoHTML}}</div>
   <div class="ph-title">{{.Framework.Name}} — Compliance</div>
   <div class="ph-class">Confidential</div>
 </div>
@@ -402,7 +404,7 @@ tr:nth-child(even) td{background:#fafbfd}
 </table>
 {{end}}
 
-<div class="pf"><span>{{.Framework.Name}} — Compliance Overview</span><span>Audspect BAS &middot; Confidential</span></div>
+<div class="pf"><span>{{.Framework.Name}} — Compliance Overview</span><span>{{.Brand.OrgName}} &middot; Confidential</span></div>
 </div>
 </div>
 
@@ -410,7 +412,7 @@ tr:nth-child(even) td{background:#fafbfd}
 <div class="page">
 <div class="inner">
 <div class="ph">
-  <div class="ph-logo">Aud<span>spect</span> BAS</div>
+  <div class="ph-logo">{{.Brand.LogoHTML}}</div>
   <div class="ph-title">{{.Framework.Name}} — Control Detail</div>
   <div class="ph-class">Confidential</div>
 </div>
@@ -461,7 +463,7 @@ tr:nth-child(even) td{background:#fafbfd}
   To verify, request the same report as JSON (<span class="mono">format=json</span>) and recompute the SHA-256 of its canonical bytes.
 </div>
 
-<div class="pf"><span>{{.Framework.Name}} — Control Detail</span><span>Audspect BAS &middot; Confidential</span></div>
+<div class="pf"><span>{{.Framework.Name}} — Control Detail</span><span>{{.Brand.OrgName}} &middot; Confidential</span></div>
 </div>
 </div>
 

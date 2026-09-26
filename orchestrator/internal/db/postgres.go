@@ -1095,6 +1095,19 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 			updated_at          timestamptz NOT NULL DEFAULT NOW()
 		)`,
 
+		// report_branding: singleton white-label config for report deliverables
+		// (product/org name, accent color, optional logo data URI, footer note).
+		// Empty fields fall back to the Audspect defaults at render time.
+		`CREATE TABLE IF NOT EXISTS report_branding (
+			id            int         PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+			product_name  text        NOT NULL DEFAULT '',
+			org_name      text        NOT NULL DEFAULT '',
+			accent_color  text        NOT NULL DEFAULT '',
+			logo_data_uri text        NOT NULL DEFAULT '',
+			footer_note   text        NOT NULL DEFAULT '',
+			updated_at    timestamptz NOT NULL DEFAULT NOW()
+		)`,
+
 		// threat_intel_config: one row per MISP/OpenCTI/OTX connector, DB-backed
 		// replacement for the .env-only config those three used before this.
 		// base_url is unused (stays '') for the 'otx' row -- it's a single

@@ -339,6 +339,10 @@ func main() {
 	// signing inside SetSigningSecret). Empty secret ⇒ digests only, no HMAC.
 	reporting.ToolVersion = Version
 	reporting.SetSigningSecret(cfg.JWTSecret)
+	// White-label branding (optional): load the DB-configured product/org name,
+	// accent color and logo into the report renderers. No-op (Audspect defaults)
+	// when unconfigured. Editable live via PUT /api/report/branding.
+	api.LoadReportBranding(context.Background(), pool)
 	reportingEngine := reporting.NewEngine(pool).
 		WithScenarios(engine).
 		WithVerifications(verificationStore).

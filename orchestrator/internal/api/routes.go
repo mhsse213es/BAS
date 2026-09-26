@@ -454,6 +454,8 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.Get("/api/report/board", h.GetBoardOnePager)
 		r.Get("/api/report/navigator", h.GetNavigatorLayer)
 		r.Post("/api/report/verify", h.VerifyAuditPack)
+		r.Get("/api/report/branding", h.GetReportBranding)
+		r.With(auth.RequirePermission(auth.CanUpdateConnectorConfig)).Put("/api/report/branding", h.UpdateReportBranding)
 
 		// Compliance — Viewer+ role
 		r.Get("/api/compliance/frameworks", h.ListComplianceFrameworks)
