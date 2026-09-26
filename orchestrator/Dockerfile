@@ -115,8 +115,14 @@ FROM golang:1.26-alpine AS builder
 # and injected here so StaticHandler() halts on mismatch at startup. Empty in
 # dev/manual builds — hash check is silently disabled when the value is "".
 ARG BAS_WWWROOT_HASH=""
+# Pinned, not @latest: garble v0.18.0 (2026-09-19) bumped its go.mod
+# requirement to go >= 1.27, which this golang:1.26-alpine base image
+# (go 1.26.7) can't satisfy under GOTOOLCHAIN=local, breaking the build
+# outright. v0.17.0 is the newest release whose own go.mod still only
+# requires go 1.26.2. Bump this pin (and the base image, if needed) as a
+# deliberate choice, not a side effect of @latest silently moving forward.
 RUN apk add --no-cache git && \
-    go install mvdan.cc/garble@latest
+    go install mvdan.cc/garble@v0.17.0
 WORKDIR /src
 COPY orchestrator/go.mod orchestrator/go.sum ./
 RUN go mod download
