@@ -86,7 +86,8 @@ type Handler struct {
 	// override it to avoid real HTTP calls.
 	actionVendorClient   func(actions.ConnectorConfig) (actions.VendorClient, error)
 	secret               string
-	agentSecret          string // optional shared secret for agent-facing endpoints
+	agentSecret          string             // optional shared secret for agent-facing endpoints
+	reportSMTP           exercise.SMTPConfig // SMTP settings for scheduled-report email delivery (empty Host = disabled)
 	calderaURL           string
 	calderaKey           string
 	iocProvider          ioc.Provider // nil when no OTX connector is configured
@@ -209,6 +210,14 @@ func (h *Handler) WithCorrelation(e *correlation.Engine) *Handler {
 // WithTicketing attaches the ITSM ticketing manager.
 func (h *Handler) WithTicketing(m *ticketing.Manager) *Handler {
 	h.ticketing = m
+	return h
+}
+
+// WithReportSMTP configures the SMTP settings used to deliver scheduled reports
+// by email. Empty Host disables scheduled-report delivery (schedules still save
+// and can be run manually, but the tick logs a "no SMTP" error).
+func (h *Handler) WithReportSMTP(cfg exercise.SMTPConfig) *Handler {
+	h.reportSMTP = cfg
 	return h
 }
 

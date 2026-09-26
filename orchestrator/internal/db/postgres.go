@@ -1108,6 +1108,31 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 			updated_at    timestamptz NOT NULL DEFAULT NOW()
 		)`,
 
+		// report_schedules: recurring, emailed report deliveries. Each row is one
+		// scheduled report (board/compliance/audit_pack) for one scope, delivered
+		// to a recipient list on a daily/weekly/monthly cadence. See
+		// internal/api/report_schedule_handlers.go.
+		`CREATE TABLE IF NOT EXISTS report_schedules (
+			id            text        PRIMARY KEY DEFAULT gen_random_uuid()::text,
+			name          text        NOT NULL DEFAULT '',
+			report_type   text        NOT NULL DEFAULT 'board',
+			scope_kind    text        NOT NULL DEFAULT 'agent',
+			scope_id      text        NOT NULL DEFAULT '',
+			framework     text        NOT NULL DEFAULT '',
+			format        text        NOT NULL DEFAULT 'pdf',
+			recipients    text        NOT NULL DEFAULT '',
+			frequency     text        NOT NULL DEFAULT 'weekly',
+			hour_utc      int         NOT NULL DEFAULT 6,
+			day_of_week   int         NOT NULL DEFAULT 1,
+			day_of_month  int         NOT NULL DEFAULT 1,
+			enabled       boolean     NOT NULL DEFAULT true,
+			last_run_at   timestamptz,
+			last_status   text        NOT NULL DEFAULT 'never',
+			last_error    text        NOT NULL DEFAULT '',
+			created_by    text        NOT NULL DEFAULT '',
+			created_at    timestamptz NOT NULL DEFAULT NOW()
+		)`,
+
 		// threat_intel_config: one row per MISP/OpenCTI/OTX connector, DB-backed
 		// replacement for the .env-only config those three used before this.
 		// base_url is unused (stays '') for the 'otx' row -- it's a single
