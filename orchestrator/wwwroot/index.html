@@ -12316,7 +12316,13 @@ function sweepAggregateScoreHtml(childRuns) {
 // each child run's own fail/pass counts (same per-run counting runRowHtml
 // already uses) across the WHOLE sweep, not a per-technique pass/fail --
 // i.e. total variants failed vs. passed across every technique dispatched.
-function renderSweepRow(payload) {
+// _sweepRowHtml is the shared shape behind renderSweepRow (VEX Full Variant
+// Sweep) and renderEMSweepRow (Endpoint Mastery Full Sweep) below -- the two
+// were previously hand-mirrored copies of the same <tr> (see the old comment
+// on renderEMSweepRow: "mirrors renderSweepRow above"). opts carries every
+// point where the two actually differ: label prefix, drilldown handler +
+// its title text, the progress-label text, and the stop handler.
+function _sweepRowHtml(payload, opts) {
   var sw = payload.sweep, childRuns = payload.runs || [];
   var totalCnt = 0, totalFail = 0;
   childRuns.forEach(function(r) {
@@ -12325,25 +12331,36 @@ function renderSweepRow(payload) {
     totalCnt += cnt; totalFail += fail;
   });
   var badge = totalCnt ? (totalFail + ' fail / ' + (totalCnt - totalFail) + ' pass') : '—';
-  var progressLabel = sw.status === 'running'
-    ? sw.completedVariants + '/' + sw.totalVariants + ' variants'
-    : sw.totalTechniques + ' atomic test(s)';
   var agent = agents.find(function(a) { return a.agentId === sw.agentId; });
   var agentLabel = agent ? agent.hostname : sw.agentId;
   return '<tr>' +
     '<td>' + fmtRunIdCode(sw.id) + '</td>' +
-    '<td style="font-weight:500">Full Variant Sweep — ' + x(agentLabel) + '</td>' +
+    '<td style="font-weight:500">' + opts.labelPrefix + ' — ' + x(agentLabel) + '</td>' +
     '<td><code>' + x(sw.agentId) + '</code></td>' +
     '<td><span class="sbadge s-' + x(sw.status) + '">' + x(sweepStatusLabel(sw.status)) + '</span></td>' +
     '<td style="color:var(--muted);font-size:0.78rem">' + x(sw.createdBy || '—') + '</td>' +
     '<td style="color:var(--muted);font-size:0.78rem">' + fmtDate(sw.startedAt) + '</td>' +
     '<td style="color:var(--muted);font-size:0.78rem">' + (sw.completedAt ? fmtDate(sw.completedAt) : '—') + '</td>' +
-    '<td><button class="btn btn-outline btn-sm" onclick="openSweepDrilldown(\'' + x(sw.id) + '\')" title="View every technique this sweep dispatched">' +
-        x(progressLabel) + ' — ' + badge + '</button>' +
+    '<td><button class="btn btn-outline btn-sm" onclick="' + opts.drilldownFn + '(\'' + x(sw.id) + '\')" title="' + opts.drilldownTitle + '">' +
+        x(opts.progressLabel(sw)) + ' — ' + badge + '</button>' +
         ((sw.status === 'running' || sw.status === 'agent_disconnected')
-          ? ' <button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger)" onclick="stopVexSweep(\'' + x(sw.id) + '\')">&#9632; Stop</button>'
+          ? ' <button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger)" onclick="' + opts.stopFn + '(\'' + x(sw.id) + '\')">&#9632; Stop</button>'
           : '') + '</td>' +
     '<td>' + sweepAggregateScoreHtml(childRuns) + '</td></tr>';
+}
+
+function renderSweepRow(payload) {
+  return _sweepRowHtml(payload, {
+    labelPrefix: 'Full Variant Sweep',
+    drilldownFn: 'openSweepDrilldown',
+    drilldownTitle: 'View every technique this sweep dispatched',
+    progressLabel: function(sw) {
+      return sw.status === 'running'
+        ? sw.completedVariants + '/' + sw.totalVariants + ' variants'
+        : sw.totalTechniques + ' atomic test(s)';
+    },
+    stopFn: 'stopVexSweep'
+  });
 }
 
 // renderEMSweepRow builds one collapsed "Endpoint Mastery Full Sweep" <tr>
@@ -12351,30 +12368,13 @@ function renderSweepRow(payload) {
 // renderSweepRow above, reusing the same drawer (openEMSweepProgress) that
 // already shows live per-layer status when a sweep is first dispatched.
 function renderEMSweepRow(payload) {
-  var sw = payload.sweep, childRuns = payload.runs || [];
-  var totalCnt = 0, totalFail = 0;
-  childRuns.forEach(function(r) {
-    var cnt = (r.results || []).length;
-    var fail = (r.results || []).filter(function(c) { return c.result === 'fail'; }).length;
-    totalCnt += cnt; totalFail += fail;
+  return _sweepRowHtml(payload, {
+    labelPrefix: 'Endpoint Mastery Full Sweep',
+    drilldownFn: 'openEMSweepProgress',
+    drilldownTitle: 'View every EM layer this sweep dispatched',
+    progressLabel: function(sw) { return sw.completedLayers + '/' + sw.totalLayers + ' layers'; },
+    stopFn: 'stopEMSweep'
   });
-  var badge = totalCnt ? (totalFail + ' fail / ' + (totalCnt - totalFail) + ' pass') : '—';
-  var agent = agents.find(function(a) { return a.agentId === sw.agentId; });
-  var agentLabel = agent ? agent.hostname : sw.agentId;
-  return '<tr>' +
-    '<td>' + fmtRunIdCode(sw.id) + '</td>' +
-    '<td style="font-weight:500">Endpoint Mastery Full Sweep — ' + x(agentLabel) + '</td>' +
-    '<td><code>' + x(sw.agentId) + '</code></td>' +
-    '<td><span class="sbadge s-' + x(sw.status) + '">' + x(sweepStatusLabel(sw.status)) + '</span></td>' +
-    '<td style="color:var(--muted);font-size:0.78rem">' + x(sw.createdBy || '—') + '</td>' +
-    '<td style="color:var(--muted);font-size:0.78rem">' + fmtDate(sw.startedAt) + '</td>' +
-    '<td style="color:var(--muted);font-size:0.78rem">' + (sw.completedAt ? fmtDate(sw.completedAt) : '—') + '</td>' +
-    '<td><button class="btn btn-outline btn-sm" onclick="openEMSweepProgress(\'' + x(sw.id) + '\')" title="View every EM layer this sweep dispatched">' +
-        x(sw.completedLayers + '/' + sw.totalLayers + ' layers') + ' — ' + badge + '</button>' +
-        ((sw.status === 'running' || sw.status === 'agent_disconnected')
-          ? ' <button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger)" onclick="stopEMSweep(\'' + x(sw.id) + '\')">&#9632; Stop</button>'
-          : '') + '</td>' +
-    '<td>' + sweepAggregateScoreHtml(childRuns) + '</td></tr>';
 }
 
 // Sweep-grouping kinds Live Runs collapses into one row: field is the
