@@ -8316,15 +8316,27 @@ function renderAgentTiles() {
     tile('Offline', b.offline, b.offline ? 'var(--danger)' : 'var(--muted)') +
     tile('Retired', b.retired, 'var(--muted)');
 }
+// covSegHtml renders the shared "cov-seg" toggle-button-group shape used by
+// several toolbars below (agent/campaign/coverage/findings/run-IOC
+// filters): one button per [value, label] item, 'on' when it matches
+// activeVal, calling setterFnName(value) on click. countFn is optional --
+// when given, each button also shows a dimmed count badge (countFn(value)).
+function covSegHtml(items, activeVal, setterFnName, countFn) {
+  return '<div class="cov-seg">' + items.map(function(o) {
+    var label = o[1] + (countFn ? ' <span style="opacity:.6">' + countFn(o[0]) + '</span>' : '');
+    return '<button class="' + (activeVal === o[0] ? 'on' : '') + '" onclick="' + setterFnName + '(\'' + o[0] + '\')">' + label + '</button>';
+  }).join('') + '</div>';
+}
 function renderAgentToolbar() {
   var c = function(k) {
     if (k === 'all') return agentTotals.online + agentTotals.degraded + agentTotals.offline;
     return agentTotals[k] || 0;
   };
   var el = document.getElementById('agent-toolbar');
-  if (el) el.innerHTML = '<div class="cov-seg">' +
-    [['all', 'All'], ['online', 'Online'], ['degraded', 'Degraded'], ['offline', 'Offline'], ['retired', 'Retired']]
-      .map(function(o) { return '<button class="' + (AGENT_FILTER === o[0] ? 'on' : '') + '" onclick="setAgentFilter(\'' + o[0] + '\')">' + o[1] + ' <span style="opacity:.6">' + c(o[0]) + '</span></button>'; }).join('') + '</div>';
+  if (el) el.innerHTML = covSegHtml(
+    [['all', 'All'], ['online', 'Online'], ['degraded', 'Degraded'], ['offline', 'Offline'], ['retired', 'Retired']],
+    AGENT_FILTER, 'setAgentFilter', c
+  );
 }
 function setAgentFilter(v) { AGENT_FILTER = v; loadAgents(); }
 function renderAgentRows() {
@@ -9098,10 +9110,9 @@ function loadCampaigns() {
 function renderCampaignToolbar() {
   var list = window._campaigns || [];
   var count = function(k) { return k === 'all' ? list.length : list.filter(function(c) { return (c.summary || {}).status === k; }).length; };
-  var seg = [['all', 'All'], ['running', 'Running'], ['completed', 'Completed'], ['partial', 'Partial'], ['failed', 'Failed'], ['stopped', 'Stopped'], ['empty', 'Empty']]
-    .filter(function(o) { return o[0] === 'all' || count(o[0]) > 0; })
-    .map(function(o) { return '<button class="' + (CAMPAIGN_TAB === o[0] ? 'on' : '') + '" onclick="setCampaignTab(\'' + o[0] + '\')">' + o[1] + ' <span style="opacity:.6">' + count(o[0]) + '</span></button>'; }).join('');
-  document.getElementById('campaign-toolbar').innerHTML = '<div class="cov-seg">' + seg + '</div>';
+  var items = [['all', 'All'], ['running', 'Running'], ['completed', 'Completed'], ['partial', 'Partial'], ['failed', 'Failed'], ['stopped', 'Stopped'], ['empty', 'Empty']]
+    .filter(function(o) { return o[0] === 'all' || count(o[0]) > 0; });
+  document.getElementById('campaign-toolbar').innerHTML = covSegHtml(items, CAMPAIGN_TAB, 'setCampaignTab', count);
 }
 function setCampaignTab(v) { CAMPAIGN_TAB = v; renderCampaignToolbar(); renderCampaignRows(); }
 function renderCampaignRows() {
@@ -10673,11 +10684,10 @@ function renderCovMatrix() {
 }
 function renderCovToolbar() {
   var c = window._covCounts || { cov: 0, part: 0, gap: 0, none: 0 };
-  var seg = [['all', 'All'], ['cov', 'Prevented'], ['part', 'Detected'], ['gap', 'Missed'], ['none', 'Untested']]
-    .map(function(o) { return '<button class="' + (COV_VIEW === o[0] ? 'on' : '') + '" onclick="setCovView(\'' + o[0] + '\')">' + o[1] + '</button>'; }).join('');
+  var seg = covSegHtml([['all', 'All'], ['cov', 'Prevented'], ['part', 'Detected'], ['gap', 'Missed'], ['none', 'Untested']], COV_VIEW, 'setCovView');
   var badge = function(col, l, v) { return '<span class="sbadge" style="background:transparent;border:1px solid var(--border);color:' + col + '">' + v + ' ' + l + '</span>'; };
   document.getElementById('cov-toolbar').innerHTML =
-    '<div class="cov-seg">' + seg + '</div><span class="u-flex1"></span>' +
+    seg + '<span class="u-flex1"></span>' +
     badge('var(--success)', 'Prevented', c.cov) + badge('var(--warning)', 'Detected', c.part) +
     badge('var(--danger)', 'Missed', c.gap) + badge('var(--muted)', 'Untested', c.none);
 }
@@ -10829,9 +10839,10 @@ function renderFindingsTiles() {
 function renderFindingsTabs() {
   var l = window._findings || [];
   var c = function(k) { return k === 'all' ? l.length : l.filter(function(f) { return f.status === k; }).length; };
-  document.getElementById('findings-toolbar').innerHTML = '<div class="cov-seg">' +
-    [['all', 'All'], ['open', 'Open'], ['triaged', 'Triaged'], ['remediated', 'Remediated'], ['risk_accepted', 'Risk-accepted']]
-      .map(function(o) { return '<button class="' + (FINDING_TAB === o[0] ? 'on' : '') + '" onclick="setFindingTab(\'' + o[0] + '\')">' + o[1] + ' <span style="opacity:.6">' + c(o[0]) + '</span></button>'; }).join('') + '</div>';
+  document.getElementById('findings-toolbar').innerHTML = covSegHtml(
+    [['all', 'All'], ['open', 'Open'], ['triaged', 'Triaged'], ['remediated', 'Remediated'], ['risk_accepted', 'Risk-accepted']],
+    FINDING_TAB, 'setFindingTab', c
+  );
 }
 function setFindingTab(v) { FINDING_TAB = v; renderFindingsTabs(); renderFindingsRows(); }
 function renderFindingsRows() {
@@ -15593,9 +15604,7 @@ function renderRunIOCToolbar() {
   _runIOCsAll.forEach(function(i) { counts[i.type] = (counts[i.type] || 0) + 1; });
   var types = [['all', 'All'], ['ip', 'IP'], ['domain', 'Domain'], ['url', 'URL'], ['hash', 'Hash'], ['cve', 'CVE']];
   el.innerHTML =
-    '<div class="cov-seg">' + types.map(function(t) {
-      return '<button class="' + (_runIOCTypeFilter === t[0] ? 'on' : '') + '" onclick="setRunIOCTypeFilter(\'' + t[0] + '\')">' + t[1] + ' <span style="opacity:.6">' + (counts[t[0]] || 0) + '</span></button>';
-    }).join('') + '</div>' +
+    covSegHtml(types, _runIOCTypeFilter, 'setRunIOCTypeFilter', function(k) { return counts[k] || 0; }) +
     '<input type="text" id="run-ioc-search" placeholder="Search indicators…" value="' + x(_runIOCSearch) + '" oninput="setRunIOCSearch(this.value)" style="padding:0.35rem 0.6rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:0.78rem;font-family:inherit;min-width:220px">';
 }
 function setRunIOCTypeFilter(t) {
