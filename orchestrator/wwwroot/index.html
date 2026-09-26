@@ -19855,6 +19855,13 @@ window.addEventListener('DOMContentLoaded', function() {
 var _vexRunPoll = null;
 var _vexActivePoll = null;          // tracks sweep/queue polling interval (cancellable)
 var _vexActiveScenarioRunId = null; // underlying scenario_run id of the current vex dispatch
+var _vexPollFailCount = 0;          // consecutive pollVariantRun failures -- see VEX_POLL_MAX_FAILURES
+// VEX_POLL_MAX_FAILURES bounds pollVariantRun's retry: a single transient
+// network blip must not stop the poll (the run keeps executing server-side
+// regardless of whether the status check succeeds), but failing forever
+// with an empty catch left the panel stuck on "Executing variants..."
+// indefinitely with zero feedback if the connection or session broke mid-run.
+var VEX_POLL_MAX_FAILURES = 5;
 var _vexAbortRequested = false;     // set by stopVex(); checked at every queue step
 
 function loadVariantTab() {
@@ -20586,14 +20593,17 @@ function _vexWaitAndNext(vrId, agentId, techniques, mode, advanced, baseType, id
 
 function pollVariantRun(vrId) {
   clearInterval(_vexRunPoll);
+  _vexPollFailCount = 0;
   var panel = document.getElementById('vex-result-panel');
   if (panel) panel.innerHTML =
     '<div class="card" style="padding:1.5rem;text-align:center;color:var(--muted)">' +
     '<div style="margin-bottom:0.5rem;font-size:0.9rem">Executing variants…</div>' +
     '<div class="tiny" style="font-family:var(--font-mono);margin-bottom:0.75rem">' + x(vrId) + '</div>' +
+    '<div id="vex-poll-status" class="tiny" style="min-height:1em;margin-bottom:0.5rem"></div>' +
     '<button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger)" onclick="stopVex()">&#9632; Stop</button></div>';
   _vexRunPoll = setInterval(function() {
     apicall('/api/variants/run/' + vrId).then(function(detail) {
+      _vexPollFailCount = 0;
       if (detail.run && detail.run.scenarioRunId) _vexActiveScenarioRunId = detail.run.scenarioRunId;
       renderVariantRun(detail);
       var s = detail.run && detail.run.status;
@@ -20603,7 +20613,29 @@ function pollVariantRun(vrId) {
         loadVariantCoverage();
         loadVariantStats();
       }
-    }).catch(function() {});
+    }).catch(function() {
+      // A single failed status check does NOT mean the run itself failed --
+      // it's still executing server-side regardless of whether this poll
+      // succeeded. Retry silently up to VEX_POLL_MAX_FAILURES times (with a
+      // visible "retrying" indicator so a stalled poll doesn't look
+      // identical to a healthy one), then give up with a recoverable
+      // message instead of leaving "Executing variants..." showing forever.
+      _vexPollFailCount++;
+      if (_vexPollFailCount >= VEX_POLL_MAX_FAILURES) {
+        clearInterval(_vexRunPoll);
+        var p = document.getElementById('vex-result-panel');
+        if (p) p.innerHTML =
+          '<div class="card" style="padding:1.5rem;text-align:center;color:var(--muted)">' +
+          '<div style="margin-bottom:0.5rem;font-size:0.9rem;color:var(--danger)">Unable to retrieve execution status</div>' +
+          '<div class="tiny" style="font-family:var(--font-mono);margin-bottom:0.75rem">' + x(vrId) + '</div>' +
+          '<div class="tiny muted" style="margin-bottom:0.75rem">The run may still be executing on the server — this only means status updates stopped arriving. Retry, or check Live Runs.</div>' +
+          '<button class="btn btn-outline btn-sm" onclick="pollVariantRun(\'' + x(vrId) + '\')">&#8635; Retry</button> ' +
+          '<button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger)" onclick="stopVex()">&#9632; Stop</button></div>';
+      } else {
+        var statusEl = document.getElementById('vex-poll-status');
+        if (statusEl) statusEl.textContent = 'Status temporarily unavailable — retrying (' + _vexPollFailCount + '/' + VEX_POLL_MAX_FAILURES + ')';
+      }
+    });
   }, 3000);
 }
 
