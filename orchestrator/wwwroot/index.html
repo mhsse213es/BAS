@@ -6882,7 +6882,7 @@ function loadOpenAEVConfig() {
           (cfg.configured ? '<button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger)" onclick="removeOpenAEVConfig()">Remove</button>' : '') +
           '<span id="oaev-test-result" class="tiny muted"></span>' +
         '</div>';
-    }).catch(function() {});
+    }).catch(function(e) { showToast('Failed to load OpenAEV config: ' + (e.message || 'error'), 'err'); });
   } else {
     configPanel.innerHTML = '';
   }
@@ -6919,7 +6919,7 @@ function loadOpenAEVConfig() {
       if (s.lastError) { errEl.textContent = s.lastError; errEl.style.display = ''; }
       else { errEl.style.display = 'none'; }
     }
-  }).catch(function() {});
+  }).catch(function(e) { showToast('Failed to load OpenAEV status: ' + (e.message || 'error'), 'err'); });
 }
 
 // removeOpenAEVConfig deletes the stored base URL + bearer token entirely
@@ -7041,7 +7041,7 @@ function openOpenAEVDetail(id) {
       body.innerHTML += '<div style="margin-top:1rem"><button class="btn btn-primary btn-sm" onclick="createPlanFromOpenAEV(\'' + x(id) + '\')">Create Exercise Plan</button></div>';
     }
     document.getElementById('openaev-detail-overlay').classList.add('open');
-  }).catch(function() {});
+  }).catch(function(e) { showToast('Failed to load scenario detail: ' + (e.message || 'error'), 'err'); });
 }
 
 function closeOpenAEVDetail() {
@@ -7132,7 +7132,7 @@ function launchExercisePrompt(planId) {
       showToast('Exercise launched', 'ok');
       loadExercisesTab();
     }).catch(function(e) { showToast('Launch failed: ' + (e.message || 'error'), 'err'); });
-  }).catch(function() {});
+  }).catch(function(e) { showToast('Failed to load exercise plan: ' + (e.message || 'error'), 'err'); });
 }
 
 var _exDetailOpenId = null;
@@ -8476,7 +8476,7 @@ function loadConnectionConfig() {
     var secretEl = document.getElementById('cfg-agent-secret');
     secretEl.dataset.value = data.agentSecret || '';
     // keep masked until user clicks Show
-  }).catch(function() {});
+  }).catch(function(e) { showToast('Failed to load connection config: ' + (e.message || 'error'), 'err'); });
 }
 
 function toggleSecret(btn) {
@@ -16433,7 +16433,7 @@ var WIN_EVENT_NAMES = {
 };
 
 function copyRaw(text) {
-  navigator.clipboard.writeText(text).catch(function() {});
+  navigator.clipboard.writeText(text).catch(function() { showToast('Copy failed', 'err'); });
 }
 
 function openEvidence(idx) {
@@ -18243,7 +18243,7 @@ function loadThreatIntelConfig(name) {
         (cfg.configured ? '<button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger)" onclick="removeConnectorConfig(\'' + name + '\')">Remove</button>' : '') +
         '<span id="ti-' + name + '-test-result" class="tiny muted"></span>' +
       '</div>';
-  }).catch(function() {});
+  }).catch(function(e) { showToast('Failed to load ' + name + ' config: ' + (e.message || 'error'), 'err'); });
 }
 
 function testConnectorConfig(name) {
@@ -18497,7 +18497,7 @@ function loadConnectorStatus() {
     var errEl = document.getElementById('cs-error');
     if (s.lastError) { errEl.textContent = s.lastError; errEl.style.display = ''; }
     else { errEl.style.display = 'none'; }
-  }).catch(function() {});
+  }).catch(function(e) { showToast('Failed to load connector status: ' + (e.message || 'error'), 'err'); });
 }
 
 function triggerConnectorSync() {
@@ -19841,8 +19841,14 @@ function ackAllTamperEvents() {
 // On page load, check for unacknowledged critical events so the banner shows
 // even for admins who logged in after the tamper was detected.
 window.addEventListener('DOMContentLoaded', function() {
+  // apicall() already resolves to the parsed JSON body (see its own
+  // definition) -- a stray extra .then(r => r.json()) here was calling
+  // .json() on an already-parsed array, which always threw
+  // "r.json is not a function" and was silently swallowed by the catch
+  // below. That made this entire page-load tamper check a no-op: even
+  // with real unacknowledged critical tamper events and a logged-in
+  // admin, showTamperBanner() never ran.
   apicall('/api/tamper-events?unacknowledged=true')
-    .then(function(r) { return r.json(); })
     .then(function(events) {
       if (Array.isArray(events) && events.length > 0) {
         events.forEach(function(e) { showTamperBanner(e); });
@@ -19994,7 +20000,7 @@ function populateVexAgents() {
     if (sweepSel) sweepSel.innerHTML = opts;
     var allLabel = document.getElementById('vex-run-all-label');
     if (allLabel) allLabel.style.display = (ROLE === 'admin') ? 'flex' : 'none';
-  }).catch(function() {});
+  }).catch(function(e) { showToast('Failed to load agents: ' + (e.message || 'error'), 'err'); });
 }
 
 var _vexAllTechniques = [];
@@ -20056,6 +20062,8 @@ function _vexFormatDuration(ms) {
 
 var _vexSweepPollTimer = null;
 var _vexKnownRunningSweepIds = []; // sweep IDs seen in the previous tick, for completion-diffing
+var _vexSweepPollFailing = false;  // true while pollVexSweeps' fetch is failing -- avoids
+                                    // re-toasting every 3s for the same outage (see pollVexSweeps)
 
 // startVexSweepPolling begins the 3s poll loop against the server-owned
 // sweep API. Idempotent -- safe to call more than once (e.g. if
@@ -20075,6 +20083,7 @@ function pollVexSweeps() {
     apicall('/api/vex/sweeps?status=running'),
     apicall('/api/vex/sweeps?status=agent_disconnected')
   ]).then(function(results) {
+    _vexSweepPollFailing = false;
     var sweeps = (results[0] || []).concat(results[1] || []);
     var currentIds = sweeps.map(function(s) { return s.id; });
 
@@ -20088,7 +20097,18 @@ function pollVexSweeps() {
     _vexKnownRunningSweepIds = currentIds;
 
     renderVexSweepList(sweeps);
-  }).catch(function() {});
+  }).catch(function() {
+    // This 3s poll runs indefinitely for the life of the tab (by design --
+    // any operator can dispatch a new sweep at any time) and previously
+    // failed completely silently: an outage here meant the sweep list went
+    // stale forever with zero indication anything was wrong. One toast per
+    // failure episode (not one every 3s) balances visibility against spam;
+    // it clears itself via the success path above once the poll recovers.
+    if (!_vexSweepPollFailing) {
+      _vexSweepPollFailing = true;
+      showToast('Sweep list refresh failing — will keep retrying', 'err');
+    }
+  });
 }
 
 function reportVexSweepFinished(sweepId) {
@@ -21513,6 +21533,7 @@ function _renderEMLayerDetail(layerId) {
 
 var _emSweepPollTimer = null;
 var _emSweepCurrentId = null;
+var _emSweepPollFailing = false; // true while pollEMSweepProgress' fetch is failing -- see pollVexSweeps' identical rationale
 
 function openEMSweepProgress(sweepId) {
   _emSweepCurrentId = sweepId;
@@ -21552,6 +21573,7 @@ function pollEMSweepProgress() {
     apicall('/api/em/sweeps/' + encodeURIComponent(_emSweepCurrentId)),
     apicall('/api/em/sweeps/' + encodeURIComponent(_emSweepCurrentId) + '/runs')
   ]).then(function(res) {
+    _emSweepPollFailing = false;
     var sw = res[0];
     if (!sw || sw.error) return;
     var runs = (res[1] && res[1].runs) || [];
@@ -21560,7 +21582,16 @@ function pollEMSweepProgress() {
       clearInterval(_emSweepPollTimer);
       _emSweepPollTimer = null;
     }
-  }).catch(function() {});
+  }).catch(function() {
+    // See pollVexSweeps' identical rationale: this 3s poll runs for as long
+    // as the progress drawer is open (the operator can leave it open
+    // indefinitely) and previously failed silently forever. One toast per
+    // failure episode, self-clearing on the next successful poll.
+    if (!_emSweepPollFailing) {
+      _emSweepPollFailing = true;
+      showToast('Sweep progress refresh failing — will keep retrying', 'err');
+    }
+  });
 }
 
 function renderEMSweepProgress(sw, runs) {
