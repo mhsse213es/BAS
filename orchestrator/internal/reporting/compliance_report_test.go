@@ -5,6 +5,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/audspect/bas/internal/compliance"
 	"github.com/audspect/bas/internal/models"
@@ -166,6 +167,49 @@ func TestRenderCompliancePDF_NoSidecar(t *testing.T) {
 	var buf bytes.Buffer
 	if err := RenderCompliancePDF(context.Background(), &buf, cr, ""); err == nil {
 		t.Error("expected error when chrome sidecar unconfigured, got nil")
+	}
+}
+
+func TestComplianceTrendRendering(t *testing.T) {
+	cr := buildTestComplianceReport(t)
+	now := time.Now()
+	trend := []ComplianceTrendPoint{
+		{Date: now.AddDate(0, 0, -21), CompliancePct: 10},
+		{Date: now.AddDate(0, 0, -14), CompliancePct: 15},
+		{Date: now.AddDate(0, 0, -7), CompliancePct: 18},
+		{Date: now, CompliancePct: 25},
+	}
+	var buf strings.Builder
+	if err := RenderComplianceHTML(&buf, cr, "", trend...); err != nil {
+		t.Fatal(err)
+	}
+	out := buf.String()
+	if !strings.Contains(out, "Compliance trend") {
+		t.Error("trend block not rendered")
+	}
+	if !strings.Contains(out, "<polyline") {
+		t.Error("trend sparkline not rendered")
+	}
+	// +15 pts improvement from 10 → 25.
+	if !strings.Contains(out, "+15.0 pts") {
+		t.Errorf("expected +15.0 pts delta in output")
+	}
+
+	// Fewer than 2 points → no trend block.
+	var buf2 strings.Builder
+	_ = RenderComplianceHTML(&buf2, cr, "", ComplianceTrendPoint{Date: now, CompliancePct: 25})
+	if strings.Contains(buf2.String(), "Compliance trend") {
+		t.Error("single-point trend should be omitted")
+	}
+}
+
+func TestComplianceTrendSparkline(t *testing.T) {
+	if s := complianceTrendSparkline(nil); s != "" {
+		t.Errorf("nil trend should be empty, got %q", s)
+	}
+	s := complianceTrendSparkline([]ComplianceTrendPoint{{CompliancePct: 0}, {CompliancePct: 100}})
+	if !strings.HasPrefix(s, "0.0,36.0") { // first point x=0, y=h (0%)
+		t.Errorf("unexpected sparkline: %q", s)
 	}
 }
 

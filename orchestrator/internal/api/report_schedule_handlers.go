@@ -286,9 +286,10 @@ func (h *Handler) generateScheduledReport(ctx context.Context, s ReportSchedule)
 		if gerr != nil {
 			return "", "", nil, gerr
 		}
+		trend := h.complianceTrend(ctx, s.ScopeID, s.Framework)
 		return h.renderToBytes(ctx, "Compliance_Report", scope, s.Format,
-			func(out *bytes.Buffer) error { return reporting.RenderComplianceHTML(out, cr, genBy) },
-			func(out *bytes.Buffer) error { return reporting.RenderCompliancePDF(ctx, out, cr, genBy) })
+			func(out *bytes.Buffer) error { return reporting.RenderComplianceHTML(out, cr, genBy, trend...) },
+			func(out *bytes.Buffer) error { return reporting.RenderCompliancePDF(ctx, out, cr, genBy, trend...) })
 
 	default: // board
 		var rep *reporting.FullReport

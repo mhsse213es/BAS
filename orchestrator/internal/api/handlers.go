@@ -5008,6 +5008,25 @@ func (h *Handler) GetBoardOnePager(w http.ResponseWriter, r *http.Request) {
 		func(out io.Writer) error { return reporting.RenderBoardOnePager(out, report, compRows, genBy) })
 }
 
+// complianceTrend loads the compliance-over-time points for an (agent,
+// framework) pair and maps them to the reporting package's trend type. Empty
+// (nil) for a fleet/run scope or when no history exists yet — the report then
+// simply omits the trend block.
+func (h *Handler) complianceTrend(ctx context.Context, agentID, frameworkID string) []reporting.ComplianceTrendPoint {
+	if agentID == "" || frameworkID == "" {
+		return nil
+	}
+	hist, err := db.GetComplianceHistory(ctx, h.db, agentID, frameworkID, 12)
+	if err != nil || len(hist) == 0 {
+		return nil
+	}
+	out := make([]reporting.ComplianceTrendPoint, 0, len(hist))
+	for _, p := range hist {
+		out = append(out, reporting.ComplianceTrendPoint{Date: p.SnapshotAt, CompliancePct: p.CompliancePct})
+	}
+	return out
+}
+
 // complianceRows builds the per-framework compliance summary rows by aggregating
 // ALL of an agent's completed/partial runs. This gives accurate framework scores
 // because no single scenario exercises every control in a framework.
@@ -5103,6 +5122,9 @@ func (h *Handler) refreshComplianceSnapshots(ctx context.Context, agentID string
 			FailingControls:  s.FailingControls,
 			ManualControls:   s.ManualControls,
 		})
+		// Append a time-series point for the compliance-over-time trend shown in
+		// the compliance report (dedup-guarded inside AppendComplianceHistory).
+		db.AppendComplianceHistory(ctx, h.db, agentID, fw.ID, s.CompliancePercent, s.CoveragePercent, runCount)
 	}
 }
 
@@ -5619,10 +5641,11 @@ func (h *Handler) GetComplianceReport(w http.ResponseWriter, r *http.Request) {
 		if claims, ok := auth.ClaimsFrom(r.Context()); ok {
 			genBy = claims.UserID
 		}
+		trend := h.complianceTrend(r.Context(), resolvedAgentID, frameworkID)
 		writeBufferedReport(w, "text/html; charset=utf-8",
 			fmt.Sprintf(`inline; filename="%s"`, buildReportFilename("Compliance_Report", scope, "html")),
 			"generate compliance HTML report",
-			func(out io.Writer) error { return reporting.RenderComplianceHTML(out, report, genBy) })
+			func(out io.Writer) error { return reporting.RenderComplianceHTML(out, report, genBy, trend...) })
 
 	case "pdf":
 		// Prefer the Chrome-sidecar PDF (pixel-identical to the HTML form). If
@@ -5633,13 +5656,14 @@ func (h *Handler) GetComplianceReport(w http.ResponseWriter, r *http.Request) {
 		if claims, ok := auth.ClaimsFrom(r.Context()); ok {
 			genBy = claims.UserID
 		}
+		trend := h.complianceTrend(r.Context(), resolvedAgentID, frameworkID)
 		var pbuf bytes.Buffer
-		if err := reporting.RenderCompliancePDF(r.Context(), &pbuf, report, genBy); err != nil {
+		if err := reporting.RenderCompliancePDF(r.Context(), &pbuf, report, genBy, trend...); err != nil {
 			log.Printf("[api] compliance pdf: %v — serving HTML fallback", err)
 			writeBufferedReport(w, "text/html; charset=utf-8",
 				fmt.Sprintf(`inline; filename="%s"`, buildReportFilename("Compliance_Report", scope, "html")),
 				"generate compliance HTML report",
-				func(out io.Writer) error { return reporting.RenderComplianceHTML(out, report, genBy) })
+				func(out io.Writer) error { return reporting.RenderComplianceHTML(out, report, genBy, trend...) })
 			return
 		}
 		w.Header().Set("Content-Type", "application/pdf")
