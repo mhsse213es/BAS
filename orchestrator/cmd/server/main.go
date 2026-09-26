@@ -951,7 +951,15 @@ func main() {
 		WithIOCProvider(iocProvider).
 		WithNetworkVantagePoint(networkVP).
 		WithEmailGWRun(emailgwProvider, emailgwInjectionTarget, emailgwEnvironment).
-		WithEmailGWOutboundSender(emailgwOutboundSender)
+		WithEmailGWOutboundSender(emailgwOutboundSender).
+		WithReportSMTP(exercise.SMTPConfig{
+			Host:     cfg.SMTPHost,
+			Port:     cfg.SMTPPort,
+			Username: cfg.SMTPUser,
+			Password: cfg.SMTPPass,
+			FromAddr: cfg.SMTPFrom,
+			FromName: cfg.SMTPFromName,
+		})
 
 	// Resume every EmailGW run a previous process restart abandoned
 	// mid-wait (see internal/api.RecoverEmailGWRuns's own doc comment).
@@ -1015,6 +1023,14 @@ func main() {
 		}
 	})
 	defer vexSweepScheduler.Stop()
+
+	// Scheduled + emailed reports: check every 5 minutes for due schedules and
+	// deliver them by email (no-op until an operator creates schedules and SMTP
+	// is configured). The tick itself decides due-ness per schedule.
+	reportSchedScheduler := exercise.NewPollScheduler(5 * time.Minute)
+	reportSchedScheduler.Start(handler.RunReportScheduleTick)
+	defer reportSchedScheduler.Stop()
+	log.Println("[+] Scheduled-report poller started")
 
 	emSweepScheduler.Start(func(ctx context.Context) {
 		if err := emSweepDispatcher.Tick(ctx); err != nil {
