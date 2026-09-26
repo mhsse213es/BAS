@@ -65,7 +65,8 @@ func RenderBoardOnePager(w io.Writer, r *FullReport, compliance []ComplianceSumm
 		ScopeLabel  string
 		SparkPoints string
 		Attestation Attestation
-	}{r, comp, drivers, actions, scope, boardSparkline(r.TrendAnalysis), att}
+		Brand       brandView
+	}{r, comp, drivers, actions, scope, boardSparkline(r.TrendAnalysis), att, brandingView()}
 
 	var buf bytes.Buffer
 	if err := tmpl.Execute(&buf, data); err != nil {
@@ -275,13 +276,14 @@ body{font-family:"Segoe UI",system-ui,-apple-system,Helvetica,Arial,sans-serif;c
 .foot .mono{font-family:"Cascadia Code","Consolas",monospace;color:var(--navy);word-break:break-all}
 .none{color:var(--muted);font-size:.78rem}
 </style>
+<style>:root{--accent:{{.Brand.AccentCSS}}}</style>
 </head>
 <body>
 <div class="page">
 
   <div class="hdr">
     <div>
-      <div class="logo">Aud<span>spect</span> BAS</div>
+      <div class="logo">{{.Brand.LogoHTML}}</div>
       <div class="t">Executive Security Scorecard</div>
     </div>
     <div class="r">
@@ -377,7 +379,7 @@ body{font-family:"Segoe UI",system-ui,-apple-system,Helvetica,Arial,sans-serif;c
     <b>Tamper-evidence ({{.Attestation.Algorithm}}).</b> Digest (SHA-256): <span class="mono">{{.Attestation.ContentSHA256}}</span>.
     Tool {{.Attestation.ToolVersion}} &middot; Generated {{.Attestation.GeneratedAt.Format "02 Jan 2006 15:04 UTC"}}{{if .Attestation.GeneratedBy}} &middot; by {{.Attestation.GeneratedBy}}{{end}}.
     {{if .Attestation.Signature}}Signed — only the issuing Audspect deployment can reproduce this signature.{{end}}
-    Audspect BAS — Executive Security Scorecard. CONFIDENTIAL, for authorized use only.
+    {{.Brand.OrgName}} — Executive Security Scorecard. CONFIDENTIAL, for authorized use only.
   </div>
 
 </div>
