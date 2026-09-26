@@ -3828,6 +3828,8 @@ body.theme-slate {
             <select id="cmp-agent-sel" class="btn btn-outline" style="min-width:160px"></select>
             <select id="cmp-fw-sel" class="btn btn-outline" style="min-width:200px"></select>
             <button class="btn btn-primary btn-sm" onclick="loadComplianceReport()">Generate</button>
+            <button class="btn btn-outline btn-sm" onclick="openComplianceDoc('html')" id="cmp-export-html" style="display:none">↗ HTML</button>
+            <button class="btn btn-outline btn-sm" onclick="openComplianceDoc('pdf')" id="cmp-export-pdf" style="display:none">↓ PDF</button>
             <button class="btn btn-outline btn-sm" onclick="exportCompliance('json')" id="cmp-export-json" style="display:none">↓ JSON</button>
             <button class="btn btn-outline btn-sm" onclick="exportCompliance('csv')" id="cmp-export-csv" style="display:none">↓ CSV</button>
           </div>
@@ -8387,6 +8389,8 @@ function renderAgentRows() {
           '<button class="row-menu-item" onclick="closeAllRowMenus();downloadFullReportPDF(\'' + x(a.agentId) + '\')">&#8595; Report (PDF)</button>' +
           '<button class="row-menu-item" onclick="closeAllRowMenus();downloadFullReportCSV(\'' + x(a.agentId) + '\')">&#8595; Report (CSV)</button>' +
           '<button class="row-menu-item" onclick="closeAllRowMenus();downloadFullReportJSON(\'' + x(a.agentId) + '\')">&#8595; Report (JSON)</button>' +
+          '<button class="row-menu-item" onclick="closeAllRowMenus();downloadBoardScorecard(\'' + x(a.agentId) + '\')">&#128202; Board scorecard (PDF)</button>' +
+          '<button class="row-menu-item" onclick="closeAllRowMenus();downloadNavigatorLayer(\'' + x(a.agentId) + '\')">&#128506; ATT&amp;CK Navigator (JSON)</button>' +
           '<button class="row-menu-item" onclick="closeAllRowMenus();downloadAuditPack(\'' + x(a.agentId) + '\')">&#8659; Download audit pack</button>' +
           (ROLE === 'admin' ?
             '<button class="row-menu-item" onclick="closeAllRowMenus();moveAgentToGroupPrompt(\'' + x(a.agentId) + '\')">&#128193; Move to group…</button>' : '') +
@@ -19571,6 +19575,22 @@ function downloadFullReportJSON(agentId) {
     );
   });
 }
+// downloadBoardScorecard saves the single-page executive/board scorecard (PDF,
+// with an HTML fallback server-side when the Chrome sidecar is unavailable).
+function downloadBoardScorecard(agentId) {
+  triggerDownload(
+    '/api/report/board?agentId=' + encodeURIComponent(agentId) + '&format=pdf',
+    buildReportFilename('Board_Scorecard', agentId, 'pdf')
+  );
+}
+// downloadNavigatorLayer saves the MITRE ATT&CK Navigator layer JSON for this
+// agent's coverage, loadable directly in the official ATT&CK Navigator.
+function downloadNavigatorLayer(agentId) {
+  triggerDownload(
+    '/api/report/navigator?agentId=' + encodeURIComponent(agentId),
+    buildReportFilename('ATTACK_Navigator', agentId, 'json')
+  );
+}
 
 function downloadAuditPack(agentId) {
   showToast('Preparing audit pack…', 'ok');
@@ -19631,7 +19651,7 @@ function loadComplianceReport() {
   document.getElementById('cmp-placeholder').textContent = 'Generating report…';
   document.getElementById('cmp-placeholder').style.display = '';
   document.getElementById('cmp-report').style.display = 'none';
-  ['cmp-export-json','cmp-export-csv'].forEach(function(id) {
+  ['cmp-export-html','cmp-export-pdf','cmp-export-json','cmp-export-csv'].forEach(function(id) {
     document.getElementById(id).style.display = 'none';
   });
 
@@ -19642,7 +19662,7 @@ function loadComplianceReport() {
       renderComplianceReport(report);
       document.getElementById('cmp-placeholder').style.display = 'none';
       document.getElementById('cmp-report').style.display = '';
-      ['cmp-export-json','cmp-export-csv'].forEach(function(id) {
+      ['cmp-export-html','cmp-export-pdf','cmp-export-json','cmp-export-csv'].forEach(function(id) {
         document.getElementById(id).style.display = '';
       });
     })
@@ -19794,6 +19814,21 @@ function filterControls(status) {
   if (_cmpReport) renderControlsTable(_cmpReport.controls, status);
 }
 
+// openComplianceDoc opens (HTML) or downloads (PDF) the styled, per-control
+// compliance report deliverable — the auditor-facing document, distinct from
+// the JSON/CSV data exports.
+function openComplianceDoc(format) {
+  var agentId = document.getElementById('cmp-agent-sel').value;
+  var framework = document.getElementById('cmp-fw-sel').value;
+  if (!agentId || !framework) { showToast('Select an agent and framework first', 'err'); return; }
+  var url = '/api/compliance/report?agentId=' + encodeURIComponent(agentId) +
+    '&framework=' + encodeURIComponent(framework) + '&format=' + format;
+  if (format === 'pdf') {
+    triggerDownload(url, buildReportFilename('Compliance_Report', agentId + '-' + framework, 'pdf'));
+  } else {
+    window.open(url, '_blank');
+  }
+}
 function exportCompliance(format) {
   var agentId = document.getElementById('cmp-agent-sel').value;
   var framework = document.getElementById('cmp-fw-sel').value;
