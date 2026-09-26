@@ -452,6 +452,8 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.Get("/api/report/full/json", h.GetFullReportJSON)
 		r.Get("/api/report/audit-pack", h.GetAuditPack)
 		r.Get("/api/report/board", h.GetBoardOnePager)
+		r.Get("/api/report/navigator", h.GetNavigatorLayer)
+		r.Post("/api/report/verify", h.VerifyAuditPack)
 
 		// Compliance — Viewer+ role
 		r.Get("/api/compliance/frameworks", h.ListComplianceFrameworks)
