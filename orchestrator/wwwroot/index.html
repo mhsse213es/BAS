@@ -20680,6 +20680,48 @@ function stopVex() {
   showToast('Variant run stopped', 'warn');
 }
 
+function _vexVerdictColor(verdict) {
+  return verdict === 'PREVENTED' ? 'var(--success)' :
+         verdict === 'ALLOWED' ? 'var(--danger)' :
+         verdict === 'ERROR' ? 'var(--muted)' : 'var(--warning)';
+}
+function _vexResultRowHtml(r) {
+  return '<tr data-task-id="' + x(r.taskId) + '">' +
+    '<td style="font-family:var(--font-mono)">' + x(r.encoding) + '</td>' +
+    '<td style="font-family:var(--font-mono)">' + x(r.execContext) + '</td>' +
+    '<td style="font-family:var(--font-mono)">' + x(r.evasion) + '</td>' +
+    '<td><span class="badge" style="font-size:0.68rem;border-color:transparent">' + x(r.riskLevel) + '</span></td>' +
+    '<td data-verdict-cell data-verdict="' + x(r.verdict) + '"><span style="color:' + _vexVerdictColor(r.verdict) + ';font-weight:600;font-size:0.78rem">' + x(r.verdict) + '</span></td>' +
+    '</tr>';
+}
+
+// renderVariantRun previously rebuilt the ENTIRE results panel -- including
+// the whole results table -- from a fresh HTML string on every 3s poll
+// tick, for the run's full duration. For a run with dozens of variant
+// combinations, that meant discarding and recreating the whole <table>
+// every tick even though typically only one or two rows' verdicts actually
+// changed. The backend guarantees results.length and each row's
+// taskId/encoding/execContext/evasion/riskLevel never change once a run
+// starts (variant_handlers.go's GetVariantRun always returns every
+// dispatched step, PENDING or not, in the same stable stepRows-insertion
+// order) -- only verdict (and the cell it renders into) ever changes. So
+// once a table for THIS run already exists with the expected row count and
+// taskIds, only the verdict cells that actually changed get touched.
+// Everything else (header/actions/summary tiles/bypass banner -- a handful
+// of small elements, not "dozens+" rows) is still cheaply rebuilt wholesale
+// every tick, per the explicit guidance not to over-engineer this further.
+//
+// Every element inside the wrapper originally had its own margin-bottom
+// PLUS .card's flex gap (0.45rem) between it and the next flex sibling --
+// 0.75rem + 0.45rem = 1.2rem total, confirmed by measuring the original
+// rendering. .card's gap only applies between its own direct children, so
+// wrapping title/actions/summary/banner inside one div (now grandchildren
+// of .card) would silently shrink those internal gaps to just 0.75rem.
+// The wrapper reproduces the original 1.2rem via its own
+// `gap:1.2rem` between its direct children (title/actions/summary/banner,
+// each with no margin-bottom of its own anymore) and its own
+// `margin-bottom:0.75rem`, which combines with .card's still-active
+// 0.45rem gap to the table for that same 1.2rem total.
 function renderVariantRun(detail) {
   var run = detail.run || {};
   var results = detail.results || [];
@@ -20687,16 +20729,18 @@ function renderVariantRun(detail) {
   var statusCol = run.status === 'completed' ? 'var(--success)' :
                   run.status === 'failed' ? 'var(--danger)' : 'var(--warning)';
 
-  var html = '<div class="card">';
-  html += '<div class="card-title" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem">';
-  html += '<span>Results — <span style="font-family:var(--font-mono)">' + x(run.techniqueId || '') + '</span></span>';
-  html += '<span style="display:flex;align-items:center;gap:0.5rem">';
-  html += '<span class="badge" style="background:' + statusCol + '22;color:' + statusCol + ';border:1px solid ' + statusCol + '44">' + x(run.status || 'running') + '</span>';
+  var panel = document.getElementById('vex-result-panel');
+  if (!panel) return;
+
+  var wrapperHtml = '<div class="card-title" style="display:flex;justify-content:space-between;align-items:center">';
+  wrapperHtml += '<span>Results — <span style="font-family:var(--font-mono)">' + x(run.techniqueId || '') + '</span></span>';
+  wrapperHtml += '<span style="display:flex;align-items:center;gap:0.5rem">';
+  wrapperHtml += '<span class="badge" style="background:' + statusCol + '22;color:' + statusCol + ';border:1px solid ' + statusCol + '44">' + x(run.status || 'running') + '</span>';
   if (run.status === 'running') {
-    html += '<button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger)" onclick="stopVex()">&#9632; Stop</button>';
+    wrapperHtml += '<button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger)" onclick="stopVex()">&#9632; Stop</button>';
   }
-  html += '</span>';
-  html += '</div>';
+  wrapperHtml += '</span>';
+  wrapperHtml += '</div>';
 
   // Report actions -- this variant run is a real scenario_runs row underneath
   // (see dispatchVariantRun), so it already has full report data behind it
@@ -20704,52 +20748,65 @@ function renderVariantRun(detail) {
   // once the run reaches a terminal state -- a running run's report would
   // just be an incomplete snapshot.
   if (run.scenarioRunId && run.status !== 'running') {
-    html += '<div style="display:flex;gap:0.4rem;flex-wrap:wrap;margin-bottom:0.75rem">';
-    html += '<button class="btn btn-outline btn-sm" onclick="openRunReport(\'' + x(run.scenarioRunId) + '\')" title="Open the HTML report">&#8599; HTML Report</button>';
-    html += '<button class="btn btn-outline btn-sm" onclick="downloadRunReport(\'' + x(run.scenarioRunId) + '\')" title="Download the report as a PDF file">&#8595; PDF</button>';
-    html += '<button class="btn btn-outline btn-sm" onclick="downloadRunCSV(\'' + x(run.scenarioRunId) + '\')" title="Download the forensic CSV (one row per variant)">&#8595; CSV</button>';
-    html += '<button class="btn btn-outline btn-sm" onclick="exportRunJSON(\'' + x(run.scenarioRunId) + '\')" title="Download the raw run data as JSON">&#8595; JSON</button>';
-    html += '</div>';
+    wrapperHtml += '<div style="display:flex;gap:0.4rem;flex-wrap:wrap">';
+    wrapperHtml += '<button class="btn btn-outline btn-sm" onclick="openRunReport(\'' + x(run.scenarioRunId) + '\')" title="Open the HTML report">&#8599; HTML Report</button>';
+    wrapperHtml += '<button class="btn btn-outline btn-sm" onclick="downloadRunReport(\'' + x(run.scenarioRunId) + '\')" title="Download the report as a PDF file">&#8595; PDF</button>';
+    wrapperHtml += '<button class="btn btn-outline btn-sm" onclick="downloadRunCSV(\'' + x(run.scenarioRunId) + '\')" title="Download the forensic CSV (one row per variant)">&#8595; CSV</button>';
+    wrapperHtml += '<button class="btn btn-outline btn-sm" onclick="exportRunJSON(\'' + x(run.scenarioRunId) + '\')" title="Download the raw run data as JSON">&#8595; JSON</button>';
+    wrapperHtml += '</div>';
   }
 
-  html += '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:0.5rem;margin-bottom:0.75rem">';
-  html += vexMini('Total', summary.total, 'var(--text)');
-  html += vexMini('Prevented', summary.prevented, 'var(--success)');
-  html += vexMini('Allowed', summary.allowed, 'var(--danger)');
-  html += vexMini('Pending', summary.pending, 'var(--muted)');
-  html += '</div>';
+  wrapperHtml += '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:0.5rem">';
+  wrapperHtml += vexMini('Total', summary.total, 'var(--text)');
+  wrapperHtml += vexMini('Prevented', summary.prevented, 'var(--success)');
+  wrapperHtml += vexMini('Allowed', summary.allowed, 'var(--danger)');
+  wrapperHtml += vexMini('Pending', summary.pending, 'var(--muted)');
+  wrapperHtml += '</div>';
 
   if (summary.firstBypass) {
-    html += '<div style="background:rgba(218,54,51,0.08);border:1px solid rgba(218,54,51,0.3);border-radius:6px;padding:0.55rem 0.8rem;margin-bottom:0.75rem;font-size:0.82rem">';
-    html += '<span style="color:var(--danger);font-weight:600">First bypass: </span>';
-    html += '<span style="font-family:var(--font-mono);color:var(--text)">' + x(summary.firstBypass) + '</span>';
+    wrapperHtml += '<div style="background:rgba(218,54,51,0.08);border:1px solid rgba(218,54,51,0.3);border-radius:6px;padding:0.55rem 0.8rem;font-size:0.82rem">';
+    wrapperHtml += '<span style="color:var(--danger);font-weight:600">First bypass: </span>';
+    wrapperHtml += '<span style="font-family:var(--font-mono);color:var(--text)">' + x(summary.firstBypass) + '</span>';
     if (summary.firstBypassRisk) {
-      html += ' <span class="badge" style="background:rgba(218,54,51,0.15);color:#f85149;font-size:0.68rem;border-color:transparent">' + x(summary.firstBypassRisk) + '</span>';
+      wrapperHtml += ' <span class="badge" style="background:rgba(218,54,51,0.15);color:#f85149;font-size:0.68rem;border-color:transparent">' + x(summary.firstBypassRisk) + '</span>';
     }
-    html += '</div>';
+    wrapperHtml += '</div>';
   }
 
-  if (results.length > 0) {
-    html += '<div class="tbl-wrap" style="max-height:300px;overflow-y:auto"><table style="font-size:0.77rem">';
-    html += '<thead><tr><th>Encoding</th><th>Context</th><th>Evasion</th><th>Risk</th><th>Verdict</th></tr></thead><tbody>';
-    results.forEach(function(r) {
-      var vc = r.verdict === 'PREVENTED' ? 'var(--success)' :
-               r.verdict === 'ALLOWED' ? 'var(--danger)' :
-               r.verdict === 'ERROR' ? 'var(--muted)' : 'var(--warning)';
-      html += '<tr>' +
-        '<td style="font-family:var(--font-mono)">' + x(r.encoding) + '</td>' +
-        '<td style="font-family:var(--font-mono)">' + x(r.execContext) + '</td>' +
-        '<td style="font-family:var(--font-mono)">' + x(r.evasion) + '</td>' +
-        '<td><span class="badge" style="font-size:0.68rem;border-color:transparent">' + x(r.riskLevel) + '</span></td>' +
-        '<td><span style="color:' + vc + ';font-weight:600;font-size:0.78rem">' + x(r.verdict) + '</span></td>' +
-        '</tr>';
+  // Try an incremental update: only valid when a table from a PRIOR render
+  // of this exact run already exists with the same row count and the same
+  // taskId in the same position for every row (both guaranteed by the
+  // backend for a given run, but checked explicitly rather than assumed --
+  // any mismatch falls back to the full rebuild below, never a silently
+  // wrong table).
+  var existingTbody = panel.querySelector('tbody[data-vex-results]');
+  var incremental = !!existingTbody && existingTbody.children.length === results.length;
+  if (incremental) {
+    for (var i = 0; i < results.length; i++) {
+      if (existingTbody.children[i].getAttribute('data-task-id') !== results[i].taskId) { incremental = false; break; }
+    }
+  }
+
+  if (incremental) {
+    var wrapperEl = panel.querySelector('[data-vex-wrapper]');
+    if (wrapperEl) wrapperEl.innerHTML = wrapperHtml;
+    results.forEach(function(r, idx) {
+      var cell = existingTbody.children[idx].querySelector('[data-verdict-cell]');
+      if (cell && cell.getAttribute('data-verdict') !== r.verdict) {
+        cell.setAttribute('data-verdict', r.verdict);
+        cell.innerHTML = '<span style="color:' + _vexVerdictColor(r.verdict) + ';font-weight:600;font-size:0.78rem">' + x(r.verdict) + '</span>';
+      }
     });
-    html += '</tbody></table></div>';
+    return;
   }
-  html += '</div>';
 
-  var panel = document.getElementById('vex-result-panel');
-  if (panel) panel.innerHTML = html;
+  var tableHtml = '';
+  if (results.length > 0) {
+    tableHtml = '<div class="tbl-wrap" style="max-height:300px;overflow-y:auto"><table style="font-size:0.77rem">' +
+      '<thead><tr><th>Encoding</th><th>Context</th><th>Evasion</th><th>Risk</th><th>Verdict</th></tr></thead>' +
+      '<tbody data-vex-results>' + results.map(_vexResultRowHtml).join('') + '</tbody></table></div>';
+  }
+  panel.innerHTML = '<div class="card"><div data-vex-wrapper style="display:flex;flex-direction:column;gap:1.2rem;margin-bottom:0.75rem">' + wrapperHtml + '</div>' + tableHtml + '</div>';
 }
 
 function vexMini(label, val, col) {
