@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
@@ -5529,6 +5530,34 @@ func (h *Handler) GetComplianceReport(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, buildReportFilename("Compliance_Report", scope, "json")))
 		w.Write(b)
+
+	case "html":
+		// Styled, standalone, per-control compliance deliverable (P0-1): the
+		// same ControlResult/DomainResult/evidence that CSV/JSON expose, but
+		// rendered as an auditor-facing document instead of a spreadsheet.
+		writeBufferedReport(w, "text/html; charset=utf-8",
+			fmt.Sprintf(`inline; filename="%s"`, buildReportFilename("Compliance_Report", scope, "html")),
+			"generate compliance HTML report",
+			func(out io.Writer) error { return reporting.RenderComplianceHTML(out, report) })
+
+	case "pdf":
+		// Prefer the Chrome-sidecar PDF (pixel-identical to the HTML form). If
+		// the sidecar is unconfigured/unreachable, fall back to serving the
+		// styled HTML inline so the operator always receives a document rather
+		// than a 500 — same resilience posture as the full report's PDF path.
+		var pbuf bytes.Buffer
+		if err := reporting.RenderCompliancePDF(r.Context(), &pbuf, report); err != nil {
+			log.Printf("[api] compliance pdf: %v — serving HTML fallback", err)
+			writeBufferedReport(w, "text/html; charset=utf-8",
+				fmt.Sprintf(`inline; filename="%s"`, buildReportFilename("Compliance_Report", scope, "html")),
+				"generate compliance HTML report",
+				func(out io.Writer) error { return reporting.RenderComplianceHTML(out, report) })
+			return
+		}
+		w.Header().Set("Content-Type", "application/pdf")
+		w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, buildReportFilename("Compliance_Report", scope, "pdf")))
+		w.Header().Set("Content-Length", strconv.Itoa(pbuf.Len()))
+		w.Write(pbuf.Bytes())
 
 	default:
 		respond(w, report)
