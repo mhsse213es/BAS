@@ -4933,6 +4933,72 @@ func (h *Handler) GetFullReportHTML(w http.ResponseWriter, r *http.Request) {
 		func(out io.Writer) error { return reporting.GenerateHTML(out, report, compRows) })
 }
 
+// GET /api/report/board?agentId=X  (or ?campaignId=Y)  &format=html|pdf
+// Renders the single-page executive/board security scorecard (P0-3): overall
+// posture, trend, KPIs, per-framework compliance, top risks and priority
+// actions on one A4 page. Reuses the same FullReport the full report builds.
+func (h *Handler) GetBoardOnePager(w http.ResponseWriter, r *http.Request) {
+	if h.reportingEngine == nil {
+		jsonError(w, "reporting engine not loaded", http.StatusServiceUnavailable)
+		return
+	}
+	agentID := r.URL.Query().Get("agentId")
+	campaignID := r.URL.Query().Get("campaignId")
+	format := strings.ToLower(r.URL.Query().Get("format"))
+	if format == "" {
+		format = "html"
+	}
+
+	var report *reporting.FullReport
+	var err error
+	var compRows []reporting.ComplianceSummaryRow
+	var scope string
+	switch {
+	case campaignID != "":
+		report, err = h.reportingEngine.BuildFromCampaign(r.Context(), campaignID, "")
+		scope = campaignID
+	case agentID != "":
+		report, err = h.reportingEngine.Build(r.Context(), agentID, "")
+		compRows = h.complianceRows(r.Context(), agentID, "")
+		scope = agentID
+	default:
+		jsonError(w, "agentId or campaignId required", http.StatusBadRequest)
+		return
+	}
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	genBy := ""
+	if claims, ok := auth.ClaimsFrom(r.Context()); ok {
+		genBy = claims.UserID
+	}
+	h.auditLog(r, "report.export", scope, map[string]any{"format": format, "type": "board"}, "ok")
+
+	if format == "pdf" {
+		var pbuf bytes.Buffer
+		if perr := reporting.RenderBoardOnePagerPDF(r.Context(), &pbuf, report, compRows, genBy); perr != nil {
+			log.Printf("[api] board pdf: %v — serving HTML fallback", perr)
+			writeBufferedReport(w, "text/html; charset=utf-8",
+				fmt.Sprintf(`inline; filename="%s"`, buildReportFilename("Board_Scorecard", scope, "html")),
+				"generate board one-pager",
+				func(out io.Writer) error { return reporting.RenderBoardOnePager(out, report, compRows, genBy) })
+			return
+		}
+		w.Header().Set("Content-Type", "application/pdf")
+		w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, buildReportFilename("Board_Scorecard", scope, "pdf")))
+		w.Header().Set("Content-Length", strconv.Itoa(pbuf.Len()))
+		w.Write(pbuf.Bytes())
+		return
+	}
+
+	writeBufferedReport(w, "text/html; charset=utf-8",
+		fmt.Sprintf(`inline; filename="%s"`, buildReportFilename("Board_Scorecard", scope, "html")),
+		"generate board one-pager",
+		func(out io.Writer) error { return reporting.RenderBoardOnePager(out, report, compRows, genBy) })
+}
+
 // complianceRows builds the per-framework compliance summary rows by aggregating
 // ALL of an agent's completed/partial runs. This gives accurate framework scores
 // because no single scenario exercises every control in a framework.
