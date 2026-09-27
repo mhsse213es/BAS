@@ -103,6 +103,17 @@ type Config struct {
 	// GET /metrics. Empty (the default) leaves it open -- same opt-in
 	// posture as DBBreakGlassPassword and RateLimitEnabled.
 	MetricsToken string `json:"metrics_token,omitempty"`
+
+	// Agent trust model (B1/B3) — deployment CA + per-agent mTLS.
+	// See docs/superpowers/specs/2026-09-27-agent-trust-model-b1-b3-b4-design.md.
+	// PKIDir holds the deployment CA's keypair/cert (ca-key.pem, ca-cert.pem),
+	// generated on first startup if absent. EnrollHTTPPort serves initial
+	// bootstrap CSR submission over TLS with NO client cert required.
+	// LegacyHTTPPort is the temporary plaintext listener for pre-migration
+	// agents, retired entirely by the separately-scoped B2 work.
+	PKIDir          string `json:"pki_dir,omitempty"`
+	EnrollHTTPPort  int    `json:"enroll_http_port,omitempty"`
+	LegacyHTTPPort  int    `json:"legacy_http_port,omitempty"`
 }
 
 // Load reads config from a JSON file, then overrides with environment variables.
@@ -121,6 +132,9 @@ func Load(path string) (*Config, error) {
 		DNSSinkEnabled:   true,
 		SFTPSinkEnabled:  true,
 		SMTPSinkEnabled:  true,
+		PKIDir:           "/etc/audspect/pki",
+		EnrollHTTPPort:   9444,
+		LegacyHTTPPort:   9000,
 	}
 
 	// Try file first (local dev)
@@ -272,6 +286,15 @@ func Load(path string) (*Config, error) {
 	}
 	if v := os.Getenv("METRICS_TOKEN"); v != "" {
 		cfg.MetricsToken = v
+	}
+	if v := os.Getenv("PKI_DIR"); v != "" {
+		cfg.PKIDir = v
+	}
+	if v := os.Getenv("HTTP_PORT_ENROLL"); v != "" {
+		fmt.Sscanf(v, "%d", &cfg.EnrollHTTPPort)
+	}
+	if v := os.Getenv("HTTP_PORT_LEGACY"); v != "" {
+		fmt.Sscanf(v, "%d", &cfg.LegacyHTTPPort)
 	}
 
 	if cfg.DatabaseURL == "" {
