@@ -142,8 +142,20 @@ services:
       # inactive (role unchanged).
       BAS_DB_BREAKGLASS_PASSWORD: ${BAS_DB_BREAKGLASS_PASSWORD:-}
       HTTP_PORT:        "9443"
+      HTTP_PORT_ENROLL: "9444"
+      HTTP_PORT_LEGACY: "9000"
+      HTTP_PORT_DASHBOARD: "9543"
       SCENARIOS_DIR:    /scenarios
       BAS_LICENSE_PATH: /etc/bas/${LICENSE_FILE:-bas.lic}
+      # In-container paths for the operator-supplied dashboard TLS cert
+      # (BAS_TLS=true in setup.conf) -- left unset (empty) when BAS_TLS=false,
+      # the default, so config.go's DashboardTLSCertPath/DashboardTLSKeyPath
+      # stay empty and main.go correctly falls back to the deployment CA's
+      # own self-signed certificate rather than trying to load files that
+      # were never copied. install.sh only sets TLS_CERT_CONTAINER_PATH/
+      # TLS_KEY_CONTAINER_PATH in .env when BAS_TLS=true.
+      TLS_CERT: ${TLS_CERT_CONTAINER_PATH:-}
+      TLS_KEY:  ${TLS_KEY_CONTAINER_PATH:-}
       DNS_SINK_ENABLED: ${DNS_SINK_ENABLED:-true}
       SFTP_SINK_ENABLED: ${SFTP_SINK_ENABLED:-true}
       SINK_SFTP_HOST:   ${SINK_SFTP_HOST:-}
@@ -179,6 +191,19 @@ services:
       # ── SharpHound AD collector (optional — see volumes above) ──────────────
       BAS_SHARPHOUND_PATH:     ${BAS_SHARPHOUND_PATH:-}
     volumes:
+      # Deployment CA (per-agent mTLS trust root, orchestrator/internal/pki) --
+      # persisted across container recreates as a plain host directory (NOT a
+      # named Docker volume) specifically so it rides the existing
+      # install.sh backup engine (_package_config), which only knows how to
+      # tar host paths under DATA_DIR. Losing this invalidates every
+      # already-issued agent certificate AND every agent's locally-cached CA
+      # root fingerprint -- a fleet-wide lockout, not just data loss.
+      - ./pki:/etc/audspect/pki
+      # Operator-supplied TLS certificate for the browser dashboard
+      # (BAS_TLS=true in setup.conf) -- install.sh already copies TLS_CERT/
+      # TLS_KEY here (${DATA_DIR}/certs/bas.crt|bas.key); read-only, the
+      # orchestrator only ever reads this certificate, never writes it.
+      - ./certs:/etc/bas/certs:ro
       # scenarios is read-write: the threat-intel connector writes generated
       # YAMLs into scenarios/intel/. Keep writable even if connector is unused.
       - ./scenarios:/scenarios
@@ -209,6 +234,9 @@ services:
       - ${SHARPHOUND_DIR:-./sharphound}:/sharphound:ro
     ports:
       - "${BAS_PORT:-9443}:9443"
+      - "${BAS_ENROLL_PORT:-9444}:9444"
+      - "${BAS_LEGACY_PORT:-9000}:9000"
+      - "${BAS_DASHBOARD_PORT:-9543}:9543"
       # Bound to a specific host IP, never the 0.0.0.0 wildcard: most Linux
       # hosts run systemd-resolved's stub listener on 127.0.0.53/.54:53, and
       # a wildcard bind on the same port conflicts with that at the kernel
