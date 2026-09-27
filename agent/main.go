@@ -29,6 +29,7 @@ func main() {
 	flagServer := flag.String("server", "", "Override BAS_SERVER_URL")
 	flagEnv := flag.String("env", "Production", "Override BAS_ENV_LABEL")
 	flagSecret := flag.String("secret", "", "Agent shared secret (encrypted at rest via DPAPI on Windows)")
+	flagCARoot := flag.String("ca-root", "", "Path to the deployment CA root PEM (required for mTLS enrollment; fetch via GET /api/config/connection)")
 
 	registerPlatformFlags()
 	flag.Parse()
@@ -49,6 +50,18 @@ func main() {
 		secret := *flagSecret
 		if secret == "" {
 			secret = os.Getenv("BAS_AGENT_SECRET")
+		}
+		if *flagCARoot != "" {
+			pemBytes, err := os.ReadFile(*flagCARoot)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "error: read --ca-root file: %v\n", err)
+				os.Exit(1)
+			}
+			if err := saveDeploymentCARoot(pemBytes); err != nil {
+				fmt.Fprintf(os.Stderr, "error: save CA root: %v\n", err)
+				os.Exit(1)
+			}
+			fmt.Println("[+] deployment CA root installed")
 		}
 		if err := svcInstall(serverURL, *flagEnv, secret); err != nil {
 			fmt.Fprintf(os.Stderr, "install failed: %v\n", err)

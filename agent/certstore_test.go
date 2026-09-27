@@ -6,6 +6,7 @@ import (
 	"crypto/x509/pkix"
 	"encoding/pem"
 	"math/big"
+	"os"
 	"testing"
 	"time"
 )
@@ -89,6 +90,24 @@ func TestCertExpiringSoon(t *testing.T) {
 	}
 	if !certExpiringSoon(old) {
 		t.Error("a certificate at ~82% of its lifetime should be reported as expiring soon (75% threshold)")
+	}
+}
+
+func TestSaveDeploymentCARoot_WritesToCanonicalPath(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("BAS_CERT_DIR", dir)
+
+	pem := []byte("-----BEGIN CERTIFICATE-----\nfakedata\n-----END CERTIFICATE-----\n")
+	if err := saveDeploymentCARoot(pem); err != nil {
+		t.Fatalf("saveDeploymentCARoot: %v", err)
+	}
+	_, caPath, _, _ := certPaths()
+	got, err := os.ReadFile(caPath)
+	if err != nil {
+		t.Fatalf("read back CA root: %v", err)
+	}
+	if string(got) != string(pem) {
+		t.Errorf("written content does not match input")
 	}
 }
 

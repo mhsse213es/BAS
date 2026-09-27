@@ -94,6 +94,25 @@ func saveAgentCertificate(certPEM []byte) error {
 	return os.WriteFile(certPath, certPEM, 0644)
 }
 
+// saveDeploymentCARoot writes pemBytes to the canonical CA-root location
+// (certPaths()'s caPath) — called during --install (agent/main.go) with a
+// PEM an admin fetched from the orchestrator's GET /api/config/connection
+// (Task 6) and handed to the installer. Not secret (a public certificate),
+// so no permission-hardening beyond the directory's own 0700/icacls
+// treatment (already applied by loadOrGenerateAgentKey's MkdirAll +
+// hardenCertDirPlatform, called here too in case --install runs before any
+// key operation has created the directory yet).
+func saveDeploymentCARoot(pemBytes []byte) error {
+	dir, caPath, _, _ := certPaths()
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		return fmt.Errorf("create cert dir %s: %w", dir, err)
+	}
+	if err := hardenCertDirPlatform(dir); err != nil {
+		return fmt.Errorf("harden cert dir: %w", err)
+	}
+	return os.WriteFile(caPath, pemBytes, 0644)
+}
+
 // loadAgentCertificate returns the currently persisted certificate, or an
 // error wrapping os.ErrNotExist if none has been saved yet (the caller,
 // Task 10's bootstrap orchestration, treats that as "run initial bootstrap").
