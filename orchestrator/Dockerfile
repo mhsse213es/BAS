@@ -123,6 +123,17 @@ ARG BAS_WWWROOT_HASH=""
 # deliberate choice, not a side effect of @latest silently moving forward.
 RUN apk add --no-cache git && \
     go install mvdan.cc/garble@v0.17.0
+# Seed the CA directory with correct nonroot ownership here, in a stage that
+# still has a shell -- gcr.io/distroless/static-debian12 (the final stage)
+# has none, so a RUN mkdir/chown there is impossible. This directory is
+# COPY --chown'd into the final stage below and becomes the mount point for
+# the audspect-pki-data named volume (packaging/compose/docker-compose.yml) --
+# Docker initializes a fresh named volume from the image's existing content
+# and ownership at that path, so this seed step is what makes the volume
+# writable by nonroot from the very first container start.
+# 65532:65532 is gcr.io/distroless/static-debian12:nonroot's real nonroot
+# UID:GID -- verified directly against the image's /etc/passwd, not assumed.
+RUN mkdir -p /pki-seed && chown 65532:65532 /pki-seed
 WORKDIR /src
 COPY orchestrator/go.mod orchestrator/go.sum ./
 RUN go mod download
@@ -152,9 +163,10 @@ COPY --from=art-fetcher /art-atomics /art-atomics
 COPY --from=art-fetcher /art-payloads /art-payloads
 # CISA KEV catalog (seeds the cves knowledge-graph table at boot).
 COPY --from=art-fetcher /content /content
+COPY --from=builder --chown=65532:65532 /pki-seed /etc/audspect/pki
 ENV ART_DIR=/art-atomics
 ENV ART_PAYLOAD_DIR=/art-payloads
 ENV KEV_FILE=/content/cisa-kev.json
 USER nonroot
-EXPOSE 9000
+EXPOSE 9000 9443 9444 9543
 ENTRYPOINT ["/orchestrator"]
