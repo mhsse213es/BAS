@@ -18,10 +18,24 @@ ag/
 # Private keys — NEVER commit any PEM/SSH key (incl. stray keys in repo root)
 *.pem
 *.key
+*.pfx
 id_rsa
 packaging/licensing/keys/
 # Generated customer license files
 *.lic
+
+# Committed-secret incident (2026-09-27): these exact files were found tracked
+# in commit 976958d (2026-05-13) despite the *.txt rule below -- gitignore
+# never retroactively untracks an already-tracked file, it only prevents new
+# additions, which is why the blanket *.txt rule didn't stop the original
+# commit. Listed explicitly, in addition to *.txt, so the intent is clear
+# even if these specific names are ever untracked and re-created locally.
+keys.txt
+tenantID.txt
+setting.json
+Model Configurator.txt
+.env
+.env.*
 
 # Build / delivery output and local tooling — never ship via git
 dist/
