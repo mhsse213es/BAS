@@ -1,5 +1,5 @@
-// orchestrator/internal/pki/testcsr.go
-package pki
+// orchestrator/internal/pki/pkitest/pkitest.go
+package pkitest
 
 import (
 	"crypto/ecdsa"
@@ -11,12 +11,14 @@ import (
 )
 
 // GenerateTestCSR generates an ECDSA P-256 keypair and a CSR for it, the
-// same shape Task 8's real agent code produces. Exported (not _test.go-only
-// -- Go excludes _test.go files from normal package compilation, so a
-// function defined there is invisible to other packages' own tests) so
-// Task 5's handler test and Task 9's protocol test can reuse it without
-// duplicating CSR-construction code, as well as within this package's own
-// tests.
+// same shape Task 8's real agent code produces. Lives in this dedicated
+// test-support subpackage (the same pattern the standard library uses for
+// httptest) rather than in package pki itself: production code never
+// imports pkitest, so Go's linker excludes it from any build that doesn't
+// reference it -- unlike a plain non-_test.go file in package pki, which
+// would compile into every binary that imports pki, including the
+// orchestrator server. Used by Task 3's own pki tests, Task 5's handler
+// test, and Task 9's protocol test.
 func GenerateTestCSR(commonName string) ([]byte, error) {
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {

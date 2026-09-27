@@ -5,6 +5,8 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"testing"
+
+	"github.com/audspect/bas/internal/pki/pkitest"
 )
 
 func TestIssueClientCertificate_ValidCSR(t *testing.T) {
@@ -13,7 +15,7 @@ func TestIssueClientCertificate_ValidCSR(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadOrGenerateCA: %v", err)
 	}
-	csrPEM, err := GenerateTestCSR("requested-cn-is-ignored")
+	csrPEM, err := pkitest.GenerateTestCSR("requested-cn-is-ignored")
 	if err != nil {
 		t.Fatalf("GenerateTestCSR: %v", err)
 	}

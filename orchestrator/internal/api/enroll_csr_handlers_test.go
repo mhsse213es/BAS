@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/audspect/bas/internal/pki"
+	"github.com/audspect/bas/internal/pki/pkitest"
 	"github.com/audspect/bas/internal/ws"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -36,7 +37,7 @@ func TestEnrollCSR_ValidBootstrapSecretIssuesCertificate(t *testing.T) {
 	}
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
 		h, _ := newTestHandlerWithPKI(t, pool)
-		csrPEM, err := pki.GenerateTestCSR("requested-cn-ignored")
+		csrPEM, err := pkitest.GenerateTestCSR("requested-cn-ignored")
 		if err != nil {
 			t.Fatalf("GenerateTestCSR: %v", err)
 		}
@@ -71,7 +72,7 @@ func TestEnrollCSR_WrongBootstrapSecretRejected(t *testing.T) {
 	}
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
 		h, _ := newTestHandlerWithPKI(t, pool)
-		csrPEM, _ := pki.GenerateTestCSR("cn")
+		csrPEM, _ := pkitest.GenerateTestCSR("cn")
 		body, _ := json.Marshal(map[string]string{"agentId": "abc123deadbeef01", "csrPem": string(csrPEM)})
 		req := httptest.NewRequest(http.MethodPost, "/api/agents/enroll-csr", bytes.NewReader(body))
 		req.Header.Set("X-Agent-Token", "wrong-secret")
@@ -91,7 +92,7 @@ func TestEnrollCSR_RejectsBootstrapForAlreadyEnrolledAgent(t *testing.T) {
 	}
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
 		h, _ := newTestHandlerWithPKI(t, pool)
-		csrPEM, _ := pki.GenerateTestCSR("cn")
+		csrPEM, _ := pkitest.GenerateTestCSR("cn")
 		body, _ := json.Marshal(map[string]string{"agentId": "abc123deadbeef01", "csrPem": string(csrPEM)})
 
 		// First bootstrap succeeds.
@@ -106,7 +107,7 @@ func TestEnrollCSR_RejectsBootstrapForAlreadyEnrolledAgent(t *testing.T) {
 		// Second bootstrap for the SAME agentId, with a fresh CSR, must be
 		// rejected -- this identity already holds a valid certificate and must
 		// renew via mTLS instead (spec Section 2, "Bootstrap reuse limit").
-		csrPEM2, _ := pki.GenerateTestCSR("cn2")
+		csrPEM2, _ := pkitest.GenerateTestCSR("cn2")
 		body2, _ := json.Marshal(map[string]string{"agentId": "abc123deadbeef01", "csrPem": string(csrPEM2)})
 		req2 := httptest.NewRequest(http.MethodPost, "/api/agents/enroll-csr", bytes.NewReader(body2))
 		req2.Header.Set("X-Agent-Token", "test-bootstrap-secret")
