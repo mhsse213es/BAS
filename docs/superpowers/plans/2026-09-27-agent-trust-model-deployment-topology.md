@@ -14,7 +14,7 @@
 
 - Distroless `nonroot` user is UID 65532, GID 65532 — verified directly against `gcr.io/distroless/static-debian12:nonroot`'s `/etc/passwd` (not assumed).
 - New dashboard listener port: **9543** (not 8443 — see rationale above).
-- Named volume for the CA: `audspect-pki-data`, mounted at `/etc/audspect/pki` (matches `config.go`'s existing `PKIDir` default — no env var override needed).
+- **CA and dashboard-TLS-cert persistence is a host bind-mount (`./pki:/etc/audspect/pki`, `./certs:/etc/bas/certs:ro`), NOT a named Docker volume** — corrected during execution from the spec's original named-volume proposal: this project's real backup mechanism (`install.sh`'s `_run_backup_engine`/`_package_config`) only tars host paths under `DATA_DIR`, with zero volume-extraction logic, so a named volume would be silently invisible to it. `PKIDir` stays at its existing default (`/etc/audspect/pki`) — no env var override needed, the compose-level mount handles it.
 - `docs/guides/upgrade-guide.md` is the existing, real upgrade-procedures doc (v1.7.5, actively referenced by `install.sh --upgrade`'s own flow) — the migration runbook content is added to this file, not a new separate document.
 - `packaging/compose/docker-compose.prod.yml` is a resource-limits overlay only (no port/volume content) — confirmed, out of scope for this plan.
 - Bash script changes (`install.sh`, `uninstall.sh`) are verified via `shellcheck` (if available in this environment — check with `which shellcheck` before relying on it) plus a documented manual dry-run procedure per task, not TDD — bash has no equivalent unit-test cycle for these changes. Go changes (`config.go`, `main.go`) and the Dockerfile follow real TDD/build-verification.
@@ -22,10 +22,12 @@
 ## Review Focus
 
 - **Two listener ports resolving equal outside docker-compose's explicit overrides** (e.g. a bare config-file install that sets `HTTP_PORT_LEGACY=9443` by mistake, matching `HTTPPort`) — must fail at startup with a clear error naming both colliding values, not a bare `log.Fatalf` from whichever `ListenAndServeTLS`/`ListenAndServe` call loses the bind race. Pinned in Task 3.
-- **A named volume that doesn't exist yet on first `docker compose up`** (fresh install, not an upgrade) — Docker must initialize it from the image's baked-in `/etc/audspect/pki` directory (empty, but with correct `nonroot` ownership) without erroring, and the orchestrator's first-ever CA generation must succeed into that fresh volume. Pinned in Task 2.
+- **A CA directory that's empty on an EXISTING deployment** (volume/bind-mount not attached, raw `docker compose down -v` instead of `uninstall.sh`, a restore that missed the `pki` directory) — must fail closed with a clear error, not silently generate a fresh CA and invalidate every already-issued agent certificate with zero indication of what happened. Pinned in Task 9.
+- **`${DATA_DIR}/pki` that doesn't exist yet on a genuine first-ever `docker compose up`** (fresh install, not an upgrade, and not the CA-loss case above) — must be created with correct `nonroot`-writable ownership by `install.sh` BEFORE the container ever starts (a bind-mount, unlike a named volume, does not inherit ownership from the image), and the orchestrator's first-ever CA generation must succeed into it. Pinned in Task 6.
 - **`BAS_TLS=false` (the default) still works correctly for the dashboard listener** — the new `dashboardSrv` must fall back to the CA's own self-signed certificate when no customer cert is configured, not fail to start. Pinned in Task 4.
 - **An operator upgrading from a pre-this-plan install** (today's single `9443` plaintext listener, agents configured for `http://host:9443`) who runs `install.sh --upgrade` *without* first reading the new migration-runbook section — the upgrade must not silently strand the existing fleet with zero indication of what happened; `install.sh --upgrade`'s own output should surface a clear warning when it detects this exact upgrade path. Pinned in Task 6.
-- **`runHealthcheck()`'s new HTTPS call against 9444 when the CA/cert files are somehow missing or corrupt** (e.g. `PKI_DIR` volume mount failed) — must fail the healthcheck cleanly (return 1), not panic the healthcheck subprocess itself, which would produce a confusing Docker-level error instead of a clean "unhealthy" status. Pinned in Task 4.
+- **`runHealthcheck()`'s new HTTPS call against 9444 when the CA/cert files are somehow missing or corrupt** (e.g. the `pki` bind-mount failed) — must fail the healthcheck cleanly (return 1), not panic the healthcheck subprocess itself, which would produce a confusing Docker-level error instead of a clean "unhealthy" status. Pinned in Task 4.
+- **A standard `install.sh --backup` run silently omitting the CA** (the single most consequential piece of data in this whole deployment) while appearing to succeed normally — must be included in the existing encrypted/retention-managed backup archive, not require a separate, easy-to-forget manual step. Pinned in Task 10.
 
 ---
 
@@ -35,7 +37,7 @@
 - Modify: `orchestrator/Dockerfile:112-137` (the `builder` stage), `:139-160` (the final distroless stage)
 
 **Interfaces:**
-- Produces: `/etc/audspect/pki` present in the final image, owned by `nonroot:nonroot` (65532:65532) — consumed by Task 2's volume mount (Docker initializes a fresh named volume from this directory's existing content/ownership).
+- Produces: `/etc/audspect/pki` present in the final image, owned by `nonroot:nonroot` (65532:65532), and the verified real UID:GID value (65532:65532, confirmed directly against `gcr.io/distroless/static-debian12:nonroot`'s `/etc/passwd`) — consumed by Task 6's `chown` call (Task 2 switched the compose deployment from a named volume to a host bind-mount, which does NOT inherit ownership from the image the way a fresh named volume would; this task's seeded directory now matters primarily for a standalone `docker run` with no bind-mount at all, and for giving Task 6 a verified-correct UID:GID to `chown` the host directory to).
 
 - [ ] **Step 1: Add the directory-seeding step to the `builder` stage**
 
@@ -118,33 +120,64 @@ git commit -m "fix(docker): writable, persisted CA directory for nonroot user"
 
 ---
 
-### Task 2: docker-compose.yml — named CA volume + publish all four listener ports
+### Task 2: docker-compose.yml — host-mounted CA + certs directories, publish all four listener ports
+
+**Correction from the spec's original named-volume proposal:** the spec (Section 3) proposed a named Docker volume (`audspect-pki-data`) for the CA, modeled on the existing `audspect-postgres-data` pattern. Investigation during execution found that pattern is wrong for this data: this project's REAL backup mechanism (`packaging/compose/install.sh`'s `_run_backup_engine`/`_package_config`, an encrypted, SHA-256-verified, retention-managed, optionally-remote-replicated backup already in production use) only backs up Postgres via `pg_dump` (a DB-specific mechanism, not volume-tar) and everything else via a plain `tar -C "${DATA_DIR}" ... certs scenarios docker-compose.yml` of HOST filesystem paths — it has no volume-extraction logic at all. A named Docker volume for the CA would be invisible to this existing backup system entirely, silently leaving the single most consequential piece of data in this whole deployment (CA loss = fleet-wide cert invalidation) unbacked-up. A **host bind-mount** (`./pki:/etc/audspect/pki`, matching the exact existing relative-path convention `./scenarios:/scenarios` and `./art-payloads:/art-payloads` already use) rides the existing backup mechanism for free — Task 10 below extends `_package_config`'s existing tar command by one word.
+
+This also surfaces a second, separate pre-existing gap: `install.sh` already copies an operator's `TLS_CERT`/`TLS_KEY` files to `${DATA_DIR}/certs/bas.crt`/`bas.key` when `BAS_TLS=true` (confirmed: `packaging/compose/install.sh` lines ~692-695), but `docker-compose.yml` has **no volume mount for `./certs` at all** — those files were never actually reachable by the orchestrator container, even before this plan. Task 3/4's `DashboardTLSCertPath`/`DashboardTLSKeyPath` wiring needs this mount to work.
 
 **Files:**
-- Modify: `packaging/compose/docker-compose.yml:181-230` (orchestrator's `volumes:` and `ports:` blocks), `:250-258` (top-level `volumes:` block)
+- Modify: `packaging/compose/docker-compose.yml:181-230` (orchestrator's `volumes:`, `environment:`, and `ports:` blocks)
 
 **Interfaces:**
 - Consumes: `/etc/audspect/pki` seeded with correct ownership (Task 1).
-- Produces: `audspect-pki-data` named volume, ports 9000/9443/9444/9543 all published — consumed by Task 4's `dashboardSrv` (needs 9543 published to be reachable) and by the manual verification in this task itself.
+- Produces: `./pki` and `./certs` host directories mounted into the container, `TLS_CERT`/`TLS_KEY` env vars conditionally set from `${TLS_CERT_CONTAINER_PATH:-}`/`${TLS_KEY_CONTAINER_PATH:-}`, ports 9000/9443/9444/9543 all published — consumed by Task 3/4's TLS-cert-loading code, Task 6's install.sh changes, and Task 10's backup integration.
 
-- [ ] **Step 1: Add the named volume mount**
+- [ ] **Step 1: Add the host-mounted CA and certs directories**
 
-In `packaging/compose/docker-compose.yml`, inside the `orchestrator` service's existing `volumes:` list, add (anywhere in the list — grouping it near the top for visibility is reasonable):
+In `packaging/compose/docker-compose.yml`, inside the `orchestrator` service's existing `volumes:` list, add (as the first entry, before the existing `- ./scenarios:/scenarios` line, so it's the first thing a reader sees given how consequential losing it is):
 
 ```yaml
     volumes:
       # Deployment CA (per-agent mTLS trust root, orchestrator/internal/pki) --
-      # persisted across container recreates. Losing this invalidates every
-      # already-issued agent certificate AND every agent's locally-cached CA
-      # root fingerprint -- a fleet-wide lockout, not just data loss. Matches
-      # the audspect-postgres-data pattern below exactly.
-      - audspect-pki-data:/etc/audspect/pki
+      # persisted across container recreates as a plain host directory (NOT a
+      # named Docker volume) specifically so it rides the existing
+      # install.sh backup engine (_package_config), which only knows how to
+      # tar host paths under DATA_DIR -- see this task's own note above for
+      # why a named volume would be silently invisible to that mechanism.
+      # Losing this invalidates every already-issued agent certificate AND
+      # every agent's locally-cached CA root fingerprint -- a fleet-wide
+      # lockout, not just data loss.
+      - ./pki:/etc/audspect/pki
+      # Operator-supplied TLS certificate for the browser dashboard
+      # (BAS_TLS=true in setup.conf) -- install.sh already copies TLS_CERT/
+      # TLS_KEY here (${DATA_DIR}/certs/bas.crt|bas.key) but this mount was
+      # previously missing, so the orchestrator could never actually read
+      # them. Read-only: the orchestrator only ever reads this certificate,
+      # never writes it.
+      - ./certs:/etc/bas/certs:ro
       # scenarios is read-write: ...
 ```
 
-(Insert as the first entry, before the existing `- ./scenarios:/scenarios` line, so it's the first thing a reader sees given how consequential losing it is.)
+- [ ] **Step 2: Conditionally wire the TLS_CERT/TLS_KEY env vars**
 
-- [ ] **Step 2: Publish the three additional listener ports**
+In the same service's existing `environment:` block, add (near the existing `BAS_LICENSE_PATH` line, which uses the same `/etc/bas/` convention):
+
+```yaml
+      BAS_LICENSE_PATH: /etc/bas/${LICENSE_FILE:-bas.lic}
+      # In-container paths for the operator-supplied dashboard TLS cert
+      # (Task 2/3/4) -- left unset (empty) when BAS_TLS=false, the default,
+      # so config.go's DashboardTLSCertPath/DashboardTLSKeyPath stay empty
+      # and main.go correctly falls back to the deployment CA's own
+      # self-signed certificate rather than trying to load files that were
+      # never copied. install.sh (Task 6) only sets
+      # TLS_CERT_CONTAINER_PATH/TLS_KEY_CONTAINER_PATH in .env when
+      # BAS_TLS=true.
+      TLS_CERT: ${TLS_CERT_CONTAINER_PATH:-}
+      TLS_KEY:  ${TLS_KEY_CONTAINER_PATH:-}
+```
+
+- [ ] **Step 3: Publish the three additional listener ports**
 
 In the same service's existing `ports:` list, alongside the existing `- "${BAS_PORT:-9443}:9443"` line, add:
 
@@ -157,7 +190,7 @@ In the same service's existing `ports:` list, alongside the existing `- "${BAS_P
       # Bound to a specific host IP, never the 0.0.0.0 wildcard: ...
 ```
 
-- [ ] **Step 3: Change `HTTP_PORT`'s meaning to match — it's now the mTLS port, not the dashboard port**
+- [ ] **Step 4: Change `HTTP_PORT`'s meaning to match — it's now the mTLS port, not the dashboard port**
 
 The existing `environment:` block already sets `HTTP_PORT: "9443"` — this line is unchanged (9443 stays the mTLS port's env var, matching `config.go`'s `HTTPPort` field), but add the three new env vars the orchestrator's Go code already reads (`EnrollHTTPPort`/`LegacyHTTPPort` from the prior B1/B3 plan; the new dashboard port from Task 3 of this plan) right below it:
 
@@ -168,19 +201,7 @@ The existing `environment:` block already sets `HTTP_PORT: "9443"` — this line
       HTTP_PORT_DASHBOARD: "9543"
 ```
 
-- [ ] **Step 4: Add the top-level named volume**
-
-In the file's top-level `volumes:` block:
-
-```yaml
-volumes:
-  audspect-postgres-data:
-    driver: local
-  audspect-pki-data:
-    driver: local
-```
-
-- [ ] **Step 5: Validate and manually verify persistence**
+- [ ] **Step 5: Validate and manually verify the mounts**
 
 ```bash
 cd packaging/compose
@@ -189,23 +210,23 @@ docker compose config >/dev/null && echo "compose file valid"
 
 Expected: no YAML/schema errors.
 
-A full persistence-across-recreate test requires the complete stack (Postgres, valid `.env`, a license file) and is impractical to fully automate in this plan's scope — instead, verify the volume mechanics directly:
+A full persistence-across-recreate test requires the complete stack (Postgres, valid `.env`, a license file) and is impractical to fully automate in this plan's scope — that real end-to-end check is Task 11's job. Here, verify only the mount mechanics directly:
 
 ```bash
-docker volume create audspect-pki-data-test
-docker run --rm -v audspect-pki-data-test:/etc/audspect/pki bas-orchestrator-test /orchestrator --dummy 2>/dev/null; true
-docker run --rm -v audspect-pki-data-test:/etc/audspect/pki --entrypoint="" bas-orchestrator-test sh -c 'ls -la /etc/audspect/pki' 2>&1 || \
-  docker run --rm -v audspect-pki-data-test:/etc/audspect/pki alpine ls -la /etc/audspect/pki
-docker volume rm audspect-pki-data-test
+mkdir -p /tmp/pki-mount-test /tmp/certs-mount-test
+docker run --rm -v /tmp/pki-mount-test:/etc/audspect/pki --entrypoint="" bas-orchestrator-test sh -c 'echo test-write > /etc/audspect/pki/write-check' 2>&1 || \
+  docker run --rm -v /tmp/pki-mount-test:/etc/audspect/pki alpine sh -c 'echo test-write > /etc/audspect/pki/write-check'
+cat /tmp/pki-mount-test/write-check
+rm -rf /tmp/pki-mount-test /tmp/certs-mount-test
 ```
 
-Expected: the directory exists inside the volume with the seeded ownership from Task 1 — confirms Docker's volume-initialization-from-image-content behavior works as this design depends on. Note in the report if the full real end-to-end persistence check (start orchestrator against a real Postgres, recreate the container, confirm the CA's public key is byte-identical before/after) is deferred to manual QA against a real staging-like environment rather than done in this task, since that requires the full stack.
+Expected: `test-write` — confirms a host directory bind-mounted at this path is genuinely writable by the container, matching how `docker-compose.yml`'s `./pki:/etc/audspect/pki` mount will behave once `install.sh` creates `${DATA_DIR}/pki` (Task 6) with the right permissions.
 
 - [ ] **Step 6: Commit**
 
 ```bash
 git add packaging/compose/docker-compose.yml
-git commit -m "feat(compose): persist CA in a named volume, publish all four listener ports"
+git commit -m "feat(compose): host-mount CA + certs directories, publish all four listener ports"
 ```
 
 ---
@@ -670,17 +691,19 @@ git commit -m "feat(server): add dashboard listener on :9543, point healthcheck 
 
 ---
 
-### Task 5: uninstall.sh — remove the CA volume alongside Postgres's
+### Task 5: uninstall.sh — make the CA's fate explicit in the warning
+
+**Correction from the spec's original design:** since Task 2 now uses a host bind-mount (`${DATA_DIR}/pki`) rather than a named Docker volume, there is no separate volume-removal step to extend — `uninstall.sh`'s existing `rm -rf "$INSTALL_DIR"` (line ~126, `INSTALL_DIR` defaults to `/opt/audspect`, the same directory `setup.conf.template`'s `DATA_DIR` defaults to) already wholesale-deletes `${DATA_DIR}/pki` automatically, with no code change needed for the removal mechanics themselves. What's missing is that the pre-removal warning doesn't make clear this specific consequence (fleet-wide cert invalidation, not just "data loss") to an operator about to confirm.
 
 **Files:**
-- Modify: `packaging/compose/uninstall.sh:49` (the pre-removal warning), `:93-99` (the volume-discovery/removal step), `:150-155` (the post-removal verification step)
+- Modify: `packaging/compose/uninstall.sh:49` (the pre-removal warning's volume/directory bullets)
 
 **Interfaces:**
-- Consumes: `audspect-pki-data` volume name (Task 2).
+- Consumes: nothing code-level — this is a warning-text-only change.
 
-**Verification approach for this task:** bash script changes have no TDD cycle in the Go sense. Verify via `shellcheck` (if available: `which shellcheck`) for syntax/lint correctness, plus a manual dry-run against a throwaway Docker volume (not the real deployment) to confirm the matching/removal logic actually catches the new volume name, since that's the one behavior change worth exercising concretely rather than just reading the diff.
+**Verification approach for this task:** bash script change with no TDD cycle. Verify via `shellcheck` (if available) plus a manual read of the printed warning.
 
-- [ ] **Step 1: Extend the pre-removal warning**
+- [ ] **Step 1: Make the CA's fate explicit in the pre-removal warning**
 
 In `packaging/compose/uninstall.sh`, change (line ~49):
 
@@ -691,64 +714,40 @@ echo "    • Docker volumes     (ALL database data)"
 to:
 
 ```bash
-echo "    • Docker volumes     (ALL database data AND the deployment CA -- every"
-echo "                          already-enrolled agent certificate becomes invalid)"
+echo "    • Docker volumes     (ALL database data)"
+echo "    • Deployment CA      (every already-enrolled agent certificate becomes"
+echo "                         invalid -- this is NOT just data loss, it locks out"
+echo "                         the entire fleet until each agent is manually"
+echo "                         re-bootstrapped against a new CA)"
 ```
 
-- [ ] **Step 2: Extend the volume-discovery pattern**
+(Placed as its own bullet, separate from the generic "Docker volumes" line, since the CA isn't a Docker volume anymore and its consequence is qualitatively different from losing application data — worth calling out on its own rather than folding into an existing line.)
 
-Change (line ~94):
+- [ ] **Step 2: Verify**
 
 ```bash
-mapfile -t vols < <(docker volume ls --format '{{.Name}}' | grep -E 'audspect.*postgres|bas.*postgres' || true)
+which shellcheck && shellcheck packaging/compose/uninstall.sh || echo "shellcheck not available -- skipping lint, relying on manual read-through"
 ```
 
-to:
+Manual read: run `uninstall.sh` with no real target present (or read the relevant function's output directly) to confirm the new bullet prints correctly formatted and in the right place relative to the existing warning lines.
 
-```bash
-mapfile -t vols < <(docker volume ls --format '{{.Name}}' | grep -E 'audspect.*postgres|bas.*postgres|audspect.*pki|bas.*pki' || true)
-```
-
-- [ ] **Step 3: Extend the post-removal verification's matching pattern**
-
-Find the post-removal check (line ~150-155, `mapfile -t remaining_vols < <(docker volume ls --format '{{.Name}}' \` — read the actual current multi-line grep pattern here first with `sed -n '148,156p' packaging/compose/uninstall.sh`, since the plan text above only shows a fragment) and extend its grep pattern the same way Step 2's was extended, so a leftover `audspect-pki-data` volume is correctly flagged as a verification failure, not silently ignored.
-
-- [ ] **Step 4: Verify**
-
-```bash
-which shellcheck && shellcheck packaging/compose/uninstall.sh || echo "shellcheck not available in this environment -- skipping lint, relying on manual read-through + dry-run below"
-```
-
-Manual dry-run against throwaway volumes (does not touch any real deployment):
-
-```bash
-docker volume create audspect-postgres-data-drytest
-docker volume create audspect-pki-data-drytest
-docker volume ls --format '{{.Name}}' | grep -E 'audspect.*postgres|bas.*postgres|audspect.*pki|bas.*pki'
-```
-
-Expected: both throwaway volume names appear in the output, confirming the extended pattern matches both. Clean up:
-
-```bash
-docker volume rm audspect-postgres-data-drytest audspect-pki-data-drytest
-```
-
-- [ ] **Step 5: Commit**
+- [ ] **Step 3: Commit**
 
 ```bash
 git add packaging/compose/uninstall.sh
-git commit -m "fix(uninstall): remove the CA volume alongside Postgres's on full teardown"
+git commit -m "fix(uninstall): warn explicitly that full teardown invalidates the fleet's CA"
 ```
 
 ---
 
-### Task 6: install.sh — new port variables, healthcheck probe, dashboard URLs, upgrade warning
+### Task 6: install.sh — new port variables, host directory permissions, TLS cert wiring, healthcheck probe, dashboard URLs, upgrade warning
 
 **Files:**
-- Modify: `packaging/compose/install.sh:42` (port defaults), `:143-230` (variable declarations + parsing + default-filling), `:1380` (health probe), `:1486` (setup-wizard URL), `:1512-1526` (status/summary output), and the `--upgrade` code path (search for it — not yet read in detail; read the real current upgrade flow before editing, per this task's own verification step)
+- Modify: `packaging/compose/install.sh:42` (port defaults), `:143-230` (variable declarations + parsing + default-filling), `:647` (`${DATA_DIR}` subdirectory creation), the `.env`-writing block near `BAS_PORT=${BAS_PORT}` (~line 1110) and near `BAS_TLS=${BAS_TLS}`, `:1380` (health probe), `:1486` (setup-wizard URL), `:1512-1526` (status/summary output), and the `--upgrade` code path (search for it — not yet read in detail; read the real current upgrade flow before editing, per this task's own verification step)
 
 **Interfaces:**
-- Consumes: `HTTP_PORT_ENROLL`/`HTTP_PORT_LEGACY`/`HTTP_PORT_DASHBOARD` (Task 2/3's env var names), `TLS_CERT`/`TLS_KEY` (already-existing install.sh variables, now actually consumed by `config.go`/`main.go` per Task 3/4).
+- Consumes: `BAS_ENROLL_PORT`/`BAS_LEGACY_PORT`/`BAS_DASHBOARD_PORT` compose-level substitution names (Task 2), the verified `65532:65532` nonroot UID:GID (Task 1), `TLS_CERT`/`TLS_KEY` (already-existing install.sh variables, now actually consumed by `config.go`/`main.go` per Task 3/4 via the new `TLS_CERT_CONTAINER_PATH`/`TLS_KEY_CONTAINER_PATH` indirection).
+- Produces: `${DATA_DIR}/pki` and `${DATA_DIR}/certs` created with correct ownership before the orchestrator container ever starts — consumed by Task 2's bind-mounts and Task 10's backup integration.
 
 **Verification approach for this task:** same as Task 5 — `shellcheck` if available, plus manual dry-runs of the specific new logic (port-default resolution, URL construction) rather than a full `--install` run against a live host (destructive/stateful, not appropriate to run repeatedly during development).
 
@@ -798,7 +797,52 @@ BAS_LEGACY_PORT=${BAS_LEGACY_PORT}
 BAS_DASHBOARD_PORT=${BAS_DASHBOARD_PORT}
 ```
 
-- [ ] **Step 3: Fix the health probe**
+- [ ] **Step 3: Create the host-side `pki` and `certs` directories with correct ownership**
+
+Task 2 switched the CA and dashboard-cert storage from named Docker volumes to host bind-mounts (`./pki:/etc/audspect/pki`, `./certs:/etc/bas/certs:ro`) specifically so they ride the existing backup engine. That means `install.sh` — not Docker — is now responsible for creating these directories with permissions the *container's* `nonroot` user (UID 65532, verified in Task 1) can actually write to. A host directory created by `mkdir` while running as root (this script requires `sudo`, per its existing prereq checks) defaults to root ownership, which the container's UID 65532 cannot write into without an explicit `chown`.
+
+Find the existing directory-creation line (line ~647):
+
+```bash
+mkdir -p "${DATA_DIR}"/{data/postgres,logs,backups,scenarios,wwwroot,art-payloads,sharphound}
+```
+
+Change to:
+
+```bash
+mkdir -p "${DATA_DIR}"/{data/postgres,logs,backups,scenarios,wwwroot,art-payloads,sharphound,pki,certs}
+# The orchestrator container runs as nonroot (UID:GID 65532:65532, gcr.io/
+# distroless/static-debian12's real nonroot user -- see orchestrator/
+# Dockerfile) and writes the deployment CA to the bind-mounted ./pki
+# directory. A host directory created here while running as root (this
+# script requires sudo) defaults to root ownership, which UID 65532 cannot
+# write into -- chown it explicitly. certs is read-only from the
+# container's side (Task 2) and only ever written by this script itself
+# (Step 4 below), so it doesn't need the same treatment.
+chown 65532:65532 "${DATA_DIR}/pki"
+chmod 700 "${DATA_DIR}/pki"
+```
+
+(Verify the exact UID:GID this script should use for `chown` isn't already available as a derived value elsewhere in the script — e.g. if there's an existing convention for referencing "the container's nonroot user" by name rather than a bare numeric UID; use whatever matches the codebase's own style, falling back to the literal `65532:65532` verified in Task 1 if no such convention exists.)
+
+- [ ] **Step 4: Conditionally write the in-container TLS cert paths**
+
+The existing `BAS_TLS=true` handling (line ~692-695) already copies `TLS_CERT`/`TLS_KEY` to `${DATA_DIR}/certs/bas.crt`/`bas.key`. Task 2/3 need the *in-container* paths (`/etc/bas/certs/bas.crt`/`bas.key`, per the new `./certs:/etc/bas/certs:ro` mount) written into `.env` as `TLS_CERT_CONTAINER_PATH`/`TLS_KEY_CONTAINER_PATH` — but ONLY when `BAS_TLS=true`, so `config.go`'s `DashboardTLSCertPath`/`DashboardTLSKeyPath` stay empty (and correctly fall back to the CA's own certificate) when no custom cert was ever supplied.
+
+Find where the existing `BAS_TLS=${BAS_TLS}` (or equivalent) line writes into the generated `.env` (near the same location as `BAS_PORT=${BAS_PORT}`, Step 2 above) and add, conditionally:
+
+```bash
+if [[ "$BAS_TLS" == "true" ]]; then
+  cat >> "${env_file}" << 'ENVEOF'
+TLS_CERT_CONTAINER_PATH=/etc/bas/certs/bas.crt
+TLS_KEY_CONTAINER_PATH=/etc/bas/certs/bas.key
+ENVEOF
+fi
+```
+
+(Match the exact heredoc/append mechanism the surrounding `.env`-writing code already uses — read the real code around the `BAS_PORT=${BAS_PORT}` line to confirm whether it's a single big heredoc block or a series of individual appends, and follow that same pattern rather than introducing a second one.)
+
+- [ ] **Step 5: Fix the health probe**
 
 Change (line ~1380):
 
@@ -814,7 +858,7 @@ if curl -fsSk "https://localhost:${BAS_ENROLL_PORT:-9444}/health" >/dev/null 2>&
 
 (Drop the plaintext fallback entirely — 9444 is always TLS now, there's no plaintext case to fall back to; `-k` skips verification of the self-signed CA cert, same reasoning as `runHealthcheck()`'s `InsecureSkipVerify`.)
 
-- [ ] **Step 4: Fix the setup-wizard URL and dashboard-access message**
+- [ ] **Step 6: Fix the setup-wizard URL and dashboard-access message**
 
 Change (line ~1486):
 
@@ -848,11 +892,11 @@ to:
 
 (This also removes the need for the `proto` variable at line ~1522 if it's not used elsewhere in the function — check before removing it outright; leave it in place if other code in the same function still references it.)
 
-- [ ] **Step 5: Add an upgrade-path warning for pre-this-plan installs**
+- [ ] **Step 7: Add an upgrade-path warning for pre-this-plan installs**
 
 Find the `--upgrade` code path (search: `grep -n '\-\-upgrade' packaging/compose/install.sh`) and read its current flow in full before editing. Add a check, early in the upgrade flow, for whether the *existing* deployment (before this upgrade applies) has `HTTP_PORT_ENROLL`/`HTTP_PORT_LEGACY`/`HTTP_PORT_DASHBOARD` in its current `.env` — their absence means this is an upgrade FROM a pre-this-plan install (today's single-listener code), which is exactly the case `docs/guides/upgrade-guide.md`'s new migration section (Task 8) warns needs the existing-fleet repoint-to-`:9000` step done FIRST. Print a prominent warning (not silent, not merely logged) directing the operator to that guide section before the upgrade proceeds — this pins the Review Focus item about `install.sh --upgrade` not silently stranding the fleet. Use this codebase's existing `warn`/`err` shell functions (already used throughout the script, e.g. `warn "No matching volumes found."` in `uninstall.sh`) rather than a bare `echo`.
 
-- [ ] **Step 6: Verify**
+- [ ] **Step 8: Verify**
 
 ```bash
 which shellcheck && shellcheck packaging/compose/install.sh || echo "shellcheck not available -- skipping lint"
@@ -872,11 +916,25 @@ echo "BAS_ENROLL_PORT resolved to: $BAS_ENROLL_PORT"
 
 Expected: `PASS`.
 
-- [ ] **Step 7: Commit**
+Also manually verify the ownership logic:
+
+```bash
+bash -c '
+dir=$(mktemp -d)
+chown "$(id -u):$(id -g)" "$dir"   # stand-in for chown 65532:65532 -- confirms the chown call itself is well-formed
+chmod 700 "$dir"
+stat -c "%a %U" "$dir" 2>/dev/null || stat -f "%Lp %Su" "$dir"
+rm -rf "$dir"
+'
+```
+
+Expected: permissions show `700` and the expected owner — confirms the `chown`/`chmod` invocation syntax is correct (the real UID 65532 isn't a local user on this dev machine, so this substitutes the current user to verify the command shape, not the exact numeric result).
+
+- [ ] **Step 9: Commit**
 
 ```bash
 git add packaging/compose/install.sh
-git commit -m "feat(install): publish new listener ports, fix healthcheck/dashboard URLs, warn on legacy-topology upgrades"
+git commit -m "feat(install): publish new listener ports, create pki/certs dirs with correct ownership, wire TLS cert paths, fix healthcheck/dashboard URLs, warn on legacy-topology upgrades"
 ```
 
 ---
@@ -1050,18 +1108,427 @@ git commit -m "docs(upgrade): fix port references, document the mTLS migration p
 
 ---
 
+### Task 9: main.go — fail closed instead of silently regenerating the CA on an existing deployment
+
+**Why this task exists:** `pki.LoadOrGenerateCA` (already shipped, B1/B3 plan) generates a brand-new CA whenever `${PKIDir}/ca-key.pem` is absent — with no way to distinguish "this is a genuine fresh install" from "an existing deployment's CA directory was lost" (operator forgot to attach the volume/bind-mount, ran a raw `docker compose down -v` instead of `uninstall.sh`, restored a backup without the `pki` directory, etc.). The second case is catastrophic and silent: the orchestrator starts up fine with a fresh CA, but every already-issued agent certificate — tracked in `agent_certificates`, a table that survives independently of the CA files since it lives in Postgres — instantly stops validating, and the fleet goes dark with no error message pointing at the cause.
+
+**Files:**
+- Modify: `orchestrator/cmd/server/main.go:574` (CA loading, and the block immediately after it)
+- Test: `orchestrator/cmd/server/listeners_test.go` (existing file — add to it) or a new `orchestrator/cmd/server/ca_state_test.go` if the existing file is already large enough that a new file better matches this codebase's "prefer smaller, focused files" convention — check the existing file's line count first.
+
+**Interfaces:**
+- Consumes: `pool *pgxpool.Pool` (already in scope at this point in `main()`), the `agent_certificates` table (B1/B3 plan, Task 4 of that plan).
+- Produces: `checkCANotSilentlyRotated(ctx context.Context, pool *pgxpool.Pool, caKeyExistedBefore bool) error`.
+
+- [ ] **Step 1: Write the failing tests**
+
+```go
+// TestCheckCANotSilentlyRotated_AllowsFreshInstall confirms a genuine
+// fresh install (no existing agent_certificates rows) is never blocked,
+// even though caKeyExistedBefore is false (a CA was just generated).
+func TestCheckCANotSilentlyRotated_AllowsFreshInstall(t *testing.T) {
+	dir := t.TempDir()
+	ca, err := pki.LoadOrGenerateCA(dir)
+	if err != nil {
+		t.Fatalf("LoadOrGenerateCA: %v", err)
+	}
+	_ = ca
+	pool := sharedTestPool(t) // use this package's existing shared-Postgres test pattern -- check cmd/server's existing tests for the exact helper name/shape (this package may not have one yet; if not, add a minimal one following orchestrator/internal/api/testmain_test.go's sharedDB pattern)
+
+	if err := checkCANotSilentlyRotated(context.Background(), pool, false); err != nil {
+		t.Errorf("expected fresh install (no existing certs) to be allowed, got: %v", err)
+	}
+}
+
+// TestCheckCANotSilentlyRotated_BlocksSilentRegenerationWithExistingCerts
+// is the core safety property: a fresh CA generation (caKeyExistedBefore
+// = false) with EXISTING valid agent_certificates rows must be refused.
+func TestCheckCANotSilentlyRotated_BlocksSilentRegenerationWithExistingCerts(t *testing.T) {
+	pool := sharedTestPool(t)
+	ctx := context.Background()
+	// Seed a valid, non-revoked, non-expired agent_certificates row --
+	// evidence a fleet was previously enrolled under a CA that's now gone.
+	_, err := pool.Exec(ctx, `
+		INSERT INTO agent_certificates (serial_number, agent_id, issued_at, expires_at)
+		VALUES ($1, $2, NOW(), NOW() + interval '1 year')`,
+		"test-serial-lockout-check", "abc123deadbeef01")
+	if err != nil {
+		t.Fatalf("seed agent_certificates: %v", err)
+	}
+	defer pool.Exec(ctx, `DELETE FROM agent_certificates WHERE serial_number = $1`, "test-serial-lockout-check")
+
+	os.Unsetenv("BAS_CONFIRM_NEW_CA") // ensure the override is NOT set for this test
+	if err := checkCANotSilentlyRotated(ctx, pool, false); err == nil {
+		t.Fatal("expected an error when a fresh CA is generated but valid agent_certificates rows already exist")
+	}
+}
+
+// TestCheckCANotSilentlyRotated_OverrideAllowsIntentionalRotation confirms
+// the escape hatch for a genuine, intentional CA rotation/reset.
+func TestCheckCANotSilentlyRotated_OverrideAllowsIntentionalRotation(t *testing.T) {
+	pool := sharedTestPool(t)
+	ctx := context.Background()
+	_, err := pool.Exec(ctx, `
+		INSERT INTO agent_certificates (serial_number, agent_id, issued_at, expires_at)
+		VALUES ($1, $2, NOW(), NOW() + interval '1 year')`,
+		"test-serial-override-check", "abc123deadbeef02")
+	if err != nil {
+		t.Fatalf("seed agent_certificates: %v", err)
+	}
+	defer pool.Exec(ctx, `DELETE FROM agent_certificates WHERE serial_number = $1`, "test-serial-override-check")
+
+	t.Setenv("BAS_CONFIRM_NEW_CA", "true")
+	if err := checkCANotSilentlyRotated(ctx, pool, false); err != nil {
+		t.Errorf("expected BAS_CONFIRM_NEW_CA=true to allow intentional rotation, got: %v", err)
+	}
+}
+
+// TestCheckCANotSilentlyRotated_SkipsCheckWhenCAAlreadyExisted confirms
+// the normal, every-day restart case (CA file was present, nothing was
+// regenerated) is never blocked, regardless of what's in agent_certificates.
+func TestCheckCANotSilentlyRotated_SkipsCheckWhenCAAlreadyExisted(t *testing.T) {
+	pool := sharedTestPool(t)
+	if err := checkCANotSilentlyRotated(context.Background(), pool, true); err != nil {
+		t.Errorf("expected caKeyExistedBefore=true to skip the check entirely, got: %v", err)
+	}
+}
+```
+
+- [ ] **Step 2: Run tests to verify they fail**
+
+Run: `cd orchestrator && go test ./cmd/server/... -run TestCheckCANotSilentlyRotated -v`
+Expected: FAIL — `checkCANotSilentlyRotated undefined` (and `sharedTestPool` undefined if this package doesn't already have an equivalent helper — resolve that first by checking `cmd/server`'s existing test files for a shared-Postgres pattern; if none exists, add a minimal one modeled on `orchestrator/internal/api/testmain_test.go`'s `sharedDB`/`TestMain` before writing these four tests, since they all need it).
+
+- [ ] **Step 3: Implement**
+
+Add to `orchestrator/cmd/server/main.go`, as a package-level function (near `resolveDashboardTLSCert` from Task 4, or in a new small file if that grows the existing file uncomfortably — check its current line count first):
+
+```go
+// checkCANotSilentlyRotated is the fail-closed safety check: a CA
+// generated fresh (caKeyExistedBefore == false) with existing valid
+// agent_certificates rows means an existing deployment's CA was lost, not
+// that this is a genuine fresh install -- refuse to start rather than
+// silently locking out the whole fleet. BAS_CONFIRM_NEW_CA=true is the
+// explicit escape hatch for an intentional CA rotation/reset.
+func checkCANotSilentlyRotated(ctx context.Context, pool *pgxpool.Pool, caKeyExistedBefore bool) error {
+	if caKeyExistedBefore {
+		return nil // normal restart, nothing was regenerated
+	}
+	var hasExistingCerts bool
+	err := pool.QueryRow(ctx, `
+		SELECT EXISTS (
+			SELECT 1 FROM agent_certificates
+			 WHERE revoked = false AND expires_at > NOW()
+		)`).Scan(&hasExistingCerts)
+	if err != nil {
+		return fmt.Errorf("check for existing agent_certificates: %w", err)
+	}
+	if !hasExistingCerts {
+		return nil // genuine fresh install, nothing to protect
+	}
+	if os.Getenv("BAS_CONFIRM_NEW_CA") == "true" {
+		log.Println("[!] WARNING: generating a new deployment CA despite existing agent certificates -- BAS_CONFIRM_NEW_CA=true set, proceeding. Every already-enrolled agent will need to re-bootstrap.")
+		return nil
+	}
+	return fmt.Errorf("a new deployment CA was just generated (no existing CA found at PKI_DIR), but agent_certificates already has valid, non-revoked entries -- this looks like CA loss on an EXISTING deployment, not a fresh install, and would silently lock out the entire enrolled fleet. If this is a genuine fresh install with stale leftover database rows, or an intentional CA rotation, set BAS_CONFIRM_NEW_CA=true and restart")
+}
+```
+
+Wire it in right after the existing CA-loading block (line ~574-787, before the handler-construction chain), checking whether the key file existed BEFORE the `LoadOrGenerateCA` call:
+
+```go
+	caKeyPath := filepath.Join(cfg.PKIDir, "ca-key.pem")
+	_, statErr := os.Stat(caKeyPath)
+	caKeyExistedBefore := statErr == nil
+
+	ca, err := pki.LoadOrGenerateCA(cfg.PKIDir)
+	if err != nil {
+		log.Fatalf("[FATAL] load/generate deployment CA: %v", err)
+	}
+	if err := checkCANotSilentlyRotated(context.Background(), pool, caKeyExistedBefore); err != nil {
+		log.Fatalf("[FATAL] %v", err)
+	}
+```
+
+(This requires `path/filepath` imported if not already present — check the existing import block first.)
+
+- [ ] **Step 4: Run tests to verify they pass**
+
+Run: `cd orchestrator && go build ./... && go test ./cmd/server/... -v`
+Expected: build succeeds, all four new tests pass plus every existing test in the package.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add orchestrator/cmd/server/main.go orchestrator/cmd/server/listeners_test.go
+git commit -m "feat(server): fail closed instead of silently regenerating the CA on an existing deployment"
+```
+
+---
+
+### Task 10: install.sh — include the CA and certs in the existing backup engine
+
+**Files:**
+- Modify: `packaging/compose/install.sh` — `_package_config` (the function backing `_run_backup_engine`, confirmed at line ~1140-1149)
+
+**Interfaces:**
+- Consumes: `${DATA_DIR}/pki` (Task 6), the existing `_run_backup_engine`/`_package_config`/`mode_restore` backup/restore mechanism (already in production, encrypted + SHA-256-verified + retention-managed + optionally remote-replicated).
+
+**Verification approach:** shellcheck + a manual dry-run of `_package_config` against a throwaway directory tree (not a real deployment or real backup encryption key).
+
+- [ ] **Step 1: Add `pki` to the config tar**
+
+Change (line ~1146-1148):
+
+```bash
+  tar -cf "$out_file" -C "${DATA_DIR}" \
+    --ignore-failed-read \
+    .env "${LICENSE_FILE}" certs scenarios docker-compose.yml 2>/dev/null || true
+```
+
+to:
+
+```bash
+  tar -cf "$out_file" -C "${DATA_DIR}" \
+    --ignore-failed-read \
+    .env "${LICENSE_FILE}" certs scenarios docker-compose.yml pki 2>/dev/null || true
+```
+
+(One word added — `pki` is now a plain host directory under `${DATA_DIR}`, Task 2/6, so it rides this existing tar exactly the same way `certs`/`scenarios` already do. `--ignore-failed-read` already makes this safe against a not-yet-created `pki` directory on an older, not-yet-migrated deployment, matching how the tar already tolerates an absent `certs` directory today.)
+
+- [ ] **Step 2: Confirm restore already handles it generically, and note if not**
+
+Read `mode_restore`'s extraction of `config.tar` (search: `grep -n 'config.tar' packaging/compose/install.sh`) to confirm it does a generic `tar -x ... -C "${DATA_DIR}"` that would restore `pki/` the same way it already restores `certs/`/`scenarios/`, with no special-casing needed. If the real code turns out to special-case which subdirectories it extracts (rather than extracting the whole archive generically), add `pki` to that explicit list too — read the real code before assuming either shape.
+
+Also: after Task 9 lands, a *restored* CA is exactly the `caKeyExistedBefore == true` case (the file exists once restore has run, before the orchestrator's next start) — confirm this composes correctly: restore writes `pki/ca-key.pem` to `${DATA_DIR}/pki` BEFORE `docker compose up` runs, so by the time `main()` checks `os.Stat(caKeyPath)`, it's already there and the fail-closed check in Task 9 correctly stays out of the way.
+
+- [ ] **Step 3: Verify**
+
+```bash
+which shellcheck && shellcheck packaging/compose/install.sh || echo "shellcheck not available -- skipping lint"
+```
+
+Manual dry-run of the tar logic in isolation:
+
+```bash
+dir=$(mktemp -d)
+mkdir -p "$dir"/{certs,scenarios,pki}
+echo "fake-ca-key" > "$dir/pki/ca-key.pem"
+echo "fake-env" > "$dir/.env"
+echo "fake-compose" > "$dir/docker-compose.yml"
+tar -cf /tmp/config-test.tar -C "$dir" --ignore-failed-read .env certs scenarios docker-compose.yml pki nonexistent-license.lic 2>/dev/null || true
+tar -tf /tmp/config-test.tar
+rm -rf "$dir" /tmp/config-test.tar
+```
+
+Expected: the listing includes `pki/ca-key.pem` alongside `.env`, `docker-compose.yml`, and the (empty) `certs`/`scenarios` directories — confirms `pki` rides the tar correctly and `--ignore-failed-read` tolerates the missing license file without aborting.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add packaging/compose/install.sh
+git commit -m "fix(install): include the deployment CA in the existing backup engine"
+```
+
+---
+
+### Task 11: end-to-end mTLS deployment lifecycle verification script
+
+**Why this task exists:** every other task in this plan verifies one piece in isolation (a build, a unit test, a manual dry-run of one function). None of them prove the pieces actually compose into a working deployment across the full lifecycle a real operator experiences: fresh install → CA generated and persisted → dashboard reachable → a legacy (pre-migration) agent still connects → a new agent verifies the orchestrator's CA and enrolls → the agent switches to mTLS and operates normally → certificate renewal succeeds → the orchestrator container restarts → the same CA survives → the already-mTLS agent reconnects without any fleet-wide invalidation. This task adds a real, runnable script proving that chain, not just a prose checklist.
+
+**Files:**
+- Create: `packaging/compose/verify-mtls-lifecycle.sh`
+
+**Interfaces:**
+- Consumes: a real Docker Compose stack (this plan's Tasks 1-10), a compiled Linux agent binary (built fresh by this script via `go build`, from the `agent/` module), a real license file (the operator must supply one — this script cannot fabricate a valid Audspect license).
+
+**Verification approach:** this task's own deliverable IS the verification mechanism for the rest of the plan — it doesn't have a separate TDD cycle of its own. Verify it by actually running it against a real (throwaway, isolated-project-name) Compose stack. If no valid license file is available in the environment this task executes in, the script must still be written completely and correctly, and this limitation reported explicitly (per this plan's own stated practice elsewhere, e.g. Task 1's Docker-build fallback) rather than silently skipped — do not fabricate a "looks like it would work" claim without having actually run it.
+
+- [ ] **Step 1: Write the script**
+
+```bash
+#!/usr/bin/env bash
+# BAS Platform — mTLS Deployment Lifecycle Verifier
+#
+# Proves the full agent-trust-model deployment lifecycle end-to-end against
+# a REAL, isolated Docker Compose stack (never the operator's real
+# deployment): fresh install -> CA generated+persisted -> dashboard
+# reachable -> legacy agent still connects -> new agent verifies the CA ->
+# CSR enrollment succeeds -> agent switches to mTLS -> normal commands work
+# -> renewal succeeds -> container restart -> same CA survives -> the
+# already-mTLS agent reconnects -> no fleet-wide invalidation.
+#
+# Usage: bash verify-mtls-lifecycle.sh --license /path/to/valid.lic
+#
+# Requires: docker, docker compose, go (to build a throwaway Linux agent
+# binary), curl, a valid Audspect license file.
+# Exit codes: 0 = every stage passed, 1 = a stage failed (see output for which).
+set -euo pipefail
+
+PROJECT="bas-lifecycle-verify-$$"
+WORKDIR=$(mktemp -d)
+LICENSE=""
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --license) LICENSE="$2"; shift 2 ;;
+    *) echo "unknown arg: $1" >&2; exit 1 ;;
+  esac
+done
+
+if [[ -z "$LICENSE" || ! -f "$LICENSE" ]]; then
+  echo "ERROR: --license <path> is required and must point at a real, valid Audspect license file." >&2
+  echo "This script cannot fabricate one -- the orchestrator will not start without it." >&2
+  exit 1
+fi
+
+STAGE=""
+fail() { echo "FAIL at stage: $STAGE -- $*" >&2; cleanup; exit 1; }
+pass() { echo "PASS: $STAGE"; }
+cleanup() {
+  docker compose -p "$PROJECT" -f "${WORKDIR}/docker-compose.yml" down -v --remove-orphans >/dev/null 2>&1 || true
+  rm -rf "$WORKDIR"
+}
+trap cleanup EXIT
+
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+
+STAGE="setup"
+cp "${REPO_ROOT}/packaging/compose/docker-compose.yml" "${WORKDIR}/docker-compose.yml"
+cp "$LICENSE" "${WORKDIR}/bas.lic"
+cat > "${WORKDIR}/.env" << ENVEOF
+BAS_VERSION=dev
+POSTGRES_PASSWORD=lifecycle-test-$(openssl rand -hex 8)
+JWT_SECRET=$(openssl rand -hex 32)
+AGENT_SECRET=$(openssl rand -hex 16)
+LICENSE_FILE=bas.lic
+BAS_PORT=19443
+BAS_ENROLL_PORT=19444
+BAS_LEGACY_PORT=19000
+BAS_DASHBOARD_PORT=19543
+DNS_SINK_BIND_IP=127.0.0.1
+ENVEOF
+pass
+
+STAGE="fresh install: stack up"
+(cd "$WORKDIR" && docker compose -p "$PROJECT" up -d) || fail "docker compose up failed"
+for i in $(seq 1 60); do
+  status=$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{end}}' "${PROJECT}-orchestrator-1" 2>/dev/null || echo "")
+  [[ "$status" == "healthy" ]] && break
+  sleep 2
+done
+[[ "$status" == "healthy" ]] || fail "orchestrator never became healthy within 120s"
+pass
+
+STAGE="CA generated and persisted"
+CA_ROOT_1=$(curl -sk "https://localhost:19543/api/config/connection" -H "Authorization: Bearer $(cat "${WORKDIR}/.admin-token" 2>/dev/null || echo "")" 2>/dev/null | grep -o '"caRootPem":"[^"]*"' || true)
+# Admin auth is needed for /api/config/connection -- if first-run admin
+# setup hasn't happened yet, this stage instead confirms the CA exists on
+# disk in the bind-mounted directory, which is sufficient proof of
+# "generated and persisted" for this stage's purpose.
+docker exec "${PROJECT}-orchestrator-1" test -f /etc/audspect/pki/ca-key.pem || fail "CA key not found in the running container"
+pass
+
+STAGE="dashboard usable"
+curl -skf "https://localhost:19543/" >/dev/null || fail "dashboard not reachable on the new listener"
+pass
+
+STAGE="legacy agent still connects"
+curl -sf "http://localhost:19000/api/agents/ping" -H "X-Agent-Token: $(grep AGENT_SECRET "${WORKDIR}/.env" | cut -d= -f2)" >/dev/null || fail "legacy listener rejected a correctly-authenticated ping"
+pass
+
+STAGE="build a real Linux agent binary"
+(cd "${REPO_ROOT}/agent" && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o "${WORKDIR}/bas-agent" .) || fail "agent build failed"
+pass
+
+STAGE="new agent verifies orchestrator CA + CSR enrollment succeeds + switches to mTLS"
+docker cp "${PROJECT}-orchestrator-1:/etc/audspect/pki/ca-cert.pem" "${WORKDIR}/deployment-ca.pem" || fail "could not extract CA root from the container"
+mkdir -p "${WORKDIR}/agent-certs"
+BAS_CERT_DIR="${WORKDIR}/agent-certs" \
+  timeout 30 "${WORKDIR}/bas-agent" --server "https://localhost:19443" --ca-root "${WORKDIR}/deployment-ca.pem" &
+AGENT_PID=$!
+sleep 10
+kill "$AGENT_PID" 2>/dev/null || true
+[[ -f "${WORKDIR}/agent-certs/agent-cert.pem" ]] || fail "agent never obtained a client certificate -- CSR enrollment did not complete"
+pass
+
+STAGE="agent renewal succeeds"
+# A full renewal-triggers-at-75%-of-1-year wait isn't practical in a
+# lifecycle smoke test -- this stage instead proves the renewal CODE PATH
+# directly, the same way agent/bootstrap.go's renewal branch does: generate
+# a fresh CSR for the same AgentID, submit it over mTLS (using the
+# certificate already obtained in the prior stage) to the OPERATIONAL
+# listener's enroll-csr endpoint -- not the bootstrap secret, not the
+# enrollment listener -- and confirm the orchestrator issues a new
+# certificate (200) rather than rejecting it (which Task 5/orchestrator's
+# EnrollCSR would do for a mismatched or already-certified identity
+# presented without a matching client cert).
+AGENT_ID_HEX=$(openssl x509 -in "${WORKDIR}/agent-certs/agent-cert.pem" -noout -subject | sed -n 's/.*CN *= *//p')
+openssl req -new -key "${WORKDIR}/agent-certs/agent-key.pem" -subj "/CN=${AGENT_ID_HEX}" -out "${WORKDIR}/renewal.csr.pem" || fail "could not generate renewal CSR"
+CSR_JSON=$(python3 -c "import json,sys; print(json.dumps({'agentId': sys.argv[1], 'csrPem': open(sys.argv[2]).read()}))" "$AGENT_ID_HEX" "${WORKDIR}/renewal.csr.pem" 2>/dev/null || \
+  printf '{"agentId":"%s","csrPem":%s}' "$AGENT_ID_HEX" "$(cat "${WORKDIR}/renewal.csr.pem" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))' 2>/dev/null || echo '""')")
+RENEWAL_STATUS=$(curl -sk -o "${WORKDIR}/renewal-response.json" -w "%{http_code}" \
+  --cert "${WORKDIR}/agent-certs/agent-cert.pem" --key "${WORKDIR}/agent-certs/agent-key.pem" \
+  -X POST "https://localhost:19443/api/agents/enroll-csr" \
+  -H "Content-Type: application/json" -d "$CSR_JSON")
+[[ "$RENEWAL_STATUS" == "200" ]] || fail "renewal request returned HTTP $RENEWAL_STATUS, expected 200 (response: $(cat "${WORKDIR}/renewal-response.json" 2>/dev/null))"
+
+STAGE="container restart: same CA survives"
+CA_FINGERPRINT_BEFORE=$(docker exec "${PROJECT}-orchestrator-1" sha256sum /etc/audspect/pki/ca-cert.pem 2>/dev/null | awk '{print $1}')
+(cd "$WORKDIR" && docker compose -p "$PROJECT" restart orchestrator)
+for i in $(seq 1 60); do
+  status=$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{end}}' "${PROJECT}-orchestrator-1" 2>/dev/null || echo "")
+  [[ "$status" == "healthy" ]] && break
+  sleep 2
+done
+[[ "$status" == "healthy" ]] || fail "orchestrator never became healthy after restart"
+CA_FINGERPRINT_AFTER=$(docker exec "${PROJECT}-orchestrator-1" sha256sum /etc/audspect/pki/ca-cert.pem 2>/dev/null | awk '{print $1}')
+[[ "$CA_FINGERPRINT_BEFORE" == "$CA_FINGERPRINT_AFTER" ]] || fail "CA fingerprint changed across a container restart -- persistence is broken"
+pass
+
+STAGE="existing mTLS agent reconnects, no fleet-wide invalidation"
+BAS_CERT_DIR="${WORKDIR}/agent-certs" \
+  timeout 15 "${WORKDIR}/bas-agent" --server "https://localhost:19443" --ca-root "${WORKDIR}/deployment-ca.pem" &
+AGENT_PID=$!
+sleep 8
+kill "$AGENT_PID" 2>/dev/null || true
+docker logs "${PROJECT}-orchestrator-1" 2>&1 | grep -q "agent_reconnected\|ws.*connected" || fail "no evidence the existing agent reconnected after restart"
+pass
+
+echo ""
+echo "ALL STAGES PASSED -- the full lifecycle is proven end-to-end."
+```
+
+- [ ] **Step 2: Run it for real**
+
+```bash
+chmod +x packaging/compose/verify-mtls-lifecycle.sh
+bash packaging/compose/verify-mtls-lifecycle.sh --license /path/to/a/real/valid/license.lic
+```
+
+Expected: `ALL STAGES PASSED`. If no valid license file is available in this execution environment, report that explicitly as a limitation — do not claim this script was verified end-to-end without having actually run it. In that case, at minimum verify the script's syntax (`bash -n packaging/compose/verify-mtls-lifecycle.sh`) and, if `shellcheck` is available, its lint cleanliness, and note in the report exactly which stages were exercised vs. which are unverified pending a real license file.
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add packaging/compose/verify-mtls-lifecycle.sh
+git commit -m "test(deployment): add end-to-end mTLS deployment lifecycle verification script"
+```
+
+---
+
 ## Final Verification
 
-After all 8 tasks:
+After all 11 tasks:
 
 ```bash
 cd orchestrator && go build ./... && go test ./config/... ./cmd/server/... -v
 ```
 
-Expected: build succeeds, all tests pass (existing tests from the prior B1/B3 plan plus this plan's new ones).
+Expected: build succeeds, all tests pass (existing tests from the prior B1/B3 plan plus this plan's new ones, including Task 9's `TestCheckCANotSilentlyRotated_*`).
 
 ```bash
-which shellcheck && shellcheck packaging/compose/install.sh packaging/compose/uninstall.sh
+which shellcheck && shellcheck packaging/compose/install.sh packaging/compose/uninstall.sh packaging/compose/verify-mtls-lifecycle.sh
 ```
 
 Expected: no new lint errors introduced by this plan's changes (pre-existing warnings in untouched parts of these large scripts are not this plan's concern).
@@ -1072,4 +1539,4 @@ cd packaging/compose && docker compose config >/dev/null && echo "compose valid"
 
 Expected: no errors.
 
-Manual, end-to-end (documented as a follow-up if genuinely impractical in this dev environment, not silently skipped): a real `docker build` of the full image, a real `install.sh --install --config setup.conf` against a clean host with a valid license file, confirming the dashboard is reachable at `https://<host>:9543`, the healthcheck reports healthy, and a fresh agent successfully bootstraps via `--ca-root` against the new topology end-to-end.
+Task 11's `verify-mtls-lifecycle.sh`, run against a real license file, IS this plan's real end-to-end verification — superseding the thinner manual checklist an earlier draft of this plan described. If a valid license file genuinely isn't available in the environment this plan executes in, that limitation must be reported explicitly (per Task 11's own verification step), not silently treated as equivalent to having run it.
