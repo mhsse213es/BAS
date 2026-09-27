@@ -15,6 +15,31 @@ import (
 	"github.com/audspect/bas/internal/ws"
 )
 
+// healthHandler is the liveness probe shared by Mount and MountEnrollment.
+func healthHandler(w http.ResponseWriter, _ *http.Request) {
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(`{"status":"ok"}`))
+}
+
+// MountEnrollment builds the deliberately minimal router for the :9444
+// enrollment listener (spec Section 1): that listener requires no client
+// certificate, so it must expose only initial CSR bootstrap and a liveness
+// probe -- never the full API surface Mount serves (the dashboard, the
+// /ws/agent legacy-secret fallback, and so on). Every other path is a 404.
+// The same middleware stack as Mount applies, so requests here are logged,
+// counted, panic-recovered and license-gated identically.
+func MountEnrollment(h *Handler) http.Handler {
+	r := chi.NewRouter()
+	r.Use(trustedRealIP)
+	r.Use(RequestLoggingMiddleware)
+	r.Use(middleware.Recoverer)
+	r.Use(middleware.StripSlashes)
+	r.Use(LicenseGate)
+	r.Post("/api/agents/enroll-csr", h.EnrollCSR)
+	r.Get("/health", healthHandler)
+	return r
+}
+
 // Mount builds the full HTTP router and returns it.
 // staticHandler serves the dashboard SPA — pass StaticHandler() in production
 // (embedded FS) or http.FileServer(http.Dir("./wwwroot")) in tests/dev.
@@ -121,10 +146,7 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 	})
 
 	// Health check
-	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"status":"ok"}`))
-	})
+	r.Get("/health", healthHandler)
 
 	// Readiness check -- distinct from /health above: this one actually
 	// reaches Postgres. Top-level, so it bypasses LicenseGate's

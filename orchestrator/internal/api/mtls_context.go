@@ -2,12 +2,16 @@ package api
 
 import (
 	"context"
+	"crypto/subtle"
 	"net/http"
 )
 
 type ctxKey int
 
-const ctxKeyAuthenticatedAgentID ctxKey = iota
+const (
+	ctxKeyAuthenticatedAgentID ctxKey = iota
+	ctxKeyLegacyListener              // set by WithLegacyListenerTag (observability.go)
+)
 
 // WithMTLSIdentity wraps next so that any request arriving with a verified
 // client certificate (i.e. requests on the mTLS-required 9443 listener —
@@ -58,7 +62,7 @@ func wsAgentAuthorized(req *http.Request, agentSecret string) (ok bool, statusCo
 		if provided == "" {
 			provided = req.Header.Get("X-Agent-Token")
 		}
-		if provided != agentSecret {
+		if subtle.ConstantTimeCompare([]byte(provided), []byte(agentSecret)) != 1 {
 			return false, http.StatusUnauthorized, "unauthorized"
 		}
 	}

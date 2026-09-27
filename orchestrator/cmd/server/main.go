@@ -809,7 +809,7 @@ func main() {
 	// exist even after B2 retires the legacy port.
 	enrollSrv := &http.Server{
 		Addr:    fmt.Sprintf(":%d", cfg.EnrollHTTPPort),
-		Handler: router,
+		Handler: api.MountEnrollment(handler), // enrollment + /health ONLY, never the full router
 		TLSConfig: &tls.Config{
 			Certificates: []tls.Certificate{serverTLSCert},
 			ClientAuth:   tls.NoClientCert,
@@ -824,7 +824,7 @@ func main() {
 	// B2 work.
 	legacySrv := &http.Server{
 		Addr:         fmt.Sprintf(":%d", cfg.LegacyHTTPPort),
-		Handler:      router,
+		Handler:      api.WithLegacyListenerTag(router), // logged/counted distinctly (spec Section 4 step 4)
 		ReadTimeout:  30 * time.Second,
 		WriteTimeout: 90 * time.Second,
 		IdleTimeout:  120 * time.Second,

@@ -63,7 +63,33 @@ var (
 		Name: "db_ready",
 		Help: "1 if the most recent /ready check reached Postgres successfully, 0 otherwise.",
 	})
+
+	// legacyListenerRequestsTotal counts requests that arrived on the
+	// temporary plaintext legacy listener (:9000). Spec Section 4 step 4:
+	// the B2 decision to retire that port is made on observed usage, so
+	// this is kept separate from http_requests_total (whose label set is
+	// unchanged) and can be read directly without filtering.
+	legacyListenerRequestsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "legacy_listener_requests_total",
+		Help: "Total HTTP requests received on the legacy plaintext listener, labeled by method, route, and status.",
+	}, []string{"method", "route", "status"})
 )
+
+// WithLegacyListenerTag marks every request passing through it as having
+// arrived on the legacy plaintext listener. It wraps the legacy server's
+// handler only (cmd/server/main.go); RequestLoggingMiddleware, which runs
+// inside the router and so already knows the matched route and final
+// status, reads the mark and emits the distinct legacy log line and metric.
+func WithLegacyListenerTag(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), ctxKeyLegacyListener, true)))
+	})
+}
+
+func isLegacyListener(r *http.Request) bool {
+	v, _ := r.Context().Value(ctxKeyLegacyListener).(bool)
+	return v
+}
 
 // RequestLoggingMiddleware replaces chi's default middleware.Logger
 // (routes.go). One instrumentation point per completed request feeds both
@@ -94,6 +120,19 @@ func RequestLoggingMiddleware(next http.Handler) http.Handler {
 			"status", status,
 			"duration_ms", duration.Milliseconds(),
 		)
+
+		if isLegacyListener(r) {
+			legacyListenerRequestsTotal.WithLabelValues(r.Method, route, strconv.Itoa(status)).Inc()
+			slog.Info("legacy listener request",
+				"component", "http",
+				"listener", "legacy",
+				"method", r.Method,
+				"route", route,
+				"status", status,
+				"remote_addr", r.RemoteAddr,
+				"agent_id", r.URL.Query().Get("agentId"),
+			)
+		}
 	})
 }
 

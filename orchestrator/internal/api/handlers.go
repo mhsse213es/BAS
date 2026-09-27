@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -249,7 +250,7 @@ func (h *Handler) validateAgentAuth(r *http.Request) bool {
 	if provided == "" {
 		provided = r.URL.Query().Get("agentSecret")
 	}
-	return provided == h.agentSecret
+	return subtle.ConstantTimeCompare([]byte(provided), []byte(h.agentSecret)) == 1
 }
 
 // GET /api/agents/ping — token validation probe used by the GUI installer.
