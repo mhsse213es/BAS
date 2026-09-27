@@ -23,7 +23,9 @@ import (
 // Otherwise it performs the CSR bootstrap flow against the enrollment
 // listener (:9444 in production, derived from a.cfg.ServerURL below).
 func (a *Agent) ensureCertificate(ctx context.Context) error {
-	if cert, err := loadAgentCertificate(); err == nil && !certExpiringSoon(cert) {
+	existing, loadErr := loadAgentCertificate()
+	hasValidCert := loadErr == nil && !certExpiringSoon(existing)
+	if hasValidCert {
 		return nil
 	}
 
@@ -36,26 +38,57 @@ func (a *Agent) ensureCertificate(ctx context.Context) error {
 		return fmt.Errorf("generate CSR: %w", err)
 	}
 
-	enrollURL, err := enrollmentURL(a.cfg.ServerURL)
-	if err != nil {
-		return fmt.Errorf("derive enrollment URL: %w", err)
-	}
-	client, err := bootstrapHTTPClient(a.cfg)
-	if err != nil {
-		return fmt.Errorf("build bootstrap HTTP client: %w", err)
+	renewing := loadErr == nil // a cert exists (just expiring soon) — renew via mTLS, don't re-bootstrap
+	var client *http.Client
+	var targetURL string
+	if renewing {
+		// Renewal goes over the normal mTLS listener (9443), authenticated
+		// by the agent's own still-valid current certificate — never the
+		// bootstrap secret, per spec Section 2. mtlsTLSConfig reads the
+		// CURRENT on-disk cert/key, which is still valid at this point
+		// (only "expiring soon," not yet expired).
+		tlsCfg, err := mtlsTLSConfig(a.cfg)
+		if err != nil || tlsCfg == nil {
+			return fmt.Errorf("build mTLS config for renewal: %w", err)
+		}
+		client = &http.Client{
+			Timeout:   30 * time.Second,
+			Transport: &http.Transport{DialContext: proxyAwareNetDialContext(a.cfg), TLSClientConfig: tlsCfg},
+		}
+		targetURL = a.cfg.ServerURL // 9443, the normal operational endpoint
+	} else {
+		client, err = bootstrapHTTPClient(a.cfg)
+		if err != nil {
+			return fmt.Errorf("build bootstrap HTTP client: %w", err)
+		}
+		targetURL, err = enrollmentURL(a.cfg.ServerURL) // 9444
+		if err != nil {
+			return fmt.Errorf("derive enrollment URL: %w", err)
+		}
 	}
 
-	resp, err := protocol.SubmitCSR(ctx, client, enrollURL, a.cfg.AgentSecret, protocol.CSRRequest{
+	// The bootstrap secret is only meaningful on the initial-bootstrap
+	// path; a renewing agent authenticates via its presented mTLS client
+	// certificate instead, so the secret is withheld entirely rather than
+	// sent alongside it — the orchestrator's Task 5 EnrollCSR handler
+	// rejects a bootstrap-secret re-submission for an already-certified
+	// identity, so renewal MUST go through mTLS-only auth or be rejected.
+	bootstrapSecret := a.cfg.AgentSecret
+	if renewing {
+		bootstrapSecret = ""
+	}
+
+	resp, err := protocol.SubmitCSR(ctx, client, targetURL, bootstrapSecret, protocol.CSRRequest{
 		AgentID: a.id.AgentID,
 		CSRPEM:  string(csrPEM),
 	})
 	if err != nil {
-		return fmt.Errorf("submit CSR: %w", err)
+		return fmt.Errorf("submit CSR (renewing=%v): %w", renewing, err)
 	}
 	if err := saveAgentCertificate([]byte(resp.CertPEM)); err != nil {
 		return fmt.Errorf("save issued certificate: %w", err)
 	}
-	log.Printf("[*] certificate issued (expires %s)", resp.ExpiresAt)
+	log.Printf("[*] certificate %s (expires %s)", map[bool]string{true: "renewed", false: "issued"}[renewing], resp.ExpiresAt)
 	return nil
 }
 

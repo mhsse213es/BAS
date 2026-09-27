@@ -6,6 +6,7 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/json"
@@ -92,6 +93,106 @@ func TestEnsureCertificate_BootstrapsWhenNoCertExists(t *testing.T) {
 	if cert.Subject.CommonName != "abc123deadbeef01" {
 		t.Errorf("persisted cert CommonName = %q, want abc123deadbeef01", cert.Subject.CommonName)
 	}
+}
+
+func TestEnsureCertificate_RenewsExpiringCertViaMTLSNotBootstrapSecret(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("BAS_CERT_DIR", dir)
+
+	key, err := loadOrGenerateAgentKey()
+	if err != nil {
+		t.Fatalf("loadOrGenerateAgentKey: %v", err)
+	}
+	// Seed a cert that's past the 75% renewal threshold.
+	expiringSoonCert := selfSignedTestCertPEMWithLifetime(t, key, "abc123deadbeef01",
+		-300*24*time.Hour /* NotBefore */, 65*24*time.Hour /* NotAfter, ~82% elapsed */)
+	if err := saveAgentCertificate(expiringSoonCert); err != nil {
+		t.Fatalf("saveAgentCertificate: %v", err)
+	}
+	if err := writeTestCARoot(t, dir, expiringSoonCert); err != nil {
+		t.Fatalf("writeTestCARoot: %v", err)
+	}
+
+	// The test server presents this SAME self-signed cert/key pair as its
+	// own TLS server identity -- mirroring production, where the
+	// orchestrator's server TLS identity IS the deployment CA's own
+	// self-signed certificate reused directly (Task 7). Since deployment-ca.pem
+	// above is that exact certificate, mtlsTLSConfig's chain verification
+	// (verifyServerCertChain) finds it directly in the trusted root pool and
+	// accepts it, without needing a separate CA-signed leaf.
+	block, _ := pem.Decode(expiringSoonCert)
+	if block == nil {
+		t.Fatalf("decode expiringSoonCert PEM")
+	}
+	serverCert := tls.Certificate{Certificate: [][]byte{block.Bytes}, PrivateKey: key}
+
+	var usedClientCert bool
+	var usedBootstrapHeader bool
+	srv := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.TLS != nil && len(r.TLS.PeerCertificates) > 0 {
+			usedClientCert = true
+		}
+		if r.Header.Get("X-Agent-Token") != "" {
+			usedBootstrapHeader = true
+		}
+		json.NewEncoder(w).Encode(protocol.CSRResponse{
+			CertPEM:   string(selfSignedTestCertPEMForRequestedID(t, "abc123deadbeef01")),
+			ExpiresAt: "2027-01-01T00:00:00Z",
+		})
+	}))
+	srv.TLS = &tls.Config{
+		Certificates: []tls.Certificate{serverCert},
+		ClientAuth:   tls.RequireAnyClientCert,
+	}
+	srv.StartTLS()
+	defer srv.Close()
+
+	a := &Agent{cfg: Config{ServerURL: srv.URL, AgentSecret: "secret"}, id: Identity{AgentID: "abc123deadbeef01"}}
+	if err := a.ensureCertificate(context.Background()); err != nil {
+		t.Fatalf("ensureCertificate (renewal): %v", err)
+	}
+	if !usedClientCert {
+		t.Error("renewal request did not present the agent's existing client certificate")
+	}
+	if usedBootstrapHeader {
+		t.Error("renewal request used the bootstrap secret header — should authenticate via mTLS only, per spec Section 2")
+	}
+}
+
+// writeTestCARoot writes an already PEM-encoded certificate directly to the
+// canonical deployment-ca.pem path within dir -- unlike writeCARootFile
+// (agent/agent_mtls_test.go), which PEM-encodes raw DER bytes, this accepts
+// content that's already PEM-encoded (e.g. selfSignedTestCertPEMWithLifetime's
+// output), since Task 12's renewal test reuses the agent's own self-signed
+// certificate directly as the trust anchor, mirroring how the orchestrator's
+// server TLS identity in production IS the deployment CA's own self-signed
+// certificate (Task 7).
+func writeTestCARoot(t *testing.T, dir string, certPEM []byte) error {
+	t.Helper()
+	return os.WriteFile(filepath.Join(dir, "deployment-ca.pem"), certPEM, 0644)
+}
+
+// selfSignedTestCertPEMWithLifetime is selfSignedTestCertPEMWithKey with
+// explicit NotBefore/NotAfter offsets from time.Now(), for tests that need
+// to control exactly how far into its lifetime a certificate is (e.g.
+// Task 12's ~82%-elapsed renewal-trigger test).
+func selfSignedTestCertPEMWithLifetime(t *testing.T, key *ecdsa.PrivateKey, commonName string, notBeforeOffset, notAfterOffset time.Duration) []byte {
+	t.Helper()
+	serial, err := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 128))
+	if err != nil {
+		t.Fatalf("generate serial: %v", err)
+	}
+	tmpl := &x509.Certificate{
+		SerialNumber: serial,
+		Subject:      pkix.Name{CommonName: commonName},
+		NotBefore:    time.Now().Add(notBeforeOffset),
+		NotAfter:     time.Now().Add(notAfterOffset),
+	}
+	der, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &key.PublicKey, key)
+	if err != nil {
+		t.Fatalf("create self-signed test cert: %v", err)
+	}
+	return pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})
 }
 
 // selfSignedTestCertPEMWithKey builds a throwaway self-signed certificate
