@@ -66,22 +66,16 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 	r.Post("/api/attackpath/sharphound", h.SubmitAttackPathSharpHound)
 	r.Post("/api/attackpath/jobs/{id}/ack", h.AckAttackPathJob)
 
-	// WebSocket — agents connect here.
-	// Validates agentSecret query param / X-Agent-Token header when configured.
+	// WebSocket — agents connect here. See wsAgentAuthorized (mtls_context.go)
+	// for the identity-check logic this delegates to.
 	r.Get("/ws/agent", func(w http.ResponseWriter, req *http.Request) {
 		if license.Current().State == license.StateLocked {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
-		if agentSecret != "" {
-			provided := req.URL.Query().Get("agentSecret")
-			if provided == "" {
-				provided = req.Header.Get("X-Agent-Token")
-			}
-			if provided != agentSecret {
-				http.Error(w, "unauthorized", http.StatusUnauthorized)
-				return
-			}
+		if ok, code, msg := wsAgentAuthorized(req, agentSecret); !ok {
+			http.Error(w, msg, code)
+			return
 		}
 		hub.ServeAgentWS(w, req)
 	})

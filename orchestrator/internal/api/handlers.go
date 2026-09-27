@@ -3329,10 +3329,18 @@ func (h *Handler) markVariantRunPartial(ctx context.Context, runID string) {
 
 // GET /api/config/connection — returns the agent secret so admins can copy it
 // into the agent config file without needing SSH access to the server.
+// GET /api/config/connection — returns the agent bootstrap secret and
+// deployment CA root so admins can assemble an agent installer package
+// without needing SSH access to the server. The CA root is not secret
+// (it's a public certificate) — safe to return here alongside the secret.
 func (h *Handler) GetConnectionConfig(w http.ResponseWriter, r *http.Request) {
-	respond(w, map[string]string{
+	resp := map[string]string{
 		"agentSecret": h.agentSecret,
-	})
+	}
+	if h.pki != nil {
+		resp["caRootPem"] = string(h.pki.RootCertPEM())
+	}
+	respond(w, resp)
 }
 
 // ── User Management (admin only) ─────────────────────────────────────────────
