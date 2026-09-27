@@ -32,8 +32,11 @@ func DialAgentWS(serverURL, agentID, agentSecret string) (*websocket.Conn, error
 
 // DialAgentWSWithDialer is DialAgentWS with an explicit *websocket.Dialer --
 // the real agent uses this with a proxy-aware NetDialContext (see
-// agent/proxyauth.go's proxyAwareNetDialContext); loadgen and every other
-// caller keeps using DialAgentWS, unaffected by this addition.
+// agent/proxyauth.go's proxyAwareNetDialContext) and, once enrolled via
+// mTLS, dialer.TLSClientConfig already carrying the agent's client
+// certificate (set by the caller before this function runs — see
+// agent/agent.go's connectWS). loadgen and every other caller keeps using
+// DialAgentWS with the zero-value dialer, unaffected by this addition.
 func DialAgentWSWithDialer(serverURL, agentID, agentSecret string, dialer *websocket.Dialer) (*websocket.Conn, error) {
 	rawURL := strings.Replace(serverURL, "http://", "ws://", 1)
 	rawURL = strings.Replace(rawURL, "https://", "wss://", 1)

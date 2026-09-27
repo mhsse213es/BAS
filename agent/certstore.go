@@ -4,6 +4,7 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
@@ -107,6 +108,53 @@ func loadAgentCertificate() (*x509.Certificate, error) {
 		return nil, fmt.Errorf("decode agent cert PEM %s: no PEM block found", certPath)
 	}
 	return x509.ParseCertificate(block.Bytes)
+}
+
+// mtlsTLSConfig builds the *tls.Config an already-enrolled agent uses for
+// both its HTTP client and its WS dialer: its own client certificate plus
+// the deployment CA root for verifying the orchestrator's server
+// certificate. Returns (nil, nil) — not an error — when no local
+// certificate exists yet, which callers (newAgent, connectWS) treat as
+// "fall back to the legacy plaintext + shared-secret path," since that's
+// the only option available to an agent that hasn't completed bootstrap
+// yet.
+//
+// Verification deliberately mirrors agent/bootstrap.go's
+// bootstrapHTTPClient / verifyServerCertChain: the orchestrator's server
+// TLS identity is the deployment CA's own self-signed certificate reused
+// directly (Task 7), which carries no SAN entries, so Go's default
+// hostname verification would fail every real handshake.
+// InsecureSkipVerify disables that default check; VerifyPeerCertificate
+// replaces it with real chain-to-trusted-CA verification (no hostname
+// check) via verifyServerCertChain — this is "verify the chain, skip the
+// hostname," not "skip verification," and is the correct trust model for
+// this single-appliance deployment where the installer-distributed CA
+// root IS the trust anchor.
+func mtlsTLSConfig(cfg Config) (*tls.Config, error) {
+	cert, err := loadAgentCertificate()
+	if err != nil {
+		return nil, nil // no cert yet — legacy fallback, not an error
+	}
+	_, caPath, certPath, keyPath := certPaths()
+	caPEM, err := os.ReadFile(caPath)
+	if err != nil {
+		return nil, fmt.Errorf("read deployment CA root: %w", err)
+	}
+	pool := x509.NewCertPool()
+	if !pool.AppendCertsFromPEM(caPEM) {
+		return nil, fmt.Errorf("parse deployment CA root: not valid PEM")
+	}
+	clientCert, err := tls.LoadX509KeyPair(certPath, keyPath)
+	if err != nil {
+		return nil, fmt.Errorf("load agent client keypair: %w", err)
+	}
+	_ = cert // already validated non-expired by ensureCertificate before this is called
+	return &tls.Config{
+		Certificates:          []tls.Certificate{clientCert},
+		RootCAs:               pool,
+		InsecureSkipVerify:    true, // see agent/bootstrap.go's verifyServerCertChain doc comment: chain-only verification, hostname check is meaningless for this single-appliance deployment model
+		VerifyPeerCertificate: verifyServerCertChain(pool),
+	}, nil
 }
 
 // certExpiringSoon reports whether cert has crossed 75% of its total
