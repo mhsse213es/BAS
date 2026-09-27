@@ -7,7 +7,9 @@ import (
 	"crypto/x509"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -15,99 +17,223 @@ import (
 	"audspect/agent/protocol"
 )
 
-// ensureCertificate guarantees the agent holds a valid, unexpired mTLS
-// client certificate before connectWS is called. If one already exists and
-// isn't expiring soon, this is a fast no-op (Review Focus: an
-// already-enrolled agent restarting must never re-bootstrap — that would
-// also just get rejected by the orchestrator's reuse-limit check, Task 5).
-// Otherwise it performs the CSR bootstrap flow against the enrollment
-// listener (:9444 in production, derived from a.cfg.ServerURL below).
-func (a *Agent) ensureCertificate(ctx context.Context) error {
-	existing, loadErr := loadAgentCertificate()
-	hasValidCert := loadErr == nil && !certExpiringSoon(existing)
-	if hasValidCert {
-		return nil
+// Default orchestrator listener ports (config.HTTPPort / config.EnrollHTTPPort
+// on the orchestrator side, Task 1/7). BAS_MTLS_PORT / BAS_ENROLL_PORT
+// override them for non-default deployments, mirroring how BAS_SERVER_URL
+// itself is already overridable.
+const (
+	defaultMTLSPort   = "9443"
+	defaultEnrollPort = "9444"
+)
+
+// resolveOperationalConfig runs certificate bootstrap/renewal BEFORE any
+// long-lived client is built (agent/main.go calls it ahead of newAgent) and
+// returns the Config every later client must be built from:
+//
+//   - success: ServerURL is rewritten to the mTLS listener
+//     (https://<host>:<mTLS port>) and MTLS is set, so newAgent's HTTP
+//     client, the log shipper and the WS dialer all target the mTLS
+//     endpoint with the agent's client certificate attached.
+//   - failure: cfg is returned unchanged (the originally configured URL,
+//     legacy shared-secret path), matching the pre-existing fallback.
+//
+// Nothing is written back to the service configuration: the mTLS URL is a
+// pure function of the configured URL plus the on-disk certificate, so it
+// is re-derived identically on every start, and an agent whose certificate
+// store is wiped falls back to the configured URL and re-bootstraps.
+func resolveOperationalConfig(ctx context.Context, cfg Config, agentID string) Config {
+	opURL, err := ensureCertificate(ctx, cfg, agentID)
+	if err != nil {
+		log.Printf("[!] certificate bootstrap failed, falling back to legacy auth on %s: %v", cfg.ServerURL, err)
+		return cfg
 	}
+	if opURL != cfg.ServerURL {
+		log.Printf("[*] operational endpoint: %s (configured: %s)", opURL, cfg.ServerURL)
+	}
+	cfg.ServerURL = opURL
+	cfg.MTLS = true
+	return cfg
+}
+
+// ensureCertificate guarantees the agent holds a valid, unexpired mTLS
+// client certificate bound to its own key, and returns the operational mTLS
+// URL (operationalURL of the configured ServerURL) that all traffic must
+// use from then on. Three states:
+//
+//   - no certificate on disk, or one that has actually EXPIRED: initial
+//     bootstrap against the enrollment listener with the bootstrap secret.
+//     An expired certificate cannot authenticate an mTLS handshake (the
+//     orchestrator's RequireAndVerifyClientCert listener rejects it before
+//     HTTP), and the orchestrator's reuse check no longer matches it
+//     (expires_at > NOW()), so bootstrap is both the only possible and the
+//     permitted path.
+//   - valid and not yet at the renewal threshold: no network I/O (Review
+//     Focus: an already-enrolled agent restarting must never re-bootstrap).
+//   - valid but past the renewal threshold (certExpiringSoon): renew over
+//     the mTLS listener authenticated by the current certificate, never the
+//     bootstrap secret (spec Section 2). A failed renewal is logged and is
+//     NOT an error: the current certificate is still valid, so the agent
+//     keeps operating over mTLS and retries renewal on its next start.
+func ensureCertificate(ctx context.Context, cfg Config, agentID string) (string, error) {
+	opURL, err := operationalURL(cfg.ServerURL)
+	if err != nil {
+		return "", fmt.Errorf("derive operational mTLS URL: %w", err)
+	}
+
+	existing, loadErr := loadAgentCertificate()
+	expired := loadErr == nil && !time.Now().Before(existing.NotAfter)
+	if loadErr == nil && !expired && !certExpiringSoon(existing) {
+		if err := checkMTLSUsable(cfg); err != nil {
+			return "", err
+		}
+		return opURL, nil
+	}
+	renewing := loadErr == nil && !expired
 
 	key, err := loadOrGenerateAgentKey()
 	if err != nil {
-		return fmt.Errorf("load/generate agent key: %w", err)
+		return "", fmt.Errorf("load/generate agent key: %w", err)
 	}
-	csrPEM, err := generateCSR(key, a.id.AgentID)
+	csrPEM, err := generateCSR(key, agentID)
 	if err != nil {
-		return fmt.Errorf("generate CSR: %w", err)
+		return "", fmt.Errorf("generate CSR: %w", err)
 	}
 
-	renewing := loadErr == nil // a cert exists (just expiring soon) — renew via mTLS, don't re-bootstrap
 	var client *http.Client
-	var targetURL string
+	var targetURL, bootstrapSecret string
 	if renewing {
-		// Renewal goes over the normal mTLS listener (9443), authenticated
-		// by the agent's own still-valid current certificate — never the
-		// bootstrap secret, per spec Section 2. mtlsTLSConfig reads the
-		// CURRENT on-disk cert/key, which is still valid at this point
-		// (only "expiring soon," not yet expired).
-		tlsCfg, err := mtlsTLSConfig(a.cfg)
-		if err != nil || tlsCfg == nil {
-			return fmt.Errorf("build mTLS config for renewal: %w", err)
+		// Renewal goes to the mTLS listener, authenticated by the agent's
+		// own still-valid current certificate (read from disk by
+		// mtlsTLSConfig's GetClientCertificate at handshake time). The
+		// bootstrap secret is withheld entirely: the orchestrator's
+		// EnrollCSR authenticates renewal by the verified certificate alone.
+		targetURL = opURL
+		tlsCfg, err := mtlsTLSConfig(cfg)
+		if err != nil {
+			return "", fmt.Errorf("build mTLS config for renewal: %w", err)
+		}
+		if tlsCfg == nil {
+			return "", fmt.Errorf("build mTLS config for renewal: deployment CA root not installed")
 		}
 		client = &http.Client{
 			Timeout:   30 * time.Second,
-			Transport: &http.Transport{DialContext: proxyAwareNetDialContext(a.cfg), TLSClientConfig: tlsCfg},
+			Transport: &http.Transport{DialContext: proxyAwareNetDialContext(withServerURL(cfg, targetURL)), TLSClientConfig: tlsCfg},
 		}
-		targetURL = a.cfg.ServerURL // 9443, the normal operational endpoint
 	} else {
-		client, err = bootstrapHTTPClient(a.cfg)
+		targetURL, err = enrollmentURL(cfg.ServerURL)
 		if err != nil {
-			return fmt.Errorf("build bootstrap HTTP client: %w", err)
+			return "", fmt.Errorf("derive enrollment URL: %w", err)
 		}
-		targetURL, err = enrollmentURL(a.cfg.ServerURL) // 9444
+		client, err = bootstrapHTTPClient(withServerURL(cfg, targetURL))
 		if err != nil {
-			return fmt.Errorf("derive enrollment URL: %w", err)
+			return "", fmt.Errorf("build bootstrap HTTP client: %w", err)
 		}
-	}
-
-	// The bootstrap secret is only meaningful on the initial-bootstrap
-	// path; a renewing agent authenticates via its presented mTLS client
-	// certificate instead, so the secret is withheld entirely rather than
-	// sent alongside it — the orchestrator's Task 5 EnrollCSR handler
-	// rejects a bootstrap-secret re-submission for an already-certified
-	// identity, so renewal MUST go through mTLS-only auth or be rejected.
-	bootstrapSecret := a.cfg.AgentSecret
-	if renewing {
-		bootstrapSecret = ""
+		bootstrapSecret = cfg.AgentSecret
 	}
 
 	resp, err := protocol.SubmitCSR(ctx, client, targetURL, bootstrapSecret, protocol.CSRRequest{
-		AgentID: a.id.AgentID,
+		AgentID: agentID,
 		CSRPEM:  string(csrPEM),
 	})
 	if err != nil {
-		return fmt.Errorf("submit CSR (renewing=%v): %w", renewing, err)
+		err = fmt.Errorf("submit CSR (renewing=%v): %w", renewing, err)
+	} else if saveErr := saveAgentCertificate([]byte(resp.CertPEM)); saveErr != nil {
+		err = fmt.Errorf("save issued certificate: %w", saveErr)
 	}
-	if err := saveAgentCertificate([]byte(resp.CertPEM)); err != nil {
-		return fmt.Errorf("save issued certificate: %w", err)
+	if err != nil {
+		if renewing {
+			log.Printf("[!] certificate renewal failed, continuing with the current certificate (expires %s): %v",
+				existing.NotAfter.Format(time.RFC3339), err)
+			return opURL, nil
+		}
+		return "", err
 	}
 	log.Printf("[*] certificate %s (expires %s)", map[bool]string{true: "renewed", false: "issued"}[renewing], resp.ExpiresAt)
+	return opURL, nil
+}
+
+// checkMTLSUsable confirms the on-disk certificate/key pair loads and the
+// deployment CA root is installed -- the fast path's guard that switching
+// to the mTLS URL will actually work, since that path makes no request.
+func checkMTLSUsable(cfg Config) error {
+	_, _, certPath, keyPath := certPaths()
+	if _, err := tls.LoadX509KeyPair(certPath, keyPath); err != nil {
+		return fmt.Errorf("load agent client keypair: %w", err)
+	}
+	tlsCfg, err := mtlsTLSConfig(cfg)
+	if err != nil {
+		return err
+	}
+	if tlsCfg == nil {
+		return fmt.Errorf("deployment CA root not installed")
+	}
 	return nil
 }
 
-// enrollmentURL rewrites serverURL's port to the enrollment listener's port
-// (9444 by default — matches config.EnrollHTTPPort's orchestrator-side
-// default from Task 1). BAS_ENROLL_PORT overrides for non-default
-// deployments, mirroring how BAS_SERVER_URL itself is already overridable.
+// withServerURL returns cfg with ServerURL replaced, so a client built for
+// a specific target resolves its proxy for that target
+// (proxyAwareNetDialContext reads cfg.ServerURL's scheme to choose
+// HTTPS_PROXY vs HTTP_PROXY).
+func withServerURL(cfg Config, serverURL string) Config {
+	cfg.ServerURL = serverURL
+	return cfg
+}
+
+// enrollmentURL returns the initial-bootstrap endpoint for serverURL's host:
+// always https:// (the enrollment listener is TLS server-authenticated,
+// Task 7) on BAS_ENROLL_PORT or 9444, whatever scheme and port serverURL
+// itself carries -- a legacy http://host:9000 configuration included.
 func enrollmentURL(serverURL string) (string, error) {
-	port := os.Getenv("BAS_ENROLL_PORT")
-	if port == "" {
-		port = "9444"
+	host, _, _, err := splitServerURL(serverURL)
+	if err != nil {
+		return "", err
 	}
-	// serverURL is like "https://host:9443" (or "http://host:9000" for a
-	// still-legacy-configured agent) — swap only the port.
-	idx := strings.LastIndex(serverURL, ":")
-	if idx <= strings.Index(serverURL, "//")+2 { // no explicit port present
-		return serverURL + ":" + port, nil
+	return "https://" + net.JoinHostPort(host, enrollPort()), nil
+}
+
+// operationalURL returns the mTLS listener URL for serverURL's host, always
+// https://. The port is BAS_MTLS_PORT if set; otherwise serverURL's own
+// port when serverURL is already https:// on a port other than the
+// enrollment port (an https URL already names the orchestrator's HTTP_PORT,
+// i.e. the mTLS listener, possibly non-default); otherwise 9443 -- which
+// covers a legacy http:// URL (the plaintext :9000 listener, or a pre-TLS
+// http://host:9443 setting) and a URL pointing at the enrollment port.
+func operationalURL(serverURL string) (string, error) {
+	host, scheme, port, err := splitServerURL(serverURL)
+	if err != nil {
+		return "", err
 	}
-	return serverURL[:idx] + ":" + port, nil
+	switch p := os.Getenv("BAS_MTLS_PORT"); {
+	case p != "":
+		port = p
+	case scheme == "https" && port != "" && port != enrollPort():
+		// already the mTLS listener -- keep its port
+	default:
+		port = defaultMTLSPort
+	}
+	return "https://" + net.JoinHostPort(host, port), nil
+}
+
+func enrollPort() string {
+	if p := os.Getenv("BAS_ENROLL_PORT"); p != "" {
+		return p
+	}
+	return defaultEnrollPort
+}
+
+// splitServerURL parses serverURL with net/url (so IPv6 literals such as
+// https://[::1]:9443 are handled correctly) and returns its bare host (no
+// brackets), lower-cased scheme and port ("" if none).
+func splitServerURL(serverURL string) (host, scheme, port string, err error) {
+	u, err := url.Parse(serverURL)
+	if err != nil {
+		return "", "", "", fmt.Errorf("parse server URL %q: %w", serverURL, err)
+	}
+	host = u.Hostname()
+	if host == "" {
+		return "", "", "", fmt.Errorf("server URL %q has no host", serverURL)
+	}
+	return host, strings.ToLower(u.Scheme), u.Port(), nil
 }
 
 // bootstrapHTTPClient builds an *http.Client that trusts the deployment CA

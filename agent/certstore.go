@@ -8,7 +8,9 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
+	"errors"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"time"
@@ -85,13 +87,55 @@ func generateCSR(key *ecdsa.PrivateKey, agentID string) ([]byte, error) {
 	return pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE REQUEST", Bytes: der}), nil
 }
 
-// saveAgentCertificate persists a newly issued (or renewed) certificate.
+// saveAgentCertificate persists a newly issued (or renewed) certificate,
+// after confirming it is a parseable certificate bound to this agent's own
+// persisted private key. A certificate for any other key would be unusable
+// (tls.LoadX509KeyPair rejects the pair on the next handshake, far from the
+// cause) and would overwrite the still-good certificate on disk, so it is
+// rejected here instead, before anything is written.
 func saveAgentCertificate(certPEM []byte) error {
-	dir, _, certPath, _ := certPaths()
+	dir, _, certPath, keyPath := certPaths()
+	cert, err := parseCertificatePEM(certPEM)
+	if err != nil {
+		return fmt.Errorf("issued certificate: %w", err)
+	}
+	keyPEM, err := os.ReadFile(keyPath)
+	if err != nil {
+		return fmt.Errorf("read agent key %s to match against issued certificate: %w", keyPath, err)
+	}
+	block, _ := pem.Decode(keyPEM)
+	if block == nil {
+		return fmt.Errorf("decode agent key PEM %s: no PEM block found", keyPath)
+	}
+	key, err := x509.ParseECPrivateKey(block.Bytes)
+	if err != nil {
+		return fmt.Errorf("parse agent key %s: %w", keyPath, err)
+	}
+	certPub, ok := cert.PublicKey.(*ecdsa.PublicKey)
+	if !ok || !certPub.Equal(&key.PublicKey) {
+		return fmt.Errorf("issued certificate's public key does not match this agent's private key — refusing to persist it")
+	}
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		return fmt.Errorf("create cert dir %s: %w", dir, err)
 	}
 	return os.WriteFile(certPath, certPEM, 0644)
+}
+
+// parseCertificatePEM decodes the first PEM block in data, requires it to
+// be a CERTIFICATE, and parses it.
+func parseCertificatePEM(data []byte) (*x509.Certificate, error) {
+	block, _ := pem.Decode(data)
+	if block == nil {
+		return nil, fmt.Errorf("no PEM block found")
+	}
+	if block.Type != "CERTIFICATE" {
+		return nil, fmt.Errorf("PEM block is %q, want CERTIFICATE", block.Type)
+	}
+	cert, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		return nil, fmt.Errorf("parse certificate: %w", err)
+	}
+	return cert, nil
 }
 
 // saveDeploymentCARoot writes pemBytes to the canonical CA-root location
@@ -102,7 +146,15 @@ func saveAgentCertificate(certPEM []byte) error {
 // treatment (already applied by loadOrGenerateAgentKey's MkdirAll +
 // hardenCertDirPlatform, called here too in case --install runs before any
 // key operation has created the directory yet).
+//
+// pemBytes must parse as an X.509 certificate: a wrong file handed to
+// --ca-root (a key, a CSR, an HTML error page saved from a browser) is
+// rejected here at install time with a clear error, instead of surfacing
+// later as an opaque bootstrap failure on the service's first start.
 func saveDeploymentCARoot(pemBytes []byte) error {
+	if _, err := parseCertificatePEM(pemBytes); err != nil {
+		return fmt.Errorf("deployment CA root is not a valid PEM certificate: %w", err)
+	}
 	dir, caPath, _, _ := certPaths()
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		return fmt.Errorf("create cert dir %s: %w", dir, err)
@@ -129,14 +181,28 @@ func loadAgentCertificate() (*x509.Certificate, error) {
 	return x509.ParseCertificate(block.Bytes)
 }
 
-// mtlsTLSConfig builds the *tls.Config an already-enrolled agent uses for
-// both its HTTP client and its WS dialer: its own client certificate plus
-// the deployment CA root for verifying the orchestrator's server
-// certificate. Returns (nil, nil) — not an error — when no local
-// certificate exists yet, which callers (newAgent, connectWS) treat as
-// "fall back to the legacy plaintext + shared-secret path," since that's
-// the only option available to an agent that hasn't completed bootstrap
-// yet.
+// mtlsTLSConfig builds the *tls.Config the agent uses for its HTTP client,
+// log shipper and WS dialer: the deployment CA root for verifying the
+// orchestrator's server certificate, plus the agent's own client
+// certificate supplied through GetClientCertificate.
+//
+// The client certificate is deliberately NOT loaded here. GetClientCertificate
+// re-reads agent-cert.pem/agent-key.pem from disk on every handshake that
+// asks for a client certificate, so one *tls.Config built at any point --
+// including before the first bootstrap has produced a certificate at all --
+// presents whatever certificate is on disk at handshake time: the first one
+// right after bootstrap, and the new one right after a renewal, with no need
+// to rebuild clients or restart the process. If no certificate exists yet
+// at handshake time, that handshake fails with a descriptive error (there is
+// nothing to authenticate with before bootstrap completes). The enrollment
+// listener never requests a client certificate, so the callback is not
+// invoked there.
+//
+// Returns (nil, nil) only when the deployment CA root file does not exist:
+// without a trust anchor no chain-verified TLS connection to the
+// orchestrator is possible, so callers keep their default transport (the
+// legacy plaintext path). A CA root file that exists but does not parse is
+// an error.
 //
 // Verification deliberately mirrors agent/bootstrap.go's
 // bootstrapHTTPClient / verifyServerCertChain: the orchestrator's server
@@ -145,17 +211,16 @@ func loadAgentCertificate() (*x509.Certificate, error) {
 // hostname verification would fail every real handshake.
 // InsecureSkipVerify disables that default check; VerifyPeerCertificate
 // replaces it with real chain-to-trusted-CA verification (no hostname
-// check) via verifyServerCertChain — this is "verify the chain, skip the
+// check) via verifyServerCertChain -- this is "verify the chain, skip the
 // hostname," not "skip verification," and is the correct trust model for
 // this single-appliance deployment where the installer-distributed CA
 // root IS the trust anchor.
 func mtlsTLSConfig(cfg Config) (*tls.Config, error) {
-	cert, err := loadAgentCertificate()
-	if err != nil {
-		return nil, nil // no cert yet — legacy fallback, not an error
-	}
 	_, caPath, certPath, keyPath := certPaths()
 	caPEM, err := os.ReadFile(caPath)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, nil // no trust anchor installed -- legacy fallback, not an error
+	}
 	if err != nil {
 		return nil, fmt.Errorf("read deployment CA root: %w", err)
 	}
@@ -163,17 +228,37 @@ func mtlsTLSConfig(cfg Config) (*tls.Config, error) {
 	if !pool.AppendCertsFromPEM(caPEM) {
 		return nil, fmt.Errorf("parse deployment CA root: not valid PEM")
 	}
-	clientCert, err := tls.LoadX509KeyPair(certPath, keyPath)
-	if err != nil {
-		return nil, fmt.Errorf("load agent client keypair: %w", err)
-	}
-	_ = cert // already validated non-expired by ensureCertificate before this is called
 	return &tls.Config{
-		Certificates:          []tls.Certificate{clientCert},
+		GetClientCertificate: func(*tls.CertificateRequestInfo) (*tls.Certificate, error) {
+			clientCert, err := tls.LoadX509KeyPair(certPath, keyPath)
+			if err != nil {
+				return nil, fmt.Errorf("load agent client certificate (bootstrap not yet completed?): %w", err)
+			}
+			return &clientCert, nil
+		},
 		RootCAs:               pool,
 		InsecureSkipVerify:    true, // see agent/bootstrap.go's verifyServerCertChain doc comment: chain-only verification, hostname check is meaningless for this single-appliance deployment model
 		VerifyPeerCertificate: verifyServerCertChain(pool),
 	}, nil
+}
+
+// agentTLSConfig is what every long-lived client (newAgent's HTTP client,
+// the log shipper, the WS dialer) attaches: mtlsTLSConfig when cfg.MTLS
+// says ServerURL is the mTLS listener, otherwise nil (Go's default TLS
+// config -- the legacy path, unchanged). Because mtlsTLSConfig supplies the
+// client certificate through GetClientCertificate, the returned config
+// never goes stale: a renewed certificate is presented on the next
+// handshake without rebuilding any client.
+func agentTLSConfig(cfg Config) *tls.Config {
+	if !cfg.MTLS {
+		return nil
+	}
+	tlsCfg, err := mtlsTLSConfig(cfg)
+	if err != nil {
+		log.Printf("[!] mTLS config unavailable: %v", err)
+		return nil
+	}
+	return tlsCfg
 }
 
 // certExpiringSoon reports whether cert has crossed 75% of its total

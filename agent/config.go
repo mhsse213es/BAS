@@ -11,6 +11,12 @@ type Config struct {
 	AgentSecret   string // shared secret for X-Agent-Token + result HMAC signing
 	ProxyUser     string // forward-proxy username, Basic auth only (NTLM needs none)
 	ProxyPassword string // forward-proxy password, Basic auth only
+	// MTLS is set only by resolveOperationalConfig (bootstrap.go), after
+	// ensureCertificate confirmed a usable client certificate and rewrote
+	// ServerURL to the orchestrator's mTLS listener. Every client built from
+	// a Config (newAgent's HTTP client, the log shipper, the WS dialer)
+	// attaches mtlsTLSConfig exactly when this is true.
+	MTLS bool
 }
 
 func loadConfig() Config {

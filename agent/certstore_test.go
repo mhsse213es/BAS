@@ -1,6 +1,8 @@
 package main
 
 import (
+	"crypto/ecdsa"
+	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/x509"
 	"crypto/x509/pkix"
@@ -97,8 +99,9 @@ func TestSaveDeploymentCARoot_WritesToCanonicalPath(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("BAS_CERT_DIR", dir)
 
-	pem := []byte("-----BEGIN CERTIFICATE-----\nfakedata\n-----END CERTIFICATE-----\n")
-	if err := saveDeploymentCARoot(pem); err != nil {
+	ca := newTestCA(t)
+	caPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: ca.cert.Raw})
+	if err := saveDeploymentCARoot(caPEM); err != nil {
 		t.Fatalf("saveDeploymentCARoot: %v", err)
 	}
 	_, caPath, _, _ := certPaths()
@@ -106,7 +109,7 @@ func TestSaveDeploymentCARoot_WritesToCanonicalPath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read back CA root: %v", err)
 	}
-	if string(got) != string(pem) {
+	if string(got) != string(caPEM) {
 		t.Errorf("written content does not match input")
 	}
 }
@@ -130,4 +133,45 @@ func selfSignedTestCertPEM(t *testing.T, commonName string) []byte {
 		t.Fatalf("create self-signed test cert: %v", err)
 	}
 	return pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})
+}
+
+func TestSaveDeploymentCARoot_RejectsNonCertificateInput(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("BAS_CERT_DIR", dir)
+	key, _ := loadOrGenerateAgentKey()
+	keyDER, _ := x509.MarshalECPrivateKey(key)
+	for name, in := range map[string][]byte{
+		"not PEM":          []byte("<html>404 Not Found</html>"),
+		"garbage in block": []byte("-----BEGIN CERTIFICATE-----\nZmFrZWRhdGE=\n-----END CERTIFICATE-----\n"),
+		"private key":      pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: keyDER}),
+		"empty":            nil,
+	} {
+		if err := saveDeploymentCARoot(in); err == nil {
+			t.Errorf("%s: expected rejection", name)
+		}
+	}
+	_, caPath, _, _ := certPaths()
+	if _, err := os.Stat(caPath); err == nil {
+		t.Error("an invalid CA root was written to disk")
+	}
+}
+
+func TestSaveAgentCertificate_RejectsCertificateForDifferentKey(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("BAS_CERT_DIR", dir)
+	if _, err := loadOrGenerateAgentKey(); err != nil {
+		t.Fatalf("loadOrGenerateAgentKey: %v", err)
+	}
+	other, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	ca := newTestCA(t)
+	foreign := leafCertPEMForKeyPublic(t, ca, "abc123deadbeef01", other)
+	if err := saveAgentCertificate(foreign); err == nil {
+		t.Fatal("expected saveAgentCertificate to reject a certificate for a different key")
+	}
+	if _, err := loadAgentCertificate(); err == nil {
+		t.Error("the mismatched certificate was persisted")
+	}
+	if err := saveAgentCertificate([]byte("not a cert")); err == nil {
+		t.Error("expected saveAgentCertificate to reject non-PEM input")
+	}
 }

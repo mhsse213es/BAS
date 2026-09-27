@@ -57,8 +57,10 @@ func main() {
 				fmt.Fprintf(os.Stderr, "error: read --ca-root file: %v\n", err)
 				os.Exit(1)
 			}
+			// saveDeploymentCARoot validates that pemBytes parses as an
+			// X.509 certificate before writing anything.
 			if err := saveDeploymentCARoot(pemBytes); err != nil {
-				fmt.Fprintf(os.Stderr, "error: save CA root: %v\n", err)
+				fmt.Fprintf(os.Stderr, "error: --ca-root %s: %v\n", *flagCARoot, err)
 				os.Exit(1)
 			}
 			fmt.Println("[+] deployment CA root installed")
@@ -101,10 +103,13 @@ func main() {
 	platformPrintBannerExtras(id)
 	fmt.Printf("\n")
 
+	// Certificate bootstrap/renewal runs BEFORE newAgent: newAgent builds
+	// the long-lived HTTP client, log shipper and (via a.cfg) the WS dialer
+	// from cfg, so cfg must already carry the resolved mTLS ServerURL and
+	// MTLS flag -- building them first is what left a freshly bootstrapped
+	// agent with a non-mTLS client until restart.
+	cfg = resolveOperationalConfig(context.Background(), cfg, id.AgentID)
 	agent := newAgent(cfg, id)
-	if err := agent.ensureCertificate(context.Background()); err != nil {
-		log.Printf("[!] certificate bootstrap failed, falling back to legacy auth: %v", err)
-	}
 	agent.enrollWithServer()
 
 	go agent.connectWS()

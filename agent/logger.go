@@ -68,7 +68,7 @@ func NewLogger(cfg Config, agentID string) *Logger {
 		agentID:   agentID,
 		serverURL: cfg.ServerURL,
 		secret:    cfg.AgentSecret,
-		client:    &http.Client{Timeout: 15 * time.Second, Transport: &http.Transport{DialContext: proxyAwareNetDialContext(cfg), Proxy: nil}},
+		client:    &http.Client{Timeout: 15 * time.Second, Transport: &http.Transport{DialContext: proxyAwareNetDialContext(cfg), Proxy: nil, TLSClientConfig: agentTLSConfig(cfg)}},
 		buf:       make([]LogEvent, 0, logBufferCap),
 		files:     make(map[string]*os.File),
 		fileDay:   make(map[string]string),

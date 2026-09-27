@@ -99,11 +99,7 @@ var errDisableFailedForTest = errors.New("disable failed (test)")
 
 func newAgent(cfg Config, id Identity) *Agent {
 	transport := &http.Transport{DialContext: proxyAwareNetDialContext(cfg), Proxy: nil}
-	if tlsCfg, err := mtlsTLSConfig(cfg); err != nil {
-		log.Printf("[!] mTLS config unavailable, falling back to legacy auth: %v", err)
-	} else if tlsCfg != nil {
-		transport.TLSClientConfig = tlsCfg
-	}
+	transport.TLSClientConfig = agentTLSConfig(cfg)
 	a := &Agent{
 		cfg:       cfg,
 		id:        id,
@@ -1214,11 +1210,7 @@ func (a *Agent) connectWS() {
 	// wsJitter's full jitter is what keeps a server restart from bringing every
 	// agent back in lockstep.
 	dialer := &websocket.Dialer{HandshakeTimeout: 45 * time.Second, NetDialContext: proxyAwareNetDialContext(a.cfg)}
-	if tlsCfg, err := mtlsTLSConfig(a.cfg); err != nil {
-		log.Printf("[!] mTLS config unavailable, falling back to legacy auth: %v", err)
-	} else if tlsCfg != nil {
-		dialer.TLSClientConfig = tlsCfg
-	}
+	dialer.TLSClientConfig = agentTLSConfig(a.cfg) // GetClientCertificate re-reads the cert per handshake, so every reconnect picks up a renewal
 	attempt := 0
 	for {
 		conn, err := protocol.DialAgentWSWithDialer(a.cfg.ServerURL, a.id.AgentID, a.cfg.AgentSecret, dialer)
