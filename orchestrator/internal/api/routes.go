@@ -54,6 +54,7 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 	// When agentSecret is empty these remain open (backward compat).
 	r.Get("/api/agents/ping", h.PingAgent)
 	r.Post("/api/agents/enroll", h.EnrollAgent)
+	r.Post("/api/agents/enroll-csr", h.EnrollCSR)
 	r.Post("/api/agents/unenroll", h.UnenrollAgent)
 	r.Post("/api/agents/{agentId}/uninstall-result", h.UninstallAgentResult)
 	r.Post("/api/agents/events", h.ReceiveEvents)

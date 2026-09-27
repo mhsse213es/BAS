@@ -2,19 +2,11 @@
 package pki
 
 import (
-	"crypto/ecdsa"
-	"crypto/elliptic"
-	"crypto/rand"
 	"crypto/x509"
-	"crypto/x509/pkix"
 	"encoding/pem"
 	"testing"
 )
 
-// GenerateTestCSR mirrors what a real agent does in Task 8: generate an
-// ECDSA P-256 keypair locally and produce a CSR PEM for it. Exported (not
-// _test.go-only) so Task 5's handler test and Task 9's protocol test can
-// reuse it without duplicating CSR-construction code.
 func TestIssueClientCertificate_ValidCSR(t *testing.T) {
 	dir := t.TempDir()
 	ca, err := LoadOrGenerateCA(dir)
@@ -69,22 +61,4 @@ func TestIssueClientCertificate_RejectsMalformedCSR(t *testing.T) {
 			}
 		})
 	}
-}
-
-// GenerateTestCSR generates an ECDSA P-256 keypair and a CSR for it, the
-// same shape Task 8's real agent code produces. Exported for reuse by other
-// packages' tests (Task 5, Task 9) as well as within this package.
-func GenerateTestCSR(commonName string) ([]byte, error) {
-	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	if err != nil {
-		return nil, err
-	}
-	tmpl := &x509.CertificateRequest{
-		Subject: pkix.Name{CommonName: commonName},
-	}
-	der, err := x509.CreateCertificateRequest(rand.Reader, tmpl, key)
-	if err != nil {
-		return nil, err
-	}
-	return pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE REQUEST", Bytes: der}), nil
 }

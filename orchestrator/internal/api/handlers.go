@@ -46,6 +46,7 @@ import (
 	"github.com/audspect/bas/internal/license"
 	"github.com/audspect/bas/internal/models"
 	"github.com/audspect/bas/internal/notifications"
+	"github.com/audspect/bas/internal/pki"
 	"github.com/audspect/bas/internal/relationships"
 	"github.com/audspect/bas/internal/remediation"
 	"github.com/audspect/bas/internal/reporting"
@@ -85,7 +86,8 @@ type Handler struct {
 	// override it to avoid real HTTP calls.
 	actionVendorClient   func(actions.ConnectorConfig) (actions.VendorClient, error)
 	secret               string
-	agentSecret          string // optional shared secret for agent-facing endpoints
+	agentSecret          string  // optional shared secret for agent-facing endpoints
+	pki                  *pki.CA // deployment CA for agent mTLS enrollment (B1/B3)
 	calderaURL           string
 	calderaKey           string
 	iocProvider          ioc.Provider // nil when no OTX connector is configured
@@ -226,6 +228,14 @@ func (h *Handler) WithMetrics(reg *observability.MetricsRegistry) *Handler {
 // WithAgentSecret configures the optional agent shared secret.
 func (h *Handler) WithAgentSecret(s string) *Handler {
 	h.agentSecret = s
+	return h
+}
+
+// WithPKI configures the deployment CA used to issue agent mTLS client
+// certificates (B1/B3). Nil is valid (pre-migration deployments / tests
+// that don't exercise enrollment) -- EnrollCSR returns 503 in that case.
+func (h *Handler) WithPKI(ca *pki.CA) *Handler {
+	h.pki = ca
 	return h
 }
 
