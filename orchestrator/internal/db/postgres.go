@@ -98,6 +98,22 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		// docs/superpowers/specs/2026-09-05-phase0c-prerequisite-evaluation-design.md.
 		`ALTER TABLE agents ADD COLUMN IF NOT EXISTS domain_joined boolean`,
 
+		// Agent trust model (B1/B3) — tracks issued mTLS client certificates
+		// per agent. Used by the enrollment handler's bootstrap-reuse check
+		// (an AgentID with a valid, unexpired, non-revoked row here must
+		// renew via mTLS instead of re-bootstrapping with the shared secret)
+		// and by the admin UI's future cert-lifecycle visibility. See
+		// docs/superpowers/specs/2026-09-27-agent-trust-model-b1-b3-b4-design.md.
+		`CREATE TABLE IF NOT EXISTS agent_certificates (
+			serial_number text        PRIMARY KEY,
+			agent_id      text        NOT NULL,
+			issued_at     timestamptz NOT NULL DEFAULT NOW(),
+			expires_at    timestamptz NOT NULL,
+			revoked       boolean     NOT NULL DEFAULT false,
+			revoked_at    timestamptz
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_agent_certificates_agent_id ON agent_certificates(agent_id)`,
+
 		`CREATE TABLE IF NOT EXISTS scenario_runs (
 			id             text        PRIMARY KEY DEFAULT gen_random_uuid()::text,
 			scenario_id    text        NOT NULL,
