@@ -406,6 +406,7 @@ var publicRoutes = map[string]bool{
 	"DELETE /scim/v2/Users/{id}":                  true,
 	"GET /api/agents/ping":                        true,
 	"POST /api/agents/enroll":                     true,
+	"POST /api/agents/enroll-csr":                 true, // bootstrap secret or verified mTLS identity, never JWT
 	"POST /api/agents/unenroll":                   true,
 	"POST /api/agents/{agentId}/uninstall-result": true,
 	"POST /api/agents/events":                     true,
