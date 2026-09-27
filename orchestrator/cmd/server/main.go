@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"fmt"
 	"log"
 	"log/slog"
@@ -39,6 +41,7 @@ import (
 	"github.com/audspect/bas/internal/models"
 	"github.com/audspect/bas/internal/notifications"
 	"github.com/audspect/bas/internal/openaev"
+	"github.com/audspect/bas/internal/pki"
 	"github.com/audspect/bas/internal/relationships"
 	"github.com/audspect/bas/internal/remediation"
 	"github.com/audspect/bas/internal/reporting"
@@ -568,6 +571,11 @@ func main() {
 	license.StartMonitor(licenseMonitorCtx, cfg.LicensePath, 5*time.Minute, func() {
 		hub.CloseAllAgentConnections()
 	})
+	ca, err := pki.LoadOrGenerateCA(cfg.PKIDir)
+	if err != nil {
+		log.Fatalf("[FATAL] load/generate deployment CA: %v", err)
+	}
+
 	handler := api.New(pool, hub, engine, cfg.JWTSecret).
 		WithCaldera(cfg.CalderaURL, cfg.CalderaAPIKey).
 		WithART(artStore).
@@ -575,6 +583,7 @@ func main() {
 		WithContentSeed(cfg.ARTDir, cfg.ARTPayloadDir, cfg.KEVFile, cfg.ARTContentVersion).
 		WithEPSSFile(cfg.EPSSFile).
 		WithAgentSecret(cfg.AgentSecret).
+		WithPKI(ca).
 		WithMetricsToken(cfg.MetricsToken).
 		WithMetrics(exMetrics).
 		WithManifest(manifest).
@@ -770,8 +779,51 @@ func main() {
 		log.Println("[smtpsink] disabled via SMTP_SINK_ENABLED=false")
 	}
 
-	srv := &http.Server{
-		Addr:         fmt.Sprintf(":%d", cfg.HTTPPort),
+	clientCAPool := x509.NewCertPool()
+	clientCAPool.AddCert(ca.Certificate())
+	serverTLSCert, err := ca.TLSCertificate()
+	if err != nil {
+		log.Fatalf("[FATAL] build server TLS identity from CA: %v", err)
+	}
+
+	// 9443 — mandatory mTLS, canonical secure endpoint for enrolled agents
+	// (normal operation + certificate renewal). Never weaken this to
+	// VerifyClientCertIfGiven -- see spec Section 1.
+	mtlsHandler := api.WithMTLSIdentity(router)
+	mtlsSrv := &http.Server{
+		Addr:    fmt.Sprintf(":%d", cfg.HTTPPort),
+		Handler: mtlsHandler,
+		TLSConfig: &tls.Config{
+			Certificates: []tls.Certificate{serverTLSCert},
+			ClientAuth:   tls.RequireAndVerifyClientCert,
+			ClientCAs:    clientCAPool,
+		},
+		ReadTimeout:  30 * time.Second,
+		WriteTimeout: 90 * time.Second,
+		IdleTimeout:  120 * time.Second,
+	}
+
+	// 9444 — TLS server-authenticated only, NO client cert required.
+	// Permanent infrastructure for onboarding brand-new agents (not a
+	// migration bridge) -- see spec Section 1 for why this listener must
+	// exist even after B2 retires the legacy port.
+	enrollSrv := &http.Server{
+		Addr:    fmt.Sprintf(":%d", cfg.EnrollHTTPPort),
+		Handler: router,
+		TLSConfig: &tls.Config{
+			Certificates: []tls.Certificate{serverTLSCert},
+			ClientAuth:   tls.NoClientCert,
+		},
+		ReadTimeout:  30 * time.Second,
+		WriteTimeout: 90 * time.Second,
+		IdleTimeout:  120 * time.Second,
+	}
+
+	// 9000 — temporary legacy plaintext listener, unchanged behavior, for
+	// pre-migration agents only. Retired entirely by the separately-scoped
+	// B2 work.
+	legacySrv := &http.Server{
+		Addr:         fmt.Sprintf(":%d", cfg.LegacyHTTPPort),
 		Handler:      router,
 		ReadTimeout:  30 * time.Second,
 		WriteTimeout: 90 * time.Second,
@@ -779,9 +831,21 @@ func main() {
 	}
 
 	go func() {
-		log.Printf("[*] BAS Orchestrator listening on :%d", cfg.HTTPPort)
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("[FATAL] listen: %v", err)
+		log.Printf("[*] BAS Orchestrator mTLS listening on :%d", cfg.HTTPPort)
+		if err := mtlsSrv.ListenAndServeTLS("", ""); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("[FATAL] mTLS listen: %v", err)
+		}
+	}()
+	go func() {
+		log.Printf("[*] BAS Orchestrator enrollment listener on :%d", cfg.EnrollHTTPPort)
+		if err := enrollSrv.ListenAndServeTLS("", ""); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("[FATAL] enrollment listen: %v", err)
+		}
+	}()
+	go func() {
+		log.Printf("[*] BAS Orchestrator legacy listener on :%d (temporary — retired by B2)", cfg.LegacyHTTPPort)
+		if err := legacySrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("[FATAL] legacy listen: %v", err)
 		}
 	}()
 
@@ -793,8 +857,10 @@ func main() {
 	log.Println("[*] Shutting down gracefully...")
 	shutCtx, shutCancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer shutCancel()
-	if err := srv.Shutdown(shutCtx); err != nil {
-		log.Printf("[!] shutdown error: %v", err)
+	for _, s := range []*http.Server{mtlsSrv, enrollSrv, legacySrv} {
+		if err := s.Shutdown(shutCtx); err != nil {
+			log.Printf("[!] shutdown error: %v", err)
+		}
 	}
 	log.Println("[*] Server stopped.")
 }
