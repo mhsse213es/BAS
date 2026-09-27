@@ -3,6 +3,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"log"
@@ -88,6 +89,9 @@ func main() {
 	fmt.Printf("\n")
 
 	agent := newAgent(cfg, id)
+	if err := agent.ensureCertificate(context.Background()); err != nil {
+		log.Printf("[!] certificate bootstrap failed, falling back to legacy auth: %v", err)
+	}
 	agent.enrollWithServer()
 
 	go agent.connectWS()
