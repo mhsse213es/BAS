@@ -1208,7 +1208,7 @@ _package_config() {
   _resolve_license_file
   tar -cf "$out_file" -C "${DATA_DIR}" \
     --ignore-failed-read \
-    .env "${LICENSE_FILE}" certs scenarios docker-compose.yml 2>/dev/null || true
+    .env "${LICENSE_FILE}" certs scenarios docker-compose.yml pki 2>/dev/null || true
 }
 
 _write_backup_manifest() {
