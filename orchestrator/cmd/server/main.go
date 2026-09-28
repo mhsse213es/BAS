@@ -20,6 +20,7 @@ import (
 	"github.com/audspect/bas/config"
 	"github.com/audspect/bas/internal/api"
 	"github.com/audspect/bas/internal/auth"
+	"github.com/audspect/bas/internal/cmdsigning"
 	"github.com/audspect/bas/internal/observability"
 	"github.com/audspect/bas/internal/compliance"
 	"github.com/audspect/bas/internal/connector"
@@ -623,7 +624,33 @@ func main() {
 	// purely a relationship/aggregation layer over the Job Engine above.
 	initiativesStore := initiatives.NewStore(pool)
 
+	// Deployment command-signing key (B4) -- a separate trust domain from
+	// the mTLS deployment CA below: its own directory, its own
+	// generate-or-load call, its own fail-closed check. Must be ready
+	// before hub is constructed, since Hub signs every execution-triggering
+	// command it sends (internal/ws/hub.go's SendToAgent).
+	// SIGNING_DIR (no BAS_ prefix) mirrors config.go's PKI_DIR naming
+	// convention exactly -- verified against config/config.go:312 rather
+	// than assumed.
+	signingDir := os.Getenv("SIGNING_DIR")
+	if signingDir == "" {
+		signingDir = "/etc/audspect/signing"
+	}
+	signingKeyPath := filepath.Join(signingDir, "command-signing.key")
+	_, signingKeyStatErr := os.Stat(signingKeyPath)
+	signingKeyExistedBefore := signingKeyStatErr == nil
+
+	signingKey, err := cmdsigning.LoadOrGenerateSigningKey(signingDir)
+	if err != nil {
+		log.Fatalf("load/generate command-signing key: %v", err)
+	}
+	if err := checkSigningKeyNotSilentlyRotated(context.Background(), pool, signingKeyExistedBefore); err != nil {
+		log.Fatalf("%v", err)
+	}
+	log.Printf("[*] command-signing key ready: %s", signingKey.KeyID())
+
 	hub := ws.NewHub()
+	hub.SetSigner(signingKey.PrivateKey())
 	licenseMonitorCtx, licenseMonitorCancel := context.WithCancel(context.Background())
 	defer licenseMonitorCancel()
 	license.StartMonitor(licenseMonitorCtx, cfg.LicensePath, 5*time.Minute, func() {

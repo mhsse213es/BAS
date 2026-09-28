@@ -1,6 +1,7 @@
 package ws
 
 import (
+	"crypto/rsa"
 	"encoding/json"
 	"log"
 	"net/http"
@@ -34,6 +35,7 @@ type Hub struct {
 	mu       sync.RWMutex
 	agents   map[string]*conn // agentID → connection
 	browsers []*conn
+	signer   *rsa.PrivateKey // deployment command-signing key (B4) -- see internal/cmdsigning. Set via SetSigner, read by SendToAgent starting in Task 5.
 }
 
 type conn struct {
@@ -41,9 +43,27 @@ type conn struct {
 	send chan []byte
 }
 
-// NewHub creates a ready-to-use Hub.
+// NewHub creates a ready-to-use Hub with no command-signing key. Kept
+// zero-arg deliberately: hundreds of existing test call sites across this
+// module construct a Hub with ws.NewHub() and never exercise command
+// signing at all -- changing this signature would force touching every
+// one of them for no benefit. Production wiring calls SetSigner once,
+// right after construction (see cmd/server/main.go).
 func NewHub() *Hub {
 	return &Hub{agents: make(map[string]*conn)}
+}
+
+// SetSigner installs the deployment command-signing private key
+// (internal/cmdsigning.SigningKey.PrivateKey()) -- never the vendor
+// scenario-signing key, which this package never imports or references.
+// A Hub with no signer set (the zero value, nil) signs nothing;
+// SendToAgent (Task 5) must treat that as a hard error for in-scope
+// command types, not a silent no-op, since an unsigned "signed" command
+// type reaching the wire would defeat the whole point of this mechanism.
+func (h *Hub) SetSigner(signer *rsa.PrivateKey) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.signer = signer
 }
 
 // ServeAgentWS upgrades an agent's HTTP connection to WebSocket.
