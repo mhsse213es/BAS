@@ -668,7 +668,7 @@ mode_install() {
   fi
 
   step "3/10  Creating data directories"
-  mkdir -p "${DATA_DIR}"/{data/postgres,logs,backups,scenarios,wwwroot,art-payloads,sharphound,pki,certs}
+  mkdir -p "${DATA_DIR}"/{data/postgres,logs,backups,scenarios,wwwroot,art-payloads,sharphound,pki,certs,signing}
   chmod 750 "${DATA_DIR}"
   # scenarios is written by the orchestrator container (runs as UID 65532 -distroless nonroot).
   # Without this the UI cannot create or save custom scenarios.
@@ -683,6 +683,12 @@ mode_install() {
   # it doesn't need the same treatment.
   chown 65532:65532 "${DATA_DIR}/pki"
   chmod 700 "${DATA_DIR}/pki"
+  # signing holds the deployment command-signing key (B4) -- independent
+  # lifecycle from pki's CA above, but needs the identical nonroot-writable
+  # treatment for the identical reason: the orchestrator container (UID
+  # 65532) generates/persists it via the ./signing bind mount.
+  chown 65532:65532 "${DATA_DIR}/signing"
+  chmod 700 "${DATA_DIR}/signing"
   log "Created: ${DATA_DIR}"
 
   step "4/10  Loading Docker images (air-gap safe -no pull)"
@@ -845,9 +851,13 @@ mode_upgrade() {
   # root-owned directory the orchestrator (UID 65532) cannot write the CA
   # into, and the container crash-loops. Safe to re-run on every upgrade:
   # mkdir -p and chown are both no-ops once ownership is already correct.
-  mkdir -p "${DATA_DIR}"/{pki,certs}
+  # signing gets the identical treatment for the identical reason -- an
+  # upgrade from a pre-B4 install has never had a signing/ directory either.
+  mkdir -p "${DATA_DIR}"/{pki,certs,signing}
   chown 65532:65532 "${DATA_DIR}/pki"
   chmod 700 "${DATA_DIR}/pki"
+  chown 65532:65532 "${DATA_DIR}/signing"
+  chmod 700 "${DATA_DIR}/signing"
   _resolve_license_file
   [[ -f "$LIC_PATH" ]] && { cp "$LIC_PATH" "${DATA_DIR}/${LICENSE_FILE}"; chmod 644 "${DATA_DIR}/${LICENSE_FILE}"; }
   cp "${SCRIPT_DIR}/docker-compose.yml" "${DATA_DIR}/docker-compose.yml"
@@ -1235,7 +1245,7 @@ _package_config() {
   _resolve_license_file
   tar -cf "$out_file" -C "${DATA_DIR}" \
     --ignore-failed-read \
-    .env "${LICENSE_FILE}" certs scenarios docker-compose.yml pki 2>/dev/null || true
+    .env "${LICENSE_FILE}" certs scenarios docker-compose.yml pki signing 2>/dev/null || true
 }
 
 _write_backup_manifest() {

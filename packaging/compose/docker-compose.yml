@@ -199,6 +199,11 @@ services:
       # already-issued agent certificate AND every agent's locally-cached CA
       # root fingerprint -- a fleet-wide lockout, not just data loss.
       - ./pki:/etc/audspect/pki
+      # Deployment command-signing key (B4) -- independent trust domain
+      # and lifecycle from pki's CA above (never chained to it), but the
+      # identical bind-mount treatment: a host path the orchestrator
+      # container (UID 65532) generates/persists into directly.
+      - ./signing:/etc/audspect/signing
       # Operator-supplied TLS certificate for the browser dashboard
       # (BAS_TLS=true in setup.conf) -- install.sh already copies TLS_CERT/
       # TLS_KEY here (${DATA_DIR}/certs/bas.crt|bas.key); read-only, the
