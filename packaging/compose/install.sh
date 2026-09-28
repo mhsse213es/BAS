@@ -40,6 +40,9 @@ ZKTftlLSAELFxhi81iDw7789G53Ur0+PQTcf9wCVFAPFk7DjCykHNcMf3c05vTdn
 readonly PRODUCT="Audspect BAS"
 readonly DEFAULT_DATA_DIR="/opt/audspect"
 readonly DEFAULT_PORT="9443"
+readonly DEFAULT_ENROLL_PORT="9444"
+readonly DEFAULT_LEGACY_PORT="9000"
+readonly DEFAULT_DASHBOARD_PORT="9543"
 readonly MIN_RAM_MB=3800
 readonly MIN_DISK_MB=10240        # 10 GB -images + DB + logs
 readonly MIN_CPU_CORES=2
@@ -141,6 +144,9 @@ fi
 # ── Config variables (populated by load_config) ───────────────────────────────
 DATA_DIR=""
 BAS_PORT=""
+BAS_ENROLL_PORT=""
+BAS_LEGACY_PORT=""
+BAS_DASHBOARD_PORT=""
 DNS_SINK_BIND_IP=""
 BAS_TLS=""
 TLS_CERT=""
@@ -191,6 +197,9 @@ load_config() {
     case "$key" in
       DATA_DIR)             DATA_DIR="$val"             ;;
       BAS_PORT)             BAS_PORT="$val"             ;;
+      BAS_ENROLL_PORT)      BAS_ENROLL_PORT="$val"      ;;
+      BAS_LEGACY_PORT)      BAS_LEGACY_PORT="$val"      ;;
+      BAS_DASHBOARD_PORT)   BAS_DASHBOARD_PORT="$val"   ;;
       DNS_SINK_BIND_IP)     DNS_SINK_BIND_IP="$val"     ;;
       BAS_TLS)              BAS_TLS="$val"              ;;
       TLS_CERT)             TLS_CERT="$val"             ;;
@@ -220,6 +229,9 @@ load_config() {
   # Defaults
   [[ -z "$DATA_DIR"           ]] && DATA_DIR="$DEFAULT_DATA_DIR"
   [[ -z "$BAS_PORT"           ]] && BAS_PORT="$DEFAULT_PORT"
+  [[ -z "$BAS_ENROLL_PORT"    ]] && BAS_ENROLL_PORT="$DEFAULT_ENROLL_PORT"
+  [[ -z "$BAS_LEGACY_PORT"    ]] && BAS_LEGACY_PORT="$DEFAULT_LEGACY_PORT"
+  [[ -z "$BAS_DASHBOARD_PORT" ]] && BAS_DASHBOARD_PORT="$DEFAULT_DASHBOARD_PORT"
   # Auto-detect the DNS sink's bind IP: first non-loopback address `hostname
   # -I` reports. Deliberately NOT a route-lookup (e.g. `ip route get`) --
   # this must work identically on air-gapped hosts with no route to the
@@ -644,11 +656,21 @@ mode_install() {
   fi
 
   step "3/10  Creating data directories"
-  mkdir -p "${DATA_DIR}"/{data/postgres,logs,backups,scenarios,wwwroot,art-payloads,sharphound}
+  mkdir -p "${DATA_DIR}"/{data/postgres,logs,backups,scenarios,wwwroot,art-payloads,sharphound,pki,certs}
   chmod 750 "${DATA_DIR}"
   # scenarios is written by the orchestrator container (runs as UID 65532 -distroless nonroot).
   # Without this the UI cannot create or save custom scenarios.
   chown -R 65532:65532 "${DATA_DIR}/scenarios"
+  # pki holds the deployment CA (agent mTLS trust root) -- the orchestrator
+  # container writes it (same UID 65532 nonroot user as above) via the
+  # ./pki:/etc/audspect/pki bind mount in docker-compose.yml. A host
+  # directory created here while running as root (this script requires
+  # sudo) defaults to root ownership, which UID 65532 cannot write into
+  # without this chown. certs is read-only from the container's side and
+  # only ever written by this script itself (BAS_TLS=true path below), so
+  # it doesn't need the same treatment.
+  chown 65532:65532 "${DATA_DIR}/pki"
+  chmod 700 "${DATA_DIR}/pki"
   log "Created: ${DATA_DIR}"
 
   step "4/10  Loading Docker images (air-gap safe -no pull)"
@@ -751,6 +773,29 @@ mode_upgrade() {
     err "No existing installation found at ${DATA_DIR}."
     info "Run --install to perform a fresh installation."
     exit 1
+  fi
+
+  # Detect an upgrade FROM a pre-mTLS install: BAS_ENROLL_PORT's absence
+  # from the existing .env means the current deployment predates the
+  # four-listener topology, so every enrolled agent is still configured
+  # for http://<host>:9443 in plaintext. After this upgrade, 9443 requires
+  # a client certificate -- those agents go dark unless repointed to the
+  # new legacy listener (:9000) BEFORE this upgrade runs. See
+  # docs/guides/upgrade-guide.md's migration-runbook section.
+  if [[ -f "${DATA_DIR}/.env" ]] && ! grep -q '^BAS_ENROLL_PORT=' "${DATA_DIR}/.env"; then
+    warn "This upgrade moves your existing deployment to a new per-agent mTLS"
+    warn "trust model. Your CURRENT fleet is configured for plaintext"
+    warn "http://<host>:9443 -- after this upgrade, that port requires a"
+    warn "client certificate and those agents will go dark."
+    warn ""
+    warn "Read the migration section in docs/guides/upgrade-guide.md and"
+    warn "repoint your existing agents to :9000 BEFORE proceeding, or they"
+    warn "will lose connectivity until manually reconfigured."
+    if ! $YES; then
+      warn ""
+      read -rp "Have you already repointed the existing fleet to :9000? [yes/N] " confirm
+      [[ "$confirm" == "yes" ]] || { err "Upgrade aborted -- repoint the fleet first (or re-run with --yes), then re-run --upgrade."; exit 1; }
+    fi
   fi
 
   step "1/5  Backup current installation"
@@ -1087,6 +1132,19 @@ _resolve_license_file() {
 
 _write_env() {
   local env_file="${DATA_DIR}/.env"
+  # In-container paths for the operator-supplied dashboard TLS cert -- only
+  # set when BAS_TLS=true, so docker-compose.yml's TLS_CERT/TLS_KEY env vars
+  # (sourced from these, via ${TLS_CERT_CONTAINER_PATH:-}) stay empty
+  # otherwise and config.go's DashboardTLSCertPath/DashboardTLSKeyPath
+  # correctly default empty too, falling back to the deployment CA's own
+  # certificate. Distinct var names from the existing TLS_CERT/TLS_KEY keys
+  # below (which hold the HOST paths install.sh itself validates/copies
+  # from) -- compose reads THESE for the in-container path instead.
+  local tls_cert_container_path="" tls_key_container_path=""
+  if [[ "$BAS_TLS" == "true" ]]; then
+    tls_cert_container_path="/etc/bas/certs/bas.crt"
+    tls_key_container_path="/etc/bas/certs/bas.key"
+  fi
   cat > "$env_file" << EOF
 # Audspect BAS -Runtime environment
 # Generated by install.sh -do not edit manually.
@@ -1108,10 +1166,15 @@ BAS_ADMIN_PASSWORD=${ADMIN_PASSWORD}
 BAS_ADMIN_EMAIL=${ADMIN_EMAIL}
 LICENSE_FILE=${LICENSE_FILE:-bas.lic}
 BAS_PORT=${BAS_PORT}
+BAS_ENROLL_PORT=${BAS_ENROLL_PORT}
+BAS_LEGACY_PORT=${BAS_LEGACY_PORT}
+BAS_DASHBOARD_PORT=${BAS_DASHBOARD_PORT}
 DNS_SINK_BIND_IP=${DNS_SINK_BIND_IP}
 BAS_TLS=${BAS_TLS}
 TLS_CERT=${TLS_CERT:-}
 TLS_KEY=${TLS_KEY:-}
+TLS_CERT_CONTAINER_PATH=${tls_cert_container_path}
+TLS_KEY_CONTAINER_PATH=${tls_key_container_path}
 DATA_DIR=${DATA_DIR}
 LOG_RETENTION_DAYS=${LOG_RETENTION_DAYS}
 SHARPHOUND_DIR=${DATA_DIR}/sharphound
@@ -1377,7 +1440,7 @@ mode_restore() {
   _wait_healthy
 
   step "8/8  Health check"
-  if curl -fsSk "https://localhost:${BAS_PORT:-9443}/health" >/dev/null 2>&1 || curl -fs "http://localhost:${BAS_PORT:-9443}/health" >/dev/null 2>&1; then
+  if curl -fsSk "https://localhost:${BAS_ENROLL_PORT:-9444}/health" >/dev/null 2>&1; then
     log "Restore complete and healthy."
   else
     err "Restore finished but health check failed -- inspect 'docker compose logs orchestrator'."
@@ -1483,11 +1546,14 @@ _diagnose_orchestrator_failure() {
 
 _create_admin() {
   # Give the orchestrator a moment then POST the admin user via its internal API.
-  local url="http://localhost:${BAS_PORT}/api/auth/setup"
+  # Dashboard listener (Task 2/4 of the deployment-topology plan) is always
+  # TLS, self-signed against the deployment CA by default -- -k skips
+  # verification, same reasoning as the enrollment-listener health probe.
+  local url="https://localhost:${BAS_DASHBOARD_PORT:-9543}/api/auth/setup"
   local attempts=0
   while [[ $attempts -lt 5 ]]; do
     local http
-    http=$(curl -sf -o /dev/null -w "%{http_code}" -X POST "$url" \
+    http=$(curl -sfk -o /dev/null -w "%{http_code}" -X POST "$url" \
       -H "Content-Type: application/json" \
       -d "{\"email\":\"${ADMIN_EMAIL}\",\"password\":\"${ADMIN_PASSWORD}\"}" 2>/dev/null || echo "000")
     if [[ "$http" == "200" || "$http" == "201" || "$http" == "409" ]]; then
@@ -1509,7 +1575,10 @@ _write_install_log() {
     echo "Version   : ${BAS_VERSION}"
     echo "Host      : $(hostname -f 2>/dev/null || hostname)"
     echo "Data dir  : ${DATA_DIR}"
-    echo "Port      : ${BAS_PORT}"
+    echo "mTLS port (agents)     : ${BAS_PORT}"
+    echo "Enroll port (agents)   : ${BAS_ENROLL_PORT}"
+    echo "Legacy port (agents)   : ${BAS_LEGACY_PORT}"
+    echo "Dashboard port         : ${BAS_DASHBOARD_PORT}"
     echo "TLS       : ${BAS_TLS}"
     echo "Admin     : ${ADMIN_EMAIL}"
     echo "Docker CE : ${docker_note}"
@@ -1518,12 +1587,16 @@ _write_install_log() {
 }
 
 _print_access_info() {
-  local proto="http"
-  [[ "$BAS_TLS" == "true" ]] && proto="https"
   local host
   host=$(hostname -f 2>/dev/null || hostname)
   echo ""
-  echo "  Access dashboard : ${proto}://${host}:${BAS_PORT}"
+  echo "  Access dashboard : https://${host}:${BAS_DASHBOARD_PORT:-9543}"
+  if [[ "$BAS_TLS" != "true" ]]; then
+    echo "                     (your browser will show a certificate warning on first"
+    echo "                     visit -- the dashboard uses a self-signed certificate by"
+    echo "                     default; this is expected. Set TLS_CERT/TLS_KEY in"
+    echo "                     setup.conf to use a properly-trusted certificate instead.)"
+  fi
   echo "  Admin login      : ${ADMIN_EMAIL}"
   echo "  Install log      : ${DATA_DIR}/install.log"
   echo ""
