@@ -26,12 +26,65 @@ Audspect BAS upgrades are delivered as a new versioned delivery ZIP (`bas-instal
 ## Before You Upgrade
 
 - [ ] Locate your original `setup.conf` (the config file used for `--install`, or reconstruct one — see [setup.conf reference](#setupconf-reference) below). `--upgrade` requires it.
-- [ ] Take an extra full database dump as a second safety net on top of `install.sh`'s own automatic config backup (see Step 1 below) — `install.sh`'s backup covers `docker-compose.yml`/`.env`/version, not the database contents itself (those live in the persistent Postgres volume, which the upgrade never touches directly, but a standalone dump is cheap insurance)
+- [ ] Take an extra full database dump as a second safety net on top of `install.sh`'s own automatic config backup (see Step 1 below) — `install.sh`'s upgrade-time backup covers `docker-compose.yml`/`.env`/version, not the database contents itself (those live in the persistent Postgres volume, which the upgrade never touches directly, but a standalone dump is cheap insurance)
+- [ ] If this upgrade crosses into the mTLS agent trust model (see the section immediately below), also run a real `sudo bash install.sh --backup` beforehand — this is a separate, encrypted, retention-managed mechanism (distinct from the small automatic config backup `--upgrade` always takes) that includes the deployment CA alongside the database and config, and is the right thing to restore from if anything about the CA goes wrong during or after this upgrade
 - [ ] Note the current version: `sudo bash install.sh --status`
 - [ ] Read the [Release Notes](release-notes.md) for the target version — specifically **Breaking Changes** and **Migration Notes**
 - [ ] Confirm you have the new delivery ZIP: `bas-install-<version>.zip`
 - [ ] Schedule during a low-activity window — the orchestrator is offline for a few minutes during the rolling restart
 - [ ] Agents will reconnect automatically once the orchestrator is back up
+
+---
+
+## ⚠ Upgrading From a Pre-mTLS Install (v1.7.5 and earlier's single-listener topology)
+
+If your current deployment predates this platform's per-agent mTLS trust
+model, every enrolled agent is configured to talk to `http://<host>:9443`
+in plaintext. After this upgrade, port 9443 requires a client certificate
+-- a plaintext request to it fails outright, and existing agent binaries
+have no built-in awareness of the new port layout to fall back to
+automatically. Skipping the steps below will disconnect your entire fleet
+until each agent is manually repointed. `install.sh --upgrade` detects this
+case automatically (checking for `BAS_ENROLL_PORT` in your existing `.env`)
+and will warn you before proceeding -- but read this section first so you
+know what to do about it.
+
+**Do this BEFORE running `install.sh --upgrade`:**
+
+1. Repoint every existing agent's configured server URL from
+   `http://<host>:9443` to `http://<host>:9000` (the new temporary legacy
+   listener this upgrade publishes) -- this works against your CURRENT,
+   not-yet-upgraded orchestrator, since it doesn't care what port number
+   the agent uses as long as it's reachable. Per-platform:
+   ```bash
+   # Re-run the agent installer with the new URL (Linux/macOS)
+   sudo ./bas-agent --install --server http://<host>:9000
+   ```
+   ```powershell
+   # Windows: re-run the installer with the new URL, or edit the service
+   # config directly and restart the BAS Agent service
+   ```
+2. Confirm agents are checking in against the *current* orchestrator on
+   `:9000` before proceeding (Agents page in the dashboard, or
+   `docker logs audspect-orchestrator | grep enroll`).
+3. **Now** run `install.sh --upgrade --config setup.conf` as normal (Step 3
+   below). All four listeners come up; your already-repointed agents keep
+   working unaffected on `:9000`.
+4. New agent installs, from this point on, enroll via the new mTLS flow
+   automatically (`--ca-root` flag, bundled CA root + bootstrap secret) --
+   no `:9000` involvement.
+5. Existing agents migrate off `:9000` automatically on their *next binary
+   upgrade* (agents already re-enroll on every upgrade) -- no further
+   manual action needed per-agent.
+6. `:9000` traffic is logged distinctly in the orchestrator's logs
+   (`legacy_listener_requests_total` metric / `"legacy listener request"`
+   log lines) -- use this to confirm when migration is complete (zero
+   remaining `:9000` traffic) before a future release retires it entirely.
+
+**If you're already running a version with the four-listener topology**
+(i.e. this isn't your first upgrade since mTLS was introduced), skip this
+section -- your agents are already using the new topology and this
+upgrade is routine.
 
 ---
 
@@ -85,11 +138,14 @@ If you don't have your original `setup.conf` handy, see [setup.conf reference](#
 sudo bash install.sh --status
 ```
 
-Expected output shows all containers running (`audspect-orchestrator`, `audspect-caldera`, `audspect-postgres`, `audspect-chrome`), the new version number, and the listening port (default `9443`).
+Expected output shows all containers running (`audspect-orchestrator`, `audspect-caldera`, `audspect-postgres`, `audspect-chrome`), the new version number, and the four listener ports (defaults `9443`/`9444`/`9000`/`9543`).
 
 ```bash
-# Health check directly (add -k and use https:// if you enabled BAS_TLS in setup.conf)
-curl -sf http://localhost:9443/health
+# Health check directly -- port 9443 now requires a client certificate
+# (per-agent mTLS), so it's no longer the right port for a manual health
+# check. Use the enrollment listener's unauthenticated /health instead
+# (self-signed cert against the deployment CA by default, hence -k).
+curl -sfk https://localhost:9444/health
 
 # Check logs for errors
 docker logs audspect-orchestrator --tail=50
@@ -175,8 +231,11 @@ sudo bash install.sh --rollback
 | Key | Required | Default | Description |
 |---|---|---|---|
 | `DATA_DIR` | | `/opt/audspect` | Installation directory |
-| `BAS_PORT` | | `9443` | Dashboard/API listening port |
-| `BAS_TLS` | | `false` | Enable TLS termination |
+| `BAS_PORT` | | `9443` | mTLS agent traffic port (no browser access -- requires a client certificate) |
+| `BAS_ENROLL_PORT` | | `9444` | New-agent enrollment + healthcheck port |
+| `BAS_LEGACY_PORT` | | `9000` | Temporary, pre-migration agent traffic |
+| `BAS_DASHBOARD_PORT` | | `9543` | Browser dashboard access port |
+| `BAS_TLS` | | `false` | Use a properly-trusted certificate on `BAS_DASHBOARD_PORT` instead of the deployment CA's self-signed one |
 | `TLS_CERT` / `TLS_KEY` | if `BAS_TLS=true` | | Certificate/key paths |
 | `DB_PASSWORD` | yes | | Postgres password (only used if no existing `.env` is found) |
 | `ADMIN_EMAIL` | yes | | Initial admin account email |
