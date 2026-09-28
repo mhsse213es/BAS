@@ -1,13 +1,22 @@
 package main
 
 import (
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
 	"crypto/tls"
 	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/pem"
+	"math/big"
 	"net"
 	"net/http"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
+	"github.com/audspect/bas/config"
 	"github.com/audspect/bas/internal/pki"
 )
 
@@ -102,3 +111,100 @@ type httptestServer struct {
 }
 
 func (s *httptestServer) Close() { s.srv.Close() }
+
+// TestDashboardListener_AcceptsNoClientCert confirms the new dashboard
+// listener, like the enrollment listener, completes a TLS handshake with
+// NO client certificate presented -- a browser has none, and this listener
+// must not require one (that's the whole reason it exists separately from
+// the mTLS listener).
+func TestDashboardListener_AcceptsNoClientCert(t *testing.T) {
+	dir := t.TempDir()
+	ca, err := pki.LoadOrGenerateCA(dir)
+	if err != nil {
+		t.Fatalf("LoadOrGenerateCA: %v", err)
+	}
+	serverCert, err := ca.TLSCertificate()
+	if err != nil {
+		t.Fatalf("TLSCertificate: %v", err)
+	}
+	pool := x509.NewCertPool()
+	pool.AddCert(ca.Certificate())
+
+	dashboardSrv := newTLSListenerForTest(t, serverCert, tls.NoClientCert, pool)
+	defer dashboardSrv.Close()
+
+	clientCfg := &tls.Config{InsecureSkipVerify: true} // no SANs on the CA's own cert, see existing tests in this file
+	if _, err := tls.DialWithDialer(&net.Dialer{Timeout: 2 * time.Second}, "tcp", dashboardSrv.Listener.Addr().String(), clientCfg); err != nil {
+		t.Errorf("dashboard listener rejected a no-client-cert handshake: %v", err)
+	}
+}
+
+// TestResolveDashboardTLSCert_FallsBackToCAWhenNoCustomCertConfigured pins
+// the Review Focus item: BAS_TLS=false (the default -- no TLS_CERT/TLS_KEY
+// configured) must make the dashboard listener use the CA's own
+// certificate, not fail to start or use a zero-value tls.Certificate.
+func TestResolveDashboardTLSCert_FallsBackToCAWhenNoCustomCertConfigured(t *testing.T) {
+	dir := t.TempDir()
+	ca, err := pki.LoadOrGenerateCA(dir)
+	if err != nil {
+		t.Fatalf("LoadOrGenerateCA: %v", err)
+	}
+	fallback, err := ca.TLSCertificate()
+	if err != nil {
+		t.Fatalf("TLSCertificate: %v", err)
+	}
+
+	got, err := resolveDashboardTLSCert(config.Config{}, fallback) // no DashboardTLSCertPath/DashboardTLSKeyPath set
+	if err != nil {
+		t.Fatalf("resolveDashboardTLSCert: %v", err)
+	}
+	if len(got.Certificate) == 0 || string(got.Certificate[0]) != string(fallback.Certificate[0]) {
+		t.Error("expected the CA's own certificate to be used when no custom cert is configured")
+	}
+}
+
+// TestResolveDashboardTLSCert_UsesCustomCertWhenConfigured pins the other
+// half: when TLS_CERT/TLS_KEY ARE configured (BAS_TLS=true), the dashboard
+// listener must use that certificate, not the CA's.
+func TestResolveDashboardTLSCert_UsesCustomCertWhenConfigured(t *testing.T) {
+	dir := t.TempDir()
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatalf("generate key: %v", err)
+	}
+	tmpl := &x509.Certificate{
+		SerialNumber: big.NewInt(1),
+		Subject:      pkix.Name{CommonName: "custom-dashboard-cert"},
+		NotBefore:    time.Now(),
+		NotAfter:     time.Now().Add(24 * time.Hour),
+	}
+	der, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &key.PublicKey, key)
+	if err != nil {
+		t.Fatalf("create cert: %v", err)
+	}
+	certPath := filepath.Join(dir, "custom.crt")
+	keyPath := filepath.Join(dir, "custom.key")
+	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})
+	keyDER, err := x509.MarshalECPrivateKey(key)
+	if err != nil {
+		t.Fatalf("marshal key: %v", err)
+	}
+	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: keyDER})
+	if err := os.WriteFile(certPath, certPEM, 0644); err != nil {
+		t.Fatalf("write cert: %v", err)
+	}
+	if err := os.WriteFile(keyPath, keyPEM, 0600); err != nil {
+		t.Fatalf("write key: %v", err)
+	}
+
+	fallback := tls.Certificate{Certificate: [][]byte{[]byte("not-the-real-fallback")}}
+	cfg := config.Config{DashboardTLSCertPath: certPath, DashboardTLSKeyPath: keyPath}
+
+	got, err := resolveDashboardTLSCert(cfg, fallback)
+	if err != nil {
+		t.Fatalf("resolveDashboardTLSCert: %v", err)
+	}
+	if string(got.Certificate[0]) == "not-the-real-fallback" {
+		t.Error("expected the custom cert to be used, got the fallback")
+	}
+}

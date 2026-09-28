@@ -67,21 +67,34 @@ import (
 var Version = "dev"
 
 // runHealthcheck is invoked as `orchestrator --healthcheck` by Docker's
-// container HEALTHCHECK (packaging/compose/docker-compose.yml). The image
-// is gcr.io/distroless/static-debian12 -- no shell, no wget/curl -- so a
-// CMD-SHELL-style "wget ... || exit 1" check can never run at all; it must
-// be the binary checking itself in-process via an argv flag (array-form
-// CMD, no shell involved). Reads HTTP_PORT directly rather than going
-// through config.Load(), since that requires DATABASE_URL/JWT_SECRET this
+// container HEALTHCHECK (packaging/compose/docker-compose.yml). Probes the
+// enrollment listener (:9444), not the mTLS listener (:9443) -- 9443
+// requires a client certificate, which this in-process self-check has no
+// way to present, so a probe against it would always report unhealthy
+// regardless of real app health. GET /health on 9444 is unauthenticated by
+// design (api.MountEnrollment). The image is gcr.io/distroless/
+// static-debian12 -- no shell, no wget/curl -- so this must be the binary
+// checking itself in-process via an argv flag (array-form CMD, no shell
+// involved). Reads HTTP_PORT_ENROLL directly rather than going through
+// config.Load(), since that requires DATABASE_URL/JWT_SECRET this
 // short-lived self-check has no need for. Returns a process exit code (0 =
 // healthy) -- that exit code is the only signal Docker's HEALTHCHECK reads.
 func runHealthcheck() int {
-	port := 9000
-	if v := os.Getenv("HTTP_PORT"); v != "" {
+	port := 9444
+	if v := os.Getenv("HTTP_PORT_ENROLL"); v != "" {
 		fmt.Sscanf(v, "%d", &port)
 	}
-	client := &http.Client{Timeout: 3 * time.Second}
-	resp, err := client.Get(fmt.Sprintf("http://127.0.0.1:%d/health", port))
+	client := &http.Client{
+		Timeout: 3 * time.Second,
+		Transport: &http.Transport{
+			// The enrollment listener's server identity is the deployment
+			// CA's own self-signed certificate (see ca.TLSCertificate()) --
+			// this is a loopback liveness probe, not a security boundary,
+			// so skipping verification here is correct, not a shortcut.
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		},
+	}
+	resp, err := client.Get(fmt.Sprintf("https://127.0.0.1:%d/health", port))
 	if err != nil {
 		return 1
 	}
@@ -90,6 +103,22 @@ func runHealthcheck() int {
 		return 1
 	}
 	return 0
+}
+
+// resolveDashboardTLSCert picks the certificate the dashboard listener
+// presents: an operator-supplied one (cfg.DashboardTLSCertPath/KeyPath --
+// install.sh's BAS_TLS/TLS_CERT/TLS_KEY option) when both are set, or
+// fallback (the deployment CA's own certificate, same as the mTLS and
+// enrollment listeners use) otherwise. Extracted as its own function --
+// rather than left inline in main() -- specifically so this decision is
+// unit-testable: BAS_TLS=false (fallback) is the default for every
+// existing and new install, so its behavior needs direct test coverage,
+// not just a read-through of main()'s startup sequence.
+func resolveDashboardTLSCert(cfg config.Config, fallback tls.Certificate) (tls.Certificate, error) {
+	if cfg.DashboardTLSCertPath == "" || cfg.DashboardTLSKeyPath == "" {
+		return fallback, nil
+	}
+	return tls.LoadX509KeyPair(cfg.DashboardTLSCertPath, cfg.DashboardTLSKeyPath)
 }
 
 func main() {
@@ -830,6 +859,33 @@ func main() {
 		IdleTimeout:  120 * time.Second,
 	}
 
+	// Dashboard (default :9543) — browser dashboard: static SPA, JWT-
+	// authenticated API, /ws/browser. Server-cert-only TLS, no client-cert
+	// requirement -- a browser has none, and this listener exists
+	// specifically so browser traffic doesn't need one (unlike the mTLS
+	// agent listener). Uses an operator-supplied certificate
+	// (cfg.DashboardTLSCertPath/KeyPath, from install.sh's pre-existing
+	// BAS_TLS/TLS_CERT/TLS_KEY option, previously dormant) when configured,
+	// falling back to the deployment CA's own self-signed certificate
+	// otherwise -- browsers show a warning for the self-signed fallback,
+	// which is expected and documented in docs/guides/upgrade-guide.md,
+	// not a bug.
+	dashboardTLSCert, err := resolveDashboardTLSCert(*cfg, serverTLSCert)
+	if err != nil {
+		log.Fatalf("[FATAL] load dashboard TLS cert/key (TLS_CERT=%s, TLS_KEY=%s): %v", cfg.DashboardTLSCertPath, cfg.DashboardTLSKeyPath, err)
+	}
+	dashboardSrv := &http.Server{
+		Addr:    fmt.Sprintf(":%d", cfg.DashboardHTTPPort),
+		Handler: router,
+		TLSConfig: &tls.Config{
+			Certificates: []tls.Certificate{dashboardTLSCert},
+			ClientAuth:   tls.NoClientCert,
+		},
+		ReadTimeout:  30 * time.Second,
+		WriteTimeout: 90 * time.Second,
+		IdleTimeout:  120 * time.Second,
+	}
+
 	go func() {
 		log.Printf("[*] BAS Orchestrator mTLS listening on :%d", cfg.HTTPPort)
 		if err := mtlsSrv.ListenAndServeTLS("", ""); err != nil && err != http.ErrServerClosed {
@@ -848,6 +904,12 @@ func main() {
 			log.Fatalf("[FATAL] legacy listen: %v", err)
 		}
 	}()
+	go func() {
+		log.Printf("[*] BAS Orchestrator dashboard listening on :%d", cfg.DashboardHTTPPort)
+		if err := dashboardSrv.ListenAndServeTLS("", ""); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("[FATAL] dashboard listen: %v", err)
+		}
+	}()
 
 	// ── Graceful Shutdown ─────────────────────────────────────────────────
 	quit := make(chan os.Signal, 1)
@@ -857,7 +919,7 @@ func main() {
 	log.Println("[*] Shutting down gracefully...")
 	shutCtx, shutCancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer shutCancel()
-	for _, s := range []*http.Server{mtlsSrv, enrollSrv, legacySrv} {
+	for _, s := range []*http.Server{mtlsSrv, enrollSrv, legacySrv, dashboardSrv} {
 		if err := s.Shutdown(shutCtx); err != nil {
 			log.Printf("[!] shutdown error: %v", err)
 		}
