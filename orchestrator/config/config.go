@@ -114,13 +114,34 @@ type Config struct {
 	PKIDir          string `json:"pki_dir,omitempty"`
 	EnrollHTTPPort  int    `json:"enroll_http_port,omitempty"`
 	LegacyHTTPPort  int    `json:"legacy_http_port,omitempty"`
+
+	// DashboardHTTPPort serves the browser dashboard (StaticHandler + JWT
+	// API + /ws/browser) over TLS with NO client-cert requirement --
+	// separate from the mTLS agent listener (HTTPPort) so a browser (which
+	// has no client certificate) can reach it. See
+	// docs/superpowers/specs/2026-09-27-agent-trust-model-deployment-topology-design.md.
+	// DashboardTLSCertPath/DashboardTLSKeyPath, if both set, let an operator
+	// supply a properly-trusted certificate for this listener instead of
+	// the deployment CA's own self-signed one (which browsers show a
+	// warning for) -- wires up install.sh's pre-existing BAS_TLS/TLS_CERT/
+	// TLS_KEY option, previously dormant (the orchestrator never read it).
+	DashboardHTTPPort    int    `json:"dashboard_http_port,omitempty"`
+	DashboardTLSCertPath string `json:"dashboard_tls_cert_path,omitempty"`
+	DashboardTLSKeyPath  string `json:"dashboard_tls_key_path,omitempty"`
 }
 
 // Load reads config from a JSON file, then overrides with environment variables.
 // In Kubernetes the file is optional — DATABASE_URL and JWT_SECRET come from Secrets.
 func Load(path string) (*Config, error) {
 	cfg := &Config{
-		HTTPPort:         9000,
+		// HTTPPort default corrected from 9000 to 9443: LegacyHTTPPort's own
+		// default (below) is 9000, so a bare install with no env overrides
+		// used to silently produce two colliding listener ports the moment
+		// the B1/B3 plan added LegacyHTTPPort -- undetected until this
+		// task's collision validation. Every real deployment
+		// (docker-compose.yml) already explicitly sets HTTP_PORT=9443, so
+		// this only changes the previously-broken bare/no-compose default.
+		HTTPPort:         9443,
 		ScenariosDir:     "scenarios",
 		ARTDir:           "/art-atomics",
 		ARTPayloadDir:    "/art-payloads",
@@ -132,9 +153,10 @@ func Load(path string) (*Config, error) {
 		DNSSinkEnabled:   true,
 		SFTPSinkEnabled:  true,
 		SMTPSinkEnabled:  true,
-		PKIDir:           "/etc/audspect/pki",
-		EnrollHTTPPort:   9444,
-		LegacyHTTPPort:   9000,
+		PKIDir:            "/etc/audspect/pki",
+		EnrollHTTPPort:    9444,
+		LegacyHTTPPort:    9000,
+		DashboardHTTPPort: 9543,
 	}
 
 	// Try file first (local dev)
@@ -296,6 +318,15 @@ func Load(path string) (*Config, error) {
 	if v := os.Getenv("HTTP_PORT_LEGACY"); v != "" {
 		fmt.Sscanf(v, "%d", &cfg.LegacyHTTPPort)
 	}
+	if v := os.Getenv("HTTP_PORT_DASHBOARD"); v != "" {
+		fmt.Sscanf(v, "%d", &cfg.DashboardHTTPPort)
+	}
+	if v := os.Getenv("TLS_CERT"); v != "" {
+		cfg.DashboardTLSCertPath = v
+	}
+	if v := os.Getenv("TLS_KEY"); v != "" {
+		cfg.DashboardTLSKeyPath = v
+	}
 
 	if cfg.DatabaseURL == "" {
 		return nil, fmt.Errorf("database_url required (set DATABASE_URL env var or config file)")
@@ -314,6 +345,24 @@ func Load(path string) (*Config, error) {
 	if agentFromFile && os.Getenv("AGENT_SECRET") == "" {
 		log.Println("[security] WARNING: agent_secret found in config.json — " +
 			"move to AGENT_SECRET env var to harden this deployment")
+	}
+
+	// Reject colliding listener ports at startup rather than letting two
+	// http.Server goroutines race to bind the same port, where the loser's
+	// log.Fatalf is much less diagnosable than a clear error naming both
+	// values up front.
+	ports := map[string]int{
+		"HTTP_PORT":           cfg.HTTPPort,
+		"HTTP_PORT_ENROLL":    cfg.EnrollHTTPPort,
+		"HTTP_PORT_LEGACY":    cfg.LegacyHTTPPort,
+		"HTTP_PORT_DASHBOARD": cfg.DashboardHTTPPort,
+	}
+	seen := make(map[int]string, len(ports))
+	for name, port := range ports {
+		if other, ok := seen[port]; ok {
+			return nil, fmt.Errorf("%s and %s both resolve to port %d -- listener ports must be distinct", other, name, port)
+		}
+		seen[port] = name
 	}
 
 	return cfg, nil
