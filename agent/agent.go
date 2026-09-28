@@ -1340,94 +1340,16 @@ func (a *Agent) connectWS() {
 			gotMessage = true
 
 			switch msg.Type {
-			case "command_scenario":
-				var cmd protocol.ScenarioCommand
-				if err := json.Unmarshal(msg.Data, &cmd); err != nil {
-					log.Printf("[!] WS: bad scenario command: %v", err)
+			case "command_scenario", "command_simulate", "command_attackpath_collect",
+				"command_cancel", "command_pause", "command_resume",
+				"command_stop_agent", "command_uninstall_agent":
+				env, err := a.verifyCommandEnvelope(msg.Data, msg.Type)
+				if err != nil {
+					log.Printf("[!] WS: command envelope rejected (%s): %v", msg.Type, err)
+					a.logger.Op("warn", "security", fmt.Sprintf("rejected command envelope for %s: %v", msg.Type, err))
 					continue
 				}
-				ctx, cancel := context.WithCancel(context.Background())
-				a.scenarioMu.Lock()
-				if a.cancelScenario != nil {
-					a.cancelScenario()
-				}
-				a.cancelScenario = cancel
-				a.scenarioMu.Unlock()
-				a.runWG.Add(1)
-				go func() { defer a.runWG.Done(); a.runScenario(ctx, cmd) }()
-
-			case "command_simulate":
-				var sim struct {
-					ScenarioID string   `json:"scenarioId"`
-					RunID      string   `json:"runId"`
-					Checks     []string `json:"checks"`
-				}
-				if err := json.Unmarshal(msg.Data, &sim); err != nil || sim.ScenarioID == "" {
-					log.Printf("[!] WS: bad command_simulate payload: %v", err)
-					continue
-				}
-				ctx, cancel := context.WithCancel(context.Background())
-				a.scenarioMu.Lock()
-				if a.cancelScenario != nil {
-					a.cancelScenario()
-				}
-				a.cancelScenario = cancel
-				a.scenarioMu.Unlock()
-				a.runWG.Add(1)
-				go func() { defer a.runWG.Done(); a.runLocalScan(ctx, sim.ScenarioID, sim.RunID, sim.Checks) }()
-
-			case "command_attackpath_collect":
-				var apc AttackPathCollectCommand
-				if err := json.Unmarshal(msg.Data, &apc); err != nil {
-					log.Printf("[!] WS: bad attackpath collect payload: %v", err)
-					continue
-				}
-				a.runWG.Add(1)
-				go func() { defer a.runWG.Done(); a.runAttackPathCollect(apc) }()
-
-			case "command_cancel":
-				if a.cancelCurrentScenario() {
-					log.Printf("[*] scenario cancelled by operator")
-					a.logger.Op("warn", "lifecycle", "scenario stopped by operator request")
-				} else {
-					log.Printf("[~] command_cancel received but no scenario is running")
-				}
-
-			case "command_pause":
-				if a.pauseCurrentScenario() {
-					log.Printf("[*] scenario paused by operator")
-					a.logger.Op("info", "lifecycle", "scenario paused by operator request")
-				} else {
-					log.Printf("[~] command_pause received but no scenario is running")
-				}
-
-			case "command_resume":
-				if a.resumeCurrentScenario() {
-					log.Printf("[*] scenario resumed by operator")
-					a.logger.Op("info", "lifecycle", "scenario resumed by operator request")
-				} else {
-					log.Printf("[~] command_resume received but no scenario is running")
-				}
-
-			case "command_stop_agent":
-				var body struct {
-					Reason string `json:"reason"`
-				}
-				if err := json.Unmarshal(msg.Data, &body); err != nil {
-					log.Printf("[!] WS: bad stop command: %v", err)
-					continue
-				}
-				go a.stopSelf(body.Reason)
-
-			case "command_uninstall_agent":
-				var body struct {
-					Reason string `json:"reason"`
-				}
-				if err := json.Unmarshal(msg.Data, &body); err != nil {
-					log.Printf("[!] WS: bad uninstall command: %v", err)
-					continue
-				}
-				go a.uninstallSelf(body.Reason)
+				a.dispatchVerifiedCommand(msg.Type, env.Payload)
 
 			default:
 				log.Printf("[~] WS: unhandled message type %q", msg.Type)
@@ -1437,5 +1359,104 @@ func (a *Agent) connectWS() {
 		delay := wsReconnectBackoff(attempt)
 		attempt++
 		time.Sleep(delay)
+	}
+}
+
+// dispatchVerifiedCommand runs the command-type-specific handling that
+// used to live directly in connectWS's switch, now called only after
+// verifyCommandEnvelope has accepted the envelope this payload was
+// unwrapped from. payload is env.Payload -- the resolved, inner
+// command-specific data (e.g. protocol.ScenarioCommand's fields for
+// command_scenario), never the raw WS frame.
+func (a *Agent) dispatchVerifiedCommand(msgType string, payload json.RawMessage) {
+	switch msgType {
+	case "command_scenario":
+		var cmd protocol.ScenarioCommand
+		if err := json.Unmarshal(payload, &cmd); err != nil {
+			log.Printf("[!] WS: bad scenario command: %v", err)
+			return
+		}
+		ctx, cancel := context.WithCancel(context.Background())
+		a.scenarioMu.Lock()
+		if a.cancelScenario != nil {
+			a.cancelScenario()
+		}
+		a.cancelScenario = cancel
+		a.scenarioMu.Unlock()
+		a.runWG.Add(1)
+		go func() { defer a.runWG.Done(); a.runScenario(ctx, cmd) }()
+
+	case "command_simulate":
+		var sim struct {
+			ScenarioID string   `json:"scenarioId"`
+			RunID      string   `json:"runId"`
+			Checks     []string `json:"checks"`
+		}
+		if err := json.Unmarshal(payload, &sim); err != nil || sim.ScenarioID == "" {
+			log.Printf("[!] WS: bad command_simulate payload: %v", err)
+			return
+		}
+		ctx, cancel := context.WithCancel(context.Background())
+		a.scenarioMu.Lock()
+		if a.cancelScenario != nil {
+			a.cancelScenario()
+		}
+		a.cancelScenario = cancel
+		a.scenarioMu.Unlock()
+		a.runWG.Add(1)
+		go func() { defer a.runWG.Done(); a.runLocalScan(ctx, sim.ScenarioID, sim.RunID, sim.Checks) }()
+
+	case "command_attackpath_collect":
+		var apc AttackPathCollectCommand
+		if err := json.Unmarshal(payload, &apc); err != nil {
+			log.Printf("[!] WS: bad attackpath collect payload: %v", err)
+			return
+		}
+		a.runWG.Add(1)
+		go func() { defer a.runWG.Done(); a.runAttackPathCollect(apc) }()
+
+	case "command_cancel":
+		if a.cancelCurrentScenario() {
+			log.Printf("[*] scenario cancelled by operator")
+			a.logger.Op("warn", "lifecycle", "scenario stopped by operator request")
+		} else {
+			log.Printf("[~] command_cancel received but no scenario is running")
+		}
+
+	case "command_pause":
+		if a.pauseCurrentScenario() {
+			log.Printf("[*] scenario paused by operator")
+			a.logger.Op("info", "lifecycle", "scenario paused by operator request")
+		} else {
+			log.Printf("[~] command_pause received but no scenario is running")
+		}
+
+	case "command_resume":
+		if a.resumeCurrentScenario() {
+			log.Printf("[*] scenario resumed by operator")
+			a.logger.Op("info", "lifecycle", "scenario resumed by operator request")
+		} else {
+			log.Printf("[~] command_resume received but no scenario is running")
+		}
+
+	case "command_stop_agent":
+		var body struct {
+			Reason string `json:"reason"`
+		}
+		if err := json.Unmarshal(payload, &body); err != nil {
+			log.Printf("[!] WS: bad stop command: %v", err)
+			return
+		}
+		go a.stopSelf(body.Reason)
+
+	case "command_uninstall_agent":
+		var body struct {
+			Reason string `json:"reason"`
+		}
+		if err := json.Unmarshal(payload, &body); err != nil {
+			log.Printf("[!] WS: bad uninstall command: %v", err)
+			return
+		}
+		go a.uninstallSelf(body.Reason)
 	}
 }
