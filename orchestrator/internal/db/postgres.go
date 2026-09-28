@@ -113,6 +113,13 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 			revoked_at    timestamptz
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_agent_certificates_agent_id ON agent_certificates(agent_id)`,
+		// command_signing_key_id records which deployment command-signing
+		// key (B4, internal/cmdsigning) an agent was told to trust at
+		// enrollment -- nullable/no-default since rows issued before this
+		// column existed correctly have no recorded signing-key trust.
+		// Populated going forward by internal/api/enroll_csr_handlers.go;
+		// read by cmd/server's checkSigningKeyNotSilentlyRotated.
+		`ALTER TABLE agent_certificates ADD COLUMN IF NOT EXISTS command_signing_key_id text`,
 
 		`CREATE TABLE IF NOT EXISTS scenario_runs (
 			id             text        PRIMARY KEY DEFAULT gen_random_uuid()::text,
