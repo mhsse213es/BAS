@@ -1,13 +1,19 @@
 package ws
 
 import (
+	"crypto/rand"
 	"crypto/rsa"
+	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
+	"os"
+	"strconv"
 	"sync"
 	"time"
 
+	"github.com/audspect/bas/internal/cmdsigning"
 	"github.com/audspect/bas/internal/models"
 	"github.com/gorilla/websocket"
 )
@@ -126,6 +132,13 @@ func (h *Hub) ServeBrowserWS(w http.ResponseWriter, r *http.Request) {
 
 // SendToAgent delivers a message to a specific connected agent.
 // Returns false if the agent is not currently connected.
+//
+// For any of the 8 execution-triggering command types
+// (models.IsSignedCommandType), msg.Data is wrapped in a signed
+// models.CommandEnvelope before marshaling -- this is the single
+// mandatory signing boundary every one of this codebase's 16 dispatch
+// call sites already funnels through, so none of them need to change.
+// Every other message type passes through completely unchanged.
 func (h *Hub) SendToAgent(agentID string, msg models.WSMessage) (sent bool) {
 	h.mu.RLock()
 	c, ok := h.agents[agentID]
@@ -133,6 +146,16 @@ func (h *Hub) SendToAgent(agentID string, msg models.WSMessage) (sent bool) {
 	if !ok {
 		return false
 	}
+
+	if models.IsSignedCommandType(msg.Type) {
+		signed, err := h.signCommand(agentID, msg)
+		if err != nil {
+			log.Printf("[ws] sign command %s for agent %s: %v -- not sent", msg.Type, agentID, err)
+			return false
+		}
+		msg.Data = signed
+	}
+
 	b, _ := json.Marshal(msg)
 	// readPump closes c.send when the agent disconnects, and does so
 	// independently of (and slightly before) this Hub removing the agent
@@ -151,6 +174,86 @@ func (h *Hub) SendToAgent(agentID string, msg models.WSMessage) (sent bool) {
 	default:
 		return false
 	}
+}
+
+// signCommand builds and signs the CommandEnvelope for an in-scope
+// command type. runID/scenarioID/mode are extracted from msg.Data on a
+// best-effort basis (only ScenarioCommand-shaped payloads carry them
+// today); command types without a scenario context (cancel, pause,
+// resume, stop_agent, uninstall_agent) simply leave those fields at
+// their zero value, which CommandEnvelope's omitempty tags already
+// handle correctly.
+//
+// h.signer == nil (SetSigner was never called -- should never happen in
+// production, since main.go calls it unconditionally right after
+// ws.NewHub()) is a hard error here, not a silent no-op: an unsigned
+// "signed" command type reaching the wire would defeat the whole point
+// of this mechanism.
+func (h *Hub) signCommand(agentID string, msg models.WSMessage) (models.CommandEnvelope, error) {
+	h.mu.RLock()
+	signer := h.signer
+	h.mu.RUnlock()
+	if signer == nil {
+		return models.CommandEnvelope{}, fmt.Errorf("no command-signing key installed (SetSigner was never called)")
+	}
+
+	payload, err := json.Marshal(msg.Data)
+	if err != nil {
+		return models.CommandEnvelope{}, fmt.Errorf("marshal payload: %w", err)
+	}
+	nonce := make([]byte, 16)
+	if _, err := rand.Read(nonce); err != nil {
+		return models.CommandEnvelope{}, fmt.Errorf("generate nonce: %w", err)
+	}
+	commandID := make([]byte, 16)
+	if _, err := rand.Read(commandID); err != nil {
+		return models.CommandEnvelope{}, fmt.Errorf("generate command id: %w", err)
+	}
+	now := time.Now().UTC()
+	env := models.CommandEnvelope{
+		Version:     models.CommandEnvelopeVersion,
+		CommandID:   hex.EncodeToString(commandID),
+		CommandType: msg.Type,
+		AgentID:     agentID,
+		IssuedAt:    now,
+		ExpiresAt:   now.Add(commandEnvelopeTTL),
+		Nonce:       hex.EncodeToString(nonce),
+		Payload:     payload,
+	}
+	// Best-effort extraction of the optional context fields from
+	// ScenarioCommand-shaped payloads -- see scenario.ScenarioCommand.
+	var ctx struct {
+		RunID      string `json:"runId"`
+		ScenarioID string `json:"scenarioId"`
+		Mode       string `json:"mode"`
+	}
+	if json.Unmarshal(payload, &ctx) == nil {
+		env.RunID = ctx.RunID
+		env.ScenarioID = ctx.ScenarioID
+		env.Mode = ctx.Mode
+	}
+
+	sig, err := cmdsigning.SignEnvelope(signer, env)
+	if err != nil {
+		return models.CommandEnvelope{}, fmt.Errorf("sign envelope: %w", err)
+	}
+	env.Signature = sig
+	return env, nil
+}
+
+// commandEnvelopeTTL is how long a signed command remains valid --
+// deliberately short (see the spec's "Expiry & replay" section for the
+// full rationale). Configurable via env var rather than hardcoded, per
+// the spec's explicit requirement.
+var commandEnvelopeTTL = commandEnvelopeTTLFromEnv()
+
+func commandEnvelopeTTLFromEnv() time.Duration {
+	if v := os.Getenv("COMMAND_ENVELOPE_TTL_SECONDS"); v != "" {
+		if secs, err := strconv.Atoi(v); err == nil && secs > 0 {
+			return time.Duration(secs) * time.Second
+		}
+	}
+	return 60 * time.Second
 }
 
 // BroadcastBrowsers sends a message to all connected dashboard browsers.
