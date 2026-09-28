@@ -25,9 +25,18 @@ type CSRRequest struct {
 // agent's installer already has it, per the spec's "never return a private
 // key" invariant — only ever public material crosses this boundary).
 type CSRResponse struct {
-	CertPEM   string `json:"certPem"`
-	CAPEM     string `json:"caPem"`
-	ExpiresAt string `json:"expiresAt"`
+	CertPEM             string              `json:"certPem"`
+	CAPEM               string              `json:"caPem"`
+	ExpiresAt           string              `json:"expiresAt"`
+	CommandSigningTrust commandSigningTrust `json:"commandSigningTrust"`
+}
+
+// commandSigningTrust is the authenticated-transport delivery of the
+// deployment command-signing public certificate (B4) -- see
+// orchestrator/internal/api/enroll_csr_handlers.go's matching type.
+type commandSigningTrust struct {
+	KeyID   string `json:"keyId"`
+	CertPEM string `json:"certPem"`
 }
 
 // SubmitCSR performs the bootstrap CSR submission against

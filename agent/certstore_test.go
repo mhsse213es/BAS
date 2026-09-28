@@ -232,3 +232,37 @@ func TestIsEnrolled_CorruptedMarkerTreatedAsNotEnrolled(t *testing.T) {
 		t.Error("expected a corrupted/unrecognized marker file to be treated as not-enrolled, not fail open")
 	}
 }
+
+func TestSaveAndLoadCommandSigningCert_RoundTrips(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("BAS_CERT_DIR", dir)
+	ca := newTestCA(t) // reuse this package's existing test helper (bootstrap_test.go)
+	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: ca.cert.Raw})
+
+	if err := saveCommandSigningCert(certPEM); err != nil {
+		t.Fatalf("saveCommandSigningCert: %v", err)
+	}
+	loaded, err := loadCommandSigningCert()
+	if err != nil {
+		t.Fatalf("loadCommandSigningCert: %v", err)
+	}
+	if loaded.SerialNumber.Cmp(ca.cert.SerialNumber) != 0 {
+		t.Error("loaded certificate does not match what was saved")
+	}
+}
+
+func TestLoadCommandSigningCert_MissingFileReturnsNotExist(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("BAS_CERT_DIR", dir)
+	if _, err := loadCommandSigningCert(); !os.IsNotExist(err) {
+		t.Errorf("expected an os.ErrNotExist-wrapping error when no cert was ever saved, got: %v", err)
+	}
+}
+
+func TestSaveCommandSigningCert_RejectsInvalidPEM(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("BAS_CERT_DIR", dir)
+	if err := saveCommandSigningCert([]byte("not a cert")); err == nil {
+		t.Error("expected saveCommandSigningCert to reject non-PEM input")
+	}
+}

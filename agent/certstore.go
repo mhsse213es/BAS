@@ -166,6 +166,44 @@ func saveDeploymentCARoot(pemBytes []byte) error {
 	return os.WriteFile(caPath, pemBytes, 0644)
 }
 
+// commandSigningCertPath returns the persisted location of the
+// deployment command-signing certificate (B4) -- the public half agents
+// use to verify every execution-triggering WS command, delivered via the
+// enrollment response and saved once, reused for every subsequent
+// command verification (never re-fetched per command).
+func commandSigningCertPath() string {
+	dir, _, _, _ := certPaths()
+	return filepath.Join(dir, "command-signing.pem")
+}
+
+// saveCommandSigningCert persists the command-signing certificate
+// received in the enrollment response. pemBytes must parse as an X.509
+// certificate -- a wrong file is rejected here rather than surfacing
+// later as an opaque verification failure on the first dispatched
+// command.
+func saveCommandSigningCert(pemBytes []byte) error {
+	if _, err := parseCertificatePEM(pemBytes); err != nil {
+		return fmt.Errorf("command-signing certificate is not a valid PEM certificate: %w", err)
+	}
+	dir, _, _, _ := certPaths()
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		return fmt.Errorf("create cert dir %s: %w", dir, err)
+	}
+	return os.WriteFile(commandSigningCertPath(), pemBytes, 0644)
+}
+
+// loadCommandSigningCert returns the persisted command-signing
+// certificate, or an error wrapping os.ErrNotExist if enrollment never
+// completed (or completed against an orchestrator version that predates
+// this feature).
+func loadCommandSigningCert() (*x509.Certificate, error) {
+	data, err := os.ReadFile(commandSigningCertPath())
+	if err != nil {
+		return nil, err
+	}
+	return parseCertificatePEM(data)
+}
+
 // loadAgentCertificate returns the currently persisted certificate, or an
 // error wrapping os.ErrNotExist if none has been saved yet (the caller,
 // Task 10's bootstrap orchestration, treats that as "run initial bootstrap").

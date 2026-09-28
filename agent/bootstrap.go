@@ -208,6 +208,16 @@ func ensureCertificate(ctx context.Context, cfg Config, agentID string) (string,
 		}
 		return "", err
 	}
+	if resp.CommandSigningTrust.CertPEM != "" {
+		if err := saveCommandSigningCert([]byte(resp.CommandSigningTrust.CertPEM)); err != nil {
+			// Non-fatal: the agent still has a valid mTLS certificate and
+			// can operate; it will simply reject every execution-triggering
+			// command until this is resolved (see agent/commandsig.go),
+			// which is the correct fail-closed behavior for a missing
+			// trust anchor, not a reason to fail bootstrap/renewal itself.
+			log.Printf("[!] could not persist command-signing trust: %v", err)
+		}
+	}
 	if !renewing {
 		// First-ever successful bootstrap: persist the ENROLLED marker.
 		// From this moment on, this identity can never use the bootstrap
