@@ -121,6 +121,35 @@ func resolveDashboardTLSCert(cfg config.Config, fallback tls.Certificate) (tls.C
 	return tls.LoadX509KeyPair(cfg.DashboardTLSCertPath, cfg.DashboardTLSKeyPath)
 }
 
+// checkCANotSilentlyRotated is the fail-closed safety check: a CA
+// generated fresh (caKeyExistedBefore == false) with existing valid
+// agent_certificates rows means an existing deployment's CA was lost, not
+// that this is a genuine fresh install -- refuse to start rather than
+// silently locking out the whole fleet. BAS_CONFIRM_NEW_CA=true is the
+// explicit escape hatch for an intentional CA rotation/reset.
+func checkCANotSilentlyRotated(ctx context.Context, pool *pgxpool.Pool, caKeyExistedBefore bool) error {
+	if caKeyExistedBefore {
+		return nil // normal restart, nothing was regenerated
+	}
+	var hasExistingCerts bool
+	err := pool.QueryRow(ctx, `
+		SELECT EXISTS (
+			SELECT 1 FROM agent_certificates
+			 WHERE revoked = false AND expires_at > NOW()
+		)`).Scan(&hasExistingCerts)
+	if err != nil {
+		return fmt.Errorf("check for existing agent_certificates: %w", err)
+	}
+	if !hasExistingCerts {
+		return nil // genuine fresh install, nothing to protect
+	}
+	if os.Getenv("BAS_CONFIRM_NEW_CA") == "true" {
+		log.Println("[!] WARNING: generating a new deployment CA despite existing agent certificates -- BAS_CONFIRM_NEW_CA=true set, proceeding. Every already-enrolled agent will need to re-bootstrap.")
+		return nil
+	}
+	return fmt.Errorf("a new deployment CA was just generated (no existing CA found at PKI_DIR), but agent_certificates already has valid, non-revoked entries -- this looks like CA loss on an EXISTING deployment, not a fresh install, and would silently lock out the entire enrolled fleet. If this is a genuine fresh install with stale leftover database rows, or an intentional CA rotation, set BAS_CONFIRM_NEW_CA=true and restart")
+}
+
 func main() {
 	if len(os.Args) > 1 && os.Args[1] == "--healthcheck" {
 		os.Exit(runHealthcheck())
@@ -600,9 +629,16 @@ func main() {
 	license.StartMonitor(licenseMonitorCtx, cfg.LicensePath, 5*time.Minute, func() {
 		hub.CloseAllAgentConnections()
 	})
+	caKeyPath := filepath.Join(cfg.PKIDir, "ca-key.pem")
+	_, caKeyStatErr := os.Stat(caKeyPath)
+	caKeyExistedBefore := caKeyStatErr == nil
+
 	ca, err := pki.LoadOrGenerateCA(cfg.PKIDir)
 	if err != nil {
 		log.Fatalf("[FATAL] load/generate deployment CA: %v", err)
+	}
+	if err := checkCANotSilentlyRotated(context.Background(), pool, caKeyExistedBefore); err != nil {
+		log.Fatalf("[FATAL] %v", err)
 	}
 
 	handler := api.New(pool, hub, engine, cfg.JWTSecret).
