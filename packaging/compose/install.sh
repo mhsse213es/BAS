@@ -572,12 +572,18 @@ mode_check() {
   # Disk and port checks use config values if supplied
   local check_dir="$DEFAULT_DATA_DIR"
   local check_port="$DEFAULT_PORT"
+  local check_enroll_port="$DEFAULT_ENROLL_PORT"
+  local check_legacy_port="$DEFAULT_LEGACY_PORT"
+  local check_dashboard_port="$DEFAULT_DASHBOARD_PORT"
   local check_dns_ip=""
   local check_cert="" check_key="" check_lic=""
   if [[ -n "$CONFIG_FILE" ]]; then
     load_config "$CONFIG_FILE" 2>/dev/null || true
     [[ -n "$DATA_DIR" ]] && check_dir="$DATA_DIR"
     [[ -n "$BAS_PORT" ]] && check_port="$BAS_PORT"
+    [[ -n "$BAS_ENROLL_PORT"    ]] && check_enroll_port="$BAS_ENROLL_PORT"
+    [[ -n "$BAS_LEGACY_PORT"    ]] && check_legacy_port="$BAS_LEGACY_PORT"
+    [[ -n "$BAS_DASHBOARD_PORT" ]] && check_dashboard_port="$BAS_DASHBOARD_PORT"
     check_dns_ip="$DNS_SINK_BIND_IP"
     check_cert="$TLS_CERT"; check_key="$TLS_KEY"; check_lic="$LIC_PATH"
   fi
@@ -585,6 +591,9 @@ mode_check() {
 
   results+=( "$(_check_disk "$check_dir")" )
   results+=( "$(_check_port "$check_port")" )
+  results+=( "$(_check_port "$check_enroll_port")" )
+  results+=( "$(_check_port "$check_legacy_port")" )
+  results+=( "$(_check_port "$check_dashboard_port")" )
   results+=( "$(_check_dns_sink_port "$check_dns_ip")" )
   results+=( "$(_check_openssl)" )
   results+=( "$(_check_bundle_integrity)" )
@@ -630,6 +639,9 @@ mode_install() {
   results+=( "$(_check_cpu)" )
   results+=( "$(_check_disk "$DATA_DIR")" )
   results+=( "$(_check_port "$BAS_PORT")" )
+  results+=( "$(_check_port "$BAS_ENROLL_PORT")" )
+  results+=( "$(_check_port "$BAS_LEGACY_PORT")" )
+  results+=( "$(_check_port "$BAS_DASHBOARD_PORT")" )
   results+=( "$(_check_dns_sink_port "$DNS_SINK_BIND_IP")" )
   results+=( "$(_check_openssl)" )
   results+=( "$(_check_bundle_integrity)" )
@@ -715,6 +727,12 @@ mode_install() {
     mkdir -p "${DATA_DIR}/certs"
     cp "$TLS_CERT" "${DATA_DIR}/certs/bas.crt"
     cp "$TLS_KEY"  "${DATA_DIR}/certs/bas.key"
+    # The orchestrator container reads these read-only as UID 65532
+    # (distroless nonroot) via ./certs:/etc/bas/certs:ro. Without this
+    # chown they stay root-owned from the copy above, tls.LoadX509KeyPair
+    # gets a permission error, and the whole orchestrator (not just the
+    # dashboard listener) fails to start.
+    chown 65532:65532 "${DATA_DIR}/certs/bas.crt" "${DATA_DIR}/certs/bas.key"
     chmod 640 "${DATA_DIR}/certs/bas.key"
     log "TLS certificates installed"
   fi
@@ -821,6 +839,15 @@ mode_upgrade() {
   [[ -d "${SCRIPT_DIR}/scenarios"   ]] && cp -r "${SCRIPT_DIR}/scenarios/."   "${DATA_DIR}/scenarios/"
   [[ -d "${SCRIPT_DIR}/wwwroot"     ]] && cp -r "${SCRIPT_DIR}/wwwroot/."     "${DATA_DIR}/wwwroot/"
   [[ -d "${SCRIPT_DIR}/art-payloads" ]] && cp -r "${SCRIPT_DIR}/art-payloads/." "${DATA_DIR}/art-payloads/"
+  # An upgrade FROM a pre-mTLS install (see the BAS_ENROLL_PORT check above)
+  # has never had a pki/ directory -- only mode_install created one. Without
+  # this, the new ./pki:/etc/audspect/pki bind mount auto-creates a
+  # root-owned directory the orchestrator (UID 65532) cannot write the CA
+  # into, and the container crash-loops. Safe to re-run on every upgrade:
+  # mkdir -p and chown are both no-ops once ownership is already correct.
+  mkdir -p "${DATA_DIR}"/{pki,certs}
+  chown 65532:65532 "${DATA_DIR}/pki"
+  chmod 700 "${DATA_DIR}/pki"
   _resolve_license_file
   [[ -f "$LIC_PATH" ]] && { cp "$LIC_PATH" "${DATA_DIR}/${LICENSE_FILE}"; chmod 644 "${DATA_DIR}/${LICENSE_FILE}"; }
   cp "${SCRIPT_DIR}/docker-compose.yml" "${DATA_DIR}/docker-compose.yml"

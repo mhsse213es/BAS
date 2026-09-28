@@ -14,6 +14,17 @@
 # Requires: docker, docker compose, go (to build a throwaway Linux agent
 # binary), curl, openssl, a valid Audspect license file.
 # Exit codes: 0 = every stage passed, 1 = a stage failed (see output for which).
+#
+# CAVEAT (found by the final plan review, after this script had already
+# passed on Windows + Docker Desktop): this script talks to the orchestrator
+# entirely through Docker's API/CLI and never runs install.sh/uninstall.sh
+# itself, so it does NOT exercise the host-side directory creation and
+# `chown 65532:65532` steps those scripts perform for ./pki and ./certs.
+# Docker Desktop's Windows file-sharing layer does not enforce POSIX UID/GID
+# bind-mount permissions the way a native Linux Docker host does, so a
+# passing run here proves the mTLS protocol/enrollment/renewal chain but
+# does NOT prove the nonroot bind-mount ownership chain install.sh sets up
+# -- that needs a separate real-Linux-host run through install.sh itself.
 set -euo pipefail
 
 PROJECT="bas-lifecycle-verify-$$"

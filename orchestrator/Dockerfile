@@ -126,11 +126,13 @@ RUN apk add --no-cache git && \
 # Seed the CA directory with correct nonroot ownership here, in a stage that
 # still has a shell -- gcr.io/distroless/static-debian12 (the final stage)
 # has none, so a RUN mkdir/chown there is impossible. This directory is
-# COPY --chown'd into the final stage below and becomes the mount point for
-# the audspect-pki-data named volume (packaging/compose/docker-compose.yml) --
-# Docker initializes a fresh named volume from the image's existing content
-# and ownership at that path, so this seed step is what makes the volume
-# writable by nonroot from the very first container start.
+# COPY --chown'd into the final stage below. Production deployments mount
+# a HOST bind-mount at this path (packaging/compose/docker-compose.yml's
+# ./pki:/etc/audspect/pki), which does NOT inherit ownership from the
+# image -- install.sh/uninstall.sh's own chown 65532:65532 on the host
+# directory is what makes that writable by nonroot. This seed step matters
+# for a standalone `docker run` with no bind-mount, and gives install.sh a
+# verified-correct UID:GID to chown the host directory to.
 # 65532:65532 is gcr.io/distroless/static-debian12:nonroot's real nonroot
 # UID:GID -- verified directly against the image's /etc/passwd, not assumed.
 RUN mkdir -p /pki-seed && chown 65532:65532 /pki-seed
