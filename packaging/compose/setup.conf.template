@@ -9,24 +9,40 @@
 
 # ── [network] ──────────────────────────────────────────────────────────────────
 # BAS_HOST is informational only (used in report URLs and setup summary).
-# BAS_PORT is the external TCP port the orchestrator dashboard binds to.
-# Run --check first — it will FAIL if the port is already in use on this host.
 #
-# Known conflicts (change BAS_PORT if any of these run on this server):
+# This platform now uses four separate listeners, each serving a different
+# kind of traffic -- do not point browsers or agents at the wrong one:
+#   BAS_PORT           mTLS agent traffic only (no browser access -- requires
+#                       a client certificate). Default: 9443
+#   BAS_ENROLL_PORT     New-agent enrollment + healthcheck. Default: 9444
+#   BAS_LEGACY_PORT     Temporary, pre-migration agents only. Default: 9000
+#   BAS_DASHBOARD_PORT  Browser dashboard access. Default: 9543
+#
+# Run --check first — it will FAIL if any of these ports are already in use
+# on this host.
+#
+# Known conflicts (change the relevant port above if any of these run on
+# this server):
 #   8443 / 8444  Trellix/McAfee ePO, Carbon Black, Forcepoint
 #   8834         Tenable Nessus
-#   9000         SonarQube, PHP-FPM
+#   9000         SonarQube, PHP-FPM  <- also this platform's own BAS_LEGACY_PORT default
 #   9090         Prometheus, Cockpit
 #   9200         Elasticsearch REST
 #   9443         IBM WebSphere AS default HTTPS  <- common in Indian banking cores
 #
-# Safe alternatives if 9443 conflicts: 9543, 9643, 9743 (typically unclaimed)
+# Safe alternatives if a default conflicts: 9643/9743 for BAS_PORT or
+# BAS_DASHBOARD_PORT; any unclaimed port in the same 9xxx range otherwise.
 #
-# BAS_TLS enables HTTPS termination inside the orchestrator (requires TLS_CERT
-# and TLS_KEY below). Leave false if TLS is handled by an upstream load-balancer.
+# BAS_TLS enables a properly-trusted certificate on BAS_DASHBOARD_PORT
+# (requires TLS_CERT and TLS_KEY below). Leave false to use the deployment
+# CA's own self-signed certificate -- browsers will show a one-time warning
+# on first visit, which is expected.
 
 BAS_HOST=                         # ← REQUIRED  e.g. bas.corp.internal
-BAS_PORT=9443                     # Default: 9443
+BAS_PORT=9443                     # Default: 9443 (mTLS agent traffic)
+BAS_ENROLL_PORT=9444              # Default: 9444 (agent enrollment)
+BAS_LEGACY_PORT=9000              # Default: 9000 (temporary, pre-migration agents)
+BAS_DASHBOARD_PORT=9543           # Default: 9543 (browser dashboard)
 BAS_TLS=false                     # true | false
 
 # DNS_SINK_BIND_IP is the host IP the DLP DNS-tunneling sink (UDP/53) binds
