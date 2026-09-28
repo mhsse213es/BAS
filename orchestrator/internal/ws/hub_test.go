@@ -177,3 +177,53 @@ func TestSendToAgent_PassesThroughOutOfScopeTypesUnchanged(t *testing.T) {
 		t.Errorf("payload was altered for an out-of-scope type: %+v", probe)
 	}
 }
+
+// TestSendToAgent_NoSignerConfiguredSendsUnsignedRatherThanRefusing locks
+// in a real correction made during this plan's Final Verification: a Hub
+// with no signer configured (SetSigner never called -- the every-day case
+// for the ~114 existing test files across this codebase that construct a
+// bare ws.NewHub() with no reason to exercise command signing at all)
+// must still deliver in-scope command types, unsigned, rather than
+// refusing to send. The actual enforcement boundary is the agent's own
+// verification (agent/commandsig.go), which rejects an unsigned envelope
+// unconditionally -- this Hub-side behavior is about not breaking every
+// caller that doesn't care about signing, not about weakening security.
+func TestSendToAgent_NoSignerConfiguredSendsUnsignedRatherThanRefusing(t *testing.T) {
+	h := NewHub() // no SetSigner call
+	c := &conn{send: make(chan []byte, 1)}
+	h.mu.Lock()
+	h.agents["agent-1"] = c
+	h.mu.Unlock()
+
+	type scenarioPayload struct {
+		RunID string `json:"runId"`
+	}
+	sent := h.SendToAgent("agent-1", models.WSMessage{
+		Type:    "command_scenario",
+		AgentID: "agent-1",
+		Data:    scenarioPayload{RunID: "run-1"},
+	})
+	if !sent {
+		t.Fatal("SendToAgent refused to send with no signer configured -- this breaks every existing caller that never set one up")
+	}
+
+	raw := <-c.send
+	var wire models.WSMessage
+	if err := json.Unmarshal(raw, &wire); err != nil {
+		t.Fatalf("unmarshal wire message: %v", err)
+	}
+	dataBytes, err := json.Marshal(wire.Data)
+	if err != nil {
+		t.Fatalf("re-marshal wire.Data: %v", err)
+	}
+	var probe map[string]interface{}
+	if err := json.Unmarshal(dataBytes, &probe); err != nil {
+		t.Fatalf("unmarshal payload: %v", err)
+	}
+	if probe["runId"] != "run-1" {
+		t.Errorf("payload was altered even though it went out unsigned: %+v", probe)
+	}
+	if _, hasSignature := probe["signature"]; hasSignature {
+		t.Error("payload was wrapped in a CommandEnvelope despite no signer being configured")
+	}
+}

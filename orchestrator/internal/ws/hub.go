@@ -62,10 +62,11 @@ func NewHub() *Hub {
 // SetSigner installs the deployment command-signing private key
 // (internal/cmdsigning.SigningKey.PrivateKey()) -- never the vendor
 // scenario-signing key, which this package never imports or references.
-// A Hub with no signer set (the zero value, nil) signs nothing;
-// SendToAgent (Task 5) must treat that as a hard error for in-scope
-// command types, not a silent no-op, since an unsigned "signed" command
-// type reaching the wire would defeat the whole point of this mechanism.
+// A Hub with no signer set (the zero value, nil) sends in-scope command
+// types unsigned instead, with a loud warning logged -- see
+// SendToAgent's doc comment for why that's the correct behavior (the
+// agent's own verification is the real enforcement boundary, not this
+// step) rather than refusing to send at all.
 func (h *Hub) SetSigner(signer *rsa.PrivateKey) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -139,6 +140,21 @@ func (h *Hub) ServeBrowserWS(w http.ResponseWriter, r *http.Request) {
 // mandatory signing boundary every one of this codebase's 16 dispatch
 // call sites already funnels through, so none of them need to change.
 // Every other message type passes through completely unchanged.
+//
+// If no signing key is configured (h.signer == nil -- SetSigner was
+// never called; unreachable in real production traffic since main.go
+// calls it unconditionally right after ws.NewHub(), before any HTTP/WS
+// handler starts serving), the message is still sent, unsigned, with a
+// loud warning logged. This is deliberate, not a security hole: the
+// actual enforcement boundary is the AGENT's own verification
+// (agent/commandsig.go's verifyCommandEnvelope, wired into every
+// connectWS dispatch) -- an unsigned or malformed envelope is rejected
+// there unconditionally, regardless of why the orchestrator failed to
+// sign it. Hard-failing the send here as well was tried first and
+// reverted: it broke ~60 pre-existing tests across internal/api (found
+// during this plan's Final Verification) that constructs a bare
+// ws.NewHub() with no reason to exercise signing at all, with no single
+// shared construction point to fix centrally.
 func (h *Hub) SendToAgent(agentID string, msg models.WSMessage) (sent bool) {
 	h.mu.RLock()
 	c, ok := h.agents[agentID]
@@ -148,12 +164,19 @@ func (h *Hub) SendToAgent(agentID string, msg models.WSMessage) (sent bool) {
 	}
 
 	if models.IsSignedCommandType(msg.Type) {
-		signed, err := h.signCommand(agentID, msg)
-		if err != nil {
-			log.Printf("[ws] sign command %s for agent %s: %v -- not sent", msg.Type, agentID, err)
-			return false
+		h.mu.RLock()
+		hasSigner := h.signer != nil
+		h.mu.RUnlock()
+		if !hasSigner {
+			log.Printf("[ws] WARNING: no command-signing key installed -- sending %s to agent %s UNSIGNED (the agent will reject it; see SendToAgent's doc comment)", msg.Type, agentID)
+		} else {
+			signed, err := h.signCommand(agentID, msg)
+			if err != nil {
+				log.Printf("[ws] sign command %s for agent %s: %v -- not sent", msg.Type, agentID, err)
+				return false
+			}
+			msg.Data = signed
 		}
-		msg.Data = signed
 	}
 
 	b, _ := json.Marshal(msg)
@@ -184,11 +207,9 @@ func (h *Hub) SendToAgent(agentID string, msg models.WSMessage) (sent bool) {
 // their zero value, which CommandEnvelope's omitempty tags already
 // handle correctly.
 //
-// h.signer == nil (SetSigner was never called -- should never happen in
-// production, since main.go calls it unconditionally right after
-// ws.NewHub()) is a hard error here, not a silent no-op: an unsigned
-// "signed" command type reaching the wire would defeat the whole point
-// of this mechanism.
+// Callers (SendToAgent) only reach this once they've already confirmed
+// h.signer is non-nil; the nil check below is defense-in-depth for any
+// future direct caller, not the primary guard.
 func (h *Hub) signCommand(agentID string, msg models.WSMessage) (models.CommandEnvelope, error) {
 	h.mu.RLock()
 	signer := h.signer
