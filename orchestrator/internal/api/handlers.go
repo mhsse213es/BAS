@@ -29,6 +29,7 @@ import (
 	"github.com/audspect/bas/internal/analytics"
 	"github.com/audspect/bas/internal/artifactgen"
 	"github.com/audspect/bas/internal/auth"
+	"github.com/audspect/bas/internal/cmdsigning"
 	"github.com/audspect/bas/internal/observability"
 	"github.com/audspect/bas/internal/compliance"
 	"github.com/audspect/bas/internal/connector"
@@ -88,7 +89,8 @@ type Handler struct {
 	actionVendorClient   func(actions.ConnectorConfig) (actions.VendorClient, error)
 	secret               string
 	agentSecret          string  // optional shared secret for agent-facing endpoints
-	pki                  *pki.CA // deployment CA for agent mTLS enrollment (B1/B3)
+	pki                  *pki.CA                    // deployment CA for agent mTLS enrollment (B1/B3)
+	signingKey           *cmdsigning.SigningKey     // deployment command-signing key (B4) -- separate trust domain from pki above, never chained to it
 	calderaURL           string
 	calderaKey           string
 	iocProvider          ioc.Provider // nil when no OTX connector is configured
@@ -237,6 +239,16 @@ func (h *Handler) WithAgentSecret(s string) *Handler {
 // that don't exercise enrollment) -- EnrollCSR returns 503 in that case.
 func (h *Handler) WithPKI(ca *pki.CA) *Handler {
 	h.pki = ca
+	return h
+}
+
+// WithCommandSigningKey installs the deployment command-signing key (B4).
+// Nil is valid (tests / a build that predates this feature) -- EnrollCSR
+// simply omits CommandSigningTrust from its response in that case, rather
+// than erroring, since a missing signing key doesn't prevent mTLS
+// enrollment itself from succeeding.
+func (h *Handler) WithCommandSigningKey(sk *cmdsigning.SigningKey) *Handler {
+	h.signingKey = sk
 	return h
 }
 

@@ -676,6 +676,7 @@ func main() {
 		WithEPSSFile(cfg.EPSSFile).
 		WithAgentSecret(cfg.AgentSecret).
 		WithPKI(ca).
+		WithCommandSigningKey(signingKey).
 		WithMetricsToken(cfg.MetricsToken).
 		WithMetrics(exMetrics).
 		WithManifest(manifest).

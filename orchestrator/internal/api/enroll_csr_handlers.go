@@ -19,9 +19,22 @@ type enrollCSRRequest struct {
 // key, per the spec's explicit invariant that the private key never
 // crosses the enrollment boundary.
 type enrollCSRResponse struct {
-	CertPEM   string `json:"certPem"`
-	CAPEM     string `json:"caPem"`
-	ExpiresAt string `json:"expiresAt"`
+	CertPEM             string              `json:"certPem"`
+	CAPEM               string              `json:"caPem"`
+	ExpiresAt           string              `json:"expiresAt"`
+	CommandSigningTrust commandSigningTrust `json:"commandSigningTrust"`
+}
+
+// commandSigningTrust is the authenticated-transport delivery of the
+// deployment command-signing public certificate (B4). The enrollment
+// response is how it reaches the agent, but it is not itself the root of
+// trust -- the agent only reaches this response at all because the
+// channel delivering it was already verified via the pre-distributed
+// deployment CA (see docs/superpowers/specs/2026-09-28-command-envelope-signing-design.md's
+// "Key distribution" section).
+type commandSigningTrust struct {
+	KeyID   string `json:"keyId"`
+	CertPEM string `json:"certPem"`
 }
 
 // agentIDPattern is the exact shape agent/identity.go produces:
@@ -135,10 +148,21 @@ func (h *Handler) EnrollCSR(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// command_signing_key_id records which deployment command-signing key
+	// (B4) this agent was told to trust, so cmd/server's
+	// checkSigningKeyNotSilentlyRotated can later detect a silently
+	// regenerated key on an existing deployment. NULL when no signing key
+	// is configured on this Handler (see WithCommandSigningKey's doc
+	// comment) -- pgx correctly binds a Go nil *string as SQL NULL.
+	var signingKeyID *string
+	if h.signingKey != nil {
+		id := h.signingKey.KeyID()
+		signingKeyID = &id
+	}
 	if _, err := tx.Exec(ctx, `
-		INSERT INTO agent_certificates (serial_number, agent_id, issued_at, expires_at)
-		VALUES ($1, $2, NOW(), $3)`,
-		issued.SerialNumber, req.AgentID, issued.ExpiresAt,
+		INSERT INTO agent_certificates (serial_number, agent_id, issued_at, expires_at, command_signing_key_id)
+		VALUES ($1, $2, NOW(), $3, $4)`,
+		issued.SerialNumber, req.AgentID, issued.ExpiresAt, signingKeyID,
 	); err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -148,9 +172,16 @@ func (h *Handler) EnrollCSR(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	respond(w, enrollCSRResponse{
+	resp := enrollCSRResponse{
 		CertPEM:   string(issued.CertPEM),
 		CAPEM:     string(h.pki.RootCertPEM()),
 		ExpiresAt: issued.ExpiresAt.Format(time.RFC3339),
-	})
+	}
+	if h.signingKey != nil {
+		resp.CommandSigningTrust = commandSigningTrust{
+			KeyID:   h.signingKey.KeyID(),
+			CertPEM: string(h.signingKey.CertPEM()),
+		}
+	}
+	respond(w, resp)
 }

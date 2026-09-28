@@ -4,10 +4,12 @@ package api
 import (
 	"bytes"
 	"encoding/json"
+	"encoding/pem"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
+	"github.com/audspect/bas/internal/cmdsigning"
 	"github.com/audspect/bas/internal/pki"
 	"github.com/audspect/bas/internal/pki/pkitest"
 	"github.com/audspect/bas/internal/ws"
@@ -29,6 +31,26 @@ func newTestHandlerWithPKI(t *testing.T, pool *pgxpool.Pool) (*Handler, *pki.CA)
 		WithAgentSecret("test-bootstrap-secret").
 		WithPKI(ca)
 	return h, ca
+}
+
+// newTestHandlerWithSigningKey is newTestHandlerWithPKI plus a fresh
+// throwaway command-signing key (B4), for tests that need
+// EnrollCSR's response to carry CommandSigningTrust.
+func newTestHandlerWithSigningKey(t *testing.T, pool *pgxpool.Pool) (*Handler, *cmdsigning.SigningKey) {
+	t.Helper()
+	ca, err := pki.LoadOrGenerateCA(t.TempDir())
+	if err != nil {
+		t.Fatalf("LoadOrGenerateCA: %v", err)
+	}
+	sk, err := cmdsigning.LoadOrGenerateSigningKey(t.TempDir())
+	if err != nil {
+		t.Fatalf("LoadOrGenerateSigningKey: %v", err)
+	}
+	h := New(pool, ws.NewHub(), nil, "").
+		WithAgentSecret("test-bootstrap-secret").
+		WithPKI(ca).
+		WithCommandSigningKey(sk)
+	return h, sk
 }
 
 func TestEnrollCSR_ValidBootstrapSecretIssuesCertificate(t *testing.T) {
@@ -62,6 +84,49 @@ func TestEnrollCSR_ValidBootstrapSecretIssuesCertificate(t *testing.T) {
 		}
 		if resp.CertPEM == "" {
 			t.Error("response did not include a signed certificate")
+		}
+	})
+}
+
+func TestEnrollCSR_ResponseIncludesCommandSigningTrust(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h, sk := newTestHandlerWithSigningKey(t, pool)
+		csrPEM, err := pkitest.GenerateTestCSR("requested-cn-ignored")
+		if err != nil {
+			t.Fatalf("GenerateTestCSR: %v", err)
+		}
+		body, _ := json.Marshal(map[string]string{
+			"agentId": "abc123deadbeef01",
+			"csrPem":  string(csrPEM),
+		})
+		req := httptest.NewRequest(http.MethodPost, "/api/agents/enroll-csr", bytes.NewReader(body))
+		req.Header.Set("X-Agent-Token", "test-bootstrap-secret")
+		rec := httptest.NewRecorder()
+
+		h.EnrollCSR(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+		}
+		var resp enrollCSRResponse
+		if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("unmarshal response: %v", err)
+		}
+		if resp.CommandSigningTrust.KeyID == "" {
+			t.Error("CommandSigningTrust.KeyID is empty")
+		}
+		if resp.CommandSigningTrust.KeyID != sk.KeyID() {
+			t.Errorf("CommandSigningTrust.KeyID = %q, want %q", resp.CommandSigningTrust.KeyID, sk.KeyID())
+		}
+		if len(resp.CommandSigningTrust.CertPEM) == 0 {
+			t.Error("CommandSigningTrust.CertPEM is empty")
+		}
+		block, _ := pem.Decode([]byte(resp.CommandSigningTrust.CertPEM))
+		if block == nil || block.Type != "CERTIFICATE" {
+			t.Error("CommandSigningTrust.CertPEM is not a valid PEM certificate")
 		}
 	})
 }
