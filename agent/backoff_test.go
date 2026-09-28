@@ -165,3 +165,39 @@ func TestProxyAuthBackoffMax_ExceedsNormalCeiling(t *testing.T) {
 		t.Fatalf("wsBackoffDelayCapped(20, proxyAuthBackoffMax) = %s, want %s (should have saturated)", delay, proxyAuthBackoffMax)
 	}
 }
+
+func TestBootstrapRetryBackoff_FollowsExactSchedule(t *testing.T) {
+	// Unlike the WS reconnect schedule (clean doubling), this one is a
+	// hand-picked step table -- assert the exact ceiling per attempt, not a
+	// formula, so a future edit can't silently drift the schedule.
+	ceilings := []time.Duration{
+		5 * time.Second,
+		10 * time.Second,
+		30 * time.Second,
+		60 * time.Second,
+		5 * time.Minute,
+		15 * time.Minute,
+	}
+	for attempt, ceiling := range ceilings {
+		got := bootstrapRetryBackoff(attempt)
+		if got < 0 || got > ceiling {
+			t.Errorf("bootstrapRetryBackoff(%d) = %s, want within [0, %s]", attempt, got, ceiling)
+		}
+	}
+}
+
+func TestBootstrapRetryBackoff_CapsAtFifteenMinutesForFurtherAttempts(t *testing.T) {
+	for _, attempt := range []int{6, 7, 20, 1000} {
+		got := bootstrapRetryBackoff(attempt)
+		if got > 15*time.Minute {
+			t.Errorf("bootstrapRetryBackoff(%d) = %s, want capped at 15m", attempt, got)
+		}
+	}
+}
+
+func TestBootstrapRetryBackoff_NegativeAttemptTreatedAsZero(t *testing.T) {
+	got := bootstrapRetryBackoff(-3)
+	if got > 5*time.Second {
+		t.Errorf("bootstrapRetryBackoff(-3) = %s, want within [0, 5s] (treated as attempt 0)", got)
+	}
+}

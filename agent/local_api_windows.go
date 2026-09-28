@@ -144,7 +144,7 @@ func (a *Agent) handleLocalStatus(w http.ResponseWriter, _ *http.Request) {
 		"hostname":        a.id.Hostname,
 		"state":           state,
 		"status":          status,
-		"serverUrl":       a.cfg.ServerURL,
+		"serverUrl":       a.cfg().ServerURL,
 		"serverConnected": connected,
 		"lastHeartbeat":   lastHBField,
 		"serviceRunning":  true,

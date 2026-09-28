@@ -85,6 +85,34 @@ func wsProxyAuthReconnectBackoff(attempt int) time.Duration {
 	return wsJitter(wsBackoffDelayCapped(attempt, proxyAuthBackoffMax))
 }
 
+// bootstrapRetrySchedule is the exact step schedule for retrying mTLS
+// bootstrap/re-enrollment (agent/bootstrap.go) — deliberately hand-picked
+// rather than a clean power-of-two progression, so it climbs fast enough to
+// recover quickly from a brief blip but backs off hard enough that a
+// sustained outage doesn't hammer the orchestrator: 5s, 10s, 30s, 60s, 5m,
+// capped at 15m for every attempt beyond this table's length.
+var bootstrapRetrySchedule = []time.Duration{
+	5 * time.Second,
+	10 * time.Second,
+	30 * time.Second,
+	60 * time.Second,
+	5 * time.Minute,
+	15 * time.Minute,
+}
+
+// bootstrapRetryBackoff returns the jittered delay before the next
+// bootstrap/re-enrollment retry, per bootstrapRetrySchedule. attempt 0 is
+// the delay before the first retry (i.e. after the first failure).
+func bootstrapRetryBackoff(attempt int) time.Duration {
+	if attempt < 0 {
+		attempt = 0
+	}
+	if attempt >= len(bootstrapRetrySchedule) {
+		attempt = len(bootstrapRetrySchedule) - 1
+	}
+	return wsJitter(bootstrapRetrySchedule[attempt])
+}
+
 // wsShouldResetBackoff decides whether a just-ended connection counts as
 // "genuinely established" for backoff-reset purposes. A bare Dial() success
 // is not sufficient evidence: the server could accept the HTTP upgrade and

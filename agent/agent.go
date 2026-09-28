@@ -23,12 +23,26 @@ import (
 )
 
 type Agent struct {
-	cfg            Config
+	// cfgPtr/clientPtr are atomic rather than plain fields: a never-enrolled
+	// agent starts on the legacy transport and a background goroutine
+	// (retryBootstrapUntilEnrolled) can upgrade both to the mTLS transport
+	// mid-process the moment bootstrap finally succeeds (agent/bootstrap.go's
+	// outcomeLegacyPending). Every caller reaches them through cfg()/
+	// httpClient() so the swap is visible atomically, with no torn read and
+	// no client rebuild required at any call site.
+	cfgPtr         atomic.Pointer[Config]
 	id             Identity
 	status         string
 	state          string // server-assigned lifecycle state: active|restricted|quarantined|retired
 	mu             sync.Mutex
-	client         *http.Client
+	clientPtr      atomic.Pointer[http.Client]
+	// wsConn/wsConnMu track the currently active WebSocket connection so
+	// upgradeToMTLS can force it closed from another goroutine: closing it
+	// unblocks connectWS's in-flight ReadMessage, which sends it back to the
+	// outer reconnect loop, which rebuilds its dialer from the just-upgraded
+	// cfg() and reconnects over mTLS. nil when disconnected.
+	wsConnMu       sync.Mutex
+	wsConn         *websocket.Conn
 	cancelScenario context.CancelFunc
 	scenarioMu     sync.Mutex
 	// pauseGate and pauseEmit belong to whichever run is currently active
@@ -101,14 +115,14 @@ func newAgent(cfg Config, id Identity) *Agent {
 	transport := &http.Transport{DialContext: proxyAwareNetDialContext(cfg), Proxy: nil}
 	transport.TLSClientConfig = agentTLSConfig(cfg)
 	a := &Agent{
-		cfg:       cfg,
 		id:        id,
 		status:    "idle",
-		client:    &http.Client{Timeout: 30 * time.Second, Transport: transport},
 		logger:    NewLogger(cfg, id.AgentID),
 		localSt:   newLocalAgentState(),
 		spoolKick: make(chan struct{}, 1),
 	}
+	a.cfgPtr.Store(&cfg)
+	a.clientPtr.Store(&http.Client{Timeout: 30 * time.Second, Transport: transport})
 	if h, err := SelfHash(); err == nil {
 		a.binaryHash = h
 		log.Printf("[*] binary hash: %s", h[:16]+"...")
@@ -151,6 +165,67 @@ func (a *Agent) getStatus() string {
 	return a.status
 }
 
+// cfg returns the agent's current operational Config. See cfgPtr's doc
+// comment on the Agent struct for why this is atomic rather than a plain
+// field read.
+func (a *Agent) cfg() Config { return *a.cfgPtr.Load() }
+
+// httpClient returns the agent's current plain-HTTP client (heartbeat,
+// enroll, submitResult, uninstall-result). See clientPtr's doc comment.
+func (a *Agent) httpClient() *http.Client { return a.clientPtr.Load() }
+
+// upgradeToMTLS atomically swaps the agent's operational Config and HTTP
+// client to newCfg's mTLS transport, then force-closes the current
+// WebSocket connection (if any) so connectWS's reconnect loop picks up the
+// new transport on its very next attempt, rather than waiting out however
+// long the current connection happens to stay up. Called exactly once, by
+// retryBootstrapUntilEnrolled, the moment a never-enrolled agent's
+// background bootstrap finally succeeds.
+//
+// After this call, legacy transport is permanently retired for this
+// process: cfg()/httpClient() only ever return the mTLS-backed values from
+// here on, matching the security invariant that legacy transport is a
+// bootstrap compatibility mechanism, never something an already-enrolled
+// identity returns to.
+func (a *Agent) upgradeToMTLS(newCfg Config) {
+	transport := &http.Transport{DialContext: proxyAwareNetDialContext(newCfg), Proxy: nil}
+	transport.TLSClientConfig = agentTLSConfig(newCfg)
+	a.cfgPtr.Store(&newCfg)
+	a.clientPtr.Store(&http.Client{Timeout: 30 * time.Second, Transport: transport})
+	log.Printf("[+] certificate obtained -- switched permanently to mTLS (%s); legacy transport disabled for this process", newCfg.ServerURL)
+	a.logger.Op("info", "connectivity", fmt.Sprintf("upgraded to mTLS transport: %s", newCfg.ServerURL))
+
+	a.wsConnMu.Lock()
+	if a.wsConn != nil {
+		a.wsConn.Close()
+	}
+	a.wsConnMu.Unlock()
+}
+
+// retryBootstrapUntilEnrolled runs only when the agent started on the
+// legacy fallback transport -- a never-enrolled identity whose initial
+// bootstrap attempt failed (agent/bootstrap.go's outcomeLegacyPending).
+// It periodically retries bootstrap with bootstrapRetryBackoff (never a
+// tight loop) until resolveOperationalConfig reports outcomeMTLSReady,
+// then upgrades exactly once via upgradeToMTLS and returns. Never invoked
+// for an already-enrolled identity: outcomeBlocked's retry loop runs
+// entirely in main(), before newAgent is ever called, and never touches
+// legacy transport at all.
+func (a *Agent) retryBootstrapUntilEnrolled(ctx context.Context) {
+	attempt := 0
+	for {
+		newCfg, outcome := resolveOperationalConfig(ctx, a.cfg(), a.id.AgentID)
+		if outcome == outcomeMTLSReady {
+			a.upgradeToMTLS(newCfg)
+			return
+		}
+		delay := bootstrapRetryBackoff(attempt)
+		log.Printf("[!] still on legacy transport, retrying enrollment in %s (attempt %d)", delay.Round(time.Second), attempt+1)
+		attempt++
+		time.Sleep(delay)
+	}
+}
+
 // postJSONDecode POSTs body as JSON and optionally decodes the response into out.
 // Pass nil for out to discard the response body.
 func (a *Agent) postJSONDecode(path string, body interface{}, out interface{}) error {
@@ -158,15 +233,15 @@ func (a *Agent) postJSONDecode(path string, body interface{}, out interface{}) e
 	if err != nil {
 		return fmt.Errorf("marshal: %w", err)
 	}
-	req, err := http.NewRequest(http.MethodPost, a.cfg.ServerURL+path, bytes.NewReader(data))
+	req, err := http.NewRequest(http.MethodPost, a.cfg().ServerURL+path, bytes.NewReader(data))
 	if err != nil {
 		return fmt.Errorf("new request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	if a.cfg.AgentSecret != "" {
-		req.Header.Set("X-Agent-Token", a.cfg.AgentSecret)
+	if a.cfg().AgentSecret != "" {
+		req.Header.Set("X-Agent-Token", a.cfg().AgentSecret)
 	}
-	resp, err := a.client.Do(req)
+	resp, err := a.httpClient().Do(req)
 	if err != nil {
 		return fmt.Errorf("POST %s: %w", path, err)
 	}
@@ -195,12 +270,12 @@ func (a *Agent) enrollWithServer() {
 		IPAddress:      a.id.IPAddress,
 		OSVersion:      a.id.OSVersion,
 		Username:       a.id.Username,
-		EnvLabel:       a.cfg.EnvLabel,
+		EnvLabel:       a.cfg().EnvLabel,
 		BinaryHash:     a.binaryHash,
 		AgentVersion:   version,
 		PostureCatalog: BuildPostureCatalog(),
 	}
-	resp, err := protocol.Enroll(context.Background(), a.client, a.cfg.ServerURL, a.cfg.AgentSecret, req)
+	resp, err := protocol.Enroll(context.Background(), a.httpClient(), a.cfg().ServerURL, a.cfg().AgentSecret, req)
 	if err != nil {
 		log.Printf("[!] enrollment failed: %v — continuing; will retry on reconnect", err)
 		return
@@ -234,7 +309,7 @@ func (a *Agent) sendHeartbeat(status string) {
 		DomainJoined:  a.id.DomainJoined,
 		Username:      a.id.Username,
 		Status:        status,
-		EnvLabel:      a.cfg.EnvLabel,
+		EnvLabel:      a.cfg().EnvLabel,
 		BinaryHash:    a.binaryHash,
 		AgentVersion:  version,
 		SchemaVersion: protocol.SchemaVersion,
@@ -253,7 +328,7 @@ func (a *Agent) sendHeartbeat(status string) {
 		}
 	}
 	t0 := time.Now()
-	resp, err := protocol.SendHeartbeat(context.Background(), a.client, a.cfg.ServerURL, a.cfg.AgentSecret, hb)
+	resp, err := protocol.SendHeartbeat(context.Background(), a.httpClient(), a.cfg().ServerURL, a.cfg().AgentSecret, hb)
 	if err != nil {
 		log.Printf("[!] heartbeat: %v", err)
 		a.logger.Op("warn", "connectivity", fmt.Sprintf("heartbeat failed: %v", err))
@@ -1015,7 +1090,7 @@ func (a *Agent) submitRunResult(payload protocol.RawRunResult, label string) {
 		// Could not persist — fall back to a direct best-effort send so an online
 		// agent still delivers even if the spool dir is unwritable.
 		log.Printf("[!] could not spool result run=%s: %v — attempting direct delivery", payload.RunID, err)
-		if err := protocol.SubmitResult(context.Background(), a.client, a.cfg.ServerURL, a.cfg.AgentSecret, payload); err != nil {
+		if err := protocol.SubmitResult(context.Background(), a.httpClient(), a.cfg().ServerURL, a.cfg().AgentSecret, payload); err != nil {
 			log.Printf("[x] result submit (%s) run=%s failed and could not be spooled: %v", label, payload.RunID, err)
 		} else {
 			log.Printf("[+] results submitted (%s): run=%s", label, payload.RunID)
@@ -1209,11 +1284,17 @@ func (a *Agent) connectWS() {
 	// never merely because Dial returned no error. Across a fleet, this plus
 	// wsJitter's full jitter is what keeps a server restart from bringing every
 	// agent back in lockstep.
-	dialer := &websocket.Dialer{HandshakeTimeout: 45 * time.Second, NetDialContext: proxyAwareNetDialContext(a.cfg)}
-	dialer.TLSClientConfig = agentTLSConfig(a.cfg) // GetClientCertificate re-reads the cert per handshake, so every reconnect picks up a renewal
 	attempt := 0
 	for {
-		conn, err := protocol.DialAgentWSWithDialer(a.cfg.ServerURL, a.id.AgentID, a.cfg.AgentSecret, dialer)
+		// Rebuilt every attempt (not once outside the loop) so a cfg()
+		// upgrade from legacy to mTLS transport (upgradeToMTLS) is picked
+		// up by the very next dial, not just by whichever dialer happened
+		// to be in scope when connectWS started.
+		cfg := a.cfg()
+		dialer := &websocket.Dialer{HandshakeTimeout: 45 * time.Second, NetDialContext: proxyAwareNetDialContext(cfg)}
+		dialer.TLSClientConfig = agentTLSConfig(cfg) // GetClientCertificate re-reads the cert per handshake, so every reconnect picks up a renewal
+
+		conn, err := protocol.DialAgentWSWithDialer(cfg.ServerURL, a.id.AgentID, cfg.AgentSecret, dialer)
 		if err != nil {
 			delay := wsReconnectBackoff(attempt)
 			if errors.Is(err, ErrProxyCredentialsRejected) {
@@ -1225,11 +1306,15 @@ func (a *Agent) connectWS() {
 			time.Sleep(delay)
 			continue
 		}
-		log.Printf("[+] WS connected: %s (after %d attempt(s))", a.cfg.ServerURL, attempt+1)
-		a.logger.Op("info", "connectivity", fmt.Sprintf("WebSocket connected to %s (after %d attempt(s))", a.cfg.ServerURL, attempt+1))
+		log.Printf("[+] WS connected: %s (after %d attempt(s))", cfg.ServerURL, attempt+1)
+		a.logger.Op("info", "connectivity", fmt.Sprintf("WebSocket connected to %s (after %d attempt(s))", cfg.ServerURL, attempt+1))
 		a.logger.Metric("ws_reconnect_attempts", float64(attempt), "count")
 		// Flush events buffered while the connection was down.
 		go a.logger.Flush()
+
+		a.wsConnMu.Lock()
+		a.wsConn = conn
+		a.wsConnMu.Unlock()
 
 		connectedAt := time.Now()
 		gotMessage := false
@@ -1242,6 +1327,11 @@ func (a *Agent) connectWS() {
 				a.logger.Op("warn", "connectivity", fmt.Sprintf("WebSocket disconnected after %s: %v", heldFor.Round(time.Millisecond), err))
 				a.logger.Metric("ws_connection_duration_seconds", heldFor.Seconds(), "seconds")
 				conn.Close()
+				a.wsConnMu.Lock()
+				if a.wsConn == conn {
+					a.wsConn = nil
+				}
+				a.wsConnMu.Unlock()
 				if wsShouldResetBackoff(heldFor, gotMessage) {
 					attempt = 0
 				}

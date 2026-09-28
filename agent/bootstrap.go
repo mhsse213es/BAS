@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"errors"
 	"fmt"
 	"log"
 	"net"
@@ -26,69 +27,128 @@ const (
 	defaultEnrollPort = "9444"
 )
 
+// errBlocked wraps an ensureCertificate error to signal "an already-enrolled
+// identity's mTLS path is currently unusable." resolveOperationalConfig
+// must never fall back to legacy transport for this -- only retry mTLS.
+// Never returned for a never-enrolled identity (see isEnrolled()): legacy
+// transport is a bootstrap compatibility mechanism, never a recovery path
+// for an identity that has already proven itself over mTLS.
+type errBlocked struct{ err error }
+
+func (e *errBlocked) Error() string { return e.err.Error() }
+func (e *errBlocked) Unwrap() error { return e.err }
+
+// bootstrapOutcome tells agent/main.go how to proceed after
+// resolveOperationalConfig, replacing the old binary
+// success/fall-back-to-legacy contract now that legacy transport is never a
+// recovery path for an already-enrolled identity. See each constant's own
+// comment for the caller's required handling.
+type bootstrapOutcome int
+
+const (
+	// outcomeMTLSReady: cfg.ServerURL/MTLS are the operational mTLS
+	// endpoint, ready to use immediately.
+	outcomeMTLSReady bootstrapOutcome = iota
+	// outcomeLegacyPending: never-enrolled, initial bootstrap failed. The
+	// caller starts the agent on legacy transport now (cfg unchanged) while
+	// Agent.retryBootstrapUntilEnrolled retries bootstrap in the
+	// background; on success it upgrades permanently via Agent.upgradeToMTLS.
+	outcomeLegacyPending
+	// outcomeBlocked: already enrolled, but mTLS is not currently usable --
+	// either a transient local problem (e.g. the CA root file is
+	// temporarily unreadable) or the certificate has expired outright with
+	// no successful renewal along the way. The caller must block, retrying
+	// with backoff, and must NEVER start the agent on cfg as returned:
+	// there is no legacy operation for this outcome at all.
+	outcomeBlocked
+)
+
 // resolveOperationalConfig runs certificate bootstrap/renewal BEFORE any
-// long-lived client is built (agent/main.go calls it ahead of newAgent) and
-// returns the Config every later client must be built from:
-//
-//   - success: ServerURL is rewritten to the mTLS listener
-//     (https://<host>:<mTLS port>) and MTLS is set, so newAgent's HTTP
-//     client, the log shipper and the WS dialer all target the mTLS
-//     endpoint with the agent's client certificate attached.
-//   - failure: cfg is returned unchanged (the originally configured URL,
-//     legacy shared-secret path), matching the pre-existing fallback.
+// long-lived client is built (agent/main.go calls it ahead of newAgent),
+// and reports which of bootstrapOutcome's three states the caller is now
+// in. The core invariant across all three: legacy transport is a bootstrap
+// compatibility mechanism, never a recovery path for an identity that has
+// already proven itself over mTLS.
 //
 // Nothing is written back to the service configuration: the mTLS URL is a
 // pure function of the configured URL plus the on-disk certificate, so it
-// is re-derived identically on every start, and an agent whose certificate
-// store is wiped falls back to the configured URL and re-bootstraps.
-func resolveOperationalConfig(ctx context.Context, cfg Config, agentID string) Config {
+// is re-derived identically on every call.
+func resolveOperationalConfig(ctx context.Context, cfg Config, agentID string) (Config, bootstrapOutcome) {
 	opURL, err := ensureCertificate(ctx, cfg, agentID)
-	if err != nil {
-		log.Printf("[!] certificate bootstrap failed, falling back to legacy auth on %s: %v", cfg.ServerURL, err)
-		return cfg
+	if err == nil {
+		if opURL != cfg.ServerURL {
+			log.Printf("[*] operational endpoint: %s (configured: %s)", opURL, cfg.ServerURL)
+		}
+		cfg.ServerURL = opURL
+		cfg.MTLS = true
+		return cfg, outcomeMTLSReady
 	}
-	if opURL != cfg.ServerURL {
-		log.Printf("[*] operational endpoint: %s (configured: %s)", opURL, cfg.ServerURL)
+	var blocked *errBlocked
+	if errors.As(err, &blocked) {
+		log.Printf("[!] mTLS unusable for this already-enrolled agent identity -- refusing legacy fallback, will retry mTLS only: %v", blocked)
+		return cfg, outcomeBlocked
 	}
-	cfg.ServerURL = opURL
-	cfg.MTLS = true
-	return cfg
+	log.Printf("[!] certificate bootstrap failed, operating on legacy transport temporarily while retrying: %v", err)
+	return cfg, outcomeLegacyPending
 }
 
 // ensureCertificate guarantees the agent holds a valid, unexpired mTLS
 // client certificate bound to its own key, and returns the operational mTLS
 // URL (operationalURL of the configured ServerURL) that all traffic must
-// use from then on. Three states:
+// use from then on. Gated first by the persisted enrollment marker
+// (isEnrolled — never by the certificate file's mere existence), then:
 //
-//   - no certificate on disk, or one that has actually EXPIRED: initial
-//     bootstrap against the enrollment listener with the bootstrap secret.
-//     An expired certificate cannot authenticate an mTLS handshake (the
-//     orchestrator's RequireAndVerifyClientCert listener rejects it before
-//     HTTP), and the orchestrator's reuse check no longer matches it
-//     (expires_at > NOW()), so bootstrap is both the only possible and the
-//     permitted path.
-//   - valid and not yet at the renewal threshold: no network I/O (Review
-//     Focus: an already-enrolled agent restarting must never re-bootstrap).
-//   - valid but past the renewal threshold (certExpiringSoon): renew over
-//     the mTLS listener authenticated by the current certificate, never the
-//     bootstrap secret (spec Section 2). A failed renewal is logged and is
-//     NOT an error: the current certificate is still valid, so the agent
-//     keeps operating over mTLS and retries renewal on its next start.
+//   - enrolled, and the certificate is gone/unreadable or has actually
+//     EXPIRED with no successful renewal along the way: an expired
+//     certificate cannot authenticate an mTLS handshake, and there is no
+//     automatic recovery path once that's happened -- returns errBlocked
+//     rather than falling back to the now-forbidden bootstrap secret.
+//   - enrolled, valid, and not yet at the renewal threshold: no network I/O
+//     (Review Focus: an already-enrolled agent restarting must never
+//     re-bootstrap). If the local mTLS setup is otherwise unusable (e.g.
+//     the CA root file is transiently unreadable), returns errBlocked --
+//     never a silent downgrade to legacy for an identity that has already
+//     proven itself.
+//   - enrolled, valid, but past the renewal threshold (certExpiringSoon):
+//     renew over the mTLS listener authenticated by the current
+//     certificate, never the bootstrap secret (spec Section 2). A failed
+//     renewal is logged and is NOT an error: the current certificate is
+//     still valid, so the agent keeps operating over mTLS and retries
+//     renewal on its next attempt.
+//   - never enrolled: the only state that may use the bootstrap secret,
+//     against the enrollment listener. Any stray/partial certificate file
+//     on disk is deliberately ignored -- only the persisted marker decides
+//     this branch. On success, markEnrolled persists the ENROLLED state;
+//     from that moment on this identity can never use the secret again.
 func ensureCertificate(ctx context.Context, cfg Config, agentID string) (string, error) {
 	opURL, err := operationalURL(cfg.ServerURL)
 	if err != nil {
 		return "", fmt.Errorf("derive operational mTLS URL: %w", err)
 	}
 
+	enrolled := isEnrolled()
 	existing, loadErr := loadAgentCertificate()
 	expired := loadErr == nil && !time.Now().Before(existing.NotAfter)
-	if loadErr == nil && !expired && !certExpiringSoon(existing) {
+
+	if enrolled && (loadErr != nil || expired) {
+		reason := "no usable certificate on disk for an enrolled identity"
+		if loadErr == nil && expired {
+			reason = "certificate has expired with no successful renewal"
+		}
+		return "", &errBlocked{errors.New(reason)}
+	}
+
+	if enrolled && !certExpiringSoon(existing) {
 		if err := checkMTLSUsable(cfg); err != nil {
-			return "", err
+			return "", &errBlocked{err}
 		}
 		return opURL, nil
 	}
-	renewing := loadErr == nil && !expired
+
+	// Two cases reach here: (a) enrolled, valid, but past the renewal
+	// threshold -- renew over mTLS; (b) never enrolled -- initial bootstrap
+	// over the enrollment listener with the shared secret.
+	renewing := enrolled
 
 	key, err := loadOrGenerateAgentKey()
 	if err != nil {
@@ -110,10 +170,10 @@ func ensureCertificate(ctx context.Context, cfg Config, agentID string) (string,
 		targetURL = opURL
 		tlsCfg, err := mtlsTLSConfig(cfg)
 		if err != nil {
-			return "", fmt.Errorf("build mTLS config for renewal: %w", err)
+			return "", &errBlocked{fmt.Errorf("build mTLS config for renewal: %w", err)}
 		}
 		if tlsCfg == nil {
-			return "", fmt.Errorf("build mTLS config for renewal: deployment CA root not installed")
+			return "", &errBlocked{errors.New("build mTLS config for renewal: deployment CA root not installed")}
 		}
 		client = &http.Client{
 			Timeout:   30 * time.Second,
@@ -147,6 +207,14 @@ func ensureCertificate(ctx context.Context, cfg Config, agentID string) (string,
 			return opURL, nil
 		}
 		return "", err
+	}
+	if !renewing {
+		// First-ever successful bootstrap: persist the ENROLLED marker.
+		// From this moment on, this identity can never use the bootstrap
+		// secret again -- see the invariant in resolveOperationalConfig.
+		if err := markEnrolled(); err != nil {
+			return "", fmt.Errorf("certificate issued but could not persist enrollment state: %w", err)
+		}
 	}
 	log.Printf("[*] certificate %s (expires %s)", map[bool]string{true: "renewed", false: "issued"}[renewing], resp.ExpiresAt)
 	return opURL, nil

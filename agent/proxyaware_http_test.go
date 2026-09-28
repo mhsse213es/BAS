@@ -29,15 +29,15 @@ func TestNewAgent_ClientHasProxyAwareTransport(t *testing.T) {
 	cfg := Config{ServerURL: "https://orchestrator.example:9443"}
 	a := newAgent(cfg, Identity{AgentID: "a1"})
 
-	tr, ok := a.client.Transport.(*http.Transport)
+	tr, ok := a.httpClient().Transport.(*http.Transport)
 	if !ok || tr == nil {
-		t.Fatalf("a.client.Transport = %T, want a non-nil *http.Transport", a.client.Transport)
+		t.Fatalf("a.httpClient().Transport = %T, want a non-nil *http.Transport", a.httpClient().Transport)
 	}
 	if tr.DialContext == nil {
-		t.Error("a.client.Transport.DialContext is nil -- proxyAwareNetDialContext(cfg) was not wired in")
+		t.Error("a.httpClient().Transport.DialContext is nil -- proxyAwareNetDialContext(cfg) was not wired in")
 	}
 	if tr.Proxy != nil {
-		t.Error("a.client.Transport.Proxy is set -- must be nil so stdlib's own (limited) proxy handling doesn't stack with proxyAwareNetDialContext's")
+		t.Error("a.httpClient().Transport.Proxy is set -- must be nil so stdlib's own (limited) proxy handling doesn't stack with proxyAwareNetDialContext's")
 	}
 }
 

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
@@ -259,6 +260,63 @@ func agentTLSConfig(cfg Config) *tls.Config {
 		return nil
 	}
 	return tlsCfg
+}
+
+// enrollmentStatePath is the persisted marker distinguishing NeverEnrolled
+// from Enrolled -- deliberately a file separate from agent-cert.pem, not
+// inferred from that file's mere existence (see isEnrolled).
+func enrollmentStatePath() string {
+	dir, _, _, _ := certPaths()
+	return filepath.Join(dir, "enrollment-state")
+}
+
+// isEnrolled reports whether this agent identity has EVER successfully
+// completed enrollment, per the marker markEnrolled writes -- NOT inferred
+// from "a certificate file exists" alone. A corrupted or partially-written
+// certificate file (a truncated write, a bad upgrade, disk corruption) must
+// never be mistaken for a successfully-enrolled identity: doing so could
+// flip an untrusted/never-enrolled agent into the ENROLLED state's stricter
+// fail-closed behavior for the wrong reason, or worse, let a real ENROLLED
+// identity's state get silently lost and fall back to bootstrap. This is
+// the persisted half of the invariant resolveOperationalConfig enforces:
+// legacy transport is a bootstrap compatibility mechanism, never a
+// recovery path for an already-enrolled identity.
+func isEnrolled() bool {
+	data, err := os.ReadFile(enrollmentStatePath())
+	return err == nil && bytes.Equal(bytes.TrimSpace(data), []byte("enrolled"))
+}
+
+// markEnrolled persists the ENROLLED state atomically: write to a temp file
+// in the same directory, then rename. Rename is atomic on both POSIX and
+// Windows (NTFS) for a same-volume move, so a crash or power loss
+// mid-write can never leave a half-written marker for isEnrolled to
+// misread as either state. Callers (agent/bootstrap.go's ensureCertificate)
+// call this only after saveAgentCertificate has confirmed a real,
+// key-matched certificate was persisted -- never before.
+func markEnrolled() error {
+	dir, _, _, _ := certPaths()
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		return fmt.Errorf("create cert dir %s: %w", dir, err)
+	}
+	tmp, err := os.CreateTemp(dir, "enrollment-state-*.tmp")
+	if err != nil {
+		return fmt.Errorf("create temp enrollment-state file: %w", err)
+	}
+	tmpName := tmp.Name()
+	if _, err := tmp.WriteString("enrolled"); err != nil {
+		tmp.Close()
+		os.Remove(tmpName)
+		return fmt.Errorf("write enrollment-state: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		os.Remove(tmpName)
+		return fmt.Errorf("close temp enrollment-state file: %w", err)
+	}
+	if err := os.Rename(tmpName, enrollmentStatePath()); err != nil {
+		os.Remove(tmpName)
+		return fmt.Errorf("rename enrollment-state into place: %w", err)
+	}
+	return nil
 }
 
 // certExpiringSoon reports whether cert has crossed 75% of its total

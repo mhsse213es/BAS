@@ -104,13 +104,37 @@ func main() {
 	fmt.Printf("\n")
 
 	// Certificate bootstrap/renewal runs BEFORE newAgent: newAgent builds
-	// the long-lived HTTP client, log shipper and (via a.cfg) the WS dialer
-	// from cfg, so cfg must already carry the resolved mTLS ServerURL and
-	// MTLS flag -- building them first is what left a freshly bootstrapped
-	// agent with a non-mTLS client until restart.
-	cfg = resolveOperationalConfig(context.Background(), cfg, id.AgentID)
+	// the long-lived HTTP client, log shipper and (via a.cfg()) the WS
+	// dialer from cfg, so cfg must already carry the resolved mTLS
+	// ServerURL and MTLS flag -- building them first is what left a
+	// freshly bootstrapped agent with a non-mTLS client until restart.
+	cfg, outcome := resolveOperationalConfig(context.Background(), cfg, id.AgentID)
+	if outcome == outcomeBlocked {
+		// An already-enrolled identity whose mTLS path is currently
+		// unusable NEVER operates over legacy transport -- block here,
+		// retrying with backoff, before newAgent (and therefore any
+		// network communication at all) ever starts. If an operator
+		// resets the enrollment marker to force a genuine re-bootstrap,
+		// the next retry picks that up automatically via isEnrolled().
+		attempt := 0
+		for outcome == outcomeBlocked {
+			delay := bootstrapRetryBackoff(attempt)
+			log.Printf("[!] blocked pending mTLS recovery -- retrying in %s (attempt %d)", delay.Round(time.Second), attempt+1)
+			time.Sleep(delay)
+			attempt++
+			cfg, outcome = resolveOperationalConfig(context.Background(), cfg, id.AgentID)
+		}
+	}
 	agent := newAgent(cfg, id)
 	agent.enrollWithServer()
+
+	if outcome == outcomeLegacyPending {
+		// Never-enrolled, initial bootstrap failed: operate on legacy
+		// transport now (cfg as built above) while retrying bootstrap in
+		// the background. retryBootstrapUntilEnrolled upgrades the running
+		// agent's transport permanently the moment it succeeds.
+		go agent.retryBootstrapUntilEnrolled(context.Background())
+	}
 
 	go agent.connectWS()
 	go agent.startLocalAPI()

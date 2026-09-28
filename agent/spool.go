@@ -124,7 +124,7 @@ func (a *Agent) drainSpool() {
 			os.Remove(path)
 			continue
 		}
-		if err := protocol.SubmitResult(context.Background(), a.client, a.cfg.ServerURL, a.cfg.AgentSecret, env.Payload); err != nil {
+		if err := protocol.SubmitResult(context.Background(), a.httpClient(), a.cfg().ServerURL, a.cfg().AgentSecret, env.Payload); err != nil {
 			log.Printf("[!] spool: delivery deferred (%s) run=%s: %v", env.Label, env.Payload.RunID, err)
 			return // server unreachable — stop; retry on next drain
 		}

@@ -18,11 +18,13 @@ func newSpoolTestAgent(t *testing.T, serverURL string) *Agent {
 	dir := t.TempDir()
 	spoolDirOverride = dir
 	t.Cleanup(func() { spoolDirOverride = "" })
-	return &Agent{
-		cfg:       Config{ServerURL: serverURL},
-		client:    http.DefaultClient,
+	a := &Agent{
 		spoolKick: make(chan struct{}, 1),
 	}
+	cfg := Config{ServerURL: serverURL}
+	a.cfgPtr.Store(&cfg)
+	a.clientPtr.Store(http.DefaultClient)
+	return a
 }
 
 func TestSpoolWriteRoundTrip(t *testing.T) {

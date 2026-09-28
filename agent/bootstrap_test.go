@@ -11,6 +11,7 @@ import (
 	"crypto/x509/pkix"
 	"encoding/json"
 	"encoding/pem"
+	"errors"
 	"math/big"
 	"net/http"
 	"net/http/httptest"
@@ -173,6 +174,9 @@ func TestEnsureCertificate_SkipsBootstrapWhenValidCertExists(t *testing.T) {
 	if err := saveAgentCertificate(caSignedCertPEM(t, ca, &key.PublicKey, "abc123deadbeef01", -time.Hour, 24*365*time.Hour)); err != nil {
 		t.Fatalf("saveAgentCertificate: %v", err)
 	}
+	if err := markEnrolled(); err != nil {
+		t.Fatalf("markEnrolled: %v", err)
+	}
 
 	rec := &csrRecord{}
 	srv := newMockOrchestrator(t, ca, tls.NoClientCert, http.StatusOK, rec)
@@ -223,6 +227,9 @@ func TestEnsureCertificate_BootstrapsFromLegacyHTTPConfigOverHTTPS(t *testing.T)
 	if opURL != "https://127.0.0.1:19443" {
 		t.Errorf("operational URL = %q, want https://127.0.0.1:19443 (not the configured http://127.0.0.1:9000)", opURL)
 	}
+	if !isEnrolled() {
+		t.Error("expected isEnrolled to be true after a successful first-time bootstrap")
+	}
 }
 
 func TestEnsureCertificate_RenewsExpiringCertViaMTLSNotBootstrapSecret(t *testing.T) {
@@ -237,6 +244,9 @@ func TestEnsureCertificate_RenewsExpiringCertViaMTLSNotBootstrapSecret(t *testin
 	// ~82% elapsed: past the 75% renewal threshold, still valid.
 	if err := saveAgentCertificate(caSignedCertPEM(t, ca, &key.PublicKey, "abc123deadbeef01", -300*24*time.Hour, 65*24*time.Hour)); err != nil {
 		t.Fatalf("saveAgentCertificate: %v", err)
+	}
+	if err := markEnrolled(); err != nil {
+		t.Fatalf("markEnrolled: %v", err)
 	}
 	before := mustLoadCert(t)
 
@@ -269,9 +279,13 @@ func TestEnsureCertificate_RenewsExpiringCertViaMTLSNotBootstrapSecret(t *testin
 	}
 }
 
-// An EXPIRED certificate cannot authenticate an mTLS renewal; the agent
-// must fall back to a fresh bootstrap on the enrollment listener.
-func TestEnsureCertificate_ExpiredCertRebootstrapsInsteadOfRenewing(t *testing.T) {
+// An EXPIRED certificate cannot authenticate an mTLS renewal. Per the
+// locked security invariant, an already-enrolled identity must NOT fall
+// back to a fresh bootstrap via the shared secret in this case -- that
+// would be exactly the "legacy transport as a recovery mechanism for an
+// enrolled identity" the design explicitly prohibits. It halts instead
+// (errBlocked), with zero calls to the bootstrap endpoint.
+func TestEnsureCertificate_EnrolledExpiredCertHaltsWithoutRebootstrapping(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("BAS_CERT_DIR", dir)
 	ca := newTestCA(t)
@@ -283,20 +297,57 @@ func TestEnsureCertificate_ExpiredCertRebootstrapsInsteadOfRenewing(t *testing.T
 	if err := saveAgentCertificate(caSignedCertPEM(t, ca, &key.PublicKey, "abc123deadbeef01", -400*24*time.Hour, -time.Hour)); err != nil {
 		t.Fatalf("saveAgentCertificate: %v", err)
 	}
+	if err := markEnrolled(); err != nil {
+		t.Fatalf("markEnrolled: %v", err)
+	}
 
 	rec := &csrRecord{}
 	srv := newMockOrchestrator(t, ca, tls.NoClientCert, http.StatusOK, rec)
 	t.Setenv("BAS_ENROLL_PORT", portOf(t, srv.URL))
 	t.Setenv("BAS_MTLS_PORT", unusedPort(t)) // a renewal attempt would fail here
 
-	if _, err := ensureCertificate(context.Background(), Config{ServerURL: "https://127.0.0.1:9443", AgentSecret: "secret"}, "abc123deadbeef01"); err != nil {
+	_, err = ensureCertificate(context.Background(), Config{ServerURL: "https://127.0.0.1:9443", AgentSecret: "secret"}, "abc123deadbeef01")
+	var blocked *errBlocked
+	if !errors.As(err, &blocked) {
+		t.Fatalf("ensureCertificate error = %v, want an *errBlocked", err)
+	}
+	if rec.calls != 0 {
+		t.Errorf("expected zero bootstrap calls for an enrolled identity's expired certificate, got %d", rec.calls)
+	}
+	if c := mustLoadCert(t); time.Now().Before(c.NotAfter) {
+		t.Error("expected the still-expired certificate to remain untouched on disk")
+	}
+}
+
+// TestEnsureCertificate_NeverEnrolledIgnoresStrayCertFile locks in the
+// "not inferred from cert-file existence" invariant: a stray/partial
+// certificate file left on disk for a never-enrolled identity (no
+// enrollment marker) must be ignored entirely -- bootstrap runs via the
+// shared secret exactly as if no file were present.
+func TestEnsureCertificate_NeverEnrolledIgnoresStrayCertFile(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("BAS_CERT_DIR", dir)
+	ca := newTestCA(t)
+	seedDeploymentCA(t, dir, ca)
+	key, err := loadOrGenerateAgentKey()
+	if err != nil {
+		t.Fatalf("loadOrGenerateAgentKey: %v", err)
+	}
+	// A valid, unexpired stray certificate -- but markEnrolled was never
+	// called, so isEnrolled() is false.
+	if err := saveAgentCertificate(caSignedCertPEM(t, ca, &key.PublicKey, "abc123deadbeef01", -time.Hour, 24*365*time.Hour)); err != nil {
+		t.Fatalf("saveAgentCertificate: %v", err)
+	}
+
+	rec := &csrRecord{}
+	srv := newMockOrchestrator(t, ca, tls.NoClientCert, http.StatusOK, rec)
+	t.Setenv("BAS_ENROLL_PORT", portOf(t, srv.URL))
+
+	if _, err := ensureCertificate(context.Background(), Config{ServerURL: "http://127.0.0.1:9000", AgentSecret: "secret"}, "abc123deadbeef01"); err != nil {
 		t.Fatalf("ensureCertificate: %v", err)
 	}
 	if rec.calls != 1 || rec.token != "secret" {
-		t.Errorf("expected one bootstrap call with the bootstrap secret, got calls=%d token=%q", rec.calls, rec.token)
-	}
-	if c := mustLoadCert(t); !time.Now().Before(c.NotAfter) {
-		t.Error("expired certificate was not replaced")
+		t.Errorf("expected one bootstrap call with the bootstrap secret despite the stray cert file, got calls=%d token=%q", rec.calls, rec.token)
 	}
 }
 
@@ -310,6 +361,9 @@ func TestEnsureCertificate_RenewalFailureKeepsCurrentCertAndMTLSURL(t *testing.T
 	key, _ := loadOrGenerateAgentKey()
 	if err := saveAgentCertificate(caSignedCertPEM(t, ca, &key.PublicKey, "abc123deadbeef01", -300*24*time.Hour, 65*24*time.Hour)); err != nil {
 		t.Fatalf("saveAgentCertificate: %v", err)
+	}
+	if err := markEnrolled(); err != nil {
+		t.Fatalf("markEnrolled: %v", err)
 	}
 	before := mustLoadCert(t)
 
@@ -370,7 +424,10 @@ func TestResolveOperationalConfig_UsesMTLSURLAfterBootstrap(t *testing.T) {
 	t.Setenv("BAS_MTLS_PORT", "")
 
 	configured := Config{ServerURL: "http://127.0.0.1:9000", AgentSecret: "secret"}
-	got := resolveOperationalConfig(context.Background(), configured, "abc123deadbeef01")
+	got, outcome := resolveOperationalConfig(context.Background(), configured, "abc123deadbeef01")
+	if outcome != outcomeMTLSReady {
+		t.Fatalf("outcome = %v, want outcomeMTLSReady", outcome)
+	}
 	if got.ServerURL != "https://127.0.0.1:9443" {
 		t.Errorf("ServerURL = %q, want https://127.0.0.1:9443 (not the configured %s)", got.ServerURL, configured.ServerURL)
 	}
@@ -380,14 +437,96 @@ func TestResolveOperationalConfig_UsesMTLSURLAfterBootstrap(t *testing.T) {
 	if got.AgentSecret != "secret" {
 		t.Error("other Config fields must be preserved")
 	}
+	if !isEnrolled() {
+		t.Error("expected isEnrolled to be true after a successful first-time bootstrap")
+	}
 }
 
-func TestResolveOperationalConfig_KeepsConfiguredURLWhenBootstrapFails(t *testing.T) {
+// TestResolveOperationalConfig_NeverEnrolledBootstrapFailureIsLegacyPending
+// covers the never-enrolled row of the locked state table: bootstrap
+// failing for an identity with no prior enrollment must report
+// outcomeLegacyPending (operate on legacy now, retry in the background),
+// never outcomeBlocked (which is reserved for an already-enrolled identity).
+func TestResolveOperationalConfig_NeverEnrolledBootstrapFailureIsLegacyPending(t *testing.T) {
 	t.Setenv("BAS_CERT_DIR", t.TempDir()) // no CA root installed -> bootstrap cannot run
 	configured := Config{ServerURL: "http://orchestrator.local:9000", AgentSecret: "secret"}
-	got := resolveOperationalConfig(context.Background(), configured, "abc123deadbeef01")
+	got, outcome := resolveOperationalConfig(context.Background(), configured, "abc123deadbeef01")
+	if outcome != outcomeLegacyPending {
+		t.Fatalf("outcome = %v, want outcomeLegacyPending", outcome)
+	}
 	if got != configured {
 		t.Errorf("config changed on bootstrap failure: %+v", got)
+	}
+}
+
+// TestResolveOperationalConfig_EnrolledCheckMTLSUsableFailureIsBlocked covers
+// the "Enrolled + valid cert, checkMTLSUsable fails" row: must report
+// outcomeBlocked, never outcomeLegacyPending -- an already-enrolled identity
+// never falls back to legacy transport.
+func TestResolveOperationalConfig_EnrolledCheckMTLSUsableFailureIsBlocked(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("BAS_CERT_DIR", dir)
+	ca := newTestCA(t)
+	seedDeploymentCA(t, dir, ca)
+	key, err := loadOrGenerateAgentKey()
+	if err != nil {
+		t.Fatalf("loadOrGenerateAgentKey: %v", err)
+	}
+	if err := saveAgentCertificate(caSignedCertPEM(t, ca, &key.PublicKey, "abc123deadbeef01", -time.Hour, 24*365*time.Hour)); err != nil {
+		t.Fatalf("saveAgentCertificate: %v", err)
+	}
+	if err := markEnrolled(); err != nil {
+		t.Fatalf("markEnrolled: %v", err)
+	}
+	// Remove the CA root after enrolling -- checkMTLSUsable's mtlsTLSConfig
+	// call will fail to find it.
+	if err := os.Remove(filepath.Join(dir, "deployment-ca.pem")); err != nil {
+		t.Fatalf("remove deployment CA: %v", err)
+	}
+
+	configured := Config{ServerURL: "http://orchestrator.local:9000", AgentSecret: "secret"}
+	got, outcome := resolveOperationalConfig(context.Background(), configured, "abc123deadbeef01")
+	if outcome != outcomeBlocked {
+		t.Fatalf("outcome = %v, want outcomeBlocked", outcome)
+	}
+	if got != configured {
+		t.Errorf("config changed while blocked: %+v", got)
+	}
+}
+
+// TestResolveOperationalConfig_EnrolledExpiredCertIsBlocked covers the
+// "Enrolled + cert expired" row: must halt (outcomeBlocked), never
+// re-bootstrap via the shared secret.
+func TestResolveOperationalConfig_EnrolledExpiredCertIsBlocked(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("BAS_CERT_DIR", dir)
+	ca := newTestCA(t)
+	seedDeploymentCA(t, dir, ca)
+	key, err := loadOrGenerateAgentKey()
+	if err != nil {
+		t.Fatalf("loadOrGenerateAgentKey: %v", err)
+	}
+	if err := saveAgentCertificate(caSignedCertPEM(t, ca, &key.PublicKey, "abc123deadbeef01", -400*24*time.Hour, -time.Hour)); err != nil {
+		t.Fatalf("saveAgentCertificate: %v", err)
+	}
+	if err := markEnrolled(); err != nil {
+		t.Fatalf("markEnrolled: %v", err)
+	}
+
+	rec := &csrRecord{}
+	srv := newMockOrchestrator(t, ca, tls.NoClientCert, http.StatusOK, rec)
+	t.Setenv("BAS_ENROLL_PORT", portOf(t, srv.URL))
+
+	configured := Config{ServerURL: "http://orchestrator.local:9000", AgentSecret: "secret"}
+	got, outcome := resolveOperationalConfig(context.Background(), configured, "abc123deadbeef01")
+	if outcome != outcomeBlocked {
+		t.Fatalf("outcome = %v, want outcomeBlocked", outcome)
+	}
+	if got != configured {
+		t.Errorf("config changed while blocked: %+v", got)
+	}
+	if rec.calls != 0 {
+		t.Error("an enrolled identity's expired certificate must never trigger a bootstrap-secret call")
 	}
 }
 

@@ -210,15 +210,15 @@ func (a *Agent) runAndUploadSharpHound(cmd AttackPathCollectCommand) {
 
 // postRaw POSTs raw bytes with the agent token (mirrors postJSONDecode auth).
 func (a *Agent) postRaw(path, contentType string, body []byte) error {
-	req, err := http.NewRequest(http.MethodPost, a.cfg.ServerURL+path, bytes.NewReader(body))
+	req, err := http.NewRequest(http.MethodPost, a.cfg().ServerURL+path, bytes.NewReader(body))
 	if err != nil {
 		return err
 	}
 	req.Header.Set("Content-Type", contentType)
-	if a.cfg.AgentSecret != "" {
-		req.Header.Set("X-Agent-Token", a.cfg.AgentSecret)
+	if a.cfg().AgentSecret != "" {
+		req.Header.Set("X-Agent-Token", a.cfg().AgentSecret)
 	}
-	resp, err := a.client.Do(req)
+	resp, err := a.httpClient().Do(req)
 	if err != nil {
 		return err
 	}

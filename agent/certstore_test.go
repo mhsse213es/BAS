@@ -175,3 +175,60 @@ func TestSaveAgentCertificate_RejectsCertificateForDifferentKey(t *testing.T) {
 		t.Error("expected saveAgentCertificate to reject non-PEM input")
 	}
 }
+
+func TestIsEnrolled_FalseBeforeMarkEnrolled(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("BAS_CERT_DIR", dir)
+	if isEnrolled() {
+		t.Error("expected isEnrolled to be false with no marker written yet")
+	}
+}
+
+func TestIsEnrolled_TrueAfterMarkEnrolled(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("BAS_CERT_DIR", dir)
+	if err := markEnrolled(); err != nil {
+		t.Fatalf("markEnrolled: %v", err)
+	}
+	if !isEnrolled() {
+		t.Error("expected isEnrolled to be true after markEnrolled")
+	}
+}
+
+// TestIsEnrolled_NotInferredFromCertFileAlone locks in the core invariant:
+// a certificate file existing on disk (even a real, valid one) must never
+// by itself count as "enrolled" -- only the explicit persisted marker does.
+// This is what protects against a corrupted/partial certificate write being
+// mistaken for a successfully-enrolled identity.
+func TestIsEnrolled_NotInferredFromCertFileAlone(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("BAS_CERT_DIR", dir)
+	key, err := loadOrGenerateAgentKey()
+	if err != nil {
+		t.Fatalf("loadOrGenerateAgentKey: %v", err)
+	}
+	ca := newTestCA(t)
+	certPEM := leafCertPEMForKeyPublic(t, ca, "abc123deadbeef01", key)
+	if err := saveAgentCertificate(certPEM); err != nil {
+		t.Fatalf("saveAgentCertificate: %v", err)
+	}
+	// A real, valid, key-matched certificate is now on disk -- but
+	// markEnrolled was never called.
+	if isEnrolled() {
+		t.Error("expected isEnrolled to be false: a certificate file on disk must not by itself imply enrollment")
+	}
+}
+
+func TestIsEnrolled_CorruptedMarkerTreatedAsNotEnrolled(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("BAS_CERT_DIR", dir)
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	if err := os.WriteFile(enrollmentStatePath(), []byte("garbage-not-the-expected-marker"), 0600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	if isEnrolled() {
+		t.Error("expected a corrupted/unrecognized marker file to be treated as not-enrolled, not fail open")
+	}
+}

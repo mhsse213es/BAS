@@ -2,6 +2,7 @@
 package main
 
 import (
+	"context"
 	"crypto/ecdsa"
 	"crypto/rand"
 	"crypto/tls"
@@ -16,6 +17,10 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/gorilla/websocket"
+
+	"audspect/agent/protocol"
 )
 
 func TestMTLSTLSConfig_NilWhenNoCARootInstalled(t *testing.T) {
@@ -231,4 +236,113 @@ func writeCARootFile(t *testing.T, dir string, der []byte) error {
 	t.Helper()
 	pemBytes := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})
 	return os.WriteFile(filepath.Join(dir, "deployment-ca.pem"), pemBytes, 0644)
+}
+
+// --- runtime legacy-to-mTLS upgrade (Group B / B3 fix) ---
+
+func TestAgent_UpgradeToMTLS_SwapsConfigAndClient(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("BAS_CERT_DIR", dir)
+	ca := newTestCA(t)
+	if err := writeCARootFile(t, dir, ca.cert.Raw); err != nil {
+		t.Fatalf("writeCARootFile: %v", err)
+	}
+	key, err := loadOrGenerateAgentKey()
+	if err != nil {
+		t.Fatalf("loadOrGenerateAgentKey: %v", err)
+	}
+	if err := saveAgentCertificate(caSignedCertPEM(t, ca, &key.PublicKey, "abc123deadbeef01", -time.Hour, 24*365*time.Hour)); err != nil {
+		t.Fatalf("saveAgentCertificate: %v", err)
+	}
+
+	legacyCfg := Config{ServerURL: "http://orchestrator.local:9000", AgentSecret: "secret"}
+	a := newAgent(legacyCfg, Identity{AgentID: "abc123deadbeef01"})
+	if a.cfg().MTLS {
+		t.Fatal("precondition: agent must start on legacy transport")
+	}
+
+	mtlsCfg := Config{ServerURL: "https://orchestrator.local:9443", AgentSecret: "secret", MTLS: true}
+	a.upgradeToMTLS(mtlsCfg)
+
+	if got := a.cfg(); got != mtlsCfg {
+		t.Errorf("cfg() = %+v, want %+v", got, mtlsCfg)
+	}
+	tr, ok := a.httpClient().Transport.(*http.Transport)
+	if !ok || tr.TLSClientConfig == nil || tr.TLSClientConfig.GetClientCertificate == nil {
+		t.Error("httpClient()'s transport was not rebuilt with the mTLS TLS config")
+	}
+}
+
+// TestAgent_UpgradeToMTLS_ClosesActiveWSConnection proves the mechanism
+// that lets a running agent actually switch transports mid-process: closing
+// the legacy WS connection is what forces connectWS's blocked ReadMessage
+// to return, sending it back to the outer loop, which rebuilds its dialer
+// from the just-upgraded cfg() and reconnects over mTLS.
+func TestAgent_UpgradeToMTLS_ClosesActiveWSConnection(t *testing.T) {
+	upgrader := websocket.Upgrader{}
+	closed := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		conn.ReadMessage() // blocks until the client side closes
+		close(closed)
+	}))
+	defer server.Close()
+
+	conn, err := protocol.DialAgentWS(server.URL, "a1", "")
+	if err != nil {
+		t.Fatalf("DialAgentWS: %v", err)
+	}
+
+	a := newAgent(Config{ServerURL: "http://orchestrator.local:9000"}, Identity{AgentID: "a1"})
+	a.wsConnMu.Lock()
+	a.wsConn = conn
+	a.wsConnMu.Unlock()
+
+	a.upgradeToMTLS(Config{ServerURL: "https://orchestrator.local:9443", MTLS: true})
+
+	select {
+	case <-closed:
+	case <-time.After(5 * time.Second):
+		t.Fatal("upgradeToMTLS did not close the active WS connection -- connectWS would never reconnect with the new transport")
+	}
+}
+
+// TestAgent_RetryBootstrapUntilEnrolled_UpgradesOnSuccess proves the
+// "legacy operation -> periodic enrollment retry -> successful enrollment
+// -> switch permanently to mTLS" path end-to-end: a never-enrolled agent
+// started on legacy transport, once bootstrap succeeds, ends up with cfg()
+// pointing at the mTLS endpoint and isEnrolled() true.
+func TestAgent_RetryBootstrapUntilEnrolled_UpgradesOnSuccess(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("BAS_CERT_DIR", dir)
+	ca := newTestCA(t)
+	seedDeploymentCA(t, dir, ca)
+	rec := &csrRecord{}
+	srv := newMockOrchestrator(t, ca, tls.NoClientCert, http.StatusOK, rec)
+	t.Setenv("BAS_ENROLL_PORT", portOf(t, srv.URL))
+	t.Setenv("BAS_MTLS_PORT", "")
+
+	legacyCfg := Config{ServerURL: "http://127.0.0.1:9000", AgentSecret: "secret"}
+	a := newAgent(legacyCfg, Identity{AgentID: "abc123deadbeef01"})
+
+	// The mock orchestrator succeeds on every call, so the very first
+	// attempt inside retryBootstrapUntilEnrolled's loop succeeds -- no
+	// backoff wait, so this test stays fast despite exercising the real
+	// retry loop's success path end-to-end.
+	a.retryBootstrapUntilEnrolled(context.Background())
+
+	got := a.cfg()
+	if !got.MTLS {
+		t.Error("expected cfg().MTLS to be true after a successful background bootstrap")
+	}
+	if got.ServerURL != "https://127.0.0.1:9443" {
+		t.Errorf("cfg().ServerURL = %q, want https://127.0.0.1:9443", got.ServerURL)
+	}
+	if !isEnrolled() {
+		t.Error("expected isEnrolled() to be true after a successful background bootstrap")
+	}
 }
