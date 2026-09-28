@@ -74,14 +74,28 @@ func TestWSAgentAuthorized_MTLSIdentityMatchAccepted(t *testing.T) {
 	}
 }
 
-func TestWSAgentAuthorized_LegacyFallbackUnchanged(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/ws/agent?agentId=x&agentSecret=correct-secret", nil)
+func TestWSAgentAuthorized_LegacyFallbackViaHeader(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/ws/agent?agentId=x", nil)
+	req.Header.Set("X-Agent-Token", "correct-secret")
 	// No context value set -- simulates the plaintext/legacy listener, where
 	// WithMTLSIdentity was never applied.
 	if ok, _, _ := wsAgentAuthorized(req, "correct-secret"); !ok {
-		t.Error("expected acceptance with the correct legacy agentSecret")
+		t.Error("expected acceptance with the correct legacy agentSecret via X-Agent-Token header")
 	}
-	if ok, code, _ := wsAgentAuthorized(req, "different-secret"); ok || code != http.StatusUnauthorized {
+	req.Header.Set("X-Agent-Token", "different-secret")
+	if ok, code, _ := wsAgentAuthorized(req, "correct-secret"); ok || code != http.StatusUnauthorized {
 		t.Errorf("expected rejection with a wrong legacy agentSecret, got ok=%v code=%d", ok, code)
+	}
+}
+
+// TestWSAgentAuthorized_QueryParamSecretRejected locks in the B2 fix: a
+// secret placed in the URL query string (which proxies, load balancers, and
+// access logs record verbatim) must never authenticate a connection. Only
+// protocol/websocket.go's DialAgentWSWithDialer header is accepted now.
+func TestWSAgentAuthorized_QueryParamSecretRejected(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/ws/agent?agentId=x&agentSecret=correct-secret", nil)
+	// No X-Agent-Token header set -- only the (no longer honored) query param.
+	if ok, code, _ := wsAgentAuthorized(req, "correct-secret"); ok || code != http.StatusUnauthorized {
+		t.Errorf("expected rejection when the secret is only in the query string, got ok=%v code=%d", ok, code)
 	}
 }

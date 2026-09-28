@@ -41,6 +41,38 @@ func TestDialAgentWS_ConnectsAndReadsMessage(t *testing.T) {
 	}
 }
 
+// TestDialAgentWS_SendsSecretViaHeaderNotQuery locks in the B2 fix: the
+// agent secret must arrive on the handshake as the X-Agent-Token header,
+// never in the URL query string (which proxies, load balancers, and access
+// logs record verbatim along the whole network path).
+func TestDialAgentWS_SendsSecretViaHeaderNotQuery(t *testing.T) {
+	upgrader := websocket.Upgrader{}
+	var gotHeader, gotQuery string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotHeader = r.Header.Get("X-Agent-Token")
+		gotQuery = r.URL.Query().Get("agentSecret")
+		conn, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+	}))
+	defer server.Close()
+
+	conn, err := DialAgentWS(server.URL, "a1", "shh")
+	if err != nil {
+		t.Fatalf("DialAgentWS: %v", err)
+	}
+	defer conn.Close()
+
+	if gotHeader != "shh" {
+		t.Errorf("X-Agent-Token header = %q, want shh", gotHeader)
+	}
+	if gotQuery != "" {
+		t.Errorf("agentSecret query param = %q, want empty -- the secret must never appear in the URL", gotQuery)
+	}
+}
+
 func TestReadMessage_MalformedFrameReturnsError(t *testing.T) {
 	upgrader := websocket.Upgrader{}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

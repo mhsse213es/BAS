@@ -46,9 +46,11 @@ func AuthenticatedAgentID(r *http.Request) string {
 // certificate's identity exactly -- a cert issued for one agent must never
 // be usable to claim another's identity. A connection with no mTLS
 // identity (enrollment/legacy listeners) falls back to the pre-existing
-// agentSecret query param/X-Agent-Token header check, unchanged from
-// today. Returns (true, 0, "") to proceed, or (false, statusCode, message)
-// to reject.
+// X-Agent-Token header check. The agentSecret query param is intentionally
+// NOT accepted here: a query string gets logged verbatim by proxies, load
+// balancers, and server access logs, and protocol/websocket.go's
+// DialAgentWSWithDialer now always sends it as a header instead. Returns
+// (true, 0, "") to proceed, or (false, statusCode, message) to reject.
 func wsAgentAuthorized(req *http.Request, agentSecret string) (ok bool, statusCode int, msg string) {
 	claimedID := req.URL.Query().Get("agentId")
 	if mtlsID := AuthenticatedAgentID(req); mtlsID != "" {
@@ -58,10 +60,7 @@ func wsAgentAuthorized(req *http.Request, agentSecret string) (ok bool, statusCo
 		return true, 0, ""
 	}
 	if agentSecret != "" {
-		provided := req.URL.Query().Get("agentSecret")
-		if provided == "" {
-			provided = req.Header.Get("X-Agent-Token")
-		}
+		provided := req.Header.Get("X-Agent-Token")
 		if subtle.ConstantTimeCompare([]byte(provided), []byte(agentSecret)) != 1 {
 			return false, http.StatusUnauthorized, "unauthorized"
 		}

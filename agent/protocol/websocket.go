@@ -3,6 +3,7 @@ package protocol
 import (
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"net/url"
 	"strings"
 	"time"
@@ -47,12 +48,19 @@ func DialAgentWSWithDialer(serverURL, agentID, agentSecret string, dialer *webso
 	}
 	q := u.Query()
 	q.Set("agentId", agentID)
-	if agentSecret != "" {
-		q.Set("agentSecret", agentSecret)
-	}
 	u.RawQuery = q.Encode()
 
-	conn, _, err := dialer.Dial(u.String(), nil)
+	// agentSecret goes on the handshake request as a header, never the URL
+	// query string -- a query string gets logged verbatim by proxies, load
+	// balancers, and server access logs along the whole network path.
+	// gorilla's Dial supports request headers on the handshake for exactly
+	// this reason.
+	var reqHeader http.Header
+	if agentSecret != "" {
+		reqHeader = http.Header{"X-Agent-Token": []string{agentSecret}}
+	}
+
+	conn, _, err := dialer.Dial(u.String(), reqHeader)
 	if err != nil {
 		return nil, fmt.Errorf("WS dial: %w", err)
 	}
