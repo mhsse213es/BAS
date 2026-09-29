@@ -129,6 +129,33 @@ func TestLoadPreventionVerdicts_LatestWinsAndCarriesTimestamp(t *testing.T) {
 	})
 }
 
+// TestLoadPreventionVerdicts_VetoedResultExcluded pins the same rule
+// ERROR/SKIPPED already had: a VETOED result means B5's agent-side guardrail
+// refused to execute the step, so it was never actually tested and must not
+// appear in the prevention-verdict index at all -- including it would
+// inflate validationPct's "tested" denominator for an actor's techniques
+// that were never really tested (final whole-branch review finding I3).
+func TestLoadPreventionVerdicts_VetoedResultExcluded(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		mustExec(t, pool, `INSERT INTO agents (agent_id, hostname) VALUES ('vt-a2', 'VT-HOST-2')`)
+		mustExec(t, pool, `INSERT INTO scenario_runs (id, scenario_id, name, agent_id, status, results, started_at)
+			VALUES ('vt-run-vetoed', 'vt-scn-2', 'VT Vetoed', 'vt-a2', 'completed', $1::jsonb, NOW())`,
+			`[{"technique":{"id":"T1490"},"result":"vetoed","executedAt":"`+time.Now().UTC().Format(time.RFC3339)+`"}]`)
+
+		verdicts, err := LoadPreventionVerdicts(ctx, pool)
+		if err != nil {
+			t.Fatalf("LoadPreventionVerdicts: %v", err)
+		}
+		if _, ok := verdicts["T1490"]; ok {
+			t.Error("a VETOED-only result must not appear in the prevention-verdict index -- it was never actually executed")
+		}
+	})
+}
+
 // TestScoreActor_MITREMatchWinsOverConnectorTechniques proves MITRE stays
 // primary: even when the profile also carries connector-sourced
 // techniques, a real MITRE-name match must win, not merge or get

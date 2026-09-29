@@ -12183,7 +12183,11 @@ function verdictCounts(r) {
       total:       sc.totalTechniques || 0,
       pass:        sc.passedTechniques || 0,
       fail:        sc.failedTechniques || 0,
-      notMeasured: (sc.erroredTechniques || 0) + (sc.skippedTechniques || 0)
+      // VETOED (B5's agent-side destructive-action guardrail) counts toward
+      // sc.totalTechniques same as error/skipped, so it must be folded into
+      // notMeasured here too -- otherwise the displayed fail+pass+notMeasured
+      // sum silently undercounts the total (final whole-branch review I3).
+      notMeasured: (sc.erroredTechniques || 0) + (sc.skippedTechniques || 0) + (sc.vetoedTechniques || 0)
     };
   }
   var results = (r && r.results) || [];
@@ -12192,7 +12196,7 @@ function verdictCounts(r) {
     total:       results.length,
     pass:        by(function(c) { return c.result === 'pass' || c.result === 'blocked'; }),
     fail:        by(function(c) { return c.result === 'fail'; }),
-    notMeasured: by(function(c) { return c.result === 'error' || c.result === 'skipped'; })
+    notMeasured: by(function(c) { return c.result === 'error' || c.result === 'skipped' || c.result === 'vetoed'; })
   };
 }
 
@@ -14934,9 +14938,14 @@ function renderVariantCoverage(data) {
 
   var s = data.summary || {};
   var techs = data.techniques || [];
-  var VCOL  = { blocked:'var(--success)', detected:'var(--warning)', logged:'#d29922', bypassed:'var(--danger)', error:'var(--muted)', skipped:'var(--muted)' };
-  var VBG   = { blocked:'rgba(35,134,54,0.12)', detected:'rgba(210,153,34,0.12)', logged:'rgba(210,153,34,0.08)', bypassed:'rgba(218,54,51,0.12)', error:'rgba(154,169,188,0.06)', skipped:'rgba(154,169,188,0.04)' };
-  var VICON = { blocked:'&#10003;', detected:'&#9888;', logged:'&#9685;', bypassed:'&#10007;', error:'?', skipped:'&#9675;' };
+  // vetoed: B5's agent-side destructive-action guardrail refused the step --
+  // a policy decision, not a security-control outcome, so it gets its own
+  // warning-amber treatment distinct from error/skipped's muted grey (final
+  // whole-branch review I3; variantVerdictStr, internal/api/handlers.go,
+  // emits exactly this string for a vetoed variant result).
+  var VCOL  = { blocked:'var(--success)', detected:'var(--warning)', logged:'#d29922', bypassed:'var(--danger)', error:'var(--muted)', skipped:'var(--muted)', vetoed:'var(--warning)' };
+  var VBG   = { blocked:'rgba(35,134,54,0.12)', detected:'rgba(210,153,34,0.12)', logged:'rgba(210,153,34,0.08)', bypassed:'rgba(218,54,51,0.12)', error:'rgba(154,169,188,0.06)', skipped:'rgba(154,169,188,0.04)', vetoed:'rgba(210,153,34,0.12)' };
+  var VICON = { blocked:'&#10003;', detected:'&#9888;', logged:'&#9685;', bypassed:'&#10007;', error:'?', skipped:'&#9675;', vetoed:'&#128683;' };
 
   function x(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
   function tile(label, val, sub, col) {
@@ -15083,7 +15092,7 @@ function loadVariantMatrix(btn, runId, techniqueId) {
     .then(function(data) {
       btn.textContent = '&#9783; Hide variant matrix';
       var rows = (data.rows || []);
-      var VCOL = { blocked:'var(--success)', detected:'var(--warning)', logged:'#d29922', bypassed:'var(--danger)', error:'var(--muted)', skipped:'var(--muted)' };
+      var VCOL = { blocked:'var(--success)', detected:'var(--warning)', logged:'#d29922', bypassed:'var(--danger)', error:'var(--muted)', skipped:'var(--muted)', vetoed:'var(--warning)' };
       function x(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
       var trs = rows.map(function(r) {
         var col = VCOL[r.verdict] || 'var(--muted)';
@@ -15130,9 +15139,9 @@ function renderAttackFlow(nodes, summary) {
     return '<div style="color:var(--muted);text-align:center;padding:2rem 0;font-size:0.78rem">No attack flow data for this run.</div>';
   }
 
-  var VERDICT_COLOR = { blocked:'var(--success)', detected:'var(--warning)', logged:'#d29922', bypassed:'var(--danger)', error:'var(--muted)', skipped:'var(--muted)' };
-  var VERDICT_BG    = { blocked:'rgba(35,134,54,0.08)', detected:'rgba(210,153,34,0.08)', logged:'rgba(210,153,34,0.05)', bypassed:'rgba(218,54,51,0.08)', error:'rgba(154,169,188,0.05)', skipped:'rgba(154,169,188,0.04)' };
-  var VERDICT_ICON  = { blocked:'&#10003;', detected:'&#9888;', logged:'&#9685;', bypassed:'&#10007;', error:'?', skipped:'&#9675;' };
+  var VERDICT_COLOR = { blocked:'var(--success)', detected:'var(--warning)', logged:'#d29922', bypassed:'var(--danger)', error:'var(--muted)', skipped:'var(--muted)', vetoed:'var(--warning)' };
+  var VERDICT_BG    = { blocked:'rgba(35,134,54,0.08)', detected:'rgba(210,153,34,0.08)', logged:'rgba(210,153,34,0.05)', bypassed:'rgba(218,54,51,0.08)', error:'rgba(154,169,188,0.05)', skipped:'rgba(154,169,188,0.04)', vetoed:'rgba(210,153,34,0.08)' };
+  var VERDICT_ICON  = { blocked:'&#10003;', detected:'&#9888;', logged:'&#9685;', bypassed:'&#10007;', error:'?', skipped:'&#9675;', vetoed:'&#128683;' };
 
   function summTile(n, label, color) {
     return '<div style="flex:1;min-width:68px;background:var(--elevated);border:1px solid var(--border);border-top:2px solid ' + color + ';border-radius:4px;padding:0.35rem 0.55rem">' +
@@ -16105,8 +16114,13 @@ function submitIOCImport() {
     blocked: 'var(--warning)'
   };
 
-  var VERDICT_COLOR = { pass: 'var(--success)', fail: 'var(--danger)', blocked: 'var(--warning)', error: 'var(--danger)' };
-  var VERDICT_LABEL = { pass: 'Prevented', fail: 'Not Prevented', blocked: 'Blocked (AV)', error: 'Error', schedule: 'Timeout', execute: 'Timeout', skipped: 'Skipped (Scheduler)' };
+  // vetoed: agent.go emits exactly {"verdict":"vetoed"} on a step's
+  // 'completed' event when B5's agent-side destructive-action guardrail
+  // refused to execute it -- without an entry here the live drawer showed
+  // the step with an undefined fallback color and a blank label, giving no
+  // indication the step never actually ran (final whole-branch review I3).
+  var VERDICT_COLOR = { pass: 'var(--success)', fail: 'var(--danger)', blocked: 'var(--warning)', error: 'var(--danger)', vetoed: 'var(--warning)' };
+  var VERDICT_LABEL = { pass: 'Prevented', fail: 'Not Prevented', blocked: 'Blocked (AV)', error: 'Error', schedule: 'Timeout', execute: 'Timeout', skipped: 'Skipped (Scheduler)', vetoed: 'Vetoed (Policy)' };
 
   // Looks up ATT&CK technique name + tactic from the ART catalog. Falls back
   // gracefully when artCatalog hasn't loaded yet (e.g. technique picker not opened).

@@ -158,9 +158,11 @@ func loadExecutableTechniques(ctx context.Context, pool *pgxpool.Pool) ([]techRo
 }
 
 // loadCoverage returns each technique's most recent REAL test across the whole
-// fleet. ERROR and SKIPPED are excluded deliberately: per the project's
-// 4-verdict taxonomy they mean the BAS could not execute the technique, so
-// they say nothing about coverage and must not suppress a recommendation.
+// fleet. ERROR, SKIPPED, and VETOED are excluded deliberately: per the
+// project's verdict taxonomy (including B5's VETOED, final whole-branch
+// review finding I3) they all mean the BAS could not/did not execute the
+// technique, so they say nothing about coverage and must not suppress a
+// recommendation.
 func loadCoverage(ctx context.Context, pool *pgxpool.Pool) (map[string]coverageRow, error) {
 	rows, err := pool.Query(ctx, `
 		SELECT DISTINCT ON (UPPER(r->'technique'->>'id'))
@@ -172,7 +174,7 @@ func loadCoverage(ctx context.Context, pool *pgxpool.Pool) (map[string]coverageR
 		  AND r->'technique'->>'id' IS NOT NULL
 		  AND r->'technique'->>'id' <> ''
 		  AND r->>'executedAt' IS NOT NULL
-		  AND r->>'result' NOT IN ('error', 'skipped')
+		  AND r->>'result' NOT IN ('error', 'skipped', 'vetoed')
 		ORDER BY UPPER(r->'technique'->>'id'), (r->>'executedAt')::timestamptz DESC`)
 	if err != nil {
 		return nil, err

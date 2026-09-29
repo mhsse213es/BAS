@@ -41,6 +41,35 @@ func TestReportExcludesErrorFromOutcomes(t *testing.T) {
 	}
 }
 
+// TestFilterResults_VetoedExcludedFromNotPreventedAndNotDetected pins final
+// whole-branch review finding I3: a VETOED result was never actually
+// executed (B5's agent-side guardrail refused it), so it must not appear
+// under "not_prevented" (which would misreport it as a technique the
+// customer's defenses failed to stop) or "not_detected" (which would
+// misreport it as something an EDR/SIEM failed to catch). Before the fix,
+// neither isPrevented nor isDetected special-cased Vetoed, so both !isX
+// branches silently included it.
+func TestFilterResults_VetoedExcludedFromNotPreventedAndNotDetected(t *testing.T) {
+	results := []models.SimulationResult{
+		{Technique: models.AttackTechnique{ID: "T1490"}, Result: models.ResultVetoed},
+		{Technique: models.AttackTechnique{ID: "T1059"}, Result: models.ResultFail, DetectionVerdict: "not_detected"},
+	}
+
+	notPrevented := FilterResults(results, "not_prevented")
+	for _, r := range notPrevented {
+		if r.Result == models.ResultVetoed {
+			t.Error("not_prevented must exclude a VETOED result -- it was never executed, so the customer's defenses were never actually tested against it")
+		}
+	}
+
+	notDetected := FilterResults(results, "not_detected")
+	for _, r := range notDetected {
+		if r.Result == models.ResultVetoed {
+			t.Error("not_detected must exclude a VETOED result -- it was never executed, so no detection was ever possible")
+		}
+	}
+}
+
 // TestBuildTechniqueMatrix_PreservesStepName proves two atomics of the same
 // technique produce two distinguishable TechniqueRows -- previously
 // TechniqueName alone was identical for every atomic under one technique ID,

@@ -235,6 +235,34 @@ func TestBuild_ErroredRunsCountAsNeverTested(t *testing.T) {
 	})
 }
 
+// TestBuild_VetoedRunsCountAsNeverTested pins the same rule for VETOED
+// (final whole-branch review finding I3): B5's agent-side veto means the
+// technique was never actually executed -- it tells us nothing about
+// coverage and must not suppress the recommendation, exactly like ERROR.
+func TestBuild_VetoedRunsCountAsNeverTested(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		seedTechnique(t, pool, "T1490", "Inhibit System Recovery", "impact")
+		mustExec(t, pool, `INSERT INTO agents (agent_id, hostname) VALUES ('a1', 'HOST-1')`)
+		mustExec(t, pool, `
+			INSERT INTO scenario_runs (scenario_id, agent_id, status, results, completed_at)
+			VALUES ('s1', 'a1', 'completed', $1::jsonb, NOW())`,
+			`[{"technique":{"id":"T1490","name":"Inhibit System Recovery","tactic":"impact"},
+			   "result":"vetoed","executedAt":"2026-07-17T10:00:00Z"}]`)
+
+		recs, err := Build(context.Background(), pool, nil, attackpath.Summary{}, 20, nil, nil, nil)
+		if err != nil {
+			t.Fatalf("Build: %v", err)
+		}
+		got, ok := findTech(recs, "T1490")
+		if !ok {
+			t.Fatal("vetoed technique should still be ranked")
+		}
+		if got.CoverageState != "never-tested" {
+			t.Errorf("CoverageState = %q, want never-tested (a VETOED step was never actually executed)", got.CoverageState)
+		}
+	})
+}
+
 // TestBuild_EnvironmentRelevanceRaisesRank: identical never-tested techniques
 // with no threat signal, but T1021.002 (SMB) traverses a real edge in the
 // collected graph. It must outrank the environment-irrelevant one.

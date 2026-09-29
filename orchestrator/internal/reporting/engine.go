@@ -3324,6 +3324,16 @@ func FilterResults(results []models.SimulationResult, filter string) []models.Si
 	}
 	var filtered []models.SimulationResult
 	for _, r := range results {
+		// A VETOED step was never executed (B5's agent-side guardrail
+		// refused it) -- it belongs in neither "not_prevented" (would
+		// misreport it as a defense failure) nor "not_detected" (would
+		// misreport it as a missed detection). Excluded from this
+		// function entirely rather than added as its own filter value,
+		// since every existing filter value here means something was
+		// tested and evaluated (final whole-branch review finding I3).
+		if r.Result == models.ResultVetoed {
+			continue
+		}
 		isPrevented := r.Result == models.ResultPass || r.Result == models.ResultBlocked
 		isDetected := r.DetectionVerdict == "detected"
 		switch filter {
