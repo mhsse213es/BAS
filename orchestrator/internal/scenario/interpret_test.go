@@ -120,6 +120,17 @@ func TestInterpretARTBlockDetection(t *testing.T) {
 	}
 }
 
+func TestInterpretART_VetoedMapsToResultVetoedNeverResultPass(t *testing.T) {
+	r := ExecResult{Vetoed: true, VetoedActionKey: "vss_delete", VetoedExecutionClass: "destructive"}
+	result, _ := interpretART(r, "")
+	if result != models.ResultVetoed {
+		t.Errorf("result = %v, want models.ResultVetoed", result)
+	}
+	if result == models.ResultPass || result == models.ResultBlocked {
+		t.Fatal("a B5 veto must NEVER map to ResultPass or ResultBlocked -- that would falsely report a customer-defense success for a technique that was never attempted")
+	}
+}
+
 // A BAS execution problem (malformed content, timeout, scheduler contention,
 // missing prerequisite, DNS, interactive prompt, …) is NOT a security finding —
 // it must classify as ERROR, never FAIL, so it is excluded from the score.

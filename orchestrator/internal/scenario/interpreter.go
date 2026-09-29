@@ -138,6 +138,7 @@ func Interpret(step Step, result ExecResult) models.SimulationResult {
 //
 // Classification is delegated to classifyExecution (outcome.go), which separates
 // a real security outcome from a BAS execution problem:
+//   - Audspect's own B5 guardrail vetoed it → VETOED (never attempted)
 //   - blocked by a control                → PASS  (control worked)
 //   - technique ran (exit 0 / completion) → FAIL  (control did not stop it)
 //   - timeout/contention/missing/malformed → ERROR (BAS could not execute)
@@ -145,6 +146,8 @@ func Interpret(step Step, result ExecResult) models.SimulationResult {
 func interpretART(r ExecResult, combined string) (models.CheckResult, string) {
 	outcome, _, detail := classifyExecution(r, combined)
 	switch outcome {
+	case OutcomeVetoed:
+		return models.ResultVetoed, detail
 	case OutcomeSkipped:
 		return models.ResultSkipped, detail
 	case OutcomeBlocked:

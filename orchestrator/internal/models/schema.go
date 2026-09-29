@@ -21,6 +21,15 @@ const (
 	// the prevention/exposure score — it answers "did the BAS hit a problem",
 	// never "did a control allow the technique".
 	ResultError CheckResult = "error"
+	// ResultVetoed means Audspect's own agent refused to execute this
+	// step under its local destructive-action policy (B5). Deliberately
+	// distinct from ResultBlocked (the CUSTOMER's own security control
+	// intercepted the technique -- scores as a defense success) --
+	// conflating the two would report a technique as tested-and-stopped
+	// when it was never attempted at all. Must be excluded from every
+	// PreventionScore/PreventionPct/BypassRate calculation; see
+	// docs/superpowers/specs/2026-09-29-destructive-action-guardrail-b5-design.md.
+	ResultVetoed CheckResult = "vetoed"
 )
 
 // AttackTechnique is a MITRE ATT&CK technique reference.

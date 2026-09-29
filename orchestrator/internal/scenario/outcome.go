@@ -19,6 +19,11 @@ const (
 	OutcomeBlocked                          // a security control prevented it → PASS
 	OutcomeError                            // BAS could not execute the technique correctly → ERROR
 	OutcomeSkipped                          // intentionally not run → SKIPPED
+	// OutcomeVetoed: Audspect's own agent refused to execute this step
+	// under B5's local destructive-action policy -- the technique was
+	// never attempted. NEVER maps to OutcomeBlocked (customer defense
+	// success) or any other existing outcome.
+	OutcomeVetoed
 )
 
 // ErrorReason names *why* an execution errored. New infrastructure failures
@@ -233,6 +238,12 @@ func withEvidence(headline, combined string) string {
 // classifyExecution maps a raw ART ExecResult to a coarse ExecutionOutcome plus,
 // for errors, a reason. The returned detail is the report's "What happened" line.
 func classifyExecution(r ExecResult, combined string) (ExecutionOutcome, ErrorReason, string) {
+	if r.Vetoed {
+		return OutcomeVetoed, ErrNone, fmt.Sprintf(
+			"VETOED — Audspect prevented execution under its local destructive-action policy (action=%s, class=%s, source=%s). Customer defensive controls were not tested by this step.",
+			r.VetoedActionKey, r.VetoedExecutionClass, r.VetoedBlockSource)
+	}
+
 	lower := strings.ToLower(combined)
 
 	// A step killed on its own deadline produced no result, so its partial
