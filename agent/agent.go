@@ -559,7 +559,12 @@ func (a *Agent) runDisconnectWatchdog() {
 // execution file (executor.go, executor_windows.go, pool_windows.go, ...)
 // already expects -- the wire type carries them as opaque JSON since
 // agent/protocol must not depend on sched (an execution-scheduling
-// package). Every other field mirrors protocol.ScenarioStep exactly.
+// package). Every other field mirrors protocol.ScenarioStep, except
+// DestructiveAction: it's an orchestrator-audit-facing label ("often
+// just the action_key itself" per the design spec) nothing on the agent
+// ever reads -- ActionKey/BlastRadius already carry what B5's log lines
+// need, so it's deliberately not mirrored here (final whole-branch
+// review, Minor: this field used to exist and sit unused).
 type ScenarioStep struct {
 	TaskID            string
 	TechniqueID       string
@@ -576,7 +581,6 @@ type ScenarioStep struct {
 	RequiresPriv      string
 	ActionKey         string
 	ExecutionClass    string
-	DestructiveAction string
 	BlastRadius       string
 }
 
@@ -592,7 +596,7 @@ func decodeStep(w protocol.ScenarioStep) ScenarioStep {
 		Executor: w.Executor, Command: w.Command, TimeoutSec: w.TimeoutSec,
 		Payloads: w.Payloads, Cleanup: w.Cleanup, RequiresPriv: w.RequiresPriv,
 		ActionKey: w.ActionKey, ExecutionClass: w.ExecutionClass,
-		DestructiveAction: w.DestructiveAction, BlastRadius: w.BlastRadius,
+		BlastRadius: w.BlastRadius,
 	}
 	if len(w.Resource) > 0 {
 		var rp sched.ResourceProfile
@@ -883,6 +887,8 @@ func (a *Agent) runScenario(ctx context.Context, cmd protocol.ScenarioCommand) {
 				}); vetoed {
 					log.Printf("[!]   [%d/%d] %s VETOED — destructive-action policy (class=%s, action=%s, source=%s)",
 						i+1, total, step.TechniqueID, step.ExecutionClass, step.ActionKey, source)
+					a.logger.Sec("warn", cmd.ScenarioID, cmd.RunID, step.TaskID, step.TechniqueID,
+						"b5_veto", fmt.Sprintf("class=%s action=%s source=%s", step.ExecutionClass, step.ActionKey, source))
 					results[i] = protocol.ExecResult{
 						TaskID:               step.TaskID,
 						ExitCode:             -1,
