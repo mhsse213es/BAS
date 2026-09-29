@@ -385,6 +385,18 @@ type ExecResult struct {
 	// TimedOut marks a step that exceeded its execute/schedule timeout — an
 	// explicit "ran, did not return" verdict, distinct from a clean skip.
 	TimedOut bool `json:"timedOut,omitempty"`
+	// Vetoed/VetoedActionKey/VetoedExecutionClass/VetoedBlockSource mirror
+	// agent/protocol.ExecResult's B5 fields exactly -- a structured
+	// signal, not inferred from stdout/stderr text the way
+	// classifyExecution infers OutcomeBlocked via blockSignature().
+	// Deliberately distinct from any "blocked" concept: see
+	// docs/superpowers/specs/2026-09-29-destructive-action-guardrail-b5-design.md's
+	// "Scoring/Reporting Impact" section for why conflating the two would
+	// be a real scoring-honesty bug.
+	Vetoed               bool   `json:"vetoed,omitempty"`
+	VetoedActionKey      string `json:"vetoedActionKey,omitempty"`
+	VetoedExecutionClass string `json:"vetoedExecutionClass,omitempty"`
+	VetoedBlockSource    string `json:"vetoedBlockSource,omitempty"`
 	// CleanupVerdict is set by the agent after running the step's cleanup command.
 	// "reverted" = exit 0; "partial" = non-zero exit; "leaked" = timeout/start failure.
 	CleanupVerdict string `json:"cleanupVerdict,omitempty"`
