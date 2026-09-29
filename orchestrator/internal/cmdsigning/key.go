@@ -120,6 +120,16 @@ func loadSigningKey(keyPath, certPath string) (*SigningKey, error) {
 	if err != nil {
 		return nil, fmt.Errorf("parse command-signing certificate: %w", err)
 	}
+	certPub, ok := cert.PublicKey.(*rsa.PublicKey)
+	if !ok || !certPub.Equal(&key.PublicKey) {
+		// A mismatched pair here means command-signing.crt and
+		// command-signing.key came from different generations (a partial
+		// restore, a manual file swap) -- signing with key would produce
+		// signatures no agent's pinned cert can verify, failing silently
+		// and unrecoverably at the next dispatched command rather than
+		// loudly here at startup.
+		return nil, fmt.Errorf("command-signing cert %s does not match the public key of command-signing key %s -- files may be from different generations", certPath, keyPath)
+	}
 	return &SigningKey{cert: cert, certDER: certBlock.Bytes, key: key, keyID: keyIDFor(certBlock.Bytes)}, nil
 }
 

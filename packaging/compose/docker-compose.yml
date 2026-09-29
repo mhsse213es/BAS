@@ -190,6 +190,14 @@ services:
       TI_BUNDLE_DIR:     ${TI_BUNDLE_DIR:-/intel-bundles}
       # ── SharpHound AD collector (optional — see volumes above) ──────────────
       BAS_SHARPHOUND_PATH:     ${BAS_SHARPHOUND_PATH:-}
+      # ── Command-signing key (B4, ./signing above) — operator overrides ───────
+      # BAS_CONFIRM_NEW_SIGNING_KEY=true: the escape hatch for a genuine,
+      # intentional signing-key rotation/reset on an existing deployment (see
+      # cmd/server/signing_state.go); leave unset for normal operation.
+      BAS_CONFIRM_NEW_SIGNING_KEY: ${BAS_CONFIRM_NEW_SIGNING_KEY:-}
+      # How long a signed command envelope remains valid after issuance
+      # (internal/ws/hub.go's commandEnvelopeTTLFromEnv); defaults to 60s if unset.
+      COMMAND_ENVELOPE_TTL_SECONDS: ${COMMAND_ENVELOPE_TTL_SECONDS:-}
     volumes:
       # Deployment CA (per-agent mTLS trust root, orchestrator/internal/pki) --
       # persisted across container recreates as a plain host directory (NOT a

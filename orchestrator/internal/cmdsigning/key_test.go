@@ -50,6 +50,37 @@ func TestLoadOrGenerateSigningKey_LoadsExistingOnSecondCall(t *testing.T) {
 	}
 }
 
+// TestLoadOrGenerateSigningKey_MismatchedCertKeyPairIsHardError pins the
+// final whole-branch review's Minor finding: command-signing.crt and
+// command-signing.key from two different generations (e.g. a partial
+// restore, a manual file swap) must be rejected at startup, not signed
+// with silently -- an agent's pinned cert would then never verify
+// anything this orchestrator signs.
+func TestLoadOrGenerateSigningKey_MismatchedCertKeyPairIsHardError(t *testing.T) {
+	dirA := t.TempDir()
+	if _, err := LoadOrGenerateSigningKey(dirA); err != nil {
+		t.Fatalf("LoadOrGenerateSigningKey(dirA): %v", err)
+	}
+	dirB := t.TempDir()
+	if _, err := LoadOrGenerateSigningKey(dirB); err != nil {
+		t.Fatalf("LoadOrGenerateSigningKey(dirB): %v", err)
+	}
+
+	// Swap in dirB's certificate alongside dirA's key -- a genuinely
+	// mismatched pair, not a corrupt file.
+	otherCert, err := os.ReadFile(filepath.Join(dirB, "command-signing.crt"))
+	if err != nil {
+		t.Fatalf("read dirB cert: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dirA, "command-signing.crt"), otherCert, 0644); err != nil {
+		t.Fatalf("overwrite dirA cert: %v", err)
+	}
+
+	if _, err := LoadOrGenerateSigningKey(dirA); err == nil {
+		t.Fatal("expected an error for a mismatched command-signing cert/key pair, got nil")
+	}
+}
+
 func TestLoadOrGenerateSigningKey_CorruptKeyFileIsHardError(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "command-signing.key"), []byte("not a pem key"), 0600); err != nil {
