@@ -14415,6 +14415,11 @@ function viewRunResults(run) {
   results.forEach(function(c, i) { c._eidx = i; });
 
   function resultColor(c) {
+    // vetoed: B5's agent-side guardrail refused the step, a policy
+    // decision -- not a defense failure, so it must not read as danger
+    // (fix-pass's own scoped re-review of I3, which fixed this same
+    // pattern elsewhere but missed this list).
+    if (c.result === 'vetoed') return 'var(--warning)';
     return c.result === 'pass' ? 'var(--success)' : c.result === 'skipped' ? 'var(--muted)' : 'var(--danger)';
   }
 
@@ -16468,7 +16473,15 @@ function closeEvidence() {
 
 function renderEvidencePanel(c) {
   var da       = c.detectionAlert || null;
-  var execOk   = c.result !== 'error' && c.result !== 'skipped';
+  // A vetoed step was never attempted (B5's agent-side guardrail refused
+  // it) -- neither "Verified"/"Successful" (claims it ran) nor "Failed"
+  // (implies an attempt that didn't work) is accurate, so it's excluded
+  // from execOk and given its own label below (fix-pass's own scoped
+  // re-review of I3, which fixed this same misrepresentation pattern
+  // elsewhere but missed this panel).
+  var execOk   = c.result !== 'error' && c.result !== 'skipped' && c.result !== 'vetoed';
+  var execText = c.result === 'vetoed' ? 'Vetoed (Policy)' : (execOk ? 'Verified' : 'Failed');
+  var execTextShort = c.result === 'vetoed' ? 'Vetoed (Policy)' : (execOk ? 'Successful' : 'Failed');
   var detOk    = !!(c.detectionVerdict === 'detected' || c.detectionVerdict === 'prevented' || da);
   var prevOk   = c.detectionVerdict === 'prevented' || c.result === 'pass';
   var cleanOk  = c.cleanupVerdict === 'reverted';
@@ -16519,7 +16532,7 @@ function renderEvidencePanel(c) {
 
   html += '<div style="background:var(--elevated);border:1px solid var(--border);border-radius:6px;padding:0.8rem 1rem;margin-bottom:1rem">';
   html += '<div style="font-size:0.6rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:0.45rem;font-weight:700">Evidence Summary</div>';
-  html += secRow('Execution', execOk, execOk ? 'Verified' : 'Failed');
+  html += secRow('Execution', execOk, execText);
   html += secRow('Detection', detOk,  detText);
   html += secRow('Prevention', prevOk, prevText);
   html += secRow('Cleanup', cleanOk, cvText);
@@ -16540,8 +16553,8 @@ function renderEvidencePanel(c) {
       + '</div>';
   };
   var resultVerdict = c.detectionVerdict || c.result || '—';
-  var resultCol = prevOk ? 'var(--success)' : (detOk ? 'var(--warning)' : 'var(--danger)');
-  srHtml += card('Execution', execOk, execOk ? 'Successful' : 'Failed', 'rgba(47,129,247,0.07)');
+  var resultCol = c.result === 'vetoed' ? 'var(--warning)' : prevOk ? 'var(--success)' : (detOk ? 'var(--warning)' : 'var(--danger)');
+  srHtml += card('Execution', execOk, execTextShort, 'rgba(47,129,247,0.07)');
   srHtml += card('Detection', detOk,  detOk  ? (da && da.provider ? xe(da.provider) : 'Detected') : 'No detection', 'rgba(210,153,34,0.07)');
   srHtml += card('Prevention', prevOk, prevOk ? 'Blocked' : 'Not blocked', 'rgba(35,134,54,0.07)');
   srHtml += '<div style="text-align:center;padding:0.45rem 0.3rem;background:var(--bg);border-radius:4px">'
