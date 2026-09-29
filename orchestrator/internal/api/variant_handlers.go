@@ -662,6 +662,35 @@ func (h *Handler) sweepEntriesForTechnique(ctx context.Context, techID, baseType
 	return
 }
 
+// buildVariantSteps converts variant templates into dispatchable
+// ScenarioSteps and resolves each one's B5 execution classification via
+// AttachExecutionClassifications -- the same compilation choke point
+// scenario.BuildSteps itself calls for every hand-authored/ART/Caldera
+// scenario. Before this fix, this path built ScenarioStep literals
+// directly and never called it at all, so ExecutionClass stayed at its
+// zero value; the agent's B5 gate treats a missing/unresolved
+// ExecutionClass as fail-closed destructive (same as it treats a step the
+// catalog has no entry for), so every variant-sweep step was vetoed
+// unconditionally, regardless of what its real command actually did
+// (final whole-branch review, C2).
+func buildVariantSteps(templates []variant.Template) []scenario.ScenarioStep {
+	steps := make([]scenario.ScenarioStep, 0, len(templates))
+	for _, t := range templates {
+		stepName := "variant|" + t.Encoding + "|" + t.ExecContext + "|" + t.Evasion + "|" + t.BaseID
+		steps = append(steps, scenario.ScenarioStep{
+			TaskID:      scenario.TaskID(t.TechniqueID, stepName),
+			TechniqueID: t.TechniqueID,
+			Name:        stepName,
+			Framework:   "variant",
+			Executor:    t.Executor,
+			Command:     t.Command,
+			TimeoutSec:  30,
+		})
+	}
+	scenario.AttachExecutionClassifications(steps)
+	return steps
+}
+
 // dispatchVariantRun creates DB records and dispatches via the WebSocket
 // pipeline. sweepName/sweepLabel/sweepFinal are forwarded onto the outgoing
 // ScenarioCommand -- empty/false for the ad-hoc (non-sweep) caller.
@@ -708,20 +737,9 @@ func (h *Handler) dispatchVariantRun(
 		return "", "", fmt.Errorf("create variant_run: %w", err)
 	}
 
-	steps := make([]scenario.ScenarioStep, 0, len(templates))
-	for _, t := range templates {
-		stepName := "variant|" + t.Encoding + "|" + t.ExecContext + "|" + t.Evasion + "|" + t.BaseID
-		taskID := scenario.TaskID(t.TechniqueID, stepName)
-
-		steps = append(steps, scenario.ScenarioStep{
-			TaskID:      taskID,
-			TechniqueID: t.TechniqueID,
-			Name:        stepName,
-			Framework:   "variant",
-			Executor:    t.Executor,
-			Command:     t.Command,
-			TimeoutSec:  30,
-		})
+	steps := buildVariantSteps(templates)
+	for i, t := range templates {
+		taskID := steps[i].TaskID
 
 		if _, insErr := h.db.Exec(ctx,
 			`INSERT INTO variant_run_steps

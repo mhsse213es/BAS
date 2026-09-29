@@ -14,6 +14,47 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+// TestBuildVariantSteps_ResolvesExecutionClass pins final whole-branch
+// review finding C2's variant-dispatch component: before this fix, variant
+// steps were built as bare ScenarioStep literals with no call into B5's
+// classification catalog, so ExecutionClass stayed at its zero value --
+// which the agent's B5 gate treats as fail-closed destructive, vetoing
+// every variant step unconditionally regardless of what it actually does.
+// T1082 has a real "default" catalog entry (non_destructive, seeded in
+// execclass.go), so a variant step for it must resolve to that, not the
+// zero value.
+func TestBuildVariantSteps_ResolvesExecutionClass(t *testing.T) {
+	templates := []variant.Template{{
+		ID: "tpl-1", TechniqueID: "T1082", Encoding: "none", ExecContext: "user",
+		Evasion: "none", Executor: "powershell", Command: "Get-ComputerInfo", BaseID: "base-1",
+	}}
+	steps := buildVariantSteps(templates)
+	if len(steps) != 1 {
+		t.Fatalf("len(steps) = %d, want 1", len(steps))
+	}
+	if steps[0].ExecutionClass != "non_destructive" {
+		t.Errorf("ExecutionClass = %q, want %q -- AttachExecutionClassifications must be called for variant steps, not just hand-authored/ART/Caldera ones", steps[0].ExecutionClass, "non_destructive")
+	}
+}
+
+// A technique with no catalog entry must still resolve to the explicit
+// fail-closed "destructive" classification (via ResolveExecutionClass's
+// own unclassified sentinel) rather than staying at the zero value -- both
+// produce the same agent-side veto outcome today, but only the explicit
+// form is correct once catalog coverage grows, and only the explicit form
+// is auditable (a report can tell "resolved destructive" from "never
+// classified at all").
+func TestBuildVariantSteps_UnknownTechniqueResolvesExplicitlyDestructive(t *testing.T) {
+	templates := []variant.Template{{
+		ID: "tpl-2", TechniqueID: "T9999", Encoding: "none", ExecContext: "user",
+		Evasion: "none", Executor: "powershell", Command: "whoami", BaseID: "base-2",
+	}}
+	steps := buildVariantSteps(templates)
+	if steps[0].ExecutionClass != "destructive" {
+		t.Errorf("ExecutionClass = %q, want %q (explicit fail-closed default)", steps[0].ExecutionClass, "destructive")
+	}
+}
+
 func TestVexAgentOSCompatibilityError(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping container-backed test in -short mode")
