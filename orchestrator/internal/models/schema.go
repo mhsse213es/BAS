@@ -401,6 +401,7 @@ type Score struct {
 	FailedTechniques  int `json:"failedTechniques"`
 	ErroredTechniques int `json:"erroredTechniques"` // could not execute correctly — excluded from scoring
 	SkippedTechniques int `json:"skippedTechniques"` // intentionally not run — excluded from scoring
+	VetoedTechniques  int `json:"vetoedTechniques"`  // refused by B5's destructive-action policy — excluded from scoring
 
 	// ── Attack Path Validation (native graph engine) ──────────────────────────
 	// AttackPathScore is the lateral-movement / domain-compromise verdict from the

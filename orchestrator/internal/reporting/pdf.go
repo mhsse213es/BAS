@@ -1318,8 +1318,12 @@ func (d *rpt) techniqueGroup(g TechniqueGroup) {
 	pdf.SetX(margin + 2)
 	d.text(cInk)
 	pdf.SetFont("Helvetica", "B", 7.5)
-	d.cellT(0, 4, fmt.Sprintf("%d test(s):  %d executed · %d blocked · %d errored · %d skipped",
-		g.Total, g.Executed, g.Blocked, g.Errored, g.Skipped))
+	tally := fmt.Sprintf("%d test(s):  %d executed · %d blocked · %d errored · %d skipped",
+		g.Total, g.Executed, g.Blocked, g.Errored, g.Skipped)
+	if g.Vetoed > 0 {
+		tally += fmt.Sprintf(" · %d vetoed", g.Vetoed)
+	}
+	d.cellT(0, 4, tally)
 	pdf.Ln(5)
 
 	// Threat impact + remediation once per technique (identical across its tests);

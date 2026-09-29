@@ -76,7 +76,12 @@ func (h *Handler) basRevalidationTargetStatus(ctx context.Context, jobType, refI
 	switch status {
 	case string(models.ResultPass), string(models.ResultBlocked):
 		return jobs.TargetStateCompleted, "", true
-	case string(models.ResultFail), string(models.ResultError), string(models.ResultSkipped):
+	case string(models.ResultFail), string(models.ResultError), string(models.ResultSkipped), string(models.ResultVetoed):
+		// ResultVetoed is terminal (Audspect's own agent refused the step),
+		// not a still-in-progress state -- without this case a vetoed
+		// status would fall to default below and the poll would treat the
+		// job as perpetually "dispatched", never reaching a terminal state
+		// (verified, B5 Task 9 audit).
 		return jobs.TargetStateFailed, reason, true
 	default: // "requested", "dispatched"
 		return jobs.TargetStateDispatched, "", false

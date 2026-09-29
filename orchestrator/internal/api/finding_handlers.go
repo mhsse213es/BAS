@@ -83,7 +83,7 @@ func (h *Handler) upsertFindingsForRun(ctx context.Context, runID string) {
 				outcome = "missed"
 			}
 		default:
-			continue // error | skipped
+			continue // error | skipped | vetoed (verified, B5 Task 9 audit)
 		}
 		var ds []string
 		if e := attackdata.Lookup(id); e != nil {
@@ -348,7 +348,7 @@ func (h *Handler) variantBreakdownForFinding(ctx context.Context, runID, techID,
 				bd.Missed++
 			}
 		default:
-			continue // error | skipped -- excluded from the security aggregation, same as upsertFindingsForRun
+			continue // error | skipped | vetoed -- excluded from the security aggregation, same as upsertFindingsForRun (verified, B5 Task 9 audit)
 		}
 		bd.Total++
 		bd.Results = append(bd.Results, variantOutcome{Name: res.Technique.Name, Outcome: outcome, Details: res.Details})

@@ -795,6 +795,8 @@ func simResultToVerdict(r models.CheckResult) string {
 		return "ALLOWED"
 	case models.ResultError, models.ResultSkipped:
 		return "ERROR"
+	case models.ResultVetoed:
+		return "VETOED"
 	}
 	return "PENDING"
 }

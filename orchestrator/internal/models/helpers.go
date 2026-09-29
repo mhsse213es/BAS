@@ -63,6 +63,13 @@ func Details(result CheckResult, techID, techName, desc, tactic, rawOutput strin
 	if result == ResultFail {
 		status = "EXECUTED â€” security controls did NOT prevent this technique"
 	}
+	if result == ResultVetoed {
+		// Falling through to the "BLOCKED" default would fabricate a
+		// customer-defense-success message for a technique Audspect's own
+		// agent refused to attempt -- never actually tested (verified, B5
+		// Task 9 audit).
+		status = "VETOED â€” Audspect prevented execution under its local destructive-action policy; customer defenses were not tested"
+	}
 	trimmed := rawOutput
 	if len(trimmed) > 500 {
 		trimmed = trimmed[:500] + "...[truncated]"
@@ -283,6 +290,16 @@ func Remediation(result CheckResult, tactic, techID, techName string) string {
 	if result == ResultPass || result == ResultBlocked {
 		return fmt.Sprintf(
 			"Control validated: %s (%s) was blocked. Maintain current security posture and continue monitoring.",
+			techName, techID)
+	}
+	if result == ResultVetoed {
+		// Falling through to technique/tactic remediation guidance below
+		// would present real advice (e.g. "Enable Credential Guard...")
+		// for a technique that was never actually attempted -- implying a
+		// gap was found when the honest state is "not tested" (verified,
+		// B5 Task 9 audit).
+		return fmt.Sprintf(
+			"Not assessed: %s (%s) was not attempted -- Audspect's own agent refused execution under its local destructive-action policy. This tells you nothing about your defenses; no remediation guidance applies.",
 			techName, techID)
 	}
 	// Technique-specific guidance overrides the tactic default where the tactic

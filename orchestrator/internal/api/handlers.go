@@ -2563,6 +2563,8 @@ func variantVerdictStr(r models.SimulationResult) string {
 		return "error"
 	case models.ResultSkipped:
 		return "skipped"
+	case models.ResultVetoed:
+		return "vetoed"
 	}
 	return "error"
 }

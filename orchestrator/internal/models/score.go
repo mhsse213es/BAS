@@ -60,6 +60,7 @@ func ComputeScore(results []SimulationResult, prev *Score) Score {
 		failed   int
 		errored  int
 		skipped  int
+		vetoed   int
 
 		weightedPassed float64
 		weightedTotal  float64
@@ -79,15 +80,25 @@ func ComputeScore(results []SimulationResult, prev *Score) Score {
 		tactic := r.Technique.Tactic
 		tw := tacticExposureWeight(tactic)
 
-		// ResultError (BAS could not execute) and ResultSkipped (intentionally not
-		// run) are excluded from the security score — they answer "did the BAS hit
-		// a problem", not "did a control allow the technique".
+		// ResultError (BAS could not execute), ResultSkipped (intentionally not
+		// run), and ResultVetoed (Audspect's own agent refused execution
+		// under B5's destructive-action policy) are excluded from the
+		// security score — they answer "did the BAS hit a problem" or "did
+		// Audspect decline to test this", never "did a control allow the
+		// technique". Without excluding ResultVetoed here, weightedTotal
+		// below would grow with zero contribution to weightedPassed for
+		// every vetoed step, silently LOWERING preventionScore -- the
+		// opposite of the truth (verified, B5 Task 9 audit; see
+		// docs/superpowers/specs/2026-09-29-destructive-action-guardrail-b5-design.md).
 		switch r.Result {
 		case ResultSkipped:
 			skipped++
 			continue
 		case ResultError:
 			errored++
+			continue
+		case ResultVetoed:
+			vetoed++
 			continue
 		}
 		executed++
@@ -257,6 +268,7 @@ func ComputeScore(results []SimulationResult, prev *Score) Score {
 		FailedTechniques:  failed,
 		ErroredTechniques: errored,
 		SkippedTechniques: skipped,
+		VetoedTechniques:  vetoed,
 
 		RiskScore:               riskScore,
 		Classification:          classify(riskScore),

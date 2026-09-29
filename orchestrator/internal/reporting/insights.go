@@ -98,11 +98,15 @@ func exposureLevel(prevention float64) string {
 }
 
 // weightedExecutedTotal is Σ severityWeight over executed (PASS/FAIL) results — the
-// denominator PreventionScore uses. ERROR/SKIPPED are excluded.
+// denominator PreventionScore uses. ERROR/SKIPPED/VETOED are excluded --
+// VETOED (Audspect's own agent refused execution under B5's destructive-
+// action policy) must not dilute this denominator with zero numerator
+// contribution, or a vetoed step would silently lower the score (verified,
+// B5 Task 9 audit).
 func weightedExecutedTotal(results []models.SimulationResult) float64 {
 	var w float64
 	for _, r := range results {
-		if r.Result == models.ResultError || r.Result == models.ResultSkipped {
+		if r.Result == models.ResultError || r.Result == models.ResultSkipped || r.Result == models.ResultVetoed {
 			continue
 		}
 		w += float64(models.SeverityWeight(r.Severity))

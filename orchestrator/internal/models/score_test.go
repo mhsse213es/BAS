@@ -37,6 +37,38 @@ func TestComputeScoreExcludesErrorFromScoring(t *testing.T) {
 	}
 }
 
+// ResultVetoed (Audspect's own agent refused execution under B5's
+// destructive-action policy) must be excluded from the prevention score
+// exactly like ResultError/ResultSkipped -- it is not a security outcome.
+// Before this fix, weightedTotal incremented for every result regardless
+// of category, so a vetoed step diluted the denominator with zero
+// numerator contribution, LOWERING PreventionScore -- backwards, since
+// Audspect declining to test something says nothing about whether the
+// customer's defenses would have stopped it.
+func TestComputeScoreExcludesVetoedFromScoring(t *testing.T) {
+	results := []SimulationResult{
+		res("execution", ResultFail),   // genuine finding
+		res("execution", ResultVetoed), // Audspect refused -- excluded
+		res("execution", ResultPass),   // blocked
+	}
+	s := ComputeScore(results, nil)
+
+	if s.VetoedTechniques != 1 {
+		t.Errorf("VetoedTechniques = %d, want 1", s.VetoedTechniques)
+	}
+	if s.FailedTechniques != 1 {
+		t.Errorf("FailedTechniques = %d, want 1 (vetoed must not count as fail)", s.FailedTechniques)
+	}
+	if s.PassedTechniques != 1 {
+		t.Errorf("PassedTechniques = %d, want 1 (vetoed must not count as pass)", s.PassedTechniques)
+	}
+	// Prevention denominator excludes the veto: 1 pass of 2 executed = 50%,
+	// exactly as if the vetoed result were never submitted at all.
+	if s.PreventionScore != 50 {
+		t.Errorf("PreventionScore = %.1f, want 50 (vetoed excluded from denominator)", s.PreventionScore)
+	}
+}
+
 // An ERROR must never become a critical finding, even at Critical severity.
 func TestComputeScoreErrorIsNotACriticalFinding(t *testing.T) {
 	results := []SimulationResult{

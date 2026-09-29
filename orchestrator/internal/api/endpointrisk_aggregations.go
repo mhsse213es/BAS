@@ -72,7 +72,7 @@ func (h *Handler) basReadinessInput(asOf time.Time, allResults []models.Simulati
 	var lastAt *time.Time
 	techSeen := map[string]bool{}
 	for _, r := range results {
-		if r.Result == models.ResultSkipped || r.Result == models.ResultError {
+		if r.Result == models.ResultSkipped || r.Result == models.ResultError || r.Result == models.ResultVetoed {
 			continue
 		}
 		techSeen[r.Technique.ID] = true
@@ -188,6 +188,16 @@ func (h *Handler) postureCheckInput(ctx context.Context, agentID string, asOf ti
 		if l.result.Result == models.ResultPass {
 			passed++
 			weightedPassed += weight
+			continue
+		}
+		if l.result.Result == models.ResultVetoed {
+			// Audspect's own agent refused this check under B5's
+			// destructive-action policy -- never attempted, so it must not
+			// be treated as a failed posture check (which would fabricate
+			// a finding, e.g. "BitLocker not enabled", for a check that
+			// never ran). Excluded from both passed and failed entirely
+			// (verified, B5 Task 9 audit).
+			weightedTotal -= weight
 			continue
 		}
 		failed++

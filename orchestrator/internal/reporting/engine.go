@@ -800,6 +800,11 @@ func BuildAttackFlow(results []models.SimulationResult) []AttackFlowNode {
 			node.VerdictLabel = "Skipped"
 			node.ControlName = "—"
 
+		case models.ResultVetoed:
+			node.Verdict = "vetoed"
+			node.VerdictLabel = "Vetoed — Destructive Action Policy"
+			node.ControlName = "—"
+
 		default:
 			node.Verdict = "unknown"
 			node.VerdictLabel = string(r.Result)
@@ -916,7 +921,7 @@ func detTechIndex(dets []DetectionTechnique) map[string]DetectionTechnique {
 // buildSweepEncodingBreakdown) so there is one source of truth for this
 // classification instead of copies that can drift apart.
 func classifyOutcome(r models.SimulationResult, detByTech map[string]DetectionTechnique) string {
-	if r.Result == models.ResultError || r.Result == models.ResultSkipped {
+	if r.Result == models.ResultError || r.Result == models.ResultSkipped || r.Result == models.ResultVetoed {
 		return "excluded"
 	}
 	if r.Result == models.ResultPass || r.Result == models.ResultBlocked {
@@ -2513,8 +2518,16 @@ type TechniqueGroup struct {
 	Blocked     int // PASS / BLOCKED — a control stopped it
 	Errored     int // ERROR — BAS could not execute (excluded from scoring)
 	Skipped     int // SKIPPED — intentionally not run
-	Total       int
-	Results     []models.SimulationResult
+	// Vetoed counts VETOED results (Audspect's own agent refused to
+	// attempt them under B5's destructive-action policy). Counted here
+	// so Total stays honest (Executed+Blocked+Errored+Skipped+Vetoed ==
+	// Total) -- omitting this bucket while still incrementing Total for
+	// every result would silently inflate Total relative to the four
+	// displayed counts. Never folded into Blocked: a veto is not a
+	// tested-and-stopped customer control.
+	Vetoed  int
+	Total   int
+	Results []models.SimulationResult
 }
 
 // groupResultsByTechnique rolls results up by technique ID (falling back to name
@@ -2552,6 +2565,8 @@ func groupResultsByTechnique(results []models.SimulationResult) []TechniqueGroup
 			g.Errored++
 		case models.ResultSkipped:
 			g.Skipped++
+		case models.ResultVetoed:
+			g.Vetoed++
 		}
 	}
 	return groups
@@ -2752,9 +2767,10 @@ func buildTacticHeatmap(results []models.SimulationResult) []TacticEntry {
 	passed := make(map[string]int)
 	failed := make(map[string]int)
 	for _, r := range results {
-		// ERROR (BAS could not execute) and SKIPPED (not run) are not security
+		// ERROR (BAS could not execute), SKIPPED (not run), and VETOED
+		// (Audspect's own agent refused to attempt it) are not security
 		// outcomes — they must not taint a tactic as failed.
-		if r.Result == models.ResultSkipped || r.Result == models.ResultError {
+		if r.Result == models.ResultSkipped || r.Result == models.ResultError || r.Result == models.ResultVetoed {
 			continue
 		}
 		t := r.Technique.Tactic
@@ -2806,7 +2822,7 @@ func buildDetectionCategories(results []models.SimulationResult) []Category {
 			a = &agg{}
 			m[t] = a
 		}
-		if r.Result == models.ResultSkipped || r.Result == models.ResultError {
+		if r.Result == models.ResultSkipped || r.Result == models.ResultError || r.Result == models.ResultVetoed {
 			continue
 		}
 		a.exec++

@@ -166,7 +166,6 @@ func (m *Mapper) GenerateReport(
 						continue
 					}
 					seen[r.ID] = true
-					cr.Tested++
 					ev := TechniqueEvidence{
 						TechniqueID:   r.Technique.ID,
 						TechniqueName: r.Technique.Name,
@@ -175,6 +174,18 @@ func (m *Mapper) GenerateReport(
 						Remediation:   r.Remediation,
 					}
 					cr.Evidence = append(cr.Evidence, ev)
+					// VETOED is excluded from Tested: Audspect's own agent
+					// refused to attempt this step under B5's
+					// destructive-action policy, so it is not evidence the
+					// control was tested at all. Counting it toward Tested
+					// while Passed/Failed both stay at zero would fall
+					// through the Tested>0/Failed==0 branch below and
+					// silently report the control "pass" when nothing was
+					// actually verified.
+					if r.Result == models.ResultVetoed {
+						continue
+					}
+					cr.Tested++
 					switch r.Result {
 					case models.ResultPass, models.ResultBlocked:
 						cr.Passed++

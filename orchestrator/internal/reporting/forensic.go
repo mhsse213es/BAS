@@ -16,7 +16,7 @@ import (
 // inferred from the technique (per the platform's no-fabricated-CVE rule).
 var cveRe = regexp.MustCompile(`CVE-\d{4}-\d{4,7}`)
 
-// forensicStatusLabel maps the 4-verdict taxonomy to report language.
+// forensicStatusLabel maps the verdict taxonomy to report language.
 func forensicStatusLabel(r models.CheckResult) string {
 	switch r {
 	case models.ResultPass, models.ResultBlocked:
@@ -27,6 +27,8 @@ func forensicStatusLabel(r models.CheckResult) string {
 		return "Error"
 	case models.ResultSkipped:
 		return "Skipped"
+	case models.ResultVetoed:
+		return "Vetoed (Destructive Action Policy)"
 	}
 	return string(r)
 }

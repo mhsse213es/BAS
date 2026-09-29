@@ -71,7 +71,12 @@ func Correlate(
 		}
 
 		switch res.Result {
-		case models.ResultSkipped, models.ResultError:
+		case models.ResultSkipped, models.ResultError, models.ResultVetoed:
+			// ResultVetoed: Audspect's own agent refused to attempt this
+			// step under B5's destructive-action policy -- it genuinely
+			// never executed, so "not_executed" is the honest bucket here
+			// (verified, B5 Task 9 audit), distinct from the "not_applicable"
+			// case below (which DID execute and was stopped at the endpoint).
 			tc.SIEMVerdict = "not_executed"
 			report.NotExecuted++
 		case models.ResultPass, models.ResultBlocked:

@@ -124,6 +124,11 @@ func Aggregate(runs []ChildRun, skips []Skip) Summary {
 				}
 			case models.ResultError, models.ResultSkipped:
 				s.Errored++
+				// models.ResultVetoed intentionally falls into no case here:
+				// a B5 veto is neither a tested-and-stopped control nor a
+				// tested-and-missed one, and this switch has no
+				// unconditional counter it would otherwise dilute (verified
+				// -- B5 Task 9 audit).
 			}
 		}
 	}
