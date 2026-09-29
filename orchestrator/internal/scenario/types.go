@@ -299,6 +299,17 @@ type ScenarioStep struct {
 	// Timeout is the step's curated schedule/execute/grace bounds. nil → the agent
 	// uses the step's own timeout / engine default. Set by AttachProfiles.
 	Timeout *TimeoutProfile `json:"timeout,omitempty"`
+	// ActionKey/ExecutionClass/DestructiveAction/BlastRadius are set by
+	// AttachExecutionClassifications (execclass.go) at compile time.
+	// ActionKey is scenario-author-set (a lookup key only -- see
+	// execclass.go's doc comment; never a safety assertion). The other
+	// three are ALWAYS catalog-resolved, never scenario-author-set, even
+	// though ExecutionClass shares a name with nothing else on this
+	// struct -- there is no legacy field this could be confused with.
+	ActionKey         string         `json:"actionKey,omitempty"`
+	ExecutionClass    ExecutionClass `json:"executionClass,omitempty"`
+	DestructiveAction string         `json:"destructiveAction,omitempty"`
+	BlastRadius       string         `json:"blastRadius,omitempty"`
 	// RequiresPriv is the privilege tier required to run this step. Mirrors Step.RequiresPriv.
 	// "" and "user" both mean non-elevated user context; "admin" and "system" run in
 	// the agent's own elevated context. Serialised to the agent wire.
