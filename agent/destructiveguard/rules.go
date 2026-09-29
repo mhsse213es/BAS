@@ -49,14 +49,22 @@ var rules = []rule{
 	{regexp.MustCompile(`\bbcdedit(\.exe)?\b.*\brecoveryenabled\b\s+no\b`), ClassDestructive},
 	{regexp.MustCompile(`\bbcdedit(\.exe)?\b.*\bbootstatuspolicy\b\s+ignoreallfailures\b`), ClassDestructive},
 	{regexp.MustCompile(`\bcipher(\.exe)?\b.*(^|\s)/w\b`), ClassDestructive},
-	// Disk format: "format" as its own command token, immediately followed
-	// by a drive letter or an /fs:/switch -- NOT PowerShell's Format-Table/
-	// Format-List/-Format, and NOT "/format:list" (wmic's own output-format
-	// switch, real shipped content in scenarios/volt-typhoon-lotl.yaml).
-	// The old `\bformat\b.*[a-z]:` matched "format" anywhere followed by
-	// ANY "x:" substring later in the command (a drive path, $env:, etc.),
-	// which is far too broad (final whole-branch review, I2).
-	{regexp.MustCompile(`(^|[;\s])format(\.com|\.exe)?\s+(/fs|[a-z]:)`), ClassDestructive},
+	// Disk format: "format" as its own command token, optionally followed
+	// by flags (e.g. the quick-format /q), then a drive letter or an /fs
+	// switch -- NOT PowerShell's Format-Table/Format-List/-Format, and NOT
+	// "/format:list" (wmic's own output-format switch, real shipped
+	// content in scenarios/volt-typhoon-lotl.yaml). The old
+	// `\bformat\b.*[a-z]:` matched "format" anywhere followed by ANY "x:"
+	// substring later in the command (a drive path, $env:, etc.), which
+	// was far too broad (final whole-branch review, I2); tightening it to
+	// require the target immediately after "format" then regressed the
+	// common `format /q c: ...` form, since a real invocation often has
+	// flags between the two (fix-pass's own scoped re-review). The
+	// `(\s+/[a-z]+)*` repetition absorbs any number of such flags without
+	// reopening the wmic/PowerShell false positive, since "format" must
+	// still be preceded by `^`/`;`/whitespace, not `/` (the "/format:list"
+	// case), for the whole pattern to anchor at all.
+	{regexp.MustCompile(`(^|[;\s])format(\.com|\.exe)?(\s+/[a-z]+)*\s+(/fs|[a-z]:)`), ClassDestructive},
 	// Win32_ShadowCopy.Delete() (Akira's documented command style, CISA
 	// AA24-109A -- akira-kill-chain.yaml Stage 8) and wmic's own shadow-
 	// copy-delete verb: alternate VSS-kill primitives distinct from
@@ -77,16 +85,38 @@ var rules = []rule{
 // from a real one.
 var narrationPrefix = regexp.MustCompile(`(?i)^\s*(write-output|write-host|write-verbose|echo)\b`)
 
+// chainOrSubstitution matches a statement separator (POSIX/cmd.exe/
+// PowerShell ; | & && ||, all covered by the single characters ; | &) or a
+// command-substitution opener (backtick, $(). A line starting with a
+// narration keyword but ALSO containing one of these is not pure
+// narration -- it may chain a real command onto the same line (e.g.
+// `Write-Output "cleanup"; vssadmin delete shadows /all /quiet`, or
+// `echo y| vssadmin delete shadows /all /quiet`, a common scripted-
+// confirmation idiom) or embed one via substitution
+// (`Write-Output "$(vssadmin delete shadows /all /quiet)"`). Such a line
+// is deliberately NOT stripped, erring toward over-scanning (a genuinely
+// safe narration line that happens to contain one of these characters in
+// its prose still gets scanned, and in the worst case just doesn't match
+// any destructive pattern) rather than under-scanning (a chained real
+// command hidden entirely -- a complete local-backstop bypass reachable
+// by anything that controls Command/Cleanup/payload text, exactly B5's
+// threat model of a compromised orchestrator). Found by the fix-pass's
+// own scoped re-review of the original I2 fix.
+var chainOrSubstitution = regexp.MustCompile("[;|&`]|\\$\\(")
+
 // stripNarrationLines removes every line that only prints text, so the
 // destructive patterns below are only ever evaluated against lines that
-// can actually execute something.
+// can actually execute something. A line matching narrationPrefix but
+// also chainOrSubstitution is kept, not stripped -- see that var's doc
+// comment.
 func stripNarrationLines(command string) string {
 	lines := strings.Split(command, "\n")
 	kept := lines[:0]
 	for _, line := range lines {
-		if !narrationPrefix.MatchString(line) {
-			kept = append(kept, line)
+		if narrationPrefix.MatchString(line) && !chainOrSubstitution.MatchString(line) {
+			continue
 		}
+		kept = append(kept, line)
 	}
 	return strings.Join(kept, "\n")
 }

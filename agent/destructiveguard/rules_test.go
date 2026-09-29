@@ -101,3 +101,33 @@ func TestClassify_BacktickAndCaretObfuscationDoesNotDefeatMatch(t *testing.T) {
 		}
 	}
 }
+
+// The narration-stripping fix for I2 (TestClassify_NarrationTextIsNotAnInvocation
+// above) drops an ENTIRE line once it starts with a narration keyword. A line
+// that starts with narration text but chains a real command onto the same
+// line via a statement separator must NOT be dropped whole -- otherwise the
+// chained real command is invisible to every pattern below it, a complete
+// bypass reachable by anything that controls Command/Cleanup/payload text
+// (i.e. exactly B5's threat model: a compromised orchestrator). Found by the
+// fix-pass's own scoped re-review.
+func TestClassify_NarrationPrefixDoesNotHideChainedRealCommand(t *testing.T) {
+	for _, cmd := range []string{
+		`Write-Output "starting cleanup"; wbadmin delete catalog -quiet`,
+		"echo y| vssadmin delete shadows /all /quiet",
+	} {
+		if got := Classify(cmd); got != ClassDestructive {
+			t.Errorf("Classify(%q) = %q, want %q (a real command chained after narration text on the same line must not be hidden)", cmd, got, ClassDestructive)
+		}
+	}
+}
+
+// The tightened `format` pattern (I2 fix) requires the drive letter/`/fs`
+// switch immediately after "format", but a real invocation commonly has
+// flags (e.g. the quick-format `/q`) in between -- the OLD broad regex
+// actually caught this form, so the I2 fix traded a false positive for a
+// false negative here. Found by the fix-pass's own scoped re-review.
+func TestClassify_FormatWithFlagsBetweenCommandAndTarget(t *testing.T) {
+	if got := Classify("format /q c: /fs:ntfs /y"); got != ClassDestructive {
+		t.Errorf("Classify(format with /q flag) = %q, want %q", got, ClassDestructive)
+	}
+}
