@@ -81,6 +81,10 @@ type ScenarioStep struct {
 	PayloadDir           string            `json:"-"`
 	Resource             json.RawMessage   `json:"resource,omitempty"`
 	Timeout              json.RawMessage   `json:"timeout,omitempty"`
+	ActionKey            string            `json:"actionKey,omitempty"`
+	ExecutionClass       string            `json:"executionClass,omitempty"`
+	DestructiveAction    string            `json:"destructiveAction,omitempty"`
+	BlastRadius          string            `json:"blastRadius,omitempty"`
 	Env                  map[string]string `json:"-"`
 	RequiresPriv         string            `json:"requiresPriv,omitempty"`
 }
