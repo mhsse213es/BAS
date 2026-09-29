@@ -1,7 +1,0 @@
-1.Build orchestrator core (Go), scenario engine, RBAC/auth, basic UI.
-2.Integrate Caldera + Atomic Red Team end-to-end.
-3.Implement Common Result Schema and ATT&CK normalisation.
-4.Ship 3–5 BFSI-relevant scenarios: APT36 spear-phish chain, ransomware drill (firedrill-based), AD credential-access drill
-(PurpleSharp), basic UPI-fraud kill chain, CSCRF-MII core control drill.
-5.Single-tenant on-prem Docker Compose + Helm chart.
-6.Internal pen test, basic CIS-hardened Ubuntu image

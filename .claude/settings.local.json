@@ -717,7 +717,23 @@
       "Bash(powershell -Command \"\\(Get-PSDrive C\\).Free/1GB\")",
       "Bash(powershell -Command \"'{0:N1} GB free' -f \\(\\(Get-PSDrive C\\).Free/1GB\\)\")",
       "Bash(sort -t: -k3 -rn)",
-      "Bash(xargs -I {} basename {})"
+      "Bash(xargs -I {} basename {})",
+      "PowerShell(wsl --unregister Ubuntu-24.04)",
+      "PowerShell(wsl --list --verbose)",
+      "PowerShell(diskpart *)",
+      "PowerShell(Get-Item \"C:\\\\Users\\\\Administrator\\\\AppData\\\\Local\\\\Docker\\\\wsl\\\\disk\\\\docker_data.vhdx\" | Select-Object @{N='SizeGB';E={[math]::Round\\($_.Length/1GB,2\\)}})",
+      "Bash(bash \"C:/Users/Administrator/.claude/plugins/cache/claude-plugins-official/superpowers/6.3.0/skills/subagent-driven-development/scripts/sdd-workspace\" docs/superpowers/plans/2026-09-04-phase0b-execution-attempt.md 2>&1)",
+      "Bash(bash \"C:/Users/Administrator/.claude/plugins/cache/claude-plugins-official/superpowers/6.3.0/skills/subagent-driven-development/scripts/task-brief\" docs/superpowers/plans/2026-09-04-phase0b-execution-attempt.md 1 2>&1)",
+      "Bash(xargs -I{} sh -c 'head -1 {}')",
+      "PowerShell(wsl --list --running; echo \"---elevation---\"; \\([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent\\(\\)\\).IsInRole\\([Security.Principal.WindowsBuiltInRole]::Administrator\\))",
+      "Bash(scripts/review-package docs/superpowers/plans/2026-09-04-phase0b-execution-attempt.md bb3319e 02d4810)",
+      "Bash(GOWORK=off go vet ./...)",
+      "Bash(GOWORK=off go test . -run \"TestKillProcessTree|TestNewStepJob_TerminateKillsJobMember\" -v)",
+      "PowerShell(Get-Content *)",
+      "Bash(GOWORK=off go build ./...)",
+      "Bash(GOWORK=off go test ./... -timeout 10m)",
+      "Bash(GOWORK=off go test . -run TestGetDomainJoined_ReturnsNonNilAndDoesNotPanic -v)",
+      "Bash(GOWORK=off go test . -run TestEventForResult -v)"
     ]
   }
 }
