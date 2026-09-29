@@ -561,19 +561,23 @@ func (a *Agent) runDisconnectWatchdog() {
 // agent/protocol must not depend on sched (an execution-scheduling
 // package). Every other field mirrors protocol.ScenarioStep exactly.
 type ScenarioStep struct {
-	TaskID       string
-	TechniqueID  string
-	Name         string
-	Executor     string
-	Command      string
-	TimeoutSec   int
-	Payloads     []protocol.Payload
-	Cleanup      string
-	PayloadDir   string
-	Resource     *sched.ResourceProfile
-	Timeout      *sched.TimeoutProfile
-	Env          map[string]string
-	RequiresPriv string
+	TaskID            string
+	TechniqueID       string
+	Name              string
+	Executor          string
+	Command           string
+	TimeoutSec        int
+	Payloads          []protocol.Payload
+	Cleanup           string
+	PayloadDir        string
+	Resource          *sched.ResourceProfile
+	Timeout           *sched.TimeoutProfile
+	Env               map[string]string
+	RequiresPriv      string
+	ActionKey         string
+	ExecutionClass    string
+	DestructiveAction string
+	BlastRadius       string
 }
 
 // decodeStep converts one wire-format protocol.ScenarioStep into the
@@ -587,6 +591,8 @@ func decodeStep(w protocol.ScenarioStep) ScenarioStep {
 		TaskID: w.TaskID, TechniqueID: w.TechniqueID, Name: w.Name,
 		Executor: w.Executor, Command: w.Command, TimeoutSec: w.TimeoutSec,
 		Payloads: w.Payloads, Cleanup: w.Cleanup, RequiresPriv: w.RequiresPriv,
+		ActionKey: w.ActionKey, ExecutionClass: w.ExecutionClass,
+		DestructiveAction: w.DestructiveAction, BlastRadius: w.BlastRadius,
 	}
 	if len(w.Resource) > 0 {
 		var rp sched.ResourceProfile
@@ -890,6 +896,27 @@ func (a *Agent) runScenario(ctx context.Context, cmd protocol.ScenarioCommand) {
 						}
 						log.Printf("[*]   staged %d payload(s) to %s", len(step.Payloads), stepDir)
 					}
+				}
+
+				if vetoed, source := evaluateB5Gate(protocol.ScenarioStep{
+					ExecutionClass: step.ExecutionClass,
+					Command:        step.Command,
+				}); vetoed {
+					log.Printf("[!]   [%d/%d] %s VETOED — destructive-action policy (class=%s, action=%s, source=%s)",
+						i+1, total, step.TechniqueID, step.ExecutionClass, step.ActionKey, source)
+					results[i] = protocol.ExecResult{
+						TaskID:               step.TaskID,
+						ExitCode:             -1,
+						Vetoed:               true,
+						VetoedActionKey:      step.ActionKey,
+						VetoedExecutionClass: step.ExecutionClass,
+						VetoedBlockSource:    source,
+						ExecutedAt:           time.Now(),
+					}
+					ran[i] = true
+					emit(RunEvent{Type: "completed", TaskID: step.TaskID, TechniqueID: step.TechniqueID, StepName: step.Name,
+						Payload: map[string]any{"verdict": "vetoed"}})
+					return false
 				}
 
 				step.PayloadDir = stepDir

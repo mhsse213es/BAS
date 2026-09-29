@@ -107,6 +107,16 @@ type ExecResult struct {
 	Blocked         bool      `json:"blocked,omitempty"`
 	BlockedReason   string    `json:"blockedReason,omitempty"`
 	TimedOut        bool      `json:"timedOut,omitempty"`
+	// Vetoed/VetoedActionKey/VetoedExecutionClass/VetoedBlockSource are
+	// B5's destructive-action veto -- deliberately distinct fields from
+	// Blocked/BlockedReason above, which mean the CUSTOMER's own EDR/AV
+	// quarantined something (see agent.go's payload-quarantine block).
+	// Reusing those fields for B5 would silently conflate an Audspect-
+	// side refusal with a customer-defense event.
+	Vetoed               bool   `json:"vetoed,omitempty"`
+	VetoedActionKey      string `json:"vetoedActionKey,omitempty"`
+	VetoedExecutionClass string `json:"vetoedExecutionClass,omitempty"`
+	VetoedBlockSource    string `json:"vetoedBlockSource,omitempty"`
 	CleanupVerdict  string    `json:"cleanupVerdict,omitempty"`
 	CleanupResidual []string  `json:"cleanupResidual,omitempty"`
 	// CleanupError captures the cleanup command's own stderr and exit code
