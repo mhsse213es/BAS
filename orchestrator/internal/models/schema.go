@@ -80,6 +80,17 @@ type SimulationResult struct {
 	CleanupResidual     []string         `json:"cleanupResidual,omitempty"`  // normalized snapshot-diff keys still present after the step's own cleanup ran
 	CleanupError        string           `json:"cleanupError,omitempty"`     // the cleanup command's own stderr+exit code when CleanupVerdict is partial/leaked
 	BlockingControl     *BlockingControl `json:"blockingControl,omitempty"`  // specific control that prevented the technique (populated when DetectionVerdict=prevented)
+	// VetoedActionKey/VetoedExecutionClass/VetoedBlockSource are populated
+	// only when Result == ResultVetoed -- structured mirrors of the free-
+	// text explanation already embedded in Details, so a report/UI/export
+	// consumer can filter or render on them directly instead of parsing
+	// prose (final whole-branch review, I5). Field names and meaning match
+	// scenario.ExecResult's own Vetoed* fields (types.go) and the agent's
+	// protocol.ExecResult, which this whole B5 pipeline already uses this
+	// naming for end to end.
+	VetoedActionKey      string `json:"vetoedActionKey,omitempty"`
+	VetoedExecutionClass string `json:"vetoedExecutionClass,omitempty"`
+	VetoedBlockSource    string `json:"vetoedBlockSource,omitempty"`
 	// SinkTokenObserved is set (non-nil) only for a step whose command was
 	// wired to the DLP exfiltration sink (see internal/api/dlp_sink.go).
 	// true = the sink received this step's token (data reached the

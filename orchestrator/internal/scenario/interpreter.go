@@ -123,6 +123,13 @@ func Interpret(step Step, result ExecResult) models.SimulationResult {
 		ThreatImpact:        models.ThreatImpact(tactic, techniqueID, techniqueName),
 		Details:             details,
 		SkipReason:          skipReason,
+		// Structured mirrors of the VETOED explanation already embedded in
+		// Details above -- zero-valued (omitempty) for any non-vetoed step,
+		// since the agent only ever populates result.Vetoed* when Vetoed is
+		// true (final whole-branch review, I5).
+		VetoedActionKey:      result.VetoedActionKey,
+		VetoedExecutionClass: result.VetoedExecutionClass,
+		VetoedBlockSource:    result.VetoedBlockSource,
 		Remediation:         models.Remediation(checkResult, tactic, techniqueID, techniqueName),
 		RawOutput:           truncate(combined, outputLimit),
 		Truncated:           truncated,
