@@ -118,6 +118,7 @@ func BuildSteps(sc *Scenario, calderaURL, calderaKey string, artStore *ARTStore,
 	}
 	dedupeStepIdentity(steps)
 	AttachProfiles(steps)
+	AttachExecutionClassifications(steps)
 	return steps, skipped, nil
 }
 

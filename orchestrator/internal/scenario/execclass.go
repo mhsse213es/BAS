@@ -106,3 +106,18 @@ func ResolveExecutionClass(techniqueID, actionKey string) ExecutionClassificatio
 	}
 	return *c
 }
+
+// AttachExecutionClassifications labels every step with its resolved
+// execution classification in place, mirroring AttachProfiles
+// (resource.go) exactly. Called from BuildSteps immediately after
+// AttachProfiles -- the single compilation choke point every step
+// (hand-authored, ART-sourced, Caldera-sourced) passes through before
+// ever reaching an agent.
+func AttachExecutionClassifications(steps []ScenarioStep) {
+	for i := range steps {
+		c := ResolveExecutionClass(steps[i].TechniqueID, steps[i].ActionKey)
+		steps[i].ExecutionClass = c.Class
+		steps[i].DestructiveAction = c.DestructiveAction
+		steps[i].BlastRadius = c.BlastRadius
+	}
+}

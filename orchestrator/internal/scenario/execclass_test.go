@@ -50,3 +50,25 @@ func TestResolveExecutionClass_CaseNormalization(t *testing.T) {
 		t.Errorf("case-insensitive lookup failed: class = %q, want %q", got.Class, ClassDestructive)
 	}
 }
+
+func TestAttachExecutionClassifications(t *testing.T) {
+	steps := []ScenarioStep{
+		{TechniqueID: "T1490", ActionKey: "vss_delete"},
+		{TechniqueID: "T1082"}, // no action_key -> "default"
+		{TechniqueID: "T9999"}, // wholly unknown -> fail closed
+	}
+	AttachExecutionClassifications(steps)
+
+	if steps[0].ExecutionClass != ClassDestructive {
+		t.Errorf("steps[0].ExecutionClass = %q, want %q", steps[0].ExecutionClass, ClassDestructive)
+	}
+	if steps[0].DestructiveAction != "vss_delete" {
+		t.Errorf("steps[0].DestructiveAction = %q, want %q", steps[0].DestructiveAction, "vss_delete")
+	}
+	if steps[1].ExecutionClass != ClassNonDestructive {
+		t.Errorf("steps[1].ExecutionClass = %q, want %q", steps[1].ExecutionClass, ClassNonDestructive)
+	}
+	if steps[2].ExecutionClass != ClassDestructive {
+		t.Errorf("steps[2].ExecutionClass = %q, want %q (fail closed)", steps[2].ExecutionClass, ClassDestructive)
+	}
+}
