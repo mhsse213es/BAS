@@ -1339,10 +1339,7 @@ func (a *Agent) connectWS() {
 			}
 			gotMessage = true
 
-			switch msg.Type {
-			case "command_scenario", "command_simulate", "command_attackpath_collect",
-				"command_cancel", "command_pause", "command_resume",
-				"command_stop_agent", "command_uninstall_agent":
+			if protocol.IsSignedCommandType(msg.Type) {
 				env, err := a.verifyCommandEnvelope(msg.Data, msg.Type)
 				if err != nil {
 					log.Printf("[!] WS: command envelope rejected (%s): %v", msg.Type, err)
@@ -1350,8 +1347,7 @@ func (a *Agent) connectWS() {
 					continue
 				}
 				a.dispatchVerifiedCommand(msg.Type, env.Payload)
-
-			default:
+			} else {
 				log.Printf("[~] WS: unhandled message type %q", msg.Type)
 			}
 		}

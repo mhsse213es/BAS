@@ -14,9 +14,15 @@ import (
 
 // issuedAtFutureTolerance bounds how far into the future IssuedAt may
 // claim to be before it's treated as backdated/malformed rather than
-// ordinary clock skew between the orchestrator and this agent -- a few
-// seconds, deliberately much smaller than the 60s validity window itself.
-const issuedAtFutureTolerance = 5 * time.Second
+// ordinary clock skew between the orchestrator and this agent. On-prem
+// deployments run without a guaranteed NTP baseline (final whole-branch
+// review, Important 3) -- a handful of seconds is realistic only for a
+// well-synced pair of clocks, and this agent has no independent signal
+// that the orchestrator or its own host is one. 60s matches the
+// envelope's own TTL window: an envelope accepted at the edge of this
+// tolerance is no more permissive than one accepted at the edge of the
+// ordinary expiry check below.
+const issuedAtFutureTolerance = 60 * time.Second
 
 // replayCache tracks CommandIDs already accepted, so the exact same
 // envelope can't execute twice within its own validity window. Package-
@@ -35,9 +41,9 @@ var (
 // verifyCommandEnvelope unmarshals raw as a protocol.CommandEnvelope and
 // runs the full rejection checklist before returning it as trusted. Only
 // called for msg.Type values where protocol.IsSignedCommandType is
-// already true -- see agent.go's connectWS, which checks that BEFORE
-// calling this at all, so an unrecognized command type never reaches
-// signature verification (the spec's explicit hard rule).
+// already true -- agent.go's connectWS checks that directly, so an
+// unrecognized command type never reaches signature verification (the
+// spec's explicit hard rule).
 func (a *Agent) verifyCommandEnvelope(raw json.RawMessage, expectedType string) (*protocol.CommandEnvelope, error) {
 	var env protocol.CommandEnvelope
 	if err := json.Unmarshal(raw, &env); err != nil {

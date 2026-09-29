@@ -6,6 +6,44 @@ import (
 	"time"
 )
 
+// TestIsSignedCommandType_RejectsUnknownTypes pins the spec's hard rule
+// that an unrecognized command type is rejected before signature
+// verification is even attempted, no matter how well-formed or validly
+// signed an envelope claiming it might be (final whole-branch review,
+// Review Focus #2) -- agent.go's connectWS gates on this function
+// directly, before calling verifyCommandEnvelope at all.
+func TestIsSignedCommandType_RejectsUnknownTypes(t *testing.T) {
+	for _, unknown := range []string{
+		"command_install_patches", // explicitly out of scope, see spec
+		"command_totally_unknown",
+		"",
+		"COMMAND_SCENARIO", // case must not be normalized away
+	} {
+		if IsSignedCommandType(unknown) {
+			t.Errorf("IsSignedCommandType(%q) = true, want false", unknown)
+		}
+	}
+}
+
+// TestIsSignedCommandType_AcceptsExactlyTheEightSignedTypes pins the
+// closed list itself -- exactly the 8 execution-triggering command
+// types the spec names, no more and no fewer.
+func TestIsSignedCommandType_AcceptsExactlyTheEightSignedTypes(t *testing.T) {
+	want := []string{
+		"command_scenario", "command_simulate", "command_attackpath_collect",
+		"command_cancel", "command_pause", "command_resume",
+		"command_stop_agent", "command_uninstall_agent",
+	}
+	for _, ct := range want {
+		if !IsSignedCommandType(ct) {
+			t.Errorf("IsSignedCommandType(%q) = false, want true", ct)
+		}
+	}
+	if len(SignedCommandTypes) != len(want) {
+		t.Errorf("SignedCommandTypes has %d entries, want exactly %d", len(SignedCommandTypes), len(want))
+	}
+}
+
 // TestCommandEnvelope_UnmarshalsOrchestratorWireShape locks in that the
 // agent's verification-side type accepts exactly what
 // orchestrator/internal/models.CommandEnvelope's json tags produce --

@@ -161,6 +161,24 @@ func TestVerifyCommandEnvelope_RejectsIssuedAtFarInFuture(t *testing.T) {
 	}
 }
 
+// A 30-second clock skew is realistic for an on-prem deployment with no
+// guaranteed NTP baseline (final whole-branch review, Important 3) and
+// must not be treated as malformed/backdated -- it's within
+// issuedAtFutureTolerance (60s), unlike the previous 5s tolerance this
+// would have tripped.
+func TestVerifyCommandEnvelope_AcceptsRealisticClockSkew(t *testing.T) {
+	key := setupSigningTrust(t)
+	a := &Agent{id: Identity{AgentID: "abc123deadbeef01"}}
+	env := validEnvelope(t, key, "abc123deadbeef01")
+	env.IssuedAt = time.Now().Add(30 * time.Second)
+	env.ExpiresAt = env.IssuedAt.Add(60 * time.Second)
+	env = resign(t, key, env)
+
+	if _, err := a.verifyCommandEnvelope(marshalEnvelope(t, env), "command_scenario"); err != nil {
+		t.Fatalf("expected a 30s clock skew to be accepted, got: %v", err)
+	}
+}
+
 func TestVerifyCommandEnvelope_RejectsUnsupportedVersion(t *testing.T) {
 	key := setupSigningTrust(t)
 	a := &Agent{id: Identity{AgentID: "abc123deadbeef01"}}

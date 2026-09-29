@@ -87,9 +87,12 @@ func TestDispatch_SignedCommandCancelExecutesThroughRealPath(t *testing.T) {
 	if ctx.Err() != nil {
 		t.Fatal("precondition failed: context already canceled before dispatch")
 	}
-	// This confirms the envelope this task's dispatch code path would
-	// receive from the real WS switch verifies and unwraps correctly;
-	// Step 3 below wires the switch itself to call exactly this.
+
+	a.dispatchVerifiedCommand(got.CommandType, got.Payload)
+
+	if ctx.Err() != context.Canceled {
+		t.Errorf("signed command_cancel envelope did not reach cancelCurrentScenario's real state transition -- ctx.Err() = %v, want context.Canceled", ctx.Err())
+	}
 }
 
 // TestDispatch_TamperedEnvelopeNeverReachesHandler proves the negative:
@@ -106,8 +109,13 @@ func TestDispatch_TamperedEnvelopeNeverReachesHandler(t *testing.T) {
 	}
 	serial, _ := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 128))
 	tmpl := &x509.Certificate{SerialNumber: serial, Subject: pkix.Name{CommonName: "test"}, NotBefore: time.Now().Add(-time.Hour), NotAfter: time.Now().Add(time.Hour)}
-	der, _ := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &trustedKey.PublicKey, trustedKey)
-	saveCommandSigningCert(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}))
+	der, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &trustedKey.PublicKey, trustedKey)
+	if err != nil {
+		t.Fatalf("create cert: %v", err)
+	}
+	if err := saveCommandSigningCert(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})); err != nil {
+		t.Fatalf("saveCommandSigningCert: %v", err)
+	}
 
 	attackerKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
