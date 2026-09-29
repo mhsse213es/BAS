@@ -867,6 +867,37 @@ func (a *Agent) runScenario(ctx context.Context, cmd protocol.ScenarioCommand) {
 					return false
 				}
 
+				// B5 gate runs BEFORE payload staging, not after -- no reason to
+				// write a potentially-destructive payload to disk for a step
+				// that's about to be vetoed anyway. Scans Command, Cleanup, and
+				// every payload's content (not just Command): a compromised
+				// orchestrator controls the signed ExecutionClass and could hide
+				// a destructive action in Cleanup (which runs unconditionally
+				// after any non-vetoed step) or in a payload's content instead
+				// (final whole-branch review, C3).
+				if vetoed, source := evaluateB5Gate(protocol.ScenarioStep{
+					ExecutionClass: step.ExecutionClass,
+					Command:        step.Command,
+					Cleanup:        step.Cleanup,
+					Payloads:       step.Payloads,
+				}); vetoed {
+					log.Printf("[!]   [%d/%d] %s VETOED — destructive-action policy (class=%s, action=%s, source=%s)",
+						i+1, total, step.TechniqueID, step.ExecutionClass, step.ActionKey, source)
+					results[i] = protocol.ExecResult{
+						TaskID:               step.TaskID,
+						ExitCode:             -1,
+						Vetoed:               true,
+						VetoedActionKey:      step.ActionKey,
+						VetoedExecutionClass: step.ExecutionClass,
+						VetoedBlockSource:    source,
+						ExecutedAt:           time.Now(),
+					}
+					ran[i] = true
+					emit(RunEvent{Type: "completed", TaskID: step.TaskID, TechniqueID: step.TechniqueID, StepName: step.Name,
+						Payload: map[string]any{"verdict": "vetoed"}})
+					return false
+				}
+
 				// Stage payloads into a per-step subdir so concurrent steps never
 				// collide on BAS_PAYLOAD_DIR. Steps without payloads use the run dir.
 				stepDir := payloadDir
@@ -896,27 +927,6 @@ func (a *Agent) runScenario(ctx context.Context, cmd protocol.ScenarioCommand) {
 						}
 						log.Printf("[*]   staged %d payload(s) to %s", len(step.Payloads), stepDir)
 					}
-				}
-
-				if vetoed, source := evaluateB5Gate(protocol.ScenarioStep{
-					ExecutionClass: step.ExecutionClass,
-					Command:        step.Command,
-				}); vetoed {
-					log.Printf("[!]   [%d/%d] %s VETOED — destructive-action policy (class=%s, action=%s, source=%s)",
-						i+1, total, step.TechniqueID, step.ExecutionClass, step.ActionKey, source)
-					results[i] = protocol.ExecResult{
-						TaskID:               step.TaskID,
-						ExitCode:             -1,
-						Vetoed:               true,
-						VetoedActionKey:      step.ActionKey,
-						VetoedExecutionClass: step.ExecutionClass,
-						VetoedBlockSource:    source,
-						ExecutedAt:           time.Now(),
-					}
-					ran[i] = true
-					emit(RunEvent{Type: "completed", TaskID: step.TaskID, TechniqueID: step.TechniqueID, StepName: step.Name,
-						Payload: map[string]any{"verdict": "vetoed"}})
-					return false
 				}
 
 				step.PayloadDir = stepDir

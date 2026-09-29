@@ -65,6 +65,49 @@ func TestEvaluateB5Gate_PotentiallyDestructiveExecutesNormally(t *testing.T) {
 	}
 }
 
+// A compromised orchestrator controls the signed ExecutionClass. If it
+// pairs a benign Command with a destructive Cleanup, the gate must still
+// veto -- otherwise the destructive action runs unchecked via cleanup
+// (final whole-branch review, C3). Cleanup is not independently
+// catalog-classified (only the step's primary action is), so this relies
+// on the local backstop scanning Cleanup text too.
+func TestEvaluateB5Gate_DestructiveCleanupIsVetoedEvenWithSafeCommand(t *testing.T) {
+	step := protocol.ScenarioStep{
+		TechniqueID: "T1082", ExecutionClass: "non_destructive",
+		Command: "Write-Output hello",
+		Cleanup: "vssadmin delete shadows /all /quiet",
+	}
+	vetoed, source := evaluateB5Gate(step)
+	if !vetoed {
+		t.Fatal("expected a destructive Cleanup to be vetoed even though Command is benign")
+	}
+	if source != "local_backstop" {
+		t.Errorf("block_source = %q, want %q", source, "local_backstop")
+	}
+}
+
+// Same threat model, via a staged payload's content instead of Cleanup:
+// payloads are written to disk before the gate ran historically, and
+// their content was never classified at all (final whole-branch review,
+// C3). A text-content payload whose content matches a known-catastrophic
+// pattern must be vetoed.
+func TestEvaluateB5Gate_DestructivePayloadContentIsVetoedEvenWithSafeCommand(t *testing.T) {
+	step := protocol.ScenarioStep{
+		TechniqueID: "T1082", ExecutionClass: "non_destructive",
+		Command: "Write-Output hello",
+		Payloads: []protocol.Payload{
+			{Name: "helper.ps1", Content: "vssadmin delete shadows /all /quiet"},
+		},
+	}
+	vetoed, source := evaluateB5Gate(step)
+	if !vetoed {
+		t.Fatal("expected a destructive payload content to be vetoed even though Command is benign")
+	}
+	if source != "local_backstop" {
+		t.Errorf("block_source = %q, want %q", source, "local_backstop")
+	}
+}
+
 func TestEvaluateB5Gate_UnclassifiedIsVetoed(t *testing.T) {
 	step := protocol.ScenarioStep{
 		TechniqueID: "T9999", ExecutionClass: "", // never resolved / unknown to this agent build
