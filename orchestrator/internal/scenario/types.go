@@ -152,6 +152,17 @@ type Step struct {
 	Telemetry   []string `yaml:"telemetry,omitempty"    json:"telemetry,omitempty"`   // expected events, e.g. "Security EID 4688", "Sysmon EID 1"
 	Detection   []string `yaml:"detection,omitempty"    json:"detection,omitempty"`   // detection objectives, e.g. "EDR: WmiPrvSE child process"
 
+	// ActionKey selects which catalog entry (execclass.go) classifies this
+	// step's destructiveness, alongside TechniqueID. It is a LOOKUP KEY
+	// ONLY -- see execclass.go's doc comment. The author cannot make a
+	// step safe by choosing a reassuring-sounding key; an unrecognized
+	// (technique_id, action_key) pair fails closed to destructive. Needed
+	// whenever a technique has more than one materially different
+	// behavior (T1490's enumerate vs. vss_delete is the canonical
+	// example); omit it for a technique with exactly one behavior, which
+	// resolves against that technique's "default" catalog entry.
+	ActionKey string `yaml:"action_key,omitempty" json:"actionKey,omitempty"`
+
 	// Fidelity controls which live tier a step runs in:
 	//   "" or "telemetry-safe" → runs in telemetry AND lab modes (zero identity risk)
 	//   "lab-only"             → runs ONLY in lab mode (isolated range; higher risk)

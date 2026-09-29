@@ -281,6 +281,7 @@ func buildStep(s Step, calderaURL, calderaKey string, artStore *ARTStore, agentO
 	return ScenarioStep{
 		TaskID:       TaskID(s.TechniqueID, s.Name),
 		TechniqueID:  s.TechniqueID,
+		ActionKey:    s.ActionKey,
 		Name:         s.Name,
 		Framework:    framework,
 		Executor:     executor,

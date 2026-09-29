@@ -169,3 +169,21 @@ func TestBuildSteps_DisambiguatesDuplicateAbilityAcrossKillChain(t *testing.T) {
 		t.Errorf("both steps kept Name %q -- Interpret() would recompute the same colliding TaskID from it", steps[0].Name)
 	}
 }
+
+func TestBuildStep_CarriesActionKeyThrough(t *testing.T) {
+	s := Step{
+		Name:        "VSS Delete",
+		TechniqueID: "T1490",
+		ActionKey:   "vss_delete",
+		Framework:   "custom",
+		Executor:    "powershell",
+		Command:     "vssadmin delete shadows /all /quiet",
+	}
+	step, err := buildStep(s, "", "", nil, "windows")
+	if err != nil {
+		t.Fatalf("buildStep: %v", err)
+	}
+	if step.ActionKey != "vss_delete" {
+		t.Errorf("ActionKey = %q, want %q", step.ActionKey, "vss_delete")
+	}
+}
