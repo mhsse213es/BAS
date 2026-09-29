@@ -129,6 +129,51 @@ func newMockOrchestrator(t *testing.T, ca testCA, clientAuth tls.ClientAuthType,
 	return srv
 }
 
+// newMockOrchestratorWithSigningTrust mirrors newMockOrchestrator but also
+// returns a non-empty commandSigningTrust.certPem -- protocol.CSRResponse's
+// CommandSigningTrust field is of an unexported type, so callers outside
+// the protocol package can't construct one directly; encoding the response
+// as a plain map (matching CSRResponse's own JSON tags) sidesteps that
+// without needing an exported constructor solely for this test.
+func newMockOrchestratorWithSigningTrust(t *testing.T, ca testCA, signingCertPEM string, rec *csrRecord) *httptest.Server {
+	t.Helper()
+	srv := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/agents/enroll-csr" {
+			http.NotFound(w, r)
+			return
+		}
+		var req protocol.CSRRequest
+		json.NewDecoder(r.Body).Decode(&req)
+		rec.mu.Lock()
+		rec.calls++
+		rec.token = r.Header.Get("X-Agent-Token")
+		if r.TLS != nil && len(r.TLS.PeerCertificates) > 0 {
+			rec.hadClientCert = true
+			rec.clientCertCN = r.TLS.PeerCertificates[0].Subject.CommonName
+		}
+		rec.mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]any{
+			"certPem":   string(issueFromCSR(t, ca, req.CSRPEM, req.AgentID)),
+			"expiresAt": time.Now().Add(365 * 24 * time.Hour).Format(time.RFC3339),
+			"commandSigningTrust": map[string]string{
+				"keyId":   "test-key-id",
+				"certPem": signingCertPEM,
+			},
+		})
+	}))
+	pool := x509.NewCertPool()
+	pool.AddCert(ca.cert)
+	srv.TLS = &tls.Config{
+		Certificates: []tls.Certificate{{Certificate: [][]byte{ca.cert.Raw}, PrivateKey: ca.key}},
+		ClientAuth:   tls.RequireAndVerifyClientCert,
+		ClientCAs:    pool,
+	}
+	srv.StartTLS()
+	t.Cleanup(srv.Close)
+	return srv
+}
+
 func portOf(t *testing.T, rawURL string) string {
 	t.Helper()
 	u, err := url.Parse(rawURL)
@@ -177,6 +222,13 @@ func TestEnsureCertificate_SkipsBootstrapWhenValidCertExists(t *testing.T) {
 	if err := markEnrolled(); err != nil {
 		t.Fatalf("markEnrolled: %v", err)
 	}
+	// Already holds command-signing trust too -- otherwise the fast path
+	// falls through to a renewal attempt (see the test below), which would
+	// make this test's "zero network I/O" assertion pass for the wrong
+	// reason (a failed DNS lookup, not a skipped renewal).
+	if err := saveCommandSigningCert(selfSignedTestCertPEM(t, "test-command-signing")); err != nil {
+		t.Fatalf("saveCommandSigningCert: %v", err)
+	}
 
 	rec := &csrRecord{}
 	srv := newMockOrchestrator(t, ca, tls.NoClientCert, http.StatusOK, rec)
@@ -191,6 +243,60 @@ func TestEnsureCertificate_SkipsBootstrapWhenValidCertExists(t *testing.T) {
 	}
 	if opURL != "https://orchestrator.local:9443" {
 		t.Errorf("operational URL = %q, want https://orchestrator.local:9443", opURL)
+	}
+}
+
+// A valid, non-expiring-soon mTLS certificate normally means zero network
+// I/O (the test above). But an agent missing its command-signing trust
+// material -- enrolled before B4 shipped, or with a lost/reset
+// command-signing.pem -- must not stay stuck on that fast path until its
+// certificate's own renewal threshold, up to ~9 months away; it renews
+// early, over mTLS, specifically to obtain the missing trust material.
+func TestEnsureCertificate_MissingCommandSigningCertTriggersRenewalDespiteValidMTLSCert(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("BAS_CERT_DIR", dir)
+	ca := newTestCA(t)
+	seedDeploymentCA(t, dir, ca)
+	key, err := loadOrGenerateAgentKey()
+	if err != nil {
+		t.Fatalf("loadOrGenerateAgentKey: %v", err)
+	}
+	// Not expiring soon -- would take the zero-network fast path if it
+	// weren't for the missing command-signing certificate.
+	if err := saveAgentCertificate(caSignedCertPEM(t, ca, &key.PublicKey, "abc123deadbeef01", -time.Hour, 24*365*time.Hour)); err != nil {
+		t.Fatalf("saveAgentCertificate: %v", err)
+	}
+	if err := markEnrolled(); err != nil {
+		t.Fatalf("markEnrolled: %v", err)
+	}
+	if _, err := loadCommandSigningCert(); err == nil {
+		t.Fatal("test setup: command-signing cert unexpectedly already present")
+	}
+
+	signingCertPEM := selfSignedTestCertPEM(t, "test-command-signing")
+	rec := &csrRecord{}
+	srv := newMockOrchestratorWithSigningTrust(t, ca, string(signingCertPEM), rec)
+	t.Setenv("BAS_MTLS_PORT", portOf(t, srv.URL))
+	t.Setenv("BAS_ENROLL_PORT", unusedPort(t)) // must renew over mTLS, never re-bootstrap
+
+	opURL, err := ensureCertificate(context.Background(), Config{ServerURL: "http://127.0.0.1:9000", AgentSecret: "secret"}, "abc123deadbeef01")
+	if err != nil {
+		t.Fatalf("ensureCertificate: %v", err)
+	}
+	if rec.calls != 1 {
+		t.Fatalf("mTLS endpoint calls = %d, want 1 (missing signing cert must force a renewal call)", rec.calls)
+	}
+	if !rec.hadClientCert || rec.clientCertCN != "abc123deadbeef01" {
+		t.Error("renewal request did not present the agent's existing client certificate")
+	}
+	if rec.token != "" {
+		t.Error("request sent the bootstrap secret -- a valid enrolled identity must authenticate via mTLS only")
+	}
+	if _, err := loadCommandSigningCert(); err != nil {
+		t.Fatalf("loadCommandSigningCert after ensureCertificate: %v", err)
+	}
+	if opURL != "https://127.0.0.1:"+portOf(t, srv.URL) {
+		t.Errorf("operational URL = %q", opURL)
 	}
 }
 

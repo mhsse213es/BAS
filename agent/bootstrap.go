@@ -142,12 +142,30 @@ func ensureCertificate(ctx context.Context, cfg Config, agentID string) (string,
 		if err := checkMTLSUsable(cfg); err != nil {
 			return "", &errBlocked{err}
 		}
-		return opURL, nil
+		// The fast path is "no network I/O" ONLY when this agent already
+		// holds command-signing trust material. Without this check, an
+		// agent enrolled before B4 shipped (or one whose
+		// command-signing.pem was lost/reset) would never take ANY
+		// network path again until its certificate's normal renewal
+		// threshold -- up to ~9 months away at the default 1-year
+		// validity -- silently rejecting every execution-triggering
+		// command in the meantime with no operator-visible recovery. A
+		// missing signing cert forces the renewal path below instead,
+		// even though the mTLS certificate itself doesn't need renewing
+		// yet: renewal is the only existing network path that delivers
+		// CommandSigningTrust, and it's safe to take early since it
+		// authenticates via the already-valid certificate, never the
+		// bootstrap secret.
+		if _, err := loadCommandSigningCert(); err == nil {
+			return opURL, nil
+		}
 	}
 
-	// Two cases reach here: (a) enrolled, valid, but past the renewal
-	// threshold -- renew over mTLS; (b) never enrolled -- initial bootstrap
-	// over the enrollment listener with the shared secret.
+	// Three cases reach here: (a) enrolled, valid, but past the renewal
+	// threshold -- renew over mTLS; (b) enrolled, valid, not past the
+	// renewal threshold, but missing command-signing trust -- also renews
+	// over mTLS, solely to obtain it; (c) never enrolled -- initial
+	// bootstrap over the enrollment listener with the shared secret.
 	renewing := enrolled
 
 	key, err := loadOrGenerateAgentKey()
