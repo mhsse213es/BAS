@@ -43,12 +43,52 @@ type rule struct {
 // as this list grows.
 var rules = []rule{
 	{regexp.MustCompile(`\bvssadmin(\.exe)?\b.*\bdelete\b.*\bshadows\b`), ClassDestructive},
+	{regexp.MustCompile(`\bvssadmin(\.exe)?\b.*\bresize\b.*\bshadowstorage\b`), ClassDestructive},
 	{regexp.MustCompile(`\bwbadmin(\.exe)?\b.*\bdelete\b.*\bcatalog\b`), ClassDestructive},
 	{regexp.MustCompile(`\bwbadmin(\.exe)?\b.*\bdelete\b.*\bsystemstatebackup\b`), ClassDestructive},
 	{regexp.MustCompile(`\bbcdedit(\.exe)?\b.*\brecoveryenabled\b\s+no\b`), ClassDestructive},
 	{regexp.MustCompile(`\bbcdedit(\.exe)?\b.*\bbootstatuspolicy\b\s+ignoreallfailures\b`), ClassDestructive},
 	{regexp.MustCompile(`\bcipher(\.exe)?\b.*(^|\s)/w\b`), ClassDestructive},
-	{regexp.MustCompile(`\bformat\b.*[a-z]:`), ClassDestructive},
+	// Disk format: "format" as its own command token, immediately followed
+	// by a drive letter or an /fs:/switch -- NOT PowerShell's Format-Table/
+	// Format-List/-Format, and NOT "/format:list" (wmic's own output-format
+	// switch, real shipped content in scenarios/volt-typhoon-lotl.yaml).
+	// The old `\bformat\b.*[a-z]:` matched "format" anywhere followed by
+	// ANY "x:" substring later in the command (a drive path, $env:, etc.),
+	// which is far too broad (final whole-branch review, I2).
+	{regexp.MustCompile(`(^|[;\s])format(\.com|\.exe)?\s+(/fs|[a-z]:)`), ClassDestructive},
+	// Win32_ShadowCopy.Delete() (Akira's documented command style, CISA
+	// AA24-109A -- akira-kill-chain.yaml Stage 8) and wmic's own shadow-
+	// copy-delete verb: alternate VSS-kill primitives distinct from
+	// vssadmin.exe, missed by the seed rule set (final whole-branch
+	// review, I1).
+	{regexp.MustCompile(`win32_shadowcopy.*\.delete\(\)`), ClassDestructive},
+	{regexp.MustCompile(`\bwmic\b.*\bshadowcopy\b.*\bdelete\b`), ClassDestructive},
+}
+
+// narrationPrefix matches a line that only PRINTS text -- Write-Output,
+// Write-Host, Write-Verbose, or a bare echo -- rather than executing
+// anything. A narration line describing what a real attacker WOULD run
+// (e.g. "BlackCat would now run 'vssadmin delete shadows...'", real
+// shipped content in scenarios/blackcat-kill-chain.yaml) is not itself an
+// invocation and must never be classified as one (final whole-branch
+// review, I2). Checked against each line BEFORE quote-stripping, since
+// quote-stripping is what makes a quoted narrated command indistinguishable
+// from a real one.
+var narrationPrefix = regexp.MustCompile(`(?i)^\s*(write-output|write-host|write-verbose|echo)\b`)
+
+// stripNarrationLines removes every line that only prints text, so the
+// destructive patterns below are only ever evaluated against lines that
+// can actually execute something.
+func stripNarrationLines(command string) string {
+	lines := strings.Split(command, "\n")
+	kept := lines[:0]
+	for _, line := range lines {
+		if !narrationPrefix.MatchString(line) {
+			kept = append(kept, line)
+		}
+	}
+	return strings.Join(kept, "\n")
 }
 
 // normalize case-folds and collapses whitespace so trivial quoting/
@@ -57,12 +97,19 @@ var rules = []rule{
 // approach this package exists to avoid) -- it only strips the
 // characters a scenario author or attacker would plausibly vary without
 // changing what the command actually does: surrounding quotes/call
-// operators and repeated whitespace.
+// operators, PowerShell's backtick escape / cmd.exe's caret escape
+// (both trivially insertable mid-token without changing what runs), and
+// repeated whitespace. String concatenation (('vss'+'admin')) and
+// -EncodedCommand stay explicitly out of scope -- defeating those needs
+// real parsing/evaluation, not normalization (final whole-branch review,
+// I1; the design spec's own "no full semantic parser" decision).
 func normalize(command string) string {
 	s := strings.ToLower(command)
 	s = strings.ReplaceAll(s, "&", " ")
 	s = strings.ReplaceAll(s, `"`, " ")
 	s = strings.ReplaceAll(s, "'", " ")
+	s = strings.ReplaceAll(s, "`", "")
+	s = strings.ReplaceAll(s, "^", "")
 	s = strings.Join(strings.Fields(s), " ")
 	return s
 }
@@ -74,7 +121,7 @@ func normalize(command string) string {
 // this function never sees or considers that signed classification
 // itself.
 func Classify(command string) Class {
-	n := normalize(command)
+	n := normalize(stripNarrationLines(command))
 	for _, r := range rules {
 		if r.pattern.MatchString(n) {
 			return r.class
