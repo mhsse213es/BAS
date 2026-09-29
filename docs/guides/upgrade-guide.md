@@ -29,6 +29,7 @@ Audspect BAS upgrades are delivered as a new versioned delivery ZIP (`bas-instal
 - [ ] Take an extra full database dump as a second safety net on top of `install.sh`'s own automatic config backup (see Step 1 below) — `install.sh`'s upgrade-time backup covers `docker-compose.yml`/`.env`/version, not the database contents itself (those live in the persistent Postgres volume, which the upgrade never touches directly, but a standalone dump is cheap insurance)
 - [ ] If this upgrade crosses into the mTLS agent trust model (see the section immediately below), also run a real `sudo bash install.sh --backup` beforehand — this is a separate, encrypted, retention-managed mechanism (distinct from the small automatic config backup `--upgrade` always takes) that includes the deployment CA alongside the database and config, and is the right thing to restore from if anything about the CA goes wrong during or after this upgrade
 - [ ] If this upgrade crosses into command-envelope signing (see [Upgrading Into Command-Envelope Signing](#-upgrading-into-command-envelope-signing-b4--upgrade-agents-first) below), upgrade agent binaries first, or in the same window — an agent left on an old binary will mishandle scenario runs and other execution-triggering commands sent by the upgraded orchestrator
+- [ ] If this upgrade crosses into the destructive-action guardrail (see [Upgrading Into the Destructive-Action Guardrail](#-upgrading-into-the-destructive-action-guardrail-b5--upgrade-together) below), upgrade the orchestrator and every agent in the same maintenance window — unlike B4, skew is unsafe in *either* direction here
 - [ ] Note the current version: `sudo bash install.sh --status`
 - [ ] Read the [Release Notes](release-notes.md) for the target version — specifically **Breaking Changes** and **Migration Notes**
 - [ ] Confirm you have the new delivery ZIP: `bas-install-<version>.zip`
@@ -129,6 +130,68 @@ upgrade:**
    still-old agent until it's upgraded -- heartbeats and read-only status
    reporting are unaffected, since only the 8 execution-triggering
    command types carry the new envelope.
+
+---
+
+## ⚠ Upgrading Into the Destructive-Action Guardrail (B5) — Upgrade Together
+
+Starting with this version, every scenario step the orchestrator compiles
+carries a signed execution classification (`non_destructive` /
+`potentially_destructive` / `destructive`), and a B5-capable agent
+enforces it locally before running the step, independent of whatever the
+signed classification says — combining it with its own local rule check
+of the actual command text, most-restrictive-wins. See
+[the design spec](../superpowers/specs/2026-09-29-destructive-action-guardrail-b5-design.md)
+for the full mechanism. **Unlike B4, where the hazard is one-directional
+(old agent + new orchestrator), B5 has a real hazard in *both* skew
+directions:**
+
+1. **New agent + old orchestrator.** An old orchestrator never sets a
+   step's `executionClass` field at all — it's simply absent from the
+   wire message. The agent's gate treats a missing/unrecognized
+   `executionClass` as fail-closed (`destructive`), the same as it
+   treats a step the classification catalog has no entry for. The
+   result: **a B5-capable agent talking to a not-yet-upgraded
+   orchestrator vetoes every execution-triggering step it receives** —
+   not a misparse, a total refusal to run anything, scored `VETOED`
+   in every report. This is the mirror image of B4's hazard direction:
+   for B5, upgrading the *agent* ahead of the *orchestrator* is what's
+   unsafe.
+2. **Old agent + new orchestrator.** An agent binary that predates B5
+   has no gate at all — it doesn't recognize the new
+   `executionClass`/`actionKey`/`destructiveAction`/`blastRadius`
+   fields (JSON unmarshaling silently ignores fields it doesn't know),
+   and just executes the step's command exactly as it always has. The
+   signed classification the orchestrator computed is real, but nothing
+   on that agent ever checks it. This isn't an outage — everything
+   appears to run normally — but it's a **silent security regression**:
+   the whole point of B5 (an agent-side backstop that holds even if the
+   orchestrator is compromised) is absent for that agent, and nothing
+   in the UI distinguishes "protected" from "unprotected" execution.
+
+**Do this before or in the same maintenance window as the orchestrator
+upgrade — for B5, "same window" effectively means "same moment," not
+"either order is fine eventually" the way B4 tolerates:**
+
+1. Upgrade the orchestrator and every agent that runs scenarios,
+   attack-path collections, or lifecycle commands together. See
+   [Step 5 — Update Agent Binaries](#step-5--update-agent-binaries-if-required)
+   below for the mechanics.
+2. Confirm each agent's reported version on the Agents page in the
+   dashboard before dispatching execution-triggering commands to it
+   against the upgraded orchestrator.
+3. If you cannot upgrade every agent in the same window, avoid
+   dispatching scenario runs to a still-old agent until it's upgraded
+   (silent B5 bypass, hazard 2 above) **and** avoid dispatching to a
+   pre-emptively-upgraded agent while the orchestrator is still old
+   (every step VETOED, hazard 1 above) — heartbeats and read-only
+   status reporting are unaffected either way, since only compiled
+   scenario steps carry the new classification fields.
+4. After the upgrade, spot-check one real scenario run and confirm its
+   report shows normal `PASS`/`FAIL`/`BLOCKED` verdicts, not every step
+   scored `VETOED` — that specific pattern (a run where literally every
+   step is `VETOED`) is the signature of hazard 1 above, not a real
+   destructive-action refusal.
 
 ---
 
