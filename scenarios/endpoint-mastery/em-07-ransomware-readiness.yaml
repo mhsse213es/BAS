@@ -256,9 +256,9 @@ steps:
     requires_priv: admin
     timeout_sec: 30
     fidelity: telemetry-safe
-    production_safe: true
+    production_safe: false
     risk: medium
-    reversible: true
+    reversible: false
     blast_radius: "Launches vssadmin.exe delete shadows /all /quiet. Expected to be blocked immediately by EDR behavioral controls. No shadow copies deleted if controls are active."
     telemetry:
       - "Sysmon EID 1: vssadmin.exe delete shadows process create"
@@ -292,9 +292,9 @@ steps:
     requires_priv: admin
     timeout_sec: 30
     fidelity: telemetry-safe
-    production_safe: true
+    production_safe: false
     risk: medium
-    reversible: true
+    reversible: false
     blast_radius: "Invokes wbadmin delete catalog -quiet. Expects UAC or EDR block. No backup catalog deleted if controls active."
     telemetry:
       - "Sysmon EID 1: wbadmin.exe delete catalog process create"
@@ -328,9 +328,9 @@ steps:
     requires_priv: admin
     timeout_sec: 30
     fidelity: telemetry-safe
-    production_safe: true
+    production_safe: false
     risk: medium
-    reversible: true
+    reversible: false
     blast_radius: "Invokes bcdedit /set recoveryenabled no. Expects UAC block (requires admin elevation). Verify recovery status with: bcdedit /enum"
     telemetry:
       - "Sysmon EID 1: bcdedit.exe with /set recoveryenabled argument"
@@ -368,9 +368,9 @@ steps:
     requires_priv: admin
     timeout_sec: 30
     fidelity: telemetry-safe
-    production_safe: true
+    production_safe: false
     risk: medium
-    reversible: true
+    reversible: false
     blast_radius: "Attempts net stop on wbengine (Windows Backup Engine) and vss. Expects access denied for non-elevated process. No service stopped if controls active."
     telemetry:
       - "Security EID 4688: net.exe stop wbengine / vss"
