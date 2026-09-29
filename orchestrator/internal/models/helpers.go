@@ -33,19 +33,19 @@ func ThreatImpact(tactic, techID, techName string) string {
 				"of the compromised system and all data accessible from it.", techName, techID)
 	case "exfiltration":
 		return fmt.Sprintf(
-			"%s (%s): Attacker exfiltrates sensitive data â€” customer PII, financial records, "+
-				"UPI transaction logs, or cryptographic keys â€” triggering DPDPA and RBI breach notification.", techName, techID)
+			"%s (%s): Attacker exfiltrates sensitive data — customer PII, financial records, "+
+				"UPI transaction logs, or cryptographic keys — triggering DPDPA and RBI breach notification.", techName, techID)
 	case "command-and-control":
 		return fmt.Sprintf(
 			"%s (%s): Attacker establishes a C2 channel enabling persistent remote control, "+
 				"tool staging, and coordination of multi-stage attacks from outside the perimeter.", techName, techID)
 	case "collection":
 		return fmt.Sprintf(
-			"%s (%s): Attacker collects sensitive data prior to exfiltration â€” "+
+			"%s (%s): Attacker collects sensitive data prior to exfiltration — "+
 				"screenshots, keystrokes, or file archives from regulated financial systems.", techName, techID)
 	case "impact":
 		return fmt.Sprintf(
-			"%s (%s): Attacker disrupts, destroys, or manipulates data â€” ransomware encryption, "+
+			"%s (%s): Attacker disrupts, destroys, or manipulates data — ransomware encryption, "+
 				"wiper deployment, or transaction manipulation affecting business continuity and SEBI/RBI obligations.", techName, techID)
 	case "reconnaissance":
 		return fmt.Sprintf(
@@ -59,22 +59,22 @@ func ThreatImpact(tactic, techID, techName string) string {
 
 // Details returns a one-line human-readable summary of a check outcome.
 func Details(result CheckResult, techID, techName, desc, tactic, rawOutput string) string {
-	status := "BLOCKED â€” security controls prevented this technique"
+	status := "BLOCKED — security controls prevented this technique"
 	if result == ResultFail {
-		status = "EXECUTED â€” security controls did NOT prevent this technique"
+		status = "EXECUTED — security controls did NOT prevent this technique"
 	}
 	if result == ResultVetoed {
 		// Falling through to the "BLOCKED" default would fabricate a
 		// customer-defense-success message for a technique Audspect's own
 		// agent refused to attempt -- never actually tested (verified, B5
 		// Task 9 audit).
-		status = "VETOED â€” Audspect prevented execution under its local destructive-action policy; customer defenses were not tested"
+		status = "VETOED — Audspect prevented execution under its local destructive-action policy; customer defenses were not tested"
 	}
 	trimmed := rawOutput
 	if len(trimmed) > 500 {
 		trimmed = trimmed[:500] + "...[truncated]"
 	}
-	d := fmt.Sprintf("[%s] %s (%s) â€” %s", tactic, techName, techID, status)
+	d := fmt.Sprintf("[%s] %s (%s) — %s", tactic, techName, techID, status)
 	if trimmed != "" {
 		d += "\nOutput: " + trimmed
 	}
@@ -84,7 +84,7 @@ func Details(result CheckResult, techID, techName, desc, tactic, rawOutput strin
 // techniqueRemediation holds remediation guidance keyed by ATT&CK technique ID
 // for cases where the tactic-level default is misleading. The tactic of a
 // technique does not always imply the right control (e.g. T1569.002 is tagged
-// "execution" but abuses service DACLs â€” PowerShell logging is irrelevant; the
+// "execution" but abuses service DACLs — PowerShell logging is irrelevant; the
 // fix is service-permission hardening). Keys are normalised technique IDs.
 var techniqueRemediation = map[string]string{
 	// ── Technique-specific overrides added below ──────────────────────────────
@@ -268,17 +268,17 @@ var techniqueRemediation = map[string]string{
 
 	// Proxy C2
 	"T1090": "1) Implement network segmentation — endpoints should not be able to proxy traffic to each other.\n2) Deploy NDR to detect multi-hop proxy chains and unusual peer-to-peer traffic patterns.\n3) Alert on SOCKS/HTTP proxy setup commands (netsh portproxy, SSH -R/-D) in EDR.\n4) Block outbound traffic from endpoints to non-whitelisted external IPs via egress firewall.",
-	// Service Execution / SetServiceObjectSecurity â€” service ACL abuse, not script execution.
+	// Service Execution / SetServiceObjectSecurity — service ACL abuse, not script execution.
 	"T1569.002": "1) Audit service DACLs (sc.exe sdshow / SCM) and remove WRITE_DAC, WRITE_OWNER, and CHANGE_CONFIG from non-admin principals.\n" +
 		"2) Harden SCM permissions; restrict who may create, reconfigure, or change the security descriptor of services.\n" +
-		"3) Review SeTakeOwnershipPrivilege / SeRestorePrivilege assignments â€” restrict to trusted administrators.\n" +
+		"3) Review SeTakeOwnershipPrivilege / SeRestorePrivilege assignments — restrict to trusted administrators.\n" +
 		"4) Monitor service DACL changes and service-config modifications (Event IDs 7045, 4697) and alert on non-admin actors.",
-	// Create or Modify System Service â€” service-based persistence.
+	// Create or Modify System Service — service-based persistence.
 	"T1543.003": "1) Restrict service creation/modification to administrators; audit and baseline all installed services.\n" +
 		"2) Enable alerts on new service installation (Event ID 7045) and unexpected ImagePath changes.\n" +
 		"3) Enforce signed-binary service images via WDAC/AppLocker; block services launching from user-writable paths.\n" +
 		"4) Monitor SCM database (HKLM\\SYSTEM\\CurrentControlSet\\Services) for unauthorised additions.",
-	// Modify Registry â€” registry-specific monitoring, not generic script logging.
+	// Modify Registry — registry-specific monitoring, not generic script logging.
 	"T1112": "1) Audit and baseline security-relevant registry keys (Run keys, policy hives, ASR/Defender settings, LSA).\n" +
 		"2) Enable registry-modification auditing (Sysmon Event IDs 12/13/14) and forward to SIEM.\n" +
 		"3) Restrict write access to sensitive hives; alert on changes to Defender/EDR and policy keys.\n" +
@@ -321,7 +321,7 @@ func Remediation(result CheckResult, tactic, techID, techName string) string {
 	case "privilege-escalation":
 		return "1) Enforce least-privilege; audit and remove unnecessary local admin memberships.\n" +
 			"2) Enable UAC at highest level; require elevation approval for all admin actions.\n" +
-			"3) Patch known privilege escalation CVEs â€” cross-reference CISA KEV catalogue.\n" +
+			"3) Patch known privilege escalation CVEs — cross-reference CISA KEV catalogue.\n" +
 			"4) Monitor for token manipulation events (Windows Event IDs 4672, 4673, 4674)."
 	case "persistence":
 		return "1) Monitor autorun locations: Run keys, scheduled tasks, services, WMI subscriptions.\n" +
