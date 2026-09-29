@@ -94,6 +94,7 @@ steps:
   - name: "Backup readiness proxy: VSS + scheduled backup task (RBI-19.4)"
     check_id: rbi-backup-proxy
     technique_id: T1490
+    action_key: backup_readiness_check
     framework: custom
     executor: local
     command: >-

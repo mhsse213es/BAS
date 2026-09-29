@@ -256,6 +256,7 @@ steps:
   # ---------------------------------------------------------------------------
   - name: "Volt Typhoon Stage 6 — Shadow Copy & NTDS.dit Enumeration Probe (T1003.003)"
     technique_id: T1003.003
+    action_key: enumerate
     framework: custom
     executor: powershell
     requires_priv: admin

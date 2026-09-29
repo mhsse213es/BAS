@@ -53,6 +53,11 @@ var executionClassifications = map[string]map[string]*ExecutionClassification{
 			DestructiveAction: "",
 			BlastRadius:       "Read-only enumeration of VSS shadow copies / backup catalog (vssadmin list shadows, wbadmin get versions). No state changed.",
 		},
+		"backup_readiness_check": {
+			Class:             ClassNonDestructive,
+			DestructiveAction: "",
+			BlastRadius:       "Read-only query of VSS service status and scheduled backup tasks (Get-Service, Get-ScheduledTask). No state changed.",
+		},
 		"vss_delete": {
 			Class:             ClassDestructive,
 			DestructiveAction: "vss_delete",
@@ -67,6 +72,34 @@ var executionClassifications = map[string]map[string]*ExecutionClassification{
 			Class:             ClassDestructive,
 			DestructiveAction: "bootloader_recovery_disable",
 			BlastRadius:       "Disables Windows Recovery Environment via bcdedit (recoveryenabled no / bootstatuspolicy ignoreallfailures) -- removes the final recovery path.",
+		},
+	},
+	"T1489": {
+		"backup_service_stop": {
+			Class:             ClassDestructive,
+			DestructiveAction: "backup_service_stop",
+			BlastRadius:       "Runs 'net stop' against wbengine (Windows Backup Engine) and vss (Volume Shadow Copy service) -- if it succeeds, disables the host's native backup infrastructure until manually restarted; an interruption mid-step (crash, kill) could leave backups disabled with no automatic recovery.",
+		},
+	},
+	"T1562.001": {
+		"stop_auditd": {
+			Class:             ClassPotentiallyDestructive,
+			DestructiveAction: "",
+			BlastRadius:       "Attempts to stop the Linux auditd service via systemctl -- if it succeeds, briefly disables audit logging until cleanup restarts it. No data loss, but a genuine (if self-limiting) security-control impairment, so not classified fully safe.",
+		},
+	},
+	"T1569.002": {
+		"service_create_start_stop_delete": {
+			Class:             ClassPotentiallyDestructive,
+			DestructiveAction: "",
+			BlastRadius:       "Creates a BAS-owned, uniquely-named decoy Windows service (rundll32 binpath), starts it, stops it, deletes it. Self-contained -- never touches a pre-existing real service -- but exercises real service-management APIs under admin privilege, so it is not classified fully safe.",
+		},
+	},
+	"T1003.003": {
+		"enumerate": {
+			Class:             ClassNonDestructive,
+			DestructiveAction: "",
+			BlastRadius:       "Read-only enumeration: vssadmin list shadows plus an ntdsutil availability probe. No shadow copy created, no NTDS.dit dump.",
 		},
 	},
 	// T1082 seeded here as the resolver test's "default" example --

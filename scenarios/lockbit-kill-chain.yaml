@@ -92,6 +92,7 @@ steps:
   # ---------------------------------------------------------------------------
   - name: "LockBit Stage 2 — VSS Snapshot Enumeration (T1490)"
     technique_id: T1490
+    action_key: enumerate
     detection_profiles:
       - windows_vss_inhibition
     framework: custom

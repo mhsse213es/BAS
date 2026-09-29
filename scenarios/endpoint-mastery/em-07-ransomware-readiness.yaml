@@ -248,6 +248,7 @@ steps:
 
   - name: "Stage 4A — VSS Shadow Copy Deletion Signature"
     technique_id: T1490
+    action_key: vss_delete
     detection_profiles:
       - windows_vss_inhibition
     framework: custom
@@ -283,6 +284,7 @@ steps:
 
   - name: "Stage 4B — wbadmin Backup Catalog Delete Probe"
     technique_id: T1490
+    action_key: wbadmin_delete_catalog
     detection_profiles:
       - windows_vss_inhibition
     framework: custom
@@ -318,6 +320,7 @@ steps:
 
   - name: "Stage 4C — BCDEdit Bootloader Recovery Disable Probe"
     technique_id: T1490
+    action_key: bootloader_recovery_disable
     detection_profiles:
       - windows_vss_inhibition
     framework: custom
@@ -357,6 +360,7 @@ steps:
 
   - name: "Stage 5A — Backup Service Stop Attempt"
     technique_id: T1489
+    action_key: backup_service_stop
     detection_profiles:
       - windows_backup_service_stop
     framework: custom

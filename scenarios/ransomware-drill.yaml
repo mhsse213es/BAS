@@ -151,6 +151,7 @@ steps:
 
   - name: "VSS + Backup Catalog Enumeration"
     technique_id: T1490
+    action_key: enumerate
     detection_profiles:
       - windows_vss_inhibition
     framework: custom
@@ -280,6 +281,7 @@ steps:
 
   - name: "VSS Shadow Copy Deletion (lab  -  requires BAS_CONFIRM_VSS_DELETE=true)"
     technique_id: T1490
+    action_key: vss_delete
     detection_profiles:
       - windows_vss_inhibition
     framework: custom

@@ -1,6 +1,9 @@
 package scenario
 
-import "testing"
+import (
+	"path/filepath"
+	"testing"
+)
 
 func TestResolveExecutionClass_ExactMatch(t *testing.T) {
 	got := ResolveExecutionClass("T1490", "vss_delete")
@@ -70,5 +73,86 @@ func TestAttachExecutionClassifications(t *testing.T) {
 	}
 	if steps[2].ExecutionClass != ClassDestructive {
 		t.Errorf("steps[2].ExecutionClass = %q, want %q (fail closed)", steps[2].ExecutionClass, ClassDestructive)
+	}
+}
+
+// TestExecutionClassifications_HandAuthoredCorpusIsNotUnderclassified is the
+// Task 10 completeness check for the hand-authored scenario corpus (the
+// only part of the full technique library reachable in this session --
+// see the plan's Task 10 for why the ART/Caldera corpora remain
+// unaudited pending live infrastructure access). Loads every real,
+// shipped scenario YAML file and asserts that every step whose
+// action_key was set during this audit resolves to the specific,
+// intended classification -- not silently falling back to the
+// fail-closed "unclassified" default because of a YAML typo or a
+// resign that didn't take.
+func TestExecutionClassifications_HandAuthoredCorpusIsNotUnderclassified(t *testing.T) {
+	dir, err := filepath.Abs(filepath.Join("..", "..", "..", "scenarios"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := NewEngine(dir)
+	if err := e.Load(); err != nil {
+		t.Fatalf("engine load: %v", err)
+	}
+
+	type want struct {
+		class  ExecutionClass
+		action string
+	}
+	// Every (technique_id, action_key) pair this audit annotated in real
+	// scenario YAML, and the classification each MUST resolve to.
+	expected := map[string]map[string]want{
+		"T1490": {
+			"enumerate":                   {ClassNonDestructive, ""},
+			"backup_readiness_check":      {ClassNonDestructive, ""},
+			"vss_delete":                  {ClassDestructive, "vss_delete"},
+			"wbadmin_delete_catalog":      {ClassDestructive, "wbadmin_delete_catalog"},
+			"bootloader_recovery_disable": {ClassDestructive, "bootloader_recovery_disable"},
+		},
+		"T1489":     {"backup_service_stop": {ClassDestructive, "backup_service_stop"}},
+		"T1562.001": {"stop_auditd": {ClassPotentiallyDestructive, ""}},
+		"T1569.002": {"service_create_start_stop_delete": {ClassPotentiallyDestructive, ""}},
+		"T1003.003": {"enumerate": {ClassNonDestructive, ""}},
+	}
+
+	found := map[string]map[string]bool{}
+	for _, sc := range e.List() {
+		for _, step := range sc.Steps {
+			techByAction, ok := expected[step.TechniqueID]
+			if !ok || step.ActionKey == "" {
+				continue
+			}
+			w, ok := techByAction[step.ActionKey]
+			if !ok {
+				continue
+			}
+			if found[step.TechniqueID] == nil {
+				found[step.TechniqueID] = map[string]bool{}
+			}
+			found[step.TechniqueID][step.ActionKey] = true
+
+			got := ResolveExecutionClass(step.TechniqueID, step.ActionKey)
+			if got.Class != w.class {
+				t.Errorf("%s (%s, action_key=%s): Class = %q, want %q",
+					sc.ID, step.TechniqueID, step.ActionKey, got.Class, w.class)
+			}
+			if got.DestructiveAction != w.action {
+				t.Errorf("%s (%s, action_key=%s): DestructiveAction = %q, want %q",
+					sc.ID, step.TechniqueID, step.ActionKey, got.DestructiveAction, w.action)
+			}
+		}
+	}
+
+	// Every expected pair must have actually been found in at least one
+	// real scenario -- otherwise this test would pass vacuously if a
+	// scenario file failed to load (signature drift) or a sed edit landed
+	// in the wrong place.
+	for tid, actions := range expected {
+		for action := range actions {
+			if !found[tid][action] {
+				t.Errorf("expected to find a real scenario step with technique_id=%s action_key=%s, found none -- scenario load may have silently failed, or the action_key edit didn't land", tid, action)
+			}
+		}
 	}
 }

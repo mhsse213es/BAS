@@ -508,6 +508,7 @@ steps:
 
   - name: "Service-to-LOLBin Chain (lab  -  sc.exe->rundll32 service)"
     technique_id: T1569.002
+    action_key: service_create_start_stop_delete
     framework: custom
     executor: powershell
     requires_priv: admin

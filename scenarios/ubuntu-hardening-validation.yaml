@@ -303,6 +303,7 @@ steps:
   # ── T1562.001 — Disable or Modify Tools (no Linux ART atomic; hand-authored, lab-only) ──
   - name: "Stop auditd (audit tamper resistance)"
     technique_id: T1562.001
+    action_key: stop_auditd
     framework: custom
     executor: bash
     requires_priv: admin
