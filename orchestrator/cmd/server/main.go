@@ -640,12 +640,20 @@ func main() {
 	_, signingKeyStatErr := os.Stat(signingKeyPath)
 	signingKeyExistedBefore := signingKeyStatErr == nil
 
+	// Check BEFORE generating, not after: LoadOrGenerateSigningKey persists
+	// a freshly generated key to disk as a side effect. Checking afterward
+	// means a first boot that correctly fails closed still leaves the new
+	// key file on disk -- under this service's restart: unless-stopped
+	// policy, the NEXT boot sees signingKeyExistedBefore=true and skips
+	// the check entirely, silently succeeding on the second try. Checking
+	// first means every restart re-evaluates the same on-disk state until
+	// an operator actually resolves it (or passes BAS_CONFIRM_NEW_SIGNING_KEY).
+	if err := checkSigningKeyNotSilentlyRotated(context.Background(), pool, signingKeyExistedBefore); err != nil {
+		log.Fatalf("%v", err)
+	}
 	signingKey, err := cmdsigning.LoadOrGenerateSigningKey(signingDir)
 	if err != nil {
 		log.Fatalf("load/generate command-signing key: %v", err)
-	}
-	if err := checkSigningKeyNotSilentlyRotated(context.Background(), pool, signingKeyExistedBefore); err != nil {
-		log.Fatalf("%v", err)
 	}
 	log.Printf("[*] command-signing key ready: %s", signingKey.KeyID())
 
@@ -660,12 +668,17 @@ func main() {
 	_, caKeyStatErr := os.Stat(caKeyPath)
 	caKeyExistedBefore := caKeyStatErr == nil
 
+	// Check BEFORE generating -- same reordering as the signing key above,
+	// and for the identical reason: LoadOrGenerateCA persists a freshly
+	// generated CA to disk as a side effect, so checking afterward means
+	// this service's restart: unless-stopped policy silently skips the
+	// check on the very next boot after a correctly-failed first one.
+	if err := checkCANotSilentlyRotated(context.Background(), pool, caKeyExistedBefore); err != nil {
+		log.Fatalf("[FATAL] %v", err)
+	}
 	ca, err := pki.LoadOrGenerateCA(cfg.PKIDir)
 	if err != nil {
 		log.Fatalf("[FATAL] load/generate deployment CA: %v", err)
-	}
-	if err := checkCANotSilentlyRotated(context.Background(), pool, caKeyExistedBefore); err != nil {
-		log.Fatalf("[FATAL] %v", err)
 	}
 
 	handler := api.New(pool, hub, engine, cfg.JWTSecret).
