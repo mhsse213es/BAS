@@ -105,7 +105,7 @@ else { Write-Output "WMI_TIMEOUT: inner process did not write output within time
 		return silentCmd(exec.CommandContext(ctx, "schtasks.exe", strings.Fields(step.Command)...))
 
 	default: // powershell / psh
-		return silentCmd(exec.CommandContext(ctx, "powershell",
+		return silentCmd(exec.CommandContext(ctx, "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
 			"-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden",
 			"-ExecutionPolicy", "Bypass",
 			"-Command", step.Command))
