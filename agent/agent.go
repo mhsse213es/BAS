@@ -318,6 +318,11 @@ func (a *Agent) sendHeartbeat(status string) {
 		EmitsEvents:      true,
 		SecurityProducts: products,
 	}
+	if a.cfg().MTLS {
+		hb.Transport = "mtls"
+	} else {
+		hb.Transport = "legacy"
+	}
 	if jobID != "" {
 		hb.CurrentJobID = jobID
 		hb.JobProgress = protocol.HeartbeatJobProgress{

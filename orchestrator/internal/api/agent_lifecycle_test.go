@@ -261,6 +261,91 @@ func TestHeartbeat_PersistsDomainJoined(t *testing.T) {
 	})
 }
 
+// TestHeartbeat_PersistsTransport covers the gap that let a fully-enrolled,
+// heartbeating agent silently reject every scenario dispatch for hours with
+// no visible signal anywhere except its own local log file (and even that
+// was unreadable when running as a Windows service). Mirrors
+// TestHeartbeat_PersistsDomainJoined's don't-clobber-on-omit semantics: a
+// pre-upgrade agent binary that never sends "transport" must not blank out
+// a known value.
+func TestHeartbeat_PersistsTransport(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := New(pool, ws.NewHub(), nil, "")
+		agentID := "agent-transport-hb"
+
+		body, _ := json.Marshal(map[string]any{
+			"agentId": agentID, "hostname": "h", "status": "idle", "transport": "mtls",
+		})
+		rec := httptest.NewRecorder()
+		h.Heartbeat(rec, httptest.NewRequest(http.MethodPost, "/api/heartbeat", bytes.NewReader(body)))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+		}
+
+		var transport string
+		if err := pool.QueryRow(context.Background(),
+			`SELECT transport FROM agents WHERE agent_id = $1`, agentID,
+		).Scan(&transport); err != nil {
+			t.Fatalf("read transport: %v", err)
+		}
+		if transport != "mtls" {
+			t.Fatalf("transport = %q, want %q", transport, "mtls")
+		}
+
+		// A heartbeat that omits the field (pre-upgrade agent binary) must NOT
+		// clobber the known value back to the 'legacy' column default.
+		body2, _ := json.Marshal(map[string]any{"agentId": agentID, "hostname": "h", "status": "idle"})
+		rec2 := httptest.NewRecorder()
+		h.Heartbeat(rec2, httptest.NewRequest(http.MethodPost, "/api/heartbeat", bytes.NewReader(body2)))
+		if rec2.Code != http.StatusOK {
+			t.Fatalf("second heartbeat: status = %d", rec2.Code)
+		}
+		var stillTransport string
+		if err := pool.QueryRow(context.Background(),
+			`SELECT transport FROM agents WHERE agent_id = $1`, agentID,
+		).Scan(&stillTransport); err != nil {
+			t.Fatalf("read transport after omitted-field heartbeat: %v", err)
+		}
+		if stillTransport != "mtls" {
+			t.Fatalf("transport after omitted-field heartbeat = %q, want still %q (must not be clobbered to 'legacy')", stillTransport, "mtls")
+		}
+	})
+}
+
+// TestHeartbeat_NewAgentDefaultsToLegacyTransport covers a brand-new row
+// (INSERT path, never an UPDATE) that never sends "transport" at all --
+// e.g. an agent binary older than this field. It must default to 'legacy',
+// the conservative assumption, not an empty string that neither the SQL
+// column default nor the dashboard's `=== 'legacy'` check would recognize.
+func TestHeartbeat_NewAgentDefaultsToLegacyTransport(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := New(pool, ws.NewHub(), nil, "")
+		agentID := "agent-transport-default"
+
+		rec := httptest.NewRecorder()
+		h.Heartbeat(rec, httptest.NewRequest(http.MethodPost, "/api/heartbeat", bytes.NewReader(heartbeatBody(agentID))))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+		}
+
+		var transport string
+		if err := pool.QueryRow(context.Background(),
+			`SELECT transport FROM agents WHERE agent_id = $1`, agentID,
+		).Scan(&transport); err != nil {
+			t.Fatalf("read transport: %v", err)
+		}
+		if transport != "legacy" {
+			t.Fatalf("transport for brand-new agent that never sent the field = %q, want %q", transport, "legacy")
+		}
+	})
+}
+
 func TestHeartbeat_Concurrent(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping container-backed test in -short mode")

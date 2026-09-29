@@ -1688,6 +1688,20 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		// no way to tell "agent was offline" from "scenario is broken".
 		`ALTER TABLE scenario_runs ADD COLUMN IF NOT EXISTS fail_reason text`,
 
+		// transport: which channel the agent's heartbeat is actually reaching
+		// the server over -- 'mtls' once ensureCertificate succeeds, 'legacy'
+		// while it's still bootstrapping (or permanently, for an agent that
+		// was never given --ca-root). Default 'legacy' is the conservative
+		// starting assumption for any pre-existing row this migration
+		// backfills. A newly-installed agent that never completes mTLS
+		// bootstrap used to be indistinguishable from a healthy one in the
+		// dashboard -- it reports a fresh heartbeat and enrolls successfully,
+		// but silently rejects every scenario dispatch because it never
+		// received the command-signing trust cert. This column is what lets
+		// the System Tree surface that gap immediately instead of only after
+		// a run fails.
+		`ALTER TABLE agents ADD COLUMN IF NOT EXISTS transport text NOT NULL DEFAULT 'legacy'`,
+
 		// posture_findings: persisted lifecycle for CIS Security Configuration
 		// + Identity posture-check findings, keyed (agent_id, check_id) --
 		// deliberately narrower than the BAS findings table's

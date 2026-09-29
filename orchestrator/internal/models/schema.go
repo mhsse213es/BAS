@@ -525,6 +525,12 @@ type Agent struct {
 	// Upgrade handshake). Without this, an operator has no way to see that
 	// gap until a dispatch attempt actually fails.
 	WSConnected bool `json:"wsConnected"`
+	// Transport is the channel the agent's most recent heartbeat reported
+	// itself as using -- "mtls" or "legacy". An agent stuck on "legacy" past
+	// its first few heartbeats never received the command-signing trust
+	// cert and will silently reject every scenario dispatch; see
+	// EffectiveTransportWarning.
+	Transport     string        `json:"transport"`
 	EnvLabel      string        `json:"envLabel"`
 	HasReport     bool          `json:"hasReport"`
 	BinaryHash    string        `json:"binaryHash,omitempty"`
@@ -570,6 +576,10 @@ type Heartbeat struct {
 
 	ProtocolVersion int  `json:"protocolVersion,omitempty"`
 	EmitsEvents     bool `json:"emitsEvents,omitempty"`
+
+	// Transport is "mtls" or "legacy" -- see models.Agent.Transport's doc
+	// comment for why the dashboard surfaces this.
+	Transport string `json:"transport,omitempty"`
 
 	SecurityProducts []string `json:"securityProducts,omitempty"` // installed AV/EDR inventory (presence only)
 

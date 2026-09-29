@@ -24,6 +24,15 @@ type Heartbeat struct {
 	ProtocolVersion int  `json:"protocolVersion,omitempty"`
 	EmitsEvents     bool `json:"emitsEvents,omitempty"`
 
+	// Transport is "mtls" once the agent's certificate bootstrap has
+	// succeeded, or "legacy" while it's still retrying (or permanently, for
+	// an agent that was installed without --ca-root). The server surfaces a
+	// dashboard warning when this stays "legacy" past enrollment, since a
+	// legacy-transport agent enrolls and heartbeats normally but silently
+	// rejects every scenario dispatch -- it never received the
+	// command-signing trust cert (see bootstrap.go's resolveOperationalConfig).
+	Transport string `json:"transport,omitempty"`
+
 	SecurityProducts []string `json:"securityProducts,omitempty"`
 
 	CurrentJobID string               `json:"currentJobId,omitempty"`

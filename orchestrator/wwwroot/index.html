@@ -8372,6 +8372,14 @@ function renderAgentRows() {
         // this agent. Only shown when that gap is real: status already reads
         // offline covers the "nothing at all" case on its own.
         (a.status !== 'offline' && !a.wsConnected ? ' <span class="sbadge s-paused" title="Heartbeat is reaching the server, but the WebSocket task channel is down -- dispatching a run to this agent will fail until it reconnects. Often a proxy/firewall blocking the WS Upgrade handshake.">&#9888; Task channel down</span>' : '') +
+        // transport reflects what the agent's own heartbeat reports (see
+        // models.Agent.Transport). An agent stuck on 'legacy' past its
+        // first heartbeat never completed mTLS bootstrap -- it enrolls and
+        // heartbeats normally, so nothing else here signals a problem, but
+        // it silently rejects every scenario dispatch because it never
+        // received the command-signing trust cert. Usually means it was
+        // installed without --ca-root.
+        (a.status !== 'offline' && a.transport === 'legacy' ? ' <span class="sbadge s-paused" title="This agent is on legacy transport -- it never completed mTLS bootstrap and cannot receive signed commands. Scenario dispatch will fail. Usually means it was installed without --ca-root; see the Deploy agent page for the current install command, or fetch the CA root manually from /api/config/ca-root.">&#9888; Legacy transport</span>' : '') +
         (apActiveJobs[a.agentId] ? ' <span class="sbadge s-running" title="Attack-path collection: ' + x(apActiveJobs[a.agentId].status) + '">&#128202; AP</span>' : '') +
       '</td>' +
       '<td style="color:var(--muted);font-size:0.78rem;white-space:nowrap">' + ago(a.lastUpdate) + '</td>' +
@@ -19148,7 +19156,13 @@ function loadAgtOverview(agentId) {
         // so an agent could read "idle" here while genuinely unable to
         // receive any dispatch -- exactly what caused a stuck EM sweep to
         // look like nothing was wrong from this view.
-        (a.status !== 'offline' && !a.wsConnected ? ' <span class="sbadge s-paused" title="Heartbeat is reaching the server, but the WebSocket task channel is down -- dispatching a run to this agent will fail until it reconnects. Often a proxy/firewall blocking the WS Upgrade handshake.">&#9888; Task channel down</span>' : '')) +
+        (a.status !== 'offline' && !a.wsConnected ? ' <span class="sbadge s-paused" title="Heartbeat is reaching the server, but the WebSocket task channel is down -- dispatching a run to this agent will fail until it reconnects. Often a proxy/firewall blocking the WS Upgrade handshake.">&#9888; Task channel down</span>' : '') +
+        // Same class of silent gap as Task channel down, but for mTLS: this
+        // agent's own heartbeat reports it never completed certificate
+        // bootstrap, so it can't receive signed commands even though it
+        // looks perfectly healthy otherwise. See renderAgentRows' matching
+        // badge and models.Agent.Transport's doc comment.
+        (a.status !== 'offline' && a.transport === 'legacy' ? ' <span class="sbadge s-paused" title="This agent is on legacy transport -- it never completed mTLS bootstrap and cannot receive signed commands. Scenario dispatch will fail. Usually means it was installed without --ca-root; see the Deploy agent page for the current install command.">&#9888; Legacy transport</span>' : '')) +
       kv('Lifecycle',    '<span class="sbadge s-' + x(a.state||'active') + '" style="color:' + stateColor + '">' + x(a.state||'active') + '</span>') +
       kv('Last Seen',    ago(a.lastUpdate)) + kv('Enrolled', a.enrolledAt ? ago(a.enrolledAt) : '—') +
       kv('Binary Trusted', a.binaryTrusted ? '<span class="u-success">&#10003; Verified</span>' : '<span class="u-warning">&#9888; Unverified</span>') +

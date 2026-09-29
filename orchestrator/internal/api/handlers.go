@@ -719,7 +719,8 @@ const agentSelectColumns = `a.agent_id, a.hostname, a.ip_address, a.os_version, 
 	        COALESCE(a.state, 'active'), COALESCE(a.policy_json::text, '{}'), a.enrolled_at,
 	        COALESCE(sr.sims, 0) AS sims,
 	        a.stopped_by, COALESCE(u.username, a.stopped_by), a.stopped_at, a.stop_reason,
-	        a.group_id, g.name, a.uninstall_error, a.uninstall_error_at, a.uninstall_requested_at`
+	        a.group_id, g.name, a.uninstall_error, a.uninstall_error_at, a.uninstall_requested_at,
+	        COALESCE(a.transport, 'legacy')`
 
 // agentFromJoins is the FROM/JOIN clause shared by every GetAgents query
 // that selects agentSelectColumns above.
@@ -745,7 +746,8 @@ func scanAgentRows(rows pgx.Rows, hub *ws.Hub, now time.Time) []models.Agent {
 			&a.BinaryHash, &a.BinaryTrusted, &a.LastUpdate,
 			&stateStr, &policyRaw, &a.EnrolledAt, &a.Sims,
 			&a.StoppedBy, &a.StoppedByName, &a.StoppedAt, &a.StopReason,
-			&a.GroupID, &a.GroupName, &a.UninstallError, &a.UninstallErrorAt, &uninstallRequestedAt); err != nil {
+			&a.GroupID, &a.GroupName, &a.UninstallError, &a.UninstallErrorAt, &uninstallRequestedAt,
+			&a.Transport); err != nil {
 			continue
 		}
 		// Connectivity is heartbeat-driven: a dead/rebooted agent stops updating
@@ -1277,6 +1279,16 @@ func (h *Handler) Heartbeat(w http.ResponseWriter, r *http.Request) {
 				`UPDATE agents SET security_products = $2 WHERE agent_id = $1`,
 				hb.AgentID, sp)
 		}
+	}
+
+	// Persist transport only when the heartbeat reports it (omitempty) -- a
+	// pre-upgrade agent binary that doesn't send this field must not clobber
+	// a known value back to the 'legacy' column default. See
+	// models.Agent.Transport's doc comment.
+	if hb.Transport != "" {
+		_, _ = h.db.Exec(r.Context(),
+			`UPDATE agents SET transport = $2 WHERE agent_id = $1`,
+			hb.AgentID, hb.Transport)
 	}
 
 	// Persist domain-joined status only when the heartbeat reports it (nil
