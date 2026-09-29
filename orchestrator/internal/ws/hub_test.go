@@ -227,3 +227,42 @@ func TestSendToAgent_NoSignerConfiguredSendsUnsignedRatherThanRefusing(t *testin
 		t.Error("payload was wrapped in a CommandEnvelope despite no signer being configured")
 	}
 }
+
+type stepClassTriple = struct {
+	ExecutionClass    string `json:"executionClass"`
+	DestructiveAction string `json:"destructiveAction"`
+	BlastRadius       string `json:"blastRadius"`
+}
+
+// TestMostRestrictiveStep_UnknownClassRanksAsDestructive pins fail-closed
+// behavior: an empty or unrecognized ExecutionClass (a future class this
+// aggregate doesn't know about, a wire-shape typo) must rank as
+// destructive -- the SAME convention the agent's own classRank uses
+// (agent/destructiveguard_gate.go) -- not silently rank below
+// non_destructive the way a bare map-literal lookup miss (Go's int zero
+// value) previously did (final whole-branch review, Minor).
+func TestMostRestrictiveStep_UnknownClassRanksAsDestructive(t *testing.T) {
+	steps := []stepClassTriple{
+		{ExecutionClass: "non_destructive"},
+		{ExecutionClass: "totally-unknown-future-class", DestructiveAction: "mystery", BlastRadius: "unknown"},
+	}
+	class, action, blast := mostRestrictiveStep(steps)
+	if class != "totally-unknown-future-class" {
+		t.Errorf("class = %q, want the unknown class to win as most restrictive, got %q instead", class, class)
+	}
+	if action != "mystery" || blast != "unknown" {
+		t.Errorf("action/blast = %q/%q, want the unknown step's own fields", action, blast)
+	}
+}
+
+func TestMostRestrictiveStep_DestructiveBeatsPotentiallyDestructive(t *testing.T) {
+	steps := []stepClassTriple{
+		{ExecutionClass: "non_destructive"},
+		{ExecutionClass: "potentially_destructive"},
+		{ExecutionClass: "destructive", DestructiveAction: "vss_delete"},
+	}
+	class, action, _ := mostRestrictiveStep(steps)
+	if class != "destructive" || action != "vss_delete" {
+		t.Errorf("class/action = %q/%q, want destructive/vss_delete", class, action)
+	}
+}

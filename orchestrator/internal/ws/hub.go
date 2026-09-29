@@ -273,15 +273,38 @@ func (h *Hub) signCommand(agentID string, msg models.WSMessage) (models.CommandE
 // "potentially_destructive" beats "non_destructive" beats "" (no steps,
 // or a non-scenario command type). Informational/audit-only, per the
 // spec -- never consulted by the agent's B5 gate.
+// executionClassRank mirrors the agent's own classRank (agent/
+// destructiveguard_gate.go) exactly: an empty or unrecognized
+// ExecutionClass ranks as destructive (fail closed), not as the lowest
+// rank. The old map-literal form here (`rank[s.ExecutionClass]`, with no
+// entry for an unrecognized string) silently returned Go's int zero
+// value for any typo or future class this aggregate didn't know about,
+// ranking it BELOW non_destructive -- the opposite of fail-closed. This
+// aggregate is informational/audit-only (never read by the agent's B5
+// gate itself), but the audit trail under-reporting a genuinely unknown
+// classification's severity is still a real correctness bug (final
+// whole-branch review, Minor).
+func executionClassRank(c string) int {
+	switch c {
+	case "non_destructive":
+		return 1
+	case "potentially_destructive":
+		return 2
+	case "destructive":
+		return 3
+	default:
+		return 3
+	}
+}
+
 func mostRestrictiveStep(steps []struct {
 	ExecutionClass    string `json:"executionClass"`
 	DestructiveAction string `json:"destructiveAction"`
 	BlastRadius       string `json:"blastRadius"`
 }) (class, action, blast string) {
-	rank := map[string]int{"": 0, "non_destructive": 1, "potentially_destructive": 2, "destructive": 3}
 	best := -1
 	for _, s := range steps {
-		if r := rank[s.ExecutionClass]; r > best {
+		if r := executionClassRank(s.ExecutionClass); r > best {
 			best = r
 			class, action, blast = s.ExecutionClass, s.DestructiveAction, s.BlastRadius
 		}
