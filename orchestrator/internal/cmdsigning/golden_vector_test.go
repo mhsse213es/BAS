@@ -51,9 +51,9 @@ TXWZxk4HmIDrmLh7oaD5FVzzAUT5Gq3MkAGVkIBmaFm/Y6j/Y/1O
 -----END RSA PRIVATE KEY-----
 `
 
-const goldenCanonicalJSON = `{"version":1,"commandId":"golden-cmd-0001","commandType":"command_cancel","agentId":"golden0000000001","issuedAt":"2026-01-15T12:00:00Z","expiresAt":"2026-01-15T12:01:00Z","nonce":"golden-nonce-0001","payload":{"reason":"golden vector test"}}`
+const goldenCanonicalJSON = `{"version":1,"commandId":"golden-cmd-0001","commandType":"command_cancel","agentId":"golden0000000001","issuedAt":"2026-01-15T12:00:00Z","expiresAt":"2026-01-15T12:01:00Z","nonce":"golden-nonce-0001","payload":{"reason":"golden vector test"},"executionClass":"non_destructive"}`
 
-const goldenSignatureB64 = `qPSVGxmZncFwrO+DqErhwcizv5xiuHXrjgS6aUPq0G3JnxBhbmJRu8c7O+ZBzZOswXseR1I9hgJ0c/p8XcHzxWDM600u6iyqJg3mzvvBmHvXgXptdFQnzClrfpqUSclb0x2k98CW8ELPQRGgYpza248Vw35njk7nblAO76xyWJEqmNCYADzUrL+tQ46ctSoV6WDChY3xQVpG7+f5IKck2btlTLF8jXOH/Pez0Df86yWhiQTEceQ8tsHhtXeTqgqp3TedmX7ymmhUF1mEs5qNspmdqnUBqH5T3lpVw+XnjxMiP/IEY2m424ioUGj9WxeoN8tfA3o/whGAGKGcRcNo6A==`
+const goldenSignatureB64 = `h/ujxSnSpL6wEsP+1h0YHHptT7w/YfR7cn4yhqqOo1A1XG6XUbmombUKhJOKt/XQrfLaW5l6aQb46rZ/GUsllLEMSDqa1grQDFly+fuVjU9ip1OJh+m9vLm1mBu6hGnMR7D0wZGVQIkKZ9yNgShSGpgODXuhPo5yuWzaXlF53YRXun35VjwKgbrr2ZswMNgETJqDsPqdK+4sOydXIRn9dni1DowFL66x00OfWV7dNB3ApzxNTXggR8yo/iHvcG2K2U4LbQ1R9hc2joPv9ij5NADUbQ5uOXs3il3c+MloqeXvn5pJQKIRKVYGhZrCpqe70wrsP8eTTko2HBzoV5shWg==`
 
 func goldenEnvelope(t *testing.T) models.CommandEnvelope {
 	t.Helper()
@@ -67,6 +67,11 @@ func goldenEnvelope(t *testing.T) models.CommandEnvelope {
 		ExpiresAt:   issuedAt.Add(60 * time.Second),
 		Nonce:       "golden-nonce-0001",
 		Payload:     json.RawMessage(`{"reason":"golden vector test"}`),
+		// New for B5: exercises CommandEnvelope's aggregate execution-class
+		// field, in addition to the fields the original B4 golden vector
+		// already covered -- see docs/superpowers/specs/
+		// 2026-09-29-destructive-action-guardrail-b5-design.md.
+		ExecutionClass: "non_destructive",
 	}
 }
 

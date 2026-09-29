@@ -247,11 +247,17 @@ func (h *Hub) signCommand(agentID string, msg models.WSMessage) (models.CommandE
 		RunID      string `json:"runId"`
 		ScenarioID string `json:"scenarioId"`
 		Mode       string `json:"mode"`
+		Steps      []struct {
+			ExecutionClass    string `json:"executionClass"`
+			DestructiveAction string `json:"destructiveAction"`
+			BlastRadius       string `json:"blastRadius"`
+		} `json:"steps"`
 	}
 	if json.Unmarshal(payload, &ctx) == nil {
 		env.RunID = ctx.RunID
 		env.ScenarioID = ctx.ScenarioID
 		env.Mode = ctx.Mode
+		env.ExecutionClass, env.DestructiveAction, env.BlastRadius = mostRestrictiveStep(ctx.Steps)
 	}
 
 	sig, err := cmdsigning.SignEnvelope(signer, env)
@@ -260,6 +266,27 @@ func (h *Hub) signCommand(agentID string, msg models.WSMessage) (models.CommandE
 	}
 	env.Signature = sig
 	return env, nil
+}
+
+// mostRestrictiveStep returns the aggregate execution_class/destructive_action/
+// blast_radius across a dispatch's steps -- "destructive" beats
+// "potentially_destructive" beats "non_destructive" beats "" (no steps,
+// or a non-scenario command type). Informational/audit-only, per the
+// spec -- never consulted by the agent's B5 gate.
+func mostRestrictiveStep(steps []struct {
+	ExecutionClass    string `json:"executionClass"`
+	DestructiveAction string `json:"destructiveAction"`
+	BlastRadius       string `json:"blastRadius"`
+}) (class, action, blast string) {
+	rank := map[string]int{"": 0, "non_destructive": 1, "potentially_destructive": 2, "destructive": 3}
+	best := -1
+	for _, s := range steps {
+		if r := rank[s.ExecutionClass]; r > best {
+			best = r
+			class, action, blast = s.ExecutionClass, s.DestructiveAction, s.BlastRadius
+		}
+	}
+	return class, action, blast
 }
 
 // commandEnvelopeTTL is how long a signed command remains valid --

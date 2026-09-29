@@ -2,6 +2,7 @@ package models
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 )
@@ -76,5 +77,27 @@ func TestCommandEnvelope_OptionalFieldsOmittedWhenEmpty(t *testing.T) {
 		if _, present := roundtrip[field]; present {
 			t.Errorf("expected %q to be omitted when empty, got: %v", field, roundtrip[field])
 		}
+	}
+}
+
+func TestCommandEnvelope_CanonicalJSONIncludesExecutionClassAggregate(t *testing.T) {
+	env := CommandEnvelope{
+		Version: CommandEnvelopeVersion, CommandID: "c1", CommandType: "command_scenario",
+		AgentID: "a1", IssuedAt: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
+		ExpiresAt: time.Date(2026, 1, 1, 0, 1, 0, 0, time.UTC), Nonce: "n1",
+		Payload:           json.RawMessage(`{}`),
+		ExecutionClass:    "destructive",
+		DestructiveAction: "vss_delete",
+		BlastRadius:       "Deletes VSS shadow copies.",
+	}
+	canon, err := env.CanonicalJSON()
+	if err != nil {
+		t.Fatalf("CanonicalJSON: %v", err)
+	}
+	if !strings.Contains(string(canon), `"executionClass":"destructive"`) {
+		t.Errorf("canonical JSON missing executionClass: %s", canon)
+	}
+	if !strings.Contains(string(canon), `"destructiveAction":"vss_delete"`) {
+		t.Errorf("canonical JSON missing destructiveAction: %s", canon)
 	}
 }
