@@ -116,6 +116,42 @@ var executionClassifications = map[string]map[string]*ExecutionClassification{
 	},
 }
 
+// discoveryDefaultClassification is the shared value for every
+// discoveryProfiles-derived "default" entry below (final whole-branch
+// review finding C2 / plan's own Task 10 Step 2): resource.go's
+// discoveryProfiles map is 15 ATT&CK discovery techniques already
+// audited against real production ART command text and proven
+// non-mutating (see that map's own doc comment) -- reused here so a step
+// with no hand-authored action_key annotation for one of these
+// techniques doesn't fail closed to destructive. One entry per
+// technique, not one shared map, keeps ResolveExecutionClass's per-
+// technique lookup untouched. T1120 is deliberately excluded even though
+// it's IN discoveryProfiles: that map labels it read-only for
+// RESOURCE/concurrency purposes only (ResourceProfile's Risk field, a
+// different concern -- see this file's own package doc), but one of its
+// four real atomics ("WinPwn - printercheck") downloads and executes an
+// arbitrary third-party script
+// (iex(new-object net.webclient).downloadstring(...)) -- genuinely
+// unverifiable destructiveness, the exact ambiguity this catalog exists
+// to fail closed on. T1082 already has its own entry above (Task 1's
+// seed) and isn't repeated here.
+var discoveryDefaultClassification = &ExecutionClassification{
+	Class:             ClassNonDestructive,
+	DestructiveAction: "",
+	BlastRadius:       "Read-only ATT&CK discovery technique from resource.go's discoveryProfiles set, already audited against real production ART command text and proven non-mutating (see discoveryProfiles' own doc comment). No state changed.",
+}
+
+func init() {
+	for _, tid := range []string{
+		"T1012", "T1057", "T1007", "T1518", "T1010", "T1033",
+		"T1124", "T1016", "T1049", "T1018", "T1087", "T1069", "T1652",
+	} {
+		executionClassifications[tid] = map[string]*ExecutionClassification{
+			"default": discoveryDefaultClassification,
+		}
+	}
+}
+
 // ResolveExecutionClass returns the catalog's classification for a step's
 // (technique_id, action_key) pair. An empty action_key resolves against
 // the technique's own "default" entry. Any miss -- unknown technique,

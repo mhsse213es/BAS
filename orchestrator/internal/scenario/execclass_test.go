@@ -54,6 +54,45 @@ func TestResolveExecutionClass_CaseNormalization(t *testing.T) {
 	}
 }
 
+// resource.go's discoveryProfiles map is 15 ATT&CK discovery techniques
+// already audited against real production ART command text and proven
+// read-only/non-mutating (see that map's own doc comment -- the
+// "2026-08-20 audit" and "2026-08-26 expansion audit" entries). Final
+// whole-branch review finding C2: the plan's own Task 10 Step 2 intended
+// to reuse this proven-safe set as "default" ClassNonDestructive catalog
+// entries (so a step with no hand-authored action_key annotation for one
+// of these techniques doesn't fail closed to destructive), but this step
+// was skipped. T1120 is deliberately excluded here even though it
+// remains in discoveryProfiles: discoveryProfiles labels it read-only
+// for RESOURCE/concurrency purposes only (ResourceProfile's Risk field),
+// but one of its four real atomics (the "WinPwn - printercheck" test)
+// downloads and executes an arbitrary third-party script
+// (iex(new-object net.webclient).downloadstring(...)) -- genuinely
+// unverifiable destructiveness, the exact ambiguity this whole catalog
+// exists to fail closed on. T1082 already has its own "default" entry
+// (Task 1's seed), so it's checked here too rather than skipped, to
+// confirm this task doesn't accidentally duplicate/conflict with it.
+func TestExecutionClassifications_DiscoveryProfilesDefaultToNonDestructive(t *testing.T) {
+	for _, tid := range []string{
+		"T1012", "T1057", "T1007", "T1518", "T1010", "T1082", "T1033",
+		"T1124", "T1016", "T1049", "T1018", "T1087", "T1069", "T1652",
+	} {
+		got := ResolveExecutionClass(tid, "")
+		if got.Class != ClassNonDestructive {
+			t.Errorf("%s (no action_key, discoveryProfiles-derived default) class = %q, want %q", tid, got.Class, ClassNonDestructive)
+		}
+	}
+}
+
+// T1120 must NOT inherit a blanket non_destructive default despite being
+// in discoveryProfiles -- see the doc comment above.
+func TestExecutionClassifications_T1120DoesNotDefaultToNonDestructive(t *testing.T) {
+	got := ResolveExecutionClass("T1120", "")
+	if got.Class == ClassNonDestructive {
+		t.Error("T1120 (no action_key) must not default to non_destructive -- one of its real atomics downloads and executes an arbitrary third-party script, unverifiable destructiveness")
+	}
+}
+
 func TestAttachExecutionClassifications(t *testing.T) {
 	steps := []ScenarioStep{
 		{TechniqueID: "T1490", ActionKey: "vss_delete"},
