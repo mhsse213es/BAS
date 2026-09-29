@@ -28,6 +28,7 @@ Audspect BAS upgrades are delivered as a new versioned delivery ZIP (`bas-instal
 - [ ] Locate your original `setup.conf` (the config file used for `--install`, or reconstruct one — see [setup.conf reference](#setupconf-reference) below). `--upgrade` requires it.
 - [ ] Take an extra full database dump as a second safety net on top of `install.sh`'s own automatic config backup (see Step 1 below) — `install.sh`'s upgrade-time backup covers `docker-compose.yml`/`.env`/version, not the database contents itself (those live in the persistent Postgres volume, which the upgrade never touches directly, but a standalone dump is cheap insurance)
 - [ ] If this upgrade crosses into the mTLS agent trust model (see the section immediately below), also run a real `sudo bash install.sh --backup` beforehand — this is a separate, encrypted, retention-managed mechanism (distinct from the small automatic config backup `--upgrade` always takes) that includes the deployment CA alongside the database and config, and is the right thing to restore from if anything about the CA goes wrong during or after this upgrade
+- [ ] If this upgrade crosses into command-envelope signing (see [Upgrading Into Command-Envelope Signing](#-upgrading-into-command-envelope-signing-b4--upgrade-agents-first) below), upgrade agent binaries first, or in the same window — an agent left on an old binary will mishandle scenario runs and other execution-triggering commands sent by the upgraded orchestrator
 - [ ] Note the current version: `sudo bash install.sh --status`
 - [ ] Read the [Release Notes](release-notes.md) for the target version — specifically **Breaking Changes** and **Migration Notes**
 - [ ] Confirm you have the new delivery ZIP: `bas-install-<version>.zip`
@@ -85,6 +86,49 @@ know what to do about it.
 (i.e. this isn't your first upgrade since mTLS was introduced), skip this
 section -- your agents are already using the new topology and this
 upgrade is routine.
+
+---
+
+## ⚠ Upgrading Into Command-Envelope Signing (B4) — Upgrade Agents First
+
+Starting with this version, the orchestrator wraps every
+execution-triggering command it sends an agent (scenario/simulate runs,
+attack-path collection, cancel, pause, resume, stop, and uninstall) in a
+signed envelope, so the agent can verify the command really came from
+this deployment's orchestrator before acting on it. This changes the
+wire shape of those 8 command types: the command's own fields move from
+the top level of the message into a nested envelope, alongside a
+signature and an expiry.
+
+**The orchestrator does this unconditionally, for every connected agent,
+the moment it starts up on this version -- it has no way to tell an old
+agent binary apart from a new one before sending.** An agent binary that
+predates this version does not know to unwrap the envelope: it reads the
+message's fields directly, finds none of the ones it expects (they're
+now nested one level down, under `payload`), and the command it receives
+is effectively empty rather than cleanly rejected -- for `command_scenario`
+in particular, this can mean a run starting with no scenario/parameters
+rather than failing outright. A B4-capable agent (this version or later)
+handles both shapes correctly; the hazard is specific to the gap between
+an upgraded orchestrator and a not-yet-upgraded agent.
+
+**Do this before or in the same maintenance window as the orchestrator
+upgrade:**
+
+1. Upgrade every agent binary you plan to send scenario runs, attack-path
+   collections, or lifecycle commands (cancel/pause/resume/stop/
+   uninstall) to at the same build, or a build from the same version, as
+   the orchestrator you're upgrading to. See
+   [Step 5 — Update Agent Binaries](#step-5--update-agent-binaries-if-required)
+   below for the mechanics.
+2. Confirm each agent's reported version on the Agents page in the
+   dashboard before relying on it for execution-triggering commands
+   against the upgraded orchestrator.
+3. If you can't upgrade every agent in the same window, avoid dispatching
+   scenario runs, attack-path collections, or lifecycle commands to a
+   still-old agent until it's upgraded -- heartbeats and read-only status
+   reporting are unaffected, since only the 8 execution-triggering
+   command types carry the new envelope.
 
 ---
 
