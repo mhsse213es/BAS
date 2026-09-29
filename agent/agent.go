@@ -898,6 +898,16 @@ func (a *Agent) runScenario(ctx context.Context, cmd protocol.ScenarioCommand) {
 					return false
 				}
 
+				// B5 elevated telemetry (final whole-branch review I4): a step
+				// the gate allowed through but the signed catalog marked
+				// potentially_destructive gets a distinct, prominent log line
+				// instead of executing silently identical to a routine step,
+				// per the design spec's own requirement.
+				if isElevatedTelemetryStep(protocol.ScenarioStep{ExecutionClass: step.ExecutionClass}) {
+					log.Printf("[*]   [%d/%d] %s POTENTIALLY DESTRUCTIVE — executing (action=%s, blast_radius=%q)",
+						i+1, total, step.TechniqueID, step.ActionKey, step.BlastRadius)
+				}
+
 				// Stage payloads into a per-step subdir so concurrent steps never
 				// collide on BAS_PAYLOAD_DIR. Steps without payloads use the run dir.
 				stepDir := payloadDir

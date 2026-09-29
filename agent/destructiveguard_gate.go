@@ -72,3 +72,19 @@ func evaluateB5Gate(step protocol.ScenarioStep) (vetoed bool, blockSource string
 		return false, ""
 	}
 }
+
+// isElevatedTelemetryStep reports whether a step the gate has already
+// allowed through (evaluateB5Gate returned vetoed=false) is
+// potentially_destructive and so needs the elevated-telemetry treatment
+// the design spec requires: "flagged distinctly, not silently identical
+// to a routine step" (final whole-branch review, I4 -- the Phase 1 plan
+// never scoped what "elevated telemetry" concretely meant, so none was
+// built). Only the signed catalog classification is checked: the local
+// backstop (destructiveguard.Classify) is binary, non_destructive or
+// destructive only -- it never itself produces potentially_destructive
+// (see destructiveguard/rules.go), so there is nothing to combine here
+// the way evaluateB5Gate combines signed and local for the destructive
+// tier.
+func isElevatedTelemetryStep(step protocol.ScenarioStep) bool {
+	return step.ExecutionClass == "potentially_destructive"
+}

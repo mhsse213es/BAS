@@ -108,6 +108,36 @@ func TestEvaluateB5Gate_DestructivePayloadContentIsVetoedEvenWithSafeCommand(t *
 	}
 }
 
+// isElevatedTelemetryStep decides B5's "elevated telemetry" flag for a
+// non-vetoed step (final whole-branch review I4: the design spec requires
+// potentially_destructive steps to be "flagged distinctly, not silently
+// identical to a routine step", but Phase 1's plan never scoped what that
+// meant and none was built). Only the signed catalog can ever resolve to
+// potentially_destructive -- destructiveguard's local backstop is binary
+// (non_destructive/destructive only, see rules.go), so this only ever
+// needs to check step.ExecutionClass, not recombine with the local
+// backstop the way evaluateB5Gate does for the destructive tier.
+func TestIsElevatedTelemetryStep(t *testing.T) {
+	cases := []struct {
+		name  string
+		class string
+		want  bool
+	}{
+		{"potentially_destructive is flagged", "potentially_destructive", true},
+		{"non_destructive is not flagged", "non_destructive", false},
+		{"empty (unresolved) is not flagged -- gate already vetoes it", "", false},
+		{"destructive is not flagged -- gate already vetoes it, this path never runs for it in practice", "destructive", false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			step := protocol.ScenarioStep{ExecutionClass: c.class}
+			if got := isElevatedTelemetryStep(step); got != c.want {
+				t.Errorf("isElevatedTelemetryStep(class=%q) = %v, want %v", c.class, got, c.want)
+			}
+		})
+	}
+}
+
 func TestEvaluateB5Gate_UnclassifiedIsVetoed(t *testing.T) {
 	step := protocol.ScenarioStep{
 		TechniqueID: "T9999", ExecutionClass: "", // never resolved / unknown to this agent build
