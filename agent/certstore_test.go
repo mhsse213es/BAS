@@ -266,3 +266,48 @@ func TestSaveCommandSigningCert_RejectsInvalidPEM(t *testing.T) {
 		t.Error("expected saveCommandSigningCert to reject non-PEM input")
 	}
 }
+
+// TestSaveCommandSigningCert_RefusesToReplaceAlreadyPinnedCert locks in
+// the pin-once invariant: once a command-signing certificate is
+// persisted, a genuinely different one must be refused, not silently
+// swapped in on the next renewal.
+func TestSaveCommandSigningCert_RefusesToReplaceAlreadyPinnedCert(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("BAS_CERT_DIR", dir)
+	ca := newTestCA(t)
+	firstPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: ca.cert.Raw})
+	if err := saveCommandSigningCert(firstPEM); err != nil {
+		t.Fatalf("saveCommandSigningCert (first): %v", err)
+	}
+
+	otherCA := newTestCA(t) // a genuinely different certificate/serial
+	secondPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: otherCA.cert.Raw})
+	if err := saveCommandSigningCert(secondPEM); err == nil {
+		t.Fatal("expected saveCommandSigningCert to refuse replacing an already-pinned certificate with a different one")
+	}
+
+	loaded, err := loadCommandSigningCert()
+	if err != nil {
+		t.Fatalf("loadCommandSigningCert: %v", err)
+	}
+	if loaded.SerialNumber.Cmp(ca.cert.SerialNumber) != 0 {
+		t.Error("the originally-pinned certificate was overwritten despite the refusal")
+	}
+}
+
+// TestSaveCommandSigningCert_IdenticalRedeliveryIsNoop confirms a
+// renewal response carrying the SAME already-pinned certificate (the
+// normal case -- every renewal response includes it, whether or not it
+// changed) is accepted as a no-op, not treated as a replacement attempt.
+func TestSaveCommandSigningCert_IdenticalRedeliveryIsNoop(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("BAS_CERT_DIR", dir)
+	ca := newTestCA(t)
+	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: ca.cert.Raw})
+	if err := saveCommandSigningCert(certPEM); err != nil {
+		t.Fatalf("saveCommandSigningCert (first): %v", err)
+	}
+	if err := saveCommandSigningCert(certPEM); err != nil {
+		t.Errorf("expected re-delivering the identical certificate to succeed as a no-op, got: %v", err)
+	}
+}

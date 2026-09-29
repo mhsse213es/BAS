@@ -181,9 +181,28 @@ func commandSigningCertPath() string {
 // certificate -- a wrong file is rejected here rather than surfacing
 // later as an opaque verification failure on the first dispatched
 // command.
+//
+// Pin-once: once a command-signing certificate is persisted, a DIFFERENT
+// one is refused rather than silently replacing it. Every delivery of
+// this certificate rides the mTLS-authenticated enrollment/renewal
+// channel, not a separately-verified channel of its own -- without this
+// guard, anyone who can answer that channel (e.g. by compromising the
+// orchestrator, or a MITM the mTLS layer itself hasn't already stopped)
+// could re-pin a different signing key at the agent's next routine
+// renewal, silently expanding what commands the agent will trust. An
+// identical re-delivery of the same certificate is a no-op, not an
+// error -- renewal responses always carry it, whether or not it changed.
 func saveCommandSigningCert(pemBytes []byte) error {
-	if _, err := parseCertificatePEM(pemBytes); err != nil {
+	cert, err := parseCertificatePEM(pemBytes)
+	if err != nil {
 		return fmt.Errorf("command-signing certificate is not a valid PEM certificate: %w", err)
+	}
+	if existing, loadErr := loadCommandSigningCert(); loadErr == nil {
+		if existing.SerialNumber.Cmp(cert.SerialNumber) != 0 {
+			return fmt.Errorf("refusing to replace already-pinned command-signing certificate (pinned serial %s, offered serial %s) -- this requires explicit operator action (delete %s and re-enroll), not an automatic renewal",
+				existing.SerialNumber.Text(16), cert.SerialNumber.Text(16), commandSigningCertPath())
+		}
+		return nil // identical certificate re-delivered -- nothing to do
 	}
 	dir, _, _, _ := certPaths()
 	if err := os.MkdirAll(dir, 0700); err != nil {
