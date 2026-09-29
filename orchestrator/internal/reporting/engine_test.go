@@ -321,9 +321,18 @@ func TestBuildObjectiveRisks(t *testing.T) {
 		// discovery: only ERROR/SKIPPED -> excluded entirely
 		{Technique: models.AttackTechnique{Tactic: "discovery"}, Result: models.ResultError},
 		{Technique: models.AttackTechnique{Tactic: "discovery"}, Result: models.ResultSkipped},
+		// defense-evasion: ONLY a vetoed result -> excluded entirely, not
+		// "Low" (which would fabricate "all were blocked" for a technique
+		// Audspect never attempted -- final whole-branch review, C4).
+		{Technique: models.AttackTechnique{Tactic: "defense-evasion"}, Result: models.ResultVetoed},
 	}
 	got := buildObjectiveRisks(results)
 	want := map[string]string{"Credential Theft": "High", "Persistence": "Low", "Code Execution": "Medium"}
+	for _, o := range got {
+		if o.Objective == "Defense Evasion" {
+			t.Fatalf("Defense Evasion objective present with a vetoed-only technique: %+v -- must be excluded entirely, not scored", o)
+		}
+	}
 	if len(got) != len(want) {
 		t.Fatalf("got %d objectives, want %d (%v)", len(got), len(want), got)
 	}

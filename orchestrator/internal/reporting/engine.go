@@ -1446,7 +1446,13 @@ func buildObjectiveRisks(results []models.SimulationResult) []ObjectiveRisk {
 	type agg struct{ tested, failed int }
 	m := make(map[string]*agg)
 	for _, r := range results {
-		if r.Result == models.ResultError || r.Result == models.ResultSkipped {
+		// VETOED (Audspect's own agent refused execution under B5's
+		// destructive-action policy) must be excluded alongside
+		// Error/Skipped: without this, an objective whose only evidence
+		// is a vetoed step reported Risk="Low" ("all were blocked"),
+		// fabricating a defense-effectiveness claim for a technique that
+		// was never attempted (final whole-branch review, C4).
+		if r.Result == models.ResultError || r.Result == models.ResultSkipped || r.Result == models.ResultVetoed {
 			continue
 		}
 		a := m[r.Technique.Tactic]

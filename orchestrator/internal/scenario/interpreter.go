@@ -72,7 +72,22 @@ func Interpret(step Step, result ExecResult) models.SimulationResult {
 	// allowed the technique either. The step is excluded from scoring rather
 	// than counted for or against the endpoint. See classifyOutcome in
 	// internal/reporting, which excludes ResultError.
-	if result.TimedOut {
+	if result.Vetoed {
+		// Checked here, before the framework switch, for the exact same
+		// reason TimedOut is: only interpretART's classifyExecution knew
+		// about Vetoed, so a vetoed step with any other framework --
+		// "custom" (em-07 and every hand-authored scenario in this
+		// codebase), "caldera", or the default -- fell through to an
+		// interpreter with no knowledge of B5 at all and scored FAIL,
+		// fabricating a "technique executed and was not stopped" finding
+		// for a step Audspect never attempted (final whole-branch review,
+		// C1). This is server-side classification -- no agent upgrade is
+		// needed for the correction to take effect.
+		checkResult = models.ResultVetoed
+		details = fmt.Sprintf(
+			"VETOED — Audspect prevented execution under its local destructive-action policy (action=%s, class=%s, source=%s). Customer defensive controls were not tested by this step.",
+			result.VetoedActionKey, result.VetoedExecutionClass, result.VetoedBlockSource)
+	} else if result.TimedOut {
 		checkResult = models.ResultError
 		details = fmt.Sprintf(
 			"Execution error (timed out): the step was killed after %s without completing, so its partial output is not evidence that a control blocked or allowed the technique.%s Re-run with a longer timeout to obtain a measurable result.",
