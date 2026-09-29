@@ -8457,14 +8457,21 @@ function showAgentDownload() {
   w.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
+// injectServerURL builds the copy-paste install commands. Both fetch the
+// deployment CA root first (via the unauthenticated GET /api/config/ca-root
+// -- the target machine has no browser session to call the admin-only
+// /api/config/connection with) and pass it as --ca-root. Omitting this step
+// strands the new agent on legacy transport: it never receives the
+// command-signing trust cert, enrolls but shows no visible error, and every
+// scenario dispatched to it silently fails at the WS command-envelope check.
 function injectServerURL() {
   var url = window.location.origin;
   var winUrl  = document.getElementById('win-server-url');
   var winCli  = document.getElementById('win-cli-cmd');
   var macCmd  = document.getElementById('mac-cmd');
   if (winUrl)  winUrl.textContent = url;
-  if (winCli)  winCli.textContent = '.\\bas-agent-windows-amd64.exe --install --server ' + url + ' --secret <AGENT_SECRET> --env Production';
-  if (macCmd)  macCmd.textContent = 'chmod +x bas-agent-darwin-* && sudo ./bas-agent-darwin-* --install --server ' + url + ' --env Production';
+  if (winCli)  winCli.textContent = 'Invoke-WebRequest -Uri "' + url + '/api/config/ca-root" -OutFile deployment-ca.pem; .\\bas-agent-windows-amd64.exe --install --server ' + url + ' --secret <AGENT_SECRET> --ca-root .\\deployment-ca.pem --env Production';
+  if (macCmd)  macCmd.textContent = 'chmod +x bas-agent-darwin-* && curl -sf -o deployment-ca.pem ' + url + '/api/config/ca-root && sudo ./bas-agent-darwin-* --install --server ' + url + ' --ca-root ./deployment-ca.pem --env Production';
 }
 
 function loadConnectionConfig() {

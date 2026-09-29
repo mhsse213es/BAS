@@ -3358,6 +3358,23 @@ func (h *Handler) GetConnectionConfig(w http.ResponseWriter, r *http.Request) {
 	respond(w, resp)
 }
 
+// GET /api/config/ca-root — serves the deployment CA root as a raw PEM file,
+// unauthenticated. The generated agent install commands (see wwwroot's
+// injectServerURL) curl/Invoke-WebRequest this directly from the target
+// endpoint being enrolled, which has no browser session to call the
+// admin-only /api/config/connection with. The CA root is not secret (it's a
+// public certificate; see GetConnectionConfig's comment) so no auth is
+// required — this mirrors how any TLS server's chain is publicly fetchable.
+func (h *Handler) GetCARoot(w http.ResponseWriter, r *http.Request) {
+	if h.pki == nil {
+		jsonError(w, "no deployment CA configured on this server", http.StatusNotFound)
+		return
+	}
+	w.Header().Set("Content-Type", "application/x-pem-file")
+	w.Header().Set("Content-Disposition", `attachment; filename="deployment-ca.pem"`)
+	w.Write(h.pki.RootCertPEM())
+}
+
 // ── User Management (admin only) ─────────────────────────────────────────────
 
 // GET /api/users

@@ -74,6 +74,7 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 	r.Post("/api/auth/setup", h.Setup) // first-run admin provisioning (installer)
 	r.Get("/login/{tenantSlug}/sso", h.InitiateSSOLogin)
 	r.Get("/api/auth/sso/callback", h.SSOCallback)
+	r.Get("/api/config/ca-root", h.GetCARoot)
 
 	// Agent endpoints — protected by optional AGENT_SECRET shared token.
 	// When agentSecret is empty these remain open (backward compat).

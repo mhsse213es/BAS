@@ -56,6 +56,10 @@ Depends: systemd
 Description: BAS Platform Agent (Audspect)
  Breach & Attack Simulation endpoint agent.
  Edit /etc/bas-agent/config with BAS_SERVER_URL before starting.
+ Also fetch the deployment CA root to /etc/audspect/certs/deployment-ca.pem
+ (curl <server>/api/config/ca-root) before starting -- without it the agent
+ enrolls on legacy transport and never receives the command-signing trust
+ cert, so it appears online but silently rejects every scenario dispatch.
 CTRL
 
   cat > "${D}/DEBIAN/postinst" <<'POST'
@@ -78,8 +82,12 @@ systemctl start bas-agent.service  || true
 
 echo ""
 echo "  BAS Agent installed."
-echo "  Configure /etc/bas-agent/config with your server URL and agent secret,"
-echo "  then run:  sudo systemctl restart bas-agent"
+echo "  1. Configure /etc/bas-agent/config with your server URL and agent secret."
+echo "  2. Fetch the deployment CA root (required for scenario dispatch to work --"
+echo "     without it the agent enrolls but silently rejects every run):"
+echo "       sudo mkdir -p /etc/audspect/certs"
+echo "       sudo curl -sf -o /etc/audspect/certs/deployment-ca.pem <server>/api/config/ca-root"
+echo "  3. sudo systemctl restart bas-agent"
 echo "  View logs: journalctl -u bas-agent -f"
 echo ""
 POST
