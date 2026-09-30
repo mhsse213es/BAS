@@ -3,8 +3,11 @@ package api
 import (
 	"bytes"
 	"context"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -16,12 +19,22 @@ func newTestRouterWithHandler(h *Handler) chi.Router {
 	r := chi.NewRouter()
 	r.Use(h.RequestLoggingMiddleware)
 	r.Post("/api/heartbeat", func(w http.ResponseWriter, r *http.Request) {
+		io.Copy(io.Discard, r.Body) // real handlers decode the body; draining it here is what makes the TeeReader capture fill
 		w.WriteHeader(http.StatusOK)
 	})
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
 	r.Get("/ws/agent", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	r.Post("/api/scenarios/events", func(w http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("X-Body-Len", strconv.Itoa(len(body)))
 		w.WriteHeader(http.StatusOK)
 	})
 	return r
@@ -114,6 +127,56 @@ func TestMiddleware_NonLegacyListener_NeverRecorded(t *testing.T) {
 		}
 		if count != 0 {
 			t.Errorf("a non-legacy-listener request was recorded as legacy usage -- expected 0 rows, got %d", count)
+		}
+	})
+}
+
+func TestMiddleware_LargeBody_DownstreamHandlerSeesFullBodyUncapped(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := &Handler{db: pool}
+		router := newTestRouterWithHandler(h)
+
+		// Larger than the middleware's capture cap (64 KiB) -- proves the
+		// TeeReader passes every byte through to the real handler
+		// uncapped; only the middleware's own attribution capture is
+		// bounded, never the request the downstream handler actually
+		// receives.
+		bigBody := strings.Repeat("A", 200*1024)
+		req := legacyRequest(http.MethodPost, "/api/scenarios/events", []byte(bigBody))
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d", rec.Code)
+		}
+		if got := rec.Header().Get("X-Body-Len"); got != strconv.Itoa(len(bigBody)) {
+			t.Errorf("downstream handler read %s bytes, want %d -- the capture cap must never truncate what the real handler receives", got, len(bigBody))
+		}
+	})
+}
+
+func TestMiddleware_LargeBody_AttributionCaptureIsCapped(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := &Handler{db: pool}
+		router := newTestRouterWithHandler(h)
+
+		// agentId sits at the very front, but the JSON object never closes
+		// within the capped prefix the middleware captures -- attribution
+		// must fail safe (fall through to unattributed) rather than buffer
+		// the whole 200KiB body into memory to find a closing brace.
+		bigBody := `{"agentId":"agent-huge",` + `"padding":"` + strings.Repeat("A", 200*1024) + `"}`
+		req := legacyRequest(http.MethodPost, "/api/heartbeat", []byte(bigBody))
+		router.ServeHTTP(httptest.NewRecorder(), req)
+
+		waitForAsyncWrite(t, pool, "legacy_transport_unattributed", "request_count >= 1")
+
+		var count int
+		if err := pool.QueryRow(context.Background(),
+			`SELECT COUNT(*) FROM legacy_transport_log WHERE agent_id = 'agent-huge'`).Scan(&count); err != nil {
+			t.Fatalf("query: %v", err)
+		}
+		if count != 0 {
+			t.Errorf("expected the oversized body to NOT be attributed (capped capture can't see the full JSON), got %d attributed rows for agent-huge", count)
 		}
 	})
 }

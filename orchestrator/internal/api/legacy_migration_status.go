@@ -1,6 +1,7 @@
 package api
 
 import (
+	"log/slog"
 	"net/http"
 	"time"
 )
@@ -37,9 +38,23 @@ const legacyRetirementWindowDays = 30
 func (h *Handler) GetLegacyMigrationStatus(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
+	// Both MAX() queries below MUST fail closed (500), never fail open to
+	// "eligible=true" -- a DB timeout, pool exhaustion, or permissions
+	// problem silently reporting eligibility is exactly the false "clear"
+	// the spec says must never happen, and it would happen during the one
+	// moment an operator is relying on this response to make the retirement
+	// decision.
 	var lastAttributed, lastUnattributed *time.Time
-	_ = h.db.QueryRow(ctx, `SELECT MAX(last_seen_at) FROM legacy_transport_log`).Scan(&lastAttributed)
-	_ = h.db.QueryRow(ctx, `SELECT MAX(last_seen_at) FROM legacy_transport_unattributed`).Scan(&lastUnattributed)
+	if err := h.db.QueryRow(ctx, `SELECT MAX(last_seen_at) FROM legacy_transport_log`).Scan(&lastAttributed); err != nil {
+		slog.Error("legacy migration status: query attributed MAX failed", "error", err)
+		http.Error(w, "failed to compute legacy migration status", http.StatusInternalServerError)
+		return
+	}
+	if err := h.db.QueryRow(ctx, `SELECT MAX(last_seen_at) FROM legacy_transport_unattributed`).Scan(&lastUnattributed); err != nil {
+		slog.Error("legacy migration status: query unattributed MAX failed", "error", err)
+		http.Error(w, "failed to compute legacy migration status", http.StatusInternalServerError)
+		return
+	}
 
 	lastSeen := latestNonNil(lastAttributed, lastUnattributed)
 
@@ -63,7 +78,9 @@ func (h *Handler) GetLegacyMigrationStatus(w http.ResponseWriter, r *http.Reques
 			WHERE l.last_seen_at >= NOW() - ($1 * INTERVAL '1 day')
 			GROUP BY l.agent_id, a.hostname
 			ORDER BY last_seen DESC`, legacyRetirementWindowDays)
-		if err == nil {
+		if err != nil {
+			slog.Error("legacy migration status: blocking-agents query failed", "error", err)
+		} else {
 			defer rows.Close()
 			for rows.Next() {
 				var b legacyMigrationBlockingAgent
@@ -77,10 +94,12 @@ func (h *Handler) GetLegacyMigrationStatus(w http.ResponseWriter, r *http.Reques
 	var unattributed *legacyMigrationUnattributed
 	if lastUnattributed != nil && time.Since(*lastUnattributed) < legacyRetirementWindowDays*24*time.Hour {
 		var count int
-		_ = h.db.QueryRow(ctx,
+		if err := h.db.QueryRow(ctx,
 			`SELECT COALESCE(SUM(request_count), 0) FROM legacy_transport_unattributed
 			 WHERE last_seen_at >= NOW() - ($1 * INTERVAL '1 day')`, legacyRetirementWindowDays,
-		).Scan(&count)
+		).Scan(&count); err != nil {
+			slog.Error("legacy migration status: unattributed-count query failed", "error", err)
+		}
 		unattributed = &legacyMigrationUnattributed{LastSeen: *lastUnattributed, Count: count}
 	}
 

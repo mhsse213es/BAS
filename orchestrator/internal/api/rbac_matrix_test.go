@@ -39,6 +39,7 @@ type routeCase struct {
 var routeMatrix = []routeCase{
 	// ── any authenticated role ──────────────────────────────────────────
 	{http.MethodGet, "/api/agents", tierAny, ""},
+	{http.MethodGet, "/api/agents/legacy-migration-status", tierAny, ""},
 	{http.MethodGet, "/api/agents/download/{platform}", tierAny, ""},
 	{http.MethodGet, "/api/scenarios", tierAny, ""},
 	{http.MethodGet, "/api/scenarios/{id}", tierAny, ""},

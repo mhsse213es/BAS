@@ -8277,7 +8277,7 @@ function renderLegacyMigrationPanel() {
   if (!el) return;
   apicall('/api/agents/legacy-migration-status').then(function(status) {
     var blockingHtml = (status.blockingAgents || []).map(function(a) {
-      return '<div class="legacy-blocking-row"><span>' + (a.hostname || a.agentId) + '</span>' +
+      return '<div class="legacy-blocking-row"><span>' + x(a.hostname || a.agentId) + '</span>' +
              '<span class="legacy-blocking-time">' + new Date(a.lastSeen).toLocaleString() + '</span></div>';
     }).join('');
     var unattributedHtml = status.unattributedRequests

@@ -2,6 +2,8 @@ package api
 
 import (
 	"context"
+	"log/slog"
+	"strings"
 	"testing"
 	"time"
 
@@ -38,7 +40,13 @@ func TestRecordLegacyUsage_AttributedUpsertsOnePerAgentPerDay(t *testing.T) {
 
 		h.recordLegacyUsage(ctx, "agent-1", "/api/heartbeat", first)
 		h.recordLegacyUsage(ctx, "agent-1", "/api/heartbeat", second)
-		waitForAsyncWrite(t, pool, "legacy_transport_log", "agent_id = 'agent-1'")
+		// Wait for the SECOND write's exact timestamp, not just "a row
+		// exists" -- the first write's fire-and-forget goroutine can still
+		// be in flight when the second's lands, and asserting immediately
+		// after only the row's existence raced the first write's value 2 of
+		// 6 local runs.
+		waitForAsyncWrite(t, pool, "legacy_transport_log",
+			"agent_id = 'agent-1' AND last_seen_at = '"+second.UTC().Format(time.RFC3339Nano)+"'::timestamptz")
 
 		var count int
 		var lastSeen time.Time
@@ -78,6 +86,38 @@ func TestRecordLegacyUsage_OutOfOrderWriteNeverMovesTimeBackwards(t *testing.T) 
 		}
 		if !lastSeen.Equal(later) {
 			t.Errorf("an out-of-order (delayed) write moved last_seen_at backwards to %v -- expected it to stay at %v (GREATEST() should have rejected the older value)", lastSeen, later)
+		}
+	})
+}
+
+func TestRecordLegacyUsage_WriteFailureIsLogged(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		// A closed pool makes h.db.Exec fail deterministically and
+		// immediately, without needing to break the schema or race a real
+		// timeout -- proves the previously fully-discarded write error is
+		// now surfaced via slog rather than vanishing silently, which
+		// matters because a silently-lost write is an undercount the
+		// retirement-eligibility decision depends on.
+		closedPool, err := pgxpool.New(context.Background(), pool.Config().ConnString())
+		if err != nil {
+			t.Fatalf("open pool: %v", err)
+		}
+		closedPool.Close()
+
+		var logBuf strings.Builder
+		prev := slog.Default()
+		slog.SetDefault(slog.New(slog.NewJSONHandler(&logBuf, nil)))
+		defer slog.SetDefault(prev)
+
+		h := &Handler{db: closedPool}
+		h.recordLegacyUsage(context.Background(), "agent-fail", "/api/heartbeat", time.Now())
+
+		deadline := time.Now().Add(2 * time.Second)
+		for time.Now().Before(deadline) && !strings.Contains(logBuf.String(), "legacy usage write failed") {
+			time.Sleep(20 * time.Millisecond)
+		}
+		if !strings.Contains(logBuf.String(), "legacy usage write failed") {
+			t.Errorf("expected a logged error for the failed write, got log output: %s", logBuf.String())
 		}
 	})
 }

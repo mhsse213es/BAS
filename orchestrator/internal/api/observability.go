@@ -127,6 +127,40 @@ type legacyBodyAgentID struct {
 	AgentIDSnake string `json:"agent_id"`
 }
 
+// legacyBodyCaptureCap bounds how much of a legacy POST body this
+// middleware ever holds in memory for attribution parsing. The :9000
+// listener is unauthenticated by default (empty AGENT_SECRET), so an
+// unbounded pre-read here would be a trivial OOM vector; 64 KiB is far
+// more than any real agentId-carrying JSON payload needs.
+const legacyBodyCaptureCap = 64 * 1024
+
+// cappedCaptureWriter accumulates up to limit bytes and silently discards
+// the rest, always reporting the full write as consumed -- used as the
+// second destination of an io.TeeReader so it never errors or short-reads
+// the real reader it's paired with.
+type cappedCaptureWriter struct {
+	buf   *bytes.Buffer
+	limit int
+}
+
+func (w *cappedCaptureWriter) Write(p []byte) (int, error) {
+	if w.buf.Len() < w.limit {
+		remaining := w.limit - w.buf.Len()
+		if remaining > len(p) {
+			remaining = len(p)
+		}
+		w.buf.Write(p[:remaining])
+	}
+	return len(p), nil
+}
+
+// teeReadCloser pairs a TeeReader with the original body's Close, since
+// io.TeeReader itself returns a plain io.Reader.
+type teeReadCloser struct {
+	io.Reader
+	io.Closer
+}
+
 // RequestLoggingMiddleware replaces chi's default middleware.Logger
 // (routes.go). One instrumentation point per completed request feeds both
 // a structured slog line and the two HTTP metrics above -- and, as of B2,
@@ -139,18 +173,31 @@ func (h *Handler) RequestLoggingMiddleware(next http.Handler) http.Handler {
 		start := time.Now()
 		ww := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
 
-		// Legacy POST bodies are peeked here, before dispatch, then restored
-		// so the real handler downstream reads them completely normally --
-		// this is the only way to see a JSON body's agentId field without
-		// requiring every legacy-protocol POST handler to separately
-		// cooperate with this middleware.
-		var legacyBody []byte
+		// Legacy POST bodies are captured here via a capped TeeReader, not a
+		// full io.ReadAll -- the real handler downstream still reads the
+		// complete, uncapped body exactly as it always did (this middleware
+		// never buffers the whole thing itself), but at most
+		// legacyBodyCaptureCap bytes of whatever the handler actually reads
+		// are mirrored into legacyBodyBuf for attribution parsing below. A
+		// body larger than the cap simply fails attribution (falls through
+		// to the unattributed table) rather than being fully buffered in
+		// memory -- the :9000 listener is unauthenticated by default, so an
+		// unbounded pre-read here would be a trivial OOM vector.
+		var legacyBodyBuf *bytes.Buffer
 		if isLegacyListener(r) && r.Method == http.MethodPost && r.Body != nil {
-			legacyBody, _ = io.ReadAll(r.Body)
-			r.Body = io.NopCloser(bytes.NewReader(legacyBody))
+			legacyBodyBuf = &bytes.Buffer{}
+			r.Body = teeReadCloser{
+				Reader: io.TeeReader(r.Body, &cappedCaptureWriter{buf: legacyBodyBuf, limit: legacyBodyCaptureCap}),
+				Closer: r.Body,
+			}
 		}
 
 		next.ServeHTTP(ww, r)
+
+		var legacyBody []byte
+		if legacyBodyBuf != nil {
+			legacyBody = legacyBodyBuf.Bytes()
+		}
 		duration := time.Since(start)
 
 		route := chi.RouteContext(r.Context()).RoutePattern()

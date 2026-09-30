@@ -91,6 +91,28 @@ func TestLegacyMigrationStatus_TwentyNineDaysNotEligible(t *testing.T) {
 	})
 }
 
+func TestLegacyMigrationStatus_QueryErrorFailsClosedNotEligible(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := &Handler{db: pool}
+
+		// A cancelled context forces the eligibility queries to error --
+		// simulating a DB timeout, pool exhaustion, or a permissions problem.
+		// The handler must never report "eligible" when it couldn't actually
+		// determine that; that would be exactly the false "clear" the spec
+		// says must never happen.
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+
+		req := httptest.NewRequest(http.MethodGet, "/api/agents/legacy-migration-status", nil).WithContext(ctx)
+		rec := httptest.NewRecorder()
+		h.GetLegacyMigrationStatus(rec, req)
+
+		if rec.Code != http.StatusInternalServerError {
+			t.Fatalf("expected 500 when the eligibility query fails (fail-closed), got %d with body %q -- a query error must never silently report eligible=true", rec.Code, rec.Body.String())
+		}
+	})
+}
+
 func TestLegacyMigrationStatus_UnattributedTrafficBlocksEligibility(t *testing.T) {
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
 		h := &Handler{db: pool}
