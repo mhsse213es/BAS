@@ -7,8 +7,12 @@ import (
 
 func TestLoad_PKIDefaults(t *testing.T) {
 	os.Setenv("DATABASE_URL", "postgres://test")
+	os.Setenv("DATABASE_ADMIN_URL", "postgres://test-admin")
+	os.Setenv("BAS_APP_DB_PASSWORD", "test-app-password")
 	os.Setenv("JWT_SECRET", "test-secret")
 	defer os.Unsetenv("DATABASE_URL")
+	defer os.Unsetenv("DATABASE_ADMIN_URL")
+	defer os.Unsetenv("BAS_APP_DB_PASSWORD")
 	defer os.Unsetenv("JWT_SECRET")
 
 	cfg, err := Load("/nonexistent/config.json")
@@ -28,11 +32,15 @@ func TestLoad_PKIDefaults(t *testing.T) {
 
 func TestLoad_PKIEnvOverrides(t *testing.T) {
 	os.Setenv("DATABASE_URL", "postgres://test")
+	os.Setenv("DATABASE_ADMIN_URL", "postgres://test-admin")
+	os.Setenv("BAS_APP_DB_PASSWORD", "test-app-password")
 	os.Setenv("JWT_SECRET", "test-secret")
 	os.Setenv("PKI_DIR", "/custom/pki")
 	os.Setenv("HTTP_PORT_ENROLL", "9555")
 	os.Setenv("HTTP_PORT_LEGACY", "9001")
 	defer os.Unsetenv("DATABASE_URL")
+	defer os.Unsetenv("DATABASE_ADMIN_URL")
+	defer os.Unsetenv("BAS_APP_DB_PASSWORD")
 	defer os.Unsetenv("JWT_SECRET")
 	defer os.Unsetenv("PKI_DIR")
 	defer os.Unsetenv("HTTP_PORT_ENROLL")
@@ -55,8 +63,12 @@ func TestLoad_PKIEnvOverrides(t *testing.T) {
 
 func TestLoad_DashboardDefaults(t *testing.T) {
 	os.Setenv("DATABASE_URL", "postgres://test")
+	os.Setenv("DATABASE_ADMIN_URL", "postgres://test-admin")
+	os.Setenv("BAS_APP_DB_PASSWORD", "test-app-password")
 	os.Setenv("JWT_SECRET", "test-secret")
 	defer os.Unsetenv("DATABASE_URL")
+	defer os.Unsetenv("DATABASE_ADMIN_URL")
+	defer os.Unsetenv("BAS_APP_DB_PASSWORD")
 	defer os.Unsetenv("JWT_SECRET")
 
 	cfg, err := Load("/nonexistent/config.json")
@@ -73,11 +85,15 @@ func TestLoad_DashboardDefaults(t *testing.T) {
 
 func TestLoad_DashboardEnvOverrides(t *testing.T) {
 	os.Setenv("DATABASE_URL", "postgres://test")
+	os.Setenv("DATABASE_ADMIN_URL", "postgres://test-admin")
+	os.Setenv("BAS_APP_DB_PASSWORD", "test-app-password")
 	os.Setenv("JWT_SECRET", "test-secret")
 	os.Setenv("HTTP_PORT_DASHBOARD", "9555")
 	os.Setenv("TLS_CERT", "/etc/bas/certs/bas.crt")
 	os.Setenv("TLS_KEY", "/etc/bas/certs/bas.key")
 	defer os.Unsetenv("DATABASE_URL")
+	defer os.Unsetenv("DATABASE_ADMIN_URL")
+	defer os.Unsetenv("BAS_APP_DB_PASSWORD")
 	defer os.Unsetenv("JWT_SECRET")
 	defer os.Unsetenv("HTTP_PORT_DASHBOARD")
 	defer os.Unsetenv("TLS_CERT")
@@ -100,10 +116,14 @@ func TestLoad_DashboardEnvOverrides(t *testing.T) {
 
 func TestLoad_RejectsCollidingListenerPorts(t *testing.T) {
 	os.Setenv("DATABASE_URL", "postgres://test")
+	os.Setenv("DATABASE_ADMIN_URL", "postgres://test-admin")
+	os.Setenv("BAS_APP_DB_PASSWORD", "test-app-password")
 	os.Setenv("JWT_SECRET", "test-secret")
 	os.Setenv("HTTP_PORT", "9443")
 	os.Setenv("HTTP_PORT_LEGACY", "9443") // deliberately colliding with HTTP_PORT
 	defer os.Unsetenv("DATABASE_URL")
+	defer os.Unsetenv("DATABASE_ADMIN_URL")
+	defer os.Unsetenv("BAS_APP_DB_PASSWORD")
 	defer os.Unsetenv("JWT_SECRET")
 	defer os.Unsetenv("HTTP_PORT")
 	defer os.Unsetenv("HTTP_PORT_LEGACY")
@@ -116,8 +136,12 @@ func TestLoad_RejectsCollidingListenerPorts(t *testing.T) {
 
 func TestLoad_DistinctPortsSucceed(t *testing.T) {
 	os.Setenv("DATABASE_URL", "postgres://test")
+	os.Setenv("DATABASE_ADMIN_URL", "postgres://test-admin")
+	os.Setenv("BAS_APP_DB_PASSWORD", "test-app-password")
 	os.Setenv("JWT_SECRET", "test-secret")
 	defer os.Unsetenv("DATABASE_URL")
+	defer os.Unsetenv("DATABASE_ADMIN_URL")
+	defer os.Unsetenv("BAS_APP_DB_PASSWORD")
 	defer os.Unsetenv("JWT_SECRET")
 
 	// All four ports at their real defaults (9443/9444/9000/9543) -- must
@@ -129,9 +153,13 @@ func TestLoad_DistinctPortsSucceed(t *testing.T) {
 
 func TestLoad_LegacyListenerEnabledDefaultsTrue(t *testing.T) {
 	os.Setenv("DATABASE_URL", "postgres://test")
+	os.Setenv("DATABASE_ADMIN_URL", "postgres://test-admin")
+	os.Setenv("BAS_APP_DB_PASSWORD", "test-app-password")
 	os.Setenv("JWT_SECRET", "test-secret")
 	os.Unsetenv("BAS_LEGACY_LISTENER_ENABLED")
 	defer os.Unsetenv("DATABASE_URL")
+	defer os.Unsetenv("DATABASE_ADMIN_URL")
+	defer os.Unsetenv("BAS_APP_DB_PASSWORD")
 	defer os.Unsetenv("JWT_SECRET")
 
 	cfg, err := Load("/nonexistent/config.json")
@@ -145,9 +173,13 @@ func TestLoad_LegacyListenerEnabledDefaultsTrue(t *testing.T) {
 
 func TestLoad_LegacyListenerEnabledFalseOverride(t *testing.T) {
 	os.Setenv("DATABASE_URL", "postgres://test")
+	os.Setenv("DATABASE_ADMIN_URL", "postgres://test-admin")
+	os.Setenv("BAS_APP_DB_PASSWORD", "test-app-password")
 	os.Setenv("JWT_SECRET", "test-secret")
 	os.Setenv("BAS_LEGACY_LISTENER_ENABLED", "false")
 	defer os.Unsetenv("DATABASE_URL")
+	defer os.Unsetenv("DATABASE_ADMIN_URL")
+	defer os.Unsetenv("BAS_APP_DB_PASSWORD")
 	defer os.Unsetenv("JWT_SECRET")
 	defer os.Unsetenv("BAS_LEGACY_LISTENER_ENABLED")
 
@@ -157,5 +189,73 @@ func TestLoad_LegacyListenerEnabledFalseOverride(t *testing.T) {
 	}
 	if cfg.LegacyListenerEnabled {
 		t.Error("expected LegacyListenerEnabled=false when BAS_LEGACY_LISTENER_ENABLED=false")
+	}
+}
+
+func TestLoad_DatabaseAdminURLRequired(t *testing.T) {
+	os.Setenv("DATABASE_URL", "postgres://bas_app:pw@localhost/bas_platform")
+	os.Setenv("JWT_SECRET", "test-secret")
+	os.Setenv("BAS_APP_DB_PASSWORD", "test-app-password")
+	os.Unsetenv("DATABASE_ADMIN_URL")
+	defer os.Unsetenv("DATABASE_URL")
+	defer os.Unsetenv("JWT_SECRET")
+	defer os.Unsetenv("BAS_APP_DB_PASSWORD")
+
+	_, err := Load("/nonexistent/config.json")
+	if err == nil {
+		t.Fatal("expected an error when DATABASE_ADMIN_URL is unset, got nil")
+	}
+}
+
+func TestLoad_DatabaseAdminURLFromEnv(t *testing.T) {
+	os.Setenv("DATABASE_URL", "postgres://bas_app:pw@localhost/bas_platform")
+	os.Setenv("DATABASE_ADMIN_URL", "postgres://bas_user:pw@localhost/bas_platform")
+	os.Setenv("JWT_SECRET", "test-secret")
+	os.Setenv("BAS_APP_DB_PASSWORD", "test-app-password")
+	defer os.Unsetenv("DATABASE_URL")
+	defer os.Unsetenv("DATABASE_ADMIN_URL")
+	defer os.Unsetenv("JWT_SECRET")
+	defer os.Unsetenv("BAS_APP_DB_PASSWORD")
+
+	cfg, err := Load("/nonexistent/config.json")
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.DatabaseAdminURL != "postgres://bas_user:pw@localhost/bas_platform" {
+		t.Errorf("DatabaseAdminURL = %q, want the env value", cfg.DatabaseAdminURL)
+	}
+}
+
+func TestLoad_AppDBPasswordRequired(t *testing.T) {
+	os.Setenv("DATABASE_URL", "postgres://bas_app:pw@localhost/bas_platform")
+	os.Setenv("DATABASE_ADMIN_URL", "postgres://bas_user:pw@localhost/bas_platform")
+	os.Setenv("JWT_SECRET", "test-secret")
+	os.Unsetenv("BAS_APP_DB_PASSWORD")
+	defer os.Unsetenv("DATABASE_URL")
+	defer os.Unsetenv("DATABASE_ADMIN_URL")
+	defer os.Unsetenv("JWT_SECRET")
+
+	_, err := Load("/nonexistent/config.json")
+	if err == nil {
+		t.Fatal("expected an error when BAS_APP_DB_PASSWORD is unset, got nil")
+	}
+}
+
+func TestLoad_AppDBPasswordFromEnv(t *testing.T) {
+	os.Setenv("DATABASE_URL", "postgres://bas_app:pw@localhost/bas_platform")
+	os.Setenv("DATABASE_ADMIN_URL", "postgres://bas_user:pw@localhost/bas_platform")
+	os.Setenv("JWT_SECRET", "test-secret")
+	os.Setenv("BAS_APP_DB_PASSWORD", "rotated-password")
+	defer os.Unsetenv("DATABASE_URL")
+	defer os.Unsetenv("DATABASE_ADMIN_URL")
+	defer os.Unsetenv("JWT_SECRET")
+	defer os.Unsetenv("BAS_APP_DB_PASSWORD")
+
+	cfg, err := Load("/nonexistent/config.json")
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.AppDBPassword != "rotated-password" {
+		t.Errorf("AppDBPassword = %q, want the env value", cfg.AppDBPassword)
 	}
 }
