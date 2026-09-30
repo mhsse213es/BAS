@@ -61,6 +61,18 @@ BAS_TLS=false                     # true | false
 
 DNS_SINK_BIND_IP=                 # Auto-detected if blank (recommended)
 
+# BAS_SERVER_SANS is the comma-separated list of hostnames/IPs agents will
+# use to reach this orchestrator -- embedded as Subject Alternative Names
+# on the deployment CA certificate (which every listener presents directly
+# as its TLS identity when BAS_TLS=false below). Without a matching SAN,
+# every agent's TLS client rejects the connection outright -- there is no
+# CommonName fallback since Go 1.15, so this is not optional for any
+# agent connecting by IP, which is the ordinary case for an on-prem box.
+# Auto-detected (reuses DNS_SINK_BIND_IP's value) if left blank; add a
+# hostname too if agents will also reach this box by DNS name, e.g.
+# BAS_SERVER_SANS=192.168.10.78,bas.internal.example.com
+BAS_SERVER_SANS=                  # Auto-detected if blank (recommended)
+
 # ── [tls] ──────────────────────────────────────────────────────────────────────
 # Required only when BAS_TLS=true. Paths are on the SERVER (not the bundle).
 # The installer copies these files into ${DATA_DIR}/certs/ and sets chmod 640.

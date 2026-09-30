@@ -112,6 +112,20 @@ type Config struct {
 	// LegacyHTTPPort is the temporary plaintext listener for pre-migration
 	// agents, retired entirely by the separately-scoped B2 work.
 	PKIDir          string `json:"pki_dir,omitempty"`
+
+	// ServerSANs: comma-separated hostnames/IP addresses (BAS_SERVER_SANS)
+	// this orchestrator is reachable at, embedded as Subject Alternative
+	// Names on the deployment CA cert (pki.LoadOrGenerateCAWithSANs) --
+	// that cert is presented directly as the TLS server identity on every
+	// listener, and Go's TLS client verification (no CommonName fallback
+	// since Go 1.15) rejects ANY address not listed here. Confirmed live,
+	// 2026-09-30: every agent dialing by IP with none set failed with
+	// "x509: cannot validate certificate ..., because it doesn't contain
+	// any IP SANs" on every single connection attempt. install.sh resolves
+	// this the same way it resolves DNS_SINK_BIND_IP; empty is valid (an
+	// operator-supplied TLS_CERT/TLS_KEY makes this irrelevant) but means
+	// every agent using the self-signed fallback will hit that same error.
+	ServerSANs string `json:"server_sans,omitempty"`
 	EnrollHTTPPort  int    `json:"enroll_http_port,omitempty"`
 	LegacyHTTPPort  int    `json:"legacy_http_port,omitempty"`
 
@@ -311,6 +325,9 @@ func Load(path string) (*Config, error) {
 	}
 	if v := os.Getenv("PKI_DIR"); v != "" {
 		cfg.PKIDir = v
+	}
+	if v := os.Getenv("BAS_SERVER_SANS"); v != "" {
+		cfg.ServerSANs = v
 	}
 	if v := os.Getenv("HTTP_PORT_ENROLL"); v != "" {
 		fmt.Sscanf(v, "%d", &cfg.EnrollHTTPPort)

@@ -17,8 +17,10 @@ import (
 	"encoding/pem"
 	"fmt"
 	"math/big"
+	"net"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -39,11 +41,35 @@ type CA struct {
 }
 
 // LoadOrGenerateCA loads an existing CA keypair from dir, or generates a new
-// one if dir contains no ca-key.pem. dir is created if it does not exist.
-// A CA that exists but fails to parse (corrupt/truncated file) is a hard
-// error -- silently regenerating would invalidate every already-issued
-// agent certificate without warning.
+// one (with no Subject Alternative Names beyond its own identity) if dir
+// contains no ca-key.pem. Prefer LoadOrGenerateCAWithSANs for any deployment
+// whose agents will dial the orchestrator by IP address -- see that
+// function's doc comment for why a bare LoadOrGenerateCA is not enough on
+// its own.
 func LoadOrGenerateCA(dir string) (*CA, error) {
+	return LoadOrGenerateCAWithSANs(dir, nil)
+}
+
+// LoadOrGenerateCAWithSANs is LoadOrGenerateCA, plus sans: hostnames and/or
+// IP addresses (mixed freely; each entry is parsed as an IP first, falling
+// back to a DNS name) to embed as this cert's Subject Alternative Names.
+//
+// TLSCertificate presents this same CA certificate directly as the
+// orchestrator's TLS server identity (see that method's doc comment). Since
+// Go's x509 verification (crypto/x509, since Go 1.15) requires a SAN match
+// for the exact address the client dialed and no longer falls back to
+// Subject.CommonName, a CA generated via bare LoadOrGenerateCA carries no
+// SAN at all -- so *every* Go TLS client (every agent; a browser merely
+// warns and lets a human click through, which is why this was missed
+// during interactive testing) fails to verify it against ANY address,
+// producing exactly this error: "x509: cannot validate certificate for
+// <ip>, because it doesn't contain any IP SANs". Confirmed live against a
+// real deployment, 2026-09-30 -- see
+// docs/superpowers/plans/2026-09-30-... incident notes. sans is only
+// consulted the first time a CA is generated for dir; an existing CA is
+// loaded as-is regardless of what's passed here (this function shares
+// LoadOrGenerateCA's "never silently regenerate" guarantee).
+func LoadOrGenerateCAWithSANs(dir string, sans []string) (*CA, error) {
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		return nil, fmt.Errorf("create PKI dir %s: %w", dir, err)
 	}
@@ -53,10 +79,10 @@ func LoadOrGenerateCA(dir string) (*CA, error) {
 	if _, err := os.Stat(keyPath); err == nil {
 		return loadCA(keyPath, certPath)
 	}
-	return generateCA(keyPath, certPath)
+	return generateCA(keyPath, certPath, sans)
 }
 
-func generateCA(keyPath, certPath string) (*CA, error) {
+func generateCA(keyPath, certPath string, sans []string) (*CA, error) {
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
 		return nil, fmt.Errorf("generate CA key: %w", err)
@@ -65,14 +91,30 @@ func generateCA(keyPath, certPath string) (*CA, error) {
 	if err != nil {
 		return nil, fmt.Errorf("generate CA serial: %w", err)
 	}
+	var ips []net.IP
+	var dnsNames []string
+	for _, san := range sans {
+		san = strings.TrimSpace(san)
+		if san == "" {
+			continue
+		}
+		if ip := net.ParseIP(san); ip != nil {
+			ips = append(ips, ip)
+		} else {
+			dnsNames = append(dnsNames, san)
+		}
+	}
 	tmpl := &x509.Certificate{
 		SerialNumber:          serial,
 		Subject:               pkix.Name{CommonName: "Audspect Deployment CA", Organization: []string{"Audspect"}},
 		NotBefore:             time.Now().Add(-5 * time.Minute),
 		NotAfter:              time.Now().Add(caValidity),
 		KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageCRLSign | x509.KeyUsageDigitalSignature,
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
 		BasicConstraintsValid: true,
 		IsCA:                  true,
+		IPAddresses:           ips,
+		DNSNames:              dnsNames,
 	}
 	certDER, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &key.PublicKey, key)
 	if err != nil {

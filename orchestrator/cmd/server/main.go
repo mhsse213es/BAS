@@ -115,6 +115,23 @@ func runHealthcheck() int {
 // unit-testable: BAS_TLS=false (fallback) is the default for every
 // existing and new install, so its behavior needs direct test coverage,
 // not just a read-through of main()'s startup sequence.
+// splitServerSANs turns cfg.ServerSANs's comma-separated BAS_SERVER_SANS
+// value into the slice pki.LoadOrGenerateCAWithSANs expects, trimming
+// whitespace and dropping empty entries so a trailing comma or accidental
+// double space in an operator's .env doesn't produce a spurious SAN.
+func splitServerSANs(raw string) []string {
+	if raw == "" {
+		return nil
+	}
+	var out []string
+	for _, s := range strings.Split(raw, ",") {
+		if s = strings.TrimSpace(s); s != "" {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
 func resolveDashboardTLSCert(cfg config.Config, fallback tls.Certificate) (tls.Certificate, error) {
 	if cfg.DashboardTLSCertPath == "" || cfg.DashboardTLSKeyPath == "" {
 		return fallback, nil
@@ -676,7 +693,7 @@ func main() {
 	if err := checkCANotSilentlyRotated(context.Background(), pool, caKeyExistedBefore); err != nil {
 		log.Fatalf("[FATAL] %v", err)
 	}
-	ca, err := pki.LoadOrGenerateCA(cfg.PKIDir)
+	ca, err := pki.LoadOrGenerateCAWithSANs(cfg.PKIDir, splitServerSANs(cfg.ServerSANs))
 	if err != nil {
 		log.Fatalf("[FATAL] load/generate deployment CA: %v", err)
 	}

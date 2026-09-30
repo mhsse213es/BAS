@@ -239,6 +239,16 @@ load_config() {
   # packet. See setup.conf.template's DNS_SINK_BIND_IP comment for why this
   # can't be 0.0.0.0.
   [[ -z "$DNS_SINK_BIND_IP"   ]] && DNS_SINK_BIND_IP=$(hostname -I 2>/dev/null | awk '{print $1}')
+  # Reuse that same auto-detected host IP as the deployment CA's default
+  # Subject Alternative Name -- without an IP SAN on the certificate every
+  # listener presents, agents connecting to this host by IP (the ordinary
+  # case) fail TLS verification outright (Go's client has no CommonName
+  # fallback since Go 1.15). Not the same variable as DNS_SINK_BIND_IP on
+  # purpose -- they serve unrelated concerns that happen to often share a
+  # value -- so an operator can extend this with a hostname (e.g.
+  # BAS_SERVER_SANS="192.168.10.78,bas.internal.example.com" in
+  # setup.conf) without touching the DNS sink's own binding.
+  [[ -z "$BAS_SERVER_SANS"    ]] && BAS_SERVER_SANS="$DNS_SINK_BIND_IP"
   [[ -z "$BAS_TLS"            ]] && BAS_TLS="false"
   [[ -z "$LOG_RETENTION_DAYS" ]] && LOG_RETENTION_DAYS="90"
   [[ -z "$BACKUP_RETENTION_DAILY"   ]] && BACKUP_RETENTION_DAILY="7"
@@ -1207,6 +1217,7 @@ BAS_ENROLL_PORT=${BAS_ENROLL_PORT}
 BAS_LEGACY_PORT=${BAS_LEGACY_PORT}
 BAS_DASHBOARD_PORT=${BAS_DASHBOARD_PORT}
 DNS_SINK_BIND_IP=${DNS_SINK_BIND_IP}
+BAS_SERVER_SANS=${BAS_SERVER_SANS}
 BAS_TLS=${BAS_TLS}
 TLS_CERT=${TLS_CERT:-}
 TLS_KEY=${TLS_KEY:-}

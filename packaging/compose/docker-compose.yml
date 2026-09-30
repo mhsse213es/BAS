@@ -145,6 +145,16 @@ services:
       HTTP_PORT_ENROLL: "9444"
       HTTP_PORT_LEGACY: "9000"
       HTTP_PORT_DASHBOARD: "9543"
+      # Comma-separated hostnames/IPs this orchestrator is reachable at --
+      # embedded as SANs on the self-signed deployment CA cert (which is
+      # presented directly as the TLS server identity on every listener).
+      # Without this, every agent connecting by IP fails TLS verification
+      # with "x509: cannot validate certificate ..., because it doesn't
+      # contain any IP SANs" -- Go's TLS client never falls back to
+      # Subject.CommonName (removed in Go 1.15). install.sh resolves this
+      # the same way it resolves DNS_SINK_BIND_IP. See
+      # orchestrator/internal/pki/ca.go's LoadOrGenerateCAWithSANs.
+      BAS_SERVER_SANS:  ${BAS_SERVER_SANS:-}
       SCENARIOS_DIR:    /scenarios
       BAS_LICENSE_PATH: /etc/bas/${LICENSE_FILE:-bas.lic}
       # In-container paths for the operator-supplied dashboard TLS cert
