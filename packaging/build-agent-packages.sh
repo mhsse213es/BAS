@@ -8,6 +8,17 @@ VER="${BAS_VERSION:-1.6.0}"
 mkdir -p /packages
 
 # ── Shared systemd unit ───────────────────────────────────────────────────────
+# ExecStartPre fetches the deployment CA root before every start, not just at
+# install time -- BAS_SERVER_URL isn't known until the operator edits
+# /etc/bas-agent/config after install, so a postinst-time fetch is
+# impossible; this runs whenever that's actually known instead. The leading
+# '-' means a failure here (curl missing, network down, server unreachable)
+# never blocks the unit from starting -- the agent falls back to legacy
+# transport as before, now visible via the dashboard's "Legacy transport"
+# badge rather than silent. Skipped once a non-empty file already exists, so
+# steady-state restarts do zero network I/O for this. On failure the partial
+# file is removed so the next restart retries cleanly instead of treating a
+# truncated download as "already fetched".
 cat > /tmp/bas-agent.service <<'UNIT'
 [Unit]
 Description=BAS Agent (Audspect)
@@ -16,6 +27,7 @@ Wants=network-online.target
 
 [Service]
 Type=simple
+ExecStartPre=-/bin/sh -c 'if [ -n "$BAS_SERVER_URL" ] && [ ! -s /etc/audspect/certs/deployment-ca.pem ]; then mkdir -p /etc/audspect/certs && (curl -sf -o /etc/audspect/certs/deployment-ca.pem "$BAS_SERVER_URL/api/config/ca-root" || rm -f /etc/audspect/certs/deployment-ca.pem); fi'
 ExecStart=/usr/local/bin/bas-agent
 EnvironmentFile=/etc/bas-agent/config
 Restart=on-failure
@@ -52,14 +64,15 @@ Architecture: ${arch}
 Maintainer: Audspect <support@audspect.com>
 Section: utils
 Priority: optional
-Depends: systemd
+Depends: systemd, curl
 Description: BAS Platform Agent (Audspect)
  Breach & Attack Simulation endpoint agent.
- Edit /etc/bas-agent/config with BAS_SERVER_URL before starting.
- Also fetch the deployment CA root to /etc/audspect/certs/deployment-ca.pem
- (curl <server>/api/config/ca-root) before starting -- without it the agent
- enrolls on legacy transport and never receives the command-signing trust
- cert, so it appears online but silently rejects every scenario dispatch.
+ Edit /etc/bas-agent/config with BAS_SERVER_URL, then restart the service --
+ the deployment CA root is fetched automatically on start once that URL is
+ set (see bas-agent.service's ExecStartPre). If that fetch ever fails
+ (server unreachable, no curl), the agent falls back to legacy transport and
+ the dashboard's Agents page shows a "Legacy transport" warning badge until
+ it's resolved and the service is restarted.
 CTRL
 
   cat > "${D}/DEBIAN/postinst" <<'POST'
@@ -83,11 +96,9 @@ systemctl start bas-agent.service  || true
 echo ""
 echo "  BAS Agent installed."
 echo "  1. Configure /etc/bas-agent/config with your server URL and agent secret."
-echo "  2. Fetch the deployment CA root (required for scenario dispatch to work --"
-echo "     without it the agent enrolls but silently rejects every run):"
-echo "       sudo mkdir -p /etc/audspect/certs"
-echo "       sudo curl -sf -o /etc/audspect/certs/deployment-ca.pem <server>/api/config/ca-root"
-echo "  3. sudo systemctl restart bas-agent"
+echo "  2. sudo systemctl restart bas-agent"
+echo "     (the deployment CA root is fetched automatically on start now that"
+echo "     BAS_SERVER_URL is set -- no manual step needed)"
 echo "  View logs: journalctl -u bas-agent -f"
 echo ""
 POST
