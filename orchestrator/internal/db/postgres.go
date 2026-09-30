@@ -1823,6 +1823,34 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		`CREATE INDEX IF NOT EXISTS idx_execution_attempts_execution ON execution_attempts(source_execution_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_execution_attempts_technique ON execution_attempts(technique_id) WHERE technique_id IS NOT NULL`,
 		`CREATE INDEX IF NOT EXISTS idx_execution_attempts_status ON execution_attempts(status)`,
+
+		// ── Legacy transport retirement (B2) ──────────────────────────────────
+		// One row per agent per UTC day, not per request -- a heartbeating-every-
+		// 30s agent would otherwise produce ~2,880 rows/day/agent for no benefit;
+		// the retirement decision only ever needs "did this agent touch legacy
+		// today." Upserted via GREATEST() in internal/api's recordLegacyUsage so
+		// an out-of-order (delayed) request can never move last_seen_at
+		// backwards. See docs/superpowers/specs/2026-09-30-b2-legacy-transport-retirement-design.md.
+		`CREATE TABLE IF NOT EXISTS legacy_transport_log (
+			agent_id     text        NOT NULL,
+			day          date        NOT NULL,
+			last_seen_at timestamptz NOT NULL,
+			endpoint     text        NOT NULL,
+			UNIQUE (agent_id, day)
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_legacy_transport_log_day ON legacy_transport_log (day)`,
+
+		// A matched, successful legacy-protocol request that cannot be resolved
+		// to an agent_id still represents real, unexplained legacy dependency --
+		// tracked here (not discarded, not folded into legacy_transport_log as
+		// agent_id='') so it blocks the retirement eligibility calculation
+		// exactly like a named agent would, rather than silently disappearing
+		// from it.
+		`CREATE TABLE IF NOT EXISTS legacy_transport_unattributed (
+			day           date        PRIMARY KEY,
+			last_seen_at  timestamptz NOT NULL,
+			request_count int         NOT NULL DEFAULT 1
+		)`,
 	}
 
 	for _, s := range stmts {
