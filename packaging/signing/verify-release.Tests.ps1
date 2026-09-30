@@ -88,9 +88,45 @@ Describe "Invoke-ReleaseVerification" {
         Test-Path $script:AuditPath | Should Be $true
         $audit = Get-Content $script:AuditPath -Raw | ConvertFrom-Json
         $audit.windowsArtifacts.Count | Should Be 1
-        $audit.windowsArtifacts[0].path | Should Be $script:SignedFile
+        # Review finding I4: an absolute build-host path (C:\Users\...) was
+        # leaking into an audit record shipped inside the customer ZIP.
+        # Only the filename is meaningful to a customer verifying the record.
+        $audit.windowsArtifacts[0].path | Should Be (Split-Path -Leaf $script:SignedFile)
         $audit.windowsArtifacts[0].sha256 | Should Not BeNullOrEmpty
         $audit.windowsArtifacts[0].signatureValid | Should Be $true
         $audit.overallResult | Should Be $true
+    }
+
+    It "fails when RequireTimestamp is set and the artifact was signed without one" {
+        # Review finding I3: the gate never asked for a timestamp, so a
+        # customer release signed without one (invalid once the cert expires)
+        # would still pass. $script:SignedFile is signed with -TimestampUrl ""
+        # in BeforeAll, so this is a real untimestamped signature, not a mock.
+        $result = Invoke-ReleaseVerification -WindowsArtifacts @($script:SignedFile) `
+            -WindowsSigningRequired $true -RequireTimestamp $true -AuditRecordPath $script:AuditPath
+        $result | Should Be $false
+    }
+
+    It "fails when ExpectedThumbprint does not match the signer" {
+        # Review finding I3: the gate accepted a valid signature from ANY
+        # trusted publisher, never checking it was signed by the certificate
+        # this build actually asked for.
+        $result = Invoke-ReleaseVerification -WindowsArtifacts @($script:SignedFile) `
+            -WindowsSigningRequired $true -ExpectedThumbprint ("0" * 40) -AuditRecordPath $script:AuditPath
+        $result | Should Be $false
+    }
+
+    It "passes when ExpectedThumbprint matches the signer" {
+        $result = Invoke-ReleaseVerification -WindowsArtifacts @($script:SignedFile) `
+            -WindowsSigningRequired $true -ExpectedThumbprint $script:TestCert.Thumbprint -AuditRecordPath $script:AuditPath
+        $result | Should Be $true
+    }
+
+    It "includes version and signer identity in the audit record" {
+        Invoke-ReleaseVerification -WindowsArtifacts @($script:SignedFile) `
+            -WindowsSigningRequired $true -Version "9.9.9-test" -AuditRecordPath $script:AuditPath | Out-Null
+        $audit = Get-Content $script:AuditPath -Raw | ConvertFrom-Json
+        $audit.version | Should Be "9.9.9-test"
+        $audit.windowsArtifacts[0].signerThumbprint | Should Be $script:TestCert.Thumbprint
     }
 }

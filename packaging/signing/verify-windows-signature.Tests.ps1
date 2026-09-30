@@ -84,4 +84,15 @@ Describe "Test-AuthenticodeSignature" {
         $result.Valid | Should Be $false
         $result.Status | Should Be "HashMismatch"
     }
+
+    It "returns the signer's thumbprint for a valid signature" {
+        $result = Test-AuthenticodeSignature -Path $script:SignedFile
+        $result.SignerThumbprint | Should Be $script:TestCert.Thumbprint
+    }
+
+    It "reports MissingTimestamp when RequireTimestamp is set and the signature carries none" {
+        $result = Test-AuthenticodeSignature -Path $script:SignedFile -RequireTimestamp
+        $result.Valid | Should Be $false
+        $result.Status | Should Be "MissingTimestamp"
+    }
 }

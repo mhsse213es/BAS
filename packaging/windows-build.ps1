@@ -381,19 +381,22 @@ if ($LASTEXITCODE -ne 0) {
     $legacySizeMB = [math]::Round((Get-Item "$OutDir\bas-agent-windows-legacy-amd64.exe").Length / 1MB, 1)
     Log "  bas-agent-windows-legacy-amd64.exe (${legacySizeMB}MB)"
 }
-Compress-Archive -Path "$OutDir\bas-agent-windows-legacy-amd64.exe" -DestinationPath "$OutDir\bas-agent-windows-legacy-amd64-setup.zip" -Force
-
 $env:GOTOOLCHAIN = ""; $env:GOOS = ""; $env:GOARCH = ""; $env:CGO_ENABLED = ""; $env:GOWORK = ""
 Pop-Location
 
 # -- 5d. Sign Windows executables (D1) ----------------------------------------
 . "$RepoRoot\packaging\signing\sign-windows.ps1"
 
-$WindowsArtifactsToSign = @(
+# @(...) -- Where-Object on 0 or 1 surviving matches returns a bare scalar
+# (or $null), not a single-element array; under this script's
+# Set-StrictMode -Version Latest, ".Count" on that throws
+# PropertyNotFoundStrict (verified empirically). @(...) forces array shape
+# regardless of match count.
+$WindowsArtifactsToSign = @(@(
     "$OutDir\BASAgent-Setup-$Version.exe",
     "$OutDir\bas-agent-windows-amd64.exe",
     "$OutDir\bas-agent-windows-legacy-amd64.exe"
-) | Where-Object { Test-Path $_ }
+) | Where-Object { Test-Path $_ })
 
 if ($WindowsCertThumbprint) {
     Log "Signing $($WindowsArtifactsToSign.Count) Windows executable(s)..."
@@ -409,6 +412,16 @@ if ($WindowsCertThumbprint) {
     Err "Windows signing is required for this build (customer build) but -WindowsCertThumbprint / BAS_WINDOWS_CERT_THUMBPRINT is not set."
 } else {
     Warn "No Windows signing certificate configured -- executables will not be signed (dev build, not required)."
+}
+
+# The legacy agent's setup zip must be built from the SIGNED exe -- zipping
+# it before 5d (the original order) shipped an unsigned copy inside the zip
+# while release-verification.json reported the loose exe (signed
+# separately) as Valid, a false audit record for the actual customer
+# deliverable. Re-zip here, after signing, so the zip's contents match what
+# the gate just verified.
+if (Test-Path "$OutDir\bas-agent-windows-legacy-amd64.exe") {
+    Compress-Archive -Path "$OutDir\bas-agent-windows-legacy-amd64.exe" -DestinationPath "$OutDir\bas-agent-windows-legacy-amd64-setup.zip" -Force
 }
 
 # -- 5b. Build Linux agent binaries (amd64 + arm64) --------------------------
@@ -633,6 +646,24 @@ if (Test-Path $PayloadDir) {
 # the version string and break compose image resolution.
 [System.IO.File]::WriteAllText("$OutDir\VERSION", $Version)
 
+# -- 7c. Release gate (D1) -----------------------------------------------------
+# Runs before the manifest (7b) so MANIFEST.sha256's hash listing actually
+# covers release-verification.json -- generating the gate's own audit record
+# after the manifest (the original order) left it outside the file the
+# customer uses to verify bundle integrity.
+. "$RepoRoot\packaging\signing\verify-windows-signature.ps1"
+. "$RepoRoot\packaging\signing\verify-release.ps1"
+
+$AuditRecordPath = Join-Path $OutDir "release-verification.json"
+$releaseOk = Invoke-ReleaseVerification -WindowsArtifacts $WindowsArtifactsToSign `
+    -WindowsSigningRequired $WindowsSigningRequired -RequireTimestamp $WindowsSigningRequired `
+    -ExpectedThumbprint $WindowsCertThumbprint -Version $Version -AuditRecordPath $AuditRecordPath
+
+if (-not $releaseOk) {
+    Err "Release verification failed -- see $AuditRecordPath. Refusing to package an unsigned/invalid release."
+}
+Log "Release verification passed: $AuditRecordPath"
+
 # -- 7b. Air-gap integrity: verify.sh + per-file SHA-256 manifest --------------
 # Gives bas-install the same offline integrity guarantees as the dedicated
 # bas-airgap bundle: a per-file manifest the client verifies after unzip.
@@ -702,19 +733,6 @@ if ($Customer -ne "" -and $CustomerID -ne "") {
     Warn "Generate manually: go run packaging\licensing\licensegen\main.go -customer '...' -id '...' -days 365"
 }
 
-# -- 8b. Release gate (D1) -----------------------------------------------------
-. "$RepoRoot\packaging\signing\verify-windows-signature.ps1"
-. "$RepoRoot\packaging\signing\verify-release.ps1"
-
-$AuditRecordPath = Join-Path $OutDir "release-verification.json"
-$releaseOk = Invoke-ReleaseVerification -WindowsArtifacts $WindowsArtifactsToSign `
-    -WindowsSigningRequired $WindowsSigningRequired -AuditRecordPath $AuditRecordPath
-
-if (-not $releaseOk) {
-    Err "Release verification failed -- see $AuditRecordPath. Refusing to package an unsigned/invalid release."
-}
-Log "Release verification passed: $AuditRecordPath"
-
 # -- 9. Create ZIP for transfer -----------------------------------------------
 Log "Creating ZIP: $ZipPath"
 if (Test-Path $ZipPath) { Remove-Item -Force $ZipPath }
@@ -743,6 +761,15 @@ if (Test-Path "$ComposeDir\VERIFY.md") {
 # Produces bas-install-<version>.zip.asc and stages a self-contained verify kit
 # (pubkey.asc + verify-sig.sh) in dist\ so the client can authenticate the zip
 # before unzip. The private key lives only in this host's GPG keyring.
+#
+# Remove-UnsignedDeliverable: Err() below exits without cleanup, so a
+# required-GPG-signing failure previously left the just-built ZIP and its
+# .sha256 sitting in dist\ looking like a normal deliverable even though the
+# build had failed closed. Called before every required-failure Err in this
+# section.
+function Remove-UnsignedDeliverable {
+    Remove-Item -Force -ErrorAction SilentlyContinue $ZipPath, "$ZipPath.sha256"
+}
 $Signed = $false
 $SigningDir      = Join-Path $RepoRoot "packaging\signing"
 $SigningKeyEmail = "releases@audspect.com"
@@ -763,6 +790,7 @@ if (-not $gpgExe) {
 
 if (-not $gpgExe) {
     if ($GpgSigningRequired) {
+        Remove-UnsignedDeliverable
         Err "gpg not found and GPG signing is required for this build. Install Gpg4win or Git for Windows."
     } else {
         Warn "gpg not found - bundle is unsigned. Install Gpg4win or Git for Windows to enable signing."
@@ -778,6 +806,7 @@ if (-not $gpgExe) {
         & $gpgExe --list-secret-keys $SigningKeyEmail 2>$null | Out-Null
         if ($LASTEXITCODE -ne 0) {
             if ($GpgSigningRequired) {
+                Remove-UnsignedDeliverable
                 Err "No usable GPG signing key for $SigningKeyEmail (gpg exit $LASTEXITCODE) and GPG signing is required for this build. Generate one: bash packaging/signing/keygen.sh"
             } else {
                 Warn "No usable signing key for $SigningKeyEmail (gpg exit $LASTEXITCODE) - bundle is unsigned."
@@ -800,13 +829,22 @@ if (-not $gpgExe) {
                 [System.IO.File]::WriteAllText("$DistDir\verify-sig.sh", $vsText)
                 Log "  Verify kit staged in dist\: pubkey.asc + verify-sig.sh"
             } elseif ($GpgSigningRequired) {
+                Remove-UnsignedDeliverable
                 Err "GPG signing failed (exit $LASTEXITCODE) and GPG signing is required for this build."
             } else {
                 Warn "  GPG signing failed (exit $LASTEXITCODE) - bundle is unsigned."
             }
         }
     } catch {
-        Warn "  GPG signing skipped (gpg error: $($_.Exception.Message)) - bundle is unsigned."
+        # This catch previously always Warned regardless of GpgSigningRequired
+        # -- a required build whose gpg invocation threw (rather than merely
+        # exiting nonzero) silently shipped unsigned instead of failing closed.
+        if ($GpgSigningRequired) {
+            Remove-UnsignedDeliverable
+            Err "GPG signing failed (gpg error: $($_.Exception.Message)) and GPG signing is required for this build."
+        } else {
+            Warn "  GPG signing skipped (gpg error: $($_.Exception.Message)) - bundle is unsigned."
+        }
     } finally {
         $ErrorActionPreference = $prevEAP
     }

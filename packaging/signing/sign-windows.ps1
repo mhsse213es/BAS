@@ -27,20 +27,26 @@ function Invoke-AuthenticodeSigning {
         [string]$SignToolPath
     )
 
+    # -ErrorAction Continue on every Write-Error in this function: the caller
+    # (windows-build.ps1) sets $ErrorActionPreference='Stop' globally, which
+    # otherwise turns these into terminating exceptions before the caller's
+    # own Err/Warn branching around this function's return value ever runs
+    # (verified empirically -- a missing file crashed the whole build instead
+    # of returning $false).
     if (-not (Test-Path $Path)) {
-        Write-Error "Invoke-AuthenticodeSigning: file not found: $Path"
+        Write-Error "Invoke-AuthenticodeSigning: file not found: $Path" -ErrorAction Continue
         return $false
     }
 
     $signtool = if ($SignToolPath) { $SignToolPath } else { Find-SignTool }
     if (-not $signtool) {
-        Write-Error "Invoke-AuthenticodeSigning: signtool.exe not found. Install the Windows SDK."
+        Write-Error "Invoke-AuthenticodeSigning: signtool.exe not found. Install the Windows SDK." -ErrorAction Continue
         return $false
     }
 
     $storePath = "$CertStoreLocation\$CertThumbprint"
     if (-not (Test-Path $storePath)) {
-        Write-Error "Invoke-AuthenticodeSigning: certificate $CertThumbprint not found in $CertStoreLocation."
+        Write-Error "Invoke-AuthenticodeSigning: certificate $CertThumbprint not found in $CertStoreLocation." -ErrorAction Continue
         return $false
     }
 
@@ -59,13 +65,24 @@ function Invoke-AuthenticodeSigning {
     }
     $signArgs += $Path
 
-    # Out-Null: signtool's own console text (progress/success messages) goes
-    # to the success stream in PowerShell for a native command, and without
-    # suppressing it, it pollutes this function's return value into an
-    # array instead of a clean boolean (verified empirically).
-    & $signtool @signArgs | Out-Null
+    # Capture signtool's combined output (instead of discarding it) so a
+    # failure's Write-Error carries its actual diagnostic, not just an exit
+    # code. 2>&1 merges native stderr into the output stream; under the
+    # caller's EAP='Stop' that promotes each stderr line to a terminating
+    # NativeCommandError before $LASTEXITCODE is even checked (same class of
+    # issue as this repo's docker-build/gpg call sites), so run it under
+    # 'Continue' -- the same pattern used everywhere else in this codebase.
+    $prevEAP = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        $signOutput = (& $signtool @signArgs 2>&1 | Out-String).Trim()
+    } finally {
+        $ErrorActionPreference = $prevEAP
+    }
+
     if ($LASTEXITCODE -ne 0) {
-        Write-Error "Invoke-AuthenticodeSigning: signtool exited $LASTEXITCODE for $Path"
+        $timestampHint = if ($TimestampUrl) { " Timestamp authority '$TimestampUrl' may be unreachable -- retry with -TimestampUrl '' to isolate." } else { "" }
+        Write-Error "Invoke-AuthenticodeSigning: signtool exited $LASTEXITCODE for $Path.$timestampHint signtool output: $signOutput" -ErrorAction Continue
         return $false
     }
     return $true

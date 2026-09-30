@@ -56,7 +56,21 @@ Describe "Invoke-AuthenticodeSigning" {
     }
 
     It "signs with an RFC 3161 timestamp when the timestamp server is reachable" {
-        $reachable = Test-Connection -ComputerName "timestamp.digicert.com" -Count 1 -Quiet -ErrorAction SilentlyContinue
+        # RFC 3161 timestamping is an HTTP POST, not ICMP -- a host that blocks
+        # ping but serves HTTP (common on corporate networks and this session's
+        # own sandbox) was reported "unreachable" by Test-Connection and always
+        # skipped, even when timestamp.digicert.com actually answered (verified:
+        # ICMP fails here, a plain HTTP GET returns 404 -- the server is up).
+        $reachable = $false
+        try {
+            Invoke-WebRequest -Uri "http://timestamp.digicert.com" -Method Head -TimeoutSec 5 -ErrorAction Stop | Out-Null
+            $reachable = $true
+        } catch [System.Net.WebException] {
+            # Any HTTP response (even an error status) proves the host answered.
+            if ($_.Exception.Response) { $reachable = $true }
+        } catch {
+            $reachable = $false
+        }
         if (-not $reachable) {
             Write-Host "SKIP: timestamp.digicert.com unreachable from this environment"
             return
@@ -71,6 +85,36 @@ Describe "Invoke-AuthenticodeSigning" {
             $sig.TimeStamperCertificate | Should Not Be $null
         } finally {
             Remove-Item (Split-Path $timestampedFile) -Recurse -ErrorAction SilentlyContinue
+        }
+    }
+
+    It "does not throw under the caller's ErrorActionPreference=Stop, returns false instead" {
+        # Review finding: Write-Error inside this function became terminating
+        # when called from windows-build.ps1 (which sets EAP=Stop globally),
+        # so the Err/Warn branches around its call site never actually ran --
+        # the whole script crashed with a raw exception instead.
+        $prevEAP = $ErrorActionPreference
+        $ErrorActionPreference = "Stop"
+        try {
+            { Invoke-AuthenticodeSigning -Path "$($script:TestFile)-missing.exe" -CertThumbprint $script:TestCert.Thumbprint } | Should Not Throw
+            $result = Invoke-AuthenticodeSigning -Path "$($script:TestFile)-missing.exe" -CertThumbprint $script:TestCert.Thumbprint
+            $result | Should Be $false
+        } finally {
+            $ErrorActionPreference = $prevEAP
+        }
+    }
+
+    It "surfaces a timestamp-specific hint when signing fails with a timestamp URL set" {
+        $Error.Clear()
+        $unreachableFile = New-UnsignedTestExe
+        try {
+            $result = Invoke-AuthenticodeSigning -Path $unreachableFile `
+                -CertThumbprint $script:TestCert.Thumbprint `
+                -TimestampUrl "http://127.0.0.1:9"
+            $result | Should Be $false
+            $Error[0].Exception.Message | Should Match "timestamp"
+        } finally {
+            Remove-Item (Split-Path $unreachableFile) -Recurse -ErrorAction SilentlyContinue
         }
     }
 }

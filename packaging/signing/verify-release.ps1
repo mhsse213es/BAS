@@ -9,6 +9,9 @@ function Invoke-ReleaseVerification {
     param(
         [string[]]$WindowsArtifacts = @(),
         [bool]$WindowsSigningRequired = $true,
+        [bool]$RequireTimestamp = $false,
+        [string]$ExpectedThumbprint = "",
+        [string]$Version = "",
         [Parameter(Mandatory)][string]$AuditRecordPath
     )
 
@@ -17,7 +20,20 @@ function Invoke-ReleaseVerification {
 
     foreach ($artifact in $WindowsArtifacts) {
         $hash = if (Test-Path $artifact) { (Get-FileHash -Path $artifact -Algorithm SHA256).Hash.ToLower() } else { $null }
-        $verification = Test-AuthenticodeSignature -Path $artifact
+        $verification = Test-AuthenticodeSignature -Path $artifact -RequireTimestamp:$RequireTimestamp
+
+        # A signature can be technically Valid yet signed by the wrong
+        # certificate -- e.g. a stray test cert left trusted on the build
+        # host. Pin it to the certificate this build actually asked for.
+        if ($ExpectedThumbprint -and $verification.Valid -and $verification.SignerThumbprint -ne $ExpectedThumbprint) {
+            $verification = @{
+                Valid             = $false
+                Status            = "SignerMismatch"
+                Reason            = "Signed by $($verification.SignerThumbprint), expected $ExpectedThumbprint"
+                SignerThumbprint  = $verification.SignerThumbprint
+                SignerSubject     = $verification.SignerSubject
+            }
+        }
 
         $artifactPassed = $true
         if ($WindowsSigningRequired -and -not $verification.Valid) {
@@ -26,20 +42,27 @@ function Invoke-ReleaseVerification {
         }
 
         $artifactResults += [PSCustomObject]@{
-            path           = $artifact
-            sha256         = $hash
-            signatureValid = $verification.Valid
-            status         = $verification.Status
-            reason         = $verification.Reason
-            passed         = $artifactPassed
+            # Filename only -- an absolute build-host path (C:\Users\...)
+            # has no meaning to a customer reading this record and must not
+            # leak into a file shipped inside the customer ZIP.
+            path             = Split-Path -Leaf $artifact
+            sha256           = $hash
+            signatureValid   = $verification.Valid
+            status           = $verification.Status
+            reason           = $verification.Reason
+            signerThumbprint = $verification.SignerThumbprint
+            signerSubject    = $verification.SignerSubject
+            passed           = $artifactPassed
         }
     }
 
     $audit = [PSCustomObject]@{
-        timestamp        = (Get-Date).ToUniversalTime().ToString("o")
+        version           = $Version
+        timestamp         = (Get-Date).ToUniversalTime().ToString("o")
         windowsRequired   = $WindowsSigningRequired
-        windowsArtifacts = $artifactResults
-        overallResult    = $overallResult
+        requireTimestamp  = $RequireTimestamp
+        windowsArtifacts  = $artifactResults
+        overallResult     = $overallResult
     }
     $audit | ConvertTo-Json -Depth 6 | Set-Content -Path $AuditRecordPath -Encoding UTF8
 

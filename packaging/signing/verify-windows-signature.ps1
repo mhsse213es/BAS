@@ -12,19 +12,21 @@ function Test-AuthenticodeSignature {
     )
 
     if (-not (Test-Path $Path)) {
-        return @{ Valid = $false; Status = "FileNotFound"; Reason = "File not found: $Path" }
+        return @{ Valid = $false; Status = "FileNotFound"; Reason = "File not found: $Path"; SignerThumbprint = ""; SignerSubject = "" }
     }
 
     $sig = Get-AuthenticodeSignature -FilePath $Path
     $statusStr = $sig.Status.ToString()
+    $signerThumbprint = if ($sig.SignerCertificate) { $sig.SignerCertificate.Thumbprint } else { "" }
+    $signerSubject    = if ($sig.SignerCertificate) { $sig.SignerCertificate.Subject } else { "" }
 
     if ($sig.Status -ne "Valid") {
-        return @{ Valid = $false; Status = $statusStr; Reason = $sig.StatusMessage }
+        return @{ Valid = $false; Status = $statusStr; Reason = $sig.StatusMessage; SignerThumbprint = $signerThumbprint; SignerSubject = $signerSubject }
     }
 
     if ($RequireTimestamp -and -not $sig.TimeStamperCertificate) {
-        return @{ Valid = $false; Status = "MissingTimestamp"; Reason = "Signature is valid but carries no RFC 3161 timestamp." }
+        return @{ Valid = $false; Status = "MissingTimestamp"; Reason = "Signature is valid but carries no RFC 3161 timestamp."; SignerThumbprint = $signerThumbprint; SignerSubject = $signerSubject }
     }
 
-    return @{ Valid = $true; Status = $statusStr; Reason = "" }
+    return @{ Valid = $true; Status = $statusStr; Reason = ""; SignerThumbprint = $signerThumbprint; SignerSubject = $signerSubject }
 }
