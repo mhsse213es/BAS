@@ -649,7 +649,7 @@ func main() {
 	// first means every restart re-evaluates the same on-disk state until
 	// an operator actually resolves it (or passes BAS_CONFIRM_NEW_SIGNING_KEY).
 	if err := checkSigningKeyNotSilentlyRotated(context.Background(), pool, signingKeyExistedBefore); err != nil {
-		log.Fatalf("%v", err)
+		log.Fatalf("[FATAL] %v", err)
 	}
 	signingKey, err := cmdsigning.LoadOrGenerateSigningKey(signingDir)
 	if err != nil {

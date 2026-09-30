@@ -195,6 +195,12 @@ services:
       # intentional signing-key rotation/reset on an existing deployment (see
       # cmd/server/signing_state.go); leave unset for normal operation.
       BAS_CONFIRM_NEW_SIGNING_KEY: ${BAS_CONFIRM_NEW_SIGNING_KEY:-}
+      # ── Deployment CA (orchestrator/internal/pki, ./pki above) — operator
+      # override ── BAS_CONFIRM_NEW_CA=true: the escape hatch for a genuine,
+      # intentional CA rotation/reset on an existing deployment (see
+      # cmd/server/main.go's checkCANotSilentlyRotated); leave unset for
+      # normal operation.
+      BAS_CONFIRM_NEW_CA: ${BAS_CONFIRM_NEW_CA:-}
       # How long a signed command envelope remains valid after issuance
       # (internal/ws/hub.go's commandEnvelopeTTLFromEnv); defaults to 60s if unset.
       COMMAND_ENVELOPE_TTL_SECONDS: ${COMMAND_ENVELOPE_TTL_SECONDS:-}
@@ -258,8 +264,14 @@ services:
       # endpoint AT ALL, which crash-loops the orchestrator on a "postgres"
       # DNS-resolution failure that looks unrelated to port 53. install.sh
       # resolves DNS_SINK_BIND_IP (see setup.conf.template) before writing
-      # .env; there is no safe wildcard default here on purpose.
-      - "${DNS_SINK_BIND_IP}:53:53/udp"
+      # .env; there is no safe wildcard default here on purpose. The `:?`
+      # required-variable form below makes `docker compose up` refuse to
+      # start at all when this is unset/blank, instead of silently
+      # substituting an empty host address (which Compose reads as the
+      # 0.0.0.0 wildcard) and crash-looping on the DNS collision above --
+      # confirmed live on a deployment that bypassed install.sh and ran
+      # docker compose directly, 2026-09-30.
+      - "${DNS_SINK_BIND_IP:?DNS_SINK_BIND_IP must be set -- run install.sh, do not invoke docker compose directly}:53:53/udp"
       # SFTP sink (internal/sftpsink): container-internal listener binds
       # standard :22 (genuine SSH/SFTP wire protocol), but the host-published
       # port is this separate, configurable, non-22 default -- every
