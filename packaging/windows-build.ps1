@@ -22,8 +22,22 @@ param(
     [string] $Customer   = "",
     [string] $CustomerID = "",
     [int]    $Days       = 365,
-    [switch] $SkipBuild          # pass -SkipBuild to repackage without rebuilding image
+    [switch] $SkipBuild,         # pass -SkipBuild to repackage without rebuilding image
+
+    # -- D1 release signing (docs/superpowers/specs/2026-09-30-d1-release-signing-architecture-design.md) --
+    # Credentials are always parameters/env vars, never hardcoded. A customer
+    # build (-Customer/-CustomerID both set) defaults every *Required flag to
+    # $true -- a production release must not silently ship unsigned. A bare
+    # dev build (no -Customer) defaults them to $false, unchanged from today's
+    # behavior, so the existing local dev/test loop isn't broken by this task.
+    [string] $WindowsCertThumbprint = $env:BAS_WINDOWS_CERT_THUMBPRINT,
+    [Nullable[bool]] $WindowsSigningRequired = $null,
+    [Nullable[bool]] $GpgSigningRequired     = $null
 )
+
+$IsCustomerBuild = ($Customer -ne "" -and $CustomerID -ne "")
+if ($null -eq $WindowsSigningRequired) { $WindowsSigningRequired = $IsCustomerBuild }
+if ($null -eq $GpgSigningRequired)     { $GpgSigningRequired     = $IsCustomerBuild }
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
@@ -155,7 +169,20 @@ if (-not $SkipBuild) {
     if ($WWWRootHash -ne "") {
         $buildExtraArgs += @("--build-arg", "BAS_WWWROOT_HASH=$WWWRootHash")
     }
-    docker build -t $OrchestratorTag @buildExtraArgs -f "$RepoRoot\orchestrator\Dockerfile" $RepoRoot
+    # docker build (BuildKit) writes routine progress to stderr; with
+    # $ErrorActionPreference='Stop' (set above) PowerShell turns that into a
+    # terminating NativeCommandError before the build even finishes, well
+    # before the $LASTEXITCODE check below ever runs -- same class of issue
+    # the GPG section below already works around. Pre-existing, unrelated to
+    # D1; found only because Task 5's end-to-end verification needs this
+    # step to actually complete.
+    $prevEAP = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        docker build -t $OrchestratorTag @buildExtraArgs -f "$RepoRoot\orchestrator\Dockerfile" $RepoRoot
+    } finally {
+        $ErrorActionPreference = $prevEAP
+    }
     if ($LASTEXITCODE -ne 0) { Err "Docker build failed." }
     Log "Image built: $OrchestratorTag"
 } else {
@@ -179,7 +206,16 @@ if ($LASTEXITCODE -ne 0) { Warn "Failed to pull headless-shell - PDF reports wil
 # Build the custom Caldera image with the adversary-emulation library baked in.
 # This is the only place the emulation library is cloned (build host has internet).
 Log "Building bas-caldera:$Version (emu library)..."
-docker build -t "bas-caldera:$Version" "$RepoRoot\packaging\caldera"
+# Same stderr/$ErrorActionPreference issue as the orchestrator docker build
+# above -- without this, a failure here doesn't even reach the graceful
+# Warn-and-continue below; the whole script aborts instead.
+$prevEAP = $ErrorActionPreference
+$ErrorActionPreference = 'Continue'
+try {
+    docker build -t "bas-caldera:$Version" "$RepoRoot\packaging\caldera"
+} finally {
+    $ErrorActionPreference = $prevEAP
+}
 if ($LASTEXITCODE -ne 0) { Warn "Failed to build bas-caldera image - bundle will fall back to stock Caldera." }
 
 # -- 3. Create output directory structure -------------------------------------
@@ -349,6 +385,31 @@ Compress-Archive -Path "$OutDir\bas-agent-windows-legacy-amd64.exe" -Destination
 
 $env:GOTOOLCHAIN = ""; $env:GOOS = ""; $env:GOARCH = ""; $env:CGO_ENABLED = ""; $env:GOWORK = ""
 Pop-Location
+
+# -- 5d. Sign Windows executables (D1) ----------------------------------------
+. "$RepoRoot\packaging\signing\sign-windows.ps1"
+
+$WindowsArtifactsToSign = @(
+    "$OutDir\BASAgent-Setup-$Version.exe",
+    "$OutDir\bas-agent-windows-amd64.exe",
+    "$OutDir\bas-agent-windows-legacy-amd64.exe"
+) | Where-Object { Test-Path $_ }
+
+if ($WindowsCertThumbprint) {
+    Log "Signing $($WindowsArtifactsToSign.Count) Windows executable(s)..."
+    foreach ($artifact in $WindowsArtifactsToSign) {
+        $signed = Invoke-AuthenticodeSigning -Path $artifact -CertThumbprint $WindowsCertThumbprint
+        if (-not $signed -and $WindowsSigningRequired) {
+            Err "Authenticode signing failed for $artifact and Windows signing is required for this build."
+        } elseif (-not $signed) {
+            Warn "Authenticode signing failed for $artifact (not required for this build -- continuing)."
+        }
+    }
+} elseif ($WindowsSigningRequired) {
+    Err "Windows signing is required for this build (customer build) but -WindowsCertThumbprint / BAS_WINDOWS_CERT_THUMBPRINT is not set."
+} else {
+    Warn "No Windows signing certificate configured -- executables will not be signed (dev build, not required)."
+}
 
 # -- 5b. Build Linux agent binaries (amd64 + arm64) --------------------------
 # CGO_ENABLED=0: required for cross-compile from Windows. All platform-specific
@@ -641,6 +702,19 @@ if ($Customer -ne "" -and $CustomerID -ne "") {
     Warn "Generate manually: go run packaging\licensing\licensegen\main.go -customer '...' -id '...' -days 365"
 }
 
+# -- 8b. Release gate (D1) -----------------------------------------------------
+. "$RepoRoot\packaging\signing\verify-windows-signature.ps1"
+. "$RepoRoot\packaging\signing\verify-release.ps1"
+
+$AuditRecordPath = Join-Path $OutDir "release-verification.json"
+$releaseOk = Invoke-ReleaseVerification -WindowsArtifacts $WindowsArtifactsToSign `
+    -WindowsSigningRequired $WindowsSigningRequired -AuditRecordPath $AuditRecordPath
+
+if (-not $releaseOk) {
+    Err "Release verification failed -- see $AuditRecordPath. Refusing to package an unsigned/invalid release."
+}
+Log "Release verification passed: $AuditRecordPath"
+
 # -- 9. Create ZIP for transfer -----------------------------------------------
 Log "Creating ZIP: $ZipPath"
 if (Test-Path $ZipPath) { Remove-Item -Force $ZipPath }
@@ -688,7 +762,11 @@ if (-not $gpgExe) {
 }
 
 if (-not $gpgExe) {
-    Warn "gpg not found - bundle is unsigned. Install Gpg4win or Git for Windows to enable signing."
+    if ($GpgSigningRequired) {
+        Err "gpg not found and GPG signing is required for this build. Install Gpg4win or Git for Windows."
+    } else {
+        Warn "gpg not found - bundle is unsigned. Install Gpg4win or Git for Windows to enable signing."
+    }
 } else {
     # gpg writes progress to stderr; with $ErrorActionPreference='Stop' (set above)
     # PowerShell turns native stderr into a terminating NativeCommandError, which
@@ -699,8 +777,12 @@ if (-not $gpgExe) {
     try {
         & $gpgExe --list-secret-keys $SigningKeyEmail 2>$null | Out-Null
         if ($LASTEXITCODE -ne 0) {
-            Warn "No usable signing key for $SigningKeyEmail (gpg exit $LASTEXITCODE) - bundle is unsigned."
-            Warn "  Generate one: bash packaging/signing/keygen.sh"
+            if ($GpgSigningRequired) {
+                Err "No usable GPG signing key for $SigningKeyEmail (gpg exit $LASTEXITCODE) and GPG signing is required for this build. Generate one: bash packaging/signing/keygen.sh"
+            } else {
+                Warn "No usable signing key for $SigningKeyEmail (gpg exit $LASTEXITCODE) - bundle is unsigned."
+                Warn "  Generate one: bash packaging/signing/keygen.sh"
+            }
         } else {
             Log "Signing bundle with GPG key $SigningKeyEmail..."
             $SigPath = "$ZipPath.asc"
@@ -717,6 +799,8 @@ if (-not $gpgExe) {
                 $vsText = (Get-Content "$DistDir\verify-sig.sh" -Raw) -replace "`r`n", "`n"
                 [System.IO.File]::WriteAllText("$DistDir\verify-sig.sh", $vsText)
                 Log "  Verify kit staged in dist\: pubkey.asc + verify-sig.sh"
+            } elseif ($GpgSigningRequired) {
+                Err "GPG signing failed (exit $LASTEXITCODE) and GPG signing is required for this build."
             } else {
                 Warn "  GPG signing failed (exit $LASTEXITCODE) - bundle is unsigned."
             }
