@@ -1648,6 +1648,17 @@ func (e *Engine) Build(ctx context.Context, agentID string, filter string) (*Ful
 		}
 	}
 
+	// Fallback: recompute the score from results when the run has none stored.
+	// Build's headline Summary is otherwise populated solely from the stored
+	// score column, so a run whose score was never persisted (e.g. imported
+	// results, or a scoring failure at submit time) would render "No Data" in
+	// the executive hero even though the detailed sections — which re-derive
+	// from results — are fully populated. Recomputing here keeps the report
+	// self-consistent, mirroring how BuildFromCampaign/Sweep already score.
+	if latestScore.TotalTechniques == 0 && len(latestResults) > 0 {
+		latestScore = models.ComputeScore(latestResults, nil)
+	}
+
 	// ── 4. Tactic heatmap from latest run ────────────────────────────────
 	report.ScenarioName = latestScenarioName
 	report.TacticHeatmap = buildTacticHeatmap(latestResults)
