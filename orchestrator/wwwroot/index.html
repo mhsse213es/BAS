@@ -569,6 +569,15 @@ code {
 .s-paused::before { background: #fbbf24; }
 .s-empty      { background: rgba(122,148,176,0.08); color: var(--muted); border: 1px solid rgba(122,148,176,0.15); }
 .s-empty::before { background: var(--muted); }
+.legacy-migration-panel { border: 1px solid var(--border); border-radius: var(--radius); padding: 0.9rem 1.1rem; margin-bottom: 1rem; }
+.legacy-migration-header { font-weight: 600; margin-bottom: 0.4rem; }
+.legacy-migration-days { font-size: 0.82rem; color: var(--muted); margin-bottom: 0.4rem; font-variant-numeric: tabular-nums; }
+.legacy-migration-status { font-weight: 600; font-size: 0.85rem; }
+.legacy-migration-status.eligible { color: var(--success); }
+.legacy-migration-status.not-eligible { color: var(--warning); }
+.legacy-unattributed-warning { color: var(--danger); margin-top: 0.5rem; font-size: 0.82rem; }
+.legacy-blocking-list { margin-top: 0.5rem; border-top: 1px solid var(--border); padding-top: 0.5rem; }
+.legacy-blocking-row { display: flex; justify-content: space-between; padding: 0.2rem 0; font-size: 0.8rem; color: var(--muted); }
 .s-stopped    { background: var(--danger-dim); color: #f87171; border: 1px solid var(--danger-border); }
 .s-stopped::before { background: #f87171; }
 .s-agent_disconnected { background: var(--warning-dim); color: #fbbf24; border: 1px solid var(--warning-border); }
@@ -1827,6 +1836,7 @@ body.theme-slate {
             <button class="btn btn-primary btn-sm" onclick="showAgentDownload()">&#8595; Deploy agent</button>
           </div>
         </div>
+        <div id="legacy-migration-panel" class="legacy-migration-panel"></div>
         <div style="display:flex;gap:0.5rem;margin-bottom:1rem">
           <button type="button" class="dash-view-btn active" data-agents-view="systemtree" onclick="setAgentsView('systemtree')">System Tree</button>
           <button type="button" class="dash-view-btn" data-agents-view="operational" onclick="setAgentsView('operational')">Operational</button>
@@ -8259,6 +8269,29 @@ function loadAgents() {
     agentTotals = (page && page.totals) || { online: 0, degraded: 0, offline: 0, retired: 0 };
     document.getElementById('agent-cnt').textContent = agentTotals.online + agentTotals.degraded + agentTotals.offline;
     renderAgentTiles(); renderAgentToolbar(); renderAgentRows();
+    renderLegacyMigrationPanel();
+  }).catch(function(e) { showToast(e.message, 'err'); });
+}
+function renderLegacyMigrationPanel() {
+  var el = document.getElementById('legacy-migration-panel');
+  if (!el) return;
+  apicall('/api/agents/legacy-migration-status').then(function(status) {
+    var blockingHtml = (status.blockingAgents || []).map(function(a) {
+      return '<div class="legacy-blocking-row"><span>' + (a.hostname || a.agentId) + '</span>' +
+             '<span class="legacy-blocking-time">' + new Date(a.lastSeen).toLocaleString() + '</span></div>';
+    }).join('');
+    var unattributedHtml = status.unattributedRequests
+      ? '<div class="legacy-unattributed-warning">&#9888; Unattributed legacy activity: ' +
+        status.unattributedRequests.count + ' request(s) — retirement blocked</div>'
+      : '';
+    el.innerHTML =
+      '<div class="legacy-migration-header">Legacy Transport Migration</div>' +
+      '<div class="legacy-migration-days">Days clean: ' + status.daysClean + ' / ' + status.daysRequired + '</div>' +
+      '<div class="legacy-migration-status ' + (status.eligible ? 'eligible' : 'not-eligible') + '">' +
+        (status.eligible ? 'ELIGIBLE FOR REVIEW' : 'NOT YET ELIGIBLE') +
+      '</div>' +
+      unattributedHtml +
+      (blockingHtml ? '<div class="legacy-blocking-list">' + blockingHtml + '</div>' : '');
   }).catch(function(e) { showToast(e.message, 'err'); });
 }
 function loadMoreAgents() {
