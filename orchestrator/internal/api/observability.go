@@ -1,8 +1,10 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -91,13 +93,63 @@ func isLegacyListener(r *http.Request) bool {
 	return v
 }
 
+// legacyProtocolRoutes is the exact, verified allowlist from
+// docs/superpowers/specs/2026-09-30-b2-legacy-transport-retirement-design.md
+// -- routes.go:79-97's agent-protocol block plus /ws/agent. Deliberately
+// NOT "any 2xx on :9000": that listener's handler is the same full router
+// every other listener uses (main.go), so it also serves /health,
+// dashboard statics, and admin endpoints that say nothing about legacy
+// agent dependency.
+var legacyProtocolRoutes = map[string]bool{
+	"/api/agents/enroll":                     true,
+	"/api/agents/enroll-csr":                 true,
+	"/api/agents/unenroll":                   true,
+	"/api/agents/{agentId}/uninstall-result": true,
+	"/api/agents/events":                     true,
+	"/api/heartbeat":                         true,
+	"/api/scenarios/result":                  true,
+	"/api/scenarios/events":                  true,
+	"/api/scenarios/runs/{runId}/detections":  true,
+	"/api/attackpath/collect":                true,
+	"/api/attackpath/sharphound":             true,
+	"/api/attackpath/jobs/{id}/ack":          true,
+	"/ws/agent":                              true,
+	"/api/agents/ping":                       true,
+}
+
+// legacyBodyAgentID is the minimal shape needed to opportunistically read
+// an agent identity out of a legacy-protocol POST body without depending
+// on any specific handler's own request struct -- this codebase's
+// AgentID-carrying JSON structs overwhelmingly use one of these two key
+// spellings.
+type legacyBodyAgentID struct {
+	AgentIDCamel string `json:"agentId"`
+	AgentIDSnake string `json:"agent_id"`
+}
+
 // RequestLoggingMiddleware replaces chi's default middleware.Logger
 // (routes.go). One instrumentation point per completed request feeds both
-// a structured slog line and the two HTTP metrics above.
-func RequestLoggingMiddleware(next http.Handler) http.Handler {
+// a structured slog line and the two HTTP metrics above -- and, as of B2,
+// the legacy-transport-retirement evidence log for requests on the :9000
+// listener. A *Handler method (not a bare function) specifically so it can
+// reach h.recordLegacyUsage; routes.go's two r.Use call sites updated
+// accordingly.
+func (h *Handler) RequestLoggingMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 		ww := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
+
+		// Legacy POST bodies are peeked here, before dispatch, then restored
+		// so the real handler downstream reads them completely normally --
+		// this is the only way to see a JSON body's agentId field without
+		// requiring every legacy-protocol POST handler to separately
+		// cooperate with this middleware.
+		var legacyBody []byte
+		if isLegacyListener(r) && r.Method == http.MethodPost && r.Body != nil {
+			legacyBody, _ = io.ReadAll(r.Body)
+			r.Body = io.NopCloser(bytes.NewReader(legacyBody))
+		}
+
 		next.ServeHTTP(ww, r)
 		duration := time.Since(start)
 
@@ -132,6 +184,28 @@ func RequestLoggingMiddleware(next http.Handler) http.Handler {
 				"remote_addr", r.RemoteAddr,
 				"agent_id", r.URL.Query().Get("agentId"),
 			)
+
+			if status >= 200 && status < 300 && legacyProtocolRoutes[route] {
+				agentID := chi.URLParam(r, "agentId")
+				if agentID == "" {
+					agentID = r.URL.Query().Get("agentId")
+				}
+				if agentID == "" && len(legacyBody) > 0 {
+					var parsed legacyBodyAgentID
+					if json.Unmarshal(legacyBody, &parsed) == nil {
+						if parsed.AgentIDCamel != "" {
+							agentID = parsed.AgentIDCamel
+						} else {
+							agentID = parsed.AgentIDSnake
+						}
+					}
+					// A json.Unmarshal error here is not itself logged/handled --
+					// it just leaves agentID empty, which correctly routes this
+					// request to the unattributed table below rather than being
+					// dropped.
+				}
+				h.recordLegacyUsage(r.Context(), agentID, route, time.Now())
+			}
 		}
 	})
 }

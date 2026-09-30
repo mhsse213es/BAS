@@ -23,8 +23,9 @@ func TestRequestLoggingMiddleware_LogsAndRecordsMetrics(t *testing.T) {
 	slog.SetDefault(slog.New(slog.NewJSONHandler(&logBuf, nil)))
 	defer slog.SetDefault(prevLogger)
 
+	h := &Handler{}
 	r := chi.NewRouter()
-	r.Use(RequestLoggingMiddleware)
+	r.Use(h.RequestLoggingMiddleware)
 	r.Get("/api/widgets/{id}", func(w http.ResponseWriter, req *http.Request) {
 		w.WriteHeader(http.StatusCreated)
 	})

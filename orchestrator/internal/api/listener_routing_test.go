@@ -53,8 +53,9 @@ func TestLegacyListenerTag_LogsAndCountsDistinctly(t *testing.T) {
 	slog.SetDefault(slog.New(slog.NewJSONHandler(&logBuf, nil)))
 	defer slog.SetDefault(prev)
 
+	h := &Handler{}
 	r := chi.NewRouter()
-	r.Use(RequestLoggingMiddleware)
+	r.Use(h.RequestLoggingMiddleware)
 	r.Post("/api/legacytest/{id}", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusAccepted) })
 
 	counter := legacyListenerRequestsTotal.WithLabelValues("POST", "/api/legacytest/{id}", "202")
