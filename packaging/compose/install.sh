@@ -157,6 +157,7 @@ ADMIN_PASSWORD=""
 LOG_RETENTION_DAYS=""
 JWT_SECRET=""
 AGENT_SECRET=""
+BAS_APP_DB_PASSWORD=""
 SINK_SFTP_PORT=""
 SINK_SFTP_HOST=""
 SINK_SMTP_PORT=""
@@ -301,6 +302,17 @@ load_config() {
   fi
   [[ -z "$JWT_SECRET"   ]] && JWT_SECRET=$(openssl rand -hex 32)
   [[ -z "$AGENT_SECRET" ]] && AGENT_SECRET=$(openssl rand -hex 24)
+
+  # bas_app runtime DB password -- same priority order as JWT_SECRET/
+  # AGENT_SECRET above (existing .env, then generate). Never operator-
+  # configurable: unlike DB_PASSWORD (the bas_user admin credential), this
+  # is a purely internal orchestrator<->Postgres secret, so there is no
+  # setup.conf key or CLI flag for it -- only auto-generation and .env
+  # persistence.
+  if [[ -z "$BAS_APP_DB_PASSWORD" && -f "$existing_env" ]]; then
+    BAS_APP_DB_PASSWORD=$(grep -oP '(?<=^BAS_APP_DB_PASSWORD=).+' "$existing_env" 2>/dev/null || true)
+  fi
+  [[ -z "$BAS_APP_DB_PASSWORD" ]] && BAS_APP_DB_PASSWORD=$(openssl rand -hex 32)
 
   # Caldera keys — priority order:
   #   1. running Caldera container (ground truth — what is actually deployed)
@@ -1203,6 +1215,7 @@ POSTGRES_USER=bas_user
 POSTGRES_PASSWORD=${DB_PASSWORD}
 JWT_SECRET=${JWT_SECRET}
 AGENT_SECRET=${AGENT_SECRET}
+BAS_APP_DB_PASSWORD=${BAS_APP_DB_PASSWORD}
 SINK_SFTP_PORT=${SINK_SFTP_PORT}
 SINK_SFTP_HOST=${SINK_SFTP_HOST}
 SINK_SMTP_PORT=${SINK_SMTP_PORT}

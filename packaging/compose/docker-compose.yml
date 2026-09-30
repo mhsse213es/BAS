@@ -133,7 +133,13 @@ services:
       # sslmode=prefer encrypts when Postgres offers TLS (default in official image).
       # Production deployments with a certificate chain should use sslmode=require
       # or sslmode=verify-full with PGSSLROOTCERT set.
-      DATABASE_URL:     "postgres://${POSTGRES_USER:-bas_user}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-bas_platform}?sslmode=prefer"
+      #
+      # DATABASE_URL is the orchestrator's normal runtime connection -- bas_app,
+      # NOSUPERUSER/NOBYPASSRLS, owns nothing. DATABASE_ADMIN_URL is used only
+      # during startup schema bootstrap/bas_app provisioning, then closed. See
+      # docs/superpowers/specs/2026-09-30-runtime-role-separation-design.md.
+      DATABASE_URL:       "postgres://bas_app:${BAS_APP_DB_PASSWORD}@postgres:5432/${POSTGRES_DB:-bas_platform}?sslmode=prefer"
+      DATABASE_ADMIN_URL: "postgres://${POSTGRES_USER:-bas_user}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-bas_platform}?sslmode=prefer"
       JWT_SECRET:       ${JWT_SECRET}
       AGENT_SECRET:     ${AGENT_SECRET:-}
       HTTP_PORT:        "9443"
