@@ -140,6 +140,12 @@ services:
       # docs/superpowers/specs/2026-09-30-runtime-role-separation-design.md.
       DATABASE_URL:       "postgres://bas_app:${BAS_APP_DB_PASSWORD}@postgres:5432/${POSTGRES_DB:-bas_platform}?sslmode=prefer"
       DATABASE_ADMIN_URL: "postgres://${POSTGRES_USER:-bas_user}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-bas_platform}?sslmode=prefer"
+      # Also passed standalone (not just embedded in DATABASE_URL above) --
+      # config.Load() reads BAS_APP_DB_PASSWORD directly via os.Getenv, it
+      # never parses the DSN. Both references interpolate from the same
+      # compose variable (sourced from the one .env value install.sh
+      # writes), so they cannot diverge.
+      BAS_APP_DB_PASSWORD: ${BAS_APP_DB_PASSWORD}
       JWT_SECRET:       ${JWT_SECRET}
       AGENT_SECRET:     ${AGENT_SECRET:-}
       HTTP_PORT:        "9443"
