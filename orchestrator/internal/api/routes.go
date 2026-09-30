@@ -1,6 +1,7 @@
 package api
 
 import (
+	"crypto/subtle"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -73,11 +74,15 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 			return
 		}
 		if agentSecret != "" {
-			provided := req.URL.Query().Get("agentSecret")
+			// Prefer the X-Agent-Token header; the ?agentSecret= query param is a
+			// deprecated fallback kept only for agents predating the header switch
+			// (secrets in URLs leak into proxy/access logs — see B2). Constant-time
+			// compare to avoid a timing side channel.
+			provided := req.Header.Get("X-Agent-Token")
 			if provided == "" {
-				provided = req.Header.Get("X-Agent-Token")
+				provided = req.URL.Query().Get("agentSecret")
 			}
-			if provided != agentSecret {
+			if subtle.ConstantTimeCompare([]byte(provided), []byte(agentSecret)) != 1 {
 				http.Error(w, "unauthorized", http.StatusUnauthorized)
 				return
 			}

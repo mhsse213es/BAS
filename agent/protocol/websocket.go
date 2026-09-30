@@ -3,6 +3,7 @@ package protocol
 import (
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"net/url"
 	"strings"
 	"time"
@@ -44,12 +45,16 @@ func DialAgentWSWithDialer(serverURL, agentID, agentSecret string, dialer *webso
 	}
 	q := u.Query()
 	q.Set("agentId", agentID)
-	if agentSecret != "" {
-		q.Set("agentSecret", agentSecret)
-	}
 	u.RawQuery = q.Encode()
 
-	conn, _, err := dialer.Dial(u.String(), nil)
+	// Send the shared secret in a handshake header, NOT the URL — a secret in a
+	// query string leaks into proxy logs, LB logs and server access logs (B2).
+	var reqHeader http.Header
+	if agentSecret != "" {
+		reqHeader = http.Header{"X-Agent-Token": {agentSecret}}
+	}
+
+	conn, _, err := dialer.Dial(u.String(), reqHeader)
 	if err != nil {
 		return nil, fmt.Errorf("WS dial: %w", err)
 	}
