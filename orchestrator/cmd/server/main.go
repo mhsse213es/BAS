@@ -238,7 +238,56 @@ func main() {
 		}
 	}
 
-	// ── Database ──────────────────────────────────────────────────────────
+	// ── Database: bootstrap connection (bas_user) ───────────────────────────
+	// Schema DDL and bas_app provisioning run here, as the privileged
+	// bootstrap/schema-owner role. Closed once that work is done -- the
+	// application never holds this connection past startup. See
+	// docs/superpowers/specs/2026-09-30-runtime-role-separation-design.md.
+	adminCtx, adminCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	adminPool, err := db.Connect(adminCtx, cfg.DatabaseAdminURL)
+	adminCancel()
+	if err != nil {
+		log.Fatalf("[FATAL] db admin connect: %v", err)
+	}
+	log.Println("[+] PostgreSQL (admin) connected")
+
+	if err := db.EnsureSchema(context.Background(), adminPool); err != nil {
+		log.Fatalf("[FATAL] schema bootstrap: %v", err)
+	}
+	if err := db.EnsureContentSchema(context.Background(), adminPool); err != nil {
+		log.Fatalf("[FATAL] content schema bootstrap: %v", err)
+	}
+	if err := db.EnsureIOCSchema(context.Background(), adminPool); err != nil {
+		log.Fatalf("[FATAL] ioc schema bootstrap: %v", err)
+	}
+	if err := db.EnsureIOCEnrichmentSchema(context.Background(), adminPool); err != nil {
+		log.Fatalf("[FATAL] ioc enrichment schema bootstrap: %v", err)
+	}
+	if err := db.EnsureAgentGroupSchema(context.Background(), adminPool); err != nil {
+		log.Fatalf("[FATAL] agent group schema bootstrap: %v", err)
+	}
+	if err := db.EnsureAgentUninstallSchema(context.Background(), adminPool); err != nil {
+		log.Fatalf("[FATAL] agent uninstall schema bootstrap: %v", err)
+	}
+	if err := db.EnsureExerciseSchema(context.Background(), adminPool); err != nil {
+		log.Fatalf("[FATAL] exercise schema: %v", err)
+	}
+	log.Println("[+] Schema verified")
+
+	// ── bas_app provisioning ─────────────────────────────────────────────
+	// Idempotent every boot: creates bas_app if absent, syncs its password
+	// from BAS_APP_DB_PASSWORD, and grants exactly the runtime DML it needs.
+	// Must run after every schema call above, against every table those
+	// calls just created.
+	if err := db.EnsureAppRole(context.Background(), adminPool, cfg.AppDBPassword); err != nil {
+		log.Fatalf("[FATAL] bas_app provisioning: %v", err)
+	}
+	adminPool.Close()
+	log.Println("[+] bas_app provisioned")
+
+	// ── Database: runtime connection (bas_app) ───────────────────────────
+	// Every application code path from here on uses this pool -- the
+	// bootstrap connection above is already closed.
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	pool, err := db.Connect(ctx, cfg.DatabaseURL)
 	cancel()
@@ -246,27 +295,11 @@ func main() {
 		log.Fatalf("[FATAL] db connect: %v", err)
 	}
 	defer pool.Close()
-	log.Println("[+] PostgreSQL connected")
+	log.Println("[+] PostgreSQL (runtime) connected")
 
-	if err := db.EnsureSchema(context.Background(), pool); err != nil {
-		log.Fatalf("[FATAL] schema bootstrap: %v", err)
+	if err := assertRuntimeIdentity(context.Background(), pool); err != nil {
+		log.Fatalf("[FATAL] runtime identity check: %v", err)
 	}
-	if err := db.EnsureContentSchema(context.Background(), pool); err != nil {
-		log.Fatalf("[FATAL] content schema bootstrap: %v", err)
-	}
-	if err := db.EnsureIOCSchema(context.Background(), pool); err != nil {
-		log.Fatalf("[FATAL] ioc schema bootstrap: %v", err)
-	}
-	if err := db.EnsureIOCEnrichmentSchema(context.Background(), pool); err != nil {
-		log.Fatalf("[FATAL] ioc enrichment schema bootstrap: %v", err)
-	}
-	if err := db.EnsureAgentGroupSchema(context.Background(), pool); err != nil {
-		log.Fatalf("[FATAL] agent group schema bootstrap: %v", err)
-	}
-	if err := db.EnsureAgentUninstallSchema(context.Background(), pool); err != nil {
-		log.Fatalf("[FATAL] agent uninstall schema bootstrap: %v", err)
-	}
-	log.Println("[+] Schema verified")
 
 	// ── Seed ART content into Postgres (disk is the seed source, DB the runtime
 	// source of truth). Idempotent — unchanged techniques are left untouched and
@@ -533,9 +566,7 @@ func main() {
 	defer openaevScheduler.Stop()
 
 	// ── Exercise Engine ───────────────────────────────────────────────────
-	if err := db.EnsureExerciseSchema(context.Background(), pool); err != nil {
-		log.Fatalf("[FATAL] exercise schema: %v", err)
-	}
+	// Schema already ensured earlier, against the bootstrap connection.
 	exStore := exercise.NewStore(pool)
 	exChain := exercise.NewEvidenceChain(exStore)
 	var smtpInj *exercise.SMTPInjector
