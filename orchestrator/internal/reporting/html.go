@@ -3425,10 +3425,10 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
     <td style="font-weight:600">{{humanize .tactic}}</td>
     <td style="text-align:center;color:#0d9488;font-weight:700">{{.prevented}}</td>
     <td style="text-align:center;color:#d29922;font-weight:700">{{.detectedOnly}}</td>
-    <td style="text-align:center;{{if gt .missed 0}}color:#da3633;font-weight:700{{else}}color:#6e7681{{end}}">{{.missed}}</td>
+    <td style="text-align:center;{{if gt .missed 0.0}}color:#da3633;font-weight:700{{else}}color:#6e7681{{end}}">{{.missed}}</td>
     <td>
       <div class="tbar-wrap" style="height:9px;position:relative">
-        {{if gt .attempted 0}}
+        {{if gt .attempted 0.0}}
         <div style="position:absolute;left:0;top:0;height:100%;width:{{pctOf .prevented .attempted}}%;background:#0d9488;border-radius:4px 0 0 4px"></div>
         <div style="position:absolute;left:{{pctOf .prevented .attempted}}%;top:0;height:100%;width:{{pctOf .detectedOnly .attempted}}%;background:#d29922"></div>
         {{end}}
