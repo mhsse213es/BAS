@@ -226,6 +226,29 @@ func TestLoad_DatabaseAdminURLFromEnv(t *testing.T) {
 	}
 }
 
+// TestLoad_ToleratesStrayBreakglassEnvVar locks in the upgrade requirement
+// from docs/superpowers/specs/2026-09-30-runtime-role-separation-design.md:
+// an existing deployment's .env may still set the now-retired
+// BAS_DB_BREAKGLASS_PASSWORD (from before HardenRuntimeRole was removed).
+// Load() must not fail just because that stray var is present -- nothing
+// reads it anymore, so it should be silently ignored.
+func TestLoad_ToleratesStrayBreakglassEnvVar(t *testing.T) {
+	os.Setenv("DATABASE_URL", "postgres://bas_app:pw@localhost/bas_platform")
+	os.Setenv("DATABASE_ADMIN_URL", "postgres://bas_user:pw@localhost/bas_platform")
+	os.Setenv("JWT_SECRET", "test-secret")
+	os.Setenv("BAS_APP_DB_PASSWORD", "test-app-password")
+	os.Setenv("BAS_DB_BREAKGLASS_PASSWORD", "stray-value-from-an-old-.env")
+	defer os.Unsetenv("DATABASE_URL")
+	defer os.Unsetenv("DATABASE_ADMIN_URL")
+	defer os.Unsetenv("JWT_SECRET")
+	defer os.Unsetenv("BAS_APP_DB_PASSWORD")
+	defer os.Unsetenv("BAS_DB_BREAKGLASS_PASSWORD")
+
+	if _, err := Load("/nonexistent/config.json"); err != nil {
+		t.Fatalf("Load should tolerate a stray BAS_DB_BREAKGLASS_PASSWORD, got: %v", err)
+	}
+}
+
 func TestLoad_AppDBPasswordRequired(t *testing.T) {
 	os.Setenv("DATABASE_URL", "postgres://bas_app:pw@localhost/bas_platform")
 	os.Setenv("DATABASE_ADMIN_URL", "postgres://bas_user:pw@localhost/bas_platform")

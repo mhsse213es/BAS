@@ -161,6 +161,55 @@ func TestEnsureAppRole_AuditLogsUpdateDeleteRevoked(t *testing.T) {
 	})
 }
 
+// TestEnsureAppRole_GrantsCoverAllPublicTables is a completeness check
+// across every table in the public schema, not just the handful other
+// tests happen to touch by name -- by the time this runs, the shared test
+// harness (testutil.MustSharedTestDB) has already called all seven
+// Ensure*Schema functions, so this covers exercise-engine, IOC, agent
+// group/uninstall, and content tables too, not only the ones defined in
+// EnsureSchema itself.
+func TestEnsureAppRole_GrantsCoverAllPublicTables(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		if err := db.EnsureAppRole(ctx, pool, testAppPassword); err != nil {
+			t.Fatalf("EnsureAppRole: %v", err)
+		}
+
+		// The CTE must be MATERIALIZED: without a real optimization barrier,
+		// Postgres can evaluate has_table_privilege() against pg_catalog/
+		// information_schema rows before the table_schema='public' filter
+		// below ever applies (predicate reordering, not row order) --
+		// verified empirically, it fails with "relation \"collations\" does
+		// not exist" and similar for arbitrary system relations otherwise.
+		rows, err := pool.Query(ctx, `
+			WITH pub_tables AS MATERIALIZED (
+				SELECT table_name FROM information_schema.tables
+				WHERE table_schema = 'public' AND table_type = 'BASE TABLE'
+			)
+			SELECT table_name FROM pub_tables
+			WHERE NOT has_table_privilege('bas_app', 'public.' || quote_ident(table_name), 'SELECT')`)
+		if err != nil {
+			t.Fatalf("query ungranted tables: %v", err)
+		}
+		defer rows.Close()
+
+		var ungranted []string
+		for rows.Next() {
+			var name string
+			if err := rows.Scan(&name); err != nil {
+				t.Fatalf("scan: %v", err)
+			}
+			ungranted = append(ungranted, name)
+		}
+		if err := rows.Err(); err != nil {
+			t.Fatalf("rows: %v", err)
+		}
+		if len(ungranted) > 0 {
+			t.Fatalf("bas_app missing SELECT on: %v", ungranted)
+		}
+	})
+}
+
 func TestEnsureAppRole_DefaultPrivilegesCoverFutureTables(t *testing.T) {
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
 		ctx := context.Background()
