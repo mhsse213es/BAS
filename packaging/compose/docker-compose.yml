@@ -211,6 +211,14 @@ services:
       # cmd/server/main.go's checkCANotSilentlyRotated); leave unset for
       # normal operation.
       BAS_CONFIRM_NEW_CA: ${BAS_CONFIRM_NEW_CA:-}
+      # ── Legacy listener retirement (B2) — operator override ─────────────────
+      # BAS_LEGACY_LISTENER_ENABLED=false: Step 3 of the B2 retirement
+      # procedure, set only after GET /api/agents/legacy-migration-status
+      # reports 30 consecutive clean days and an operator has reviewed the
+      # evidence. Defaults true (every existing deployment unaffected). See
+      # cmd/server/main.go's legacyListenerShouldStart and
+      # docs/superpowers/specs/2026-09-30-b2-legacy-transport-retirement-design.md.
+      BAS_LEGACY_LISTENER_ENABLED: ${BAS_LEGACY_LISTENER_ENABLED:-}
       # How long a signed command envelope remains valid after issuance
       # (internal/ws/hub.go's commandEnvelopeTTLFromEnv); defaults to 60s if unset.
       COMMAND_ENVELOPE_TTL_SECONDS: ${COMMAND_ENVELOPE_TTL_SECONDS:-}

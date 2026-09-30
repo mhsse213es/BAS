@@ -132,6 +132,18 @@ func splitServerSANs(raw string) []string {
 	return out
 }
 
+// legacyListenerShouldStart is Step 4 of the B2 retirement procedure
+// (docs/superpowers/specs/2026-09-30-b2-legacy-transport-retirement-design.md):
+// an operator sets BAS_LEGACY_LISTENER_ENABLED=false after reviewing 30
+// consecutive clean days' evidence from GET /api/agents/legacy-migration-status,
+// then restarts -- this is the single check point that decides whether the
+// legacy listener's goroutine ever calls legacySrv.ListenAndServe() at all.
+// Extracted as its own function (rather than left inline) so it's directly
+// unit-testable without needing a live listener or database.
+func legacyListenerShouldStart(cfg config.Config) bool {
+	return cfg.LegacyListenerEnabled
+}
+
 func resolveDashboardTLSCert(cfg config.Config, fallback tls.Certificate) (tls.Certificate, error) {
 	if cfg.DashboardTLSCertPath == "" || cfg.DashboardTLSKeyPath == "" {
 		return fallback, nil
@@ -993,6 +1005,12 @@ func main() {
 		}
 	}()
 	go func() {
+		if !legacyListenerShouldStart(*cfg) {
+			log.Printf("[*] Legacy listener disabled via BAS_LEGACY_LISTENER_ENABLED=false -- :%d not bound", cfg.LegacyHTTPPort)
+			handler.AuditLogSystem(context.Background(), "legacy_listener.disabled", "",
+				map[string]any{"port": cfg.LegacyHTTPPort}, "ok")
+			return
+		}
 		log.Printf("[*] BAS Orchestrator legacy listener on :%d (temporary — retired by B2)", cfg.LegacyHTTPPort)
 		if err := legacySrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("[FATAL] legacy listen: %v", err)

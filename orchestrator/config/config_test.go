@@ -126,3 +126,36 @@ func TestLoad_DistinctPortsSucceed(t *testing.T) {
 		t.Fatalf("Load with all-default (distinct) ports should succeed, got: %v", err)
 	}
 }
+
+func TestLoad_LegacyListenerEnabledDefaultsTrue(t *testing.T) {
+	os.Setenv("DATABASE_URL", "postgres://test")
+	os.Setenv("JWT_SECRET", "test-secret")
+	os.Unsetenv("BAS_LEGACY_LISTENER_ENABLED")
+	defer os.Unsetenv("DATABASE_URL")
+	defer os.Unsetenv("JWT_SECRET")
+
+	cfg, err := Load("/nonexistent/config.json")
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if !cfg.LegacyListenerEnabled {
+		t.Error("expected LegacyListenerEnabled to default true when BAS_LEGACY_LISTENER_ENABLED is unset -- every existing deployment must behave unchanged")
+	}
+}
+
+func TestLoad_LegacyListenerEnabledFalseOverride(t *testing.T) {
+	os.Setenv("DATABASE_URL", "postgres://test")
+	os.Setenv("JWT_SECRET", "test-secret")
+	os.Setenv("BAS_LEGACY_LISTENER_ENABLED", "false")
+	defer os.Unsetenv("DATABASE_URL")
+	defer os.Unsetenv("JWT_SECRET")
+	defer os.Unsetenv("BAS_LEGACY_LISTENER_ENABLED")
+
+	cfg, err := Load("/nonexistent/config.json")
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.LegacyListenerEnabled {
+		t.Error("expected LegacyListenerEnabled=false when BAS_LEGACY_LISTENER_ENABLED=false")
+	}
+}

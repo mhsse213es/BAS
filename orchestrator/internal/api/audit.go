@@ -54,6 +54,31 @@ func (h *Handler) auditLog(r *http.Request, action, resource string, detail map[
 	h.auditLogAs(r, actorID, action, resource, detail, outcome)
 }
 
+// AuditLogSystem records a system/startup-time event with no HTTP request
+// in scope (e.g. main.go detecting BAS_LEGACY_LISTENER_ENABLED=false at
+// boot) -- auditLogAs above requires *http.Request (it reads r.Header and
+// r.RemoteAddr unconditionally, so passing nil would panic), which no
+// startup-time caller has. Exported: cmd/server/main.go (package main)
+// calls this directly at startup, matching the existing cross-package
+// convention (ReapNeverStartedRuns, StartRevalidationLoop, etc). actor_id
+// is left empty; GetAuditLogs' existing query already renders an empty
+// actor_id as "system" (COALESCE(u.username, CASE WHEN a.actor_id=''
+// THEN 'system' ...)), so this needs no new display-side handling.
+func (h *Handler) AuditLogSystem(ctx context.Context, action, resource string, detail map[string]any, outcome string) {
+	detailJSON := []byte("{}")
+	if detail != nil {
+		if b, err := json.Marshal(detail); err == nil {
+			detailJSON = b
+		}
+	}
+	go func() {
+		_, _ = h.db.Exec(context.Background(),
+			`INSERT INTO audit_logs (actor_id, action, resource, detail, ip, outcome)
+			 VALUES ('', $1, $2, $3, '', $4)`,
+			action, resource, detailJSON, outcome)
+	}()
+}
+
 // GetAuditLogs returns audit log entries, most-recent first. Admin only.
 // Query params: limit (default 100, max 500), offset, action, actor (username).
 // GET /api/audit-logs

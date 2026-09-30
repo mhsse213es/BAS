@@ -129,6 +129,17 @@ type Config struct {
 	EnrollHTTPPort  int    `json:"enroll_http_port,omitempty"`
 	LegacyHTTPPort  int    `json:"legacy_http_port,omitempty"`
 
+	// LegacyListenerEnabled (BAS_LEGACY_LISTENER_ENABLED) gates the :9000
+	// plaintext legacy listener. Defaults true -- every existing deployment
+	// keeps working unchanged. An operator sets this false as Step 3 of the
+	// B2 retirement procedure, after GET /api/agents/legacy-migration-status
+	// has reported 30 consecutive clean days AND they've reviewed the
+	// evidence -- see
+	// docs/superpowers/specs/2026-09-30-b2-legacy-transport-retirement-design.md.
+	// Reversible: setting it back to true (or unsetting it) and restarting
+	// re-enables the listener.
+	LegacyListenerEnabled bool `json:"legacy_listener_enabled,omitempty"`
+
 	// DashboardHTTPPort serves the browser dashboard (StaticHandler + JWT
 	// API + /ws/browser) over TLS with NO client-cert requirement --
 	// separate from the mTLS agent listener (HTTPPort) so a browser (which
@@ -171,6 +182,7 @@ func Load(path string) (*Config, error) {
 		EnrollHTTPPort:    9444,
 		LegacyHTTPPort:    9000,
 		DashboardHTTPPort: 9543,
+		LegacyListenerEnabled: true,
 	}
 
 	// Try file first (local dev)
@@ -328,6 +340,11 @@ func Load(path string) (*Config, error) {
 	}
 	if v := os.Getenv("BAS_SERVER_SANS"); v != "" {
 		cfg.ServerSANs = v
+	}
+	if v := os.Getenv("BAS_LEGACY_LISTENER_ENABLED"); v != "" {
+		if b, err := strconv.ParseBool(v); err == nil {
+			cfg.LegacyListenerEnabled = b
+		}
 	}
 	if v := os.Getenv("HTTP_PORT_ENROLL"); v != "" {
 		fmt.Sscanf(v, "%d", &cfg.EnrollHTTPPort)
