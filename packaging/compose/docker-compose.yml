@@ -136,11 +136,6 @@ services:
       DATABASE_URL:     "postgres://${POSTGRES_USER:-bas_user}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-bas_platform}?sslmode=prefer"
       JWT_SECRET:       ${JWT_SECRET}
       AGENT_SECRET:     ${AGENT_SECRET:-}
-      # DB role hardening (opt-in): set to a strong password to demote the
-      # orchestrator's Postgres role to NOSUPERUSER/NOBYPASSRLS at startup and
-      # create a `bas_breakglass` recovery superuser with this password. Blank =
-      # inactive (role unchanged).
-      BAS_DB_BREAKGLASS_PASSWORD: ${BAS_DB_BREAKGLASS_PASSWORD:-}
       HTTP_PORT:        "9443"
       HTTP_PORT_ENROLL: "9444"
       HTTP_PORT_LEGACY: "9000"

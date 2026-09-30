@@ -60,17 +60,11 @@ type Config struct {
 	// live MISP/OpenCTI above overlay on top when configured).
 	TIBundleDir string `json:"ti_bundle_dir,omitempty"`
 
-	// DB role hardening (opt-in): when set, the orchestrator demotes its runtime
-	// Postgres role to NOSUPERUSER/NOBYPASSRLS at startup (so RLS can enforce)
-	// after creating a bas_breakglass recovery superuser with this password.
-	// Unset = hardening inactive (default). Env: BAS_DB_BREAKGLASS_PASSWORD.
-	DBBreakGlassPassword string `json:"db_breakglass_password,omitempty"`
-
 	// API rate limiting (opt-in): a single global token-bucket limit protecting
 	// against a runaway client, not a per-tenant/commercial quota system (that
 	// belongs to the future Audspect Cloud offering, not this on-prem product).
 	// Disabled by default so existing installs are never surprise-limited on
-	// upgrade -- same discipline as DBBreakGlassPassword above.
+	// upgrade.
 	// Env: API_RATE_LIMIT_ENABLED=true, API_RATE_LIMIT=1000/min, API_RATE_BURST=200.
 	RateLimitEnabled bool `json:"rate_limit_enabled,omitempty"`
 	RateLimitPerMin  int  `json:"rate_limit_per_min,omitempty"`
@@ -101,7 +95,7 @@ type Config struct {
 
 	// MetricsToken, when set, requires "Authorization: Bearer <token>" on
 	// GET /metrics. Empty (the default) leaves it open -- same opt-in
-	// posture as DBBreakGlassPassword and RateLimitEnabled.
+	// posture as RateLimitEnabled.
 	MetricsToken string `json:"metrics_token,omitempty"`
 
 	// Agent trust model (B1/B3) — deployment CA + per-agent mTLS.
@@ -200,9 +194,6 @@ func Load(path string) (*Config, error) {
 	// Environment variables override file values (Kubernetes / Docker)
 	if v := os.Getenv("DATABASE_URL"); v != "" {
 		cfg.DatabaseURL = v
-	}
-	if v := os.Getenv("BAS_DB_BREAKGLASS_PASSWORD"); v != "" {
-		cfg.DBBreakGlassPassword = v
 	}
 	if v := os.Getenv("JWT_SECRET"); v != "" {
 		cfg.JWTSecret = v

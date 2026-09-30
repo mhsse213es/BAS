@@ -136,8 +136,7 @@ type Handler struct {
 	cancelGracePeriod time.Duration
 	// metricsToken, when non-empty, requires "Authorization: Bearer
 	// <token>" on GET /metrics. Empty (the default) leaves it open --
-	// same opt-in-by-default-off posture as BAS_DB_BREAKGLASS_PASSWORD
-	// and API rate limiting.
+	// same opt-in-by-default-off posture as API rate limiting.
 	metricsToken string
 	// metricsRegistry is the observability metrics registry.
 	// nil when not configured.
