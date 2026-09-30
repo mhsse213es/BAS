@@ -207,6 +207,7 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 
 		// Viewer + Analyst + Admin
 		r.Get("/api/agents", h.GetAgents)
+		r.Get("/api/agents/legacy-migration-status", h.GetLegacyMigrationStatus)
 		r.Get("/api/agents/download/{platform}", h.DownloadAgent)
 		r.Get("/api/scenarios", h.ListScenarios)
 		r.Get("/api/scenarios/{id}", h.GetScenario)
