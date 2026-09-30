@@ -34,11 +34,24 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# CORS: never wildcard for a security product's API. Origins are read from
+# ALLOWED_ORIGINS (comma-separated); default to local console origins. The
+# console is served same-origin by the Go orchestrator, so a locked list does
+# not break it. Methods/headers are scoped to what the API actually uses.
+_allowed_origins = [
+    o.strip()
+    for o in os.getenv(
+        "ALLOWED_ORIGINS",
+        "http://localhost:9000,https://localhost:9443",
+    ).split(",")
+    if o.strip()
+]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=_allowed_origins,
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type"],
 )
 
 

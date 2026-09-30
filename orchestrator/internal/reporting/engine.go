@@ -2715,13 +2715,26 @@ type DetectionSummary struct {
 func buildDetectionSummary(results []models.SimulationResult) DetectionSummary {
 	var s DetectionSummary
 	for _, r := range results {
-		if len(r.Events) > 0 {
+		// Telemetry is "observed" if the run carries EITHER raw event IDs OR an
+		// explicit purple-team detection verdict — otherwise detection reads as
+		// N/A even when the agent's post-run sweep produced verdicts.
+		if len(r.Events) > 0 || r.DetectionVerdict != "" {
 			s.TelemetryObserved = true
 		}
 		if r.Result != models.ResultFail {
 			continue
 		}
 		s.ExecutedUnprevented++
+		// Prefer the explicit DetectionVerdict (the agent's post-run alert-sweep
+		// result) when present; fall back to event-ID classification otherwise.
+		switch strings.ToLower(r.DetectionVerdict) {
+		case "detected":
+			s.Detected++
+			continue
+		case "undetected":
+			s.Undetected++
+			continue
+		}
 		switch classifyDetection(r.Events).Status {
 		case "Detected":
 			s.Detected++

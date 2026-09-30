@@ -280,6 +280,12 @@ func Load(path string) (*Config, error) {
 	if cfg.JWTSecret == "" {
 		return nil, fmt.Errorf("jwt_secret required (set JWT_SECRET env var or config file)")
 	}
+	// HS256 token security rests entirely on the secret's entropy. Reject a
+	// short/weak secret at boot rather than issue trivially-forgeable tokens.
+	// 32 bytes matches the SHA-256 output size the HMAC keys into.
+	if len(cfg.JWTSecret) < 32 {
+		return nil, fmt.Errorf("jwt_secret too short (%d chars): require at least 32 characters of high-entropy secret", len(cfg.JWTSecret))
+	}
 
 	// ── Security: warn when sensitive secrets live in the JSON file ────────
 	// Secrets in config.json are readable by anyone with filesystem access.

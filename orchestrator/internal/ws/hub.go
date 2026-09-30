@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"net/url"
+	"strings"
 	"sync"
 	"time"
 
@@ -14,7 +16,25 @@ import (
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  4096,
 	WriteBufferSize: 4096,
-	CheckOrigin:     func(r *http.Request) bool { return true },
+	CheckOrigin:     checkOrigin,
+}
+
+// checkOrigin defends the browser WebSocket channel against cross-site
+// WebSocket hijacking. Non-browser clients (the endpoint agent) send no Origin
+// header — those are allowed, since CSWSH is only a browser threat and the
+// agent path is separately credential-gated. Browser requests must be
+// same-origin: the Origin's host must equal the request Host. A blank/parse-
+// failed Origin from a browser is rejected.
+func checkOrigin(r *http.Request) bool {
+	origin := r.Header.Get("Origin")
+	if origin == "" {
+		return true // non-browser client (agent, CLI) — no Origin to forge
+	}
+	u, err := url.Parse(origin)
+	if err != nil {
+		return false
+	}
+	return strings.EqualFold(u.Host, r.Host)
 }
 
 const (

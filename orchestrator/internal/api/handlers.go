@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -249,7 +250,9 @@ func (h *Handler) validateAgentAuth(r *http.Request) bool {
 	if provided == "" {
 		provided = r.URL.Query().Get("agentSecret")
 	}
-	return provided == h.agentSecret
+	// Constant-time compare — a plain == leaks the secret's length and a
+	// prefix-timing side channel on a security product's agent-auth path.
+	return subtle.ConstantTimeCompare([]byte(provided), []byte(h.agentSecret)) == 1
 }
 
 // GET /api/agents/ping — token validation probe used by the GUI installer.
