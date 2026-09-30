@@ -278,7 +278,7 @@ func TestGetAuditPack_ZIPStructure(t *testing.T) {
 				runEntry = f.Name
 			}
 		}
-		for _, want := range []string{"/README.txt", "/summary.json", "/executive-report.html", "/agent-inventory.json", "/MANIFEST.txt"} {
+		for _, want := range []string{"/README.txt", "/summary.json", "/executive-report.html", "/agent-inventory.json", "/MANIFEST.sha256", "/SIGNATURE.txt", "/attestation.json"} {
 			if !hasSuffix(want) {
 				var have []string
 				for _, f := range zr.File {
