@@ -85,6 +85,43 @@ not yet support -- moving to a service like that is a code change here, not
 just a config change, and should be scoped before Phase 0 selects a
 provider.
 
+## Orchestrator download endpoint (C2)
+
+The orchestrator's own `/api/agents/download` endpoint used to serve
+binaries built independently inside `orchestrator/Dockerfile` -- a
+second, unsigned copy of the same software the customer ZIP already
+signs. `windows-build.ps1` now patches the orchestrator image after
+Windows signing (step "5c") so the endpoint serves the *same signed
+bytes* as the ZIP: `bas-agent-windows-amd64.exe`,
+`bas-agent-windows-legacy-amd64.exe`,
+`bas-agent-windows-legacy-amd64-setup.zip` are copied in verbatim;
+`bas-agent-windows-amd64-setup.zip` is rebuilt from the signed
+`BASAgent-Setup-$Version.exe` under the image's internal filename
+(`Audspect_Agent.exe`). `BINARIES.sha256` is regenerated for just the 2
+changed entries and re-signed with the existing RSA key.
+
+This only works if the orchestrator image already exists under
+`$OrchestratorTag` when `windows-build.ps1` reaches this step (true for
+a normal run; also true with `-SkipBuild` against a previously-built
+tag, as the dev-build verification case uses).
+
+**Still unsigned after this:** `darwin-amd64`/`darwin-arm64` (no macOS
+signing pipeline exists yet -- see "macOS signing" below) and the Linux
+raw binaries/`.deb`/`.rpm` packages (no OS-native signing mechanism
+applies to Linux). A separate, already-logged bug
+(`BINARIES.sha256` excludes `.zip`/`.deb`/`.rpm` filenames from its
+integrity check entirely) means those packaged downloads may currently
+fail integrity verification regardless of signing status -- that's
+tracked independently, not fixed by this pipeline.
+
+**Verifying the fix manually:**
+```powershell
+$cid = docker create bas-orchestrator:<version>
+docker cp "${cid}:/agents/bas-agent-windows-amd64.exe" .\check.exe
+docker rm $cid
+(Get-AuthenticodeSignature -FilePath .\check.exe).Status   # expect: Valid
+```
+
 ## macOS signing (not yet wired into any build -- no macOS artifact is
 produced by windows-build.ps1 today)
 
