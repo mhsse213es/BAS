@@ -226,3 +226,58 @@ func TestDownloadAgent_OnePlatformMissingFromManifestRefusesOnlyThatOne(t *testi
 		}
 	}
 }
+
+// TestBinariesManifestDockerfileCoversAllAgentFiles parses the real
+// orchestrator/Dockerfile's binaries-manifest stage and asserts its
+// sha256sum argument list covers every agentFiles entry. The two tests
+// above build their own manifest FROM agentFiles, so they only prove the
+// handler serves whatever is listed -- they can never catch agentFiles
+// and the Dockerfile drifting apart, which is exactly how C3 happened (5
+// platforms were served but never reached BINARIES.sha256, and nothing
+// caught it). This test reads the actual build input instead, so adding
+// a 12th platform to agentFiles without a matching Dockerfile entry
+// fails here.
+func TestBinariesManifestDockerfileCoversAllAgentFiles(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("..", "..", "Dockerfile"))
+	if err != nil {
+		t.Fatalf("read orchestrator/Dockerfile: %v", err)
+	}
+	lines := strings.Split(string(data), "\n")
+
+	start := -1
+	for i, line := range lines {
+		if strings.Contains(line, "sha256sum") {
+			start = i
+			break
+		}
+	}
+	if start == -1 {
+		t.Fatal("orchestrator/Dockerfile has no sha256sum command -- has the binaries-manifest stage been renamed or restructured? Update this test's parsing to match.")
+	}
+
+	listed := map[string]bool{}
+	for i := start; i < len(lines); i++ {
+		line := lines[i]
+		done := strings.Contains(line, "> /agents/BINARIES.sha256")
+		line = strings.ReplaceAll(line, "> /agents/BINARIES.sha256", "")
+		line = strings.ReplaceAll(line, "\\", "")
+		for _, tok := range strings.Fields(line) {
+			switch tok {
+			case "RUN", "cd", "/agents", "&&", "sha256sum":
+				continue
+			}
+			listed[tok] = true
+		}
+		if done {
+			break
+		}
+	}
+
+	for _, entry := range agentFiles {
+		if !listed[entry.filename] {
+			t.Errorf("orchestrator/Dockerfile's binaries-manifest sha256sum command does not list %q -- "+
+				"agentFiles can serve this platform but BINARIES.sha256 would never cover it, "+
+				"which is exactly the C3 defect recurring", entry.filename)
+		}
+	}
+}
