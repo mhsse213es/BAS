@@ -281,3 +281,59 @@ func TestBinariesManifestDockerfileCoversAllAgentFiles(t *testing.T) {
 		}
 	}
 }
+
+// TestDockerfileAgentBuilderStageObfuscatesWithGarble guards against the
+// agent-builder stage silently regressing to a plain `go build` (as it
+// did for ~5 months, 2026-05-27 to 2026-10-01, on a now-stale "x/sys
+// assembly incompatible with garble" assumption -- see D2's design doc).
+// It pairs every `-o /agents/bas-agent-...` output in the stage with an
+// immediately-preceding, correctly-scoped garble invocation, rather than
+// checking a fixed count, so a future platform added to this stage
+// without obfuscation fails here too.
+func TestDockerfileAgentBuilderStageObfuscatesWithGarble(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("..", "..", "Dockerfile"))
+	if err != nil {
+		t.Fatalf("read orchestrator/Dockerfile: %v", err)
+	}
+	content := string(data)
+
+	start := strings.Index(content, "AS agent-builder")
+	if start == -1 {
+		t.Fatal("orchestrator/Dockerfile has no 'AS agent-builder' stage -- has it been renamed? Update this test's parsing to match.")
+	}
+	end := strings.Index(content, "AS agent-legacy-builder")
+	if end == -1 || end < start {
+		t.Fatal("orchestrator/Dockerfile has no 'AS agent-legacy-builder' stage after agent-builder -- has stage order changed? Update this test's parsing to match.")
+	}
+	stage := content[start:end]
+
+	// Checked against the whole file, not the stage-scoped substring: this
+	// stale comment sits on the line immediately ABOVE "FROM ... AS
+	// agent-builder", so it precedes (and is excluded by) `start`, which is
+	// indexed from "AS agent-builder" itself. The string is unique to this
+	// one historical comment in this file, so a whole-file check carries no
+	// risk of a false match elsewhere.
+	if strings.Contains(content, "x/sys assembly is incompatible with garble") {
+		t.Error("orchestrator/Dockerfile still carries the stale x/sys-incompatibility comment -- D2's spike found this claim no longer holds for the pinned garble version; remove it")
+	}
+
+	for _, line := range strings.Split(stage, "\n") {
+		if !strings.Contains(line, "-o /agents/bas-agent-") {
+			continue
+		}
+		// Each build line is independent (joined by "&&" across the RUN
+		// block's backslash continuations), so the garble invocation must
+		// appear on the SAME line as its own "-o" output, not merely
+		// somewhere earlier in the stage.
+		if !strings.Contains(line, "garble -literals build") {
+			t.Errorf("agent-builder line producing a bas-agent binary is not garble-wrapped: %q", strings.TrimSpace(line))
+		}
+		if !strings.Contains(line, "GOGARBLE='audspect/*'") {
+			t.Errorf("agent-builder line producing a bas-agent binary is missing the GOGARBLE='audspect/*' scope: %q", strings.TrimSpace(line))
+		}
+	}
+
+	if !strings.Contains(stage, "go install mvdan.cc/garble@v0.17.0") {
+		t.Error("agent-builder stage does not install garble v0.17.0 -- each Dockerfile stage is independent and does not inherit the orchestrator builder stage's install")
+	}
+}
