@@ -227,12 +227,6 @@ New-Item -ItemType Directory -Force -Path "$OutDir\systemd" | Out-Null
 # -- 4. Save Docker images (.tar -- docker load accepts both .tar and .tar.gz) -
 Log "Saving Docker images (this may take a few minutes)..."
 
-Log "  Saving $OrchestratorTag..."
-docker save $OrchestratorTag -o "$OutDir\images\bas-orchestrator-$Version.tar"
-if ($LASTEXITCODE -ne 0) { Err "Failed to save orchestrator image." }
-$sizeMB = [math]::Round((Get-Item "$OutDir\images\bas-orchestrator-$Version.tar").Length / 1MB)
-Log "  Saved: bas-orchestrator-$Version.tar (${sizeMB}MB)"
-
 Log "  Saving postgres:16-alpine..."
 docker save postgres:16-alpine -o "$OutDir\images\postgres-16-alpine.tar"
 if ($LASTEXITCODE -ne 0) { Err "Failed to save postgres:16-alpine image." }
@@ -386,6 +380,12 @@ Pop-Location
 
 # -- 5d. Sign Windows executables (D1) ----------------------------------------
 . "$RepoRoot\packaging\signing\sign-windows.ps1"
+# verify-windows-signature.ps1 defines Test-AuthenticodeSignature, which
+# Update-OrchestratorAgentArtifacts (step 5c, below) re-verifies signatures
+# with before patching -- must be loaded before that call site, not only
+# at 7c's later release gate where this file is also dot-sourced.
+. "$RepoRoot\packaging\signing\verify-windows-signature.ps1"
+. "$RepoRoot\packaging\signing\sign-orchestrator-artifacts.ps1"
 
 # @(...) -- Where-Object on 0 or 1 surviving matches returns a bare scalar
 # (or $null), not a single-element array; under this script's
@@ -504,26 +504,35 @@ if ($LASTEXITCODE -ne 0) {
         if ($manExit -ne 0) { Err "Failed to sign BINARIES.sha256." }
         else { Log "  Manifest signed." }
 
-        # Bake BINARIES.sha256.sig into the orchestrator image.
-        # The sig is generated here (after the first build) so it cannot be
-        # included in the initial docker build. A one-layer patch image adds it
-        # without rebuilding the orchestrator — fast (no recompilation).
-        if (Test-Path "$BinManifestPath.sig") {
-            Log "Baking BINARIES.sha256.sig into orchestrator image..."
-            $patchCtx = Join-Path $env:TEMP "bas-sig-patch-$(Get-Random)"
-            New-Item -ItemType Directory -Force -Path $patchCtx | Out-Null
-            Copy-Item "$BinManifestPath.sig" "$patchCtx\BINARIES.sha256.sig"
-            [System.IO.File]::WriteAllText(
-                "$patchCtx\Dockerfile",
-                "FROM $OrchestratorTag`nCOPY BINARIES.sha256.sig /agents/BINARIES.sha256.sig`n"
-            )
-            docker build -q -t $OrchestratorTag $patchCtx | Out-Null
-            if ($LASTEXITCODE -ne 0) { Warn "  Patch build failed - sig must be volume-mounted at deploy time." }
-            else { Log "  BINARIES.sha256.sig baked into $OrchestratorTag." }
-            Remove-Item -Recurse -Force $patchCtx -ErrorAction SilentlyContinue
+        # C2: inject D1's signed Windows artifacts (and a manifest that
+        # covers them) into the orchestrator image, in the same one-layer
+        # patch this section already used for just the signature. This
+        # replaces that narrower patch -- it's now folded into the richer
+        # one below, which also bakes BINARIES.sha256.sig.
+        $orchestratorPatched = Update-OrchestratorAgentArtifacts -OrchestratorTag $OrchestratorTag `
+            -OutDir $OutDir -Version $Version -OrchestratorDir $OrchestratorDir
+        if (-not $orchestratorPatched -and $WindowsSigningRequired) {
+            Err "Failed to inject signed Windows artifacts into the orchestrator image, and Windows signing is required for this build."
+        } elseif (-not $orchestratorPatched) {
+            Warn "  Could not inject signed Windows artifacts into the orchestrator image (not required for this build) -- it will serve its own independently-built, unsigned copies."
+        } else {
+            Log "  Signed Windows artifacts + regenerated BINARIES.sha256 baked into $OrchestratorTag."
         }
     }
 }
+
+# Save the orchestrator image AFTER the patch above, not before --
+# docker save produced the tar that install.sh actually `docker load`s on
+# the customer's machine, and saving it before this patch (the original
+# order) meant the shipped tar never contained the patched bytes at all,
+# even though the local daemon's tag was correctly patched. One save
+# call now covers every path: patched-and-required, patched-not-required,
+# skipped-not-required, and plain dev build with no cert at all.
+Log "  Saving $OrchestratorTag..."
+docker save $OrchestratorTag -o "$OutDir\images\bas-orchestrator-$Version.tar"
+if ($LASTEXITCODE -ne 0) { Err "Failed to save orchestrator image." }
+$orchSizeMB = [math]::Round((Get-Item "$OutDir\images\bas-orchestrator-$Version.tar").Length / 1MB)
+Log "  Saved: bas-orchestrator-$Version.tar (${orchSizeMB}MB)"
 
 # Copy manifest alongside the standalone Windows exe as a side-by-side fallback.
 # If rsrc.syso was not generated, Windows will use this external manifest file
