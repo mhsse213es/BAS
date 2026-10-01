@@ -464,13 +464,19 @@ $BinManifestPath = Join-Path $OutDir "BINARIES.sha256"
 # distroless has no shell/cat - use docker create+cp which works at filesystem level.
 $tmpCID = docker create $OrchestratorTag 2>$null
 if ($LASTEXITCODE -ne 0) {
-    Warn "  docker create failed - cannot extract manifest. Agent integrity checks disabled."
+    # A required build can't fall through to Update-OrchestratorAgentArtifacts
+    # at all when this branch is taken (it's never called below) -- without
+    # this Err, a customer build whose image lost its manifest would ship
+    # Docker-built unsigned Windows binaries with exit code 0.
+    if ($WindowsSigningRequired) { Err "  docker create failed - cannot extract manifest, and Windows signing is required for this build." }
+    else { Warn "  docker create failed - cannot extract manifest. Agent integrity checks disabled." }
 } else {
     docker cp "${tmpCID}:/agents/BINARIES.sha256" $BinManifestPath 2>$null | Out-Null
     $cpExit = $LASTEXITCODE
     docker rm $tmpCID 2>$null | Out-Null
     if ($cpExit -ne 0 -or -not (Test-Path $BinManifestPath) -or (Get-Item $BinManifestPath).Length -eq 0) {
-        Warn "  Could not extract BINARIES.sha256 from image - agent integrity checks disabled."
+        if ($WindowsSigningRequired) { Err "  Could not extract BINARIES.sha256 from image, and Windows signing is required for this build." }
+        else { Warn "  Could not extract BINARIES.sha256 from image - agent integrity checks disabled." }
     } else {
         $entryCount = (Get-Content $BinManifestPath | Where-Object { $_ -ne "" }).Count
         Log "  $entryCount entries extracted from image"
@@ -510,10 +516,10 @@ if ($LASTEXITCODE -ne 0) {
         # replaces that narrower patch -- it's now folded into the richer
         # one below, which also bakes BINARIES.sha256.sig.
         $orchestratorPatched = Update-OrchestratorAgentArtifacts -OrchestratorTag $OrchestratorTag `
-            -OutDir $OutDir -Version $Version -OrchestratorDir $OrchestratorDir
-        if (-not $orchestratorPatched -and $WindowsSigningRequired) {
+            -OutDir $OutDir -Version $Version -OrchestratorDir $OrchestratorDir -ExpectedThumbprint $WindowsCertThumbprint
+        if ($orchestratorPatched -ne $true -and $WindowsSigningRequired) {
             Err "Failed to inject signed Windows artifacts into the orchestrator image, and Windows signing is required for this build."
-        } elseif (-not $orchestratorPatched) {
+        } elseif ($orchestratorPatched -ne $true) {
             Warn "  Could not inject signed Windows artifacts into the orchestrator image (not required for this build) -- it will serve its own independently-built, unsigned copies."
         } else {
             Log "  Signed Windows artifacts + regenerated BINARIES.sha256 baked into $OrchestratorTag."

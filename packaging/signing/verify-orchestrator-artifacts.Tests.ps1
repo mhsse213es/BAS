@@ -86,7 +86,8 @@ Describe "Update-OrchestratorAgentArtifacts" {
     AfterAll {
         docker rmi $script:FixtureTag -f 2>$null | Out-Null
         Remove-Item $script:OutDir -Recurse -Force -ErrorAction SilentlyContinue
-        foreach ($cert in @($script:TestCert, $script:UntrustedCert)) {
+        foreach ($cert in @($script:TestCert, $script:UntrustedCert, $script:SecondTrustedCert)) {
+            if (-not $cert) { continue }
             foreach ($storeSpec in @(@("My","CurrentUser"), @("Root","LocalMachine"), @("TrustedPublisher","LocalMachine"))) {
                 $s = New-Object System.Security.Cryptography.X509Certificates.X509Store($storeSpec[0], $storeSpec[1])
                 $s.Open("ReadWrite")
@@ -95,17 +96,33 @@ Describe "Update-OrchestratorAgentArtifacts" {
                 $s.Close()
             }
         }
+        # A successful patch now also overwrites orchestrator/agents/BINARIES.sha256(.sig)
+        # (I3) -- those are real, tracked files in this repo, not test fixtures.
+        # Revert any test-run pollution the same way windows-build.ps1's own
+        # E2E verification does.
+        $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
+        Push-Location $repoRoot
+        git checkout -- orchestrator/agents/BINARIES.sha256 orchestrator/agents/BINARIES.sha256.sig 2>$null
+        Pop-Location
     }
 
     It "patches the image so each extracted artifact carries a valid Authenticode signature" {
-        $result = Update-OrchestratorAgentArtifacts -OrchestratorTag $script:FixtureTag -OutDir $script:OutDir -Version $script:Version -OrchestratorDir $script:OrchestratorDir
+        $result = Update-OrchestratorAgentArtifacts -OrchestratorTag $script:FixtureTag -OutDir $script:OutDir -Version $script:Version -OrchestratorDir $script:OrchestratorDir -ExpectedThumbprint $script:TestCert.Thumbprint
         $result | Should Be $true
+        # A leaked native-command stdout (the C1 regression class) turns
+        # this into a 2+-element array, which PowerShell treats as truthy
+        # regardless of contents -- assert the scalar type, not just the
+        # value, so that class of bug fails this test even when the
+        # array's own last element happens to be $true.
+        ($result -is [bool]) | Should Be $true
 
         $extractDir = Join-Path $env:TEMP "orch-patch-extract-$(Get-Random)"
         New-Item -ItemType Directory -Force -Path $extractDir | Out-Null
         $cid = docker create $script:FixtureTag
-        docker cp "${cid}:/agents/bas-agent-windows-amd64.exe" "$extractDir\bas-agent-windows-amd64.exe" | Out-Null
-        docker cp "${cid}:/agents/bas-agent-windows-legacy-amd64.exe" "$extractDir\bas-agent-windows-legacy-amd64.exe" | Out-Null
+        foreach ($f in @("bas-agent-windows-amd64.exe", "bas-agent-windows-legacy-amd64.exe",
+                         "bas-agent-windows-legacy-amd64-setup.zip", "bas-agent-windows-amd64-setup.zip")) {
+            docker cp "${cid}:/agents/$f" "$extractDir\$f" | Out-Null
+        }
         docker rm $cid | Out-Null
 
         $sig1 = Get-AuthenticodeSignature -FilePath "$extractDir\bas-agent-windows-amd64.exe"
@@ -116,22 +133,79 @@ Describe "Update-OrchestratorAgentArtifacts" {
         $sig2.Status | Should Be "Valid"
         $sig2.SignerCertificate.Thumbprint | Should Be $script:TestCert.Thumbprint
 
+        # Both setup zips carry a signed exe inside them, not just a signed
+        # exe alongside them -- unpack and check the actual payload a user
+        # would run.
+        Expand-Archive -Path "$extractDir\bas-agent-windows-legacy-amd64-setup.zip" -DestinationPath "$extractDir\legacy-unzipped" -Force
+        $sig3 = Get-AuthenticodeSignature -FilePath "$extractDir\legacy-unzipped\bas-agent-windows-legacy-amd64.exe"
+        $sig3.Status | Should Be "Valid"
+        $sig3.SignerCertificate.Thumbprint | Should Be $script:TestCert.Thumbprint
+
+        Expand-Archive -Path "$extractDir\bas-agent-windows-amd64-setup.zip" -DestinationPath "$extractDir\amd64-unzipped" -Force
+        $sig4 = Get-AuthenticodeSignature -FilePath "$extractDir\amd64-unzipped\Audspect_Agent.exe"
+        $sig4.Status | Should Be "Valid"
+        $sig4.SignerCertificate.Thumbprint | Should Be $script:TestCert.Thumbprint
+
         Remove-Item $extractDir -Recurse -Force -ErrorAction SilentlyContinue
     }
 
-    It "regenerates BINARIES.sha256 with only the 2 Windows entries changed" {
+    It "regenerates BINARIES.sha256 with only the 2 Windows entries changed, matching the actual signed bytes, and re-signs it" {
         $extractDir = Join-Path $env:TEMP "orch-patch-manifest-$(Get-Random)"
         New-Item -ItemType Directory -Force -Path $extractDir | Out-Null
         $cid = docker create $script:FixtureTag
         docker cp "${cid}:/agents/BINARIES.sha256" "$extractDir\BINARIES.sha256" | Out-Null
+        docker cp "${cid}:/agents/BINARIES.sha256.sig" "$extractDir\BINARIES.sha256.sig" | Out-Null
         docker rm $cid | Out-Null
 
         $manifestLines = Get-Content "$extractDir\BINARIES.sha256"
-        ($manifestLines | Where-Object { $_ -match "bas-agent-windows-amd64\.exe$" }) | Should Not Match ("^" + ("0" * 64))
+        $expectedAmd64Hash = (Get-FileHash -Path (Join-Path $script:OutDir "bas-agent-windows-amd64.exe") -Algorithm SHA256).Hash.ToLower()
+        $expectedLegacyHash = (Get-FileHash -Path (Join-Path $script:OutDir "bas-agent-windows-legacy-amd64.exe") -Algorithm SHA256).Hash.ToLower()
+        ($manifestLines | Where-Object { $_ -match "bas-agent-windows-amd64\.exe$" }) | Should Be "$expectedAmd64Hash  bas-agent-windows-amd64.exe"
+        ($manifestLines | Where-Object { $_ -match "bas-agent-windows-legacy-amd64\.exe$" }) | Should Be "$expectedLegacyHash  bas-agent-windows-legacy-amd64.exe"
         ($manifestLines | Where-Object { $_ -match "bas-agent-linux-amd64$" }) | Should Match ("^" + ("0" * 64))
+        ($manifestLines | Where-Object { $_ -match "bas-agent-linux-arm64$" }) | Should Match ("^" + ("0" * 64))
         ($manifestLines | Where-Object { $_ -match "bas-agent-darwin-amd64$" }) | Should Match ("^" + ("0" * 64))
+        ($manifestLines | Where-Object { $_ -match "bas-agent-darwin-arm64$" }) | Should Match ("^" + ("0" * 64))
+
+        # The .sig must exist and be non-empty -- if it were still the
+        # pre-patch signature, verifying the now-different manifest bytes
+        # against it would fail at orchestrator startup.
+        (Get-Item "$extractDir\BINARIES.sha256.sig").Length | Should BeGreaterThan 0
+
+        # I3: the customer ZIP's own copy, and the orchestrator/agents
+        # staging copy windows-build.ps1 writes before this function runs,
+        # must both match what the image now serves -- not the stale
+        # pre-patch extraction either of them started out as.
+        (Get-Content (Join-Path $script:OutDir "BINARIES.sha256") -Raw) | Should Be (Get-Content "$extractDir\BINARIES.sha256" -Raw)
+        (Get-Content (Join-Path $script:OutDir "BINARIES.sha256.sig") -Raw) | Should Be (Get-Content "$extractDir\BINARIES.sha256.sig" -Raw)
+        $agentsStageManifest = Join-Path $script:OrchestratorDir "agents\BINARIES.sha256"
+        (Get-Content $agentsStageManifest -Raw) | Should Be (Get-Content "$extractDir\BINARIES.sha256" -Raw)
 
         Remove-Item $extractDir -Recurse -Force -ErrorAction SilentlyContinue
+    }
+
+    It "returns false when a staged artifact's signer thumbprint does not match -ExpectedThumbprint, even though the signature is validly trusted" {
+        # A second, independently-trusted cert -- distinct from
+        # $script:UntrustedCert (never trusted) and from $script:TestCert
+        # (the expected one). Proves re-verification pins the exact
+        # certificate, not just "signed by something this machine trusts".
+        if (-not $script:SecondTrustedCert) {
+            $script:SecondTrustedCert = New-SelfSignedCertificate `
+                -Subject "CN=BAS Orchestrator Patch Second Trusted" -Type CodeSigningCert `
+                -CertStoreLocation "Cert:\CurrentUser\My" -KeyUsage DigitalSignature `
+                -NotAfter (Get-Date).AddDays(1)
+            foreach ($storeSpec in @(@("Root","LocalMachine"), @("TrustedPublisher","LocalMachine"))) {
+                $s = New-Object System.Security.Cryptography.X509Certificates.X509Store($storeSpec[0], $storeSpec[1])
+                $s.Open("ReadWrite"); $s.Add($script:SecondTrustedCert); $s.Close()
+            }
+        }
+
+        $mismatchOutDir = New-SignedOutDir
+        Invoke-AuthenticodeSigning -Path (Join-Path $mismatchOutDir "bas-agent-windows-amd64.exe") -CertThumbprint $script:SecondTrustedCert.Thumbprint -CertStoreLocation "Cert:\CurrentUser\My" -TimestampUrl "" | Out-Null
+
+        $result = Update-OrchestratorAgentArtifacts -OrchestratorTag $script:FixtureTag -OutDir $mismatchOutDir -Version $script:Version -OrchestratorDir $script:OrchestratorDir -ExpectedThumbprint $script:TestCert.Thumbprint
+        $result | Should Be $false
+        Remove-Item $mismatchOutDir -Recurse -Force -ErrorAction SilentlyContinue
     }
 
     It "returns false and does not throw when a signed artifact is missing" {

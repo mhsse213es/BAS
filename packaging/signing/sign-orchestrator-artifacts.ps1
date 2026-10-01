@@ -40,11 +40,19 @@ function Update-BinaryManifestEntries {
 }
 
 function Update-OrchestratorAgentArtifacts {
+    [OutputType([bool])]
     param(
         [Parameter(Mandatory)][string]$OrchestratorTag,
         [Parameter(Mandatory)][string]$OutDir,
         [Parameter(Mandatory)][string]$Version,
-        [Parameter(Mandatory)][string]$OrchestratorDir
+        [Parameter(Mandatory)][string]$OrchestratorDir,
+        # Pinned to the certificate this build actually signed with (pass
+        # $WindowsCertThumbprint from the caller). Empty skips the check --
+        # a bare dev build with no cert configured has nothing to pin.
+        # Without this, re-verification only proved *some* trusted
+        # certificate signed the file, which a stale file left over from a
+        # retired certificate would also satisfy.
+        [string]$ExpectedThumbprint = ""
     )
 
     $artifacts = @{
@@ -63,13 +71,36 @@ function Update-OrchestratorAgentArtifacts {
 
     # Re-verify signatures -- defense in depth. Do not trust that signing
     # succeeded just because it ran earlier in this same script invocation.
+    # Pinning the thumbprint (not just chain trust) catches a stale file
+    # signed by a certificate that is no longer the one in use.
     foreach ($path in @($installerPath, $artifacts["bas-agent-windows-amd64.exe"], $artifacts["bas-agent-windows-legacy-amd64.exe"])) {
         $v = Test-AuthenticodeSignature -Path $path
         if (-not $v.Valid) {
             Write-Error "Update-OrchestratorAgentArtifacts: $path failed signature re-verification: $($v.Status) $($v.Reason)" -ErrorAction Continue
             return $false
         }
+        if ($ExpectedThumbprint -and $v.SignerThumbprint -ne $ExpectedThumbprint) {
+            Write-Error "Update-OrchestratorAgentArtifacts: $path is validly signed but by $($v.SignerThumbprint), expected $ExpectedThumbprint" -ErrorAction Continue
+            return $false
+        }
     }
+
+    # Native command stderr becomes a terminating NativeCommandError under
+    # the caller's EAP='Stop' (windows-build.ps1 sets this) before
+    # $LASTEXITCODE is even checked -- same class of issue as sign-windows.ps1
+    # (see its comment at the signtool call site). Run every native call
+    # under 'Continue' and capture its output explicitly into a variable
+    # instead of letting it flow unassigned into this function's own return
+    # value: an unassigned native call's stdout becomes part of the
+    # function's output stream alongside the eventual `return`, so a
+    # bare `go run ...` here previously turned `return $true`/`$false`
+    # into a 2-element array, which PowerShell treats as truthy in a
+    # boolean context *regardless of its contents* -- a failed patch could
+    # read as success at the call site. Capturing into a variable prevents
+    # that at the source, for every native call in this function, not just
+    # the signer.
+    $prevEAP = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
 
     $patchCtx = Join-Path $env:TEMP "bas-orchestrator-patch-$(Get-Random)"
     New-Item -ItemType Directory -Force -Path $patchCtx | Out-Null
@@ -88,17 +119,18 @@ function Update-OrchestratorAgentArtifacts {
         Compress-Archive -Path (Join-Path $rezipDir "Audspect_Agent.exe") -DestinationPath (Join-Path $patchCtx "bas-agent-windows-amd64-setup.zip") -Force
         Remove-Item $rezipDir -Recurse -Force -ErrorAction SilentlyContinue
 
-        $tmpCID = docker create $OrchestratorTag 2>$null
+        $createOutput = (docker create $OrchestratorTag 2>&1 | Out-String).Trim()
         if ($LASTEXITCODE -ne 0) {
-            Write-Error "Update-OrchestratorAgentArtifacts: docker create failed for $OrchestratorTag" -ErrorAction Continue
+            Write-Error "Update-OrchestratorAgentArtifacts: docker create failed for $OrchestratorTag`: $createOutput" -ErrorAction Continue
             return $false
         }
+        $tmpCID = $createOutput
         $manifestPath = Join-Path $patchCtx "BINARIES.sha256"
-        docker cp "${tmpCID}:/agents/BINARIES.sha256" $manifestPath 2>$null | Out-Null
+        $cpOutput = (docker cp "${tmpCID}:/agents/BINARIES.sha256" $manifestPath 2>&1 | Out-String).Trim()
         $cpExit = $LASTEXITCODE
-        docker rm $tmpCID 2>$null | Out-Null
+        $null = (docker rm $tmpCID 2>&1 | Out-String)
         if ($cpExit -ne 0 -or -not (Test-Path $manifestPath)) {
-            Write-Error "Update-OrchestratorAgentArtifacts: could not extract BINARIES.sha256 from $OrchestratorTag" -ErrorAction Continue
+            Write-Error "Update-OrchestratorAgentArtifacts: could not extract BINARIES.sha256 from $OrchestratorTag`: $cpOutput" -ErrorAction Continue
             return $false
         }
 
@@ -116,11 +148,14 @@ function Update-OrchestratorAgentArtifacts {
         [System.IO.File]::WriteAllText($manifestPath, $updatedManifest)
 
         Push-Location $OrchestratorDir
-        go run scripts/signer.go sign private_key.pem $manifestPath
-        $signExit = $LASTEXITCODE
-        Pop-Location
+        try {
+            $signOutput = (go run scripts/signer.go sign private_key.pem $manifestPath 2>&1 | Out-String).Trim()
+            $signExit = $LASTEXITCODE
+        } finally {
+            Pop-Location
+        }
         if ($signExit -ne 0 -or -not (Test-Path "$manifestPath.sig")) {
-            Write-Error "Update-OrchestratorAgentArtifacts: RSA signing of regenerated BINARIES.sha256 failed" -ErrorAction Continue
+            Write-Error "Update-OrchestratorAgentArtifacts: RSA signing of regenerated BINARIES.sha256 failed: $signOutput" -ErrorAction Continue
             return $false
         }
 
@@ -135,13 +170,26 @@ function Update-OrchestratorAgentArtifacts {
             "COPY BINARIES.sha256.sig /agents/BINARIES.sha256.sig`n"
         )
 
-        docker build -q -t $OrchestratorTag $patchCtx | Out-Null
+        $buildOutput = (docker build -q -t $OrchestratorTag $patchCtx 2>&1 | Out-String).Trim()
         if ($LASTEXITCODE -ne 0) {
-            Write-Error "Update-OrchestratorAgentArtifacts: patch image build failed for $OrchestratorTag" -ErrorAction Continue
+            Write-Error "Update-OrchestratorAgentArtifacts: patch image build failed for $OrchestratorTag`: $buildOutput" -ErrorAction Continue
             return $false
+        }
+
+        # The manifest + sig shipped in the customer ZIP (written earlier,
+        # from the pre-patch image) would otherwise still describe the
+        # unpatched binaries -- overwrite both staged copies with the ones
+        # that actually match what the image now serves.
+        Copy-Item $manifestPath (Join-Path $OutDir "BINARIES.sha256") -Force
+        Copy-Item "$manifestPath.sig" (Join-Path $OutDir "BINARIES.sha256.sig") -Force
+        $agentsStageDir = Join-Path $OrchestratorDir "agents"
+        if (Test-Path $agentsStageDir) {
+            Copy-Item $manifestPath (Join-Path $agentsStageDir "BINARIES.sha256") -Force
+            Copy-Item "$manifestPath.sig" (Join-Path $agentsStageDir "BINARIES.sha256.sig") -Force
         }
     } finally {
         Remove-Item -Recurse -Force $patchCtx -ErrorAction SilentlyContinue
+        $ErrorActionPreference = $prevEAP
     }
 
     return $true
