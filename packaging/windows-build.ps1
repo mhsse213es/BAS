@@ -258,6 +258,8 @@ if ($basCalderaExists) {
     }
 }
 
+. "$RepoRoot\packaging\signing\sign-windows.ps1"
+
 # -- 5a. Build Windows agent binary + installer EXE ---------------------------
 Log "Building Windows agent binary..."
 $AgentDir     = Join-Path $RepoRoot "agent"
@@ -286,7 +288,7 @@ if (Test-Path $rsrcBin) {
 }
 
 Push-Location $AgentDir
-$env:GOOS = "windows"; $env:GOARCH = "amd64"
+$env:GOOS = "windows"; $env:GOARCH = "amd64"; $env:CGO_ENABLED = "0"
 # -H windowsgui: without this the agent is a console-subsystem binary, and
 # Windows auto-allocates a visible console for it whenever something launches
 # it without an inherited console (e.g. the tray's Run-key entry firing at
@@ -296,11 +298,44 @@ $env:GOOS = "windows"; $env:GOARCH = "amd64"
 # console on demand for genuine interactive use (--install/--uninstall/plain
 # console mode); this flag just lets that mechanism do its job everywhere
 # instead of the OS pre-empting it.
+#
+# C4: delete any pre-existing output first. `go build -o` skips rewriting
+# the destination when it decides the new binary is unchanged from what's
+# already there (a build-cache optimization to avoid bumping mtimes) --
+# verified empirically to leave a PREVIOUSLY SIGNED bas_agent.exe from an
+# earlier build completely untouched, cert and all, even though this run
+# goes on to log "will not be signed". Without this delete, the signed/
+# unsigned state of the embed source would depend on workspace history
+# instead of this run's own cert/thumbprint -- exactly the non-determinism
+# C4 exists to eliminate.
+Remove-Item -Force -ErrorAction SilentlyContinue "$InstallerDir\bas_agent.exe"
 go build -ldflags="-s -w -H windowsgui" -o "$InstallerDir\bas_agent.exe" . 2>&1
 if ($LASTEXITCODE -ne 0) { Err "Agent build failed." }
-$env:GOOS = ""; $env:GOARCH = ""
+$env:GOOS = ""; $env:GOARCH = ""; $env:CGO_ENABLED = ""
 Pop-Location
 Log "  Agent binary built: installer\bas_agent.exe"
+
+# C4: sign the agent binary HERE, before the installer embeds it via
+# go:embed, so the installer's embedded copy and the standalone artifact
+# built further below are the exact same signed bytes -- not two
+# independent builds that happen to both get signed later. Mirrors the
+# Dockerfile's own build-once-then-cp pattern (orchestrator/Dockerfile:
+# 34,47), which never had this problem because it only ever builds the
+# agent once.
+if ($WindowsCertThumbprint) {
+    $agentSigned = Invoke-AuthenticodeSigning -Path "$InstallerDir\bas_agent.exe" -CertThumbprint $WindowsCertThumbprint
+    if (-not $agentSigned -and $WindowsSigningRequired) {
+        Err "Authenticode signing failed for installer\bas_agent.exe and Windows signing is required for this build."
+    } elseif (-not $agentSigned) {
+        Warn "Authenticode signing failed for installer\bas_agent.exe (not required for this build -- continuing)."
+    } else {
+        Log "  installer\bas_agent.exe signed (embedded by the installer build below)."
+    }
+} elseif ($WindowsSigningRequired) {
+    Err "Windows signing is required for this build (customer build) but -WindowsCertThumbprint / BAS_WINDOWS_CERT_THUMBPRINT is not set."
+} else {
+    Warn "No Windows signing certificate configured -- installer\bas_agent.exe will not be signed (dev build, not required)."
+}
 
 Log "Building installer EXE (embeds the single agent binary)..."
 Log "  Embedding UAC manifest into installer..."
@@ -327,20 +362,30 @@ Log "  Installer EXE: BASAgent-Setup-$Version.exe (${exeSizeMB}MB)"
 # one-off fluctuation worth silently allowing through.
 if ($exeSizeMB -gt 25) { Err "BASAgent-Setup-$Version.exe is ${exeSizeMB}MB, expected ~14MB - something is being embedded that shouldn't be (check for a go:embed regression)." }
 
-# Also build standalone Windows agent (for manual / side-by-side deploy)
-Log "Building standalone Windows agent binary..."
-Push-Location $AgentDir
-$env:GOOS = "windows"; $env:GOARCH = "amd64"; $env:CGO_ENABLED = "0"
-# -H windowsgui: see the comment on the installer-embedded agent build
-# above -- same binary, same reason.
-go build -ldflags="-s -w -H windowsgui" -o "$OutDir\bas-agent-windows-amd64.exe" . 2>&1
-if ($LASTEXITCODE -ne 0) { Warn "Standalone Windows agent build failed." }
-else {
+# Also stage the standalone Windows agent artifact (for manual / side-by-side
+# deploy). Copied from the already-signed installer\bas_agent.exe, not
+# rebuilt -- see the C4 comment above. A second independent build here
+# would silently reintroduce the exact mismatch this fix removes (even
+# with identical source and flags, re-signing a second time would embed a
+# different RFC 3161 timestamp token and the two files would diverge).
+Log "Staging standalone Windows agent binary..."
+Copy-Item "$InstallerDir\bas_agent.exe" "$OutDir\bas-agent-windows-amd64.exe" -Force
+if (-not (Test-Path "$OutDir\bas-agent-windows-amd64.exe")) {
+    Warn "Standalone Windows agent staging failed."
+} else {
     $wSizeMB = [math]::Round((Get-Item "$OutDir\bas-agent-windows-amd64.exe").Length / 1MB, 1)
     Log "  bas-agent-windows-amd64.exe (${wSizeMB}MB)"
+
+    # C4's core invariant: the embed source and the standalone copy must be
+    # byte-identical. Unconditional (not gated by $WindowsSigningRequired) --
+    # this is a build-construction fact, not a signing policy, and under
+    # this design it cannot legitimately fail.
+    $embedHash = (Get-FileHash -Path "$InstallerDir\bas_agent.exe" -Algorithm SHA256).Hash
+    $standaloneHash = (Get-FileHash -Path "$OutDir\bas-agent-windows-amd64.exe" -Algorithm SHA256).Hash
+    if ($embedHash -ne $standaloneHash) {
+        Err "installer\bas_agent.exe and bas-agent-windows-amd64.exe diverged after a copy -- this should be structurally impossible; investigate before shipping."
+    }
 }
-$env:GOOS = ""; $env:GOARCH = ""; $env:CGO_ENABLED = ""
-Pop-Location
 
 # -- 5a2. Build Legacy Windows agent binary (amd64 only) ---------------------
 # Separately toolchained via GOTOOLCHAIN=go1.20.14 (agent-legacy/go.mod stays
@@ -379,7 +424,6 @@ $env:GOTOOLCHAIN = ""; $env:GOOS = ""; $env:GOARCH = ""; $env:CGO_ENABLED = ""; 
 Pop-Location
 
 # -- 5d. Sign Windows executables (D1) ----------------------------------------
-. "$RepoRoot\packaging\signing\sign-windows.ps1"
 # verify-windows-signature.ps1 defines Test-AuthenticodeSignature, which
 # Update-OrchestratorAgentArtifacts (step 5c, below) re-verifies signatures
 # with before patching -- must be loaded before that call site, not only
@@ -398,9 +442,17 @@ $WindowsArtifactsToSign = @(@(
     "$OutDir\bas-agent-windows-legacy-amd64.exe"
 ) | Where-Object { Test-Path $_ })
 
+# bas-agent-windows-amd64.exe was already signed above, before the
+# installer embedded it (C4) -- signing it again here would embed a
+# fresh RFC 3161 timestamp and break the byte-identity that fix
+# depends on. $WindowsArtifactsToSign (the full list) still carries it
+# through to step 7c's release-verification audit below; this list is
+# only for the signing loop immediately following.
+$WindowsArtifactsToSignNow = @($WindowsArtifactsToSign | Where-Object { $_ -notlike "*bas-agent-windows-amd64.exe" })
+
 if ($WindowsCertThumbprint) {
-    Log "Signing $($WindowsArtifactsToSign.Count) Windows executable(s)..."
-    foreach ($artifact in $WindowsArtifactsToSign) {
+    Log "Signing $($WindowsArtifactsToSignNow.Count) Windows executable(s)..."
+    foreach ($artifact in $WindowsArtifactsToSignNow) {
         $signed = Invoke-AuthenticodeSigning -Path $artifact -CertThumbprint $WindowsCertThumbprint
         if (-not $signed -and $WindowsSigningRequired) {
             Err "Authenticode signing failed for $artifact and Windows signing is required for this build."
