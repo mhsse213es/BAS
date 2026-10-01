@@ -82,22 +82,6 @@ RUN CGO_ENABLED=0 GOOS=windows GOARCH=amd64 \
     go build -trimpath -ldflags="-s -w" -o /agents-legacy/bas-agent-windows-legacy-amd64.exe .
 RUN cd /agents-legacy && zip -q bas-agent-windows-legacy-amd64-setup.zip bas-agent-windows-legacy-amd64.exe
 
-# ── Combined Binary Manifest ─────────────────────────────────────────────────
-# Must run after BOTH agent-builder and agent-legacy-builder so the manifest
-# covers every binary an endpoint can download -- generated from a single
-# COPY of each stage's real output, not duplicated/recomputed elsewhere, so
-# the hashes always match what's actually shipped.
-FROM alpine AS binaries-manifest
-RUN mkdir /agents
-COPY --from=agent-builder /agents/bas-agent-linux-amd64 /agents/bas-agent-linux-arm64 \
-     /agents/bas-agent-windows-amd64.exe /agents/bas-agent-darwin-amd64 /agents/bas-agent-darwin-arm64 \
-     /agents/
-COPY --from=agent-legacy-builder /agents-legacy/bas-agent-windows-legacy-amd64.exe /agents/
-RUN cd /agents && sha256sum \
-      bas-agent-linux-amd64 bas-agent-linux-arm64 bas-agent-windows-amd64.exe \
-      bas-agent-darwin-amd64 bas-agent-darwin-arm64 bas-agent-windows-legacy-amd64.exe \
-    > /agents/BINARIES.sha256
-
 # ── Package Builder (.deb, .rpm) ─────────────────────────────────────────────
 FROM debian:bookworm-slim AS packager
 ARG BAS_VERSION=1.6.0
@@ -108,6 +92,33 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY --from=agent-builder /agents /binaries
 COPY packaging/build-agent-packages.sh /build-packages.sh
 RUN bash /build-packages.sh
+
+# ── Combined Binary Manifest ─────────────────────────────────────────────────
+# Must run after agent-builder, agent-legacy-builder, AND packager so the
+# manifest covers every artifact an endpoint can download -- generated from
+# a single COPY of each stage's real output, not duplicated/recomputed
+# elsewhere, so the hashes always match what's actually shipped. Must be
+# textually defined after packager: BuildKit resolves a `COPY --from=`
+# reference only against stages already declared earlier in the file,
+# regardless of the dependency graph it then builds in.
+FROM alpine AS binaries-manifest
+RUN mkdir /agents
+COPY --from=agent-builder /agents/bas-agent-linux-amd64 /agents/bas-agent-linux-arm64 \
+     /agents/bas-agent-windows-amd64.exe /agents/bas-agent-darwin-amd64 /agents/bas-agent-darwin-arm64 \
+     /agents/bas-agent-windows-amd64-setup.zip \
+     /agents/
+COPY --from=agent-legacy-builder /agents-legacy/bas-agent-windows-legacy-amd64.exe \
+     /agents-legacy/bas-agent-windows-legacy-amd64-setup.zip \
+     /agents/
+COPY --from=packager /packages/bas-agent-linux-amd64.deb /packages/bas-agent-linux-arm64.deb \
+     /packages/bas-agent-linux-amd64.rpm \
+     /agents/
+RUN cd /agents && sha256sum \
+      bas-agent-linux-amd64 bas-agent-linux-arm64 bas-agent-windows-amd64.exe \
+      bas-agent-darwin-amd64 bas-agent-darwin-arm64 bas-agent-windows-legacy-amd64.exe \
+      bas-agent-windows-amd64-setup.zip bas-agent-windows-legacy-amd64-setup.zip \
+      bas-agent-linux-amd64.deb bas-agent-linux-arm64.deb bas-agent-linux-amd64.rpm \
+    > /agents/BINARIES.sha256
 
 # ── Go Orchestrator ───────────────────────────────────────────────────────────
 FROM golang:1.26-alpine AS builder
