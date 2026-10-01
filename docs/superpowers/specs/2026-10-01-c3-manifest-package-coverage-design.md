@@ -3,7 +3,7 @@
 ## Problem
 
 `GET /api/agents/download/{platform}` (`orchestrator/internal/api/handlers.go:1158`)
-serves 10 distinct files across 11 platform keys (`agentFiles`, lines
+serves 11 distinct files across 11 platform keys (`agentFiles`, lines
 1140-1152):
 
 | Platform key | File | In `BINARIES.sha256` today? |
@@ -35,7 +35,7 @@ integrity verification` on every request.
 
 `TestDownloadAgent_RefusesBinaryMissingFromManifest`
 (`download_integrity_test.go:103`) proves the refusal behavior itself is
-intentional and correct. Nothing tests it against the real 10-artifact
+intentional and correct. Nothing tests it against the real 11-artifact
 set, so nothing caught that 5 of them are permanently in the refused
 state.
 
@@ -62,7 +62,7 @@ silent manifest/artifact mismatch C4 just closed for the raw agent exe.
   entries truthful after it rebuilds them; it leaves the 3 Linux package
   entries alone, since nothing in that step touches Linux artifacts.
 - A build-time test exists that would have caught the original gap (all
-  10 artifacts present and correctly hashed in the real Docker image),
+  11 artifacts present and correctly hashed in the real Docker image),
   and a fast unit-level test exists that would have caught the handler
   ever starting to default-permit an unlisted platform.
 
@@ -72,7 +72,7 @@ silent manifest/artifact mismatch C4 just closed for the raw agent exe.
   it is already correct. This spec closes the manifest coverage gap
   that was defeating it, not its own behavior.
 - No package-native verification mechanism (`dpkg-sig`, `rpm --sign`, or
-  a zip-specific signature). All 10 artifacts use the same whole-file
+  a zip-specific signature). All 11 artifacts use the same whole-file
   SHA-256-in-a-signed-manifest mechanism the existing 6 already use.
 - No full live-stack HTTP/JWT/Postgres end-to-end boot test (would not
   materially improve detection of either defect above; deferred as a
@@ -91,17 +91,17 @@ failure modes:
 
 ```
 docker build (orchestrator/Dockerfile)
-  agent-builder:         6 raw bins + 1 zip (bas-agent-windows-amd64-setup.zip)
+  agent-builder:         5 raw bins + 1 zip (bas-agent-windows-amd64-setup.zip)
   agent-legacy-builder:  1 raw bin + 1 zip (bas-agent-windows-legacy-amd64-setup.zip)
   packager:              2 .deb + 1 .rpm
          |
          v
   binaries-manifest stage (FIX 1: Dockerfile)
-    COPY all 10 artifacts in (was: 6)
-    sha256sum all 10 -> BINARIES.sha256          <- correct baseline for
+    COPY all 11 artifacts in (was: 6)
+    sha256sum all 11 -> BINARIES.sha256          <- correct baseline for
          |                                           every build, signed or not
          v
-  final image: /agents/{10 artifacts, BINARIES.sha256(.sig)}
+  final image: /agents/{11 artifacts, BINARIES.sha256(.sig)}
 
 
 windows-build.ps1 (customer/signed build only)
@@ -116,7 +116,7 @@ windows-build.ps1 (customer/signed build only)
     regenerate + RSA-sign BINARIES.sha256                <- correct baseline for
          |                                                   a signed build
          v
-  final image: /agents/{10 artifacts (2 exe + 2 zip now signed), BINARIES.sha256(.sig)}
+  final image: /agents/{11 artifacts (2 exe + 2 zip now signed), BINARIES.sha256(.sig)}
 ```
 
 The 3 Linux packages are untouched by the second diagram — nothing in
@@ -229,7 +229,7 @@ wrong reason.
 
 Extend the existing fixture-manifest pattern (`writeAgentAndManifest`,
 currently hardcoded to one filename) to write real fixture files for all
-10 `agentFiles` entries plus a manifest listing all 10, then
+11 `agentFiles` entries plus a manifest listing all 11, then
 table-drive over `agentFiles` confirming: all-present → every platform
 key serves 200 with matching bytes; one entry removed from the manifest
 → exactly that platform key is refused, the rest unaffected; one
@@ -244,7 +244,7 @@ existing "regenerates BINARIES.sha256... matching the actual signed
 bytes" test (currently asserting only the 2 exe entries and that
 darwin/linux-raw are untouched) to assert the full acceptance matrix
 above: build the real image (or reuse the suite's existing fixture
-image), extract `BINARIES.sha256` both *before* (asserting all 10
+image), extract `BINARIES.sha256` both *before* (asserting all 11
 present with correct bytes — the Fix-1 check) and *after*
 `Update-OrchestratorAgentArtifacts` runs (asserting the 2 exe + 2 zip
 entries now match the newly-signed bytes, and the 3 Linux package + 2
@@ -262,14 +262,14 @@ either defect this spec closes, at substantially higher cost.
 ## Acceptance criteria
 
 - `orchestrator/Dockerfile`'s `binaries-manifest` stage sha256sums all
-  10 artifacts `DownloadAgent` can serve; the final image's
-  `BINARIES.sha256` lists all 10 with hashes matching the real files, in
+  11 artifacts `DownloadAgent` can serve; the final image's
+  `BINARIES.sha256` lists all 11 with hashes matching the real files, in
   an unsigned (dev/no-cert) build.
 - `Update-OrchestratorAgentArtifacts` regenerates manifest entries for
   both setup zips, matching their post-signing bytes, in a signed
   (required/customer) build — without touching the 3 Linux package
   entries.
-- Tier A test suite covers all 10 `agentFiles` entries' serve/refuse
+- Tier A test suite covers all 11 `agentFiles` entries' serve/refuse
   behavior against a realistic manifest.
 - Tier B test suite covers the full acceptance matrix above against a
   real Docker build, both pre- and post-signing-patch.
