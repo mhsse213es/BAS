@@ -50,6 +50,37 @@ func writeAgentAndManifest(t *testing.T, onDisk, manifestContent string) *integr
 	return integrity.LoadManifest(mpath)
 }
 
+// writeAllAgentFixturesAndManifest writes a real fixture file for every
+// agentFiles entry and a manifest that correctly lists all of them -- the
+// shape production's BINARIES.sha256 has once all 11 download-endpoint
+// artifacts are covered. Content is "content-of-<filename>" per file, so
+// a test can assert on exactly which file it got back.
+func writeAllAgentFixturesAndManifest(t *testing.T) *integrity.Manifest {
+	t.Helper()
+	var lines []string
+	for _, entry := range agentFiles {
+		content := "content-of-" + entry.filename
+		if err := os.WriteFile(filepath.Join("agents", entry.filename), []byte(content), 0o755); err != nil {
+			t.Fatalf("write %s: %v", entry.filename, err)
+		}
+		sum := sha256.Sum256([]byte(content))
+		lines = append(lines, hex.EncodeToString(sum[:])+"  "+entry.filename)
+	}
+	mpath := filepath.Join("agents", "BINARIES.sha256")
+	if err := os.WriteFile(mpath, []byte(strings.Join(lines, "\n")+"\n"), 0o644); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
+	return integrity.LoadManifest(mpath)
+}
+
+func downloadPlatform(h *Handler, platform string) *httptest.ResponseRecorder {
+	rec := httptest.NewRecorder()
+	h.DownloadAgent(rec, withURLParam(
+		httptest.NewRequest(http.MethodGet, "/api/agents/download/"+platform, nil),
+		"platform", platform))
+	return rec
+}
+
 func downloadLinuxAgent(h *Handler) *httptest.ResponseRecorder {
 	rec := httptest.NewRecorder()
 	h.DownloadAgent(rec, withURLParam(
@@ -129,5 +160,69 @@ func TestDownloadAgent_NoManifestStillServes(t *testing.T) {
 	rec := downloadLinuxAgent(h)
 	if rec.Code != http.StatusOK {
 		t.Errorf("status = %d, want 200 when no manifest is present", rec.Code)
+	}
+}
+
+// The C3 regression: 5 of the 11 platforms DownloadAgent can serve were
+// permanently refused in production because BINARIES.sha256 never listed
+// them, even though this refusal logic was already correct. This test
+// proves every platform serves correctly once the manifest lists all 11.
+func TestDownloadAgent_AllPlatformsServedAndVerified(t *testing.T) {
+	withAgentsDir(t)
+	h := (&Handler{}).WithManifest(writeAllAgentFixturesAndManifest(t))
+
+	for platform, entry := range agentFiles {
+		platform, entry := platform, entry
+		t.Run(platform, func(t *testing.T) {
+			rec := downloadPlatform(h, platform)
+			if rec.Code != http.StatusOK {
+				t.Fatalf("platform %q: status = %d, want 200; body=%q", platform, rec.Code, rec.Body.String())
+			}
+			want := "content-of-" + entry.filename
+			if rec.Body.String() != want {
+				t.Errorf("platform %q: body = %q, want %q", platform, rec.Body.String(), want)
+			}
+		})
+	}
+}
+
+// Removing one platform's file from the manifest must refuse only that
+// platform, leaving the other 10 unaffected -- not a fail-open-the-whole-set
+// bug, and not a refuse-everything-when-one-is-missing bug.
+func TestDownloadAgent_OnePlatformMissingFromManifestRefusesOnlyThatOne(t *testing.T) {
+	withAgentsDir(t)
+	writeAllAgentFixturesAndManifest(t)
+
+	// linux-amd64-deb is one of the 5 platforms C3 actually found broken
+	// in production -- a regression here is literally the defect recurring.
+	const missingPlatform = "linux-amd64-deb"
+	missingFile := agentFiles[missingPlatform].filename
+	mpath := filepath.Join("agents", "BINARIES.sha256")
+	content, err := os.ReadFile(mpath)
+	if err != nil {
+		t.Fatalf("read manifest: %v", err)
+	}
+	var kept []string
+	for _, line := range strings.Split(strings.TrimRight(string(content), "\n"), "\n") {
+		if !strings.HasSuffix(line, "  "+missingFile) {
+			kept = append(kept, line)
+		}
+	}
+	if err := os.WriteFile(mpath, []byte(strings.Join(kept, "\n")+"\n"), 0o644); err != nil {
+		t.Fatalf("rewrite manifest: %v", err)
+	}
+
+	h := (&Handler{}).WithManifest(integrity.LoadManifest(mpath))
+	for platform := range agentFiles {
+		rec := downloadPlatform(h, platform)
+		if platform == missingPlatform {
+			if rec.Code == http.StatusOK {
+				t.Errorf("platform %q: served despite being absent from the manifest", platform)
+			}
+			continue
+		}
+		if rec.Code != http.StatusOK {
+			t.Errorf("platform %q: status = %d, want 200 (must be unaffected by %q's absence)", platform, rec.Code, missingPlatform)
+		}
 	}
 }
