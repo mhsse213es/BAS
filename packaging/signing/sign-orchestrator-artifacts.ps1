@@ -135,8 +135,18 @@ function Update-OrchestratorAgentArtifacts {
         }
 
         $replacements = @{
-            "bas-agent-windows-amd64.exe"        = (Get-FileHash -Path $artifacts["bas-agent-windows-amd64.exe"] -Algorithm SHA256).Hash.ToLower()
-            "bas-agent-windows-legacy-amd64.exe" = (Get-FileHash -Path $artifacts["bas-agent-windows-legacy-amd64.exe"] -Algorithm SHA256).Hash.ToLower()
+            "bas-agent-windows-amd64.exe"              = (Get-FileHash -Path $artifacts["bas-agent-windows-amd64.exe"] -Algorithm SHA256).Hash.ToLower()
+            "bas-agent-windows-legacy-amd64.exe"       = (Get-FileHash -Path $artifacts["bas-agent-windows-legacy-amd64.exe"] -Algorithm SHA256).Hash.ToLower()
+            # C3: both zips are rebuilt above (lines ~108-120) with freshly
+            # signed content before this point -- their manifest entries
+            # must be regenerated here too, or a signed build would ship a
+            # manifest hashing the pre-signing zip while serving the
+            # post-signing one. bas-agent-windows-amd64-setup.zip has no
+            # $artifacts entry (it only ever exists as the freshly rebuilt
+            # copy in $patchCtx, never a pre-existing $OutDir source), so
+            # it's hashed from there directly.
+            "bas-agent-windows-amd64-setup.zip"        = (Get-FileHash -Path (Join-Path $patchCtx "bas-agent-windows-amd64-setup.zip") -Algorithm SHA256).Hash.ToLower()
+            "bas-agent-windows-legacy-amd64-setup.zip" = (Get-FileHash -Path $artifacts["bas-agent-windows-legacy-amd64-setup.zip"] -Algorithm SHA256).Hash.ToLower()
         }
         $manifestContent = Get-Content $manifestPath -Raw
         try {

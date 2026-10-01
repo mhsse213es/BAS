@@ -22,9 +22,14 @@ function New-FixtureOrchestratorImage {
     $ctx = Join-Path $env:TEMP "orch-patch-fixture-$(Get-Random)"
     New-Item -ItemType Directory -Force -Path "$ctx\agents" | Out-Null
     foreach ($f in @("bas-agent-windows-amd64.exe", "bas-agent-windows-legacy-amd64.exe",
-                     "bas-agent-windows-legacy-amd64-setup.zip", "bas-agent-windows-amd64-setup.zip")) {
+                     "bas-agent-windows-legacy-amd64-setup.zip", "bas-agent-windows-amd64-setup.zip",
+                     "bas-agent-linux-amd64.deb", "bas-agent-linux-arm64.deb", "bas-agent-linux-amd64.rpm")) {
         Set-Content -Path "$ctx\agents\$f" -Value "placeholder"
     }
+    # C3: the fixture's manifest now matches the post-Task-1 shape -- all
+    # 11 entries present, so this function's own test can assert the 2
+    # zip entries change on a signing patch while the 3 Linux package
+    # entries (added here) stay untouched.
     $placeholderHash = ("0" * 64)
     Set-Content -Path "$ctx\agents\BINARIES.sha256" -Value (@(
         "$placeholderHash  bas-agent-linux-amd64",
@@ -32,7 +37,12 @@ function New-FixtureOrchestratorImage {
         "$placeholderHash  bas-agent-windows-amd64.exe",
         "$placeholderHash  bas-agent-darwin-amd64",
         "$placeholderHash  bas-agent-darwin-arm64",
-        "$placeholderHash  bas-agent-windows-legacy-amd64.exe"
+        "$placeholderHash  bas-agent-windows-legacy-amd64.exe",
+        "$placeholderHash  bas-agent-windows-amd64-setup.zip",
+        "$placeholderHash  bas-agent-windows-legacy-amd64-setup.zip",
+        "$placeholderHash  bas-agent-linux-amd64.deb",
+        "$placeholderHash  bas-agent-linux-arm64.deb",
+        "$placeholderHash  bas-agent-linux-amd64.rpm"
     ) -join "`n")
     # CMD is required: "docker create <image>" with no override command
     # fails with "No command specified" on a FROM-scratch image that
@@ -149,23 +159,44 @@ Describe "Update-OrchestratorAgentArtifacts" {
         Remove-Item $extractDir -Recurse -Force -ErrorAction SilentlyContinue
     }
 
-    It "regenerates BINARIES.sha256 with only the 2 Windows entries changed, matching the actual signed bytes, and re-signs it" {
+    It "regenerates BINARIES.sha256 so every signed-or-rebuilt entry matches the actual bytes the image now serves, and leaves every other entry untouched" {
         $extractDir = Join-Path $env:TEMP "orch-patch-manifest-$(Get-Random)"
         New-Item -ItemType Directory -Force -Path $extractDir | Out-Null
         $cid = docker create $script:FixtureTag
-        docker cp "${cid}:/agents/BINARIES.sha256" "$extractDir\BINARIES.sha256" | Out-Null
-        docker cp "${cid}:/agents/BINARIES.sha256.sig" "$extractDir\BINARIES.sha256.sig" | Out-Null
+        foreach ($f in @("BINARIES.sha256", "BINARIES.sha256.sig",
+                         "bas-agent-windows-amd64.exe", "bas-agent-windows-legacy-amd64.exe",
+                         "bas-agent-windows-amd64-setup.zip", "bas-agent-windows-legacy-amd64-setup.zip")) {
+            docker cp "${cid}:/agents/$f" "$extractDir\$f" | Out-Null
+        }
         docker rm $cid | Out-Null
 
         $manifestLines = Get-Content "$extractDir\BINARIES.sha256"
-        $expectedAmd64Hash = (Get-FileHash -Path (Join-Path $script:OutDir "bas-agent-windows-amd64.exe") -Algorithm SHA256).Hash.ToLower()
-        $expectedLegacyHash = (Get-FileHash -Path (Join-Path $script:OutDir "bas-agent-windows-legacy-amd64.exe") -Algorithm SHA256).Hash.ToLower()
-        ($manifestLines | Where-Object { $_ -match "bas-agent-windows-amd64\.exe$" }) | Should Be "$expectedAmd64Hash  bas-agent-windows-amd64.exe"
-        ($manifestLines | Where-Object { $_ -match "bas-agent-windows-legacy-amd64\.exe$" }) | Should Be "$expectedLegacyHash  bas-agent-windows-legacy-amd64.exe"
-        ($manifestLines | Where-Object { $_ -match "bas-agent-linux-amd64$" }) | Should Match ("^" + ("0" * 64))
-        ($manifestLines | Where-Object { $_ -match "bas-agent-linux-arm64$" }) | Should Match ("^" + ("0" * 64))
-        ($manifestLines | Where-Object { $_ -match "bas-agent-darwin-amd64$" }) | Should Match ("^" + ("0" * 64))
-        ($manifestLines | Where-Object { $_ -match "bas-agent-darwin-arm64$" }) | Should Match ("^" + ("0" * 64))
+        function Get-ManifestHash($filename) {
+            $line = $manifestLines | Where-Object { $_ -match [regex]::Escape($filename) + '$' }
+            ($line -replace '\s.*$', '')
+        }
+
+        # Signed or rebuilt by Update-OrchestratorAgentArtifacts -- manifest
+        # hash must equal SHA-256 of the actual bytes the image now serves,
+        # extracted fresh from the image rather than assumed from whichever
+        # source file the function happened to copy from.
+        foreach ($f in @("bas-agent-windows-amd64.exe", "bas-agent-windows-legacy-amd64.exe",
+                         "bas-agent-windows-amd64-setup.zip", "bas-agent-windows-legacy-amd64-setup.zip")) {
+            $actual = (Get-FileHash -Path "$extractDir\$f" -Algorithm SHA256).Hash.ToLower()
+            Get-ManifestHash $f | Should Be $actual
+        }
+
+        # Never touched by Update-OrchestratorAgentArtifacts -- must still be
+        # the placeholder fixture hash, proving the function didn't
+        # accidentally recompute, drop, or reorder these lines. Includes the
+        # 3 Linux packages (C3): nothing in the Windows signing patch should
+        # ever touch them.
+        $placeholderHash = ("0" * 64)
+        foreach ($f in @("bas-agent-linux-amd64", "bas-agent-linux-arm64",
+                         "bas-agent-darwin-amd64", "bas-agent-darwin-arm64",
+                         "bas-agent-linux-amd64.deb", "bas-agent-linux-arm64.deb", "bas-agent-linux-amd64.rpm")) {
+            Get-ManifestHash $f | Should Be $placeholderHash
+        }
 
         # The .sig must exist and be non-empty -- if it were still the
         # pre-patch signature, verifying the now-different manifest bytes
