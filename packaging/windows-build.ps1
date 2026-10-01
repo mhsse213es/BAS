@@ -308,7 +308,7 @@ $env:GOOS = "windows"; $env:GOARCH = "amd64"; $env:CGO_ENABLED = "0"
 # unsigned state of the embed source would depend on workspace history
 # instead of this run's own cert/thumbprint -- exactly the non-determinism
 # C4 exists to eliminate.
-Remove-Item -Force -ErrorAction SilentlyContinue "$InstallerDir\bas_agent.exe"
+if (Test-Path "$InstallerDir\bas_agent.exe") { Remove-Item -Force "$InstallerDir\bas_agent.exe" }
 go build -ldflags="-s -w -H windowsgui" -o "$InstallerDir\bas_agent.exe" . 2>&1
 if ($LASTEXITCODE -ne 0) { Err "Agent build failed." }
 $env:GOOS = ""; $env:GOARCH = ""; $env:CGO_ENABLED = ""
