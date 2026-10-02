@@ -101,3 +101,16 @@ func TestBoardSparkline(t *testing.T) {
 		t.Errorf("unexpected sparkline points: %q", s)
 	}
 }
+
+func TestBoardRiskLabel(t *testing.T) {
+	cases := map[string]string{"Critical": "Critical Risk", "Medium Risk": "Medium Risk", "High Risk": "High Risk", "Low Risk": "Low Risk", "": "Unknown Risk"}
+	rep := sampleBoardReport()
+	for cls, want := range cases {
+		rep.Summary.Classification = cls
+		var b bytes.Buffer
+		if err := RenderBoardOnePager(&b, rep, nil, ""); err != nil { t.Fatal(err) }
+		if !strings.Contains(b.String(), ">"+want+"</div>") {
+			t.Errorf("classification %q: expected %q in hero", cls, want)
+		}
+	}
+}
