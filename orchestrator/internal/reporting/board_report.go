@@ -195,6 +195,17 @@ func boardTmpl() (*template.Template, error) {
 		"prevColor":  preventionColor,
 		"sevColor":   severityColor,
 		"trendArrow": trendArrow,
+		"riskLabel": func(c string) string {
+			// classify() returns "Medium Risk"/"High Risk"/"Low Risk" (with the
+			// suffix) but "Critical" (without), so a bare "<c> Risk" doubled it.
+			// Normalize: strip any trailing " Risk", then append once.
+			c = strings.TrimSpace(c)
+			if c == "" {
+				return "Unknown Risk"
+			}
+			c = strings.TrimSuffix(c, " Risk")
+			return c + " Risk"
+		},
 		"add1": func(i int) int { return i + 1 },
 		"fmtF": func(v any) string {
 			switch t := v.(type) {
@@ -300,7 +311,7 @@ body{font-family:"Segoe UI",system-ui,-apple-system,Helvetica,Arial,sans-serif;c
   <div class="hero">
     <div class="risk" style="background:{{riskColor .Summary.RiskScore}}">
       <div class="n">{{.Summary.RiskScore}}</div>
-      <div class="c">{{.Summary.Classification}} Risk</div>
+      <div class="c">{{riskLabel .Summary.Classification}}</div>
       <div class="s">Exposure: {{.Summary.ExposureLevel}} &middot; {{.Summary.TotalTechniques}} techniques tested</div>
     </div>
     <div class="kpis">
