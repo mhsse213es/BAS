@@ -229,6 +229,51 @@ check_compose() {
   fi
 }
 
+# The orchestrator release artifact ships cosign-signed (packaging/build.sh,
+# packaging/windows-build.ps1, via sign-blob/verify-blob against the
+# docker-save tarball -- cosign's image subcommands all need a registry,
+# which doesn't exist here); this installer must be able to verify that
+# signature before the tarball is ever loaded. No auto-install path like
+# Docker's -- cosign is specific enough that silently installing it on an
+# operator's box is not appropriate here.
+check_cosign() {
+  if ! command -v cosign &>/dev/null; then
+    echo "FAIL:Cosign — not installed (required to verify the orchestrator artifact before install; see https://docs.sigstore.dev/cosign/system_config/installation/)"
+    return
+  fi
+  if [[ ! -f "${SCRIPT_DIR}/cosign.pub" ]]; then
+    echo "FAIL:Cosign — public key not found in bundle at ${SCRIPT_DIR}/cosign.pub (corrupt or incomplete release bundle)"
+    return
+  fi
+  echo "PASS:Cosign — $(cosign version 2>/dev/null | grep -oP 'GitVersion:\s*\K\S+' || echo 'installed')"
+}
+
+# Verifies the orchestrator tarball against the bundle's cosign.pub BEFORE
+# any docker load call touches it -- the tarball's bytes never reach the
+# Docker daemon at all if verification fails. Caller must treat a nonzero
+# return as fatal (abort the whole install), not skip-and-continue.
+_verify_orchestrator_artifact() {
+  local tar="$1"
+  if [[ ! -f "${SCRIPT_DIR}/cosign.pub" ]]; then
+    err "cosign.pub not found in bundle -- cannot verify $(basename "$tar"), refusing to proceed"
+    return 1
+  fi
+  if ! command -v cosign &>/dev/null; then
+    err "cosign is not installed -- cannot verify $(basename "$tar"), refusing to proceed"
+    return 1
+  fi
+  if [[ ! -f "${tar}.bundle" ]]; then
+    err "Signature bundle not found: $(basename "$tar").bundle -- refusing to install an unsigned orchestrator artifact"
+    return 1
+  fi
+  if ! cosign verify-blob --key "${SCRIPT_DIR}/cosign.pub" --bundle "${tar}.bundle" --insecure-ignore-tlog "$tar" &>/dev/null; then
+    err "cosign verification FAILED for $(basename "$tar") -- refusing to install a tampered or unsigned orchestrator artifact"
+    return 1
+  fi
+  log "cosign: verified $(basename "$tar")"
+  return 0
+}
+
 check_port() {
   local port="$1"
   if ss -tlnH "sport = :${port}" 2>/dev/null | grep -q ":${port}"; then
@@ -403,6 +448,7 @@ page_prereqs() {
     check_disk "$DEFAULT_INSTALL_DIR"
     check_docker
     check_compose
+    check_cosign
     check_port "9000"
     check_port "5432"
   )
@@ -529,7 +575,12 @@ EOF
     for img in "${SCRIPT_DIR}"/images/*.tar.gz "${SCRIPT_DIR}"/images/*.tar; do
       [[ -f "$img" ]] || continue
       _step 55 "Loading $(basename "$img")..."
-      docker load < "$img" || true
+      if [[ "$(basename "$img")" == bas-orchestrator-* ]]; then
+        _verify_orchestrator_artifact "$img" || { err "Orchestrator artifact failed verification -- installation aborted."; exit 1; }
+        docker load < "$img"
+      else
+        docker load < "$img" || true
+      fi
     done
   else
     cd "${INSTALL_DIR}"
@@ -994,6 +1045,7 @@ main() {
       check_disk "$INSTALL_DIR"
       check_docker
       check_compose
+      check_cosign
       check_port "$DASHBOARD_PORT"
       check_port "5432"
     )
