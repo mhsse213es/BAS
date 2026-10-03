@@ -395,16 +395,55 @@ if (-not (Test-Path "$OutDir\bas-agent-windows-amd64.exe")) {
 }
 
 # -- 5a2. Build Legacy Windows agent binary (amd64 only) ---------------------
-# Separately toolchained via GOTOOLCHAIN=go1.20.14 (agent-legacy/go.mod stays
-# at a bare `go 1.20` -- the `toolchain` directive predates Go 1.21 and
-# go1.20.14 can't parse it). go1.20.14 is the last Go release supporting
-# Windows 7 SP1/8/8.1/Server 2008 R2-2012 R2. See
+# go1.20.14 is the last Go release supporting Windows 7 SP1/8/8.1/Server
+# 2008 R2-2012 R2. See
 # docs/superpowers/specs/2026-08-18-legacy-windows-agent-phase1-design.md.
+#
+# Uses a dedicated, real go1.20.14 GOROOT at C:\go1.20.14 (provisioned
+# once on this build host -- see D2's implementation plan, Task 5, Step
+# 1) rather than $env:GOTOOLCHAIN = "go1.20.14" on top of the main
+# install: the latter downloads go1.20.14 as a *module* toolchain under
+# GOMODCACHE, which garble (built against the main toolchain) either
+# refuses to run against outright (newer garble versions reject a too-old
+# go version) or cannot parse the output of (garble v0.10.1, the
+# legacy-compatible pin, predates Go's module-toolchain feature and
+# panics on the banner line) -- both failure modes reproduced during D2's
+# spike. A real GOROOT has no such banner for garble to choke on. D2's
+# design doc (Gap 2) has the full root cause.
 Log "Building Legacy Windows agent binary (go1.20.14, amd64 only)..."
 $LegacyAgentDir = Join-Path $RepoRoot "agent-legacy"
+$LegacyGoRoot = "C:\go1.20.14"
+# Fail loudly and specifically if the dedicated GOROOT is missing, rather
+# than silently falling through to $env:GOTOOLCHAIN's auto-download path
+# and dying on Gap 2's confusing failure far from its real cause.
+if (-not (Test-Path "$LegacyGoRoot\bin\go.exe")) {
+    Err "Legacy agent build requires a dedicated go1.20.14 install at $LegacyGoRoot (not found). Provision it: see D2's implementation plan, Task 5, Step 1. Do not rely on `$env:GOTOOLCHAIN='go1.20.14'` -- it downloads a module toolchain that garble cannot build against."
+}
+# D2: garble v0.10.1 is installed under a dedicated GOBIN
+# (C:\go1.20.14\gobin), not the default GOPATH\bin -- that default path
+# is shared with the main toolchain's own garble (v0.17.0, used by the
+# modern agent/orchestrator builds above), and `go install` always
+# overwrites whatever is currently at that one canonical path. Resolving
+# via `go env GOPATH` here would silently clobber the main garble install
+# on every legacy build run (reproduced live during D2's Task 5
+# provisioning). The dedicated GOBIN keeps the two binaries permanently
+# distinct.
+$LegacyGarbleBin = "C:\go1.20.14\gobin\garble.exe"
+if (-not (Test-Path $LegacyGarbleBin)) {
+    Err "Legacy agent build requires garble v0.10.1 installed under GOBIN=C:\go1.20.14\gobin (not found at $LegacyGarbleBin). Provision it: see D2's implementation plan, Task 5, Step 1."
+}
 Push-Location $LegacyAgentDir
-$env:GOTOOLCHAIN = "go1.20.14"
+$env:GOROOT = $LegacyGoRoot
+$env:GOTOOLCHAIN = "local"
+# GOROOT alone does not change which go.exe subprocess calls resolve to --
+# garble shells out to "go" via PATH, so without this prepend it still
+# invokes the main toolchain's go.exe (version-mismatched against this
+# garble build) despite GOROOT pointing elsewhere. Saved/restored around
+# this section so it doesn't leak into the rest of the script.
+$LegacyOrigPath = $env:PATH
+$env:PATH = "$LegacyGoRoot\bin;$env:PATH"
 $env:GOOS = "windows"; $env:GOARCH = "amd64"; $env:CGO_ENABLED = "0"
+$env:GOGARBLE = "audspect/*"
 # go1.20.14 predates Go workspace support (added in Go 1.21) and cannot
 # parse the repo-root go.work file at all -- it errors on the go.work
 # `go` directive's version format before it can even determine
@@ -413,21 +452,26 @@ $env:GOOS = "windows"; $env:GOARCH = "amd64"; $env:CGO_ENABLED = "0"
 # existed.
 $env:GOWORK = "off"
 
-$legacyGoVersion = (go version)
-Log "  Resolved toolchain: $legacyGoVersion"
+$legacyGoVersion = (& "$LegacyGoRoot\bin\go.exe" version)
+Log "  Resolved toolchain: $legacyGoVersion (GOROOT=$env:GOROOT)"
 if ($legacyGoVersion -notmatch "go1\.20\.14") {
     Pop-Location
     Err "Legacy agent toolchain mismatch. Expected go1.20.14, got: $legacyGoVersion"
 }
+if ((Get-Item $LegacyGoRoot).Target) {
+    Pop-Location
+    Err "C:\go1.20.14 resolves through a reparse point/symlink -- verify it is a real extracted install, not something that could resolve to the module-toolchain cache."
+}
 
-go build -trimpath -ldflags="-s -w" -o "$OutDir\bas-agent-windows-legacy-amd64.exe" . 2>&1
+& $LegacyGarbleBin -literals build -ldflags="-s -w" -o "$OutDir\bas-agent-windows-legacy-amd64.exe" . 2>&1
 if ($LASTEXITCODE -ne 0) {
     Warn "Legacy Windows agent build failed."
 } else {
     $legacySizeMB = [math]::Round((Get-Item "$OutDir\bas-agent-windows-legacy-amd64.exe").Length / 1MB, 1)
-    Log "  bas-agent-windows-legacy-amd64.exe (${legacySizeMB}MB)"
+    Log "  bas-agent-windows-legacy-amd64.exe (${legacySizeMB}MB, obfuscated)"
 }
-$env:GOTOOLCHAIN = ""; $env:GOOS = ""; $env:GOARCH = ""; $env:CGO_ENABLED = ""; $env:GOWORK = ""
+$env:GOROOT = ""; $env:GOTOOLCHAIN = ""; $env:GOOS = ""; $env:GOARCH = ""; $env:CGO_ENABLED = ""; $env:GOWORK = ""; $env:GOGARBLE = ""
+$env:PATH = $LegacyOrigPath
 Pop-Location
 
 # -- 5d. Sign Windows executables (D1) ----------------------------------------
