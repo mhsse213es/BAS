@@ -236,16 +236,37 @@ check_compose() {
 # signature before the tarball is ever loaded. No auto-install path like
 # Docker's -- cosign is specific enough that silently installing it on an
 # operator's box is not appropriate here.
+# Minimum confirmed-working cosign version for the sigstore bundle format
+# sign-blob/verify-blob now always produce. Real cross-version testing
+# during review found v2.2.4/v2.4.3/v2.5.3/v2.6.1/v3.0.2 all reject a
+# genuinely valid, offline signature ("trusted root is required when
+# using new bundle format" or a decode error); v3.1.3 verifies correctly.
+# Without this check, an operator with an older cosign sees "refusing to
+# install a tampered or unsigned orchestrator artifact" for a perfectly
+# valid artifact -- a version problem misreported as a tamper finding.
+_cosign_version_ok() {
+  local ver="$1" major minor
+  IFS='.' read -r major minor _ <<< "${ver#v}"
+  [[ "$major" =~ ^[0-9]+$ && "$minor" =~ ^[0-9]+$ ]] || return 1
+  (( major > 3 || (major == 3 && minor >= 1) ))
+}
+
 check_cosign() {
   if ! command -v cosign &>/dev/null; then
     echo "FAIL:Cosign — not installed (required to verify the orchestrator artifact before install; see https://docs.sigstore.dev/cosign/system_config/installation/)"
+    return
+  fi
+  local ver
+  ver=$(cosign version 2>/dev/null | sed -n 's/^GitVersion:[[:space:]]*\(.*\)$/\1/p' | tr -d '[:space:]')
+  if [[ -z "$ver" ]] || ! _cosign_version_ok "$ver"; then
+    echo "FAIL:Cosign — version ${ver:-unknown} is too old (need >= v3.1.0 to verify the sigstore bundle format this bundle's signature uses)"
     return
   fi
   if [[ ! -f "${SCRIPT_DIR}/cosign.pub" ]]; then
     echo "FAIL:Cosign — public key not found in bundle at ${SCRIPT_DIR}/cosign.pub (corrupt or incomplete release bundle)"
     return
   fi
-  echo "PASS:Cosign — $(cosign version 2>/dev/null | grep -oP 'GitVersion:\s*\K\S+' || echo 'installed')"
+  echo "PASS:Cosign — ${ver}"
 }
 
 # Verifies the orchestrator tarball against the bundle's cosign.pub BEFORE
@@ -266,8 +287,10 @@ _verify_orchestrator_artifact() {
     err "Signature bundle not found: $(basename "$tar").bundle -- refusing to install an unsigned orchestrator artifact"
     return 1
   fi
-  if ! cosign verify-blob --key "${SCRIPT_DIR}/cosign.pub" --bundle "${tar}.bundle" --insecure-ignore-tlog "$tar" &>/dev/null; then
+  local verify_output
+  if ! verify_output=$(cosign verify-blob --key "${SCRIPT_DIR}/cosign.pub" --bundle "${tar}.bundle" --insecure-ignore-tlog "$tar" 2>&1); then
     err "cosign verification FAILED for $(basename "$tar") -- refusing to install a tampered or unsigned orchestrator artifact"
+    echo "$verify_output" >&2
     return 1
   fi
   log "cosign: verified $(basename "$tar")"
@@ -572,16 +595,31 @@ EOF
 
   _step 50 "Loading Docker images..."
   if [[ "$OFFLINE" == "true" ]]; then
+    # Load every other image first, then verify+load the orchestrator
+    # artifact LAST -- same deliberate ordering as install.sh. Singling
+    # it out by filename alone would (1) silently skip verification if
+    # no bas-orchestrator-* file exists, and (2) let a later tar in the
+    # loop re-point the "bas-orchestrator:<ver>" tag after a verified
+    # load (docker load's tag assignment is last-write-wins, and tags
+    # are embedded in the tar's own manifest, independent of its
+    # filename on disk). Loading it last closes both.
+    local orch_img=""
     for img in "${SCRIPT_DIR}"/images/*.tar.gz "${SCRIPT_DIR}"/images/*.tar; do
       [[ -f "$img" ]] || continue
-      _step 55 "Loading $(basename "$img")..."
       if [[ "$(basename "$img")" == bas-orchestrator-* ]]; then
-        _verify_orchestrator_artifact "$img" || { err "Orchestrator artifact failed verification -- installation aborted."; exit 1; }
-        docker load < "$img"
-      else
-        docker load < "$img" || true
+        orch_img="$img"
+        continue
       fi
+      _step 55 "Loading $(basename "$img")..."
+      docker load < "$img" || true
     done
+    if [[ -z "$orch_img" ]]; then
+      err "No orchestrator artifact (bas-orchestrator-*.tar) found in ${SCRIPT_DIR}/images -- refusing to install without it."
+      exit 1
+    fi
+    _step 55 "Loading $(basename "$orch_img")..."
+    _verify_orchestrator_artifact "$orch_img" || { err "Orchestrator artifact failed verification -- installation aborted."; exit 1; }
+    docker load < "$orch_img"
   else
     cd "${INSTALL_DIR}"
     docker compose -f docker-compose.yml pull --quiet || true

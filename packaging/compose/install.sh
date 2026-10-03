@@ -786,15 +786,35 @@ mode_install() {
   step "4/10  Loading Docker images (air-gap safe -no pull)"
   local images_dir="${SCRIPT_DIR}/images"
   if [[ -d "$images_dir" ]]; then
+    # Load every other image first, then verify+load the orchestrator
+    # artifact LAST. This is deliberate, not cosmetic: singling out the
+    # orchestrator by filename alone would (1) silently skip verification
+    # if no bas-orchestrator-* file exists at all, and (2) let a later tar
+    # in the loop re-point the "bas-orchestrator:<ver>" tag after a
+    # verified load, since docker load's tag assignment is last-write-wins
+    # and tags are embedded in the tar's own manifest, independent of its
+    # filename on disk. Loading the orchestrator last closes both: nothing
+    # can load after it to override its tag, and its absence is now fatal
+    # instead of silent.
+    local orch_tar=""
     for tar in "${images_dir}"/*.tar; do
       [[ -f "$tar" ]] || continue
       if [[ "$(basename "$tar")" == bas-orchestrator-* ]]; then
-        _verify_orchestrator_artifact "$tar" || { err "Orchestrator artifact failed verification -- installation aborted."; exit 1; }
+        orch_tar="$tar"
+        continue
       fi
       info "Loading $(basename "$tar")..."
       docker load < "$tar"
       log "Loaded: $(basename "$tar")"
     done
+    if [[ -z "$orch_tar" ]]; then
+      err "No orchestrator artifact (bas-orchestrator-*.tar) found in ${images_dir} -- refusing to install without it."
+      exit 1
+    fi
+    _verify_orchestrator_artifact "$orch_tar" || { err "Orchestrator artifact failed verification -- installation aborted."; exit 1; }
+    info "Loading $(basename "$orch_tar")..."
+    docker load < "$orch_tar"
+    log "Loaded: $(basename "$orch_tar")"
   else
     warn "images/ directory not found -Docker will attempt to pull (requires internet)"
   fi
@@ -930,13 +950,25 @@ mode_upgrade() {
   step "2/5  Loading new images"
   local images_dir="${SCRIPT_DIR}/images"
   if [[ -d "$images_dir" ]]; then
+    # Same deliberate ordering as mode_install: load every other image
+    # first, then verify+load the orchestrator artifact LAST, so nothing
+    # loaded after it can override the "bas-orchestrator:<ver>" tag, and
+    # its absence is fatal rather than silently skipped.
+    local orch_tar=""
     for tar in "${images_dir}"/*.tar; do
       [[ -f "$tar" ]] || continue
       if [[ "$(basename "$tar")" == bas-orchestrator-* ]]; then
-        _verify_orchestrator_artifact "$tar" || { err "Orchestrator artifact failed verification -- upgrade aborted. The previous version is still running; nothing was replaced."; exit 1; }
+        orch_tar="$tar"
+        continue
       fi
       docker load < "$tar" && log "Loaded: $(basename "$tar")"
     done
+    if [[ -z "$orch_tar" ]]; then
+      err "No orchestrator artifact (bas-orchestrator-*.tar) found in ${images_dir} -- upgrade aborted. The previous version is still running; nothing was replaced."
+      exit 1
+    fi
+    _verify_orchestrator_artifact "$orch_tar" || { err "Orchestrator artifact failed verification -- upgrade aborted. The previous version is still running; nothing was replaced."; exit 1; }
+    docker load < "$orch_tar" && log "Loaded: $(basename "$orch_tar")"
   fi
 
   step "3/5  Updating bundle files"
