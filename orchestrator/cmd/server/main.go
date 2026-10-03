@@ -711,6 +711,7 @@ func main() {
 
 	hub := ws.NewHub()
 	hub.SetSigner(signingKey.PrivateKey())
+	hub.SetAllowedOrigin(cfg.PublicBaseURL) // F3: empty is valid -- ServeBrowserWS falls back to same-origin-only
 	licenseMonitorCtx, licenseMonitorCancel := context.WithCancel(context.Background())
 	defer licenseMonitorCancel()
 	license.StartMonitor(licenseMonitorCtx, cfg.LicensePath, 5*time.Minute, func() {

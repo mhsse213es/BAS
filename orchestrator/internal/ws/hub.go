@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"strconv"
 	"sync"
@@ -18,7 +19,11 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-var upgrader = websocket.Upgrader{
+// agentUpgrader serves the agent WebSocket path, which is credential-gated
+// separately (X-Agent-Token) and doesn't carry browser same-origin
+// semantics -- F3 (browser-origin validation) deliberately does not
+// apply here.
+var agentUpgrader = websocket.Upgrader{
 	ReadBufferSize:  4096,
 	WriteBufferSize: 4096,
 	CheckOrigin:     func(r *http.Request) bool { return true },
@@ -38,10 +43,11 @@ const (
 
 // Hub manages all active WebSocket connections — both endpoint agents and browser dashboards.
 type Hub struct {
-	mu       sync.RWMutex
-	agents   map[string]*conn // agentID → connection
-	browsers []*conn
-	signer   *rsa.PrivateKey // deployment command-signing key (B4) -- see internal/cmdsigning. Set via SetSigner, read by SendToAgent starting in Task 5.
+	mu            sync.RWMutex
+	agents        map[string]*conn // agentID → connection
+	browsers      []*conn
+	signer        *rsa.PrivateKey // deployment command-signing key (B4) -- see internal/cmdsigning. Set via SetSigner, read by SendToAgent starting in Task 5.
+	allowedOrigin string          // host (not full URL) a browser WS Origin must match -- see SetAllowedOrigin (F3)
 }
 
 type conn struct {
@@ -73,6 +79,60 @@ func (h *Hub) SetSigner(signer *rsa.PrivateKey) {
 	h.signer = signer
 }
 
+// SetAllowedOrigin configures the host a browser WebSocket connection's
+// Origin header must match (F3), derived from the same configured
+// public-base-URL mechanism other deployment-facing URLs already use
+// (cfg.PublicBaseURL) rather than introducing a second, independently
+// configured security value that could drift from it. publicBaseURL may
+// be a bare host ("bas.internal") or a full URL ("https://bas.internal");
+// only the host is stored and compared -- scheme is deliberately ignored
+// (see checkBrowserOrigin's doc comment). An empty or unparseable value
+// leaves allowedOrigin empty, which checkBrowserOrigin treats as "rely on
+// the same-origin fallback only."
+func (h *Hub) SetAllowedOrigin(publicBaseURL string) {
+	host := publicBaseURL
+	if u, err := url.Parse(publicBaseURL); err == nil && u.Host != "" {
+		host = u.Host
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.allowedOrigin = host
+}
+
+// checkBrowserOrigin validates a browser WebSocket upgrade's Origin
+// header (F3). A real browser's Origin is always present on a WS
+// handshake (same-origin or not) -- its absence is rejected rather than
+// treated as same-origin, matching this check's own test plan.
+//
+// Scheme is deliberately never compared, only host: a reverse proxy
+// terminating TLS upstream leaves r.TLS nil even when the real external
+// connection was https, which would otherwise false-reject a legitimate
+// same-origin browser purely because of how the request reached this
+// process -- host alone already defeats the actual threat (a page at an
+// attacker-controlled origin trying to open a WS to this server), since
+// that page's Origin host can never legitimately equal this server's own.
+func (h *Hub) checkBrowserOrigin(r *http.Request) bool {
+	origin := r.Header.Get("Origin")
+	if origin == "" {
+		return false
+	}
+	u, err := url.Parse(origin)
+	if err != nil || u.Host == "" {
+		return false
+	}
+
+	h.mu.RLock()
+	allowed := h.allowedOrigin
+	h.mu.RUnlock()
+	if allowed != "" && u.Host == allowed {
+		return true
+	}
+	// Same-origin fallback: the SPA is served by this same orchestrator,
+	// so a legitimate browser's Origin host matches the actual request's
+	// own Host even with no explicit PUBLIC_BASE_URL configured.
+	return u.Host == r.Host
+}
+
 // ServeAgentWS upgrades an agent's HTTP connection to WebSocket.
 // Query param: ?agentId=<id>
 func (h *Hub) ServeAgentWS(w http.ResponseWriter, r *http.Request) {
@@ -81,7 +141,7 @@ func (h *Hub) ServeAgentWS(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "agentId required", http.StatusBadRequest)
 		return
 	}
-	ws, err := upgrader.Upgrade(w, r, nil)
+	ws, err := agentUpgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Printf("[ws] agent upgrade error: %v", err)
 		return
@@ -106,8 +166,17 @@ func (h *Hub) ServeAgentWS(w http.ResponseWriter, r *http.Request) {
 }
 
 // ServeBrowserWS upgrades a dashboard browser connection to WebSocket.
+// Unlike ServeAgentWS, this validates the request's Origin header
+// (F3) via h.checkBrowserOrigin -- a per-Hub upgrader (not the shared
+// package-level agentUpgrader) since CheckOrigin needs this Hub's own
+// configured allowed origin.
 func (h *Hub) ServeBrowserWS(w http.ResponseWriter, r *http.Request) {
-	ws, err := upgrader.Upgrade(w, r, nil)
+	browserUpgrader := websocket.Upgrader{
+		ReadBufferSize:  4096,
+		WriteBufferSize: 4096,
+		CheckOrigin:     h.checkBrowserOrigin,
+	}
+	ws, err := browserUpgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Printf("[ws] browser upgrade error: %v", err)
 		return
