@@ -34,19 +34,25 @@ log()  { echo -e "${GREEN}[+]${NC} $*"; }
 warn() { echo -e "${YELLOW}[!]${NC} $*"; }
 
 # ── Garble detection ──────────────────────────────────────────────────────────
-# garble @latest — required for the Go toolchain in go.mod (v0.16.0+ for Go 1.26;
-# older garble cannot build Go 1.26).  Install with:
-#   go install mvdan.cc/garble@latest
+# garble v0.17.0 — pinned, not @latest: v0.18.0 (2026-09-19) bumped its
+# go.mod requirement to go >= 1.27, which breaks under a go1.26 toolchain.
+# Install with:
+#   go install mvdan.cc/garble@v0.17.0
 if command -v garble &>/dev/null; then
-  log "garble found — orchestrator will be obfuscated (-literals -tiny)"
+  log "garble found — orchestrator and agent will be obfuscated (-literals)"
   GOBUILD_ORCH="garble -literals -tiny build -ldflags=-s -w -X main.Version=${VERSION}"
+  # GOGARBLE scopes to our own module (audspect/agent, no github.com/
+  # prefix -- different module path than the orchestrator's
+  # github.com/audspect/bas). golang.org/x/sys, windigo, sspi, and
+  # gorilla/websocket stay un-obfuscated, same reasoning as the
+  # orchestrator's own scoping below.
+  GOBUILD_AGENT="GOGARBLE='audspect/*' garble -literals build -ldflags=-s -w"
 else
-  warn "garble not found — building orchestrator without obfuscation."
-  echo "  Install: go install mvdan.cc/garble@latest"
+  warn "garble not found — building orchestrator and agent without obfuscation."
+  echo "  Install: go install mvdan.cc/garble@v0.17.0"
   GOBUILD_ORCH="go build -trimpath -ldflags=-s -w -X main.Version=${VERSION}"
+  GOBUILD_AGENT="go build -trimpath -ldflags=-s -w"
 fi
-# Agent uses plain stripped build: golang.org/x/sys assembly is incompatible with garble.
-GOBUILD_AGENT="go build -trimpath -ldflags=-s -w"
 
 # ── 1. Build orchestrator binary ───────────────────────────────────────────────
 log "Building bas-orchestrator ${VERSION} for linux/amd64..."
