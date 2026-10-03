@@ -6,7 +6,40 @@ import (
 	"log"
 	"os"
 	"strconv"
+	"strings"
 )
+
+// minJWTSecretBytes is the floor HS256 needs for meaningful forgery
+// resistance (F4). 32 bytes = 256 bits of key material, matching
+// HS256's output size.
+const minJWTSecretBytes = 32
+
+// knownWeakJWTSecrets are specific placeholder/example phrases that
+// satisfy the length check but must never reach a real deployment --
+// the kind of value a human copies from a sample .env and forgets to
+// change. Deliberately specific compound phrases, not generic single
+// words like "secret" or "password" alone, which would false-positive
+// on legitimate random-looking secrets that happen to contain them.
+var knownWeakJWTSecrets = []string{
+	"changeme", "change-me", "change_me", "changeit", "please-change", "replace-this",
+	"your-secret-here", "your-jwt-secret", "example-secret",
+	"insecure-default", "dummy-secret", "default-secret",
+}
+
+// isKnownWeakSecret reports whether secret is (or contains, case-
+// insensitively) one of the known placeholder values -- a substring
+// check rather than exact match, since real-world defaults get padded
+// to meet a length requirement without changing their actual content
+// (e.g. "changeme-changeme-changeme-change").
+func isKnownWeakSecret(secret string) bool {
+	lower := strings.ToLower(secret)
+	for _, weak := range knownWeakJWTSecrets {
+		if strings.Contains(lower, weak) {
+			return true
+		}
+	}
+	return false
+}
 
 type Config struct {
 	DatabaseURL       string `json:"database_url"`
@@ -378,6 +411,17 @@ func Load(path string) (*Config, error) {
 	}
 	if cfg.JWTSecret == "" {
 		return nil, fmt.Errorf("jwt_secret required (set JWT_SECRET env var or config file)")
+	}
+	// F4: HS256 token-forgery resistance depends entirely on JWT_SECRET's
+	// entropy. A present-but-weak secret is as dangerous as a missing one,
+	// so fail closed at boot rather than only checking non-empty.
+	if len(cfg.JWTSecret) < minJWTSecretBytes {
+		return nil, fmt.Errorf("jwt_secret must be at least %d bytes (got %d) -- generate one with "+
+			"`openssl rand -base64 32` and set it via JWT_SECRET", minJWTSecretBytes, len(cfg.JWTSecret))
+	}
+	if isKnownWeakSecret(cfg.JWTSecret) {
+		return nil, fmt.Errorf("jwt_secret is a known placeholder/default value -- generate a real secret with " +
+			"`openssl rand -base64 32` and set it via JWT_SECRET")
 	}
 
 	// ── Security: warn when sensitive secrets live in the JSON file ────────

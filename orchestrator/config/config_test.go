@@ -9,7 +9,7 @@ func TestLoad_PKIDefaults(t *testing.T) {
 	os.Setenv("DATABASE_URL", "postgres://test")
 	os.Setenv("DATABASE_ADMIN_URL", "postgres://test-admin")
 	os.Setenv("BAS_APP_DB_PASSWORD", "test-app-password")
-	os.Setenv("JWT_SECRET", "test-secret")
+	os.Setenv("JWT_SECRET", "test-secret-32-bytes-long-enough")
 	defer os.Unsetenv("DATABASE_URL")
 	defer os.Unsetenv("DATABASE_ADMIN_URL")
 	defer os.Unsetenv("BAS_APP_DB_PASSWORD")
@@ -34,7 +34,7 @@ func TestLoad_PKIEnvOverrides(t *testing.T) {
 	os.Setenv("DATABASE_URL", "postgres://test")
 	os.Setenv("DATABASE_ADMIN_URL", "postgres://test-admin")
 	os.Setenv("BAS_APP_DB_PASSWORD", "test-app-password")
-	os.Setenv("JWT_SECRET", "test-secret")
+	os.Setenv("JWT_SECRET", "test-secret-32-bytes-long-enough")
 	os.Setenv("PKI_DIR", "/custom/pki")
 	os.Setenv("HTTP_PORT_ENROLL", "9555")
 	os.Setenv("HTTP_PORT_LEGACY", "9001")
@@ -65,7 +65,7 @@ func TestLoad_DashboardDefaults(t *testing.T) {
 	os.Setenv("DATABASE_URL", "postgres://test")
 	os.Setenv("DATABASE_ADMIN_URL", "postgres://test-admin")
 	os.Setenv("BAS_APP_DB_PASSWORD", "test-app-password")
-	os.Setenv("JWT_SECRET", "test-secret")
+	os.Setenv("JWT_SECRET", "test-secret-32-bytes-long-enough")
 	defer os.Unsetenv("DATABASE_URL")
 	defer os.Unsetenv("DATABASE_ADMIN_URL")
 	defer os.Unsetenv("BAS_APP_DB_PASSWORD")
@@ -87,7 +87,7 @@ func TestLoad_DashboardEnvOverrides(t *testing.T) {
 	os.Setenv("DATABASE_URL", "postgres://test")
 	os.Setenv("DATABASE_ADMIN_URL", "postgres://test-admin")
 	os.Setenv("BAS_APP_DB_PASSWORD", "test-app-password")
-	os.Setenv("JWT_SECRET", "test-secret")
+	os.Setenv("JWT_SECRET", "test-secret-32-bytes-long-enough")
 	os.Setenv("HTTP_PORT_DASHBOARD", "9555")
 	os.Setenv("TLS_CERT", "/etc/bas/certs/bas.crt")
 	os.Setenv("TLS_KEY", "/etc/bas/certs/bas.key")
@@ -118,7 +118,7 @@ func TestLoad_RejectsCollidingListenerPorts(t *testing.T) {
 	os.Setenv("DATABASE_URL", "postgres://test")
 	os.Setenv("DATABASE_ADMIN_URL", "postgres://test-admin")
 	os.Setenv("BAS_APP_DB_PASSWORD", "test-app-password")
-	os.Setenv("JWT_SECRET", "test-secret")
+	os.Setenv("JWT_SECRET", "test-secret-32-bytes-long-enough")
 	os.Setenv("HTTP_PORT", "9443")
 	os.Setenv("HTTP_PORT_LEGACY", "9443") // deliberately colliding with HTTP_PORT
 	defer os.Unsetenv("DATABASE_URL")
@@ -138,7 +138,7 @@ func TestLoad_DistinctPortsSucceed(t *testing.T) {
 	os.Setenv("DATABASE_URL", "postgres://test")
 	os.Setenv("DATABASE_ADMIN_URL", "postgres://test-admin")
 	os.Setenv("BAS_APP_DB_PASSWORD", "test-app-password")
-	os.Setenv("JWT_SECRET", "test-secret")
+	os.Setenv("JWT_SECRET", "test-secret-32-bytes-long-enough")
 	defer os.Unsetenv("DATABASE_URL")
 	defer os.Unsetenv("DATABASE_ADMIN_URL")
 	defer os.Unsetenv("BAS_APP_DB_PASSWORD")
@@ -155,7 +155,7 @@ func TestLoad_LegacyListenerEnabledDefaultsTrue(t *testing.T) {
 	os.Setenv("DATABASE_URL", "postgres://test")
 	os.Setenv("DATABASE_ADMIN_URL", "postgres://test-admin")
 	os.Setenv("BAS_APP_DB_PASSWORD", "test-app-password")
-	os.Setenv("JWT_SECRET", "test-secret")
+	os.Setenv("JWT_SECRET", "test-secret-32-bytes-long-enough")
 	os.Unsetenv("BAS_LEGACY_LISTENER_ENABLED")
 	defer os.Unsetenv("DATABASE_URL")
 	defer os.Unsetenv("DATABASE_ADMIN_URL")
@@ -175,7 +175,7 @@ func TestLoad_LegacyListenerEnabledFalseOverride(t *testing.T) {
 	os.Setenv("DATABASE_URL", "postgres://test")
 	os.Setenv("DATABASE_ADMIN_URL", "postgres://test-admin")
 	os.Setenv("BAS_APP_DB_PASSWORD", "test-app-password")
-	os.Setenv("JWT_SECRET", "test-secret")
+	os.Setenv("JWT_SECRET", "test-secret-32-bytes-long-enough")
 	os.Setenv("BAS_LEGACY_LISTENER_ENABLED", "false")
 	defer os.Unsetenv("DATABASE_URL")
 	defer os.Unsetenv("DATABASE_ADMIN_URL")
@@ -194,7 +194,7 @@ func TestLoad_LegacyListenerEnabledFalseOverride(t *testing.T) {
 
 func TestLoad_DatabaseAdminURLRequired(t *testing.T) {
 	os.Setenv("DATABASE_URL", "postgres://bas_app:pw@localhost/bas_platform")
-	os.Setenv("JWT_SECRET", "test-secret")
+	os.Setenv("JWT_SECRET", "test-secret-32-bytes-long-enough")
 	os.Setenv("BAS_APP_DB_PASSWORD", "test-app-password")
 	os.Unsetenv("DATABASE_ADMIN_URL")
 	defer os.Unsetenv("DATABASE_URL")
@@ -210,7 +210,7 @@ func TestLoad_DatabaseAdminURLRequired(t *testing.T) {
 func TestLoad_DatabaseAdminURLFromEnv(t *testing.T) {
 	os.Setenv("DATABASE_URL", "postgres://bas_app:pw@localhost/bas_platform")
 	os.Setenv("DATABASE_ADMIN_URL", "postgres://bas_user:pw@localhost/bas_platform")
-	os.Setenv("JWT_SECRET", "test-secret")
+	os.Setenv("JWT_SECRET", "test-secret-32-bytes-long-enough")
 	os.Setenv("BAS_APP_DB_PASSWORD", "test-app-password")
 	defer os.Unsetenv("DATABASE_URL")
 	defer os.Unsetenv("DATABASE_ADMIN_URL")
@@ -235,7 +235,7 @@ func TestLoad_DatabaseAdminURLFromEnv(t *testing.T) {
 func TestLoad_ToleratesStrayBreakglassEnvVar(t *testing.T) {
 	os.Setenv("DATABASE_URL", "postgres://bas_app:pw@localhost/bas_platform")
 	os.Setenv("DATABASE_ADMIN_URL", "postgres://bas_user:pw@localhost/bas_platform")
-	os.Setenv("JWT_SECRET", "test-secret")
+	os.Setenv("JWT_SECRET", "test-secret-32-bytes-long-enough")
 	os.Setenv("BAS_APP_DB_PASSWORD", "test-app-password")
 	os.Setenv("BAS_DB_BREAKGLASS_PASSWORD", "stray-value-from-an-old-.env")
 	defer os.Unsetenv("DATABASE_URL")
@@ -252,7 +252,7 @@ func TestLoad_ToleratesStrayBreakglassEnvVar(t *testing.T) {
 func TestLoad_AppDBPasswordRequired(t *testing.T) {
 	os.Setenv("DATABASE_URL", "postgres://bas_app:pw@localhost/bas_platform")
 	os.Setenv("DATABASE_ADMIN_URL", "postgres://bas_user:pw@localhost/bas_platform")
-	os.Setenv("JWT_SECRET", "test-secret")
+	os.Setenv("JWT_SECRET", "test-secret-32-bytes-long-enough")
 	os.Unsetenv("BAS_APP_DB_PASSWORD")
 	defer os.Unsetenv("DATABASE_URL")
 	defer os.Unsetenv("DATABASE_ADMIN_URL")
@@ -264,10 +264,61 @@ func TestLoad_AppDBPasswordRequired(t *testing.T) {
 	}
 }
 
+// F4: HS256 security depends entirely on JWT_SECRET's entropy, so a
+// short/weak secret must be rejected, not merely a missing one.
+func TestLoad_JWTSecretTooShort_Rejected(t *testing.T) {
+	os.Setenv("DATABASE_URL", "postgres://test")
+	os.Setenv("DATABASE_ADMIN_URL", "postgres://test-admin")
+	os.Setenv("BAS_APP_DB_PASSWORD", "test-app-password")
+	os.Setenv("JWT_SECRET", "this-is-only-31-bytes-long-xxx") // 30 bytes (name is approximate), deliberately under 32
+	defer os.Unsetenv("DATABASE_URL")
+	defer os.Unsetenv("DATABASE_ADMIN_URL")
+	defer os.Unsetenv("BAS_APP_DB_PASSWORD")
+	defer os.Unsetenv("JWT_SECRET")
+
+	_, err := Load("/nonexistent/config.json")
+	if err == nil {
+		t.Fatal("expected an error for a JWT_SECRET under 32 bytes, got nil")
+	}
+}
+
+func TestLoad_JWTSecretExactly32Bytes_Accepted(t *testing.T) {
+	os.Setenv("DATABASE_URL", "postgres://test")
+	os.Setenv("DATABASE_ADMIN_URL", "postgres://test-admin")
+	os.Setenv("BAS_APP_DB_PASSWORD", "test-app-password")
+	os.Setenv("JWT_SECRET", "test-secret-32-bytes-long-enough") // exactly 32 bytes
+	defer os.Unsetenv("DATABASE_URL")
+	defer os.Unsetenv("DATABASE_ADMIN_URL")
+	defer os.Unsetenv("BAS_APP_DB_PASSWORD")
+	defer os.Unsetenv("JWT_SECRET")
+
+	if _, err := Load("/nonexistent/config.json"); err != nil {
+		t.Fatalf("Load: %v, want a 32-byte secret to be accepted", err)
+	}
+}
+
+func TestLoad_JWTSecretKnownDefault_Rejected(t *testing.T) {
+	os.Setenv("DATABASE_URL", "postgres://test")
+	os.Setenv("DATABASE_ADMIN_URL", "postgres://test-admin")
+	os.Setenv("BAS_APP_DB_PASSWORD", "test-app-password")
+	// Long enough to pass the length check alone, but a known placeholder
+	// value that must never reach production.
+	os.Setenv("JWT_SECRET", "changeme-changeme-changeme-change")
+	defer os.Unsetenv("DATABASE_URL")
+	defer os.Unsetenv("DATABASE_ADMIN_URL")
+	defer os.Unsetenv("BAS_APP_DB_PASSWORD")
+	defer os.Unsetenv("JWT_SECRET")
+
+	_, err := Load("/nonexistent/config.json")
+	if err == nil {
+		t.Fatal("expected an error for a known-default/placeholder JWT_SECRET, got nil")
+	}
+}
+
 func TestLoad_AppDBPasswordFromEnv(t *testing.T) {
 	os.Setenv("DATABASE_URL", "postgres://bas_app:pw@localhost/bas_platform")
 	os.Setenv("DATABASE_ADMIN_URL", "postgres://bas_user:pw@localhost/bas_platform")
-	os.Setenv("JWT_SECRET", "test-secret")
+	os.Setenv("JWT_SECRET", "test-secret-32-bytes-long-enough")
 	os.Setenv("BAS_APP_DB_PASSWORD", "rotated-password")
 	defer os.Unsetenv("DATABASE_URL")
 	defer os.Unsetenv("DATABASE_ADMIN_URL")
