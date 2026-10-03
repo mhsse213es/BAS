@@ -65,33 +65,41 @@ RUN apk add --no-cache zip && \
     cd /agents && zip -q bas-agent-windows-amd64-setup.zip Audspect_Agent.exe && rm Audspect_Agent.exe
 
 # ── Legacy Windows Agent Builder ─────────────────────────────────────────────
-# Separately toolchained via GOTOOLCHAIN=go1.20.14 (go.mod itself stays at a
-# bare `go 1.20` -- the `toolchain` directive predates Go 1.21 and go1.20.14
-# can't parse it). go1.20.14 is the last Go release supporting Windows 7
-# SP1/8/8.1/Server 2008 R2-2012 R2. See
+# go1.20.14 is the last Go release supporting Windows 7 SP1/8/8.1/Server
+# 2008 R2-2012 R2. See
 # docs/superpowers/specs/2026-08-18-legacy-windows-agent-phase1-design.md.
-FROM golang:1.26-alpine AS agent-legacy-builder
-# gcompat: Go's GOTOOLCHAIN auto-download fetches a glibc-linked go1.20.14
-# binary from go.dev -- Alpine's musl libc can't exec it without this shim
-# ("go: exec go1.20.14: no such file or directory" without it, a confusing
-# error for what's actually a missing dynamic linker).
-RUN apk add --no-cache git zip gcompat
+# Uses golang:1.20.14-alpine directly rather than GOTOOLCHAIN=go1.20.14 on
+# top of a newer base image: the latter downloads go1.20.14 as a *module*
+# toolchain under GOMODCACHE, and garble v0.10.1 (the newest version that
+# still installs under a go1.20 toolchain -- it predates Go's
+# module-toolchain feature entirely) panics parsing `go list -json`
+# output because of the "toolchain ... invoked to provide ..." banner
+# that mechanism prints. A native GOROOT install has no such banner.
+# See D2's design doc, Gap 2.
+FROM golang:1.20.14-alpine AS agent-legacy-builder
+RUN apk add --no-cache git zip && \
+    go install mvdan.cc/garble@v0.10.1
 WORKDIR /agent-legacy
 COPY agent-legacy/go.mod agent-legacy/go.sum ./
-ENV GOTOOLCHAIN=go1.20.14
 RUN go mod download
 COPY agent-legacy/ .
 # Hard assertion: fail the image build outright if the resolved toolchain
-# isn't exactly go1.20.14, rather than silently shipping a binary built
-# against a newer runtime than the legacy OSes this agent targets support.
+# isn't exactly go1.20.14 -- now asserting the base image itself (a
+# stronger guarantee than the previous GOTOOLCHAIN-driven assertion,
+# which could not distinguish a correct native install from a
+# garble-incompatible module-downloaded one carrying the same version
+# string).
 RUN GOVERSION=$(go version) && \
     echo "Resolved toolchain: $GOVERSION" && \
     case "$GOVERSION" in \
       *go1.20.14*) ;; \
       *) echo "FATAL: expected go1.20.14, got: $GOVERSION" >&2; exit 1 ;; \
     esac
-RUN CGO_ENABLED=0 GOOS=windows GOARCH=amd64 \
-    go build -trimpath -ldflags="-s -w" -o /agents-legacy/bas-agent-windows-legacy-amd64.exe .
+# GOGARBLE scopes obfuscation to our own module only -- golang.org/x/sys
+# (an older version than the modern agent's, v0.15.0) stays un-obfuscated,
+# same reasoning as agent-builder above.
+RUN CGO_ENABLED=0 GOOS=windows GOARCH=amd64 GOGARBLE='audspect/*' \
+    garble -literals build -ldflags="-s -w" -o /agents-legacy/bas-agent-windows-legacy-amd64.exe .
 RUN cd /agents-legacy && zip -q bas-agent-windows-legacy-amd64-setup.zip bas-agent-windows-legacy-amd64.exe
 
 # ── Package Builder (.deb, .rpm) ─────────────────────────────────────────────

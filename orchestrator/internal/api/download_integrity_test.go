@@ -337,3 +337,71 @@ func TestDockerfileAgentBuilderStageObfuscatesWithGarble(t *testing.T) {
 		t.Error("agent-builder stage does not install garble v0.17.0 -- each Dockerfile stage is independent and does not inherit the orchestrator builder stage's install")
 	}
 }
+
+// TestDockerfileAgentLegacyBuilderStageObfuscatesWithGarble mirrors
+// TestDockerfileAgentBuilderStageObfuscatesWithGarble for the legacy
+// Windows agent, which needs a different garble pin (v0.10.1) and a
+// different base image (golang:1.20.14-alpine, not golang:1.26-alpine +
+// GOTOOLCHAIN=go1.20.14 -- the latter downloads go1.20.14 as a module
+// toolchain, which breaks garble's internal `go list` call under any
+// pre-GOTOOLCHAIN-era garble version; see D2's design doc Gap 2).
+func TestDockerfileAgentLegacyBuilderStageObfuscatesWithGarble(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("..", "..", "Dockerfile"))
+	if err != nil {
+		t.Fatalf("read orchestrator/Dockerfile: %v", err)
+	}
+	content := string(data)
+
+	start := strings.Index(content, "AS agent-legacy-builder")
+	if start == -1 {
+		t.Fatal("orchestrator/Dockerfile has no 'AS agent-legacy-builder' stage -- has it been renamed? Update this test's parsing to match.")
+	}
+	end := strings.Index(content, "AS packager")
+	if end == -1 || end < start {
+		t.Fatal("orchestrator/Dockerfile has no 'AS packager' stage after agent-legacy-builder -- has stage order changed? Update this test's parsing to match.")
+	}
+	// Widen to the start of the FROM line itself, not just "AS
+	// agent-legacy-builder": the base image name (golang:1.20.14-alpine)
+	// precedes "AS agent-legacy-builder" on that same line, so anchoring
+	// exactly at the match would exclude it from `stage` entirely.
+	lineStart := strings.LastIndex(content[:start], "\n") + 1
+	stage := content[lineStart:end]
+
+	if !strings.Contains(stage, "golang:1.20.14-alpine") {
+		t.Error("agent-legacy-builder no longer uses the native golang:1.20.14-alpine base image -- this is required to avoid the GOTOOLCHAIN module-download panic with garble v0.10.1 (D2 Gap 2)")
+	}
+	if strings.Contains(stage, "ENV GOTOOLCHAIN=go1.20.14") {
+		t.Error("agent-legacy-builder still sets ENV GOTOOLCHAIN=go1.20.14 -- no longer needed once the base image is natively go1.20.14, and reintroduces the module-toolchain-download panic (D2 Gap 2) if left in")
+	}
+	if strings.Contains(stage, "gcompat") {
+		t.Error("agent-legacy-builder still installs gcompat -- that shim was only needed for the glibc-linked auto-downloaded toolchain; golang:1.20.14-alpine's own Go binary is already musl-native")
+	}
+	if !strings.Contains(stage, "git") || !strings.Contains(stage, "zip") {
+		t.Error("agent-legacy-builder's apk add line is missing git or zip -- these are still required (git for go mod download, zip for the setup.zip artifact) even though gcompat is removed")
+	}
+
+	// Matched as a block, not a single split line: unlike agent-builder's
+	// multi-platform &&-chain (where each platform's whole command,
+	// GOGARBLE included, fits on one line), this stage builds only one
+	// platform, so the Dockerfile reasonably splits env vars and the
+	// garble invocation across a backslash line continuation.
+	const buildCmdStart = "CGO_ENABLED=0 GOOS=windows GOARCH=amd64"
+	const buildCmdEnd = "-o /agents-legacy/bas-agent-windows-legacy-amd64.exe"
+	cmdStart := strings.Index(stage, buildCmdStart)
+	cmdEnd := strings.Index(stage, buildCmdEnd)
+	if cmdStart == -1 || cmdEnd == -1 || cmdEnd < cmdStart {
+		t.Error("agent-legacy-builder has no recognizable CGO_ENABLED=0 GOOS=windows GOARCH=amd64 ... -o /agents-legacy/bas-agent-windows-legacy-amd64.exe build command")
+	} else {
+		buildCmd := stage[cmdStart : cmdEnd+len(buildCmdEnd)]
+		if !strings.Contains(buildCmd, "garble -literals build") {
+			t.Errorf("agent-legacy-builder's agent build command is not garble-wrapped: %q", buildCmd)
+		}
+		if !strings.Contains(buildCmd, "GOGARBLE='audspect/*'") {
+			t.Errorf("agent-legacy-builder's agent build command is missing the GOGARBLE='audspect/*' scope: %q", buildCmd)
+		}
+	}
+
+	if !strings.Contains(stage, "go install mvdan.cc/garble@v0.10.1") {
+		t.Error("agent-legacy-builder stage does not install garble v0.10.1 -- v0.17.0 (the modern pin) does not install under a go1.20 toolchain")
+	}
+}
