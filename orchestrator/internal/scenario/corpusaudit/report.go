@@ -21,13 +21,18 @@ type ClassifiedItem struct {
 	BlastRadius       string
 }
 
-// AlreadyCatalogued reports whether (techniqueID, actionKey) already
-// resolves via the hand-authored catalog. Reuses the exact sentinel check
-// orchestrator/cmd/probeclassify already established (comparing
-// DestructiveAction against the "unclassified" fail-closed sentinel) --
-// never re-derives catalog internals.
+// AlreadyCatalogued reports whether (techniqueID, actionKey) is a
+// genuinely hand-authored catalog entry. Deliberately uses
+// scenario.IsHandAuthored, NOT scenario.ResolveExecutionClass: the latter
+// resolves against the live, mutable catalog that execclass_generated.go's
+// own init() also populates, so on a second real run of cmd/auditcorpus
+// it would already contain every entry this same tool generated last
+// time -- making every previously-generated item look "hand-authored"
+// and get silently dropped on regeneration (see
+// execclass_test.go's TestIsHandAuthored_ImmuneToLaterGeneratedEntries
+// for the real bug this replaced).
 func AlreadyCatalogued(techniqueID, actionKey string) bool {
-	return scenario.ResolveExecutionClass(techniqueID, actionKey).DestructiveAction != "unclassified"
+	return scenario.IsHandAuthored(techniqueID, actionKey)
 }
 
 type SourceCounts struct {

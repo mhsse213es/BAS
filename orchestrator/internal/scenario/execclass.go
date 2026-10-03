@@ -1,5 +1,7 @@
 package scenario
 
+import "maps"
+
 // ExecutionClass is the destructiveness tier B5 (the agent-side
 // destructive-action guardrail) enforces per step. See
 // docs/superpowers/specs/2026-09-29-destructive-action-guardrail-b5-design.md.
@@ -1008,6 +1010,48 @@ var executionClassifications = map[string]map[string]*ExecutionClassification{
 			BlastRadius:       "Environment variable injection — read-only PATH/library-path enumeration",
 		},
 	},
+}
+
+// handAuthoredExecutionClassifications is a frozen, independent copy of
+// the hand-authored catalog above, taken at package-variable-initialization
+// time -- which the Go spec guarantees completes, for every file in a
+// package, before any init() function in that package runs. execclass_generated.go's
+// init() mutates executionClassifications directly, including (on a
+// second real run of cmd/auditcorpus) re-adding every entry from its own
+// PREVIOUS output before that tool's main() even starts. Without this
+// independent snapshot, a lookup against executionClassifications cannot
+// tell a genuinely hand-authored entry from the tool's own prior
+// generated output, and the audit tool mistakes the latter for the
+// former -- silently dropping those entries the next time it regenerates
+// the file. IsHandAuthored below is the only thing allowed to read this.
+var handAuthoredExecutionClassifications = cloneExecutionClassifications(executionClassifications)
+
+func cloneExecutionClassifications(src map[string]map[string]*ExecutionClassification) map[string]map[string]*ExecutionClassification {
+	dst := make(map[string]map[string]*ExecutionClassification, len(src))
+	for tech, inner := range src {
+		innerCopy := make(map[string]*ExecutionClassification, len(inner))
+		maps.Copy(innerCopy, inner)
+		dst[tech] = innerCopy
+	}
+	return dst
+}
+
+// IsHandAuthored reports whether (techniqueID, actionKey) is a genuinely
+// hand-authored catalog entry -- never an entry added later by
+// execclass_generated.go's init() (including by the generator's own
+// prior run). This is what cmd/auditcorpus must use to decide whether an
+// item is already covered by this file, specifically so the generator is
+// safe to re-run: ResolveExecutionClass/the live executionClassifications
+// map are deliberately NOT used here, since they reflect generated
+// entries too and would make the tool mistake its own previous output for
+// a hand-authored one.
+func IsHandAuthored(techniqueID, actionKey string) bool {
+	techniques, ok := handAuthoredExecutionClassifications[techniqueID]
+	if !ok {
+		return false
+	}
+	_, ok = techniques[actionKey]
+	return ok
 }
 
 // ResolveExecutionClass looks up the classification for a given

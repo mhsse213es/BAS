@@ -5,6 +5,41 @@ import (
 	"testing"
 )
 
+// TestIsHandAuthored_ImmuneToLaterGeneratedEntries pins a real bug found
+// during the B5 ART/Caldera audit's Task 8: cmd/auditcorpus's
+// AlreadyCatalogued check used to read ResolveExecutionClass, which
+// resolves against the SAME mutable executionClassifications map that
+// execclass_generated.go's own init() populates at package-init time.
+// On a second real re-run, Go's package init already loaded that
+// generated file's PREVIOUS output before main() ran, so every item the
+// tool had classified last time looked "already catalogued" this time --
+// WriteGeneratedGo (which only emits non-hand-authored StatusClassified
+// items) then skipped re-emitting them, and os.Create's truncation wiped
+// them from disk. A real run demonstrated this exactly: the committed
+// execclass_generated.go shrank from 13744 lines (Task 6) to 72 lines
+// (Task 8's first re-run), losing ~3435 real entries. IsHandAuthored must
+// never be fooled by the tool's own prior output.
+func TestIsHandAuthored_ImmuneToLaterGeneratedEntries(t *testing.T) {
+	const tech, key = "T9999", "simulated_generated_entry_for_test"
+	if IsHandAuthored(tech, key) {
+		t.Fatalf("expected %s/%s to not be hand-authored before any mutation", tech, key)
+	}
+	// Simulate exactly what execclass_generated.go's init() does on a
+	// second re-run: add an entry directly to the live, mutable catalog.
+	if executionClassifications[tech] == nil {
+		executionClassifications[tech] = map[string]*ExecutionClassification{}
+	}
+	executionClassifications[tech][key] = &ExecutionClassification{Class: ClassNonDestructive, DestructiveAction: key}
+	t.Cleanup(func() { delete(executionClassifications[tech], key) })
+
+	if ResolveExecutionClass(tech, key).DestructiveAction == "unclassified" {
+		t.Fatalf("sanity check failed: expected the live map mutation to be visible to ResolveExecutionClass")
+	}
+	if IsHandAuthored(tech, key) {
+		t.Errorf("IsHandAuthored must stay false for an entry added after package init -- otherwise a second cmd/auditcorpus run mistakes its own prior output for a hand-authored entry and silently drops it on regeneration")
+	}
+}
+
 func TestResolveExecutionClass_ExactMatch(t *testing.T) {
 	got := ResolveExecutionClass("T1490", "vss_delete")
 	if got.Class != ClassDestructive {
