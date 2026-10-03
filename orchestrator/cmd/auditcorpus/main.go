@@ -3,14 +3,40 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"log"
 	"os"
+	"path/filepath"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/audspect/bas/internal/scenario"
 	"github.com/audspect/bas/internal/scenario/corpusaudit"
 )
+
+// writeFileAtomically writes write's output to a temp file in path's own
+// directory, then renames it over path only on success -- so a mid-write
+// failure (disk full, process killed) never leaves path truncated or
+// partially overwritten. On any failure the temp file is removed and path
+// is left exactly as it was before the call.
+func writeFileAtomically(path string, write func(io.Writer) error) error {
+	dir := filepath.Dir(path)
+	tmp, err := os.CreateTemp(dir, filepath.Base(path)+".tmp-*")
+	if err != nil {
+		return err
+	}
+	tmpPath := tmp.Name()
+	defer os.Remove(tmpPath) // no-op once the rename below succeeds
+
+	if err := write(tmp); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tmpPath, path)
+}
 
 const (
 	generatedPath = "internal/scenario/execclass_generated.go"
@@ -77,7 +103,7 @@ func main() {
 
 	keyed, collisions := corpusaudit.DeriveActionKeys(items)
 	for _, c := range collisions {
-		log.Printf("WARNING: %v (both items excluded from the catalog, will surface as unresolved)", c)
+		log.Printf("WARNING: %v (both items excluded from the catalog, see report.*.Collisions -- not folded into Unresolved)", c)
 	}
 
 	reviewed, err := corpusaudit.LoadReviewedDecisions(reviewedPath)
@@ -87,25 +113,19 @@ func main() {
 
 	classified := corpusaudit.Triage(keyed, reviewed)
 
-	genFile, err := os.Create(generatedPath)
-	if err != nil {
-		log.Fatalf("create %s: %v", generatedPath, err)
-	}
-	defer genFile.Close()
-	if err := corpusaudit.WriteGeneratedGo(genFile, classified); err != nil {
+	if err := writeFileAtomically(generatedPath, func(w io.Writer) error {
+		return corpusaudit.WriteGeneratedGo(w, classified)
+	}); err != nil {
 		log.Fatalf("write %s: %v", generatedPath, err)
 	}
 
 	if err := os.MkdirAll("internal/scenario/testdata", 0o755); err != nil {
 		log.Fatalf("mkdir testdata: %v", err)
 	}
-	reportFile, err := os.Create(reportPath)
-	if err != nil {
-		log.Fatalf("create %s: %v", reportPath, err)
-	}
-	defer reportFile.Close()
 	report := corpusaudit.BuildReport(classified, collisions)
-	if err := corpusaudit.WriteReportMarkdown(reportFile, report); err != nil {
+	if err := writeFileAtomically(reportPath, func(w io.Writer) error {
+		return corpusaudit.WriteReportMarkdown(w, report)
+	}); err != nil {
 		log.Fatalf("write %s: %v", reportPath, err)
 	}
 

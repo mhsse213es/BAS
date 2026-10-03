@@ -56,6 +56,37 @@ func TestNewCalderaStore_IndexesAbilitiesByTechnique(t *testing.T) {
 	}
 }
 
+// TestNewCalderaStore_AssignsRealActionKey pins the B5 ART/Caldera audit's
+// wiring fix: real dispatch must set ScenarioStep.ActionKey from the
+// ability's own Name, using the same derivation cmd/auditcorpus used to
+// build execclass_generated.go -- otherwise ResolveExecutionClass always
+// falls back to the technique's "enumerate" default regardless of which
+// real ability is being classified.
+func TestNewCalderaStore_AssignsRealActionKey(t *testing.T) {
+	const abilitiesJSON = `[
+	  {"ability_id":"a1","name":"systeminfo","technique_id":"T1082","tactic":"discovery",
+	   "executors":[{"platform":"windows","name":"psh","command":"systeminfo"}]}
+	]`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/v2/abilities" {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(abilitiesJSON))
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer srv.Close()
+
+	store := NewCalderaStore(srv.URL, "")
+	got := store.GetAbilities("T1082")
+	if len(got) != 1 {
+		t.Fatalf("GetAbilities(T1082) = %d abilities, want 1", len(got))
+	}
+	if got[0].ActionKey != "systeminfo" {
+		t.Errorf("ActionKey = %q, want %q -- real Caldera abilities must get a derived action_key, not be left empty (which falls back to \"enumerate\")", got[0].ActionKey, "systeminfo")
+	}
+}
+
 func TestNewCalderaStore_UnknownTechniqueReturnsNil(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

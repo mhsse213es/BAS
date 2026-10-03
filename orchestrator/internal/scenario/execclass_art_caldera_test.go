@@ -95,3 +95,75 @@ func TestExecutionClassifications_ARTCalderaCorpusFullyResolved(t *testing.T) {
 			"and docs/superpowers/plans/2026-10-03-b5-art-caldera-corpus-audit.md's Task 8 for the review methodology", report.Caldera.Unresolved)
 	}
 }
+
+// TestARTCalderaStores_RealStepsResolveSpecificClassNotEnumerate is the
+// end-to-end proof the final review of the B5 ART/Caldera audit asked
+// for: unlike the gate test above (which re-derives action_key from raw
+// data independently of the real stores, a closed loop that never
+// touches ScenarioStep.ActionKey as the real dispatch path builds it),
+// this test uses the real *ARTStore/*CalderaStore's own steps -- exactly
+// what AttachExecutionClassifications consumes in builder.go -- and
+// confirms a meaningful fraction resolve to something other than the
+// technique's "enumerate" fallback. Before the ActionKey-wiring fix, 100%
+// of real ART/Caldera steps resolved via ActionKey == "" -> "enumerate",
+// regardless of what the step actually does; this pins that regression.
+func TestARTCalderaStores_RealStepsResolveSpecificClassNotEnumerate(t *testing.T) {
+	dbURL := os.Getenv("DATABASE_URL")
+	calderaURL := os.Getenv("CALDERA_URL")
+	if dbURL == "" || calderaURL == "" {
+		t.Skip("DATABASE_URL/CALDERA_URL not set -- skipping the live-stack ActionKey-wiring end-to-end check")
+	}
+	calderaKey := os.Getenv("CALDERA_API_KEY")
+
+	ctx := context.Background()
+	pool, err := pgxpool.New(ctx, dbURL)
+	if err != nil {
+		t.Fatalf("connect to postgres: %v", err)
+	}
+	defer pool.Close()
+
+	artStore, err := scenario.NewARTStoreFromDB(ctx, pool, nil)
+	if err != nil {
+		t.Fatalf("load ART atomics: %v", err)
+	}
+	var artSteps []scenario.ScenarioStep
+	for _, tech := range artStore.ListTechniques() {
+		artSteps = append(artSteps, artStore.GetStepsByPlatform(tech, "windows")...)
+	}
+	if len(artSteps) == 0 {
+		t.Fatal("loaded zero ART atomics -- environment problem, not an ActionKey-wiring question")
+	}
+
+	calderaStore := scenario.NewCalderaStore(calderaURL, calderaKey)
+	var calderaSteps []scenario.ScenarioStep
+	for _, tech := range calderaStore.ListTechniqueIDs() {
+		calderaSteps = append(calderaSteps, calderaStore.GetAbilities(tech)...)
+	}
+	if len(calderaSteps) == 0 {
+		t.Fatal("loaded zero Caldera abilities -- environment problem, not an ActionKey-wiring question")
+	}
+
+	for _, tc := range []struct {
+		label string
+		steps []scenario.ScenarioStep
+	}{{"ART", artSteps}, {"Caldera", calderaSteps}} {
+		label, steps := tc.label, tc.steps
+		var withKey, resolvedSpecific int
+		for _, s := range steps {
+			if s.ActionKey != "" {
+				withKey++
+				if got := scenario.ResolveExecutionClass(s.TechniqueID, s.ActionKey); got.DestructiveAction != "enumerate" {
+					resolvedSpecific++
+				}
+			}
+		}
+		if withKey == 0 {
+			t.Errorf("%s: zero real steps got a non-empty ActionKey -- the wiring fix did not take effect for this source", label)
+		}
+		if resolvedSpecific == 0 {
+			t.Errorf("%s: %d steps had an ActionKey, but zero resolved to anything other than the bare \"enumerate\" fallback", label, withKey)
+		}
+		t.Logf("%s: %d/%d steps got a real ActionKey, %d of those resolved to a specific (non-enumerate) classification",
+			label, withKey, len(steps), resolvedSpecific)
+	}
+}

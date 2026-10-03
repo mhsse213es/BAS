@@ -142,6 +142,9 @@ func NewARTStoreFromDB(ctx context.Context, pool *pgxpool.Pool, payloads *Payloa
 			requiredPayloads: required,
 		})
 	}
+	for tech := range s.steps {
+		assignActionKeys(s.steps[tech], "art")
+	}
 	return s, rows.Err()
 }
 

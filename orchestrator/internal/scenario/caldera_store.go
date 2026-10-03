@@ -138,6 +138,10 @@ func (s *CalderaStore) tryLoad(calderaURL, apiKey string) bool {
 		})
 	}
 
+	for tech := range steps {
+		assignActionKeys(steps[tech], "caldera")
+	}
+
 	// Built off to the side, then swapped in under the write lock, so a reader
 	// never observes a half-populated index while a background retry runs.
 	s.mu.Lock()
