@@ -327,6 +327,37 @@ services:
       retries: 3
       start_period: 20s
 
+  # Dev/audit-only: runs orchestrator/cmd/auditcorpus against this stack's
+  # real postgres+caldera to (re)generate the B5 ART/Caldera classification
+  # catalog. profiles gates it out of every normal `docker compose up` --
+  # zero effect on production. See
+  # docs/superpowers/plans/2026-10-03-b5-art-caldera-corpus-audit.md.
+  auditcorpus:
+    # Plain golang image with the whole repo bind-mounted, NOT a build off
+    # orchestrator/Dockerfile's builder stage -- that stage only copies the
+    # orchestrator module (no go.work, no agent/), so cmd/auditcorpus's
+    # cross-module import of agent/destructiveguard cannot resolve there.
+    # Mounting the real repo root lets Go's workspace auto-detection find
+    # /workspace/go.work by walking up from working_dir, exactly as it
+    # already does when running tests from the host's orchestrator/ dir.
+    image: golang:1.26-alpine
+    profiles: ["audit"]
+    networks:
+      - bas-internal
+    depends_on:
+      postgres:
+        condition: service_started
+      caldera:
+        condition: service_started
+    environment:
+      DATABASE_URL: "postgres://bas_app:${BAS_APP_DB_PASSWORD}@postgres:5432/${POSTGRES_DB:-bas_platform}?sslmode=prefer"
+      CALDERA_URL: "http://caldera:8888"
+      CALDERA_API_KEY: ${CALDERA_API_KEY:-BASPlatform2024}
+    volumes:
+      - ../..:/workspace
+    working_dir: /workspace/orchestrator
+    command: ["go", "run", "./cmd/auditcorpus"]
+
 networks:
   bas-internal:
     driver: bridge

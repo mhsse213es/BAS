@@ -215,6 +215,73 @@ func (s *CalderaStore) Count() int {
 	return n
 }
 
+// RawCalderaAbility is the unfiltered form of a Caldera ability, exposed
+// for audit tooling (orchestrator/cmd/auditcorpus). CalderaStore itself
+// only ever exposes the already-filtered, already-indexed subset via
+// GetAbilities -- this exists so the audit can see the TRUE discovered
+// count (including abilities tryLoad would otherwise silently drop) and
+// the real picked executor name, which tryLoad's own ScenarioStep
+// construction hardcodes to "powershell" regardless of which executor
+// was actually picked.
+type RawCalderaAbility struct {
+	AbilityID   string
+	Name        string
+	TechniqueID string
+	Executor    string
+	Command     string
+}
+
+// pickExecutor mirrors pickExecutorCommand's own preference order
+// (preferred, then psh/powershell, then first available) but also
+// returns which executor's name was actually picked -- pickExecutorCommand
+// only ever returns the command, which is why tryLoad's own ScenarioStep
+// construction has to hardcode "powershell" instead of reporting the truth.
+func pickExecutor(executors []calderaExecutor, preferred string) (name, command string) {
+	if preferred == "" {
+		preferred = "psh"
+	}
+	for _, e := range executors {
+		if e.Name == preferred {
+			return e.Name, e.Command
+		}
+	}
+	for _, e := range executors {
+		if e.Name == "psh" || e.Name == "powershell" {
+			return e.Name, e.Command
+		}
+	}
+	if len(executors) > 0 {
+		return executors[0].Name, executors[0].Command
+	}
+	return "", ""
+}
+
+func rawFromCalderaAbility(ab calderaAbilityFull) RawCalderaAbility {
+	executor, command := pickExecutor(ab.Executors, "psh")
+	return RawCalderaAbility{
+		AbilityID:   ab.AbilityID,
+		Name:        ab.Name,
+		TechniqueID: ab.TechniqueID,
+		Executor:    executor,
+		Command:     command,
+	}
+}
+
+// FetchRawCalderaAbilities fetches every ability from a live Caldera
+// instance, unfiltered -- reuses the exact same fetch fetchAllCalderaAbilities
+// uses internally, never a parallel API parser.
+func FetchRawCalderaAbilities(calderaURL, apiKey string) ([]RawCalderaAbility, error) {
+	full, err := fetchAllCalderaAbilities(calderaURL, apiKey)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]RawCalderaAbility, len(full))
+	for i, ab := range full {
+		out[i] = rawFromCalderaAbility(ab)
+	}
+	return out, nil
+}
+
 // fetchAllCalderaAbilities fetches and parses the full abilities list from a
 // live Caldera instance. Shared by NewCalderaStore and
 // buildCalderaAllWindowsSteps (which additionally converts to steps and
