@@ -644,8 +644,74 @@ if ($LASTEXITCODE -ne 0) {
 # call now covers every path: patched-and-required, patched-not-required,
 # skipped-not-required, and plain dev build with no cert at all.
 Log "  Saving $OrchestratorTag..."
-docker save $OrchestratorTag -o "$OutDir\images\bas-orchestrator-$Version.tar"
+$OrchTar = "$OutDir\images\bas-orchestrator-$Version.tar"
+docker save $OrchestratorTag -o "$OrchTar"
 if ($LASTEXITCODE -ne 0) { Err "Failed to save orchestrator image." }
+
+# D2/cosign-enforcement: cosign's sign/verify/save/load subcommands all
+# resolve against a container registry, which does not exist here (this
+# image is built and docker-saved but never pushed anywhere). Signing the
+# tarball's own bytes with sign-blob/verify-blob needs no registry, and
+# signs the EXACT bytes just saved above -- confirmed working against this
+# repo's packaging/signing/cosign.sh (bash, used by build.sh); this calls
+# the native cosign.exe binary directly, same pattern this file already
+# uses for gpg.exe rather than shelling out to a bash script. Gated by the
+# existing $WindowsSigningRequired (already = $IsCustomerBuild by
+# default): a customer build that can't sign+verify must not ship; a dev
+# build without cosign configured proceeds unsigned, loudly.
+$CosignKey = "$RepoRoot\packaging\signing\cosign.key"
+$CosignPub = "$RepoRoot\packaging\signing\cosign.pub"
+$cosignCmd = Get-Command cosign -ErrorAction SilentlyContinue
+if (-not $cosignCmd) {
+    if ($WindowsSigningRequired) {
+        Err "cosign is not installed, and cosign signing is mandatory for this customer build. Install: https://docs.sigstore.dev/cosign/system_config/installation/"
+    } else {
+        Warn "  cosign not found -- orchestrator artifact will not be cosign-signed (not required for this build)."
+    }
+} elseif (-not (Test-Path $CosignKey)) {
+    if ($WindowsSigningRequired) {
+        Err "cosign.key not found at $CosignKey, and cosign signing is mandatory for this customer build. Run: bash packaging/signing/cosign.sh --keygen"
+    } else {
+        Warn "  cosign.key not found -- orchestrator artifact will not be cosign-signed (not required for this build)."
+    }
+} else {
+    Log "  Signing $OrchTar with cosign..."
+    # cosign.exe prompts interactively for the key's passphrase unless
+    # given empty input via a real file handle. $env:COSIGN_PASSWORD = ""
+    # does NOT work on Windows -- confirmed: Win32 cannot represent an
+    # empty-string environment variable, so the assignment is silently
+    # treated as unset (cmd /c "set COSIGN_PASSWORD" reports "not
+    # defined" immediately after setting it to ""), and cosign falls
+    # through to its interactive prompt, which then fails non-interactively
+    # ("The handle is invalid"). Piping an empty string also fails
+    # (adds a trailing newline, which the key's true empty passphrase
+    # does not match -- "decryption failed"). Redirecting stdin from a
+    # real, 0-byte file is the only tested approach that supplies a true
+    # empty passphrase non-interactively on Windows.
+    $emptyStdin = "$OutDir\.cosign-empty-stdin"
+    New-Item -ItemType File -Force -Path $emptyStdin | Out-Null
+    $signStdout = "$OutDir\.cosign-sign-stdout.log"
+    $signStderr = "$OutDir\.cosign-sign-stderr.log"
+    $signProc = Start-Process -FilePath "cosign.exe" -ArgumentList @(
+        "sign-blob", "--key", "$CosignKey", "--yes", "--tlog-upload=false", "--use-signing-config=false",
+        "--bundle", "$OrchTar.bundle", "$OrchTar"
+    ) -RedirectStandardInput $emptyStdin -NoNewWindow -Wait -PassThru `
+      -RedirectStandardOutput $signStdout -RedirectStandardError $signStderr
+    Get-Content $signStdout, $signStderr -ErrorAction SilentlyContinue | ForEach-Object { Log "    $_" }
+    Remove-Item -ErrorAction SilentlyContinue $emptyStdin, $signStdout, $signStderr
+    if ($signProc.ExitCode -ne 0) {
+        if ($WindowsSigningRequired) { Err "cosign signing failed for $OrchTar -- aborting customer build." }
+        else { Warn "  cosign signing failed -- continuing unsigned (not required for this build)." }
+    } else {
+        Log "  Verifying the signature we just produced..."
+        & cosign verify-blob --key $CosignPub --bundle "$OrchTar.bundle" --insecure-ignore-tlog "$OrchTar" 2>&1 | ForEach-Object { Log "    $_" }
+        if ($LASTEXITCODE -ne 0) {
+            Err "cosign verification FAILED immediately after signing $OrchTar -- this should be structurally impossible; investigate before shipping."
+        }
+        Log "  $OrchTar signed and verified."
+        Copy-Item $CosignPub "$OutDir\cosign.pub" -Force
+    }
+}
 $orchSizeMB = [math]::Round((Get-Item "$OutDir\images\bas-orchestrator-$Version.tar").Length / 1MB)
 Log "  Saved: bas-orchestrator-$Version.tar (${orchSizeMB}MB)"
 
