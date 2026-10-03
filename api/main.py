@@ -16,6 +16,7 @@ import httpx
 from database import engine, Base, get_db
 from models import Agent, Report, ScenarioRun
 import scoring
+from cors_config import allowed_origins
 
 
 ORCHESTRATOR_URL = os.getenv("ORCHESTRATOR_URL", "http://orchestrator:9000")
@@ -34,11 +35,20 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# F2 (groupF.txt): was allow_origins=["*"] with wildcard methods/headers --
+# any origin could call this API from a browser. Real endpoints only ever
+# use GET/POST and a JSON Content-Type (no Authorization header
+# anywhere in this service); allow_origins is derived from PUBLIC_BASE_URL
+# (plus optional CORS_ALLOWED_ORIGINS), the same concept the Go
+# orchestrator's browser WebSocket origin check reads, so the two never
+# drift apart as independently configured values. An unset PUBLIC_BASE_URL
+# yields an empty origin list -- no cross-origin browser access at all --
+# rather than falling back to a wildcard.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=allowed_origins(),
+    allow_methods=["GET", "POST"],
+    allow_headers=["Content-Type"],
 )
 
 
