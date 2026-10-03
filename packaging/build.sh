@@ -26,12 +26,13 @@ BUILD_NAME="bas-platform-compose-${VERSION}"
 BUILD_DIR="${DIST_DIR}/${BUILD_NAME}"
 
 if [ -t 1 ]; then
-  GREEN='\033[0;32m'; YELLOW='\033[1;33m'; NC='\033[0m'
+  RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; NC='\033[0m'
 else
-  GREEN=''; YELLOW=''; NC=''
+  RED=''; GREEN=''; YELLOW=''; NC=''
 fi
 log()  { echo -e "${GREEN}[+]${NC} $*"; }
 warn() { echo -e "${YELLOW}[!]${NC} $*"; }
+err()  { echo -e "${RED}[✗]${NC} $*" >&2; }
 
 # ── Garble detection ──────────────────────────────────────────────────────────
 # garble v0.17.0 — pinned, not @latest: v0.18.0 (2026-09-19) bumped its
@@ -193,38 +194,66 @@ sed -i "s|bas-orchestrator:.*|bas-orchestrator:${VERSION}|g" \
 # Also update .env.example default
 sed -i "s|^BAS_VERSION=.*|BAS_VERSION=${VERSION}|" "${BUILD_DIR}/.env.example"
 
-# ── 4. Build Docker image and export (optional, requires Docker) ───────────────
-if command -v docker &>/dev/null; then
-  log "Building Docker image bas-orchestrator:${VERSION}..."
-  docker build \
-    --build-arg VERSION="${VERSION}" \
-    -t "bas-orchestrator:${VERSION}" \
-    -f "${REPO_ROOT}/orchestrator/Dockerfile" \
-    "${REPO_ROOT}"
-
-  # Sign image with cosign if available
-  COSIGN_SCRIPT="${REPO_ROOT}/packaging/signing/cosign.sh"
-  COSIGN_PUB="${REPO_ROOT}/packaging/signing/cosign.pub"
-  if command -v cosign &>/dev/null && [[ -f "${REPO_ROOT}/packaging/signing/cosign.key" ]]; then
-    log "Signing Docker image with cosign..."
-    bash "${COSIGN_SCRIPT}" --sign "bas-orchestrator:${VERSION}"
-    # Copy public key into bundle so installer can verify
-    [[ -f "$COSIGN_PUB" ]] && cp "$COSIGN_PUB" "${BUILD_DIR}/"
-  else
-    warn "cosign not available or cosign.key missing — Docker image will not be cosign-signed."
-    echo "  To sign: bash packaging/signing/cosign.sh --keygen  then rebuild."
-  fi
-
-  log "Exporting Docker image to bundle..."
-  mkdir -p "${BUILD_DIR}/images"
-  docker save "bas-orchestrator:${VERSION}" \
-    | gzip > "${BUILD_DIR}/images/bas-orchestrator-${VERSION}.tar.gz"
-  docker save "postgres:16-alpine" \
-    | gzip > "${BUILD_DIR}/images/postgres-16-alpine.tar.gz" 2>/dev/null || \
-    warn "postgres:16-alpine not pulled locally — run 'docker pull postgres:16-alpine' to include it"
-else
-  warn "Docker not found — skipping image export. Bundle will pull images on install."
+# ── 4. Build Docker image and export (requires Docker) ─────────────────────────
+if ! command -v docker &>/dev/null; then
+  err "Docker not found — this script produces a release bundle and cannot do so without Docker."
+  exit 1
 fi
+
+# D2/cosign-enforcement: this script produces the distributable release
+# bundle -- it has no dev-build concept to preserve, so cosign signing is
+# unconditionally mandatory here (unlike windows-build.ps1, which keeps an
+# explicit dev-vs-customer distinction via $WindowsSigningRequired). Checked
+# before the (slow) docker build so a missing cosign/key fails fast.
+COSIGN_SCRIPT="${REPO_ROOT}/packaging/signing/cosign.sh"
+COSIGN_KEY="${REPO_ROOT}/packaging/signing/cosign.key"
+COSIGN_PUB="${REPO_ROOT}/packaging/signing/cosign.pub"
+if ! command -v cosign &>/dev/null; then
+  err "cosign is not installed, and cosign signing is mandatory for this release build. Install: https://docs.sigstore.dev/cosign/system_config/installation/"
+  exit 1
+fi
+if [[ ! -f "$COSIGN_KEY" ]]; then
+  err "cosign.key not found at ${COSIGN_KEY}, and cosign signing is mandatory for this release build. Run: bash packaging/signing/cosign.sh --keygen"
+  exit 1
+fi
+
+log "Building Docker image bas-orchestrator:${VERSION}..."
+docker build \
+  --build-arg VERSION="${VERSION}" \
+  -t "bas-orchestrator:${VERSION}" \
+  -f "${REPO_ROOT}/orchestrator/Dockerfile" \
+  "${REPO_ROOT}"
+
+log "Exporting Docker image to bundle..."
+mkdir -p "${BUILD_DIR}/images"
+ORCH_TAR="${BUILD_DIR}/images/bas-orchestrator-${VERSION}.tar"
+docker save "bas-orchestrator:${VERSION}" -o "${ORCH_TAR}"
+
+# cosign has no mode to sign/verify a Docker-daemon-only image reference --
+# sign/verify/save/load all resolve against a container registry, which
+# does not exist here (this image is built and saved but never pushed
+# anywhere). Signing the tarball's own bytes with sign-blob/verify-blob
+# needs no registry, and signs the EXACT bytes that ship in the bundle --
+# not a pre-save intermediate that could diverge from what gets shipped.
+log "Signing release artifact with cosign..."
+if ! bash "${COSIGN_SCRIPT}" --sign "${ORCH_TAR}"; then
+  err "cosign signing failed for ${ORCH_TAR} -- aborting release build."
+  exit 1
+fi
+log "Verifying the signature we just produced..."
+if ! bash "${COSIGN_SCRIPT}" --verify "${ORCH_TAR}"; then
+  err "cosign verification FAILED immediately after signing ${ORCH_TAR} -- this should be structurally impossible; investigate before shipping."
+  exit 1
+fi
+if [[ ! -f "$COSIGN_PUB" ]]; then
+  err "cosign.pub not found at ${COSIGN_PUB} after a successful sign+verify -- cannot ship a release bundle the installer can't verify."
+  exit 1
+fi
+cp "$COSIGN_PUB" "${BUILD_DIR}/"
+
+docker save "postgres:16-alpine" \
+  | gzip > "${BUILD_DIR}/images/postgres-16-alpine.tar.gz" 2>/dev/null || \
+  warn "postgres:16-alpine not pulled locally — run 'docker pull postgres:16-alpine' to include it"
 
 # ── 5. Package tarball ─────────────────────────────────────────────────────────
 TARBALL="${DIST_DIR}/${BUILD_NAME}.tar.gz"
