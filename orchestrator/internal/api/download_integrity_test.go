@@ -429,6 +429,18 @@ func TestBuildShAgentObfuscatesWithGarble(t *testing.T) {
 		t.Error("packaging/build.sh embeds GOGARBLE inside $GOBUILD_AGENT -- bash does not honor an assignment-prefix word that arrives via parameter expansion; this form expands to a command whose first word is the literal string GOGARBLE='audspect/*', failing with \"command not found\" under set -e")
 	}
 
+	// GOBUILD_ORCH/GOBUILD_AGENT must never carry an embedded "-ldflags=..."
+	// value containing an internal space: unquoted parameter expansion at
+	// the call sites word-splits on that space, so "-ldflags=-s -w" would
+	// arrive as two separate tokens ("-ldflags=-s" and a bare "-w") that
+	// go/garble reject or misparse (reproduced directly: "flag provided
+	// but not defined: -w" for plain go build, "malformed import path" for
+	// garble). -ldflags must instead be its own variable, passed as a
+	// single already-quoted token at each call site.
+	if strings.Contains(content, `-ldflags=-s -w`) {
+		t.Error(`packaging/build.sh embeds "-ldflags=-s -w" (containing a space) inside a command variable -- unquoted parameter expansion at the call site word-splits this into two tokens, which go/garble reject; move it to its own LDFLAGS_* variable and pass it as -ldflags="${LDFLAGS_*}" at the call site instead`)
+	}
+
 	callSites := []string{
 		`CGO_ENABLED=0 GOOS="${GOOS}" GOARCH="${GOARCH}" GOGARBLE='audspect/*' \`,
 		`CGO_ENABLED=0 GOOS=windows GOARCH=amd64 GOGARBLE='audspect/*' \`,
@@ -439,8 +451,11 @@ func TestBuildShAgentObfuscatesWithGarble(t *testing.T) {
 		}
 	}
 
-	if !strings.Contains(content, `${GOBUILD_AGENT} -o "${OUT}" .`) {
-		t.Error("packaging/build.sh's agent cross-compile loop no longer invokes $GOBUILD_AGENT as expected -- has the call site been restructured?")
+	if !strings.Contains(content, `${GOBUILD_AGENT} -ldflags="${LDFLAGS_AGENT}" -o "${OUT}" .`) {
+		t.Error(`packaging/build.sh's agent cross-compile loop no longer invokes $GOBUILD_AGENT with a quoted -ldflags="${LDFLAGS_AGENT}" as expected -- has the call site been restructured?`)
+	}
+	if !strings.Contains(content, `-ldflags="${LDFLAGS_ORCH}"`) {
+		t.Error(`packaging/build.sh's orchestrator build no longer passes a quoted -ldflags="${LDFLAGS_ORCH}" -- has the call site been restructured?`)
 	}
 }
 

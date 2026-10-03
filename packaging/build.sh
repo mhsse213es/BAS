@@ -40,7 +40,7 @@ warn() { echo -e "${YELLOW}[!]${NC} $*"; }
 #   go install mvdan.cc/garble@v0.17.0
 if command -v garble &>/dev/null; then
   log "garble found — orchestrator and agent will be obfuscated (-literals)"
-  GOBUILD_ORCH="garble -literals -tiny build -ldflags=-s -w -X main.Version=${VERSION}"
+  GOBUILD_ORCH="garble -literals -tiny build"
   # GOGARBLE scopes to our own module (audspect/agent, no github.com/
   # prefix -- different module path than the orchestrator's
   # github.com/audspect/bas). golang.org/x/sys, windigo, sspi, and
@@ -54,13 +54,25 @@ if command -v garble &>/dev/null; then
   # below), bash treats the whole expanded string as the command name
   # instead of an env assignment, so it's set literally at each call
   # site instead (same place GOOS/GOARCH already are).
-  GOBUILD_AGENT="garble -literals build -ldflags=-s -w"
+  GOBUILD_AGENT="garble -literals build"
 else
   warn "garble not found — building orchestrator and agent without obfuscation."
   echo "  Install: go install mvdan.cc/garble@v0.17.0"
-  GOBUILD_ORCH="go build -trimpath -ldflags=-s -w -X main.Version=${VERSION}"
-  GOBUILD_AGENT="go build -trimpath -ldflags=-s -w"
+  GOBUILD_ORCH="go build -trimpath"
+  GOBUILD_AGENT="go build -trimpath"
 fi
+# LDFLAGS_* are kept out of GOBUILD_ORCH/GOBUILD_AGENT and passed as their
+# own already-quoted "-ldflags=..." token at each call site below. Bash
+# word-splits on whitespace during unquoted parameter expansion
+# (${GOBUILD_AGENT} ...), so a value containing an internal space (like
+# "-s -w") embedded inside GOBUILD_AGENT itself would arrive as two
+# separate words -- "-ldflags=-s" and a bare "-w" -- which go/garble
+# reject or misparse (reproduced directly: "flag provided but not
+# defined: -w" / "malformed import path"). Writing `-ldflags="${LDFLAGS_*}"`
+# literally at the call site keeps bash's own quoting intact, so the
+# expansion stays one word regardless of the value's internal spaces.
+LDFLAGS_ORCH="-s -w -X main.Version=${VERSION}"
+LDFLAGS_AGENT="-s -w"
 
 # ── 1. Build orchestrator binary ───────────────────────────────────────────────
 log "Building bas-orchestrator ${VERSION} for linux/amd64..."
@@ -71,6 +83,7 @@ cd "${REPO_ROOT}/orchestrator"
 # IP, since those libs are public OSS. (Ignored by the plain go-build fallback.)
 CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GOGARBLE='github.com/audspect/*' \
   ${GOBUILD_ORCH} \
+  -ldflags="${LDFLAGS_ORCH}" \
   -o "${DIST_DIR}/bas-orchestrator-linux-amd64" \
   ./cmd/server/
 cd "${REPO_ROOT}"
@@ -95,13 +108,13 @@ for LABEL in "${!AGENT_TARGETS[@]}"; do
   OUT="${AGENTS_DIR}/bas-agent-${LABEL}"
   log "  [agent] GOOS=${GOOS} GOARCH=${GOARCH} → ${OUT}"
   CGO_ENABLED=0 GOOS="${GOOS}" GOARCH="${GOARCH}" GOGARBLE='audspect/*' \
-    ${GOBUILD_AGENT} -o "${OUT}" .
+    ${GOBUILD_AGENT} -ldflags="${LDFLAGS_AGENT}" -o "${OUT}" .
 done
 
 # Windows cross-compile (separate because of .exe extension)
 log "  [agent] GOOS=windows GOARCH=amd64 → ${AGENTS_DIR}/bas-agent-windows-amd64.exe"
 CGO_ENABLED=0 GOOS=windows GOARCH=amd64 GOGARBLE='audspect/*' \
-  ${GOBUILD_AGENT} -o "${AGENTS_DIR}/bas-agent-windows-amd64.exe" .
+  ${GOBUILD_AGENT} -ldflags="${LDFLAGS_AGENT}" -o "${AGENTS_DIR}/bas-agent-windows-amd64.exe" .
 
 cd "${REPO_ROOT}"
 log "Agent binaries written to ${AGENTS_DIR}/"
