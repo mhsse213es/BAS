@@ -391,6 +391,51 @@ _check_compose() {
   fi
 }
 
+# The orchestrator release artifact ships cosign-signed (packaging/build.sh,
+# packaging/windows-build.ps1, via sign-blob/verify-blob against the
+# docker-save tarball -- cosign's image subcommands all need a registry,
+# which doesn't exist here); this installer must be able to verify that
+# signature before the tarball is ever loaded. No auto-install path like
+# Docker's -- cosign is specific enough that silently installing it on an
+# operator's box is not appropriate here.
+_check_cosign() {
+  if ! command -v cosign &>/dev/null; then
+    echo "FAIL:Cosign -not installed (required to verify the orchestrator artifact before install; see https://docs.sigstore.dev/cosign/system_config/installation/)"
+    return
+  fi
+  if [[ ! -f "${SCRIPT_DIR}/cosign.pub" ]]; then
+    echo "FAIL:Cosign -public key not found in bundle at ${SCRIPT_DIR}/cosign.pub (corrupt or incomplete release bundle)"
+    return
+  fi
+  echo "PASS:Cosign -$(cosign version 2>/dev/null | grep -oP 'GitVersion:\s*\K\S+' || echo 'installed')"
+}
+
+# Verifies the orchestrator tarball against the bundle's cosign.pub BEFORE
+# any docker load call touches it -- the tarball's bytes never reach the
+# Docker daemon at all if verification fails. Caller must treat a nonzero
+# return as fatal (abort the whole install/upgrade), not skip-and-continue.
+_verify_orchestrator_artifact() {
+  local tar="$1"
+  if [[ ! -f "${SCRIPT_DIR}/cosign.pub" ]]; then
+    err "cosign.pub not found in bundle -- cannot verify $(basename "$tar"), refusing to proceed"
+    return 1
+  fi
+  if ! command -v cosign &>/dev/null; then
+    err "cosign is not installed -- cannot verify $(basename "$tar"), refusing to proceed"
+    return 1
+  fi
+  if [[ ! -f "${tar}.bundle" ]]; then
+    err "Signature bundle not found: $(basename "$tar").bundle -- refusing to install an unsigned orchestrator artifact"
+    return 1
+  fi
+  if ! cosign verify-blob --key "${SCRIPT_DIR}/cosign.pub" --bundle "${tar}.bundle" --insecure-ignore-tlog "$tar" &>/dev/null; then
+    err "cosign verification FAILED for $(basename "$tar") -- refusing to install a tampered or unsigned orchestrator artifact"
+    return 1
+  fi
+  log "cosign: verified $(basename "$tar")"
+  return 0
+}
+
 # ── Docker CE installation ─────────────────────────────────────────────────────
 # Installs from Docker's own officially documented apt/dnf repositories.
 # Called only after explicit operator consent (see mode_install).
@@ -588,6 +633,7 @@ mode_check() {
   results+=( "$(_check_os)" )
   results+=( "$(_check_docker)" )
   results+=( "$(_check_compose)" )
+  results+=( "$(_check_cosign)" )
   results+=( "$(_check_ram)" )
   results+=( "$(_check_cpu)" )
 
@@ -653,6 +699,7 @@ mode_install() {
   results+=( "$(_check_os)" )
   results+=( "$(_check_docker)" )
   results+=( "$(_check_compose)" )
+  results+=( "$(_check_cosign)" )
   # _check_docker/_check_compose run inside $(...) subshells above and can't
   # set NEED_DOCKER/NEED_COMPOSE themselves -- mirror their own detection here.
   command -v docker &>/dev/null || NEED_DOCKER=true
@@ -718,6 +765,9 @@ mode_install() {
   if [[ -d "$images_dir" ]]; then
     for tar in "${images_dir}"/*.tar; do
       [[ -f "$tar" ]] || continue
+      if [[ "$(basename "$tar")" == bas-orchestrator-* ]]; then
+        _verify_orchestrator_artifact "$tar" || { err "Orchestrator artifact failed verification -- installation aborted."; exit 1; }
+      fi
       info "Loading $(basename "$tar")..."
       docker load < "$tar"
       log "Loaded: $(basename "$tar")"
@@ -859,6 +909,9 @@ mode_upgrade() {
   if [[ -d "$images_dir" ]]; then
     for tar in "${images_dir}"/*.tar; do
       [[ -f "$tar" ]] || continue
+      if [[ "$(basename "$tar")" == bas-orchestrator-* ]]; then
+        _verify_orchestrator_artifact "$tar" || { err "Orchestrator artifact failed verification -- upgrade aborted. The previous version is still running; nothing was replaced."; exit 1; }
+      fi
       docker load < "$tar" && log "Loaded: $(basename "$tar")"
     done
   fi
