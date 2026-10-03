@@ -672,7 +672,7 @@ if (-not $cosignCmd) {
     if ($WindowsSigningRequired) {
         Err "cosign.key not found at $CosignKey, and cosign signing is mandatory for this customer build. Run: bash packaging/signing/cosign.sh --keygen"
     } else {
-        Warn "  cosign.key not found -- orchestrator artifact will not be cosign-signed (not required for this build)."
+        Warn "  cosign.key not found -- orchestrator artifact will NOT be cosign-signed (not required for this build). This bundle will be refused by install.sh/setup.sh, which require a signed orchestrator artifact -- fine for a purely local test, but it cannot be deployed to staging or a customer site."
     }
 } else {
     Log "  Signing $OrchTar with cosign..."
@@ -688,13 +688,24 @@ if (-not $cosignCmd) {
     # does not match -- "decryption failed"). Redirecting stdin from a
     # real, 0-byte file is the only tested approach that supplies a true
     # empty passphrase non-interactively on Windows.
+    #
+    # Paths are individually double-quoted inside each -ArgumentList
+    # element: Start-Process does NOT shell-quote array elements the way
+    # `&`-invocation does, so an unquoted element containing a space (a
+    # build host or $OutDir with a space in its path) silently splits
+    # into multiple arguments and cosign fails with "cannot find the
+    # file" -- confirmed by reproducing it directly.
+    #
+    # $cosignCmd.Source (the resolved path from Get-Command above) is
+    # used instead of a bare "cosign.exe" so the binary that was checked
+    # for existence is the exact one that runs.
     $emptyStdin = "$OutDir\.cosign-empty-stdin"
     New-Item -ItemType File -Force -Path $emptyStdin | Out-Null
     $signStdout = "$OutDir\.cosign-sign-stdout.log"
     $signStderr = "$OutDir\.cosign-sign-stderr.log"
-    $signProc = Start-Process -FilePath "cosign.exe" -ArgumentList @(
-        "sign-blob", "--key", "$CosignKey", "--yes", "--tlog-upload=false", "--use-signing-config=false",
-        "--bundle", "$OrchTar.bundle", "$OrchTar"
+    $signProc = Start-Process -FilePath $cosignCmd.Source -ArgumentList @(
+        "sign-blob", "--key", "`"$CosignKey`"", "--yes", "--tlog-upload=false", "--use-signing-config=false",
+        "--bundle", "`"$OrchTar.bundle`"", "`"$OrchTar`""
     ) -RedirectStandardInput $emptyStdin -NoNewWindow -Wait -PassThru `
       -RedirectStandardOutput $signStdout -RedirectStandardError $signStderr
     Get-Content $signStdout, $signStderr -ErrorAction SilentlyContinue | ForEach-Object { Log "    $_" }
@@ -703,8 +714,29 @@ if (-not $cosignCmd) {
         if ($WindowsSigningRequired) { Err "cosign signing failed for $OrchTar -- aborting customer build." }
         else { Warn "  cosign signing failed -- continuing unsigned (not required for this build)." }
     } else {
+        # Offline-signing invariant: --tlog-upload=false --use-signing-config=false
+        # (above) must produce a bundle with no transparency-log entry. cosign has
+        # already deprecated --tlog-upload once; if a future version silently
+        # re-enables upload, this is the only thing that would ever notice.
+        $bundleContent = Get-Content "$OrchTar.bundle" -Raw
+        if ($bundleContent -match '"tlogEntries"') {
+            Err "cosign produced a bundle containing a transparency-log entry for $OrchTar -- offline-signing invariant violated (this build may have contacted the public Sigstore log over the network). Investigate before shipping."
+        }
         Log "  Verifying the signature we just produced..."
-        & cosign verify-blob --key $CosignPub --bundle "$OrchTar.bundle" --insecure-ignore-tlog "$OrchTar" 2>&1 | ForEach-Object { Log "    $_" }
+        # docker build above already established that piping cosign's
+        # stderr through `2>&1 | ForEach-Object` under this script's
+        # $ErrorActionPreference = 'Stop' (set near the top) turns cosign's
+        # routine stderr output (e.g. "WARNING: Skipping tlog verification")
+        # into a terminating NativeCommandError before $LASTEXITCODE is
+        # ever checked -- confirmed by reproducing it directly: a valid
+        # signature still aborted the build. Same fix as that section.
+        $prevEAP = $ErrorActionPreference
+        $ErrorActionPreference = 'Continue'
+        try {
+            & $cosignCmd.Source verify-blob --key $CosignPub --bundle "$OrchTar.bundle" --insecure-ignore-tlog "$OrchTar" 2>&1 | ForEach-Object { Log "    $_" }
+        } finally {
+            $ErrorActionPreference = $prevEAP
+        }
         if ($LASTEXITCODE -ne 0) {
             Err "cosign verification FAILED immediately after signing $OrchTar -- this should be structurally impossible; investigate before shipping."
         }

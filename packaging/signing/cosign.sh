@@ -96,6 +96,14 @@ cmd_sign() {
     --use-signing-config=false \
     --bundle "${artifact}.bundle" \
     "${artifact}"
+  # Offline-signing invariant: --tlog-upload=false --use-signing-config=false
+  # (above) must produce a bundle with no transparency-log entry. cosign has
+  # already deprecated --tlog-upload once; if a future version silently
+  # re-enables upload, this is the only thing that would ever notice.
+  if grep -q '"tlogEntries"' "${artifact}.bundle"; then
+    err "cosign produced a bundle containing a transparency-log entry for ${artifact} -- offline-signing invariant violated (this build may have contacted the public Sigstore log over the network). Investigate before shipping."
+    exit 1
+  fi
   log "Artifact signed: ${artifact}"
   echo "  Bundle: ${artifact}.bundle"
   echo "  Verify with: bash cosign.sh --verify ${artifact}"
