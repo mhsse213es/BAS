@@ -79,7 +79,7 @@ while IFS= read -r -d '' binary; do
       "$binary"
 
   log "  signed: ${name}"
-  ((signed++))
+  signed=$((signed + 1))
 done < <(find "$BINARIES_DIR" -maxdepth 1 -type f -print0 | sort -z)
 
 if [[ $signed -eq 0 ]]; then
