@@ -289,6 +289,7 @@ if (Test-Path $rsrcBin) {
 
 Push-Location $AgentDir
 $env:GOOS = "windows"; $env:GOARCH = "amd64"; $env:CGO_ENABLED = "0"
+$env:GOGARBLE = "audspect/*"
 # -H windowsgui: without this the agent is a console-subsystem binary, and
 # Windows auto-allocates a visible console for it whenever something launches
 # it without an inherited console (e.g. the tray's Run-key entry firing at
@@ -308,12 +309,18 @@ $env:GOOS = "windows"; $env:GOARCH = "amd64"; $env:CGO_ENABLED = "0"
 # unsigned state of the embed source would depend on workspace history
 # instead of this run's own cert/thumbprint -- exactly the non-determinism
 # C4 exists to eliminate.
+#
+# D2: garble (not plain go build) produces this binary -- it is the ONE
+# authoritative build C4's signing/embedding below consumes. GOGARBLE
+# scopes obfuscation to our own module, leaving golang.org/x/sys,
+# windigo, and sspi un-obfuscated (same reasoning as the Dockerfile's
+# agent-builder stage).
 if (Test-Path "$InstallerDir\bas_agent.exe") { Remove-Item -Force "$InstallerDir\bas_agent.exe" }
-go build -ldflags="-s -w -H windowsgui" -o "$InstallerDir\bas_agent.exe" . 2>&1
+garble -literals build -ldflags="-s -w -H windowsgui" -o "$InstallerDir\bas_agent.exe" . 2>&1
 if ($LASTEXITCODE -ne 0) { Err "Agent build failed." }
-$env:GOOS = ""; $env:GOARCH = ""; $env:CGO_ENABLED = ""
+$env:GOOS = ""; $env:GOARCH = ""; $env:CGO_ENABLED = ""; $env:GOGARBLE = ""
 Pop-Location
-Log "  Agent binary built: installer\bas_agent.exe"
+Log "  Agent binary built: installer\bas_agent.exe (obfuscated)"
 
 # C4: sign the agent binary HERE, before the installer embeds it via
 # go:embed, so the installer's embedded copy and the standalone artifact
