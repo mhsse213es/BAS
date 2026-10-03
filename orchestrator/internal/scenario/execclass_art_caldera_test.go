@@ -70,7 +70,12 @@ func TestExecutionClassifications_ARTCalderaCorpusFullyResolved(t *testing.T) {
 
 	keyed, collisions := corpusaudit.DeriveActionKeys(items)
 	for _, c := range collisions {
-		t.Logf("unresolved action_key collision (counts as unresolved below): %v", c)
+		// Logged, not failed: a collision-excluded item is reported under
+		// report.*.Collisions (not Unresolved) -- see report.go's doc
+		// comment. It already fails closed at runtime (no catalog entry ->
+		// "destructive"/unclassified -> blocked), so this gate does not
+		// treat it as a safety gap, only surfaces it for visibility.
+		t.Logf("action_key collision (see report.*.Collisions, not folded into Unresolved): %v", c)
 	}
 
 	reviewed, err := corpusaudit.LoadReviewedDecisions("execclass_reviewed.yaml")
@@ -79,7 +84,7 @@ func TestExecutionClassifications_ARTCalderaCorpusFullyResolved(t *testing.T) {
 	}
 
 	classified := corpusaudit.Triage(keyed, reviewed)
-	report := corpusaudit.BuildReport(classified)
+	report := corpusaudit.BuildReport(classified, collisions)
 
 	if report.ART.Unresolved != 0 {
 		t.Errorf("ART corpus has %d unresolved (technique_id, action_key) pairs -- see internal/scenario/testdata/execclass_corpus_report.md "+

@@ -55,7 +55,7 @@ func TestWriteReportMarkdown_FormatsRealCounts(t *testing.T) {
 		t.Fatalf("WriteReportMarkdown: %v", err)
 	}
 	out := buf.String()
-	for _, want := range []string{"ART:", "discovered: 500", "unresolved: 2", "Caldera:", "discovered: 2200", "unresolved: 5"} {
+	for _, want := range []string{"ART:", "discovered: 500", "unresolved: 2", "collisions: 0", "Caldera:", "discovered: 2200", "unresolved: 5"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("report missing %q:\n%s", want, out)
 		}

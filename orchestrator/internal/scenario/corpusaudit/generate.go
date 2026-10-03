@@ -51,12 +51,12 @@ func WriteGeneratedGo(w io.Writer, items []ClassifiedItem) error {
 func WriteReportMarkdown(w io.Writer, r CoverageReport) error {
 	_, err := fmt.Fprintf(w, "ART:\n"+
 		"  discovered: %d\n  reachable: %d\n  classified: %d\n"+
-		"  destructive candidates: %d\n  manually reviewed: %d\n  unresolved: %d\n\n"+
+		"  destructive candidates: %d\n  manually reviewed: %d\n  unresolved: %d\n  collisions: %d\n\n"+
 		"Caldera:\n"+
 		"  discovered: %d\n  reachable: %d\n  classified: %d\n"+
-		"  destructive candidates: %d\n  manually reviewed: %d\n  unresolved: %d\n",
-		r.ART.Discovered, r.ART.Reachable, r.ART.Classified, r.ART.DestructiveCandidates, r.ART.ManuallyReviewed, r.ART.Unresolved,
-		r.Caldera.Discovered, r.Caldera.Reachable, r.Caldera.Classified, r.Caldera.DestructiveCandidates, r.Caldera.ManuallyReviewed, r.Caldera.Unresolved,
+		"  destructive candidates: %d\n  manually reviewed: %d\n  unresolved: %d\n  collisions: %d\n",
+		r.ART.Discovered, r.ART.Reachable, r.ART.Classified, r.ART.DestructiveCandidates, r.ART.ManuallyReviewed, r.ART.Unresolved, r.ART.Collisions,
+		r.Caldera.Discovered, r.Caldera.Reachable, r.Caldera.Classified, r.Caldera.DestructiveCandidates, r.Caldera.ManuallyReviewed, r.Caldera.Unresolved, r.Caldera.Collisions,
 	)
 	return err
 }

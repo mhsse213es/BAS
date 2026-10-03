@@ -27,7 +27,7 @@ func TestBuildReport_CountsBySourceAndStatus(t *testing.T) {
 		{KeyedItem: KeyedItem{DiscoveredItem: DiscoveredItem{Source: "art", Reachable: true}}, Status: StatusAlreadyHandAuthored},
 		{KeyedItem: KeyedItem{DiscoveredItem: DiscoveredItem{Source: "caldera", Reachable: true}}, Status: StatusClassified},
 	}
-	r := BuildReport(items)
+	r := BuildReport(items, nil)
 
 	if r.ART.Discovered != 3 {
 		t.Errorf("ART.Discovered = %d, want 3", r.ART.Discovered)
@@ -55,11 +55,54 @@ func TestBuildReport_DestructiveCandidatesAndManuallyReviewed(t *testing.T) {
 		// a plain non_destructive promotion: not a destructive candidate at all
 		{KeyedItem: KeyedItem{DiscoveredItem: DiscoveredItem{Source: "art", Reachable: true}}, Status: StatusClassified, Class: scenario.ClassNonDestructive},
 	}
-	r := BuildReport(items)
+	r := BuildReport(items, nil)
 	if r.ART.DestructiveCandidates != 2 {
 		t.Errorf("DestructiveCandidates = %d, want 2 (1 reviewed-destructive + 1 unresolved)", r.ART.DestructiveCandidates)
 	}
 	if r.ART.ManuallyReviewed != 1 {
 		t.Errorf("ManuallyReviewed = %d, want 1", r.ART.ManuallyReviewed)
+	}
+}
+
+// TestBuildReport_CountsCollisionsPerSource pins the fix for a real gap
+// found during Task 8's manual review: DeriveActionKeys excludes
+// genuinely-colliding items from the []KeyedItem it returns (see
+// identity.go), so without this, those items were invisible in every
+// SourceCounts field, including Discovered -- silently dropped rather
+// than recorded, which is exactly what the spec's "nothing silently
+// dropped" requirement forbids. A real 3-way collision (e.g. the T1082
+// "System Information Discovery (2)" Caldera duplicate) produces 3
+// pairwise CollisionErrors (C(3,2)=3) for only 3 distinct items -- the
+// count must dedupe by item identity, not by error count.
+func TestBuildReport_CountsCollisionsPerSource(t *testing.T) {
+	collisions := []CollisionError{
+		{
+			TechniqueID: "T1082", ActionKey: "system_information_discovery_2_cmd",
+			ItemA: DiscoveredItem{Source: "caldera", Name: "A", Executor: "cmd", Command: "systeminfo", Reachable: true},
+			ItemB: DiscoveredItem{Source: "caldera", Name: "A", Executor: "cmd", Command: "systeminfo && reg query X", Reachable: true},
+		},
+		{
+			TechniqueID: "T1082", ActionKey: "system_information_discovery_2_cmd",
+			ItemA: DiscoveredItem{Source: "caldera", Name: "A", Executor: "cmd", Command: "systeminfo", Reachable: true},
+			ItemB: DiscoveredItem{Source: "caldera", Name: "A", Executor: "cmd", Command: "wscript.exe X", Reachable: true},
+		},
+		{
+			TechniqueID: "T1082", ActionKey: "system_information_discovery_2_cmd",
+			ItemA: DiscoveredItem{Source: "caldera", Name: "A", Executor: "cmd", Command: "systeminfo && reg query X", Reachable: true},
+			ItemB: DiscoveredItem{Source: "caldera", Name: "A", Executor: "cmd", Command: "wscript.exe X", Reachable: true},
+		},
+	}
+	r := BuildReport(nil, collisions)
+	if r.Caldera.Collisions != 3 {
+		t.Errorf("Caldera.Collisions = %d, want 3 (deduped across pairwise CollisionErrors, not 6 or 3-per-error)", r.Caldera.Collisions)
+	}
+	if r.Caldera.Discovered != 3 {
+		t.Errorf("Caldera.Discovered = %d, want 3 -- collision-excluded items must still count as discovered", r.Caldera.Discovered)
+	}
+	if r.Caldera.Reachable != 3 {
+		t.Errorf("Caldera.Reachable = %d, want 3", r.Caldera.Reachable)
+	}
+	if r.ART.Collisions != 0 || r.ART.Discovered != 0 {
+		t.Errorf("ART counts should be untouched: %+v", r.ART)
 	}
 }

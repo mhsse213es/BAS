@@ -104,7 +104,7 @@ func main() {
 		log.Fatalf("create %s: %v", reportPath, err)
 	}
 	defer reportFile.Close()
-	report := corpusaudit.BuildReport(classified)
+	report := corpusaudit.BuildReport(classified, collisions)
 	if err := corpusaudit.WriteReportMarkdown(reportFile, report); err != nil {
 		log.Fatalf("write %s: %v", reportPath, err)
 	}

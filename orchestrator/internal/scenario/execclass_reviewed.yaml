@@ -6,11 +6,129 @@
 # alters the command text makes the entry stale (treated as unresolved
 # again, not silently re-applied) until re-reviewed.
 #
-# - technique_id: T1490
-#   action_key: vss_delete_akira_style
-#   class: destructive
-#   command_hash: <sha256 of the exact reviewed command text>
-#   reviewer: <name>
-#   reviewed_at: 2026-10-03
-#   note: "<why this classification>"
-[]
+# All 16 entries below were produced by the same real audit pass: every
+# live destructiveguard-flagged (technique_id, action_key) pair from the
+# ART atomics DB and the Caldera ability library was dumped with its exact
+# command text (orchestrator/cmd/dumpunresolved-throwaway, deleted after
+# use) and compared against this family's own existing hand-authored
+# catalog entries in execclass.go ("vss_delete", "wbadmin_delete_catalog",
+# "bootloader_recovery_disable" under T1490, and T1485's data-destruction
+# entries) -- all 16 are the exact same real command families already
+# classified destructive there, just reached via ART/Caldera instead of
+# the hand-authored scenario corpus. No false positives were found: every
+# flagged item is genuine VSS/backup-catalog/system-state-backup deletion,
+# boot-recovery disabling, or free-space secure-wipe -- all irreversible,
+# all directly matching MITRE ATT&CK T1485 (Data Destruction) or T1490
+# (Inhibit System Recovery) ransomware-precursor behavior.
+- technique_id: T1485
+  action_key: t1485_test_3_overwrite_deleted_data_on_c_drive
+  class: destructive
+  command_hash: c1cd71538f7379db6227627afbc9e528d26f614de43c88466f64ab7acf7c6679
+  reviewer: claude-sonnet-5 (automated corpus audit, Task 8)
+  reviewed_at: "2026-10-03"
+  note: "cipher.exe /w:C: secure-wipes free space on C: -- irreversibly destroys recoverable deleted data across the whole volume; matches T1485 Data Destruction, same family as this catalog's existing T1485 entries."
+- technique_id: T1485
+  action_key: overwrite_deleted_data_on_c_drive
+  class: destructive
+  command_hash: 877c7d08d4ed33eb148a8c1b4487ca24120685f3f5e4a10a3523a3b2ca47ba28
+  reviewer: claude-sonnet-5 (automated corpus audit, Task 8)
+  reviewed_at: "2026-10-03"
+  note: "Caldera equivalent of the ART cipher.exe /w:C: test -- identical command semantics, same classification rationale."
+- technique_id: T1490
+  action_key: t1490_test_1_windows_delete_volume_shadow_copies
+  class: destructive
+  command_hash: daeb44d0fbf9f5ea6a26dfab007355daca687d7c9c623c9e5a71ce19aea123a0
+  reviewer: claude-sonnet-5 (automated corpus audit, Task 8)
+  reviewed_at: "2026-10-03"
+  note: "vssadmin.exe delete shadows /all /quiet deletes every VSS shadow copy on the host -- irreversible, removes the ransomware-recovery path. Same effect as this catalog's existing T1490 vss_delete entry."
+- technique_id: T1490
+  action_key: windows_delete_volume_shadow_copies
+  class: destructive
+  command_hash: 4553504e47c82cec9c1e5f376f58c7b3c3dbd7649a96086f6eeca977f23f2715
+  reviewer: claude-sonnet-5 (automated corpus audit, Task 8)
+  reviewed_at: "2026-10-03"
+  note: "Caldera equivalent of the ART vssadmin delete shadows test -- identical command semantics, same classification rationale."
+- technique_id: T1490
+  action_key: t1490_test_2_windows_delete_volume_shadow_copies_via_wmi
+  class: destructive
+  command_hash: 35227b4e6a901164a95c5b7960c0f4258b86af4672f78a6940fdb2014b8db795
+  reviewer: claude-sonnet-5 (automated corpus audit, Task 8)
+  reviewed_at: "2026-10-03"
+  note: "wmic.exe shadowcopy delete deletes all VSS shadow copies via WMI -- same irreversible effect as vssadmin delete shadows, just a different interface to the same destructive action."
+- technique_id: T1490
+  action_key: windows_delete_volume_shadow_copies_via_wmi
+  class: destructive
+  command_hash: 158f5c612d22df0c34e374231ba8e65e6d670c7833b99dba52b31b6e9a5a7ce1
+  reviewer: claude-sonnet-5 (automated corpus audit, Task 8)
+  reviewed_at: "2026-10-03"
+  note: "Caldera equivalent of the ART wmic shadowcopy delete test -- identical command semantics, same classification rationale."
+- technique_id: T1490
+  action_key: t1490_test_3_windows_wbadmin_delete_windows_backup_catalog
+  class: destructive
+  command_hash: 7714167335d975d240c471014afee0a1d73746a770cf0113afc4495e350dec71
+  reviewer: claude-sonnet-5 (automated corpus audit, Task 8)
+  reviewed_at: "2026-10-03"
+  note: "wbadmin delete catalog -quiet deletes the Windows Server Backup catalog -- irreversible. Same effect as this catalog's existing T1490 wbadmin_delete_catalog entry."
+- technique_id: T1490
+  action_key: windows_wbadmin_delete_windows_backup_catalog
+  class: destructive
+  command_hash: 741712723d08c93f38a4985b13d05c164119c4cd16e71e5c49d90e0276cd7023
+  reviewer: claude-sonnet-5 (automated corpus audit, Task 8)
+  reviewed_at: "2026-10-03"
+  note: "Caldera equivalent of the ART wbadmin delete catalog test -- identical command semantics, same classification rationale."
+- technique_id: T1490
+  action_key: t1490_test_4_windows_disable_windows_recovery_console_repair
+  class: destructive
+  command_hash: cf16558b87ec41090ebe9206ca5a66e3da8f5f1d54fea9576e41c1cec895ea8f
+  reviewer: claude-sonnet-5 (automated corpus audit, Task 8)
+  reviewed_at: "2026-10-03"
+  note: "bcdedit /set {default} bootstatuspolicy ignoreallfailures + recoveryenabled no disables Windows Recovery Environment -- removes the final recovery path. Same effect as this catalog's existing T1490 bootloader_recovery_disable entry."
+- technique_id: T1490
+  action_key: windows_disable_windows_recovery_console_repair
+  class: destructive
+  command_hash: 0c2d71a357069f5665c48b9d0933ff9b4d8573a5a9cc0abcf8b6a5e19abb966f
+  reviewer: claude-sonnet-5 (automated corpus audit, Task 8)
+  reviewed_at: "2026-10-03"
+  note: "Caldera equivalent of the ART bcdedit recovery-disable test (combined via && instead of two lines) -- identical command semantics, same classification rationale."
+- technique_id: T1490
+  action_key: t1490_test_5_windows_delete_volume_shadow_copies_via_wmi_with_powershell
+  class: destructive
+  command_hash: 555f0365dbe578be8398967abe5f5305dae3ba3093e6fcc2df986e82724b3dc3
+  reviewer: claude-sonnet-5 (automated corpus audit, Task 8)
+  reviewed_at: "2026-10-03"
+  note: "Get-WmiObject Win32_Shadowcopy | ForEach-Object {$_.Delete();} deletes all VSS shadow copies via PowerShell/WMI -- same irreversible effect as vssadmin delete shadows, a third interface to the same destructive action."
+- technique_id: T1490
+  action_key: windows_delete_volume_shadow_copies_via_wmi_with_powershell
+  class: destructive
+  command_hash: 1c72baa6ae70209cac6e1fdcfd44e34071c0883615df448c61ddbea708977f18
+  reviewer: claude-sonnet-5 (automated corpus audit, Task 8)
+  reviewed_at: "2026-10-03"
+  note: "Caldera equivalent of the ART PowerShell/WMI shadow-copy-delete test -- identical command semantics, same classification rationale."
+- technique_id: T1490
+  action_key: t1490_test_7_windows_wbadmin_delete_systemstatebackup
+  class: destructive
+  command_hash: bb58d03b8cfc239464c2da55847b615d56e322a01f0675edd6312e52afaae5dc
+  reviewer: claude-sonnet-5 (automated corpus audit, Task 8)
+  reviewed_at: "2026-10-03"
+  note: "wbadmin delete systemstatebackup -keepVersions:0 deletes all Windows system-state backups -- irreversible, removes the OS/registry recovery path, same family as wbadmin_delete_catalog."
+- technique_id: T1490
+  action_key: windows_wbadmin_delete_systemstatebackup
+  class: destructive
+  command_hash: 8c4f344df311e5510f98bdf1f7b72c31a1b0afcd770bdc5edec952c112bbfe32
+  reviewer: claude-sonnet-5 (automated corpus audit, Task 8)
+  reviewed_at: "2026-10-03"
+  note: "Caldera equivalent of the ART wbadmin delete systemstatebackup test -- identical command semantics, same classification rationale."
+- technique_id: T1490
+  action_key: t1490_test_10_windows_vssadmin_resize_shadowstorage_volume
+  class: destructive
+  command_hash: 9064af9989115c9c3bf7a08c679b06168b7148078a5551297119a95bb544b07d
+  reviewer: claude-sonnet-5 (automated corpus audit, Task 8)
+  reviewed_at: "2026-10-03"
+  note: "vssadmin resize shadowstorage /For=C: /On=C: /MaxSize=20% shrinks the shadow-storage allocation on C: to 20% -- Windows forcibly discards existing shadow copies that no longer fit, an indirect but real and irreversible VSS-deletion effect, same family as vss_delete."
+- technique_id: T1490
+  action_key: windows_vssadmin_resize_shadowstorage_volume
+  class: destructive
+  command_hash: 9064af9989115c9c3bf7a08c679b06168b7148078a5551297119a95bb544b07d
+  reviewer: claude-sonnet-5 (automated corpus audit, Task 8)
+  reviewed_at: "2026-10-03"
+  note: "Byte-identical command to the ART vssadmin resize shadowstorage test (same hash) -- identical classification rationale."
