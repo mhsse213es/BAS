@@ -1,0 +1,16 @@
+# Human-reviewed classification decisions for ART/Caldera items that
+# agent/destructiveguard.Classify flags as destructive. Populated for
+# real in Task 8 of docs/superpowers/plans/2026-10-03-b5-art-caldera-corpus-audit.md
+# -- see that task for the review methodology. Each entry's command_hash
+# pins it to the exact command text reviewed; a later corpus change that
+# alters the command text makes the entry stale (treated as unresolved
+# again, not silently re-applied) until re-reviewed.
+#
+# - technique_id: T1490
+#   action_key: vss_delete_akira_style
+#   class: destructive
+#   command_hash: <sha256 of the exact reviewed command text>
+#   reviewer: <name>
+#   reviewed_at: 2026-10-03
+#   note: "<why this classification>"
+[]
