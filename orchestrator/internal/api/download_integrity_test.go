@@ -405,3 +405,87 @@ func TestDockerfileAgentLegacyBuilderStageObfuscatesWithGarble(t *testing.T) {
 		t.Error("agent-legacy-builder stage does not install garble v0.10.1 -- v0.17.0 (the modern pin) does not install under a go1.20 toolchain")
 	}
 }
+
+// TestBuildShAgentObfuscatesWithGarble guards packaging/build.sh's native
+// (non-Docker) agent build path. A prior version embedded
+// GOGARBLE='audspect/*' inside the $GOBUILD_AGENT variable itself; bash only
+// honors an assignment-prefix word when it appears literally on the command
+// line, not after parameter expansion, so `${GOBUILD_AGENT}` expanded to a
+// command whose first word was the literal string `GOGARBLE='audspect/*'`
+// -- "command not found", aborting the whole script under `set -e`. Fixed
+// by moving GOGARBLE to the call sites (same place GOOS/GOARCH already
+// are), mirroring how the orchestrator's own GOBUILD_ORCH call site already
+// does it on the line above. This test asserts GOGARBLE is literal on the
+// same line as each agent build invocation, not merely present somewhere in
+// the file (which the embedded-in-variable form would have also satisfied).
+func TestBuildShAgentObfuscatesWithGarble(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("..", "..", "..", "packaging", "build.sh"))
+	if err != nil {
+		t.Fatalf("read packaging/build.sh: %v", err)
+	}
+	content := string(data)
+
+	if strings.Contains(content, `GOBUILD_AGENT="GOGARBLE=`) {
+		t.Error("packaging/build.sh embeds GOGARBLE inside $GOBUILD_AGENT -- bash does not honor an assignment-prefix word that arrives via parameter expansion; this form expands to a command whose first word is the literal string GOGARBLE='audspect/*', failing with \"command not found\" under set -e")
+	}
+
+	callSites := []string{
+		`CGO_ENABLED=0 GOOS="${GOOS}" GOARCH="${GOARCH}" GOGARBLE='audspect/*' \`,
+		`CGO_ENABLED=0 GOOS=windows GOARCH=amd64 GOGARBLE='audspect/*' \`,
+	}
+	for _, line := range callSites {
+		if !strings.Contains(content, line) {
+			t.Errorf("packaging/build.sh is missing the expected literal GOGARBLE-scoped agent build call site: %q", line)
+		}
+	}
+
+	if !strings.Contains(content, `${GOBUILD_AGENT} -o "${OUT}" .`) {
+		t.Error("packaging/build.sh's agent cross-compile loop no longer invokes $GOBUILD_AGENT as expected -- has the call site been restructured?")
+	}
+}
+
+// TestWindowsBuildScriptLinuxAgentsObfuscateWithGarble guards
+// packaging/windows-build.ps1's section 5b, which cross-compiles the loose
+// linux-amd64/arm64 agent binaries bundled into this script's own customer
+// delivery zip (section 5c). These were left as plain `go build` when D2's
+// Task 4/5 added garble to the modern and legacy Windows agent builds in
+// this same file -- an under-decomposed plan gap, not an intentional
+// exemption: the Docker path (orchestrator/Dockerfile) obfuscates the
+// identically-named linux-amd64/arm64 artifacts, so shipping plain copies
+// of the same name here directly contradicts the "no path builds an agent
+// artifact plain while another path obfuscates the 'same' artifact"
+// acceptance criterion in D2's spec.
+func TestWindowsBuildScriptLinuxAgentsObfuscateWithGarble(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("..", "..", "..", "packaging", "windows-build.ps1"))
+	if err != nil {
+		t.Fatalf("read packaging/windows-build.ps1: %v", err)
+	}
+	content := string(data)
+
+	start := strings.Index(content, "Building Linux agent binaries")
+	if start == -1 {
+		t.Fatal("packaging/windows-build.ps1 has no 'Building Linux agent binaries' section -- has it been renamed or removed? Update this test's parsing to match.")
+	}
+	end := strings.Index(content[start:], "Pop-Location")
+	if end == -1 {
+		t.Fatal("packaging/windows-build.ps1's linux-agent section has no matching Pop-Location -- has the section structure changed?")
+	}
+	section := content[start : start+end]
+
+	for _, out := range []string{`-o "$OutDir\bas-agent-linux-amd64"`, `-o "$OutDir\bas-agent-linux-arm64"`} {
+		idx := strings.Index(section, out)
+		if idx == -1 {
+			t.Errorf("packaging/windows-build.ps1's linux-agent section no longer produces %q -- has the output path changed?", out)
+			continue
+		}
+		lineStart := strings.LastIndex(section[:idx], "\n") + 1
+		line := section[lineStart : idx+len(out)]
+		if !strings.Contains(line, "garble -literals build") {
+			t.Errorf("packaging/windows-build.ps1's linux-agent build line producing %q is not garble-wrapped: %q", out, strings.TrimSpace(line))
+		}
+	}
+
+	if !strings.Contains(section, `$env:GOGARBLE = "audspect/*"`) {
+		t.Error("packaging/windows-build.ps1's linux-agent section is missing $env:GOGARBLE = \"audspect/*\" scoping")
+	}
+}

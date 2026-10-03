@@ -46,7 +46,15 @@ if command -v garble &>/dev/null; then
   # github.com/audspect/bas). golang.org/x/sys, windigo, sspi, and
   # gorilla/websocket stay un-obfuscated, same reasoning as the
   # orchestrator's own scoping below.
-  GOBUILD_AGENT="GOGARBLE='audspect/*' garble -literals build -ldflags=-s -w"
+  #
+  # GOGARBLE is NOT embedded here (unlike GOBUILD_ORCH's literal garble
+  # invocation above) -- an assignment-prefix word only works when bash
+  # parses it literally on the command line; once it arrives via
+  # unquoted parameter expansion (${GOBUILD_AGENT} at the call sites
+  # below), bash treats the whole expanded string as the command name
+  # instead of an env assignment, so it's set literally at each call
+  # site instead (same place GOOS/GOARCH already are).
+  GOBUILD_AGENT="garble -literals build -ldflags=-s -w"
 else
   warn "garble not found — building orchestrator and agent without obfuscation."
   echo "  Install: go install mvdan.cc/garble@v0.17.0"
@@ -86,13 +94,13 @@ for LABEL in "${!AGENT_TARGETS[@]}"; do
   IFS='/' read -r GOOS GOARCH <<< "${AGENT_TARGETS[$LABEL]}"
   OUT="${AGENTS_DIR}/bas-agent-${LABEL}"
   log "  [agent] GOOS=${GOOS} GOARCH=${GOARCH} → ${OUT}"
-  CGO_ENABLED=0 GOOS="${GOOS}" GOARCH="${GOARCH}" \
+  CGO_ENABLED=0 GOOS="${GOOS}" GOARCH="${GOARCH}" GOGARBLE='audspect/*' \
     ${GOBUILD_AGENT} -o "${OUT}" .
 done
 
 # Windows cross-compile (separate because of .exe extension)
 log "  [agent] GOOS=windows GOARCH=amd64 → ${AGENTS_DIR}/bas-agent-windows-amd64.exe"
-CGO_ENABLED=0 GOOS=windows GOARCH=amd64 \
+CGO_ENABLED=0 GOOS=windows GOARCH=amd64 GOGARBLE='audspect/*' \
   ${GOBUILD_AGENT} -o "${AGENTS_DIR}/bas-agent-windows-amd64.exe" .
 
 cd "${REPO_ROOT}"

@@ -536,25 +536,31 @@ if (Test-Path "$OutDir\bas-agent-windows-legacy-amd64.exe") {
 Log "Building Linux agent binaries..."
 Push-Location $AgentDir
 
+# D2: garble-wrapped, same as the modern Windows agent build above -- these
+# loose linux binaries ship inside this same script's customer delivery zip
+# (5c, Compress-Archive), so leaving them plain here while the Docker path
+# obfuscates the identically-named artifacts would ship an unobfuscated
+# agent under a name the manifest/signing flow treats as already-hardened.
 $env:GOOS = "linux"; $env:GOARCH = "amd64"; $env:CGO_ENABLED = "0"
-go build -ldflags="-s -w" -o "$OutDir\bas-agent-linux-amd64" . 2>&1
+$env:GOGARBLE = "audspect/*"
+garble -literals build -ldflags="-s -w" -o "$OutDir\bas-agent-linux-amd64" . 2>&1
 if ($LASTEXITCODE -ne 0) {
     Warn "Linux amd64 agent build failed."
 } else {
     $la64MB = [math]::Round((Get-Item "$OutDir\bas-agent-linux-amd64").Length / 1MB, 1)
-    Log "  bas-agent-linux-amd64 (${la64MB}MB)"
+    Log "  bas-agent-linux-amd64 (${la64MB}MB, obfuscated)"
 }
 
 $env:GOOS = "linux"; $env:GOARCH = "arm64"; $env:CGO_ENABLED = "0"
-go build -ldflags="-s -w" -o "$OutDir\bas-agent-linux-arm64" . 2>&1
+garble -literals build -ldflags="-s -w" -o "$OutDir\bas-agent-linux-arm64" . 2>&1
 if ($LASTEXITCODE -ne 0) {
     Warn "Linux arm64 agent build failed."
 } else {
     $la32MB = [math]::Round((Get-Item "$OutDir\bas-agent-linux-arm64").Length / 1MB, 1)
-    Log "  bas-agent-linux-arm64 (${la32MB}MB)"
+    Log "  bas-agent-linux-arm64 (${la32MB}MB, obfuscated)"
 }
 
-$env:GOOS = ""; $env:GOARCH = ""; $env:CGO_ENABLED = ""
+$env:GOOS = ""; $env:GOARCH = ""; $env:CGO_ENABLED = ""; $env:GOGARBLE = ""
 Pop-Location
 
 # -- 5c. Extract BINARIES.sha256 from the Docker image ----------------------
