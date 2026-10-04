@@ -1010,6 +1010,35 @@ var executionClassifications = map[string]map[string]*ExecutionClassification{
 			BlastRadius:       "Environment variable injection — read-only PATH/library-path enumeration",
 		},
 	},
+
+	// discoveryProfiles-derived defaults (C2, 8ec2f4db), lost in the
+	// e8371b57 catalog rewrite. T1057/T1082/T1016/T1018 have their own
+	// entries above. T1120 is deliberately absent: see
+	// discoveryDefaultClassification.
+	"T1012": {"enumerate": discoveryDefaultClassification},
+	"T1007": {"enumerate": discoveryDefaultClassification},
+	"T1518": {"enumerate": discoveryDefaultClassification},
+	"T1010": {"enumerate": discoveryDefaultClassification},
+	"T1033": {"enumerate": discoveryDefaultClassification},
+	"T1124": {"enumerate": discoveryDefaultClassification},
+	"T1049": {"enumerate": discoveryDefaultClassification},
+	"T1087": {"enumerate": discoveryDefaultClassification},
+	"T1069": {"enumerate": discoveryDefaultClassification},
+	"T1652": {"enumerate": discoveryDefaultClassification},
+}
+
+// discoveryDefaultClassification covers the read-only ATT&CK discovery
+// techniques in resource.go's discoveryProfiles, which were audited against
+// real production ART command text and proven non-mutating -- so a step with
+// no action_key for one of them doesn't fail closed to destructive. T1120 is
+// excluded even though it's in discoveryProfiles: that map rates it read-only
+// for resource/concurrency purposes only, and one of its real atomics
+// ("WinPwn - printercheck") downloads and executes an arbitrary third-party
+// script, which is exactly the unverifiable case this catalog fails closed on.
+var discoveryDefaultClassification = &ExecutionClassification{
+	Class:             ClassNonDestructive,
+	DestructiveAction: "",
+	BlastRadius:       "Read-only ATT&CK discovery technique from resource.go's discoveryProfiles set, audited against real production ART command text and proven non-mutating. No state changed.",
 }
 
 // handAuthoredExecutionClassifications is a frozen, independent copy of
