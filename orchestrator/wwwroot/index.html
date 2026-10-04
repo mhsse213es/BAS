@@ -5983,7 +5983,7 @@ function vfStatusLabel(s) {
     case 'NotDetected': return 'SILENT';
     case 'NotApplicable': return 'N/A';
     case 'NeedsReview': return 'NEEDS REVIEW';
-    default: return (s || 'Pending').toUpperCase();
+    default: return x((s || 'Pending').toUpperCase());
   }
 }
 
@@ -7718,7 +7718,7 @@ function _apRenderJobState(job) {
   var s = job.status;
   var prog = job.progress;
 
-  var stageLabel = prog && prog.stage ? (_apStageLabels[prog.stage] || prog.stage) : '';
+  var stageLabel = prog && prog.stage ? (_apStageLabels[prog.stage] || x(prog.stage)) : '';
   var pct = prog && prog.progressPercent > 0 ? prog.progressPercent : 0;
   var pctBar = (pct > 0 && pct < 100)
     ? '<div style="margin-top:0.3rem;width:100%;max-width:220px;background:var(--border);border-radius:4px;height:6px;overflow:hidden">' +
@@ -7756,7 +7756,7 @@ function _apRenderJobState(job) {
     authentication_failed: 'Agent authentication failed.',
     permission_denied: 'Permission denied on the agent.'
   };
-  var errorDisplay = failReasonMap[job.error] || job.error || '';
+  var errorDisplay = failReasonMap[job.error] || (job.error ? x(job.error) : '');
 
   var statusLabel = {
     queued: 'Queued — waiting for agent to connect',
@@ -11238,7 +11238,7 @@ function loadDashboardITSM() {
       tile('Resolved tickets', resolved, 'var(--success)') +
       tile('Pending revalidation', pend, pend ? 'var(--danger)' : 'var(--muted)');
     (s.byProvider || []).forEach(function(p) {
-      html += tile(p.provider, p.count, 'var(--accent)');
+      html += tile(x(p.provider), p.count, 'var(--accent)');
     });
     document.getElementById('dash-itsm-tiles').innerHTML = html;
   }).catch(function() {});
@@ -11313,7 +11313,7 @@ function renderConnectorList(list) {
         '<div style="display:flex;align-items:center;gap:0.75rem">' +
           '<div style="width:32px;height:32px;border-radius:6px;background:rgba(47,129,247,0.12);color:var(--accent);display:flex;align-items:center;justify-content:center">' + (PROVIDER_ICONS[c.provider] || '') + '</div>' +
           '<div><div style="font-weight:600;font-size:0.85rem;color:var(--text)">' + x(c.name) + '</div>' +
-            '<div class="tiny muted">' + (PROVIDER_LABELS[c.provider] || c.provider) + ' &nbsp;·&nbsp; Auto-create: ' + x(ac) + '</div></div>' +
+            '<div class="tiny muted">' + (PROVIDER_LABELS[c.provider] || x(c.provider)) + ' &nbsp;·&nbsp; Auto-create: ' + x(ac) + '</div></div>' +
         '</div>' +
         '<div style="display:flex;align-items:center;gap:0.65rem">' +
           '<span class="tiny" style="color:' + statusColor + '" title="' + x(statusTitle) + '">' + statusDot + '</span>' +
@@ -11617,7 +11617,7 @@ function renderResponseConnectorList(list) {
     return '<div class="conn-cfg-card" style="margin-bottom:0.75rem">' +
       '<div style="display:flex;align-items:center;justify-content:space-between;gap:1rem">' +
         '<div><div style="font-weight:600;font-size:0.85rem;color:var(--text)">' + x(c.name) + '</div>' +
-          '<div class="tiny muted">' + (providerLabels[c.provider] || c.provider) + '</div></div>' +
+          '<div class="tiny muted">' + (providerLabels[c.provider] || x(c.provider)) + '</div></div>' +
         '<div style="display:flex;align-items:center;gap:0.65rem">' +
           '<span class="tiny" style="color:' + statusColor + '">' + statusDot + '</span>' +
           '<button class="btn btn-outline btn-sm" onclick="testResponseConnectorById(\'' + x(c.id) + '\',this)">Test</button>' +
@@ -13509,7 +13509,7 @@ function renderModalSelection() {
             });
             html = '&#9432; <strong>' + d.length + '</strong> check' + (d.length === 1 ? '' : 's') +
               ' will run across ' + catNames.length + ' categor' + (catNames.length === 1 ? 'y' : 'ies') +
-              ': ' + catNames.join(', ') + '.';
+              ': ' + x(catNames.join(', ')) + '.';
           }
           _postureSummaryCache[cacheKey] = html;
           // Only repaint if the modal is still on this exact scenario+agent —
@@ -16070,17 +16070,20 @@ function openIOCDetail(idx) {
   document.getElementById('results-title').textContent = (IOC_TYPE_LABEL_REGISTRY[row.type] || row.type) + ': ' + row.value;
   document.getElementById('results-export').innerHTML = '';
 
+  // Escapes v internally -- every caller passes a raw value, not
+  // pre-escaped HTML (G1a hardening: this used to rely on every call site
+  // remembering to pre-escape, which was safe only by caller discipline).
   var rowHtml = function(k, v) {
-    return v ? '<div style="display:flex;gap:0.6rem;padding:0.35rem 0;border-bottom:1px solid var(--border);font-size:0.8rem"><span style="color:var(--muted);min-width:120px">' + k + '</span><span class="u-flex1">' + v + '</span></div>' : '';
+    return v ? '<div style="display:flex;gap:0.6rem;padding:0.35rem 0;border-bottom:1px solid var(--border);font-size:0.8rem"><span style="color:var(--muted);min-width:120px">' + k + '</span><span class="u-flex1">' + x(v) + '</span></div>' : '';
   };
   var body =
-    rowHtml('Source', x(row.source || '—')) +
-    rowHtml('Origin', x(row.origin || '—')) +
-    rowHtml('Status', x(row.status || '—')) +
+    rowHtml('Source', row.source || '—') +
+    rowHtml('Origin', row.origin || '—') +
+    rowHtml('Status', row.status || '—') +
     rowHtml('Sightings', String(row.sightingCount || 0)) +
     rowHtml('First seen', row.firstSeen ? new Date(row.firstSeen).toLocaleString() : '—') +
     rowHtml('Last seen', row.lastSeen ? new Date(row.lastSeen).toLocaleString() : '—') +
-    (row.suppressed ? rowHtml('Suppressed', x(row.suppressionReason || 'yes')) : '') +
+    (row.suppressed ? rowHtml('Suppressed', row.suppressionReason || 'yes') : '') +
     '<div id="ioc-detail-relationships" style="margin-top:1rem"><div class="tiny muted">Loading relationships…</div></div>';
   document.getElementById('results-body').innerHTML = body;
   document.getElementById('results-overlay').classList.add('open');
@@ -16538,22 +16541,18 @@ function renderEvidencePanel(c) {
            : cScore >= 2 ? {l:'Medium', col:'var(--warning)'}
                          : {l:'Low',    col:'var(--muted)'};
 
-  function xe(s) {
-    return String(s == null ? '' : s)
-      .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-  }
   function secRow(label, ok, text) {
     return '<div style="display:flex;align-items:center;gap:0.6rem;padding:0.22rem 0">'
       + '<span style="width:5.8rem;font-size:0.72rem;color:var(--muted);flex-shrink:0">' + label + '</span>'
       + '<span style="font-size:0.72rem;color:' + (ok ? 'var(--success)' : 'var(--muted)') + ';font-weight:600">'
-      + (ok ? '&#10003; ' : '&#8212; ') + xe(text) + '</span>'
+      + (ok ? '&#10003; ' : '&#8212; ') + x(text) + '</span>'
       + '</div>';
   }
   function section(title, badge, content) {
     return '<div style="margin-bottom:0.9rem">'
       + '<div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.4rem">'
       + '<div style="font-size:0.61rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)">' + title + '</div>'
-      + (badge ? '<span style="font-size:0.58rem;font-weight:700;text-transform:uppercase;background:rgba(35,134,54,0.15);color:var(--success);border-radius:3px;padding:1px 6px;border:1px solid rgba(35,134,54,0.3)">' + xe(badge) + '</span>' : '')
+      + (badge ? '<span style="font-size:0.58rem;font-weight:700;text-transform:uppercase;background:rgba(35,134,54,0.15);color:var(--success);border-radius:3px;padding:1px 6px;border:1px solid rgba(35,134,54,0.3)">' + x(badge) + '</span>' : '')
       + '</div>'
       + '<div style="background:var(--elevated);border:1px solid var(--border);border-radius:6px;padding:0.7rem 0.85rem;font-size:0.74rem">'
       + content
@@ -16569,7 +16568,7 @@ function renderEvidencePanel(c) {
   var html = '';
 
   // ── 1. Evidence Summary ──
-  var detText  = detOk  ? (da && da.provider ? xe(da.provider) : 'Detected') : 'No detection correlated';
+  var detText  = detOk  ? (da && da.provider ? x(da.provider) : 'Detected') : 'No detection correlated';
   var prevText = prevOk ? 'Blocked' : 'Not prevented';
   var cvText   = cleanOk ? 'Environment restored'
                : (c.cleanupVerdict === 'partial' ? 'Partial cleanup'
@@ -16595,40 +16594,40 @@ function renderEvidencePanel(c) {
     return '<div style="text-align:center;padding:0.45rem 0.3rem;background:' + bg + ';border-radius:4px">'
       + '<div style="font-size:0.64rem;color:var(--muted);margin-bottom:0.15rem">' + label + '</div>'
       + '<div style="font-size:0.95rem;margin:0.08rem 0;color:' + (ok ? 'var(--success)' : 'var(--muted)') + '">' + (ok ? '&#10003;' : '&#8212;') + '</div>'
-      + '<div style="font-size:0.67rem;color:var(--text)">' + xe(sub) + '</div>'
+      + '<div style="font-size:0.67rem;color:var(--text)">' + x(sub) + '</div>'
       + '</div>';
   };
   var resultVerdict = c.detectionVerdict || c.result || '—';
   var resultCol = c.result === 'vetoed' ? 'var(--warning)' : prevOk ? 'var(--success)' : (detOk ? 'var(--warning)' : 'var(--danger)');
   srHtml += card('Execution', execOk, execTextShort, 'rgba(47,129,247,0.07)');
-  srHtml += card('Detection', detOk,  detOk  ? (da && da.provider ? xe(da.provider) : 'Detected') : 'No detection', 'rgba(210,153,34,0.07)');
+  srHtml += card('Detection', detOk,  detOk  ? (da && da.provider ? x(da.provider) : 'Detected') : 'No detection', 'rgba(210,153,34,0.07)');
   srHtml += card('Prevention', prevOk, prevOk ? 'Blocked' : 'Not blocked', 'rgba(35,134,54,0.07)');
   srHtml += '<div style="text-align:center;padding:0.45rem 0.3rem;background:var(--bg);border-radius:4px">'
          + '<div style="font-size:0.64rem;color:var(--muted);margin-bottom:0.15rem">Result</div>'
-         + '<div style="font-size:0.67rem;font-weight:700;color:' + resultCol + ';text-transform:uppercase;margin-top:0.6rem">' + xe(resultVerdict) + '</div>'
+         + '<div style="font-size:0.67rem;font-weight:700;color:' + resultCol + ';text-transform:uppercase;margin-top:0.6rem">' + x(resultVerdict) + '</div>'
          + '</div>';
   srHtml += '</div>';
   if (da) {
     srHtml += '<div style="background:rgba(210,153,34,0.08);border:1px solid rgba(210,153,34,0.25);border-radius:4px;padding:0.5rem 0.65rem;margin-bottom:0.4rem">';
-    srHtml += '<div style="font-size:0.61rem;color:var(--warning);font-weight:700;margin-bottom:0.2rem">' + xe(da.provider||'EDR') + ' Alert</div>';
-    if (da.threatName) srHtml += '<div style="font-size:0.72rem;color:var(--text);margin-bottom:0.12rem">' + xe(da.threatName) + '</div>';
+    srHtml += '<div style="font-size:0.61rem;color:var(--warning);font-weight:700;margin-bottom:0.2rem">' + x(da.provider||'EDR') + ' Alert</div>';
+    if (da.threatName) srHtml += '<div style="font-size:0.72rem;color:var(--text);margin-bottom:0.12rem">' + x(da.threatName) + '</div>';
     if (da.mttdMs != null) srHtml += '<div style="font-size:0.67rem;color:var(--muted)">MTTD: ' + (da.mttdMs < 1000 ? da.mttdMs + ' ms' : (da.mttdMs/1000).toFixed(1) + ' s') + '</div>';
     srHtml += '</div>';
   }
   if (c.blockingControl) {
     srHtml += '<div style="background:rgba(35,134,54,0.08);border:1px solid rgba(35,134,54,0.25);border-radius:4px;padding:0.5rem 0.65rem;margin-bottom:0.4rem">';
     srHtml += '<div style="font-size:0.61rem;color:var(--success);font-weight:700;margin-bottom:0.12rem">Blocking Control</div>';
-    srHtml += '<div style="font-size:0.72rem;color:var(--text)">' + xe((c.blockingControl && c.blockingControl.name) || 'Security Control') + '</div>';
+    srHtml += '<div style="font-size:0.72rem;color:var(--text)">' + x((c.blockingControl && c.blockingControl.name) || 'Security Control') + '</div>';
     srHtml += '</div>';
   }
   if (c.events && c.events.length > 0) {
     srHtml += '<div style="margin-top:0.5rem"><div style="font-size:0.61rem;color:var(--muted);margin-bottom:0.22rem;font-weight:600">Windows Events</div>';
     srHtml += c.events.map(function(evId) {
       var evName = WIN_EVENT_NAMES[String(evId)] || 'Security Event';
-      var evIdStr = xe(String(evId));
+      var evIdStr = x(String(evId));
       return '<div style="display:flex;align-items:center;gap:0.5rem;padding:0.16rem 0">'
         + '<code style="font-size:0.64rem;color:var(--accent);min-width:2.8rem">' + evIdStr + '</code>'
-        + '<span style="font-size:0.69rem;color:var(--text);flex:1">' + xe(evName) + '</span>'
+        + '<span style="font-size:0.69rem;color:var(--text);flex:1">' + x(evName) + '</span>'
         + '<button onclick="copyRaw(\'' + evIdStr + '\')" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:0.63rem;padding:0" title="Copy ID">&#128203;</button>'
         + '</div>';
     }).join('');
@@ -16652,24 +16651,24 @@ function renderEvidencePanel(c) {
   var durLabel = durMs < 1000 ? durMs + ' ms' : durMs < 60000 ? (durMs/1000).toFixed(1) + ' s' : Math.round(durMs/60000) + ' m ' + Math.round((durMs%60000)/1000) + ' s';
   var durCol = durMs < 1000 ? 'var(--success)' : durMs < 8000 ? 'var(--text)' : durMs < 30000 ? 'var(--warning)' : 'var(--danger)';
 
-  var exHtml = kv('Method', xe(cmdMethod));
+  var exHtml = kv('Method', x(cmdMethod));
   if (cmd) {
     var cmdJson = JSON.stringify(cmd);
     exHtml += '<div style="display:flex;gap:0.75rem;padding:0.18rem 0;border-bottom:1px solid rgba(34,50,74,0.4)">'
       + '<span style="min-width:6.5rem;color:var(--muted);font-size:0.69rem;flex-shrink:0;padding-top:0.05rem">Command</span>'
       + '<details style="flex:1;cursor:pointer"><summary style="list-style:none;color:var(--accent);font-size:0.68rem">View Full Command &#9660;</summary>'
       + '<div style="margin-top:0.4rem;display:flex;gap:0.4rem;align-items:flex-start">'
-      + '<code style="font-size:0.62rem;background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:0.35rem 0.5rem;display:block;word-break:break-all;flex:1;color:var(--text);line-height:1.5">' + xe(cmd) + '</code>'
+      + '<code style="font-size:0.62rem;background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:0.35rem 0.5rem;display:block;word-break:break-all;flex:1;color:var(--text);line-height:1.5">' + x(cmd) + '</code>'
       + '<button onclick="copyRaw(' + cmdJson + ')" style="background:none;border:1px solid var(--border);border-radius:3px;color:var(--muted);cursor:pointer;font-size:0.63rem;padding:0.2rem 0.35rem;flex-shrink:0" title="Copy">&#128203;</button>'
       + '</div></details></div>';
   }
-  if (c.pid) exHtml += kv('PID', xe(String(c.pid)));
-  exHtml += kv('Executed as', xe(c.executedAs || c.requestedPriv || 'agent context'));
-  exHtml += kv('Exit code', c.exitCode != null ? xe(String(c.exitCode)) : '&#8212;');
+  if (c.pid) exHtml += kv('PID', x(String(c.pid)));
+  exHtml += kv('Executed as', x(c.executedAs || c.requestedPriv || 'agent context'));
+  exHtml += kv('Exit code', c.exitCode != null ? x(String(c.exitCode)) : '&#8212;');
   if (c.startedAt && (new Date(c.startedAt)).getFullYear() > 2000) {
-    exHtml += kv('Started at', xe(new Date(c.startedAt).toISOString().replace('T',' ').slice(0,23) + ' UTC'));
+    exHtml += kv('Started at', x(new Date(c.startedAt).toISOString().replace('T',' ').slice(0,23) + ' UTC'));
   } else if (c.executedAt) {
-    exHtml += kv('Completed at', xe(new Date(c.executedAt).toISOString().replace('T',' ').slice(0,23) + ' UTC'));
+    exHtml += kv('Completed at', x(new Date(c.executedAt).toISOString().replace('T',' ').slice(0,23) + ' UTC'));
   }
   exHtml += kv('Duration', '<span style="font-weight:600;color:' + durCol + '">' + durLabel + '</span>');
   if (c.timedOut) exHtml += kv('Timed out', '<span style="color:var(--danger);font-weight:700">Yes — exceeded timeout</span>');
@@ -16694,7 +16693,7 @@ function renderEvidencePanel(c) {
   }
   if (c.cleanupVerdict) {
     var cleanCol2 = cleanOk ? 'var(--success)' : c.cleanupVerdict === 'leaked' ? 'var(--danger)' : 'var(--warning)';
-    tlNodes.push({ label: 'Cleanup', sub: xe(c.cleanupVerdict), col: cleanCol2 });
+    tlNodes.push({ label: 'Cleanup', sub: x(c.cleanupVerdict), col: cleanCol2 });
   }
   tlNodes.push({ label: 'Completed', sub: fmt(t1), col: 'var(--text)' });
 
@@ -16704,8 +16703,8 @@ function renderEvidencePanel(c) {
     tlHtml += '<div style="position:relative;padding-bottom:' + (last ? '0' : '0.85rem') + '">'
       + (!last ? '<div style="position:absolute;left:-0.65rem;top:0.55rem;bottom:0;width:1px;background:var(--border)"></div>' : '')
       + '<div style="position:absolute;left:-0.87rem;top:0.12rem;width:0.42rem;height:0.42rem;border-radius:50%;background:' + n.col + '"></div>'
-      + '<div style="font-size:0.74rem;font-weight:600;color:' + n.col + '">' + xe(n.label) + '</div>'
-      + (n.sub ? '<div style="font-size:0.64rem;color:var(--muted);margin-top:0.04rem">' + xe(n.sub) + '</div>' : '')
+      + '<div style="font-size:0.74rem;font-weight:600;color:' + n.col + '">' + x(n.label) + '</div>'
+      + (n.sub ? '<div style="font-size:0.64rem;color:var(--muted);margin-top:0.04rem">' + x(n.sub) + '</div>' : '')
       + '</div>';
   });
   tlHtml += '</div>';
@@ -16725,13 +16724,13 @@ function renderEvidencePanel(c) {
                :                     ['Payload Executed', 'Cleanup Timed Out'];
     var clHtml = '<div style="display:flex;align-items:center;gap:0.6rem;margin-bottom:0.5rem">'
       + '<span style="font-size:1rem;color:' + cvCol2 + ';flex-shrink:0">' + cvIcon + '</span>'
-      + '<div><div style="font-weight:600;color:' + cvCol2 + ';font-size:0.77rem">' + xe(cv.charAt(0).toUpperCase()+cv.slice(1)) + '</div>'
-      + '<div style="font-size:0.67rem;color:var(--muted)">' + xe(cvDesc) + '</div></div></div>';
+      + '<div><div style="font-weight:600;color:' + cvCol2 + ';font-size:0.77rem">' + x(cv.charAt(0).toUpperCase()+cv.slice(1)) + '</div>'
+      + '<div style="font-size:0.67rem;color:var(--muted)">' + x(cvDesc) + '</div></div></div>';
     clHtml += '<div style="display:flex;align-items:center;flex-wrap:wrap;gap:0">';
     clFlow.forEach(function(step, i) {
       var last = i === clFlow.length-1;
       var sc = last ? cvCol2 : 'var(--muted)';
-      clHtml += '<span style="font-size:0.65rem;color:' + sc + '">' + xe(step) + '</span>';
+      clHtml += '<span style="font-size:0.65rem;color:' + sc + '">' + x(step) + '</span>';
       if (!last) clHtml += '<span style="color:var(--border);margin:0 0.3rem">&rsaquo;</span>';
     });
     clHtml += '</div>';
@@ -16742,13 +16741,13 @@ function renderEvidencePanel(c) {
   if (c.technique && c.technique.id) {
     var tid = c.technique.id.replace('.', '/');
     var miHtml = kv('Technique',
-      '<a href="https://attack.mitre.org/techniques/' + xe(tid) + '" target="_blank" style="color:var(--accent);text-decoration:none">'
-      + xe(c.technique.id) + ' &#8212; ' + xe(c.technique.name||'') + ' &#8599;</a>');
-    if (c.stepName && c.stepName !== c.technique.name) miHtml += kv('Test', xe(c.stepName));
-    if (c.technique.tactic) miHtml += kv('Tactic', xe(c.technique.tactic.replace(/-/g,' ')));
+      '<a href="https://attack.mitre.org/techniques/' + x(tid) + '" target="_blank" style="color:var(--accent);text-decoration:none">'
+      + x(c.technique.id) + ' &#8212; ' + x(c.technique.name||'') + ' &#8599;</a>');
+    if (c.stepName && c.stepName !== c.technique.name) miHtml += kv('Test', x(c.stepName));
+    if (c.technique.tactic) miHtml += kv('Tactic', x(c.technique.tactic.replace(/-/g,' ')));
     var fw2 = (c.framework||'custom').toLowerCase();
     var fw2col = fw2 === 'art' ? 'var(--accent)' : fw2 === 'caldera' ? '#bc8cff' : 'var(--muted)';
-    miHtml += kv('Framework', '<span style="color:' + fw2col + ';font-weight:700;text-transform:uppercase;font-size:0.68rem">' + xe(fw2) + '</span>');
+    miHtml += kv('Framework', '<span style="color:' + fw2col + ';font-weight:700;text-transform:uppercase;font-size:0.68rem">' + x(fw2) + '</span>');
     html += section('MITRE ATT&CK', null, miHtml);
   }
 
@@ -16763,7 +16762,7 @@ function renderEvidencePanel(c) {
       + '<button onclick="copyRaw(' + rawJson + ')" style="background:none;border:1px solid var(--border);border-radius:3px;color:var(--muted);cursor:pointer;font-size:0.62rem;padding:0.15rem 0.4rem">&#128203; Copy</button>'
       + '</div>'
       + '<pre style="background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:0.6rem;font-size:0.64rem;color:var(--text);overflow-x:auto;white-space:pre-wrap;word-break:break-all;max-height:180px;overflow-y:auto;margin:0">'
-      + xe(c.rawOutput) + '</pre></div></details>';
+      + x(c.rawOutput) + '</pre></div></details>';
     html += section('Execution Logs', null, logsHtml);
   }
 
@@ -19707,7 +19706,7 @@ function initComplianceTab() {
   if (agSel.options.length <= 1) {
     agSel.innerHTML = '<option value="">— Select Agent —</option>' +
       (agents || []).map(function(a) {
-        return '<option value="' + a.agentId + '">' + (a.hostname || a.agentId) + '</option>';
+        return '<option value="' + x(a.agentId) + '">' + x(a.hostname || a.agentId) + '</option>';
       }).join('');
   }
 }
