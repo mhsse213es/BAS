@@ -396,6 +396,7 @@ var publicRoutes = map[string]bool{
 	"POST /api/auth/setup":                        true,
 	"GET /login/{tenantSlug}/sso":                 true,
 	"GET /api/auth/sso/callback":                  true,
+	"GET /api/config/ca-root":                     true, // public CA certificate (never the key), fetched by install commands before enrollment
 	"GET /scim/v2/ServiceProviderConfig":          true,
 	"GET /scim/v2/ResourceTypes":                  true,
 	"GET /scim/v2/Schemas":                        true,
