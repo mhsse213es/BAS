@@ -13396,7 +13396,7 @@ function updatePickerCount() {
   document.getElementById('picker-count').textContent = txt;
   var btn = document.getElementById('picker-apply');
   btn.disabled = (n === 0);
-  btn.innerHTML = '&#9654; Use selection (' + n + ')';
+  btn.textContent = '▶ Use selection (' + n + ')';
 }
 
 function applyPicker() {
@@ -13471,13 +13471,13 @@ function renderModalSelection() {
     link.style.opacity = '0.5';
     link.style.pointerEvents = 'none';
   } else if (has && _runSelection.locked) {
-    link.innerHTML = '&#128274; Locked — re-validating ' + _runSelection.ids.join(', ') + ' only';
+    link.textContent = '🔒 Locked — re-validating ' + _runSelection.ids.join(', ') + ' only';
     link.style.opacity = '0.6';
     link.style.pointerEvents = 'none';
   } else {
     link.style.opacity = '';
     link.style.pointerEvents = '';
-    link.innerHTML = '&#9881; ' + (has ? 'Change selection' : 'Customize — select ' + noun + ' to run');
+    link.textContent = '⚙ ' + (has ? 'Change selection' : 'Customize — select ' + noun + ' to run');
   }
   if (has) {
     note.style.display = 'block';
@@ -19876,7 +19876,7 @@ function toggleEvidence(id, btn) {
   if (!el) return;
   el.classList.toggle('open');
   var count = el.querySelectorAll('.cmp-ev-row').length;
-  if (btn) btn.innerHTML = el.classList.contains('open') ? '&#9660; ' + count + ' tests' : '&#9658; ' + count + ' tests';
+  if (btn) btn.textContent = el.classList.contains('open') ? '▼ ' + count + ' tests' : '► ' + count + ' tests';
 }
 
 function filterControls(status) {
