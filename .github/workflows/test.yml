@@ -15,6 +15,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: G1 XSS sink regression guard
+        working-directory: .
+        run: |
+          python3 scripts/g1-innerhtml-sink-classifier.py
+          python3 scripts/g1-trace-indirect-sinks.py
+          python3 scripts/g1-merge-classification.py
+          git diff --exit-code Assessment/G1_INNERHTML_SINK_INVENTORY.csv Assessment/G1_INNERHTML_SINK_INVENTORY.json Assessment/G1_INDIRECT_SINK_TRACE.csv Assessment/G1_FINAL_CLASSIFICATION.json Assessment/G1_FINAL_CLASSIFICATION.csv || \
+            (echo "::error::Assessment/G1_FINAL_CLASSIFICATION.{json,csv} is stale -- run 'python3 scripts/g1-merge-classification.py' and commit the result." && exit 1)
+          git fetch origin main --depth=1 2>/dev/null || true
+          git show origin/main:Assessment/G1_FINAL_CLASSIFICATION.json > /tmp/g1_main_baseline.json 2>/dev/null || echo "{}" > /tmp/g1_main_baseline.json
+          python3 scripts/g1-check-no-regression.py --against /tmp/g1_main_baseline.json
+          cd scripts && python3 -m unittest test_g1_merge_classification test_g1_check_no_regression -v
+
       - uses: actions/setup-go@v5
         with:
           go-version-file: orchestrator/go.mod
