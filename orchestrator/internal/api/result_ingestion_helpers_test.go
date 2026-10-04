@@ -97,7 +97,10 @@ func startFakeBrowser(t *testing.T, hub *ws.Hub) *fakeBrowser {
 	t.Helper()
 	server := httptest.NewServer(http.HandlerFunc(hub.ServeBrowserWS))
 	wsURL := "ws" + strings.TrimPrefix(server.URL, "http")
-	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
+	// A real browser always sends Origin on a WS handshake; hub.go's
+	// checkBrowserOrigin (F3, groupF.txt) now requires one and falls back to
+	// same-origin-host when no PUBLIC_BASE_URL is configured, as here.
+	conn, _, err := websocket.DefaultDialer.Dial(wsURL, http.Header{"Origin": []string{server.URL}})
 	if err != nil {
 		server.Close()
 		t.Fatalf("dial fake browser: %v", err)
@@ -167,7 +170,7 @@ func (b *fakeBrowser) Reconnect(t *testing.T, hub *ws.Hub) {
 	t.Helper()
 	server := httptest.NewServer(http.HandlerFunc(hub.ServeBrowserWS))
 	wsURL := "ws" + strings.TrimPrefix(server.URL, "http")
-	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
+	conn, _, err := websocket.DefaultDialer.Dial(wsURL, http.Header{"Origin": []string{server.URL}})
 	if err != nil {
 		server.Close()
 		t.Fatalf("reconnect fake browser: %v", err)
