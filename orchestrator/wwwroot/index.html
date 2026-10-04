@@ -5696,7 +5696,7 @@ function initiativeStateLabel(state) {
   if (state === 'active') return 'Active';
   if (state === 'closed') return 'Closed';
   if (state === 'archived') return 'Archived';
-  return state;
+  return x(state);
 }
 
 function initiativeSetFilter(state) {
@@ -7044,7 +7044,7 @@ function openOpenAEVDetail(id) {
     document.getElementById('openaev-detail-title').textContent = d.scenario.Name;
     var body = document.getElementById('openaev-detail-body');
     var injectsHtml = (d.detail.injects || []).map(function(inj) {
-      return '<div class="kpi-row"><span>' + x(inj.title) + '</span><span class="tiny muted">' + (inj.techniqueIds || []).join(', ') + '</span></div>';
+      return '<div class="kpi-row"><span>' + x(inj.title) + '</span><span class="tiny muted">' + x((inj.techniqueIds || []).join(', ')) + '</span></div>';
     }).join('');
     body.innerHTML = '<div class="tiny muted">' + x(d.detail.description || '') + '</div>' + injectsHtml;
     if (ROLE === 'admin') {
@@ -7873,7 +7873,7 @@ function _apOnCollected(msg) {
   step1Html = step1Html.replace(/animation:spin[^"]+/g, '').replace(/<span[^>]*>&#9696;<\/span>/, '<span class="u-success">&#10003;</span>').replace(/<span[^>]*>&#9675;<\/span>/, '<span class="u-success">&#10003;</span>');
   tl.innerHTML =
     step1Html +
-    _apStep('done', 'Agent finished probing at ' + _apTimestamp(), label + ' completed TCP probes across all targets.') +
+    _apStep('done', 'Agent finished probing at ' + _apTimestamp(), x(label) + ' completed TCP probes across all targets.') +
     _apStep('done', 'Collection received — ' + nodes + ' node' + (nodes === 1 ? '' : 's') + ', ' + edges + ' lateral edge' + (edges === 1 ? '' : 's') + ' mapped',
       'The server has built the updated graph. Previous collection (if any) has been superseded by this result.') +
     _apStep('done', 'Graph analysis complete — results are ready', 'Attack path score, lateral movement risk, and domain reachability have been recalculated. Click View Results to review.');
@@ -10322,7 +10322,7 @@ function openAdvDrawer(adversaryId) {
   if (runWrap) {
     var canRun = ROLE === 'admin' || ROLE === 'analyst';
     runWrap.innerHTML = canRun
-      ? '<button class="btn btn-primary btn-sm u-w100" onclick="openAdvRunModal(\'' + x(adversaryId) + '\',\'' + (adv ? x(adv.name).replace(/'/g,'\\\'') : adversaryId) + '\')">&#9654; Run this adversary</button>'
+      ? '<button class="btn btn-primary btn-sm u-w100" onclick="openAdvRunModal(\'' + x(adversaryId) + '\',\'' + (adv ? x(adv.name).replace(/'/g,'\\\'') : x(adversaryId).replace(/'/g,'\\\'')) + '\')">&#9654; Run this adversary</button>'
       : '';
   }
   document.getElementById('adv-drawer-overlay').style.display = '';
@@ -11027,7 +11027,7 @@ function openFinding(id) {
       (canPush
         ? '<div style="margin-top:1rem;padding-top:0.75rem;border-top:1px solid var(--border)">' +
             '<div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:0.4rem">ITSM Tickets</div>' +
-            '<div id="' + ticketSectionId + '"><div class="tiny muted">Loading…</div></div>' +
+            '<div id="' + x(ticketSectionId) + '"><div class="tiny muted">Loading…</div></div>' +
           '</div>'
         : '');
     document.getElementById('results-overlay').classList.add('open');
@@ -14204,7 +14204,7 @@ function viewRunResults(run) {
   var subsetFieldLabels = { techniques: 'Techniques', abilities: 'Abilities', steps: 'Steps', checks: 'Checks' };
   var subsetText = '';
   if (subset.field && subset.ids.length) {
-    subsetText = ' &nbsp;&middot;&nbsp; ' + (subsetFieldLabels[subset.field] || subset.field) + ': <strong>' +
+    subsetText = ' &nbsp;&middot;&nbsp; ' + x(subsetFieldLabels[subset.field] || subset.field) + ': <strong>' +
       subset.ids.length + '</strong> — ' + x(subset.ids.slice(0, 4).join(', ')) + (subset.ids.length > 4 ? ', …' : '');
   }
 
@@ -14313,7 +14313,7 @@ function viewRunResults(run) {
         '<div class="kpi-row" style="grid-template-columns:repeat(6,1fr)">' +
           '<div class="kpi-card"><div class="kpi-label">Overall Security Score</div><div class="kpi-value">' + prevPct + '<span style="font-size:0.9rem;color:var(--muted)">/100</span></div><div class="kpi-sub">' + (deltaHtml || '—') + '</div></div>' +
           kpiGaugeCard('Detection Rate', detRate, pass + ' / ' + results.length + ' techniques') +
-          kpiGaugeCard('Prevention Rate', prevPct, cls || '—') +
+          kpiGaugeCard('Prevention Rate', prevPct, x(cls) || '—') +
           '<div class="kpi-card"><div class="kpi-label">Exposure Score</div><div class="kpi-value" style="color:' + expCol + '">' + expVal + '</div><div class="kpi-sub">×' + amp + ' kill-chain</div></div>' +
           kpiGaugeCard('Tactic Coverage', covPct, 'of 14 ATT&CK tactics') +
           '<div class="kpi-card"><div class="kpi-label">Risk Level</div><div class="kpi-value" style="color:' + trendCol + '">' + trendIcon + ' ' + x(trend) + '</div><div class="kpi-sub">vs prior run</div></div>' +
@@ -15381,7 +15381,7 @@ function renderRunReportExtra(rep) {
     var ageDesc = "";
     if (oldestID) {
       ageDesc = 'Exposed weakness present for <strong>' + age + ' days</strong>.<br/>' +
-                '<span style="font-size:0.72rem;color:var(--muted)">Oldest weakness: <strong>' + oldestID + '</strong> (' + oldestName + ') &middot; Severity: <strong>' + oldestSev + '</strong></span>';
+                '<span style="font-size:0.72rem;color:var(--muted)">Oldest weakness: <strong>' + x(oldestID) + '</strong> (' + x(oldestName) + ') &middot; Severity: <strong>' + x(oldestSev) + '</strong></span>';
     } else {
       ageDesc = 'No open weaknesses detected on this agent.';
     }
@@ -15487,13 +15487,13 @@ function renderRunReportExtra(rep) {
     html += '<div style="' + panel + ';border-left:3px solid ' + erBorderCol + ';background:' + erBg + '">' +
       '<div style="' + hdr + ';display:flex;align-items:center;justify-content:space-between">' +
         '<span>Environment Restoration</span>' +
-        '<span style="font-size:0.58rem;font-weight:700;color:' + erTextCol + '">' + erStatus.toUpperCase() + '</span>' +
+        '<span style="font-size:0.58rem;font-weight:700;color:' + erTextCol + '">' + x(erStatus.toUpperCase()) + '</span>' +
       '</div>' +
       '<div style="display:flex;align-items:flex-start;gap:12px;margin-bottom:0.5rem">' +
         '<div style="font-size:1.8rem;line-height:1;color:' + erTextCol + ';flex-shrink:0">' + erIcon + '</div>' +
         '<div class="u-flex1">' +
-          '<div style="font-size:0.92rem;font-weight:700;color:' + erTextCol + '">' + erRate.toFixed(1) + '% Clean &mdash; ' + erLabel + '</div>' +
-          '<div style="font-size:0.75rem;color:var(--text);margin-top:3px;line-height:1.4">' + erSummary + '</div>' +
+          '<div style="font-size:0.92rem;font-weight:700;color:' + erTextCol + '">' + erRate.toFixed(1) + '% Clean &mdash; ' + x(erLabel) + '</div>' +
+          '<div style="font-size:0.75rem;color:var(--text);margin-top:3px;line-height:1.4">' + x(erSummary) + '</div>' +
         '</div>' +
         '<div style="text-align:right;flex-shrink:0">' +
           '<div style="font-size:0.58rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:2px">Cleanup Rate</div>' +
@@ -19219,10 +19219,10 @@ function loadAgtOverview(agentId) {
       (Object.keys(policy).length ? '<div style="background:var(--elevated);border:1px solid var(--border);border-radius:4px;padding:0.7rem 0.9rem;margin-bottom:0.75rem">' +
         '<div style="font-weight:600;font-size:0.78rem;margin-bottom:0.4rem;color:var(--muted)">POLICY BUNDLE</div>' +
         '<div style="display:grid;grid-template-columns:1fr 1fr;gap:0.3rem 1rem;font-size:0.77rem">' +
-        kv('Log Level', policy.logLevel || 'info') +
+        kv('Log Level', x(policy.logLevel || 'info')) +
         kv('Max Concurrent', policy.maxConcurrentRuns || 'unlimited') +
         kv('Heartbeat Interval', (policy.heartbeatIntervalS || 30) + 's') +
-        kv('Exec Window', policy.executionWindow || 'unrestricted') +
+        kv('Exec Window', x(policy.executionWindow || 'unrestricted')) +
         '</div>' +
       '</div>' : '') +
       '<div style="border-top:1px solid var(--border);padding-top:0.85rem;margin-top:0.25rem">' +
