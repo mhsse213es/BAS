@@ -138,6 +138,18 @@ func TestContentVersions_AppRoleCannotRewriteOrDelete(t *testing.T) { // A3 (DB 
 		if err := insertVersion(pool, "imm", "LOCAL", "UNTRUSTED", "DRAFT", nil, 1); err != nil {
 			t.Fatalf("seed: %v", err)
 		}
+		var vid string
+		if err := pool.QueryRow(ctx, `SELECT id FROM content_versions WHERE content_id='imm'`).Scan(&vid); err != nil {
+			t.Fatalf("version id: %v", err)
+		}
+		if _, err := pool.Exec(ctx, `INSERT INTO content_validations (content_version_id, level, outcome, validator, validator_version)
+			VALUES ($1,'STRUCTURAL','PASS','test','1')`, vid); err != nil {
+			t.Fatalf("seed validation: %v", err)
+		}
+		if _, err := pool.Exec(ctx, `INSERT INTO content_registry_state (id) VALUES (1) ON CONFLICT DO NOTHING`); err != nil {
+			t.Fatalf("seed state: %v", err)
+		}
+		t.Cleanup(func() { _, _ = pool.Exec(context.Background(), `DELETE FROM content_registry_state`) })
 		app := appConnectedPool(t, pool)
 		for _, stmt := range []string{
 			`UPDATE content_versions SET artifact_bytes = 'x' WHERE content_id='imm'`,
@@ -147,11 +159,25 @@ func TestContentVersions_AppRoleCannotRewriteOrDelete(t *testing.T) { // A3 (DB 
 			`DELETE FROM scenarios WHERE scenario_id='imm'`,
 			`UPDATE content_version_events SET actor='x'`,
 			`DELETE FROM content_version_events`,
+			`UPDATE content_validations SET outcome='FAIL'`,
+			`DELETE FROM content_validations`,
+			`UPDATE content_registry_state SET inventory='{}'`,
+			`DELETE FROM content_registry_state`,
 		} {
 			if _, err := app.Exec(ctx, stmt); err == nil || !strings.Contains(err.Error(), "permission denied") {
 				t.Errorf("bas_app %q: want permission denied, got %v", stmt, err)
 			}
 		}
+		// INSERT stays allowed (CompleteMigration writes the marker row);
+		// roll back so the seeded state is untouched.
+		tx, err := app.Begin(ctx)
+		if err != nil {
+			t.Fatalf("begin: %v", err)
+		}
+		if _, err := tx.Exec(ctx, `INSERT INTO content_registry_state (id) VALUES (1) ON CONFLICT DO NOTHING`); err != nil {
+			t.Errorf("bas_app must be able to INSERT content_registry_state: %v", err)
+		}
+		_ = tx.Rollback(ctx)
 		if _, err := app.Exec(ctx, `UPDATE content_versions SET lifecycle='VALIDATING' WHERE content_id='imm'`); err != nil {
 			t.Fatalf("bas_app lifecycle update must be allowed: %v", err)
 		}

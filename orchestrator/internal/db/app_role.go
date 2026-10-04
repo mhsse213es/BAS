@@ -93,6 +93,8 @@ func EnsureAppRole(ctx context.Context, pool *pgxpool.Pool, appPassword string) 
 		`REVOKE UPDATE, DELETE ON content_version_sources FROM ` + appRole,
 		`REVOKE UPDATE, DELETE ON content_safety_verdicts FROM ` + appRole,
 		`REVOKE DELETE ON scenarios FROM ` + appRole,
+		`REVOKE UPDATE, DELETE ON content_validations FROM ` + appRole,
+		`REVOKE UPDATE, DELETE ON content_registry_state FROM ` + appRole,
 	}
 	for _, stmt := range grants {
 		if _, err := pool.Exec(ctx, stmt); err != nil {
