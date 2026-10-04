@@ -326,7 +326,7 @@
   "op": "=",
   "rhs": "'<div class=\"empty\" style=\"padding:2.5rem;text-align:center;color:var(--muted)\">No off-host expectations for this run' + (VF.domain ? ' in the ' + x(VF.domain) + ' domain' : '') + '. Endpoint controls are verified automatically.</div>'",
   "rhs_len": 235,
-  "category": "unescaped_html",
+  "category": "escaped",
   "data_source_tags": ""
  },
  {
@@ -636,7 +636,7 @@
   "op": "=",
   "rhs": "x(d.actorName) +\n    (d.canonicalGroupId ? '  <span class=\"tiny muted\" style=\"font-weight:400\">&middot; MITRE ' + x(d.canonicalGroupId) + '</span>' : '')",
   "rhs_len": 153,
-  "category": "partial_escaped",
+  "category": "escaped",
   "data_source_tags": ""
  },
  {
@@ -686,7 +686,7 @@
   "op": "=",
   "rhs": "sources.length\n    ? '<div style=\"display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:0.75rem\">' +\n      sources.map(function(s) {\n        // \"Unknown\" (never \"None\"): an empty field here means this source\n        // never supplied it -- e.g. OpenCTI never reports sectors/regions,\n        // MISP never reports aliases. Rendering it as \"None\" would read as\n        // a positiv",
   "rhs_len": 1770,
-  "category": "unescaped_likely_safe",
+  "category": "unescaped_html",
   "data_source_tags": "user_created_name"
  },
  {
@@ -766,7 +766,7 @@
   "op": "=",
   "rhs": "list.map(function(t) {\n    var threat = [];\n    if (t.kev) threat.push('<span class=\"badge\" style=\"color:var(--danger);border-color:var(--danger)\">KEV</span>');\n    if (t.epssPercentile) threat.push('<span class=\"badge\">EPSS ' + Math.round(t.epssPercentile) + '</span>');\n    if (t.threatActors) threat.push('<span class=\"badge\">' + t.threatActors + ' group' + (t.threatActors === 1 ? '' : 's') + '</",
   "rhs_len": 1300,
-  "category": "unescaped_likely_safe",
+  "category": "unescaped_html",
   "data_source_tags": "threat_intel,user_created_name"
  },
  {
@@ -806,7 +806,7 @@
   "op": "=",
   "rhs": "'<div class=\"kpi-row\">' +\n          '<input id=\"oaev-url\" type=\"text\" placeholder=\"https://openaev.example.local\" value=\"' + x(cfg.baseUrl || '') + '\" class=\"inp-sm u-flex1\">' +\n          '<input id=\"oaev-token\" type=\"password\" placeholder=\"Bearer token (leave blank to keep current)\" class=\"inp-sm u-flex1\">' +\n          '<label class=\"tiny muted\" style=\"display:flex;align-items:center;gap:0.3rem\">",
   "rhs_len": 1147,
-  "category": "partial_escaped",
+  "category": "escaped",
   "data_source_tags": "openaev"
  },
  {
@@ -836,7 +836,7 @@
   "op": "=",
   "rhs": "list.map(function(sc) {\n      return '<tr class=\"u-pointer\" onclick=\"openOpenAEVDetail(\\'' + x(sc.OpenAEVScenarioID) + '\\')\">' +\n        '<td>' + x(sc.Name) + '</td>' +\n        '<td>' + x(sc.Category) + '</td>' +\n        '<td>' + x(sc.Severity) + '</td>' +\n        '<td>' + (sc.TechniqueIDs || []).length + '</td>' +\n        '<td>' + sc.InjectsCount + '</td>' +\n        '<td class=\"tiny muted\">' + x(",
   "rhs_len": 470,
-  "category": "unescaped_likely_safe",
+  "category": "unescaped_html",
   "data_source_tags": "openaev"
  },
  {
@@ -876,7 +876,7 @@
   "op": "=",
   "rhs": "plans.map(function(p) {\n      return '<tr>' +\n        '<td>' + x(p.name) + '</td>' +\n        '<td>' + (p.steps ? p.steps.length : 0) + '</td>' +\n        '<td class=\"tiny muted\">' + x(p.created_at || '') + '</td>' +\n        '<td><button class=\"btn btn-primary btn-sm\" onclick=\"launchExercisePrompt(\\'' + x(p.id) + '\\')\">Launch</button></td>' +\n        '</tr>';\n    }).join('')",
   "rhs_len": 375,
-  "category": "unescaped_likely_safe",
+  "category": "escaped",
   "data_source_tags": "user_created_name"
  },
  {
@@ -976,7 +976,7 @@
   "op": "=",
   "rhs": "(agents || []).map(function(a) {\n      return '<option value=\"' + x(a.agentId) + '\">' + x(a.hostname || a.agentId) + (a.status === 'offline' ? ' (offline)' : '') + '</option>';\n    }).join('') || '<option value=\"\">No agents enrolled</option>'",
   "rhs_len": 242,
-  "category": "unescaped_html",
+  "category": "escaped",
   "data_source_tags": "agent"
  },
  {
@@ -1006,7 +1006,7 @@
   "op": "=",
   "rhs": "_apStep('done', 'Collection started for ' + x(agentLabel) + ' at ' + _apTimestamp(),\n        targets.length + ' target' + (targets.length === 1 ? '' : 's') + ' queued \u2014 job ' + (r.job ? r.job.id.slice(0,8) : '')) +\n      (shDetail ? _apStep('warn', 'SharpHound notice', shDetail) : '') +\n      _apStep(jobStatus === 'dispatched' || jobStatus === 'running' ? 'done' : 'active',\n        jobStatus === '",
   "rhs_len": 843,
-  "category": "partial_escaped",
+  "category": "indirect_builder",
   "data_source_tags": ""
  },
  {
@@ -1086,7 +1086,7 @@
   "op": "=",
   "rhs": "'<div class=\"legacy-migration-header\">Legacy Transport Migration</div>' +\n      '<div class=\"legacy-migration-days\">Days clean: ' + status.daysClean + ' / ' + status.daysRequired + '</div>' +\n      '<div class=\"legacy-migration-status ' + (status.eligible ? 'eligible' : 'not-eligible') + '\">' +\n        (status.eligible ? 'ELIGIBLE FOR REVIEW' : 'NOT YET ELIGIBLE') +\n      '</div>' +\n      unattrib",
   "rhs_len": 501,
-  "category": "unescaped_html",
+  "category": "partial_escaped",
   "data_source_tags": ""
  },
  {
@@ -1186,7 +1186,7 @@
   "op": "=",
   "rhs": "'<tr><td colspan=\"6\" class=\"empty\">No campaigns' + (CAMPAIGN_TAB === 'all' ? ' yet.' : ' in this state.') + '</td></tr>'",
   "rhs_len": 120,
-  "category": "unescaped_html",
+  "category": "escaped",
   "data_source_tags": ""
  },
  {
@@ -1226,7 +1226,7 @@
   "op": "=",
   "rhs": "(open.length ? hdr('Top open findings') + open.map(rowf).join('') : '') +\n      (regr.length ? hdr('Top regressions') + regr.map(rowf).join('') : '')",
   "rhs_len": 149,
-  "category": "unescaped_likely_safe",
+  "category": "unescaped_text",
   "data_source_tags": ""
  },
  {
@@ -1376,7 +1376,7 @@
   "op": "=",
   "rhs": "'<option value=\"\">\u2014 Select a scenario \u2014</option>' +\n    scenarios.map(function(s) {\n      return '<option value=\"' + x(s.id) + '\"' + (s.id === id ? ' selected' : '') + '>' + x(s.name) + '</option>';\n    }).join('')",
   "rhs_len": 214,
-  "category": "unescaped_html",
+  "category": "escaped",
   "data_source_tags": "scenario,user_created_name"
  },
  {
@@ -1466,7 +1466,7 @@
   "op": "=",
   "rhs": "rows.map(function(t) {\n      var arrow = t.direction === 'up'\n        ? '<span style=\"color:var(--success);font-weight:700\">&#8679; +' + t.preventionDelta.toFixed(1) + '%</span>'\n        : t.direction === 'down'\n        ? '<span style=\"color:var(--danger);font-weight:700\">&#8681; ' + t.preventionDelta.toFixed(1) + '%</span>'\n        : '<span class=\"u-muted\">&#8213;</span>';\n      var prevColor = _",
   "rhs_len": 869,
-  "category": "unescaped_likely_safe",
+  "category": "unescaped_html",
   "data_source_tags": ""
  },
  {
@@ -1516,7 +1516,7 @@
   "op": "=",
   "rhs": "online.map(function(a) {\n      return '<label style=\"display:flex;align-items:center;gap:0.5rem;padding:0.25rem 0.3rem;cursor:pointer\">' +\n        '<input type=\"checkbox\" ' + (_tmplSelAgents[a.agentId] ? 'checked' : '') +\n        ' onchange=\"_tmplSelAgents[\\'' + x(a.agentId) + '\\']=this.checked;renderTmplAgentCount();renderTmplOSCompat()\">' +\n        '<code style=\"font-size:0.72rem\">' + x(a.agentI",
   "rhs_len": 546,
-  "category": "unescaped_html",
+  "category": "escaped",
   "data_source_tags": "agent"
  },
  {
@@ -1636,7 +1636,7 @@
   "op": "=",
   "rhs": "filtered.map(function(a) {\n    var tactics = (a.tactics || []).slice(0, 4).map(tacticChip).join(' ');\n    var moreT = a.tactics && a.tactics.length > 4 ? ' <span style=\"color:var(--muted);font-size:0.68rem\">+' + (a.tactics.length - 4) + '</span>' : '';\n    var desc = (a.description || '').length > 100 ? a.description.substring(0, 97) + '\u2026' : (a.description || 'MITRE CTID adversary emulation profil",
   "rhs_len": 1578,
-  "category": "unescaped_likely_safe",
+  "category": "unescaped_html",
   "data_source_tags": "user_created_name"
  },
  {
@@ -1676,7 +1676,7 @@
   "op": "=",
   "rhs": "abs.map(function(ab, i) {\n      var col = tacticColors[ab.tactic] || 'var(--muted)';\n      var badges = '';\n      if ((ab.platforms || []).length) badges += '<span style=\"font-size:0.65rem;padding:1px 5px;border-radius:7px;background:var(--surface);border:1px solid var(--border);color:var(--muted)\">' + x(ab.platforms.join('/')) + '</span>';\n      if (ab.requiresPayload) badges += '<span style=\"fon",
   "rhs_len": 1757,
-  "category": "unescaped_likely_safe",
+  "category": "unescaped_html",
   "data_source_tags": "user_created_name"
  },
  {
@@ -1776,7 +1776,7 @@
   "op": "=",
   "rhs": "tiers.map(function(t, i) {\n      var bg   = i % 2 ? 'background:rgba(255,255,255,.02)' : '';\n      var col  = tierColor[t.tier] || 'var(--muted)';\n      var lbl  = tierLabel[t.tier] || t.tier;\n      var rate = t.attempted > 0 ? t.preventionRate : 0;\n      var rateColor = rate >= 75 ? 'color:var(--success)' : rate >= 40 ? 'color:var(--warning)' : 'color:var(--danger)';\n      var barW = Math.min(100",
   "rhs_len": 1480,
-  "category": "unescaped_likely_safe",
+  "category": "unescaped_html",
   "data_source_tags": ""
  },
  {
@@ -1846,7 +1846,7 @@
   "op": "=",
   "rhs": "'<div class=\"mx\">' + (window._covTactics || []).map(function(t) {\n    var techs = t.techniques || [];\n    var cov = techs.filter(function(c) { return st[c.id] === 'cov'; }).length;\n    var cells = techs.map(function(c) {\n      var s = st[c.id] || 'none', dim = view !== 'all' && view !== s;\n      return '<div class=\"mx-cell ' + s + '\" onclick=\"openTechnique(\\'' + x(c.id) + '\\')\" style=\"' + (dim ? '",
   "rhs_len": 753,
-  "category": "unescaped_likely_safe",
+  "category": "unescaped_html",
   "data_source_tags": "user_created_name"
  },
  {
@@ -1976,7 +1976,7 @@
   "op": "=",
   "rhs": "'<tr><td colspan=\"' + colCount + '\" class=\"empty\">No findings' + (FINDING_TAB === 'all' ? ' yet.' : ' in this state.') + '</td></tr>'",
   "rhs_len": 133,
-  "category": "unescaped_html",
+  "category": "partial_escaped",
   "data_source_tags": ""
  },
  {
@@ -1996,7 +1996,7 @@
   "op": "=",
   "rhs": "(actions ? actions + ' ' : '') + pushBtn + (pushBtn && respondBtn ? ' ' : '') + respondBtn",
   "rhs_len": 90,
-  "category": "unescaped_text",
+  "category": "partial_escaped",
   "data_source_tags": ""
  },
  {
@@ -2116,7 +2116,7 @@
   "op": "=",
   "rhs": "projects.map(function(p) {\n        return '<option value=\"' + x(p.key) + '\"' + (inp.value === p.key ? ' selected' : '') + '>' + x(p.key) + ' \u2014 ' + x(p.name) + '</option>';\n      }).join('')",
   "rhs_len": 189,
-  "category": "unescaped_html",
+  "category": "escaped",
   "data_source_tags": "user_created_name"
  },
  {
@@ -2306,7 +2306,7 @@
   "op": "=",
   "rhs": "scenarios.map(function(s) {\n    var desc = s.description ? ' \u2014 ' + (s.description.length > 90 ? s.description.substring(0, 87) + '...' : s.description) : '';\n    return '<option value=\"' + x(s.id) + '\"' + (s.id === scenarioId ? ' selected' : '') + '>' + x(s.name) + x(desc) + '</option>';\n  }).join('')",
   "rhs_len": 302,
-  "category": "unescaped_likely_safe",
+  "category": "escaped",
   "data_source_tags": "scenario,user_created_name"
  },
  {
@@ -2526,7 +2526,7 @@
   "op": "=",
   "rhs": "'&#9989; Running a selected subset: <strong>' + _runSelection.ids.length + '</strong> ' + noun +\n      (_runSelection.locked ? ' (targeted re-validate)' :\n       ' <a href=\"javascript:void(0)\" class=\"desc-toggle\" style=\"margin-left:8px\" onclick=\"clearSelection();return false;\">Clear</a>')",
   "rhs_len": 289,
-  "category": "unescaped_html",
+  "category": "partial_escaped",
   "data_source_tags": ""
  },
  {
@@ -2586,7 +2586,7 @@
   "op": "=",
   "rhs": "'<div><span class=\"st-tech-sel-id\">' + x(id) + '</span>' +\n        '<span class=\"tiny muted\" style=\"margin-left:0.4rem\">' +\n        (techniqueCatalog === null ? 'resolving\u2026' : 'not recognized') + '</span></div>' +\n      '<span class=\"st-tech-sel-actions\"><a href=\"javascript:void(0)\" onclick=\"techChangeSelection(this)\">&#10005; change</a></span>'",
   "rhs_len": 347,
-  "category": "partial_escaped",
+  "category": "escaped",
   "data_source_tags": ""
  },
  {
@@ -2596,7 +2596,7 @@
   "op": "=",
   "rhs": "'<div><span class=\"st-tech-sel-id\">' + x(t.id) + '</span> <span class=\"st-tech-sel-name\">' + x(t.name) + '</span>' +\n      (tactics ? '<div class=\"st-tech-row-meta\">' + x(tactics) + '</div>' : '') +\n      (subText ? '<div class=\"st-tech-row-meta\">' + x(subText) + '</div>' : '') +\n    '</div>' +\n    '<span class=\"st-tech-sel-actions\">' +\n      (t.url ? '<a href=\"' + x(t.url) + '\" target=\"_blank\" re",
   "rhs_len": 656,
-  "category": "partial_escaped",
+  "category": "escaped",
   "data_source_tags": "user_created_name"
  },
  {
@@ -2626,7 +2626,7 @@
   "op": "=",
   "rhs": "results.map(function(t, i) {\n    var tactics = (t.tactics || []).join(', ');\n    var platforms = (t.platforms || []).join(', ');\n    return '<div class=\"st-tech-row' + (i === 0 ? ' active' : '') + '\" data-id=\"' + x(t.id) + '\" onmousedown=\"techSelectRow(this)\">' +\n      '<span class=\"st-tech-row-id\">' + x(t.id) + '</span><span class=\"st-tech-row-name\">' + x(t.name) + '</span>' +\n      (tactics ? '<",
   "rhs_len": 576,
-  "category": "unescaped_html",
+  "category": "escaped",
   "data_source_tags": "user_created_name"
  },
  {
@@ -2956,7 +2956,7 @@
   "op": "=",
   "rhs": "'<div style=\"color:var(--muted);font-size:0.8rem;padding:2.5rem 0;text-align:center\">' +\n      (_runIOCsAll.length ? 'No indicators match this filter.' : 'No indicators extracted from this run.') + '</div>'",
   "rhs_len": 206,
-  "category": "unescaped_likely_safe",
+  "category": "escaped",
   "data_source_tags": ""
  },
  {
@@ -2966,7 +2966,7 @@
   "op": "=",
   "rhs": "list.map(function(ind, idx) {\n    var expanded = _runIOCExpandedIdx === idx;\n    var techs = (ind.techniqueIds || []).map(function(t) {\n      return '<code style=\"font-size:0.66rem;color:var(--muted);margin-right:3px\">' + x(t) + '</code>';\n    }).join('');\n    var tags = (ind.tags || []).map(function(t) {\n      return '<span class=\"tiny\" style=\"background:var(--elevated);border:1px solid var(--bor",
   "rhs_len": 2819,
-  "category": "unescaped_likely_safe",
+  "category": "unescaped_html",
   "data_source_tags": ""
  },
  {
@@ -3256,7 +3256,7 @@
   "op": "=",
   "rhs": "(r.description ? '<p style=\"margin-bottom:0.8rem\">' + x(r.description) + '</p>' : '') +\n    ((r.tags || []).length ? '<div style=\"display:flex;gap:0.4rem;flex-wrap:wrap\">' +\n      r.tags.map(function(t) { return '<span class=\"sbadge\" style=\"background:transparent;border:1px solid var(--border)\">' + x(t) + '</span>'; }).join('') +\n      '</div>' : '')",
   "rhs_len": 352,
-  "category": "unescaped_html",
+  "category": "escaped",
   "data_source_tags": "user_created_name"
  },
  {
@@ -3446,7 +3446,7 @@
   "op": "=",
   "rhs": "recent.map(function(r) {\n        var cnt = (r.results || []).length;\n        var fail = (r.results || []).filter(function(c) { return c.result === 'fail'; }).length;\n        var scoreStr = '\u2014';\n        var scol = 'var(--text-dim)';\n        if (r.score && r.score.preventionScore != null) {\n          var pp = Math.round(r.score.preventionScore);\n          var ta = r.score.trend === 'Improving' ? ' \u2191",
   "rhs_len": 1451,
-  "category": "unescaped_likely_safe",
+  "category": "unescaped_html",
   "data_source_tags": "user_created_name"
  },
  {
@@ -3466,7 +3466,7 @@
   "op": "=",
   "rhs": "topFails.map(function(t) {\n        var pct = Math.round((t.fail / (t.fail + t.pass)) * 100);\n        var w = Math.round((t.fail / maxFail) * 100);\n        return '<div class=\"bar-row\">' +\n          '<div class=\"bar-label\"><span style=\"color:var(--text-dim)\">' + x(t.name) + '</span><span>' + t.fail + ' fail &middot; ' + pct + '%</span></div>' +\n          '<div class=\"bar-track\"><div class=\"bar-fill",
   "rhs_len": 517,
-  "category": "unescaped_likely_safe",
+  "category": "unescaped_html",
   "data_source_tags": "user_created_name"
  },
  {
@@ -3486,7 +3486,7 @@
   "op": "=",
   "rhs": "tactics.map(function(tactic) {\n        var d = tacticMap[tactic];\n        var total = d.pass + d.fail;\n        var pct = total ? Math.round((d.pass / total) * 100) : 0;\n        var col = _riskScoreColor(pct);\n        return '<div class=\"bar-row\">' +\n          '<div class=\"bar-label\"><span style=\"text-transform:capitalize\">' + x(tactic) + '</span><span style=\"color:' + col + '\">' + pct + '%</span><",
   "rhs_len": 706,
-  "category": "unescaped_likely_safe",
+  "category": "unescaped_html",
   "data_source_tags": ""
  },
  {
@@ -3586,7 +3586,7 @@
   "op": "=",
   "rhs": "'<div class=\"kpi-row\">' +\n        urlField +\n        '<input id=\"ti-' + name + '-key\" type=\"password\" placeholder=\"API key (leave blank to keep current)\" class=\"inp-sm u-flex1\">' +\n        insecureField +\n        '<label class=\"tiny muted\" style=\"display:flex;align-items:center;gap:0.3rem\"><input type=\"checkbox\" id=\"ti-' + name + '-enabled\" ' + (cfg.enabled ? 'checked' : '') + '> Enabled</label>' ",
   "rhs_len": 1002,
-  "category": "unescaped_html",
+  "category": "partial_escaped",
   "data_source_tags": ""
  },
  {
@@ -4086,7 +4086,7 @@
   "op": "=",
   "rhs": "'<div class=\"cmp-section-hdr\">Domain Breakdown</div>' +\n    '<div class=\"cmp-domain-grid\">' +\n    (r.domains || []).map(function(d) {\n      var tested = (d.passing||0) + (d.failing||0) + (d.partial||0);\n      var p = tested > 0 ? +(d.compliancePct||0) : null;\n      var barColor = p === null ? 'rgba(122,148,176,0.3)' : p >= 70 ? '#22d3a6' : p >= 40 ? '#f59e0b' : '#ef4444';\n      return '<div class=",
   "rhs_len": 1236,
-  "category": "unescaped_likely_safe",
+  "category": "unescaped_html",
   "data_source_tags": "user_created_name"
  },
  {
@@ -4096,7 +4096,7 @@
   "op": "=",
   "rhs": "rows.map(function(c, i) {\n    var badge = '<span class=\"cmp-badge ' + c.status + '\">' + (statusLabel[c.status] || c.status) + '</span>';\n    if (c.status === 'manual') {\n      return '<tr><td>' + badge + '</td>' +\n        '<td><span class=\"cmp-ctrl-id\">' + x(c.id) + '</span></td>' +\n        '<td>' + x(c.name) + ' <span class=\"cmp-manual-tag\">manual attestation</span></td>' +\n        '<td><span cla",
   "rhs_len": 2011,
-  "category": "unescaped_likely_safe",
+  "category": "unescaped_html",
   "data_source_tags": "user_created_name"
  },
  {
@@ -4186,7 +4186,7 @@
   "op": "=",
   "rhs": "sweeps.map(function(sw) {\n    // A full sweep can have thousands of total variants, so a handful of\n    // real completions can round down to a misleading \"0%\" -- floor any\n    // nonzero progress at 1% so the bar never looks stuck when it isn't.\n    var rawPct = sw.totalVariants > 0 ? (sw.completedVariants / sw.totalVariants) * 100 : 0;\n    var pct = rawPct > 0 && rawPct < 1 ? 1 : Math.round(rawP",
   "rhs_len": 1839,
-  "category": "unescaped_likely_safe",
+  "category": "unescaped_html",
   "data_source_tags": "agent"
  },
  {
@@ -4206,7 +4206,7 @@
   "op": "=",
   "rhs": "filtered.map(function(t) {\n    return '<label style=\"display:flex;align-items:center;gap:0.5rem;padding:2px 4px;cursor:pointer;border-radius:3px\">' +\n      '<input type=\"checkbox\" class=\"vex-tech-cb\" value=\"' + x(t.id) + '\" style=\"accent-color:var(--accent);flex-shrink:0\">' +\n      '<span style=\"font-family:var(--font-mono);font-size:0.76rem;flex-shrink:0\">' + x(t.id) + '</span>' +\n      (t.name ?",
   "rhs_len": 576,
-  "category": "unescaped_html",
+  "category": "escaped",
   "data_source_tags": "user_created_name"
  },
  {
@@ -4366,7 +4366,7 @@
   "op": "=",
   "rhs": "EM_CATALOG.map(function(e) {\n      var run = lastRunMap[e.id];\n      var p = 0, f = 0;\n      if (run) {\n        (run.results || []).forEach(function(c) {\n          if (c.result === 'pass' || c.result === 'blocked') p++;\n          else if (c.result === 'fail') f++;\n        });\n      }\n      var pct = (p + f) ? Math.round(p / (p + f) * 100) : null;\n      var col = pct === null ? 'var(--muted)' : _ri",
   "rhs_len": 3506,
-  "category": "unescaped_likely_safe",
+  "category": "unescaped_html",
   "data_source_tags": "agent,user_created_name"
  },
  {

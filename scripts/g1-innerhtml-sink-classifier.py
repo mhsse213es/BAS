@@ -397,11 +397,65 @@ SAFE_NUMERIC_RE = re.compile(
 BUILDER_CALL_RE = re.compile(r"^[A-Za-z_$][\w$]*\s*\(.*\)$", re.DOTALL)
 BARE_IDENT_RE = re.compile(r"^[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*|\[[^\]]+\])*$")
 
+def strip_enclosing_parens(expr):
+    """Strip one or more layers of fully-wrapping, redundant parens, e.g.
+    `(changed ? 'a' : 'b')` -> `changed ? 'a' : 'b'`. Without this,
+    find_ternary_split below hits the wrapping '(' first, raises depth to 1,
+    and never sees the '?' at depth 0 -- so a ternary written with a
+    (harmless, common) wrapping paren around it is invisible to the
+    classifier, which then treats the whole parenthesized blob as one
+    opaque unescaped hole. Confirmed real impact: `_diffSecretRow()` (fully
+    escaped via x(label), both ternary branches pure static strings) was
+    misclassified partial_escaped purely because of this wrapping paren."""
+    e = expr.strip()
+    while e.startswith("(") and e.endswith(")"):
+        depth = 0
+        in_str = None
+        nn = len(e)
+        matched_at_end = False
+        i = 0
+        while i < nn:
+            c = e[i]
+            if in_str:
+                if c == "\\":
+                    i += 2
+                    continue
+                if c == in_str:
+                    in_str = None
+                i += 1
+                continue
+            nc = skip_comment(e, i)
+            if nc is not None:
+                i = nc
+                continue
+            nr = skip_regex_literal(e, i)
+            if nr is not None:
+                i = nr
+                continue
+            if c in "'\"`":
+                in_str = c
+                i += 1
+                continue
+            if c == "(":
+                depth += 1
+            elif c == ")":
+                depth -= 1
+                if depth == 0:
+                    matched_at_end = (i == nn - 1)
+                    break
+            i += 1
+        if not matched_at_end:
+            break
+        e = e[1:-1].strip()
+    return e
+
 def find_ternary_split(expr):
     """Find a top-level (depth-0, outside strings/comments/regex) `cond ? a
-    : b`. Returns (cond, true_branch, false_branch) or None. Skips `?.` and
-    `??`. Handles nested ternaries in the false branch (a ? b : c ? d : e)
-    via a ternary-nesting counter."""
+    : b`, after stripping any fully-wrapping redundant parens. Returns
+    (cond, true_branch, false_branch) or None. Skips `?.` and `??`. Handles
+    nested ternaries in the false branch (a ? b : c ? d : e) via a
+    ternary-nesting counter."""
+    expr = strip_enclosing_parens(expr)
     n = len(expr)
     i = 0
     depth = 0
@@ -560,44 +614,61 @@ def classify_hole(h):
     h = h.strip()
     if ESCAPER_CALL_RE.match(h):
         return "escaped"
+    # A ternary nested inside this +-term, e.g. (cond ? '<span>'+x(v)+'</span>' : ''),
+    # isn't the whole RHS so classify_expr's own ternary-split never sees it -
+    # recurse into just the two branches (never into h itself, to avoid
+    # looping back into this same classify_hole call). This MUST run before
+    # the SAFE_NUMERIC_RE check below: SAFE_NUMERIC_RE.search() matches a
+    # substring anywhere in h, so a ternary whose *condition* merely
+    # contains `.length` (e.g. `(tags.length ? '<div>'+riskyStuff+'</div>' :
+    # '')`) would otherwise be waved through as "likely_safe" without the
+    # branches -- which are what actually renders -- ever being inspected.
+    # Confirmed real impact: this exact shape hid a genuine unescaped
+    # dynamic-HTML branch behind a `.length` condition check.
+    tern = find_ternary_split(h)
+    if tern is not None:
+        _, t_branch, f_branch = tern
+        combined = _combine(classify_expr(t_branch), classify_expr(f_branch))
+        return _hole_verdict(combined)
+    # Likewise, a `return <expr>;` nested inside this hole (e.g. a .map()
+    # callback literal) MUST be resolved before the SAFE_NUMERIC_RE
+    # substring check below: that check scans the WHOLE hole text for
+    # things like ".length" anywhere at all, so a multi-statement callback
+    # whose *unrelated* local variable happens to use `.length` (e.g.
+    # `var desc = s.description.length > 90 ? ... : ...;` declared before
+    # a fully-escaped `return '<option>'+x(s.id)+...;`) would otherwise be
+    # waved through as "likely_safe" without the actual returned/rendered
+    # content ever being inspected. Confirmed real impact: exactly this
+    # shape hid a fully-escaped sink behind an unrelated `.length` mention.
+    rets = extract_return_exprs(h)
+    if rets:
+        combined = classify_expr(rets[0])
+        for r in rets[1:]:
+            combined = _combine(combined, classify_expr(r))
+        return _hole_verdict(combined)
     if SAFE_NUMERIC_RE.search(h):
         return "likely_safe"
     # A bare top-level call (no leading `.method(` dot) with no inline
     # function literal to trace into is virtually always a call to an
     # app-defined helper, not a builtin -- naming it after "Html" is a
     # convention this codebase doesn't follow consistently (tile(),
-    # _apStep(), edKpiCard() build markup too), so any such call that
-    # extract_return_exprs can't see inside gets the same "needs tracing"
-    # verdict regardless of its name.
-    if BUILDER_CALL_RE.match(h) and not extract_return_exprs(h):
+    # _apStep(), edKpiCard() build markup too), so any such call gets the
+    # same "needs tracing" verdict regardless of its name. (rets is already
+    # known empty here, from the check above.)
+    if BUILDER_CALL_RE.match(h):
         return "indirect_builder"
-    # A ternary nested inside this +-term, e.g. (cond ? '<span>'+x(v)+'</span>' : ''),
-    # isn't the whole RHS so classify_expr's own ternary-split never sees it -
-    # recurse into just the two branches (never into h itself, to avoid
-    # looping back into this same classify_hole call).
-    tern = find_ternary_split(h)
-    if tern is not None:
-        _, t_branch, f_branch = tern
-        combined = _combine(classify_expr(t_branch), classify_expr(f_branch))
-        if combined in _SAFE_COMBINED:
-            return "escaped"
-        if combined == "unescaped_likely_safe":
-            return "likely_safe"
-        if combined in _INDIRECT_COMBINED:
-            return "indirect_builder"
-        return "unescaped"
-    rets = extract_return_exprs(h)
-    if rets:
-        combined = classify_expr(rets[0])
-        for r in rets[1:]:
-            combined = _combine(combined, classify_expr(r))
-        if combined in _SAFE_COMBINED:
-            return "escaped"
-        if combined == "unescaped_likely_safe":
-            return "likely_safe"
-        if combined in _INDIRECT_COMBINED:
-            return "indirect_builder"
-        return "unescaped"
+    return "unescaped"
+
+def _hole_verdict(combined):
+    """Map a full classify_expr-level category down to classify_hole's
+    smaller vocabulary ({escaped, likely_safe, indirect_builder,
+    unescaped}), used after resolving a hole's nested ternary or return(s)."""
+    if combined in _SAFE_COMBINED:
+        return "escaped"
+    if combined == "unescaped_likely_safe":
+        return "likely_safe"
+    if combined in _INDIRECT_COMBINED:
+        return "indirect_builder"
     return "unescaped"
 
 def classify_expr(expr):
@@ -619,8 +690,17 @@ def classify_expr(expr):
     # string literal anywhere and no function call -> a pass-through
     # variable (e.g. `sel.innerHTML = opts;`) that needs tracing to find
     # where `opts` was built, not a textContent-vs-escape decision we can
-    # make from this call site alone.
+    # make from this call site alone. EXCEPT a chain ending in a known-safe
+    # accessor like `.length` (SAFE_NUMERIC_RE) -- `p.steps.length` matches
+    # BARE_IDENT_RE too (it's just dotted property access), but it isn't a
+    # pass-through needing tracing, it's a number. Checking this first
+    # matters: without it, every bare `foo.bar.length` ternary branch in
+    # the file (a very common shape) was misrouted into indirect_variable
+    # instead of being recognized as safe, which cascaded into inflated
+    # partial_escaped/unescaped counts for sinks that were actually fine.
     if len(holes) == 1 and holes[0].strip() == expr and BARE_IDENT_RE.match(expr) and "(" not in expr:
+        if SAFE_NUMERIC_RE.search(expr):
+            return "unescaped_likely_safe"
         return "indirect_variable"
 
     hole_classes = [classify_hole(h) for h in holes]
@@ -631,6 +711,10 @@ def classify_expr(expr):
         return "escaped"
     if all(hc == "likely_safe" for hc in hole_classes):
         return "unescaped_likely_safe"
+    if all(hc in ("escaped", "likely_safe") for hc in hole_classes):
+        # a mix of properly-escaped and safely-numeric/computed holes, no
+        # actually-unescaped or unresolved ones -- fully safe, not "unclear"
+        return "escaped"
 
     escaped_n = sum(1 for hc in hole_classes if hc == "escaped")
     unescaped_n = sum(1 for hc in hole_classes if hc == "unescaped")
