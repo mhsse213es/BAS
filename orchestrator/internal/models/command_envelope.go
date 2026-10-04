@@ -50,12 +50,12 @@ const CommandEnvelopeVersion = 1
 // and the agent verifies: json.Marshal of every field except Signature.
 // A fixed struct (never a map[string]any) makes Go's deterministic
 // per-type field ordering the canonical form -- no separate
-// canonicalization scheme (JCS etc.) is needed. Signature is excluded by
-// constructing an unsigned copy rather than by tag tricks, so this stays
-// correct even if CommandEnvelope's fields are ever reordered.
+// canonicalization scheme (JCS etc.) is needed. Signature is excluded
+// because the anonymous struct below has no Signature field (not by tag
+// tricks), so this stays correct even if CommandEnvelope's fields are ever
+// reordered.
 func (e CommandEnvelope) CanonicalJSON() ([]byte, error) {
 	unsigned := e
-	unsigned.Signature = nil
 	return json.Marshal(struct {
 		Version           int             `json:"version"`
 		CommandID         string          `json:"commandId"`
