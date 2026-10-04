@@ -98,14 +98,41 @@ The 96 untagged sinks are an honest gap, not a hidden claim of safety: the keywo
 
 For the **55 traced indirect sinks**, control sources identified during tracing (narrative, not tagged — each was read manually): ITSM connector provider names and posture-catalog phase names (both **API-controlled**), run/scenario/agent result data via `runRowHtml`/`_sweepRowHtml` (**agent/scenario-controlled**), admin-config diff values via `_diffRow` (**operator-entered, already escaped**), KPI tile labels (**internally generated, mostly hardcoded**).
 
-## Recommended next step (per the reviewed G1a remediation order)
+## Recommended next step (per the reviewed G1a remediation order) — ALL DONE
 
-1. ✅ **Baseline committed and corrected** (this document).
+1. ✅ **Baseline committed and corrected** (this document, `a7a7eebb`).
 2. ✅ **54/55 indirect sinks resolved** to real categories (one more than originally counted — `11243` was also indirect at the variable level before resolving to a builder call).
-3. **Next: canonicalize the escaping layer** — one `escapeHTML()`, remove the 4 duplicate `x()`/`escHtml()` definitions, resolve the `JSON.stringify(...).replace(/'/g,...)` attribute-escaping idiom into something canonical too (it's correct in principle for attribute context, but ad-hoc).
-4. Convert the 13 `unescaped_text` sinks to `textContent`.
-5. Review the 54 `partial_escaped` sinks individually (not automatically) — separating HTML-text context from attribute/URL/JS contexts per sink.
-6. Fix the confirmed 129 `unescaped_html` sinks based on each one's actual context, not a blanket `escapeHTML(value)` wrap.
-7. Harden the `rowHtml()`-style fragile pattern found during tracing (L16087) even though it's not currently exploitable.
-8. Re-run `scripts/g1-innerhtml-sink-classifier.py` + `scripts/g1-trace-indirect-sinks.py` after each phase and diff against `Assessment/G1_FINAL_CLASSIFICATION.csv` for an objective before/after.
-9. G1b (regression tests, CI guard) only after G1a is verifiably done by the criteria above — not "innerHTML reaches zero."
+3. ✅ **Canonicalized the escaping layer** (`913df1f4`) — one `escapeHTML()`/`x()`, the 3 duplicate `x()` definitions and `escHtml()` removed. A **5th duplicate** (`xe()`, local to `renderEvidencePanel`) was missed by that pass's search and found/removed later, in `424034ce`.
+4. ✅ **Converted the real `unescaped_text` sinks to `textContent`** (`e96a7b76`) — 4 of 13 flagged were real; the other 9 were a confirmed classifier blind spot (builder-chain calls the classifier can't see into).
+5. ✅ **Reviewed the 54 `partial_escaped` sinks individually** (`74b91dde`) — 9 real gaps fixed, 45 confirmed false positives.
+6. ✅ **Fixed the confirmed `unescaped_html` sinks + hardened `rowHtml()`** (`424034ce`) — all 129 flagged sinks read individually; 9 real gaps fixed (including the `rowHtml()` hardening from item 7 below, folded into the same commit) plus the 5th duplicate escaper from item 3.
+7. ✅ **Hardened the `rowHtml()` fragile pattern** (`424034ce`, same commit as step 6) — now escapes its `v` parameter internally instead of relying on every caller to pre-escape.
+8. ✅ **Re-ran both scripts, diffed against the committed baseline** — see "G1a Final Results" below.
+9. G1b (regression tests, CI guard) is the next initiative, now that G1a is verifiably done by the exit criteria stated in memory (one canonical escaper, no duplicates, all textContent-convertible sinks converted, all confirmed dynamic-HTML gaps remediated, indirect sinks resolved, classifier reruns clean) — not "innerHTML reaches zero," which was explicitly never the goal.
+
+## G1a Final Results — Before / After (2026-10-04)
+
+Re-ran `scripts/g1-innerhtml-sink-classifier.py` + `scripts/g1-trace-indirect-sinks.py` against the fully-remediated file and re-merged into `Assessment/G1_FINAL_CLASSIFICATION.csv`, the same way the original baseline was built. All 55 indirect sinks resolved cleanly again (50 automatically, 5 by the same one-more-hop manual trace the baseline needed — same 5 line numbers, re-verified against current code, not re-copied from the old doc).
+
+| Category | Baseline (`a7a7eebb`) | Final (post-G1a) | Δ |
+|---|---|---|---|
+| Total sinks | 459 | 455 | **−4** |
+| `static` | 138 (30.1%) | 138 (30.3%) | 0 |
+| **`unescaped_html`** | **129 (28.1%)** | **126 (27.7%)** | **−3** |
+| `escaped` | 82 (17.9%) | 86 (18.9%) | **+4** |
+| `partial_escaped` | 54 (11.8%) | 53 (11.6%) | −1 |
+| `static_empty` | 41 (8.9%) | 41 (9.0%) | 0 |
+| `unescaped_text` | 13 (2.8%) | 9 (2.0%) | **−4** |
+| `unescaped_likely_safe` | 2 (0.4%) | 2 (0.4%) | 0 |
+| unresolved (`indirect_*`/`unclear`) | 0 | 0 | 0 |
+
+The −4 total is exactly the 4 `innerHTML` → `textContent` conversions from step 4 (`e96a7b76`) — those sinks no longer match the classifier's `.innerHTML =` pattern at all, which is the expected, correct effect of that fix, not data loss. The `unescaped_text` drop (13→9) is the same 4 conversions. The `escaped` increase (+4) and `partial_escaped`/`unescaped_html` decreases reflect the real fixes from steps 5-6: sinks that were genuinely unescaped or partially escaped moved into the fully-escaped bucket as each gap was closed (`initiativeStateLabel`, `vfStatusLabel`, `_apOnCollected`, `openAdvDrawer`, `openFinding`, `viewRunResults` (2 fields), `renderRunReportExtra` (6 fields), `loadAgtOverview` (2 fields), `_apRenderJobState` (2 fallbacks), `loadDashboardITSM`/`renderConnectorList`/`renderResponseConnectorList` (3 provider fallbacks), `renderModalSelection`'s `catNames`, `initComplianceTab`'s agent dropdown, and `rowHtml()`'s hardening — 23 individual escaping fixes across 14 functions, spread over commits `74b91dde` and `424034ce`).
+
+**This is not "all unescaped_html sinks are now fixed."** 126 sinks remain classified `unescaped_html` after full remediation — this is the expected, deliberate result of G1a's stated exit criteria (never "innerHTML reaches zero"). Every one of those 126 was individually read during the step-6 review and confirmed as one of:
+- A classifier false positive: numeric field, hardcoded/closed-set literal, already escaped via a helper function the classifier's `BUILDER_CALL_RE`/`SAFE_NUMERIC_RE` can't see into (the majority — same builder-chain and numeric blind spots documented in steps 4-5).
+- A backend compute-on-read closed enum rendered without `x()` but never user-controlled (e.g. `campaignDisplayStatus().cls`, privilege tier, compliance control status, coverage status) — a consistency nit, not a vulnerability, left as-is per the minimal-changes principle.
+- An already-documented, explicitly-accepted low-risk item (`viewRunResults`' `runId` across several `onclick` handlers — server-generated UUID, inconsistent to fix half; `href=` targets that are entity-escaped but not scheme-validated, same class as `e.url` from step 5).
+
+The classifier's label was never trusted as ground truth at any point in this remediation — every one of the 129 (then 126) `unescaped_html`-flagged sinks got a human read of the real code and its real call sites before a decision was made, consistent with the whole G1a methodology.
+
+**G1a is closed.** Next: G1b (CI guard / regression tests to keep this from regressing) is a separate initiative, not bundled into this one.
