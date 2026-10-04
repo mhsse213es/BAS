@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -104,7 +105,9 @@ func TestRecordLegacyUsage_WriteFailureIsLogged(t *testing.T) {
 		}
 		closedPool.Close()
 
-		var logBuf strings.Builder
+		// recordLegacyUsage logs from its own goroutine, so the buffer is
+		// written and read concurrently.
+		var logBuf lockedBuffer
 		prev := slog.Default()
 		slog.SetDefault(slog.New(slog.NewJSONHandler(&logBuf, nil)))
 		defer slog.SetDefault(prev)
@@ -143,4 +146,21 @@ func TestRecordLegacyUsage_UnattributedIncrementsCount(t *testing.T) {
 			t.Errorf("expected request_count 2 after two unattributed writes on the same day, got %d", count)
 		}
 	})
+}
+
+type lockedBuffer struct {
+	mu sync.Mutex
+	b  strings.Builder
+}
+
+func (l *lockedBuffer) Write(p []byte) (int, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.b.Write(p)
+}
+
+func (l *lockedBuffer) String() string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.b.String()
 }

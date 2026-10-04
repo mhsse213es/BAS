@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -58,13 +59,14 @@ func TestStartMonitor_OnLockFiresExactlyOnceOnTransition(t *testing.T) {
 	}
 	SetInitial(Info{State: StateGrace}) // start NOT locked, so the first tick is the transition
 
-	var calls int
+	// onLock runs on the monitor's goroutine; atomic so the read below doesn't race it.
+	var calls atomic.Int32
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	StartMonitor(ctx, licPath, 20*time.Millisecond, func() { calls++ })
+	StartMonitor(ctx, licPath, 20*time.Millisecond, func() { calls.Add(1) })
 
 	time.Sleep(200 * time.Millisecond) // several ticks — onLock must still fire only once
-	if calls != 1 {
-		t.Errorf("onLock called %d times, want exactly 1", calls)
+	if n := calls.Load(); n != 1 {
+		t.Errorf("onLock called %d times, want exactly 1", n)
 	}
 }
