@@ -64,3 +64,54 @@ func TestIssueClientCertificate_RejectsMalformedCSR(t *testing.T) {
 		})
 	}
 }
+
+// The :9443 listener verifies agent certs with RequireAndVerifyClientCert,
+// i.e. a full chain verification for ClientAuth -- not just a signature
+// check. A CA whose own ExtKeyUsage omits ClientAuth makes every agent cert
+// fail with "incompatible key usage".
+func TestIssueClientCertificate_VerifiesForClientAuthAgainstCA(t *testing.T) {
+	ca, err := LoadOrGenerateCAWithSANs(t.TempDir(), []string{"192.168.10.78"})
+	if err != nil {
+		t.Fatalf("LoadOrGenerateCAWithSANs: %v", err)
+	}
+	csrPEM, err := pkitest.GenerateTestCSR("agent")
+	if err != nil {
+		t.Fatalf("GenerateTestCSR: %v", err)
+	}
+	issued, err := ca.IssueClientCertificate("abc123deadbeef01", csrPEM)
+	if err != nil {
+		t.Fatalf("IssueClientCertificate: %v", err)
+	}
+	block, _ := pem.Decode(issued.CertPEM)
+	cert, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		t.Fatalf("parse issued cert: %v", err)
+	}
+	roots := x509.NewCertPool()
+	roots.AddCert(ca.Certificate())
+	if _, err := cert.Verify(x509.VerifyOptions{
+		Roots:     roots,
+		KeyUsages: []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
+	}); err != nil {
+		t.Fatalf("agent cert does not verify for ClientAuth against the CA: %v", err)
+	}
+}
+
+// The CA certificate is also the orchestrator's TLS server identity, which
+// agents verify for ServerAuth by IP (c67548e9). Fixing ClientAuth must not
+// break that.
+func TestCACertificate_StillVerifiesAsServerIdentity(t *testing.T) {
+	ca, err := LoadOrGenerateCAWithSANs(t.TempDir(), []string{"192.168.10.78"})
+	if err != nil {
+		t.Fatalf("LoadOrGenerateCAWithSANs: %v", err)
+	}
+	roots := x509.NewCertPool()
+	roots.AddCert(ca.Certificate())
+	if _, err := ca.Certificate().Verify(x509.VerifyOptions{
+		Roots:     roots,
+		DNSName:   "192.168.10.78",
+		KeyUsages: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+	}); err != nil {
+		t.Fatalf("CA certificate no longer verifies as server identity: %v", err)
+	}
+}
