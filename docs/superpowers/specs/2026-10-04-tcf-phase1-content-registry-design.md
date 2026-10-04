@@ -455,3 +455,16 @@ Named invariant tests against a real Postgres (existing Docker test harness; `go
 - **Engine reload and DB coupling:** the engine now needs the DB at load to register content. Startup already requires Postgres; intake errors fail closed per file.
 - **`scenarios.name` / `category`** in the repurposed table are populated from YAML at intake for listing; they are display data, not identity.
 - **Phase 8 (signing & distribution)** must define how vendor content arrives on customer deployments beyond the image-baked `scenarios/` directory, and must close the open airgap-signing gap before offline bundles carry vendor content.
+
+## 14. Amendments made during implementation planning (2026-10-04)
+
+1. `execution_kind` adds `adhoc_adversary` (synthetic adversary-template / Caldera-adversary runs via `dispatchRun`).
+2. `content_registry_state` singleton (migration marker + stored inventory). Custom-file grandfathering applies only before the marker exists.
+3. `content_versions.intake_source` (`builtin|custom|intel`).
+4. Deleting a custom scenario retires its executable versions.
+5. `RETIRED → PUBLISHED_LOCAL` allowed for LOCAL with a human actor (re-approval after delete/re-create with identical bytes).
+6. Intake processes builtin files first, then custom, then intel, so first registration can never let a custom file claim a builtin's identity.
+7. Two per-step hashes: `resolvedSha256` (post-`BuildSteps`, used for drift) and `commandSha256` (exact bytes sent; per-run artifact and sink-token substitution make it unreproducible by design).
+8. Signature verification is injected via `integrity.Verifier` so VENDOR_SIGNED paths are testable without the vendor private key.
+9. Limitation: detection profiles are still resolved from current files during historical reads; profiles are not registry content in Phase 1.
+10. A minimal admin "Approve for local use" action on DRAFT cards.

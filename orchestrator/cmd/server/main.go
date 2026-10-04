@@ -272,6 +272,9 @@ func main() {
 	if err := db.EnsureExerciseSchema(context.Background(), adminPool); err != nil {
 		log.Fatalf("[FATAL] exercise schema: %v", err)
 	}
+	if err := db.EnsureContentRegistrySchema(context.Background(), adminPool); err != nil {
+		log.Fatalf("[FATAL] content registry schema: %v", err)
+	}
 	log.Println("[+] Schema verified")
 
 	// ── bas_app provisioning ─────────────────────────────────────────────
