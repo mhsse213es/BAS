@@ -6336,9 +6336,9 @@ function edSparkline(values) {
   var min = Math.min.apply(null, values), max = Math.max.apply(null, values);
   var range = (max - min) || 1;
   var pts = values.map(function(v, i) {
-    var x = values.length > 1 ? (i / (values.length - 1)) * w : w;
+    var px = values.length > 1 ? (i / (values.length - 1)) * w : w;
     var y = h - ((v - min) / range) * h;
-    return x.toFixed(1) + ',' + y.toFixed(1);
+    return px.toFixed(1) + ',' + y.toFixed(1);
   }).join(' ');
   return '<svg class="stat-spark" width="' + w + '" height="' + h + '" viewBox="0 0 ' + w + ' ' + h + '">' +
     '<polyline points="' + pts + '" fill="none" stroke="var(--accent)" stroke-width="1.6"/></svg>';
@@ -9307,7 +9307,7 @@ function renderCampaignRecs(campaignId) {
 }
 function openRunFromCampaign(runId) {
   apicall('/api/scenarios/runs').then(function(runs) {
-    var r = (runs || []).find(function(x) { return x.id === runId; });
+    var r = (runs || []).find(function(item) { return item.id === runId; });
     if (r) viewRunResults(r); else showToast('Run not found', 'err');
   });
 }
@@ -13389,7 +13389,7 @@ function updatePickerCount() {
   // nothing when it's not applicable rather than showing a misleading 0.
   var totalTests = 0, anyHasTests = false;
   selectedIds.forEach(function(id) {
-    var it = _pickerItems.find(function(x) { return x.id === id; });
+    var it = _pickerItems.find(function(item) { return item.id === id; });
     if (it && it.tests) { anyHasTests = true; totalTests += it.tests; }
   });
   if (anyHasTests) txt += ' · ' + totalTests + ' test' + (totalTests === 1 ? '' : 's');
@@ -15000,7 +15000,6 @@ function renderVariantCoverage(data) {
   var VBG   = { blocked:'rgba(35,134,54,0.12)', detected:'rgba(210,153,34,0.12)', logged:'rgba(210,153,34,0.08)', bypassed:'rgba(218,54,51,0.12)', error:'rgba(154,169,188,0.06)', skipped:'rgba(154,169,188,0.04)', vetoed:'rgba(210,153,34,0.12)' };
   var VICON = { blocked:'&#10003;', detected:'&#9888;', logged:'&#9685;', bypassed:'&#10007;', error:'?', skipped:'&#9675;', vetoed:'&#128683;' };
 
-  function x(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
   function tile(label, val, sub, col) {
     return '<div style="background:var(--elevated);border:1px solid var(--border);border-top:2px solid ' + col + ';border-radius:4px;padding:0.55rem 0.75rem;flex:1;min-width:100px">' +
       '<div style="font-size:0.58rem;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:0.2rem">' + label + '</div>' +
@@ -15146,7 +15145,6 @@ function loadVariantMatrix(btn, runId, techniqueId) {
       btn.textContent = '&#9783; Hide variant matrix';
       var rows = (data.rows || []);
       var VCOL = { blocked:'var(--success)', detected:'var(--warning)', logged:'#d29922', bypassed:'var(--danger)', error:'var(--muted)', skipped:'var(--muted)', vetoed:'var(--warning)' };
-      function x(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
       var trs = rows.map(function(r) {
         var col = VCOL[r.verdict] || 'var(--muted)';
         var bestMark = r.isBestBypass ? ' &#9733;' : '';
@@ -17160,10 +17158,25 @@ function connectWS() {
   };
 }
 
-function x(s) {
+// escapeHTML is the single canonical HTML-text/double-quoted-attribute
+// escaper for this file (G1a canonicalization -- previously 4 divergent
+// copies existed: two more "x" definitions with weaker/inconsistent
+// coverage, plus a separate "escHtml" name for the same job). It
+// deliberately does NOT escape ' -- several call sites receive its output
+// and then apply their OWN context-specific quote handling afterward
+// (e.g. .replace(/'/g,'&#39;') for an HTML single-quoted attribute, or
+// .replace(/'/g,"\\'") for a value embedded inside a single-quoted JS
+// string literal within an onclick="..." handler). If this escaped '
+// too, those downstream .replace() calls would become no-ops and the
+// JS-string-literal cases would break out of their quote -- don't add '
+// escaping here; give call sites that need it their own explicit step.
+function escapeHTML(s) {
   return String(s == null ? '' : s)
     .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
+// x is the short alias used at hundreds of call sites throughout this
+// file; escapeHTML is the one real implementation.
+function x(s) { return escapeHTML(s); }
 function ago(iso) {
   if (!iso) return '—';
   var s = Math.floor((Date.now() - new Date(iso)) / 1000);
@@ -17570,7 +17583,7 @@ function doResetPassword(id, username) {
 function donutSVG(segs, size, stroke) {
   size = size || 124; stroke = stroke || 16;
   var r = (size - stroke) / 2, cx = size / 2, cy = size / 2, C = 2 * Math.PI * r;
-  var total = segs.reduce(function(s, x) { return s + x.v; }, 0) || 1, off = 0;
+  var total = segs.reduce(function(s, seg) { return s + seg.v; }, 0) || 1, off = 0;
   var c = '<circle cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="none" stroke="var(--elevated)" stroke-width="' + stroke + '"/>';
   segs.forEach(function(s) {
     var len = s.v / total * C;
@@ -19063,11 +19076,11 @@ function fetchAuditPage() {
         } catch(ex) { detail = e.resource || ''; }
         return '<tr>' +
           '<td style="font-size:0.77rem;color:var(--muted);white-space:nowrap">' + tsStr + '</td>' +
-          '<td style="font-size:0.8rem;font-weight:500">' + escHtml(e.actorName) + '</td>' +
-          '<td style="font-size:0.8rem">' + escHtml(actionLabel) + '</td>' +
-          '<td style="font-size:0.77rem;color:var(--muted)">' + escHtml(detail) + '</td>' +
-          '<td style="font-size:0.75rem;color:var(--muted);font-family:var(--font-mono)">' + escHtml(e.ip || '') + '</td>' +
-          '<td><span style="display:inline-block;padding:0.18rem 0.55rem;border-radius:10px;font-size:0.72rem;font-weight:600;' + outcomeStyle + '">' + escHtml(e.outcome) + '</span></td>' +
+          '<td style="font-size:0.8rem;font-weight:500">' + x(e.actorName) + '</td>' +
+          '<td style="font-size:0.8rem">' + x(actionLabel) + '</td>' +
+          '<td style="font-size:0.77rem;color:var(--muted)">' + x(detail) + '</td>' +
+          '<td style="font-size:0.75rem;color:var(--muted);font-family:var(--font-mono)">' + x(e.ip || '') + '</td>' +
+          '<td><span style="display:inline-block;padding:0.18rem 0.55rem;border-radius:10px;font-size:0.72rem;font-weight:600;' + outcomeStyle + '">' + x(e.outcome) + '</span></td>' +
         '</tr>';
       }).join('');
     }
@@ -19097,7 +19110,7 @@ function exportAuditLogs() {
     var rows = (d.entries || []);
     var csv = 'Time,User,Action,Resource,Detail,IP,Outcome\n' + rows.map(function(e) {
       var det = '';
-      try { det = JSON.stringify(e.detail); } catch(x) {}
+      try { det = JSON.stringify(e.detail); } catch(_err) {}
       return [e.ts, e.actorName, e.action, e.resource, det, e.ip, e.outcome]
         .map(function(v) { return '"' + String(v||'').replace(/"/g,'""') + '"'; }).join(',');
     }).join('\n');
@@ -19106,10 +19119,6 @@ function exportAuditLogs() {
     a.download = buildReportFilename('Audit_Logs', actor || 'all', 'csv');
     a.click();
   }).catch(function(e) { showToast('Export failed: ' + e.message, 'err'); });
-}
-
-function escHtml(s) {
-  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
