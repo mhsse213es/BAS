@@ -10,3 +10,9 @@
 *.service   text eol=lf
 .env        text eol=lf
 .env.*      text eol=lf
+
+# G1 audit artifacts: the classifier/tracer write CSV rows with CRLF (Python's
+# csv default) on every OS. Normalizing keeps CI's freshness diff
+# (.github/workflows/test.yml) comparing content, not line endings.
+Assessment/G1_*.csv   text eol=lf
+Assessment/G1_*.json  text eol=lf
