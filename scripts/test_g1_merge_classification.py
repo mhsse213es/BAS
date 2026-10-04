@@ -115,7 +115,9 @@ class TestMerge(unittest.TestCase):
         self.assertEqual(rows1[0]["function"], "a")
         self.assertEqual(rows1[1]["function"], "b")
 
-    def test_unresolvable_category_raises(self):
+    def test_unresolved_sink_is_top_tier_not_a_crash(self):
+        # A new sink the tracer can't resolve must not crash CI (spec Goal 3);
+        # it is treated as worst-case and reported by the guard.
         self._write_inventory([{
             "line": "99", "function": "h", "target": "z", "op": "=",
             "category": "indirect_variable", "data_source_tags": "", "rhs_len": "1", "rhs": "w",
@@ -124,6 +126,16 @@ class TestMerge(unittest.TestCase):
             "line": "99", "function": "h", "original_category": "indirect_variable",
             "resolved_category": "unclear", "notes": "no callable name found in rhs", "rhs": "w",
         }])
+        rows = merge_mod.merge(self.inv_path, self.trace_path)
+        self.assertEqual(rows[0]["final_category"], "unclear")
+        self.assertEqual(rows[0]["severity_tier"], 4)
+
+    def test_unknown_category_raises(self):
+        self._write_inventory([{
+            "line": "98", "function": "h", "target": "z", "op": "=",
+            "category": "bogus_category", "data_source_tags": "", "rhs_len": "1", "rhs": "w",
+        }])
+        self._write_trace([])
         with self.assertRaises(ValueError):
             merge_mod.merge(self.inv_path, self.trace_path)
 
