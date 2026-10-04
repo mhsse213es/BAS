@@ -27,19 +27,19 @@ type AlertRule struct {
 
 // Alert is a fired alert event.
 type Alert struct {
-	RuleName          string
-	Description       string
-	Severity          string
-	FiredAt           time.Time
-	NotificationURL   string
-	Message           string
+	RuleName        string
+	Description     string
+	Severity        string
+	FiredAt         time.Time
+	NotificationURL string
+	Message         string
 }
 
 // AlertEngine evaluates rules periodically and notifies on changes.
 type AlertEngine struct {
-	mu       sync.RWMutex
-	rules    []*AlertRule
-	fired    map[string]bool // ruleNa me → is currently firing
+	mu      sync.RWMutex
+	rules   []*AlertRule
+	fired   map[string]bool // ruleNa me → is currently firing
 	history []Alert
 
 	ticker *time.Ticker

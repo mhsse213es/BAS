@@ -43,7 +43,7 @@ type ExerciseReport struct {
 // or step status transition, merged and sorted by time.
 type TimelineEntry struct {
 	TS       time.Time `json:"ts"`
-	Kind     string    `json:"kind"`    // "event", "evidence", "step"
+	Kind     string    `json:"kind"` // "event", "evidence", "step"
 	StepID   string    `json:"step_id,omitempty"`
 	StepType string    `json:"step_type,omitempty"`
 	Actor    string    `json:"actor,omitempty"`
@@ -160,7 +160,7 @@ func ExerciseReportHTML(w io.Writer, rep *ExerciseReport) error {
 		// change the status and merely appended JSON to a truncated page. The
 		// existing handler test asserted only status 200 and the presence of
 		// "<html", both of which a truncated response satisfies.
-		"lower": func(v any) string { return strings.ToLower(fmt.Sprint(v)) },
+		"lower":    func(v any) string { return strings.ToLower(fmt.Sprint(v)) },
 		"joinStrs": strings.Join,
 		"scoreBar": func(f float64) int {
 			v := int(f)

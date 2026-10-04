@@ -9,16 +9,16 @@ import (
 func TestExecutionAttemptJSONRoundTrip(t *testing.T) {
 	now := time.Now().UTC()
 	ea := ExecutionAttempt{
-		ID:                 "attempt-1",
-		Source:              ExecutionSourceART,
-		Granularity:         GranularityRun,
-		SourceExecutionID:   "run-1",
-		SourceAttemptID:     "run-1",
-		Status:              ExecutionAttemptCompleted,
-		CreatedAt:           now,
-		DispatchQueuedAt:    &now,
-		DispatchSentAt:      &now,
-		CompletedAt:         &now,
+		ID:                "attempt-1",
+		Source:            ExecutionSourceART,
+		Granularity:       GranularityRun,
+		SourceExecutionID: "run-1",
+		SourceAttemptID:   "run-1",
+		Status:            ExecutionAttemptCompleted,
+		CreatedAt:         now,
+		DispatchQueuedAt:  &now,
+		DispatchSentAt:    &now,
+		CompletedAt:       &now,
 	}
 	data, err := json.Marshal(ea)
 	if err != nil {

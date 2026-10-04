@@ -35,21 +35,21 @@ func ValidRecordType(rt RecordType) bool {
 // pre-resolved by Manager.enrichFinding before dispatch — connectors never
 // query the database.
 type TicketFinding struct {
-	FindingID       string
-	TechniqueID     string
-	TechniqueName   string
-	Tactic          string
-	Severity        string
-	ControlClass    string
-	ExposureState   string // "missed" | "detected_only"
-	AgentID         string
-	AgentHostname   string
-	OccurrenceCount int
-	FirstSeen       time.Time
-	LastSeen        time.Time
-	DaysExposed     int
-	LastRunID       string
-	Mitigations     []MitigationRef
+	FindingID          string
+	TechniqueID        string
+	TechniqueName      string
+	Tactic             string
+	Severity           string
+	ControlClass       string
+	ExposureState      string // "missed" | "detected_only"
+	AgentID            string
+	AgentHostname      string
+	OccurrenceCount    int
+	FirstSeen          time.Time
+	LastSeen           time.Time
+	DaysExposed        int
+	LastRunID          string
+	Mitigations        []MitigationRef
 	ComplianceMappings []ComplianceMapping
 }
 

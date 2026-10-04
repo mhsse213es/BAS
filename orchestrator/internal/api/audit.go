@@ -62,7 +62,7 @@ func (h *Handler) auditLog(r *http.Request, action, resource string, detail map[
 // calls this directly at startup, matching the existing cross-package
 // convention (ReapNeverStartedRuns, StartRevalidationLoop, etc). actor_id
 // is left empty; GetAuditLogs' existing query already renders an empty
-// actor_id as "system" (COALESCE(u.username, CASE WHEN a.actor_id=''
+// actor_id as "system" (COALESCE(u.username, CASE WHEN a.actor_id=”
 // THEN 'system' ...)), so this needs no new display-side handling.
 func (h *Handler) AuditLogSystem(ctx context.Context, action, resource string, detail map[string]any, outcome string) {
 	detailJSON := []byte("{}")

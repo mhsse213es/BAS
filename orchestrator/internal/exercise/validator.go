@@ -184,7 +184,7 @@ func validateCondition(cond string, ids map[string]bool) error {
 	validPredicates := map[string]bool{
 		"clicked": true, "not_clicked": true,
 		"reported": true,
-		"timeout": true, "no_timeout": true,
+		"timeout":  true, "no_timeout": true,
 		"succeeded": true, "failed": true,
 	}
 	parts := strings.SplitN(cond, ":", 3)

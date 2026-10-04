@@ -27,13 +27,13 @@ type OpenCTIClient struct {
 	// supporting this needs OpenCTI's actual sector/region GraphQL schema,
 	// which can't be verified without a live instance. See
 	// docs/superpowers/specs/2026-07-19-sp5-sector-region-weighting-design.md.
-	sectors       []string
-	lastStat      SourceStat
-	lastCampaigns []intelligence.Campaign
-	lastMalware   []intelligence.Malware
-	lastTools     []intelligence.Tool
+	sectors               []string
+	lastStat              SourceStat
+	lastCampaigns         []intelligence.Campaign
+	lastMalware           []intelligence.Malware
+	lastTools             []intelligence.Tool
 	lastTechniqueEvidence []TechniqueEvidence
-	retryDelay    time.Duration
+	retryDelay            time.Duration
 }
 
 // NewOpenCTIClient creates an OpenCTI GraphQL client.
@@ -109,11 +109,11 @@ type octiGQLRequest struct {
 // that GraphQL response and stay zero-valued; this lets one Go type back
 // every relationship extraction in this file instead of one per target type.
 type octiRelatedEntity struct {
-	ID          string   `json:"id"`
-	Name        string   `json:"name"`
-	Description string   `json:"description"`
-	Aliases     []string `json:"aliases"`
-	XMitreID    string   `json:"x_mitre_id"`
+	ID              string   `json:"id"`
+	Name            string   `json:"name"`
+	Description     string   `json:"description"`
+	Aliases         []string `json:"aliases"`
+	XMitreID        string   `json:"x_mitre_id"`
 	KillChainPhases []struct {
 		PhaseName string `json:"phase_name"`
 	} `json:"killChainPhases"`

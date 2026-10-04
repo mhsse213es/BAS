@@ -78,7 +78,7 @@ var BuiltinTemplates = []Template{
 			},
 			{
 				ID: "wait_detection", Type: StepTypeWaitForDetection, Label: "Wait for SOC/EDR detection",
-				DependsOn: []string{"send_bec"},
+				DependsOn:   []string{"send_bec"},
 				TimeoutSecs: 7200,
 				Config: StepConfig{WaitForDetection: &WaitForDetectionConfig{
 					DetectionTypes: []string{"edr_detected", "siem_alerted", "phishing_reported"},
@@ -137,22 +137,22 @@ var BuiltinTemplates = []Template{
 			},
 			{
 				ID: "wait_sim", Type: StepTypeWaitForAgent, Label: "Wait for simulation to complete",
-				DependsOn: []string{"sim"},
-				Config:    StepConfig{WaitForAgent: &WaitForAgentConfig{AgentTaskStepID: "sim"}},
+				DependsOn:   []string{"sim"},
+				Config:      StepConfig{WaitForAgent: &WaitForAgentConfig{AgentTaskStepID: "sim"}},
 				TimeoutSecs: 1800,
 			},
 			{
 				ID: "wait_edr", Type: StepTypeWaitForDetection, Label: "Wait for EDR/SIEM detection",
-				DependsOn: []string{"wait_sim"},
+				DependsOn:   []string{"wait_sim"},
 				TimeoutSecs: 1800,
 				Config: StepConfig{WaitForDetection: &WaitForDetectionConfig{
-					DetectionTypes: []string{"edr_detected", "siem_alerted"},
+					DetectionTypes:  []string{"edr_detected", "siem_alerted"},
 					ExecutionStepID: "sim",
 				}},
 			},
 			{
 				ID: "soc_approve", Type: StepTypeApproval, Label: "SOC sign-off — incident handled?",
-				DependsOn: []string{"wait_edr"},
+				DependsOn:   []string{"wait_edr"},
 				TimeoutSecs: 14400,
 				Config: StepConfig{
 					ApprovalPrompt: "Did the SOC follow the ransomware IR playbook and contain the incident?",
@@ -202,15 +202,15 @@ var BuiltinTemplates = []Template{
 			},
 			{
 				ID: "notify_cred", Type: StepTypeNotify, Label: "Credential theft exercise complete",
-				DependsOn:  []string{"wait_interact"},
-				Condition:  "step:phish_cred:clicked",
-				Config:     StepConfig{NotifyMsg: "One or more users submitted credentials. Review credentials_submitted evidence."},
+				DependsOn: []string{"wait_interact"},
+				Condition: "step:phish_cred:clicked",
+				Config:    StepConfig{NotifyMsg: "One or more users submitted credentials. Review credentials_submitted evidence."},
 			},
 			{
 				ID: "notify_no_cred", Type: StepTypeNotify, Label: "No credentials submitted — good outcome",
-				DependsOn:  []string{"wait_interact"},
-				Condition:  "step:phish_cred:not_clicked",
-				Config:     StepConfig{NotifyMsg: "No credentials submitted during the exercise window."},
+				DependsOn: []string{"wait_interact"},
+				Condition: "step:phish_cred:not_clicked",
+				Config:    StepConfig{NotifyMsg: "No credentials submitted during the exercise window."},
 			},
 		},
 	},
@@ -241,22 +241,22 @@ var BuiltinTemplates = []Template{
 			},
 			{
 				ID: "wait_sim_done", Type: StepTypeWaitForAgent, Label: "Wait for simulation to complete",
-				DependsOn: []string{"drill_sim"},
-				Config:    StepConfig{WaitForAgent: &WaitForAgentConfig{AgentTaskStepID: "drill_sim"}},
+				DependsOn:   []string{"drill_sim"},
+				Config:      StepConfig{WaitForAgent: &WaitForAgentConfig{AgentTaskStepID: "drill_sim"}},
 				TimeoutSecs: 1800,
 			},
 			{
 				ID: "wait_detect", Type: StepTypeWaitForDetection, Label: "Wait for SOC detection",
-				DependsOn: []string{"wait_sim_done"},
+				DependsOn:   []string{"wait_sim_done"},
 				TimeoutSecs: 1800,
 				Config: StepConfig{WaitForDetection: &WaitForDetectionConfig{
-					DetectionTypes: []string{"edr_detected", "siem_alerted"},
+					DetectionTypes:  []string{"edr_detected", "siem_alerted"},
 					ExecutionStepID: "drill_sim",
 				}},
 			},
 			{
 				ID: "approval_response", Type: StepTypeApproval, Label: "SOC: confirm incident response completed",
-				DependsOn: []string{"wait_detect"},
+				DependsOn:   []string{"wait_detect"},
 				TimeoutSecs: 7200,
 				Config: StepConfig{
 					ApprovalPrompt: "Has the SOC completed triage, containment, and documented the incident?",

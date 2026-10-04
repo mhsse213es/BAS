@@ -5,7 +5,7 @@ import "time"
 type Type string
 
 const (
-	TypeFileHash    Type = "file_hash"
+	TypeFileHash Type = "file_hash"
 	// TypeFilename fills a real gap in iochandling.txt §1's own taxonomy: §5/§6
 	// explicitly ask to generate new filenames, but §1's type list never names
 	// "filename" as distinct from "File Hash". Added Phase C.

@@ -8,7 +8,7 @@ const (
 	StatusRunning            = "running"
 	StatusVerifying          = "verifying"
 	StatusCompleted          = "completed"
-	StatusFailed             = "failed"             // the fix command itself failed
+	StatusFailed             = "failed"              // the fix command itself failed
 	StatusVerificationFailed = "verification_failed" // fix command exited cleanly, but the check still fails
 	StatusTimedOut           = "timed_out"
 	StatusCancelled          = "cancelled"

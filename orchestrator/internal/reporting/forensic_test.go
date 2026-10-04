@@ -28,10 +28,10 @@ func TestForensicCSV(t *testing.T) {
 
 	for _, want := range []string{
 		"Technique ID", "ATT&CK URL", // header
-		"Not Prevented",              // FAIL → Not Prevented
-		"Prevented",                  // PASS → Prevented
-		"CVE-2021-34527",             // surfaced from the result's own text
-		"Credential Access",          // humanized tactic
+		"Not Prevented",     // FAIL → Not Prevented
+		"Prevented",         // PASS → Prevented
+		"CVE-2021-34527",    // surfaced from the result's own text
+		"Credential Access", // humanized tactic
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("forensic CSV missing %q", want)

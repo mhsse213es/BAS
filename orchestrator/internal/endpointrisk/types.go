@@ -146,7 +146,7 @@ type InstalledApp struct {
 // more risky apps found), not a fixed pass/fail checklist, so its score is
 // a severity-weighted deduction, not a pass rate.
 type ApplicationRiskInput struct {
-	Score       int       // 0-100, 100 minus severity-weighted deductions, floored at 0
+	Score       int // 0-100, 100 minus severity-weighted deductions, floored at 0
 	AppsScanned int
 	Findings    []Finding // one per unique matched catalog id
 	Collected   bool

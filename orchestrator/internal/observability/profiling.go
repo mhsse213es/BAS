@@ -22,11 +22,11 @@ type ProfileRequest struct {
 
 // ProfileResult contains the collected profile data.
 type ProfileResult struct {
-	Type           string
-	CollectedAt    time.Time
-	DurationMs     int64
-	Data           []byte // Raw pprof binary or text output
-	Summary        string // Human-readable summary
+	Type        string
+	CollectedAt time.Time
+	DurationMs  int64
+	Data        []byte // Raw pprof binary or text output
+	Summary     string // Human-readable summary
 }
 
 // Profiler handles on-demand CPU and memory profiling.
@@ -92,7 +92,7 @@ func (p *Profiler) collectCPUProfile(ctx context.Context, req *ProfileRequest) (
 	return &ProfileResult{
 		Type:        "cpu",
 		CollectedAt: time.Now(),
-		DurationMs: int64(req.DurationSeconds * 1000),
+		DurationMs:  int64(req.DurationSeconds * 1000),
 		Data:        buf.Bytes(),
 		Summary:     fmt.Sprintf("CPU profile collected for %d seconds", req.DurationSeconds),
 	}, nil
@@ -209,7 +209,7 @@ func (p *Profiler) collectTrace(ctx context.Context, req *ProfileRequest) (*Prof
 	return &ProfileResult{
 		Type:        "trace",
 		CollectedAt: time.Now(),
-		DurationMs: int64(req.DurationSeconds * 1000),
+		DurationMs:  int64(req.DurationSeconds * 1000),
 		Data:        buf.Bytes(),
 		Summary:     fmt.Sprintf("Execution trace captured for %d seconds", req.DurationSeconds),
 	}, nil

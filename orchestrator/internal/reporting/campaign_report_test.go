@@ -14,8 +14,8 @@ import (
 func campaignScopeReport() *FullReport {
 	now := time.Date(2026, 6, 18, 9, 0, 0, 0, time.UTC)
 	rep := &FullReport{
-		GeneratedAt: now,
-		Agent:       models.Agent{Hostname: "Q2 Ransomware Drill"}, // footers/fallback
+		GeneratedAt:            now,
+		Agent:                  models.Agent{Hostname: "Q2 Ransomware Drill"}, // footers/fallback
 		AttackSurfaceAge:       147,
 		OldestFindingName:      "OS Credential Dumping",
 		OldestFindingID:        "T1003",
@@ -25,14 +25,14 @@ func campaignScopeReport() *FullReport {
 			{Product: "Trellix", Detections: 18, MinMTTDMs: 4500, AvgMTTDMs: 8200},
 			{Product: "Defender", Detections: 14, MinMTTDMs: 2100, AvgMTTDMs: 4900},
 		},
-		PerfCPUBefore:          2.1,
-		PerfCPUAfter:           2.3,
-		PerfRAMBefore:          5.4,
-		PerfRAMAfter:           5.4,
-		PerfDiskBefore:         62.5,
-		PerfDiskAfter:          62.5,
-		CleanupFailed:          true,
-		CleanupFailedCount:     2,
+		PerfCPUBefore:      2.1,
+		PerfCPUAfter:       2.3,
+		PerfRAMBefore:      5.4,
+		PerfRAMAfter:       5.4,
+		PerfDiskBefore:     62.5,
+		PerfDiskAfter:      62.5,
+		CleanupFailed:      true,
+		CleanupFailedCount: 2,
 		Summary: ExecutiveSummary{
 			RiskScore: 68, Classification: "High Risk",
 			PreventionScore: 55, ExposureScore: 48, CoverageScore: 20,

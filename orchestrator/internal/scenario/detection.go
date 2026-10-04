@@ -84,7 +84,7 @@ type ExpectedEvidence struct {
 
 // ExpectedFinding is the report finding produced when an expectation is unmet.
 type ExpectedFinding struct {
-	Severity    string `yaml:"severity"            json:"severity"`    // Critical|High|Medium|Low
+	Severity    string `yaml:"severity"            json:"severity"` // Critical|High|Medium|Low
 	Title       string `yaml:"title"               json:"title"`
 	Remediation string `yaml:"remediation"         json:"remediation"`
 	Reference   string `yaml:"reference,omitempty" json:"reference,omitempty"`

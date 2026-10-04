@@ -53,8 +53,8 @@ func TestIssueClientCertificate_RejectsMalformedCSR(t *testing.T) {
 		t.Fatalf("LoadOrGenerateCA: %v", err)
 	}
 	for name, bad := range map[string][]byte{
-		"not PEM at all":       []byte("this is not a CSR"),
-		"PEM but wrong type":   pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: []byte("garbage")}),
+		"not PEM at all":           []byte("this is not a CSR"),
+		"PEM but wrong type":       pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: []byte("garbage")}),
 		"PEM CSR type but bad DER": pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE REQUEST", Bytes: []byte("garbage")}),
 	} {
 		t.Run(name, func(t *testing.T) {

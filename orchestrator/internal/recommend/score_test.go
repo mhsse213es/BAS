@@ -79,9 +79,9 @@ func TestEnvironmentRisk_Tiers(t *testing.T) {
 // threat/coverage/env) from the Threat Prioritization spec.
 func TestRecommendationScore_Weights(t *testing.T) {
 	cases := []struct {
-		name                          string
+		name                         string
 		actor, threat, coverage, env int
-		want                          int
+		want                         int
 	}{
 		{"all zero", 0, 0, 0, 0, 0},
 		{"all max", 100, 100, 100, 100, 100},

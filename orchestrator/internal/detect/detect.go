@@ -29,8 +29,8 @@ type ExecutedStep struct {
 
 type TechniqueDetection struct {
 	TechniqueID     string           `json:"techniqueId"`
-	Verdict         string           `json:"verdict"`               // prevented|detected|logged|undetected
-	Confidence      string           `json:"confidence,omitempty"`  // high|medium when detected
+	Verdict         string           `json:"verdict"`              // prevented|detected|logged|undetected
+	Confidence      string           `json:"confidence,omitempty"` // high|medium when detected
 	MatchedBy       []string         `json:"matchedBy,omitempty"`
 	Alert           *AlertRecord     `json:"alert,omitempty"`
 	TimeToDetectMs  int64            `json:"timeToDetectMs,omitempty"`

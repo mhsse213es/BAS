@@ -363,9 +363,9 @@ func (h *Handler) ReceiveTicketingWebhook(w http.ResponseWriter, r *http.Request
 
 	var payload struct {
 		TicketID string `json:"ticketId"`
-		State    string `json:"state"`   // resolved | reopened | updated
-		Number   string `json:"number"`  // ServiceNow record number
-		Key      string `json:"key"`     // Jira issue key
+		State    string `json:"state"`  // resolved | reopened | updated
+		Number   string `json:"number"` // ServiceNow record number
+		Key      string `json:"key"`    // Jira issue key
 	}
 	if json.NewDecoder(r.Body).Decode(&payload) != nil {
 		w.WriteHeader(http.StatusOK) // don't reveal parse errors to external systems

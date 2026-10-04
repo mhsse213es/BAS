@@ -315,8 +315,12 @@ func TestTick_SpawnsDueSchedule(t *testing.T) {
 		}
 
 		d := NewDispatcher(store)
-		d.SetDispatch(func(ctx context.Context, j Job, target JobTarget) (string, error) { return "ref-" + target.AgentID, nil })
-		d.SetStatus(func(ctx context.Context, jobType, refID string) (string, string, bool) { return TargetStateDispatched, "", false })
+		d.SetDispatch(func(ctx context.Context, j Job, target JobTarget) (string, error) {
+			return "ref-" + target.AgentID, nil
+		})
+		d.SetStatus(func(ctx context.Context, jobType, refID string) (string, string, bool) {
+			return TargetStateDispatched, "", false
+		})
 
 		if err := d.Tick(ctx); err != nil {
 			t.Fatalf("Tick: %v", err)
@@ -373,8 +377,12 @@ func TestTick_SpawnsDueSchedule_AssignsSpawnedJobToInitiative(t *testing.T) {
 		}
 
 		d := NewDispatcher(store)
-		d.SetDispatch(func(ctx context.Context, j Job, target JobTarget) (string, error) { return "ref-" + target.AgentID, nil })
-		d.SetStatus(func(ctx context.Context, jobType, refID string) (string, string, bool) { return TargetStateDispatched, "", false })
+		d.SetDispatch(func(ctx context.Context, j Job, target JobTarget) (string, error) {
+			return "ref-" + target.AgentID, nil
+		})
+		d.SetStatus(func(ctx context.Context, jobType, refID string) (string, string, bool) {
+			return TargetStateDispatched, "", false
+		})
 
 		if err := d.Tick(ctx); err != nil {
 			t.Fatalf("Tick: %v", err)
@@ -439,8 +447,12 @@ func TestTick_SkipsScheduleWhenPreviousSpawnStillActive(t *testing.T) {
 		}
 
 		d := NewDispatcher(store)
-		d.SetDispatch(func(ctx context.Context, j Job, target JobTarget) (string, error) { return "ref-" + target.AgentID, nil })
-		d.SetStatus(func(ctx context.Context, jobType, refID string) (string, string, bool) { return TargetStateDispatched, "", false })
+		d.SetDispatch(func(ctx context.Context, j Job, target JobTarget) (string, error) {
+			return "ref-" + target.AgentID, nil
+		})
+		d.SetStatus(func(ctx context.Context, jobType, refID string) (string, string, bool) {
+			return TargetStateDispatched, "", false
+		})
 
 		if err := d.Tick(ctx); err != nil {
 			t.Fatalf("Tick: %v", err)
@@ -485,7 +497,9 @@ func TestTick_DisabledScheduleNeverSpawns(t *testing.T) {
 			t.Fatal("dispatch should not be called -- schedule's own target list should never have been spawned")
 			return "", nil
 		})
-		d.SetStatus(func(ctx context.Context, jobType, refID string) (string, string, bool) { return TargetStateDispatched, "", false })
+		d.SetStatus(func(ctx context.Context, jobType, refID string) (string, string, bool) {
+			return TargetStateDispatched, "", false
+		})
 
 		if err := d.Tick(ctx); err != nil {
 			t.Fatalf("Tick: %v", err)
@@ -523,7 +537,9 @@ func TestTick_FrozenTargetDeferredInsteadOfDispatched(t *testing.T) {
 			t.Fatal("dispatch should not be called for a frozen agent")
 			return "", nil
 		})
-		d.SetStatus(func(ctx context.Context, jobType, refID string) (string, string, bool) { return TargetStateDispatched, "", false })
+		d.SetStatus(func(ctx context.Context, jobType, refID string) (string, string, bool) {
+			return TargetStateDispatched, "", false
+		})
 
 		if err := d.Tick(ctx); err != nil {
 			t.Fatalf("Tick: %v", err)
@@ -573,7 +589,9 @@ func TestTick_DeferredTargetResumesOnceFreezeExpires(t *testing.T) {
 			dispatched = true
 			return "ref-resumed", nil
 		})
-		d.SetStatus(func(ctx context.Context, jobType, refID string) (string, string, bool) { return TargetStateDispatched, "", false })
+		d.SetStatus(func(ctx context.Context, jobType, refID string) (string, string, bool) {
+			return TargetStateDispatched, "", false
+		})
 
 		if err := d.Tick(ctx); err != nil {
 			t.Fatalf("Tick: %v", err)
@@ -599,7 +617,9 @@ func TestSpawnDueSchedules_ResolvesGroupMembershipLive(t *testing.T) {
 		store := NewStore(pool)
 		dispatcher := NewDispatcher(store)
 		dispatcher.SetDispatch(func(ctx context.Context, job Job, target JobTarget) (string, error) { return "ref-" + target.ID, nil })
-		dispatcher.SetStatus(func(ctx context.Context, jobType, refID string) (string, string, bool) { return TargetStateCompleted, "", true })
+		dispatcher.SetStatus(func(ctx context.Context, jobType, refID string) (string, string, bool) {
+			return TargetStateCompleted, "", true
+		})
 
 		past := time.Now().Add(-time.Hour).UTC()
 		sch, err := store.CreateSchedule(context.Background(), Schedule{

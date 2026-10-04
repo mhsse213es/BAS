@@ -334,14 +334,14 @@ func (c *MISPClient) extractIntelligence(ev mispEventIndex, detail *mispEventDet
 		case "mitre-malware":
 			malware = append(malware, intelligence.Malware{
 				ID: intelligence.NormalizeKey(name), Name: name,
-				TechniqueIDs: techniqueIDs(actor.Techniques),
+				TechniqueIDs:   techniqueIDs(actor.Techniques),
 				ThreatActorIDs: []string{actor.Name}, CampaignIDs: []string{campaign.ID},
 				Source: src,
 			})
 		case "mitre-tool":
 			tools = append(tools, intelligence.Tool{
 				ID: intelligence.NormalizeKey(name), Name: name,
-				TechniqueIDs: techniqueIDs(actor.Techniques),
+				TechniqueIDs:   techniqueIDs(actor.Techniques),
 				ThreatActorIDs: []string{actor.Name}, CampaignIDs: []string{campaign.ID},
 				Source: src,
 			})

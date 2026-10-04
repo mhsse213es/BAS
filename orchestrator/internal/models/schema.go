@@ -183,15 +183,15 @@ const (
 type ExecutionAttemptStatus string
 
 const (
-	ExecutionAttemptPending           ExecutionAttemptStatus = "pending"
-	ExecutionAttemptDispatched        ExecutionAttemptStatus = "dispatched"
-	ExecutionAttemptRunning           ExecutionAttemptStatus = "running"
-	ExecutionAttemptCompleted         ExecutionAttemptStatus = "completed"
-	ExecutionAttemptTimedOut          ExecutionAttemptStatus = "timed_out"
-	ExecutionAttemptCancelled         ExecutionAttemptStatus = "cancelled"
-	ExecutionAttemptAbandoned         ExecutionAttemptStatus = "abandoned"
-	ExecutionAttemptFailedToDispatch  ExecutionAttemptStatus = "failed_to_dispatch"
-	ExecutionAttemptSkipped           ExecutionAttemptStatus = "skipped"
+	ExecutionAttemptPending          ExecutionAttemptStatus = "pending"
+	ExecutionAttemptDispatched       ExecutionAttemptStatus = "dispatched"
+	ExecutionAttemptRunning          ExecutionAttemptStatus = "running"
+	ExecutionAttemptCompleted        ExecutionAttemptStatus = "completed"
+	ExecutionAttemptTimedOut         ExecutionAttemptStatus = "timed_out"
+	ExecutionAttemptCancelled        ExecutionAttemptStatus = "cancelled"
+	ExecutionAttemptAbandoned        ExecutionAttemptStatus = "abandoned"
+	ExecutionAttemptFailedToDispatch ExecutionAttemptStatus = "failed_to_dispatch"
+	ExecutionAttemptSkipped          ExecutionAttemptStatus = "skipped"
 )
 
 // SkipReason explains WHY an ExecutionAttempt has status=skipped. Extensible
@@ -215,24 +215,24 @@ const (
 // scenario_runs.id or exercise Execution.ID depending on Source, and a real
 // FK would force picking one, breaking the unification.
 type ExecutionAttempt struct {
-	ID                  string                  `json:"id,omitempty"`
-	Source              ExecutionSource         `json:"source"`
-	Granularity         ExecutionGranularity    `json:"granularity"`
-	SourceExecutionID   string                  `json:"sourceExecutionId"`
-	SourceAttemptID     string                  `json:"sourceAttemptId"`
-	TechniqueID         string                  `json:"techniqueId,omitempty"`
+	ID                string               `json:"id,omitempty"`
+	Source            ExecutionSource      `json:"source"`
+	Granularity       ExecutionGranularity `json:"granularity"`
+	SourceExecutionID string               `json:"sourceExecutionId"`
+	SourceAttemptID   string               `json:"sourceAttemptId"`
+	TechniqueID       string               `json:"techniqueId,omitempty"`
 
-	Status              ExecutionAttemptStatus  `json:"status"`
-	SkipReason          SkipReason              `json:"skipReason,omitempty"`
+	Status     ExecutionAttemptStatus `json:"status"`
+	SkipReason SkipReason             `json:"skipReason,omitempty"`
 
-	CreatedAt           time.Time               `json:"createdAt"`
-	DispatchQueuedAt    *time.Time              `json:"dispatchQueuedAt,omitempty"`
-	DispatchSentAt      *time.Time              `json:"dispatchSentAt,omitempty"`
-	StartedAt           *time.Time              `json:"startedAt,omitempty"`
-	CompletedAt         *time.Time              `json:"completedAt,omitempty"`
-	DecisionAt          *time.Time              `json:"decisionAt,omitempty"`
+	CreatedAt        time.Time  `json:"createdAt"`
+	DispatchQueuedAt *time.Time `json:"dispatchQueuedAt,omitempty"`
+	DispatchSentAt   *time.Time `json:"dispatchSentAt,omitempty"`
+	StartedAt        *time.Time `json:"startedAt,omitempty"`
+	CompletedAt      *time.Time `json:"completedAt,omitempty"`
+	DecisionAt       *time.Time `json:"decisionAt,omitempty"`
 
-	Result              map[string]interface{}  `json:"result,omitempty"`
+	Result map[string]interface{} `json:"result,omitempty"`
 }
 
 // SkipReasonPolicyPrivilege marks a SimulationResult synthesized server-side
@@ -304,8 +304,8 @@ type ScenarioRun struct {
 	SweepID *string `json:"sweepId,omitempty"`
 	// EMSweepID is non-nil only for a scenario_run dispatched by an Endpoint
 	// Mastery Full Sweep (internal/emsweep) -- mirrors SweepID's grouping role.
-	EMSweepID   *string            `json:"emSweepId,omitempty"`
-	Status      string             `json:"status"` // running | completed | partial | failed
+	EMSweepID *string `json:"emSweepId,omitempty"`
+	Status    string  `json:"status"` // running | completed | partial | failed
 	// FailReason is a genuine, human-readable explanation for a dispatch-time
 	// failure (Status=="failed" only) -- e.g. "Agent is offline", a scenario
 	// build error, or "every step is lab-only". Empty for every other status;
@@ -509,13 +509,13 @@ type PolicyBundle struct {
 
 // Agent represents a registered endpoint.
 type Agent struct {
-	AgentID       string        `json:"agentId"`
-	Hostname      string        `json:"hostname"`
-	IPAddress     string        `json:"ipAddress"`
-	OSVersion     string        `json:"osVersion"`
-	Username      string        `json:"username"`
-	Status        string        `json:"status"` // idle | scanning | offline (connectivity)
-	State         AgentState    `json:"state"`  // active | restricted | quarantined | retired (lifecycle)
+	AgentID   string     `json:"agentId"`
+	Hostname  string     `json:"hostname"`
+	IPAddress string     `json:"ipAddress"`
+	OSVersion string     `json:"osVersion"`
+	Username  string     `json:"username"`
+	Status    string     `json:"status"` // idle | scanning | offline (connectivity)
+	State     AgentState `json:"state"`  // active | restricted | quarantined | retired (lifecycle)
 	// WSConnected reports the WebSocket hub's real, live connection state --
 	// distinct from Status above, which is derived purely from heartbeat
 	// freshness (a separate HTTP channel, on its own 30s interval). An agent

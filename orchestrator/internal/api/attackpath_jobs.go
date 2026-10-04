@@ -32,7 +32,7 @@ const (
 // Execution stage enum — agent reports these in heartbeats to show granular progress.
 const (
 	APStageInitializing        = "initializing"         // post-ACK setup
-	APStageProbing             = "probing"               // TCP reachability scan
+	APStageProbing             = "probing"              // TCP reachability scan
 	APStageEnumeratingAdmins   = "enumerating_admins"   // local admin group enumeration
 	APStageEnumeratingSessions = "enumerating_sessions" // active session enumeration
 	APStageRunningSharpHound   = "running_sharphound"   // SharpHound domain collection
@@ -42,14 +42,14 @@ const (
 
 // Failure reason taxonomy — use instead of arbitrary error strings.
 const (
-	APFailDeliveryFailed    = "delivery_failed"
-	APFailTimeout           = "timeout"
-	APFailAgentOffline      = "agent_offline"
-	APFailUploadFailed      = "upload_failed"
-	APFailCancelled         = "cancelled"
-	APFailNetworkError      = "network_error"
-	APFailAuthFailed        = "authentication_failed"
-	APFailPermissionDenied  = "permission_denied"
+	APFailDeliveryFailed   = "delivery_failed"
+	APFailTimeout          = "timeout"
+	APFailAgentOffline     = "agent_offline"
+	APFailUploadFailed     = "upload_failed"
+	APFailCancelled        = "cancelled"
+	APFailNetworkError     = "network_error"
+	APFailAuthFailed       = "authentication_failed"
+	APFailPermissionDenied = "permission_denied"
 )
 
 // APJobProgress is carried in the jobs table progress column and in heartbeats.

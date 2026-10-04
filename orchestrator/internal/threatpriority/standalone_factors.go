@@ -9,7 +9,7 @@ import (
 
 type IntelFreshnessFactor struct{}
 
-func (IntelFreshnessFactor) Name() string          { return "Intel Freshness" }
+func (IntelFreshnessFactor) Name() string           { return "Intel Freshness" }
 func (IntelFreshnessFactor) Weight(Context) float64 { return flatWeight }
 func (IntelFreshnessFactor) Score(_ context.Context, tctx Context) (float64, string, bool, error) {
 	if tctx.Profile == nil || tctx.Profile.LastSeen == nil {
@@ -29,7 +29,7 @@ func (IntelFreshnessFactor) Score(_ context.Context, tctx Context) (float64, str
 
 type RelevanceFactor struct{}
 
-func (RelevanceFactor) Name() string          { return "Sector/Region Relevance" }
+func (RelevanceFactor) Name() string           { return "Sector/Region Relevance" }
 func (RelevanceFactor) Weight(Context) float64 { return flatWeight }
 func (RelevanceFactor) Score(_ context.Context, tctx Context) (float64, string, bool, error) {
 	if len(tctx.Sectors) == 0 && len(tctx.Regions) == 0 {
@@ -68,7 +68,7 @@ func overlapFold(a, b []string) bool {
 
 type ConfidenceFactor struct{}
 
-func (ConfidenceFactor) Name() string          { return "Intel Confidence" }
+func (ConfidenceFactor) Name() string           { return "Intel Confidence" }
 func (ConfidenceFactor) Weight(Context) float64 { return flatWeight }
 func (ConfidenceFactor) Score(_ context.Context, tctx Context) (float64, string, bool, error) {
 	if tctx.Profile == nil || tctx.Profile.Confidence == "" {

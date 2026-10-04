@@ -140,9 +140,9 @@ func (s VariantSpec) IsBase() bool {
 // Returns "base" for the zero variant.
 func (s VariantSpec) Sig() string {
 	plat := norm(s.Platform, "windows")
-	enc  := norm(s.Encoding, "plain")
+	enc := norm(s.Encoding, "plain")
 	priv := norm(s.Privilege, "user")
-	ctx  := norm(s.ExecContext, "direct")
+	ctx := norm(s.ExecContext, "direct")
 	if plat == "windows" && enc == "plain" && priv == "user" && ctx == "direct" {
 		return "base"
 	}
@@ -176,19 +176,20 @@ func norm(s, def string) string {
 // excluded from variant counts so "Available Variants" numbers are defensible.
 //
 // Known invalid combinations:
-//   system + com       — WScript.Shell.Run does not reliably spawn as SYSTEM
-//   cmd + base64       — -EncodedCommand is PowerShell-only
-//   cmd + charcode     — IEX([char]…) is PowerShell-only
-//   linux + wmi        — Win32_Process is Windows-only
-//   linux + schtasks   — Task Scheduler is Windows-only
-//   linux + com        — WScript.Shell is Windows-only
-//   linux + base64     — UTF-16LE -EncodedCommand is PowerShell-for-Windows only
-//   linux + charcode   — IEX syntax is Windows PowerShell-only
+//
+//	system + com       — WScript.Shell.Run does not reliably spawn as SYSTEM
+//	cmd + base64       — -EncodedCommand is PowerShell-only
+//	cmd + charcode     — IEX([char]…) is PowerShell-only
+//	linux + wmi        — Win32_Process is Windows-only
+//	linux + schtasks   — Task Scheduler is Windows-only
+//	linux + com        — WScript.Shell is Windows-only
+//	linux + base64     — UTF-16LE -EncodedCommand is PowerShell-for-Windows only
+//	linux + charcode   — IEX syntax is Windows PowerShell-only
 func CanApply(spec VariantSpec, executor string) bool {
 	platform := norm(spec.Platform, "windows")
-	priv     := norm(spec.Privilege, "user")
-	ctx      := norm(spec.ExecContext, "direct")
-	enc      := norm(spec.Encoding, "plain")
+	priv := norm(spec.Privilege, "user")
+	ctx := norm(spec.ExecContext, "direct")
+	enc := norm(spec.Encoding, "plain")
 
 	if platform == "linux" {
 		// Linux: only direct execution with plain encoding is valid today.
@@ -322,8 +323,8 @@ func ApplyVariant(step ScenarioStep, spec VariantSpec) ScenarioStep {
 	}
 
 	// 5. Update name + TaskID with the variant signature
-	sig    := spec.Sig()
-	v.Name  = step.Name + " [" + sig + "]"
+	sig := spec.Sig()
+	v.Name = step.Name + " [" + sig + "]"
 	v.TaskID = TaskID(v.TechniqueID, v.Name)
 	return v
 }

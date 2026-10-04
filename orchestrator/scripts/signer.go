@@ -52,7 +52,7 @@ func generateKeys() {
 		Type:  "RSA PRIVATE KEY",
 		Bytes: privBytes,
 	})
-	
+
 	err = os.WriteFile("private_key.pem", privPEM, 0600)
 	if err != nil {
 		fmt.Printf("Failed to write private_key.pem: %v\n", err)
@@ -94,7 +94,7 @@ func generateKeys() {
 		fmt.Printf("Failed to update %s: %v\n", targetPath, err)
 		os.Exit(1)
 	}
-	
+
 	fmt.Printf("[+] Injected public key into %s\n", targetPath)
 	fmt.Println("Done. Keep private_key.pem safe and NEVER commit it.")
 }

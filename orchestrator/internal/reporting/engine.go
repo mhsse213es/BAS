@@ -473,9 +473,9 @@ type TechniqueRow struct {
 	CleanupResidual []string `json:"cleanupResidual,omitempty"`
 	// CleanupError is the cleanup command's own stderr+exit code when
 	// CleanupVerdict is partial/leaked -- see models.SimulationResult.CleanupError.
-	CleanupError string `json:"cleanupError,omitempty"`
-	ControlName     string   `json:"controlName,omitempty"`   // specific control that blocked (Defender ASR, AppLocker, WDAC)
-	ControlRuleID   string   `json:"controlRuleId,omitempty"` // ASR GUID or AppLocker policy name
+	CleanupError  string `json:"cleanupError,omitempty"`
+	ControlName   string `json:"controlName,omitempty"`   // specific control that blocked (Defender ASR, AppLocker, WDAC)
+	ControlRuleID string `json:"controlRuleId,omitempty"` // ASR GUID or AppLocker policy name
 	// RequestedPriv is the effective tier sent to the agent (PrivSpec.Effective()).
 	// "Legacy" when the step was unannotated.
 	RequestedPriv string `json:"requestedPriv"`
