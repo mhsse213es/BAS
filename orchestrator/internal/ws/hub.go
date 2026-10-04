@@ -50,9 +50,38 @@ type Hub struct {
 	allowedOrigin string          // host (not full URL) a browser WS Origin must match -- see SetAllowedOrigin (F3)
 }
 
+// send is never closed: SendToAgent and BroadcastBrowsers send on it from
+// other goroutines, and closing a channel concurrently with a send is a data
+// race (and a panic). Disconnect is signalled by closing done instead.
 type conn struct {
-	ws   *websocket.Conn
-	send chan []byte
+	ws        *websocket.Conn
+	send      chan []byte
+	done      chan struct{}
+	closeOnce sync.Once
+}
+
+func newConn(ws *websocket.Conn) *conn {
+	return &conn{ws: ws, send: make(chan []byte, 128), done: make(chan struct{})}
+}
+
+func (c *conn) shutdown() {
+	c.closeOnce.Do(func() { close(c.done) })
+}
+
+// trySend queues b without blocking; false if the peer is gone or the
+// buffer is full.
+func (c *conn) trySend(b []byte) bool {
+	select {
+	case <-c.done:
+		return false
+	default:
+	}
+	select {
+	case c.send <- b:
+		return true
+	default:
+		return false
+	}
 }
 
 // NewHub creates a ready-to-use Hub with no command-signing key. Kept
@@ -146,7 +175,7 @@ func (h *Hub) ServeAgentWS(w http.ResponseWriter, r *http.Request) {
 		log.Printf("[ws] agent upgrade error: %v", err)
 		return
 	}
-	c := &conn{ws: ws, send: make(chan []byte, 128)}
+	c := newConn(ws)
 
 	h.mu.Lock()
 	h.agents[agentID] = c
@@ -181,7 +210,7 @@ func (h *Hub) ServeBrowserWS(w http.ResponseWriter, r *http.Request) {
 		log.Printf("[ws] browser upgrade error: %v", err)
 		return
 	}
-	c := &conn{ws: ws, send: make(chan []byte, 128)}
+	c := newConn(ws)
 
 	h.mu.Lock()
 	h.browsers = append(h.browsers, c)
@@ -249,23 +278,9 @@ func (h *Hub) SendToAgent(agentID string, msg models.WSMessage) (sent bool) {
 	}
 
 	b, _ := json.Marshal(msg)
-	// readPump closes c.send when the agent disconnects, and does so
-	// independently of (and slightly before) this Hub removing the agent
-	// from h.agents — so a disconnect landing between our lookup above and
-	// the send below can hit an already-closed channel. Sending on a closed
-	// channel panics unconditionally; recover and report it exactly like
-	// "not connected", which is what it functionally is.
-	defer func() {
-		if recover() != nil {
-			sent = false
-		}
-	}()
-	select {
-	case c.send <- b:
-		return true
-	default:
-		return false
-	}
+	// The agent may disconnect between the lookup above and this send;
+	// trySend reports that as "not sent" via c.done (c.send is never closed).
+	return c.trySend(b)
 }
 
 // signCommand builds and signs the CommandEnvelope for an in-scope
@@ -402,10 +417,7 @@ func (h *Hub) BroadcastBrowsers(msg models.WSMessage) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	for _, c := range h.browsers {
-		select {
-		case c.send <- b:
-		default:
-		}
+		c.trySend(b)
 	}
 }
 
@@ -477,13 +489,13 @@ func (c *conn) writePump() {
 	}()
 	for {
 		select {
-		case msg, ok := <-c.send:
+		case <-c.done:
+			// readPump saw the connection end.
 			c.ws.SetWriteDeadline(time.Now().Add(writeWait))
-			if !ok {
-				// readPump closed the channel — the connection is gone.
-				c.ws.WriteMessage(websocket.CloseMessage, []byte{})
-				return
-			}
+			c.ws.WriteMessage(websocket.CloseMessage, []byte{})
+			return
+		case msg := <-c.send:
+			c.ws.SetWriteDeadline(time.Now().Add(writeWait))
 			if err := c.ws.WriteMessage(websocket.TextMessage, msg); err != nil {
 				// This used to fail silently -- SendToAgent had already
 				// returned true (it only confirms the message was queued,
@@ -508,7 +520,7 @@ func (c *conn) writePump() {
 func (c *conn) readPump(onMessage func(models.WSMessage)) {
 	defer func() {
 		c.ws.Close()
-		close(c.send)
+		c.shutdown()
 	}()
 	// Keepalive: declare the peer dead if nothing arrives within pongWait. The
 	// pong handler (and any inbound frame) extends the deadline. Browsers and the
