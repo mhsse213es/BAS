@@ -3,537 +3,8 @@ import { state } from './core/state.js';
 import { apicall } from './core/api.js';
 import { x } from './core/escape.js';
 import { ago, daysAgo, fmtDate, fmtRunIdCode, showToast } from './core/util.js';
-export function __init_L5162() {
-(function() {
-  var t = localStorage.getItem('audspect_theme') || 'dark';
-  if (t !== 'dark') document.body.classList.add('theme-' + t);
-  try {
-    if (localStorage.getItem('bas_sidebar_collapsed') === '1') {
-      document.getElementById('app').classList.add('sidebar-collapsed');
-      document.getElementById('sidebar-collapse-btn').title = 'Expand sidebar';
-    }
-  } catch (e) {}
-})();
-}
+import { ROLE, STRIPE_COLORS, _artCatalogByPlatform, _riskScoreColor, _riskTrendBadge, activateTab, scenarioSrcCollapsed, setAgentsView, showTab, showTamperBanner } from './features/shell.js';
 
-// toggleSidebarCollapsed flips the icon-rail collapsed state and persists it,
-// so the choice survives a reload (same bas_-prefixed localStorage pattern
-// used for theme/role/last-tab elsewhere in this file).
-export function toggleSidebarCollapsed() {
-  var collapsed = document.getElementById('app').classList.toggle('sidebar-collapsed');
-  try { localStorage.setItem('bas_sidebar_collapsed', collapsed ? '1' : '0'); } catch (e) {}
-  document.getElementById('sidebar-collapse-btn').title = collapsed ? 'Expand sidebar' : 'Collapse sidebar';
-}
-var TAB_TITLES = { dashboard:'Dashboard', agents:'Agents', scenarios:'Scenarios', runs:'Live Runs', 'scheduled-assessments':'Scheduled Assessments', initiatives:'Initiatives', campaigns:'Campaigns', coverage:'ATT&CK Coverage', findings:'Findings', remediation:'Remediation', reports:'Reports', verification:'Detection Verification', users:'Users', compliance:'Compliance', settings:'Settings', variants:'Variant Executor', em:'Endpoint Mastery', exposure:'Exposure Explorer', recommendations:'Recommendations', exercises:'Exercises', 'attack-coverage':'Technique Coverage', 'threat-priority':'Threat Prioritization', iocs:'IOC Registry', profile:'My Profile', 'sla-report':'SLA Compliance' };
-var STRIPE_COLORS = ['#2f81f7','#da3633','#d29922','#e0609e','#8957e5','#2fd8c3'];
-
-var TOKEN    = ''; // kept in memory only — never persisted to localStorage
-var ROLE     = localStorage.getItem('bas_role')  || '';
-var USERNAME = ''; // populated by loadCurrentUser() at boot -- not persisted, refetched each session
-var socket   = null;
-
-var overlayPinned = null; // scenario id of the pinned tile's overlay, or null
- // 'landing' | 'em' | 'other'
-var scenarioSrcCollapsed = { em: {}, other: {}, search: {} };
-
-var agentsNextCursor = '';
-var agentsHasMore = false;
-var agentsPagesLoaded = 1;
-var agentTotals = { online: 0, degraded: 0, offline: 0, retired: 0 };
-var agentSearchDebounceTimer = null;
-var agentLiveRefreshTimer = null;
-var artCatalog = [];      // live ART catalog: [{id,name,tests}] -- always windows
-var calderaCatalog = [];  // live Caldera catalog: [{id,name,tactic,technique}]
-var _artCatalogByPlatform = {};  // live ART catalog per non-windows platform, keyed by 'linux'/'darwin' -- for art_selective_platform scenarios' Customize picker
-
-var _modalScId = null;
-var _runSelection = null;  // {scId, fw:'art'|'caldera', ids:[]} — operator-chosen subset for the next run
-  // {agentId: true} — checked "Run on Additional Agents" state for the next run
-var _targetMode = 'individual'; // 'individual' | 'group' | 'all'
- // { [groupId]: true } for checked groups in Group(s) mode
-var _editUserId = null;
-
-
-var LICENSE_INFO = null; // populated by the pre-login /api/license/status check below
-
-export function __init_L5212() {
-window.addEventListener('DOMContentLoaded', function() {
-  // Sidebar footer version: reflects the running build's actual version
-  // (baked in at build time via packaging/build.sh -> main.Version ->
-  // /ready's "version" field) instead of a hand-edited string that drifts
-  // from what's actually deployed. Silently keeps the placeholder on
-  // failure -- this is cosmetic, never worth surfacing an error for.
-  fetch('/ready').then(function(r) { return r.json(); }).then(function(info) {
-    if (info && info.version) {
-      document.getElementById('sidebar-version').textContent = 'v' + info.version;
-    }
-  }).catch(function() {});
-
-  fetch('/api/license/status').then(function(r) { return r.json(); }).then(function(info) {
-    LICENSE_INFO = info;
-    if (info.state === 'locked') {
-      renderLicenseLockedScreen(info);
-      return;
-    }
-    if (info.state === 'grace') {
-      renderLicenseGraceBanner(info);
-    }
-    initLoginScreen();
-  }).catch(function() {
-    initLoginScreen(); // license-status endpoint unreachable — fail open to the normal login flow rather than stranding the operator
-  });
-});
-}
-
-
-function initLoginScreen() {
-  document.getElementById('inp-pass').addEventListener('keydown', function(e) {
-    if (e.key === 'Enter') doLogin();
-  });
-  // If role is stored, attempt to resume session via cookie.
-  // A 401 response means the cookie is expired — fall through to login screen.
-  if (ROLE) {
-    fetch('/api/agents', { credentials: 'same-origin' })
-      .then(function(r) { if (r.ok) bootApp(); else { localStorage.removeItem('bas_role'); } })
-      .catch(function() { localStorage.removeItem('bas_role'); });
-  }
-}
-
-function renderLicenseLockedScreen(info) {
-  document.getElementById('login-screen').style.display = 'none';
-  document.getElementById('app').style.display = 'none';
-  var el = document.createElement('div');
-  el.id = 'license-locked-screen';
-  el.style.cssText = 'position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:var(--bg,#0b0e14);z-index:9999;padding:2rem';
-  el.innerHTML =
-    '<div style="max-width:520px;text-align:center;color:var(--text,#e6e6e6)">' +
-      '<div style="font-size:2.5rem;margin-bottom:1rem">&#x1F512;</div>' +
-      '<h1 style="font-size:1.4rem;margin-bottom:0.75rem">BAS LICENSE EXPIRED</h1>' +
-      '<p style="color:var(--muted,#9aa9bc);line-height:1.6;margin-bottom:1rem">This Audspect BAS Server is currently unavailable because its license and grace period have expired.</p>' +
-      '<p style="color:var(--muted,#9aa9bc);line-height:1.6;margin-bottom:1.5rem">Please contact your licensing administrator to renew the license.</p>' +
-      '<div style="font-size:0.85rem;color:var(--muted,#9aa9bc);margin-bottom:1.5rem">' +
-        'License Expiry: ' + x(info.expiresAt) + '<br>' +
-        'Access Disabled On: ' + x(info.lockoutAt) +
-      '</div>' +
-      '<a href="mailto:support@audspect.com" style="display:inline-block;padding:0.6rem 1.4rem;background:var(--danger,#da3633);color:#fff;border-radius:6px;text-decoration:none;font-weight:600">Contact Licensing Support</a>' +
-    '</div>';
-  document.body.appendChild(el);
-}
-
-function _licenseBannerHTML(info) {
-  var dayWord = info.daysRemaining === 1 ? 'day' : 'days';
-  var tomorrowNote = info.daysRemaining === 1 ? ' BAS access will be disabled tomorrow.' : '';
-  return '<strong>&#x26A0;&#xFE0F; LICENSE EXPIRED — ACTION REQUIRED</strong><br>' +
-    'Your Audspect BAS license expired on ' + x(info.expiresAt) + '. You are currently within the 5-day license grace period.<br>' +
-    '<strong>Grace Period Remaining: ' + info.daysRemaining + ' ' + dayWord + '</strong><br>' +
-    'The BAS platform will become inaccessible after the grace period expires. Please contact your Audspect administrator or licensing representative to renew your license.' + tomorrowNote + '<br>' +
-    'License Expiry: ' + x(info.expiresAt) + ' &middot; Access Disabled On: ' + x(info.lockoutAt) + ' ' +
-    '<a href="mailto:support@audspect.com" style="color:inherit;text-decoration:underline">[Contact Licensing Support]</a>';
-}
-
-function _syncLicenseBannerHeight() {
-  var el = document.getElementById('license-grace-banner');
-  document.documentElement.style.setProperty('--license-banner-h', el ? el.offsetHeight + 'px' : '0px');
-}
-
-// _dismissLicenseGraceBanner removes the banner and reclaims the layout
-// space it reserved (body padding-top / sidebar+header top offset all read
-// --license-banner-h). Session-scoped, not permanent -- the warning is
-// real and comes back on the next login, this just lets an operator who
-// has already seen it get it out of the way to work.
-export function _dismissLicenseGraceBanner() {
-  var el = document.getElementById('license-grace-banner');
-  if (el) el.remove();
-  document.documentElement.style.setProperty('--license-banner-h', '0px');
-  sessionStorage.setItem('bas_license_grace_banner_dismissed', '1');
-}
-
-function renderLicenseGraceBanner(info) {
-  if (sessionStorage.getItem('bas_license_grace_banner_dismissed')) {
-    maybeShowLicenseGraceModal(info);
-    return;
-  }
-  var existing = document.getElementById('license-grace-banner');
-  if (existing) existing.remove();
-  var el = document.createElement('div');
-  el.id = 'license-grace-banner';
-  // Fixed (not in-flow) so it stays visible while scrolling instead of
-  // scrolling away and leaving #sidebar's --license-banner-h offset stale --
-  // see body's padding-top and header's sticky top below, which depend on
-  // this banner actually staying put at the height they were measured against.
-  // z-index is deliberately BELOW every drawer/modal overlay in the app
-  // (.drawer-overlay/.modal-overlay start at z-index:100, the lowest of
-  // any overlay here) -- it previously sat at 9998, well above all of
-  // them, so opening any wizard/drawer left its top content painted over
-  // by this banner instead of the banner yielding to whatever the
-  // operator actually opened.
-  el.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:90;padding:0.75rem 2.5rem;background:var(--warning,#d29922);color:#1a1200;font-size:0.85rem;line-height:1.5;text-align:center';
-  el.innerHTML = _licenseBannerHTML(info) +
-    '<button onclick="_dismissLicenseGraceBanner()" aria-label="Dismiss" title="Dismiss" ' +
-      'style="position:absolute;top:0.5rem;right:0.6rem;width:24px;height:24px;display:flex;align-items:center;justify-content:center;' +
-      'background:transparent;border:none;color:inherit;font-size:1.1rem;line-height:1;cursor:pointer;opacity:0.75" ' +
-      'onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0.75">&#10005;</button>';
-  document.body.insertBefore(el, document.body.firstChild);
-  _syncLicenseBannerHeight();
-  window.addEventListener('resize', _syncLicenseBannerHeight);
-  maybeShowLicenseGraceModal(info);
-}
-
-function maybeShowLicenseGraceModal(info) {
-  if (sessionStorage.getItem('bas_license_grace_modal_shown')) return;
-  sessionStorage.setItem('bas_license_grace_modal_shown', '1');
-  var overlay = document.createElement('div');
-  overlay.id = 'license-grace-modal-overlay';
-  overlay.style.cssText = 'position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.6);z-index:10000';
-  overlay.innerHTML =
-    '<div style="max-width:480px;background:var(--surface,#152338);border:1px solid var(--warning,#d29922);border-radius:8px;padding:1.5rem;color:var(--text,#e6e6e6)">' +
-      _licenseBannerHTML(info) +
-      '<div style="text-align:right;margin-top:1rem"><button id="license-grace-modal-dismiss" style="padding:0.4rem 1rem;border-radius:6px;border:1px solid var(--border,#22324a);background:transparent;color:inherit;cursor:pointer">Dismiss</button></div>' +
-    '</div>';
-  document.body.appendChild(overlay);
-  document.getElementById('license-grace-modal-dismiss').addEventListener('click', function() {
-    overlay.remove();
-  });
-}
-
-export function doLogin() {
-  var username = document.getElementById('inp-user').value.trim();
-  var password = document.getElementById('inp-pass').value;
-  document.getElementById('login-err').textContent = '';
-  fetch('/api/auth/login', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username: username, password: password })
-  })
-  .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, d: d }; }); })
-  .then(function(res) {
-    if (!res.ok) throw new Error(res.d.error || 'Login failed');
-    TOKEN = res.d.token; ROLE = res.d.role;
-    localStorage.setItem('bas_role', ROLE); // role only — token is in HttpOnly cookie
-    bootApp();
-    if (res.d.mustChangePw) {
-      state._pwForced = true;
-      document.getElementById('changepw-title').textContent = 'Set New Password';
-      document.getElementById('changepw-sub').textContent = 'Your account requires a password change before continuing.';
-      document.getElementById('cpw-cancel-btn').style.display = 'none';
-      document.getElementById('changepw-overlay').classList.add('open');
-    }
-  })
-  .catch(function(e) { document.getElementById('login-err').textContent = e.message; });
-}
-
-export function doLogout() {
-  TOKEN = ''; ROLE = '';
-  localStorage.removeItem('bas_role');
-  if (socket) socket.close();
-  fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' }).catch(function(){});
-  document.getElementById('app').style.display = 'none';
-  document.getElementById('login-screen').style.display = 'flex';
-  document.getElementById('inp-pass').value = '';
-}
-
-function bootApp() {
-  if (LICENSE_INFO && LICENSE_INFO.state === 'grace') renderLicenseGraceBanner(LICENSE_INFO);
-  document.getElementById('login-screen').style.display = 'none';
-  document.getElementById('app').style.display = 'flex';
-  document.getElementById('role-badge').textContent = ROLE;
-  document.getElementById('nav-settings').style.display = '';
-  loadCurrentUser();
-  // Integrations nav — admin only
-  var navInt = document.getElementById('nav-integrations');
-  if (navInt) navInt.style.display = ROLE === 'admin' ? '' : 'none';
-  // Scheduled Assessments nav — Analyst+Admin (same tier the API itself requires)
-  var navSched = document.getElementById('nav-scheduled-assessments');
-  if (navSched) navSched.style.display = (ROLE === 'admin' || ROLE === 'analyst') ? '' : 'none';
-  if (ROLE === 'admin') {
-    document.querySelectorAll('.settings-nav a').forEach(function(el) {
-      if (el.getAttribute('data-set') !== 'theme') el.style.display = '';
-    });
-    document.getElementById('sim-cov-card').style.display = '';
-  } else {
-    document.querySelectorAll('.settings-nav a').forEach(function(el) {
-      if (el.getAttribute('data-set') !== 'theme') el.style.display = 'none';
-    });
-    document.getElementById('sim-cov-card').style.display = 'none';
-    document.getElementById('sim-cov-detail').style.display = 'none';
-    if (SETTINGS_SECTION !== 'theme') {
-      SETTINGS_SECTION = 'theme';
-    }
-  }
-  selectTheme(localStorage.getItem('audspect_theme') || 'dark');
-  // Scenario authoring is Analyst+Admin only — hide builder entry points for viewers.
-  if (ROLE !== 'admin' && ROLE !== 'analyst') {
-    var nb = document.getElementById('sc-new-btn');     if (nb) nb.style.display = 'none';
-    var ub = document.getElementById('sc-upload-btn');  if (ub) ub.style.display = 'none';
-  }
-  // Remediation bulk ticket actions — analyst+
-  var remTicketActions = document.getElementById('rem-ticket-actions');
-  if (remTicketActions) remTicketActions.style.display = (ROLE === 'admin' || ROLE === 'analyst') ? 'flex' : 'none';
-  connectWS();
-  loadAgents();
-  loadAgentGroupTree();
-  loadCatalogs();
-  loadScenarios();
-  loadAdversaries();
-  loadAdversaryTemplates();
-  loadRuns();
-  if (ROLE === 'admin') { loadConnectionConfig(); loadCalderaStatus(); loadConnectorStatus(); loadThreatIntelConfig('misp'); loadThreatIntelConfig('opencti'); loadThreatIntelConfig('otx'); loadTAXIIConnectors(); loadARTContentStatus(); }
-  injectServerURL();
-  // Restore the last active tab so a reload returns the user to where they were.
-  // If there's a pending attack-path job in localStorage, go straight to that tab
-  // regardless of where the user was, so the progress panel reappears.
-  var lastTab = (function() {
-    try { return localStorage.getItem('bas_last_tab') || 'dashboard'; } catch(e) { return 'dashboard'; }
-  })();
-  var hasPendingJob = (function() {
-    try { var s = JSON.parse(localStorage.getItem('_apCurrentJob') || 'null'); return !!(s && s.jobId); } catch(e) { return false; }
-  })();
-  showTab(hasPendingJob ? 'attackpath' : lastTab);
-  if (!window._cmdkBound) {
-    window._cmdkBound = true;
-    document.addEventListener('keydown', function(e) {
-      if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')) { e.preventDefault(); openCmdk(); }
-    });
-  }
-}
-
-// ── Profile avatar + dropdown ─────────────────────────────────────────────
-// Deterministic per-username color (same hash-based approach GitHub/Slack use
-// for users without an uploaded photo) so the same person always gets the
-// same color across sessions/devices, without needing any stored avatar data.
-var AVATAR_PALETTE = ['#2f81f7','#da3633','#d29922','#8957e5','#2fd8c3','#e0609e','#3fb950','#f0883e'];
-function avatarColorFor(name) {
-  var s = String(name || '?');
-  var hash = 0;
-  for (var i = 0; i < s.length; i++) { hash = (hash * 31 + s.charCodeAt(i)) >>> 0; }
-  return AVATAR_PALETTE[hash % AVATAR_PALETTE.length];
-}
-function avatarInitials(name) {
-  var s = String(name || '?').trim();
-  return s ? s.charAt(0).toUpperCase() : '?';
-}
-
-// loadCurrentUser fetches the caller's own account (GET /api/me) to populate
-// the header avatar + dropdown. Best-effort: a failure leaves the avatar on
-// its "?" placeholder rather than blocking the rest of the app from booting.
-function loadCurrentUser() {
-  apicall('/api/me').then(function(u) {
-    if (!u || !u.username) return;
-    USERNAME = u.username;
-    var av = document.getElementById('user-avatar');
-    if (av) { av.textContent = avatarInitials(USERNAME); av.style.background = avatarColorFor(USERNAME); }
-    var pav = document.getElementById('profile-avatar');
-    if (pav) { pav.textContent = avatarInitials(USERNAME); pav.style.background = avatarColorFor(USERNAME); }
-    var un = document.getElementById('um-username'); if (un) un.textContent = USERNAME;
-    var ur = document.getElementById('um-role'); if (ur) ur.textContent = u.role || ROLE || '—';
-  }).catch(function() {});
-}
-
-export function toggleUserMenu(e) {
-  if (e) e.stopPropagation();
-  document.getElementById('user-menu-panel').classList.toggle('open');
-}
-export function closeUserMenu() {
-  var p = document.getElementById('user-menu-panel');
-  if (p) p.classList.remove('open');
-}
-export function __init_L5490() {
-document.addEventListener('click', function(e) {
-  var menu = document.getElementById('user-menu');
-  if (menu && !menu.contains(e.target)) closeUserMenu();
-});
-}
-
-export function __init_L5494() {
-document.addEventListener('keydown', function(e) {
-  if (e.key === 'Escape') closeUserMenu();
-});
-}
-
-
-// goToProfile switches to the Profile tab and loads the caller's own account
-// (GET /api/me) + their actual permission set (GET /api/me/permissions, the
-// same endpoint the rest of the UI already uses to enable/disable controls)
-// so the page reflects what this specific user can really do, not a generic
-// role blurb.
-export function goToProfile() {
-  showTab('profile');
-  apicall('/api/me').then(function(u) {
-    if (!u || u.error) return;
-    var av = document.getElementById('profile-avatar');
-    if (av) { av.textContent = avatarInitials(u.username); av.style.background = avatarColorFor(u.username); }
-    document.getElementById('profile-username').textContent = u.username || '—';
-    var roleChip = document.getElementById('profile-role-chip');
-    roleChip.textContent = u.role || '—';
-    var statusBadge = document.getElementById('profile-status-badge');
-    statusBadge.textContent = u.isActive ? 'Active' : 'Inactive';
-    statusBadge.className = 'sbadge ' + (u.isActive ? 's-active' : 's-retired');
-    document.getElementById('profile-created').textContent = u.createdAt ? new Date(u.createdAt).toLocaleDateString() : '—';
-    document.getElementById('profile-last-login').textContent = u.lastLogin ? new Date(u.lastLogin).toLocaleString() : 'Never';
-    document.getElementById('profile-auth-source').textContent = u.authSource === 'sso' ? 'Single sign-on (SSO)' : 'Username & password';
-    document.getElementById('profile-admin-shortcut').style.display = u.role === 'admin' ? '' : 'none';
-  }).catch(function() {
-    document.getElementById('profile-username').textContent = 'Failed to load profile';
-  });
-  apicall('/api/me/permissions').then(function(d) {
-    var el = document.getElementById('profile-permissions');
-    if (!d || !Array.isArray(d.permissions)) { el.textContent = 'Unable to load permissions.'; return; }
-    if (!d.permissions.length) { el.textContent = 'No permissions granted.'; return; }
-    el.innerHTML = d.permissions.slice().sort().map(function(p) {
-      return '<span class="tag" style="display:inline-block;margin:0 0.3rem 0.3rem 0">' + x(p) + '</span>';
-    }).join('');
-  }).catch(function() {
-    document.getElementById('profile-permissions').textContent = 'Unable to load permissions.';
-  });
-}
-
-// activateTab toggles which tab view + nav item is visible, without running any
-// data loaders — so callers like openCampaignDetail can switch to a tab and then
-// render their own sub-view without the tab's loader resetting it.
-function activateTab(name) {
-  ['dashboard','agents','scenarios','runs','scheduled-assessments','initiatives','campaigns','coverage','findings','remediation','reports','verification','compliance','settings','variants','em','attackpath','exposure','recommendations','integrations','exercises','attack-coverage','threat-priority','iocs','profile','sla-report'].forEach(function(t) {
-    var el = document.getElementById('tab-' + t);
-    if (el) el.style.display = t === name ? '' : 'none';
-    var nav = document.querySelector('[data-tab="' + t + '"]');
-    if (nav) nav.classList.toggle('active', t === name);
-  });
-  var titleEl = document.getElementById('header-page-title');
-  if (titleEl) titleEl.textContent = TAB_TITLES[name] || name;
-}
-
-// Unified Dashboard shell (Sub-project B) -- one Dashboard tab, two views.
-// DASH_VIEW is the live/current view. bas_last_dash_view always tracks the
-// most recent manual switch regardless of the pinned bas_dash_pref setting
-// (added in a later task), so switching the pref to "Last used" picks up
-// wherever the user left off.
-var DASH_VIEW = 'operational';
-
-function resolveDashView() {
-  var pref = localStorage.getItem('bas_dash_pref') || 'operational';
-  return pref === 'last' ? (localStorage.getItem('bas_last_dash_view') || 'operational') : pref;
-}
-
-export function setDashView(view) {
-  DASH_VIEW = view;
-  document.getElementById('dash-view-operational').style.display = view === 'operational' ? '' : 'none';
-  document.getElementById('dash-view-executive').style.display = view === 'executive' ? '' : 'none';
-  document.querySelectorAll('.dash-view-btn').forEach(function(b) {
-    b.classList.toggle('active', b.getAttribute('data-view') === view);
-  });
-  try { localStorage.setItem('bas_last_dash_view', view); } catch (e) {}
-  if (view === 'operational') { loadDashboard(); startDashCampPoll(); }
-  else { stopDashCampPoll(); loadExecDashboard(); }
-}
-export function setAgentsView(view) {
-  document.getElementById('agents-view-systemtree').style.display = view === 'systemtree' ? '' : 'none';
-  document.getElementById('agents-view-operational').style.display = view === 'operational' ? '' : 'none';
-  document.getElementById('agents-view-risk').style.display = view === 'risk' ? '' : 'none';
-  document.querySelectorAll('[data-agents-view]').forEach(function(b) {
-    b.classList.toggle('active', b.getAttribute('data-agents-view') === view);
-  });
-  if (view === 'risk') loadAgentRiskSummary();
-}
-function loadAgentRiskSummary() {
-  var tb = document.getElementById('agent-risk-body');
-  if (tb) tb.innerHTML = '<tr><td colspan="7" class="empty">Loading…</td></tr>';
-  apicall('/api/agents/risk-summary').then(function(d) {
-    renderAgentRiskSummary((d && d.agents) || []);
-  }).catch(function(e) { showToast(e.message, 'err'); });
-}
-function _riskScoreColor(score) {
-  return score >= 80 ? 'var(--success)' : score >= 50 ? 'var(--warning)' : 'var(--danger)';
-}
-function _riskTrendBadge(trend) {
-  if (trend === 'Improving') return '<span class="u-success">&#8593; Improving</span>';
-  if (trend === 'Declining') return '<span class="u-danger">&#8595; Declining</span>';
-  if (trend === 'Stable') return '<span class="u-muted">&#8594; Stable</span>';
-  return '<span class="u-muted">—</span>';
-}
-function renderAgentRiskSummary(rows) {
-  var tb = document.getElementById('agent-risk-body');
-  if (!tb) return;
-  if (!rows.length) {
-    tb.innerHTML = '<tr><td colspan="7" class="empty">No agents to show.</td></tr>';
-    return;
-  }
-  // Worst-first, but agents with nothing collected sort LAST rather than
-  // masquerading as the worst endpoints: their healthScore is a mean over an
-  // empty set (0), not a real finding.
-  rows.sort(function(a, b) {
-    if (a.measurable !== b.measurable) return a.measurable ? -1 : 1;
-    return a.healthScore - b.healthScore;
-  });
-  tb.innerHTML = rows.map(function(a) {
-    return '<tr>' +
-      '<td>' + x(a.hostname || a.agentId) + '</td>' +
-      (a.measurable
-        ? '<td style="color:' + _riskScoreColor(a.healthScore) + ';font-weight:700">' + a.healthScore + '</td>'
-        : '<td class="u-muted" title="Nothing collected for this endpoint yet — an absent score is not a safe score">— no data</td>') +
-      '<td>' + (a.criticalityRisk || 0) + '</td>' +
-      '<td>' + _riskTrendBadge(a.trend) + '</td>' +
-      '<td>' + x(a.topDeficitCategory || '—') + '</td>' +
-      '<td>' + (a.openFindingsCount || 0) + '</td>' +
-      '<td><button class="btn btn-outline btn-sm" onclick="openAgentDetail(\'' + x(a.agentId) + '\');setTimeout(function(){showAgentTab(\'risk\')},50)">View</button></td>' +
-      '</tr>';
-  }).join('');
-}
-
-// Reuses the existing _dashCampPoll var declared with refreshDashboardCampaigns
-// (index.html:12572) -- only the start/stop logic moves here, plus a
-// DASH_VIEW check so the poll also stops when the Executive view is showing,
-// not just when the whole Dashboard tab is hidden.
-function startDashCampPoll() {
-  clearInterval(_dashCampPoll);
-  _dashCampPoll = setInterval(function() {
-    var dash = document.getElementById('tab-dashboard');
-    if (dash && dash.style.display !== 'none' && DASH_VIEW === 'operational') {
-      refreshDashboardCampaigns();
-    } else {
-      clearInterval(_dashCampPoll);
-    }
-  }, 5000);
-}
-function stopDashCampPoll() { clearInterval(_dashCampPoll); }
-
-export function showTab(name) {
-  try { localStorage.setItem('bas_last_tab', name); } catch(e) {}
-  activateTab(name);
-  if (name === 'agents') { loadAgents(); loadAgentGroupTree(); }
-  if (name === 'runs') loadRuns();
-  if (name === 'campaigns') closeCampaignDetail();
-  if (name === 'scheduled-assessments') loadScheduledAssessments();
-  if (name === 'initiatives') loadInitiatives();
-  if (name === 'coverage') { loadCoverage(); loadUnifiedTechniques(); loadCoverageAnalytics(); }
-  if (name === 'attack-coverage') { loadCoverageActors(); loadCoverageMatrix(); }
-  if (name === 'threat-priority') { showThreatPriorityList(); loadThreatPriorityActors(); }
-  if (name === 'findings') loadFindings();
-  if (name === 'iocs') loadIOCRegistry();
-  if (name === 'remediation') loadRemediations();
-  if (name === 'reports') loadReports();
-  if (name === 'sla-report') loadSLAReport();
-  if (name === 'verification') loadVerificationTab();
-  if (name === 'attackpath') loadAttackPath();
-  if (name === 'exposure') loadExposureAssets();
-  if (name === 'recommendations') loadRecommendations();
-  if (name === 'exercises') loadExercisesTab();
-  if (name === 'variants') loadVariantTab();
-  if (name === 'em') loadEmTab();
-  if (name === 'scenarios') { state.scenarioView = 'landing'; closeScenarioOverlay(); if (state.scenarios.length) renderScenarios(); }
-  if (name === 'dashboard') {
-    setDashView(resolveDashView());
-  }
-  if (name === 'integrations') { loadIntegrations(); loadResponseConnectors(renderResponseConnectorList); }
-  if (name === 'compliance') initComplianceTab();
-  if (name === 'settings') {
-    if (ROLE === 'admin') {
-      showSettingsSection(SETTINGS_SECTION);
-      loadSimCoverage();
-      if (SETTINGS_SECTION === 'audit') loadAuditLogs();
-    } else {
-      showSettingsSection('theme');
-    }
-  }
-}
 
 // ── Initiative Layer ─────────────────────────────────────────────────────
 // Frontend for docs/superpowers/specs/2026-08-22-initiative-layer-ui-design.md.
@@ -843,7 +314,7 @@ function vfStatusLabel(s) {
   }
 }
 
-function loadVerificationTab() {
+export function loadVerificationTab() {
   // Load caller permissions once so controls can be enabled/disabled.
   if (!VF.perms) {
     apicall('/api/me/permissions').then(function(d) {
@@ -1365,7 +836,7 @@ function covStatusCell(val) {
   return val ? '<span class="u-success">&#10003;</span>' : '<span class="tiny muted">&mdash;</span>';
 }
 
-function loadCoverageActors() {
+export function loadCoverageActors() {
   var sel = document.getElementById('cov-actor-select');
   apicall('/api/coverage/actors')
     .then(function(data) {
@@ -1431,7 +902,7 @@ function tpTrendCell(trend, delta) {
   return '<span class="tiny muted">New</span>';
 }
 
-function loadThreatPriorityActors() {
+export function loadThreatPriorityActors() {
   var body = document.getElementById('tp-list-body');
   var empty = document.getElementById('tp-list-empty');
   body.innerHTML = '<tr><td colspan="5" class="empty">Loading&hellip;</td></tr>';
@@ -1914,7 +1385,7 @@ export function closeOpenAEVDetail() {
   document.getElementById('openaev-detail-overlay').classList.remove('open');
 }
 
-function loadExercisesTab() {
+export function loadExercisesTab() {
   loadOpenAEVScenarios('scenario', 'openaev-scenarios-body', 'openaev-scenarios-empty');
   loadOpenAEVScenarios('exercise', 'openaev-exercises-body', 'openaev-exercises-empty');
   apicall('/api/exercises/plans').then(function(plans) {
@@ -2865,10 +2336,10 @@ export function saveAPSchedule() {
   }).catch(function(e) { showToast(e.message, 'err'); });
 }
 
-var SETTINGS_SECTION = 'users';
+
 // Settings sub-section switcher — toggles the body panels + lazily loads each.
 export function showSettingsSection(name) {
-  SETTINGS_SECTION = name;
+  state.SETTINGS_SECTION = name;
   ['users', 'engine', 'intel', 'art', 'audit', 'theme', 'dashprefs', 'license', 'backup'].forEach(function(s) {
     var el = document.getElementById('set-' + s);
     if (el) el.style.display = s === name ? '' : 'none';
@@ -2927,7 +2398,7 @@ function agentDotColor(b) { return b === 'online' ? 'var(--success)' : b === 'de
 var agentGroupTree = [];
 var activeAgentGroupId = null; // null = "All" (no filter), otherwise a group id
 
-function loadAgentGroupTree() {
+export function loadAgentGroupTree() {
   apicall('/api/agent-groups').then(function(tree) {
     agentGroupTree = Array.isArray(tree) ? tree : [];
     renderAgentGroupTree();
@@ -3108,11 +2579,11 @@ export function loadAgents() {
   if (AGENT_FILTER !== 'all') url += '&bucket=' + encodeURIComponent(AGENT_FILTER);
   return apicall(url).then(function(page) {
     state.agents = (page && page.items) || [];
-    agentsNextCursor = (page && page.next_cursor) || '';
-    agentsHasMore = !!(page && page.has_more);
-    agentsPagesLoaded = 1;
-    agentTotals = (page && page.totals) || { online: 0, degraded: 0, offline: 0, retired: 0 };
-    document.getElementById('agent-cnt').textContent = agentTotals.online + agentTotals.degraded + agentTotals.offline;
+    state.agentsNextCursor = (page && page.next_cursor) || '';
+    state.agentsHasMore = !!(page && page.has_more);
+    state.agentsPagesLoaded = 1;
+    state.agentTotals = (page && page.totals) || { online: 0, degraded: 0, offline: 0, retired: 0 };
+    document.getElementById('agent-cnt').textContent = state.agentTotals.online + state.agentTotals.degraded + state.agentTotals.offline;
     renderAgentTiles(); renderAgentToolbar(); renderAgentRows();
     renderLegacyMigrationPanel();
   }).catch(function(e) { showToast(e.message, 'err'); });
@@ -3140,8 +2611,8 @@ function renderLegacyMigrationPanel() {
   }).catch(function(e) { showToast(e.message, 'err'); });
 }
 export function loadMoreAgents() {
-  if (!agentsHasMore || !agentsNextCursor) return;
-  var url = '/api/agents?limit=100&cursor=' + encodeURIComponent(agentsNextCursor) +
+  if (!state.agentsHasMore || !state.agentsNextCursor) return;
+  var url = '/api/agents?limit=100&cursor=' + encodeURIComponent(state.agentsNextCursor) +
     (activeAgentGroupId !== null ? '&groupId=' + activeAgentGroupId : '');
   var searchEl = document.getElementById('agent-search');
   var q = searchEl ? searchEl.value.trim() : '';
@@ -3149,9 +2620,9 @@ export function loadMoreAgents() {
   if (AGENT_FILTER !== 'all') url += '&bucket=' + encodeURIComponent(AGENT_FILTER);
   return apicall(url).then(function(page) {
     state.agents = state.agents.concat((page && page.items) || []);
-    agentsNextCursor = (page && page.next_cursor) || '';
-    agentsHasMore = !!(page && page.has_more);
-    agentsPagesLoaded++;
+    state.agentsNextCursor = (page && page.next_cursor) || '';
+    state.agentsHasMore = !!(page && page.has_more);
+    state.agentsPagesLoaded++;
     // totals intentionally NOT updated here -- they were already
     // fleet-wide-accurate from the first page's response, and appending
     // more rows to `agents` doesn't change the true totals.
@@ -3159,8 +2630,8 @@ export function loadMoreAgents() {
   }).catch(function(e) { showToast(e.message, 'err'); });
 }
 export function onAgentSearchInput() {
-  clearTimeout(agentSearchDebounceTimer);
-  agentSearchDebounceTimer = setTimeout(loadAgents, 300);
+  clearTimeout(state.agentSearchDebounceTimer);
+  state.agentSearchDebounceTimer = setTimeout(loadAgents, 300);
 }
 // Live WS pushes (agentUpdate/scenario_result) arrive per-agent -- on a large
 // fleet, dozens can fire in a burst. Calling loadAgents() directly on each one
@@ -3168,9 +2639,9 @@ export function onAgentSearchInput() {
 // operator had loaded back down to page 1. This debounces the burst into one
 // refresh and re-walks back to the same page depth via loadMoreAgents().
 function requestAgentsLiveRefresh() {
-  clearTimeout(agentLiveRefreshTimer);
-  agentLiveRefreshTimer = setTimeout(function() {
-    var targetDepth = agentsPagesLoaded;
+  clearTimeout(state.agentLiveRefreshTimer);
+  state.agentLiveRefreshTimer = setTimeout(function() {
+    var targetDepth = state.agentsPagesLoaded;
     var chain = loadAgents();
     for (var i = 1; i < targetDepth; i++) chain = chain.then(loadMoreAgents);
   }, 800);
@@ -3184,7 +2655,7 @@ function statTileCard(lbl, val, col) {
     '</div><div class="kpi-value" style="color:' + col + '">' + val + '</div></div></div></div>';
 }
 function renderAgentTiles() {
-  var b = agentTotals;
+  var b = state.agentTotals;
   var tile = statTileCard;
   var el = document.getElementById('agent-tiles');
   if (el) el.innerHTML =
@@ -3207,8 +2678,8 @@ function covSegHtml(items, activeVal, setterFnName, countFn) {
 }
 function renderAgentToolbar() {
   var c = function(k) {
-    if (k === 'all') return agentTotals.online + agentTotals.degraded + agentTotals.offline;
-    return agentTotals[k] || 0;
+    if (k === 'all') return state.agentTotals.online + state.agentTotals.degraded + state.agentTotals.offline;
+    return state.agentTotals[k] || 0;
   };
   var el = document.getElementById('agent-toolbar');
   if (el) el.innerHTML = covSegHtml(
@@ -3225,7 +2696,7 @@ function renderAgentRows() {
   var q = searchEl ? searchEl.value.trim() : '';
   var tbody = document.getElementById('agents-body');
   var loadMoreWrap = document.getElementById('agent-load-more-wrap');
-  if (loadMoreWrap) loadMoreWrap.style.display = agentsHasMore ? '' : 'none';
+  if (loadMoreWrap) loadMoreWrap.style.display = state.agentsHasMore ? '' : 'none';
   if (!list.length) {
     var emptyMsg = q ? 'No agents match "' + x(q) + '".' : ('No agents' + (AGENT_FILTER === 'all' ? ' registered yet.' : ' in this state.'));
     tbody.innerHTML = '<tr><td colspan="8" class="empty">' + emptyMsg + '</td></tr>';
@@ -3356,7 +2827,7 @@ export function showAgentDownload() {
 // strands the new agent on legacy transport: it never receives the
 // command-signing trust cert, enrolls but shows no visible error, and every
 // scenario dispatched to it silently fails at the WS command-envelope check.
-function injectServerURL() {
+export function injectServerURL() {
   var url = window.location.origin;
   var winUrl  = document.getElementById('win-server-url');
   var winCli  = document.getElementById('win-cli-cmd');
@@ -3366,7 +2837,7 @@ function injectServerURL() {
   if (macCmd)  macCmd.textContent = 'chmod +x bas-agent-darwin-* && curl -sf -o deployment-ca.pem ' + url + '/api/config/ca-root && sudo ./bas-agent-darwin-* --install --server ' + url + ' --ca-root ./deployment-ca.pem --env Production';
 }
 
-function loadConnectionConfig() {
+export function loadConnectionConfig() {
   apicall('/api/config/connection').then(function(data) {
     var wrap = document.getElementById('conn-cfg-wrap');
     if (!wrap) return;
@@ -3428,15 +2899,15 @@ function stripeColor(id) {
 // real technique/ability count and the picker has data. Best-effort: a failure
 // (e.g. Caldera offline) just leaves that count blank — it never blocks the UI.
 // Re-renders the scenario grid once loaded so counts appear without a refresh.
-function loadCatalogs() {
+export function loadCatalogs() {
   // apicall resolves even on HTTP errors (the body is the JSON error object), so
   // guard with Array.isArray — an error body must not be mistaken for a catalog.
   apicall('/api/art/techniques').then(function(d) {
-    artCatalog = Array.isArray(d) ? d : [];
+    state.artCatalog = Array.isArray(d) ? d : [];
     if (state.scenarios.length) renderScenarios();
   }).catch(function() {});
   apicall('/api/caldera/abilities').then(function(d) {
-    calderaCatalog = Array.isArray(d) ? d : [];
+    state.calderaCatalog = Array.isArray(d) ? d : [];
     if (state.scenarios.length) renderScenarios();
   }).catch(function() {});
 }
@@ -3803,14 +3274,14 @@ function _scPositionOverlay(id) {
 }
 
 function previewScenarioOverlay(id) {
-  if (overlayPinned) return; // a pinned overlay is never disturbed by hovering elsewhere
+  if (state.overlayPinned) return; // a pinned overlay is never disturbed by hovering elsewhere
   var detail = _scOverlayEl(id);
   if (!detail) return;
   _scPositionOverlay(id);
   detail.classList.add('show');
 }
 export function unpreviewScenarioOverlay(id) {
-  if (overlayPinned === id) return; // pinned overlays only close via toggle/ESC/outside-click
+  if (state.overlayPinned === id) return; // pinned overlays only close via toggle/ESC/outside-click
   var detail = _scOverlayEl(id);
   if (detail) detail.classList.remove('show');
 }
@@ -3820,27 +3291,27 @@ function toggleScenarioPin(event, id) {
   // tile, so such clicks bubble up to this same handler.
   if (event.target.closest && event.target.closest('.sc-tile-detail')) return;
   event.stopPropagation();
-  if (overlayPinned === id) { closeScenarioOverlay(); return; }
+  if (state.overlayPinned === id) { closeScenarioOverlay(); return; }
   closeScenarioOverlay();
-  overlayPinned = id;
+  state.overlayPinned = id;
   var tile = _scTileEl(id);
   var detail = _scOverlayEl(id);
   if (tile) { tile.classList.add('pinned'); tile.setAttribute('aria-expanded', 'true'); }
   if (detail) { _scPositionOverlay(id); detail.classList.add('show'); }
 }
-function closeScenarioOverlay() {
-  if (!overlayPinned) return;
-  var tile = _scTileEl(overlayPinned);
-  var detail = _scOverlayEl(overlayPinned);
+export function closeScenarioOverlay() {
+  if (!state.overlayPinned) return;
+  var tile = _scTileEl(state.overlayPinned);
+  var detail = _scOverlayEl(state.overlayPinned);
   if (tile) { tile.classList.remove('pinned'); tile.setAttribute('aria-expanded', 'false'); }
   if (detail) detail.classList.remove('show');
-  overlayPinned = null;
+  state.overlayPinned = null;
 }
 export function __init_L8985() {
 document.addEventListener('click', function(e) {
-  if (!overlayPinned) return;
-  var detail = _scOverlayEl(overlayPinned);
-  var tile = _scTileEl(overlayPinned);
+  if (!state.overlayPinned) return;
+  var detail = _scOverlayEl(state.overlayPinned);
+  var tile = _scTileEl(state.overlayPinned);
   if ((detail && detail.contains(e.target)) || (tile && tile.contains(e.target))) return;
   closeScenarioOverlay();
 });
@@ -3848,8 +3319,8 @@ document.addEventListener('click', function(e) {
 
 export function __init_L8992() {
 document.addEventListener('keydown', function(e) {
-  if (e.key === 'Escape' && overlayPinned) {
-    var tile = _scTileEl(overlayPinned);
+  if (e.key === 'Escape' && state.overlayPinned) {
+    var tile = _scTileEl(state.overlayPinned);
     closeScenarioOverlay();
     if (tile) tile.focus();
   }
@@ -3907,18 +3378,18 @@ function scenarioDetailHTML(s) {
         modeMeta = '<a href="javascript:void(0)" class="desc-toggle" title="Choose which posture checks to run" ' +
           'onclick="openModal(\'' + x(s.id) + '\',null);return false;">Posture check &#9881;</a>';
       } else if (s.artAllWindows) {
-        modeMeta = 'Full ART sweep' + (artCatalog.length ? ' · ' + artCatalog.length + ' techniques' : '');
+        modeMeta = 'Full ART sweep' + (state.artCatalog.length ? ' · ' + state.artCatalog.length + ' techniques' : '');
       } else if (s.artAllPlatform) {
         // artCatalog is the Windows-scoped catalog count -- not meaningful
         // for a Linux/macOS full sweep, so no count is shown here (the
         // read-only Detailed view has the real per-platform number).
         modeMeta = 'Full ART sweep';
       } else if (s.artSelectiveWindows) {
-        modeMeta = 'Selective ART sweep' + (artCatalog.length ? ' · up to ' + artCatalog.length + ' techniques' : '');
+        modeMeta = 'Selective ART sweep' + (state.artCatalog.length ? ' · up to ' + state.artCatalog.length + ' techniques' : '');
       } else if (s.artSelectivePlatform) {
         modeMeta = 'Selective ART sweep';
       } else if (s.calderaAllWindows) {
-        modeMeta = 'Full Caldera sweep' + (calderaCatalog.length ? ' · ' + calderaCatalog.length + ' abilities' : '');
+        modeMeta = 'Full Caldera sweep' + (state.calderaCatalog.length ? ' · ' + state.calderaCatalog.length + ' abilities' : '');
       } else if ((s.artTechniques || []).length) {
         modeMeta = s.artTechniques.length + ' ART techniques';
       } else if ((s.calderaAbilities || []).length) {
@@ -4691,7 +4162,7 @@ var _tmplFilter = { cat: 'all' };
 var _tmplRunID = null;  // template ID being launched
 var _tmplCalderaID = ''; // resolved caldera adversary ID for current modal
 
-function loadAdversaryTemplates() {
+export function loadAdversaryTemplates() {
   apicall('/api/adversary-templates').catch(function() { return []; }).then(function(d) {
     _templates = Array.isArray(d) ? d : [];
     renderTemplateGrid();
@@ -5482,7 +4953,7 @@ function setW(id, pct)  { var el = document.getElementById(id); if (el) el.style
 var _utlData = [];          // raw response from /api/techniques/unified
 var _utlFilter = { src: 'all' }; // active source filter
 
-function loadUnifiedTechniques() {
+export function loadUnifiedTechniques() {
   apicall('/api/techniques/unified').catch(function() { return []; }).then(function(d) {
     _utlData = Array.isArray(d) ? d : [];
     // Populate tactic dropdown.
@@ -5572,7 +5043,7 @@ export function renderUTL() {
 }
 // ─────────────────────────────────────────────────────────────────────────────
 
-function loadCoverage() {
+export function loadCoverage() {
   Promise.all([apicall('/api/attack/matrix'), apicall('/api/scenarios/runs')]).then(function(res) {
     var tactics = (res[0] && res[0].tactics) || [];
     var st = covStatusMap(res[1] || []);
@@ -5903,7 +5374,7 @@ export function setFindingStatus(id, status) {
 }
 
 // ── Remediation ──────────────────────────────────────────────────────────────
-function loadRemediations() {
+export function loadRemediations() {
   apicall('/api/remediations').then(function(list) {
     window._rems = list || [];
     renderRemTiles(); renderRemList();
@@ -6051,7 +5522,7 @@ export function revalidateRemediation(techniqueId) {
   }
   // Pre-arm the run-selection with ONLY this one technique. locked=true bypasses
   // the picker step (jump straight to Review) and hides "Change selection".
-  _runSelection = { scId: match.id, fw: matchFw, ids: [tid], locked: true };
+  state._runSelection = { scId: match.id, fw: matchFw, ids: [tid], locked: true };
   showToast('Re-validating ' + techniqueId + ' only — 1 technique targeted', 'ok');
   openModal(match.id);
 }
@@ -6105,7 +5576,7 @@ function loadDashboardITSM() {
 }
 
 // ── Integrations tab ────────────────────────────────────────────────────────
-function loadIntegrations() {
+export function loadIntegrations() {
   loadTicketingConfigs(function(list) {
     renderConnectorList(list);
   });
@@ -6453,14 +5924,14 @@ export function deleteConnector(id, name) {
 // policy, project pickers) and would be a worse fit than a small dedicated form.
 var _responseConnectors = null;
 
-function loadResponseConnectors(cb) {
+export function loadResponseConnectors(cb) {
   apicall('/api/actions/configs').then(function(list) {
     _responseConnectors = list || [];
     if (cb) cb(_responseConnectors);
   }).catch(function() { _responseConnectors = []; if (cb) cb([]); });
 }
 
-function renderResponseConnectorList(list) {
+export function renderResponseConnectorList(list) {
   var el = document.getElementById('response-connectors-list');
   if (!el) return;
   if (!list || !list.length) {
@@ -6937,7 +6408,7 @@ function _pushFindingTickets(findingIds) {
 
 // ── Reports ──────────────────────────────────────────────────────────────────
 var REPORT_TYPE = 'posture';
-function loadReports() {
+export function loadReports() {
   renderRepHistory();
   // Per-agent launcher: which agents have run data we can report on.
   apicall('/api/scenarios/runs').then(function(runs) {
@@ -7407,7 +6878,7 @@ export function loadRuns() {
 }
 
 export function openModal(scenarioId, preAgent, lockAgent) {
-  _modalScId = scenarioId;
+  state._modalScId = scenarioId;
   if (state.scenarios.length === 0) { showToast('Scenarios not loaded yet', 'err'); return; }
   if (state.agents.length === 0)    { showToast('No agents registered yet', 'err'); return; }
   var scSel = document.getElementById('modal-sc');
@@ -7436,7 +6907,7 @@ export function openModal(scenarioId, preAgent, lockAgent) {
   document.getElementById('modal-max-privilege').value = ''; // always default to no limit
   state._addlSel = {};
   state._groupSel = {};
-  _targetMode = 'individual';
+  state._targetMode = 'individual';
   var indRadio = document.querySelector('input[name="modal-target-mode"][value="individual"]');
   if (indRadio) indRadio.checked = true;
   document.getElementById('modal-individual-wrap').style.display = 'block';
@@ -7455,8 +6926,8 @@ export function openModal(scenarioId, preAgent, lockAgent) {
   if (pip2) pip2.style.display = lockAgent ? 'none' : '';
   _wzMin = lockAgent ? 3 : (scenarioId ? 2 : 1);
   var effId = scenarioId || document.getElementById('modal-sc').value;
-  var start = (_runSelection && _runSelection.scId === effId && _runSelection.ids && _runSelection.ids.length)
-              ? (_runSelection.locked ? 4 : 3) : _wzMin;
+  var start = (state._runSelection && state._runSelection.scId === effId && state._runSelection.ids && state._runSelection.ids.length)
+              ? (state._runSelection.locked ? 4 : 3) : _wzMin;
   wizardSet(start);
 }
 
@@ -7465,9 +6936,9 @@ export function openModal(scenarioId, preAgent, lockAgent) {
 export function renderRunMode() {
   renderModalSelection();
   renderAdditionalAgents();
-  if (_targetMode === 'group') renderGroupTargetSummary();
-  if (_targetMode === 'all') renderAllTargetSummary();
-  var id = _modalScId || document.getElementById('modal-sc').value;
+  if (state._targetMode === 'group') renderGroupTargetSummary();
+  if (state._targetMode === 'all') renderAllTargetSummary();
+  var id = state._modalScId || document.getElementById('modal-sc').value;
   var sc = state.scenarios.find(function(s) { return s.id === id; });
   var wrap = document.getElementById('modal-mode-wrap');
   var modeSel = document.getElementById('modal-mode');
@@ -7479,8 +6950,8 @@ export function renderRunMode() {
   // mismatch check below (which only applies in Individual mode). Agents were
   // already OS-filtered when the set was resolved, so the only remaining
   // question here is whether ANY eligible agent survived that filter.
-  if (_targetMode === 'group' || _targetMode === 'all') {
-    var resolved = _targetMode === 'group' ? resolvedGroupTargetIds() : resolvedAllTargetIds();
+  if (state._targetMode === 'group' || state._targetMode === 'all') {
+    var resolved = state._targetMode === 'group' ? resolvedGroupTargetIds() : resolvedAllTargetIds();
     if (!resolved.eligible.length) {
       wrap.style.display = 'none';
       warn.style.display = 'none';
@@ -7494,7 +6965,7 @@ export function renderRunMode() {
   // targeting has no single "the selected agent", eligibility is handled above).
   var osMismatch = false;
   var osMismatchMsg = '';
-  if (_targetMode === 'individual') {
+  if (state._targetMode === 'individual') {
     var agentId = document.getElementById('modal-agent').value;
     var agent = state.agents.find(function(a) { return a.agentId === agentId; });
     var agentOSClass = '';
@@ -7610,7 +7081,7 @@ function osEligibleAgents(list, sc) {
 
 function eligibleAdditionalAgents() {
   var primaryId = document.getElementById('modal-agent').value;
-  var scId = _modalScId || document.getElementById('modal-sc').value;
+  var scId = state._modalScId || document.getElementById('modal-sc').value;
   var sc = state.scenarios.find(function(s) { return s.id === scId; });
   return osEligibleAgents(state.agents.filter(function(a) { return a.agentId !== primaryId; }), sc);
 }
@@ -7652,7 +7123,7 @@ export function selectAllAdditionalAgents() {
 // silently leak into a dispatch (e.g. switching from Group back to Individual
 // must not leave old group checkboxes still "selected" underneath).
 export function setTargetMode(mode) {
-  _targetMode = mode;
+  state._targetMode = mode;
   if (mode !== 'group') state._groupSel = {};
   if (mode !== 'individual') state._addlSel = {};
   document.getElementById('modal-individual-wrap').style.display = mode === 'individual' ? 'block' : 'none';
@@ -7665,7 +7136,7 @@ export function setTargetMode(mode) {
 // resolvedGroupTargetIds/resolvedAllTargetIds both return {eligible, total} so
 // callers can show "X of Y eligible" without a second pass over the data.
 function resolvedGroupTargetIds() {
-  var scId = _modalScId || document.getElementById('modal-sc').value;
+  var scId = state._modalScId || document.getElementById('modal-sc').value;
   var sc = state.scenarios.find(function(s) { return s.id === scId; });
   var selectedGroupIds = Object.keys(state._groupSel).filter(function(k) { return state._groupSel[k]; }).map(Number);
   var candidates = resolveGroupTargetAgents(selectedGroupIds);
@@ -7673,7 +7144,7 @@ function resolvedGroupTargetIds() {
 }
 
 function resolvedAllTargetIds() {
-  var scId = _modalScId || document.getElementById('modal-sc').value;
+  var scId = state._modalScId || document.getElementById('modal-sc').value;
   var sc = state.scenarios.find(function(s) { return s.id === scId; });
   return { eligible: osEligibleAgents(state.agents, sc), total: state.agents.length };
 }
@@ -7721,7 +7192,7 @@ export function updateVariantDepthNote() {
   if (!noteEl) return;
   var sel = document.getElementById('modal-variant-depth');
   var depth = sel ? sel.value : 'none';
-  var scId = _modalScId || document.getElementById('modal-sc').value;
+  var scId = state._modalScId || document.getElementById('modal-sc').value;
   var sc = state.scenarios.find(function(s) { return s.id === scId; });
   // Full-sweep-style scenarios (Full Sweep and its Selective siblings, when
   // left uncustomized) dispatch against the entire technique catalog --
@@ -7749,7 +7220,7 @@ export function updateVariantDepthNote() {
 
 export function closeModal() {
   document.getElementById('run-overlay').classList.remove('open');
-  _modalScId = null; _runSelection = null;
+  state._modalScId = null; state._runSelection = null;
   // Restore pip visibility so next open() always starts clean
   var p2 = document.querySelector('[data-pip="2"]');
   if (p2) p2.style.display = '';
@@ -7785,7 +7256,7 @@ function wizardSet(step) {
 export function wizardNav(dir) { wizardSet(_wzStep + dir); }
 function renderWizardReview() {
   renderRunMode(); // refresh the OS-mismatch / mode warning + Run button state
-  var scId = _modalScId || document.getElementById('modal-sc').value;
+  var scId = state._modalScId || document.getElementById('modal-sc').value;
   var sc = state.scenarios.find(function(s) { return s.id === scId; });
   var agSel = document.getElementById('modal-agent');
   var agTxt = (agSel.options[agSel.selectedIndex] || {}).text || agSel.value;
@@ -7794,11 +7265,11 @@ function renderWizardReview() {
   var modeLabel = { posture: 'Posture — read-only', telemetry: 'Telemetry — identity-safe', lab: 'Lab — full-fidelity' }[mode] || mode;
   var fw = scenarioFramework(sc);
   var noun = (fw === 'art') ? 'techniques' : (fw === 'caldera') ? 'abilities' : (fw === 'posture') ? 'checks' : 'steps';
-  var sel = _runSelection && _runSelection.scId === scId && _runSelection.ids.length;
+  var sel = state._runSelection && state._runSelection.scId === scId && state._runSelection.ids.length;
   var subset = sel
-    ? ((_runSelection.locked && _runSelection.ids.length === 1)
-        ? _runSelection.ids[0] + ' (targeted re-validate)'
-        : _runSelection.ids.length + ' ' + noun + ' (subset)')
+    ? ((state._runSelection.locked && state._runSelection.ids.length === 1)
+        ? state._runSelection.ids[0] + ' (targeted re-validate)'
+        : state._runSelection.ids.length + ' ' + noun + ' (subset)')
     : 'All ' + noun;
   var reasonEl = document.getElementById('modal-reason');
   var reason = (mode !== 'posture' && reasonEl && reasonEl.value.trim()) ? reasonEl.value.trim() : '';
@@ -7831,7 +7302,7 @@ function renderWizardReview() {
   // between Review and the actual dispatch, and a stale status shouldn't
   // prevent a legitimate run.
   var offlineNames = [];
-  if (_targetMode !== 'group' && _targetMode !== 'all') {
+  if (state._targetMode !== 'group' && state._targetMode !== 'all') {
     [agSel.value].concat(addlIds).forEach(function(id) {
       var a = state.agents.find(function(ag) { return ag.agentId === id; });
       if (a && agentBucket(a) === 'offline') offlineNames.push(x(a.hostname || a.agentId));
@@ -7841,15 +7312,15 @@ function renderWizardReview() {
     offlineWarnRow = '<div class="wz-rev-warn">&#9888; Currently offline: ' + offlineNames.join(', ') +
       '. The run will likely fail to reach ' + (offlineNames.length > 1 ? 'these agents' : 'this agent') + '.</div>';
   }
-  if (_targetMode === 'group' || _targetMode === 'all') {
-    var resolved = _targetMode === 'group' ? resolvedGroupTargetIds() : resolvedAllTargetIds();
+  if (state._targetMode === 'group' || state._targetMode === 'all') {
+    var resolved = state._targetMode === 'group' ? resolvedGroupTargetIds() : resolvedAllTargetIds();
     var eligible = resolved.eligible;
-    var groupCount = _targetMode === 'group'
+    var groupCount = state._targetMode === 'group'
       ? Object.keys(state._groupSel).filter(function(k) { return state._groupSel[k]; }).length : 0;
     var names2 = eligible.map(function(a) { return x(a.agentId + ' — ' + a.hostname); });
     agentsRow = '<div class="wz-rev-row"><span>Agents (' + eligible.length + ')</span><span>' +
       (names2.length ? names2.join('<br>') : '<span class="muted">No eligible agents</span>') + '</span></div>';
-    var blastMsg = _targetMode === 'all'
+    var blastMsg = state._targetMode === 'all'
       ? 'This will run on all ' + eligible.length + ' eligible agent(s).'
       : 'This will run on ' + eligible.length + ' agent(s) across ' + groupCount + ' group(s).';
     blastRow = '<div class="wz-rev-warn">' + x(blastMsg) + '</div>';
@@ -7947,8 +7418,8 @@ export function openPicker(scId, fw) {
   var artPlatform = (sc.artSelectivePlatform || nonWindowsOnly)
     ? ((sc.supportedOs && sc.supportedOs[0]) || 'windows')
     : 'windows';
-  var artCache = (artPlatform === 'windows') ? artCatalog : (_artCatalogByPlatform[artPlatform] || []);
-  var have = (fw === 'art') ? scopeArtItems(sc, artCache) : calderaCatalog;
+  var artCache = (artPlatform === 'windows') ? state.artCatalog : (_artCatalogByPlatform[artPlatform] || []);
+  var have = (fw === 'art') ? scopeArtItems(sc, artCache) : state.calderaCatalog;
   if (have.length) { openPickerWith(scId, fw, sc, have); return; }
   // Catalog not loaded (or a prior fetch failed silently) — fetch on demand and
   // surface the actual reason instead of a generic "unavailable" message.
@@ -7961,8 +7432,8 @@ export function openPicker(scId, fw) {
       return;
     }
     if (fw === 'art') {
-      if (artPlatform === 'windows') artCatalog = d; else _artCatalogByPlatform[artPlatform] = d;
-    } else calderaCatalog = d;
+      if (artPlatform === 'windows') state.artCatalog = d; else _artCatalogByPlatform[artPlatform] = d;
+    } else state.calderaCatalog = d;
     if (state.scenarios.length) renderScenarios();
     var items = (fw === 'art') ? scopeArtItems(sc, d) : d;
     if (!items.length) {
@@ -8015,8 +7486,8 @@ function openPickerWith(scId, fw, sc, items) {
   // framework) silently broke the match: the count included them but no
   // checkbox ever showed checked, and neither "None" nor "Select all"
   // could ever fully agree with the real total again.
-  if (_runSelection && _runSelection.scId === scId && _runSelection.fw === fw) {
-    _runSelection.ids.forEach(function(id) { _pickerSel[id] = true; });
+  if (state._runSelection && state._runSelection.scId === scId && state._runSelection.fw === fw) {
+    state._runSelection.ids.forEach(function(id) { _pickerSel[id] = true; });
   }
   var titleNoun = fw === 'art' ? 'Select ART techniques'
                 : fw === 'caldera' ? 'Select Caldera abilities'
@@ -8065,7 +7536,7 @@ export function setPF(dim, val) {
 }
 
 export function openPickerFromModal() {
-  openPicker(_modalScId || document.getElementById('modal-sc').value);
+  openPicker(state._modalScId || document.getElementById('modal-sc').value);
 }
 
 // openDetailedViewForScenario opens the read-only "Detailed view" for an
@@ -8098,7 +7569,7 @@ export function openDetailedViewForScenario(scId) {
 }
 
 function openDetailedViewFromModal() {
-  openDetailedViewForScenario(_modalScId || document.getElementById('modal-sc').value);
+  openDetailedViewForScenario(state._modalScId || document.getElementById('modal-sc').value);
 }
 
 function openDetailedView(sc, items) {
@@ -8274,14 +7745,14 @@ export function applyPicker() {
   // first agent — otherwise the selection would dispatch to the wrong endpoint.
   var agEl = document.getElementById('modal-agent');
   var ag = agEl ? agEl.value : '';
-  _runSelection = { scId: _pickerScId, fw: _pickerFw, ids: ids, agentId: ag };
+  state._runSelection = { scId: _pickerScId, fw: _pickerFw, ids: ids, agentId: ag };
   closePicker();
   openModal(_pickerScId, ag || null);
 }
 
 export function closePicker() { _pickerBuilderMode = false; document.getElementById('picker-overlay').classList.remove('open'); }
 
-export function clearSelection() { _runSelection = null; renderModalSelection(); }
+export function clearSelection() { state._runSelection = null; renderModalSelection(); }
 
 // _postureSummaryCache holds the rendered "N checks across M categories" HTML
 // per scId|agentId, so re-renders (agent/mode changes) don't refetch. Values:
@@ -8296,7 +7767,7 @@ function renderModalSelection() {
   var note = document.getElementById('modal-selection');
   var link = document.getElementById('modal-customize-link');
   if (!cw || !note || !link) return;
-  var id = _modalScId || document.getElementById('modal-sc').value;
+  var id = state._modalScId || document.getElementById('modal-sc').value;
   var sc = state.scenarios.find(function(s) { return s.id === id; });
   var fw = scenarioFramework(sc);
   if (!sc || !fw) { cw.style.display = 'none'; note.style.display = 'none'; return; }
@@ -8319,19 +7790,19 @@ function renderModalSelection() {
   // A posture selection is tied to the agent whose catalog produced it (check IDs
   // are per-OS). If the operator switched agents, the stale subset would no longer
   // match — drop it so the run reverts to "all checks" rather than an empty run.
-  if (fw === 'posture' && _runSelection && _runSelection.scId === id &&
-      _runSelection.agentId && _runSelection.agentId !== document.getElementById('modal-agent').value) {
-    _runSelection = null;
+  if (fw === 'posture' && state._runSelection && state._runSelection.scId === id &&
+      state._runSelection.agentId && state._runSelection.agentId !== document.getElementById('modal-agent').value) {
+    state._runSelection = null;
   }
   var noun = (fw === 'art') ? 'techniques' : (fw === 'caldera') ? 'abilities' : (fw === 'posture') ? 'checks' : 'steps';
-  var has = _runSelection && _runSelection.scId === id && _runSelection.fw === fw && _runSelection.ids.length > 0;
+  var has = state._runSelection && state._runSelection.scId === id && state._runSelection.fw === fw && state._runSelection.ids.length > 0;
   cw.style.display = 'block';
   if (fw === 'posture' && !document.getElementById('modal-agent').value) {
     link.innerHTML = '&#9881; Customize — select a target agent first';
     link.style.opacity = '0.5';
     link.style.pointerEvents = 'none';
-  } else if (has && _runSelection.locked) {
-    link.textContent = '🔒 Locked — re-validating ' + _runSelection.ids.join(', ') + ' only';
+  } else if (has && state._runSelection.locked) {
+    link.textContent = '🔒 Locked — re-validating ' + state._runSelection.ids.join(', ') + ' only';
     link.style.opacity = '0.6';
     link.style.pointerEvents = 'none';
   } else {
@@ -8341,8 +7812,8 @@ function renderModalSelection() {
   }
   if (has) {
     note.style.display = 'block';
-    note.innerHTML = '&#9989; Running a selected subset: <strong>' + _runSelection.ids.length + '</strong> ' + noun +
-      (_runSelection.locked ? ' (targeted re-validate)' :
+    note.innerHTML = '&#9989; Running a selected subset: <strong>' + state._runSelection.ids.length + '</strong> ' + noun +
+      (state._runSelection.locked ? ' (targeted re-validate)' :
        ' <a href="javascript:void(0)" class="desc-toggle" style="margin-left:8px" onclick="clearSelection();return false;">Clear</a>');
   } else if (fw === 'posture' && document.getElementById('modal-agent').value) {
     // No explicit subset chosen — show what "run everything" actually means
@@ -8375,13 +7846,13 @@ function renderModalSelection() {
           // Only repaint if the modal is still on this exact scenario+agent —
           // the operator may have navigated elsewhere while the fetch was in flight.
           if (document.getElementById('modal-agent').value === agentId &&
-              (_modalScId || document.getElementById('modal-sc').value) === id) {
+              (state._modalScId || document.getElementById('modal-sc').value) === id) {
             renderModalSelection();
           }
         }).catch(function() {
           _postureSummaryCache[cacheKey] = '';
           if (document.getElementById('modal-agent').value === agentId &&
-              (_modalScId || document.getElementById('modal-sc').value) === id) {
+              (state._modalScId || document.getElementById('modal-sc').value) === id) {
             renderModalSelection();
           }
         });
@@ -8424,10 +7895,10 @@ export function openBuilderARTPicker() {
     ensureCovStatus(renderPickerList);
     document.getElementById('picker-overlay').classList.add('open');
   }
-  if (artCatalog.length) { doOpen(artCatalog); return; }
+  if (state.artCatalog.length) { doOpen(state.artCatalog); return; }
   apicall('/api/art/techniques').then(function(d) {
-    if (Array.isArray(d) && d.length) { artCatalog = d; }
-    doOpen(artCatalog);
+    if (Array.isArray(d) && d.length) { state.artCatalog = d; }
+    doOpen(state.artCatalog);
   }).catch(function(e) { showToast('Catalog request failed: ' + (e && e.message ? e.message : e), 'err'); });
 }
 
@@ -8467,10 +7938,10 @@ export function openBuilderCalderaPicker() {
     ensureCovStatus(renderPickerList);
     document.getElementById('picker-overlay').classList.add('open');
   }
-  if (calderaCatalog.length) { doOpen(calderaCatalog); return; }
+  if (state.calderaCatalog.length) { doOpen(state.calderaCatalog); return; }
   apicall('/api/caldera/abilities').then(function(d) {
-    if (Array.isArray(d) && d.length) calderaCatalog = d;
-    doOpen(calderaCatalog);
+    if (Array.isArray(d) && d.length) state.calderaCatalog = d;
+    doOpen(state.calderaCatalog);
   }).catch(function(e) { showToast('Catalog request failed: ' + (e && e.message ? e.message : e), 'err'); });
 }
 
@@ -11040,11 +10511,11 @@ export function __init_L16159() {
   // Looks up ATT&CK technique name + tactic from the ART catalog. Falls back
   // gracefully when artCatalog hasn't loaded yet (e.g. technique picker not opened).
   function lookupTech(id) {
-    if (!id || !artCatalog.length) return null;
+    if (!id || !state.artCatalog.length) return null;
     var up = id.toUpperCase();
-    for (var i = 0; i < artCatalog.length; i++) {
-      if (artCatalog[i].id && artCatalog[i].id.toUpperCase() === up) {
-        return { name: artCatalog[i].name || '', tactic: artCatalog[i].tactic || '' };
+    for (var i = 0; i < state.artCatalog.length; i++) {
+      if (state.artCatalog[i].id && state.artCatalog[i].id.toUpperCase() === up) {
+        return { name: state.artCatalog[i].name || '', tactic: state.artCatalog[i].tactic || '' };
       }
     }
     return null;
@@ -11844,11 +11315,11 @@ function genBatchId() {
 }
 
 export function confirmRun() {
-  var scenarioId = _modalScId || document.getElementById('modal-sc').value;
-  var groupTargeted = (_targetMode === 'group' || _targetMode === 'all');
+  var scenarioId = state._modalScId || document.getElementById('modal-sc').value;
+  var groupTargeted = (state._targetMode === 'group' || state._targetMode === 'all');
   var agentIds;
   if (groupTargeted) {
-    var resolved = _targetMode === 'group' ? resolvedGroupTargetIds() : resolvedAllTargetIds();
+    var resolved = state._targetMode === 'group' ? resolvedGroupTargetIds() : resolvedAllTargetIds();
     agentIds = resolved.eligible.map(function(a) { return a.agentId; });
     if (!scenarioId || !agentIds.length) { showToast('Select scenario and at least one eligible agent', 'err'); return; }
   } else {
@@ -11876,9 +11347,9 @@ export function confirmRun() {
   // than showing two confirms back to back. In telemetry/lab mode it is
   // additional to — shown before — those modes' own existing confirms.
   if (groupTargeted) {
-    var groupCount = _targetMode === 'group'
+    var groupCount = state._targetMode === 'group'
       ? Object.keys(state._groupSel).filter(function(k) { return state._groupSel[k]; }).length : 0;
-    var blastMsg = _targetMode === 'all'
+    var blastMsg = state._targetMode === 'all'
       ? 'This will run on all ' + agentIds.length + ' eligible agent(s).\n\nProceed?'
       : 'This will run on ' + agentIds.length + ' agent(s) across ' + groupCount + ' group(s).\n\nProceed?';
     if (!confirm(blastMsg)) return;
@@ -11923,13 +11394,13 @@ export function confirmRun() {
   if (maxPrivEl2 && maxPrivEl2.value) {
     baseBody.executionPolicy = { maxPrivilege: maxPrivEl2.value };
   }
-  if (_runSelection && _runSelection.scId === scenarioId && _runSelection.ids.length) {
-    if (_runSelection.fw === 'art') baseBody.techniques = _runSelection.ids;
-    else if (_runSelection.fw === 'caldera') baseBody.abilities = _runSelection.ids;
-    else if (_runSelection.fw === 'steps') baseBody.steps = _runSelection.ids.map(Number);
-    else if (_runSelection.fw === 'posture') baseBody.checks = _runSelection.ids;
-    if (_runSelection.locked && _runSelection.ids.length === 1) {
-      baseBody.runLabel = _runSelection.ids[0] + ' — Re-validate';
+  if (state._runSelection && state._runSelection.scId === scenarioId && state._runSelection.ids.length) {
+    if (state._runSelection.fw === 'art') baseBody.techniques = state._runSelection.ids;
+    else if (state._runSelection.fw === 'caldera') baseBody.abilities = state._runSelection.ids;
+    else if (state._runSelection.fw === 'steps') baseBody.steps = state._runSelection.ids.map(Number);
+    else if (state._runSelection.fw === 'posture') baseBody.checks = state._runSelection.ids;
+    if (state._runSelection.locked && state._runSelection.ids.length === 1) {
+      baseBody.runLabel = state._runSelection.ids[0] + ' — Re-validate';
     }
   }
 
@@ -11982,20 +11453,20 @@ export function confirmRun() {
   });
 }
 
-function connectWS() {
-  if (socket) socket.close();
+export function connectWS() {
+  if (state.socket) state.socket.close();
   var proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-  socket = new WebSocket(proto + '//' + location.host + '/ws/browser');
-  socket.onopen = function() {
+  state.socket = new WebSocket(proto + '//' + location.host + '/ws/browser');
+  state.socket.onopen = function() {
     document.getElementById('ws-dot').classList.add('on');
     document.getElementById('ws-label').textContent = 'live';
   };
-  socket.onclose = function() {
+  state.socket.onclose = function() {
     document.getElementById('ws-dot').classList.remove('on');
     document.getElementById('ws-label').textContent = 'reconnecting';
     setTimeout(connectWS, 5000);
   };
-  socket.onmessage = function(evt) {
+  state.socket.onmessage = function(evt) {
     try {
       var msg = JSON.parse(evt.data);
       if (msg.type === 'run_event') {
@@ -12350,19 +11821,19 @@ export function submitCreateUser() {
 }
 
 export function openEditUser(id, username, role) {
-  _editUserId = id;
+  state._editUserId = id;
   document.getElementById('edit-user-title').textContent = 'Edit: ' + username;
   document.getElementById('edit-user-sub').textContent = 'Change role for ' + username;
   document.getElementById('eu-role').value = role;
   document.getElementById('eu-err').textContent = '';
   document.getElementById('edit-user-overlay').classList.add('open');
 }
-export function closeEditUser() { document.getElementById('edit-user-overlay').classList.remove('open'); _editUserId = null; }
+export function closeEditUser() { document.getElementById('edit-user-overlay').classList.remove('open'); state._editUserId = null; }
 
 export function submitEditUser() {
-  if (!_editUserId) return;
+  if (!state._editUserId) return;
   var role = document.getElementById('eu-role').value;
-  apicall('/api/users/' + encodeURIComponent(_editUserId), { method: 'PUT', body: JSON.stringify({ role: role }) })
+  apicall('/api/users/' + encodeURIComponent(state._editUserId), { method: 'PUT', body: JSON.stringify({ role: role }) })
   .then(function(res) {
     if (res.error) throw new Error(res.error);
     closeEditUser(); showToast('Role updated', 'ok'); loadUsers();
@@ -12445,7 +11916,7 @@ function miniBars(data, w, h) {
   return '<svg width="100%" height="' + h + '" viewBox="0 0 ' + w + ' ' + h + '" preserveAspectRatio="none">' + out + '</svg>';
 }
 
-function loadDashboard() {
+export function loadDashboard() {
   Promise.all([apicall('/api/agents'), apicall('/api/scenarios/runs')])
   .then(function(res) {
     var ag = res[0] || [], runs = res[1] || [];
@@ -12926,8 +12397,8 @@ function complianceTile(fw) {
 
 // refreshDashboardCampaigns — standalone fn so it can be called from the WS
 // handler and the periodic poll without running the full dashboard reload.
-var _dashCampPoll = null;
-function refreshDashboardCampaigns() {
+
+export function refreshDashboardCampaigns() {
   apicall('/api/campaigns').then(function(cs) {
     // KPI tile — Active campaigns (running now).
     var running = (cs || []).filter(function(c) { return c.summary && c.summary.status === 'running'; }).length;
@@ -13119,7 +12590,7 @@ function _diffSecretRow(label, changed) {
 var TI_CONNECTOR_LABELS = { misp: 'MISP', opencti: 'OpenCTI', otx: 'OTX' };
 var TI_CONNECTOR_LOADED = {}; // name -> {baseUrl, enabled} as last fetched from the server, for the save confirmation diff
 
-function loadThreatIntelConfig(name) {
+export function loadThreatIntelConfig(name) {
   var panel = document.getElementById('ti-' + name + '-config-panel');
   if (!panel || ROLE !== 'admin') { if (panel) panel.innerHTML = ''; return; }
   apicall('/api/threat-intel/' + name + '/config').then(function(cfg) {
@@ -13378,7 +12849,7 @@ export function syncTAXIIConnectorNow(id) {
     .catch(function(e) { showToast('Sync failed: ' + (e.message || 'error'), 'err'); });
 }
 
-function loadConnectorStatus() {
+export function loadConnectorStatus() {
   var wrap = document.getElementById('connector-status-wrap');
   if (!wrap) return;
   wrap.style.display = '';
@@ -13484,7 +12955,7 @@ export function toggleSimCoverage() {
   if (det) det.style.display = SIM_COV_OPEN ? '' : 'none';
   if (car) car.innerHTML = SIM_COV_OPEN ? '&#9660;' : '&#9654;';
 }
-function loadSimCoverage() {
+export function loadSimCoverage() {
   var totalEl   = document.getElementById('sim-total');
   var variantEl = document.getElementById('sim-variants');
   var subEl     = document.getElementById('sim-sub');
@@ -14502,7 +13973,7 @@ var _cmpReport = null;
 var _cmpFrameworks = [];
 var _cmpFilter = '';
 
-function initComplianceTab() {
+export function initComplianceTab() {
   var fwSel = document.getElementById('cmp-fw-sel');
   if (_cmpFrameworks.length === 0) {
     apicall('/api/compliance/frameworks').then(function(fws) {
@@ -14713,54 +14184,6 @@ export function exportCompliance(format) {
     }).catch(function(e) { showToast('Export failed: ' + e.message, 'err'); });
   });
 }
-// ── Tamper Alert Banner ────────────────────────────────────────────────────
-var _tamperPaths = [];
-function showTamperBanner(data) {
-  var path = data && data.path ? data.path : 'unknown path';
-  var evt  = data && data.eventType ? data.eventType : 'modified';
-  // Accumulate all alerts; don't duplicate the same path.
-  if (_tamperPaths.indexOf(path) === -1) _tamperPaths.push(path);
-  var banner = document.getElementById('tamper-banner');
-  var msg    = document.getElementById('tamper-banner-msg');
-  if (!banner || !msg) return;
-  msg.textContent = '⚠ Unexpected file ' + evt + ' detected: ' +
-    (_tamperPaths.length === 1 ? _tamperPaths[0] : _tamperPaths.length + ' protected files') +
-    ' — Run dispatch is suspended. Acknowledge to resume.';
-  banner.style.display = 'flex';
-  // Shift the main content down so the fixed banner doesn't cover it.
-  document.body.style.paddingTop = '46px';
-}
-export function ackAllTamperEvents() {
-  apicall('/api/tamper-events/acknowledge-all', { method: 'POST' })
-    .then(function() {
-      _tamperPaths = [];
-      var banner = document.getElementById('tamper-banner');
-      if (banner) banner.style.display = 'none';
-      document.body.style.paddingTop = '';
-    })
-    .catch(function() { alert('Failed to acknowledge tamper events. Check server logs.'); });
-}
-// On page load, check for unacknowledged critical events so the banner shows
-// even for admins who logged in after the tamper was detected.
-export function __init_L19932() {
-window.addEventListener('DOMContentLoaded', function() {
-  // apicall() already resolves to the parsed JSON body (see its own
-  // definition) -- a stray extra .then(r => r.json()) here was calling
-  // .json() on an already-parsed array, which always threw
-  // "r.json is not a function" and was silently swallowed by the catch
-  // below. That made this entire page-load tamper check a no-op: even
-  // with real unacknowledged critical tamper events and a logged-in
-  // admin, showTamperBanner() never ran.
-  apicall('/api/tamper-events?unacknowledged=true')
-    .then(function(events) {
-      if (Array.isArray(events) && events.length > 0) {
-        events.forEach(function(e) { showTamperBanner(e); });
-      }
-    })
-    .catch(function() {}); // fail silently if not logged in yet
-});
-}
-
 
 // ── Variant Executor ───────────────────────────────────────────────────────
 var _vexRunPoll = null;

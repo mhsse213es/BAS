@@ -28,21 +28,37 @@
   "thisCount": 0,
   "stateVars": [
     "INIT_ATTACH_SELECTED",
+    "SETTINGS_SECTION",
     "_addlSel",
     "_agtLogTelemetryMetric",
     "_cmpSel",
+    "_dashCampPoll",
+    "_editUserId",
     "_emGroupSel",
     "_emSweepCurrentId",
     "_groupSel",
+    "_modalScId",
     "_pwForced",
+    "_runSelection",
+    "_targetMode",
     "_tmplGroupSel",
     "_tmplSelAgents",
     "_toast",
     "_vexGroupSel",
     "_vexRunGroupSel",
+    "agentLiveRefreshTimer",
+    "agentSearchDebounceTimer",
+    "agentTotals",
     "agents",
+    "agentsHasMore",
+    "agentsNextCursor",
+    "agentsPagesLoaded",
+    "artCatalog",
+    "calderaCatalog",
+    "overlayPinned",
     "scenarioView",
-    "scenarios"
+    "scenarios",
+    "socket"
   ],
   "modules": {
     "core/api.js": {
@@ -57,9 +73,13 @@
       "imports": 2,
       "inits": 0
     },
+    "features/shell.js": {
+      "imports": 5,
+      "inits": 5
+    },
     "legacy.js": {
-      "imports": 4,
-      "inits": 12
+      "imports": 5,
+      "inits": 7
     }
   }
 }

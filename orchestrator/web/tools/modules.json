@@ -1,7 +1,16 @@
 {
   "default": "legacy.js",
-  "preamble": null,
-  "sections": [],
+  "preamble": "features/shell.js",
+  "sections": [
+    {
+      "header": "Profile avatar + dropdown",
+      "module": "features/shell.js"
+    },
+    {
+      "header": "Tamper Alert Banner",
+      "module": "features/shell.js"
+    }
+  ],
   "pin": {
     "escapeHTML": "core/escape.js",
     "x": "core/escape.js",
