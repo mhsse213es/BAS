@@ -17,6 +17,7 @@ import './features/initiatives.js';
 import './features/integrations.js';
 import './features/iocs.js';
 import { __init_L16159 } from './features/live-run.js';
+import './features/openaev.js';
 import './features/ransomware.js';
 import './features/rerun-review.js';
 import './features/scheduled.js';

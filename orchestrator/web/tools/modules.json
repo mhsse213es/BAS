@@ -189,6 +189,10 @@
     {
       "header": "Endpoint Mastery",
       "module": "features/endpoint-mastery.js"
+    },
+    {
+      "header": "OpenAEV Connector",
+      "module": "features/openaev.js"
     }
   ],
   "pin": {

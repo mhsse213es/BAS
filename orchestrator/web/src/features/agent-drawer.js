@@ -3,8 +3,9 @@ import { state } from '../core/state.js';
 import { apicall } from '../core/api.js';
 import { x } from '../core/escape.js';
 import { ago, showToast } from '../core/util.js';
+import { apArrow, apNodePill } from './openaev.js';
 import { _riskScoreColor, _riskTrendBadge } from './shell.js';
-import { apArrow, apNodePill, buildReportFilename, loadAgents, openModal, showDownloadOptions, triggerDownload } from '../legacy.js';
+import { buildReportFilename, loadAgents, openModal, showDownloadOptions, triggerDownload } from '../legacy.js';
 
 
 /* ═══════════════════════════════════════════════════════════════════════════

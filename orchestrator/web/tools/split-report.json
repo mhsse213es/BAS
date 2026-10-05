@@ -89,7 +89,7 @@
       "inits": 0
     },
     "features/agent-drawer.js": {
-      "imports": 6,
+      "imports": 7,
       "inits": 0
     },
     "features/audit-logs.js": {
@@ -136,6 +136,10 @@
       "imports": 5,
       "inits": 1
     },
+    "features/openaev.js": {
+      "imports": 6,
+      "inits": 0
+    },
     "features/ransomware.js": {
       "imports": 5,
       "inits": 0
@@ -149,7 +153,7 @@
       "inits": 0
     },
     "features/shell.js": {
-      "imports": 20,
+      "imports": 21,
       "inits": 5
     },
     "features/threat-intel.js": {
@@ -161,7 +165,7 @@
       "inits": 0
     },
     "legacy.js": {
-      "imports": 20,
+      "imports": 21,
       "inits": 6
     }
   }
