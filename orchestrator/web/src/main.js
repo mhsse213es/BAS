@@ -3,6 +3,7 @@ import { installGlobals } from './globals.js';
 import './core/api.js';
 import './core/escape.js';
 import './core/util.js';
+import './features/adversaries.js';
 import './features/agent-actions.js';
 import './features/audit-logs.js';
 import './features/compliance.js';

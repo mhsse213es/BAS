@@ -79,6 +79,10 @@
       "imports": 2,
       "inits": 0
     },
+    "features/adversaries.js": {
+      "imports": 6,
+      "inits": 0
+    },
     "features/agent-actions.js": {
       "imports": 3,
       "inits": 0
@@ -112,7 +116,7 @@
       "inits": 0
     },
     "features/shell.js": {
-      "imports": 13,
+      "imports": 14,
       "inits": 5
     },
     "features/threat-intel.js": {
@@ -124,7 +128,7 @@
       "inits": 0
     },
     "legacy.js": {
-      "imports": 13,
+      "imports": 14,
       "inits": 7
     }
   }

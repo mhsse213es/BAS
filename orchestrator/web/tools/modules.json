@@ -77,6 +77,14 @@
     {
       "header": "Unified Technique Library",
       "module": "features/coverage.js"
+    },
+    {
+      "header": "Threat Actor Library",
+      "module": "features/adversaries.js"
+    },
+    {
+      "header": "Adversary Templates",
+      "module": "features/adversaries.js"
     }
   ],
   "pin": {

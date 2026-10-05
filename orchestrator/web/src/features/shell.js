@@ -3,6 +3,7 @@ import { state } from '../core/state.js';
 import { apicall } from '../core/api.js';
 import { x } from '../core/escape.js';
 import { showToast } from '../core/util.js';
+import { loadAdversaries, loadAdversaryTemplates } from './adversaries.js';
 import { loadAuditLogs } from './audit-logs.js';
 import { loadCalderaStatus, refreshDashboardCampaigns } from './compliance.js';
 import { loadCoverage, loadCoverageAnalytics, loadUnifiedTechniques } from './coverage.js';
@@ -11,7 +12,7 @@ import { loadInitiatives } from './initiatives.js';
 import { loadIOCRegistry } from './iocs.js';
 import { loadARTContentStatus, loadConnectorStatus, loadSimCoverage, loadTAXIIConnectors, loadThreatIntelConfig } from './threat-intel.js';
 import { loadVariantTab } from './variant-executor.js';
-import { closeCampaignDetail, closeScenarioOverlay, connectWS, initComplianceTab, injectServerURL, loadAdversaries, loadAdversaryTemplates, loadAgentGroupTree, loadAgents, loadAttackPath, loadCatalogs, loadConnectionConfig, loadCoverageActors, loadCoverageMatrix, loadDashboard, loadEmTab, loadExecDashboard, loadExercisesTab, loadExposureAssets, loadFindings, loadIntegrations, loadRecommendations, loadRemediations, loadReports, loadResponseConnectors, loadRuns, loadSLAReport, loadScenarios, loadScheduledAssessments, loadThreatPriorityActors, openCmdk, renderResponseConnectorList, renderScenarios, selectTheme, showSettingsSection, showThreatPriorityList } from '../legacy.js';
+import { closeCampaignDetail, closeScenarioOverlay, connectWS, initComplianceTab, injectServerURL, loadAgentGroupTree, loadAgents, loadAttackPath, loadCatalogs, loadConnectionConfig, loadCoverageActors, loadCoverageMatrix, loadDashboard, loadEmTab, loadExecDashboard, loadExercisesTab, loadExposureAssets, loadFindings, loadIntegrations, loadRecommendations, loadRemediations, loadReports, loadResponseConnectors, loadRuns, loadSLAReport, loadScenarios, loadScheduledAssessments, loadThreatPriorityActors, openCmdk, renderResponseConnectorList, renderScenarios, selectTheme, showSettingsSection, showThreatPriorityList } from '../legacy.js';
 export function __init_L5162() {
 (function() {
   var t = localStorage.getItem('audspect_theme') || 'dark';
