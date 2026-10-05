@@ -1,5 +1,6 @@
 import { state } from './core/state.js';
 import { x } from './core/escape.js';
+import { stopEvent } from './core/actions.js';
 import { closeAdvDrawer, closeAdvRunModal, closeTmplRun, confirmAdversaryRun, confirmTmplRun, loadAdversaries, openAdvDrawer, openAdvRunModal, openTmplRun, renderAdvRunWarn, renderAdversaryLibrary, renderTmplAgentCount, renderTmplGroupSummary, renderTmplOSCompat, renderTmplWarn, setTmplFilter, setTmplTargetMode, toggleAdversarySection } from './features/adversaries.js';
 import { closeRemoveAgentModal, closeStopAgentModal, closeUninstallAgentModal, openRemoveAgentModal, openStopAgentModal, openUninstallAgentModal, submitRemoveAgent, submitStopAgent, submitUninstallAgent, triggerTicketingSync } from './features/agent-actions.js';
 import { closeAgentDetail, downloadAuditPack, downloadFullReportCSV, downloadFullReportJSON, downloadFullReportPDF, exportCompliance, filterControls, loadAgtLogs, loadComplianceReport, openAgentDetail, openFullReport, safeScan, setAgentState, showAgentTab, toggleEvidence, updateLinuxDownloadCmd } from './features/agent-drawer.js';
@@ -390,6 +391,14 @@ export const HANDLER_FUNCTIONS = {
   viewRunResults,
   wizardNav,
   x,
+};
+
+// The action registry for data-on-* attributes (G1d). During migration it
+// holds every inline-handler function plus the explicit actions below; Task 9
+// turns it into the explicit list and deletes HANDLER_FUNCTIONS.
+export const ACTIONS = {
+  ...HANDLER_FUNCTIONS,
+  stopEvent,
 };
 
 // Named only via strings: window[name] lookups and handler names built at runtime
