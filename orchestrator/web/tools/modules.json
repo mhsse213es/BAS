@@ -137,6 +137,10 @@
     {
       "header": "Respond (EPP response actions",
       "module": "features/integrations.js"
+    },
+    {
+      "header": "Ransomware Readiness Module",
+      "module": "features/ransomware.js"
     }
   ],
   "pin": {

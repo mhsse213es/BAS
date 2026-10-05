@@ -124,6 +124,10 @@
       "imports": 6,
       "inits": 0
     },
+    "features/ransomware.js": {
+      "imports": 5,
+      "inits": 0
+    },
     "features/rerun-review.js": {
       "imports": 9,
       "inits": 0
@@ -141,7 +145,7 @@
       "inits": 0
     },
     "legacy.js": {
-      "imports": 16,
+      "imports": 17,
       "inits": 7
     }
   }
