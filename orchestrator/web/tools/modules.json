@@ -2,7 +2,10 @@
   "default": "legacy.js",
   "preamble": null,
   "sections": [],
-  "pin": {},
+  "pin": {
+    "escapeHTML": "core/escape.js",
+    "x": "core/escape.js"
+  },
   "windowVars": ["_groupSel", "_tmplGroupSel", "_vexGroupSel", "_vexRunGroupSel"],
   "windowFns": ["renderGroupTargetSummary", "renderRunMode", "renderTmplGroupSummary", "renderTmplOSCompat", "renderVexGroupSummary", "renderVexRunGroupSummary"],
   "lateInit": [],
