@@ -7,7 +7,7 @@
     "split": "node tools/split.mjs",
     "split:check": "node tools/split.mjs --check",
     "lint": "eslint src",
-    "test": "node --test tests/unit/",
+    "test": "node --test \"tests/unit/*.test.mjs\"",
     "build": "node tools/build.mjs",
     "smoke": "playwright test -c tests/smoke/playwright.config.mjs"
   },

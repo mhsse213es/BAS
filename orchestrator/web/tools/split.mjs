@@ -153,12 +153,14 @@ export function splitMonolith(html, cfg) {
   const isFn = (n) => a.topNames.has(n) && a.topNames.get(n).kind === 'function';
   const handlerFns = new Set([...handlers.calls].filter(isFn));
   // Functions reached by name rather than by a handler call: modules.json
-  // windowFns (window[name] lookups) plus any top-level function accessed as
-  // window.NAME. Both are listed in DYNAMIC_HANDLERS so the registry check
+  // windowFns (window[name] lookups), any top-level function accessed as
+  // window.NAME, and any top-level function whose name appears as a string
+  // literal (handlers built as onclick="' + fnName + '(...)"). Both are listed in DYNAMIC_HANDLERS so the registry check
   // does not report them as stale.
   const dynamicFns = new Set();
   for (const n of cfg.windowFns) { if (!isFn(n)) throw new Error(`windowFns entry "${n}" is not a top-level function`); dynamicFns.add(n); }
   for (const n of windowRead) if (isFn(n)) dynamicFns.add(n);
+  for (const n of a.stringNames) if (isFn(n)) dynamicFns.add(n);
   for (const n of dynamicFns) handlerFns.add(n);
   const exported = new Set(handlerFns);
   for (const set of usedBy.values()) for (const n of set) exported.add(n);

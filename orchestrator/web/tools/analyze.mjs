@@ -3,7 +3,7 @@
 import { Linter } from 'eslint';
 
 export function analyzeScript(js) {
-  const out = { chunks: [], topNames: new Map(), refs: [], through: [], windowMembers: [], thisCount: 0 };
+  const out = { chunks: [], topNames: new Map(), refs: [], through: [], windowMembers: [], thisCount: 0, stringNames: new Set() };
   let program = null;
   let scopeManager = null;
   const collector = {
@@ -11,6 +11,11 @@ export function analyzeScript(js) {
       return {
         Program(node) { program = node; scopeManager = context.sourceCode.scopeManager; },
         ThisExpression() { out.thisCount++; },
+        // Identifier-shaped string literals: candidate function names passed
+        // around for dynamic dispatch (window[name], onclick="' + fn + '(...").
+        Literal(node) {
+          if (typeof node.value === 'string' && /^[A-Za-z_$][\w$]*$/.test(node.value)) out.stringNames.add(node.value);
+        },
         MemberExpression(node) {
           if (node.object.type !== 'Identifier' || node.object.name !== 'window') return;
           let name = null;

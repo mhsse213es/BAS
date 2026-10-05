@@ -94,6 +94,14 @@ test('mixed declaration keeps the non-state declarator and rewrites its state re
   assert.match(file(out, 'src/core/state.js'), /mode: 1/);
 });
 
+test('function named by a string literal is exposed as a dynamic handler', () => {
+  // covSegHtml(items, active, 'setAgentFilter') builds onclick="' + fnName + '(…)"
+  const js = "function setAgentFilter(v) {}\nfunction seg(fn) { return '<b onclick=\"' + fn + '(1)\">'; }\nfunction bar() { return seg('setAgentFilter'); }\n";
+  const out = splitMonolith(monolith(js), cfg());
+  assert.match(file(out, 'src/globals.js'), /DYNAMIC_HANDLERS = \[\s*'setAgentFilter'/);
+  assert.match(file(out, 'src/globals.js'), /HANDLER_FUNCTIONS = \{[^}]*\bsetAgentFilter\b/);
+});
+
 test('window.NAME writes of undeclared names are registered verbatim', () => {
   const js = '(function(){ window.openRunPanel = function(){}; })();\n';
   const out = splitMonolith(monolith(js), cfg());

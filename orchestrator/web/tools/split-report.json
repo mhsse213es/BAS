@@ -1,0 +1,52 @@
+{
+  "laterVarReads": [],
+  "undeclaredReads": [
+    "Blob",
+    "FileReader",
+    "FormData",
+    "URL",
+    "WebSocket",
+    "alert",
+    "clearInterval",
+    "clearTimeout",
+    "confirm",
+    "console",
+    "crypto",
+    "document",
+    "event",
+    "fetch",
+    "history",
+    "localStorage",
+    "location",
+    "navigator",
+    "prompt",
+    "sessionStorage",
+    "setInterval",
+    "setTimeout",
+    "window"
+  ],
+  "thisCount": 0,
+  "stateVars": [
+    "INIT_ATTACH_SELECTED",
+    "_addlSel",
+    "_agtLogTelemetryMetric",
+    "_cmpSel",
+    "_emGroupSel",
+    "_emSweepCurrentId",
+    "_groupSel",
+    "_pwForced",
+    "_tmplGroupSel",
+    "_tmplSelAgents",
+    "_vexGroupSel",
+    "_vexRunGroupSel",
+    "agents",
+    "scenarioView",
+    "scenarios"
+  ],
+  "modules": {
+    "legacy.js": {
+      "imports": 1,
+      "inits": 12
+    }
+  }
+}

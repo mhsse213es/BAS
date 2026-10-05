@@ -21,6 +21,10 @@ BUILTINS = {
 # Handler fragments built at runtime: '_x[' + id + ']=' leaves "]=" after a
 # quote, so the variable name is the identifier right before the opening quote.
 DYN_INDEX_ASSIGN = re.compile(r"([A-Za-z_$][\w$]*)\[\s*'\s*\+")
+# Prose inside a handler's string arguments ('… breakdown (Windows)') is not a
+# call. Blanked only for the "missing" direction: the generator registers every
+# raw match (a superset), so "stale" keeps comparing against the raw scan.
+STRING_LIT = re.compile(r"""'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*\"""")
 
 
 def _list(globals_js, const):
@@ -43,14 +47,15 @@ def check(web_dir):
     js_texts = [p.read_text(encoding="utf-8") for p in js_files]
     sources += js_texts
 
-    called, assigned = set(), set()
+    called, called_code, assigned = set(), set(), set()
     for text in sources:
         for m in HANDLER_ATTR.finditer(text):
             called |= set(CALL.findall(m.group(1)))
+            called_code |= set(CALL.findall(STRING_LIT.sub("''", m.group(1))))
             assigned |= set(ASSIGN.findall(m.group(1)))
             assigned |= set(DYN_INDEX_ASSIGN.findall(m.group(1)))
     errors = []
-    for n in sorted(called - fns - window_writes - BUILTINS):
+    for n in sorted(called_code - fns - window_writes - BUILTINS):
         errors.append(f"missing: {n}")
     for n in sorted(fns - called - dynamic):
         errors.append(f"stale: {n}")

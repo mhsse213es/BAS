@@ -70,5 +70,10 @@ class TestRegistry(unittest.TestCase):
         self.assertIn("window-write registered but absent: openRunPanel", g.check(d))
 
 
+    def test_text_inside_handler_string_arguments_is_not_a_call(self):
+        d = make('<a onclick="showTab(\'per-platform breakdown (Windows)\');doLogin()"></a>', "window.openRunPanel = 1;\n")
+        self.assertEqual(g.check(d), [])
+
+
 if __name__ == "__main__":
     unittest.main()
