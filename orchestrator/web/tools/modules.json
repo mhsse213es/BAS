@@ -25,6 +25,14 @@
     {
       "header": "Variant Executor",
       "module": "features/variant-executor.js"
+    },
+    {
+      "header": "Compliance score tiles",
+      "module": "features/compliance.js"
+    },
+    {
+      "header": "Generic config-save confirmation",
+      "module": "features/compliance.js"
     }
   ],
   "pin": {

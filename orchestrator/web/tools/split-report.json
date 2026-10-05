@@ -82,8 +82,12 @@
       "imports": 3,
       "inits": 0
     },
-    "features/shell.js": {
+    "features/compliance.js": {
       "imports": 6,
+      "inits": 0
+    },
+    "features/shell.js": {
+      "imports": 7,
       "inits": 5
     },
     "features/variant-executor.js": {
@@ -91,7 +95,7 @@
       "inits": 0
     },
     "legacy.js": {
-      "imports": 6,
+      "imports": 7,
       "inits": 7
     }
   }
