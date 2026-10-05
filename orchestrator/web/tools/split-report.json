@@ -39,6 +39,7 @@
     "_groupSel",
     "_modalScId",
     "_pwForced",
+    "_runIOCsAll",
     "_runSelection",
     "_targetMode",
     "_tmplGroupSel",
@@ -90,8 +91,12 @@
       "imports": 6,
       "inits": 0
     },
+    "features/iocs.js": {
+      "imports": 6,
+      "inits": 0
+    },
     "features/shell.js": {
-      "imports": 9,
+      "imports": 10,
       "inits": 5
     },
     "features/threat-intel.js": {
@@ -103,7 +108,7 @@
       "inits": 0
     },
     "legacy.js": {
-      "imports": 9,
+      "imports": 10,
       "inits": 7
     }
   }

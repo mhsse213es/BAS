@@ -12,6 +12,7 @@ export const state = {
   _groupSel: {},
   _modalScId: null,
   _pwForced: false,
+  _runIOCsAll: [],
   _runSelection: null,
   _targetMode: 'individual',
   _tmplGroupSel: {},

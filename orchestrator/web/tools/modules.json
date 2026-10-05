@@ -45,6 +45,14 @@
     {
       "header": "TAXII Connectors",
       "module": "features/threat-intel.js"
+    },
+    {
+      "header": "Indicators (IOCs) tab",
+      "module": "features/iocs.js"
+    },
+    {
+      "header": "IOC Registry",
+      "module": "features/iocs.js"
     }
   ],
   "pin": {
