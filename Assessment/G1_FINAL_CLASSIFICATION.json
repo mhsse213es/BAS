@@ -79,7 +79,7 @@
  },
  {
   "sink_id": "_vexRenderQueuePanel:panel:=:b153a86b8dca",
-  "line": 21277,
+  "line": 21278,
   "function": "_vexRenderQueuePanel",
   "target": "panel",
   "op": "=",
@@ -92,7 +92,7 @@
  },
  {
   "sink_id": "addStep:div:=:7ac68f61520c",
-  "line": 17433,
+  "line": 18104,
   "function": "addStep",
   "target": "div",
   "op": "=",
@@ -105,7 +105,7 @@
  },
  {
   "sink_id": "aggOf:document.getElementById('dash-gauge'):=:c2776b093e85",
-  "line": 20357,
+  "line": 20358,
   "function": "aggOf",
   "target": "document.getElementById('dash-gauge')",
   "op": "=",
@@ -118,7 +118,7 @@
  },
  {
   "sink_id": "aggOf:document.getElementById('dash-posture-bars'):=:1c09c35c581f",
-  "line": 20367,
+  "line": 20368,
   "function": "aggOf",
   "target": "document.getElementById('dash-posture-bars')",
   "op": "=",
@@ -126,12 +126,12 @@
   "final_category": "unescaped_html",
   "severity_tier": 4,
   "data_source_tags": "",
-  "trace_notes": "miniBars() @L20233 (scope-resolved): 3 return(s) -> unescaped_html",
+  "trace_notes": "miniBars() @L20234 (scope-resolved): 3 return(s) -> unescaped_html",
   "rhs": "miniBars(barData, 320, 64)"
  },
  {
   "sink_id": "aggOf:document.getElementById('kpi-cov-spark'):=:85105375906e",
-  "line": 20395,
+  "line": 20396,
   "function": "aggOf",
   "target": "document.getElementById('kpi-cov-spark')",
   "op": "=",
@@ -139,12 +139,12 @@
   "final_category": "unescaped_html",
   "severity_tier": 4,
   "data_source_tags": "",
-  "trace_notes": "sparkSVG() @L20208 (scope-resolved): 4 return(s) -> unescaped_html; var(): no declaration found anywhere in file",
+  "trace_notes": "sparkSVG() @L20209 (scope-resolved): 4 return(s) -> unescaped_html; var(): no declaration found anywhere in file",
   "rhs": "sparkSVG(covSeries, 110, 30, 'var(--warning)')"
  },
  {
   "sink_id": "aggOf:document.getElementById('kpi-score-spark'):=:0319aaf8760d",
-  "line": 20354,
+  "line": 20355,
   "function": "aggOf",
   "target": "document.getElementById('kpi-score-spark')",
   "op": "=",
@@ -152,12 +152,12 @@
   "final_category": "unescaped_html",
   "severity_tier": 4,
   "data_source_tags": "",
-  "trace_notes": "sparkSVG() @L20208 (scope-resolved): 4 return(s) -> unescaped_html; var(): no declaration found anywhere in file",
+  "trace_notes": "sparkSVG() @L20209 (scope-resolved): 4 return(s) -> unescaped_html; var(): no declaration found anywhere in file",
   "rhs": "sparkSVG(prevSeries, 110, 30, 'var(--teal)')"
  },
  {
   "sink_id": "aggOf:donutEl:=:bb66089500d8",
-  "line": 20415,
+  "line": 20416,
   "function": "aggOf",
   "target": "donutEl",
   "op": "=",
@@ -170,7 +170,7 @@
  },
  {
   "sink_id": "aggOf:else                            tEl:=:1c87b321677d",
-  "line": 20352,
+  "line": 20353,
   "function": "aggOf",
   "target": "else                            tEl",
   "op": "=",
@@ -183,7 +183,7 @@
  },
  {
   "sink_id": "aggOf:else if (trend === 'Degrading') tEl:=:10f698d311c8",
-  "line": 20351,
+  "line": 20352,
   "function": "aggOf",
   "target": "else if (trend === 'Degrading') tEl",
   "op": "=",
@@ -196,7 +196,7 @@
  },
  {
   "sink_id": "aggOf:if (trend === 'Improving')      tEl:=:c5109212a34d",
-  "line": 20350,
+  "line": 20351,
   "function": "aggOf",
   "target": "if (trend === 'Improving')      tEl",
   "op": "=",
@@ -248,7 +248,7 @@
  },
  {
   "sink_id": "byStartedAtDesc:tbody:=:a84861ce6bf1",
-  "line": 16017,
+  "line": 16688,
   "function": "byStartedAtDesc",
   "target": "tbody",
   "op": "=",
@@ -261,7 +261,7 @@
  },
  {
   "sink_id": "byStartedAtDesc:tbody:=:f78d2a49fc20",
-  "line": 15981,
+  "line": 16652,
   "function": "byStartedAtDesc",
   "target": "tbody",
   "op": "=",
@@ -313,7 +313,7 @@
  },
  {
   "sink_id": "cmdkResultFallback:document.getElementById('results-body'):=:12f11fe6b7e3",
-  "line": 19912,
+  "line": 19913,
   "function": "cmdkResultFallback",
   "target": "document.getElementById('results-body')",
   "op": "=",
@@ -326,7 +326,7 @@
  },
  {
   "sink_id": "cmdkResultFallback:document.getElementById('results-export'):=:6f49cdbd80e1",
-  "line": 19910,
+  "line": 19911,
   "function": "cmdkResultFallback",
   "target": "document.getElementById('results-export')",
   "op": "=",
@@ -339,7 +339,7 @@
  },
  {
   "sink_id": "cmdkResultFallback:document.getElementById('results-summary'):=:6f49cdbd80e1",
-  "line": 19911,
+  "line": 19912,
   "function": "cmdkResultFallback",
   "target": "document.getElementById('results-summary')",
   "op": "=",
@@ -417,7 +417,7 @@
  },
  {
   "sink_id": "confirmRun:runBtn:=:8eab6fb9be00",
-  "line": 19737,
+  "line": 19738,
   "function": "confirmRun",
   "target": "runBtn",
   "op": "=",
@@ -430,7 +430,7 @@
  },
  {
   "sink_id": "confirmRun:runBtn:=:cd9227672841",
-  "line": 19756,
+  "line": 19757,
   "function": "confirmRun",
   "target": "runBtn",
   "op": "=",
@@ -469,7 +469,7 @@
  },
  {
   "sink_id": "doOpen:tacticSel:=:84dac746f49b",
-  "line": 17074,
+  "line": 17745,
   "function": "doOpen",
   "target": "tacticSel",
   "op": "=",
@@ -573,7 +573,7 @@
  },
  {
   "sink_id": "fillBuilder:steps:=:6f49cdbd80e1",
-  "line": 17127,
+  "line": 17798,
   "function": "fillBuilder",
   "target": "steps",
   "op": "=",
@@ -586,7 +586,7 @@
  },
  {
   "sink_id": "filterVexTechniques:el:=:b51334baf721",
-  "line": 21099,
+  "line": 21100,
   "function": "filterVexTechniques",
   "target": "el",
   "op": "=",
@@ -599,7 +599,7 @@
  },
  {
   "sink_id": "filterVexTechniques:el:=:fe7e0ce19e69",
-  "line": 21102,
+  "line": 21103,
   "function": "filterVexTechniques",
   "target": "el",
   "op": "=",
@@ -612,7 +612,7 @@
  },
  {
   "sink_id": "fmt:document.getElementById('evidence-content'):=:e5e239560bc1",
-  "line": 19430,
+  "line": 19431,
   "function": "fmt",
   "target": "document.getElementById('evidence-content')",
   "op": "=",
@@ -620,7 +620,7 @@
   "final_category": "unescaped_html",
   "severity_tier": 4,
   "data_source_tags": "",
-  "trace_notes": "15 assignment(s) to 'html' inside renderEvidencePanel() @L19184 (scope-resolved) -> unescaped_html",
+  "trace_notes": "15 assignment(s) to 'html' inside renderEvidencePanel() @L19185 (scope-resolved) -> unescaped_html",
   "rhs": "html"
  },
  {
@@ -716,7 +716,7 @@
  },
  {
   "sink_id": "kpiGaugeCard:document.getElementById('run-kpi-strip'):=:9f61190ab079",
-  "line": 17785,
+  "line": 18456,
   "function": "kpiGaugeCard",
   "target": "document.getElementById('run-kpi-strip')",
   "op": "=",
@@ -742,7 +742,7 @@
  },
  {
   "sink_id": "lg:afEl:=:045b2d7bf19f",
-  "line": 20456,
+  "line": 20457,
   "function": "lg",
   "target": "afEl",
   "op": "=",
@@ -755,7 +755,7 @@
  },
  {
   "sink_id": "lg:afEl:=:742a1d68308b",
-  "line": 20460,
+  "line": 20461,
   "function": "lg",
   "target": "afEl",
   "op": "=",
@@ -768,7 +768,7 @@
  },
  {
   "sink_id": "lg:afEl:=:af6127e6cf99",
-  "line": 20457,
+  "line": 20458,
   "function": "lg",
   "target": "afEl",
   "op": "=",
@@ -776,12 +776,12 @@
   "final_category": "unescaped_html",
   "severity_tier": 4,
   "data_source_tags": "",
-  "trace_notes": "killChainNodes() @L18755 (scope-resolved): 1 return(s) -> unescaped_html",
+  "trace_notes": "killChainNodes() @L15423 (scope-resolved): 1 return(s) -> unescaped_html",
   "rhs": "'<div class=\"killchain\">' + killChainNodes(kc) + '</div>'"
  },
  {
   "sink_id": "lg:attckEl:=:15344d1eaefd",
-  "line": 20540,
+  "line": 20541,
   "function": "lg",
   "target": "attckEl",
   "op": "=",
@@ -794,7 +794,7 @@
  },
  {
   "sink_id": "lg:attckEl:=:29910ff5e4fc",
-  "line": 20538,
+  "line": 20539,
   "function": "lg",
   "target": "attckEl",
   "op": "=",
@@ -807,7 +807,7 @@
  },
  {
   "sink_id": "lg:bodyEl:=:a021056e35a9",
-  "line": 20590,
+  "line": 20591,
   "function": "lg",
   "target": "bodyEl",
   "op": "=",
@@ -820,7 +820,7 @@
  },
  {
   "sink_id": "lg:donutEl:=:b908d493e3d4",
-  "line": 20426,
+  "line": 20427,
   "function": "lg",
   "target": "donutEl",
   "op": "=",
@@ -833,7 +833,7 @@
  },
  {
   "sink_id": "lg:rrEl:=:40cfa668e770",
-  "line": 20469,
+  "line": 20470,
   "function": "lg",
   "target": "rrEl",
   "op": "=",
@@ -846,7 +846,7 @@
  },
  {
   "sink_id": "lg:rrEl:=:a15994e328c4",
-  "line": 20467,
+  "line": 20468,
   "function": "lg",
   "target": "rrEl",
   "op": "=",
@@ -859,7 +859,7 @@
  },
  {
   "sink_id": "lg:tfEl:=:3c8626d1c7ac",
-  "line": 20512,
+  "line": 20513,
   "function": "lg",
   "target": "tfEl",
   "op": "=",
@@ -872,7 +872,7 @@
  },
  {
   "sink_id": "lg:tfEl:=:e009cf04aee2",
-  "line": 20515,
+  "line": 20516,
   "function": "lg",
   "target": "tfEl",
   "op": "=",
@@ -1873,7 +1873,7 @@
  },
  {
   "sink_id": "loadReports:document.getElementById('rep-available'):=:568454456a1f",
-  "line": 15586,
+  "line": 16257,
   "function": "loadReports",
   "target": "document.getElementById('rep-available')",
   "op": "=",
@@ -1886,7 +1886,7 @@
  },
  {
   "sink_id": "loadReports:el:=:211a4d2abf4a",
-  "line": 15569,
+  "line": 16240,
   "function": "loadReports",
   "target": "el",
   "op": "=",
@@ -1899,7 +1899,7 @@
  },
  {
   "sink_id": "loadReports:el:=:b1f98f11e298",
-  "line": 15573,
+  "line": 16244,
   "function": "loadReports",
   "target": "el",
   "op": "=",
@@ -1912,7 +1912,7 @@
  },
  {
   "sink_id": "loadRuns:tbody:=:f259d05495ad",
-  "line": 15964,
+  "line": 16635,
   "function": "loadRuns",
   "target": "tbody",
   "op": "=",
@@ -1925,7 +1925,7 @@
  },
  {
   "sink_id": "loadSIEMCorrelationPanel:el:=:a0696ac13148",
-  "line": 18419,
+  "line": 19090,
   "function": "loadSIEMCorrelationPanel",
   "target": "el",
   "op": "=",
@@ -2068,7 +2068,7 @@
  },
  {
   "sink_id": "loadUsers:tbody:=:58af379b3e34",
-  "line": 20108,
+  "line": 20109,
   "function": "loadUsers",
   "target": "tbody",
   "op": "=",
@@ -2081,7 +2081,7 @@
  },
  {
   "sink_id": "loadUsers:tbody:=:59926b90a0ae",
-  "line": 20109,
+  "line": 20110,
   "function": "loadUsers",
   "target": "tbody",
   "op": "=",
@@ -2094,7 +2094,7 @@
  },
  {
   "sink_id": "loadVariantCoverage:el:=:5ad448abef7d",
-  "line": 21129,
+  "line": 21130,
   "function": "loadVariantCoverage",
   "target": "el",
   "op": "=",
@@ -2107,7 +2107,7 @@
  },
  {
   "sink_id": "loadVariantCoverage:el:=:a79e43cbcf7f",
-  "line": 21156,
+  "line": 21157,
   "function": "loadVariantCoverage",
   "target": "el",
   "op": "=",
@@ -2120,7 +2120,7 @@
  },
  {
   "sink_id": "loadVariantCoverage:el:=:c944b2f9b670",
-  "line": 21126,
+  "line": 21127,
   "function": "loadVariantCoverage",
   "target": "el",
   "op": "=",
@@ -2133,7 +2133,7 @@
  },
  {
   "sink_id": "loadVariantCoverage:el:=:e5e239560bc1",
-  "line": 21154,
+  "line": 21155,
   "function": "loadVariantCoverage",
   "target": "el",
   "op": "=",
@@ -2141,12 +2141,12 @@
   "final_category": "partial_escaped",
   "severity_tier": 3,
   "data_source_tags": "",
-  "trace_notes": "3 assignment(s) to 'html' inside loadVariantCoverage() @L21123 (scope-resolved) -> partial_escaped",
+  "trace_notes": "3 assignment(s) to 'html' inside loadVariantCoverage() @L21124 (scope-resolved) -> partial_escaped",
   "rhs": "html"
  },
  {
   "sink_id": "loadVariantStats:el:=:357036e91e03",
-  "line": 20685,
+  "line": 20686,
   "function": "loadVariantStats",
   "target": "el",
   "op": "=",
@@ -2154,7 +2154,7 @@
   "final_category": "partial_escaped",
   "severity_tier": 3,
   "data_source_tags": "",
-  "trace_notes": "executions(): no declaration found anywhere in file; var(): no declaration found anywhere in file; vexStatCard() @L20698 (scope-resolved): 1 return(s) -> partial_escaped",
+  "trace_notes": "executions(): no declaration found anywhere in file; var(): no declaration found anywhere in file; vexStatCard() @L20699 (scope-resolved): 1 return(s) -> partial_escaped",
   "rhs": "vexStatCard('Executed Variants',     s.executedVariants,       'var(--accent)', null,\n        'How many individual variant executions (encoding \\xd7 privilege \\xd7 context combinations) have actually completed so far, summed across every finished variant run — not the total available.') +\n      vexStatCard('Total Variants',        s.availableVariants,      'var(--text)',   artAtomic.toLocaleString"
  },
  {
@@ -2354,7 +2354,7 @@
  },
  {
   "sink_id": "openCmdk:wrap:=:e5b2adf984bd",
-  "line": 19942,
+  "line": 19943,
   "function": "openCmdk",
   "target": "wrap",
   "op": "=",
@@ -2523,7 +2523,7 @@
  },
  {
   "sink_id": "openModal:document.getElementById('modal-agent'):=:aec9738cf908",
-  "line": 16039,
+  "line": 16710,
   "function": "openModal",
   "target": "document.getElementById('modal-agent')",
   "op": "=",
@@ -2536,7 +2536,7 @@
  },
  {
   "sink_id": "openModal:scSel:=:99fea35738b6",
-  "line": 16028,
+  "line": 16699,
   "function": "openModal",
   "target": "scSel",
   "op": "=",
@@ -2575,7 +2575,7 @@
  },
  {
   "sink_id": "openPickerWith:tacticSel:=:56ff914bbfc9",
-  "line": 16662,
+  "line": 17333,
   "function": "openPickerWith",
   "target": "tacticSel",
   "op": "=",
@@ -2601,7 +2601,7 @@
  },
  {
   "sink_id": "openReportGen:document.getElementById('rep-agent'):=:449a6c764d46",
-  "line": 15640,
+  "line": 16311,
   "function": "openReportGen",
   "target": "document.getElementById('rep-agent')",
   "op": "=",
@@ -2614,7 +2614,7 @@
  },
  {
   "sink_id": "openReportGen:document.getElementById('rep-format'):=:f36948ae35eb",
-  "line": 15644,
+  "line": 16315,
   "function": "openReportGen",
   "target": "document.getElementById('rep-format')",
   "op": "=",
@@ -2627,7 +2627,7 @@
  },
  {
   "sink_id": "openReportGen:document.getElementById('rep-fw'):=:cf81daeadfa1",
-  "line": 15653,
+  "line": 16324,
   "function": "openReportGen",
   "target": "document.getElementById('rep-fw')",
   "op": "=",
@@ -2783,7 +2783,7 @@
  },
  {
   "sink_id": "pollVariantRun:if (p) p:=:7216b4ea81b4",
-  "line": 21376,
+  "line": 21377,
   "function": "pollVariantRun",
   "target": "if (p) p",
   "op": "=",
@@ -2796,7 +2796,7 @@
  },
  {
   "sink_id": "pollVariantRun:if (panel) panel:=:852c6910cc5b",
-  "line": 21347,
+  "line": 21348,
   "function": "pollVariantRun",
   "target": "if (panel) panel",
   "op": "=",
@@ -2835,7 +2835,7 @@
  },
  {
   "sink_id": "populateVexAgents:if (sel) sel:=:d2a1edd66cf8",
-  "line": 20727,
+  "line": 20728,
   "function": "populateVexAgents",
   "target": "if (sel) sel",
   "op": "=",
@@ -2843,12 +2843,12 @@
   "final_category": "escaped",
   "severity_tier": 1,
   "data_source_tags": "",
-  "trace_notes": "1 assignment(s) to 'opts' inside populateVexAgents() @L20714 (scope-resolved) -> escaped",
+  "trace_notes": "1 assignment(s) to 'opts' inside populateVexAgents() @L20715 (scope-resolved) -> escaped",
   "rhs": "opts"
  },
  {
   "sink_id": "populateVexAgents:if (sweepSel) sweepSel:=:d2a1edd66cf8",
-  "line": 20729,
+  "line": 20730,
   "function": "populateVexAgents",
   "target": "if (sweepSel) sweepSel",
   "op": "=",
@@ -2856,12 +2856,12 @@
   "final_category": "escaped",
   "severity_tier": 1,
   "data_source_tags": "",
-  "trace_notes": "1 assignment(s) to 'opts' inside populateVexAgents() @L20714 (scope-resolved) -> escaped",
+  "trace_notes": "1 assignment(s) to 'opts' inside populateVexAgents() @L20715 (scope-resolved) -> escaped",
   "rhs": "opts"
  },
  {
   "sink_id": "populateVexTechniques:if (el) el:=:63e9d5f1a93f",
-  "line": 20769,
+  "line": 20770,
   "function": "populateVexTechniques",
   "target": "if (el) el",
   "op": "=",
@@ -2874,7 +2874,7 @@
  },
  {
   "sink_id": "populateVexTechniques:tacSel:=:ce309d68b711",
-  "line": 20764,
+  "line": 20765,
   "function": "populateVexTechniques",
   "target": "tacSel",
   "op": "=",
@@ -2882,7 +2882,7 @@
   "final_category": "unescaped_html",
   "severity_tier": 4,
   "data_source_tags": "",
-  "trace_notes": "2 assignment(s) to 'tacOpts' inside populateVexTechniques() @L20741 (scope-resolved) -> unescaped_html",
+  "trace_notes": "2 assignment(s) to 'tacOpts' inside populateVexTechniques() @L20742 (scope-resolved) -> unescaped_html",
   "rhs": "tacOpts"
  },
  {
@@ -2978,7 +2978,7 @@
  },
  {
   "sink_id": "render:list:=:969e22921b7e",
-  "line": 20050,
+  "line": 20051,
   "function": "render",
   "target": "list",
   "op": "=",
@@ -2991,7 +2991,7 @@
  },
  {
   "sink_id": "render:list:=:a8f1044c4fed",
-  "line": 20049,
+  "line": 20050,
   "function": "render",
   "target": "list",
   "op": "=",
@@ -3056,7 +3056,7 @@
  },
  {
   "sink_id": "renderAdditionalAgents:list:=:afe12f0f5138",
-  "line": 16243,
+  "line": 16914,
   "function": "renderAdditionalAgents",
   "target": "list",
   "op": "=",
@@ -3485,7 +3485,7 @@
  },
  {
   "sink_id": "renderDetectionValidationTab:el:=:84cc57f30541",
-  "line": 18365,
+  "line": 19036,
   "function": "renderDetectionValidationTab",
   "target": "el",
   "op": "=",
@@ -3784,7 +3784,7 @@
  },
  {
   "sink_id": "renderModalSelection:link:=:3ac9eb36dbbe",
-  "line": 16924,
+  "line": 17595,
   "function": "renderModalSelection",
   "target": "link",
   "op": "=",
@@ -3797,7 +3797,7 @@
  },
  {
   "sink_id": "renderModalSelection:link:=:a31134ee495c",
-  "line": 16943,
+  "line": 17614,
   "function": "renderModalSelection",
   "target": "link",
   "op": "=",
@@ -3810,7 +3810,7 @@
  },
  {
   "sink_id": "renderModalSelection:note:=:3673014e72b6",
-  "line": 17006,
+  "line": 17677,
   "function": "renderModalSelection",
   "target": "note",
   "op": "=",
@@ -3823,7 +3823,7 @@
  },
  {
   "sink_id": "renderModalSelection:note:=:6da56d2607de",
-  "line": 16957,
+  "line": 17628,
   "function": "renderModalSelection",
   "target": "note",
   "op": "=",
@@ -3836,7 +3836,7 @@
  },
  {
   "sink_id": "renderModalSelection:note:=:f6a1dba9d317",
-  "line": 16973,
+  "line": 17644,
   "function": "renderModalSelection",
   "target": "note",
   "op": "=",
@@ -3849,7 +3849,7 @@
  },
  {
   "sink_id": "renderModalSelection:note:=:f6a1dba9d317",
-  "line": 17003,
+  "line": 17674,
   "function": "renderModalSelection",
   "target": "note",
   "op": "=",
@@ -3862,7 +3862,7 @@
  },
  {
   "sink_id": "renderPickerList:document.getElementById('picker-list'):=:86bc3b918fa9",
-  "line": 16819,
+  "line": 17490,
   "function": "renderPickerList",
   "target": "document.getElementById('picker-list')",
   "op": "=",
@@ -3992,7 +3992,7 @@
  },
  {
   "sink_id": "renderRepHistory:tb:=:913a94a62edf",
-  "line": 15594,
+  "line": 16265,
   "function": "renderRepHistory",
   "target": "tb",
   "op": "=",
@@ -4005,7 +4005,7 @@
  },
  {
   "sink_id": "renderRepHistory:tb:=:b9e0ef311b73",
-  "line": 15598,
+  "line": 16269,
   "function": "renderRepHistory",
   "target": "tb",
   "op": "=",
@@ -4083,7 +4083,7 @@
  },
  {
   "sink_id": "renderRunMode:btn:=:4959506b17ea",
-  "line": 16101,
+  "line": 16772,
   "function": "renderRunMode",
   "target": "btn",
   "op": "=",
@@ -4096,7 +4096,7 @@
  },
  {
   "sink_id": "renderRunMode:btn:=:5b98d58b0313",
-  "line": 16181,
+  "line": 16852,
   "function": "renderRunMode",
   "target": "btn",
   "op": "=",
@@ -4109,7 +4109,7 @@
  },
  {
   "sink_id": "renderRunMode:btn:=:6b374eeb8131",
-  "line": 16161,
+  "line": 16832,
   "function": "renderRunMode",
   "target": "btn",
   "op": "=",
@@ -4122,7 +4122,7 @@
  },
  {
   "sink_id": "renderRunMode:btn:=:ad81ad1f4514",
-  "line": 16174,
+  "line": 16845,
   "function": "renderRunMode",
   "target": "btn",
   "op": "=",
@@ -4135,7 +4135,7 @@
  },
  {
   "sink_id": "renderRunMode:btn:=:cd9227672841",
-  "line": 16145,
+  "line": 16816,
   "function": "renderRunMode",
   "target": "btn",
   "op": "=",
@@ -4148,7 +4148,7 @@
  },
  {
   "sink_id": "renderRunMode:btn:=:cd9227672841",
-  "line": 16192,
+  "line": 16863,
   "function": "renderRunMode",
   "target": "btn",
   "op": "=",
@@ -4161,7 +4161,7 @@
  },
  {
   "sink_id": "renderRunMode:warn:=:37e38ab2c4c2",
-  "line": 16141,
+  "line": 16812,
   "function": "renderRunMode",
   "target": "warn",
   "op": "=",
@@ -4169,12 +4169,12 @@
   "final_category": "escaped",
   "severity_tier": 1,
   "data_source_tags": "",
-  "trace_notes": "2 assignment(s) to 'osMismatchMsg' inside renderRunMode() @L16078 (scope-resolved) -> escaped",
+  "trace_notes": "2 assignment(s) to 'osMismatchMsg' inside renderRunMode() @L16749 (scope-resolved) -> escaped",
   "rhs": "osMismatchMsg"
  },
  {
   "sink_id": "renderRunMode:warn:=:37e38ab2c4c2",
-  "line": 16188,
+  "line": 16859,
   "function": "renderRunMode",
   "target": "warn",
   "op": "=",
@@ -4182,12 +4182,12 @@
   "final_category": "escaped",
   "severity_tier": 1,
   "data_source_tags": "",
-  "trace_notes": "2 assignment(s) to 'osMismatchMsg' inside renderRunMode() @L16078 (scope-resolved) -> escaped",
+  "trace_notes": "2 assignment(s) to 'osMismatchMsg' inside renderRunMode() @L16749 (scope-resolved) -> escaped",
   "rhs": "osMismatchMsg"
  },
  {
   "sink_id": "renderRunMode:warn:=:41e9204bcecf",
-  "line": 16159,
+  "line": 16830,
   "function": "renderRunMode",
   "target": "warn",
   "op": "=",
@@ -4200,7 +4200,7 @@
  },
  {
   "sink_id": "renderRunMode:warn:=:7945c45dabe0",
-  "line": 16180,
+  "line": 16851,
   "function": "renderRunMode",
   "target": "warn",
   "op": "=",
@@ -4213,7 +4213,7 @@
  },
  {
   "sink_id": "renderRunMode:warn:=:7cbf4609536e",
-  "line": 16173,
+  "line": 16844,
   "function": "renderRunMode",
   "target": "warn",
   "op": "=",
@@ -4221,7 +4221,7 @@
   "final_category": "unescaped_html",
   "severity_tier": 4,
   "data_source_tags": "",
-  "trace_notes": "2 assignment(s) to 'warnText' inside renderRunMode() @L16078 (scope-resolved) -> unescaped_html",
+  "trace_notes": "2 assignment(s) to 'warnText' inside renderRunMode() @L16749 (scope-resolved) -> unescaped_html",
   "rhs": "warnText"
  },
  {
@@ -4759,7 +4759,7 @@
  },
  {
   "sink_id": "renderVariantRun:cell:=:2ff32a8ace7a",
-  "line": 21526,
+  "line": 21527,
   "function": "renderVariantRun",
   "target": "cell",
   "op": "=",
@@ -4772,7 +4772,7 @@
  },
  {
   "sink_id": "renderVariantRun:if (wrapperEl) wrapperEl:=:8e94bcdd09f7",
-  "line": 21521,
+  "line": 21522,
   "function": "renderVariantRun",
   "target": "if (wrapperEl) wrapperEl",
   "op": "=",
@@ -4780,12 +4780,12 @@
   "final_category": "partial_escaped",
   "severity_tier": 3,
   "data_source_tags": "",
-  "trace_notes": "24 assignment(s) to 'wrapperHtml' inside renderVariantRun() @L21454 (scope-resolved) -> partial_escaped",
+  "trace_notes": "24 assignment(s) to 'wrapperHtml' inside renderVariantRun() @L21455 (scope-resolved) -> partial_escaped",
   "rhs": "wrapperHtml"
  },
  {
   "sink_id": "renderVariantRun:panel:=:8576b16b3214",
-  "line": 21538,
+  "line": 21539,
   "function": "renderVariantRun",
   "target": "panel",
   "op": "=",
@@ -4798,7 +4798,7 @@
  },
  {
   "sink_id": "renderVexSweepList:el:=:6f49cdbd80e1",
-  "line": 20860,
+  "line": 20861,
   "function": "renderVexSweepList",
   "target": "el",
   "op": "=",
@@ -4811,7 +4811,7 @@
  },
  {
   "sink_id": "renderVexSweepList:el:=:84f7e3c3eda0",
-  "line": 20862,
+  "line": 20863,
   "function": "renderVexSweepList",
   "target": "el",
   "op": "=",
@@ -4889,7 +4889,7 @@
  },
  {
   "sink_id": "row:document.getElementById('wz-review'):=:e5e239560bc1",
-  "line": 16496,
+  "line": 17167,
   "function": "row",
   "target": "document.getElementById('wz-review')",
   "op": "=",
@@ -4897,7 +4897,7 @@
   "final_category": "unescaped_html",
   "severity_tier": 4,
   "data_source_tags": "",
-  "trace_notes": "3 assignment(s) to 'html' inside renderWizardReview() @L16399 (scope-resolved) -> unescaped_html",
+  "trace_notes": "3 assignment(s) to 'html' inside renderWizardReview() @L17070 (scope-resolved) -> unescaped_html",
   "rhs": "html"
  },
  {
@@ -5032,7 +5032,7 @@
  },
  {
   "sink_id": "soonPanel:document.getElementById('run-tab-content'):=:7adc696626b0",
-  "line": 18127,
+  "line": 18798,
   "function": "soonPanel",
   "target": "document.getElementById('run-tab-content')",
   "op": "=",
@@ -5045,7 +5045,7 @@
  },
  {
   "sink_id": "soonPanel:document.getElementById('run-tabbar'):=:ec3077d5757a",
-  "line": 18164,
+  "line": 18835,
   "function": "soonPanel",
   "target": "document.getElementById('run-tabbar')",
   "op": "=",
@@ -5058,7 +5058,7 @@
  },
  {
   "sink_id": "soonPanel:extraEl:=:000e9faf7dc9",
-  "line": 18203,
+  "line": 18874,
   "function": "soonPanel",
   "target": "extraEl",
   "op": "=",
@@ -5071,7 +5071,7 @@
  },
  {
   "sink_id": "soonPanel:extraEl:=:6f49cdbd80e1",
-  "line": 18215,
+  "line": 18886,
   "function": "soonPanel",
   "target": "extraEl",
   "op": "=",
@@ -5084,7 +5084,7 @@
  },
  {
   "sink_id": "soonPanel:extraEl:=:8a89f49e5dd6",
-  "line": 18207,
+  "line": 18878,
   "function": "soonPanel",
   "target": "extraEl",
   "op": "=",
@@ -5092,12 +5092,12 @@
   "final_category": "partial_escaped",
   "severity_tier": 3,
   "data_source_tags": "",
-  "trace_notes": "renderRunReportExtra() @L18785 (scope-resolved): 5 return(s) -> partial_escaped",
+  "trace_notes": "renderRunReportExtra() @L15453 (scope-resolved): 5 return(s) -> partial_escaped",
   "rhs": "renderRunReportExtra(rep)"
  },
  {
   "sink_id": "soonPanel:if (el) el:=:05b3ceeea0fb",
-  "line": 18228,
+  "line": 18899,
   "function": "soonPanel",
   "target": "if (el) el",
   "op": "=",
@@ -5110,7 +5110,7 @@
  },
  {
   "sink_id": "soonPanel:if (el) el:=:05d28a38e57d",
-  "line": 18225,
+  "line": 18896,
   "function": "soonPanel",
   "target": "if (el) el",
   "op": "=",
@@ -5118,12 +5118,12 @@
   "final_category": "unescaped_html",
   "severity_tier": 4,
   "data_source_tags": "",
-  "trace_notes": "renderAttackFlow() @L18661 (scope-resolved): 6 return(s) -> unescaped_html",
+  "trace_notes": "renderAttackFlow() @L15329 (scope-resolved): 6 return(s) -> unescaped_html",
   "rhs": "renderAttackFlow(af.nodes || [], af.summary || {})"
  },
  {
   "sink_id": "soonPanel:if (el) el:=:4b2a80780dc0",
-  "line": 18255,
+  "line": 18926,
   "function": "soonPanel",
   "target": "if (el) el",
   "op": "=",
@@ -5136,7 +5136,7 @@
  },
  {
   "sink_id": "soonPanel:if (el) el:=:57e4ff8ae29b",
-  "line": 18234,
+  "line": 18905,
   "function": "soonPanel",
   "target": "if (el) el",
   "op": "=",
@@ -5144,12 +5144,12 @@
   "final_category": "unescaped_html",
   "severity_tier": 4,
   "data_source_tags": "",
-  "trace_notes": "renderVariantCoverage() @L18455 (scope-resolved): 11 return(s) -> unescaped_html",
+  "trace_notes": "renderVariantCoverage() @L15123 (scope-resolved): 11 return(s) -> unescaped_html",
   "rhs": "renderVariantCoverage(cov)"
  },
  {
   "sink_id": "soonPanel:if (el) el:=:9d4d108e29ef",
-  "line": 18237,
+  "line": 18908,
   "function": "soonPanel",
   "target": "if (el) el",
   "op": "=",
@@ -5162,7 +5162,7 @@
  },
  {
   "sink_id": "soonPanel:if (findingsEl) findingsEl:=:1ab55760a1c3",
-  "line": 18209,
+  "line": 18880,
   "function": "soonPanel",
   "target": "if (findingsEl) findingsEl",
   "op": "=",
@@ -5170,12 +5170,12 @@
   "final_category": "unescaped_html",
   "severity_tier": 4,
   "data_source_tags": "",
-  "trace_notes": "renderRunFindings() @L19081 (scope-resolved): 3 return(s) -> unescaped_html",
+  "trace_notes": "renderRunFindings() @L15749 (scope-resolved): 3 return(s) -> unescaped_html",
   "rhs": "renderRunFindings(rep)"
  },
  {
   "sink_id": "soonPanel:if (findingsEl) findingsEl:=:af0652ed63c6",
-  "line": 18217,
+  "line": 18888,
   "function": "soonPanel",
   "target": "if (findingsEl) findingsEl",
   "op": "=",
@@ -5188,7 +5188,7 @@
  },
  {
   "sink_id": "soonPanel:if (findingsElEarly) findingsElEarly:=:5ddfcb3cebd4",
-  "line": 18263,
+  "line": 18934,
   "function": "soonPanel",
   "target": "if (findingsElEarly) findingsElEarly",
   "op": "=",
@@ -5196,12 +5196,12 @@
   "final_category": "static",
   "severity_tier": 0,
   "data_source_tags": "",
-  "trace_notes": "1 assignment(s) to 'notReady' inside viewRunResults() @L17635 (scope-resolved) -> static",
+  "trace_notes": "1 assignment(s) to 'notReady' inside viewRunResults() @L18306 (scope-resolved) -> static",
   "rhs": "notReady"
  },
  {
   "sink_id": "soonPanel:if (iocElEarly) iocElEarly:=:5ddfcb3cebd4",
-  "line": 18267,
+  "line": 18938,
   "function": "soonPanel",
   "target": "if (iocElEarly) iocElEarly",
   "op": "=",
@@ -5209,12 +5209,12 @@
   "final_category": "static",
   "severity_tier": 0,
   "data_source_tags": "",
-  "trace_notes": "1 assignment(s) to 'notReady' inside viewRunResults() @L17635 (scope-resolved) -> static",
+  "trace_notes": "1 assignment(s) to 'notReady' inside viewRunResults() @L18306 (scope-resolved) -> static",
   "rhs": "notReady"
  },
  {
   "sink_id": "soonPanel:if (recEl) recEl:=:cc3ff533d162",
-  "line": 18211,
+  "line": 18882,
   "function": "soonPanel",
   "target": "if (recEl) recEl",
   "op": "=",
@@ -5222,12 +5222,12 @@
   "final_category": "unescaped_html",
   "severity_tier": 4,
   "data_source_tags": "",
-  "trace_notes": "renderRunRecommendations() @L19108 (scope-resolved): 3 return(s) -> unescaped_html",
+  "trace_notes": "renderRunRecommendations() @L15776 (scope-resolved): 3 return(s) -> unescaped_html",
   "rhs": "renderRunRecommendations(rep)"
  },
  {
   "sink_id": "soonPanel:if (recEl) recEl:=:f64c73cc64ef",
-  "line": 18219,
+  "line": 18890,
   "function": "soonPanel",
   "target": "if (recEl) recEl",
   "op": "=",
@@ -5240,7 +5240,7 @@
  },
  {
   "sink_id": "soonPanel:if (recElEarly) recElEarly:=:5ddfcb3cebd4",
-  "line": 18265,
+  "line": 18936,
   "function": "soonPanel",
   "target": "if (recElEarly) recElEarly",
   "op": "=",
@@ -5248,12 +5248,12 @@
   "final_category": "static",
   "severity_tier": 0,
   "data_source_tags": "",
-  "trace_notes": "1 assignment(s) to 'notReady' inside viewRunResults() @L17635 (scope-resolved) -> static",
+  "trace_notes": "1 assignment(s) to 'notReady' inside viewRunResults() @L18306 (scope-resolved) -> static",
   "rhs": "notReady"
  },
  {
   "sink_id": "soonPanel:reportsEl:=:a0e2dc3988f7",
-  "line": 18178,
+  "line": 18849,
   "function": "soonPanel",
   "target": "reportsEl",
   "op": "=",
@@ -5266,7 +5266,7 @@
  },
  {
   "sink_id": "soonPanel:reportsEl:=:ae6324141a3e",
-  "line": 18193,
+  "line": 18864,
   "function": "soonPanel",
   "target": "reportsEl",
   "op": "=",
@@ -5357,7 +5357,7 @@
  },
  {
   "sink_id": "stopVex:if (panel) panel:=:f892e36d9a7f",
-  "line": 21408,
+  "line": 21409,
   "function": "stopVex",
   "target": "if (panel) panel",
   "op": "=",
@@ -5487,7 +5487,7 @@
  },
  {
   "sink_id": "techOnBlur:panel:=:6f49cdbd80e1",
-  "line": 17413,
+  "line": 18084,
   "function": "techOnBlur",
   "target": "panel",
   "op": "=",
@@ -5500,7 +5500,7 @@
  },
  {
   "sink_id": "techOnInput:panel:=:6f49cdbd80e1",
-  "line": 17347,
+  "line": 18018,
   "function": "techOnInput",
   "target": "panel",
   "op": "=",
@@ -5513,7 +5513,7 @@
  },
  {
   "sink_id": "techOnKeydown:panel:=:6f49cdbd80e1",
-  "line": 17402,
+  "line": 18073,
   "function": "techOnKeydown",
   "target": "panel",
   "op": "=",
@@ -5526,7 +5526,7 @@
  },
  {
   "sink_id": "techRenderResults:panel:=:80cdc4a637c4",
-  "line": 17357,
+  "line": 18028,
   "function": "techRenderResults",
   "target": "panel",
   "op": "=",
@@ -5539,7 +5539,7 @@
  },
  {
   "sink_id": "techRenderResults:panel:=:a66308c636d4",
-  "line": 17361,
+  "line": 18032,
   "function": "techRenderResults",
   "target": "panel",
   "op": "=",
@@ -5552,7 +5552,7 @@
  },
  {
   "sink_id": "techRenderSelected:box:=:41fc3647c35b",
-  "line": 17297,
+  "line": 17968,
   "function": "techRenderSelected",
   "target": "box",
   "op": "=",
@@ -5565,7 +5565,7 @@
  },
  {
   "sink_id": "techRenderSelected:box:=:f4b5d505bc4a",
-  "line": 17307,
+  "line": 17978,
   "function": "techRenderSelected",
   "target": "box",
   "op": "=",
@@ -5578,7 +5578,7 @@
  },
  {
   "sink_id": "techSelectRow:panel:=:6f49cdbd80e1",
-  "line": 17378,
+  "line": 18049,
   "function": "techSelectRow",
   "target": "panel",
   "op": "=",
@@ -5851,7 +5851,7 @@
  },
  {
   "sink_id": "viewRunResults:document.getElementById('results-export'):=:6f49cdbd80e1",
-  "line": 17707,
+  "line": 18378,
   "function": "viewRunResults",
   "target": "document.getElementById('results-export')",
   "op": "=",
@@ -5864,7 +5864,7 @@
  },
  {
   "sink_id": "viewRunResults:document.getElementById('results-header-actions'):=:8d3e295873f1",
-  "line": 17735,
+  "line": 18406,
   "function": "viewRunResults",
   "target": "document.getElementById('results-header-actions')",
   "op": "=",
@@ -5872,12 +5872,12 @@
   "final_category": "unescaped_html",
   "severity_tier": 4,
   "data_source_tags": "",
-  "trace_notes": "2 assignment(s) to 'actionsHtml' inside viewRunResults() @L17635 (scope-resolved) -> unescaped_html",
+  "trace_notes": "2 assignment(s) to 'actionsHtml' inside viewRunResults() @L18306 (scope-resolved) -> unescaped_html",
   "rhs": "actionsHtml"
  },
  {
   "sink_id": "viewRunResults:document.getElementById('results-summary'):=:14ac4be88bd0",
-  "line": 17695,
+  "line": 18366,
   "function": "viewRunResults",
   "target": "document.getElementById('results-summary')",
   "op": "=",
@@ -5890,7 +5890,7 @@
  },
  {
   "sink_id": "viewRunResults:document.getElementById('results-summary'):=:b5178044b390",
-  "line": 17690,
+  "line": 18361,
   "function": "viewRunResults",
   "target": "document.getElementById('results-summary')",
   "op": "=",
@@ -5903,7 +5903,7 @@
  },
  {
   "sink_id": "viewRunResults:document.getElementById('results-title'):=:5ca182313248",
-  "line": 17713,
+  "line": 18384,
   "function": "viewRunResults",
   "target": "document.getElementById('results-title')",
   "op": "=",

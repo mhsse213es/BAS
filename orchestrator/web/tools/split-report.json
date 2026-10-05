@@ -168,8 +168,12 @@
       "imports": 2,
       "inits": 0
     },
+    "features/variant-report.js": {
+      "imports": 2,
+      "inits": 0
+    },
     "legacy.js": {
-      "imports": 18,
+      "imports": 19,
       "inits": 1
     }
   }

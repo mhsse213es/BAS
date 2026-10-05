@@ -201,6 +201,10 @@
     {
       "header": "Attack Path Collection",
       "module": "features/attack-path.js"
+    },
+    {
+      "header": "Variant Coverage Report rendering",
+      "module": "features/variant-report.js"
     }
   ],
   "pin": {

@@ -25,6 +25,7 @@ import './features/scheduled.js';
 import { __init_L19932, __init_L5162, __init_L5212, __init_L5490, __init_L5494 } from './features/shell.js';
 import './features/threat-intel.js';
 import './features/variant-executor.js';
+import './features/variant-report.js';
 import { __init_L16846 } from './legacy.js';
 
 installGlobals();
