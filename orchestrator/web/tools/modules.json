@@ -125,6 +125,18 @@
     {
       "header": "Dashboard ITSM widget",
       "module": "features/findings.js"
+    },
+    {
+      "header": "Integrations tab",
+      "module": "features/integrations.js"
+    },
+    {
+      "header": "EPP Response Connectors",
+      "module": "features/integrations.js"
+    },
+    {
+      "header": "Respond (EPP response actions",
+      "module": "features/integrations.js"
     }
   ],
   "pin": {

@@ -85,7 +85,7 @@
       "inits": 0
     },
     "features/agent-actions.js": {
-      "imports": 3,
+      "imports": 4,
       "inits": 0
     },
     "features/audit-logs.js": {
@@ -116,6 +116,10 @@
       "imports": 5,
       "inits": 0
     },
+    "features/integrations.js": {
+      "imports": 6,
+      "inits": 0
+    },
     "features/iocs.js": {
       "imports": 6,
       "inits": 0
@@ -125,7 +129,7 @@
       "inits": 0
     },
     "features/shell.js": {
-      "imports": 16,
+      "imports": 17,
       "inits": 5
     },
     "features/threat-intel.js": {
