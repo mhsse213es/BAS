@@ -4,7 +4,8 @@
   "sections": [],
   "pin": {
     "escapeHTML": "core/escape.js",
-    "x": "core/escape.js"
+    "x": "core/escape.js",
+    "apicall": "core/api.js"
   },
   "windowVars": ["_groupSel", "_tmplGroupSel", "_vexGroupSel", "_vexRunGroupSel"],
   "windowFns": ["renderGroupTargetSummary", "renderRunMode", "renderTmplGroupSummary", "renderTmplOSCompat", "renderVexGroupSummary", "renderVexRunGroupSummary"],

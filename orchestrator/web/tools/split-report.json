@@ -44,12 +44,16 @@
     "scenarios"
   ],
   "modules": {
+    "core/api.js": {
+      "imports": 1,
+      "inits": 0
+    },
     "core/escape.js": {
       "imports": 0,
       "inits": 0
     },
     "legacy.js": {
-      "imports": 2,
+      "imports": 3,
       "inits": 12
     }
   }
