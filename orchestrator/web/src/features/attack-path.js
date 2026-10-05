@@ -9,10 +9,10 @@ import { loadAuditLogs, loadBackups, loadLicenseInfo } from './audit-logs.js';
 import { loadCalderaStatus } from './compliance.js';
 import { loadUsers } from './evidence.js';
 import { loadOpenAEVConfig, renderAttackPath } from './openaev.js';
+import { loadRuns, loadSIEMCorrelationPanel } from './reports.js';
 import { SCHED, renderScheduledAssessmentsList } from './scheduled.js';
 import { ROLE, STRIPE_COLORS, scenarioSrcCollapsed, setAgentsView } from './shell.js';
 import { loadARTContentStatus, loadConnectorStatus, loadTAXIIConnectors, loadThreatIntelConfig } from './threat-intel.js';
-import { loadRuns, loadSIEMCorrelationPanel } from '../legacy.js';
 
 
 // ── Attack Path Validation ─────────────────────────────────────────────────

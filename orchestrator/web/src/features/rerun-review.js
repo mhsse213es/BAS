@@ -6,8 +6,8 @@ import { showToast } from '../core/util.js';
 import { CMP, loadCampaigns } from './campaigns.js';
 import { refreshDashboardCampaigns } from './compliance.js';
 import { closeResults } from './iocs.js';
+import { MODE_LABELS, scenarioFramework } from './reports.js';
 import { showTab } from './shell.js';
-import { MODE_LABELS, scenarioFramework } from '../legacy.js';
 
 
 // ── Re-run Review ────────────────────────────────────────────────────────────

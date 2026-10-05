@@ -6,8 +6,8 @@ import { ago, showToast } from '../core/util.js';
 import { loadAgents } from './attack-path.js';
 import { buildReportFilename, showDownloadOptions, triggerDownload } from './evidence.js';
 import { apArrow, apNodePill } from './openaev.js';
+import { openModal } from './reports.js';
 import { _riskScoreColor, _riskTrendBadge } from './shell.js';
-import { openModal } from '../legacy.js';
 
 
 /* ═══════════════════════════════════════════════════════════════════════════

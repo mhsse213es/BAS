@@ -3,7 +3,7 @@ import { state } from '../core/state.js';
 import { apicall } from '../core/api.js';
 import { x } from '../core/escape.js';
 import { showToast } from '../core/util.js';
-import { MODE_LABELS, verdictBadge, verdictCounts } from '../legacy.js';
+import { MODE_LABELS, verdictBadge, verdictCounts } from './reports.js';
 
 
 // ── Live Run Panel ────────────────────────────────────────────────────────────

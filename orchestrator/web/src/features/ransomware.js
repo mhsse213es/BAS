@@ -2,8 +2,8 @@
 import { state } from '../core/state.js';
 import { x } from '../core/escape.js';
 import { ago, showToast } from '../core/util.js';
+import { openModal } from './reports.js';
 import { _riskScoreColor, showTab } from './shell.js';
-import { openModal } from '../legacy.js';
 
 
 // ── Ransomware Readiness Module ───────────────────────────────────────────────

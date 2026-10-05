@@ -4,8 +4,8 @@ import { apicall } from '../core/api.js';
 import { x } from '../core/escape.js';
 import { daysAgo, fmtDate, showToast } from '../core/util.js';
 import { covSegHtml, statTileCard } from './attack-path.js';
+import { openModal, scenarioFramework } from './reports.js';
 import { ROLE, _riskScoreColor } from './shell.js';
-import { openModal, scenarioFramework } from '../legacy.js';
 
 
 // ── Findings ─────────────────────────────────────────────────────────────────

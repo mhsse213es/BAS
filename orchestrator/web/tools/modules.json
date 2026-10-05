@@ -213,6 +213,10 @@
     {
       "header": "Evidence Panel",
       "module": "features/evidence.js"
+    },
+    {
+      "header": "Reports",
+      "module": "features/reports.js"
     }
   ],
   "pin": {

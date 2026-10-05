@@ -4,9 +4,9 @@ import { apicall } from '../core/api.js';
 import { x } from '../core/escape.js';
 import { showToast } from '../core/util.js';
 import { agentGroupTree, gpFlattenGroups, renderScenarios, resolveGroupTargetAgents } from './attack-path.js';
+import { loadRuns } from './reports.js';
 import { schedAgentCompatible } from './scheduled.js';
 import { ROLE, showTab } from './shell.js';
-import { loadRuns } from '../legacy.js';
 
 // ── Threat Actor Library (Caldera emu adversary profiles) ──────────────────────
 

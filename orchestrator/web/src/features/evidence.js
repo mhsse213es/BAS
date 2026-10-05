@@ -9,9 +9,9 @@ import { loadComplianceScores, refreshDashboardCampaigns } from './compliance.js
 import { openTechnique } from './coverage.js';
 import { findingSevBadge, loadDashboardITSM, openFinding } from './findings.js';
 import { loadRansomwareReadiness } from './ransomware.js';
+import { additionalAgentIds, closeModal, loadRuns, openBuilder, openModal, resolvedAllTargetIds, resolvedGroupTargetIds, scenarioFramework, viewRunResults } from './reports.js';
 import { ROLE, _riskScoreColor, showTab, showTamperBanner } from './shell.js';
 import { killChainNodes } from './variant-report.js';
-import { additionalAgentIds, closeModal, loadRuns, openBuilder, openModal, resolvedAllTargetIds, resolvedGroupTargetIds, scenarioFramework, viewRunResults } from '../legacy.js';
 
 
 // ── Evidence Panel ────────────────────────────────────────────────────────────

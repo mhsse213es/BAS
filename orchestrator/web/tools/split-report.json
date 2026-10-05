@@ -152,6 +152,10 @@
       "imports": 5,
       "inits": 0
     },
+    "features/reports.js": {
+      "imports": 14,
+      "inits": 0
+    },
     "features/rerun-review.js": {
       "imports": 9,
       "inits": 0
@@ -178,10 +182,6 @@
     },
     "features/variants.js": {
       "imports": 10,
-      "inits": 0
-    },
-    "legacy.js": {
-      "imports": 14,
       "inits": 0
     }
   }

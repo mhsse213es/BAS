@@ -6,8 +6,8 @@ import { fmtDate, showToast } from '../core/util.js';
 import { covSegHtml, loadScenarios, tpTierBadge } from './attack-path.js';
 import { refreshDashboardCampaigns } from './compliance.js';
 import { findingSevBadge } from './findings.js';
+import { viewRunResults } from './reports.js';
 import { ROLE, _riskScoreColor, activateTab, showTab } from './shell.js';
-import { viewRunResults } from '../legacy.js';
 
 
 // ── Campaigns ────────────────────────────────────────────────────────────────
