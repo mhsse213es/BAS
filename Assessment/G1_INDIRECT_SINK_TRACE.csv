@@ -85,18 +85,3 @@ line,function,original_category,resolved_category,notes,rhs
 20337,populateVexTechniques,indirect_variable,unescaped_html,2 assignment(s) to 'tacOpts' inside populateVexTechniques() @L20314 (scope-resolved) -> unescaped_html,tacOpts
 20727,loadVariantCoverage,indirect_variable,partial_escaped,3 assignment(s) to 'html' inside loadVariantCoverage() @L20696 (scope-resolved) -> partial_escaped,html
 21094,renderVariantRun,indirect_variable,partial_escaped,24 assignment(s) to 'wrapperHtml' inside renderVariantRun() @L21027 (scope-resolved) -> partial_escaped,wrapperHtml
-22018,byStartedAtDesc,indirect_builder,unclear,no callable name found in rhs,allEntries.map(function(e) { return e.html; }).join('')
-22142,renderRunMode,indirect_variable,escaped,2 assignment(s) to 'osMismatchMsg' inside renderRunMode() @L22079 (scope-resolved) -> escaped,osMismatchMsg
-22174,renderRunMode,indirect_variable,unescaped_html,2 assignment(s) to 'warnText' inside renderRunMode() @L22079 (scope-resolved) -> unescaped_html,warnText
-22189,renderRunMode,indirect_variable,escaped,2 assignment(s) to 'osMismatchMsg' inside renderRunMode() @L22079 (scope-resolved) -> escaped,osMismatchMsg
-22497,row,indirect_variable,unescaped_html,3 assignment(s) to 'html' inside renderWizardReview() @L22400 (scope-resolved) -> unescaped_html,html
-23007,renderModalSelection,indirect_variable,indirect_variable,1 assignment(s) to 'cached' inside renderModalSelection() @L22908 (scope-resolved) -> indirect_variable,cached
-23736,viewRunResults,indirect_variable,unescaped_html,2 assignment(s) to 'actionsHtml' inside viewRunResults() @L23636 (scope-resolved) -> unescaped_html,actionsHtml
-24208,soonPanel,indirect_builder,partial_escaped,renderRunReportExtra() @L19845 (scope-resolved): 5 return(s) -> partial_escaped,renderRunReportExtra(rep)
-24210,soonPanel,indirect_builder,unescaped_html,renderRunFindings() @L20141 (scope-resolved): 3 return(s) -> unescaped_html,renderRunFindings(rep)
-24212,soonPanel,indirect_builder,unescaped_html,renderRunRecommendations() @L20168 (scope-resolved): 3 return(s) -> unescaped_html,renderRunRecommendations(rep)
-24226,soonPanel,indirect_builder,unescaped_html,renderAttackFlow() @L19721 (scope-resolved): 6 return(s) -> unescaped_html,"renderAttackFlow(af.nodes || [], af.summary || {})"
-24235,soonPanel,indirect_builder,unescaped_html,renderVariantCoverage() @L19515 (scope-resolved): 11 return(s) -> unescaped_html,renderVariantCoverage(cov)
-24264,soonPanel,indirect_variable,static,1 assignment(s) to 'notReady' inside viewRunResults() @L23636 (scope-resolved) -> static,notReady
-24266,soonPanel,indirect_variable,static,1 assignment(s) to 'notReady' inside viewRunResults() @L23636 (scope-resolved) -> static,notReady
-24268,soonPanel,indirect_variable,static,1 assignment(s) to 'notReady' inside viewRunResults() @L23636 (scope-resolved) -> static,notReady

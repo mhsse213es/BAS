@@ -1,7 +1,7 @@
 // G1c generator: frozen monolith -> web/index.html, styles/app.css, src/**.
 // Verbatim by construction: only the edits listed in the plan's
 // "Generator rules" are applied. Run: node tools/split.mjs [--check]
-import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync, rmSync } from 'node:fs';
 import { dirname, join, relative, posix } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { analyzeScript } from './analyze.mjs';
@@ -233,6 +233,21 @@ export function splitMonolith(html, cfg) {
   return { files, report };
 }
 
+// Generated .js files under src/ that this run no longer produces (e.g. a
+// module whose last chunk moved elsewhere). Left on disk they would still be
+// inlined into the G1 classifier view and scanned by the registry check.
+export function staleFiles(webDir, files) {
+  const out = [];
+  (function walk(rel) {
+    for (const e of readdirSync(join(webDir, rel), { withFileTypes: true })) {
+      const p = `${rel}/${e.name}`;
+      if (e.isDirectory()) walk(p);
+      else if (p.endsWith('.js') && !files.has(p)) out.push(p);
+    }
+  })('src');
+  return out.sort();
+}
+
 // ── CLI
 const here = dirname(fileURLToPath(import.meta.url));
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
@@ -241,10 +256,12 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   const { files, report } = splitMonolith(readFileSync(join(here, 'monolith.html'), 'utf8'), cfg);
   if (process.argv.includes('--check')) {
     const drift = [...files].filter(([p, t]) => !existsSync(join(web, p)) || readFileSync(join(web, p), 'utf8') !== t).map(([p]) => p);
+    for (const p of staleFiles(web, files)) drift.push(`${p} (stale: no longer generated)`);
     if (drift.length) { console.error('generated files differ from committed:\n  ' + drift.join('\n  ')); process.exit(1); }
     console.log(`split:check OK (${files.size} files)`);
   } else {
     for (const [p, t] of files) { mkdirSync(dirname(join(web, p)), { recursive: true }); writeFileSync(join(web, p), t); }
+    for (const p of staleFiles(web, files)) { rmSync(join(web, p)); console.log(`removed stale ${p}`); }
     writeFileSync(join(here, 'split-report.json'), JSON.stringify(report, null, 2) + '\n');
     console.log(`wrote ${files.size} files; report: tools/split-report.json`);
   }

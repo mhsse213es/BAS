@@ -1,7 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { analyzeScript } from '../../tools/analyze.mjs';
-import { splitMonolith } from '../../tools/split.mjs';
+import { splitMonolith, staleFiles } from '../../tools/split.mjs';
+import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 // Builds a minimal monolith with the real file's fixed line layout:
 // lines 1-10 head, 11 <style>, 12-1320 css, 1321 </style>, 1322-5160 markup,
@@ -115,4 +118,13 @@ test('window.NAME writes of undeclared names are registered verbatim', () => {
   const out = splitMonolith(monolith(js), cfg());
   assert.match(file(out, 'src/globals.js'), /WINDOW_WRITES = \[\s*'openRunPanel'/);
   assert.match(file(out, 'src/legacy.js'), /window\.openRunPanel = function\(\)\{\};/);
+});
+
+test('a src file the generator no longer produces is reported as stale', () => {
+  // legacy.js outlived its last chunk (row 10.29) and was inlined into the G1 view twice.
+  const web = mkdtempSync(join(tmpdir(), 'split-'));
+  mkdirSync(join(web, 'src', 'features'), { recursive: true });
+  for (const p of ['src/main.js', 'src/legacy.js', 'src/features/a.js', 'src/notes.txt']) writeFileSync(join(web, p), '');
+  const files = new Map([['src/main.js', ''], ['src/features/a.js', ''], ['index.html', '']]);
+  assert.deepEqual(staleFiles(web, files), ['src/legacy.js']);
 });

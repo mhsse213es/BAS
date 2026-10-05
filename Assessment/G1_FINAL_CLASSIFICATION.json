@@ -104,19 +104,6 @@
   "rhs": "'<div class=\"bld-step-hdr\"><span class=\"bld-step-num\">Step</span>' +\n      '<span class=\"bld-actions\">' +\n        '<button type=\"button\" onclick=\"moveStep(this,-1)\" title=\"Move up\">&#9650;</button>' +\n        '<button type=\"button\" onclick=\"moveStep(this,1)\" title=\"Move down\">&#9660;</button>' +\n        '<button type=\"button\" onclick=\"removeStep(this)\" title=\"Remove\">&#10005;</button>' +\n      '</"
  },
  {
-  "sink_id": "addStep:div:=:7ac68f61520c",
-  "line": 23434,
-  "function": "addStep",
-  "target": "div",
-  "op": "=",
-  "baseline_category": "partial_escaped",
-  "final_category": "partial_escaped",
-  "severity_tier": 3,
-  "data_source_tags": "user_created_name",
-  "trace_notes": "",
-  "rhs": "'<div class=\"bld-step-hdr\"><span class=\"bld-step-num\">Step</span>' +\n      '<span class=\"bld-actions\">' +\n        '<button type=\"button\" onclick=\"moveStep(this,-1)\" title=\"Move up\">&#9650;</button>' +\n        '<button type=\"button\" onclick=\"moveStep(this,1)\" title=\"Move down\">&#9660;</button>' +\n        '<button type=\"button\" onclick=\"removeStep(this)\" title=\"Remove\">&#10005;</button>' +\n      '</"
- },
- {
   "sink_id": "aggOf:document.getElementById('dash-gauge'):=:c2776b093e85",
   "line": 11605,
   "function": "aggOf",
@@ -273,34 +260,8 @@
   "rhs": "allEntries.map(function(e) { return e.html; }).join('')"
  },
  {
-  "sink_id": "byStartedAtDesc:tbody:=:a84861ce6bf1",
-  "line": 22018,
-  "function": "byStartedAtDesc",
-  "target": "tbody",
-  "op": "=",
-  "baseline_category": "indirect_builder",
-  "final_category": "partial_escaped",
-  "severity_tier": 3,
-  "data_source_tags": "",
-  "trace_notes": "e.html is runRowHtml(r) or _sweepRowHtml(payload,opts); both builders are partial_escaped (documented runId / opts gaps, accepted as low-risk).",
-  "rhs": "allEntries.map(function(e) { return e.html; }).join('')"
- },
- {
   "sink_id": "byStartedAtDesc:tbody:=:f78d2a49fc20",
   "line": 15190,
-  "function": "byStartedAtDesc",
-  "target": "tbody",
-  "op": "=",
-  "baseline_category": "unescaped_text",
-  "final_category": "unescaped_text",
-  "severity_tier": 4,
-  "data_source_tags": "",
-  "trace_notes": "",
-  "rhs": "individualRuns.slice().sort(byStartedAtDesc).map(runRowHtml).join('')"
- },
- {
-  "sink_id": "byStartedAtDesc:tbody:=:f78d2a49fc20",
-  "line": 21982,
   "function": "byStartedAtDesc",
   "target": "tbody",
   "op": "=",
@@ -520,19 +481,6 @@
   "rhs": "'<option value=\"all\">All tactics</option>' +\n        Object.keys(tacticSet).sort().map(function(t) {\n          return '<option value=\"' + x(t) + '\">' + x(t) + '</option>';\n        }).join('')"
  },
  {
-  "sink_id": "doOpen:tacticSel:=:84dac746f49b",
-  "line": 23075,
-  "function": "doOpen",
-  "target": "tacticSel",
-  "op": "=",
-  "baseline_category": "escaped",
-  "final_category": "escaped",
-  "severity_tier": 1,
-  "data_source_tags": "",
-  "trace_notes": "",
-  "rhs": "'<option value=\"all\">All tactics</option>' +\n        Object.keys(tacticSet).sort().map(function(t) {\n          return '<option value=\"' + x(t) + '\">' + x(t) + '</option>';\n        }).join('')"
- },
- {
   "sink_id": "expCard:body:=:0218a335dcfb",
   "line": 6092,
   "function": "expCard",
@@ -626,19 +574,6 @@
  {
   "sink_id": "fillBuilder:steps:=:6f49cdbd80e1",
   "line": 16336,
-  "function": "fillBuilder",
-  "target": "steps",
-  "op": "=",
-  "baseline_category": "static_empty",
-  "final_category": "static_empty",
-  "severity_tier": 0,
-  "data_source_tags": "",
-  "trace_notes": "",
-  "rhs": "''"
- },
- {
-  "sink_id": "fillBuilder:steps:=:6f49cdbd80e1",
-  "line": 23128,
   "function": "fillBuilder",
   "target": "steps",
   "op": "=",
@@ -782,19 +717,6 @@
  {
   "sink_id": "kpiGaugeCard:document.getElementById('run-kpi-strip'):=:9f61190ab079",
   "line": 16994,
-  "function": "kpiGaugeCard",
-  "target": "document.getElementById('run-kpi-strip')",
-  "op": "=",
-  "baseline_category": "partial_escaped",
-  "final_category": "partial_escaped",
-  "severity_tier": 3,
-  "data_source_tags": "",
-  "trace_notes": "",
-  "rhs": "'<div class=\"kpi-row\" style=\"grid-template-columns:repeat(6,1fr)\">' +\n          '<div class=\"kpi-card\"><div class=\"kpi-label\">Overall Security Score</div><div class=\"kpi-value\">' + prevPct + '<span style=\"font-size:0.9rem;color:var(--muted)\">/100</span></div><div class=\"kpi-sub\">' + (deltaHtml || '—') + '</div></div>' +\n          kpiGaugeCard('Detection Rate', detRate, pass + ' / ' + results.lengt"
- },
- {
-  "sink_id": "kpiGaugeCard:document.getElementById('run-kpi-strip'):=:9f61190ab079",
-  "line": 23786,
   "function": "kpiGaugeCard",
   "target": "document.getElementById('run-kpi-strip')",
   "op": "=",
@@ -1963,34 +1885,8 @@
   "rhs": "'<div class=\"empty\" style=\"padding:1.25rem\">Could not load agents.</div>'"
  },
  {
-  "sink_id": "loadReports:document.getElementById('rep-available'):=:568454456a1f",
-  "line": 21587,
-  "function": "loadReports",
-  "target": "document.getElementById('rep-available')",
-  "op": "=",
-  "baseline_category": "static",
-  "final_category": "static",
-  "severity_tier": 0,
-  "data_source_tags": "agent",
-  "trace_notes": "",
-  "rhs": "'<div class=\"empty\" style=\"padding:1.25rem\">Could not load agents.</div>'"
- },
- {
   "sink_id": "loadReports:el:=:211a4d2abf4a",
   "line": 14778,
-  "function": "loadReports",
-  "target": "el",
-  "op": "=",
-  "baseline_category": "static",
-  "final_category": "static",
-  "severity_tier": 0,
-  "data_source_tags": "",
-  "trace_notes": "",
-  "rhs": "'<div class=\"empty\" style=\"padding:1.25rem\">No agents with completed runs yet. Run a scenario, then generate its report here.</div>'"
- },
- {
-  "sink_id": "loadReports:el:=:211a4d2abf4a",
-  "line": 21570,
   "function": "loadReports",
   "target": "el",
   "op": "=",
@@ -2015,19 +1911,6 @@
   "rhs": "ids.map(function(id) {\n      var host = hostOf[id] || id, n = byAgent[id].runs, lastName = byAgent[id].lastName;\n      return '<div class=\"rep-row\">' +\n        '<div class=\"rep-ic\">' + d + '</div>' +\n        '<div class=\"rep-main\"><div class=\"rep-host\">' + x(host) + '</div>' +\n          '<div class=\"rep-sub\">Reports on: <strong class=\"u-text\">' + x(lastName || 'unnamed scenario') + '</strong> (lat"
  },
  {
-  "sink_id": "loadReports:el:=:b1f98f11e298",
-  "line": 21574,
-  "function": "loadReports",
-  "target": "el",
-  "op": "=",
-  "baseline_category": "unescaped_html",
-  "final_category": "unescaped_html",
-  "severity_tier": 4,
-  "data_source_tags": "",
-  "trace_notes": "",
-  "rhs": "ids.map(function(id) {\n      var host = hostOf[id] || id, n = byAgent[id].runs, lastName = byAgent[id].lastName;\n      return '<div class=\"rep-row\">' +\n        '<div class=\"rep-ic\">' + d + '</div>' +\n        '<div class=\"rep-main\"><div class=\"rep-host\">' + x(host) + '</div>' +\n          '<div class=\"rep-sub\">Reports on: <strong class=\"u-text\">' + x(lastName || 'unnamed scenario') + '</strong> (lat"
- },
- {
   "sink_id": "loadRuns:tbody:=:f259d05495ad",
   "line": 15173,
   "function": "loadRuns",
@@ -2041,34 +1924,8 @@
   "rhs": "'<tr><td colspan=\"9\" class=\"empty\">No runs yet. Go to Scenarios and run one.</td></tr>'"
  },
  {
-  "sink_id": "loadRuns:tbody:=:f259d05495ad",
-  "line": 21965,
-  "function": "loadRuns",
-  "target": "tbody",
-  "op": "=",
-  "baseline_category": "static",
-  "final_category": "static",
-  "severity_tier": 0,
-  "data_source_tags": "",
-  "trace_notes": "",
-  "rhs": "'<tr><td colspan=\"9\" class=\"empty\">No runs yet. Go to Scenarios and run one.</td></tr>'"
- },
- {
   "sink_id": "loadSIEMCorrelationPanel:el:=:a0696ac13148",
   "line": 17628,
-  "function": "loadSIEMCorrelationPanel",
-  "target": "el",
-  "op": "=",
-  "baseline_category": "partial_escaped",
-  "final_category": "partial_escaped",
-  "severity_tier": 3,
-  "data_source_tags": "",
-  "trace_notes": "",
-  "rhs": "'<div style=\"padding:1rem 0 0.5rem\">' +\n        '<div style=\"display:flex;gap:1.5rem;margin-bottom:1rem;flex-wrap:wrap\">' +\n          '<div class=\"u-center\">' +\n            '<div style=\"font-size:1.7rem;font-weight:700;color:' + color + '\">' + detRate + '%</div>' +\n            '<div style=\"font-size:0.68rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em\">SIEM Detection Rate</div>"
- },
- {
-  "sink_id": "loadSIEMCorrelationPanel:el:=:a0696ac13148",
-  "line": 24420,
   "function": "loadSIEMCorrelationPanel",
   "target": "el",
   "op": "=",
@@ -2678,34 +2535,8 @@
   "rhs": "state.agents.map(function(a) {\n    var osLabel = '';\n    if (a.osVersion) {\n      var ov = a.osVersion.toLowerCase();\n      osLabel = ov.indexOf('windows') !== -1 ? ' [Win]' : ov.indexOf('darwin') !== -1 || ov.indexOf('macos') !== -1 ? ' [macOS]' : ' [Linux]';\n    }\n    return '<option value=\"' + x(a.agentId) + '\"' + (a.agentId === preAgent ? ' selected' : '') + '>' +\n           x(a.agentId) + ' —"
  },
  {
-  "sink_id": "openModal:document.getElementById('modal-agent'):=:aec9738cf908",
-  "line": 22040,
-  "function": "openModal",
-  "target": "document.getElementById('modal-agent')",
-  "op": "=",
-  "baseline_category": "unescaped_html",
-  "final_category": "unescaped_html",
-  "severity_tier": 4,
-  "data_source_tags": "agent",
-  "trace_notes": "",
-  "rhs": "state.agents.map(function(a) {\n    var osLabel = '';\n    if (a.osVersion) {\n      var ov = a.osVersion.toLowerCase();\n      osLabel = ov.indexOf('windows') !== -1 ? ' [Win]' : ov.indexOf('darwin') !== -1 || ov.indexOf('macos') !== -1 ? ' [macOS]' : ' [Linux]';\n    }\n    return '<option value=\"' + x(a.agentId) + '\"' + (a.agentId === preAgent ? ' selected' : '') + '>' +\n           x(a.agentId) + ' —"
- },
- {
   "sink_id": "openModal:scSel:=:99fea35738b6",
   "line": 15237,
-  "function": "openModal",
-  "target": "scSel",
-  "op": "=",
-  "baseline_category": "escaped",
-  "final_category": "escaped",
-  "severity_tier": 1,
-  "data_source_tags": "scenario,user_created_name",
-  "trace_notes": "",
-  "rhs": "state.scenarios.map(function(s) {\n    var desc = s.description ? ' — ' + (s.description.length > 90 ? s.description.substring(0, 87) + '...' : s.description) : '';\n    return '<option value=\"' + x(s.id) + '\"' + (s.id === scenarioId ? ' selected' : '') + '>' + x(s.name) + x(desc) + '</option>';\n  }).join('')"
- },
- {
-  "sink_id": "openModal:scSel:=:99fea35738b6",
-  "line": 22029,
   "function": "openModal",
   "target": "scSel",
   "op": "=",
@@ -2756,19 +2587,6 @@
   "rhs": "'<option value=\"all\">All tactics</option>' + tacticOpts"
  },
  {
-  "sink_id": "openPickerWith:tacticSel:=:56ff914bbfc9",
-  "line": 22663,
-  "function": "openPickerWith",
-  "target": "tacticSel",
-  "op": "=",
-  "baseline_category": "unescaped_html",
-  "final_category": "unescaped_html",
-  "severity_tier": 4,
-  "data_source_tags": "",
-  "trace_notes": "",
-  "rhs": "'<option value=\"all\">All tactics</option>' + tacticOpts"
- },
- {
   "sink_id": "openRemediation:document.getElementById('results-export'):=:2816ca742c36",
   "line": 12187,
   "function": "openRemediation",
@@ -2795,19 +2613,6 @@
   "rhs": "state.agents.map(function(a) {\n    return '<option value=\"' + x(a.agentId) + '\">' + x(a.agentId) + ' — ' + x(a.hostname) + '</option>';\n  }).join('')"
  },
  {
-  "sink_id": "openReportGen:document.getElementById('rep-agent'):=:449a6c764d46",
-  "line": 21641,
-  "function": "openReportGen",
-  "target": "document.getElementById('rep-agent')",
-  "op": "=",
-  "baseline_category": "escaped",
-  "final_category": "escaped",
-  "severity_tier": 1,
-  "data_source_tags": "agent",
-  "trace_notes": "",
-  "rhs": "state.agents.map(function(a) {\n    return '<option value=\"' + x(a.agentId) + '\">' + x(a.agentId) + ' — ' + x(a.hostname) + '</option>';\n  }).join('')"
- },
- {
   "sink_id": "openReportGen:document.getElementById('rep-format'):=:f36948ae35eb",
   "line": 14853,
   "function": "openReportGen",
@@ -2821,34 +2626,8 @@
   "rhs": "fmts.map(function(f) {\n    var lbl = f ? f.toUpperCase() : 'Package';\n    if (type === 'posture' && f === 'csv') lbl = 'CSV (forensic)';\n    return '<option value=\"' + f + '\">' + lbl + '</option>';\n  }).join('')"
  },
  {
-  "sink_id": "openReportGen:document.getElementById('rep-format'):=:f36948ae35eb",
-  "line": 21645,
-  "function": "openReportGen",
-  "target": "document.getElementById('rep-format')",
-  "op": "=",
-  "baseline_category": "unescaped_html",
-  "final_category": "unescaped_html",
-  "severity_tier": 4,
-  "data_source_tags": "",
-  "trace_notes": "",
-  "rhs": "fmts.map(function(f) {\n    var lbl = f ? f.toUpperCase() : 'Package';\n    if (type === 'posture' && f === 'csv') lbl = 'CSV (forensic)';\n    return '<option value=\"' + f + '\">' + lbl + '</option>';\n  }).join('')"
- },
- {
   "sink_id": "openReportGen:document.getElementById('rep-fw'):=:cf81daeadfa1",
   "line": 14862,
-  "function": "openReportGen",
-  "target": "document.getElementById('rep-fw')",
-  "op": "=",
-  "baseline_category": "escaped",
-  "final_category": "escaped",
-  "severity_tier": 1,
-  "data_source_tags": "user_created_name",
-  "trace_notes": "",
-  "rhs": "(fws || []).map(function(f) {\n        return '<option value=\"' + x(f.id) + '\">' + x(f.name || f.id) + '</option>';\n      }).join('')"
- },
- {
-  "sink_id": "openReportGen:document.getElementById('rep-fw'):=:cf81daeadfa1",
-  "line": 21654,
   "function": "openReportGen",
   "target": "document.getElementById('rep-fw')",
   "op": "=",
@@ -3289,19 +3068,6 @@
   "rhs": "eligible.map(function(a) {\n    return '<label style=\"display:flex;align-items:center;gap:0.5rem;padding:0.25rem 0.3rem;cursor:pointer\">' +\n      '<input type=\"checkbox\" ' + (state._addlSel[a.agentId] ? 'checked' : '') +\n      ' onchange=\"_addlSel[\\'' + x(a.agentId) + '\\']=this.checked;renderAdditionalAgentsCount()\">' +\n      '<code style=\"font-size:0.72rem\">' + x(a.agentId) + '</code><span class=\""
  },
  {
-  "sink_id": "renderAdditionalAgents:list:=:afe12f0f5138",
-  "line": 22244,
-  "function": "renderAdditionalAgents",
-  "target": "list",
-  "op": "=",
-  "baseline_category": "unescaped_html",
-  "final_category": "unescaped_html",
-  "severity_tier": 4,
-  "data_source_tags": "agent",
-  "trace_notes": "",
-  "rhs": "eligible.map(function(a) {\n    return '<label style=\"display:flex;align-items:center;gap:0.5rem;padding:0.25rem 0.3rem;cursor:pointer\">' +\n      '<input type=\"checkbox\" ' + (state._addlSel[a.agentId] ? 'checked' : '') +\n      ' onchange=\"_addlSel[\\'' + x(a.agentId) + '\\']=this.checked;renderAdditionalAgentsCount()\">' +\n      '<code style=\"font-size:0.72rem\">' + x(a.agentId) + '</code><span class=\""
- },
- {
   "sink_id": "renderAdvRunWarn:warn:=:2a45fbf139c8",
   "line": 4544,
   "function": "renderAdvRunWarn",
@@ -3731,19 +3497,6 @@
   "rhs": "'<div style=\"padding:1rem 0 0.5rem\">' +\n      '<div style=\"display:flex;gap:1.5rem;margin-bottom:0.75rem;flex-wrap:wrap\">' +\n        '<div class=\"u-center\">' +\n          '<div style=\"font-size:1.7rem;font-weight:700;color:' + covColor + '\">' + coverage + '%</div>' +\n          '<div style=\"font-size:0.68rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em\">Detection Coverage</div>' "
  },
  {
-  "sink_id": "renderDetectionValidationTab:el:=:84cc57f30541",
-  "line": 24366,
-  "function": "renderDetectionValidationTab",
-  "target": "el",
-  "op": "=",
-  "baseline_category": "unescaped_html",
-  "final_category": "unescaped_html",
-  "severity_tier": 4,
-  "data_source_tags": "",
-  "trace_notes": "",
-  "rhs": "'<div style=\"padding:1rem 0 0.5rem\">' +\n      '<div style=\"display:flex;gap:1.5rem;margin-bottom:0.75rem;flex-wrap:wrap\">' +\n        '<div class=\"u-center\">' +\n          '<div style=\"font-size:1.7rem;font-weight:700;color:' + covColor + '\">' + coverage + '%</div>' +\n          '<div style=\"font-size:0.68rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em\">Detection Coverage</div>' "
- },
- {
   "sink_id": "renderEMSweepGroupList:list:=:2660b7c02980",
   "line": 9776,
   "function": "renderEMSweepGroupList",
@@ -4043,34 +3796,8 @@
   "rhs": "'&#128269; Detailed view — every atomic test that will run'"
  },
  {
-  "sink_id": "renderModalSelection:link:=:3ac9eb36dbbe",
-  "line": 22925,
-  "function": "renderModalSelection",
-  "target": "link",
-  "op": "=",
-  "baseline_category": "static",
-  "final_category": "static",
-  "severity_tier": 0,
-  "data_source_tags": "",
-  "trace_notes": "",
-  "rhs": "'&#128269; Detailed view — every atomic test that will run'"
- },
- {
   "sink_id": "renderModalSelection:link:=:a31134ee495c",
   "line": 16152,
-  "function": "renderModalSelection",
-  "target": "link",
-  "op": "=",
-  "baseline_category": "static",
-  "final_category": "static",
-  "severity_tier": 0,
-  "data_source_tags": "",
-  "trace_notes": "",
-  "rhs": "'&#9881; Customize — select a target agent first'"
- },
- {
-  "sink_id": "renderModalSelection:link:=:a31134ee495c",
-  "line": 22944,
   "function": "renderModalSelection",
   "target": "link",
   "op": "=",
@@ -4095,34 +3822,8 @@
   "rhs": "cached"
  },
  {
-  "sink_id": "renderModalSelection:note:=:3673014e72b6",
-  "line": 23007,
-  "function": "renderModalSelection",
-  "target": "note",
-  "op": "=",
-  "baseline_category": "indirect_variable",
-  "final_category": "escaped",
-  "severity_tier": 1,
-  "data_source_tags": "",
-  "trace_notes": "_postureSummaryCache is written by renderModalSelection's catNames.join(', ') (posture-catalog phase names), wrapped in x().",
-  "rhs": "cached"
- },
- {
   "sink_id": "renderModalSelection:note:=:6da56d2607de",
   "line": 16166,
-  "function": "renderModalSelection",
-  "target": "note",
-  "op": "=",
-  "baseline_category": "partial_escaped",
-  "final_category": "partial_escaped",
-  "severity_tier": 3,
-  "data_source_tags": "",
-  "trace_notes": "",
-  "rhs": "'&#9989; Running a selected subset: <strong>' + state._runSelection.ids.length + '</strong> ' + noun +\n      (state._runSelection.locked ? ' (targeted re-validate)' :\n       ' <a href=\"javascript:void(0)\" class=\"desc-toggle\" style=\"margin-left:8px\" onclick=\"clearSelection();return false;\">Clear</a>')"
- },
- {
-  "sink_id": "renderModalSelection:note:=:6da56d2607de",
-  "line": 22958,
   "function": "renderModalSelection",
   "target": "note",
   "op": "=",
@@ -4160,47 +3861,8 @@
   "rhs": "'<span class=\"u-muted\">Loading check catalog…</span>'"
  },
  {
-  "sink_id": "renderModalSelection:note:=:f6a1dba9d317",
-  "line": 22974,
-  "function": "renderModalSelection",
-  "target": "note",
-  "op": "=",
-  "baseline_category": "static",
-  "final_category": "static",
-  "severity_tier": 0,
-  "data_source_tags": "",
-  "trace_notes": "",
-  "rhs": "'<span class=\"u-muted\">Loading check catalog…</span>'"
- },
- {
-  "sink_id": "renderModalSelection:note:=:f6a1dba9d317",
-  "line": 23004,
-  "function": "renderModalSelection",
-  "target": "note",
-  "op": "=",
-  "baseline_category": "static",
-  "final_category": "static",
-  "severity_tier": 0,
-  "data_source_tags": "",
-  "trace_notes": "",
-  "rhs": "'<span class=\"u-muted\">Loading check catalog…</span>'"
- },
- {
   "sink_id": "renderPickerList:document.getElementById('picker-list'):=:86bc3b918fa9",
   "line": 16028,
-  "function": "renderPickerList",
-  "target": "document.getElementById('picker-list')",
-  "op": "=",
-  "baseline_category": "unescaped_html",
-  "final_category": "unescaped_html",
-  "severity_tier": 4,
-  "data_source_tags": "",
-  "trace_notes": "",
-  "rhs": "rows || '<p class=\"empty\" style=\"padding:1rem\">No matches.</p>'"
- },
- {
-  "sink_id": "renderPickerList:document.getElementById('picker-list'):=:86bc3b918fa9",
-  "line": 22820,
   "function": "renderPickerList",
   "target": "document.getElementById('picker-list')",
   "op": "=",
@@ -4342,34 +4004,8 @@
   "rhs": "'<tr><td colspan=\"7\" class=\"empty\" style=\"padding:1.5rem;line-height:1.6\">No reports generated yet — this log fills when you generate one (from a tile above or the per-agent buttons). Test runs don\\'t create reports automatically.</td></tr>'"
  },
  {
-  "sink_id": "renderRepHistory:tb:=:913a94a62edf",
-  "line": 21595,
-  "function": "renderRepHistory",
-  "target": "tb",
-  "op": "=",
-  "baseline_category": "static",
-  "final_category": "static",
-  "severity_tier": 0,
-  "data_source_tags": "",
-  "trace_notes": "",
-  "rhs": "'<tr><td colspan=\"7\" class=\"empty\" style=\"padding:1.5rem;line-height:1.6\">No reports generated yet — this log fills when you generate one (from a tile above or the per-agent buttons). Test runs don\\'t create reports automatically.</td></tr>'"
- },
- {
   "sink_id": "renderRepHistory:tb:=:b9e0ef311b73",
   "line": 14807,
-  "function": "renderRepHistory",
-  "target": "tb",
-  "op": "=",
-  "baseline_category": "unescaped_html",
-  "final_category": "unescaped_html",
-  "severity_tier": 4,
-  "data_source_tags": "",
-  "trace_notes": "",
-  "rhs": "list.map(function(r) {\n      var st = r.status === 'failed' ? 's-failed' : 's-completed';\n      return '<tr>' +\n        '<td class=\"cell-main\">' + x(label[r.reportType] || r.reportType) + '</td>' +\n        '<td class=\"tiny muted\">' + x(r.scopeLabel) + '</td>' +\n        '<td class=\"tiny\">' + x((r.format || '—').toUpperCase()) + '</td>' +\n        '<td class=\"tiny muted\">' + x(r.generatedBy || '—') +"
- },
- {
-  "sink_id": "renderRepHistory:tb:=:b9e0ef311b73",
-  "line": 21599,
   "function": "renderRepHistory",
   "target": "tb",
   "op": "=",
@@ -4459,34 +4095,8 @@
   "rhs": "'&#9888; No Eligible Agents'"
  },
  {
-  "sink_id": "renderRunMode:btn:=:4959506b17ea",
-  "line": 22102,
-  "function": "renderRunMode",
-  "target": "btn",
-  "op": "=",
-  "baseline_category": "static",
-  "final_category": "static",
-  "severity_tier": 0,
-  "data_source_tags": "",
-  "trace_notes": "",
-  "rhs": "'&#9888; No Eligible Agents'"
- },
- {
   "sink_id": "renderRunMode:btn:=:5b98d58b0313",
   "line": 15390,
-  "function": "renderRunMode",
-  "target": "btn",
-  "op": "=",
-  "baseline_category": "static",
-  "final_category": "static",
-  "severity_tier": 0,
-  "data_source_tags": "",
-  "trace_notes": "",
-  "rhs": "'&#9654; Run LAB'"
- },
- {
-  "sink_id": "renderRunMode:btn:=:5b98d58b0313",
-  "line": 22182,
   "function": "renderRunMode",
   "target": "btn",
   "op": "=",
@@ -4511,34 +4121,8 @@
   "rhs": "'&#9888; OS Mismatch'"
  },
  {
-  "sink_id": "renderRunMode:btn:=:6b374eeb8131",
-  "line": 22162,
-  "function": "renderRunMode",
-  "target": "btn",
-  "op": "=",
-  "baseline_category": "static",
-  "final_category": "static",
-  "severity_tier": 0,
-  "data_source_tags": "",
-  "trace_notes": "",
-  "rhs": "'&#9888; OS Mismatch'"
- },
- {
   "sink_id": "renderRunMode:btn:=:ad81ad1f4514",
   "line": 15383,
-  "function": "renderRunMode",
-  "target": "btn",
-  "op": "=",
-  "baseline_category": "static",
-  "final_category": "static",
-  "severity_tier": 0,
-  "data_source_tags": "",
-  "trace_notes": "",
-  "rhs": "'&#9654; Run Telemetry'"
- },
- {
-  "sink_id": "renderRunMode:btn:=:ad81ad1f4514",
-  "line": 22175,
   "function": "renderRunMode",
   "target": "btn",
   "op": "=",
@@ -4576,32 +4160,6 @@
   "rhs": "'&#9654; Run'"
  },
  {
-  "sink_id": "renderRunMode:btn:=:cd9227672841",
-  "line": 22146,
-  "function": "renderRunMode",
-  "target": "btn",
-  "op": "=",
-  "baseline_category": "static",
-  "final_category": "static",
-  "severity_tier": 0,
-  "data_source_tags": "",
-  "trace_notes": "",
-  "rhs": "'&#9654; Run'"
- },
- {
-  "sink_id": "renderRunMode:btn:=:cd9227672841",
-  "line": 22193,
-  "function": "renderRunMode",
-  "target": "btn",
-  "op": "=",
-  "baseline_category": "static",
-  "final_category": "static",
-  "severity_tier": 0,
-  "data_source_tags": "",
-  "trace_notes": "",
-  "rhs": "'&#9654; Run'"
- },
- {
   "sink_id": "renderRunMode:warn:=:37e38ab2c4c2",
   "line": 15350,
   "function": "renderRunMode",
@@ -4628,47 +4186,8 @@
   "rhs": "osMismatchMsg"
  },
  {
-  "sink_id": "renderRunMode:warn:=:37e38ab2c4c2",
-  "line": 22142,
-  "function": "renderRunMode",
-  "target": "warn",
-  "op": "=",
-  "baseline_category": "indirect_variable",
-  "final_category": "escaped",
-  "severity_tier": 1,
-  "data_source_tags": "",
-  "trace_notes": "2 assignment(s) to 'osMismatchMsg' inside renderRunMode() @L22079 (scope-resolved) -> escaped",
-  "rhs": "osMismatchMsg"
- },
- {
-  "sink_id": "renderRunMode:warn:=:37e38ab2c4c2",
-  "line": 22189,
-  "function": "renderRunMode",
-  "target": "warn",
-  "op": "=",
-  "baseline_category": "indirect_variable",
-  "final_category": "escaped",
-  "severity_tier": 1,
-  "data_source_tags": "",
-  "trace_notes": "2 assignment(s) to 'osMismatchMsg' inside renderRunMode() @L22079 (scope-resolved) -> escaped",
-  "rhs": "osMismatchMsg"
- },
- {
   "sink_id": "renderRunMode:warn:=:41e9204bcecf",
   "line": 15368,
-  "function": "renderRunMode",
-  "target": "warn",
-  "op": "=",
-  "baseline_category": "unescaped_html",
-  "final_category": "unescaped_html",
-  "severity_tier": 4,
-  "data_source_tags": "agent",
-  "trace_notes": "",
-  "rhs": "osMismatchMsg + ' <strong>Cannot run ' + mode + ' mode on this agent.</strong>'"
- },
- {
-  "sink_id": "renderRunMode:warn:=:41e9204bcecf",
-  "line": 22160,
   "function": "renderRunMode",
   "target": "warn",
   "op": "=",
@@ -4693,19 +4212,6 @@
   "rhs": "'&#9888; <strong>LAB MODE — full-fidelity emulation.</strong> Runs LSASS memory dump and allowlisted password spray. <strong>Isolated AD range only, never production.</strong> Triggers EDR by design; requires a second confirmation.'"
  },
  {
-  "sink_id": "renderRunMode:warn:=:7945c45dabe0",
-  "line": 22181,
-  "function": "renderRunMode",
-  "target": "warn",
-  "op": "=",
-  "baseline_category": "static",
-  "final_category": "static",
-  "severity_tier": 0,
-  "data_source_tags": "",
-  "trace_notes": "",
-  "rhs": "'&#9888; <strong>LAB MODE — full-fidelity emulation.</strong> Runs LSASS memory dump and allowlisted password spray. <strong>Isolated AD range only, never production.</strong> Triggers EDR by design; requires a second confirmation.'"
- },
- {
   "sink_id": "renderRunMode:warn:=:7cbf4609536e",
   "line": 15382,
   "function": "renderRunMode",
@@ -4716,19 +4222,6 @@
   "severity_tier": 4,
   "data_source_tags": "",
   "trace_notes": "2 assignment(s) to 'warnText' inside renderRunMode() @L15287 (scope-resolved) -> unescaped_html",
-  "rhs": "warnText"
- },
- {
-  "sink_id": "renderRunMode:warn:=:7cbf4609536e",
-  "line": 22174,
-  "function": "renderRunMode",
-  "target": "warn",
-  "op": "=",
-  "baseline_category": "indirect_variable",
-  "final_category": "unescaped_html",
-  "severity_tier": 4,
-  "data_source_tags": "",
-  "trace_notes": "2 assignment(s) to 'warnText' inside renderRunMode() @L22079 (scope-resolved) -> unescaped_html",
   "rhs": "warnText"
  },
  {
@@ -5408,19 +4901,6 @@
   "rhs": "html"
  },
  {
-  "sink_id": "row:document.getElementById('wz-review'):=:e5e239560bc1",
-  "line": 22497,
-  "function": "row",
-  "target": "document.getElementById('wz-review')",
-  "op": "=",
-  "baseline_category": "indirect_variable",
-  "final_category": "unescaped_html",
-  "severity_tier": 4,
-  "data_source_tags": "",
-  "trace_notes": "3 assignment(s) to 'html' inside renderWizardReview() @L22400 (scope-resolved) -> unescaped_html",
-  "rhs": "html"
- },
- {
   "sink_id": "rowHtml:document.getElementById('results-body'):=:230d8358dc8e",
   "line": 13572,
   "function": "rowHtml",
@@ -5564,34 +5044,8 @@
   "rhs": "'<div id=\"run-tab-overview\" class=\"run-tab-panel\">' +\n      '<div class=\"run-tab-grid\">' +\n        '<div>' + scorePanel + '</div>' +\n        '<div id=\"run-report-extra\"></div>' +\n      '</div>' +\n    '</div>' +\n    '<div id=\"run-tab-findings\" class=\"run-tab-panel\" style=\"display:none\">' +\n      '<div id=\"run-report-findings\"><div style=\"color:var(--muted);font-size:0.72rem;padding:1.5rem 0;text-al"
  },
  {
-  "sink_id": "soonPanel:document.getElementById('run-tab-content'):=:7adc696626b0",
-  "line": 24128,
-  "function": "soonPanel",
-  "target": "document.getElementById('run-tab-content')",
-  "op": "=",
-  "baseline_category": "unescaped_html",
-  "final_category": "unescaped_html",
-  "severity_tier": 4,
-  "data_source_tags": "threat_intel",
-  "trace_notes": "",
-  "rhs": "'<div id=\"run-tab-overview\" class=\"run-tab-panel\">' +\n      '<div class=\"run-tab-grid\">' +\n        '<div>' + scorePanel + '</div>' +\n        '<div id=\"run-report-extra\"></div>' +\n      '</div>' +\n    '</div>' +\n    '<div id=\"run-tab-findings\" class=\"run-tab-panel\" style=\"display:none\">' +\n      '<div id=\"run-report-findings\"><div style=\"color:var(--muted);font-size:0.72rem;padding:1.5rem 0;text-al"
- },
- {
   "sink_id": "soonPanel:document.getElementById('run-tabbar'):=:ec3077d5757a",
   "line": 17373,
-  "function": "soonPanel",
-  "target": "document.getElementById('run-tabbar')",
-  "op": "=",
-  "baseline_category": "unescaped_html",
-  "final_category": "unescaped_html",
-  "severity_tier": 4,
-  "data_source_tags": "",
-  "trace_notes": "",
-  "rhs": "RUN_TABS.map(function(t, i) {\n    return '<button class=\"run-tab-btn' + (i === 0 ? ' active' : '') + '\" id=\"run-tabbtn-' + t[0] + '\" onclick=\"switchRunTab(\\'' + t[0] + '\\')\">' + x(t[1]) + '</button>';\n  }).join('')"
- },
- {
-  "sink_id": "soonPanel:document.getElementById('run-tabbar'):=:ec3077d5757a",
-  "line": 24165,
   "function": "soonPanel",
   "target": "document.getElementById('run-tabbar')",
   "op": "=",
@@ -5616,34 +5070,8 @@
   "rhs": "'<div style=\"color:var(--muted);font-size:0.72rem;padding:0.4rem 0\">Loading&#8230;</div>'"
  },
  {
-  "sink_id": "soonPanel:extraEl:=:000e9faf7dc9",
-  "line": 24204,
-  "function": "soonPanel",
-  "target": "extraEl",
-  "op": "=",
-  "baseline_category": "static",
-  "final_category": "static",
-  "severity_tier": 0,
-  "data_source_tags": "",
-  "trace_notes": "",
-  "rhs": "'<div style=\"color:var(--muted);font-size:0.72rem;padding:0.4rem 0\">Loading&#8230;</div>'"
- },
- {
   "sink_id": "soonPanel:extraEl:=:6f49cdbd80e1",
   "line": 17424,
-  "function": "soonPanel",
-  "target": "extraEl",
-  "op": "=",
-  "baseline_category": "static_empty",
-  "final_category": "static_empty",
-  "severity_tier": 0,
-  "data_source_tags": "",
-  "trace_notes": "",
-  "rhs": "''"
- },
- {
-  "sink_id": "soonPanel:extraEl:=:6f49cdbd80e1",
-  "line": 24216,
   "function": "soonPanel",
   "target": "extraEl",
   "op": "=",
@@ -5668,34 +5096,8 @@
   "rhs": "renderRunReportExtra(rep)"
  },
  {
-  "sink_id": "soonPanel:extraEl:=:8a89f49e5dd6",
-  "line": 24208,
-  "function": "soonPanel",
-  "target": "extraEl",
-  "op": "=",
-  "baseline_category": "indirect_builder",
-  "final_category": "partial_escaped",
-  "severity_tier": 3,
-  "data_source_tags": "",
-  "trace_notes": "renderRunReportExtra() @L19845 (scope-resolved): 5 return(s) -> partial_escaped",
-  "rhs": "renderRunReportExtra(rep)"
- },
- {
   "sink_id": "soonPanel:if (el) el:=:05b3ceeea0fb",
   "line": 17437,
-  "function": "soonPanel",
-  "target": "if (el) el",
-  "op": "=",
-  "baseline_category": "static",
-  "final_category": "static",
-  "severity_tier": 0,
-  "data_source_tags": "",
-  "trace_notes": "",
-  "rhs": "'<div style=\"color:var(--muted);font-size:0.72rem;padding:1.5rem 0;text-align:center\">Attack flow unavailable.</div>'"
- },
- {
-  "sink_id": "soonPanel:if (el) el:=:05b3ceeea0fb",
-  "line": 24229,
   "function": "soonPanel",
   "target": "if (el) el",
   "op": "=",
@@ -5720,34 +5122,8 @@
   "rhs": "renderAttackFlow(af.nodes || [], af.summary || {})"
  },
  {
-  "sink_id": "soonPanel:if (el) el:=:05d28a38e57d",
-  "line": 24226,
-  "function": "soonPanel",
-  "target": "if (el) el",
-  "op": "=",
-  "baseline_category": "indirect_builder",
-  "final_category": "unescaped_html",
-  "severity_tier": 4,
-  "data_source_tags": "",
-  "trace_notes": "renderAttackFlow() @L19721 (scope-resolved): 6 return(s) -> unescaped_html",
-  "rhs": "renderAttackFlow(af.nodes || [], af.summary || {})"
- },
- {
   "sink_id": "soonPanel:if (el) el:=:4b2a80780dc0",
   "line": 17464,
-  "function": "soonPanel",
-  "target": "if (el) el",
-  "op": "=",
-  "baseline_category": "static",
-  "final_category": "static",
-  "severity_tier": 0,
-  "data_source_tags": "",
-  "trace_notes": "",
-  "rhs": "'<div style=\"color:var(--muted);font-size:0.8rem;padding:2.5rem 0;text-align:center\">Indicators unavailable.</div>'"
- },
- {
-  "sink_id": "soonPanel:if (el) el:=:4b2a80780dc0",
-  "line": 24256,
   "function": "soonPanel",
   "target": "if (el) el",
   "op": "=",
@@ -5772,34 +5148,8 @@
   "rhs": "renderVariantCoverage(cov)"
  },
  {
-  "sink_id": "soonPanel:if (el) el:=:57e4ff8ae29b",
-  "line": 24235,
-  "function": "soonPanel",
-  "target": "if (el) el",
-  "op": "=",
-  "baseline_category": "indirect_builder",
-  "final_category": "unescaped_html",
-  "severity_tier": 4,
-  "data_source_tags": "",
-  "trace_notes": "renderVariantCoverage() @L19515 (scope-resolved): 11 return(s) -> unescaped_html",
-  "rhs": "renderVariantCoverage(cov)"
- },
- {
   "sink_id": "soonPanel:if (el) el:=:9d4d108e29ef",
   "line": 17446,
-  "function": "soonPanel",
-  "target": "if (el) el",
-  "op": "=",
-  "baseline_category": "static",
-  "final_category": "static",
-  "severity_tier": 0,
-  "data_source_tags": "",
-  "trace_notes": "",
-  "rhs": "'<div style=\"color:var(--muted);font-size:0.72rem;padding:1.5rem 0;text-align:center\">Variant coverage unavailable.</div>'"
- },
- {
-  "sink_id": "soonPanel:if (el) el:=:9d4d108e29ef",
-  "line": 24238,
   "function": "soonPanel",
   "target": "if (el) el",
   "op": "=",
@@ -5824,34 +5174,8 @@
   "rhs": "renderRunFindings(rep)"
  },
  {
-  "sink_id": "soonPanel:if (findingsEl) findingsEl:=:1ab55760a1c3",
-  "line": 24210,
-  "function": "soonPanel",
-  "target": "if (findingsEl) findingsEl",
-  "op": "=",
-  "baseline_category": "indirect_builder",
-  "final_category": "unescaped_html",
-  "severity_tier": 4,
-  "data_source_tags": "",
-  "trace_notes": "renderRunFindings() @L20141 (scope-resolved): 3 return(s) -> unescaped_html",
-  "rhs": "renderRunFindings(rep)"
- },
- {
   "sink_id": "soonPanel:if (findingsEl) findingsEl:=:af0652ed63c6",
   "line": 17426,
-  "function": "soonPanel",
-  "target": "if (findingsEl) findingsEl",
-  "op": "=",
-  "baseline_category": "static",
-  "final_category": "static",
-  "severity_tier": 0,
-  "data_source_tags": "",
-  "trace_notes": "",
-  "rhs": "'<div style=\"color:var(--muted);font-size:0.8rem;padding:2.5rem 0;text-align:center\">Findings unavailable.</div>'"
- },
- {
-  "sink_id": "soonPanel:if (findingsEl) findingsEl:=:af0652ed63c6",
-  "line": 24218,
   "function": "soonPanel",
   "target": "if (findingsEl) findingsEl",
   "op": "=",
@@ -5876,19 +5200,6 @@
   "rhs": "notReady"
  },
  {
-  "sink_id": "soonPanel:if (findingsElEarly) findingsElEarly:=:5ddfcb3cebd4",
-  "line": 24264,
-  "function": "soonPanel",
-  "target": "if (findingsElEarly) findingsElEarly",
-  "op": "=",
-  "baseline_category": "indirect_variable",
-  "final_category": "static",
-  "severity_tier": 0,
-  "data_source_tags": "",
-  "trace_notes": "1 assignment(s) to 'notReady' inside viewRunResults() @L23636 (scope-resolved) -> static",
-  "rhs": "notReady"
- },
- {
   "sink_id": "soonPanel:if (iocElEarly) iocElEarly:=:5ddfcb3cebd4",
   "line": 17476,
   "function": "soonPanel",
@@ -5902,34 +5213,8 @@
   "rhs": "notReady"
  },
  {
-  "sink_id": "soonPanel:if (iocElEarly) iocElEarly:=:5ddfcb3cebd4",
-  "line": 24268,
-  "function": "soonPanel",
-  "target": "if (iocElEarly) iocElEarly",
-  "op": "=",
-  "baseline_category": "indirect_variable",
-  "final_category": "static",
-  "severity_tier": 0,
-  "data_source_tags": "",
-  "trace_notes": "1 assignment(s) to 'notReady' inside viewRunResults() @L23636 (scope-resolved) -> static",
-  "rhs": "notReady"
- },
- {
   "sink_id": "soonPanel:if (recEl) recEl:=:cc3ff533d162",
   "line": 17420,
-  "function": "soonPanel",
-  "target": "if (recEl) recEl",
-  "op": "=",
-  "baseline_category": "indirect_builder",
-  "final_category": "unescaped_html",
-  "severity_tier": 4,
-  "data_source_tags": "",
-  "trace_notes": "renderRunRecommendations() @L20168 (scope-resolved): 3 return(s) -> unescaped_html",
-  "rhs": "renderRunRecommendations(rep)"
- },
- {
-  "sink_id": "soonPanel:if (recEl) recEl:=:cc3ff533d162",
-  "line": 24212,
   "function": "soonPanel",
   "target": "if (recEl) recEl",
   "op": "=",
@@ -5954,19 +5239,6 @@
   "rhs": "'<div style=\"color:var(--muted);font-size:0.8rem;padding:2.5rem 0;text-align:center\">Recommendations unavailable.</div>'"
  },
  {
-  "sink_id": "soonPanel:if (recEl) recEl:=:f64c73cc64ef",
-  "line": 24220,
-  "function": "soonPanel",
-  "target": "if (recEl) recEl",
-  "op": "=",
-  "baseline_category": "static",
-  "final_category": "static",
-  "severity_tier": 0,
-  "data_source_tags": "",
-  "trace_notes": "",
-  "rhs": "'<div style=\"color:var(--muted);font-size:0.8rem;padding:2.5rem 0;text-align:center\">Recommendations unavailable.</div>'"
- },
- {
   "sink_id": "soonPanel:if (recElEarly) recElEarly:=:5ddfcb3cebd4",
   "line": 17474,
   "function": "soonPanel",
@@ -5977,19 +5249,6 @@
   "severity_tier": 0,
   "data_source_tags": "",
   "trace_notes": "1 assignment(s) to 'notReady' inside viewRunResults() @L16844 (scope-resolved) -> static",
-  "rhs": "notReady"
- },
- {
-  "sink_id": "soonPanel:if (recElEarly) recElEarly:=:5ddfcb3cebd4",
-  "line": 24266,
-  "function": "soonPanel",
-  "target": "if (recElEarly) recElEarly",
-  "op": "=",
-  "baseline_category": "indirect_variable",
-  "final_category": "static",
-  "severity_tier": 0,
-  "data_source_tags": "",
-  "trace_notes": "1 assignment(s) to 'notReady' inside viewRunResults() @L23636 (scope-resolved) -> static",
   "rhs": "notReady"
  },
  {
@@ -6006,34 +5265,8 @@
   "rhs": "'<div class=\"dash-panel u-mb-1\"><div class=\"dash-panel-hdr\">Run Metadata</div><div class=\"dash-panel-body\">' +\n          '<div style=\"display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:0.75rem;font-size:0.78rem\">' +\n            '<div><div class=\"kpi-label\">Run ID</div><div>' + x(runId) + '</div></div>' +\n            '<div><div class=\"kpi-label\">Agent</div><div>' + x(run.agen"
  },
  {
-  "sink_id": "soonPanel:reportsEl:=:a0e2dc3988f7",
-  "line": 24179,
-  "function": "soonPanel",
-  "target": "reportsEl",
-  "op": "=",
-  "baseline_category": "partial_escaped",
-  "final_category": "partial_escaped",
-  "severity_tier": 3,
-  "data_source_tags": "agent",
-  "trace_notes": "",
-  "rhs": "'<div class=\"dash-panel u-mb-1\"><div class=\"dash-panel-hdr\">Run Metadata</div><div class=\"dash-panel-body\">' +\n          '<div style=\"display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:0.75rem;font-size:0.78rem\">' +\n            '<div><div class=\"kpi-label\">Run ID</div><div>' + x(runId) + '</div></div>' +\n            '<div><div class=\"kpi-label\">Agent</div><div>' + x(run.agen"
- },
- {
   "sink_id": "soonPanel:reportsEl:=:ae6324141a3e",
   "line": 17402,
-  "function": "soonPanel",
-  "target": "reportsEl",
-  "op": "=",
-  "baseline_category": "static",
-  "final_category": "static",
-  "severity_tier": 0,
-  "data_source_tags": "",
-  "trace_notes": "",
-  "rhs": "'<div style=\"color:var(--muted);font-size:0.8rem;padding:1rem 0\">No exportable output yet — this run hasn\\'t completed.</div>'"
- },
- {
-  "sink_id": "soonPanel:reportsEl:=:ae6324141a3e",
-  "line": 24194,
   "function": "soonPanel",
   "target": "reportsEl",
   "op": "=",
@@ -6266,34 +5499,8 @@
   "rhs": "''"
  },
  {
-  "sink_id": "techOnBlur:panel:=:6f49cdbd80e1",
-  "line": 23414,
-  "function": "techOnBlur",
-  "target": "panel",
-  "op": "=",
-  "baseline_category": "static_empty",
-  "final_category": "static_empty",
-  "severity_tier": 0,
-  "data_source_tags": "",
-  "trace_notes": "",
-  "rhs": "''"
- },
- {
   "sink_id": "techOnInput:panel:=:6f49cdbd80e1",
   "line": 16556,
-  "function": "techOnInput",
-  "target": "panel",
-  "op": "=",
-  "baseline_category": "static_empty",
-  "final_category": "static_empty",
-  "severity_tier": 0,
-  "data_source_tags": "",
-  "trace_notes": "",
-  "rhs": "''"
- },
- {
-  "sink_id": "techOnInput:panel:=:6f49cdbd80e1",
-  "line": 23348,
   "function": "techOnInput",
   "target": "panel",
   "op": "=",
@@ -6318,34 +5525,8 @@
   "rhs": "''"
  },
  {
-  "sink_id": "techOnKeydown:panel:=:6f49cdbd80e1",
-  "line": 23403,
-  "function": "techOnKeydown",
-  "target": "panel",
-  "op": "=",
-  "baseline_category": "static_empty",
-  "final_category": "static_empty",
-  "severity_tier": 0,
-  "data_source_tags": "",
-  "trace_notes": "",
-  "rhs": "''"
- },
- {
   "sink_id": "techRenderResults:panel:=:80cdc4a637c4",
   "line": 16566,
-  "function": "techRenderResults",
-  "target": "panel",
-  "op": "=",
-  "baseline_category": "static",
-  "final_category": "static",
-  "severity_tier": 0,
-  "data_source_tags": "",
-  "trace_notes": "",
-  "rhs": "'<div class=\"st-tech-row\" style=\"cursor:default;color:var(--muted)\">No matching technique.</div>'"
- },
- {
-  "sink_id": "techRenderResults:panel:=:80cdc4a637c4",
-  "line": 23358,
   "function": "techRenderResults",
   "target": "panel",
   "op": "=",
@@ -6370,34 +5551,8 @@
   "rhs": "results.map(function(t, i) {\n    var tactics = (t.tactics || []).join(', ');\n    var platforms = (t.platforms || []).join(', ');\n    return '<div class=\"st-tech-row' + (i === 0 ? ' active' : '') + '\" data-id=\"' + x(t.id) + '\" onmousedown=\"techSelectRow(this)\">' +\n      '<span class=\"st-tech-row-id\">' + x(t.id) + '</span><span class=\"st-tech-row-name\">' + x(t.name) + '</span>' +\n      (tactics ? '<"
  },
  {
-  "sink_id": "techRenderResults:panel:=:a66308c636d4",
-  "line": 23362,
-  "function": "techRenderResults",
-  "target": "panel",
-  "op": "=",
-  "baseline_category": "escaped",
-  "final_category": "escaped",
-  "severity_tier": 1,
-  "data_source_tags": "user_created_name",
-  "trace_notes": "",
-  "rhs": "results.map(function(t, i) {\n    var tactics = (t.tactics || []).join(', ');\n    var platforms = (t.platforms || []).join(', ');\n    return '<div class=\"st-tech-row' + (i === 0 ? ' active' : '') + '\" data-id=\"' + x(t.id) + '\" onmousedown=\"techSelectRow(this)\">' +\n      '<span class=\"st-tech-row-id\">' + x(t.id) + '</span><span class=\"st-tech-row-name\">' + x(t.name) + '</span>' +\n      (tactics ? '<"
- },
- {
   "sink_id": "techRenderSelected:box:=:41fc3647c35b",
   "line": 16506,
-  "function": "techRenderSelected",
-  "target": "box",
-  "op": "=",
-  "baseline_category": "escaped",
-  "final_category": "escaped",
-  "severity_tier": 1,
-  "data_source_tags": "",
-  "trace_notes": "",
-  "rhs": "'<div><span class=\"st-tech-sel-id\">' + x(id) + '</span>' +\n        '<span class=\"tiny muted\" style=\"margin-left:0.4rem\">' +\n        (techniqueCatalog === null ? 'resolving…' : 'not recognized') + '</span></div>' +\n      '<span class=\"st-tech-sel-actions\"><a href=\"javascript:void(0)\" onclick=\"techChangeSelection(this)\">&#10005; change</a></span>'"
- },
- {
-  "sink_id": "techRenderSelected:box:=:41fc3647c35b",
-  "line": 23298,
   "function": "techRenderSelected",
   "target": "box",
   "op": "=",
@@ -6422,34 +5577,8 @@
   "rhs": "'<div><span class=\"st-tech-sel-id\">' + x(t.id) + '</span> <span class=\"st-tech-sel-name\">' + x(t.name) + '</span>' +\n      (tactics ? '<div class=\"st-tech-row-meta\">' + x(tactics) + '</div>' : '') +\n      (subText ? '<div class=\"st-tech-row-meta\">' + x(subText) + '</div>' : '') +\n    '</div>' +\n    '<span class=\"st-tech-sel-actions\">' +\n      (t.url ? '<a href=\"' + x(t.url) + '\" target=\"_blank\" re"
  },
  {
-  "sink_id": "techRenderSelected:box:=:f4b5d505bc4a",
-  "line": 23308,
-  "function": "techRenderSelected",
-  "target": "box",
-  "op": "=",
-  "baseline_category": "escaped",
-  "final_category": "escaped",
-  "severity_tier": 1,
-  "data_source_tags": "user_created_name",
-  "trace_notes": "",
-  "rhs": "'<div><span class=\"st-tech-sel-id\">' + x(t.id) + '</span> <span class=\"st-tech-sel-name\">' + x(t.name) + '</span>' +\n      (tactics ? '<div class=\"st-tech-row-meta\">' + x(tactics) + '</div>' : '') +\n      (subText ? '<div class=\"st-tech-row-meta\">' + x(subText) + '</div>' : '') +\n    '</div>' +\n    '<span class=\"st-tech-sel-actions\">' +\n      (t.url ? '<a href=\"' + x(t.url) + '\" target=\"_blank\" re"
- },
- {
   "sink_id": "techSelectRow:panel:=:6f49cdbd80e1",
   "line": 16587,
-  "function": "techSelectRow",
-  "target": "panel",
-  "op": "=",
-  "baseline_category": "static_empty",
-  "final_category": "static_empty",
-  "severity_tier": 0,
-  "data_source_tags": "",
-  "trace_notes": "",
-  "rhs": "''"
- },
- {
-  "sink_id": "techSelectRow:panel:=:6f49cdbd80e1",
-  "line": 23379,
   "function": "techSelectRow",
   "target": "panel",
   "op": "=",
@@ -6734,19 +5863,6 @@
   "rhs": "''"
  },
  {
-  "sink_id": "viewRunResults:document.getElementById('results-export'):=:6f49cdbd80e1",
-  "line": 23708,
-  "function": "viewRunResults",
-  "target": "document.getElementById('results-export')",
-  "op": "=",
-  "baseline_category": "static_empty",
-  "final_category": "static_empty",
-  "severity_tier": 0,
-  "data_source_tags": "",
-  "trace_notes": "",
-  "rhs": "''"
- },
- {
   "sink_id": "viewRunResults:document.getElementById('results-header-actions'):=:8d3e295873f1",
   "line": 16944,
   "function": "viewRunResults",
@@ -6760,34 +5876,8 @@
   "rhs": "actionsHtml"
  },
  {
-  "sink_id": "viewRunResults:document.getElementById('results-header-actions'):=:8d3e295873f1",
-  "line": 23736,
-  "function": "viewRunResults",
-  "target": "document.getElementById('results-header-actions')",
-  "op": "=",
-  "baseline_category": "indirect_variable",
-  "final_category": "unescaped_html",
-  "severity_tier": 4,
-  "data_source_tags": "",
-  "trace_notes": "2 assignment(s) to 'actionsHtml' inside viewRunResults() @L23636 (scope-resolved) -> unescaped_html",
-  "rhs": "actionsHtml"
- },
- {
   "sink_id": "viewRunResults:document.getElementById('results-summary'):=:14ac4be88bd0",
   "line": 16904,
-  "function": "viewRunResults",
-  "target": "document.getElementById('results-summary')",
-  "op": "=",
-  "baseline_category": "partial_escaped",
-  "final_category": "partial_escaped",
-  "severity_tier": 3,
-  "data_source_tags": "agent",
-  "trace_notes": "",
-  "rhs": "'<span style=\"color:var(--danger);font-weight:600\">' + fail + ' fail</span>' +\n      ' &nbsp;/&nbsp; <span style=\"color:var(--success);font-weight:600\">' + pass + ' pass</span>' +\n      (skipped ? ' &nbsp;/&nbsp; <span class=\"u-muted\">' + skipped + ' skipped</span>' : '') +\n      ' &nbsp;&middot;&nbsp; ' + results.length + ' total &nbsp;&middot;&nbsp; Agent: <code>' + x(run.agentId) + '</code>' +\n"
- },
- {
-  "sink_id": "viewRunResults:document.getElementById('results-summary'):=:14ac4be88bd0",
-  "line": 23696,
   "function": "viewRunResults",
   "target": "document.getElementById('results-summary')",
   "op": "=",
@@ -6812,34 +5902,8 @@
   "rhs": "'<span style=\"color:var(--danger);font-weight:600\">Run failed to start</span>' +\n      ' &nbsp;&middot;&nbsp; ' + x(run.failReason || 'No reason recorded for this failure.') +\n      ' &nbsp;&middot;&nbsp; Agent: <code>' + x(run.agentId) + '</code>'"
  },
  {
-  "sink_id": "viewRunResults:document.getElementById('results-summary'):=:b5178044b390",
-  "line": 23691,
-  "function": "viewRunResults",
-  "target": "document.getElementById('results-summary')",
-  "op": "=",
-  "baseline_category": "escaped",
-  "final_category": "escaped",
-  "severity_tier": 1,
-  "data_source_tags": "agent",
-  "trace_notes": "",
-  "rhs": "'<span style=\"color:var(--danger);font-weight:600\">Run failed to start</span>' +\n      ' &nbsp;&middot;&nbsp; ' + x(run.failReason || 'No reason recorded for this failure.') +\n      ' &nbsp;&middot;&nbsp; Agent: <code>' + x(run.agentId) + '</code>'"
- },
- {
   "sink_id": "viewRunResults:document.getElementById('results-title'):=:5ca182313248",
   "line": 16922,
-  "function": "viewRunResults",
-  "target": "document.getElementById('results-title')",
-  "op": "=",
-  "baseline_category": "partial_escaped",
-  "final_category": "partial_escaped",
-  "severity_tier": 3,
-  "data_source_tags": "user_created_name",
-  "trace_notes": "",
-  "rhs": "x(run.name) + ' — Results ' +\n    '<span class=\"sbadge\" style=\"background:' + runStatusColor + '22;color:' + runStatusColor + ';border:1px solid ' + runStatusColor + '44;font-size:0.65rem;margin-left:0.4rem;vertical-align:middle\">' + x(run.status || '') + '</span>'"
- },
- {
-  "sink_id": "viewRunResults:document.getElementById('results-title'):=:5ca182313248",
-  "line": 23714,
   "function": "viewRunResults",
   "target": "document.getElementById('results-title')",
   "op": "=",
