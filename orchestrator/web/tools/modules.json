@@ -57,6 +57,10 @@
     {
       "header": "Re-run Review",
       "module": "features/rerun-review.js"
+    },
+    {
+      "header": "Initiative Layer",
+      "module": "features/initiatives.js"
     }
   ],
   "pin": {

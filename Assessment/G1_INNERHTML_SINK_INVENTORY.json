@@ -220,377 +220,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 4681,
-  "function": "renderRunIOCToolbar",
-  "target": "el",
-  "op": "=",
-  "rhs": "covSegHtml(types, _runIOCTypeFilter, 'setRunIOCTypeFilter', function(k) { return counts[k] || 0; }) +\n    '<input type=\"text\" id=\"run-ioc-search\" placeholder=\"Search indicators\u2026\" value=\"' + x(_runIOCSearch) + '\" oninput=\"setRunIOCSearch(this.value)\" style=\"padding:0.35rem 0.6rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:0.78re",
-  "rhs_len": 440,
-  "category": "partial_escaped",
-  "data_source_tags": ""
- },
- {
-  "line": 4723,
-  "function": "renderRunIOCList",
-  "target": "el",
-  "op": "=",
-  "rhs": "'<div style=\"color:var(--muted);font-size:0.8rem;padding:2.5rem 0;text-align:center\">' +\n      (state._runIOCsAll.length ? 'No indicators match this filter.' : 'No indicators extracted from this run.') + '</div>'",
-  "rhs_len": 212,
-  "category": "escaped",
-  "data_source_tags": ""
- },
- {
-  "line": 4728,
-  "function": "renderRunIOCList",
-  "target": "el",
-  "op": "=",
-  "rhs": "list.map(function(ind, idx) {\n    var expanded = _runIOCExpandedIdx === idx;\n    var techs = (ind.techniqueIds || []).map(function(t) {\n      return '<code style=\"font-size:0.66rem;color:var(--muted);margin-right:3px\">' + x(t) + '</code>';\n    }).join('');\n    var tags = (ind.tags || []).map(function(t) {\n      return '<span class=\"tiny\" style=\"background:var(--elevated);border:1px solid var(--bor",
-  "rhs_len": 2819,
-  "category": "unescaped_html",
-  "data_source_tags": ""
- },
- {
-  "line": 4777,
-  "function": "loadIOCRegistry",
-  "target": "if (el) el",
-  "op": "=",
-  "rhs": "''",
-  "rhs_len": 2,
-  "category": "static_empty",
-  "data_source_tags": ""
- },
- {
-  "line": 4795,
-  "function": "loadIOCRegistry",
-  "target": "tbody",
-  "op": "=",
-  "rhs": "'<tr><td colspan=\"9\" class=\"empty\">Loading\u2026</td></tr>'",
-  "rhs_len": 54,
-  "category": "static",
-  "data_source_tags": ""
- },
- {
-  "line": 4804,
-  "function": "loadIOCRegistry",
-  "target": "tbody",
-  "op": "=",
-  "rhs": "'<tr><td colspan=\"9\" class=\"empty\">Failed to load: ' + x(e.message || 'unknown error') + '</td></tr>'",
-  "rhs_len": 101,
-  "category": "escaped",
-  "data_source_tags": "error_message"
- },
- {
-  "line": 4825,
-  "function": "tile",
-  "target": "el",
-  "op": "=",
-  "rhs": "tile('Most Detected', result.mostDetected, ' detections') +\n    tile('Highest Bypass Rate', result.highestBypassRate, ' bypasses') +\n    tile('Frequently Reused', result.frequentlyReused, ' sightings') +\n    tile('Longest Surviving', result.longestSurviving, ' sightings')",
-  "rhs_len": 272,
-  "category": "indirect_builder",
-  "data_source_tags": "api_response"
- },
- {
-  "line": 4835,
-  "function": "renderIOCRegistryTable",
-  "target": "tbody",
-  "op": "=",
-  "rhs": "'<tr><td colspan=\"9\" class=\"empty\">No indicators match this filter.</td></tr>'",
-  "rhs_len": 78,
-  "category": "static",
-  "data_source_tags": ""
- },
- {
-  "line": 4838,
-  "function": "renderIOCRegistryTable",
-  "target": "tbody",
-  "op": "=",
-  "rhs": "_iocRegistryRows.map(function(row, idx) {\n    var suppressedBadge = row.suppressed ? ' <span class=\"sbadge\" style=\"background:rgba(154,169,188,.12);color:var(--muted)\" title=\"' + x(row.suppressionReason || '') + '\">suppressed</span>' : '';\n    return '<tr class=\"u-pointer\" onclick=\"openIOCDetail(' + idx + ')\">' +\n      '<td><span class=\"tiny\" style=\"background:var(--elevated);border:1px solid var(",
-  "rhs_len": 1425,
-  "category": "unescaped_html",
-  "data_source_tags": ""
- },
- {
-  "line": 4886,
-  "function": "openIOCDetail",
-  "target": "document.getElementById('results-export')",
-  "op": "=",
-  "rhs": "''",
-  "rhs_len": 2,
-  "category": "static_empty",
-  "data_source_tags": ""
- },
- {
-  "line": 4903,
-  "function": "rowHtml",
-  "target": "document.getElementById('results-body')",
-  "op": "=",
-  "rhs": "body",
-  "rhs_len": 4,
-  "category": "indirect_variable",
-  "data_source_tags": ""
- },
- {
-  "line": 4922,
-  "function": "rowHtml",
-  "target": "el",
-  "op": "=",
-  "rhs": "sections || '<div class=\"tiny muted\">No relationships recorded.</div>'",
-  "rhs_len": 70,
-  "category": "unescaped_html",
-  "data_source_tags": ""
- },
- {
-  "line": 4925,
-  "function": "rowHtml",
-  "target": "if (el) el",
-  "op": "=",
-  "rhs": "'<div class=\"tiny muted\">Relationships unavailable.</div>'",
-  "rhs_len": 58,
-  "category": "static",
-  "data_source_tags": ""
- },
- {
-  "line": 5027,
-  "function": "openRerunReview",
-  "target": "document.getElementById('rerun-review-body')",
-  "op": "=",
-  "rhs": "rows.map(function(r) {\n    return '<div class=\"conn-cfg-row\"><span class=\"conn-cfg-label\">' + r[0] + '</span><span class=\"conn-cfg-val\">' + r[1] + '</span></div>';\n  }).join('')",
-  "rhs_len": 177,
-  "category": "unescaped_html",
-  "data_source_tags": ""
- },
- {
-  "line": 5074,
-  "function": "startRerunFromReview",
-  "target": "btn",
-  "op": "=",
-  "rhs": "'&#9654; Start Re-run'",
-  "rhs_len": 22,
-  "category": "static",
-  "data_source_tags": ""
- },
- {
-  "line": 5081,
-  "function": "startRerunFromReview",
-  "target": "btn",
-  "op": "=",
-  "rhs": "'&#9654; Start Re-run'",
-  "rhs_len": 22,
-  "category": "static",
-  "data_source_tags": ""
- },
- {
-  "line": 5121,
-  "function": "openCampaignRerunReview",
-  "target": "document.getElementById('rerun-review-body')",
-  "op": "=",
-  "rhs": "rows.map(function(r) {\n    return '<div class=\"conn-cfg-row\"><span class=\"conn-cfg-label\">' + r[0] + '</span><span class=\"conn-cfg-val\">' + r[1] + '</span></div>';\n  }).join('')",
-  "rhs_len": 177,
-  "category": "unescaped_html",
-  "data_source_tags": ""
- },
- {
-  "line": 5154,
-  "function": "startCampaignRerunFromReview",
-  "target": "btn",
-  "op": "=",
-  "rhs": "'&#9654; Start Re-run'",
-  "rhs_len": 22,
-  "category": "static",
-  "data_source_tags": ""
- },
- {
-  "line": 5161,
-  "function": "startCampaignRerunFromReview",
-  "target": "btn",
-  "op": "=",
-  "rhs": "'&#9654; Start Re-run'",
-  "rhs_len": 22,
-  "category": "static",
-  "data_source_tags": ""
- },
- {
-  "line": 5267,
-  "function": "renderLicenseLockedScreen",
-  "target": "el",
-  "op": "=",
-  "rhs": "'<div style=\"max-width:520px;text-align:center;color:var(--text,#e6e6e6)\">' +\n      '<div style=\"font-size:2.5rem;margin-bottom:1rem\">&#x1F512;</div>' +\n      '<h1 style=\"font-size:1.4rem;margin-bottom:0.75rem\">BAS LICENSE EXPIRED</h1>' +\n      '<p style=\"color:var(--muted,#9aa9bc);line-height:1.6;margin-bottom:1rem\">This Audspect BAS Server is currently unavailable because its license and grace p",
-  "rhs_len": 1040,
-  "category": "escaped",
-  "data_source_tags": ""
- },
- {
-  "line": 5330,
-  "function": "renderLicenseGraceBanner",
-  "target": "el",
-  "op": "=",
-  "rhs": "_licenseBannerHTML(info) +\n    '<button onclick=\"_dismissLicenseGraceBanner()\" aria-label=\"Dismiss\" title=\"Dismiss\" ' +\n      'style=\"position:absolute;top:0.5rem;right:0.6rem;width:24px;height:24px;display:flex;align-items:center;justify-content:center;' +\n      'background:transparent;border:none;color:inherit;font-size:1.1rem;line-height:1;cursor:pointer;opacity:0.75\" ' +\n      'onmouseover=\"th",
-  "rhs_len": 475,
-  "category": "indirect_builder",
-  "data_source_tags": ""
- },
- {
-  "line": 5347,
-  "function": "maybeShowLicenseGraceModal",
-  "target": "overlay",
-  "op": "=",
-  "rhs": "'<div style=\"max-width:480px;background:var(--surface,#152338);border:1px solid var(--warning,#d29922);border-radius:8px;padding:1.5rem;color:var(--text,#e6e6e6)\">' +\n      _licenseBannerHTML(info) +\n      '<div style=\"text-align:right;margin-top:1rem\"><button id=\"license-grace-modal-dismiss\" style=\"padding:0.4rem 1rem;border-radius:6px;border:1px solid var(--border,#22324a);background:transparent",
-  "rhs_len": 469,
-  "category": "indirect_builder",
-  "data_source_tags": ""
- },
- {
-  "line": 5541,
-  "function": "goToProfile",
-  "target": "el",
-  "op": "=",
-  "rhs": "d.permissions.slice().sort().map(function(p) {\n      return '<span class=\"tag\" style=\"display:inline-block;margin:0 0.3rem 0.3rem 0\">' + x(p) + '</span>';\n    }).join('')",
-  "rhs_len": 170,
-  "category": "escaped",
-  "data_source_tags": ""
- },
- {
-  "line": 5597,
-  "function": "loadAgentRiskSummary",
-  "target": "if (tb) tb",
-  "op": "=",
-  "rhs": "'<tr><td colspan=\"7\" class=\"empty\">Loading\u2026</td></tr>'",
-  "rhs_len": 54,
-  "category": "static",
-  "data_source_tags": ""
- },
- {
-  "line": 5615,
-  "function": "renderAgentRiskSummary",
-  "target": "tb",
-  "op": "=",
-  "rhs": "'<tr><td colspan=\"7\" class=\"empty\">No agents to show.</td></tr>'",
-  "rhs_len": 64,
-  "category": "static",
-  "data_source_tags": ""
- },
- {
-  "line": 5625,
-  "function": "renderAgentRiskSummary",
-  "target": "tb",
-  "op": "=",
-  "rhs": "rows.map(function(a) {\n    return '<tr>' +\n      '<td>' + x(a.hostname || a.agentId) + '</td>' +\n      (a.measurable\n        ? '<td style=\"color:' + _riskScoreColor(a.healthScore) + ';font-weight:700\">' + a.healthScore + '</td>'\n        : '<td class=\"u-muted\" title=\"Nothing collected for this endpoint yet \u2014 an absent score is not a safe score\">\u2014 no data</td>') +\n      '<td>' + (a.criticalityRisk |",
-  "rhs_len": 783,
-  "category": "unescaped_html",
-  "data_source_tags": "agent"
- },
- {
-  "line": 5754,
-  "function": "loadThreatIntelConfig",
-  "target": "if (panel) panel",
-  "op": "=",
-  "rhs": "''",
-  "rhs_len": 2,
-  "category": "static_empty",
-  "data_source_tags": ""
- },
- {
-  "line": 5763,
-  "function": "loadThreatIntelConfig",
-  "target": "panel",
-  "op": "=",
-  "rhs": "'<div class=\"kpi-row\">' +\n        urlField +\n        '<input id=\"ti-' + name + '-key\" type=\"password\" placeholder=\"API key (leave blank to keep current)\" class=\"inp-sm u-flex1\">' +\n        insecureField +\n        '<label class=\"tiny muted\" style=\"display:flex;align-items:center;gap:0.3rem\"><input type=\"checkbox\" id=\"ti-' + name + '-enabled\" ' + (cfg.enabled ? 'checked' : '') + '> Enabled</label>' ",
-  "rhs_len": 1002,
-  "category": "partial_escaped",
-  "data_source_tags": ""
- },
- {
-  "line": 5869,
-  "function": "loadTAXIIConnectors",
-  "target": "tbody",
-  "op": "=",
-  "rhs": "'<tr><td colspan=\"6\" class=\"empty\">Loading\u2026</td></tr>'",
-  "rhs_len": 54,
-  "category": "static",
-  "data_source_tags": ""
- },
- {
-  "line": 5874,
-  "function": "loadTAXIIConnectors",
-  "target": "tbody",
-  "op": "=",
-  "rhs": "'<tr><td colspan=\"6\" class=\"empty\">Failed to load: ' + x(e.message || 'unknown error') + '</td></tr>'",
-  "rhs_len": 101,
-  "category": "escaped",
-  "data_source_tags": "error_message"
- },
- {
-  "line": 5881,
-  "function": "renderTAXIIConnectorsList",
-  "target": "tbody",
-  "op": "=",
-  "rhs": "'<tr><td colspan=\"6\" class=\"empty\">No TAXII connectors configured yet.</td></tr>'",
-  "rhs_len": 81,
-  "category": "static",
-  "data_source_tags": ""
- },
- {
-  "line": 5884,
-  "function": "renderTAXIIConnectorsList",
-  "target": "tbody",
-  "op": "=",
-  "rhs": "TAXII_CONNECTORS.map(function(c) {\n    var lastPoll = c.lastPollAt ? ago(c.lastPollAt) : 'Never';\n    var resultColor = c.lastPollStatus === 'ok' ? 'var(--success)' : (c.lastPollStatus === 'error' ? 'var(--danger)' : 'var(--muted)');\n    var summary = c.lastPollSummary || {};\n    var resultText = c.lastPollStatus === 'ok'\n      ? (summary.processed || 0) + ' processed, ' + (summary.skipped || 0) +",
-  "rhs_len": 1439,
-  "category": "unescaped_html",
-  "data_source_tags": "user_created_name"
- },
- {
-  "line": 6060,
-  "function": "loadARTContentStatus",
-  "target": "statusEl",
-  "op": "=",
-  "rhs": "'<span style=\"display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--success);margin-right:6px;vertical-align:middle\"></span><span class=\"u-success\">Seeded</span>'",
-  "rhs_len": 185,
-  "category": "static",
-  "data_source_tags": ""
- },
- {
-  "line": 6062,
-  "function": "loadARTContentStatus",
-  "target": "statusEl",
-  "op": "=",
-  "rhs": "'<span style=\"display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--warning);margin-right:6px;vertical-align:middle\"></span><span class=\"u-warning\">Not seeded</span>'",
-  "rhs_len": 189,
-  "category": "static",
-  "data_source_tags": ""
- },
- {
-  "line": 6102,
-  "function": "loadARTContentStatus",
-  "target": "document.getElementById('cs-art-status')",
-  "op": "=",
-  "rhs": "'<span class=\"u-danger\">Error checking status</span>'",
-  "rhs_len": 53,
-  "category": "static",
-  "data_source_tags": ""
- },
- {
-  "line": 6115,
-  "function": "toggleSimCoverage",
-  "target": "if (car) car",
-  "op": "=",
-  "rhs": "SIM_COV_OPEN ? '&#9660;' : '&#9654;'",
-  "rhs_len": 36,
-  "category": "static",
-  "data_source_tags": ""
- },
- {
-  "line": 6228,
-  "function": "loadSimCoverage",
-  "target": "bodyEl",
-  "op": "=",
-  "rhs": "rows.map(function(r, i) {\n        var bg = i % 2 === 0 ? '' : 'background:rgba(255,255,255,.02)';\n        var isVariantRow = r[0].indexOf('Variant Engine') !== -1;\n        var isSection = !!sectionKeys[r[0]];\n        var textStyle = isVariantRow ? 'font-weight:700;color:var(--accent)'\n                      : isSection    ? 'font-weight:700;color:var(--text)'\n                      :                ",
-  "rhs_len": 2162,
-  "category": "unescaped_html",
-  "data_source_tags": ""
- },
- {
-  "line": 6773,
+  "line": 4704,
   "function": "renderInitiativesList",
   "target": "tbody",
   "op": "=",
@@ -600,7 +230,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 6776,
+  "line": 4707,
   "function": "renderInitiativesList",
   "target": "tbody",
   "op": "=",
@@ -610,7 +240,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 6844,
+  "line": 4775,
   "function": "renderInitiativeDrawer",
   "target": "document.getElementById('init-drawer-body')",
   "op": "=",
@@ -620,7 +250,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 6884,
+  "line": 4815,
   "function": "initiativeShowDrawerError",
   "target": "if (el) el",
   "op": "=",
@@ -630,7 +260,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 6912,
+  "line": 4843,
   "function": "openInitiativeCreateDrawer",
   "target": "document.getElementById('init-create-error')",
   "op": "=",
@@ -640,7 +270,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 6924,
+  "line": 4855,
   "function": "submitInitiativeCreate",
   "target": "errEl",
   "op": "=",
@@ -650,7 +280,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 6927,
+  "line": 4858,
   "function": "submitInitiativeCreate",
   "target": "errEl",
   "op": "=",
@@ -660,7 +290,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 6930,
+  "line": 4861,
   "function": "submitInitiativeCreate",
   "target": "errEl",
   "op": "=",
@@ -670,7 +300,7 @@
   "data_source_tags": "api_response"
  },
  {
-  "line": 6935,
+  "line": 4866,
   "function": "submitInitiativeCreate",
   "target": "errEl",
   "op": "=",
@@ -680,7 +310,7 @@
   "data_source_tags": "error_message"
  },
  {
-  "line": 6958,
+  "line": 4889,
   "function": "openInitiativeAttachDrawer",
   "target": "document.getElementById('init-attach-error')",
   "op": "=",
@@ -690,7 +320,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 6959,
+  "line": 4890,
   "function": "openInitiativeAttachDrawer",
   "target": "document.getElementById('init-attach-list')",
   "op": "=",
@@ -700,7 +330,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 6962,
+  "line": 4893,
   "function": "openInitiativeAttachDrawer",
   "target": "document.getElementById('init-attach-list')",
   "op": "=",
@@ -710,7 +340,7 @@
   "data_source_tags": "api_response"
  },
  {
-  "line": 6965,
+  "line": 4896,
   "function": "openInitiativeAttachDrawer",
   "target": "document.getElementById('init-attach-list')",
   "op": "=",
@@ -720,7 +350,7 @@
   "data_source_tags": "error_message"
  },
  {
-  "line": 6979,
+  "line": 4910,
   "function": "initiativeRenderAttachList",
   "target": "list",
   "op": "=",
@@ -730,7 +360,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 6982,
+  "line": 4913,
   "function": "initiativeRenderAttachList",
   "target": "list",
   "op": "=",
@@ -740,7 +370,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 6996,
+  "line": 4927,
   "function": "submitInitiativeAttach",
   "target": "errEl",
   "op": "=",
@@ -750,7 +380,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 6999,
+  "line": 4930,
   "function": "submitInitiativeAttach",
   "target": "errEl",
   "op": "=",
@@ -760,7 +390,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 7003,
+  "line": 4934,
   "function": "submitInitiativeAttach",
   "target": "errEl",
   "op": "=",
@@ -770,7 +400,7 @@
   "data_source_tags": "api_response"
  },
  {
-  "line": 7007,
+  "line": 4938,
   "function": "submitInitiativeAttach",
   "target": "errEl",
   "op": "=",
@@ -780,7 +410,377 @@
   "data_source_tags": "error_message"
  },
  {
-  "line": 7057,
+  "line": 4960,
+  "function": "renderRunIOCToolbar",
+  "target": "el",
+  "op": "=",
+  "rhs": "covSegHtml(types, _runIOCTypeFilter, 'setRunIOCTypeFilter', function(k) { return counts[k] || 0; }) +\n    '<input type=\"text\" id=\"run-ioc-search\" placeholder=\"Search indicators\u2026\" value=\"' + x(_runIOCSearch) + '\" oninput=\"setRunIOCSearch(this.value)\" style=\"padding:0.35rem 0.6rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:0.78re",
+  "rhs_len": 440,
+  "category": "partial_escaped",
+  "data_source_tags": ""
+ },
+ {
+  "line": 5002,
+  "function": "renderRunIOCList",
+  "target": "el",
+  "op": "=",
+  "rhs": "'<div style=\"color:var(--muted);font-size:0.8rem;padding:2.5rem 0;text-align:center\">' +\n      (state._runIOCsAll.length ? 'No indicators match this filter.' : 'No indicators extracted from this run.') + '</div>'",
+  "rhs_len": 212,
+  "category": "escaped",
+  "data_source_tags": ""
+ },
+ {
+  "line": 5007,
+  "function": "renderRunIOCList",
+  "target": "el",
+  "op": "=",
+  "rhs": "list.map(function(ind, idx) {\n    var expanded = _runIOCExpandedIdx === idx;\n    var techs = (ind.techniqueIds || []).map(function(t) {\n      return '<code style=\"font-size:0.66rem;color:var(--muted);margin-right:3px\">' + x(t) + '</code>';\n    }).join('');\n    var tags = (ind.tags || []).map(function(t) {\n      return '<span class=\"tiny\" style=\"background:var(--elevated);border:1px solid var(--bor",
+  "rhs_len": 2819,
+  "category": "unescaped_html",
+  "data_source_tags": ""
+ },
+ {
+  "line": 5056,
+  "function": "loadIOCRegistry",
+  "target": "if (el) el",
+  "op": "=",
+  "rhs": "''",
+  "rhs_len": 2,
+  "category": "static_empty",
+  "data_source_tags": ""
+ },
+ {
+  "line": 5074,
+  "function": "loadIOCRegistry",
+  "target": "tbody",
+  "op": "=",
+  "rhs": "'<tr><td colspan=\"9\" class=\"empty\">Loading\u2026</td></tr>'",
+  "rhs_len": 54,
+  "category": "static",
+  "data_source_tags": ""
+ },
+ {
+  "line": 5083,
+  "function": "loadIOCRegistry",
+  "target": "tbody",
+  "op": "=",
+  "rhs": "'<tr><td colspan=\"9\" class=\"empty\">Failed to load: ' + x(e.message || 'unknown error') + '</td></tr>'",
+  "rhs_len": 101,
+  "category": "escaped",
+  "data_source_tags": "error_message"
+ },
+ {
+  "line": 5104,
+  "function": "tile",
+  "target": "el",
+  "op": "=",
+  "rhs": "tile('Most Detected', result.mostDetected, ' detections') +\n    tile('Highest Bypass Rate', result.highestBypassRate, ' bypasses') +\n    tile('Frequently Reused', result.frequentlyReused, ' sightings') +\n    tile('Longest Surviving', result.longestSurviving, ' sightings')",
+  "rhs_len": 272,
+  "category": "indirect_builder",
+  "data_source_tags": "api_response"
+ },
+ {
+  "line": 5114,
+  "function": "renderIOCRegistryTable",
+  "target": "tbody",
+  "op": "=",
+  "rhs": "'<tr><td colspan=\"9\" class=\"empty\">No indicators match this filter.</td></tr>'",
+  "rhs_len": 78,
+  "category": "static",
+  "data_source_tags": ""
+ },
+ {
+  "line": 5117,
+  "function": "renderIOCRegistryTable",
+  "target": "tbody",
+  "op": "=",
+  "rhs": "_iocRegistryRows.map(function(row, idx) {\n    var suppressedBadge = row.suppressed ? ' <span class=\"sbadge\" style=\"background:rgba(154,169,188,.12);color:var(--muted)\" title=\"' + x(row.suppressionReason || '') + '\">suppressed</span>' : '';\n    return '<tr class=\"u-pointer\" onclick=\"openIOCDetail(' + idx + ')\">' +\n      '<td><span class=\"tiny\" style=\"background:var(--elevated);border:1px solid var(",
+  "rhs_len": 1425,
+  "category": "unescaped_html",
+  "data_source_tags": ""
+ },
+ {
+  "line": 5165,
+  "function": "openIOCDetail",
+  "target": "document.getElementById('results-export')",
+  "op": "=",
+  "rhs": "''",
+  "rhs_len": 2,
+  "category": "static_empty",
+  "data_source_tags": ""
+ },
+ {
+  "line": 5182,
+  "function": "rowHtml",
+  "target": "document.getElementById('results-body')",
+  "op": "=",
+  "rhs": "body",
+  "rhs_len": 4,
+  "category": "indirect_variable",
+  "data_source_tags": ""
+ },
+ {
+  "line": 5201,
+  "function": "rowHtml",
+  "target": "el",
+  "op": "=",
+  "rhs": "sections || '<div class=\"tiny muted\">No relationships recorded.</div>'",
+  "rhs_len": 70,
+  "category": "unescaped_html",
+  "data_source_tags": ""
+ },
+ {
+  "line": 5204,
+  "function": "rowHtml",
+  "target": "if (el) el",
+  "op": "=",
+  "rhs": "'<div class=\"tiny muted\">Relationships unavailable.</div>'",
+  "rhs_len": 58,
+  "category": "static",
+  "data_source_tags": ""
+ },
+ {
+  "line": 5306,
+  "function": "openRerunReview",
+  "target": "document.getElementById('rerun-review-body')",
+  "op": "=",
+  "rhs": "rows.map(function(r) {\n    return '<div class=\"conn-cfg-row\"><span class=\"conn-cfg-label\">' + r[0] + '</span><span class=\"conn-cfg-val\">' + r[1] + '</span></div>';\n  }).join('')",
+  "rhs_len": 177,
+  "category": "unescaped_html",
+  "data_source_tags": ""
+ },
+ {
+  "line": 5353,
+  "function": "startRerunFromReview",
+  "target": "btn",
+  "op": "=",
+  "rhs": "'&#9654; Start Re-run'",
+  "rhs_len": 22,
+  "category": "static",
+  "data_source_tags": ""
+ },
+ {
+  "line": 5360,
+  "function": "startRerunFromReview",
+  "target": "btn",
+  "op": "=",
+  "rhs": "'&#9654; Start Re-run'",
+  "rhs_len": 22,
+  "category": "static",
+  "data_source_tags": ""
+ },
+ {
+  "line": 5400,
+  "function": "openCampaignRerunReview",
+  "target": "document.getElementById('rerun-review-body')",
+  "op": "=",
+  "rhs": "rows.map(function(r) {\n    return '<div class=\"conn-cfg-row\"><span class=\"conn-cfg-label\">' + r[0] + '</span><span class=\"conn-cfg-val\">' + r[1] + '</span></div>';\n  }).join('')",
+  "rhs_len": 177,
+  "category": "unescaped_html",
+  "data_source_tags": ""
+ },
+ {
+  "line": 5433,
+  "function": "startCampaignRerunFromReview",
+  "target": "btn",
+  "op": "=",
+  "rhs": "'&#9654; Start Re-run'",
+  "rhs_len": 22,
+  "category": "static",
+  "data_source_tags": ""
+ },
+ {
+  "line": 5440,
+  "function": "startCampaignRerunFromReview",
+  "target": "btn",
+  "op": "=",
+  "rhs": "'&#9654; Start Re-run'",
+  "rhs_len": 22,
+  "category": "static",
+  "data_source_tags": ""
+ },
+ {
+  "line": 5546,
+  "function": "renderLicenseLockedScreen",
+  "target": "el",
+  "op": "=",
+  "rhs": "'<div style=\"max-width:520px;text-align:center;color:var(--text,#e6e6e6)\">' +\n      '<div style=\"font-size:2.5rem;margin-bottom:1rem\">&#x1F512;</div>' +\n      '<h1 style=\"font-size:1.4rem;margin-bottom:0.75rem\">BAS LICENSE EXPIRED</h1>' +\n      '<p style=\"color:var(--muted,#9aa9bc);line-height:1.6;margin-bottom:1rem\">This Audspect BAS Server is currently unavailable because its license and grace p",
+  "rhs_len": 1040,
+  "category": "escaped",
+  "data_source_tags": ""
+ },
+ {
+  "line": 5609,
+  "function": "renderLicenseGraceBanner",
+  "target": "el",
+  "op": "=",
+  "rhs": "_licenseBannerHTML(info) +\n    '<button onclick=\"_dismissLicenseGraceBanner()\" aria-label=\"Dismiss\" title=\"Dismiss\" ' +\n      'style=\"position:absolute;top:0.5rem;right:0.6rem;width:24px;height:24px;display:flex;align-items:center;justify-content:center;' +\n      'background:transparent;border:none;color:inherit;font-size:1.1rem;line-height:1;cursor:pointer;opacity:0.75\" ' +\n      'onmouseover=\"th",
+  "rhs_len": 475,
+  "category": "indirect_builder",
+  "data_source_tags": ""
+ },
+ {
+  "line": 5626,
+  "function": "maybeShowLicenseGraceModal",
+  "target": "overlay",
+  "op": "=",
+  "rhs": "'<div style=\"max-width:480px;background:var(--surface,#152338);border:1px solid var(--warning,#d29922);border-radius:8px;padding:1.5rem;color:var(--text,#e6e6e6)\">' +\n      _licenseBannerHTML(info) +\n      '<div style=\"text-align:right;margin-top:1rem\"><button id=\"license-grace-modal-dismiss\" style=\"padding:0.4rem 1rem;border-radius:6px;border:1px solid var(--border,#22324a);background:transparent",
+  "rhs_len": 469,
+  "category": "indirect_builder",
+  "data_source_tags": ""
+ },
+ {
+  "line": 5820,
+  "function": "goToProfile",
+  "target": "el",
+  "op": "=",
+  "rhs": "d.permissions.slice().sort().map(function(p) {\n      return '<span class=\"tag\" style=\"display:inline-block;margin:0 0.3rem 0.3rem 0\">' + x(p) + '</span>';\n    }).join('')",
+  "rhs_len": 170,
+  "category": "escaped",
+  "data_source_tags": ""
+ },
+ {
+  "line": 5876,
+  "function": "loadAgentRiskSummary",
+  "target": "if (tb) tb",
+  "op": "=",
+  "rhs": "'<tr><td colspan=\"7\" class=\"empty\">Loading\u2026</td></tr>'",
+  "rhs_len": 54,
+  "category": "static",
+  "data_source_tags": ""
+ },
+ {
+  "line": 5894,
+  "function": "renderAgentRiskSummary",
+  "target": "tb",
+  "op": "=",
+  "rhs": "'<tr><td colspan=\"7\" class=\"empty\">No agents to show.</td></tr>'",
+  "rhs_len": 64,
+  "category": "static",
+  "data_source_tags": ""
+ },
+ {
+  "line": 5904,
+  "function": "renderAgentRiskSummary",
+  "target": "tb",
+  "op": "=",
+  "rhs": "rows.map(function(a) {\n    return '<tr>' +\n      '<td>' + x(a.hostname || a.agentId) + '</td>' +\n      (a.measurable\n        ? '<td style=\"color:' + _riskScoreColor(a.healthScore) + ';font-weight:700\">' + a.healthScore + '</td>'\n        : '<td class=\"u-muted\" title=\"Nothing collected for this endpoint yet \u2014 an absent score is not a safe score\">\u2014 no data</td>') +\n      '<td>' + (a.criticalityRisk |",
+  "rhs_len": 783,
+  "category": "unescaped_html",
+  "data_source_tags": "agent"
+ },
+ {
+  "line": 6033,
+  "function": "loadThreatIntelConfig",
+  "target": "if (panel) panel",
+  "op": "=",
+  "rhs": "''",
+  "rhs_len": 2,
+  "category": "static_empty",
+  "data_source_tags": ""
+ },
+ {
+  "line": 6042,
+  "function": "loadThreatIntelConfig",
+  "target": "panel",
+  "op": "=",
+  "rhs": "'<div class=\"kpi-row\">' +\n        urlField +\n        '<input id=\"ti-' + name + '-key\" type=\"password\" placeholder=\"API key (leave blank to keep current)\" class=\"inp-sm u-flex1\">' +\n        insecureField +\n        '<label class=\"tiny muted\" style=\"display:flex;align-items:center;gap:0.3rem\"><input type=\"checkbox\" id=\"ti-' + name + '-enabled\" ' + (cfg.enabled ? 'checked' : '') + '> Enabled</label>' ",
+  "rhs_len": 1002,
+  "category": "partial_escaped",
+  "data_source_tags": ""
+ },
+ {
+  "line": 6148,
+  "function": "loadTAXIIConnectors",
+  "target": "tbody",
+  "op": "=",
+  "rhs": "'<tr><td colspan=\"6\" class=\"empty\">Loading\u2026</td></tr>'",
+  "rhs_len": 54,
+  "category": "static",
+  "data_source_tags": ""
+ },
+ {
+  "line": 6153,
+  "function": "loadTAXIIConnectors",
+  "target": "tbody",
+  "op": "=",
+  "rhs": "'<tr><td colspan=\"6\" class=\"empty\">Failed to load: ' + x(e.message || 'unknown error') + '</td></tr>'",
+  "rhs_len": 101,
+  "category": "escaped",
+  "data_source_tags": "error_message"
+ },
+ {
+  "line": 6160,
+  "function": "renderTAXIIConnectorsList",
+  "target": "tbody",
+  "op": "=",
+  "rhs": "'<tr><td colspan=\"6\" class=\"empty\">No TAXII connectors configured yet.</td></tr>'",
+  "rhs_len": 81,
+  "category": "static",
+  "data_source_tags": ""
+ },
+ {
+  "line": 6163,
+  "function": "renderTAXIIConnectorsList",
+  "target": "tbody",
+  "op": "=",
+  "rhs": "TAXII_CONNECTORS.map(function(c) {\n    var lastPoll = c.lastPollAt ? ago(c.lastPollAt) : 'Never';\n    var resultColor = c.lastPollStatus === 'ok' ? 'var(--success)' : (c.lastPollStatus === 'error' ? 'var(--danger)' : 'var(--muted)');\n    var summary = c.lastPollSummary || {};\n    var resultText = c.lastPollStatus === 'ok'\n      ? (summary.processed || 0) + ' processed, ' + (summary.skipped || 0) +",
+  "rhs_len": 1439,
+  "category": "unescaped_html",
+  "data_source_tags": "user_created_name"
+ },
+ {
+  "line": 6339,
+  "function": "loadARTContentStatus",
+  "target": "statusEl",
+  "op": "=",
+  "rhs": "'<span style=\"display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--success);margin-right:6px;vertical-align:middle\"></span><span class=\"u-success\">Seeded</span>'",
+  "rhs_len": 185,
+  "category": "static",
+  "data_source_tags": ""
+ },
+ {
+  "line": 6341,
+  "function": "loadARTContentStatus",
+  "target": "statusEl",
+  "op": "=",
+  "rhs": "'<span style=\"display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--warning);margin-right:6px;vertical-align:middle\"></span><span class=\"u-warning\">Not seeded</span>'",
+  "rhs_len": 189,
+  "category": "static",
+  "data_source_tags": ""
+ },
+ {
+  "line": 6381,
+  "function": "loadARTContentStatus",
+  "target": "document.getElementById('cs-art-status')",
+  "op": "=",
+  "rhs": "'<span class=\"u-danger\">Error checking status</span>'",
+  "rhs_len": 53,
+  "category": "static",
+  "data_source_tags": ""
+ },
+ {
+  "line": 6394,
+  "function": "toggleSimCoverage",
+  "target": "if (car) car",
+  "op": "=",
+  "rhs": "SIM_COV_OPEN ? '&#9660;' : '&#9654;'",
+  "rhs_len": 36,
+  "category": "static",
+  "data_source_tags": ""
+ },
+ {
+  "line": 6507,
+  "function": "loadSimCoverage",
+  "target": "bodyEl",
+  "op": "=",
+  "rhs": "rows.map(function(r, i) {\n        var bg = i % 2 === 0 ? '' : 'background:rgba(255,255,255,.02)';\n        var isVariantRow = r[0].indexOf('Variant Engine') !== -1;\n        var isSection = !!sectionKeys[r[0]];\n        var textStyle = isVariantRow ? 'font-weight:700;color:var(--accent)'\n                      : isSection    ? 'font-weight:700;color:var(--text)'\n                      :                ",
+  "rhs_len": 2162,
+  "category": "unescaped_html",
+  "data_source_tags": ""
+ },
+ {
+  "line": 7058,
   "function": "loadVerificationTab",
   "target": "sel",
   "op": "=",
@@ -790,7 +790,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 7066,
+  "line": 7067,
   "function": "vfRenderDomainChips",
   "target": "wrap",
   "op": "=",
@@ -800,7 +800,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 7081,
+  "line": 7082,
   "function": "vfLoadQueue",
   "target": "box",
   "op": "=",
@@ -810,7 +810,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 7082,
+  "line": 7083,
   "function": "vfLoadQueue",
   "target": "box",
   "op": "=",
@@ -820,7 +820,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 7085,
+  "line": 7086,
   "function": "vfLoadQueue",
   "target": "box",
   "op": "=",
@@ -830,7 +830,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 7088,
+  "line": 7089,
   "function": "vfLoadQueue",
   "target": "box",
   "op": "=",
@@ -840,7 +840,7 @@
   "data_source_tags": "error_message"
  },
  {
-  "line": 7097,
+  "line": 7098,
   "function": "vfRenderQueue",
   "target": "box",
   "op": "=",
@@ -850,7 +850,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 7116,
+  "line": 7117,
   "function": "vfRenderQueue",
   "target": "box",
   "op": "=",
@@ -860,7 +860,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 7145,
+  "line": 7146,
   "function": "resultBtn",
   "target": "host",
   "op": "=",
@@ -870,7 +870,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 7175,
+  "line": 7176,
   "function": "vfCloseDetail",
   "target": "if (h) h",
   "op": "=",
@@ -880,7 +880,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 7231,
+  "line": 7232,
   "function": "vfLoadEvidence",
   "target": "host",
   "op": "=",
@@ -890,7 +890,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 7233,
+  "line": 7234,
   "function": "vfLoadEvidence",
   "target": "host",
   "op": "=",
@@ -900,7 +900,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 7244,
+  "line": 7245,
   "function": "vfLoadEvidence",
   "target": "host",
   "op": "=",
@@ -910,7 +910,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 7267,
+  "line": 7268,
   "function": "vfToggleHistory",
   "target": "host",
   "op": "=",
@@ -920,7 +920,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 7269,
+  "line": 7270,
   "function": "vfToggleHistory",
   "target": "host",
   "op": "=",
@@ -930,7 +930,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 7272,
+  "line": 7273,
   "function": "vfToggleHistory",
   "target": "host",
   "op": "=",
@@ -940,7 +940,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 7273,
+  "line": 7274,
   "function": "vfToggleHistory",
   "target": "host",
   "op": "=",
@@ -950,7 +950,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 7285,
+  "line": 7286,
   "function": "vfToggleHistory",
   "target": "host",
   "op": "=",
@@ -960,7 +960,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 7291,
+  "line": 7292,
   "function": "loadAttackPath",
   "target": "if (body) body",
   "op": "=",
@@ -970,7 +970,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 7346,
+  "line": 7347,
   "function": "loadExposureAssets",
   "target": "body",
   "op": "=",
@@ -980,7 +980,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 7349,
+  "line": 7350,
   "function": "loadExposureAssets",
   "target": "body",
   "op": "=",
@@ -990,7 +990,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 7352,
+  "line": 7353,
   "function": "loadExposureAssets",
   "target": "body",
   "op": "=",
@@ -1000,7 +1000,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 7365,
+  "line": 7366,
   "function": "loadExposureAssets",
   "target": "body",
   "op": "=",
@@ -1010,7 +1010,7 @@
   "data_source_tags": "error_message"
  },
  {
-  "line": 7435,
+  "line": 7436,
   "function": "renderExecDashboard",
   "target": "el",
   "op": "=",
@@ -1020,7 +1020,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 7491,
+  "line": 7492,
   "function": "renderForecast",
   "target": "el",
   "op": "=",
@@ -1030,7 +1030,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 7498,
+  "line": 7499,
   "function": "renderForecast",
   "target": "el",
   "op": "=",
@@ -1040,7 +1040,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 7512,
+  "line": 7513,
   "function": "renderExposure",
   "target": "el",
   "op": "=",
@@ -1050,7 +1050,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 7534,
+  "line": 7535,
   "function": "stat",
   "target": "el",
   "op": "=",
@@ -1060,7 +1060,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 7582,
+  "line": 7583,
   "function": "loadCoverageMatrix",
   "target": "body",
   "op": "=",
@@ -1070,7 +1070,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 7588,
+  "line": 7589,
   "function": "loadCoverageMatrix",
   "target": "body",
   "op": "=",
@@ -1080,7 +1080,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 7593,
+  "line": 7594,
   "function": "loadCoverageMatrix",
   "target": "body",
   "op": "=",
@@ -1090,7 +1090,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 7605,
+  "line": 7606,
   "function": "loadCoverageMatrix",
   "target": "body",
   "op": "=",
@@ -1100,7 +1100,7 @@
   "data_source_tags": "error_message"
  },
  {
-  "line": 7631,
+  "line": 7632,
   "function": "loadThreatPriorityActors",
   "target": "body",
   "op": "=",
@@ -1110,7 +1110,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 7636,
+  "line": 7637,
   "function": "loadThreatPriorityActors",
   "target": "body",
   "op": "=",
@@ -1120,7 +1120,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 7641,
+  "line": 7642,
   "function": "loadThreatPriorityActors",
   "target": "body",
   "op": "=",
@@ -1130,7 +1130,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 7652,
+  "line": 7653,
   "function": "loadThreatPriorityActors",
   "target": "body",
   "op": "=",
@@ -1140,7 +1140,7 @@
   "data_source_tags": "error_message"
  },
  {
-  "line": 7664,
+  "line": 7665,
   "function": "showThreatPriorityDetail",
   "target": "document.getElementById('tp-detail-factors')",
   "op": "=",
@@ -1150,7 +1150,7 @@
   "data_source_tags": "error_message"
  },
  {
-  "line": 7669,
+  "line": 7670,
   "function": "renderThreatPriorityDetail",
   "target": "document.getElementById('tp-detail-title')",
   "op": "=",
@@ -1160,7 +1160,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 7672,
+  "line": 7673,
   "function": "renderThreatPriorityDetail",
   "target": "document.getElementById('tp-detail-summary')",
   "op": "=",
@@ -1170,7 +1170,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 7685,
+  "line": 7686,
   "function": "renderThreatPriorityDetail",
   "target": "document.getElementById('tp-detail-factors')",
   "op": "=",
@@ -1180,7 +1180,7 @@
   "data_source_tags": "api_response"
  },
  {
-  "line": 7688,
+  "line": 7689,
   "function": "renderThreatPriorityDetail",
   "target": "document.getElementById('tp-detail-uncovered')",
   "op": "=",
@@ -1190,7 +1190,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 7699,
+  "line": 7700,
   "function": "renderThreatPriorityDetail",
   "target": "document.getElementById('tp-detail-coverage')",
   "op": "=",
@@ -1200,7 +1200,7 @@
   "data_source_tags": "api_response"
  },
  {
-  "line": 7716,
+  "line": 7717,
   "function": "renderThreatPriorityDetail",
   "target": "document.getElementById('tp-detail-sources')",
   "op": "=",
@@ -1210,7 +1210,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 7751,
+  "line": 7752,
   "function": "row",
   "target": "document.getElementById('tp-detail-evidence')",
   "op": "=",
@@ -1220,7 +1220,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 7764,
+  "line": 7765,
   "function": "row",
   "target": "document.getElementById('tp-detail-history')",
   "op": "=",
@@ -1230,7 +1230,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 7774,
+  "line": 7775,
   "function": "row",
   "target": "document.getElementById('tp-detail-recs')",
   "op": "=",
@@ -1240,7 +1240,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 7778,
+  "line": 7779,
   "function": "row",
   "target": "document.getElementById('tp-detail-recs')",
   "op": "=",
@@ -1250,7 +1250,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 7786,
+  "line": 7787,
   "function": "loadRecommendations",
   "target": "body",
   "op": "=",
@@ -1260,7 +1260,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 7790,
+  "line": 7791,
   "function": "loadRecommendations",
   "target": "body",
   "op": "=",
@@ -1270,7 +1270,7 @@
   "data_source_tags": "error_message"
  },
  {
-  "line": 7799,
+  "line": 7800,
   "function": "renderRecommendations",
   "target": "body",
   "op": "=",
@@ -1280,7 +1280,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 7802,
+  "line": 7803,
   "function": "renderRecommendations",
   "target": "body",
   "op": "=",
@@ -1290,7 +1290,7 @@
   "data_source_tags": "threat_intel,user_created_name"
  },
  {
-  "line": 7844,
+  "line": 7845,
   "function": "openExposureDetail",
   "target": "body",
   "op": "=",
@@ -1300,7 +1300,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 7910,
+  "line": 7911,
   "function": "expCard",
   "target": "body",
   "op": "=",
@@ -1310,7 +1310,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 7912,
+  "line": 7913,
   "function": "expCard",
   "target": "body",
   "op": "=",
@@ -1320,7 +1320,7 @@
   "data_source_tags": "error_message"
  },
  {
-  "line": 7932,
+  "line": 7933,
   "function": "loadOpenAEVConfig",
   "target": "configPanel",
   "op": "=",
@@ -1330,7 +1330,7 @@
   "data_source_tags": "openaev"
  },
  {
-  "line": 7947,
+  "line": 7948,
   "function": "loadOpenAEVConfig",
   "target": "configPanel",
   "op": "=",
@@ -1340,7 +1340,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 8008,
+  "line": 8009,
   "function": "loadOpenAEVScenarios",
   "target": "body",
   "op": "=",
@@ -1350,7 +1350,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 8013,
+  "line": 8014,
   "function": "loadOpenAEVScenarios",
   "target": "body",
   "op": "=",
@@ -1360,7 +1360,7 @@
   "data_source_tags": "openaev"
  },
  {
-  "line": 8099,
+  "line": 8100,
   "function": "openOpenAEVDetail",
   "target": "body",
   "op": "=",
@@ -1370,7 +1370,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 8101,
+  "line": 8102,
   "function": "openOpenAEVDetail",
   "target": "body",
   "op": "+=",
@@ -1380,7 +1380,7 @@
   "data_source_tags": "openaev"
  },
  {
-  "line": 8117,
+  "line": 8118,
   "function": "loadExercisesTab",
   "target": "body",
   "op": "=",
@@ -1390,7 +1390,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 8119,
+  "line": 8120,
   "function": "loadExercisesTab",
   "target": "body",
   "op": "=",
@@ -1400,7 +1400,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 8132,
+  "line": 8133,
   "function": "loadExercisesTab",
   "target": "body",
   "op": "=",
@@ -1410,7 +1410,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 8134,
+  "line": 8135,
   "function": "loadExercisesTab",
   "target": "body",
   "op": "=",
@@ -1420,7 +1420,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 8278,
+  "line": 8279,
   "function": "openExerciseDetail",
   "target": "document.getElementById('exercise-detail-body')",
   "op": "=",
@@ -1430,7 +1430,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 8508,
+  "line": 8509,
   "function": "loadAPHistory",
   "target": "tb",
   "op": "=",
@@ -1440,7 +1440,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 8511,
+  "line": 8512,
   "function": "loadAPHistory",
   "target": "tb",
   "op": "=",
@@ -1450,7 +1450,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 8514,
+  "line": 8515,
   "function": "loadAPHistory",
   "target": "tb",
   "op": "=",
@@ -1460,7 +1460,7 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 8530,
+  "line": 8531,
   "function": "loadAPHistory",
   "target": "tb",
   "op": "=",
@@ -1470,7 +1470,7 @@
   "data_source_tags": "error_message"
  },
  {
-  "line": 8539,
+  "line": 8540,
   "function": "renderAttackPath",
   "target": "body",
   "op": "=",
@@ -1480,7 +1480,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 8585,
+  "line": 8586,
   "function": "renderAttackPath",
   "target": "body",
   "op": "=",
@@ -1490,7 +1490,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 8642,
+  "line": 8643,
   "function": "fill",
   "target": "sel",
   "op": "=",
@@ -1500,7 +1500,7 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 8666,
+  "line": 8667,
   "function": "apDiscoverSubnet",
   "target": "btn",
   "op": "=",
@@ -1510,7 +1510,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 8676,
+  "line": 8677,
   "function": "apDiscoverSubnet",
   "target": "btn",
   "op": "=",
@@ -1520,7 +1520,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 8721,
+  "line": 8722,
   "function": "dispatchAPCollect",
   "target": "tl",
   "op": "=",
@@ -1530,7 +1530,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 8822,
+  "line": 8823,
   "function": "_apRenderJobState",
   "target": "tl",
   "op": "=",
@@ -1540,7 +1540,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 8924,
+  "line": 8925,
   "function": "_apOnCollected",
   "target": "tl",
   "op": "=",
@@ -1550,7 +1550,7 @@
   "data_source_tags": "api_response"
  },
  {
-  "line": 8964,
+  "line": 8965,
   "function": "openAPAssets",
   "target": "document.getElementById('ap-assets-body')",
   "op": "=",
@@ -1560,7 +1560,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 8974,
+  "line": 8975,
   "function": "renderAPAssets",
   "target": "tb",
   "op": "=",
@@ -1570,7 +1570,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 8977,
+  "line": 8978,
   "function": "renderAPAssets",
   "target": "tb",
   "op": "=",
@@ -1580,7 +1580,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 9136,
+  "line": 9137,
   "function": "renderAgentGroupTree",
   "target": "root",
   "op": "=",
@@ -1590,7 +1590,7 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 9247,
+  "line": 9248,
   "function": "openGroupPicker",
   "target": "document.getElementById('gp-select')",
   "op": "=",
@@ -1600,7 +1600,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 9326,
+  "line": 9327,
   "function": "renderLegacyMigrationPanel",
   "target": "el",
   "op": "=",
@@ -1610,7 +1610,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 9384,
+  "line": 9385,
   "function": "renderAgentTiles",
   "target": "if (el) el",
   "op": "=",
@@ -1620,7 +1620,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 9408,
+  "line": 9409,
   "function": "c",
   "target": "if (el) el",
   "op": "=",
@@ -1630,7 +1630,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 9425,
+  "line": 9426,
   "function": "renderAgentRows",
   "target": "tbody",
   "op": "=",
@@ -1640,7 +1640,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 9428,
+  "line": 9429,
   "function": "renderAgentRows",
   "target": "tbody",
   "op": "=",
@@ -1650,7 +1650,7 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 9749,
+  "line": 9750,
   "function": "renderScenarioLanding",
   "target": "el",
   "op": "=",
@@ -1660,7 +1660,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 9795,
+  "line": 9796,
   "function": "renderScenarios",
   "target": "landingEl",
   "op": "=",
@@ -1670,7 +1670,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 9840,
+  "line": 9841,
   "function": "renderScenarios",
   "target": "sgrid",
   "op": "=",
@@ -1680,7 +1680,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 9869,
+  "line": 9870,
   "function": "renderScenarios",
   "target": "grid",
   "op": "=",
@@ -1690,7 +1690,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 10217,
+  "line": 10218,
   "function": "count",
   "target": "document.getElementById('campaign-toolbar')",
   "op": "=",
@@ -1700,7 +1700,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 10223,
+  "line": 10224,
   "function": "renderCampaignRows",
   "target": "tb",
   "op": "=",
@@ -1710,7 +1710,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 10224,
+  "line": 10225,
   "function": "renderCampaignRows",
   "target": "tb",
   "op": "=",
@@ -1720,7 +1720,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 10320,
+  "line": 10321,
   "function": "kv",
   "target": "document.getElementById('campaigns-detail')",
   "op": "=",
@@ -1730,7 +1730,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 10355,
+  "line": 10356,
   "function": "rowf",
   "target": "el",
   "op": "=",
@@ -1740,7 +1740,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 10358,
+  "line": 10359,
   "function": "rowf",
   "target": "el",
   "op": "=",
@@ -1750,7 +1750,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 10401,
+  "line": 10402,
   "function": "openCampaignLaunch",
   "target": "document.getElementById('cmp-scenario')",
   "op": "=",
@@ -1760,7 +1760,7 @@
   "data_source_tags": "scenario,user_created_name"
  },
  {
-  "line": 10403,
+  "line": 10404,
   "function": "openCampaignLaunch",
   "target": "document.getElementById('cmp-scenario-preview')",
   "op": "=",
@@ -1770,7 +1770,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 10417,
+  "line": 10418,
   "function": "openCampaignLaunch",
   "target": "document.getElementById('cmp-filter-env')",
   "op": "=",
@@ -1780,7 +1780,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 10424,
+  "line": 10425,
   "function": "openCampaignLaunch",
   "target": "typeSel",
   "op": "=",
@@ -1790,7 +1790,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 10432,
+  "line": 10433,
   "function": "openCampaignLaunch",
   "target": "groupSel",
   "op": "=",
@@ -1800,7 +1800,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 10459,
+  "line": 10460,
   "function": "cmpOnGroupChange",
   "target": "document.getElementById('cmp-group-preview')",
   "op": "=",
@@ -1810,7 +1810,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 10459,
+  "line": 10460,
   "function": "cmpOnGroupChange",
   "target": "document.getElementById('cmp-exclusions')",
   "op": "=",
@@ -1820,7 +1820,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 10474,
+  "line": 10475,
   "function": "renderCampaignGroupPreview",
   "target": "document.getElementById('cmp-group-preview')",
   "op": "=",
@@ -1830,7 +1830,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 10477,
+  "line": 10478,
   "function": "renderCampaignGroupPreview",
   "target": "document.getElementById('cmp-exclusions')",
   "op": "=",
@@ -1840,7 +1840,7 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 10536,
+  "line": 10537,
   "function": "setCampaignSource",
   "target": "document.getElementById('cmp-scenario-preview')",
   "op": "=",
@@ -1850,7 +1850,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 10564,
+  "line": 10565,
   "function": "selectTIPack",
   "target": "info",
   "op": "=",
@@ -1860,7 +1860,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 10573,
+  "line": 10574,
   "function": "selectTIPack",
   "target": "info",
   "op": "=",
@@ -1870,7 +1870,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 10581,
+  "line": 10582,
   "function": "selectTIPack",
   "target": "info",
   "op": "=",
@@ -1880,7 +1880,7 @@
   "data_source_tags": "api_response"
  },
  {
-  "line": 10617,
+  "line": 10618,
   "function": "_applyGeneratedTIScenario",
   "target": "el",
   "op": "=",
@@ -1890,7 +1890,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 10646,
+  "line": 10647,
   "function": "_selectCmpScenario",
   "target": "document.getElementById('cmp-scenario')",
   "op": "=",
@@ -1900,7 +1900,7 @@
   "data_source_tags": "scenario,user_created_name"
  },
  {
-  "line": 10658,
+  "line": 10659,
   "function": "cmpOnExistingScenarioChange",
   "target": "el",
   "op": "=",
@@ -1910,7 +1910,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 10660,
+  "line": 10661,
   "function": "cmpOnExistingScenarioChange",
   "target": "el",
   "op": "=",
@@ -1920,7 +1920,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 10664,
+  "line": 10665,
   "function": "cmpOnExistingScenarioChange",
   "target": "el",
   "op": "=",
@@ -1930,7 +1930,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 10683,
+  "line": 10684,
   "function": "loadKEVWidget",
   "target": "tiles",
   "op": "=",
@@ -1940,7 +1940,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 10703,
+  "line": 10704,
   "function": "renderTIActors",
   "target": "el",
   "op": "=",
@@ -1950,7 +1950,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 10704,
+  "line": 10705,
   "function": "renderTIActors",
   "target": "el",
   "op": "=",
@@ -1960,7 +1960,7 @@
   "data_source_tags": "actor"
  },
  {
-  "line": 10748,
+  "line": 10749,
   "function": "loadEndpointPostureWidget",
   "target": "tiles",
   "op": "=",
@@ -1970,7 +1970,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 10771,
+  "line": 10772,
   "function": "loadReadinessTrends",
   "target": "summary",
   "op": "=",
@@ -1980,7 +1980,7 @@
   "data_source_tags": "api_response"
  },
  {
-  "line": 10778,
+  "line": 10779,
   "function": "loadReadinessTrends",
   "target": "el",
   "op": "=",
@@ -1990,7 +1990,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 10806,
+  "line": 10807,
   "function": "renderCampaignTargets",
   "target": "document.getElementById('cmp-targets')",
   "op": "=",
@@ -2000,7 +2000,7 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 10953,
+  "line": 10954,
   "function": "renderTemplateGrid",
   "target": "grid",
   "op": "=",
@@ -2010,7 +2010,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11006,
+  "line": 11007,
   "function": "openTmplRun",
   "target": "if (srcsEl) srcsEl",
   "op": "=",
@@ -2020,7 +2020,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11060,
+  "line": 11061,
   "function": "renderTmplAgentList",
   "target": "list",
   "op": "=",
@@ -2030,7 +2030,7 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 11062,
+  "line": 11063,
   "function": "renderTmplAgentList",
   "target": "list",
   "op": "=",
@@ -2040,7 +2040,7 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 11102,
+  "line": 11103,
   "function": "renderGroupCheckboxList",
   "target": "list",
   "op": "=",
@@ -2050,7 +2050,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11111,
+  "line": 11112,
   "function": "renderGroupCheckboxList",
   "target": "list",
   "op": "=",
@@ -2060,7 +2060,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11153,
+  "line": 11154,
   "function": "renderTmplWarn",
   "target": "warn",
   "op": "=",
@@ -2070,7 +2070,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11155,
+  "line": 11156,
   "function": "renderTmplWarn",
   "target": "warn",
   "op": "=",
@@ -2080,7 +2080,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11157,
+  "line": 11158,
   "function": "renderTmplWarn",
   "target": "warn",
   "op": "=",
@@ -2090,7 +2090,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11184,
+  "line": 11185,
   "function": "renderTmplOSCompat",
   "target": "warnEl",
   "op": "=",
@@ -2100,7 +2100,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11202,
+  "line": 11203,
   "function": "renderTmplOSCompat",
   "target": "warnEl",
   "op": "=",
@@ -2110,7 +2110,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11219,
+  "line": 11220,
   "function": "renderTmplOSCompat",
   "target": "warnEl",
   "op": "=",
@@ -2120,7 +2120,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11229,
+  "line": 11230,
   "function": "renderTmplOSCompat",
   "target": "warnEl",
   "op": "=",
@@ -2130,7 +2130,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11238,
+  "line": 11239,
   "function": "renderTmplOSCompat",
   "target": "warnEl",
   "op": "=",
@@ -2140,7 +2140,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11331,
+  "line": 11332,
   "function": "renderAdversaryLibrary",
   "target": "grid",
   "op": "=",
@@ -2150,7 +2150,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11346,
+  "line": 11347,
   "function": "tacticChip",
   "target": "grid",
   "op": "=",
@@ -2160,7 +2160,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 11375,
+  "line": 11376,
   "function": "openAdvDrawer",
   "target": "abEl",
   "op": "=",
@@ -2170,7 +2170,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11378,
+  "line": 11379,
   "function": "openAdvDrawer",
   "target": "runWrap",
   "op": "=",
@@ -2180,7 +2180,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 11387,
+  "line": 11388,
   "function": "openAdvDrawer",
   "target": "abEl",
   "op": "=",
@@ -2190,7 +2190,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11392,
+  "line": 11393,
   "function": "openAdvDrawer",
   "target": "abEl",
   "op": "=",
@@ -2200,7 +2200,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 11411,
+  "line": 11412,
   "function": "openAdvDrawer",
   "target": "abEl",
   "op": "=",
@@ -2210,7 +2210,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11430,
+  "line": 11431,
   "function": "openAdvRunModal",
   "target": "agSel",
   "op": "=",
@@ -2220,7 +2220,7 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 11455,
+  "line": 11456,
   "function": "renderAdvRunWarn",
   "target": "warn",
   "op": "=",
@@ -2230,7 +2230,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11461,
+  "line": 11462,
   "function": "renderAdvRunWarn",
   "target": "warn",
   "op": "=",
@@ -2240,7 +2240,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11516,
+  "line": 11517,
   "function": "populateCoverageFilters",
   "target": "scenSel",
   "op": "=",
@@ -2250,7 +2250,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 11524,
+  "line": 11525,
   "function": "populateCoverageFilters",
   "target": "agSel",
   "op": "=",
@@ -2260,7 +2260,7 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 11559,
+  "line": 11560,
   "function": "renderCoverageAnalytics",
   "target": "tacBody",
   "op": "=",
@@ -2270,7 +2270,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11575,
+  "line": 11576,
   "function": "renderCoverageAnalytics",
   "target": "missedBody",
   "op": "=",
@@ -2280,7 +2280,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 11608,
+  "line": 11609,
   "function": "renderPrivilegeCoverage",
   "target": "cards",
   "op": "=",
@@ -2290,7 +2290,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11624,
+  "line": 11625,
   "function": "renderPrivilegeCoverage",
   "target": "tierBody",
   "op": "=",
@@ -2300,7 +2300,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11650,
+  "line": 11651,
   "function": "renderPrivilegeCoverage",
   "target": "gapBody",
   "op": "=",
@@ -2310,7 +2310,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11652,
+  "line": 11653,
   "function": "renderPrivilegeCoverage",
   "target": "gapBody",
   "op": "=",
@@ -2320,7 +2320,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 11665,
+  "line": 11666,
   "function": "renderPrivilegeCoverage",
   "target": "gapBody",
   "op": "+=",
@@ -2330,7 +2330,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11687,
+  "line": 11688,
   "function": "loadUnifiedTechniques",
   "target": "sel",
   "op": "=",
@@ -2340,7 +2340,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11763,
+  "line": 11764,
   "function": "cell",
   "target": "if (body) body",
   "op": "=",
@@ -2350,7 +2350,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11788,
+  "line": 11789,
   "function": "loadCoverage",
   "target": "document.getElementById('cov-matrix')",
   "op": "=",
@@ -2360,7 +2360,7 @@
   "data_source_tags": "error_message"
  },
  {
-  "line": 11793,
+  "line": 11794,
   "function": "renderCovMatrix",
   "target": "document.getElementById('cov-matrix')",
   "op": "=",
@@ -2370,7 +2370,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 11809,
+  "line": 11810,
   "function": "badge",
   "target": "document.getElementById('cov-toolbar')",
   "op": "=",
@@ -2380,7 +2380,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11822,
+  "line": 11823,
   "function": "openTechnique",
   "target": "document.getElementById('results-export')",
   "op": "=",
@@ -2390,7 +2390,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11830,
+  "line": 11831,
   "function": "list",
   "target": "document.getElementById('results-body')",
   "op": "=",
@@ -2400,7 +2400,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11871,
+  "line": 11872,
   "function": "renderSLAKPIs",
   "target": "document.getElementById('sla-rpt-kpis')",
   "op": "=",
@@ -2410,7 +2410,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11885,
+  "line": 11886,
   "function": "rank",
   "target": "el",
   "op": "=",
@@ -2420,7 +2420,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11886,
+  "line": 11887,
   "function": "rank",
   "target": "el",
   "op": "=",
@@ -2430,7 +2430,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11898,
+  "line": 11899,
   "function": "renderSLAMonthlyTrend",
   "target": "body",
   "op": "=",
@@ -2440,7 +2440,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11899,
+  "line": 11900,
   "function": "renderSLAMonthlyTrend",
   "target": "body",
   "op": "=",
@@ -2450,7 +2450,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11907,
+  "line": 11908,
   "function": "renderSLARecentlyResolved",
   "target": "body",
   "op": "=",
@@ -2460,7 +2460,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11908,
+  "line": 11909,
   "function": "renderSLARecentlyResolved",
   "target": "body",
   "op": "=",
@@ -2470,7 +2470,7 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 11952,
+  "line": 11953,
   "function": "renderFindingsTiles",
   "target": "document.getElementById('findings-tiles')",
   "op": "=",
@@ -2480,7 +2480,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11962,
+  "line": 11963,
   "function": "c",
   "target": "document.getElementById('findings-toolbar')",
   "op": "=",
@@ -2490,7 +2490,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11980,
+  "line": 11981,
   "function": "renderFindingsRows",
   "target": "tb",
   "op": "=",
@@ -2500,7 +2500,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11981,
+  "line": 11982,
   "function": "renderFindingsRows",
   "target": "tb",
   "op": "=",
@@ -2510,7 +2510,7 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 12040,
+  "line": 12041,
   "function": "list",
   "target": "document.getElementById('results-export')",
   "op": "=",
@@ -2520,7 +2520,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 12068,
+  "line": 12069,
   "function": "list",
   "target": "document.getElementById('results-body')",
   "op": "=",
@@ -2530,7 +2530,7 @@
   "data_source_tags": "agent,threat_intel,user_created_name"
  },
  {
-  "line": 12104,
+  "line": 12105,
   "function": "loadRemediations",
   "target": "document.getElementById('rem-list')",
   "op": "=",
@@ -2540,7 +2540,7 @@
   "data_source_tags": "error_message"
  },
  {
-  "line": 12126,
+  "line": 12127,
   "function": "tile",
   "target": "document.getElementById('rem-tiles')",
   "op": "=",
@@ -2550,7 +2550,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 12134,
+  "line": 12135,
   "function": "renderRemList",
   "target": "el",
   "op": "=",
@@ -2560,7 +2560,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 12135,
+  "line": 12136,
   "function": "renderRemList",
   "target": "el",
   "op": "=",
@@ -2570,7 +2570,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 12162,
+  "line": 12163,
   "function": "openRemediation",
   "target": "document.getElementById('results-export')",
   "op": "=",
@@ -2580,7 +2580,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 12183,
+  "line": 12184,
   "function": "stat",
   "target": "document.getElementById('results-body')",
   "op": "=",
@@ -2590,7 +2590,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 12297,
+  "line": 12298,
   "function": "tile",
   "target": "document.getElementById('dash-itsm-tiles')",
   "op": "=",
@@ -2600,7 +2600,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 12331,
+  "line": 12332,
   "function": "renderConnectorList",
   "target": "el",
   "op": "=",
@@ -2610,7 +2610,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 12336,
+  "line": 12337,
   "function": "renderConnectorList",
   "target": "el",
   "op": "=",
@@ -2620,7 +2620,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 12454,
+  "line": 12455,
   "function": "renderConnectorSettings",
   "target": "document.getElementById('cf-settings')",
   "op": "=",
@@ -2630,7 +2630,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 12507,
+  "line": 12508,
   "function": "fetchConnectorProjects",
   "target": "sel",
   "op": "=",
@@ -2640,7 +2640,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 12661,
+  "line": 12662,
   "function": "renderResponseConnectorList",
   "target": "el",
   "op": "=",
@@ -2650,7 +2650,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 12667,
+  "line": 12668,
   "function": "renderResponseConnectorList",
   "target": "el",
   "op": "=",
@@ -2660,7 +2660,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 12796,
+  "line": 12797,
   "function": "openRespondModal",
   "target": "sel",
   "op": "=",
@@ -2670,7 +2670,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 12798,
+  "line": 12799,
   "function": "openRespondModal",
   "target": "sel",
   "op": "=",
@@ -2680,7 +2680,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 12900,
+  "line": 12901,
   "function": "loadFindingTickets",
   "target": "container",
   "op": "=",
@@ -2690,7 +2690,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 12903,
+  "line": 12904,
   "function": "loadFindingTickets",
   "target": "container",
   "op": "=",
@@ -2700,7 +2700,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 12912,
+  "line": 12913,
   "function": "loadFindingTickets",
   "target": "if (container) container",
   "op": "=",
@@ -2710,7 +2710,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 13044,
+  "line": 13045,
   "function": "loadReports",
   "target": "el",
   "op": "=",
@@ -2720,7 +2720,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 13048,
+  "line": 13049,
   "function": "loadReports",
   "target": "el",
   "op": "=",
@@ -2730,7 +2730,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 13061,
+  "line": 13062,
   "function": "loadReports",
   "target": "document.getElementById('rep-available')",
   "op": "=",
@@ -2740,7 +2740,7 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 13069,
+  "line": 13070,
   "function": "renderRepHistory",
   "target": "tb",
   "op": "=",
@@ -2750,7 +2750,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 13073,
+  "line": 13074,
   "function": "renderRepHistory",
   "target": "tb",
   "op": "=",
@@ -2760,7 +2760,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 13115,
+  "line": 13116,
   "function": "openReportGen",
   "target": "document.getElementById('rep-agent')",
   "op": "=",
@@ -2770,7 +2770,7 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 13119,
+  "line": 13120,
   "function": "openReportGen",
   "target": "document.getElementById('rep-format')",
   "op": "=",
@@ -2780,7 +2780,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 13128,
+  "line": 13129,
   "function": "openReportGen",
   "target": "document.getElementById('rep-fw')",
   "op": "=",
@@ -2790,7 +2790,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 13439,
+  "line": 13440,
   "function": "loadRuns",
   "target": "tbody",
   "op": "=",
@@ -2800,7 +2800,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 13456,
+  "line": 13457,
   "function": "byStartedAtDesc",
   "target": "tbody",
   "op": "=",
@@ -2810,7 +2810,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 13492,
+  "line": 13493,
   "function": "byStartedAtDesc",
   "target": "tbody",
   "op": "=",
@@ -2820,7 +2820,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 13503,
+  "line": 13504,
   "function": "openModal",
   "target": "scSel",
   "op": "=",
@@ -2830,7 +2830,7 @@
   "data_source_tags": "scenario,user_created_name"
  },
  {
-  "line": 13514,
+  "line": 13515,
   "function": "openModal",
   "target": "document.getElementById('modal-agent')",
   "op": "=",
@@ -2840,7 +2840,7 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 13576,
+  "line": 13577,
   "function": "renderRunMode",
   "target": "btn",
   "op": "=",
@@ -2850,7 +2850,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 13616,
+  "line": 13617,
   "function": "renderRunMode",
   "target": "warn",
   "op": "=",
@@ -2860,7 +2860,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 13620,
+  "line": 13621,
   "function": "renderRunMode",
   "target": "btn",
   "op": "=",
@@ -2870,7 +2870,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 13634,
+  "line": 13635,
   "function": "renderRunMode",
   "target": "warn",
   "op": "=",
@@ -2880,7 +2880,7 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 13636,
+  "line": 13637,
   "function": "renderRunMode",
   "target": "btn",
   "op": "=",
@@ -2890,7 +2890,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 13648,
+  "line": 13649,
   "function": "renderRunMode",
   "target": "warn",
   "op": "=",
@@ -2900,7 +2900,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 13649,
+  "line": 13650,
   "function": "renderRunMode",
   "target": "btn",
   "op": "=",
@@ -2910,7 +2910,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 13655,
+  "line": 13656,
   "function": "renderRunMode",
   "target": "warn",
   "op": "=",
@@ -2920,7 +2920,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 13656,
+  "line": 13657,
   "function": "renderRunMode",
   "target": "btn",
   "op": "=",
@@ -2930,7 +2930,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 13663,
+  "line": 13664,
   "function": "renderRunMode",
   "target": "warn",
   "op": "=",
@@ -2940,7 +2940,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 13667,
+  "line": 13668,
   "function": "renderRunMode",
   "target": "btn",
   "op": "=",
@@ -2950,7 +2950,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 13718,
+  "line": 13719,
   "function": "renderAdditionalAgents",
   "target": "list",
   "op": "=",
@@ -2960,7 +2960,7 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 13971,
+  "line": 13972,
   "function": "row",
   "target": "document.getElementById('wz-review')",
   "op": "=",
@@ -2970,7 +2970,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 14137,
+  "line": 14138,
   "function": "openPickerWith",
   "target": "tacticSel",
   "op": "=",
@@ -2980,7 +2980,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 14294,
+  "line": 14295,
   "function": "renderPickerList",
   "target": "document.getElementById('picker-list')",
   "op": "=",
@@ -2990,7 +2990,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 14399,
+  "line": 14400,
   "function": "renderModalSelection",
   "target": "link",
   "op": "=",
@@ -3000,7 +3000,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 14418,
+  "line": 14419,
   "function": "renderModalSelection",
   "target": "link",
   "op": "=",
@@ -3010,7 +3010,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 14432,
+  "line": 14433,
   "function": "renderModalSelection",
   "target": "note",
   "op": "=",
@@ -3020,7 +3020,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 14448,
+  "line": 14449,
   "function": "renderModalSelection",
   "target": "note",
   "op": "=",
@@ -3030,7 +3030,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 14478,
+  "line": 14479,
   "function": "renderModalSelection",
   "target": "note",
   "op": "=",
@@ -3040,7 +3040,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 14481,
+  "line": 14482,
   "function": "renderModalSelection",
   "target": "note",
   "op": "=",
@@ -3050,7 +3050,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 14549,
+  "line": 14550,
   "function": "doOpen",
   "target": "tacticSel",
   "op": "=",
@@ -3060,7 +3060,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 14602,
+  "line": 14603,
   "function": "fillBuilder",
   "target": "steps",
   "op": "=",
@@ -3070,7 +3070,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 14772,
+  "line": 14773,
   "function": "techRenderSelected",
   "target": "box",
   "op": "=",
@@ -3080,7 +3080,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 14782,
+  "line": 14783,
   "function": "techRenderSelected",
   "target": "box",
   "op": "=",
@@ -3090,7 +3090,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 14822,
+  "line": 14823,
   "function": "techOnInput",
   "target": "panel",
   "op": "=",
@@ -3100,7 +3100,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 14832,
+  "line": 14833,
   "function": "techRenderResults",
   "target": "panel",
   "op": "=",
@@ -3110,7 +3110,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 14836,
+  "line": 14837,
   "function": "techRenderResults",
   "target": "panel",
   "op": "=",
@@ -3120,7 +3120,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 14853,
+  "line": 14854,
   "function": "techSelectRow",
   "target": "panel",
   "op": "=",
@@ -3130,7 +3130,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 14877,
+  "line": 14878,
   "function": "techOnKeydown",
   "target": "panel",
   "op": "=",
@@ -3140,7 +3140,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 14888,
+  "line": 14889,
   "function": "techOnBlur",
   "target": "panel",
   "op": "=",
@@ -3150,7 +3150,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 14908,
+  "line": 14909,
   "function": "addStep",
   "target": "div",
   "op": "=",
@@ -3160,7 +3160,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 15165,
+  "line": 15166,
   "function": "viewRunResults",
   "target": "document.getElementById('results-summary')",
   "op": "=",
@@ -3170,7 +3170,7 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 15170,
+  "line": 15171,
   "function": "viewRunResults",
   "target": "document.getElementById('results-summary')",
   "op": "=",
@@ -3180,7 +3180,7 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 15182,
+  "line": 15183,
   "function": "viewRunResults",
   "target": "document.getElementById('results-export')",
   "op": "=",
@@ -3190,7 +3190,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 15188,
+  "line": 15189,
   "function": "viewRunResults",
   "target": "document.getElementById('results-title')",
   "op": "=",
@@ -3200,7 +3200,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 15210,
+  "line": 15211,
   "function": "viewRunResults",
   "target": "document.getElementById('results-header-actions')",
   "op": "=",
@@ -3210,7 +3210,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 15260,
+  "line": 15261,
   "function": "kpiGaugeCard",
   "target": "document.getElementById('run-kpi-strip')",
   "op": "=",
@@ -3220,7 +3220,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 15602,
+  "line": 15603,
   "function": "soonPanel",
   "target": "document.getElementById('run-tab-content')",
   "op": "=",
@@ -3230,7 +3230,7 @@
   "data_source_tags": "threat_intel"
  },
  {
-  "line": 15639,
+  "line": 15640,
   "function": "soonPanel",
   "target": "document.getElementById('run-tabbar')",
   "op": "=",
@@ -3240,7 +3240,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 15653,
+  "line": 15654,
   "function": "soonPanel",
   "target": "reportsEl",
   "op": "=",
@@ -3250,7 +3250,7 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 15668,
+  "line": 15669,
   "function": "soonPanel",
   "target": "reportsEl",
   "op": "=",
@@ -3260,7 +3260,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 15678,
+  "line": 15679,
   "function": "soonPanel",
   "target": "extraEl",
   "op": "=",
@@ -3270,7 +3270,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 15682,
+  "line": 15683,
   "function": "soonPanel",
   "target": "extraEl",
   "op": "=",
@@ -3280,7 +3280,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 15684,
+  "line": 15685,
   "function": "soonPanel",
   "target": "if (findingsEl) findingsEl",
   "op": "=",
@@ -3290,7 +3290,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 15686,
+  "line": 15687,
   "function": "soonPanel",
   "target": "if (recEl) recEl",
   "op": "=",
@@ -3300,7 +3300,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 15690,
+  "line": 15691,
   "function": "soonPanel",
   "target": "extraEl",
   "op": "=",
@@ -3310,7 +3310,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 15692,
+  "line": 15693,
   "function": "soonPanel",
   "target": "if (findingsEl) findingsEl",
   "op": "=",
@@ -3320,7 +3320,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 15694,
+  "line": 15695,
   "function": "soonPanel",
   "target": "if (recEl) recEl",
   "op": "=",
@@ -3330,7 +3330,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 15700,
+  "line": 15701,
   "function": "soonPanel",
   "target": "if (el) el",
   "op": "=",
@@ -3340,7 +3340,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 15703,
+  "line": 15704,
   "function": "soonPanel",
   "target": "if (el) el",
   "op": "=",
@@ -3350,7 +3350,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 15709,
+  "line": 15710,
   "function": "soonPanel",
   "target": "if (el) el",
   "op": "=",
@@ -3360,7 +3360,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 15712,
+  "line": 15713,
   "function": "soonPanel",
   "target": "if (el) el",
   "op": "=",
@@ -3370,7 +3370,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 15730,
+  "line": 15731,
   "function": "soonPanel",
   "target": "if (el) el",
   "op": "=",
@@ -3380,7 +3380,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 15738,
+  "line": 15739,
   "function": "soonPanel",
   "target": "if (findingsElEarly) findingsElEarly",
   "op": "=",
@@ -3390,7 +3390,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 15740,
+  "line": 15741,
   "function": "soonPanel",
   "target": "if (recElEarly) recElEarly",
   "op": "=",
@@ -3400,7 +3400,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 15742,
+  "line": 15743,
   "function": "soonPanel",
   "target": "if (iocElEarly) iocElEarly",
   "op": "=",
@@ -3410,7 +3410,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 15840,
+  "line": 15841,
   "function": "renderDetectionValidationTab",
   "target": "el",
   "op": "=",
@@ -3420,7 +3420,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 15894,
+  "line": 15895,
   "function": "loadSIEMCorrelationPanel",
   "target": "el",
   "op": "=",
@@ -3430,7 +3430,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 16657,
+  "line": 16658,
   "function": "render",
   "target": "document.getElementById('run-live-progress')",
   "op": "=",
@@ -3440,7 +3440,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 16669,
+  "line": 16670,
   "function": "render",
   "target": "ul",
   "op": "=",
@@ -3450,7 +3450,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 16762,
+  "line": 16763,
   "function": "render",
   "target": "ul",
   "op": "=",
@@ -3460,7 +3460,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 16871,
+  "line": 16872,
   "function": "openSweepDrilldown",
   "target": "document.getElementById('sweep-drilldown-actions')",
   "op": "=",
@@ -3470,7 +3470,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 16872,
+  "line": 16873,
   "function": "openSweepDrilldown",
   "target": "document.getElementById('sweep-drilldown-list')",
   "op": "=",
@@ -3480,7 +3480,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 16879,
+  "line": 16880,
   "function": "openSweepDrilldown",
   "target": "document.getElementById('sweep-drilldown-actions')",
   "op": "=",
@@ -3490,7 +3490,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 16882,
+  "line": 16883,
   "function": "openSweepDrilldown",
   "target": "document.getElementById('sweep-drilldown-list')",
   "op": "=",
@@ -3500,7 +3500,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 17218,
+  "line": 17219,
   "function": "fmt",
   "target": "document.getElementById('evidence-content')",
   "op": "=",
@@ -3510,7 +3510,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17525,
+  "line": 17526,
   "function": "confirmRun",
   "target": "runBtn",
   "op": "=",
@@ -3520,7 +3520,7 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 17544,
+  "line": 17545,
   "function": "confirmRun",
   "target": "runBtn",
   "op": "=",
@@ -3530,7 +3530,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17698,
+  "line": 17699,
   "function": "cmdkResultFallback",
   "target": "document.getElementById('results-export')",
   "op": "=",
@@ -3540,7 +3540,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17699,
+  "line": 17700,
   "function": "cmdkResultFallback",
   "target": "document.getElementById('results-summary')",
   "op": "=",
@@ -3550,7 +3550,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17700,
+  "line": 17701,
   "function": "cmdkResultFallback",
   "target": "document.getElementById('results-body')",
   "op": "=",
@@ -3560,7 +3560,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 17730,
+  "line": 17731,
   "function": "openCmdk",
   "target": "wrap",
   "op": "=",
@@ -3570,7 +3570,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17837,
+  "line": 17838,
   "function": "render",
   "target": "list",
   "op": "=",
@@ -3580,7 +3580,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17838,
+  "line": 17839,
   "function": "render",
   "target": "list",
   "op": "=",
@@ -3590,7 +3590,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17896,
+  "line": 17897,
   "function": "loadUsers",
   "target": "tbody",
   "op": "=",
@@ -3600,7 +3600,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17897,
+  "line": 17898,
   "function": "loadUsers",
   "target": "tbody",
   "op": "=",
@@ -3610,7 +3610,7 @@
   "data_source_tags": "api_response,user_created_name"
  },
  {
-  "line": 18138,
+  "line": 18139,
   "function": "aggOf",
   "target": "if (trend === 'Improving')      tEl",
   "op": "=",
@@ -3620,7 +3620,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18139,
+  "line": 18140,
   "function": "aggOf",
   "target": "else if (trend === 'Degrading') tEl",
   "op": "=",
@@ -3630,7 +3630,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18140,
+  "line": 18141,
   "function": "aggOf",
   "target": "else                            tEl",
   "op": "=",
@@ -3640,7 +3640,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18142,
+  "line": 18143,
   "function": "aggOf",
   "target": "document.getElementById('kpi-score-spark')",
   "op": "=",
@@ -3650,7 +3650,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18145,
+  "line": 18146,
   "function": "aggOf",
   "target": "document.getElementById('dash-gauge')",
   "op": "=",
@@ -3660,7 +3660,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18155,
+  "line": 18156,
   "function": "aggOf",
   "target": "document.getElementById('dash-posture-bars')",
   "op": "=",
@@ -3670,7 +3670,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18183,
+  "line": 18184,
   "function": "aggOf",
   "target": "document.getElementById('kpi-cov-spark')",
   "op": "=",
@@ -3680,7 +3680,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18203,
+  "line": 18204,
   "function": "aggOf",
   "target": "donutEl",
   "op": "=",
@@ -3690,7 +3690,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18214,
+  "line": 18215,
   "function": "lg",
   "target": "donutEl",
   "op": "=",
@@ -3700,7 +3700,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18244,
+  "line": 18245,
   "function": "lg",
   "target": "afEl",
   "op": "=",
@@ -3710,7 +3710,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18245,
+  "line": 18246,
   "function": "lg",
   "target": "afEl",
   "op": "=",
@@ -3720,7 +3720,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18248,
+  "line": 18249,
   "function": "lg",
   "target": "afEl",
   "op": "=",
@@ -3730,7 +3730,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18255,
+  "line": 18256,
   "function": "lg",
   "target": "rrEl",
   "op": "=",
@@ -3740,7 +3740,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18257,
+  "line": 18258,
   "function": "lg",
   "target": "rrEl",
   "op": "=",
@@ -3750,7 +3750,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 18300,
+  "line": 18301,
   "function": "lg",
   "target": "tfEl",
   "op": "=",
@@ -3760,7 +3760,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18303,
+  "line": 18304,
   "function": "lg",
   "target": "tfEl",
   "op": "=",
@@ -3770,7 +3770,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 18326,
+  "line": 18327,
   "function": "lg",
   "target": "attckEl",
   "op": "=",
@@ -3780,7 +3780,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18328,
+  "line": 18329,
   "function": "lg",
   "target": "attckEl",
   "op": "=",
@@ -3790,7 +3790,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18378,
+  "line": 18379,
   "function": "lg",
   "target": "bodyEl",
   "op": "=",
@@ -3800,7 +3800,7 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 18454,
+  "line": 18455,
   "function": "loadAgtOverview",
   "target": "pane",
   "op": "=",
@@ -3810,7 +3810,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18457,
+  "line": 18458,
   "function": "loadAgtOverview",
   "target": "pane",
   "op": "=",
@@ -3820,7 +3820,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18461,
+  "line": 18462,
   "function": "loadAgtOverview",
   "target": "pane",
   "op": "=",
@@ -3830,7 +3830,7 @@
   "data_source_tags": "agent,scenario,user_created_name"
  },
  {
-  "line": 18518,
+  "line": 18519,
   "function": "loadAgtOverview",
   "target": "pane",
   "op": "=",
@@ -3840,7 +3840,7 @@
   "data_source_tags": "error_message"
  },
  {
-  "line": 18546,
+  "line": 18547,
   "function": "loadAgtScenarios",
   "target": "pane",
   "op": "=",
@@ -3850,7 +3850,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18549,
+  "line": 18550,
   "function": "loadAgtScenarios",
   "target": "pane",
   "op": "=",
@@ -3860,7 +3860,7 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 18566,
+  "line": 18567,
   "function": "loadAgtScenarios",
   "target": "pane",
   "op": "=",
@@ -3870,7 +3870,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18576,
+  "line": 18577,
   "function": "loadAgtScenarios",
   "target": "pane",
   "op": "=",
@@ -3880,7 +3880,7 @@
   "data_source_tags": "error_message"
  },
  {
-  "line": 18658,
+  "line": 18659,
   "function": "loadAgtLogs",
   "target": "pane",
   "op": "=",
@@ -3890,7 +3890,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18663,
+  "line": 18664,
   "function": "loadAgtLogs",
   "target": "pane",
   "op": "=",
@@ -3900,7 +3900,7 @@
   "data_source_tags": "error_message"
  },
  {
-  "line": 18740,
+  "line": 18741,
   "function": "loadAgtHealth",
   "target": "pane",
   "op": "=",
@@ -3910,7 +3910,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18752,
+  "line": 18753,
   "function": "loadAgtHealth",
   "target": "pane",
   "op": "=",
@@ -3920,7 +3920,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18754,
+  "line": 18755,
   "function": "loadAgtHealth",
   "target": "pane",
   "op": "=",
@@ -3930,7 +3930,7 @@
   "data_source_tags": "error_message"
  },
  {
-  "line": 18761,
+  "line": 18762,
   "function": "loadAgtRisk",
   "target": "if (panel) panel",
   "op": "=",
@@ -3940,7 +3940,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18764,
+  "line": 18765,
   "function": "loadAgtRisk",
   "target": "if (panel) panel",
   "op": "=",
@@ -3950,7 +3950,7 @@
   "data_source_tags": "error_message"
  },
  {
-  "line": 18837,
+  "line": 18838,
   "function": "renderAgtRisk",
   "target": "panel",
   "op": "=",
@@ -3960,7 +3960,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18843,
+  "line": 18844,
   "function": "loadAgtAttackPath",
   "target": "pane",
   "op": "=",
@@ -3970,7 +3970,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18846,
+  "line": 18847,
   "function": "loadAgtAttackPath",
   "target": "pane",
   "op": "=",
@@ -3980,7 +3980,7 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 18877,
+  "line": 18878,
   "function": "loadAgtAttackPath",
   "target": "pane",
   "op": "=",
@@ -3990,7 +3990,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18887,
+  "line": 18888,
   "function": "loadAgtAttackPath",
   "target": "pane",
   "op": "=",
@@ -4000,7 +4000,7 @@
   "data_source_tags": "error_message"
  },
  {
-  "line": 18973,
+  "line": 18974,
   "function": "initComplianceTab",
   "target": "fwSel",
   "op": "=",
@@ -4010,7 +4010,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 18977,
+  "line": 18978,
   "function": "initComplianceTab",
   "target": "fwSel",
   "op": "=",
@@ -4020,7 +4020,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18983,
+  "line": 18984,
   "function": "initComplianceTab",
   "target": "agSel",
   "op": "=",
@@ -4030,7 +4030,7 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 19032,
+  "line": 19033,
   "function": "renderComplianceReport",
   "target": "document.getElementById('cmp-header-area')",
   "op": "=",
@@ -4040,7 +4040,7 @@
   "data_source_tags": "agent,user_created_name"
  },
  {
-  "line": 19069,
+  "line": 19070,
   "function": "renderComplianceReport",
   "target": "document.getElementById('cmp-kpi-area')",
   "op": "=",
@@ -4050,7 +4050,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 19081,
+  "line": 19082,
   "function": "renderComplianceReport",
   "target": "document.getElementById('cmp-domain-area')",
   "op": "=",
@@ -4060,7 +4060,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 19113,
+  "line": 19114,
   "function": "renderControlsTable",
   "target": "document.getElementById('cmp-controls-body')",
   "op": "=",
@@ -4070,7 +4070,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 19144,
+  "line": 19145,
   "function": "renderControlsTable",
   "target": "document.getElementById('cmp-controls-body')",
   "op": "=",
@@ -4080,7 +4080,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 19254,
+  "line": 19255,
   "function": "loadVariantStats",
   "target": "el",
   "op": "=",
@@ -4090,7 +4090,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 19296,
+  "line": 19297,
   "function": "populateVexAgents",
   "target": "if (sel) sel",
   "op": "=",
@@ -4100,7 +4100,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 19298,
+  "line": 19299,
   "function": "populateVexAgents",
   "target": "if (sweepSel) sweepSel",
   "op": "=",
@@ -4110,7 +4110,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 19333,
+  "line": 19334,
   "function": "populateVexTechniques",
   "target": "tacSel",
   "op": "=",
@@ -4120,7 +4120,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 19338,
+  "line": 19339,
   "function": "populateVexTechniques",
   "target": "if (el) el",
   "op": "=",
@@ -4130,7 +4130,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 19429,
+  "line": 19430,
   "function": "renderVexSweepList",
   "target": "el",
   "op": "=",
@@ -4140,7 +4140,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 19431,
+  "line": 19432,
   "function": "renderVexSweepList",
   "target": "el",
   "op": "=",
@@ -4150,7 +4150,7 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 19668,
+  "line": 19669,
   "function": "filterVexTechniques",
   "target": "el",
   "op": "=",
@@ -4160,7 +4160,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 19671,
+  "line": 19672,
   "function": "filterVexTechniques",
   "target": "el",
   "op": "=",
@@ -4170,7 +4170,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 19695,
+  "line": 19696,
   "function": "loadVariantCoverage",
   "target": "el",
   "op": "=",
@@ -4180,7 +4180,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 19698,
+  "line": 19699,
   "function": "loadVariantCoverage",
   "target": "el",
   "op": "=",
@@ -4190,7 +4190,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 19723,
+  "line": 19724,
   "function": "loadVariantCoverage",
   "target": "el",
   "op": "=",
@@ -4200,7 +4200,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 19725,
+  "line": 19726,
   "function": "loadVariantCoverage",
   "target": "el",
   "op": "=",
@@ -4210,7 +4210,7 @@
   "data_source_tags": "error_message"
  },
  {
-  "line": 19846,
+  "line": 19847,
   "function": "_vexRenderQueuePanel",
   "target": "panel",
   "op": "=",
@@ -4220,7 +4220,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 19916,
+  "line": 19917,
   "function": "pollVariantRun",
   "target": "if (panel) panel",
   "op": "=",
@@ -4230,7 +4230,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 19945,
+  "line": 19946,
   "function": "pollVariantRun",
   "target": "if (p) p",
   "op": "=",
@@ -4240,7 +4240,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 19977,
+  "line": 19978,
   "function": "stopVex",
   "target": "if (panel) panel",
   "op": "=",
@@ -4250,7 +4250,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 20090,
+  "line": 20091,
   "function": "renderVariantRun",
   "target": "if (wrapperEl) wrapperEl",
   "op": "=",
@@ -4260,7 +4260,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 20095,
+  "line": 20096,
   "function": "renderVariantRun",
   "target": "cell",
   "op": "=",
@@ -4270,7 +4270,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 20107,
+  "line": 20108,
   "function": "renderVariantRun",
   "target": "panel",
   "op": "=",
@@ -4280,7 +4280,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 20147,
+  "line": 20148,
   "function": "loadRansomwareReadiness",
   "target": "bodyEl",
   "op": "=",
@@ -4290,7 +4290,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 20219,
+  "line": 20220,
   "function": "loadRansomwareReadiness",
   "target": "bodyEl",
   "op": "=",
@@ -4300,7 +4300,7 @@
   "data_source_tags": "agent,user_created_name"
  },
  {
-  "line": 20310,
+  "line": 20311,
   "function": "loadEmTab",
   "target": "summaryEl",
   "op": "=",
@@ -4310,7 +4310,7 @@
   "data_source_tags": "api_response"
  },
  {
-  "line": 20314,
+  "line": 20315,
   "function": "loadEmTab",
   "target": "summaryEl",
   "op": "=",
@@ -4320,7 +4320,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 20332,
+  "line": 20333,
   "function": "loadEmTab",
   "target": "gridEl",
   "op": "=",
@@ -4330,7 +4330,7 @@
   "data_source_tags": "agent,user_created_name"
  },
  {
-  "line": 20409,
+  "line": 20410,
   "function": "openEMSweepModal",
   "target": "sel",
   "op": "=",
@@ -4340,7 +4340,7 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 20424,
+  "line": 20425,
   "function": "renderEMSweepGroupList",
   "target": "list",
   "op": "=",
@@ -4350,7 +4350,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 20427,
+  "line": 20428,
   "function": "renderEMSweepGroupList",
   "target": "list",
   "op": "=",
@@ -4360,7 +4360,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 20617,
+  "line": 20618,
   "function": "renderSweepPreview",
   "target": "filtersEl",
   "op": "=",
@@ -4370,7 +4370,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 20628,
+  "line": 20629,
   "function": "renderSweepPreview",
   "target": "filtersEl",
   "op": "=",
@@ -4380,7 +4380,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 20649,
+  "line": 20650,
   "function": "_renderVexPreviewList",
   "target": "listEl",
   "op": "=",
@@ -4390,7 +4390,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 20792,
+  "line": 20793,
   "function": "_renderEMPreviewList",
   "target": "listEl",
   "op": "=",
@@ -4400,7 +4400,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 20895,
+  "line": 20896,
   "function": "openEMSweepProgress",
   "target": "document.getElementById('em-sweep-progress-actions')",
   "op": "=",
@@ -4410,7 +4410,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 20954,
+  "line": 20955,
   "function": "renderEMSweepProgress",
   "target": "document.getElementById('em-sweep-progress-summary')",
   "op": "=",
@@ -4420,7 +4420,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 20961,
+  "line": 20962,
   "function": "renderEMSweepProgress",
   "target": "document.getElementById('em-sweep-progress-actions')",
   "op": "=",
@@ -4430,7 +4430,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 20974,
+  "line": 20975,
   "function": "renderEMSweepProgress",
   "target": "list",
   "op": "=",
@@ -4440,7 +4440,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 21095,
+  "line": 21096,
   "function": "renderScheduledAssessmentsList",
   "target": "tbody",
   "op": "=",
@@ -4450,7 +4450,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 21098,
+  "line": 21099,
   "function": "renderScheduledAssessmentsList",
   "target": "tbody",
   "op": "=",
@@ -4460,7 +4460,7 @@
   "data_source_tags": "scenario,telemetry_log,user_created_name"
  },
  {
-  "line": 21166,
+  "line": 21167,
   "function": "openSchedWizard",
   "target": "sel",
   "op": "=",
@@ -4470,7 +4470,7 @@
   "data_source_tags": "scenario,user_created_name"
  },
  {
-  "line": 21223,
+  "line": 21224,
   "function": "openSchedWizardForEdit",
   "target": "sel",
   "op": "=",
@@ -4480,7 +4480,7 @@
   "data_source_tags": "scenario,user_created_name"
  },
  {
-  "line": 21280,
+  "line": 21281,
   "function": "renderSchedGroupTree",
   "target": "root",
   "op": "=",
@@ -4490,7 +4490,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 21285,
+  "line": 21286,
   "function": "renderSchedGroupTree",
   "target": "root",
   "op": "=",
@@ -4500,7 +4500,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 21348,
+  "line": 21349,
   "function": "renderSchedAgentList",
   "target": "root",
   "op": "=",
@@ -4510,7 +4510,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 21350,
+  "line": 21351,
   "function": "renderSchedAgentList",
   "target": "root",
   "op": "=",
@@ -4520,7 +4520,7 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 21377,
+  "line": 21378,
   "function": "renderSchedInitiativeSelect",
   "target": "sel",
   "op": "=",
@@ -4530,7 +4530,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 21390,
+  "line": 21391,
   "function": "renderSchedModeRecurrencePane",
   "target": "modeSel",
   "op": "=",
@@ -4540,7 +4540,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 21496,
+  "line": 21497,
   "function": "renderSchedReview",
   "target": "document.getElementById('sched-review')",
   "op": "=",

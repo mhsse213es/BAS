@@ -91,6 +91,10 @@
       "imports": 6,
       "inits": 0
     },
+    "features/initiatives.js": {
+      "imports": 5,
+      "inits": 0
+    },
     "features/iocs.js": {
       "imports": 6,
       "inits": 0
@@ -100,7 +104,7 @@
       "inits": 0
     },
     "features/shell.js": {
-      "imports": 10,
+      "imports": 11,
       "inits": 5
     },
     "features/threat-intel.js": {
