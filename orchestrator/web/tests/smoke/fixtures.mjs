@@ -44,6 +44,9 @@ export const FIXTURES = {
   'GET /api/campaigns': [campaign],
   // Variants tab polls this every 3s; a non-list makes it toast forever.
   'GET /api/vex/sweeps': [],
+  // Loaded at boot by loadScenarios(); the {} default made .map throw, and the
+  // resulting toast landed on whichever tab was open (flaky in CI).
+  'GET /api/scenarios': [],
 };
 
 // Text each tab must show once its fixture renders (payloads appear as

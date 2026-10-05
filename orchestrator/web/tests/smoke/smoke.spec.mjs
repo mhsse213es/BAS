@@ -47,6 +47,9 @@ async function boot(page) {
   await page.routeWebSocket(/\/ws\//, () => {});
   await page.goto('/index.html');
   await page.waitForFunction(() => getComputedStyle(document.getElementById('app')).display !== 'none', null, { timeout: 15_000 });
+  // Let boot-time loaders settle so their errors cannot be attributed to the
+  // first tab measured on a slower machine.
+  await page.waitForLoadState('networkidle', { timeout: 10_000 }).catch(() => {});
   return errors;
 }
 
