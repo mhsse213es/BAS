@@ -3,9 +3,10 @@ import { state } from '../core/state.js';
 import { apicall } from '../core/api.js';
 import { x } from '../core/escape.js';
 import { showToast } from '../core/util.js';
+import { loadAuditLogs } from './audit-logs.js';
 import { loadCalderaStatus, refreshDashboardCampaigns } from './compliance.js';
 import { loadVariantTab } from './variant-executor.js';
-import { closeCampaignDetail, closeScenarioOverlay, connectWS, initComplianceTab, injectServerURL, loadARTContentStatus, loadAdversaries, loadAdversaryTemplates, loadAgentGroupTree, loadAgents, loadAttackPath, loadAuditLogs, loadCatalogs, loadConnectionConfig, loadConnectorStatus, loadCoverage, loadCoverageActors, loadCoverageAnalytics, loadCoverageMatrix, loadDashboard, loadEmTab, loadExecDashboard, loadExercisesTab, loadExposureAssets, loadFindings, loadIOCRegistry, loadInitiatives, loadIntegrations, loadRecommendations, loadRemediations, loadReports, loadResponseConnectors, loadRuns, loadSLAReport, loadScenarios, loadScheduledAssessments, loadSimCoverage, loadTAXIIConnectors, loadThreatIntelConfig, loadThreatPriorityActors, loadUnifiedTechniques, loadVerificationTab, openCmdk, renderResponseConnectorList, renderScenarios, selectTheme, showSettingsSection, showThreatPriorityList } from '../legacy.js';
+import { closeCampaignDetail, closeScenarioOverlay, connectWS, initComplianceTab, injectServerURL, loadARTContentStatus, loadAdversaries, loadAdversaryTemplates, loadAgentGroupTree, loadAgents, loadAttackPath, loadCatalogs, loadConnectionConfig, loadConnectorStatus, loadCoverage, loadCoverageActors, loadCoverageAnalytics, loadCoverageMatrix, loadDashboard, loadEmTab, loadExecDashboard, loadExercisesTab, loadExposureAssets, loadFindings, loadIOCRegistry, loadInitiatives, loadIntegrations, loadRecommendations, loadRemediations, loadReports, loadResponseConnectors, loadRuns, loadSLAReport, loadScenarios, loadScheduledAssessments, loadSimCoverage, loadTAXIIConnectors, loadThreatIntelConfig, loadThreatPriorityActors, loadUnifiedTechniques, loadVerificationTab, openCmdk, renderResponseConnectorList, renderScenarios, selectTheme, showSettingsSection, showThreatPriorityList } from '../legacy.js';
 export function __init_L5162() {
 (function() {
   var t = localStorage.getItem('audspect_theme') || 'dark';

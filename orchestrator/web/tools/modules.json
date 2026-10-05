@@ -33,6 +33,10 @@
     {
       "header": "Generic config-save confirmation",
       "module": "features/compliance.js"
+    },
+    {
+      "header": "Audit Logs",
+      "module": "features/audit-logs.js"
     }
   ],
   "pin": {
