@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"regexp"
+	"strings"
 
 	"github.com/audspect/bas/internal/emsweep"
 )
@@ -32,11 +33,19 @@ func emSweepLayerLabel(scenarioID, scenarioName string) string {
 // posture scenario, not an ART technique needing variant-template
 // resolution.
 func (h *Handler) dispatchEMLayer(ctx context.Context, sweepID, agentID, scenarioID string, layerIndex, totalLayers int) (scenarioRunID string, err error) {
-	sc, ok := h.engine.Get(scenarioID)
-	if !ok {
+	if _, ok := h.engine.Get(scenarioID); !ok {
 		return "", fmt.Errorf("EM layer scenario %q not found", scenarioID)
 	}
+	// Resolve once so the sweep label names the pinned version that runs. A
+	// gate denial surfaces like any other skip: the dispatcher marks the
+	// sweep failed with this text (em_sweeps.error, shown by the sweep API).
+	ev, gerr := h.engine.ResolveExecutable(ctx, scenarioID)
+	if gerr != nil {
+		return "", fmt.Errorf("layer skipped: content not executable: %s", strings.TrimPrefix(gerr.Error(), "content not executable: "))
+	}
+	sc := ev.Scenario
 	runID, skip, err := h.dispatchRun(ctx, sc, agentID, dispatchOpts{
+		Resolved:   &ev,
 		Mode:       "posture",
 		SweepID:    sweepID,
 		SweepName:  "EM Full Sweep",

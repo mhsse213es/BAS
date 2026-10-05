@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/audspect/bas/internal/auth"
 	"github.com/audspect/bas/internal/campaign"
+	"github.com/audspect/bas/internal/contentregistry"
 	"github.com/audspect/bas/internal/models"
 	"github.com/audspect/bas/internal/reporting"
 	"github.com/audspect/bas/internal/scenario"
@@ -77,10 +79,28 @@ func (h *Handler) CreateCampaign(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "targetType must be agents, group, or all", http.StatusBadRequest)
 		return
 	}
-	sc, ok := h.engine.Get(req.ScenarioID)
-	if !ok {
-		jsonError(w, "scenario not found", http.StatusNotFound)
+	// Resolve the executable version ONCE, before any side effect: every policy
+	// check below (Executable, execution window, step indices, name) must judge
+	// the pinned bytes that will actually run, never a newer on-disk DRAFT, and
+	// the whole fan-out executes this one version (one signature verification).
+	ev, gerr := h.engine.ResolveExecutable(r.Context(), req.ScenarioID)
+	if gerr != nil {
+		var ne *contentregistry.ErrNotExecutable
+		if errors.As(gerr, &ne) && ne.Reason == "not registered" {
+			if _, onDisk := h.engine.Get(req.ScenarioID); !onDisk {
+				jsonError(w, "scenario not found", http.StatusNotFound)
+				return
+			}
+		}
+		jsonError(w, gerr.Error(), http.StatusConflict)
 		return
+	}
+	sc := ev.Scenario
+	for _, idx := range req.Steps {
+		if idx < 0 || idx >= len(sc.Steps) {
+			jsonError(w, fmt.Sprintf("step index %d out of range — scenario has %d step(s)", idx, len(sc.Steps)), http.StatusBadRequest)
+			return
+		}
 	}
 	mode := req.Mode
 	if mode == "" {
@@ -204,6 +224,7 @@ func (h *Handler) CreateCampaign(w http.ResponseWriter, r *http.Request) {
 		// label scheduled_assessment_dispatch.go already applies for the same
 		// reason.
 		RunLabel: "Campaign: " + req.Name,
+		Resolved: &ev,
 	}
 	skips := []map[string]string{}
 	dispatched := 0

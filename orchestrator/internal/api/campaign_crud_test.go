@@ -10,9 +10,11 @@ import (
 	"time"
 
 	"github.com/audspect/bas/internal/auth"
+	"github.com/audspect/bas/internal/contentregistry"
 	"github.com/audspect/bas/internal/jobs"
 	"github.com/audspect/bas/internal/models"
 	"github.com/audspect/bas/internal/scenario"
+	"github.com/audspect/bas/internal/testutil"
 	"github.com/audspect/bas/internal/ws"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -64,6 +66,8 @@ func TestCreateCampaign_ValidationErrors(t *testing.T) {
 
 func TestCreateCampaign_ScenarioNotFound(t *testing.T) {
 	engine := scenario.NewEngine(t.TempDir())
+	engine.SetVerifier(testutil.DevVerifier())
+	engine.AttachRegistry(contentregistry.New(sharedDB.Pool, testutil.DevVerifier()))
 	h := New(nil, ws.NewHub(), engine, "")
 	rec := httptest.NewRecorder()
 	h.CreateCampaign(rec, createCampaignReq(map[string]any{"name": "x", "scenarioId": "nope", "agentIds": []string{"a1"}}))
