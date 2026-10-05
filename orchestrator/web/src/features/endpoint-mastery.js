@@ -727,9 +727,9 @@ function renderEMSweepProgress(sw, runs) {
   (runs || []).forEach(function(r) { runsByScenario[r.scenarioId] = r; });
   var list = document.getElementById('em-sweep-progress-list');
   list.innerHTML = (sw.layers || []).map(function(layerId, i) {
-    var state = i < sw.currentIndex ? 'done' : (i === sw.currentIndex && sw.status === 'running') ? 'running' : 'pending';
-    var color = state === 'done' ? 'var(--success)' : state === 'running' ? 'var(--accent)' : 'var(--muted)';
-    var label = state === 'done' ? '&#10003;' : state === 'running' ? '&#9679;' : '&#9675;';
+    var layerState = i < sw.currentIndex ? 'done' : (i === sw.currentIndex && sw.status === 'running') ? 'running' : 'pending';
+    var color = layerState === 'done' ? 'var(--success)' : layerState === 'running' ? 'var(--accent)' : 'var(--muted)';
+    var label = layerState === 'done' ? '&#10003;' : layerState === 'running' ? '&#9679;' : '&#9675;';
     var r = runsByScenario[layerId];
     var actionHtml = '';
     if (r) {

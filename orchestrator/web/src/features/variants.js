@@ -22,8 +22,8 @@ import { VEX_POLL_MAX_FAILURES } from './variant-executor.js';
 // enough (which run to reconnect to, and the queue's remaining work) in
 // localStorage to survive a reload; _vexResumeActiveRun reconnects on load.
 var VEX_ACTIVE_KEY = 'bas_vex_active_run';
-function _vexSaveActiveState(state) {
-  try { localStorage.setItem(VEX_ACTIVE_KEY, JSON.stringify(state)); } catch (e) {}
+function _vexSaveActiveState(active) {
+  try { localStorage.setItem(VEX_ACTIVE_KEY, JSON.stringify(active)); } catch (e) {}
 }
 function _vexLoadActiveState() {
   try {

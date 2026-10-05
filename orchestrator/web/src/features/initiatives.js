@@ -15,20 +15,20 @@ import { ROLE } from './shell.js';
 // completedAt). Verified against the actual Go source, not assumed.
 var INITIATIVES = { list: [], filter: 'active' };
 
-function initiativeStateColor(state) {
-  return state === 'active' ? 'var(--success)' : 'var(--muted)';
+function initiativeStateColor(initState) {
+  return initState === 'active' ? 'var(--success)' : 'var(--muted)';
 }
-export function initiativeStateLabel(state) {
-  if (state === 'active') return 'Active';
-  if (state === 'closed') return 'Closed';
-  if (state === 'archived') return 'Archived';
-  return x(state);
+export function initiativeStateLabel(initState) {
+  if (initState === 'active') return 'Active';
+  if (initState === 'closed') return 'Closed';
+  if (initState === 'archived') return 'Archived';
+  return x(initState);
 }
 
-export function initiativeSetFilter(state) {
-  INITIATIVES.filter = state;
+export function initiativeSetFilter(initState) {
+  INITIATIVES.filter = initState;
   document.querySelectorAll('#init-filter [data-init-filter]').forEach(function(b) {
-    b.classList.toggle('active', b.getAttribute('data-init-filter') === state);
+    b.classList.toggle('active', b.getAttribute('data-init-filter') === initState);
   });
   loadInitiatives();
 }

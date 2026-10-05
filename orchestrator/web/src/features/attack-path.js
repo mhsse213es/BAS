@@ -185,7 +185,7 @@ function edForecastChart(fc) {
   });
   var minY = Math.min.apply(null, vals), maxY = Math.max.apply(null, vals);
   var rangeY = (maxY - minY) || 1;
-  function sx(x) { return pad + ((x - minX) / rangeX) * (w - 2 * pad); }
+  function sx(dx) { return pad + ((dx - minX) / rangeX) * (w - 2 * pad); }
   function sy(v) { return (h - pad) - ((v - minY) / rangeY) * (h - 2 * pad); }
   var svg = '<svg width="100%" height="' + h + '" viewBox="0 0 ' + w + ' ' + h +
     '" preserveAspectRatio="none" style="max-width:100%;margin-top:0.5rem">';
@@ -277,9 +277,9 @@ function recTierColor(tier) {
        : 'var(--muted)';
 }
 
-function recCoverageBadge(state) {
-  if (state === 'never-tested') return '<span class="badge" style="color:var(--danger);border-color:var(--danger)">Never tested</span>';
-  if (state === 'stale')        return '<span class="badge" style="color:var(--warning);border-color:var(--warning)">Stale</span>';
+function recCoverageBadge(coverage) {
+  if (coverage === 'never-tested') return '<span class="badge" style="color:var(--danger);border-color:var(--danger)">Never tested</span>';
+  if (coverage === 'stale')        return '<span class="badge" style="color:var(--warning);border-color:var(--warning)">Stale</span>';
   return '<span class="badge u-muted">Recent</span>';
 }
 
@@ -740,12 +740,12 @@ export function apDiscoverSubnet() {
 }
 
 // Renders a timeline step. state: 'done' | 'active' | 'pending' | 'warn'
-function _apStep(state, title, detail) {
-  var icon = state === 'done' ? '<span class="u-success">&#10003;</span>'
-    : state === 'active' ? '<span style="animation:spin 1s linear infinite;display:inline-block">&#9696;</span>'
-    : state === 'warn' ? '<span class="u-warning">&#9888;</span>'
+function _apStep(stepState, title, detail) {
+  var icon = stepState === 'done' ? '<span class="u-success">&#10003;</span>'
+    : stepState === 'active' ? '<span style="animation:spin 1s linear infinite;display:inline-block">&#9696;</span>'
+    : stepState === 'warn' ? '<span class="u-warning">&#9888;</span>'
     : '<span class="u-muted">&#9675;</span>';
-  var titleColor = state === 'pending' ? 'var(--muted)' : 'var(--text)';
+  var titleColor = stepState === 'pending' ? 'var(--muted)' : 'var(--text)';
   return '<div style="display:flex;gap:0.7rem;align-items:flex-start;padding:0.55rem 0;border-bottom:1px solid var(--border)">' +
     '<div style="width:1.2rem;text-align:center;flex-shrink:0;margin-top:0.05rem;font-size:0.9rem">' + icon + '</div>' +
     '<div><div style="font-size:0.82rem;font-weight:600;color:' + titleColor + '">' + title + '</div>' +

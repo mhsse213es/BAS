@@ -1,4 +1,6 @@
-import { state } from '../core/state.js';
+// Aliased: the Live Run IIFE below keeps its own per-run `state`, which would
+// otherwise shadow the shared one (G1c final review, Critical 1).
+import { state as appState } from '../core/state.js';
 import { apicall } from '../core/api.js';
 import { x } from '../core/escape.js';
 import { showToast } from '../core/util.js';
@@ -36,11 +38,11 @@ export function __init_L16159() {
   // Looks up ATT&CK technique name + tactic from the ART catalog. Falls back
   // gracefully when artCatalog hasn't loaded yet (e.g. technique picker not opened).
   function lookupTech(id) {
-    if (!id || !state.artCatalog.length) return null;
+    if (!id || !appState.artCatalog.length) return null;
     var up = id.toUpperCase();
-    for (var i = 0; i < state.artCatalog.length; i++) {
-      if (state.artCatalog[i].id && state.artCatalog[i].id.toUpperCase() === up) {
-        return { name: state.artCatalog[i].name || '', tactic: state.artCatalog[i].tactic || '' };
+    for (var i = 0; i < appState.artCatalog.length; i++) {
+      if (appState.artCatalog[i].id && appState.artCatalog[i].id.toUpperCase() === up) {
+        return { name: appState.artCatalog[i].name || '', tactic: appState.artCatalog[i].tactic || '' };
       }
     }
     return null;

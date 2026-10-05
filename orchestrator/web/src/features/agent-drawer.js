@@ -135,7 +135,7 @@ function kv(label, val) {
          '<div style="font-size:0.82rem">' + val + '</div></div>';
 }
 
-export function setAgentState(agentId, state) {
+export function setAgentState(agentId, newState) {
   var labels = { quarantined: 'Quarantine', restricted: 'Restrict', retired: 'Retire', active: 'Restore to Active' };
   var warn = {
     quarantined: 'Quarantine blocks ALL scenario dispatch from this agent. Are you sure?',
@@ -143,11 +143,11 @@ export function setAgentState(agentId, state) {
     retired:     'Retire decommissions this agent and blocks all scenario dispatch. Are you sure?',
     active:      'Restore this agent to active and re-enable scenario dispatch?'
   };
-  if (!confirm(warn[state] || 'Set agent state to ' + state + '?')) return;
+  if (!confirm(warn[newState] || 'Set agent state to ' + newState + '?')) return;
   apicall('/api/agents/' + encodeURIComponent(agentId) + '/state', {
-    method: 'PUT', body: JSON.stringify({ state: state })
+    method: 'PUT', body: JSON.stringify({ state: newState })
   }).then(function() {
-    showToast('Agent state set to ' + state, state === 'active' ? 'ok' : 'warn');
+    showToast('Agent state set to ' + newState, newState === 'active' ? 'ok' : 'warn');
     loadAgents();
     loadAgtOverview(agentId);
   }).catch(function(e) { showToast(e.message, 'err'); });
