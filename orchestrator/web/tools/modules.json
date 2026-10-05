@@ -1,0 +1,9 @@
+{
+  "default": "legacy.js",
+  "preamble": null,
+  "sections": [],
+  "pin": {},
+  "windowVars": ["_groupSel", "_tmplGroupSel", "_vexGroupSel", "_vexRunGroupSel"],
+  "windowFns": ["renderGroupTargetSummary", "renderRunMode", "renderTmplGroupSummary", "renderTmplOSCompat", "renderVexGroupSummary", "renderVexRunGroupSummary"],
+  "lateInit": []
+}
