@@ -209,6 +209,10 @@
     {
       "header": "Run Variants reload-survival",
       "module": "features/variants.js"
+    },
+    {
+      "header": "Evidence Panel",
+      "module": "features/evidence.js"
     }
   ],
   "pin": {

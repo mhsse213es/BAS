@@ -13,6 +13,7 @@ import './features/compliance.js';
 import './features/coverage.js';
 import './features/detection-verification.js';
 import './features/endpoint-mastery.js';
+import { __init_L16846 } from './features/evidence.js';
 import './features/findings.js';
 import './features/initiatives.js';
 import './features/integrations.js';
@@ -27,7 +28,7 @@ import './features/threat-intel.js';
 import './features/variant-executor.js';
 import './features/variant-report.js';
 import './features/variants.js';
-import { __init_L16846 } from './legacy.js';
+import './legacy.js';
 
 installGlobals();
 __init_L5162();

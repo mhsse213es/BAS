@@ -89,11 +89,11 @@
       "inits": 0
     },
     "features/agent-drawer.js": {
-      "imports": 8,
+      "imports": 9,
       "inits": 0
     },
     "features/attack-path.js": {
-      "imports": 13,
+      "imports": 14,
       "inits": 5
     },
     "features/audit-logs.js": {
@@ -119,6 +119,10 @@
     "features/endpoint-mastery.js": {
       "imports": 8,
       "inits": 0
+    },
+    "features/evidence.js": {
+      "imports": 13,
+      "inits": 1
     },
     "features/findings.js": {
       "imports": 7,
@@ -157,7 +161,7 @@
       "inits": 0
     },
     "features/shell.js": {
-      "imports": 22,
+      "imports": 23,
       "inits": 5
     },
     "features/threat-intel.js": {
@@ -177,8 +181,8 @@
       "inits": 0
     },
     "legacy.js": {
-      "imports": 16,
-      "inits": 1
+      "imports": 14,
+      "inits": 0
     }
   }
 }

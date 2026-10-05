@@ -2,7 +2,7 @@
 import { apicall } from '../core/api.js';
 import { x } from '../core/escape.js';
 import { showToast } from '../core/util.js';
-import { buildReportFilename } from '../legacy.js';
+import { buildReportFilename } from './evidence.js';
 
 
 // ── Audit Logs ────────────────────────────────────────────────────────────────

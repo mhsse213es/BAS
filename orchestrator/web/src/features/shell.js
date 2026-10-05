@@ -12,6 +12,7 @@ import { loadCalderaStatus, refreshDashboardCampaigns } from './compliance.js';
 import { loadCoverage, loadCoverageAnalytics, loadUnifiedTechniques } from './coverage.js';
 import { loadVerificationTab } from './detection-verification.js';
 import { loadEmTab } from './endpoint-mastery.js';
+import { connectWS, loadDashboard, openCmdk } from './evidence.js';
 import { loadFindings, loadRemediations, loadSLAReport } from './findings.js';
 import { loadInitiatives } from './initiatives.js';
 import { loadIntegrations, loadResponseConnectors, renderResponseConnectorList } from './integrations.js';
@@ -20,7 +21,7 @@ import { loadExercisesTab } from './openaev.js';
 import { loadScheduledAssessments } from './scheduled.js';
 import { loadARTContentStatus, loadConnectorStatus, loadSimCoverage, loadTAXIIConnectors, loadThreatIntelConfig } from './threat-intel.js';
 import { loadVariantTab } from './variant-executor.js';
-import { connectWS, loadDashboard, loadReports, loadRuns, openCmdk } from '../legacy.js';
+import { loadReports, loadRuns } from '../legacy.js';
 export function __init_L5162() {
 (function() {
   var t = localStorage.getItem('audspect_theme') || 'dark';
