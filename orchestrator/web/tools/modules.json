@@ -37,6 +37,14 @@
     {
       "header": "Audit Logs",
       "module": "features/audit-logs.js"
+    },
+    {
+      "header": "Threat Intel connector config",
+      "module": "features/threat-intel.js"
+    },
+    {
+      "header": "TAXII Connectors",
+      "module": "features/threat-intel.js"
     }
   ],
   "pin": {

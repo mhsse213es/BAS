@@ -91,15 +91,19 @@
       "inits": 0
     },
     "features/shell.js": {
-      "imports": 8,
+      "imports": 9,
       "inits": 5
+    },
+    "features/threat-intel.js": {
+      "imports": 6,
+      "inits": 0
     },
     "features/variant-executor.js": {
       "imports": 2,
       "inits": 0
     },
     "legacy.js": {
-      "imports": 8,
+      "imports": 9,
       "inits": 7
     }
   }
