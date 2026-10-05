@@ -30,7 +30,6 @@ import (
 	"github.com/audspect/bas/internal/artifactgen"
 	"github.com/audspect/bas/internal/auth"
 	"github.com/audspect/bas/internal/cmdsigning"
-	"github.com/audspect/bas/internal/observability"
 	"github.com/audspect/bas/internal/compliance"
 	"github.com/audspect/bas/internal/connector"
 	"github.com/audspect/bas/internal/controlhealth"
@@ -48,6 +47,7 @@ import (
 	"github.com/audspect/bas/internal/license"
 	"github.com/audspect/bas/internal/models"
 	"github.com/audspect/bas/internal/notifications"
+	"github.com/audspect/bas/internal/observability"
 	"github.com/audspect/bas/internal/pki"
 	"github.com/audspect/bas/internal/relationships"
 	"github.com/audspect/bas/internal/remediation"
@@ -88,9 +88,9 @@ type Handler struct {
 	// override it to avoid real HTTP calls.
 	actionVendorClient   func(actions.ConnectorConfig) (actions.VendorClient, error)
 	secret               string
-	agentSecret          string  // optional shared secret for agent-facing endpoints
-	pki                  *pki.CA                    // deployment CA for agent mTLS enrollment (B1/B3)
-	signingKey           *cmdsigning.SigningKey     // deployment command-signing key (B4) -- separate trust domain from pki above, never chained to it
+	agentSecret          string                 // optional shared secret for agent-facing endpoints
+	pki                  *pki.CA                // deployment CA for agent mTLS enrollment (B1/B3)
+	signingKey           *cmdsigning.SigningKey // deployment command-signing key (B4) -- separate trust domain from pki above, never chained to it
 	calderaURL           string
 	calderaKey           string
 	iocProvider          ioc.Provider // nil when no OTX connector is configured
@@ -2591,7 +2591,7 @@ func normStr(s, def string) string {
 // actually dispatched, so results from dynamically-built ART/Caldera steps (not
 // present in the scenario's static Steps) can be interpreted correctly.
 func (h *Handler) persistStepMeta(ctx context.Context, runID string, steps []scenario.ScenarioStep) {
-	raw, err := json.Marshal(scenario.BuildStepMeta(steps))
+	raw, err := json.Marshal(scenario.BuildStepMeta(steps, nil, scenario.ComponentVersions{}))
 	if err != nil {
 		return
 	}
@@ -5379,9 +5379,9 @@ func (h *Handler) GetFullReportJSON(w http.ResponseWriter, r *http.Request) {
 	fname := buildReportFilename("BAS_Report", scenPart+"-"+host+filterSuffix, "json")
 
 	b, err := json.MarshalIndent(struct {
-		Report            *reporting.FullReport             `json:"report"`
-		ComplianceSummary []reporting.ComplianceSummaryRow   `json:"complianceSummary,omitempty"`
-		Results           []models.SimulationResult          `json:"results,omitempty"`
+		Report            *reporting.FullReport            `json:"report"`
+		ComplianceSummary []reporting.ComplianceSummaryRow `json:"complianceSummary,omitempty"`
+		Results           []models.SimulationResult        `json:"results,omitempty"`
 	}{report, h.complianceRows(r.Context(), agentID, filter), results}, "", "  ")
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)

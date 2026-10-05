@@ -9,6 +9,7 @@ import (
 	"log"
 	"net/http"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 )
@@ -63,6 +64,15 @@ type StepMeta struct {
 	TechniqueID string `json:"techniqueId"`
 	Name        string `json:"name"`
 	Framework   string `json:"framework"`
+	// TCF Phase 1 §4.9 / plan amendment 7. Component + version pin the
+	// mutable catalog a step was resolved from; ResolvedSHA256 is taken right
+	// after BuildSteps (comparable on rebuild -> drift), CommandSHA256 is what
+	// was actually sent (includes per-run artifact/sink-token substitution).
+	Component        string `json:"component,omitempty"`
+	ComponentVersion string `json:"componentVersion,omitempty"`
+	Platform         string `json:"platform,omitempty"`
+	ResolvedSHA256   string `json:"resolvedSha256,omitempty"`
+	CommandSHA256    string `json:"commandSha256,omitempty"`
 	// Variant fields — populated only for variant steps (BaseTaskID non-empty).
 	// Persisted in scenario_runs.step_meta so the result processor can write
 	// scenario_variant_results without re-querying at submission time.
@@ -71,21 +81,68 @@ type StepMeta struct {
 	ProxyTechniqueID string       `json:"proxyTechniqueId,omitempty"`
 }
 
+type ComponentVersions struct {
+	ART     string
+	Caldera string
+}
+
+// StepCommandSHA256 hashes canonical JSON of exactly what an agent executes.
+func StepCommandSHA256(st ScenarioStep) string {
+	type p struct {
+		Name   string `json:"name"`
+		SHA256 string `json:"sha256"`
+	}
+	ps := make([]p, 0, len(st.Payloads))
+	for _, pl := range st.Payloads {
+		h := sha256.Sum256([]byte(pl.Content))
+		ps = append(ps, p{Name: pl.Name, SHA256: hex.EncodeToString(h[:])})
+	}
+	sort.Slice(ps, func(i, j int) bool { return ps[i].Name < ps[j].Name })
+	b, _ := json.Marshal(struct {
+		Executor string `json:"executor"`
+		Command  string `json:"command"`
+		Cleanup  string `json:"cleanup"`
+		Payloads []p    `json:"payloads"`
+	}{st.Executor, st.Command, st.Cleanup, ps})
+	h := sha256.Sum256(b)
+	return hex.EncodeToString(h[:])
+}
+
+// ResolvedHashes snapshots per-step hashes right after BuildSteps, before
+// any per-run substitution.
+func ResolvedHashes(steps []ScenarioStep) map[string]string {
+	out := make(map[string]string, len(steps))
+	for _, st := range steps {
+		out[st.TaskID] = StepCommandSHA256(st)
+	}
+	return out
+}
+
 // BuildStepMeta builds a TaskID→StepMeta lookup from the steps actually
 // dispatched to the agent, capturing the technique, name, framework and (for
 // variant steps) the base TaskID + VariantSpec needed to write variant findings.
-func BuildStepMeta(steps []ScenarioStep) map[string]StepMeta {
+func BuildStepMeta(steps []ScenarioStep, resolved map[string]string, cv ComponentVersions) map[string]StepMeta {
 	m := make(map[string]StepMeta, len(steps))
-	for _, s := range steps {
+	for _, st := range steps {
 		meta := StepMeta{
-			TechniqueID:      s.TechniqueID,
-			Name:             s.Name,
-			Framework:        s.Framework,
-			BaseTaskID:       s.BaseTaskID,
-			VariantSpec:      s.VariantSpecRef,
-			ProxyTechniqueID: s.ProxyTechniqueID,
+			TechniqueID:      st.TechniqueID,
+			Name:             st.Name,
+			Framework:        st.Framework,
+			BaseTaskID:       st.BaseTaskID,
+			VariantSpec:      st.VariantSpecRef,
+			ProxyTechniqueID: st.ProxyTechniqueID,
 		}
-		m[s.TaskID] = meta
+		meta.Component = st.Framework
+		switch st.Framework {
+		case "art":
+			meta.ComponentVersion = cv.ART
+		case "caldera":
+			meta.ComponentVersion = cv.Caldera
+		}
+		meta.Platform = st.Platform
+		meta.ResolvedSHA256 = resolved[st.TaskID]
+		meta.CommandSHA256 = StepCommandSHA256(st)
+		m[st.TaskID] = meta
 	}
 	return m
 }
