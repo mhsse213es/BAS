@@ -113,6 +113,9 @@ func (r *Registry) createVersion(ctx context.Context, nv newVersion) (string, bo
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
+	if nv.analysis == nil || nv.contentID != nv.analysis.contentID {
+		return "", false, errors.New("content id does not match analyzed artifact")
+	}
 	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtext($1))`, nv.contentID); err != nil {
 		return "", false, err
 	}
@@ -121,6 +124,13 @@ func (r *Registry) createVersion(ctx context.Context, nv newVersion) (string, bo
 	err = tx.QueryRow(ctx, `SELECT id FROM content_versions WHERE content_id = $1 AND artifact_sha256 = $2`,
 		nv.contentID, sum).Scan(&existing)
 	if err == nil {
+		var existingOrigin string
+		if err := tx.QueryRow(ctx, `SELECT origin FROM scenarios WHERE scenario_id = $1`, nv.contentID).Scan(&existingOrigin); err != nil {
+			return "", false, err
+		}
+		if Origin(existingOrigin) != nv.origin {
+			return "", false, ErrOriginCollision
+		}
 		return existing, false, tx.Commit(ctx)
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {
@@ -158,6 +168,9 @@ func (r *Registry) createVersion(ctx context.Context, nv newVersion) (string, bo
 	}
 	if nv.analysis.dynamicScope != "" {
 		gen["dynamic_scope"] = nv.analysis.dynamicScope
+	}
+	if len(nv.analysis.dynamicModes) > 0 {
+		gen["dynamic_modes"] = nv.analysis.dynamicModes
 	}
 	genJSON, _ := json.Marshal(gen)
 

@@ -52,6 +52,60 @@ func TestAnalyze_RejectsUnparseableAndMissingID(t *testing.T) {
 	}
 }
 
+func TestAnalyze_DynamicSafetyIsUnresolvedUnlessDestructive(t *testing.T) {
+	cases := []struct{ name, yaml, want string }{
+		{"dynamic only", "id: d\nname: D\nart_all_platform: true\n", "unresolved"},
+		{"static safe plus art_techniques", `id: d
+name: D
+art_techniques: [T1082]
+steps:
+  - {name: a, technique_id: T1082, framework: custom, command: x}
+`, "unresolved"},
+		{"static destructive plus dynamic", `id: d
+name: D
+art_all_platform: true
+steps:
+  - {name: b, technique_id: T9999, framework: custom, command: y}
+`, "destructive"},
+		{"static only stays non_destructive", `id: d
+name: D
+steps:
+  - {name: a, technique_id: T1082, framework: custom, command: x}
+`, "non_destructive"},
+	}
+	for _, c := range cases {
+		a, err := analyzeArtifact([]byte(c.yaml))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if a.safety.verdict != c.want {
+			t.Errorf("%s: verdict = %s, want %s", c.name, a.safety.verdict, c.want)
+		}
+	}
+}
+
+func TestAnalyze_CombinedDynamicModesAllRecorded(t *testing.T) {
+	a, err := analyzeArtifact([]byte("id: c\nname: C\nart_all_windows: true\nart_techniques: [T1082]\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(a.dynamicModes) != 2 || a.dynamicModes[0] != "art_all_windows" || a.dynamicModes[1] != "art_techniques" {
+		t.Fatalf("modes = %v", a.dynamicModes)
+	}
+	if a.dynamicScope != "art_all_windows" {
+		t.Fatalf("scope = %q", a.dynamicScope)
+	}
+	n := 0
+	for _, d := range a.safety.detail {
+		if d["dynamic"] == true {
+			n++
+		}
+	}
+	if n != 2 {
+		t.Fatalf("safety detail must record every mode: %v", a.safety.detail)
+	}
+}
+
 func TestAnalyze_SafetyWorstStepWins(t *testing.T) {
 	a, err := analyzeArtifact([]byte(`id: s
 name: S

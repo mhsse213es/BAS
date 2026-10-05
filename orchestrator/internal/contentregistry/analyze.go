@@ -45,6 +45,7 @@ type analysis struct {
 	techniqueIDs []string
 	supportedOS  []string
 	dynamicScope string
+	dynamicModes []string
 	structural   checkResult
 	safety       safetyResult
 }
@@ -85,8 +86,9 @@ func analyzeArtifact(raw []byte) (*analysis, error) {
 		a.techniqueIDs = []string{}
 	}
 	a.dynamicScope = dynamicScope(&sc)
+	a.dynamicModes = dynamicModes(&sc)
 	a.structural = structuralCheck(&sc, a.techniqueIDs)
-	a.safety = safetyVerdict(&sc, a.dynamicScope)
+	a.safety = safetyVerdict(&sc, a.dynamicModes)
 	return a, nil
 }
 
@@ -111,6 +113,31 @@ func dynamicScope(sc *scenario.Scenario) string {
 		return "art_selective_platform"
 	}
 	return ""
+}
+
+// dynamicModes lists ALL active dynamic execution modes in a fixed order
+// (dynamicScope reports only the first); art_techniques is included when set.
+func dynamicModes(sc *scenario.Scenario) []string {
+	modes := []string{}
+	for _, m := range []struct {
+		on   bool
+		name string
+	}{
+		{sc.LocalCheck, "local_check"},
+		{sc.CalderaAllWindows, "caldera_all_windows"},
+		{sc.CalderaAdversaryID != "", "caldera_adversary"},
+		{len(sc.CalderaAbilities) > 0, "caldera_abilities"},
+		{sc.ARTAllWindows, "art_all_windows"},
+		{sc.ARTAllPlatform, "art_all_platform"},
+		{sc.ARTSelectiveWindows, "art_selective_windows"},
+		{sc.ARTSelectivePlatform, "art_selective_platform"},
+		{len(sc.ARTTechniques) > 0, "art_techniques"},
+	} {
+		if m.on {
+			modes = append(modes, m.name)
+		}
+	}
+	return modes
 }
 
 func hasExecutionMode(sc *scenario.Scenario) bool {
@@ -149,9 +176,10 @@ var classRank = map[scenario.ExecutionClass]int{
 }
 
 // safetyVerdict stores execclass's native verdict (spec §4.6): worst static
-// step wins; dynamically resolved steps are marked, never assumed safe or
-// unsafe.
-func safetyVerdict(sc *scenario.Scenario, scope string) safetyResult {
+// step wins. Dynamically resolved steps are never assumed safe or unsafe: if
+// any dynamic mode exists and the static worst is not destructive (a known
+// lower bound), the verdict is "unresolved".
+func safetyVerdict(sc *scenario.Scenario, modes []string) safetyResult {
 	worst := scenario.ClassNonDestructive
 	detail := []map[string]any{}
 	for _, st := range sc.Steps {
@@ -164,11 +192,12 @@ func safetyVerdict(sc *scenario.Scenario, scope string) safetyResult {
 			worst = c.Class
 		}
 	}
-	switch {
-	case scope != "":
-		detail = append(detail, map[string]any{"dynamic": true, "mode": scope})
-	case len(sc.ARTTechniques) > 0:
-		detail = append(detail, map[string]any{"dynamic": true, "mode": "art_techniques"})
+	for _, m := range modes {
+		detail = append(detail, map[string]any{"dynamic": true, "mode": m})
 	}
-	return safetyResult{verdict: string(worst), detail: detail}
+	verdict := string(worst)
+	if len(modes) > 0 && worst != scenario.ClassDestructive {
+		verdict = "unresolved"
+	}
+	return safetyResult{verdict: verdict, detail: detail}
 }

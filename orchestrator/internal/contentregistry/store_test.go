@@ -75,6 +75,71 @@ func TestCreateVersion_OriginCollision(t *testing.T) {
 	})
 }
 
+func TestCreateVersion_DedupDoesNotCrossOrigins(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		r := New(pool, testutil.DevVerifier())
+		vendor := localDraft(t, yamlV1)
+		vendor.origin, vendor.source, vendor.lifecycle = OriginVendor, SourceBuiltin, LifecyclePublished
+		if _, _, err := r.createVersion(ctx, vendor); err != nil {
+			t.Fatal(err)
+		}
+		if _, _, err := r.createVersion(ctx, localDraft(t, yamlV1)); err != ErrOriginCollision {
+			t.Fatalf("identical bytes from another origin must collide, got %v", err)
+		}
+	})
+}
+
+func TestCreateVersion_RejectsContentIDMismatch(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		r := New(pool, testutil.DevVerifier())
+		nv := localDraft(t, yamlV1)
+		nv.contentID = "other-id"
+		if _, _, err := r.createVersion(context.Background(), nv); err == nil {
+			t.Fatal("contentID != analysis.contentID must error")
+		}
+	})
+}
+
+func structuralRow(t *testing.T, pool *pgxpool.Pool, id string) (outcome string, checked bool) {
+	t.Helper()
+	if err := pool.QueryRow(context.Background(),
+		`SELECT outcome, (detail->>'technique_ids_checked_against_catalog')::boolean
+		 FROM content_validations WHERE content_version_id=$1 AND level='STRUCTURAL'`, id).Scan(&outcome, &checked); err != nil {
+		t.Fatal(err)
+	}
+	return
+}
+
+func TestCreateVersion_CatalogCheck(t *testing.T) {
+	const art = "id: store-sc\nname: Store\nart_techniques: [T1082, T1003]\n"
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		r := New(pool, testutil.DevVerifier())
+		id, _, err := r.createVersion(ctx, localDraft(t, art))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if out, checked := structuralRow(t, pool, id); out != "PASS" || checked {
+			t.Fatalf("empty catalog: outcome=%s checked=%v", out, checked)
+		}
+	})
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		if _, err := pool.Exec(ctx, `INSERT INTO techniques (technique_id, name) VALUES ('T1082', 'System Information Discovery')`); err != nil {
+			t.Fatal(err)
+		}
+		r := New(pool, testutil.DevVerifier())
+		id, _, err := r.createVersion(ctx, localDraft(t, art))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if out, checked := structuralRow(t, pool, id); out != "FAIL" || !checked {
+			t.Fatalf("populated catalog, unknown T1003: outcome=%s checked=%v", out, checked)
+		}
+	})
+}
+
 func TestVersionParse_RestoresSource(t *testing.T) {
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
 		ctx := context.Background()
