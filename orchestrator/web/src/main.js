@@ -18,6 +18,7 @@ import './features/iocs.js';
 import { __init_L16159 } from './features/live-run.js';
 import './features/ransomware.js';
 import './features/rerun-review.js';
+import './features/scheduled.js';
 import { __init_L19932, __init_L5162, __init_L5212, __init_L5490, __init_L5494 } from './features/shell.js';
 import './features/threat-intel.js';
 import './features/variant-executor.js';

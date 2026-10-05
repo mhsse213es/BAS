@@ -173,6 +173,10 @@
     {
       "header": "Attack Path tab",
       "module": "features/agent-drawer.js"
+    },
+    {
+      "header": "Scheduled Assessments",
+      "module": "features/scheduled.js"
     }
   ],
   "pin": {

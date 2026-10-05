@@ -14,9 +14,10 @@ import { loadFindings, loadRemediations, loadSLAReport } from './findings.js';
 import { loadInitiatives } from './initiatives.js';
 import { loadIntegrations, loadResponseConnectors, renderResponseConnectorList } from './integrations.js';
 import { loadIOCRegistry } from './iocs.js';
+import { loadScheduledAssessments } from './scheduled.js';
 import { loadARTContentStatus, loadConnectorStatus, loadSimCoverage, loadTAXIIConnectors, loadThreatIntelConfig } from './threat-intel.js';
 import { loadVariantTab } from './variant-executor.js';
-import { closeScenarioOverlay, connectWS, injectServerURL, loadAgentGroupTree, loadAgents, loadAttackPath, loadCatalogs, loadConnectionConfig, loadCoverageActors, loadCoverageMatrix, loadDashboard, loadEmTab, loadExecDashboard, loadExercisesTab, loadExposureAssets, loadRecommendations, loadReports, loadRuns, loadScenarios, loadScheduledAssessments, loadThreatPriorityActors, openCmdk, renderScenarios, selectTheme, showSettingsSection, showThreatPriorityList } from '../legacy.js';
+import { closeScenarioOverlay, connectWS, injectServerURL, loadAgentGroupTree, loadAgents, loadAttackPath, loadCatalogs, loadConnectionConfig, loadCoverageActors, loadCoverageMatrix, loadDashboard, loadEmTab, loadExecDashboard, loadExercisesTab, loadExposureAssets, loadRecommendations, loadReports, loadRuns, loadScenarios, loadThreatPriorityActors, openCmdk, renderScenarios, selectTheme, showSettingsSection, showThreatPriorityList } from '../legacy.js';
 export function __init_L5162() {
 (function() {
   var t = localStorage.getItem('audspect_theme') || 'dark';

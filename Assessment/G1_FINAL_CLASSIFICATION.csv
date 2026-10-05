@@ -1,9 +1,9 @@
 sink_id,line,function,target,op,baseline_category,final_category,severity_tier,data_source_tags,trace_notes,rhs
-_apOnCollected:tl:=:6d95588273ae,13012,_apOnCollected,tl,=,partial_escaped,partial_escaped,3,api_response,,"step1Html +
+_apOnCollected:tl:=:6d95588273ae,13528,_apOnCollected,tl,=,partial_escaped,partial_escaped,3,api_response,,"step1Html +
     _apStep('done', 'Agent finished probing at ' + _apTimestamp(), x(label) + ' completed TCP probes across all targets.') +
     _apStep('done', 'Collection received — ' + nodes + ' node' + (nodes === 1 ? '' : 's') + ', ' + edges + ' lateral edge' + (edges === 1 ? '' : 's') + ' mapped',
       'The server has built the updated graph. Previous collection (if any) has been superseded by t"
-_apRenderJobState:tl:=:7258ec278590,12910,_apRenderJobState,tl,=,indirect_builder,unescaped_html,4,,_apStep() @L12770 (scope-resolved): 1 return(s) -> unescaped_html,"_apStep(dispatchState, 'Job dispatched — ' + job.id.slice(0,8),
+_apRenderJobState:tl:=:7258ec278590,13426,_apRenderJobState,tl,=,indirect_builder,unescaped_html,4,,_apStep() @L13286 (scope-resolved): 1 return(s) -> unescaped_html,"_apStep(dispatchState, 'Job dispatched — ' + job.id.slice(0,8),
       job.targetCount > 0 ? job.targetCount + ' target' + (job.targetCount === 1 ? '' : 's') + ' queued' : '') +
     _apStep(ackState, statusLabel, '') +
     _apStep(probeState, 'Executing on agent', progDetail) +
@@ -11,72 +11,72 @@ _apRenderJobState:tl:=:7258ec278590,12910,_apRenderJobState,tl,=,indirect_builde
     _apStep(graphState, 'Graph built &amp; analysis complete',
       "
 _applyGeneratedTIScenario:el:=:3a75cf0d8be3,6192,_applyGeneratedTIScenario,el,=,partial_escaped,partial_escaped,3,,,'&#10003; Generated: <strong>' + x(pack.suggestedName) + '</strong> — ' + pack.techniqueCount + ' techniques. Ready to configure targets below.'
-_renderEMPreviewList:listEl:=:347204cd7ffa,20803,_renderEMPreviewList,listEl,=,unescaped_text,unescaped_text,4,,,fixedHtml + extraHeaderHtml + extraRowsHtml
-_renderVexPreviewList:listEl:=:e00a99d0e67c,20660,_renderVexPreviewList,listEl,=,indirect_builder,unescaped_html,4,,_renderVexPreviewSection() @L20665 (scope-resolved): 4 return(s) -> unescaped_html,"_renderVexPreviewSection('art', 'ART', artFiltered, _vexPreviewArtCollapsed) +
+_renderEMPreviewList:listEl:=:347204cd7ffa,21319,_renderEMPreviewList,listEl,=,unescaped_text,unescaped_text,4,,,fixedHtml + extraHeaderHtml + extraRowsHtml
+_renderVexPreviewList:listEl:=:e00a99d0e67c,21176,_renderVexPreviewList,listEl,=,indirect_builder,unescaped_html,4,,_renderVexPreviewSection() @L21181 (scope-resolved): 4 return(s) -> unescaped_html,"_renderVexPreviewSection('art', 'ART', artFiltered, _vexPreviewArtCollapsed) +
     _renderVexPreviewSection('caldera', 'Caldera', calderaFiltered, _vexPreviewCalderaCollapsed)"
 _selectCmpScenario:document.getElementById('cmp-scenario'):=:7d56bfcc3cb2,6221,_selectCmpScenario,document.getElementById('cmp-scenario'),=,escaped,escaped,1,"scenario,user_created_name",,"'<option value="""">— Select a scenario —</option>' +
     state.scenarios.map(function(s) {
       return '<option value=""' + x(s.id) + '""' + (s.id === id ? ' selected' : '') + '>' + x(s.name) + '</option>';
     }).join('')"
-_vexRenderQueuePanel:panel:=:b153a86b8dca,19996,_vexRenderQueuePanel,panel,=,partial_escaped,partial_escaped,3,,,"'<div class=""card"" style=""padding:1.5rem"">' +
+_vexRenderQueuePanel:panel:=:b153a86b8dca,20512,_vexRenderQueuePanel,panel,=,partial_escaped,partial_escaped,3,,,"'<div class=""card"" style=""padding:1.5rem"">' +
     '<div class=""card-title"" style=""margin-bottom:0.75rem"">Queue Progress</div>' +
     '<div style=""font-size:0.83rem;color:var(--muted);margin-bottom:0.6rem"">Running <span style=""font-family:var(--font-mono);color:var(--text)"">' + x(tid) + '</span> — <span style=""color:var(--accent);font-weight:600"">' + (idx + 1) + ' / ' + techniques.length + '</span>"
-addStep:div:=:7ac68f61520c,16152,addStep,div,=,partial_escaped,partial_escaped,3,user_created_name,,"'<div class=""bld-step-hdr""><span class=""bld-step-num"">Step</span>' +
+addStep:div:=:7ac68f61520c,16668,addStep,div,=,partial_escaped,partial_escaped,3,user_created_name,,"'<div class=""bld-step-hdr""><span class=""bld-step-num"">Step</span>' +
       '<span class=""bld-actions"">' +
         '<button type=""button"" onclick=""moveStep(this,-1)"" title=""Move up"">&#9650;</button>' +
         '<button type=""button"" onclick=""moveStep(this,1)"" title=""Move down"">&#9660;</button>' +
         '<button type=""button"" onclick=""removeStep(this)"" title=""Remove"">&#10005;</button>' +
       '</"
-aggOf:document.getElementById('dash-gauge'):=:c2776b093e85,19076,aggOf,document.getElementById('dash-gauge'),=,partial_escaped,partial_escaped,3,,,"gaugeSVG(prevPct, 124, 14) +
+aggOf:document.getElementById('dash-gauge'):=:c2776b093e85,19592,aggOf,document.getElementById('dash-gauge'),=,partial_escaped,partial_escaped,3,,,"gaugeSVG(prevPct, 124, 14) +
         '<div class=""ring-c""><span class=""rv"" style=""color:' + prevCol + '"">' + prevPct + '</span><span class=""rl"">of 100</span></div>'"
-aggOf:document.getElementById('dash-posture-bars'):=:1c09c35c581f,19086,aggOf,document.getElementById('dash-posture-bars'),=,indirect_builder,unescaped_html,4,,miniBars() @L18952 (scope-resolved): 3 return(s) -> unescaped_html,"miniBars(barData, 320, 64)"
-aggOf:document.getElementById('kpi-cov-spark'):=:85105375906e,19114,aggOf,document.getElementById('kpi-cov-spark'),=,indirect_builder,unescaped_html,4,,sparkSVG() @L18927 (scope-resolved): 4 return(s) -> unescaped_html; var(): no declaration found anywhere in file,"sparkSVG(covSeries, 110, 30, 'var(--warning)')"
-aggOf:document.getElementById('kpi-score-spark'):=:0319aaf8760d,19073,aggOf,document.getElementById('kpi-score-spark'),=,indirect_builder,unescaped_html,4,,sparkSVG() @L18927 (scope-resolved): 4 return(s) -> unescaped_html; var(): no declaration found anywhere in file,"sparkSVG(prevSeries, 110, 30, 'var(--teal)')"
-aggOf:donutEl:=:bb66089500d8,19134,aggOf,donutEl,=,static,static,0,,,"'<div class=""empty"">No run data yet.</div>'"
-aggOf:else                            tEl:=:1c87b321677d,19071,aggOf,else                            tEl,=,static,static,0,,,"'<span class=""trend flat"">—</span> '"
-aggOf:else if (trend === 'Degrading') tEl:=:10f698d311c8,19070,aggOf,else if (trend === 'Degrading') tEl,=,static,static,0,,,"'<span class=""trend down"">▼</span> '"
-aggOf:if (trend === 'Improving')      tEl:=:c5109212a34d,19069,aggOf,if (trend === 'Improving')      tEl,=,static,static,0,,,"'<span class=""trend up"">▲</span> '"
-apDiscoverSubnet:btn:=:ec0171b2a89a,12754,apDiscoverSubnet,btn,=,static,static,0,,,'&#128270; Discover Subnet'
-apDiscoverSubnet:btn:=:ec0171b2a89a,12764,apDiscoverSubnet,btn,=,static,static,0,,,'&#128270; Discover Subnet'
+aggOf:document.getElementById('dash-posture-bars'):=:1c09c35c581f,19602,aggOf,document.getElementById('dash-posture-bars'),=,indirect_builder,unescaped_html,4,,miniBars() @L19468 (scope-resolved): 3 return(s) -> unescaped_html,"miniBars(barData, 320, 64)"
+aggOf:document.getElementById('kpi-cov-spark'):=:85105375906e,19630,aggOf,document.getElementById('kpi-cov-spark'),=,indirect_builder,unescaped_html,4,,sparkSVG() @L19443 (scope-resolved): 4 return(s) -> unescaped_html; var(): no declaration found anywhere in file,"sparkSVG(covSeries, 110, 30, 'var(--warning)')"
+aggOf:document.getElementById('kpi-score-spark'):=:0319aaf8760d,19589,aggOf,document.getElementById('kpi-score-spark'),=,indirect_builder,unescaped_html,4,,sparkSVG() @L19443 (scope-resolved): 4 return(s) -> unescaped_html; var(): no declaration found anywhere in file,"sparkSVG(prevSeries, 110, 30, 'var(--teal)')"
+aggOf:donutEl:=:bb66089500d8,19650,aggOf,donutEl,=,static,static,0,,,"'<div class=""empty"">No run data yet.</div>'"
+aggOf:else                            tEl:=:1c87b321677d,19587,aggOf,else                            tEl,=,static,static,0,,,"'<span class=""trend flat"">—</span> '"
+aggOf:else if (trend === 'Degrading') tEl:=:10f698d311c8,19586,aggOf,else if (trend === 'Degrading') tEl,=,static,static,0,,,"'<span class=""trend down"">▼</span> '"
+aggOf:if (trend === 'Improving')      tEl:=:c5109212a34d,19585,aggOf,if (trend === 'Improving')      tEl,=,static,static,0,,,"'<span class=""trend up"">▲</span> '"
+apDiscoverSubnet:btn:=:ec0171b2a89a,13270,apDiscoverSubnet,btn,=,static,static,0,,,'&#128270; Discover Subnet'
+apDiscoverSubnet:btn:=:ec0171b2a89a,13280,apDiscoverSubnet,btn,=,static,static,0,,,'&#128270; Discover Subnet'
 badge:document.getElementById('cov-toolbar'):=:a56e7fcad41e,7075,badge,document.getElementById('cov-toolbar'),=,partial_escaped,partial_escaped,3,,,"seg + '<span class=""u-flex1""></span>' +
     badge('var(--success)', 'Prevented', c.cov) + badge('var(--warning)', 'Detected', c.part) +
     badge('var(--danger)', 'Missed', c.gap) + badge('var(--muted)', 'Untested', c.none)"
-byStartedAtDesc:tbody:=:a84861ce6bf1,14736,byStartedAtDesc,tbody,=,indirect_builder,partial_escaped,3,,"e.html is runRowHtml(r) or _sweepRowHtml(payload,opts); both builders are partial_escaped (documented runId / opts gaps, accepted as low-risk).",allEntries.map(function(e) { return e.html; }).join('')
-byStartedAtDesc:tbody:=:f78d2a49fc20,14700,byStartedAtDesc,tbody,=,unescaped_text,unescaped_text,4,,,individualRuns.slice().sort(byStartedAtDesc).map(runRowHtml).join('')
-c:document.getElementById('findings-toolbar'):=:c3213155c165,7508,c,document.getElementById('findings-toolbar'),=,indirect_builder,unescaped_html,4,,covSegHtml() @L13484 (scope-resolved): 1 return(s) -> unescaped_html,"covSegHtml(
+byStartedAtDesc:tbody:=:a84861ce6bf1,15252,byStartedAtDesc,tbody,=,indirect_builder,partial_escaped,3,,"e.html is runRowHtml(r) or _sweepRowHtml(payload,opts); both builders are partial_escaped (documented runId / opts gaps, accepted as low-risk).",allEntries.map(function(e) { return e.html; }).join('')
+byStartedAtDesc:tbody:=:f78d2a49fc20,15216,byStartedAtDesc,tbody,=,unescaped_text,unescaped_text,4,,,individualRuns.slice().sort(byStartedAtDesc).map(runRowHtml).join('')
+c:document.getElementById('findings-toolbar'):=:c3213155c165,7508,c,document.getElementById('findings-toolbar'),=,indirect_builder,unescaped_html,4,,covSegHtml() @L14000 (scope-resolved): 1 return(s) -> unescaped_html,"covSegHtml(
     [['all', 'All'], ['open', 'Open'], ['triaged', 'Triaged'], ['remediated', 'Remediated'], ['risk_accepted', 'Risk-accepted']],
     FINDING_TAB, 'setFindingTab', c
   )"
-c:if (el) el:=:6f6e0b1c7346,13496,c,if (el) el,=,indirect_builder,unescaped_html,4,,covSegHtml() @L13484 (scope-resolved): 1 return(s) -> unescaped_html,"covSegHtml(
+c:if (el) el:=:6f6e0b1c7346,14012,c,if (el) el,=,indirect_builder,unescaped_html,4,,covSegHtml() @L14000 (scope-resolved): 1 return(s) -> unescaped_html,"covSegHtml(
     [['all', 'All'], ['online', 'Online'], ['degraded', 'Degraded'], ['offline', 'Offline'], ['retired', 'Retired']],
     AGENT_FILTER, 'setAgentFilter', c
   )"
 cell:if (body) body:=:3c853fbcca72,7029,cell,if (body) body,=,unescaped_html,unescaped_html,4,,,"rows || '<tr><td colspan=""9"" class=""empty"">No techniques match.</td></tr>'"
-cmdkResultFallback:document.getElementById('results-body'):=:12f11fe6b7e3,18631,cmdkResultFallback,document.getElementById('results-body'),=,escaped,escaped,1,user_created_name,,"(r.description ? '<p style=""margin-bottom:0.8rem"">' + x(r.description) + '</p>' : '') +
+cmdkResultFallback:document.getElementById('results-body'):=:12f11fe6b7e3,19147,cmdkResultFallback,document.getElementById('results-body'),=,escaped,escaped,1,user_created_name,,"(r.description ? '<p style=""margin-bottom:0.8rem"">' + x(r.description) + '</p>' : '') +
     ((r.tags || []).length ? '<div style=""display:flex;gap:0.4rem;flex-wrap:wrap"">' +
       r.tags.map(function(t) { return '<span class=""sbadge"" style=""background:transparent;border:1px solid var(--border)"">' + x(t) + '</span>'; }).join('') +
       '</div>' : '')"
-cmdkResultFallback:document.getElementById('results-export'):=:6f49cdbd80e1,18629,cmdkResultFallback,document.getElementById('results-export'),=,static_empty,static_empty,0,,,''
-cmdkResultFallback:document.getElementById('results-summary'):=:6f49cdbd80e1,18630,cmdkResultFallback,document.getElementById('results-summary'),=,static_empty,static_empty,0,,,''
+cmdkResultFallback:document.getElementById('results-export'):=:6f49cdbd80e1,19145,cmdkResultFallback,document.getElementById('results-export'),=,static_empty,static_empty,0,,,''
+cmdkResultFallback:document.getElementById('results-summary'):=:6f49cdbd80e1,19146,cmdkResultFallback,document.getElementById('results-summary'),=,static_empty,static_empty,0,,,''
 cmpOnExistingScenarioChange:el:=:6f49cdbd80e1,6233,cmpOnExistingScenarioChange,el,=,static_empty,static_empty,0,,,''
 cmpOnExistingScenarioChange:el:=:6f49cdbd80e1,6235,cmpOnExistingScenarioChange,el,=,static_empty,static_empty,0,,,''
 cmpOnExistingScenarioChange:el:=:cdf355211d13,6239,cmpOnExistingScenarioChange,el,=,partial_escaped,partial_escaped,3,,,x(desc) + tagsLine
 cmpOnGroupChange:document.getElementById('cmp-exclusions'):=:6f49cdbd80e1,6034,cmpOnGroupChange,document.getElementById('cmp-exclusions'),=,static_empty,static_empty,0,,,''
 cmpOnGroupChange:document.getElementById('cmp-group-preview'):=:6f49cdbd80e1,6034,cmpOnGroupChange,document.getElementById('cmp-group-preview'),=,static_empty,static_empty,0,,,''
-confirmRun:runBtn:=:8eab6fb9be00,18456,confirmRun,runBtn,=,unescaped_likely_safe,unescaped_likely_safe,2,agent,,'Dispatching to ' + agentIds.length + ' agents…'
-confirmRun:runBtn:=:cd9227672841,18475,confirmRun,runBtn,=,static,static,0,,,'&#9654; Run'
-count:document.getElementById('campaign-toolbar'):=:df279ec14359,5792,count,document.getElementById('campaign-toolbar'),=,indirect_builder,unescaped_html,4,,covSegHtml() @L13484 (scope-resolved): 1 return(s) -> unescaped_html,"covSegHtml(items, CAMPAIGN_TAB, 'setCampaignTab', count)"
-dispatchAPCollect:tl:=:79a513ef9789,12809,dispatchAPCollect,tl,=,indirect_builder,unescaped_html,4,,_apStep() @L12770 (scope-resolved): 1 return(s) -> unescaped_html; _apTimestamp() @L12783 (scope-resolved): 1 return(s) -> unescaped_text,"_apStep('done', 'Collection started for ' + x(agentLabel) + ' at ' + _apTimestamp(),
+confirmRun:runBtn:=:8eab6fb9be00,18972,confirmRun,runBtn,=,unescaped_likely_safe,unescaped_likely_safe,2,agent,,'Dispatching to ' + agentIds.length + ' agents…'
+confirmRun:runBtn:=:cd9227672841,18991,confirmRun,runBtn,=,static,static,0,,,'&#9654; Run'
+count:document.getElementById('campaign-toolbar'):=:df279ec14359,5792,count,document.getElementById('campaign-toolbar'),=,indirect_builder,unescaped_html,4,,covSegHtml() @L14000 (scope-resolved): 1 return(s) -> unescaped_html,"covSegHtml(items, CAMPAIGN_TAB, 'setCampaignTab', count)"
+dispatchAPCollect:tl:=:79a513ef9789,13325,dispatchAPCollect,tl,=,indirect_builder,unescaped_html,4,,_apStep() @L13286 (scope-resolved): 1 return(s) -> unescaped_html; _apTimestamp() @L13299 (scope-resolved): 1 return(s) -> unescaped_text,"_apStep('done', 'Collection started for ' + x(agentLabel) + ' at ' + _apTimestamp(),
         targets.length + ' target' + (targets.length === 1 ? '' : 's') + ' queued — job ' + (r.job ? r.job.id.slice(0,8) : '')) +
       (shDetail ? _apStep('warn', 'SharpHound notice', shDetail) : '') +
       _apStep(jobStatus === 'dispatched' || jobStatus === 'running' ? 'done' : 'active',
         jobStatus === '"
-doOpen:tacticSel:=:84dac746f49b,15793,doOpen,tacticSel,=,escaped,escaped,1,,,"'<option value=""all"">All tactics</option>' +
+doOpen:tacticSel:=:84dac746f49b,16309,doOpen,tacticSel,=,escaped,escaped,1,,,"'<option value=""all"">All tactics</option>' +
         Object.keys(tacticSet).sort().map(function(t) {
           return '<option value=""' + x(t) + '"">' + x(t) + '</option>';
         }).join('')"
-expCard:body:=:0218a335dcfb,12000,expCard,body,=,escaped,escaped,1,error_message,,"'<div class=""empty u-danger"">Failed to load: ' + x(e.message) + '</div>'"
-expCard:body:=:aaa9402664f1,11998,expCard,body,=,indirect_variable,partial_escaped,3,,20 assignment(s) to 'h' inside openExposureDetail() @L11929 (scope-resolved) -> partial_escaped,h
+expCard:body:=:0218a335dcfb,12516,expCard,body,=,escaped,escaped,1,error_message,,"'<div class=""empty u-danger"">Failed to load: ' + x(e.message) + '</div>'"
+expCard:body:=:aaa9402664f1,12514,expCard,body,=,indirect_variable,partial_escaped,3,,20 assignment(s) to 'h' inside openExposureDetail() @L12445 (scope-resolved) -> partial_escaped,h
 fetchAuditPage:if (tbody) tbody:=:1a277fe0c0f1,5731,fetchAuditPage,if (tbody) tbody,=,static,static,0,telemetry_log,,"'<tr><td colspan=""6"" style=""text-align:center;color:var(--danger);padding:2rem"">Failed to load audit logs.</td></tr>'"
 fetchAuditPage:tbody:=:04dd9c2b9f5a,5670,fetchAuditPage,tbody,=,static,static,0,,,"'<tr><td colspan=""6"" style=""text-align:center;color:var(--muted);padding:2rem"">No audit records found.</td></tr>'"
 fetchAuditPage:tbody:=:3fb9ba42cd8e,5672,fetchAuditPage,tbody,=,unescaped_html,unescaped_html,4,"agent,user_created_name",,"entries.map(function(e) {
@@ -88,18 +88,18 @@ fetchAuditPage:tbody:=:3fb9ba42cd8e,5672,fetchAuditPage,tbody,=,unescaped_html,u
 fetchConnectorProjects:sel:=:d2134590b864,8466,fetchConnectorProjects,sel,=,escaped,escaped,1,user_created_name,,"projects.map(function(p) {
         return '<option value=""' + x(p.key) + '""' + (inp.value === p.key ? ' selected' : '') + '>' + x(p.key) + ' — ' + x(p.name) + '</option>';
       }).join('')"
-fill:sel:=:208268b2e954,12730,fill,sel,=,escaped,escaped,1,agent,,"(state.agents || []).map(function(a) {
+fill:sel:=:208268b2e954,13246,fill,sel,=,escaped,escaped,1,agent,,"(state.agents || []).map(function(a) {
       return '<option value=""' + x(a.agentId) + '"">' + x(a.hostname || a.agentId) + (a.status === 'offline' ? ' (offline)' : '') + '</option>';
     }).join('') || '<option value="""">No agents enrolled</option>'"
-fillBuilder:steps:=:6f49cdbd80e1,15846,fillBuilder,steps,=,static_empty,static_empty,0,,,''
-filterVexTechniques:el:=:b51334baf721,19818,filterVexTechniques,el,=,static,static,0,,,"'<div style=""color:var(--muted);font-size:0.75rem;padding:0.4rem"">No techniques match</div>'"
-filterVexTechniques:el:=:fe7e0ce19e69,19821,filterVexTechniques,el,=,escaped,escaped,1,user_created_name,,"filtered.map(function(t) {
+fillBuilder:steps:=:6f49cdbd80e1,16362,fillBuilder,steps,=,static_empty,static_empty,0,,,''
+filterVexTechniques:el:=:b51334baf721,20334,filterVexTechniques,el,=,static,static,0,,,"'<div style=""color:var(--muted);font-size:0.75rem;padding:0.4rem"">No techniques match</div>'"
+filterVexTechniques:el:=:fe7e0ce19e69,20337,filterVexTechniques,el,=,escaped,escaped,1,user_created_name,,"filtered.map(function(t) {
     return '<label style=""display:flex;align-items:center;gap:0.5rem;padding:2px 4px;cursor:pointer;border-radius:3px"">' +
       '<input type=""checkbox"" class=""vex-tech-cb"" value=""' + x(t.id) + '"" style=""accent-color:var(--accent);flex-shrink:0"">' +
       '<span style=""font-family:var(--font-mono);font-size:0.76rem;flex-shrink:0"">' + x(t.id) + '</span>' +
       (t.name ?"
-fmt:document.getElementById('evidence-content'):=:e5e239560bc1,18149,fmt,document.getElementById('evidence-content'),=,indirect_variable,unescaped_html,4,,15 assignment(s) to 'html' inside renderEvidencePanel() @L17903 (scope-resolved) -> unescaped_html,html
-goToProfile:el:=:dbb79cb6cb5d,10185,goToProfile,el,=,escaped,escaped,1,,,"d.permissions.slice().sort().map(function(p) {
+fmt:document.getElementById('evidence-content'):=:e5e239560bc1,18665,fmt,document.getElementById('evidence-content'),=,indirect_variable,unescaped_html,4,,15 assignment(s) to 'html' inside renderEvidencePanel() @L18419 (scope-resolved) -> unescaped_html,html
+goToProfile:el:=:dbb79cb6cb5d,10701,goToProfile,el,=,escaped,escaped,1,,,"d.permissions.slice().sort().map(function(p) {
       return '<span class=""tag"" style=""display:inline-block;margin:0 0.3rem 0.3rem 0"">' + x(p) + '</span>';
     }).join('')"
 initComplianceTab:agSel:=:6f767b9cccfa,5270,initComplianceTab,agSel,=,escaped,escaped,1,agent,,"'<option value="""">— Select Agent —</option>' +
@@ -116,28 +116,28 @@ initiativeRenderAttachList:list:=:f7770fbca8f2,8231,initiativeRenderAttachList,l
     return '<label style=""display:flex;align-items:center;gap:0.5rem;padding:0.5rem 0.75rem;border-bottom:1px solid var(--border);cursor:pointer;font-size:0.78rem"">' +
       '<input type=""radio"" name=""init-attach-radio"" value=""' + x(j.id) + '"" ' + checked + ' onchange=""INIT_ATTACH_SELECTED=this.value"
 initiativeShowDrawerError:if (el) el:=:6720deede4b8,8133,initiativeShowDrawerError,if (el) el,=,escaped,escaped,1,,,"msg ? '<div class=""tiny u-danger"">' + x(msg) + '</div>' : ''"
-kpiGaugeCard:document.getElementById('run-kpi-strip'):=:9f61190ab079,16504,kpiGaugeCard,document.getElementById('run-kpi-strip'),=,partial_escaped,partial_escaped,3,,,"'<div class=""kpi-row"" style=""grid-template-columns:repeat(6,1fr)"">' +
+kpiGaugeCard:document.getElementById('run-kpi-strip'):=:9f61190ab079,17020,kpiGaugeCard,document.getElementById('run-kpi-strip'),=,partial_escaped,partial_escaped,3,,,"'<div class=""kpi-row"" style=""grid-template-columns:repeat(6,1fr)"">' +
           '<div class=""kpi-card""><div class=""kpi-label"">Overall Security Score</div><div class=""kpi-value"">' + prevPct + '<span style=""font-size:0.9rem;color:var(--muted)"">/100</span></div><div class=""kpi-sub"">' + (deltaHtml || '—') + '</div></div>' +
           kpiGaugeCard('Detection Rate', detRate, pass + ' / ' + results.lengt"
 kv:document.getElementById('campaigns-detail'):=:71d9ba121342,5895,kv,document.getElementById('campaigns-detail'),=,partial_escaped,partial_escaped,3,user_created_name,,"'<div style=""display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;margin-bottom:1rem;flex-wrap:wrap"">' +
         '<div><a class=""tiny"" style=""color:var(--accent);cursor:pointer"" onclick=""closeCampaignDetail()"">&larr; Campaigns</a>' +
         '<h1 style=""font-family:var(--font-display);font-size:1.5rem;font-weight:700;letter-spacing:-0.02em;margin:0.3rem 0;color:var(--text)"">'"
-lg:afEl:=:045b2d7bf19f,19175,lg,afEl,=,static,static,0,,,"'<div class=""empty"" style=""padding:1.5rem"">No kill-chain data for the latest run.</div>'"
-lg:afEl:=:742a1d68308b,19179,lg,afEl,=,static,static,0,,,"'<div class=""empty"" style=""padding:1.5rem"">Attack flow unavailable.</div>'"
-lg:afEl:=:af6127e6cf99,19176,lg,afEl,=,indirect_builder,unescaped_html,4,,killChainNodes() @L17474 (scope-resolved): 1 return(s) -> unescaped_html,"'<div class=""killchain"">' + killChainNodes(kc) + '</div>'"
-lg:attckEl:=:15344d1eaefd,19259,lg,attckEl,=,unescaped_html,unescaped_html,4,,,"tactics.map(function(tactic) {
+lg:afEl:=:045b2d7bf19f,19691,lg,afEl,=,static,static,0,,,"'<div class=""empty"" style=""padding:1.5rem"">No kill-chain data for the latest run.</div>'"
+lg:afEl:=:742a1d68308b,19695,lg,afEl,=,static,static,0,,,"'<div class=""empty"" style=""padding:1.5rem"">Attack flow unavailable.</div>'"
+lg:afEl:=:af6127e6cf99,19692,lg,afEl,=,indirect_builder,unescaped_html,4,,killChainNodes() @L17990 (scope-resolved): 1 return(s) -> unescaped_html,"'<div class=""killchain"">' + killChainNodes(kc) + '</div>'"
+lg:attckEl:=:15344d1eaefd,19775,lg,attckEl,=,unescaped_html,unescaped_html,4,,,"tactics.map(function(tactic) {
         var d = tacticMap[tactic];
         var total = d.pass + d.fail;
         var pct = total ? Math.round((d.pass / total) * 100) : 0;
         var col = _riskScoreColor(pct);
         return '<div class=""bar-row"">' +
           '<div class=""bar-label""><span style=""text-transform:capitalize"">' + x(tactic) + '</span><span style=""color:' + col + '"">' + pct + '%</span><"
-lg:attckEl:=:29910ff5e4fc,19257,lg,attckEl,=,static,static,0,,,"'<div class=""empty"" style=""padding:1.5rem;grid-column:1/-1"">No run data yet.</div>'"
-lg:bodyEl:=:a021056e35a9,19309,lg,bodyEl,=,unescaped_html,unescaped_html,4,agent,,"top.length ? top.map(function(f) {
+lg:attckEl:=:29910ff5e4fc,19773,lg,attckEl,=,static,static,0,,,"'<div class=""empty"" style=""padding:1.5rem;grid-column:1/-1"">No run data yet.</div>'"
+lg:bodyEl:=:a021056e35a9,19825,lg,bodyEl,=,unescaped_html,unescaped_html,4,agent,,"top.length ? top.map(function(f) {
             return '<div class=""lrow u-pointer"" onclick=""showTab(\'findings\');setTimeout(function(){openFinding(\'' + x(f.id) + '\')},150)"">' +
               '<div class=""lmain""><div class=""lt"">' + x(f.techniqueName || f.techniqueId) + '</div>' +
               '<div class=""ls""><span class=""tech-id"">' + x(f.techniqueId) + '</span> · ' + x(f.controlClass) + ' · ' "
-lg:donutEl:=:b908d493e3d4,19145,lg,donutEl,=,partial_escaped,partial_escaped,3,,,"'<div style=""position:relative;flex-shrink:0"">' +
+lg:donutEl:=:b908d493e3d4,19661,lg,donutEl,=,partial_escaped,partial_escaped,3,,,"'<div style=""position:relative;flex-shrink:0"">' +
           donutSVG([
             { v: eff.prevented, color: 'var(--teal)' },
             { v: eff.detected, color: 'var(--warning)' },
@@ -145,7 +145,7 @@ lg:donutEl:=:b908d493e3d4,19145,lg,donutEl,=,partial_escaped,partial_escaped,3,,
             { v: eff.other, color: 'var(--elevated)' }
           ]) +
           '<div style=""position:absolute;inset:0;display:flex;flex-direction:column;align-"
-lg:rrEl:=:40cfa668e770,19188,lg,rrEl,=,unescaped_html,unescaped_html,4,user_created_name,,"recent.map(function(r) {
+lg:rrEl:=:40cfa668e770,19704,lg,rrEl,=,unescaped_html,unescaped_html,4,user_created_name,,"recent.map(function(r) {
         var cnt = (r.results || []).length;
         var fail = (r.results || []).filter(function(c) { return c.result === 'fail'; }).length;
         var scoreStr = '—';
@@ -153,9 +153,9 @@ lg:rrEl:=:40cfa668e770,19188,lg,rrEl,=,unescaped_html,unescaped_html,4,user_crea
         if (r.score && r.score.preventionScore != null) {
           var pp = Math.round(r.score.preventionScore);
           var ta = r.score.trend === 'Improving' ? ' ↑"
-lg:rrEl:=:a15994e328c4,19186,lg,rrEl,=,static,static,0,,,"'<div class=""empty"" style=""padding:1.5rem"">No runs yet.</div>'"
-lg:tfEl:=:3c8626d1c7ac,19231,lg,tfEl,=,static,static,0,,,"'<div class=""empty"" style=""padding:1.5rem"">No failures recorded.</div>'"
-lg:tfEl:=:e009cf04aee2,19234,lg,tfEl,=,unescaped_html,unescaped_html,4,user_created_name,,"topFails.map(function(t) {
+lg:rrEl:=:a15994e328c4,19702,lg,rrEl,=,static,static,0,,,"'<div class=""empty"" style=""padding:1.5rem"">No runs yet.</div>'"
+lg:tfEl:=:3c8626d1c7ac,19747,lg,tfEl,=,static,static,0,,,"'<div class=""empty"" style=""padding:1.5rem"">No failures recorded.</div>'"
+lg:tfEl:=:e009cf04aee2,19750,lg,tfEl,=,unescaped_html,unescaped_html,4,user_created_name,,"topFails.map(function(t) {
         var pct = Math.round((t.fail / (t.fail + t.pass)) * 100);
         var w = Math.round((t.fail / maxFail) * 100);
         return '<div class=""bar-row"">' +
@@ -167,18 +167,18 @@ list:document.getElementById('results-body'):=:4eb1c57d1f9c,7614,list,document.g
       row('Technique', '<span class=""tech-id"">' + x(f.techniqueId) + '</span> ' + x(f.techniqueName)) +
       row('Tactic', x(f.tactic)) + row('Expected control', x(f.controlClass)) "
 list:document.getElementById('results-export'):=:cfdd80621952,7586,list,document.getElementById('results-export'),=,partial_escaped,partial_escaped,3,,,(actions ? actions + ' ' : '') + pushBtn + (pushBtn && respondBtn ? ' ' : '') + respondBtn
-loadAPHistory:tb:=:19f226136597,12596,loadAPHistory,tb,=,static,static,0,,,"'<tr><td colspan=""7"" class=""empty"">Loading…</td></tr>'"
-loadAPHistory:tb:=:1e8414e7c561,12618,loadAPHistory,tb,=,escaped,escaped,1,error_message,,"'<tr><td colspan=""7"" class=""empty"">' + x(e.message) + '</td></tr>'"
-loadAPHistory:tb:=:b41e906344fa,12599,loadAPHistory,tb,=,static,static,0,,,"'<tr><td colspan=""7"" class=""empty"">No collection history yet.</td></tr>'"
-loadAPHistory:tb:=:e93f630359cd,12602,loadAPHistory,tb,=,unescaped_html,unescaped_html,4,agent,,"rows.map(function(r) {
+loadAPHistory:tb:=:19f226136597,13112,loadAPHistory,tb,=,static,static,0,,,"'<tr><td colspan=""7"" class=""empty"">Loading…</td></tr>'"
+loadAPHistory:tb:=:1e8414e7c561,13134,loadAPHistory,tb,=,escaped,escaped,1,error_message,,"'<tr><td colspan=""7"" class=""empty"">' + x(e.message) + '</td></tr>'"
+loadAPHistory:tb:=:b41e906344fa,13115,loadAPHistory,tb,=,static,static,0,,,"'<tr><td colspan=""7"" class=""empty"">No collection history yet.</td></tr>'"
+loadAPHistory:tb:=:e93f630359cd,13118,loadAPHistory,tb,=,unescaped_html,unescaped_html,4,agent,,"rows.map(function(r) {
       var ts = r.collectedAt ? new Date(r.collectedAt).toLocaleString('en-GB',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}) : '—';
       var statusBadge = r.status === 'completed'
         ? '<span class=""u-success"">&#10003; Completed</span>'
         : '<span class=""u-danger"">&#10005; ' + x(r.status) + (r.errorMsg ? ': ' + x(r.errorMsg.slice(0,40)) : '') + '<"
-loadARTContentStatus:document.getElementById('cs-art-status'):=:f83cfb2e045d,10746,loadARTContentStatus,document.getElementById('cs-art-status'),=,static,static,0,,,"'<span class=""u-danger"">Error checking status</span>'"
-loadARTContentStatus:statusEl:=:231d8ed13a85,10704,loadARTContentStatus,statusEl,=,static,static,0,,,"'<span style=""display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--success);margin-right:6px;vertical-align:middle""></span><span class=""u-success"">Seeded</span>'"
-loadARTContentStatus:statusEl:=:240aa95af980,10706,loadARTContentStatus,statusEl,=,static,static,0,,,"'<span style=""display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--warning);margin-right:6px;vertical-align:middle""></span><span class=""u-warning"">Not seeded</span>'"
-loadAgentRiskSummary:if (tb) tb:=:19f226136597,10241,loadAgentRiskSummary,if (tb) tb,=,static,static,0,,,"'<tr><td colspan=""7"" class=""empty"">Loading…</td></tr>'"
+loadARTContentStatus:document.getElementById('cs-art-status'):=:f83cfb2e045d,11262,loadARTContentStatus,document.getElementById('cs-art-status'),=,static,static,0,,,"'<span class=""u-danger"">Error checking status</span>'"
+loadARTContentStatus:statusEl:=:231d8ed13a85,11220,loadARTContentStatus,statusEl,=,static,static,0,,,"'<span style=""display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--success);margin-right:6px;vertical-align:middle""></span><span class=""u-success"">Seeded</span>'"
+loadARTContentStatus:statusEl:=:240aa95af980,11222,loadARTContentStatus,statusEl,=,static,static,0,,,"'<span style=""display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--warning);margin-right:6px;vertical-align:middle""></span><span class=""u-warning"">Not seeded</span>'"
+loadAgentRiskSummary:if (tb) tb:=:19f226136597,10757,loadAgentRiskSummary,if (tb) tb,=,static,static,0,,,"'<tr><td colspan=""7"" class=""empty"">Loading…</td></tr>'"
 loadAgtAttackPath:pane:=:288757584172,5174,loadAgtAttackPath,pane,=,escaped,escaped,1,error_message,,"'<div style=""padding:1rem;color:var(--danger)"">' + x(e.message) + '</div>'"
 loadAgtAttackPath:pane:=:43b384bfff79,5130,loadAgtAttackPath,pane,=,static,static,0,,,"'<div style=""color:var(--muted);padding:1rem"">Loading…</div>'"
 loadAgtAttackPath:pane:=:6a8bdfbcf6ec,5164,loadAgtAttackPath,pane,=,unescaped_html,unescaped_html,4,,,"'<div style=""padding:0.75rem 1.25rem 0"">' +
@@ -214,7 +214,7 @@ loadAgtScenarios:pane:=:ef1e71317aff,4853,loadAgtScenarios,pane,=,unescaped_html
       '<th style=""padding:0.4rem 0.5rem 0.4rem 0;text-align:left"">Scenario</th>' +
       '<th style=""padding:0.4rem 0.5rem;text-align:left"">When</th>' +
 "
-loadAttackPath:if (body) body:=:775979a09db1,11379,loadAttackPath,if (body) body,=,static,static,0,,,"'<div class=""empty"" style=""padding:2rem"">Loading…</div>'"
+loadAttackPath:if (body) body:=:775979a09db1,11895,loadAttackPath,if (body) body,=,static,static,0,,,"'<div class=""empty"" style=""padding:2rem"">Loading…</div>'"
 loadBackups:if (wrap) wrap:=:26bb601d6dfd,5552,loadBackups,if (wrap) wrap,=,escaped,escaped,1,,,"'<div class=""empty"" style=""padding:2rem;color:var(--danger)"">' + x(jobs.error) + '</div>'"
 loadBackups:if (wrap) wrap:=:52aae5451493,5558,loadBackups,if (wrap) wrap,=,escaped,escaped,1,error_message,,"'<div class=""empty"" style=""padding:2rem;color:var(--danger)"">' + x(e.message) + '</div>'"
 loadCalderaStatus:document.getElementById('cs-caldera-status'):=:e392dad8b085,6641,loadCalderaStatus,document.getElementById('cs-caldera-status'),=,indirect_variable,static,0,,3 assignment(s) to 'dot' inside loadCalderaStatus() @L6626 (scope-resolved) -> static,dot
@@ -222,8 +222,8 @@ loadCalderaStatus:document.getElementById('cs-caldera-status'):=:f83cfb2e045d,66
 loadComplianceScores:el:=:3507e053d334,6448,loadComplianceScores,el,=,static,static,0,,,"'<div style=""color:var(--muted);font-size:0.78rem;padding:0.4rem 0"">No compliance data yet — run a scenario to generate scores.</div>'"
 loadComplianceScores:el:=:39fb08138cd0,6451,loadComplianceScores,el,=,unescaped_text,unescaped_text,4,,,scores.map(complianceTile).join('')
 loadCoverage:document.getElementById('cov-matrix'):=:9bbe032fcd11,7054,loadCoverage,document.getElementById('cov-matrix'),=,escaped,escaped,1,error_message,,"'<div class=""empty"" style=""padding:2rem"">' + x(e.message) + '</div>'"
-loadCoverageMatrix:body:=:33f2a6ace2f9,11670,loadCoverageMatrix,body,=,static,static,0,,,"'<tr><td colspan=""6"" class=""empty"">Loading&hellip;</td></tr>'"
-loadCoverageMatrix:body:=:3b7e776d736b,11681,loadCoverageMatrix,body,=,unescaped_html,unescaped_html,4,,,"rows.map(function(r) {
+loadCoverageMatrix:body:=:33f2a6ace2f9,12186,loadCoverageMatrix,body,=,static,static,0,,,"'<tr><td colspan=""6"" class=""empty"">Loading&hellip;</td></tr>'"
+loadCoverageMatrix:body:=:3b7e776d736b,12197,loadCoverageMatrix,body,=,unescaped_html,unescaped_html,4,,,"rows.map(function(r) {
         return '<tr>' +
           '<td class=""u-fw600"">' + x(r.techniqueId) + '</td>' +
           '<td>' + covStatusCell(r.simulationExists) + '</td>' +
@@ -231,9 +231,9 @@ loadCoverageMatrix:body:=:3b7e776d736b,11681,loadCoverageMatrix,body,=,unescaped
           '<td>' + covStatusCell(r.purpleExerciseExists) + '</td>' +
           '<td>' + covStatusCell(r.complianceMappingExists) + '</td>' +
           '<"
-loadCoverageMatrix:body:=:6db277ff2d5b,11693,loadCoverageMatrix,body,=,escaped,escaped,1,error_message,,"'<tr><td colspan=""6"" class=""empty u-danger"">Failed to load: ' + x(e.message) + '</td></tr>'"
-loadCoverageMatrix:body:=:6f49cdbd80e1,11676,loadCoverageMatrix,body,=,static_empty,static_empty,0,,,''
-loadEmTab:gridEl:=:1988c3855d7f,20343,loadEmTab,gridEl,=,unescaped_html,unescaped_html,4,"agent,user_created_name",,"EM_CATALOG.map(function(e) {
+loadCoverageMatrix:body:=:6db277ff2d5b,12209,loadCoverageMatrix,body,=,escaped,escaped,1,error_message,,"'<tr><td colspan=""6"" class=""empty u-danger"">Failed to load: ' + x(e.message) + '</td></tr>'"
+loadCoverageMatrix:body:=:6f49cdbd80e1,12192,loadCoverageMatrix,body,=,static_empty,static_empty,0,,,''
+loadEmTab:gridEl:=:1988c3855d7f,20859,loadEmTab,gridEl,=,unescaped_html,unescaped_html,4,"agent,user_created_name",,"EM_CATALOG.map(function(e) {
       var run = lastRunMap[e.id];
       var p = 0, f = 0;
       if (run) {
@@ -244,14 +244,14 @@ loadEmTab:gridEl:=:1988c3855d7f,20343,loadEmTab,gridEl,=,unescaped_html,unescape
       }
       var pct = (p + f) ? Math.round(p / (p + f) * 100) : null;
       var col = pct === null ? 'var(--muted)' : _ri"
-loadEmTab:summaryEl:=:0b3c56ec65da,20321,loadEmTab,summaryEl,=,static,static,0,api_response,,"'<div class=""empty"" style=""padding:0.5rem"">Run one or more EM scenarios to generate coverage data.</div>'"
-loadEmTab:summaryEl:=:a1ac946a6dd4,20325,loadEmTab,summaryEl,=,partial_escaped,partial_escaped,3,,,"'<div style=""display:flex;align-items:center;gap:2rem;flex-wrap:wrap"">' +
+loadEmTab:summaryEl:=:0b3c56ec65da,20837,loadEmTab,summaryEl,=,static,static,0,api_response,,"'<div class=""empty"" style=""padding:0.5rem"">Run one or more EM scenarios to generate coverage data.</div>'"
+loadEmTab:summaryEl:=:a1ac946a6dd4,20841,loadEmTab,summaryEl,=,partial_escaped,partial_escaped,3,,,"'<div style=""display:flex;align-items:center;gap:2rem;flex-wrap:wrap"">' +
             emSummaryBig(overallPct + '%', 'Overall Score', col) +
             emSummaryBig(layersRun + '/14', 'Layers Run', 'var(--text)') +
             emSummaryBig(layersPass + '', 'Layers Passing', 'var(--success)') +
             emSummaryBig(layersFail + '', 'Layers Failing', layersFail ? 'var(--danger)' : 'var(--muted)"
 loadEndpointPostureWidget:tiles:=:e5e239560bc1,6323,loadEndpointPostureWidget,tiles,=,indirect_variable,unescaped_html,4,,3 assignment(s) to 'html' inside loadEndpointPostureWidget() @L6294 (scope-resolved) -> unescaped_html,html
-loadExercisesTab:body:=:291715c8403f,12207,loadExercisesTab,body,=,escaped,escaped,1,user_created_name,,"plans.map(function(p) {
+loadExercisesTab:body:=:291715c8403f,12723,loadExercisesTab,body,=,escaped,escaped,1,user_created_name,,"plans.map(function(p) {
       return '<tr>' +
         '<td>' + x(p.name) + '</td>' +
         '<td>' + (p.steps ? p.steps.length : 0) + '</td>' +
@@ -259,23 +259,23 @@ loadExercisesTab:body:=:291715c8403f,12207,loadExercisesTab,body,=,escaped,escap
         '<td><button class=""btn btn-primary btn-sm"" onclick=""launchExercisePrompt(\'' + x(p.id) + '\')"">Launch</button></td>' +
         '</tr>';
     }).join('')"
-loadExercisesTab:body:=:69d63b8ee4f5,12222,loadExercisesTab,body,=,unescaped_html,unescaped_html,4,user_created_name,,"execs.map(function(e) {
+loadExercisesTab:body:=:69d63b8ee4f5,12738,loadExercisesTab,body,=,unescaped_html,unescaped_html,4,user_created_name,,"execs.map(function(e) {
       var live = e.status === 'running' || e.status === 'paused';
       var progress = e.steps_total
         ? (e.steps_done || 0) + ' / ' + e.steps_total + ' steps'
         : '<span class=""tiny muted"">—</span>';
       var abortBtn = live
         ? '<button class=""btn btn-outline-red btn-sm"" onclick=""event.stopPropagation();abortExecution(\'' + x(e.id) + '\')"">&#9632; Abort"
-loadExercisesTab:body:=:6f49cdbd80e1,12205,loadExercisesTab,body,=,static_empty,static_empty,0,,,''
-loadExercisesTab:body:=:6f49cdbd80e1,12220,loadExercisesTab,body,=,static_empty,static_empty,0,,,''
-loadExposureAssets:body:=:436c1620d825,11440,loadExposureAssets,body,=,unescaped_html,unescaped_html,4,,,"assets.map(function(a) {
+loadExercisesTab:body:=:6f49cdbd80e1,12721,loadExercisesTab,body,=,static_empty,static_empty,0,,,''
+loadExercisesTab:body:=:6f49cdbd80e1,12736,loadExercisesTab,body,=,static_empty,static_empty,0,,,''
+loadExposureAssets:body:=:436c1620d825,11956,loadExposureAssets,body,=,unescaped_html,unescaped_html,4,,,"assets.map(function(a) {
       return '<tr class=""u-pointer"" onclick=""openExposureDetail(\'' + x(a.asset.hostKey) + '\')"">' +
         '<td class=""u-fw600"">' + x(a.asset.label) + '</td>' +
         '<td>' + (a.asset.managed ? '<span class=""badge"">Managed</span>' : '<span class=""badge u-muted"">Discovered</span>') + '</td>' +
         '<td style=""color:' + apColor(a.exposureScore) + ';font-weight:700"">"
-loadExposureAssets:body:=:53ffa97366ab,11434,loadExposureAssets,body,=,static,static,0,,,"'<tr><td colspan=""8"" class=""empty"">Loading…</td></tr>'"
-loadExposureAssets:body:=:7aa750446b7d,11437,loadExposureAssets,body,=,static,static,0,,,"'<tr><td colspan=""8"" class=""empty"">No assets found — enroll an agent or run attack-path collection.</td></tr>'"
-loadExposureAssets:body:=:e2f15271ecc0,11453,loadExposureAssets,body,=,escaped,escaped,1,error_message,,"'<tr><td colspan=""8"" class=""empty u-danger"">Failed to load: ' + x(e.message) + '</td></tr>'"
+loadExposureAssets:body:=:53ffa97366ab,11950,loadExposureAssets,body,=,static,static,0,,,"'<tr><td colspan=""8"" class=""empty"">Loading…</td></tr>'"
+loadExposureAssets:body:=:7aa750446b7d,11953,loadExposureAssets,body,=,static,static,0,,,"'<tr><td colspan=""8"" class=""empty"">No assets found — enroll an agent or run attack-path collection.</td></tr>'"
+loadExposureAssets:body:=:e2f15271ecc0,11969,loadExposureAssets,body,=,escaped,escaped,1,error_message,,"'<tr><td colspan=""8"" class=""empty u-danger"">Failed to load: ' + x(e.message) + '</td></tr>'"
 loadFindingTickets:container:=:3b0ad29b6834,7854,loadFindingTickets,container,=,static,static,0,,,"'<div class=""tiny muted"" style=""padding:0.3rem 0"">No tickets yet.</div>'"
 loadFindingTickets:container:=:d3ba7728b85f,7857,loadFindingTickets,container,=,unescaped_html,unescaped_html,4,,,"tickets.map(function(t) {
       var statusColor = t.status === 'resolved' ? 'var(--success)' : t.status === 'open' ? 'var(--warning)' : 'var(--muted)';
@@ -297,12 +297,12 @@ loadLicenseInfo:wrap:=:1e2b1bb5184e,5515,loadLicenseInfo,wrap,=,partial_escaped,
 loadLicenseInfo:wrap:=:52aae5451493,5528,loadLicenseInfo,wrap,=,escaped,escaped,1,error_message,,"'<div class=""empty"" style=""padding:2rem;color:var(--danger)"">' + x(e.message) + '</div>'"
 loadLicenseInfo:wrap:=:58373f9eeda5,5509,loadLicenseInfo,wrap,=,escaped,escaped,1,,,"'<div class=""empty"" style=""padding:2rem;color:var(--danger)"">' + x(lic.error) + '</div>'"
 loadLicenseInfo:wrap:=:775979a09db1,5507,loadLicenseInfo,wrap,=,static,static,0,,,"'<div class=""empty"" style=""padding:2rem"">Loading…</div>'"
-loadOpenAEVConfig:configPanel:=:44e8a8bb59a5,12020,loadOpenAEVConfig,configPanel,=,escaped,escaped,1,openaev,,"'<div class=""kpi-row"">' +
+loadOpenAEVConfig:configPanel:=:44e8a8bb59a5,12536,loadOpenAEVConfig,configPanel,=,escaped,escaped,1,openaev,,"'<div class=""kpi-row"">' +
           '<input id=""oaev-url"" type=""text"" placeholder=""https://openaev.example.local"" value=""' + x(cfg.baseUrl || '') + '"" class=""inp-sm u-flex1"">' +
           '<input id=""oaev-token"" type=""password"" placeholder=""Bearer token (leave blank to keep current)"" class=""inp-sm u-flex1"">' +
           '<label class=""tiny muted"" style=""display:flex;align-items:center;gap:0.3rem"">"
-loadOpenAEVConfig:configPanel:=:6f49cdbd80e1,12035,loadOpenAEVConfig,configPanel,=,static_empty,static_empty,0,,,''
-loadOpenAEVScenarios:body:=:4e411960cd3e,12101,loadOpenAEVScenarios,body,=,unescaped_html,unescaped_html,4,openaev,,"list.map(function(sc) {
+loadOpenAEVConfig:configPanel:=:6f49cdbd80e1,12551,loadOpenAEVConfig,configPanel,=,static_empty,static_empty,0,,,''
+loadOpenAEVScenarios:body:=:4e411960cd3e,12617,loadOpenAEVScenarios,body,=,unescaped_html,unescaped_html,4,openaev,,"list.map(function(sc) {
       return '<tr class=""u-pointer"" onclick=""openOpenAEVDetail(\'' + x(sc.OpenAEVScenarioID) + '\')"">' +
         '<td>' + x(sc.Name) + '</td>' +
         '<td>' + x(sc.Category) + '</td>' +
@@ -310,7 +310,7 @@ loadOpenAEVScenarios:body:=:4e411960cd3e,12101,loadOpenAEVScenarios,body,=,unesc
         '<td>' + (sc.TechniqueIDs || []).length + '</td>' +
         '<td>' + sc.InjectsCount + '</td>' +
         '<td class=""tiny muted"">' + x("
-loadOpenAEVScenarios:body:=:6f49cdbd80e1,12096,loadOpenAEVScenarios,body,=,static_empty,static_empty,0,,,''
+loadOpenAEVScenarios:body:=:6f49cdbd80e1,12612,loadOpenAEVScenarios,body,=,static_empty,static_empty,0,,,''
 loadRansomwareReadiness:bodyEl:=:a96a125c81c6,9574,loadRansomwareReadiness,bodyEl,=,partial_escaped,partial_escaped,3,"agent,user_created_name",,"'<div style=""display:flex;gap:1.5rem;align-items:flex-start"">' +
       scoreHtml +
       '<div style=""flex:1;min-width:0"">' + barsHtml + '</div>' +
@@ -327,68 +327,68 @@ loadReadinessTrends:el:=:8b32cd795356,6353,loadReadinessTrends,el,=,unescaped_ht
 loadReadinessTrends:summary:=:17c655bcb80a,6346,loadReadinessTrends,summary,=,unescaped_html,unescaped_html,4,api_response,,"'<span style=""margin-right:1rem""><strong class=""u-success"">' + improved + '</strong> improved</span>' +
         '<span style=""margin-right:1rem""><strong class=""u-danger"">' + regressed + '</strong> regressed</span>' +
         '<span><strong>' + data.total + '</strong> actors tracked</span>'"
-loadRecommendations:body:=:19f226136597,11874,loadRecommendations,body,=,static,static,0,,,"'<tr><td colspan=""7"" class=""empty"">Loading…</td></tr>'"
-loadRecommendations:body:=:45fc1c5a0961,11878,loadRecommendations,body,=,escaped,escaped,1,error_message,,"'<tr><td colspan=""7"" class=""empty u-danger"">Failed to load: ' + x(e.message) + '</td></tr>'"
+loadRecommendations:body:=:19f226136597,12390,loadRecommendations,body,=,static,static,0,,,"'<tr><td colspan=""7"" class=""empty"">Loading…</td></tr>'"
+loadRecommendations:body:=:45fc1c5a0961,12394,loadRecommendations,body,=,escaped,escaped,1,error_message,,"'<tr><td colspan=""7"" class=""empty u-danger"">Failed to load: ' + x(e.message) + '</td></tr>'"
 loadRemediations:document.getElementById('rem-list'):=:9bbe032fcd11,7650,loadRemediations,document.getElementById('rem-list'),=,escaped,escaped,1,error_message,,"'<div class=""empty"" style=""padding:2rem"">' + x(e.message) + '</div>'"
-loadReports:document.getElementById('rep-available'):=:568454456a1f,14305,loadReports,document.getElementById('rep-available'),=,static,static,0,agent,,"'<div class=""empty"" style=""padding:1.25rem"">Could not load agents.</div>'"
-loadReports:el:=:211a4d2abf4a,14288,loadReports,el,=,static,static,0,,,"'<div class=""empty"" style=""padding:1.25rem"">No agents with completed runs yet. Run a scenario, then generate its report here.</div>'"
-loadReports:el:=:b1f98f11e298,14292,loadReports,el,=,unescaped_html,unescaped_html,4,,,"ids.map(function(id) {
+loadReports:document.getElementById('rep-available'):=:568454456a1f,14821,loadReports,document.getElementById('rep-available'),=,static,static,0,agent,,"'<div class=""empty"" style=""padding:1.25rem"">Could not load agents.</div>'"
+loadReports:el:=:211a4d2abf4a,14804,loadReports,el,=,static,static,0,,,"'<div class=""empty"" style=""padding:1.25rem"">No agents with completed runs yet. Run a scenario, then generate its report here.</div>'"
+loadReports:el:=:b1f98f11e298,14808,loadReports,el,=,unescaped_html,unescaped_html,4,,,"ids.map(function(id) {
       var host = hostOf[id] || id, n = byAgent[id].runs, lastName = byAgent[id].lastName;
       return '<div class=""rep-row"">' +
         '<div class=""rep-ic"">' + d + '</div>' +
         '<div class=""rep-main""><div class=""rep-host"">' + x(host) + '</div>' +
           '<div class=""rep-sub"">Reports on: <strong class=""u-text"">' + x(lastName || 'unnamed scenario') + '</strong> (lat"
-loadRuns:tbody:=:f259d05495ad,14683,loadRuns,tbody,=,static,static,0,,,"'<tr><td colspan=""9"" class=""empty"">No runs yet. Go to Scenarios and run one.</td></tr>'"
-loadSIEMCorrelationPanel:el:=:a0696ac13148,17138,loadSIEMCorrelationPanel,el,=,partial_escaped,partial_escaped,3,,,"'<div style=""padding:1rem 0 0.5rem"">' +
+loadRuns:tbody:=:f259d05495ad,15199,loadRuns,tbody,=,static,static,0,,,"'<tr><td colspan=""9"" class=""empty"">No runs yet. Go to Scenarios and run one.</td></tr>'"
+loadSIEMCorrelationPanel:el:=:a0696ac13148,17654,loadSIEMCorrelationPanel,el,=,partial_escaped,partial_escaped,3,,,"'<div style=""padding:1rem 0 0.5rem"">' +
         '<div style=""display:flex;gap:1.5rem;margin-bottom:1rem;flex-wrap:wrap"">' +
           '<div class=""u-center"">' +
             '<div style=""font-size:1.7rem;font-weight:700;color:' + color + '"">' + detRate + '%</div>' +
             '<div style=""font-size:0.68rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em"">SIEM Detection Rate</div>"
-loadSimCoverage:bodyEl:=:b822322bb95c,10872,loadSimCoverage,bodyEl,=,unescaped_html,unescaped_html,4,,,"rows.map(function(r, i) {
+loadSimCoverage:bodyEl:=:b822322bb95c,11388,loadSimCoverage,bodyEl,=,unescaped_html,unescaped_html,4,,,"rows.map(function(r, i) {
         var bg = i % 2 === 0 ? '' : 'background:rgba(255,255,255,.02)';
         var isVariantRow = r[0].indexOf('Variant Engine') !== -1;
         var isSection = !!sectionKeys[r[0]];
         var textStyle = isVariantRow ? 'font-weight:700;color:var(--accent)'
                       : isSection    ? 'font-weight:700;color:var(--text)'
                       :                "
-loadTAXIIConnectors:tbody:=:1f42fbd5bac8,10518,loadTAXIIConnectors,tbody,=,escaped,escaped,1,error_message,,"'<tr><td colspan=""6"" class=""empty"">Failed to load: ' + x(e.message || 'unknown error') + '</td></tr>'"
-loadTAXIIConnectors:tbody:=:e683e20284c5,10513,loadTAXIIConnectors,tbody,=,static,static,0,,,"'<tr><td colspan=""6"" class=""empty"">Loading…</td></tr>'"
-loadThreatIntelConfig:if (panel) panel:=:6f49cdbd80e1,10398,loadThreatIntelConfig,if (panel) panel,=,static_empty,static_empty,0,,,''
-loadThreatIntelConfig:panel:=:a9b597bb6c96,10407,loadThreatIntelConfig,panel,=,partial_escaped,partial_escaped,3,,,"'<div class=""kpi-row"">' +
+loadTAXIIConnectors:tbody:=:1f42fbd5bac8,11034,loadTAXIIConnectors,tbody,=,escaped,escaped,1,error_message,,"'<tr><td colspan=""6"" class=""empty"">Failed to load: ' + x(e.message || 'unknown error') + '</td></tr>'"
+loadTAXIIConnectors:tbody:=:e683e20284c5,11029,loadTAXIIConnectors,tbody,=,static,static,0,,,"'<tr><td colspan=""6"" class=""empty"">Loading…</td></tr>'"
+loadThreatIntelConfig:if (panel) panel:=:6f49cdbd80e1,10914,loadThreatIntelConfig,if (panel) panel,=,static_empty,static_empty,0,,,''
+loadThreatIntelConfig:panel:=:a9b597bb6c96,10923,loadThreatIntelConfig,panel,=,partial_escaped,partial_escaped,3,,,"'<div class=""kpi-row"">' +
         urlField +
         '<input id=""ti-' + name + '-key"" type=""password"" placeholder=""API key (leave blank to keep current)"" class=""inp-sm u-flex1"">' +
         insecureField +
         '<label class=""tiny muted"" style=""display:flex;align-items:center;gap:0.3rem""><input type=""checkbox"" id=""ti-' + name + '-enabled"" ' + (cfg.enabled ? 'checked' : '') + '> Enabled</label>' "
-loadThreatPriorityActors:body:=:2843e7de1bbf,11740,loadThreatPriorityActors,body,=,escaped,escaped,1,error_message,,"'<tr><td colspan=""5"" class=""empty u-danger"">Failed to load: ' + x(e.message) + '</td></tr>'"
-loadThreatPriorityActors:body:=:28b537756c37,11729,loadThreatPriorityActors,body,=,unescaped_html,unescaped_html,4,,,"TP_ACTOR_CACHE.map(function(a) {
+loadThreatPriorityActors:body:=:2843e7de1bbf,12256,loadThreatPriorityActors,body,=,escaped,escaped,1,error_message,,"'<tr><td colspan=""5"" class=""empty u-danger"">Failed to load: ' + x(e.message) + '</td></tr>'"
+loadThreatPriorityActors:body:=:28b537756c37,12245,loadThreatPriorityActors,body,=,unescaped_html,unescaped_html,4,,,"TP_ACTOR_CACHE.map(function(a) {
         return '<tr class=""u-pointer"" onclick=\'showThreatPriorityDetail(' + JSON.stringify(a.actorName).replace(/'/g, ""&#39;"") + ')\'>' +
           '<td class=""u-fw600"">' + x(a.actorName) + '</td>' +
           '<td>' + tpTierBadge(a.tier) + '</td>' +
           '<td>' + x(a.score) + '</td>' +
           '<td>' + tpTrendCell(a.trend, a.trendDelta) + '</td>' +
        "
-loadThreatPriorityActors:body:=:6f49cdbd80e1,11724,loadThreatPriorityActors,body,=,static_empty,static_empty,0,,,''
-loadThreatPriorityActors:body:=:f880d42927c9,11719,loadThreatPriorityActors,body,=,static,static,0,,,"'<tr><td colspan=""5"" class=""empty"">Loading&hellip;</td></tr>'"
+loadThreatPriorityActors:body:=:6f49cdbd80e1,12240,loadThreatPriorityActors,body,=,static_empty,static_empty,0,,,''
+loadThreatPriorityActors:body:=:f880d42927c9,12235,loadThreatPriorityActors,body,=,static,static,0,,,"'<tr><td colspan=""5"" class=""empty"">Loading&hellip;</td></tr>'"
 loadUnifiedTechniques:sel:=:b2f5b56a3a23,6953,loadUnifiedTechniques,sel,=,escaped,escaped,1,,,"'<option value=""all"">All tactics</option>' +
         Object.keys(tacSet).sort().map(function(t) { return '<option value=""' + x(t) + '"">' + x(t) + '</option>'; }).join('')"
-loadUsers:tbody:=:58af379b3e34,18827,loadUsers,tbody,=,static,static,0,,,"'<tr><td colspan=""6"" class=""empty"">No users found.</td></tr>'"
-loadUsers:tbody:=:59926b90a0ae,18828,loadUsers,tbody,=,unescaped_html,unescaped_html,4,"api_response,user_created_name",,"data.map(function(u) {
+loadUsers:tbody:=:58af379b3e34,19343,loadUsers,tbody,=,static,static,0,,,"'<tr><td colspan=""6"" class=""empty"">No users found.</td></tr>'"
+loadUsers:tbody:=:59926b90a0ae,19344,loadUsers,tbody,=,unescaped_html,unescaped_html,4,"api_response,user_created_name",,"data.map(function(u) {
       var statusBadge = u.isActive ? '<span class=""sbadge s-completed"">Active</span>' : '<span class=""sbadge s-offline"">Disabled</span>';
       var mustPw = u.mustChangePw ? ' <span class=""tag u-warning"">pw reset</span>' : '';
       var actions =
         '<button class=""btn btn-outline btn-sm"" onclick=""openEditUser(\'' + x(u.id) + '\',\'' + x(u.username) + '\',\'' + x(u.role"
-loadVariantCoverage:el:=:5ad448abef7d,19848,loadVariantCoverage,el,=,static,static,0,,,"'<div class=""empty"" style=""padding:1.5rem"">No variant runs yet. Run variants on a technique to see coverage here.</div>'"
-loadVariantCoverage:el:=:a79e43cbcf7f,19875,loadVariantCoverage,el,=,escaped,escaped,1,error_message,,"'<div class=""empty"" style=""color:var(--danger);padding:1rem"">' + x(e.message || 'Error loading coverage') + '</div>'"
-loadVariantCoverage:el:=:c944b2f9b670,19845,loadVariantCoverage,el,=,static,static,0,,,"'<div class=""empty"" style=""padding:1.5rem"">Loading…</div>'"
-loadVariantCoverage:el:=:e5e239560bc1,19873,loadVariantCoverage,el,=,indirect_variable,partial_escaped,3,,3 assignment(s) to 'html' inside loadVariantCoverage() @L19842 (scope-resolved) -> partial_escaped,html
-loadVariantStats:el:=:357036e91e03,19404,loadVariantStats,el,=,indirect_builder,partial_escaped,3,,executions(): no declaration found anywhere in file; var(): no declaration found anywhere in file; vexStatCard() @L19417 (scope-resolved): 1 return(s) -> partial_escaped,"vexStatCard('Executed Variants',     s.executedVariants,       'var(--accent)', null,
+loadVariantCoverage:el:=:5ad448abef7d,20364,loadVariantCoverage,el,=,static,static,0,,,"'<div class=""empty"" style=""padding:1.5rem"">No variant runs yet. Run variants on a technique to see coverage here.</div>'"
+loadVariantCoverage:el:=:a79e43cbcf7f,20391,loadVariantCoverage,el,=,escaped,escaped,1,error_message,,"'<div class=""empty"" style=""color:var(--danger);padding:1rem"">' + x(e.message || 'Error loading coverage') + '</div>'"
+loadVariantCoverage:el:=:c944b2f9b670,20361,loadVariantCoverage,el,=,static,static,0,,,"'<div class=""empty"" style=""padding:1.5rem"">Loading…</div>'"
+loadVariantCoverage:el:=:e5e239560bc1,20389,loadVariantCoverage,el,=,indirect_variable,partial_escaped,3,,3 assignment(s) to 'html' inside loadVariantCoverage() @L20358 (scope-resolved) -> partial_escaped,html
+loadVariantStats:el:=:357036e91e03,19920,loadVariantStats,el,=,indirect_builder,partial_escaped,3,,executions(): no declaration found anywhere in file; var(): no declaration found anywhere in file; vexStatCard() @L19933 (scope-resolved): 1 return(s) -> partial_escaped,"vexStatCard('Executed Variants',     s.executedVariants,       'var(--accent)', null,
         'How many individual variant executions (encoding \xd7 privilege \xd7 context combinations) have actually completed so far, summed across every finished variant run — not the total available.') +
       vexStatCard('Total Variants',        s.availableVariants,      'var(--text)',   artAtomic.toLocaleString"
 loadVerificationTab:sel:=:d2a1edd66cf8,7149,loadVerificationTab,sel,=,indirect_variable,escaped,1,,1 assignment(s) to 'opts' inside loadVerificationTab() @L7132 (scope-resolved) -> escaped,opts
-maybeShowLicenseGraceModal:overlay:=:07494db8034d,9991,maybeShowLicenseGraceModal,overlay,=,indirect_builder,partial_escaped,3,,_licenseBannerHTML() @L9926 (scope-resolved): 1 return(s) -> partial_escaped; var(): no declaration found anywhere in file,"'<div style=""max-width:480px;background:var(--surface,#152338);border:1px solid var(--warning,#d29922);border-radius:8px;padding:1.5rem;color:var(--text,#e6e6e6)"">' +
+maybeShowLicenseGraceModal:overlay:=:07494db8034d,10507,maybeShowLicenseGraceModal,overlay,=,indirect_builder,partial_escaped,3,,_licenseBannerHTML() @L10442 (scope-resolved): 1 return(s) -> partial_escaped; var(): no declaration found anywhere in file,"'<div style=""max-width:480px;background:var(--surface,#152338);border:1px solid var(--warning,#d29922);border-radius:8px;padding:1.5rem;color:var(--text,#e6e6e6)"">' +
       _licenseBannerHTML(info) +
       '<div style=""text-align:right;margin-top:1rem""><button id=""license-grace-modal-dismiss"" style=""padding:0.4rem 1rem;border-radius:6px;border:1px solid var(--border,#22324a);background:transparent"
-openAPAssets:document.getElementById('ap-assets-body'):=:a0dfbbddf3d5,13052,openAPAssets,document.getElementById('ap-assets-body'),=,static,static,0,,,"'<tr><td colspan=""5"" class=""empty"">Loading…</td></tr>'"
+openAPAssets:document.getElementById('ap-assets-body'):=:a0dfbbddf3d5,13568,openAPAssets,document.getElementById('ap-assets-body'),=,static,static,0,,,"'<tr><td colspan=""5"" class=""empty"">Loading…</td></tr>'"
 openAdvDrawer:abEl:=:10f800eddb16,4458,openAdvDrawer,abEl,=,static,static,0,,,"'<div style=""color:var(--muted);font-size:0.78rem"">Loading…</div>'"
 openAdvDrawer:abEl:=:1bc301895d82,4494,openAdvDrawer,abEl,=,static,static,0,,,"'<div style=""color:var(--muted);font-size:0.78rem"">Could not load ability chain.</div>'"
 openAdvDrawer:abEl:=:9b29f26921f0,4475,openAdvDrawer,abEl,=,unescaped_html,unescaped_html,4,user_created_name,,"abs.map(function(ab, i) {
@@ -416,19 +416,19 @@ openCampaignLaunch:typeSel:=:d2a1edd66cf8,5999,openCampaignLaunch,typeSel,=,indi
 openCampaignRerunReview:document.getElementById('rerun-review-body'):=:a694e4076aeb,9765,openCampaignRerunReview,document.getElementById('rerun-review-body'),=,unescaped_html,unescaped_html,4,,,"rows.map(function(r) {
     return '<div class=""conn-cfg-row""><span class=""conn-cfg-label"">' + r[0] + '</span><span class=""conn-cfg-val"">' + r[1] + '</span></div>';
   }).join('')"
-openCmdk:wrap:=:e5b2adf984bd,18661,openCmdk,wrap,=,static,static,0,,,"'<div class=""cmdk"" role=""dialog"" aria-label=""Command palette"">' +
+openCmdk:wrap:=:e5b2adf984bd,19177,openCmdk,wrap,=,static,static,0,,,"'<div class=""cmdk"" role=""dialog"" aria-label=""Command palette"">' +
       '<div class=""cmdk-in"">' +
         '<svg width=""16"" height=""16"" viewBox=""0 0 24 24"" fill=""none"" stroke=""currentColor"" stroke-width=""2""><circle cx=""11"" cy=""11"" r=""7""/><path d=""M21 21l-4-4""/></svg>' +
         '<input id=""cmdk-input"" placeholder=""Type a command or search…"" autocomplete=""off"">' +
         '<span class=""cmdk-esc"">esc"
 openConfirmDiffModal:document.getElementById('confirm-diff-body'):=:2da3370e4143,6709,openConfirmDiffModal,document.getElementById('confirm-diff-body'),=,indirect_variable,escaped,1,,"diffHtml parameter, traced across all 5 call sites -- every one passes rows built exclusively from _diffRow()/_diffSecretRow(), both fully escaped internally via x().",diffHtml
-openEMSweepModal:sel:=:449a6c764d46,20420,openEMSweepModal,sel,=,escaped,escaped,1,agent,,"state.agents.map(function(a) {
+openEMSweepModal:sel:=:449a6c764d46,20936,openEMSweepModal,sel,=,escaped,escaped,1,agent,,"state.agents.map(function(a) {
     return '<option value=""' + x(a.agentId) + '"">' + x(a.agentId) + ' — ' + x(a.hostname) + '</option>';
   }).join('')"
-openEMSweepProgress:document.getElementById('em-sweep-progress-actions'):=:6f49cdbd80e1,20906,openEMSweepProgress,document.getElementById('em-sweep-progress-actions'),=,static_empty,static_empty,0,,,''
-openExerciseDetail:document.getElementById('exercise-detail-body'):=:372807e2ccce,12366,openExerciseDetail,document.getElementById('exercise-detail-body'),=,unescaped_html,unescaped_html,4,,,"scoreHtml + stepsHtml + '<div style=""margin-top:0.75rem"">' + actions + '</div>'"
-openExposureDetail:body:=:775979a09db1,11932,openExposureDetail,body,=,static,static,0,,,"'<div class=""empty"" style=""padding:2rem"">Loading…</div>'"
-openGroupPicker:document.getElementById('gp-select'):=:e921aae928a4,13335,openGroupPicker,document.getElementById('gp-select'),=,partial_escaped,partial_escaped,3,,,"'<option value="""">' + topLabel + '</option>' +
+openEMSweepProgress:document.getElementById('em-sweep-progress-actions'):=:6f49cdbd80e1,21422,openEMSweepProgress,document.getElementById('em-sweep-progress-actions'),=,static_empty,static_empty,0,,,''
+openExerciseDetail:document.getElementById('exercise-detail-body'):=:372807e2ccce,12882,openExerciseDetail,document.getElementById('exercise-detail-body'),=,unescaped_html,unescaped_html,4,,,"scoreHtml + stepsHtml + '<div style=""margin-top:0.75rem"">' + actions + '</div>'"
+openExposureDetail:body:=:775979a09db1,12448,openExposureDetail,body,=,static,static,0,,,"'<div class=""empty"" style=""padding:2rem"">Loading…</div>'"
+openGroupPicker:document.getElementById('gp-select'):=:e921aae928a4,13851,openGroupPicker,document.getElementById('gp-select'),=,partial_escaped,partial_escaped,3,,,"'<option value="""">' + topLabel + '</option>' +
     options.map(function(o) { return '<option value=""' + x(o.id) + '"">' + x(o.label) + '</option>'; }).join('')"
 openIOCDetail:document.getElementById('results-export'):=:6f49cdbd80e1,9076,openIOCDetail,document.getElementById('results-export'),=,static_empty,static_empty,0,,,''
 openInitiativeAttachDrawer:document.getElementById('init-attach-error'):=:6f49cdbd80e1,8207,openInitiativeAttachDrawer,document.getElementById('init-attach-error'),=,static_empty,static_empty,0,,,''
@@ -436,7 +436,7 @@ openInitiativeAttachDrawer:document.getElementById('init-attach-list'):=:17cdfc7
 openInitiativeAttachDrawer:document.getElementById('init-attach-list'):=:6e32df6b622b,8214,openInitiativeAttachDrawer,document.getElementById('init-attach-list'),=,escaped,escaped,1,error_message,,"'<div class=""tiny"" style=""color:var(--danger);padding:0.75rem"">' + x(e.message) + '</div>'"
 openInitiativeAttachDrawer:document.getElementById('init-attach-list'):=:b4b3accad9c5,8211,openInitiativeAttachDrawer,document.getElementById('init-attach-list'),=,escaped,escaped,1,api_response,,"'<div class=""tiny"" style=""color:var(--danger);padding:0.75rem"">' + x(res.error) + '</div>'"
 openInitiativeCreateDrawer:document.getElementById('init-create-error'):=:6f49cdbd80e1,8161,openInitiativeCreateDrawer,document.getElementById('init-create-error'),=,static_empty,static_empty,0,,,''
-openModal:document.getElementById('modal-agent'):=:aec9738cf908,14758,openModal,document.getElementById('modal-agent'),=,unescaped_html,unescaped_html,4,agent,,"state.agents.map(function(a) {
+openModal:document.getElementById('modal-agent'):=:aec9738cf908,15274,openModal,document.getElementById('modal-agent'),=,unescaped_html,unescaped_html,4,agent,,"state.agents.map(function(a) {
     var osLabel = '';
     if (a.osVersion) {
       var ov = a.osVersion.toLowerCase();
@@ -444,24 +444,24 @@ openModal:document.getElementById('modal-agent'):=:aec9738cf908,14758,openModal,
     }
     return '<option value=""' + x(a.agentId) + '""' + (a.agentId === preAgent ? ' selected' : '') + '>' +
            x(a.agentId) + ' —"
-openModal:scSel:=:99fea35738b6,14747,openModal,scSel,=,escaped,escaped,1,"scenario,user_created_name",,"state.scenarios.map(function(s) {
+openModal:scSel:=:99fea35738b6,15263,openModal,scSel,=,escaped,escaped,1,"scenario,user_created_name",,"state.scenarios.map(function(s) {
     var desc = s.description ? ' — ' + (s.description.length > 90 ? s.description.substring(0, 87) + '...' : s.description) : '';
     return '<option value=""' + x(s.id) + '""' + (s.id === scenarioId ? ' selected' : '') + '>' + x(s.name) + x(desc) + '</option>';
   }).join('')"
-openOpenAEVDetail:body:+=:b2c47a480b69,12189,openOpenAEVDetail,body,+=,escaped,escaped,1,openaev,,"'<div style=""margin-top:1rem""><button class=""btn btn-primary btn-sm"" onclick=""createPlanFromOpenAEV(\'' + x(id) + '\')"">Create Exercise Plan</button></div>'"
-openOpenAEVDetail:body:=:26b9cf015d37,12187,openOpenAEVDetail,body,=,partial_escaped,partial_escaped,3,user_created_name,,"'<div class=""tiny muted"">' + x(d.detail.description || '') + '</div>' + injectsHtml"
-openPickerWith:tacticSel:=:56ff914bbfc9,15381,openPickerWith,tacticSel,=,unescaped_html,unescaped_html,4,,,"'<option value=""all"">All tactics</option>' + tacticOpts"
+openOpenAEVDetail:body:+=:b2c47a480b69,12705,openOpenAEVDetail,body,+=,escaped,escaped,1,openaev,,"'<div style=""margin-top:1rem""><button class=""btn btn-primary btn-sm"" onclick=""createPlanFromOpenAEV(\'' + x(id) + '\')"">Create Exercise Plan</button></div>'"
+openOpenAEVDetail:body:=:26b9cf015d37,12703,openOpenAEVDetail,body,=,partial_escaped,partial_escaped,3,user_created_name,,"'<div class=""tiny muted"">' + x(d.detail.description || '') + '</div>' + injectsHtml"
+openPickerWith:tacticSel:=:56ff914bbfc9,15897,openPickerWith,tacticSel,=,unescaped_html,unescaped_html,4,,,"'<option value=""all"">All tactics</option>' + tacticOpts"
 openRemediation:document.getElementById('results-export'):=:2816ca742c36,7708,openRemediation,document.getElementById('results-export'),=,partial_escaped,partial_escaped,3,,,"(ROLE === 'admin' || ROLE === 'analyst' ? '<button class=""btn btn-outline btn-sm"" onclick=""remSingleTicket(' + i + ')"">&#128279; Create Ticket</button>' : '') +
     '<button class=""btn btn-primary btn-sm"" onclick=""revalidateRemediation(\'' + x(r.techniqueId) + '\')"">&#8635; Re-validate</button>'"
-openReportGen:document.getElementById('rep-agent'):=:449a6c764d46,14359,openReportGen,document.getElementById('rep-agent'),=,escaped,escaped,1,agent,,"state.agents.map(function(a) {
+openReportGen:document.getElementById('rep-agent'):=:449a6c764d46,14875,openReportGen,document.getElementById('rep-agent'),=,escaped,escaped,1,agent,,"state.agents.map(function(a) {
     return '<option value=""' + x(a.agentId) + '"">' + x(a.agentId) + ' — ' + x(a.hostname) + '</option>';
   }).join('')"
-openReportGen:document.getElementById('rep-format'):=:f36948ae35eb,14363,openReportGen,document.getElementById('rep-format'),=,unescaped_html,unescaped_html,4,,,"fmts.map(function(f) {
+openReportGen:document.getElementById('rep-format'):=:f36948ae35eb,14879,openReportGen,document.getElementById('rep-format'),=,unescaped_html,unescaped_html,4,,,"fmts.map(function(f) {
     var lbl = f ? f.toUpperCase() : 'Package';
     if (type === 'posture' && f === 'csv') lbl = 'CSV (forensic)';
     return '<option value=""' + f + '"">' + lbl + '</option>';
   }).join('')"
-openReportGen:document.getElementById('rep-fw'):=:cf81daeadfa1,14372,openReportGen,document.getElementById('rep-fw'),=,escaped,escaped,1,user_created_name,,"(fws || []).map(function(f) {
+openReportGen:document.getElementById('rep-fw'):=:cf81daeadfa1,14888,openReportGen,document.getElementById('rep-fw'),=,escaped,escaped,1,user_created_name,,"(fws || []).map(function(f) {
         return '<option value=""' + x(f.id) + '"">' + x(f.name || f.id) + '</option>';
       }).join('')"
 openRerunReview:document.getElementById('rerun-review-body'):=:a694e4076aeb,9671,openRerunReview,document.getElementById('rerun-review-body'),=,unescaped_html,unescaped_html,4,,,"rows.map(function(r) {
@@ -471,8 +471,8 @@ openRespondModal:sel:=:204b8e4a701b,8755,openRespondModal,sel,=,static,static,0,
 openRespondModal:sel:=:d39662b3126f,8757,openRespondModal,sel,=,escaped,escaped,1,user_created_name,,"enabled.map(function(c) {
         return '<option value=""' + x(c.id) + '"" data-provider=""' + x(c.provider) + '"">' + x(c.name) + '</option>';
       }).join('')"
-openSchedWizard:sel:=:894f3c4e7f0f,21177,openSchedWizard,sel,=,escaped,escaped,1,"scenario,user_created_name",,"state.scenarios.map(function(s) { return '<option value=""' + x(s.id) + '"">' + x(s.name) + '</option>'; }).join('')"
-openSchedWizardForEdit:sel:=:894f3c4e7f0f,21234,openSchedWizardForEdit,sel,=,escaped,escaped,1,"scenario,user_created_name",,"state.scenarios.map(function(s) { return '<option value=""' + x(s.id) + '"">' + x(s.name) + '</option>'; }).join('')"
+openSchedWizard:sel:=:894f3c4e7f0f,9959,openSchedWizard,sel,=,escaped,escaped,1,"scenario,user_created_name",,"state.scenarios.map(function(s) { return '<option value=""' + x(s.id) + '"">' + x(s.name) + '</option>'; }).join('')"
+openSchedWizardForEdit:sel:=:894f3c4e7f0f,10016,openSchedWizardForEdit,sel,=,escaped,escaped,1,"scenario,user_created_name",,"state.scenarios.map(function(s) { return '<option value=""' + x(s.id) + '"">' + x(s.name) + '</option>'; }).join('')"
 openSweepDrilldown:document.getElementById('sweep-drilldown-actions'):=:6f49cdbd80e1,9431,openSweepDrilldown,document.getElementById('sweep-drilldown-actions'),=,static_empty,static_empty,0,,,''
 openSweepDrilldown:document.getElementById('sweep-drilldown-actions'):=:8a82d28b35b7,9439,openSweepDrilldown,document.getElementById('sweep-drilldown-actions'),=,partial_escaped,partial_escaped,3,,,"'<button class=""btn btn-outline btn-sm"" onclick=""window.open(\'/api/vex/sweeps/' + encodeURIComponent(sweepId) + '/report\',\'_blank\')"" title=""Open the combined sweep report"">&#8599; HTML Report</button> ' +
       '<button class=""btn btn-outline btn-sm"" onclick=""downloadSweepReport(\'' + x(sweepId) + '\')"" title=""Download the combined sweep report as a PDF file"">&#8595; PDF Report</button>'"
@@ -483,11 +483,11 @@ openSweepDrilldown:document.getElementById('sweep-drilldown-list'):=:00fdd243fc3
 openSweepDrilldown:document.getElementById('sweep-drilldown-list'):=:6f49cdbd80e1,9432,openSweepDrilldown,document.getElementById('sweep-drilldown-list'),=,static_empty,static_empty,0,,,''
 openTechnique:document.getElementById('results-export'):=:6f49cdbd80e1,7088,openTechnique,document.getElementById('results-export'),=,static_empty,static_empty,0,,,''
 openTmplRun:if (srcsEl) srcsEl:=:35fcdf336154,4089,openTmplRun,if (srcsEl) srcsEl,=,unescaped_html,unescaped_html,4,,,"srcRows || '<span style=""color:var(--muted);font-size:0.8rem"">No sources configured for this template.</span>'"
-pollVariantRun:if (p) p:=:7216b4ea81b4,20095,pollVariantRun,if (p) p,=,escaped,escaped,1,,,"'<div class=""card"" style=""padding:1.5rem;text-align:center;color:var(--muted)"">' +
+pollVariantRun:if (p) p:=:7216b4ea81b4,20611,pollVariantRun,if (p) p,=,escaped,escaped,1,,,"'<div class=""card"" style=""padding:1.5rem;text-align:center;color:var(--muted)"">' +
           '<div style=""margin-bottom:0.5rem;font-size:0.9rem;color:var(--danger)"">Unable to retrieve execution status</div>' +
           '<div class=""tiny"" style=""font-family:var(--font-mono);margin-bottom:0.75rem"">' + x(vrId) + '</div>' +
           '<div class=""tiny muted"" style=""margin-bottom:0.75rem"">The run may "
-pollVariantRun:if (panel) panel:=:852c6910cc5b,20066,pollVariantRun,if (panel) panel,=,escaped,escaped,1,,,"'<div class=""card"" style=""padding:1.5rem;text-align:center;color:var(--muted)"">' +
+pollVariantRun:if (panel) panel:=:852c6910cc5b,20582,pollVariantRun,if (panel) panel,=,escaped,escaped,1,,,"'<div class=""card"" style=""padding:1.5rem;text-align:center;color:var(--muted)"">' +
     '<div style=""margin-bottom:0.5rem;font-size:0.9rem"">Executing variants…</div>' +
     '<div class=""tiny"" style=""font-family:var(--font-mono);margin-bottom:0.75rem"">' + x(vrId) + '</div>' +
     '<div id=""vex-poll-status"" class=""tiny"" style=""min-height:1em;margin-bottom:0.5rem""></div>' +
@@ -496,10 +496,10 @@ populateCoverageFilters:agSel:=:9863b81ed88c,6790,populateCoverageFilters,agSel,
       (state.agents || []).map(function(a) { return '<option value=""' + x(a.agentId) + '"">' + x(a.hostname || a.agentId) + '</option>'; }).join('')"
 populateCoverageFilters:scenSel:=:0056b3f421bf,6782,populateCoverageFilters,scenSel,=,escaped,escaped,1,user_created_name,,"'<option value="""">All scenarios</option>' +
       (state.scenarios || []).map(function(s) { return '<option value=""' + x(s.id) + '"">' + x(s.name) + '</option>'; }).join('')"
-populateVexAgents:if (sel) sel:=:d2a1edd66cf8,19446,populateVexAgents,if (sel) sel,=,indirect_variable,escaped,1,,1 assignment(s) to 'opts' inside populateVexAgents() @L19433 (scope-resolved) -> escaped,opts
-populateVexAgents:if (sweepSel) sweepSel:=:d2a1edd66cf8,19448,populateVexAgents,if (sweepSel) sweepSel,=,indirect_variable,escaped,1,,1 assignment(s) to 'opts' inside populateVexAgents() @L19433 (scope-resolved) -> escaped,opts
-populateVexTechniques:if (el) el:=:63e9d5f1a93f,19488,populateVexTechniques,if (el) el,=,static,static,0,,,"'<div style=""color:var(--danger);font-size:0.75rem;padding:0.4rem"">Failed to load techniques</div>'"
-populateVexTechniques:tacSel:=:ce309d68b711,19483,populateVexTechniques,tacSel,=,indirect_variable,unescaped_html,4,,2 assignment(s) to 'tacOpts' inside populateVexTechniques() @L19460 (scope-resolved) -> unescaped_html,tacOpts
+populateVexAgents:if (sel) sel:=:d2a1edd66cf8,19962,populateVexAgents,if (sel) sel,=,indirect_variable,escaped,1,,1 assignment(s) to 'opts' inside populateVexAgents() @L19949 (scope-resolved) -> escaped,opts
+populateVexAgents:if (sweepSel) sweepSel:=:d2a1edd66cf8,19964,populateVexAgents,if (sweepSel) sweepSel,=,indirect_variable,escaped,1,,1 assignment(s) to 'opts' inside populateVexAgents() @L19949 (scope-resolved) -> escaped,opts
+populateVexTechniques:if (el) el:=:63e9d5f1a93f,20004,populateVexTechniques,if (el) el,=,static,static,0,,,"'<div style=""color:var(--danger);font-size:0.75rem;padding:0.4rem"">Failed to load techniques</div>'"
+populateVexTechniques:tacSel:=:ce309d68b711,19999,populateVexTechniques,tacSel,=,indirect_variable,unescaped_html,4,,2 assignment(s) to 'tacOpts' inside populateVexTechniques() @L19976 (scope-resolved) -> unescaped_html,tacOpts
 prepareRestore:wrap:=:15e764735eba,5643,prepareRestore,wrap,=,escaped,escaped,1,api_response,,"'<div class=""empty"" style=""padding:1rem;color:var(--danger)"">' + x(res.error) + '</div>'"
 prepareRestore:wrap:=:33a5df9d0735,5644,prepareRestore,wrap,=,escaped,escaped,1,api_response,,"'<div class=""conn-cfg-card"" style=""margin-top:1rem;border-color:var(--warning)"">' +
         '<div style=""font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--warning);margin-bottom:0.5rem"">Restore must be run on the host</div>' +
@@ -522,24 +522,24 @@ render:document.getElementById('run-live-progress'):=:f94ae6248a6e,9217,render,d
         statCell(state.running, 'running', state.running ? 'var(--accent)' : 'var(--muted)') +
       '</div>' +
       '<div style=""height:4px;background:var(--elev"
-render:list:=:969e22921b7e,18769,render,list,=,unescaped_html,unescaped_html,4,,,"flat.map(function(f, i) {
+render:list:=:969e22921b7e,19285,render,list,=,unescaped_html,unescaped_html,4,,,"flat.map(function(f, i) {
       if (f.sec) return '<div class=""cmdk-sec"">' + x(f.sec) + '</div>';
       // f.docType is only set for search-result/recents rows (Phase 3) --
       // static Navigate/Actions rows never get the star affordance.
       var star = f.docType
         ? '<span data-fav-ci=""' + i + '"" style=""cursor:pointer;margin-right:0.5rem;color:' + (f.fav ? 'var(--warning)' : 'var(--mut"
-render:list:=:a8f1044c4fed,18768,render,list,=,static,static,0,,,"'<div class=""cmdk-empty"">No matches</div>'"
+render:list:=:a8f1044c4fed,19284,render,list,=,static,static,0,,,"'<div class=""cmdk-empty"">No matches</div>'"
 render:ul:=:e54d2e84b096,9229,render,ul,=,static,static,0,,,"'<li style=""color:var(--muted);font-size:0.78rem;padding:0.4rem 0"">Waiting for the first step…</li>'"
 render:ul:=:fd19c074919d,9322,render,ul,=,unescaped_text,unescaped_text,4,,,rows.join('')
-renderAPAssets:tb:=:512e62596fa4,13062,renderAPAssets,tb,=,static,static,0,,,"'<tr><td colspan=""7"" class=""empty"">No hosts discovered yet — run a collection first.</td></tr>'"
-renderAPAssets:tb:=:5c60c426e589,13065,renderAPAssets,tb,=,unescaped_html,unescaped_html,4,,,"AP_ASSETS.map(function(a, i) {
+renderAPAssets:tb:=:512e62596fa4,13578,renderAPAssets,tb,=,static,static,0,,,"'<tr><td colspan=""7"" class=""empty"">No hosts discovered yet — run a collection first.</td></tr>'"
+renderAPAssets:tb:=:5c60c426e589,13581,renderAPAssets,tb,=,unescaped_html,unescaped_html,4,,,"AP_ASSETS.map(function(a, i) {
     var tierOpts = AP_CRIT_TIERS.map(function(t) {
       return '<option value=""' + t + '""' + (a.criticalityTier === t ? ' selected' : '') + '>' + (t || '—') + '</option>';
     }).join('');
     return '<tr>' +
       '<td style=""font-family:var(--font-mono);font-size:0.76rem"">' + x(a.label || a.hostKey) +
         (a.label && a.label.toUpperCase() !== (a.hostKey || '')"
-renderAdditionalAgents:list:=:afe12f0f5138,14962,renderAdditionalAgents,list,=,unescaped_html,unescaped_html,4,agent,,"eligible.map(function(a) {
+renderAdditionalAgents:list:=:afe12f0f5138,15478,renderAdditionalAgents,list,=,unescaped_html,unescaped_html,4,agent,,"eligible.map(function(a) {
     return '<label style=""display:flex;align-items:center;gap:0.5rem;padding:0.25rem 0.3rem;cursor:pointer"">' +
       '<input type=""checkbox"" ' + (state._addlSel[a.agentId] ? 'checked' : '') +
       ' onchange=""_addlSel[\'' + x(a.agentId) + '\']=this.checked;renderAdditionalAgentsCount()"">' +
@@ -547,32 +547,32 @@ renderAdditionalAgents:list:=:afe12f0f5138,14962,renderAdditionalAgents,list,=,u
 renderAdvRunWarn:warn:=:2a45fbf139c8,4544,renderAdvRunWarn,warn,=,static,static,0,,,"'&#9888; <strong>LAB mode — FULL FIDELITY</strong>. Payload-bearing abilities (credential tools, lateral movement payloads) will execute. <strong>ISOLATED AD RANGE ONLY — NEVER PRODUCTION.</strong>'"
 renderAdvRunWarn:warn:=:8e67d1356d39,4538,renderAdvRunWarn,warn,=,static,static,0,,,"'&#9888; <strong>TELEMETRY mode</strong> — runs real, identity-safe ATT&amp;CK techniques and <strong>will generate EDR/SIEM alerts</strong>. Only proceed on an approved, monitored endpoint.'"
 renderAdversaryLibrary:grid:=:49c89f59e166,4414,renderAdversaryLibrary,grid,=,static,static,0,,,"'<div style=""color:var(--muted);font-size:0.82rem;padding:0.5rem 0"">No threat actors match your search.</div>'"
-renderAgentGroupTree:root:=:431ef9e1bbb7,13224,renderAgentGroupTree,root,=,unescaped_text,unescaped_text,4,agent,,allRow + agentGroupTree.map(renderAgentGroupNode).join('')
-renderAgentRiskSummary:tb:=:b2f34185c24f,10259,renderAgentRiskSummary,tb,=,static,static,0,,,"'<tr><td colspan=""7"" class=""empty"">No agents to show.</td></tr>'"
-renderAgentRiskSummary:tb:=:df1b491f9634,10269,renderAgentRiskSummary,tb,=,unescaped_html,unescaped_html,4,agent,,"rows.map(function(a) {
+renderAgentGroupTree:root:=:431ef9e1bbb7,13740,renderAgentGroupTree,root,=,unescaped_text,unescaped_text,4,agent,,allRow + agentGroupTree.map(renderAgentGroupNode).join('')
+renderAgentRiskSummary:tb:=:b2f34185c24f,10775,renderAgentRiskSummary,tb,=,static,static,0,,,"'<tr><td colspan=""7"" class=""empty"">No agents to show.</td></tr>'"
+renderAgentRiskSummary:tb:=:df1b491f9634,10785,renderAgentRiskSummary,tb,=,unescaped_html,unescaped_html,4,agent,,"rows.map(function(a) {
     return '<tr>' +
       '<td>' + x(a.hostname || a.agentId) + '</td>' +
       (a.measurable
         ? '<td style=""color:' + _riskScoreColor(a.healthScore) + ';font-weight:700"">' + a.healthScore + '</td>'
         : '<td class=""u-muted"" title=""Nothing collected for this endpoint yet — an absent score is not a safe score"">— no data</td>') +
       '<td>' + (a.criticalityRisk |"
-renderAgentRows:tbody:=:7a6d1d98a0c2,13516,renderAgentRows,tbody,=,unescaped_html,unescaped_html,4,agent,,"list.map(function(a, idx) {
+renderAgentRows:tbody:=:7a6d1d98a0c2,14032,renderAgentRows,tbody,=,unescaped_html,unescaped_html,4,agent,,"list.map(function(a, idx) {
     var dot = agentDotColor(agentBucket(a));
     var menuId = 'agent-menu-' + idx;
     return '<tr>' +
       '<td style=""max-width:180px""><div style=""display:flex;align-items:center;gap:0.5rem""><span style=""width:8px;height:8px;border-radius:50%;flex-shrink:0;background:' + dot + '""></span>' +
         '<div style=""min-width:0""><div class=""cell-main"" style=""font-family:v"
-renderAgentRows:tbody:=:9ea28b375edf,13513,renderAgentRows,tbody,=,unescaped_html,unescaped_html,4,,,"'<tr><td colspan=""8"" class=""empty"">' + emptyMsg + '</td></tr>'"
-renderAgentTiles:if (el) el:=:3bd67afa61e6,13472,renderAgentTiles,if (el) el,=,indirect_builder,unescaped_html,4,,tile() @L5832 (scope-resolved): 1 return(s) -> unescaped_html; var(): no declaration found anywhere in file,"tile('Total agents', b.online + b.degraded + b.offline, 'var(--text)') +
+renderAgentRows:tbody:=:9ea28b375edf,14029,renderAgentRows,tbody,=,unescaped_html,unescaped_html,4,,,"'<tr><td colspan=""8"" class=""empty"">' + emptyMsg + '</td></tr>'"
+renderAgentTiles:if (el) el:=:3bd67afa61e6,13988,renderAgentTiles,if (el) el,=,indirect_builder,unescaped_html,4,,tile() @L5832 (scope-resolved): 1 return(s) -> unescaped_html; var(): no declaration found anywhere in file,"tile('Total agents', b.online + b.degraded + b.offline, 'var(--text)') +
     tile('Online', b.online, b.online ? 'var(--success)' : 'var(--muted)') +
     tile('Degraded', b.degraded, b.degraded ? 'var(--warning)' : 'var(--muted)') +
     tile('Offline', b.offline, b.offline ? 'var(--danger)' : 'var(--muted)') +
     tile('Retired', b.retired, 'var(--muted)')"
 renderAgtRisk:panel:=:aaa9402664f1,5124,renderAgtRisk,panel,=,indirect_variable,unescaped_html,4,,7 assignment(s) to 'h' inside renderAgtRisk() @L5074 (scope-resolved) -> unescaped_html,h
-renderAttackPath:body:=:2f57ae966a62,12627,renderAttackPath,body,=,static,static,0,,,"'<div class=""dash-panel""><div class=""dash-panel-body"" style=""padding:2rem;text-align:center"">' +
+renderAttackPath:body:=:2f57ae966a62,13143,renderAttackPath,body,=,static,static,0,,,"'<div class=""dash-panel""><div class=""dash-panel-body"" style=""padding:2rem;text-align:center"">' +
       '<div style=""font-size:1rem;font-weight:700;color:var(--text);margin-bottom:0.4rem"">No attack-path data collected yet</div>' +
       '<div class=""tiny muted"" style=""max-width:520px;margin:0 auto 1rem"">Run a collection on an enrolled agent to map lateral-movement reachability, blast radius, segmen"
-renderAttackPath:body:=:aaa9402664f1,12673,renderAttackPath,body,=,indirect_variable,unescaped_text,4,,20 assignment(s) to 'h' inside renderAttackPath() @L12622 (scope-resolved) -> unescaped_text,h
+renderAttackPath:body:=:aaa9402664f1,13189,renderAttackPath,body,=,indirect_variable,unescaped_text,4,,20 assignment(s) to 'h' inside renderAttackPath() @L13138 (scope-resolved) -> unescaped_text,h
 renderBackupJobsTable:tbody:=:423c796e7f78,5594,renderBackupJobsTable,tbody,=,unescaped_html,unescaped_html,4,,,"jobs.map(function(j) {
     var color = BACKUP_STATUS_COLOR[j.status] || 'var(--muted)';
     var label = BACKUP_STATUS_LABEL[j.status] || j.status;
@@ -670,33 +670,33 @@ renderCoverageAnalytics:tacBody:=:4e39dac2ae8c,6825,renderCoverageAnalytics,tacB
         '<td>' + x(t.tactic) + '</td>' +
         '<td style=""text-align:center;color:var(--success)"">' + t.prevented + '</td>' +
         '<td style=""text-align"
-renderDetectionValidationTab:el:=:84cc57f30541,17084,renderDetectionValidationTab,el,=,unescaped_html,unescaped_html,4,,,"'<div style=""padding:1rem 0 0.5rem"">' +
+renderDetectionValidationTab:el:=:84cc57f30541,17600,renderDetectionValidationTab,el,=,unescaped_html,unescaped_html,4,,,"'<div style=""padding:1rem 0 0.5rem"">' +
       '<div style=""display:flex;gap:1.5rem;margin-bottom:0.75rem;flex-wrap:wrap"">' +
         '<div class=""u-center"">' +
           '<div style=""font-size:1.7rem;font-weight:700;color:' + covColor + '"">' + coverage + '%</div>' +
           '<div style=""font-size:0.68rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em"">Detection Coverage</div>' "
-renderEMSweepGroupList:list:=:2660b7c02980,20435,renderEMSweepGroupList,list,=,static,static,0,,,"'<p class=""tiny muted"" style=""margin:0"">No agent groups have been created yet.</p>'"
-renderEMSweepGroupList:list:=:f0fee56680fb,20438,renderEMSweepGroupList,list,=,unescaped_html,unescaped_html,4,,,"options.map(function(o) {
+renderEMSweepGroupList:list:=:2660b7c02980,20951,renderEMSweepGroupList,list,=,static,static,0,,,"'<p class=""tiny muted"" style=""margin:0"">No agent groups have been created yet.</p>'"
+renderEMSweepGroupList:list:=:f0fee56680fb,20954,renderEMSweepGroupList,list,=,unescaped_html,unescaped_html,4,,,"options.map(function(o) {
     return '<label style=""display:flex;align-items:center;gap:0.5rem;padding:0.25rem 0.3rem;cursor:pointer"">' +
       '<input type=""checkbox"" ' + (state._emGroupSel[o.id] ? 'checked' : '') +
       ' onchange=""_emGroupSel[' + o.id + ']=this.checked"">' +
       '<span style=""font-size:0.8rem"">' + x(o.label) + '</span></label>';
   }).join('')"
-renderEMSweepProgress:document.getElementById('em-sweep-progress-actions'):=:41ce23a287a9,20972,renderEMSweepProgress,document.getElementById('em-sweep-progress-actions'),=,partial_escaped,partial_escaped,3,,,"terminal
+renderEMSweepProgress:document.getElementById('em-sweep-progress-actions'):=:41ce23a287a9,21488,renderEMSweepProgress,document.getElementById('em-sweep-progress-actions'),=,partial_escaped,partial_escaped,3,,,"terminal
     ? '<button class=""btn btn-outline btn-sm"" onclick=""window.open(\'/api/em/sweeps/' + encodeURIComponent(sw.id) + '/report\',\'_blank\')"" title=""Open the combined EM sweep report"">&#8599; HTML Report</button> ' +
       '<button class=""btn btn-outline btn-sm"" onclick=""downloadEMSweepReport(\'' + x(sw.id) + '\')"" title=""Download the combined EM sweep report as a PDF file"">&#8595; PDF Repo"
-renderEMSweepProgress:document.getElementById('em-sweep-progress-summary'):=:4af87292bb0a,20965,renderEMSweepProgress,document.getElementById('em-sweep-progress-summary'),=,partial_escaped,partial_escaped,3,,,"'<strong>' + sw.completedLayers + '/' + sw.totalLayers + '</strong> layers complete &middot; status: ' + x(sweepStatusLabel(sw.status)) +
+renderEMSweepProgress:document.getElementById('em-sweep-progress-summary'):=:4af87292bb0a,21481,renderEMSweepProgress,document.getElementById('em-sweep-progress-summary'),=,partial_escaped,partial_escaped,3,,,"'<strong>' + sw.completedLayers + '/' + sw.totalLayers + '</strong> layers complete &middot; status: ' + x(sweepStatusLabel(sw.status)) +
     (sw.error ? '<div style=""color:var(--danger);margin-top:0.3rem"">' + x(sw.error) + '</div>' : '')"
-renderEMSweepProgress:list:=:da6b2d6397e7,20985,renderEMSweepProgress,list,=,unescaped_html,unescaped_html,4,user_created_name,,"(sw.layers || []).map(function(layerId, i) {
+renderEMSweepProgress:list:=:da6b2d6397e7,21501,renderEMSweepProgress,list,=,unescaped_html,unescaped_html,4,user_created_name,,"(sw.layers || []).map(function(layerId, i) {
     var state = i < sw.currentIndex ? 'done' : (i === sw.currentIndex && sw.status === 'running') ? 'running' : 'pending';
     var color = state === 'done' ? 'var(--success)' : state === 'running' ? 'var(--accent)' : 'var(--muted)';
     var label = state === 'done' ? '&#10003;' : state === 'running' ? '&#9679;' : '&#9675;';
     var r = runsByScenario[la"
-renderExecDashboard:el:=:54460ff68c62,11523,renderExecDashboard,el,=,indirect_builder,partial_escaped,3,,edKpiCard() @L11502 (scope-resolved): 1 return(s) -> partial_escaped,"edKpiCard('Risk Score', current.avgRiskScore, risk) +
+renderExecDashboard:el:=:54460ff68c62,12039,renderExecDashboard,el,=,indirect_builder,partial_escaped,3,,edKpiCard() @L12018 (scope-resolved): 1 return(s) -> partial_escaped,"edKpiCard('Risk Score', current.avgRiskScore, risk) +
     edKpiCard('Exposure Score', current.exposureScore, exp, noAttackPathData) +
     edKpiCard('Detection Coverage', current.detectionCoverage, det, noAttackPathData) +
     edKpiCard('Fleet Assets', current.assetCount, cnt)"
-renderExposure:el:=:e62a6b6cf073,11600,renderExposure,el,=,static,static,0,,,"'<div class=""card"" style=""margin-top:1rem;padding:1rem"">' +
+renderExposure:el:=:e62a6b6cf073,12116,renderExposure,el,=,static,static,0,,,"'<div class=""card"" style=""margin-top:1rem;padding:1rem"">' +
       '<span class=""kpi-label"">Open exposure windows</span>' +
       '<div class=""tiny muted"" style=""margin-top:0.4rem"">No open findings.</div></div>'"
 renderFindingsRows:tb:=:3e800d98f4e7,7527,renderFindingsRows,tb,=,unescaped_html,unescaped_html,4,agent,,"l.map(function(f) {
@@ -710,7 +710,7 @@ renderFindingsTiles:document.getElementById('findings-tiles'):=:9c715967ff22,749
     tile('Critical', crit, crit ? 'var(--danger)' : 'var(--muted)') +
     tile('Reopened', reopened, reopened ? 'var(--warning)' : 'var(--muted)') +
     tile('Remediated · 30d', remediated, 'var(--success)')"
-renderForecast:el:=:512173c3d0ae,11586,renderForecast,el,=,partial_escaped,partial_escaped,3,,,"'<div class=""card"" style=""margin-top:1rem;padding:1rem"">' +
+renderForecast:el:=:512173c3d0ae,12102,renderForecast,el,=,partial_escaped,partial_escaped,3,,,"'<div class=""card"" style=""margin-top:1rem;padding:1rem"">' +
     '<div style=""display:flex;justify-content:space-between;align-items:center"">' +
       '<div><span class=""kpi-label"">Risk-score forecast</span> &nbsp;' + edDirectionLabel(fc) + '</div>' +
       conf +
@@ -718,7 +718,7 @@ renderForecast:el:=:512173c3d0ae,11586,renderForecast,el,=,partial_escaped,parti
     (chart || '<div class=""tiny muted"" style=""margin-top:0.4rem"">Not enough data to chart yet.</div>') +
     note +
   '</"
-renderForecast:el:=:6f49cdbd80e1,11579,renderForecast,el,=,static_empty,static_empty,0,,,''
+renderForecast:el:=:6f49cdbd80e1,12095,renderForecast,el,=,static_empty,static_empty,0,,,''
 renderGroupCheckboxList:list:=:1e80f4fe2d69,4194,renderGroupCheckboxList,list,=,unescaped_html,unescaped_html,4,,,"options.map(function(o) {
     return '<label style=""display:flex;align-items:center;gap:0.5rem;padding:0.25rem 0.3rem;cursor:pointer"">' +
       '<input type=""checkbox"" ' + (stateVar[o.id] ? 'checked' : '') +
@@ -745,30 +745,30 @@ renderInitiativesList:tbody:=:ee8859aa555b,8025,renderInitiativesList,tbody,=,un
     return '<tr onclick=""openInitiativeDrawer(\'' + x(it.ID) + '\')"" class=""u-pointer"">' +
       '<td>' + x(it.Name) + '</td>' +
       '<td><span class=""badge"" style=""color:' + col + ';border-color:' + col + '"">"
-renderLegacyMigrationPanel:el:=:3401671f918d,13414,renderLegacyMigrationPanel,el,=,partial_escaped,partial_escaped,3,,,"'<div class=""legacy-migration-header"">Legacy Transport Migration</div>' +
+renderLegacyMigrationPanel:el:=:3401671f918d,13930,renderLegacyMigrationPanel,el,=,partial_escaped,partial_escaped,3,,,"'<div class=""legacy-migration-header"">Legacy Transport Migration</div>' +
       '<div class=""legacy-migration-days"">Days clean: ' + status.daysClean + ' / ' + status.daysRequired + '</div>' +
       '<div class=""legacy-migration-status ' + (status.eligible ? 'eligible' : 'not-eligible') + '"">' +
         (status.eligible ? 'ELIGIBLE FOR REVIEW' : 'NOT YET ELIGIBLE') +
       '</div>' +
       unattrib"
-renderLicenseGraceBanner:el:=:26f2bae5f524,9974,renderLicenseGraceBanner,el,=,indirect_builder,partial_escaped,3,,_dismissLicenseGraceBanner() @L9947 (scope-resolved): no return statement found; _licenseBannerHTML() @L9926 (scope-resolved): 1 return(s) -> partial_escaped,"_licenseBannerHTML(info) +
+renderLicenseGraceBanner:el:=:26f2bae5f524,10490,renderLicenseGraceBanner,el,=,indirect_builder,partial_escaped,3,,_dismissLicenseGraceBanner() @L10463 (scope-resolved): no return statement found; _licenseBannerHTML() @L10442 (scope-resolved): 1 return(s) -> partial_escaped,"_licenseBannerHTML(info) +
     '<button onclick=""_dismissLicenseGraceBanner()"" aria-label=""Dismiss"" title=""Dismiss"" ' +
       'style=""position:absolute;top:0.5rem;right:0.6rem;width:24px;height:24px;display:flex;align-items:center;justify-content:center;' +
       'background:transparent;border:none;color:inherit;font-size:1.1rem;line-height:1;cursor:pointer;opacity:0.75"" ' +
       'onmouseover=""th"
-renderLicenseLockedScreen:el:=:56bd2dda6569,9911,renderLicenseLockedScreen,el,=,escaped,escaped,1,,,"'<div style=""max-width:520px;text-align:center;color:var(--text,#e6e6e6)"">' +
+renderLicenseLockedScreen:el:=:56bd2dda6569,10427,renderLicenseLockedScreen,el,=,escaped,escaped,1,,,"'<div style=""max-width:520px;text-align:center;color:var(--text,#e6e6e6)"">' +
       '<div style=""font-size:2.5rem;margin-bottom:1rem"">&#x1F512;</div>' +
       '<h1 style=""font-size:1.4rem;margin-bottom:0.75rem"">BAS LICENSE EXPIRED</h1>' +
       '<p style=""color:var(--muted,#9aa9bc);line-height:1.6;margin-bottom:1rem"">This Audspect BAS Server is currently unavailable because its license and grace p"
-renderModalSelection:link:=:3ac9eb36dbbe,15643,renderModalSelection,link,=,static,static,0,,,'&#128269; Detailed view — every atomic test that will run'
-renderModalSelection:link:=:a31134ee495c,15662,renderModalSelection,link,=,static,static,0,,,'&#9881; Customize — select a target agent first'
-renderModalSelection:note:=:3673014e72b6,15725,renderModalSelection,note,=,indirect_variable,escaped,1,,"_postureSummaryCache is written by renderModalSelection's catNames.join(', ') (posture-catalog phase names), wrapped in x().",cached
-renderModalSelection:note:=:6da56d2607de,15676,renderModalSelection,note,=,partial_escaped,partial_escaped,3,,,"'&#9989; Running a selected subset: <strong>' + state._runSelection.ids.length + '</strong> ' + noun +
+renderModalSelection:link:=:3ac9eb36dbbe,16159,renderModalSelection,link,=,static,static,0,,,'&#128269; Detailed view — every atomic test that will run'
+renderModalSelection:link:=:a31134ee495c,16178,renderModalSelection,link,=,static,static,0,,,'&#9881; Customize — select a target agent first'
+renderModalSelection:note:=:3673014e72b6,16241,renderModalSelection,note,=,indirect_variable,escaped,1,,"_postureSummaryCache is written by renderModalSelection's catNames.join(', ') (posture-catalog phase names), wrapped in x().",cached
+renderModalSelection:note:=:6da56d2607de,16192,renderModalSelection,note,=,partial_escaped,partial_escaped,3,,,"'&#9989; Running a selected subset: <strong>' + state._runSelection.ids.length + '</strong> ' + noun +
       (state._runSelection.locked ? ' (targeted re-validate)' :
        ' <a href=""javascript:void(0)"" class=""desc-toggle"" style=""margin-left:8px"" onclick=""clearSelection();return false;"">Clear</a>')"
-renderModalSelection:note:=:f6a1dba9d317,15692,renderModalSelection,note,=,static,static,0,,,"'<span class=""u-muted"">Loading check catalog…</span>'"
-renderModalSelection:note:=:f6a1dba9d317,15722,renderModalSelection,note,=,static,static,0,,,"'<span class=""u-muted"">Loading check catalog…</span>'"
-renderPickerList:document.getElementById('picker-list'):=:86bc3b918fa9,15538,renderPickerList,document.getElementById('picker-list'),=,unescaped_html,unescaped_html,4,,,"rows || '<p class=""empty"" style=""padding:1rem"">No matches.</p>'"
+renderModalSelection:note:=:f6a1dba9d317,16208,renderModalSelection,note,=,static,static,0,,,"'<span class=""u-muted"">Loading check catalog…</span>'"
+renderModalSelection:note:=:f6a1dba9d317,16238,renderModalSelection,note,=,static,static,0,,,"'<span class=""u-muted"">Loading check catalog…</span>'"
+renderPickerList:document.getElementById('picker-list'):=:86bc3b918fa9,16054,renderPickerList,document.getElementById('picker-list'),=,unescaped_html,unescaped_html,4,,,"rows || '<p class=""empty"" style=""padding:1rem"">No matches.</p>'"
 renderPrivilegeCoverage:cards:=:a48f8f61cde9,6874,renderPrivilegeCoverage,cards,=,unescaped_html,unescaped_html,4,,,"tiers.map(function(t) {
       var col  = tierColor[t.tier] || 'var(--muted)';
       var lbl  = tierLabel[t.tier] || t.tier;
@@ -791,8 +791,8 @@ renderPrivilegeCoverage:tierBody:=:7122e1adc294,6890,renderPrivilegeCoverage,tie
       var rate = t.attempted > 0 ? t.preventionRate : 0;
       var rateColor = rate >= 75 ? 'color:var(--success)' : rate >= 40 ? 'color:var(--warning)' : 'color:var(--danger)';
       var barW = Math.min(100"
-renderRecommendations:body:=:b98b92dc917f,11887,renderRecommendations,body,=,static,static,0,,,"'<tr><td colspan=""7"" class=""empty"">No recommendations yet — seed ATT&CK/ART content to rank techniques.</td></tr>'"
-renderRecommendations:body:=:fc2a515d08b8,11890,renderRecommendations,body,=,unescaped_html,unescaped_html,4,"threat_intel,user_created_name",,"list.map(function(t) {
+renderRecommendations:body:=:b98b92dc917f,12403,renderRecommendations,body,=,static,static,0,,,"'<tr><td colspan=""7"" class=""empty"">No recommendations yet — seed ATT&CK/ART content to rank techniques.</td></tr>'"
+renderRecommendations:body:=:fc2a515d08b8,12406,renderRecommendations,body,=,unescaped_html,unescaped_html,4,"threat_intel,user_created_name",,"list.map(function(t) {
     var threat = [];
     if (t.kev) threat.push('<span class=""badge"" style=""color:var(--danger);border-color:var(--danger)"">KEV</span>');
     if (t.epssPercentile) threat.push('<span class=""badge"">EPSS ' + Math.round(t.epssPercentile) + '</span>');
@@ -805,8 +805,8 @@ renderRemList:el:=:5b15f65ece96,7681,renderRemList,el,=,unescaped_html,unescaped
       '<div class=""rem-ic' + critCls + '"">' + REM_SVG.wrench + '</div>' +
       '<div class=""rem-main"">' +
         '<div class=""rem-top"">' + findingSevBadge(r.severity, '') + ' <span class=""tech-id"">' + x(r.techn"
-renderRepHistory:tb:=:913a94a62edf,14313,renderRepHistory,tb,=,static,static,0,,,"'<tr><td colspan=""7"" class=""empty"" style=""padding:1.5rem;line-height:1.6"">No reports generated yet — this log fills when you generate one (from a tile above or the per-agent buttons). Test runs don\'t create reports automatically.</td></tr>'"
-renderRepHistory:tb:=:b9e0ef311b73,14317,renderRepHistory,tb,=,unescaped_html,unescaped_html,4,,,"list.map(function(r) {
+renderRepHistory:tb:=:913a94a62edf,14829,renderRepHistory,tb,=,static,static,0,,,"'<tr><td colspan=""7"" class=""empty"" style=""padding:1.5rem;line-height:1.6"">No reports generated yet — this log fills when you generate one (from a tile above or the per-agent buttons). Test runs don\'t create reports automatically.</td></tr>'"
+renderRepHistory:tb:=:b9e0ef311b73,14833,renderRepHistory,tb,=,unescaped_html,unescaped_html,4,,,"list.map(function(r) {
       var st = r.status === 'failed' ? 's-failed' : 's-completed';
       return '<tr>' +
         '<td class=""cell-main"">' + x(label[r.reportType] || r.reportType) + '</td>' +
@@ -833,17 +833,17 @@ renderRunIOCList:el:=:bc77e667f8a5,8913,renderRunIOCList,el,=,escaped,escaped,1,
       (state._runIOCsAll.length ? 'No indicators match this filter.' : 'No indicators extracted from this run.') + '</div>'"
 renderRunIOCToolbar:el:=:43590e9d61e4,8871,renderRunIOCToolbar,el,=,partial_escaped,partial_escaped,3,,,"covSegHtml(types, _runIOCTypeFilter, 'setRunIOCTypeFilter', function(k) { return counts[k] || 0; }) +
     '<input type=""text"" id=""run-ioc-search"" placeholder=""Search indicators…"" value=""' + x(_runIOCSearch) + '"" oninput=""setRunIOCSearch(this.value)"" style=""padding:0.35rem 0.6rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:0.78re"
-renderRunMode:btn:=:4959506b17ea,14820,renderRunMode,btn,=,static,static,0,,,'&#9888; No Eligible Agents'
-renderRunMode:btn:=:5b98d58b0313,14900,renderRunMode,btn,=,static,static,0,,,'&#9654; Run LAB'
-renderRunMode:btn:=:6b374eeb8131,14880,renderRunMode,btn,=,static,static,0,,,'&#9888; OS Mismatch'
-renderRunMode:btn:=:ad81ad1f4514,14893,renderRunMode,btn,=,static,static,0,,,'&#9654; Run Telemetry'
-renderRunMode:btn:=:cd9227672841,14864,renderRunMode,btn,=,static,static,0,,,'&#9654; Run'
-renderRunMode:btn:=:cd9227672841,14911,renderRunMode,btn,=,static,static,0,,,'&#9654; Run'
-renderRunMode:warn:=:37e38ab2c4c2,14860,renderRunMode,warn,=,indirect_variable,escaped,1,,2 assignment(s) to 'osMismatchMsg' inside renderRunMode() @L14797 (scope-resolved) -> escaped,osMismatchMsg
-renderRunMode:warn:=:37e38ab2c4c2,14907,renderRunMode,warn,=,indirect_variable,escaped,1,,2 assignment(s) to 'osMismatchMsg' inside renderRunMode() @L14797 (scope-resolved) -> escaped,osMismatchMsg
-renderRunMode:warn:=:41e9204bcecf,14878,renderRunMode,warn,=,unescaped_html,unescaped_html,4,agent,,osMismatchMsg + ' <strong>Cannot run ' + mode + ' mode on this agent.</strong>'
-renderRunMode:warn:=:7945c45dabe0,14899,renderRunMode,warn,=,static,static,0,,,"'&#9888; <strong>LAB MODE — full-fidelity emulation.</strong> Runs LSASS memory dump and allowlisted password spray. <strong>Isolated AD range only, never production.</strong> Triggers EDR by design; requires a second confirmation.'"
-renderRunMode:warn:=:7cbf4609536e,14892,renderRunMode,warn,=,indirect_variable,unescaped_html,4,,2 assignment(s) to 'warnText' inside renderRunMode() @L14797 (scope-resolved) -> unescaped_html,warnText
+renderRunMode:btn:=:4959506b17ea,15336,renderRunMode,btn,=,static,static,0,,,'&#9888; No Eligible Agents'
+renderRunMode:btn:=:5b98d58b0313,15416,renderRunMode,btn,=,static,static,0,,,'&#9654; Run LAB'
+renderRunMode:btn:=:6b374eeb8131,15396,renderRunMode,btn,=,static,static,0,,,'&#9888; OS Mismatch'
+renderRunMode:btn:=:ad81ad1f4514,15409,renderRunMode,btn,=,static,static,0,,,'&#9654; Run Telemetry'
+renderRunMode:btn:=:cd9227672841,15380,renderRunMode,btn,=,static,static,0,,,'&#9654; Run'
+renderRunMode:btn:=:cd9227672841,15427,renderRunMode,btn,=,static,static,0,,,'&#9654; Run'
+renderRunMode:warn:=:37e38ab2c4c2,15376,renderRunMode,warn,=,indirect_variable,escaped,1,,2 assignment(s) to 'osMismatchMsg' inside renderRunMode() @L15313 (scope-resolved) -> escaped,osMismatchMsg
+renderRunMode:warn:=:37e38ab2c4c2,15423,renderRunMode,warn,=,indirect_variable,escaped,1,,2 assignment(s) to 'osMismatchMsg' inside renderRunMode() @L15313 (scope-resolved) -> escaped,osMismatchMsg
+renderRunMode:warn:=:41e9204bcecf,15394,renderRunMode,warn,=,unescaped_html,unescaped_html,4,agent,,osMismatchMsg + ' <strong>Cannot run ' + mode + ' mode on this agent.</strong>'
+renderRunMode:warn:=:7945c45dabe0,15415,renderRunMode,warn,=,static,static,0,,,"'&#9888; <strong>LAB MODE — full-fidelity emulation.</strong> Runs LSASS memory dump and allowlisted password spray. <strong>Isolated AD range only, never production.</strong> Triggers EDR by design; requires a second confirmation.'"
+renderRunMode:warn:=:7cbf4609536e,15408,renderRunMode,warn,=,indirect_variable,unescaped_html,4,,2 assignment(s) to 'warnText' inside renderRunMode() @L15313 (scope-resolved) -> unescaped_html,warnText
 renderSLAKPIs:document.getElementById('sla-rpt-kpis'):=:5622a6c839d8,7417,renderSLAKPIs,document.getElementById('sla-rpt-kpis'),=,indirect_builder,unescaped_html,4,,tile() @L5832 (scope-resolved): 1 return(s) -> unescaped_html; var(): no declaration found anywhere in file,"tile('Compliance Rate', rate.text, rate.color) +
     tile('On-Time', overall.onTime, 'var(--success)') +
     tile('Late', overall.late, overall.late ? 'var(--danger)' : 'var(--muted)') +
@@ -860,48 +860,48 @@ renderSLARecentlyResolved:body:=:d31824d4b9af,7454,renderSLARecentlyResolved,bod
       ? '<span class=""sbadge"" style=""background:transparent;border:1px solid var(--success);color:var(--success)"">On time</span>'
       : '<span class=""sbadge"" style=""background:transparent;border:1px solid var(--danger);color:var(--danger)"">Late</span>';
     return '<tr><td>' + x(r.agentId) + '</td><td>' + x(r.checkId) + '</td><td>' + "
-renderScenarioLanding:el:=:b9d3bf75bccc,13837,renderScenarioLanding,el,=,unescaped_html,unescaped_html,4,,,"html || '<p class=""empty"">No scenarios loaded.</p>'"
-renderScenarios:grid:=:927dbfa214df,13957,renderScenarios,grid,=,indirect_builder,unescaped_html,4,,renderScenarioTileGroup() @L14036 (scope-resolved): 3 return(s) -> unescaped_html,"inCat.length
+renderScenarioLanding:el:=:b9d3bf75bccc,14353,renderScenarioLanding,el,=,unescaped_html,unescaped_html,4,,,"html || '<p class=""empty"">No scenarios loaded.</p>'"
+renderScenarios:grid:=:927dbfa214df,14473,renderScenarios,grid,=,indirect_builder,unescaped_html,4,,renderScenarioTileGroup() @L14552 (scope-resolved): 3 return(s) -> unescaped_html,"inCat.length
     ? '<div class=""sc-fade"">' + renderScenarioTileGroup(state.scenarioView, inCat) + '</div>'
     : '<p class=""empty"">No scenarios match your filter.</p>'"
-renderScenarios:landingEl:=:4378fed73bb8,13883,renderScenarios,landingEl,=,static,static,0,,,"'<p class=""empty"">No scenarios loaded.</p>'"
-renderScenarios:sgrid:=:f4ffae003e16,13928,renderScenarios,sgrid,=,indirect_builder,unescaped_html,4,,renderScenarioTileGroup() @L14036 (scope-resolved): 3 return(s) -> unescaped_html,"results.length
+renderScenarios:landingEl:=:4378fed73bb8,14399,renderScenarios,landingEl,=,static,static,0,,,"'<p class=""empty"">No scenarios loaded.</p>'"
+renderScenarios:sgrid:=:f4ffae003e16,14444,renderScenarios,sgrid,=,indirect_builder,unescaped_html,4,,renderScenarioTileGroup() @L14552 (scope-resolved): 3 return(s) -> unescaped_html,"results.length
       ? '<div class=""sc-fade"">' + renderScenarioTileGroup('search', results) + '</div>'
       : '<p class=""empty"">No scenarios match your search.</p>'"
-renderSchedAgentList:root:=:5d77463a1d25,21359,renderSchedAgentList,root,=,static,static,0,,,"'<div class=""empty"">No agents registered.</div>'"
-renderSchedAgentList:root:=:d702422fe11a,21361,renderSchedAgentList,root,=,unescaped_html,unescaped_html,4,agent,,"SCHED.agentsAll.map(function(a) {
+renderSchedAgentList:root:=:5d77463a1d25,10141,renderSchedAgentList,root,=,static,static,0,,,"'<div class=""empty"">No agents registered.</div>'"
+renderSchedAgentList:root:=:d702422fe11a,10143,renderSchedAgentList,root,=,unescaped_html,unescaped_html,4,agent,,"SCHED.agentsAll.map(function(a) {
     var compatible = schedAgentCompatible(a, supportedOS);
     // A previously-checked agent that's now incompatible (scenario changed
     // after selection) must not stay silently selected.
     if (!compatible && SCHED.selAgents[a.agentId]) delete SCHED.selAgents[a.agentId];
     var checked = SCHED.selAgents[a.agentId] ? ' checked' : '';
     var disabled = compa"
-renderSchedGroupTree:root:=:a9d9375b0173,21291,renderSchedGroupTree,root,=,static,static,0,,,"SCHED.groupsAccessDenied
+renderSchedGroupTree:root:=:a9d9375b0173,10073,renderSchedGroupTree,root,=,static,static,0,,,"SCHED.groupsAccessDenied
       ? '<div class=""empty"">Group targeting requires Administrator access — select individual agents instead.</div>'
       : '<div class=""empty"">No agent groups defined.</div>'"
-renderSchedGroupTree:root:=:cdd0f2fd36f8,21296,renderSchedGroupTree,root,=,unescaped_text,unescaped_text,4,,,SCHED.groups.map(renderSchedGroupNode).join('')
-renderSchedInitiativeSelect:sel:=:0614a03d92d3,21388,renderSchedInitiativeSelect,sel,=,escaped,escaped,1,,,"'<option value="""">— None —</option>' +
+renderSchedGroupTree:root:=:cdd0f2fd36f8,10078,renderSchedGroupTree,root,=,unescaped_text,unescaped_text,4,,,SCHED.groups.map(renderSchedGroupNode).join('')
+renderSchedInitiativeSelect:sel:=:0614a03d92d3,10170,renderSchedInitiativeSelect,sel,=,escaped,escaped,1,,,"'<option value="""">— None —</option>' +
     SCHED.initiativesActive.map(function(it) { return '<option value=""' + x(it.ID) + '"">' + x(it.Name) + '</option>'; }).join('')"
-renderSchedModeRecurrencePane:modeSel:=:d2a1edd66cf8,21401,renderSchedModeRecurrencePane,modeSel,=,indirect_variable,static,0,,2 assignment(s) to 'opts' inside renderSchedModeRecurrencePane() @L21393 (scope-resolved) -> static,opts
-renderSchedReview:document.getElementById('sched-review'):=:530136e85d80,21507,renderSchedReview,document.getElementById('sched-review'),=,unescaped_text,unescaped_text,4,,,html + authWrap
-renderScheduledAssessmentsList:tbody:=:b49d64237e49,21106,renderScheduledAssessmentsList,tbody,=,static,static,0,,,"'<tr><td colspan=""7"" class=""empty"">No scheduled assessments yet.</td></tr>'"
-renderScheduledAssessmentsList:tbody:=:dab79a0dc67d,21109,renderScheduledAssessmentsList,tbody,=,unescaped_html,unescaped_html,4,"scenario,telemetry_log,user_created_name",,"SCHED.schedules.map(function(sch) {
+renderSchedModeRecurrencePane:modeSel:=:d2a1edd66cf8,10183,renderSchedModeRecurrencePane,modeSel,=,indirect_variable,static,0,,2 assignment(s) to 'opts' inside renderSchedModeRecurrencePane() @L10175 (scope-resolved) -> static,opts
+renderSchedReview:document.getElementById('sched-review'):=:530136e85d80,10289,renderSchedReview,document.getElementById('sched-review'),=,unescaped_text,unescaped_text,4,,,html + authWrap
+renderScheduledAssessmentsList:tbody:=:b49d64237e49,9888,renderScheduledAssessmentsList,tbody,=,static,static,0,,,"'<tr><td colspan=""7"" class=""empty"">No scheduled assessments yet.</td></tr>'"
+renderScheduledAssessmentsList:tbody:=:dab79a0dc67d,9891,renderScheduledAssessmentsList,tbody,=,unescaped_html,unescaped_html,4,"scenario,telemetry_log,user_created_name",,"SCHED.schedules.map(function(sch) {
     // sch.Payload is a Go json.RawMessage with no json:""..."" tag override, so
     // it arrives already embedded as a real object in the outer response --
     // NOT as a JSON string needing a second JSON.parse (that silently threw,
     // caught below, and always fell back to {} -- see openSchedWizardForEdit's
     // identical fix for the same root cause).
    "
-renderSweepPreview:filtersEl:=:117d5eb851fa,20639,renderSweepPreview,filtersEl,=,escaped,escaped,1,,,"'<input type=""text"" placeholder=""Search extra scenarios to add…"" value=""' + x(_emExtraSearch) + '"" oninput=""_setEMExtraSearch(this.value)"" class=""btn btn-outline btn-sm u-flex1"">'"
-renderSweepPreview:filtersEl:=:e21d289a6fad,20628,renderSweepPreview,filtersEl,=,partial_escaped,partial_escaped,3,,,"'<select onchange=""_setVexPreviewTactic(this.value)"" class=""btn btn-outline btn-sm u-flex1"">' + tacticOpts + '</select>' +
+renderSweepPreview:filtersEl:=:117d5eb851fa,21155,renderSweepPreview,filtersEl,=,escaped,escaped,1,,,"'<input type=""text"" placeholder=""Search extra scenarios to add…"" value=""' + x(_emExtraSearch) + '"" oninput=""_setEMExtraSearch(this.value)"" class=""btn btn-outline btn-sm u-flex1"">'"
+renderSweepPreview:filtersEl:=:e21d289a6fad,21144,renderSweepPreview,filtersEl,=,partial_escaped,partial_escaped,3,,,"'<select onchange=""_setVexPreviewTactic(this.value)"" class=""btn btn-outline btn-sm u-flex1"">' + tacticOpts + '</select>' +
       '<input type=""text"" placeholder=""Search T-ID or name…"" value=""' + x(_vexPreviewSearch) + '"" oninput=""_setVexPreviewSearch(this.value)"" class=""btn btn-outline btn-sm u-flex1"">'"
-renderTAXIIConnectorsList:tbody:=:09e758a55a6d,10528,renderTAXIIConnectorsList,tbody,=,unescaped_html,unescaped_html,4,user_created_name,,"TAXII_CONNECTORS.map(function(c) {
+renderTAXIIConnectorsList:tbody:=:09e758a55a6d,11044,renderTAXIIConnectorsList,tbody,=,unescaped_html,unescaped_html,4,user_created_name,,"TAXII_CONNECTORS.map(function(c) {
     var lastPoll = c.lastPollAt ? ago(c.lastPollAt) : 'Never';
     var resultColor = c.lastPollStatus === 'ok' ? 'var(--success)' : (c.lastPollStatus === 'error' ? 'var(--danger)' : 'var(--muted)');
     var summary = c.lastPollSummary || {};
     var resultText = c.lastPollStatus === 'ok'
       ? (summary.processed || 0) + ' processed, ' + (summary.skipped || 0) +"
-renderTAXIIConnectorsList:tbody:=:59d7910c503d,10525,renderTAXIIConnectorsList,tbody,=,static,static,0,,,"'<tr><td colspan=""6"" class=""empty"">No TAXII connectors configured yet.</td></tr>'"
+renderTAXIIConnectorsList:tbody:=:59d7910c503d,11041,renderTAXIIConnectorsList,tbody,=,static,static,0,,,"'<tr><td colspan=""6"" class=""empty"">No TAXII connectors configured yet.</td></tr>'"
 renderTIActors:el:=:6f49cdbd80e1,6278,renderTIActors,el,=,static_empty,static_empty,0,,,''
 renderTIActors:el:=:7970587b35ea,6279,renderTIActors,el,=,unescaped_html,unescaped_html,4,actor,,"'<div style=""font-size:0.68rem;font-weight:600;letter-spacing:0.05em;color:var(--muted);text-transform:uppercase;margin:0.75rem 0 0.4rem"">Top Threat Actors</div>' +
     actors.map(function(a) {
@@ -910,28 +910,28 @@ renderTIActors:el:=:7970587b35ea,6279,renderTIActors,el,=,unescaped_html,unescap
 renderTemplateGrid:grid:=:22bebea10749,4036,renderTemplateGrid,grid,=,unescaped_html,unescaped_html,4,,,"html
       ? '<div class=""sc-fade"" style=""display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:0.85rem"">' + html + '</div>'
       : '<div class=""empty"" style=""padding:1.5rem"">No templates in this category.</div>'"
-renderThreatPriorityDetail:document.getElementById('tp-detail-coverage'):=:245364ce0236,11787,renderThreatPriorityDetail,document.getElementById('tp-detail-coverage'),=,unescaped_html,unescaped_html,4,api_response,,"techCoverage.length
+renderThreatPriorityDetail:document.getElementById('tp-detail-coverage'):=:245364ce0236,12303,renderThreatPriorityDetail,document.getElementById('tp-detail-coverage'),=,unescaped_html,unescaped_html,4,api_response,,"techCoverage.length
     ? '<table class=""u-w100""><thead><tr><th>Technique</th><th>Content</th><th>Prevention</th><th>Detection</th></tr></thead><tbody>' +
       techCoverage.map(function(tc) {
         var content = [
           tc.hasSimulation ? '<span class=""tool-tag"">Sim</span>' : '',
           tc.hasDetection ? '<span class=""tool-tag"">Detect</span>' : '',
           tc.hasCompliance ? '<span cla"
-renderThreatPriorityDetail:document.getElementById('tp-detail-factors'):=:34d08d947ad6,11773,renderThreatPriorityDetail,document.getElementById('tp-detail-factors'),=,unescaped_html,unescaped_html,4,api_response,,"factors || '<div class=""empty"">No factor data.</div>'"
-renderThreatPriorityDetail:document.getElementById('tp-detail-sources'):=:220b67ae2510,11804,renderThreatPriorityDetail,document.getElementById('tp-detail-sources'),=,unescaped_html,unescaped_html,4,user_created_name,,"sources.length
+renderThreatPriorityDetail:document.getElementById('tp-detail-factors'):=:34d08d947ad6,12289,renderThreatPriorityDetail,document.getElementById('tp-detail-factors'),=,unescaped_html,unescaped_html,4,api_response,,"factors || '<div class=""empty"">No factor data.</div>'"
+renderThreatPriorityDetail:document.getElementById('tp-detail-sources'):=:220b67ae2510,12320,renderThreatPriorityDetail,document.getElementById('tp-detail-sources'),=,unescaped_html,unescaped_html,4,user_created_name,,"sources.length
     ? '<div style=""display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:0.75rem"">' +
       sources.map(function(s) {
         // ""Unknown"" (never ""None""): an empty field here means this source
         // never supplied it -- e.g. OpenCTI never reports sectors/regions,
         // MISP never reports aliases. Rendering it as ""None"" would read as
         // a positiv"
-renderThreatPriorityDetail:document.getElementById('tp-detail-summary'):=:74eef6fc3726,11760,renderThreatPriorityDetail,document.getElementById('tp-detail-summary'),=,partial_escaped,partial_escaped,3,,,"'<div class=""kpi-card""><div class=""kpi-label"">Score</div><div class=""kpi-value"">' + x(d.score) + '</div></div>' +
+renderThreatPriorityDetail:document.getElementById('tp-detail-summary'):=:74eef6fc3726,12276,renderThreatPriorityDetail,document.getElementById('tp-detail-summary'),=,partial_escaped,partial_escaped,3,,,"'<div class=""kpi-card""><div class=""kpi-label"">Score</div><div class=""kpi-value"">' + x(d.score) + '</div></div>' +
     '<div class=""kpi-card""><div class=""kpi-label"">Tier</div><div class=""kpi-value"">' + tpTierBadge(d.tier) + '</div></div>' +
     '<div class=""kpi-card""><div class=""kpi-label"">Techniques</div><div class=""kpi-value"">' + x(d.techniqueCount) + '</div></div>' +
     '<div class=""kpi-card""><"
-renderThreatPriorityDetail:document.getElementById('tp-detail-title'):=:82f38c25cdbc,11757,renderThreatPriorityDetail,document.getElementById('tp-detail-title'),=,escaped,escaped,1,,,"x(d.actorName) +
+renderThreatPriorityDetail:document.getElementById('tp-detail-title'):=:82f38c25cdbc,12273,renderThreatPriorityDetail,document.getElementById('tp-detail-title'),=,escaped,escaped,1,,,"x(d.actorName) +
     (d.canonicalGroupId ? '  <span class=""tiny muted"" style=""font-weight:400"">&middot; MITRE ' + x(d.canonicalGroupId) + '</span>' : '')"
-renderThreatPriorityDetail:document.getElementById('tp-detail-uncovered'):=:7772b63947aa,11776,renderThreatPriorityDetail,document.getElementById('tp-detail-uncovered'),=,escaped,escaped,1,,,"uncovered.length
+renderThreatPriorityDetail:document.getElementById('tp-detail-uncovered'):=:7772b63947aa,12292,renderThreatPriorityDetail,document.getElementById('tp-detail-uncovered'),=,escaped,escaped,1,,,"uncovered.length
     ? uncovered.map(function(t) { return '<span class=""tool-tag"">' + x(t) + '</span>'; }).join(' ')
     : '<span class=""muted"">No coverage gaps.</span>'"
 renderTmplAgentList:list:=:2751bfd505c0,4143,renderTmplAgentList,list,=,static,static,0,agent,,"'<p class=""tiny muted"" style=""margin:0"">No online agents.</p>'"
@@ -950,11 +950,11 @@ renderTmplOSCompat:warnEl:=:6f49cdbd80e1,4302,renderTmplOSCompat,warnEl,=,static
 renderTmplWarn:warn:=:1570473181c7,4238,renderTmplWarn,warn,=,static,static,0,,,"'<div style=""padding:0.55rem 0.75rem;background:rgba(218,54,51,.1);border:1px solid rgba(218,54,51,.3);border-radius:var(--radius);color:#f85149"">Lab mode — full fidelity. Run ONLY in isolated lab range. High-risk techniques will execute without production-safe guards.</div>'"
 renderTmplWarn:warn:=:3b41cec7506f,4236,renderTmplWarn,warn,=,static,static,0,,,"'<div style=""padding:0.55rem 0.75rem;background:rgba(35,134,54,.1);border:1px solid rgba(35,134,54,.3);border-radius:var(--radius);color:#56d364"">Telemetry mode — real techniques executed with production-safe guards. All cleanup steps run automatically.</div>'"
 renderTmplWarn:warn:=:6f49cdbd80e1,4240,renderTmplWarn,warn,=,static_empty,static_empty,0,,,''
-renderVariantRun:cell:=:2ff32a8ace7a,20245,renderVariantRun,cell,=,partial_escaped,partial_escaped,3,,,"'<span style=""color:' + _vexVerdictColor(r.verdict) + ';font-weight:600;font-size:0.78rem"">' + x(r.verdict) + '</span>'"
-renderVariantRun:if (wrapperEl) wrapperEl:=:8e94bcdd09f7,20240,renderVariantRun,if (wrapperEl) wrapperEl,=,indirect_variable,partial_escaped,3,,24 assignment(s) to 'wrapperHtml' inside renderVariantRun() @L20173 (scope-resolved) -> partial_escaped,wrapperHtml
-renderVariantRun:panel:=:8576b16b3214,20257,renderVariantRun,panel,=,unescaped_html,unescaped_html,4,,,"'<div class=""card""><div data-vex-wrapper style=""display:flex;flex-direction:column;gap:1.2rem;margin-bottom:0.75rem"">' + wrapperHtml + '</div>' + tableHtml + '</div>'"
-renderVexSweepList:el:=:6f49cdbd80e1,19579,renderVexSweepList,el,=,static_empty,static_empty,0,,,''
-renderVexSweepList:el:=:84f7e3c3eda0,19581,renderVexSweepList,el,=,unescaped_html,unescaped_html,4,agent,,"sweeps.map(function(sw) {
+renderVariantRun:cell:=:2ff32a8ace7a,20761,renderVariantRun,cell,=,partial_escaped,partial_escaped,3,,,"'<span style=""color:' + _vexVerdictColor(r.verdict) + ';font-weight:600;font-size:0.78rem"">' + x(r.verdict) + '</span>'"
+renderVariantRun:if (wrapperEl) wrapperEl:=:8e94bcdd09f7,20756,renderVariantRun,if (wrapperEl) wrapperEl,=,indirect_variable,partial_escaped,3,,24 assignment(s) to 'wrapperHtml' inside renderVariantRun() @L20689 (scope-resolved) -> partial_escaped,wrapperHtml
+renderVariantRun:panel:=:8576b16b3214,20773,renderVariantRun,panel,=,unescaped_html,unescaped_html,4,,,"'<div class=""card""><div data-vex-wrapper style=""display:flex;flex-direction:column;gap:1.2rem;margin-bottom:0.75rem"">' + wrapperHtml + '</div>' + tableHtml + '</div>'"
+renderVexSweepList:el:=:6f49cdbd80e1,20095,renderVexSweepList,el,=,static_empty,static_empty,0,,,''
+renderVexSweepList:el:=:84f7e3c3eda0,20097,renderVexSweepList,el,=,unescaped_html,unescaped_html,4,agent,,"sweeps.map(function(sw) {
     // A full sweep can have thousands of total variants, so a handful of
     // real completions can round down to a misleading ""0%"" -- floor any
     // nonzero progress at 1% so the bar never looks stuck when it isn't.
@@ -963,21 +963,21 @@ renderVexSweepList:el:=:84f7e3c3eda0,19581,renderVexSweepList,el,=,unescaped_htm
 resultBtn:host:=:ffa3f74923be,7237,resultBtn,host,=,partial_escaped,partial_escaped,3,,,"'<div style=""border-top:2px solid var(--accent);background:var(--bg);padding:1rem 1.1rem"">' +
     '<div style=""display:flex;justify-content:space-between;align-items:baseline;gap:1rem;margin-bottom:0.7rem"">' +
       '<div><strong style=""font-size:0.9rem"">' + x(i.providerDisplay || i.provider) + '</strong> · <code style=""font-size:0.72rem"">' + x(i.techniqueId) + '</code> · <span style=""text-transfo"
-row:document.getElementById('tp-detail-evidence'):=:9c37de47b653,11839,row,document.getElementById('tp-detail-evidence'),=,unescaped_html,unescaped_html,4,,,"'<table class=""u-w100""><thead><tr><th>Technique</th><th>Via</th><th>Confidence</th><th>Since</th></tr></thead><tbody>' +
+row:document.getElementById('tp-detail-evidence'):=:9c37de47b653,12355,row,document.getElementById('tp-detail-evidence'),=,unescaped_html,unescaped_html,4,,,"'<table class=""u-w100""><thead><tr><th>Technique</th><th>Via</th><th>Confidence</th><th>Since</th></tr></thead><tbody>' +
       techEvidence.map(function(e) {
         var via = e.via ? (e.via + (e.viaName ? ' (' + x(e.viaName) + ')' : '')) : '<span class=""muted"">direct</span>';
         var since = e.startTime ? x(fmtDate(e.startTime)) : '<span class=""muted"">&mdash;</span>';
         return '<tr><td>"
-row:document.getElementById('tp-detail-history'):=:1bfa85a5a567,11852,row,document.getElementById('tp-detail-history'),=,escaped,escaped,1,,,"hist.length
+row:document.getElementById('tp-detail-history'):=:1bfa85a5a567,12368,row,document.getElementById('tp-detail-history'),=,escaped,escaped,1,,,"hist.length
     ? '<table class=""u-w100""><thead><tr><th>Date</th><th>Score</th></tr></thead><tbody>' +
       hist.map(function(h) { return '<tr><td>' + x(new Date(h.recordedAt).toLocaleDateString()) + '</td><td>' + x(h.score) + '</td></tr>'; }).join('') +
       '</tbody></table>'
     : '<span class=""muted"">No history yet.</span>'"
-row:document.getElementById('tp-detail-recs'):=:898ae3b87a57,11866,row,document.getElementById('tp-detail-recs'),=,static,static,0,,,"'<span class=""muted"">Could not load recommendations.</span>'"
-row:document.getElementById('tp-detail-recs'):=:fb59f7a0d2bc,11862,row,document.getElementById('tp-detail-recs'),=,escaped,escaped,1,user_created_name,,"matches.length
+row:document.getElementById('tp-detail-recs'):=:898ae3b87a57,12382,row,document.getElementById('tp-detail-recs'),=,static,static,0,,,"'<span class=""muted"">Could not load recommendations.</span>'"
+row:document.getElementById('tp-detail-recs'):=:fb59f7a0d2bc,12378,row,document.getElementById('tp-detail-recs'),=,escaped,escaped,1,user_created_name,,"matches.length
       ? matches.map(function(t) { return '<div style=""padding:0.3rem 0"">' + x(t.techniqueId) + ' — ' + x(t.name) + ' <span class=""tiny muted"">(score ' + x(t.score) + ')</span></div>'; }).join('')
       : '<span class=""muted"">No open recommendations for this actor\'s techniques.</span>'"
-row:document.getElementById('wz-review'):=:e5e239560bc1,15215,row,document.getElementById('wz-review'),=,indirect_variable,unescaped_html,4,,3 assignment(s) to 'html' inside renderWizardReview() @L15118 (scope-resolved) -> unescaped_html,html
+row:document.getElementById('wz-review'):=:e5e239560bc1,15731,row,document.getElementById('wz-review'),=,indirect_variable,unescaped_html,4,,3 assignment(s) to 'html' inside renderWizardReview() @L15634 (scope-resolved) -> unescaped_html,html
 rowHtml:document.getElementById('results-body'):=:230d8358dc8e,9093,rowHtml,document.getElementById('results-body'),=,indirect_variable,escaped,1,,"Local rowHtml(k,v) closure in openIOCDetail escapes v internally (hardened: closes the phase-1-flagged fragile pattern).",body
 rowHtml:el:=:a8dfe7e921d5,9112,rowHtml,el,=,unescaped_html,unescaped_html,4,,,"sections || '<div class=""tiny muted"">No relationships recorded.</div>'"
 rowHtml:if (el) el:=:4d45c9a1c090,9115,rowHtml,if (el) el,=,static,static,0,,,"'<div class=""tiny muted"">Relationships unavailable.</div>'"
@@ -990,8 +990,8 @@ selectTIPack:info:=:a06eb30b9758,6148,selectTIPack,info,=,partial_escaped,partia
       '<span class=""u-muted"">' + x(pack.description) + '</span><br>' +
       '<span style=""font-size:0.75rem;margin-top:4px;display:inline-block""><strong>' + pack.techniqueCount + '</strong> techniques &middot; <strong>' + tacticCount + '</strong> tactics' + kevNote + ransomNote + '</span>'"
 setCampaignSource:document.getElementById('cmp-scenario-preview'):=:6f49cdbd80e1,6111,setCampaignSource,document.getElementById('cmp-scenario-preview'),=,static_empty,static_empty,0,,,''
-showThreatPriorityDetail:document.getElementById('tp-detail-factors'):=:0218a335dcfb,11752,showThreatPriorityDetail,document.getElementById('tp-detail-factors'),=,escaped,escaped,1,error_message,,"'<div class=""empty u-danger"">Failed to load: ' + x(e.message) + '</div>'"
-soonPanel:document.getElementById('run-tab-content'):=:7adc696626b0,16846,soonPanel,document.getElementById('run-tab-content'),=,unescaped_html,unescaped_html,4,threat_intel,,"'<div id=""run-tab-overview"" class=""run-tab-panel"">' +
+showThreatPriorityDetail:document.getElementById('tp-detail-factors'):=:0218a335dcfb,12268,showThreatPriorityDetail,document.getElementById('tp-detail-factors'),=,escaped,escaped,1,error_message,,"'<div class=""empty u-danger"">Failed to load: ' + x(e.message) + '</div>'"
+soonPanel:document.getElementById('run-tab-content'):=:7adc696626b0,17362,soonPanel,document.getElementById('run-tab-content'),=,unescaped_html,unescaped_html,4,threat_intel,,"'<div id=""run-tab-overview"" class=""run-tab-panel"">' +
       '<div class=""run-tab-grid"">' +
         '<div>' + scorePanel + '</div>' +
         '<div id=""run-report-extra""></div>' +
@@ -999,29 +999,29 @@ soonPanel:document.getElementById('run-tab-content'):=:7adc696626b0,16846,soonPa
     '</div>' +
     '<div id=""run-tab-findings"" class=""run-tab-panel"" style=""display:none"">' +
       '<div id=""run-report-findings""><div style=""color:var(--muted);font-size:0.72rem;padding:1.5rem 0;text-al"
-soonPanel:document.getElementById('run-tabbar'):=:ec3077d5757a,16883,soonPanel,document.getElementById('run-tabbar'),=,unescaped_html,unescaped_html,4,,,"RUN_TABS.map(function(t, i) {
+soonPanel:document.getElementById('run-tabbar'):=:ec3077d5757a,17399,soonPanel,document.getElementById('run-tabbar'),=,unescaped_html,unescaped_html,4,,,"RUN_TABS.map(function(t, i) {
     return '<button class=""run-tab-btn' + (i === 0 ? ' active' : '') + '"" id=""run-tabbtn-' + t[0] + '"" onclick=""switchRunTab(\'' + t[0] + '\')"">' + x(t[1]) + '</button>';
   }).join('')"
-soonPanel:extraEl:=:000e9faf7dc9,16922,soonPanel,extraEl,=,static,static,0,,,"'<div style=""color:var(--muted);font-size:0.72rem;padding:0.4rem 0"">Loading&#8230;</div>'"
-soonPanel:extraEl:=:6f49cdbd80e1,16934,soonPanel,extraEl,=,static_empty,static_empty,0,,,''
-soonPanel:extraEl:=:8a89f49e5dd6,16926,soonPanel,extraEl,=,indirect_builder,partial_escaped,3,,renderRunReportExtra() @L17504 (scope-resolved): 5 return(s) -> partial_escaped,renderRunReportExtra(rep)
-soonPanel:if (el) el:=:05b3ceeea0fb,16947,soonPanel,if (el) el,=,static,static,0,,,"'<div style=""color:var(--muted);font-size:0.72rem;padding:1.5rem 0;text-align:center"">Attack flow unavailable.</div>'"
-soonPanel:if (el) el:=:05d28a38e57d,16944,soonPanel,if (el) el,=,indirect_builder,unescaped_html,4,,renderAttackFlow() @L17380 (scope-resolved): 6 return(s) -> unescaped_html,"renderAttackFlow(af.nodes || [], af.summary || {})"
-soonPanel:if (el) el:=:4b2a80780dc0,16974,soonPanel,if (el) el,=,static,static,0,,,"'<div style=""color:var(--muted);font-size:0.8rem;padding:2.5rem 0;text-align:center"">Indicators unavailable.</div>'"
-soonPanel:if (el) el:=:57e4ff8ae29b,16953,soonPanel,if (el) el,=,indirect_builder,unescaped_html,4,,renderVariantCoverage() @L17174 (scope-resolved): 11 return(s) -> unescaped_html,renderVariantCoverage(cov)
-soonPanel:if (el) el:=:9d4d108e29ef,16956,soonPanel,if (el) el,=,static,static,0,,,"'<div style=""color:var(--muted);font-size:0.72rem;padding:1.5rem 0;text-align:center"">Variant coverage unavailable.</div>'"
-soonPanel:if (findingsEl) findingsEl:=:1ab55760a1c3,16928,soonPanel,if (findingsEl) findingsEl,=,indirect_builder,unescaped_html,4,,renderRunFindings() @L17800 (scope-resolved): 3 return(s) -> unescaped_html,renderRunFindings(rep)
-soonPanel:if (findingsEl) findingsEl:=:af0652ed63c6,16936,soonPanel,if (findingsEl) findingsEl,=,static,static,0,,,"'<div style=""color:var(--muted);font-size:0.8rem;padding:2.5rem 0;text-align:center"">Findings unavailable.</div>'"
-soonPanel:if (findingsElEarly) findingsElEarly:=:5ddfcb3cebd4,16982,soonPanel,if (findingsElEarly) findingsElEarly,=,indirect_variable,static,0,,1 assignment(s) to 'notReady' inside viewRunResults() @L16354 (scope-resolved) -> static,notReady
-soonPanel:if (iocElEarly) iocElEarly:=:5ddfcb3cebd4,16986,soonPanel,if (iocElEarly) iocElEarly,=,indirect_variable,static,0,,1 assignment(s) to 'notReady' inside viewRunResults() @L16354 (scope-resolved) -> static,notReady
-soonPanel:if (recEl) recEl:=:cc3ff533d162,16930,soonPanel,if (recEl) recEl,=,indirect_builder,unescaped_html,4,,renderRunRecommendations() @L17827 (scope-resolved): 3 return(s) -> unescaped_html,renderRunRecommendations(rep)
-soonPanel:if (recEl) recEl:=:f64c73cc64ef,16938,soonPanel,if (recEl) recEl,=,static,static,0,,,"'<div style=""color:var(--muted);font-size:0.8rem;padding:2.5rem 0;text-align:center"">Recommendations unavailable.</div>'"
-soonPanel:if (recElEarly) recElEarly:=:5ddfcb3cebd4,16984,soonPanel,if (recElEarly) recElEarly,=,indirect_variable,static,0,,1 assignment(s) to 'notReady' inside viewRunResults() @L16354 (scope-resolved) -> static,notReady
-soonPanel:reportsEl:=:a0e2dc3988f7,16897,soonPanel,reportsEl,=,partial_escaped,partial_escaped,3,agent,,"'<div class=""dash-panel u-mb-1""><div class=""dash-panel-hdr"">Run Metadata</div><div class=""dash-panel-body"">' +
+soonPanel:extraEl:=:000e9faf7dc9,17438,soonPanel,extraEl,=,static,static,0,,,"'<div style=""color:var(--muted);font-size:0.72rem;padding:0.4rem 0"">Loading&#8230;</div>'"
+soonPanel:extraEl:=:6f49cdbd80e1,17450,soonPanel,extraEl,=,static_empty,static_empty,0,,,''
+soonPanel:extraEl:=:8a89f49e5dd6,17442,soonPanel,extraEl,=,indirect_builder,partial_escaped,3,,renderRunReportExtra() @L18020 (scope-resolved): 5 return(s) -> partial_escaped,renderRunReportExtra(rep)
+soonPanel:if (el) el:=:05b3ceeea0fb,17463,soonPanel,if (el) el,=,static,static,0,,,"'<div style=""color:var(--muted);font-size:0.72rem;padding:1.5rem 0;text-align:center"">Attack flow unavailable.</div>'"
+soonPanel:if (el) el:=:05d28a38e57d,17460,soonPanel,if (el) el,=,indirect_builder,unescaped_html,4,,renderAttackFlow() @L17896 (scope-resolved): 6 return(s) -> unescaped_html,"renderAttackFlow(af.nodes || [], af.summary || {})"
+soonPanel:if (el) el:=:4b2a80780dc0,17490,soonPanel,if (el) el,=,static,static,0,,,"'<div style=""color:var(--muted);font-size:0.8rem;padding:2.5rem 0;text-align:center"">Indicators unavailable.</div>'"
+soonPanel:if (el) el:=:57e4ff8ae29b,17469,soonPanel,if (el) el,=,indirect_builder,unescaped_html,4,,renderVariantCoverage() @L17690 (scope-resolved): 11 return(s) -> unescaped_html,renderVariantCoverage(cov)
+soonPanel:if (el) el:=:9d4d108e29ef,17472,soonPanel,if (el) el,=,static,static,0,,,"'<div style=""color:var(--muted);font-size:0.72rem;padding:1.5rem 0;text-align:center"">Variant coverage unavailable.</div>'"
+soonPanel:if (findingsEl) findingsEl:=:1ab55760a1c3,17444,soonPanel,if (findingsEl) findingsEl,=,indirect_builder,unescaped_html,4,,renderRunFindings() @L18316 (scope-resolved): 3 return(s) -> unescaped_html,renderRunFindings(rep)
+soonPanel:if (findingsEl) findingsEl:=:af0652ed63c6,17452,soonPanel,if (findingsEl) findingsEl,=,static,static,0,,,"'<div style=""color:var(--muted);font-size:0.8rem;padding:2.5rem 0;text-align:center"">Findings unavailable.</div>'"
+soonPanel:if (findingsElEarly) findingsElEarly:=:5ddfcb3cebd4,17498,soonPanel,if (findingsElEarly) findingsElEarly,=,indirect_variable,static,0,,1 assignment(s) to 'notReady' inside viewRunResults() @L16870 (scope-resolved) -> static,notReady
+soonPanel:if (iocElEarly) iocElEarly:=:5ddfcb3cebd4,17502,soonPanel,if (iocElEarly) iocElEarly,=,indirect_variable,static,0,,1 assignment(s) to 'notReady' inside viewRunResults() @L16870 (scope-resolved) -> static,notReady
+soonPanel:if (recEl) recEl:=:cc3ff533d162,17446,soonPanel,if (recEl) recEl,=,indirect_builder,unescaped_html,4,,renderRunRecommendations() @L18343 (scope-resolved): 3 return(s) -> unescaped_html,renderRunRecommendations(rep)
+soonPanel:if (recEl) recEl:=:f64c73cc64ef,17454,soonPanel,if (recEl) recEl,=,static,static,0,,,"'<div style=""color:var(--muted);font-size:0.8rem;padding:2.5rem 0;text-align:center"">Recommendations unavailable.</div>'"
+soonPanel:if (recElEarly) recElEarly:=:5ddfcb3cebd4,17500,soonPanel,if (recElEarly) recElEarly,=,indirect_variable,static,0,,1 assignment(s) to 'notReady' inside viewRunResults() @L16870 (scope-resolved) -> static,notReady
+soonPanel:reportsEl:=:a0e2dc3988f7,17413,soonPanel,reportsEl,=,partial_escaped,partial_escaped,3,agent,,"'<div class=""dash-panel u-mb-1""><div class=""dash-panel-hdr"">Run Metadata</div><div class=""dash-panel-body"">' +
           '<div style=""display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:0.75rem;font-size:0.78rem"">' +
             '<div><div class=""kpi-label"">Run ID</div><div>' + x(runId) + '</div></div>' +
             '<div><div class=""kpi-label"">Agent</div><div>' + x(run.agen"
-soonPanel:reportsEl:=:ae6324141a3e,16912,soonPanel,reportsEl,=,static,static,0,,,"'<div style=""color:var(--muted);font-size:0.8rem;padding:1rem 0"">No exportable output yet — this run hasn\'t completed.</div>'"
+soonPanel:reportsEl:=:ae6324141a3e,17428,soonPanel,reportsEl,=,static,static,0,,,"'<div style=""color:var(--muted);font-size:0.8rem;padding:1rem 0"">No exportable output yet — this run hasn\'t completed.</div>'"
 startCampaignRerunFromReview:btn:=:c420793ec474,9798,startCampaignRerunFromReview,btn,=,static,static,0,,,'&#9654; Start Re-run'
 startCampaignRerunFromReview:btn:=:c420793ec474,9805,startCampaignRerunFromReview,btn,=,static,static,0,,,'&#9654; Start Re-run'
 startRerunFromReview:btn:=:c420793ec474,9718,startRerunFromReview,btn,=,static,static,0,,,'&#9654; Start Re-run'
@@ -1029,13 +1029,13 @@ startRerunFromReview:btn:=:c420793ec474,9725,startRerunFromReview,btn,=,static,s
 stat:document.getElementById('results-body'):=:ba7ff7c8a7a1,7729,stat,document.getElementById('results-body'),=,partial_escaped,partial_escaped,3,,,"'<div style=""display:flex;align-items:center;gap:0.5rem;margin-bottom:0.3rem"">' + findingSevBadge(r.severity, '') + ' <span class=""tech-id"">' + x(r.techniqueId) + '</span></div>' +
     '<div style=""font-weight:600;font-size:0.98rem;color:var(--text);margin-bottom:0.25rem;line-height:1.3"">' + x(r.techniqueName) + '</div>' +
     '<div class=""tiny muted"" style=""margin-bottom:0.6rem"">Closes ' + r.find"
-stat:el:=:5b4ce0e8f2ff,11622,stat,el,=,unescaped_html,unescaped_html,4,,,"'<div class=""card"" style=""margin-top:1rem;padding:1rem"">' +
+stat:el:=:5b4ce0e8f2ff,12138,stat,el,=,unescaped_html,unescaped_html,4,,,"'<div class=""card"" style=""margin-top:1rem;padding:1rem"">' +
     '<span class=""kpi-label"">Open exposure windows</span>' + strip +
     '<div class=""tbl-wrap""><table><thead><tr>' +
       '<th>Technique</th><th>Severity</th><th>Days open</th><th>First seen</th><th>Reopened</th>' +
     '</tr></thead><tbody>' + rows + '</tbody></table></div>' +
   '</div>'"
-stopVex:if (panel) panel:=:f892e36d9a7f,20127,stopVex,if (panel) panel,=,static,static,0,,,"'<div class=""card"" style=""padding:1.25rem;color:var(--warning);text-align:center"">&#9632; Variant run stopped</div>'"
+stopVex:if (panel) panel:=:f892e36d9a7f,20643,stopVex,if (panel) panel,=,static,static,0,,,"'<div class=""card"" style=""padding:1.25rem;color:var(--warning);text-align:center"">&#9632; Variant run stopped</div>'"
 submitInitiativeAttach:errEl:=:34df0875fe33,8245,submitInitiativeAttach,errEl,=,static,static,0,,,"'<div class=""tiny u-danger"">Select a job to attach.</div>'"
 submitInitiativeAttach:errEl:=:5cfb084d1944,8252,submitInitiativeAttach,errEl,=,escaped,escaped,1,api_response,,"'<div class=""tiny u-danger"">' + x(res.error) + '</div>'"
 submitInitiativeAttach:errEl:=:6f49cdbd80e1,8248,submitInitiativeAttach,errEl,=,static_empty,static_empty,0,,,''
@@ -1048,27 +1048,27 @@ tacticChip:grid:=:a66ebb4166b3,4429,tacticChip,grid,=,unescaped_html,unescaped_h
     var tactics = (a.tactics || []).slice(0, 4).map(tacticChip).join(' ');
     var moreT = a.tactics && a.tactics.length > 4 ? ' <span style=""color:var(--muted);font-size:0.68rem"">+' + (a.tactics.length - 4) + '</span>' : '';
     var desc = (a.description || '').length > 100 ? a.description.substring(0, 97) + '…' : (a.description || 'MITRE CTID adversary emulation profil"
-techOnBlur:panel:=:6f49cdbd80e1,16132,techOnBlur,panel,=,static_empty,static_empty,0,,,''
-techOnInput:panel:=:6f49cdbd80e1,16066,techOnInput,panel,=,static_empty,static_empty,0,,,''
-techOnKeydown:panel:=:6f49cdbd80e1,16121,techOnKeydown,panel,=,static_empty,static_empty,0,,,''
-techRenderResults:panel:=:80cdc4a637c4,16076,techRenderResults,panel,=,static,static,0,,,"'<div class=""st-tech-row"" style=""cursor:default;color:var(--muted)"">No matching technique.</div>'"
-techRenderResults:panel:=:a66308c636d4,16080,techRenderResults,panel,=,escaped,escaped,1,user_created_name,,"results.map(function(t, i) {
+techOnBlur:panel:=:6f49cdbd80e1,16648,techOnBlur,panel,=,static_empty,static_empty,0,,,''
+techOnInput:panel:=:6f49cdbd80e1,16582,techOnInput,panel,=,static_empty,static_empty,0,,,''
+techOnKeydown:panel:=:6f49cdbd80e1,16637,techOnKeydown,panel,=,static_empty,static_empty,0,,,''
+techRenderResults:panel:=:80cdc4a637c4,16592,techRenderResults,panel,=,static,static,0,,,"'<div class=""st-tech-row"" style=""cursor:default;color:var(--muted)"">No matching technique.</div>'"
+techRenderResults:panel:=:a66308c636d4,16596,techRenderResults,panel,=,escaped,escaped,1,user_created_name,,"results.map(function(t, i) {
     var tactics = (t.tactics || []).join(', ');
     var platforms = (t.platforms || []).join(', ');
     return '<div class=""st-tech-row' + (i === 0 ? ' active' : '') + '"" data-id=""' + x(t.id) + '"" onmousedown=""techSelectRow(this)"">' +
       '<span class=""st-tech-row-id"">' + x(t.id) + '</span><span class=""st-tech-row-name"">' + x(t.name) + '</span>' +
       (tactics ? '<"
-techRenderSelected:box:=:41fc3647c35b,16016,techRenderSelected,box,=,escaped,escaped,1,,,"'<div><span class=""st-tech-sel-id"">' + x(id) + '</span>' +
+techRenderSelected:box:=:41fc3647c35b,16532,techRenderSelected,box,=,escaped,escaped,1,,,"'<div><span class=""st-tech-sel-id"">' + x(id) + '</span>' +
         '<span class=""tiny muted"" style=""margin-left:0.4rem"">' +
         (techniqueCatalog === null ? 'resolving…' : 'not recognized') + '</span></div>' +
       '<span class=""st-tech-sel-actions""><a href=""javascript:void(0)"" onclick=""techChangeSelection(this)"">&#10005; change</a></span>'"
-techRenderSelected:box:=:f4b5d505bc4a,16026,techRenderSelected,box,=,escaped,escaped,1,user_created_name,,"'<div><span class=""st-tech-sel-id"">' + x(t.id) + '</span> <span class=""st-tech-sel-name"">' + x(t.name) + '</span>' +
+techRenderSelected:box:=:f4b5d505bc4a,16542,techRenderSelected,box,=,escaped,escaped,1,user_created_name,,"'<div><span class=""st-tech-sel-id"">' + x(t.id) + '</span> <span class=""st-tech-sel-name"">' + x(t.name) + '</span>' +
       (tactics ? '<div class=""st-tech-row-meta"">' + x(tactics) + '</div>' : '') +
       (subText ? '<div class=""st-tech-row-meta"">' + x(subText) + '</div>' : '') +
     '</div>' +
     '<span class=""st-tech-sel-actions"">' +
       (t.url ? '<a href=""' + x(t.url) + '"" target=""_blank"" re"
-techSelectRow:panel:=:6f49cdbd80e1,16097,techSelectRow,panel,=,static_empty,static_empty,0,,,''
+techSelectRow:panel:=:6f49cdbd80e1,16613,techSelectRow,panel,=,static_empty,static_empty,0,,,''
 tile:document.getElementById('dash-itsm-tiles'):=:e5e239560bc1,7843,tile,document.getElementById('dash-itsm-tiles'),=,indirect_variable,escaped,1,,"loadDashboardITSM's tile(lbl,val,col) closure doesn't escape lbl internally, but the one caller that passes dynamic data (p.provider, an ITSM byProvider API response) wraps it in x().",html
 tile:document.getElementById('rem-tiles'):=:d1843405b08b,7672,tile,document.getElementById('rem-tiles'),=,indirect_builder,unescaped_html,4,,rgba(): no declaration found anywhere in file; tile() @L7666 (scope-resolved): 1 return(s) -> unescaped_html; var(): no declaration found anywhere in file,"tile('Open remediations', l.length, l.length ? 'var(--warning)' : 'var(--success)', 'rgba(210,153,34,0.12)', REM_SVG.wrench16, 'prioritized fixes') +
     tile('Affected findings', findingsTotal, findingsTotal ? 'var(--danger)' : 'var(--success)', 'rgba(218,54,51,0.12)', REM_SVG.flag, 'closed if all applied') +
@@ -1077,7 +1077,7 @@ tile:el:=:aa0da7afd29e,9015,tile,el,=,indirect_builder,unescaped_html,4,api_resp
     tile('Highest Bypass Rate', result.highestBypassRate, ' bypasses') +
     tile('Frequently Reused', result.frequentlyReused, ' sightings') +
     tile('Longest Surviving', result.longestSurviving, ' sightings')"
-toggleSimCoverage:if (car) car:=:9c822af7dbd9,10759,toggleSimCoverage,if (car) car,=,static,static,0,,,SIM_COV_OPEN ? '&#9660;' : '&#9654;'
+toggleSimCoverage:if (car) car:=:9c822af7dbd9,11275,toggleSimCoverage,if (car) car,=,static,static,0,,,SIM_COV_OPEN ? '&#9660;' : '&#9654;'
 vfCloseDetail:if (h) h:=:6f49cdbd80e1,7267,vfCloseDetail,if (h) h,=,static_empty,static_empty,0,,,''
 vfLoadEvidence:host:=:5af37790c274,7336,vfLoadEvidence,host,=,static,static,0,,,"'<div style=""font-size:0.74rem;color:var(--danger)"">Failed to load evidence.</div>'"
 vfLoadEvidence:host:=:cf367cccc2b5,7325,vfLoadEvidence,host,=,unescaped_html,unescaped_html,4,,,"list.map(function(e) {
@@ -1106,15 +1106,15 @@ vfToggleHistory:host:=:61bf78f8afa9,7365,vfToggleHistory,host,=,unescaped_html,u
           '<span style=""font-weight:700;color:' + vfStatusColor(r.active ? (r.workf"
 vfToggleHistory:host:=:6f49cdbd80e1,7359,vfToggleHistory,host,=,static_empty,static_empty,0,,,''
 vfToggleHistory:host:=:eee07750c4e9,7364,vfToggleHistory,host,=,static,static,0,,,"'<div style=""font-size:0.74rem;color:var(--muted)"">No attestations recorded yet.</div>'"
-viewRunResults:document.getElementById('results-export'):=:6f49cdbd80e1,16426,viewRunResults,document.getElementById('results-export'),=,static_empty,static_empty,0,,,''
-viewRunResults:document.getElementById('results-header-actions'):=:8d3e295873f1,16454,viewRunResults,document.getElementById('results-header-actions'),=,indirect_variable,unescaped_html,4,,2 assignment(s) to 'actionsHtml' inside viewRunResults() @L16354 (scope-resolved) -> unescaped_html,actionsHtml
-viewRunResults:document.getElementById('results-summary'):=:14ac4be88bd0,16414,viewRunResults,document.getElementById('results-summary'),=,partial_escaped,partial_escaped,3,agent,,"'<span style=""color:var(--danger);font-weight:600"">' + fail + ' fail</span>' +
+viewRunResults:document.getElementById('results-export'):=:6f49cdbd80e1,16942,viewRunResults,document.getElementById('results-export'),=,static_empty,static_empty,0,,,''
+viewRunResults:document.getElementById('results-header-actions'):=:8d3e295873f1,16970,viewRunResults,document.getElementById('results-header-actions'),=,indirect_variable,unescaped_html,4,,2 assignment(s) to 'actionsHtml' inside viewRunResults() @L16870 (scope-resolved) -> unescaped_html,actionsHtml
+viewRunResults:document.getElementById('results-summary'):=:14ac4be88bd0,16930,viewRunResults,document.getElementById('results-summary'),=,partial_escaped,partial_escaped,3,agent,,"'<span style=""color:var(--danger);font-weight:600"">' + fail + ' fail</span>' +
       ' &nbsp;/&nbsp; <span style=""color:var(--success);font-weight:600"">' + pass + ' pass</span>' +
       (skipped ? ' &nbsp;/&nbsp; <span class=""u-muted"">' + skipped + ' skipped</span>' : '') +
       ' &nbsp;&middot;&nbsp; ' + results.length + ' total &nbsp;&middot;&nbsp; Agent: <code>' + x(run.agentId) + '</code>' +
 "
-viewRunResults:document.getElementById('results-summary'):=:b5178044b390,16409,viewRunResults,document.getElementById('results-summary'),=,escaped,escaped,1,agent,,"'<span style=""color:var(--danger);font-weight:600"">Run failed to start</span>' +
+viewRunResults:document.getElementById('results-summary'):=:b5178044b390,16925,viewRunResults,document.getElementById('results-summary'),=,escaped,escaped,1,agent,,"'<span style=""color:var(--danger);font-weight:600"">Run failed to start</span>' +
       ' &nbsp;&middot;&nbsp; ' + x(run.failReason || 'No reason recorded for this failure.') +
       ' &nbsp;&middot;&nbsp; Agent: <code>' + x(run.agentId) + '</code>'"
-viewRunResults:document.getElementById('results-title'):=:5ca182313248,16432,viewRunResults,document.getElementById('results-title'),=,partial_escaped,partial_escaped,3,user_created_name,,"x(run.name) + ' — Results ' +
+viewRunResults:document.getElementById('results-title'):=:5ca182313248,16948,viewRunResults,document.getElementById('results-title'),=,partial_escaped,partial_escaped,3,user_created_name,,"x(run.name) + ' — Results ' +
     '<span class=""sbadge"" style=""background:' + runStatusColor + '22;color:' + runStatusColor + ';border:1px solid ' + runStatusColor + '44;font-size:0.65rem;margin-left:0.4rem;vertical-align:middle"">' + x(run.status || '') + '</span>'"
