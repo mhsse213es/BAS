@@ -9,11 +9,12 @@ import { closeCampaignDetail } from './campaigns.js';
 import { loadCalderaStatus, refreshDashboardCampaigns } from './compliance.js';
 import { loadCoverage, loadCoverageAnalytics, loadUnifiedTechniques } from './coverage.js';
 import { loadVerificationTab } from './detection-verification.js';
+import { loadFindings, loadRemediations, loadSLAReport } from './findings.js';
 import { loadInitiatives } from './initiatives.js';
 import { loadIOCRegistry } from './iocs.js';
 import { loadARTContentStatus, loadConnectorStatus, loadSimCoverage, loadTAXIIConnectors, loadThreatIntelConfig } from './threat-intel.js';
 import { loadVariantTab } from './variant-executor.js';
-import { closeScenarioOverlay, connectWS, initComplianceTab, injectServerURL, loadAgentGroupTree, loadAgents, loadAttackPath, loadCatalogs, loadConnectionConfig, loadCoverageActors, loadCoverageMatrix, loadDashboard, loadEmTab, loadExecDashboard, loadExercisesTab, loadExposureAssets, loadFindings, loadIntegrations, loadRecommendations, loadRemediations, loadReports, loadResponseConnectors, loadRuns, loadSLAReport, loadScenarios, loadScheduledAssessments, loadThreatPriorityActors, openCmdk, renderResponseConnectorList, renderScenarios, selectTheme, showSettingsSection, showThreatPriorityList } from '../legacy.js';
+import { closeScenarioOverlay, connectWS, initComplianceTab, injectServerURL, loadAgentGroupTree, loadAgents, loadAttackPath, loadCatalogs, loadConnectionConfig, loadCoverageActors, loadCoverageMatrix, loadDashboard, loadEmTab, loadExecDashboard, loadExercisesTab, loadExposureAssets, loadIntegrations, loadRecommendations, loadReports, loadResponseConnectors, loadRuns, loadScenarios, loadScheduledAssessments, loadThreatPriorityActors, openCmdk, renderResponseConnectorList, renderScenarios, selectTheme, showSettingsSection, showThreatPriorityList } from '../legacy.js';
 export function __init_L5162() {
 (function() {
   var t = localStorage.getItem('audspect_theme') || 'dark';

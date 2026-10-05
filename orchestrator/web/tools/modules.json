@@ -97,6 +97,34 @@
     {
       "header": "Threat-Informed Campaign Builder",
       "module": "features/campaigns.js"
+    },
+    {
+      "header": "Findings ticket actions",
+      "module": "features/findings.js"
+    },
+    {
+      "header": "Findings bulk select",
+      "module": "features/findings.js"
+    },
+    {
+      "header": "Remediation bulk tickets",
+      "module": "features/findings.js"
+    },
+    {
+      "header": "Findings",
+      "module": "features/findings.js"
+    },
+    {
+      "header": "Remediation",
+      "module": "features/findings.js"
+    },
+    {
+      "header": "Ticketing",
+      "module": "features/findings.js"
+    },
+    {
+      "header": "Dashboard ITSM widget",
+      "module": "features/findings.js"
     }
   ],
   "pin": {

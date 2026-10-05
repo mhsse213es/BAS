@@ -5,6 +5,7 @@ export const state = {
   _addlSel: {},
   _agtLogTelemetryMetric: '',
   _cmpSel: {},
+  _currentFinding: null,
   _dashCampPoll: null,
   _editUserId: null,
   _emGroupSel: {},

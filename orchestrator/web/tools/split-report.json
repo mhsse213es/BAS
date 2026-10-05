@@ -32,6 +32,7 @@
     "_addlSel",
     "_agtLogTelemetryMetric",
     "_cmpSel",
+    "_currentFinding",
     "_dashCampPoll",
     "_editUserId",
     "_emGroupSel",
@@ -92,7 +93,7 @@
       "inits": 0
     },
     "features/campaigns.js": {
-      "imports": 7,
+      "imports": 8,
       "inits": 0
     },
     "features/compliance.js": {
@@ -105,6 +106,10 @@
     },
     "features/detection-verification.js": {
       "imports": 3,
+      "inits": 0
+    },
+    "features/findings.js": {
+      "imports": 6,
       "inits": 0
     },
     "features/initiatives.js": {
@@ -120,7 +125,7 @@
       "inits": 0
     },
     "features/shell.js": {
-      "imports": 15,
+      "imports": 16,
       "inits": 5
     },
     "features/threat-intel.js": {
@@ -132,7 +137,7 @@
       "inits": 0
     },
     "legacy.js": {
-      "imports": 15,
+      "imports": 16,
       "inits": 7
     }
   }

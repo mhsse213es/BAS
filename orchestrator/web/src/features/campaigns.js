@@ -4,8 +4,9 @@ import { apicall } from '../core/api.js';
 import { x } from '../core/escape.js';
 import { fmtDate, showToast } from '../core/util.js';
 import { refreshDashboardCampaigns } from './compliance.js';
+import { findingSevBadge } from './findings.js';
 import { ROLE, _riskScoreColor, activateTab, showTab } from './shell.js';
-import { covSegHtml, findingSevBadge, loadScenarios, tpTierBadge, viewRunResults } from '../legacy.js';
+import { covSegHtml, loadScenarios, tpTierBadge, viewRunResults } from '../legacy.js';
 
 
 // ── Campaigns ────────────────────────────────────────────────────────────────

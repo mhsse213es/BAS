@@ -10,6 +10,7 @@ import './features/campaigns.js';
 import './features/compliance.js';
 import './features/coverage.js';
 import './features/detection-verification.js';
+import './features/findings.js';
 import './features/initiatives.js';
 import './features/iocs.js';
 import './features/rerun-review.js';
