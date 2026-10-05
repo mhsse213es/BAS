@@ -91,6 +91,10 @@
       "imports": 6,
       "inits": 0
     },
+    "features/coverage.js": {
+      "imports": 5,
+      "inits": 0
+    },
     "features/detection-verification.js": {
       "imports": 3,
       "inits": 0
@@ -108,7 +112,7 @@
       "inits": 0
     },
     "features/shell.js": {
-      "imports": 12,
+      "imports": 13,
       "inits": 5
     },
     "features/threat-intel.js": {
@@ -120,7 +124,7 @@
       "inits": 0
     },
     "legacy.js": {
-      "imports": 12,
+      "imports": 13,
       "inits": 7
     }
   }

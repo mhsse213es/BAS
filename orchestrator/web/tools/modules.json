@@ -65,6 +65,18 @@
     {
       "header": "Detection Verification (SP2)",
       "module": "features/detection-verification.js"
+    },
+    {
+      "header": "ATT&CK Coverage",
+      "module": "features/coverage.js"
+    },
+    {
+      "header": "Coverage Analytics",
+      "module": "features/coverage.js"
+    },
+    {
+      "header": "Unified Technique Library",
+      "module": "features/coverage.js"
     }
   ],
   "pin": {
