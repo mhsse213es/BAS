@@ -545,7 +545,7 @@ var INITIATIVES = { list: [], filter: 'active' };
 function initiativeStateColor(state) {
   return state === 'active' ? 'var(--success)' : 'var(--muted)';
 }
-function initiativeStateLabel(state) {
+export function initiativeStateLabel(state) {
   if (state === 'active') return 'Active';
   if (state === 'closed') return 'Closed';
   if (state === 'archived') return 'Archived';
@@ -10177,7 +10177,7 @@ function killChainNodes(kc) {
 // restoration, detection coverage) from the report-engine payload. Key
 // Findings and Prioritised Recommendations moved to their own tabs — see
 // renderRunFindings / renderRunRecommendations below.
-function renderRunReportExtra(rep) {
+export function renderRunReportExtra(rep) {
   rep = rep || {};
   var panel = 'background:var(--elevated);border:1px solid var(--border);border-radius:4px;padding:0.6rem 0.75rem;margin-bottom:0.75rem';
   var hdr = 'font-size:0.6rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:0.45rem';
@@ -12043,7 +12043,7 @@ function connectWS() {
 // too, those downstream .replace() calls would become no-ops and the
 // JS-string-literal cases would break out of their quote -- don't add '
 // escaping here; give call sites that need it their own explicit step.
-function escapeHTML(s) {
+export function escapeHTML(s) {
   return String(s == null ? '' : s)
     .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }

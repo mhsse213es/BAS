@@ -102,6 +102,14 @@ test('function named by a string literal is exposed as a dynamic handler', () =>
   assert.match(file(out, 'src/globals.js'), /HANDLER_FUNCTIONS = \{[^}]*\bsetAgentFilter\b/);
 });
 
+test('testExports entries are exported but not put on window', () => {
+  const js = 'function helper(s) { return s; }\nfunction user() { return helper(1); }\n';
+  const out = splitMonolith(monolith(js), cfg({ testExports: ['helper'] }));
+  assert.match(file(out, 'src/legacy.js'), /^export function helper\(s\)/m);
+  assert.doesNotMatch(file(out, 'src/globals.js'), /\bhelper\b/);
+  assert.throws(() => splitMonolith(monolith(js), cfg({ testExports: ['nope'] })), /testExports entry "nope" is not a top-level function/);
+});
+
 test('window.NAME writes of undeclared names are registered verbatim', () => {
   const js = '(function(){ window.openRunPanel = function(){}; })();\n';
   const out = splitMonolith(monolith(js), cfg());

@@ -164,6 +164,8 @@ export function splitMonolith(html, cfg) {
   for (const n of dynamicFns) handlerFns.add(n);
   const exported = new Set(handlerFns);
   for (const set of usedBy.values()) for (const n of set) exported.add(n);
+  // Exported only so unit tests can import them (never put on window).
+  for (const n of cfg.testExports || []) { if (!isFn(n)) throw new Error(`testExports entry "${n}" is not a top-level function`); exported.add(n); }
   for (const name of exported) {
     const ci = a.topNames.get(name).chunk; const c = a.chunks[ci];
     if (!edits[ci].some((e) => e[0] === c.stmtStart && e[2] === 'export ')) edits[ci].push([c.stmtStart, c.stmtStart, 'export ']);
