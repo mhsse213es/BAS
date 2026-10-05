@@ -188,5 +188,23 @@ class TestCanonicalEscaperCheck(unittest.TestCase):
         self.assertEqual(errors, [])
 
 
+
+class TestRhsChanges(unittest.TestCase):
+    def test_same_slot_changed_rhs_same_tier_is_reported(self):
+        old = [_sink("f", "el", "=", 4, sink_id="f:el:=:aaaaaaaaaaaa")]
+        new = [_sink("f", "el", "=", 4, sink_id="f:el:=:bbbbbbbbbbbb")]
+        self.assertEqual(guard.find_rhs_changes(old, new),
+                         [(("f", "el", "="), 4, "f:el:=:aaaaaaaaaaaa", "f:el:=:bbbbbbbbbbbb")])
+        self.assertEqual(guard.compare_slots(old, new)[0], [])  # still not a failure
+
+    def test_identical_sink_is_not_reported(self):
+        s = [_sink("f", "el", "=", 4)]
+        self.assertEqual(guard.find_rhs_changes(s, list(s)), [])
+
+    def test_tier_change_is_not_a_review_item(self):
+        old = [_sink("f", "el", "=", 1, sink_id="f:el:=:aaaaaaaaaaaa")]
+        new = [_sink("f", "el", "=", 4, sink_id="f:el:=:bbbbbbbbbbbb")]
+        self.assertEqual(guard.find_rhs_changes(old, new), [])
+
 if __name__ == "__main__":
     unittest.main()

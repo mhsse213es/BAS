@@ -102,6 +102,31 @@ def compare_slots(old_sinks, new_sinks):
     return regressions, eliminated, added
 
 
+def find_rhs_changes(old_sinks, new_sinks):
+    """Same slot, RHS changed, tier unchanged: never a failure, always shown.
+    A changed RHS can change data provenance (e.g. an internal value becoming
+    user-controlled state) without changing the tier, so a reviewer must see
+    it (G1c spec section 8). Pairs the unmatched sinks of each slot exactly
+    like compare_slots does and reports the pairs whose tiers are equal."""
+    out = []
+    old_by_slot = _group_by_slot(old_sinks)
+    for slot, news in _group_by_slot(new_sinks).items():
+        olds = list(old_by_slot.get(slot, []))
+        changed_new = []
+        for s in news:
+            match = next((o for o in olds if o["sink_id"] == s["sink_id"] and o["severity_tier"] == s["severity_tier"]), None)
+            if match is not None:
+                olds.remove(match)
+            else:
+                changed_new.append(s)
+        olds.sort(key=lambda o: (-o["severity_tier"], o["sink_id"]))
+        changed_new.sort(key=lambda s: (s["severity_tier"], s["sink_id"]))
+        for o, n in zip(olds, changed_new):
+            if o["severity_tier"] == n["severity_tier"] and o["sink_id"] != n["sink_id"]:
+                out.append((slot, n["severity_tier"], o["sink_id"], n["sink_id"]))
+    return sorted(out)
+
+
 # --- Canonical-escaper check -------------------------------------------
 # Duplicated from g1-trace-indirect-sinks.py's scan_function_spans() and
 # its helpers, not imported: that module runs
@@ -400,6 +425,11 @@ def main():
         print(f"  {len(added)} new sink(s) (reported, not auto-failed -- review manually):")
         for slot, tier, category, sid in sorted(added):
             print(f"    NEW   severity={tier} {category}  {format_slot(slot)}  [{sid}]")
+    rhs_changes = find_rhs_changes(old_sinks, new_sinks)
+    if rhs_changes:
+        print(f"  {len(rhs_changes)} sink(s) with a changed RHS at the same tier (REVIEW, not failed):")
+        for slot, tier, old_id, new_id in rhs_changes:
+            print(f"    REVIEW severity={tier}  {format_slot(slot)}  [{old_id} -> {new_id}]")
 
     if regressions:
         ok = False

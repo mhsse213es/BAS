@@ -1,0 +1,43 @@
+import importlib.util
+import tempfile
+import unittest
+from pathlib import Path
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+spec = importlib.util.spec_from_file_location("g1_view", REPO_ROOT / "scripts" / "g1-assemble-classifier-view.py")
+v = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(v)
+
+
+def web(files):
+    d = Path(tempfile.mkdtemp())
+    for rel, text in files.items():
+        p = d / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_bytes(text.encode("utf-8"))
+    return d
+
+
+BASE = {"index.html": "<html>\n<body>\n<script src=\"/assets/%%APP_JS%%\"></script>\n</body>\n</html>\n"}
+
+
+class TestAssemble(unittest.TestCase):
+    def test_inlines_sources_in_sorted_path_order(self):
+        d = web({**BASE, "src/b.js": "function b() {}\n", "src/a.js": "function a() {}\n", "src/core/z.js": "function z() {}\n"})
+        out = v.assemble(d)
+        self.assertIn("<script>\nfunction a() {}\nfunction b() {}\nfunction z() {}\n</script>", out)
+        self.assertNotIn("%%APP_JS%%", out)
+
+    def test_is_byte_identical_across_runs_and_uses_lf(self):
+        d = web({**BASE, "src/a.js": "function a() {}\r\n"})
+        self.assertEqual(v.assemble(d), v.assemble(d))
+        self.assertNotIn("\r", v.assemble(d))
+
+    def test_missing_script_tag_fails(self):
+        d = web({"index.html": "<html></html>\n", "src/a.js": ""})
+        with self.assertRaises(ValueError):
+            v.assemble(d)
+
+
+if __name__ == "__main__":
+    unittest.main()
