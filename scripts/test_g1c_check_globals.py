@@ -87,6 +87,16 @@ class TestRegistry(unittest.TestCase):
         d = make('<a onclick="showTab(\'x\')"></a>', js)
         self.assertEqual([e for e in g.check(d) if e.startswith("read:")], [])
 
+    def test_single_quoted_handler_attribute_is_checked(self):
+        # onclick='f(...)' (single-quoted, used when the argument is JSON) was
+        # invisible to the check, so viewRunResults never reached window.
+        js = ("window.openRunPanel = 1;\n"
+              "var s = '<button onclick=\\'viewRunResults(' + JSON.stringify(r) + ')\\'>';\n")
+        d = make('<a onclick="showTab(\'x\');doLogin()"></a><b onclick=\'gone()\'></b>', js)
+        errs = g.check(d)
+        self.assertIn("missing: viewRunResults", errs)
+        self.assertIn("missing: gone", errs)
+
     def test_exposed_state_read_is_allowed(self):
         js = "window.openRunPanel = 1;\nvar s = '<i onclick=\"doLogin(scenarioView)\">';\n"
         d = make('<a onclick="showTab(\'x\')"></a>', js)

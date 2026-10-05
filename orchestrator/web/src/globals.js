@@ -18,8 +18,8 @@ import { closeIOCImportModal, closeResults, loadIOCRegistry, openIOCDetail, open
 import { closeRunLive, closeSweepDrilldown, openSweepDrilldown } from './features/live-run.js';
 import { abortExecution, approveExStep, closeExerciseDetail, closeOpenAEVDetail, createPlanFromOpenAEV, launchExercisePrompt, openExerciseDetail, openOpenAEVDetail, removeOpenAEVConfig, saveOpenAEVConfig, syncOpenAEVNow, testOpenAEVConfig, toggleAPHistory } from './features/openaev.js';
 import { runRansomwareDrill } from './features/ransomware.js';
-import { addStep, applyPicker, clearSelection, cloneScenario, closeBuilder, closeModal, closePicker, closeReportGen, deleteCustomScenario, downloadBuilderYaml, genAgentReport, loadRuns, moveStep, openBuilder, openBuilderARTPicker, openBuilderCalderaPicker, openDetailedViewForScenario, openModal, openPicker, openPickerFromModal, openReportGen, pickerSelectAll, pickerToggle, removeStep, renderAdditionalAgentsCount, renderBuilderMode, renderGroupTargetSummary, renderPickerList, renderRunMode, saveScenario, selectAllAdditionalAgents, setPF, setTargetMode, submitReport, switchRunTab, techChangeSelection, techCopyId, techOnBlur, techOnKeydown, techSelectRow, updateVariantDepthNote, uploadScenarioFile, wizardNav } from './features/reports.js';
-import { closeRerunReview, startRerunFromReview } from './features/rerun-review.js';
+import { addStep, applyPicker, clearSelection, cloneScenario, closeBuilder, closeModal, closePicker, closeReportGen, deleteCustomScenario, downloadBuilderYaml, genAgentReport, loadRuns, moveStep, openBuilder, openBuilderARTPicker, openBuilderCalderaPicker, openDetailedViewForScenario, openModal, openPicker, openPickerFromModal, openReportGen, pickerSelectAll, pickerToggle, removeStep, renderAdditionalAgentsCount, renderBuilderMode, renderGroupTargetSummary, renderPickerList, renderRunMode, saveScenario, selectAllAdditionalAgents, setPF, setTargetMode, submitReport, switchRunTab, techChangeSelection, techCopyId, techOnBlur, techOnKeydown, techSelectRow, updateVariantDepthNote, uploadScenarioFile, viewRunResults, wizardNav } from './features/reports.js';
+import { closeRerunReview, openCampaignRerunReview, openRerunReview, startRerunFromReview } from './features/rerun-review.js';
 import { cancelScheduledAssessment, closeSchedWizard, loadScheduledAssessments, openSchedWizard, openSchedWizardForEdit, schedOnModeChange, schedOnRecurrenceChange, schedToggleAgent, schedToggleGroup, schedWizardNav, submitScheduledAssessment } from './features/scheduled.js';
 import { _dismissLicenseGraceBanner, ackAllTamperEvents, closeUserMenu, doLogin, doLogout, goToProfile, setAgentsView, setDashView, showTab, toggleSidebarCollapsed, toggleUserMenu } from './features/shell.js';
 import { closeTAXIIConnectorModal, deleteTAXIIConnector, loadARTContentStatus, loadTAXIIConnectors, openTAXIIConnectorModal, removeConnectorConfig, reseedART, saveConnectorConfig, saveTAXIIConnectorForm, syncTAXIIConnectorNow, taxiiToggleAuthFields, testConnectorConfig, testTAXIIConnectorForm, toggleSimCoverage, triggerConnectorSync } from './features/threat-intel.js';
@@ -196,6 +196,7 @@ export const HANDLER_FUNCTIONS = {
   openCampaignDetail,
   openCampaignLaunch,
   openCampaignReport,
+  openCampaignRerunReview,
   openChangePassword,
   openCmdk,
   openCreateUser,
@@ -222,6 +223,7 @@ export const HANDLER_FUNCTIONS = {
   openRemediation,
   openRemoveAgentModal,
   openReportGen,
+  openRerunReview,
   openRespondModal,
   openRunFromCampaign,
   openRunReport,
@@ -385,6 +387,7 @@ export const HANDLER_FUNCTIONS = {
   vfSubmit,
   vfToggleHistory,
   vfUploadEvidence,
+  viewRunResults,
   wizardNav,
   x,
 };

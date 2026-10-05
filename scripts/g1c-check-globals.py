@@ -9,6 +9,9 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_WEB = REPO_ROOT / "orchestrator" / "web"
 
 HANDLER_ATTR = re.compile(r"""\son[a-z]+=\\?"(.*?)\\?\"""")
+# Single-quoted handlers (onclick='viewRunResults(' + JSON + ')', used when the
+# argument is JSON) -- missed until the G1c final review's drawer smoke test.
+HANDLER_ATTR_SQ = re.compile(r"""\son[a-z]+=\\?'(.*?)\\?'""")
 CALL = re.compile(r"(?<![.\w$'\"])([A-Za-z_$][\w$]*)\s*\(")
 ASSIGN = re.compile(r"(?<![.\w$'\"])([A-Za-z_$][\w$]*)\s*(?:\[[^\]]*\])?\s*(?:=(?!=)|\+\+|--|\+=|-=)")
 WINDOW_WRITE = re.compile(r"(?<![\w$.])window\.([A-Za-z_$][\w$]*)\s*=(?!=)")
@@ -61,7 +64,7 @@ def check(web_dir):
 
     called, called_code, assigned, read = set(), set(), set(), set()
     for i, text in enumerate(sources):
-        for m in HANDLER_ATTR.finditer(text):
+        for m in [*HANDLER_ATTR.finditer(text), *HANDLER_ATTR_SQ.finditer(text)]:
             called |= set(CALL.findall(m.group(1)))
             called_code |= set(CALL.findall(STRING_LIT.sub("''", m.group(1))))
             assigned |= set(ASSIGN.findall(m.group(1)))

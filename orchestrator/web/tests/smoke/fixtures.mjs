@@ -29,6 +29,15 @@ const campaign = {
   createdAt: NOW, updatedAt: NOW, scenarioIds: [], steps: [], targets: [],
 };
 
+// Live Run replay: ART steps carry a techniqueId, which drives the ART
+// catalog lookup (G1c final review C1 broke exactly this path).
+const runEvents = [
+  { type: 'run_started', taskId: '', payload: { stepsTotal: 2 } },
+  { type: 'queued', taskId: 'task-1', techniqueId: 'T1059', stepName: `Step ${PAYLOAD}` },
+  { type: 'started', taskId: 'task-1', techniqueId: 'T1059' },
+  { type: 'completed', taskId: 'task-1', techniqueId: 'T1059', payload: { verdict: 'pass', durationMs: 1200 } },
+];
+
 export const FIXTURES = {
   'GET /ready': { version: '0.0.0-smoke' },
   'GET /api/license/status': { state: 'valid' },
@@ -47,6 +56,10 @@ export const FIXTURES = {
   // Loaded at boot by loadScenarios(); the {} default made .map throw, and the
   // resulting toast landed on whichever tab was open (flaky in CI).
   'GET /api/scenarios': [],
+  // Drawers (smoke.spec.mjs "drawers"): detail endpoints for the list fixtures.
+  'GET /api/scenarios/runs/run-smoke-1/events': runEvents,
+  'GET /api/findings/finding-smoke-1': finding,
+  'GET /api/campaigns/campaign-smoke-1': campaign,
 };
 
 // Text each tab must show once its fixture renders (payloads appear as

@@ -43,7 +43,7 @@ export function rerunSubset(run, fw) {
   return { field: fw === 'art' ? 'techniques' : 'checks', ids: ids, exact: true };
 }
 
-function openRerunReview(run) {
+export function openRerunReview(run) {
   _rerunReviewKind = 'run';
   _rerunReviewRun = run;
   document.getElementById('rerun-review-title').textContent = 'Re-run Review';
@@ -137,7 +137,7 @@ export function startRerunFromReview() {
 // original group/all target -- a group can be edited or deleted after
 // launch, and "clone this campaign" means the same targets, not "whoever is
 // in the group now".
-function openCampaignRerunReview(c) {
+export function openCampaignRerunReview(c) {
   _rerunReviewKind = 'campaign';
   _rerunReviewCampaign = c;
   document.getElementById('rerun-review-title').textContent = 'Re-run Campaign Review';

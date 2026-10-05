@@ -108,3 +108,30 @@ test('every tab renders with no errors beyond the monolith baseline', async ({ p
   for (const tab of Object.keys(baseline.tabs)) if (!(tab in result.tabs)) regressions.push(`${tab}: tab disappeared`);
   expect(regressions, 'new errors versus the monolith baseline').toEqual([]);
 });
+
+// Drawers reachable from the tabs, opened through the same window functions
+// their rows' handlers call (spec section 9). Each must render its marker
+// with no errors; there is no monolith baseline for these, so none are known.
+const DRAWERS = [
+  { name: 'live run', open: "openRunPanel('run-smoke-1', 'Run', 2)", selector: '#run-live-timeline', marker: 'T1059' },
+  { name: 'run results', open: "viewRunResults({ id: 'run-smoke-1', name: 'Smoke run', status: 'completed', results: [] })", selector: '#results-title', marker: 'Smoke run' },
+  { name: 'finding', open: "openFinding('finding-smoke-1')", selector: '#results-title', marker: 'Finding' },
+  { name: 'agent detail', open: "openAgentDetail('agent-smoke-1')", selector: '#agt-detail-title', marker: 'Agent: host' },
+  { name: 'campaign detail', open: "openCampaignDetail('campaign-smoke-1')", selector: 'body', marker: 'Campaign "><img' },
+];
+
+test('drawers open and render with no errors', async ({ page }) => {
+  const errors = await boot(page);
+  const problems = [];
+  for (const d of DRAWERS) {
+    errors.length = 0;
+    // Recorded, not thrown, so one broken drawer cannot hide the next.
+    try { await page.evaluate((code) => { (0, eval)(code); }, d.open); } catch (e) { problems.push(`${d.name}: ${e.message.split('\n')[0]}`); continue; }
+    await page.waitForTimeout(500);
+    const text = await page.evaluate((sel) => document.querySelector(sel)?.textContent || '', d.selector);
+    if (!text.includes(d.marker)) problems.push(`${d.name}: marker "${d.marker}" not rendered`);
+    for (const e of errors) problems.push(`${d.name}: ${e}`);
+  }
+  expect(await page.evaluate(() => window.__xss), 'a fixture payload executed').toBeUndefined();
+  expect(problems).toEqual([]);
+});
