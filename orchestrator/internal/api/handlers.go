@@ -2634,6 +2634,41 @@ func normStr(s, def string) string {
 	return s
 }
 
+// runContent is the ONLY way post-run code may obtain a run's scenario
+// (spec §7). Without a registry (unit tests) it degrades to the legacy path.
+func (h *Handler) runContent(ctx context.Context, runID string) contentregistry.RunContent {
+	if h.engine == nil {
+		return contentregistry.RunContent{Status: contentregistry.RunUnversioned}
+	}
+	reg, ok := h.engine.Registry().(*contentregistry.Registry)
+	if !ok || reg == nil {
+		var sid string
+		_ = h.db.QueryRow(ctx, `SELECT scenario_id FROM scenario_runs WHERE id = $1`, runID).Scan(&sid)
+		sc, _ := h.engine.Get(sid)
+		return contentregistry.RunContent{Status: contentregistry.RunUnversioned, Scenario: sc, ContentID: sid}
+	}
+	return reg.RunContent(ctx, runID, h.engine)
+}
+
+// runResolver is the run-scoped scenario resolver for detection verification.
+// Without a registry (unit tests) it degrades to the engine itself, which is
+// exactly the legacy (current-content) behaviour including profile expansion.
+func (h *Handler) runResolver(ctx context.Context, runID string) detectverify.ScenarioResolver {
+	if h.engine != nil {
+		if reg, ok := h.engine.Registry().(*contentregistry.Registry); ok && reg != nil {
+			return reg.ForRun(ctx, runID, h.engine)
+		}
+	}
+	return h.engine
+}
+
+// RunResolver must serve both post-run consumers. Asserted here (not in
+// contentregistry) so contentregistry never imports reporting/detectverify.
+var (
+	_ reporting.ScenarioResolver    = contentregistry.RunResolver{}
+	_ detectverify.ScenarioResolver = contentregistry.RunResolver{}
+)
+
 // persistStepMeta saves the TaskID→{technique,name,framework} map for the steps
 // actually dispatched, so results from dynamically-built ART/Caldera steps (not
 // present in the scenario's static Steps) can be interpreted correctly.
@@ -2697,7 +2732,7 @@ func (h *Handler) SubmitScenarioResult(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Look up the scenario to get framework context for interpretation
-	sc, _ := h.engine.Get(raw.ScenarioID)
+	sc := h.runContent(r.Context(), raw.RunID).Scenario
 
 	// Build a taskId→Step map for O(1) lookup. Static YAML steps come from the
 	// scenario; dynamically-built ART/Caldera steps are NOT in sc.Steps, so we

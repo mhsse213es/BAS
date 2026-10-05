@@ -312,7 +312,7 @@ func (h *Handler) runDetectionVerification(ctx context.Context, runID string) {
 	}
 	summary := detectverify.VerifyRun(ctx, detectverify.VerifyRunParams{
 		RunID: runID, ScenarioID: scenarioID, HostName: host, HostIP: ip,
-		Results: results, Scenarios: h.engine, Store: h.verification, Connectors: connectors,
+		Results: results, Scenarios: h.runResolver(ctx, runID), Store: h.verification, Connectors: connectors,
 	})
 	log.Printf("[detectverify] run %s: checked=%d attested=%d errors=%d",
 		runID, summary.Checked, summary.Attested, summary.Errors)
@@ -341,7 +341,7 @@ func (h *Handler) runDetectionVerificationForConnector(ctx context.Context, runI
 	}
 	summary := detectverify.VerifyRun(ctx, detectverify.VerifyRunParams{
 		RunID: runID, ScenarioID: scenarioID, HostName: host, HostIP: ip,
-		Results: results, Scenarios: h.engine, Store: h.verification,
+		Results: results, Scenarios: h.runResolver(ctx, runID), Store: h.verification,
 		Connectors: map[string]detectverify.Connector{cfg.Provider: conn},
 	})
 	log.Printf("[detectverify] run %s connector %s: checked=%d attested=%d errors=%d",

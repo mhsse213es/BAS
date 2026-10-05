@@ -438,7 +438,14 @@ func main() {
 	// verification_history — only manual/API attestations were. This poller
 	// closes that gap so Store.CurrentForRun/History are complete for every
 	// consumer, not just human-reviewed expectations.
-	verifyJob := verifysync.NewJob(pool, verificationStore, engine)
+	// Run-scoped content view (TCF Phase 1 §7): post-run verification and
+	// reporting interpret each run against its pinned content version. Wired
+	// before the poller starts so Tick never races the assignment.
+	runContent := func(ctx context.Context, runID string) reporting.RunContentInfo {
+		rr := contentRegistry.ForRun(ctx, runID, engine)
+		return reporting.RunContentInfo{Resolver: rr, Status: string(rr.Content.Status), Label: rr.Content.Label()}
+	}
+	verifyJob := verifysync.NewJob(pool, verificationStore, engine).WithRunContent(runContent)
 	verifySyncScheduler := exercise.NewPollScheduler(5 * time.Minute)
 	verifySyncScheduler.Start(verifyJob.Tick)
 	log.Println("[+] Automatic verdict persistence poller started")
@@ -459,7 +466,8 @@ func main() {
 		WithScenarios(engine).
 		WithVerifications(verificationStore).
 		WithRuleLibrary(rulesEngine).
-		WithSectorRegion(cfg.ThreatIntelSectors, cfg.ThreatIntelRegions)
+		WithSectorRegion(cfg.ThreatIntelSectors, cfg.ThreatIntelRegions).
+		WithRunContent(runContent)
 	log.Println("[+] Reporting engine ready")
 
 	// ── Ticketing Manager ─────────────────────────────────────────────────

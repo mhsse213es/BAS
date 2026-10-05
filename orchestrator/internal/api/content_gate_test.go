@@ -321,3 +321,29 @@ func TestRevalidation_GateDenialIsTerminal(t *testing.T) {
 		}
 	})
 }
+
+// A9 end-to-end: result interpretation uses the pinned version's step names
+// even after the disk YAML changed.
+func TestSubmitResult_InterpretsAgainstPinnedVersion(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		e, reg, _ := registryEngine(t, pool)
+		v1 := &scenario.Scenario{ID: "hp", Name: "HP", Executable: true,
+			Steps: []scenario.Step{{Name: "Original step", TechniqueID: "T1082", Framework: "custom", Command: "a"}}}
+		if err := e.SaveAs(context.Background(), v1, "user:op"); err != nil {
+			t.Fatal(err)
+		}
+		ev, _ := reg.ResolveExecutable(context.Background(), "hp")
+		seedAgent(t, pool, "hpa")
+		var runID string
+		_ = pool.QueryRow(context.Background(), `INSERT INTO scenario_runs (scenario_id, agent_id, execution_kind, content_version_id)
+			VALUES ('hp','hpa','content',$1) RETURNING id`, ev.VersionID).Scan(&runID)
+		v2 := *v1
+		v2.Steps = []scenario.Step{{Name: "Renamed step", TechniqueID: "T1082", Framework: "custom", Command: "a"}}
+		_ = e.SaveAs(context.Background(), &v2, "user:op")
+		h := New(pool, ws.NewHub(), e, "")
+		rc := h.runContent(context.Background(), runID)
+		if rc.Scenario == nil || rc.Scenario.Steps[0].Name != "Original step" {
+			t.Fatalf("pinned interpretation lost: %+v", rc.Scenario)
+		}
+	})
+}
