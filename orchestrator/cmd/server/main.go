@@ -883,14 +883,25 @@ func main() {
 		// closed, but only then.
 		{Path: "./agents/BINARIES.sha256.sig", Severity: "critical"},
 		{Path: cfg.LicensePath, Severity: "critical"},
-		// index.html is hash-verified at startup (StaticHandler), but that check
-		// runs ONCE. http.FileServer reads from disk per request, so a console
-		// edited while the orchestrator is running was served immediately and
-		// went undetected until the next restart — an attacker could alter
-		// displayed scores, hide findings, or inject script. Watching it closes
-		// the running-process window.
-		{Path: filepath.Join(resolveWWWRoot(), "index.html"), Severity: "critical"},
 	})
+	// The dashboard is hash-verified at startup (StaticHandler), but that check
+	// runs ONCE. http.FileServer reads from disk per request, so a file edited
+	// while the orchestrator is running was served immediately and went
+	// undetected until the next restart — an attacker could alter displayed
+	// scores, hide findings, or inject script. Every served dashboard file, not
+	// only index.html (G1c): the watcher closes the running-process window for
+	// the whole manifest.
+	var wwwWatch []struct {
+		Path     string
+		Severity string
+	}
+	for _, p := range wwwRootWatchList(resolveWWWRoot()) {
+		wwwWatch = append(wwwWatch, struct {
+			Path     string
+			Severity string
+		}{Path: p, Severity: "critical"})
+	}
+	integrity.WatchPaths(wwwWatch)
 	integrity.WatchDir(cfg.ScenariosDir, "critical")
 	go integrity.StartWatcher(context.Background(), pool, hub)
 	log.Println("[+] Filesystem integrity watcher started")
