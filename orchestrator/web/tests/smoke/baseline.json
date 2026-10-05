@@ -1,0 +1,29 @@
+{
+  "tabs": {
+    "agents": [],
+    "attack-coverage": [],
+    "attackpath": [],
+    "campaigns": [],
+    "compliance": [],
+    "coverage": [],
+    "dashboard": [],
+    "em": [],
+    "exercises": [],
+    "exposure": [],
+    "findings": [],
+    "initiatives": [],
+    "integrations": [],
+    "iocs": [],
+    "recommendations": [],
+    "remediation": [],
+    "reports": [],
+    "runs": [],
+    "scenarios": [],
+    "scheduled-assessments": [],
+    "settings": [],
+    "sla-report": [],
+    "threat-priority": [],
+    "variants": [],
+    "verification": []
+  }
+}
