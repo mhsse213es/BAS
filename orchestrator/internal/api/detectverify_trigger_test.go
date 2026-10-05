@@ -66,7 +66,7 @@ func TestTriggerDetectionVerification_EndToEnd(t *testing.T) {
 				},
 			},
 		}
-		if err := h.engine.Save(sc); err != nil {
+		if err := h.engine.SaveAs(context.Background(), sc, "user:test"); err != nil {
 			t.Fatalf("seed scenario: %v", err)
 		}
 
@@ -134,7 +134,7 @@ func TestAutoVerifyDetection_OnlyDispatchesAutoVerifyConnectors(t *testing.T) {
 				},
 			},
 		}
-		if err := h.engine.Save(sc); err != nil {
+		if err := h.engine.SaveAs(context.Background(), sc, "user:test"); err != nil {
 			t.Fatalf("seed scenario: %v", err)
 		}
 

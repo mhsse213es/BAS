@@ -2345,7 +2345,7 @@ func (h *Handler) CreateScenario(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, fmt.Sprintf("scenario %q already exists — choose a different id or edit the existing one", sc.ID), http.StatusConflict)
 		return
 	}
-	if err := h.engine.Save(&sc); err != nil {
+	if err := h.engine.SaveAs(r.Context(), &sc, actorFor(r)); err != nil {
 		jsonError(w, err.Error(), http.StatusUnprocessableEntity)
 		return
 	}
@@ -2373,7 +2373,7 @@ func (h *Handler) UpdateScenario(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	sc.ID = id // the URL is authoritative — ignore any mismatched body id
-	if err := h.engine.Save(&sc); err != nil {
+	if err := h.engine.SaveAs(r.Context(), &sc, actorFor(r)); err != nil {
 		jsonError(w, err.Error(), http.StatusUnprocessableEntity)
 		return
 	}
@@ -2435,7 +2435,7 @@ func (h *Handler) CloneScenario(w http.ResponseWriter, r *http.Request) {
 		clone.Name = src.Name + " (copy)"
 	}
 
-	if err := h.engine.Save(&clone); err != nil {
+	if err := h.engine.SaveAs(r.Context(), &clone, actorFor(r)); err != nil {
 		jsonError(w, err.Error(), http.StatusUnprocessableEntity)
 		return
 	}
@@ -2460,7 +2460,7 @@ func (h *Handler) UploadScenario(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, fmt.Sprintf("scenario %q already exists — rename the id in the file or delete the existing one", sc.ID), http.StatusConflict)
 		return
 	}
-	if err := h.engine.Save(sc); err != nil {
+	if err := h.engine.SaveAs(r.Context(), sc, actorFor(r)); err != nil {
 		jsonError(w, err.Error(), http.StatusUnprocessableEntity)
 		return
 	}
@@ -2482,7 +2482,7 @@ func (h *Handler) DeleteScenario(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, fmt.Sprintf("scenario %q is %s and cannot be deleted here", id, sc.Source), http.StatusBadRequest)
 		return
 	}
-	if err := h.engine.Delete(id); err != nil {
+	if err := h.engine.DeleteAs(r.Context(), id, actorFor(r)); err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
 		return
 	}

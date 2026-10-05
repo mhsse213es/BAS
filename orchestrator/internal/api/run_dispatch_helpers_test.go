@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -198,7 +199,7 @@ func minimalPostureScenario(t *testing.T, id string) (*scenario.Scenario, *scena
 		Name:       "Posture Test Scenario",
 		LocalCheck: true,
 	}
-	if err := engine.Save(sc); err != nil {
+	if err := engine.SaveAs(context.Background(), sc, "user:test"); err != nil {
 		t.Fatalf("save posture scenario: %v", err)
 	}
 	got, _ := engine.Get(id)
@@ -219,7 +220,7 @@ func minimalLiveScenario(t *testing.T, id string, steps ...scenario.Step) (*scen
 		Executable: true,
 		Steps:      steps,
 	}
-	if err := engine.Save(sc); err != nil {
+	if err := engine.SaveAs(context.Background(), sc, "user:test"); err != nil {
 		t.Fatalf("save live scenario: %v", err)
 	}
 	got, _ := engine.Get(id)

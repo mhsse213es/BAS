@@ -160,7 +160,7 @@ func TestCreateCampaign_ExecutionWindowRejection(t *testing.T) {
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
 		sc, engine := minimalLiveScenario(t, "cc-window-sc")
 		sc.LivePolicy = &scenario.LivePolicy{ExecutionWindow: "00:00-00:01"}
-		if err := engine.Save(sc); err != nil {
+		if err := engine.SaveAs(context.Background(), sc, "user:test"); err != nil {
 			t.Fatalf("re-save with LivePolicy: %v", err)
 		}
 		h := New(pool, ws.NewHub(), engine, "")
@@ -176,7 +176,7 @@ func TestCreateCampaign_ExecutionWindowRejection(t *testing.T) {
 
 		badSc, badEngine := minimalLiveScenario(t, "cc-badwindow-sc")
 		badSc.LivePolicy = &scenario.LivePolicy{ExecutionWindow: "not-a-window"}
-		if err := badEngine.Save(badSc); err != nil {
+		if err := badEngine.SaveAs(context.Background(), badSc, "user:test"); err != nil {
 			t.Fatalf("re-save with bad LivePolicy: %v", err)
 		}
 		h2 := New(pool, ws.NewHub(), badEngine, "")
