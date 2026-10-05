@@ -61,6 +61,10 @@
     {
       "header": "Initiative Layer",
       "module": "features/initiatives.js"
+    },
+    {
+      "header": "Detection Verification (SP2)",
+      "module": "features/detection-verification.js"
     }
   ],
   "pin": {
