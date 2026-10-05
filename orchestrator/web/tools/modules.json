@@ -85,6 +85,18 @@
     {
       "header": "Adversary Templates",
       "module": "features/adversaries.js"
+    },
+    {
+      "header": "Campaigns",
+      "module": "features/campaigns.js"
+    },
+    {
+      "header": "Campaign Source",
+      "module": "features/campaigns.js"
+    },
+    {
+      "header": "Threat-Informed Campaign Builder",
+      "module": "features/campaigns.js"
     }
   ],
   "pin": {

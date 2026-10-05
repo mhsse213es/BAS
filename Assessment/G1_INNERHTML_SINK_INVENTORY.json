@@ -390,1707 +390,7 @@
   "data_source_tags": "telemetry_log"
  },
  {
-  "line": 4985,
-  "function": "loadComplianceScores",
-  "target": "el",
-  "op": "=",
-  "rhs": "'<div style=\"color:var(--muted);font-size:0.78rem;padding:0.4rem 0\">No compliance data yet \u2014 run a scenario to generate scores.</div>'",
-  "rhs_len": 134,
-  "category": "static",
-  "data_source_tags": ""
- },
- {
-  "line": 4988,
-  "function": "loadComplianceScores",
-  "target": "el",
-  "op": "=",
-  "rhs": "scores.map(complianceTile).join('')",
-  "rhs_len": 35,
-  "category": "unescaped_text",
-  "data_source_tags": ""
- },
- {
-  "line": 5112,
-  "function": "refreshDashboardCampaigns",
-  "target": "el",
-  "op": "=",
-  "rhs": "'<div class=\"empty\" style=\"padding:1.5rem\">No campaigns running.</div>'",
-  "rhs_len": 71,
-  "category": "static",
-  "data_source_tags": ""
- },
- {
-  "line": 5113,
-  "function": "refreshDashboardCampaigns",
-  "target": "el",
-  "op": "=",
-  "rhs": "liveList.map(function(c) {\n      var s = c.summary || {};\n      var cds = campaignDisplayStatus(s);\n      return '<div class=\"lrow u-pointer\" onclick=\"openCampaignDetail(\\'' + x(c.id) + '\\')\">' +\n        '<div class=\"lic\" style=\"color:var(--accent);background:rgba(47,129,247,0.1)\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 16 16\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.4\"><path d=\"M1 8h3l2",
-  "rhs_len": 956,
-  "category": "unescaped_html",
-  "data_source_tags": "user_created_name"
- },
- {
-  "line": 5178,
-  "function": "loadCalderaStatus",
-  "target": "document.getElementById('cs-caldera-status')",
-  "op": "=",
-  "rhs": "dot",
-  "rhs_len": 3,
-  "category": "indirect_variable",
-  "data_source_tags": ""
- },
- {
-  "line": 5204,
-  "function": "loadCalderaStatus",
-  "target": "document.getElementById('cs-caldera-status')",
-  "op": "=",
-  "rhs": "'<span class=\"u-danger\">Error checking status</span>'",
-  "rhs_len": 53,
-  "category": "static",
-  "data_source_tags": ""
- },
- {
-  "line": 5246,
-  "function": "openConfirmDiffModal",
-  "target": "document.getElementById('confirm-diff-body')",
-  "op": "=",
-  "rhs": "diffHtml",
-  "rhs_len": 8,
-  "category": "indirect_variable",
-  "data_source_tags": ""
- },
- {
-  "line": 5319,
-  "function": "populateCoverageFilters",
-  "target": "scenSel",
-  "op": "=",
-  "rhs": "'<option value=\"\">All scenarios</option>' +\n      (state.scenarios || []).map(function(s) { return '<option value=\"' + x(s.id) + '\">' + x(s.name) + '</option>'; }).join('')",
-  "rhs_len": 172,
-  "category": "escaped",
-  "data_source_tags": "user_created_name"
- },
- {
-  "line": 5327,
-  "function": "populateCoverageFilters",
-  "target": "agSel",
-  "op": "=",
-  "rhs": "'<option value=\"\">All agents</option>' +\n      (state.agents || []).map(function(a) { return '<option value=\"' + x(a.agentId) + '\">' + x(a.hostname || a.agentId) + '</option>'; }).join('')",
-  "rhs_len": 188,
-  "category": "escaped",
-  "data_source_tags": "agent"
- },
- {
-  "line": 5362,
-  "function": "renderCoverageAnalytics",
-  "target": "tacBody",
-  "op": "=",
-  "rhs": "(d.byTactic || []).map(function(t, i) {\n      var bg = i % 2 ? 'background:rgba(255,255,255,.02)' : '';\n      var mColor = t.missed > 0 ? 'color:var(--danger);font-weight:700' : 'color:var(--muted)';\n      return '<tr style=\"' + bg + '\">' +\n        '<td>' + x(t.tactic) + '</td>' +\n        '<td style=\"text-align:center;color:var(--success)\">' + t.prevented + '</td>' +\n        '<td style=\"text-align",
-  "rhs_len": 627,
-  "category": "unescaped_html",
-  "data_source_tags": ""
- },
- {
-  "line": 5378,
-  "function": "renderCoverageAnalytics",
-  "target": "missedBody",
-  "op": "=",
-  "rhs": "missed.map(function(t, i) {\n      var bg = i % 2 ? 'background:rgba(255,255,255,.02)' : '';\n      var vColor = t.bestVerdict === 'missed' ? 'color:var(--danger)' : 'color:var(--warning)';\n      var vDot   = t.bestVerdict === 'missed' ? '\u25cf ' : '\u25d0 ';\n      return '<tr style=\"' + bg + '\">' +\n        '<td style=\"font-family:var(--font-mono);font-size:0.76rem;' + vColor + '\">' + vDot + x(t.techniqueId)",
-  "rhs_len": 770,
-  "category": "unescaped_html",
-  "data_source_tags": "user_created_name"
- },
- {
-  "line": 5411,
-  "function": "renderPrivilegeCoverage",
-  "target": "cards",
-  "op": "=",
-  "rhs": "tiers.map(function(t) {\n      var col  = tierColor[t.tier] || 'var(--muted)';\n      var lbl  = tierLabel[t.tier] || t.tier;\n      var rate = t.attempted > 0 ? t.preventionRate : 0;\n      var rateColor = rate >= 75 ? 'var(--success)' : rate >= 40 ? 'var(--warning)' : 'var(--danger)';\n      return '<div class=\"ca-card\" style=\"border-top:2px solid ' + col + '\">' +\n        '<div class=\"ca-label\" style",
-  "rhs_len": 662,
-  "category": "unescaped_html",
-  "data_source_tags": ""
- },
- {
-  "line": 5427,
-  "function": "renderPrivilegeCoverage",
-  "target": "tierBody",
-  "op": "=",
-  "rhs": "tiers.map(function(t, i) {\n      var bg   = i % 2 ? 'background:rgba(255,255,255,.02)' : '';\n      var col  = tierColor[t.tier] || 'var(--muted)';\n      var lbl  = tierLabel[t.tier] || t.tier;\n      var rate = t.attempted > 0 ? t.preventionRate : 0;\n      var rateColor = rate >= 75 ? 'color:var(--success)' : rate >= 40 ? 'color:var(--warning)' : 'color:var(--danger)';\n      var barW = Math.min(100",
-  "rhs_len": 1480,
-  "category": "unescaped_html",
-  "data_source_tags": ""
- },
- {
-  "line": 5453,
-  "function": "renderPrivilegeCoverage",
-  "target": "gapBody",
-  "op": "=",
-  "rhs": "'<tr><td colspan=\"3\" class=\"empty u-success\">\u2713 All annotated techniques tested at user tier</td></tr>'",
-  "rhs_len": 102,
-  "category": "static",
-  "data_source_tags": ""
- },
- {
-  "line": 5455,
-  "function": "renderPrivilegeCoverage",
-  "target": "gapBody",
-  "op": "=",
-  "rhs": "gaps.slice(0, 25).map(function(g, i) {\n        var bg = i % 2 ? 'background:rgba(255,255,255,.02)' : '';\n        var tierBadges = (g.tiers || []).map(function(t) {\n          var c = tierColor[t] || 'var(--muted)';\n          return '<span style=\"font-size:0.65rem;border:1px solid ' + c + ';color:' + c + ';border-radius:2px;padding:1px 4px;margin-right:2px\">' + (tierLabel[t] || t) + '</span>';\n     ",
-  "rhs_len": 839,
-  "category": "unescaped_html",
-  "data_source_tags": "user_created_name"
- },
- {
-  "line": 5468,
-  "function": "renderPrivilegeCoverage",
-  "target": "gapBody",
-  "op": "+=",
-  "rhs": "'<tr><td colspan=\"3\" style=\"text-align:center;color:var(--muted);font-size:0.72rem;padding:4px\">\u2026 and ' + (gaps.length - 25) + ' more</td></tr>'",
-  "rhs_len": 144,
-  "category": "unescaped_likely_safe",
-  "data_source_tags": ""
- },
- {
-  "line": 5490,
-  "function": "loadUnifiedTechniques",
-  "target": "sel",
-  "op": "=",
-  "rhs": "'<option value=\"all\">All tactics</option>' +\n        Object.keys(tacSet).sort().map(function(t) { return '<option value=\"' + x(t) + '\">' + x(t) + '</option>'; }).join('')",
-  "rhs_len": 170,
-  "category": "escaped",
-  "data_source_tags": ""
- },
- {
-  "line": 5566,
-  "function": "cell",
-  "target": "if (body) body",
-  "op": "=",
-  "rhs": "rows || '<tr><td colspan=\"9\" class=\"empty\">No techniques match.</td></tr>'",
-  "rhs_len": 74,
-  "category": "unescaped_html",
-  "data_source_tags": ""
- },
- {
-  "line": 5591,
-  "function": "loadCoverage",
-  "target": "document.getElementById('cov-matrix')",
-  "op": "=",
-  "rhs": "'<div class=\"empty\" style=\"padding:2rem\">' + x(e.message) + '</div>'",
-  "rhs_len": 68,
-  "category": "escaped",
-  "data_source_tags": "error_message"
- },
- {
-  "line": 5596,
-  "function": "renderCovMatrix",
-  "target": "document.getElementById('cov-matrix')",
-  "op": "=",
-  "rhs": "'<div class=\"mx\">' + (window._covTactics || []).map(function(t) {\n    var techs = t.techniques || [];\n    var cov = techs.filter(function(c) { return st[c.id] === 'cov'; }).length;\n    var cells = techs.map(function(c) {\n      var s = st[c.id] || 'none', dim = view !== 'all' && view !== s;\n      return '<div class=\"mx-cell ' + s + '\" onclick=\"openTechnique(\\'' + x(c.id) + '\\')\" style=\"' + (dim ? '",
-  "rhs_len": 753,
-  "category": "unescaped_html",
-  "data_source_tags": "user_created_name"
- },
- {
-  "line": 5612,
-  "function": "badge",
-  "target": "document.getElementById('cov-toolbar')",
-  "op": "=",
-  "rhs": "seg + '<span class=\"u-flex1\"></span>' +\n    badge('var(--success)', 'Prevented', c.cov) + badge('var(--warning)', 'Detected', c.part) +\n    badge('var(--danger)', 'Missed', c.gap) + badge('var(--muted)', 'Untested', c.none)",
-  "rhs_len": 223,
-  "category": "partial_escaped",
-  "data_source_tags": ""
- },
- {
-  "line": 5625,
-  "function": "openTechnique",
-  "target": "document.getElementById('results-export')",
-  "op": "=",
-  "rhs": "''",
-  "rhs_len": 2,
-  "category": "static_empty",
-  "data_source_tags": ""
- },
- {
-  "line": 5633,
-  "function": "list",
-  "target": "document.getElementById('results-body')",
-  "op": "=",
-  "rhs": "body",
-  "rhs_len": 4,
-  "category": "indirect_variable",
-  "data_source_tags": ""
- },
- {
-  "line": 5686,
-  "function": "loadVerificationTab",
-  "target": "sel",
-  "op": "=",
-  "rhs": "opts",
-  "rhs_len": 4,
-  "category": "indirect_variable",
-  "data_source_tags": ""
- },
- {
-  "line": 5695,
-  "function": "vfRenderDomainChips",
-  "target": "wrap",
-  "op": "=",
-  "rhs": "all.map(function(d) {\n    var active = VF.domain === d.k;\n    return '<span onclick=\"vfSetDomain(\\'' + d.k + '\\')\" style=\"cursor:pointer;text-transform:capitalize;padding:0.3rem 0.7rem;border-radius:999px;font-size:0.74rem;border:1px solid ' +\n      (active ? 'var(--accent)' : 'var(--border)') + ';color:' + (active ? 'var(--accent)' : 'var(--muted)') +\n      ';background:' + (active ? 'rgba(79,142",
-  "rhs_len": 475,
-  "category": "unescaped_html",
-  "data_source_tags": ""
- },
- {
-  "line": 5710,
-  "function": "vfLoadQueue",
-  "target": "box",
-  "op": "=",
-  "rhs": "'<div class=\"empty\" style=\"padding:2.5rem;text-align:center;color:var(--muted)\">Select a run to load its pending verifications.</div>'",
-  "rhs_len": 134,
-  "category": "static",
-  "data_source_tags": ""
- },
- {
-  "line": 5711,
-  "function": "vfLoadQueue",
-  "target": "box",
-  "op": "=",
-  "rhs": "'<div class=\"empty\" style=\"padding:2.5rem;text-align:center;color:var(--muted)\">Loading\u2026</div>'",
-  "rhs_len": 95,
-  "category": "static",
-  "data_source_tags": ""
- },
- {
-  "line": 5714,
-  "function": "vfLoadQueue",
-  "target": "box",
-  "op": "=",
-  "rhs": "'<div class=\"empty\" style=\"padding:2rem;color:var(--danger)\">' + x(d.error) + '</div>'",
-  "rhs_len": 86,
-  "category": "escaped",
-  "data_source_tags": ""
- },
- {
-  "line": 5717,
-  "function": "vfLoadQueue",
-  "target": "box",
-  "op": "=",
-  "rhs": "'<div class=\"empty\" style=\"padding:2rem;color:var(--danger)\">' + x(e.message) + '</div>'",
-  "rhs_len": 88,
-  "category": "escaped",
-  "data_source_tags": "error_message"
- },
- {
-  "line": 5726,
-  "function": "vfRenderQueue",
-  "target": "box",
-  "op": "=",
-  "rhs": "'<div class=\"empty\" style=\"padding:2.5rem;text-align:center;color:var(--muted)\">No off-host expectations for this run' + (VF.domain ? ' in the ' + x(VF.domain) + ' domain' : '') + '. Endpoint controls are verified automatically.</div>'",
-  "rhs_len": 235,
-  "category": "escaped",
-  "data_source_tags": ""
- },
- {
-  "line": 5745,
-  "function": "vfRenderQueue",
-  "target": "box",
-  "op": "=",
-  "rhs": "'<table style=\"width:100%;border-collapse:collapse\">' +\n    '<thead><tr style=\"text-align:left;font-size:0.68rem;text-transform:uppercase;letter-spacing:0.04em;color:var(--muted)\">' +\n    '<th style=\"padding:0.6rem 0.8rem\">Status</th><th style=\"padding:0.6rem 0.8rem\">Technique</th><th style=\"padding:0.6rem 0.8rem\">Expected Control</th><th style=\"padding:0.6rem 0.8rem\">Domain</th><th style=\"padding",
-  "rhs_len": 626,
-  "category": "unescaped_html",
-  "data_source_tags": ""
- },
- {
-  "line": 5774,
-  "function": "resultBtn",
-  "target": "host",
-  "op": "=",
-  "rhs": "'<div style=\"border-top:2px solid var(--accent);background:var(--bg);padding:1rem 1.1rem\">' +\n    '<div style=\"display:flex;justify-content:space-between;align-items:baseline;gap:1rem;margin-bottom:0.7rem\">' +\n      '<div><strong style=\"font-size:0.9rem\">' + x(i.providerDisplay || i.provider) + '</strong> \u00b7 <code style=\"font-size:0.72rem\">' + x(i.techniqueId) + '</code> \u00b7 <span style=\"text-transfo",
-  "rhs_len": 3013,
-  "category": "partial_escaped",
-  "data_source_tags": ""
- },
- {
-  "line": 5804,
-  "function": "vfCloseDetail",
-  "target": "if (h) h",
-  "op": "=",
-  "rhs": "''",
-  "rhs_len": 2,
-  "category": "static_empty",
-  "data_source_tags": ""
- },
- {
-  "line": 5860,
-  "function": "vfLoadEvidence",
-  "target": "host",
-  "op": "=",
-  "rhs": "'<div style=\"font-size:0.74rem;color:var(--muted)\">No evidence attached yet.</div>'",
-  "rhs_len": 83,
-  "category": "static",
-  "data_source_tags": ""
- },
- {
-  "line": 5862,
-  "function": "vfLoadEvidence",
-  "target": "host",
-  "op": "=",
-  "rhs": "list.map(function(e) {\n      return '<div style=\"display:flex;align-items:center;gap:0.6rem;padding:0.4rem 0.55rem;border:1px solid var(--border);border-radius:6px;margin-bottom:0.35rem;font-size:0.76rem\">' +\n        '<span class=\"u-success\">&#10003;</span>' +\n        '<a href=\"/api/evidence/' + encodeURIComponent(e.id) + '/download\" style=\"color:var(--accent);text-decoration:none\">' + x(e.display",
-  "rhs_len": 1047,
-  "category": "unescaped_html",
-  "data_source_tags": ""
- },
- {
-  "line": 5873,
-  "function": "vfLoadEvidence",
-  "target": "host",
-  "op": "=",
-  "rhs": "'<div style=\"font-size:0.74rem;color:var(--danger)\">Failed to load evidence.</div>'",
-  "rhs_len": 83,
-  "category": "static",
-  "data_source_tags": ""
- },
- {
-  "line": 5896,
-  "function": "vfToggleHistory",
-  "target": "host",
-  "op": "=",
-  "rhs": "''",
-  "rhs_len": 2,
-  "category": "static_empty",
-  "data_source_tags": ""
- },
- {
-  "line": 5898,
-  "function": "vfToggleHistory",
-  "target": "host",
-  "op": "=",
-  "rhs": "'<div style=\"font-size:0.74rem;color:var(--muted)\">Loading history\u2026</div>'",
-  "rhs_len": 74,
-  "category": "static",
-  "data_source_tags": ""
- },
- {
-  "line": 5901,
-  "function": "vfToggleHistory",
-  "target": "host",
-  "op": "=",
-  "rhs": "'<div style=\"font-size:0.74rem;color:var(--muted)\">No attestations recorded yet.</div>'",
-  "rhs_len": 87,
-  "category": "static",
-  "data_source_tags": ""
- },
- {
-  "line": 5902,
-  "function": "vfToggleHistory",
-  "target": "host",
-  "op": "=",
-  "rhs": "'<div style=\"font-size:0.72rem;text-transform:uppercase;letter-spacing:0.04em;color:var(--muted);margin-bottom:0.4rem\">Attestation history (immutable)</div>' +\n      h.map(function(r) {\n        return '<div style=\"display:flex;gap:0.6rem;font-size:0.74rem;padding:0.35rem 0;border-bottom:1px solid var(--border)\">' +\n          '<span style=\"font-weight:700;color:' + vfStatusColor(r.active ? (r.workf",
-  "rhs_len": 963,
-  "category": "unescaped_html",
-  "data_source_tags": ""
- },
- {
-  "line": 5914,
-  "function": "vfToggleHistory",
-  "target": "host",
-  "op": "=",
-  "rhs": "'<div style=\"font-size:0.74rem;color:var(--danger)\">Failed to load history.</div>'",
-  "rhs_len": 82,
-  "category": "static",
-  "data_source_tags": ""
- },
- {
-  "line": 5959,
-  "function": "renderInitiativesList",
-  "target": "tbody",
-  "op": "=",
-  "rhs": "'<tr><td colspan=\"5\" class=\"empty\">No initiatives yet.</td></tr>'",
-  "rhs_len": 65,
-  "category": "static",
-  "data_source_tags": ""
- },
- {
-  "line": 5962,
-  "function": "renderInitiativesList",
-  "target": "tbody",
-  "op": "=",
-  "rhs": "INITIATIVES.list.map(function(it, idx) {\n    var col = initiativeStateColor(it.State);\n    var menuId = 'init-menu-' + idx;\n    var canDelete = it.State === 'archived' && ROLE === 'admin';\n    return '<tr onclick=\"openInitiativeDrawer(\\'' + x(it.ID) + '\\')\" class=\"u-pointer\">' +\n      '<td>' + x(it.Name) + '</td>' +\n      '<td><span class=\"badge\" style=\"color:' + col + ';border-color:' + col + '\">",
-  "rhs_len": 1181,
-  "category": "unescaped_html",
-  "data_source_tags": ""
- },
- {
-  "line": 6030,
-  "function": "renderInitiativeDrawer",
-  "target": "document.getElementById('init-drawer-body')",
-  "op": "=",
-  "rhs": "'<div class=\"u-mb-1\">' +\n      '<span class=\"badge\" style=\"color:' + col + ';border-color:' + col + '\">' + initiativeStateLabel(it.State) + '</span> ' +\n      '<span class=\"tiny muted\">Created by ' + x(it.CreatedBy || '\u2014') + ' \u00b7 ' + x(fmtDate(it.CreatedAt)) + '</span>' +\n    '</div>' +\n    '<div style=\"display:flex;gap:0.5rem;margin-bottom:1rem\">' +\n      (it.State === 'active' ? '<button class=\"b",
-  "rhs_len": 1855,
-  "category": "partial_escaped",
-  "data_source_tags": ""
- },
- {
-  "line": 6070,
-  "function": "initiativeShowDrawerError",
-  "target": "if (el) el",
-  "op": "=",
-  "rhs": "msg ? '<div class=\"tiny u-danger\">' + x(msg) + '</div>' : ''",
-  "rhs_len": 60,
-  "category": "escaped",
-  "data_source_tags": ""
- },
- {
-  "line": 6098,
-  "function": "openInitiativeCreateDrawer",
-  "target": "document.getElementById('init-create-error')",
-  "op": "=",
-  "rhs": "''",
-  "rhs_len": 2,
-  "category": "static_empty",
-  "data_source_tags": ""
- },
- {
-  "line": 6110,
-  "function": "submitInitiativeCreate",
-  "target": "errEl",
-  "op": "=",
-  "rhs": "'<div class=\"tiny u-danger\">Name is required.</div>'",
-  "rhs_len": 52,
-  "category": "static",
-  "data_source_tags": ""
- },
- {
-  "line": 6113,
-  "function": "submitInitiativeCreate",
-  "target": "errEl",
-  "op": "=",
-  "rhs": "''",
-  "rhs_len": 2,
-  "category": "static_empty",
-  "data_source_tags": ""
- },
- {
-  "line": 6116,
-  "function": "submitInitiativeCreate",
-  "target": "errEl",
-  "op": "=",
-  "rhs": "'<div class=\"tiny u-danger\">' + x(res.error) + '</div>'",
-  "rhs_len": 55,
-  "category": "escaped",
-  "data_source_tags": "api_response"
- },
- {
-  "line": 6121,
-  "function": "submitInitiativeCreate",
-  "target": "errEl",
-  "op": "=",
-  "rhs": "'<div class=\"tiny u-danger\">' + x(e.message) + '</div>'",
-  "rhs_len": 55,
-  "category": "escaped",
-  "data_source_tags": "error_message"
- },
- {
-  "line": 6144,
-  "function": "openInitiativeAttachDrawer",
-  "target": "document.getElementById('init-attach-error')",
-  "op": "=",
-  "rhs": "''",
-  "rhs_len": 2,
-  "category": "static_empty",
-  "data_source_tags": ""
- },
- {
-  "line": 6145,
-  "function": "openInitiativeAttachDrawer",
-  "target": "document.getElementById('init-attach-list')",
-  "op": "=",
-  "rhs": "'<div class=\"tiny muted\" style=\"padding:0.75rem\">Loading\u2026</div>'",
-  "rhs_len": 64,
-  "category": "static",
-  "data_source_tags": ""
- },
- {
-  "line": 6148,
-  "function": "openInitiativeAttachDrawer",
-  "target": "document.getElementById('init-attach-list')",
-  "op": "=",
-  "rhs": "'<div class=\"tiny\" style=\"color:var(--danger);padding:0.75rem\">' + x(res.error) + '</div>'",
-  "rhs_len": 90,
-  "category": "escaped",
-  "data_source_tags": "api_response"
- },
- {
-  "line": 6151,
-  "function": "openInitiativeAttachDrawer",
-  "target": "document.getElementById('init-attach-list')",
-  "op": "=",
-  "rhs": "'<div class=\"tiny\" style=\"color:var(--danger);padding:0.75rem\">' + x(e.message) + '</div>'",
-  "rhs_len": 90,
-  "category": "escaped",
-  "data_source_tags": "error_message"
- },
- {
-  "line": 6165,
-  "function": "initiativeRenderAttachList",
-  "target": "list",
-  "op": "=",
-  "rhs": "'<div class=\"tiny muted\" style=\"padding:0.75rem\">No unassigned jobs found.</div>'",
-  "rhs_len": 81,
-  "category": "static",
-  "data_source_tags": ""
- },
- {
-  "line": 6168,
-  "function": "initiativeRenderAttachList",
-  "target": "list",
-  "op": "=",
-  "rhs": "filtered.map(function(j) {\n    var checked = j.id === state.INIT_ATTACH_SELECTED ? 'checked' : '';\n    return '<label style=\"display:flex;align-items:center;gap:0.5rem;padding:0.5rem 0.75rem;border-bottom:1px solid var(--border);cursor:pointer;font-size:0.78rem\">' +\n      '<input type=\"radio\" name=\"init-attach-radio\" value=\"' + x(j.id) + '\" ' + checked + ' onchange=\"INIT_ATTACH_SELECTED=this.value",
-  "rhs_len": 639,
-  "category": "unescaped_html",
-  "data_source_tags": ""
- },
- {
-  "line": 6182,
-  "function": "submitInitiativeAttach",
-  "target": "errEl",
-  "op": "=",
-  "rhs": "'<div class=\"tiny u-danger\">Select a job to attach.</div>'",
-  "rhs_len": 58,
-  "category": "static",
-  "data_source_tags": ""
- },
- {
-  "line": 6185,
-  "function": "submitInitiativeAttach",
-  "target": "errEl",
-  "op": "=",
-  "rhs": "''",
-  "rhs_len": 2,
-  "category": "static_empty",
-  "data_source_tags": ""
- },
- {
-  "line": 6189,
-  "function": "submitInitiativeAttach",
-  "target": "errEl",
-  "op": "=",
-  "rhs": "'<div class=\"tiny u-danger\">' + x(res.error) + '</div>'",
-  "rhs_len": 55,
-  "category": "escaped",
-  "data_source_tags": "api_response"
- },
- {
-  "line": 6193,
-  "function": "submitInitiativeAttach",
-  "target": "errEl",
-  "op": "=",
-  "rhs": "'<div class=\"tiny u-danger\">' + x(e.message) + '</div>'",
-  "rhs_len": 55,
-  "category": "escaped",
-  "data_source_tags": "error_message"
- },
- {
-  "line": 6215,
-  "function": "renderRunIOCToolbar",
-  "target": "el",
-  "op": "=",
-  "rhs": "covSegHtml(types, _runIOCTypeFilter, 'setRunIOCTypeFilter', function(k) { return counts[k] || 0; }) +\n    '<input type=\"text\" id=\"run-ioc-search\" placeholder=\"Search indicators\u2026\" value=\"' + x(_runIOCSearch) + '\" oninput=\"setRunIOCSearch(this.value)\" style=\"padding:0.35rem 0.6rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:0.78re",
-  "rhs_len": 440,
-  "category": "partial_escaped",
-  "data_source_tags": ""
- },
- {
-  "line": 6257,
-  "function": "renderRunIOCList",
-  "target": "el",
-  "op": "=",
-  "rhs": "'<div style=\"color:var(--muted);font-size:0.8rem;padding:2.5rem 0;text-align:center\">' +\n      (state._runIOCsAll.length ? 'No indicators match this filter.' : 'No indicators extracted from this run.') + '</div>'",
-  "rhs_len": 212,
-  "category": "escaped",
-  "data_source_tags": ""
- },
- {
-  "line": 6262,
-  "function": "renderRunIOCList",
-  "target": "el",
-  "op": "=",
-  "rhs": "list.map(function(ind, idx) {\n    var expanded = _runIOCExpandedIdx === idx;\n    var techs = (ind.techniqueIds || []).map(function(t) {\n      return '<code style=\"font-size:0.66rem;color:var(--muted);margin-right:3px\">' + x(t) + '</code>';\n    }).join('');\n    var tags = (ind.tags || []).map(function(t) {\n      return '<span class=\"tiny\" style=\"background:var(--elevated);border:1px solid var(--bor",
-  "rhs_len": 2819,
-  "category": "unescaped_html",
-  "data_source_tags": ""
- },
- {
-  "line": 6311,
-  "function": "loadIOCRegistry",
-  "target": "if (el) el",
-  "op": "=",
-  "rhs": "''",
-  "rhs_len": 2,
-  "category": "static_empty",
-  "data_source_tags": ""
- },
- {
-  "line": 6329,
-  "function": "loadIOCRegistry",
-  "target": "tbody",
-  "op": "=",
-  "rhs": "'<tr><td colspan=\"9\" class=\"empty\">Loading\u2026</td></tr>'",
-  "rhs_len": 54,
-  "category": "static",
-  "data_source_tags": ""
- },
- {
-  "line": 6338,
-  "function": "loadIOCRegistry",
-  "target": "tbody",
-  "op": "=",
-  "rhs": "'<tr><td colspan=\"9\" class=\"empty\">Failed to load: ' + x(e.message || 'unknown error') + '</td></tr>'",
-  "rhs_len": 101,
-  "category": "escaped",
-  "data_source_tags": "error_message"
- },
- {
-  "line": 6359,
-  "function": "tile",
-  "target": "el",
-  "op": "=",
-  "rhs": "tile('Most Detected', result.mostDetected, ' detections') +\n    tile('Highest Bypass Rate', result.highestBypassRate, ' bypasses') +\n    tile('Frequently Reused', result.frequentlyReused, ' sightings') +\n    tile('Longest Surviving', result.longestSurviving, ' sightings')",
-  "rhs_len": 272,
-  "category": "indirect_builder",
-  "data_source_tags": "api_response"
- },
- {
-  "line": 6369,
-  "function": "renderIOCRegistryTable",
-  "target": "tbody",
-  "op": "=",
-  "rhs": "'<tr><td colspan=\"9\" class=\"empty\">No indicators match this filter.</td></tr>'",
-  "rhs_len": 78,
-  "category": "static",
-  "data_source_tags": ""
- },
- {
-  "line": 6372,
-  "function": "renderIOCRegistryTable",
-  "target": "tbody",
-  "op": "=",
-  "rhs": "_iocRegistryRows.map(function(row, idx) {\n    var suppressedBadge = row.suppressed ? ' <span class=\"sbadge\" style=\"background:rgba(154,169,188,.12);color:var(--muted)\" title=\"' + x(row.suppressionReason || '') + '\">suppressed</span>' : '';\n    return '<tr class=\"u-pointer\" onclick=\"openIOCDetail(' + idx + ')\">' +\n      '<td><span class=\"tiny\" style=\"background:var(--elevated);border:1px solid var(",
-  "rhs_len": 1425,
-  "category": "unescaped_html",
-  "data_source_tags": ""
- },
- {
-  "line": 6420,
-  "function": "openIOCDetail",
-  "target": "document.getElementById('results-export')",
-  "op": "=",
-  "rhs": "''",
-  "rhs_len": 2,
-  "category": "static_empty",
-  "data_source_tags": ""
- },
- {
-  "line": 6437,
-  "function": "rowHtml",
-  "target": "document.getElementById('results-body')",
-  "op": "=",
-  "rhs": "body",
-  "rhs_len": 4,
-  "category": "indirect_variable",
-  "data_source_tags": ""
- },
- {
-  "line": 6456,
-  "function": "rowHtml",
-  "target": "el",
-  "op": "=",
-  "rhs": "sections || '<div class=\"tiny muted\">No relationships recorded.</div>'",
-  "rhs_len": 70,
-  "category": "unescaped_html",
-  "data_source_tags": ""
- },
- {
-  "line": 6459,
-  "function": "rowHtml",
-  "target": "if (el) el",
-  "op": "=",
-  "rhs": "'<div class=\"tiny muted\">Relationships unavailable.</div>'",
-  "rhs_len": 58,
-  "category": "static",
-  "data_source_tags": ""
- },
- {
-  "line": 6561,
-  "function": "openRerunReview",
-  "target": "document.getElementById('rerun-review-body')",
-  "op": "=",
-  "rhs": "rows.map(function(r) {\n    return '<div class=\"conn-cfg-row\"><span class=\"conn-cfg-label\">' + r[0] + '</span><span class=\"conn-cfg-val\">' + r[1] + '</span></div>';\n  }).join('')",
-  "rhs_len": 177,
-  "category": "unescaped_html",
-  "data_source_tags": ""
- },
- {
-  "line": 6608,
-  "function": "startRerunFromReview",
-  "target": "btn",
-  "op": "=",
-  "rhs": "'&#9654; Start Re-run'",
-  "rhs_len": 22,
-  "category": "static",
-  "data_source_tags": ""
- },
- {
-  "line": 6615,
-  "function": "startRerunFromReview",
-  "target": "btn",
-  "op": "=",
-  "rhs": "'&#9654; Start Re-run'",
-  "rhs_len": 22,
-  "category": "static",
-  "data_source_tags": ""
- },
- {
-  "line": 6655,
-  "function": "openCampaignRerunReview",
-  "target": "document.getElementById('rerun-review-body')",
-  "op": "=",
-  "rhs": "rows.map(function(r) {\n    return '<div class=\"conn-cfg-row\"><span class=\"conn-cfg-label\">' + r[0] + '</span><span class=\"conn-cfg-val\">' + r[1] + '</span></div>';\n  }).join('')",
-  "rhs_len": 177,
-  "category": "unescaped_html",
-  "data_source_tags": ""
- },
- {
-  "line": 6688,
-  "function": "startCampaignRerunFromReview",
-  "target": "btn",
-  "op": "=",
-  "rhs": "'&#9654; Start Re-run'",
-  "rhs_len": 22,
-  "category": "static",
-  "data_source_tags": ""
- },
- {
-  "line": 6695,
-  "function": "startCampaignRerunFromReview",
-  "target": "btn",
-  "op": "=",
-  "rhs": "'&#9654; Start Re-run'",
-  "rhs_len": 22,
-  "category": "static",
-  "data_source_tags": ""
- },
- {
-  "line": 6801,
-  "function": "renderLicenseLockedScreen",
-  "target": "el",
-  "op": "=",
-  "rhs": "'<div style=\"max-width:520px;text-align:center;color:var(--text,#e6e6e6)\">' +\n      '<div style=\"font-size:2.5rem;margin-bottom:1rem\">&#x1F512;</div>' +\n      '<h1 style=\"font-size:1.4rem;margin-bottom:0.75rem\">BAS LICENSE EXPIRED</h1>' +\n      '<p style=\"color:var(--muted,#9aa9bc);line-height:1.6;margin-bottom:1rem\">This Audspect BAS Server is currently unavailable because its license and grace p",
-  "rhs_len": 1040,
-  "category": "escaped",
-  "data_source_tags": ""
- },
- {
-  "line": 6864,
-  "function": "renderLicenseGraceBanner",
-  "target": "el",
-  "op": "=",
-  "rhs": "_licenseBannerHTML(info) +\n    '<button onclick=\"_dismissLicenseGraceBanner()\" aria-label=\"Dismiss\" title=\"Dismiss\" ' +\n      'style=\"position:absolute;top:0.5rem;right:0.6rem;width:24px;height:24px;display:flex;align-items:center;justify-content:center;' +\n      'background:transparent;border:none;color:inherit;font-size:1.1rem;line-height:1;cursor:pointer;opacity:0.75\" ' +\n      'onmouseover=\"th",
-  "rhs_len": 475,
-  "category": "indirect_builder",
-  "data_source_tags": ""
- },
- {
-  "line": 6881,
-  "function": "maybeShowLicenseGraceModal",
-  "target": "overlay",
-  "op": "=",
-  "rhs": "'<div style=\"max-width:480px;background:var(--surface,#152338);border:1px solid var(--warning,#d29922);border-radius:8px;padding:1.5rem;color:var(--text,#e6e6e6)\">' +\n      _licenseBannerHTML(info) +\n      '<div style=\"text-align:right;margin-top:1rem\"><button id=\"license-grace-modal-dismiss\" style=\"padding:0.4rem 1rem;border-radius:6px;border:1px solid var(--border,#22324a);background:transparent",
-  "rhs_len": 469,
-  "category": "indirect_builder",
-  "data_source_tags": ""
- },
- {
-  "line": 7075,
-  "function": "goToProfile",
-  "target": "el",
-  "op": "=",
-  "rhs": "d.permissions.slice().sort().map(function(p) {\n      return '<span class=\"tag\" style=\"display:inline-block;margin:0 0.3rem 0.3rem 0\">' + x(p) + '</span>';\n    }).join('')",
-  "rhs_len": 170,
-  "category": "escaped",
-  "data_source_tags": ""
- },
- {
-  "line": 7131,
-  "function": "loadAgentRiskSummary",
-  "target": "if (tb) tb",
-  "op": "=",
-  "rhs": "'<tr><td colspan=\"7\" class=\"empty\">Loading\u2026</td></tr>'",
-  "rhs_len": 54,
-  "category": "static",
-  "data_source_tags": ""
- },
- {
-  "line": 7149,
-  "function": "renderAgentRiskSummary",
-  "target": "tb",
-  "op": "=",
-  "rhs": "'<tr><td colspan=\"7\" class=\"empty\">No agents to show.</td></tr>'",
-  "rhs_len": 64,
-  "category": "static",
-  "data_source_tags": ""
- },
- {
-  "line": 7159,
-  "function": "renderAgentRiskSummary",
-  "target": "tb",
-  "op": "=",
-  "rhs": "rows.map(function(a) {\n    return '<tr>' +\n      '<td>' + x(a.hostname || a.agentId) + '</td>' +\n      (a.measurable\n        ? '<td style=\"color:' + _riskScoreColor(a.healthScore) + ';font-weight:700\">' + a.healthScore + '</td>'\n        : '<td class=\"u-muted\" title=\"Nothing collected for this endpoint yet \u2014 an absent score is not a safe score\">\u2014 no data</td>') +\n      '<td>' + (a.criticalityRisk |",
-  "rhs_len": 783,
-  "category": "unescaped_html",
-  "data_source_tags": "agent"
- },
- {
-  "line": 7288,
-  "function": "loadThreatIntelConfig",
-  "target": "if (panel) panel",
-  "op": "=",
-  "rhs": "''",
-  "rhs_len": 2,
-  "category": "static_empty",
-  "data_source_tags": ""
- },
- {
-  "line": 7297,
-  "function": "loadThreatIntelConfig",
-  "target": "panel",
-  "op": "=",
-  "rhs": "'<div class=\"kpi-row\">' +\n        urlField +\n        '<input id=\"ti-' + name + '-key\" type=\"password\" placeholder=\"API key (leave blank to keep current)\" class=\"inp-sm u-flex1\">' +\n        insecureField +\n        '<label class=\"tiny muted\" style=\"display:flex;align-items:center;gap:0.3rem\"><input type=\"checkbox\" id=\"ti-' + name + '-enabled\" ' + (cfg.enabled ? 'checked' : '') + '> Enabled</label>' ",
-  "rhs_len": 1002,
-  "category": "partial_escaped",
-  "data_source_tags": ""
- },
- {
-  "line": 7403,
-  "function": "loadTAXIIConnectors",
-  "target": "tbody",
-  "op": "=",
-  "rhs": "'<tr><td colspan=\"6\" class=\"empty\">Loading\u2026</td></tr>'",
-  "rhs_len": 54,
-  "category": "static",
-  "data_source_tags": ""
- },
- {
-  "line": 7408,
-  "function": "loadTAXIIConnectors",
-  "target": "tbody",
-  "op": "=",
-  "rhs": "'<tr><td colspan=\"6\" class=\"empty\">Failed to load: ' + x(e.message || 'unknown error') + '</td></tr>'",
-  "rhs_len": 101,
-  "category": "escaped",
-  "data_source_tags": "error_message"
- },
- {
-  "line": 7415,
-  "function": "renderTAXIIConnectorsList",
-  "target": "tbody",
-  "op": "=",
-  "rhs": "'<tr><td colspan=\"6\" class=\"empty\">No TAXII connectors configured yet.</td></tr>'",
-  "rhs_len": 81,
-  "category": "static",
-  "data_source_tags": ""
- },
- {
-  "line": 7418,
-  "function": "renderTAXIIConnectorsList",
-  "target": "tbody",
-  "op": "=",
-  "rhs": "TAXII_CONNECTORS.map(function(c) {\n    var lastPoll = c.lastPollAt ? ago(c.lastPollAt) : 'Never';\n    var resultColor = c.lastPollStatus === 'ok' ? 'var(--success)' : (c.lastPollStatus === 'error' ? 'var(--danger)' : 'var(--muted)');\n    var summary = c.lastPollSummary || {};\n    var resultText = c.lastPollStatus === 'ok'\n      ? (summary.processed || 0) + ' processed, ' + (summary.skipped || 0) +",
-  "rhs_len": 1439,
-  "category": "unescaped_html",
-  "data_source_tags": "user_created_name"
- },
- {
-  "line": 7594,
-  "function": "loadARTContentStatus",
-  "target": "statusEl",
-  "op": "=",
-  "rhs": "'<span style=\"display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--success);margin-right:6px;vertical-align:middle\"></span><span class=\"u-success\">Seeded</span>'",
-  "rhs_len": 185,
-  "category": "static",
-  "data_source_tags": ""
- },
- {
-  "line": 7596,
-  "function": "loadARTContentStatus",
-  "target": "statusEl",
-  "op": "=",
-  "rhs": "'<span style=\"display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--warning);margin-right:6px;vertical-align:middle\"></span><span class=\"u-warning\">Not seeded</span>'",
-  "rhs_len": 189,
-  "category": "static",
-  "data_source_tags": ""
- },
- {
-  "line": 7636,
-  "function": "loadARTContentStatus",
-  "target": "document.getElementById('cs-art-status')",
-  "op": "=",
-  "rhs": "'<span class=\"u-danger\">Error checking status</span>'",
-  "rhs_len": 53,
-  "category": "static",
-  "data_source_tags": ""
- },
- {
-  "line": 7649,
-  "function": "toggleSimCoverage",
-  "target": "if (car) car",
-  "op": "=",
-  "rhs": "SIM_COV_OPEN ? '&#9660;' : '&#9654;'",
-  "rhs_len": 36,
-  "category": "static",
-  "data_source_tags": ""
- },
- {
-  "line": 7762,
-  "function": "loadSimCoverage",
-  "target": "bodyEl",
-  "op": "=",
-  "rhs": "rows.map(function(r, i) {\n        var bg = i % 2 === 0 ? '' : 'background:rgba(255,255,255,.02)';\n        var isVariantRow = r[0].indexOf('Variant Engine') !== -1;\n        var isSection = !!sectionKeys[r[0]];\n        var textStyle = isVariantRow ? 'font-weight:700;color:var(--accent)'\n                      : isSection    ? 'font-weight:700;color:var(--text)'\n                      :                ",
-  "rhs_len": 2162,
-  "category": "unescaped_html",
-  "data_source_tags": ""
- },
- {
-  "line": 8269,
-  "function": "loadAttackPath",
-  "target": "if (body) body",
-  "op": "=",
-  "rhs": "'<div class=\"empty\" style=\"padding:2rem\">Loading\u2026</div>'",
-  "rhs_len": 56,
-  "category": "static",
-  "data_source_tags": ""
- },
- {
-  "line": 8324,
-  "function": "loadExposureAssets",
-  "target": "body",
-  "op": "=",
-  "rhs": "'<tr><td colspan=\"8\" class=\"empty\">Loading\u2026</td></tr>'",
-  "rhs_len": 54,
-  "category": "static",
-  "data_source_tags": ""
- },
- {
-  "line": 8327,
-  "function": "loadExposureAssets",
-  "target": "body",
-  "op": "=",
-  "rhs": "'<tr><td colspan=\"8\" class=\"empty\">No assets found \u2014 enroll an agent or run attack-path collection.</td></tr>'",
-  "rhs_len": 110,
-  "category": "static",
-  "data_source_tags": ""
- },
- {
-  "line": 8330,
-  "function": "loadExposureAssets",
-  "target": "body",
-  "op": "=",
-  "rhs": "assets.map(function(a) {\n      return '<tr class=\"u-pointer\" onclick=\"openExposureDetail(\\'' + x(a.asset.hostKey) + '\\')\">' +\n        '<td class=\"u-fw600\">' + x(a.asset.label) + '</td>' +\n        '<td>' + (a.asset.managed ? '<span class=\"badge\">Managed</span>' : '<span class=\"badge u-muted\">Discovered</span>') + '</td>' +\n        '<td style=\"color:' + apColor(a.exposureScore) + ';font-weight:700\">",
-  "rhs_len": 926,
-  "category": "unescaped_html",
-  "data_source_tags": ""
- },
- {
-  "line": 8343,
-  "function": "loadExposureAssets",
-  "target": "body",
-  "op": "=",
-  "rhs": "'<tr><td colspan=\"8\" class=\"empty u-danger\">Failed to load: ' + x(e.message) + '</td></tr>'",
-  "rhs_len": 91,
-  "category": "escaped",
-  "data_source_tags": "error_message"
- },
- {
-  "line": 8413,
-  "function": "renderExecDashboard",
-  "target": "el",
-  "op": "=",
-  "rhs": "edKpiCard('Risk Score', current.avgRiskScore, risk) +\n    edKpiCard('Exposure Score', current.exposureScore, exp, noAttackPathData) +\n    edKpiCard('Detection Coverage', current.detectionCoverage, det, noAttackPathData) +\n    edKpiCard('Fleet Assets', current.assetCount, cnt)",
-  "rhs_len": 276,
-  "category": "indirect_builder",
-  "data_source_tags": ""
- },
- {
-  "line": 8469,
-  "function": "renderForecast",
-  "target": "el",
-  "op": "=",
-  "rhs": "''",
-  "rhs_len": 2,
-  "category": "static_empty",
-  "data_source_tags": ""
- },
- {
-  "line": 8476,
-  "function": "renderForecast",
-  "target": "el",
-  "op": "=",
-  "rhs": "'<div class=\"card\" style=\"margin-top:1rem;padding:1rem\">' +\n    '<div style=\"display:flex;justify-content:space-between;align-items:center\">' +\n      '<div><span class=\"kpi-label\">Risk-score forecast</span> &nbsp;' + edDirectionLabel(fc) + '</div>' +\n      conf +\n    '</div>' +\n    (chart || '<div class=\"tiny muted\" style=\"margin-top:0.4rem\">Not enough data to chart yet.</div>') +\n    note +\n  '</",
-  "rhs_len": 405,
-  "category": "partial_escaped",
-  "data_source_tags": ""
- },
- {
-  "line": 8490,
-  "function": "renderExposure",
-  "target": "el",
-  "op": "=",
-  "rhs": "'<div class=\"card\" style=\"margin-top:1rem;padding:1rem\">' +\n      '<span class=\"kpi-label\">Open exposure windows</span>' +\n      '<div class=\"tiny muted\" style=\"margin-top:0.4rem\">No open findings.</div></div>'",
-  "rhs_len": 210,
-  "category": "static",
-  "data_source_tags": ""
- },
- {
-  "line": 8512,
-  "function": "stat",
-  "target": "el",
-  "op": "=",
-  "rhs": "'<div class=\"card\" style=\"margin-top:1rem;padding:1rem\">' +\n    '<span class=\"kpi-label\">Open exposure windows</span>' + strip +\n    '<div class=\"tbl-wrap\"><table><thead><tr>' +\n      '<th>Technique</th><th>Severity</th><th>Days open</th><th>First seen</th><th>Reopened</th>' +\n    '</tr></thead><tbody>' + rows + '</tbody></table></div>' +\n  '</div>'",
-  "rhs_len": 351,
-  "category": "unescaped_html",
-  "data_source_tags": ""
- },
- {
-  "line": 8560,
-  "function": "loadCoverageMatrix",
-  "target": "body",
-  "op": "=",
-  "rhs": "'<tr><td colspan=\"6\" class=\"empty\">Loading&hellip;</td></tr>'",
-  "rhs_len": 61,
-  "category": "static",
-  "data_source_tags": ""
- },
- {
-  "line": 8566,
-  "function": "loadCoverageMatrix",
-  "target": "body",
-  "op": "=",
-  "rhs": "''",
-  "rhs_len": 2,
-  "category": "static_empty",
-  "data_source_tags": ""
- },
- {
-  "line": 8571,
-  "function": "loadCoverageMatrix",
-  "target": "body",
-  "op": "=",
-  "rhs": "rows.map(function(r) {\n        return '<tr>' +\n          '<td class=\"u-fw600\">' + x(r.techniqueId) + '</td>' +\n          '<td>' + covStatusCell(r.simulationExists) + '</td>' +\n          '<td>' + covStatusCell(r.detectionProfileExists) + '</td>' +\n          '<td>' + covStatusCell(r.purpleExerciseExists) + '</td>' +\n          '<td>' + covStatusCell(r.complianceMappingExists) + '</td>' +\n          '<",
-  "rhs_len": 495,
-  "category": "unescaped_html",
-  "data_source_tags": ""
- },
- {
-  "line": 8583,
-  "function": "loadCoverageMatrix",
-  "target": "body",
-  "op": "=",
-  "rhs": "'<tr><td colspan=\"6\" class=\"empty u-danger\">Failed to load: ' + x(e.message) + '</td></tr>'",
-  "rhs_len": 91,
-  "category": "escaped",
-  "data_source_tags": "error_message"
- },
- {
-  "line": 8609,
-  "function": "loadThreatPriorityActors",
-  "target": "body",
-  "op": "=",
-  "rhs": "'<tr><td colspan=\"5\" class=\"empty\">Loading&hellip;</td></tr>'",
-  "rhs_len": 61,
-  "category": "static",
-  "data_source_tags": ""
- },
- {
-  "line": 8614,
-  "function": "loadThreatPriorityActors",
-  "target": "body",
-  "op": "=",
-  "rhs": "''",
-  "rhs_len": 2,
-  "category": "static_empty",
-  "data_source_tags": ""
- },
- {
-  "line": 8619,
-  "function": "loadThreatPriorityActors",
-  "target": "body",
-  "op": "=",
-  "rhs": "TP_ACTOR_CACHE.map(function(a) {\n        return '<tr class=\"u-pointer\" onclick=\\'showThreatPriorityDetail(' + JSON.stringify(a.actorName).replace(/'/g, \"&#39;\") + ')\\'>' +\n          '<td class=\"u-fw600\">' + x(a.actorName) + '</td>' +\n          '<td>' + tpTierBadge(a.tier) + '</td>' +\n          '<td>' + x(a.score) + '</td>' +\n          '<td>' + tpTrendCell(a.trend, a.trendDelta) + '</td>' +\n       ",
-  "rhs_len": 513,
-  "category": "unescaped_html",
-  "data_source_tags": ""
- },
- {
-  "line": 8630,
-  "function": "loadThreatPriorityActors",
-  "target": "body",
-  "op": "=",
-  "rhs": "'<tr><td colspan=\"5\" class=\"empty u-danger\">Failed to load: ' + x(e.message) + '</td></tr>'",
-  "rhs_len": 91,
-  "category": "escaped",
-  "data_source_tags": "error_message"
- },
- {
-  "line": 8642,
-  "function": "showThreatPriorityDetail",
-  "target": "document.getElementById('tp-detail-factors')",
-  "op": "=",
-  "rhs": "'<div class=\"empty u-danger\">Failed to load: ' + x(e.message) + '</div>'",
-  "rhs_len": 72,
-  "category": "escaped",
-  "data_source_tags": "error_message"
- },
- {
-  "line": 8647,
-  "function": "renderThreatPriorityDetail",
-  "target": "document.getElementById('tp-detail-title')",
-  "op": "=",
-  "rhs": "x(d.actorName) +\n    (d.canonicalGroupId ? '  <span class=\"tiny muted\" style=\"font-weight:400\">&middot; MITRE ' + x(d.canonicalGroupId) + '</span>' : '')",
-  "rhs_len": 153,
-  "category": "escaped",
-  "data_source_tags": ""
- },
- {
-  "line": 8650,
-  "function": "renderThreatPriorityDetail",
-  "target": "document.getElementById('tp-detail-summary')",
-  "op": "=",
-  "rhs": "'<div class=\"kpi-card\"><div class=\"kpi-label\">Score</div><div class=\"kpi-value\">' + x(d.score) + '</div></div>' +\n    '<div class=\"kpi-card\"><div class=\"kpi-label\">Tier</div><div class=\"kpi-value\">' + tpTierBadge(d.tier) + '</div></div>' +\n    '<div class=\"kpi-card\"><div class=\"kpi-label\">Techniques</div><div class=\"kpi-value\">' + x(d.techniqueCount) + '</div></div>' +\n    '<div class=\"kpi-card\"><",
-  "rhs_len": 505,
-  "category": "partial_escaped",
-  "data_source_tags": ""
- },
- {
-  "line": 8663,
-  "function": "renderThreatPriorityDetail",
-  "target": "document.getElementById('tp-detail-factors')",
-  "op": "=",
-  "rhs": "factors || '<div class=\"empty\">No factor data.</div>'",
-  "rhs_len": 53,
-  "category": "unescaped_html",
-  "data_source_tags": "api_response"
- },
- {
-  "line": 8666,
-  "function": "renderThreatPriorityDetail",
-  "target": "document.getElementById('tp-detail-uncovered')",
-  "op": "=",
-  "rhs": "uncovered.length\n    ? uncovered.map(function(t) { return '<span class=\"tool-tag\">' + x(t) + '</span>'; }).join(' ')\n    : '<span class=\"muted\">No coverage gaps.</span>'",
-  "rhs_len": 169,
-  "category": "escaped",
-  "data_source_tags": ""
- },
- {
-  "line": 8677,
-  "function": "renderThreatPriorityDetail",
-  "target": "document.getElementById('tp-detail-coverage')",
-  "op": "=",
-  "rhs": "techCoverage.length\n    ? '<table class=\"u-w100\"><thead><tr><th>Technique</th><th>Content</th><th>Prevention</th><th>Detection</th></tr></thead><tbody>' +\n      techCoverage.map(function(tc) {\n        var content = [\n          tc.hasSimulation ? '<span class=\"tool-tag\">Sim</span>' : '',\n          tc.hasDetection ? '<span class=\"tool-tag\">Detect</span>' : '',\n          tc.hasCompliance ? '<span cla",
-  "rhs_len": 1068,
-  "category": "unescaped_html",
-  "data_source_tags": "api_response"
- },
- {
-  "line": 8694,
-  "function": "renderThreatPriorityDetail",
-  "target": "document.getElementById('tp-detail-sources')",
-  "op": "=",
-  "rhs": "sources.length\n    ? '<div style=\"display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:0.75rem\">' +\n      sources.map(function(s) {\n        // \"Unknown\" (never \"None\"): an empty field here means this source\n        // never supplied it -- e.g. OpenCTI never reports sectors/regions,\n        // MISP never reports aliases. Rendering it as \"None\" would read as\n        // a positiv",
-  "rhs_len": 1770,
-  "category": "unescaped_html",
-  "data_source_tags": "user_created_name"
- },
- {
-  "line": 8729,
-  "function": "row",
-  "target": "document.getElementById('tp-detail-evidence')",
-  "op": "=",
-  "rhs": "'<table class=\"u-w100\"><thead><tr><th>Technique</th><th>Via</th><th>Confidence</th><th>Since</th></tr></thead><tbody>' +\n      techEvidence.map(function(e) {\n        var via = e.via ? (e.via + (e.viaName ? ' (' + x(e.viaName) + ')' : '')) : '<span class=\"muted\">direct</span>';\n        var since = e.startTime ? x(fmtDate(e.startTime)) : '<span class=\"muted\">&mdash;</span>';\n        return '<tr><td>",
-  "rhs_len": 556,
-  "category": "unescaped_html",
-  "data_source_tags": ""
- },
- {
-  "line": 8742,
-  "function": "row",
-  "target": "document.getElementById('tp-detail-history')",
-  "op": "=",
-  "rhs": "hist.length\n    ? '<table class=\"u-w100\"><thead><tr><th>Date</th><th>Score</th></tr></thead><tbody>' +\n      hist.map(function(h) { return '<tr><td>' + x(new Date(h.recordedAt).toLocaleDateString()) + '</td><td>' + x(h.score) + '</td></tr>'; }).join('') +\n      '</tbody></table>'\n    : '<span class=\"muted\">No history yet.</span>'",
-  "rhs_len": 331,
-  "category": "escaped",
-  "data_source_tags": ""
- },
- {
-  "line": 8752,
-  "function": "row",
-  "target": "document.getElementById('tp-detail-recs')",
-  "op": "=",
-  "rhs": "matches.length\n      ? matches.map(function(t) { return '<div style=\"padding:0.3rem 0\">' + x(t.techniqueId) + ' \u2014 ' + x(t.name) + ' <span class=\"tiny muted\">(score ' + x(t.score) + ')</span></div>'; }).join('')\n      : '<span class=\"muted\">No open recommendations for this actor\\'s techniques.</span>'",
-  "rhs_len": 301,
-  "category": "escaped",
-  "data_source_tags": "user_created_name"
- },
- {
-  "line": 8756,
-  "function": "row",
-  "target": "document.getElementById('tp-detail-recs')",
-  "op": "=",
-  "rhs": "'<span class=\"muted\">Could not load recommendations.</span>'",
-  "rhs_len": 60,
-  "category": "static",
-  "data_source_tags": ""
- },
- {
-  "line": 8764,
-  "function": "loadRecommendations",
-  "target": "body",
-  "op": "=",
-  "rhs": "'<tr><td colspan=\"7\" class=\"empty\">Loading\u2026</td></tr>'",
-  "rhs_len": 54,
-  "category": "static",
-  "data_source_tags": ""
- },
- {
-  "line": 8768,
-  "function": "loadRecommendations",
-  "target": "body",
-  "op": "=",
-  "rhs": "'<tr><td colspan=\"7\" class=\"empty u-danger\">Failed to load: ' + x(e.message) + '</td></tr>'",
-  "rhs_len": 91,
-  "category": "escaped",
-  "data_source_tags": "error_message"
- },
- {
-  "line": 8777,
-  "function": "renderRecommendations",
-  "target": "body",
-  "op": "=",
-  "rhs": "'<tr><td colspan=\"7\" class=\"empty\">No recommendations yet \u2014 seed ATT&CK/ART content to rank techniques.</td></tr>'",
-  "rhs_len": 114,
-  "category": "static",
-  "data_source_tags": ""
- },
- {
-  "line": 8780,
-  "function": "renderRecommendations",
-  "target": "body",
-  "op": "=",
-  "rhs": "list.map(function(t) {\n    var threat = [];\n    if (t.kev) threat.push('<span class=\"badge\" style=\"color:var(--danger);border-color:var(--danger)\">KEV</span>');\n    if (t.epssPercentile) threat.push('<span class=\"badge\">EPSS ' + Math.round(t.epssPercentile) + '</span>');\n    if (t.threatActors) threat.push('<span class=\"badge\">' + t.threatActors + ' group' + (t.threatActors === 1 ? '' : 's') + '</",
-  "rhs_len": 1300,
-  "category": "unescaped_html",
-  "data_source_tags": "threat_intel,user_created_name"
- },
- {
-  "line": 8822,
-  "function": "openExposureDetail",
-  "target": "body",
-  "op": "=",
-  "rhs": "'<div class=\"empty\" style=\"padding:2rem\">Loading\u2026</div>'",
-  "rhs_len": 56,
-  "category": "static",
-  "data_source_tags": ""
- },
- {
-  "line": 8888,
-  "function": "expCard",
-  "target": "body",
-  "op": "=",
-  "rhs": "h",
-  "rhs_len": 1,
-  "category": "indirect_variable",
-  "data_source_tags": ""
- },
- {
-  "line": 8890,
-  "function": "expCard",
-  "target": "body",
-  "op": "=",
-  "rhs": "'<div class=\"empty u-danger\">Failed to load: ' + x(e.message) + '</div>'",
-  "rhs_len": 72,
-  "category": "escaped",
-  "data_source_tags": "error_message"
- },
- {
-  "line": 8910,
-  "function": "loadOpenAEVConfig",
-  "target": "configPanel",
-  "op": "=",
-  "rhs": "'<div class=\"kpi-row\">' +\n          '<input id=\"oaev-url\" type=\"text\" placeholder=\"https://openaev.example.local\" value=\"' + x(cfg.baseUrl || '') + '\" class=\"inp-sm u-flex1\">' +\n          '<input id=\"oaev-token\" type=\"password\" placeholder=\"Bearer token (leave blank to keep current)\" class=\"inp-sm u-flex1\">' +\n          '<label class=\"tiny muted\" style=\"display:flex;align-items:center;gap:0.3rem\">",
-  "rhs_len": 1147,
-  "category": "escaped",
-  "data_source_tags": "openaev"
- },
- {
-  "line": 8925,
-  "function": "loadOpenAEVConfig",
-  "target": "configPanel",
-  "op": "=",
-  "rhs": "''",
-  "rhs_len": 2,
-  "category": "static_empty",
-  "data_source_tags": ""
- },
- {
-  "line": 8986,
-  "function": "loadOpenAEVScenarios",
-  "target": "body",
-  "op": "=",
-  "rhs": "''",
-  "rhs_len": 2,
-  "category": "static_empty",
-  "data_source_tags": ""
- },
- {
-  "line": 8991,
-  "function": "loadOpenAEVScenarios",
-  "target": "body",
-  "op": "=",
-  "rhs": "list.map(function(sc) {\n      return '<tr class=\"u-pointer\" onclick=\"openOpenAEVDetail(\\'' + x(sc.OpenAEVScenarioID) + '\\')\">' +\n        '<td>' + x(sc.Name) + '</td>' +\n        '<td>' + x(sc.Category) + '</td>' +\n        '<td>' + x(sc.Severity) + '</td>' +\n        '<td>' + (sc.TechniqueIDs || []).length + '</td>' +\n        '<td>' + sc.InjectsCount + '</td>' +\n        '<td class=\"tiny muted\">' + x(",
-  "rhs_len": 470,
-  "category": "unescaped_html",
-  "data_source_tags": "openaev"
- },
- {
-  "line": 9077,
-  "function": "openOpenAEVDetail",
-  "target": "body",
-  "op": "=",
-  "rhs": "'<div class=\"tiny muted\">' + x(d.detail.description || '') + '</div>' + injectsHtml",
-  "rhs_len": 83,
-  "category": "partial_escaped",
-  "data_source_tags": "user_created_name"
- },
- {
-  "line": 9079,
-  "function": "openOpenAEVDetail",
-  "target": "body",
-  "op": "+=",
-  "rhs": "'<div style=\"margin-top:1rem\"><button class=\"btn btn-primary btn-sm\" onclick=\"createPlanFromOpenAEV(\\'' + x(id) + '\\')\">Create Exercise Plan</button></div>'",
-  "rhs_len": 156,
-  "category": "escaped",
-  "data_source_tags": "openaev"
- },
- {
-  "line": 9095,
-  "function": "loadExercisesTab",
-  "target": "body",
-  "op": "=",
-  "rhs": "''",
-  "rhs_len": 2,
-  "category": "static_empty",
-  "data_source_tags": ""
- },
- {
-  "line": 9097,
-  "function": "loadExercisesTab",
-  "target": "body",
-  "op": "=",
-  "rhs": "plans.map(function(p) {\n      return '<tr>' +\n        '<td>' + x(p.name) + '</td>' +\n        '<td>' + (p.steps ? p.steps.length : 0) + '</td>' +\n        '<td class=\"tiny muted\">' + x(p.created_at || '') + '</td>' +\n        '<td><button class=\"btn btn-primary btn-sm\" onclick=\"launchExercisePrompt(\\'' + x(p.id) + '\\')\">Launch</button></td>' +\n        '</tr>';\n    }).join('')",
-  "rhs_len": 375,
-  "category": "escaped",
-  "data_source_tags": "user_created_name"
- },
- {
-  "line": 9110,
-  "function": "loadExercisesTab",
-  "target": "body",
-  "op": "=",
-  "rhs": "''",
-  "rhs_len": 2,
-  "category": "static_empty",
-  "data_source_tags": ""
- },
- {
-  "line": 9112,
-  "function": "loadExercisesTab",
-  "target": "body",
-  "op": "=",
-  "rhs": "execs.map(function(e) {\n      var live = e.status === 'running' || e.status === 'paused';\n      var progress = e.steps_total\n        ? (e.steps_done || 0) + ' / ' + e.steps_total + ' steps'\n        : '<span class=\"tiny muted\">\u2014</span>';\n      var abortBtn = live\n        ? '<button class=\"btn btn-outline-red btn-sm\" onclick=\"event.stopPropagation();abortExecution(\\'' + x(e.id) + '\\')\">&#9632; Abort",
-  "rhs_len": 932,
-  "category": "unescaped_html",
-  "data_source_tags": "user_created_name"
- },
- {
-  "line": 9256,
-  "function": "openExerciseDetail",
-  "target": "document.getElementById('exercise-detail-body')",
-  "op": "=",
-  "rhs": "scoreHtml + stepsHtml + '<div style=\"margin-top:0.75rem\">' + actions + '</div>'",
-  "rhs_len": 79,
-  "category": "unescaped_html",
-  "data_source_tags": ""
- },
- {
-  "line": 9486,
-  "function": "loadAPHistory",
-  "target": "tb",
-  "op": "=",
-  "rhs": "'<tr><td colspan=\"7\" class=\"empty\">Loading\u2026</td></tr>'",
-  "rhs_len": 54,
-  "category": "static",
-  "data_source_tags": ""
- },
- {
-  "line": 9489,
-  "function": "loadAPHistory",
-  "target": "tb",
-  "op": "=",
-  "rhs": "'<tr><td colspan=\"7\" class=\"empty\">No collection history yet.</td></tr>'",
-  "rhs_len": 72,
-  "category": "static",
-  "data_source_tags": ""
- },
- {
-  "line": 9492,
-  "function": "loadAPHistory",
-  "target": "tb",
-  "op": "=",
-  "rhs": "rows.map(function(r) {\n      var ts = r.collectedAt ? new Date(r.collectedAt).toLocaleString('en-GB',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}) : '\u2014';\n      var statusBadge = r.status === 'completed'\n        ? '<span class=\"u-success\">&#10003; Completed</span>'\n        : '<span class=\"u-danger\">&#10005; ' + x(r.status) + (r.errorMsg ? ': ' + x(r.errorMsg.slice(0,40)) : '') + '<",
-  "rhs_len": 960,
-  "category": "unescaped_html",
-  "data_source_tags": "agent"
- },
- {
-  "line": 9508,
-  "function": "loadAPHistory",
-  "target": "tb",
-  "op": "=",
-  "rhs": "'<tr><td colspan=\"7\" class=\"empty\">' + x(e.message) + '</td></tr>'",
-  "rhs_len": 66,
-  "category": "escaped",
-  "data_source_tags": "error_message"
- },
- {
-  "line": 9517,
-  "function": "renderAttackPath",
-  "target": "body",
-  "op": "=",
-  "rhs": "'<div class=\"dash-panel\"><div class=\"dash-panel-body\" style=\"padding:2rem;text-align:center\">' +\n      '<div style=\"font-size:1rem;font-weight:700;color:var(--text);margin-bottom:0.4rem\">No attack-path data collected yet</div>' +\n      '<div class=\"tiny muted\" style=\"max-width:520px;margin:0 auto 1rem\">Run a collection on an enrolled agent to map lateral-movement reachability, blast radius, segmen",
-  "rhs_len": 576,
-  "category": "static",
-  "data_source_tags": ""
- },
- {
-  "line": 9563,
-  "function": "renderAttackPath",
-  "target": "body",
-  "op": "=",
-  "rhs": "h",
-  "rhs_len": 1,
-  "category": "indirect_variable",
-  "data_source_tags": ""
- },
- {
-  "line": 9620,
-  "function": "fill",
-  "target": "sel",
-  "op": "=",
-  "rhs": "(state.agents || []).map(function(a) {\n      return '<option value=\"' + x(a.agentId) + '\">' + x(a.hostname || a.agentId) + (a.status === 'offline' ? ' (offline)' : '') + '</option>';\n    }).join('') || '<option value=\"\">No agents enrolled</option>'",
-  "rhs_len": 248,
-  "category": "escaped",
-  "data_source_tags": "agent"
- },
- {
-  "line": 9644,
-  "function": "apDiscoverSubnet",
-  "target": "btn",
-  "op": "=",
-  "rhs": "'&#128270; Discover Subnet'",
-  "rhs_len": 27,
-  "category": "static",
-  "data_source_tags": ""
- },
- {
-  "line": 9654,
-  "function": "apDiscoverSubnet",
-  "target": "btn",
-  "op": "=",
-  "rhs": "'&#128270; Discover Subnet'",
-  "rhs_len": 27,
-  "category": "static",
-  "data_source_tags": ""
- },
- {
-  "line": 9699,
-  "function": "dispatchAPCollect",
-  "target": "tl",
-  "op": "=",
-  "rhs": "_apStep('done', 'Collection started for ' + x(agentLabel) + ' at ' + _apTimestamp(),\n        targets.length + ' target' + (targets.length === 1 ? '' : 's') + ' queued \u2014 job ' + (r.job ? r.job.id.slice(0,8) : '')) +\n      (shDetail ? _apStep('warn', 'SharpHound notice', shDetail) : '') +\n      _apStep(jobStatus === 'dispatched' || jobStatus === 'running' ? 'done' : 'active',\n        jobStatus === '",
-  "rhs_len": 843,
-  "category": "indirect_builder",
-  "data_source_tags": ""
- },
- {
-  "line": 9800,
-  "function": "_apRenderJobState",
-  "target": "tl",
-  "op": "=",
-  "rhs": "_apStep(dispatchState, 'Job dispatched \u2014 ' + job.id.slice(0,8),\n      job.targetCount > 0 ? job.targetCount + ' target' + (job.targetCount === 1 ? '' : 's') + ' queued' : '') +\n    _apStep(ackState, statusLabel, '') +\n    _apStep(probeState, 'Executing on agent', progDetail) +\n    _apStep(uploadState, 'Uploading results\u2026', '') +\n    _apStep(graphState, 'Graph built &amp; analysis complete',\n      ",
-  "rhs_len": 490,
-  "category": "indirect_builder",
-  "data_source_tags": ""
- },
- {
-  "line": 9902,
-  "function": "_apOnCollected",
-  "target": "tl",
-  "op": "=",
-  "rhs": "step1Html +\n    _apStep('done', 'Agent finished probing at ' + _apTimestamp(), x(label) + ' completed TCP probes across all targets.') +\n    _apStep('done', 'Collection received \u2014 ' + nodes + ' node' + (nodes === 1 ? '' : 's') + ', ' + edges + ' lateral edge' + (edges === 1 ? '' : 's') + ' mapped',\n      'The server has built the updated graph. Previous collection (if any) has been superseded by t",
-  "rhs_len": 605,
-  "category": "partial_escaped",
-  "data_source_tags": "api_response"
- },
- {
-  "line": 9942,
-  "function": "openAPAssets",
-  "target": "document.getElementById('ap-assets-body')",
-  "op": "=",
-  "rhs": "'<tr><td colspan=\"5\" class=\"empty\">Loading\u2026</td></tr>'",
-  "rhs_len": 54,
-  "category": "static",
-  "data_source_tags": ""
- },
- {
-  "line": 9952,
-  "function": "renderAPAssets",
-  "target": "tb",
-  "op": "=",
-  "rhs": "'<tr><td colspan=\"7\" class=\"empty\">No hosts discovered yet \u2014 run a collection first.</td></tr>'",
-  "rhs_len": 95,
-  "category": "static",
-  "data_source_tags": ""
- },
- {
-  "line": 9955,
-  "function": "renderAPAssets",
-  "target": "tb",
-  "op": "=",
-  "rhs": "AP_ASSETS.map(function(a, i) {\n    var tierOpts = AP_CRIT_TIERS.map(function(t) {\n      return '<option value=\"' + t + '\"' + (a.criticalityTier === t ? ' selected' : '') + '>' + (t || '\u2014') + '</option>';\n    }).join('');\n    return '<tr>' +\n      '<td style=\"font-family:var(--font-mono);font-size:0.76rem\">' + x(a.label || a.hostKey) +\n        (a.label && a.label.toUpperCase() !== (a.hostKey || '')",
-  "rhs_len": 1896,
-  "category": "unescaped_html",
-  "data_source_tags": ""
- },
- {
-  "line": 10114,
-  "function": "renderAgentGroupTree",
-  "target": "root",
-  "op": "=",
-  "rhs": "allRow + agentGroupTree.map(renderAgentGroupNode).join('')",
-  "rhs_len": 58,
-  "category": "unescaped_text",
-  "data_source_tags": "agent"
- },
- {
-  "line": 10225,
-  "function": "openGroupPicker",
-  "target": "document.getElementById('gp-select')",
-  "op": "=",
-  "rhs": "'<option value=\"\">' + topLabel + '</option>' +\n    options.map(function(o) { return '<option value=\"' + x(o.id) + '\">' + x(o.label) + '</option>'; }).join('')",
-  "rhs_len": 158,
-  "category": "partial_escaped",
-  "data_source_tags": ""
- },
- {
-  "line": 10304,
-  "function": "renderLegacyMigrationPanel",
-  "target": "el",
-  "op": "=",
-  "rhs": "'<div class=\"legacy-migration-header\">Legacy Transport Migration</div>' +\n      '<div class=\"legacy-migration-days\">Days clean: ' + status.daysClean + ' / ' + status.daysRequired + '</div>' +\n      '<div class=\"legacy-migration-status ' + (status.eligible ? 'eligible' : 'not-eligible') + '\">' +\n        (status.eligible ? 'ELIGIBLE FOR REVIEW' : 'NOT YET ELIGIBLE') +\n      '</div>' +\n      unattrib",
-  "rhs_len": 501,
-  "category": "partial_escaped",
-  "data_source_tags": ""
- },
- {
-  "line": 10362,
-  "function": "renderAgentTiles",
-  "target": "if (el) el",
-  "op": "=",
-  "rhs": "tile('Total agents', b.online + b.degraded + b.offline, 'var(--text)') +\n    tile('Online', b.online, b.online ? 'var(--success)' : 'var(--muted)') +\n    tile('Degraded', b.degraded, b.degraded ? 'var(--warning)' : 'var(--muted)') +\n    tile('Offline', b.offline, b.offline ? 'var(--danger)' : 'var(--muted)') +\n    tile('Retired', b.retired, 'var(--muted)')",
-  "rhs_len": 358,
-  "category": "indirect_builder",
-  "data_source_tags": ""
- },
- {
-  "line": 10386,
-  "function": "c",
-  "target": "if (el) el",
-  "op": "=",
-  "rhs": "covSegHtml(\n    [['all', 'All'], ['online', 'Online'], ['degraded', 'Degraded'], ['offline', 'Offline'], ['retired', 'Retired']],\n    AGENT_FILTER, 'setAgentFilter', c\n  )",
-  "rhs_len": 171,
-  "category": "indirect_builder",
-  "data_source_tags": ""
- },
- {
-  "line": 10403,
-  "function": "renderAgentRows",
-  "target": "tbody",
-  "op": "=",
-  "rhs": "'<tr><td colspan=\"8\" class=\"empty\">' + emptyMsg + '</td></tr>'",
-  "rhs_len": 62,
-  "category": "unescaped_html",
-  "data_source_tags": ""
- },
- {
-  "line": 10406,
-  "function": "renderAgentRows",
-  "target": "tbody",
-  "op": "=",
-  "rhs": "list.map(function(a, idx) {\n    var dot = agentDotColor(agentBucket(a));\n    var menuId = 'agent-menu-' + idx;\n    return '<tr>' +\n      '<td style=\"max-width:180px\"><div style=\"display:flex;align-items:center;gap:0.5rem\"><span style=\"width:8px;height:8px;border-radius:50%;flex-shrink:0;background:' + dot + '\"></span>' +\n        '<div style=\"min-width:0\"><div class=\"cell-main\" style=\"font-family:v",
-  "rhs_len": 6034,
-  "category": "unescaped_html",
-  "data_source_tags": "agent"
- },
- {
-  "line": 10727,
-  "function": "renderScenarioLanding",
-  "target": "el",
-  "op": "=",
-  "rhs": "html || '<p class=\"empty\">No scenarios loaded.</p>'",
-  "rhs_len": 51,
-  "category": "unescaped_html",
-  "data_source_tags": ""
- },
- {
-  "line": 10773,
-  "function": "renderScenarios",
-  "target": "landingEl",
-  "op": "=",
-  "rhs": "'<p class=\"empty\">No scenarios loaded.</p>'",
-  "rhs_len": 43,
-  "category": "static",
-  "data_source_tags": ""
- },
- {
-  "line": 10818,
-  "function": "renderScenarios",
-  "target": "sgrid",
-  "op": "=",
-  "rhs": "results.length\n      ? '<div class=\"sc-fade\">' + renderScenarioTileGroup('search', results) + '</div>'\n      : '<p class=\"empty\">No scenarios match your search.</p>'",
-  "rhs_len": 165,
-  "category": "indirect_builder",
-  "data_source_tags": ""
- },
- {
-  "line": 10847,
-  "function": "renderScenarios",
-  "target": "grid",
-  "op": "=",
-  "rhs": "inCat.length\n    ? '<div class=\"sc-fade\">' + renderScenarioTileGroup(state.scenarioView, inCat) + '</div>'\n    : '<p class=\"empty\">No scenarios match your filter.</p>'",
-  "rhs_len": 167,
-  "category": "indirect_builder",
-  "data_source_tags": ""
- },
- {
-  "line": 11195,
+  "line": 5009,
   "function": "count",
   "target": "document.getElementById('campaign-toolbar')",
   "op": "=",
@@ -2100,7 +400,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11201,
+  "line": 5015,
   "function": "renderCampaignRows",
   "target": "tb",
   "op": "=",
@@ -2110,7 +410,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11202,
+  "line": 5016,
   "function": "renderCampaignRows",
   "target": "tb",
   "op": "=",
@@ -2120,7 +420,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 11298,
+  "line": 5112,
   "function": "kv",
   "target": "document.getElementById('campaigns-detail')",
   "op": "=",
@@ -2130,7 +430,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 11333,
+  "line": 5147,
   "function": "rowf",
   "target": "el",
   "op": "=",
@@ -2140,7 +440,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11336,
+  "line": 5150,
   "function": "rowf",
   "target": "el",
   "op": "=",
@@ -2150,7 +450,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11379,
+  "line": 5193,
   "function": "openCampaignLaunch",
   "target": "document.getElementById('cmp-scenario')",
   "op": "=",
@@ -2160,7 +460,7 @@
   "data_source_tags": "scenario,user_created_name"
  },
  {
-  "line": 11381,
+  "line": 5195,
   "function": "openCampaignLaunch",
   "target": "document.getElementById('cmp-scenario-preview')",
   "op": "=",
@@ -2170,7 +470,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11395,
+  "line": 5209,
   "function": "openCampaignLaunch",
   "target": "document.getElementById('cmp-filter-env')",
   "op": "=",
@@ -2180,7 +480,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11402,
+  "line": 5216,
   "function": "openCampaignLaunch",
   "target": "typeSel",
   "op": "=",
@@ -2190,7 +490,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11410,
+  "line": 5224,
   "function": "openCampaignLaunch",
   "target": "groupSel",
   "op": "=",
@@ -2200,7 +500,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11437,
+  "line": 5251,
   "function": "cmpOnGroupChange",
   "target": "document.getElementById('cmp-group-preview')",
   "op": "=",
@@ -2210,7 +510,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11437,
+  "line": 5251,
   "function": "cmpOnGroupChange",
   "target": "document.getElementById('cmp-exclusions')",
   "op": "=",
@@ -2220,7 +520,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11452,
+  "line": 5266,
   "function": "renderCampaignGroupPreview",
   "target": "document.getElementById('cmp-group-preview')",
   "op": "=",
@@ -2230,7 +530,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11455,
+  "line": 5269,
   "function": "renderCampaignGroupPreview",
   "target": "document.getElementById('cmp-exclusions')",
   "op": "=",
@@ -2240,7 +540,7 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 11514,
+  "line": 5328,
   "function": "setCampaignSource",
   "target": "document.getElementById('cmp-scenario-preview')",
   "op": "=",
@@ -2250,7 +550,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11542,
+  "line": 5356,
   "function": "selectTIPack",
   "target": "info",
   "op": "=",
@@ -2260,7 +560,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11551,
+  "line": 5365,
   "function": "selectTIPack",
   "target": "info",
   "op": "=",
@@ -2270,7 +570,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 11559,
+  "line": 5373,
   "function": "selectTIPack",
   "target": "info",
   "op": "=",
@@ -2280,7 +580,7 @@
   "data_source_tags": "api_response"
  },
  {
-  "line": 11595,
+  "line": 5409,
   "function": "_applyGeneratedTIScenario",
   "target": "el",
   "op": "=",
@@ -2290,7 +590,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11624,
+  "line": 5438,
   "function": "_selectCmpScenario",
   "target": "document.getElementById('cmp-scenario')",
   "op": "=",
@@ -2300,7 +600,7 @@
   "data_source_tags": "scenario,user_created_name"
  },
  {
-  "line": 11636,
+  "line": 5450,
   "function": "cmpOnExistingScenarioChange",
   "target": "el",
   "op": "=",
@@ -2310,7 +610,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11638,
+  "line": 5452,
   "function": "cmpOnExistingScenarioChange",
   "target": "el",
   "op": "=",
@@ -2320,7 +620,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11642,
+  "line": 5456,
   "function": "cmpOnExistingScenarioChange",
   "target": "el",
   "op": "=",
@@ -2330,7 +630,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11661,
+  "line": 5475,
   "function": "loadKEVWidget",
   "target": "tiles",
   "op": "=",
@@ -2340,7 +640,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11681,
+  "line": 5495,
   "function": "renderTIActors",
   "target": "el",
   "op": "=",
@@ -2350,7 +650,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11682,
+  "line": 5496,
   "function": "renderTIActors",
   "target": "el",
   "op": "=",
@@ -2360,7 +660,7 @@
   "data_source_tags": "actor"
  },
  {
-  "line": 11726,
+  "line": 5540,
   "function": "loadEndpointPostureWidget",
   "target": "tiles",
   "op": "=",
@@ -2370,7 +670,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11749,
+  "line": 5563,
   "function": "loadReadinessTrends",
   "target": "summary",
   "op": "=",
@@ -2380,7 +680,7 @@
   "data_source_tags": "api_response"
  },
  {
-  "line": 11756,
+  "line": 5570,
   "function": "loadReadinessTrends",
   "target": "el",
   "op": "=",
@@ -2390,7 +690,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11784,
+  "line": 5598,
   "function": "renderCampaignTargets",
   "target": "document.getElementById('cmp-targets')",
   "op": "=",
@@ -2400,7 +700,1707 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 11875,
+  "line": 5665,
+  "function": "loadComplianceScores",
+  "target": "el",
+  "op": "=",
+  "rhs": "'<div style=\"color:var(--muted);font-size:0.78rem;padding:0.4rem 0\">No compliance data yet \u2014 run a scenario to generate scores.</div>'",
+  "rhs_len": 134,
+  "category": "static",
+  "data_source_tags": ""
+ },
+ {
+  "line": 5668,
+  "function": "loadComplianceScores",
+  "target": "el",
+  "op": "=",
+  "rhs": "scores.map(complianceTile).join('')",
+  "rhs_len": 35,
+  "category": "unescaped_text",
+  "data_source_tags": ""
+ },
+ {
+  "line": 5792,
+  "function": "refreshDashboardCampaigns",
+  "target": "el",
+  "op": "=",
+  "rhs": "'<div class=\"empty\" style=\"padding:1.5rem\">No campaigns running.</div>'",
+  "rhs_len": 71,
+  "category": "static",
+  "data_source_tags": ""
+ },
+ {
+  "line": 5793,
+  "function": "refreshDashboardCampaigns",
+  "target": "el",
+  "op": "=",
+  "rhs": "liveList.map(function(c) {\n      var s = c.summary || {};\n      var cds = campaignDisplayStatus(s);\n      return '<div class=\"lrow u-pointer\" onclick=\"openCampaignDetail(\\'' + x(c.id) + '\\')\">' +\n        '<div class=\"lic\" style=\"color:var(--accent);background:rgba(47,129,247,0.1)\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 16 16\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.4\"><path d=\"M1 8h3l2",
+  "rhs_len": 956,
+  "category": "unescaped_html",
+  "data_source_tags": "user_created_name"
+ },
+ {
+  "line": 5858,
+  "function": "loadCalderaStatus",
+  "target": "document.getElementById('cs-caldera-status')",
+  "op": "=",
+  "rhs": "dot",
+  "rhs_len": 3,
+  "category": "indirect_variable",
+  "data_source_tags": ""
+ },
+ {
+  "line": 5884,
+  "function": "loadCalderaStatus",
+  "target": "document.getElementById('cs-caldera-status')",
+  "op": "=",
+  "rhs": "'<span class=\"u-danger\">Error checking status</span>'",
+  "rhs_len": 53,
+  "category": "static",
+  "data_source_tags": ""
+ },
+ {
+  "line": 5926,
+  "function": "openConfirmDiffModal",
+  "target": "document.getElementById('confirm-diff-body')",
+  "op": "=",
+  "rhs": "diffHtml",
+  "rhs_len": 8,
+  "category": "indirect_variable",
+  "data_source_tags": ""
+ },
+ {
+  "line": 5999,
+  "function": "populateCoverageFilters",
+  "target": "scenSel",
+  "op": "=",
+  "rhs": "'<option value=\"\">All scenarios</option>' +\n      (state.scenarios || []).map(function(s) { return '<option value=\"' + x(s.id) + '\">' + x(s.name) + '</option>'; }).join('')",
+  "rhs_len": 172,
+  "category": "escaped",
+  "data_source_tags": "user_created_name"
+ },
+ {
+  "line": 6007,
+  "function": "populateCoverageFilters",
+  "target": "agSel",
+  "op": "=",
+  "rhs": "'<option value=\"\">All agents</option>' +\n      (state.agents || []).map(function(a) { return '<option value=\"' + x(a.agentId) + '\">' + x(a.hostname || a.agentId) + '</option>'; }).join('')",
+  "rhs_len": 188,
+  "category": "escaped",
+  "data_source_tags": "agent"
+ },
+ {
+  "line": 6042,
+  "function": "renderCoverageAnalytics",
+  "target": "tacBody",
+  "op": "=",
+  "rhs": "(d.byTactic || []).map(function(t, i) {\n      var bg = i % 2 ? 'background:rgba(255,255,255,.02)' : '';\n      var mColor = t.missed > 0 ? 'color:var(--danger);font-weight:700' : 'color:var(--muted)';\n      return '<tr style=\"' + bg + '\">' +\n        '<td>' + x(t.tactic) + '</td>' +\n        '<td style=\"text-align:center;color:var(--success)\">' + t.prevented + '</td>' +\n        '<td style=\"text-align",
+  "rhs_len": 627,
+  "category": "unescaped_html",
+  "data_source_tags": ""
+ },
+ {
+  "line": 6058,
+  "function": "renderCoverageAnalytics",
+  "target": "missedBody",
+  "op": "=",
+  "rhs": "missed.map(function(t, i) {\n      var bg = i % 2 ? 'background:rgba(255,255,255,.02)' : '';\n      var vColor = t.bestVerdict === 'missed' ? 'color:var(--danger)' : 'color:var(--warning)';\n      var vDot   = t.bestVerdict === 'missed' ? '\u25cf ' : '\u25d0 ';\n      return '<tr style=\"' + bg + '\">' +\n        '<td style=\"font-family:var(--font-mono);font-size:0.76rem;' + vColor + '\">' + vDot + x(t.techniqueId)",
+  "rhs_len": 770,
+  "category": "unescaped_html",
+  "data_source_tags": "user_created_name"
+ },
+ {
+  "line": 6091,
+  "function": "renderPrivilegeCoverage",
+  "target": "cards",
+  "op": "=",
+  "rhs": "tiers.map(function(t) {\n      var col  = tierColor[t.tier] || 'var(--muted)';\n      var lbl  = tierLabel[t.tier] || t.tier;\n      var rate = t.attempted > 0 ? t.preventionRate : 0;\n      var rateColor = rate >= 75 ? 'var(--success)' : rate >= 40 ? 'var(--warning)' : 'var(--danger)';\n      return '<div class=\"ca-card\" style=\"border-top:2px solid ' + col + '\">' +\n        '<div class=\"ca-label\" style",
+  "rhs_len": 662,
+  "category": "unescaped_html",
+  "data_source_tags": ""
+ },
+ {
+  "line": 6107,
+  "function": "renderPrivilegeCoverage",
+  "target": "tierBody",
+  "op": "=",
+  "rhs": "tiers.map(function(t, i) {\n      var bg   = i % 2 ? 'background:rgba(255,255,255,.02)' : '';\n      var col  = tierColor[t.tier] || 'var(--muted)';\n      var lbl  = tierLabel[t.tier] || t.tier;\n      var rate = t.attempted > 0 ? t.preventionRate : 0;\n      var rateColor = rate >= 75 ? 'color:var(--success)' : rate >= 40 ? 'color:var(--warning)' : 'color:var(--danger)';\n      var barW = Math.min(100",
+  "rhs_len": 1480,
+  "category": "unescaped_html",
+  "data_source_tags": ""
+ },
+ {
+  "line": 6133,
+  "function": "renderPrivilegeCoverage",
+  "target": "gapBody",
+  "op": "=",
+  "rhs": "'<tr><td colspan=\"3\" class=\"empty u-success\">\u2713 All annotated techniques tested at user tier</td></tr>'",
+  "rhs_len": 102,
+  "category": "static",
+  "data_source_tags": ""
+ },
+ {
+  "line": 6135,
+  "function": "renderPrivilegeCoverage",
+  "target": "gapBody",
+  "op": "=",
+  "rhs": "gaps.slice(0, 25).map(function(g, i) {\n        var bg = i % 2 ? 'background:rgba(255,255,255,.02)' : '';\n        var tierBadges = (g.tiers || []).map(function(t) {\n          var c = tierColor[t] || 'var(--muted)';\n          return '<span style=\"font-size:0.65rem;border:1px solid ' + c + ';color:' + c + ';border-radius:2px;padding:1px 4px;margin-right:2px\">' + (tierLabel[t] || t) + '</span>';\n     ",
+  "rhs_len": 839,
+  "category": "unescaped_html",
+  "data_source_tags": "user_created_name"
+ },
+ {
+  "line": 6148,
+  "function": "renderPrivilegeCoverage",
+  "target": "gapBody",
+  "op": "+=",
+  "rhs": "'<tr><td colspan=\"3\" style=\"text-align:center;color:var(--muted);font-size:0.72rem;padding:4px\">\u2026 and ' + (gaps.length - 25) + ' more</td></tr>'",
+  "rhs_len": 144,
+  "category": "unescaped_likely_safe",
+  "data_source_tags": ""
+ },
+ {
+  "line": 6170,
+  "function": "loadUnifiedTechniques",
+  "target": "sel",
+  "op": "=",
+  "rhs": "'<option value=\"all\">All tactics</option>' +\n        Object.keys(tacSet).sort().map(function(t) { return '<option value=\"' + x(t) + '\">' + x(t) + '</option>'; }).join('')",
+  "rhs_len": 170,
+  "category": "escaped",
+  "data_source_tags": ""
+ },
+ {
+  "line": 6246,
+  "function": "cell",
+  "target": "if (body) body",
+  "op": "=",
+  "rhs": "rows || '<tr><td colspan=\"9\" class=\"empty\">No techniques match.</td></tr>'",
+  "rhs_len": 74,
+  "category": "unescaped_html",
+  "data_source_tags": ""
+ },
+ {
+  "line": 6271,
+  "function": "loadCoverage",
+  "target": "document.getElementById('cov-matrix')",
+  "op": "=",
+  "rhs": "'<div class=\"empty\" style=\"padding:2rem\">' + x(e.message) + '</div>'",
+  "rhs_len": 68,
+  "category": "escaped",
+  "data_source_tags": "error_message"
+ },
+ {
+  "line": 6276,
+  "function": "renderCovMatrix",
+  "target": "document.getElementById('cov-matrix')",
+  "op": "=",
+  "rhs": "'<div class=\"mx\">' + (window._covTactics || []).map(function(t) {\n    var techs = t.techniques || [];\n    var cov = techs.filter(function(c) { return st[c.id] === 'cov'; }).length;\n    var cells = techs.map(function(c) {\n      var s = st[c.id] || 'none', dim = view !== 'all' && view !== s;\n      return '<div class=\"mx-cell ' + s + '\" onclick=\"openTechnique(\\'' + x(c.id) + '\\')\" style=\"' + (dim ? '",
+  "rhs_len": 753,
+  "category": "unescaped_html",
+  "data_source_tags": "user_created_name"
+ },
+ {
+  "line": 6292,
+  "function": "badge",
+  "target": "document.getElementById('cov-toolbar')",
+  "op": "=",
+  "rhs": "seg + '<span class=\"u-flex1\"></span>' +\n    badge('var(--success)', 'Prevented', c.cov) + badge('var(--warning)', 'Detected', c.part) +\n    badge('var(--danger)', 'Missed', c.gap) + badge('var(--muted)', 'Untested', c.none)",
+  "rhs_len": 223,
+  "category": "partial_escaped",
+  "data_source_tags": ""
+ },
+ {
+  "line": 6305,
+  "function": "openTechnique",
+  "target": "document.getElementById('results-export')",
+  "op": "=",
+  "rhs": "''",
+  "rhs_len": 2,
+  "category": "static_empty",
+  "data_source_tags": ""
+ },
+ {
+  "line": 6313,
+  "function": "list",
+  "target": "document.getElementById('results-body')",
+  "op": "=",
+  "rhs": "body",
+  "rhs_len": 4,
+  "category": "indirect_variable",
+  "data_source_tags": ""
+ },
+ {
+  "line": 6366,
+  "function": "loadVerificationTab",
+  "target": "sel",
+  "op": "=",
+  "rhs": "opts",
+  "rhs_len": 4,
+  "category": "indirect_variable",
+  "data_source_tags": ""
+ },
+ {
+  "line": 6375,
+  "function": "vfRenderDomainChips",
+  "target": "wrap",
+  "op": "=",
+  "rhs": "all.map(function(d) {\n    var active = VF.domain === d.k;\n    return '<span onclick=\"vfSetDomain(\\'' + d.k + '\\')\" style=\"cursor:pointer;text-transform:capitalize;padding:0.3rem 0.7rem;border-radius:999px;font-size:0.74rem;border:1px solid ' +\n      (active ? 'var(--accent)' : 'var(--border)') + ';color:' + (active ? 'var(--accent)' : 'var(--muted)') +\n      ';background:' + (active ? 'rgba(79,142",
+  "rhs_len": 475,
+  "category": "unescaped_html",
+  "data_source_tags": ""
+ },
+ {
+  "line": 6390,
+  "function": "vfLoadQueue",
+  "target": "box",
+  "op": "=",
+  "rhs": "'<div class=\"empty\" style=\"padding:2.5rem;text-align:center;color:var(--muted)\">Select a run to load its pending verifications.</div>'",
+  "rhs_len": 134,
+  "category": "static",
+  "data_source_tags": ""
+ },
+ {
+  "line": 6391,
+  "function": "vfLoadQueue",
+  "target": "box",
+  "op": "=",
+  "rhs": "'<div class=\"empty\" style=\"padding:2.5rem;text-align:center;color:var(--muted)\">Loading\u2026</div>'",
+  "rhs_len": 95,
+  "category": "static",
+  "data_source_tags": ""
+ },
+ {
+  "line": 6394,
+  "function": "vfLoadQueue",
+  "target": "box",
+  "op": "=",
+  "rhs": "'<div class=\"empty\" style=\"padding:2rem;color:var(--danger)\">' + x(d.error) + '</div>'",
+  "rhs_len": 86,
+  "category": "escaped",
+  "data_source_tags": ""
+ },
+ {
+  "line": 6397,
+  "function": "vfLoadQueue",
+  "target": "box",
+  "op": "=",
+  "rhs": "'<div class=\"empty\" style=\"padding:2rem;color:var(--danger)\">' + x(e.message) + '</div>'",
+  "rhs_len": 88,
+  "category": "escaped",
+  "data_source_tags": "error_message"
+ },
+ {
+  "line": 6406,
+  "function": "vfRenderQueue",
+  "target": "box",
+  "op": "=",
+  "rhs": "'<div class=\"empty\" style=\"padding:2.5rem;text-align:center;color:var(--muted)\">No off-host expectations for this run' + (VF.domain ? ' in the ' + x(VF.domain) + ' domain' : '') + '. Endpoint controls are verified automatically.</div>'",
+  "rhs_len": 235,
+  "category": "escaped",
+  "data_source_tags": ""
+ },
+ {
+  "line": 6425,
+  "function": "vfRenderQueue",
+  "target": "box",
+  "op": "=",
+  "rhs": "'<table style=\"width:100%;border-collapse:collapse\">' +\n    '<thead><tr style=\"text-align:left;font-size:0.68rem;text-transform:uppercase;letter-spacing:0.04em;color:var(--muted)\">' +\n    '<th style=\"padding:0.6rem 0.8rem\">Status</th><th style=\"padding:0.6rem 0.8rem\">Technique</th><th style=\"padding:0.6rem 0.8rem\">Expected Control</th><th style=\"padding:0.6rem 0.8rem\">Domain</th><th style=\"padding",
+  "rhs_len": 626,
+  "category": "unescaped_html",
+  "data_source_tags": ""
+ },
+ {
+  "line": 6454,
+  "function": "resultBtn",
+  "target": "host",
+  "op": "=",
+  "rhs": "'<div style=\"border-top:2px solid var(--accent);background:var(--bg);padding:1rem 1.1rem\">' +\n    '<div style=\"display:flex;justify-content:space-between;align-items:baseline;gap:1rem;margin-bottom:0.7rem\">' +\n      '<div><strong style=\"font-size:0.9rem\">' + x(i.providerDisplay || i.provider) + '</strong> \u00b7 <code style=\"font-size:0.72rem\">' + x(i.techniqueId) + '</code> \u00b7 <span style=\"text-transfo",
+  "rhs_len": 3013,
+  "category": "partial_escaped",
+  "data_source_tags": ""
+ },
+ {
+  "line": 6484,
+  "function": "vfCloseDetail",
+  "target": "if (h) h",
+  "op": "=",
+  "rhs": "''",
+  "rhs_len": 2,
+  "category": "static_empty",
+  "data_source_tags": ""
+ },
+ {
+  "line": 6540,
+  "function": "vfLoadEvidence",
+  "target": "host",
+  "op": "=",
+  "rhs": "'<div style=\"font-size:0.74rem;color:var(--muted)\">No evidence attached yet.</div>'",
+  "rhs_len": 83,
+  "category": "static",
+  "data_source_tags": ""
+ },
+ {
+  "line": 6542,
+  "function": "vfLoadEvidence",
+  "target": "host",
+  "op": "=",
+  "rhs": "list.map(function(e) {\n      return '<div style=\"display:flex;align-items:center;gap:0.6rem;padding:0.4rem 0.55rem;border:1px solid var(--border);border-radius:6px;margin-bottom:0.35rem;font-size:0.76rem\">' +\n        '<span class=\"u-success\">&#10003;</span>' +\n        '<a href=\"/api/evidence/' + encodeURIComponent(e.id) + '/download\" style=\"color:var(--accent);text-decoration:none\">' + x(e.display",
+  "rhs_len": 1047,
+  "category": "unescaped_html",
+  "data_source_tags": ""
+ },
+ {
+  "line": 6553,
+  "function": "vfLoadEvidence",
+  "target": "host",
+  "op": "=",
+  "rhs": "'<div style=\"font-size:0.74rem;color:var(--danger)\">Failed to load evidence.</div>'",
+  "rhs_len": 83,
+  "category": "static",
+  "data_source_tags": ""
+ },
+ {
+  "line": 6576,
+  "function": "vfToggleHistory",
+  "target": "host",
+  "op": "=",
+  "rhs": "''",
+  "rhs_len": 2,
+  "category": "static_empty",
+  "data_source_tags": ""
+ },
+ {
+  "line": 6578,
+  "function": "vfToggleHistory",
+  "target": "host",
+  "op": "=",
+  "rhs": "'<div style=\"font-size:0.74rem;color:var(--muted)\">Loading history\u2026</div>'",
+  "rhs_len": 74,
+  "category": "static",
+  "data_source_tags": ""
+ },
+ {
+  "line": 6581,
+  "function": "vfToggleHistory",
+  "target": "host",
+  "op": "=",
+  "rhs": "'<div style=\"font-size:0.74rem;color:var(--muted)\">No attestations recorded yet.</div>'",
+  "rhs_len": 87,
+  "category": "static",
+  "data_source_tags": ""
+ },
+ {
+  "line": 6582,
+  "function": "vfToggleHistory",
+  "target": "host",
+  "op": "=",
+  "rhs": "'<div style=\"font-size:0.72rem;text-transform:uppercase;letter-spacing:0.04em;color:var(--muted);margin-bottom:0.4rem\">Attestation history (immutable)</div>' +\n      h.map(function(r) {\n        return '<div style=\"display:flex;gap:0.6rem;font-size:0.74rem;padding:0.35rem 0;border-bottom:1px solid var(--border)\">' +\n          '<span style=\"font-weight:700;color:' + vfStatusColor(r.active ? (r.workf",
+  "rhs_len": 963,
+  "category": "unescaped_html",
+  "data_source_tags": ""
+ },
+ {
+  "line": 6594,
+  "function": "vfToggleHistory",
+  "target": "host",
+  "op": "=",
+  "rhs": "'<div style=\"font-size:0.74rem;color:var(--danger)\">Failed to load history.</div>'",
+  "rhs_len": 82,
+  "category": "static",
+  "data_source_tags": ""
+ },
+ {
+  "line": 6639,
+  "function": "renderInitiativesList",
+  "target": "tbody",
+  "op": "=",
+  "rhs": "'<tr><td colspan=\"5\" class=\"empty\">No initiatives yet.</td></tr>'",
+  "rhs_len": 65,
+  "category": "static",
+  "data_source_tags": ""
+ },
+ {
+  "line": 6642,
+  "function": "renderInitiativesList",
+  "target": "tbody",
+  "op": "=",
+  "rhs": "INITIATIVES.list.map(function(it, idx) {\n    var col = initiativeStateColor(it.State);\n    var menuId = 'init-menu-' + idx;\n    var canDelete = it.State === 'archived' && ROLE === 'admin';\n    return '<tr onclick=\"openInitiativeDrawer(\\'' + x(it.ID) + '\\')\" class=\"u-pointer\">' +\n      '<td>' + x(it.Name) + '</td>' +\n      '<td><span class=\"badge\" style=\"color:' + col + ';border-color:' + col + '\">",
+  "rhs_len": 1181,
+  "category": "unescaped_html",
+  "data_source_tags": ""
+ },
+ {
+  "line": 6710,
+  "function": "renderInitiativeDrawer",
+  "target": "document.getElementById('init-drawer-body')",
+  "op": "=",
+  "rhs": "'<div class=\"u-mb-1\">' +\n      '<span class=\"badge\" style=\"color:' + col + ';border-color:' + col + '\">' + initiativeStateLabel(it.State) + '</span> ' +\n      '<span class=\"tiny muted\">Created by ' + x(it.CreatedBy || '\u2014') + ' \u00b7 ' + x(fmtDate(it.CreatedAt)) + '</span>' +\n    '</div>' +\n    '<div style=\"display:flex;gap:0.5rem;margin-bottom:1rem\">' +\n      (it.State === 'active' ? '<button class=\"b",
+  "rhs_len": 1855,
+  "category": "partial_escaped",
+  "data_source_tags": ""
+ },
+ {
+  "line": 6750,
+  "function": "initiativeShowDrawerError",
+  "target": "if (el) el",
+  "op": "=",
+  "rhs": "msg ? '<div class=\"tiny u-danger\">' + x(msg) + '</div>' : ''",
+  "rhs_len": 60,
+  "category": "escaped",
+  "data_source_tags": ""
+ },
+ {
+  "line": 6778,
+  "function": "openInitiativeCreateDrawer",
+  "target": "document.getElementById('init-create-error')",
+  "op": "=",
+  "rhs": "''",
+  "rhs_len": 2,
+  "category": "static_empty",
+  "data_source_tags": ""
+ },
+ {
+  "line": 6790,
+  "function": "submitInitiativeCreate",
+  "target": "errEl",
+  "op": "=",
+  "rhs": "'<div class=\"tiny u-danger\">Name is required.</div>'",
+  "rhs_len": 52,
+  "category": "static",
+  "data_source_tags": ""
+ },
+ {
+  "line": 6793,
+  "function": "submitInitiativeCreate",
+  "target": "errEl",
+  "op": "=",
+  "rhs": "''",
+  "rhs_len": 2,
+  "category": "static_empty",
+  "data_source_tags": ""
+ },
+ {
+  "line": 6796,
+  "function": "submitInitiativeCreate",
+  "target": "errEl",
+  "op": "=",
+  "rhs": "'<div class=\"tiny u-danger\">' + x(res.error) + '</div>'",
+  "rhs_len": 55,
+  "category": "escaped",
+  "data_source_tags": "api_response"
+ },
+ {
+  "line": 6801,
+  "function": "submitInitiativeCreate",
+  "target": "errEl",
+  "op": "=",
+  "rhs": "'<div class=\"tiny u-danger\">' + x(e.message) + '</div>'",
+  "rhs_len": 55,
+  "category": "escaped",
+  "data_source_tags": "error_message"
+ },
+ {
+  "line": 6824,
+  "function": "openInitiativeAttachDrawer",
+  "target": "document.getElementById('init-attach-error')",
+  "op": "=",
+  "rhs": "''",
+  "rhs_len": 2,
+  "category": "static_empty",
+  "data_source_tags": ""
+ },
+ {
+  "line": 6825,
+  "function": "openInitiativeAttachDrawer",
+  "target": "document.getElementById('init-attach-list')",
+  "op": "=",
+  "rhs": "'<div class=\"tiny muted\" style=\"padding:0.75rem\">Loading\u2026</div>'",
+  "rhs_len": 64,
+  "category": "static",
+  "data_source_tags": ""
+ },
+ {
+  "line": 6828,
+  "function": "openInitiativeAttachDrawer",
+  "target": "document.getElementById('init-attach-list')",
+  "op": "=",
+  "rhs": "'<div class=\"tiny\" style=\"color:var(--danger);padding:0.75rem\">' + x(res.error) + '</div>'",
+  "rhs_len": 90,
+  "category": "escaped",
+  "data_source_tags": "api_response"
+ },
+ {
+  "line": 6831,
+  "function": "openInitiativeAttachDrawer",
+  "target": "document.getElementById('init-attach-list')",
+  "op": "=",
+  "rhs": "'<div class=\"tiny\" style=\"color:var(--danger);padding:0.75rem\">' + x(e.message) + '</div>'",
+  "rhs_len": 90,
+  "category": "escaped",
+  "data_source_tags": "error_message"
+ },
+ {
+  "line": 6845,
+  "function": "initiativeRenderAttachList",
+  "target": "list",
+  "op": "=",
+  "rhs": "'<div class=\"tiny muted\" style=\"padding:0.75rem\">No unassigned jobs found.</div>'",
+  "rhs_len": 81,
+  "category": "static",
+  "data_source_tags": ""
+ },
+ {
+  "line": 6848,
+  "function": "initiativeRenderAttachList",
+  "target": "list",
+  "op": "=",
+  "rhs": "filtered.map(function(j) {\n    var checked = j.id === state.INIT_ATTACH_SELECTED ? 'checked' : '';\n    return '<label style=\"display:flex;align-items:center;gap:0.5rem;padding:0.5rem 0.75rem;border-bottom:1px solid var(--border);cursor:pointer;font-size:0.78rem\">' +\n      '<input type=\"radio\" name=\"init-attach-radio\" value=\"' + x(j.id) + '\" ' + checked + ' onchange=\"INIT_ATTACH_SELECTED=this.value",
+  "rhs_len": 639,
+  "category": "unescaped_html",
+  "data_source_tags": ""
+ },
+ {
+  "line": 6862,
+  "function": "submitInitiativeAttach",
+  "target": "errEl",
+  "op": "=",
+  "rhs": "'<div class=\"tiny u-danger\">Select a job to attach.</div>'",
+  "rhs_len": 58,
+  "category": "static",
+  "data_source_tags": ""
+ },
+ {
+  "line": 6865,
+  "function": "submitInitiativeAttach",
+  "target": "errEl",
+  "op": "=",
+  "rhs": "''",
+  "rhs_len": 2,
+  "category": "static_empty",
+  "data_source_tags": ""
+ },
+ {
+  "line": 6869,
+  "function": "submitInitiativeAttach",
+  "target": "errEl",
+  "op": "=",
+  "rhs": "'<div class=\"tiny u-danger\">' + x(res.error) + '</div>'",
+  "rhs_len": 55,
+  "category": "escaped",
+  "data_source_tags": "api_response"
+ },
+ {
+  "line": 6873,
+  "function": "submitInitiativeAttach",
+  "target": "errEl",
+  "op": "=",
+  "rhs": "'<div class=\"tiny u-danger\">' + x(e.message) + '</div>'",
+  "rhs_len": 55,
+  "category": "escaped",
+  "data_source_tags": "error_message"
+ },
+ {
+  "line": 6895,
+  "function": "renderRunIOCToolbar",
+  "target": "el",
+  "op": "=",
+  "rhs": "covSegHtml(types, _runIOCTypeFilter, 'setRunIOCTypeFilter', function(k) { return counts[k] || 0; }) +\n    '<input type=\"text\" id=\"run-ioc-search\" placeholder=\"Search indicators\u2026\" value=\"' + x(_runIOCSearch) + '\" oninput=\"setRunIOCSearch(this.value)\" style=\"padding:0.35rem 0.6rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:0.78re",
+  "rhs_len": 440,
+  "category": "partial_escaped",
+  "data_source_tags": ""
+ },
+ {
+  "line": 6937,
+  "function": "renderRunIOCList",
+  "target": "el",
+  "op": "=",
+  "rhs": "'<div style=\"color:var(--muted);font-size:0.8rem;padding:2.5rem 0;text-align:center\">' +\n      (state._runIOCsAll.length ? 'No indicators match this filter.' : 'No indicators extracted from this run.') + '</div>'",
+  "rhs_len": 212,
+  "category": "escaped",
+  "data_source_tags": ""
+ },
+ {
+  "line": 6942,
+  "function": "renderRunIOCList",
+  "target": "el",
+  "op": "=",
+  "rhs": "list.map(function(ind, idx) {\n    var expanded = _runIOCExpandedIdx === idx;\n    var techs = (ind.techniqueIds || []).map(function(t) {\n      return '<code style=\"font-size:0.66rem;color:var(--muted);margin-right:3px\">' + x(t) + '</code>';\n    }).join('');\n    var tags = (ind.tags || []).map(function(t) {\n      return '<span class=\"tiny\" style=\"background:var(--elevated);border:1px solid var(--bor",
+  "rhs_len": 2819,
+  "category": "unescaped_html",
+  "data_source_tags": ""
+ },
+ {
+  "line": 6991,
+  "function": "loadIOCRegistry",
+  "target": "if (el) el",
+  "op": "=",
+  "rhs": "''",
+  "rhs_len": 2,
+  "category": "static_empty",
+  "data_source_tags": ""
+ },
+ {
+  "line": 7009,
+  "function": "loadIOCRegistry",
+  "target": "tbody",
+  "op": "=",
+  "rhs": "'<tr><td colspan=\"9\" class=\"empty\">Loading\u2026</td></tr>'",
+  "rhs_len": 54,
+  "category": "static",
+  "data_source_tags": ""
+ },
+ {
+  "line": 7018,
+  "function": "loadIOCRegistry",
+  "target": "tbody",
+  "op": "=",
+  "rhs": "'<tr><td colspan=\"9\" class=\"empty\">Failed to load: ' + x(e.message || 'unknown error') + '</td></tr>'",
+  "rhs_len": 101,
+  "category": "escaped",
+  "data_source_tags": "error_message"
+ },
+ {
+  "line": 7039,
+  "function": "tile",
+  "target": "el",
+  "op": "=",
+  "rhs": "tile('Most Detected', result.mostDetected, ' detections') +\n    tile('Highest Bypass Rate', result.highestBypassRate, ' bypasses') +\n    tile('Frequently Reused', result.frequentlyReused, ' sightings') +\n    tile('Longest Surviving', result.longestSurviving, ' sightings')",
+  "rhs_len": 272,
+  "category": "indirect_builder",
+  "data_source_tags": "api_response"
+ },
+ {
+  "line": 7049,
+  "function": "renderIOCRegistryTable",
+  "target": "tbody",
+  "op": "=",
+  "rhs": "'<tr><td colspan=\"9\" class=\"empty\">No indicators match this filter.</td></tr>'",
+  "rhs_len": 78,
+  "category": "static",
+  "data_source_tags": ""
+ },
+ {
+  "line": 7052,
+  "function": "renderIOCRegistryTable",
+  "target": "tbody",
+  "op": "=",
+  "rhs": "_iocRegistryRows.map(function(row, idx) {\n    var suppressedBadge = row.suppressed ? ' <span class=\"sbadge\" style=\"background:rgba(154,169,188,.12);color:var(--muted)\" title=\"' + x(row.suppressionReason || '') + '\">suppressed</span>' : '';\n    return '<tr class=\"u-pointer\" onclick=\"openIOCDetail(' + idx + ')\">' +\n      '<td><span class=\"tiny\" style=\"background:var(--elevated);border:1px solid var(",
+  "rhs_len": 1425,
+  "category": "unescaped_html",
+  "data_source_tags": ""
+ },
+ {
+  "line": 7100,
+  "function": "openIOCDetail",
+  "target": "document.getElementById('results-export')",
+  "op": "=",
+  "rhs": "''",
+  "rhs_len": 2,
+  "category": "static_empty",
+  "data_source_tags": ""
+ },
+ {
+  "line": 7117,
+  "function": "rowHtml",
+  "target": "document.getElementById('results-body')",
+  "op": "=",
+  "rhs": "body",
+  "rhs_len": 4,
+  "category": "indirect_variable",
+  "data_source_tags": ""
+ },
+ {
+  "line": 7136,
+  "function": "rowHtml",
+  "target": "el",
+  "op": "=",
+  "rhs": "sections || '<div class=\"tiny muted\">No relationships recorded.</div>'",
+  "rhs_len": 70,
+  "category": "unescaped_html",
+  "data_source_tags": ""
+ },
+ {
+  "line": 7139,
+  "function": "rowHtml",
+  "target": "if (el) el",
+  "op": "=",
+  "rhs": "'<div class=\"tiny muted\">Relationships unavailable.</div>'",
+  "rhs_len": 58,
+  "category": "static",
+  "data_source_tags": ""
+ },
+ {
+  "line": 7241,
+  "function": "openRerunReview",
+  "target": "document.getElementById('rerun-review-body')",
+  "op": "=",
+  "rhs": "rows.map(function(r) {\n    return '<div class=\"conn-cfg-row\"><span class=\"conn-cfg-label\">' + r[0] + '</span><span class=\"conn-cfg-val\">' + r[1] + '</span></div>';\n  }).join('')",
+  "rhs_len": 177,
+  "category": "unescaped_html",
+  "data_source_tags": ""
+ },
+ {
+  "line": 7288,
+  "function": "startRerunFromReview",
+  "target": "btn",
+  "op": "=",
+  "rhs": "'&#9654; Start Re-run'",
+  "rhs_len": 22,
+  "category": "static",
+  "data_source_tags": ""
+ },
+ {
+  "line": 7295,
+  "function": "startRerunFromReview",
+  "target": "btn",
+  "op": "=",
+  "rhs": "'&#9654; Start Re-run'",
+  "rhs_len": 22,
+  "category": "static",
+  "data_source_tags": ""
+ },
+ {
+  "line": 7335,
+  "function": "openCampaignRerunReview",
+  "target": "document.getElementById('rerun-review-body')",
+  "op": "=",
+  "rhs": "rows.map(function(r) {\n    return '<div class=\"conn-cfg-row\"><span class=\"conn-cfg-label\">' + r[0] + '</span><span class=\"conn-cfg-val\">' + r[1] + '</span></div>';\n  }).join('')",
+  "rhs_len": 177,
+  "category": "unescaped_html",
+  "data_source_tags": ""
+ },
+ {
+  "line": 7368,
+  "function": "startCampaignRerunFromReview",
+  "target": "btn",
+  "op": "=",
+  "rhs": "'&#9654; Start Re-run'",
+  "rhs_len": 22,
+  "category": "static",
+  "data_source_tags": ""
+ },
+ {
+  "line": 7375,
+  "function": "startCampaignRerunFromReview",
+  "target": "btn",
+  "op": "=",
+  "rhs": "'&#9654; Start Re-run'",
+  "rhs_len": 22,
+  "category": "static",
+  "data_source_tags": ""
+ },
+ {
+  "line": 7481,
+  "function": "renderLicenseLockedScreen",
+  "target": "el",
+  "op": "=",
+  "rhs": "'<div style=\"max-width:520px;text-align:center;color:var(--text,#e6e6e6)\">' +\n      '<div style=\"font-size:2.5rem;margin-bottom:1rem\">&#x1F512;</div>' +\n      '<h1 style=\"font-size:1.4rem;margin-bottom:0.75rem\">BAS LICENSE EXPIRED</h1>' +\n      '<p style=\"color:var(--muted,#9aa9bc);line-height:1.6;margin-bottom:1rem\">This Audspect BAS Server is currently unavailable because its license and grace p",
+  "rhs_len": 1040,
+  "category": "escaped",
+  "data_source_tags": ""
+ },
+ {
+  "line": 7544,
+  "function": "renderLicenseGraceBanner",
+  "target": "el",
+  "op": "=",
+  "rhs": "_licenseBannerHTML(info) +\n    '<button onclick=\"_dismissLicenseGraceBanner()\" aria-label=\"Dismiss\" title=\"Dismiss\" ' +\n      'style=\"position:absolute;top:0.5rem;right:0.6rem;width:24px;height:24px;display:flex;align-items:center;justify-content:center;' +\n      'background:transparent;border:none;color:inherit;font-size:1.1rem;line-height:1;cursor:pointer;opacity:0.75\" ' +\n      'onmouseover=\"th",
+  "rhs_len": 475,
+  "category": "indirect_builder",
+  "data_source_tags": ""
+ },
+ {
+  "line": 7561,
+  "function": "maybeShowLicenseGraceModal",
+  "target": "overlay",
+  "op": "=",
+  "rhs": "'<div style=\"max-width:480px;background:var(--surface,#152338);border:1px solid var(--warning,#d29922);border-radius:8px;padding:1.5rem;color:var(--text,#e6e6e6)\">' +\n      _licenseBannerHTML(info) +\n      '<div style=\"text-align:right;margin-top:1rem\"><button id=\"license-grace-modal-dismiss\" style=\"padding:0.4rem 1rem;border-radius:6px;border:1px solid var(--border,#22324a);background:transparent",
+  "rhs_len": 469,
+  "category": "indirect_builder",
+  "data_source_tags": ""
+ },
+ {
+  "line": 7755,
+  "function": "goToProfile",
+  "target": "el",
+  "op": "=",
+  "rhs": "d.permissions.slice().sort().map(function(p) {\n      return '<span class=\"tag\" style=\"display:inline-block;margin:0 0.3rem 0.3rem 0\">' + x(p) + '</span>';\n    }).join('')",
+  "rhs_len": 170,
+  "category": "escaped",
+  "data_source_tags": ""
+ },
+ {
+  "line": 7811,
+  "function": "loadAgentRiskSummary",
+  "target": "if (tb) tb",
+  "op": "=",
+  "rhs": "'<tr><td colspan=\"7\" class=\"empty\">Loading\u2026</td></tr>'",
+  "rhs_len": 54,
+  "category": "static",
+  "data_source_tags": ""
+ },
+ {
+  "line": 7829,
+  "function": "renderAgentRiskSummary",
+  "target": "tb",
+  "op": "=",
+  "rhs": "'<tr><td colspan=\"7\" class=\"empty\">No agents to show.</td></tr>'",
+  "rhs_len": 64,
+  "category": "static",
+  "data_source_tags": ""
+ },
+ {
+  "line": 7839,
+  "function": "renderAgentRiskSummary",
+  "target": "tb",
+  "op": "=",
+  "rhs": "rows.map(function(a) {\n    return '<tr>' +\n      '<td>' + x(a.hostname || a.agentId) + '</td>' +\n      (a.measurable\n        ? '<td style=\"color:' + _riskScoreColor(a.healthScore) + ';font-weight:700\">' + a.healthScore + '</td>'\n        : '<td class=\"u-muted\" title=\"Nothing collected for this endpoint yet \u2014 an absent score is not a safe score\">\u2014 no data</td>') +\n      '<td>' + (a.criticalityRisk |",
+  "rhs_len": 783,
+  "category": "unescaped_html",
+  "data_source_tags": "agent"
+ },
+ {
+  "line": 7968,
+  "function": "loadThreatIntelConfig",
+  "target": "if (panel) panel",
+  "op": "=",
+  "rhs": "''",
+  "rhs_len": 2,
+  "category": "static_empty",
+  "data_source_tags": ""
+ },
+ {
+  "line": 7977,
+  "function": "loadThreatIntelConfig",
+  "target": "panel",
+  "op": "=",
+  "rhs": "'<div class=\"kpi-row\">' +\n        urlField +\n        '<input id=\"ti-' + name + '-key\" type=\"password\" placeholder=\"API key (leave blank to keep current)\" class=\"inp-sm u-flex1\">' +\n        insecureField +\n        '<label class=\"tiny muted\" style=\"display:flex;align-items:center;gap:0.3rem\"><input type=\"checkbox\" id=\"ti-' + name + '-enabled\" ' + (cfg.enabled ? 'checked' : '') + '> Enabled</label>' ",
+  "rhs_len": 1002,
+  "category": "partial_escaped",
+  "data_source_tags": ""
+ },
+ {
+  "line": 8083,
+  "function": "loadTAXIIConnectors",
+  "target": "tbody",
+  "op": "=",
+  "rhs": "'<tr><td colspan=\"6\" class=\"empty\">Loading\u2026</td></tr>'",
+  "rhs_len": 54,
+  "category": "static",
+  "data_source_tags": ""
+ },
+ {
+  "line": 8088,
+  "function": "loadTAXIIConnectors",
+  "target": "tbody",
+  "op": "=",
+  "rhs": "'<tr><td colspan=\"6\" class=\"empty\">Failed to load: ' + x(e.message || 'unknown error') + '</td></tr>'",
+  "rhs_len": 101,
+  "category": "escaped",
+  "data_source_tags": "error_message"
+ },
+ {
+  "line": 8095,
+  "function": "renderTAXIIConnectorsList",
+  "target": "tbody",
+  "op": "=",
+  "rhs": "'<tr><td colspan=\"6\" class=\"empty\">No TAXII connectors configured yet.</td></tr>'",
+  "rhs_len": 81,
+  "category": "static",
+  "data_source_tags": ""
+ },
+ {
+  "line": 8098,
+  "function": "renderTAXIIConnectorsList",
+  "target": "tbody",
+  "op": "=",
+  "rhs": "TAXII_CONNECTORS.map(function(c) {\n    var lastPoll = c.lastPollAt ? ago(c.lastPollAt) : 'Never';\n    var resultColor = c.lastPollStatus === 'ok' ? 'var(--success)' : (c.lastPollStatus === 'error' ? 'var(--danger)' : 'var(--muted)');\n    var summary = c.lastPollSummary || {};\n    var resultText = c.lastPollStatus === 'ok'\n      ? (summary.processed || 0) + ' processed, ' + (summary.skipped || 0) +",
+  "rhs_len": 1439,
+  "category": "unescaped_html",
+  "data_source_tags": "user_created_name"
+ },
+ {
+  "line": 8274,
+  "function": "loadARTContentStatus",
+  "target": "statusEl",
+  "op": "=",
+  "rhs": "'<span style=\"display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--success);margin-right:6px;vertical-align:middle\"></span><span class=\"u-success\">Seeded</span>'",
+  "rhs_len": 185,
+  "category": "static",
+  "data_source_tags": ""
+ },
+ {
+  "line": 8276,
+  "function": "loadARTContentStatus",
+  "target": "statusEl",
+  "op": "=",
+  "rhs": "'<span style=\"display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--warning);margin-right:6px;vertical-align:middle\"></span><span class=\"u-warning\">Not seeded</span>'",
+  "rhs_len": 189,
+  "category": "static",
+  "data_source_tags": ""
+ },
+ {
+  "line": 8316,
+  "function": "loadARTContentStatus",
+  "target": "document.getElementById('cs-art-status')",
+  "op": "=",
+  "rhs": "'<span class=\"u-danger\">Error checking status</span>'",
+  "rhs_len": 53,
+  "category": "static",
+  "data_source_tags": ""
+ },
+ {
+  "line": 8329,
+  "function": "toggleSimCoverage",
+  "target": "if (car) car",
+  "op": "=",
+  "rhs": "SIM_COV_OPEN ? '&#9660;' : '&#9654;'",
+  "rhs_len": 36,
+  "category": "static",
+  "data_source_tags": ""
+ },
+ {
+  "line": 8442,
+  "function": "loadSimCoverage",
+  "target": "bodyEl",
+  "op": "=",
+  "rhs": "rows.map(function(r, i) {\n        var bg = i % 2 === 0 ? '' : 'background:rgba(255,255,255,.02)';\n        var isVariantRow = r[0].indexOf('Variant Engine') !== -1;\n        var isSection = !!sectionKeys[r[0]];\n        var textStyle = isVariantRow ? 'font-weight:700;color:var(--accent)'\n                      : isSection    ? 'font-weight:700;color:var(--text)'\n                      :                ",
+  "rhs_len": 2162,
+  "category": "unescaped_html",
+  "data_source_tags": ""
+ },
+ {
+  "line": 8949,
+  "function": "loadAttackPath",
+  "target": "if (body) body",
+  "op": "=",
+  "rhs": "'<div class=\"empty\" style=\"padding:2rem\">Loading\u2026</div>'",
+  "rhs_len": 56,
+  "category": "static",
+  "data_source_tags": ""
+ },
+ {
+  "line": 9004,
+  "function": "loadExposureAssets",
+  "target": "body",
+  "op": "=",
+  "rhs": "'<tr><td colspan=\"8\" class=\"empty\">Loading\u2026</td></tr>'",
+  "rhs_len": 54,
+  "category": "static",
+  "data_source_tags": ""
+ },
+ {
+  "line": 9007,
+  "function": "loadExposureAssets",
+  "target": "body",
+  "op": "=",
+  "rhs": "'<tr><td colspan=\"8\" class=\"empty\">No assets found \u2014 enroll an agent or run attack-path collection.</td></tr>'",
+  "rhs_len": 110,
+  "category": "static",
+  "data_source_tags": ""
+ },
+ {
+  "line": 9010,
+  "function": "loadExposureAssets",
+  "target": "body",
+  "op": "=",
+  "rhs": "assets.map(function(a) {\n      return '<tr class=\"u-pointer\" onclick=\"openExposureDetail(\\'' + x(a.asset.hostKey) + '\\')\">' +\n        '<td class=\"u-fw600\">' + x(a.asset.label) + '</td>' +\n        '<td>' + (a.asset.managed ? '<span class=\"badge\">Managed</span>' : '<span class=\"badge u-muted\">Discovered</span>') + '</td>' +\n        '<td style=\"color:' + apColor(a.exposureScore) + ';font-weight:700\">",
+  "rhs_len": 926,
+  "category": "unescaped_html",
+  "data_source_tags": ""
+ },
+ {
+  "line": 9023,
+  "function": "loadExposureAssets",
+  "target": "body",
+  "op": "=",
+  "rhs": "'<tr><td colspan=\"8\" class=\"empty u-danger\">Failed to load: ' + x(e.message) + '</td></tr>'",
+  "rhs_len": 91,
+  "category": "escaped",
+  "data_source_tags": "error_message"
+ },
+ {
+  "line": 9093,
+  "function": "renderExecDashboard",
+  "target": "el",
+  "op": "=",
+  "rhs": "edKpiCard('Risk Score', current.avgRiskScore, risk) +\n    edKpiCard('Exposure Score', current.exposureScore, exp, noAttackPathData) +\n    edKpiCard('Detection Coverage', current.detectionCoverage, det, noAttackPathData) +\n    edKpiCard('Fleet Assets', current.assetCount, cnt)",
+  "rhs_len": 276,
+  "category": "indirect_builder",
+  "data_source_tags": ""
+ },
+ {
+  "line": 9149,
+  "function": "renderForecast",
+  "target": "el",
+  "op": "=",
+  "rhs": "''",
+  "rhs_len": 2,
+  "category": "static_empty",
+  "data_source_tags": ""
+ },
+ {
+  "line": 9156,
+  "function": "renderForecast",
+  "target": "el",
+  "op": "=",
+  "rhs": "'<div class=\"card\" style=\"margin-top:1rem;padding:1rem\">' +\n    '<div style=\"display:flex;justify-content:space-between;align-items:center\">' +\n      '<div><span class=\"kpi-label\">Risk-score forecast</span> &nbsp;' + edDirectionLabel(fc) + '</div>' +\n      conf +\n    '</div>' +\n    (chart || '<div class=\"tiny muted\" style=\"margin-top:0.4rem\">Not enough data to chart yet.</div>') +\n    note +\n  '</",
+  "rhs_len": 405,
+  "category": "partial_escaped",
+  "data_source_tags": ""
+ },
+ {
+  "line": 9170,
+  "function": "renderExposure",
+  "target": "el",
+  "op": "=",
+  "rhs": "'<div class=\"card\" style=\"margin-top:1rem;padding:1rem\">' +\n      '<span class=\"kpi-label\">Open exposure windows</span>' +\n      '<div class=\"tiny muted\" style=\"margin-top:0.4rem\">No open findings.</div></div>'",
+  "rhs_len": 210,
+  "category": "static",
+  "data_source_tags": ""
+ },
+ {
+  "line": 9192,
+  "function": "stat",
+  "target": "el",
+  "op": "=",
+  "rhs": "'<div class=\"card\" style=\"margin-top:1rem;padding:1rem\">' +\n    '<span class=\"kpi-label\">Open exposure windows</span>' + strip +\n    '<div class=\"tbl-wrap\"><table><thead><tr>' +\n      '<th>Technique</th><th>Severity</th><th>Days open</th><th>First seen</th><th>Reopened</th>' +\n    '</tr></thead><tbody>' + rows + '</tbody></table></div>' +\n  '</div>'",
+  "rhs_len": 351,
+  "category": "unescaped_html",
+  "data_source_tags": ""
+ },
+ {
+  "line": 9240,
+  "function": "loadCoverageMatrix",
+  "target": "body",
+  "op": "=",
+  "rhs": "'<tr><td colspan=\"6\" class=\"empty\">Loading&hellip;</td></tr>'",
+  "rhs_len": 61,
+  "category": "static",
+  "data_source_tags": ""
+ },
+ {
+  "line": 9246,
+  "function": "loadCoverageMatrix",
+  "target": "body",
+  "op": "=",
+  "rhs": "''",
+  "rhs_len": 2,
+  "category": "static_empty",
+  "data_source_tags": ""
+ },
+ {
+  "line": 9251,
+  "function": "loadCoverageMatrix",
+  "target": "body",
+  "op": "=",
+  "rhs": "rows.map(function(r) {\n        return '<tr>' +\n          '<td class=\"u-fw600\">' + x(r.techniqueId) + '</td>' +\n          '<td>' + covStatusCell(r.simulationExists) + '</td>' +\n          '<td>' + covStatusCell(r.detectionProfileExists) + '</td>' +\n          '<td>' + covStatusCell(r.purpleExerciseExists) + '</td>' +\n          '<td>' + covStatusCell(r.complianceMappingExists) + '</td>' +\n          '<",
+  "rhs_len": 495,
+  "category": "unescaped_html",
+  "data_source_tags": ""
+ },
+ {
+  "line": 9263,
+  "function": "loadCoverageMatrix",
+  "target": "body",
+  "op": "=",
+  "rhs": "'<tr><td colspan=\"6\" class=\"empty u-danger\">Failed to load: ' + x(e.message) + '</td></tr>'",
+  "rhs_len": 91,
+  "category": "escaped",
+  "data_source_tags": "error_message"
+ },
+ {
+  "line": 9289,
+  "function": "loadThreatPriorityActors",
+  "target": "body",
+  "op": "=",
+  "rhs": "'<tr><td colspan=\"5\" class=\"empty\">Loading&hellip;</td></tr>'",
+  "rhs_len": 61,
+  "category": "static",
+  "data_source_tags": ""
+ },
+ {
+  "line": 9294,
+  "function": "loadThreatPriorityActors",
+  "target": "body",
+  "op": "=",
+  "rhs": "''",
+  "rhs_len": 2,
+  "category": "static_empty",
+  "data_source_tags": ""
+ },
+ {
+  "line": 9299,
+  "function": "loadThreatPriorityActors",
+  "target": "body",
+  "op": "=",
+  "rhs": "TP_ACTOR_CACHE.map(function(a) {\n        return '<tr class=\"u-pointer\" onclick=\\'showThreatPriorityDetail(' + JSON.stringify(a.actorName).replace(/'/g, \"&#39;\") + ')\\'>' +\n          '<td class=\"u-fw600\">' + x(a.actorName) + '</td>' +\n          '<td>' + tpTierBadge(a.tier) + '</td>' +\n          '<td>' + x(a.score) + '</td>' +\n          '<td>' + tpTrendCell(a.trend, a.trendDelta) + '</td>' +\n       ",
+  "rhs_len": 513,
+  "category": "unescaped_html",
+  "data_source_tags": ""
+ },
+ {
+  "line": 9310,
+  "function": "loadThreatPriorityActors",
+  "target": "body",
+  "op": "=",
+  "rhs": "'<tr><td colspan=\"5\" class=\"empty u-danger\">Failed to load: ' + x(e.message) + '</td></tr>'",
+  "rhs_len": 91,
+  "category": "escaped",
+  "data_source_tags": "error_message"
+ },
+ {
+  "line": 9322,
+  "function": "showThreatPriorityDetail",
+  "target": "document.getElementById('tp-detail-factors')",
+  "op": "=",
+  "rhs": "'<div class=\"empty u-danger\">Failed to load: ' + x(e.message) + '</div>'",
+  "rhs_len": 72,
+  "category": "escaped",
+  "data_source_tags": "error_message"
+ },
+ {
+  "line": 9327,
+  "function": "renderThreatPriorityDetail",
+  "target": "document.getElementById('tp-detail-title')",
+  "op": "=",
+  "rhs": "x(d.actorName) +\n    (d.canonicalGroupId ? '  <span class=\"tiny muted\" style=\"font-weight:400\">&middot; MITRE ' + x(d.canonicalGroupId) + '</span>' : '')",
+  "rhs_len": 153,
+  "category": "escaped",
+  "data_source_tags": ""
+ },
+ {
+  "line": 9330,
+  "function": "renderThreatPriorityDetail",
+  "target": "document.getElementById('tp-detail-summary')",
+  "op": "=",
+  "rhs": "'<div class=\"kpi-card\"><div class=\"kpi-label\">Score</div><div class=\"kpi-value\">' + x(d.score) + '</div></div>' +\n    '<div class=\"kpi-card\"><div class=\"kpi-label\">Tier</div><div class=\"kpi-value\">' + tpTierBadge(d.tier) + '</div></div>' +\n    '<div class=\"kpi-card\"><div class=\"kpi-label\">Techniques</div><div class=\"kpi-value\">' + x(d.techniqueCount) + '</div></div>' +\n    '<div class=\"kpi-card\"><",
+  "rhs_len": 505,
+  "category": "partial_escaped",
+  "data_source_tags": ""
+ },
+ {
+  "line": 9343,
+  "function": "renderThreatPriorityDetail",
+  "target": "document.getElementById('tp-detail-factors')",
+  "op": "=",
+  "rhs": "factors || '<div class=\"empty\">No factor data.</div>'",
+  "rhs_len": 53,
+  "category": "unescaped_html",
+  "data_source_tags": "api_response"
+ },
+ {
+  "line": 9346,
+  "function": "renderThreatPriorityDetail",
+  "target": "document.getElementById('tp-detail-uncovered')",
+  "op": "=",
+  "rhs": "uncovered.length\n    ? uncovered.map(function(t) { return '<span class=\"tool-tag\">' + x(t) + '</span>'; }).join(' ')\n    : '<span class=\"muted\">No coverage gaps.</span>'",
+  "rhs_len": 169,
+  "category": "escaped",
+  "data_source_tags": ""
+ },
+ {
+  "line": 9357,
+  "function": "renderThreatPriorityDetail",
+  "target": "document.getElementById('tp-detail-coverage')",
+  "op": "=",
+  "rhs": "techCoverage.length\n    ? '<table class=\"u-w100\"><thead><tr><th>Technique</th><th>Content</th><th>Prevention</th><th>Detection</th></tr></thead><tbody>' +\n      techCoverage.map(function(tc) {\n        var content = [\n          tc.hasSimulation ? '<span class=\"tool-tag\">Sim</span>' : '',\n          tc.hasDetection ? '<span class=\"tool-tag\">Detect</span>' : '',\n          tc.hasCompliance ? '<span cla",
+  "rhs_len": 1068,
+  "category": "unescaped_html",
+  "data_source_tags": "api_response"
+ },
+ {
+  "line": 9374,
+  "function": "renderThreatPriorityDetail",
+  "target": "document.getElementById('tp-detail-sources')",
+  "op": "=",
+  "rhs": "sources.length\n    ? '<div style=\"display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:0.75rem\">' +\n      sources.map(function(s) {\n        // \"Unknown\" (never \"None\"): an empty field here means this source\n        // never supplied it -- e.g. OpenCTI never reports sectors/regions,\n        // MISP never reports aliases. Rendering it as \"None\" would read as\n        // a positiv",
+  "rhs_len": 1770,
+  "category": "unescaped_html",
+  "data_source_tags": "user_created_name"
+ },
+ {
+  "line": 9409,
+  "function": "row",
+  "target": "document.getElementById('tp-detail-evidence')",
+  "op": "=",
+  "rhs": "'<table class=\"u-w100\"><thead><tr><th>Technique</th><th>Via</th><th>Confidence</th><th>Since</th></tr></thead><tbody>' +\n      techEvidence.map(function(e) {\n        var via = e.via ? (e.via + (e.viaName ? ' (' + x(e.viaName) + ')' : '')) : '<span class=\"muted\">direct</span>';\n        var since = e.startTime ? x(fmtDate(e.startTime)) : '<span class=\"muted\">&mdash;</span>';\n        return '<tr><td>",
+  "rhs_len": 556,
+  "category": "unescaped_html",
+  "data_source_tags": ""
+ },
+ {
+  "line": 9422,
+  "function": "row",
+  "target": "document.getElementById('tp-detail-history')",
+  "op": "=",
+  "rhs": "hist.length\n    ? '<table class=\"u-w100\"><thead><tr><th>Date</th><th>Score</th></tr></thead><tbody>' +\n      hist.map(function(h) { return '<tr><td>' + x(new Date(h.recordedAt).toLocaleDateString()) + '</td><td>' + x(h.score) + '</td></tr>'; }).join('') +\n      '</tbody></table>'\n    : '<span class=\"muted\">No history yet.</span>'",
+  "rhs_len": 331,
+  "category": "escaped",
+  "data_source_tags": ""
+ },
+ {
+  "line": 9432,
+  "function": "row",
+  "target": "document.getElementById('tp-detail-recs')",
+  "op": "=",
+  "rhs": "matches.length\n      ? matches.map(function(t) { return '<div style=\"padding:0.3rem 0\">' + x(t.techniqueId) + ' \u2014 ' + x(t.name) + ' <span class=\"tiny muted\">(score ' + x(t.score) + ')</span></div>'; }).join('')\n      : '<span class=\"muted\">No open recommendations for this actor\\'s techniques.</span>'",
+  "rhs_len": 301,
+  "category": "escaped",
+  "data_source_tags": "user_created_name"
+ },
+ {
+  "line": 9436,
+  "function": "row",
+  "target": "document.getElementById('tp-detail-recs')",
+  "op": "=",
+  "rhs": "'<span class=\"muted\">Could not load recommendations.</span>'",
+  "rhs_len": 60,
+  "category": "static",
+  "data_source_tags": ""
+ },
+ {
+  "line": 9444,
+  "function": "loadRecommendations",
+  "target": "body",
+  "op": "=",
+  "rhs": "'<tr><td colspan=\"7\" class=\"empty\">Loading\u2026</td></tr>'",
+  "rhs_len": 54,
+  "category": "static",
+  "data_source_tags": ""
+ },
+ {
+  "line": 9448,
+  "function": "loadRecommendations",
+  "target": "body",
+  "op": "=",
+  "rhs": "'<tr><td colspan=\"7\" class=\"empty u-danger\">Failed to load: ' + x(e.message) + '</td></tr>'",
+  "rhs_len": 91,
+  "category": "escaped",
+  "data_source_tags": "error_message"
+ },
+ {
+  "line": 9457,
+  "function": "renderRecommendations",
+  "target": "body",
+  "op": "=",
+  "rhs": "'<tr><td colspan=\"7\" class=\"empty\">No recommendations yet \u2014 seed ATT&CK/ART content to rank techniques.</td></tr>'",
+  "rhs_len": 114,
+  "category": "static",
+  "data_source_tags": ""
+ },
+ {
+  "line": 9460,
+  "function": "renderRecommendations",
+  "target": "body",
+  "op": "=",
+  "rhs": "list.map(function(t) {\n    var threat = [];\n    if (t.kev) threat.push('<span class=\"badge\" style=\"color:var(--danger);border-color:var(--danger)\">KEV</span>');\n    if (t.epssPercentile) threat.push('<span class=\"badge\">EPSS ' + Math.round(t.epssPercentile) + '</span>');\n    if (t.threatActors) threat.push('<span class=\"badge\">' + t.threatActors + ' group' + (t.threatActors === 1 ? '' : 's') + '</",
+  "rhs_len": 1300,
+  "category": "unescaped_html",
+  "data_source_tags": "threat_intel,user_created_name"
+ },
+ {
+  "line": 9502,
+  "function": "openExposureDetail",
+  "target": "body",
+  "op": "=",
+  "rhs": "'<div class=\"empty\" style=\"padding:2rem\">Loading\u2026</div>'",
+  "rhs_len": 56,
+  "category": "static",
+  "data_source_tags": ""
+ },
+ {
+  "line": 9568,
+  "function": "expCard",
+  "target": "body",
+  "op": "=",
+  "rhs": "h",
+  "rhs_len": 1,
+  "category": "indirect_variable",
+  "data_source_tags": ""
+ },
+ {
+  "line": 9570,
+  "function": "expCard",
+  "target": "body",
+  "op": "=",
+  "rhs": "'<div class=\"empty u-danger\">Failed to load: ' + x(e.message) + '</div>'",
+  "rhs_len": 72,
+  "category": "escaped",
+  "data_source_tags": "error_message"
+ },
+ {
+  "line": 9590,
+  "function": "loadOpenAEVConfig",
+  "target": "configPanel",
+  "op": "=",
+  "rhs": "'<div class=\"kpi-row\">' +\n          '<input id=\"oaev-url\" type=\"text\" placeholder=\"https://openaev.example.local\" value=\"' + x(cfg.baseUrl || '') + '\" class=\"inp-sm u-flex1\">' +\n          '<input id=\"oaev-token\" type=\"password\" placeholder=\"Bearer token (leave blank to keep current)\" class=\"inp-sm u-flex1\">' +\n          '<label class=\"tiny muted\" style=\"display:flex;align-items:center;gap:0.3rem\">",
+  "rhs_len": 1147,
+  "category": "escaped",
+  "data_source_tags": "openaev"
+ },
+ {
+  "line": 9605,
+  "function": "loadOpenAEVConfig",
+  "target": "configPanel",
+  "op": "=",
+  "rhs": "''",
+  "rhs_len": 2,
+  "category": "static_empty",
+  "data_source_tags": ""
+ },
+ {
+  "line": 9666,
+  "function": "loadOpenAEVScenarios",
+  "target": "body",
+  "op": "=",
+  "rhs": "''",
+  "rhs_len": 2,
+  "category": "static_empty",
+  "data_source_tags": ""
+ },
+ {
+  "line": 9671,
+  "function": "loadOpenAEVScenarios",
+  "target": "body",
+  "op": "=",
+  "rhs": "list.map(function(sc) {\n      return '<tr class=\"u-pointer\" onclick=\"openOpenAEVDetail(\\'' + x(sc.OpenAEVScenarioID) + '\\')\">' +\n        '<td>' + x(sc.Name) + '</td>' +\n        '<td>' + x(sc.Category) + '</td>' +\n        '<td>' + x(sc.Severity) + '</td>' +\n        '<td>' + (sc.TechniqueIDs || []).length + '</td>' +\n        '<td>' + sc.InjectsCount + '</td>' +\n        '<td class=\"tiny muted\">' + x(",
+  "rhs_len": 470,
+  "category": "unescaped_html",
+  "data_source_tags": "openaev"
+ },
+ {
+  "line": 9757,
+  "function": "openOpenAEVDetail",
+  "target": "body",
+  "op": "=",
+  "rhs": "'<div class=\"tiny muted\">' + x(d.detail.description || '') + '</div>' + injectsHtml",
+  "rhs_len": 83,
+  "category": "partial_escaped",
+  "data_source_tags": "user_created_name"
+ },
+ {
+  "line": 9759,
+  "function": "openOpenAEVDetail",
+  "target": "body",
+  "op": "+=",
+  "rhs": "'<div style=\"margin-top:1rem\"><button class=\"btn btn-primary btn-sm\" onclick=\"createPlanFromOpenAEV(\\'' + x(id) + '\\')\">Create Exercise Plan</button></div>'",
+  "rhs_len": 156,
+  "category": "escaped",
+  "data_source_tags": "openaev"
+ },
+ {
+  "line": 9775,
+  "function": "loadExercisesTab",
+  "target": "body",
+  "op": "=",
+  "rhs": "''",
+  "rhs_len": 2,
+  "category": "static_empty",
+  "data_source_tags": ""
+ },
+ {
+  "line": 9777,
+  "function": "loadExercisesTab",
+  "target": "body",
+  "op": "=",
+  "rhs": "plans.map(function(p) {\n      return '<tr>' +\n        '<td>' + x(p.name) + '</td>' +\n        '<td>' + (p.steps ? p.steps.length : 0) + '</td>' +\n        '<td class=\"tiny muted\">' + x(p.created_at || '') + '</td>' +\n        '<td><button class=\"btn btn-primary btn-sm\" onclick=\"launchExercisePrompt(\\'' + x(p.id) + '\\')\">Launch</button></td>' +\n        '</tr>';\n    }).join('')",
+  "rhs_len": 375,
+  "category": "escaped",
+  "data_source_tags": "user_created_name"
+ },
+ {
+  "line": 9790,
+  "function": "loadExercisesTab",
+  "target": "body",
+  "op": "=",
+  "rhs": "''",
+  "rhs_len": 2,
+  "category": "static_empty",
+  "data_source_tags": ""
+ },
+ {
+  "line": 9792,
+  "function": "loadExercisesTab",
+  "target": "body",
+  "op": "=",
+  "rhs": "execs.map(function(e) {\n      var live = e.status === 'running' || e.status === 'paused';\n      var progress = e.steps_total\n        ? (e.steps_done || 0) + ' / ' + e.steps_total + ' steps'\n        : '<span class=\"tiny muted\">\u2014</span>';\n      var abortBtn = live\n        ? '<button class=\"btn btn-outline-red btn-sm\" onclick=\"event.stopPropagation();abortExecution(\\'' + x(e.id) + '\\')\">&#9632; Abort",
+  "rhs_len": 932,
+  "category": "unescaped_html",
+  "data_source_tags": "user_created_name"
+ },
+ {
+  "line": 9936,
+  "function": "openExerciseDetail",
+  "target": "document.getElementById('exercise-detail-body')",
+  "op": "=",
+  "rhs": "scoreHtml + stepsHtml + '<div style=\"margin-top:0.75rem\">' + actions + '</div>'",
+  "rhs_len": 79,
+  "category": "unescaped_html",
+  "data_source_tags": ""
+ },
+ {
+  "line": 10166,
+  "function": "loadAPHistory",
+  "target": "tb",
+  "op": "=",
+  "rhs": "'<tr><td colspan=\"7\" class=\"empty\">Loading\u2026</td></tr>'",
+  "rhs_len": 54,
+  "category": "static",
+  "data_source_tags": ""
+ },
+ {
+  "line": 10169,
+  "function": "loadAPHistory",
+  "target": "tb",
+  "op": "=",
+  "rhs": "'<tr><td colspan=\"7\" class=\"empty\">No collection history yet.</td></tr>'",
+  "rhs_len": 72,
+  "category": "static",
+  "data_source_tags": ""
+ },
+ {
+  "line": 10172,
+  "function": "loadAPHistory",
+  "target": "tb",
+  "op": "=",
+  "rhs": "rows.map(function(r) {\n      var ts = r.collectedAt ? new Date(r.collectedAt).toLocaleString('en-GB',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}) : '\u2014';\n      var statusBadge = r.status === 'completed'\n        ? '<span class=\"u-success\">&#10003; Completed</span>'\n        : '<span class=\"u-danger\">&#10005; ' + x(r.status) + (r.errorMsg ? ': ' + x(r.errorMsg.slice(0,40)) : '') + '<",
+  "rhs_len": 960,
+  "category": "unescaped_html",
+  "data_source_tags": "agent"
+ },
+ {
+  "line": 10188,
+  "function": "loadAPHistory",
+  "target": "tb",
+  "op": "=",
+  "rhs": "'<tr><td colspan=\"7\" class=\"empty\">' + x(e.message) + '</td></tr>'",
+  "rhs_len": 66,
+  "category": "escaped",
+  "data_source_tags": "error_message"
+ },
+ {
+  "line": 10197,
+  "function": "renderAttackPath",
+  "target": "body",
+  "op": "=",
+  "rhs": "'<div class=\"dash-panel\"><div class=\"dash-panel-body\" style=\"padding:2rem;text-align:center\">' +\n      '<div style=\"font-size:1rem;font-weight:700;color:var(--text);margin-bottom:0.4rem\">No attack-path data collected yet</div>' +\n      '<div class=\"tiny muted\" style=\"max-width:520px;margin:0 auto 1rem\">Run a collection on an enrolled agent to map lateral-movement reachability, blast radius, segmen",
+  "rhs_len": 576,
+  "category": "static",
+  "data_source_tags": ""
+ },
+ {
+  "line": 10243,
+  "function": "renderAttackPath",
+  "target": "body",
+  "op": "=",
+  "rhs": "h",
+  "rhs_len": 1,
+  "category": "indirect_variable",
+  "data_source_tags": ""
+ },
+ {
+  "line": 10300,
+  "function": "fill",
+  "target": "sel",
+  "op": "=",
+  "rhs": "(state.agents || []).map(function(a) {\n      return '<option value=\"' + x(a.agentId) + '\">' + x(a.hostname || a.agentId) + (a.status === 'offline' ? ' (offline)' : '') + '</option>';\n    }).join('') || '<option value=\"\">No agents enrolled</option>'",
+  "rhs_len": 248,
+  "category": "escaped",
+  "data_source_tags": "agent"
+ },
+ {
+  "line": 10324,
+  "function": "apDiscoverSubnet",
+  "target": "btn",
+  "op": "=",
+  "rhs": "'&#128270; Discover Subnet'",
+  "rhs_len": 27,
+  "category": "static",
+  "data_source_tags": ""
+ },
+ {
+  "line": 10334,
+  "function": "apDiscoverSubnet",
+  "target": "btn",
+  "op": "=",
+  "rhs": "'&#128270; Discover Subnet'",
+  "rhs_len": 27,
+  "category": "static",
+  "data_source_tags": ""
+ },
+ {
+  "line": 10379,
+  "function": "dispatchAPCollect",
+  "target": "tl",
+  "op": "=",
+  "rhs": "_apStep('done', 'Collection started for ' + x(agentLabel) + ' at ' + _apTimestamp(),\n        targets.length + ' target' + (targets.length === 1 ? '' : 's') + ' queued \u2014 job ' + (r.job ? r.job.id.slice(0,8) : '')) +\n      (shDetail ? _apStep('warn', 'SharpHound notice', shDetail) : '') +\n      _apStep(jobStatus === 'dispatched' || jobStatus === 'running' ? 'done' : 'active',\n        jobStatus === '",
+  "rhs_len": 843,
+  "category": "indirect_builder",
+  "data_source_tags": ""
+ },
+ {
+  "line": 10480,
+  "function": "_apRenderJobState",
+  "target": "tl",
+  "op": "=",
+  "rhs": "_apStep(dispatchState, 'Job dispatched \u2014 ' + job.id.slice(0,8),\n      job.targetCount > 0 ? job.targetCount + ' target' + (job.targetCount === 1 ? '' : 's') + ' queued' : '') +\n    _apStep(ackState, statusLabel, '') +\n    _apStep(probeState, 'Executing on agent', progDetail) +\n    _apStep(uploadState, 'Uploading results\u2026', '') +\n    _apStep(graphState, 'Graph built &amp; analysis complete',\n      ",
+  "rhs_len": 490,
+  "category": "indirect_builder",
+  "data_source_tags": ""
+ },
+ {
+  "line": 10582,
+  "function": "_apOnCollected",
+  "target": "tl",
+  "op": "=",
+  "rhs": "step1Html +\n    _apStep('done', 'Agent finished probing at ' + _apTimestamp(), x(label) + ' completed TCP probes across all targets.') +\n    _apStep('done', 'Collection received \u2014 ' + nodes + ' node' + (nodes === 1 ? '' : 's') + ', ' + edges + ' lateral edge' + (edges === 1 ? '' : 's') + ' mapped',\n      'The server has built the updated graph. Previous collection (if any) has been superseded by t",
+  "rhs_len": 605,
+  "category": "partial_escaped",
+  "data_source_tags": "api_response"
+ },
+ {
+  "line": 10622,
+  "function": "openAPAssets",
+  "target": "document.getElementById('ap-assets-body')",
+  "op": "=",
+  "rhs": "'<tr><td colspan=\"5\" class=\"empty\">Loading\u2026</td></tr>'",
+  "rhs_len": 54,
+  "category": "static",
+  "data_source_tags": ""
+ },
+ {
+  "line": 10632,
+  "function": "renderAPAssets",
+  "target": "tb",
+  "op": "=",
+  "rhs": "'<tr><td colspan=\"7\" class=\"empty\">No hosts discovered yet \u2014 run a collection first.</td></tr>'",
+  "rhs_len": 95,
+  "category": "static",
+  "data_source_tags": ""
+ },
+ {
+  "line": 10635,
+  "function": "renderAPAssets",
+  "target": "tb",
+  "op": "=",
+  "rhs": "AP_ASSETS.map(function(a, i) {\n    var tierOpts = AP_CRIT_TIERS.map(function(t) {\n      return '<option value=\"' + t + '\"' + (a.criticalityTier === t ? ' selected' : '') + '>' + (t || '\u2014') + '</option>';\n    }).join('');\n    return '<tr>' +\n      '<td style=\"font-family:var(--font-mono);font-size:0.76rem\">' + x(a.label || a.hostKey) +\n        (a.label && a.label.toUpperCase() !== (a.hostKey || '')",
+  "rhs_len": 1896,
+  "category": "unescaped_html",
+  "data_source_tags": ""
+ },
+ {
+  "line": 10794,
+  "function": "renderAgentGroupTree",
+  "target": "root",
+  "op": "=",
+  "rhs": "allRow + agentGroupTree.map(renderAgentGroupNode).join('')",
+  "rhs_len": 58,
+  "category": "unescaped_text",
+  "data_source_tags": "agent"
+ },
+ {
+  "line": 10905,
+  "function": "openGroupPicker",
+  "target": "document.getElementById('gp-select')",
+  "op": "=",
+  "rhs": "'<option value=\"\">' + topLabel + '</option>' +\n    options.map(function(o) { return '<option value=\"' + x(o.id) + '\">' + x(o.label) + '</option>'; }).join('')",
+  "rhs_len": 158,
+  "category": "partial_escaped",
+  "data_source_tags": ""
+ },
+ {
+  "line": 10984,
+  "function": "renderLegacyMigrationPanel",
+  "target": "el",
+  "op": "=",
+  "rhs": "'<div class=\"legacy-migration-header\">Legacy Transport Migration</div>' +\n      '<div class=\"legacy-migration-days\">Days clean: ' + status.daysClean + ' / ' + status.daysRequired + '</div>' +\n      '<div class=\"legacy-migration-status ' + (status.eligible ? 'eligible' : 'not-eligible') + '\">' +\n        (status.eligible ? 'ELIGIBLE FOR REVIEW' : 'NOT YET ELIGIBLE') +\n      '</div>' +\n      unattrib",
+  "rhs_len": 501,
+  "category": "partial_escaped",
+  "data_source_tags": ""
+ },
+ {
+  "line": 11042,
+  "function": "renderAgentTiles",
+  "target": "if (el) el",
+  "op": "=",
+  "rhs": "tile('Total agents', b.online + b.degraded + b.offline, 'var(--text)') +\n    tile('Online', b.online, b.online ? 'var(--success)' : 'var(--muted)') +\n    tile('Degraded', b.degraded, b.degraded ? 'var(--warning)' : 'var(--muted)') +\n    tile('Offline', b.offline, b.offline ? 'var(--danger)' : 'var(--muted)') +\n    tile('Retired', b.retired, 'var(--muted)')",
+  "rhs_len": 358,
+  "category": "indirect_builder",
+  "data_source_tags": ""
+ },
+ {
+  "line": 11066,
+  "function": "c",
+  "target": "if (el) el",
+  "op": "=",
+  "rhs": "covSegHtml(\n    [['all', 'All'], ['online', 'Online'], ['degraded', 'Degraded'], ['offline', 'Offline'], ['retired', 'Retired']],\n    AGENT_FILTER, 'setAgentFilter', c\n  )",
+  "rhs_len": 171,
+  "category": "indirect_builder",
+  "data_source_tags": ""
+ },
+ {
+  "line": 11083,
+  "function": "renderAgentRows",
+  "target": "tbody",
+  "op": "=",
+  "rhs": "'<tr><td colspan=\"8\" class=\"empty\">' + emptyMsg + '</td></tr>'",
+  "rhs_len": 62,
+  "category": "unescaped_html",
+  "data_source_tags": ""
+ },
+ {
+  "line": 11086,
+  "function": "renderAgentRows",
+  "target": "tbody",
+  "op": "=",
+  "rhs": "list.map(function(a, idx) {\n    var dot = agentDotColor(agentBucket(a));\n    var menuId = 'agent-menu-' + idx;\n    return '<tr>' +\n      '<td style=\"max-width:180px\"><div style=\"display:flex;align-items:center;gap:0.5rem\"><span style=\"width:8px;height:8px;border-radius:50%;flex-shrink:0;background:' + dot + '\"></span>' +\n        '<div style=\"min-width:0\"><div class=\"cell-main\" style=\"font-family:v",
+  "rhs_len": 6034,
+  "category": "unescaped_html",
+  "data_source_tags": "agent"
+ },
+ {
+  "line": 11407,
+  "function": "renderScenarioLanding",
+  "target": "el",
+  "op": "=",
+  "rhs": "html || '<p class=\"empty\">No scenarios loaded.</p>'",
+  "rhs_len": 51,
+  "category": "unescaped_html",
+  "data_source_tags": ""
+ },
+ {
+  "line": 11453,
+  "function": "renderScenarios",
+  "target": "landingEl",
+  "op": "=",
+  "rhs": "'<p class=\"empty\">No scenarios loaded.</p>'",
+  "rhs_len": 43,
+  "category": "static",
+  "data_source_tags": ""
+ },
+ {
+  "line": 11498,
+  "function": "renderScenarios",
+  "target": "sgrid",
+  "op": "=",
+  "rhs": "results.length\n      ? '<div class=\"sc-fade\">' + renderScenarioTileGroup('search', results) + '</div>'\n      : '<p class=\"empty\">No scenarios match your search.</p>'",
+  "rhs_len": 165,
+  "category": "indirect_builder",
+  "data_source_tags": ""
+ },
+ {
+  "line": 11527,
+  "function": "renderScenarios",
+  "target": "grid",
+  "op": "=",
+  "rhs": "inCat.length\n    ? '<div class=\"sc-fade\">' + renderScenarioTileGroup(state.scenarioView, inCat) + '</div>'\n    : '<p class=\"empty\">No scenarios match your filter.</p>'",
+  "rhs_len": 167,
+  "category": "indirect_builder",
+  "data_source_tags": ""
+ },
+ {
+  "line": 11876,
   "function": "renderSLAKPIs",
   "target": "document.getElementById('sla-rpt-kpis')",
   "op": "=",
@@ -2410,7 +2410,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11889,
+  "line": 11890,
   "function": "rank",
   "target": "el",
   "op": "=",
@@ -2420,7 +2420,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11890,
+  "line": 11891,
   "function": "rank",
   "target": "el",
   "op": "=",
@@ -2430,7 +2430,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11902,
+  "line": 11903,
   "function": "renderSLAMonthlyTrend",
   "target": "body",
   "op": "=",
@@ -2440,7 +2440,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11903,
+  "line": 11904,
   "function": "renderSLAMonthlyTrend",
   "target": "body",
   "op": "=",
@@ -2450,7 +2450,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11911,
+  "line": 11912,
   "function": "renderSLARecentlyResolved",
   "target": "body",
   "op": "=",
@@ -2460,7 +2460,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11912,
+  "line": 11913,
   "function": "renderSLARecentlyResolved",
   "target": "body",
   "op": "=",
@@ -2470,7 +2470,7 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 11956,
+  "line": 11957,
   "function": "renderFindingsTiles",
   "target": "document.getElementById('findings-tiles')",
   "op": "=",
@@ -2480,7 +2480,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11966,
+  "line": 11967,
   "function": "c",
   "target": "document.getElementById('findings-toolbar')",
   "op": "=",
@@ -2490,7 +2490,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11984,
+  "line": 11985,
   "function": "renderFindingsRows",
   "target": "tb",
   "op": "=",
@@ -2500,7 +2500,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11985,
+  "line": 11986,
   "function": "renderFindingsRows",
   "target": "tb",
   "op": "=",
@@ -2510,7 +2510,7 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 12044,
+  "line": 12045,
   "function": "list",
   "target": "document.getElementById('results-export')",
   "op": "=",
@@ -2520,7 +2520,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 12072,
+  "line": 12073,
   "function": "list",
   "target": "document.getElementById('results-body')",
   "op": "=",
@@ -2530,7 +2530,7 @@
   "data_source_tags": "agent,threat_intel,user_created_name"
  },
  {
-  "line": 12108,
+  "line": 12109,
   "function": "loadRemediations",
   "target": "document.getElementById('rem-list')",
   "op": "=",
@@ -2540,7 +2540,7 @@
   "data_source_tags": "error_message"
  },
  {
-  "line": 12130,
+  "line": 12131,
   "function": "tile",
   "target": "document.getElementById('rem-tiles')",
   "op": "=",
@@ -2550,7 +2550,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 12138,
+  "line": 12139,
   "function": "renderRemList",
   "target": "el",
   "op": "=",
@@ -2560,7 +2560,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 12139,
+  "line": 12140,
   "function": "renderRemList",
   "target": "el",
   "op": "=",
@@ -2570,7 +2570,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 12166,
+  "line": 12167,
   "function": "openRemediation",
   "target": "document.getElementById('results-export')",
   "op": "=",
@@ -2580,7 +2580,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 12187,
+  "line": 12188,
   "function": "stat",
   "target": "document.getElementById('results-body')",
   "op": "=",
@@ -2590,7 +2590,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 12301,
+  "line": 12302,
   "function": "tile",
   "target": "document.getElementById('dash-itsm-tiles')",
   "op": "=",
@@ -2600,7 +2600,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 12335,
+  "line": 12336,
   "function": "renderConnectorList",
   "target": "el",
   "op": "=",
@@ -2610,7 +2610,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 12340,
+  "line": 12341,
   "function": "renderConnectorList",
   "target": "el",
   "op": "=",
@@ -2620,7 +2620,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 12458,
+  "line": 12459,
   "function": "renderConnectorSettings",
   "target": "document.getElementById('cf-settings')",
   "op": "=",
@@ -2630,7 +2630,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 12511,
+  "line": 12512,
   "function": "fetchConnectorProjects",
   "target": "sel",
   "op": "=",
@@ -2640,7 +2640,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 12665,
+  "line": 12666,
   "function": "renderResponseConnectorList",
   "target": "el",
   "op": "=",
@@ -2650,7 +2650,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 12671,
+  "line": 12672,
   "function": "renderResponseConnectorList",
   "target": "el",
   "op": "=",
@@ -2660,7 +2660,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 12800,
+  "line": 12801,
   "function": "openRespondModal",
   "target": "sel",
   "op": "=",
@@ -2670,7 +2670,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 12802,
+  "line": 12803,
   "function": "openRespondModal",
   "target": "sel",
   "op": "=",
@@ -2680,7 +2680,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 12904,
+  "line": 12905,
   "function": "loadFindingTickets",
   "target": "container",
   "op": "=",
@@ -2690,7 +2690,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 12907,
+  "line": 12908,
   "function": "loadFindingTickets",
   "target": "container",
   "op": "=",
@@ -2700,7 +2700,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 12916,
+  "line": 12917,
   "function": "loadFindingTickets",
   "target": "if (container) container",
   "op": "=",
@@ -2710,7 +2710,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 13048,
+  "line": 13049,
   "function": "loadReports",
   "target": "el",
   "op": "=",
@@ -2720,7 +2720,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 13052,
+  "line": 13053,
   "function": "loadReports",
   "target": "el",
   "op": "=",
@@ -2730,7 +2730,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 13065,
+  "line": 13066,
   "function": "loadReports",
   "target": "document.getElementById('rep-available')",
   "op": "=",
@@ -2740,7 +2740,7 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 13073,
+  "line": 13074,
   "function": "renderRepHistory",
   "target": "tb",
   "op": "=",
@@ -2750,7 +2750,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 13077,
+  "line": 13078,
   "function": "renderRepHistory",
   "target": "tb",
   "op": "=",
@@ -2760,7 +2760,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 13119,
+  "line": 13120,
   "function": "openReportGen",
   "target": "document.getElementById('rep-agent')",
   "op": "=",
@@ -2770,7 +2770,7 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 13123,
+  "line": 13124,
   "function": "openReportGen",
   "target": "document.getElementById('rep-format')",
   "op": "=",
@@ -2780,7 +2780,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 13132,
+  "line": 13133,
   "function": "openReportGen",
   "target": "document.getElementById('rep-fw')",
   "op": "=",
@@ -2790,7 +2790,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 13443,
+  "line": 13444,
   "function": "loadRuns",
   "target": "tbody",
   "op": "=",
@@ -2800,7 +2800,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 13460,
+  "line": 13461,
   "function": "byStartedAtDesc",
   "target": "tbody",
   "op": "=",
@@ -2810,7 +2810,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 13496,
+  "line": 13497,
   "function": "byStartedAtDesc",
   "target": "tbody",
   "op": "=",
@@ -2820,7 +2820,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 13507,
+  "line": 13508,
   "function": "openModal",
   "target": "scSel",
   "op": "=",
@@ -2830,7 +2830,7 @@
   "data_source_tags": "scenario,user_created_name"
  },
  {
-  "line": 13518,
+  "line": 13519,
   "function": "openModal",
   "target": "document.getElementById('modal-agent')",
   "op": "=",
@@ -2840,7 +2840,7 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 13580,
+  "line": 13581,
   "function": "renderRunMode",
   "target": "btn",
   "op": "=",
@@ -2850,7 +2850,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 13620,
+  "line": 13621,
   "function": "renderRunMode",
   "target": "warn",
   "op": "=",
@@ -2860,7 +2860,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 13624,
+  "line": 13625,
   "function": "renderRunMode",
   "target": "btn",
   "op": "=",
@@ -2870,7 +2870,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 13638,
+  "line": 13639,
   "function": "renderRunMode",
   "target": "warn",
   "op": "=",
@@ -2880,7 +2880,7 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 13640,
+  "line": 13641,
   "function": "renderRunMode",
   "target": "btn",
   "op": "=",
@@ -2890,7 +2890,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 13652,
+  "line": 13653,
   "function": "renderRunMode",
   "target": "warn",
   "op": "=",
@@ -2900,7 +2900,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 13653,
+  "line": 13654,
   "function": "renderRunMode",
   "target": "btn",
   "op": "=",
@@ -2910,7 +2910,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 13659,
+  "line": 13660,
   "function": "renderRunMode",
   "target": "warn",
   "op": "=",
@@ -2920,7 +2920,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 13660,
+  "line": 13661,
   "function": "renderRunMode",
   "target": "btn",
   "op": "=",
@@ -2930,7 +2930,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 13667,
+  "line": 13668,
   "function": "renderRunMode",
   "target": "warn",
   "op": "=",
@@ -2940,7 +2940,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 13671,
+  "line": 13672,
   "function": "renderRunMode",
   "target": "btn",
   "op": "=",
@@ -2950,7 +2950,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 13722,
+  "line": 13723,
   "function": "renderAdditionalAgents",
   "target": "list",
   "op": "=",
@@ -2960,7 +2960,7 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 13975,
+  "line": 13976,
   "function": "row",
   "target": "document.getElementById('wz-review')",
   "op": "=",
@@ -2970,7 +2970,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 14141,
+  "line": 14142,
   "function": "openPickerWith",
   "target": "tacticSel",
   "op": "=",
@@ -2980,7 +2980,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 14298,
+  "line": 14299,
   "function": "renderPickerList",
   "target": "document.getElementById('picker-list')",
   "op": "=",
@@ -2990,7 +2990,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 14403,
+  "line": 14404,
   "function": "renderModalSelection",
   "target": "link",
   "op": "=",
@@ -3000,7 +3000,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 14422,
+  "line": 14423,
   "function": "renderModalSelection",
   "target": "link",
   "op": "=",
@@ -3010,7 +3010,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 14436,
+  "line": 14437,
   "function": "renderModalSelection",
   "target": "note",
   "op": "=",
@@ -3020,7 +3020,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 14452,
+  "line": 14453,
   "function": "renderModalSelection",
   "target": "note",
   "op": "=",
@@ -3030,7 +3030,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 14482,
+  "line": 14483,
   "function": "renderModalSelection",
   "target": "note",
   "op": "=",
@@ -3040,7 +3040,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 14485,
+  "line": 14486,
   "function": "renderModalSelection",
   "target": "note",
   "op": "=",
@@ -3050,7 +3050,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 14553,
+  "line": 14554,
   "function": "doOpen",
   "target": "tacticSel",
   "op": "=",
@@ -3060,7 +3060,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 14606,
+  "line": 14607,
   "function": "fillBuilder",
   "target": "steps",
   "op": "=",
@@ -3070,7 +3070,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 14776,
+  "line": 14777,
   "function": "techRenderSelected",
   "target": "box",
   "op": "=",
@@ -3080,7 +3080,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 14786,
+  "line": 14787,
   "function": "techRenderSelected",
   "target": "box",
   "op": "=",
@@ -3090,7 +3090,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 14826,
+  "line": 14827,
   "function": "techOnInput",
   "target": "panel",
   "op": "=",
@@ -3100,7 +3100,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 14836,
+  "line": 14837,
   "function": "techRenderResults",
   "target": "panel",
   "op": "=",
@@ -3110,7 +3110,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 14840,
+  "line": 14841,
   "function": "techRenderResults",
   "target": "panel",
   "op": "=",
@@ -3120,7 +3120,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 14857,
+  "line": 14858,
   "function": "techSelectRow",
   "target": "panel",
   "op": "=",
@@ -3130,7 +3130,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 14881,
+  "line": 14882,
   "function": "techOnKeydown",
   "target": "panel",
   "op": "=",
@@ -3140,7 +3140,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 14892,
+  "line": 14893,
   "function": "techOnBlur",
   "target": "panel",
   "op": "=",
@@ -3150,7 +3150,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 14912,
+  "line": 14913,
   "function": "addStep",
   "target": "div",
   "op": "=",
@@ -3160,7 +3160,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 15169,
+  "line": 15170,
   "function": "viewRunResults",
   "target": "document.getElementById('results-summary')",
   "op": "=",
@@ -3170,7 +3170,7 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 15174,
+  "line": 15175,
   "function": "viewRunResults",
   "target": "document.getElementById('results-summary')",
   "op": "=",
@@ -3180,7 +3180,7 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 15186,
+  "line": 15187,
   "function": "viewRunResults",
   "target": "document.getElementById('results-export')",
   "op": "=",
@@ -3190,7 +3190,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 15192,
+  "line": 15193,
   "function": "viewRunResults",
   "target": "document.getElementById('results-title')",
   "op": "=",
@@ -3200,7 +3200,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 15214,
+  "line": 15215,
   "function": "viewRunResults",
   "target": "document.getElementById('results-header-actions')",
   "op": "=",
@@ -3210,7 +3210,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 15264,
+  "line": 15265,
   "function": "kpiGaugeCard",
   "target": "document.getElementById('run-kpi-strip')",
   "op": "=",
@@ -3220,7 +3220,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 15606,
+  "line": 15607,
   "function": "soonPanel",
   "target": "document.getElementById('run-tab-content')",
   "op": "=",
@@ -3230,7 +3230,7 @@
   "data_source_tags": "threat_intel"
  },
  {
-  "line": 15643,
+  "line": 15644,
   "function": "soonPanel",
   "target": "document.getElementById('run-tabbar')",
   "op": "=",
@@ -3240,7 +3240,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 15657,
+  "line": 15658,
   "function": "soonPanel",
   "target": "reportsEl",
   "op": "=",
@@ -3250,7 +3250,7 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 15672,
+  "line": 15673,
   "function": "soonPanel",
   "target": "reportsEl",
   "op": "=",
@@ -3260,7 +3260,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 15682,
+  "line": 15683,
   "function": "soonPanel",
   "target": "extraEl",
   "op": "=",
@@ -3270,7 +3270,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 15686,
+  "line": 15687,
   "function": "soonPanel",
   "target": "extraEl",
   "op": "=",
@@ -3280,7 +3280,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 15688,
+  "line": 15689,
   "function": "soonPanel",
   "target": "if (findingsEl) findingsEl",
   "op": "=",
@@ -3290,7 +3290,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 15690,
+  "line": 15691,
   "function": "soonPanel",
   "target": "if (recEl) recEl",
   "op": "=",
@@ -3300,7 +3300,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 15694,
+  "line": 15695,
   "function": "soonPanel",
   "target": "extraEl",
   "op": "=",
@@ -3310,7 +3310,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 15696,
+  "line": 15697,
   "function": "soonPanel",
   "target": "if (findingsEl) findingsEl",
   "op": "=",
@@ -3320,7 +3320,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 15698,
+  "line": 15699,
   "function": "soonPanel",
   "target": "if (recEl) recEl",
   "op": "=",
@@ -3330,7 +3330,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 15704,
+  "line": 15705,
   "function": "soonPanel",
   "target": "if (el) el",
   "op": "=",
@@ -3340,7 +3340,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 15707,
+  "line": 15708,
   "function": "soonPanel",
   "target": "if (el) el",
   "op": "=",
@@ -3350,7 +3350,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 15713,
+  "line": 15714,
   "function": "soonPanel",
   "target": "if (el) el",
   "op": "=",
@@ -3360,7 +3360,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 15716,
+  "line": 15717,
   "function": "soonPanel",
   "target": "if (el) el",
   "op": "=",
@@ -3370,7 +3370,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 15734,
+  "line": 15735,
   "function": "soonPanel",
   "target": "if (el) el",
   "op": "=",
@@ -3380,7 +3380,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 15742,
+  "line": 15743,
   "function": "soonPanel",
   "target": "if (findingsElEarly) findingsElEarly",
   "op": "=",
@@ -3390,7 +3390,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 15744,
+  "line": 15745,
   "function": "soonPanel",
   "target": "if (recElEarly) recElEarly",
   "op": "=",
@@ -3400,7 +3400,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 15746,
+  "line": 15747,
   "function": "soonPanel",
   "target": "if (iocElEarly) iocElEarly",
   "op": "=",
@@ -3410,7 +3410,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 15844,
+  "line": 15845,
   "function": "renderDetectionValidationTab",
   "target": "el",
   "op": "=",
@@ -3420,7 +3420,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 15898,
+  "line": 15899,
   "function": "loadSIEMCorrelationPanel",
   "target": "el",
   "op": "=",
@@ -3430,7 +3430,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 16661,
+  "line": 16662,
   "function": "render",
   "target": "document.getElementById('run-live-progress')",
   "op": "=",
@@ -3440,7 +3440,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 16673,
+  "line": 16674,
   "function": "render",
   "target": "ul",
   "op": "=",
@@ -3450,7 +3450,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 16766,
+  "line": 16767,
   "function": "render",
   "target": "ul",
   "op": "=",
@@ -3460,7 +3460,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 16875,
+  "line": 16876,
   "function": "openSweepDrilldown",
   "target": "document.getElementById('sweep-drilldown-actions')",
   "op": "=",
@@ -3470,7 +3470,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 16876,
+  "line": 16877,
   "function": "openSweepDrilldown",
   "target": "document.getElementById('sweep-drilldown-list')",
   "op": "=",
@@ -3480,7 +3480,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 16883,
+  "line": 16884,
   "function": "openSweepDrilldown",
   "target": "document.getElementById('sweep-drilldown-actions')",
   "op": "=",
@@ -3490,7 +3490,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 16886,
+  "line": 16887,
   "function": "openSweepDrilldown",
   "target": "document.getElementById('sweep-drilldown-list')",
   "op": "=",
@@ -3500,7 +3500,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 17222,
+  "line": 17223,
   "function": "fmt",
   "target": "document.getElementById('evidence-content')",
   "op": "=",
@@ -3510,7 +3510,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17529,
+  "line": 17530,
   "function": "confirmRun",
   "target": "runBtn",
   "op": "=",
@@ -3520,7 +3520,7 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 17548,
+  "line": 17549,
   "function": "confirmRun",
   "target": "runBtn",
   "op": "=",
@@ -3530,7 +3530,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17702,
+  "line": 17703,
   "function": "cmdkResultFallback",
   "target": "document.getElementById('results-export')",
   "op": "=",
@@ -3540,7 +3540,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17703,
+  "line": 17704,
   "function": "cmdkResultFallback",
   "target": "document.getElementById('results-summary')",
   "op": "=",
@@ -3550,7 +3550,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17704,
+  "line": 17705,
   "function": "cmdkResultFallback",
   "target": "document.getElementById('results-body')",
   "op": "=",
@@ -3560,7 +3560,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 17734,
+  "line": 17735,
   "function": "openCmdk",
   "target": "wrap",
   "op": "=",
@@ -3570,7 +3570,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17841,
+  "line": 17842,
   "function": "render",
   "target": "list",
   "op": "=",
@@ -3580,7 +3580,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17842,
+  "line": 17843,
   "function": "render",
   "target": "list",
   "op": "=",
@@ -3590,7 +3590,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17900,
+  "line": 17901,
   "function": "loadUsers",
   "target": "tbody",
   "op": "=",
@@ -3600,7 +3600,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17901,
+  "line": 17902,
   "function": "loadUsers",
   "target": "tbody",
   "op": "=",
@@ -3610,7 +3610,7 @@
   "data_source_tags": "api_response,user_created_name"
  },
  {
-  "line": 18142,
+  "line": 18143,
   "function": "aggOf",
   "target": "if (trend === 'Improving')      tEl",
   "op": "=",
@@ -3620,7 +3620,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18143,
+  "line": 18144,
   "function": "aggOf",
   "target": "else if (trend === 'Degrading') tEl",
   "op": "=",
@@ -3630,7 +3630,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18144,
+  "line": 18145,
   "function": "aggOf",
   "target": "else                            tEl",
   "op": "=",
@@ -3640,7 +3640,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18146,
+  "line": 18147,
   "function": "aggOf",
   "target": "document.getElementById('kpi-score-spark')",
   "op": "=",
@@ -3650,7 +3650,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18149,
+  "line": 18150,
   "function": "aggOf",
   "target": "document.getElementById('dash-gauge')",
   "op": "=",
@@ -3660,7 +3660,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18159,
+  "line": 18160,
   "function": "aggOf",
   "target": "document.getElementById('dash-posture-bars')",
   "op": "=",
@@ -3670,7 +3670,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18187,
+  "line": 18188,
   "function": "aggOf",
   "target": "document.getElementById('kpi-cov-spark')",
   "op": "=",
@@ -3680,7 +3680,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18207,
+  "line": 18208,
   "function": "aggOf",
   "target": "donutEl",
   "op": "=",
@@ -3690,7 +3690,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18218,
+  "line": 18219,
   "function": "lg",
   "target": "donutEl",
   "op": "=",
@@ -3700,7 +3700,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18248,
+  "line": 18249,
   "function": "lg",
   "target": "afEl",
   "op": "=",
@@ -3710,7 +3710,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18249,
+  "line": 18250,
   "function": "lg",
   "target": "afEl",
   "op": "=",
@@ -3720,7 +3720,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18252,
+  "line": 18253,
   "function": "lg",
   "target": "afEl",
   "op": "=",
@@ -3730,7 +3730,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18259,
+  "line": 18260,
   "function": "lg",
   "target": "rrEl",
   "op": "=",
@@ -3740,7 +3740,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18261,
+  "line": 18262,
   "function": "lg",
   "target": "rrEl",
   "op": "=",
@@ -3750,7 +3750,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 18304,
+  "line": 18305,
   "function": "lg",
   "target": "tfEl",
   "op": "=",
@@ -3760,7 +3760,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18307,
+  "line": 18308,
   "function": "lg",
   "target": "tfEl",
   "op": "=",
@@ -3770,7 +3770,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 18330,
+  "line": 18331,
   "function": "lg",
   "target": "attckEl",
   "op": "=",
@@ -3780,7 +3780,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18332,
+  "line": 18333,
   "function": "lg",
   "target": "attckEl",
   "op": "=",
@@ -3790,7 +3790,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18382,
+  "line": 18383,
   "function": "lg",
   "target": "bodyEl",
   "op": "=",
@@ -3800,7 +3800,7 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 18458,
+  "line": 18459,
   "function": "loadAgtOverview",
   "target": "pane",
   "op": "=",
@@ -3810,7 +3810,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18461,
+  "line": 18462,
   "function": "loadAgtOverview",
   "target": "pane",
   "op": "=",
@@ -3820,7 +3820,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18465,
+  "line": 18466,
   "function": "loadAgtOverview",
   "target": "pane",
   "op": "=",
@@ -3830,7 +3830,7 @@
   "data_source_tags": "agent,scenario,user_created_name"
  },
  {
-  "line": 18522,
+  "line": 18523,
   "function": "loadAgtOverview",
   "target": "pane",
   "op": "=",
@@ -3840,7 +3840,7 @@
   "data_source_tags": "error_message"
  },
  {
-  "line": 18550,
+  "line": 18551,
   "function": "loadAgtScenarios",
   "target": "pane",
   "op": "=",
@@ -3850,7 +3850,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18553,
+  "line": 18554,
   "function": "loadAgtScenarios",
   "target": "pane",
   "op": "=",
@@ -3860,7 +3860,7 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 18570,
+  "line": 18571,
   "function": "loadAgtScenarios",
   "target": "pane",
   "op": "=",
@@ -3870,7 +3870,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18580,
+  "line": 18581,
   "function": "loadAgtScenarios",
   "target": "pane",
   "op": "=",
@@ -3880,7 +3880,7 @@
   "data_source_tags": "error_message"
  },
  {
-  "line": 18662,
+  "line": 18663,
   "function": "loadAgtLogs",
   "target": "pane",
   "op": "=",
@@ -3890,7 +3890,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18667,
+  "line": 18668,
   "function": "loadAgtLogs",
   "target": "pane",
   "op": "=",
@@ -3900,7 +3900,7 @@
   "data_source_tags": "error_message"
  },
  {
-  "line": 18744,
+  "line": 18745,
   "function": "loadAgtHealth",
   "target": "pane",
   "op": "=",
@@ -3910,7 +3910,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18756,
+  "line": 18757,
   "function": "loadAgtHealth",
   "target": "pane",
   "op": "=",
@@ -3920,7 +3920,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18758,
+  "line": 18759,
   "function": "loadAgtHealth",
   "target": "pane",
   "op": "=",
@@ -3930,7 +3930,7 @@
   "data_source_tags": "error_message"
  },
  {
-  "line": 18765,
+  "line": 18766,
   "function": "loadAgtRisk",
   "target": "if (panel) panel",
   "op": "=",
@@ -3940,7 +3940,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18768,
+  "line": 18769,
   "function": "loadAgtRisk",
   "target": "if (panel) panel",
   "op": "=",
@@ -3950,7 +3950,7 @@
   "data_source_tags": "error_message"
  },
  {
-  "line": 18841,
+  "line": 18842,
   "function": "renderAgtRisk",
   "target": "panel",
   "op": "=",
@@ -3960,7 +3960,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18847,
+  "line": 18848,
   "function": "loadAgtAttackPath",
   "target": "pane",
   "op": "=",
@@ -3970,7 +3970,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18850,
+  "line": 18851,
   "function": "loadAgtAttackPath",
   "target": "pane",
   "op": "=",
@@ -3980,7 +3980,7 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 18881,
+  "line": 18882,
   "function": "loadAgtAttackPath",
   "target": "pane",
   "op": "=",
@@ -3990,7 +3990,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18891,
+  "line": 18892,
   "function": "loadAgtAttackPath",
   "target": "pane",
   "op": "=",
@@ -4000,7 +4000,7 @@
   "data_source_tags": "error_message"
  },
  {
-  "line": 18977,
+  "line": 18978,
   "function": "initComplianceTab",
   "target": "fwSel",
   "op": "=",
@@ -4010,7 +4010,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 18981,
+  "line": 18982,
   "function": "initComplianceTab",
   "target": "fwSel",
   "op": "=",
@@ -4020,7 +4020,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18987,
+  "line": 18988,
   "function": "initComplianceTab",
   "target": "agSel",
   "op": "=",
@@ -4030,7 +4030,7 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 19036,
+  "line": 19037,
   "function": "renderComplianceReport",
   "target": "document.getElementById('cmp-header-area')",
   "op": "=",
@@ -4040,7 +4040,7 @@
   "data_source_tags": "agent,user_created_name"
  },
  {
-  "line": 19073,
+  "line": 19074,
   "function": "renderComplianceReport",
   "target": "document.getElementById('cmp-kpi-area')",
   "op": "=",
@@ -4050,7 +4050,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 19085,
+  "line": 19086,
   "function": "renderComplianceReport",
   "target": "document.getElementById('cmp-domain-area')",
   "op": "=",
@@ -4060,7 +4060,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 19117,
+  "line": 19118,
   "function": "renderControlsTable",
   "target": "document.getElementById('cmp-controls-body')",
   "op": "=",
@@ -4070,7 +4070,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 19148,
+  "line": 19149,
   "function": "renderControlsTable",
   "target": "document.getElementById('cmp-controls-body')",
   "op": "=",
@@ -4080,7 +4080,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 19258,
+  "line": 19259,
   "function": "loadVariantStats",
   "target": "el",
   "op": "=",
@@ -4090,7 +4090,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 19300,
+  "line": 19301,
   "function": "populateVexAgents",
   "target": "if (sel) sel",
   "op": "=",
@@ -4100,7 +4100,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 19302,
+  "line": 19303,
   "function": "populateVexAgents",
   "target": "if (sweepSel) sweepSel",
   "op": "=",
@@ -4110,7 +4110,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 19337,
+  "line": 19338,
   "function": "populateVexTechniques",
   "target": "tacSel",
   "op": "=",
@@ -4120,7 +4120,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 19342,
+  "line": 19343,
   "function": "populateVexTechniques",
   "target": "if (el) el",
   "op": "=",
@@ -4130,7 +4130,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 19433,
+  "line": 19434,
   "function": "renderVexSweepList",
   "target": "el",
   "op": "=",
@@ -4140,7 +4140,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 19435,
+  "line": 19436,
   "function": "renderVexSweepList",
   "target": "el",
   "op": "=",
@@ -4150,7 +4150,7 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 19672,
+  "line": 19673,
   "function": "filterVexTechniques",
   "target": "el",
   "op": "=",
@@ -4160,7 +4160,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 19675,
+  "line": 19676,
   "function": "filterVexTechniques",
   "target": "el",
   "op": "=",
@@ -4170,7 +4170,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 19699,
+  "line": 19700,
   "function": "loadVariantCoverage",
   "target": "el",
   "op": "=",
@@ -4180,7 +4180,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 19702,
+  "line": 19703,
   "function": "loadVariantCoverage",
   "target": "el",
   "op": "=",
@@ -4190,7 +4190,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 19727,
+  "line": 19728,
   "function": "loadVariantCoverage",
   "target": "el",
   "op": "=",
@@ -4200,7 +4200,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 19729,
+  "line": 19730,
   "function": "loadVariantCoverage",
   "target": "el",
   "op": "=",
@@ -4210,7 +4210,7 @@
   "data_source_tags": "error_message"
  },
  {
-  "line": 19850,
+  "line": 19851,
   "function": "_vexRenderQueuePanel",
   "target": "panel",
   "op": "=",
@@ -4220,7 +4220,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 19920,
+  "line": 19921,
   "function": "pollVariantRun",
   "target": "if (panel) panel",
   "op": "=",
@@ -4230,7 +4230,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 19949,
+  "line": 19950,
   "function": "pollVariantRun",
   "target": "if (p) p",
   "op": "=",
@@ -4240,7 +4240,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 19981,
+  "line": 19982,
   "function": "stopVex",
   "target": "if (panel) panel",
   "op": "=",
@@ -4250,7 +4250,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 20094,
+  "line": 20095,
   "function": "renderVariantRun",
   "target": "if (wrapperEl) wrapperEl",
   "op": "=",
@@ -4260,7 +4260,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 20099,
+  "line": 20100,
   "function": "renderVariantRun",
   "target": "cell",
   "op": "=",
@@ -4270,7 +4270,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 20111,
+  "line": 20112,
   "function": "renderVariantRun",
   "target": "panel",
   "op": "=",
@@ -4280,7 +4280,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 20151,
+  "line": 20152,
   "function": "loadRansomwareReadiness",
   "target": "bodyEl",
   "op": "=",
@@ -4290,7 +4290,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 20223,
+  "line": 20224,
   "function": "loadRansomwareReadiness",
   "target": "bodyEl",
   "op": "=",
@@ -4300,7 +4300,7 @@
   "data_source_tags": "agent,user_created_name"
  },
  {
-  "line": 20314,
+  "line": 20315,
   "function": "loadEmTab",
   "target": "summaryEl",
   "op": "=",
@@ -4310,7 +4310,7 @@
   "data_source_tags": "api_response"
  },
  {
-  "line": 20318,
+  "line": 20319,
   "function": "loadEmTab",
   "target": "summaryEl",
   "op": "=",
@@ -4320,7 +4320,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 20336,
+  "line": 20337,
   "function": "loadEmTab",
   "target": "gridEl",
   "op": "=",
@@ -4330,7 +4330,7 @@
   "data_source_tags": "agent,user_created_name"
  },
  {
-  "line": 20413,
+  "line": 20414,
   "function": "openEMSweepModal",
   "target": "sel",
   "op": "=",
@@ -4340,7 +4340,7 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 20428,
+  "line": 20429,
   "function": "renderEMSweepGroupList",
   "target": "list",
   "op": "=",
@@ -4350,7 +4350,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 20431,
+  "line": 20432,
   "function": "renderEMSweepGroupList",
   "target": "list",
   "op": "=",
@@ -4360,7 +4360,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 20621,
+  "line": 20622,
   "function": "renderSweepPreview",
   "target": "filtersEl",
   "op": "=",
@@ -4370,7 +4370,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 20632,
+  "line": 20633,
   "function": "renderSweepPreview",
   "target": "filtersEl",
   "op": "=",
@@ -4380,7 +4380,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 20653,
+  "line": 20654,
   "function": "_renderVexPreviewList",
   "target": "listEl",
   "op": "=",
@@ -4390,7 +4390,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 20796,
+  "line": 20797,
   "function": "_renderEMPreviewList",
   "target": "listEl",
   "op": "=",
@@ -4400,7 +4400,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 20899,
+  "line": 20900,
   "function": "openEMSweepProgress",
   "target": "document.getElementById('em-sweep-progress-actions')",
   "op": "=",
@@ -4410,7 +4410,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 20958,
+  "line": 20959,
   "function": "renderEMSweepProgress",
   "target": "document.getElementById('em-sweep-progress-summary')",
   "op": "=",
@@ -4420,7 +4420,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 20965,
+  "line": 20966,
   "function": "renderEMSweepProgress",
   "target": "document.getElementById('em-sweep-progress-actions')",
   "op": "=",
@@ -4430,7 +4430,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 20978,
+  "line": 20979,
   "function": "renderEMSweepProgress",
   "target": "list",
   "op": "=",
@@ -4440,7 +4440,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 21099,
+  "line": 21100,
   "function": "renderScheduledAssessmentsList",
   "target": "tbody",
   "op": "=",
@@ -4450,7 +4450,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 21102,
+  "line": 21103,
   "function": "renderScheduledAssessmentsList",
   "target": "tbody",
   "op": "=",
@@ -4460,7 +4460,7 @@
   "data_source_tags": "scenario,telemetry_log,user_created_name"
  },
  {
-  "line": 21170,
+  "line": 21171,
   "function": "openSchedWizard",
   "target": "sel",
   "op": "=",
@@ -4470,7 +4470,7 @@
   "data_source_tags": "scenario,user_created_name"
  },
  {
-  "line": 21227,
+  "line": 21228,
   "function": "openSchedWizardForEdit",
   "target": "sel",
   "op": "=",
@@ -4480,7 +4480,7 @@
   "data_source_tags": "scenario,user_created_name"
  },
  {
-  "line": 21284,
+  "line": 21285,
   "function": "renderSchedGroupTree",
   "target": "root",
   "op": "=",
@@ -4490,7 +4490,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 21289,
+  "line": 21290,
   "function": "renderSchedGroupTree",
   "target": "root",
   "op": "=",
@@ -4500,7 +4500,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 21352,
+  "line": 21353,
   "function": "renderSchedAgentList",
   "target": "root",
   "op": "=",
@@ -4510,7 +4510,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 21354,
+  "line": 21355,
   "function": "renderSchedAgentList",
   "target": "root",
   "op": "=",
@@ -4520,7 +4520,7 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 21381,
+  "line": 21382,
   "function": "renderSchedInitiativeSelect",
   "target": "sel",
   "op": "=",
@@ -4530,7 +4530,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 21394,
+  "line": 21395,
   "function": "renderSchedModeRecurrencePane",
   "target": "modeSel",
   "op": "=",
@@ -4540,7 +4540,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 21500,
+  "line": 21501,
   "function": "renderSchedReview",
   "target": "document.getElementById('sched-review')",
   "op": "=",

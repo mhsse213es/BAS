@@ -3,10 +3,11 @@ import { state } from '../core/state.js';
 import { apicall } from '../core/api.js';
 import { x } from '../core/escape.js';
 import { showToast } from '../core/util.js';
+import { CMP, loadCampaigns } from './campaigns.js';
 import { refreshDashboardCampaigns } from './compliance.js';
 import { closeResults } from './iocs.js';
 import { showTab } from './shell.js';
-import { CMP, MODE_LABELS, loadCampaigns, scenarioFramework } from '../legacy.js';
+import { MODE_LABELS, scenarioFramework } from '../legacy.js';
 
 
 // ── Re-run Review ────────────────────────────────────────────────────────────

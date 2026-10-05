@@ -6,6 +6,7 @@ import './core/util.js';
 import './features/adversaries.js';
 import './features/agent-actions.js';
 import './features/audit-logs.js';
+import './features/campaigns.js';
 import './features/compliance.js';
 import './features/coverage.js';
 import './features/detection-verification.js';
