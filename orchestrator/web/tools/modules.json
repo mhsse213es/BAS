@@ -141,6 +141,10 @@
     {
       "header": "Ransomware Readiness Module",
       "module": "features/ransomware.js"
+    },
+    {
+      "header": "Live Run Panel",
+      "module": "features/live-run.js"
     }
   ],
   "pin": {

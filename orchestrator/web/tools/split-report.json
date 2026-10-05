@@ -124,6 +124,10 @@
       "imports": 6,
       "inits": 0
     },
+    "features/live-run.js": {
+      "imports": 5,
+      "inits": 1
+    },
     "features/ransomware.js": {
       "imports": 5,
       "inits": 0
@@ -146,7 +150,7 @@
     },
     "legacy.js": {
       "imports": 17,
-      "inits": 7
+      "inits": 6
     }
   }
 }
