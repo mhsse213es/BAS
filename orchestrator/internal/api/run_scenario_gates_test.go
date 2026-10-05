@@ -9,7 +9,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/audspect/bas/internal/contentregistry"
 	"github.com/audspect/bas/internal/scenario"
+	"github.com/audspect/bas/internal/testutil"
 	"github.com/audspect/bas/internal/ws"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -40,6 +42,8 @@ func TestRunScenario_MissingAgentID(t *testing.T) {
 
 func TestRunScenario_ScenarioNotFound(t *testing.T) {
 	engine := scenario.NewEngine(t.TempDir())
+	engine.SetVerifier(testutil.DevVerifier())
+	engine.AttachRegistry(contentregistry.New(sharedDB.Pool, testutil.DevVerifier()))
 	h := New(nil, ws.NewHub(), engine, "")
 	rec := httptest.NewRecorder()
 	h.RunScenario(rec, runScenarioReq("does-not-exist", map[string]any{"agentId": "a1"}))

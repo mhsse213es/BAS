@@ -715,8 +715,8 @@ func (h *Handler) dispatchVariantRun(
 
 	err = h.db.QueryRow(ctx,
 		`INSERT INTO scenario_runs
-			(scenario_id, agent_id, name, status, results, steps_total, initiated_by, sweep_id)
-		 VALUES ($1, $2, $3, 'running', '[]', $4, 'variant-executor', $5)
+			(scenario_id, agent_id, name, status, results, steps_total, initiated_by, sweep_id, execution_kind)
+		 VALUES ($1, $2, $3, 'running', '[]', $4, 'variant-executor', $5, 'variant')
 		 RETURNING id`,
 		syntheticScenarioID, agentID, runName, len(templates), sweepIDArg,
 	).Scan(&scenarioRunID)
@@ -738,6 +738,8 @@ func (h *Handler) dispatchVariantRun(
 	}
 
 	steps := buildVariantSteps(templates)
+	// The variant templates are themselves the resolved commands.
+	resolved := scenario.ResolvedHashes(steps)
 	for i, t := range templates {
 		taskID := steps[i].TaskID
 
@@ -754,7 +756,7 @@ func (h *Handler) dispatchVariantRun(
 		}
 	}
 
-	h.persistStepMeta(ctx, scenarioRunID, steps)
+	h.persistStepMeta(ctx, scenarioRunID, steps, resolved)
 
 	sent := h.hub.SendToAgent(agentID, models.WSMessage{
 		Type:    models.MsgCommandScenario,

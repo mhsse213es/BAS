@@ -18,8 +18,8 @@ func TestReapNeverStartedRuns_MarksZeroProgressRunPastGuardAsFailed(t *testing.T
 		t.Skip("skipping container-backed test in -short mode")
 	}
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
-		sc, _ := minimalPostureScenario(t, "watchdog-never-started")
-		h := New(pool, ws.NewHub(), nil, "")
+		sc, eng := minimalPostureScenario(t, "watchdog-never-started")
+		h := New(pool, ws.NewHub(), eng, "")
 		agentID := "watchdog-agent"
 		seedActiveAgent(t, pool, agentID, "Windows")
 
@@ -53,8 +53,8 @@ func TestReapNeverStartedRuns_LeavesRecentZeroProgressRunAlone(t *testing.T) {
 		t.Skip("skipping container-backed test in -short mode")
 	}
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
-		sc, _ := minimalPostureScenario(t, "watchdog-fresh")
-		h := New(pool, ws.NewHub(), nil, "")
+		sc, eng := minimalPostureScenario(t, "watchdog-fresh")
+		h := New(pool, ws.NewHub(), eng, "")
 		agentID := "watchdog-agent-fresh"
 		seedActiveAgent(t, pool, agentID, "Windows")
 
@@ -89,8 +89,8 @@ func TestReapNeverStartedRuns_LeavesProgressingRunAlone(t *testing.T) {
 		t.Skip("skipping container-backed test in -short mode")
 	}
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
-		sc, _ := minimalPostureScenario(t, "watchdog-progressing")
-		h := New(pool, ws.NewHub(), nil, "")
+		sc, eng := minimalPostureScenario(t, "watchdog-progressing")
+		h := New(pool, ws.NewHub(), eng, "")
 		agentID := "watchdog-agent-progressing"
 		seedActiveAgent(t, pool, agentID, "Windows")
 

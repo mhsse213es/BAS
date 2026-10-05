@@ -21,9 +21,9 @@ import (
 	"github.com/audspect/bas/internal/api"
 	"github.com/audspect/bas/internal/auth"
 	"github.com/audspect/bas/internal/cmdsigning"
-	"github.com/audspect/bas/internal/observability"
 	"github.com/audspect/bas/internal/compliance"
 	"github.com/audspect/bas/internal/connector"
+	"github.com/audspect/bas/internal/contentregistry"
 	"github.com/audspect/bas/internal/controlhealth"
 	"github.com/audspect/bas/internal/correlation"
 	"github.com/audspect/bas/internal/db"
@@ -41,6 +41,7 @@ import (
 	"github.com/audspect/bas/internal/license"
 	"github.com/audspect/bas/internal/models"
 	"github.com/audspect/bas/internal/notifications"
+	"github.com/audspect/bas/internal/observability"
 	"github.com/audspect/bas/internal/openaev"
 	"github.com/audspect/bas/internal/pki"
 	"github.com/audspect/bas/internal/relationships"
@@ -343,6 +344,8 @@ func main() {
 
 	// ── Scenario Engine ───────────────────────────────────────────────────
 	engine := scenario.NewEngine(cfg.ScenariosDir)
+	contentRegistry := contentregistry.New(pool, integrity.CompiledVerifier{})
+	engine.AttachRegistry(contentRegistry)
 	if err := engine.Load(); err != nil {
 		log.Printf("[!] scenario load warning: %v", err)
 	}
