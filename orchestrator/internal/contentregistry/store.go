@@ -99,6 +99,10 @@ type newVersion struct {
 	generation    map[string]any
 	generationKey string
 	sources       []sourceSnapshot
+	// grandfatherEligible marks a pre-migration custom file whose trusted
+	// values were chosen from an unlocked read; createVersion re-checks it
+	// under the content lock and downgrades to DRAFT if no longer eligible.
+	grandfatherEligible bool
 }
 
 // createVersion inserts identity (if new), version, creation event,
@@ -135,6 +139,18 @@ func (r *Registry) createVersion(ctx context.Context, nv newVersion) (string, bo
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {
 		return "", false, err
+	}
+
+	if nv.grandfatherEligible {
+		var stillEligible bool
+		if err := tx.QueryRow(ctx,
+			`SELECT NOT EXISTS (SELECT 1 FROM content_registry_state)
+			    AND NOT EXISTS (SELECT 1 FROM content_versions WHERE content_id = $1)`, nv.contentID).Scan(&stillEligible); err != nil {
+			return "", false, err
+		}
+		if !stillEligible {
+			nv.trust, nv.lifecycle, nv.actor, nv.reason = TrustUntrusted, LifecycleDraft, ActorIntake, "changed outside the operator UI"
+		}
 	}
 
 	var origin string

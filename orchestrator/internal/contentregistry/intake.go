@@ -80,7 +80,7 @@ func (r *Registry) Intake(ctx context.Context, f scenario.IntakeFile) (scenario.
 	case SourceBuiltin:
 		nv.lifecycle = LifecyclePublished
 		switch {
-		case f.SignatureVerified:
+		case f.SignatureVerified && len(f.Signature) > 0:
 			nv.trust, nv.signature = TrustVendorSigned, f.Signature
 		case r.devBuild():
 			nv.trust = TrustUntrusted
@@ -100,6 +100,7 @@ func (r *Registry) Intake(ctx context.Context, f scenario.IntakeFile) (scenario.
 		}
 		if !done && !has {
 			nv.trust, nv.lifecycle, nv.actor, nv.reason = TrustLocalTrusted, LifecyclePublishedLocal, ActorMigration, MigrationReason
+			nv.grandfatherEligible = true
 		} else {
 			nv.trust, nv.lifecycle, nv.reason = TrustUntrusted, LifecycleDraft, "changed outside the operator UI"
 		}
@@ -132,18 +133,32 @@ func (r *Registry) RegisterLocalApproved(ctx context.Context, contentID string, 
 		return err
 	}
 	if hit {
-		if v.Origin != OriginLocal {
-			return ErrOriginCollision
-		}
-		if v.Lifecycle == LifecyclePublishedLocal {
-			return nil
-		}
-		return r.Transition(ctx, v.ID, LifecyclePublishedLocal, actor, "operator save")
+		return r.approveExisting(ctx, v, actor)
 	}
-	_, _, err = r.createVersion(ctx, newVersion{contentID: contentID, origin: OriginLocal, source: SourceCustom,
+	vid, created, err := r.createVersion(ctx, newVersion{contentID: contentID, origin: OriginLocal, source: SourceCustom,
 		artifact: artifact, trust: TrustLocalTrusted, lifecycle: LifecyclePublishedLocal, actor: actor,
 		reason: "operator save", analysis: a})
-	return err
+	if err != nil || created {
+		return err
+	}
+	// Lost a race: a concurrent intake registered these bytes first.
+	v, err = r.LoadVersion(ctx, vid)
+	if err != nil {
+		return err
+	}
+	return r.approveExisting(ctx, v, actor)
+}
+
+// approveExisting applies an operator approval to an already-registered
+// version of the same bytes.
+func (r *Registry) approveExisting(ctx context.Context, v Version, actor string) error {
+	if v.Origin != OriginLocal {
+		return ErrOriginCollision
+	}
+	if v.Lifecycle == LifecyclePublishedLocal {
+		return nil
+	}
+	return r.Transition(ctx, v.ID, LifecyclePublishedLocal, actor, "operator save")
 }
 
 // RetireExecutable retires every PUBLISHED / PUBLISHED_LOCAL version.

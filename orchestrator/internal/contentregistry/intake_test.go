@@ -2,6 +2,7 @@ package contentregistry
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"testing"
 
@@ -18,6 +19,15 @@ func latest(t *testing.T, r *Registry, id string) Version {
 		t.Fatalf("no versions for %s: %v", id, err)
 	}
 	return vs[0]
+}
+
+func mustIntake(t *testing.T, r *Registry, ctx context.Context, f scenario.IntakeFile) scenario.IntakeDecision {
+	t.Helper()
+	d, err := r.Intake(ctx, f)
+	if err != nil {
+		t.Fatalf("intake %s: %v", f.Path, err)
+	}
+	return d
 }
 
 func file(src, body string) scenario.IntakeFile {
@@ -41,11 +51,11 @@ func TestIntake_Matrix(t *testing.T) {
 		}
 
 		ub := file("builtin", "id: ub\nname: UB\nlocal_check: true\n") // signing enabled, not verified
-		if d, _ := r.Intake(ctx, ub); d.Accepted {
+		if d := mustIntake(t, r, ctx, ub); d.Accepted {
 			t.Fatal("unverified builtin must be refused when signing is enabled")
 		}
 
-		if d, _ := r.Intake(ctx, file("intel", "id: in1\nname: In\nart_techniques: [T1082]\n")); !d.Accepted {
+		if d := mustIntake(t, r, ctx, file("intel", "id: in1\nname: In\nart_techniques: [T1082]\n")); !d.Accepted {
 			t.Fatal("intel intake")
 		}
 		if v := latest(t, r, "in1"); v.Origin != OriginLocal || v.Trust != TrustUntrusted || v.Lifecycle != LifecycleDraft {
@@ -53,7 +63,7 @@ func TestIntake_Matrix(t *testing.T) {
 		}
 
 		// Pre-migration custom file: grandfathered.
-		if d, _ := r.Intake(ctx, file("custom", "id: cu1\nname: Cu\nlocal_check: true\n")); !d.Accepted {
+		if d := mustIntake(t, r, ctx, file("custom", "id: cu1\nname: Cu\nlocal_check: true\n")); !d.Accepted {
 			t.Fatal("custom intake")
 		}
 		v := latest(t, r, "cu1")
@@ -66,7 +76,7 @@ func TestIntake_Matrix(t *testing.T) {
 func TestIntake_DevBuildBuiltinStaysUntrusted(t *testing.T) { // A6 (intake half)
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
 		r := New(pool, testutil.DevVerifier())
-		if d, _ := r.Intake(context.Background(), file("builtin", "id: dv\nname: D\nlocal_check: true\n")); !d.Accepted {
+		if d := mustIntake(t, r, context.Background(), file("builtin", "id: dv\nname: D\nlocal_check: true\n")); !d.Accepted {
 			t.Fatal("dev builtin intake")
 		}
 		if v := latest(t, r, "dv"); v.Trust != TrustUntrusted || v.Lifecycle != LifecyclePublished {
@@ -82,7 +92,7 @@ func TestIntake_CustomAfterMigrationIsDraft(t *testing.T) { // plan amendment 2
 		if _, err := pool.Exec(ctx, `INSERT INTO content_registry_state (id) VALUES (1)`); err != nil {
 			t.Fatal(err)
 		}
-		_, _ = r.Intake(ctx, file("custom", "id: cu2\nname: Cu\nlocal_check: true\n"))
+		mustIntake(t, r, ctx, file("custom", "id: cu2\nname: Cu\nlocal_check: true\n"))
 		if v := latest(t, r, "cu2"); v.Lifecycle != LifecycleDraft || v.Trust != TrustUntrusted {
 			t.Fatalf("post-migration out-of-band custom file must be DRAFT: %+v", v)
 		}
@@ -93,16 +103,21 @@ func TestIntake_LocalOutOfBandEditBecomesDraft(t *testing.T) { // A11
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
 		ctx := context.Background()
 		r := New(pool, testutil.DevVerifier())
-		_, _ = pool.Exec(ctx, `INSERT INTO content_registry_state (id) VALUES (1)`)
+		if _, err := pool.Exec(ctx, `INSERT INTO content_registry_state (id) VALUES (1)`); err != nil {
+			t.Fatal(err)
+		}
 		v1 := []byte("id: ob\nname: OB\nlocal_check: true\n")
 		if err := r.RegisterLocalApproved(ctx, "ob", v1, "user:op"); err != nil {
 			t.Fatal(err)
 		}
-		if d, _ := r.Intake(ctx, file("custom", string(v1))); !d.Accepted {
+		if d := mustIntake(t, r, ctx, file("custom", string(v1))); !d.Accepted {
 			t.Fatal("same bytes on disk must be a no-op accept")
 		}
-		_, _ = r.Intake(ctx, file("custom", "id: ob\nname: OB edited\nlocal_check: true\n"))
-		vs, _ := r.ListVersions(ctx, "ob")
+		mustIntake(t, r, ctx, file("custom", "id: ob\nname: OB edited\nlocal_check: true\n"))
+		vs, err := r.ListVersions(ctx, "ob")
+		if err != nil {
+			t.Fatal(err)
+		}
 		if len(vs) != 2 || vs[0].Lifecycle != LifecycleDraft || vs[0].Trust != TrustUntrusted ||
 			vs[1].Lifecycle != LifecyclePublishedLocal {
 			t.Fatalf("versions: %+v", vs)
@@ -114,7 +129,7 @@ func TestIntake_CrossOriginCollisionRefused(t *testing.T) { // A12 (registry hal
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
 		ctx := context.Background()
 		r := New(pool, testutil.DevVerifier())
-		_, _ = r.Intake(ctx, file("builtin", "id: col\nname: B\nlocal_check: true\n"))
+		mustIntake(t, r, ctx, file("builtin", "id: col\nname: B\nlocal_check: true\n"))
 		d, err := r.Intake(ctx, file("custom", "id: col\nname: C\nlocal_check: true\n"))
 		if err != nil || d.Accepted {
 			t.Fatalf("collision must be refused, not errored: %+v %v", d, err)
@@ -123,7 +138,9 @@ func TestIntake_CrossOriginCollisionRefused(t *testing.T) { // A12 (registry hal
 			t.Fatalf("builtin identity must survive: %+v", v)
 		}
 		var n int
-		_ = pool.QueryRow(ctx, `SELECT count(*) FROM audit_logs WHERE action='content_registry.collision'`).Scan(&n)
+		if err := pool.QueryRow(ctx, `SELECT count(*) FROM audit_logs WHERE action='content_registry.collision'`).Scan(&n); err != nil {
+			t.Fatal(err)
+		}
 		if n != 1 || len(r.Refusals()) != 1 {
 			t.Fatalf("collision audit=%d refusals=%d", n, len(r.Refusals()))
 		}
@@ -144,12 +161,17 @@ func TestIntake_CrossOriginIdenticalBytesRefused(t *testing.T) {
 		if err != nil || d.Accepted {
 			t.Fatalf("identical bytes under another origin must be refused: %+v %v", d, err)
 		}
-		vs, _ := r.ListVersions(ctx, "same")
+		vs, err := r.ListVersions(ctx, "same")
+		if err != nil {
+			t.Fatal(err)
+		}
 		if len(vs) != 1 || vs[0].Origin != OriginVendor {
 			t.Fatalf("builtin identity must survive: %+v", vs)
 		}
 		var n int
-		_ = pool.QueryRow(ctx, `SELECT count(*) FROM audit_logs WHERE action='content_registry.collision'`).Scan(&n)
+		if err := pool.QueryRow(ctx, `SELECT count(*) FROM audit_logs WHERE action='content_registry.collision'`).Scan(&n); err != nil {
+			t.Fatal(err)
+		}
 		if n != 1 || len(r.Refusals()) != 1 {
 			t.Fatalf("collision audit=%d refusals=%d", n, len(r.Refusals()))
 		}
@@ -165,11 +187,11 @@ func TestIntake_ConcurrentSameBytesOneVersion(t *testing.T) { // Review Focus 2
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				_, _ = r.Intake(ctx, file("intel", "id: race\nname: R\nart_techniques: [T1082]\n"))
+				mustIntake(t, r, ctx, file("intel", "id: race\nname: R\nart_techniques: [T1082]\n"))
 			}()
 		}
 		wg.Wait()
-		if vs, _ := r.ListVersions(ctx, "race"); len(vs) != 1 {
+		if vs, err := r.ListVersions(ctx, "race"); err != nil || len(vs) != 1 {
 			t.Fatalf("want 1 version, got %d", len(vs))
 		}
 	})
@@ -192,7 +214,10 @@ func TestRegisterLocalApproved_RecreateAfterRetire(t *testing.T) { // Review Foc
 		if err := r.RegisterLocalApproved(ctx, "rr", b, "user:op2"); err != nil {
 			t.Fatal(err)
 		}
-		vs, _ := r.ListVersions(ctx, "rr")
+		vs, err := r.ListVersions(ctx, "rr")
+		if err != nil {
+			t.Fatal(err)
+		}
 		if len(vs) != 1 || vs[0].Lifecycle != LifecyclePublishedLocal || vs[0].Trust != TrustLocalTrusted {
 			t.Fatalf("re-approval: %+v", vs)
 		}
@@ -204,6 +229,84 @@ func TestRegisterLocalApproved_RequiresHumanActor(t *testing.T) {
 		r := New(pool, testutil.DevVerifier())
 		if err := r.RegisterLocalApproved(context.Background(), "h", []byte("id: h\nname: H\nlocal_check: true\n"), "intake"); err == nil {
 			t.Fatal("non-human save must be rejected")
+		}
+	})
+}
+
+func TestIntake_ConcurrentGrandfatherOnlyOneTrusted(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		r := New(pool, testutil.DevVerifier())
+		for i := 0; i < 5; i++ {
+			id := fmt.Sprintf("gf%d", i)
+			var wg sync.WaitGroup
+			for _, name := range []string{"A", "B"} {
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+					body := "id: " + id + "\nname: " + name + "\nlocal_check: true\n"
+					if _, err := r.Intake(ctx, file("custom", body)); err != nil {
+						t.Error(err)
+					}
+				}()
+			}
+			wg.Wait()
+			vs, err := r.ListVersions(ctx, id)
+			if err != nil || len(vs) != 2 {
+				t.Fatalf("%s: want 2 versions, got %d (%v)", id, len(vs), err)
+			}
+			trusted, drafts := 0, 0
+			for _, v := range vs {
+				switch {
+				case v.Trust == TrustLocalTrusted && v.Lifecycle == LifecyclePublishedLocal && v.CreatedBy == ActorMigration:
+					trusted++
+				case v.Trust == TrustUntrusted && v.Lifecycle == LifecycleDraft && v.CreatedBy == ActorIntake:
+					drafts++
+				}
+			}
+			if trusted != 1 || drafts != 1 {
+				t.Fatalf("%s: want 1 grandfathered + 1 draft, got %+v", id, vs)
+			}
+		}
+	})
+}
+
+func TestIntake_VerifiedFlagWithEmptySignatureRefused(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		signer := testutil.NewTestSigner(t)
+		r := New(pool, signer.Verifier())
+		f := file("builtin", "id: es\nname: ES\nlocal_check: true\n")
+		f.SignatureVerified = true
+		if d := mustIntake(t, r, context.Background(), f); d.Accepted {
+			t.Fatal("verified flag with empty signature must be refused")
+		}
+	})
+}
+
+func TestRegisterLocalApproved_ApprovesExistingIntakeDraft(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		r := New(pool, testutil.DevVerifier())
+		body := "id: ad\nname: AD\nart_techniques: [T1082]\n"
+		if d := mustIntake(t, r, ctx, file("intel", body)); !d.Accepted {
+			t.Fatal("intel intake")
+		}
+		v := latest(t, r, "ad")
+		// Exercise the shared helper used by the lost-race (!created) path.
+		if err := r.approveExisting(ctx, v, "user:op"); err != nil {
+			t.Fatal(err)
+		}
+		if err := r.RegisterLocalApproved(ctx, "ad", []byte(body), "user:op"); err != nil {
+			t.Fatal(err)
+		}
+		vs, err := r.ListVersions(ctx, "ad")
+		if err != nil || len(vs) != 1 || vs[0].Lifecycle != LifecyclePublishedLocal || vs[0].Trust != TrustLocalTrusted {
+			t.Fatalf("approval: %+v %v", vs, err)
+		}
+		var actor string
+		if err := pool.QueryRow(ctx, `SELECT actor FROM content_version_events WHERE content_version_id=$1 AND to_lifecycle='PUBLISHED_LOCAL'`,
+			vs[0].ID).Scan(&actor); err != nil || actor != "user:op" {
+			t.Fatalf("approval event actor=%q err=%v", actor, err)
 		}
 	})
 }
