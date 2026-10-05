@@ -3,9 +3,9 @@ import { state } from '../core/state.js';
 import { apicall } from '../core/api.js';
 import { x } from '../core/escape.js';
 import { showToast } from '../core/util.js';
+import { loadComplianceReport } from './agent-drawer.js';
 import { campaignDisplayStatus } from './campaigns.js';
 import { showTab } from './shell.js';
-import { loadComplianceReport } from '../legacy.js';
 
 
 // ── Compliance score tiles ─────────────────────────────────────────────────

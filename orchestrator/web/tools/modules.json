@@ -145,6 +145,34 @@
     {
       "header": "Live Run Panel",
       "module": "features/live-run.js"
+    },
+    {
+      "header": "Agent Detail Drawer",
+      "module": "features/agent-drawer.js"
+    },
+    {
+      "header": "Overview tab",
+      "module": "features/agent-drawer.js"
+    },
+    {
+      "header": "Scenarios tab",
+      "module": "features/agent-drawer.js"
+    },
+    {
+      "header": "Logs tab",
+      "module": "features/agent-drawer.js"
+    },
+    {
+      "header": "Health tab",
+      "module": "features/agent-drawer.js"
+    },
+    {
+      "header": "Risk tab",
+      "module": "features/agent-drawer.js"
+    },
+    {
+      "header": "Attack Path tab",
+      "module": "features/agent-drawer.js"
     }
   ],
   "pin": {

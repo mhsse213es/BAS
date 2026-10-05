@@ -88,6 +88,10 @@
       "imports": 4,
       "inits": 0
     },
+    "features/agent-drawer.js": {
+      "imports": 6,
+      "inits": 0
+    },
     "features/audit-logs.js": {
       "imports": 4,
       "inits": 0
@@ -137,7 +141,7 @@
       "inits": 0
     },
     "features/shell.js": {
-      "imports": 17,
+      "imports": 18,
       "inits": 5
     },
     "features/threat-intel.js": {
@@ -149,7 +153,7 @@
       "inits": 0
     },
     "legacy.js": {
-      "imports": 17,
+      "imports": 18,
       "inits": 6
     }
   }
