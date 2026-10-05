@@ -2,9 +2,9 @@
 import { apicall } from '../core/api.js';
 import { x } from '../core/escape.js';
 import { ago, showToast } from '../core/util.js';
+import { loadScenarios } from './attack-path.js';
 import { _diffRow, _diffSecretRow, _renderConnectorCard, openConfirmDiffModal } from './compliance.js';
 import { ROLE } from './shell.js';
-import { loadScenarios } from '../legacy.js';
 
 
 // ── Threat Intel connector config (MISP/OpenCTI/OTX) — editable, matching

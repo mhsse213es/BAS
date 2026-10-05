@@ -3,9 +3,10 @@ import { state } from '../core/state.js';
 import { apicall } from '../core/api.js';
 import { x } from '../core/escape.js';
 import { showToast } from '../core/util.js';
+import { agentGroupTree, gpFlattenGroups, renderScenarios, resolveGroupTargetAgents } from './attack-path.js';
 import { schedAgentCompatible } from './scheduled.js';
 import { ROLE, showTab } from './shell.js';
-import { agentGroupTree, gpFlattenGroups, loadRuns, renderScenarios, resolveGroupTargetAgents } from '../legacy.js';
+import { loadRuns } from '../legacy.js';
 
 // ── Threat Actor Library (Caldera emu adversary profiles) ──────────────────────
 

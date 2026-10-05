@@ -3,10 +3,11 @@ import { state } from '../core/state.js';
 import { apicall } from '../core/api.js';
 import { x } from '../core/escape.js';
 import { fmtDate, showToast } from '../core/util.js';
+import { covSegHtml, loadScenarios, tpTierBadge } from './attack-path.js';
 import { refreshDashboardCampaigns } from './compliance.js';
 import { findingSevBadge } from './findings.js';
 import { ROLE, _riskScoreColor, activateTab, showTab } from './shell.js';
-import { covSegHtml, loadScenarios, tpTierBadge, viewRunResults } from '../legacy.js';
+import { viewRunResults } from '../legacy.js';
 
 
 // ── Campaigns ────────────────────────────────────────────────────────────────

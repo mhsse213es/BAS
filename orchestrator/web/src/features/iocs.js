@@ -3,8 +3,8 @@ import { state } from '../core/state.js';
 import { apicall } from '../core/api.js';
 import { x } from '../core/escape.js';
 import { ago, showToast } from '../core/util.js';
+import { covSegHtml } from './attack-path.js';
 import { ROLE } from './shell.js';
-import { covSegHtml } from '../legacy.js';
 
 
 // ── Indicators (IOCs) tab ────────────────────────────────────────────────────

@@ -81,7 +81,7 @@
       "inits": 0
     },
     "features/adversaries.js": {
-      "imports": 7,
+      "imports": 8,
       "inits": 0
     },
     "features/agent-actions.js": {
@@ -89,15 +89,19 @@
       "inits": 0
     },
     "features/agent-drawer.js": {
-      "imports": 7,
+      "imports": 8,
       "inits": 0
+    },
+    "features/attack-path.js": {
+      "imports": 13,
+      "inits": 5
     },
     "features/audit-logs.js": {
       "imports": 4,
       "inits": 0
     },
     "features/campaigns.js": {
-      "imports": 8,
+      "imports": 9,
       "inits": 0
     },
     "features/compliance.js": {
@@ -113,11 +117,11 @@
       "inits": 0
     },
     "features/endpoint-mastery.js": {
-      "imports": 6,
+      "imports": 7,
       "inits": 0
     },
     "features/findings.js": {
-      "imports": 6,
+      "imports": 7,
       "inits": 0
     },
     "features/initiatives.js": {
@@ -153,7 +157,7 @@
       "inits": 0
     },
     "features/shell.js": {
-      "imports": 21,
+      "imports": 22,
       "inits": 5
     },
     "features/threat-intel.js": {
@@ -165,8 +169,8 @@
       "inits": 0
     },
     "legacy.js": {
-      "imports": 21,
-      "inits": 6
+      "imports": 18,
+      "inits": 1
     }
   }
 }

@@ -6,6 +6,7 @@ import './core/util.js';
 import './features/adversaries.js';
 import './features/agent-actions.js';
 import './features/agent-drawer.js';
+import { __init_L8485, __init_L8490, __init_L8723, __init_L8985, __init_L8992 } from './features/attack-path.js';
 import './features/audit-logs.js';
 import './features/campaigns.js';
 import './features/compliance.js';
@@ -24,7 +25,7 @@ import './features/scheduled.js';
 import { __init_L19932, __init_L5162, __init_L5212, __init_L5490, __init_L5494 } from './features/shell.js';
 import './features/threat-intel.js';
 import './features/variant-executor.js';
-import { __init_L16846, __init_L8485, __init_L8490, __init_L8723, __init_L8985, __init_L8992 } from './legacy.js';
+import { __init_L16846 } from './legacy.js';
 
 installGlobals();
 __init_L5162();

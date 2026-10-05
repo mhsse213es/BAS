@@ -3,7 +3,7 @@ import { state } from '../core/state.js';
 import { apicall } from '../core/api.js';
 import { x } from '../core/escape.js';
 import { showToast } from '../core/util.js';
-import { covSegHtml } from '../legacy.js';
+import { covSegHtml } from './attack-path.js';
 
 
 // ── ATT&CK Coverage ──────────────────────────────────────────────────────────

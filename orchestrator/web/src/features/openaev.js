@@ -2,9 +2,9 @@
 import { apicall } from '../core/api.js';
 import { x } from '../core/escape.js';
 import { ago, showToast } from '../core/util.js';
+import { apBandColor, apCard, apColor, apFreshness } from './attack-path.js';
 import { _diffRow, _diffSecretRow, openConfirmDiffModal } from './compliance.js';
 import { ROLE, showTab } from './shell.js';
-import { apBandColor, apCard, apColor, apFreshness } from '../legacy.js';
 
 
 // ── OpenAEV Connector — config/status card lives in Settings → Threat Intel,

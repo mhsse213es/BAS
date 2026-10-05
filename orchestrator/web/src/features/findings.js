@@ -3,8 +3,9 @@ import { state } from '../core/state.js';
 import { apicall } from '../core/api.js';
 import { x } from '../core/escape.js';
 import { daysAgo, fmtDate, showToast } from '../core/util.js';
+import { covSegHtml, statTileCard } from './attack-path.js';
 import { ROLE, _riskScoreColor } from './shell.js';
-import { covSegHtml, openModal, scenarioFramework, statTileCard } from '../legacy.js';
+import { openModal, scenarioFramework } from '../legacy.js';
 
 
 // ── Findings ─────────────────────────────────────────────────────────────────

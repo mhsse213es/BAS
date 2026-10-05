@@ -3,8 +3,9 @@ import { state } from '../core/state.js';
 import { apicall } from '../core/api.js';
 import { x } from '../core/escape.js';
 import { ago, showToast } from '../core/util.js';
+import { agentGroupTree, gpFlattenGroups, resolveGroupTargetAgents, scenarioCategoryOf } from './attack-path.js';
 import { ROLE, _riskScoreColor, showTab } from './shell.js';
-import { _vexAllTechniques, _vexAvailableVariants, _vexCalderaTechniques, _vexDispatchFullSweep, agentGroupTree, filterVexTechniqueList, gpFlattenGroups, loadRuns, openModal, resolveGroupTargetAgents, scenarioCategoryOf, sweepStatusLabel, verdictBadge, verdictCounts } from '../legacy.js';
+import { _vexAllTechniques, _vexAvailableVariants, _vexCalderaTechniques, _vexDispatchFullSweep, filterVexTechniqueList, loadRuns, openModal, sweepStatusLabel, verdictBadge, verdictCounts } from '../legacy.js';
 
 
 // ── Endpoint Mastery ──────────────────────────────────────────────────────────

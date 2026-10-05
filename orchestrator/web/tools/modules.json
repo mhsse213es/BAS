@@ -193,6 +193,14 @@
     {
       "header": "OpenAEV Connector",
       "module": "features/openaev.js"
+    },
+    {
+      "header": "Attack Path Validation",
+      "module": "features/attack-path.js"
+    },
+    {
+      "header": "Attack Path Collection",
+      "module": "features/attack-path.js"
     }
   ],
   "pin": {
