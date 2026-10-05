@@ -9,6 +9,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -88,10 +89,39 @@ func StaticHandler() http.Handler {
 			log.Fatalf("[FATAL] wwwroot integrity: %v -- files may be tampered. Redeploy from a trusted release package.", err)
 		}
 		log.Printf("[+] wwwroot integrity: manifest and every listed file verified (%s…)", expectedWWWManifestHash[:16])
-	} else {
-		log.Println("[~] wwwroot integrity: no reference hash compiled in — hash check disabled (dev build)")
+		h, err := manifestOnly(wwwrootDir, http.FileServer(http.Dir(wwwrootDir)))
+		if err != nil {
+			log.Fatalf("[FATAL] wwwroot integrity: %v", err)
+		}
+		return cacheHeaders(h)
 	}
+	log.Println("[~] wwwroot integrity: no reference hash compiled in — hash check disabled (dev build)")
 	return cacheHeaders(http.FileServer(http.Dir(wwwrootDir)))
+}
+
+// manifestOnly answers only paths listed in dir's MANIFEST.sha256 ("/" is
+// index.html); everything else is a 404. The startup check rejects unlisted
+// files, but a file dropped in afterwards would otherwise be served
+// same-origin until the next restart (G1c final review I3). Directory
+// listings and the manifest itself are not served either.
+func manifestOnly(dir string, h http.Handler) (http.Handler, error) {
+	raw, err := os.ReadFile(filepath.Join(dir, wwwManifestName))
+	if err != nil {
+		return nil, fmt.Errorf("read %s: %w", wwwManifestName, err)
+	}
+	allowed := map[string]bool{"/": true}
+	for _, line := range strings.Split(string(raw), "\n") {
+		if _, rel, ok := strings.Cut(strings.TrimRight(line, "\r"), "  "); ok && rel != "" {
+			allowed["/"+rel] = true
+		}
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !allowed[path.Clean(r.URL.Path)] {
+			http.NotFound(w, r)
+			return
+		}
+		h.ServeHTTP(w, r)
+	}), nil
 }
 
 const wwwManifestName = "MANIFEST.sha256"

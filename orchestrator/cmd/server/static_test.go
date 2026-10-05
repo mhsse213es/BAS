@@ -208,3 +208,42 @@ func TestVerifyWWWRoot_ExtractedImage(t *testing.T) {
 		t.Fatalf("extracted image wwwroot fails verification: %v", err)
 	}
 }
+
+// A file dropped into wwwroot after the startup check must never be served
+// (G1c final review I3): only manifest-listed paths are answered.
+func TestManifestOnly_ServesOnlyListedFiles(t *testing.T) {
+	dir, _ := writeWWWRoot(t, sampleWWW)
+	h, err := manifestOnly(dir, http.FileServer(http.Dir(dir)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "assets", "evil.js"), []byte("alert(1)"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "x.html"), []byte("<script>"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for path, want := range map[string]int{
+		"/":                     http.StatusOK,
+		"/assets/app.ABC123.js": http.StatusOK,
+		"/images/logo.png":      http.StatusOK,
+		"/assets/evil.js":       http.StatusNotFound,
+		"/x.html":               http.StatusNotFound,
+		"/assets/":              http.StatusNotFound,
+		"/MANIFEST.sha256":      http.StatusNotFound,
+		"/assets/../x.html":     http.StatusNotFound,
+		"/assets//evil.js":      http.StatusNotFound,
+	} {
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+		if rec.Code != want {
+			t.Errorf("GET %s = %d, want %d", path, rec.Code, want)
+		}
+	}
+}
+
+func TestManifestOnly_MissingManifestFails(t *testing.T) {
+	if _, err := manifestOnly(t.TempDir(), http.NotFoundHandler()); err == nil {
+		t.Fatal("manifestOnly accepted a wwwroot without MANIFEST.sha256")
+	}
+}
