@@ -198,3 +198,13 @@ func TestCacheHeaders(t *testing.T) {
 		}
 	}
 }
+
+func TestVerifyWWWRoot_ExtractedImage(t *testing.T) {
+	dir, hash := os.Getenv("WWW_DIR"), os.Getenv("WWW_HASH")
+	if dir == "" || hash == "" {
+		t.Skip("set WWW_DIR and WWW_HASH to verify a wwwroot extracted from a built image")
+	}
+	if err := verifyWWWRoot(dir, hash); err != nil {
+		t.Fatalf("extracted image wwwroot fails verification: %v", err)
+	}
+}

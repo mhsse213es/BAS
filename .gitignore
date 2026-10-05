@@ -59,3 +59,6 @@ node_modules/
 
 # Superpowers visual-companion brainstorming sessions (local scratch only)
 .superpowers/
+
+# G1c: build output of orchestrator/web (see web/tools/dev-build.sh)
+/orchestrator/wwwroot/

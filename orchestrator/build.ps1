@@ -71,21 +71,22 @@ if (Test-Path "agents/BINARIES.sha256") {
     Write-Host "[~] No agents/BINARIES.sha256 found to sign." -ForegroundColor DarkGray
 }
 
-# 4. Hash wwwroot/index.html
-$indexHash = ""
-if (Test-Path "wwwroot/index.html") {
-    Write-Host "[*] Hashing wwwroot/index.html..." -ForegroundColor Cyan
-    $indexHash = (Get-FileHash -Path "wwwroot/index.html" -Algorithm SHA256).Hash.ToLower()
-    Write-Host "[+] Computed hash: $($indexHash.Substring(0,16))..." -ForegroundColor Green
+# 4. Hash wwwroot/MANIFEST.sha256 (written by web/tools/dev-build.sh; it lists
+#    the hash of every dashboard file, so this one hash anchors them all)
+$manifestHash = ""
+if (Test-Path "wwwroot/MANIFEST.sha256") {
+    Write-Host "[*] Hashing wwwroot/MANIFEST.sha256..." -ForegroundColor Cyan
+    $manifestHash = (Get-FileHash -Path "wwwroot/MANIFEST.sha256" -Algorithm SHA256).Hash.ToLower()
+    Write-Host "[+] Computed hash: $($manifestHash.Substring(0,16))..." -ForegroundColor Green
 } else {
-    Write-Host "[!] wwwroot/index.html not found! Skipping hash injection." -ForegroundColor Red
+    Write-Host "[!] wwwroot/MANIFEST.sha256 not found (run web/tools/dev-build.sh)! Skipping hash injection." -ForegroundColor Red
 }
 
 # 5. Build Binary
 Write-Host "[*] Compiling server.exe with garble obfuscation..." -ForegroundColor Cyan
 $ldflags = "-s -w"
-if ($indexHash -ne "") {
-    $ldflags += " -X main.expectedWWWRootHash=$indexHash"
+if ($manifestHash -ne "") {
+    $ldflags += " -X main.expectedWWWManifestHash=$manifestHash"
 }
 
 $env:CGO_ENABLED = "0"

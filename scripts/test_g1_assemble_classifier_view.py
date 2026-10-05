@@ -33,6 +33,15 @@ class TestAssemble(unittest.TestCase):
         self.assertEqual(v.assemble(d), v.assemble(d))
         self.assertNotIn("\r", v.assemble(d))
 
+    def test_export_keyword_is_dropped_so_the_classifier_sees_each_function(self):
+        # The proven classifier finds functions with ^\s*function NAME( -- an
+        # exported declaration would hand its sinks to the previous function.
+        d = web({**BASE, "src/a.js": "import { x } from './b.js';\nexport function a() {}\nexport async function b() {}\nexport var c = 1;\nconst s = 'export function no() {}';\n"})
+        out = v.assemble(d)
+        self.assertIn("\nfunction a() {}\nasync function b() {}\nvar c = 1;\n", out)
+        self.assertIn("'export function no() {}'", out)
+        self.assertNotIn("import {", out)
+
     def test_missing_script_tag_fails(self):
         d = web({"index.html": "<html></html>\n", "src/a.js": ""})
         with self.assertRaises(ValueError):

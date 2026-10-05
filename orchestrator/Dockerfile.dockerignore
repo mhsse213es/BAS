@@ -1,0 +1,8 @@
+# BuildKit reads this for orchestrator/Dockerfile only (the build context is
+# the repo root). Host-side dashboard artifacts must never reach the web
+# stage: node_modules is installed there by npm ci, dist/ is built there.
+orchestrator/web/node_modules
+orchestrator/web/dist
+orchestrator/web/test-results
+orchestrator/web/playwright-report
+orchestrator/wwwroot

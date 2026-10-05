@@ -22,6 +22,7 @@ jobs:
           # the branch, so direct pushes to main are still checked.
           BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
         run: |
+          python3 scripts/g1-assemble-classifier-view.py
           python3 scripts/g1-innerhtml-sink-classifier.py
           python3 scripts/g1-trace-indirect-sinks.py
           python3 scripts/g1-merge-classification.py
@@ -41,7 +42,7 @@ jobs:
             fi
           fi
           python3 scripts/g1-check-no-regression.py --against /tmp/g1_base.json
-          cd scripts && python3 -m unittest test_g1_merge_classification test_g1_check_no_regression -v
+          cd scripts && python3 -m unittest test_g1_merge_classification test_g1_check_no_regression test_g1_assemble_classifier_view -v
 
       - name: G1c globals registry check
         working-directory: .
@@ -119,10 +120,6 @@ jobs:
       - name: Smoke harness (bundled build)
         env:
           SMOKE_ROOT: dist
-        run: npm run smoke
-      - name: Smoke harness (monolith baseline)
-        env:
-          SMOKE_ROOT: ../wwwroot
         run: npm run smoke
       - name: Upload smoke artifacts on failure
         if: failure()
