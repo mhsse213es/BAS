@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -21,7 +22,7 @@ func TestResolveExecutable_GateMatrixAgainstDB(t *testing.T) { // A5
 			if dev {
 				r = New(pool, testutil.DevVerifier())
 			}
-			n := 0
+			n, allowed := 0, 0
 			for _, o := range allOrigins {
 				for _, tr := range allTrusts {
 					for _, lc := range allLifecycles {
@@ -45,8 +46,17 @@ func TestResolveExecutable_GateMatrixAgainstDB(t *testing.T) { // A5
 						if got := err == nil; got != want {
 							t.Errorf("dev=%v %s/%s/%s: runnable=%v want %v (err=%v)", dev, o, tr, lc, got, want, err)
 						}
+						if want {
+							allowed++
+						}
 					}
 				}
+			}
+			// Guards against the createVersion `continue` silently skipping ALLOW cases.
+			// Prod: VENDOR_SIGNED+PUBLISHED and LOCAL_TRUSTED+PUBLISHED_LOCAL.
+			// Dev: VENDOR+UNTRUSTED+PUBLISHED and LOCAL_TRUSTED+PUBLISHED_LOCAL.
+			if allowed != 2 {
+				t.Errorf("dev=%v: %d allowed combinations created, want exactly 2", dev, allowed)
 			}
 		}
 	})
@@ -60,8 +70,12 @@ func TestResolveExecutable_DraftDoesNotDisplacePublished(t *testing.T) { // A7
 		if err := r.RegisterLocalApproved(ctx, "dd", v1, "user:op"); err != nil {
 			t.Fatal(err)
 		}
-		_, _ = pool.Exec(ctx, `INSERT INTO content_registry_state (id) VALUES (1)`)
-		_, _ = r.Intake(ctx, scenario.IntakeFile{Path: "custom/dd.yaml", Source: "custom", Artifact: []byte("id: dd\nname: V2\nlocal_check: true\n")})
+		if _, err := pool.Exec(ctx, `INSERT INTO content_registry_state (id) VALUES (1)`); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := r.Intake(ctx, scenario.IntakeFile{Path: "custom/dd.yaml", Source: "custom", Artifact: []byte("id: dd\nname: V2\nlocal_check: true\n")}); err != nil {
+			t.Fatal(err)
+		}
 		ev, err := r.ResolveExecutable(ctx, "dd")
 		if err != nil || ev.Version != 1 || ev.Scenario.Name != "V1" {
 			t.Fatalf("want v1 from stored bytes, got %+v err=%v", ev, err)
@@ -86,6 +100,19 @@ func TestResolveExecutable_DenialReasons(t *testing.T) {
 	})
 }
 
+// signedPublished inserts a VENDOR_SIGNED+PUBLISHED version of id with the given name.
+func signedPublished(t *testing.T, r *Registry, signer *testutil.TestSigner, id, name string) string {
+	t.Helper()
+	art := []byte(fmt.Sprintf("id: %s\nname: %s\nlocal_check: true\n", id, name))
+	vid, _, err := r.createVersion(context.Background(), newVersion{contentID: id, origin: OriginVendor, source: SourceBuiltin,
+		artifact: art, signature: signer.Sign(art), trust: TrustVendorSigned, lifecycle: LifecyclePublished,
+		actor: ActorMigration, analysis: mustAnalyze(t, string(art))})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return vid
+}
+
 func TestGateReverifiesVendorSignature(t *testing.T) { // A19
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
 		ctx := context.Background()
@@ -105,13 +132,82 @@ func TestGateReverifiesVendorSignature(t *testing.T) { // A19
 			tampered, len(tampered)); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := r.ResolveExecutable(ctx, "tv"); err == nil {
-			t.Fatal("tampered vendor content must be denied")
+		_, err := r.ResolveExecutable(ctx, "tv")
+		var ne *ErrNotExecutable
+		if !errors.As(err, &ne) || !strings.Contains(ne.Reason, "signature re-verification failed for v1") {
+			t.Fatalf("tampered vendor content must be denied with re-verification reason, got %v", err)
 		}
 		var n int
 		_ = pool.QueryRow(ctx, `SELECT count(*) FROM audit_logs WHERE action='content_registry.tamper'`).Scan(&n)
 		if n != 1 {
 			t.Fatalf("tamper audit rows = %d", n)
+		}
+	})
+}
+
+// A tampered newest version must deny, never fall through to an older intact one.
+func TestResolveExecutable_TamperedNewestDoesNotFallThrough(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		signer := testutil.NewTestSigner(t)
+		r := New(pool, signer.Verifier())
+		signedPublished(t, r, signer, "ft", "V1")
+		v2 := signedPublished(t, r, signer, "ft", "V2")
+		if ev, err := r.ResolveExecutable(ctx, "ft"); err != nil || ev.Version != 2 {
+			t.Fatalf("intact: want v2, got %+v err=%v", ev, err)
+		}
+		tampered := []byte("id: ft\nname: EVIL\nlocal_check: true\n")
+		if _, err := pool.Exec(ctx, `UPDATE content_versions SET artifact_bytes=$1, artifact_size=$2 WHERE id=$3`,
+			tampered, len(tampered), v2); err != nil {
+			t.Fatal(err)
+		}
+		ev, err := r.ResolveExecutable(ctx, "ft")
+		var ne *ErrNotExecutable
+		if !errors.As(err, &ne) || !strings.Contains(ne.Reason, "signature re-verification failed for v2") {
+			t.Fatalf("want denial for v2, got %+v err=%v", ev, err)
+		}
+	})
+}
+
+// Validly signed bytes of another content id swapped into this row must be denied.
+func TestResolveExecutable_RejectsSwappedSignedBytes(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		signer := testutil.NewTestSigner(t)
+		r := New(pool, signer.Verifier())
+		signedPublished(t, r, signer, "sw-a", "A")
+		bid := signedPublished(t, r, signer, "sw-b", "B")
+		artA := []byte("id: sw-a\nname: A\nlocal_check: true\n")
+		if _, err := pool.Exec(ctx,
+			`UPDATE content_versions SET artifact_bytes=$1, artifact_size=$2, artifact_sha256=$3, signature_bytes=$4 WHERE id=$5`,
+			artA, len(artA), sha256Hex(artA), signer.Sign(artA), bid); err != nil {
+			t.Fatal(err)
+		}
+		_, err := r.ResolveExecutable(ctx, "sw-b")
+		var ne *ErrNotExecutable
+		if !errors.As(err, &ne) || !strings.Contains(ne.Reason, `does not match content id`) {
+			t.Fatalf("swapped bytes must be denied, got %v", err)
+		}
+	})
+}
+
+// A dev build cannot verify signatures: deny, audited as unavailable, not tamper.
+func TestResolveExecutable_DevBuildVendorSignedIsNotTamper(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		signer := testutil.NewTestSigner(t)
+		r := New(pool, testutil.DevVerifier())
+		signedPublished(t, r, signer, "dv", "V1")
+		_, err := r.ResolveExecutable(ctx, "dv")
+		var ne *ErrNotExecutable
+		if !errors.As(err, &ne) || !strings.Contains(ne.Reason, "cannot verify signatures") {
+			t.Fatalf("want signing-unavailable denial, got %v", err)
+		}
+		var tamper, unavail int
+		_ = pool.QueryRow(ctx, `SELECT count(*) FROM audit_logs WHERE action='content_registry.tamper'`).Scan(&tamper)
+		_ = pool.QueryRow(ctx, `SELECT count(*) FROM audit_logs WHERE action='content_registry.signing_unavailable'`).Scan(&unavail)
+		if tamper != 0 || unavail != 1 {
+			t.Fatalf("tamper=%d signing_unavailable=%d, want 0 and 1", tamper, unavail)
 		}
 	})
 }
@@ -152,10 +248,14 @@ func TestAttachVendorSignature(t *testing.T) { // A18
 		}
 		// LOCAL content can never receive a vendor signature.
 		la := []byte("id: lf\nname: LF\nlocal_check: true\n")
-		lid, _, _ := r.createVersion(ctx, newVersion{contentID: "lf", origin: OriginLocal, source: SourceCustom,
+		lid, _, err := r.createVersion(ctx, newVersion{contentID: "lf", origin: OriginLocal, source: SourceCustom,
 			artifact: la, trust: TrustUntrusted, lifecycle: LifecycleDraft, actor: ActorIntake, analysis: mustAnalyze(t, string(la))})
-		if err := r.AttachVendorSignature(ctx, lid, signer.Sign(la), "user:research"); err == nil {
-			t.Fatal("LOCAL content must be refused")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := r.AttachVendorSignature(ctx, lid, signer.Sign(la), "user:research"); err == nil ||
+			!strings.Contains(err.Error(), "only VENDOR content") {
+			t.Fatalf("LOCAL content must be refused by the Go guard, got %v", err)
 		}
 	})
 }

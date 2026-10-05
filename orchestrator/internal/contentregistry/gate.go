@@ -36,6 +36,13 @@ func (r *Registry) ResolveExecutable(ctx context.Context, contentID string) (sce
 			continue
 		}
 		if v.Trust == TrustVendorSigned {
+			if !r.verifier.SigningEnabled() {
+				// A dev build cannot verify signatures: deny, but this is not tampering.
+				r.audit(ctx, "content_registry.signing_unavailable", v.ID, map[string]any{
+					"content_id": contentID, "version": v.Number}, "denied")
+				return scenario.ExecutableVersion{}, &ErrNotExecutable{ContentID: contentID,
+					Reason: fmt.Sprintf("v%d is vendor-signed but this build cannot verify signatures", v.Number)}
+			}
 			ok, verr := r.verifier.Verify(v.Artifact, v.Signature)
 			if !ok || verr != nil {
 				r.audit(ctx, "content_registry.tamper", v.ID, map[string]any{
@@ -48,6 +55,11 @@ func (r *Registry) ResolveExecutable(ctx context.Context, contentID string) (sce
 		if perr != nil {
 			return scenario.ExecutableVersion{}, &ErrNotExecutable{ContentID: contentID,
 				Reason: fmt.Sprintf("v%d artifact unreadable: %v", v.Number, perr)}
+		}
+		if sc.ID != contentID {
+			// Stops validly signed bytes of another content id being swapped into this row.
+			return scenario.ExecutableVersion{}, &ErrNotExecutable{ContentID: contentID,
+				Reason: fmt.Sprintf("v%d artifact id %q does not match content id", v.Number, sc.ID)}
 		}
 		return scenario.ExecutableVersion{VersionID: v.ID, ContentID: v.ContentID, Version: v.Number,
 			Origin: string(v.Origin), Trust: string(v.Trust), Lifecycle: string(v.Lifecycle), Scenario: sc}, nil
@@ -87,8 +99,11 @@ func (r *Registry) AttachVendorSignature(ctx context.Context, versionID string, 
 		return fmt.Errorf("signature already attached")
 	}
 	ok, verr := r.verifier.Verify(art, sig)
-	if !ok || verr != nil {
-		return fmt.Errorf("signature does not verify against stored artifact: %v", verr)
+	if verr != nil {
+		return fmt.Errorf("signature does not verify against stored artifact: %w", verr)
+	}
+	if !ok {
+		return fmt.Errorf("signature does not verify against stored artifact")
 	}
 	if _, err := tx.Exec(ctx, `UPDATE content_versions SET signature_bytes = $2, trust_level = 'VENDOR_SIGNED' WHERE id = $1`,
 		versionID, sig); err != nil {
