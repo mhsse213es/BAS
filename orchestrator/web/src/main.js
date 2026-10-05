@@ -11,6 +11,7 @@ import './features/campaigns.js';
 import './features/compliance.js';
 import './features/coverage.js';
 import './features/detection-verification.js';
+import './features/endpoint-mastery.js';
 import './features/findings.js';
 import './features/initiatives.js';
 import './features/integrations.js';

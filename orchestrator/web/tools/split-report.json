@@ -112,6 +112,10 @@
       "imports": 3,
       "inits": 0
     },
+    "features/endpoint-mastery.js": {
+      "imports": 6,
+      "inits": 0
+    },
     "features/findings.js": {
       "imports": 6,
       "inits": 0
@@ -145,7 +149,7 @@
       "inits": 0
     },
     "features/shell.js": {
-      "imports": 19,
+      "imports": 20,
       "inits": 5
     },
     "features/threat-intel.js": {
@@ -157,7 +161,7 @@
       "inits": 0
     },
     "legacy.js": {
-      "imports": 19,
+      "imports": 20,
       "inits": 6
     }
   }

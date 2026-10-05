@@ -177,6 +177,18 @@
     {
       "header": "Scheduled Assessments",
       "module": "features/scheduled.js"
+    },
+    {
+      "header": "Endpoint Mastery Full Sweep",
+      "module": "features/endpoint-mastery.js"
+    },
+    {
+      "header": "Full Sweep Preview & Confirm",
+      "module": "features/endpoint-mastery.js"
+    },
+    {
+      "header": "Endpoint Mastery",
+      "module": "features/endpoint-mastery.js"
     }
   ],
   "pin": {
