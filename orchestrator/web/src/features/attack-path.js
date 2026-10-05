@@ -1,4 +1,5 @@
 import { state } from '../core/state.js';
+import { on } from '../core/actions.js';
 import { apicall } from '../core/api.js';
 import { x } from '../core/escape.js';
 import { ago, fmtDate, showToast } from '../core/util.js';
@@ -1457,7 +1458,7 @@ function renderAgentTiles() {
 export function covSegHtml(items, activeVal, setterFnName, countFn) {
   return '<div class="cov-seg">' + items.map(function(o) {
     var label = o[1] + (countFn ? ' <span style="opacity:.6">' + countFn(o[0]) + '</span>' : '');
-    return '<button class="' + (activeVal === o[0] ? 'on' : '') + '" onclick="' + setterFnName + '(\'' + o[0] + '\')">' + label + '</button>';
+    return '<button class="' + (activeVal === o[0] ? 'on' : '') + '"' + on('click', setterFnName, o[0]) + '>' + label + '</button>';
   }).join('') + '</div>';
 }
 function renderAgentToolbar() {
