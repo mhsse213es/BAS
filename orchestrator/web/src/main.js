@@ -7,6 +7,7 @@ import './features/agent-actions.js';
 import './features/audit-logs.js';
 import './features/compliance.js';
 import './features/iocs.js';
+import './features/rerun-review.js';
 import { __init_L19932, __init_L5162, __init_L5212, __init_L5490, __init_L5494 } from './features/shell.js';
 import './features/threat-intel.js';
 import './features/variant-executor.js';

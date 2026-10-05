@@ -95,6 +95,10 @@
       "imports": 6,
       "inits": 0
     },
+    "features/rerun-review.js": {
+      "imports": 8,
+      "inits": 0
+    },
     "features/shell.js": {
       "imports": 10,
       "inits": 5
@@ -108,7 +112,7 @@
       "inits": 0
     },
     "legacy.js": {
-      "imports": 10,
+      "imports": 11,
       "inits": 7
     }
   }

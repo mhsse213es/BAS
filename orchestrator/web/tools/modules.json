@@ -53,6 +53,10 @@
     {
       "header": "IOC Registry",
       "module": "features/iocs.js"
+    },
+    {
+      "header": "Re-run Review",
+      "module": "features/rerun-review.js"
     }
   ],
   "pin": {
