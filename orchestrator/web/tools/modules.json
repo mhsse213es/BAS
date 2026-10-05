@@ -21,6 +21,10 @@
     {
       "header": "Remove Agent (Force Remove)",
       "module": "features/agent-actions.js"
+    },
+    {
+      "header": "Variant Executor",
+      "module": "features/variant-executor.js"
     }
   ],
   "pin": {

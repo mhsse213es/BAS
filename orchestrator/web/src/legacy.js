@@ -4,6 +4,7 @@ import { apicall } from './core/api.js';
 import { x } from './core/escape.js';
 import { ago, daysAgo, fmtDate, fmtRunIdCode, showToast } from './core/util.js';
 import { ROLE, STRIPE_COLORS, _artCatalogByPlatform, _riskScoreColor, _riskTrendBadge, activateTab, scenarioSrcCollapsed, setAgentsView, showTab, showTamperBanner } from './features/shell.js';
+import { VEX_POLL_MAX_FAILURES } from './features/variant-executor.js';
 
 
 // ── Initiative Layer ─────────────────────────────────────────────────────
@@ -14079,28 +14080,6 @@ export function exportCompliance(format) {
   });
 }
 
-// ── Variant Executor ───────────────────────────────────────────────────────
-var _vexRunPoll = null;
-var _vexActivePoll = null;          // tracks sweep/queue polling interval (cancellable)
-var _vexActiveScenarioRunId = null; // underlying scenario_run id of the current vex dispatch
-var _vexPollFailCount = 0;          // consecutive pollVariantRun failures -- see VEX_POLL_MAX_FAILURES
-// VEX_POLL_MAX_FAILURES bounds pollVariantRun's retry: a single transient
-// network blip must not stop the poll (the run keeps executing server-side
-// regardless of whether the status check succeeds), but failing forever
-// with an empty catch left the panel stuck on "Executing variants..."
-// indefinitely with zero feedback if the connection or session broke mid-run.
-var VEX_POLL_MAX_FAILURES = 5;
-var _vexAbortRequested = false;     // set by stopVex(); checked at every queue step
-
-export function loadVariantTab() {
-  loadVariantStats();
-  loadVariantCoverage();
-  populateVexAgents();
-  populateVexTechniques();
-  startVexSweepPolling();
-  _vexResumeActiveRun();
-}
-
 // ── Run Variants reload-survival ────────────────────────────────────────────
 // A Run Variants dispatch (single technique, or a queued multi-technique
 // batch) only ever tracked its live state in JS variables -- a page reload
@@ -14126,8 +14105,8 @@ function _vexClearActiveState() {
   try { localStorage.removeItem(VEX_ACTIVE_KEY); } catch (e) {}
 }
 
-function _vexResumeActiveRun() {
-  if (_vexRunPoll || _vexActivePoll) return; // already polling something this session
+export function _vexResumeActiveRun() {
+  if (state._vexRunPoll || state._vexActivePoll) return; // already polling something this session
   var st = _vexLoadActiveState();
   if (!st || !st.vrId) return;
   apicall('/api/variants/run/' + st.vrId).then(function(detail) {
@@ -14137,7 +14116,7 @@ function _vexResumeActiveRun() {
       // For a queue, pick up right where it left off rather than silently
       // abandoning the remaining techniques.
       if (st.techniques.length > 1 && st.idx + 1 < st.techniques.length) {
-        _vexAbortRequested = false;
+        state._vexAbortRequested = false;
         var btn = document.getElementById('vex-run-btn');
         if (btn) btn.disabled = true;
         _vexRunVariantQueue(st.agentId, st.techniques, st.mode, st.advanced, st.baseType, st.idx + 1);
@@ -14148,8 +14127,8 @@ function _vexResumeActiveRun() {
     }
     // Still running -- reconnect the live panel/polling exactly as if this
     // tab had never left.
-    _vexAbortRequested = false;
-    _vexActiveScenarioRunId = detail.run.scenarioRunId || null;
+    state._vexAbortRequested = false;
+    state._vexActiveScenarioRunId = detail.run.scenarioRunId || null;
     var btn2 = document.getElementById('vex-run-btn');
     if (btn2) { btn2.disabled = true; btn2.textContent = st.techniques.length > 1 ? (st.idx + 1) + '/' + st.techniques.length + ' Running…' : 'Dispatching…'; }
     if (st.techniques.length > 1) {
@@ -14167,7 +14146,7 @@ function _vexResumeActiveRun() {
 // "Total Variants" stat card instead of a separate rough guess.
 var _vexAvailableVariants = 0;
 
-function loadVariantStats() {
+export function loadVariantStats() {
   apicall('/api/variants/stats').then(function(s) {
     var el = document.getElementById('vex-stats');
     if (!el) return;
@@ -14204,7 +14183,7 @@ export function showVexStatHelp(label, help) {
   showToast(label + ': ' + help, 'ok');
 }
 
-function populateVexAgents() {
+export function populateVexAgents() {
   apicall('/api/agents').then(function(agents) {
     // Every variant Template the generator produces is Windows-only
     // PowerShell (internal/variant/generator.go), so a non-Windows agent
@@ -14231,7 +14210,7 @@ var _vexAllTechniques = [];
 // sources without a second round-trip. Empty when Caldera isn't configured.
 var _vexCalderaTechniques = [];
 
-function populateVexTechniques() {
+export function populateVexTechniques() {
   apicall('/api/caldera/techniques').then(function(techs) {
     _vexCalderaTechniques = (techs || []).filter(function(t) { return t.id; });
     var calderaEl = document.getElementById('vex-sweep-caldera-count');
@@ -14290,7 +14269,7 @@ var _vexSweepPollFailing = false;  // true while pollVexSweeps' fetch is failing
 // startVexSweepPolling begins the 3s poll loop against the server-owned
 // sweep API. Idempotent -- safe to call more than once (e.g. if
 // loadVariantTab() runs again after a tab re-visit).
-function startVexSweepPolling() {
+export function startVexSweepPolling() {
   if (_vexSweepPollTimer) return;
   pollVexSweeps();
   _vexSweepPollTimer = setInterval(pollVexSweeps, 3000);
@@ -14613,7 +14592,7 @@ function vexSelectedTechniques() {
   return Array.from(document.querySelectorAll('#vex-technique-list .vex-tech-cb:checked')).map(function(cb) { return cb.value; });
 }
 
-function loadVariantCoverage() {
+export function loadVariantCoverage() {
   var el = document.getElementById('vex-coverage');
   if (!el) return;
   el.innerHTML = '<div class="empty" style="padding:1.5rem">Loading…</div>';
@@ -14757,7 +14736,7 @@ export function runVariants() {
 
   var agentId = document.getElementById('vex-agent') ? document.getElementById('vex-agent').value : '';
   if (!agentId) { showToast('Select an agent first', 'err'); return; }
-  _vexAbortRequested = false; _vexActiveScenarioRunId = null;
+  state._vexAbortRequested = false; state._vexActiveScenarioRunId = null;
   var btn = document.getElementById('vex-run-btn');
   if (btn) { btn.disabled = true; }
   _vexRunVariantQueue(agentId, techniques, mode, advanced, baseType, 0);
@@ -14780,7 +14759,7 @@ function _vexRenderQueuePanel(tid, idx, techniques) {
 
 function _vexRunVariantQueue(agentId, techniques, mode, advanced, baseType, idx) {
   var btn = document.getElementById('vex-run-btn');
-  if (_vexAbortRequested) { if (btn) { btn.disabled = false; btn.textContent = 'Run'; } _vexClearActiveState(); return; }
+  if (state._vexAbortRequested) { if (btn) { btn.disabled = false; btn.textContent = 'Run'; } _vexClearActiveState(); return; }
   if (idx >= techniques.length) {
     if (btn) { btn.disabled = false; btn.textContent = 'Run'; }
     if (techniques.length > 1) showToast('All ' + techniques.length + ' techniques queued', 'ok');
@@ -14799,7 +14778,7 @@ function _vexRunVariantQueue(agentId, techniques, mode, advanced, baseType, idx)
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ agentId: agentId, techniqueId: tid, baseType: baseType, executionMode: mode, includeAdvanced: advanced })
   }).then(function(resp) {
-    _vexActiveScenarioRunId = resp.scenarioRunId;
+    state._vexActiveScenarioRunId = resp.scenarioRunId;
     var vrId = resp.variantRunId;
     // Persist so a page reload can reconnect to this run instead of the
     // panel just going blank -- and, for a queue, so the remaining
@@ -14820,22 +14799,22 @@ function _vexRunVariantQueue(agentId, techniques, mode, advanced, baseType, idx)
 }
 
 function _vexWaitAndNext(vrId, agentId, techniques, mode, advanced, baseType, idx) {
-  if (_vexActivePoll) clearInterval(_vexActivePoll);
-  _vexActivePoll = setInterval(function() {
-    if (_vexAbortRequested) { clearInterval(_vexActivePoll); _vexActivePoll = null; return; }
+  if (state._vexActivePoll) clearInterval(state._vexActivePoll);
+  state._vexActivePoll = setInterval(function() {
+    if (state._vexAbortRequested) { clearInterval(state._vexActivePoll); state._vexActivePoll = null; return; }
     apicall('/api/variants/run/' + vrId).then(function(detail) {
       var s = detail.run && detail.run.status;
       if (s === 'completed' || s === 'failed' || s === 'partial') {
-        clearInterval(_vexActivePoll); _vexActivePoll = null;
+        clearInterval(state._vexActivePoll); state._vexActivePoll = null;
         _vexRunVariantQueue(agentId, techniques, mode, advanced, baseType, idx + 1);
       }
-    }).catch(function() { clearInterval(_vexActivePoll); _vexActivePoll = null; _vexRunVariantQueue(agentId, techniques, mode, advanced, baseType, idx + 1); });
+    }).catch(function() { clearInterval(state._vexActivePoll); state._vexActivePoll = null; _vexRunVariantQueue(agentId, techniques, mode, advanced, baseType, idx + 1); });
   }, 3000);
 }
 
 export function pollVariantRun(vrId) {
-  clearInterval(_vexRunPoll);
-  _vexPollFailCount = 0;
+  clearInterval(state._vexRunPoll);
+  state._vexPollFailCount = 0;
   var panel = document.getElementById('vex-result-panel');
   if (panel) panel.innerHTML =
     '<div class="card" style="padding:1.5rem;text-align:center;color:var(--muted)">' +
@@ -14843,14 +14822,14 @@ export function pollVariantRun(vrId) {
     '<div class="tiny" style="font-family:var(--font-mono);margin-bottom:0.75rem">' + x(vrId) + '</div>' +
     '<div id="vex-poll-status" class="tiny" style="min-height:1em;margin-bottom:0.5rem"></div>' +
     '<button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger)" onclick="stopVex()">&#9632; Stop</button></div>';
-  _vexRunPoll = setInterval(function() {
+  state._vexRunPoll = setInterval(function() {
     apicall('/api/variants/run/' + vrId).then(function(detail) {
-      _vexPollFailCount = 0;
-      if (detail.run && detail.run.scenarioRunId) _vexActiveScenarioRunId = detail.run.scenarioRunId;
+      state._vexPollFailCount = 0;
+      if (detail.run && detail.run.scenarioRunId) state._vexActiveScenarioRunId = detail.run.scenarioRunId;
       renderVariantRun(detail);
       var s = detail.run && detail.run.status;
       if (s === 'completed' || s === 'failed' || s === 'partial') {
-        clearInterval(_vexRunPoll);
+        clearInterval(state._vexRunPoll);
         _vexClearActiveState();
         loadVariantCoverage();
         loadVariantStats();
@@ -14862,9 +14841,9 @@ export function pollVariantRun(vrId) {
       // visible "retrying" indicator so a stalled poll doesn't look
       // identical to a healthy one), then give up with a recoverable
       // message instead of leaving "Executing variants..." showing forever.
-      _vexPollFailCount++;
-      if (_vexPollFailCount >= VEX_POLL_MAX_FAILURES) {
-        clearInterval(_vexRunPoll);
+      state._vexPollFailCount++;
+      if (state._vexPollFailCount >= VEX_POLL_MAX_FAILURES) {
+        clearInterval(state._vexRunPoll);
         var p = document.getElementById('vex-result-panel');
         if (p) p.innerHTML =
           '<div class="card" style="padding:1.5rem;text-align:center;color:var(--muted)">' +
@@ -14875,7 +14854,7 @@ export function pollVariantRun(vrId) {
           '<button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger)" onclick="stopVex()">&#9632; Stop</button></div>';
       } else {
         var statusEl = document.getElementById('vex-poll-status');
-        if (statusEl) statusEl.textContent = 'Status temporarily unavailable — retrying (' + _vexPollFailCount + '/' + VEX_POLL_MAX_FAILURES + ')';
+        if (statusEl) statusEl.textContent = 'Status temporarily unavailable — retrying (' + state._vexPollFailCount + '/' + VEX_POLL_MAX_FAILURES + ')';
       }
     });
   }, 3000);
@@ -14887,12 +14866,12 @@ export function pollVariantRun(vrId) {
 // cancel endpoint directly -- the two flows no longer share any state or
 // UI, since the sweep no longer runs its own client-side polling loop.
 export function stopVex() {
-  _vexAbortRequested = true;
-  if (_vexActivePoll) { clearInterval(_vexActivePoll); _vexActivePoll = null; }
-  clearInterval(_vexRunPoll); _vexRunPoll = null;
+  state._vexAbortRequested = true;
+  if (state._vexActivePoll) { clearInterval(state._vexActivePoll); state._vexActivePoll = null; }
+  clearInterval(state._vexRunPoll); state._vexRunPoll = null;
   _vexClearActiveState();
-  if (_vexActiveScenarioRunId) {
-    apicall('/api/scenarios/runs/' + encodeURIComponent(_vexActiveScenarioRunId) + '/cancel', { method: 'POST' }).catch(function(){});
+  if (state._vexActiveScenarioRunId) {
+    apicall('/api/scenarios/runs/' + encodeURIComponent(state._vexActiveScenarioRunId) + '/cancel', { method: 'POST' }).catch(function(){});
   }
   var btn = document.getElementById('vex-run-btn');
   if (btn) { btn.disabled = false; btn.textContent = 'Run'; }

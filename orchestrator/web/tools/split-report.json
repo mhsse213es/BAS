@@ -44,8 +44,13 @@
     "_tmplGroupSel",
     "_tmplSelAgents",
     "_toast",
+    "_vexAbortRequested",
+    "_vexActivePoll",
+    "_vexActiveScenarioRunId",
     "_vexGroupSel",
+    "_vexPollFailCount",
     "_vexRunGroupSel",
+    "_vexRunPoll",
     "agentLiveRefreshTimer",
     "agentSearchDebounceTimer",
     "agentTotals",
@@ -78,11 +83,15 @@
       "inits": 0
     },
     "features/shell.js": {
-      "imports": 5,
+      "imports": 6,
       "inits": 5
     },
+    "features/variant-executor.js": {
+      "imports": 2,
+      "inits": 0
+    },
     "legacy.js": {
-      "imports": 5,
+      "imports": 6,
       "inits": 7
     }
   }

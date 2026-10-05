@@ -5,6 +5,7 @@ import './core/escape.js';
 import './core/util.js';
 import './features/agent-actions.js';
 import { __init_L19932, __init_L5162, __init_L5212, __init_L5490, __init_L5494 } from './features/shell.js';
+import './features/variant-executor.js';
 import { __init_L16159, __init_L16846, __init_L8485, __init_L8490, __init_L8723, __init_L8985, __init_L8992 } from './legacy.js';
 
 installGlobals();
