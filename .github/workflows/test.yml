@@ -43,6 +43,12 @@ jobs:
           python3 scripts/g1-check-no-regression.py --against /tmp/g1_base.json
           cd scripts && python3 -m unittest test_g1_merge_classification test_g1_check_no_regression -v
 
+      - name: G1c globals registry check
+        working-directory: .
+        run: |
+          python3 scripts/g1c-check-globals.py
+          cd scripts && python3 -m unittest test_g1c_check_globals -v
+
       - uses: actions/setup-go@v5
         with:
           go-version-file: orchestrator/go.mod
