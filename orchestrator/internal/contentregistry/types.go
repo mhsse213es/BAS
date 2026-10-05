@@ -63,6 +63,7 @@ const (
 
 var (
 	ErrOriginCollision = errors.New("content id already registered with a different origin")
+	ErrSourceCollision = errors.New("content id already registered from the other local intake source (custom vs intel)")
 	ErrVersionNotFound = errors.New("content version not found")
 )
 

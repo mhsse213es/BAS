@@ -15,6 +15,8 @@ type fakeRegistry struct {
 	approved   map[string]string // id -> actor
 	retired    map[string]string
 	approveErr error
+	retireErr  error
+	refusals   []string // "path|reason" in NoteRefusal order
 }
 
 func newFake() *fakeRegistry {
@@ -38,7 +40,9 @@ func (f *fakeRegistry) Intake(_ context.Context, in IntakeFile) (IntakeDecision,
 	}
 	return IntakeDecision{Accepted: true}, nil
 }
-func (f *fakeRegistry) NoteRefusal(string, string, string) {}
+func (f *fakeRegistry) NoteRefusal(path, _, reason string) {
+	f.refusals = append(f.refusals, path+"|"+reason)
+}
 func (f *fakeRegistry) RegisterLocalApproved(_ context.Context, id string, _ []byte, actor string) error {
 	if f.approveErr != nil {
 		return f.approveErr
@@ -47,6 +51,9 @@ func (f *fakeRegistry) RegisterLocalApproved(_ context.Context, id string, _ []b
 	return nil
 }
 func (f *fakeRegistry) RetireExecutable(_ context.Context, id, actor, _ string) error {
+	if f.retireErr != nil {
+		return f.retireErr
+	}
 	f.retired[id] = actor
 	return nil
 }
@@ -93,7 +100,6 @@ func TestLoad_RefusedFileNotInMap(t *testing.T) { // A12 engine half
 	e := NewEngine(dir)
 	e.SetVerifier(devV{})
 	f := newFake()
-	e.AttachRegistry(f)
 	// The second intake of "apt" (the custom one) is refused by the registry.
 	calls := 0
 	f2 := &countingRefuser{fakeRegistry: f, refuseAfter: 1, calls: &calls}
@@ -179,7 +185,9 @@ func TestDeleteAs_RetiresBeforeRemovingFile(t *testing.T) {
 	e := NewEngine(dir)
 	f := newFake()
 	e.AttachRegistry(f)
-	_ = e.SaveAs(context.Background(), &Scenario{ID: "dl", Name: "D", LocalCheck: true}, "user:op")
+	if err := e.SaveAs(context.Background(), &Scenario{ID: "dl", Name: "D", LocalCheck: true}, "user:op"); err != nil {
+		t.Fatal(err)
+	}
 	if err := e.DeleteAs(context.Background(), "dl", "user:op"); err != nil {
 		t.Fatal(err)
 	}
@@ -188,5 +196,120 @@ func TestDeleteAs_RetiresBeforeRemovingFile(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(dir, "custom", "dl.yaml")); !os.IsNotExist(err) {
 		t.Fatal("file must be removed")
+	}
+}
+
+// Fix round 1 ruling (a): custom and intel are both LOCAL, so the registry
+// may accept both; the engine map must still keep the higher-precedence file.
+func TestLoad_CustomKeepsSlotOverIntelDuplicate(t *testing.T) {
+	dir := t.TempDir()
+	write(t, dir, "custom/x.yaml", "id: x\nname: C\nlocal_check: true\n")
+	write(t, dir, "intel/x.yaml", "id: x\nname: I\nart_techniques: [T1082]\n")
+	e := NewEngine(dir)
+	e.SetVerifier(devV{})
+	f := newFake()
+	e.AttachRegistry(f)
+	if err := e.Load(); err != nil {
+		t.Fatal(err)
+	}
+	sc, ok := e.Get("x")
+	if !ok || sc.Source != "custom" || sc.Name != "C" {
+		t.Fatalf("custom must keep the map slot: %+v", sc)
+	}
+	want := filepath.Join(dir, "intel", "x.yaml") + "|duplicate id; higher-precedence file wins"
+	if len(f.refusals) != 1 || f.refusals[0] != want {
+		t.Fatalf("refusals = %v, want [%s]", f.refusals, want)
+	}
+}
+
+func TestLoad_NoRegistryBuiltinBeatsCustomDuplicate(t *testing.T) {
+	dir := t.TempDir()
+	// zzz.yaml walks after custom/ and aaa.yaml before it: under the old
+	// last-write-wins the winner depended on the file name. Builtin must win
+	// both ways.
+	write(t, dir, "zzz.yaml", "id: dup\nname: Builtin\nlocal_check: true\n")
+	write(t, dir, "custom/dup.yaml", "id: dup\nname: Custom\nlocal_check: true\n")
+	write(t, dir, "aaa.yaml", "id: dup2\nname: Builtin2\nlocal_check: true\n")
+	write(t, dir, "custom/dup2.yaml", "id: dup2\nname: Custom2\nlocal_check: true\n")
+	e := NewEngine(dir)
+	e.SetVerifier(devV{})
+	if err := e.Load(); err != nil {
+		t.Fatal(err)
+	}
+	for id, name := range map[string]string{"dup": "Builtin", "dup2": "Builtin2"} {
+		sc, ok := e.Get(id)
+		if !ok || sc.Source != "builtin" || sc.Name != name {
+			t.Fatalf("%s: builtin must win: %+v", id, sc)
+		}
+	}
+}
+
+// badSigV reports signing enabled and rejects every signature.
+type badSigV struct{}
+
+func (badSigV) Verify([]byte, []byte) (bool, error) { return false, errors.New("signature invalid") }
+func (badSigV) SigningEnabled() bool                { return true }
+
+func TestLoad_TamperedBuiltinNotedAndNeverIntaken(t *testing.T) {
+	dir := t.TempDir()
+	write(t, dir, "tampered.yaml", "id: tampered\nname: T\nlocal_check: true\n")
+	write(t, dir, "tampered.yaml.sig", "AAAA")
+	e := NewEngine(dir)
+	e.SetVerifier(badSigV{})
+	f := newFake()
+	e.AttachRegistry(f)
+	if err := e.Load(); err != nil {
+		t.Fatal(err)
+	}
+	if len(f.order) != 0 {
+		t.Fatalf("a tampered builtin must never reach Intake: %v", f.order)
+	}
+	if len(f.refusals) != 1 {
+		t.Fatalf("tampered builtin must be noted as a refusal: %v", f.refusals)
+	}
+	if _, ok := e.Get("tampered"); ok {
+		t.Fatal("tampered builtin must not be loaded")
+	}
+}
+
+func TestSaveAs_FirstSaveRegistryFailureRemovesFile(t *testing.T) {
+	dir := t.TempDir()
+	e := NewEngine(dir)
+	f := newFake()
+	f.approveErr = errors.New("db down")
+	e.AttachRegistry(f)
+	sc := &Scenario{ID: "fresh", Name: "F", LocalCheck: true, Source: "preset"}
+	err := e.SaveAs(context.Background(), sc, "user:op")
+	if err == nil || !errors.Is(err, f.approveErr) {
+		t.Fatalf("want the registry error, got %v", err)
+	}
+	if _, serr := os.Stat(filepath.Join(dir, "custom", "fresh.yaml")); !os.IsNotExist(serr) {
+		t.Fatalf("new file must be removed when there was no previous file: %v", serr)
+	}
+	if _, ok := e.Get("fresh"); ok {
+		t.Fatal("failed save must not enter the map")
+	}
+	if sc.Source != "preset" {
+		t.Fatalf("Source must be restored on failure, got %q", sc.Source)
+	}
+}
+
+func TestDeleteAs_RetireErrorLeavesFileAndMap(t *testing.T) {
+	dir := t.TempDir()
+	e := NewEngine(dir)
+	f := newFake()
+	e.AttachRegistry(f)
+	if err := e.SaveAs(context.Background(), &Scenario{ID: "keep", Name: "K", LocalCheck: true}, "user:op"); err != nil {
+		t.Fatal(err)
+	}
+	f.retireErr = errors.New("db down")
+	if err := e.DeleteAs(context.Background(), "keep", "user:op"); err == nil || !errors.Is(err, f.retireErr) {
+		t.Fatalf("want the retire error, got %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "custom", "keep.yaml")); err != nil {
+		t.Fatalf("file must remain after a failed retire: %v", err)
+	}
+	if _, ok := e.Get("keep"); !ok {
+		t.Fatal("map entry must remain after a failed retire")
 	}
 }

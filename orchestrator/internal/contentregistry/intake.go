@@ -32,6 +32,31 @@ func (r *Registry) hasVersions(ctx context.Context, contentID string) (bool, err
 	return ok, err
 }
 
+// otherLocalSource returns the local intake source a custom/intel file must
+// not share a content id with, or "" for any other source.
+func otherLocalSource(s IntakeSource) IntakeSource {
+	switch s {
+	case SourceCustom:
+		return SourceIntel
+	case SourceIntel:
+		return SourceCustom
+	}
+	return ""
+}
+
+type queryRower interface {
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+}
+
+// hasVersionsFromSource reports whether contentID has any version taken in
+// through the given intake source.
+func hasVersionsFromSource(ctx context.Context, q queryRower, contentID string, src IntakeSource) (bool, error) {
+	var ok bool
+	err := q.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM content_versions WHERE content_id = $1 AND intake_source = $2)`,
+		contentID, string(src)).Scan(&ok)
+	return ok, err
+}
+
 func (r *Registry) refuse(f scenario.IntakeFile, contentID, reason string) scenario.IntakeDecision {
 	r.NoteRefusal(f.Path, contentID, reason)
 	return scenario.IntakeDecision{Accepted: false, Reason: reason}
@@ -41,6 +66,14 @@ func (r *Registry) refuseCollision(ctx context.Context, f scenario.IntakeFile, c
 	r.audit(ctx, "content_registry.collision", contentID,
 		map[string]any{"path": f.Path, "attempted_origin": string(attempted)}, "denied")
 	return r.refuse(f, contentID, "content id already registered with a different origin")
+}
+
+// refuseSourceCollision refuses a custom file claiming an intel id or vice
+// versa. Both are LOCAL, so the origin check alone cannot catch it.
+func (r *Registry) refuseSourceCollision(ctx context.Context, f scenario.IntakeFile, contentID string) scenario.IntakeDecision {
+	r.audit(ctx, "content_registry.collision", contentID,
+		map[string]any{"path": f.Path, "attempted_source": f.Source}, "denied")
+	return r.refuse(f, contentID, ErrSourceCollision.Error())
 }
 
 // Intake applies spec §5.1: origin/trust/lifecycle come from location and
@@ -65,6 +98,19 @@ func (r *Registry) Intake(ctx context.Context, f scenario.IntakeFile) (scenario.
 		return scenario.IntakeDecision{}, fmt.Errorf("unknown intake source %q", f.Source)
 	}
 
+	// A custom file may not take over an intel id (or vice versa), even with
+	// identical bytes, so this runs before the hash pre-check. createVersion
+	// repeats it under the content lock.
+	if other := otherLocalSource(IntakeSource(f.Source)); other != "" {
+		clash, err := hasVersionsFromSource(ctx, r.pool, a.contentID, other)
+		if err != nil {
+			return scenario.IntakeDecision{}, err
+		}
+		if clash {
+			return r.refuseSourceCollision(ctx, f, a.contentID), nil
+		}
+	}
+
 	if hit, found, err := r.versionByHash(ctx, a.contentID, sha256Hex(f.Artifact)); err != nil {
 		return scenario.IntakeDecision{}, err
 	} else if found {
@@ -75,7 +121,7 @@ func (r *Registry) Intake(ctx context.Context, f scenario.IntakeFile) (scenario.
 	}
 
 	nv := newVersion{contentID: a.contentID, artifact: f.Artifact, analysis: a, actor: ActorIntake,
-		source: IntakeSource(f.Source), origin: targetOrigin}
+		source: IntakeSource(f.Source), origin: targetOrigin, exclusiveLocalSource: true}
 	switch IntakeSource(f.Source) {
 	case SourceBuiltin:
 		nv.lifecycle = LifecyclePublished
@@ -109,6 +155,9 @@ func (r *Registry) Intake(ctx context.Context, f scenario.IntakeFile) (scenario.
 	if _, _, err := r.createVersion(ctx, nv); err != nil {
 		if errors.Is(err, ErrOriginCollision) {
 			return r.refuseCollision(ctx, f, a.contentID, nv.origin), nil
+		}
+		if errors.Is(err, ErrSourceCollision) {
+			return r.refuseSourceCollision(ctx, f, a.contentID), nil
 		}
 		return scenario.IntakeDecision{}, err
 	}

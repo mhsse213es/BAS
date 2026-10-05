@@ -2,6 +2,7 @@ package contentregistry
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"testing"
@@ -307,6 +308,51 @@ func TestRegisterLocalApproved_ApprovesExistingIntakeDraft(t *testing.T) {
 		if err := pool.QueryRow(ctx, `SELECT actor FROM content_version_events WHERE content_version_id=$1 AND to_lifecycle='PUBLISHED_LOCAL'`,
 			vs[0].ID).Scan(&actor); err != nil || actor != "user:op" {
 			t.Fatalf("approval event actor=%q err=%v", actor, err)
+		}
+	})
+}
+
+// Fix round 1 ruling (b): custom and intel are both LOCAL, so the origin
+// check cannot stop one claiming the other's id; intake must.
+func TestIntake_CustomIntelSourceCollisionRefused(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		r := New(pool, testutil.DevVerifier())
+		if d := mustIntake(t, r, ctx, file("custom", "id: ci\nname: Custom\nlocal_check: true\n")); !d.Accepted {
+			t.Fatalf("custom intake: %+v", d)
+		}
+		d, err := r.Intake(ctx, file("intel", "id: ci\nname: Intel\nart_techniques: [T1082]\n"))
+		if err != nil || d.Accepted {
+			t.Fatalf("intel claiming a custom id must be refused, not errored: %+v %v", d, err)
+		}
+		vs, err := r.ListVersions(ctx, "ci")
+		if err != nil || len(vs) != 1 || vs[0].Source != SourceCustom {
+			t.Fatalf("custom version must be the only one: %+v %v", vs, err)
+		}
+		var n int
+		if err := pool.QueryRow(ctx, `SELECT count(*) FROM audit_logs WHERE action='content_registry.collision' AND resource='ci'`).Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		if n != 1 || len(r.Refusals()) != 1 {
+			t.Fatalf("collision audit=%d refusals=%d", n, len(r.Refusals()))
+		}
+	})
+}
+
+func TestIntake_SourceCollisionRecheckedUnderLock(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		r := New(pool, testutil.DevVerifier())
+		mustIntake(t, r, ctx, file("intel", "id: cl\nname: I\nart_techniques: [T1082]\n"))
+		a, err := analyzeArtifact([]byte("id: cl\nname: C\nlocal_check: true\n"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, _, err = r.createVersion(ctx, newVersion{contentID: "cl", origin: OriginLocal, source: SourceCustom,
+			artifact: []byte("id: cl\nname: C\nlocal_check: true\n"), trust: TrustUntrusted, lifecycle: LifecycleDraft,
+			actor: ActorIntake, analysis: a, exclusiveLocalSource: true})
+		if !errors.Is(err, ErrSourceCollision) {
+			t.Fatalf("want ErrSourceCollision under the lock, got %v", err)
 		}
 	})
 }

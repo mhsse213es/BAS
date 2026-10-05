@@ -2,6 +2,7 @@ package scenario
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io/fs"
 	"log"
@@ -75,8 +76,8 @@ var sourceRank = map[string]int{"builtin": 0, "custom": 1, "intel": 2}
 // Load reads all *.yaml files in the scenarios directory. With a registry
 // attached, every file is handed to intake in builtin -> custom -> intel
 // order (so first registration can never let a custom file claim a builtin
-// identity); a refused or errored file is left out of the map. Without a
-// registry, a duplicate id keeps the first (higher-precedence) file.
+// identity); a refused or errored file is left out of the map. A duplicate
+// id always keeps the first (higher-precedence) file in the map.
 // Individual file errors are logged and skipped — a bad file never blocks the rest.
 // Safe to call multiple times — reloads on each call.
 func (e *Engine) Load() error {
@@ -153,8 +154,14 @@ func (e *Engine) Load() error {
 				continue
 			}
 		}
-		if _, dup := e.scenarios[f.sc.ID]; dup && e.registry == nil {
+		// First wins, with or without a registry: the higher-precedence file
+		// already in the map keeps the slot even if the registry accepted
+		// the later file (e.g. custom vs intel, both LOCAL).
+		if _, dup := e.scenarios[f.sc.ID]; dup {
 			log.Printf("[!] scenario: duplicate id %s at %s — keeping the first (higher-precedence) file", f.sc.ID, f.path)
+			if e.registry != nil {
+				e.registry.NoteRefusal(f.path, f.sc.ID, "duplicate id; higher-precedence file wins")
+			}
 			continue
 		}
 		e.scenarios[f.sc.ID] = f.sc
@@ -259,25 +266,48 @@ func (e *Engine) SaveAs(ctx context.Context, s *Scenario, actor string) error {
 		return fmt.Errorf("create custom dir: %w", err)
 	}
 
+	origSource := s.Source
 	s.Source = "" // never persist the runtime-only field
 	b, err := yaml.Marshal(s)
 	if err != nil {
+		s.Source = origSource
 		return fmt.Errorf("marshal scenario: %w", err)
 	}
 
 	dest := filepath.Join(customDir, s.ID+".yaml")
-	prev, prevErr := os.ReadFile(dest)
+	// With a registry, a failed registration must restore the previous
+	// file, so read it first. Only "does not exist" means there is nothing
+	// to restore; any other read failure refuses the save before writing.
+	var prev []byte
+	hadPrev := false
+	if e.registry != nil {
+		p, rerr := os.ReadFile(dest)
+		switch {
+		case rerr == nil:
+			prev, hadPrev = p, true
+		case !errors.Is(rerr, fs.ErrNotExist):
+			s.Source = origSource
+			return fmt.Errorf("read existing %s: %w", dest, rerr)
+		}
+	}
 	if err := os.WriteFile(dest, b, 0o644); err != nil {
+		s.Source = origSource
 		return fmt.Errorf("write %s: %w", dest, err)
 	}
 	if e.registry != nil {
 		if err := e.registry.RegisterLocalApproved(ctx, s.ID, b, actor); err != nil {
-			if prevErr == nil {
-				_ = os.WriteFile(dest, prev, 0o644)
+			s.Source = origSource
+			var restoreErr error
+			if hadPrev {
+				restoreErr = os.WriteFile(dest, prev, 0o644)
 			} else {
-				_ = os.Remove(dest)
+				restoreErr = os.Remove(dest)
 			}
-			return fmt.Errorf("content registry: %w", err)
+			if restoreErr != nil {
+				log.Printf("[!] scenario: restore %s after content registry failure: %v", dest, restoreErr)
+				restoreErr = fmt.Errorf("restore %s: %w", dest, restoreErr)
+			}
+			return errors.Join(fmt.Errorf("content registry: %w", err), restoreErr)
 		}
 	}
 

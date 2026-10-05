@@ -103,6 +103,9 @@ type newVersion struct {
 	// values were chosen from an unlocked read; createVersion re-checks it
 	// under the content lock and downgrades to DRAFT if no longer eligible.
 	grandfatherEligible bool
+	// exclusiveLocalSource (set by Intake) refuses a custom version when the
+	// id already has intel versions and vice versa, re-checked under the lock.
+	exclusiveLocalSource bool
 }
 
 // createVersion inserts identity (if new), version, creation event,
@@ -122,6 +125,15 @@ func (r *Registry) createVersion(ctx context.Context, nv newVersion) (string, bo
 	}
 	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtext($1))`, nv.contentID); err != nil {
 		return "", false, err
+	}
+	if other := otherLocalSource(nv.source); nv.exclusiveLocalSource && other != "" {
+		clash, err := hasVersionsFromSource(ctx, tx, nv.contentID, other)
+		if err != nil {
+			return "", false, err
+		}
+		if clash {
+			return "", false, ErrSourceCollision
+		}
 	}
 	sum := sha256Hex(nv.artifact)
 	var existing string
