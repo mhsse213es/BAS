@@ -3330,1027 +3330,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 16240,
-  "function": "loadReports",
-  "target": "el",
-  "op": "=",
-  "rhs": "'<div class=\"empty\" style=\"padding:1.25rem\">No agents with completed runs yet. Run a scenario, then generate its report here.</div>'",
-  "rhs_len": 132,
-  "category": "static",
-  "data_source_tags": ""
- },
- {
-  "line": 16244,
-  "function": "loadReports",
-  "target": "el",
-  "op": "=",
-  "rhs": "ids.map(function(id) {\n      var host = hostOf[id] || id, n = byAgent[id].runs, lastName = byAgent[id].lastName;\n      return '<div class=\"rep-row\">' +\n        '<div class=\"rep-ic\">' + d + '</div>' +\n        '<div class=\"rep-main\"><div class=\"rep-host\">' + x(host) + '</div>' +\n          '<div class=\"rep-sub\">Reports on: <strong class=\"u-text\">' + x(lastName || 'unnamed scenario') + '</strong> (lat",
-  "rhs_len": 984,
-  "category": "unescaped_html",
-  "data_source_tags": ""
- },
- {
-  "line": 16257,
-  "function": "loadReports",
-  "target": "document.getElementById('rep-available')",
-  "op": "=",
-  "rhs": "'<div class=\"empty\" style=\"padding:1.25rem\">Could not load agents.</div>'",
-  "rhs_len": 73,
-  "category": "static",
-  "data_source_tags": "agent"
- },
- {
-  "line": 16265,
-  "function": "renderRepHistory",
-  "target": "tb",
-  "op": "=",
-  "rhs": "'<tr><td colspan=\"7\" class=\"empty\" style=\"padding:1.5rem;line-height:1.6\">No reports generated yet \u2014 this log fills when you generate one (from a tile above or the per-agent buttons). Test runs don\\'t create reports automatically.</td></tr>'",
-  "rhs_len": 241,
-  "category": "static",
-  "data_source_tags": ""
- },
- {
-  "line": 16269,
-  "function": "renderRepHistory",
-  "target": "tb",
-  "op": "=",
-  "rhs": "list.map(function(r) {\n      var st = r.status === 'failed' ? 's-failed' : 's-completed';\n      return '<tr>' +\n        '<td class=\"cell-main\">' + x(label[r.reportType] || r.reportType) + '</td>' +\n        '<td class=\"tiny muted\">' + x(r.scopeLabel) + '</td>' +\n        '<td class=\"tiny\">' + x((r.format || '\u2014').toUpperCase()) + '</td>' +\n        '<td class=\"tiny muted\">' + x(r.generatedBy || '\u2014') +",
-  "rhs_len": 734,
-  "category": "unescaped_html",
-  "data_source_tags": ""
- },
- {
-  "line": 16311,
-  "function": "openReportGen",
-  "target": "document.getElementById('rep-agent')",
-  "op": "=",
-  "rhs": "state.agents.map(function(a) {\n    return '<option value=\"' + x(a.agentId) + '\">' + x(a.agentId) + ' \u2014 ' + x(a.hostname) + '</option>';\n  }).join('')",
-  "rhs_len": 149,
-  "category": "escaped",
-  "data_source_tags": "agent"
- },
- {
-  "line": 16315,
-  "function": "openReportGen",
-  "target": "document.getElementById('rep-format')",
-  "op": "=",
-  "rhs": "fmts.map(function(f) {\n    var lbl = f ? f.toUpperCase() : 'Package';\n    if (type === 'posture' && f === 'csv') lbl = 'CSV (forensic)';\n    return '<option value=\"' + f + '\">' + lbl + '</option>';\n  }).join('')",
-  "rhs_len": 211,
-  "category": "unescaped_html",
-  "data_source_tags": ""
- },
- {
-  "line": 16324,
-  "function": "openReportGen",
-  "target": "document.getElementById('rep-fw')",
-  "op": "=",
-  "rhs": "(fws || []).map(function(f) {\n        return '<option value=\"' + x(f.id) + '\">' + x(f.name || f.id) + '</option>';\n      }).join('')",
-  "rhs_len": 132,
-  "category": "escaped",
-  "data_source_tags": "user_created_name"
- },
- {
-  "line": 16635,
-  "function": "loadRuns",
-  "target": "tbody",
-  "op": "=",
-  "rhs": "'<tr><td colspan=\"9\" class=\"empty\">No runs yet. Go to Scenarios and run one.</td></tr>'",
-  "rhs_len": 87,
-  "category": "static",
-  "data_source_tags": ""
- },
- {
-  "line": 16652,
-  "function": "byStartedAtDesc",
-  "target": "tbody",
-  "op": "=",
-  "rhs": "individualRuns.slice().sort(byStartedAtDesc).map(runRowHtml).join('')",
-  "rhs_len": 69,
-  "category": "unescaped_text",
-  "data_source_tags": ""
- },
- {
-  "line": 16688,
-  "function": "byStartedAtDesc",
-  "target": "tbody",
-  "op": "=",
-  "rhs": "allEntries.map(function(e) { return e.html; }).join('')",
-  "rhs_len": 55,
-  "category": "indirect_builder",
-  "data_source_tags": ""
- },
- {
-  "line": 16699,
-  "function": "openModal",
-  "target": "scSel",
-  "op": "=",
-  "rhs": "state.scenarios.map(function(s) {\n    var desc = s.description ? ' \u2014 ' + (s.description.length > 90 ? s.description.substring(0, 87) + '...' : s.description) : '';\n    return '<option value=\"' + x(s.id) + '\"' + (s.id === scenarioId ? ' selected' : '') + '>' + x(s.name) + x(desc) + '</option>';\n  }).join('')",
-  "rhs_len": 308,
-  "category": "escaped",
-  "data_source_tags": "scenario,user_created_name"
- },
- {
-  "line": 16710,
-  "function": "openModal",
-  "target": "document.getElementById('modal-agent')",
-  "op": "=",
-  "rhs": "state.agents.map(function(a) {\n    var osLabel = '';\n    if (a.osVersion) {\n      var ov = a.osVersion.toLowerCase();\n      osLabel = ov.indexOf('windows') !== -1 ? ' [Win]' : ov.indexOf('darwin') !== -1 || ov.indexOf('macos') !== -1 ? ' [macOS]' : ' [Linux]';\n    }\n    return '<option value=\"' + x(a.agentId) + '\"' + (a.agentId === preAgent ? ' selected' : '') + '>' +\n           x(a.agentId) + ' \u2014",
-  "rhs_len": 457,
-  "category": "unescaped_html",
-  "data_source_tags": "agent"
- },
- {
-  "line": 16772,
-  "function": "renderRunMode",
-  "target": "btn",
-  "op": "=",
-  "rhs": "'&#9888; No Eligible Agents'",
-  "rhs_len": 28,
-  "category": "static",
-  "data_source_tags": ""
- },
- {
-  "line": 16812,
-  "function": "renderRunMode",
-  "target": "warn",
-  "op": "=",
-  "rhs": "osMismatchMsg",
-  "rhs_len": 13,
-  "category": "indirect_variable",
-  "data_source_tags": ""
- },
- {
-  "line": 16816,
-  "function": "renderRunMode",
-  "target": "btn",
-  "op": "=",
-  "rhs": "'&#9654; Run'",
-  "rhs_len": 13,
-  "category": "static",
-  "data_source_tags": ""
- },
- {
-  "line": 16830,
-  "function": "renderRunMode",
-  "target": "warn",
-  "op": "=",
-  "rhs": "osMismatchMsg + ' <strong>Cannot run ' + mode + ' mode on this agent.</strong>'",
-  "rhs_len": 79,
-  "category": "unescaped_html",
-  "data_source_tags": "agent"
- },
- {
-  "line": 16832,
-  "function": "renderRunMode",
-  "target": "btn",
-  "op": "=",
-  "rhs": "'&#9888; OS Mismatch'",
-  "rhs_len": 21,
-  "category": "static",
-  "data_source_tags": ""
- },
- {
-  "line": 16844,
-  "function": "renderRunMode",
-  "target": "warn",
-  "op": "=",
-  "rhs": "warnText",
-  "rhs_len": 8,
-  "category": "indirect_variable",
-  "data_source_tags": ""
- },
- {
-  "line": 16845,
-  "function": "renderRunMode",
-  "target": "btn",
-  "op": "=",
-  "rhs": "'&#9654; Run Telemetry'",
-  "rhs_len": 23,
-  "category": "static",
-  "data_source_tags": ""
- },
- {
-  "line": 16851,
-  "function": "renderRunMode",
-  "target": "warn",
-  "op": "=",
-  "rhs": "'&#9888; <strong>LAB MODE \u2014 full-fidelity emulation.</strong> Runs LSASS memory dump and allowlisted password spray. <strong>Isolated AD range only, never production.</strong> Triggers EDR by design; requires a second confirmation.'",
-  "rhs_len": 232,
-  "category": "static",
-  "data_source_tags": ""
- },
- {
-  "line": 16852,
-  "function": "renderRunMode",
-  "target": "btn",
-  "op": "=",
-  "rhs": "'&#9654; Run LAB'",
-  "rhs_len": 17,
-  "category": "static",
-  "data_source_tags": ""
- },
- {
-  "line": 16859,
-  "function": "renderRunMode",
-  "target": "warn",
-  "op": "=",
-  "rhs": "osMismatchMsg",
-  "rhs_len": 13,
-  "category": "indirect_variable",
-  "data_source_tags": ""
- },
- {
-  "line": 16863,
-  "function": "renderRunMode",
-  "target": "btn",
-  "op": "=",
-  "rhs": "'&#9654; Run'",
-  "rhs_len": 13,
-  "category": "static",
-  "data_source_tags": ""
- },
- {
-  "line": 16914,
-  "function": "renderAdditionalAgents",
-  "target": "list",
-  "op": "=",
-  "rhs": "eligible.map(function(a) {\n    return '<label style=\"display:flex;align-items:center;gap:0.5rem;padding:0.25rem 0.3rem;cursor:pointer\">' +\n      '<input type=\"checkbox\" ' + (state._addlSel[a.agentId] ? 'checked' : '') +\n      ' onchange=\"_addlSel[\\'' + x(a.agentId) + '\\']=this.checked;renderAdditionalAgentsCount()\">' +\n      '<code style=\"font-size:0.72rem\">' + x(a.agentId) + '</code><span class=\"",
-  "rhs_len": 488,
-  "category": "unescaped_html",
-  "data_source_tags": "agent"
- },
- {
-  "line": 17167,
-  "function": "row",
-  "target": "document.getElementById('wz-review')",
-  "op": "=",
-  "rhs": "html",
-  "rhs_len": 4,
-  "category": "indirect_variable",
-  "data_source_tags": ""
- },
- {
-  "line": 17333,
-  "function": "openPickerWith",
-  "target": "tacticSel",
-  "op": "=",
-  "rhs": "'<option value=\"all\">All tactics</option>' + tacticOpts",
-  "rhs_len": 55,
-  "category": "unescaped_html",
-  "data_source_tags": ""
- },
- {
-  "line": 17490,
-  "function": "renderPickerList",
-  "target": "document.getElementById('picker-list')",
-  "op": "=",
-  "rhs": "rows || '<p class=\"empty\" style=\"padding:1rem\">No matches.</p>'",
-  "rhs_len": 63,
-  "category": "unescaped_html",
-  "data_source_tags": ""
- },
- {
-  "line": 17595,
-  "function": "renderModalSelection",
-  "target": "link",
-  "op": "=",
-  "rhs": "'&#128269; Detailed view \u2014 every atomic test that will run'",
-  "rhs_len": 59,
-  "category": "static",
-  "data_source_tags": ""
- },
- {
-  "line": 17614,
-  "function": "renderModalSelection",
-  "target": "link",
-  "op": "=",
-  "rhs": "'&#9881; Customize \u2014 select a target agent first'",
-  "rhs_len": 49,
-  "category": "static",
-  "data_source_tags": ""
- },
- {
-  "line": 17628,
-  "function": "renderModalSelection",
-  "target": "note",
-  "op": "=",
-  "rhs": "'&#9989; Running a selected subset: <strong>' + state._runSelection.ids.length + '</strong> ' + noun +\n      (state._runSelection.locked ? ' (targeted re-validate)' :\n       ' <a href=\"javascript:void(0)\" class=\"desc-toggle\" style=\"margin-left:8px\" onclick=\"clearSelection();return false;\">Clear</a>')",
-  "rhs_len": 301,
-  "category": "partial_escaped",
-  "data_source_tags": ""
- },
- {
-  "line": 17644,
-  "function": "renderModalSelection",
-  "target": "note",
-  "op": "=",
-  "rhs": "'<span class=\"u-muted\">Loading check catalog\u2026</span>'",
-  "rhs_len": 53,
-  "category": "static",
-  "data_source_tags": ""
- },
- {
-  "line": 17674,
-  "function": "renderModalSelection",
-  "target": "note",
-  "op": "=",
-  "rhs": "'<span class=\"u-muted\">Loading check catalog\u2026</span>'",
-  "rhs_len": 53,
-  "category": "static",
-  "data_source_tags": ""
- },
- {
-  "line": 17677,
-  "function": "renderModalSelection",
-  "target": "note",
-  "op": "=",
-  "rhs": "cached",
-  "rhs_len": 6,
-  "category": "indirect_variable",
-  "data_source_tags": ""
- },
- {
-  "line": 17745,
-  "function": "doOpen",
-  "target": "tacticSel",
-  "op": "=",
-  "rhs": "'<option value=\"all\">All tactics</option>' +\n        Object.keys(tacticSet).sort().map(function(t) {\n          return '<option value=\"' + x(t) + '\">' + x(t) + '</option>';\n        }).join('')",
-  "rhs_len": 191,
-  "category": "escaped",
-  "data_source_tags": ""
- },
- {
-  "line": 17798,
-  "function": "fillBuilder",
-  "target": "steps",
-  "op": "=",
-  "rhs": "''",
-  "rhs_len": 2,
-  "category": "static_empty",
-  "data_source_tags": ""
- },
- {
-  "line": 17968,
-  "function": "techRenderSelected",
-  "target": "box",
-  "op": "=",
-  "rhs": "'<div><span class=\"st-tech-sel-id\">' + x(id) + '</span>' +\n        '<span class=\"tiny muted\" style=\"margin-left:0.4rem\">' +\n        (techniqueCatalog === null ? 'resolving\u2026' : 'not recognized') + '</span></div>' +\n      '<span class=\"st-tech-sel-actions\"><a href=\"javascript:void(0)\" onclick=\"techChangeSelection(this)\">&#10005; change</a></span>'",
-  "rhs_len": 347,
-  "category": "escaped",
-  "data_source_tags": ""
- },
- {
-  "line": 17978,
-  "function": "techRenderSelected",
-  "target": "box",
-  "op": "=",
-  "rhs": "'<div><span class=\"st-tech-sel-id\">' + x(t.id) + '</span> <span class=\"st-tech-sel-name\">' + x(t.name) + '</span>' +\n      (tactics ? '<div class=\"st-tech-row-meta\">' + x(tactics) + '</div>' : '') +\n      (subText ? '<div class=\"st-tech-row-meta\">' + x(subText) + '</div>' : '') +\n    '</div>' +\n    '<span class=\"st-tech-sel-actions\">' +\n      (t.url ? '<a href=\"' + x(t.url) + '\" target=\"_blank\" re",
-  "rhs_len": 656,
-  "category": "escaped",
-  "data_source_tags": "user_created_name"
- },
- {
-  "line": 18018,
-  "function": "techOnInput",
-  "target": "panel",
-  "op": "=",
-  "rhs": "''",
-  "rhs_len": 2,
-  "category": "static_empty",
-  "data_source_tags": ""
- },
- {
-  "line": 18028,
-  "function": "techRenderResults",
-  "target": "panel",
-  "op": "=",
-  "rhs": "'<div class=\"st-tech-row\" style=\"cursor:default;color:var(--muted)\">No matching technique.</div>'",
-  "rhs_len": 97,
-  "category": "static",
-  "data_source_tags": ""
- },
- {
-  "line": 18032,
-  "function": "techRenderResults",
-  "target": "panel",
-  "op": "=",
-  "rhs": "results.map(function(t, i) {\n    var tactics = (t.tactics || []).join(', ');\n    var platforms = (t.platforms || []).join(', ');\n    return '<div class=\"st-tech-row' + (i === 0 ? ' active' : '') + '\" data-id=\"' + x(t.id) + '\" onmousedown=\"techSelectRow(this)\">' +\n      '<span class=\"st-tech-row-id\">' + x(t.id) + '</span><span class=\"st-tech-row-name\">' + x(t.name) + '</span>' +\n      (tactics ? '<",
-  "rhs_len": 576,
-  "category": "escaped",
-  "data_source_tags": "user_created_name"
- },
- {
-  "line": 18049,
-  "function": "techSelectRow",
-  "target": "panel",
-  "op": "=",
-  "rhs": "''",
-  "rhs_len": 2,
-  "category": "static_empty",
-  "data_source_tags": ""
- },
- {
-  "line": 18073,
-  "function": "techOnKeydown",
-  "target": "panel",
-  "op": "=",
-  "rhs": "''",
-  "rhs_len": 2,
-  "category": "static_empty",
-  "data_source_tags": ""
- },
- {
-  "line": 18084,
-  "function": "techOnBlur",
-  "target": "panel",
-  "op": "=",
-  "rhs": "''",
-  "rhs_len": 2,
-  "category": "static_empty",
-  "data_source_tags": ""
- },
- {
-  "line": 18104,
-  "function": "addStep",
-  "target": "div",
-  "op": "=",
-  "rhs": "'<div class=\"bld-step-hdr\"><span class=\"bld-step-num\">Step</span>' +\n      '<span class=\"bld-actions\">' +\n        '<button type=\"button\" onclick=\"moveStep(this,-1)\" title=\"Move up\">&#9650;</button>' +\n        '<button type=\"button\" onclick=\"moveStep(this,1)\" title=\"Move down\">&#9660;</button>' +\n        '<button type=\"button\" onclick=\"removeStep(this)\" title=\"Remove\">&#10005;</button>' +\n      '</",
-  "rhs_len": 1547,
-  "category": "partial_escaped",
-  "data_source_tags": "user_created_name"
- },
- {
-  "line": 18361,
-  "function": "viewRunResults",
-  "target": "document.getElementById('results-summary')",
-  "op": "=",
-  "rhs": "'<span style=\"color:var(--danger);font-weight:600\">Run failed to start</span>' +\n      ' &nbsp;&middot;&nbsp; ' + x(run.failReason || 'No reason recorded for this failure.') +\n      ' &nbsp;&middot;&nbsp; Agent: <code>' + x(run.agentId) + '</code>'",
-  "rhs_len": 248,
-  "category": "escaped",
-  "data_source_tags": "agent"
- },
- {
-  "line": 18366,
-  "function": "viewRunResults",
-  "target": "document.getElementById('results-summary')",
-  "op": "=",
-  "rhs": "'<span style=\"color:var(--danger);font-weight:600\">' + fail + ' fail</span>' +\n      ' &nbsp;/&nbsp; <span style=\"color:var(--success);font-weight:600\">' + pass + ' pass</span>' +\n      (skipped ? ' &nbsp;/&nbsp; <span class=\"u-muted\">' + skipped + ' skipped</span>' : '') +\n      ' &nbsp;&middot;&nbsp; ' + results.length + ' total &nbsp;&middot;&nbsp; Agent: <code>' + x(run.agentId) + '</code>' +\n",
-  "rhs_len": 458,
-  "category": "partial_escaped",
-  "data_source_tags": "agent"
- },
- {
-  "line": 18378,
-  "function": "viewRunResults",
-  "target": "document.getElementById('results-export')",
-  "op": "=",
-  "rhs": "''",
-  "rhs_len": 2,
-  "category": "static_empty",
-  "data_source_tags": ""
- },
- {
-  "line": 18384,
-  "function": "viewRunResults",
-  "target": "document.getElementById('results-title')",
-  "op": "=",
-  "rhs": "x(run.name) + ' \u2014 Results ' +\n    '<span class=\"sbadge\" style=\"background:' + runStatusColor + '22;color:' + runStatusColor + ';border:1px solid ' + runStatusColor + '44;font-size:0.65rem;margin-left:0.4rem;vertical-align:middle\">' + x(run.status || '') + '</span>'",
-  "rhs_len": 265,
-  "category": "partial_escaped",
-  "data_source_tags": "user_created_name"
- },
- {
-  "line": 18406,
-  "function": "viewRunResults",
-  "target": "document.getElementById('results-header-actions')",
-  "op": "=",
-  "rhs": "actionsHtml",
-  "rhs_len": 11,
-  "category": "indirect_variable",
-  "data_source_tags": ""
- },
- {
-  "line": 18456,
-  "function": "kpiGaugeCard",
-  "target": "document.getElementById('run-kpi-strip')",
-  "op": "=",
-  "rhs": "'<div class=\"kpi-row\" style=\"grid-template-columns:repeat(6,1fr)\">' +\n          '<div class=\"kpi-card\"><div class=\"kpi-label\">Overall Security Score</div><div class=\"kpi-value\">' + prevPct + '<span style=\"font-size:0.9rem;color:var(--muted)\">/100</span></div><div class=\"kpi-sub\">' + (deltaHtml || '\u2014') + '</div></div>' +\n          kpiGaugeCard('Detection Rate', detRate, pass + ' / ' + results.lengt",
-  "rhs_len": 1004,
-  "category": "partial_escaped",
-  "data_source_tags": ""
- },
- {
-  "line": 18798,
-  "function": "soonPanel",
-  "target": "document.getElementById('run-tab-content')",
-  "op": "=",
-  "rhs": "'<div id=\"run-tab-overview\" class=\"run-tab-panel\">' +\n      '<div class=\"run-tab-grid\">' +\n        '<div>' + scorePanel + '</div>' +\n        '<div id=\"run-report-extra\"></div>' +\n      '</div>' +\n    '</div>' +\n    '<div id=\"run-tab-findings\" class=\"run-tab-panel\" style=\"display:none\">' +\n      '<div id=\"run-report-findings\"><div style=\"color:var(--muted);font-size:0.72rem;padding:1.5rem 0;text-al",
-  "rhs_len": 2210,
-  "category": "unescaped_html",
-  "data_source_tags": "threat_intel"
- },
- {
-  "line": 18835,
-  "function": "soonPanel",
-  "target": "document.getElementById('run-tabbar')",
-  "op": "=",
-  "rhs": "RUN_TABS.map(function(t, i) {\n    return '<button class=\"run-tab-btn' + (i === 0 ? ' active' : '') + '\" id=\"run-tabbtn-' + t[0] + '\" onclick=\"switchRunTab(\\'' + t[0] + '\\')\">' + x(t[1]) + '</button>';\n  }).join('')",
-  "rhs_len": 214,
-  "category": "unescaped_html",
-  "data_source_tags": ""
- },
- {
-  "line": 18849,
-  "function": "soonPanel",
-  "target": "reportsEl",
-  "op": "=",
-  "rhs": "'<div class=\"dash-panel u-mb-1\"><div class=\"dash-panel-hdr\">Run Metadata</div><div class=\"dash-panel-body\">' +\n          '<div style=\"display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:0.75rem;font-size:0.78rem\">' +\n            '<div><div class=\"kpi-label\">Run ID</div><div>' + x(runId) + '</div></div>' +\n            '<div><div class=\"kpi-label\">Agent</div><div>' + x(run.agen",
-  "rhs_len": 1241,
-  "category": "partial_escaped",
-  "data_source_tags": "agent"
- },
- {
-  "line": 18864,
-  "function": "soonPanel",
-  "target": "reportsEl",
-  "op": "=",
-  "rhs": "'<div style=\"color:var(--muted);font-size:0.8rem;padding:1rem 0\">No exportable output yet \u2014 this run hasn\\'t completed.</div>'",
-  "rhs_len": 126,
-  "category": "static",
-  "data_source_tags": ""
- },
- {
-  "line": 18874,
-  "function": "soonPanel",
-  "target": "extraEl",
-  "op": "=",
-  "rhs": "'<div style=\"color:var(--muted);font-size:0.72rem;padding:0.4rem 0\">Loading&#8230;</div>'",
-  "rhs_len": 89,
-  "category": "static",
-  "data_source_tags": ""
- },
- {
-  "line": 18878,
-  "function": "soonPanel",
-  "target": "extraEl",
-  "op": "=",
-  "rhs": "renderRunReportExtra(rep)",
-  "rhs_len": 25,
-  "category": "indirect_builder",
-  "data_source_tags": ""
- },
- {
-  "line": 18880,
-  "function": "soonPanel",
-  "target": "if (findingsEl) findingsEl",
-  "op": "=",
-  "rhs": "renderRunFindings(rep)",
-  "rhs_len": 22,
-  "category": "indirect_builder",
-  "data_source_tags": ""
- },
- {
-  "line": 18882,
-  "function": "soonPanel",
-  "target": "if (recEl) recEl",
-  "op": "=",
-  "rhs": "renderRunRecommendations(rep)",
-  "rhs_len": 29,
-  "category": "indirect_builder",
-  "data_source_tags": ""
- },
- {
-  "line": 18886,
-  "function": "soonPanel",
-  "target": "extraEl",
-  "op": "=",
-  "rhs": "''",
-  "rhs_len": 2,
-  "category": "static_empty",
-  "data_source_tags": ""
- },
- {
-  "line": 18888,
-  "function": "soonPanel",
-  "target": "if (findingsEl) findingsEl",
-  "op": "=",
-  "rhs": "'<div style=\"color:var(--muted);font-size:0.8rem;padding:2.5rem 0;text-align:center\">Findings unavailable.</div>'",
-  "rhs_len": 113,
-  "category": "static",
-  "data_source_tags": ""
- },
- {
-  "line": 18890,
-  "function": "soonPanel",
-  "target": "if (recEl) recEl",
-  "op": "=",
-  "rhs": "'<div style=\"color:var(--muted);font-size:0.8rem;padding:2.5rem 0;text-align:center\">Recommendations unavailable.</div>'",
-  "rhs_len": 120,
-  "category": "static",
-  "data_source_tags": ""
- },
- {
-  "line": 18896,
-  "function": "soonPanel",
-  "target": "if (el) el",
-  "op": "=",
-  "rhs": "renderAttackFlow(af.nodes || [], af.summary || {})",
-  "rhs_len": 50,
-  "category": "indirect_builder",
-  "data_source_tags": ""
- },
- {
-  "line": 18899,
-  "function": "soonPanel",
-  "target": "if (el) el",
-  "op": "=",
-  "rhs": "'<div style=\"color:var(--muted);font-size:0.72rem;padding:1.5rem 0;text-align:center\">Attack flow unavailable.</div>'",
-  "rhs_len": 117,
-  "category": "static",
-  "data_source_tags": ""
- },
- {
-  "line": 18905,
-  "function": "soonPanel",
-  "target": "if (el) el",
-  "op": "=",
-  "rhs": "renderVariantCoverage(cov)",
-  "rhs_len": 26,
-  "category": "indirect_builder",
-  "data_source_tags": ""
- },
- {
-  "line": 18908,
-  "function": "soonPanel",
-  "target": "if (el) el",
-  "op": "=",
-  "rhs": "'<div style=\"color:var(--muted);font-size:0.72rem;padding:1.5rem 0;text-align:center\">Variant coverage unavailable.</div>'",
-  "rhs_len": 122,
-  "category": "static",
-  "data_source_tags": ""
- },
- {
-  "line": 18926,
-  "function": "soonPanel",
-  "target": "if (el) el",
-  "op": "=",
-  "rhs": "'<div style=\"color:var(--muted);font-size:0.8rem;padding:2.5rem 0;text-align:center\">Indicators unavailable.</div>'",
-  "rhs_len": 115,
-  "category": "static",
-  "data_source_tags": ""
- },
- {
-  "line": 18934,
-  "function": "soonPanel",
-  "target": "if (findingsElEarly) findingsElEarly",
-  "op": "=",
-  "rhs": "notReady",
-  "rhs_len": 8,
-  "category": "indirect_variable",
-  "data_source_tags": ""
- },
- {
-  "line": 18936,
-  "function": "soonPanel",
-  "target": "if (recElEarly) recElEarly",
-  "op": "=",
-  "rhs": "notReady",
-  "rhs_len": 8,
-  "category": "indirect_variable",
-  "data_source_tags": ""
- },
- {
-  "line": 18938,
-  "function": "soonPanel",
-  "target": "if (iocElEarly) iocElEarly",
-  "op": "=",
-  "rhs": "notReady",
-  "rhs_len": 8,
-  "category": "indirect_variable",
-  "data_source_tags": ""
- },
- {
-  "line": 19036,
-  "function": "renderDetectionValidationTab",
-  "target": "el",
-  "op": "=",
-  "rhs": "'<div style=\"padding:1rem 0 0.5rem\">' +\n      '<div style=\"display:flex;gap:1.5rem;margin-bottom:0.75rem;flex-wrap:wrap\">' +\n        '<div class=\"u-center\">' +\n          '<div style=\"font-size:1.7rem;font-weight:700;color:' + covColor + '\">' + coverage + '%</div>' +\n          '<div style=\"font-size:0.68rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em\">Detection Coverage</div>' ",
-  "rhs_len": 2060,
-  "category": "unescaped_html",
-  "data_source_tags": ""
- },
- {
-  "line": 19090,
-  "function": "loadSIEMCorrelationPanel",
-  "target": "el",
-  "op": "=",
-  "rhs": "'<div style=\"padding:1rem 0 0.5rem\">' +\n        '<div style=\"display:flex;gap:1.5rem;margin-bottom:1rem;flex-wrap:wrap\">' +\n          '<div class=\"u-center\">' +\n            '<div style=\"font-size:1.7rem;font-weight:700;color:' + color + '\">' + detRate + '%</div>' +\n            '<div style=\"font-size:0.68rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em\">SIEM Detection Rate</div>",
-  "rhs_len": 2080,
-  "category": "partial_escaped",
-  "data_source_tags": ""
- },
- {
-  "line": 19431,
-  "function": "fmt",
-  "target": "document.getElementById('evidence-content')",
-  "op": "=",
-  "rhs": "html",
-  "rhs_len": 4,
-  "category": "indirect_variable",
-  "data_source_tags": ""
- },
- {
-  "line": 19738,
-  "function": "confirmRun",
-  "target": "runBtn",
-  "op": "=",
-  "rhs": "'Dispatching to ' + agentIds.length + ' agents\u2026'",
-  "rhs_len": 48,
-  "category": "unescaped_likely_safe",
-  "data_source_tags": "agent"
- },
- {
-  "line": 19757,
-  "function": "confirmRun",
-  "target": "runBtn",
-  "op": "=",
-  "rhs": "'&#9654; Run'",
-  "rhs_len": 13,
-  "category": "static",
-  "data_source_tags": ""
- },
- {
-  "line": 19911,
-  "function": "cmdkResultFallback",
-  "target": "document.getElementById('results-export')",
-  "op": "=",
-  "rhs": "''",
-  "rhs_len": 2,
-  "category": "static_empty",
-  "data_source_tags": ""
- },
- {
-  "line": 19912,
-  "function": "cmdkResultFallback",
-  "target": "document.getElementById('results-summary')",
-  "op": "=",
-  "rhs": "''",
-  "rhs_len": 2,
-  "category": "static_empty",
-  "data_source_tags": ""
- },
- {
-  "line": 19913,
-  "function": "cmdkResultFallback",
-  "target": "document.getElementById('results-body')",
-  "op": "=",
-  "rhs": "(r.description ? '<p style=\"margin-bottom:0.8rem\">' + x(r.description) + '</p>' : '') +\n    ((r.tags || []).length ? '<div style=\"display:flex;gap:0.4rem;flex-wrap:wrap\">' +\n      r.tags.map(function(t) { return '<span class=\"sbadge\" style=\"background:transparent;border:1px solid var(--border)\">' + x(t) + '</span>'; }).join('') +\n      '</div>' : '')",
-  "rhs_len": 352,
-  "category": "escaped",
-  "data_source_tags": "user_created_name"
- },
- {
-  "line": 19943,
-  "function": "openCmdk",
-  "target": "wrap",
-  "op": "=",
-  "rhs": "'<div class=\"cmdk\" role=\"dialog\" aria-label=\"Command palette\">' +\n      '<div class=\"cmdk-in\">' +\n        '<svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><circle cx=\"11\" cy=\"11\" r=\"7\"/><path d=\"M21 21l-4-4\"/></svg>' +\n        '<input id=\"cmdk-input\" placeholder=\"Type a command or search\u2026\" autocomplete=\"off\">' +\n        '<span class=\"cmdk-esc\">esc",
-  "rhs_len": 629,
-  "category": "static",
-  "data_source_tags": ""
- },
- {
-  "line": 20050,
-  "function": "render",
-  "target": "list",
-  "op": "=",
-  "rhs": "'<div class=\"cmdk-empty\">No matches</div>'",
-  "rhs_len": 42,
-  "category": "static",
-  "data_source_tags": ""
- },
- {
-  "line": 20051,
-  "function": "render",
-  "target": "list",
-  "op": "=",
-  "rhs": "flat.map(function(f, i) {\n      if (f.sec) return '<div class=\"cmdk-sec\">' + x(f.sec) + '</div>';\n      // f.docType is only set for search-result/recents rows (Phase 3) --\n      // static Navigate/Actions rows never get the star affordance.\n      var star = f.docType\n        ? '<span data-fav-ci=\"' + i + '\" style=\"cursor:pointer;margin-right:0.5rem;color:' + (f.fav ? 'var(--warning)' : 'var(--mut",
-  "rhs_len": 537,
-  "category": "unescaped_html",
-  "data_source_tags": ""
- },
- {
-  "line": 20109,
-  "function": "loadUsers",
-  "target": "tbody",
-  "op": "=",
-  "rhs": "'<tr><td colspan=\"6\" class=\"empty\">No users found.</td></tr>'",
-  "rhs_len": 61,
-  "category": "static",
-  "data_source_tags": ""
- },
- {
-  "line": 20110,
-  "function": "loadUsers",
-  "target": "tbody",
-  "op": "=",
-  "rhs": "data.map(function(u) {\n      var statusBadge = u.isActive ? '<span class=\"sbadge s-completed\">Active</span>' : '<span class=\"sbadge s-offline\">Disabled</span>';\n      var mustPw = u.mustChangePw ? ' <span class=\"tag u-warning\">pw reset</span>' : '';\n      var actions =\n        '<button class=\"btn btn-outline btn-sm\" onclick=\"openEditUser(\\'' + x(u.id) + '\\',\\'' + x(u.username) + '\\',\\'' + x(u.role",
-  "rhs_len": 1308,
-  "category": "unescaped_html",
-  "data_source_tags": "api_response,user_created_name"
- },
- {
-  "line": 20351,
-  "function": "aggOf",
-  "target": "if (trend === 'Improving')      tEl",
-  "op": "=",
-  "rhs": "'<span class=\"trend up\">\u25b2</span> '",
-  "rhs_len": 34,
-  "category": "static",
-  "data_source_tags": ""
- },
- {
-  "line": 20352,
-  "function": "aggOf",
-  "target": "else if (trend === 'Degrading') tEl",
-  "op": "=",
-  "rhs": "'<span class=\"trend down\">\u25bc</span> '",
-  "rhs_len": 36,
-  "category": "static",
-  "data_source_tags": ""
- },
- {
-  "line": 20353,
-  "function": "aggOf",
-  "target": "else                            tEl",
-  "op": "=",
-  "rhs": "'<span class=\"trend flat\">\u2014</span> '",
-  "rhs_len": 36,
-  "category": "static",
-  "data_source_tags": ""
- },
- {
-  "line": 20355,
-  "function": "aggOf",
-  "target": "document.getElementById('kpi-score-spark')",
-  "op": "=",
-  "rhs": "sparkSVG(prevSeries, 110, 30, 'var(--teal)')",
-  "rhs_len": 44,
-  "category": "indirect_builder",
-  "data_source_tags": ""
- },
- {
-  "line": 20358,
-  "function": "aggOf",
-  "target": "document.getElementById('dash-gauge')",
-  "op": "=",
-  "rhs": "gaugeSVG(prevPct, 124, 14) +\n        '<div class=\"ring-c\"><span class=\"rv\" style=\"color:' + prevCol + '\">' + prevPct + '</span><span class=\"rl\">of 100</span></div>'",
-  "rhs_len": 164,
-  "category": "partial_escaped",
-  "data_source_tags": ""
- },
- {
-  "line": 20368,
-  "function": "aggOf",
-  "target": "document.getElementById('dash-posture-bars')",
-  "op": "=",
-  "rhs": "miniBars(barData, 320, 64)",
-  "rhs_len": 26,
-  "category": "indirect_builder",
-  "data_source_tags": ""
- },
- {
-  "line": 20396,
-  "function": "aggOf",
-  "target": "document.getElementById('kpi-cov-spark')",
-  "op": "=",
-  "rhs": "sparkSVG(covSeries, 110, 30, 'var(--warning)')",
-  "rhs_len": 46,
-  "category": "indirect_builder",
-  "data_source_tags": ""
- },
- {
-  "line": 20416,
-  "function": "aggOf",
-  "target": "donutEl",
-  "op": "=",
-  "rhs": "'<div class=\"empty\">No run data yet.</div>'",
-  "rhs_len": 43,
-  "category": "static",
-  "data_source_tags": ""
- },
- {
-  "line": 20427,
-  "function": "lg",
-  "target": "donutEl",
-  "op": "=",
-  "rhs": "'<div style=\"position:relative;flex-shrink:0\">' +\n          donutSVG([\n            { v: eff.prevented, color: 'var(--teal)' },\n            { v: eff.detected, color: 'var(--warning)' },\n            { v: eff.missed, color: 'var(--danger)' },\n            { v: eff.other, color: 'var(--elevated)' }\n          ]) +\n          '<div style=\"position:absolute;inset:0;display:flex;flex-direction:column;align-",
-  "rhs_len": 1443,
-  "category": "partial_escaped",
-  "data_source_tags": ""
- },
- {
-  "line": 20457,
-  "function": "lg",
-  "target": "afEl",
-  "op": "=",
-  "rhs": "'<div class=\"empty\" style=\"padding:1.5rem\">No kill-chain data for the latest run.</div>'",
-  "rhs_len": 88,
-  "category": "static",
-  "data_source_tags": ""
- },
- {
-  "line": 20458,
-  "function": "lg",
-  "target": "afEl",
-  "op": "=",
-  "rhs": "'<div class=\"killchain\">' + killChainNodes(kc) + '</div>'",
-  "rhs_len": 57,
-  "category": "indirect_builder",
-  "data_source_tags": ""
- },
- {
-  "line": 20461,
-  "function": "lg",
-  "target": "afEl",
-  "op": "=",
-  "rhs": "'<div class=\"empty\" style=\"padding:1.5rem\">Attack flow unavailable.</div>'",
-  "rhs_len": 74,
-  "category": "static",
-  "data_source_tags": ""
- },
- {
-  "line": 20468,
-  "function": "lg",
-  "target": "rrEl",
-  "op": "=",
-  "rhs": "'<div class=\"empty\" style=\"padding:1.5rem\">No runs yet.</div>'",
-  "rhs_len": 62,
-  "category": "static",
-  "data_source_tags": ""
- },
- {
-  "line": 20470,
-  "function": "lg",
-  "target": "rrEl",
-  "op": "=",
-  "rhs": "recent.map(function(r) {\n        var cnt = (r.results || []).length;\n        var fail = (r.results || []).filter(function(c) { return c.result === 'fail'; }).length;\n        var scoreStr = '\u2014';\n        var scol = 'var(--text-dim)';\n        if (r.score && r.score.preventionScore != null) {\n          var pp = Math.round(r.score.preventionScore);\n          var ta = r.score.trend === 'Improving' ? ' \u2191",
-  "rhs_len": 1451,
-  "category": "unescaped_html",
-  "data_source_tags": "user_created_name"
- },
- {
-  "line": 20513,
-  "function": "lg",
-  "target": "tfEl",
-  "op": "=",
-  "rhs": "'<div class=\"empty\" style=\"padding:1.5rem\">No failures recorded.</div>'",
-  "rhs_len": 71,
-  "category": "static",
-  "data_source_tags": ""
- },
- {
-  "line": 20516,
-  "function": "lg",
-  "target": "tfEl",
-  "op": "=",
-  "rhs": "topFails.map(function(t) {\n        var pct = Math.round((t.fail / (t.fail + t.pass)) * 100);\n        var w = Math.round((t.fail / maxFail) * 100);\n        return '<div class=\"bar-row\">' +\n          '<div class=\"bar-label\"><span style=\"color:var(--text-dim)\">' + x(t.name) + '</span><span>' + t.fail + ' fail &middot; ' + pct + '%</span></div>' +\n          '<div class=\"bar-track\"><div class=\"bar-fill",
-  "rhs_len": 517,
-  "category": "unescaped_html",
-  "data_source_tags": "user_created_name"
- },
- {
-  "line": 20539,
-  "function": "lg",
-  "target": "attckEl",
-  "op": "=",
-  "rhs": "'<div class=\"empty\" style=\"padding:1.5rem;grid-column:1/-1\">No run data yet.</div>'",
-  "rhs_len": 83,
-  "category": "static",
-  "data_source_tags": ""
- },
- {
-  "line": 20541,
-  "function": "lg",
-  "target": "attckEl",
-  "op": "=",
-  "rhs": "tactics.map(function(tactic) {\n        var d = tacticMap[tactic];\n        var total = d.pass + d.fail;\n        var pct = total ? Math.round((d.pass / total) * 100) : 0;\n        var col = _riskScoreColor(pct);\n        return '<div class=\"bar-row\">' +\n          '<div class=\"bar-label\"><span style=\"text-transform:capitalize\">' + x(tactic) + '</span><span style=\"color:' + col + '\">' + pct + '%</span><",
-  "rhs_len": 706,
-  "category": "unescaped_html",
-  "data_source_tags": ""
- },
- {
-  "line": 20591,
-  "function": "lg",
-  "target": "bodyEl",
-  "op": "=",
-  "rhs": "top.length ? top.map(function(f) {\n            return '<div class=\"lrow u-pointer\" onclick=\"showTab(\\'findings\\');setTimeout(function(){openFinding(\\'' + x(f.id) + '\\')},150)\">' +\n              '<div class=\"lmain\"><div class=\"lt\">' + x(f.techniqueName || f.techniqueId) + '</div>' +\n              '<div class=\"ls\"><span class=\"tech-id\">' + x(f.techniqueId) + '</span> \u00b7 ' + x(f.controlClass) + ' \u00b7 ' ",
-  "rhs_len": 623,
-  "category": "unescaped_html",
-  "data_source_tags": "agent"
- },
- {
-  "line": 20686,
+  "line": 15866,
   "function": "loadVariantStats",
   "target": "el",
   "op": "=",
@@ -4360,7 +3340,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 20728,
+  "line": 15908,
   "function": "populateVexAgents",
   "target": "if (sel) sel",
   "op": "=",
@@ -4370,7 +3350,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 20730,
+  "line": 15910,
   "function": "populateVexAgents",
   "target": "if (sweepSel) sweepSel",
   "op": "=",
@@ -4380,7 +3360,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 20765,
+  "line": 15945,
   "function": "populateVexTechniques",
   "target": "tacSel",
   "op": "=",
@@ -4390,7 +3370,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 20770,
+  "line": 15950,
   "function": "populateVexTechniques",
   "target": "if (el) el",
   "op": "=",
@@ -4400,7 +3380,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 20861,
+  "line": 16041,
   "function": "renderVexSweepList",
   "target": "el",
   "op": "=",
@@ -4410,7 +3390,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 20863,
+  "line": 16043,
   "function": "renderVexSweepList",
   "target": "el",
   "op": "=",
@@ -4420,7 +3400,7 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 21100,
+  "line": 16280,
   "function": "filterVexTechniques",
   "target": "el",
   "op": "=",
@@ -4430,7 +3410,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 21103,
+  "line": 16283,
   "function": "filterVexTechniques",
   "target": "el",
   "op": "=",
@@ -4440,7 +3420,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 21127,
+  "line": 16307,
   "function": "loadVariantCoverage",
   "target": "el",
   "op": "=",
@@ -4450,7 +3430,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 21130,
+  "line": 16310,
   "function": "loadVariantCoverage",
   "target": "el",
   "op": "=",
@@ -4460,7 +3440,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 21155,
+  "line": 16335,
   "function": "loadVariantCoverage",
   "target": "el",
   "op": "=",
@@ -4470,7 +3450,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 21157,
+  "line": 16337,
   "function": "loadVariantCoverage",
   "target": "el",
   "op": "=",
@@ -4480,7 +3460,7 @@
   "data_source_tags": "error_message"
  },
  {
-  "line": 21278,
+  "line": 16458,
   "function": "_vexRenderQueuePanel",
   "target": "panel",
   "op": "=",
@@ -4490,7 +3470,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 21348,
+  "line": 16528,
   "function": "pollVariantRun",
   "target": "if (panel) panel",
   "op": "=",
@@ -4500,7 +3480,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 21377,
+  "line": 16557,
   "function": "pollVariantRun",
   "target": "if (p) p",
   "op": "=",
@@ -4510,7 +3490,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 21409,
+  "line": 16589,
   "function": "stopVex",
   "target": "if (panel) panel",
   "op": "=",
@@ -4520,7 +3500,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 21522,
+  "line": 16702,
   "function": "renderVariantRun",
   "target": "if (wrapperEl) wrapperEl",
   "op": "=",
@@ -4530,7 +3510,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 21527,
+  "line": 16707,
   "function": "renderVariantRun",
   "target": "cell",
   "op": "=",
@@ -4540,7 +3520,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 21539,
+  "line": 16719,
   "function": "renderVariantRun",
   "target": "panel",
   "op": "=",
@@ -4548,5 +3528,1025 @@
   "rhs_len": 166,
   "category": "unescaped_html",
   "data_source_tags": ""
+ },
+ {
+  "line": 17178,
+  "function": "loadReports",
+  "target": "el",
+  "op": "=",
+  "rhs": "'<div class=\"empty\" style=\"padding:1.25rem\">No agents with completed runs yet. Run a scenario, then generate its report here.</div>'",
+  "rhs_len": 132,
+  "category": "static",
+  "data_source_tags": ""
+ },
+ {
+  "line": 17182,
+  "function": "loadReports",
+  "target": "el",
+  "op": "=",
+  "rhs": "ids.map(function(id) {\n      var host = hostOf[id] || id, n = byAgent[id].runs, lastName = byAgent[id].lastName;\n      return '<div class=\"rep-row\">' +\n        '<div class=\"rep-ic\">' + d + '</div>' +\n        '<div class=\"rep-main\"><div class=\"rep-host\">' + x(host) + '</div>' +\n          '<div class=\"rep-sub\">Reports on: <strong class=\"u-text\">' + x(lastName || 'unnamed scenario') + '</strong> (lat",
+  "rhs_len": 984,
+  "category": "unescaped_html",
+  "data_source_tags": ""
+ },
+ {
+  "line": 17195,
+  "function": "loadReports",
+  "target": "document.getElementById('rep-available')",
+  "op": "=",
+  "rhs": "'<div class=\"empty\" style=\"padding:1.25rem\">Could not load agents.</div>'",
+  "rhs_len": 73,
+  "category": "static",
+  "data_source_tags": "agent"
+ },
+ {
+  "line": 17203,
+  "function": "renderRepHistory",
+  "target": "tb",
+  "op": "=",
+  "rhs": "'<tr><td colspan=\"7\" class=\"empty\" style=\"padding:1.5rem;line-height:1.6\">No reports generated yet \u2014 this log fills when you generate one (from a tile above or the per-agent buttons). Test runs don\\'t create reports automatically.</td></tr>'",
+  "rhs_len": 241,
+  "category": "static",
+  "data_source_tags": ""
+ },
+ {
+  "line": 17207,
+  "function": "renderRepHistory",
+  "target": "tb",
+  "op": "=",
+  "rhs": "list.map(function(r) {\n      var st = r.status === 'failed' ? 's-failed' : 's-completed';\n      return '<tr>' +\n        '<td class=\"cell-main\">' + x(label[r.reportType] || r.reportType) + '</td>' +\n        '<td class=\"tiny muted\">' + x(r.scopeLabel) + '</td>' +\n        '<td class=\"tiny\">' + x((r.format || '\u2014').toUpperCase()) + '</td>' +\n        '<td class=\"tiny muted\">' + x(r.generatedBy || '\u2014') +",
+  "rhs_len": 734,
+  "category": "unescaped_html",
+  "data_source_tags": ""
+ },
+ {
+  "line": 17249,
+  "function": "openReportGen",
+  "target": "document.getElementById('rep-agent')",
+  "op": "=",
+  "rhs": "state.agents.map(function(a) {\n    return '<option value=\"' + x(a.agentId) + '\">' + x(a.agentId) + ' \u2014 ' + x(a.hostname) + '</option>';\n  }).join('')",
+  "rhs_len": 149,
+  "category": "escaped",
+  "data_source_tags": "agent"
+ },
+ {
+  "line": 17253,
+  "function": "openReportGen",
+  "target": "document.getElementById('rep-format')",
+  "op": "=",
+  "rhs": "fmts.map(function(f) {\n    var lbl = f ? f.toUpperCase() : 'Package';\n    if (type === 'posture' && f === 'csv') lbl = 'CSV (forensic)';\n    return '<option value=\"' + f + '\">' + lbl + '</option>';\n  }).join('')",
+  "rhs_len": 211,
+  "category": "unescaped_html",
+  "data_source_tags": ""
+ },
+ {
+  "line": 17262,
+  "function": "openReportGen",
+  "target": "document.getElementById('rep-fw')",
+  "op": "=",
+  "rhs": "(fws || []).map(function(f) {\n        return '<option value=\"' + x(f.id) + '\">' + x(f.name || f.id) + '</option>';\n      }).join('')",
+  "rhs_len": 132,
+  "category": "escaped",
+  "data_source_tags": "user_created_name"
+ },
+ {
+  "line": 17573,
+  "function": "loadRuns",
+  "target": "tbody",
+  "op": "=",
+  "rhs": "'<tr><td colspan=\"9\" class=\"empty\">No runs yet. Go to Scenarios and run one.</td></tr>'",
+  "rhs_len": 87,
+  "category": "static",
+  "data_source_tags": ""
+ },
+ {
+  "line": 17590,
+  "function": "byStartedAtDesc",
+  "target": "tbody",
+  "op": "=",
+  "rhs": "individualRuns.slice().sort(byStartedAtDesc).map(runRowHtml).join('')",
+  "rhs_len": 69,
+  "category": "unescaped_text",
+  "data_source_tags": ""
+ },
+ {
+  "line": 17626,
+  "function": "byStartedAtDesc",
+  "target": "tbody",
+  "op": "=",
+  "rhs": "allEntries.map(function(e) { return e.html; }).join('')",
+  "rhs_len": 55,
+  "category": "indirect_builder",
+  "data_source_tags": ""
+ },
+ {
+  "line": 17637,
+  "function": "openModal",
+  "target": "scSel",
+  "op": "=",
+  "rhs": "state.scenarios.map(function(s) {\n    var desc = s.description ? ' \u2014 ' + (s.description.length > 90 ? s.description.substring(0, 87) + '...' : s.description) : '';\n    return '<option value=\"' + x(s.id) + '\"' + (s.id === scenarioId ? ' selected' : '') + '>' + x(s.name) + x(desc) + '</option>';\n  }).join('')",
+  "rhs_len": 308,
+  "category": "escaped",
+  "data_source_tags": "scenario,user_created_name"
+ },
+ {
+  "line": 17648,
+  "function": "openModal",
+  "target": "document.getElementById('modal-agent')",
+  "op": "=",
+  "rhs": "state.agents.map(function(a) {\n    var osLabel = '';\n    if (a.osVersion) {\n      var ov = a.osVersion.toLowerCase();\n      osLabel = ov.indexOf('windows') !== -1 ? ' [Win]' : ov.indexOf('darwin') !== -1 || ov.indexOf('macos') !== -1 ? ' [macOS]' : ' [Linux]';\n    }\n    return '<option value=\"' + x(a.agentId) + '\"' + (a.agentId === preAgent ? ' selected' : '') + '>' +\n           x(a.agentId) + ' \u2014",
+  "rhs_len": 457,
+  "category": "unescaped_html",
+  "data_source_tags": "agent"
+ },
+ {
+  "line": 17710,
+  "function": "renderRunMode",
+  "target": "btn",
+  "op": "=",
+  "rhs": "'&#9888; No Eligible Agents'",
+  "rhs_len": 28,
+  "category": "static",
+  "data_source_tags": ""
+ },
+ {
+  "line": 17750,
+  "function": "renderRunMode",
+  "target": "warn",
+  "op": "=",
+  "rhs": "osMismatchMsg",
+  "rhs_len": 13,
+  "category": "indirect_variable",
+  "data_source_tags": ""
+ },
+ {
+  "line": 17754,
+  "function": "renderRunMode",
+  "target": "btn",
+  "op": "=",
+  "rhs": "'&#9654; Run'",
+  "rhs_len": 13,
+  "category": "static",
+  "data_source_tags": ""
+ },
+ {
+  "line": 17768,
+  "function": "renderRunMode",
+  "target": "warn",
+  "op": "=",
+  "rhs": "osMismatchMsg + ' <strong>Cannot run ' + mode + ' mode on this agent.</strong>'",
+  "rhs_len": 79,
+  "category": "unescaped_html",
+  "data_source_tags": "agent"
+ },
+ {
+  "line": 17770,
+  "function": "renderRunMode",
+  "target": "btn",
+  "op": "=",
+  "rhs": "'&#9888; OS Mismatch'",
+  "rhs_len": 21,
+  "category": "static",
+  "data_source_tags": ""
+ },
+ {
+  "line": 17782,
+  "function": "renderRunMode",
+  "target": "warn",
+  "op": "=",
+  "rhs": "warnText",
+  "rhs_len": 8,
+  "category": "indirect_variable",
+  "data_source_tags": ""
+ },
+ {
+  "line": 17783,
+  "function": "renderRunMode",
+  "target": "btn",
+  "op": "=",
+  "rhs": "'&#9654; Run Telemetry'",
+  "rhs_len": 23,
+  "category": "static",
+  "data_source_tags": ""
+ },
+ {
+  "line": 17789,
+  "function": "renderRunMode",
+  "target": "warn",
+  "op": "=",
+  "rhs": "'&#9888; <strong>LAB MODE \u2014 full-fidelity emulation.</strong> Runs LSASS memory dump and allowlisted password spray. <strong>Isolated AD range only, never production.</strong> Triggers EDR by design; requires a second confirmation.'",
+  "rhs_len": 232,
+  "category": "static",
+  "data_source_tags": ""
+ },
+ {
+  "line": 17790,
+  "function": "renderRunMode",
+  "target": "btn",
+  "op": "=",
+  "rhs": "'&#9654; Run LAB'",
+  "rhs_len": 17,
+  "category": "static",
+  "data_source_tags": ""
+ },
+ {
+  "line": 17797,
+  "function": "renderRunMode",
+  "target": "warn",
+  "op": "=",
+  "rhs": "osMismatchMsg",
+  "rhs_len": 13,
+  "category": "indirect_variable",
+  "data_source_tags": ""
+ },
+ {
+  "line": 17801,
+  "function": "renderRunMode",
+  "target": "btn",
+  "op": "=",
+  "rhs": "'&#9654; Run'",
+  "rhs_len": 13,
+  "category": "static",
+  "data_source_tags": ""
+ },
+ {
+  "line": 17852,
+  "function": "renderAdditionalAgents",
+  "target": "list",
+  "op": "=",
+  "rhs": "eligible.map(function(a) {\n    return '<label style=\"display:flex;align-items:center;gap:0.5rem;padding:0.25rem 0.3rem;cursor:pointer\">' +\n      '<input type=\"checkbox\" ' + (state._addlSel[a.agentId] ? 'checked' : '') +\n      ' onchange=\"_addlSel[\\'' + x(a.agentId) + '\\']=this.checked;renderAdditionalAgentsCount()\">' +\n      '<code style=\"font-size:0.72rem\">' + x(a.agentId) + '</code><span class=\"",
+  "rhs_len": 488,
+  "category": "unescaped_html",
+  "data_source_tags": "agent"
+ },
+ {
+  "line": 18105,
+  "function": "row",
+  "target": "document.getElementById('wz-review')",
+  "op": "=",
+  "rhs": "html",
+  "rhs_len": 4,
+  "category": "indirect_variable",
+  "data_source_tags": ""
+ },
+ {
+  "line": 18271,
+  "function": "openPickerWith",
+  "target": "tacticSel",
+  "op": "=",
+  "rhs": "'<option value=\"all\">All tactics</option>' + tacticOpts",
+  "rhs_len": 55,
+  "category": "unescaped_html",
+  "data_source_tags": ""
+ },
+ {
+  "line": 18428,
+  "function": "renderPickerList",
+  "target": "document.getElementById('picker-list')",
+  "op": "=",
+  "rhs": "rows || '<p class=\"empty\" style=\"padding:1rem\">No matches.</p>'",
+  "rhs_len": 63,
+  "category": "unescaped_html",
+  "data_source_tags": ""
+ },
+ {
+  "line": 18533,
+  "function": "renderModalSelection",
+  "target": "link",
+  "op": "=",
+  "rhs": "'&#128269; Detailed view \u2014 every atomic test that will run'",
+  "rhs_len": 59,
+  "category": "static",
+  "data_source_tags": ""
+ },
+ {
+  "line": 18552,
+  "function": "renderModalSelection",
+  "target": "link",
+  "op": "=",
+  "rhs": "'&#9881; Customize \u2014 select a target agent first'",
+  "rhs_len": 49,
+  "category": "static",
+  "data_source_tags": ""
+ },
+ {
+  "line": 18566,
+  "function": "renderModalSelection",
+  "target": "note",
+  "op": "=",
+  "rhs": "'&#9989; Running a selected subset: <strong>' + state._runSelection.ids.length + '</strong> ' + noun +\n      (state._runSelection.locked ? ' (targeted re-validate)' :\n       ' <a href=\"javascript:void(0)\" class=\"desc-toggle\" style=\"margin-left:8px\" onclick=\"clearSelection();return false;\">Clear</a>')",
+  "rhs_len": 301,
+  "category": "partial_escaped",
+  "data_source_tags": ""
+ },
+ {
+  "line": 18582,
+  "function": "renderModalSelection",
+  "target": "note",
+  "op": "=",
+  "rhs": "'<span class=\"u-muted\">Loading check catalog\u2026</span>'",
+  "rhs_len": 53,
+  "category": "static",
+  "data_source_tags": ""
+ },
+ {
+  "line": 18612,
+  "function": "renderModalSelection",
+  "target": "note",
+  "op": "=",
+  "rhs": "'<span class=\"u-muted\">Loading check catalog\u2026</span>'",
+  "rhs_len": 53,
+  "category": "static",
+  "data_source_tags": ""
+ },
+ {
+  "line": 18615,
+  "function": "renderModalSelection",
+  "target": "note",
+  "op": "=",
+  "rhs": "cached",
+  "rhs_len": 6,
+  "category": "indirect_variable",
+  "data_source_tags": ""
+ },
+ {
+  "line": 18683,
+  "function": "doOpen",
+  "target": "tacticSel",
+  "op": "=",
+  "rhs": "'<option value=\"all\">All tactics</option>' +\n        Object.keys(tacticSet).sort().map(function(t) {\n          return '<option value=\"' + x(t) + '\">' + x(t) + '</option>';\n        }).join('')",
+  "rhs_len": 191,
+  "category": "escaped",
+  "data_source_tags": ""
+ },
+ {
+  "line": 18736,
+  "function": "fillBuilder",
+  "target": "steps",
+  "op": "=",
+  "rhs": "''",
+  "rhs_len": 2,
+  "category": "static_empty",
+  "data_source_tags": ""
+ },
+ {
+  "line": 18906,
+  "function": "techRenderSelected",
+  "target": "box",
+  "op": "=",
+  "rhs": "'<div><span class=\"st-tech-sel-id\">' + x(id) + '</span>' +\n        '<span class=\"tiny muted\" style=\"margin-left:0.4rem\">' +\n        (techniqueCatalog === null ? 'resolving\u2026' : 'not recognized') + '</span></div>' +\n      '<span class=\"st-tech-sel-actions\"><a href=\"javascript:void(0)\" onclick=\"techChangeSelection(this)\">&#10005; change</a></span>'",
+  "rhs_len": 347,
+  "category": "escaped",
+  "data_source_tags": ""
+ },
+ {
+  "line": 18916,
+  "function": "techRenderSelected",
+  "target": "box",
+  "op": "=",
+  "rhs": "'<div><span class=\"st-tech-sel-id\">' + x(t.id) + '</span> <span class=\"st-tech-sel-name\">' + x(t.name) + '</span>' +\n      (tactics ? '<div class=\"st-tech-row-meta\">' + x(tactics) + '</div>' : '') +\n      (subText ? '<div class=\"st-tech-row-meta\">' + x(subText) + '</div>' : '') +\n    '</div>' +\n    '<span class=\"st-tech-sel-actions\">' +\n      (t.url ? '<a href=\"' + x(t.url) + '\" target=\"_blank\" re",
+  "rhs_len": 656,
+  "category": "escaped",
+  "data_source_tags": "user_created_name"
+ },
+ {
+  "line": 18956,
+  "function": "techOnInput",
+  "target": "panel",
+  "op": "=",
+  "rhs": "''",
+  "rhs_len": 2,
+  "category": "static_empty",
+  "data_source_tags": ""
+ },
+ {
+  "line": 18966,
+  "function": "techRenderResults",
+  "target": "panel",
+  "op": "=",
+  "rhs": "'<div class=\"st-tech-row\" style=\"cursor:default;color:var(--muted)\">No matching technique.</div>'",
+  "rhs_len": 97,
+  "category": "static",
+  "data_source_tags": ""
+ },
+ {
+  "line": 18970,
+  "function": "techRenderResults",
+  "target": "panel",
+  "op": "=",
+  "rhs": "results.map(function(t, i) {\n    var tactics = (t.tactics || []).join(', ');\n    var platforms = (t.platforms || []).join(', ');\n    return '<div class=\"st-tech-row' + (i === 0 ? ' active' : '') + '\" data-id=\"' + x(t.id) + '\" onmousedown=\"techSelectRow(this)\">' +\n      '<span class=\"st-tech-row-id\">' + x(t.id) + '</span><span class=\"st-tech-row-name\">' + x(t.name) + '</span>' +\n      (tactics ? '<",
+  "rhs_len": 576,
+  "category": "escaped",
+  "data_source_tags": "user_created_name"
+ },
+ {
+  "line": 18987,
+  "function": "techSelectRow",
+  "target": "panel",
+  "op": "=",
+  "rhs": "''",
+  "rhs_len": 2,
+  "category": "static_empty",
+  "data_source_tags": ""
+ },
+ {
+  "line": 19011,
+  "function": "techOnKeydown",
+  "target": "panel",
+  "op": "=",
+  "rhs": "''",
+  "rhs_len": 2,
+  "category": "static_empty",
+  "data_source_tags": ""
+ },
+ {
+  "line": 19022,
+  "function": "techOnBlur",
+  "target": "panel",
+  "op": "=",
+  "rhs": "''",
+  "rhs_len": 2,
+  "category": "static_empty",
+  "data_source_tags": ""
+ },
+ {
+  "line": 19042,
+  "function": "addStep",
+  "target": "div",
+  "op": "=",
+  "rhs": "'<div class=\"bld-step-hdr\"><span class=\"bld-step-num\">Step</span>' +\n      '<span class=\"bld-actions\">' +\n        '<button type=\"button\" onclick=\"moveStep(this,-1)\" title=\"Move up\">&#9650;</button>' +\n        '<button type=\"button\" onclick=\"moveStep(this,1)\" title=\"Move down\">&#9660;</button>' +\n        '<button type=\"button\" onclick=\"removeStep(this)\" title=\"Remove\">&#10005;</button>' +\n      '</",
+  "rhs_len": 1547,
+  "category": "partial_escaped",
+  "data_source_tags": "user_created_name"
+ },
+ {
+  "line": 19299,
+  "function": "viewRunResults",
+  "target": "document.getElementById('results-summary')",
+  "op": "=",
+  "rhs": "'<span style=\"color:var(--danger);font-weight:600\">Run failed to start</span>' +\n      ' &nbsp;&middot;&nbsp; ' + x(run.failReason || 'No reason recorded for this failure.') +\n      ' &nbsp;&middot;&nbsp; Agent: <code>' + x(run.agentId) + '</code>'",
+  "rhs_len": 248,
+  "category": "escaped",
+  "data_source_tags": "agent"
+ },
+ {
+  "line": 19304,
+  "function": "viewRunResults",
+  "target": "document.getElementById('results-summary')",
+  "op": "=",
+  "rhs": "'<span style=\"color:var(--danger);font-weight:600\">' + fail + ' fail</span>' +\n      ' &nbsp;/&nbsp; <span style=\"color:var(--success);font-weight:600\">' + pass + ' pass</span>' +\n      (skipped ? ' &nbsp;/&nbsp; <span class=\"u-muted\">' + skipped + ' skipped</span>' : '') +\n      ' &nbsp;&middot;&nbsp; ' + results.length + ' total &nbsp;&middot;&nbsp; Agent: <code>' + x(run.agentId) + '</code>' +\n",
+  "rhs_len": 458,
+  "category": "partial_escaped",
+  "data_source_tags": "agent"
+ },
+ {
+  "line": 19316,
+  "function": "viewRunResults",
+  "target": "document.getElementById('results-export')",
+  "op": "=",
+  "rhs": "''",
+  "rhs_len": 2,
+  "category": "static_empty",
+  "data_source_tags": ""
+ },
+ {
+  "line": 19322,
+  "function": "viewRunResults",
+  "target": "document.getElementById('results-title')",
+  "op": "=",
+  "rhs": "x(run.name) + ' \u2014 Results ' +\n    '<span class=\"sbadge\" style=\"background:' + runStatusColor + '22;color:' + runStatusColor + ';border:1px solid ' + runStatusColor + '44;font-size:0.65rem;margin-left:0.4rem;vertical-align:middle\">' + x(run.status || '') + '</span>'",
+  "rhs_len": 265,
+  "category": "partial_escaped",
+  "data_source_tags": "user_created_name"
+ },
+ {
+  "line": 19344,
+  "function": "viewRunResults",
+  "target": "document.getElementById('results-header-actions')",
+  "op": "=",
+  "rhs": "actionsHtml",
+  "rhs_len": 11,
+  "category": "indirect_variable",
+  "data_source_tags": ""
+ },
+ {
+  "line": 19394,
+  "function": "kpiGaugeCard",
+  "target": "document.getElementById('run-kpi-strip')",
+  "op": "=",
+  "rhs": "'<div class=\"kpi-row\" style=\"grid-template-columns:repeat(6,1fr)\">' +\n          '<div class=\"kpi-card\"><div class=\"kpi-label\">Overall Security Score</div><div class=\"kpi-value\">' + prevPct + '<span style=\"font-size:0.9rem;color:var(--muted)\">/100</span></div><div class=\"kpi-sub\">' + (deltaHtml || '\u2014') + '</div></div>' +\n          kpiGaugeCard('Detection Rate', detRate, pass + ' / ' + results.lengt",
+  "rhs_len": 1004,
+  "category": "partial_escaped",
+  "data_source_tags": ""
+ },
+ {
+  "line": 19736,
+  "function": "soonPanel",
+  "target": "document.getElementById('run-tab-content')",
+  "op": "=",
+  "rhs": "'<div id=\"run-tab-overview\" class=\"run-tab-panel\">' +\n      '<div class=\"run-tab-grid\">' +\n        '<div>' + scorePanel + '</div>' +\n        '<div id=\"run-report-extra\"></div>' +\n      '</div>' +\n    '</div>' +\n    '<div id=\"run-tab-findings\" class=\"run-tab-panel\" style=\"display:none\">' +\n      '<div id=\"run-report-findings\"><div style=\"color:var(--muted);font-size:0.72rem;padding:1.5rem 0;text-al",
+  "rhs_len": 2210,
+  "category": "unescaped_html",
+  "data_source_tags": "threat_intel"
+ },
+ {
+  "line": 19773,
+  "function": "soonPanel",
+  "target": "document.getElementById('run-tabbar')",
+  "op": "=",
+  "rhs": "RUN_TABS.map(function(t, i) {\n    return '<button class=\"run-tab-btn' + (i === 0 ? ' active' : '') + '\" id=\"run-tabbtn-' + t[0] + '\" onclick=\"switchRunTab(\\'' + t[0] + '\\')\">' + x(t[1]) + '</button>';\n  }).join('')",
+  "rhs_len": 214,
+  "category": "unescaped_html",
+  "data_source_tags": ""
+ },
+ {
+  "line": 19787,
+  "function": "soonPanel",
+  "target": "reportsEl",
+  "op": "=",
+  "rhs": "'<div class=\"dash-panel u-mb-1\"><div class=\"dash-panel-hdr\">Run Metadata</div><div class=\"dash-panel-body\">' +\n          '<div style=\"display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:0.75rem;font-size:0.78rem\">' +\n            '<div><div class=\"kpi-label\">Run ID</div><div>' + x(runId) + '</div></div>' +\n            '<div><div class=\"kpi-label\">Agent</div><div>' + x(run.agen",
+  "rhs_len": 1241,
+  "category": "partial_escaped",
+  "data_source_tags": "agent"
+ },
+ {
+  "line": 19802,
+  "function": "soonPanel",
+  "target": "reportsEl",
+  "op": "=",
+  "rhs": "'<div style=\"color:var(--muted);font-size:0.8rem;padding:1rem 0\">No exportable output yet \u2014 this run hasn\\'t completed.</div>'",
+  "rhs_len": 126,
+  "category": "static",
+  "data_source_tags": ""
+ },
+ {
+  "line": 19812,
+  "function": "soonPanel",
+  "target": "extraEl",
+  "op": "=",
+  "rhs": "'<div style=\"color:var(--muted);font-size:0.72rem;padding:0.4rem 0\">Loading&#8230;</div>'",
+  "rhs_len": 89,
+  "category": "static",
+  "data_source_tags": ""
+ },
+ {
+  "line": 19816,
+  "function": "soonPanel",
+  "target": "extraEl",
+  "op": "=",
+  "rhs": "renderRunReportExtra(rep)",
+  "rhs_len": 25,
+  "category": "indirect_builder",
+  "data_source_tags": ""
+ },
+ {
+  "line": 19818,
+  "function": "soonPanel",
+  "target": "if (findingsEl) findingsEl",
+  "op": "=",
+  "rhs": "renderRunFindings(rep)",
+  "rhs_len": 22,
+  "category": "indirect_builder",
+  "data_source_tags": ""
+ },
+ {
+  "line": 19820,
+  "function": "soonPanel",
+  "target": "if (recEl) recEl",
+  "op": "=",
+  "rhs": "renderRunRecommendations(rep)",
+  "rhs_len": 29,
+  "category": "indirect_builder",
+  "data_source_tags": ""
+ },
+ {
+  "line": 19824,
+  "function": "soonPanel",
+  "target": "extraEl",
+  "op": "=",
+  "rhs": "''",
+  "rhs_len": 2,
+  "category": "static_empty",
+  "data_source_tags": ""
+ },
+ {
+  "line": 19826,
+  "function": "soonPanel",
+  "target": "if (findingsEl) findingsEl",
+  "op": "=",
+  "rhs": "'<div style=\"color:var(--muted);font-size:0.8rem;padding:2.5rem 0;text-align:center\">Findings unavailable.</div>'",
+  "rhs_len": 113,
+  "category": "static",
+  "data_source_tags": ""
+ },
+ {
+  "line": 19828,
+  "function": "soonPanel",
+  "target": "if (recEl) recEl",
+  "op": "=",
+  "rhs": "'<div style=\"color:var(--muted);font-size:0.8rem;padding:2.5rem 0;text-align:center\">Recommendations unavailable.</div>'",
+  "rhs_len": 120,
+  "category": "static",
+  "data_source_tags": ""
+ },
+ {
+  "line": 19834,
+  "function": "soonPanel",
+  "target": "if (el) el",
+  "op": "=",
+  "rhs": "renderAttackFlow(af.nodes || [], af.summary || {})",
+  "rhs_len": 50,
+  "category": "indirect_builder",
+  "data_source_tags": ""
+ },
+ {
+  "line": 19837,
+  "function": "soonPanel",
+  "target": "if (el) el",
+  "op": "=",
+  "rhs": "'<div style=\"color:var(--muted);font-size:0.72rem;padding:1.5rem 0;text-align:center\">Attack flow unavailable.</div>'",
+  "rhs_len": 117,
+  "category": "static",
+  "data_source_tags": ""
+ },
+ {
+  "line": 19843,
+  "function": "soonPanel",
+  "target": "if (el) el",
+  "op": "=",
+  "rhs": "renderVariantCoverage(cov)",
+  "rhs_len": 26,
+  "category": "indirect_builder",
+  "data_source_tags": ""
+ },
+ {
+  "line": 19846,
+  "function": "soonPanel",
+  "target": "if (el) el",
+  "op": "=",
+  "rhs": "'<div style=\"color:var(--muted);font-size:0.72rem;padding:1.5rem 0;text-align:center\">Variant coverage unavailable.</div>'",
+  "rhs_len": 122,
+  "category": "static",
+  "data_source_tags": ""
+ },
+ {
+  "line": 19864,
+  "function": "soonPanel",
+  "target": "if (el) el",
+  "op": "=",
+  "rhs": "'<div style=\"color:var(--muted);font-size:0.8rem;padding:2.5rem 0;text-align:center\">Indicators unavailable.</div>'",
+  "rhs_len": 115,
+  "category": "static",
+  "data_source_tags": ""
+ },
+ {
+  "line": 19872,
+  "function": "soonPanel",
+  "target": "if (findingsElEarly) findingsElEarly",
+  "op": "=",
+  "rhs": "notReady",
+  "rhs_len": 8,
+  "category": "indirect_variable",
+  "data_source_tags": ""
+ },
+ {
+  "line": 19874,
+  "function": "soonPanel",
+  "target": "if (recElEarly) recElEarly",
+  "op": "=",
+  "rhs": "notReady",
+  "rhs_len": 8,
+  "category": "indirect_variable",
+  "data_source_tags": ""
+ },
+ {
+  "line": 19876,
+  "function": "soonPanel",
+  "target": "if (iocElEarly) iocElEarly",
+  "op": "=",
+  "rhs": "notReady",
+  "rhs_len": 8,
+  "category": "indirect_variable",
+  "data_source_tags": ""
+ },
+ {
+  "line": 19974,
+  "function": "renderDetectionValidationTab",
+  "target": "el",
+  "op": "=",
+  "rhs": "'<div style=\"padding:1rem 0 0.5rem\">' +\n      '<div style=\"display:flex;gap:1.5rem;margin-bottom:0.75rem;flex-wrap:wrap\">' +\n        '<div class=\"u-center\">' +\n          '<div style=\"font-size:1.7rem;font-weight:700;color:' + covColor + '\">' + coverage + '%</div>' +\n          '<div style=\"font-size:0.68rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em\">Detection Coverage</div>' ",
+  "rhs_len": 2060,
+  "category": "unescaped_html",
+  "data_source_tags": ""
+ },
+ {
+  "line": 20028,
+  "function": "loadSIEMCorrelationPanel",
+  "target": "el",
+  "op": "=",
+  "rhs": "'<div style=\"padding:1rem 0 0.5rem\">' +\n        '<div style=\"display:flex;gap:1.5rem;margin-bottom:1rem;flex-wrap:wrap\">' +\n          '<div class=\"u-center\">' +\n            '<div style=\"font-size:1.7rem;font-weight:700;color:' + color + '\">' + detRate + '%</div>' +\n            '<div style=\"font-size:0.68rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em\">SIEM Detection Rate</div>",
+  "rhs_len": 2080,
+  "category": "partial_escaped",
+  "data_source_tags": ""
+ },
+ {
+  "line": 20369,
+  "function": "fmt",
+  "target": "document.getElementById('evidence-content')",
+  "op": "=",
+  "rhs": "html",
+  "rhs_len": 4,
+  "category": "indirect_variable",
+  "data_source_tags": ""
+ },
+ {
+  "line": 20676,
+  "function": "confirmRun",
+  "target": "runBtn",
+  "op": "=",
+  "rhs": "'Dispatching to ' + agentIds.length + ' agents\u2026'",
+  "rhs_len": 48,
+  "category": "unescaped_likely_safe",
+  "data_source_tags": "agent"
+ },
+ {
+  "line": 20695,
+  "function": "confirmRun",
+  "target": "runBtn",
+  "op": "=",
+  "rhs": "'&#9654; Run'",
+  "rhs_len": 13,
+  "category": "static",
+  "data_source_tags": ""
+ },
+ {
+  "line": 20849,
+  "function": "cmdkResultFallback",
+  "target": "document.getElementById('results-export')",
+  "op": "=",
+  "rhs": "''",
+  "rhs_len": 2,
+  "category": "static_empty",
+  "data_source_tags": ""
+ },
+ {
+  "line": 20850,
+  "function": "cmdkResultFallback",
+  "target": "document.getElementById('results-summary')",
+  "op": "=",
+  "rhs": "''",
+  "rhs_len": 2,
+  "category": "static_empty",
+  "data_source_tags": ""
+ },
+ {
+  "line": 20851,
+  "function": "cmdkResultFallback",
+  "target": "document.getElementById('results-body')",
+  "op": "=",
+  "rhs": "(r.description ? '<p style=\"margin-bottom:0.8rem\">' + x(r.description) + '</p>' : '') +\n    ((r.tags || []).length ? '<div style=\"display:flex;gap:0.4rem;flex-wrap:wrap\">' +\n      r.tags.map(function(t) { return '<span class=\"sbadge\" style=\"background:transparent;border:1px solid var(--border)\">' + x(t) + '</span>'; }).join('') +\n      '</div>' : '')",
+  "rhs_len": 352,
+  "category": "escaped",
+  "data_source_tags": "user_created_name"
+ },
+ {
+  "line": 20881,
+  "function": "openCmdk",
+  "target": "wrap",
+  "op": "=",
+  "rhs": "'<div class=\"cmdk\" role=\"dialog\" aria-label=\"Command palette\">' +\n      '<div class=\"cmdk-in\">' +\n        '<svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><circle cx=\"11\" cy=\"11\" r=\"7\"/><path d=\"M21 21l-4-4\"/></svg>' +\n        '<input id=\"cmdk-input\" placeholder=\"Type a command or search\u2026\" autocomplete=\"off\">' +\n        '<span class=\"cmdk-esc\">esc",
+  "rhs_len": 629,
+  "category": "static",
+  "data_source_tags": ""
+ },
+ {
+  "line": 20988,
+  "function": "render",
+  "target": "list",
+  "op": "=",
+  "rhs": "'<div class=\"cmdk-empty\">No matches</div>'",
+  "rhs_len": 42,
+  "category": "static",
+  "data_source_tags": ""
+ },
+ {
+  "line": 20989,
+  "function": "render",
+  "target": "list",
+  "op": "=",
+  "rhs": "flat.map(function(f, i) {\n      if (f.sec) return '<div class=\"cmdk-sec\">' + x(f.sec) + '</div>';\n      // f.docType is only set for search-result/recents rows (Phase 3) --\n      // static Navigate/Actions rows never get the star affordance.\n      var star = f.docType\n        ? '<span data-fav-ci=\"' + i + '\" style=\"cursor:pointer;margin-right:0.5rem;color:' + (f.fav ? 'var(--warning)' : 'var(--mut",
+  "rhs_len": 537,
+  "category": "unescaped_html",
+  "data_source_tags": ""
+ },
+ {
+  "line": 21047,
+  "function": "loadUsers",
+  "target": "tbody",
+  "op": "=",
+  "rhs": "'<tr><td colspan=\"6\" class=\"empty\">No users found.</td></tr>'",
+  "rhs_len": 61,
+  "category": "static",
+  "data_source_tags": ""
+ },
+ {
+  "line": 21048,
+  "function": "loadUsers",
+  "target": "tbody",
+  "op": "=",
+  "rhs": "data.map(function(u) {\n      var statusBadge = u.isActive ? '<span class=\"sbadge s-completed\">Active</span>' : '<span class=\"sbadge s-offline\">Disabled</span>';\n      var mustPw = u.mustChangePw ? ' <span class=\"tag u-warning\">pw reset</span>' : '';\n      var actions =\n        '<button class=\"btn btn-outline btn-sm\" onclick=\"openEditUser(\\'' + x(u.id) + '\\',\\'' + x(u.username) + '\\',\\'' + x(u.role",
+  "rhs_len": 1308,
+  "category": "unescaped_html",
+  "data_source_tags": "api_response,user_created_name"
+ },
+ {
+  "line": 21289,
+  "function": "aggOf",
+  "target": "if (trend === 'Improving')      tEl",
+  "op": "=",
+  "rhs": "'<span class=\"trend up\">\u25b2</span> '",
+  "rhs_len": 34,
+  "category": "static",
+  "data_source_tags": ""
+ },
+ {
+  "line": 21290,
+  "function": "aggOf",
+  "target": "else if (trend === 'Degrading') tEl",
+  "op": "=",
+  "rhs": "'<span class=\"trend down\">\u25bc</span> '",
+  "rhs_len": 36,
+  "category": "static",
+  "data_source_tags": ""
+ },
+ {
+  "line": 21291,
+  "function": "aggOf",
+  "target": "else                            tEl",
+  "op": "=",
+  "rhs": "'<span class=\"trend flat\">\u2014</span> '",
+  "rhs_len": 36,
+  "category": "static",
+  "data_source_tags": ""
+ },
+ {
+  "line": 21293,
+  "function": "aggOf",
+  "target": "document.getElementById('kpi-score-spark')",
+  "op": "=",
+  "rhs": "sparkSVG(prevSeries, 110, 30, 'var(--teal)')",
+  "rhs_len": 44,
+  "category": "indirect_builder",
+  "data_source_tags": ""
+ },
+ {
+  "line": 21296,
+  "function": "aggOf",
+  "target": "document.getElementById('dash-gauge')",
+  "op": "=",
+  "rhs": "gaugeSVG(prevPct, 124, 14) +\n        '<div class=\"ring-c\"><span class=\"rv\" style=\"color:' + prevCol + '\">' + prevPct + '</span><span class=\"rl\">of 100</span></div>'",
+  "rhs_len": 164,
+  "category": "partial_escaped",
+  "data_source_tags": ""
+ },
+ {
+  "line": 21306,
+  "function": "aggOf",
+  "target": "document.getElementById('dash-posture-bars')",
+  "op": "=",
+  "rhs": "miniBars(barData, 320, 64)",
+  "rhs_len": 26,
+  "category": "indirect_builder",
+  "data_source_tags": ""
+ },
+ {
+  "line": 21334,
+  "function": "aggOf",
+  "target": "document.getElementById('kpi-cov-spark')",
+  "op": "=",
+  "rhs": "sparkSVG(covSeries, 110, 30, 'var(--warning)')",
+  "rhs_len": 46,
+  "category": "indirect_builder",
+  "data_source_tags": ""
+ },
+ {
+  "line": 21354,
+  "function": "aggOf",
+  "target": "donutEl",
+  "op": "=",
+  "rhs": "'<div class=\"empty\">No run data yet.</div>'",
+  "rhs_len": 43,
+  "category": "static",
+  "data_source_tags": ""
+ },
+ {
+  "line": 21365,
+  "function": "lg",
+  "target": "donutEl",
+  "op": "=",
+  "rhs": "'<div style=\"position:relative;flex-shrink:0\">' +\n          donutSVG([\n            { v: eff.prevented, color: 'var(--teal)' },\n            { v: eff.detected, color: 'var(--warning)' },\n            { v: eff.missed, color: 'var(--danger)' },\n            { v: eff.other, color: 'var(--elevated)' }\n          ]) +\n          '<div style=\"position:absolute;inset:0;display:flex;flex-direction:column;align-",
+  "rhs_len": 1443,
+  "category": "partial_escaped",
+  "data_source_tags": ""
+ },
+ {
+  "line": 21395,
+  "function": "lg",
+  "target": "afEl",
+  "op": "=",
+  "rhs": "'<div class=\"empty\" style=\"padding:1.5rem\">No kill-chain data for the latest run.</div>'",
+  "rhs_len": 88,
+  "category": "static",
+  "data_source_tags": ""
+ },
+ {
+  "line": 21396,
+  "function": "lg",
+  "target": "afEl",
+  "op": "=",
+  "rhs": "'<div class=\"killchain\">' + killChainNodes(kc) + '</div>'",
+  "rhs_len": 57,
+  "category": "indirect_builder",
+  "data_source_tags": ""
+ },
+ {
+  "line": 21399,
+  "function": "lg",
+  "target": "afEl",
+  "op": "=",
+  "rhs": "'<div class=\"empty\" style=\"padding:1.5rem\">Attack flow unavailable.</div>'",
+  "rhs_len": 74,
+  "category": "static",
+  "data_source_tags": ""
+ },
+ {
+  "line": 21406,
+  "function": "lg",
+  "target": "rrEl",
+  "op": "=",
+  "rhs": "'<div class=\"empty\" style=\"padding:1.5rem\">No runs yet.</div>'",
+  "rhs_len": 62,
+  "category": "static",
+  "data_source_tags": ""
+ },
+ {
+  "line": 21408,
+  "function": "lg",
+  "target": "rrEl",
+  "op": "=",
+  "rhs": "recent.map(function(r) {\n        var cnt = (r.results || []).length;\n        var fail = (r.results || []).filter(function(c) { return c.result === 'fail'; }).length;\n        var scoreStr = '\u2014';\n        var scol = 'var(--text-dim)';\n        if (r.score && r.score.preventionScore != null) {\n          var pp = Math.round(r.score.preventionScore);\n          var ta = r.score.trend === 'Improving' ? ' \u2191",
+  "rhs_len": 1451,
+  "category": "unescaped_html",
+  "data_source_tags": "user_created_name"
+ },
+ {
+  "line": 21451,
+  "function": "lg",
+  "target": "tfEl",
+  "op": "=",
+  "rhs": "'<div class=\"empty\" style=\"padding:1.5rem\">No failures recorded.</div>'",
+  "rhs_len": 71,
+  "category": "static",
+  "data_source_tags": ""
+ },
+ {
+  "line": 21454,
+  "function": "lg",
+  "target": "tfEl",
+  "op": "=",
+  "rhs": "topFails.map(function(t) {\n        var pct = Math.round((t.fail / (t.fail + t.pass)) * 100);\n        var w = Math.round((t.fail / maxFail) * 100);\n        return '<div class=\"bar-row\">' +\n          '<div class=\"bar-label\"><span style=\"color:var(--text-dim)\">' + x(t.name) + '</span><span>' + t.fail + ' fail &middot; ' + pct + '%</span></div>' +\n          '<div class=\"bar-track\"><div class=\"bar-fill",
+  "rhs_len": 517,
+  "category": "unescaped_html",
+  "data_source_tags": "user_created_name"
+ },
+ {
+  "line": 21477,
+  "function": "lg",
+  "target": "attckEl",
+  "op": "=",
+  "rhs": "'<div class=\"empty\" style=\"padding:1.5rem;grid-column:1/-1\">No run data yet.</div>'",
+  "rhs_len": 83,
+  "category": "static",
+  "data_source_tags": ""
+ },
+ {
+  "line": 21479,
+  "function": "lg",
+  "target": "attckEl",
+  "op": "=",
+  "rhs": "tactics.map(function(tactic) {\n        var d = tacticMap[tactic];\n        var total = d.pass + d.fail;\n        var pct = total ? Math.round((d.pass / total) * 100) : 0;\n        var col = _riskScoreColor(pct);\n        return '<div class=\"bar-row\">' +\n          '<div class=\"bar-label\"><span style=\"text-transform:capitalize\">' + x(tactic) + '</span><span style=\"color:' + col + '\">' + pct + '%</span><",
+  "rhs_len": 706,
+  "category": "unescaped_html",
+  "data_source_tags": ""
+ },
+ {
+  "line": 21529,
+  "function": "lg",
+  "target": "bodyEl",
+  "op": "=",
+  "rhs": "top.length ? top.map(function(f) {\n            return '<div class=\"lrow u-pointer\" onclick=\"showTab(\\'findings\\');setTimeout(function(){openFinding(\\'' + x(f.id) + '\\')},150)\">' +\n              '<div class=\"lmain\"><div class=\"lt\">' + x(f.techniqueName || f.techniqueId) + '</div>' +\n              '<div class=\"ls\"><span class=\"tech-id\">' + x(f.techniqueId) + '</span> \u00b7 ' + x(f.controlClass) + ' \u00b7 ' ",
+  "rhs_len": 623,
+  "category": "unescaped_html",
+  "data_source_tags": "agent"
  }
 ]

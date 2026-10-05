@@ -117,7 +117,7 @@
       "inits": 0
     },
     "features/endpoint-mastery.js": {
-      "imports": 7,
+      "imports": 8,
       "inits": 0
     },
     "features/findings.js": {
@@ -172,8 +172,12 @@
       "imports": 2,
       "inits": 0
     },
+    "features/variants.js": {
+      "imports": 10,
+      "inits": 0
+    },
     "legacy.js": {
-      "imports": 19,
+      "imports": 16,
       "inits": 1
     }
   }

@@ -79,7 +79,7 @@
  },
  {
   "sink_id": "_vexRenderQueuePanel:panel:=:b153a86b8dca",
-  "line": 21278,
+  "line": 16458,
   "function": "_vexRenderQueuePanel",
   "target": "panel",
   "op": "=",
@@ -92,7 +92,7 @@
  },
  {
   "sink_id": "addStep:div:=:7ac68f61520c",
-  "line": 18104,
+  "line": 19042,
   "function": "addStep",
   "target": "div",
   "op": "=",
@@ -105,7 +105,7 @@
  },
  {
   "sink_id": "aggOf:document.getElementById('dash-gauge'):=:c2776b093e85",
-  "line": 20358,
+  "line": 21296,
   "function": "aggOf",
   "target": "document.getElementById('dash-gauge')",
   "op": "=",
@@ -118,7 +118,7 @@
  },
  {
   "sink_id": "aggOf:document.getElementById('dash-posture-bars'):=:1c09c35c581f",
-  "line": 20368,
+  "line": 21306,
   "function": "aggOf",
   "target": "document.getElementById('dash-posture-bars')",
   "op": "=",
@@ -126,12 +126,12 @@
   "final_category": "unescaped_html",
   "severity_tier": 4,
   "data_source_tags": "",
-  "trace_notes": "miniBars() @L20234 (scope-resolved): 3 return(s) -> unescaped_html",
+  "trace_notes": "miniBars() @L21172 (scope-resolved): 3 return(s) -> unescaped_html",
   "rhs": "miniBars(barData, 320, 64)"
  },
  {
   "sink_id": "aggOf:document.getElementById('kpi-cov-spark'):=:85105375906e",
-  "line": 20396,
+  "line": 21334,
   "function": "aggOf",
   "target": "document.getElementById('kpi-cov-spark')",
   "op": "=",
@@ -139,12 +139,12 @@
   "final_category": "unescaped_html",
   "severity_tier": 4,
   "data_source_tags": "",
-  "trace_notes": "sparkSVG() @L20209 (scope-resolved): 4 return(s) -> unescaped_html; var(): no declaration found anywhere in file",
+  "trace_notes": "sparkSVG() @L21147 (scope-resolved): 4 return(s) -> unescaped_html; var(): no declaration found anywhere in file",
   "rhs": "sparkSVG(covSeries, 110, 30, 'var(--warning)')"
  },
  {
   "sink_id": "aggOf:document.getElementById('kpi-score-spark'):=:0319aaf8760d",
-  "line": 20355,
+  "line": 21293,
   "function": "aggOf",
   "target": "document.getElementById('kpi-score-spark')",
   "op": "=",
@@ -152,12 +152,12 @@
   "final_category": "unescaped_html",
   "severity_tier": 4,
   "data_source_tags": "",
-  "trace_notes": "sparkSVG() @L20209 (scope-resolved): 4 return(s) -> unescaped_html; var(): no declaration found anywhere in file",
+  "trace_notes": "sparkSVG() @L21147 (scope-resolved): 4 return(s) -> unescaped_html; var(): no declaration found anywhere in file",
   "rhs": "sparkSVG(prevSeries, 110, 30, 'var(--teal)')"
  },
  {
   "sink_id": "aggOf:donutEl:=:bb66089500d8",
-  "line": 20416,
+  "line": 21354,
   "function": "aggOf",
   "target": "donutEl",
   "op": "=",
@@ -170,7 +170,7 @@
  },
  {
   "sink_id": "aggOf:else                            tEl:=:1c87b321677d",
-  "line": 20353,
+  "line": 21291,
   "function": "aggOf",
   "target": "else                            tEl",
   "op": "=",
@@ -183,7 +183,7 @@
  },
  {
   "sink_id": "aggOf:else if (trend === 'Degrading') tEl:=:10f698d311c8",
-  "line": 20352,
+  "line": 21290,
   "function": "aggOf",
   "target": "else if (trend === 'Degrading') tEl",
   "op": "=",
@@ -196,7 +196,7 @@
  },
  {
   "sink_id": "aggOf:if (trend === 'Improving')      tEl:=:c5109212a34d",
-  "line": 20351,
+  "line": 21289,
   "function": "aggOf",
   "target": "if (trend === 'Improving')      tEl",
   "op": "=",
@@ -248,7 +248,7 @@
  },
  {
   "sink_id": "byStartedAtDesc:tbody:=:a84861ce6bf1",
-  "line": 16688,
+  "line": 17626,
   "function": "byStartedAtDesc",
   "target": "tbody",
   "op": "=",
@@ -261,7 +261,7 @@
  },
  {
   "sink_id": "byStartedAtDesc:tbody:=:f78d2a49fc20",
-  "line": 16652,
+  "line": 17590,
   "function": "byStartedAtDesc",
   "target": "tbody",
   "op": "=",
@@ -313,7 +313,7 @@
  },
  {
   "sink_id": "cmdkResultFallback:document.getElementById('results-body'):=:12f11fe6b7e3",
-  "line": 19913,
+  "line": 20851,
   "function": "cmdkResultFallback",
   "target": "document.getElementById('results-body')",
   "op": "=",
@@ -326,7 +326,7 @@
  },
  {
   "sink_id": "cmdkResultFallback:document.getElementById('results-export'):=:6f49cdbd80e1",
-  "line": 19911,
+  "line": 20849,
   "function": "cmdkResultFallback",
   "target": "document.getElementById('results-export')",
   "op": "=",
@@ -339,7 +339,7 @@
  },
  {
   "sink_id": "cmdkResultFallback:document.getElementById('results-summary'):=:6f49cdbd80e1",
-  "line": 19912,
+  "line": 20850,
   "function": "cmdkResultFallback",
   "target": "document.getElementById('results-summary')",
   "op": "=",
@@ -417,7 +417,7 @@
  },
  {
   "sink_id": "confirmRun:runBtn:=:8eab6fb9be00",
-  "line": 19738,
+  "line": 20676,
   "function": "confirmRun",
   "target": "runBtn",
   "op": "=",
@@ -430,7 +430,7 @@
  },
  {
   "sink_id": "confirmRun:runBtn:=:cd9227672841",
-  "line": 19757,
+  "line": 20695,
   "function": "confirmRun",
   "target": "runBtn",
   "op": "=",
@@ -469,7 +469,7 @@
  },
  {
   "sink_id": "doOpen:tacticSel:=:84dac746f49b",
-  "line": 17745,
+  "line": 18683,
   "function": "doOpen",
   "target": "tacticSel",
   "op": "=",
@@ -573,7 +573,7 @@
  },
  {
   "sink_id": "fillBuilder:steps:=:6f49cdbd80e1",
-  "line": 17798,
+  "line": 18736,
   "function": "fillBuilder",
   "target": "steps",
   "op": "=",
@@ -586,7 +586,7 @@
  },
  {
   "sink_id": "filterVexTechniques:el:=:b51334baf721",
-  "line": 21100,
+  "line": 16280,
   "function": "filterVexTechniques",
   "target": "el",
   "op": "=",
@@ -599,7 +599,7 @@
  },
  {
   "sink_id": "filterVexTechniques:el:=:fe7e0ce19e69",
-  "line": 21103,
+  "line": 16283,
   "function": "filterVexTechniques",
   "target": "el",
   "op": "=",
@@ -612,7 +612,7 @@
  },
  {
   "sink_id": "fmt:document.getElementById('evidence-content'):=:e5e239560bc1",
-  "line": 19431,
+  "line": 20369,
   "function": "fmt",
   "target": "document.getElementById('evidence-content')",
   "op": "=",
@@ -620,7 +620,7 @@
   "final_category": "unescaped_html",
   "severity_tier": 4,
   "data_source_tags": "",
-  "trace_notes": "15 assignment(s) to 'html' inside renderEvidencePanel() @L19185 (scope-resolved) -> unescaped_html",
+  "trace_notes": "15 assignment(s) to 'html' inside renderEvidencePanel() @L20123 (scope-resolved) -> unescaped_html",
   "rhs": "html"
  },
  {
@@ -716,7 +716,7 @@
  },
  {
   "sink_id": "kpiGaugeCard:document.getElementById('run-kpi-strip'):=:9f61190ab079",
-  "line": 18456,
+  "line": 19394,
   "function": "kpiGaugeCard",
   "target": "document.getElementById('run-kpi-strip')",
   "op": "=",
@@ -742,7 +742,7 @@
  },
  {
   "sink_id": "lg:afEl:=:045b2d7bf19f",
-  "line": 20457,
+  "line": 21395,
   "function": "lg",
   "target": "afEl",
   "op": "=",
@@ -755,7 +755,7 @@
  },
  {
   "sink_id": "lg:afEl:=:742a1d68308b",
-  "line": 20461,
+  "line": 21399,
   "function": "lg",
   "target": "afEl",
   "op": "=",
@@ -768,7 +768,7 @@
  },
  {
   "sink_id": "lg:afEl:=:af6127e6cf99",
-  "line": 20458,
+  "line": 21396,
   "function": "lg",
   "target": "afEl",
   "op": "=",
@@ -781,7 +781,7 @@
  },
  {
   "sink_id": "lg:attckEl:=:15344d1eaefd",
-  "line": 20541,
+  "line": 21479,
   "function": "lg",
   "target": "attckEl",
   "op": "=",
@@ -794,7 +794,7 @@
  },
  {
   "sink_id": "lg:attckEl:=:29910ff5e4fc",
-  "line": 20539,
+  "line": 21477,
   "function": "lg",
   "target": "attckEl",
   "op": "=",
@@ -807,7 +807,7 @@
  },
  {
   "sink_id": "lg:bodyEl:=:a021056e35a9",
-  "line": 20591,
+  "line": 21529,
   "function": "lg",
   "target": "bodyEl",
   "op": "=",
@@ -820,7 +820,7 @@
  },
  {
   "sink_id": "lg:donutEl:=:b908d493e3d4",
-  "line": 20427,
+  "line": 21365,
   "function": "lg",
   "target": "donutEl",
   "op": "=",
@@ -833,7 +833,7 @@
  },
  {
   "sink_id": "lg:rrEl:=:40cfa668e770",
-  "line": 20470,
+  "line": 21408,
   "function": "lg",
   "target": "rrEl",
   "op": "=",
@@ -846,7 +846,7 @@
  },
  {
   "sink_id": "lg:rrEl:=:a15994e328c4",
-  "line": 20468,
+  "line": 21406,
   "function": "lg",
   "target": "rrEl",
   "op": "=",
@@ -859,7 +859,7 @@
  },
  {
   "sink_id": "lg:tfEl:=:3c8626d1c7ac",
-  "line": 20513,
+  "line": 21451,
   "function": "lg",
   "target": "tfEl",
   "op": "=",
@@ -872,7 +872,7 @@
  },
  {
   "sink_id": "lg:tfEl:=:e009cf04aee2",
-  "line": 20516,
+  "line": 21454,
   "function": "lg",
   "target": "tfEl",
   "op": "=",
@@ -1873,7 +1873,7 @@
  },
  {
   "sink_id": "loadReports:document.getElementById('rep-available'):=:568454456a1f",
-  "line": 16257,
+  "line": 17195,
   "function": "loadReports",
   "target": "document.getElementById('rep-available')",
   "op": "=",
@@ -1886,7 +1886,7 @@
  },
  {
   "sink_id": "loadReports:el:=:211a4d2abf4a",
-  "line": 16240,
+  "line": 17178,
   "function": "loadReports",
   "target": "el",
   "op": "=",
@@ -1899,7 +1899,7 @@
  },
  {
   "sink_id": "loadReports:el:=:b1f98f11e298",
-  "line": 16244,
+  "line": 17182,
   "function": "loadReports",
   "target": "el",
   "op": "=",
@@ -1912,7 +1912,7 @@
  },
  {
   "sink_id": "loadRuns:tbody:=:f259d05495ad",
-  "line": 16635,
+  "line": 17573,
   "function": "loadRuns",
   "target": "tbody",
   "op": "=",
@@ -1925,7 +1925,7 @@
  },
  {
   "sink_id": "loadSIEMCorrelationPanel:el:=:a0696ac13148",
-  "line": 19090,
+  "line": 20028,
   "function": "loadSIEMCorrelationPanel",
   "target": "el",
   "op": "=",
@@ -2068,7 +2068,7 @@
  },
  {
   "sink_id": "loadUsers:tbody:=:58af379b3e34",
-  "line": 20109,
+  "line": 21047,
   "function": "loadUsers",
   "target": "tbody",
   "op": "=",
@@ -2081,7 +2081,7 @@
  },
  {
   "sink_id": "loadUsers:tbody:=:59926b90a0ae",
-  "line": 20110,
+  "line": 21048,
   "function": "loadUsers",
   "target": "tbody",
   "op": "=",
@@ -2094,7 +2094,7 @@
  },
  {
   "sink_id": "loadVariantCoverage:el:=:5ad448abef7d",
-  "line": 21130,
+  "line": 16310,
   "function": "loadVariantCoverage",
   "target": "el",
   "op": "=",
@@ -2107,7 +2107,7 @@
  },
  {
   "sink_id": "loadVariantCoverage:el:=:a79e43cbcf7f",
-  "line": 21157,
+  "line": 16337,
   "function": "loadVariantCoverage",
   "target": "el",
   "op": "=",
@@ -2120,7 +2120,7 @@
  },
  {
   "sink_id": "loadVariantCoverage:el:=:c944b2f9b670",
-  "line": 21127,
+  "line": 16307,
   "function": "loadVariantCoverage",
   "target": "el",
   "op": "=",
@@ -2133,7 +2133,7 @@
  },
  {
   "sink_id": "loadVariantCoverage:el:=:e5e239560bc1",
-  "line": 21155,
+  "line": 16335,
   "function": "loadVariantCoverage",
   "target": "el",
   "op": "=",
@@ -2141,12 +2141,12 @@
   "final_category": "partial_escaped",
   "severity_tier": 3,
   "data_source_tags": "",
-  "trace_notes": "3 assignment(s) to 'html' inside loadVariantCoverage() @L21124 (scope-resolved) -> partial_escaped",
+  "trace_notes": "3 assignment(s) to 'html' inside loadVariantCoverage() @L16304 (scope-resolved) -> partial_escaped",
   "rhs": "html"
  },
  {
   "sink_id": "loadVariantStats:el:=:357036e91e03",
-  "line": 20686,
+  "line": 15866,
   "function": "loadVariantStats",
   "target": "el",
   "op": "=",
@@ -2154,7 +2154,7 @@
   "final_category": "partial_escaped",
   "severity_tier": 3,
   "data_source_tags": "",
-  "trace_notes": "executions(): no declaration found anywhere in file; var(): no declaration found anywhere in file; vexStatCard() @L20699 (scope-resolved): 1 return(s) -> partial_escaped",
+  "trace_notes": "executions(): no declaration found anywhere in file; var(): no declaration found anywhere in file; vexStatCard() @L15879 (scope-resolved): 1 return(s) -> partial_escaped",
   "rhs": "vexStatCard('Executed Variants',     s.executedVariants,       'var(--accent)', null,\n        'How many individual variant executions (encoding \\xd7 privilege \\xd7 context combinations) have actually completed so far, summed across every finished variant run — not the total available.') +\n      vexStatCard('Total Variants',        s.availableVariants,      'var(--text)',   artAtomic.toLocaleString"
  },
  {
@@ -2354,7 +2354,7 @@
  },
  {
   "sink_id": "openCmdk:wrap:=:e5b2adf984bd",
-  "line": 19943,
+  "line": 20881,
   "function": "openCmdk",
   "target": "wrap",
   "op": "=",
@@ -2523,7 +2523,7 @@
  },
  {
   "sink_id": "openModal:document.getElementById('modal-agent'):=:aec9738cf908",
-  "line": 16710,
+  "line": 17648,
   "function": "openModal",
   "target": "document.getElementById('modal-agent')",
   "op": "=",
@@ -2536,7 +2536,7 @@
  },
  {
   "sink_id": "openModal:scSel:=:99fea35738b6",
-  "line": 16699,
+  "line": 17637,
   "function": "openModal",
   "target": "scSel",
   "op": "=",
@@ -2575,7 +2575,7 @@
  },
  {
   "sink_id": "openPickerWith:tacticSel:=:56ff914bbfc9",
-  "line": 17333,
+  "line": 18271,
   "function": "openPickerWith",
   "target": "tacticSel",
   "op": "=",
@@ -2601,7 +2601,7 @@
  },
  {
   "sink_id": "openReportGen:document.getElementById('rep-agent'):=:449a6c764d46",
-  "line": 16311,
+  "line": 17249,
   "function": "openReportGen",
   "target": "document.getElementById('rep-agent')",
   "op": "=",
@@ -2614,7 +2614,7 @@
  },
  {
   "sink_id": "openReportGen:document.getElementById('rep-format'):=:f36948ae35eb",
-  "line": 16315,
+  "line": 17253,
   "function": "openReportGen",
   "target": "document.getElementById('rep-format')",
   "op": "=",
@@ -2627,7 +2627,7 @@
  },
  {
   "sink_id": "openReportGen:document.getElementById('rep-fw'):=:cf81daeadfa1",
-  "line": 16324,
+  "line": 17262,
   "function": "openReportGen",
   "target": "document.getElementById('rep-fw')",
   "op": "=",
@@ -2783,7 +2783,7 @@
  },
  {
   "sink_id": "pollVariantRun:if (p) p:=:7216b4ea81b4",
-  "line": 21377,
+  "line": 16557,
   "function": "pollVariantRun",
   "target": "if (p) p",
   "op": "=",
@@ -2796,7 +2796,7 @@
  },
  {
   "sink_id": "pollVariantRun:if (panel) panel:=:852c6910cc5b",
-  "line": 21348,
+  "line": 16528,
   "function": "pollVariantRun",
   "target": "if (panel) panel",
   "op": "=",
@@ -2835,7 +2835,7 @@
  },
  {
   "sink_id": "populateVexAgents:if (sel) sel:=:d2a1edd66cf8",
-  "line": 20728,
+  "line": 15908,
   "function": "populateVexAgents",
   "target": "if (sel) sel",
   "op": "=",
@@ -2843,12 +2843,12 @@
   "final_category": "escaped",
   "severity_tier": 1,
   "data_source_tags": "",
-  "trace_notes": "1 assignment(s) to 'opts' inside populateVexAgents() @L20715 (scope-resolved) -> escaped",
+  "trace_notes": "1 assignment(s) to 'opts' inside populateVexAgents() @L15895 (scope-resolved) -> escaped",
   "rhs": "opts"
  },
  {
   "sink_id": "populateVexAgents:if (sweepSel) sweepSel:=:d2a1edd66cf8",
-  "line": 20730,
+  "line": 15910,
   "function": "populateVexAgents",
   "target": "if (sweepSel) sweepSel",
   "op": "=",
@@ -2856,12 +2856,12 @@
   "final_category": "escaped",
   "severity_tier": 1,
   "data_source_tags": "",
-  "trace_notes": "1 assignment(s) to 'opts' inside populateVexAgents() @L20715 (scope-resolved) -> escaped",
+  "trace_notes": "1 assignment(s) to 'opts' inside populateVexAgents() @L15895 (scope-resolved) -> escaped",
   "rhs": "opts"
  },
  {
   "sink_id": "populateVexTechniques:if (el) el:=:63e9d5f1a93f",
-  "line": 20770,
+  "line": 15950,
   "function": "populateVexTechniques",
   "target": "if (el) el",
   "op": "=",
@@ -2874,7 +2874,7 @@
  },
  {
   "sink_id": "populateVexTechniques:tacSel:=:ce309d68b711",
-  "line": 20765,
+  "line": 15945,
   "function": "populateVexTechniques",
   "target": "tacSel",
   "op": "=",
@@ -2882,7 +2882,7 @@
   "final_category": "unescaped_html",
   "severity_tier": 4,
   "data_source_tags": "",
-  "trace_notes": "2 assignment(s) to 'tacOpts' inside populateVexTechniques() @L20742 (scope-resolved) -> unescaped_html",
+  "trace_notes": "2 assignment(s) to 'tacOpts' inside populateVexTechniques() @L15922 (scope-resolved) -> unescaped_html",
   "rhs": "tacOpts"
  },
  {
@@ -2978,7 +2978,7 @@
  },
  {
   "sink_id": "render:list:=:969e22921b7e",
-  "line": 20051,
+  "line": 20989,
   "function": "render",
   "target": "list",
   "op": "=",
@@ -2991,7 +2991,7 @@
  },
  {
   "sink_id": "render:list:=:a8f1044c4fed",
-  "line": 20050,
+  "line": 20988,
   "function": "render",
   "target": "list",
   "op": "=",
@@ -3056,7 +3056,7 @@
  },
  {
   "sink_id": "renderAdditionalAgents:list:=:afe12f0f5138",
-  "line": 16914,
+  "line": 17852,
   "function": "renderAdditionalAgents",
   "target": "list",
   "op": "=",
@@ -3485,7 +3485,7 @@
  },
  {
   "sink_id": "renderDetectionValidationTab:el:=:84cc57f30541",
-  "line": 19036,
+  "line": 19974,
   "function": "renderDetectionValidationTab",
   "target": "el",
   "op": "=",
@@ -3784,7 +3784,7 @@
  },
  {
   "sink_id": "renderModalSelection:link:=:3ac9eb36dbbe",
-  "line": 17595,
+  "line": 18533,
   "function": "renderModalSelection",
   "target": "link",
   "op": "=",
@@ -3797,7 +3797,7 @@
  },
  {
   "sink_id": "renderModalSelection:link:=:a31134ee495c",
-  "line": 17614,
+  "line": 18552,
   "function": "renderModalSelection",
   "target": "link",
   "op": "=",
@@ -3810,7 +3810,7 @@
  },
  {
   "sink_id": "renderModalSelection:note:=:3673014e72b6",
-  "line": 17677,
+  "line": 18615,
   "function": "renderModalSelection",
   "target": "note",
   "op": "=",
@@ -3823,7 +3823,7 @@
  },
  {
   "sink_id": "renderModalSelection:note:=:6da56d2607de",
-  "line": 17628,
+  "line": 18566,
   "function": "renderModalSelection",
   "target": "note",
   "op": "=",
@@ -3836,7 +3836,7 @@
  },
  {
   "sink_id": "renderModalSelection:note:=:f6a1dba9d317",
-  "line": 17644,
+  "line": 18582,
   "function": "renderModalSelection",
   "target": "note",
   "op": "=",
@@ -3849,7 +3849,7 @@
  },
  {
   "sink_id": "renderModalSelection:note:=:f6a1dba9d317",
-  "line": 17674,
+  "line": 18612,
   "function": "renderModalSelection",
   "target": "note",
   "op": "=",
@@ -3862,7 +3862,7 @@
  },
  {
   "sink_id": "renderPickerList:document.getElementById('picker-list'):=:86bc3b918fa9",
-  "line": 17490,
+  "line": 18428,
   "function": "renderPickerList",
   "target": "document.getElementById('picker-list')",
   "op": "=",
@@ -3992,7 +3992,7 @@
  },
  {
   "sink_id": "renderRepHistory:tb:=:913a94a62edf",
-  "line": 16265,
+  "line": 17203,
   "function": "renderRepHistory",
   "target": "tb",
   "op": "=",
@@ -4005,7 +4005,7 @@
  },
  {
   "sink_id": "renderRepHistory:tb:=:b9e0ef311b73",
-  "line": 16269,
+  "line": 17207,
   "function": "renderRepHistory",
   "target": "tb",
   "op": "=",
@@ -4083,7 +4083,7 @@
  },
  {
   "sink_id": "renderRunMode:btn:=:4959506b17ea",
-  "line": 16772,
+  "line": 17710,
   "function": "renderRunMode",
   "target": "btn",
   "op": "=",
@@ -4096,7 +4096,7 @@
  },
  {
   "sink_id": "renderRunMode:btn:=:5b98d58b0313",
-  "line": 16852,
+  "line": 17790,
   "function": "renderRunMode",
   "target": "btn",
   "op": "=",
@@ -4109,7 +4109,7 @@
  },
  {
   "sink_id": "renderRunMode:btn:=:6b374eeb8131",
-  "line": 16832,
+  "line": 17770,
   "function": "renderRunMode",
   "target": "btn",
   "op": "=",
@@ -4122,7 +4122,7 @@
  },
  {
   "sink_id": "renderRunMode:btn:=:ad81ad1f4514",
-  "line": 16845,
+  "line": 17783,
   "function": "renderRunMode",
   "target": "btn",
   "op": "=",
@@ -4135,7 +4135,7 @@
  },
  {
   "sink_id": "renderRunMode:btn:=:cd9227672841",
-  "line": 16816,
+  "line": 17754,
   "function": "renderRunMode",
   "target": "btn",
   "op": "=",
@@ -4148,7 +4148,7 @@
  },
  {
   "sink_id": "renderRunMode:btn:=:cd9227672841",
-  "line": 16863,
+  "line": 17801,
   "function": "renderRunMode",
   "target": "btn",
   "op": "=",
@@ -4161,7 +4161,7 @@
  },
  {
   "sink_id": "renderRunMode:warn:=:37e38ab2c4c2",
-  "line": 16812,
+  "line": 17750,
   "function": "renderRunMode",
   "target": "warn",
   "op": "=",
@@ -4169,12 +4169,12 @@
   "final_category": "escaped",
   "severity_tier": 1,
   "data_source_tags": "",
-  "trace_notes": "2 assignment(s) to 'osMismatchMsg' inside renderRunMode() @L16749 (scope-resolved) -> escaped",
+  "trace_notes": "2 assignment(s) to 'osMismatchMsg' inside renderRunMode() @L17687 (scope-resolved) -> escaped",
   "rhs": "osMismatchMsg"
  },
  {
   "sink_id": "renderRunMode:warn:=:37e38ab2c4c2",
-  "line": 16859,
+  "line": 17797,
   "function": "renderRunMode",
   "target": "warn",
   "op": "=",
@@ -4182,12 +4182,12 @@
   "final_category": "escaped",
   "severity_tier": 1,
   "data_source_tags": "",
-  "trace_notes": "2 assignment(s) to 'osMismatchMsg' inside renderRunMode() @L16749 (scope-resolved) -> escaped",
+  "trace_notes": "2 assignment(s) to 'osMismatchMsg' inside renderRunMode() @L17687 (scope-resolved) -> escaped",
   "rhs": "osMismatchMsg"
  },
  {
   "sink_id": "renderRunMode:warn:=:41e9204bcecf",
-  "line": 16830,
+  "line": 17768,
   "function": "renderRunMode",
   "target": "warn",
   "op": "=",
@@ -4200,7 +4200,7 @@
  },
  {
   "sink_id": "renderRunMode:warn:=:7945c45dabe0",
-  "line": 16851,
+  "line": 17789,
   "function": "renderRunMode",
   "target": "warn",
   "op": "=",
@@ -4213,7 +4213,7 @@
  },
  {
   "sink_id": "renderRunMode:warn:=:7cbf4609536e",
-  "line": 16844,
+  "line": 17782,
   "function": "renderRunMode",
   "target": "warn",
   "op": "=",
@@ -4221,7 +4221,7 @@
   "final_category": "unescaped_html",
   "severity_tier": 4,
   "data_source_tags": "",
-  "trace_notes": "2 assignment(s) to 'warnText' inside renderRunMode() @L16749 (scope-resolved) -> unescaped_html",
+  "trace_notes": "2 assignment(s) to 'warnText' inside renderRunMode() @L17687 (scope-resolved) -> unescaped_html",
   "rhs": "warnText"
  },
  {
@@ -4759,7 +4759,7 @@
  },
  {
   "sink_id": "renderVariantRun:cell:=:2ff32a8ace7a",
-  "line": 21527,
+  "line": 16707,
   "function": "renderVariantRun",
   "target": "cell",
   "op": "=",
@@ -4772,7 +4772,7 @@
  },
  {
   "sink_id": "renderVariantRun:if (wrapperEl) wrapperEl:=:8e94bcdd09f7",
-  "line": 21522,
+  "line": 16702,
   "function": "renderVariantRun",
   "target": "if (wrapperEl) wrapperEl",
   "op": "=",
@@ -4780,12 +4780,12 @@
   "final_category": "partial_escaped",
   "severity_tier": 3,
   "data_source_tags": "",
-  "trace_notes": "24 assignment(s) to 'wrapperHtml' inside renderVariantRun() @L21455 (scope-resolved) -> partial_escaped",
+  "trace_notes": "24 assignment(s) to 'wrapperHtml' inside renderVariantRun() @L16635 (scope-resolved) -> partial_escaped",
   "rhs": "wrapperHtml"
  },
  {
   "sink_id": "renderVariantRun:panel:=:8576b16b3214",
-  "line": 21539,
+  "line": 16719,
   "function": "renderVariantRun",
   "target": "panel",
   "op": "=",
@@ -4798,7 +4798,7 @@
  },
  {
   "sink_id": "renderVexSweepList:el:=:6f49cdbd80e1",
-  "line": 20861,
+  "line": 16041,
   "function": "renderVexSweepList",
   "target": "el",
   "op": "=",
@@ -4811,7 +4811,7 @@
  },
  {
   "sink_id": "renderVexSweepList:el:=:84f7e3c3eda0",
-  "line": 20863,
+  "line": 16043,
   "function": "renderVexSweepList",
   "target": "el",
   "op": "=",
@@ -4889,7 +4889,7 @@
  },
  {
   "sink_id": "row:document.getElementById('wz-review'):=:e5e239560bc1",
-  "line": 17167,
+  "line": 18105,
   "function": "row",
   "target": "document.getElementById('wz-review')",
   "op": "=",
@@ -4897,7 +4897,7 @@
   "final_category": "unescaped_html",
   "severity_tier": 4,
   "data_source_tags": "",
-  "trace_notes": "3 assignment(s) to 'html' inside renderWizardReview() @L17070 (scope-resolved) -> unescaped_html",
+  "trace_notes": "3 assignment(s) to 'html' inside renderWizardReview() @L18008 (scope-resolved) -> unescaped_html",
   "rhs": "html"
  },
  {
@@ -5032,7 +5032,7 @@
  },
  {
   "sink_id": "soonPanel:document.getElementById('run-tab-content'):=:7adc696626b0",
-  "line": 18798,
+  "line": 19736,
   "function": "soonPanel",
   "target": "document.getElementById('run-tab-content')",
   "op": "=",
@@ -5045,7 +5045,7 @@
  },
  {
   "sink_id": "soonPanel:document.getElementById('run-tabbar'):=:ec3077d5757a",
-  "line": 18835,
+  "line": 19773,
   "function": "soonPanel",
   "target": "document.getElementById('run-tabbar')",
   "op": "=",
@@ -5058,7 +5058,7 @@
  },
  {
   "sink_id": "soonPanel:extraEl:=:000e9faf7dc9",
-  "line": 18874,
+  "line": 19812,
   "function": "soonPanel",
   "target": "extraEl",
   "op": "=",
@@ -5071,7 +5071,7 @@
  },
  {
   "sink_id": "soonPanel:extraEl:=:6f49cdbd80e1",
-  "line": 18886,
+  "line": 19824,
   "function": "soonPanel",
   "target": "extraEl",
   "op": "=",
@@ -5084,7 +5084,7 @@
  },
  {
   "sink_id": "soonPanel:extraEl:=:8a89f49e5dd6",
-  "line": 18878,
+  "line": 19816,
   "function": "soonPanel",
   "target": "extraEl",
   "op": "=",
@@ -5097,7 +5097,7 @@
  },
  {
   "sink_id": "soonPanel:if (el) el:=:05b3ceeea0fb",
-  "line": 18899,
+  "line": 19837,
   "function": "soonPanel",
   "target": "if (el) el",
   "op": "=",
@@ -5110,7 +5110,7 @@
  },
  {
   "sink_id": "soonPanel:if (el) el:=:05d28a38e57d",
-  "line": 18896,
+  "line": 19834,
   "function": "soonPanel",
   "target": "if (el) el",
   "op": "=",
@@ -5123,7 +5123,7 @@
  },
  {
   "sink_id": "soonPanel:if (el) el:=:4b2a80780dc0",
-  "line": 18926,
+  "line": 19864,
   "function": "soonPanel",
   "target": "if (el) el",
   "op": "=",
@@ -5136,7 +5136,7 @@
  },
  {
   "sink_id": "soonPanel:if (el) el:=:57e4ff8ae29b",
-  "line": 18905,
+  "line": 19843,
   "function": "soonPanel",
   "target": "if (el) el",
   "op": "=",
@@ -5149,7 +5149,7 @@
  },
  {
   "sink_id": "soonPanel:if (el) el:=:9d4d108e29ef",
-  "line": 18908,
+  "line": 19846,
   "function": "soonPanel",
   "target": "if (el) el",
   "op": "=",
@@ -5162,7 +5162,7 @@
  },
  {
   "sink_id": "soonPanel:if (findingsEl) findingsEl:=:1ab55760a1c3",
-  "line": 18880,
+  "line": 19818,
   "function": "soonPanel",
   "target": "if (findingsEl) findingsEl",
   "op": "=",
@@ -5175,7 +5175,7 @@
  },
  {
   "sink_id": "soonPanel:if (findingsEl) findingsEl:=:af0652ed63c6",
-  "line": 18888,
+  "line": 19826,
   "function": "soonPanel",
   "target": "if (findingsEl) findingsEl",
   "op": "=",
@@ -5188,7 +5188,7 @@
  },
  {
   "sink_id": "soonPanel:if (findingsElEarly) findingsElEarly:=:5ddfcb3cebd4",
-  "line": 18934,
+  "line": 19872,
   "function": "soonPanel",
   "target": "if (findingsElEarly) findingsElEarly",
   "op": "=",
@@ -5196,12 +5196,12 @@
   "final_category": "static",
   "severity_tier": 0,
   "data_source_tags": "",
-  "trace_notes": "1 assignment(s) to 'notReady' inside viewRunResults() @L18306 (scope-resolved) -> static",
+  "trace_notes": "1 assignment(s) to 'notReady' inside viewRunResults() @L19244 (scope-resolved) -> static",
   "rhs": "notReady"
  },
  {
   "sink_id": "soonPanel:if (iocElEarly) iocElEarly:=:5ddfcb3cebd4",
-  "line": 18938,
+  "line": 19876,
   "function": "soonPanel",
   "target": "if (iocElEarly) iocElEarly",
   "op": "=",
@@ -5209,12 +5209,12 @@
   "final_category": "static",
   "severity_tier": 0,
   "data_source_tags": "",
-  "trace_notes": "1 assignment(s) to 'notReady' inside viewRunResults() @L18306 (scope-resolved) -> static",
+  "trace_notes": "1 assignment(s) to 'notReady' inside viewRunResults() @L19244 (scope-resolved) -> static",
   "rhs": "notReady"
  },
  {
   "sink_id": "soonPanel:if (recEl) recEl:=:cc3ff533d162",
-  "line": 18882,
+  "line": 19820,
   "function": "soonPanel",
   "target": "if (recEl) recEl",
   "op": "=",
@@ -5227,7 +5227,7 @@
  },
  {
   "sink_id": "soonPanel:if (recEl) recEl:=:f64c73cc64ef",
-  "line": 18890,
+  "line": 19828,
   "function": "soonPanel",
   "target": "if (recEl) recEl",
   "op": "=",
@@ -5240,7 +5240,7 @@
  },
  {
   "sink_id": "soonPanel:if (recElEarly) recElEarly:=:5ddfcb3cebd4",
-  "line": 18936,
+  "line": 19874,
   "function": "soonPanel",
   "target": "if (recElEarly) recElEarly",
   "op": "=",
@@ -5248,12 +5248,12 @@
   "final_category": "static",
   "severity_tier": 0,
   "data_source_tags": "",
-  "trace_notes": "1 assignment(s) to 'notReady' inside viewRunResults() @L18306 (scope-resolved) -> static",
+  "trace_notes": "1 assignment(s) to 'notReady' inside viewRunResults() @L19244 (scope-resolved) -> static",
   "rhs": "notReady"
  },
  {
   "sink_id": "soonPanel:reportsEl:=:a0e2dc3988f7",
-  "line": 18849,
+  "line": 19787,
   "function": "soonPanel",
   "target": "reportsEl",
   "op": "=",
@@ -5266,7 +5266,7 @@
  },
  {
   "sink_id": "soonPanel:reportsEl:=:ae6324141a3e",
-  "line": 18864,
+  "line": 19802,
   "function": "soonPanel",
   "target": "reportsEl",
   "op": "=",
@@ -5357,7 +5357,7 @@
  },
  {
   "sink_id": "stopVex:if (panel) panel:=:f892e36d9a7f",
-  "line": 21409,
+  "line": 16589,
   "function": "stopVex",
   "target": "if (panel) panel",
   "op": "=",
@@ -5487,7 +5487,7 @@
  },
  {
   "sink_id": "techOnBlur:panel:=:6f49cdbd80e1",
-  "line": 18084,
+  "line": 19022,
   "function": "techOnBlur",
   "target": "panel",
   "op": "=",
@@ -5500,7 +5500,7 @@
  },
  {
   "sink_id": "techOnInput:panel:=:6f49cdbd80e1",
-  "line": 18018,
+  "line": 18956,
   "function": "techOnInput",
   "target": "panel",
   "op": "=",
@@ -5513,7 +5513,7 @@
  },
  {
   "sink_id": "techOnKeydown:panel:=:6f49cdbd80e1",
-  "line": 18073,
+  "line": 19011,
   "function": "techOnKeydown",
   "target": "panel",
   "op": "=",
@@ -5526,7 +5526,7 @@
  },
  {
   "sink_id": "techRenderResults:panel:=:80cdc4a637c4",
-  "line": 18028,
+  "line": 18966,
   "function": "techRenderResults",
   "target": "panel",
   "op": "=",
@@ -5539,7 +5539,7 @@
  },
  {
   "sink_id": "techRenderResults:panel:=:a66308c636d4",
-  "line": 18032,
+  "line": 18970,
   "function": "techRenderResults",
   "target": "panel",
   "op": "=",
@@ -5552,7 +5552,7 @@
  },
  {
   "sink_id": "techRenderSelected:box:=:41fc3647c35b",
-  "line": 17968,
+  "line": 18906,
   "function": "techRenderSelected",
   "target": "box",
   "op": "=",
@@ -5565,7 +5565,7 @@
  },
  {
   "sink_id": "techRenderSelected:box:=:f4b5d505bc4a",
-  "line": 17978,
+  "line": 18916,
   "function": "techRenderSelected",
   "target": "box",
   "op": "=",
@@ -5578,7 +5578,7 @@
  },
  {
   "sink_id": "techSelectRow:panel:=:6f49cdbd80e1",
-  "line": 18049,
+  "line": 18987,
   "function": "techSelectRow",
   "target": "panel",
   "op": "=",
@@ -5851,7 +5851,7 @@
  },
  {
   "sink_id": "viewRunResults:document.getElementById('results-export'):=:6f49cdbd80e1",
-  "line": 18378,
+  "line": 19316,
   "function": "viewRunResults",
   "target": "document.getElementById('results-export')",
   "op": "=",
@@ -5864,7 +5864,7 @@
  },
  {
   "sink_id": "viewRunResults:document.getElementById('results-header-actions'):=:8d3e295873f1",
-  "line": 18406,
+  "line": 19344,
   "function": "viewRunResults",
   "target": "document.getElementById('results-header-actions')",
   "op": "=",
@@ -5872,12 +5872,12 @@
   "final_category": "unescaped_html",
   "severity_tier": 4,
   "data_source_tags": "",
-  "trace_notes": "2 assignment(s) to 'actionsHtml' inside viewRunResults() @L18306 (scope-resolved) -> unescaped_html",
+  "trace_notes": "2 assignment(s) to 'actionsHtml' inside viewRunResults() @L19244 (scope-resolved) -> unescaped_html",
   "rhs": "actionsHtml"
  },
  {
   "sink_id": "viewRunResults:document.getElementById('results-summary'):=:14ac4be88bd0",
-  "line": 18366,
+  "line": 19304,
   "function": "viewRunResults",
   "target": "document.getElementById('results-summary')",
   "op": "=",
@@ -5890,7 +5890,7 @@
  },
  {
   "sink_id": "viewRunResults:document.getElementById('results-summary'):=:b5178044b390",
-  "line": 18361,
+  "line": 19299,
   "function": "viewRunResults",
   "target": "document.getElementById('results-summary')",
   "op": "=",
@@ -5903,7 +5903,7 @@
  },
  {
   "sink_id": "viewRunResults:document.getElementById('results-title'):=:5ca182313248",
-  "line": 18384,
+  "line": 19322,
   "function": "viewRunResults",
   "target": "document.getElementById('results-title')",
   "op": "=",

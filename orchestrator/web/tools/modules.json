@@ -205,6 +205,10 @@
     {
       "header": "Variant Coverage Report rendering",
       "module": "features/variant-report.js"
+    },
+    {
+      "header": "Run Variants reload-survival",
+      "module": "features/variants.js"
     }
   ],
   "pin": {
