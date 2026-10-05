@@ -102,6 +102,13 @@ class TestRegistry(unittest.TestCase):
         d = make('<a onclick="showTab(\'x\')"></a>', js)
         self.assertEqual(g.check(d), [])
 
+    def test_handler_moved_to_data_on_or_on_call_is_not_stale(self):
+        fns = ["openThing", "doOther", "thirdFn"]
+        globals_js = GLOBALS.replace("  doLogin,\n  showTab,\n", "".join(f"  {f},\n" for f in fns))
+        d = make('<a data-on-click="openThing"></a>', "x = on('click', 'doOther');\ny = seg('thirdFn');\nwindow.openRunPanel = 1;\n",
+                 globals_js=globals_js)
+        self.assertEqual(g.check(d), [])
+
 
 if __name__ == "__main__":
     unittest.main()

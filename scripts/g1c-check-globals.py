@@ -35,6 +35,11 @@ STRING_LIT = re.compile(r"""'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*\"""")
 TOP_LEVEL = re.compile(r"(?m)^(?:export )?(?:async )?(?:var|let|const|function\*?) +([A-Za-z_$][\w$]*)")
 CONCAT = re.compile(r"(?<!\\)'\s*\+(?:[^+]|\+(?!\s*'))*\+\s*'")
 REGEX_LIT = re.compile(r"/(?:[^/\\\n]|\\.)+/[gimsuy]*")
+# Handlers converted to G1d actions are "called" through data-on-* names,
+# literal on('evt', 'name') calls, or names passed around as strings.
+DATA_ON = re.compile(r'data-on-[a-z]+="([^"]*)"')
+ON_CALL_NAME = re.compile(r"""(?<![\w$.])on\(\s*['"][a-z]+['"]\s*,\s*['"]([A-Za-z_$][\w$]*)['"]""")
+STRING_NAME = re.compile(r"""['"]([A-Za-z_$][\w$]*)['"]""")
 IDENT = re.compile(r"(?<![.\w$])([A-Za-z_$][\w$]*)(?!\s*:(?!:))")
 
 
@@ -72,6 +77,10 @@ def check(web_dir):
             body = CONCAT.sub("''", m.group(1)) if i > 0 else m.group(1)
             body = REGEX_LIT.sub("''", STRING_LIT.sub("''", body.replace("\\'", "'")))
             read |= set(IDENT.findall(body)) & top_level
+    for text in sources:
+        called |= set(DATA_ON.findall(text)) | set(ON_CALL_NAME.findall(text))
+    for text in js_texts:
+        called |= set(STRING_NAME.findall(text))
     errors = []
     for n in sorted(called_code - fns - window_writes - BUILTINS):
         errors.append(f"missing: {n}")
