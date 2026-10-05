@@ -9,6 +9,18 @@
     {
       "header": "Tamper Alert Banner",
       "module": "features/shell.js"
+    },
+    {
+      "header": "Stop Agent",
+      "module": "features/agent-actions.js"
+    },
+    {
+      "header": "Uninstall Agent",
+      "module": "features/agent-actions.js"
+    },
+    {
+      "header": "Remove Agent (Force Remove)",
+      "module": "features/agent-actions.js"
     }
   ],
   "pin": {

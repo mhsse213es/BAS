@@ -73,6 +73,10 @@
       "imports": 2,
       "inits": 0
     },
+    "features/agent-actions.js": {
+      "imports": 3,
+      "inits": 0
+    },
     "features/shell.js": {
       "imports": 5,
       "inits": 5
