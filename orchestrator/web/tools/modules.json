@@ -5,7 +5,12 @@
   "pin": {
     "escapeHTML": "core/escape.js",
     "x": "core/escape.js",
-    "apicall": "core/api.js"
+    "apicall": "core/api.js",
+    "ago": "core/util.js",
+    "daysAgo": "core/util.js",
+    "fmtDate": "core/util.js",
+    "fmtRunIdCode": "core/util.js",
+    "showToast": "core/util.js"
   },
   "windowVars": ["_groupSel", "_tmplGroupSel", "_vexGroupSel", "_vexRunGroupSel"],
   "windowFns": ["renderGroupTargetSummary", "renderRunMode", "renderTmplGroupSummary", "renderTmplOSCompat", "renderVexGroupSummary", "renderVexRunGroupSummary"],

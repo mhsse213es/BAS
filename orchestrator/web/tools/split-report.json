@@ -37,6 +37,7 @@
     "_pwForced",
     "_tmplGroupSel",
     "_tmplSelAgents",
+    "_toast",
     "_vexGroupSel",
     "_vexRunGroupSel",
     "agents",
@@ -52,8 +53,12 @@
       "imports": 0,
       "inits": 0
     },
+    "core/util.js": {
+      "imports": 2,
+      "inits": 0
+    },
     "legacy.js": {
-      "imports": 3,
+      "imports": 4,
       "inits": 12
     }
   }

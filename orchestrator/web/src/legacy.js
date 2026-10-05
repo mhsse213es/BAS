@@ -2,6 +2,7 @@
 import { state } from './core/state.js';
 import { apicall } from './core/api.js';
 import { x } from './core/escape.js';
+import { ago, daysAgo, fmtDate, fmtRunIdCode, showToast } from './core/util.js';
 export function __init_L5162() {
 (function() {
   var t = localStorage.getItem('audspect_theme') || 'dark';
@@ -44,7 +45,7 @@ var agentLiveRefreshTimer = null;
 var artCatalog = [];      // live ART catalog: [{id,name,tests}] -- always windows
 var calderaCatalog = [];  // live Caldera catalog: [{id,name,tactic,technique}]
 var _artCatalogByPlatform = {};  // live ART catalog per non-windows platform, keyed by 'linux'/'darwin' -- for art_selective_platform scenarios' Customize picker
-var _toast;
+
 var _modalScId = null;
 var _runSelection = null;  // {scId, fw:'art'|'caldera', ids:[]} — operator-chosen subset for the next run
   // {agentId: true} — checked "Run on Additional Agents" state for the next run
@@ -12020,39 +12021,6 @@ function connectWS() {
       if (msg.type === 'siem_correlation_complete') { _onSIEMCorrelationComplete(msg); }
     } catch(e) {}
   };
-}
-function ago(iso) {
-  if (!iso) return '—';
-  var s = Math.floor((Date.now() - new Date(iso)) / 1000);
-  if (s < 60)   return s + 's ago';
-  if (s < 3600) return Math.floor(s/60) + 'm ago';
-  return Math.floor(s/3600) + 'h ago';
-}
-function daysAgo(iso) {
-  if (!iso) return 0;
-  var diff = Date.now() - new Date(iso);
-  return Math.max(0, Math.floor(diff / (1000 * 60 * 60 * 24)));
-}
-function fmtDate(iso) {
-  if (!iso) return '—';
-  return new Date(iso).toLocaleString();
-}
-// fmtRunIdCode renders a run/sweep ID as a <code> cell truncated for table
-// width, but -- unlike a bare .substring(0,14) -- an ellipsis marks it as
-// truncated and the full ID is available via title (hover) and by copying
-// the visible text plus the tooltip. Without this, a truncated ID silently
-// LOOKS complete (e.g. "18cea85f279812" for the real ID "18cea85f279812f5"),
-// which breaks any attempt to look the run up directly by that ID later.
-function fmtRunIdCode(id) {
-  if (!id) return '<code>—</code>';
-  var shown = id.length > 14 ? x(id.substring(0, 14)) + '&hellip;' : x(id);
-  return '<code title="' + x(id) + '">' + shown + '</code>';
-}
-function showToast(msg, type) {
-  var el = document.getElementById('toast');
-  el.textContent = msg; el.className = 'show ' + (type || 'ok');
-  clearTimeout(_toast);
-  _toast = setTimeout(function() { el.className = ''; }, 3800);
 }
 
 /* ── Command palette (Ctrl/Cmd-K) ─────────────────────────────────────────

@@ -10,6 +10,7 @@ export const state = {
   _pwForced: false,
   _tmplGroupSel: {},
   _tmplSelAgents: {},
+  _toast: undefined,
   _vexGroupSel: {},
   _vexRunGroupSel: {},
   agents: [],
