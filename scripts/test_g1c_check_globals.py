@@ -74,6 +74,24 @@ class TestRegistry(unittest.TestCase):
         d = make('<a onclick="showTab(\'per-platform breakdown (Windows)\');doLogin()"></a>', "window.openRunPanel = 1;\n")
         self.assertEqual(g.check(d), [])
 
+    def test_handler_read_of_unexposed_module_variable_fails(self):
+        # A module-private top-level variable read by a handler is a click-time
+        # ReferenceError (G1c final review I4).
+        js = "window.openRunPanel = 1;\nvar _pending = 3;\nvar s = '<i onclick=\"doLogin(_pending)\">';\n"
+        d = make('<a onclick="showTab(\'x\')"></a>', js)
+        self.assertIn("read: _pending", g.check(d))
+
+    def test_template_locals_spliced_into_handlers_are_not_reads(self):
+        js = ("window.openRunPanel = 1;\nvar a = 1;\n"
+              "function r(a) { return '<i onclick=\"doLogin(\\'' + x(a.id) + '\\')\">'; }\n")
+        d = make('<a onclick="showTab(\'x\')"></a>', js)
+        self.assertEqual([e for e in g.check(d) if e.startswith("read:")], [])
+
+    def test_exposed_state_read_is_allowed(self):
+        js = "window.openRunPanel = 1;\nvar s = '<i onclick=\"doLogin(scenarioView)\">';\n"
+        d = make('<a onclick="showTab(\'x\')"></a>', js)
+        self.assertEqual(g.check(d), [])
+
 
 if __name__ == "__main__":
     unittest.main()

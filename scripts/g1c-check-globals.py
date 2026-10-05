@@ -25,6 +25,14 @@ DYN_INDEX_ASSIGN = re.compile(r"([A-Za-z_$][\w$]*)\[\s*'\s*\+")
 # call. Blanked only for the "missing" direction: the generator registers every
 # raw match (a superset), so "stale" keeps comparing against the raw scan.
 STRING_LIT = re.compile(r"""'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*\"""")
+# Reads (G1c final review I4): a handler identifier that names a module's
+# top-level declaration but is not on window is a click-time ReferenceError.
+# Only top-level names are compared, so template locals spliced into a
+# JS-built handler (' + x(a.id) + ') can never match by accident.
+TOP_LEVEL = re.compile(r"(?m)^(?:export )?(?:async )?(?:var|let|const|function\*?) +([A-Za-z_$][\w$]*)")
+CONCAT = re.compile(r"(?<!\\)'\s*\+(?:[^+]|\+(?!\s*'))*\+\s*'")
+REGEX_LIT = re.compile(r"/(?:[^/\\\n]|\\.)+/[gimsuy]*")
+IDENT = re.compile(r"(?<![.\w$])([A-Za-z_$][\w$]*)(?!\s*:(?!:))")
 
 
 def _list(globals_js, const):
@@ -47,13 +55,20 @@ def check(web_dir):
     js_texts = [p.read_text(encoding="utf-8") for p in js_files]
     sources += js_texts
 
-    called, called_code, assigned = set(), set(), set()
-    for text in sources:
+    top_level = set()
+    for text in js_texts:
+        top_level |= set(TOP_LEVEL.findall(text))
+
+    called, called_code, assigned, read = set(), set(), set(), set()
+    for i, text in enumerate(sources):
         for m in HANDLER_ATTR.finditer(text):
             called |= set(CALL.findall(m.group(1)))
             called_code |= set(CALL.findall(STRING_LIT.sub("''", m.group(1))))
             assigned |= set(ASSIGN.findall(m.group(1)))
             assigned |= set(DYN_INDEX_ASSIGN.findall(m.group(1)))
+            body = CONCAT.sub("''", m.group(1)) if i > 0 else m.group(1)
+            body = REGEX_LIT.sub("''", STRING_LIT.sub("''", body.replace("\\'", "'")))
+            read |= set(IDENT.findall(body)) & top_level
     errors = []
     for n in sorted(called_code - fns - window_writes - BUILTINS):
         errors.append(f"missing: {n}")
@@ -61,6 +76,8 @@ def check(web_dir):
         errors.append(f"stale: {n}")
     for n in sorted(assigned - state_globals - BUILTINS):
         errors.append(f"assign: {n}")
+    for n in sorted(read - fns - state_globals - window_writes - BUILTINS):
+        errors.append(f"read: {n}")
     writes = set()
     for text in js_texts:
         writes |= set(WINDOW_WRITE.findall(text))
