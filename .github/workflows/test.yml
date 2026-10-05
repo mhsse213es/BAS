@@ -109,8 +109,6 @@ jobs:
         run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Playwright package matches image browsers
         run: node tools/check-playwright-version.mjs
-      - name: Generated sources match the generator (G1c freeze)
-        run: npm run split:check
       - name: Lint
         run: npx eslint src --max-warnings=100000
       - name: Unit tests

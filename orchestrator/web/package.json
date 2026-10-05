@@ -4,8 +4,6 @@
   "type": "module",
   "engines": { "node": ">=24" },
   "scripts": {
-    "split": "node tools/split.mjs",
-    "split:check": "node tools/split.mjs --check",
     "lint": "eslint src",
     "test": "node --test \"tests/unit/*.test.mjs\"",
     "build": "node tools/build.mjs",
