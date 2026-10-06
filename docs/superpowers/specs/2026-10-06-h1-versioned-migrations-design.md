@@ -60,7 +60,7 @@ Runs as bas_user under a Postgres advisory lock (one constant key) so concurrent
 | State | Detection | Action |
 |---|---|---|
 | Fresh | no Audspect tables, no `schema_migrations` | apply 000001…N |
-| Pre-H1 | Audspect tables present (sentinel set: `tenants`, `agents`, `scenario_runs`), no `schema_migrations` | adoption, then 2…N |
+| Pre-H1 | Audspect tables present (sentinel set: `agents`, `scenario_runs` -- present since the first release; `tenants` was dropped from the set by the final review, it arrived only in July 2026), no `schema_migrations` | adoption, then 2…N |
 | Managed | `schema_migrations` present, `dirty = false` | apply pending, or nothing |
 | Dirty | `dirty = true` | refuse; name the version; point to the upgrade snapshot and `install.sh --rollback`; never auto-repair |
 | Newer | version > highest embedded migration | refuse: "database is at V, this release knows N — run the matching release or `install.sh --rollback`" |

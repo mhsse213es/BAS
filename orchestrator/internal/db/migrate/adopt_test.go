@@ -3,9 +3,11 @@ package migrate_test
 import (
 	"context"
 	"errors"
+	"os"
 	"strings"
 	"testing"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/audspect/bas/internal/db/legacy"
@@ -117,6 +119,34 @@ func TestAdopt_OlderReleaseSchema(t *testing.T) { // H1-T3 variant
 		AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'agents' AND column_name = 'transport')`).Scan(&ok)
 	if !ok {
 		t.Fatal("older-release objects were not restored")
+	}
+}
+
+func TestAdopt_TaggedReleaseV170(t *testing.T) { // H1-T3: a real earlier tagged release
+	ctx := context.Background()
+	dsn := pgtest.NewDatabase(t)
+	dump, err := os.ReadFile("testdata/v1.7.0.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Own connection: the dump empties search_path for its session.
+	conn, err := pgx.Connect(ctx, dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = conn.Exec(ctx, string(dump))
+	conn.Close(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := up(t, dsn, noRole)
+	if !r.Adopted || len(r.Extra) != 0 {
+		t.Fatalf("result %+v", r)
+	}
+	var host string
+	pgtest.PoolFor(t, dsn).QueryRow(ctx, `SELECT hostname FROM agents WHERE agent_id = 'a-v170'`).Scan(&host)
+	if host != "host-v170" {
+		t.Fatalf("v1.7.0 agent row lost: %q", host)
 	}
 }
 

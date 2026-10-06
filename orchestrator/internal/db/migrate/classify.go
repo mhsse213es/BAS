@@ -24,8 +24,9 @@ func (s State) String() string {
 	return [...]string{"fresh", "pre-H1", "managed", "dirty", "newer", "unrecognised"}[s]
 }
 
-// sentinels are present in every Audspect schema since before H1.
-var sentinels = []string{"tenants", "agents", "scenario_runs"}
+// sentinels exist in every Audspect release (tenants arrived only in July
+// 2026, so it cannot be one; testdata/v1.7.0.sql pins an older install).
+var sentinels = []string{"agents", "scenario_runs"}
 
 // Classify inspects public; the uint is the recorded schema version (0 if none).
 func Classify(ctx context.Context, conn *pgx.Conn) (State, uint, error) {
