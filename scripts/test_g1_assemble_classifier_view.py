@@ -22,6 +22,12 @@ BASE = {"index.html": "<html>\n<body>\n<script src=\"/assets/%%APP_JS%%\"></scri
 
 
 class TestAssemble(unittest.TestCase):
+    def test_on_helper_calls_are_presented_as_escaper_calls(self):
+        d = web({**BASE, "src/a.js": "function r(i) { return '<b' + on('click', 'f', i) + '>'; }\nconst moon(1);\n"})
+        out = v.assemble(d)
+        self.assertIn("'<b' + x('click', 'f', i) + '>'", out)
+        self.assertIn("const moon(1);", out)
+
     def test_inlines_sources_in_sorted_path_order(self):
         d = web({**BASE, "src/b.js": "function b() {}\n", "src/a.js": "function a() {}\n", "src/core/z.js": "function z() {}\n"})
         out = v.assemble(d)
