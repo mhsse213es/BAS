@@ -215,6 +215,9 @@ const (
 	// this permission gates only the ability to request one and to flag a
 	// backup for restore intent (an audit marker, not an execution trigger).
 	CanManageBackups Permission = "backups:manage"
+
+	// TCF Phase 2A: link/new/dismiss unresolved actor identities (Admin only).
+	CanResolveActorIdentity Permission = "intel:resolve-actor"
 )
 
 // rolePermissions maps each role to the permissions it holds. Viewer is
@@ -272,6 +275,7 @@ var rolePermissions = map[Role]map[Permission]bool{
 		CanViewSCIMConfig: true, CanManageSCIMConfig: true,
 		CanExecuteRemediation: true, CanApproveRemediation: true,
 		CanManageBackups: true,
+		CanResolveActorIdentity: true,
 	},
 	RoleAnalyst: {
 		CanVerify:            true,
@@ -356,6 +360,7 @@ func Permissions(role Role) []Permission {
 
 		CanExecuteRemediation, CanApproveRemediation,
 		CanManageBackups,
+		CanResolveActorIdentity,
 		CanViewContentArtifact, CanTransitionContent, CanViewContentMigrationReport,
 	} {
 		if set[p] {

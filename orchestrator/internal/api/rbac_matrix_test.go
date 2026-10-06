@@ -206,6 +206,8 @@ var routeMatrix = []routeCase{
 	{http.MethodPut, "/api/scenarios/{id}", tierPermission, auth.CanUpdateScenario},
 	{http.MethodDelete, "/api/scenarios/{id}", tierPermission, auth.CanDeleteScenario},
 	{http.MethodGet, "/api/content-registry/versions/{vid}/artifact", tierPermission, auth.CanViewContentArtifact},
+	{http.MethodGet, "/api/intel/actor-resolutions", tierPermission, auth.CanResolveActorIdentity},
+	{http.MethodPost, "/api/intel/actor-resolutions/{id}", tierPermission, auth.CanResolveActorIdentity},
 	{http.MethodPost, "/api/content-registry/versions/{vid}/transition", tierPermission, auth.CanTransitionContent},
 	{http.MethodGet, "/api/content-registry/migration-report", tierPermission, auth.CanViewContentMigrationReport},
 	{http.MethodPost, "/api/variants/generate", tierPermission, auth.CanGenerateVariants},

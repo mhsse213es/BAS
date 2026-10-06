@@ -407,6 +407,8 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.With(auth.RequirePermission(auth.CanViewContentArtifact)).Get("/api/content-registry/versions/{vid}/artifact", h.GetContentArtifact)
 		r.With(auth.RequirePermission(auth.CanTransitionContent)).Post("/api/content-registry/versions/{vid}/transition", h.TransitionContentVersion)
 		r.With(auth.RequirePermission(auth.CanViewContentMigrationReport)).Get("/api/content-registry/migration-report", h.GetContentMigrationReport)
+		r.With(auth.RequirePermission(auth.CanResolveActorIdentity)).Get("/api/intel/actor-resolutions", h.ListActorResolutions)
+		r.With(auth.RequirePermission(auth.CanResolveActorIdentity)).Post("/api/intel/actor-resolutions/{id}", h.DecideActorResolution)
 
 		// Variant executor — multi-variant technique execution
 		r.With(auth.RequirePermission(auth.CanGenerateVariants)).Post("/api/variants/generate", h.GenerateVariants)
