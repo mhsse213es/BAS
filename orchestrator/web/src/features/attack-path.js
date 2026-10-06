@@ -1551,6 +1551,8 @@ function renderAgentRows() {
 // Row action menus (the "⋮" dropdown in the Agents table Actions column).
 // Only one panel is ever open at a time; toggling re-closes any other open
 // panel first so stale menus never linger behind a newly opened one.
+export function toggleRowMenuById(id, el, event) { toggleRowMenu(event, id); }
+
 export function toggleRowMenu(ev, id) {
   ev.stopPropagation();
   var panel = document.getElementById(id);

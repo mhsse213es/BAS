@@ -1,7 +1,9 @@
 import { state } from '../core/state.js';
 import { apicall } from '../core/api.js';
 import { x } from '../core/escape.js';
+import { on } from '../core/actions.js';
 import { fmtDate, showToast } from '../core/util.js';
+import { closeAllRowMenus } from './attack-path.js';
 import { ROLE } from './shell.js';
 
 
@@ -53,17 +55,17 @@ function renderInitiativesList() {
     var col = initiativeStateColor(it.State);
     var menuId = 'init-menu-' + idx;
     var canDelete = it.State === 'archived' && ROLE === 'admin';
-    return '<tr onclick="openInitiativeDrawer(\'' + x(it.ID) + '\')" class="u-pointer">' +
+    return '<tr' + on('click', 'openInitiativeDrawer', it.ID) + ' class="u-pointer">' +
       '<td>' + x(it.Name) + '</td>' +
       '<td><span class="badge" style="color:' + col + ';border-color:' + col + '">' + initiativeStateLabel(it.State) + '</span></td>' +
       '<td>' + x(it.CreatedBy || '—') + '</td>' +
       '<td>' + x(fmtDate(it.CreatedAt)) + '</td>' +
-      '<td onclick="event.stopPropagation()">' +
+      '<td' + on('click', 'stopEvent') + '>' +
         (canDelete ?
           '<div class="row-menu-wrap">' +
-          '<button class="btn btn-outline btn-sm row-menu-btn" onclick="toggleRowMenu(event,\'' + menuId + '\')" title="Actions" aria-haspopup="true">&#8942;</button>' +
+          '<button class="btn btn-outline btn-sm row-menu-btn"' + on('click', 'toggleRowMenuById', menuId) + ' title="Actions" aria-haspopup="true">&#8942;</button>' +
           '<div class="row-menu-panel" id="' + menuId + '">' +
-            '<button class="row-menu-item row-menu-item-danger" onclick="closeAllRowMenus();initiativeDeleteAction(\'' + x(it.ID) + '\',\'' + x(it.Name) + '\')">&#128465; Delete</button>' +
+            '<button class="row-menu-item row-menu-item-danger"' + on('click', 'initiativeDeleteFromMenu', it.ID, it.Name) + '>&#128465; Delete</button>' +
           '</div>' +
           '</div>' : '') +
       '</td>' +
@@ -113,7 +115,7 @@ function renderInitiativeDrawer(it, progress, jobs) {
           '<td><span class="badge">' + x(j.state) + '</span></td>' +
           '<td>' + x(fmtDate(j.createdAt)) + '</td>' +
           '<td>' + (j.completedAt ? x(fmtDate(j.completedAt)) : '—') + '</td>' +
-          '<td>' + (canDetach ? '<button class="btn btn-outline btn-sm" onclick="initiativeDetachJob(\'' + x(j.id) + '\')">Detach</button>' : '') + '</td>' +
+          '<td>' + (canDetach ? '<button class="btn btn-outline btn-sm"' + on('click', 'initiativeDetachJob', j.id) + '>Detach</button>' : '') + '</td>' +
         '</tr>';
       }).join('')
     : '<tr><td colspan="6" class="empty">No jobs attached yet. This initiative tracks related remediation jobs and their overall progress.</td></tr>';
@@ -124,8 +126,8 @@ function renderInitiativeDrawer(it, progress, jobs) {
       '<span class="tiny muted">Created by ' + x(it.CreatedBy || '—') + ' · ' + x(fmtDate(it.CreatedAt)) + '</span>' +
     '</div>' +
     '<div style="display:flex;gap:0.5rem;margin-bottom:1rem">' +
-      (it.State === 'active' ? '<button class="btn btn-outline btn-sm" onclick="initiativeCloseAction()">Close Initiative</button>' : '') +
-      (it.State === 'closed' ? '<button class="btn btn-outline btn-sm" onclick="initiativeArchiveAction()">Archive Initiative</button>' : '') +
+      (it.State === 'active' ? '<button class="btn btn-outline btn-sm"' + on('click', 'initiativeCloseAction') + '>Close Initiative</button>' : '') +
+      (it.State === 'closed' ? '<button class="btn btn-outline btn-sm"' + on('click', 'initiativeArchiveAction') + '>Archive Initiative</button>' : '') +
     '</div>' +
     '<div id="init-drawer-error" style="margin-bottom:0.85rem"></div>' +
     (it.Description ? '<p style="font-size:0.8rem;color:var(--text-dim);margin-bottom:1.1rem;line-height:1.5">' + x(it.Description) + '</p>' : '') +
@@ -136,7 +138,7 @@ function renderInitiativeDrawer(it, progress, jobs) {
     '</div>' +
     '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.5rem">' +
       '<h4 style="font-size:0.78rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin:0">Jobs</h4>' +
-      (it.State === 'active' ? '<button class="btn btn-outline btn-sm" onclick="openInitiativeAttachDrawer()">+ Attach Job</button>' : '') +
+      (it.State === 'active' ? '<button class="btn btn-outline btn-sm"' + on('click', 'openInitiativeAttachDrawer') + '>+ Attach Job</button>' : '') +
     '</div>' +
     '<div class="tbl-wrap"><table><thead><tr>' +
       '<th>ID</th><th>Type</th><th>State</th><th>Created</th><th>Completed</th><th></th>' +
@@ -213,6 +215,13 @@ export function submitInitiativeCreate() {
   }).catch(function(e) { errEl.innerHTML = '<div class="tiny u-danger">' + x(e.message) + '</div>'; });
 }
 
+export function initiativeDeleteFromMenu(id, name) {
+  closeAllRowMenus();
+  initiativeDeleteAction(id, name);
+}
+
+export function initiativeAttachSelect(el) { state.INIT_ATTACH_SELECTED = el.value; }
+
 export function initiativeDeleteAction(id, name) {
   if (!confirm('Delete "' + name + '"? This cannot be undone.')) return;
   apicall('/api/initiatives/' + encodeURIComponent(id), { method: 'DELETE' }).then(function(res) {
@@ -261,7 +270,7 @@ export function initiativeRenderAttachList() {
   list.innerHTML = filtered.map(function(j) {
     var checked = j.id === state.INIT_ATTACH_SELECTED ? 'checked' : '';
     return '<label style="display:flex;align-items:center;gap:0.5rem;padding:0.5rem 0.75rem;border-bottom:1px solid var(--border);cursor:pointer;font-size:0.78rem">' +
-      '<input type="radio" name="init-attach-radio" value="' + x(j.id) + '" ' + checked + ' onchange="INIT_ATTACH_SELECTED=this.value">' +
+      '<input type="radio" name="init-attach-radio" value="' + x(j.id) + '" ' + checked + on('change', 'initiativeAttachSelect') + '>' +
       '<span style="font-family:var(--font-mono);color:var(--muted)">' + x(j.id.slice(0, 8)) + '</span>' +
       '<span>' + x(j.type) + '</span>' +
       '<span class="badge">' + x(j.state) + '</span>' +
