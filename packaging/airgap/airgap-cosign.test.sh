@@ -637,7 +637,8 @@ else
   # GNUPGHOME ($GNUPGHOME holds A and attacker B, B's secret key included) ──
   SNIP="$REPO/packaging/airgap/trust-bootstrap.sh"
   awk '/<a id="trust-bootstrap">/{f=1} f && /^```bash/{g=1; next} g && /^```/{exit} g' "$REPO/docs/guides/installation.md" | tr -d '\r' > "$T/doc-snip.txt"
-  cmp -s "$T/doc-snip.txt" "$SNIP" && pass "trust bootstrap: installation.md shows exactly the canonical snippet" || { fail "trust bootstrap: doc snippet drifted from trust-bootstrap.sh"; diff "$T/doc-snip.txt" "$SNIP"; }
+  grep -v '^# shellcheck ' "$SNIP" > "$T/canon-snip.txt"   # the file's only extra line is the shellcheck directive
+  cmp -s "$T/doc-snip.txt" "$T/canon-snip.txt" && pass "trust bootstrap: installation.md shows exactly the canonical snippet" || { fail "trust bootstrap: doc snippet drifted from trust-bootstrap.sh"; diff "$T/doc-snip.txt" "$T/canon-snip.txt"; }
   grep -q 'packaging/airgap/trust-bootstrap.sh' "$REPO/packaging/airgap/pack.sh" && pass "trust bootstrap: pack.sh prints the canonical file" || fail "pack.sh has its own copy of the snippet"
   ! grep -rnF 'GNUPGHOME=$(mktemp' "$REPO/docs/guides/installation.md" "$REPO/packaging/airgap" "$REPO/packaging/build.sh" | grep -v airgap-cosign.test.sh | grep -q . && pass "trust bootstrap: the broken GNUPGHOME= prefix form is gone" || fail "broken GNUPGHOME= prefix form still present"
   TB="$T/tb"; rm -rf "$TB"; mkdir -p "$TB/tmp"
