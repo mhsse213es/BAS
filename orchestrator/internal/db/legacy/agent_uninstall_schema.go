@@ -1,10 +1,8 @@
-package db
+package legacy
 
 import (
 	"context"
-	"github.com/audspect/bas/internal/db/legacy"
-
-	"github.com/jackc/pgx/v5/pgxpool"
+	"fmt"
 )
 
 // EnsureAgentUninstallSchema adds the columns needed to track a dispatched
@@ -19,6 +17,19 @@ import (
 // computes a live timeout message when neither is set but the agent has
 // been stuck in 'uninstalling' too long (see models.EffectiveUninstallError)
 // -- that computation never writes to these columns.
-func EnsureAgentUninstallSchema(ctx context.Context, pool *pgxpool.Pool) error {
-	return legacy.EnsureAgentUninstallSchema(ctx, pool)
+func EnsureAgentUninstallSchema(ctx context.Context, db DB) error {
+	stmts := []string{
+		`ALTER TABLE agents ADD COLUMN IF NOT EXISTS uninstall_requested_by text`,
+		`ALTER TABLE agents ADD COLUMN IF NOT EXISTS uninstall_requested_at timestamptz`,
+		`ALTER TABLE agents ADD COLUMN IF NOT EXISTS uninstall_reason text`,
+		`ALTER TABLE agents ADD COLUMN IF NOT EXISTS uninstall_prior_state text`,
+		`ALTER TABLE agents ADD COLUMN IF NOT EXISTS uninstall_error text`,
+		`ALTER TABLE agents ADD COLUMN IF NOT EXISTS uninstall_error_at timestamptz`,
+	}
+	for _, s := range stmts {
+		if _, err := db.Exec(ctx, s); err != nil {
+			return fmt.Errorf("agent uninstall schema: %w", err)
+		}
+	}
+	return nil
 }

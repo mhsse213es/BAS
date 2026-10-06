@@ -2,7 +2,7 @@ package db
 
 import (
 	"context"
-	"fmt"
+	"github.com/audspect/bas/internal/db/legacy"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -17,21 +17,5 @@ import (
 // descendant) has to be rejected at the application layer regardless, since a
 // plain self-referencing FK can't express "no cycles."
 func EnsureAgentGroupSchema(ctx context.Context, pool *pgxpool.Pool) error {
-	stmts := []string{
-		`CREATE TABLE IF NOT EXISTS agent_groups (
-			id         BIGSERIAL PRIMARY KEY,
-			name       TEXT NOT NULL,
-			parent_id  BIGINT,
-			created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-		)`,
-		`CREATE INDEX IF NOT EXISTS idx_agent_groups_parent_id ON agent_groups(parent_id)`,
-		`ALTER TABLE agents ADD COLUMN IF NOT EXISTS group_id BIGINT`,
-		`CREATE INDEX IF NOT EXISTS idx_agents_group_id ON agents(group_id)`,
-	}
-	for _, s := range stmts {
-		if _, err := pool.Exec(ctx, s); err != nil {
-			return fmt.Errorf("agent group schema: %w", err)
-		}
-	}
-	return nil
+	return legacy.EnsureAgentGroupSchema(ctx, pool)
 }
