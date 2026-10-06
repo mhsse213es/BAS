@@ -148,3 +148,18 @@ jobs:
           path: |
             orchestrator/web/test-results
             orchestrator/web/playwright-report
+
+  web-visual:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: G1e visual equivalence (baseline build vs HEAD)
+        run: bash orchestrator/web/tools/visual.sh
+      - name: Upload visual artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: visual-artifacts
+          path: orchestrator/web/.visual/results
