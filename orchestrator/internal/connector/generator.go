@@ -20,6 +20,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/audspect/bas/internal/contentregistry"
+	"github.com/audspect/bas/internal/reporting/attackdata"
 	"github.com/audspect/bas/internal/scenario"
 )
 
@@ -59,6 +60,8 @@ type Generator struct {
 	// componentVersions reads the pinned catalog versions recorded in each
 	// new version's generation metadata (spec 4.4). nil => unknown.
 	componentVersions func(context.Context) (scenario.ComponentVersions, error)
+	// attackMeta overrides attackdata.DatasetMeta (tests).
+	attackMeta func() attackdata.Meta
 }
 
 // WithComponentVersions sets the catalog-version source for generation
@@ -367,7 +370,15 @@ const (
 	reasonNoCaldera   = "no Caldera version source exists (spec 4.9)"
 	reasonNoART       = "art_content_meta has no source_version recorded"
 	reasonARTReadFail = "art_content_meta could not be read at generation time"
-	reasonNoAttack    = "the bundled ATT&CK enrichment dataset does not record its STIX bundle version"
+	reasonNoAttack    = "dataset version unavailable"
+)
+
+// What the embedded ATT&CK dataset influenced in a generated candidate, so
+// the record is precise: the dataset canonicalizes actors (actor_merge.go /
+// otx.go via ATT&CK groups); tactics come from tacticsForTechniquePrefix.
+const (
+	attackDatasetUse = "actor canonicalization (ATT&CK groups)"
+	tacticMapping    = "static prefix table (mapping_version)"
 )
 
 // generationMeta is the immutable generation JSON stored on the new version
@@ -390,13 +401,25 @@ func (g *Generator) generationMeta(a ThreatActor, cv scenario.ComponentVersions,
 	} else {
 		comp["caldera"], comp["caldera_reason"] = nil, reasonNoCaldera
 	}
-	return map[string]any{
+	out := map[string]any{
 		"generator": generatorName, "generator_version": generatorVersion, "mapping_version": mappingVersion,
 		"parameters":         map[string]any{"min_techniques": minTechniques},
 		"inputs":             generationInputs(a),
 		"component_versions": comp,
-		"attack_version":     nil, "attack_version_reason": reasonNoAttack,
+		"attack_dataset_use": attackDatasetUse,
+		"tactic_mapping":     tacticMapping,
 	}
+	am := attackdata.DatasetMeta
+	if g.attackMeta != nil {
+		am = g.attackMeta
+	}
+	if m := am(); m.Known() {
+		out["attack_version"] = m.AttackVersion
+		out["attack_dataset_sha256"] = m.SourceBundleSHA256
+	} else {
+		out["attack_version"], out["attack_version_reason"] = nil, reasonNoAttack
+	}
+	return out
 }
 
 func generationKey(a ThreatActor) string {

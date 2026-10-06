@@ -8,6 +8,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/audspect/bas/internal/contentregistry"
+	"github.com/audspect/bas/internal/reporting/attackdata"
+	"github.com/audspect/bas/internal/scenario"
 	"github.com/audspect/bas/internal/testutil"
 )
 
@@ -52,13 +54,28 @@ func TestGenerator_GenerationMetadataStoredOnDraft(t *testing.T) {
 		if v, ok := cv["caldera"]; !ok || v != nil || cv["caldera_reason"] == "" || cv["caldera_reason"] == nil {
 			t.Fatalf("component_versions.caldera must be null with a reason: %s", raw)
 		}
-		if v, ok := gen["attack_version"]; !ok {
-			t.Fatalf("attack_version missing: %s", raw)
-		} else if v == nil && (gen["attack_version_reason"] == nil || gen["attack_version_reason"] == "") {
-			t.Fatalf("null attack_version needs a reason: %s", raw)
+		if gen["attack_version"] != "16.1" ||
+			gen["attack_dataset_sha256"] != "8423d8dac3fc2feb825bb07d26e5f5d905e08a88f6fe4652cc20834cbe982813" {
+			t.Fatalf("attack dataset: %s", raw)
+		}
+		if _, ok := gen["attack_version_reason"]; ok {
+			t.Fatalf("a known version carries no reason: %s", raw)
+		}
+		if gen["attack_dataset_use"] != "actor canonicalization (ATT&CK groups)" ||
+			gen["tactic_mapping"] != "static prefix table (mapping_version)" {
+			t.Fatalf("dataset influence not recorded: %s", raw)
 		}
 		if gen["generator_version"] != generatorVersion {
 			t.Fatalf("generator_version: %s", raw)
 		}
 	})
+}
+
+func TestGenerationMeta_UnknownAttackDataset(t *testing.T) {
+	g := NewGenerator(t.TempDir(), nil, nil, nil)
+	g.attackMeta = func() attackdata.Meta { return attackdata.Meta{SourceBundleSHA256: "ab"} }
+	gen := g.generationMeta(ThreatActor{Name: "X"}, scenario.ComponentVersions{}, nil)
+	if v, ok := gen["attack_version"]; !ok || v != nil || gen["attack_version_reason"] != "dataset version unavailable" {
+		t.Fatalf("unknown dataset: %v", gen)
+	}
 }
