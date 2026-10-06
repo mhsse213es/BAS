@@ -351,6 +351,7 @@ export function toggleUserMenu(e) {
   if (e) e.stopPropagation();
   document.getElementById('user-menu-panel').classList.toggle('open');
 }
+export function toggleUserMenuFromEvent(el, event) { toggleUserMenu(event); }
 export function closeUserMenu() {
   var p = document.getElementById('user-menu-panel');
   if (p) p.classList.remove('open');
@@ -404,6 +405,9 @@ export function goToProfile() {
     document.getElementById('profile-permissions').textContent = 'Unable to load permissions.';
   });
 }
+export function goToProfileFromMenu() { closeUserMenu(); goToProfile(); }
+export function openSettingsFromMenu() { closeUserMenu(); showTab('settings'); }
+export function doLogoutFromMenu() { closeUserMenu(); doLogout(); }
 
 // activateTab toggles which tab view + nav item is visible, without running any
 // data loaders — so callers like openCampaignDetail can switch to a tab and then

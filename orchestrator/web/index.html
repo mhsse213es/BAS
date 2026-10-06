@@ -256,15 +256,15 @@
         </div>
         <span id="role-badge" class="role-chip">—</span>
         <div class="user-menu" id="user-menu">
-          <div class="user-avatar" id="user-avatar" onclick="toggleUserMenu(event)" title="Account"></div>
+          <div class="user-avatar" id="user-avatar" data-on-click="toggleUserMenuFromEvent" title="Account"></div>
           <div class="user-menu-panel" id="user-menu-panel">
             <div class="user-menu-hdr">
               <div class="um-name" id="um-username">—</div>
               <div class="um-role" id="um-role">—</div>
             </div>
-            <button class="user-menu-item" onclick="closeUserMenu();goToProfile()">Go to Profile</button>
-            <button class="user-menu-item" onclick="closeUserMenu();showTab('settings')">Settings</button>
-            <button class="user-menu-item danger" onclick="closeUserMenu();doLogout()">Sign Out</button>
+            <button class="user-menu-item" data-on-click="goToProfileFromMenu">Go to Profile</button>
+            <button class="user-menu-item" data-on-click="openSettingsFromMenu">Settings</button>
+            <button class="user-menu-item danger" data-on-click="doLogoutFromMenu">Sign Out</button>
           </div>
         </div>
       </div>
@@ -1274,7 +1274,7 @@
               <option value="darwin">macOS</option>
             </select>
             <button id="sc-new-btn" class="btn btn-primary btn-sm" style="width:auto;padding:0.45rem 0.9rem" data-on-click="openBuilder" data-args="[null]">+ New Scenario</button>
-            <button id="sc-upload-btn" class="btn btn-outline btn-sm" onclick="document.getElementById('sc-upload-file').click()">&#8657; Upload YAML</button>
+            <button id="sc-upload-btn" class="btn btn-outline btn-sm" data-on-click="pickScenarioUploadFile">&#8657; Upload YAML</button>
             <input type="file" id="sc-upload-file" accept=".yaml,.yml" style="display:none" data-on-change="uploadScenarioFile">
             <button class="btn btn-outline btn-sm" data-on-click="loadScenarios">Refresh</button>
           </div>
@@ -1308,9 +1308,9 @@
               <span id="adversary-cnt" class="cnt" style="font-size:0.8rem;background:var(--elevated);padding:2px 8px;border-radius:12px;border:1px solid var(--border)">0</span>
             </h3>
             <div style="display:flex;gap:0.4rem;align-items:center">
-              <input type="search" id="adv-search" placeholder="Search actor…" data-on-input="renderAdversaryLibrary" onclick="event.stopPropagation()"
+              <input type="search" id="adv-search" placeholder="Search actor…" data-on-input="renderAdversaryLibrary" data-on-click="stopEvent"
                      style="padding:0.4rem 0.65rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:0.8rem;font-family:inherit;min-width:160px">
-              <button class="btn btn-outline btn-sm" onclick="event.stopPropagation();loadAdversaries()">Refresh</button>
+              <button class="btn btn-outline btn-sm" data-on-click="loadAdversariesStop">Refresh</button>
             </div>
           </div>
           <div id="adversary-body">
@@ -1361,7 +1361,7 @@
           <div id="tmpl-run-os-warn" style="margin:0.5rem 0 0.85rem;font-size:0.76rem"></div>
 
           <label style="font-size:0.72rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:700;display:block;margin-bottom:0.35rem">Execution Mode</label>
-          <select id="tmpl-run-mode" onchange="renderTmplWarn();renderTmplOSCompat();" style="width:100%;padding:0.5rem;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:6px;margin-bottom:0.85rem;font-size:0.8rem">
+          <select id="tmpl-run-mode" data-on-change="tmplRunModeChange" style="width:100%;padding:0.5rem;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:6px;margin-bottom:0.85rem;font-size:0.8rem">
             <option value="posture">Posture — read-only checks only</option>
             <option value="telemetry" selected>Telemetry — real execution, production-safe</option>
             <option value="lab">Lab — full fidelity (isolated range only)</option>
@@ -1737,7 +1737,7 @@
           <div class="dash-panel-body" style="padding:1rem">
             <div style="display:flex;align-items:center;justify-content:space-between;gap:0.5rem;margin-bottom:0.35rem">
               <div style="font-weight:700;color:var(--text)">Asset Tagging — Crown Jewels &amp; Segments</div>
-              <button class="btn btn-outline btn-sm" onclick="document.getElementById('ap-assets').style.display='none'">Close</button>
+              <button class="btn btn-outline btn-sm" data-on-click="apAssetsClose">Close</button>
             </div>
             <div class="tiny muted" style="margin-bottom:0.75rem">Tag the high-value assets the collectors can't infer. A crown-jewel tag makes a host show up in crown-jewel exposure and scoring; tier-0 marks a custom domain-compromise target. Criticality/Flags feed the Exposure Explorer's risk score — see the Exposure Explorer tab. Tags follow the host across reachability and SharpHound identities.</div>
             <div class="tbl-wrap">
@@ -1795,7 +1795,7 @@
                 <button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger)" data-on-click="_apCancelJob">&#10005; Cancel Collection</button>
               </div>
               <div id="ap-done-actions" style="display:none;margin-top:1rem;gap:0.5rem;flex-wrap:wrap">
-                <button class="btn btn-primary btn-sm" onclick="loadAttackPath();apCollectClose()">View Results</button>
+                <button class="btn btn-primary btn-sm" data-on-click="apCollectViewResults">View Results</button>
                 <button id="ap-retry-btn" class="btn btn-outline btn-sm" style="display:none">&#8635; Retry</button>
                 <button class="btn btn-outline btn-sm" data-on-click="apCollectClose">Close</button>
               </div>
@@ -1807,7 +1807,7 @@
           <div class="dash-panel-body" style="padding:1rem;max-width:560px">
             <div style="display:flex;align-items:center;justify-content:space-between;gap:0.5rem;margin-bottom:0.35rem">
               <div style="font-weight:700;color:var(--text)">Periodic Collection Schedule</div>
-              <button class="btn btn-outline btn-sm" onclick="document.getElementById('ap-schedule').style.display='none'">Close</button>
+              <button class="btn btn-outline btn-sm" data-on-click="apScheduleClose">Close</button>
             </div>
             <div class="tiny muted" style="margin-bottom:0.75rem">Automatically re-dispatch attack-path collection to all connected agents on a recurring interval. The same targets and SharpHound setting are reused each run.</div>
             <label style="display:flex;align-items:center;gap:0.45rem;font-size:0.8rem;color:var(--text);margin-bottom:0.75rem;cursor:pointer">
@@ -1825,7 +1825,7 @@
             <div id="ap-sched-last" class="tiny muted" style="margin-bottom:0.6rem"></div>
             <div style="display:flex;gap:0.5rem">
               <button class="btn btn-primary btn-sm" data-on-click="saveAPSchedule">Save</button>
-              <button class="btn btn-outline btn-sm" onclick="document.getElementById('ap-schedule').style.display='none'">Cancel</button>
+              <button class="btn btn-outline btn-sm" data-on-click="apScheduleClose">Cancel</button>
             </div>
           </div>
         </div>
@@ -2133,7 +2133,7 @@
             <option value="expired">Expired</option>
             <option value="archived">Archived</option>
           </select>
-          <input type="text" id="ioc-filter-search" placeholder="Search value…" onkeydown="if(event.key==='Enter')loadIOCRegistry()" style="padding:0.35rem 0.6rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:0.78rem;font-family:inherit;min-width:200px">
+          <input type="text" id="ioc-filter-search" placeholder="Search value…" data-on-keydown="loadIOCRegistryOnEnter" style="padding:0.35rem 0.6rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:0.78rem;font-family:inherit;min-width:200px">
           <button class="btn btn-outline btn-sm" data-on-click="loadIOCRegistry">Search</button>
           <label style="display:flex;align-items:center;gap:0.35rem;font-size:0.78rem;color:var(--muted);cursor:pointer">
             <input type="checkbox" id="ioc-filter-suppressed" data-on-change="loadIOCRegistry"> Show suppressed
@@ -3633,7 +3633,7 @@
       <div id="em-sweep-progress-actions" style="margin-bottom:0.75rem"></div>
       <ul id="em-sweep-progress-list" style="list-style:none;margin:0;padding:0"></ul>
       <div style="margin-top:1rem;display:flex;justify-content:flex-end">
-        <button class="btn btn-outline-red btn-sm" id="em-sweep-stop-btn" onclick="stopEMSweep(_emSweepCurrentId)">&#9632; Stop Sweep</button>
+        <button class="btn btn-outline-red btn-sm" id="em-sweep-stop-btn" data-on-click="stopEMSweepCurrent">&#9632; Stop Sweep</button>
       </div>
     </div>
   </div>

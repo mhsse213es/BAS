@@ -679,6 +679,9 @@ export function apCollectClose() {
   document.getElementById('ap-progress').style.display = 'none';
   document.getElementById('ap-done-actions').style.display = 'none';
 }
+export function apCollectViewResults() { loadAttackPath(); apCollectClose(); }
+export function apAssetsClose() { document.getElementById('ap-assets').style.display = 'none'; }
+export function apScheduleClose() { document.getElementById('ap-schedule').style.display = 'none'; }
 
 export function openAPCollect() {
   var sel = document.getElementById('ap-agent');

@@ -772,3 +772,4 @@ export function stopEMSweep(sweepId) {
     loadRuns();
   }).catch(function(e) { showToast(e.message, 'err'); });
 }
+export function stopEMSweepCurrent() { stopEMSweep(state._emSweepCurrentId); }

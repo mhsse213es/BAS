@@ -2051,6 +2051,7 @@ export function uploadScenarioFile(input) {
   };
   reader.readAsText(file);
 }
+export function pickScenarioUploadFile() { document.getElementById('sc-upload-file').click(); }
 
 export function downloadBuilderYaml() {
   var sc = collectBuilder();

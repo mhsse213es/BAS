@@ -151,6 +151,7 @@ export function loadIOCRegistry() {
     tbody.innerHTML = '<tr><td colspan="9" class="empty">Failed to load: ' + x(e.message || 'unknown error') + '</td></tr>';
   });
 }
+export function loadIOCRegistryOnEnter(el, event) { if (event.key === 'Enter') loadIOCRegistry(); }
 
 var IOC_TYPE_LABEL_REGISTRY = {
   file_hash: 'File hash', domain: 'Domain', url: 'URL', ip: 'IP', registry_key: 'Registry key',

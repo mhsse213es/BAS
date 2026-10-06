@@ -369,6 +369,7 @@ export function renderTmplOSCompat() {
     x(skipLines) + ' (require Windows).' + x(deadNote) + '</div>';
   if (btn) btn.disabled = false;
 }
+export function tmplRunModeChange() { renderTmplWarn(); renderTmplOSCompat(); }
 
 export function confirmTmplRun() {
   var targets = tmplResolvedTargetAgents();
@@ -439,6 +440,7 @@ export function loadAdversaries() {
     renderAdversaryLibrary();
   }).catch(function() { /* Caldera not configured — silently skip */ });
 }
+export function loadAdversariesStop(el, event) { event.stopPropagation(); loadAdversaries(); }
 
 export function renderAdversaryLibrary() {
   var grid = document.getElementById('adv-grid');
