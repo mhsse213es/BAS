@@ -1,8 +1,8 @@
 package connector
 
 import (
-	"fmt"
 	"context"
+	"fmt"
 	"log"
 	"os"
 	"path/filepath"
