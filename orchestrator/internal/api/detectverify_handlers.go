@@ -3,11 +3,13 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log"
 	"net/http"
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/jackc/pgx/v5"
 
 	"github.com/audspect/bas/internal/detectverify"
 	"github.com/audspect/bas/internal/models"
@@ -131,17 +133,22 @@ func (h *Handler) UpdateDetectionConnector(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	// Preserve masked sensitive values (UI returns "***" for secrets it can't show).
-	var existingSecret, existingToken string
-	h.db.QueryRow(r.Context(), `SELECT client_secret, api_token FROM detection_connectors WHERE id=$1`, id).
-		Scan(&existingSecret, &existingToken)
+	var existingSecret, existingToken, provider string
+	if err := h.db.QueryRow(r.Context(), `SELECT client_secret, api_token, provider FROM detection_connectors WHERE id=$1`, id).
+		Scan(&existingSecret, &existingToken, &provider); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			jsonError(w, "connector not found", http.StatusNotFound)
+		} else {
+			jsonError(w, err.Error(), http.StatusInternalServerError)
+		}
+		return
+	}
 	if req.ClientSecret == "***" {
 		req.ClientSecret = existingSecret
 	}
 	if req.APIToken == "***" {
 		req.APIToken = existingToken
 	}
-	var provider string
-	h.db.QueryRow(r.Context(), `SELECT provider FROM detection_connectors WHERE id=$1`, id).Scan(&provider)
 	if provider == "elastic" {
 		if err := detectverify.ValidateElasticAuth(detectverify.Config{ClientID: req.ClientID, ClientSecret: req.ClientSecret, APIToken: req.APIToken}); err != nil {
 			jsonError(w, err.Error(), http.StatusBadRequest)

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -16,6 +17,13 @@ import (
 // every space.
 const elasticAlertsPath = "/.alerts-security.alerts-*/_search"
 
+// elasticSearchQuery makes every search strict: a partial result or an
+// unreadable/missing index must be an error, never an empty (NotDetected) one.
+const elasticSearchQuery = "allow_partial_search_results=false&allow_no_indices=false&expand_wildcards=open,hidden"
+
+// elasticErrBodyMax caps how much of a response body is echoed into errors.
+const elasticErrBodyMax = 4 << 10
+
 // elasticMaxPages bounds the search_after loop so a runaway query fails
 // loudly rather than looping forever or silently truncating.
 const elasticMaxPages = 50
@@ -24,6 +32,10 @@ const elasticMaxPages = 50
 // the Elasticsearch search API. Exactly one auth mode is configured:
 // API key (Config.APIToken, sent as "Authorization: ApiKey <value>") or
 // basic auth (Config.ClientID = username, Config.ClientSecret = password).
+//
+// Minimum supported version: Elastic Stack 8.x (alerts-as-data indices
+// `.alerts-security.alerts-<space>`; 7.x used the legacy `.siem-signals-*`
+// indices and is not supported).
 //
 // Host and window scoping are done server-side in the query; technique
 // matching is left to matchAlerts. InvestigationURL is left empty: a Kibana
@@ -55,14 +67,15 @@ func newElasticConnector(cfg Config) *elasticConnector {
 // ValidateElasticAuth enforces that exactly one auth mode is configured.
 // Also used by the API create/update validation.
 func ValidateElasticAuth(cfg Config) error {
-	hasKey := cfg.APIToken != ""
-	hasBasic := cfg.ClientID != "" || cfg.ClientSecret != ""
+	tok, user, pw := strings.TrimSpace(cfg.APIToken), strings.TrimSpace(cfg.ClientID), strings.TrimSpace(cfg.ClientSecret)
+	hasKey := tok != ""
+	hasBasic := user != "" || pw != ""
 	switch {
 	case hasKey && hasBasic:
 		return fmt.Errorf("elastic: configure either an API key or username/password, not both")
 	case !hasKey && !hasBasic:
 		return fmt.Errorf("elastic: no credentials configured: set an API key or username and password")
-	case !hasKey && (cfg.ClientID == "" || cfg.ClientSecret == ""):
+	case !hasKey && (user == "" || pw == ""):
 		return fmt.Errorf("elastic: basic auth requires both username and password")
 	}
 	return nil
@@ -82,6 +95,9 @@ func (e *elasticConnector) Verify(ctx context.Context, req VerifyRequest) (Verif
 	if err := e.preflight(); err != nil {
 		return VerifyResult{}, err
 	}
+	if strings.TrimSpace(req.HostName) == "" && net.ParseIP(strings.TrimSpace(req.HostIP)) == nil {
+		return VerifyResult{}, fmt.Errorf("elastic: no host identity to scope the query")
+	}
 	var alerts []normalizedAlert
 	var searchAfter []any
 	for page := 0; ; page++ {
@@ -93,7 +109,11 @@ func (e *elasticConnector) Verify(ctx context.Context, req VerifyRequest) (Verif
 			return VerifyResult{}, err
 		}
 		for _, h := range hits {
-			alerts = append(alerts, normalizeElasticHit(h))
+			a, err := normalizeElasticHit(h)
+			if err != nil {
+				return VerifyResult{}, err
+			}
+			alerts = append(alerts, a)
 		}
 		if len(hits) < e.pageSize {
 			break
@@ -118,20 +138,36 @@ func (e *elasticConnector) TestConnection(ctx context.Context) error {
 }
 
 func (e *elasticConnector) buildQuery(req VerifyRequest, searchAfter []any) map[string]any {
+	tsRange := func(field string) map[string]any {
+		return map[string]any{"range": map[string]any{field: map[string]any{
+			"gte":    req.WindowStart.UTC().Format(time.RFC3339Nano),
+			"lte":    req.WindowEnd.UTC().Format(time.RFC3339Nano),
+			"format": "strict_date_optional_time",
+		}}}
+	}
+	var hostShould []any
+	if host := strings.TrimSpace(req.HostName); host != "" {
+		hostShould = append(hostShould,
+			map[string]any{"term": map[string]any{"host.name": map[string]any{"value": host, "case_insensitive": true}}},
+			map[string]any{"term": map[string]any{"host.hostname": map[string]any{"value": host, "case_insensitive": true}}},
+			// ECS host.name is often the FQDN while agents report the short name.
+			map[string]any{"prefix": map[string]any{"host.name": map[string]any{"value": host + ".", "case_insensitive": true}}},
+		)
+	}
+	// An invalid value against an ip field is a 400, so only send valid IPs.
+	if ip := strings.TrimSpace(req.HostIP); net.ParseIP(ip) != nil {
+		hostShould = append(hostShould, map[string]any{"term": map[string]any{"host.ip": ip}})
+	}
 	q := map[string]any{
 		"size": e.pageSize,
 		"query": map[string]any{"bool": map[string]any{"filter": []any{
-			map[string]any{"range": map[string]any{"@timestamp": map[string]any{
-				"gte": req.WindowStart.UTC().Format(time.RFC3339Nano),
-				"lte": req.WindowEnd.UTC().Format(time.RFC3339Nano),
-			}}},
+			// @timestamp is when the rule ran; original_time is when the source
+			// event happened. Either falling in the window counts.
 			map[string]any{"bool": map[string]any{
-				"should": []any{
-					map[string]any{"term": map[string]any{"host.name": req.HostName}},
-					map[string]any{"term": map[string]any{"host.hostname": req.HostName}},
-				},
+				"should":               []any{tsRange("@timestamp"), tsRange("kibana.alert.original_time")},
 				"minimum_should_match": 1,
 			}},
+			map[string]any{"bool": map[string]any{"should": hostShould, "minimum_should_match": 1}},
 		}}},
 		"sort": []any{
 			map[string]any{"@timestamp": "asc"},
@@ -139,7 +175,8 @@ func (e *elasticConnector) buildQuery(req VerifyRequest, searchAfter []any) map[
 		},
 		"_source": []string{
 			"@timestamp", "kibana.alert.uuid", "kibana.alert.rule.name", "kibana.alert.severity",
-			"kibana.alert.rule.threat", "kibana.alert.workflow_status", "host.name", "host.hostname",
+			"kibana.alert.rule.threat", "kibana.alert.workflow_status", "kibana.alert.original_time",
+			"threat", "host.name", "host.hostname",
 		},
 	}
 	if len(searchAfter) > 0 {
@@ -159,7 +196,7 @@ func (e *elasticConnector) search(ctx context.Context, body map[string]any) ([]e
 	if err != nil {
 		return nil, err
 	}
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, e.baseURL+elasticAlertsPath, bytes.NewReader(b))
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, e.baseURL+elasticAlertsPath+"?"+elasticSearchQuery, bytes.NewReader(b))
 	if err != nil {
 		return nil, err
 	}
@@ -176,15 +213,24 @@ func (e *elasticConnector) search(ctx context.Context, body map[string]any) ([]e
 	}
 	defer resp.Body.Close()
 	data, _ := io.ReadAll(io.LimitReader(resp.Body, 32<<20))
+	snippet := data
+	if len(snippet) > elasticErrBodyMax {
+		snippet = append(append([]byte{}, snippet[:elasticErrBodyMax]...), "...(truncated)"...)
+	}
 	switch {
 	case resp.StatusCode == http.StatusUnauthorized:
-		return nil, fmt.Errorf("elastic search alerts: authentication failed (HTTP 401): %s", data)
+		return nil, fmt.Errorf("elastic search alerts: authentication failed (HTTP 401): %s", snippet)
 	case resp.StatusCode == http.StatusForbidden:
-		return nil, fmt.Errorf("elastic search alerts: credentials lack read privilege on .alerts-security.alerts-* (HTTP 403): %s", data)
+		return nil, fmt.Errorf("elastic search alerts: credentials lack read privilege on .alerts-security.alerts-* (HTTP 403): %s", snippet)
 	case resp.StatusCode >= 400:
-		return nil, fmt.Errorf("elastic search alerts: HTTP %d: %s", resp.StatusCode, data)
+		return nil, fmt.Errorf("elastic search alerts: HTTP %d: %s", resp.StatusCode, snippet)
 	}
 	var out struct {
+		TimedOut bool `json:"timed_out"`
+		Shards   struct {
+			Total  int `json:"total"`
+			Failed int `json:"failed"`
+		} `json:"_shards"`
 		Hits struct {
 			Hits []elasticHit `json:"hits"`
 		} `json:"hits"`
@@ -192,15 +238,27 @@ func (e *elasticConnector) search(ctx context.Context, body map[string]any) ([]e
 	if err := json.Unmarshal(data, &out); err != nil {
 		return nil, fmt.Errorf("elastic: parse search response: %w", err)
 	}
+	// A 200 can still be a partial or empty view; never let that read as
+	// "no alerts".
+	switch {
+	case out.TimedOut:
+		return nil, fmt.Errorf("elastic search alerts: search timed out; results are incomplete")
+	case out.Shards.Failed > 0:
+		return nil, fmt.Errorf("elastic search alerts: %d of %d shards failed; results are incomplete", out.Shards.Failed, out.Shards.Total)
+	case out.Shards.Total == 0:
+		return nil, fmt.Errorf("elastic: no Elastic Security alerts index visible to these credentials (check read privilege on .alerts-security.alerts-* and the Kibana space)")
+	}
 	return out.Hits.Hits, nil
 }
 
 // normalizeElasticHit maps one alert document to the shared shape. Techniques
 // are the union of technique ids and subtechnique ids from the rule's threat
 // mapping; matchAlerts decides what counts as a match.
-func normalizeElasticHit(h elasticHit) normalizedAlert {
+func normalizeElasticHit(h elasticHit) (normalizedAlert, error) {
 	var src map[string]any
-	_ = json.Unmarshal(h.Source, &src)
+	if err := json.Unmarshal(h.Source, &src); err != nil {
+		return normalizedAlert{}, fmt.Errorf("elastic: malformed alert document %q: %w", h.ID, err)
+	}
 
 	a := normalizedAlert{
 		AlertID:  h.ID,
@@ -210,8 +268,13 @@ func normalizeElasticHit(h elasticHit) normalizedAlert {
 	if u := elasticString(src, "kibana.alert.uuid"); u != "" {
 		a.AlertID = u
 	}
-	if ts := elasticString(src, "@timestamp"); ts != "" {
-		a.Timestamp, _ = time.Parse(time.RFC3339Nano, ts)
+	for _, f := range []string{"@timestamp", "kibana.alert.original_time"} {
+		if ts := elasticString(src, f); ts != "" {
+			if t, err := time.Parse(time.RFC3339Nano, ts); err == nil {
+				a.Timestamp = t
+				break
+			}
+		}
 	}
 	seen := map[string]bool{}
 	add := func(ids []string) {
@@ -226,6 +289,9 @@ func normalizeElasticHit(h elasticHit) normalizedAlert {
 	// rule threat mapping is an array of {technique:[{id, subtechnique:[{id}]}]}.
 	add(elasticStrings(src, "kibana.alert.rule.threat.technique.id"))
 	add(elasticStrings(src, "kibana.alert.rule.threat.technique.subtechnique.id"))
+	// ECS threat.* (Elastic Defend alerts carry their ATT&CK ids here).
+	add(elasticStrings(src, "threat.technique.id"))
+	add(elasticStrings(src, "threat.technique.subtechnique.id"))
 	for _, th := range elasticObjects(elasticLookup(src, "kibana.alert.rule.threat")) {
 		for _, tech := range elasticObjects(th["technique"]) {
 			add(elasticStrings(tech, "id"))
@@ -240,7 +306,7 @@ func normalizeElasticHit(h elasticHit) normalizedAlert {
 		"workflowStatus": elasticString(src, "kibana.alert.workflow_status"),
 	})
 	a.RawJSON = raw
-	return a
+	return a, nil
 }
 
 // elasticLookup resolves a dotted path against either a flattened key or a

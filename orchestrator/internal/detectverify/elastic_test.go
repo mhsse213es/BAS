@@ -53,7 +53,7 @@ func elasticHitJSON(id string, ts time.Time, techs ...string) map[string]any {
 }
 
 func elasticResp(hits ...map[string]any) string {
-	b, _ := json.Marshal(map[string]any{"hits": map[string]any{"hits": hits}})
+	b, _ := json.Marshal(map[string]any{"timed_out": false, "_shards": map[string]any{"total": 1, "failed": 0}, "hits": map[string]any{"hits": hits}})
 	return string(b)
 }
 
@@ -213,7 +213,7 @@ func TestNormalizeElasticHit_FlattenedKeys(t *testing.T) {
 	h := elasticHit{ID: "d", Source: json.RawMessage(`{"@timestamp":"2026-10-06T09:00:00.123Z",
 		"kibana.alert.rule.threat.technique.id":["T1003"],
 		"kibana.alert.rule.threat.technique.subtechnique.id":["T1003.001"]}`)}
-	a := normalizeElasticHit(h)
+	a, _ := normalizeElasticHit(h)
 	if !containsTechnique(a.Techniques, "T1003") || !containsTechnique(a.Techniques, "T1003.001") {
 		t.Errorf("techniques = %v", a.Techniques)
 	}

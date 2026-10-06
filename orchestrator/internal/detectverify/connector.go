@@ -1,5 +1,5 @@
-// Package detectverify queries Microsoft Sentinel and Microsoft Defender XDR
-// for whether they detected a run's executed techniques, then writes the
+// Package detectverify queries detection providers (Sentinel, Defender XDR,
+// Splunk, QRadar, CrowdStrike, Trellix, Elastic) for whether they detected a run's executed techniques, then writes the
 // verdict into the Verification Store (internal/verification) with
 // Source=api. It is deliberately independent of internal/siem — see
 // docs/superpowers/specs/2026-07-14-detection-verification-connectors-design.md
@@ -103,8 +103,7 @@ type Connector interface {
 }
 
 // NewConnector builds the Connector for cfg.Provider. Returns an error for
-// any provider not yet implemented — Elastic arrives in a later slice using
-// this same framework.
+// any provider not yet implemented.
 func NewConnector(cfg Config) (Connector, error) {
 	switch cfg.Provider {
 	case "microsoft_sentinel":
