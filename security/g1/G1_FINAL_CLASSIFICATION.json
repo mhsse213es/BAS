@@ -79,7 +79,7 @@
  },
  {
   "sink_id": "_vexRenderQueuePanel:panel:=:b153a86b8dca",
-  "line": 20944,
+  "line": 20948,
   "function": "_vexRenderQueuePanel",
   "target": "panel",
   "op": "=",
@@ -92,7 +92,7 @@
  },
  {
   "sink_id": "addStep:div:=:7ac68f61520c",
-  "line": 16717,
+  "line": 16721,
   "function": "addStep",
   "target": "div",
   "op": "=",
@@ -248,7 +248,7 @@
  },
  {
   "sink_id": "byStartedAtDesc:tbody:=:a84861ce6bf1",
-  "line": 15300,
+  "line": 15304,
   "function": "byStartedAtDesc",
   "target": "tbody",
   "op": "=",
@@ -261,7 +261,7 @@
  },
  {
   "sink_id": "byStartedAtDesc:tbody:=:f78d2a49fc20",
-  "line": 15264,
+  "line": 15268,
   "function": "byStartedAtDesc",
   "target": "tbody",
   "op": "=",
@@ -469,7 +469,7 @@
  },
  {
   "sink_id": "doOpen:tacticSel:=:84dac746f49b",
-  "line": 16357,
+  "line": 16361,
   "function": "doOpen",
   "target": "tacticSel",
   "op": "=",
@@ -547,7 +547,7 @@
  },
  {
   "sink_id": "fetchConnectorProjects:sel:=:d2134590b864",
-  "line": 13011,
+  "line": 13015,
   "function": "fetchConnectorProjects",
   "target": "sel",
   "op": "=",
@@ -573,7 +573,7 @@
  },
  {
   "sink_id": "fillBuilder:steps:=:6f49cdbd80e1",
-  "line": 16410,
+  "line": 16414,
   "function": "fillBuilder",
   "target": "steps",
   "op": "=",
@@ -586,7 +586,7 @@
  },
  {
   "sink_id": "filterVexTechniques:el:=:b51334baf721",
-  "line": 20766,
+  "line": 20770,
   "function": "filterVexTechniques",
   "target": "el",
   "op": "=",
@@ -599,7 +599,7 @@
  },
  {
   "sink_id": "filterVexTechniques:el:=:fe7e0ce19e69",
-  "line": 20769,
+  "line": 20773,
   "function": "filterVexTechniques",
   "target": "el",
   "op": "=",
@@ -625,7 +625,7 @@
  },
  {
   "sink_id": "goToProfile:el:=:dbb79cb6cb5d",
-  "line": 18837,
+  "line": 18841,
   "function": "goToProfile",
   "target": "el",
   "op": "=",
@@ -716,7 +716,7 @@
  },
  {
   "sink_id": "kpiGaugeCard:document.getElementById('run-kpi-strip'):=:9f61190ab079",
-  "line": 17070,
+  "line": 17074,
   "function": "kpiGaugeCard",
   "target": "document.getElementById('run-kpi-strip')",
   "op": "=",
@@ -776,7 +776,7 @@
   "final_category": "unescaped_html",
   "severity_tier": 4,
   "data_source_tags": "",
-  "trace_notes": "killChainNodes() @L19910 (scope-resolved): 1 return(s) -> unescaped_html",
+  "trace_notes": "killChainNodes() @L19914 (scope-resolved): 1 return(s) -> unescaped_html",
   "rhs": "'<div class=\"killchain\">' + killChainNodes(kc) + '</div>'"
  },
  {
@@ -924,7 +924,7 @@
  },
  {
   "sink_id": "loadAPHistory:tb:=:19f226136597",
-  "line": 14615,
+  "line": 14619,
   "function": "loadAPHistory",
   "target": "tb",
   "op": "=",
@@ -937,7 +937,7 @@
  },
  {
   "sink_id": "loadAPHistory:tb:=:1e8414e7c561",
-  "line": 14637,
+  "line": 14641,
   "function": "loadAPHistory",
   "target": "tb",
   "op": "=",
@@ -950,7 +950,7 @@
  },
  {
   "sink_id": "loadAPHistory:tb:=:b41e906344fa",
-  "line": 14618,
+  "line": 14622,
   "function": "loadAPHistory",
   "target": "tb",
   "op": "=",
@@ -963,7 +963,7 @@
  },
  {
   "sink_id": "loadAPHistory:tb:=:e93f630359cd",
-  "line": 14621,
+  "line": 14625,
   "function": "loadAPHistory",
   "target": "tb",
   "op": "=",
@@ -976,7 +976,7 @@
  },
  {
   "sink_id": "loadARTContentStatus:document.getElementById('cs-art-status'):=:f83cfb2e045d",
-  "line": 19406,
+  "line": 19410,
   "function": "loadARTContentStatus",
   "target": "document.getElementById('cs-art-status')",
   "op": "=",
@@ -989,7 +989,7 @@
  },
  {
   "sink_id": "loadARTContentStatus:statusEl:=:231d8ed13a85",
-  "line": 19364,
+  "line": 19368,
   "function": "loadARTContentStatus",
   "target": "statusEl",
   "op": "=",
@@ -1002,7 +1002,7 @@
  },
  {
   "sink_id": "loadARTContentStatus:statusEl:=:240aa95af980",
-  "line": 19366,
+  "line": 19370,
   "function": "loadARTContentStatus",
   "target": "statusEl",
   "op": "=",
@@ -1015,7 +1015,7 @@
  },
  {
   "sink_id": "loadAgentRiskSummary:if (tb) tb:=:19f226136597",
-  "line": 18896,
+  "line": 18900,
   "function": "loadAgentRiskSummary",
   "target": "if (tb) tb",
   "op": "=",
@@ -1483,7 +1483,7 @@
  },
  {
   "sink_id": "loadExercisesTab:body:=:291715c8403f",
-  "line": 14225,
+  "line": 14229,
   "function": "loadExercisesTab",
   "target": "body",
   "op": "=",
@@ -1496,7 +1496,7 @@
  },
  {
   "sink_id": "loadExercisesTab:body:=:69d63b8ee4f5",
-  "line": 14240,
+  "line": 14244,
   "function": "loadExercisesTab",
   "target": "body",
   "op": "=",
@@ -1509,7 +1509,7 @@
  },
  {
   "sink_id": "loadExercisesTab:body:=:6f49cdbd80e1",
-  "line": 14223,
+  "line": 14227,
   "function": "loadExercisesTab",
   "target": "body",
   "op": "=",
@@ -1522,7 +1522,7 @@
  },
  {
   "sink_id": "loadExercisesTab:body:=:6f49cdbd80e1",
-  "line": 14238,
+  "line": 14242,
   "function": "loadExercisesTab",
   "target": "body",
   "op": "=",
@@ -1626,7 +1626,7 @@
  },
  {
   "sink_id": "loadIOCRegistry:if (el) el:=:6f49cdbd80e1",
-  "line": 13513,
+  "line": 13517,
   "function": "loadIOCRegistry",
   "target": "if (el) el",
   "op": "=",
@@ -1639,7 +1639,7 @@
  },
  {
   "sink_id": "loadIOCRegistry:tbody:=:f0443ab03823",
-  "line": 13540,
+  "line": 13544,
   "function": "loadIOCRegistry",
   "target": "tbody",
   "op": "=",
@@ -1652,7 +1652,7 @@
  },
  {
   "sink_id": "loadIOCRegistry:tbody:=:f799a3a2f7e0",
-  "line": 13531,
+  "line": 13535,
   "function": "loadIOCRegistry",
   "target": "tbody",
   "op": "=",
@@ -1730,7 +1730,7 @@
  },
  {
   "sink_id": "loadOpenAEVConfig:configPanel:=:44e8a8bb59a5",
-  "line": 14037,
+  "line": 14041,
   "function": "loadOpenAEVConfig",
   "target": "configPanel",
   "op": "=",
@@ -1743,7 +1743,7 @@
  },
  {
   "sink_id": "loadOpenAEVConfig:configPanel:=:6f49cdbd80e1",
-  "line": 14052,
+  "line": 14056,
   "function": "loadOpenAEVConfig",
   "target": "configPanel",
   "op": "=",
@@ -1756,7 +1756,7 @@
  },
  {
   "sink_id": "loadOpenAEVScenarios:body:=:4e411960cd3e",
-  "line": 14118,
+  "line": 14122,
   "function": "loadOpenAEVScenarios",
   "target": "body",
   "op": "=",
@@ -1769,7 +1769,7 @@
  },
  {
   "sink_id": "loadOpenAEVScenarios:body:=:6f49cdbd80e1",
-  "line": 14113,
+  "line": 14117,
   "function": "loadOpenAEVScenarios",
   "target": "body",
   "op": "=",
@@ -1782,7 +1782,7 @@
  },
  {
   "sink_id": "loadRansomwareReadiness:bodyEl:=:a96a125c81c6",
-  "line": 14797,
+  "line": 14801,
   "function": "loadRansomwareReadiness",
   "target": "bodyEl",
   "op": "=",
@@ -1795,7 +1795,7 @@
  },
  {
   "sink_id": "loadRansomwareReadiness:bodyEl:=:deb9f6bd377e",
-  "line": 14725,
+  "line": 14729,
   "function": "loadRansomwareReadiness",
   "target": "bodyEl",
   "op": "=",
@@ -1873,7 +1873,7 @@
  },
  {
   "sink_id": "loadReports:document.getElementById('rep-available'):=:568454456a1f",
-  "line": 14869,
+  "line": 14873,
   "function": "loadReports",
   "target": "document.getElementById('rep-available')",
   "op": "=",
@@ -1886,7 +1886,7 @@
  },
  {
   "sink_id": "loadReports:el:=:211a4d2abf4a",
-  "line": 14852,
+  "line": 14856,
   "function": "loadReports",
   "target": "el",
   "op": "=",
@@ -1899,7 +1899,7 @@
  },
  {
   "sink_id": "loadReports:el:=:b1f98f11e298",
-  "line": 14856,
+  "line": 14860,
   "function": "loadReports",
   "target": "el",
   "op": "=",
@@ -1912,7 +1912,7 @@
  },
  {
   "sink_id": "loadRuns:tbody:=:f259d05495ad",
-  "line": 15247,
+  "line": 15251,
   "function": "loadRuns",
   "target": "tbody",
   "op": "=",
@@ -1925,7 +1925,7 @@
  },
  {
   "sink_id": "loadSIEMCorrelationPanel:el:=:a0696ac13148",
-  "line": 17704,
+  "line": 17708,
   "function": "loadSIEMCorrelationPanel",
   "target": "el",
   "op": "=",
@@ -1938,7 +1938,7 @@
  },
  {
   "sink_id": "loadSimCoverage:bodyEl:=:b822322bb95c",
-  "line": 19534,
+  "line": 19538,
   "function": "loadSimCoverage",
   "target": "bodyEl",
   "op": "=",
@@ -1951,7 +1951,7 @@
  },
  {
   "sink_id": "loadTAXIIConnectors:tbody:=:1f42fbd5bac8",
-  "line": 19178,
+  "line": 19182,
   "function": "loadTAXIIConnectors",
   "target": "tbody",
   "op": "=",
@@ -1964,7 +1964,7 @@
  },
  {
   "sink_id": "loadTAXIIConnectors:tbody:=:e683e20284c5",
-  "line": 19173,
+  "line": 19177,
   "function": "loadTAXIIConnectors",
   "target": "tbody",
   "op": "=",
@@ -1977,7 +1977,7 @@
  },
  {
   "sink_id": "loadThreatIntelConfig:if (panel) panel:=:6f49cdbd80e1",
-  "line": 19058,
+  "line": 19062,
   "function": "loadThreatIntelConfig",
   "target": "if (panel) panel",
   "op": "=",
@@ -1990,7 +1990,7 @@
  },
  {
   "sink_id": "loadThreatIntelConfig:panel:=:a9b597bb6c96",
-  "line": 19067,
+  "line": 19071,
   "function": "loadThreatIntelConfig",
   "target": "panel",
   "op": "=",
@@ -2094,7 +2094,7 @@
  },
  {
   "sink_id": "loadVariantCoverage:el:=:5ad448abef7d",
-  "line": 20796,
+  "line": 20800,
   "function": "loadVariantCoverage",
   "target": "el",
   "op": "=",
@@ -2107,7 +2107,7 @@
  },
  {
   "sink_id": "loadVariantCoverage:el:=:a79e43cbcf7f",
-  "line": 20823,
+  "line": 20827,
   "function": "loadVariantCoverage",
   "target": "el",
   "op": "=",
@@ -2120,7 +2120,7 @@
  },
  {
   "sink_id": "loadVariantCoverage:el:=:c944b2f9b670",
-  "line": 20793,
+  "line": 20797,
   "function": "loadVariantCoverage",
   "target": "el",
   "op": "=",
@@ -2133,7 +2133,7 @@
  },
  {
   "sink_id": "loadVariantCoverage:el:=:e5e239560bc1",
-  "line": 20821,
+  "line": 20825,
   "function": "loadVariantCoverage",
   "target": "el",
   "op": "=",
@@ -2141,12 +2141,12 @@
   "final_category": "partial_escaped",
   "severity_tier": 3,
   "data_source_tags": "",
-  "trace_notes": "3 assignment(s) to 'html' inside loadVariantCoverage() @L20790 (scope-resolved) -> partial_escaped",
+  "trace_notes": "3 assignment(s) to 'html' inside loadVariantCoverage() @L20794 (scope-resolved) -> partial_escaped",
   "rhs": "html"
  },
  {
   "sink_id": "loadVariantStats:el:=:357036e91e03",
-  "line": 20352,
+  "line": 20356,
   "function": "loadVariantStats",
   "target": "el",
   "op": "=",
@@ -2154,7 +2154,7 @@
   "final_category": "partial_escaped",
   "severity_tier": 3,
   "data_source_tags": "",
-  "trace_notes": "executions(): no declaration found anywhere in file; var(): no declaration found anywhere in file; vexStatCard() @L20365 (scope-resolved): 1 return(s) -> partial_escaped",
+  "trace_notes": "executions(): no declaration found anywhere in file; var(): no declaration found anywhere in file; vexStatCard() @L20369 (scope-resolved): 1 return(s) -> partial_escaped",
   "rhs": "vexStatCard('Executed Variants',     s.executedVariants,       'var(--accent)', null,\n        'How many individual variant executions (encoding \\xd7 privilege \\xd7 context combinations) have actually completed so far, summed across every finished variant run — not the total available.') +\n      vexStatCard('Total Variants',        s.availableVariants,      'var(--text)',   artAtomic.toLocaleString"
  },
  {
@@ -2172,7 +2172,7 @@
  },
  {
   "sink_id": "maybeShowLicenseGraceModal:overlay:=:07494db8034d",
-  "line": 18642,
+  "line": 18646,
   "function": "maybeShowLicenseGraceModal",
   "target": "overlay",
   "op": "=",
@@ -2180,7 +2180,7 @@
   "final_category": "partial_escaped",
   "severity_tier": 3,
   "data_source_tags": "",
-  "trace_notes": "_licenseBannerHTML() @L18574 (scope-resolved): 1 return(s) -> partial_escaped; var(): no declaration found anywhere in file",
+  "trace_notes": "_licenseBannerHTML() @L18578 (scope-resolved): 1 return(s) -> partial_escaped; var(): no declaration found anywhere in file",
   "rhs": "'<div style=\"max-width:480px;background:var(--surface,#152338);border:1px solid var(--warning,#d29922);border-radius:8px;padding:1.5rem;color:var(--text,#e6e6e6)\">' +\n      _licenseBannerHTML(info) +\n      '<div style=\"text-align:right;margin-top:1rem\"><button id=\"license-grace-modal-dismiss\" style=\"padding:0.4rem 1rem;border-radius:6px;border:1px solid var(--border,#22324a);background:transparent"
  },
  {
@@ -2341,7 +2341,7 @@
  },
  {
   "sink_id": "openCampaignRerunReview:document.getElementById('rerun-review-body'):=:a694e4076aeb",
-  "line": 17892,
+  "line": 17896,
   "function": "openCampaignRerunReview",
   "target": "document.getElementById('rerun-review-body')",
   "op": "=",
@@ -2406,7 +2406,7 @@
  },
  {
   "sink_id": "openExerciseDetail:document.getElementById('exercise-detail-body'):=:372807e2ccce",
-  "line": 14384,
+  "line": 14388,
   "function": "openExerciseDetail",
   "target": "document.getElementById('exercise-detail-body')",
   "op": "=",
@@ -2445,7 +2445,7 @@
  },
  {
   "sink_id": "openIOCDetail:document.getElementById('results-export'):=:6f49cdbd80e1",
-  "line": 13623,
+  "line": 13627,
   "function": "openIOCDetail",
   "target": "document.getElementById('results-export')",
   "op": "=",
@@ -2523,7 +2523,7 @@
  },
  {
   "sink_id": "openModal:document.getElementById('modal-agent'):=:aec9738cf908",
-  "line": 15322,
+  "line": 15326,
   "function": "openModal",
   "target": "document.getElementById('modal-agent')",
   "op": "=",
@@ -2536,7 +2536,7 @@
  },
  {
   "sink_id": "openModal:scSel:=:99fea35738b6",
-  "line": 15311,
+  "line": 15315,
   "function": "openModal",
   "target": "scSel",
   "op": "=",
@@ -2549,7 +2549,7 @@
  },
  {
   "sink_id": "openOpenAEVDetail:body:+=:b2c47a480b69",
-  "line": 14206,
+  "line": 14210,
   "function": "openOpenAEVDetail",
   "target": "body",
   "op": "+=",
@@ -2562,7 +2562,7 @@
  },
  {
   "sink_id": "openOpenAEVDetail:body:=:26b9cf015d37",
-  "line": 14204,
+  "line": 14208,
   "function": "openOpenAEVDetail",
   "target": "body",
   "op": "=",
@@ -2575,7 +2575,7 @@
  },
  {
   "sink_id": "openPickerWith:tacticSel:=:56ff914bbfc9",
-  "line": 15945,
+  "line": 15949,
   "function": "openPickerWith",
   "target": "tacticSel",
   "op": "=",
@@ -2601,7 +2601,7 @@
  },
  {
   "sink_id": "openReportGen:document.getElementById('rep-agent'):=:449a6c764d46",
-  "line": 14923,
+  "line": 14927,
   "function": "openReportGen",
   "target": "document.getElementById('rep-agent')",
   "op": "=",
@@ -2614,7 +2614,7 @@
  },
  {
   "sink_id": "openReportGen:document.getElementById('rep-format'):=:f36948ae35eb",
-  "line": 14927,
+  "line": 14931,
   "function": "openReportGen",
   "target": "document.getElementById('rep-format')",
   "op": "=",
@@ -2627,7 +2627,7 @@
  },
  {
   "sink_id": "openReportGen:document.getElementById('rep-fw'):=:cf81daeadfa1",
-  "line": 14936,
+  "line": 14940,
   "function": "openReportGen",
   "target": "document.getElementById('rep-fw')",
   "op": "=",
@@ -2640,7 +2640,7 @@
  },
  {
   "sink_id": "openRerunReview:document.getElementById('rerun-review-body'):=:a694e4076aeb",
-  "line": 17797,
+  "line": 17801,
   "function": "openRerunReview",
   "target": "document.getElementById('rerun-review-body')",
   "op": "=",
@@ -2653,7 +2653,7 @@
  },
  {
   "sink_id": "openRespondModal:sel:=:204b8e4a701b",
-  "line": 13300,
+  "line": 13304,
   "function": "openRespondModal",
   "target": "sel",
   "op": "=",
@@ -2666,7 +2666,7 @@
  },
  {
   "sink_id": "openRespondModal:sel:=:d39662b3126f",
-  "line": 13302,
+  "line": 13306,
   "function": "openRespondModal",
   "target": "sel",
   "op": "=",
@@ -2679,7 +2679,7 @@
  },
  {
   "sink_id": "openSchedWizard:sel:=:894f3c4e7f0f",
-  "line": 18085,
+  "line": 18089,
   "function": "openSchedWizard",
   "target": "sel",
   "op": "=",
@@ -2692,7 +2692,7 @@
  },
  {
   "sink_id": "openSchedWizardForEdit:sel:=:894f3c4e7f0f",
-  "line": 18142,
+  "line": 18146,
   "function": "openSchedWizardForEdit",
   "target": "sel",
   "op": "=",
@@ -2705,7 +2705,7 @@
  },
  {
   "sink_id": "openSweepDrilldown:document.getElementById('sweep-drilldown-actions'):=:6f49cdbd80e1",
-  "line": 13984,
+  "line": 13988,
   "function": "openSweepDrilldown",
   "target": "document.getElementById('sweep-drilldown-actions')",
   "op": "=",
@@ -2718,7 +2718,7 @@
  },
  {
   "sink_id": "openSweepDrilldown:document.getElementById('sweep-drilldown-actions'):=:d62ae8a5d0c0",
-  "line": 13992,
+  "line": 13996,
   "function": "openSweepDrilldown",
   "target": "document.getElementById('sweep-drilldown-actions')",
   "op": "=",
@@ -2731,7 +2731,7 @@
  },
  {
   "sink_id": "openSweepDrilldown:document.getElementById('sweep-drilldown-list'):=:1c7e431196ab",
-  "line": 13995,
+  "line": 13999,
   "function": "openSweepDrilldown",
   "target": "document.getElementById('sweep-drilldown-list')",
   "op": "=",
@@ -2744,7 +2744,7 @@
  },
  {
   "sink_id": "openSweepDrilldown:document.getElementById('sweep-drilldown-list'):=:6f49cdbd80e1",
-  "line": 13985,
+  "line": 13989,
   "function": "openSweepDrilldown",
   "target": "document.getElementById('sweep-drilldown-list')",
   "op": "=",
@@ -2783,7 +2783,7 @@
  },
  {
   "sink_id": "pollVariantRun:if (p) p:=:7216b4ea81b4",
-  "line": 21043,
+  "line": 21047,
   "function": "pollVariantRun",
   "target": "if (p) p",
   "op": "=",
@@ -2796,7 +2796,7 @@
  },
  {
   "sink_id": "pollVariantRun:if (panel) panel:=:852c6910cc5b",
-  "line": 21014,
+  "line": 21018,
   "function": "pollVariantRun",
   "target": "if (panel) panel",
   "op": "=",
@@ -2835,7 +2835,7 @@
  },
  {
   "sink_id": "populateVexAgents:if (sel) sel:=:d2a1edd66cf8",
-  "line": 20394,
+  "line": 20398,
   "function": "populateVexAgents",
   "target": "if (sel) sel",
   "op": "=",
@@ -2843,12 +2843,12 @@
   "final_category": "escaped",
   "severity_tier": 1,
   "data_source_tags": "",
-  "trace_notes": "1 assignment(s) to 'opts' inside populateVexAgents() @L20381 (scope-resolved) -> escaped",
+  "trace_notes": "1 assignment(s) to 'opts' inside populateVexAgents() @L20385 (scope-resolved) -> escaped",
   "rhs": "opts"
  },
  {
   "sink_id": "populateVexAgents:if (sweepSel) sweepSel:=:d2a1edd66cf8",
-  "line": 20396,
+  "line": 20400,
   "function": "populateVexAgents",
   "target": "if (sweepSel) sweepSel",
   "op": "=",
@@ -2856,12 +2856,12 @@
   "final_category": "escaped",
   "severity_tier": 1,
   "data_source_tags": "",
-  "trace_notes": "1 assignment(s) to 'opts' inside populateVexAgents() @L20381 (scope-resolved) -> escaped",
+  "trace_notes": "1 assignment(s) to 'opts' inside populateVexAgents() @L20385 (scope-resolved) -> escaped",
   "rhs": "opts"
  },
  {
   "sink_id": "populateVexTechniques:if (el) el:=:63e9d5f1a93f",
-  "line": 20436,
+  "line": 20440,
   "function": "populateVexTechniques",
   "target": "if (el) el",
   "op": "=",
@@ -2874,7 +2874,7 @@
  },
  {
   "sink_id": "populateVexTechniques:tacSel:=:ce309d68b711",
-  "line": 20431,
+  "line": 20435,
   "function": "populateVexTechniques",
   "target": "tacSel",
   "op": "=",
@@ -2882,7 +2882,7 @@
   "final_category": "unescaped_html",
   "severity_tier": 4,
   "data_source_tags": "",
-  "trace_notes": "2 assignment(s) to 'tacOpts' inside populateVexTechniques() @L20408 (scope-resolved) -> unescaped_html",
+  "trace_notes": "2 assignment(s) to 'tacOpts' inside populateVexTechniques() @L20412 (scope-resolved) -> unescaped_html",
   "rhs": "tacOpts"
  },
  {
@@ -2965,7 +2965,7 @@
  },
  {
   "sink_id": "render:document.getElementById('run-live-progress'):=:f94ae6248a6e",
-  "line": 13765,
+  "line": 13769,
   "function": "render",
   "target": "document.getElementById('run-live-progress')",
   "op": "=",
@@ -3004,7 +3004,7 @@
  },
  {
   "sink_id": "render:ul:=:e54d2e84b096",
-  "line": 13777,
+  "line": 13781,
   "function": "render",
   "target": "ul",
   "op": "=",
@@ -3017,7 +3017,7 @@
  },
  {
   "sink_id": "render:ul:=:fd19c074919d",
-  "line": 13870,
+  "line": 13874,
   "function": "render",
   "target": "ul",
   "op": "=",
@@ -3056,7 +3056,7 @@
  },
  {
   "sink_id": "renderAdditionalAgents:list:=:afe12f0f5138",
-  "line": 15526,
+  "line": 15530,
   "function": "renderAdditionalAgents",
   "target": "list",
   "op": "=",
@@ -3121,7 +3121,7 @@
  },
  {
   "sink_id": "renderAgentRiskSummary:tb:=:b2f34185c24f",
-  "line": 18918,
+  "line": 18922,
   "function": "renderAgentRiskSummary",
   "target": "tb",
   "op": "=",
@@ -3134,7 +3134,7 @@
  },
  {
   "sink_id": "renderAgentRiskSummary:tb:=:df1b491f9634",
-  "line": 18928,
+  "line": 18932,
   "function": "renderAgentRiskSummary",
   "target": "tb",
   "op": "=",
@@ -3199,7 +3199,7 @@
  },
  {
   "sink_id": "renderAttackPath:body:=:2f57ae966a62",
-  "line": 14646,
+  "line": 14650,
   "function": "renderAttackPath",
   "target": "body",
   "op": "=",
@@ -3212,7 +3212,7 @@
  },
  {
   "sink_id": "renderAttackPath:body:=:aaa9402664f1",
-  "line": 14692,
+  "line": 14696,
   "function": "renderAttackPath",
   "target": "body",
   "op": "=",
@@ -3220,7 +3220,7 @@
   "final_category": "unescaped_text",
   "severity_tier": 4,
   "data_source_tags": "",
-  "trace_notes": "20 assignment(s) to 'h' inside renderAttackPath() @L14641 (scope-resolved) -> unescaped_text",
+  "trace_notes": "20 assignment(s) to 'h' inside renderAttackPath() @L14645 (scope-resolved) -> unescaped_text",
   "rhs": "h"
  },
  {
@@ -3485,7 +3485,7 @@
  },
  {
   "sink_id": "renderDetectionValidationTab:el:=:84cc57f30541",
-  "line": 17650,
+  "line": 17654,
   "function": "renderDetectionValidationTab",
   "target": "el",
   "op": "=",
@@ -3680,7 +3680,7 @@
  },
  {
   "sink_id": "renderIOCRegistryTable:tbody:=:343fc91b0722",
-  "line": 13572,
+  "line": 13576,
   "function": "renderIOCRegistryTable",
   "target": "tbody",
   "op": "=",
@@ -3693,7 +3693,7 @@
  },
  {
   "sink_id": "renderIOCRegistryTable:tbody:=:9f380c9e400b",
-  "line": 13575,
+  "line": 13579,
   "function": "renderIOCRegistryTable",
   "target": "tbody",
   "op": "=",
@@ -3758,7 +3758,7 @@
  },
  {
   "sink_id": "renderLicenseGraceBanner:el:=:20267c198848",
-  "line": 18625,
+  "line": 18629,
   "function": "renderLicenseGraceBanner",
   "target": "el",
   "op": "=",
@@ -3771,7 +3771,7 @@
  },
  {
   "sink_id": "renderLicenseLockedScreen:el:=:56bd2dda6569",
-  "line": 18559,
+  "line": 18563,
   "function": "renderLicenseLockedScreen",
   "target": "el",
   "op": "=",
@@ -3784,7 +3784,7 @@
  },
  {
   "sink_id": "renderModalSelection:link:=:3ac9eb36dbbe",
-  "line": 16207,
+  "line": 16211,
   "function": "renderModalSelection",
   "target": "link",
   "op": "=",
@@ -3797,7 +3797,7 @@
  },
  {
   "sink_id": "renderModalSelection:link:=:a31134ee495c",
-  "line": 16226,
+  "line": 16230,
   "function": "renderModalSelection",
   "target": "link",
   "op": "=",
@@ -3810,7 +3810,7 @@
  },
  {
   "sink_id": "renderModalSelection:note:=:3673014e72b6",
-  "line": 16289,
+  "line": 16293,
   "function": "renderModalSelection",
   "target": "note",
   "op": "=",
@@ -3823,7 +3823,7 @@
  },
  {
   "sink_id": "renderModalSelection:note:=:6da56d2607de",
-  "line": 16240,
+  "line": 16244,
   "function": "renderModalSelection",
   "target": "note",
   "op": "=",
@@ -3836,7 +3836,7 @@
  },
  {
   "sink_id": "renderModalSelection:note:=:f6a1dba9d317",
-  "line": 16256,
+  "line": 16260,
   "function": "renderModalSelection",
   "target": "note",
   "op": "=",
@@ -3849,7 +3849,7 @@
  },
  {
   "sink_id": "renderModalSelection:note:=:f6a1dba9d317",
-  "line": 16286,
+  "line": 16290,
   "function": "renderModalSelection",
   "target": "note",
   "op": "=",
@@ -3862,7 +3862,7 @@
  },
  {
   "sink_id": "renderPickerList:document.getElementById('picker-list'):=:86bc3b918fa9",
-  "line": 16102,
+  "line": 16106,
   "function": "renderPickerList",
   "target": "document.getElementById('picker-list')",
   "op": "=",
@@ -3992,7 +3992,7 @@
  },
  {
   "sink_id": "renderRepHistory:tb:=:913a94a62edf",
-  "line": 14877,
+  "line": 14881,
   "function": "renderRepHistory",
   "target": "tb",
   "op": "=",
@@ -4005,7 +4005,7 @@
  },
  {
   "sink_id": "renderRepHistory:tb:=:b9e0ef311b73",
-  "line": 14881,
+  "line": 14885,
   "function": "renderRepHistory",
   "target": "tb",
   "op": "=",
@@ -4018,7 +4018,7 @@
  },
  {
   "sink_id": "renderResponseConnectorList:el:=:3d148461a96d",
-  "line": 13165,
+  "line": 13169,
   "function": "renderResponseConnectorList",
   "target": "el",
   "op": "=",
@@ -4031,7 +4031,7 @@
  },
  {
   "sink_id": "renderResponseConnectorList:el:=:a27464dcf3bf",
-  "line": 13171,
+  "line": 13175,
   "function": "renderResponseConnectorList",
   "target": "el",
   "op": "=",
@@ -4044,7 +4044,7 @@
  },
  {
   "sink_id": "renderRunIOCList:el:=:196f9154d695",
-  "line": 13463,
+  "line": 13467,
   "function": "renderRunIOCList",
   "target": "el",
   "op": "=",
@@ -4057,7 +4057,7 @@
  },
  {
   "sink_id": "renderRunIOCList:el:=:bc77e667f8a5",
-  "line": 13458,
+  "line": 13462,
   "function": "renderRunIOCList",
   "target": "el",
   "op": "=",
@@ -4070,7 +4070,7 @@
  },
  {
   "sink_id": "renderRunIOCToolbar:el:=:6410de5ba68c",
-  "line": 13415,
+  "line": 13419,
   "function": "renderRunIOCToolbar",
   "target": "el",
   "op": "=",
@@ -4083,7 +4083,7 @@
  },
  {
   "sink_id": "renderRunMode:btn:=:4959506b17ea",
-  "line": 15384,
+  "line": 15388,
   "function": "renderRunMode",
   "target": "btn",
   "op": "=",
@@ -4096,7 +4096,7 @@
  },
  {
   "sink_id": "renderRunMode:btn:=:5b98d58b0313",
-  "line": 15464,
+  "line": 15468,
   "function": "renderRunMode",
   "target": "btn",
   "op": "=",
@@ -4109,7 +4109,7 @@
  },
  {
   "sink_id": "renderRunMode:btn:=:6b374eeb8131",
-  "line": 15444,
+  "line": 15448,
   "function": "renderRunMode",
   "target": "btn",
   "op": "=",
@@ -4122,7 +4122,7 @@
  },
  {
   "sink_id": "renderRunMode:btn:=:ad81ad1f4514",
-  "line": 15457,
+  "line": 15461,
   "function": "renderRunMode",
   "target": "btn",
   "op": "=",
@@ -4135,7 +4135,7 @@
  },
  {
   "sink_id": "renderRunMode:btn:=:cd9227672841",
-  "line": 15428,
+  "line": 15432,
   "function": "renderRunMode",
   "target": "btn",
   "op": "=",
@@ -4148,7 +4148,7 @@
  },
  {
   "sink_id": "renderRunMode:btn:=:cd9227672841",
-  "line": 15475,
+  "line": 15479,
   "function": "renderRunMode",
   "target": "btn",
   "op": "=",
@@ -4161,7 +4161,7 @@
  },
  {
   "sink_id": "renderRunMode:warn:=:37e38ab2c4c2",
-  "line": 15424,
+  "line": 15428,
   "function": "renderRunMode",
   "target": "warn",
   "op": "=",
@@ -4169,12 +4169,12 @@
   "final_category": "escaped",
   "severity_tier": 1,
   "data_source_tags": "",
-  "trace_notes": "2 assignment(s) to 'osMismatchMsg' inside renderRunMode() @L15361 (scope-resolved) -> escaped",
+  "trace_notes": "2 assignment(s) to 'osMismatchMsg' inside renderRunMode() @L15365 (scope-resolved) -> escaped",
   "rhs": "osMismatchMsg"
  },
  {
   "sink_id": "renderRunMode:warn:=:37e38ab2c4c2",
-  "line": 15471,
+  "line": 15475,
   "function": "renderRunMode",
   "target": "warn",
   "op": "=",
@@ -4182,12 +4182,12 @@
   "final_category": "escaped",
   "severity_tier": 1,
   "data_source_tags": "",
-  "trace_notes": "2 assignment(s) to 'osMismatchMsg' inside renderRunMode() @L15361 (scope-resolved) -> escaped",
+  "trace_notes": "2 assignment(s) to 'osMismatchMsg' inside renderRunMode() @L15365 (scope-resolved) -> escaped",
   "rhs": "osMismatchMsg"
  },
  {
   "sink_id": "renderRunMode:warn:=:41e9204bcecf",
-  "line": 15442,
+  "line": 15446,
   "function": "renderRunMode",
   "target": "warn",
   "op": "=",
@@ -4200,7 +4200,7 @@
  },
  {
   "sink_id": "renderRunMode:warn:=:7945c45dabe0",
-  "line": 15463,
+  "line": 15467,
   "function": "renderRunMode",
   "target": "warn",
   "op": "=",
@@ -4213,7 +4213,7 @@
  },
  {
   "sink_id": "renderRunMode:warn:=:7cbf4609536e",
-  "line": 15456,
+  "line": 15460,
   "function": "renderRunMode",
   "target": "warn",
   "op": "=",
@@ -4221,7 +4221,7 @@
   "final_category": "unescaped_html",
   "severity_tier": 4,
   "data_source_tags": "",
-  "trace_notes": "2 assignment(s) to 'warnText' inside renderRunMode() @L15361 (scope-resolved) -> unescaped_html",
+  "trace_notes": "2 assignment(s) to 'warnText' inside renderRunMode() @L15365 (scope-resolved) -> unescaped_html",
   "rhs": "warnText"
  },
  {
@@ -4343,7 +4343,7 @@
  },
  {
   "sink_id": "renderSchedAgentList:root:=:5d77463a1d25",
-  "line": 18274,
+  "line": 18278,
   "function": "renderSchedAgentList",
   "target": "root",
   "op": "=",
@@ -4356,7 +4356,7 @@
  },
  {
   "sink_id": "renderSchedAgentList:root:=:d702422fe11a",
-  "line": 18276,
+  "line": 18280,
   "function": "renderSchedAgentList",
   "target": "root",
   "op": "=",
@@ -4369,7 +4369,7 @@
  },
  {
   "sink_id": "renderSchedGroupTree:root:=:a9d9375b0173",
-  "line": 18206,
+  "line": 18210,
   "function": "renderSchedGroupTree",
   "target": "root",
   "op": "=",
@@ -4382,7 +4382,7 @@
  },
  {
   "sink_id": "renderSchedGroupTree:root:=:cdd0f2fd36f8",
-  "line": 18211,
+  "line": 18215,
   "function": "renderSchedGroupTree",
   "target": "root",
   "op": "=",
@@ -4395,7 +4395,7 @@
  },
  {
   "sink_id": "renderSchedInitiativeSelect:sel:=:0614a03d92d3",
-  "line": 18303,
+  "line": 18307,
   "function": "renderSchedInitiativeSelect",
   "target": "sel",
   "op": "=",
@@ -4408,7 +4408,7 @@
  },
  {
   "sink_id": "renderSchedModeRecurrencePane:modeSel:=:d2a1edd66cf8",
-  "line": 18316,
+  "line": 18320,
   "function": "renderSchedModeRecurrencePane",
   "target": "modeSel",
   "op": "=",
@@ -4416,12 +4416,12 @@
   "final_category": "static",
   "severity_tier": 0,
   "data_source_tags": "",
-  "trace_notes": "2 assignment(s) to 'opts' inside renderSchedModeRecurrencePane() @L18308 (scope-resolved) -> static",
+  "trace_notes": "2 assignment(s) to 'opts' inside renderSchedModeRecurrencePane() @L18312 (scope-resolved) -> static",
   "rhs": "opts"
  },
  {
   "sink_id": "renderSchedReview:document.getElementById('sched-review'):=:530136e85d80",
-  "line": 18422,
+  "line": 18426,
   "function": "renderSchedReview",
   "target": "document.getElementById('sched-review')",
   "op": "=",
@@ -4434,7 +4434,7 @@
  },
  {
   "sink_id": "renderScheduledAssessmentsList:tbody:=:b49d64237e49",
-  "line": 18014,
+  "line": 18018,
   "function": "renderScheduledAssessmentsList",
   "target": "tbody",
   "op": "=",
@@ -4447,7 +4447,7 @@
  },
  {
   "sink_id": "renderScheduledAssessmentsList:tbody:=:dab79a0dc67d",
-  "line": 18017,
+  "line": 18021,
   "function": "renderScheduledAssessmentsList",
   "target": "tbody",
   "op": "=",
@@ -4486,7 +4486,7 @@
  },
  {
   "sink_id": "renderTAXIIConnectorsList:tbody:=:09e758a55a6d",
-  "line": 19188,
+  "line": 19192,
   "function": "renderTAXIIConnectorsList",
   "target": "tbody",
   "op": "=",
@@ -4499,7 +4499,7 @@
  },
  {
   "sink_id": "renderTAXIIConnectorsList:tbody:=:59d7910c503d",
-  "line": 19185,
+  "line": 19189,
   "function": "renderTAXIIConnectorsList",
   "target": "tbody",
   "op": "=",
@@ -4759,7 +4759,7 @@
  },
  {
   "sink_id": "renderVariantRun:cell:=:2ff32a8ace7a",
-  "line": 21193,
+  "line": 21197,
   "function": "renderVariantRun",
   "target": "cell",
   "op": "=",
@@ -4772,7 +4772,7 @@
  },
  {
   "sink_id": "renderVariantRun:if (wrapperEl) wrapperEl:=:8e94bcdd09f7",
-  "line": 21188,
+  "line": 21192,
   "function": "renderVariantRun",
   "target": "if (wrapperEl) wrapperEl",
   "op": "=",
@@ -4780,12 +4780,12 @@
   "final_category": "partial_escaped",
   "severity_tier": 3,
   "data_source_tags": "",
-  "trace_notes": "24 assignment(s) to 'wrapperHtml' inside renderVariantRun() @L21121 (scope-resolved) -> partial_escaped",
+  "trace_notes": "24 assignment(s) to 'wrapperHtml' inside renderVariantRun() @L21125 (scope-resolved) -> partial_escaped",
   "rhs": "wrapperHtml"
  },
  {
   "sink_id": "renderVariantRun:panel:=:8576b16b3214",
-  "line": 21205,
+  "line": 21209,
   "function": "renderVariantRun",
   "target": "panel",
   "op": "=",
@@ -4798,7 +4798,7 @@
  },
  {
   "sink_id": "renderVexSweepList:el:=:6f49cdbd80e1",
-  "line": 20527,
+  "line": 20531,
   "function": "renderVexSweepList",
   "target": "el",
   "op": "=",
@@ -4811,7 +4811,7 @@
  },
  {
   "sink_id": "renderVexSweepList:el:=:84f7e3c3eda0",
-  "line": 20529,
+  "line": 20533,
   "function": "renderVexSweepList",
   "target": "el",
   "op": "=",
@@ -4889,7 +4889,7 @@
  },
  {
   "sink_id": "row:document.getElementById('wz-review'):=:e5e239560bc1",
-  "line": 15779,
+  "line": 15783,
   "function": "row",
   "target": "document.getElementById('wz-review')",
   "op": "=",
@@ -4897,12 +4897,12 @@
   "final_category": "unescaped_html",
   "severity_tier": 4,
   "data_source_tags": "",
-  "trace_notes": "3 assignment(s) to 'html' inside renderWizardReview() @L15682 (scope-resolved) -> unescaped_html",
+  "trace_notes": "3 assignment(s) to 'html' inside renderWizardReview() @L15686 (scope-resolved) -> unescaped_html",
   "rhs": "html"
  },
  {
   "sink_id": "rowHtml:document.getElementById('results-body'):=:230d8358dc8e",
-  "line": 13640,
+  "line": 13644,
   "function": "rowHtml",
   "target": "document.getElementById('results-body')",
   "op": "=",
@@ -4915,7 +4915,7 @@
  },
  {
   "sink_id": "rowHtml:el:=:a8dfe7e921d5",
-  "line": 13659,
+  "line": 13663,
   "function": "rowHtml",
   "target": "el",
   "op": "=",
@@ -4928,7 +4928,7 @@
  },
  {
   "sink_id": "rowHtml:if (el) el:=:4d45c9a1c090",
-  "line": 13662,
+  "line": 13666,
   "function": "rowHtml",
   "target": "if (el) el",
   "op": "=",
@@ -5032,7 +5032,7 @@
  },
  {
   "sink_id": "soonPanel:document.getElementById('run-tab-content'):=:7adc696626b0",
-  "line": 17412,
+  "line": 17416,
   "function": "soonPanel",
   "target": "document.getElementById('run-tab-content')",
   "op": "=",
@@ -5045,7 +5045,7 @@
  },
  {
   "sink_id": "soonPanel:document.getElementById('run-tabbar'):=:ec3077d5757a",
-  "line": 17449,
+  "line": 17453,
   "function": "soonPanel",
   "target": "document.getElementById('run-tabbar')",
   "op": "=",
@@ -5058,7 +5058,7 @@
  },
  {
   "sink_id": "soonPanel:extraEl:=:000e9faf7dc9",
-  "line": 17488,
+  "line": 17492,
   "function": "soonPanel",
   "target": "extraEl",
   "op": "=",
@@ -5071,7 +5071,7 @@
  },
  {
   "sink_id": "soonPanel:extraEl:=:6f49cdbd80e1",
-  "line": 17500,
+  "line": 17504,
   "function": "soonPanel",
   "target": "extraEl",
   "op": "=",
@@ -5084,7 +5084,7 @@
  },
  {
   "sink_id": "soonPanel:extraEl:=:8a89f49e5dd6",
-  "line": 17492,
+  "line": 17496,
   "function": "soonPanel",
   "target": "extraEl",
   "op": "=",
@@ -5092,12 +5092,12 @@
   "final_category": "partial_escaped",
   "severity_tier": 3,
   "data_source_tags": "",
-  "trace_notes": "renderRunReportExtra() @L19940 (scope-resolved): 5 return(s) -> partial_escaped",
+  "trace_notes": "renderRunReportExtra() @L19944 (scope-resolved): 5 return(s) -> partial_escaped",
   "rhs": "renderRunReportExtra(rep)"
  },
  {
   "sink_id": "soonPanel:if (el) el:=:05b3ceeea0fb",
-  "line": 17513,
+  "line": 17517,
   "function": "soonPanel",
   "target": "if (el) el",
   "op": "=",
@@ -5110,7 +5110,7 @@
  },
  {
   "sink_id": "soonPanel:if (el) el:=:05d28a38e57d",
-  "line": 17510,
+  "line": 17514,
   "function": "soonPanel",
   "target": "if (el) el",
   "op": "=",
@@ -5118,12 +5118,12 @@
   "final_category": "unescaped_html",
   "severity_tier": 4,
   "data_source_tags": "",
-  "trace_notes": "renderAttackFlow() @L19816 (scope-resolved): 6 return(s) -> unescaped_html",
+  "trace_notes": "renderAttackFlow() @L19820 (scope-resolved): 6 return(s) -> unescaped_html",
   "rhs": "renderAttackFlow(af.nodes || [], af.summary || {})"
  },
  {
   "sink_id": "soonPanel:if (el) el:=:4b2a80780dc0",
-  "line": 17540,
+  "line": 17544,
   "function": "soonPanel",
   "target": "if (el) el",
   "op": "=",
@@ -5136,7 +5136,7 @@
  },
  {
   "sink_id": "soonPanel:if (el) el:=:57e4ff8ae29b",
-  "line": 17519,
+  "line": 17523,
   "function": "soonPanel",
   "target": "if (el) el",
   "op": "=",
@@ -5144,12 +5144,12 @@
   "final_category": "unescaped_html",
   "severity_tier": 4,
   "data_source_tags": "",
-  "trace_notes": "renderVariantCoverage() @L19608 (scope-resolved): 11 return(s) -> unescaped_html",
+  "trace_notes": "renderVariantCoverage() @L19612 (scope-resolved): 11 return(s) -> unescaped_html",
   "rhs": "renderVariantCoverage(cov)"
  },
  {
   "sink_id": "soonPanel:if (el) el:=:9d4d108e29ef",
-  "line": 17522,
+  "line": 17526,
   "function": "soonPanel",
   "target": "if (el) el",
   "op": "=",
@@ -5162,7 +5162,7 @@
  },
  {
   "sink_id": "soonPanel:if (findingsEl) findingsEl:=:1ab55760a1c3",
-  "line": 17494,
+  "line": 17498,
   "function": "soonPanel",
   "target": "if (findingsEl) findingsEl",
   "op": "=",
@@ -5170,12 +5170,12 @@
   "final_category": "unescaped_html",
   "severity_tier": 4,
   "data_source_tags": "",
-  "trace_notes": "renderRunFindings() @L20236 (scope-resolved): 3 return(s) -> unescaped_html",
+  "trace_notes": "renderRunFindings() @L20240 (scope-resolved): 3 return(s) -> unescaped_html",
   "rhs": "renderRunFindings(rep)"
  },
  {
   "sink_id": "soonPanel:if (findingsEl) findingsEl:=:af0652ed63c6",
-  "line": 17502,
+  "line": 17506,
   "function": "soonPanel",
   "target": "if (findingsEl) findingsEl",
   "op": "=",
@@ -5188,7 +5188,7 @@
  },
  {
   "sink_id": "soonPanel:if (findingsElEarly) findingsElEarly:=:5ddfcb3cebd4",
-  "line": 17548,
+  "line": 17552,
   "function": "soonPanel",
   "target": "if (findingsElEarly) findingsElEarly",
   "op": "=",
@@ -5196,12 +5196,12 @@
   "final_category": "static",
   "severity_tier": 0,
   "data_source_tags": "",
-  "trace_notes": "1 assignment(s) to 'notReady' inside viewRunResults() @L16920 (scope-resolved) -> static",
+  "trace_notes": "1 assignment(s) to 'notReady' inside viewRunResults() @L16924 (scope-resolved) -> static",
   "rhs": "notReady"
  },
  {
   "sink_id": "soonPanel:if (iocElEarly) iocElEarly:=:5ddfcb3cebd4",
-  "line": 17552,
+  "line": 17556,
   "function": "soonPanel",
   "target": "if (iocElEarly) iocElEarly",
   "op": "=",
@@ -5209,12 +5209,12 @@
   "final_category": "static",
   "severity_tier": 0,
   "data_source_tags": "",
-  "trace_notes": "1 assignment(s) to 'notReady' inside viewRunResults() @L16920 (scope-resolved) -> static",
+  "trace_notes": "1 assignment(s) to 'notReady' inside viewRunResults() @L16924 (scope-resolved) -> static",
   "rhs": "notReady"
  },
  {
   "sink_id": "soonPanel:if (recEl) recEl:=:cc3ff533d162",
-  "line": 17496,
+  "line": 17500,
   "function": "soonPanel",
   "target": "if (recEl) recEl",
   "op": "=",
@@ -5222,12 +5222,12 @@
   "final_category": "unescaped_html",
   "severity_tier": 4,
   "data_source_tags": "",
-  "trace_notes": "renderRunRecommendations() @L20263 (scope-resolved): 3 return(s) -> unescaped_html",
+  "trace_notes": "renderRunRecommendations() @L20267 (scope-resolved): 3 return(s) -> unescaped_html",
   "rhs": "renderRunRecommendations(rep)"
  },
  {
   "sink_id": "soonPanel:if (recEl) recEl:=:f64c73cc64ef",
-  "line": 17504,
+  "line": 17508,
   "function": "soonPanel",
   "target": "if (recEl) recEl",
   "op": "=",
@@ -5240,7 +5240,7 @@
  },
  {
   "sink_id": "soonPanel:if (recElEarly) recElEarly:=:5ddfcb3cebd4",
-  "line": 17550,
+  "line": 17554,
   "function": "soonPanel",
   "target": "if (recElEarly) recElEarly",
   "op": "=",
@@ -5248,12 +5248,12 @@
   "final_category": "static",
   "severity_tier": 0,
   "data_source_tags": "",
-  "trace_notes": "1 assignment(s) to 'notReady' inside viewRunResults() @L16920 (scope-resolved) -> static",
+  "trace_notes": "1 assignment(s) to 'notReady' inside viewRunResults() @L16924 (scope-resolved) -> static",
   "rhs": "notReady"
  },
  {
   "sink_id": "soonPanel:reportsEl:=:a0e2dc3988f7",
-  "line": 17463,
+  "line": 17467,
   "function": "soonPanel",
   "target": "reportsEl",
   "op": "=",
@@ -5266,7 +5266,7 @@
  },
  {
   "sink_id": "soonPanel:reportsEl:=:ae6324141a3e",
-  "line": 17478,
+  "line": 17482,
   "function": "soonPanel",
   "target": "reportsEl",
   "op": "=",
@@ -5279,7 +5279,7 @@
  },
  {
   "sink_id": "startCampaignRerunFromReview:btn:=:c420793ec474",
-  "line": 17925,
+  "line": 17929,
   "function": "startCampaignRerunFromReview",
   "target": "btn",
   "op": "=",
@@ -5292,7 +5292,7 @@
  },
  {
   "sink_id": "startCampaignRerunFromReview:btn:=:c420793ec474",
-  "line": 17932,
+  "line": 17936,
   "function": "startCampaignRerunFromReview",
   "target": "btn",
   "op": "=",
@@ -5305,7 +5305,7 @@
  },
  {
   "sink_id": "startRerunFromReview:btn:=:c420793ec474",
-  "line": 17845,
+  "line": 17849,
   "function": "startRerunFromReview",
   "target": "btn",
   "op": "=",
@@ -5318,7 +5318,7 @@
  },
  {
   "sink_id": "startRerunFromReview:btn:=:c420793ec474",
-  "line": 17852,
+  "line": 17856,
   "function": "startRerunFromReview",
   "target": "btn",
   "op": "=",
@@ -5357,7 +5357,7 @@
  },
  {
   "sink_id": "stopVex:if (panel) panel:=:f892e36d9a7f",
-  "line": 21075,
+  "line": 21079,
   "function": "stopVex",
   "target": "if (panel) panel",
   "op": "=",
@@ -5487,7 +5487,7 @@
  },
  {
   "sink_id": "techOnBlur:panel:=:6f49cdbd80e1",
-  "line": 16697,
+  "line": 16701,
   "function": "techOnBlur",
   "target": "panel",
   "op": "=",
@@ -5500,7 +5500,7 @@
  },
  {
   "sink_id": "techOnInput:panel:=:6f49cdbd80e1",
-  "line": 16631,
+  "line": 16635,
   "function": "techOnInput",
   "target": "panel",
   "op": "=",
@@ -5513,7 +5513,7 @@
  },
  {
   "sink_id": "techOnKeydown:panel:=:6f49cdbd80e1",
-  "line": 16686,
+  "line": 16690,
   "function": "techOnKeydown",
   "target": "panel",
   "op": "=",
@@ -5526,7 +5526,7 @@
  },
  {
   "sink_id": "techRenderResults:panel:=:80cdc4a637c4",
-  "line": 16641,
+  "line": 16645,
   "function": "techRenderResults",
   "target": "panel",
   "op": "=",
@@ -5539,7 +5539,7 @@
  },
  {
   "sink_id": "techRenderResults:panel:=:a66308c636d4",
-  "line": 16645,
+  "line": 16649,
   "function": "techRenderResults",
   "target": "panel",
   "op": "=",
@@ -5552,7 +5552,7 @@
  },
  {
   "sink_id": "techRenderSelected:box:=:41fc3647c35b",
-  "line": 16581,
+  "line": 16585,
   "function": "techRenderSelected",
   "target": "box",
   "op": "=",
@@ -5565,7 +5565,7 @@
  },
  {
   "sink_id": "techRenderSelected:box:=:f4b5d505bc4a",
-  "line": 16591,
+  "line": 16595,
   "function": "techRenderSelected",
   "target": "box",
   "op": "=",
@@ -5578,7 +5578,7 @@
  },
  {
   "sink_id": "techSelectRow:panel:=:6f49cdbd80e1",
-  "line": 16662,
+  "line": 16666,
   "function": "techSelectRow",
   "target": "panel",
   "op": "=",
@@ -5617,7 +5617,7 @@
  },
  {
   "sink_id": "tile:el:=:aa0da7afd29e",
-  "line": 13562,
+  "line": 13566,
   "function": "tile",
   "target": "el",
   "op": "=",
@@ -5625,12 +5625,12 @@
   "final_category": "unescaped_html",
   "severity_tier": 4,
   "data_source_tags": "api_response",
-  "trace_notes": "tile() @L13555 (scope-resolved): 1 return(s) -> unescaped_html",
+  "trace_notes": "tile() @L13559 (scope-resolved): 1 return(s) -> unescaped_html",
   "rhs": "tile('Most Detected', result.mostDetected, ' detections') +\n    tile('Highest Bypass Rate', result.highestBypassRate, ' bypasses') +\n    tile('Frequently Reused', result.frequentlyReused, ' sightings') +\n    tile('Longest Surviving', result.longestSurviving, ' sightings')"
  },
  {
   "sink_id": "toggleSimCoverage:if (car) car:=:9c822af7dbd9",
-  "line": 19419,
+  "line": 19423,
   "function": "toggleSimCoverage",
   "target": "if (car) car",
   "op": "=",
@@ -5851,7 +5851,7 @@
  },
  {
   "sink_id": "viewRunResults:document.getElementById('results-export'):=:6f49cdbd80e1",
-  "line": 16992,
+  "line": 16996,
   "function": "viewRunResults",
   "target": "document.getElementById('results-export')",
   "op": "=",
@@ -5864,7 +5864,7 @@
  },
  {
   "sink_id": "viewRunResults:document.getElementById('results-header-actions'):=:8d3e295873f1",
-  "line": 17020,
+  "line": 17024,
   "function": "viewRunResults",
   "target": "document.getElementById('results-header-actions')",
   "op": "=",
@@ -5872,12 +5872,12 @@
   "final_category": "unescaped_html",
   "severity_tier": 4,
   "data_source_tags": "",
-  "trace_notes": "2 assignment(s) to 'actionsHtml' inside viewRunResults() @L16920 (scope-resolved) -> unescaped_html",
+  "trace_notes": "2 assignment(s) to 'actionsHtml' inside viewRunResults() @L16924 (scope-resolved) -> unescaped_html",
   "rhs": "actionsHtml"
  },
  {
   "sink_id": "viewRunResults:document.getElementById('results-summary'):=:14ac4be88bd0",
-  "line": 16980,
+  "line": 16984,
   "function": "viewRunResults",
   "target": "document.getElementById('results-summary')",
   "op": "=",
@@ -5890,7 +5890,7 @@
  },
  {
   "sink_id": "viewRunResults:document.getElementById('results-summary'):=:b5178044b390",
-  "line": 16975,
+  "line": 16979,
   "function": "viewRunResults",
   "target": "document.getElementById('results-summary')",
   "op": "=",
@@ -5903,7 +5903,7 @@
  },
  {
   "sink_id": "viewRunResults:document.getElementById('results-title'):=:5ca182313248",
-  "line": 16998,
+  "line": 17002,
   "function": "viewRunResults",
   "target": "document.getElementById('results-title')",
   "op": "=",

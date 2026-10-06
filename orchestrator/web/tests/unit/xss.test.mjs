@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import { setupDom, load, PAYLOADS } from './dom.mjs';
 
 setupDom();
-const { initiativeStateLabel, openAdvDrawer, openFinding, renderRunReportExtra, renderVariantCoverage, complianceTile, renderAgentRiskSummary, loadScheduledAssessments, loadTAXIIConnectors, loadUsers, openSweepDrilldown, loadAgtLogs } =
-  await load(['initiativeStateLabel', 'openAdvDrawer', 'openFinding', 'renderRunReportExtra', 'renderVariantCoverage', 'complianceTile', 'renderAgentRiskSummary', 'loadScheduledAssessments', 'loadTAXIIConnectors', 'loadUsers', 'openSweepDrilldown', 'loadAgtLogs']);
+const { initiativeStateLabel, openAdvDrawer, openFinding, renderRunReportExtra, renderVariantCoverage, complianceTile, renderAgentRiskSummary, loadScheduledAssessments, loadTAXIIConnectors, loadUsers, openSweepDrilldown, loadAgtLogs, renderResponseConnectorList } =
+  await load(['initiativeStateLabel', 'openAdvDrawer', 'openFinding', 'renderRunReportExtra', 'renderVariantCoverage', 'complianceTile', 'renderAgentRiskSummary', 'loadScheduledAssessments', 'loadTAXIIConnectors', 'loadUsers', 'openSweepDrilldown', 'loadAgtLogs', 'renderResponseConnectorList']);
 const tick = () => new Promise((r) => setTimeout(r, 0));
 
 function assertInert(container, label) {
@@ -148,6 +148,17 @@ test('agent-drawer: loadAgtLogs keeps payloads inside data-args', async () => {
     await tick(); await tick();
     const div = document.getElementById('agt-tab-logs');
     assertInert(div, 'loadAgtLogs');
+    assert.ok(div.querySelector('[data-args]'), 'fixture did not render');
+    const args = [...div.querySelectorAll('[data-args]')].map((e) => e.getAttribute('data-args')).join(' ');
+    assert.ok(args.includes(JSON.stringify(p).slice(1, -1)), 'payload should travel as data-args');
+  }
+});
+
+test('integrations: renderResponseConnectorList keeps payloads inside data-args', () => {
+  for (const p of PAYLOADS) {
+    renderResponseConnectorList([{ id: p, name: p, provider: 'crowdstrike', enabled: true }]);
+    const div = document.getElementById('response-connectors-list');
+    assertInert(div, 'renderResponseConnectorList');
     assert.ok(div.querySelector('[data-args]'), 'fixture did not render');
     const args = [...div.querySelectorAll('[data-args]')].map((e) => e.getAttribute('data-args')).join(' ');
     assert.ok(args.includes(JSON.stringify(p).slice(1, -1)), 'payload should travel as data-args');
