@@ -61,7 +61,18 @@ func (r *Registry) LoadVersion(ctx context.Context, id string) (Version, error) 
 
 // ListVersions returns every version of contentID, newest first.
 func (r *Registry) ListVersions(ctx context.Context, contentID string) ([]Version, error) {
-	rows, err := r.pool.Query(ctx,
+	return listVersions(ctx, r.pool, contentID)
+}
+
+// querier is satisfied by *pgxpool.Pool and pgx.Tx, so read helpers can run
+// on a caller's transaction without taking another pool connection.
+type querier interface {
+	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+}
+
+func listVersions(ctx context.Context, q querier, contentID string) ([]Version, error) {
+	rows, err := q.Query(ctx,
 		`SELECT `+versionCols+` FROM content_versions WHERE content_id = $1 ORDER BY version DESC`, contentID)
 	if err != nil {
 		return nil, err

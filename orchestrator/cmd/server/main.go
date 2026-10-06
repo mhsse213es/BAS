@@ -347,6 +347,8 @@ func main() {
 	contentRegistry := contentregistry.New(pool, integrity.CompiledVerifier{})
 	engine.AttachRegistry(contentRegistry)
 	scenarioLoadErr := engine.Load()
+	// Captured now: later Loads (connector scheduler) reset the counter.
+	bootIntakeFailures := engine.LastLoadIntakeFailures()
 	if scenarioLoadErr != nil {
 		log.Printf("[!] scenario load warning: %v", scenarioLoadErr)
 	}
@@ -789,7 +791,7 @@ func main() {
 	// Content registry migration marker: only after a clean scenario load with zero intake
 	// infrastructure failures, so a partial intake never ends custom-file grandfathering. A failure here is
 	// logged and retried next boot (marker stays absent); it never blocks boot.
-	if n := engine.LastLoadIntakeFailures(); scenarioLoadErr == nil && n == 0 {
+	if scenarioLoadErr == nil && bootIntakeFailures == 0 {
 		if inv, first, err := contentRegistry.CompleteMigration(context.Background()); err != nil {
 			log.Printf("[contentregistry] migration inventory: %v", err)
 		} else if first {
@@ -797,7 +799,7 @@ func main() {
 				len(inv.IntelDrafted), len(inv.AffectedSchedules), len(inv.AffectedCampaigns), len(inv.CustomGrandfathered), len(inv.BuiltinRefused))
 		}
 	} else {
-		log.Printf("[contentregistry] migration deferred: %d intake failures (load error: %v)", engine.LastLoadIntakeFailures(), scenarioLoadErr)
+		log.Printf("[contentregistry] migration deferred: %d intake failures (load error: %v)", bootIntakeFailures, scenarioLoadErr)
 	}
 
 	vexSweepScheduler.Start(func(ctx context.Context) {

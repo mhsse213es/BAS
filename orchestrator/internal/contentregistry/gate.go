@@ -24,14 +24,14 @@ func errString(err error) string {
 // VENDOR_SIGNED versions are re-verified on every resolution; a failure
 // denies (it never falls through to an older version) and audits a tamper.
 func (r *Registry) ResolveExecutable(ctx context.Context, contentID string) (scenario.ExecutableVersion, error) {
-	return r.resolveExecutable(ctx, contentID, true)
+	return r.resolveExecutable(ctx, r.pool, contentID, true)
 }
 
 // resolveExecutable is ResolveExecutable with the audit writes switchable.
 // audit=false (used by polled read-only checks) still re-verifies signatures
 // and denies identically; it only suppresses the audit_logs rows.
-func (r *Registry) resolveExecutable(ctx context.Context, contentID string, audit bool) (scenario.ExecutableVersion, error) {
-	versions, err := r.ListVersions(ctx, contentID)
+func (r *Registry) resolveExecutable(ctx context.Context, q querier, contentID string, audit bool) (scenario.ExecutableVersion, error) {
+	versions, err := listVersions(ctx, q, contentID)
 	if err != nil {
 		return scenario.ExecutableVersion{}, fmt.Errorf("content registry unavailable: %w", err)
 	}

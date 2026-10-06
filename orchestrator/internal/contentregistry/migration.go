@@ -33,7 +33,7 @@ type Inventory struct {
 // now. It uses ResolveExecutable, the same resolution as the execution gate,
 // so retired, rejected, untrusted, unregistered and tampered content all count
 // as blocked. A registry/DB failure is an error, never "not blocked".
-func (r *Registry) blockedSet(ctx context.Context, ids []string) (map[string]bool, error) {
+func (r *Registry) blockedSet(ctx context.Context, q querier, ids []string) (map[string]bool, error) {
 	blocked := map[string]bool{}
 	seen := map[string]bool{}
 	for _, id := range ids {
@@ -41,7 +41,7 @@ func (r *Registry) blockedSet(ctx context.Context, ids []string) (map[string]boo
 			continue
 		}
 		seen[id] = true
-		_, err := r.resolveExecutable(ctx, id, false)
+		_, err := r.resolveExecutable(ctx, q, id, false)
 		if err == nil {
 			continue
 		}
@@ -56,8 +56,8 @@ func (r *Registry) blockedSet(ctx context.Context, ids []string) (map[string]boo
 }
 
 // nonExecutableIntel lists intel content ids with no executable version.
-func (r *Registry) nonExecutableIntel(ctx context.Context) ([]string, error) {
-	rows, err := r.pool.Query(ctx,
+func (r *Registry) nonExecutableIntel(ctx context.Context, q querier) ([]string, error) {
+	rows, err := q.Query(ctx,
 		`SELECT DISTINCT content_id FROM content_versions WHERE intake_source = 'intel' ORDER BY content_id`)
 	if err != nil {
 		return nil, err
@@ -66,7 +66,7 @@ func (r *Registry) nonExecutableIntel(ctx context.Context) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	blocked, err := r.blockedSet(ctx, ids)
+	blocked, err := r.blockedSet(ctx, q, ids)
 	if err != nil {
 		return nil, err
 	}
@@ -81,8 +81,8 @@ func (r *Registry) nonExecutableIntel(ctx context.Context) ([]string, error) {
 
 // enabledSchedules returns enabled scheduled assessments. Name carries the
 // schedule type because job_schedules has no name column.
-func (r *Registry) enabledSchedules(ctx context.Context) ([]AffectedRef, error) {
-	rows, err := r.pool.Query(ctx,
+func enabledSchedules(ctx context.Context, q querier) ([]AffectedRef, error) {
+	rows, err := q.Query(ctx,
 		`SELECT id, type, COALESCE(payload->>'scenarioId', '') FROM job_schedules
 		  WHERE type = 'scheduled_assessment' AND enabled ORDER BY id`)
 	if err != nil {
@@ -109,7 +109,7 @@ func filterRefs(refs []AffectedRef, keep map[string]bool) []AffectedRef {
 // whose scenario has no executable version right now (resolved through the
 // execution gate, so retired or non-executable versions do not count as OK).
 func (r *Registry) BlockedSchedules(ctx context.Context) ([]AffectedRef, error) {
-	refs, err := r.enabledSchedules(ctx)
+	refs, err := enabledSchedules(ctx, r.pool)
 	if err != nil || len(refs) == 0 {
 		return nil, err
 	}
@@ -117,7 +117,7 @@ func (r *Registry) BlockedSchedules(ctx context.Context) ([]AffectedRef, error) 
 	for _, a := range refs {
 		ids = append(ids, a.ScenarioID)
 	}
-	blocked, err := r.blockedSet(ctx, ids)
+	blocked, err := r.blockedSet(ctx, r.pool, ids)
 	if err != nil {
 		return nil, err
 	}
@@ -148,7 +148,7 @@ func (r *Registry) CompleteMigration(ctx context.Context) (Inventory, bool, erro
 	if inv, ok, err := r.migrationInventory(ctx, tx); err != nil || ok {
 		return inv, false, err
 	}
-	inv, err := r.computeInventory(ctx)
+	inv, err := r.computeInventory(ctx, tx)
 	if err != nil {
 		return inv, false, err
 	}
@@ -177,22 +177,22 @@ func (r *Registry) CompleteMigration(ctx context.Context) (Inventory, bool, erro
 }
 
 // computeInventory runs while the exclusive migration lock is held.
-func (r *Registry) computeInventory(ctx context.Context) (Inventory, error) {
+func (r *Registry) computeInventory(ctx context.Context, q querier) (Inventory, error) {
 	var inv Inventory
 	var err error
-	if inv.IntelDrafted, err = r.nonExecutableIntel(ctx); err != nil {
+	if inv.IntelDrafted, err = r.nonExecutableIntel(ctx, q); err != nil {
 		return inv, err
 	}
 	drafted := map[string]bool{}
 	for _, id := range inv.IntelDrafted {
 		drafted[id] = true
 	}
-	scheds, err := r.enabledSchedules(ctx)
+	scheds, err := enabledSchedules(ctx, q)
 	if err != nil {
 		return inv, err
 	}
 	inv.AffectedSchedules = filterRefs(scheds, drafted)
-	crow, err := r.pool.Query(ctx, `SELECT id, name, scenario_id FROM campaigns WHERE scenario_id = ANY($1) ORDER BY id`, inv.IntelDrafted)
+	crow, err := q.Query(ctx, `SELECT id, name, scenario_id FROM campaigns WHERE scenario_id = ANY($1) ORDER BY id`, inv.IntelDrafted)
 	if err != nil {
 		return inv, err
 	}
@@ -203,7 +203,7 @@ func (r *Registry) computeInventory(ctx context.Context) (Inventory, error) {
 	}); err != nil {
 		return inv, err
 	}
-	grow, err := r.pool.Query(ctx,
+	grow, err := q.Query(ctx,
 		`SELECT DISTINCT cv.content_id FROM content_version_events e JOIN content_versions cv ON cv.id = e.content_version_id
 		  WHERE e.actor = $1 ORDER BY cv.content_id`, ActorMigration)
 	if err != nil {
