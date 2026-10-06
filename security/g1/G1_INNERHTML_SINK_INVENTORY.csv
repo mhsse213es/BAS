@@ -1091,7 +1091,7 @@ line,function,target,op,category,data_source_tags,rhs_len,rhs
 20456,populateVexTechniques,tacSel,=,indirect_variable,,7,tacOpts
 20461,populateVexTechniques,if (el) el,=,static,,99,"'<div style=""color:var(--danger);font-size:0.75rem;padding:0.4rem"">Failed to load techniques</div>'"
 20552,renderVexSweepList,el,=,static_empty,,2,''
-20554,renderVexSweepList,el,=,unescaped_html,agent,1839,"sweeps.map(function(sw) {
+20554,renderVexSweepList,el,=,unescaped_html,agent,1835,"sweeps.map(function(sw) {
     // A full sweep can have thousands of total variants, so a handful of
     // real completions can round down to a misleading ""0%"" -- floor any
     // nonzero progress at 1% so the bar never looks stuck when it isn't.
@@ -1107,15 +1107,15 @@ line,function,target,op,category,data_source_tags,rhs_len,rhs
 20821,loadVariantCoverage,el,=,static,,120,"'<div class=""empty"" style=""padding:1.5rem"">No variant runs yet. Run variants on a technique to see coverage here.</div>'"
 20846,loadVariantCoverage,el,=,indirect_variable,,4,html
 20848,loadVariantCoverage,el,=,escaped,error_message,116,"'<div class=""empty"" style=""color:var(--danger);padding:1rem"">' + x(e.message || 'Error loading coverage') + '</div>'"
-20969,_vexRenderQueuePanel,panel,=,partial_escaped,,942,"'<div class=""card"" style=""padding:1.5rem"">' +
+20969,_vexRenderQueuePanel,panel,=,partial_escaped,,951,"'<div class=""card"" style=""padding:1.5rem"">' +
     '<div class=""card-title"" style=""margin-bottom:0.75rem"">Queue Progress</div>' +
     '<div style=""font-size:0.83rem;color:var(--muted);margin-bottom:0.6rem"">Running <span style=""font-family:var(--font-mono);color:var(--text)"">' + x(tid) + '</span> — <span style=""color:var(--accent);font-weight:600"">' + (idx + 1) + ' / ' + techniques.length + '</span>"
-21039,pollVariantRun,if (panel) panel,=,escaped,,520,"'<div class=""card"" style=""padding:1.5rem;text-align:center;color:var(--muted)"">' +
+21039,pollVariantRun,if (panel) panel,=,escaped,,529,"'<div class=""card"" style=""padding:1.5rem;text-align:center;color:var(--muted)"">' +
     '<div style=""margin-bottom:0.5rem;font-size:0.9rem"">Executing variants…</div>' +
     '<div class=""tiny"" style=""font-family:var(--font-mono);margin-bottom:0.75rem"">' + x(vrId) + '</div>' +
     '<div id=""vex-poll-status"" class=""tiny"" style=""min-height:1em;margin-bottom:0.5rem""></div>' +
     '<button class=""btn btn"
-21068,pollVariantRun,if (p) p,=,escaped,,796,"'<div class=""card"" style=""padding:1.5rem;text-align:center;color:var(--muted)"">' +
+21068,pollVariantRun,if (p) p,=,escaped,,801,"'<div class=""card"" style=""padding:1.5rem;text-align:center;color:var(--muted)"">' +
           '<div style=""margin-bottom:0.5rem;font-size:0.9rem;color:var(--danger)"">Unable to retrieve execution status</div>' +
           '<div class=""tiny"" style=""font-family:var(--font-mono);margin-bottom:0.75rem"">' + x(vrId) + '</div>' +
           '<div class=""tiny muted"" style=""margin-bottom:0.75rem"">The run may "

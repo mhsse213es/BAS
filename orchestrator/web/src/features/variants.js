@@ -1,6 +1,7 @@
 import { state } from '../core/state.js';
 import { apicall } from '../core/api.js';
 import { x } from '../core/escape.js';
+import { on } from '../core/actions.js';
 import { showToast } from '../core/util.js';
 import { renderGroupCheckboxList } from './adversaries.js';
 import { resolveGroupTargetAgents } from './attack-path.js';
@@ -97,9 +98,9 @@ export function loadVariantStats() {
   }).catch(function() {});
 }
 
-function vexStatCard(label, val, col, sub, help) {
+export function vexStatCard(label, val, col, sub, help) {
   return '<div class="kpi-card" style="position:relative">' +
-    (help ? '<button type="button" class="btn btn-sm" onclick="showVexStatHelp(\'' + x(label) + '\',\'' + x(help) + '\')" title="What does this number mean?" style="position:absolute;top:0.5rem;right:0.5rem;width:18px;height:18px;padding:0;line-height:16px;text-align:center;border-radius:50%;font-size:0.68rem;font-weight:700;color:var(--muted);background:transparent;border:1px solid var(--border)">?</button>' : '') +
+    (help ? '<button type="button" class="btn btn-sm"' + on('click', 'showVexStatHelp', label, help) + ' title="What does this number mean?" style="position:absolute;top:0.5rem;right:0.5rem;width:18px;height:18px;padding:0;line-height:16px;text-align:center;border-radius:50%;font-size:0.68rem;font-weight:700;color:var(--muted);background:transparent;border:1px solid var(--border)">?</button>' : '') +
     '<div class="kpi-label">' + label + '</div>' +
     '<div class="kpi-value" style="color:' + col + '">' + (val || 0).toLocaleString() + '</div>' +
     (sub ? '<div style="font-size:0.65rem;color:var(--muted);margin-top:0.15rem">' + sub + '</div>' : '') +
@@ -274,7 +275,7 @@ function renderVexSweepList(sweeps) {
           (disconnected ? ' <span class="sbadge s-agent_disconnected">Agent Disconnected</span>' : '') + '</span>' +
         '<span style="display:flex;align-items:center;gap:0.6rem">' +
           (disconnected ? '' : '<span style="font-weight:700;color:var(--accent)">' + pct + '%</span>') +
-          '<button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger);padding:2px 8px;font-size:0.7rem" onclick="stopVexSweep(\'' + x(sw.id) + '\')">&#9632; Stop</button>' +
+          '<button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger);padding:2px 8px;font-size:0.7rem"' + on('click', 'stopVexSweep', sw.id) + '>&#9632; Stop</button>' +
         '</span>' +
       '</div>' +
       '<div style="height:5px;background:var(--border);border-radius:3px;overflow:hidden">' +
@@ -683,7 +684,7 @@ function _vexRenderQueuePanel(tid, idx, techniques) {
       '<div style="height:4px;background:var(--accent);border-radius:2px;width:' + pct + '%;transition:width 0.4s"></div>' +
     '</div>' +
     (idx > 0 ? '<div style="margin-bottom:0.6rem;font-size:0.74rem;color:var(--muted)">' + idx + ' completed</div>' : '') +
-    '<button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger)" onclick="stopVex()">&#9632; Stop</button>' +
+    '<button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger)"' + on('click', 'stopVex') + '>&#9632; Stop</button>' +
   '</div>';
 }
 
@@ -751,7 +752,7 @@ export function pollVariantRun(vrId) {
     '<div style="margin-bottom:0.5rem;font-size:0.9rem">Executing variants…</div>' +
     '<div class="tiny" style="font-family:var(--font-mono);margin-bottom:0.75rem">' + x(vrId) + '</div>' +
     '<div id="vex-poll-status" class="tiny" style="min-height:1em;margin-bottom:0.5rem"></div>' +
-    '<button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger)" onclick="stopVex()">&#9632; Stop</button></div>';
+    '<button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger)"' + on('click', 'stopVex') + '>&#9632; Stop</button></div>';
   state._vexRunPoll = setInterval(function() {
     apicall('/api/variants/run/' + vrId).then(function(detail) {
       state._vexPollFailCount = 0;
@@ -780,8 +781,8 @@ export function pollVariantRun(vrId) {
           '<div style="margin-bottom:0.5rem;font-size:0.9rem;color:var(--danger)">Unable to retrieve execution status</div>' +
           '<div class="tiny" style="font-family:var(--font-mono);margin-bottom:0.75rem">' + x(vrId) + '</div>' +
           '<div class="tiny muted" style="margin-bottom:0.75rem">The run may still be executing on the server — this only means status updates stopped arriving. Retry, or check Live Runs.</div>' +
-          '<button class="btn btn-outline btn-sm" onclick="pollVariantRun(\'' + x(vrId) + '\')">&#8635; Retry</button> ' +
-          '<button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger)" onclick="stopVex()">&#9632; Stop</button></div>';
+          '<button class="btn btn-outline btn-sm"' + on('click', 'pollVariantRun', vrId) + '>&#8635; Retry</button> ' +
+          '<button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger)"' + on('click', 'stopVex') + '>&#9632; Stop</button></div>';
       } else {
         var statusEl = document.getElementById('vex-poll-status');
         if (statusEl) statusEl.textContent = 'Status temporarily unavailable — retrying (' + state._vexPollFailCount + '/' + VEX_POLL_MAX_FAILURES + ')';
@@ -868,7 +869,7 @@ function renderVariantRun(detail) {
   wrapperHtml += '<span style="display:flex;align-items:center;gap:0.5rem">';
   wrapperHtml += '<span class="badge" style="background:' + statusCol + '22;color:' + statusCol + ';border:1px solid ' + statusCol + '44">' + x(run.status || 'running') + '</span>';
   if (run.status === 'running') {
-    wrapperHtml += '<button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger)" onclick="stopVex()">&#9632; Stop</button>';
+    wrapperHtml += '<button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger)"' + on('click', 'stopVex') + '>&#9632; Stop</button>';
   }
   wrapperHtml += '</span>';
   wrapperHtml += '</div>';
@@ -880,10 +881,10 @@ function renderVariantRun(detail) {
   // just be an incomplete snapshot.
   if (run.scenarioRunId && run.status !== 'running') {
     wrapperHtml += '<div style="display:flex;gap:0.4rem;flex-wrap:wrap">';
-    wrapperHtml += '<button class="btn btn-outline btn-sm" onclick="openRunReport(\'' + x(run.scenarioRunId) + '\')" title="Open the HTML report">&#8599; HTML Report</button>';
-    wrapperHtml += '<button class="btn btn-outline btn-sm" onclick="downloadRunReport(\'' + x(run.scenarioRunId) + '\')" title="Download the report as a PDF file">&#8595; PDF</button>';
-    wrapperHtml += '<button class="btn btn-outline btn-sm" onclick="downloadRunCSV(\'' + x(run.scenarioRunId) + '\')" title="Download the forensic CSV (one row per variant)">&#8595; CSV</button>';
-    wrapperHtml += '<button class="btn btn-outline btn-sm" onclick="exportRunJSON(\'' + x(run.scenarioRunId) + '\')" title="Download the raw run data as JSON">&#8595; JSON</button>';
+    wrapperHtml += '<button class="btn btn-outline btn-sm"' + on('click', 'openRunReport', run.scenarioRunId) + ' title="Open the HTML report">&#8599; HTML Report</button>';
+    wrapperHtml += '<button class="btn btn-outline btn-sm"' + on('click', 'downloadRunReport', run.scenarioRunId) + ' title="Download the report as a PDF file">&#8595; PDF</button>';
+    wrapperHtml += '<button class="btn btn-outline btn-sm"' + on('click', 'downloadRunCSV', run.scenarioRunId) + ' title="Download the forensic CSV (one row per variant)">&#8595; CSV</button>';
+    wrapperHtml += '<button class="btn btn-outline btn-sm"' + on('click', 'exportRunJSON', run.scenarioRunId) + ' title="Download the raw run data as JSON">&#8595; JSON</button>';
     wrapperHtml += '</div>';
   }
 
