@@ -2,7 +2,11 @@ package contentregistry
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"log"
+
+	"github.com/jackc/pgx/v5"
 
 	"github.com/audspect/bas/internal/scenario"
 )
@@ -24,6 +28,12 @@ type RunContent struct {
 	Version   int
 	Trust     string
 	Lifecycle string
+	// Err is why the content is unreadable (nil otherwise).
+	Err error
+	// Transient marks an unreadable outcome caused by infrastructure (DB or
+	// context error) rather than a permanently bad state: callers that
+	// record a run as processed must retry instead.
+	Transient bool
 }
 
 // Label is the operator/report-facing provenance line (spec §7).
@@ -52,20 +62,23 @@ func (r *Registry) RunContent(ctx context.Context, runID string, current Current
 	if err := r.pool.QueryRow(ctx,
 		`SELECT execution_kind, content_version_id, scenario_id FROM scenario_runs WHERE id = $1`, runID,
 	).Scan(&kind, &vid, &scenarioID); err != nil {
-		return RunContent{Status: RunUnreadable}
+		return unreadable(runID, RunContent{Err: fmt.Errorf("load run: %w", err),
+			Transient: !errors.Is(err, pgx.ErrNoRows)})
 	}
 	switch kind {
 	case KindContent:
 		if vid == nil {
-			return RunContent{Status: RunUnreadable}
+			return unreadable(runID, RunContent{ContentID: scenarioID,
+				Err: errors.New("content run has no pinned content_version_id")})
 		}
 		v, err := r.LoadVersion(ctx, *vid)
 		if err != nil {
-			return RunContent{Status: RunUnreadable, VersionID: *vid}
+			return unreadable(runID, RunContent{VersionID: *vid, ContentID: scenarioID,
+				Err: err, Transient: !errors.Is(err, ErrVersionNotFound)})
 		}
 		sc, err := v.Parse()
 		if err != nil {
-			return RunContent{Status: RunUnreadable, VersionID: v.ID, ContentID: v.ContentID, Version: v.Number}
+			return unreadable(runID, RunContent{VersionID: v.ID, ContentID: v.ContentID, Version: v.Number, Err: err})
 		}
 		return RunContent{Status: RunVersioned, Scenario: sc, VersionID: v.ID, ContentID: v.ContentID,
 			Version: v.Number, Trust: string(v.Trust), Lifecycle: string(v.Lifecycle)}
@@ -78,6 +91,15 @@ func (r *Registry) RunContent(ctx context.Context, runID string, current Current
 	default:
 		return RunContent{Status: RunSynthetic}
 	}
+}
+
+// unreadable stamps the Unreadable status and logs the outcome once: a run
+// interpreted against nothing must never be silent.
+func unreadable(runID string, rc RunContent) RunContent {
+	rc.Status = RunUnreadable
+	log.Printf("[contentregistry] run %s content unreadable (version %q, transient=%t): %v",
+		runID, rc.VersionID, rc.Transient, rc.Err)
+	return rc
 }
 
 // ExpectationResolver is the engine's detection-profile resolution (still

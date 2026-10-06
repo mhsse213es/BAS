@@ -83,5 +83,64 @@ func TestRunContent_UnreadableNeverFallsBack(t *testing.T) {
 		if rc.Status != RunUnreadable || rc.Scenario != nil || rc.Label() != "Content version unreadable" {
 			t.Fatalf("got %+v", rc)
 		}
+		// A corrupt artifact is a permanent state, not an infrastructure blip.
+		if rc.Transient || rc.Err == nil {
+			t.Fatalf("corrupt version must be permanent with an error: %+v", rc)
+		}
+		// So is a run row that does not exist.
+		if miss := r.RunContent(ctx, "no-such-run", nil); miss.Status != RunUnreadable || miss.Transient || miss.Err == nil {
+			t.Fatalf("missing run must be permanent: %+v", miss)
+		}
+	})
+}
+
+func TestRunContent_MissingVersionIsPermanent(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		r := New(pool, testutil.DevVerifier())
+		if _, err := pool.Exec(ctx, `INSERT INTO agents (agent_id, hostname) VALUES ('ma','h')`); err != nil {
+			t.Fatal(err)
+		}
+		// The FK forbids a dangling pin, so pin a real version and then
+		// repoint it at a nonexistent id with FK triggers disabled
+		// (session_replication_role = replica) to simulate a lost version.
+		if err := r.RegisterLocalApproved(ctx, "mv", []byte("id: mv\nname: M\nlocal_check: true\n"), "user:op"); err != nil {
+			t.Fatal(err)
+		}
+		ev, _ := r.ResolveExecutable(ctx, "mv")
+		var runID string
+		if err := pool.QueryRow(ctx, `INSERT INTO scenario_runs (scenario_id, agent_id, execution_kind, content_version_id)
+			VALUES ('mv','ma','content',$1) RETURNING id`, ev.VersionID).Scan(&runID); err != nil {
+			t.Fatal(err)
+		}
+		conn, err := pool.Acquire(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer conn.Release()
+		if _, err := conn.Exec(ctx, `SET session_replication_role = replica`); err != nil {
+			t.Skipf("cannot bypass FK to simulate a missing version: %v", err)
+		}
+		_, err = conn.Exec(ctx, `UPDATE scenario_runs SET content_version_id = 'cv-gone' WHERE id = $1`, runID)
+		_, _ = conn.Exec(ctx, `SET session_replication_role = origin`)
+		if err != nil {
+			t.Fatal(err)
+		}
+		rc := r.RunContent(ctx, runID, nil)
+		if rc.Status != RunUnreadable || rc.Transient || rc.VersionID != "cv-gone" || rc.Err == nil {
+			t.Fatalf("missing version must be permanent: %+v", rc)
+		}
+	})
+}
+
+func TestRunContent_CancelledContextIsTransient(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		r := New(pool, testutil.DevVerifier())
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		rc := r.RunContent(ctx, "any-run", nil)
+		if rc.Status != RunUnreadable || !rc.Transient || rc.Err == nil {
+			t.Fatalf("cancelled context must be transient: %+v", rc)
+		}
 	})
 }

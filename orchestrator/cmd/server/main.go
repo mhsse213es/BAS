@@ -443,7 +443,8 @@ func main() {
 	// before the poller starts so Tick never races the assignment.
 	runContent := func(ctx context.Context, runID string) reporting.RunContentInfo {
 		rr := contentRegistry.ForRun(ctx, runID, engine)
-		return reporting.RunContentInfo{Resolver: rr, Status: string(rr.Content.Status), Label: rr.Content.Label()}
+		return reporting.RunContentInfo{Resolver: rr, Status: string(rr.Content.Status), Label: rr.Content.Label(),
+			Transient: rr.Content.Transient}
 	}
 	verifyJob := verifysync.NewJob(pool, verificationStore, engine).WithRunContent(runContent)
 	verifySyncScheduler := exercise.NewPollScheduler(5 * time.Minute)

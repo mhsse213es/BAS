@@ -81,6 +81,9 @@ type RunContentInfo struct {
 	Resolver ScenarioResolver
 	Status   string
 	Label    string
+	// Transient is true when the content was unreadable because of an
+	// infrastructure error; consumers that persist "processed" state retry.
+	Transient bool
 }
 
 type RunContentFunc func(ctx context.Context, runID string) RunContentInfo

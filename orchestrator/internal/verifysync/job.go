@@ -14,6 +14,7 @@ package verifysync
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -85,6 +86,24 @@ func (j *Job) Tick(ctx context.Context) {
 }
 
 func (j *Job) processRun(ctx context.Context, runID, scenarioID string, resultsRaw []byte) error {
+	resolver := j.scenarios
+	if j.runContent != nil {
+		info := j.runContent(ctx, runID)
+		if info.Status == "unreadable" { // contentregistry.RunUnreadable
+			if info.Transient {
+				// Not marked processed: retried next tick instead of
+				// silently losing this run's automatic verdicts.
+				return errors.New("run content transiently unreadable")
+			}
+			// Permanently bad content: mark processed so it can't starve
+			// the batch; there is nothing to verify against.
+			log.Printf("[verifysync] run %s content permanently unreadable; skipping verification", runID)
+			return nil
+		}
+		if info.Resolver != nil {
+			resolver = info.Resolver
+		}
+	}
 	var results []models.SimulationResult
 	if len(resultsRaw) > 0 {
 		if err := json.Unmarshal(resultsRaw, &results); err != nil {
@@ -93,12 +112,6 @@ func (j *Job) processRun(ctx context.Context, runID, scenarioID string, resultsR
 	}
 	if err := j.annotateSinkReceipts(ctx, runID, results); err != nil {
 		return err
-	}
-	resolver := j.scenarios
-	if j.runContent != nil {
-		if info := j.runContent(ctx, runID); info.Resolver != nil {
-			resolver = info.Resolver
-		}
 	}
 	specs := reporting.ResolveStepDetectionSpecs(resolver, scenarioID)
 	if len(specs) == 0 {

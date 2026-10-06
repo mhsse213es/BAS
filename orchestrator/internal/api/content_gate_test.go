@@ -339,7 +339,9 @@ func TestSubmitResult_InterpretsAgainstPinnedVersion(t *testing.T) {
 			VALUES ('hp','hpa','content',$1) RETURNING id`, ev.VersionID).Scan(&runID)
 		v2 := *v1
 		v2.Steps = []scenario.Step{{Name: "Renamed step", TechniqueID: "T1082", Framework: "custom", Command: "a"}}
-		_ = e.SaveAs(context.Background(), &v2, "user:op")
+		if err := e.SaveAs(context.Background(), &v2, "user:op"); err != nil {
+			t.Fatal(err)
+		}
 		h := New(pool, ws.NewHub(), e, "")
 		rc := h.runContent(context.Background(), runID)
 		if rc.Scenario == nil || rc.Scenario.Steps[0].Name != "Original step" {
