@@ -76,9 +76,16 @@ def check(web_dir, baseline_path=DEFAULT_BASELINE):
         errors.append(f"unused action: {name}")
 
     window_writes = set(_block(globals_js, "WINDOW_WRITES")) if "WINDOW_WRITES" in globals_js else set()
+    # Keys of the shared state object used to be mirrored onto window; a
+    # window.<key> read is now silently undefined.
+    state_js = js.get(web_dir / "src" / "core" / "state.js", "")
+    m = re.search(r"export const state = \{(.*?)\n\};", state_js, re.S)
+    state_keys = set(re.findall(r"^\s+([A-Za-z_$][\w$]*):", m.group(1), re.M)) if m else set()
     for p, text in js.items():
         if p.name == "globals.js":
             continue
+        for name in sorted(set(re.findall(r"(?<![\w$.])window\.([A-Za-z_$][\w$]*)", text)) & state_keys):
+            errors.append(f"window read of shared state: {name} in {p.relative_to(web_dir).as_posix()} (use state.{name})")
         for name in re.findall(r"(?<![\w$.])window\.([A-Za-z_$][\w$]*)\s*=(?!=)", text):
             if name not in window_writes:
                 errors.append(f"window write not in WINDOW_WRITES: {name}")

@@ -45,7 +45,7 @@ function populateCoverageFilters(d) {
   _caFiltersPopulated = true;
   // Scenario dropdown from loaded scenario list.
   var scenSel = document.getElementById('ca-scenario');
-  if (scenSel && window.scenarios) {
+  if (scenSel && state.scenarios) {
     var cur = scenSel.value;
     scenSel.innerHTML = '<option value="">All scenarios</option>' +
       (state.scenarios || []).map(function(s) { return '<option value="' + x(s.id) + '">' + x(s.name) + '</option>'; }).join('');

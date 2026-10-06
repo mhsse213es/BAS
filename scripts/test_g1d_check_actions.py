@@ -105,6 +105,15 @@ class TestActions(unittest.TestCase):
         d, b = make(CLEAN_HTML, "window.onRunEvent = f;\nwindow.sneaky = 1;\n", globals_js=g_js)
         self.assertIn("window write not in WINDOW_WRITES: sneaky", g.check(d, b))
 
+    def test_window_read_of_shared_state_key_fails(self):
+        # installGlobals used to mirror these keys onto window; after G1d a
+        # window.<key> read is silently undefined.
+        d, b = make(CLEAN_HTML, "if (window.scenarios) go();\nvar w = window.innerWidth;\n")
+        (d / "src" / "core" / "state.js").write_text("export const state = {\n  scenarios: [],\n  _covSt: undefined,\n};\n", encoding="utf-8")
+        errors = g.check(d, b)
+        self.assertIn("window read of shared state: scenarios in src/a.js (use state.scenarios)", errors)
+        self.assertFalse(any("innerWidth" in e for e in errors))
+
     def test_window_bracket_lookup_fails(self):
         d, b = make(CLEAN_HTML, "var sel = window[name];\n")
         self.assertIn("window[...] lookup in src/a.js", g.check(d, b))
