@@ -1023,7 +1023,7 @@ export function _onRevalidationStarted(msg) {
   } else if (status === 'error') {
     // Content Registry gate denial (revalidation.content_not_executable): the
     // scenario is not approved, so this is terminal until an operator approves it.
-    showToast(d.message || ('Auto-revalidation of ' + tech + ' was blocked.'), 'error');
+    showToast(d.message || ('Auto-revalidation of ' + tech + ' was blocked.'), 'err');
   }
 }
 
@@ -1758,9 +1758,9 @@ function registryBadge(s) {
     var pending = r.latestVersion > r.executableVersion
       ? ' <span class="tag" title="Newer version awaiting approval">v' + x(String(r.latestVersion)) + ' ' + x(r.latestLifecycle) + '</span>'
       : '';
-    return '<span class="tag" style="background:rgba(63,185,80,0.12);color:#3fb950">' + label + x(String(r.executableVersion)) + '</span>' + pending + ' ';
+    return '<span class="tag tag-approved">' + label + x(String(r.executableVersion)) + '</span>' + pending + ' ';
   }
-  return '<span class="tag" style="background:rgba(210,153,34,0.15);color:#d29922" title="Not executable until approved">v' +
+  return '<span class="tag tag-pending" title="Not executable until approved">v' +
     x(String(r.latestVersion)) + ' ' + x(r.latestLifecycle) + '</span> ';
 }
 
@@ -1784,7 +1784,7 @@ export function approveForLocalUse(id, versionId) {
     if (d && d.error) throw new Error(d.error);
     showToast('Approved ' + id + ' for local use', 'ok');
     loadScenarios();
-  }).catch(function(e) { showToast('Approval failed: ' + e.message, 'error'); });
+  }).catch(function(e) { showToast('Approval failed: ' + e.message, 'err'); });
 }
 
 // Admin-only banner: schedules whose scenario is no longer executable after the

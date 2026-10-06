@@ -2173,17 +2173,21 @@ export function viewRunResults(run) {
   var runId = run.id || '';
   // TCF Phase 1 provenance: which content version this run executed. Shown
   // only on a clean 200 with a label; textContent only (label has a content id).
+  var oldProv = document.getElementById('runContentProvenance');
+  if (oldProv) oldProv.remove();
   if (runId) {
-    var sumEl = document.getElementById('results-summary');
+    var titleEl = document.getElementById('results-title');
+    titleEl.setAttribute('data-prov-run', runId);
     apicall('/api/content-registry/runs/' + encodeURIComponent(runId) + '/content').then(function(c) {
-      if (!c || !c.label || !sumEl) return;
-      var el = document.createElement('div');
+      // Stale-response guard: a newer viewRunResults call re-stamps the title.
+      if (!c || !c.label || titleEl.getAttribute('data-prov-run') !== runId) return;
+      var stale = document.getElementById('runContentProvenance');
+      if (stale) stale.remove();
+      var el = document.createElement('span');
       el.id = 'runContentProvenance';
       el.className = 'card-meta';
       el.textContent = 'Content: ' + c.label;
-      var old = document.getElementById('runContentProvenance');
-      if (old) old.remove();
-      sumEl.appendChild(el);
+      titleEl.insertAdjacentElement('afterend', el);
     }).catch(function() {});
   }
   var hasOutput = runId && (run.status === 'completed' || run.status === 'partial');
