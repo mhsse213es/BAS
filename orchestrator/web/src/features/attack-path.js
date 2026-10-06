@@ -1774,17 +1774,80 @@ function approveButton(s) {
   return '<button class="btn btn-outline btn-sm"' + on('click', 'approveForLocalUse', s.id, s.registry.latestVersionId) + '>&#10003; Approve</button> ';
 }
 
+// Approve-for-local-use is a deliberate, in-page confirmation (no
+// window.prompt/confirm): it loads the exact version first and shows what it
+// will run -- step count, ART techniques, safety verdicts, a link to the
+// stored bytes -- and stays disabled until the operator ticks the review box
+// and gives a reason. All server text goes through x().
+var _approveTarget = null; // { id, versionId } of the loaded version
+
 export function approveForLocalUse(id, versionId) {
-  var reason = window.prompt('Approve ' + id + ' for local execution. Reason (recorded in the audit trail):', 'reviewed');
-  if (reason === null) return;
-  apicall('/api/content-registry/versions/' + encodeURIComponent(versionId) + '/transition', {
+  var body = document.getElementById('approve-local-body');
+  var overlay = document.getElementById('approve-local-overlay');
+  if (!body || !overlay) return;
+  _approveTarget = null;
+  document.getElementById('approve-local-ack').checked = false;
+  document.getElementById('approve-local-reason').value = '';
+  document.getElementById('approve-local-submit-btn').disabled = true;
+  body.innerHTML = '<p class="sub2">Loading version&hellip;</p>';
+  overlay.classList.add('open');
+  apicall('/api/content-registry/versions/' + encodeURIComponent(versionId)).then(function(d) {
+    if (!d || d.error) throw new Error((d && d.error) || 'version not found');
+    if (d.id !== versionId || d.contentId !== id) throw new Error('version does not match this scenario');
+    body.innerHTML = approveSummaryHTML(d);
+    _approveTarget = { id: id, versionId: versionId };
+    approveLocalAckChanged();
+  }).catch(function(e) {
+    body.innerHTML = '<p class="u-danger">Could not load the version to review: ' + x(e.message) + '</p>';
+  });
+}
+
+function approveSummaryHTML(d) {
+  var steps = (d.stepCount === null || d.stepCount === undefined) ? 'unreadable artifact' : String(d.stepCount);
+  var techs = d.artTechniques || [];
+  var techList = techs.slice(0, 20).join(', ') + (techs.length > 20 ? ', … (+' + (techs.length - 20) + ')' : '');
+  var verdicts = Array.isArray(d.safetyVerdicts) ? d.safetyVerdicts : [];
+  var safety = verdicts.length
+    ? verdicts.map(function(v) { return x(v.classifier) + ' ' + x(v.classifierVersion) + ': <strong>' + x(v.verdict) + '</strong>'; }).join('<br>')
+    : 'no safety verdict recorded';
+  var href = '/api/content-registry/versions/' + encodeURIComponent(d.id) + '/artifact';
+  return '<table class="approve-kv"><tbody>' +
+    '<tr><th>Scenario</th><td><code>' + x(d.contentId) + '</code> v' + x(String(d.version)) + '</td></tr>' +
+    '<tr><th>State</th><td>' + x(d.lifecycle) + ' / ' + x(d.trust) + ' (' + x(d.intakeSource) + ')</td></tr>' +
+    '<tr><th>Custom steps</th><td>' + x(steps) + '</td></tr>' +
+    '<tr><th>ART techniques</th><td>' + x(String(techs.length)) + (techs.length ? ' &mdash; ' + x(techList) : '') + '</td></tr>' +
+    '<tr><th>Safety</th><td>' + safety + '</td></tr>' +
+    '<tr><th>SHA-256</th><td><code>' + x(d.artifactSha256) + '</code></td></tr>' +
+    '<tr><th>Artifact</th><td><a href="' + x(href) + '" download>Download the exact bytes to review</a></td></tr>' +
+    '</tbody></table>';
+}
+
+export function approveLocalAckChanged() {
+  var ok = !!_approveTarget && document.getElementById('approve-local-ack').checked &&
+    document.getElementById('approve-local-reason').value.trim() !== '';
+  document.getElementById('approve-local-submit-btn').disabled = !ok;
+}
+
+export function closeApproveLocalModal() {
+  _approveTarget = null;
+  document.getElementById('approve-local-overlay').classList.remove('open');
+}
+
+export function submitApproveLocal() {
+  var t = _approveTarget;
+  var reason = document.getElementById('approve-local-reason').value.trim();
+  if (!t || !reason || !document.getElementById('approve-local-ack').checked) return;
+  var btn = document.getElementById('approve-local-submit-btn');
+  btn.disabled = true;
+  apicall('/api/content-registry/versions/' + encodeURIComponent(t.versionId) + '/transition', {
     method: 'POST',
     body: JSON.stringify({ to: 'PUBLISHED_LOCAL', reason: reason })
   }).then(function(d) {
     if (d && d.error) throw new Error(d.error);
-    showToast('Approved ' + id + ' for local use', 'ok');
+    closeApproveLocalModal();
+    showToast('Approved ' + t.id + ' for local use', 'ok');
     loadScenarios();
-  }).catch(function(e) { showToast('Approval failed: ' + e.message, 'err'); });
+  }).catch(function(e) { btn.disabled = false; showToast('Approval failed: ' + e.message, 'err'); });
 }
 
 // Admin-only banner: schedules whose scenario is no longer executable after the

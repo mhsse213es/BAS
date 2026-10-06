@@ -695,6 +695,13 @@ code {
   overflow-y: auto; padding: 2rem 0;
 }
 .overlay.open { display: flex; }
+/* TCF approve-for-local-use confirmation */
+.modal.modal-approve { width: 600px; max-width: calc(100vw - 2rem); }
+.approve-kv { width: 100%; border-collapse: collapse; font-size: 0.8rem; margin-bottom: 0.75rem; }
+.approve-kv th { text-align: left; color: var(--muted); padding: 0.2rem 0.75rem 0.2rem 0; vertical-align: top; white-space: nowrap; font-weight: 500; }
+.approve-kv td { padding: 0.2rem 0; overflow-wrap: anywhere; }
+.approve-ack { display: flex; gap: 0.5rem; align-items: flex-start; font-size: 0.8rem; margin: 0.75rem 0; }
+.approve-reason { width: 100%; padding: 0.45rem 0.7rem; background: var(--elevated); border: 1px solid var(--border); border-radius: var(--radius); color: var(--text); font-size: 0.8rem; }
 .modal {
   background: var(--surface); border: 1px solid var(--border);
   border-radius: var(--radius); padding: 1.5rem; width: 400px;

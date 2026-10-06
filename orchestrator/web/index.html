@@ -3132,6 +3132,23 @@
   </div>
 </div>
 
+<!-- TCF: approve a DRAFT for local execution (in-page confirm) -->
+<div id="approve-local-overlay" class="overlay">
+  <div class="modal modal-approve">
+    <h3>Approve for local execution</h3>
+    <p class="sub2">Approving makes exactly this stored version executable on your agents. Review it first.</p>
+    <div id="approve-local-body"></div>
+    <label class="modal-lbl" for="approve-local-reason">Reason (recorded in the audit trail)</label>
+    <input id="approve-local-reason" class="approve-reason" type="text" maxlength="500" autocomplete="off" data-on-input="approveLocalAckChanged">
+    <label class="approve-ack"><input id="approve-local-ack" type="checkbox" data-on-change="approveLocalAckChanged"> I reviewed the steps, techniques and safety verdict above and approve this version to run.</label>
+    <div class="modal-actions">
+      <button class="btn btn-outline btn-sm" data-on-click="closeApproveLocalModal">Cancel</button>
+      <span class="u-flex1"></span>
+      <button id="approve-local-submit-btn" class="btn btn-primary btn-sm" data-on-click="submitApproveLocal" disabled>Approve</button>
+    </div>
+  </div>
+</div>
+
 <!-- Stop Agent Modal -->
 <div id="stop-agent-overlay" class="overlay">
   <div class="modal" style="width:440px">

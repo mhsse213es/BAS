@@ -114,3 +114,24 @@ func TestRegisterGenerated_RefusesCustomSourceCollision(t *testing.T) {
 		}
 	})
 }
+
+// Final-review I3 (approve UI): the version detail tells an approver what the
+// DRAFT will run before approval -- step and ART technique counts.
+func TestVersionDetail_ReportsWhatWillRun(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		r := New(pool, testutil.DevVerifier())
+		art := []byte("id: intel-cnt\nname: N\nart_techniques: [T1059.001, T1082, T1083]\nsteps:\n- name: s1\n  technique_id: T1082\n  command: whoami\n")
+		vid, _, err := r.RegisterGenerated(ctx, GeneratedCandidate{ContentID: "intel-cnt", Artifact: art})
+		if err != nil {
+			t.Fatal(err)
+		}
+		d, err := r.VersionDetail(ctx, vid)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if d.StepCount == nil || *d.StepCount != 1 || len(d.ARTTechniques) != 3 || d.ARTTechniques[0] != "T1059.001" {
+			t.Fatalf("detail: steps=%v art=%v", d.StepCount, d.ARTTechniques)
+		}
+	})
+}

@@ -13,6 +13,9 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"unicode"
+
+	"gopkg.in/yaml.v3"
 
 	"github.com/audspect/bas/internal/contentregistry"
 	"github.com/audspect/bas/internal/scenario"
@@ -26,8 +29,11 @@ type Registrar interface {
 }
 
 const (
-	generatorName    = "connector/generator"
-	generatorVersion = "2" // 2 = registry-backed, deterministic YAML (TCF Phase 1)
+	generatorName = "connector/generator"
+	// 2 = registry-backed, deterministic YAML (TCF Phase 1).
+	// 3 = yaml.Marshal encoding + sanitized, rune-capped intel text (final
+	//     review I3). New bytes => a new DRAFT version of the same content id.
+	generatorVersion = "3"
 	mappingVersion   = "1"
 )
 
@@ -155,21 +161,81 @@ func (g *Generator) Write(actors []ThreatActor) (GenerateResult, error) {
 
 // ── YAML builder ──────────────────────────────────────────────────────────────
 
+// intelScenarioYAML fixes the generated document's key order. Every value
+// goes through yaml.Marshal, so external intel text (MISP/OpenCTI/OTX) is
+// always a quoted/escaped scalar and can never add keys such as steps:.
+type intelScenarioYAML struct {
+	ID                string   `yaml:"id"`
+	Name              string   `yaml:"name"`
+	Description       string   `yaml:"description"`
+	Author            string   `yaml:"author"`
+	Tags              []string `yaml:"tags"`
+	MITREPhases       []string `yaml:"mitre_phases"`
+	IntelSource       string   `yaml:"intel_source"`
+	IntelSourceID     string   `yaml:"intel_source_id"`
+	IntelActor        string   `yaml:"intel_actor"`
+	IntelConfidence   string   `yaml:"intel_confidence"`
+	ARTTechniques     []string `yaml:"art_techniques"`
+	DetectionProfiles []string `yaml:"detection_profiles,omitempty"`
+}
+
+// Rune caps for actor-derived display text.
+const (
+	maxIntelNameRunes        = 128
+	maxIntelDescriptionRunes = 200
+	maxIntelFieldRunes       = 128 // source, source id, confidence, sector, technique id, tactic
+)
+
+// sanitizeIntelText drops invalid UTF-8 and every control character
+// (including CR, LF, NUL and ESC) from external intel text, trims it, and
+// caps it at max runes -- never mid-rune. truncated reports a cut.
+func sanitizeIntelText(s string, max int) (out string, truncated bool) {
+	s = strings.ToValidUTF8(s, "")
+	s = strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) {
+			return -1
+		}
+		return r
+	}, s)
+	s = strings.TrimSpace(s)
+	n := 0
+	for i := range s {
+		if n == max {
+			return strings.TrimSpace(s[:i]), true
+		}
+		n++
+	}
+	return s, false
+}
+
+func cleanIntel(s string) string {
+	out, _ := sanitizeIntelText(s, maxIntelFieldRunes)
+	return out
+}
+
 // buildYAML renders the scenario YAML. It is deterministic: no wall-clock or
 // last-seen values, so unchanged techniques/confidence give identical bytes.
 func (g *Generator) buildYAML(actor ThreatActor, contentID string) string {
-	id := contentID
+	name, _ := sanitizeIntelText(actor.Name, maxIntelNameRunes)
+	source := cleanIntel(actor.Source)
+	confidence := cleanIntel(actor.Confidence)
 
-	// Collect unique technique IDs
-	techIDs := dedupedTechniqueIDs(actor.Techniques)
+	// Collect unique technique IDs (already sorted)
+	techIDs := []string{}
+	for _, t := range dedupedTechniqueIDs(actor.Techniques) {
+		techIDs = append(techIDs, cleanIntel(t))
+	}
 
-	// Derive MITRE phases from techniques
-	phases := deriveMITREPhases(actor.Techniques)
+	// Derive MITRE phases from techniques (kill-chain ordered)
+	phases := []string{}
+	for _, p := range deriveMITREPhases(actor.Techniques) {
+		phases = append(phases, cleanIntel(p))
+	}
 
 	// Tags
-	tags := []string{"intel", "auto-generated", strings.ToLower(strings.ReplaceAll(actor.Name, " ", "-"))}
-	if len(actor.Sectors) > 0 {
-		tags = append(tags, actor.Sectors...)
+	tags := []string{"intel", "auto-generated", strings.ToLower(strings.ReplaceAll(name, " ", "-"))}
+	for _, sec := range actor.Sectors {
+		tags = append(tags, cleanIntel(sec))
 	}
 	if intersects(actor.Sectors, g.sectors) {
 		tags = append(tags, "sector-relevant")
@@ -179,39 +245,12 @@ func (g *Generator) buildYAML(actor ThreatActor, contentID string) string {
 	}
 
 	// Description
-	description := actor.Description
+	description, cut := sanitizeIntelText(actor.Description, maxIntelDescriptionRunes)
 	if description == "" {
-		description = fmt.Sprintf("%s threat actor profile.", actor.Name)
+		description, cut = sanitizeIntelText(fmt.Sprintf("%s threat actor profile.", name), maxIntelDescriptionRunes)
 	}
-	if len(description) > 200 {
-		description = description[:200] + "..."
-	}
-
-	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("id: %s\n", id))
-	sb.WriteString(fmt.Sprintf("name: \"%s — Active Campaign (Intel)\"\n", actor.Name))
-	sb.WriteString(fmt.Sprintf("description: \"Auto-generated from %s. %s Confidence: %s.\"\n",
-		actor.Source, strings.ReplaceAll(description, `"`, `'`), actor.Confidence))
-	sb.WriteString(fmt.Sprintf("author: \"Threat Intel Connector (%s)\"\n", actor.Source))
-
-	sb.WriteString("tags:\n")
-	for _, tag := range tags {
-		sb.WriteString(fmt.Sprintf("  - %s\n", tag))
-	}
-
-	sb.WriteString("mitre_phases:\n")
-	for _, p := range phases {
-		sb.WriteString(fmt.Sprintf("  - %s\n", p))
-	}
-
-	sb.WriteString(fmt.Sprintf("intel_source: %s\n", actor.Source))
-	sb.WriteString(fmt.Sprintf("intel_source_id: \"%s\"\n", actor.SourceID))
-	sb.WriteString(fmt.Sprintf("intel_actor: \"%s\"\n", actor.Name))
-	sb.WriteString(fmt.Sprintf("intel_confidence: %s\n", actor.Confidence))
-
-	sb.WriteString("art_techniques:\n")
-	for _, t := range techIDs {
-		sb.WriteString(fmt.Sprintf("  - %s\n", t))
+	if cut {
+		description += "..."
 	}
 
 	// Detection Profile Inheritance: attach any profile whose TechniqueIDs
@@ -219,20 +258,36 @@ func (g *Generator) buildYAML(actor ThreatActor, contentID string) string {
 	var detectionProfiles []string
 	seenProfiles := make(map[string]bool)
 	for _, id := range techIDs {
-		if name := resolveProfile(g.techniqueIdx, id); name != "" && !seenProfiles[name] {
-			seenProfiles[name] = true
-			detectionProfiles = append(detectionProfiles, name)
+		if pn := resolveProfile(g.techniqueIdx, id); pn != "" && !seenProfiles[pn] {
+			seenProfiles[pn] = true
+			detectionProfiles = append(detectionProfiles, pn)
 		}
 	}
-	if len(detectionProfiles) > 0 {
-		sort.Strings(detectionProfiles)
-		sb.WriteString("detection_profiles:\n")
-		for _, p := range detectionProfiles {
-			sb.WriteString(fmt.Sprintf("  - %s\n", p))
-		}
-	}
+	sort.Strings(detectionProfiles)
 
-	return sb.String()
+	doc := intelScenarioYAML{
+		ID:                contentID,
+		Name:              name + " — Active Campaign (Intel)",
+		Description:       fmt.Sprintf("Auto-generated from %s. %s Confidence: %s.", source, description, confidence),
+		Author:            fmt.Sprintf("Threat Intel Connector (%s)", source),
+		Tags:              tags,
+		MITREPhases:       phases,
+		IntelSource:       source,
+		IntelSourceID:     cleanIntel(actor.SourceID),
+		IntelActor:        name,
+		IntelConfidence:   confidence,
+		ARTTechniques:     techIDs,
+		DetectionProfiles: detectionProfiles,
+	}
+	var buf bytes.Buffer
+	enc := yaml.NewEncoder(&buf)
+	enc.SetIndent(2)
+	if err := enc.Encode(doc); err != nil {
+		// Only strings and string slices: Encode cannot fail on this type.
+		panic(fmt.Sprintf("connector/generator: encode %s: %v", contentID, err))
+	}
+	_ = enc.Close()
+	return buf.String()
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────

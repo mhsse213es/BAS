@@ -74,6 +74,10 @@ type VersionDetail struct {
 	Events        []EventRow      `json:"events"`
 	DetectionRate *float64        `json:"detectionEffectiveness,omitempty"`
 	DetectionStat string          `json:"detectionEffectivenessStatus"`
+	// What the stored bytes will run, for the approve confirmation. StepCount
+	// is nil when the stored artifact does not parse.
+	StepCount     *int     `json:"stepCount"`
+	ARTTechniques []string `json:"artTechniques"`
 }
 
 // VersionDetail assembles the audit view of one version. Every sub-query
@@ -86,7 +90,15 @@ func (r *Registry) VersionDetail(ctx context.Context, vid string) (VersionDetail
 	}
 	d := VersionDetail{ID: v.ID, ContentID: v.ContentID, Version: v.Number, Origin: string(v.Origin),
 		Trust: string(v.Trust), Lifecycle: string(v.Lifecycle), SHA256: v.SHA256, Source: string(v.Source),
-		CreatedBy: v.CreatedBy, CreatedAt: v.CreatedAt, Sources: []SourceRow{}, Validations: []ValidationRow{}, Events: []EventRow{}}
+		CreatedBy: v.CreatedBy, CreatedAt: v.CreatedAt, Sources: []SourceRow{}, Validations: []ValidationRow{}, Events: []EventRow{},
+		ARTTechniques: []string{}}
+	if sc, perr := v.Parse(); perr == nil {
+		n := len(sc.Steps)
+		d.StepCount = &n
+		if sc.ARTTechniques != nil {
+			d.ARTTechniques = sc.ARTTechniques
+		}
+	}
 	if err := r.pool.QueryRow(ctx, `SELECT generation FROM content_versions WHERE id = $1`, vid).Scan(&d.Generation); err != nil {
 		return VersionDetail{}, err
 	}
