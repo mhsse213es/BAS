@@ -56,7 +56,8 @@ func setPassword(ctx context.Context, conn *pgx.Conn, password string) error {
 	return nil
 }
 
-// grantApp is the grant block of the pre-H1 db.EnsureAppRole, unchanged.
+// grantApp is the grant block of the pre-H1 db.EnsureAppRole plus a read-only
+// revoke on the migration bookkeeping tables.
 func grantApp(ctx context.Context, conn *pgx.Conn) error {
 	var grantConnectStmt string
 	if err := conn.QueryRow(ctx,
@@ -77,6 +78,9 @@ func grantApp(ctx context.Context, conn *pgx.Conn) error {
 			GRANT USAGE, SELECT ON SEQUENCES TO ` + AppRole,
 		// audit_logs is append-only; must follow the blanket grant above.
 		`REVOKE UPDATE, DELETE ON audit_logs FROM ` + AppRole,
+		// Bookkeeping is read-only at runtime (CheckRuntime SELECTs it): a
+		// write could mark the schema dirty/newer and force a rollback.
+		`REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON schema_migrations, reference_data_version, h1_adoption_report FROM ` + AppRole,
 	}
 	for _, stmt := range grants {
 		if _, err := conn.Exec(ctx, stmt); err != nil {

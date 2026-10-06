@@ -81,6 +81,32 @@ func TestRoleGrants_AuditLogsAppendOnly(t *testing.T) {
 	}
 }
 
+// A foothold as bas_app must not be able to mark the schema dirty or newer
+// (forcing an operator rollback) or skip seeds: bookkeeping is read-only.
+func TestRoleGrants_MigrationBookkeepingReadOnly(t *testing.T) {
+	ctx := context.Background()
+	_, app, _ := provisioned(t)
+	for _, tb := range []string{"schema_migrations", "reference_data_version", "h1_adoption_report"} {
+		var n int
+		if err := app.QueryRow(ctx, `SELECT count(*) FROM `+tb).Scan(&n); err != nil {
+			t.Fatalf("bas_app SELECT on %s: %v", tb, err)
+		}
+	}
+	for _, stmt := range []string{
+		`UPDATE schema_migrations SET dirty = true`,
+		`DELETE FROM schema_migrations`,
+		`INSERT INTO schema_migrations (version, dirty) VALUES (999, false)`,
+		`UPDATE reference_data_version SET version = 99`,
+		`DELETE FROM reference_data_version`,
+		`INSERT INTO reference_data_version (version) VALUES (99)`,
+		`DELETE FROM h1_adoption_report`,
+	} {
+		if _, err := app.Exec(ctx, stmt); err == nil {
+			t.Errorf("bas_app allowed: %s", stmt)
+		}
+	}
+}
+
 func TestRoleGrants_CoverAllPublicTables(t *testing.T) {
 	ctx := context.Background()
 	admin, _, _ := provisioned(t)
