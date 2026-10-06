@@ -9,6 +9,12 @@
 #   sudo bash install.sh --status                        # current state
 #   sudo bash install.sh --uninstall [--purge-images] [--yes]
 #
+# Out-of-band cosign key (optional, for --check/--install/--upgrade):
+#   --cosign-pub <path>   or   BAS_COSIGN_PUB=<path>   (flag wins over env)
+# verifies the orchestrator image with a key you obtained separately instead of
+# the bundle's cosign.pub (a bundled key proves integrity, not origin). With sudo,
+# prefer the flag, or: sudo --preserve-env=BAS_COSIGN_PUB bash install.sh ...
+#
 # If Docker/Docker Compose are missing, --install asks for explicit
 # confirmation before installing Docker CE from Docker's official
 # repository. --yes also grants that consent, for unattended runs.
@@ -74,6 +80,7 @@ MODE=""
 CONFIG_FILE=""
 PURGE_IMAGES=false
 YES=false
+COSIGN_PUB_FLAG=""
 NEED_DOCKER=false
 NEED_COMPOSE=false
 DOCKER_AUTO_INSTALLED=false
@@ -95,18 +102,20 @@ while [[ $# -gt 0 ]]; do
       RESTORE_ARCHIVE="${1:-}"
       ;;
     --config)       shift; CONFIG_FILE="$1" ;;
+    --cosign-pub)   shift; COSIGN_PUB_FLAG="${1:-}"
+                    [[ -n "$COSIGN_PUB_FLAG" ]] || { echo "--cosign-pub requires a path"; exit 1; } ;;
     --purge-images) PURGE_IMAGES=true ;;
     --yes|-y)       YES=true ;;
     *)
       echo "Unknown option: $1"
-      echo "Usage: sudo bash install.sh --check | --install --config setup.conf | --upgrade --config setup.conf | --rollback | --status | --uninstall [--purge-images] [--yes]"
+      echo "Usage: sudo bash install.sh --check | --install --config setup.conf | --upgrade --config setup.conf | --rollback | --status | --uninstall [--purge-images] [--yes]   (--check/--install/--upgrade accept: --cosign-pub <key.pub>, or env BAS_COSIGN_PUB)"
       exit 1 ;;
   esac
   shift
 done
 
 if [[ -z "$MODE" ]]; then
-  echo "Usage: sudo bash install.sh --check | --install --config setup.conf | --upgrade --config setup.conf | --rollback | --status | --uninstall [--purge-images] [--yes]"
+  echo "Usage: sudo bash install.sh --check | --install --config setup.conf | --upgrade --config setup.conf | --rollback | --status | --uninstall [--purge-images] [--yes]   (--check/--install/--upgrade accept: --cosign-pub <key.pub>, or env BAS_COSIGN_PUB)"
   exit 1
 fi
 
@@ -413,6 +422,41 @@ _cosign_version_ok() {
   (( major > 3 || (major == 3 && minor >= 1) ))
 }
 
+# Selects the cosign public key verification MUST use. Precedence: --cosign-pub
+# flag, BAS_COSIGN_PUB env, then the bundle's cosign.pub. An external key is
+# used exclusively (never overridden by the bundled one); a missing/unreadable
+# path is fatal. Sets COSIGN_PUB_USED and prints its sha256 fingerprint.
+# (Duplicated from packaging/airgap/cosign-verify-lib.sh on purpose: install.sh
+# ships flat in the release bundle with no lib next to it.)
+COSIGN_PUB_USED="${SCRIPT_DIR}/cosign.pub"
+_resolve_cosign_pub() {
+  local ext="${COSIGN_PUB_FLAG:-${BAS_COSIGN_PUB:-}}" bundled="${SCRIPT_DIR}/cosign.pub" fp
+  if [[ -n "$ext" ]]; then
+    if [[ ! -f "$ext" || ! -r "$ext" ]]; then
+      err "External cosign public key not found or unreadable: ${ext}"
+      return 1
+    fi
+    COSIGN_PUB_USED="$(cd "$(dirname "$ext")" && pwd)/$(basename "$ext")"
+    fp=$(sha256sum "$COSIGN_PUB_USED" | cut -d' ' -f1)
+    {
+      echo ""
+      echo "  ============================================================"
+      echo "   Verifying with EXTERNAL key, sha256: ${fp}"
+      echo "   (${COSIGN_PUB_USED}) -- compare with the published Audspect fingerprint"
+      echo "  ============================================================"
+      echo ""
+    } >&2
+    if [[ -f "$bundled" ]] && ! cmp -s "$bundled" "$COSIGN_PUB_USED"; then
+      warn "The bundle's own cosign.pub DIFFERS from the external key (sha256: $(sha256sum "$bundled" | cut -d' ' -f1)). The external key is used."
+    fi
+  else
+    COSIGN_PUB_USED="$bundled"
+    if [[ -f "$bundled" ]]; then
+      info "Verifying with BUNDLED key, sha256: $(sha256sum "$bundled" | cut -d' ' -f1) (use --cosign-pub or BAS_COSIGN_PUB for an out-of-band key)"
+    fi
+  fi
+}
+
 _check_cosign() {
   if ! command -v cosign &>/dev/null; then
     echo "FAIL:Cosign -not installed (required to verify the orchestrator artifact before install; see https://docs.sigstore.dev/cosign/system_config/installation/)"
@@ -424,8 +468,8 @@ _check_cosign() {
     echo "FAIL:Cosign -version ${ver:-unknown} is too old (need >= v3.1.0 to verify the sigstore bundle format this bundle's signature uses)"
     return
   fi
-  if [[ ! -f "${SCRIPT_DIR}/cosign.pub" ]]; then
-    echo "FAIL:Cosign -public key not found in bundle at ${SCRIPT_DIR}/cosign.pub (corrupt or incomplete release bundle)"
+  if [[ ! -f "$COSIGN_PUB_USED" ]]; then
+    echo "FAIL:Cosign -public key not found at ${COSIGN_PUB_USED} (corrupt or incomplete release bundle)"
     return
   fi
   echo "PASS:Cosign -${ver}"
@@ -437,8 +481,8 @@ _check_cosign() {
 # return as fatal (abort the whole install/upgrade), not skip-and-continue.
 _verify_orchestrator_artifact() {
   local tar="$1"
-  if [[ ! -f "${SCRIPT_DIR}/cosign.pub" ]]; then
-    err "cosign.pub not found in bundle -- cannot verify $(basename "$tar"), refusing to proceed"
+  if [[ ! -f "$COSIGN_PUB_USED" ]]; then
+    err "cosign public key not found (${COSIGN_PUB_USED}) -- cannot verify $(basename "$tar"), refusing to proceed"
     return 1
   fi
   if ! command -v cosign &>/dev/null; then
@@ -450,7 +494,7 @@ _verify_orchestrator_artifact() {
     return 1
   fi
   local verify_output
-  if ! verify_output=$(cosign verify-blob --key "${SCRIPT_DIR}/cosign.pub" --bundle "${tar}.bundle" --insecure-ignore-tlog "$tar" 2>&1); then
+  if ! verify_output=$(cosign verify-blob --key "$COSIGN_PUB_USED" --bundle "${tar}.bundle" --insecure-ignore-tlog "$tar" 2>&1); then
     err "cosign verification FAILED for $(basename "$tar") -- refusing to install a tampered or unsigned orchestrator artifact"
     echo "$verify_output" >&2
     return 1
@@ -1781,6 +1825,10 @@ _print_access_info() {
 echo ""
 echo -e "${BOLD}${CYAN}===  ${PRODUCT} v${BAS_VERSION}  ===${NC}"
 echo ""
+
+case "$MODE" in
+  check|install|upgrade) _resolve_cosign_pub || exit 1 ;;
+esac
 
 case "$MODE" in
   check)     mode_check     ;;

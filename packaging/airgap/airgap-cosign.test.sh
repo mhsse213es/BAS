@@ -215,6 +215,31 @@ else
   rm -f "$T/b.tar.gz.asc" "$T/tools/verify-sig.sh" "$T/tools/pubkey.asc"
 fi
 
+echo "TEST: compose/install.sh out-of-band cosign key (functions extracted from install.sh)"
+INST="$HERE/../compose/install.sh"
+sed -n '/^_cosign_version_ok() {/,/^# ── Docker CE installation/p' "$INST" > "$T/inst-fns.sh"
+IB="$T/instbundle"; rm -rf "$IB"; mkdir -p "$IB"
+echo fake-orchestrator-image > "$IB/o.tar"
+{ sha256sum "$IB/o.tar" | cut -d' ' -f1 | tr -d '\n'; printf ':fake-pub'; } > "$IB/o.tar.bundle"
+printf 'fake-pub' > "$IB/cosign.pub"      # bundled key = signer, so the bundled key would pass
+run_inst() { # key selection via COSIGN_PUB_FLAG / BAS_COSIGN_PUB in the caller's env
+  PATH="$STUBS:$PATH" bash -c '
+    err() { echo "ERR: $*" >&2; }; warn() { echo "WARN: $*"; }; info() { echo "$*"; }; log() { echo "$*"; }
+    SCRIPT_DIR="$1"; COSIGN_PUB_FLAG="${COSIGN_PUB_FLAG:-}"
+    source "$2"
+    _resolve_cosign_pub || exit 3
+    _verify_orchestrator_artifact "$1/o.tar"' _ "$IB" "$T/inst-fns.sh" > "$T/out.txt" 2>&1
+}
+inst_ok() { local rc=0; run_inst || rc=$?; [ "$rc" -eq 0 ]; }
+if inst_ok && grep -q "BUNDLED key, sha256:" "$T/out.txt"; then echo "PASS: install.sh default (bundled key) unchanged + fingerprint"; else echo "FAIL: install.sh default"; cat "$T/out.txt"; FAILED=1; fi
+if COSIGN_PUB_FLAG="$T/ext-good.pub" inst_ok && grep -q "Verifying with EXTERNAL key, sha256: ${GOODFP}" "$T/out.txt"; then echo "PASS: install.sh external key matches"; else echo "FAIL: install.sh external match"; cat "$T/out.txt"; FAILED=1; fi
+if COSIGN_PUB_FLAG="$T/ext-bad.pub" inst_ok; then echo "FAIL: install.sh accepted mismatching external key"; FAILED=1; elif grep -q "DIFFERS" "$T/out.txt"; then echo "PASS: install.sh mismatching external key fails (bundled would pass) + warning"; else echo "FAIL: install.sh mismatch output"; FAILED=1; fi
+if COSIGN_PUB_FLAG="$T/nope.pub" inst_ok; then echo "FAIL: install.sh missing path accepted"; FAILED=1; else echo "PASS: install.sh missing external path aborts"; fi
+if BAS_COSIGN_PUB="$T/ext-bad.pub" inst_ok; then echo "FAIL: install.sh env(bad) lost to bundled"; FAILED=1; else echo "PASS: install.sh env beats bundled"; fi
+if BAS_COSIGN_PUB="$T/ext-bad.pub" COSIGN_PUB_FLAG="$T/ext-good.pub" inst_ok; then echo "PASS: install.sh flag beats env"; else echo "FAIL: install.sh flag/env"; FAILED=1; fi
+if BAS_COSIGN_PUB="$T/ext-good.pub" COSIGN_PUB_FLAG="$T/ext-bad.pub" inst_ok; then echo "FAIL: install.sh flag(bad) lost to env(good)"; FAILED=1; else echo "PASS: install.sh flag(bad) beats env(good)"; fi
+if grep -q -- '--cosign-pub <key.pub>' "$INST"; then echo "PASS: install.sh usage lists --cosign-pub"; else echo "FAIL: install.sh usage text"; FAILED=1; fi
+
 echo "TEST: fetch-cosign.sh --verify enforces the pinned checksum"
 printf 'fake-cosign' > "$T/cos.bin"
 printf 'COSIGN_VERSION=v3.1.3
