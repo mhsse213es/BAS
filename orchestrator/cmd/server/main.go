@@ -519,6 +519,11 @@ func main() {
 		log.Printf("[+] threat identity: %d threat(s) created; entity actor links +%d, %d unmatched, %d queued",
 			rep.Threats, rep.Links.Linked, rep.Links.Unmatched, rep.Links.Queued)
 	}
+	if legacy, err := contentRegistry.LegacyIntelContent(context.Background()); err != nil {
+		log.Printf("[!] legacy intel inventory: %v", err)
+	} else if len(legacy) > 0 {
+		log.Printf("[!] %d legacy name-derived intel content item(s); see GET /api/content-registry/migration-report (legacyIntel)", len(legacy))
+	}
 	scheduler := connector.NewScheduler(tiSources, gen, engine, cfg.ThreatIntelPollHours, pool, priorityEngine).
 		WithIdentityStore(identityStore)
 	tiActivitySources, err := connector.LoadActivitySourcesFromDB(context.Background(), pool)
