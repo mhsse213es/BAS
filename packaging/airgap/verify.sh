@@ -6,6 +6,9 @@
 #
 # Usage:
 #   bash verify.sh <path/to/bas-airgap-<version>.tar.gz>
+#
+# Also verifies the orchestrator image's cosign signature. cosign >= v3.1.0
+# must be installed; if it is not, verification FAILS (cannot verify signature).
 set -euo pipefail
 
 if [ -t 1 ]; then
@@ -78,22 +81,22 @@ FAIL_COUNT=0
 PASS_COUNT=0
 while IFS= read -r line; do
   expected_hash="${line%% *}"
-  rel_path="${line#* }"
-  rel_path="${rel_path#./}"
+  rel_path="${line#*  }"   # sha256sum format: "<hash>  <path>"
+  rel_path="${rel_path#\*}"; rel_path="${rel_path#./}"
   abs_path="${BUNDLE_DIR}/${rel_path}"
 
   if [[ ! -f "$abs_path" ]]; then
     err "Missing: ${rel_path}"
-    ((FAIL_COUNT++))
+    FAIL_COUNT=$((FAIL_COUNT + 1))
     continue
   fi
 
   actual_hash=$(sha256sum "$abs_path" | cut -d' ' -f1)
   if [[ "$actual_hash" != "$expected_hash" ]]; then
     err "Corrupt: ${rel_path}"
-    ((FAIL_COUNT++))
+    FAIL_COUNT=$((FAIL_COUNT + 1))
   else
-    ((PASS_COUNT++))
+    PASS_COUNT=$((PASS_COUNT + 1))
   fi
 done < "$MANIFEST"
 
@@ -107,7 +110,9 @@ log "${PASS_COUNT} files verified."
 
 # ── 3. Check required files ────────────────────────────────────────────────────
 REQUIRED=(
-  "images/bas-orchestrator-${VERSION}.tar.gz"
+  "images/bas-orchestrator-${VERSION}.tar"
+  "images/bas-orchestrator-${VERSION}.tar.bundle"
+  "cosign.pub"
   "images/postgres-16-alpine.tar.gz"
   "compose/setup.sh"
   "compose/docker-compose.yml"
@@ -125,6 +130,20 @@ done
 
 if ! $all_present; then
   err "Bundle is incomplete. Re-pack with packaging/airgap/pack.sh."
+  exit 1
+fi
+
+# ── 4. Verify orchestrator image cosign signature ─────────────────────────────
+# Trusted helper from next to this script -- never from inside the bundle under test.
+AIRGAP_LIB="$(dirname "$0")/cosign-verify-lib.sh"
+if [[ ! -f "$AIRGAP_LIB" ]]; then
+  err "cosign-verify-lib.sh not found next to verify.sh -- cannot verify signature."
+  exit 1
+fi
+# shellcheck source=cosign-verify-lib.sh
+source "$AIRGAP_LIB"
+if ! airgap_verify_orchestrator "${BUNDLE_DIR}/images/bas-orchestrator-${VERSION}.tar" "${BUNDLE_DIR}/cosign.pub"; then
+  err "Cannot verify signature -- do NOT import this bundle."
   exit 1
 fi
 

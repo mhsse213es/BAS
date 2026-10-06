@@ -14,6 +14,9 @@
 #   dist/bas-airgap-<version>.tar.gz      (transfer this to the air-gapped server)
 #   dist/bas-airgap-<version>.tar.gz.sha256
 #
+# Requires cosign + packaging/signing/cosign.key (the orchestrator image is
+# signed; import.sh refuses an unsigned one).
+#
 # Run from the repository root.
 set -euo pipefail
 
@@ -46,6 +49,21 @@ if ! docker info &>/dev/null; then
   exit 1
 fi
 
+# ── cosign is mandatory (mirrors packaging/build.sh) ──────────────────────────
+# The orchestrator image ships cosign-signed; the air-gapped importer refuses an
+# unsigned one. Checked before the slow pull/save so a missing cosign/key fails fast.
+COSIGN_SCRIPT="${REPO_ROOT}/packaging/signing/cosign.sh"
+COSIGN_KEY="${REPO_ROOT}/packaging/signing/cosign.key"
+COSIGN_PUB="${REPO_ROOT}/packaging/signing/cosign.pub"
+if ! command -v cosign &>/dev/null; then
+  err "cosign is not installed, and cosign signing is mandatory for this air-gap bundle. Install: https://docs.sigstore.dev/cosign/system_config/installation/"
+  exit 1
+fi
+if [[ ! -f "$COSIGN_KEY" ]]; then
+  err "cosign.key not found at ${COSIGN_KEY}, and cosign signing is mandatory for this air-gap bundle. Run: bash packaging/signing/cosign.sh --keygen"
+  exit 1
+fi
+
 # ── 1. Stage bundle directory ──────────────────────────────────────────────────
 log "Staging air-gap bundle v${VERSION}..."
 rm -rf "${BUILD_DIR}"
@@ -69,8 +87,28 @@ log "Found ${ORCHESTRATOR_IMAGE} locally."
 # ── 3. Export images ───────────────────────────────────────────────────────────
 log "Exporting Docker images (this may take a minute)..."
 
-docker save "${ORCHESTRATOR_IMAGE}" | gzip > "${BUILD_DIR}/images/bas-orchestrator-${VERSION}.tar.gz"
-log "  Saved: bas-orchestrator-${VERSION}.tar.gz ($(du -sh "${BUILD_DIR}/images/bas-orchestrator-${VERSION}.tar.gz" | cut -f1))"
+# Orchestrator: UNCOMPRESSED tar so the signature covers the exact shipped bytes
+# (same as packaging/build.sh). Signed with cosign sign-blob, verified at once.
+ORCH_TAR="${BUILD_DIR}/images/bas-orchestrator-${VERSION}.tar"
+docker save "${ORCHESTRATOR_IMAGE}" -o "${ORCH_TAR}"
+log "  Saved: bas-orchestrator-${VERSION}.tar ($(du -sh "${ORCH_TAR}" | cut -f1))"
+
+log "Signing orchestrator image with cosign..."
+if ! bash "${COSIGN_SCRIPT}" --sign "${ORCH_TAR}"; then
+  err "cosign signing failed for ${ORCH_TAR} -- aborting."
+  exit 1
+fi
+log "Verifying the signature we just produced..."
+if ! bash "${COSIGN_SCRIPT}" --verify "${ORCH_TAR}"; then
+  err "cosign verification FAILED immediately after signing ${ORCH_TAR} -- this should be structurally impossible; investigate before shipping."
+  exit 1
+fi
+if [[ ! -f "$COSIGN_PUB" ]]; then
+  err "cosign.pub not found at ${COSIGN_PUB} -- cannot ship a bundle the importer can't verify."
+  exit 1
+fi
+# Top level: used by import.sh / verify.sh. compose/: used by setup.sh --offline.
+cp "$COSIGN_PUB" "${BUILD_DIR}/cosign.pub"
 
 docker save "${POSTGRES_IMAGE}" | gzip > "${BUILD_DIR}/images/postgres-16-alpine.tar.gz"
 log "  Saved: postgres-16-alpine.tar.gz ($(du -sh "${BUILD_DIR}/images/postgres-16-alpine.tar.gz" | cut -f1))"
@@ -113,7 +151,12 @@ fi
 # ── 5. Copy import helper ──────────────────────────────────────────────────────
 cp "${REPO_ROOT}/packaging/airgap/import.sh"  "${BUILD_DIR}/"
 cp "${REPO_ROOT}/packaging/airgap/verify.sh"  "${BUILD_DIR}/"
+cp "${REPO_ROOT}/packaging/airgap/cosign-verify-lib.sh" "${BUILD_DIR}/"
 chmod +x "${BUILD_DIR}/import.sh" "${BUILD_DIR}/verify.sh"
+
+# setup.sh --offline (run by import.sh) verifies again from its own directory:
+# it needs cosign.pub and the signed orchestrator artifact under compose/.
+cp "${BUILD_DIR}/cosign.pub" "${BUILD_DIR}/compose/cosign.pub"
 
 # Write version file
 echo "${VERSION}" > "${BUILD_DIR}/VERSION"
@@ -158,6 +201,7 @@ echo "  Bundle:    ${TARBALL}  (${BUNDLE_SIZE})"
 echo "  Checksum:  ${CHECKSUM}"
 echo ""
 echo "  Transfer bundle + .sha256 + .asc (if signed) to the air-gapped server, then run:"
+echo "  (cosign >= v3.1.0 must already be installed on the air-gapped server)"
 echo "    bash verify-sig.sh bas-airgap-${VERSION}.tar.gz   # if signed"
 echo "    bash verify.sh bas-airgap-${VERSION}.tar.gz"
 echo "    sudo bash import.sh bas-airgap-${VERSION}.tar.gz"

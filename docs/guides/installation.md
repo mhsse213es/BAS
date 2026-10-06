@@ -213,6 +213,8 @@ cd /opt/bas-install-<version>/images
 for f in *.tar; do sudo docker load < "$f"; echo "Loaded $f"; done
 ```
 
+**Prerequisite — cosign.** The orchestrator image is cosign-signed and is verified before it is loaded, for both `install.sh` and the `bas-airgap-<version>.tar.gz` bundle (`verify.sh` / `import.sh`). cosign >= v3.1.0 must be pre-installed on the air-gapped host: download the `cosign-linux-amd64` release binary from <https://github.com/sigstore/cosign/releases> on a connected machine, copy it over, and run `sudo install -m 0755 cosign-linux-amd64 /usr/local/bin/cosign`. Without it the install/import aborts (fail closed).
+
 ### 6.2 Content bundle
 
 The orchestrator image includes at build time:

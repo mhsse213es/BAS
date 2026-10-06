@@ -59,7 +59,10 @@ if [[ -f "$AIRGAP_BUNDLE" ]]; then
   tar -xzf "$AIRGAP_BUNDLE" -C "$WORK"
   BUNDLE_DIR=$(find "$WORK" -maxdepth 1 -mindepth 1 -type d | head -1)
 
-  log "Loading Docker images..."
+  # The orchestrator image is a cosign-signed bas-orchestrator-<v>.tar (not .tar.gz):
+  # it is NOT loaded here. It is staged below and setup.sh --offline verifies the
+  # signature (cosign >= v3.1.0 required on this host) before loading it.
+  log "Loading Docker images (non-orchestrator)..."
   for img in "${BUNDLE_DIR}"/images/*.tar.gz; do
     log "  Loading $(basename "$img")..."
     docker load < "$img"
@@ -75,6 +78,9 @@ if [[ -f "$AIRGAP_BUNDLE" ]]; then
   rm -rf "$STAGING"
   mkdir -p "$STAGING/compose"
   cp -r "${BUNDLE_DIR}/compose/." "$STAGING/compose/"
+  mkdir -p "$STAGING/compose/images"
+  cp "${BUNDLE_DIR}"/images/bas-orchestrator-* "$STAGING/compose/images/"
+  cp "${BUNDLE_DIR}/cosign.pub" "$STAGING/compose/cosign.pub"
   echo "${BAS_VERSION}" > "$STAGING/VERSION"
 
   rm -f "$AIRGAP_BUNDLE"

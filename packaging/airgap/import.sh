@@ -7,6 +7,12 @@
 # Usage:
 #   sudo bash import.sh <path/to/bas-airgap-<version>.tar.gz>
 #
+# The orchestrator image is cosign-verified (sign-blob bundle) BEFORE it is
+# loaded; an unsigned, tampered or legacy .tar.gz orchestrator image is refused.
+# PREREQUISITE: cosign >= v3.1.0 must be pre-installed on this air-gapped host
+# (copy the release binary from https://github.com/sigstore/cosign/releases
+# over offline: install -m 0755 cosign-linux-amd64 /usr/local/bin/cosign).
+#
 # Optional flags (passed through to setup.sh):
 #   --non-interactive   Run setup.sh with default values (no whiptail)
 set -euo pipefail
@@ -51,6 +57,15 @@ if ! docker info &>/dev/null; then
   err "Docker daemon is not running. Start it: systemctl start docker"
   exit 1
 fi
+
+# ── cosign verification helpers (shared with verify.sh) ───────────────────────
+AIRGAP_LIB="$(dirname "$0")/cosign-verify-lib.sh"
+if [[ ! -f "$AIRGAP_LIB" ]]; then
+  err "cosign-verify-lib.sh not found next to import.sh -- cannot verify the orchestrator image, refusing to proceed."
+  exit 1
+fi
+# shellcheck source=cosign-verify-lib.sh
+source "$AIRGAP_LIB"
 
 # ── Signature verification (if .asc present) ──────────────────────────────────
 SIGFILE="${TARBALL}.asc"
@@ -111,19 +126,28 @@ else
   warn "No MANIFEST.sha256 found — skipping integrity check."
 fi
 
-# ── Load Docker images ─────────────────────────────────────────────────────────
-log "Loading Docker images..."
-
-ORCHESTRATOR_IMG="${BUNDLE_DIR}/images/bas-orchestrator-${VERSION}.tar.gz"
+# ── Verify orchestrator image signature, THEN load images ─────────────────────
+# Nothing reaches the Docker daemon unless the orchestrator tar verifies.
+ORCHESTRATOR_IMG="${BUNDLE_DIR}/images/bas-orchestrator-${VERSION}.tar"
+LEGACY_ORCH_IMG="${BUNDLE_DIR}/images/bas-orchestrator-${VERSION}.tar.gz"
 POSTGRES_IMG="${BUNDLE_DIR}/images/postgres-16-alpine.tar.gz"
 
-if [[ -f "$ORCHESTRATOR_IMG" ]]; then
-  log "  Loading bas-orchestrator:${VERSION}..."
-  docker load < "$ORCHESTRATOR_IMG"
-else
-  err "Image not found: images/bas-orchestrator-${VERSION}.tar.gz"
+if [[ ! -f "$ORCHESTRATOR_IMG" && -f "$LEGACY_ORCH_IMG" ]]; then
+  airgap_verify_orchestrator "$LEGACY_ORCH_IMG" "${BUNDLE_DIR}/cosign.pub" || true
+  err "Import aborted."
   exit 1
 fi
+if [[ ! -f "$ORCHESTRATOR_IMG" ]]; then
+  err "Image not found: images/bas-orchestrator-${VERSION}.tar"
+  exit 1
+fi
+log "Verifying orchestrator image signature..."
+if ! airgap_verify_orchestrator "$ORCHESTRATOR_IMG" "${BUNDLE_DIR}/cosign.pub"; then
+  err "Orchestrator image failed verification. Import aborted."
+  exit 1
+fi
+
+log "Loading Docker images..."
 
 if [[ -f "$POSTGRES_IMG" ]]; then
   log "  Loading postgres:16-alpine..."
@@ -132,6 +156,10 @@ else
   err "Image not found: images/postgres-16-alpine.tar.gz"
   exit 1
 fi
+
+# Orchestrator loaded last so no later load can re-point its tag.
+log "  Loading bas-orchestrator:${VERSION}..."
+docker load < "$ORCHESTRATOR_IMG"
 
 log "Docker images loaded:"
 docker images | grep -E "(bas-orchestrator|postgres)" | awk '{printf "  %-40s %s\n", $1":"$2, $3}'
@@ -151,6 +179,8 @@ if [[ ! -f "$SETUP_SCRIPT" ]]; then
   exit 1
 fi
 chmod +x "$SETUP_SCRIPT"
+# setup.sh --offline re-verifies the signed artifact from <its dir>/images.
+[[ -e "${BUNDLE_DIR}/compose/images" ]] || ln -s ../images "${BUNDLE_DIR}/compose/images"
 
 log "Launching BAS setup wizard (offline mode)..."
 echo ""

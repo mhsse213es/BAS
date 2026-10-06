@@ -19,7 +19,10 @@ tar -xzf "$BUNDLE" -C "$WORK"
 BUNDLE_DIR=$(find "$WORK" -maxdepth 1 -mindepth 1 -type d | head -1)
 
 # ── 2. Load Docker images (baked into VM so first-boot is instant) ─────────────
-echo "[install-bas] Loading Docker images..."
+# The orchestrator image is a cosign-signed bas-orchestrator-<v>.tar (not .tar.gz):
+# NOT loaded here. It is staged below; setup.sh --offline verifies the signature
+# (cosign >= v3.1.0 required on the VM) before loading it at first boot.
+echo "[install-bas] Loading Docker images (non-orchestrator)..."
 for img in "${BUNDLE_DIR}"/images/*.tar.gz; do
   echo "  Loading: $(basename "$img")"
   docker load < "$img"
@@ -39,6 +42,9 @@ echo "[install-bas] Staging BAS files to ${STAGING_DIR}..."
 rm -rf "$STAGING_DIR"
 mkdir -p "$STAGING_DIR/compose"
 cp -r "${BUNDLE_DIR}/compose/." "$STAGING_DIR/compose/"
+mkdir -p "$STAGING_DIR/compose/images"
+cp "${BUNDLE_DIR}"/images/bas-orchestrator-* "$STAGING_DIR/compose/images/"
+cp "${BUNDLE_DIR}/cosign.pub" "$STAGING_DIR/compose/cosign.pub"
 echo "${BAS_VERSION}" > "$STAGING_DIR/VERSION"
 
 # ── 4. Install first-boot systemd service ─────────────────────────────────────
