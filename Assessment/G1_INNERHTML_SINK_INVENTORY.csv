@@ -443,12 +443,12 @@ line,function,target,op,category,data_source_tags,rhs_len,rhs
         Object.keys(tacSet).sort().map(function(t) { return '<option value=""' + x(t) + '"">' + x(t) + '</option>'; }).join('')"
 9309,cell,if (body) body,=,unescaped_html,,74,"rows || '<tr><td colspan=""9"" class=""empty"">No techniques match.</td></tr>'"
 9334,loadCoverage,document.getElementById('cov-matrix'),=,escaped,error_message,68,"'<div class=""empty"" style=""padding:2rem"">' + x(e.message) + '</div>'"
-9339,renderCovMatrix,document.getElementById('cov-matrix'),=,unescaped_html,user_created_name,753,"'<div class=""mx"">' + (window._covTactics || []).map(function(t) {
+9339,renderCovMatrix,document.getElementById('cov-matrix'),=,unescaped_html,user_created_name,750,"'<div class=""mx"">' + (window._covTactics || []).map(function(t) {
     var techs = t.techniques || [];
     var cov = techs.filter(function(c) { return st[c.id] === 'cov'; }).length;
     var cells = techs.map(function(c) {
       var s = st[c.id] || 'none', dim = view !== 'all' && view !== s;
-      return '<div class=""mx-cell ' + s + '"" onclick=""openTechnique(\'' + x(c.id) + '\')"" style=""' + (dim ? '"
+      return '<div class=""mx-cell ' + s + '""' + on('click', 'openTechnique', c.id) + ' style=""' + (dim ? 'opa"
 9355,badge,document.getElementById('cov-toolbar'),=,partial_escaped,,223,"seg + '<span class=""u-flex1""></span>' +
     badge('var(--success)', 'Prevented', c.cov) + badge('var(--warning)', 'Detected', c.part) +
     badge('var(--danger)', 'Missed', c.gap) + badge('var(--muted)', 'Untested', c.none)"

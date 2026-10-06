@@ -1,6 +1,7 @@
 import { state } from '../core/state.js';
 import { apicall } from '../core/api.js';
 import { x } from '../core/escape.js';
+import { on } from '../core/actions.js';
 import { showToast } from '../core/util.js';
 import { covSegHtml } from './attack-path.js';
 
@@ -328,7 +329,7 @@ function renderCovMatrix() {
     var cov = techs.filter(function(c) { return st[c.id] === 'cov'; }).length;
     var cells = techs.map(function(c) {
       var s = st[c.id] || 'none', dim = view !== 'all' && view !== s;
-      return '<div class="mx-cell ' + s + '" onclick="openTechnique(\'' + x(c.id) + '\')" style="' + (dim ? 'opacity:.12' : '') + '">' +
+      return '<div class="mx-cell ' + s + '"' + on('click', 'openTechnique', c.id) + ' style="' + (dim ? 'opacity:.12' : '') + '">' +
         '<span class="mc-id">' + x(c.id) + '</span>' + x(c.name) + '</div>';
     }).join('');
     return '<div class="mx-col"><div class="mx-col-h"><div class="tac-name">' + x(t.name) + '</div>' +

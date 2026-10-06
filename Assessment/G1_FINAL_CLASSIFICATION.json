@@ -3445,7 +3445,7 @@
   "rhs": "rows.map(function(c, i) {\n    var badge = '<span class=\"cmp-badge ' + c.status + '\">' + (statusLabel[c.status] || c.status) + '</span>';\n    if (c.status === 'manual') {\n      return '<tr><td>' + badge + '</td>' +\n        '<td><span class=\"cmp-ctrl-id\">' + x(c.id) + '</span></td>' +\n        '<td>' + x(c.name) + ' <span class=\"cmp-manual-tag\">manual attestation</span></td>' +\n        '<td><span cla"
  },
  {
-  "sink_id": "renderCovMatrix:document.getElementById('cov-matrix'):=:7ecf713241ce",
+  "sink_id": "renderCovMatrix:document.getElementById('cov-matrix'):=:7013626ba4a4",
   "line": 9339,
   "function": "renderCovMatrix",
   "target": "document.getElementById('cov-matrix')",
@@ -3455,7 +3455,7 @@
   "severity_tier": 4,
   "data_source_tags": "user_created_name",
   "trace_notes": "",
-  "rhs": "'<div class=\"mx\">' + (window._covTactics || []).map(function(t) {\n    var techs = t.techniques || [];\n    var cov = techs.filter(function(c) { return st[c.id] === 'cov'; }).length;\n    var cells = techs.map(function(c) {\n      var s = st[c.id] || 'none', dim = view !== 'all' && view !== s;\n      return '<div class=\"mx-cell ' + s + '\" onclick=\"openTechnique(\\'' + x(c.id) + '\\')\" style=\"' + (dim ? '"
+  "rhs": "'<div class=\"mx\">' + (window._covTactics || []).map(function(t) {\n    var techs = t.techniques || [];\n    var cov = techs.filter(function(c) { return st[c.id] === 'cov'; }).length;\n    var cells = techs.map(function(c) {\n      var s = st[c.id] || 'none', dim = view !== 'all' && view !== s;\n      return '<div class=\"mx-cell ' + s + '\"' + on('click', 'openTechnique', c.id) + ' style=\"' + (dim ? 'opa"
  },
  {
   "sink_id": "renderCoverageAnalytics:missedBody:=:b78b0951bee8",

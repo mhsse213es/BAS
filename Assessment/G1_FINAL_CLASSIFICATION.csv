@@ -651,12 +651,12 @@ renderControlsTable:document.getElementById('cmp-controls-body'):=:5387bef00084,
         '<td><span class=""cmp-ctrl-id"">' + x(c.id) + '</span></td>' +
         '<td>' + x(c.name) + ' <span class=""cmp-manual-tag"">manual attestation</span></td>' +
         '<td><span cla"
-renderCovMatrix:document.getElementById('cov-matrix'):=:7ecf713241ce,9339,renderCovMatrix,document.getElementById('cov-matrix'),=,unescaped_html,unescaped_html,4,user_created_name,,"'<div class=""mx"">' + (window._covTactics || []).map(function(t) {
+renderCovMatrix:document.getElementById('cov-matrix'):=:7013626ba4a4,9339,renderCovMatrix,document.getElementById('cov-matrix'),=,unescaped_html,unescaped_html,4,user_created_name,,"'<div class=""mx"">' + (window._covTactics || []).map(function(t) {
     var techs = t.techniques || [];
     var cov = techs.filter(function(c) { return st[c.id] === 'cov'; }).length;
     var cells = techs.map(function(c) {
       var s = st[c.id] || 'none', dim = view !== 'all' && view !== s;
-      return '<div class=""mx-cell ' + s + '"" onclick=""openTechnique(\'' + x(c.id) + '\')"" style=""' + (dim ? '"
+      return '<div class=""mx-cell ' + s + '""' + on('click', 'openTechnique', c.id) + ' style=""' + (dim ? 'opa"
 renderCoverageAnalytics:missedBody:=:b78b0951bee8,9121,renderCoverageAnalytics,missedBody,=,unescaped_html,unescaped_html,4,user_created_name,,"missed.map(function(t, i) {
       var bg = i % 2 ? 'background:rgba(255,255,255,.02)' : '';
       var vColor = t.bestVerdict === 'missed' ? 'color:var(--danger)' : 'color:var(--warning)';
