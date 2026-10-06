@@ -36,9 +36,9 @@ echo "cosign $*" >> "$STUB_LOG"
 case "$1" in
   version) echo "GitVersion:    ${FAKE_COSIGN_VERSION:-v3.1.3}"; exit 0 ;;
   verify-blob)
-    bundle=""; target="${*: -1}"
-    while [ $# -gt 0 ]; do [ "$1" = "--bundle" ] && bundle="$2"; shift; done
-    want=$(cat "$bundle"); got=$(sha256sum "$target" | cut -d' ' -f1)
+    bundle=""; key=""; target="${*: -1}"
+    while [ $# -gt 0 ]; do [ "$1" = "--bundle" ] && bundle="$2"; [ "$1" = "--key" ] && key="$2"; shift; done
+    want=$(cat "$bundle"); got="$(sha256sum "$target" | cut -d' ' -f1):$(cat "$key")"
     [ "$want" = "$got" ] || { echo "Error: invalid signature" >&2; exit 1; }
     exit 0 ;;
 esac
@@ -52,10 +52,10 @@ make_bundle() {
   rm -rf "$T/build"; mkdir -p "$b/images" "$b/compose"
   echo 9.9.9 > "$b/VERSION"
   echo fake-orchestrator-image > "$b/images/bas-orchestrator-9.9.9.tar"
-  sha256sum "$b/images/bas-orchestrator-9.9.9.tar" | cut -d' ' -f1 > "$b/images/bas-orchestrator-9.9.9.tar.bundle"
+  sha256sum "$b/images/bas-orchestrator-9.9.9.tar" | cut -d' ' -f1 | sed 's/$/:fake-pub/' > "$b/images/bas-orchestrator-9.9.9.tar.bundle"
   echo fake-postgres | gzip > "$b/images/postgres-16-alpine.tar.gz"
   echo fake-pub > "$b/cosign.pub"; echo fake-pub > "$b/compose/cosign.pub"; echo 9.9.9 > "$b/compose/VERSION"
-  printf '#!/usr/bin/env bash\necho SETUP-RAN >> "$STUB_LOG"\n' > "$b/compose/setup.sh"
+  printf '#!/usr/bin/env bash\necho "PUBENV=${BAS_COSIGN_PUB:-}" >> "$STUB_LOG"; echo SETUP-RAN >> "$STUB_LOG"\n' > "$b/compose/setup.sh"
   for f in docker-compose.yml docker-compose.prod.yml; do : > "$b/compose/$f"; done
   : > "$b/import.sh"; cp "$HERE/cosign-verify-lib.sh" "$b/"
   [ -n "${MUTATE:-}" ] && eval "$MUTATE"
@@ -66,7 +66,8 @@ make_bundle() {
 
 run_import() { # <tarball> ; uses PATH_OVERRIDE for the stub path
   : > "$STUB_LOG"
-  PATH="${TEST_PATH}" bash "$T/tools/import.sh" "$1" --non-interactive > "$T/out.txt" 2>&1
+  # shellcheck disable=SC2086
+  PATH="${TEST_PATH}" bash "$T/tools/import.sh" "$1" --non-interactive ${IMPORT_EXTRA:-} > "$T/out.txt" 2>&1
 }
 
 FAILED=0
@@ -104,6 +105,27 @@ echo "TEST: bundle-shipped compose/cosign.pub that differs -> abort"
 MUTATE='echo other > "$b/compose/cosign.pub"' make_bundle "$T/b.tar.gz"
 rc=0; run_import "$T/b.tar.gz" || rc=$?
 { [ "$rc" -ne 0 ] && ! grep -q SETUP-RAN "$STUB_LOG" && echo "PASS: compose/cosign.pub mismatch"; } || { echo "FAIL: pub mismatch accepted"; FAILED=1; }
+
+echo "TEST: out-of-band cosign key"
+printf 'fake-pub' > "$T/ext-good.pub"; printf 'other-pub' > "$T/ext-bad.pub"
+GOODFP=$(sha256sum "$T/ext-good.pub" | cut -d' ' -f1)
+MUTATE="" make_bundle "$T/b.tar.gz"
+check_valid "no external key (bundled)"
+if grep -q "BUNDLED key, sha256:" "$T/out.txt" && ! grep -q '^PUBENV=.' "$STUB_LOG"; then echo "PASS: bundled fingerprint printed, no env export"; else echo "FAIL: bundled-key behaviour"; FAILED=1; fi
+IMPORT_EXTRA="--cosign-pub $T/ext-good.pub" check_valid "external key matches"
+if grep -q "Verifying with EXTERNAL key, sha256: ${GOODFP}" "$T/out.txt" && grep -q "PUBENV=.*ext-good.pub" "$STUB_LOG"; then echo "PASS: external fingerprint printed, setup.sh handed the key"; else echo "FAIL: external key output/handoff"; FAILED=1; fi
+IMPORT_EXTRA="--cosign-pub $T/ext-bad.pub" expect_abort "external key differs from signing key (bundled key would pass)"
+if grep -q "EXTERNAL key" "$T/out.txt" && grep -q "DIFFERS" "$T/out.txt"; then echo "PASS: mismatch warned"; else echo "FAIL: mismatch output"; FAILED=1; fi
+IMPORT_EXTRA="--cosign-pub $T/nope.pub" expect_abort "external key path missing (flag)"
+BAS_COSIGN_PUB="$T/nope.pub" expect_abort "external key path missing (env)"
+BAS_COSIGN_PUB="$T/ext-bad.pub" IMPORT_EXTRA="--cosign-pub $T/ext-good.pub" check_valid "flag (good) beats env (bad)"
+BAS_COSIGN_PUB="$T/ext-good.pub" IMPORT_EXTRA="--cosign-pub $T/ext-bad.pub" expect_abort "flag (bad) beats env (good)"
+BAS_COSIGN_PUB="$T/ext-bad.pub" expect_abort "env (bad) beats bundled (good)"
+BAS_COSIGN_PUB="$T/ext-good.pub" check_valid "env (good) without flag"
+rc=0; PATH="$TEST_PATH" bash "$T/tools/verify.sh" "$T/b.tar.gz" --cosign-pub "$T/ext-bad.pub" > "$T/out.txt" 2>&1 || rc=$?
+if [ "$rc" -ne 0 ]; then echo "PASS: verify.sh external key differs -> fail"; else echo "FAIL: verify.sh accepted wrong external key"; FAILED=1; fi
+rc=0; PATH="$TEST_PATH" bash "$T/tools/verify.sh" "$T/b.tar.gz" --cosign-pub "$T/ext-good.pub" > "$T/out.txt" 2>&1 || rc=$?
+if [ "$rc" -eq 0 ] && grep -q "EXTERNAL key" "$T/out.txt"; then echo "PASS: verify.sh external key ok"; else echo "FAIL: verify.sh external key"; FAILED=1; fi
 
 echo "TEST: tampered tarball -> abort before docker load"
 MUTATE='echo evil >> "$b/images/bas-orchestrator-9.9.9.tar"' make_bundle "$T/b.tar.gz"
@@ -159,5 +181,18 @@ for sc in post-install install-bas; do
     echo "PASS: $sc refuses legacy tar.gz before load"
   else echo "FAIL: $sc rc=$rc"; cat "$STUB_LOG"; FAILED=1; fi
 done
+
+echo "TEST: fetch-cosign.sh --verify enforces the pinned checksum"
+printf 'fake-cosign' > "$T/cos.bin"
+printf 'COSIGN_VERSION=v3.1.3
+COSIGN_SHA256_LINUX_AMD64=%s
+' "$(sha256sum "$T/cos.bin" | cut -d' ' -f1)" > "$T/ok.pin"
+printf 'COSIGN_VERSION=v3.0.2
+COSIGN_SHA256_LINUX_AMD64=%s
+' "$(sha256sum "$T/cos.bin" | cut -d' ' -f1)" > "$T/old.pin"
+if bash "$REPO/packaging/appliance/fetch-cosign.sh" --verify "$T/cos.bin" "$T/ok.pin" >/dev/null 2>&1; then echo "PASS: matching checksum accepted"; else echo "FAIL: good checksum rejected"; FAILED=1; fi
+if bash "$REPO/packaging/appliance/fetch-cosign.sh" --verify "$T/cos.bin" "$T/old.pin" >/dev/null 2>&1; then echo "FAIL: pin < v3.1.0 accepted"; FAILED=1; else echo "PASS: pin older than v3.1.0 rejected"; fi
+printf 'tampered' > "$T/cos.bin"
+if bash "$REPO/packaging/appliance/fetch-cosign.sh" --verify "$T/cos.bin" "$T/ok.pin" >/dev/null 2>&1; then echo "FAIL: tampered cosign accepted"; FAILED=1; else [ ! -e "$T/cos.bin" ] && echo "PASS: checksum mismatch rejected and file removed"; fi
 
 [ "$FAILED" -eq 0 ] && echo "ALL PASS" || { echo "SOME FAILED"; exit 1; }

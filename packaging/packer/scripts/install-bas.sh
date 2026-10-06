@@ -6,6 +6,10 @@ BAS_VERSION="${BAS_VERSION:-latest}"
 BUNDLE="/var/tmp/bas-airgap.tar.gz"
 STAGING_DIR="/opt/bas-platform-src"
 
+# ── 0. Install pinned cosign (build-time download, sha256-pinned; fails the build) ─
+bash /var/tmp/bas-appliance/fetch-cosign.sh /usr/local/bin/cosign /var/tmp/bas-appliance/cosign.pin
+rm -rf /var/tmp/bas-appliance
+
 # ── 1. Extract air-gap bundle ──────────────────────────────────────────────────
 echo "[install-bas] Extracting bundle..."
 if [[ ! -f "$BUNDLE" ]]; then

@@ -5,7 +5,12 @@
 # Loads Docker images, then launches the interactive setup wizard.
 #
 # Usage:
-#   sudo bash import.sh <path/to/bas-airgap-<version>.tar.gz>
+#   sudo bash import.sh <path/to/bas-airgap-<version>.tar.gz> [--cosign-pub <key.pub>]
+#
+# Out-of-band key: --cosign-pub <path> (or env BAS_COSIGN_PUB=<path>) verifies
+# with a key you obtained separately instead of the bundle's cosign.pub; it also
+# governs setup.sh. Precedence: flag, env, bundled. Compare the printed sha256
+# fingerprint with the published Audspect fingerprint.
 #
 # The orchestrator image is cosign-verified (sign-blob bundle) BEFORE it is
 # loaded; an unsigned, tampered or legacy .tar.gz orchestrator image is refused.
@@ -43,9 +48,19 @@ if [[ ! -f "$TARBALL" ]]; then
   exit 1
 fi
 
-# Collect any extra flags to pass to setup.sh (e.g. --non-interactive)
+# Collect any extra flags to pass to setup.sh (e.g. --non-interactive).
+# --cosign-pub <path> is consumed here (out-of-band key; see usage header).
 shift
-SETUP_EXTRA_ARGS=("$@")
+SETUP_EXTRA_ARGS=()
+COSIGN_PUB_FLAG=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --cosign-pub)
+      [[ $# -ge 2 ]] || { err "--cosign-pub requires a path"; exit 1; }
+      COSIGN_PUB_FLAG="$2"; shift 2 ;;
+    *) SETUP_EXTRA_ARGS+=("$1"); shift ;;
+  esac
+done
 
 # ── Verify Docker ──────────────────────────────────────────────────────────────
 if ! command -v docker &>/dev/null; then
@@ -66,6 +81,8 @@ if [[ ! -f "$AIRGAP_LIB" ]]; then
 fi
 # shellcheck source=cosign-verify-lib.sh
 source "$AIRGAP_LIB"
+
+airgap_external_pub "$COSIGN_PUB_FLAG" || { err "Import aborted."; exit 1; }
 
 # ── Signature verification (if .asc present) ──────────────────────────────────
 SIGFILE="${TARBALL}.asc"
@@ -143,8 +160,9 @@ if [[ ! -f "$ORCHESTRATOR_IMG" ]]; then
   err "Image not found: images/bas-orchestrator-${VERSION}.tar"
   exit 1
 fi
+airgap_select_pub "${BUNDLE_DIR}/cosign.pub"
 log "Verifying orchestrator image signature..."
-if ! airgap_verify_orchestrator "$ORCHESTRATOR_IMG" "${BUNDLE_DIR}/cosign.pub"; then
+if ! airgap_verify_orchestrator "$ORCHESTRATOR_IMG" "$AIRGAP_PUB"; then
   err "Orchestrator image failed verification. Import aborted."
   exit 1
 fi
@@ -184,8 +202,12 @@ chmod +x "$SETUP_SCRIPT"
 # Never trust a bundle-shipped compose/images or compose/cosign.pub.
 rm -rf "${BUNDLE_DIR}/compose/images"
 ln -s ../images "${BUNDLE_DIR}/compose/images"
-if ! cmp -s "${BUNDLE_DIR}/cosign.pub" "${BUNDLE_DIR}/compose/cosign.pub"; then
-  err "compose/cosign.pub differs from the verified cosign.pub -- bundle is inconsistent. Import aborted."
+if [[ -n "$AIRGAP_EXT_PUB" ]]; then
+  # External key in use: it overrides whatever the bundle ships, for setup.sh too.
+  cp "$AIRGAP_EXT_PUB" "${BUNDLE_DIR}/compose/cosign.pub"
+  export BAS_COSIGN_PUB="$AIRGAP_EXT_PUB"
+elif ! cmp -s "$AIRGAP_PUB" "${BUNDLE_DIR}/compose/cosign.pub"; then
+  err "compose/cosign.pub differs from the key used for verification -- bundle is inconsistent. Import aborted."
   exit 1
 fi
 

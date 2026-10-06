@@ -59,6 +59,19 @@ if [[ -f "$AIRGAP_BUNDLE" ]]; then
   tar -xzf "$AIRGAP_BUNDLE" -C "$WORK"
   BUNDLE_DIR=$(find "$WORK" -maxdepth 1 -mindepth 1 -type d | head -1)
 
+  # Install the pinned cosign staged on the ISO (re-checked against cosign.pin).
+  APPLIANCE_DIR="/opt/bas-install/appliance"
+  if ! command -v cosign &>/dev/null; then
+    if [[ -f "${APPLIANCE_DIR}/cosign-linux-amd64" ]] && \
+       bash "${APPLIANCE_DIR}/fetch-cosign.sh" --verify "${APPLIANCE_DIR}/cosign-linux-amd64" "${APPLIANCE_DIR}/cosign.pin"; then
+      install -m 0755 "${APPLIANCE_DIR}/cosign-linux-amd64" /usr/local/bin/cosign
+      log "Installed pinned cosign to /usr/local/bin/cosign."
+    else
+      echo "ERROR: pinned cosign missing or failed its checksum -- cannot verify the orchestrator image." >&2
+      exit 1
+    fi
+  fi
+
   # Refuse a legacy (unsigned) orchestrator image BEFORE any docker load.
   if compgen -G "${BUNDLE_DIR}/images/bas-orchestrator-*.tar.gz" >/dev/null; then
     echo "ERROR: legacy unsigned orchestrator image (bas-orchestrator-*.tar.gz) in bundle -- refusing. Re-pack with the current packaging/airgap/pack.sh." >&2

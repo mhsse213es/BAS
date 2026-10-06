@@ -5,7 +5,10 @@
 # Run on the air-gapped target server before import.sh.
 #
 # Usage:
-#   bash verify.sh <path/to/bas-airgap-<version>.tar.gz>
+#   bash verify.sh <path/to/bas-airgap-<version>.tar.gz> [--cosign-pub <key.pub>]
+#
+# --cosign-pub <path> / env BAS_COSIGN_PUB verify with an out-of-band key
+# (precedence: flag, env, bundled cosign.pub); the key fingerprint is printed.
 #
 # Also verifies the orchestrator image's cosign signature. cosign >= v3.1.0
 # must be installed; if it is not, verification FAILS (cannot verify signature).
@@ -21,6 +24,11 @@ warn() { echo -e "${YELLOW}[!]${NC} $*"; }
 err()  { echo -e "${RED}[✗]${NC} $*" >&2; }
 
 TARBALL="${1:-}"
+COSIGN_PUB_FLAG=""
+if [[ "${2:-}" == "--cosign-pub" ]]; then
+  COSIGN_PUB_FLAG="${3:-}"
+  [[ -n "$COSIGN_PUB_FLAG" ]] || { echo "--cosign-pub requires a path" >&2; exit 1; }
+fi
 if [[ -z "$TARBALL" ]]; then
   err "Usage: bash verify.sh <bas-airgap-<version>.tar.gz>"
   exit 1
@@ -150,7 +158,9 @@ if [[ ! -f "$AIRGAP_LIB" ]]; then
 fi
 # shellcheck source=cosign-verify-lib.sh
 source "$AIRGAP_LIB"
-if ! airgap_verify_orchestrator "${BUNDLE_DIR}/images/bas-orchestrator-${VERSION}.tar" "${BUNDLE_DIR}/cosign.pub"; then
+airgap_external_pub "$COSIGN_PUB_FLAG" || { err "Cannot verify signature -- do NOT import this bundle."; exit 1; }
+airgap_select_pub "${BUNDLE_DIR}/cosign.pub"
+if ! airgap_verify_orchestrator "${BUNDLE_DIR}/images/bas-orchestrator-${VERSION}.tar" "$AIRGAP_PUB"; then
   err "Cannot verify signature -- do NOT import this bundle."
   exit 1
 fi

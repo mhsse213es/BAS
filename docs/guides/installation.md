@@ -215,6 +215,17 @@ for f in *.tar; do sudo docker load < "$f"; echo "Loaded $f"; done
 
 **Prerequisite — cosign.** The orchestrator image is cosign-signed and is verified before it is loaded, for both `install.sh` and the `bas-airgap-<version>.tar.gz` bundle (`verify.sh` / `import.sh`). cosign >= v3.1.0 must be pre-installed on the air-gapped host: download the `cosign-linux-amd64` release binary from <https://github.com/sigstore/cosign/releases> on a connected machine, copy it over, and run `sudo install -m 0755 cosign-linux-amd64 /usr/local/bin/cosign`. Without it the install/import aborts (fail closed).
 
+**ISO / Packer appliances** install a pinned cosign for you at build time (`packaging/appliance/cosign.pin`: exact version and SHA-256 of the official release binary; the build fails if the download or checksum fails). The ISO stages the binary on the media, so an offline target needs no download.
+
+**Out-of-band verification key (optional).** By default `verify.sh` and `import.sh` verify with the `cosign.pub` shipped inside the bundle, which proves integrity but trusts the bundle for the key. To pin the key yourself, pass `--cosign-pub <path>` (or set `BAS_COSIGN_PUB=<path>`; the flag wins, then the env var, then the bundled key):
+
+```bash
+bash verify.sh bas-airgap-<version>.tar.gz --cosign-pub /media/usb/audspect-cosign.pub
+sudo bash import.sh bas-airgap-<version>.tar.gz --cosign-pub /media/usb/audspect-cosign.pub
+```
+
+The key's SHA-256 fingerprint is printed (compare it with the fingerprint Audspect publishes). An external key is never overridden by the bundled one, a missing/unreadable path aborts, and `setup.sh` re-verifies with the same key. A warning is shown if the bundle's own key differs.
+
 ### 6.2 Content bundle
 
 The orchestrator image includes at build time:

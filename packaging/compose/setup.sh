@@ -262,7 +262,7 @@ check_cosign() {
     echo "FAIL:Cosign — version ${ver:-unknown} is too old (need >= v3.1.0 to verify the sigstore bundle format this bundle's signature uses)"
     return
   fi
-  if [[ ! -f "${SCRIPT_DIR}/cosign.pub" ]]; then
+  if [[ ! -f "${BAS_COSIGN_PUB:-${SCRIPT_DIR}/cosign.pub}" ]]; then
     echo "FAIL:Cosign — public key not found in bundle at ${SCRIPT_DIR}/cosign.pub (corrupt or incomplete release bundle)"
     return
   fi
@@ -275,7 +275,7 @@ check_cosign() {
 # return as fatal (abort the whole install), not skip-and-continue.
 _verify_orchestrator_artifact() {
   local tar="$1"
-  if [[ ! -f "${SCRIPT_DIR}/cosign.pub" ]]; then
+  if [[ ! -f "${BAS_COSIGN_PUB:-${SCRIPT_DIR}/cosign.pub}" ]]; then
     err "cosign.pub not found in bundle -- cannot verify $(basename "$tar"), refusing to proceed"
     return 1
   fi
@@ -288,7 +288,7 @@ _verify_orchestrator_artifact() {
     return 1
   fi
   local verify_output
-  if ! verify_output=$(cosign verify-blob --key "${SCRIPT_DIR}/cosign.pub" --bundle "${tar}.bundle" --insecure-ignore-tlog "$tar" 2>&1); then
+  if ! verify_output=$(cosign verify-blob --key "${BAS_COSIGN_PUB:-${SCRIPT_DIR}/cosign.pub}" --bundle "${tar}.bundle" --insecure-ignore-tlog "$tar" 2>&1); then
     err "cosign verification FAILED for $(basename "$tar") -- refusing to install a tampered or unsigned orchestrator artifact"
     echo "$verify_output" >&2
     return 1

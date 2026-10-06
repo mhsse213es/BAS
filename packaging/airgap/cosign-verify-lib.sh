@@ -73,3 +73,47 @@ airgap_verify_orchestrator() {
   log "cosign: verified $(basename "$tar")"
   return 0
 }
+
+# ── Out-of-band public key selection ──────────────────────────────────────────
+# Precedence: --cosign-pub flag, then BAS_COSIGN_PUB env, then the bundled
+# cosign.pub. An external key is NEVER silently replaced by the bundled one.
+
+_airgap_fp() { sha256sum "$1" | cut -d' ' -f1; }
+
+# airgap_external_pub <flag-value-or-empty>
+# Sets AIRGAP_EXT_PUB (absolute path, or empty). Returns 1 if a key was
+# requested but is missing/unreadable.
+airgap_external_pub() {
+  local p="${1:-${BAS_COSIGN_PUB:-}}"
+  AIRGAP_EXT_PUB=""
+  [[ -z "$p" ]] && return 0
+  if [[ ! -f "$p" || ! -r "$p" ]]; then
+    err "External cosign public key not found or unreadable: ${p}"
+    return 1
+  fi
+  AIRGAP_EXT_PUB="$(cd "$(dirname "$p")" && pwd)/$(basename "$p")"
+}
+
+# airgap_select_pub <bundled cosign.pub path>
+# Sets AIRGAP_PUB to the key verification MUST use and prints its fingerprint.
+airgap_select_pub() {
+  local bundled="$1" fp
+  if [[ -n "${AIRGAP_EXT_PUB:-}" ]]; then
+    AIRGAP_PUB="$AIRGAP_EXT_PUB"
+    fp=$(_airgap_fp "$AIRGAP_PUB")
+    echo "" >&2
+    echo "  ============================================================" >&2
+    echo "   Verifying with EXTERNAL key, sha256: ${fp}" >&2
+    echo "   (${AIRGAP_PUB}) -- compare with the published Audspect fingerprint" >&2
+    echo "  ============================================================" >&2
+    echo "" >&2
+    if [[ -f "$bundled" ]] && ! cmp -s "$bundled" "$AIRGAP_PUB"; then
+      warn "The bundle's own cosign.pub DIFFERS from the external key (sha256: $(_airgap_fp "$bundled")). The external key is used."
+    fi
+  else
+    AIRGAP_PUB="$bundled"
+    if [[ -f "$bundled" ]]; then
+      log "Verifying with BUNDLED key, sha256: $(_airgap_fp "$bundled") (supply --cosign-pub or BAS_COSIGN_PUB to use an out-of-band key)"
+    fi
+  fi
+}

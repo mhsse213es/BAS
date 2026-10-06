@@ -110,6 +110,12 @@ build {
     destination = "/var/tmp/bas-airgap.tar.gz"
   }
 
+  # Pinned-cosign pin + fetch helper (appliance build dependency)
+  provisioner "file" {
+    source      = "${path.root}/../appliance/"
+    destination = "/var/tmp/bas-appliance/"
+  }
+
   # Step 1 — Install Docker + system dependencies
   provisioner "shell" {
     execute_command = "echo '${var.packer_ssh_pass}' | sudo -S env {{.Vars}} bash {{.Path}}"
