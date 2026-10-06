@@ -182,6 +182,39 @@ for sc in post-install install-bas; do
   else echo "FAIL: $sc rc=$rc"; cat "$STUB_LOG"; FAILED=1; fi
 done
 
+echo "TEST: GPG key selection (real throwaway keys)"
+if ! command -v gpg >/dev/null 2>&1; then
+  echo "SKIP: gpg not available"
+else
+  export GNUPGHOME="$T/gnupg"; mkdir -p "$GNUPGHOME"; chmod 700 "$GNUPGHOME"
+  gpg --batch --pinentry-mode loopback --passphrase '' --quick-gen-key "A <a@test.invalid>" default default never >/dev/null 2>&1
+  gpg --batch --pinentry-mode loopback --passphrase '' --quick-gen-key "B <b@test.invalid>" default default never >/dev/null 2>&1
+  gpg --armor --export a@test.invalid > "$T/gpg-a.asc"; gpg --armor --export b@test.invalid > "$T/gpg-b.asc"
+  FPA=$(gpg --with-colons --list-keys a@test.invalid | awk -F: '/^fpr/{print $10; exit}')
+  MUTATE="" make_bundle "$T/b.tar.gz"
+  rm -f "$T/b.tar.gz.asc"; gpg --batch --pinentry-mode loopback --passphrase '' -u a@test.invalid --detach-sign --armor -o "$T/b.tar.gz.asc" "$T/b.tar.gz"
+  cp "$HERE/../signing/verify-sig.sh" "$T/tools/"; cp "$T/gpg-a.asc" "$T/tools/pubkey.asc"   # bundled key = A (signer)
+  vs() { PATH="$TEST_PATH" bash "$T/tools/verify-sig.sh" "$T/b.tar.gz" "$@" > "$T/out.txt" 2>&1; }
+  gok() { local rc=0; "$@" || rc=$?; [ "$rc" -eq 0 ]; }
+  if gok vs && grep -q "BUNDLED GPG key, fingerprint: ${FPA}" "$T/out.txt" && grep -q "integrity, not origin" "$T/out.txt"; then echo "PASS: bundled GPG key: fingerprint + origin warning"; else echo "FAIL: bundled GPG"; cat "$T/out.txt"; FAILED=1; fi
+  if gok vs --gpg-pub "$T/gpg-a.asc" && grep -q "EXTERNAL GPG key, fingerprint: ${FPA}" "$T/out.txt"; then echo "PASS: external GPG key matches"; else echo "FAIL: external GPG match"; FAILED=1; fi
+  if gok vs --gpg-pub "$T/gpg-b.asc"; then echo "FAIL: mismatching external GPG key accepted"; FAILED=1; else echo "PASS: external GPG key mismatch fails (bundled would pass)"; fi
+  if gok vs --gpg-pub "$T/nope.asc"; then echo "FAIL: missing GPG path accepted"; FAILED=1; else echo "PASS: missing GPG path aborts"; fi
+  if BAS_GPG_PUB="$T/gpg-b.asc" gok vs --gpg-pub "$T/gpg-a.asc"; then echo "PASS: GPG flag beats env"; else echo "FAIL: GPG flag/env precedence"; FAILED=1; fi
+  if BAS_GPG_PUB="$T/gpg-a.asc" gok vs --gpg-pub "$T/gpg-b.asc"; then echo "FAIL: GPG flag(bad) lost to env(good)"; FAILED=1; else echo "PASS: GPG flag(bad) beats env(good)"; fi
+  if BAS_GPG_PUB="$T/gpg-b.asc" gok vs; then echo "FAIL: GPG env(bad) lost to bundled(good)"; FAILED=1; else echo "PASS: GPG env beats bundled"; fi
+  # import.sh / verify.sh pass the key through and abort before docker load on mismatch
+  IMPORT_EXTRA="--gpg-pub $T/gpg-b.asc" expect_abort "import.sh: external GPG mismatch"
+  IMPORT_EXTRA="--gpg-pub $T/gpg-a.asc" check_valid "import.sh: external GPG match"
+  rc=0; PATH="$TEST_PATH" bash "$T/tools/verify.sh" "$T/b.tar.gz" --gpg-pub "$T/gpg-b.asc" > "$T/out.txt" 2>&1 || rc=$?
+  if [ "$rc" -ne 0 ]; then echo "PASS: verify.sh external GPG mismatch fails"; else echo "FAIL: verify.sh accepted wrong GPG key"; FAILED=1; fi
+  rc=0; PATH="$TEST_PATH" bash "$T/tools/verify.sh" "$T/b.tar.gz" --gpg-pub "$T/gpg-a.asc" > "$T/out.txt" 2>&1 || rc=$?
+  if [ "$rc" -eq 0 ]; then echo "PASS: verify.sh external GPG ok"; else echo "FAIL: verify.sh external GPG"; cat "$T/out.txt"; FAILED=1; fi
+  # gpg-agent is auto-spawned per GNUPGHOME and would otherwise outlive the test holding its pipes
+  gpgconf --kill all >/dev/null 2>&1 || true
+  rm -f "$T/b.tar.gz.asc" "$T/tools/verify-sig.sh" "$T/tools/pubkey.asc"
+fi
+
 echo "TEST: fetch-cosign.sh --verify enforces the pinned checksum"
 printf 'fake-cosign' > "$T/cos.bin"
 printf 'COSIGN_VERSION=v3.1.3

@@ -7,6 +7,8 @@
 # Usage:
 #   bash verify.sh <path/to/bas-airgap-<version>.tar.gz> [--cosign-pub <key.pub>]
 #
+# --gpg-pub <key.asc> / env BAS_GPG_PUB: out-of-band GPG key for the bundle's
+# .asc signature (checked via verify-sig.sh when an .asc is present).
 # --cosign-pub <path> / env BAS_COSIGN_PUB verify with an out-of-band key
 # (precedence: flag, env, bundled cosign.pub); the key fingerprint is printed.
 #
@@ -25,10 +27,15 @@ err()  { echo -e "${RED}[✗]${NC} $*" >&2; }
 
 TARBALL="${1:-}"
 COSIGN_PUB_FLAG=""
-if [[ "${2:-}" == "--cosign-pub" ]]; then
-  COSIGN_PUB_FLAG="${3:-}"
-  [[ -n "$COSIGN_PUB_FLAG" ]] || { echo "--cosign-pub requires a path" >&2; exit 1; }
-fi
+GPG_PUB_FLAG=""
+shift || true
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --cosign-pub) COSIGN_PUB_FLAG="${2:-}"; [[ -n "$COSIGN_PUB_FLAG" ]] || { echo "--cosign-pub requires a path" >&2; exit 1; }; shift 2 ;;
+    --gpg-pub)    GPG_PUB_FLAG="${2:-}";    [[ -n "$GPG_PUB_FLAG" ]]    || { echo "--gpg-pub requires a path" >&2; exit 1; }; shift 2 ;;
+    *) echo "Unknown argument: $1" >&2; exit 1 ;;
+  esac
+done
 if [[ -z "$TARBALL" ]]; then
   err "Usage: bash verify.sh <bas-airgap-<version>.tar.gz>"
   exit 1
@@ -58,6 +65,22 @@ if [[ -f "$CHECKSUM_FILE" ]]; then
   fi
 else
   warn "No .sha256 file found alongside bundle — skipping outer checksum."
+fi
+
+# ── 1b. GPG signature (if .asc present) ────────────────────────────────────────
+VERIFY_SIG_SCRIPT="$(dirname "$0")/verify-sig.sh"
+[[ -f "$VERIFY_SIG_SCRIPT" ]] || VERIFY_SIG_SCRIPT="$(dirname "$0")/../signing/verify-sig.sh"
+if [[ -f "${TARBALL}.asc" ]]; then
+  if [[ ! -f "$VERIFY_SIG_SCRIPT" ]]; then
+    err ".asc present but verify-sig.sh not found -- cannot verify origin."
+    exit 1
+  fi
+  GPG_ARGS=()
+  [[ -n "$GPG_PUB_FLAG" ]] && GPG_ARGS=(--gpg-pub "$GPG_PUB_FLAG")
+  bash "$VERIFY_SIG_SCRIPT" "$TARBALL" ${GPG_ARGS[@]+"${GPG_ARGS[@]}"} || { err "GPG verification failed -- do NOT import this bundle."; exit 1; }
+elif [[ -n "${GPG_PUB_FLAG:-${BAS_GPG_PUB:-}}" ]]; then
+  err "An external GPG key was supplied but ${TARBALL}.asc does not exist -- cannot verify origin."
+  exit 1
 fi
 
 # ── 2. Extract and verify inner manifest ──────────────────────────────────────
@@ -150,7 +173,9 @@ fi
 # ── 4. Verify orchestrator image cosign signature ─────────────────────────────
 # Trust model: the verifier (this lib, next to the script) and cosign.pub both
 # come from the same bundle distribution, so this check proves integrity and
-# consistency only. The outer GPG .asc (verify-sig.sh) is the trust anchor.
+# consistency only. The outer GPG .asc (verify-sig.sh) is the trust anchor, and
+# only for origin when its key is out-of-band (--gpg-pub / BAS_GPG_PUB) or its
+# fingerprint matches the published one.
 AIRGAP_LIB="$(dirname "$0")/cosign-verify-lib.sh"
 if [[ ! -f "$AIRGAP_LIB" ]]; then
   err "cosign-verify-lib.sh not found next to verify.sh -- cannot verify signature."

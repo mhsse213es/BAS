@@ -26,3 +26,9 @@ orchestrator/web/**/*.json text eol=lf
 orchestrator/web/**/*.sh text eol=lf
 orchestrator/web/**/*.md text eol=lf
 orchestrator/web/.gitignore text eol=lf
+
+# Appliance build inputs (ISO/Packer): a CRLF checkout would break cosign.pin parsing
+# (fetch-cosign.sh fails closed) and the autoinstall/packer templates.
+packaging/appliance/* text eol=lf
+*.pkr.hcl text eol=lf
+*.tmpl text eol=lf

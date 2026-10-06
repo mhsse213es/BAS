@@ -11,6 +11,8 @@
 # with a key you obtained separately instead of the bundle's cosign.pub; it also
 # governs setup.sh. Precedence: flag, env, bundled. Compare the printed sha256
 # fingerprint with the published Audspect fingerprint.
+# Likewise --gpg-pub <key.asc> (or BAS_GPG_PUB) supplies the GPG key for the
+# bundle's .asc signature out-of-band (a bundled pubkey.asc proves integrity only).
 #
 # The orchestrator image is cosign-verified (sign-blob bundle) BEFORE it is
 # loaded; an unsigned, tampered or legacy .tar.gz orchestrator image is refused.
@@ -53,8 +55,12 @@ fi
 shift
 SETUP_EXTRA_ARGS=()
 COSIGN_PUB_FLAG=""
+GPG_PUB_FLAG=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --gpg-pub)
+      [[ $# -ge 2 ]] || { err "--gpg-pub requires a path"; exit 1; }
+      GPG_PUB_FLAG="$2"; shift 2 ;;
     --cosign-pub)
       [[ $# -ge 2 ]] || { err "--cosign-pub requires a path"; exit 1; }
       COSIGN_PUB_FLAG="$2"; shift 2 ;;
@@ -82,6 +88,12 @@ fi
 # shellcheck source=cosign-verify-lib.sh
 source "$AIRGAP_LIB"
 
+# An explicitly supplied GPG key (flag or env) with no .asc to check is an error,
+# never a silent skip.
+if [[ -n "${GPG_PUB_FLAG:-${BAS_GPG_PUB:-}}" && ! -f "${TARBALL}.asc" ]]; then
+  err "An external GPG key was supplied but ${TARBALL}.asc does not exist -- cannot verify origin. Import aborted."
+  exit 1
+fi
 airgap_external_pub "$COSIGN_PUB_FLAG" || { err "Import aborted."; exit 1; }
 
 # ── Signature verification (if .asc present) ──────────────────────────────────
@@ -93,7 +105,9 @@ VERIFY_SIG_SCRIPT="$(dirname "$0")/../signing/verify-sig.sh"
 if [[ -f "$SIGFILE" ]]; then
   if [[ -f "$VERIFY_SIG_SCRIPT" ]]; then
     log "GPG signature found — verifying before import..."
-    if ! bash "$VERIFY_SIG_SCRIPT" "$TARBALL"; then
+    GPG_ARGS=()
+    [[ -n "$GPG_PUB_FLAG" ]] && GPG_ARGS=(--gpg-pub "$GPG_PUB_FLAG")
+    if ! bash "$VERIFY_SIG_SCRIPT" "$TARBALL" ${GPG_ARGS[@]+"${GPG_ARGS[@]}"}; then
       err "Signature verification failed. Import aborted."
       exit 1
     fi

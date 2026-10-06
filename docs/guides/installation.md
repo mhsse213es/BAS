@@ -226,6 +226,8 @@ sudo bash import.sh bas-airgap-<version>.tar.gz --cosign-pub /media/usb/audspect
 
 The key's SHA-256 fingerprint is printed (compare it with the fingerprint Audspect publishes). An external key is never overridden by the bundled one, a missing/unreadable path aborts, and `setup.sh` re-verifies with the same key. A warning is shown if the bundle's own key differs.
 
+**Out-of-band GPG key (optional).** The bundle's `.asc` signature is checked by `verify-sig.sh` (called by `verify.sh` and `import.sh` when an `.asc` is present). The `pubkey.asc` shipped inside the bundle only proves integrity, not origin: whoever replaces the whole bundle can replace that key too. Pass the key you obtained separately with `--gpg-pub <key.asc>` (or `BAS_GPG_PUB=<path>`; flag, then env, then bundled) to `verify-sig.sh`, `verify.sh` or `import.sh`. The GPG fingerprint is always printed, labelled EXTERNAL or BUNDLED; compare it with the fingerprint Audspect publishes. An external key is used exclusively, a missing/unreadable path aborts, and supplying one for a bundle with no `.asc` is an error. Using the bundled key prints a warning. The bundled `pubkey.asc` is still shipped for backward compatibility.
+
 ### 6.2 Content bundle
 
 The orchestrator image includes at build time:
