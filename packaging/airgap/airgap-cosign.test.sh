@@ -737,4 +737,11 @@ if bash "$REPO/packaging/appliance/fetch-cosign.sh" --verify "$T/cos.bin" "$T/ol
 printf 'tampered' > "$T/cos.bin"
 if bash "$REPO/packaging/appliance/fetch-cosign.sh" --verify "$T/cos.bin" "$T/ok.pin" >/dev/null 2>&1; then fail "tampered cosign accepted"; else [ ! -e "$T/cos.bin" ] && pass "checksum mismatch rejected and file removed"; fi
 
+echo "TEST: operator docs never instruct a raw docker load (it skips signature, tag and image-ID checks)"
+# docs/superpowers/ is excluded: dated design plans/specs that record how the
+# verify-before-load code was built, not operator instructions.
+raw_load=$(find "$REPO/docs" "$REPO/packaging" -name '*.md' -not -path "$REPO/docs/superpowers/*" -print0 \
+  | xargs -0 grep -nE 'docker load([[:space:]]*<|[[:space:]]+(-i|--input)([[:space:]=]|$))' | grep -iv 'do not' || true)
+[ -z "$raw_load" ] && pass "docs: no raw 'docker load' instruction in docs/ or packaging/ *.md" || { fail "docs: raw 'docker load' instruction found"; echo "$raw_load"; }
+
 if [ "$FAILED" -eq 0 ]; then echo "ALL PASS"; else echo "SOME FAILED"; exit 1; fi
