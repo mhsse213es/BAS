@@ -1094,11 +1094,11 @@ vfLoadQueue:box:=:52aae5451493,9478,vfLoadQueue,box,=,escaped,escaped,1,error_me
 vfLoadQueue:box:=:b2d40dbd06a2,9471,vfLoadQueue,box,=,static,static,0,,,"'<div class=""empty"" style=""padding:2.5rem;text-align:center;color:var(--muted)"">Select a run to load its pending verifications.</div>'"
 vfLoadQueue:box:=:ef5962205875,9472,vfLoadQueue,box,=,static,static,0,,,"'<div class=""empty"" style=""padding:2.5rem;text-align:center;color:var(--muted)"">Loading…</div>'"
 vfLoadQueue:box:=:fca586893f1d,9475,vfLoadQueue,box,=,escaped,escaped,1,,,"'<div class=""empty"" style=""padding:2rem;color:var(--danger)"">' + x(d.error) + '</div>'"
-vfRenderDomainChips:wrap:=:ab2adb3174fc,9456,vfRenderDomainChips,wrap,=,unescaped_html,unescaped_html,4,,,"all.map(function(d) {
+vfRenderDomainChips:wrap:=:372a9ff00b9e,9456,vfRenderDomainChips,wrap,=,escaped,escaped,1,,,"all.map(function(d) {
     var active = VF.domain === d.k;
-    return '<span onclick=""vfSetDomain(\'' + d.k + '\')"" style=""cursor:pointer;text-transform:capitalize;padding:0.3rem 0.7rem;border-radius:999px;font-size:0.74rem;border:1px solid ' +
+    return '<span' + x('click', 'vfSetDomain', d.k) + ' style=""cursor:pointer;text-transform:capitalize;padding:0.3rem 0.7rem;border-radius:999px;font-size:0.74rem;border:1px solid ' +
       (active ? 'var(--accent)' : 'var(--border)') + ';color:' + (active ? 'var(--accent)' : 'var(--muted)') +
-      ';background:' + (active ? 'rgba(79,142"
+      ';background:' + (active ? 'rgba(79,142,"
 vfRenderQueue:box:=:c77bfe52318d,9506,vfRenderQueue,box,=,unescaped_html,unescaped_html,4,,,"'<table style=""width:100%;border-collapse:collapse"">' +
     '<thead><tr style=""text-align:left;font-size:0.68rem;text-transform:uppercase;letter-spacing:0.04em;color:var(--muted)"">' +
     '<th style=""padding:0.6rem 0.8rem"">Status</th><th style=""padding:0.6rem 0.8rem"">Technique</th><th style=""padding:0.6rem 0.8rem"">Expected Control</th><th style=""padding:0.6rem 0.8rem"">Domain</th><th style=""padding"

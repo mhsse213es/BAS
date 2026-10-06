@@ -5746,17 +5746,17 @@
   "rhs": "'<div class=\"empty\" style=\"padding:2rem;color:var(--danger)\">' + x(d.error) + '</div>'"
  },
  {
-  "sink_id": "vfRenderDomainChips:wrap:=:ab2adb3174fc",
+  "sink_id": "vfRenderDomainChips:wrap:=:372a9ff00b9e",
   "line": 9456,
   "function": "vfRenderDomainChips",
   "target": "wrap",
   "op": "=",
-  "baseline_category": "unescaped_html",
-  "final_category": "unescaped_html",
-  "severity_tier": 4,
+  "baseline_category": "escaped",
+  "final_category": "escaped",
+  "severity_tier": 1,
   "data_source_tags": "",
   "trace_notes": "",
-  "rhs": "all.map(function(d) {\n    var active = VF.domain === d.k;\n    return '<span onclick=\"vfSetDomain(\\'' + d.k + '\\')\" style=\"cursor:pointer;text-transform:capitalize;padding:0.3rem 0.7rem;border-radius:999px;font-size:0.74rem;border:1px solid ' +\n      (active ? 'var(--accent)' : 'var(--border)') + ';color:' + (active ? 'var(--accent)' : 'var(--muted)') +\n      ';background:' + (active ? 'rgba(79,142"
+  "rhs": "all.map(function(d) {\n    var active = VF.domain === d.k;\n    return '<span' + x('click', 'vfSetDomain', d.k) + ' style=\"cursor:pointer;text-transform:capitalize;padding:0.3rem 0.7rem;border-radius:999px;font-size:0.74rem;border:1px solid ' +\n      (active ? 'var(--accent)' : 'var(--border)') + ';color:' + (active ? 'var(--accent)' : 'var(--muted)') +\n      ';background:' + (active ? 'rgba(79,142,"
  },
  {
   "sink_id": "vfRenderQueue:box:=:c77bfe52318d",

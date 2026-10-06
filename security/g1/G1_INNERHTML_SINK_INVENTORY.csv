@@ -456,11 +456,11 @@ line,function,target,op,category,data_source_tags,rhs_len,rhs
 9387,openTechnique,document.getElementById('results-export'),=,static_empty,,2,''
 9395,list,document.getElementById('results-body'),=,indirect_variable,,4,body
 9447,loadVerificationTab,sel,=,indirect_variable,,4,opts
-9456,vfRenderDomainChips,wrap,=,unescaped_html,,475,"all.map(function(d) {
+9456,vfRenderDomainChips,wrap,=,escaped,,474,"all.map(function(d) {
     var active = VF.domain === d.k;
-    return '<span onclick=""vfSetDomain(\'' + d.k + '\')"" style=""cursor:pointer;text-transform:capitalize;padding:0.3rem 0.7rem;border-radius:999px;font-size:0.74rem;border:1px solid ' +
+    return '<span' + x('click', 'vfSetDomain', d.k) + ' style=""cursor:pointer;text-transform:capitalize;padding:0.3rem 0.7rem;border-radius:999px;font-size:0.74rem;border:1px solid ' +
       (active ? 'var(--accent)' : 'var(--border)') + ';color:' + (active ? 'var(--accent)' : 'var(--muted)') +
-      ';background:' + (active ? 'rgba(79,142"
+      ';background:' + (active ? 'rgba(79,142,"
 9471,vfLoadQueue,box,=,static,,134,"'<div class=""empty"" style=""padding:2.5rem;text-align:center;color:var(--muted)"">Select a run to load its pending verifications.</div>'"
 9472,vfLoadQueue,box,=,static,,95,"'<div class=""empty"" style=""padding:2.5rem;text-align:center;color:var(--muted)"">Loading…</div>'"
 9475,vfLoadQueue,box,=,escaped,,86,"'<div class=""empty"" style=""padding:2rem;color:var(--danger)"">' + x(d.error) + '</div>'"
@@ -469,12 +469,12 @@ line,function,target,op,category,data_source_tags,rhs_len,rhs
 9506,vfRenderQueue,box,=,unescaped_html,,626,"'<table style=""width:100%;border-collapse:collapse"">' +
     '<thead><tr style=""text-align:left;font-size:0.68rem;text-transform:uppercase;letter-spacing:0.04em;color:var(--muted)"">' +
     '<th style=""padding:0.6rem 0.8rem"">Status</th><th style=""padding:0.6rem 0.8rem"">Technique</th><th style=""padding:0.6rem 0.8rem"">Expected Control</th><th style=""padding:0.6rem 0.8rem"">Domain</th><th style=""padding"
-9535,resultBtn,host,=,partial_escaped,,3013,"'<div style=""border-top:2px solid var(--accent);background:var(--bg);padding:1rem 1.1rem"">' +
+9535,resultBtn,host,=,partial_escaped,,2998,"'<div style=""border-top:2px solid var(--accent);background:var(--bg);padding:1rem 1.1rem"">' +
     '<div style=""display:flex;justify-content:space-between;align-items:baseline;gap:1rem;margin-bottom:0.7rem"">' +
       '<div><strong style=""font-size:0.9rem"">' + x(i.providerDisplay || i.provider) + '</strong> · <code style=""font-size:0.72rem"">' + x(i.techniqueId) + '</code> · <span style=""text-transfo"
 9565,vfCloseDetail,if (h) h,=,static_empty,,2,''
 9621,vfLoadEvidence,host,=,static,,83,"'<div style=""font-size:0.74rem;color:var(--muted)"">No evidence attached yet.</div>'"
-9623,vfLoadEvidence,host,=,unescaped_html,,1047,"list.map(function(e) {
+9623,vfLoadEvidence,host,=,unescaped_html,,1029,"list.map(function(e) {
       return '<div style=""display:flex;align-items:center;gap:0.6rem;padding:0.4rem 0.55rem;border:1px solid var(--border);border-radius:6px;margin-bottom:0.35rem;font-size:0.76rem"">' +
         '<span class=""u-success"">&#10003;</span>' +
         '<a href=""/api/evidence/' + encodeURIComponent(e.id) + '/download"" style=""color:var(--accent);text-decoration:none"">' + x(e.display"

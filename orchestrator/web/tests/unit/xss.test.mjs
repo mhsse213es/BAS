@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import { setupDom, load, PAYLOADS } from './dom.mjs';
 
 setupDom();
-const { initiativeStateLabel, openAdvDrawer, openFinding, renderRunReportExtra, renderVariantCoverage, complianceTile, renderAgentRiskSummary, loadScheduledAssessments, loadTAXIIConnectors, loadUsers, openSweepDrilldown, loadAgtLogs, renderResponseConnectorList, loadInitiatives, loadAdversaries, vexStatCard } =
-  await load(['initiativeStateLabel', 'openAdvDrawer', 'openFinding', 'renderRunReportExtra', 'renderVariantCoverage', 'complianceTile', 'renderAgentRiskSummary', 'loadScheduledAssessments', 'loadTAXIIConnectors', 'loadUsers', 'openSweepDrilldown', 'loadAgtLogs', 'renderResponseConnectorList', 'loadInitiatives', 'loadAdversaries', 'vexStatCard']);
+const { initiativeStateLabel, openAdvDrawer, openFinding, renderRunReportExtra, renderVariantCoverage, complianceTile, renderAgentRiskSummary, loadScheduledAssessments, loadTAXIIConnectors, loadUsers, openSweepDrilldown, loadAgtLogs, renderResponseConnectorList, loadInitiatives, loadAdversaries, vexStatCard, vfLoadQueue } =
+  await load(['initiativeStateLabel', 'openAdvDrawer', 'openFinding', 'renderRunReportExtra', 'renderVariantCoverage', 'complianceTile', 'renderAgentRiskSummary', 'loadScheduledAssessments', 'loadTAXIIConnectors', 'loadUsers', 'openSweepDrilldown', 'loadAgtLogs', 'renderResponseConnectorList', 'loadInitiatives', 'loadAdversaries', 'vexStatCard', 'vfLoadQueue']);
 const tick = () => new Promise((r) => setTimeout(r, 0));
 
 function assertInert(container, label) {
@@ -196,6 +196,20 @@ test('variants: vexStatCard keeps payloads inside data-args', () => {
     const div = document.createElement('div');
     div.innerHTML = vexStatCard('Label', 5, 'var(--accent)', 'sub', p);
     assertInert(div, 'vexStatCard');
+    const args = [...div.querySelectorAll('[data-args]')].map((e) => e.getAttribute('data-args')).join(' ');
+    assert.ok(args.includes(JSON.stringify(p).slice(1, -1)), 'payload should travel as data-args');
+  }
+});
+
+test('detection-verification: vfLoadQueue keeps payloads inside data-args', async () => {
+  for (const p of PAYLOADS) {
+    document.getElementById('vf-run').innerHTML = '<option value="run1" selected>run1</option>';
+    globalThis.fetch = async () => ({ status: 200, json: async () => ({ items: [{ expectationId: p, verificationId: p, status: 'pending', techniqueId: p, technique: p, name: p, domain: p }] }) });
+    vfLoadQueue();
+    await tick(); await tick();
+    const div = document.getElementById('vf-queue');
+    assertInert(div, 'vfLoadQueue');
+    assert.ok(div.querySelector('[data-args]'), 'fixture did not render');
     const args = [...div.querySelectorAll('[data-args]')].map((e) => e.getAttribute('data-args')).join(' ');
     assert.ok(args.includes(JSON.stringify(p).slice(1, -1)), 'payload should travel as data-args');
   }

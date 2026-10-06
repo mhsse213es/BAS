@@ -1784,9 +1784,9 @@
   "function": "vfRenderDomainChips",
   "target": "wrap",
   "op": "=",
-  "rhs": "all.map(function(d) {\n    var active = VF.domain === d.k;\n    return '<span onclick=\"vfSetDomain(\\'' + d.k + '\\')\" style=\"cursor:pointer;text-transform:capitalize;padding:0.3rem 0.7rem;border-radius:999px;font-size:0.74rem;border:1px solid ' +\n      (active ? 'var(--accent)' : 'var(--border)') + ';color:' + (active ? 'var(--accent)' : 'var(--muted)') +\n      ';background:' + (active ? 'rgba(79,142",
-  "rhs_len": 475,
-  "category": "unescaped_html",
+  "rhs": "all.map(function(d) {\n    var active = VF.domain === d.k;\n    return '<span' + x('click', 'vfSetDomain', d.k) + ' style=\"cursor:pointer;text-transform:capitalize;padding:0.3rem 0.7rem;border-radius:999px;font-size:0.74rem;border:1px solid ' +\n      (active ? 'var(--accent)' : 'var(--border)') + ';color:' + (active ? 'var(--accent)' : 'var(--muted)') +\n      ';background:' + (active ? 'rgba(79,142,",
+  "rhs_len": 474,
+  "category": "escaped",
   "data_source_tags": ""
  },
  {
@@ -1855,7 +1855,7 @@
   "target": "host",
   "op": "=",
   "rhs": "'<div style=\"border-top:2px solid var(--accent);background:var(--bg);padding:1rem 1.1rem\">' +\n    '<div style=\"display:flex;justify-content:space-between;align-items:baseline;gap:1rem;margin-bottom:0.7rem\">' +\n      '<div><strong style=\"font-size:0.9rem\">' + x(i.providerDisplay || i.provider) + '</strong> \u00b7 <code style=\"font-size:0.72rem\">' + x(i.techniqueId) + '</code> \u00b7 <span style=\"text-transfo",
-  "rhs_len": 3013,
+  "rhs_len": 2998,
   "category": "partial_escaped",
   "data_source_tags": ""
  },
@@ -1885,7 +1885,7 @@
   "target": "host",
   "op": "=",
   "rhs": "list.map(function(e) {\n      return '<div style=\"display:flex;align-items:center;gap:0.6rem;padding:0.4rem 0.55rem;border:1px solid var(--border);border-radius:6px;margin-bottom:0.35rem;font-size:0.76rem\">' +\n        '<span class=\"u-success\">&#10003;</span>' +\n        '<a href=\"/api/evidence/' + encodeURIComponent(e.id) + '/download\" style=\"color:var(--accent);text-decoration:none\">' + x(e.display",
-  "rhs_len": 1047,
+  "rhs_len": 1029,
   "category": "unescaped_html",
   "data_source_tags": ""
  },
