@@ -63,5 +63,6 @@ node_modules/
 # G1c: build output of orchestrator/web (see web/tools/dev-build.sh)
 /orchestrator/wwwroot/
 
-# Private reference material, never committed
-/Assessment/
+# Stale copies of the G1 audit data; the live artifacts are security/g1/G1_*
+/Assessment/G1_*.csv
+/Assessment/G1_*.json
