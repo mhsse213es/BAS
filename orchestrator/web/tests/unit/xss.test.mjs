@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import { setupDom, load, PAYLOADS } from './dom.mjs';
 
 setupDom();
-const { initiativeStateLabel, openAdvDrawer, openFinding, renderRunReportExtra, renderVariantCoverage, complianceTile } =
-  await load(['initiativeStateLabel', 'openAdvDrawer', 'openFinding', 'renderRunReportExtra', 'renderVariantCoverage', 'complianceTile']);
+const { initiativeStateLabel, openAdvDrawer, openFinding, renderRunReportExtra, renderVariantCoverage, complianceTile, renderAgentRiskSummary } =
+  await load(['initiativeStateLabel', 'openAdvDrawer', 'openFinding', 'renderRunReportExtra', 'renderVariantCoverage', 'complianceTile', 'renderAgentRiskSummary']);
 const tick = () => new Promise((r) => setTimeout(r, 0));
 
 function assertInert(container, label) {
@@ -74,6 +74,16 @@ test('compliance: complianceTile keeps payloads inside data-args', () => {
     const div = document.createElement('div');
     div.innerHTML = complianceTile({ frameworkId: p, agentId: p, frameworkName: p, testedControls: 1, passingControls: 1, compliancePct: 100 });
     assertInert(div, 'complianceTile');
+    const args = [...div.querySelectorAll('[data-args]')].map((e) => e.getAttribute('data-args')).join(' ');
+    assert.ok(args.includes(JSON.stringify(p).slice(1, -1)), 'payload should travel as data-args');
+  }
+});
+
+test('shell: renderAgentRiskSummary keeps payloads inside data-args', () => {
+  for (const p of PAYLOADS) {
+    renderAgentRiskSummary([{ agentId: p, hostname: p, measurable: true, healthScore: 50, topDeficitCategory: p }]);
+    const div = document.getElementById('agent-risk-body');
+    assertInert(div, 'renderAgentRiskSummary');
     const args = [...div.querySelectorAll('[data-args]')].map((e) => e.getAttribute('data-args')).join(' ');
     assert.ok(args.includes(JSON.stringify(p).slice(1, -1)), 'payload should travel as data-args');
   }

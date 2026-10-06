@@ -3,7 +3,8 @@ import { apicall } from '../core/api.js';
 import { x } from '../core/escape.js';
 import { showToast } from '../core/util.js';
 import { loadAdversaries, loadAdversaryTemplates } from './adversaries.js';
-import { initComplianceTab } from './agent-drawer.js';
+import { initComplianceTab, openAgentDetail, showAgentTab } from './agent-drawer.js';
+import { on } from '../core/actions.js';
 import { closeScenarioOverlay, injectServerURL, loadAgentGroupTree, loadAgents, loadAttackPath, loadCatalogs, loadConnectionConfig, loadCoverageActors, loadCoverageMatrix, loadExecDashboard, loadExposureAssets, loadRecommendations, loadScenarios, loadThreatPriorityActors, renderScenarios, selectTheme, showSettingsSection, showThreatPriorityList } from './attack-path.js';
 import { loadAuditLogs } from './audit-logs.js';
 import { closeCampaignDetail } from './campaigns.js';
@@ -159,6 +160,9 @@ function _syncLicenseBannerHeight() {
 // --license-banner-h). Session-scoped, not permanent -- the warning is
 // real and comes back on the next login, this just lets an operator who
 // has already seen it get it out of the way to work.
+export function licenseBannerDismissHoverOn() { this.style.opacity = 1; }
+export function licenseBannerDismissHoverOff() { this.style.opacity = 0.75; }
+
 export function _dismissLicenseGraceBanner() {
   var el = document.getElementById('license-grace-banner');
   if (el) el.remove();
@@ -187,10 +191,10 @@ function renderLicenseGraceBanner(info) {
   // operator actually opened.
   el.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:90;padding:0.75rem 2.5rem;background:var(--warning,#d29922);color:#1a1200;font-size:0.85rem;line-height:1.5;text-align:center';
   el.innerHTML = _licenseBannerHTML(info) +
-    '<button onclick="_dismissLicenseGraceBanner()" aria-label="Dismiss" title="Dismiss" ' +
+    '<button' + on('click', '_dismissLicenseGraceBanner') + ' aria-label="Dismiss" title="Dismiss" ' +
       'style="position:absolute;top:0.5rem;right:0.6rem;width:24px;height:24px;display:flex;align-items:center;justify-content:center;' +
       'background:transparent;border:none;color:inherit;font-size:1.1rem;line-height:1;cursor:pointer;opacity:0.75" ' +
-      'onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0.75">&#10005;</button>';
+      on('mouseover', 'licenseBannerDismissHoverOn') + on('mouseout', 'licenseBannerDismissHoverOff') + '>&#10005;</button>';
   document.body.insertBefore(el, document.body.firstChild);
   _syncLicenseBannerHeight();
   window.addEventListener('resize', _syncLicenseBannerHeight);
@@ -471,7 +475,11 @@ export function _riskTrendBadge(trend) {
   if (trend === 'Stable') return '<span class="u-muted">&#8594; Stable</span>';
   return '<span class="u-muted">—</span>';
 }
-function renderAgentRiskSummary(rows) {
+export function openAgentDetailRiskTab(agentId) {
+  openAgentDetail(agentId);
+  setTimeout(function() { showAgentTab('risk'); }, 50);
+}
+export function renderAgentRiskSummary(rows) {
   var tb = document.getElementById('agent-risk-body');
   if (!tb) return;
   if (!rows.length) {
@@ -495,7 +503,7 @@ function renderAgentRiskSummary(rows) {
       '<td>' + _riskTrendBadge(a.trend) + '</td>' +
       '<td>' + x(a.topDeficitCategory || '—') + '</td>' +
       '<td>' + (a.openFindingsCount || 0) + '</td>' +
-      '<td><button class="btn btn-outline btn-sm" onclick="openAgentDetail(\'' + x(a.agentId) + '\');setTimeout(function(){showAgentTab(\'risk\')},50)">View</button></td>' +
+      '<td><button class="btn btn-outline btn-sm"' + on('click', 'openAgentDetailRiskTab', a.agentId) + '>View</button></td>' +
       '</tr>';
   }).join('');
 }

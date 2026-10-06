@@ -79,7 +79,7 @@
  },
  {
   "sink_id": "_vexRenderQueuePanel:panel:=:b153a86b8dca",
-  "line": 20917,
+  "line": 20924,
   "function": "_vexRenderQueuePanel",
   "target": "panel",
   "op": "=",
@@ -586,7 +586,7 @@
  },
  {
   "sink_id": "filterVexTechniques:el:=:b51334baf721",
-  "line": 20739,
+  "line": 20746,
   "function": "filterVexTechniques",
   "target": "el",
   "op": "=",
@@ -599,7 +599,7 @@
  },
  {
   "sink_id": "filterVexTechniques:el:=:fe7e0ce19e69",
-  "line": 20742,
+  "line": 20749,
   "function": "filterVexTechniques",
   "target": "el",
   "op": "=",
@@ -625,7 +625,7 @@
  },
  {
   "sink_id": "goToProfile:el:=:dbb79cb6cb5d",
-  "line": 18814,
+  "line": 18817,
   "function": "goToProfile",
   "target": "el",
   "op": "=",
@@ -776,7 +776,7 @@
   "final_category": "unescaped_html",
   "severity_tier": 4,
   "data_source_tags": "",
-  "trace_notes": "killChainNodes() @L19883 (scope-resolved): 1 return(s) -> unescaped_html",
+  "trace_notes": "killChainNodes() @L19890 (scope-resolved): 1 return(s) -> unescaped_html",
   "rhs": "'<div class=\"killchain\">' + killChainNodes(kc) + '</div>'"
  },
  {
@@ -976,7 +976,7 @@
  },
  {
   "sink_id": "loadARTContentStatus:document.getElementById('cs-art-status'):=:f83cfb2e045d",
-  "line": 19379,
+  "line": 19386,
   "function": "loadARTContentStatus",
   "target": "document.getElementById('cs-art-status')",
   "op": "=",
@@ -989,7 +989,7 @@
  },
  {
   "sink_id": "loadARTContentStatus:statusEl:=:231d8ed13a85",
-  "line": 19337,
+  "line": 19344,
   "function": "loadARTContentStatus",
   "target": "statusEl",
   "op": "=",
@@ -1002,7 +1002,7 @@
  },
  {
   "sink_id": "loadARTContentStatus:statusEl:=:240aa95af980",
-  "line": 19339,
+  "line": 19346,
   "function": "loadARTContentStatus",
   "target": "statusEl",
   "op": "=",
@@ -1015,7 +1015,7 @@
  },
  {
   "sink_id": "loadAgentRiskSummary:if (tb) tb:=:19f226136597",
-  "line": 18873,
+  "line": 18876,
   "function": "loadAgentRiskSummary",
   "target": "if (tb) tb",
   "op": "=",
@@ -1938,7 +1938,7 @@
  },
  {
   "sink_id": "loadSimCoverage:bodyEl:=:b822322bb95c",
-  "line": 19507,
+  "line": 19514,
   "function": "loadSimCoverage",
   "target": "bodyEl",
   "op": "=",
@@ -1951,7 +1951,7 @@
  },
  {
   "sink_id": "loadTAXIIConnectors:tbody:=:1f42fbd5bac8",
-  "line": 19151,
+  "line": 19158,
   "function": "loadTAXIIConnectors",
   "target": "tbody",
   "op": "=",
@@ -1964,7 +1964,7 @@
  },
  {
   "sink_id": "loadTAXIIConnectors:tbody:=:e683e20284c5",
-  "line": 19146,
+  "line": 19153,
   "function": "loadTAXIIConnectors",
   "target": "tbody",
   "op": "=",
@@ -1977,7 +1977,7 @@
  },
  {
   "sink_id": "loadThreatIntelConfig:if (panel) panel:=:6f49cdbd80e1",
-  "line": 19031,
+  "line": 19038,
   "function": "loadThreatIntelConfig",
   "target": "if (panel) panel",
   "op": "=",
@@ -1990,7 +1990,7 @@
  },
  {
   "sink_id": "loadThreatIntelConfig:panel:=:a9b597bb6c96",
-  "line": 19040,
+  "line": 19047,
   "function": "loadThreatIntelConfig",
   "target": "panel",
   "op": "=",
@@ -2094,7 +2094,7 @@
  },
  {
   "sink_id": "loadVariantCoverage:el:=:5ad448abef7d",
-  "line": 20769,
+  "line": 20776,
   "function": "loadVariantCoverage",
   "target": "el",
   "op": "=",
@@ -2107,7 +2107,7 @@
  },
  {
   "sink_id": "loadVariantCoverage:el:=:a79e43cbcf7f",
-  "line": 20796,
+  "line": 20803,
   "function": "loadVariantCoverage",
   "target": "el",
   "op": "=",
@@ -2120,7 +2120,7 @@
  },
  {
   "sink_id": "loadVariantCoverage:el:=:c944b2f9b670",
-  "line": 20766,
+  "line": 20773,
   "function": "loadVariantCoverage",
   "target": "el",
   "op": "=",
@@ -2133,7 +2133,7 @@
  },
  {
   "sink_id": "loadVariantCoverage:el:=:e5e239560bc1",
-  "line": 20794,
+  "line": 20801,
   "function": "loadVariantCoverage",
   "target": "el",
   "op": "=",
@@ -2141,12 +2141,12 @@
   "final_category": "partial_escaped",
   "severity_tier": 3,
   "data_source_tags": "",
-  "trace_notes": "3 assignment(s) to 'html' inside loadVariantCoverage() @L20763 (scope-resolved) -> partial_escaped",
+  "trace_notes": "3 assignment(s) to 'html' inside loadVariantCoverage() @L20770 (scope-resolved) -> partial_escaped",
   "rhs": "html"
  },
  {
   "sink_id": "loadVariantStats:el:=:357036e91e03",
-  "line": 20325,
+  "line": 20332,
   "function": "loadVariantStats",
   "target": "el",
   "op": "=",
@@ -2154,7 +2154,7 @@
   "final_category": "partial_escaped",
   "severity_tier": 3,
   "data_source_tags": "",
-  "trace_notes": "executions(): no declaration found anywhere in file; var(): no declaration found anywhere in file; vexStatCard() @L20338 (scope-resolved): 1 return(s) -> partial_escaped",
+  "trace_notes": "executions(): no declaration found anywhere in file; var(): no declaration found anywhere in file; vexStatCard() @L20345 (scope-resolved): 1 return(s) -> partial_escaped",
   "rhs": "vexStatCard('Executed Variants',     s.executedVariants,       'var(--accent)', null,\n        'How many individual variant executions (encoding \\xd7 privilege \\xd7 context combinations) have actually completed so far, summed across every finished variant run — not the total available.') +\n      vexStatCard('Total Variants',        s.availableVariants,      'var(--text)',   artAtomic.toLocaleString"
  },
  {
@@ -2172,7 +2172,7 @@
  },
  {
   "sink_id": "maybeShowLicenseGraceModal:overlay:=:07494db8034d",
-  "line": 18619,
+  "line": 18622,
   "function": "maybeShowLicenseGraceModal",
   "target": "overlay",
   "op": "=",
@@ -2783,7 +2783,7 @@
  },
  {
   "sink_id": "pollVariantRun:if (p) p:=:7216b4ea81b4",
-  "line": 21016,
+  "line": 21023,
   "function": "pollVariantRun",
   "target": "if (p) p",
   "op": "=",
@@ -2796,7 +2796,7 @@
  },
  {
   "sink_id": "pollVariantRun:if (panel) panel:=:852c6910cc5b",
-  "line": 20987,
+  "line": 20994,
   "function": "pollVariantRun",
   "target": "if (panel) panel",
   "op": "=",
@@ -2835,7 +2835,7 @@
  },
  {
   "sink_id": "populateVexAgents:if (sel) sel:=:d2a1edd66cf8",
-  "line": 20367,
+  "line": 20374,
   "function": "populateVexAgents",
   "target": "if (sel) sel",
   "op": "=",
@@ -2843,12 +2843,12 @@
   "final_category": "escaped",
   "severity_tier": 1,
   "data_source_tags": "",
-  "trace_notes": "1 assignment(s) to 'opts' inside populateVexAgents() @L20354 (scope-resolved) -> escaped",
+  "trace_notes": "1 assignment(s) to 'opts' inside populateVexAgents() @L20361 (scope-resolved) -> escaped",
   "rhs": "opts"
  },
  {
   "sink_id": "populateVexAgents:if (sweepSel) sweepSel:=:d2a1edd66cf8",
-  "line": 20369,
+  "line": 20376,
   "function": "populateVexAgents",
   "target": "if (sweepSel) sweepSel",
   "op": "=",
@@ -2856,12 +2856,12 @@
   "final_category": "escaped",
   "severity_tier": 1,
   "data_source_tags": "",
-  "trace_notes": "1 assignment(s) to 'opts' inside populateVexAgents() @L20354 (scope-resolved) -> escaped",
+  "trace_notes": "1 assignment(s) to 'opts' inside populateVexAgents() @L20361 (scope-resolved) -> escaped",
   "rhs": "opts"
  },
  {
   "sink_id": "populateVexTechniques:if (el) el:=:63e9d5f1a93f",
-  "line": 20409,
+  "line": 20416,
   "function": "populateVexTechniques",
   "target": "if (el) el",
   "op": "=",
@@ -2874,7 +2874,7 @@
  },
  {
   "sink_id": "populateVexTechniques:tacSel:=:ce309d68b711",
-  "line": 20404,
+  "line": 20411,
   "function": "populateVexTechniques",
   "target": "tacSel",
   "op": "=",
@@ -2882,7 +2882,7 @@
   "final_category": "unescaped_html",
   "severity_tier": 4,
   "data_source_tags": "",
-  "trace_notes": "2 assignment(s) to 'tacOpts' inside populateVexTechniques() @L20381 (scope-resolved) -> unescaped_html",
+  "trace_notes": "2 assignment(s) to 'tacOpts' inside populateVexTechniques() @L20388 (scope-resolved) -> unescaped_html",
   "rhs": "tacOpts"
  },
  {
@@ -3121,7 +3121,7 @@
  },
  {
   "sink_id": "renderAgentRiskSummary:tb:=:b2f34185c24f",
-  "line": 18891,
+  "line": 18898,
   "function": "renderAgentRiskSummary",
   "target": "tb",
   "op": "=",
@@ -3134,7 +3134,7 @@
  },
  {
   "sink_id": "renderAgentRiskSummary:tb:=:df1b491f9634",
-  "line": 18901,
+  "line": 18908,
   "function": "renderAgentRiskSummary",
   "target": "tb",
   "op": "=",
@@ -3757,8 +3757,8 @@
   "rhs": "'<div class=\"legacy-migration-header\">Legacy Transport Migration</div>' +\n      '<div class=\"legacy-migration-days\">Days clean: ' + status.daysClean + ' / ' + status.daysRequired + '</div>' +\n      '<div class=\"legacy-migration-status ' + (status.eligible ? 'eligible' : 'not-eligible') + '\">' +\n        (status.eligible ? 'ELIGIBLE FOR REVIEW' : 'NOT YET ELIGIBLE') +\n      '</div>' +\n      unattrib"
  },
  {
-  "sink_id": "renderLicenseGraceBanner:el:=:26f2bae5f524",
-  "line": 18602,
+  "sink_id": "renderLicenseGraceBanner:el:=:d63b5c010ef7",
+  "line": 18605,
   "function": "renderLicenseGraceBanner",
   "target": "el",
   "op": "=",
@@ -3766,8 +3766,8 @@
   "final_category": "partial_escaped",
   "severity_tier": 3,
   "data_source_tags": "",
-  "trace_notes": "_dismissLicenseGraceBanner() @L18575 (scope-resolved): no return statement found; _licenseBannerHTML() @L18554 (scope-resolved): 1 return(s) -> partial_escaped",
-  "rhs": "_licenseBannerHTML(info) +\n    '<button onclick=\"_dismissLicenseGraceBanner()\" aria-label=\"Dismiss\" title=\"Dismiss\" ' +\n      'style=\"position:absolute;top:0.5rem;right:0.6rem;width:24px;height:24px;display:flex;align-items:center;justify-content:center;' +\n      'background:transparent;border:none;color:inherit;font-size:1.1rem;line-height:1;cursor:pointer;opacity:0.75\" ' +\n      'onmouseover=\"th"
+  "trace_notes": "_licenseBannerHTML() @L18554 (scope-resolved): 1 return(s) -> partial_escaped; on() @L3866 (scope-resolved): 1 return(s) -> indirect_variable",
+  "rhs": "_licenseBannerHTML(info) +\n    '<button' + on('click', '_dismissLicenseGraceBanner') + ' aria-label=\"Dismiss\" title=\"Dismiss\" ' +\n      'style=\"position:absolute;top:0.5rem;right:0.6rem;width:24px;height:24px;display:flex;align-items:center;justify-content:center;' +\n      'background:transparent;border:none;color:inherit;font-size:1.1rem;line-height:1;cursor:pointer;opacity:0.75\" ' +\n      on('mo"
  },
  {
   "sink_id": "renderLicenseLockedScreen:el:=:56bd2dda6569",
@@ -4486,7 +4486,7 @@
  },
  {
   "sink_id": "renderTAXIIConnectorsList:tbody:=:09e758a55a6d",
-  "line": 19161,
+  "line": 19168,
   "function": "renderTAXIIConnectorsList",
   "target": "tbody",
   "op": "=",
@@ -4499,7 +4499,7 @@
  },
  {
   "sink_id": "renderTAXIIConnectorsList:tbody:=:59d7910c503d",
-  "line": 19158,
+  "line": 19165,
   "function": "renderTAXIIConnectorsList",
   "target": "tbody",
   "op": "=",
@@ -4759,7 +4759,7 @@
  },
  {
   "sink_id": "renderVariantRun:cell:=:2ff32a8ace7a",
-  "line": 21166,
+  "line": 21173,
   "function": "renderVariantRun",
   "target": "cell",
   "op": "=",
@@ -4772,7 +4772,7 @@
  },
  {
   "sink_id": "renderVariantRun:if (wrapperEl) wrapperEl:=:8e94bcdd09f7",
-  "line": 21161,
+  "line": 21168,
   "function": "renderVariantRun",
   "target": "if (wrapperEl) wrapperEl",
   "op": "=",
@@ -4780,12 +4780,12 @@
   "final_category": "partial_escaped",
   "severity_tier": 3,
   "data_source_tags": "",
-  "trace_notes": "24 assignment(s) to 'wrapperHtml' inside renderVariantRun() @L21094 (scope-resolved) -> partial_escaped",
+  "trace_notes": "24 assignment(s) to 'wrapperHtml' inside renderVariantRun() @L21101 (scope-resolved) -> partial_escaped",
   "rhs": "wrapperHtml"
  },
  {
   "sink_id": "renderVariantRun:panel:=:8576b16b3214",
-  "line": 21178,
+  "line": 21185,
   "function": "renderVariantRun",
   "target": "panel",
   "op": "=",
@@ -4798,7 +4798,7 @@
  },
  {
   "sink_id": "renderVexSweepList:el:=:6f49cdbd80e1",
-  "line": 20500,
+  "line": 20507,
   "function": "renderVexSweepList",
   "target": "el",
   "op": "=",
@@ -4811,7 +4811,7 @@
  },
  {
   "sink_id": "renderVexSweepList:el:=:84f7e3c3eda0",
-  "line": 20502,
+  "line": 20509,
   "function": "renderVexSweepList",
   "target": "el",
   "op": "=",
@@ -5092,7 +5092,7 @@
   "final_category": "partial_escaped",
   "severity_tier": 3,
   "data_source_tags": "",
-  "trace_notes": "renderRunReportExtra() @L19913 (scope-resolved): 5 return(s) -> partial_escaped",
+  "trace_notes": "renderRunReportExtra() @L19920 (scope-resolved): 5 return(s) -> partial_escaped",
   "rhs": "renderRunReportExtra(rep)"
  },
  {
@@ -5118,7 +5118,7 @@
   "final_category": "unescaped_html",
   "severity_tier": 4,
   "data_source_tags": "",
-  "trace_notes": "renderAttackFlow() @L19789 (scope-resolved): 6 return(s) -> unescaped_html",
+  "trace_notes": "renderAttackFlow() @L19796 (scope-resolved): 6 return(s) -> unescaped_html",
   "rhs": "renderAttackFlow(af.nodes || [], af.summary || {})"
  },
  {
@@ -5144,7 +5144,7 @@
   "final_category": "unescaped_html",
   "severity_tier": 4,
   "data_source_tags": "",
-  "trace_notes": "renderVariantCoverage() @L19581 (scope-resolved): 11 return(s) -> unescaped_html",
+  "trace_notes": "renderVariantCoverage() @L19588 (scope-resolved): 11 return(s) -> unescaped_html",
   "rhs": "renderVariantCoverage(cov)"
  },
  {
@@ -5170,7 +5170,7 @@
   "final_category": "unescaped_html",
   "severity_tier": 4,
   "data_source_tags": "",
-  "trace_notes": "renderRunFindings() @L20209 (scope-resolved): 3 return(s) -> unescaped_html",
+  "trace_notes": "renderRunFindings() @L20216 (scope-resolved): 3 return(s) -> unescaped_html",
   "rhs": "renderRunFindings(rep)"
  },
  {
@@ -5222,7 +5222,7 @@
   "final_category": "unescaped_html",
   "severity_tier": 4,
   "data_source_tags": "",
-  "trace_notes": "renderRunRecommendations() @L20236 (scope-resolved): 3 return(s) -> unescaped_html",
+  "trace_notes": "renderRunRecommendations() @L20243 (scope-resolved): 3 return(s) -> unescaped_html",
   "rhs": "renderRunRecommendations(rep)"
  },
  {
@@ -5357,7 +5357,7 @@
  },
  {
   "sink_id": "stopVex:if (panel) panel:=:f892e36d9a7f",
-  "line": 21048,
+  "line": 21055,
   "function": "stopVex",
   "target": "if (panel) panel",
   "op": "=",
@@ -5630,7 +5630,7 @@
  },
  {
   "sink_id": "toggleSimCoverage:if (car) car:=:9c822af7dbd9",
-  "line": 19392,
+  "line": 19399,
   "function": "toggleSimCoverage",
   "target": "if (car) car",
   "op": "=",
