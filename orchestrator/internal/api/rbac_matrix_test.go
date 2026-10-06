@@ -406,6 +406,7 @@ var publicRoutes = map[string]bool{
 	"GET /login/{tenantSlug}/sso":                 true,
 	"GET /api/auth/sso/callback":                  true,
 	"GET /api/config/ca-root":                     true, // public CA certificate (never the key), fetched by install commands before enrollment
+	"POST /api/csp-report":                        true, // CSP violation reports (G1d); browsers send them unauthenticated
 	"GET /scim/v2/ServiceProviderConfig":          true,
 	"GET /scim/v2/ResourceTypes":                  true,
 	"GET /scim/v2/Schemas":                        true,
