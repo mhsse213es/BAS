@@ -1020,6 +1020,10 @@ export function _onRevalidationStarted(msg) {
     loadRuns();
   } else if (status === 'no_scenario') {
     showToast('Auto-revalidation: no scenario for ' + tech + ' — re-validate manually via Remediations.', 'warn');
+  } else if (status === 'error') {
+    // Content Registry gate denial (revalidation.content_not_executable): the
+    // scenario is not approved, so this is terminal until an operator approves it.
+    showToast(d.message || ('Auto-revalidation of ' + tech + ' was blocked.'), 'error');
   }
 }
 
@@ -1727,10 +1731,12 @@ export function loadScenarios() {
         intelActor:         s.intelActor          || '',
         intelConfidence:    s.intelConfidence      || '',
         artTechniques:      s.artTechniques       || [],
-        supportedOs:        s.supportedOs         || []
+        supportedOs:        s.supportedOs         || [],
+        registry:           s.registry            || null
       };
     });
     renderScenarios();
+    loadRegistryMigrationBanner();
     // renderScheduledAssessmentsList() looks up each schedule's human name
     // from this scenarios array client-side, falling back to the raw
     // scenario ID when not found. loadScenarios() and
@@ -1740,6 +1746,60 @@ export function loadScenarios() {
     // re-renders it. Re-render now that scenarios is actually populated.
     if (SCHED.schedules.length) renderScheduledAssessmentsList();
   }).catch(function(e) { showToast(e.message, 'err'); });
+}
+
+// TCF Phase 1: registry lifecycle/trust badge. Only server-provided enum
+// strings and numbers, all escaped via x().
+function registryBadge(s) {
+  var r = s.registry;
+  if (!r) return '<span class="tag" title="Not registered — cannot run">unregistered</span> ';
+  if (r.executableVersion) {
+    var label = r.executableTrust === 'VENDOR_SIGNED' ? 'signed v' : (r.executableTrust === 'LOCAL_TRUSTED' ? 'approved v' : 'dev-unsigned v');
+    var pending = r.latestVersion > r.executableVersion
+      ? ' <span class="tag" title="Newer version awaiting approval">v' + x(String(r.latestVersion)) + ' ' + x(r.latestLifecycle) + '</span>'
+      : '';
+    return '<span class="tag" style="background:rgba(63,185,80,0.12);color:#3fb950">' + label + x(String(r.executableVersion)) + '</span>' + pending + ' ';
+  }
+  return '<span class="tag" style="background:rgba(210,153,34,0.15);color:#d29922" title="Not executable until approved">v' +
+    x(String(r.latestVersion)) + ' ' + x(r.latestLifecycle) + '</span> ';
+}
+
+function canApproveForLocal(s) {
+  var r = s.registry;
+  return ROLE === 'admin' && r && !r.executableVersion && (s.source === 'intel' || s.source === 'custom') &&
+    (r.latestLifecycle === 'DRAFT' || r.latestLifecycle === 'VALIDATED');
+}
+
+function approveButton(s) {
+  return '<button class="btn btn-outline btn-sm"' + on('click', 'approveForLocalUse', s.id, s.registry.latestVersionId) + '>&#10003; Approve</button> ';
+}
+
+export function approveForLocalUse(id, versionId) {
+  var reason = window.prompt('Approve ' + id + ' for local execution. Reason (recorded in the audit trail):', 'reviewed');
+  if (reason === null) return;
+  apicall('/api/content-registry/versions/' + encodeURIComponent(versionId) + '/transition', {
+    method: 'POST',
+    body: JSON.stringify({ to: 'PUBLISHED_LOCAL', reason: reason })
+  }).then(function(d) {
+    if (d && d.error) throw new Error(d.error);
+    showToast('Approved ' + id + ' for local use', 'ok');
+    loadScenarios();
+  }).catch(function(e) { showToast('Approval failed: ' + e.message, 'error'); });
+}
+
+// Admin-only banner: schedules whose scenario is no longer executable after the
+// registry migration. Text via textContent only (scenario ids are data).
+function loadRegistryMigrationBanner() {
+  if (ROLE !== 'admin') return;
+  apicall('/api/content-registry/migration-report').then(function(m) {
+    var host = document.getElementById('registryMigrationBanner');
+    if (!host) return;
+    var b = m && m.blockedSchedules;
+    if (!b || !b.length) { host.hidden = true; return; }
+    host.textContent = b.length + ' scheduled assessment(s) reference threat-intel scenarios that now need approval before they can run (' +
+      b.map(function(r) { return r.scenarioId; }).join(', ') + '). Approve them on their scenario cards.';
+    host.hidden = false;
+  }).catch(function() {});
 }
 
 var SCENARIO_CATEGORIES = {
@@ -2140,12 +2200,13 @@ function scenarioDetailHTML(s) {
         // scenarios cannot be deleted by anyone, through any path (the
         // backend enforces this too; see Engine.Delete's intel-source guard).
         var footerMeta = techCount + ' techniques';
-        return '<div>' + intelBadge + '</div>' +
+        return '<div>' + registryBadge(s) + intelBadge + '</div>' +
           '<h3>' + x(s.name) + '</h3>' +
           descHtml(s.description, s.id, {limit:120, style:'font-size:0.78rem;color:var(--muted)'}) +
           '<div class="tags">' + tags + '</div>' +
           '<div class="card-footer">' +
             '<div class="card-meta">' + footerMeta + '</div>' +
+            (canApproveForLocal(s) ? approveButton(s) : '') +
             '<button class="btn btn-outline-green btn-sm" onclick="openModal(\'' + x(s.id) + '\',null)">&#9654; Run</button>' +
           '</div>';
       }
@@ -2154,6 +2215,7 @@ function scenarioDetailHTML(s) {
         ? '<span class="tag" style="background:rgba(47,216,195,0.15);color:#5cead8;border-color:rgba(47,216,195,0.4)">custom</span> '
         : '';
       var editBtns = '';
+      if (canApproveForLocal(s)) editBtns += approveButton(s);
       if (canEdit) {
         editBtns += '<button class="btn btn-outline btn-sm" onclick="cloneScenario(\'' + x(s.id) + '\')" title="Clone into an editable custom scenario">&#9112; Clone</button> ';
         if (s.source === 'custom') {
@@ -2237,7 +2299,7 @@ function scenarioDetailHTML(s) {
           'title="Choose which ' + fwNoun + ' to run">&#9881; Customize</button> '
         : '';
 
-      return '<div>' + customBadge + '</div>' +
+      return '<div>' + registryBadge(s) + customBadge + '</div>' +
         '<h3>' + x(s.name) + '</h3>' +
         descHtml(s.description, s.id, {limit:140}) +
         '<div class="tags">' + osBadge + tags + '</div>' +

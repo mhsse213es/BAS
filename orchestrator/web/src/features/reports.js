@@ -2171,6 +2171,21 @@ export function viewRunResults(run) {
   }
 
   var runId = run.id || '';
+  // TCF Phase 1 provenance: which content version this run executed. Shown
+  // only on a clean 200 with a label; textContent only (label has a content id).
+  if (runId) {
+    var sumEl = document.getElementById('results-summary');
+    apicall('/api/content-registry/runs/' + encodeURIComponent(runId) + '/content').then(function(c) {
+      if (!c || !c.label || !sumEl) return;
+      var el = document.createElement('div');
+      el.id = 'runContentProvenance';
+      el.className = 'card-meta';
+      el.textContent = 'Content: ' + c.label;
+      var old = document.getElementById('runContentProvenance');
+      if (old) old.remove();
+      sumEl.appendChild(el);
+    }).catch(function() {});
+  }
   var hasOutput = runId && (run.status === 'completed' || run.status === 'partial');
   document.getElementById('results-export').innerHTML = '';
 
