@@ -57,7 +57,7 @@ func (r Result) Summary() string {
 		s += ", adopted pre-H1 install"
 	}
 	if r.Role != "" {
-		s += ", bas_app " + r.Role
+		s += ", " + r.Role
 	}
 	return s
 }
@@ -78,6 +78,9 @@ func (o Options) printf(format string, a ...any) {
 // Up brings the database at adminDSN to the newest embedded schema and seed.
 func Up(ctx context.Context, adminDSN string, opt Options) (Result, error) {
 	var r Result
+	if !opt.SkipRole && opt.AppPassword == "" {
+		return r, errors.New("bas_app password is empty (BAS_APP_DB_PASSWORD)")
+	}
 	src := opt.source()
 	if err := CheckSet(src); err != nil {
 		return r, err
@@ -159,8 +162,13 @@ func Up(ctx context.Context, adminDSN string, opt Options) (Result, error) {
 		return r, err
 	}
 	if !opt.SkipRole {
-		if r.Role, err = ensureRole(ctx, conn, opt.AppPassword); err != nil {
+		created, err := ensureRole(ctx, conn, opt.AppPassword, adminDSN)
+		if err != nil {
 			return r, err
+		}
+		r.Role = AppRole + " ok"
+		if created {
+			r.Role = AppRole + " created"
 		}
 	}
 	opt.printf("migrate: %s", r.Summary())
