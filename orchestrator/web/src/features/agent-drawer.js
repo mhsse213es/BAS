@@ -584,19 +584,23 @@ export function downloadAuditPack(agentId) {
 var _cmpReport = null;
 var _cmpFrameworks = [];
 var _cmpFilter = '';
+var _cmpInitPromise = null;
 
+// Returns a promise that resolves once the framework options exist, so a
+// caller can select one (openComplianceDetail) without racing the fetch.
 export function initComplianceTab() {
   var fwSel = document.getElementById('cmp-fw-sel');
-  if (_cmpFrameworks.length === 0) {
-    apicall('/api/compliance/frameworks').then(function(fws) {
+  if (_cmpFrameworks.length === 0 && !_cmpInitPromise) {
+    _cmpInitPromise = apicall('/api/compliance/frameworks').then(function(fws) {
       _cmpFrameworks = fws || [];
       fwSel.innerHTML = _cmpFrameworks.map(function(f) {
         return '<option value="' + f.id + '">' + f.name + ' ' + f.version + '</option>';
       }).join('');
     }).catch(function() {
       fwSel.innerHTML = '<option value="">Error loading frameworks</option>';
-    });
+    }).then(function() { _cmpInitPromise = null; });
   }
+  var ready = _cmpInitPromise || Promise.resolve();
   // Populate agent selector from already-loaded agents array
   var agSel = document.getElementById('cmp-agent-sel');
   if (agSel.options.length <= 1) {
@@ -605,6 +609,7 @@ export function initComplianceTab() {
         return '<option value="' + x(a.agentId) + '">' + x(a.hostname || a.agentId) + '</option>';
       }).join('');
   }
+  return ready;
 }
 
 export function loadComplianceReport() {

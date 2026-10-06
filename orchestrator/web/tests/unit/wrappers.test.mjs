@@ -7,7 +7,8 @@ import assert from 'node:assert/strict';
 import { setupDom, load } from './dom.mjs';
 
 setupDom();
-const fns = await load(['toggleRowMenuById']);
+const fns = await load(['toggleRowMenuById', 'openComplianceDetail']);
+const tick = () => new Promise((r) => setTimeout(r, 0));
 
 function delegatedEvent(extra = {}) {
   return {
@@ -49,3 +50,16 @@ const table = [
 ];
 
 for (const row of table) test(row.name, row.run);
+
+test('openComplianceDetail selects the framework only after the options have loaded', async () => {
+  const urls = [];
+  globalThis.fetch = async (url) => {
+    urls.push(String(url));
+    const body = String(url).includes('/api/compliance/frameworks') ? [{ id: 'fw-1', name: 'NIST', version: '1' }] : {};
+    return { status: 200, json: async () => body };
+  };
+  fns.openComplianceDetail('fw-1', '');
+  for (let i = 0; i < 6; i++) await tick();
+  assert.equal(document.getElementById('cmp-fw-sel').value, 'fw-1');
+  assert.ok(urls.some((u) => u.includes('/api/compliance/frameworks')), 'frameworks fetched');
+});
