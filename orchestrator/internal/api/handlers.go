@@ -1460,6 +1460,7 @@ func (h *Handler) TriggerScan(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "build steps: "+err.Error(), http.StatusUnprocessableEntity)
 		return
 	}
+	stampDispatchPlatform(steps, "windows")
 	resolved := scenario.ResolvedHashes(steps)
 
 	runID := newID()
@@ -2004,6 +2005,7 @@ func (h *Handler) dispatchRun(ctx context.Context, sc *scenario.Scenario, agentI
 		h.markRunFailed(context.Background(), runID, "Failed to build scenario steps: "+err.Error())
 		return "", "", fmt.Errorf("build steps: %w", err)
 	}
+	stampDispatchPlatform(steps, agentOS)
 	resolved := scenario.ResolvedHashes(steps)
 	steps = h.applyGeneratedArtifacts(ctx, sc.ID, runID, agentID, steps)
 	steps, err = h.issueSinkTokensAndSubstitute(ctx, runID, h.publicBaseURL, steps)
@@ -5780,6 +5782,21 @@ func (h *Handler) GetRunForensicCSV(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
 	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, fname))
 	reporting.WriteForensicCSV(w, name, results, filter, totalCount)
+}
+
+// stampDispatchPlatform records the OS the steps were built for on every step
+// that does not already carry one, so step_meta holds the real dispatch
+// platform (drift rebuilds must not guess it). Platform is json:"-" and not
+// part of StepCommandSHA256, so dispatched commands and hashes are unchanged.
+func stampDispatchPlatform(steps []scenario.ScenarioStep, os string) {
+	if os == "" {
+		return
+	}
+	for i := range steps {
+		if steps[i].Platform == "" {
+			steps[i].Platform = os
+		}
+	}
 }
 
 // classifyAgentOS maps a raw os_version string to "windows", "linux", or "darwin".

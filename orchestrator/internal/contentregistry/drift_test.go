@@ -6,6 +6,16 @@ import (
 	"github.com/audspect/bas/internal/scenario"
 )
 
+func TestCompareDrift_VariantPresentInCurrentStaysUnknown(t *testing.T) {
+	hist := map[string]scenario.StepMeta{
+		"v1": {Component: "art", ResolvedSHA256: "aaa", BaseTaskID: "base"},
+	}
+	got := CompareDrift(hist, map[string]string{"v1": "aaa"}, scenario.ComponentVersions{})
+	if len(got) != 1 || got[0].Status != "DRIFT_UNKNOWN" {
+		t.Fatalf("%+v", got)
+	}
+}
+
 func TestCompareDrift(t *testing.T) { // A10
 	hist := map[string]scenario.StepMeta{
 		"same":    {Component: "art", ComponentVersion: "v1", ResolvedSHA256: "aaa"},
