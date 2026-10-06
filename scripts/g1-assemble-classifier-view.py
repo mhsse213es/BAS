@@ -27,7 +27,9 @@ EXPORT_KW = re.compile(r"^export (?=(?:async\s+)?function\b|var\b|let\b|const\b)
 
 # on() (core/actions.js) returns only x()-escaped attribute text; the proven
 # classifier does not know the name, so the view presents it as the escaper.
-ON_CALL = re.compile(r"(?<![\w$.])on\(")
+# Calls only: on()'s own definition must keep its name, or the view gets a
+# second, impure `function x` and the canonical-escaper check fails.
+ON_CALL = re.compile(r"(?<![\w$.])(?<!function )on\(")
 
 
 def _as_script(js):

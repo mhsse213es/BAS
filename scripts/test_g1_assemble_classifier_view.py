@@ -28,6 +28,13 @@ class TestAssemble(unittest.TestCase):
         self.assertIn("'<b' + x('click', 'f', i) + '>'", out)
         self.assertIn("const moon(1);", out)
 
+    def test_on_helper_definition_is_not_renamed_to_the_escaper(self):
+        # A second `function x` would fail the canonical-escaper check.
+        d = web({**BASE, "src/core/actions.js": "export function on(t, n) { return ' a'; }\n"})
+        out = v.assemble(d)
+        self.assertIn("function on(t, n)", out)
+        self.assertNotIn("function x(t, n)", out)
+
     def test_inlines_sources_in_sorted_path_order(self):
         d = web({**BASE, "src/b.js": "function b() {}\n", "src/a.js": "function a() {}\n", "src/core/z.js": "function z() {}\n"})
         out = v.assemble(d)

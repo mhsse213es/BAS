@@ -1,6 +1,6 @@
 """
 G1 phase 2: resolve the 54 indirect_builder/indirect_variable sinks from the
-baseline inventory (Assessment/G1_INNERHTML_SINK_INVENTORY.csv) by tracing
+baseline inventory (security/g1/G1_INNERHTML_SINK_INVENTORY.csv) by tracing
 each to its actual value construction, then reclassifying using the same
 tokenizer/classifier as the baseline script.
 
@@ -28,7 +28,7 @@ RHS. If no assignment is found, the variable is very likely a function
 parameter -- flagged for a caller-level trace rather than guessed at.
 
 Usage: python scripts/g1-trace-indirect-sinks.py
-Output: Assessment/G1_INDIRECT_SINK_TRACE.csv + prints a summary.
+Output: security/g1/G1_INDIRECT_SINK_TRACE.csv + prints a summary.
 """
 import csv
 import importlib.util
@@ -36,8 +36,8 @@ import re
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-BASELINE_CSV = REPO_ROOT / "Assessment" / "G1_INNERHTML_SINK_INVENTORY.csv"
-OUT_CSV = REPO_ROOT / "Assessment" / "G1_INDIRECT_SINK_TRACE.csv"
+BASELINE_CSV = REPO_ROOT / "security" / "g1" / "G1_INNERHTML_SINK_INVENTORY.csv"
+OUT_CSV = REPO_ROOT / "security" / "g1" / "G1_INDIRECT_SINK_TRACE.csv"
 
 spec = importlib.util.spec_from_file_location(
     "g1_classifier", REPO_ROOT / "scripts" / "g1-innerhtml-sink-classifier.py"
