@@ -60,6 +60,12 @@ const (
 	CanUpdateScenario Permission = "scenarios:update"
 	CanDeleteScenario Permission = "scenarios:delete"
 
+	// Content registry (TCF Phase 1) — artifact view is Analyst+Admin;
+	// lifecycle transitions and the migration report are Admin only.
+	CanViewContentArtifact        Permission = "content:artifact:view"
+	CanTransitionContent          Permission = "content:transition"
+	CanViewContentMigrationReport Permission = "content:migration:view"
+
 	// Variant executor — Analyst+Admin.
 	CanGenerateVariants    Permission = "variants:generate"
 	CanRunVariants         Permission = "variants:run"
@@ -233,6 +239,9 @@ var rolePermissions = map[Role]map[Permission]bool{
 		CanSetFindingStatus: true, CanPushToITSM: true, CanBulkPushToITSM: true,
 		CanCreateScenario: true, CanUploadScenario: true, CanCloneScenario: true,
 		CanUpdateScenario: true, CanDeleteScenario: true, CanGenerateVariants: true,
+
+		CanViewContentArtifact: true, CanTransitionContent: true, CanViewContentMigrationReport: true,
+
 		CanRunVariants: true, CanViewVariantRun: true, CanViewVariantCoverage: true,
 		CanViewVariantStats: true, CanListPayloadFamilies: true, CanViewPayloadFamily: true,
 		CanLaunchExerciseExecution: true, CanAbortExerciseExecution: true,
@@ -283,6 +292,9 @@ var rolePermissions = map[Role]map[Permission]bool{
 		CanSetFindingStatus: true, CanPushToITSM: true, CanBulkPushToITSM: true,
 		CanCreateScenario: true, CanUploadScenario: true, CanCloneScenario: true,
 		CanUpdateScenario: true, CanDeleteScenario: true, CanGenerateVariants: true,
+
+		CanViewContentArtifact: true,
+
 		CanRunVariants: true, CanViewVariantRun: true, CanViewVariantCoverage: true,
 		CanViewVariantStats: true, CanListPayloadFamilies: true, CanViewPayloadFamily: true,
 		CanLaunchExerciseExecution: true, CanAbortExerciseExecution: true,
@@ -344,6 +356,7 @@ func Permissions(role Role) []Permission {
 
 		CanExecuteRemediation, CanApproveRemediation,
 		CanManageBackups,
+		CanViewContentArtifact, CanTransitionContent, CanViewContentMigrationReport,
 	} {
 		if set[p] {
 			out = append(out, p)

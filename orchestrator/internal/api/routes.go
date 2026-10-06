@@ -211,6 +211,10 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.Get("/api/agents/download/{platform}", h.DownloadAgent)
 		r.Get("/api/scenarios", h.ListScenarios)
 		r.Get("/api/scenarios/{id}", h.GetScenario)
+		r.Get("/api/content-registry/content/{id}/versions", h.ListContentVersions)
+		r.Get("/api/content-registry/versions/{vid}", h.GetContentVersion)
+		r.Get("/api/content-registry/runs/{runId}/drift", h.GetRunDrift)
+		r.Get("/api/content-registry/runs/{runId}/content", h.GetRunContent)
 		r.Get("/api/scenarios/runs", h.ListScenarioRuns)
 		r.Get("/api/scenarios/runs/{runId}/report", h.GetRunReport)
 		r.Get("/api/scenarios/runs/{runId}/report.json", h.GetRunReportData)
@@ -400,6 +404,9 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.With(auth.RequirePermission(auth.CanCloneScenario)).Post("/api/scenarios/{id}/clone", h.CloneScenario)
 		r.With(auth.RequirePermission(auth.CanUpdateScenario)).Put("/api/scenarios/{id}", h.UpdateScenario)
 		r.With(auth.RequirePermission(auth.CanDeleteScenario)).Delete("/api/scenarios/{id}", h.DeleteScenario)
+		r.With(auth.RequirePermission(auth.CanViewContentArtifact)).Get("/api/content-registry/versions/{vid}/artifact", h.GetContentArtifact)
+		r.With(auth.RequirePermission(auth.CanTransitionContent)).Post("/api/content-registry/versions/{vid}/transition", h.TransitionContentVersion)
+		r.With(auth.RequirePermission(auth.CanViewContentMigrationReport)).Get("/api/content-registry/migration-report", h.GetContentMigrationReport)
 
 		// Variant executor — multi-variant technique execution
 		r.With(auth.RequirePermission(auth.CanGenerateVariants)).Post("/api/variants/generate", h.GenerateVariants)

@@ -1557,7 +1557,33 @@ func (h *Handler) SafeScan(w http.ResponseWriter, r *http.Request) {
 
 // GET /api/scenarios
 func (h *Handler) ListScenarios(w http.ResponseWriter, r *http.Request) {
-	respond(w, h.engine.List())
+	list := h.engine.List()
+	// One query for every content id (no N+1). A registry failure must not
+	// fail the list: log it and omit the enrichment.
+	var sums map[string]contentregistry.Summary
+	if reg, ok := h.engine.Registry().(*contentregistry.Registry); ok && reg != nil {
+		var err error
+		if sums, err = reg.Summaries(r.Context()); err != nil {
+			log.Printf("[scenarios] registry summaries unavailable, listing without badges: %v", err)
+			sums = nil
+		}
+	}
+	out := make([]scenarioListItem, 0, len(list))
+	for _, sc := range list {
+		it := scenarioListItem{Scenario: sc}
+		if s, ok := sums[sc.ID]; ok {
+			it.Registry = &s
+		}
+		out = append(out, it)
+	}
+	respond(w, out)
+}
+
+// scenarioListItem embeds the scenario so the JSON shape stays a superset of
+// what the dashboard already reads, plus the registry badge summary.
+type scenarioListItem struct {
+	*scenario.Scenario
+	Registry *contentregistry.Summary `json:"registry,omitempty"`
 }
 
 // GET /api/scenarios/{id}

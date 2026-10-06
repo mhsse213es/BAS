@@ -349,3 +349,11 @@ func TestSubmitResult_InterpretsAgainstPinnedVersion(t *testing.T) {
 		}
 	})
 }
+
+func writeIntel(t *testing.T, dir, id, body string) {
+	t.Helper()
+	_ = os.MkdirAll(filepath.Join(dir, "intel"), 0o755)
+	if err := os.WriteFile(filepath.Join(dir, "intel", id+".yaml"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
