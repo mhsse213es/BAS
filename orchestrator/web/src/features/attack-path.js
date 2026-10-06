@@ -1764,10 +1764,16 @@ function registryBadge(s) {
     x(String(r.latestVersion)) + ' ' + x(r.latestLifecycle) + '</span> ';
 }
 
-function canApproveForLocal(s) {
+// Approvable: the latest version is a DRAFT/VALIDATED intel or custom one and
+// either nothing is executable yet or it is newer than the executable one
+// (e.g. an approved intel id's regenerated DRAFT). role defaults to the
+// signed-in role (parameter for tests).
+export function canApproveForLocal(s, role) {
+  if (role === undefined) role = ROLE;
   var r = s.registry;
-  return ROLE === 'admin' && r && !r.executableVersion && (s.source === 'intel' || s.source === 'custom') &&
-    (r.latestLifecycle === 'DRAFT' || r.latestLifecycle === 'VALIDATED');
+  if (role !== 'admin' || !r || !(s.source === 'intel' || s.source === 'custom')) return false;
+  if (r.latestLifecycle !== 'DRAFT' && r.latestLifecycle !== 'VALIDATED') return false;
+  return !r.executableVersion || r.latestVersion > r.executableVersion;
 }
 
 function approveButton(s) {
@@ -1780,24 +1786,28 @@ function approveButton(s) {
 // stored bytes -- and stays disabled until the operator ticks the review box
 // and gives a reason. All server text goes through x().
 var _approveTarget = null; // { id, versionId } of the loaded version
+var _approveSeq = 0;        // request token: only the latest load may render
 
 export function approveForLocalUse(id, versionId) {
   var body = document.getElementById('approve-local-body');
   var overlay = document.getElementById('approve-local-overlay');
   if (!body || !overlay) return;
   _approveTarget = null;
+  var tok = ++_approveSeq;
   document.getElementById('approve-local-ack').checked = false;
   document.getElementById('approve-local-reason').value = '';
   document.getElementById('approve-local-submit-btn').disabled = true;
   body.innerHTML = '<p class="sub2">Loading version&hellip;</p>';
   overlay.classList.add('open');
   apicall('/api/content-registry/versions/' + encodeURIComponent(versionId)).then(function(d) {
+    if (tok !== _approveSeq) return; // a later click (or close) superseded this load
     if (!d || d.error) throw new Error((d && d.error) || 'version not found');
     if (d.id !== versionId || d.contentId !== id) throw new Error('version does not match this scenario');
     body.innerHTML = approveSummaryHTML(d);
     _approveTarget = { id: id, versionId: versionId };
     approveLocalAckChanged();
   }).catch(function(e) {
+    if (tok !== _approveSeq) return;
     body.innerHTML = '<p class="u-danger">Could not load the version to review: ' + x(e.message) + '</p>';
   });
 }
@@ -1830,6 +1840,7 @@ export function approveLocalAckChanged() {
 
 export function closeApproveLocalModal() {
   _approveTarget = null;
+  _approveSeq++; // drop any in-flight load
   document.getElementById('approve-local-overlay').classList.remove('open');
 }
 
