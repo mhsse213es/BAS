@@ -118,7 +118,7 @@ make_bundle() {
   mk_image_tar "$b/images/headless-shell.tar" "\"$CHROME_TAG\"" chrome;               sign_tar "$b/images/headless-shell.tar" "${SIGN_KEY:-fake-pub}"
   mk_image_tar "$b/images/bas-caldera-9.9.9.tar" '"bas-caldera:9.9.9"' caldera;         sign_tar "$b/images/bas-caldera-9.9.9.tar" "${SIGN_KEY:-fake-pub}"
   printf '%s' "${BUNDLED_PUB:-fake-pub}" > "$b/cosign.pub"; cp "$b/cosign.pub" "$b/compose/cosign.pub"; echo 9.9.9 > "$b/compose/VERSION"
-  printf '#!/usr/bin/env bash\necho "PUBENV=${BAS_COSIGN_PUB:-}" >> "$STUB_LOG"; echo "GPGENV=${BAS_GPG_PUB:-}" >> "$STUB_LOG"; echo "STRICT=${BAS_REQUIRE_SIGNED_IMAGES:-}" >> "$STUB_LOG"; echo SETUP-RAN >> "$STUB_LOG"\n' > "$b/compose/setup.sh"
+  printf '#!/usr/bin/env bash\necho "PUBENV=${BAS_COSIGN_PUB:-}" >> "$STUB_LOG"; echo "GPGENV=${BAS_GPG_PUB:-}" >> "$STUB_LOG"; echo SETUP-RAN >> "$STUB_LOG"\n' > "$b/compose/setup.sh"
   for f in docker-compose.yml docker-compose.prod.yml; do : > "$b/compose/$f"; done
   : > "$b/import.sh"; cp "$HERE/cosign-verify-lib.sh" "$b/"
   [ -n "${MUTATE:-}" ] && eval "$MUTATE"
@@ -175,7 +175,6 @@ check_valid() { # <label>  (verify, postgres load, orchestrator load LAST, :late
 echo "TEST: valid bundle -> every image verified first, postgres then orchestrator loaded, :latest re-tagged from the verified image, then setup"
 MUTATE="" make_bundle "$T/b.tar.gz"
 check_valid "valid bundle"
-grep -q "^STRICT=$" "$STUB_LOG" && pass "no BAS_REQUIRE_SIGNED_IMAGES opt-in exported (signed images are always required)" || fail "opt-in env still exported"
 ! grep -rq "BAS_REQUIRE_SIGNED_IMAGES" "$REPO/packaging/compose" "$REPO/packaging/iso" "$REPO/packaging/packer" "$REPO/packaging/airgap/import.sh" && pass "no BAS_REQUIRE_SIGNED_IMAGES opt-in left in setup/install/ISO/Packer/import" || fail "BAS_REQUIRE_SIGNED_IMAGES still referenced"
 echo "TEST: a pre-existing/planted :latest is overwritten, not trusted"
 FAKE_LATEST_EXISTS=1 check_valid "pre-existing :latest re-tagged unconditionally"
@@ -269,8 +268,13 @@ if [ "$rc" -eq 0 ] && grep -q "EXTERNAL key" "$T/out.txt"; then pass "verify.sh:
 echo "TEST: compose/install.sh and setup.sh (functions extracted from the real files)"
 extract_fn() { awk -v n="$2" '$0 ~ "^"n"\\(\\) \\{" {p=1} p{print} p && /^}/ {exit}' "$1"; }
 INST="$REPO/packaging/compose/install.sh"; SETUP="$REPO/packaging/compose/setup.sh"
-{ for fn in _key_fp _tar_image_id _docker_tag_is _cosign_version_ok _resolve_cosign_pub _verify_orchestrator_artifact; do extract_fn "$INST" "$fn"; done; } > "$T/inst-fns.sh"
-{ for fn in _key_fp _tar_image_id _docker_tag_is _cosign_version_ok _verify_orchestrator_artifact _expected_image_tag _verify_all_images; do extract_fn "$SETUP" "$fn"; done; } > "$T/setup-fns.sh"
+{ for fn in _key_fp _tar_image_id _docker_tag_is _cosign_version_ok _resolve_cosign_pub _verify_orchestrator_artifact _expected_image_tag _verify_all_images _load_verified_images; do extract_fn "$INST" "$fn"; done; } > "$T/inst-fns.sh"
+{ for fn in _key_fp _tar_image_id _docker_tag_is _cosign_version_ok _verify_orchestrator_artifact _expected_image_tag _verify_all_images _load_verified_images; do extract_fn "$SETUP" "$fn"; done; } > "$T/setup-fns.sh"
+# One logical copy: the image helpers must be byte-identical in install.sh and setup.sh.
+for fn in _key_fp _tar_image_id _docker_tag_is _cosign_version_ok _expected_image_tag _verify_all_images _load_verified_images; do
+  a="$(extract_fn "$INST" "$fn")"; s="$(extract_fn "$SETUP" "$fn")"
+  if [ -n "$a" ] && [ "$a" = "$s" ]; then pass "$fn is byte-identical in install.sh and setup.sh"; else fail "$fn drifted between install.sh and setup.sh (or is missing)"; fi
+done
 
 IB="$T/instbundle"; rm -rf "$IB"; mkdir -p "$IB"
 mk_image_tar "$IB/o.tar" '"bas-orchestrator:9.9.9"' orch; sign_tar "$IB/o.tar"
@@ -307,7 +311,7 @@ run_setup_verify() { # <env assignments...> uses $SX as SCRIPT_DIR
     err() { echo "ERR: $*" >&2; }; warn() { echo "WARN: $*"; }; info() { echo "$*"; }; log() { echo "$*"; }
     SCRIPT_DIR="$1"; BAS_VERSION=9.9.9
     source "$2"
-    _verify_all_images
+    _verify_all_images "$SCRIPT_DIR/images" installation
     echo "OK orch_id=$ORCH_ID imgs=${#IMG_TARS[@]}"' _ "$SX" "$T/setup-fns.sh" > "$T/out.txt" 2>&1
 }
 stage_setup() { # build bundle (MUTATE) and unpack it so SX=<bundle>/compose with a real images/ dir
@@ -316,15 +320,15 @@ stage_setup() { # build bundle (MUTATE) and unpack it so SX=<bundle>/compose wit
 }
 sv_ok() { local rc=0; run_setup_verify "$@" || rc=$?; [ "$rc" -eq 0 ]; }
 MUTATE="" stage_setup
-if sv_ok BAS_REQUIRE_SIGNED_IMAGES=1 && grep -q "^OK orch_id=$(img_id orch) $(idx_id orch) imgs=3" "$T/out.txt"; then pass "setup.sh strict: valid images verified up front, orchestrator ID recorded"; else fail "setup.sh strict valid"; cat "$T/out.txt"; fi
+if sv_ok && grep -q "^OK orch_id=$(img_id orch) $(idx_id orch) imgs=3" "$T/out.txt"; then pass "setup.sh: valid images verified up front, orchestrator ID recorded"; else fail "setup.sh valid"; cat "$T/out.txt"; fi
 MUTATE='echo x > "$b/images/extra.tar"' stage_setup
-sv_ok BAS_REQUIRE_SIGNED_IMAGES=1 && fail "setup.sh strict accepted extra unsigned tar" || pass "setup.sh strict: extra unsigned tar refused"
+sv_ok && fail "setup.sh accepted extra unsigned tar" || pass "setup.sh: extra unsigned tar refused"
 MUTATE='rm "$b/images/postgres-16-alpine.tar.bundle"' stage_setup
-sv_ok BAS_REQUIRE_SIGNED_IMAGES=1 && fail "setup.sh strict accepted unsigned postgres" || pass "setup.sh strict: unsigned postgres refused (fatal, no || true)"
+sv_ok && fail "setup.sh accepted unsigned postgres" || pass "setup.sh: unsigned postgres refused (fatal, no || true)"
 MUTATE='mk_image_tar "$b/images/postgres-16-alpine.tar" "\"postgres:16-alpine\",\"bas-orchestrator:9.9.9\"" pg; sign_tar "$b/images/postgres-16-alpine.tar"' stage_setup
-sv_ok BAS_REQUIRE_SIGNED_IMAGES=1 && fail "setup.sh accepted planted tag" || pass "setup.sh: planted orchestrator tag inside postgres tar refused"
+sv_ok && fail "setup.sh accepted planted tag" || pass "setup.sh: planted orchestrator tag inside postgres tar refused"
 MUTATE='mk_image_tar "$b/images/bas-orchestrator-9.9.9.tar" "\"bas-orchestrator:9.9.8\"" older; sign_tar "$b/images/bas-orchestrator-9.9.9.tar"' stage_setup
-sv_ok BAS_REQUIRE_SIGNED_IMAGES=1 && fail "setup.sh accepted older tar renamed" || pass "setup.sh: older signed tar renamed to this version refused"
+sv_ok && fail "setup.sh accepted older tar renamed" || pass "setup.sh: older signed tar renamed to this version refused"
 sv_ok && fail "setup.sh accepted renamed older orchestrator" || pass "setup.sh: orchestrator identity enforced (no env needed)"
 MUTATE='rm "$b/images/postgres-16-alpine.tar" "$b/images/postgres-16-alpine.tar.bundle"; echo x | gzip > "$b/images/postgres-16-alpine.tar.gz"' stage_setup
 sv_ok && fail "setup.sh accepted release-ZIP-style unsigned postgres.tar.gz" || pass "setup.sh: legacy unsigned postgres.tar.gz is fatal by default (no env)"
@@ -335,24 +339,33 @@ sv_ok && fail "setup.sh accepted tampered postgres tar" || pass "setup.sh: relea
 MUTATE="" stage_setup
 sv_ok && grep -q "^OK orch_id=" "$T/out.txt" && pass "setup.sh: correctly signed release-ZIP-shaped bundle passes with no env" || { fail "setup.sh signed bundle default"; cat "$T/out.txt"; }
 MUTATE="" stage_setup
-sv_ok BAS_REQUIRE_SIGNED_IMAGES=1 BAS_COSIGN_PUB="$T/ext-bad.pub" && fail "setup.sh ignored external cosign key" || pass "setup.sh: external cosign key (BAS_COSIGN_PUB) governs verification"
+sv_ok BAS_COSIGN_PUB="$T/ext-bad.pub" && fail "setup.sh ignored external cosign key" || pass "setup.sh: external cosign key (BAS_COSIGN_PUB) governs verification"
 grep -q "EXTERNAL key" "$T/out.txt" && pass "setup.sh error shows EXTERNAL label + key path" || fail "setup.sh error context missing"
-sv_ok BAS_REQUIRE_SIGNED_IMAGES=1 BAS_COSIGN_PUB="$T/ext-good.pub" && pass "setup.sh: matching external key accepted" || fail "setup.sh external good"
+sv_ok BAS_COSIGN_PUB="$T/ext-good.pub" && pass "setup.sh: matching external key accepted" || fail "setup.sh external good"
 # post-load identity (setup.sh and install.sh share _docker_tag_is)
 rm -rf "$DOCKER_STATE"; mkdir -p "$DOCKER_STATE"; echo "$(img_id orch)" > "$DOCKER_STATE/tag.bas-orchestrator_9.9.9"
 PATH="$STUBS:$PATH" bash -c 'source "$1"; _docker_tag_is bas-orchestrator:9.9.9 "$2"' _ "$T/setup-fns.sh" "$(img_id orch)" && pass "_docker_tag_is: matching ID" || fail "_docker_tag_is match"
 PATH="$STUBS:$PATH" bash -c 'source "$1"; _docker_tag_is bas-orchestrator:9.9.9 "$2"' _ "$T/setup-fns.sh" "$(img_id other)" && fail "_docker_tag_is accepted wrong ID" || pass "_docker_tag_is: wrong ID refused"
 PATH="$STUBS:$PATH" bash -c 'source "$1"; _docker_tag_is bas-orchestrator:9.9.9 "$2"' _ "$T/setup-fns.sh" "$(img_id other) $(img_id orch)" && pass "_docker_tag_is: matches any ONE of the candidate digests" || fail "_docker_tag_is candidate list"
 
-echo "TEST: build.sh produces a signed, uncompressed postgres tar (stubbed docker/cosign)"
+echo "TEST: release-images.sh (pack.sh + build.sh): pin parsing, pull BY DIGEST, every failure fatal (stubbed docker/cosign)"
 BSTUB="$T/bstub"; rm -rf "$BSTUB"; mkdir -p "$BSTUB"
+# Fake docker for the release side: pull <repo>@<digest> records the digest;
+# image inspect reports it back (or a WRONG one with FAKE_WRONG_DIGEST); save
+# writes a minimal tar; FAKE_FAIL=<subcommand> makes that subcommand fail.
 cat > "$BSTUB/docker" <<'DEOF'
 #!/usr/bin/env bash
-[ "$1" = save ] || exit 0
-[ -n "${FAKE_NO_PG:-}" ] && exit 1
-out=""; while [ $# -gt 0 ]; do [ "$1" = -o ] && out="$2"; shift; done
-d=$(mktemp -d); printf '[{"Config":"blobs/sha256/%064d","RepoTags":["postgres:16-alpine"],"Layers":[]}]' 1 > "$d/manifest.json"
-tar -cf "$out" -C "$d" manifest.json
+echo "docker $*" >> "$REL_LOG"
+[ "${FAKE_FAIL:-}" = "$1" ] && exit 1
+case "$1" in
+  pull)  exit 0 ;;
+  image) ref="${*: -1}"; d="${ref#*@}"; [ -n "${FAKE_WRONG_DIGEST:-}" ] && d="sha256:$(printf '0%.0s' $(seq 64))"; echo "[\"x@$d\"]"; exit 0 ;;
+  tag|build) exit 0 ;;
+  save)  out=""; img="$2"; while [ $# -gt 0 ]; do [ "$1" = -o ] && out="$2"; shift; done
+         d=$(mktemp -d); printf '[{"Config":"blobs/sha256/%064d","RepoTags":["%s"],"Layers":[]}]' 1 "$img" > "$d/manifest.json"
+         tar -cf "$out" -C "$d" manifest.json; rm -rf "$d"; exit 0 ;;
+esac
+exit 0
 DEOF
 cat > "$BSTUB/cosign.sh" <<'CEOF'
 #!/usr/bin/env bash
@@ -362,16 +375,57 @@ case "$1" in
 esac
 CEOF
 chmod +x "$BSTUB/docker" "$BSTUB/cosign.sh"
-awk '/^# Postgres: saved UNCOMPRESSED/{f=1} /^# Caldera \(baked emu/{f=0} f' "$REPO/packaging/build.sh" > "$T/build-pg-block.sh"
-[ -s "$T/build-pg-block.sh" ] && pass "extracted build.sh postgres block" || fail "could not extract build.sh postgres block"
-run_build_block() {
-  rm -rf "$T/bb"; mkdir -p "$T/bb/images"
-  env "$@" PATH="$BSTUB:$PATH" bash -c 'log(){ echo "$*"; }; err(){ echo "ERR $*" >&2; }; BUILD_DIR="$1"; COSIGN_SCRIPT="$2"; set -e; source "$3"' _ "$T/bb" "$BSTUB/cosign.sh" "$T/build-pg-block.sh" > "$T/out.txt" 2>&1
+export REL_LOG="$T/rel.log"
+RROOT="$T/relroot"; rm -rf "$RROOT"; mkdir -p "$RROOT/packaging/caldera"
+run_rel() { # <function + args, eval'd>  env from caller; images land in $T/rimg
+  : > "$REL_LOG"; rm -rf "$T/rimg"; mkdir -p "$T/rimg"
+  PATH="$BSTUB:$PATH" bash -c 'log(){ echo "$*"; }; err(){ echo "ERR $*" >&2; }; source "$1"; eval "$2"' _ \
+    "$REPO/packaging/signing/release-images.sh" "$1" > "$T/out.txt" 2>&1
 }
-if run_build_block && [ -f "$T/bb/images/postgres-16-alpine.tar" ] && [ -f "$T/bb/images/postgres-16-alpine.tar.bundle" ] && [ ! -e "$T/bb/images/postgres-16-alpine.tar.gz" ]; then pass "build.sh: postgres-16-alpine.tar and .bundle produced, no .tar.gz"; else fail "build.sh postgres block"; cat "$T/out.txt"; fi
-tar -tf "$T/bb/images/postgres-16-alpine.tar" >/dev/null 2>&1 && pass "build.sh: postgres tar is uncompressed" || fail "build.sh postgres tar not a plain tar"
-run_build_block FAKE_NO_PG=1 && fail "build.sh continued without a postgres image" || pass "build.sh: missing postgres image is fatal"
+rel_ok() { local rc=0; run_rel "$@" || rc=$?; [ "$rc" -eq 0 ]; }
+PG_PIN_DIGEST="$(sed -n 's/^POSTGRES_DIGEST=//p' "$REPO/packaging/images.pin")"
+CH_PIN_DIGEST="$(sed -n 's/^CHROME_DIGEST=//p' "$REPO/packaging/images.pin")"
+cp "$REPO/packaging/images.pin" "$RROOT/packaging/images.pin"
+SHIP='rel_ship_postgres "'"$RROOT"'" "'"$T/rimg"'" "'"$BSTUB/cosign.sh"'"; rel_ship_caldera_chrome 9.9.9 "'"$RROOT"'" "'"$T/rimg"'" "'"$BSTUB/cosign.sh"'"'
+if rel_ok "$SHIP" && [ -f "$T/rimg/postgres-16-alpine.tar.bundle" ] && [ -f "$T/rimg/headless-shell.tar.bundle" ] && [ -f "$T/rimg/bas-caldera-9.9.9.tar.bundle" ] && [ ! -e "$T/rimg/postgres-16-alpine.tar.gz" ]; then pass "release: postgres, chrome and caldera tars saved uncompressed + signed"; else fail "release happy path"; cat "$T/out.txt"; fi
+tar -tf "$T/rimg/postgres-16-alpine.tar" >/dev/null 2>&1 && pass "release: postgres tar is a plain (uncompressed) tar" || fail "release: postgres tar not a plain tar"
+grep -qx "docker pull postgres@${PG_PIN_DIGEST}" "$REL_LOG" && grep -qx "docker tag postgres@${PG_PIN_DIGEST} postgres:16-alpine" "$REL_LOG" && pass "release: postgres pulled BY the images.pin digest, then tagged postgres:16-alpine" || { fail "release: postgres not pulled by digest"; cat "$REL_LOG"; }
+grep -qx "docker pull chromedp/headless-shell@${CH_PIN_DIGEST}" "$REL_LOG" && pass "release: chrome pulled BY the images.pin digest" || fail "release: chrome not pulled by digest"
+! grep -Eq '^docker pull [^@]+$' "$REL_LOG" && pass "release: no pull by mutable tag" || fail "release: an image was pulled by tag"
+FAKE_FAIL=pull rel_ok "$SHIP" && fail "release: pull failure ignored" || pass "release: a failed pull exits non-zero"
+FAKE_WRONG_DIGEST=1 rel_ok "$SHIP" && fail "release: digest mismatch ignored" || { grep -q "does not carry the pinned digest" "$T/out.txt" && pass "release: pulled image without the pinned digest exits non-zero" || fail "release: digest-mismatch reason"; }
+FAKE_FAIL=build rel_ok "$SHIP" && fail "release: caldera build failure ignored" || { grep -q "Failed to build bas-caldera" "$T/out.txt" && pass "release: a failed caldera build exits non-zero" || fail "release: caldera failure reason"; }
+FAKE_FAIL=save rel_ok "$SHIP" && fail "release: save failure ignored" || pass "release: a failed docker save exits non-zero"
+# images.pin is PARSED, never sourced: every malformed variant is fatal.
+pin_case() { # <label> <pin content>
+  printf '%b' "$2" > "$RROOT/packaging/images.pin"
+  if rel_ok "$SHIP"; then fail "images.pin: $1 accepted"; elif grep -q '^docker pull' "$REL_LOG"; then fail "images.pin: $1 -- pulled before failing"; else pass "images.pin: $1 is fatal (nothing pulled)"; fi
+}
+GOODPIN="$(cat "$REPO/packaging/images.pin")"
+pin_case "CRLF line endings" "$(sed 's/$/\\r/' "$REPO/packaging/images.pin")\n"
+pin_case "duplicate key" "${GOODPIN}\nPOSTGRES_DIGEST=${PG_PIN_DIGEST}\n"
+pin_case "unknown key" "${GOODPIN}\nEVIL=1\n"
+pin_case "shell code (would run if sourced)" "${GOODPIN}\nCHROME_VERSION=\$(touch $T/pwned)\n"
+pin_case "malformed digest" "$(sed "s/^POSTGRES_DIGEST=.*/POSTGRES_DIGEST=sha256:abc/" "$REPO/packaging/images.pin")\n"
+pin_case "missing POSTGRES_DIGEST" "$(grep -v '^POSTGRES_DIGEST=' "$REPO/packaging/images.pin")\n"
+pin_case "space-separated value" "$(sed "s/^POSTGRES_TAG=.*/POSTGRES_TAG=16 alpine/" "$REPO/packaging/images.pin")\n"
+[ ! -e "$T/pwned" ] && pass "images.pin content is never executed" || fail "images.pin content was executed"
+cp "$REPO/packaging/images.pin" "$RROOT/packaging/images.pin"
+rel_ok 'rel_read_pin "'"$RROOT"'/packaging/images.pin"; echo "PIN $POSTGRES_TAG $POSTGRES_DIGEST"' && grep -qx "PIN 16-alpine ${PG_PIN_DIGEST}" "$T/out.txt" && pass "images.pin: the shipped file parses (POSTGRES_TAG + POSTGRES_DIGEST)" || { fail "shipped images.pin rejected"; cat "$T/out.txt"; }
+! grep -rnE '(source|\.)[[:space:]]+"?[^ ]*images\.pin' "$REPO/packaging" --include=*.sh | grep -v airgap-cosign.test.sh | grep -q . && pass "no script sources images.pin" || fail "images.pin is still sourced somewhere"
+for f in packaging/airgap/pack.sh packaging/build.sh; do
+  if grep -q '^rel_ship_postgres ' "$REPO/$f" && ! grep -Eq 'docker (pull|save) "?(postgres|\$\{?POSTGRES_IMAGE)' "$REPO/$f"; then pass "$f ships postgres only via rel_ship_postgres (by digest)"; else fail "$f still pulls/saves postgres by tag"; fi
+done
+grep -q "Get-PinnedImage -Repo 'postgres' -Tag \$pin\['POSTGRES_TAG'\] -Digest \$pin\['POSTGRES_DIGEST'\]" "$REPO/packaging/windows-build.ps1" && ! grep -q 'docker pull postgres:' "$REPO/packaging/windows-build.ps1" && pass "windows-build.ps1 pulls postgres by the images.pin digest" || fail "windows-build.ps1 postgres not pinned"
 
+echo "TEST: windows-build.ps1: cosign image signing is gated separately from Authenticode"
+PS1="$REPO/packaging/windows-build.ps1"
+grep -q '\[switch\] \$AllowUnsignedImages' "$PS1" && grep -q '\$CosignSigningRequired  = (-not \$AllowUnsignedImages)' "$PS1" && pass "windows-build.ps1: \$CosignSigningRequired defaults to true, -AllowUnsignedImages is the dev opt-out" || fail "windows-build.ps1 cosign switches"
+awk '/^# D2\/cosign-enforcement:/{f=1} /^\$orchSizeMB = /{f=0} f' "$PS1" > "$T/ps-cosign.txt"
+[ -s "$T/ps-cosign.txt" ] && ! grep -v "NOT by Authenticode" "$T/ps-cosign.txt" | grep -q 'WindowsSigningRequired' && pass "windows-build.ps1: cosign signing no longer keyed on \$WindowsSigningRequired" || fail "windows-build.ps1 cosign still gated by Authenticode flag"
+gate_line=$(grep -n 'Image(s) without a cosign .bundle' "$PS1" | head -1 | cut -d: -f1)
+zip_line=$(grep -n 'Compress-Archive -Path \$OutDir -DestinationPath \$ZipPath' "$PS1" | head -1 | cut -d: -f1)
+[ -n "$gate_line" ] && [ -n "$zip_line" ] && [ "$gate_line" -lt "$zip_line" ] && pass "windows-build.ps1: every images\\*.tar must have a .bundle before Compress-Archive" || fail "windows-build.ps1 ZIP gate missing/misplaced"
 echo "TEST: runtime image set: orchestrator + postgres + bas-caldera + chrome are ALL required, signed and bound; golang is never shipped"
 DIGEST="$(sed -n 's/^CHROME_DIGEST=//p' "$REPO/packaging/images.pin")"
 echo "$DIGEST" | grep -Eq '^sha256:[0-9a-f]{64}$' && pass "images.pin carries a sha256 digest" || fail "images.pin digest malformed"
@@ -401,6 +455,109 @@ for missing in headless-shell.tar bas-caldera-9.9.9.tar; do
 done
 MUTATE="" stage_setup
 
+echo "TEST: postgres pin + no fail-open path: compose never pulls, nothing pulls in a bundle path"
+PGT="$(sed -n 's/^POSTGRES_TAG=//p' "$REPO/packaging/images.pin")"
+[ "$PGT" = "16-alpine" ] && grep -Eq '^POSTGRES_DIGEST=sha256:[0-9a-f]{64}$' "$REPO/packaging/images.pin" && pass "images.pin pins POSTGRES_TAG=16-alpine + a sha256 POSTGRES_DIGEST" || fail "images.pin postgres pin missing/malformed"
+grep -q "image: postgres:${PGT}\$" "$REPO/packaging/compose/docker-compose.yml" && pass "compose postgres image == images.pin tag" || fail "compose postgres tag drifted from images.pin"
+for f in packaging/compose/setup.sh packaging/compose/install.sh packaging/airgap/cosign-verify-lib.sh; do
+  grep -q "\"postgres:${PGT}\"" "$REPO/$f" && pass "$f expects postgres:${PGT}" || fail "$f postgres tag drifted from images.pin"
+done
+for svc in postgres caldera chrome orchestrator; do
+  blk=$(awk -v s="  ${svc}:" '$0==s {f=1; print; next} f && /^  [a-z][a-z-]*:$/ {exit} f' "$REPO/packaging/compose/docker-compose.yml")
+  grep -q '^    pull_policy: never$' <<<"$blk" && pass "compose: ${svc} has pull_policy: never" || fail "compose: ${svc} may be pulled (no pull_policy: never)"
+done
+! grep -nE 'compose[^#]*[[:space:]]pull\b|docker pull' "$REPO/packaging/compose/setup.sh" "$REPO/packaging/compose/install.sh" "$REPO/packaging/airgap/import.sh" "$REPO/packaging/iso/autoinstall/scripts/post-install.sh" "$REPO/packaging/packer/scripts/install-bas.sh" | grep -v '^[^:]*:[0-9]*:[[:space:]]*#' | grep -q . && pass "no compose/docker pull reachable in setup.sh, install.sh, import.sh, ISO or Packer paths" || fail "a pull is still reachable in a bundle path"
+! grep -Eq 'headless-shell:(latest|[0-9])' "$REPO/packaging/compose/uninstall.sh" && grep -q 'chromedp/headless-shell):' "$REPO/packaging/compose/uninstall.sh" && pass "uninstall.sh matches chromedp/headless-shell:* (no hardcoded chrome tag)" || fail "uninstall.sh hardcodes a chrome tag"
+
+echo "TEST: setup.sh flags + images/ forces the verify path (real parse_args / _do_install_steps)"
+{ extract_fn "$SETUP" parse_args; extract_fn "$SETUP" _do_install_steps; } > "$T/setup-main-fns.sh"
+NOIMG="$T/noimg"; rm -rf "$NOIMG"; mkdir -p "$NOIMG"; printf 'fake-pub' > "$NOIMG/cosign.pub"
+run_setup_main() { # <script dir> <args...>   parse_args "$@" then _do_install_steps (stops at its first _step)
+  local sd="$1"; shift
+  : > "$STUB_LOG"
+  PATH="$STUBS:$PATH" bash -c '
+    set -euo pipefail
+    err() { echo "ERR: $*" >&2; }; warn() { echo "WARN: $*"; }; log() { echo "$*"; }
+    _step() { echo "STEP $1" >> "$STUB_LOG"; exit 42; }
+    SCRIPT_DIR="$1"; shift; BAS_VERSION=9.9.9; OFFLINE=false; NO_WIZARD=false; CONFIG_FILE=""; GPG_PUB_FLAG=""
+    source "$T_FNS"; source "$T_MAIN"
+    parse_args "$@"
+    echo "PARSED OFFLINE=$OFFLINE NOWIZ=$NO_WIZARD CONFIG=$CONFIG_FILE GPG=$GPG_PUB_FLAG COSIGN=${BAS_COSIGN_PUB:-}"
+    [ -n "${PARSE_ONLY:-}" ] && exit 0
+    _do_install_steps' _ "$sd" "$@" > "$T/out.txt" 2>&1
+}
+export T_FNS="$T/setup-fns.sh" T_MAIN="$T/setup-main-fns.sh"
+MUTATE="" stage_setup
+rc=0; run_setup_main "$SX" || rc=$?
+if [ "$rc" -eq 42 ] && grep -q "PARSED OFFLINE=true" "$T/out.txt" && [ "$(grep -c '^cosign verify-blob' "$STUB_LOG")" -eq 4 ]; then pass "setup.sh WITHOUT --offline but with images/: verify path forced (all 4 images verified before the first step)"; else fail "setup.sh without --offline did not verify (rc=$rc)"; cat "$T/out.txt"; fi
+MUTATE='echo evil >> "$b/images/postgres-16-alpine.tar"' stage_setup
+rc=0; run_setup_main "$SX" || rc=$?
+[ "$rc" -ne 0 ] && [ "$rc" -ne 42 ] && pass "setup.sh without --offline: tampered image is fatal before anything is written" || fail "setup.sh without --offline accepted a tampered image (rc=$rc)"
+rc=0; run_setup_main "$NOIMG" || rc=$?
+if [ "$rc" -ne 0 ] && [ "$rc" -ne 42 ] && grep -q "refusing to install" "$T/out.txt" && ! grep -q "pull" "$STUB_LOG"; then pass "setup.sh with no images/: fatal, nothing pulled"; else fail "setup.sh with no images/ (rc=$rc)"; cat "$T/out.txt"; fi
+rc=0; run_setup_main "$NOIMG" --offline || rc=$?
+[ "$rc" -ne 0 ] && [ "$rc" -ne 42 ] && grep -q "images/ directory not found" "$T/out.txt" && pass "setup.sh --offline with no images/: fatal" || fail "setup.sh --offline without images (rc=$rc)"
+MUTATE="" stage_setup
+pa_ok() { local rc=0; PARSE_ONLY=1 run_setup_main "$@" || rc=$?; [ "$rc" -eq 0 ]; }
+pa_ok "$SX" --offline --no-wizard --config "$T/x.conf" --gpg-pub "$T/k.asc" --cosign-pub "$T/k.pub" --non-interactive --web \
+  && grep -q "PARSED OFFLINE=true NOWIZ=true CONFIG=$T/x.conf GPG=$T/k.asc COSIGN=$T/k.pub" "$T/out.txt" \
+  && pass "setup.sh: every supported flag still works (--offline --no-wizard --config --gpg-pub --cosign-pub --non-interactive --web)" || { fail "setup.sh supported flags"; cat "$T/out.txt"; }
+pa_ok "$SX" --gpg-pub="$T/k.asc" --cosign-pub="$T/k.pub" --config="$T/x.conf" && grep -q "GPG=$T/k.asc COSIGN=$T/k.pub" "$T/out.txt" && pass "setup.sh: --flag=<value> forms" || fail "setup.sh = forms"
+BAS_COSIGN_PUB="$T/env.pub" pa_ok "$SX" --cosign-pub "$T/k.pub" && grep -q "COSIGN=$T/k.pub" "$T/out.txt" && pass "setup.sh: --cosign-pub beats BAS_COSIGN_PUB" || fail "setup.sh cosign flag/env precedence"
+for bad in "--gpg-pub" "--cosign-pub" "--config" "--gpg-pub=" "--cosign-pub=" "--gpg-pub --offline" "--cosgn-pub $T/k.pub" "--bogus"; do
+  # shellcheck disable=SC2086
+  if pa_ok "$SX" $bad; then fail "setup.sh accepted: $bad"; else pass "setup.sh rejects: $bad"; fi
+done
+
+echo "TEST: install.sh mode_install / mode_upgrade (real functions): images/ required, verify first, orchestrator loaded last"
+{ cat "$T/inst-fns.sh"; extract_fn "$INST" mode_install; extract_fn "$INST" mode_upgrade; } > "$T/inst-mode-fns.sh"
+run_mode() { # <mode_install|mode_upgrade> <script dir>   stops (rc 42) at the step after the image load
+  : > "$STUB_LOG"; rm -rf "$DOCKER_STATE" "$T/datadir"; mkdir -p "$DOCKER_STATE" "$T/datadir"
+  if [ "$1" = mode_upgrade ]; then : > "$T/datadir/docker-compose.yml"; echo "BAS_ENROLL_PORT=9443" > "$T/datadir/.env"; fi
+  PATH="$STUBS:$PATH" bash -c '
+    set -euo pipefail
+    err() { echo "ERR: $*" >&2; }; warn() { echo "WARN: $*"; }; info() { echo "$*"; }; log() { echo "$*"; }
+    step() { echo "STEP $*" >> "$STUB_LOG"; case "$*" in 5/10*|3/5*) exit 42 ;; esac; }
+    load_config() { :; }; render_checks() { return 0; }; chown() { :; }
+    for f in _check_os _check_docker _check_compose _check_cosign _check_ram _check_cpu _check_disk _check_port _check_dns_sink_port _check_openssl _check_bundle_integrity _check_licence _check_tls_certs; do eval "$f() { echo PASS:stub; }"; done
+    SCRIPT_DIR="$2"; DATA_DIR="$3"; CONFIG_FILE=x; BAS_VERSION=9.9.9; YES=true; NEED_DOCKER=false; NEED_COMPOSE=false
+    BAS_TLS=false; BAS_PORT=1; BAS_ENROLL_PORT=2; BAS_LEGACY_PORT=3; BAS_DASHBOARD_PORT=4; DNS_SINK_BIND_IP=x; LIC_PATH=x; PRODUCT=x
+    COSIGN_PUB_FLAG=""; COSIGN_PUB_USED="$2/cosign.pub"
+    source "$4"; _resolve_cosign_pub
+    "$1"' _ "$1" "$2" "$T/datadir" "$T/inst-mode-fns.sh" > "$T/out.txt" 2>&1
+}
+want_order="LOADED bas-caldera:9.9.9|LOADED $CHROME_TAG|LOADED postgres:16-alpine|LOADED bas-orchestrator:9.9.9|"
+for m in mode_install mode_upgrade; do
+  MUTATE="" stage_setup
+  rc=0; run_mode "$m" "$SX" || rc=$?
+  seq=$(grep '^LOADED' "$STUB_LOG" | tr '\n' '|')
+  lastverify=$(grep -n '^cosign verify-blob' "$STUB_LOG" | tail -1 | cut -d: -f1); firstload=$(grep -n '^LOADED' "$STUB_LOG" | head -1 | cut -d: -f1)
+  if [ "$rc" -eq 42 ] && [ "$seq" = "$want_order" ] && [ -n "$firstload" ] && [ "$lastverify" -lt "$firstload" ]; then pass "install.sh $m: all 4 verified, then loaded with the orchestrator LAST"; else fail "install.sh $m load loop (rc=$rc seq=$seq)"; cat "$T/out.txt"; fi
+  rc=0; FAKE_DOCKER_CLOBBER=1 run_mode "$m" "$SX" || rc=$?
+  [ "$rc" -ne 0 ] && [ "$rc" -ne 42 ] && grep -q "not the verified image after load" "$T/out.txt" && pass "install.sh $m: post-load orchestrator ID mismatch is fatal" || fail "install.sh $m post-load ID (rc=$rc)"
+  rc=0; run_mode "$m" "$NOIMG" || rc=$?
+  if [ "$rc" -ne 0 ] && [ "$rc" -ne 42 ] && grep -q "images/ directory not found" "$T/out.txt" && ! grep -q '^LOADED' "$STUB_LOG" && ! grep -Eq '^STEP ([2-9]/|1/5)' "$STUB_LOG"; then pass "install.sh $m with no images/: FATAL before anything is installed, backed up or written (nothing pulled)"; else fail "install.sh $m without images/ (rc=$rc)"; cat "$T/out.txt"; fi
+  MUTATE='echo evil >> "$b/images/postgres-16-alpine.tar"' stage_setup
+  rc=0; run_mode "$m" "$SX" || rc=$?
+  [ "$rc" -ne 0 ] && [ "$rc" -ne 42 ] && ! grep -q '^LOADED' "$STUB_LOG" && pass "install.sh $m: tampered postgres -> nothing loaded" || fail "install.sh $m tampered (rc=$rc)"
+done
+[ ! -e "$T/datadir/backups" ] && pass "install.sh mode_upgrade: a refused bundle writes no backup" || fail "mode_upgrade wrote a backup before verifying"
+MUTATE="" stage_setup
+
+echo "TEST: import.sh checks free space in \${TMPDIR:-/tmp} before copying"
+REAL_DF="$(command -v df)"
+cat > "$STUBS/df" <<DFEOF
+#!/usr/bin/env bash
+if [ -n "\${FAKE_DF_KB:-}" ]; then printf 'Filesystem 1024-blocks Used Available Capacity Mounted on\nfake 1 1 %s 1%% /\n' "\$FAKE_DF_KB"; exit 0; fi
+exec "$REAL_DF" "\$@"
+DFEOF
+chmod +x "$STUBS/df"
+MUTATE="" make_bundle "$T/b.tar.gz"
+FAKE_DF_KB=1 expect_abort "import.sh: too little free space in TMPDIR -> abort before copying"
+grep -q "Not enough free space" "$T/out.txt" && grep -q "TMPDIR" "$T/out.txt" && pass "free-space error is clear and names TMPDIR" || fail "free-space message"
+need_kb=$(( ( $(wc -c < "$T/b.tar.gz") + 1023 ) / 1024 * 3 ))
+FAKE_DF_KB=$((need_kb - 1)) expect_abort "import.sh: just under 3x the bundle size -> abort"
+FAKE_DF_KB=$need_kb check_valid "import.sh: exactly 3x the bundle size free -> proceeds"
 echo "TEST: GPG (real throwaway keys): verify-sig.sh, import.sh, verify.sh and setup.sh agent check"
 if ! command -v gpg >/dev/null 2>&1; then
   echo "SKIP: gpg not available"
@@ -476,6 +633,41 @@ else
   mv "$AG/asc.keep" "$AG/agents/BINARIES.sha256.asc"
   printf 'TAMPERED' > "$AG/agents/bas-agent-linux-amd64"
   if vb_ok; then fail "setup.sh agents: tampered binary accepted"; else grep -q "does not match the signed BINARIES.sha256" "$T/out.txt" && pass "setup.sh agents: tampered binary fails the sha256 check (signature itself was valid)" || fail "tamper reason"; fi
+  # ── Trust bootstrap: run the ONE canonical snippet against a POLLUTED default
+  # GNUPGHOME ($GNUPGHOME holds A and attacker B, B's secret key included) ──
+  SNIP="$REPO/packaging/airgap/trust-bootstrap.sh"
+  awk '/<a id="trust-bootstrap">/{f=1} f && /^```bash/{g=1; next} g && /^```/{exit} g' "$REPO/docs/guides/installation.md" | tr -d '\r' > "$T/doc-snip.txt"
+  cmp -s "$T/doc-snip.txt" "$SNIP" && pass "trust bootstrap: installation.md shows exactly the canonical snippet" || { fail "trust bootstrap: doc snippet drifted from trust-bootstrap.sh"; diff "$T/doc-snip.txt" "$SNIP"; }
+  grep -q 'packaging/airgap/trust-bootstrap.sh' "$REPO/packaging/airgap/pack.sh" && pass "trust bootstrap: pack.sh prints the canonical file" || fail "pack.sh has its own copy of the snippet"
+  ! grep -rnF 'GNUPGHOME=$(mktemp' "$REPO/docs/guides/installation.md" "$REPO/packaging/airgap" "$REPO/packaging/build.sh" | grep -v airgap-cosign.test.sh | grep -q . && pass "trust bootstrap: the broken GNUPGHOME= prefix form is gone" || fail "broken GNUPGHOME= prefix form still present"
+  TB="$T/tb"; rm -rf "$TB"; mkdir -p "$TB/tmp"
+  cp "$T/b.tar.gz" "$TB/bundle.tar.gz"; cp "$T/gpg-a.asc" "$TB/oob.asc"     # oob key = genuine A
+  run_tb() { (cd "$TB" && TMPDIR="$TB/tmp" bash "$SNIP") > "$T/out.txt" 2>&1 || true; }
+  gsign b@test.invalid "$TB/bundle.tar.gz"                                  # attacker B signs
+  (cd "$TB" && GNUPGHOME=$(TMPDIR="$T" mktemp -d) gpg --import oob.asc >/dev/null 2>&1 && gpg --status-fd 1 --verify bundle.tar.gz.asc bundle.tar.gz) > "$T/old.txt" 2>&1 || true
+  grep -q '^\[GNUPG:\] VALIDSIG ' "$T/old.txt" && pass "trust bootstrap control: the OLD prefix form is fooled by the polluted keyring (test discriminates)" || fail "control: old form not fooled -- test does not prove anything"
+  run_tb
+  ! grep -q '^\[GNUPG:\] VALIDSIG ' "$T/out.txt" && pass "trust bootstrap: attacker-signed bundle gets NO VALIDSIG (only oob.asc can vouch)" || fail "trust bootstrap: the polluted default keyring vouched for the bundle"
+  gsign a@test.invalid "$TB/bundle.tar.gz"
+  run_tb
+  vfpr=$(awk '/^\[GNUPG:\] VALIDSIG /{print toupper($12)}' "$T/out.txt")
+  [ "$vfpr" = "$(tr '[:lower:]' '[:upper:]' <<<"$FPA")" ] && pass "trust bootstrap: genuine bundle -> VALIDSIG primary fingerprint = oob key" || { fail "trust bootstrap genuine ($vfpr)"; cat "$T/out.txt"; }
+  [ -z "$(ls -A "$TB/tmp")" ] && pass "trust bootstrap: temp homedir removed (rm -rf \"\$H\")" || fail "trust bootstrap left its temp homedir behind"
+
+  # ── Signing SUBKEY: VALIDSIG field 3 is the subkey, field 12 the primary ──
+  gpg --batch --pinentry-mode loopback --passphrase '' --quick-gen-key "C <c@test.invalid>" ed25519 cert never >/dev/null 2>&1
+  FPC=$(gpg --with-colons --list-keys c@test.invalid | awk -F: '/^fpr/{print $10; exit}')
+  gpg --batch --pinentry-mode loopback --passphrase '' --quick-add-key "$FPC" ed25519 sign never >/dev/null 2>&1
+  gpg --armor --export c@test.invalid > "$T/gpg-c.asc"
+  gsign c@test.invalid "$T/b.tar.gz"
+  st=$(gpg --status-fd 1 --verify "$T/b.tar.gz.asc" "$T/b.tar.gz" 2>/dev/null | grep '^\[GNUPG:\] VALIDSIG ' || true)
+  if [ -n "$st" ] && [ "$(awk '{print $3}' <<<"$st")" != "$FPC" ] && [ "$(awk '{print $12}' <<<"$st")" = "$FPC" ]; then pass "subkey fixture: signature made by a signing SUBKEY (field 3 != primary, field 12 = primary)"; else fail "subkey fixture did not sign with a subkey: $st"; fi
+  if gok vs --gpg-pub "$T/gpg-c.asc" && grep -q "signed by key ${FPC}" "$T/out.txt"; then pass "verify-sig.sh: subkey signature accepted (VALIDSIG primary = the key's primary)"; else fail "verify-sig.sh rejected a subkey signature"; cat "$T/out.txt"; fi
+  printf 'agent-binary-bytes' > "$AG/agents/bas-agent-linux-amd64"
+  gsign c@test.invalid "$AG/agents/BINARIES.sha256"
+  if vb_ok BAS_GPG_PUB="$T/gpg-c.asc"; then pass "setup.sh agents: subkey-signed manifest accepted"; else fail "setup.sh agents rejected a subkey signature"; cat "$T/out.txt"; fi
+  if vb_ok BAS_GPG_PUB="$T/gpg-a.asc"; then fail "setup.sh agents: C's subkey signature accepted for key A"; else pass "setup.sh agents: subkey signature still bound to ITS primary (key A refused)"; fi
+  gsign a@test.invalid "$T/b.tar.gz"
   gpgconf --kill all >/dev/null 2>&1 || true
   rm -f "$T/b.tar.gz.asc" "$T/tools/verify-sig.sh" "$T/tools/pubkey.asc"
 fi
