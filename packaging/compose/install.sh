@@ -55,6 +55,14 @@ _ver="$(cat "${SCRIPT_DIR}/VERSION" 2>/dev/null || true)"
 _ver="${_ver#$'\xEF\xBB\xBF'}"; _ver="${_ver//$'\r'/}"; _ver="${_ver//[[:space:]]/}"
 readonly BAS_VERSION="${_ver:-latest}"
 
+# Upgrade record, DB snapshot/restore and the migrate step (H1).
+if [[ ! -f "${SCRIPT_DIR}/lib/upgrade-db.sh" ]]; then
+  echo "Missing ${SCRIPT_DIR}/lib/upgrade-db.sh -- run install.sh from a complete bundle." >&2
+  exit 1
+fi
+# shellcheck source=lib/upgrade-db.sh
+source "${SCRIPT_DIR}/lib/upgrade-db.sh"
+
 # ── Colours ───────────────────────────────────────────────────────────────────
 if [ -t 1 ]; then
   RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
@@ -77,6 +85,7 @@ YES=false
 NEED_DOCKER=false
 NEED_COMPOSE=false
 DOCKER_AUTO_INSTALLED=false
+UPGRADE_ID=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -84,6 +93,8 @@ while [[ $# -gt 0 ]]; do
     --install)      MODE="install"   ;;
     --upgrade)      MODE="upgrade"   ;;
     --rollback)     MODE="rollback"  ;;
+    --upgrade-id)   shift; UPGRADE_ID="${1:-}" ;;
+    --rotate-db-app-password) MODE="rotate-db-app-password" ;;
     --status)       MODE="status"    ;;
     --uninstall)    MODE="uninstall" ;;
     --backup)          MODE="backup"          ;;
@@ -99,14 +110,14 @@ while [[ $# -gt 0 ]]; do
     --yes|-y)       YES=true ;;
     *)
       echo "Unknown option: $1"
-      echo "Usage: sudo bash install.sh --check | --install --config setup.conf | --upgrade --config setup.conf | --rollback | --status | --uninstall [--purge-images] [--yes]"
+      echo "Usage: sudo bash install.sh --check | --install --config setup.conf | --upgrade --config setup.conf | --rollback [--upgrade-id <dir>] | --rotate-db-app-password | --status | --uninstall [--purge-images] [--yes]"
       exit 1 ;;
   esac
   shift
 done
 
 if [[ -z "$MODE" ]]; then
-  echo "Usage: sudo bash install.sh --check | --install --config setup.conf | --upgrade --config setup.conf | --rollback | --status | --uninstall [--purge-images] [--yes]"
+  echo "Usage: sudo bash install.sh --check | --install --config setup.conf | --upgrade --config setup.conf | --rollback [--upgrade-id <dir>] | --rotate-db-app-password | --status | --uninstall [--purge-images] [--yes]"
   exit 1
 fi
 
@@ -874,6 +885,8 @@ mode_install() {
   step "7/10  Installing docker-compose.yml"
   cp "${SCRIPT_DIR}/docker-compose.yml" "${DATA_DIR}/docker-compose.yml"
   cp "${SCRIPT_DIR}/install.sh" "${DATA_DIR}/install.sh"
+  mkdir -p "${DATA_DIR}/lib"
+  cp "${SCRIPT_DIR}/lib/upgrade-db.sh" "${DATA_DIR}/lib/upgrade-db.sh"
   log "Compose file installed"
 
   step "8/10  Installing systemd service (auto-start on boot)"
@@ -886,6 +899,12 @@ mode_install() {
   _write_backup_systemd_units
 
   step "9/10  Starting stack"
+  # The server only checks the schema version; `migrate up` creates it, as a
+  # one-off container, once Postgres is healthy and before the orchestrator.
+  (cd "${DATA_DIR}" && docker compose -p "$COMPOSE_PROJECT" up -d --wait postgres) \
+    || { err "Postgres did not become healthy."; exit 1; }
+  run_migrate up || { err "Database migration failed -- see the output above."; exit 1; }
+  log "Database schema created"
   systemctl start "${SERVICE_NAME}"
   log "Stack started via systemd"
   _wait_healthy
@@ -937,17 +956,31 @@ mode_upgrade() {
     fi
   fi
 
-  step "1/5  Backup current installation"
-  local backup_ts backup_dir
-  backup_ts=$(date -u '+%Y%m%d-%H%M%S')
-  backup_dir="${DATA_DIR}/backups/${backup_ts}"
-  mkdir -p "$backup_dir"
-  cp "${DATA_DIR}/docker-compose.yml" "${backup_dir}/docker-compose.yml"
-  [[ -f "${DATA_DIR}/.env" ]] && cp "${DATA_DIR}/.env" "${backup_dir}/.env"
-  echo "$BAS_VERSION" > "${backup_dir}/VERSION"
-  log "Backup created: ${backup_dir}"
+  local from_ver="unknown"
+  [[ -f "${DATA_DIR}/.env" ]] && from_ver=$(grep -oP '(?<=^BAS_VERSION=).+' "${DATA_DIR}/.env" 2>/dev/null | head -1 || echo "unknown")
+  [[ -n "$from_ver" ]] || from_ver="unknown"
 
-  step "2/5  Loading new images"
+  step "1/7  Upgrade record + configuration backup"
+  # The database snapshot below needs room for about two copies of the DB.
+  local db_bytes free_bytes
+  db_bytes=$(docker exec "$PG_CONTAINER" psql -U bas_user -d bas_platform -tAc "SELECT pg_database_size('bas_platform')" 2>/dev/null | tr -d '[:space:]')
+  free_bytes=$(( $(df -Pk "${DATA_DIR}" | awk 'NR==2 {print $4}') * 1024 ))
+  if [[ -z "$db_bytes" ]]; then
+    err "Cannot read the database size -- is ${PG_CONTAINER} running? Upgrade aborted; nothing was changed."
+    exit 1
+  fi
+  if (( free_bytes < 2 * db_bytes )); then
+    err "Not enough free space in ${DATA_DIR} for the pre-upgrade database snapshot (need $(( 2 * db_bytes / 1048576 )) MB, have $(( free_bytes / 1048576 )) MB). Upgrade aborted; nothing was changed."
+    exit 1
+  fi
+  local rec
+  rec=$(upgrade_record_create "$DATA_DIR" "$from_ver" "$BAS_VERSION") || { err "Cannot create the upgrade record under ${DATA_DIR}/backups."; exit 1; }
+  cp "${DATA_DIR}/docker-compose.yml" "${rec}/docker-compose.yml"
+  [[ -f "${DATA_DIR}/.env" ]] && cp "${DATA_DIR}/.env" "${rec}/.env" && chmod 600 "${rec}/.env"
+  echo "$from_ver" > "${rec}/VERSION"
+  log "Upgrade record: ${rec}"
+
+  step "2/7  Loading new images"
   local images_dir="${SCRIPT_DIR}/images"
   if [[ -d "$images_dir" ]]; then
     # Same deliberate ordering as mode_install: load every other image
@@ -964,14 +997,27 @@ mode_upgrade() {
       docker load < "$tar" && log "Loaded: $(basename "$tar")"
     done
     if [[ -z "$orch_tar" ]]; then
+      upgrade_record_set "$rec" state aborted
       err "No orchestrator artifact (bas-orchestrator-*.tar) found in ${images_dir} -- upgrade aborted. The previous version is still running; nothing was replaced."
       exit 1
     fi
-    _verify_orchestrator_artifact "$orch_tar" || { err "Orchestrator artifact failed verification -- upgrade aborted. The previous version is still running; nothing was replaced."; exit 1; }
+    _verify_orchestrator_artifact "$orch_tar" || { upgrade_record_set "$rec" state aborted; err "Orchestrator artifact failed verification -- upgrade aborted. The previous version is still running; nothing was replaced."; exit 1; }
     docker load < "$orch_tar" && log "Loaded: $(basename "$orch_tar")"
   fi
 
-  step "3/5  Updating bundle files"
+  step "3/7  Database snapshot"
+  # The orchestrator is stopped so the snapshot is the exact state the
+  # migration starts from; --rollback restores exactly this snapshot.
+  (cd "${DATA_DIR}" && docker compose -p "$COMPOSE_PROJECT" stop orchestrator) >/dev/null 2>&1 || true
+  if ! db_snapshot "$rec"; then
+    upgrade_record_set "$rec" state aborted
+    (cd "${DATA_DIR}" && docker compose -p "$COMPOSE_PROJECT" start orchestrator) >/dev/null 2>&1 || true
+    err "Database snapshot failed -- upgrade aborted. Nothing was changed; the previous version was restarted."
+    exit 1
+  fi
+  log "Database snapshot: ${rec}/db.dump.enc (sha256 $(upgrade_record_get "$rec" dump_sha256))"
+
+  step "4/7  Updating bundle files"
   [[ -d "${SCRIPT_DIR}/scenarios"   ]] && cp -r "${SCRIPT_DIR}/scenarios/."   "${DATA_DIR}/scenarios/"
   [[ -d "${SCRIPT_DIR}/wwwroot"     ]] && cp -r "${SCRIPT_DIR}/wwwroot/."     "${DATA_DIR}/wwwroot/"
   [[ -d "${SCRIPT_DIR}/art-payloads" ]] && cp -r "${SCRIPT_DIR}/art-payloads/." "${DATA_DIR}/art-payloads/"
@@ -992,66 +1038,134 @@ mode_upgrade() {
   [[ -f "$LIC_PATH" ]] && { cp "$LIC_PATH" "${DATA_DIR}/${LICENSE_FILE}"; chmod 644 "${DATA_DIR}/${LICENSE_FILE}"; }
   cp "${SCRIPT_DIR}/docker-compose.yml" "${DATA_DIR}/docker-compose.yml"
   cp "${SCRIPT_DIR}/install.sh" "${DATA_DIR}/install.sh"
+  mkdir -p "${DATA_DIR}/lib"
+  cp "${SCRIPT_DIR}/lib/upgrade-db.sh" "${DATA_DIR}/lib/upgrade-db.sh"
   _write_env        # refreshes BAS_VERSION; preserves existing secrets via load_config
   _write_systemd_unit  # refresh WorkingDirectory in case DATA_DIR changed
   _write_backup_systemd_units
   systemctl daemon-reload
   log "Files updated"
 
-  step "4/5  Rolling restart"
+  local rollback_hint
+  rollback_hint="sudo bash ${DATA_DIR}/install.sh --rollback --upgrade-id $(basename "$rec")"
+
+  step "5/7  Database migration"
+  (cd "${DATA_DIR}" && docker compose -p "$COMPOSE_PROJECT" up -d --wait postgres) >/dev/null 2>&1 || true
+  if ! run_migrate up; then
+    upgrade_record_set "$rec" state failed
+    err "Database migration failed. The orchestrator is stopped."
+    info "To restore the pre-upgrade state run: ${rollback_hint}"
+    exit 1
+  fi
+  upgrade_record_set "$rec" state migrated
+  log "Database migrated"
+
+  step "6/7  Rolling restart"
   systemctl restart "${SERVICE_NAME}" 2>/dev/null \
     || (cd "${DATA_DIR}" && docker compose -p "$COMPOSE_PROJECT" up -d --remove-orphans)
   log "Stack restarted"
   _wait_healthy
+  if [[ "$(docker inspect --format '{{.State.Health.Status}}' audspect-orchestrator 2>/dev/null)" != "healthy" ]]; then
+    upgrade_record_set "$rec" state failed
+    err "The orchestrator is not healthy after the upgrade."
+    info "To restore the pre-upgrade state run: ${rollback_hint}"
+    exit 1
+  fi
+  upgrade_record_set "$rec" state healthy
 
-  step "5/5  Verifying upgrade"
+  step "7/7  Verifying upgrade"
   mode_status
-  log "Upgrade to v${BAS_VERSION} complete. Rollback: sudo bash install.sh --rollback"
+  log "Upgrade v${from_ver} -> v${BAS_VERSION} complete. Rollback: ${rollback_hint}"
 }
 
 # ═════════════════════════════════════════════════════════════════════════════
 # MODE: --rollback
 # ═════════════════════════════════════════════════════════════════════════════
 mode_rollback() {
-  local backup_root="${DEFAULT_DATA_DIR}/backups"
+  local install_dir="$DEFAULT_DATA_DIR"
   # Find existing DATA_DIR from systemd or default
   if [[ -f /etc/systemd/system/${SERVICE_NAME}.service ]]; then
     detected=$(grep -oP '(?<=WorkingDirectory=)[^\s]+' /etc/systemd/system/${SERVICE_NAME}.service || true)
-    [[ -n "$detected" ]] && backup_root="${detected}/backups"
+    [[ -n "$detected" ]] && install_dir="$detected"
   fi
+  DATA_DIR="$install_dir"
 
-  # Find most recent backup
-  local latest
-  latest=$(ls -1dt "${backup_root}"/[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]-[0-9][0-9][0-9][0-9][0-9][0-9]/ 2>/dev/null | head -1 || true)
-  if [[ -z "$latest" ]]; then
-    err "No backup found under ${backup_root}. Cannot rollback."
-    exit 1
+  # Rollback restores the snapshot taken by --upgrade for that upgrade -- never
+  # a scheduled backup (those are restored with --restore).
+  local rec
+  if [[ -n "$UPGRADE_ID" ]]; then
+    rec="${install_dir}/backups/$(basename "$UPGRADE_ID")"
+    [[ -f "${rec}/UPGRADE.json" ]] || { err "No upgrade record ${rec}."; exit 1; }
+  else
+    rec=$(upgrade_record_latest "$install_dir") || {
+      err "No upgrade record under ${install_dir}/backups -- nothing to roll back."
+      info "Scheduled backups are restored with: sudo bash install.sh --restore <archive>"
+      exit 1
+    }
   fi
-
-  local install_dir
-  install_dir=$(dirname "$backup_root")
+  local from to started
+  from=$(upgrade_record_get "$rec" from); to=$(upgrade_record_get "$rec" to); started=$(upgrade_record_get "$rec" started_at)
 
   echo -e "${YELLOW}${BOLD}===  Rollback  ===${NC}"
-  echo "  Restoring from: ${latest}"
-  echo "  Install dir   : ${install_dir}"
+  echo "  Upgrade record : ${rec}"
+  echo "  Roll back      : v${to} -> v${from}"
+  echo "  Install dir    : ${install_dir}"
   echo ""
+  warn "Database changes made after this upgrade began (${started}) will be lost."
 
   if ! $YES; then
-    read -rp "  Confirm rollback? [yes/N] " confirm
-    [[ "$confirm" == "yes" ]] || { echo "Aborted."; exit 0; }
+    read -rp "  Type the version to restore (${from}) to confirm: " confirm
+    [[ "$confirm" == "$from" ]] || { echo "Aborted."; exit 0; }
   fi
 
-  cp "${latest}/docker-compose.yml" "${install_dir}/docker-compose.yml"
-  [[ -f "${latest}/.env" ]] && cp "${latest}/.env" "${install_dir}/.env"
-  local prev_ver
-  prev_ver=$(cat "${latest}/VERSION" 2>/dev/null || echo "unknown")
-  log "Compose and .env restored (version: ${prev_ver})"
+  (cd "${install_dir}" && docker compose -p "$COMPOSE_PROJECT" stop orchestrator) >/dev/null 2>&1 || true
+  if ! db_restore "$rec"; then
+    err "Database restore failed -- the orchestrator is stopped and the database may be partially restored. The snapshot is ${rec}/db.dump.enc."
+    exit 1
+  fi
+  log "Database restored to the pre-upgrade snapshot"
+
+  cp "${rec}/docker-compose.yml" "${install_dir}/docker-compose.yml"
+  [[ -f "${rec}/.env" ]] && cp "${rec}/.env" "${install_dir}/.env"
+  log "Compose and .env restored (version: ${from})"
 
   systemctl restart "${SERVICE_NAME}" 2>/dev/null \
     || (cd "${install_dir}" && docker compose -p "$COMPOSE_PROJECT" up -d --remove-orphans)
   log "Stack restarted with previous version"
   _wait_healthy
-  log "Rollback complete (v${BAS_VERSION} → v${prev_ver})"
+  upgrade_record_set "$rec" state rolled-back
+  log "Rollback complete (v${to} -> v${from})"
+}
+
+# ═════════════════════════════════════════════════════════════════════════════
+# MODE: --rotate-db-app-password
+# ═════════════════════════════════════════════════════════════════════════════
+mode_rotate_db_app_password() {
+  local install_dir="$DEFAULT_DATA_DIR"
+  if [[ -f /etc/systemd/system/${SERVICE_NAME}.service ]]; then
+    detected=$(grep -oP '(?<=WorkingDirectory=)[^\s]+' /etc/systemd/system/${SERVICE_NAME}.service || true)
+    [[ -n "$detected" ]] && install_dir="$detected"
+  fi
+  DATA_DIR="$install_dir"
+  local env_file="${install_dir}/.env"
+  [[ -f "$env_file" ]] || { err "No installation found at ${install_dir}."; exit 1; }
+
+  step "Rotating the bas_app database password"
+  local prev new
+  prev=$(_env_get BAS_APP_DB_PASSWORD)
+  new=$(openssl rand -hex 32)
+  cp -p "$env_file" "${env_file}.pre-rotate"
+  sed -i "s|^BAS_APP_DB_PASSWORD=.*|BAS_APP_DB_PASSWORD=${new}|" "$env_file"
+  if ! run_migrate rotate-app-password; then
+    cp -p "${env_file}.pre-rotate" "$env_file"
+    err "Rotation failed; .env keeps the previous password. If the output above shows the role WAS changed, re-run this command."
+    exit 1
+  fi
+  rm -f "${env_file}.pre-rotate"
+  [[ -n "$prev" ]] || warn "No previous BAS_APP_DB_PASSWORD was recorded in .env."
+  (cd "${install_dir}" && docker compose -p "$COMPOSE_PROJECT" up -d orchestrator) >/dev/null
+  _wait_healthy
+  log "bas_app password rotated; orchestrator restarted with the new value"
 }
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -1771,6 +1885,7 @@ _print_access_info() {
   echo ""
   echo "  Status check     : sudo bash install.sh --status"
   echo "  Upgrade          : sudo bash install.sh --upgrade --config setup.conf"
+  echo "  Rollback upgrade : sudo bash install.sh --rollback"
   echo "  Uninstall        : sudo bash install.sh --uninstall"
   echo ""
 }
@@ -1787,6 +1902,7 @@ case "$MODE" in
   install)   mode_install   ;;
   upgrade)   mode_upgrade   ;;
   rollback)  mode_rollback  ;;
+  rotate-db-app-password) mode_rotate_db_app_password ;;
   status)    mode_status    ;;
   uninstall) mode_uninstall ;;
   backup)         mode_backup         ;;

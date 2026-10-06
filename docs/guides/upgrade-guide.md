@@ -233,7 +233,17 @@ If the bundle was GPG-signed, verify it first — see the `VERIFY.md` staged alo
 sudo bash install.sh --upgrade --config setup.conf
 ```
 
-This single command performs all 5 steps described in the Overview above — image load, bundle refresh, secret-preserving `.env` rewrite, systemd unit refresh, and a rolling restart with a health-check wait — and prints a status summary when done.
+This single command:
+
+1. creates an **upgrade record** `<DATA_DIR>/backups/upgrade-<UTC time>-<from>-to-<to>/` (current `docker-compose.yml`, `.env`, version) after checking there is free space for about two copies of the database;
+2. loads and verifies the new images (the old version keeps running until this succeeds);
+3. stops the orchestrator and takes an **encrypted database snapshot** (`db.dump.enc`, AES-256 with `<DATA_DIR>/.backup_key`, readability-checked, SHA-256 recorded in `UPGRADE.json`);
+4. refreshes bundle files, `.env` and systemd units;
+5. runs **`orchestrator migrate up`** once, as a one-off container that alone receives the database owner credentials. On the first upgrade to a release with versioned migrations it adopts the existing database: it checks the schema object by object and, on any mismatch, stops without changing anything;
+6. restarts the stack and waits for the orchestrator to be healthy;
+7. prints a status summary.
+
+If step 5 or 6 fails, the orchestrator is left stopped and the command prints the exact rollback command for this upgrade. The orchestrator itself never changes the schema: at start-up it only checks that the database matches its release and refuses to start otherwise (the message names the fix: `install.sh --upgrade` or `install.sh --rollback`).
 
 If you don't have your original `setup.conf` handy, see [setup.conf reference](#setupconf-reference) below to reconstruct one with the same `DATA_DIR`/`ADMIN_EMAIL`/`LIC_PATH` your existing install used — `DB_PASSWORD`/`JWT_SECRET`/`AGENT_SECRET` in this file are only used if no existing `.env` is found, so it's safe to leave those blank/placeholder for an upgrade.
 
@@ -290,12 +300,13 @@ docker image prune -f
 ## Rollback Procedure
 
 ```bash
-sudo bash install.sh --rollback
+sudo bash install.sh --rollback                      # the most recent upgrade
+sudo bash install.sh --rollback --upgrade-id <dir>    # a specific upgrade record
 ```
 
-This restores the most recent timestamped backup under `<DATA_DIR>/backups/` (the `docker-compose.yml`, `.env`, and version marker `install.sh --upgrade` saved in Step 3) and restarts the stack on the previous version. It prompts for confirmation unless run with `--yes`.
+Rollback restores **the database snapshot taken by that upgrade** together with its `docker-compose.yml` and `.env`, then restarts the previous version. It never uses a scheduled backup (restore those with `--restore <archive>`). Database changes made after the upgrade began are lost; the command shows that time and asks you to type the version being restored (skip with `--yes`). It refuses if no upgrade record exists, and refuses a snapshot whose SHA-256 no longer matches its record.
 
-If the target Docker images for the previous version are no longer present locally (e.g. pruned after upgrade), reload them first:
+If the Docker images for the previous version are no longer present locally (e.g. pruned after upgrade), reload them first:
 
 ```bash
 cd /path/to/previous/bas-install-<previous-version>/images
@@ -303,20 +314,7 @@ for f in *.tar; do sudo docker load < "$f"; done
 sudo bash install.sh --rollback
 ```
 
-If a schema change means the old binary can no longer read the current database, restore from the pre-upgrade database dump instead:
-
-```bash
-# Stop the stack first
-sudo systemctl stop audspect 2>/dev/null || (cd /opt/audspect && docker compose down)
-
-# Restore database (destructive — all data after the backup is lost)
-docker start audspect-postgres
-gunzip < /opt/backups/bas-pre-upgrade-<timestamp>.sql.gz | \
-  docker exec -i audspect-postgres psql -U bas_user -d bas_platform
-
-# Then roll back the images/config too
-sudo bash install.sh --rollback
-```
+Keep `<DATA_DIR>/.backup_key`: without it no snapshot can be decrypted.
 
 ---
 
@@ -360,6 +358,7 @@ sudo bash install.sh --rollback
 sudo bash install.sh --check                            # prereq report
 sudo bash install.sh --install --config setup.conf       # first-time install
 sudo bash install.sh --status                            # current state
+sudo bash install.sh --rotate-db-app-password            # new bas_app DB password, applied + verified
 sudo bash install.sh --uninstall [--purge-images] [--yes]
 ```
 
