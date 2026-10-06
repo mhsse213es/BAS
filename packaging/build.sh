@@ -155,6 +155,10 @@ chmod +x "${BUILD_DIR}/setup.sh" "${BUILD_DIR}/uninstall.sh"
 # Release gate: every builtin scenario/detection-profile .sig must verify
 # against the COMPILED public key (calls integrity.VerifyScenarioFile). Runs
 # before scenarios are copied into the bundle. Go is already required above.
+if ! command -v go &>/dev/null; then
+  err "Go is required to verify builtin scenario signatures (release gate)."
+  exit 1
+fi
 log "Verifying builtin scenario signatures..."
 if ! (cd "${REPO_ROOT}/orchestrator" && env -u GOOS -u GOARCH go run scripts/signer.go verify-all "${REPO_ROOT}/scenarios"); then
   err "builtin scenario signatures are stale -- re-sign on the build host with orchestrator/private_key.pem (see docs/internal/build-guide.md)"

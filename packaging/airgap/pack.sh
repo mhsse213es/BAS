@@ -41,6 +41,10 @@ if ! command -v docker &>/dev/null; then
   err "Docker is required to build the air-gap bundle."
   exit 1
 fi
+if ! command -v go &>/dev/null; then
+  err "Go is required to verify builtin scenario signatures (release gate)."
+  exit 1
+fi
 if ! docker info &>/dev/null; then
   err "Docker daemon is not running."
   exit 1
