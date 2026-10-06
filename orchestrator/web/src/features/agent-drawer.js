@@ -1,6 +1,7 @@
 import { state } from '../core/state.js';
 import { apicall } from '../core/api.js';
 import { x } from '../core/escape.js';
+import { on } from '../core/actions.js';
 import { ago, showToast } from '../core/util.js';
 import { loadAgents } from './attack-path.js';
 import { buildReportFilename, showDownloadOptions, triggerDownload } from './evidence.js';
@@ -118,13 +119,13 @@ function loadAgtOverview(agentId) {
         '<div style="font-size:0.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:0.55rem">Lifecycle Controls</div>' +
         '<div style="display:flex;gap:0.5rem;flex-wrap:wrap">' +
           (a.state !== 'active' ?
-            '<button class="btn btn-primary btn-sm" onclick="setAgentState(\'' + x(a.agentId) + '\',\'active\')">&#10003; Restore to Active</button>' : '') +
+            '<button class="btn btn-primary btn-sm" '+ on('click', 'setAgentState', a.agentId, 'active') + '>&#10003; Restore to Active</button>' : '') +
           (a.state !== 'quarantined' ?
-            '<button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger-border)" onclick="setAgentState(\'' + x(a.agentId) + '\',\'quarantined\')">&#9888; Quarantine</button>' : '') +
+            '<button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger-border)" '+ on('click', 'setAgentState', a.agentId, 'quarantined') + '>&#9888; Quarantine</button>' : '') +
           (a.state !== 'restricted' ?
-            '<button class="btn btn-outline btn-sm" style="color:var(--warning);border-color:var(--warning-border)" onclick="setAgentState(\'' + x(a.agentId) + '\',\'restricted\')">&#128274; Restrict</button>' : '') +
+            '<button class="btn btn-outline btn-sm" style="color:var(--warning);border-color:var(--warning-border)" '+ on('click', 'setAgentState', a.agentId, 'restricted') + '>&#128274; Restrict</button>' : '') +
           (a.state !== 'retired' ?
-            '<button class="btn btn-outline btn-sm u-muted" onclick="setAgentState(\'' + x(a.agentId) + '\',\'retired\')">&#128683; Retire</button>' : '') +
+            '<button class="btn btn-outline btn-sm u-muted" '+ on('click', 'setAgentState', a.agentId, 'retired') + '>&#128683; Retire</button>' : '') +
         '</div>' +
         '<div style="font-size:0.7rem;color:var(--muted);margin-top:0.45rem">Quarantine / Restrict / Retire all block scenario dispatch. Only <strong>Restore to Active</strong> re-enables the agent.</div>' +
       '</div>' +
@@ -174,7 +175,7 @@ function loadAgtScenarios(agentId) {
         '<td style="color:var(--muted);font-size:0.75rem">' + ago(r.startedAt) + '</td>' +
         '<td>' + scoreHtml + '</td>' +
         '<td><span style="color:' + statusColor + '">' + x(r.status) + '</span></td>' +
-        '<td><button class="btn btn-outline btn-sm" onclick=\'viewRunResults(' + JSON.stringify(r).replace(/'/g,"&#39;") + ')\'>&#128202; Results</button></td>' +
+        '<td><button class="btn btn-outline btn-sm" ' + on('click', 'viewRunResults', r) + '>&#128202; Results</button></td>' +
         '</tr>';
     }).join('');
     pane.innerHTML =
@@ -208,6 +209,11 @@ var _AGT_TELEMETRY_METRICS = [
 ];
 
 // ── Logs tab ──────────────────────────────────────────────────────────────────
+export function loadAgtLogsTelemetryMetric(agentId, el) {
+  state._agtLogTelemetryMetric = el.value;
+  loadAgtLogs(agentId, 'telemetry');
+}
+
 export function loadAgtLogs(agentId, tier) {
   _agtLogTier = tier;
   if (tier !== 'telemetry') state._agtLogTelemetryMetric = '';
@@ -221,10 +227,10 @@ export function loadAgtLogs(agentId, tier) {
   var tierBtns =
     '<div style="display:flex;gap:0.4rem;align-items:center;padding:0.75rem 1.25rem;border-bottom:1px solid var(--border);flex-shrink:0">' +
     ['operational','security','telemetry'].map(function(t) {
-      return '<button class="tier-btn' + (t===tier?' active':'') + '" onclick="loadAgtLogs(\'' + x(agentId) + '\',\'' + t + '\')">' + t.charAt(0).toUpperCase()+t.slice(1) + '</button>';
+      return '<button class="tier-btn' + (t===tier?' active':'') + '" '+ on('click', 'loadAgtLogs', agentId, t) + '>' + t.charAt(0).toUpperCase()+t.slice(1) + '</button>';
     }).join('') +
     (tier === 'telemetry'
-      ? '<select onchange="_agtLogTelemetryMetric=this.value;loadAgtLogs(\'' + x(agentId) + '\',\'telemetry\')" ' +
+      ? '<select' + on('change', 'loadAgtLogsTelemetryMetric', agentId) + ' ' +
         'style="margin-left:0.5rem;background:var(--elevated);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:0.25rem 0.4rem;font-size:0.78rem">' +
         '<option value=""' + (state._agtLogTelemetryMetric===''?' selected':'') + '>All Metrics</option>' +
         _AGT_TELEMETRY_METRICS.map(function(g) {
@@ -744,7 +750,7 @@ function renderControlsTable(controls, filter) {
           '<span class="cmp-ev-detail">' + x((ev.details || '').substring(0, 120)) + '</span>' +
         '</div>';
       }).join('') + '</div>' : '';
-    var expandBtn = hasEv ? '<span class="cmp-expand-btn" onclick="toggleEvidence(\'' + evId + '\',this)">&#9658; ' + c.evidence.length + ' tests</span>' : '';
+    var expandBtn = hasEv ? '<span class="cmp-expand-btn" '+ on('click', 'toggleEvidence', evId) + '>&#9658; ' + c.evidence.length + ' tests</span>' : '';
     return '<tr><td>' + badge + '</td>' +
       '<td><span class="cmp-ctrl-id">' + x(c.id) + '</span></td>' +
       '<td>' + x(c.name) + expandBtn + evHtml + '</td>' +
