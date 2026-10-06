@@ -9,6 +9,6 @@ HOST="$ORCH"
 if command -v cygpath >/dev/null 2>&1; then HOST="$(cygpath -m "$ORCH")"; fi
 REC=()
 if [ "${2:-}" = "record" ]; then REC=(-e SMOKE_RECORD=1); fi
-MSYS_NO_PATHCONV=1 exec docker run --rm --ipc=host -v "$HOST:/o" -w /o/web -e "SMOKE_ROOT=$1" "${REC[@]}" \
+MSYS_NO_PATHCONV=1 exec docker run --rm --ipc=host -v "$HOST:/o" -w /o/web -e "SMOKE_ROOT=$1" -e SMOKE_CSP -e SMOKE_STRICT "${REC[@]}" \
   -e PLAYWRIGHT_IMAGE_VERSION=1.63.0 "$IMAGE" \
   sh -c 'npm ci --ignore-scripts --no-audit --no-fund >/dev/null && npm run smoke'

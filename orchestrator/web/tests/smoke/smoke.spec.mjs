@@ -23,6 +23,11 @@ async function boot(page) {
   await page.addInitScript(() => {
     localStorage.setItem('bas_role', 'admin');
     window.__xss = undefined;
+    // Every CSP violation is an error (G1d). Without a policy header this
+    // never fires.
+    document.addEventListener('securitypolicyviolation', (e) => {
+      console.error(`csp: ${e.effectiveDirective} blocked ${e.blockedURI || 'inline'} at ${e.sourceFile || ''}:${e.lineNumber || 0}`);
+    });
     // Loaders catch their own errors and show them as an error toast
     // (#toast.err) instead of throwing; surface those as errors too, or a
     // ReferenceError inside a .then() would go unnoticed.
@@ -53,11 +58,45 @@ async function boot(page) {
   return errors;
 }
 
-// Tabs are discovered from the markup, not from app internals, so the same
-// harness runs unchanged against the monolith and the bundled build.
+// Tabs are discovered from the markup -- inline onclick="showTab('x')" or the
+// G1d form data-on-click="showTab" data-args='["x"]' -- never from app internals.
 async function tabNames(page) {
-  return page.$$eval('[onclick^="showTab(\'"]', (els) => [...new Set(els.map((e) => e.getAttribute('onclick').match(/showTab\('([^']+)'\)/)[1]))].sort());
+  return page.$$eval('[onclick^="showTab(\'"],[data-on-click="showTab"]', (els) => [...new Set(els.map((e) => {
+    const a = e.getAttribute('data-args');
+    return a ? JSON.parse(a)[0] : e.getAttribute('onclick').match(/showTab\('([^']+)'\)/)[1];
+  }))].sort());
 }
+
+async function openTab(page, tab) {
+  await page.evaluate((t) => {
+    const el = [...document.querySelectorAll('[data-on-click="showTab"]')].find((e) => JSON.parse(e.getAttribute('data-args') || '[]')[0] === t)
+      || document.querySelector(`[onclick="showTab('${t}')"]`);
+    el.click(); // element.click(): some nav entries live in a collapsed dropdown
+  }, tab);
+}
+
+// Inline handlers and javascript: URLs left in the live DOM (G1d strict mode).
+async function inlineLeft(page) {
+  return page.evaluate(() => {
+    const out = [];
+    for (const el of document.querySelectorAll('*')) {
+      for (const a of el.attributes) {
+        if (/^on[a-z]+$/.test(a.name)) out.push(`inline handler left: ${a.name} on <${el.tagName.toLowerCase()}${el.id ? '#' + el.id : ''}>`);
+        if ((a.name === 'href' || a.name === 'src' || a.name === 'action') && /^\s*javascript:/i.test(a.value)) out.push(`javascript: URL left on <${el.tagName.toLowerCase()}${el.id ? '#' + el.id : ''}>`);
+      }
+    }
+    return [...new Set(out)].sort();
+  });
+}
+
+// One representative action per tab beyond the tab switch (G1d spec 6.3).
+// Both are filter buttons: setAgentFilter('online') reloads agents and moves
+// the "on" highlight; setCampaignTab('all') re-renders the campaign toolbar
+// (under the fixtures only "All" exists). No dialogs, navigation or pickers.
+const ACTION_CLICKS = {
+  agents: `#agent-toolbar button[data-on-click="setAgentFilter"][data-args='["online"]']`,
+  campaigns: '#campaign-toolbar button[data-on-click="setCampaignTab"]',
+};
 
 // Every inline handler in the live DOM whose called function is not on window.
 async function unresolvedHandlers(page) {
@@ -86,14 +125,21 @@ test('every tab renders with no errors beyond the monolith baseline', async ({ p
     errors.length = 0;
     // element.click() rather than page.click(): some nav entries (e.g. Profile)
     // live in a collapsed dropdown and are not "visible" to Playwright.
-    await page.$eval(`[onclick="showTab('${tab}')"]`, (el) => el.click());
+    await openTab(page, tab);
     await page.waitForTimeout(400);
+    const extra = [];
+    if (ACTION_CLICKS[tab]) {
+      const hit = await page.evaluate((sel) => { const el = document.querySelector(sel); if (!el) return false; el.click(); return true; }, ACTION_CLICKS[tab]);
+      if (!hit) extra.push(`action click target missing: ${ACTION_CLICKS[tab]}`);
+      await page.waitForTimeout(300);
+    }
+    if (process.env.SMOKE_STRICT === '1') extra.push(...await inlineLeft(page));
     const unresolved = await unresolvedHandlers(page);
     const missing = [];
     if (RENDER_MARKERS[tab] && !(await page.evaluate((m) => document.body.innerText.includes(m), RENDER_MARKERS[tab]))) {
       missing.push(`fixture not rendered: ${RENDER_MARKERS[tab]}`);
     }
-    result.tabs[tab] = [...new Set([...errors, ...missing, ...unresolved.map((n) => `unresolved handler: ${n}`)])].sort();
+    result.tabs[tab] = [...new Set([...errors, ...missing, ...extra, ...unresolved.map((n) => `unresolved handler: ${n}`)])].sort();
   }
   const xss = await page.evaluate(() => window.__xss);
   expect(xss, 'a fixture payload executed').toBeUndefined();
