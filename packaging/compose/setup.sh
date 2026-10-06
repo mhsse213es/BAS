@@ -345,36 +345,95 @@ check_port() {
 }
 
 # ── Binary manifest verification ──────────────────────────────────────────────
-# Runs silently if no signing artifacts are present (unsigned dev bundle).
-# Aborts installation if signatures are present but fail to verify.
+# GPG key selection (precedence): --gpg-pub flag, BAS_GPG_PUB env, then the
+# bundle's agents/pubkey.asc. An external key is used EXCLUSIVELY (the bundled
+# one is never consulted) and a missing/unreadable path is fatal. A bundled key
+# only proves integrity, not origin.
+GPG_PUB_FLAG=""
+
+# _gpg_verify_single_key <sig> <file> <pubkey> <kind>
+# Same hardening as packaging/signing/verify-sig.sh (duplicated here because
+# verify-sig.sh is not guaranteed to sit next to setup.sh in a release bundle):
+# throwaway keyring, exactly ONE primary key in the key file, and the signature's
+# VALIDSIG primary fingerprint must equal that key's fingerprint, which is printed.
+_gpg_verify_single_key() {
+  local sig="$1" file="$2" pub="$3" kind="$4" home listing n fpr status rc=0 l primary ok
+  home=$(mktemp -d); chmod 700 "$home"
+  # shellcheck disable=SC2064
+  trap "rm -rf '$home'" RETURN
+  local G=(gpg --homedir "$home" --batch --quiet --no-autostart)
+  "${G[@]}" --import "$pub" 2>/dev/null || { err "Could not import the GPG public key from ${pub}."; return 1; }
+  listing=$("${G[@]}" --with-colons --list-keys 2>/dev/null)
+  n=$(grep -c '^pub:' <<<"$listing" || true)
+  if [[ "$n" -ne 1 ]]; then
+    err "GPG key file ${pub} contains ${n} primary keys; exactly one is required. Refusing."
+    return 1
+  fi
+  fpr=$(awk -F: '/^fpr/{print $10; exit}' <<<"$listing")
+  [[ -n "$fpr" ]] || { err "Could not read the GPG key fingerprint from ${pub}."; return 1; }
+  echo "" >&2
+  echo "  ============================================================" >&2
+  echo "   Verifying with ${kind} GPG key, fingerprint: ${fpr}" >&2
+  echo "   (compare with the fingerprint Audspect publishes)" >&2
+  echo "  ============================================================" >&2
+  if [[ "$kind" == BUNDLED ]]; then
+    warn "A bundled key proves integrity, not origin, unless its fingerprint matches the published one (or use --gpg-pub / BAS_GPG_PUB)."
+  fi
+  status=$("${G[@]}" --status-fd 1 --verify "$sig" "$file" 2>/dev/null) || rc=$?
+  l=$(grep '^\[GNUPG:\] VALIDSIG ' <<<"$status" || true)
+  ok=false
+  if [[ $rc -eq 0 && -n "$l" ]]; then
+    ok=true
+    while IFS= read -r line; do
+      primary=$(awk '{print toupper($12)}' <<<"$line")
+      [[ "$primary" == "$(tr '[:lower:]' '[:upper:]' <<<"$fpr")" ]] || ok=false
+    done <<<"$l"
+  fi
+  $ok
+}
+
+# Silent only when the bundle has no BINARIES.sha256 at all (unsigned dev/test
+# bundle) and no external key was requested. A manifest with no .asc stays a
+# warning (deliberate, pre-existing) unless an external key was requested. A
+# present .asc that cannot be verified -- INCLUDING gpg not being installed -- is
+# fatal. After the signature verifies, every binary is checked against the
+# manifest and any mismatch/missing file is fatal.
 verify_bundle_signatures() {
   local agents_dir="${SCRIPT_DIR}/agents"
   local manifest="${agents_dir}/BINARIES.sha256"
   local manifest_sig="${agents_dir}/BINARIES.sha256.asc"
-  local pubkey="${agents_dir}/pubkey.asc"
+  local pubkey="${agents_dir}/pubkey.asc" kind=BUNDLED
+  local ext="${GPG_PUB_FLAG:-${BAS_GPG_PUB:-}}"
 
-  # No signing artifacts — skip silently (dev/test bundle)
-  [[ -f "$manifest" ]] || return 0
-  [[ -f "$manifest_sig" ]] || { warn "Binary manifest present but unsigned — skipping verification."; return 0; }
+  if [[ -n "$ext" ]]; then
+    if [[ ! -f "$ext" || ! -r "$ext" ]]; then
+      err "External GPG public key not found or unreadable: ${ext}"
+      exit 1
+    fi
+    pubkey="$ext"; kind=EXTERNAL
+  fi
+
+  if [[ ! -f "$manifest" ]]; then
+    [[ -z "$ext" ]] && return 0
+    err "An external GPG key was supplied but ${manifest} does not exist -- cannot verify the agent binaries."
+    exit 1
+  fi
+  if [[ ! -f "$manifest_sig" ]]; then
+    if [[ -n "$ext" ]]; then
+      err "An external GPG key was supplied but ${manifest_sig} does not exist -- cannot verify the agent binaries."
+      exit 1
+    fi
+    warn "Binary manifest present but unsigned — skipping verification."
+    return 0
+  fi
   [[ -f "$pubkey" ]] || { err "pubkey.asc missing alongside BINARIES.sha256 — cannot verify."; exit 1; }
 
-  command -v gpg &>/dev/null || {
-    warn "gpg not installed — cannot verify binary signatures (install gnupg to enable)."
-    return 0
-  }
+  if ! command -v gpg &>/dev/null; then
+    err "gpg is not installed, but ${manifest_sig} is present -- refusing to continue without verifying the agent binaries. Install gnupg (apt-get install -y gnupg)."
+    exit 1
+  fi
 
-  local tmpring
-  tmpring=$(mktemp -d)
-  # shellcheck disable=SC2064
-  trap "rm -rf '$tmpring'" RETURN
-
-  gpg --quiet --batch --no-default-keyring \
-      --keyring "${tmpring}/bas.gpg" \
-      --import "${pubkey}" 2>/dev/null
-
-  if ! gpg --quiet --batch --no-default-keyring \
-           --keyring "${tmpring}/bas.gpg" \
-           --verify "${manifest_sig}" "${manifest}" 2>/dev/null; then
+  if ! _gpg_verify_single_key "$manifest_sig" "$manifest" "$pubkey" "$kind"; then
     err "SECURITY: Binary manifest signature verification FAILED."
     echo ""
     echo "  The agent binaries in this bundle may have been tampered with."
@@ -382,8 +441,18 @@ verify_bundle_signatures() {
     echo "  Contact Audspect support if you received this bundle from an official source."
     exit 1
   fi
+  log "Binary manifest signature verified (${kind} GPG key)."
 
-  log "Binary manifest signature verified (Audspect release key)."
+  # The signed manifest is only meaningful if the binaries still match it.
+  if [[ ! -s "$manifest" ]]; then
+    err "Binary manifest ${manifest} is empty -- nothing to verify against. Refusing."
+    exit 1
+  fi
+  if ! (cd "$agents_dir" && sha256sum --check --strict --quiet BINARIES.sha256 >/dev/null 2>&1); then
+    err "SECURITY: an agent binary does not match the signed BINARIES.sha256 (modified or missing). Do NOT continue installation."
+    exit 1
+  fi
+  log "Agent binaries match the signed manifest."
 }
 
 # ── Docker CE installation (Ubuntu/Debian) ─────────────────────────────────────
@@ -1132,6 +1201,11 @@ main() {
     case "${_args[$i]}" in
       --offline)   OFFLINE=true ;;
       --no-wizard) NO_WIZARD=true ;;
+      --gpg-pub=*) GPG_PUB_FLAG="${_args[$i]#--gpg-pub=}" ;;
+      --gpg-pub)
+        i=$(( i + 1 ))
+        GPG_PUB_FLAG="${_args[$i]:-}"
+        ;;
       --config)
         i=$(( i + 1 ))
         CONFIG_FILE="${_args[$i]:-}"
