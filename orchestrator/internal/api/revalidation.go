@@ -100,6 +100,22 @@ func (h *Handler) dispatchRevalidation(ctx context.Context, c revalidationCandid
 	agentOS := classifyAgentOS(agentOSVersion)
 
 	sc := h.resolveRevalidationScenario(c.lastScenarioID, c.techniqueID, agentOS)
+	var ev scenario.ExecutableVersion
+	if sc != nil {
+		// Resolve the pinned version once and judge OS compatibility against
+		// the bytes that will run, not the on-disk file that selected it.
+		var gerr error
+		ev, gerr = h.engine.ResolveExecutable(ctx, sc.ID)
+		if gerr != nil {
+			h.revalidationContentNotExecutable(ctx, c, sc.ID,
+				"content not executable: "+strings.TrimPrefix(gerr.Error(), "content not executable: "))
+			return
+		}
+		sc = ev.Scenario
+		if !revalOSCompatible(sc.SupportedOS, agentOS) {
+			sc = nil
+		}
+	}
 	if sc == nil {
 		log.Printf("[reval] no scenario found for technique %s (finding %s) — skipping auto-dispatch",
 			c.techniqueID, c.findingID)
@@ -122,9 +138,14 @@ func (h *Handler) dispatchRevalidation(ctx context.Context, c revalidationCandid
 		Techniques:  []string{c.techniqueID},
 		Reason:      "Auto-revalidation — ITSM ticket resolved for " + c.techniqueID,
 		InitiatedBy: &sysUser,
+		Resolved:    &ev,
 	})
 	if err != nil {
 		log.Printf("[reval] dispatch failed (finding %s technique %s): %v", c.findingID, c.techniqueID, err)
+		return
+	}
+	if strings.HasPrefix(skip, "content not executable: ") {
+		h.revalidationContentNotExecutable(ctx, c, sc.ID, skip)
 		return
 	}
 	if skip != "" {
@@ -160,6 +181,31 @@ func (h *Handler) dispatchRevalidation(ctx context.Context, c revalidationCandid
 			"agentId":       c.agentID,
 			"status":        "dispatched",
 			"message":       "Auto-revalidating " + c.techniqueID + " — ITSM ticket was resolved",
+		},
+	})
+}
+
+// revalidationContentNotExecutable handles a Content Registry gate denial.
+// Unlike agent busy/offline, a denial is terminal (spec §10): retrying every
+// tick can never succeed until an operator approves the content. The ticket
+// has no failed state or error column, so revalidation_dispatched_at stays
+// set (set before dispatch above) to stop the loop; the denial is surfaced
+// to browsers and recorded in the audit log instead of only a log line.
+func (h *Handler) revalidationContentNotExecutable(ctx context.Context, c revalidationCandidate, scenarioID, reason string) {
+	log.Printf("[reval] %s (finding %s technique %s) — not retrying", reason, c.findingID, c.techniqueID)
+	h.AuditLogSystem(ctx, "revalidation.content_not_executable", c.findingID, map[string]any{
+		"findingId": c.findingID, "techniqueId": c.techniqueID, "agentId": c.agentID,
+		"scenarioId": scenarioID, "error": reason,
+	}, "error")
+	h.hub.BroadcastBrowsers(models.WSMessage{
+		Type:    models.MsgRevalidationStarted,
+		AgentID: c.agentID,
+		Data: map[string]any{
+			"findingId":   c.findingID,
+			"techniqueId": c.techniqueID,
+			"agentId":     c.agentID,
+			"status":      "error",
+			"message":     "Auto-revalidation of " + c.techniqueID + " blocked: " + reason,
 		},
 	})
 }

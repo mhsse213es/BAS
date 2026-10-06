@@ -1021,6 +1021,10 @@ export function _onRevalidationStarted(msg) {
     loadRuns();
   } else if (status === 'no_scenario') {
     showToast('Auto-revalidation: no scenario for ' + tech + ' — re-validate manually via Remediations.', 'warn');
+  } else if (status === 'error') {
+    // Content Registry gate denial (revalidation.content_not_executable): the
+    // scenario is not approved, so this is terminal until an operator approves it.
+    showToast(d.message || ('Auto-revalidation of ' + tech + ' was blocked.'), 'err');
   }
 }
 
@@ -1747,10 +1751,12 @@ export function loadScenarios() {
         intelActor:         s.intelActor          || '',
         intelConfidence:    s.intelConfidence      || '',
         artTechniques:      s.artTechniques       || [],
-        supportedOs:        s.supportedOs         || []
+        supportedOs:        s.supportedOs         || [],
+        registry:           s.registry            || null
       };
     });
     renderScenarios();
+    loadRegistryMigrationBanner();
     // renderScheduledAssessmentsList() looks up each schedule's human name
     // from this scenarios array client-side, falling back to the raw
     // scenario ID when not found. loadScenarios() and
@@ -1760,6 +1766,134 @@ export function loadScenarios() {
     // re-renders it. Re-render now that scenarios is actually populated.
     if (SCHED.schedules.length) renderScheduledAssessmentsList();
   }).catch(function(e) { showToast(e.message, 'err'); });
+}
+
+// TCF Phase 1: registry lifecycle/trust badge. Only server-provided enum
+// strings and numbers, all escaped via x().
+function registryBadge(s) {
+  var r = s.registry;
+  if (!r) return '<span class="tag" title="Not registered — cannot run">unregistered</span> ';
+  if (r.executableVersion) {
+    var label = r.executableTrust === 'VENDOR_SIGNED' ? 'signed v' : (r.executableTrust === 'LOCAL_TRUSTED' ? 'approved v' : 'dev-unsigned v');
+    var pending = r.latestVersion > r.executableVersion
+      ? ' <span class="tag" title="Newer version awaiting approval">v' + x(String(r.latestVersion)) + ' ' + x(r.latestLifecycle) + '</span>'
+      : '';
+    return '<span class="tag tag-approved">' + label + x(String(r.executableVersion)) + '</span>' + pending + ' ';
+  }
+  return '<span class="tag tag-pending" title="Not executable until approved">v' +
+    x(String(r.latestVersion)) + ' ' + x(r.latestLifecycle) + '</span> ';
+}
+
+// Approvable: the latest version is a DRAFT/VALIDATED intel or custom one and
+// either nothing is executable yet or it is newer than the executable one
+// (e.g. an approved intel id's regenerated DRAFT). role defaults to the
+// signed-in role (parameter for tests).
+export function canApproveForLocal(s, role) {
+  if (role === undefined) role = ROLE;
+  var r = s.registry;
+  if (role !== 'admin' || !r || !(s.source === 'intel' || s.source === 'custom')) return false;
+  if (r.latestLifecycle !== 'DRAFT' && r.latestLifecycle !== 'VALIDATED') return false;
+  return !r.executableVersion || r.latestVersion > r.executableVersion;
+}
+
+function approveButton(s) {
+  return '<button class="btn btn-outline btn-sm"' + on('click', 'approveForLocalUse', s.id, s.registry.latestVersionId) + '>&#10003; Approve</button> ';
+}
+
+// Approve-for-local-use is a deliberate, in-page confirmation (no
+// window.prompt/confirm): it loads the exact version first and shows what it
+// will run -- step count, ART techniques, safety verdicts, a link to the
+// stored bytes -- and stays disabled until the operator ticks the review box
+// and gives a reason. All server text goes through x().
+var _approveTarget = null; // { id, versionId } of the loaded version
+var _approveSeq = 0;        // request token: only the latest load may render
+
+export function approveForLocalUse(id, versionId) {
+  var body = document.getElementById('approve-local-body');
+  var overlay = document.getElementById('approve-local-overlay');
+  if (!body || !overlay) return;
+  _approveTarget = null;
+  var tok = ++_approveSeq;
+  document.getElementById('approve-local-ack').checked = false;
+  document.getElementById('approve-local-reason').value = '';
+  document.getElementById('approve-local-submit-btn').disabled = true;
+  body.innerHTML = '<p class="sub2">Loading version&hellip;</p>';
+  overlay.classList.add('open');
+  apicall('/api/content-registry/versions/' + encodeURIComponent(versionId)).then(function(d) {
+    if (tok !== _approveSeq) return; // a later click (or close) superseded this load
+    if (!d || d.error) throw new Error((d && d.error) || 'version not found');
+    if (d.id !== versionId || d.contentId !== id) throw new Error('version does not match this scenario');
+    body.innerHTML = approveSummaryHTML(d);
+    _approveTarget = { id: id, versionId: versionId };
+    approveLocalAckChanged();
+  }).catch(function(e) {
+    if (tok !== _approveSeq) return;
+    body.innerHTML = '<p class="u-danger">Could not load the version to review: ' + x(e.message) + '</p>';
+  });
+}
+
+function approveSummaryHTML(d) {
+  var steps = (d.stepCount === null || d.stepCount === undefined) ? 'unreadable artifact' : String(d.stepCount);
+  var techs = d.artTechniques || [];
+  var techList = techs.slice(0, 20).join(', ') + (techs.length > 20 ? ', … (+' + (techs.length - 20) + ')' : '');
+  var verdicts = Array.isArray(d.safetyVerdicts) ? d.safetyVerdicts : [];
+  var safety = verdicts.length
+    ? verdicts.map(function(v) { return x(v.classifier) + ' ' + x(v.classifierVersion) + ': <strong>' + x(v.verdict) + '</strong>'; }).join('<br>')
+    : 'no safety verdict recorded';
+  var href = '/api/content-registry/versions/' + encodeURIComponent(d.id) + '/artifact';
+  return '<table class="approve-kv"><tbody>' +
+    '<tr><th>Scenario</th><td><code>' + x(d.contentId) + '</code> v' + x(String(d.version)) + '</td></tr>' +
+    '<tr><th>State</th><td>' + x(d.lifecycle) + ' / ' + x(d.trust) + ' (' + x(d.intakeSource) + ')</td></tr>' +
+    '<tr><th>Custom steps</th><td>' + x(steps) + '</td></tr>' +
+    '<tr><th>ART techniques</th><td>' + x(String(techs.length)) + (techs.length ? ' &mdash; ' + x(techList) : '') + '</td></tr>' +
+    '<tr><th>Safety</th><td>' + safety + '</td></tr>' +
+    '<tr><th>SHA-256</th><td><code>' + x(d.artifactSha256) + '</code></td></tr>' +
+    '<tr><th>Artifact</th><td><a href="' + x(href) + '" download>Download the exact bytes to review</a></td></tr>' +
+    '</tbody></table>';
+}
+
+export function approveLocalAckChanged() {
+  var ok = !!_approveTarget && document.getElementById('approve-local-ack').checked &&
+    document.getElementById('approve-local-reason').value.trim() !== '';
+  document.getElementById('approve-local-submit-btn').disabled = !ok;
+}
+
+export function closeApproveLocalModal() {
+  _approveTarget = null;
+  _approveSeq++; // drop any in-flight load
+  document.getElementById('approve-local-overlay').classList.remove('open');
+}
+
+export function submitApproveLocal() {
+  var t = _approveTarget;
+  var reason = document.getElementById('approve-local-reason').value.trim();
+  if (!t || !reason || !document.getElementById('approve-local-ack').checked) return;
+  var btn = document.getElementById('approve-local-submit-btn');
+  btn.disabled = true;
+  apicall('/api/content-registry/versions/' + encodeURIComponent(t.versionId) + '/transition', {
+    method: 'POST',
+    body: JSON.stringify({ to: 'PUBLISHED_LOCAL', reason: reason })
+  }).then(function(d) {
+    if (d && d.error) throw new Error(d.error);
+    closeApproveLocalModal();
+    showToast('Approved ' + t.id + ' for local use', 'ok');
+    loadScenarios();
+  }).catch(function(e) { btn.disabled = false; showToast('Approval failed: ' + e.message, 'err'); });
+}
+
+// Admin-only banner: schedules whose scenario is no longer executable after the
+// registry migration. Text via textContent only (scenario ids are data).
+function loadRegistryMigrationBanner() {
+  if (ROLE !== 'admin') return;
+  apicall('/api/content-registry/migration-report').then(function(m) {
+    var host = document.getElementById('registryMigrationBanner');
+    if (!host) return;
+    var b = m && m.blockedSchedules;
+    if (!b || !b.length) { host.hidden = true; return; }
+    host.textContent = b.length + ' scheduled assessment(s) reference threat-intel scenarios that now need approval before they can run (' +
+      b.map(function(r) { return r.scenarioId; }).join(', ') + '). Approve them on their scenario cards.';
+    host.hidden = false;
+  }).catch(function() {});
 }
 
 var SCENARIO_CATEGORIES = {
@@ -2165,12 +2299,13 @@ function scenarioDetailHTML(s) {
         // scenarios cannot be deleted by anyone, through any path (the
         // backend enforces this too; see Engine.Delete's intel-source guard).
         var footerMeta = techCount + ' techniques';
-        return '<div>' + intelBadge + '</div>' +
+        return '<div>' + registryBadge(s) + intelBadge + '</div>' +
           '<h3>' + x(s.name) + '</h3>' +
           descHtml(s.description, s.id, {limit:120, style:'font-size:0.78rem;color:var(--muted)'}) +
           '<div class="tags">' + tags + '</div>' +
           '<div class="card-footer">' +
             '<div class="card-meta">' + footerMeta + '</div>' +
+            (canApproveForLocal(s) ? approveButton(s) : '') +
             '<button class="btn btn-outline-green btn-sm"' + on('click', 'openModalForScenario', s.id) + '>&#9654; Run</button>' +
           '</div>';
       }
@@ -2179,6 +2314,7 @@ function scenarioDetailHTML(s) {
         ? '<span class="tag" style="background:rgba(47,216,195,0.15);color:#5cead8;border-color:rgba(47,216,195,0.4)">custom</span> '
         : '';
       var editBtns = '';
+      if (canApproveForLocal(s)) editBtns += approveButton(s);
       if (canEdit) {
         editBtns += '<button class="btn btn-outline btn-sm"' + on('click', 'cloneScenario', s.id) + ' title="Clone into an editable custom scenario">&#9112; Clone</button> ';
         if (s.source === 'custom') {
@@ -2260,7 +2396,7 @@ function scenarioDetailHTML(s) {
           'title="Choose which ' + fwNoun + ' to run">&#9881; Customize</button> '
         : '';
 
-      return '<div>' + customBadge + '</div>' +
+      return '<div>' + registryBadge(s) + customBadge + '</div>' +
         '<h3>' + x(s.name) + '</h3>' +
         descHtml(s.description, s.id, {limit:140}) +
         '<div class="tags">' + osBadge + tags + '</div>' +

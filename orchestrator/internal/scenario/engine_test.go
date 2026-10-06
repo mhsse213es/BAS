@@ -1,6 +1,7 @@
 package scenario
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -24,7 +25,7 @@ func TestSaveAndDelete(t *testing.T) {
 		},
 	}
 
-	if err := e.Save(sc); err != nil {
+	if err := e.SaveAs(context.Background(), sc, "user:test"); err != nil {
 		t.Fatalf("save: %v", err)
 	}
 	if sc.Source != "custom" {
@@ -54,7 +55,7 @@ func TestSaveAndDelete(t *testing.T) {
 	}
 
 	// Delete should remove it from memory and disk.
-	if err := e2.Delete("my-custom-chain"); err != nil {
+	if err := e2.DeleteAs(context.Background(), "my-custom-chain", "user:test"); err != nil {
 		t.Fatalf("delete: %v", err)
 	}
 	if _, ok := e2.Get("my-custom-chain"); ok {
@@ -140,7 +141,7 @@ func TestSave_RoundTripFidelity(t *testing.T) {
 		SupportedOS: []string{"windows", "linux"},
 	}
 
-	if err := e.Save(sc); err != nil {
+	if err := e.SaveAs(context.Background(), sc, "user:test"); err != nil {
 		t.Fatalf("save: %v", err)
 	}
 
@@ -198,7 +199,7 @@ func TestLoad_SourceClassification(t *testing.T) {
 	}
 
 	// custom/ — via the normal Save path.
-	if err := e.Save(&Scenario{ID: "custom-src-sc", Name: "Custom", LocalCheck: true}); err != nil {
+	if err := e.SaveAs(context.Background(), &Scenario{ID: "custom-src-sc", Name: "Custom", LocalCheck: true}, "user:test"); err != nil {
 		t.Fatalf("save custom: %v", err)
 	}
 
@@ -275,7 +276,7 @@ func TestDelete_CustomRescan(t *testing.T) {
 		t.Fatalf("fixture not loaded")
 	}
 
-	if err := e.Delete("custom-delete-sc"); err != nil {
+	if err := e.DeleteAs(context.Background(), "custom-delete-sc", "user:test"); err != nil {
 		t.Fatalf("delete: %v", err)
 	}
 
@@ -299,7 +300,7 @@ func TestLoad_SkipsMalformedFileWithoutBlockingOthers(t *testing.T) {
 	if err := e.Load(); err != nil {
 		t.Fatalf("load empty: %v", err)
 	}
-	if err := e.Save(&Scenario{ID: "valid-alongside-sc", Name: "Valid", LocalCheck: true}); err != nil {
+	if err := e.SaveAs(context.Background(), &Scenario{ID: "valid-alongside-sc", Name: "Valid", LocalCheck: true}, "user:test"); err != nil {
 		t.Fatalf("save valid fixture: %v", err)
 	}
 
@@ -337,7 +338,7 @@ func TestSave_RefusesToOverwriteNonCustomDirectly(t *testing.T) {
 	}
 	e.scenarios["fake-intel-sc"] = &Scenario{ID: "fake-intel-sc", Name: "Fake Intel", LocalCheck: true, Source: "intel"}
 
-	err := e.Save(&Scenario{ID: "fake-intel-sc", Name: "Overwrite Attempt", LocalCheck: true})
+	err := e.SaveAs(context.Background(), &Scenario{ID: "fake-intel-sc", Name: "Overwrite Attempt", LocalCheck: true}, "user:test")
 	if err == nil {
 		t.Fatalf("expected error overwriting a non-custom scenario directly via Save")
 	}
@@ -358,12 +359,12 @@ func TestDelete_NotFoundAndBuiltinGuarded(t *testing.T) {
 		t.Fatalf("load empty: %v", err)
 	}
 
-	if err := e.Delete("does-not-exist"); err == nil {
+	if err := e.DeleteAs(context.Background(), "does-not-exist", "user:test"); err == nil {
 		t.Fatalf("expected error deleting an unknown id")
 	}
 
 	e.scenarios["fake-builtin-sc"] = &Scenario{ID: "fake-builtin-sc", Name: "Fake Builtin", Source: "builtin"}
-	if err := e.Delete("fake-builtin-sc"); err == nil {
+	if err := e.DeleteAs(context.Background(), "fake-builtin-sc", "user:test"); err == nil {
 		t.Fatalf("expected error deleting a builtin-sourced scenario")
 	}
 	if _, ok := e.Get("fake-builtin-sc"); !ok {
@@ -374,7 +375,7 @@ func TestDelete_NotFoundAndBuiltinGuarded(t *testing.T) {
 	// any caller, ever -- enforced here at the engine level (not just the
 	// now-removed API handler) so no future code path can reopen it.
 	e.scenarios["fake-intel-sc"] = &Scenario{ID: "fake-intel-sc", Name: "Fake Intel", Source: "intel"}
-	if err := e.Delete("fake-intel-sc"); err == nil {
+	if err := e.DeleteAs(context.Background(), "fake-intel-sc", "user:test"); err == nil {
 		t.Fatalf("expected error deleting an intel-sourced scenario")
 	}
 	if _, ok := e.Get("fake-intel-sc"); !ok {

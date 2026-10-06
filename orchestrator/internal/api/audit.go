@@ -23,6 +23,14 @@ type AuditEntry struct {
 	Outcome   string          `json:"outcome"`
 }
 
+// actorFor renders the registry actor for the authenticated caller.
+func actorFor(r *http.Request) string {
+	if c, ok := auth.ClaimsFrom(r.Context()); ok && c != nil && c.UserID != "" {
+		return "user:" + c.UserID
+	}
+	return ""
+}
+
 // auditLogAs records a user action with an explicit actorID. Use this when the
 // actor is known but no JWT context exists yet (e.g. the Login handler).
 func (h *Handler) auditLogAs(r *http.Request, actorID, action, resource string, detail map[string]any, outcome string) {

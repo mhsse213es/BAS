@@ -38,7 +38,7 @@ func registerFixtureScenario(t *testing.T, eng *scenario.Engine, checkID string)
 			TimeoutSec:  10,
 		}},
 	}
-	if err := eng.Save(sc); err != nil {
+	if err := eng.SaveAs(context.Background(), sc, "user:test"); err != nil {
 		t.Fatalf("register fixture scenario: %v", err)
 	}
 }

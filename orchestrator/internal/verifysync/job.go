@@ -14,6 +14,7 @@ package verifysync
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -30,7 +31,14 @@ type Job struct {
 	store     *verification.Store
 	scenarios reporting.ScenarioResolver
 	batchSize int
+	// runContent, when set, resolves each run against its pinned content
+	// version instead of scenarios (TCF Phase 1 §7).
+	runContent reporting.RunContentFunc
 }
+
+// WithRunContent attaches the run-scoped content view. Must be called before
+// the Job's Tick is scheduled. Returns the job for chaining.
+func (j *Job) WithRunContent(f reporting.RunContentFunc) *Job { j.runContent = f; return j }
 
 // NewJob builds a Job. batchSize defaults to 50 (bounds each Tick's DB work
 // regardless of how many runs are pending).
@@ -78,6 +86,24 @@ func (j *Job) Tick(ctx context.Context) {
 }
 
 func (j *Job) processRun(ctx context.Context, runID, scenarioID string, resultsRaw []byte) error {
+	resolver := j.scenarios
+	if j.runContent != nil {
+		info := j.runContent(ctx, runID)
+		if info.Status == "unreadable" { // contentregistry.RunUnreadable
+			if info.Transient {
+				// Not marked processed: retried next tick instead of
+				// silently losing this run's automatic verdicts.
+				return errors.New("run content transiently unreadable")
+			}
+			// Permanently bad content: mark processed so it can't starve
+			// the batch; there is nothing to verify against.
+			log.Printf("[verifysync] run %s content permanently unreadable; skipping verification", runID)
+			return nil
+		}
+		if info.Resolver != nil {
+			resolver = info.Resolver
+		}
+	}
 	var results []models.SimulationResult
 	if len(resultsRaw) > 0 {
 		if err := json.Unmarshal(resultsRaw, &results); err != nil {
@@ -87,7 +113,7 @@ func (j *Job) processRun(ctx context.Context, runID, scenarioID string, resultsR
 	if err := j.annotateSinkReceipts(ctx, runID, results); err != nil {
 		return err
 	}
-	specs := reporting.ResolveStepDetectionSpecs(j.scenarios, scenarioID)
+	specs := reporting.ResolveStepDetectionSpecs(resolver, scenarioID)
 	if len(specs) == 0 {
 		return nil // nothing declared any expectation
 	}

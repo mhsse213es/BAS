@@ -1,0 +1,8 @@
+{
+ "attack_version": "16.1",
+ "domain": "enterprise-attack",
+ "collection_name": "Enterprise ATT&CK",
+ "collection_id": "x-mitre-collection--1f5f1533-f617-4ca8-9ab4-6a02367fa019",
+ "collection_modified": "2024-11-12T14:00:00.188Z",
+ "source_bundle_sha256": "8423d8dac3fc2feb825bb07d26e5f5d905e08a88f6fe4652cc20834cbe982813"
+}

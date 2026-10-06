@@ -1,6 +1,8 @@
 package scenario
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"io/fs"
 	"log"
@@ -9,6 +11,8 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
+	"sync/atomic"
 
 	"gopkg.in/yaml.v3"
 
@@ -26,29 +30,87 @@ const profilesSubdir = "detection-profiles"
 
 // Engine loads and manages scenario definitions from YAML files.
 type Engine struct {
-	dir       string
+	dir string
+	// mu guards scenarios, profiles and reservedBuiltin. Load builds fresh
+	// maps off-lock and swaps them in; readers take RLock. Never held across
+	// registry, DB or filesystem I/O.
+	mu        sync.RWMutex
 	scenarios map[string]*Scenario
 	profiles  map[string]*DetectionProfile
+	// reservedBuiltin holds the id of every builtin-source file the last
+	// Load saw (verified, refused, or unparseable with a readable id). No
+	// LOCAL save or intake may claim one: a refused builtin has no registry
+	// row, so a LOCAL claim would lock the vendor builtin out forever.
+	reservedBuiltin map[string]struct{}
+	// registry is the TCF Content Registry. nil => nothing is executable
+	// (ResolveExecutable fails closed); the disk map still serves authoring.
+	registry ContentRegistry
+	verifier integrity.Verifier
+	// intakeFailures counts registry Intake infrastructure errors (err != nil)
+	// in the last Load. Policy refusals are not counted.
+	intakeFailures atomic.Int32
 }
 
 // NewEngine creates an Engine that reads scenarios from dir.
 func NewEngine(dir string) *Engine {
 	return &Engine{
-		dir:       dir,
-		scenarios: make(map[string]*Scenario),
-		profiles:  make(map[string]*DetectionProfile),
+		dir:             dir,
+		scenarios:       make(map[string]*Scenario),
+		profiles:        make(map[string]*DetectionProfile),
+		reservedBuiltin: make(map[string]struct{}),
+		verifier:        integrity.CompiledVerifier{},
 	}
 }
 
-// Load reads all *.yaml files in the scenarios directory.
+// LastLoadIntakeFailures is the number of files the last Load could not hand
+// to the registry because Intake returned an error (not a policy refusal).
+func (e *Engine) LastLoadIntakeFailures() int { return int(e.intakeFailures.Load()) }
+
+// AttachRegistry wires the TCF Content Registry into the engine.
+func (e *Engine) AttachRegistry(r ContentRegistry) { e.registry = r }
+
+// Registry returns the attached content registry, or nil.
+func (e *Engine) Registry() ContentRegistry { return e.registry }
+
+// SetVerifier overrides the builtin-signature verifier (tests; rotated keys).
+func (e *Engine) SetVerifier(v integrity.Verifier) { e.verifier = v }
+
+// ResolveExecutable is the only way callers may obtain a scenario to run.
+func (e *Engine) ResolveExecutable(ctx context.Context, id string) (ExecutableVersion, error) {
+	if e.registry == nil {
+		return ExecutableVersion{}, ErrNoRegistry
+	}
+	return e.registry.ResolveExecutable(ctx, id)
+}
+
+type loadedFile struct {
+	path   string
+	source string
+	bytes  []byte
+	sc     *Scenario
+}
+
+var sourceRank = map[string]int{"builtin": 0, "custom": 1, "intel": 2}
+
+// Load reads all *.yaml files in the scenarios directory. With a registry
+// attached, every file is handed to intake in builtin -> custom -> intel
+// order (so first registration can never let a custom file claim a builtin
+// identity); a refused or errored file is left out of the map. A duplicate
+// id always keeps the first (higher-precedence) file in the map.
 // Individual file errors are logged and skipped — a bad file never blocks the rest.
 // Safe to call multiple times — reloads on each call.
 func (e *Engine) Load() error {
-	e.scenarios = make(map[string]*Scenario)
+	e.intakeFailures.Store(0)
+	// Everything is built in locals and swapped in at the end under e.mu, so
+	// concurrent readers see either the old or the new set, never a map
+	// being written (Load does registry round-trips and RSA verification).
+	scenarios := make(map[string]*Scenario)
+	reserved := make(map[string]struct{})
 	// Load Detection Validation profiles first so scenario resolution can
 	// reference them. Profile errors are logged, never fatal.
-	e.loadProfiles()
-	return filepath.WalkDir(e.dir, func(path string, d fs.DirEntry, err error) error {
+	profiles := e.loadProfiles()
+	var files []loadedFile
+	err := filepath.WalkDir(e.dir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err // directory-level error — abort
 		}
@@ -68,31 +130,100 @@ func (e *Engine) Load() error {
 			log.Printf("[!] scenario: read %s: %v — skipping", path, err)
 			return nil
 		}
+		source := e.sourceForPath(path)
 		var s Scenario
 		if err := yaml.Unmarshal(b, &s); err != nil {
 			log.Printf("[!] scenario: parse %s: %v — skipping", path, err)
+			if source == "builtin" {
+				// Still reserve the id if it is readable on its own.
+				var idOnly struct {
+					ID string `yaml:"id"`
+				}
+				if yaml.Unmarshal(b, &idOnly) == nil && idOnly.ID != "" {
+					reserved[idOnly.ID] = struct{}{}
+				}
+			}
 			return nil
 		}
 		if s.ID == "" {
 			log.Printf("[!] scenario: %s missing required field 'id' — skipping", path)
 			return nil
 		}
-		s.Source = e.sourceForPath(path)
-
-		// Signature verification: only builtin (vendor-shipped) scenarios must be
-		// signed. Custom and intel scenarios are operator/connector-created and
-		// intentionally have no signature — they are always accepted.
-		if s.Source == "builtin" {
-			if err := integrity.VerifyScenarioFile(path); err != nil {
-				log.Printf("[!] TAMPER ALERT: builtin scenario %s failed signature verification: %v — refusing to load", path, err)
-				return nil // skip — do not add tampered scenario to the map
-			}
+		s.Source = source
+		if source == "builtin" {
+			reserved[s.ID] = struct{}{}
 		}
-
-		e.scenarios[s.ID] = &s
+		files = append(files, loadedFile{path: path, source: s.Source, bytes: b, sc: &s})
 		return nil
 	})
+	if err != nil {
+		return err
+	}
+	sort.SliceStable(files, func(i, j int) bool { return sourceRank[files[i].source] < sourceRank[files[j].source] })
+
+	ctx := context.Background()
+	for _, f := range files {
+		// Signature verification: only builtin (vendor-shipped) scenarios must be
+		// signed. Custom and intel scenarios are operator/connector-created and
+		// intentionally have no signature.
+		var sig []byte
+		var verified bool
+		if f.source == "builtin" {
+			s, ok, verr := integrity.ReadBuiltinSignature(e.verifier, f.path, f.bytes)
+			if verr != nil {
+				log.Printf("[!] TAMPER ALERT: builtin scenario %s failed signature verification: %v — refusing to load", f.path, verr)
+				if e.registry != nil {
+					e.registry.NoteRefusal(f.path, f.sc.ID, f.source, verr.Error())
+				}
+				continue // do not add tampered scenario to the map
+			}
+			sig, verified = s, ok
+		} else if _, isReserved := reserved[f.sc.ID]; isReserved {
+			// A loaded builtin keeps the slot and the registry refuses (and
+			// audits) the cross-origin claim as before. A builtin that was
+			// NOT loaded has no registry row, so the claim must stop here or
+			// it would create a permanent LOCAL identity for a vendor id.
+			if prev, ok := scenarios[f.sc.ID]; !ok || prev.Source != "builtin" {
+				log.Printf("[!] scenario: %s claims id %s %s — refusing", f.path, f.sc.ID, reservedIDMsg)
+				if e.registry != nil {
+					e.registry.NoteRefusal(f.path, f.sc.ID, f.source, reservedIDMsg)
+				}
+				continue
+			}
+		}
+		if e.registry != nil {
+			d, ierr := e.registry.Intake(ctx, IntakeFile{Path: f.path, Source: f.source, Artifact: f.bytes,
+				Signature: sig, SignatureVerified: verified})
+			if ierr != nil {
+				e.intakeFailures.Add(1)
+				log.Printf("[!] content registry intake %s: %v — not loaded", f.path, ierr)
+				continue
+			}
+			if !d.Accepted {
+				log.Printf("[!] content registry refused %s: %s", f.path, d.Reason)
+				continue
+			}
+		}
+		// First wins, with or without a registry: the higher-precedence file
+		// already in the map keeps the slot even if the registry accepted
+		// the later file (e.g. custom vs intel, both LOCAL).
+		if _, dup := scenarios[f.sc.ID]; dup {
+			log.Printf("[!] scenario: duplicate id %s at %s — keeping the first (higher-precedence) file", f.sc.ID, f.path)
+			if e.registry != nil {
+				e.registry.NoteRefusal(f.path, f.sc.ID, f.source, "duplicate id; higher-precedence file wins")
+			}
+			continue
+		}
+		scenarios[f.sc.ID] = f.sc
+	}
+	e.mu.Lock()
+	e.scenarios, e.profiles, e.reservedBuiltin = scenarios, profiles, reserved
+	e.mu.Unlock()
+	return nil
 }
+
+// reservedIDMsg is the refusal text for a LOCAL claim on a builtin id.
+const reservedIDMsg = "id reserved by a built-in scenario"
 
 // sourceForPath classifies a scenario file by which sub-folder it lives in,
 // relative to the scenarios root: "custom", "intel", or "builtin".
@@ -113,6 +244,8 @@ func (e *Engine) sourceForPath(path string) string {
 
 // List returns all loaded scenarios sorted by ID.
 func (e *Engine) List() []*Scenario {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
 	out := make([]*Scenario, 0, len(e.scenarios))
 	for _, s := range e.scenarios {
 		out = append(out, s)
@@ -123,12 +256,16 @@ func (e *Engine) List() []*Scenario {
 
 // Get returns a scenario by ID.
 func (e *Engine) Get(id string) (*Scenario, bool) {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
 	s, ok := e.scenarios[id]
 	return s, ok
 }
 
 // Count returns the number of loaded scenarios.
 func (e *Engine) Count() int {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
 	return len(e.scenarios)
 }
 
@@ -170,16 +307,27 @@ func (s *Scenario) Validate() error {
 	return nil
 }
 
-// Save validates a scenario and writes it as YAML into scenarios/custom/<id>.yaml,
-// then updates the in-memory map. It refuses to overwrite a builtin or intel file
-// (those live outside custom/) so shipped content can never be clobbered.
-func (e *Engine) Save(s *Scenario) error {
+// SaveAs validates a scenario and writes it as YAML into
+// scenarios/custom/<id>.yaml, then updates the in-memory map. It refuses to
+// overwrite a builtin or intel file (those live outside custom/) so shipped
+// content can never be clobbered. With a registry attached it registers
+// exactly the written bytes as an operator-approved PUBLISHED_LOCAL version
+// (spec §5.1 "UI save path"); if registration fails the previous file is
+// restored and the map is unchanged.
+func (e *Engine) SaveAs(ctx context.Context, s *Scenario, actor string) error {
 	if err := s.Validate(); err != nil {
 		return err
 	}
 	// If a scenario with this ID already exists, it must be a custom one.
-	if existing, ok := e.scenarios[s.ID]; ok && existing.Source != "custom" {
+	e.mu.RLock()
+	existing, ok := e.scenarios[s.ID]
+	_, isReserved := e.reservedBuiltin[s.ID]
+	e.mu.RUnlock()
+	if ok && existing.Source != "custom" {
 		return fmt.Errorf("scenario %q is %s and cannot be overwritten — clone it to a new ID instead", s.ID, existing.Source)
+	}
+	if isReserved {
+		return fmt.Errorf("scenario %q: %s — clone it to a new ID instead", s.ID, reservedIDMsg)
 	}
 
 	customDir := filepath.Join(e.dir, "custom")
@@ -187,29 +335,69 @@ func (e *Engine) Save(s *Scenario) error {
 		return fmt.Errorf("create custom dir: %w", err)
 	}
 
+	origSource := s.Source
 	s.Source = "" // never persist the runtime-only field
 	b, err := yaml.Marshal(s)
 	if err != nil {
+		s.Source = origSource
 		return fmt.Errorf("marshal scenario: %w", err)
 	}
 
 	dest := filepath.Join(customDir, s.ID+".yaml")
+	// With a registry, a failed registration must restore the previous
+	// file, so read it first. Only "does not exist" means there is nothing
+	// to restore; any other read failure refuses the save before writing.
+	var prev []byte
+	hadPrev := false
+	if e.registry != nil {
+		p, rerr := os.ReadFile(dest)
+		switch {
+		case rerr == nil:
+			prev, hadPrev = p, true
+		case !errors.Is(rerr, fs.ErrNotExist):
+			s.Source = origSource
+			return fmt.Errorf("read existing %s: %w", dest, rerr)
+		}
+	}
 	if err := os.WriteFile(dest, b, 0o644); err != nil {
+		s.Source = origSource
 		return fmt.Errorf("write %s: %w", dest, err)
+	}
+	if e.registry != nil {
+		if err := e.registry.RegisterLocalApproved(ctx, s.ID, b, actor); err != nil {
+			s.Source = origSource
+			var restoreErr error
+			if hadPrev {
+				restoreErr = os.WriteFile(dest, prev, 0o644)
+			} else {
+				restoreErr = os.Remove(dest)
+			}
+			if restoreErr != nil {
+				log.Printf("[!] scenario: restore %s after content registry failure: %v", dest, restoreErr)
+				restoreErr = fmt.Errorf("restore %s: %w", dest, restoreErr)
+			}
+			return errors.Join(fmt.Errorf("content registry: %w", err), restoreErr)
+		}
 	}
 
 	s.Source = "custom"
+	e.mu.Lock()
 	e.scenarios[s.ID] = s
+	e.mu.Unlock()
 	return nil
 }
 
-// Delete removes a custom scenario from memory and deletes its YAML file.
+// DeleteAs removes a custom scenario from memory and deletes its YAML file.
 // Builtin (shipped) and intel (threat-intel-generated) scenarios cannot be
 // deleted, by anyone, through any caller -- enforced here rather than only
 // at the API layer so no future handler can accidentally reopen the path.
+// With a registry attached, the scenario's executable versions are retired
+// before the file is touched; a failed retirement leaves everything in place.
 // Returns an error if the file cannot be found or removed.
-func (e *Engine) Delete(id string) error {
+func (e *Engine) DeleteAs(ctx context.Context, id, actor string) error {
+	e.mu.RLock()
 	sc, ok := e.scenarios[id]
+	e.mu.RUnlock()
 	if !ok {
 		return fmt.Errorf("scenario %q not found", id)
 	}
@@ -218,6 +406,11 @@ func (e *Engine) Delete(id string) error {
 	}
 	if sc.Source == "intel" {
 		return fmt.Errorf("scenario %q is auto-generated from threat intel and cannot be deleted", id)
+	}
+	if e.registry != nil {
+		if err := e.registry.RetireExecutable(ctx, id, actor, "scenario deleted by operator"); err != nil {
+			return fmt.Errorf("content registry: retire %s: %w", id, err)
+		}
 	}
 
 	// Find the file on disk by re-scanning for the matching ID
@@ -243,6 +436,10 @@ func (e *Engine) Delete(id string) error {
 	if err := os.Remove(found); err != nil {
 		return fmt.Errorf("remove %s: %w", found, err)
 	}
+	e.mu.Lock()
 	delete(e.scenarios, id)
+	e.mu.Unlock()
 	return nil
 }
+
+func yamlUnmarshal(b []byte, v any) error { return yaml.Unmarshal(b, v) }

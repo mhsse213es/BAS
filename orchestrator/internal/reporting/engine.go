@@ -70,7 +70,33 @@ type Engine struct {
 	// section stays inactive -- matches the same "nil/empty means feature off"
 	// convention as the fields above.
 	threatIntelProvider string
+	// runContent is the run-scoped content view (TCF Phase 1 §7), set via
+	// WithRunContent. nil means per-run reports resolve through scenarios
+	// (current content) and carry no content provenance.
+	runContent RunContentFunc
 }
+
+// RunContentInfo is the run-scoped content view (TCF Phase 1 §7).
+type RunContentInfo struct {
+	Resolver ScenarioResolver
+	Status   string
+	Label    string
+	// Transient is true when the content was unreadable because of an
+	// infrastructure error; consumers that persist "processed" state retry.
+	Transient bool
+}
+
+type RunContentFunc func(ctx context.Context, runID string) RunContentInfo
+
+type ContentProvenance struct {
+	Status string `json:"status"`
+	Label  string `json:"label"`
+}
+
+// WithRunContent attaches the run-scoped content view so a run's report is
+// interpreted against its pinned content version. Returns the engine for
+// chaining.
+func (e *Engine) WithRunContent(f RunContentFunc) *Engine { e.runContent = f; return e }
 
 func NewEngine(db *pgxpool.Pool) *Engine { return &Engine{db: db} }
 
@@ -233,6 +259,9 @@ type FullReport struct {
 	// Populated by Build (latest run's name), BuildFromRun, and BuildFromCampaign.
 	// Used by handlers to construct descriptive download filenames.
 	ScenarioName string `json:"scenarioName,omitempty"`
+	// ContentProvenance labels which content version a single-run report was
+	// interpreted against (BuildFromRun only; nil elsewhere).
+	ContentProvenance *ContentProvenance `json:"contentProvenance,omitempty"`
 	// ActiveFilter is set when the report was generated with a result filter
 	// (prevented/not_prevented/detected/not_detected). The score always reflects
 	// the full unfiltered run; only the kill chain and technique matrix are subsetted.
@@ -1999,6 +2028,11 @@ func (e *Engine) BuildFromRun(ctx context.Context, runID string, filter string) 
 		PreventionScore: score.PreventionScore, ExposureScore: score.ExposureScore,
 		TotalTechniques: score.TotalTechniques, FailedTechniques: score.FailedTechniques,
 	}}
+	if e.runContent != nil {
+		if info := e.runContent(ctx, runID); info.Label != "" {
+			report.ContentProvenance = &ContentProvenance{Status: info.Status, Label: info.Label}
+		}
+	}
 
 	// Trend: compare this run against EARLIER runs OF THE SAME SCENARIO on this
 	// endpoint.
