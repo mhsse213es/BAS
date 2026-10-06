@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import { setupDom, load, PAYLOADS } from './dom.mjs';
 
 setupDom();
-const { initiativeStateLabel, openAdvDrawer, openFinding, renderRunReportExtra, renderVariantCoverage, complianceTile, renderAgentRiskSummary } =
-  await load(['initiativeStateLabel', 'openAdvDrawer', 'openFinding', 'renderRunReportExtra', 'renderVariantCoverage', 'complianceTile', 'renderAgentRiskSummary']);
+const { initiativeStateLabel, openAdvDrawer, openFinding, renderRunReportExtra, renderVariantCoverage, complianceTile, renderAgentRiskSummary, loadScheduledAssessments } =
+  await load(['initiativeStateLabel', 'openAdvDrawer', 'openFinding', 'renderRunReportExtra', 'renderVariantCoverage', 'complianceTile', 'renderAgentRiskSummary', 'loadScheduledAssessments']);
 const tick = () => new Promise((r) => setTimeout(r, 0));
 
 function assertInert(container, label) {
@@ -84,6 +84,19 @@ test('shell: renderAgentRiskSummary keeps payloads inside data-args', () => {
     renderAgentRiskSummary([{ agentId: p, hostname: p, measurable: true, healthScore: 50, topDeficitCategory: p }]);
     const div = document.getElementById('agent-risk-body');
     assertInert(div, 'renderAgentRiskSummary');
+    const args = [...div.querySelectorAll('[data-args]')].map((e) => e.getAttribute('data-args')).join(' ');
+    assert.ok(args.includes(JSON.stringify(p).slice(1, -1)), 'payload should travel as data-args');
+  }
+});
+
+test('scheduled: loadScheduledAssessments keeps payloads inside data-args', async () => {
+  for (const p of PAYLOADS) {
+    globalThis.fetch = async (url) => ({ status: 200, json: async () => (String(url).includes('agent-groups') ? [] : { schedules: [{ ID: p, Enabled: true, Mode: 'posture', RecurrenceType: 'daily', Payload: { scenarioId: p } }] }) });
+    loadScheduledAssessments();
+    await tick(); await tick();
+    const div = document.getElementById('sched-body');
+    assertInert(div, 'loadScheduledAssessments');
+    assert.ok(div.querySelector('[data-args]'), 'fixture did not render');
     const args = [...div.querySelectorAll('[data-args]')].map((e) => e.getAttribute('data-args')).join(' ');
     assert.ok(args.includes(JSON.stringify(p).slice(1, -1)), 'payload should travel as data-args');
   }

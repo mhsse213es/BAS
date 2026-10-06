@@ -1,6 +1,7 @@
 import { state } from '../core/state.js';
 import { apicall } from '../core/api.js';
 import { x } from '../core/escape.js';
+import { on } from '../core/actions.js';
 import { fmtDate, showToast } from '../core/util.js';
 import { ROLE } from './shell.js';
 
@@ -116,8 +117,8 @@ export function renderScheduledAssessmentsList() {
       '<td>' +
         (onceCompleted
           ? '<span class="tiny muted">Ran once — nothing to edit or cancel</span>'
-          : '<button class="btn btn-outline btn-sm" onclick="openSchedWizardForEdit(\'' + x(sch.ID) + '\')">Edit</button>' +
-            (sch.Enabled ? ' <button class="btn btn-outline btn-sm" onclick="cancelScheduledAssessment(\'' + x(sch.ID) + '\')">Cancel</button>' : '')) +
+          : '<button class="btn btn-outline btn-sm"' + on('click', 'openSchedWizardForEdit', sch.ID) + '>Edit</button>' +
+            (sch.Enabled ? ' <button class="btn btn-outline btn-sm"' + on('click', 'cancelScheduledAssessment', sch.ID) + '>Cancel</button>' : '')) +
       '</td>' +
     '</tr>';
   }).join('');
@@ -253,6 +254,13 @@ function schedWizardSet(step) {
 
 export function schedWizardNav(dir) { schedWizardSet(SCHED.step + dir); }
 
+export function schedAuthCheckChange(el) {
+  document.getElementById('sched-create-btn').disabled = !el.checked;
+}
+
+export function schedToggleGroupFromChecked(id, el) { schedToggleGroup(id, el.checked); }
+export function schedToggleAgentFromChecked(id, el) { schedToggleAgent(id, el.checked); }
+
 export function schedToggleGroup(id, checked) {
   if (checked) SCHED.selGroups[id] = true; else delete SCHED.selGroups[id];
   document.getElementById('sched-group-cnt').textContent = '(' + Object.keys(SCHED.selGroups).length + ' selected)';
@@ -280,7 +288,7 @@ function renderSchedGroupNode(node) {
   var checked = SCHED.selGroups[node.id] ? ' checked' : '';
   var html = '<div class="at-node">' +
     '<label style="display:flex;align-items:center;gap:6px;cursor:pointer;width:100%">' +
-    '<input type="checkbox"' + checked + ' onchange="schedToggleGroup(' + node.id + ',this.checked)">' +
+    '<input type="checkbox"' + checked + on('change', 'schedToggleGroupFromChecked', node.id) + '>' +
     '<span class="at-name">' + x(node.name) + '</span>' +
     '<span class="at-count">' + node.totalAgentCount + '</span>' +
     '</label></div>';
@@ -346,7 +354,7 @@ function renderSchedAgentList() {
     var disabled = compatible ? '' : ' disabled';
     var warn = compatible ? '' : ' <span class="tiny u-danger">Platform mismatch</span>';
     return '<label style="display:flex;align-items:center;gap:0.5rem;padding:0.25rem 0.3rem;cursor:' + (compatible ? 'pointer' : 'not-allowed') + ';opacity:' + (compatible ? '1' : '0.55') + '">' +
-      '<input type="checkbox"' + checked + disabled + ' onchange="schedToggleAgent(\'' + x(a.agentId) + '\',this.checked)">' +
+      '<input type="checkbox"' + checked + disabled + on('change', 'schedToggleAgentFromChecked', a.agentId) + '>' +
       '<code style="font-size:0.72rem">' + x(a.agentId) + '</code><span class="tiny muted">' + x(a.hostname) + ' — ' + x(a.osVersion || 'Unknown OS') + '</span>' + warn + '</label>';
   }).join('');
   document.getElementById('sched-agent-cnt').textContent = '(' + Object.keys(SCHED.selAgents).length + ' selected)';
@@ -478,7 +486,7 @@ function renderSchedReview() {
       '<div style="font-size:0.78rem;line-height:1.5;margin-bottom:0.5rem">This schedule will execute real techniques that may generate security alerts on the selected targets, on every future occurrence, with no further confirmation.</div>' +
       '<div style="font-size:0.78rem;margin-bottom:0.5rem"><strong>Reason:</strong> ' + x(payload.reason || '(none entered)') + '</div>' +
       '<label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;font-size:0.8rem">' +
-      '<input type="checkbox" id="sched-auth-check" onchange="document.getElementById(\'sched-create-btn\').disabled=!this.checked">' +
+      '<input type="checkbox" id="sched-auth-check"' + on('change', 'schedAuthCheckChange') + '>' +
       'I authorize this recurring unattended execution</label>' +
       '</div>';
   }

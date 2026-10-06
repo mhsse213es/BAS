@@ -4075,7 +4075,7 @@
   "target": "tbody",
   "op": "=",
   "rhs": "SCHED.schedules.map(function(sch) {\n    // sch.Payload is a Go json.RawMessage with no json:\"...\" tag override, so\n    // it arrives already embedded as a real object in the outer response --\n    // NOT as a JSON string needing a second JSON.parse (that silently threw,\n    // caught below, and always fell back to {} -- see openSchedWizardForEdit's\n    // identical fix for the same root cause).\n   ",
-  "rhs_len": 2437,
+  "rhs_len": 2431,
   "category": "unescaped_html",
   "data_source_tags": "scenario,telemetry_log,user_created_name"
  },
@@ -4100,7 +4100,7 @@
   "data_source_tags": "scenario,user_created_name"
  },
  {
-  "line": 18187,
+  "line": 18194,
   "function": "renderSchedGroupTree",
   "target": "root",
   "op": "=",
@@ -4110,7 +4110,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18192,
+  "line": 18199,
   "function": "renderSchedGroupTree",
   "target": "root",
   "op": "=",
@@ -4120,7 +4120,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18255,
+  "line": 18262,
   "function": "renderSchedAgentList",
   "target": "root",
   "op": "=",
@@ -4130,17 +4130,17 @@
   "data_source_tags": ""
  },
  {
-  "line": 18257,
+  "line": 18264,
   "function": "renderSchedAgentList",
   "target": "root",
   "op": "=",
   "rhs": "SCHED.agentsAll.map(function(a) {\n    var compatible = schedAgentCompatible(a, supportedOS);\n    // A previously-checked agent that's now incompatible (scenario changed\n    // after selection) must not stay silently selected.\n    if (!compatible && SCHED.selAgents[a.agentId]) delete SCHED.selAgents[a.agentId];\n    var checked = SCHED.selAgents[a.agentId] ? ' checked' : '';\n    var disabled = compa",
-  "rhs_len": 1036,
+  "rhs_len": 1026,
   "category": "unescaped_html",
   "data_source_tags": "agent"
  },
  {
-  "line": 18284,
+  "line": 18291,
   "function": "renderSchedInitiativeSelect",
   "target": "sel",
   "op": "=",
@@ -4150,7 +4150,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18297,
+  "line": 18304,
   "function": "renderSchedModeRecurrencePane",
   "target": "modeSel",
   "op": "=",
@@ -4160,7 +4160,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18403,
+  "line": 18410,
   "function": "renderSchedReview",
   "target": "document.getElementById('sched-review')",
   "op": "=",
@@ -4170,7 +4170,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18540,
+  "line": 18547,
   "function": "renderLicenseLockedScreen",
   "target": "el",
   "op": "=",
@@ -4180,7 +4180,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18606,
+  "line": 18613,
   "function": "renderLicenseGraceBanner",
   "target": "el",
   "op": "=",
@@ -4190,7 +4190,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18623,
+  "line": 18630,
   "function": "maybeShowLicenseGraceModal",
   "target": "overlay",
   "op": "=",
@@ -4200,7 +4200,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18818,
+  "line": 18825,
   "function": "goToProfile",
   "target": "el",
   "op": "=",
@@ -4210,7 +4210,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18877,
+  "line": 18884,
   "function": "loadAgentRiskSummary",
   "target": "if (tb) tb",
   "op": "=",
@@ -4220,7 +4220,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18899,
+  "line": 18906,
   "function": "renderAgentRiskSummary",
   "target": "tb",
   "op": "=",
@@ -4230,7 +4230,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18909,
+  "line": 18916,
   "function": "renderAgentRiskSummary",
   "target": "tb",
   "op": "=",
@@ -4240,7 +4240,7 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 19039,
+  "line": 19046,
   "function": "loadThreatIntelConfig",
   "target": "if (panel) panel",
   "op": "=",
@@ -4250,7 +4250,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 19048,
+  "line": 19055,
   "function": "loadThreatIntelConfig",
   "target": "panel",
   "op": "=",
@@ -4260,7 +4260,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 19154,
+  "line": 19161,
   "function": "loadTAXIIConnectors",
   "target": "tbody",
   "op": "=",
@@ -4270,7 +4270,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 19159,
+  "line": 19166,
   "function": "loadTAXIIConnectors",
   "target": "tbody",
   "op": "=",
@@ -4280,7 +4280,7 @@
   "data_source_tags": "error_message"
  },
  {
-  "line": 19166,
+  "line": 19173,
   "function": "renderTAXIIConnectorsList",
   "target": "tbody",
   "op": "=",
@@ -4290,7 +4290,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 19169,
+  "line": 19176,
   "function": "renderTAXIIConnectorsList",
   "target": "tbody",
   "op": "=",
@@ -4300,7 +4300,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 19345,
+  "line": 19352,
   "function": "loadARTContentStatus",
   "target": "statusEl",
   "op": "=",
@@ -4310,7 +4310,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 19347,
+  "line": 19354,
   "function": "loadARTContentStatus",
   "target": "statusEl",
   "op": "=",
@@ -4320,7 +4320,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 19387,
+  "line": 19394,
   "function": "loadARTContentStatus",
   "target": "document.getElementById('cs-art-status')",
   "op": "=",
@@ -4330,7 +4330,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 19400,
+  "line": 19407,
   "function": "toggleSimCoverage",
   "target": "if (car) car",
   "op": "=",
@@ -4340,7 +4340,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 19515,
+  "line": 19522,
   "function": "loadSimCoverage",
   "target": "bodyEl",
   "op": "=",
@@ -4350,7 +4350,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 20333,
+  "line": 20340,
   "function": "loadVariantStats",
   "target": "el",
   "op": "=",
@@ -4360,7 +4360,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 20375,
+  "line": 20382,
   "function": "populateVexAgents",
   "target": "if (sel) sel",
   "op": "=",
@@ -4370,7 +4370,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 20377,
+  "line": 20384,
   "function": "populateVexAgents",
   "target": "if (sweepSel) sweepSel",
   "op": "=",
@@ -4380,7 +4380,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 20412,
+  "line": 20419,
   "function": "populateVexTechniques",
   "target": "tacSel",
   "op": "=",
@@ -4390,7 +4390,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 20417,
+  "line": 20424,
   "function": "populateVexTechniques",
   "target": "if (el) el",
   "op": "=",
@@ -4400,7 +4400,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 20508,
+  "line": 20515,
   "function": "renderVexSweepList",
   "target": "el",
   "op": "=",
@@ -4410,7 +4410,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 20510,
+  "line": 20517,
   "function": "renderVexSweepList",
   "target": "el",
   "op": "=",
@@ -4420,7 +4420,7 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 20747,
+  "line": 20754,
   "function": "filterVexTechniques",
   "target": "el",
   "op": "=",
@@ -4430,7 +4430,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 20750,
+  "line": 20757,
   "function": "filterVexTechniques",
   "target": "el",
   "op": "=",
@@ -4440,7 +4440,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 20774,
+  "line": 20781,
   "function": "loadVariantCoverage",
   "target": "el",
   "op": "=",
@@ -4450,7 +4450,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 20777,
+  "line": 20784,
   "function": "loadVariantCoverage",
   "target": "el",
   "op": "=",
@@ -4460,7 +4460,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 20802,
+  "line": 20809,
   "function": "loadVariantCoverage",
   "target": "el",
   "op": "=",
@@ -4470,7 +4470,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 20804,
+  "line": 20811,
   "function": "loadVariantCoverage",
   "target": "el",
   "op": "=",
@@ -4480,7 +4480,7 @@
   "data_source_tags": "error_message"
  },
  {
-  "line": 20925,
+  "line": 20932,
   "function": "_vexRenderQueuePanel",
   "target": "panel",
   "op": "=",
@@ -4490,7 +4490,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 20995,
+  "line": 21002,
   "function": "pollVariantRun",
   "target": "if (panel) panel",
   "op": "=",
@@ -4500,7 +4500,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 21024,
+  "line": 21031,
   "function": "pollVariantRun",
   "target": "if (p) p",
   "op": "=",
@@ -4510,7 +4510,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 21056,
+  "line": 21063,
   "function": "stopVex",
   "target": "if (panel) panel",
   "op": "=",
@@ -4520,7 +4520,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 21169,
+  "line": 21176,
   "function": "renderVariantRun",
   "target": "if (wrapperEl) wrapperEl",
   "op": "=",
@@ -4530,7 +4530,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 21174,
+  "line": 21181,
   "function": "renderVariantRun",
   "target": "cell",
   "op": "=",
@@ -4540,7 +4540,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 21186,
+  "line": 21193,
   "function": "renderVariantRun",
   "target": "panel",
   "op": "=",

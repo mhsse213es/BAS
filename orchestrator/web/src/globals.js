@@ -21,7 +21,7 @@ import { abortExecution, approveExStep, closeExerciseDetail, closeExerciseDetail
 import { runRansomwareDrill } from './features/ransomware.js';
 import { addStep, applyPicker, clearSelection, cloneScenario, closeBuilder, closeBuilderOnBackdrop, closeModal, closePicker, closeReportGen, deleteCustomScenario, downloadBuilderYaml, genAgentReport, loadRuns, moveStep, openBuilder, openBuilderARTPicker, openBuilderCalderaPicker, openDetailedViewForScenario, openModal, openPicker, openPickerFromModal, openReportGen, pickScenarioUploadFile, pickerSelectAll, pickerToggle, removeStep, renderAdditionalAgentsCount, renderBuilderMode, renderGroupTargetSummary, renderPickerList, renderRunMode, saveScenario, selectAllAdditionalAgents, setPF, setTargetMode, submitReport, switchRunTab, techChangeSelection, techCopyId, techOnBlur, techOnKeydown, techSelectRow, updateVariantDepthNote, uploadScenarioFile, viewRunResults, wizardNav } from './features/reports.js';
 import { closeRerunReview, closeRerunReviewOnBackdrop, openCampaignRerunReview, openRerunReview, startRerunFromReview } from './features/rerun-review.js';
-import { cancelScheduledAssessment, closeSchedWizard, loadScheduledAssessments, openSchedWizard, openSchedWizardForEdit, schedOnModeChange, schedOnRecurrenceChange, schedToggleAgent, schedToggleGroup, schedWizardNav, submitScheduledAssessment } from './features/scheduled.js';
+import { cancelScheduledAssessment, closeSchedWizard, loadScheduledAssessments, openSchedWizard, openSchedWizardForEdit, schedAuthCheckChange, schedOnModeChange, schedOnRecurrenceChange, schedToggleAgentFromChecked, schedToggleGroupFromChecked, schedWizardNav, submitScheduledAssessment } from './features/scheduled.js';
 import { _dismissLicenseGraceBanner, ackAllTamperEvents, doLogin, doLogoutFromMenu, goToProfileFromMenu, licenseBannerDismissHoverOff, licenseBannerDismissHoverOn, openAgentDetailRiskTab, openSettingsFromMenu, setAgentsView, setDashView, showTab, tamperAckHoverOff, tamperAckHoverOn, toggleSidebarCollapsed, toggleUserMenuFromEvent } from './features/shell.js';
 import { closeTAXIIConnectorModal, deleteTAXIIConnector, loadARTContentStatus, loadTAXIIConnectors, openTAXIIConnectorModal, removeConnectorConfig, reseedART, saveConnectorConfig, saveTAXIIConnectorForm, simCovHoverOff, simCovHoverOn, syncTAXIIConnectorNow, taxiiToggleAuthFields, testConnectorConfig, testTAXIIConnectorForm, toggleSimCoverage, triggerConnectorSync } from './features/threat-intel.js';
 import { loadVariantTab } from './features/variant-executor.js';
@@ -280,8 +280,6 @@ export const HANDLER_FUNCTIONS = {
   saveTAXIIConnectorForm,
   schedOnModeChange,
   schedOnRecurrenceChange,
-  schedToggleAgent,
-  schedToggleGroup,
   schedWizardNav,
   selectAgentGroup,
   selectAllAdditionalAgents,
@@ -426,6 +424,9 @@ export const ACTIONS = {
   openSettingsFromMenu,
   pickScenarioUploadFile,
   scenarioSearchClear,
+  schedAuthCheckChange,
+  schedToggleAgentFromChecked,
+  schedToggleGroupFromChecked,
   setRunIOCSearchFromInput,
   simCovHoverOff,
   simCovHoverOn,
