@@ -80,8 +80,24 @@ jobs:
           CGO_ENABLED: "0"
         run: go build ./...
 
+      # Record every test-container lifecycle event, so a database container
+      # that disappears mid-run shows whether it was killed (and by which
+      # signal), OOM-killed, or crashed on its own.
+      - name: watch test containers
+        run: |
+          nohup docker events --filter type=container \
+            --format '{{.TimeNano}} {{.Action}} image={{.Actor.Attributes.image}} exit={{.Actor.Attributes.exitCode}} signal={{.Actor.Attributes.signal}} id={{printf "%.12s" .Actor.ID}}' \
+            > "$RUNNER_TEMP/docker-events.log" 2>&1 &
+
       - name: go test (race + coverage)
         run: go test ./... -race -timeout 30m -coverprofile=coverage.out
+
+      - name: test container diagnostics
+        if: failure()
+        run: |
+          grep -vE ' (exec_|attach|resize|top)' "$RUNNER_TEMP/docker-events.log" | grep -vE ' (create|start) ' | tail -200 || true
+          sudo dmesg -T | grep -iE 'oom|killed process|out of memory' || echo "no OOM in kernel log"
+          free -m
 
       - name: coverage HTML report
         run: go tool cover -html=coverage.out -o coverage.html
