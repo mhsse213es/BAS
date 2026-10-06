@@ -346,8 +346,9 @@ func main() {
 	engine := scenario.NewEngine(cfg.ScenariosDir)
 	contentRegistry := contentregistry.New(pool, integrity.CompiledVerifier{})
 	engine.AttachRegistry(contentRegistry)
-	if err := engine.Load(); err != nil {
-		log.Printf("[!] scenario load warning: %v", err)
+	scenarioLoadErr := engine.Load()
+	if scenarioLoadErr != nil {
+		log.Printf("[!] scenario load warning: %v", scenarioLoadErr)
 	}
 	log.Printf("[+] Loaded %d scenarios from %s", engine.Count(), cfg.ScenariosDir)
 
@@ -784,6 +785,20 @@ func main() {
 		WithEMSweep(emSweepStore, emSweepDispatcher).
 		WithTAXII(taxiiStore, taxiiManager).
 		WithIOCProvider(iocProvider)
+
+	// Content registry migration marker: only after a clean scenario load, so a
+	// partial intake never ends custom-file grandfathering. A failure here is
+	// logged and retried next boot (marker stays absent); it never blocks boot.
+	if scenarioLoadErr == nil {
+		if inv, first, err := contentRegistry.CompleteMigration(context.Background()); err != nil {
+			log.Printf("[contentregistry] migration inventory: %v", err)
+		} else if first {
+			log.Printf("[contentregistry] migration complete: %d intel scenario(s) now DRAFT, %d schedule(s) and %d campaign(s) affected, %d custom scenario(s) grandfathered, %d builtin file(s) refused",
+				len(inv.IntelDrafted), len(inv.AffectedSchedules), len(inv.AffectedCampaigns), len(inv.CustomGrandfathered), len(inv.BuiltinRefused))
+		}
+	} else {
+		log.Printf("[contentregistry] migration deferred: scenario load failed")
+	}
 
 	vexSweepScheduler.Start(func(ctx context.Context) {
 		if err := vexSweepDispatcher.Tick(ctx); err != nil {
