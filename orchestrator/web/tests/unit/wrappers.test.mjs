@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import { setupDom, load } from './dom.mjs';
 
 setupDom();
-const fns = await load(['toggleRowMenuById', 'openComplianceDetail', 'tmplGroupChange', 'runGroupChange', 'vexSweepGroupChange', 'vexRunGroupChange']);
+const fns = await load(['toggleRowMenuById', 'openComplianceDetail', 'tmplGroupChange', 'runGroupChange', 'vexSweepGroupChange', 'vexRunGroupChange', 'openAgentGroupMenuStop', 'toggleScenarioPinFromEvent', 'scenarioPinKeydown', 'techKeydown', 'abortExecutionStop']);
 const { state } = await import('../../src/core/state.js');
 const tick = () => new Promise((r) => setTimeout(r, 0));
 
@@ -46,6 +46,70 @@ const table = [
       assert.ok(panel.classList.contains('open'), 'menu opened');
       assert.equal(panel.style.top, '124px');
       assert.equal(ev.cancelBubble, true, 'propagation stopped');
+    },
+  },
+  {
+    name: 'openAgentGroupMenuStop stops propagation before opening the group prompt',
+    run() {
+      globalThis.prompt = () => null;
+      const span = document.createElement('span');
+      const ev = delegatedEvent();
+      dispatchTo(fns.openAgentGroupMenuStop, span, [3], ev);
+      assert.equal(ev.cancelBubble, true);
+    },
+  },
+  {
+    name: 'toggleScenarioPinFromEvent pins the tile id and stops propagation',
+    run() {
+      state.overlayPinned = null;
+      const tile = document.createElement('div');
+      const ev = delegatedEvent({ target: tile });
+      dispatchTo(fns.toggleScenarioPinFromEvent, tile, ['sc-1'], ev);
+      assert.equal(ev.cancelBubble, true);
+      assert.equal(state.overlayPinned, 'sc-1');
+      state.overlayPinned = null;
+    },
+  },
+  {
+    name: 'scenarioPinKeydown acts on Enter and Space only',
+    run() {
+      state.overlayPinned = null;
+      const tile = document.createElement('div');
+      const other = delegatedEvent({ target: tile, key: 'a' });
+      dispatchTo(fns.scenarioPinKeydown, tile, ['sc-2'], other);
+      assert.equal(other.defaultPrevented, false);
+      assert.equal(state.overlayPinned, null);
+      const enter = delegatedEvent({ target: tile, key: 'Enter' });
+      dispatchTo(fns.scenarioPinKeydown, tile, ['sc-2'], enter);
+      assert.equal(enter.defaultPrevented, true);
+      assert.equal(state.overlayPinned, 'sc-2');
+      state.overlayPinned = null;
+    },
+  },
+  {
+    name: 'techKeydown forwards (event, input): ArrowDown activates a row, Escape closes the panel',
+    run() {
+      const wrap = document.createElement('div');
+      wrap.className = 'st-tech-wrap';
+      wrap.innerHTML = '<input><div class="st-tech-panel show"><div class="st-tech-row" data-id="T1"></div><div class="st-tech-row" data-id="T2"></div></div>';
+      document.body.appendChild(wrap);
+      const input = wrap.querySelector('input');
+      const down = delegatedEvent({ key: 'ArrowDown' });
+      dispatchTo(fns.techKeydown, input, [], down);
+      assert.equal(down.defaultPrevented, true);
+      assert.ok(wrap.querySelector('.st-tech-row[data-id="T1"]').classList.contains('active'));
+      dispatchTo(fns.techKeydown, input, [], delegatedEvent({ key: 'Escape' }));
+      assert.ok(!wrap.querySelector('.st-tech-panel').classList.contains('show'));
+    },
+  },
+  {
+    name: 'abortExecutionStop stops propagation so the row click does not also fire',
+    run() {
+      globalThis.confirm = () => false;
+      const btn = document.createElement('button');
+      const ev = delegatedEvent();
+      dispatchTo(fns.abortExecutionStop, btn, ['ex-1'], ev);
+      assert.equal(ev.cancelBubble, true);
     },
   },
 ];
