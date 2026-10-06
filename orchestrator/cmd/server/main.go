@@ -276,6 +276,9 @@ func main() {
 	if err := db.EnsureContentRegistrySchema(context.Background(), adminPool); err != nil {
 		log.Fatalf("[FATAL] content registry schema: %v", err)
 	}
+	if err := db.EnsureThreatIdentitySchema(context.Background(), adminPool); err != nil {
+		log.Fatalf("[FATAL] threat identity schema: %v", err)
+	}
 	log.Println("[+] Schema verified")
 
 	// ── bas_app provisioning ─────────────────────────────────────────────
