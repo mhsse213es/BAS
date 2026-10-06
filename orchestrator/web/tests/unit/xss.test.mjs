@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import { setupDom, load, PAYLOADS } from './dom.mjs';
 
 setupDom();
-const { initiativeStateLabel, openAdvDrawer, openFinding, renderRunReportExtra, renderVariantCoverage, complianceTile, renderAgentRiskSummary, loadScheduledAssessments, loadTAXIIConnectors, loadUsers, openSweepDrilldown, loadAgtLogs, renderResponseConnectorList, loadInitiatives } =
-  await load(['initiativeStateLabel', 'openAdvDrawer', 'openFinding', 'renderRunReportExtra', 'renderVariantCoverage', 'complianceTile', 'renderAgentRiskSummary', 'loadScheduledAssessments', 'loadTAXIIConnectors', 'loadUsers', 'openSweepDrilldown', 'loadAgtLogs', 'renderResponseConnectorList', 'loadInitiatives']);
+const { initiativeStateLabel, openAdvDrawer, openFinding, renderRunReportExtra, renderVariantCoverage, complianceTile, renderAgentRiskSummary, loadScheduledAssessments, loadTAXIIConnectors, loadUsers, openSweepDrilldown, loadAgtLogs, renderResponseConnectorList, loadInitiatives, loadAdversaries } =
+  await load(['initiativeStateLabel', 'openAdvDrawer', 'openFinding', 'renderRunReportExtra', 'renderVariantCoverage', 'complianceTile', 'renderAgentRiskSummary', 'loadScheduledAssessments', 'loadTAXIIConnectors', 'loadUsers', 'openSweepDrilldown', 'loadAgtLogs', 'renderResponseConnectorList', 'loadInitiatives', 'loadAdversaries']);
 const tick = () => new Promise((r) => setTimeout(r, 0));
 
 function assertInert(container, label) {
@@ -172,6 +172,19 @@ test('initiatives: loadInitiatives keeps payloads inside data-args', async () =>
     await tick(); await tick();
     const div = document.getElementById('init-body');
     assertInert(div, 'loadInitiatives');
+    assert.ok(div.querySelector('[data-args]'), 'fixture did not render');
+    const args = [...div.querySelectorAll('[data-args]')].map((e) => e.getAttribute('data-args')).join(' ');
+    assert.ok(args.includes(JSON.stringify(p).slice(1, -1)), 'payload should travel as data-args');
+  }
+});
+
+test('adversaries: loadAdversaries keeps payloads inside data-args', async () => {
+  for (const p of PAYLOADS) {
+    globalThis.fetch = async () => ({ status: 200, json: async () => ([{ id: p, name: p, description: p, tactics: [p] }]) });
+    loadAdversaries();
+    await tick(); await tick();
+    const div = document.getElementById('adv-grid');
+    assertInert(div, 'loadAdversaries');
     assert.ok(div.querySelector('[data-args]'), 'fixture did not render');
     const args = [...div.querySelectorAll('[data-args]')].map((e) => e.getAttribute('data-args')).join(' ');
     assert.ok(args.includes(JSON.stringify(p).slice(1, -1)), 'payload should travel as data-args');

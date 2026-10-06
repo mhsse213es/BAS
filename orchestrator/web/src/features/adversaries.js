@@ -1,6 +1,7 @@
 import { state } from '../core/state.js';
 import { apicall } from '../core/api.js';
 import { x } from '../core/escape.js';
+import { on } from '../core/actions.js';
 import { showToast } from '../core/util.js';
 import { agentGroupTree, gpFlattenGroups, renderScenarios, resolveGroupTargetAgents } from './attack-path.js';
 import { loadRuns } from './reports.js';
@@ -73,7 +74,7 @@ export function renderTemplateGrid() {
         '</div>' +
       '</div>' +
       '<div style="border-top:1px solid var(--border);padding:0.55rem 1rem;display:flex;gap:0.4rem;justify-content:flex-end">' +
-        '<button class="btn btn-primary btn-sm" onclick="openTmplRun(\'' + x(t.id) + '\')">&#9654; Launch</button>' +
+        '<button class="btn btn-primary btn-sm"' + on('click', 'openTmplRun', t.id) + '>&#9654; Launch</button>' +
       '</div>' +
     '</div>';
   }).join('');
@@ -114,13 +115,13 @@ export function openTmplRun(templateId) {
   var srcRows = '';
   if (tmpl.basScenarioId) {
     srcRows += '<label style="display:flex;align-items:flex-start;gap:0.6rem;cursor:pointer;font-size:0.82rem">' +
-      '<input type="checkbox" id="tmpl-src-bas" checked onchange="renderTmplOSCompat()" style="margin-top:2px">' +
+      '<input type="checkbox" id="tmpl-src-bas" checked' + on('change', 'renderTmplOSCompat') + ' style="margin-top:2px">' +
       '<span><span class="utl-badge utl-bas" style="margin-right:4px">BAS</span>' +
       '<strong>' + x(tmpl.basScenarioId) + '</strong> — native scenario</span></label>';
   }
   if (tmpl.artTechniques && tmpl.artTechniques.length) {
     srcRows += '<label style="display:flex;align-items:flex-start;gap:0.6rem;cursor:pointer;font-size:0.82rem">' +
-      '<input type="checkbox" id="tmpl-src-art" checked onchange="renderTmplOSCompat()" style="margin-top:2px">' +
+      '<input type="checkbox" id="tmpl-src-art" checked' + on('change', 'renderTmplOSCompat') + ' style="margin-top:2px">' +
       '<span><span class="utl-badge utl-art" style="margin-right:4px">ART</span>' +
       tmpl.artTechniques.length + ' techniques — ' + tmpl.artTechniques.slice(0,3).join(', ') + (tmpl.artTechniques.length > 3 ? '…' : '') + '</span></label>';
   }
@@ -130,7 +131,7 @@ export function openTmplRun(templateId) {
       : '<span class="utl-badge" style="background:var(--elevated);border-color:var(--border);color:var(--muted);margin-right:4px">Emu</span>' +
         x(tmpl.calderaAdversaryName) + ' <em class="u-muted">(not found in Caldera — unchecked)</em>';
     srcRows += '<label style="display:flex;align-items:flex-start;gap:0.6rem;cursor:pointer;font-size:0.82rem">' +
-      '<input type="checkbox" id="tmpl-src-caldera"' + (_tmplCalderaID ? ' checked' : '') + ' onchange="renderTmplOSCompat()" style="margin-top:2px">' +
+      '<input type="checkbox" id="tmpl-src-caldera"' + (_tmplCalderaID ? ' checked' : '') + on('change', 'renderTmplOSCompat') + ' style="margin-top:2px">' +
       '<span>' + calLabel + '</span></label>';
   }
   if (srcsEl) srcsEl.innerHTML = srcRows || '<span style="color:var(--muted);font-size:0.8rem">No sources configured for this template.</span>';
@@ -192,7 +193,7 @@ function renderTmplAgentList() {
     list.innerHTML = online.map(function(a) {
       return '<label style="display:flex;align-items:center;gap:0.5rem;padding:0.25rem 0.3rem;cursor:pointer">' +
         '<input type="checkbox" ' + (state._tmplSelAgents[a.agentId] ? 'checked' : '') +
-        ' onchange="_tmplSelAgents[\'' + x(a.agentId) + '\']=this.checked;renderTmplAgentCount();renderTmplOSCompat()">' +
+        on('change', 'tmplSelAgentChange', a.agentId) + '>' +
         '<code style="font-size:0.72rem">' + x(a.agentId) + '</code>' +
         '<span class="tiny muted">' + x(a.hostname) + ' — ' + x(a.osVersion || 'Unknown OS') + '</span></label>';
     }).join('');
@@ -223,6 +224,19 @@ export function renderTmplAgentCount() {
 // renderTmplOSCompat()), so it's passed explicitly rather than assumed.
 // renderEMSweepGroupList has a genuinely simpler shape (no count badge,
 // no summary callback at all) and is intentionally not covered here.
+export function tmplSelAgentChange(agentId, el) {
+  state._tmplSelAgents[agentId] = el.checked;
+  renderTmplAgentCount();
+  renderTmplOSCompat();
+}
+
+// Checkbox change for renderGroupCheckboxList: records the selection in the
+// named state map, then calls each named function (all registered handlers).
+export function groupCheckboxChange(stateVarName, id, fnNames, el) {
+  state[stateVarName][id] = el.checked;
+  fnNames.forEach(function(fn) { window[fn](); });
+}
+
 export function renderGroupCheckboxList(listElId, emptyClass, stateVarName, summaryFnName, onchangeFnNames) {
   var list = document.getElementById(listElId);
   if (!list) return;
@@ -237,11 +251,10 @@ export function renderGroupCheckboxList(listElId, emptyClass, stateVarName, summ
   (function walk(nodes) {
     (nodes || []).forEach(function(n) { countMap[n.id] = n.totalAgentCount; walk(n.children); });
   })(agentGroupTree);
-  var onchange = onchangeFnNames.map(function(fn) { return fn + '()'; }).join(';');
   list.innerHTML = options.map(function(o) {
     return '<label style="display:flex;align-items:center;gap:0.5rem;padding:0.25rem 0.3rem;cursor:pointer">' +
       '<input type="checkbox" ' + (stateVar[o.id] ? 'checked' : '') +
-      ' onchange="' + stateVarName + '[' + o.id + ']=this.checked;' + onchange + '">' +
+      on('change', 'groupCheckboxChange', stateVarName, o.id, onchangeFnNames) + '>' +
       '<span style="font-size:0.8rem">' + x(o.label) + '</span>' +
       '<span class="tiny muted">(' + (countMap[o.id] || 0) + ' agents)</span></label>';
   }).join('');
@@ -480,15 +493,15 @@ export function renderAdversaryLibrary() {
     var moreT = a.tactics && a.tactics.length > 4 ? ' <span style="color:var(--muted);font-size:0.68rem">+' + (a.tactics.length - 4) + '</span>' : '';
     var desc = (a.description || '').length > 100 ? a.description.substring(0, 97) + '…' : (a.description || 'MITRE CTID adversary emulation profile');
     var canRun = ROLE === 'admin' || ROLE === 'analyst';
-    return '<div class="card" style="cursor:pointer;display:flex;flex-direction:column;gap:0.5rem;border-left:3px solid var(--accent)" onclick="openAdvDrawer(\'' + x(a.id) + '\')">' +
+    return '<div class="card" style="cursor:pointer;display:flex;flex-direction:column;gap:0.5rem;border-left:3px solid var(--accent)"' + on('click', 'openAdvDrawer', a.id) + '>' +
       '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:0.5rem">' +
         '<div style="font-size:0.9rem;font-weight:700;color:var(--text)">' + x(a.name) + '</div>' +
         '<span style="flex-shrink:0;font-size:0.72rem;color:var(--muted);background:var(--elevated);padding:2px 7px;border-radius:9px;border:1px solid var(--border)">' + (a.abilityCount || 0) + ' abilities</span>' +
       '</div>' +
       '<div style="font-size:0.78rem;color:var(--muted);line-height:1.45">' + x(desc) + '</div>' +
       '<div style="display:flex;flex-wrap:wrap;gap:0.25rem">' + tactics + moreT + '</div>' +
-      (canRun ? '<div style="margin-top:0.25rem" onclick="event.stopPropagation()">' +
-        '<button class="btn btn-primary btn-sm u-w100" onclick="openAdvRunModal(\'' + x(a.id) + '\',\'' + x(a.name).replace(/'/g,'\\\'') + '\')">&#9654; Run</button>' +
+      (canRun ? '<div style="margin-top:0.25rem"' + on('click', 'stopEvent') + '>' +
+        '<button class="btn btn-primary btn-sm u-w100"' + on('click', 'openAdvRunModal', a.id, a.name) + '>&#9654; Run</button>' +
       '</div>' : '') +
     '</div>';
   }).join('');
@@ -508,7 +521,7 @@ export function openAdvDrawer(adversaryId) {
   if (runWrap) {
     var canRun = ROLE === 'admin' || ROLE === 'analyst';
     runWrap.innerHTML = canRun
-      ? '<button class="btn btn-primary btn-sm u-w100" onclick="openAdvRunModal(\'' + x(adversaryId) + '\',\'' + (adv ? x(adv.name).replace(/'/g,'\\\'') : x(adversaryId).replace(/'/g,'\\\'')) + '\')">&#9654; Run this adversary</button>'
+      ? '<button class="btn btn-primary btn-sm u-w100"' + on('click', 'openAdvRunModal', adversaryId, adv ? adv.name : adversaryId) + '>&#9654; Run this adversary</button>'
       : '';
   }
   document.getElementById('adv-drawer-overlay').style.display = '';
