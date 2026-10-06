@@ -28,7 +28,7 @@
   <span style="font-size:18px">&#9888;</span>
   <strong style="letter-spacing:.5px">INTEGRITY ALERT</strong>
   <span id="tamper-banner-msg" class="u-flex1"></span>
-  <button id="tamper-banner-ack" onclick="ackAllTamperEvents()" style="
+  <button id="tamper-banner-ack" data-on-click="ackAllTamperEvents" style="
     background:#fff2;border:1px solid rgba(255,255,255,.4);
     color:#fff;border-radius:6px;padding:4px 14px;
     cursor:pointer;font-size:12px;font-weight:600;letter-spacing:.3px;
@@ -64,7 +64,7 @@
         <label>Password</label>
         <input type="password" id="inp-pass" autocomplete="current-password">
       </div>
-      <button class="btn btn-primary" onclick="doLogin()">Sign in</button>
+      <button class="btn btn-primary" data-on-click="doLogin">Sign in</button>
       <div id="login-err" class="error-msg"></div>
     </div>
   </div>
@@ -79,58 +79,58 @@
     <nav class="sidebar-nav">
       <div class="nav-group">
         <div class="nav-group-label">Operations</div>
-        <div class="nav-item" data-tab="dashboard" title="Dashboard" onclick="showTab('dashboard')">
+        <div class="nav-item" data-tab="dashboard" title="Dashboard" data-on-click="showTab" data-args="[&quot;dashboard&quot;]">
           <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
             <rect x="1" y="1" width="6" height="6" rx="1"/><rect x="9" y="1" width="6" height="6" rx="1"/>
             <rect x="1" y="9" width="6" height="6" rx="1"/><rect x="9" y="9" width="6" height="6" rx="1"/>
           </svg>
           Dashboard
         </div>
-        <div class="nav-item active" data-tab="scenarios" title="Scenarios" onclick="showTab('scenarios')">
+        <div class="nav-item active" data-tab="scenarios" title="Scenarios" data-on-click="showTab" data-args="[&quot;scenarios&quot;]">
           <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
             <circle cx="8" cy="8" r="6"/><circle cx="8" cy="8" r="3"/>
             <circle cx="8" cy="8" r="1" fill="currentColor" stroke="none"/>
           </svg>
           Scenarios
         </div>
-        <div class="nav-item" data-tab="runs" title="Live Runs" onclick="showTab('runs')">
+        <div class="nav-item" data-tab="runs" title="Live Runs" data-on-click="showTab" data-args="[&quot;runs&quot;]">
           <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
             <polygon points="3,2 13,8 3,14" stroke-linejoin="round"/>
           </svg>
           Live Runs
         </div>
-        <div class="nav-item" id="nav-scheduled-assessments" data-tab="scheduled-assessments" title="Scheduled Assessments" onclick="showTab('scheduled-assessments')" style="display:none">
+        <div class="nav-item" id="nav-scheduled-assessments" data-tab="scheduled-assessments" title="Scheduled Assessments" data-on-click="showTab" data-args="[&quot;scheduled-assessments&quot;]" style="display:none">
           <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
             <circle cx="8" cy="8" r="6"/><path d="M8 4.5V8l2.5 1.5"/>
           </svg>
           Scheduled Assessments
         </div>
-        <div class="nav-item" data-tab="initiatives" title="Initiatives" onclick="showTab('initiatives')">
+        <div class="nav-item" data-tab="initiatives" title="Initiatives" data-on-click="showTab" data-args="[&quot;initiatives&quot;]">
           <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
             <rect x="2" y="2" width="5" height="5" rx="1"/><rect x="9" y="2" width="5" height="5" rx="1"/>
             <rect x="2" y="9" width="5" height="5" rx="1"/><path d="M9 11.5h5M11.5 9v5"/>
           </svg>
           Initiatives
         </div>
-        <div class="nav-item" data-tab="campaigns" title="Campaigns" onclick="showTab('campaigns')">
+        <div class="nav-item" data-tab="campaigns" title="Campaigns" data-on-click="showTab" data-args="[&quot;campaigns&quot;]">
           <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
             <path d="M2 13V3M2 13h12M5 11V7M8.5 11V5M12 11V8"/>
           </svg>
           Campaigns
         </div>
-        <div class="nav-item" data-tab="coverage" title="Coverage" onclick="showTab('coverage')">
+        <div class="nav-item" data-tab="coverage" title="Coverage" data-on-click="showTab" data-args="[&quot;coverage&quot;]">
           <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
             <path d="M2 12a6 6 0 0 1 12 0"/><path d="M8 12L11 7"/><circle cx="8" cy="12" r="1" fill="currentColor" stroke="none"/>
           </svg>
           Coverage
         </div>
-        <div class="nav-item" data-tab="variants" title="Variants" onclick="showTab('variants')">
+        <div class="nav-item" data-tab="variants" title="Variants" data-on-click="showTab" data-args="[&quot;variants&quot;]">
           <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
             <path d="M8 1.5 14.5 5.2 8 8.9 1.5 5.2z"/><path d="M1.5 8.2 8 11.9 14.5 8.2"/><path d="M1.5 11.2 8 14.9 14.5 11.2"/>
           </svg>
           Variants
         </div>
-        <div class="nav-item" data-tab="em" title="Endpoint Mastery" onclick="showTab('em')">
+        <div class="nav-item" data-tab="em" title="Endpoint Mastery" data-on-click="showTab" data-args="[&quot;em&quot;]">
           <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
             <circle cx="8" cy="6" r="4.2"/><path d="M8 3.8l.7 1.6 1.7.2-1.3 1.1.4 1.7L8 7.5l-1.5.9.4-1.7-1.3-1.1 1.7-.2z" fill="currentColor" stroke="none"/><path d="M5.5 9.7L4 15l4-2 4 2-1.5-5.3"/>
           </svg>
@@ -139,69 +139,69 @@
       </div>
       <div class="nav-group">
         <div class="nav-group-label">Visibility</div>
-        <div class="nav-item" data-tab="findings" title="Findings" onclick="showTab('findings')">
+        <div class="nav-item" data-tab="findings" title="Findings" data-on-click="showTab" data-args="[&quot;findings&quot;]">
           <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
             <path d="M3 1.5v13"/><path d="M3 2h9l-2 2.5L12 7H3z"/>
           </svg>
           Findings
         </div>
-        <div class="nav-item" data-tab="iocs" title="IOC Registry" onclick="showTab('iocs')">
+        <div class="nav-item" data-tab="iocs" title="IOC Registry" data-on-click="showTab" data-args="[&quot;iocs&quot;]">
           <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
             <path d="M9 2h4.5c.3 0 .5.2.5.5V7L6.5 14.5 1.5 9.5 9 2z"/><circle cx="11" cy="5" r="1" fill="currentColor" stroke="none"/>
           </svg>
           IOC Registry
         </div>
-        <div class="nav-item" data-tab="remediation" title="Remediation" onclick="showTab('remediation')">
+        <div class="nav-item" data-tab="remediation" title="Remediation" data-on-click="showTab" data-args="[&quot;remediation&quot;]">
           <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
             <path d="M11 2.5a3 3 0 0 0-3.9 3.9L2 11.5 4.5 14l5.1-5.1A3 3 0 0 0 13.5 5l-2.1 2.1-1.5-1.5z"/>
           </svg>
           Remediation
         </div>
-        <div class="nav-item" data-tab="reports" title="Reports" onclick="showTab('reports')">
+        <div class="nav-item" data-tab="reports" title="Reports" data-on-click="showTab" data-args="[&quot;reports&quot;]">
           <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
             <path d="M4 1.5h6l3 3V14.5H4z"/><path d="M9.5 1.5v3.5H13M6 8h4M6 10.5h4"/>
           </svg>
           Reports
         </div>
-        <div class="nav-item" data-tab="verification" title="Verification" onclick="showTab('verification')">
+        <div class="nav-item" data-tab="verification" title="Verification" data-on-click="showTab" data-args="[&quot;verification&quot;]">
           <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
             <path d="M8 1.5l5 2v4c0 3-2 5.2-5 6.5C5 12.7 3 10.5 3 7.5v-4z"/>
             <path d="M5.7 7.8 7.3 9.4l3-3.2"/>
           </svg>
           Verification
         </div>
-        <div class="nav-item" data-tab="attackpath" title="Attack Paths" onclick="showTab('attackpath')">
+        <div class="nav-item" data-tab="attackpath" title="Attack Paths" data-on-click="showTab" data-args="[&quot;attackpath&quot;]">
           <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
             <circle cx="3" cy="3" r="1.6"/><circle cx="13" cy="3" r="1.6"/><circle cx="8" cy="13" r="1.6"/>
             <path d="M4.3 4.2 6.8 11.6M11.7 4.2 9.2 11.6M4.4 3h7.2"/>
           </svg>
           Attack Paths
         </div>
-        <div class="nav-item" data-tab="exposure" title="Exposure Explorer" onclick="showTab('exposure')">
+        <div class="nav-item" data-tab="exposure" title="Exposure Explorer" data-on-click="showTab" data-args="[&quot;exposure&quot;]">
           <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
             <rect x="3" y="7" width="10" height="7" rx="1"/><path d="M5 7V4.5a3 3 0 0 1 5.6-1.5"/><circle cx="8" cy="10.3" r="1" fill="currentColor" stroke="none"/>
           </svg>
           Exposure Explorer
         </div>
-        <div class="nav-item" data-tab="recommendations" title="Recommendations" onclick="showTab('recommendations')">
+        <div class="nav-item" data-tab="recommendations" title="Recommendations" data-on-click="showTab" data-args="[&quot;recommendations&quot;]">
           <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
             <path d="M8 1.8a4 4 0 0 0-2.3 7.3c.5.4.8 1 .8 1.6v.3h3v-.3c0-.6.3-1.2.8-1.6A4 4 0 0 0 8 1.8z"/><path d="M6.3 13.2h3.4M6.7 14.8h2.6"/>
           </svg>
           Recommendations
         </div>
-        <div class="nav-item" data-tab="exercises" title="Exercises" onclick="showTab('exercises')">
+        <div class="nav-item" data-tab="exercises" title="Exercises" data-on-click="showTab" data-args="[&quot;exercises&quot;]">
           <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
             <path d="M3 1.5v13"/><path d="M3 2.2h9l-2.2 2.3L12 6.8H3z"/><path d="M6.5 2.2v4.6M9.5 2.2v4.6"/>
           </svg>
           Exercises
         </div>
-        <div class="nav-item" data-tab="attack-coverage" title="Technique Coverage" onclick="showTab('attack-coverage')">
+        <div class="nav-item" data-tab="attack-coverage" title="Technique Coverage" data-on-click="showTab" data-args="[&quot;attack-coverage&quot;]">
           <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
             <rect x="1" y="1" width="4" height="4"/><rect x="6" y="1" width="4" height="4"/><rect x="11" y="1" width="4" height="4"/><rect x="1" y="6" width="4" height="4"/><rect x="6" y="6" width="4" height="4"/><rect x="11" y="6" width="4" height="4"/><rect x="1" y="11" width="4" height="4"/><rect x="6" y="11" width="4" height="4"/><rect x="11" y="11" width="4" height="4"/>
           </svg>
           Technique Coverage
         </div>
-        <div class="nav-item" data-tab="threat-priority" title="Threat Prioritization" onclick="showTab('threat-priority')">
+        <div class="nav-item" data-tab="threat-priority" title="Threat Prioritization" data-on-click="showTab" data-args="[&quot;threat-priority&quot;]">
           <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
             <path d="M8 1l2 4 4.5.5-3.25 3.25L12.25 13 8 10.75 3.75 13l1-4.25L1.5 5.5 6 5z"/>
           </svg>
@@ -210,14 +210,14 @@
       </div>
       <div class="nav-group">
         <div class="nav-group-label">Infrastructure</div>
-        <div class="nav-item" data-tab="agents" title="Agents" onclick="showTab('agents')">
+        <div class="nav-item" data-tab="agents" title="Agents" data-on-click="showTab" data-args="[&quot;agents&quot;]">
           <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
             <rect x="2" y="3" width="12" height="9" rx="1"/>
             <path d="M5 12v1M11 12v1M3 13h10"/>
           </svg>
           Agents
         </div>
-        <div class="nav-item" id="nav-integrations" data-tab="integrations" title="Integrations" onclick="showTab('integrations')" style="display:none">
+        <div class="nav-item" id="nav-integrations" data-tab="integrations" title="Integrations" data-on-click="showTab" data-args="[&quot;integrations&quot;]" style="display:none">
           <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
             <path d="M5.5 1.5v3M10.5 1.5v3M4 4.5h8v3a4 4 0 0 1-8 0z"/><path d="M8 11.5v3"/>
           </svg>
@@ -226,7 +226,7 @@
       </div>
       <div class="nav-group">
         <div class="nav-group-label">Administration</div>
-        <div class="nav-item" id="nav-settings" data-tab="settings" title="Settings" onclick="showTab('settings')" style="display:none">
+        <div class="nav-item" id="nav-settings" data-tab="settings" title="Settings" data-on-click="showTab" data-args="[&quot;settings&quot;]" style="display:none">
           <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
             <circle cx="8" cy="8" r="2"/>
             <path d="M8 1v2.2M8 12.8V15M1 8h2.2M12.8 8H15M3.1 3.1l1.6 1.6M11.3 11.3l1.6 1.6M3.1 12.9l1.6-1.6M11.3 4.7l1.6-1.6"/>
@@ -240,13 +240,13 @@
 
   <div class="main-wrapper">
     <header>
-      <button class="sidebar-collapse-btn" id="sidebar-collapse-btn" onclick="toggleSidebarCollapsed()" title="Collapse sidebar">
+      <button class="sidebar-collapse-btn" id="sidebar-collapse-btn" data-on-click="toggleSidebarCollapsed" title="Collapse sidebar">
         <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="1.5" y="2.5" width="13" height="11" rx="1.5"/><path d="M6 2.5v11"/></svg>
       </button>
       <span class="header-page-title" id="header-page-title">Scenarios</span>
       <div class="header-spacer"></div>
       <div class="header-right">
-        <button class="cmdk-launch" onclick="openCmdk()" title="Command palette (Ctrl/Cmd-K)">
+        <button class="cmdk-launch" data-on-click="openCmdk" title="Command palette (Ctrl/Cmd-K)">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>
           Search <span class="kbd">&#8984;K</span>
         </button>
@@ -274,8 +274,8 @@
       <!-- Dashboard -->
       <div id="tab-dashboard" style="display:none">
         <div class="dash-view-toggle" role="tablist" aria-label="Dashboard view">
-          <button type="button" class="dash-view-btn active" data-view="operational" onclick="setDashView('operational')">Operational</button>
-          <button type="button" class="dash-view-btn" data-view="executive" onclick="setDashView('executive')">Executive</button>
+          <button type="button" class="dash-view-btn active" data-view="operational" data-on-click="setDashView" data-args="[&quot;operational&quot;]">Operational</button>
+          <button type="button" class="dash-view-btn" data-view="executive" data-on-click="setDashView" data-args="[&quot;executive&quot;]">Executive</button>
         </div>
         <div id="dash-view-operational">
         <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;margin-bottom:1.25rem;flex-wrap:wrap">
@@ -284,26 +284,26 @@
             <div id="dash-subtitle" style="font-size:0.8rem;color:var(--muted)">Loading continuous-validation summary…</div>
           </div>
           <div style="display:flex;gap:0.5rem;flex-shrink:0">
-            <button class="btn btn-outline btn-sm" onclick="showTab('reports')">Generate report</button>
-            <button class="btn btn-primary btn-sm" onclick="openModal()">&#9654; New simulation</button>
+            <button class="btn btn-outline btn-sm" data-on-click="showTab" data-args="[&quot;reports&quot;]">Generate report</button>
+            <button class="btn btn-primary btn-sm" data-on-click="openModal">&#9654; New simulation</button>
           </div>
         </div>
         <div class="kpi-row">
-          <div class="kpi-card stat-tile" onclick="showTab('findings')" title="View findings">
+          <div class="kpi-card stat-tile" data-on-click="showTab" data-args="[&quot;findings&quot;]" title="View findings">
             <div class="stat-top">
               <div><div class="kpi-label">Open findings</div><div class="kpi-value" id="kpi-findings-val">—</div></div>
               <div class="stat-icon" style="background:rgba(218,54,51,0.12);color:var(--danger)"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M3 14V2.5h8L9.5 5.5 11 8.5H3"/></svg></div>
             </div>
             <div class="kpi-sub" id="kpi-findings-sub">awaiting triage</div>
           </div>
-          <div class="kpi-card stat-tile" onclick="showTab('findings')" title="View attack surface age">
+          <div class="kpi-card stat-tile" data-on-click="showTab" data-args="[&quot;findings&quot;]" title="View attack surface age">
             <div class="stat-top">
               <div><div class="kpi-label">Attack surface age</div><div class="kpi-value" id="kpi-surface-val">—</div></div>
               <div class="stat-icon" style="background:rgba(240,135,0,0.12);color:#ff9800"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="6"/><path d="M8 4v4h3"/></svg></div>
             </div>
             <div class="kpi-sub" id="kpi-surface-sub">oldest open weakness</div>
           </div>
-          <div class="kpi-card stat-tile" onclick="showTab('runs')" title="View runs">
+          <div class="kpi-card stat-tile" data-on-click="showTab" data-args="[&quot;runs&quot;]" title="View runs">
             <div class="stat-top">
               <div><div class="kpi-label">Prevention score</div><div class="kpi-value" id="kpi-score-val">—</div></div>
               <div class="stat-icon" style="background:var(--teal-soft);color:var(--teal)"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M8 1.5l5 2v4c0 3-2 5.2-5 6.5C5 12.7 3 10.5 3 7.5v-4z"/></svg></div>
@@ -312,7 +312,7 @@
             <div class="stat-spark" id="kpi-score-spark"></div>
             <div id="kpi-score-coverage" style="font-size:0.6rem;color:var(--muted);margin-top:0.3rem;font-style:italic"></div>
           </div>
-          <div class="kpi-card stat-tile" onclick="showTab('runs')" title="ATT&CK coverage">
+          <div class="kpi-card stat-tile" data-on-click="showTab" data-args="[&quot;runs&quot;]" title="ATT&CK coverage">
             <div class="stat-top">
               <div><div class="kpi-label">ATT&amp;CK coverage</div><div class="kpi-value" id="kpi-cov-val">—</div></div>
               <div class="stat-icon" style="background:rgba(210,153,34,0.12);color:var(--warning)"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="6"/><circle cx="8" cy="8" r="2.4"/></svg></div>
@@ -320,7 +320,7 @@
             <div class="kpi-sub" id="kpi-cov-sub">tactic coverage</div>
             <div class="stat-spark" id="kpi-cov-spark"></div>
           </div>
-          <div class="kpi-card stat-tile" onclick="showTab('campaigns')" title="View campaigns">
+          <div class="kpi-card stat-tile" data-on-click="showTab" data-args="[&quot;campaigns&quot;]" title="View campaigns">
             <div class="stat-top">
               <div><div class="kpi-label">Active campaigns</div><div class="kpi-value" id="kpi-campaigns-val">—</div></div>
               <div class="stat-icon" style="background:rgba(47,129,247,0.12);color:var(--accent)"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M1 8h3l2-5 4 10 2-5h3"/></svg></div>
@@ -332,7 +332,7 @@
         <!-- Regulatory Compliance score tiles — one per framework, refreshed after each run -->
         <div style="display:flex;align-items:center;justify-content:space-between;margin:1.25rem 0 0.55rem">
           <span style="font-size:0.72rem;font-weight:600;letter-spacing:0.06em;color:var(--muted);text-transform:uppercase">Regulatory Compliance</span>
-          <a class="tiny" style="color:var(--accent);cursor:pointer;font-weight:500" onclick="showTab('compliance')">View details →</a>
+          <a class="tiny" style="color:var(--accent);cursor:pointer;font-weight:500" data-on-click="showTab" data-args="[&quot;compliance&quot;]">View details →</a>
         </div>
         <div class="kpi-row" id="compliance-tiles" style="flex-wrap:wrap">
           <div style="color:var(--muted);font-size:0.78rem;padding:0.4rem 0">Loading compliance scores…</div>
@@ -342,7 +342,7 @@
         <div id="dash-itsm-section" style="display:none">
           <div style="display:flex;align-items:center;justify-content:space-between;margin:1.25rem 0 0.55rem">
             <span style="font-size:0.72rem;font-weight:600;letter-spacing:0.06em;color:var(--muted);text-transform:uppercase">ITSM Tickets</span>
-            <a class="tiny" id="dash-itsm-link" style="color:var(--accent);cursor:pointer;font-weight:500" onclick="showTab('integrations')">Manage connectors →</a>
+            <a class="tiny" id="dash-itsm-link" style="color:var(--accent);cursor:pointer;font-weight:500" data-on-click="showTab" data-args="[&quot;integrations&quot;]">Manage connectors →</a>
           </div>
           <div class="kpi-row" id="dash-itsm-tiles"></div>
         </div>
@@ -351,7 +351,7 @@
         <div id="dash-ti-section" style="display:none">
           <div style="display:flex;align-items:center;justify-content:space-between;margin:1.25rem 0 0.55rem">
             <span style="font-size:0.72rem;font-weight:600;letter-spacing:0.06em;color:var(--muted);text-transform:uppercase">Threat Intelligence</span>
-            <a class="tiny" style="color:var(--accent);cursor:pointer;font-weight:500" onclick="loadKEVPack()">&#9760; Create KEV Pack →</a>
+            <a class="tiny" style="color:var(--accent);cursor:pointer;font-weight:500" data-on-click="loadKEVPack">&#9760; Create KEV Pack →</a>
           </div>
           <div class="kpi-row" id="dash-ti-tiles"></div>
           <div id="dash-ti-actors"></div>
@@ -413,7 +413,7 @@
           <div class="dash-panel">
             <div class="dash-panel-hdr" style="display:flex;align-items:center;justify-content:space-between">
               <span><span id="dash-campaigns-dot" class="dot-live"></span> Live campaigns</span>
-              <a class="tiny" style="color:var(--accent);cursor:pointer;font-weight:500" onclick="showTab('campaigns')">View all →</a>
+              <a class="tiny" style="color:var(--accent);cursor:pointer;font-weight:500" data-on-click="showTab" data-args="[&quot;campaigns&quot;]">View all →</a>
             </div>
             <div class="dash-panel-body" id="dash-campaigns"><div class="empty" style="padding:1.5rem">No campaigns running.</div></div>
           </div>
@@ -485,7 +485,7 @@
             <div style="display:flex;gap:0.5rem;align-items:center">
               <span id="rr-tier" style="font-size:0.72rem;padding:0.2rem 0.6rem;border-radius:4px;font-weight:600;display:none"></span>
               <span id="rr-last" style="font-size:0.72rem;color:var(--muted)"></span>
-              <button class="btn btn-outline btn-sm" onclick="runRansomwareDrill()" id="rr-run-btn">&#9654; Run Drill</button>
+              <button class="btn btn-outline btn-sm" data-on-click="runRansomwareDrill" id="rr-run-btn">&#9654; Run Drill</button>
             </div>
           </div>
           <div class="dash-panel-body" id="rr-body" style="padding:1rem 1.25rem">
@@ -500,12 +500,12 @@
             <div style="font-size:0.8rem;color:var(--muted)">Fleet-wide risk, exposure, and detection-coverage trends over time — daily snapshots, not a single point-in-time report.</div>
           </div>
           <div style="display:flex;gap:0.5rem;align-items:center">
-            <select id="ed-range" onchange="loadExecDashboard()" style="padding:0.35rem 0.6rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:0.78rem">
+            <select id="ed-range" data-on-change="loadExecDashboard" style="padding:0.35rem 0.6rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:0.78rem">
               <option value="30">30 days</option>
               <option value="90" selected>90 days</option>
               <option value="365">1 year</option>
             </select>
-            <button class="btn btn-outline btn-sm" onclick="loadExecDashboard()">Refresh</button>
+            <button class="btn btn-outline btn-sm" data-on-click="loadExecDashboard">Refresh</button>
           </div>
         </div>
         <div class="kpi-row" id="ed-kpi-row"><div class="empty">Loading…</div></div>
@@ -522,27 +522,27 @@
             <div style="font-size:0.8rem;color:var(--muted)">Lightweight collectors across your environment — they execute safe emulations locally and stream telemetry back.</div>
           </div>
           <div style="display:flex;gap:0.5rem;flex-shrink:0;align-items:center">
-            <button class="btn btn-outline btn-sm" onclick="loadAgents()">Refresh</button>
-            <button class="btn btn-primary btn-sm" onclick="showAgentDownload()">&#8595; Deploy agent</button>
+            <button class="btn btn-outline btn-sm" data-on-click="loadAgents">Refresh</button>
+            <button class="btn btn-primary btn-sm" data-on-click="showAgentDownload">&#8595; Deploy agent</button>
           </div>
         </div>
         <div id="legacy-migration-panel" class="legacy-migration-panel"></div>
         <div style="display:flex;gap:0.5rem;margin-bottom:1rem">
-          <button type="button" class="dash-view-btn active" data-agents-view="systemtree" onclick="setAgentsView('systemtree')">System Tree</button>
-          <button type="button" class="dash-view-btn" data-agents-view="operational" onclick="setAgentsView('operational')">Operational</button>
-          <button type="button" class="dash-view-btn" data-agents-view="risk" onclick="setAgentsView('risk')">Risk &amp; Remediation</button>
+          <button type="button" class="dash-view-btn active" data-agents-view="systemtree" data-on-click="setAgentsView" data-args="[&quot;systemtree&quot;]">System Tree</button>
+          <button type="button" class="dash-view-btn" data-agents-view="operational" data-on-click="setAgentsView" data-args="[&quot;operational&quot;]">Operational</button>
+          <button type="button" class="dash-view-btn" data-agents-view="risk" data-on-click="setAgentsView" data-args="[&quot;risk&quot;]">Risk &amp; Remediation</button>
         </div>
         <div id="agents-view-systemtree">
         <div style="display:flex;justify-content:flex-end;margin-bottom:0.75rem">
           <input type="search" id="agent-search" placeholder="Search hostname, agent ID, IP, group…"
-                 oninput="onAgentSearchInput()"
+                 data-on-input="onAgentSearchInput"
                  style="padding:0.45rem 0.7rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:0.82rem;font-family:inherit;min-width:260px">
         </div>
         <div class="agent-tree-layout">
           <div class="agent-tree-panel">
             <div class="agent-tree-hdr">
               <h4>Groups</h4>
-              <button class="btn btn-outline btn-sm" onclick="createAgentGroupPrompt(null)" title="New root group">+</button>
+              <button class="btn btn-outline btn-sm" data-on-click="createAgentGroupPrompt" data-args="[null]" title="New root group">+</button>
             </div>
             <div id="agent-tree-root"></div>
           </div>
@@ -560,7 +560,7 @@
           </table>
         </div>
         <div id="agent-load-more-wrap" style="text-align:center;margin-top:0.75rem;display:none">
-          <button class="btn btn-outline btn-sm" onclick="loadMoreAgents()">Load more</button>
+          <button class="btn btn-outline btn-sm" data-on-click="loadMoreAgents">Load more</button>
         </div>
           </div>
         </div>
@@ -654,9 +654,9 @@
               Linux
             </div>
             <div class="agent-dl-btns">
-              <a class="btn btn-sm btn-outline" href="/api/agents/download/linux-amd64-deb" download onclick="updateLinuxDownloadCmd('amd64','deb')">.deb x86_64</a>
-              <a class="btn btn-sm btn-outline" href="/api/agents/download/linux-arm64-deb" download onclick="updateLinuxDownloadCmd('arm64','deb')">.deb ARM64</a>
-              <a class="btn btn-sm btn-outline" href="/api/agents/download/linux-amd64-rpm" download onclick="updateLinuxDownloadCmd('amd64','rpm')">.rpm x86_64</a>
+              <a class="btn btn-sm btn-outline" href="/api/agents/download/linux-amd64-deb" download data-on-click="updateLinuxDownloadCmd" data-args="[&quot;amd64&quot;,&quot;deb&quot;]">.deb x86_64</a>
+              <a class="btn btn-sm btn-outline" href="/api/agents/download/linux-arm64-deb" download data-on-click="updateLinuxDownloadCmd" data-args="[&quot;arm64&quot;,&quot;deb&quot;]">.deb ARM64</a>
+              <a class="btn btn-sm btn-outline" href="/api/agents/download/linux-amd64-rpm" download data-on-click="updateLinuxDownloadCmd" data-args="[&quot;amd64&quot;,&quot;rpm&quot;]">.rpm x86_64</a>
             </div>
             <div class="agent-dl-hint">Ubuntu 20.04+, Debian 10+, RHEL/Rocky 8+</div>
             <div class="agent-dl-usage" style="margin-bottom:0">
@@ -706,7 +706,7 @@
           <div style="font-size:0.8rem;color:var(--muted)">Manage team access, the simulation engine, threat-intel sync, and content.</div>
         </div>
         <!-- ── Simulation Coverage KPI card ────────────────────────────────── -->
-        <div id="sim-cov-card" class="conn-cfg-card" onclick="toggleSimCoverage()"
+        <div id="sim-cov-card" class="conn-cfg-card" data-on-click="toggleSimCoverage"
              style="margin-bottom:1.25rem;cursor:pointer;user-select:none;transition:box-shadow .15s"
              onmouseenter="this.style.boxShadow='0 0 0 1px var(--accent)'"
              onmouseleave="this.style.boxShadow=''">
@@ -752,15 +752,15 @@
 
         <div class="settings-layout">
           <div class="settings-nav">
-            <a class="sset active" data-set="users" onclick="showSettingsSection('users')">Users &amp; roles</a>
-            <a class="sset" data-set="engine" onclick="showSettingsSection('engine')">Caldera engine</a>
-            <a class="sset" data-set="intel" onclick="showSettingsSection('intel')">Threat intel</a>
-            <a class="sset" data-set="art" onclick="showSettingsSection('art')">ART content</a>
-            <a class="sset" data-set="audit" onclick="showSettingsSection('audit')">Audit logs</a>
-            <a class="sset" data-set="theme" onclick="showSettingsSection('theme')">Theme &amp; display</a>
-            <a class="sset" data-set="dashprefs" onclick="showSettingsSection('dashprefs')">Dashboard</a>
-            <a class="sset" data-set="license" onclick="showSettingsSection('license')">License</a>
-            <a class="sset" data-set="backup" onclick="showSettingsSection('backup')">Backup &amp; Recovery</a>
+            <a class="sset active" data-set="users" data-on-click="showSettingsSection" data-args="[&quot;users&quot;]">Users &amp; roles</a>
+            <a class="sset" data-set="engine" data-on-click="showSettingsSection" data-args="[&quot;engine&quot;]">Caldera engine</a>
+            <a class="sset" data-set="intel" data-on-click="showSettingsSection" data-args="[&quot;intel&quot;]">Threat intel</a>
+            <a class="sset" data-set="art" data-on-click="showSettingsSection" data-args="[&quot;art&quot;]">ART content</a>
+            <a class="sset" data-set="audit" data-on-click="showSettingsSection" data-args="[&quot;audit&quot;]">Audit logs</a>
+            <a class="sset" data-set="theme" data-on-click="showSettingsSection" data-args="[&quot;theme&quot;]">Theme &amp; display</a>
+            <a class="sset" data-set="dashprefs" data-on-click="showSettingsSection" data-args="[&quot;dashprefs&quot;]">Dashboard</a>
+            <a class="sset" data-set="license" data-on-click="showSettingsSection" data-args="[&quot;license&quot;]">License</a>
+            <a class="sset" data-set="backup" data-on-click="showSettingsSection" data-args="[&quot;backup&quot;]">Backup &amp; Recovery</a>
           </div>
           <div class="settings-body">
 
@@ -768,7 +768,7 @@
           <div id="set-users" class="set-section">
             <div class="sec-hdr">
               <h2>Users &amp; roles <span id="users-cnt" class="cnt">0</span></h2>
-              <button class="btn btn-outline-green btn-sm" onclick="openCreateUser()">+ New User</button>
+              <button class="btn btn-outline-green btn-sm" data-on-click="openCreateUser">+ New User</button>
             </div>
             <div class="tbl-wrap">
               <table>
@@ -790,7 +790,7 @@
         <div id="caldera-status-wrap" style="display:none">
           <div class="sec-hdr">
             <h2>Caldera Engine</h2>
-            <button class="btn btn-outline btn-sm" onclick="loadCalderaStatus()" id="caldera-check-btn">Check Now</button>
+            <button class="btn btn-outline btn-sm" data-on-click="loadCalderaStatus" id="caldera-check-btn">Check Now</button>
           </div>
           <div class="conn-cfg-card" id="caldera-status-card">
             <div class="conn-cfg-row">
@@ -825,7 +825,7 @@
         <div id="connector-status-wrap" style="display:none">
           <div class="sec-hdr">
             <h2>Threat Intel Connector</h2>
-            <button class="btn btn-outline btn-sm" onclick="triggerConnectorSync()" id="connector-sync-btn">Sync Now</button>
+            <button class="btn btn-outline btn-sm" data-on-click="triggerConnectorSync" id="connector-sync-btn">Sync Now</button>
           </div>
           <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:0.75rem;margin-bottom:0.75rem">
             <div class="conn-cfg-card" id="cs-misp-card">
@@ -940,8 +940,8 @@
         <div class="sec-hdr" style="margin-top:1.25rem">
           <h2>TAXII Connectors</h2>
           <div style="display:flex;gap:0.5rem">
-            <button class="btn btn-outline btn-sm" onclick="loadTAXIIConnectors()">Refresh</button>
-            <button class="btn btn-primary btn-sm" onclick="openTAXIIConnectorModal(null)">+ Add Connector</button>
+            <button class="btn btn-outline btn-sm" data-on-click="loadTAXIIConnectors">Refresh</button>
+            <button class="btn btn-primary btn-sm" data-on-click="openTAXIIConnectorModal" data-args="[null]">+ Add Connector</button>
           </div>
         </div>
         <div class="tbl-wrap">
@@ -964,8 +964,8 @@
           <div class="sec-hdr">
             <h2>ART Content Library</h2>
             <div style="display:flex;gap:0.4rem">
-              <button class="btn btn-outline btn-sm" onclick="loadARTContentStatus()" id="art-check-btn">Check Now</button>
-              <button class="btn btn-primary btn-sm" style="width:auto;padding:0.45rem 0.9rem" onclick="reseedART()" id="art-reseed-btn">Reseed from Pack</button>
+              <button class="btn btn-outline btn-sm" data-on-click="loadARTContentStatus" id="art-check-btn">Check Now</button>
+              <button class="btn btn-primary btn-sm" style="width:auto;padding:0.45rem 0.9rem" data-on-click="reseedART" id="art-reseed-btn">Reseed from Pack</button>
             </div>
           </div>
           <div class="conn-cfg-card" id="art-content-card">
@@ -1025,10 +1025,10 @@
               <div style="display:flex;gap:0.5rem;align-items:center">
                 <input id="audit-search-actor" type="search" placeholder="Filter by user…"
                        style="padding:0.4rem 0.65rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:0.8rem;font-family:inherit;width:160px"
-                       oninput="loadAuditLogs()">
+                       data-on-input="loadAuditLogs">
                 <select id="audit-filter-action"
                         style="padding:0.4rem 0.6rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:0.8rem;font-family:inherit"
-                        onchange="loadAuditLogs()">
+                        data-on-change="loadAuditLogs">
                   <option value="">All actions</option>
                   <option value="user.login">Login</option>
                   <option value="user.create">User created</option>
@@ -1054,8 +1054,8 @@
                   <option value="connector.sync">Connector sync</option>
                   <option value="art.reseed">ART reseed</option>
                 </select>
-                <button class="btn btn-outline btn-sm" onclick="loadAuditLogs()">Refresh</button>
-                <button class="btn btn-outline btn-sm" onclick="exportAuditLogs()">&#8659; Export CSV</button>
+                <button class="btn btn-outline btn-sm" data-on-click="loadAuditLogs">Refresh</button>
+                <button class="btn btn-outline btn-sm" data-on-click="exportAuditLogs">&#8659; Export CSV</button>
               </div>
             </div>
             <div class="tbl-wrap">
@@ -1075,8 +1075,8 @@
             </div>
             <div style="display:flex;justify-content:flex-end;gap:0.5rem;margin-top:0.75rem;align-items:center">
               <span id="audit-range-label" style="font-size:0.78rem;color:var(--muted)"></span>
-              <button class="btn btn-outline btn-sm" id="audit-prev-btn" onclick="auditPage(-1)" disabled>&#8249; Prev</button>
-              <button class="btn btn-outline btn-sm" id="audit-next-btn" onclick="auditPage(1)" disabled>Next &#8250;</button>
+              <button class="btn btn-outline btn-sm" id="audit-prev-btn" data-on-click="auditPage" data-args="[-1]" disabled>&#8249; Prev</button>
+              <button class="btn btn-outline btn-sm" id="audit-next-btn" data-on-click="auditPage" data-args="[1]" disabled>Next &#8250;</button>
             </div>
           </div>
 
@@ -1088,7 +1088,7 @@
             <div style="color:var(--muted);font-size:0.8rem;margin-bottom:1.5rem">Select your preferred user interface theme. Settings will be saved locally in your browser.</div>
             <div style="display:grid;grid-template-columns:repeat(auto-fill, minmax(200px, 1fr));gap:1rem">
               <!-- Audspect Dark -->
-              <div class="theme-card active" onclick="selectTheme('dark')" id="theme-card-dark">
+              <div class="theme-card active" data-on-click="selectTheme" data-args="[&quot;dark&quot;]" id="theme-card-dark">
                 <div class="theme-preview" style="background:#080d18;border-color:#1e2f47">
                   <div style="background:#0f1a2e;height:24px;border-bottom:1px solid #1e2f47;display:flex;align-items:center;padding:0 8px"><div style="background:#4f8ef7;width:12px;height:12px;border-radius:3px"></div></div>
                   <div style="padding:8px;display:flex;flex-direction:column;gap:4px">
@@ -1100,7 +1100,7 @@
               </div>
               
               <!-- Audspect Light -->
-              <div class="theme-card" onclick="selectTheme('light')" id="theme-card-light">
+              <div class="theme-card" data-on-click="selectTheme" data-args="[&quot;light&quot;]" id="theme-card-light">
                 <div class="theme-preview" style="background:#f3f6fa;border-color:#e2e8f0">
                   <div style="background:#ffffff;height:24px;border-bottom:1px solid #e2e8f0;display:flex;align-items:center;padding:0 8px"><div style="background:#3b82f6;width:12px;height:12px;border-radius:3px"></div></div>
                   <div style="padding:8px;display:flex;flex-direction:column;gap:4px">
@@ -1112,7 +1112,7 @@
               </div>
 
               <!-- Cyberpunk Neon -->
-              <div class="theme-card" onclick="selectTheme('cyberpunk')" id="theme-card-cyberpunk">
+              <div class="theme-card" data-on-click="selectTheme" data-args="[&quot;cyberpunk&quot;]" id="theme-card-cyberpunk">
                 <div class="theme-preview" style="background:#0c0614;border-color:#351b54">
                   <div style="background:#140b24;height:24px;border-bottom:1px solid #351b54;display:flex;align-items:center;padding:0 8px"><div style="background:#ff007f;width:12px;height:12px;border-radius:3px"></div></div>
                   <div style="padding:8px;display:flex;flex-direction:column;gap:4px">
@@ -1124,7 +1124,7 @@
               </div>
 
               <!-- Slate Minimal -->
-              <div class="theme-card" onclick="selectTheme('slate')" id="theme-card-slate">
+              <div class="theme-card" data-on-click="selectTheme" data-args="[&quot;slate&quot;]" id="theme-card-slate">
                 <div class="theme-preview" style="background:#0f1115;border-color:#2d313b">
                   <div style="background:#181a1f;height:24px;border-bottom:1px solid #2d313b;display:flex;align-items:center;padding:0 8px"><div style="background:#10b981;width:12px;height:12px;border-radius:3px"></div></div>
                   <div style="padding:8px;display:flex;flex-direction:column;gap:4px">
@@ -1144,15 +1144,15 @@
             </div>
             <div style="color:var(--muted);font-size:0.8rem;margin-bottom:1.5rem">Choose which view the Dashboard tab opens to. Saved locally in your browser.</div>
             <div style="display:grid;grid-template-columns:repeat(auto-fill, minmax(200px, 1fr));gap:1rem">
-              <div class="theme-card" onclick="selectDashPref('operational')" id="dashpref-card-operational">
+              <div class="theme-card" data-on-click="selectDashPref" data-args="[&quot;operational&quot;]" id="dashpref-card-operational">
                 <div class="theme-name">Operational</div>
                 <div style="color:var(--muted);font-size:0.72rem;text-align:center;margin-top:0.3rem">Always land on the Operational view</div>
               </div>
-              <div class="theme-card" onclick="selectDashPref('executive')" id="dashpref-card-executive">
+              <div class="theme-card" data-on-click="selectDashPref" data-args="[&quot;executive&quot;]" id="dashpref-card-executive">
                 <div class="theme-name">Executive</div>
                 <div style="color:var(--muted);font-size:0.72rem;text-align:center;margin-top:0.3rem">Always land on the Executive view</div>
               </div>
-              <div class="theme-card" onclick="selectDashPref('last')" id="dashpref-card-last">
+              <div class="theme-card" data-on-click="selectDashPref" data-args="[&quot;last&quot;]" id="dashpref-card-last">
                 <div class="theme-name">Last used</div>
                 <div style="color:var(--muted);font-size:0.72rem;text-align:center;margin-top:0.3rem">Remember whichever view I had open last</div>
               </div>
@@ -1163,7 +1163,7 @@
           <div id="set-license" class="set-section" style="display:none">
             <div class="sec-hdr">
               <h2>License</h2>
-              <button class="btn btn-outline btn-sm" onclick="loadLicenseInfo()">&#x21bb; Refresh</button>
+              <button class="btn btn-outline btn-sm" data-on-click="loadLicenseInfo">&#x21bb; Refresh</button>
             </div>
             <div id="license-card-wrap">
               <div class="empty" style="padding:2rem">Loading…</div>
@@ -1174,8 +1174,8 @@
             <div class="sec-hdr">
               <h2>Backup &amp; Recovery</h2>
               <div style="display:flex;gap:0.5rem">
-                <button class="btn btn-outline btn-sm" onclick="loadBackups()">&#x21bb; Refresh</button>
-                <button class="btn btn-primary btn-sm" id="backup-now-btn" onclick="backupNow()">Backup Now</button>
+                <button class="btn btn-outline btn-sm" data-on-click="loadBackups">&#x21bb; Refresh</button>
+                <button class="btn btn-primary btn-sm" id="backup-now-btn" data-on-click="backupNow">Backup Now</button>
               </div>
             </div>
             <div style="font-size:0.8rem;color:var(--muted);margin-bottom:1rem">
@@ -1237,7 +1237,7 @@
           <div class="conn-cfg-row"><span class="conn-cfg-label">Last login</span><span id="profile-last-login" class="conn-cfg-val">—</span></div>
           <div class="conn-cfg-row"><span class="conn-cfg-label">Sign-in method</span><span id="profile-auth-source" class="conn-cfg-val">—</span></div>
           <div style="margin-top:0.9rem;padding-top:0.9rem;border-top:1px solid var(--border)">
-            <button class="btn btn-outline btn-sm" onclick="openChangePassword()">Change Password</button>
+            <button class="btn btn-outline btn-sm" data-on-click="openChangePassword">Change Password</button>
           </div>
         </div>
 
@@ -1259,24 +1259,24 @@
             <input type="search" id="sc-search" placeholder="Search name, tag, technique…"
                    oninput="if (!this.value.trim() && scenarioView === 'search') { scenarioView = 'landing'; } renderScenarios()"
                    style="padding:0.45rem 0.7rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:0.82rem;font-family:inherit;min-width:200px">
-            <select id="sc-filter-source" onchange="renderScenarios()"
+            <select id="sc-filter-source" data-on-change="renderScenarios"
                     style="padding:0.45rem 0.6rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:0.82rem;font-family:inherit">
               <option value="all">All sources</option>
               <option value="builtin">Built-in</option>
               <option value="custom">Custom</option>
               <option value="intel">Threat intel</option>
             </select>
-            <select id="sc-filter-os" onchange="renderScenarios()"
+            <select id="sc-filter-os" data-on-change="renderScenarios"
                     style="padding:0.45rem 0.6rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:0.82rem;font-family:inherit">
               <option value="all">All OS</option>
               <option value="windows">Windows</option>
               <option value="linux">Linux</option>
               <option value="darwin">macOS</option>
             </select>
-            <button id="sc-new-btn" class="btn btn-primary btn-sm" style="width:auto;padding:0.45rem 0.9rem" onclick="openBuilder(null)">+ New Scenario</button>
+            <button id="sc-new-btn" class="btn btn-primary btn-sm" style="width:auto;padding:0.45rem 0.9rem" data-on-click="openBuilder" data-args="[null]">+ New Scenario</button>
             <button id="sc-upload-btn" class="btn btn-outline btn-sm" onclick="document.getElementById('sc-upload-file').click()">&#8657; Upload YAML</button>
             <input type="file" id="sc-upload-file" accept=".yaml,.yml" style="display:none" onchange="uploadScenarioFile(this)">
-            <button class="btn btn-outline btn-sm" onclick="loadScenarios()">Refresh</button>
+            <button class="btn btn-outline btn-sm" data-on-click="loadScenarios">Refresh</button>
           </div>
         </div>
 
@@ -1285,15 +1285,15 @@
 
         <div id="sc-category-view" style="display:none">
           <div class="sc-backbar">
-            <button class="sc-back-btn" onclick="closeScenarioCategoryView()">&larr; Back</button>
+            <button class="sc-back-btn" data-on-click="closeScenarioCategoryView">&larr; Back</button>
             <h2 id="sc-backbar-title"></h2>
           </div>
           <div id="sc-tmpl-filters" style="display:none;gap:0.4rem;flex-wrap:wrap;align-items:center;margin-bottom:1rem">
-            <button class="pfbtn active" data-tf="cat" data-val="all"        onclick="setTmplFilter('cat','all')">All</button>
-            <button class="pfbtn"        data-tf="cat" data-val="apt"        onclick="setTmplFilter('cat','apt')">APT</button>
-            <button class="pfbtn"        data-tf="cat" data-val="ransomware" onclick="setTmplFilter('cat','ransomware')">Ransomware</button>
-            <button class="pfbtn"        data-tf="cat" data-val="technique"  onclick="setTmplFilter('cat','technique')">Technique</button>
-            <button class="pfbtn"        data-tf="cat" data-val="insider"    onclick="setTmplFilter('cat','insider')">Insider</button>
+            <button class="pfbtn active" data-tf="cat" data-val="all"        data-on-click="setTmplFilter" data-args="[&quot;cat&quot;,&quot;all&quot;]">All</button>
+            <button class="pfbtn"        data-tf="cat" data-val="apt"        data-on-click="setTmplFilter" data-args="[&quot;cat&quot;,&quot;apt&quot;]">APT</button>
+            <button class="pfbtn"        data-tf="cat" data-val="ransomware" data-on-click="setTmplFilter" data-args="[&quot;cat&quot;,&quot;ransomware&quot;]">Ransomware</button>
+            <button class="pfbtn"        data-tf="cat" data-val="technique"  data-on-click="setTmplFilter" data-args="[&quot;cat&quot;,&quot;technique&quot;]">Technique</button>
+            <button class="pfbtn"        data-tf="cat" data-val="insider"    data-on-click="setTmplFilter" data-args="[&quot;cat&quot;,&quot;insider&quot;]">Insider</button>
           </div>
           <div id="sc-tile-grid"></div>
         </div>
@@ -1301,14 +1301,14 @@
         <!-- Threat Actor Library (Caldera emu adversary profiles) -->
         <div id="adversary-section" style="margin-top:2rem;display:none">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;flex-wrap:wrap;gap:0.5rem">
-            <h3 class="sc-src-hdr" id="adversary-hdr" onclick="toggleAdversarySection()" style="font-size:1.1rem;color:var(--accent);margin:0;gap:8px">
+            <h3 class="sc-src-hdr" id="adversary-hdr" data-on-click="toggleAdversarySection" style="font-size:1.1rem;color:var(--accent);margin:0;gap:8px">
               <span class="chev" style="font-size:0.75rem">&#9660;</span>
               <svg style="width:18px;height:18px;stroke:var(--accent)" viewBox="0 0 24 24" fill="none"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" stroke-width="2"/><circle cx="9" cy="7" r="4" stroke-width="2"/><path d="M23 21v-2a4 4 0 0 0-3-3.87" stroke-width="2"/><path d="M16 3.13a4 4 0 0 1 0 7.75" stroke-width="2"/></svg>
               Threat Actor Library
               <span id="adversary-cnt" class="cnt" style="font-size:0.8rem;background:var(--elevated);padding:2px 8px;border-radius:12px;border:1px solid var(--border)">0</span>
             </h3>
             <div style="display:flex;gap:0.4rem;align-items:center">
-              <input type="search" id="adv-search" placeholder="Search actor…" oninput="renderAdversaryLibrary()" onclick="event.stopPropagation()"
+              <input type="search" id="adv-search" placeholder="Search actor…" data-on-input="renderAdversaryLibrary" onclick="event.stopPropagation()"
                      style="padding:0.4rem 0.65rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:0.8rem;font-family:inherit;min-width:160px">
               <button class="btn btn-outline btn-sm" onclick="event.stopPropagation();loadAdversaries()">Refresh</button>
             </div>
@@ -1327,7 +1327,7 @@
         <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:1.5rem;width:min(480px,96vw);box-shadow:0 8px 40px rgba(0,0,0,0.5);max-height:90vh;overflow-y:auto">
           <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:0.4rem">
             <div style="font-size:1rem;font-weight:700;color:var(--text)" id="tmpl-run-title">Launch Template</div>
-            <button onclick="closeTmplRun()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:1.2rem;padding:0 0 0 0.5rem">&#10005;</button>
+            <button data-on-click="closeTmplRun" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:1.2rem;padding:0 0 0 0.5rem">&#10005;</button>
           </div>
           <div id="tmpl-run-desc" style="font-size:0.8rem;color:var(--muted);margin-bottom:1.25rem;line-height:1.5"></div>
 
@@ -1338,13 +1338,13 @@
           <label style="font-size:0.72rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:700;display:block;margin-bottom:0.35rem">Target</label>
           <div style="display:flex;gap:0.9rem;flex-wrap:wrap;margin-bottom:0.4rem">
             <label style="display:flex;align-items:center;gap:0.3rem;cursor:pointer;font-size:0.78rem;color:var(--muted)">
-              <input type="radio" name="tmpl-run-target-mode" value="individual" checked onchange="setTmplTargetMode('individual')"> Individual
+              <input type="radio" name="tmpl-run-target-mode" value="individual" checked data-on-change="setTmplTargetMode" data-args="[&quot;individual&quot;]"> Individual
             </label>
             <label style="display:flex;align-items:center;gap:0.3rem;cursor:pointer;font-size:0.78rem;color:var(--muted)">
-              <input type="radio" name="tmpl-run-target-mode" value="group" onchange="setTmplTargetMode('group')"> Group(s)
+              <input type="radio" name="tmpl-run-target-mode" value="group" data-on-change="setTmplTargetMode" data-args="[&quot;group&quot;]"> Group(s)
             </label>
             <label id="tmpl-run-all-label" style="display:none;align-items:center;gap:0.3rem;cursor:pointer;font-size:0.78rem;color:var(--muted)">
-              <input type="radio" name="tmpl-run-target-mode" value="all" onchange="setTmplTargetMode('all')"> All Agents
+              <input type="radio" name="tmpl-run-target-mode" value="all" data-on-change="setTmplTargetMode" data-args="[&quot;all&quot;]"> All Agents
             </label>
           </div>
           <div id="tmpl-run-individual-wrap">
@@ -1373,21 +1373,21 @@
           <div id="tmpl-run-warn" style="margin-bottom:0.85rem;font-size:0.78rem"></div>
 
           <div style="display:flex;gap:0.5rem;justify-content:flex-end">
-            <button class="btn btn-outline btn-sm" onclick="closeTmplRun()">Cancel</button>
-            <button class="btn btn-primary btn-sm" id="tmpl-run-confirm-btn" onclick="confirmTmplRun()">Launch</button>
+            <button class="btn btn-outline btn-sm" data-on-click="closeTmplRun">Cancel</button>
+            <button class="btn btn-primary btn-sm" id="tmpl-run-confirm-btn" data-on-click="confirmTmplRun">Launch</button>
           </div>
         </div>
       </div>
 
       <!-- Adversary detail drawer -->
-      <div id="adv-drawer-overlay" style="display:none;position:fixed;inset:0;z-index:500;background:rgba(0,0,0,0.55)" onclick="closeAdvDrawer()"></div>
+      <div id="adv-drawer-overlay" style="display:none;position:fixed;inset:0;z-index:500;background:rgba(0,0,0,0.55)" data-on-click="closeAdvDrawer"></div>
       <div id="adv-drawer" style="display:none;position:fixed;top:0;right:0;height:100%;width:min(480px,95vw);background:var(--surface);border-left:1px solid var(--border);z-index:501;overflow-y:auto;padding:1.5rem 1.25rem;box-shadow:-4px 0 24px rgba(0,0,0,0.3)">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:1rem">
           <div>
             <div id="adv-drawer-name" style="font-size:1.15rem;font-weight:700;color:var(--text);margin-bottom:0.25rem"></div>
             <div id="adv-drawer-desc" style="font-size:0.8rem;color:var(--muted);line-height:1.5"></div>
           </div>
-          <button onclick="closeAdvDrawer()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:1.2rem;padding:0 0 0 0.5rem">&#10005;</button>
+          <button data-on-click="closeAdvDrawer" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:1.2rem;padding:0 0 0 0.5rem">&#10005;</button>
         </div>
         <div id="adv-drawer-run-wrap" style="margin-bottom:1.25rem"></div>
         <div style="font-size:0.72rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--muted);font-weight:700;margin-bottom:0.6rem">Ability Chain</div>
@@ -1405,7 +1405,7 @@
           </div>
           <div style="margin-bottom:0.85rem">
             <label style="font-size:0.72rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--muted);font-weight:700;display:block;margin-bottom:0.4rem">Execution Mode</label>
-            <select id="adv-run-mode" onchange="renderAdvRunWarn()" style="width:100%;padding:0.5rem 0.7rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:0.82rem;font-family:inherit">
+            <select id="adv-run-mode" data-on-change="renderAdvRunWarn" style="width:100%;padding:0.5rem 0.7rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:0.82rem;font-family:inherit">
               <option value="telemetry">Telemetry — real identity-safe techniques (production-safe under approval)</option>
               <option value="lab">Lab — full-fidelity emulation (isolated range only)</option>
             </select>
@@ -1416,8 +1416,8 @@
             <input type="text" id="adv-run-reason" placeholder="e.g. CR-1234 detection validation" style="width:100%;padding:0.5rem 0.7rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:0.82rem;font-family:inherit;box-sizing:border-box">
           </div>
           <div style="display:flex;gap:0.5rem;justify-content:flex-end">
-            <button class="btn btn-outline btn-sm" onclick="closeAdvRunModal()">Cancel</button>
-            <button class="btn btn-primary btn-sm" id="adv-run-confirm-btn" onclick="confirmAdversaryRun()">&#9654; Run</button>
+            <button class="btn btn-outline btn-sm" data-on-click="closeAdvRunModal">Cancel</button>
+            <button class="btn btn-primary btn-sm" id="adv-run-confirm-btn" data-on-click="confirmAdversaryRun">&#9654; Run</button>
           </div>
         </div>
       </div>
@@ -1426,7 +1426,7 @@
       <div id="tab-runs" style="display:none">
         <div class="sec-hdr">
           <h2>Scenario Runs <span id="runs-cnt" class="cnt">0</span></h2>
-          <button class="btn btn-outline btn-sm" onclick="loadRuns()">Refresh</button>
+          <button class="btn btn-outline btn-sm" data-on-click="loadRuns">Refresh</button>
         </div>
         <div class="tbl-wrap">
           <table>
@@ -1446,8 +1446,8 @@
         <div class="sec-hdr">
           <h2>Scheduled Assessments <span id="sched-cnt" class="cnt">0</span></h2>
           <div style="display:flex;gap:0.5rem">
-            <button class="btn btn-outline btn-sm" onclick="loadScheduledAssessments()">Refresh</button>
-            <button class="btn btn-primary btn-sm" onclick="openSchedWizard()">+ New Schedule</button>
+            <button class="btn btn-outline btn-sm" data-on-click="loadScheduledAssessments">Refresh</button>
+            <button class="btn btn-primary btn-sm" data-on-click="openSchedWizard">+ New Schedule</button>
           </div>
         </div>
         <div class="tbl-wrap">
@@ -1469,13 +1469,13 @@
           <h2>Initiatives <span id="init-cnt" class="cnt">0</span></h2>
           <div style="display:flex;gap:0.5rem;align-items:center">
             <div id="init-filter" style="display:flex;gap:0.3rem">
-              <button class="btn btn-outline btn-sm active" data-init-filter="active" onclick="initiativeSetFilter('active')">Active</button>
-              <button class="btn btn-outline btn-sm" data-init-filter="closed" onclick="initiativeSetFilter('closed')">Closed</button>
-              <button class="btn btn-outline btn-sm" data-init-filter="archived" onclick="initiativeSetFilter('archived')">Archived</button>
-              <button class="btn btn-outline btn-sm" data-init-filter="all" onclick="initiativeSetFilter('all')">All</button>
+              <button class="btn btn-outline btn-sm active" data-init-filter="active" data-on-click="initiativeSetFilter" data-args="[&quot;active&quot;]">Active</button>
+              <button class="btn btn-outline btn-sm" data-init-filter="closed" data-on-click="initiativeSetFilter" data-args="[&quot;closed&quot;]">Closed</button>
+              <button class="btn btn-outline btn-sm" data-init-filter="archived" data-on-click="initiativeSetFilter" data-args="[&quot;archived&quot;]">Archived</button>
+              <button class="btn btn-outline btn-sm" data-init-filter="all" data-on-click="initiativeSetFilter" data-args="[&quot;all&quot;]">All</button>
             </div>
-            <button class="btn btn-outline btn-sm" onclick="loadInitiatives()">Refresh</button>
-            <button class="btn btn-primary btn-sm" onclick="openInitiativeCreateDrawer()">+ New Initiative</button>
+            <button class="btn btn-outline btn-sm" data-on-click="loadInitiatives">Refresh</button>
+            <button class="btn btn-primary btn-sm" data-on-click="openInitiativeCreateDrawer">+ New Initiative</button>
           </div>
         </div>
         <div class="tbl-wrap">
@@ -1500,8 +1500,8 @@
             </div>
             <div style="display:flex;gap:0.5rem;flex-shrink:0">
               <button class="btn btn-outline btn-sm" disabled style="opacity:0.5;cursor:not-allowed" title="Scheduled campaigns — coming soon">Schedule · soon</button>
-              <button class="btn btn-outline btn-sm" onclick="loadCampaigns()">Refresh</button>
-              <button class="btn btn-primary btn-sm" id="campaign-new-btn" onclick="openCampaignLaunch()">&#9654; New campaign</button>
+              <button class="btn btn-outline btn-sm" data-on-click="loadCampaigns">Refresh</button>
+              <button class="btn btn-primary btn-sm" id="campaign-new-btn" data-on-click="openCampaignLaunch">&#9654; New campaign</button>
             </div>
           </div>
           <div id="campaign-toolbar" style="margin-bottom:0.9rem"></div>
@@ -1523,13 +1523,13 @@
           <div class="dash-panel-hdr" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0.5rem">
             <span>Coverage Analytics</span>
             <div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap">
-              <select id="ca-scenario" onchange="loadCoverageAnalytics()" style="padding:3px 8px;background:var(--surface);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:0.76rem;font-family:inherit">
+              <select id="ca-scenario" data-on-change="loadCoverageAnalytics" style="padding:3px 8px;background:var(--surface);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:0.76rem;font-family:inherit">
                 <option value="">All scenarios</option>
               </select>
-              <select id="ca-agent" onchange="loadCoverageAnalytics()" style="padding:3px 8px;background:var(--surface);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:0.76rem;font-family:inherit">
+              <select id="ca-agent" data-on-change="loadCoverageAnalytics" style="padding:3px 8px;background:var(--surface);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:0.76rem;font-family:inherit">
                 <option value="">All agents</option>
               </select>
-              <button class="btn btn-outline btn-sm" onclick="loadCoverageAnalytics()">Refresh</button>
+              <button class="btn btn-outline btn-sm" data-on-click="loadCoverageAnalytics">Refresh</button>
             </div>
           </div>
           <div class="dash-panel-body" style="padding:0.9rem">
@@ -1609,7 +1609,7 @@
           </div>
           <div style="display:flex;gap:0.5rem;flex-shrink:0">
             <button class="btn btn-outline btn-sm" disabled style="opacity:0.5;cursor:not-allowed" title="ATT&amp;CK Navigator export — coming soon">Export layer · soon</button>
-            <button class="btn btn-primary btn-sm" onclick="openModal()">&#9654; Test coverage gaps</button>
+            <button class="btn btn-primary btn-sm" data-on-click="openModal">&#9654; Test coverage gaps</button>
           </div>
         </div>
         <div id="cov-toolbar" style="display:flex;align-items:center;gap:0.75rem;margin-bottom:0.9rem;flex-wrap:wrap"></div>
@@ -1629,19 +1629,19 @@
             <!-- Source filter chips -->
             <div style="display:flex;flex-wrap:wrap;gap:0.35rem;margin-bottom:0.6rem;align-items:center">
               <span style="font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)">Source</span>
-              <button class="pfbtn active" data-uf="src" data-val="all"    onclick="setUTLFilter('src','all')">All</button>
-              <button class="pfbtn"        data-uf="src" data-val="bas"    onclick="setUTLFilter('src','bas')">BAS</button>
-              <button class="pfbtn"        data-uf="src" data-val="art"    onclick="setUTLFilter('src','art')">ART</button>
-              <button class="pfbtn"        data-uf="src" data-val="emu"    onclick="setUTLFilter('src','emu')">Emu</button>
-              <button class="pfbtn"        data-uf="src" data-val="atomic" onclick="setUTLFilter('src','atomic')">Atomic</button>
-              <button class="pfbtn"        data-uf="src" data-val="multi"  onclick="setUTLFilter('src','multi')">Multi-source</button>
+              <button class="pfbtn active" data-uf="src" data-val="all"    data-on-click="setUTLFilter" data-args="[&quot;src&quot;,&quot;all&quot;]">All</button>
+              <button class="pfbtn"        data-uf="src" data-val="bas"    data-on-click="setUTLFilter" data-args="[&quot;src&quot;,&quot;bas&quot;]">BAS</button>
+              <button class="pfbtn"        data-uf="src" data-val="art"    data-on-click="setUTLFilter" data-args="[&quot;src&quot;,&quot;art&quot;]">ART</button>
+              <button class="pfbtn"        data-uf="src" data-val="emu"    data-on-click="setUTLFilter" data-args="[&quot;src&quot;,&quot;emu&quot;]">Emu</button>
+              <button class="pfbtn"        data-uf="src" data-val="atomic" data-on-click="setUTLFilter" data-args="[&quot;src&quot;,&quot;atomic&quot;]">Atomic</button>
+              <button class="pfbtn"        data-uf="src" data-val="multi"  data-on-click="setUTLFilter" data-args="[&quot;src&quot;,&quot;multi&quot;]">Multi-source</button>
               <span style="color:var(--border);margin:0 4px">|</span>
               <span style="font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)">Tactic</span>
-              <select id="utl-tactic" onchange="renderUTL()"
+              <select id="utl-tactic" data-on-change="renderUTL"
                       style="padding:2px 6px;background:var(--surface);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:0.76rem;font-family:inherit">
                 <option value="all">All tactics</option>
               </select>
-              <input id="utl-search" type="text" placeholder="Filter technique…" oninput="renderUTL()" autocomplete="off"
+              <input id="utl-search" type="text" placeholder="Filter technique…" data-on-input="renderUTL" autocomplete="off"
                      style="padding:3px 8px;background:var(--surface);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:0.76rem;font-family:inherit;min-width:160px">
             </div>
             <!-- Source legend -->
@@ -1682,11 +1682,11 @@
             <div style="font-size:0.8rem;color:var(--muted)">Fleet lateral-movement graph — reachability, blast radius, choke points, and paths to Domain Admin. Recon only: relationship mapping, no exploitation or propagation.</div>
           </div>
           <div style="display:flex;gap:0.5rem;flex-shrink:0">
-            <button class="btn btn-outline btn-sm" onclick="loadAttackPath()">Refresh</button>
-            <button class="btn btn-outline btn-sm" onclick="openAPAssets()">&#9873; Tag Assets</button>
-            <button class="btn btn-outline btn-sm" onclick="openAPSchedule()">&#8635; Schedule</button>
-            <button class="btn btn-outline btn-sm" onclick="openAPAbout()" title="How Attack Path Validation works">&#9432; About</button>
-            <button class="btn btn-primary btn-sm" id="ap-collect-btn" onclick="openAPCollect()">&#9654; Run Collection</button>
+            <button class="btn btn-outline btn-sm" data-on-click="loadAttackPath">Refresh</button>
+            <button class="btn btn-outline btn-sm" data-on-click="openAPAssets">&#9873; Tag Assets</button>
+            <button class="btn btn-outline btn-sm" data-on-click="openAPSchedule">&#8635; Schedule</button>
+            <button class="btn btn-outline btn-sm" data-on-click="openAPAbout" title="How Attack Path Validation works">&#9432; About</button>
+            <button class="btn btn-primary btn-sm" id="ap-collect-btn" data-on-click="openAPCollect">&#9654; Run Collection</button>
           </div>
         </div>
         <!-- Current Graph metadata bar — always visible when data exists -->
@@ -1712,7 +1712,7 @@
               </div>
             </div>
             <div style="margin-left:auto">
-              <button class="btn btn-outline btn-sm" onclick="toggleAPHistory()" id="ap-history-toggle">&#128196; History</button>
+              <button class="btn btn-outline btn-sm" data-on-click="toggleAPHistory" id="ap-history-toggle">&#128196; History</button>
             </div>
           </div>
         </div>
@@ -1722,7 +1722,7 @@
           <div class="dash-panel-body" style="padding:1rem">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem">
               <div style="font-weight:700;font-size:0.88rem;color:var(--text)">Collection History</div>
-              <button class="btn btn-outline btn-sm" onclick="toggleAPHistory()">Close</button>
+              <button class="btn btn-outline btn-sm" data-on-click="toggleAPHistory">Close</button>
             </div>
             <div class="tbl-wrap">
               <table>
@@ -1755,19 +1755,19 @@
             <div id="ap-form">
               <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.3rem">
                 <div style="font-weight:700;color:var(--text)">Run Attack-Path Collection</div>
-                <button class="btn btn-outline btn-sm" onclick="apCollectClose()" style="padding:0.2rem 0.55rem">&#10005;</button>
+                <button class="btn btn-outline btn-sm" data-on-click="apCollectClose" style="padding:0.2rem 0.55rem">&#10005;</button>
               </div>
               <div class="tiny muted" style="margin-bottom:0.75rem">The agent probes only the hosts you list (TCP connect — no scanning) and maps local admins, active sessions, and domain membership. SharpHound deepens the picture on domain-joined hosts if enabled and the binary is configured server-side.</div>
               <label class="tiny muted" style="display:block;margin-bottom:0.2rem">Agent</label>
               <div style="display:flex;gap:0.4rem;margin-bottom:0.6rem;align-items:center">
                 <select id="ap-agent" style="flex:1;padding:0.5rem;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:0.8rem"></select>
-                <button class="btn btn-outline btn-sm" onclick="apDiscoverSubnet()" id="ap-discover-btn" title="Populate targets with all hosts in this agent&apos;s subnet for you to review before dispatching" style="white-space:nowrap">&#128270; Discover Subnet</button>
+                <button class="btn btn-outline btn-sm" data-on-click="apDiscoverSubnet" id="ap-discover-btn" title="Populate targets with all hosts in this agent&apos;s subnet for you to review before dispatching" style="white-space:nowrap">&#128270; Discover Subnet</button>
               </div>
               <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.2rem">
                 <label class="tiny muted">Targets &mdash; one hostname or IP per line</label>
                 <span class="tiny muted" id="ap-target-count"></span>
               </div>
-              <textarea id="ap-targets" rows="5" placeholder="DC01&#10;FILE01&#10;10.0.0.20" oninput="apCountTargets()" style="width:100%;padding:0.5rem;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:6px;margin-bottom:0.6rem;font-family:var(--font-mono);font-size:0.78rem;resize:vertical;box-sizing:border-box"></textarea>
+              <textarea id="ap-targets" rows="5" placeholder="DC01&#10;FILE01&#10;10.0.0.20" data-on-input="apCountTargets" style="width:100%;padding:0.5rem;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:6px;margin-bottom:0.6rem;font-family:var(--font-mono);font-size:0.78rem;resize:vertical;box-sizing:border-box"></textarea>
               <label class="tiny muted" style="display:block;margin-bottom:0.2rem">Network segment tag (optional — groups hosts in the graph)</label>
               <input id="ap-segment" placeholder="user-vlan" style="width:100%;padding:0.5rem;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:6px;margin-bottom:0.6rem;font-size:0.8rem;box-sizing:border-box">
               <label style="display:flex;align-items:center;gap:0.45rem;font-size:0.8rem;color:var(--text);margin-bottom:0.8rem;cursor:pointer">
@@ -1779,8 +1779,8 @@
                 &mdash; a new collection will refresh the attack path graph.
               </div>
               <div style="display:flex;gap:0.5rem">
-                <button class="btn btn-primary btn-sm" onclick="dispatchAPCollect()">&#9654; Start Collection</button>
-                <button class="btn btn-outline btn-sm" onclick="apCollectClose()">Cancel</button>
+                <button class="btn btn-primary btn-sm" data-on-click="dispatchAPCollect">&#9654; Start Collection</button>
+                <button class="btn btn-outline btn-sm" data-on-click="apCollectClose">Cancel</button>
               </div>
             </div>
 
@@ -1788,16 +1788,16 @@
             <div id="ap-progress" style="display:none">
               <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
                 <div style="font-weight:700;color:var(--text)">Collection in progress</div>
-                <button class="btn btn-outline btn-sm" onclick="apCollectClose()" style="padding:0.2rem 0.55rem">&#10005;</button>
+                <button class="btn btn-outline btn-sm" data-on-click="apCollectClose" style="padding:0.2rem 0.55rem">&#10005;</button>
               </div>
               <div id="ap-timeline" style="display:flex;flex-direction:column;gap:0;padding-left:0.1rem"></div>
               <div id="ap-cancel-action" style="display:none;margin-top:0.75rem">
-                <button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger)" onclick="_apCancelJob()">&#10005; Cancel Collection</button>
+                <button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger)" data-on-click="_apCancelJob">&#10005; Cancel Collection</button>
               </div>
               <div id="ap-done-actions" style="display:none;margin-top:1rem;gap:0.5rem;flex-wrap:wrap">
                 <button class="btn btn-primary btn-sm" onclick="loadAttackPath();apCollectClose()">View Results</button>
                 <button id="ap-retry-btn" class="btn btn-outline btn-sm" style="display:none">&#8635; Retry</button>
-                <button class="btn btn-outline btn-sm" onclick="apCollectClose()">Close</button>
+                <button class="btn btn-outline btn-sm" data-on-click="apCollectClose">Close</button>
               </div>
             </div>
 
@@ -1824,7 +1824,7 @@
             </label>
             <div id="ap-sched-last" class="tiny muted" style="margin-bottom:0.6rem"></div>
             <div style="display:flex;gap:0.5rem">
-              <button class="btn btn-primary btn-sm" onclick="saveAPSchedule()">Save</button>
+              <button class="btn btn-primary btn-sm" data-on-click="saveAPSchedule">Save</button>
               <button class="btn btn-outline btn-sm" onclick="document.getElementById('ap-schedule').style.display='none'">Cancel</button>
             </div>
           </div>
@@ -1832,14 +1832,14 @@
         <div id="ap-body"><div class="empty" style="padding:2rem">Loading…</div></div>
 
         <!-- About modal -->
-        <div id="ap-about-backdrop" onclick="closeAPAbout()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:1000"></div>
+        <div id="ap-about-backdrop" data-on-click="closeAPAbout" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:1000"></div>
         <div id="ap-about-modal" style="display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:1001;width:min(680px,96vw);max-height:88vh;overflow-y:auto;background:var(--surface);border:1px solid var(--border);border-radius:12px;box-shadow:0 24px 60px rgba(0,0,0,0.5)">
           <div style="position:sticky;top:0;background:var(--surface);border-bottom:1px solid var(--border);padding:1rem 1.25rem 0.85rem;display:flex;align-items:center;justify-content:space-between;z-index:1">
             <div>
               <div style="font-family:var(--font-display);font-size:1.05rem;font-weight:700;color:var(--text);letter-spacing:-0.01em">&#9432; Attack Path Validation — How It Works</div>
               <div style="font-size:0.75rem;color:var(--muted);margin-top:0.15rem">Relationship mapping and reachability analysis · no exploitation · no propagation</div>
             </div>
-            <button onclick="closeAPAbout()" style="background:none;border:1px solid var(--border);border-radius:6px;padding:0.25rem 0.55rem;color:var(--muted);cursor:pointer;font-size:0.85rem">&#10005;</button>
+            <button data-on-click="closeAPAbout" style="background:none;border:1px solid var(--border);border-radius:6px;padding:0.25rem 0.55rem;color:var(--muted);cursor:pointer;font-size:0.85rem">&#10005;</button>
           </div>
           <div style="padding:1.25rem;font-size:0.82rem;color:var(--text);line-height:1.65">
 
@@ -1990,7 +1990,7 @@
 
           </div>
           <div style="padding:0.75rem 1.25rem;border-top:1px solid var(--border);text-align:right">
-            <button onclick="closeAPAbout()" class="btn btn-primary btn-sm">Got it</button>
+            <button data-on-click="closeAPAbout" class="btn btn-primary btn-sm">Got it</button>
           </div>
         </div>
       </div>
@@ -2002,7 +2002,7 @@
             <h1 style="font-family:var(--font-display);font-size:1.5rem;font-weight:700;letter-spacing:-0.02em;margin:0 0 0.3rem;color:var(--text)">Exposure Explorer</h1>
             <div style="font-size:0.8rem;color:var(--muted)">Per-asset attack-path exposure, detection coverage, CVE/KEV/EPSS risk, threat-group attribution, and findings — one composite Exposure Score per host.</div>
           </div>
-          <button class="btn btn-outline btn-sm" onclick="loadExposureAssets()">Refresh</button>
+          <button class="btn btn-outline btn-sm" data-on-click="loadExposureAssets">Refresh</button>
         </div>
         <div class="tbl-wrap">
           <table>
@@ -2025,13 +2025,13 @@
             <div style="font-size:0.8rem;color:var(--muted)">What to simulate next, ranked by threat priority, how overdue the technique is for testing, and whether it traverses a real path in your environment.</div>
           </div>
           <div style="display:flex;gap:0.5rem;align-items:center">
-            <select id="rec-limit" onchange="loadRecommendations()" style="padding:0.35rem 0.6rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:0.78rem">
+            <select id="rec-limit" data-on-change="loadRecommendations" style="padding:0.35rem 0.6rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:0.78rem">
               <option value="10">Top 10</option>
               <option value="20" selected>Top 20</option>
               <option value="50">Top 50</option>
             </select>
-            <button class="btn btn-outline btn-sm" onclick="copyRecommendedScenario()">Copy scenario techniques</button>
-            <button class="btn btn-outline btn-sm" onclick="loadRecommendations()">Refresh</button>
+            <button class="btn btn-outline btn-sm" data-on-click="copyRecommendedScenario">Copy scenario techniques</button>
+            <button class="btn btn-outline btn-sm" data-on-click="loadRecommendations">Refresh</button>
           </div>
         </div>
         <div class="tbl-wrap">
@@ -2055,8 +2055,8 @@
             <div style="font-size:0.8rem;color:var(--muted)">Security gaps surfaced by simulations — each is a technique that executed without being prevented. Triage and re-validate.</div>
           </div>
           <div style="display:flex;gap:0.5rem;flex-shrink:0">
-            <button class="btn btn-outline btn-sm" id="findings-bulk-btn" style="display:none" onclick="bulkPushSelectedFindings()">Push to ITSM</button>
-            <button class="btn btn-outline btn-sm" onclick="loadFindings()">Refresh</button>
+            <button class="btn btn-outline btn-sm" id="findings-bulk-btn" style="display:none" data-on-click="bulkPushSelectedFindings">Push to ITSM</button>
+            <button class="btn btn-outline btn-sm" data-on-click="loadFindings">Refresh</button>
           </div>
         </div>
         <div class="kpi-row" id="findings-tiles"></div>
@@ -2077,15 +2077,15 @@
             <div style="font-size:0.8rem;color:var(--muted)">Indicators observed across every run, deduplicated and cross-referenced against scenarios, agents, and ATT&amp;CK techniques.</div>
           </div>
           <div style="display:flex;gap:0.5rem;flex-shrink:0">
-            <button class="btn btn-outline btn-sm" id="ioc-import-btn" style="display:none" onclick="openIOCImportModal()">Import</button>
-            <button class="btn btn-outline btn-sm" onclick="loadIOCRegistry()">Refresh</button>
+            <button class="btn btn-outline btn-sm" id="ioc-import-btn" style="display:none" data-on-click="openIOCImportModal">Import</button>
+            <button class="btn btn-outline btn-sm" data-on-click="loadIOCRegistry">Refresh</button>
           </div>
         </div>
 
         <div class="kpi-row u-mb-1" id="ioc-analytics-tiles"></div>
 
         <div id="ioc-toolbar" style="display:flex;gap:0.6rem;align-items:center;margin-bottom:0.9rem;flex-wrap:wrap">
-          <select id="ioc-filter-type" onchange="loadIOCRegistry()" style="padding:0.35rem 0.6rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:0.78rem">
+          <select id="ioc-filter-type" data-on-change="loadIOCRegistry" style="padding:0.35rem 0.6rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:0.78rem">
             <option value="">All types</option>
             <option value="file_hash">File hash</option>
             <option value="domain">Domain</option>
@@ -2102,7 +2102,7 @@
             <option value="dns_record">DNS record</option>
             <option value="certificate">Certificate</option>
           </select>
-          <select id="ioc-filter-source" onchange="loadIOCRegistry()" style="padding:0.35rem 0.6rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:0.78rem">
+          <select id="ioc-filter-source" data-on-change="loadIOCRegistry" style="padding:0.35rem 0.6rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:0.78rem">
             <option value="">All sources</option>
             <option value="detection_alert">Detection alert</option>
             <option value="scenario">Scenario</option>
@@ -2110,7 +2110,7 @@
             <option value="manual">Manual</option>
             <option value="threat_feed">Threat feed</option>
           </select>
-          <select id="ioc-filter-origin" onchange="loadIOCRegistry()" style="padding:0.35rem 0.6rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:0.78rem">
+          <select id="ioc-filter-origin" data-on-change="loadIOCRegistry" style="padding:0.35rem 0.6rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:0.78rem">
             <option value="">All origins</option>
             <option value="built-in">Built-in</option>
             <option value="generated">Generated</option>
@@ -2121,7 +2121,7 @@
             <option value="threat-feed">Threat feed</option>
             <option value="customer">Customer</option>
           </select>
-          <select id="ioc-filter-status" onchange="loadIOCRegistry()" style="padding:0.35rem 0.6rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:0.78rem">
+          <select id="ioc-filter-status" data-on-change="loadIOCRegistry" style="padding:0.35rem 0.6rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:0.78rem">
             <option value="">All statuses</option>
             <option value="draft">Draft</option>
             <option value="generated">Generated</option>
@@ -2134,9 +2134,9 @@
             <option value="archived">Archived</option>
           </select>
           <input type="text" id="ioc-filter-search" placeholder="Search value…" onkeydown="if(event.key==='Enter')loadIOCRegistry()" style="padding:0.35rem 0.6rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:0.78rem;font-family:inherit;min-width:200px">
-          <button class="btn btn-outline btn-sm" onclick="loadIOCRegistry()">Search</button>
+          <button class="btn btn-outline btn-sm" data-on-click="loadIOCRegistry">Search</button>
           <label style="display:flex;align-items:center;gap:0.35rem;font-size:0.78rem;color:var(--muted);cursor:pointer">
-            <input type="checkbox" id="ioc-filter-suppressed" onchange="loadIOCRegistry()"> Show suppressed
+            <input type="checkbox" id="ioc-filter-suppressed" data-on-change="loadIOCRegistry"> Show suppressed
           </label>
         </div>
 
@@ -2156,9 +2156,9 @@
           <textarea id="ioc-import-text" rows="8" placeholder="domain,evil.example.com&#10;ip,203.0.113.9" style="width:100%;padding:0.5rem 0.7rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:0.8rem;font-family:var(--font-mono);resize:vertical"></textarea>
           <div id="ioc-import-err" style="display:none;margin-top:0.5rem;font-size:0.75rem;color:var(--danger)"></div>
           <div class="modal-actions">
-            <button class="btn btn-outline btn-sm" onclick="closeIOCImportModal()">Cancel</button>
+            <button class="btn btn-outline btn-sm" data-on-click="closeIOCImportModal">Cancel</button>
             <span class="u-flex1"></span>
-            <button id="ioc-import-submit-btn" class="btn btn-primary btn-sm" onclick="submitIOCImport()">Import</button>
+            <button id="ioc-import-submit-btn" class="btn btn-primary btn-sm" data-on-click="submitIOCImport">Import</button>
           </div>
         </div>
       </div>
@@ -2171,8 +2171,8 @@
             <div style="font-size:0.8rem;color:var(--muted)">Prioritized fixes from your open findings, with authoritative MITRE ATT&amp;CK mitigations. Re-validate after applying a fix.</div>
           </div>
           <div id="rem-ticket-actions" style="display:none;gap:0.5rem;flex-shrink:0">
-            <button class="btn btn-outline btn-sm" onclick="remBulkTicket('critical')">Create Tickets for All Critical</button>
-            <button class="btn btn-outline btn-sm" onclick="remBulkTicket('all')">Create Tickets for All</button>
+            <button class="btn btn-outline btn-sm" data-on-click="remBulkTicket" data-args="[&quot;critical&quot;]">Create Tickets for All Critical</button>
+            <button class="btn btn-outline btn-sm" data-on-click="remBulkTicket" data-args="[&quot;all&quot;]">Create Tickets for All</button>
           </div>
         </div>
         <div class="kpi-row" id="rem-tiles"></div>
@@ -2187,7 +2187,7 @@
         </div>
 
         <div style="display:flex;gap:0.75rem;flex-wrap:wrap;align-items:center;margin-bottom:1rem">
-          <select id="vf-run" onchange="vfLoadQueue()" style="min-width:280px;padding:0.5rem 0.6rem;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:8px;font-size:0.82rem">
+          <select id="vf-run" data-on-change="vfLoadQueue" style="min-width:280px;padding:0.5rem 0.6rem;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:8px;font-size:0.82rem">
             <option value="">Select a run…</option>
           </select>
           <div id="vf-domain-chips" style="display:flex;gap:0.4rem;flex-wrap:wrap"></div>
@@ -2206,10 +2206,10 @@
           <div style="font-size:0.8rem;color:var(--muted)">Generate evidence reports from your validated results. History re-generates on download — no stale copies.</div>
         </div>
         <div class="dash-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:1.25rem">
-          <div class="dash-panel u-pointer" onclick="openReportGen('posture')"><div class="dash-panel-body"><div class="kpi-label">Posture report</div><div style="font-weight:600;color:var(--text);margin:0.3rem 0">Full per-agent posture</div><div class="tiny muted">Prevention, detection, kill-chain — HTML report</div></div></div>
-          <div class="dash-panel u-pointer" onclick="openReportGen('audit')"><div class="dash-panel-body"><div class="kpi-label">Audit pack</div><div style="font-weight:600;color:var(--text);margin:0.3rem 0">Evidence bundle</div><div class="tiny muted">Per-agent audit-ready package</div></div></div>
-          <div class="dash-panel u-pointer" onclick="showTab('compliance')"><div class="dash-panel-body"><div class="kpi-label">Compliance evidence</div><div style="font-weight:600;color:var(--text);margin:0.3rem 0">Framework mapping</div><div class="tiny muted">SEBI/RBI/IRDAI/CERT-In/ISO/NIST — view on-screen, export JSON/CSV</div></div></div>
-          <div class="dash-panel u-pointer" onclick="showTab('sla-report')"><div class="dash-panel-body"><div class="kpi-label">SLA Compliance</div><div style="font-weight:600;color:var(--text);margin:0.3rem 0">Fleet SLA report</div><div class="tiny muted">On-time resolution rate by severity, trend, recent history</div></div></div>
+          <div class="dash-panel u-pointer" data-on-click="openReportGen" data-args="[&quot;posture&quot;]"><div class="dash-panel-body"><div class="kpi-label">Posture report</div><div style="font-weight:600;color:var(--text);margin:0.3rem 0">Full per-agent posture</div><div class="tiny muted">Prevention, detection, kill-chain — HTML report</div></div></div>
+          <div class="dash-panel u-pointer" data-on-click="openReportGen" data-args="[&quot;audit&quot;]"><div class="dash-panel-body"><div class="kpi-label">Audit pack</div><div style="font-weight:600;color:var(--text);margin:0.3rem 0">Evidence bundle</div><div class="tiny muted">Per-agent audit-ready package</div></div></div>
+          <div class="dash-panel u-pointer" data-on-click="showTab" data-args="[&quot;compliance&quot;]"><div class="dash-panel-body"><div class="kpi-label">Compliance evidence</div><div style="font-weight:600;color:var(--text);margin:0.3rem 0">Framework mapping</div><div class="tiny muted">SEBI/RBI/IRDAI/CERT-In/ISO/NIST — view on-screen, export JSON/CSV</div></div></div>
+          <div class="dash-panel u-pointer" data-on-click="showTab" data-args="[&quot;sla-report&quot;]"><div class="dash-panel-body"><div class="kpi-label">SLA Compliance</div><div style="font-weight:600;color:var(--text);margin:0.3rem 0">Fleet SLA report</div><div class="tiny muted">On-time resolution rate by severity, trend, recent history</div></div></div>
         </div>
         <div class="rep-shdr">Available reports — by agent</div>
         <div id="rep-available"><div class="empty" style="padding:1.25rem">Loading…</div></div>
@@ -2231,8 +2231,8 @@
             <div style="font-size:0.8rem;color:var(--muted)">Configure ITSM connectors. Analysts create tickets from the Findings tab; BAS can auto-create tickets for critical exposures based on policy.</div>
           </div>
           <div style="display:flex;gap:0.5rem;flex-shrink:0" id="integrations-admin-actions">
-            <button class="btn btn-outline btn-sm" onclick="triggerTicketingSync()">Sync Now</button>
-            <button class="btn btn-primary btn-sm" onclick="openAddConnector()">+ Add Connector</button>
+            <button class="btn btn-outline btn-sm" data-on-click="triggerTicketingSync">Sync Now</button>
+            <button class="btn btn-primary btn-sm" data-on-click="openAddConnector">+ Add Connector</button>
           </div>
         </div>
 
@@ -2244,7 +2244,7 @@
           <div class="conn-cfg-card">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
               <div style="font-size:0.85rem;font-weight:600;color:var(--text)" id="connector-form-title">Add Connector</div>
-              <button class="btn btn-outline btn-sm" onclick="closeConnectorForm()">✕ Cancel</button>
+              <button class="btn btn-outline btn-sm" data-on-click="closeConnectorForm">✕ Cancel</button>
             </div>
             <input type="hidden" id="cf-id">
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;margin-bottom:0.75rem">
@@ -2254,7 +2254,7 @@
               </div>
               <div>
                 <div class="conn-cfg-label" style="margin-bottom:0.3rem">Provider</div>
-                <select id="cf-provider" class="inp-sm u-w100" onchange="renderConnectorSettings()">
+                <select id="cf-provider" class="inp-sm u-w100" data-on-change="renderConnectorSettings">
                   <option value="servicenow">ServiceNow</option>
                   <option value="jira">Jira</option>
                   <option value="webhook">Webhook</option>
@@ -2287,8 +2287,8 @@
               </div>
             </div>
             <div style="display:flex;gap:0.5rem">
-              <button class="btn btn-outline btn-sm" onclick="testConnectorForm()">Test Connection</button>
-              <button class="btn btn-primary btn-sm" onclick="saveConnectorForm()">Save</button>
+              <button class="btn btn-outline btn-sm" data-on-click="testConnectorForm">Test Connection</button>
+              <button class="btn btn-primary btn-sm" data-on-click="saveConnectorForm">Save</button>
             </div>
             <div id="cf-test-result" style="margin-top:0.5rem;font-size:0.75rem;display:none"></div>
           </div>
@@ -2302,7 +2302,7 @@
               <div style="font-size:0.82rem;font-weight:600;color:var(--text)">Pending Revalidation</div>
               <div style="font-size:0.75rem;color:var(--muted)">Tickets resolved in ITSM — run BAS again to confirm prevention before closing finding.</div>
             </div>
-            <button class="btn btn-outline btn-sm" style="margin-left:auto" onclick="showTab('findings')">View Findings →</button>
+            <button class="btn btn-outline btn-sm" style="margin-left:auto" data-on-click="showTab" data-args="[&quot;findings&quot;]">View Findings →</button>
           </div>
         </div>
 
@@ -2313,7 +2313,7 @@
             <h2 style="font-family:var(--font-display);font-size:1.15rem;font-weight:700;letter-spacing:-0.02em;margin:0 0 0.3rem;color:var(--text)">EPP Response Connectors</h2>
             <div style="font-size:0.8rem;color:var(--muted)">CrowdStrike / Defender credentials for isolate, kill process, and quarantine actions from the Findings tab.</div>
           </div>
-          <button class="btn btn-primary btn-sm" onclick="openAddResponseConnector()">+ Add Connector</button>
+          <button class="btn btn-primary btn-sm" data-on-click="openAddResponseConnector">+ Add Connector</button>
         </div>
         <div id="response-connectors-list"><div class="empty" style="padding:2rem">Loading connectors…</div></div>
 
@@ -2322,7 +2322,7 @@
           <div class="conn-cfg-card">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
               <div style="font-size:0.85rem;font-weight:600;color:var(--text)" id="response-connector-form-title">Add Connector</div>
-              <button class="btn btn-outline btn-sm" onclick="closeResponseConnectorForm()">✕ Cancel</button>
+              <button class="btn btn-outline btn-sm" data-on-click="closeResponseConnectorForm">✕ Cancel</button>
             </div>
             <input type="hidden" id="rc-id">
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;margin-bottom:0.75rem">
@@ -2332,7 +2332,7 @@
               </div>
               <div>
                 <div class="conn-cfg-label" style="margin-bottom:0.3rem">Provider</div>
-                <select id="rc-provider" class="inp-sm u-w100" onchange="renderResponseConnectorFields()">
+                <select id="rc-provider" class="inp-sm u-w100" data-on-change="renderResponseConnectorFields">
                   <option value="crowdstrike">CrowdStrike Falcon</option>
                   <option value="microsoft_defender">Microsoft Defender for Endpoint</option>
                 </select>
@@ -2369,7 +2369,7 @@
               <input type="checkbox" id="rc-enabled" checked> Enabled
             </label>
             <div style="display:flex;gap:0.5rem">
-              <button class="btn btn-primary btn-sm" onclick="saveResponseConnectorForm()">Save</button>
+              <button class="btn btn-primary btn-sm" data-on-click="saveResponseConnectorForm">Save</button>
             </div>
           </div>
         </div>
@@ -2424,7 +2424,7 @@
           <div class="card-title">Technique Coverage</div>
           <div style="margin:0.5rem 0 1rem;display:flex;gap:0.75rem;align-items:center">
             <label class="tiny muted" for="cov-actor-select">Actor</label>
-            <select id="cov-actor-select" onchange="loadCoverageMatrix()">
+            <select id="cov-actor-select" data-on-change="loadCoverageMatrix">
               <option value="">All techniques</option>
             </select>
           </div>
@@ -2472,7 +2472,7 @@
 
         <div id="tp-detail-view" style="display:none">
           <div style="margin-bottom:0.75rem">
-            <a class="tiny" style="color:var(--accent);cursor:pointer;text-decoration:none" onclick="showThreatPriorityList()">&lsaquo; Threat Prioritization</a>
+            <a class="tiny" style="color:var(--accent);cursor:pointer;text-decoration:none" data-on-click="showThreatPriorityList">&lsaquo; Threat Prioritization</a>
           </div>
           <div class="card" style="margin-bottom:1rem;padding:1rem 1.2rem">
             <div class="card-title" id="tp-detail-title">Actor</div>
@@ -2520,16 +2520,16 @@
       <!-- Compliance (reached from the Reports hub) -->
       <div id="tab-compliance" style="display:none">
         <div style="margin-bottom:0.75rem">
-          <a class="tiny" style="color:var(--accent);cursor:pointer;text-decoration:none" onclick="showTab('reports')">&lsaquo; Reports</a>
+          <a class="tiny" style="color:var(--accent);cursor:pointer;text-decoration:none" data-on-click="showTab" data-args="[&quot;reports&quot;]">&lsaquo; Reports</a>
         </div>
         <div class="sec-hdr">
           <h2>Compliance Report</h2>
           <div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap">
             <select id="cmp-agent-sel" class="btn btn-outline" style="min-width:160px"></select>
             <select id="cmp-fw-sel" class="btn btn-outline" style="min-width:200px"></select>
-            <button class="btn btn-primary btn-sm" onclick="loadComplianceReport()">Generate</button>
-            <button class="btn btn-outline btn-sm" onclick="exportCompliance('json')" id="cmp-export-json" style="display:none">↓ JSON</button>
-            <button class="btn btn-outline btn-sm" onclick="exportCompliance('csv')" id="cmp-export-csv" style="display:none">↓ CSV</button>
+            <button class="btn btn-primary btn-sm" data-on-click="loadComplianceReport">Generate</button>
+            <button class="btn btn-outline btn-sm" data-on-click="exportCompliance" data-args="[&quot;json&quot;]" id="cmp-export-json" style="display:none">↓ JSON</button>
+            <button class="btn btn-outline btn-sm" data-on-click="exportCompliance" data-args="[&quot;csv&quot;]" id="cmp-export-csv" style="display:none">↓ CSV</button>
           </div>
         </div>
 
@@ -2548,11 +2548,11 @@
             <div class="cmp-controls-hdr">
               <span class="cmp-controls-title">Controls</span>
               <div class="cmp-filter-tabs">
-                <button class="cmp-ftab active" data-filter="" onclick="filterControls('')">All</button>
-                <button class="cmp-ftab f-pass" data-filter="pass" onclick="filterControls('pass')">Compliant</button>
-                <button class="cmp-ftab f-fail" data-filter="fail" onclick="filterControls('fail')">Non-Compliant</button>
-                <button class="cmp-ftab f-untested" data-filter="untested" onclick="filterControls('untested')">Untested</button>
-                <button class="cmp-ftab f-manual" data-filter="manual" onclick="filterControls('manual')">Manual</button>
+                <button class="cmp-ftab active" data-filter="" data-on-click="filterControls" data-args="[&quot;&quot;]">All</button>
+                <button class="cmp-ftab f-pass" data-filter="pass" data-on-click="filterControls" data-args="[&quot;pass&quot;]">Compliant</button>
+                <button class="cmp-ftab f-fail" data-filter="fail" data-on-click="filterControls" data-args="[&quot;fail&quot;]">Non-Compliant</button>
+                <button class="cmp-ftab f-untested" data-filter="untested" data-on-click="filterControls" data-args="[&quot;untested&quot;]">Untested</button>
+                <button class="cmp-ftab f-manual" data-filter="manual" data-on-click="filterControls" data-args="[&quot;manual&quot;]">Manual</button>
               </div>
             </div>
             <div class="tbl-wrap">
@@ -2576,11 +2576,11 @@
       <!-- ── SLA Compliance Report ─────────────────────────────────────── -->
       <div id="tab-sla-report" style="display:none">
         <div style="margin-bottom:0.75rem">
-          <a class="tiny" style="color:var(--accent);cursor:pointer;text-decoration:none" onclick="showTab('reports')">&lsaquo; Reports</a>
+          <a class="tiny" style="color:var(--accent);cursor:pointer;text-decoration:none" data-on-click="showTab" data-args="[&quot;reports&quot;]">&lsaquo; Reports</a>
         </div>
         <div class="sec-hdr">
           <h2>SLA Compliance</h2>
-          <button class="btn btn-outline btn-sm" onclick="loadSLAReport()">&#x21bb; Refresh</button>
+          <button class="btn btn-outline btn-sm" data-on-click="loadSLAReport">&#x21bb; Refresh</button>
         </div>
         <div id="sla-rpt-empty" class="empty" style="display:none;padding:2rem">No SLA data yet.</div>
         <div id="sla-rpt-body">
@@ -2609,7 +2609,7 @@
         <div class="sec-hdr">
           <h2>Variant Executor</h2>
           <div style="display:flex;gap:0.5rem;align-items:center">
-            <button class="btn btn-outline btn-sm" onclick="loadVariantTab()">&#x21bb; Refresh</button>
+            <button class="btn btn-outline btn-sm" data-on-click="loadVariantTab">&#x21bb; Refresh</button>
           </div>
         </div>
 
@@ -2625,20 +2625,20 @@
                 Full Variant Sweep
               </div>
               <div class="tiny muted">Run all <strong id="vex-sweep-tech-count" class="u-text">—</strong> Windows-runnable ART techniques<span id="vex-sweep-caldera-count"></span> sequentially · <span id="vex-sweep-total-variants" class="u-text">—</span> total variants ·
-                <button type="button" class="btn btn-sm" onclick="showVexStatHelp('Windows-runnable ART techniques','This is the subset of ART techniques that have at least one Windows atomic test — see Settings → Simulation Engine for the full breakdown (total ART techniques, how many are Windows-runnable, and total atomic tests across all of them). Techniques with Linux/macOS-only atomics are excluded here since this sweep only runs on Windows agents.')" title="Why this number?" style="padding:0 3px;line-height:1;font-size:0.68rem;color:var(--muted);background:transparent;border:none;text-decoration:underline;cursor:pointer">why this number?</button>
+                <button type="button" class="btn btn-sm" data-on-click="showVexStatHelp" data-args="[&quot;Windows-runnable ART techniques&quot;,&quot;This is the subset of ART techniques that have at least one Windows atomic test — see Settings → Simulation Engine for the full breakdown (total ART techniques, how many are Windows-runnable, and total atomic tests across all of them). Techniques with Linux/macOS-only atomics are excluded here since this sweep only runs on Windows agents.&quot;]" title="Why this number?" style="padding:0 3px;line-height:1;font-size:0.68rem;color:var(--muted);background:transparent;border:none;text-decoration:underline;cursor:pointer">why this number?</button>
                 · <span class="tiny muted">runs technique-by-technique; you can see live progress</span></div>
             </div>
             <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap">
               <div style="display:flex;gap:0.6rem;margin-right:0.4rem">
                 <label style="display:flex;align-items:center;gap:0.3rem;cursor:pointer;font-size:0.78rem;color:var(--muted);white-space:nowrap">
-                  <input type="radio" name="vex-target-mode" value="individual" checked onchange="setVexTargetMode('individual')"> Individual
+                  <input type="radio" name="vex-target-mode" value="individual" checked data-on-change="setVexTargetMode" data-args="[&quot;individual&quot;]"> Individual
                 </label>
                 <label style="display:flex;align-items:center;gap:0.3rem;cursor:pointer;font-size:0.78rem;color:var(--muted);white-space:nowrap">
-                  <input type="radio" name="vex-target-mode" value="group" onchange="setVexTargetMode('group')"> Group(s)
+                  <input type="radio" name="vex-target-mode" value="group" data-on-change="setVexTargetMode" data-args="[&quot;group&quot;]"> Group(s)
                 </label>
               </div>
               <div id="vex-sweep-individual-wrap" style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap">
-                <select id="vex-sweep-agent" class="btn btn-outline" style="font-size:0.8rem;min-width:140px" onchange="_vexCheckAgentSweepConflict()">
+                <select id="vex-sweep-agent" class="btn btn-outline" style="font-size:0.8rem;min-width:140px" data-on-change="_vexCheckAgentSweepConflict">
                   <option value="">Select agent…</option>
                 </select>
                 <span id="vex-sweep-agent-hint" class="tiny u-warning"></span>
@@ -2650,7 +2650,7 @@
               <label style="display:flex;align-items:center;gap:0.35rem;font-size:0.78rem;color:var(--muted);cursor:pointer;white-space:nowrap">
                 <input type="checkbox" id="vex-sweep-advanced" style="accent-color:var(--accent)"> Advanced Pack
               </label>
-              <span id="vex-sweep-btn-inline-slot"><button id="vex-sweep-btn" class="btn btn-primary" onclick="vexRunFullSweep()" style="white-space:nowrap">▶ Start Sweep</button></span>
+              <span id="vex-sweep-btn-inline-slot"><button id="vex-sweep-btn" class="btn btn-primary" data-on-click="vexRunFullSweep" style="white-space:nowrap">▶ Start Sweep</button></span>
             </div>
           </div>
           <div id="vex-sweep-group-wrap" style="display:none;margin-top:0.75rem;padding-top:0.75rem;border-top:1px solid var(--border)">
@@ -2671,13 +2671,13 @@
                 <label class="modal-lbl" style="display:block;margin-bottom:0.25rem">Target</label>
                 <div style="display:flex;gap:0.9rem;flex-wrap:wrap;margin-bottom:0.4rem">
                   <label style="display:flex;align-items:center;gap:0.3rem;cursor:pointer;font-size:0.78rem;color:var(--muted)">
-                    <input type="radio" name="vex-run-target-mode" value="individual" checked onchange="setVexRunTargetMode('individual')"> Individual
+                    <input type="radio" name="vex-run-target-mode" value="individual" checked data-on-change="setVexRunTargetMode" data-args="[&quot;individual&quot;]"> Individual
                   </label>
                   <label style="display:flex;align-items:center;gap:0.3rem;cursor:pointer;font-size:0.78rem;color:var(--muted)">
-                    <input type="radio" name="vex-run-target-mode" value="group" onchange="setVexRunTargetMode('group')"> Group(s)
+                    <input type="radio" name="vex-run-target-mode" value="group" data-on-change="setVexRunTargetMode" data-args="[&quot;group&quot;]"> Group(s)
                   </label>
                   <label id="vex-run-all-label" style="display:none;align-items:center;gap:0.3rem;cursor:pointer;font-size:0.78rem;color:var(--muted)">
-                    <input type="radio" name="vex-run-target-mode" value="all" onchange="setVexRunTargetMode('all')"> All Agents
+                    <input type="radio" name="vex-run-target-mode" value="all" data-on-change="setVexRunTargetMode" data-args="[&quot;all&quot;]"> All Agents
                   </label>
                 </div>
                 <div id="vex-run-individual-wrap">
@@ -2693,7 +2693,7 @@
               </div>
               <div>
                 <label class="modal-lbl" style="display:block;margin-bottom:0.25rem">Tactic</label>
-                <select id="vex-tactic" class="btn btn-outline" style="width:100%;text-align:left" onchange="filterVexTechniques()">
+                <select id="vex-tactic" class="btn btn-outline" style="width:100%;text-align:left" data-on-change="filterVexTechniques">
                   <option value="">All tactics</option>
                 </select>
               </div>
@@ -2701,11 +2701,11 @@
                 <label class="modal-lbl" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.25rem">
                   <span>Techniques <span id="vex-tech-count" style="color:var(--muted);font-size:0.72rem"></span></span>
                   <span style="display:flex;gap:0.3rem">
-                    <button class="btn btn-sm btn-outline" onclick="vexSelectAll()" style="font-size:0.66rem;padding:1px 6px">All</button>
-                    <button class="btn btn-sm btn-outline" onclick="vexClearAll()" style="font-size:0.66rem;padding:1px 6px">None</button>
+                    <button class="btn btn-sm btn-outline" data-on-click="vexSelectAll" style="font-size:0.66rem;padding:1px 6px">All</button>
+                    <button class="btn btn-sm btn-outline" data-on-click="vexClearAll" style="font-size:0.66rem;padding:1px 6px">None</button>
                   </span>
                 </label>
-                <input type="text" id="vex-tech-search" class="btn btn-outline" style="width:100%;font-size:0.78rem;margin-bottom:0.3rem" placeholder="Search T-ID or name…" oninput="filterVexTechniques()">
+                <input type="text" id="vex-tech-search" class="btn btn-outline" style="width:100%;font-size:0.78rem;margin-bottom:0.3rem" placeholder="Search T-ID or name…" data-on-input="filterVexTechniques">
                 <div id="vex-technique-list" style="max-height:150px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;padding:0.35rem;background:var(--surface)">
                   <div style="color:var(--muted);font-size:0.75rem;padding:0.4rem">Loading…</div>
                 </div>
@@ -2728,7 +2728,7 @@
                 <input type="checkbox" id="vex-advanced" style="accent-color:var(--accent)">
                 Include Advanced Pack (AMSI bypass)
               </label>
-              <button id="vex-run-btn" class="btn btn-primary" style="width:100%;margin-top:0.25rem" onclick="runVariants()">Run</button>
+              <button id="vex-run-btn" class="btn btn-primary" style="width:100%;margin-top:0.25rem" data-on-click="runVariants">Run</button>
             </div>
           </div>
 
@@ -2762,8 +2762,8 @@
             <div class="tiny muted" style="margin-top:0.2rem">14 validation layers — from control presence to adversary emulation</div>
           </div>
           <div style="display:flex;gap:0.5rem;align-items:center">
-            <button class="btn btn-outline btn-sm" onclick="loadEmTab()">&#x21bb; Refresh</button>
-            <button class="btn btn-primary btn-sm" onclick="openEMSweepModal()">&#9654; Run Full Sweep</button>
+            <button class="btn btn-outline btn-sm" data-on-click="loadEmTab">&#x21bb; Refresh</button>
+            <button class="btn btn-primary btn-sm" data-on-click="openEMSweepModal">&#9654; Run Full Sweep</button>
           </div>
         </div>
 
@@ -2803,7 +2803,7 @@
       <div class="wz-pane" data-pane="1">
         <div id="modal-sc-wrap">
           <label class="modal-lbl">Scenario</label>
-          <select id="modal-sc" onchange="renderRunMode()"></select>
+          <select id="modal-sc" data-on-change="renderRunMode"></select>
         </div>
         <p class="sub2" style="margin-top:0.55rem">Choose the adversary emulation to run.</p>
       </div>
@@ -2814,26 +2814,26 @@
           <label class="modal-lbl">Target</label>
           <div style="display:flex;gap:1.1rem;margin-top:0.35rem;flex-wrap:wrap">
             <label style="display:flex;align-items:center;gap:0.35rem;cursor:pointer;font-size:0.82rem">
-              <input type="radio" name="modal-target-mode" value="individual" checked onchange="setTargetMode('individual')"> Individual Agent(s)
+              <input type="radio" name="modal-target-mode" value="individual" checked data-on-change="setTargetMode" data-args="[&quot;individual&quot;]"> Individual Agent(s)
             </label>
             <label style="display:flex;align-items:center;gap:0.35rem;cursor:pointer;font-size:0.82rem">
-              <input type="radio" name="modal-target-mode" value="group" onchange="setTargetMode('group')"> Agent Group(s)
+              <input type="radio" name="modal-target-mode" value="group" data-on-change="setTargetMode" data-args="[&quot;group&quot;]"> Agent Group(s)
             </label>
             <label id="modal-target-all-label" style="display:none;align-items:center;gap:0.35rem;cursor:pointer;font-size:0.82rem">
-              <input type="radio" name="modal-target-mode" value="all" onchange="setTargetMode('all')"> All Agents
+              <input type="radio" name="modal-target-mode" value="all" data-on-change="setTargetMode" data-args="[&quot;all&quot;]"> All Agents
             </label>
           </div>
         </div>
 
         <div id="modal-individual-wrap">
           <label class="modal-lbl">Primary Agent</label>
-          <select id="modal-agent" onchange="renderRunMode()"></select>
+          <select id="modal-agent" data-on-change="renderRunMode"></select>
           <p class="sub2" style="margin-top:0.55rem">The endpoint that will execute this run.</p>
 
           <div id="modal-addl-wrap" style="display:none;margin-top:0.9rem">
             <label class="modal-lbl">Run on Additional Agents <span class="tiny muted" id="modal-addl-cnt">(0 selected)</span></label>
             <div style="display:flex;justify-content:flex-end;margin-bottom:0.4rem">
-              <button class="btn btn-outline btn-sm" onclick="selectAllAdditionalAgents()">Select all</button>
+              <button class="btn btn-outline btn-sm" data-on-click="selectAllAdditionalAgents">Select all</button>
             </div>
             <div id="modal-addl-list" style="max-height:200px;overflow:auto;border:1px solid var(--border);border-radius:var(--radius);padding:0.4rem"></div>
             <p class="sub2" style="margin-top:0.4rem">Same scenario, mode, and options will be dispatched to each checked agent.</p>
@@ -2862,7 +2862,7 @@
         <!-- Execution mode — only shown for hybrid (executable) scenarios -->
         <div id="modal-mode-wrap" style="display:none;margin-top:0.75rem">
           <label class="modal-lbl">Execution mode</label>
-          <select id="modal-mode" onchange="renderRunMode()">
+          <select id="modal-mode" data-on-change="renderRunMode">
             <option value="posture">Posture — read-only, safe on any host</option>
             <option value="telemetry">Telemetry — real identity-safe techniques (production-safe under approval)</option>
             <option value="lab">Lab — full-fidelity emulation (isolated range only)</option>
@@ -2879,7 +2879,7 @@
         <!-- Variant depth — only shown for live (telemetry/lab) ART runs -->
         <div id="modal-variant-wrap" style="display:none;margin-top:0.75rem">
           <label class="modal-lbl">Variant depth</label>
-          <select id="modal-variant-depth" onchange="updateVariantDepthNote()">
+          <select id="modal-variant-depth" data-on-change="updateVariantDepthNote">
             <option value="none">None — base test only (1 per step)</option>
             <option value="quick">Quick — ~5 per PS step (encoding + privilege + WMI)</option>
             <option value="standard">Standard — ~15 per PS step (all dimensions, key cross-products)</option>
@@ -2908,11 +2908,11 @@
     </div>
 
     <div class="modal-actions wz-actions">
-      <button class="btn btn-outline btn-sm" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-outline btn-sm" data-on-click="closeModal">Cancel</button>
       <span class="u-flex1"></span>
-      <button id="wz-back" class="btn btn-outline btn-sm" onclick="wizardNav(-1)" style="display:none">&#8592; Back</button>
-      <button id="wz-next" class="btn btn-primary btn-sm" onclick="wizardNav(1)">Next &#8594;</button>
-      <button id="modal-run-btn" class="btn btn-outline-green btn-sm" onclick="confirmRun()" style="display:none">&#9654; Run</button>
+      <button id="wz-back" class="btn btn-outline btn-sm" data-on-click="wizardNav" data-args="[-1]" style="display:none">&#8592; Back</button>
+      <button id="wz-next" class="btn btn-primary btn-sm" data-on-click="wizardNav" data-args="[1]">Next &#8594;</button>
+      <button id="modal-run-btn" class="btn btn-outline-green btn-sm" data-on-click="confirmRun" style="display:none">&#9654; Run</button>
     </div>
   </div>
 </div>
@@ -2950,7 +2950,7 @@
       <!-- Step 3: Mode & Recurrence -->
       <div class="wz-pane" data-sched-pane="3" style="display:none">
         <label class="modal-lbl">Execution mode</label>
-        <select id="sched-mode" onchange="schedOnModeChange()"></select>
+        <select id="sched-mode" data-on-change="schedOnModeChange"></select>
         <div id="sched-mode-warn" style="display:none;margin-top:0.6rem;padding:0.6rem 0.75rem;border-radius:var(--radius);font-size:0.78rem;line-height:1.45;border:1px solid rgba(210,153,34,0.5);background:rgba(210,153,34,0.08);color:var(--warning)">This assessment executes real, alert-generating techniques against the selected targets and will run unattended.</div>
         <div id="sched-reason-wrap" style="display:none;margin-top:0.6rem">
           <label class="modal-lbl">Reason / authorization basis (required, audited)</label>
@@ -2959,7 +2959,7 @@
         </div>
 
         <label class="modal-lbl" style="margin-top:0.9rem;display:block">Recurrence</label>
-        <select id="sched-recurrence-type" onchange="schedOnRecurrenceChange()">
+        <select id="sched-recurrence-type" data-on-change="schedOnRecurrenceChange">
           <option value="once">Once</option>
           <option value="daily">Daily</option>
           <option value="weekly" selected>Weekly</option>
@@ -3026,11 +3026,11 @@
     </div>
 
     <div class="modal-actions wz-actions">
-      <button class="btn btn-outline btn-sm" onclick="closeSchedWizard()">Cancel</button>
+      <button class="btn btn-outline btn-sm" data-on-click="closeSchedWizard">Cancel</button>
       <span class="u-flex1"></span>
-      <button id="sched-wz-back" class="btn btn-outline btn-sm" onclick="schedWizardNav(-1)" style="display:none">&#8592; Back</button>
-      <button id="sched-wz-next" class="btn btn-primary btn-sm" onclick="schedWizardNav(1)">Next &#8594;</button>
-      <button id="sched-create-btn" class="btn btn-outline-green btn-sm" onclick="submitScheduledAssessment()" style="display:none">Create Schedule</button>
+      <button id="sched-wz-back" class="btn btn-outline btn-sm" data-on-click="schedWizardNav" data-args="[-1]" style="display:none">&#8592; Back</button>
+      <button id="sched-wz-next" class="btn btn-primary btn-sm" data-on-click="schedWizardNav" data-args="[1]">Next &#8594;</button>
+      <button id="sched-create-btn" class="btn btn-outline-green btn-sm" data-on-click="submitScheduledAssessment" style="display:none">Create Schedule</button>
     </div>
   </div>
 </div>
@@ -3042,7 +3042,7 @@
     <p class="sub2" id="respond-target-sub"></p>
 
     <label class="modal-lbl">Action</label>
-    <select id="respond-action" onchange="renderRespondFields()">
+    <select id="respond-action" data-on-change="renderRespondFields">
       <option value="endpoint.isolate">Isolate host</option>
       <option value="endpoint.release">Release from isolation</option>
       <option value="endpoint.kill_process">Kill process</option>
@@ -3050,7 +3050,7 @@
     </select>
 
     <label class="modal-lbl u-mt-06">Connector</label>
-    <select id="respond-connector" onchange="renderRespondFields()"></select>
+    <select id="respond-connector" data-on-change="renderRespondFields"></select>
 
     <div id="respond-extra-field" style="margin-top:0.6rem;display:none">
       <label class="modal-lbl" id="respond-extra-label"></label>
@@ -3067,9 +3067,9 @@
            style="width:100%;padding:0.5rem 0.7rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:0.82rem;font-family:inherit">
 
     <div class="modal-actions">
-      <button class="btn btn-outline btn-sm" onclick="closeRespondModal()">Cancel</button>
+      <button class="btn btn-outline btn-sm" data-on-click="closeRespondModal">Cancel</button>
       <span class="u-flex1"></span>
-      <button id="respond-submit-btn" class="btn btn-outline-green btn-sm" onclick="submitRespondAction()">&#9654; Execute</button>
+      <button id="respond-submit-btn" class="btn btn-outline-green btn-sm" data-on-click="submitRespondAction">&#9654; Execute</button>
     </div>
   </div>
 </div>
@@ -3096,7 +3096,7 @@
            style="width:100%;padding:0.5rem 0.7rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:0.82rem;font-family:inherit">
 
     <label class="modal-lbl u-mt-06">Auth Type</label>
-    <select id="taxii-conn-auth-type" onchange="taxiiToggleAuthFields()"
+    <select id="taxii-conn-auth-type" data-on-change="taxiiToggleAuthFields"
             style="width:100%;padding:0.5rem 0.7rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:0.82rem">
       <option value="none">None</option>
       <option value="basic">Basic (username/password)</option>
@@ -3123,10 +3123,10 @@
     <div id="taxii-conn-test-result" class="tiny muted" style="margin-top:0.5rem"></div>
 
     <div class="modal-actions">
-      <button class="btn btn-outline btn-sm" onclick="testTAXIIConnectorForm()">Test Connection</button>
+      <button class="btn btn-outline btn-sm" data-on-click="testTAXIIConnectorForm">Test Connection</button>
       <span class="u-flex1"></span>
-      <button class="btn btn-outline btn-sm" onclick="closeTAXIIConnectorModal()">Cancel</button>
-      <button class="btn btn-primary btn-sm" id="taxii-conn-save-btn" onclick="saveTAXIIConnectorForm()">Save</button>
+      <button class="btn btn-outline btn-sm" data-on-click="closeTAXIIConnectorModal">Cancel</button>
+      <button class="btn btn-primary btn-sm" id="taxii-conn-save-btn" data-on-click="saveTAXIIConnectorForm">Save</button>
     </div>
   </div>
 </div>
@@ -3146,9 +3146,9 @@
            style="width:100%;padding:0.5rem 0.7rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:0.82rem;font-family:inherit">
 
     <div class="modal-actions">
-      <button class="btn btn-outline btn-sm" onclick="closeStopAgentModal()">Cancel</button>
+      <button class="btn btn-outline btn-sm" data-on-click="closeStopAgentModal">Cancel</button>
       <span class="u-flex1"></span>
-      <button id="stop-agent-submit-btn" class="btn btn-sm" style="color:#fff;background:var(--danger)" onclick="submitStopAgent()">&#9209; Stop Agent</button>
+      <button id="stop-agent-submit-btn" class="btn btn-sm" style="color:#fff;background:var(--danger)" data-on-click="submitStopAgent">&#9209; Stop Agent</button>
     </div>
   </div>
 </div>
@@ -3168,9 +3168,9 @@
            style="width:100%;padding:0.5rem 0.7rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:0.82rem;font-family:inherit">
 
     <div class="modal-actions">
-      <button class="btn btn-outline btn-sm" onclick="closeUninstallAgentModal()">Cancel</button>
+      <button class="btn btn-outline btn-sm" data-on-click="closeUninstallAgentModal">Cancel</button>
       <span class="u-flex1"></span>
-      <button id="uninstall-agent-submit-btn" class="btn btn-sm" style="color:#fff;background:var(--danger)" onclick="submitUninstallAgent()">&#128465; Uninstall Agent</button>
+      <button id="uninstall-agent-submit-btn" class="btn btn-sm" style="color:#fff;background:var(--danger)" data-on-click="submitUninstallAgent">&#128465; Uninstall Agent</button>
     </div>
   </div>
 </div>
@@ -3190,9 +3190,9 @@
            style="width:100%;padding:0.5rem 0.7rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:0.82rem;font-family:inherit">
 
     <div class="modal-actions">
-      <button class="btn btn-outline btn-sm" onclick="closeRemoveAgentModal()">Cancel</button>
+      <button class="btn btn-outline btn-sm" data-on-click="closeRemoveAgentModal">Cancel</button>
       <span class="u-flex1"></span>
-      <button id="remove-agent-submit-btn" class="btn btn-sm" style="color:#fff;background:var(--danger)" onclick="submitRemoveAgent()">&#128465; Force Remove</button>
+      <button id="remove-agent-submit-btn" class="btn btn-sm" style="color:#fff;background:var(--danger)" data-on-click="submitRemoveAgent">&#128465; Force Remove</button>
     </div>
   </div>
 </div>
@@ -3206,9 +3206,9 @@
     <p class="sub2">Review what will change before saving.</p>
     <div id="confirm-diff-body" style="margin:0.6rem 0"></div>
     <div class="modal-actions">
-      <button class="btn btn-outline btn-sm" onclick="closeConfirmDiffModal()">Cancel</button>
+      <button class="btn btn-outline btn-sm" data-on-click="closeConfirmDiffModal">Cancel</button>
       <span class="u-flex1"></span>
-      <button id="confirm-diff-submit-btn" class="btn btn-primary btn-sm" onclick="runConfirmDiffModal()">Save</button>
+      <button id="confirm-diff-submit-btn" class="btn btn-primary btn-sm" data-on-click="runConfirmDiffModal">Save</button>
     </div>
   </div>
 </div>
@@ -3220,9 +3220,9 @@
     <label class="modal-lbl">Group</label>
     <select id="gp-select" class="u-w100"></select>
     <div class="modal-actions">
-      <button class="btn btn-outline btn-sm" onclick="closeGroupPicker()">Cancel</button>
+      <button class="btn btn-outline btn-sm" data-on-click="closeGroupPicker">Cancel</button>
       <span class="u-flex1"></span>
-      <button class="btn btn-primary btn-sm" onclick="submitGroupPicker()">Move</button>
+      <button class="btn btn-primary btn-sm" data-on-click="submitGroupPicker">Move</button>
     </div>
   </div>
 </div>
@@ -3232,37 +3232,37 @@
   <div class="modal" style="width:580px;display:flex;flex-direction:column;max-height:88vh">
     <h3 id="picker-title">Select techniques</h3>
     <p class="sub2" id="picker-sub">Tick the items you want to run. Use search to narrow the list.</p>
-    <input type="text" id="picker-search" placeholder="Filter by ID, name, or tactic…" oninput="renderPickerList()" autocomplete="off"
+    <input type="text" id="picker-search" placeholder="Filter by ID, name, or tactic…" data-on-input="renderPickerList" autocomplete="off"
            style="width:100%;padding:0.5rem 0.7rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:0.82rem;font-family:inherit;margin-bottom:0.5rem">
 
     <!-- Caldera-only metadata filters (hidden for ART/steps/posture) -->
     <div id="picker-caldera-filters" style="display:none;margin-bottom:0.5rem;border:1px solid var(--border);border-radius:var(--radius);padding:0.55rem 0.65rem;background:var(--elevated);font-size:0.78rem">
       <div style="display:flex;flex-wrap:wrap;gap:0.35rem;align-items:center;margin-bottom:0.4rem">
         <span style="color:var(--muted);font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;margin-right:2px">Plugin</span>
-        <button class="pfbtn active" data-pf="plugin" data-val="all"     onclick="setPF('plugin','all')">All</button>
-        <button class="pfbtn"        data-pf="plugin" data-val="emu"     onclick="setPF('plugin','emu')">emu</button>
-        <button class="pfbtn"        data-pf="plugin" data-val="atomic"  onclick="setPF('plugin','atomic')">atomic</button>
-        <button class="pfbtn"        data-pf="plugin" data-val="stockpile" onclick="setPF('plugin','stockpile')">stockpile</button>
+        <button class="pfbtn active" data-pf="plugin" data-val="all"     data-on-click="setPF" data-args="[&quot;plugin&quot;,&quot;all&quot;]">All</button>
+        <button class="pfbtn"        data-pf="plugin" data-val="emu"     data-on-click="setPF" data-args="[&quot;plugin&quot;,&quot;emu&quot;]">emu</button>
+        <button class="pfbtn"        data-pf="plugin" data-val="atomic"  data-on-click="setPF" data-args="[&quot;plugin&quot;,&quot;atomic&quot;]">atomic</button>
+        <button class="pfbtn"        data-pf="plugin" data-val="stockpile" data-on-click="setPF" data-args="[&quot;plugin&quot;,&quot;stockpile&quot;]">stockpile</button>
         <span style="color:var(--border);margin:0 2px">|</span>
         <span style="color:var(--muted);font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;margin-right:2px">Payload</span>
-        <button class="pfbtn active" data-pf="payload" data-val="all" onclick="setPF('payload','all')">All</button>
-        <button class="pfbtn"        data-pf="payload" data-val="yes" onclick="setPF('payload','yes')">Required</button>
-        <button class="pfbtn"        data-pf="payload" data-val="no"  onclick="setPF('payload','no')">None</button>
+        <button class="pfbtn active" data-pf="payload" data-val="all" data-on-click="setPF" data-args="[&quot;payload&quot;,&quot;all&quot;]">All</button>
+        <button class="pfbtn"        data-pf="payload" data-val="yes" data-on-click="setPF" data-args="[&quot;payload&quot;,&quot;yes&quot;]">Required</button>
+        <button class="pfbtn"        data-pf="payload" data-val="no"  data-on-click="setPF" data-args="[&quot;payload&quot;,&quot;no&quot;]">None</button>
         <span style="color:var(--border);margin:0 2px">|</span>
         <span style="color:var(--muted);font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;margin-right:2px">Admin</span>
-        <button class="pfbtn active" data-pf="admin" data-val="all" onclick="setPF('admin','all')">All</button>
-        <button class="pfbtn"        data-pf="admin" data-val="yes" onclick="setPF('admin','yes')">Required</button>
-        <button class="pfbtn"        data-pf="admin" data-val="no"  onclick="setPF('admin','no')">Not required</button>
+        <button class="pfbtn active" data-pf="admin" data-val="all" data-on-click="setPF" data-args="[&quot;admin&quot;,&quot;all&quot;]">All</button>
+        <button class="pfbtn"        data-pf="admin" data-val="yes" data-on-click="setPF" data-args="[&quot;admin&quot;,&quot;yes&quot;]">Required</button>
+        <button class="pfbtn"        data-pf="admin" data-val="no"  data-on-click="setPF" data-args="[&quot;admin&quot;,&quot;no&quot;]">Not required</button>
       </div>
       <div style="display:flex;flex-wrap:wrap;gap:0.35rem;align-items:center">
         <span style="color:var(--muted);font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;margin-right:2px">Platform</span>
-        <button class="pfbtn active" data-pf="platform" data-val="all"     onclick="setPF('platform','all')">All</button>
-        <button class="pfbtn"        data-pf="platform" data-val="windows" onclick="setPF('platform','windows')">Windows</button>
-        <button class="pfbtn"        data-pf="platform" data-val="linux"   onclick="setPF('platform','linux')">Linux</button>
-        <button class="pfbtn"        data-pf="platform" data-val="darwin"  onclick="setPF('platform','darwin')">macOS</button>
+        <button class="pfbtn active" data-pf="platform" data-val="all"     data-on-click="setPF" data-args="[&quot;platform&quot;,&quot;all&quot;]">All</button>
+        <button class="pfbtn"        data-pf="platform" data-val="windows" data-on-click="setPF" data-args="[&quot;platform&quot;,&quot;windows&quot;]">Windows</button>
+        <button class="pfbtn"        data-pf="platform" data-val="linux"   data-on-click="setPF" data-args="[&quot;platform&quot;,&quot;linux&quot;]">Linux</button>
+        <button class="pfbtn"        data-pf="platform" data-val="darwin"  data-on-click="setPF" data-args="[&quot;platform&quot;,&quot;darwin&quot;]">macOS</button>
         <span style="color:var(--border);margin:0 2px">|</span>
         <span style="color:var(--muted);font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;margin-right:2px">Tactic</span>
-        <select id="picker-tactic-sel" onchange="renderPickerList()"
+        <select id="picker-tactic-sel" data-on-change="renderPickerList"
                 style="padding:2px 6px;background:var(--surface);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:0.76rem;font-family:inherit">
           <option value="all">All tactics</option>
         </select>
@@ -3276,8 +3276,8 @@
     </div>
     <div id="picker-list" style="flex:1;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius);padding:0.25rem"></div>
     <div class="modal-actions">
-      <button class="btn btn-outline btn-sm" id="picker-cancel-btn" onclick="closePicker()">Cancel</button>
-      <button id="picker-apply" class="btn btn-outline-green btn-sm" onclick="applyPicker()">&#9654; Use selection</button>
+      <button class="btn btn-outline btn-sm" id="picker-cancel-btn" data-on-click="closePicker">Cancel</button>
+      <button id="picker-apply" class="btn btn-outline-green btn-sm" data-on-click="applyPicker">&#9654; Use selection</button>
     </div>
   </div>
 </div>
@@ -3293,10 +3293,10 @@
     <label class="modal-lbl" style="margin-top:0.9rem;display:block">Campaign Source</label>
     <div style="display:flex;gap:1.1rem;margin:0.35rem 0 0;flex-wrap:wrap">
       <label style="display:flex;align-items:center;gap:0.35rem;cursor:pointer;font-size:0.82rem">
-        <input type="radio" name="cmp-source" value="threat_informed" checked onchange="setCampaignSource('threat_informed')"> Threat-Informed Campaign
+        <input type="radio" name="cmp-source" value="threat_informed" checked data-on-change="setCampaignSource" data-args="[&quot;threat_informed&quot;]"> Threat-Informed Campaign
       </label>
       <label style="display:flex;align-items:center;gap:0.35rem;cursor:pointer;font-size:0.82rem">
-        <input type="radio" name="cmp-source" value="existing_scenario" onchange="setCampaignSource('existing_scenario')"> Existing Scenario
+        <input type="radio" name="cmp-source" value="existing_scenario" data-on-change="setCampaignSource" data-args="[&quot;existing_scenario&quot;]"> Existing Scenario
       </label>
     </div>
 
@@ -3304,16 +3304,16 @@
     <div id="cmp-source-ti" style="margin:0.65rem 0 0;padding:0.85rem 1rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius)">
       <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.07em;text-transform:uppercase;color:var(--accent);margin-bottom:0.65rem">Threat Intelligence</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.4rem" id="ti-pack-grid">
-        <button class="btn btn-outline btn-sm" style="justify-content:flex-start;gap:0.4rem;text-align:left" onclick="selectTIPack('kev')">&#9760; KEV Exposure</button>
-        <button class="btn btn-outline btn-sm" style="justify-content:flex-start;gap:0.4rem;text-align:left" onclick="selectTIPack('ransomware')">&#128274; Ransomware Readiness</button>
-        <button class="btn btn-outline btn-sm" style="justify-content:flex-start;gap:0.4rem;text-align:left" onclick="selectTIPack('credential-theft')">&#128272; Credential Theft</button>
-        <button class="btn btn-outline btn-sm" style="justify-content:flex-start;gap:0.4rem;text-align:left" onclick="selectTIPack('living-off-the-land')">&#9881; Living-Off-The-Land</button>
-        <button class="btn btn-outline btn-sm" style="justify-content:flex-start;gap:0.4rem;text-align:left" onclick="selectTIPack('powershell-abuse')">&#128187; PowerShell Abuse</button>
-        <button class="btn btn-outline btn-sm" style="justify-content:flex-start;gap:0.4rem;text-align:left" onclick="selectTIPack('lateral-movement')">&#8596; Lateral Movement</button>
+        <button class="btn btn-outline btn-sm" style="justify-content:flex-start;gap:0.4rem;text-align:left" data-on-click="selectTIPack" data-args="[&quot;kev&quot;]">&#9760; KEV Exposure</button>
+        <button class="btn btn-outline btn-sm" style="justify-content:flex-start;gap:0.4rem;text-align:left" data-on-click="selectTIPack" data-args="[&quot;ransomware&quot;]">&#128274; Ransomware Readiness</button>
+        <button class="btn btn-outline btn-sm" style="justify-content:flex-start;gap:0.4rem;text-align:left" data-on-click="selectTIPack" data-args="[&quot;credential-theft&quot;]">&#128272; Credential Theft</button>
+        <button class="btn btn-outline btn-sm" style="justify-content:flex-start;gap:0.4rem;text-align:left" data-on-click="selectTIPack" data-args="[&quot;living-off-the-land&quot;]">&#9881; Living-Off-The-Land</button>
+        <button class="btn btn-outline btn-sm" style="justify-content:flex-start;gap:0.4rem;text-align:left" data-on-click="selectTIPack" data-args="[&quot;powershell-abuse&quot;]">&#128187; PowerShell Abuse</button>
+        <button class="btn btn-outline btn-sm" style="justify-content:flex-start;gap:0.4rem;text-align:left" data-on-click="selectTIPack" data-args="[&quot;lateral-movement&quot;]">&#8596; Lateral Movement</button>
       </div>
       <div id="ti-pack-preview" style="display:none;margin-top:0.65rem;padding:0.6rem 0.75rem;background:var(--bg);border:1px solid var(--accent);border-radius:var(--radius)">
         <div id="ti-pack-info" style="font-size:0.8rem;color:var(--text);margin-bottom:0.5rem"></div>
-        <button class="btn btn-primary btn-sm u-w100" onclick="generateTIScenario()">&#9654; Generate Campaign</button>
+        <button class="btn btn-primary btn-sm u-w100" data-on-click="generateTIScenario">&#9654; Generate Campaign</button>
       </div>
       <div id="ti-generated-preview" style="display:none;margin-top:0.65rem;padding:0.6rem 0.75rem;background:rgba(35,134,54,0.1);border:1px solid var(--success);border-radius:var(--radius);font-size:0.8rem;color:var(--text)"></div>
     </div>
@@ -3321,7 +3321,7 @@
     <!-- ── Existing Scenario ── -->
     <div id="cmp-source-existing" style="display:none;margin:0.65rem 0 0">
       <label class="modal-lbl">Scenario</label>
-      <select id="cmp-scenario" onchange="cmpOnExistingScenarioChange()"></select>
+      <select id="cmp-scenario" data-on-change="cmpOnExistingScenarioChange"></select>
       <div id="cmp-scenario-preview" style="margin-top:0.4rem;font-size:0.78rem;color:var(--muted)"></div>
     </div>
 
@@ -3332,7 +3332,7 @@
       <option value="lab">Lab — full-fidelity (isolated range only)</option>
     </select>
     <label class="modal-lbl" style="margin-top:0.9rem;display:block">Campaign Targets</label>
-    <select id="cmp-target-type" onchange="cmpOnTargetTypeChange()">
+    <select id="cmp-target-type" data-on-change="cmpOnTargetTypeChange">
       <option value="agents">Agents</option>
       <option value="group">Agent Group</option>
     </select>
@@ -3340,16 +3340,16 @@
     <div id="cmp-target-agents-wrap">
       <label class="modal-lbl" style="margin-top:0.6rem;display:block">Agents <span class="tiny muted" id="cmp-target-cnt">(0 selected)</span></label>
       <div style="display:flex;gap:0.5rem;margin-bottom:0.4rem">
-        <select id="cmp-filter-os" onchange="renderCampaignTargets()" class="u-flex1"><option value="">All OS</option><option value="windows">Windows</option><option value="linux">Linux</option><option value="darwin">macOS</option></select>
-        <select id="cmp-filter-env" onchange="renderCampaignTargets()" class="u-flex1"><option value="">All environments</option></select>
-        <button class="btn btn-outline btn-sm" onclick="cmpSelectAllFiltered()">Select all</button>
+        <select id="cmp-filter-os" data-on-change="renderCampaignTargets" class="u-flex1"><option value="">All OS</option><option value="windows">Windows</option><option value="linux">Linux</option><option value="darwin">macOS</option></select>
+        <select id="cmp-filter-env" data-on-change="renderCampaignTargets" class="u-flex1"><option value="">All environments</option></select>
+        <button class="btn btn-outline btn-sm" data-on-click="cmpSelectAllFiltered">Select all</button>
       </div>
       <div id="cmp-targets" style="max-height:200px;overflow:auto;border:1px solid var(--border);border-radius:var(--radius);padding:0.4rem"></div>
     </div>
 
     <div id="cmp-target-group-wrap" style="display:none;margin-top:0.6rem">
       <label class="modal-lbl">Agent Group</label>
-      <select id="cmp-group" onchange="cmpOnGroupChange()"></select>
+      <select id="cmp-group" data-on-change="cmpOnGroupChange"></select>
       <div id="cmp-group-preview" style="margin-top:0.5rem;font-size:0.78rem;color:var(--muted)"></div>
       <label class="modal-lbl" style="margin-top:0.7rem;display:block">Exclude agents <span class="tiny muted" id="cmp-excl-cnt">(0 excluded)</span></label>
       <div id="cmp-exclusions" style="max-height:150px;overflow:auto;border:1px solid var(--border);border-radius:var(--radius);padding:0.4rem"></div>
@@ -3365,8 +3365,8 @@
       </label>
     </div>
     <div class="modal-actions">
-      <button class="btn btn-outline btn-sm" onclick="closeCampaignLaunch()">Cancel</button>
-      <button class="btn btn-primary btn-sm" id="cmp-launch-btn" onclick="submitCampaign()">&#9654; Launch</button>
+      <button class="btn btn-outline btn-sm" data-on-click="closeCampaignLaunch">Cancel</button>
+      <button class="btn btn-primary btn-sm" id="cmp-launch-btn" data-on-click="submitCampaign">&#9654; Launch</button>
     </div>
   </div>
 </div>
@@ -3394,8 +3394,8 @@
       </select>
     </div>
     <div class="modal-actions">
-      <button class="btn btn-outline btn-sm" onclick="closeReportGen()">Cancel</button>
-      <button class="btn btn-primary btn-sm" onclick="submitReport()">&#9660; Generate &amp; download</button>
+      <button class="btn btn-outline btn-sm" data-on-click="closeReportGen">Cancel</button>
+      <button class="btn btn-primary btn-sm" data-on-click="submitReport">&#9660; Generate &amp; download</button>
     </div>
   </div>
 </div>
@@ -3431,7 +3431,7 @@
     </div>
 
     <div class="modal-actions" style="display:flex; justify-content:flex-end; gap:0.5rem;">
-      <button class="btn btn-outline btn-sm" onclick="closeDownloadOptions()">Cancel</button>
+      <button class="btn btn-outline btn-sm" data-on-click="closeDownloadOptions">Cancel</button>
       <button class="btn btn-primary btn-sm" id="dl-confirm-btn">Confirm &amp; Download</button>
     </div>
   </div>
@@ -3443,7 +3443,7 @@
     <div class="drawer-header">
       <h3 id="results-title">Run Results</h3>
       <div id="results-header-actions" style="display:flex;gap:0.5rem;align-items:center;margin-left:auto;margin-right:0.75rem"></div>
-      <button class="drawer-close" onclick="closeResults()">&#10005;</button>
+      <button class="drawer-close" data-on-click="closeResults">&#10005;</button>
     </div>
     <div class="drawer-body">
       <div id="results-summary" style="margin-bottom:0.75rem;font-size:0.8rem"></div>
@@ -3461,7 +3461,7 @@
   <div class="drawer" style="width:480px;max-width:94vw">
     <div class="drawer-header">
       <h3 id="init-drawer-title">Initiative</h3>
-      <button class="drawer-close" onclick="closeInitiativeDrawer()">&#10005;</button>
+      <button class="drawer-close" data-on-click="closeInitiativeDrawer">&#10005;</button>
     </div>
     <div class="drawer-body" id="init-drawer-body"></div>
   </div>
@@ -3472,7 +3472,7 @@
   <div class="drawer" style="width:420px;max-width:94vw">
     <div class="drawer-header">
       <h3>New Initiative</h3>
-      <button class="drawer-close" onclick="closeInitiativeCreateDrawer()">&#10005;</button>
+      <button class="drawer-close" data-on-click="closeInitiativeCreateDrawer">&#10005;</button>
     </div>
     <div class="drawer-body">
       <label style="font-size:0.72rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:700;display:block;margin-bottom:0.35rem">Name</label>
@@ -3484,8 +3484,8 @@
       <div id="init-create-error" style="margin-bottom:0.85rem"></div>
 
       <div style="display:flex;gap:0.5rem;justify-content:flex-end">
-        <button class="btn btn-outline btn-sm" onclick="closeInitiativeCreateDrawer()">Cancel</button>
-        <button class="btn btn-primary btn-sm" onclick="submitInitiativeCreate()">Create</button>
+        <button class="btn btn-outline btn-sm" data-on-click="closeInitiativeCreateDrawer">Cancel</button>
+        <button class="btn btn-primary btn-sm" data-on-click="submitInitiativeCreate">Create</button>
       </div>
     </div>
   </div>
@@ -3496,15 +3496,15 @@
   <div class="drawer" style="width:420px;max-width:94vw">
     <div class="drawer-header">
       <h3>Attach Job</h3>
-      <button class="drawer-close" onclick="closeInitiativeAttachDrawer()">&#10005;</button>
+      <button class="drawer-close" data-on-click="closeInitiativeAttachDrawer">&#10005;</button>
     </div>
     <div class="drawer-body">
-      <input type="text" id="init-attach-search" placeholder="Search job ID or type" oninput="initiativeRenderAttachList()" style="width:100%;padding:0.5rem;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:6px;margin-bottom:0.85rem;font-size:0.8rem;font-family:inherit">
+      <input type="text" id="init-attach-search" placeholder="Search job ID or type" data-on-input="initiativeRenderAttachList" style="width:100%;padding:0.5rem;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:6px;margin-bottom:0.85rem;font-size:0.8rem;font-family:inherit">
       <div id="init-attach-list" style="max-height:320px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;margin-bottom:0.85rem"></div>
       <div id="init-attach-error" style="margin-bottom:0.85rem"></div>
       <div style="display:flex;gap:0.5rem;justify-content:flex-end">
-        <button class="btn btn-outline btn-sm" onclick="closeInitiativeAttachDrawer()">Cancel</button>
-        <button class="btn btn-primary btn-sm" onclick="submitInitiativeAttach()">Attach</button>
+        <button class="btn btn-outline btn-sm" data-on-click="closeInitiativeAttachDrawer">Cancel</button>
+        <button class="btn btn-primary btn-sm" data-on-click="submitInitiativeAttach">Attach</button>
       </div>
     </div>
   </div>
@@ -3517,15 +3517,15 @@
   <div class="drawer" style="width:480px;max-width:94vw">
     <div class="drawer-header">
       <h3 id="rerun-review-title">Re-run Review</h3>
-      <button class="drawer-close" onclick="closeRerunReview()">&#10005;</button>
+      <button class="drawer-close" data-on-click="closeRerunReview">&#10005;</button>
     </div>
     <div class="drawer-body">
       <p class="tiny muted" id="rerun-review-subtitle" style="margin-bottom:0.75rem">Exact clone of the original run's configuration — nothing below is editable.</p>
       <div id="rerun-review-body"></div>
     </div>
     <div style="padding:0.85rem 1.25rem;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:0.5rem;flex-shrink:0">
-      <button class="btn btn-outline btn-sm" onclick="closeRerunReview()">Cancel</button>
-      <button class="btn btn-primary btn-sm" id="rerun-review-start-btn" onclick="startRerunFromReview()">&#9654; Start Re-run</button>
+      <button class="btn btn-outline btn-sm" data-on-click="closeRerunReview">Cancel</button>
+      <button class="btn btn-primary btn-sm" id="rerun-review-start-btn" data-on-click="startRerunFromReview">&#9654; Start Re-run</button>
     </div>
   </div>
 </div>
@@ -3535,7 +3535,7 @@
     <div class="drawer-header" style="flex-direction:column;align-items:flex-start;gap:0.1rem">
       <div style="display:flex;justify-content:space-between;align-items:center;width:100%">
         <h3 id="run-live-title">Live Run</h3>
-        <button class="drawer-close" onclick="closeRunLive()">&#10005;</button>
+        <button class="drawer-close" data-on-click="closeRunLive">&#10005;</button>
       </div>
       <div id="run-live-subtitle" style="font-size:0.72rem;color:var(--muted)"></div>
     </div>
@@ -3551,7 +3551,7 @@
   <div class="drawer" style="width:540px;max-width:94vw">
     <div class="drawer-header">
       <h3 id="sweep-drilldown-title">Full Variant Sweep</h3>
-      <button class="drawer-close" onclick="closeSweepDrilldown()">&#10005;</button>
+      <button class="drawer-close" data-on-click="closeSweepDrilldown">&#10005;</button>
     </div>
     <div class="drawer-body">
       <div id="sweep-drilldown-summary" class="sub2" style="margin-bottom:0.75rem"></div>
@@ -3566,19 +3566,19 @@
   <div class="drawer" style="width:480px;max-width:94vw">
     <div class="drawer-header">
       <h3>Run Full Sweep — Endpoint Mastery</h3>
-      <button class="drawer-close" onclick="closeEMSweepModal()">&#10005;</button>
+      <button class="drawer-close" data-on-click="closeEMSweepModal">&#10005;</button>
     </div>
     <div class="drawer-body">
       <p class="tiny muted" style="margin-bottom:0.75rem">Dispatches all 14 Endpoint Mastery layers sequentially — each layer runs to completion before the next starts. You can add extra scenarios from the full library in the next step.</p>
       <div style="margin-bottom:1rem;display:flex;gap:1.1rem;flex-wrap:wrap">
         <label style="display:flex;align-items:center;gap:0.35rem;cursor:pointer;font-size:0.82rem">
-          <input type="radio" name="em-sweep-target-mode" value="individual" checked onchange="setEMSweepTargetMode('individual')"> Individual Agent
+          <input type="radio" name="em-sweep-target-mode" value="individual" checked data-on-change="setEMSweepTargetMode" data-args="[&quot;individual&quot;]"> Individual Agent
         </label>
         <label style="display:flex;align-items:center;gap:0.35rem;cursor:pointer;font-size:0.82rem">
-          <input type="radio" name="em-sweep-target-mode" value="group" onchange="setEMSweepTargetMode('group')"> Agent Group(s)
+          <input type="radio" name="em-sweep-target-mode" value="group" data-on-change="setEMSweepTargetMode" data-args="[&quot;group&quot;]"> Agent Group(s)
         </label>
         <label style="display:flex;align-items:center;gap:0.35rem;cursor:pointer;font-size:0.82rem">
-          <input type="radio" name="em-sweep-target-mode" value="all" onchange="setEMSweepTargetMode('all')"> All Agents
+          <input type="radio" name="em-sweep-target-mode" value="all" data-on-change="setEMSweepTargetMode" data-args="[&quot;all&quot;]"> All Agents
         </label>
       </div>
       <div id="em-sweep-individual-wrap">
@@ -3589,8 +3589,8 @@
         <div id="em-sweep-group-list" style="max-height:220px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius);padding:0.5rem"></div>
       </div>
       <div style="margin-top:1rem;display:flex;justify-content:flex-end;gap:0.5rem">
-        <button class="btn btn-outline btn-sm" onclick="closeEMSweepModal()">Cancel</button>
-        <button class="btn btn-primary btn-sm" onclick="emSweepDispatch()">&#9654; Start Sweep</button>
+        <button class="btn btn-outline btn-sm" data-on-click="closeEMSweepModal">Cancel</button>
+        <button class="btn btn-primary btn-sm" data-on-click="emSweepDispatch">&#9654; Start Sweep</button>
       </div>
     </div>
   </div>
@@ -3606,7 +3606,7 @@
   <div class="drawer">
     <div class="drawer-header">
       <h3 id="sweep-preview-title">Preview &amp; Confirm</h3>
-      <button class="drawer-close" onclick="closeSweepPreview()">&#10005;</button>
+      <button class="drawer-close" data-on-click="closeSweepPreview">&#10005;</button>
     </div>
     <div class="drawer-body">
       <div id="sweep-preview-summary" class="tiny muted" style="margin-bottom:0.75rem"></div>
@@ -3615,8 +3615,8 @@
       <div id="sweep-preview-list" style="border:1px solid var(--border);border-radius:6px"></div>
     </div>
     <div style="padding:0.85rem 1.25rem;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:0.5rem;flex-shrink:0">
-      <button class="btn btn-outline btn-sm" onclick="closeSweepPreview()">Cancel</button>
-      <button class="btn btn-primary btn-sm" onclick="startSweepFromPreview()">&#9654; Start Full Sweep</button>
+      <button class="btn btn-outline btn-sm" data-on-click="closeSweepPreview">Cancel</button>
+      <button class="btn btn-primary btn-sm" data-on-click="startSweepFromPreview">&#9654; Start Full Sweep</button>
     </div>
   </div>
 </div>
@@ -3626,7 +3626,7 @@
   <div class="drawer" style="width:480px;max-width:94vw">
     <div class="drawer-header">
       <h3 id="em-sweep-progress-title">EM Full Sweep — Live</h3>
-      <button class="drawer-close" onclick="closeEMSweepProgress()">&#10005;</button>
+      <button class="drawer-close" data-on-click="closeEMSweepProgress">&#10005;</button>
     </div>
     <div class="drawer-body">
       <div id="em-sweep-progress-summary" style="margin-bottom:0.75rem"></div>
@@ -3647,7 +3647,7 @@
         <div style="font-size:0.6rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:0.2rem;font-weight:700">Execution Evidence</div>
         <div id="evidence-title" style="font-size:1rem;font-weight:600;color:var(--text)"></div>
       </div>
-      <button onclick="closeEvidence()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:1.1rem;flex-shrink:0;padding:0;line-height:1">&#10005;</button>
+      <button data-on-click="closeEvidence" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:1.1rem;flex-shrink:0;padding:0;line-height:1">&#10005;</button>
     </div>
     <div id="evidence-content"></div>
   </div>
@@ -3658,7 +3658,7 @@
   <div class="drawer" style="width:560px;max-width:92vw">
     <div class="drawer-header">
       <h3 id="builder-title">New Scenario</h3>
-      <button class="drawer-close" onclick="closeBuilder()">&#10005;</button>
+      <button class="drawer-close" data-on-click="closeBuilder">&#10005;</button>
     </div>
     <div class="drawer-body">
       <div class="form-group">
@@ -3673,7 +3673,7 @@
 
       <div class="form-group">
         <label>Execution mode</label>
-        <select id="bld-mode" onchange="renderBuilderMode()">
+        <select id="bld-mode" data-on-change="renderBuilderMode">
           <option value="custom">Custom steps — define each command yourself</option>
           <option value="art">Atomic Red Team — list of ATT&CK technique IDs</option>
           <option value="caldera">Caldera — list of ability IDs</option>
@@ -3685,7 +3685,7 @@
       <div id="bld-custom">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.5rem">
           <span style="font-size:0.72rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em">Attack chain steps</span>
-          <button class="btn btn-outline btn-sm" onclick="addStep()">+ Add step</button>
+          <button class="btn btn-outline btn-sm" data-on-click="addStep">+ Add step</button>
         </div>
         <div id="bld-steps"></div>
       </div>
@@ -3721,10 +3721,10 @@
 
       <div id="bld-err" class="error-msg"></div>
       <div class="modal-actions" style="margin-top:1rem;display:flex;gap:0.4rem;flex-wrap:wrap">
-        <button class="btn btn-outline btn-sm" onclick="closeBuilder()">Cancel</button>
-        <button class="btn btn-outline btn-sm" onclick="downloadBuilderYaml()">&#8659; Download YAML</button>
-        <button class="btn btn-primary btn-sm" style="width:auto;padding:0.45rem 0.9rem" onclick="saveScenario(false)">Save</button>
-        <button class="btn btn-outline-green btn-sm" onclick="saveScenario(true)">Save &amp; Run</button>
+        <button class="btn btn-outline btn-sm" data-on-click="closeBuilder">Cancel</button>
+        <button class="btn btn-outline btn-sm" data-on-click="downloadBuilderYaml">&#8659; Download YAML</button>
+        <button class="btn btn-primary btn-sm" style="width:auto;padding:0.45rem 0.9rem" data-on-click="saveScenario" data-args="[false]">Save</button>
+        <button class="btn btn-outline-green btn-sm" data-on-click="saveScenario" data-args="[true]">Save &amp; Run</button>
       </div>
     </div>
   </div>
@@ -3735,15 +3735,15 @@
   <div class="drawer" style="width:600px;max-width:96vw">
     <div class="drawer-header">
       <h3 id="agt-detail-title">Agent Detail</h3>
-      <button class="drawer-close" onclick="closeAgentDetail()">&#10005;</button>
+      <button class="drawer-close" data-on-click="closeAgentDetail">&#10005;</button>
     </div>
     <div class="tab-bar" id="agt-tab-bar">
-      <button class="tab-btn active" onclick="showAgentTab('overview')">Overview</button>
-      <button class="tab-btn" onclick="showAgentTab('scenarios')">Scenarios</button>
-      <button class="tab-btn" onclick="showAgentTab('logs')">Logs</button>
-      <button class="tab-btn" onclick="showAgentTab('health')">Health</button>
-      <button class="tab-btn" onclick="showAgentTab('attackpath')">Attack Path</button>
-      <button class="tab-btn" onclick="showAgentTab('risk')">Risk</button>
+      <button class="tab-btn active" data-on-click="showAgentTab" data-args="[&quot;overview&quot;]">Overview</button>
+      <button class="tab-btn" data-on-click="showAgentTab" data-args="[&quot;scenarios&quot;]">Scenarios</button>
+      <button class="tab-btn" data-on-click="showAgentTab" data-args="[&quot;logs&quot;]">Logs</button>
+      <button class="tab-btn" data-on-click="showAgentTab" data-args="[&quot;health&quot;]">Health</button>
+      <button class="tab-btn" data-on-click="showAgentTab" data-args="[&quot;attackpath&quot;]">Attack Path</button>
+      <button class="tab-btn" data-on-click="showAgentTab" data-args="[&quot;risk&quot;]">Risk</button>
     </div>
     <div class="drawer-body" style="overflow-y:auto">
       <div id="agt-tab-overview" class="tab-pane"></div>
@@ -3760,7 +3760,7 @@
   <div class="drawer" style="width:640px;max-width:96vw">
     <div class="drawer-header">
       <h3 id="exp-detail-title">Asset</h3>
-      <button class="drawer-close" onclick="closeExposureDetail()">&#10005;</button>
+      <button class="drawer-close" data-on-click="closeExposureDetail">&#10005;</button>
     </div>
     <div class="drawer-body" style="overflow-y:auto" id="exp-detail-body"></div>
   </div>
@@ -3770,7 +3770,7 @@
   <div class="drawer" style="width:640px;max-width:96vw">
     <div class="drawer-header">
       <h3 id="openaev-detail-title">Scenario</h3>
-      <button class="drawer-close" onclick="closeOpenAEVDetail()">&#10005;</button>
+      <button class="drawer-close" data-on-click="closeOpenAEVDetail">&#10005;</button>
     </div>
     <div class="drawer-body" style="overflow-y:auto" id="openaev-detail-body"></div>
   </div>
@@ -3780,7 +3780,7 @@
   <div class="drawer" style="width:640px;max-width:96vw">
     <div class="drawer-header">
       <h3 id="exercise-detail-title">Execution</h3>
-      <button class="drawer-close" onclick="closeExerciseDetail()">&#10005;</button>
+      <button class="drawer-close" data-on-click="closeExerciseDetail">&#10005;</button>
     </div>
     <div class="drawer-body" style="overflow-y:auto" id="exercise-detail-body"></div>
   </div>
@@ -3803,8 +3803,8 @@
     </div>
     <div id="cu-err" class="error-msg"></div>
     <div class="modal-actions">
-      <button class="btn btn-outline btn-sm" onclick="closeCreateUser()">Cancel</button>
-      <button class="btn btn-outline-green btn-sm" onclick="submitCreateUser()">Create</button>
+      <button class="btn btn-outline btn-sm" data-on-click="closeCreateUser">Cancel</button>
+      <button class="btn btn-outline-green btn-sm" data-on-click="submitCreateUser">Create</button>
     </div>
   </div>
 </div>
@@ -3824,8 +3824,8 @@
     </div>
     <div id="eu-err" class="error-msg"></div>
     <div class="modal-actions">
-      <button class="btn btn-outline btn-sm" onclick="closeEditUser()">Cancel</button>
-      <button class="btn btn-outline-green btn-sm" onclick="submitEditUser()">Save</button>
+      <button class="btn btn-outline btn-sm" data-on-click="closeEditUser">Cancel</button>
+      <button class="btn btn-outline-green btn-sm" data-on-click="submitEditUser">Save</button>
     </div>
   </div>
 </div>
@@ -3840,8 +3840,8 @@
     <div class="form-group"><label>Confirm New Password</label><input type="password" id="cpw-confirm" autocomplete="new-password"></div>
     <div id="cpw-err" class="error-msg"></div>
     <div class="modal-actions">
-      <button class="btn btn-outline btn-sm" id="cpw-cancel-btn" onclick="closeChangePassword()">Cancel</button>
-      <button class="btn btn-outline-green btn-sm" onclick="submitChangePassword()">Update Password</button>
+      <button class="btn btn-outline btn-sm" id="cpw-cancel-btn" data-on-click="closeChangePassword">Cancel</button>
+      <button class="btn btn-outline-green btn-sm" data-on-click="submitChangePassword">Update Password</button>
     </div>
   </div>
 </div>
