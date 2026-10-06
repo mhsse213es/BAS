@@ -1,25 +1,40 @@
 #!/usr/bin/env bash
 # BAS Platform -- offline acceptance test for the air-gap bundle.
 #
-# Proves a bundle is OFFLINE-COMPLETE: it is verified, loaded and started by
-# `docker compose -p audspect up -d` (the exact command bas-compose.service runs)
-# inside an ISOLATED Docker-in-Docker daemon that has NO registry access, so any
-# image Docker would silently pull makes the test fail.
+# Proves a bundle is OFFLINE-COMPLETE: inside an ISOLATED Docker-in-Docker
+# daemon that has NO registry access, the REAL import.sh copies, checks, cosign-
+# verifies and loads every image, then at its setup.sh hand-off setup.sh's own
+# (extracted, unmodified) verify + load functions run against the staged
+# compose/ dir, and the stack is started with `docker compose -p audspect up -d`
+# (the exact command bas-compose.service runs). Any image Docker would silently
+# pull makes the test fail.
 #
-# It never touches the host daemon's images/containers/volumes: the only things
-# it creates (a private network, one dind container with its anonymous volumes, a
-# harness image tag, a temp dir) are removed on exit.
+# NOT run inside the test daemon: the rest of setup.sh (licence check, whiptail/
+# web wizard, systemd unit) -- the dind container has no systemd. A PATH shim
+# for `bash` intercepts exactly the `bash compose/setup.sh` call import.sh makes.
+# The bundle carries no bas.lic, so the orchestrator is EXPECTED to start, run
+# its crypto self-test and then crash-loop ("restarting") on the missing
+# licence; that proves the verified image executed, not that it is healthy.
 #
-# Usage (run from anywhere; needs docker, bash, cosign on PATH, internet for the
-# bundle build step and for pulling docker:dind/building the harness image BEFORE
-# isolation):
+# Host side effects: building the bundle runs the real pack.sh against the HOST
+# Docker daemon, which pulls postgres/chrome by digest (re-pointing the host's
+# postgres:16-alpine and chromedp/headless-shell:<ver> tags at the pinned
+# digests), builds and tags bas-caldera:<version>, and saves images. Host images
+# are never removed. The isolation harness adds a private network, one dind
+# container with its anonymous volumes, a harness image tag and a temp dir, all
+# removed on exit.
+#
+# Usage (run from anywhere; needs docker, bash, go, cosign on PATH, internet for
+# the bundle build step and for pulling docker:dind/building the harness image
+# BEFORE isolation):
 #   bash packaging/airgap/offline-acceptance.sh [version]        # build a bundle with the real pack.sh
 #   SAVE_BUNDLE=/path/keep.tar.gz  keeps the freshly built bundle for re-runs
 #   BUNDLE=/path/bas-airgap-<ver>.tar.gz bash ... [version]      # test an existing bundle (skips pack.sh)
 #
 # [version] must match a local image bas-orchestrator:<version> (pack.sh requires
-# it). Without BUNDLE the real pack.sh runs from a throwaway COPY of packaging/
-# with a throwaway cosign key (the repo's release key is never needed or used).
+# it). Without BUNDLE the real pack.sh runs from a throwaway COPY of packaging/,
+# scenarios/ and orchestrator/ with a throwaway cosign key (the repo's release
+# key is never needed or used).
 #
 # Result: prints PASS / FAIL lines and "ACCEPTANCE: PASS|FAIL"; exit status 0 only on PASS.
 set -euo pipefail
@@ -56,15 +71,18 @@ if [[ -n "${BUNDLE:-}" ]]; then
 else
   echo "== Building the bundle with the real pack.sh (throwaway copy + throwaway cosign key)"
   SB="$WORK/repo"
-  mkdir -p "$SB/orchestrator"
+  mkdir -p "$SB"
   cp -r "$REPO_ROOT/packaging" "$SB/packaging"
   cp -r "$REPO_ROOT/scenarios" "$SB/scenarios"
-  if [[ -d "$REPO_ROOT/orchestrator/wwwroot" ]]; then cp -r "$REPO_ROOT/orchestrator/wwwroot" "$SB/orchestrator/wwwroot"; else mkdir -p "$SB/orchestrator/wwwroot"; fi
+  # orchestrator/ (Go module): pack.sh's release gate verifies the builtin
+  # scenario signatures with `go run scripts/signer.go verify-all`.
+  cp -r "$REPO_ROOT/orchestrator" "$SB/orchestrator"
+  mkdir -p "$SB/orchestrator/wwwroot"
   rm -f "$SB/packaging/signing/cosign.key" "$SB/packaging/signing/cosign.pub"
   (cd "$SB/packaging/signing" && COSIGN_PASSWORD="" cosign generate-key-pair --output-key-prefix "$SB/packaging/signing/cosign" >/dev/null)
   # Empty GNUPGHOME: pack.sh then skips its optional GPG step (the test bundle is never signed with a real release key).
   mkdir -p "$WORK/gnupg-empty"; chmod 700 "$WORK/gnupg-empty"
-  GNUPGHOME="$WORK/gnupg-empty" bash "$SB/packaging/airgap/pack.sh" "$VERSION"
+  GOWORK=off GNUPGHOME="$WORK/gnupg-empty" bash "$SB/packaging/airgap/pack.sh" "$VERSION"
   BUNDLE="$SB/dist/bas-airgap-${VERSION}.tar.gz"
 fi
 [[ -n "${SAVE_BUNDLE:-}" && "$BUNDLE" != "$SAVE_BUNDLE" ]] && cp "$BUNDLE" "$SAVE_BUNDLE" && BUNDLE="$SAVE_BUNDLE"
@@ -110,22 +128,58 @@ cat > "$WORK/inner.sh" <<'EOF'
 set -euo pipefail
 VER="$1"
 cd /work
-tar -xzf bundle.tar.gz
-B="/work/bas-airgap-${VER}"
-cd "$B"
+# Only the bundle's verifier/importer scripts are unpacked here; import.sh does
+# its own private copy + extraction under $TMPDIR.
+mkdir -p /work/tools
+tar -xzf bundle.tar.gz -C /work/tools --strip-components=1 \
+  "bas-airgap-${VER}/verify.sh" "bas-airgap-${VER}/import.sh" "bas-airgap-${VER}/cosign-verify-lib.sh"
 # Record every image pull the daemon attempts for the rest of this run.
 docker events --filter type=image --filter event=pull > /work/pull-events.log 2>&1 &
 EVPID=$!
 echo "== verify.sh (bundle's own integrity + signature check)"
-bash verify.sh "/work/bundle.tar.gz" || { echo "INNER-FAIL verify.sh"; exit 11; }
-echo "== verify + load all runtime images (import.sh's exact functions)"
-# shellcheck disable=SC1091
-source ./cosign-verify-lib.sh
+bash /work/tools/verify.sh "/work/bundle.tar.gz" || { echo "INNER-FAIL verify.sh"; exit 11; }
+
+# PATH shim: `bash <bundle>/compose/setup.sh ...` (import.sh's hand-off) runs
+# setup-handoff.sh instead; every other `bash` call is the real bash.
+mkdir -p /work/shim
+cat > /work/shim/bash <<'SH'
+#!/bin/sh
+case "${1:-}" in
+  */compose/setup.sh) exec /bin/bash /work/setup-handoff.sh "$@" ;;
+esac
+exec /bin/bash "$@"
+SH
+chmod +x /work/shim/bash
+cat > /work/setup-handoff.sh <<'SH'
+#!/bin/bash
+# Runs setup.sh's OWN image verify + load functions, extracted unmodified from
+# the bundle's setup.sh, against its staged compose/ dir (images/ -> ../images).
+set -euo pipefail
+SETUP="$1"; shift
+D="$(cd "$(dirname "$SETUP")" && pwd)"
+echo "SETUP-HANDOFF reached: setup.sh $*"
+extract_fn() { awk -v n="$2" '$0 ~ "^"n"\\(\\) \\{" {p=1} p{print} p && /^}/ {exit}' "$1"; }
+for fn in _key_fp _tar_image_id _docker_tag_is _verify_orchestrator_artifact _expected_image_tag _verify_all_images _load_verified_images; do
+  extract_fn "$SETUP" "$fn"
+done > /work/setup-fns.sh
 log() { echo "$*"; }; err() { echo "ERR: $*" >&2; }; warn() { echo "WARN: $*"; }
-airgap_verify_and_load_images "$B/images" "$B/cosign.pub" "$VER" || { echo "INNER-FAIL verify+load"; exit 12; }
-echo "== setup.sh's own verify step on the staged compose/ dir"
-cd "$B/compose"
-rm -rf images; ln -s ../images images
+SCRIPT_DIR="$D"; BAS_VERSION="$(tr -d '[:space:]' < "$D/VERSION")"
+# shellcheck disable=SC1091
+source /work/setup-fns.sh
+_verify_all_images "$D/images" "installation"
+_load_verified_images "installation"
+echo "SETUP-VERIFY-LOAD-OK"
+# Keep the staged compose/ dir (minus the images symlink) for `compose up`:
+# import.sh deletes its private work dir on exit.
+rm -rf /work/staged-compose; mkdir /work/staged-compose
+(cd "$D" && tar --exclude=./images -cf - .) | tar -xf - -C /work/staged-compose
+SH
+echo "== REAL import.sh: private copy, manifest, verify + load all images, :latest, setup.sh hand-off"
+# The dind container's /tmp is small; use the documented TMPDIR override.
+mkdir -p /work/itmp; df -h /tmp /work/itmp || true
+PATH="/work/shim:$PATH" TMPDIR=/work/itmp bash /work/tools/import.sh /work/bundle.tar.gz --non-interactive || { echo "INNER-FAIL import.sh"; exit 12; }
+[[ -f /work/staged-compose/docker-compose.yml ]] || { echo "INNER-FAIL setup.sh hand-off not reached"; exit 12; }
+cd /work/staged-compose
 echo "== docker compose -p audspect up -d  (exact bas-compose.service command)"
 cp .env.example .env
 rnd() { head -c "$1" /dev/urandom | od -An -tx1 | tr -d ' \n'; }
@@ -156,10 +210,13 @@ dk cp "$(hostpath "$WORK/inner.sh")" "$DIND:/work/inner.sh"
 INNER_RC=0
 dk exec "$DIND" bash /work/inner.sh "$VERSION" 2>&1 | tee "$WORK/inner.out" || INNER_RC=${PIPESTATUS[0]}
 
-grep -q "INNER-FAIL" "$WORK/inner.out" && fail "inner step failed: $(grep INNER-FAIL "$WORK/inner.out")" || pass "bundle verify.sh, signed-image verification + load, and compose up all succeeded offline"
+grep -q "INNER-FAIL" "$WORK/inner.out" && fail "inner step failed: $(grep INNER-FAIL "$WORK/inner.out")" || pass "bundle verify.sh, the real import.sh (verify + load), setup.sh's verify + load functions, and compose up all succeeded offline"
+if grep -q "^SETUP-HANDOFF reached: setup.sh --offline" "$WORK/inner.out" && grep -q "^SETUP-VERIFY-LOAD-OK" "$WORK/inner.out"; then pass "import.sh handed off to setup.sh --offline, whose own verify + load passed"; else fail "setup.sh hand-off / verify + load not observed"; fi
+if grep -q "Not enough free space" "$WORK/inner.out"; then fail "import.sh free-space check refused (test daemon disk too small)"; fi
 
 # ── 5. Assertions ─────────────────────────────────────────────────────────────
-EXPECTED="$(dk exec "$DIND" sh -c "cd /work/bas-airgap-${VERSION}/compose && docker compose -p audspect config --services" 2>/dev/null | sort)"
+[[ "$INNER_RC" -eq 0 ]] || fail "inner script exited ${INNER_RC}"
+EXPECTED="$(dk exec "$DIND" sh -c "cd /work/staged-compose && docker compose -p audspect config --services" 2>/dev/null | sort || true)"
 STATES="$(dk exec "$DIND" docker compose -p audspect ps -a --format '{{.Service}} {{.State}}' 2>/dev/null || true)"
 for svc in $EXPECTED; do
   # "restarting" is accepted for the orchestrator only: this test deliberately has no bas.lic, so
