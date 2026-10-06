@@ -304,7 +304,7 @@ sudo bash install.sh --rollback                      # the most recent upgrade
 sudo bash install.sh --rollback --upgrade-id <dir>    # a specific upgrade record
 ```
 
-Rollback restores **the database snapshot taken by that upgrade** together with its `docker-compose.yml` and `.env`, then restarts the previous version. It never uses a scheduled backup (restore those with `--restore <archive>`). Database changes made after the upgrade began are lost; the command shows that time and asks you to type the version being restored (skip with `--yes`). It refuses if no upgrade record exists, and refuses a snapshot whose SHA-256 no longer matches its record.
+Rollback restores **the database snapshot taken by that upgrade** together with its `docker-compose.yml` and `.env`, then restarts the previous version. It never uses a scheduled backup (restore those with `--restore <archive>`). Database changes made after the upgrade began are lost; the command shows that time and asks you to type the version being restored (skip with `--yes`). Without `--upgrade-id` it picks the most recent upgrade that has a snapshot and has not already been rolled back (an upgrade that aborted before its snapshot is skipped). It refuses if there is none, and refuses a snapshot whose SHA-256 no longer matches its record. The snapshot is verified and decrypted **before** anything is stopped, so a refused rollback leaves the running stack untouched. If the restore fails, the message says whether the database was touched. The upgrade is marked rolled back only once the previous version is healthy.
 
 If the Docker images for the previous version are no longer present locally (e.g. pruned after upgrade), reload them first:
 
@@ -314,7 +314,7 @@ for f in *.tar; do sudo docker load < "$f"; done
 sudo bash install.sh --rollback
 ```
 
-Keep `<DATA_DIR>/.backup_key`: without it no snapshot can be decrypted.
+Keep `<DATA_DIR>/.backup_key`: without it no snapshot can be decrypted. Installs from before the backup feature have no key; `--upgrade` creates one and tells you to copy it somewhere safe.
 
 ---
 

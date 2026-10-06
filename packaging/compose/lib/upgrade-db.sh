@@ -48,13 +48,31 @@ upgrade_record_get() {
   sed -n "s|^  \"${2}\": \"\\([^\"]*\\)\".*|\\1|p" "${1}/UPGRADE.json"
 }
 
-# upgrade_record_latest <data_dir> -> newest backups/upgrade-* dir; fails if none.
-# Ignores every other backup (scheduled archives, pre-H1 <ts>/ dirs).
+# upgrade_record_latest <data_dir> -> newest restorable backups/upgrade-* dir;
+# fails if none. Restorable: a snapshot hash is recorded and the record is
+# not aborted or already rolled back. Ignores every other backup (scheduled
+# archives, pre-H1 <ts>/ dirs).
 upgrade_record_latest() {
-  local latest
-  latest=$(find "${1}/backups" -maxdepth 1 -type d -name 'upgrade-*' 2>/dev/null | LC_ALL=C sort | tail -1)
-  [[ -n "$latest" && -f "${latest}/UPGRADE.json" ]] || return 1
-  echo "$latest"
+  local d state
+  while IFS= read -r d; do
+    [[ -f "${d}/UPGRADE.json" ]] || continue
+    [[ -n "$(upgrade_record_get "$d" dump_sha256)" ]] || continue
+    state=$(upgrade_record_get "$d" state)
+    [[ "$state" == aborted || "$state" == rolled-back ]] && continue
+    echo "$d"
+    return 0
+  done < <(find "${1}/backups" -maxdepth 1 -type d -name 'upgrade-*' 2>/dev/null | LC_ALL=C sort -r)
+  return 1
+}
+
+# backup_key_ensure <data_dir>: creates a 0600 .backup_key if missing and
+# prints "created"; an existing key is never touched.
+backup_key_ensure() {
+  local key="${1}/.backup_key"
+  [[ -f "$key" ]] && return 0
+  (umask 077 && openssl rand -base64 48 > "$key") || return 1
+  chmod 600 "$key"
+  echo created
 }
 
 _ur_key() { echo "file:${DATA_DIR:?DATA_DIR must be set}/.backup_key"; }
@@ -73,24 +91,43 @@ db_snapshot() {
   upgrade_record_set "$dir" dump_sha256 "$sha"
 }
 
-# db_restore <dir>: verify the hash, then replace bas_platform with the snapshot.
-db_restore() {
-  local dir="$1" in="${1}/db.dump.enc" want got
+# db_restore_prepare <dir>: verify the hash and decrypt the snapshot to
+# <dir>/db.dump (0600, inside the 0700 record dir), proven readable by
+# pg_restore. Touches neither the database nor the stack, so --rollback runs
+# it before stopping anything. Leaves no plaintext on failure.
+db_restore_prepare() {
+  local dir="$1" in="${1}/db.dump.enc" plain="${1}/db.dump" want got
+  rm -f "$plain"
   want=$(upgrade_record_get "$dir" dump_sha256)
   [[ -n "$want" && -f "$in" ]] || { echo "db_restore: ${dir} has no recorded snapshot" >&2; return 1; }
   got=$(sha256sum "$in" | awk '{print $1}')
   [[ "$got" == "$want" ]] || { echo "db_restore: snapshot hash mismatch (${got} != ${want}) -- refusing" >&2; return 1; }
-  # Decrypt fully before touching the database: a bad key must not leave it dropped.
-  local tmp
-  tmp=$(mktemp) || return 1
-  openssl enc -d -aes-256-cbc -pbkdf2 -in "$in" -out "$tmp" -pass "$(_ur_key)" \
-    || { rm -f "$tmp"; echo "db_restore: decryption failed (wrong .backup_key?)" >&2; return 1; }
-  docker exec "$PG_CONTAINER" dropdb -U bas_user --force bas_platform \
-    && docker exec "$PG_CONTAINER" createdb -U bas_user bas_platform \
-    && docker exec -i "$PG_CONTAINER" pg_restore -U bas_user -d bas_platform --no-owner --exit-on-error < "$tmp"
-  local rc=$?
-  rm -f "$tmp"
+  (umask 077 && openssl enc -d -aes-256-cbc -pbkdf2 -in "$in" -out "$plain" -pass "$(_ur_key)") \
+    || { rm -f "$plain"; echo "db_restore: decryption failed (wrong .backup_key?)" >&2; return 1; }
+  docker exec -i "$PG_CONTAINER" pg_restore --list < "$plain" >/dev/null \
+    || { rm -f "$plain"; echo "db_restore: decrypted snapshot is not readable by pg_restore" >&2; return 1; }
+}
+
+# db_restore_apply <dir>: replace bas_platform with <dir>/db.dump, then
+# delete the plaintext. Returns 1 if it failed before the database was
+# dropped (database untouched), 3 if it failed after (partially restored).
+db_restore_apply() {
+  local plain="${1}/db.dump" rc=0
+  [[ -f "$plain" ]] || { echo "db_restore: ${plain} missing -- run db_restore_prepare first" >&2; return 1; }
+  if ! docker exec "$PG_CONTAINER" dropdb -U bas_user --force bas_platform; then
+    rm -f "$plain"
+    return 1
+  fi
+  docker exec "$PG_CONTAINER" createdb -U bas_user bas_platform \
+    && docker exec -i "$PG_CONTAINER" pg_restore -U bas_user -d bas_platform --no-owner --exit-on-error < "$plain" \
+    || rc=3
+  rm -f "$plain"
   return $rc
+}
+
+# db_restore <dir>: prepare then apply.
+db_restore() {
+  db_restore_prepare "$1" && db_restore_apply "$1"
 }
 
 # _env_get <key>: value from DATA_DIR/.env (written by install.sh, unquoted).
@@ -114,10 +151,12 @@ _urlencode() {
 # already be running) with the schema-owner URL passed only to this run;
 # the long-running server never receives it.
 run_migrate() {
-  local user pw db
+  local user pw db url
   user=$(_env_get POSTGRES_USER); pw=$(_env_get POSTGRES_PASSWORD); db=$(_env_get POSTGRES_DB)
   [[ -n "$pw" ]] || { echo "run_migrate: POSTGRES_PASSWORD missing from ${DATA_DIR}/.env" >&2; return 1; }
-  (cd "${DATA_DIR}" && docker compose -p "${COMPOSE_PROJECT}" run --rm --no-deps -T \
-    -e DATABASE_ADMIN_URL="postgres://${user:-bas_user}:$(_urlencode "$pw")@postgres:5432/${db:-bas_platform}?sslmode=prefer" \
-    orchestrator migrate "$1")
+  url="postgres://${user:-bas_user}:$(_urlencode "$pw")@postgres:5432/${db:-bas_platform}?sslmode=prefer"
+  # Passed by name from docker's environment: a value on the command line
+  # would show in host ps.
+  (cd "${DATA_DIR}" && DATABASE_ADMIN_URL="$url" \
+    docker compose -p "${COMPOSE_PROJECT}" run --rm --no-deps -T -e DATABASE_ADMIN_URL orchestrator migrate "$1")
 }

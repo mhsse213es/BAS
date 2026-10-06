@@ -872,11 +872,8 @@ mode_install() {
   # Backup archive encryption key -- generated once, never touches the app
   # container or the database. Losing this file makes existing backups
   # unrecoverable; --status reminds the operator to preserve it.
-  if [[ ! -f "${DATA_DIR}/.backup_key" ]]; then
-    openssl rand -base64 48 > "${DATA_DIR}/.backup_key"
-    chmod 600 "${DATA_DIR}/.backup_key"
-    chown root:root "${DATA_DIR}/.backup_key"
-  fi
+  backup_key_ensure "${DATA_DIR}" >/dev/null || { err "Cannot create ${DATA_DIR}/.backup_key."; exit 1; }
+  chown root:root "${DATA_DIR}/.backup_key"
 
   step "6/10  Writing .env (root-readable only)"
   _write_env
@@ -1006,6 +1003,14 @@ mode_upgrade() {
   fi
 
   step "3/7  Database snapshot"
+  # Installs from before the backup feature have no key; the snapshot needs one.
+  local key_state
+  key_state=$(backup_key_ensure "${DATA_DIR}") || { upgrade_record_set "$rec" state aborted; err "Cannot create ${DATA_DIR}/.backup_key -- upgrade aborted. Nothing was changed."; exit 1; }
+  chown root:root "${DATA_DIR}/.backup_key"
+  if [[ "$key_state" == created ]]; then
+    warn "Created ${DATA_DIR}/.backup_key: the database snapshot and all future backups are"
+    warn "encrypted with it. Copy it somewhere safe -- without it they cannot be restored."
+  fi
   # The orchestrator is stopped so the snapshot is the exact state the
   # migration starts from; --rollback restores exactly this snapshot.
   (cd "${DATA_DIR}" && docker compose -p "$COMPOSE_PROJECT" stop orchestrator) >/dev/null 2>&1 || true
@@ -1118,9 +1123,20 @@ mode_rollback() {
     [[ "$confirm" == "$from" ]] || { echo "Aborted."; exit 0; }
   fi
 
+  # Verify and decrypt first: a bad snapshot or key must not stop a running stack.
+  if ! db_restore_prepare "$rec"; then
+    err "The snapshot in ${rec} cannot be restored (see above). Nothing was changed; the stack is still running."
+    exit 1
+  fi
   (cd "${install_dir}" && docker compose -p "$COMPOSE_PROJECT" stop orchestrator) >/dev/null 2>&1 || true
-  if ! db_restore "$rec"; then
-    err "Database restore failed -- the orchestrator is stopped and the database may be partially restored. The snapshot is ${rec}/db.dump.enc."
+  local rc=0
+  db_restore_apply "$rec" || rc=$?
+  if [[ $rc == 3 ]]; then
+    err "Database restore failed after the database was dropped -- the orchestrator is stopped and the database is partially restored. Re-run this rollback; the snapshot is ${rec}/db.dump.enc."
+    exit 1
+  elif [[ $rc != 0 ]]; then
+    (cd "${install_dir}" && docker compose -p "$COMPOSE_PROJECT" start orchestrator) >/dev/null 2>&1 || true
+    err "Database restore failed before the database was touched. Nothing was changed; the orchestrator was restarted."
     exit 1
   fi
   log "Database restored to the pre-upgrade snapshot"
@@ -1133,6 +1149,11 @@ mode_rollback() {
     || (cd "${install_dir}" && docker compose -p "$COMPOSE_PROJECT" up -d --remove-orphans)
   log "Stack restarted with previous version"
   _wait_healthy
+  if [[ "$(docker inspect --format '{{.State.Health.Status}}' audspect-orchestrator 2>/dev/null)" != "healthy" ]]; then
+    upgrade_record_set "$rec" state rollback-unhealthy
+    err "The database and configuration are restored to v${from}, but the orchestrator is not healthy (see diagnostics above)."
+    exit 1
+  fi
   upgrade_record_set "$rec" state rolled-back
   log "Rollback complete (v${to} -> v${from})"
 }

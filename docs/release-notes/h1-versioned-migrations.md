@@ -18,7 +18,8 @@
 - **Every upgrade takes an encrypted database snapshot** before migrating:
   `<DATA_DIR>/backups/upgrade-<time>-<from>-to-<to>/db.dump.enc`, encrypted
   with `<DATA_DIR>/.backup_key`. `--upgrade` checks for free space for about
-  two copies of the database first. Keep `.backup_key` safe.
+  two copies of the database first. Keep `.backup_key` safe; installs from
+  before the backup feature get one created by `--upgrade`.
 - **`install.sh --rollback` restores that upgrade's snapshot** together with
   the previous configuration and version (`--upgrade-id <dir>` selects a
   specific upgrade). **Database changes made after the upgrade began are
