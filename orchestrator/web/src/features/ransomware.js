@@ -1,5 +1,6 @@
 import { state } from '../core/state.js';
 import { x } from '../core/escape.js';
+import { on } from '../core/actions.js';
 import { ago, showToast } from '../core/util.js';
 import { openModal } from './reports.js';
 import { _riskScoreColor, showTab } from './shell.js';
@@ -117,7 +118,7 @@ export function loadRansomwareReadiness(runs) {
         '<div style="margin-top:0.25rem">' +
           '<span class="sbadge s-' + x(rrRun.status) + '">' + x(rrRun.status) + '</span>' +
         '</div>' +
-        '<a style="color:var(--accent);cursor:pointer;margin-top:0.4rem" onclick=\'viewRunResults(' + JSON.stringify(rrRun).replace(/'/g,"&#39;") + ')\'>View full report →</a>' +
+        '<a style="color:var(--accent);cursor:pointer;margin-top:0.4rem"' + on('click', 'viewRunResults', rrRun) + '>View full report →</a>' +
       '</div>' +
     '</div>';
 }

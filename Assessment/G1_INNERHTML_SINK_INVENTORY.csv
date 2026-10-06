@@ -830,7 +830,7 @@ line,function,target,op,category,data_source_tags,rhs_len,rhs
       '<div class=""tiny muted"" style=""max-width:520px;margin:0 auto 1rem"">Run a collection on an enrolled agent to map lateral-movement reachability, blast radius, segmen"
 14679,renderAttackPath,body,=,indirect_variable,,1,h
 14712,loadRansomwareReadiness,bodyEl,=,static,,157,"'<div class=""empty"" style=""padding:0.5rem"">Run the <strong>Ransomware Drill</strong> or <strong>EM-07</strong> scenario to generate a readiness score.</div>'"
-14784,loadRansomwareReadiness,bodyEl,=,partial_escaped,"agent,user_created_name",852,"'<div style=""display:flex;gap:1.5rem;align-items:flex-start"">' +
+14784,loadRansomwareReadiness,bodyEl,=,partial_escaped,"agent,user_created_name",816,"'<div style=""display:flex;gap:1.5rem;align-items:flex-start"">' +
       scoreHtml +
       '<div style=""flex:1;min-width:0"">' + barsHtml + '</div>' +
       '<div style=""flex-shrink:0;display:flex;flex-direction:column;gap:0.4rem;min-width:160px;font-size:0.75rem;color:var(--muted)"">' +
