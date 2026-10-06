@@ -249,3 +249,24 @@ func TestGenerateHTMLCoverLogoNotSanitized(t *testing.T) {
 		t.Error("expected cover logo <img> to carry a real base64 PNG data URI")
 	}
 }
+
+// TCF Phase 1 §7: a run report names the content version it was interpreted
+// against. Rendered from the json-tag map (garble-safe), so this also pins the
+// contentProvenance/label keys the template reads.
+func TestGenerateHTMLContentProvenance(t *testing.T) {
+	var buf bytes.Buffer
+	rep := &FullReport{ContentProvenance: &ContentProvenance{Status: "versioned", Label: "hist v3 (verified)"}}
+	if err := GenerateHTML(&buf, rep, nil); err != nil {
+		t.Fatalf("GenerateHTML: %v", err)
+	}
+	if out := buf.String(); !strings.Contains(out, "Content Version") || !strings.Contains(out, "hist v3 (verified)") {
+		t.Fatal("content provenance cell missing from rendered report")
+	}
+	buf.Reset()
+	if err := GenerateHTML(&buf, &FullReport{}, nil); err != nil {
+		t.Fatalf("GenerateHTML: %v", err)
+	}
+	if strings.Contains(buf.String(), "Content Version") {
+		t.Fatal("content provenance cell must be absent when the report has none")
+	}
+}

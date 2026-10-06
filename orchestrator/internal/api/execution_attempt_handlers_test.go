@@ -25,7 +25,8 @@ func TestDispatchRun_CreatesExecutionAttemptRow(t *testing.T) {
 		fake := startFakeAgent(t, h.hub, agentID)
 		defer fake.Disconnect(t)
 
-		sc, _ := minimalLiveScenario(t, "int-ea-dispatch")
+		sc, eng := minimalLiveScenario(t, "int-ea-dispatch")
+		h.engine = eng // dispatch resolves through the engine that registered sc
 		ctx := context.Background()
 		runID, skipReason, err := h.dispatchRun(ctx, sc, agentID, dispatchOpts{Mode: "telemetry", ConfirmLive: true})
 		if err != nil || skipReason != "" {
@@ -109,7 +110,8 @@ func TestDispatchRun_OfflineAgentMarksFailedToDispatch(t *testing.T) {
 		seedActiveAgent(t, pool, agentID, "Linux")
 		// Deliberately no fake agent on the hub — SendToAgent fails.
 
-		sc, _ := minimalLiveScenario(t, "int-ea-offline")
+		sc, eng := minimalLiveScenario(t, "int-ea-offline")
+		h.engine = eng // dispatch resolves through the engine that registered sc
 		ctx := context.Background()
 		runID, skipReason, err := h.dispatchRun(ctx, sc, agentID, dispatchOpts{Mode: "telemetry", ConfirmLive: true})
 		if err != nil {
@@ -266,7 +268,8 @@ func TestExecutionAttempt_FullLifecycle_DispatchToCompletion(t *testing.T) {
 		fake := startFakeAgent(t, h.hub, agentID)
 		defer fake.Disconnect(t)
 
-		sc, _ := minimalLiveScenario(t, "int-ea-e2e")
+		sc, eng := minimalLiveScenario(t, "int-ea-e2e")
+		h.engine = eng // dispatch resolves through the engine that registered sc
 		ctx := context.Background()
 		runID, _, err := h.dispatchRun(ctx, sc, agentID, dispatchOpts{Mode: "telemetry", ConfirmLive: true})
 		if err != nil {

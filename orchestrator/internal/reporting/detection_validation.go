@@ -387,10 +387,18 @@ type UnexpectedDetectionRow struct {
 // section when the resolver is unwired, the scenario is unknown, or no step
 // declares any expectation — all of which render exactly as before.
 func (e *Engine) buildDetectionValidation(ctx context.Context, runID, scenarioID string, results []models.SimulationResult) DetectionValidationSection {
-	if e.scenarios == nil || scenarioID == "" {
+	resolver := e.scenarios
+	// runID == "" is the campaign roll-up (no single run to pin to); it keeps
+	// the engine-wide resolver rather than an always-unreadable run lookup.
+	if e.runContent != nil && runID != "" {
+		if info := e.runContent(ctx, runID); info.Resolver != nil {
+			resolver = info.Resolver
+		}
+	}
+	if resolver == nil || scenarioID == "" {
 		return DetectionValidationSection{}
 	}
-	specs := ResolveStepDetectionSpecs(e.scenarios, scenarioID)
+	specs := ResolveStepDetectionSpecs(resolver, scenarioID)
 	// Overlay stored attestations (manual SP2 / API SP3). Off-host expectations
 	// the automatic engine could only mark Pending become resolved here once an
 	// analyst or connector has verified them. Kept read-only: reporting consumes

@@ -61,11 +61,16 @@ func matchAlerts(req VerifyRequest, alerts []normalizedAlert) VerifyResult {
 		})
 	}
 
+	// An alert with no usable timestamp has no meaningful latency.
+	var latency time.Duration
+	if !best.Timestamp.IsZero() {
+		latency = best.Timestamp.Sub(req.StepExecutedAt)
+	}
 	return VerifyResult{
 		Verdict:          VerdictDetected,
 		Confidence:       confidence,
 		MatchedAlerts:    matched,
-		DetectionLatency: best.Timestamp.Sub(req.StepExecutedAt),
+		DetectionLatency: latency,
 		InvestigationURL: best.InvestigationURL,
 	}
 }

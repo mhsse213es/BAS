@@ -136,6 +136,15 @@ if (Test-Path $ScenariosDir) {
         if ($signExit -ne 0) { Err "Failed to sign scenario: $($yaml.Name)" }
     }
     Log "  All scenarios signed."
+
+    # Release gate: verify every scenario/detection-profile .sig against the
+    # COMPILED public key via the binary's own integrity.VerifyScenarioFile.
+    Push-Location $OrchestratorDir
+    go run scripts/signer.go verify-all $ScenariosDir
+    $verifyExit = $LASTEXITCODE
+    Pop-Location
+    if ($verifyExit -ne 0) { Err "Builtin scenario signature verification failed (see FAIL lines above)  -  re-sign with orchestrator\private_key.pem (see docs\internal\build-guide.md)." }
+    Log "  Scenario signature gate passed."
 } else {
     Warn "  No scenarios\ directory found at repo root  -  skipping scenario signing."
 }

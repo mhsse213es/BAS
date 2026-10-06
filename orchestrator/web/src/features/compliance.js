@@ -3,7 +3,7 @@ import { apicall } from '../core/api.js';
 import { x } from '../core/escape.js';
 import { on } from '../core/actions.js';
 import { showToast } from '../core/util.js';
-import { loadComplianceReport } from './agent-drawer.js';
+import { initComplianceTab, loadComplianceReport } from './agent-drawer.js';
 import { campaignDisplayStatus } from './campaigns.js';
 import { showTab } from './shell.js';
 
@@ -42,11 +42,14 @@ function complianceWhy(fw) {
 
 export function openComplianceDetail(frameworkId, agentId) {
   showTab('compliance');
-  var fwSel = document.getElementById('cmp-fw-sel');
-  var agSel = document.getElementById('cmp-agent-sel');
-  if (fwSel) fwSel.value = frameworkId;
-  if (agSel && agentId) agSel.value = agentId;
-  loadComplianceReport();
+  // The framework options load asynchronously; wait for them before selecting.
+  initComplianceTab().then(function() {
+    var fwSel = document.getElementById('cmp-fw-sel');
+    var agSel = document.getElementById('cmp-agent-sel');
+    if (fwSel) fwSel.value = frameworkId;
+    if (agSel && agentId) agSel.value = agentId;
+    loadComplianceReport();
+  });
 }
 
 export function complianceTile(fw) {

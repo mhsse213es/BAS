@@ -58,16 +58,14 @@ type QueueItem struct {
 	EvidenceCount   int        `json:"evidenceCount"`
 }
 
-// runScenario loads the scenario for a run id.
+// runScenario loads the scenario for a run id: its pinned content version,
+// never the current YAML (TCF Phase 1 §7).
 func (h *Handler) runScenario(ctx context.Context, runID string) (*scenario.Scenario, bool) {
 	if h.engine == nil {
 		return nil, false
 	}
-	var scenarioID string
-	if err := h.db.QueryRow(ctx, `SELECT scenario_id FROM scenario_runs WHERE id=$1`, runID).Scan(&scenarioID); err != nil || scenarioID == "" {
-		return nil, false
-	}
-	return h.engine.Get(scenarioID)
+	rc := h.runContent(ctx, runID)
+	return rc.Scenario, rc.Scenario != nil
 }
 
 // expMeta is the authoritative, server-resolved metadata for one expectation.

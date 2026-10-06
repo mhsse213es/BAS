@@ -20,7 +20,7 @@ func TestBuildStepTagsARTFramework(t *testing.T) {
 		t.Errorf("Framework = %q, want art", built.Framework)
 	}
 
-	meta := BuildStepMeta([]ScenarioStep{built})
+	meta := BuildStepMeta([]ScenarioStep{built}, nil, ComponentVersions{})
 	m, ok := meta[built.TaskID]
 	if !ok {
 		t.Fatalf("BuildStepMeta missing TaskID %s", built.TaskID)

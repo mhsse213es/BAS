@@ -10,9 +10,11 @@ import (
 	"time"
 
 	"github.com/audspect/bas/internal/auth"
+	"github.com/audspect/bas/internal/contentregistry"
 	"github.com/audspect/bas/internal/jobs"
 	"github.com/audspect/bas/internal/models"
 	"github.com/audspect/bas/internal/scenario"
+	"github.com/audspect/bas/internal/testutil"
 	"github.com/audspect/bas/internal/ws"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -64,6 +66,8 @@ func TestCreateCampaign_ValidationErrors(t *testing.T) {
 
 func TestCreateCampaign_ScenarioNotFound(t *testing.T) {
 	engine := scenario.NewEngine(t.TempDir())
+	engine.SetVerifier(testutil.DevVerifier())
+	engine.AttachRegistry(contentregistry.New(sharedDB.Pool, testutil.DevVerifier()))
 	h := New(nil, ws.NewHub(), engine, "")
 	rec := httptest.NewRecorder()
 	h.CreateCampaign(rec, createCampaignReq(map[string]any{"name": "x", "scenarioId": "nope", "agentIds": []string{"a1"}}))
@@ -160,7 +164,7 @@ func TestCreateCampaign_ExecutionWindowRejection(t *testing.T) {
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
 		sc, engine := minimalLiveScenario(t, "cc-window-sc")
 		sc.LivePolicy = &scenario.LivePolicy{ExecutionWindow: "00:00-00:01"}
-		if err := engine.Save(sc); err != nil {
+		if err := engine.SaveAs(context.Background(), sc, "user:test"); err != nil {
 			t.Fatalf("re-save with LivePolicy: %v", err)
 		}
 		h := New(pool, ws.NewHub(), engine, "")
@@ -176,7 +180,7 @@ func TestCreateCampaign_ExecutionWindowRejection(t *testing.T) {
 
 		badSc, badEngine := minimalLiveScenario(t, "cc-badwindow-sc")
 		badSc.LivePolicy = &scenario.LivePolicy{ExecutionWindow: "not-a-window"}
-		if err := badEngine.Save(badSc); err != nil {
+		if err := badEngine.SaveAs(context.Background(), badSc, "user:test"); err != nil {
 			t.Fatalf("re-save with bad LivePolicy: %v", err)
 		}
 		h2 := New(pool, ws.NewHub(), badEngine, "")

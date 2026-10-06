@@ -230,14 +230,14 @@ export function tmplSelAgentChange(agentId, el) {
   renderTmplOSCompat();
 }
 
-// Checkbox change for renderGroupCheckboxList: records the selection in the
-// named state map, then calls each named function (all registered handlers).
-export function groupCheckboxChange(stateVarName, id, fnNames, el) {
-  state[stateVarName][id] = el.checked;
-  fnNames.forEach(function(fn) { window[fn](); });
+// Checkbox change for the template-run group list (renderGroupCheckboxList).
+export function tmplGroupChange(id, el) {
+  state._tmplGroupSel[id] = el.checked;
+  renderTmplGroupSummary();
+  renderTmplOSCompat();
 }
 
-export function renderGroupCheckboxList(listElId, emptyClass, stateVarName, summaryFnName, onchangeFnNames) {
+export function renderGroupCheckboxList(listElId, emptyClass, stateVarName, summaryFnName, changeAction) {
   var list = document.getElementById(listElId);
   if (!list) return;
   var stateVar = window[stateVarName];
@@ -254,14 +254,14 @@ export function renderGroupCheckboxList(listElId, emptyClass, stateVarName, summ
   list.innerHTML = options.map(function(o) {
     return '<label style="display:flex;align-items:center;gap:0.5rem;padding:0.25rem 0.3rem;cursor:pointer">' +
       '<input type="checkbox" ' + (stateVar[o.id] ? 'checked' : '') +
-      on('change', 'groupCheckboxChange', stateVarName, o.id, onchangeFnNames) + '>' +
+      on('change', changeAction, o.id) + '>' +
       '<span style="font-size:0.8rem">' + x(o.label) + '</span>' +
       '<span class="tiny muted">(' + (countMap[o.id] || 0) + ' agents)</span></label>';
   }).join('');
   window[summaryFnName]();
 }
 function renderTmplGroupList() {
-  renderGroupCheckboxList('tmpl-run-group-list', 'tiny muted', '_tmplGroupSel', 'renderTmplGroupSummary', ['renderTmplGroupSummary', 'renderTmplOSCompat']);
+  renderGroupCheckboxList('tmpl-run-group-list', 'tiny muted', '_tmplGroupSel', 'renderTmplGroupSummary', 'tmplGroupChange');
 }
 
 function tmplResolvedGroupAgents() {

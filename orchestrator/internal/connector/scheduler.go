@@ -2,6 +2,7 @@ package connector
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"os"
 	"path/filepath"
@@ -431,7 +432,7 @@ func (s *Scheduler) sync() {
 	}
 
 	// ── Reload scenario engine ────────────────────────────────────────────
-	if result.Created > 0 || result.Updated > 0 {
+	if result.Created > 0 || result.Updated > 0 || result.Changed > 0 {
 		if err := s.engine.Load(); err != nil {
 			log.Printf("[connector] engine reload: %v", err)
 		} else {
@@ -440,10 +441,16 @@ func (s *Scheduler) sync() {
 	}
 
 	elapsed := time.Since(start).Round(time.Millisecond)
-	log.Printf("[connector] sync complete in %s — created:%d updated:%d skipped:%d",
-		elapsed, result.Created, result.Updated, result.Skipped)
+	log.Printf("[connector] sync complete in %s — created:%d updated:%d skipped:%d changed:%d failed:%d",
+		elapsed, result.Created, result.Updated, result.Skipped, result.Changed, result.Failed)
 
 	s.setOK(result.Created, result.Updated, len(actors), bundleVersion, bySource)
+	if result.Failed > 0 {
+		s.mu.Lock()
+		s.status.LastSyncStatus = "error"
+		s.status.LastError = fmt.Sprintf("Generator: %d candidate(s) failed registration (see logs)", result.Failed)
+		s.mu.Unlock()
+	}
 }
 
 func (s *Scheduler) setOK(created, updated, total int, bundleVersion string, bySource map[string]SourceStat) {

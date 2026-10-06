@@ -46,6 +46,10 @@ if ! command -v docker &>/dev/null; then
   err "Docker is required to build the air-gap bundle."
   exit 1
 fi
+if ! command -v go &>/dev/null; then
+  err "Go is required to verify builtin scenario signatures (release gate)."
+  exit 1
+fi
 if ! docker info &>/dev/null; then
   err "Docker daemon is not running."
   exit 1
@@ -151,8 +155,15 @@ cp "${REPO_ROOT}/packaging/compose/uninstall.sh"                "${BUILD_DIR}/co
 cp "${REPO_ROOT}/packaging/compose/systemd/bas-compose.service" "${BUILD_DIR}/compose/systemd/"
 chmod +x "${BUILD_DIR}/compose/setup.sh" "${BUILD_DIR}/compose/uninstall.sh"
 
+# Release gate: builtin scenario signatures must verify against the compiled key.
+log "Verifying builtin scenario signatures..."
+if ! (cd "${REPO_ROOT}/orchestrator" && env -u GOOS -u GOARCH go run scripts/signer.go verify-all "${REPO_ROOT}/scenarios"); then
+  err "builtin scenario signatures are stale -- re-sign on the build host with orchestrator/private_key.pem (see docs/internal/build-guide.md)"
+  exit 1
+fi
+
 # Copy application assets
-cp -r "${REPO_ROOT}/scenarios/."                  "${BUILD_DIR}/compose/scenarios/"
+cp -r "${REPO_ROOT}/scenarios/."                "${BUILD_DIR}/compose/scenarios/"
 cp -r "${REPO_ROOT}/orchestrator/wwwroot/."       "${BUILD_DIR}/compose/wwwroot/"
 
 # ART external payloads staged on the build host — baked in so the client gets

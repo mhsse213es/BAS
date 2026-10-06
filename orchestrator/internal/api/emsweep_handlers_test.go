@@ -63,7 +63,7 @@ func TestCreateEMSweep_AppendsValidExtraScenarios(t *testing.T) {
 		// someone built specifically for EM purposes is exactly the case this
 		// tag exists to cover (see isEMCategoryScenario).
 		extra := &scenario.Scenario{ID: "custom-extra-scenario", Name: "Extra Scenario", LocalCheck: true, Tags: []string{"endpoint-mastery"}}
-		if err := engine.Save(extra); err != nil {
+		if err := engine.SaveAs(context.Background(), extra, "user:test"); err != nil {
 			t.Fatalf("save extra scenario: %v", err)
 		}
 		store := emsweep.NewStore(pool)
@@ -110,7 +110,7 @@ func TestCreateEMSweep_DropsNonEMExtraScenario(t *testing.T) {
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
 		_, engine := minimalPostureScenario(t, "em-01-control-validation")
 		standard := &scenario.Scenario{ID: "standard-non-em-scenario", Name: "Standard Scenario", LocalCheck: true}
-		if err := engine.Save(standard); err != nil {
+		if err := engine.SaveAs(context.Background(), standard, "user:test"); err != nil {
 			t.Fatalf("save standard scenario: %v", err)
 		}
 		store := emsweep.NewStore(pool)

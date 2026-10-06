@@ -505,7 +505,7 @@ func TestRunScenarioIntegration_PostureOSMismatchStillDispatches(t *testing.T) {
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
 		sc, engine := minimalPostureScenario(t, "int-osw")
 		sc.SupportedOS = []string{"linux"}
-		if err := engine.Save(sc); err != nil {
+		if err := engine.SaveAs(context.Background(), sc, "user:test"); err != nil {
 			t.Fatalf("re-save: %v", err)
 		}
 		h := New(pool, ws.NewHub(), engine, "")

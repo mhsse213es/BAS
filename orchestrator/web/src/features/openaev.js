@@ -1,5 +1,6 @@
 import { apicall } from '../core/api.js';
 import { x } from '../core/escape.js';
+import { on } from '../core/actions.js';
 import { ago, showToast } from '../core/util.js';
 import { apBandColor, apCard, apColor, apFreshness } from './attack-path.js';
 import { _diffRow, _diffSecretRow, openConfirmDiffModal } from './compliance.js';
@@ -25,10 +26,10 @@ export function loadOpenAEVConfig() {
           '<label class="tiny muted" style="display:flex;align-items:center;gap:0.3rem"><input type="checkbox" id="oaev-enabled" ' + (cfg.enabled ? 'checked' : '') + '> Enabled</label>' +
         '</div>' +
         '<div class="kpi-row" style="margin-top:0.5rem">' +
-          '<button class="btn btn-outline btn-sm" onclick="testOpenAEVConfig()">Test Connection</button>' +
-          '<button class="btn btn-primary btn-sm" onclick="saveOpenAEVConfig()">Save</button>' +
-          '<button class="btn btn-outline btn-sm" onclick="syncOpenAEVNow()">Sync Now</button>' +
-          (cfg.configured ? '<button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger)" onclick="removeOpenAEVConfig()">Remove</button>' : '') +
+          '<button class="btn btn-outline btn-sm"' + on('click', 'testOpenAEVConfig') + '>Test Connection</button>' +
+          '<button class="btn btn-primary btn-sm"' + on('click', 'saveOpenAEVConfig') + '>Save</button>' +
+          '<button class="btn btn-outline btn-sm"' + on('click', 'syncOpenAEVNow') + '>Sync Now</button>' +
+          (cfg.configured ? '<button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger)"' + on('click', 'removeOpenAEVConfig') + '>Remove</button>' : '') +
           '<span id="oaev-test-result" class="tiny muted"></span>' +
         '</div>';
     }).catch(function(e) { showToast('Failed to load OpenAEV config: ' + (e.message || 'error'), 'err'); });
@@ -100,7 +101,7 @@ function loadOpenAEVScenarios(type, bodyId, emptyId) {
     }
     empty.style.display = 'none';
     body.innerHTML = list.map(function(sc) {
-      return '<tr class="u-pointer" onclick="openOpenAEVDetail(\'' + x(sc.OpenAEVScenarioID) + '\')">' +
+      return '<tr class="u-pointer"' + on('click', 'openOpenAEVDetail', sc.OpenAEVScenarioID) + '>' +
         '<td>' + x(sc.Name) + '</td>' +
         '<td>' + x(sc.Category) + '</td>' +
         '<td>' + x(sc.Severity) + '</td>' +
@@ -187,7 +188,7 @@ export function openOpenAEVDetail(id) {
     }).join('');
     body.innerHTML = '<div class="tiny muted">' + x(d.detail.description || '') + '</div>' + injectsHtml;
     if (ROLE === 'admin') {
-      body.innerHTML += '<div style="margin-top:1rem"><button class="btn btn-primary btn-sm" onclick="createPlanFromOpenAEV(\'' + x(id) + '\')">Create Exercise Plan</button></div>';
+      body.innerHTML += '<div style="margin-top:1rem"><button class="btn btn-primary btn-sm"' + on('click', 'createPlanFromOpenAEV', id) + '>Create Exercise Plan</button></div>';
     }
     document.getElementById('openaev-detail-overlay').classList.add('open');
   }).catch(function(e) { showToast('Failed to load scenario detail: ' + (e.message || 'error'), 'err'); });
@@ -211,7 +212,7 @@ export function loadExercisesTab() {
         '<td>' + x(p.name) + '</td>' +
         '<td>' + (p.steps ? p.steps.length : 0) + '</td>' +
         '<td class="tiny muted">' + x(p.created_at || '') + '</td>' +
-        '<td><button class="btn btn-primary btn-sm" onclick="launchExercisePrompt(\'' + x(p.id) + '\')">Launch</button></td>' +
+        '<td><button class="btn btn-primary btn-sm"' + on('click', 'launchExercisePrompt', p.id) + '>Launch</button></td>' +
         '</tr>';
     }).join('');
   }).catch(function() {});
@@ -227,9 +228,9 @@ export function loadExercisesTab() {
         ? (e.steps_done || 0) + ' / ' + e.steps_total + ' steps'
         : '<span class="tiny muted">—</span>';
       var abortBtn = live
-        ? '<button class="btn btn-outline-red btn-sm" onclick="event.stopPropagation();abortExecution(\'' + x(e.id) + '\')">&#9632; Abort</button>'
+        ? '<button class="btn btn-outline-red btn-sm"' + on('click', 'abortExecutionStop', e.id) + '>&#9632; Abort</button>'
         : '';
-      return '<tr class="u-pointer" onclick="openExerciseDetail(\'' + x(e.id) + '\')">' +
+      return '<tr class="u-pointer"' + on('click', 'openExerciseDetail', e.id) + '>' +
         '<td>' + x(e.name || e.plan_id) + '</td>' +
         '<td><span class="badge">' + x(e.status) + (live ? ' <span class="tiny" style="opacity:.7">&#9679; live</span>' : '') + '</span></td>' +
         '<td class="tiny">' + progress + '</td>' +
@@ -356,7 +357,7 @@ export function openExerciseDetail(id) {
         '<div class="kpi-row" style="justify-content:space-between">' +
           '<span>' + x(s.step_id) + ' <span class="tiny muted">' + x(s.step_type) + '</span></span>' +
           '<span><span class="badge">' + x(s.status) + '</span>' +
-          (canApprove ? ' <button class="btn btn-outline btn-sm" onclick="approveExStep(\'' + x(id) + '\',\'' + x(s.step_id) + '\')">Approve</button>' : '') +
+          (canApprove ? ' <button class="btn btn-outline btn-sm"' + on('click', 'approveExStep', id, s.step_id) + '>Approve</button>' : '') +
           '</span>' +
         '</div>' +
         (what ? '<div class="tiny muted" style="margin-left:0.2rem">' + x(what) + '</div>' : '') +
@@ -364,7 +365,7 @@ export function openExerciseDetail(id) {
       '</div>';
     }).join('');
     var actions = (ex.status === 'running' || ex.status === 'paused') ?
-      '<button class="btn btn-outline btn-sm" onclick="abortExecution(\'' + x(id) + '\')">Abort</button>' : '';
+      '<button class="btn btn-outline btn-sm"' + on('click', 'abortExecution', id) + '>Abort</button>' : '';
     document.getElementById('exercise-detail-body').innerHTML = scoreHtml + stepsHtml + '<div style="margin-top:0.75rem">' + actions + '</div>';
     document.getElementById('exercise-detail-overlay').classList.add('open');
   }).catch(function() {});
@@ -381,6 +382,8 @@ export function approveExStep(id, stepId) {
     .then(function() { showToast('Step approved', 'ok'); openExerciseDetail(id); })
     .catch(function(e) { showToast('Approve failed: ' + (e.message || 'error'), 'err'); });
 }
+
+export function abortExecutionStop(id, el, event) { event.stopPropagation(); abortExecution(id); }
 
 export function abortExecution(id) {
   if (!confirm('Abort this exercise execution?')) return;
@@ -630,7 +633,7 @@ export function renderAttackPath(d, corr) {
     body.innerHTML = '<div class="dash-panel"><div class="dash-panel-body" style="padding:2rem;text-align:center">' +
       '<div style="font-size:1rem;font-weight:700;color:var(--text);margin-bottom:0.4rem">No attack-path data collected yet</div>' +
       '<div class="tiny muted" style="max-width:520px;margin:0 auto 1rem">Run a collection on an enrolled agent to map lateral-movement reachability, blast radius, segmentation, and crown-jewel exposure across the fleet.</div>' +
-      '<button class="btn btn-primary btn-sm" onclick="openAPCollect()">&#9654; Run Collection</button></div></div>';
+      '<button class="btn btn-primary btn-sm" data-on-click="openAPCollect">&#9654; Run Collection</button></div></div>';
     return;
   }
   var s = d.summary || {};

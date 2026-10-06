@@ -82,6 +82,19 @@ func EnsureAppRole(ctx context.Context, pool *pgxpool.Pool, appPassword string) 
 		// above (a REVOKE before the matching GRANT would have nothing to
 		// narrow).
 		`REVOKE UPDATE, DELETE ON audit_logs FROM ` + appRole,
+
+		// Content Registry immutability (TCF Phase 1 §4.2). A table-level
+		// REVOKE also removes column privileges, so the column GRANT must
+		// come after it -- otherwise the blanket grant above would keep
+		// bas_app able to rewrite artifact bytes.
+		`REVOKE UPDATE, DELETE ON content_versions FROM ` + appRole,
+		`GRANT UPDATE (lifecycle, trust_level, signature_bytes) ON content_versions TO ` + appRole,
+		`REVOKE UPDATE, DELETE ON content_version_events FROM ` + appRole,
+		`REVOKE UPDATE, DELETE ON content_version_sources FROM ` + appRole,
+		`REVOKE UPDATE, DELETE ON content_safety_verdicts FROM ` + appRole,
+		`REVOKE DELETE ON scenarios FROM ` + appRole,
+		`REVOKE UPDATE, DELETE ON content_validations FROM ` + appRole,
+		`REVOKE UPDATE, DELETE ON content_registry_state FROM ` + appRole,
 	}
 	for _, stmt := range grants {
 		if _, err := pool.Exec(ctx, stmt); err != nil {

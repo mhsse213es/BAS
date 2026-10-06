@@ -82,7 +82,7 @@ func TestDispatchRun_OSMismatch_LiveBlocksPostureProceeds(t *testing.T) {
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
 		live, liveEngine := minimalLiveScenario(t, "dr-osmismatch-live")
 		live.SupportedOS = []string{"linux"}
-		if err := liveEngine.Save(live); err != nil {
+		if err := liveEngine.SaveAs(context.Background(), live, "user:test"); err != nil {
 			t.Fatalf("re-save: %v", err)
 		}
 		hLive := New(pool, ws.NewHub(), liveEngine, "")
@@ -99,7 +99,7 @@ func TestDispatchRun_OSMismatch_LiveBlocksPostureProceeds(t *testing.T) {
 
 		posture, postureEngine := minimalPostureScenario(t, "dr-osmismatch-posture")
 		posture.SupportedOS = []string{"linux"}
-		if err := postureEngine.Save(posture); err != nil {
+		if err := postureEngine.SaveAs(context.Background(), posture, "user:test"); err != nil {
 			t.Fatalf("re-save posture: %v", err)
 		}
 		hPosture := New(pool, ws.NewHub(), postureEngine, "")
