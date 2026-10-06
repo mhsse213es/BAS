@@ -11,6 +11,13 @@
 //	  internal/reporting/attackdata/attack_enrichment.json \
 //	  [--d3fend=d3fend-attack-map.json] [--sigma=path/to/sigma/rules]
 //
+// Every run also writes attack_dataset_meta.json (ATT&CK version + domain
+// from the bundle's x-mitre-collection object, sha256 of the bundle bytes).
+// To (re)record the meta for the existing dataset without regenerating it:
+//
+//	go run ./internal/reporting/attackdata/gen --meta-only enterprise-attack-16.1.json \
+//	  internal/reporting/attackdata/attack_dataset_meta.json
+//
 // ⚠ PIN THE BUNDLE TO v16.1 — DO NOT use the generic `.../master/.../enterprise-attack.json`.
 // MITRE removed the inline technique fields this tool reads (`x_mitre_data_sources`,
 // `x_mitre_permissions_required`) from attack-pattern objects in ATT&CK v17 (2025).
@@ -145,8 +152,17 @@ const (
 )
 
 func main() {
+	// --meta-only <bundle> <attack_dataset_meta.json>: record which bundle the
+	// existing dataset came from without regenerating the data files.
+	if len(os.Args) == 4 && os.Args[1] == "--meta-only" {
+		m, err := readDatasetMeta(os.Args[2])
+		must(err)
+		must(writeDatasetMeta(m, os.Args[3]))
+		fmt.Printf("wrote dataset meta to %s\n", os.Args[3])
+		return
+	}
 	if len(os.Args) < 3 {
-		fmt.Fprintln(os.Stderr, "usage: gen <enterprise-attack.json> <out.json> [--d3fend=FILE] [--sigma=DIR]")
+		fmt.Fprintln(os.Stderr, "usage: gen <enterprise-attack.json> <out.json> [--d3fend=FILE] [--sigma=DIR]\n       gen --meta-only <enterprise-attack.json> <attack_dataset_meta.json>")
 		os.Exit(2)
 	}
 	inPath, outPath := os.Args[1], os.Args[2]
@@ -303,6 +319,12 @@ func main() {
 	groupsPath := filepath.Join(filepath.Dir(outPath), "attack_groups.json")
 	must(os.WriteFile(groupsPath, groupsOut, 0o644))
 	fmt.Printf("wrote %d groups to %s (%d bytes)\n", len(groups), groupsPath, len(groupsOut))
+
+	meta, err := datasetMetaFromBytes(raw)
+	must(err)
+	metaPath := filepath.Join(filepath.Dir(outPath), metaFileName)
+	must(writeDatasetMeta(meta, metaPath))
+	fmt.Printf("wrote dataset meta to %s\n", metaPath)
 }
 
 // parseGroups extracts canonical MITRE Group-ID + alias data from every
