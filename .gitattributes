@@ -32,3 +32,4 @@ orchestrator/web/.gitignore text eol=lf
 packaging/appliance/* text eol=lf
 *.pkr.hcl text eol=lf
 *.tmpl text eol=lf
+packaging/images.pin text eol=lf
