@@ -1061,7 +1061,7 @@ line,function,target,op,category,data_source_tags,rhs_len,rhs
 19161,loadTAXIIConnectors,tbody,=,static,,54,"'<tr><td colspan=""6"" class=""empty"">Loading…</td></tr>'"
 19166,loadTAXIIConnectors,tbody,=,escaped,error_message,101,"'<tr><td colspan=""6"" class=""empty"">Failed to load: ' + x(e.message || 'unknown error') + '</td></tr>'"
 19173,renderTAXIIConnectorsList,tbody,=,static,,81,"'<tr><td colspan=""6"" class=""empty"">No TAXII connectors configured yet.</td></tr>'"
-19176,renderTAXIIConnectorsList,tbody,=,unescaped_html,user_created_name,1439,"TAXII_CONNECTORS.map(function(c) {
+19176,renderTAXIIConnectorsList,tbody,=,unescaped_html,user_created_name,1430,"TAXII_CONNECTORS.map(function(c) {
     var lastPoll = c.lastPollAt ? ago(c.lastPollAt) : 'Never';
     var resultColor = c.lastPollStatus === 'ok' ? 'var(--success)' : (c.lastPollStatus === 'error' ? 'var(--danger)' : 'var(--muted)');
     var summary = c.lastPollSummary || {};

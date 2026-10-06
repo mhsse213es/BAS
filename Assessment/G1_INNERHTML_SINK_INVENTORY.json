@@ -4295,7 +4295,7 @@
   "target": "tbody",
   "op": "=",
   "rhs": "TAXII_CONNECTORS.map(function(c) {\n    var lastPoll = c.lastPollAt ? ago(c.lastPollAt) : 'Never';\n    var resultColor = c.lastPollStatus === 'ok' ? 'var(--success)' : (c.lastPollStatus === 'error' ? 'var(--danger)' : 'var(--muted)');\n    var summary = c.lastPollSummary || {};\n    var resultText = c.lastPollStatus === 'ok'\n      ? (summary.processed || 0) + ' processed, ' + (summary.skipped || 0) +",
-  "rhs_len": 1439,
+  "rhs_len": 1430,
   "category": "unescaped_html",
   "data_source_tags": "user_created_name"
  },
