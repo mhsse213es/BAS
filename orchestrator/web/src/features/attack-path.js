@@ -1554,7 +1554,7 @@ function renderAgentRows() {
 // Row action menus (the "⋮" dropdown in the Agents table Actions column).
 // Only one panel is ever open at a time; toggling re-closes any other open
 // panel first so stale menus never linger behind a newly opened one.
-export function toggleRowMenuById(id, el, event) { toggleRowMenu(event, id); }
+export function toggleRowMenuById(id, el, event) { event.stopPropagation(); toggleRowMenu(el, id); }
 
 export function openModalForScenario(id) { openModal(id, null); }
 
@@ -1572,8 +1572,7 @@ export function rowMenuStopAgent(id, hostname) { closeAllRowMenus(); openStopAge
 export function rowMenuUninstallAgent(id, hostname) { closeAllRowMenus(); openUninstallAgentModal(id, hostname); }
 export function rowMenuRemoveAgent(id, hostname) { closeAllRowMenus(); openRemoveAgentModal(id, hostname); }
 
-export function toggleRowMenu(ev, id) {
-  ev.stopPropagation();
+export function toggleRowMenu(btn, id) {
   var panel = document.getElementById(id);
   if (!panel) return;
   var wasOpen = panel.classList.contains('open');
@@ -1582,7 +1581,7 @@ export function toggleRowMenu(ev, id) {
   // Position as fixed viewport coordinates from the trigger button's own
   // rect (see the .row-menu-panel CSS comment for why fixed instead of
   // absolute), right-aligned under the button like a standard menu.
-  var btnRect = ev.currentTarget.getBoundingClientRect();
+  var btnRect = btn.getBoundingClientRect();
   panel.style.right = (window.innerWidth - btnRect.right) + 'px';
   panel.style.left = 'auto';
   panel.style.top = (btnRect.bottom + 4) + 'px';
