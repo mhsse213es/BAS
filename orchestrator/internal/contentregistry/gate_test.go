@@ -212,6 +212,37 @@ func TestResolveExecutable_DevBuildVendorSignedIsNotTamper(t *testing.T) {
 	})
 }
 
+// Final-review M4: in a dev build the gate stops at a newer VENDOR_SIGNED
+// version (deny) and never falls through to an older UNTRUSTED one, so the
+// list badge must not claim the older version is executable.
+func TestSummaries_MirrorGateNoFallThroughInDevBuild(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		r := New(pool, testutil.DevVerifier())
+		if d := mustIntake(t, r, ctx, file("builtin", "id: sm\nname: V1\nlocal_check: true\n")); !d.Accepted {
+			t.Fatalf("dev unsigned builtin intake: %+v", d)
+		}
+		f := file("builtin", "id: sm\nname: V2\nlocal_check: true\n")
+		f.Signature, f.SignatureVerified = []byte{1}, true
+		if d := mustIntake(t, r, ctx, f); !d.Accepted {
+			t.Fatalf("signed builtin intake: %+v", d)
+		}
+		if l := latest(t, r, "sm"); l.Trust != TrustVendorSigned || l.Number != 2 {
+			t.Fatalf("setup: latest = v%d %s", l.Number, l.Trust)
+		}
+		if _, err := r.ResolveExecutable(ctx, "sm"); err == nil {
+			t.Fatal("setup: gate must deny in a dev build")
+		}
+		sums, err := r.Summaries(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if s := sums["sm"]; s.ExecutableVersion != 0 || s.LatestVersion != 2 {
+			t.Fatalf("summary must mirror the gate (no executable version): %+v", s)
+		}
+	})
+}
+
 func TestAttachVendorSignature(t *testing.T) { // A18
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
 		ctx := context.Background()

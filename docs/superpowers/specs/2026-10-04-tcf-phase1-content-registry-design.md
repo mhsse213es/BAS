@@ -468,3 +468,4 @@ Named invariant tests against a real Postgres (existing Docker test harness; `go
 8. Signature verification is injected via `integrity.Verifier` so VENDOR_SIGNED paths are testable without the vendor private key.
 9. Limitation: detection profiles are still resolved from current files during historical reads; profiles are not registry content in Phase 1.
 10. A minimal admin "Approve for local use" action on DRAFT cards.
+11. (Final review, 2026-10-06) The exercise engine's `agent_task` dispatch is gated too: it goes through `dispatchRun`, so it resolves via the Content Registry like every other execution kind. This is stricter than §11, which lists the exercise engine as not yet governed by the registry, for this dispatch path.

@@ -312,6 +312,26 @@ func TestRegisterLocalApproved_ApprovesExistingIntakeDraft(t *testing.T) {
 	})
 }
 
+// Final-review T7: a UI save (custom source) must not mix new bytes into an
+// intel-owned id, e.g. when the intel file is missing from disk.
+func TestRegisterLocalApproved_RefusesIntelOwnedID(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		r := New(pool, testutil.DevVerifier())
+		if d := mustIntake(t, r, ctx, file("intel", "id: io\nname: I\nart_techniques: [T1082]\n")); !d.Accepted {
+			t.Fatal("intel intake")
+		}
+		err := r.RegisterLocalApproved(ctx, "io", []byte("id: io\nname: Mine\nlocal_check: true\n"), "user:op")
+		if !errors.Is(err, ErrSourceCollision) {
+			t.Fatalf("want ErrSourceCollision, got %v", err)
+		}
+		vs, err := r.ListVersions(ctx, "io")
+		if err != nil || len(vs) != 1 || vs[0].Source != SourceIntel {
+			t.Fatalf("intel version must be the only one: %+v %v", vs, err)
+		}
+	})
+}
+
 // Fix round 1 ruling (b): custom and intel are both LOCAL, so the origin
 // check cannot stop one claiming the other's id; intake must.
 func TestIntake_CustomIntelSourceCollisionRefused(t *testing.T) {

@@ -3,8 +3,11 @@ package scenario
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
+	"sync"
 	"testing"
 )
 
@@ -40,7 +43,7 @@ func (f *fakeRegistry) Intake(_ context.Context, in IntakeFile) (IntakeDecision,
 	}
 	return IntakeDecision{Accepted: true}, nil
 }
-func (f *fakeRegistry) NoteRefusal(path, _, reason string) {
+func (f *fakeRegistry) NoteRefusal(path, _, _, reason string) {
 	f.refusals = append(f.refusals, path+"|"+reason)
 }
 func (f *fakeRegistry) RegisterLocalApproved(_ context.Context, id string, _ []byte, actor string) error {
@@ -321,5 +324,118 @@ func TestDeleteAs_RetireErrorLeavesFileAndMap(t *testing.T) {
 	}
 	if _, ok := e.Get("keep"); !ok {
 		t.Fatal("map entry must remain after a failed retire")
+	}
+}
+
+// Final-review I1: Load rebuilds the map while handlers read it. Readers must
+// never observe a map being written (fatal "concurrent map ..." throw).
+func TestLoad_ConcurrentWithReaders(t *testing.T) {
+	dir := t.TempDir()
+	for i := 0; i < 150; i++ {
+		write(t, dir, fmt.Sprintf("s%03d.yaml", i), fmt.Sprintf("id: s%03d\nname: S\nlocal_check: true\n", i))
+	}
+	e := NewEngine(dir)
+	e.SetVerifier(devV{})
+	if err := e.Load(); err != nil {
+		t.Fatal(err)
+	}
+	var wg sync.WaitGroup
+	stop := make(chan struct{})
+	for r := 0; r < 4; r++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for {
+				select {
+				case <-stop:
+					return
+				default:
+				}
+				_ = e.List()
+				_, _ = e.Get("s001")
+				_ = e.Count()
+				_ = e.Profiles()
+			}
+		}()
+	}
+	for i := 0; i < 15; i++ {
+		if err := e.Load(); err != nil {
+			t.Error(err)
+		}
+	}
+	close(stop)
+	wg.Wait()
+	if e.Count() != 150 {
+		t.Fatalf("count = %d, want 150", e.Count())
+	}
+}
+
+// Final-review I2: a builtin refused at Load (bad/missing .sig) leaves no map
+// entry and no registry row; its id must stay reserved so nothing LOCAL can
+// claim it and lock the vendor builtin out forever.
+func TestSaveAs_RefusesIDOfRefusedBuiltin(t *testing.T) {
+	dir := t.TempDir()
+	write(t, dir, "vendor.yaml", "id: vendor\nname: V\nlocal_check: true\n")
+	write(t, dir, "vendor.yaml.sig", "AAAA")
+	e := NewEngine(dir)
+	e.SetVerifier(badSigV{})
+	f := newFake()
+	e.AttachRegistry(f)
+	if err := e.Load(); err != nil {
+		t.Fatal(err)
+	}
+	err := e.SaveAs(context.Background(), &Scenario{ID: "vendor", Name: "Mine", LocalCheck: true}, "user:op")
+	if err == nil || !strings.Contains(err.Error(), "reserved by a built-in scenario") {
+		t.Fatalf("want reserved-id refusal, got %v", err)
+	}
+	if _, ok := f.approved["vendor"]; ok {
+		t.Fatal("reserved id must never reach the registry")
+	}
+	if _, serr := os.Stat(filepath.Join(dir, "custom", "vendor.yaml")); !os.IsNotExist(serr) {
+		t.Fatalf("no custom file may be written for a reserved id: %v", serr)
+	}
+	// A normal custom id still saves.
+	if err := e.SaveAs(context.Background(), &Scenario{ID: "mine", Name: "Mine", LocalCheck: true}, "user:op"); err != nil {
+		t.Fatalf("normal save: %v", err)
+	}
+}
+
+func TestLoad_LocalIntakeOfReservedBuiltinIDRefused(t *testing.T) {
+	dir := t.TempDir()
+	write(t, dir, "vendor.yaml", "id: vendor\nname: V\nlocal_check: true\n")
+	write(t, dir, "vendor.yaml.sig", "AAAA")
+	// Unparseable as a Scenario but its id is readable: still reserved.
+	write(t, dir, "broken.yaml", "id: broken\nname: B\nsteps: not-a-list\n")
+	write(t, dir, "custom/vendor.yaml", "id: vendor\nname: Shadow\nlocal_check: true\n")
+	write(t, dir, "intel/broken.yaml", "id: broken\nname: Shadow\nart_techniques: [T1082]\n")
+	write(t, dir, "custom/mine.yaml", "id: mine\nname: Mine\nlocal_check: true\n")
+	e := NewEngine(dir)
+	e.SetVerifier(badSigV{})
+	f := newFake()
+	e.AttachRegistry(f)
+	if err := e.Load(); err != nil {
+		t.Fatal(err)
+	}
+	for _, o := range f.order {
+		if o == "custom:vendor" || o == "intel:broken" {
+			t.Fatalf("a reserved builtin id must not be intaken as LOCAL: %v", f.order)
+		}
+	}
+	for _, id := range []string{"vendor", "broken"} {
+		if _, ok := e.Get(id); ok {
+			t.Fatalf("%s must not be loaded", id)
+		}
+	}
+	reserved := 0
+	for _, r := range f.refusals {
+		if strings.Contains(r, "reserved by a built-in scenario") {
+			reserved++
+		}
+	}
+	if reserved != 2 {
+		t.Fatalf("want 2 reserved-id refusals, got %v", f.refusals)
+	}
+	if _, ok := e.Get("mine"); !ok {
+		t.Fatal("a normal custom id must still load")
 	}
 }

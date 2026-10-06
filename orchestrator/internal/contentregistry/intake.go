@@ -58,7 +58,7 @@ func hasVersionsFromSource(ctx context.Context, q queryRower, contentID string, 
 }
 
 func (r *Registry) refuse(f scenario.IntakeFile, contentID, reason string) scenario.IntakeDecision {
-	r.NoteRefusal(f.Path, contentID, reason)
+	r.NoteRefusal(f.Path, contentID, f.Source, reason)
 	return scenario.IntakeDecision{Accepted: false, Reason: reason}
 }
 
@@ -186,7 +186,7 @@ func (r *Registry) RegisterLocalApproved(ctx context.Context, contentID string, 
 	}
 	vid, created, err := r.createVersion(ctx, newVersion{contentID: contentID, origin: OriginLocal, source: SourceCustom,
 		artifact: artifact, trust: TrustLocalTrusted, lifecycle: LifecyclePublishedLocal, actor: actor,
-		reason: "operator save", analysis: a})
+		reason: "operator save", analysis: a, exclusiveLocalSource: true})
 	if err != nil || created {
 		return err
 	}

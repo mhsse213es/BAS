@@ -183,6 +183,9 @@ func (r *Registry) Summaries(ctx context.Context) (map[string]Summary, error) {
 	}
 	defer rows.Close()
 	out := map[string]Summary{}
+	// decided marks content ids whose first gate-considered version has been
+	// seen; like the gate, older versions are never consulted after it.
+	decided := map[string]bool{}
 	for rows.Next() {
 		var id, cid, o, tr, lc string
 		var n int
@@ -193,11 +196,15 @@ func (r *Registry) Summaries(ctx context.Context) (map[string]Summary, error) {
 		if !seen {
 			s = Summary{LatestVersion: n, LatestVersionID: id, LatestLifecycle: lc, LatestTrust: tr}
 		}
-		// Same rule as the gate: a dev build cannot verify signatures, so
-		// VENDOR_SIGNED content is not executable there.
-		if s.ExecutableVersion == 0 && Executable(Origin(o), Trust(tr), Lifecycle(lc), r.devBuild()) &&
-			!(r.devBuild() && Trust(tr) == TrustVendorSigned) {
-			s.ExecutableVersion, s.ExecutableLifecycle, s.ExecutableTrust = n, lc, tr
+		// Same rule as the gate: the first (highest) version passing
+		// Executable decides. A dev build cannot verify signatures, so a
+		// VENDOR_SIGNED one there means "not executable" -- the gate denies
+		// rather than falling through to an older version, and so do we.
+		if !decided[cid] && Executable(Origin(o), Trust(tr), Lifecycle(lc), r.devBuild()) {
+			decided[cid] = true
+			if !(r.devBuild() && Trust(tr) == TrustVendorSigned) {
+				s.ExecutableVersion, s.ExecutableLifecycle, s.ExecutableTrust = n, lc, tr
+			}
 		}
 		out[cid] = s
 	}

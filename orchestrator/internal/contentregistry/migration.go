@@ -212,7 +212,7 @@ func (r *Registry) computeInventory(ctx context.Context, q querier) (Inventory, 
 	if inv.CustomGrandfathered, err = pgx.CollectRows(grow, pgx.RowTo[string]); err != nil {
 		return inv, err
 	}
-	inv.BuiltinRefused = r.Refusals()
+	inv.BuiltinRefused = r.BuiltinRefusals()
 	inv.MigratedAt = time.Now().UTC().Truncate(time.Microsecond)
 	return inv, nil
 }

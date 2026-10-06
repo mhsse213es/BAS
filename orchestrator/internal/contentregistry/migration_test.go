@@ -25,7 +25,10 @@ func TestMigrationIdempotentWithInventory(t *testing.T) { // A14
 		in("builtin", "id: b1\nname: B\nlocal_check: true\n")
 		in("custom", "id: c1\nname: C\nlocal_check: true\n")
 		in("intel", "id: intel-1\nname: I\nart_techniques: [T1082]\n")
-		r.NoteRefusal("tampered.yaml", "bad", "signature invalid")
+		r.NoteRefusal("tampered.yaml", "bad", "builtin", "signature invalid")
+		// Custom/intel refusals are not builtin refusals (final-review M3).
+		r.NoteRefusal("custom/dup.yaml", "dup", "custom", "duplicate id; higher-precedence file wins")
+		r.NoteRefusal("intel/x.yaml", "x", "intel", ErrSourceCollision.Error())
 		if _, err := pool.Exec(ctx, `INSERT INTO job_schedules (type, payload, agent_ids, day_of_week, time_of_day)
 			VALUES ('scheduled_assessment', '{"scenarioId":"intel-1"}', '[]', 1, '09:00')`); err != nil {
 			t.Fatalf("seed schedule: %v", err)

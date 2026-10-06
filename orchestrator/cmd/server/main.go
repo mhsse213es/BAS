@@ -345,6 +345,10 @@ func main() {
 	// ── Scenario Engine ───────────────────────────────────────────────────
 	engine := scenario.NewEngine(cfg.ScenariosDir)
 	contentRegistry := contentregistry.New(pool, integrity.CompiledVerifier{})
+	if !(integrity.CompiledVerifier{}).SigningEnabled() {
+		// Spec §6.3: make the dev-build trust downgrade impossible to miss.
+		log.Printf("[!] DEV BUILD: unsigned vendor content is executable; production builds deny it")
+	}
 	engine.AttachRegistry(contentRegistry)
 	scenarioLoadErr := engine.Load()
 	// Captured now: later Loads (connector scheduler) reset the counter.

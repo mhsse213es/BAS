@@ -16,6 +16,7 @@ import (
 type Refusal struct {
 	Path      string    `json:"path"`
 	ContentID string    `json:"contentId"`
+	Source    string    `json:"source"` // builtin | custom | intel
 	Reason    string    `json:"reason"`
 	At        time.Time `json:"at"`
 }
@@ -37,13 +38,24 @@ func (r *Registry) devBuild() bool { return !r.verifier.SigningEnabled() }
 
 // NoteRefusal records an intake refusal for the migration inventory. Keeps
 // the most recent 500.
-func (r *Registry) NoteRefusal(path, contentID, reason string) {
+func (r *Registry) NoteRefusal(path, contentID, source, reason string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.refusals = append(r.refusals, Refusal{Path: path, ContentID: contentID, Reason: reason, At: time.Now().UTC()})
+	r.refusals = append(r.refusals, Refusal{Path: path, ContentID: contentID, Source: source, Reason: reason, At: time.Now().UTC()})
 	if len(r.refusals) > 500 {
 		r.refusals = r.refusals[len(r.refusals)-500:]
 	}
+}
+
+// BuiltinRefusals is the builtin-source subset of Refusals.
+func (r *Registry) BuiltinRefusals() []Refusal {
+	var out []Refusal
+	for _, x := range r.Refusals() {
+		if x.Source == string(SourceBuiltin) {
+			out = append(out, x)
+		}
+	}
+	return out
 }
 
 func (r *Registry) Refusals() []Refusal {

@@ -114,7 +114,8 @@ type newVersion struct {
 	// values were chosen from an unlocked read; createVersion re-checks it
 	// under the content lock and downgrades to DRAFT if no longer eligible.
 	grandfatherEligible bool
-	// exclusiveLocalSource (set by Intake) refuses a custom version when the
+	// exclusiveLocalSource (set by Intake, RegisterLocalApproved and
+	// RegisterGenerated) refuses a custom version when the
 	// id already has intel versions and vice versa, re-checked under the lock.
 	exclusiveLocalSource bool
 }

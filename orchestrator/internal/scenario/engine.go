@@ -11,6 +11,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
 	"sync/atomic"
 
 	"gopkg.in/yaml.v3"
@@ -29,9 +30,18 @@ const profilesSubdir = "detection-profiles"
 
 // Engine loads and manages scenario definitions from YAML files.
 type Engine struct {
-	dir       string
+	dir string
+	// mu guards scenarios, profiles and reservedBuiltin. Load builds fresh
+	// maps off-lock and swaps them in; readers take RLock. Never held across
+	// registry, DB or filesystem I/O.
+	mu        sync.RWMutex
 	scenarios map[string]*Scenario
 	profiles  map[string]*DetectionProfile
+	// reservedBuiltin holds the id of every builtin-source file the last
+	// Load saw (verified, refused, or unparseable with a readable id). No
+	// LOCAL save or intake may claim one: a refused builtin has no registry
+	// row, so a LOCAL claim would lock the vendor builtin out forever.
+	reservedBuiltin map[string]struct{}
 	// registry is the TCF Content Registry. nil => nothing is executable
 	// (ResolveExecutable fails closed); the disk map still serves authoring.
 	registry ContentRegistry
@@ -44,10 +54,11 @@ type Engine struct {
 // NewEngine creates an Engine that reads scenarios from dir.
 func NewEngine(dir string) *Engine {
 	return &Engine{
-		dir:       dir,
-		scenarios: make(map[string]*Scenario),
-		profiles:  make(map[string]*DetectionProfile),
-		verifier:  integrity.CompiledVerifier{},
+		dir:             dir,
+		scenarios:       make(map[string]*Scenario),
+		profiles:        make(map[string]*DetectionProfile),
+		reservedBuiltin: make(map[string]struct{}),
+		verifier:        integrity.CompiledVerifier{},
 	}
 }
 
@@ -90,10 +101,14 @@ var sourceRank = map[string]int{"builtin": 0, "custom": 1, "intel": 2}
 // Safe to call multiple times — reloads on each call.
 func (e *Engine) Load() error {
 	e.intakeFailures.Store(0)
-	e.scenarios = make(map[string]*Scenario)
+	// Everything is built in locals and swapped in at the end under e.mu, so
+	// concurrent readers see either the old or the new set, never a map
+	// being written (Load does registry round-trips and RSA verification).
+	scenarios := make(map[string]*Scenario)
+	reserved := make(map[string]struct{})
 	// Load Detection Validation profiles first so scenario resolution can
 	// reference them. Profile errors are logged, never fatal.
-	e.loadProfiles()
+	profiles := e.loadProfiles()
 	var files []loadedFile
 	err := filepath.WalkDir(e.dir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -115,16 +130,29 @@ func (e *Engine) Load() error {
 			log.Printf("[!] scenario: read %s: %v — skipping", path, err)
 			return nil
 		}
+		source := e.sourceForPath(path)
 		var s Scenario
 		if err := yaml.Unmarshal(b, &s); err != nil {
 			log.Printf("[!] scenario: parse %s: %v — skipping", path, err)
+			if source == "builtin" {
+				// Still reserve the id if it is readable on its own.
+				var idOnly struct {
+					ID string `yaml:"id"`
+				}
+				if yaml.Unmarshal(b, &idOnly) == nil && idOnly.ID != "" {
+					reserved[idOnly.ID] = struct{}{}
+				}
+			}
 			return nil
 		}
 		if s.ID == "" {
 			log.Printf("[!] scenario: %s missing required field 'id' — skipping", path)
 			return nil
 		}
-		s.Source = e.sourceForPath(path)
+		s.Source = source
+		if source == "builtin" {
+			reserved[s.ID] = struct{}{}
+		}
 		files = append(files, loadedFile{path: path, source: s.Source, bytes: b, sc: &s})
 		return nil
 	})
@@ -145,11 +173,23 @@ func (e *Engine) Load() error {
 			if verr != nil {
 				log.Printf("[!] TAMPER ALERT: builtin scenario %s failed signature verification: %v — refusing to load", f.path, verr)
 				if e.registry != nil {
-					e.registry.NoteRefusal(f.path, f.sc.ID, verr.Error())
+					e.registry.NoteRefusal(f.path, f.sc.ID, f.source, verr.Error())
 				}
 				continue // do not add tampered scenario to the map
 			}
 			sig, verified = s, ok
+		} else if _, isReserved := reserved[f.sc.ID]; isReserved {
+			// A loaded builtin keeps the slot and the registry refuses (and
+			// audits) the cross-origin claim as before. A builtin that was
+			// NOT loaded has no registry row, so the claim must stop here or
+			// it would create a permanent LOCAL identity for a vendor id.
+			if prev, ok := scenarios[f.sc.ID]; !ok || prev.Source != "builtin" {
+				log.Printf("[!] scenario: %s claims id %s %s — refusing", f.path, f.sc.ID, reservedIDMsg)
+				if e.registry != nil {
+					e.registry.NoteRefusal(f.path, f.sc.ID, f.source, reservedIDMsg)
+				}
+				continue
+			}
 		}
 		if e.registry != nil {
 			d, ierr := e.registry.Intake(ctx, IntakeFile{Path: f.path, Source: f.source, Artifact: f.bytes,
@@ -167,17 +207,23 @@ func (e *Engine) Load() error {
 		// First wins, with or without a registry: the higher-precedence file
 		// already in the map keeps the slot even if the registry accepted
 		// the later file (e.g. custom vs intel, both LOCAL).
-		if _, dup := e.scenarios[f.sc.ID]; dup {
+		if _, dup := scenarios[f.sc.ID]; dup {
 			log.Printf("[!] scenario: duplicate id %s at %s — keeping the first (higher-precedence) file", f.sc.ID, f.path)
 			if e.registry != nil {
-				e.registry.NoteRefusal(f.path, f.sc.ID, "duplicate id; higher-precedence file wins")
+				e.registry.NoteRefusal(f.path, f.sc.ID, f.source, "duplicate id; higher-precedence file wins")
 			}
 			continue
 		}
-		e.scenarios[f.sc.ID] = f.sc
+		scenarios[f.sc.ID] = f.sc
 	}
+	e.mu.Lock()
+	e.scenarios, e.profiles, e.reservedBuiltin = scenarios, profiles, reserved
+	e.mu.Unlock()
 	return nil
 }
+
+// reservedIDMsg is the refusal text for a LOCAL claim on a builtin id.
+const reservedIDMsg = "id reserved by a built-in scenario"
 
 // sourceForPath classifies a scenario file by which sub-folder it lives in,
 // relative to the scenarios root: "custom", "intel", or "builtin".
@@ -198,6 +244,8 @@ func (e *Engine) sourceForPath(path string) string {
 
 // List returns all loaded scenarios sorted by ID.
 func (e *Engine) List() []*Scenario {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
 	out := make([]*Scenario, 0, len(e.scenarios))
 	for _, s := range e.scenarios {
 		out = append(out, s)
@@ -208,12 +256,16 @@ func (e *Engine) List() []*Scenario {
 
 // Get returns a scenario by ID.
 func (e *Engine) Get(id string) (*Scenario, bool) {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
 	s, ok := e.scenarios[id]
 	return s, ok
 }
 
 // Count returns the number of loaded scenarios.
 func (e *Engine) Count() int {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
 	return len(e.scenarios)
 }
 
@@ -267,8 +319,15 @@ func (e *Engine) SaveAs(ctx context.Context, s *Scenario, actor string) error {
 		return err
 	}
 	// If a scenario with this ID already exists, it must be a custom one.
-	if existing, ok := e.scenarios[s.ID]; ok && existing.Source != "custom" {
+	e.mu.RLock()
+	existing, ok := e.scenarios[s.ID]
+	_, isReserved := e.reservedBuiltin[s.ID]
+	e.mu.RUnlock()
+	if ok && existing.Source != "custom" {
 		return fmt.Errorf("scenario %q is %s and cannot be overwritten — clone it to a new ID instead", s.ID, existing.Source)
+	}
+	if isReserved {
+		return fmt.Errorf("scenario %q: %s — clone it to a new ID instead", s.ID, reservedIDMsg)
 	}
 
 	customDir := filepath.Join(e.dir, "custom")
@@ -322,7 +381,9 @@ func (e *Engine) SaveAs(ctx context.Context, s *Scenario, actor string) error {
 	}
 
 	s.Source = "custom"
+	e.mu.Lock()
 	e.scenarios[s.ID] = s
+	e.mu.Unlock()
 	return nil
 }
 
@@ -334,7 +395,9 @@ func (e *Engine) SaveAs(ctx context.Context, s *Scenario, actor string) error {
 // before the file is touched; a failed retirement leaves everything in place.
 // Returns an error if the file cannot be found or removed.
 func (e *Engine) DeleteAs(ctx context.Context, id, actor string) error {
+	e.mu.RLock()
 	sc, ok := e.scenarios[id]
+	e.mu.RUnlock()
 	if !ok {
 		return fmt.Errorf("scenario %q not found", id)
 	}
@@ -373,7 +436,9 @@ func (e *Engine) DeleteAs(ctx context.Context, id, actor string) error {
 	if err := os.Remove(found); err != nil {
 		return fmt.Errorf("remove %s: %w", found, err)
 	}
+	e.mu.Lock()
 	delete(e.scenarios, id)
+	e.mu.Unlock()
 	return nil
 }
 

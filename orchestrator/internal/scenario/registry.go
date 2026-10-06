@@ -37,7 +37,7 @@ type ExecutableVersion struct {
 // so the engine can call it without an import cycle.
 type ContentRegistry interface {
 	Intake(ctx context.Context, f IntakeFile) (IntakeDecision, error)
-	NoteRefusal(path, contentID, reason string)
+	NoteRefusal(path, contentID, source, reason string)
 	RegisterLocalApproved(ctx context.Context, contentID string, artifact []byte, actor string) error
 	RetireExecutable(ctx context.Context, contentID, actor, reason string) error
 	ResolveExecutable(ctx context.Context, contentID string) (ExecutableVersion, error)
