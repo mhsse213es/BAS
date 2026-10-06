@@ -274,6 +274,32 @@ func TestBuildYAML_ExternalFieldsCannotInjectStructure(t *testing.T) {
 	}
 }
 
+// Re-review M-b: values are cleaned first, then deduped and sorted, so the
+// provider's ordering and values that collapse after cleaning cannot change
+// the bytes.
+func TestBuildYAML_CleanThenDedupeSort(t *testing.T) {
+	g := NewGenerator(t.TempDir(), []string{"finance"}, nil, nil)
+	a := ThreatActor{Name: "Akira", Source: "misp", Confidence: "high",
+		Sectors:    []string{"retail", "finance", "finance\n", "fin\u200bance"},
+		Techniques: []TechniqueRef{{ID: "T1083"}, {ID: "t1082"}, {ID: "T1082\x00"}, {ID: "T1059", Tactic: "execution\r"}}}
+	b := ThreatActor{Name: "Akira", Source: "misp", Confidence: "high",
+		Sectors:    []string{"finance", "retail"},
+		Techniques: []TechniqueRef{{ID: "T1059", Tactic: "execution"}, {ID: "T1082"}, {ID: "T1083"}}}
+	ya, yb := g.buildYAML(a, "intel-x"), g.buildYAML(b, "intel-x")
+	if ya != yb {
+		t.Fatalf("reordered / collapsing inputs must give identical bytes:\n%s\n---\n%s", ya, yb)
+	}
+}
+
+// Re-review M-b2: format characters (bidi controls, ZWSP, BOM) and line/
+// paragraph separators are stripped too.
+func TestSanitizeIntelText_DropsFormatAndSeparatorChars(t *testing.T) {
+	got, _ := sanitizeIntelText("A\u202eB\u200bC\ufeffD\u2028E\u2029F\u2066G", 100)
+	if got != "ABCDEFG" {
+		t.Fatalf("got %q", got)
+	}
+}
+
 func TestBuildYAML_TruncatesOnRuneBoundary(t *testing.T) {
 	g := NewGenerator(t.TempDir(), nil, nil, nil)
 	a := ThreatActor{Name: strings.Repeat("é", 500), Source: "otx", Description: strings.Repeat("日", 300),

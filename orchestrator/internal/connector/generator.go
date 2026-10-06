@@ -229,7 +229,9 @@ const (
 func sanitizeIntelText(s string, max int) (out string, truncated bool) {
 	s = strings.ToValidUTF8(s, "")
 	s = strings.Map(func(r rune) rune {
-		if unicode.IsControl(r) {
+		// Controls (CR, LF, NUL, ESC...), format characters (bidi
+		// overrides, ZWSP, BOM) and line/paragraph separators.
+		if unicode.IsControl(r) || unicode.In(r, unicode.Cf, unicode.Zl, unicode.Zp) {
 			return -1
 		}
 		return r
@@ -245,6 +247,20 @@ func sanitizeIntelText(s string, max int) (out string, truncated bool) {
 	return s, false
 }
 
+// cleanDedupeSort cleans each value, drops empties and duplicates, and sorts.
+func cleanDedupeSort(in []string) []string {
+	seen := map[string]bool{}
+	out := []string{}
+	for _, v := range in {
+		if c := cleanIntel(v); c != "" && !seen[c] {
+			seen[c] = true
+			out = append(out, c)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
 func cleanIntel(s string) string {
 	out, _ := sanitizeIntelText(s, maxIntelFieldRunes)
 	return out
@@ -257,27 +273,27 @@ func (g *Generator) buildYAML(actor ThreatActor, contentID string) string {
 	source := cleanIntel(actor.Source)
 	confidence := cleanIntel(actor.Confidence)
 
-	// Collect unique technique IDs (already sorted)
-	techIDs := []string{}
-	for _, t := range dedupedTechniqueIDs(actor.Techniques) {
-		techIDs = append(techIDs, cleanIntel(t))
+	// Clean first, then dedupe and sort: provider ordering, and values that
+	// only differ before cleaning, must not change the bytes.
+	techs := make([]TechniqueRef, 0, len(actor.Techniques))
+	for _, t := range actor.Techniques {
+		techs = append(techs, TechniqueRef{ID: cleanIntel(t.ID), Tactic: cleanIntel(t.Tactic)})
 	}
-
-	// Derive MITRE phases from techniques (kill-chain ordered)
-	phases := []string{}
-	for _, p := range deriveMITREPhases(actor.Techniques) {
-		phases = append(phases, cleanIntel(p))
+	techIDs := dedupedTechniqueIDs(techs) // uppercased, deduped, sorted
+	phases := deriveMITREPhases(techs)    // deduped, kill-chain ordered
+	if phases == nil {
+		phases = []string{}
 	}
+	sectors := cleanDedupeSort(actor.Sectors)
+	regions := cleanDedupeSort(actor.Regions)
 
 	// Tags
 	tags := []string{"intel", "auto-generated", strings.ToLower(strings.ReplaceAll(name, " ", "-"))}
-	for _, sec := range actor.Sectors {
-		tags = append(tags, cleanIntel(sec))
-	}
-	if intersects(actor.Sectors, g.sectors) {
+	tags = append(tags, sectors...)
+	if intersects(sectors, g.sectors) {
 		tags = append(tags, "sector-relevant")
 	}
-	if intersects(actor.Regions, g.regions) {
+	if intersects(regions, g.regions) {
 		tags = append(tags, "region-relevant")
 	}
 
