@@ -1,9 +1,14 @@
 package connector
 
 import (
+	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/audspect/bas/internal/contentregistry"
 	"github.com/audspect/bas/internal/scenario"
 )
 
@@ -116,5 +121,69 @@ func TestDedupedTechniqueIDs_DedupesAndUppercases(t *testing.T) {
 func TestDedupedTechniqueIDs_EmptyInput(t *testing.T) {
 	if got := dedupedTechniqueIDs(nil); len(got) != 0 {
 		t.Fatalf("got %v, want empty", got)
+	}
+}
+
+func TestGenerator_UnchangedInputsSameBytes(t *testing.T) { // Review Focus 3
+	g := NewGenerator(t.TempDir(), nil, nil, nil)
+	a := ThreatActor{Name: "RansomHub", Source: "misp", SourceID: "evt-1", Confidence: "high",
+		LastSeen:   time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC),
+		Techniques: []TechniqueRef{{ID: "T1082"}, {ID: "T1059.001"}}}
+	id := intelContentID(a.Name)
+	first := g.buildYAML(a, id)
+	time.Sleep(1100 * time.Millisecond)         // a wall-clock timestamp in the YAML would now differ
+	a.LastSeen = a.LastSeen.Add(24 * time.Hour) // last-seen churn alone must not change bytes
+	if second := g.buildYAML(a, id); first != second {
+		t.Fatalf("YAML must be deterministic for unchanged techniques/confidence:\n%s\n---\n%s", first, second)
+	}
+}
+
+func TestIntelContentID_StablePerActor(t *testing.T) {
+	if intelContentID("RansomHub") != intelContentID(" ransomhub ") {
+		t.Fatal("content id must depend on the normalized actor name only")
+	}
+	if intelContentID("RansomHub") == intelContentID("Akira") {
+		t.Fatal("different actors must not collide")
+	}
+}
+
+type recRegistrar struct {
+	got []contentregistry.GeneratedCandidate
+}
+
+func (r *recRegistrar) RegisterGenerated(_ context.Context, c contentregistry.GeneratedCandidate) (string, bool, error) {
+	r.got = append(r.got, c)
+	return "v", true, nil
+}
+
+func TestGenerator_WriteRegistersAndRewritesWorkingCopy(t *testing.T) { // A2 generator half
+	dir := t.TempDir()
+	rec := &recRegistrar{}
+	g := NewGenerator(dir, nil, nil, nil).WithRegistrar(rec)
+	a := ThreatActor{Name: "Akira", Source: "opencti", SourceID: "x", Confidence: "medium",
+		Techniques: []TechniqueRef{{ID: "T1082"}, {ID: "T1083"}}}
+	r1, err := g.Write([]ThreatActor{a})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r1.Changed != 1 {
+		t.Fatalf("first write must report a changed working copy: %+v", r1)
+	}
+	r2, err := g.Write([]ThreatActor{a}) // second sync: still registers; registry dedups
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r2.Changed != 0 {
+		t.Fatalf("unchanged working copy must not report Changed: %+v", r2)
+	}
+	if len(rec.got) != 2 || rec.got[0].GenerationKey != rec.got[1].GenerationKey ||
+		string(rec.got[0].Artifact) != string(rec.got[1].Artifact) {
+		t.Fatalf("same inputs must yield same key and bytes: %+v", rec.got)
+	}
+	if rec.got[0].ContentID != intelContentID("Akira") || rec.got[0].Sources[0].Role != "primary" {
+		t.Fatalf("candidate: %+v", rec.got[0])
+	}
+	if _, err := os.Stat(filepath.Join(dir, "intel", intelContentID("Akira")+".yaml")); err != nil {
+		t.Fatalf("working copy: %v", err)
 	}
 }

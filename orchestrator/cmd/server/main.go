@@ -497,7 +497,7 @@ func main() {
 	for _, src := range tiSources {
 		log.Printf("[+] %s connector configured", src.Name())
 	}
-	gen := connector.NewGenerator(cfg.ScenariosDir, cfg.ThreatIntelSectors, cfg.ThreatIntelRegions, engine.Profiles())
+	gen := connector.NewGenerator(cfg.ScenariosDir, cfg.ThreatIntelSectors, cfg.ThreatIntelRegions, engine.Profiles()).WithRegistrar(contentRegistry)
 	priorityEngine := threatpriority.NewEngine(pool, engine, cfg.ThreatIntelSectors, cfg.ThreatIntelRegions)
 	correlationEngine := correlation.NewEngine(pool, engine)
 	scheduler := connector.NewScheduler(tiSources, gen, engine, cfg.ThreatIntelPollHours, pool, priorityEngine)

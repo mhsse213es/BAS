@@ -431,7 +431,7 @@ func (s *Scheduler) sync() {
 	}
 
 	// ── Reload scenario engine ────────────────────────────────────────────
-	if result.Created > 0 || result.Updated > 0 {
+	if result.Created > 0 || result.Updated > 0 || result.Changed > 0 {
 		if err := s.engine.Load(); err != nil {
 			log.Printf("[connector] engine reload: %v", err)
 		} else {

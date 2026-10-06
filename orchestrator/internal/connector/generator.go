@@ -1,20 +1,34 @@
 package connector
 
 import (
+	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"log"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
-	"time"
 
+	"github.com/audspect/bas/internal/contentregistry"
 	"github.com/audspect/bas/internal/scenario"
 )
 
 const minTechniques = 2 // minimum techniques before generating a scenario
+
+// Registrar is the slice of the Content Registry the generator writes to.
+type Registrar interface {
+	RegisterGenerated(ctx context.Context, c contentregistry.GeneratedCandidate) (string, bool, error)
+}
+
+const (
+	generatorName    = "connector/generator"
+	generatorVersion = "2" // 2 = registry-backed, deterministic YAML (TCF Phase 1)
+	mappingVersion   = "1"
+)
 
 // Generator converts ThreatActor profiles into BAS scenario YAML files.
 type Generator struct {
@@ -31,6 +45,15 @@ type Generator struct {
 	// names (Detection Profile Inheritance). Built once at construction
 	// time from the profiles the caller already loaded.
 	techniqueIdx map[string][]string
+
+	registrar Registrar
+}
+
+// WithRegistrar makes the generator register every candidate as a
+// LOCAL/UNTRUSTED/DRAFT version in the Content Registry.
+func (g *Generator) WithRegistrar(r Registrar) *Generator {
+	g.registrar = r
+	return g
 }
 
 // NewGenerator creates a Generator that writes to intelDir, tagging
@@ -53,11 +76,18 @@ type GenerateResult struct {
 	Created int
 	Updated int
 	Skipped int
+	// Changed counts working-copy files whose bytes differ from what was on
+	// disk (new or rewritten), independent of the registry outcome. The
+	// scheduler reloads the scenario engine when Changed > 0.
+	Changed int
 }
 
 // Write generates scenario YAMLs for each actor and returns a result summary.
-// Files are named by a fingerprint of (actor name + sorted technique IDs),
-// so the same actor+techniques never produces a duplicate file.
+// Files are named by the actor-derived content ID (intelContentID), and the
+// YAML is byte-deterministic for unchanged inputs. The working copy is
+// rewritten only when its bytes differ; every candidate is registered with
+// the Content Registry (which dedups identical bytes). Created counts
+// versions the registry created; Skipped covers everything else.
 func (g *Generator) Write(actors []ThreatActor) (GenerateResult, error) {
 	if err := os.MkdirAll(g.intelDir, 0755); err != nil {
 		return GenerateResult{}, fmt.Errorf("mkdir %s: %w", g.intelDir, err)
@@ -70,31 +100,47 @@ func (g *Generator) Write(actors []ThreatActor) (GenerateResult, error) {
 			continue
 		}
 
-		fp := actorFingerprint(actor)
-		fname := filepath.Join(g.intelDir, "intel-"+fp+".yaml")
-
-		if _, err := os.Stat(fname); err == nil {
-			// File exists — fingerprint unchanged, skip
+		id := intelContentID(actor.Name)
+		body := g.buildYAML(actor, id)
+		fname := filepath.Join(g.intelDir, id+".yaml")
+		if old, err := os.ReadFile(fname); err != nil || !bytes.Equal(old, []byte(body)) {
+			if err := os.WriteFile(fname, []byte(body), 0644); err != nil {
+				log.Printf("[connector/gen] write %s: %v", fname, err)
+				continue
+			}
+			res.Changed++
+		}
+		if g.registrar == nil {
 			res.Skipped++
 			continue
 		}
-
-		yaml := g.buildYAML(actor, fp)
-		if err := os.WriteFile(fname, []byte(yaml), 0644); err != nil {
-			log.Printf("[connector/gen] write %s: %v", fname, err)
+		_, created, err := g.registrar.RegisterGenerated(context.Background(), contentregistry.GeneratedCandidate{
+			ContentID: id, Artifact: []byte(body), GenerationKey: generationKey(actor),
+			Generation: map[string]any{"generator": generatorName, "generator_version": generatorVersion,
+				"mapping_version": mappingVersion, "parameters": map[string]any{"min_techniques": minTechniques}},
+			Sources: []contentregistry.SourceRef{{EntityType: "actor", EntityID: actor.Name, Provider: actor.Source,
+				ExternalID: actor.SourceID, Role: "primary"}},
+		})
+		if err != nil {
+			log.Printf("[connector/gen] register %s: %v", id, err)
 			continue
 		}
-		log.Printf("[connector/gen] wrote %s (%s, %d techniques)", fname, actor.Name, len(actor.Techniques))
-		res.Created++
+		if created {
+			log.Printf("[connector/gen] new DRAFT %s (%s, %d techniques)", id, actor.Name, len(actor.Techniques))
+			res.Created++
+		} else {
+			res.Skipped++
+		}
 	}
 	return res, nil
 }
 
 // ── YAML builder ──────────────────────────────────────────────────────────────
 
-func (g *Generator) buildYAML(actor ThreatActor, fingerprint string) string {
-	id := "intel-" + fingerprint
-	date := time.Now().UTC().Format("2006-01-02")
+// buildYAML renders the scenario YAML. It is deterministic: no wall-clock or
+// last-seen values, so unchanged techniques/confidence give identical bytes.
+func (g *Generator) buildYAML(actor ThreatActor, contentID string) string {
+	id := contentID
 
 	// Collect unique technique IDs
 	techIDs := dedupedTechniqueIDs(actor.Techniques)
@@ -115,10 +161,6 @@ func (g *Generator) buildYAML(actor ThreatActor, fingerprint string) string {
 	}
 
 	// Description
-	lastSeen := "unknown"
-	if !actor.LastSeen.IsZero() {
-		lastSeen = actor.LastSeen.Format("2006-01-02")
-	}
 	description := actor.Description
 	if description == "" {
 		description = fmt.Sprintf("%s threat actor profile.", actor.Name)
@@ -129,9 +171,9 @@ func (g *Generator) buildYAML(actor ThreatActor, fingerprint string) string {
 
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("id: %s\n", id))
-	sb.WriteString(fmt.Sprintf("name: \"%s — Active Campaign (Intel, %s)\"\n", actor.Name, date))
-	sb.WriteString(fmt.Sprintf("description: \"Auto-generated from %s. %s Confidence: %s. Last seen: %s.\"\n",
-		actor.Source, strings.ReplaceAll(description, `"`, `'`), actor.Confidence, lastSeen))
+	sb.WriteString(fmt.Sprintf("name: \"%s — Active Campaign (Intel)\"\n", actor.Name))
+	sb.WriteString(fmt.Sprintf("description: \"Auto-generated from %s. %s Confidence: %s.\"\n",
+		actor.Source, strings.ReplaceAll(description, `"`, `'`), actor.Confidence))
 	sb.WriteString(fmt.Sprintf("author: \"Threat Intel Connector (%s)\"\n", actor.Source))
 
 	sb.WriteString("tags:\n")
@@ -148,7 +190,6 @@ func (g *Generator) buildYAML(actor ThreatActor, fingerprint string) string {
 	sb.WriteString(fmt.Sprintf("intel_source_id: \"%s\"\n", actor.SourceID))
 	sb.WriteString(fmt.Sprintf("intel_actor: \"%s\"\n", actor.Name))
 	sb.WriteString(fmt.Sprintf("intel_confidence: %s\n", actor.Confidence))
-	sb.WriteString(fmt.Sprintf("intel_generated_at: \"%s\"\n", time.Now().UTC().Format(time.RFC3339)))
 
 	sb.WriteString("art_techniques:\n")
 	for _, t := range techIDs {
@@ -200,15 +241,22 @@ func dedupedTechniqueIDs(techs []TechniqueRef) []string {
 	return out
 }
 
-func actorFingerprint(actor ThreatActor) string {
-	ids := make([]string, len(actor.Techniques))
-	for i, t := range actor.Techniques {
-		ids[i] = strings.ToUpper(t.ID)
-	}
-	sort.Strings(ids)
-	key := strings.ToLower(actor.Name) + "|" + strings.Join(ids, ",")
-	h := sha256.Sum256([]byte(key))
-	return hex.EncodeToString(h[:])[:12]
+// intelContentID is derived from the actor identity only, so technique-set
+// changes become versions of one content id (spec 5.2).
+func intelContentID(actorName string) string {
+	h := sha256.Sum256([]byte(strings.ToLower(strings.TrimSpace(actorName))))
+	return "intel-" + hex.EncodeToString(h[:])[:12]
+}
+
+func generationKey(a ThreatActor) string {
+	b, _ := json.Marshal(map[string]any{
+		"generator": generatorName, "generator_version": generatorVersion, "mapping_version": mappingVersion,
+		"inputs":     []map[string]string{{"entity_type": "actor", "entity_id": a.Name, "provider": a.Source, "external_id": a.SourceID}},
+		"techniques": dedupedTechniqueIDs(a.Techniques),
+		"parameters": map[string]any{"min_techniques": minTechniques},
+	})
+	h := sha256.Sum256(b)
+	return hex.EncodeToString(h[:])
 }
 
 var tacticsForTechniquePrefix = map[string]string{
