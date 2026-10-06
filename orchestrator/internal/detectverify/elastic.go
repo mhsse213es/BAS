@@ -54,9 +54,9 @@ type elasticConnector struct {
 func newElasticConnector(cfg Config) *elasticConnector {
 	return &elasticConnector{
 		baseURL:    strings.TrimRight(cfg.BaseURL, "/"),
-		apiKey:     cfg.APIToken,
-		username:   cfg.ClientID,
-		password:   cfg.ClientSecret,
+		apiKey:     strings.TrimSpace(cfg.APIToken),
+		username:   strings.TrimSpace(cfg.ClientID),
+		password:   strings.TrimSpace(cfg.ClientSecret),
 		httpClient: httpClientFor(cfg, 30*time.Second),
 		pageSize:   500,
 		maxPages:   elasticMaxPages,

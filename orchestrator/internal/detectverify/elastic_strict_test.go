@@ -213,3 +213,25 @@ func TestElastic_ErrorBodyTruncated(t *testing.T) {
 		t.Errorf("error len = %d", len(fmt.Sprint(err)))
 	}
 }
+
+func TestElastic_CredentialsSentTrimmed(t *testing.T) {
+	var auth, user, pass string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		auth = r.Header.Get("Authorization")
+		user, pass, _ = r.BasicAuth()
+		w.Write([]byte(elasticResp()))
+	}))
+	defer srv.Close()
+	if err := newElasticConnector(Config{BaseURL: srv.URL, APIToken: "  k 	"}).TestConnection(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if auth != "ApiKey k" {
+		t.Errorf("Authorization = %q", auth)
+	}
+	if err := newElasticConnector(Config{BaseURL: srv.URL, ClientID: " u ", ClientSecret: " p "}).TestConnection(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if user != "u" || pass != "p" {
+		t.Errorf("basic = %q/%q", user, pass)
+	}
+}
