@@ -1,6 +1,7 @@
 import { state } from '../core/state.js';
 import { apicall } from '../core/api.js';
 import { x } from '../core/escape.js';
+import { on } from '../core/actions.js';
 import { ago, showToast } from '../core/util.js';
 import { covSegHtml } from './attack-path.js';
 import { ROLE } from './shell.js';
@@ -26,7 +27,7 @@ export function renderRunIOCToolbar() {
   var types = [['all', 'All'], ['ip', 'IP'], ['domain', 'Domain'], ['url', 'URL'], ['hash', 'Hash'], ['cve', 'CVE']];
   el.innerHTML =
     covSegHtml(types, _runIOCTypeFilter, 'setRunIOCTypeFilter', function(k) { return counts[k] || 0; }) +
-    '<input type="text" id="run-ioc-search" placeholder="Search indicators…" value="' + x(_runIOCSearch) + '" oninput="setRunIOCSearch(this.value)" style="padding:0.35rem 0.6rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:0.78rem;font-family:inherit;min-width:220px">';
+    '<input type="text" id="run-ioc-search" placeholder="Search indicators…" value="' + x(_runIOCSearch) + '"' + on('input', 'setRunIOCSearchFromInput') + ' style="padding:0.35rem 0.6rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:0.78rem;font-family:inherit;min-width:220px">';
 }
 export function setRunIOCTypeFilter(t) {
   _runIOCTypeFilter = t;
@@ -36,6 +37,7 @@ export function setRunIOCTypeFilter(t) {
 }
 // Only re-renders the list (not the toolbar) so the search input never loses
 // focus/cursor position while the user is still typing.
+export function setRunIOCSearchFromInput(el) { setRunIOCSearch(el.value); }
 export function setRunIOCSearch(v) {
   _runIOCSearch = v;
   _runIOCExpandedIdx = -1;
@@ -92,7 +94,7 @@ export function renderRunIOCList() {
         ((ind.adversaryNames || []).length ? '<div class="u-mt-06"><div class="kpi-label" style="margin-bottom:0.2rem">Associated actors</div>' + x(ind.adversaryNames.join(', ')) + '</div>' : '') +
       '</div>';
     return '<div style="border:1px solid var(--border);border-radius:var(--radius);margin-bottom:0.5rem;overflow:hidden">' +
-      '<div style="display:flex;align-items:center;gap:0.75rem;padding:0.6rem 1rem;cursor:pointer" onclick="toggleRunIOCRow(' + idx + ')">' +
+      '<div style="display:flex;align-items:center;gap:0.75rem;padding:0.6rem 1rem;cursor:pointer"' + on('click', 'toggleRunIOCRow', idx) + '>' +
         '<span class="tiny" style="background:var(--elevated);border:1px solid var(--border);border-radius:4px;padding:1px 7px;text-transform:uppercase;flex-shrink:0">' + x(IOC_TYPE_LABEL[ind.type] || ind.type) + '</span>' +
         '<code style="font-size:0.82rem;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + x(ind.value) + '</code>' +
         '<span class="tiny muted" style="flex-shrink:0">' + x(ind.source || '') + '</span>' +
@@ -185,7 +187,7 @@ function renderIOCRegistryTable() {
   }
   tbody.innerHTML = _iocRegistryRows.map(function(row, idx) {
     var suppressedBadge = row.suppressed ? ' <span class="sbadge" style="background:rgba(154,169,188,.12);color:var(--muted)" title="' + x(row.suppressionReason || '') + '">suppressed</span>' : '';
-    return '<tr class="u-pointer" onclick="openIOCDetail(' + idx + ')">' +
+    return '<tr class="u-pointer"' + on('click', 'openIOCDetail', idx) + '>' +
       '<td><span class="tiny" style="background:var(--elevated);border:1px solid var(--border);border-radius:4px;padding:1px 7px">' + x(IOC_TYPE_LABEL_REGISTRY[row.type] || row.type) + '</span></td>' +
       '<td><code style="font-size:0.8rem">' + x(row.value) + '</code>' + suppressedBadge + '</td>' +
       '<td class="tiny muted">' + x(row.source || '—') + '</td>' +
@@ -194,9 +196,9 @@ function renderIOCRegistryTable() {
       '<td class="tiny" style="font-family:var(--font-mono)">' + (row.sightingCount || 0) + '</td>' +
       '<td class="tiny muted">' + (row.firstSeen ? ago(row.firstSeen) : '—') + '</td>' +
       '<td class="tiny muted">' + (row.lastSeen ? ago(row.lastSeen) : '—') + '</td>' +
-      '<td onclick="event.stopPropagation()">' +
+      '<td' + on('click', 'stopEvent') + '>' +
         (ROLE === 'admin' ?
-          '<button class="btn btn-outline btn-sm" style="padding:2px 8px;font-size:0.7rem" onclick="toggleIOCSuppressed(' + idx + ')">' + (row.suppressed ? 'Unsuppress' : 'Suppress') + '</button>'
+          '<button class="btn btn-outline btn-sm" style="padding:2px 8px;font-size:0.7rem"' + on('click', 'toggleIOCSuppressed', idx) + '>' + (row.suppressed ? 'Unsuppress' : 'Suppress') + '</button>'
           : '') +
       '</td>' +
     '</tr>';
