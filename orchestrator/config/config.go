@@ -175,6 +175,12 @@ type Config struct {
 	// re-enables the listener.
 	LegacyListenerEnabled bool `json:"legacy_listener_enabled,omitempty"`
 
+	// CSPMode (BAS_CSP_MODE) selects how the dashboard Content-Security-Policy
+	// is sent (G1d): "enforce" (default) or "report-only" -- the escape hatch
+	// for a client hitting a violation. There is deliberately no "off"; any
+	// other value fails Load.
+	CSPMode string `json:"csp_mode,omitempty"`
+
 	// DashboardHTTPPort serves the browser dashboard (StaticHandler + JWT
 	// API + /ws/browser) over TLS with NO client-cert requirement --
 	// separate from the mTLS agent listener (HTTPPort) so a browser (which
@@ -218,6 +224,7 @@ func Load(path string) (*Config, error) {
 		LegacyHTTPPort:        9000,
 		DashboardHTTPPort:     9543,
 		LegacyListenerEnabled: true,
+		CSPMode:               "enforce",
 	}
 
 	// Try file first (local dev)
@@ -383,6 +390,12 @@ func Load(path string) (*Config, error) {
 		if b, err := strconv.ParseBool(v); err == nil {
 			cfg.LegacyListenerEnabled = b
 		}
+	}
+	if v := strings.TrimSpace(os.Getenv("BAS_CSP_MODE")); v != "" {
+		cfg.CSPMode = strings.ToLower(v)
+	}
+	if cfg.CSPMode != "enforce" && cfg.CSPMode != "report-only" {
+		return nil, fmt.Errorf("BAS_CSP_MODE=%q: must be \"enforce\" or \"report-only\"", cfg.CSPMode)
 	}
 	if v := os.Getenv("HTTP_PORT_ENROLL"); v != "" {
 		fmt.Sscanf(v, "%d", &cfg.EnrollHTTPPort)

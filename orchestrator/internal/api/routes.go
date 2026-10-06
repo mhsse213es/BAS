@@ -41,7 +41,7 @@ func MountEnrollment(h *Handler) http.Handler {
 }
 
 // Mount builds the full HTTP router and returns it.
-// staticHandler serves the dashboard SPA — pass StaticHandler() in production
+// staticHandler serves the dashboard SPA — pass StaticHandler(cfg.CSPMode) in production
 // (embedded FS) or http.FileServer(http.Dir("./wwwroot")) in tests/dev.
 // rateLimitPerMin <= 0 disables rate limiting entirely (the default —
 // existing installs are never surprise-limited on upgrade).

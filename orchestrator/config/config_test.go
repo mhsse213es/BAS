@@ -2,6 +2,7 @@ package config
 
 import (
 	"os"
+	"strings"
 	"testing"
 )
 
@@ -331,5 +332,42 @@ func TestLoad_AppDBPasswordFromEnv(t *testing.T) {
 	}
 	if cfg.AppDBPassword != "rotated-password" {
 		t.Errorf("AppDBPassword = %q, want the env value", cfg.AppDBPassword)
+	}
+}
+
+func TestLoad_CSPMode(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://test")
+	t.Setenv("DATABASE_ADMIN_URL", "postgres://test-admin")
+	t.Setenv("BAS_APP_DB_PASSWORD", "test-app-password")
+	t.Setenv("JWT_SECRET", "test-secret-32-bytes-long-enough")
+	for _, tc := range []struct {
+		env, want string
+		wantErr   bool
+	}{
+		{"", "enforce", false},
+		{"enforce", "enforce", false},
+		{"report-only", "report-only", false},
+		{" Report-Only ", "report-only", false},
+		{"ENFORCE", "enforce", false},
+		{"off", "", true},
+		{"none", "", true},
+		{"reportonly", "", true},
+	} {
+		t.Run(tc.env, func(t *testing.T) {
+			t.Setenv("BAS_CSP_MODE", tc.env)
+			cfg, err := Load("/nonexistent/config.json")
+			if tc.wantErr {
+				if err == nil || !strings.Contains(err.Error(), "BAS_CSP_MODE") {
+					t.Fatalf("Load() err = %v, want a BAS_CSP_MODE error", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("Load() err = %v", err)
+			}
+			if cfg.CSPMode != tc.want {
+				t.Fatalf("CSPMode = %q, want %q", cfg.CSPMode, tc.want)
+			}
+		})
 	}
 }
