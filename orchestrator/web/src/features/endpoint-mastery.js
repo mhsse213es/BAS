@@ -190,6 +190,7 @@ function renderEMSweepGroupList() {
 export function closeEMSweepModal() {
   document.getElementById('em-sweep-modal-overlay').classList.remove('open');
 }
+export function closeEMSweepModalOnBackdrop(el, event) { if (event.target === el) closeEMSweepModal(); }
 
 export function setEMSweepTargetMode(mode) {
   _emTargetMode = mode;
@@ -331,6 +332,7 @@ export function closeSweepPreview() {
   _sweepPreviewType = null;
   _sweepPreviewTargets = null;
 }
+export function closeSweepPreviewOnBackdrop(el, event) { if (event.target === el) closeSweepPreview(); }
 
 export function startSweepFromPreview() {
   var type = _sweepPreviewType, targets = _sweepPreviewTargets;
@@ -659,6 +661,7 @@ export function closeEMSweepProgress() {
   if (_emSweepPollTimer) { clearInterval(_emSweepPollTimer); _emSweepPollTimer = null; }
   state._emSweepCurrentId = null;
 }
+export function closeEMSweepProgressOnBackdrop(el, event) { if (event.target === el) closeEMSweepProgress(); }
 
 // cancelEMSweep mirrors stopVexSweep's exact pattern -- the server-side
 // POST /api/em/sweeps/{id}/cancel endpoint already existed and already

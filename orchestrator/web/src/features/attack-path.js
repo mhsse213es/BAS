@@ -646,6 +646,7 @@ export function openExposureDetail(hostKey) {
 export function closeExposureDetail() {
   document.getElementById('exposure-detail-overlay').classList.remove('open');
 }
+export function closeExposureDetailOnBackdrop(el, event) { if (event.target === el) closeExposureDetail(); }
 // ── Attack Path Collection — job-based execution with full state machine ────────
 
 var _apCollectAgentId = null; // agentId currently being collected (for WS matching)
@@ -1931,6 +1932,10 @@ export function renderScenarios() {
   grid.innerHTML = inCat.length
     ? '<div class="sc-fade">' + renderScenarioTileGroup(state.scenarioView, inCat) + '</div>'
     : '<p class="empty">No scenarios match your filter.</p>';
+}
+export function scenarioSearchClear() {
+  if (!this.value.trim() && state.scenarioView === 'search') { state.scenarioView = 'landing'; }
+  renderScenarios();
 }
 
 // Collapsible description: shows a short preview with a "Read more" / "Read less"

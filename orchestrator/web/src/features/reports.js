@@ -1602,6 +1602,7 @@ export function closeBuilder() {
   document.getElementById('builder-overlay').classList.remove('open');
   _bldEditId = null;
 }
+export function closeBuilderOnBackdrop(el, event) { if (event.target === el) closeBuilder(); }
 
 export function renderBuilderMode() {
   var mode = document.getElementById('bld-mode').value;

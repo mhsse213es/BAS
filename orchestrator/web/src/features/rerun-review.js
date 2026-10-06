@@ -80,6 +80,7 @@ export function closeRerunReview() {
   _rerunReviewCampaign = null;
   _rerunReviewKind = null;
 }
+export function closeRerunReviewOnBackdrop(el, event) { if (event.target === el) closeRerunReview(); }
 
 export function startRerunFromReview() {
   if (_rerunReviewKind === 'campaign') { startCampaignRerunFromReview(); return; }

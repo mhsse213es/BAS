@@ -73,6 +73,7 @@ export function openEvidence(idx) {
 export function closeEvidence() {
   document.getElementById('evidence-overlay').style.display = 'none';
 }
+export function closeEvidenceOnBackdrop(el, event) { if (event.target === el) closeEvidence(); }
 
 function renderEvidencePanel(c) {
   var da       = c.detectionAlert || null;
@@ -1025,6 +1026,7 @@ export function openCreateUser() {
   document.getElementById('create-user-overlay').classList.add('open');
 }
 export function closeCreateUser() { document.getElementById('create-user-overlay').classList.remove('open'); }
+export function closeCreateUserOnBackdrop(el, event) { if (event.target === el) closeCreateUser(); }
 
 export function submitCreateUser() {
   var username = document.getElementById('cu-username').value.trim();
@@ -1049,6 +1051,7 @@ export function openEditUser(id, username, role) {
   document.getElementById('edit-user-overlay').classList.add('open');
 }
 export function closeEditUser() { document.getElementById('edit-user-overlay').classList.remove('open'); state._editUserId = null; }
+export function closeEditUserOnBackdrop(el, event) { if (event.target === el) closeEditUser(); }
 
 export function submitEditUser() {
   if (!state._editUserId) return;

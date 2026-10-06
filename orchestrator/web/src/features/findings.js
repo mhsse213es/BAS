@@ -537,6 +537,7 @@ export function toggleAllFindingChecks(checked) {
   }
   renderFindingsRows();
 }
+export function toggleAllFindingChecksFromChecked() { toggleAllFindingChecks(this.checked); }
 
 export function toggleFindingCheck(id) {
   if (_findingsSelected[id]) delete _findingsSelected[id];

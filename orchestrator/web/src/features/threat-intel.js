@@ -377,6 +377,8 @@ export function toggleSimCoverage() {
   if (det) det.style.display = SIM_COV_OPEN ? '' : 'none';
   if (car) car.innerHTML = SIM_COV_OPEN ? '&#9660;' : '&#9654;';
 }
+export function simCovHoverOn() { this.style.boxShadow = '0 0 0 1px var(--accent)'; }
+export function simCovHoverOff() { this.style.boxShadow = ''; }
 export function loadSimCoverage() {
   var totalEl   = document.getElementById('sim-total');
   var variantEl = document.getElementById('sim-variants');

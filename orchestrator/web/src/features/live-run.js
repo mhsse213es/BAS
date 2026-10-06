@@ -272,6 +272,7 @@ export function __init_L16159() {
 
 
 export function closeRunLive() { document.getElementById('run-live-overlay').classList.remove('open'); }
+export function closeRunLiveOnBackdrop(el, event) { if (event.target === el) closeRunLive(); }
 
 // openSweepDrilldown lists every technique a Full Variant Sweep dispatched --
 // each list item reuses the EXISTING, unmodified openRunPanel/viewRunResults
@@ -319,3 +320,4 @@ export function openSweepDrilldown(sweepId) {
 }
 
 export function closeSweepDrilldown() { document.getElementById('sweep-drilldown-overlay').classList.remove('open'); }
+export function closeSweepDrilldownOnBackdrop(el, event) { if (event.target === el) closeSweepDrilldown(); }

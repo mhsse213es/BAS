@@ -174,6 +174,7 @@ export function closeChangePassword() {
   if (state._pwForced) return;
   document.getElementById('changepw-overlay').classList.remove('open');
 }
+export function closeChangePasswordOnBackdrop(el, event) { if (event.target === el && !state._pwForced) closeChangePassword(); }
 export function submitChangePassword() {
   var current = document.getElementById('cpw-current').value;
   var newpw   = document.getElementById('cpw-new').value;

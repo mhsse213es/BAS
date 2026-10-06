@@ -322,6 +322,7 @@ function cmpUpdateExclusionCount() {
 }
 
 export function closeCampaignLaunch() { document.getElementById('campaign-overlay').classList.remove('open'); }
+export function cmpAllConfirmChange() { document.getElementById('cmp-launch-btn').disabled = !this.checked; }
 
 // ── Campaign Source (mutually exclusive) ─────────────────────────────────────
 // A campaign has exactly ONE source, never two -- Threat-Informed generation

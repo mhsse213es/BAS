@@ -105,6 +105,7 @@ export function renderRunIOCList() {
 }
 
 export function closeResults() { document.getElementById('results-overlay').classList.remove('open', 'run-mode'); }
+export function closeResultsOnBackdrop(el, event) { if (event.target === el) closeResults(); }
 
 // ── IOC Registry ─────────────────────────────────────────────────────────────
 // Cross-run indicator search (GET /api/iocs), distinct from the per-run

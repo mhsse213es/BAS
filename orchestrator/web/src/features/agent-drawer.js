@@ -42,6 +42,7 @@ export function closeAgentDetail() {
   if (_agtLogRefresh) { clearInterval(_agtLogRefresh); _agtLogRefresh = null; }
   _agtDetailId = null;
 }
+export function closeAgentDetailOnBackdrop(el, event) { if (event.target === el) closeAgentDetail(); }
 export function showAgentTab(tab) {
   ['overview','scenarios','logs','health','attackpath','risk'].forEach(function(t) {
     document.getElementById('agt-tab-' + t).style.display = (t === tab ? '' : 'none');

@@ -77,6 +77,7 @@ export function closeInitiativeDrawer() {
   document.getElementById('init-drawer-overlay').classList.remove('open');
   INIT_CURRENT = null;
 }
+export function closeInitiativeDrawerOnBackdrop(el, event) { if (event.target === el) closeInitiativeDrawer(); }
 
 export function openInitiativeDrawer(id) {
   apicall('/api/initiatives/' + encodeURIComponent(id)).then(function(res) {
@@ -192,6 +193,7 @@ export function openInitiativeCreateDrawer() {
 export function closeInitiativeCreateDrawer() {
   document.getElementById('init-create-overlay').classList.remove('open');
 }
+export function closeInitiativeCreateDrawerOnBackdrop(el, event) { if (event.target === el) closeInitiativeCreateDrawer(); }
 
 export function submitInitiativeCreate() {
   var name = document.getElementById('init-create-name').value.trim();
@@ -244,6 +246,7 @@ export function openInitiativeAttachDrawer() {
 export function closeInitiativeAttachDrawer() {
   document.getElementById('init-attach-overlay').classList.remove('open');
 }
+export function closeInitiativeAttachDrawerOnBackdrop(el, event) { if (event.target === el) closeInitiativeAttachDrawer(); }
 
 export function initiativeRenderAttachList() {
   var q = document.getElementById('init-attach-search').value.trim().toLowerCase();

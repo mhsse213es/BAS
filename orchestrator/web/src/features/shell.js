@@ -579,6 +579,8 @@ export function ackAllTamperEvents() {
     })
     .catch(function() { alert('Failed to acknowledge tamper events. Check server logs.'); });
 }
+export function tamperAckHoverOn() { this.style.background = 'rgba(255,255,255,.25)'; }
+export function tamperAckHoverOff() { this.style.background = 'rgba(255,255,255,.13)'; }
 // On page load, check for unacknowledged critical events so the banner shows
 // even for admins who logged in after the tamper was detected.
 export function __init_L19932() {

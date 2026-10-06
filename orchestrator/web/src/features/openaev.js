@@ -196,6 +196,7 @@ export function openOpenAEVDetail(id) {
 export function closeOpenAEVDetail() {
   document.getElementById('openaev-detail-overlay').classList.remove('open');
 }
+export function closeOpenAEVDetailOnBackdrop(el, event) { if (event.target === el) closeOpenAEVDetail(); }
 
 export function loadExercisesTab() {
   loadOpenAEVScenarios('scenario', 'openaev-scenarios-body', 'openaev-scenarios-empty');
@@ -373,6 +374,7 @@ export function closeExerciseDetail() {
   document.getElementById('exercise-detail-overlay').classList.remove('open');
   _exDetailOpenId = null;
 }
+export function closeExerciseDetailOnBackdrop(el, event) { if (event.target === el) closeExerciseDetail(); }
 
 export function approveExStep(id, stepId) {
   apicall('/api/exercises/executions/' + encodeURIComponent(id) + '/steps/' + encodeURIComponent(stepId) + '/approve', { method: 'POST' })
