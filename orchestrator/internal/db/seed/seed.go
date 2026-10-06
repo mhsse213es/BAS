@@ -17,8 +17,10 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
+// FS holds the seed files NNNN_name.sql.
+//
 //go:embed *.sql
-var files embed.FS
+var FS embed.FS
 
 var name = regexp.MustCompile(`^(\d{4})_[a-z0-9_]+\.sql$`)
 
@@ -57,7 +59,7 @@ func list(fsys fs.FS) ([]file, error) {
 
 // Version is the highest embedded seed version.
 func Version() (int, error) {
-	fl, err := list(files)
+	fl, err := list(FS)
 	if err != nil || len(fl) == 0 {
 		return 0, err
 	}
@@ -80,7 +82,7 @@ func Current(ctx context.Context, q Querier) (int, error) {
 
 // Apply runs every embedded seed file newer than Current, in order, inside tx.
 func Apply(ctx context.Context, tx pgx.Tx) error {
-	return ApplyFS(ctx, tx, files)
+	return ApplyFS(ctx, tx, FS)
 }
 
 // ApplyFS is Apply over fsys (tests).

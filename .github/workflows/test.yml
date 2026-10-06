@@ -51,6 +51,14 @@ jobs:
           python3 scripts/g1d-check-actions.py
           cd scripts && python3 -m unittest test_g1c_check_globals test_g1d_check_actions -v
 
+      # H1: only `orchestrator migrate` changes the schema. Migration/seed
+      # immutability, the legacy freeze and baseline equivalence run in go test.
+      - name: H1 no-runtime-DDL check
+        working-directory: .
+        run: |
+          python3 scripts/h1-check-no-runtime-ddl.py
+          cd scripts && python3 -m unittest test_h1_check_no_runtime_ddl -v
+
       - uses: actions/setup-go@v5
         with:
           go-version-file: orchestrator/go.mod
