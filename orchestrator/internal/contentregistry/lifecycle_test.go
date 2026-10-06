@@ -52,6 +52,10 @@ func TestCheckTransition_Rules(t *testing.T) {
 		{"published_local retire", OriginLocal, TrustLocalTrusted, LifecyclePublishedLocal, LifecycleRetired, user, true},
 		{"retire needs human", OriginLocal, TrustLocalTrusted, LifecyclePublishedLocal, LifecycleRetired, "intake", false},
 		{"validated is not executable shortcut", OriginLocal, TrustUntrusted, LifecycleValidated, LifecyclePublished, user, false},
+		{"validated by human refused", OriginVendor, TrustUntrusted, LifecycleValidating, LifecycleValidated, user, false},
+		{"validated by system", OriginVendor, TrustUntrusted, LifecycleValidating, LifecycleValidated, ActorIntake, true},
+		{"validating back to draft by human refused", OriginLocal, TrustUntrusted, LifecycleValidating, LifecycleDraft, user, false},
+		{"validating back to draft by generator", OriginLocal, TrustUntrusted, LifecycleValidating, LifecycleDraft, ActorGenerator, true},
 		{"reject from approved", OriginVendor, TrustUntrusted, LifecycleApproved, LifecycleRejected, user, true},
 	}
 	for _, c := range cases {

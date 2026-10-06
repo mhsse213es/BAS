@@ -34,6 +34,9 @@ type RunContent struct {
 	// context error) rather than a permanently bad state: callers that
 	// record a run as processed must retry instead.
 	Transient bool
+	// NotFound is set only when the scenario_runs row does not exist. It
+	// implies Status == RunUnreadable and Transient == false.
+	NotFound bool
 }
 
 // Label is the operator/report-facing provenance line (spec §7).
@@ -62,8 +65,11 @@ func (r *Registry) RunContent(ctx context.Context, runID string, current Current
 	if err := r.pool.QueryRow(ctx,
 		`SELECT execution_kind, content_version_id, scenario_id FROM scenario_runs WHERE id = $1`, runID,
 	).Scan(&kind, &vid, &scenarioID); err != nil {
-		return unreadable(runID, RunContent{Err: fmt.Errorf("load run: %w", err),
-			Transient: !errors.Is(err, pgx.ErrNoRows)})
+		if errors.Is(err, pgx.ErrNoRows) {
+			// Unknown run id: not logged (any viewer can probe random ids).
+			return RunContent{Status: RunUnreadable, NotFound: true, Err: fmt.Errorf("load run: %w", err)}
+		}
+		return unreadable(runID, RunContent{Err: fmt.Errorf("load run: %w", err), Transient: true})
 	}
 	switch kind {
 	case KindContent:

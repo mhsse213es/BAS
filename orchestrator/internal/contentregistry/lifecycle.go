@@ -11,26 +11,27 @@ type transitionRule struct {
 	from, to Lifecycle
 	origin   Origin // "" = any origin
 	human    bool
+	system   bool // system-only: refused for human actors (spec 4.3)
 }
 
 // transitionRules is the complete allowed-transition table (spec §4.3 +
 // plan amendment 5). Anything not listed is illegal; REJECTED is terminal,
 // RETIRED is terminal except LOCAL re-approval.
 var transitionRules = []transitionRule{
-	{LifecycleDraft, LifecycleValidating, "", false},
-	{LifecycleValidating, LifecycleValidated, "", false},
-	{LifecycleValidating, LifecycleDraft, "", false},
-	{LifecycleValidated, LifecycleApproved, OriginVendor, true},
-	{LifecycleApproved, LifecyclePublished, OriginVendor, true},
-	{LifecycleValidated, LifecyclePublishedLocal, OriginLocal, true},
-	{LifecycleDraft, LifecyclePublishedLocal, OriginLocal, true},
-	{LifecycleRetired, LifecyclePublishedLocal, OriginLocal, true},
-	{LifecycleDraft, LifecycleRejected, "", true},
-	{LifecycleValidating, LifecycleRejected, "", true},
-	{LifecycleValidated, LifecycleRejected, "", true},
-	{LifecycleApproved, LifecycleRejected, "", true},
-	{LifecyclePublished, LifecycleRetired, OriginVendor, true},
-	{LifecyclePublishedLocal, LifecycleRetired, OriginLocal, true},
+	{LifecycleDraft, LifecycleValidating, "", false, false},
+	{LifecycleValidating, LifecycleValidated, "", false, true},
+	{LifecycleValidating, LifecycleDraft, "", false, true},
+	{LifecycleValidated, LifecycleApproved, OriginVendor, true, false},
+	{LifecycleApproved, LifecyclePublished, OriginVendor, true, false},
+	{LifecycleValidated, LifecyclePublishedLocal, OriginLocal, true, false},
+	{LifecycleDraft, LifecyclePublishedLocal, OriginLocal, true, false},
+	{LifecycleRetired, LifecyclePublishedLocal, OriginLocal, true, false},
+	{LifecycleDraft, LifecycleRejected, "", true, false},
+	{LifecycleValidating, LifecycleRejected, "", true, false},
+	{LifecycleValidated, LifecycleRejected, "", true, false},
+	{LifecycleApproved, LifecycleRejected, "", true, false},
+	{LifecyclePublished, LifecycleRetired, OriginVendor, true, false},
+	{LifecyclePublishedLocal, LifecycleRetired, OriginLocal, true, false},
 }
 
 // CheckTransition validates one lifecycle move. It is the single
@@ -43,6 +44,9 @@ func CheckTransition(origin Origin, trust Trust, from, to Lifecycle, actor strin
 		}
 		if r.origin != "" && r.origin != origin {
 			return &ErrIllegalTransition{From: from, To: to, Reason: "not allowed for " + string(origin) + " content"}
+		}
+		if r.system && IsHumanActor(actor) {
+			return &ErrIllegalTransition{From: from, To: to, Reason: "system-only transition"}
 		}
 		if r.human && !IsHumanActor(actor) {
 			return &ErrIllegalTransition{From: from, To: to, Reason: "requires a human actor"}

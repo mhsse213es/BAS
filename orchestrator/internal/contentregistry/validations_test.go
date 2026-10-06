@@ -13,8 +13,11 @@ func TestNoDataExcludedFromDenominator(t *testing.T) { // A13
 	if _, st := DetectionEffectiveness(nil); st != "NO_DATA" {
 		t.Fatalf("empty must be NO_DATA, got %s", st)
 	}
-	// ERROR is a real outcome (counts in the denominator) but not a success.
-	if rate, _ := DetectionEffectiveness([]string{"DETECTED", "ERROR"}); rate != 0.5 {
-		t.Fatalf("ERROR counts against: %v", rate)
+	// ERROR measures nothing about detection: excluded from the denominator.
+	if rate, st := DetectionEffectiveness([]string{"DETECTED", "ERROR"}); st != "OK" || rate != 1 {
+		t.Fatalf("ERROR must be excluded: rate=%v status=%s", rate, st)
+	}
+	if _, st := DetectionEffectiveness([]string{"ERROR", "ERROR"}); st != "NO_DATA" {
+		t.Fatalf("all-ERROR must be NO_DATA, got %s", st)
 	}
 }

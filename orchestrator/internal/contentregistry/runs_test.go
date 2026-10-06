@@ -88,7 +88,7 @@ func TestRunContent_UnreadableNeverFallsBack(t *testing.T) {
 			t.Fatalf("corrupt version must be permanent with an error: %+v", rc)
 		}
 		// So is a run row that does not exist.
-		if miss := r.RunContent(ctx, "no-such-run", nil); miss.Status != RunUnreadable || miss.Transient || miss.Err == nil {
+		if miss := r.RunContent(ctx, "no-such-run", nil); miss.Status != RunUnreadable || miss.Transient || miss.Err == nil || !miss.NotFound {
 			t.Fatalf("missing run must be permanent: %+v", miss)
 		}
 	})

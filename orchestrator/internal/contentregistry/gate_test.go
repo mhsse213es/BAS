@@ -224,7 +224,11 @@ func TestAttachVendorSignature(t *testing.T) { // A18
 			t.Fatal(err)
 		}
 		for _, to := range []Lifecycle{LifecycleValidating, LifecycleValidated, LifecycleApproved} {
-			if err := r.Transition(ctx, id, to, "user:research", ""); err != nil {
+			actor := "user:research"
+			if to == LifecycleValidating || to == LifecycleValidated {
+				actor = ActorIntake // system-only moves
+			}
+			if err := r.Transition(ctx, id, to, actor, ""); err != nil {
 				t.Fatalf("-> %s: %v", to, err)
 			}
 		}

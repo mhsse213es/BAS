@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
 	"time"
 
@@ -127,7 +128,9 @@ func (h *Handler) TransitionContentVersion(w http.ResponseWriter, r *http.Reques
 	h.auditLog(r, "content_registry.transition", vid, map[string]any{"to": req.To, "reason": req.Reason}, "ok")
 	d, err := reg.VersionDetail(r.Context(), vid)
 	if err != nil {
-		jsonError(w, err.Error(), http.StatusInternalServerError)
+		// The transition is committed: a 500 would invite a retry into a 409.
+		log.Printf("[content-registry] transition %s -> %s committed but detail unavailable: %v", vid, req.To, err)
+		respond(w, map[string]any{"id": vid, "lifecycle": req.To})
 		return
 	}
 	respond(w, d)
@@ -135,7 +138,12 @@ func (h *Handler) TransitionContentVersion(w http.ResponseWriter, r *http.Reques
 
 // GET /api/content-registry/runs/{runId}/drift
 func (h *Handler) GetRunDrift(w http.ResponseWriter, r *http.Request) {
-	rep, err := h.checkRunDrift(r.Context(), chi.URLParam(r, "runId"))
+	runID := chi.URLParam(r, "runId")
+	if rc := h.runContent(r.Context(), runID); rc.NotFound {
+		jsonError(w, "run not found", http.StatusNotFound)
+		return
+	}
+	rep, err := h.checkRunDrift(r.Context(), runID)
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -148,6 +156,10 @@ func (h *Handler) GetRunDrift(w http.ResponseWriter, r *http.Request) {
 // permanent "unreadable" verdict.
 func (h *Handler) GetRunContent(w http.ResponseWriter, r *http.Request) {
 	rc := h.runContent(r.Context(), chi.URLParam(r, "runId"))
+	if rc.NotFound {
+		jsonError(w, "run not found", http.StatusNotFound)
+		return
+	}
 	if rc.Status == contentregistry.RunUnreadable && rc.Transient {
 		jsonError(w, "run content temporarily unavailable", http.StatusInternalServerError)
 		return

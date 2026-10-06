@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/audspect/bas/internal/auth"
+	"github.com/audspect/bas/internal/contentregistry"
 	"github.com/audspect/bas/internal/scenario"
 	"github.com/audspect/bas/internal/ws"
 )
@@ -227,6 +228,50 @@ func TestListScenarios_RegistryErrorOmitsEnrichment(t *testing.T) {
 		}
 		if _, has := out[0]["registry"]; has {
 			t.Fatalf("enrichment must be omitted on registry error: %v", out[0])
+		}
+	})
+}
+
+// A human cannot fabricate VALIDATED: VALIDATING->VALIDATED is system-only.
+func TestTransitionEndpoint_HumanCannotFabricateValidated(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		e, reg, dir := registryEngine(t, pool)
+		writeIntel(t, dir, "intel-val", "id: intel-val\nname: I\nlocal_check: true\n")
+		_ = e.Load()
+		h := New(pool, ws.NewHub(), e, "")
+		vs, _ := reg.ListVersions(context.Background(), "intel-val")
+		vid := vs[0].ID
+		if err := reg.Transition(context.Background(), vid, contentregistry.LifecycleValidating, contentregistry.ActorIntake, ""); err != nil {
+			t.Fatal(err)
+		}
+		lc0, ev0 := lifecycleOf(t, pool, vid)
+		for _, to := range []string{"VALIDATED", "DRAFT"} {
+			rec := httptest.NewRecorder()
+			h.TransitionContentVersion(rec, withRole(vidRequest(http.MethodPost, vid, map[string]string{"to": to}), "admin1", auth.RoleAdmin))
+			if rec.Code != http.StatusConflict {
+				t.Fatalf("VALIDATING->%s by human: code=%d", to, rec.Code)
+			}
+		}
+		if lc, ev := lifecycleOf(t, pool, vid); lc != lc0 || ev != ev0 || lc != "VALIDATING" {
+			t.Fatalf("state changed: %s/%d -> %s/%d", lc0, ev0, lc, ev)
+		}
+	})
+}
+
+func TestRunEndpoints_UnknownRunIs404(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		e, _, _ := registryEngine(t, pool)
+		h := New(pool, ws.NewHub(), e, "")
+		for name, fn := range map[string]http.HandlerFunc{"content": h.GetRunContent, "drift": h.GetRunDrift} {
+			req := httptest.NewRequest(http.MethodGet, "/x", nil)
+			rctx := chi.NewRouteContext()
+			rctx.URLParams.Add("runId", "no-such-run")
+			req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+			rec := httptest.NewRecorder()
+			fn(rec, req)
+			if rec.Code != http.StatusNotFound {
+				t.Fatalf("%s: code=%d body=%s", name, rec.Code, rec.Body.String())
+			}
 		}
 	})
 }

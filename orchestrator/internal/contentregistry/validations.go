@@ -7,12 +7,14 @@ import (
 )
 
 // DetectionEffectiveness = (DETECTED+PREVENTED+LOGGED) / (all outcomes except
-// NO_DATA and NOT_APPLICABLE). A zero denominator is NO_DATA -- never 0%.
+// NO_DATA, NOT_APPLICABLE and ERROR). ERROR is excluded by controller ruling
+// (Task 14 fix round 1): an execution error measures nothing about detection
+// (ERROR != FAIL). A zero denominator is NO_DATA -- never 0%.
 func DetectionEffectiveness(outcomes []string) (float64, string) {
 	var num, den int
 	for _, o := range outcomes {
 		switch o {
-		case "NO_DATA", "NOT_APPLICABLE":
+		case "NO_DATA", "NOT_APPLICABLE", "ERROR":
 			continue
 		case "DETECTED", "PREVENTED", "LOGGED":
 			num++
@@ -191,7 +193,10 @@ func (r *Registry) Summaries(ctx context.Context) (map[string]Summary, error) {
 		if !seen {
 			s = Summary{LatestVersion: n, LatestVersionID: id, LatestLifecycle: lc, LatestTrust: tr}
 		}
-		if s.ExecutableVersion == 0 && Executable(Origin(o), Trust(tr), Lifecycle(lc), r.devBuild()) {
+		// Same rule as the gate: a dev build cannot verify signatures, so
+		// VENDOR_SIGNED content is not executable there.
+		if s.ExecutableVersion == 0 && Executable(Origin(o), Trust(tr), Lifecycle(lc), r.devBuild()) &&
+			!(r.devBuild() && Trust(tr) == TrustVendorSigned) {
 			s.ExecutableVersion, s.ExecutableLifecycle, s.ExecutableTrust = n, lc, tr
 		}
 		out[cid] = s
