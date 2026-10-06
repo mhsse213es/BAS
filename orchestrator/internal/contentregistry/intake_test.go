@@ -288,14 +288,17 @@ func TestRegisterLocalApproved_ApprovesExistingIntakeDraft(t *testing.T) {
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
 		ctx := context.Background()
 		r := New(pool, testutil.DevVerifier())
-		body := "id: ad\nname: AD\nart_techniques: [T1082]\n"
-		if d := mustIntake(t, r, ctx, file("intel", body)); !d.Accepted {
-			t.Fatal("intel intake")
-		}
-		v := latest(t, r, "ad")
-		// Exercise the shared helper used by the lost-race (!created) path.
-		if err := r.approveExisting(ctx, v, "user:op"); err != nil {
+		// Post-migration, an out-of-band custom file is a custom-source DRAFT;
+		// a UI save of the identical bytes approves that version in place.
+		if _, err := pool.Exec(ctx, `INSERT INTO content_registry_state (id) VALUES (1)`); err != nil {
 			t.Fatal(err)
+		}
+		body := "id: ad\nname: AD\nart_techniques: [T1082]\n"
+		if d := mustIntake(t, r, ctx, file("custom", body)); !d.Accepted {
+			t.Fatal("custom intake")
+		}
+		if v := latest(t, r, "ad"); v.Lifecycle != LifecycleDraft || v.Source != SourceCustom {
+			t.Fatalf("setup: %+v", v)
 		}
 		if err := r.RegisterLocalApproved(ctx, "ad", []byte(body), "user:op"); err != nil {
 			t.Fatal(err)
@@ -308,6 +311,26 @@ func TestRegisterLocalApproved_ApprovesExistingIntakeDraft(t *testing.T) {
 		if err := pool.QueryRow(ctx, `SELECT actor FROM content_version_events WHERE content_version_id=$1 AND to_lifecycle='PUBLISHED_LOCAL'`,
 			vs[0].ID).Scan(&actor); err != nil || actor != "user:op" {
 			t.Fatalf("approval event actor=%q err=%v", actor, err)
+		}
+	})
+}
+
+// Re-review M-a: the identical-bytes (hash-hit) path must not approve an
+// intel-owned version through the UI save path either.
+func TestRegisterLocalApproved_RefusesIntelIdenticalBytes(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		r := New(pool, testutil.DevVerifier())
+		body := "id: ib\nname: I\nart_techniques: [T1082]\n"
+		if d := mustIntake(t, r, ctx, file("intel", body)); !d.Accepted {
+			t.Fatal("intel intake")
+		}
+		if err := r.RegisterLocalApproved(ctx, "ib", []byte(body), "user:op"); !errors.Is(err, ErrSourceCollision) {
+			t.Fatalf("want ErrSourceCollision, got %v", err)
+		}
+		vs, err := r.ListVersions(ctx, "ib")
+		if err != nil || len(vs) != 1 || vs[0].Lifecycle != LifecycleDraft || vs[0].Source != SourceIntel {
+			t.Fatalf("intel DRAFT must be untouched: %+v %v", vs, err)
 		}
 	})
 }

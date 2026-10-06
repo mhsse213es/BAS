@@ -177,6 +177,14 @@ func (r *Registry) RegisterLocalApproved(ctx context.Context, contentID string, 
 	if a.contentID != contentID {
 		return fmt.Errorf("artifact id %q does not match %q", a.contentID, contentID)
 	}
+	// A UI save is a custom-source action: it may not add to, or approve
+	// (identical-bytes hash hit), an intel-owned id. createVersion repeats
+	// the check under the content lock.
+	if clash, err := hasVersionsFromSource(ctx, r.pool, contentID, SourceIntel); err != nil {
+		return err
+	} else if clash {
+		return ErrSourceCollision
+	}
 	v, hit, err := r.versionByHash(ctx, contentID, sha256Hex(artifact))
 	if err != nil {
 		return err
