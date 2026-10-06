@@ -149,6 +149,7 @@ BAS_LEGACY_PORT=""
 BAS_DASHBOARD_PORT=""
 DNS_SINK_BIND_IP=""
 BAS_TLS=""
+BAS_SERVER_SANS=""
 TLS_CERT=""
 TLS_KEY=""
 DB_PASSWORD=""
@@ -203,6 +204,7 @@ load_config() {
       BAS_DASHBOARD_PORT)   BAS_DASHBOARD_PORT="$val"   ;;
       DNS_SINK_BIND_IP)     DNS_SINK_BIND_IP="$val"     ;;
       BAS_TLS)              BAS_TLS="$val"              ;;
+      BAS_SERVER_SANS)      BAS_SERVER_SANS="$val"      ;;
       TLS_CERT)             TLS_CERT="$val"             ;;
       TLS_KEY)              TLS_KEY="$val"              ;;
       DB_PASSWORD)          DB_PASSWORD="$val"          ;;
