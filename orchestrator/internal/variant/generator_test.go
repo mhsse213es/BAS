@@ -198,8 +198,8 @@ func TestAMSIPatchAppearsInAdvancedRun(t *testing.T) {
 
 func TestRiskLevelAssignment(t *testing.T) {
 	cases := []struct {
-		enc, ev   string
-		wantRisk  RiskLevel
+		enc, ev  string
+		wantRisk RiskLevel
 	}{
 		{EncPlain, EvasionNone, RiskSafe},
 		{EncPlain, EvasionDelay, RiskSafe},

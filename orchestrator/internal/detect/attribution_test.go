@@ -196,7 +196,7 @@ func TestCorrelate_UserReportIsADetection(t *testing.T) {
 // exercise's own report channel.
 func TestCorrelate_EndpointAlertNeverGetsUserReported(t *testing.T) {
 	d := correlateOne(t, AlertRecord{
-		Channel: "Microsoft-Windows-Windows Defender/Operational",
+		Channel:  "Microsoft-Windows-Windows Defender/Operational",
 		Provider: "Microsoft-Windows-Windows Defender", EventID: 1116,
 		ThreatName: "Trojan:Win32/Meterpreter",
 	})

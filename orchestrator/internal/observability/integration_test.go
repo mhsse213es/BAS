@@ -2,13 +2,9 @@ package observability_test
 
 import (
 	"context"
-	"encoding/json"
-	"net/http"
-	"net/http/httptest"
 	"testing"
 	"time"
 
-	"github.com/audspect/bas/internal/api"
 	"github.com/audspect/bas/internal/observability"
 )
 
@@ -46,28 +42,8 @@ func TestPhase8IntegrationFullFlow(t *testing.T) {
 	promReg.AgentAvailable.WithLabelValues("default").Set(5)
 	promReg.ExecutionErrors.WithLabelValues("agent_task", "timeout").Inc()
 
-	// Step 3: Test dashboard endpoint
-	req, _ := http.NewRequestWithContext(context.Background(), "GET", "/api/observability/summary", nil)
-	rr := httptest.NewRecorder()
-
-	handler := http.HandlerFunc(api.HandleObservabilitySummary)
-	handler.ServeHTTP(rr, req)
-
-	// Verify response structure
-	var summary api.ObservabilitySummary
-	if err := json.NewDecoder(rr.Body).Decode(&summary); err != nil {
-		t.Errorf("dashboard response is not valid JSON: %v", err)
-	}
-
-	if summary.Timestamp == "" {
-		t.Error("dashboard summary should have timestamp")
-	}
-	if summary.SchedulerHealth == nil {
-		t.Error("dashboard summary should have scheduler health")
-	}
-	if summary.ExecutionMetrics == nil {
-		t.Error("dashboard summary should have execution metrics")
-	}
+	// The dashboard endpoint is DB-backed (Handler.GetObservabilitySummary) and
+	// is covered by internal/api/observability_dashboard_test.go.
 
 	// Step 4: Initialize OTel tracer provider
 	otelConfig := &observability.OTelConfig{
@@ -111,7 +87,7 @@ func TestPhase8IntegrationFullFlow(t *testing.T) {
 		t.Error("alert history should not be nil")
 	}
 
-	t.Logf("Phase 8 integration test passed: correlationIDs=%s, metrics gathered, dashboard OK, OTel initialized, alerting ready", run)
+	t.Logf("Phase 8 integration test passed: correlationIDs=%s, metrics gathered, OTel initialized, alerting ready", run)
 }
 
 func TestPhase8CorrelationLoggerIntegration(t *testing.T) {

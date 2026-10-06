@@ -55,14 +55,14 @@ type Campaign struct {
 // Malware is one mitre-malware GalaxyCluster entry, deduplicated by
 // normalized name across every event that references it (NormalizeKey).
 type Malware struct {
-	ID             string    `json:"id"` // = NormalizeKey(Name) -- cross-event dedup key
-	Name           string    `json:"name"`
-	Aliases        []string  `json:"aliases"`
-	TechniqueIDs   []string  `json:"techniqueIds"`
-	ThreatActorIDs []string  `json:"threatActorIds"`
-	CampaignIDs    []string  `json:"campaignIds"`
-	MalwareTypes   []string  `json:"malwareTypes,omitempty"` // e.g. "ransomware", "trojan" -- OpenCTI-only
-	Source         SourceRef `json:"source"`
+	ID             string      `json:"id"` // = NormalizeKey(Name) -- cross-event dedup key
+	Name           string      `json:"name"`
+	Aliases        []string    `json:"aliases"`
+	TechniqueIDs   []string    `json:"techniqueIds"`
+	ThreatActorIDs []string    `json:"threatActorIds"`
+	CampaignIDs    []string    `json:"campaignIds"`
+	MalwareTypes   []string    `json:"malwareTypes,omitempty"` // e.g. "ransomware", "trojan" -- OpenCTI-only
+	Source         SourceRef   `json:"source"`
 	Sources        []SourceRef `json:"sources"`
 }
 
@@ -73,13 +73,13 @@ type Malware struct {
 // docs/superpowers/specs/2026-07-29-intelligence-expansion-phase4-design.md's
 // Non-Goals).
 type Tool struct {
-	ID             string    `json:"id"` // = NormalizeKey(Name) -- same cross-provider dedup key Malware already uses
-	Name           string    `json:"name"`
-	Aliases        []string  `json:"aliases"`
-	TechniqueIDs   []string  `json:"techniqueIds"`
-	ThreatActorIDs []string  `json:"threatActorIds"`
-	CampaignIDs    []string  `json:"campaignIds"`
-	Source         SourceRef `json:"source"`
+	ID             string      `json:"id"` // = NormalizeKey(Name) -- same cross-provider dedup key Malware already uses
+	Name           string      `json:"name"`
+	Aliases        []string    `json:"aliases"`
+	TechniqueIDs   []string    `json:"techniqueIds"`
+	ThreatActorIDs []string    `json:"threatActorIds"`
+	CampaignIDs    []string    `json:"campaignIds"`
+	Source         SourceRef   `json:"source"`
 	Sources        []SourceRef `json:"sources"`
 }
 

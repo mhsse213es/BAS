@@ -79,15 +79,38 @@ class TestCompareSlots(unittest.TestCase):
     def test_brand_new_slot_is_reported_not_failed(self):
         old = []
         new = [_sink("f", "t", "=", 4)]
-        regressions, _, new_slots = guard.compare_slots(old, new)
+        regressions, _, new_sinks = guard.compare_slots(old, new)
         self.assertEqual(regressions, [])
-        self.assertEqual(new_slots, [(("f", "t", "="), 4)])
+        self.assertEqual(new_sinks, [(("f", "t", "="), 4, "unescaped_html", "f:t:=:deadbeefcafe")])
 
     def test_multiple_sinks_per_slot_compares_the_max(self):
         old = [_sink("f", "t", "=", 0, sink_id="a"), _sink("f", "t", "=", 1, sink_id="b")]
         new = [_sink("f", "t", "=", 0, sink_id="a"), _sink("f", "t", "=", 4, sink_id="c")]
         regressions, _, _ = guard.compare_slots(old, new)
         self.assertEqual(regressions, [(("f", "t", "="), 1, 4)])
+
+    def test_in_place_worsening_hidden_by_max_is_regression(self):
+        # Slot already has a tier-4 sink; its static sibling is rewritten
+        # to tier 4. The slot max is unchanged, but a sink got worse.
+        old = [_sink("f", "t", "=", 4, sink_id="a"), _sink("f", "t", "=", 0, sink_id="b")]
+        new = [_sink("f", "t", "=", 4, sink_id="a"), _sink("f", "t", "=", 4, sink_id="c")]
+        regressions, _, new_sinks = guard.compare_slots(old, new)
+        self.assertEqual(regressions, [(("f", "t", "="), 0, 4)])
+        self.assertEqual(new_sinks, [])
+
+    def test_new_sink_added_to_existing_slot_is_reported_not_failed(self):
+        old = [_sink("f", "t", "=", 4, sink_id="a")]
+        new = [_sink("f", "t", "=", 4, sink_id="a"), _sink("f", "t", "=", 4, sink_id="c")]
+        regressions, _, new_sinks = guard.compare_slots(old, new)
+        self.assertEqual(regressions, [])
+        self.assertEqual(new_sinks, [(("f", "t", "="), 4, "unescaped_html", "c")])
+
+    def test_rhs_edit_at_same_tier_is_ok(self):
+        old = [_sink("f", "t", "=", 1, sink_id="a")]
+        new = [_sink("f", "t", "=", 1, sink_id="b")]
+        regressions, _, new_sinks = guard.compare_slots(old, new)
+        self.assertEqual(regressions, [])
+        self.assertEqual(new_sinks, [])
 
 
 class TestCanonicalEscaperCheck(unittest.TestCase):
@@ -123,11 +146,65 @@ class TestCanonicalEscaperCheck(unittest.TestCase):
         self.assertEqual(len(errors), 1)
         self.assertIn("also escapes a bare", errors[0])
 
+    SUBS = (".replace(/&/g,'&amp;').replace(/</g,'&lt;')"
+            ".replace(/>/g,'&gt;').replace(/\"/g,'&quot;')")
+
+    def _assert_fails(self, text, fragment):
+        errors = guard.check_canonical_escaper(text, clf)
+        self.assertTrue(errors, "expected a failure, got none")
+        self.assertTrue(any(fragment in e for e in errors), errors)
+
+    def test_alias_delegating_to_canonical_passes(self):
+        text = self.GOOD + "function x(s) { return escapeHTML(s); }\n"
+        self.assertEqual(guard.check_canonical_escaper(text, clf), [])
+
+    def test_alias_passthrough_fails(self):
+        self._assert_fails(self.GOOD + "function x(s) { return s; }\n", "'x'")
+
+    def test_arrow_alias_passthrough_fails(self):
+        self._assert_fails(self.GOOD + "var esc = s => s;\n", "'esc'")
+
+    def test_decoy_escaper_with_gutted_canonical_fails(self):
+        gutted = "function escapeHTML(s) { return s; }\n"
+        decoy = "function enc(s) { return String(s)" + self.SUBS + "; }\n"
+        self._assert_fails(gutted + decoy, "escapeHTML")
+
+    def test_arrow_duplicate_escaper_fails(self):
+        dup = "var enc = s => String(s)" + self.SUBS + ";\n"
+        self._assert_fails(self.GOOD + dup, "duplicate")
+
+    def test_object_method_duplicate_escaper_fails(self):
+        dup = "var U = { enc: function(s) { return String(s)" + self.SUBS + "; } };\n"
+        self._assert_fails(self.GOOD + dup, "duplicate")
+
+    def test_char_class_escaper_fails(self):
+        dup = ("var e2 = function(s) { return String(s).replace(/[&<>\"]/g, "
+               "function(c) { return M[c]; }); };\n")
+        self._assert_fails(self.GOOD + dup, "duplicate")
+
     def test_real_index_html_passes(self):
         real_clf = _load("g1_classifier_real", "g1-innerhtml-sink-classifier.py")
         errors = guard.check_canonical_escaper(real_clf.text, real_clf)
         self.assertEqual(errors, [])
 
+
+
+class TestRhsChanges(unittest.TestCase):
+    def test_same_slot_changed_rhs_same_tier_is_reported(self):
+        old = [_sink("f", "el", "=", 4, sink_id="f:el:=:aaaaaaaaaaaa")]
+        new = [_sink("f", "el", "=", 4, sink_id="f:el:=:bbbbbbbbbbbb")]
+        self.assertEqual(guard.find_rhs_changes(old, new),
+                         [(("f", "el", "="), 4, "f:el:=:aaaaaaaaaaaa", "f:el:=:bbbbbbbbbbbb")])
+        self.assertEqual(guard.compare_slots(old, new)[0], [])  # still not a failure
+
+    def test_identical_sink_is_not_reported(self):
+        s = [_sink("f", "el", "=", 4)]
+        self.assertEqual(guard.find_rhs_changes(s, list(s)), [])
+
+    def test_tier_change_is_not_a_review_item(self):
+        old = [_sink("f", "el", "=", 1, sink_id="f:el:=:aaaaaaaaaaaa")]
+        new = [_sink("f", "el", "=", 4, sink_id="f:el:=:bbbbbbbbbbbb")]
+        self.assertEqual(guard.find_rhs_changes(old, new), [])
 
 if __name__ == "__main__":
     unittest.main()

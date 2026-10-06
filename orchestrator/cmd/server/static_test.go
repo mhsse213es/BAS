@@ -1,8 +1,14 @@
 package main
 
 import (
+	"crypto/sha256"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"sort"
+	"strings"
 	"testing"
 )
 
@@ -84,5 +90,160 @@ func TestResolveScenariosDir_FallsBackToParentDir(t *testing.T) {
 	want := "../scenarios"
 	if got != want {
 		t.Errorf("resolveScenariosDir(%q) = %q, want %q (sibling scenarios/ one level up)", "scenarios", got, want)
+	}
+}
+
+// writeWWWRoot builds a wwwroot with a valid MANIFEST.sha256 and returns the
+// directory plus the manifest's own SHA-256 (what the binary is built with).
+func writeWWWRoot(t *testing.T, files map[string]string) (string, string) {
+	t.Helper()
+	dir := t.TempDir()
+	var names []string
+	for p, body := range files {
+		full := filepath.Join(dir, filepath.FromSlash(p))
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(full, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		names = append(names, p)
+	}
+	sort.Strings(names)
+	var b strings.Builder
+	for _, p := range names {
+		fmt.Fprintf(&b, "%x  %s\n", sha256.Sum256([]byte(files[p])), p)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "MANIFEST.sha256"), []byte(b.String()), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return dir, fmt.Sprintf("%x", sha256.Sum256([]byte(b.String())))
+}
+
+var sampleWWW = map[string]string{
+	"index.html":            "<html></html>",
+	"assets/app.ABC123.js":  "console.log(1)",
+	"assets/app.DEF456.css": "body{}",
+	"images/logo.png":       "png",
+}
+
+func TestVerifyWWWRoot_ValidTreePasses(t *testing.T) {
+	dir, h := writeWWWRoot(t, sampleWWW)
+	if err := verifyWWWRoot(dir, h); err != nil {
+		t.Fatalf("verifyWWWRoot = %v, want nil", err)
+	}
+}
+
+func TestVerifyWWWRoot_TamperedFileFails(t *testing.T) {
+	dir, h := writeWWWRoot(t, sampleWWW)
+	os.WriteFile(filepath.Join(dir, "assets", "app.ABC123.js"), []byte("alert(1)"), 0o644)
+	if err := verifyWWWRoot(dir, h); err == nil || !strings.Contains(err.Error(), "assets/app.ABC123.js") {
+		t.Fatalf("verifyWWWRoot = %v, want a hash mismatch naming the file", err)
+	}
+}
+
+func TestVerifyWWWRoot_UnlistedFileFails(t *testing.T) {
+	dir, h := writeWWWRoot(t, sampleWWW)
+	os.WriteFile(filepath.Join(dir, "assets", "evil.js"), []byte("x"), 0o644)
+	if err := verifyWWWRoot(dir, h); err == nil || !strings.Contains(err.Error(), "evil.js") {
+		t.Fatalf("verifyWWWRoot = %v, want an unlisted-file error naming evil.js", err)
+	}
+}
+
+func TestVerifyWWWRoot_MissingFileFails(t *testing.T) {
+	dir, h := writeWWWRoot(t, sampleWWW)
+	os.Remove(filepath.Join(dir, "images", "logo.png"))
+	if err := verifyWWWRoot(dir, h); err == nil || !strings.Contains(err.Error(), "images/logo.png") {
+		t.Fatalf("verifyWWWRoot = %v, want a missing-file error", err)
+	}
+}
+
+func TestVerifyWWWRoot_EditedManifestFails(t *testing.T) {
+	dir, h := writeWWWRoot(t, sampleWWW)
+	f, _ := os.OpenFile(filepath.Join(dir, "MANIFEST.sha256"), os.O_APPEND|os.O_WRONLY, 0o644)
+	f.WriteString("\n")
+	f.Close()
+	if err := verifyWWWRoot(dir, h); err == nil || !strings.Contains(err.Error(), "MANIFEST.sha256") {
+		t.Fatalf("verifyWWWRoot = %v, want a manifest hash mismatch", err)
+	}
+}
+
+func TestVerifyWWWRoot_MissingManifestFails(t *testing.T) {
+	dir, h := writeWWWRoot(t, sampleWWW)
+	os.Remove(filepath.Join(dir, "MANIFEST.sha256"))
+	if err := verifyWWWRoot(dir, h); err == nil {
+		t.Fatal("verifyWWWRoot = nil, want an error when MANIFEST.sha256 is missing")
+	}
+}
+
+func TestWWWRootWatchList_CoversEveryManifestFile(t *testing.T) {
+	dir, _ := writeWWWRoot(t, sampleWWW)
+	got := wwwRootWatchList(dir)
+	if len(got) != len(sampleWWW)+1 {
+		t.Fatalf("watch list has %d entries, want %d (every file + the manifest): %v", len(got), len(sampleWWW)+1, got)
+	}
+}
+
+func TestCacheHeaders(t *testing.T) {
+	h := cacheHeaders(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	for path, want := range map[string]string{
+		"/assets/app.ABC123.js": "public, max-age=31536000, immutable",
+		"/":                     "no-cache",
+		"/index.html":           "no-cache",
+	} {
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+		if got := rec.Header().Get("Cache-Control"); got != want {
+			t.Errorf("%s Cache-Control = %q, want %q", path, got, want)
+		}
+	}
+}
+
+func TestVerifyWWWRoot_ExtractedImage(t *testing.T) {
+	dir, hash := os.Getenv("WWW_DIR"), os.Getenv("WWW_HASH")
+	if dir == "" || hash == "" {
+		t.Skip("set WWW_DIR and WWW_HASH to verify a wwwroot extracted from a built image")
+	}
+	if err := verifyWWWRoot(dir, hash); err != nil {
+		t.Fatalf("extracted image wwwroot fails verification: %v", err)
+	}
+}
+
+// A file dropped into wwwroot after the startup check must never be served
+// (G1c final review I3): only manifest-listed paths are answered.
+func TestManifestOnly_ServesOnlyListedFiles(t *testing.T) {
+	dir, _ := writeWWWRoot(t, sampleWWW)
+	h, err := manifestOnly(dir, http.FileServer(http.Dir(dir)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "assets", "evil.js"), []byte("alert(1)"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "x.html"), []byte("<script>"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for path, want := range map[string]int{
+		"/":                     http.StatusOK,
+		"/assets/app.ABC123.js": http.StatusOK,
+		"/images/logo.png":      http.StatusOK,
+		"/assets/evil.js":       http.StatusNotFound,
+		"/x.html":               http.StatusNotFound,
+		"/assets/":              http.StatusNotFound,
+		"/MANIFEST.sha256":      http.StatusNotFound,
+		"/assets/../x.html":     http.StatusNotFound,
+		"/assets//evil.js":      http.StatusNotFound,
+	} {
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+		if rec.Code != want {
+			t.Errorf("GET %s = %d, want %d", path, rec.Code, want)
+		}
+	}
+}
+
+func TestManifestOnly_MissingManifestFails(t *testing.T) {
+	if _, err := manifestOnly(t.TempDir(), http.NotFoundHandler()); err == nil {
+		t.Fatal("manifestOnly accepted a wwwroot without MANIFEST.sha256")
 	}
 }

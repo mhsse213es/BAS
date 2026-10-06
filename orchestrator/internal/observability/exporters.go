@@ -42,7 +42,7 @@ func NewTempoExporter(endpoint string) (trace.SpanExporter, error) {
 	}
 
 	// Create OTLP HTTP trace exporter
-	exporter, err := otlptracehttp.New(nil, otlptracehttp.WithEndpoint(endpoint))
+	exporter, err := otlptracehttp.New(context.Background(), otlptracehttp.WithEndpoint(endpoint))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create tempo exporter: %w", err)
 	}
@@ -63,7 +63,7 @@ func NewJaegerExporter(endpoint string) (trace.SpanExporter, error) {
 	}
 
 	// Create OTLP HTTP trace exporter (Jaeger also supports OTLP)
-	exporter, err := otlptracehttp.New(nil, otlptracehttp.WithEndpoint(endpoint))
+	exporter, err := otlptracehttp.New(context.Background(), otlptracehttp.WithEndpoint(endpoint))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create jaeger exporter: %w", err)
 	}

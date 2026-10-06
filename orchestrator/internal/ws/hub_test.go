@@ -9,31 +9,17 @@ import (
 	"github.com/audspect/bas/internal/models"
 )
 
-// TestSendToAgent_ClosedChannelDoesNotPanic reproduces the exact race
-// SendToAgent must survive: the agent's send channel has already been
-// closed by readPump's disconnect cleanup, but the agent entry hasn't been
-// removed from h.agents yet (that happens separately, slightly later, in
-// ServeAgentWS). Sending on a closed channel panics unconditionally — found
-// via a flaky fake-agent test in internal/api that hit this window in ~1-2%
-// of runs. Reproduced here deterministically by closing the channel directly
-// rather than relying on real goroutine-scheduling timing.
-func TestSendToAgent_ClosedChannelDoesNotPanic(t *testing.T) {
+// TestSendToAgent_DisconnectedConnReturnsFalse covers the window where
+// readPump has marked the connection done but ServeAgentWS hasn't yet removed
+// the agent from h.agents: SendToAgent must report "not sent", not queue.
+func TestSendToAgent_DisconnectedConnReturnsFalse(t *testing.T) {
 	h := NewHub()
-	c := &conn{send: make(chan []byte, 128)}
+	c := newConn(nil)
 	h.agents["agent-race"] = c
-	close(c.send)
+	c.shutdown()
 
-	var sent bool
-	func() {
-		defer func() {
-			if r := recover(); r != nil {
-				t.Fatalf("SendToAgent panicked: %v", r)
-			}
-		}()
-		sent = h.SendToAgent("agent-race", models.WSMessage{Type: "test"})
-	}()
-	if sent {
-		t.Fatal("SendToAgent returned true for a closed channel, want false")
+	if h.SendToAgent("agent-race", models.WSMessage{Type: "test"}) {
+		t.Fatal("SendToAgent returned true for a disconnected conn, want false")
 	}
 }
 

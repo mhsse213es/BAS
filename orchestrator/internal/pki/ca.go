@@ -104,13 +104,17 @@ func generateCA(keyPath, certPath string, sans []string) (*CA, error) {
 			dnsNames = append(dnsNames, san)
 		}
 	}
+	// A CA's EKUs constrain every cert chained beneath it, so ClientAuth must
+	// be listed or the agent client certs it issues fail mTLS verification
+	// ("incompatible key usage"). ServerAuth: this cert is also the
+	// orchestrator's TLS server identity.
 	tmpl := &x509.Certificate{
 		SerialNumber:          serial,
 		Subject:               pkix.Name{CommonName: "Audspect Deployment CA", Organization: []string{"Audspect"}},
 		NotBefore:             time.Now().Add(-5 * time.Minute),
 		NotAfter:              time.Now().Add(caValidity),
 		KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageCRLSign | x509.KeyUsageDigitalSignature,
-		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth},
 		BasicConstraintsValid: true,
 		IsCA:                  true,
 		IPAddresses:           ips,

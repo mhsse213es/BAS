@@ -5,26 +5,26 @@ import "sort"
 // Summary is the report-ready output of the attack-path engine: the headline
 // AttackPathScore plus the supporting analytics the report and dashboard render.
 type Summary struct {
-	AttackPathScore      int                     `json:"attackPathScore"` // 0..100, HIGHER = better (less exposed)
-	Band                 string                  `json:"band"`            // Critical|High|Medium|Low (risk band, inverse of score)
-	Hosts                int                     `json:"hosts"`
-	Users                int                     `json:"users"`
-	Groups               int                     `json:"groups"`
-	Edges                int                     `json:"edges"`
-	DomainCompromise     bool                    `json:"domainCompromise"`     // some host can reach a Domain Admin / Tier-0 target
-	LateralMovementBand  string                  `json:"lateralMovementBand"`  // Critical|High|Medium|Low
-	AvgBlastRadius       float64                 `json:"avgBlastRadius"`       // avg other-hosts compromisable per entry
-	MaxBlastRadius       int                     `json:"maxBlastRadius"`       // worst single entry host
-	MaxBlastEntry        string                  `json:"maxBlastEntry"`        // that host id
-	SegmentationViols    []SegmentationViolation `json:"segmentationViolations"`
-	CrownJewels          []CrownJewelExposure    `json:"crownJewels"`
-	ChokePoints          []ChokePoint            `json:"chokePoints"`
-	ShortestDAPath       []Edge                  `json:"shortestDomainAdminPath"` // representative worst-case path to DA (nil if none)
-	ShortestDADifficulty Difficulty              `json:"shortestDomainAdminDifficulty"`
-	ScoreDrivers           []ScoreDriver  `json:"scoreDrivers"`
-	RelationshipCounts     map[string]int `json:"relationshipCounts"` // keyed by EdgeKind string value
-	Confidence             Confidence     `json:"confidence"`
-	DomainCompromiseStatus string         `json:"domainCompromiseStatus"` // reachable | not-observed | undetermined
+	AttackPathScore        int                     `json:"attackPathScore"` // 0..100, HIGHER = better (less exposed)
+	Band                   string                  `json:"band"`            // Critical|High|Medium|Low (risk band, inverse of score)
+	Hosts                  int                     `json:"hosts"`
+	Users                  int                     `json:"users"`
+	Groups                 int                     `json:"groups"`
+	Edges                  int                     `json:"edges"`
+	DomainCompromise       bool                    `json:"domainCompromise"`    // some host can reach a Domain Admin / Tier-0 target
+	LateralMovementBand    string                  `json:"lateralMovementBand"` // Critical|High|Medium|Low
+	AvgBlastRadius         float64                 `json:"avgBlastRadius"`      // avg other-hosts compromisable per entry
+	MaxBlastRadius         int                     `json:"maxBlastRadius"`      // worst single entry host
+	MaxBlastEntry          string                  `json:"maxBlastEntry"`       // that host id
+	SegmentationViols      []SegmentationViolation `json:"segmentationViolations"`
+	CrownJewels            []CrownJewelExposure    `json:"crownJewels"`
+	ChokePoints            []ChokePoint            `json:"chokePoints"`
+	ShortestDAPath         []Edge                  `json:"shortestDomainAdminPath"` // representative worst-case path to DA (nil if none)
+	ShortestDADifficulty   Difficulty              `json:"shortestDomainAdminDifficulty"`
+	ScoreDrivers           []ScoreDriver           `json:"scoreDrivers"`
+	RelationshipCounts     map[string]int          `json:"relationshipCounts"` // keyed by EdgeKind string value
+	Confidence             Confidence              `json:"confidence"`
+	DomainCompromiseStatus string                  `json:"domainCompromiseStatus"` // reachable | not-observed | undetermined
 }
 
 // Confidence summarizes which data sources contributed to this graph, so the
@@ -32,7 +32,7 @@ type Summary struct {
 // values (see Collection.Source) are present across the collections merged
 // into this graph.
 type Confidence struct {
-	Level   string   `json:"level"`   // High | Medium | Low
+	Level   string   `json:"level"` // High | Medium | Low
 	Based   []string `json:"based"`
 	Missing []string `json:"missing"`
 }
@@ -68,10 +68,10 @@ const (
 // AttackPathScore is 100 minus weighted exposure deficits, clamped to [0,100].
 func (g *Graph) Analyze() Summary {
 	s := Summary{
-		Hosts: g.countKind(KindHost),
-		Users: g.countKind(KindUser),
+		Hosts:  g.countKind(KindHost),
+		Users:  g.countKind(KindUser),
 		Groups: g.countKind(KindGroup),
-		Edges: g.EdgeCount(),
+		Edges:  g.EdgeCount(),
 	}
 
 	hosts := g.hostIDs()

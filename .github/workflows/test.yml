@@ -17,16 +17,39 @@ jobs:
 
       - name: G1 XSS sink regression guard
         working-directory: .
+        env:
+          # PRs compare against their base; pushes against the previous tip of
+          # the branch, so direct pushes to main are still checked.
+          BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
         run: |
+          python3 scripts/g1-assemble-classifier-view.py
           python3 scripts/g1-innerhtml-sink-classifier.py
           python3 scripts/g1-trace-indirect-sinks.py
           python3 scripts/g1-merge-classification.py
           git diff --exit-code Assessment/G1_INNERHTML_SINK_INVENTORY.csv Assessment/G1_INNERHTML_SINK_INVENTORY.json Assessment/G1_INDIRECT_SINK_TRACE.csv Assessment/G1_FINAL_CLASSIFICATION.json Assessment/G1_FINAL_CLASSIFICATION.csv || \
-            (echo "::error::Assessment/G1_FINAL_CLASSIFICATION.{json,csv} is stale -- run 'python3 scripts/g1-merge-classification.py' and commit the result." && exit 1)
-          git fetch origin main --depth=1 2>/dev/null || true
-          git show origin/main:Assessment/G1_FINAL_CLASSIFICATION.json > /tmp/g1_main_baseline.json 2>/dev/null || echo "{}" > /tmp/g1_main_baseline.json
-          python3 scripts/g1-check-no-regression.py --against /tmp/g1_main_baseline.json
-          cd scripts && python3 -m unittest test_g1_merge_classification test_g1_check_no_regression -v
+            (echo "::error::G1 audit artifacts are stale -- run scripts/g1-innerhtml-sink-classifier.py, scripts/g1-trace-indirect-sinks.py and scripts/g1-merge-classification.py, then commit Assessment/G1_*." && exit 1)
+          # CI-only: a --depth fetch makes a full local clone shallow.
+          if [ -z "$BASE_SHA" ] || [ "$BASE_SHA" = "0000000000000000000000000000000000000000" ]; then
+            echo "::warning::No base commit for this event -- G1 regression comparison skipped."
+            echo "{}" > /tmp/g1_base.json
+          else
+            git fetch --no-tags --depth=1 origin "$BASE_SHA"
+            if git cat-file -e "$BASE_SHA:Assessment/G1_FINAL_CLASSIFICATION.json" 2>/dev/null; then
+              git show "$BASE_SHA:Assessment/G1_FINAL_CLASSIFICATION.json" > /tmp/g1_base.json
+            else
+              echo "::warning::Base $BASE_SHA has no G1 baseline -- G1 regression comparison skipped."
+              echo "{}" > /tmp/g1_base.json
+            fi
+          fi
+          python3 scripts/g1-check-no-regression.py --against /tmp/g1_base.json
+          cd scripts && python3 -m unittest test_g1_merge_classification test_g1_check_no_regression test_g1_assemble_classifier_view -v
+
+      - name: G1c globals registry check
+        working-directory: .
+        run: |
+          python3 scripts/g1c-check-globals.py
+          python3 scripts/g1d-check-actions.py
+          cd scripts && python3 -m unittest test_g1c_check_globals test_g1d_check_actions -v
 
       - uses: actions/setup-go@v5
         with:
@@ -56,7 +79,7 @@ jobs:
         run: go build ./...
 
       - name: go test (race + coverage)
-        run: go test ./... -race -coverprofile=coverage.out
+        run: go test ./... -race -timeout 30m -coverprofile=coverage.out
 
       - name: coverage HTML report
         run: go tool cover -html=coverage.out -o coverage.html
@@ -71,3 +94,37 @@ jobs:
             orchestrator/coverage.out
             orchestrator/coverage.html
             orchestrator/coverage-summary.txt
+
+  web:
+    runs-on: ubuntu-latest
+    container:
+      image: mcr.microsoft.com/playwright:v1.63.0-noble@sha256:eff16c30e6f3f4af0a03fa4b706120d5e9b0891c344a27d64559aff5900a4a27
+    env:
+      PLAYWRIGHT_IMAGE_VERSION: "1.63.0"
+    defaults:
+      run:
+        working-directory: orchestrator/web
+    steps:
+      - uses: actions/checkout@v4
+      - name: npm ci (lockfile only, no lifecycle scripts)
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Playwright package matches image browsers
+        run: node tools/check-playwright-version.mjs
+      - name: Lint
+        run: npx eslint src --max-warnings=100000
+      - name: Unit tests
+        run: npm test
+      - name: Build
+        run: npm run build
+      - name: Smoke harness (bundled build)
+        env:
+          SMOKE_ROOT: dist
+        run: npm run smoke
+      - name: Upload smoke artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-artifacts
+          path: |
+            orchestrator/web/test-results
+            orchestrator/web/playwright-report

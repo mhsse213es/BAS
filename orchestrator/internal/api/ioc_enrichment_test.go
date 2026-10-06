@@ -26,11 +26,21 @@ func (s *stubIOCProvider) lookup(v string) (*ioc.Result, error) {
 	}
 	return &ioc.Result{Indicator: v, Provider: s.name, PulseCount: 3}, nil
 }
-func (s *stubIOCProvider) LookupIP(ctx context.Context, v string) (*ioc.Result, error)     { return s.lookup(v) }
-func (s *stubIOCProvider) LookupDomain(ctx context.Context, v string) (*ioc.Result, error) { return s.lookup(v) }
-func (s *stubIOCProvider) LookupURL(ctx context.Context, v string) (*ioc.Result, error)    { return s.lookup(v) }
-func (s *stubIOCProvider) LookupHash(ctx context.Context, v string) (*ioc.Result, error)   { return s.lookup(v) }
-func (s *stubIOCProvider) LookupCVE(ctx context.Context, v string) (*ioc.Result, error)    { return s.lookup(v) }
+func (s *stubIOCProvider) LookupIP(ctx context.Context, v string) (*ioc.Result, error) {
+	return s.lookup(v)
+}
+func (s *stubIOCProvider) LookupDomain(ctx context.Context, v string) (*ioc.Result, error) {
+	return s.lookup(v)
+}
+func (s *stubIOCProvider) LookupURL(ctx context.Context, v string) (*ioc.Result, error) {
+	return s.lookup(v)
+}
+func (s *stubIOCProvider) LookupHash(ctx context.Context, v string) (*ioc.Result, error) {
+	return s.lookup(v)
+}
+func (s *stubIOCProvider) LookupCVE(ctx context.Context, v string) (*ioc.Result, error) {
+	return s.lookup(v)
+}
 
 func seedRunIOC(t *testing.T, runID string, indicators []ioc.RunIndicator) {
 	t.Helper()

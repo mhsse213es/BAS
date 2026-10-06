@@ -56,9 +56,9 @@ type StatsSource interface {
 
 // ConnectorStatus is the live state of the connector — returned by the API.
 type ConnectorStatus struct {
-	MISPEnabled      bool                  `json:"mispEnabled"`
-	OpenCTIEnabled   bool                  `json:"openctiEnabled"`
-	BundleEnabled    bool                  `json:"bundleEnabled"`
+	MISPEnabled    bool `json:"mispEnabled"`
+	OpenCTIEnabled bool `json:"openctiEnabled"`
+	BundleEnabled  bool `json:"bundleEnabled"`
 	// OTXEnabled reflects Scheduler.activitySources, set by
 	// WithActivitySources/ReconfigureActivitySources -- tracked separately
 	// from the other three because OTX is not in the sources/Reconfigure

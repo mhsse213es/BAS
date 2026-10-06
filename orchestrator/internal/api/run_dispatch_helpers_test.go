@@ -75,20 +75,23 @@ func startFakeAgent(t *testing.T, hub *ws.Hub, agentID string) *fakeAgent {
 		t.Fatalf("dial fake agent: %v", err)
 	}
 	f := &fakeAgent{agentID: agentID, hub: hub, server: server, conn: conn, received: make(chan wsEnvelope, 32)}
-	go f.readLoop()
+	go f.readLoop(f.conn, f.received)
 	waitForAgentConnected(t, hub, agentID)
 	return f
 }
 
-func (f *fakeAgent) readLoop() {
+// readLoop takes its connection and channel as arguments rather than reading
+// them from f: Reconnect replaces f.conn and f.received while the previous
+// loop may still be running, and sharing the fields was a data race.
+func (f *fakeAgent) readLoop(conn *websocket.Conn, received chan<- wsEnvelope) {
 	for {
-		_, raw, err := f.conn.ReadMessage()
+		_, raw, err := conn.ReadMessage()
 		if err != nil {
 			return
 		}
 		var env wsEnvelope
 		if json.Unmarshal(raw, &env) == nil {
-			f.received <- env
+			received <- env
 		}
 	}
 }
@@ -159,7 +162,7 @@ func (f *fakeAgent) Reconnect(t *testing.T, hub *ws.Hub) {
 	f.server = server
 	f.conn = conn
 	f.received = make(chan wsEnvelope, 32)
-	go f.readLoop()
+	go f.readLoop(f.conn, f.received)
 	waitForAgentConnected(t, hub, f.agentID)
 }
 

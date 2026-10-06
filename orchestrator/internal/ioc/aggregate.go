@@ -12,13 +12,13 @@ import (
 // aggregation result and the DB/API shape (internal/db and internal/api
 // consume this directly -- no duplicate struct).
 type RunIndicator struct {
-	Type          string    `json:"type"`
-	Value         string    `json:"value"`
-	Algorithm     string    `json:"hashAlgorithm,omitempty"`
-	Confidence    int       `json:"confidence"`
-	Source        string    `json:"source"` // stdout | stderr | details (first occurrence)
-	OffsetStart   int       `json:"offsetStart"`
-	OffsetEnd     int       `json:"offsetEnd"`
+	Type          string     `json:"type"`
+	Value         string     `json:"value"`
+	Algorithm     string     `json:"hashAlgorithm,omitempty"`
+	Confidence    int        `json:"confidence"`
+	Source        string     `json:"source"` // stdout | stderr | details (first occurrence)
+	OffsetStart   int        `json:"offsetStart"`
+	OffsetEnd     int        `json:"offsetEnd"`
 	TechniqueIDs  []string   `json:"techniqueIds"`
 	SimulationIDs []string   `json:"simulationIds"`
 	ExtractedAt   *time.Time `json:"extractedAt,omitempty"` // set on DB read; nil on fresh extraction (omitempty has no effect on a non-pointer time.Time)

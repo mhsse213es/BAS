@@ -30,7 +30,7 @@ func TestNextOccurrenceSince_FirstOccurrenceEverChecked(t *testing.T) {
 	// nil), evaluated on the following Monday -- should find last Friday's
 	// occurrence.
 	sch := Schedule{DayOfWeek: 5, TimeOfDay: "23:00", Timezone: "UTC"} // 5 = Friday
-	now := time.Date(2026, 8, 10, 12, 0, 0, 0, time.UTC)              // a Monday
+	now := time.Date(2026, 8, 10, 12, 0, 0, 0, time.UTC)               // a Monday
 	occurrence, ok := nextOccurrenceSince(sch, now)
 	if !ok {
 		t.Fatal("nextOccurrenceSince() ok = false, want true (first-ever check should find last Friday)")
@@ -54,7 +54,7 @@ func TestNextOccurrenceSince_AlreadyHandled_ReturnsNotOK(t *testing.T) {
 
 func TestNextOccurrenceSince_TimeOfDayNotYetReachedToday(t *testing.T) {
 	sch := Schedule{DayOfWeek: 1, TimeOfDay: "23:00", Timezone: "UTC"} // 1 = Monday
-	now := time.Date(2026, 8, 10, 10, 0, 0, 0, time.UTC)              // Monday, 10:00 -- before 23:00
+	now := time.Date(2026, 8, 10, 10, 0, 0, 0, time.UTC)               // Monday, 10:00 -- before 23:00
 	_, ok := nextOccurrenceSince(sch, now)
 	if ok {
 		t.Error("nextOccurrenceSince() ok = true, want false -- today's occurrence time hasn't arrived yet")

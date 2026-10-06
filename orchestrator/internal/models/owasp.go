@@ -44,17 +44,17 @@ var owaspByTechnique = map[string][]string{
 	"T1611": {"A01:2021", "A05:2021"},             // Escape to Host (container misconfig)
 
 	// A02 Cryptographic Failures / A07 Identification & Authentication Failures
-	"T1003": {"A02:2021"},                         // OS Credential Dumping
-	"T1040": {"A02:2021"},                         // Network Sniffing (cleartext)
-	"T1555": {"A02:2021"},                         // Credentials from Password Stores
-	"T1552": {"A02:2021", "A07:2021"},             // Unsecured Credentials
-	"T1557": {"A02:2021", "A07:2021"},             // Adversary-in-the-Middle
-	"T1558": {"A02:2021", "A07:2021"},             // Steal or Forge Kerberos Tickets
-	"T1550": {"A02:2021", "A07:2021"},             // Use Alternate Authentication Material
-	"T1606": {"A02:2021", "A07:2021"},             // Forge Web Credentials
-	"T1528": {"A02:2021", "A07:2021"},             // Steal Application Access Token
-	"T1539": {"A02:2021", "A07:2021"},             // Steal Web Session Cookie
-	"T1649": {"A02:2021", "A07:2021"},             // Steal or Forge Authentication Certificates
+	"T1003": {"A02:2021"},             // OS Credential Dumping
+	"T1040": {"A02:2021"},             // Network Sniffing (cleartext)
+	"T1555": {"A02:2021"},             // Credentials from Password Stores
+	"T1552": {"A02:2021", "A07:2021"}, // Unsecured Credentials
+	"T1557": {"A02:2021", "A07:2021"}, // Adversary-in-the-Middle
+	"T1558": {"A02:2021", "A07:2021"}, // Steal or Forge Kerberos Tickets
+	"T1550": {"A02:2021", "A07:2021"}, // Use Alternate Authentication Material
+	"T1606": {"A02:2021", "A07:2021"}, // Forge Web Credentials
+	"T1528": {"A02:2021", "A07:2021"}, // Steal Application Access Token
+	"T1539": {"A02:2021", "A07:2021"}, // Steal Web Session Cookie
+	"T1649": {"A02:2021", "A07:2021"}, // Steal or Forge Authentication Certificates
 
 	// A03 Injection / A05 / A06 / A10 (Exploit Public-Facing Application is broad)
 	"T1190": {"A03:2021", "A05:2021", "A06:2021", "A10:2021"}, // Exploit Public-Facing Application

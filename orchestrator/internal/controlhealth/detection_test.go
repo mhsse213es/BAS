@@ -32,7 +32,7 @@ func TestLoadDetectionEvidence_OnlyApprovedActiveCounts(t *testing.T) {
 		now := time.Now().UTC()
 		seedVerificationRecord(t, pool, "ch-vh-1", "T1566", verification.ResultDetected, verification.StateApproved, true, now)
 		seedVerificationRecord(t, pool, "ch-vh-2", "T1003", verification.ResultNotDetected, verification.StateApproved, true, now)
-		seedVerificationRecord(t, pool, "ch-vh-3", "T1078", verification.ResultDetected, verification.StatePending, true, now) // not Approved
+		seedVerificationRecord(t, pool, "ch-vh-3", "T1078", verification.ResultDetected, verification.StatePending, true, now)   // not Approved
 		seedVerificationRecord(t, pool, "ch-vh-4", "T1046", verification.ResultDetected, verification.StateApproved, false, now) // not active
 
 		since := now.Add(-24 * time.Hour)

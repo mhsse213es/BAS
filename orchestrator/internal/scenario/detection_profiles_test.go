@@ -23,14 +23,14 @@ func TestValidateExpectation(t *testing.T) {
 	}
 
 	cases := map[string]ExpectedDetection{
-		"missing id":       {Provider: "microsoft_defender", Confidence: ConfidenceRequired, Finding: ExpectedFinding{Title: "t", Severity: "High"}},
-		"unknown provider": {ID: "a", Provider: "nope", Confidence: ConfidenceRequired, Finding: ExpectedFinding{Title: "t", Severity: "High"}},
-		"bad confidence":   {ID: "a", Provider: "microsoft_defender", Confidence: "maybe"},
-		"bad verification": {ID: "a", Provider: "microsoft_defender", Confidence: ConfidenceOptional, Verification: "psychic"},
-		"bad domain":       {ID: "a", Provider: "microsoft_defender", Confidence: ConfidenceOptional, Type: "galaxy"},
+		"missing id":           {Provider: "microsoft_defender", Confidence: ConfidenceRequired, Finding: ExpectedFinding{Title: "t", Severity: "High"}},
+		"unknown provider":     {ID: "a", Provider: "nope", Confidence: ConfidenceRequired, Finding: ExpectedFinding{Title: "t", Severity: "High"}},
+		"bad confidence":       {ID: "a", Provider: "microsoft_defender", Confidence: "maybe"},
+		"bad verification":     {ID: "a", Provider: "microsoft_defender", Confidence: ConfidenceOptional, Verification: "psychic"},
+		"bad domain":           {ID: "a", Provider: "microsoft_defender", Confidence: ConfidenceOptional, Type: "galaxy"},
 		"bad outcome family":   {ID: "a", Provider: "microsoft_defender", Confidence: ConfidenceOptional, OutcomeFamily: "nope"},
 		"bad expected outcome": {ID: "a", Provider: "microsoft_defender", Confidence: ConfidenceOptional, ExpectedOutcome: "Warn"},
-		"required no find":  {ID: "a", Provider: "microsoft_defender", Confidence: ConfidenceRequired},
+		"required no find":     {ID: "a", Provider: "microsoft_defender", Confidence: ConfidenceRequired},
 	}
 	for name, exp := range cases {
 		if err := validateExpectation(exp); err == nil {

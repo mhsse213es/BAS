@@ -498,10 +498,10 @@ func buildCollectCmd(targets []string, segment string, runSharpHound bool, sharp
 func (h *Handler) DispatchAttackPathCollect(w http.ResponseWriter, r *http.Request) {
 	agentID := chi.URLParam(r, "agentId")
 	var body struct {
-		Targets       []string `json:"targets"`
-		Segment       string   `json:"segment"`
-		RunSharpHound bool     `json:"runSharpHound"`
-		SharpHoundArgs string  `json:"sharpHoundArgs"`
+		Targets        []string `json:"targets"`
+		Segment        string   `json:"segment"`
+		RunSharpHound  bool     `json:"runSharpHound"`
+		SharpHoundArgs string   `json:"sharpHoundArgs"`
 	}
 	_ = json.NewDecoder(r.Body).Decode(&body)
 
@@ -537,11 +537,11 @@ func (h *Handler) DispatchAttackPathCollect(w http.ResponseWriter, r *http.Reque
 
 // attackPathSchedule is the wire type for the schedule singleton.
 type attackPathSchedule struct {
-	Enabled         bool      `json:"enabled"`
-	IntervalMinutes int       `json:"intervalMinutes"`
-	Targets         []string  `json:"targets"`
-	Segment         string    `json:"segment"`
-	RunSharpHound   bool      `json:"runSharpHound"`
+	Enabled         bool       `json:"enabled"`
+	IntervalMinutes int        `json:"intervalMinutes"`
+	Targets         []string   `json:"targets"`
+	Segment         string     `json:"segment"`
+	RunSharpHound   bool       `json:"runSharpHound"`
 	LastRunAt       *time.Time `json:"lastRunAt,omitempty"`
 	UpdatedAt       time.Time  `json:"updatedAt"`
 }

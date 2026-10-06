@@ -108,8 +108,8 @@ type stixObj struct {
 	// Group-ID cross-source bridge (see attackdata's Group doc comment):
 	// it can only match a MISP "APT29" to an OpenCTI "Cozy Bear" by
 	// knowing that's an alias.
-	Aliases []string `json:"aliases"`
-	ExternalRefs        []struct {
+	Aliases      []string `json:"aliases"`
+	ExternalRefs []struct {
 		SourceName string `json:"source_name"`
 		ExternalID string `json:"external_id"`
 		URL        string `json:"url"`

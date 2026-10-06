@@ -106,20 +106,23 @@ func startFakeBrowser(t *testing.T, hub *ws.Hub) *fakeBrowser {
 		t.Fatalf("dial fake browser: %v", err)
 	}
 	b := &fakeBrowser{hub: hub, server: server, conn: conn, received: make(chan wsEnvelope, 32)}
-	go b.readLoop()
+	go b.readLoop(b.conn, b.received)
 	b.waitConnected(t)
 	return b
 }
 
-func (b *fakeBrowser) readLoop() {
+// readLoop takes its connection and channel as arguments rather than reading
+// them from b: Reconnect replaces b.conn and b.received while the previous
+// loop may still be running, and sharing the fields was a data race.
+func (b *fakeBrowser) readLoop(conn *websocket.Conn, received chan<- wsEnvelope) {
 	for {
-		_, raw, err := b.conn.ReadMessage()
+		_, raw, err := conn.ReadMessage()
 		if err != nil {
 			return
 		}
 		var env wsEnvelope
 		if json.Unmarshal(raw, &env) == nil {
-			b.received <- env
+			received <- env
 		}
 	}
 }
@@ -179,7 +182,7 @@ func (b *fakeBrowser) Reconnect(t *testing.T, hub *ws.Hub) {
 	b.server = server
 	b.conn = conn
 	b.received = make(chan wsEnvelope, 32)
-	go b.readLoop()
+	go b.readLoop(b.conn, b.received)
 	b.waitConnected(t)
 }
 

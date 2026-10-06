@@ -16,3 +16,13 @@
 # (.github/workflows/test.yml) comparing content, not line endings.
 Assessment/G1_*.csv   text eol=lf
 Assessment/G1_*.json  text eol=lf
+# G1c: the generator and split:check compare bytes, so web sources are LF on
+# every platform (Windows checkouts would otherwise get CRLF).
+orchestrator/web/**/*.html text eol=lf
+orchestrator/web/**/*.css text eol=lf
+orchestrator/web/**/*.js text eol=lf
+orchestrator/web/**/*.mjs text eol=lf
+orchestrator/web/**/*.json text eol=lf
+orchestrator/web/**/*.sh text eol=lf
+orchestrator/web/**/*.md text eol=lf
+orchestrator/web/.gitignore text eol=lf

@@ -15,7 +15,7 @@ type fakeTokenStore struct {
 
 type insertedToken struct {
 	token, execID, stepExecID, targetID, tokenType string
-	payload                                         map[string]any
+	payload                                        map[string]any
 }
 
 func (f *fakeTokenStore) InsertTrackToken(_ context.Context, token, execID, stepExecID, targetID, tokenType string, payload map[string]any) error {

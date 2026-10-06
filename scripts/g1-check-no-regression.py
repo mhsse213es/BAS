@@ -41,42 +41,90 @@ def slot_key(sink):
     return (sink["function"], sink["target"], sink["op"])
 
 
-def max_severity_by_slot(sinks):
+def _group_by_slot(sinks):
     out = {}
     for s in sinks:
-        k = slot_key(s)
-        tier = s["severity_tier"]
-        if k not in out or tier > out[k]:
-            out[k] = tier
+        out.setdefault(slot_key(s), []).append(s)
     return out
 
 
 def compare_slots(old_sinks, new_sinks):
-    """Returns (regressions, eliminated, new_slots):
-      regressions: [(slot, old_max_tier, new_max_tier), ...] where new > old
-      eliminated:  [(slot, old_max_tier), ...] where the slot no longer exists
-      new_slots:   [(slot, new_max_tier), ...] where the slot didn't exist before
+    """Returns (regressions, eliminated, new_sinks):
+      regressions: [(slot, old_tier, new_tier), ...] -- a changed sink got worse
+      eliminated:  [(slot, old_max_tier), ...] -- the slot no longer exists
+      new_sinks:   [(slot, tier, final_category, sink_id), ...] -- added sinks,
+                   in new or existing slots; reported, never failed
+
+    Within a slot, sinks with the same sink_id and tier are matched and ignored.
+    The remaining (changed) sinks are paired charitably -- the highest old
+    tiers against the lowest new tiers -- so an edit that keeps or lowers
+    severity never fails, while a sink rewritten to something worse does,
+    even when a sibling already holds the slot's top tier. New sinks beyond
+    the pairing count are additions, which the spec reports but never fails.
     """
-    old_by_slot = max_severity_by_slot(old_sinks)
-    new_by_slot = max_severity_by_slot(new_sinks)
+    old_by_slot = _group_by_slot(old_sinks)
+    new_by_slot = _group_by_slot(new_sinks)
 
     regressions = []
     eliminated = []
-    new_slots = []
+    added = []
 
-    for slot, old_tier in old_by_slot.items():
+    for slot, olds in old_by_slot.items():
         if slot not in new_by_slot:
-            eliminated.append((slot, old_tier))
-        else:
-            new_tier = new_by_slot[slot]
+            eliminated.append((slot, max(s["severity_tier"] for s in olds)))
+
+    for slot, news in new_by_slot.items():
+        olds = list(old_by_slot.get(slot, []))
+        changed_new = []
+        for s in news:
+            match = next(
+                (o for o in olds
+                 if o["sink_id"] == s["sink_id"] and o["severity_tier"] == s["severity_tier"]),
+                None,
+            )
+            if match is not None:
+                olds.remove(match)
+            else:
+                changed_new.append(s)
+
+        old_tiers = sorted((o["severity_tier"] for o in olds), reverse=True)
+        changed_new.sort(key=lambda s: (s["severity_tier"], s["sink_id"]))
+        k = min(len(old_tiers), len(changed_new))
+
+        paired_new = sorted((s["severity_tier"] for s in changed_new[:k]), reverse=True)
+        for old_tier, new_tier in zip(old_tiers[:k], paired_new):
             if new_tier > old_tier:
                 regressions.append((slot, old_tier, new_tier))
 
-    for slot, new_tier in new_by_slot.items():
-        if slot not in old_by_slot:
-            new_slots.append((slot, new_tier))
+        for s in changed_new[k:]:
+            added.append((slot, s["severity_tier"], s["final_category"], s["sink_id"]))
 
-    return regressions, eliminated, new_slots
+    return regressions, eliminated, added
+
+
+def find_rhs_changes(old_sinks, new_sinks):
+    """Same slot, RHS changed, tier unchanged: never a failure, always shown.
+    A changed RHS can change data provenance (e.g. an internal value becoming
+    user-controlled state) without changing the tier, so a reviewer must see
+    it (G1c spec section 8). Pairs the unmatched sinks of each slot exactly
+    like compare_slots does and reports the pairs whose tiers are equal."""
+    out = []
+    old_by_slot = _group_by_slot(old_sinks)
+    for slot, news in _group_by_slot(new_sinks).items():
+        olds = list(old_by_slot.get(slot, []))
+        changed_new = []
+        for s in news:
+            match = next((o for o in olds if o["sink_id"] == s["sink_id"] and o["severity_tier"] == s["severity_tier"]), None)
+            if match is not None:
+                olds.remove(match)
+            else:
+                changed_new.append(s)
+        olds.sort(key=lambda o: (-o["severity_tier"], o["sink_id"]))
+        changed_new.sort(key=lambda s: (s["severity_tier"], s["sink_id"]))
+        for o, n in zip(olds, changed_new):
+            if o["severity_tier"] == n["severity_tier"] and o["sink_id"] != n["sink_id"]:
+                out.append((slot, n["severity_tier"], o["sink_id"], n["sink_id"]))
+    return sorted(out)
 
 
 # --- Canonical-escaper check -------------------------------------------
@@ -215,39 +263,123 @@ def scan_function_spans(text, clf):
     return spans
 
 
+CANONICAL_ESCAPER = "escapeHTML"
+# A replace() over a character class containing both & and < -- the
+# map-lookup style of escaper, e.g. s.replace(/[&<>"]/g, fn).
+CHAR_CLASS_ESCAPE = re.compile(r"""\.replace\(\s*/\[(?=[^\]\n]*&)(?=[^\]\n]*<)[^\]\n]*\]/g""")
+DUPLICATE_WINDOW = 600
+
+_PARAM = r"\(\s*([A-Za-z_$][\w$]*)\s*\)"
+_CALL = CANONICAL_ESCAPER + r"\(\s*\1\s*\)"
+_BLOCK = r"\{\s*return\s+" + _CALL + r"\s*;?\s*\}"
+_EXPR_END = r"(?=[ \t]*(?:[;,})\r\n]|$))"
+_DELEGATE_FORMS = [
+    re.compile(r"function\s+[\w$]+\s*" + _PARAM + r"\s*" + _BLOCK),
+    re.compile(r"[\w$]+\s*[:=]\s*function\s*[\w$]*\s*" + _PARAM + r"\s*" + _BLOCK),
+    re.compile(r"[\w$]+\s*[:=]\s*" + _PARAM + r"\s*=>\s*(?:" + _BLOCK + "|" + _CALL + _EXPR_END + ")"),
+    re.compile(r"[\w$]+\s*[:=]\s*([A-Za-z_$][\w$]*)\s*=>\s*(?:" + _BLOCK + "|" + _CALL + _EXPR_END + ")"),
+    re.compile(r"[\w$]+\s*" + _PARAM + r"\s*" + _BLOCK),
+]
+
+
+def _line_of(text, pos):
+    return text.count("\n", 0, pos) + 1
+
+
 def find_escaper_candidates(text, clf):
-    spans = scan_function_spans(text, clf)
+    """(name, line, escapes_apostrophe, decl_start, body_start, body_end) for
+    every function whose body implements all four canonical substitutions."""
     out = []
-    for decl_start, body_start, body_end, name in spans:
+    for decl_start, body_start, body_end, name in scan_function_spans(text, clf):
         body = text[body_start:body_end]
         if AMP.search(body) and LT.search(body) and GT.search(body) and QUOT.search(body):
-            line = text.count("\n", 0, decl_start) + 1
-            out.append((name, line, bool(APOS.search(body))))
+            out.append((name, _line_of(text, decl_start), bool(APOS.search(body)),
+                        decl_start, body_start, body_end))
     return out
+
+
+def _escaper_name_definitions(text, names):
+    """(name, start) for each definition of a trusted escaper name: function
+    declarations, function/arrow assignments and properties, shorthand
+    methods."""
+    out = []
+    for name in sorted(names):
+        n = re.escape(name)
+        pat = re.compile(
+            r"function\s+" + n + r"\s*\("
+            r"|(?<![\w$.])" + n + r"\s*[:=]\s*(?:function\b|\([^()]*\)\s*=>|[A-Za-z_$][\w$]*\s*=>)"
+            r"|(?<![\w$.])" + n + r"\s*\([^()]*\)\s*\{"
+        )
+        for m in pat.finditer(text):
+            if re.search(r"function\s+$", text[max(0, m.start() - 20):m.start()]):
+                continue
+            out.append((name, m.start()))
+    return out
+
+
+def _is_delegate(text, start):
+    snippet = text[start:start + 300]
+    return any(p.match(snippet) for p in _DELEGATE_FORMS)
 
 
 def check_canonical_escaper(text, clf):
     candidates = find_escaper_candidates(text, clf)
-    errors = []
     if len(candidates) == 0:
-        errors.append(
+        return [
             "No function implements all four canonical HTML-escaping "
             "substitutions (& -> &amp;, < -> &lt;, > -> &gt;, \" -> &quot;)."
-        )
-    elif len(candidates) > 1:
-        names = ", ".join(f"{n} (line {l})" for n, l, _ in candidates)
-        errors.append(
+        ]
+    if len(candidates) > 1:
+        names = ", ".join(f"{c[0]} (line {c[1]})" for c in candidates)
+        return [
             f"{len(candidates)} functions implement the full escaper "
             f"substitution set -- expected exactly one canonical escaper: {names}"
+        ]
+
+    name, line, has_apos, decl_start, body_start, body_end = candidates[0]
+    if name != CANONICAL_ESCAPER:
+        return [
+            f"The only function implementing the escaper substitutions is "
+            f"{name!r} (line {line}), not {CANONICAL_ESCAPER!r}. The classifier "
+            f"counts calls to {sorted(clf.ESCAPER_NAMES)} as escaped, so "
+            f"{CANONICAL_ESCAPER} itself must do the escaping."
+        ]
+
+    errors = []
+    if has_apos:
+        errors.append(
+            f"Canonical escaper {name!r} (line {line}) now also escapes "
+            "a bare ' -- this breaks callers that apply their own "
+            "quote-context escaping afterward."
         )
-    else:
-        name, line, has_apos = candidates[0]
-        if has_apos:
+
+    # Every other definition of a name the classifier trusts must be a pure
+    # delegate; otherwise e.g. function x(s){return s;} would turn every
+    # x()-escaped sink into real XSS while its classification stays "escaped".
+    for alias, start in _escaper_name_definitions(text, clf.ESCAPER_NAMES):
+        if alias == CANONICAL_ESCAPER and decl_start <= start < body_start:
+            continue
+        if not _is_delegate(text, start):
             errors.append(
-                f"Canonical escaper {name!r} (line {line}) now also escapes "
-                "a bare ' -- this breaks callers that apply their own "
-                "quote-context escaping afterward."
+                f"{alias!r} (line {_line_of(text, start)}) is a trusted escaper "
+                f"name but is not a pure `return {CANONICAL_ESCAPER}(arg)` delegate."
             )
+
+    # Duplicate escapers in any syntax (arrow, object method, char-class map)
+    # that the function-span scan can't see.
+    masked = text[:body_start] + " " * (body_end - body_start) + text[body_end:]
+    for m in AMP.finditer(masked):
+        window = masked[max(0, m.start() - DUPLICATE_WINDOW):m.start() + DUPLICATE_WINDOW]
+        if LT.search(window) and GT.search(window) and QUOT.search(window):
+            errors.append(
+                f"Possible duplicate escaper at line {_line_of(text, m.start())}: all four "
+                f"substitutions appear outside {CANONICAL_ESCAPER}."
+            )
+    for m in CHAR_CLASS_ESCAPE.finditer(masked):
+        errors.append(
+            f"Possible duplicate escaper at line {_line_of(text, m.start())}: "
+            f"character-class HTML-escape replace() outside {CANONICAL_ESCAPER}."
+        )
     return errors
 
 
@@ -279,7 +411,7 @@ def main():
 
     old_sinks = load_json(args.against)
     new_sinks = load_json(args.current)
-    regressions, eliminated, new_slots = compare_slots(old_sinks, new_sinks)
+    regressions, eliminated, added = compare_slots(old_sinks, new_sinks)
 
     clf = load_classifier_module()
     escaper_errors = check_canonical_escaper(clf.text, clf)
@@ -289,10 +421,15 @@ def main():
     print(f"G1 XSS sink regression guard: {len(new_sinks)} current sinks, {len(old_sinks)} baseline sinks")
     print(f"  {len(eliminated)} slot(s) eliminated (OK)")
 
-    if new_slots:
-        print(f"  {len(new_slots)} brand-new slot(s) (reported, not auto-failed -- review manually):")
-        for slot, tier in sorted(new_slots):
-            print(f"    NEW   severity={tier}  {format_slot(slot)}")
+    if added:
+        print(f"  {len(added)} new sink(s) (reported, not auto-failed -- review manually):")
+        for slot, tier, category, sid in sorted(added):
+            print(f"    NEW   severity={tier} {category}  {format_slot(slot)}  [{sid}]")
+    rhs_changes = find_rhs_changes(old_sinks, new_sinks)
+    if rhs_changes:
+        print(f"  {len(rhs_changes)} sink(s) with a changed RHS at the same tier (REVIEW, not failed):")
+        for slot, tier, old_id, new_id in rhs_changes:
+            print(f"    REVIEW severity={tier}  {format_slot(slot)}  [{old_id} -> {new_id}]")
 
     if regressions:
         ok = False

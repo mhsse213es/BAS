@@ -22,10 +22,10 @@ type RunResult struct {
 
 // ExecutionMetrics holds computed timing data.
 type ExecutionMetrics struct {
-	RunID              string
-	QueueWait          time.Duration // CreatedAt → StartedAt
-	ExecutionDuration  time.Duration // StartedAt → EndedAt
-	TotalDuration      time.Duration // CreatedAt → EndedAt
+	RunID             string
+	QueueWait         time.Duration // CreatedAt → StartedAt
+	ExecutionDuration time.Duration // StartedAt → EndedAt
+	TotalDuration     time.Duration // CreatedAt → EndedAt
 }
 
 // Config holds analysis parameters.

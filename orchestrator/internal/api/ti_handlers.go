@@ -422,14 +422,14 @@ type historyEntry struct {
 // actorTrend aggregates the measurement series for one threat actor and
 // computes the net change from the oldest to most recent entry.
 type actorTrend struct {
-	ActorName          string         `json:"actorName"`
-	Latest             float64        `json:"latestPrevention"`
-	LatestDetection    float64        `json:"latestDetection"`
-	Delta              float64        `json:"preventionDelta"`   // latest - oldest
-	DetectionDelta     float64        `json:"detectionDelta"`
-	Direction          string         `json:"direction"`          // "up"/"down"/"stable"
-	DataPoints         int            `json:"dataPoints"`
-	History            []historyEntry `json:"history"`
+	ActorName       string         `json:"actorName"`
+	Latest          float64        `json:"latestPrevention"`
+	LatestDetection float64        `json:"latestDetection"`
+	Delta           float64        `json:"preventionDelta"` // latest - oldest
+	DetectionDelta  float64        `json:"detectionDelta"`
+	Direction       string         `json:"direction"` // "up"/"down"/"stable"
+	DataPoints      int            `json:"dataPoints"`
+	History         []historyEntry `json:"history"`
 }
 
 // GET /api/ti/readiness/history?agentId=&actor=&limit=

@@ -83,9 +83,6 @@ func TestSpanWithAttributes(t *testing.T) {
 
 func TestOTelConfigDefaults(t *testing.T) {
 	config := &observability.OTelConfig{}
-	if config == nil {
-		t.Error("OTelConfig should not be nil")
-	}
 
 	// Disabled by default
 	if config.Enabled {

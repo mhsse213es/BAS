@@ -1,0 +1,18 @@
+{
+  "name": "audspect-web",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=24" },
+  "scripts": {
+    "lint": "eslint src",
+    "test": "node --test \"tests/unit/*.test.mjs\"",
+    "build": "node tools/build.mjs",
+    "smoke": "playwright test -c tests/smoke/playwright.config.mjs"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0",
+    "esbuild": "0.28.2",
+    "eslint": "10.12.0",
+    "jsdom": "30.1.2"
+  }
+}

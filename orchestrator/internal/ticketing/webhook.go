@@ -20,9 +20,10 @@ import (
 // Teams/Slack alert channels, etc.).
 //
 // Settings:
-//   url           — target endpoint (required)
-//   secret        — HMAC-SHA256 key; if set, X-BAS-Signature header is added
-//   header_*      — extra headers, e.g. header_Authorization = Bearer token
+//
+//	url           — target endpoint (required)
+//	secret        — HMAC-SHA256 key; if set, X-BAS-Signature header is added
+//	header_*      — extra headers, e.g. header_Authorization = Bearer token
 type webhookConnector struct {
 	url        string
 	secret     string
@@ -50,10 +51,10 @@ func newWebhook(settings map[string]string) *webhookConnector {
 }
 
 type webhookPayload struct {
-	Action     string        `json:"action"`
-	TicketID   string        `json:"ticketId,omitempty"`
-	RecordType string        `json:"recordType,omitempty"`
-	Comment    string        `json:"comment,omitempty"`
+	Action     string         `json:"action"`
+	TicketID   string         `json:"ticketId,omitempty"`
+	RecordType string         `json:"recordType,omitempty"`
+	Comment    string         `json:"comment,omitempty"`
 	Finding    *TicketFinding `json:"finding,omitempty"`
 }
 

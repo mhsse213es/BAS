@@ -367,5 +367,3 @@ func Remediation(result CheckResult, tactic, techID, techName string) string {
 			techName, techID)
 	}
 }
-
-

@@ -43,6 +43,11 @@ SEVERITY_TIER = {
     "partial_escaped": 3,
     "unescaped_text": 4,
     "unescaped_html": 4,
+    # Unresolved after tracing and MANUAL_RESOLUTIONS: worst case, so a new
+    # sink nobody has traced yet is reported by the guard, not a crash.
+    "unclear": 4,
+    "indirect_builder": 4,
+    "indirect_variable": 4,
 }
 
 # Second-hop human resolutions for sinks the automated tracer leaves
@@ -134,9 +139,8 @@ def merge(inv_csv_path=INV_CSV, trace_csv_path=TRACE_CSV):
 
             if final_cat not in SEVERITY_TIER:
                 raise ValueError(
-                    f"line {line}: final_category {final_cat!r} has no severity_tier "
-                    "mapping -- this sink is still unresolved. Either the tracer "
-                    "needs to resolve it, or it needs a MANUAL_RESOLUTIONS entry."
+                    f"line {line} ({sid}): unknown category {final_cat!r} -- "
+                    "add it to SEVERITY_TIER."
                 )
 
             out_rows.append({

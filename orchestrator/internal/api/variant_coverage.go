@@ -30,35 +30,35 @@ type VariantCoverageReport struct {
 }
 
 type VariantCoverageSummary struct {
-	TechniquesTotal        int     `json:"techniquesTotal"`
-	TechniquesWithBypass   int     `json:"techniquesWithBypass"`
-	TechniquesFullyBlocked int     `json:"techniquesFullyBlocked"`
-	VariantsExecuted       int     `json:"variantsExecuted"`
-	Blocked                int     `json:"blocked"`
-	Detected               int     `json:"detected"`
-	Logged                 int     `json:"logged"`
-	Bypassed               int     `json:"bypassed"`
-	Errors                 int     `json:"errors"`
+	TechniquesTotal        int `json:"techniquesTotal"`
+	TechniquesWithBypass   int `json:"techniquesWithBypass"`
+	TechniquesFullyBlocked int `json:"techniquesFullyBlocked"`
+	VariantsExecuted       int `json:"variantsExecuted"`
+	Blocked                int `json:"blocked"`
+	Detected               int `json:"detected"`
+	Logged                 int `json:"logged"`
+	Bypassed               int `json:"bypassed"`
+	Errors                 int `json:"errors"`
 	// BypassRate = (bypassed+detected) / (total-errors-skipped) * 100
-	BypassRate    float64 `json:"bypassRate"`
+	BypassRate float64 `json:"bypassRate"`
 	// CoverageScore = blocked / (total-errors-skipped) * 100 (prevention effectiveness)
 	CoverageScore float64 `json:"coverageScore"`
 }
 
 type TechniqueVariantCoverage struct {
-	TechniqueID      string   `json:"techniqueId"`
-	TechniqueName    string   `json:"techniqueName"`
-	Tactic           string   `json:"tactic"`
-	VariantsExecuted int      `json:"variantsExecuted"`
-	Blocked          int      `json:"blocked"`
-	Detected         int      `json:"detected"`
-	Logged           int      `json:"logged"`
-	Bypassed         int      `json:"bypassed"`
-	Errors           int      `json:"errors"`
-	BypassRate       float64  `json:"bypassRate"`
-	HasBypass        bool     `json:"hasBypass"`
+	TechniqueID      string  `json:"techniqueId"`
+	TechniqueName    string  `json:"techniqueName"`
+	Tactic           string  `json:"tactic"`
+	VariantsExecuted int     `json:"variantsExecuted"`
+	Blocked          int     `json:"blocked"`
+	Detected         int     `json:"detected"`
+	Logged           int     `json:"logged"`
+	Bypassed         int     `json:"bypassed"`
+	Errors           int     `json:"errors"`
+	BypassRate       float64 `json:"bypassRate"`
+	HasBypass        bool    `json:"hasBypass"`
 
-	BestBypassVariantID string           `json:"bestBypassVariantId,omitempty"`
+	BestBypassVariantID string            `json:"bestBypassVariantId,omitempty"`
 	BestBypass          *VariantResultRow `json:"bestBypass,omitempty"`
 
 	EncodingsCovered  []string `json:"encodingsCovered"`
@@ -77,7 +77,7 @@ type VariantResultRow struct {
 	VariantID        string `json:"variantId"`
 	Encoding         string `json:"encoding"`
 	Privilege        string `json:"privilege"`
-	ExecutionContext  string `json:"executionContext"`
+	ExecutionContext string `json:"executionContext"`
 	ProxyTechniqueID string `json:"proxyTechniqueId,omitempty"`
 	RequestedPriv    string `json:"requestedPrivilege,omitempty"`
 	ActualPrivilege  string `json:"actualPrivilege,omitempty"`
@@ -126,7 +126,7 @@ func (h *Handler) computeVariantTechniqueSummary(
 	// Aggregate per-technique counts from in-memory results.
 	type agg struct {
 		blocked, detected, logged, bypassed, errors, skipped int
-		encodings, privileges, contexts                       map[string]bool
+		encodings, privileges, contexts                      map[string]bool
 	}
 	byTech := map[string]*agg{}
 	for _, res := range simResults {
@@ -137,9 +137,9 @@ func (h *Handler) computeVariantTechniqueSummary(
 		techID := res.Technique.ID
 		if byTech[techID] == nil {
 			byTech[techID] = &agg{
-				encodings: map[string]bool{},
+				encodings:  map[string]bool{},
 				privileges: map[string]bool{},
-				contexts:  map[string]bool{},
+				contexts:   map[string]bool{},
 			}
 		}
 		a := byTech[techID]
@@ -382,20 +382,20 @@ func (h *Handler) GetVariantCoverageReport(w http.ResponseWriter, r *http.Reques
 		br := pct(allowed, counted)
 
 		tc := TechniqueVariantCoverage{
-			TechniqueID:      s.techID,
-			TechniqueName:    s.techName,
-			Tactic:           s.tactic,
-			VariantsExecuted: s.total,
-			Blocked:          s.blocked,
-			Detected:         s.detected,
-			Logged:           s.logged,
-			Bypassed:         s.bypassed,
-			Errors:           s.errors,
-			BypassRate:       br,
-			HasBypass:        allowed > 0,
-			EncodingsCovered: s.encodings,
+			TechniqueID:       s.techID,
+			TechniqueName:     s.techName,
+			Tactic:            s.tactic,
+			VariantsExecuted:  s.total,
+			Blocked:           s.blocked,
+			Detected:          s.detected,
+			Logged:            s.logged,
+			Bypassed:          s.bypassed,
+			Errors:            s.errors,
+			BypassRate:        br,
+			HasBypass:         allowed > 0,
+			EncodingsCovered:  s.encodings,
 			PrivilegesCovered: s.privileges,
-			ContextsCovered:  s.contexts,
+			ContextsCovered:   s.contexts,
 		}
 		if s.bestBypassID != nil {
 			tc.BestBypassVariantID = *s.bestBypassID
@@ -555,11 +555,11 @@ func techExecLang(techID string) string {
 		{"T1059.001", "PowerShell execution"},
 		{"T1059.003", "Windows Command Shell execution"},
 		{"T1059.005", "Visual Basic execution"},
-		{"T1059",     "Script/command execution"},
-		{"T1047",     "WMI execution"},
-		{"T1053",     "Scheduled task execution"},
-		{"T1218",     "System binary proxy execution"},
-		{"T1055",     "Process injection"},
+		{"T1059", "Script/command execution"},
+		{"T1047", "WMI execution"},
+		{"T1053", "Scheduled task execution"},
+		{"T1218", "System binary proxy execution"},
+		{"T1055", "Process injection"},
 	}
 	for _, p := range prefixes {
 		if strings.HasPrefix(techID, p.prefix) {
@@ -588,7 +588,7 @@ func buildCoverageSummary(techs []TechniqueVariantCoverage) VariantCoverageSumma
 		}
 	}
 	counted := s.VariantsExecuted - s.Errors
-	s.BypassRate    = pct(s.Bypassed+s.Detected, counted)
+	s.BypassRate = pct(s.Bypassed+s.Detected, counted)
 	s.CoverageScore = pct(s.Blocked, counted)
 	return s
 }
@@ -833,4 +833,3 @@ func pct(n, total int) float64 {
 	}
 	return math.Round(float64(n)/float64(total)*1000) / 10
 }
-

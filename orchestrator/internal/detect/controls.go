@@ -9,10 +9,10 @@ import (
 // technique from executing. Populated only for "prevented" verdicts where a
 // matching block event is found in the post-run alert sweep.
 type BlockingControl struct {
-	Name    string `json:"name"`              // human label, e.g. "Defender ASR: Block obfuscated scripts"
-	RuleID  string `json:"ruleId,omitempty"`  // ASR GUID or AppLocker policy name
-	EventID int    `json:"eventId"`           // Windows Event ID that confirmed the block
-	Channel string `json:"channel"`           // source event log channel
+	Name    string `json:"name"`             // human label, e.g. "Defender ASR: Block obfuscated scripts"
+	RuleID  string `json:"ruleId,omitempty"` // ASR GUID or AppLocker policy name
+	EventID int    `json:"eventId"`          // Windows Event ID that confirmed the block
+	Channel string `json:"channel"`          // source event log channel
 }
 
 // blockEventIDs maps channel → set of event IDs that confirm a block (not just

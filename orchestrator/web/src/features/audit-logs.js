@@ -1,0 +1,294 @@
+import { apicall } from '../core/api.js';
+import { x } from '../core/escape.js';
+import { on } from '../core/actions.js';
+import { showToast } from '../core/util.js';
+import { buildReportFilename } from './evidence.js';
+
+
+// ── Audit Logs ────────────────────────────────────────────────────────────────
+var AUDIT_OFFSET = 0;
+var AUDIT_LIMIT  = 50;
+var AUDIT_TOTAL  = 0;
+
+var AUDIT_ACTION_LABELS = {
+  'user.login':                'Login',
+  'user.create':               'User created',
+  'user.update':               'User updated',
+  'user.delete':               'User deleted',
+  'user.change_password':      'Password changed',
+  'user.reset_password':       'Password reset',
+  'scenario.run':              'Scenario run',
+  'scenario.cancel':           'Scenario cancelled',
+  'campaign.create':           'Campaign created',
+  'campaign.stop':             'Campaign stopped',
+  'scenario.create':           'Scenario created',
+  'scenario.update':           'Scenario updated',
+  'scenario.delete':           'Scenario deleted',
+  'finding.status_change':     'Finding status changed',
+  'agent.enroll':              'Agent enrolled',
+  'attackpath.collect':        'AP collected',
+  'attackpath.schedule_update':'AP schedule updated',
+  'attackpath.asset_tag':      'Asset tagged',
+  'report.export':             'Report exported',
+  'tamper.acknowledge':        'Tamper ack',
+  'tamper.acknowledge_all':    'Tamper ack all',
+  'connector.sync':            'Connector sync',
+  'art.reseed':                'ART reseed',
+};
+
+export function loadAuditLogs() {
+  AUDIT_OFFSET = 0;
+  fetchAuditPage();
+}
+
+export function loadLicenseInfo() {
+  var wrap = document.getElementById('license-card-wrap');
+  if (!wrap) return;
+  wrap.innerHTML = '<div class="empty" style="padding:2rem">Loading…</div>';
+  apicall('/api/license').then(function(lic) {
+    if (lic.error) { wrap.innerHTML = '<div class="empty" style="padding:2rem;color:var(--danger)">' + x(lic.error) + '</div>'; return; }
+    var statusColor = lic.status === 'valid' ? 'var(--success)' : lic.status === 'grace' ? 'var(--warning)' : lic.status === 'locked' ? 'var(--danger)' : 'var(--muted)';
+    var statusLabel = lic.status === 'valid' ? 'Active' : lic.status === 'grace' ? 'Grace Period' : lic.status === 'locked' ? 'Locked' : 'Unknown';
+    var features = (lic.features || []).map(function(f) {
+      return '<span class="sbadge" style="background:rgba(47,129,247,0.12);color:var(--accent);margin:0.15rem 0.2rem 0.15rem 0;display:inline-block">' + x(f) + '</span>';
+    }).join('');
+    wrap.innerHTML =
+      '<div class="conn-cfg-card" style="max-width:540px">' +
+        '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">' +
+          '<div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)">Entitlement</div>' +
+          '<span class="sbadge" style="background:' + statusColor + '22;color:' + statusColor + ';border:1px solid ' + statusColor + '44;font-size:0.7rem;font-weight:700">' + statusLabel + '</span>' +
+        '</div>' +
+        _licRow('Customer',    x(lic.customer   || '-')) +
+        _licRow('Customer ID', x(lic.customerId || '-')) +
+        _licRow('Issued',      x(lic.issuedAt   || '-')) +
+        _licRow('Expires',     '<span style="color:' + statusColor + ';font-weight:600">' + x(lic.expiresAt || '-') + '</span>') +
+        (lic.status === 'grace' ? _licRow('Grace Period', '<span style="color:var(--warning);font-weight:600">' + lic.daysRemaining + ' day(s) remaining — access disabled on ' + x(lic.lockoutAt) + '</span>') : '') +
+        (features ? '<div style="padding:0.55rem 0;border-bottom:1px solid var(--border);display:flex;gap:0.5rem;font-size:0.8rem;align-items:flex-start"><span style="color:var(--muted);min-width:130px;flex-shrink:0">Features</span><div>' + features + '</div></div>' : '') +
+      '</div>';
+  }).catch(function(e) { wrap.innerHTML = '<div class="empty" style="padding:2rem;color:var(--danger)">' + x(e.message) + '</div>'; });
+}
+
+function _licRow(label, val) {
+  return '<div style="display:flex;gap:0.5rem;padding:0.5rem 0;border-bottom:1px solid var(--border);font-size:0.8rem">' +
+    '<span style="color:var(--muted);min-width:130px;flex-shrink:0">' + label + '</span>' +
+    '<span style="flex:1;color:var(--text)">' + val + '</span>' +
+    '</div>';
+}
+
+var BACKUP_STATUS_LABEL = {
+  requested: 'Requested', running: 'Running…', protected: 'Protected',
+  local_success: 'Local only', remote_failed: 'Remote failed', failed: 'Failed'
+};
+var BACKUP_STATUS_COLOR = {
+  requested: 'var(--muted)', running: 'var(--accent)', protected: 'var(--success)',
+  local_success: 'var(--warning)', remote_failed: 'var(--danger)', failed: 'var(--danger)'
+};
+var BACKUP_POLL_TIMER = null;
+
+export function loadBackups() {
+  var wrap = document.getElementById('backup-status-card-wrap');
+  apicall('/api/backups').then(function(jobs) {
+    if (jobs.error) {
+      if (wrap) wrap.innerHTML = '<div class="empty" style="padding:2rem;color:var(--danger)">' + x(jobs.error) + '</div>';
+      return;
+    }
+    renderBackupStatusCard(jobs[0] || null);
+    renderBackupJobsTable(jobs);
+  }).catch(function(e) {
+    if (wrap) wrap.innerHTML = '<div class="empty" style="padding:2rem;color:var(--danger)">' + x(e.message) + '</div>';
+  });
+}
+
+function renderBackupStatusCard(job) {
+  var wrap = document.getElementById('backup-status-card-wrap');
+  if (!wrap) return;
+  if (!job) {
+    wrap.innerHTML = '<div class="conn-cfg-card"><div class="empty" style="padding:1rem 0">No backups yet. Click "Backup Now" to create one.</div></div>';
+    return;
+  }
+  var color = BACKUP_STATUS_COLOR[job.status] || 'var(--muted)';
+  var label = BACKUP_STATUS_LABEL[job.status] || job.status;
+  var size = job.archiveSizeBytes ? (job.archiveSizeBytes / 1048576).toFixed(1) + ' MB' : '—';
+  wrap.innerHTML =
+    '<div class="conn-cfg-card">' +
+      '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.6rem">' +
+        '<div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)">Most recent backup</div>' +
+        '<span class="sbadge" style="background:' + color + '22;color:' + color + ';border:1px solid ' + color + '44;font-size:0.7rem;font-weight:700">' + x(label) + '</span>' +
+      '</div>' +
+      '<div class="conn-cfg-row"><span class="conn-cfg-label">Requested</span><span class="conn-cfg-val">' + x(new Date(job.requestedAt).toLocaleString()) + '</span></div>' +
+      '<div class="conn-cfg-row"><span class="conn-cfg-label">Trigger</span><span class="conn-cfg-val">' + x(job.trigger) + '</span></div>' +
+      '<div class="conn-cfg-row"><span class="conn-cfg-label">Size</span><span class="conn-cfg-val">' + size + '</span></div>' +
+      '<div class="conn-cfg-row"><span class="conn-cfg-label">Local</span><span class="conn-cfg-val">' + (job.localPath ? '✓' : '—') + '</span></div>' +
+      '<div class="conn-cfg-row"><span class="conn-cfg-label">Remote</span><span class="conn-cfg-val">' + (job.remotePath ? '✓' : (job.status === 'local_success' ? '✗' : '—')) + '</span></div>' +
+      (job.errorMessage ? '<div class="conn-cfg-row"><span class="conn-cfg-label">Error</span><span class="conn-cfg-val u-danger">' + x(job.errorMessage) + '</span></div>' : '') +
+    '</div>';
+}
+
+function renderBackupJobsTable(jobs) {
+  var tbody = document.getElementById('backup-jobs-body');
+  if (!tbody) return;
+  if (!jobs.length) {
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:1.5rem">No backups yet.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = jobs.map(function(j) {
+    var color = BACKUP_STATUS_COLOR[j.status] || 'var(--muted)';
+    var label = BACKUP_STATUS_LABEL[j.status] || j.status;
+    var canRestore = (j.status === 'protected' || j.status === 'local_success');
+    return '<tr style="border-bottom:1px solid var(--border)">' +
+      '<td style="padding:0.4rem 0.5rem">' + x(new Date(j.requestedAt).toLocaleString()) + '</td>' +
+      '<td style="padding:0.4rem 0.5rem">' + x(j.trigger) + '</td>' +
+      '<td style="padding:0.4rem 0.5rem">' + (j.localPath ? '✓' : '—') + '</td>' +
+      '<td style="padding:0.4rem 0.5rem">' + (j.remotePath ? '✓' : '—') + '</td>' +
+      '<td style="padding:0.4rem 0.5rem"><span class="sbadge" style="background:' + color + '22;color:' + color + ';border:1px solid ' + color + '44;font-size:0.7rem">' + x(label) + '</span></td>' +
+      '<td style="padding:0.4rem 0.5rem">' +
+        (canRestore ? '<button class="btn btn-outline btn-sm"' + on('click', 'prepareRestore', j.id) + '>Prepare Restore</button>' : '—') +
+      '</td>' +
+    '</tr>';
+  }).join('');
+}
+
+export function backupNow() {
+  var btn = document.getElementById('backup-now-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Requesting…'; }
+  apicall('/api/backups', { method: 'POST' }).then(function(job) {
+    if (job.error) { alert('Backup request failed: ' + job.error); if (btn) { btn.disabled = false; btn.textContent = 'Backup Now'; } return; }
+    loadBackups();
+    pollBackupJob(job.id, btn);
+  }).catch(function(e) {
+    alert('Backup request failed: ' + e.message);
+    if (btn) { btn.disabled = false; btn.textContent = 'Backup Now'; }
+  });
+}
+
+function pollBackupJob(id, btn) {
+  if (BACKUP_POLL_TIMER) clearInterval(BACKUP_POLL_TIMER);
+  BACKUP_POLL_TIMER = setInterval(function() {
+    apicall('/api/backups/' + id).then(function(job) {
+      if (job.error) { clearInterval(BACKUP_POLL_TIMER); return; }
+      renderBackupStatusCard(job);
+      if (job.status !== 'requested' && job.status !== 'running') {
+        clearInterval(BACKUP_POLL_TIMER);
+        loadBackups();
+        if (btn) { btn.disabled = false; btn.textContent = 'Backup Now'; }
+      }
+    }).catch(function() { clearInterval(BACKUP_POLL_TIMER); });
+  }, 4000);
+}
+
+export function prepareRestore(id) {
+  apicall('/api/backups/' + id + '/restore-marker', { method: 'POST' }).then(function(res) {
+    var wrap = document.getElementById('restore-command-wrap');
+    if (!wrap) return;
+    if (res.error) { wrap.innerHTML = '<div class="empty" style="padding:1rem;color:var(--danger)">' + x(res.error) + '</div>'; return; }
+    wrap.innerHTML =
+      '<div class="conn-cfg-card" style="margin-top:1rem;border-color:var(--warning)">' +
+        '<div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--warning);margin-bottom:0.5rem">Restore must be run on the host</div>' +
+        '<div style="font-size:0.8rem;color:var(--muted);margin-bottom:0.6rem">This console cannot and will not run this for you. An administrator with root access to the server must run the command below and type <b>RESTORE</b> to confirm.</div>' +
+        '<code style="display:block;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);padding:0.6rem;font-size:0.8rem;word-break:break-all">' + x(res.restoreCommand) + '</code>' +
+      '</div>';
+  }).catch(function(e) { alert('Failed to prepare restore: ' + e.message); });
+}
+
+export function auditPage(dir) {
+  AUDIT_OFFSET = Math.max(0, AUDIT_OFFSET + dir * AUDIT_LIMIT);
+  fetchAuditPage();
+}
+
+function fetchAuditPage() {
+  var action = document.getElementById('audit-filter-action').value || '';
+  var actor  = (document.getElementById('audit-search-actor').value || '').trim();
+  var qs = '?limit=' + AUDIT_LIMIT + '&offset=' + AUDIT_OFFSET;
+  if (action) qs += '&action=' + encodeURIComponent(action);
+  if (actor)  qs += '&actor='  + encodeURIComponent(actor);
+  apicall('/api/audit-logs' + qs).then(function(d) {
+    var entries = d.entries || [];
+    AUDIT_TOTAL = entries.length; // approximate
+    var tbody = document.getElementById('audit-body');
+    if (!tbody) return;
+    if (!entries.length) {
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:2rem">No audit records found.</td></tr>';
+    } else {
+      tbody.innerHTML = entries.map(function(e) {
+        var ts = new Date(e.ts);
+        var tsStr = ts.toLocaleDateString() + ' ' + ts.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+        var actionLabel = AUDIT_ACTION_LABELS[e.action] || e.action;
+        var outcomeStyle = e.outcome === 'ok'
+          ? 'background:rgba(35,134,54,.18);color:#3fb950;border:1px solid rgba(35,134,54,.35)'
+          : 'background:rgba(218,54,51,.18);color:#f85149;border:1px solid rgba(218,54,51,.35)';
+        var detail = '';
+        try {
+          var d2 = typeof e.detail === 'string' ? JSON.parse(e.detail) : e.detail;
+          var parts = [];
+          if (d2.username) parts.push('user: ' + d2.username);
+          if (d2.role) parts.push('role: ' + d2.role);
+          if (d2.scenarioId) parts.push('scenario: ' + d2.scenarioId);
+          if (d2.name) parts.push('name: ' + d2.name);
+          if (d2.mode) parts.push('mode: ' + d2.mode);
+          if (d2.agentId) parts.push('agent: ' + d2.agentId);
+          if (d2.hostname) parts.push('host: ' + d2.hostname);
+          if (d2.ip) parts.push('ip: ' + d2.ip);
+          if (d2.trusted != null) parts.push('trusted: ' + d2.trusted);
+          if (d2.state) parts.push('state: ' + d2.state);
+          if (d2.reason) parts.push('reason: ' + d2.reason);
+          if (d2.status) parts.push('status: ' + d2.status);
+          if (d2.format) parts.push('format: ' + d2.format);
+          if (d2.type) parts.push('type: ' + d2.type);
+          if (d2.crownJewel) parts.push('crown-jewel: ' + d2.crownJewel);
+          if (d2.highValue) parts.push('high-value');
+          if (d2.criticalityTier) parts.push('criticality: ' + d2.criticalityTier);
+          if (d2.version) parts.push('v: ' + d2.version);
+          if (d2.techniqueCount != null) parts.push('techniques: ' + d2.techniqueCount);
+          if (d2.enabled != null) parts.push('enabled: ' + d2.enabled);
+          if (d2.intervalMinutes) parts.push('interval: ' + d2.intervalMinutes + 'min');
+          if (d2.agents != null) parts.push('agents: ' + d2.agents);
+          if (d2.dispatched != null) parts.push('dispatched: ' + d2.dispatched);
+          detail = parts.join(' · ');
+          if (!detail && e.resource) detail = e.resource;
+        } catch(ex) { detail = e.resource || ''; }
+        return '<tr>' +
+          '<td style="font-size:0.77rem;color:var(--muted);white-space:nowrap">' + tsStr + '</td>' +
+          '<td style="font-size:0.8rem;font-weight:500">' + x(e.actorName) + '</td>' +
+          '<td style="font-size:0.8rem">' + x(actionLabel) + '</td>' +
+          '<td style="font-size:0.77rem;color:var(--muted)">' + x(detail) + '</td>' +
+          '<td style="font-size:0.75rem;color:var(--muted);font-family:var(--font-mono)">' + x(e.ip || '') + '</td>' +
+          '<td><span style="display:inline-block;padding:0.18rem 0.55rem;border-radius:10px;font-size:0.72rem;font-weight:600;' + outcomeStyle + '">' + x(e.outcome) + '</span></td>' +
+        '</tr>';
+      }).join('');
+    }
+    var rangeEl = document.getElementById('audit-range-label');
+    if (rangeEl) {
+      var from = AUDIT_OFFSET + 1;
+      var to = AUDIT_OFFSET + entries.length;
+      rangeEl.textContent = entries.length ? from + '–' + to + ' shown' : '';
+    }
+    var prevBtn = document.getElementById('audit-prev-btn');
+    var nextBtn = document.getElementById('audit-next-btn');
+    if (prevBtn) prevBtn.disabled = AUDIT_OFFSET === 0;
+    if (nextBtn) nextBtn.disabled = entries.length < AUDIT_LIMIT;
+  }).catch(function() {
+    var tbody = document.getElementById('audit-body');
+    if (tbody) tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--danger);padding:2rem">Failed to load audit logs.</td></tr>';
+  });
+}
+
+export function exportAuditLogs() {
+  var action = document.getElementById('audit-filter-action').value || '';
+  var actor  = (document.getElementById('audit-search-actor').value || '').trim();
+  apicall('/api/audit-logs?limit=500&offset=0' +
+    (action ? '&action=' + encodeURIComponent(action) : '') +
+    (actor  ? '&actor='  + encodeURIComponent(actor)  : '')
+  ).then(function(d) {
+    var rows = (d.entries || []);
+    var csv = 'Time,User,Action,Resource,Detail,IP,Outcome\n' + rows.map(function(e) {
+      var det = '';
+      try { det = JSON.stringify(e.detail); } catch(_err) {}
+      return [e.ts, e.actorName, e.action, e.resource, det, e.ip, e.outcome]
+        .map(function(v) { return '"' + String(v||'').replace(/"/g,'""') + '"'; }).join(',');
+    }).join('\n');
+    var a = document.createElement('a');
+    a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv);
+    a.download = buildReportFilename('Audit_Logs', actor || 'all', 'csv');
+    a.click();
+  }).catch(function(e) { showToast('Export failed: ' + e.message, 'err'); });
+}

@@ -5,10 +5,11 @@ package scenario
 // avoid accidentally expanding a 100-step scenario 33× without intent.
 //
 // Depth      Extra steps / PS step   Total steps / PS step
-//   none          0                       1  (base only)
-//   quick         4                       5
-//   standard     14                      15
-//   full         32                      33  (all valid combos − base)
+//
+//	none          0                       1  (base only)
+//	quick         4                       5
+//	standard     14                      15
+//	full         32                      33  (all valid combos − base)
 //
 // CMD steps have fewer valid variants (no encoding transforms); CanApply
 // filters the curated lists so CMD steps get ~3/8/10 extras at quick/std/full.
@@ -16,9 +17,9 @@ type VariantDepth string
 
 const (
 	VariantDepthNone     VariantDepth = "none"     // 1 per step — base test only
-	VariantDepthQuick    VariantDepth = "quick"     // ~5 per PS step, ~4 per CMD step
-	VariantDepthStandard VariantDepth = "standard"  // ~15 per PS step, ~9 per CMD step
-	VariantDepthFull     VariantDepth = "full"       // all valid combos (33/11 per step)
+	VariantDepthQuick    VariantDepth = "quick"    // ~5 per PS step, ~4 per CMD step
+	VariantDepthStandard VariantDepth = "standard" // ~15 per PS step, ~9 per CMD step
+	VariantDepthFull     VariantDepth = "full"     // all valid combos (33/11 per step)
 )
 
 // quickAdditional is the curated set of additional variant specs dispatched at
@@ -26,31 +27,31 @@ const (
 // signal), then privilege, then exec context, then a key cross-product combo.
 // The base spec (plain/user/direct) is always the first step and is NOT listed here.
 var quickAdditional = []VariantSpec{
-	{Encoding: "base64",   Privilege: "user",  ExecContext: "direct"},        // -EncodedCommand bypass
-	{Encoding: "charcode", Privilege: "user",  ExecContext: "direct"},        // IEX([char]N) bypass
-	{Encoding: "plain",    Privilege: "admin", ExecContext: "direct"},        // admin privilege
-	{Encoding: "plain",    Privilege: "user",  ExecContext: "wmi"},           // T1047 proxy
+	{Encoding: "base64", Privilege: "user", ExecContext: "direct"},   // -EncodedCommand bypass
+	{Encoding: "charcode", Privilege: "user", ExecContext: "direct"}, // IEX([char]N) bypass
+	{Encoding: "plain", Privilege: "admin", ExecContext: "direct"},   // admin privilege
+	{Encoding: "plain", Privilege: "user", ExecContext: "wmi"},       // T1047 proxy
 }
 
 // standardAdditional extends quickAdditional with the remaining high-value combos
 // for a ~15-variant per step budget on PS steps.
 var standardAdditional = []VariantSpec{
 	// ── Quick set ──────────────────────────────────────────────────────────────
-	{Encoding: "base64",   Privilege: "user",   ExecContext: "direct"},
-	{Encoding: "charcode", Privilege: "user",   ExecContext: "direct"},
-	{Encoding: "plain",    Privilege: "admin",  ExecContext: "direct"},
-	{Encoding: "plain",    Privilege: "user",   ExecContext: "wmi"},
+	{Encoding: "base64", Privilege: "user", ExecContext: "direct"},
+	{Encoding: "charcode", Privilege: "user", ExecContext: "direct"},
+	{Encoding: "plain", Privilege: "admin", ExecContext: "direct"},
+	{Encoding: "plain", Privilege: "user", ExecContext: "wmi"},
 	// ── Extend ─────────────────────────────────────────────────────────────────
-	{Encoding: "plain",    Privilege: "user",   ExecContext: "scheduled-task"}, // T1053.005
-	{Encoding: "plain",    Privilege: "user",   ExecContext: "com"},            // T1559.001
-	{Encoding: "plain",    Privilege: "system", ExecContext: "direct"},         // SYSTEM privilege
-	{Encoding: "base64",   Privilege: "admin",  ExecContext: "direct"},         // encoding + privilege
-	{Encoding: "charcode", Privilege: "admin",  ExecContext: "direct"},         // stronger encoding + privilege
-	{Encoding: "base64",   Privilege: "user",   ExecContext: "wmi"},            // encoding + T1047
-	{Encoding: "charcode", Privilege: "user",   ExecContext: "wmi"},            // IEX + T1047
-	{Encoding: "plain",    Privilege: "admin",  ExecContext: "wmi"},            // privilege + T1047
-	{Encoding: "base64",   Privilege: "admin",  ExecContext: "wmi"},            // three-way combo
-	{Encoding: "plain",    Privilege: "system", ExecContext: "wmi"},            // max priv + T1047
+	{Encoding: "plain", Privilege: "user", ExecContext: "scheduled-task"}, // T1053.005
+	{Encoding: "plain", Privilege: "user", ExecContext: "com"},            // T1559.001
+	{Encoding: "plain", Privilege: "system", ExecContext: "direct"},       // SYSTEM privilege
+	{Encoding: "base64", Privilege: "admin", ExecContext: "direct"},       // encoding + privilege
+	{Encoding: "charcode", Privilege: "admin", ExecContext: "direct"},     // stronger encoding + privilege
+	{Encoding: "base64", Privilege: "user", ExecContext: "wmi"},           // encoding + T1047
+	{Encoding: "charcode", Privilege: "user", ExecContext: "wmi"},         // IEX + T1047
+	{Encoding: "plain", Privilege: "admin", ExecContext: "wmi"},           // privilege + T1047
+	{Encoding: "base64", Privilege: "admin", ExecContext: "wmi"},          // three-way combo
+	{Encoding: "plain", Privilege: "system", ExecContext: "wmi"},          // max priv + T1047
 }
 
 // allAdditionalSpecs enumerates every valid non-base variant for a given executor.
@@ -123,8 +124,8 @@ func ExpandSteps(steps []ScenarioStep, depth VariantDepth) []ScenarioStep {
 		specs := SelectedSpecs(depth, base.Executor)
 		for _, spec := range specs {
 			v := ApplyVariant(base, spec)
-			v.BaseTaskID     = base.TaskID
-			specCopy         := spec
+			v.BaseTaskID = base.TaskID
+			specCopy := spec
 			v.VariantSpecRef = &specCopy
 			expanded = append(expanded, v)
 		}
@@ -144,7 +145,7 @@ func ExpandedStepCount(baseSteps int, depth VariantDepth, psSteps, cmdSteps int)
 	}
 
 	// Quick and Standard: count valid specs per executor type.
-	psExtras  := len(SelectedSpecs(depth, "powershell"))
+	psExtras := len(SelectedSpecs(depth, "powershell"))
 	cmdExtras := len(SelectedSpecs(depth, "cmd"))
 	// Other executors (bash, sh) get 0 extras
 	other := baseSteps - psSteps - cmdSteps

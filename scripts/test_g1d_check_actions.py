@@ -1,0 +1,105 @@
+import importlib.util
+import json
+import tempfile
+import unittest
+from pathlib import Path
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+spec = importlib.util.spec_from_file_location("g1d", REPO_ROOT / "scripts" / "g1d-check-actions.py")
+g = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(g)
+
+ACTIONS_JS = "export const EVENT_TYPES = ['click', 'change'];\n"
+GLOBALS = """export const HANDLER_FUNCTIONS = {
+  legacyFn,
+};
+export const ACTIONS = {
+  ...HANDLER_FUNCTIONS,
+  openRun,
+  stopEvent,
+};
+"""
+
+
+def make(html, js="", globals_js=GLOBALS, baseline=None, actions_js=ACTIONS_JS):
+    d = Path(tempfile.mkdtemp())
+    (d / "src" / "core").mkdir(parents=True)
+    (d / "index.html").write_text(html, encoding="utf-8")
+    (d / "src" / "core" / "actions.js").write_text(actions_js, encoding="utf-8")
+    (d / "src" / "globals.js").write_text(globals_js, encoding="utf-8")
+    (d / "src" / "a.js").write_text(js, encoding="utf-8")
+    b = d / "baseline.json"
+    b.write_text(json.dumps(baseline if baseline is not None else g.counts(d)), encoding="utf-8")
+    return d, b
+
+
+CLEAN_HTML = '<a data-on-click="openRun" data-args="[1]"></a><b data-on-change="stopEvent"></b>'
+
+
+class TestActions(unittest.TestCase):
+    def test_clean_tree_passes(self):
+        d, b = make(CLEAN_HTML)
+        self.assertEqual(g.check(d, b), [])
+
+    def test_unregistered_markup_action_fails(self):
+        d, b = make(CLEAN_HTML + '<i data-on-click="ghost"></i>')
+        self.assertIn("unregistered action: ghost", g.check(d, b))
+
+    def test_unregistered_on_call_fails(self):
+        d, b = make(CLEAN_HTML, "x = '<b' + on('click', 'ghost', 1) + '>';\n")
+        self.assertIn("unregistered action: ghost", g.check(d, b))
+
+    def test_unknown_event_type_fails(self):
+        d, b = make(CLEAN_HTML + '<i data-on-dblclick="openRun"></i>')
+        self.assertIn("unknown event type: dblclick", g.check(d, b))
+
+    def test_unused_explicit_action_fails_but_spread_entries_are_exempt(self):
+        d, b = make('<a data-on-click="openRun"></a>', actions_js=ACTIONS_JS + "export function other() {}\n")
+        errs = g.check(d, b)
+        self.assertNotIn("unused action: legacyFn", errs)
+        g2 = GLOBALS.replace("  stopEvent,\n", "  stopEvent,\n  orphan,\n")
+        d, b = make('<a data-on-click="openRun"></a>', globals_js=g2)
+        self.assertIn("unused action: orphan", g.check(d, b))
+
+    def test_builtin_actions_exported_by_actions_js_are_exempt_from_unused(self):
+        d, b = make('<a data-on-click="openRun"></a>',
+                    actions_js=ACTIONS_JS + "export function stopEvent(e) {}\n")
+        self.assertEqual(g.check(d, b), [])
+        # without the export, stopEvent is a plain unused explicit action
+        d, b = make('<a data-on-click="openRun"></a>')
+        self.assertIn("unused action: stopEvent", g.check(d, b))
+
+    def test_example_calls_in_actions_js_comments_are_not_use_sites(self):
+        d, b = make(CLEAN_HTML, actions_js=ACTIONS_JS + "// on('click', 'ghost', id)\n")
+        self.assertEqual(g.check(d, b), [])
+
+    def test_multiline_event_types_parse(self):
+        d, b = make('<a data-on-click="openRun"></a><b data-on-change="stopEvent"></b>',
+                    actions_js="export const EVENT_TYPES = [\n  'click',\n  'change',\n];\n")
+        self.assertEqual(g.check(d, b), [])
+
+    def test_name_passed_as_a_string_literal_counts_as_used(self):
+        d, b = make('<a data-on-click="openRun"></a>', "covSegHtml(items, v, 'stopEvent');\n")
+        self.assertEqual(g.check(d, b), [])
+
+    def test_inline_count_may_not_grow(self):
+        d, b = make(CLEAN_HTML, baseline={"inline_handlers": 0, "javascript_urls": 0})
+        (d / "src" / "a.js").write_text("s = '<b onclick=\"f()\">';\n", encoding="utf-8")
+        self.assertIn("inline handlers: 1 > baseline 0", g.check(d, b))
+
+    def test_inline_count_drop_requires_baseline_update(self):
+        d, b = make(CLEAN_HTML, baseline={"inline_handlers": 5, "javascript_urls": 1})
+        errs = g.check(d, b)
+        self.assertIn("inline handlers: 0 < baseline 5 -- run with --update-baseline", errs)
+        self.assertIn("javascript: URLs: 0 < baseline 1 -- run with --update-baseline", errs)
+
+    def test_data_on_attribute_is_not_counted_as_inline(self):
+        self.assertEqual(g.counts(make(CLEAN_HTML)[0]), {"inline_handlers": 0, "javascript_urls": 0})
+
+    def test_counts_markup_and_template_handlers_and_js_urls(self):
+        d, _ = make('<a href="javascript:void(0)" onclick="f()"></a>', "s = '<b onchange=\\\"g()\\\">';\n")
+        self.assertEqual(g.counts(d), {"inline_handlers": 2, "javascript_urls": 1})
+
+
+if __name__ == "__main__":
+    unittest.main()

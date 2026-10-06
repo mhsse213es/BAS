@@ -13,8 +13,8 @@ import (
 // (CISA KEV) vulnerabilities.
 type ThreatIntelPosture struct {
 	TopActors            []threatpriority.ActorPriority `json:"topActors"`
-	KEVExposedTechniques int                             `json:"kevExposedTechniques"`
-	TotalKEVCVEs         int                              `json:"totalKevCves"`
+	KEVExposedTechniques int                            `json:"kevExposedTechniques"`
+	TotalKEVCVEs         int                            `json:"totalKevCves"`
 }
 
 // ThreatIntelSummary computes the fleet-wide threat-intel posture.

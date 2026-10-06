@@ -140,12 +140,16 @@ RUN cd /agents && sha256sum \
       bas-agent-linux-amd64.deb bas-agent-linux-arm64.deb bas-agent-linux-amd64.rpm \
     > /agents/BINARIES.sha256
 
+# ── Dashboard (G1c): Node only here, never in the final image ─────────────────
+FROM node:24-alpine@sha256:ebfe2f90462722a7a4de65e91990e97fe0d401c70e0e762c5b53302f905ec1c1 AS web
+WORKDIR /web
+COPY orchestrator/web/package.json orchestrator/web/package-lock.json ./
+RUN npm ci --ignore-scripts --no-audit --no-fund
+COPY orchestrator/web/ ./
+RUN npm run build && sha256sum dist/MANIFEST.sha256 | cut -d' ' -f1 > /web-manifest.sha256 && echo "wwwroot manifest hash: $(cat /web-manifest.sha256)"
+
 # ── Go Orchestrator ───────────────────────────────────────────────────────────
 FROM golang:1.26-alpine AS builder
-# BAS_WWWROOT_HASH: SHA-256 of wwwroot/index.html, computed by windows-build.ps1
-# and injected here so StaticHandler() halts on mismatch at startup. Empty in
-# dev/manual builds — hash check is silently disabled when the value is "".
-ARG BAS_WWWROOT_HASH=""
 # Pinned, not @latest: garble v0.18.0 (2026-09-19) bumped its go.mod
 # requirement to go >= 1.27, which this golang:1.26-alpine base image
 # (go 1.26.7) can't satisfy under GOTOOLCHAIN=local, breaking the build
@@ -171,13 +175,16 @@ WORKDIR /src
 COPY orchestrator/go.mod orchestrator/go.sum ./
 RUN go mod download
 COPY orchestrator/ .
+# SHA-256 of dist/MANIFEST.sha256 from the web stage, compiled into the binary so
+# StaticHandler() verifies the manifest and every listed file at startup.
+COPY --from=web /web-manifest.sha256 /web-manifest.sha256
 # GOGARBLE scopes obfuscation to our own module only. Obfuscating third-party
 # deps (esp. github.com/go-pdf/fpdf) renames their reflection-driven struct
 # fields and breaks PDF font loading ("font has not been set") — and protects no
 # IP, since those libs are public OSS.
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GOGARBLE='github.com/audspect/*' \
     garble -literals build \
-    -ldflags="-s -w -X main.expectedWWWRootHash=${BAS_WWWROOT_HASH}" \
+    -ldflags="-s -w -X main.expectedWWWManifestHash=$(cat /web-manifest.sha256)" \
     -o /bin/orchestrator ./cmd/server
 
 FROM gcr.io/distroless/static-debian12
@@ -187,7 +194,7 @@ COPY --from=agent-builder /agents /agents
 COPY --from=agent-legacy-builder /agents-legacy/bas-agent-windows-legacy-amd64.exe /agents/bas-agent-windows-legacy-amd64.exe
 COPY --from=agent-legacy-builder /agents-legacy/bas-agent-windows-legacy-amd64-setup.zip /agents/bas-agent-windows-legacy-amd64-setup.zip
 COPY --from=packager /packages/ /agents/
-COPY orchestrator/wwwroot /wwwroot
+COPY --from=web /web/dist /wwwroot
 COPY scenarios /scenarios
 COPY --from=art-fetcher /art-atomics /art-atomics
 # Empty by default — mount a volume here (or bake binaries in) to enable ART

@@ -9,7 +9,8 @@ import (
 )
 
 func TestCommandHash_SameCommandSameHash(t *testing.T) {
-	if CommandHash("vssadmin delete shadows /all") != CommandHash("vssadmin delete shadows /all") {
+	first, second := CommandHash("vssadmin delete shadows /all"), CommandHash("vssadmin delete shadows /all")
+	if first != second {
 		t.Error("expected identical commands to hash identically")
 	}
 	if CommandHash("vssadmin delete shadows /all") == CommandHash("vssadmin delete shadows /quiet") {

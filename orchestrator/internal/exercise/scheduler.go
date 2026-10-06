@@ -17,9 +17,9 @@ type Scheduler interface {
 
 // PollScheduler is the default scheduler: a simple time.Ticker.
 type PollScheduler struct {
-	interval  time.Duration
-	stop      chan struct{}
-	metrics   *observability.MetricsRegistry
+	interval time.Duration
+	stop     chan struct{}
+	metrics  *observability.MetricsRegistry
 }
 
 func NewPollScheduler(interval time.Duration) *PollScheduler {

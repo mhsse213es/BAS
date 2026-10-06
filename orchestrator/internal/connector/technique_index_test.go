@@ -20,7 +20,7 @@ func TestBuildTechniqueIndex_MultipleProfilesSameTechnique(t *testing.T) {
 	profiles := map[string]*scenario.DetectionProfile{
 		"windows_defender_tampering":           {Profile: "windows_defender_tampering", TechniqueIDs: []string{"T1562.001"}},
 		"windows_security_process_termination": {Profile: "windows_security_process_termination", TechniqueIDs: []string{"T1562.001"}},
-		"windows_vulnerable_driver_load":        {Profile: "windows_vulnerable_driver_load", TechniqueIDs: []string{"T1562.001"}},
+		"windows_vulnerable_driver_load":       {Profile: "windows_vulnerable_driver_load", TechniqueIDs: []string{"T1562.001"}},
 	}
 	idx := buildTechniqueIndex(profiles)
 	want := []string{"windows_defender_tampering", "windows_security_process_termination", "windows_vulnerable_driver_load"}

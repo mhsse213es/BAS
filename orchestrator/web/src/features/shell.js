@@ -1,0 +1,615 @@
+import { state } from '../core/state.js';
+import { apicall } from '../core/api.js';
+import { x } from '../core/escape.js';
+import { showToast } from '../core/util.js';
+import { loadAdversaries, loadAdversaryTemplates } from './adversaries.js';
+import { initComplianceTab, openAgentDetail, showAgentTab } from './agent-drawer.js';
+import { on } from '../core/actions.js';
+import { closeScenarioOverlay, injectServerURL, loadAgentGroupTree, loadAgents, loadAttackPath, loadCatalogs, loadConnectionConfig, loadCoverageActors, loadCoverageMatrix, loadExecDashboard, loadExposureAssets, loadRecommendations, loadScenarios, loadThreatPriorityActors, renderScenarios, selectTheme, showSettingsSection, showThreatPriorityList } from './attack-path.js';
+import { loadAuditLogs } from './audit-logs.js';
+import { closeCampaignDetail } from './campaigns.js';
+import { loadCalderaStatus, refreshDashboardCampaigns } from './compliance.js';
+import { loadCoverage, loadCoverageAnalytics, loadUnifiedTechniques } from './coverage.js';
+import { loadVerificationTab } from './detection-verification.js';
+import { loadEmTab } from './endpoint-mastery.js';
+import { connectWS, loadDashboard, openCmdk } from './evidence.js';
+import { loadFindings, loadRemediations, loadSLAReport } from './findings.js';
+import { loadInitiatives } from './initiatives.js';
+import { loadIntegrations, loadResponseConnectors, renderResponseConnectorList } from './integrations.js';
+import { loadIOCRegistry } from './iocs.js';
+import { loadExercisesTab } from './openaev.js';
+import { loadReports, loadRuns } from './reports.js';
+import { loadScheduledAssessments } from './scheduled.js';
+import { loadARTContentStatus, loadConnectorStatus, loadSimCoverage, loadTAXIIConnectors, loadThreatIntelConfig } from './threat-intel.js';
+import { loadVariantTab } from './variant-executor.js';
+export function __init_L5162() {
+(function() {
+  var t = localStorage.getItem('audspect_theme') || 'dark';
+  if (t !== 'dark') document.body.classList.add('theme-' + t);
+  try {
+    if (localStorage.getItem('bas_sidebar_collapsed') === '1') {
+      document.getElementById('app').classList.add('sidebar-collapsed');
+      document.getElementById('sidebar-collapse-btn').title = 'Expand sidebar';
+    }
+  } catch (e) {}
+})();
+}
+
+// toggleSidebarCollapsed flips the icon-rail collapsed state and persists it,
+// so the choice survives a reload (same bas_-prefixed localStorage pattern
+// used for theme/role/last-tab elsewhere in this file).
+export function toggleSidebarCollapsed() {
+  var collapsed = document.getElementById('app').classList.toggle('sidebar-collapsed');
+  try { localStorage.setItem('bas_sidebar_collapsed', collapsed ? '1' : '0'); } catch (e) {}
+  document.getElementById('sidebar-collapse-btn').title = collapsed ? 'Expand sidebar' : 'Collapse sidebar';
+}
+var TAB_TITLES = { dashboard:'Dashboard', agents:'Agents', scenarios:'Scenarios', runs:'Live Runs', 'scheduled-assessments':'Scheduled Assessments', initiatives:'Initiatives', campaigns:'Campaigns', coverage:'ATT&CK Coverage', findings:'Findings', remediation:'Remediation', reports:'Reports', verification:'Detection Verification', users:'Users', compliance:'Compliance', settings:'Settings', variants:'Variant Executor', em:'Endpoint Mastery', exposure:'Exposure Explorer', recommendations:'Recommendations', exercises:'Exercises', 'attack-coverage':'Technique Coverage', 'threat-priority':'Threat Prioritization', iocs:'IOC Registry', profile:'My Profile', 'sla-report':'SLA Compliance' };
+export var STRIPE_COLORS = ['#2f81f7','#da3633','#d29922','#e0609e','#8957e5','#2fd8c3'];
+
+var TOKEN    = ''; // kept in memory only — never persisted to localStorage
+export var ROLE     = localStorage.getItem('bas_role')  || '';
+var USERNAME = ''; // populated by loadCurrentUser() at boot -- not persisted, refetched each session
+
+
+ // scenario id of the pinned tile's overlay, or null
+ // 'landing' | 'em' | 'other'
+export var scenarioSrcCollapsed = { em: {}, other: {}, search: {} };
+
+
+
+
+
+
+
+      // live ART catalog: [{id,name,tests}] -- always windows
+  // live Caldera catalog: [{id,name,tactic,technique}]
+export var _artCatalogByPlatform = {};  // live ART catalog per non-windows platform, keyed by 'linux'/'darwin' -- for art_selective_platform scenarios' Customize picker
+
+
+  // {scId, fw:'art'|'caldera', ids:[]} — operator-chosen subset for the next run
+  // {agentId: true} — checked "Run on Additional Agents" state for the next run
+ // 'individual' | 'group' | 'all'
+ // { [groupId]: true } for checked groups in Group(s) mode
+
+
+
+var LICENSE_INFO = null; // populated by the pre-login /api/license/status check below
+
+export function __init_L5212() {
+window.addEventListener('DOMContentLoaded', function() {
+  // Sidebar footer version: reflects the running build's actual version
+  // (baked in at build time via packaging/build.sh -> main.Version ->
+  // /ready's "version" field) instead of a hand-edited string that drifts
+  // from what's actually deployed. Silently keeps the placeholder on
+  // failure -- this is cosmetic, never worth surfacing an error for.
+  fetch('/ready').then(function(r) { return r.json(); }).then(function(info) {
+    if (info && info.version) {
+      document.getElementById('sidebar-version').textContent = 'v' + info.version;
+    }
+  }).catch(function() {});
+
+  fetch('/api/license/status').then(function(r) { return r.json(); }).then(function(info) {
+    LICENSE_INFO = info;
+    if (info.state === 'locked') {
+      renderLicenseLockedScreen(info);
+      return;
+    }
+    if (info.state === 'grace') {
+      renderLicenseGraceBanner(info);
+    }
+    initLoginScreen();
+  }).catch(function() {
+    initLoginScreen(); // license-status endpoint unreachable — fail open to the normal login flow rather than stranding the operator
+  });
+});
+}
+
+
+function initLoginScreen() {
+  document.getElementById('inp-pass').addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') doLogin();
+  });
+  // If role is stored, attempt to resume session via cookie.
+  // A 401 response means the cookie is expired — fall through to login screen.
+  if (ROLE) {
+    fetch('/api/agents', { credentials: 'same-origin' })
+      .then(function(r) { if (r.ok) bootApp(); else { localStorage.removeItem('bas_role'); } })
+      .catch(function() { localStorage.removeItem('bas_role'); });
+  }
+}
+
+function renderLicenseLockedScreen(info) {
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('app').style.display = 'none';
+  var el = document.createElement('div');
+  el.id = 'license-locked-screen';
+  el.style.cssText = 'position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:var(--bg,#0b0e14);z-index:9999;padding:2rem';
+  el.innerHTML =
+    '<div style="max-width:520px;text-align:center;color:var(--text,#e6e6e6)">' +
+      '<div style="font-size:2.5rem;margin-bottom:1rem">&#x1F512;</div>' +
+      '<h1 style="font-size:1.4rem;margin-bottom:0.75rem">BAS LICENSE EXPIRED</h1>' +
+      '<p style="color:var(--muted,#9aa9bc);line-height:1.6;margin-bottom:1rem">This Audspect BAS Server is currently unavailable because its license and grace period have expired.</p>' +
+      '<p style="color:var(--muted,#9aa9bc);line-height:1.6;margin-bottom:1.5rem">Please contact your licensing administrator to renew the license.</p>' +
+      '<div style="font-size:0.85rem;color:var(--muted,#9aa9bc);margin-bottom:1.5rem">' +
+        'License Expiry: ' + x(info.expiresAt) + '<br>' +
+        'Access Disabled On: ' + x(info.lockoutAt) +
+      '</div>' +
+      '<a href="mailto:support@audspect.com" style="display:inline-block;padding:0.6rem 1.4rem;background:var(--danger,#da3633);color:#fff;border-radius:6px;text-decoration:none;font-weight:600">Contact Licensing Support</a>' +
+    '</div>';
+  document.body.appendChild(el);
+}
+
+function _licenseBannerHTML(info) {
+  var dayWord = info.daysRemaining === 1 ? 'day' : 'days';
+  var tomorrowNote = info.daysRemaining === 1 ? ' BAS access will be disabled tomorrow.' : '';
+  return '<strong>&#x26A0;&#xFE0F; LICENSE EXPIRED — ACTION REQUIRED</strong><br>' +
+    'Your Audspect BAS license expired on ' + x(info.expiresAt) + '. You are currently within the 5-day license grace period.<br>' +
+    '<strong>Grace Period Remaining: ' + info.daysRemaining + ' ' + dayWord + '</strong><br>' +
+    'The BAS platform will become inaccessible after the grace period expires. Please contact your Audspect administrator or licensing representative to renew your license.' + tomorrowNote + '<br>' +
+    'License Expiry: ' + x(info.expiresAt) + ' &middot; Access Disabled On: ' + x(info.lockoutAt) + ' ' +
+    '<a href="mailto:support@audspect.com" style="color:inherit;text-decoration:underline">[Contact Licensing Support]</a>';
+}
+
+function _syncLicenseBannerHeight() {
+  var el = document.getElementById('license-grace-banner');
+  document.documentElement.style.setProperty('--license-banner-h', el ? el.offsetHeight + 'px' : '0px');
+}
+
+// _dismissLicenseGraceBanner removes the banner and reclaims the layout
+// space it reserved (body padding-top / sidebar+header top offset all read
+// --license-banner-h). Session-scoped, not permanent -- the warning is
+// real and comes back on the next login, this just lets an operator who
+// has already seen it get it out of the way to work.
+export function licenseBannerDismissHoverOn() { this.style.opacity = 1; }
+export function licenseBannerDismissHoverOff() { this.style.opacity = 0.75; }
+
+export function _dismissLicenseGraceBanner() {
+  var el = document.getElementById('license-grace-banner');
+  if (el) el.remove();
+  document.documentElement.style.setProperty('--license-banner-h', '0px');
+  sessionStorage.setItem('bas_license_grace_banner_dismissed', '1');
+}
+
+function renderLicenseGraceBanner(info) {
+  if (sessionStorage.getItem('bas_license_grace_banner_dismissed')) {
+    maybeShowLicenseGraceModal(info);
+    return;
+  }
+  var existing = document.getElementById('license-grace-banner');
+  if (existing) existing.remove();
+  var el = document.createElement('div');
+  el.id = 'license-grace-banner';
+  // Fixed (not in-flow) so it stays visible while scrolling instead of
+  // scrolling away and leaving #sidebar's --license-banner-h offset stale --
+  // see body's padding-top and header's sticky top below, which depend on
+  // this banner actually staying put at the height they were measured against.
+  // z-index is deliberately BELOW every drawer/modal overlay in the app
+  // (.drawer-overlay/.modal-overlay start at z-index:100, the lowest of
+  // any overlay here) -- it previously sat at 9998, well above all of
+  // them, so opening any wizard/drawer left its top content painted over
+  // by this banner instead of the banner yielding to whatever the
+  // operator actually opened.
+  el.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:90;padding:0.75rem 2.5rem;background:var(--warning,#d29922);color:#1a1200;font-size:0.85rem;line-height:1.5;text-align:center';
+  el.innerHTML = _licenseBannerHTML(info) +
+    '<button' + on('click', '_dismissLicenseGraceBanner') + ' aria-label="Dismiss" title="Dismiss" ' +
+      'style="position:absolute;top:0.5rem;right:0.6rem;width:24px;height:24px;display:flex;align-items:center;justify-content:center;' +
+      'background:transparent;border:none;color:inherit;font-size:1.1rem;line-height:1;cursor:pointer;opacity:0.75" ' +
+      on('mouseover', 'licenseBannerDismissHoverOn') + on('mouseout', 'licenseBannerDismissHoverOff') + '>&#10005;</button>';
+  document.body.insertBefore(el, document.body.firstChild);
+  _syncLicenseBannerHeight();
+  window.addEventListener('resize', _syncLicenseBannerHeight);
+  maybeShowLicenseGraceModal(info);
+}
+
+function maybeShowLicenseGraceModal(info) {
+  if (sessionStorage.getItem('bas_license_grace_modal_shown')) return;
+  sessionStorage.setItem('bas_license_grace_modal_shown', '1');
+  var overlay = document.createElement('div');
+  overlay.id = 'license-grace-modal-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.6);z-index:10000';
+  overlay.innerHTML =
+    '<div style="max-width:480px;background:var(--surface,#152338);border:1px solid var(--warning,#d29922);border-radius:8px;padding:1.5rem;color:var(--text,#e6e6e6)">' +
+      _licenseBannerHTML(info) +
+      '<div style="text-align:right;margin-top:1rem"><button id="license-grace-modal-dismiss" style="padding:0.4rem 1rem;border-radius:6px;border:1px solid var(--border,#22324a);background:transparent;color:inherit;cursor:pointer">Dismiss</button></div>' +
+    '</div>';
+  document.body.appendChild(overlay);
+  document.getElementById('license-grace-modal-dismiss').addEventListener('click', function() {
+    overlay.remove();
+  });
+}
+
+export function doLogin() {
+  var username = document.getElementById('inp-user').value.trim();
+  var password = document.getElementById('inp-pass').value;
+  document.getElementById('login-err').textContent = '';
+  fetch('/api/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username: username, password: password })
+  })
+  .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, d: d }; }); })
+  .then(function(res) {
+    if (!res.ok) throw new Error(res.d.error || 'Login failed');
+    TOKEN = res.d.token; ROLE = res.d.role;
+    localStorage.setItem('bas_role', ROLE); // role only — token is in HttpOnly cookie
+    bootApp();
+    if (res.d.mustChangePw) {
+      state._pwForced = true;
+      document.getElementById('changepw-title').textContent = 'Set New Password';
+      document.getElementById('changepw-sub').textContent = 'Your account requires a password change before continuing.';
+      document.getElementById('cpw-cancel-btn').style.display = 'none';
+      document.getElementById('changepw-overlay').classList.add('open');
+    }
+  })
+  .catch(function(e) { document.getElementById('login-err').textContent = e.message; });
+}
+
+export function doLogout() {
+  TOKEN = ''; ROLE = '';
+  localStorage.removeItem('bas_role');
+  if (state.socket) state.socket.close();
+  fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' }).catch(function(){});
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('login-screen').style.display = 'flex';
+  document.getElementById('inp-pass').value = '';
+}
+
+function bootApp() {
+  if (LICENSE_INFO && LICENSE_INFO.state === 'grace') renderLicenseGraceBanner(LICENSE_INFO);
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('app').style.display = 'flex';
+  document.getElementById('role-badge').textContent = ROLE;
+  document.getElementById('nav-settings').style.display = '';
+  loadCurrentUser();
+  // Integrations nav — admin only
+  var navInt = document.getElementById('nav-integrations');
+  if (navInt) navInt.style.display = ROLE === 'admin' ? '' : 'none';
+  // Scheduled Assessments nav — Analyst+Admin (same tier the API itself requires)
+  var navSched = document.getElementById('nav-scheduled-assessments');
+  if (navSched) navSched.style.display = (ROLE === 'admin' || ROLE === 'analyst') ? '' : 'none';
+  if (ROLE === 'admin') {
+    document.querySelectorAll('.settings-nav a').forEach(function(el) {
+      if (el.getAttribute('data-set') !== 'theme') el.style.display = '';
+    });
+    document.getElementById('sim-cov-card').style.display = '';
+  } else {
+    document.querySelectorAll('.settings-nav a').forEach(function(el) {
+      if (el.getAttribute('data-set') !== 'theme') el.style.display = 'none';
+    });
+    document.getElementById('sim-cov-card').style.display = 'none';
+    document.getElementById('sim-cov-detail').style.display = 'none';
+    if (state.SETTINGS_SECTION !== 'theme') {
+      state.SETTINGS_SECTION = 'theme';
+    }
+  }
+  selectTheme(localStorage.getItem('audspect_theme') || 'dark');
+  // Scenario authoring is Analyst+Admin only — hide builder entry points for viewers.
+  if (ROLE !== 'admin' && ROLE !== 'analyst') {
+    var nb = document.getElementById('sc-new-btn');     if (nb) nb.style.display = 'none';
+    var ub = document.getElementById('sc-upload-btn');  if (ub) ub.style.display = 'none';
+  }
+  // Remediation bulk ticket actions — analyst+
+  var remTicketActions = document.getElementById('rem-ticket-actions');
+  if (remTicketActions) remTicketActions.style.display = (ROLE === 'admin' || ROLE === 'analyst') ? 'flex' : 'none';
+  connectWS();
+  loadAgents();
+  loadAgentGroupTree();
+  loadCatalogs();
+  loadScenarios();
+  loadAdversaries();
+  loadAdversaryTemplates();
+  loadRuns();
+  if (ROLE === 'admin') { loadConnectionConfig(); loadCalderaStatus(); loadConnectorStatus(); loadThreatIntelConfig('misp'); loadThreatIntelConfig('opencti'); loadThreatIntelConfig('otx'); loadTAXIIConnectors(); loadARTContentStatus(); }
+  injectServerURL();
+  // Restore the last active tab so a reload returns the user to where they were.
+  // If there's a pending attack-path job in localStorage, go straight to that tab
+  // regardless of where the user was, so the progress panel reappears.
+  var lastTab = (function() {
+    try { return localStorage.getItem('bas_last_tab') || 'dashboard'; } catch(e) { return 'dashboard'; }
+  })();
+  var hasPendingJob = (function() {
+    try { var s = JSON.parse(localStorage.getItem('_apCurrentJob') || 'null'); return !!(s && s.jobId); } catch(e) { return false; }
+  })();
+  showTab(hasPendingJob ? 'attackpath' : lastTab);
+  if (!window._cmdkBound) {
+    window._cmdkBound = true;
+    document.addEventListener('keydown', function(e) {
+      if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')) { e.preventDefault(); openCmdk(); }
+    });
+  }
+}
+
+// ── Profile avatar + dropdown ─────────────────────────────────────────────
+// Deterministic per-username color (same hash-based approach GitHub/Slack use
+// for users without an uploaded photo) so the same person always gets the
+// same color across sessions/devices, without needing any stored avatar data.
+var AVATAR_PALETTE = ['#2f81f7','#da3633','#d29922','#8957e5','#2fd8c3','#e0609e','#3fb950','#f0883e'];
+function avatarColorFor(name) {
+  var s = String(name || '?');
+  var hash = 0;
+  for (var i = 0; i < s.length; i++) { hash = (hash * 31 + s.charCodeAt(i)) >>> 0; }
+  return AVATAR_PALETTE[hash % AVATAR_PALETTE.length];
+}
+function avatarInitials(name) {
+  var s = String(name || '?').trim();
+  return s ? s.charAt(0).toUpperCase() : '?';
+}
+
+// loadCurrentUser fetches the caller's own account (GET /api/me) to populate
+// the header avatar + dropdown. Best-effort: a failure leaves the avatar on
+// its "?" placeholder rather than blocking the rest of the app from booting.
+function loadCurrentUser() {
+  apicall('/api/me').then(function(u) {
+    if (!u || !u.username) return;
+    USERNAME = u.username;
+    var av = document.getElementById('user-avatar');
+    if (av) { av.textContent = avatarInitials(USERNAME); av.style.background = avatarColorFor(USERNAME); }
+    var pav = document.getElementById('profile-avatar');
+    if (pav) { pav.textContent = avatarInitials(USERNAME); pav.style.background = avatarColorFor(USERNAME); }
+    var un = document.getElementById('um-username'); if (un) un.textContent = USERNAME;
+    var ur = document.getElementById('um-role'); if (ur) ur.textContent = u.role || ROLE || '—';
+  }).catch(function() {});
+}
+
+export function toggleUserMenu(e) {
+  if (e) e.stopPropagation();
+  document.getElementById('user-menu-panel').classList.toggle('open');
+}
+export function toggleUserMenuFromEvent(el, event) { toggleUserMenu(event); }
+export function closeUserMenu() {
+  var p = document.getElementById('user-menu-panel');
+  if (p) p.classList.remove('open');
+}
+export function __init_L5490() {
+document.addEventListener('click', function(e) {
+  var menu = document.getElementById('user-menu');
+  if (menu && !menu.contains(e.target)) closeUserMenu();
+});
+}
+
+export function __init_L5494() {
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') closeUserMenu();
+});
+}
+
+
+// goToProfile switches to the Profile tab and loads the caller's own account
+// (GET /api/me) + their actual permission set (GET /api/me/permissions, the
+// same endpoint the rest of the UI already uses to enable/disable controls)
+// so the page reflects what this specific user can really do, not a generic
+// role blurb.
+export function goToProfile() {
+  showTab('profile');
+  apicall('/api/me').then(function(u) {
+    if (!u || u.error) return;
+    var av = document.getElementById('profile-avatar');
+    if (av) { av.textContent = avatarInitials(u.username); av.style.background = avatarColorFor(u.username); }
+    document.getElementById('profile-username').textContent = u.username || '—';
+    var roleChip = document.getElementById('profile-role-chip');
+    roleChip.textContent = u.role || '—';
+    var statusBadge = document.getElementById('profile-status-badge');
+    statusBadge.textContent = u.isActive ? 'Active' : 'Inactive';
+    statusBadge.className = 'sbadge ' + (u.isActive ? 's-active' : 's-retired');
+    document.getElementById('profile-created').textContent = u.createdAt ? new Date(u.createdAt).toLocaleDateString() : '—';
+    document.getElementById('profile-last-login').textContent = u.lastLogin ? new Date(u.lastLogin).toLocaleString() : 'Never';
+    document.getElementById('profile-auth-source').textContent = u.authSource === 'sso' ? 'Single sign-on (SSO)' : 'Username & password';
+    document.getElementById('profile-admin-shortcut').style.display = u.role === 'admin' ? '' : 'none';
+  }).catch(function() {
+    document.getElementById('profile-username').textContent = 'Failed to load profile';
+  });
+  apicall('/api/me/permissions').then(function(d) {
+    var el = document.getElementById('profile-permissions');
+    if (!d || !Array.isArray(d.permissions)) { el.textContent = 'Unable to load permissions.'; return; }
+    if (!d.permissions.length) { el.textContent = 'No permissions granted.'; return; }
+    el.innerHTML = d.permissions.slice().sort().map(function(p) {
+      return '<span class="tag" style="display:inline-block;margin:0 0.3rem 0.3rem 0">' + x(p) + '</span>';
+    }).join('');
+  }).catch(function() {
+    document.getElementById('profile-permissions').textContent = 'Unable to load permissions.';
+  });
+}
+export function goToProfileFromMenu() { closeUserMenu(); goToProfile(); }
+export function openSettingsFromMenu() { closeUserMenu(); showTab('settings'); }
+export function doLogoutFromMenu() { closeUserMenu(); doLogout(); }
+
+// activateTab toggles which tab view + nav item is visible, without running any
+// data loaders — so callers like openCampaignDetail can switch to a tab and then
+// render their own sub-view without the tab's loader resetting it.
+export function activateTab(name) {
+  ['dashboard','agents','scenarios','runs','scheduled-assessments','initiatives','campaigns','coverage','findings','remediation','reports','verification','compliance','settings','variants','em','attackpath','exposure','recommendations','integrations','exercises','attack-coverage','threat-priority','iocs','profile','sla-report'].forEach(function(t) {
+    var el = document.getElementById('tab-' + t);
+    if (el) el.style.display = t === name ? '' : 'none';
+    var nav = document.querySelector('[data-tab="' + t + '"]');
+    if (nav) nav.classList.toggle('active', t === name);
+  });
+  var titleEl = document.getElementById('header-page-title');
+  if (titleEl) titleEl.textContent = TAB_TITLES[name] || name;
+}
+
+// Unified Dashboard shell (Sub-project B) -- one Dashboard tab, two views.
+// DASH_VIEW is the live/current view. bas_last_dash_view always tracks the
+// most recent manual switch regardless of the pinned bas_dash_pref setting
+// (added in a later task), so switching the pref to "Last used" picks up
+// wherever the user left off.
+var DASH_VIEW = 'operational';
+
+function resolveDashView() {
+  var pref = localStorage.getItem('bas_dash_pref') || 'operational';
+  return pref === 'last' ? (localStorage.getItem('bas_last_dash_view') || 'operational') : pref;
+}
+
+export function setDashView(view) {
+  DASH_VIEW = view;
+  document.getElementById('dash-view-operational').style.display = view === 'operational' ? '' : 'none';
+  document.getElementById('dash-view-executive').style.display = view === 'executive' ? '' : 'none';
+  document.querySelectorAll('.dash-view-btn').forEach(function(b) {
+    b.classList.toggle('active', b.getAttribute('data-view') === view);
+  });
+  try { localStorage.setItem('bas_last_dash_view', view); } catch (e) {}
+  if (view === 'operational') { loadDashboard(); startDashCampPoll(); }
+  else { stopDashCampPoll(); loadExecDashboard(); }
+}
+export function setAgentsView(view) {
+  document.getElementById('agents-view-systemtree').style.display = view === 'systemtree' ? '' : 'none';
+  document.getElementById('agents-view-operational').style.display = view === 'operational' ? '' : 'none';
+  document.getElementById('agents-view-risk').style.display = view === 'risk' ? '' : 'none';
+  document.querySelectorAll('[data-agents-view]').forEach(function(b) {
+    b.classList.toggle('active', b.getAttribute('data-agents-view') === view);
+  });
+  if (view === 'risk') loadAgentRiskSummary();
+}
+function loadAgentRiskSummary() {
+  var tb = document.getElementById('agent-risk-body');
+  if (tb) tb.innerHTML = '<tr><td colspan="7" class="empty">Loading…</td></tr>';
+  apicall('/api/agents/risk-summary').then(function(d) {
+    renderAgentRiskSummary((d && d.agents) || []);
+  }).catch(function(e) { showToast(e.message, 'err'); });
+}
+export function _riskScoreColor(score) {
+  return score >= 80 ? 'var(--success)' : score >= 50 ? 'var(--warning)' : 'var(--danger)';
+}
+export function _riskTrendBadge(trend) {
+  if (trend === 'Improving') return '<span class="u-success">&#8593; Improving</span>';
+  if (trend === 'Declining') return '<span class="u-danger">&#8595; Declining</span>';
+  if (trend === 'Stable') return '<span class="u-muted">&#8594; Stable</span>';
+  return '<span class="u-muted">—</span>';
+}
+export function openAgentDetailRiskTab(agentId) {
+  openAgentDetail(agentId);
+  setTimeout(function() { showAgentTab('risk'); }, 50);
+}
+export function renderAgentRiskSummary(rows) {
+  var tb = document.getElementById('agent-risk-body');
+  if (!tb) return;
+  if (!rows.length) {
+    tb.innerHTML = '<tr><td colspan="7" class="empty">No agents to show.</td></tr>';
+    return;
+  }
+  // Worst-first, but agents with nothing collected sort LAST rather than
+  // masquerading as the worst endpoints: their healthScore is a mean over an
+  // empty set (0), not a real finding.
+  rows.sort(function(a, b) {
+    if (a.measurable !== b.measurable) return a.measurable ? -1 : 1;
+    return a.healthScore - b.healthScore;
+  });
+  tb.innerHTML = rows.map(function(a) {
+    return '<tr>' +
+      '<td>' + x(a.hostname || a.agentId) + '</td>' +
+      (a.measurable
+        ? '<td style="color:' + _riskScoreColor(a.healthScore) + ';font-weight:700">' + a.healthScore + '</td>'
+        : '<td class="u-muted" title="Nothing collected for this endpoint yet — an absent score is not a safe score">— no data</td>') +
+      '<td>' + (a.criticalityRisk || 0) + '</td>' +
+      '<td>' + _riskTrendBadge(a.trend) + '</td>' +
+      '<td>' + x(a.topDeficitCategory || '—') + '</td>' +
+      '<td>' + (a.openFindingsCount || 0) + '</td>' +
+      '<td><button class="btn btn-outline btn-sm"' + on('click', 'openAgentDetailRiskTab', a.agentId) + '>View</button></td>' +
+      '</tr>';
+  }).join('');
+}
+
+// Reuses the existing _dashCampPoll var declared with refreshDashboardCampaigns
+// (index.html:12572) -- only the start/stop logic moves here, plus a
+// DASH_VIEW check so the poll also stops when the Executive view is showing,
+// not just when the whole Dashboard tab is hidden.
+function startDashCampPoll() {
+  clearInterval(state._dashCampPoll);
+  state._dashCampPoll = setInterval(function() {
+    var dash = document.getElementById('tab-dashboard');
+    if (dash && dash.style.display !== 'none' && DASH_VIEW === 'operational') {
+      refreshDashboardCampaigns();
+    } else {
+      clearInterval(state._dashCampPoll);
+    }
+  }, 5000);
+}
+function stopDashCampPoll() { clearInterval(state._dashCampPoll); }
+
+export function showTab(name) {
+  try { localStorage.setItem('bas_last_tab', name); } catch(e) {}
+  activateTab(name);
+  if (name === 'agents') { loadAgents(); loadAgentGroupTree(); }
+  if (name === 'runs') loadRuns();
+  if (name === 'campaigns') closeCampaignDetail();
+  if (name === 'scheduled-assessments') loadScheduledAssessments();
+  if (name === 'initiatives') loadInitiatives();
+  if (name === 'coverage') { loadCoverage(); loadUnifiedTechniques(); loadCoverageAnalytics(); }
+  if (name === 'attack-coverage') { loadCoverageActors(); loadCoverageMatrix(); }
+  if (name === 'threat-priority') { showThreatPriorityList(); loadThreatPriorityActors(); }
+  if (name === 'findings') loadFindings();
+  if (name === 'iocs') loadIOCRegistry();
+  if (name === 'remediation') loadRemediations();
+  if (name === 'reports') loadReports();
+  if (name === 'sla-report') loadSLAReport();
+  if (name === 'verification') loadVerificationTab();
+  if (name === 'attackpath') loadAttackPath();
+  if (name === 'exposure') loadExposureAssets();
+  if (name === 'recommendations') loadRecommendations();
+  if (name === 'exercises') loadExercisesTab();
+  if (name === 'variants') loadVariantTab();
+  if (name === 'em') loadEmTab();
+  if (name === 'scenarios') { state.scenarioView = 'landing'; closeScenarioOverlay(); if (state.scenarios.length) renderScenarios(); }
+  if (name === 'dashboard') {
+    setDashView(resolveDashView());
+  }
+  if (name === 'integrations') { loadIntegrations(); loadResponseConnectors(renderResponseConnectorList); }
+  if (name === 'compliance') initComplianceTab();
+  if (name === 'settings') {
+    if (ROLE === 'admin') {
+      showSettingsSection(state.SETTINGS_SECTION);
+      loadSimCoverage();
+      if (state.SETTINGS_SECTION === 'audit') loadAuditLogs();
+    } else {
+      showSettingsSection('theme');
+    }
+  }
+}
+// ── Tamper Alert Banner ────────────────────────────────────────────────────
+var _tamperPaths = [];
+export function showTamperBanner(data) {
+  var path = data && data.path ? data.path : 'unknown path';
+  var evt  = data && data.eventType ? data.eventType : 'modified';
+  // Accumulate all alerts; don't duplicate the same path.
+  if (_tamperPaths.indexOf(path) === -1) _tamperPaths.push(path);
+  var banner = document.getElementById('tamper-banner');
+  var msg    = document.getElementById('tamper-banner-msg');
+  if (!banner || !msg) return;
+  msg.textContent = '⚠ Unexpected file ' + evt + ' detected: ' +
+    (_tamperPaths.length === 1 ? _tamperPaths[0] : _tamperPaths.length + ' protected files') +
+    ' — Run dispatch is suspended. Acknowledge to resume.';
+  banner.style.display = 'flex';
+  // Shift the main content down so the fixed banner doesn't cover it.
+  document.body.style.paddingTop = '46px';
+}
+export function ackAllTamperEvents() {
+  apicall('/api/tamper-events/acknowledge-all', { method: 'POST' })
+    .then(function() {
+      _tamperPaths = [];
+      var banner = document.getElementById('tamper-banner');
+      if (banner) banner.style.display = 'none';
+      document.body.style.paddingTop = '';
+    })
+    .catch(function() { alert('Failed to acknowledge tamper events. Check server logs.'); });
+}
+export function tamperAckHoverOn() { this.style.background = 'rgba(255,255,255,.25)'; }
+export function tamperAckHoverOff() { this.style.background = 'rgba(255,255,255,.13)'; }
+// On page load, check for unacknowledged critical events so the banner shows
+// even for admins who logged in after the tamper was detected.
+export function __init_L19932() {
+window.addEventListener('DOMContentLoaded', function() {
+  // apicall() already resolves to the parsed JSON body (see its own
+  // definition) -- a stray extra .then(r => r.json()) here was calling
+  // .json() on an already-parsed array, which always threw
+  // "r.json is not a function" and was silently swallowed by the catch
+  // below. That made this entire page-load tamper check a no-op: even
+  // with real unacknowledged critical tamper events and a logged-in
+  // admin, showTamperBanner() never ran.
+  apicall('/api/tamper-events?unacknowledged=true')
+    .then(function(events) {
+      if (Array.isArray(events) && events.length > 0) {
+        events.forEach(function(e) { showTamperBanner(e); });
+      }
+    })
+    .catch(function() {}); // fail silently if not logged in yet
+});
+}

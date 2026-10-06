@@ -144,16 +144,7 @@ if (Test-Path $ScenariosDir) {
 # image in step 5c (after the build), then signed there. Signing confirmed below.
 Log "  BINARIES.sha256: will be extracted from image and signed in step 5c."
 
-# 0b-iv. SHA-256 hash of wwwroot/index.html, injected into the binary via
-#        --build-arg BAS_WWWROOT_HASH so StaticHandler() halts on mismatch.
-$WWWRootHash = ""
-$IndexHtmlPath = Join-Path $OrchestratorDir "wwwroot\index.html"
-if (Test-Path $IndexHtmlPath) {
-    $WWWRootHash = (Get-FileHash -Path $IndexHtmlPath -Algorithm SHA256).Hash.ToLower()
-    Log "  wwwroot/index.html hash: $($WWWRootHash.Substring(0,16))..."
-} else {
-    Warn "  wwwroot/index.html not found  -  UI tamper-detection will be DISABLED in this build."
-}
+Log "  wwwroot integrity: manifest hash is computed inside the Docker build (G1c)."
 
 # -- 1. Build Docker image ----------------------------------------------------
 $OrchestratorTag = "bas-orchestrator:$Version"
@@ -161,14 +152,12 @@ $OrchestratorTag = "bas-orchestrator:$Version"
 if (-not $SkipBuild) {
     # Obfuscation (garble -literals -tiny, scoped to our module via GOGARBLE) runs
     # inside orchestrator/Dockerfile  -  see that file for the GOGARBLE rationale.
-    # BAS_WWWROOT_HASH is injected via -X ldflags so StaticHandler() verifies the
-    # dashboard SPA hash at startup. BAS_SIGNING_KEY is not needed  -  the public key
+    # The dashboard's MANIFEST.sha256 hash is computed by the Dockerfile's web
+    # stage and compiled in via -X ldflags, so StaticHandler() verifies every
+    # dashboard file at startup. BAS_SIGNING_KEY is not needed  -  the public key
     # was already compiled into signing.go by step 0b-i above.
     Log "Building $OrchestratorTag (garble -literals -tiny - this takes 5-10 min)..."
     $buildExtraArgs = @("--build-arg", "BAS_VERSION=$Version")
-    if ($WWWRootHash -ne "") {
-        $buildExtraArgs += @("--build-arg", "BAS_WWWROOT_HASH=$WWWRootHash")
-    }
     # docker build (BuildKit) writes routine progress to stderr; with
     # $ErrorActionPreference='Stop' (set above) PowerShell turns that into a
     # terminating NativeCommandError before the build even finishes, well
@@ -187,7 +176,6 @@ if (-not $SkipBuild) {
     Log "Image built: $OrchestratorTag"
 } else {
     Warn "Skipping image build (-SkipBuild). Using existing $OrchestratorTag."
-    if ($WWWRootHash -eq "") { Warn "  (UI tamper hash was not computed  -  existing image retains its compiled hash)" }
 }
 
 # -- 2. Pull dependency images ------------------------------------------------
