@@ -86,6 +86,14 @@ jobs:
           CGO_ENABLED: "0"
         run: go build ./...
 
+      # The release image (orchestrator/Dockerfile) copies only orchestrator/,
+      # so go.work never applies there: go.mod alone must build the server.
+      - name: go build server without go.work (as the image does)
+        env:
+          CGO_ENABLED: "0"
+          GOWORK: "off"
+        run: go build -o /dev/null ./cmd/server
+
       - name: go test (race + coverage)
         run: go test ./... -race -timeout 30m -coverprofile=coverage.out
 
