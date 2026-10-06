@@ -3295,7 +3295,7 @@
   "target": "el",
   "op": "=",
   "rhs": "ids.map(function(id) {\n      var host = hostOf[id] || id, n = byAgent[id].runs, lastName = byAgent[id].lastName;\n      return '<div class=\"rep-row\">' +\n        '<div class=\"rep-ic\">' + d + '</div>' +\n        '<div class=\"rep-main\"><div class=\"rep-host\">' + x(host) + '</div>' +\n          '<div class=\"rep-sub\">Reports on: <strong class=\"u-text\">' + x(lastName || 'unnamed scenario') + '</strong> (lat",
-  "rhs_len": 984,
+  "rhs_len": 966,
   "category": "unescaped_html",
   "data_source_tags": ""
  },
@@ -3524,8 +3524,8 @@
   "function": "renderAdditionalAgents",
   "target": "list",
   "op": "=",
-  "rhs": "eligible.map(function(a) {\n    return '<label style=\"display:flex;align-items:center;gap:0.5rem;padding:0.25rem 0.3rem;cursor:pointer\">' +\n      '<input type=\"checkbox\" ' + (state._addlSel[a.agentId] ? 'checked' : '') +\n      ' onchange=\"_addlSel[\\'' + x(a.agentId) + '\\']=this.checked;renderAdditionalAgentsCount()\">' +\n      '<code style=\"font-size:0.72rem\">' + x(a.agentId) + '</code><span class=\"",
-  "rhs_len": 488,
+  "rhs": "eligible.map(function(a) {\n    return '<label style=\"display:flex;align-items:center;gap:0.5rem;padding:0.25rem 0.3rem;cursor:pointer\">' +\n      '<input type=\"checkbox\" ' + (state._addlSel[a.agentId] ? 'checked' : '') +\n      x('change', 'addlSelChange', a.agentId) + '>' +\n      '<code style=\"font-size:0.72rem\">' + x(a.agentId) + '</code><span class=\"tiny muted\">' + x(a.hostname) + ' \u00b7 ' + cmpAgen",
+  "rhs_len": 441,
   "category": "unescaped_html",
   "data_source_tags": "agent"
  },
@@ -3584,8 +3584,8 @@
   "function": "renderModalSelection",
   "target": "note",
   "op": "=",
-  "rhs": "'&#9989; Running a selected subset: <strong>' + state._runSelection.ids.length + '</strong> ' + noun +\n      (state._runSelection.locked ? ' (targeted re-validate)' :\n       ' <a href=\"javascript:void(0)\" class=\"desc-toggle\" style=\"margin-left:8px\" onclick=\"clearSelection();return false;\">Clear</a>')",
-  "rhs_len": 301,
+  "rhs": "'&#9989; Running a selected subset: <strong>' + state._runSelection.ids.length + '</strong> ' + noun +\n      (state._runSelection.locked ? ' (targeted re-validate)' :\n       ' <a href=\"#\" class=\"desc-toggle\" style=\"margin-left:8px\"' + x('click', 'clearSelection') + '>Clear</a>')",
+  "rhs_len": 279,
   "category": "partial_escaped",
   "data_source_tags": ""
  },
@@ -3644,8 +3644,8 @@
   "function": "techRenderSelected",
   "target": "box",
   "op": "=",
-  "rhs": "'<div><span class=\"st-tech-sel-id\">' + x(id) + '</span>' +\n        '<span class=\"tiny muted\" style=\"margin-left:0.4rem\">' +\n        (techniqueCatalog === null ? 'resolving\u2026' : 'not recognized') + '</span></div>' +\n      '<span class=\"st-tech-sel-actions\"><a href=\"javascript:void(0)\" onclick=\"techChangeSelection(this)\">&#10005; change</a></span>'",
-  "rhs_len": 347,
+  "rhs": "'<div><span class=\"st-tech-sel-id\">' + x(id) + '</span>' +\n        '<span class=\"tiny muted\" style=\"margin-left:0.4rem\">' +\n        (techniqueCatalog === null ? 'resolving\u2026' : 'not recognized') + '</span></div>' +\n      '<span class=\"st-tech-sel-actions\"><a href=\"#\"' + x('click', 'techChangeSelection') + '>&#10005; change</a></span>'",
+  "rhs_len": 335,
   "category": "escaped",
   "data_source_tags": ""
  },
@@ -3655,7 +3655,7 @@
   "target": "box",
   "op": "=",
   "rhs": "'<div><span class=\"st-tech-sel-id\">' + x(t.id) + '</span> <span class=\"st-tech-sel-name\">' + x(t.name) + '</span>' +\n      (tactics ? '<div class=\"st-tech-row-meta\">' + x(tactics) + '</div>' : '') +\n      (subText ? '<div class=\"st-tech-row-meta\">' + x(subText) + '</div>' : '') +\n    '</div>' +\n    '<span class=\"st-tech-sel-actions\">' +\n      (t.url ? '<a href=\"' + x(t.url) + '\" target=\"_blank\" re",
-  "rhs_len": 656,
+  "rhs_len": 632,
   "category": "escaped",
   "data_source_tags": "user_created_name"
  },
@@ -3684,8 +3684,8 @@
   "function": "techRenderResults",
   "target": "panel",
   "op": "=",
-  "rhs": "results.map(function(t, i) {\n    var tactics = (t.tactics || []).join(', ');\n    var platforms = (t.platforms || []).join(', ');\n    return '<div class=\"st-tech-row' + (i === 0 ? ' active' : '') + '\" data-id=\"' + x(t.id) + '\" onmousedown=\"techSelectRow(this)\">' +\n      '<span class=\"st-tech-row-id\">' + x(t.id) + '</span><span class=\"st-tech-row-name\">' + x(t.name) + '</span>' +\n      (tactics ? '<",
-  "rhs_len": 576,
+  "rhs": "results.map(function(t, i) {\n    var tactics = (t.tactics || []).join(', ');\n    var platforms = (t.platforms || []).join(', ');\n    return '<div class=\"st-tech-row' + (i === 0 ? ' active' : '') + '\" data-id=\"' + x(t.id) + '\"' + x('mousedown', 'techSelectRow') + '>' +\n      '<span class=\"st-tech-row-id\">' + x(t.id) + '</span><span class=\"st-tech-row-name\">' + x(t.name) + '</span>' +\n      (tactics",
+  "rhs_len": 581,
   "category": "escaped",
   "data_source_tags": "user_created_name"
  },
@@ -3724,13 +3724,13 @@
   "function": "addStep",
   "target": "div",
   "op": "=",
-  "rhs": "'<div class=\"bld-step-hdr\"><span class=\"bld-step-num\">Step</span>' +\n      '<span class=\"bld-actions\">' +\n        '<button type=\"button\" onclick=\"moveStep(this,-1)\" title=\"Move up\">&#9650;</button>' +\n        '<button type=\"button\" onclick=\"moveStep(this,1)\" title=\"Move down\">&#9660;</button>' +\n        '<button type=\"button\" onclick=\"removeStep(this)\" title=\"Remove\">&#10005;</button>' +\n      '</",
-  "rhs_len": 1547,
+  "rhs": "'<div class=\"bld-step-hdr\"><span class=\"bld-step-num\">Step</span>' +\n      '<span class=\"bld-actions\">' +\n        '<button type=\"button\"' + x('click', 'moveStepBy', -1) + ' title=\"Move up\">&#9650;</button>' +\n        '<button type=\"button\"' + x('click', 'moveStepBy', 1) + ' title=\"Move down\">&#9660;</button>' +\n        '<button type=\"button\"' + x('click', 'removeStep') + ' title=\"Remove\">&#10005;<",
+  "rhs_len": 1568,
   "category": "partial_escaped",
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 17020,
+  "line": 17029,
   "function": "viewRunResults",
   "target": "document.getElementById('results-summary')",
   "op": "=",
@@ -3740,7 +3740,7 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 17025,
+  "line": 17034,
   "function": "viewRunResults",
   "target": "document.getElementById('results-summary')",
   "op": "=",
@@ -3750,7 +3750,7 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 17037,
+  "line": 17046,
   "function": "viewRunResults",
   "target": "document.getElementById('results-export')",
   "op": "=",
@@ -3760,7 +3760,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17043,
+  "line": 17052,
   "function": "viewRunResults",
   "target": "document.getElementById('results-title')",
   "op": "=",
@@ -3770,7 +3770,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 17065,
+  "line": 17074,
   "function": "viewRunResults",
   "target": "document.getElementById('results-header-actions')",
   "op": "=",
@@ -3780,7 +3780,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17115,
+  "line": 17124,
   "function": "kpiGaugeCard",
   "target": "document.getElementById('run-kpi-strip')",
   "op": "=",
@@ -3790,7 +3790,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17457,
+  "line": 17466,
   "function": "soonPanel",
   "target": "document.getElementById('run-tab-content')",
   "op": "=",
@@ -3800,27 +3800,27 @@
   "data_source_tags": "threat_intel"
  },
  {
-  "line": 17494,
+  "line": 17503,
   "function": "soonPanel",
   "target": "document.getElementById('run-tabbar')",
   "op": "=",
-  "rhs": "RUN_TABS.map(function(t, i) {\n    return '<button class=\"run-tab-btn' + (i === 0 ? ' active' : '') + '\" id=\"run-tabbtn-' + t[0] + '\" onclick=\"switchRunTab(\\'' + t[0] + '\\')\">' + x(t[1]) + '</button>';\n  }).join('')",
-  "rhs_len": 214,
+  "rhs": "RUN_TABS.map(function(t, i) {\n    return '<button class=\"run-tab-btn' + (i === 0 ? ' active' : '') + '\" id=\"run-tabbtn-' + t[0] + '\"' + x('click', 'switchRunTab', t[0]) + '>' + x(t[1]) + '</button>';\n  }).join('')",
+  "rhs_len": 213,
   "category": "unescaped_html",
   "data_source_tags": ""
  },
  {
-  "line": 17508,
+  "line": 17517,
   "function": "soonPanel",
   "target": "reportsEl",
   "op": "=",
   "rhs": "'<div class=\"dash-panel u-mb-1\"><div class=\"dash-panel-hdr\">Run Metadata</div><div class=\"dash-panel-body\">' +\n          '<div style=\"display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:0.75rem;font-size:0.78rem\">' +\n            '<div><div class=\"kpi-label\">Run ID</div><div>' + x(runId) + '</div></div>' +\n            '<div><div class=\"kpi-label\">Agent</div><div>' + x(run.agen",
-  "rhs_len": 1241,
-  "category": "partial_escaped",
+  "rhs_len": 1237,
+  "category": "escaped",
   "data_source_tags": "agent"
  },
  {
-  "line": 17523,
+  "line": 17532,
   "function": "soonPanel",
   "target": "reportsEl",
   "op": "=",
@@ -3830,7 +3830,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17533,
+  "line": 17542,
   "function": "soonPanel",
   "target": "extraEl",
   "op": "=",
@@ -3840,7 +3840,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17537,
+  "line": 17546,
   "function": "soonPanel",
   "target": "extraEl",
   "op": "=",
@@ -3850,7 +3850,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17539,
+  "line": 17548,
   "function": "soonPanel",
   "target": "if (findingsEl) findingsEl",
   "op": "=",
@@ -3860,7 +3860,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17541,
+  "line": 17550,
   "function": "soonPanel",
   "target": "if (recEl) recEl",
   "op": "=",
@@ -3870,7 +3870,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17545,
+  "line": 17554,
   "function": "soonPanel",
   "target": "extraEl",
   "op": "=",
@@ -3880,7 +3880,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17547,
+  "line": 17556,
   "function": "soonPanel",
   "target": "if (findingsEl) findingsEl",
   "op": "=",
@@ -3890,7 +3890,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17549,
+  "line": 17558,
   "function": "soonPanel",
   "target": "if (recEl) recEl",
   "op": "=",
@@ -3900,7 +3900,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17555,
+  "line": 17564,
   "function": "soonPanel",
   "target": "if (el) el",
   "op": "=",
@@ -3910,7 +3910,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17558,
+  "line": 17567,
   "function": "soonPanel",
   "target": "if (el) el",
   "op": "=",
@@ -3920,7 +3920,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17564,
+  "line": 17573,
   "function": "soonPanel",
   "target": "if (el) el",
   "op": "=",
@@ -3930,7 +3930,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17567,
+  "line": 17576,
   "function": "soonPanel",
   "target": "if (el) el",
   "op": "=",
@@ -3940,7 +3940,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17585,
+  "line": 17594,
   "function": "soonPanel",
   "target": "if (el) el",
   "op": "=",
@@ -3950,7 +3950,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17593,
+  "line": 17602,
   "function": "soonPanel",
   "target": "if (findingsElEarly) findingsElEarly",
   "op": "=",
@@ -3960,7 +3960,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17595,
+  "line": 17604,
   "function": "soonPanel",
   "target": "if (recElEarly) recElEarly",
   "op": "=",
@@ -3970,7 +3970,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17597,
+  "line": 17606,
   "function": "soonPanel",
   "target": "if (iocElEarly) iocElEarly",
   "op": "=",
@@ -3980,7 +3980,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17695,
+  "line": 17704,
   "function": "renderDetectionValidationTab",
   "target": "el",
   "op": "=",
@@ -3990,7 +3990,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17749,
+  "line": 17758,
   "function": "loadSIEMCorrelationPanel",
   "target": "el",
   "op": "=",
@@ -4000,7 +4000,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17842,
+  "line": 17851,
   "function": "openRerunReview",
   "target": "document.getElementById('rerun-review-body')",
   "op": "=",
@@ -4010,7 +4010,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17890,
+  "line": 17899,
   "function": "startRerunFromReview",
   "target": "btn",
   "op": "=",
@@ -4020,7 +4020,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17897,
+  "line": 17906,
   "function": "startRerunFromReview",
   "target": "btn",
   "op": "=",
@@ -4030,7 +4030,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17937,
+  "line": 17946,
   "function": "openCampaignRerunReview",
   "target": "document.getElementById('rerun-review-body')",
   "op": "=",
@@ -4040,7 +4040,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17970,
+  "line": 17979,
   "function": "startCampaignRerunFromReview",
   "target": "btn",
   "op": "=",
@@ -4050,7 +4050,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17977,
+  "line": 17986,
   "function": "startCampaignRerunFromReview",
   "target": "btn",
   "op": "=",
@@ -4060,7 +4060,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18059,
+  "line": 18068,
   "function": "renderScheduledAssessmentsList",
   "target": "tbody",
   "op": "=",
@@ -4070,7 +4070,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18062,
+  "line": 18071,
   "function": "renderScheduledAssessmentsList",
   "target": "tbody",
   "op": "=",
@@ -4080,7 +4080,7 @@
   "data_source_tags": "scenario,telemetry_log,user_created_name"
  },
  {
-  "line": 18130,
+  "line": 18139,
   "function": "openSchedWizard",
   "target": "sel",
   "op": "=",
@@ -4090,7 +4090,7 @@
   "data_source_tags": "scenario,user_created_name"
  },
  {
-  "line": 18187,
+  "line": 18196,
   "function": "openSchedWizardForEdit",
   "target": "sel",
   "op": "=",
@@ -4100,7 +4100,7 @@
   "data_source_tags": "scenario,user_created_name"
  },
  {
-  "line": 18251,
+  "line": 18260,
   "function": "renderSchedGroupTree",
   "target": "root",
   "op": "=",
@@ -4110,7 +4110,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18256,
+  "line": 18265,
   "function": "renderSchedGroupTree",
   "target": "root",
   "op": "=",
@@ -4120,7 +4120,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18319,
+  "line": 18328,
   "function": "renderSchedAgentList",
   "target": "root",
   "op": "=",
@@ -4130,7 +4130,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18321,
+  "line": 18330,
   "function": "renderSchedAgentList",
   "target": "root",
   "op": "=",
@@ -4140,7 +4140,7 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 18348,
+  "line": 18357,
   "function": "renderSchedInitiativeSelect",
   "target": "sel",
   "op": "=",
@@ -4150,7 +4150,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18361,
+  "line": 18370,
   "function": "renderSchedModeRecurrencePane",
   "target": "modeSel",
   "op": "=",
@@ -4160,7 +4160,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18467,
+  "line": 18476,
   "function": "renderSchedReview",
   "target": "document.getElementById('sched-review')",
   "op": "=",
@@ -4170,7 +4170,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18604,
+  "line": 18613,
   "function": "renderLicenseLockedScreen",
   "target": "el",
   "op": "=",
@@ -4180,7 +4180,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18670,
+  "line": 18679,
   "function": "renderLicenseGraceBanner",
   "target": "el",
   "op": "=",
@@ -4190,7 +4190,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18687,
+  "line": 18696,
   "function": "maybeShowLicenseGraceModal",
   "target": "overlay",
   "op": "=",
@@ -4200,7 +4200,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18882,
+  "line": 18891,
   "function": "goToProfile",
   "target": "el",
   "op": "=",
@@ -4210,7 +4210,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18941,
+  "line": 18950,
   "function": "loadAgentRiskSummary",
   "target": "if (tb) tb",
   "op": "=",
@@ -4220,7 +4220,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18963,
+  "line": 18972,
   "function": "renderAgentRiskSummary",
   "target": "tb",
   "op": "=",
@@ -4230,7 +4230,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18973,
+  "line": 18982,
   "function": "renderAgentRiskSummary",
   "target": "tb",
   "op": "=",
@@ -4240,7 +4240,7 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 19103,
+  "line": 19112,
   "function": "loadThreatIntelConfig",
   "target": "if (panel) panel",
   "op": "=",
@@ -4250,7 +4250,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 19112,
+  "line": 19121,
   "function": "loadThreatIntelConfig",
   "target": "panel",
   "op": "=",
@@ -4260,7 +4260,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 19218,
+  "line": 19227,
   "function": "loadTAXIIConnectors",
   "target": "tbody",
   "op": "=",
@@ -4270,7 +4270,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 19223,
+  "line": 19232,
   "function": "loadTAXIIConnectors",
   "target": "tbody",
   "op": "=",
@@ -4280,7 +4280,7 @@
   "data_source_tags": "error_message"
  },
  {
-  "line": 19230,
+  "line": 19239,
   "function": "renderTAXIIConnectorsList",
   "target": "tbody",
   "op": "=",
@@ -4290,7 +4290,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 19233,
+  "line": 19242,
   "function": "renderTAXIIConnectorsList",
   "target": "tbody",
   "op": "=",
@@ -4300,7 +4300,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 19409,
+  "line": 19418,
   "function": "loadARTContentStatus",
   "target": "statusEl",
   "op": "=",
@@ -4310,7 +4310,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 19411,
+  "line": 19420,
   "function": "loadARTContentStatus",
   "target": "statusEl",
   "op": "=",
@@ -4320,7 +4320,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 19451,
+  "line": 19460,
   "function": "loadARTContentStatus",
   "target": "document.getElementById('cs-art-status')",
   "op": "=",
@@ -4330,7 +4330,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 19464,
+  "line": 19473,
   "function": "toggleSimCoverage",
   "target": "if (car) car",
   "op": "=",
@@ -4340,7 +4340,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 19579,
+  "line": 19588,
   "function": "loadSimCoverage",
   "target": "bodyEl",
   "op": "=",
@@ -4350,7 +4350,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 20397,
+  "line": 20406,
   "function": "loadVariantStats",
   "target": "el",
   "op": "=",
@@ -4360,7 +4360,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 20439,
+  "line": 20448,
   "function": "populateVexAgents",
   "target": "if (sel) sel",
   "op": "=",
@@ -4370,7 +4370,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 20441,
+  "line": 20450,
   "function": "populateVexAgents",
   "target": "if (sweepSel) sweepSel",
   "op": "=",
@@ -4380,7 +4380,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 20476,
+  "line": 20485,
   "function": "populateVexTechniques",
   "target": "tacSel",
   "op": "=",
@@ -4390,7 +4390,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 20481,
+  "line": 20490,
   "function": "populateVexTechniques",
   "target": "if (el) el",
   "op": "=",
@@ -4400,7 +4400,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 20572,
+  "line": 20581,
   "function": "renderVexSweepList",
   "target": "el",
   "op": "=",
@@ -4410,7 +4410,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 20574,
+  "line": 20583,
   "function": "renderVexSweepList",
   "target": "el",
   "op": "=",
@@ -4420,7 +4420,7 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 20811,
+  "line": 20820,
   "function": "filterVexTechniques",
   "target": "el",
   "op": "=",
@@ -4430,7 +4430,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 20814,
+  "line": 20823,
   "function": "filterVexTechniques",
   "target": "el",
   "op": "=",
@@ -4440,7 +4440,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 20838,
+  "line": 20847,
   "function": "loadVariantCoverage",
   "target": "el",
   "op": "=",
@@ -4450,7 +4450,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 20841,
+  "line": 20850,
   "function": "loadVariantCoverage",
   "target": "el",
   "op": "=",
@@ -4460,7 +4460,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 20866,
+  "line": 20875,
   "function": "loadVariantCoverage",
   "target": "el",
   "op": "=",
@@ -4470,7 +4470,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 20868,
+  "line": 20877,
   "function": "loadVariantCoverage",
   "target": "el",
   "op": "=",
@@ -4480,7 +4480,7 @@
   "data_source_tags": "error_message"
  },
  {
-  "line": 20989,
+  "line": 20998,
   "function": "_vexRenderQueuePanel",
   "target": "panel",
   "op": "=",
@@ -4490,7 +4490,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 21059,
+  "line": 21068,
   "function": "pollVariantRun",
   "target": "if (panel) panel",
   "op": "=",
@@ -4500,7 +4500,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 21088,
+  "line": 21097,
   "function": "pollVariantRun",
   "target": "if (p) p",
   "op": "=",
@@ -4510,7 +4510,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 21120,
+  "line": 21129,
   "function": "stopVex",
   "target": "if (panel) panel",
   "op": "=",
@@ -4520,7 +4520,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 21233,
+  "line": 21242,
   "function": "renderVariantRun",
   "target": "if (wrapperEl) wrapperEl",
   "op": "=",
@@ -4530,7 +4530,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 21238,
+  "line": 21247,
   "function": "renderVariantRun",
   "target": "cell",
   "op": "=",
@@ -4540,7 +4540,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 21250,
+  "line": 21259,
   "function": "renderVariantRun",
   "target": "panel",
   "op": "=",

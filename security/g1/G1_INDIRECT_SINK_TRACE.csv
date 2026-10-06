@@ -36,7 +36,7 @@ line,function,original_category,resolved_category,notes,rhs
 11699,aggOf,indirect_builder,unescaped_html,sparkSVG() @L11553 (scope-resolved): 4 return(s) -> unescaped_html; var(): no declaration found anywhere in file,"sparkSVG(prevSeries, 110, 30, 'var(--teal)')"
 11712,aggOf,indirect_builder,unescaped_html,miniBars() @L11578 (scope-resolved): 3 return(s) -> unescaped_html,"miniBars(barData, 320, 64)"
 11740,aggOf,indirect_builder,unescaped_html,sparkSVG() @L11553 (scope-resolved): 4 return(s) -> unescaped_html; var(): no declaration found anywhere in file,"sparkSVG(covSeries, 110, 30, 'var(--warning)')"
-11802,lg,indirect_builder,unescaped_html,killChainNodes() @L19955 (scope-resolved): 1 return(s) -> unescaped_html,"'<div class=""killchain"">' + killChainNodes(kc) + '</div>'"
+11802,lg,indirect_builder,unescaped_html,killChainNodes() @L19964 (scope-resolved): 1 return(s) -> unescaped_html,"'<div class=""killchain"">' + killChainNodes(kc) + '</div>'"
 11992,renderSLAKPIs,indirect_builder,unescaped_html,tile() @L8131 (scope-resolved): 1 return(s) -> unescaped_html; var(): no declaration found anywhere in file,"tile('Compliance Rate', rate.text, rate.color) +
     tile('On-Time', overall.onTime, 'var(--success)') +
     tile('Late', overall.late, overall.late ? 'var(--danger)' : 'var(--muted)') +
@@ -62,23 +62,23 @@ line,function,original_category,resolved_category,notes,rhs
 15516,renderRunMode,indirect_variable,escaped,2 assignment(s) to 'osMismatchMsg' inside renderRunMode() @L15406 (scope-resolved) -> escaped,osMismatchMsg
 15824,row,indirect_variable,unescaped_html,3 assignment(s) to 'html' inside renderWizardReview() @L15727 (scope-resolved) -> unescaped_html,html
 16334,renderModalSelection,indirect_variable,indirect_variable,1 assignment(s) to 'cached' inside renderModalSelection() @L16235 (scope-resolved) -> indirect_variable,cached
-17065,viewRunResults,indirect_variable,unescaped_html,2 assignment(s) to 'actionsHtml' inside viewRunResults() @L16965 (scope-resolved) -> unescaped_html,actionsHtml
-17537,soonPanel,indirect_builder,partial_escaped,renderRunReportExtra() @L19985 (scope-resolved): 5 return(s) -> partial_escaped,renderRunReportExtra(rep)
-17539,soonPanel,indirect_builder,unescaped_html,renderRunFindings() @L20281 (scope-resolved): 3 return(s) -> unescaped_html,renderRunFindings(rep)
-17541,soonPanel,indirect_builder,unescaped_html,renderRunRecommendations() @L20308 (scope-resolved): 3 return(s) -> unescaped_html,renderRunRecommendations(rep)
-17555,soonPanel,indirect_builder,unescaped_html,renderAttackFlow() @L19861 (scope-resolved): 6 return(s) -> unescaped_html,"renderAttackFlow(af.nodes || [], af.summary || {})"
-17564,soonPanel,indirect_builder,unescaped_html,renderVariantCoverage() @L19653 (scope-resolved): 11 return(s) -> unescaped_html,renderVariantCoverage(cov)
-17593,soonPanel,indirect_variable,static,1 assignment(s) to 'notReady' inside viewRunResults() @L16965 (scope-resolved) -> static,notReady
-17595,soonPanel,indirect_variable,static,1 assignment(s) to 'notReady' inside viewRunResults() @L16965 (scope-resolved) -> static,notReady
-17597,soonPanel,indirect_variable,static,1 assignment(s) to 'notReady' inside viewRunResults() @L16965 (scope-resolved) -> static,notReady
-18361,renderSchedModeRecurrencePane,indirect_variable,static,2 assignment(s) to 'opts' inside renderSchedModeRecurrencePane() @L18353 (scope-resolved) -> static,opts
-18687,maybeShowLicenseGraceModal,indirect_builder,partial_escaped,_licenseBannerHTML() @L18619 (scope-resolved): 1 return(s) -> partial_escaped; var(): no declaration found anywhere in file,"'<div style=""max-width:480px;background:var(--surface,#152338);border:1px solid var(--warning,#d29922);border-radius:8px;padding:1.5rem;color:var(--text,#e6e6e6)"">' +
+17074,viewRunResults,indirect_variable,escaped,2 assignment(s) to 'actionsHtml' inside viewRunResults() @L16974 (scope-resolved) -> escaped,actionsHtml
+17546,soonPanel,indirect_builder,partial_escaped,renderRunReportExtra() @L19994 (scope-resolved): 5 return(s) -> partial_escaped,renderRunReportExtra(rep)
+17548,soonPanel,indirect_builder,unescaped_html,renderRunFindings() @L20290 (scope-resolved): 3 return(s) -> unescaped_html,renderRunFindings(rep)
+17550,soonPanel,indirect_builder,unescaped_html,renderRunRecommendations() @L20317 (scope-resolved): 3 return(s) -> unescaped_html,renderRunRecommendations(rep)
+17564,soonPanel,indirect_builder,unescaped_html,renderAttackFlow() @L19870 (scope-resolved): 6 return(s) -> unescaped_html,"renderAttackFlow(af.nodes || [], af.summary || {})"
+17573,soonPanel,indirect_builder,unescaped_html,renderVariantCoverage() @L19662 (scope-resolved): 11 return(s) -> unescaped_html,renderVariantCoverage(cov)
+17602,soonPanel,indirect_variable,static,1 assignment(s) to 'notReady' inside viewRunResults() @L16974 (scope-resolved) -> static,notReady
+17604,soonPanel,indirect_variable,static,1 assignment(s) to 'notReady' inside viewRunResults() @L16974 (scope-resolved) -> static,notReady
+17606,soonPanel,indirect_variable,static,1 assignment(s) to 'notReady' inside viewRunResults() @L16974 (scope-resolved) -> static,notReady
+18370,renderSchedModeRecurrencePane,indirect_variable,static,2 assignment(s) to 'opts' inside renderSchedModeRecurrencePane() @L18362 (scope-resolved) -> static,opts
+18696,maybeShowLicenseGraceModal,indirect_builder,partial_escaped,_licenseBannerHTML() @L18628 (scope-resolved): 1 return(s) -> partial_escaped; var(): no declaration found anywhere in file,"'<div style=""max-width:480px;background:var(--surface,#152338);border:1px solid var(--warning,#d29922);border-radius:8px;padding:1.5rem;color:var(--text,#e6e6e6)"">' +
       _licenseBannerHTML(info) +
 "
-20397,loadVariantStats,indirect_builder,partial_escaped,executions(): no declaration found anywhere in file; var(): no declaration found anywhere in file; vexStatCard() @L20410 (scope-resolved): 1 return(s) -> partial_escaped,"vexStatCard('Executed Variants',     s.executedVariants,       'var(--accent)', null,
+20406,loadVariantStats,indirect_builder,partial_escaped,executions(): no declaration found anywhere in file; var(): no declaration found anywhere in file; vexStatCard() @L20419 (scope-resolved): 1 return(s) -> partial_escaped,"vexStatCard('Executed Variants',     s.executedVariants,       'var(--accent)', null,
         'How many individual variant executions (encoding \xd7 privilege \xd7 context combinations) have actually "
-20439,populateVexAgents,indirect_variable,escaped,1 assignment(s) to 'opts' inside populateVexAgents() @L20426 (scope-resolved) -> escaped,opts
-20441,populateVexAgents,indirect_variable,escaped,1 assignment(s) to 'opts' inside populateVexAgents() @L20426 (scope-resolved) -> escaped,opts
-20476,populateVexTechniques,indirect_variable,unescaped_html,2 assignment(s) to 'tacOpts' inside populateVexTechniques() @L20453 (scope-resolved) -> unescaped_html,tacOpts
-20866,loadVariantCoverage,indirect_variable,partial_escaped,3 assignment(s) to 'html' inside loadVariantCoverage() @L20835 (scope-resolved) -> partial_escaped,html
-21233,renderVariantRun,indirect_variable,partial_escaped,24 assignment(s) to 'wrapperHtml' inside renderVariantRun() @L21166 (scope-resolved) -> partial_escaped,wrapperHtml
+20448,populateVexAgents,indirect_variable,escaped,1 assignment(s) to 'opts' inside populateVexAgents() @L20435 (scope-resolved) -> escaped,opts
+20450,populateVexAgents,indirect_variable,escaped,1 assignment(s) to 'opts' inside populateVexAgents() @L20435 (scope-resolved) -> escaped,opts
+20485,populateVexTechniques,indirect_variable,unescaped_html,2 assignment(s) to 'tacOpts' inside populateVexTechniques() @L20462 (scope-resolved) -> unescaped_html,tacOpts
+20875,loadVariantCoverage,indirect_variable,partial_escaped,3 assignment(s) to 'html' inside loadVariantCoverage() @L20844 (scope-resolved) -> partial_escaped,html
+21242,renderVariantRun,indirect_variable,partial_escaped,24 assignment(s) to 'wrapperHtml' inside renderVariantRun() @L21175 (scope-resolved) -> partial_escaped,wrapperHtml

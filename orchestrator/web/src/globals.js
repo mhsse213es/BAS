@@ -19,7 +19,7 @@ import { closeIOCImportModal, closeResults, closeResultsOnBackdrop, loadIOCRegis
 import { closeRunLive, closeRunLiveOnBackdrop, closeSweepDrilldown, closeSweepDrilldownOnBackdrop, openRunPanelAction, openSweepDrilldown, openSweepReport, toggleLiveStepAction } from './features/live-run.js';
 import { abortExecution, abortExecutionStop, approveExStep, closeExerciseDetail, closeExerciseDetailOnBackdrop, closeOpenAEVDetail, closeOpenAEVDetailOnBackdrop, createPlanFromOpenAEV, launchExercisePrompt, openExerciseDetail, openOpenAEVDetail, removeOpenAEVConfig, saveOpenAEVConfig, syncOpenAEVNow, testOpenAEVConfig, toggleAPHistory } from './features/openaev.js';
 import { runRansomwareDrill } from './features/ransomware.js';
-import { addStep, applyPicker, clearSelection, cloneScenario, closeBuilder, closeBuilderOnBackdrop, closeModal, closePicker, closeReportGen, deleteCustomScenario, downloadBuilderYaml, genAgentReport, loadRuns, moveStep, openBuilder, openBuilderARTPicker, openBuilderCalderaPicker, openDetailedViewForScenario, openModal, openPicker, openPickerFromModal, openReportGen, pickScenarioUploadFile, pickerSelectAll, pickerToggle, removeStep, renderAdditionalAgentsCount, renderBuilderMode, renderGroupTargetSummary, renderPickerList, renderRunMode, saveScenario, selectAllAdditionalAgents, setPF, setTargetMode, submitReport, switchRunTab, techChangeSelection, techCopyId, techOnBlur, techOnKeydown, techSelectRow, updateVariantDepthNote, uploadScenarioFile, viewRunResults, wizardNav } from './features/reports.js';
+import { addStep, addlSelChange, applyPicker, clearSelection, cloneScenario, closeBuilder, closeBuilderOnBackdrop, closeModal, closePicker, closeReportGen, deleteCustomScenario, downloadBuilderYaml, genAgentReport, loadRuns, moveStepBy, openBuilder, openBuilderARTPicker, openBuilderCalderaPicker, openDetailedViewForScenario, openModal, openPicker, openPickerFromModal, openReportGen, pickScenarioUploadFile, pickerSelectAll, pickerToggle, removeStep, renderBuilderMode, renderGroupTargetSummary, renderPickerList, renderRunMode, saveScenario, selectAllAdditionalAgents, setPF, setTargetMode, submitReport, switchRunTab, techChangeSelection, techCopyId, techKeydown, techOnBlur, techOnInput, techSelectRow, updateVariantDepthNote, uploadScenarioFile, viewRunResults, wizardNav } from './features/reports.js';
 import { closeRerunReview, closeRerunReviewOnBackdrop, openCampaignRerunReview, openRerunReview, startRerunFromReview } from './features/rerun-review.js';
 import { cancelScheduledAssessment, closeSchedWizard, loadScheduledAssessments, openSchedWizard, openSchedWizardForEdit, schedAuthCheckChange, schedOnModeChange, schedOnRecurrenceChange, schedToggleAgentFromChecked, schedToggleGroupFromChecked, schedWizardNav, submitScheduledAssessment } from './features/scheduled.js';
 import { _dismissLicenseGraceBanner, ackAllTamperEvents, doLogin, doLogoutFromMenu, goToProfileFromMenu, licenseBannerDismissHoverOff, licenseBannerDismissHoverOn, openAgentDetailRiskTab, openSettingsFromMenu, setAgentsView, setDashView, showTab, tamperAckHoverOff, tamperAckHoverOn, toggleSidebarCollapsed, toggleUserMenuFromEvent } from './features/shell.js';
@@ -168,7 +168,6 @@ export const HANDLER_FUNCTIONS = {
   loadTAXIIConnectors,
   loadVariantTab,
   moveAgentToGroupPrompt,
-  moveStep,
   onAgentSearchInput,
   openAPAbout,
   openAPAssets,
@@ -238,7 +237,6 @@ export const HANDLER_FUNCTIONS = {
   removeConnectorConfig,
   removeOpenAEVConfig,
   removeStep,
-  renderAdditionalAgentsCount,
   renderAdvRunWarn,
   renderAdversaryLibrary,
   renderBuilderMode,
@@ -332,7 +330,6 @@ export const HANDLER_FUNCTIONS = {
   techChangeSelection,
   techCopyId,
   techOnBlur,
-  techOnKeydown,
   techSelectRow,
   testConnectorById,
   testConnectorConfig,
@@ -382,6 +379,7 @@ export const ACTIONS = {
   ...HANDLER_FUNCTIONS,
   stopEvent,
   abortExecutionStop,
+  addlSelChange,
   apAssetsClose,
   apCollectViewResults,
   apScheduleClose,
@@ -421,6 +419,7 @@ export const ACTIONS = {
   loadIOCRegistryOnEnter,
   loadVariantMatrixFromButton,
   manageUsersLink,
+  moveStepBy,
   openAgentDetailRiskTab,
   openComplianceDetail,
   openEMSweepReport,
@@ -443,6 +442,8 @@ export const ACTIONS = {
   stopEMSweepCurrent,
   tamperAckHoverOff,
   tamperAckHoverOn,
+  techKeydown,
+  techOnInput,
   tmplRunModeChange,
   tmplSelAgentChange,
   toggleAllFindingChecksFromChecked,
