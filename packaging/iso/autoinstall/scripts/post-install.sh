@@ -59,20 +59,33 @@ if [[ -f "$AIRGAP_BUNDLE" ]]; then
   tar -xzf "$AIRGAP_BUNDLE" -C "$WORK"
   BUNDLE_DIR=$(find "$WORK" -maxdepth 1 -mindepth 1 -type d | head -1)
 
+  # Refuse a legacy (unsigned) orchestrator image BEFORE any docker load.
+  if compgen -G "${BUNDLE_DIR}/images/bas-orchestrator-*.tar.gz" >/dev/null; then
+    echo "ERROR: legacy unsigned orchestrator image (bas-orchestrator-*.tar.gz) in bundle -- refusing. Re-pack with the current packaging/airgap/pack.sh." >&2
+    exit 1
+  fi
   # The orchestrator image is a cosign-signed bas-orchestrator-<v>.tar (not .tar.gz):
   # it is NOT loaded here. It is staged below and setup.sh --offline verifies the
   # signature (cosign >= v3.1.0 required on this host) before loading it.
+  # Fail a bad bundle at provisioning time where cosign already exists; otherwise
+  # setup.sh --offline performs the (mandatory) verification at first boot.
+  if command -v cosign &>/dev/null; then
+    err() { echo "ERROR: $*" >&2; }
+    # shellcheck source=/dev/null
+    source "${BUNDLE_DIR}/cosign-verify-lib.sh"
+    BV=$(cat "${BUNDLE_DIR}/VERSION")
+    airgap_verify_orchestrator "${BUNDLE_DIR}/images/bas-orchestrator-${BV}.tar" "${BUNDLE_DIR}/cosign.pub" || exit 1
+  fi
   log "Loading Docker images (non-orchestrator)..."
   for img in "${BUNDLE_DIR}"/images/*.tar.gz; do
+    case "$(basename "$img")" in bas-orchestrator-*) continue ;; esac
     log "  Loading $(basename "$img")..."
     docker load < "$img"
   done
 
   BAS_VERSION=$(cat "${BUNDLE_DIR}/VERSION" 2>/dev/null || echo "latest")
-  if docker image inspect "bas-orchestrator:${BAS_VERSION}" &>/dev/null && \
-     ! docker image inspect "bas-orchestrator:latest" &>/dev/null; then
-    docker tag "bas-orchestrator:${BAS_VERSION}" "bas-orchestrator:latest"
-  fi
+  # No :latest tagging: compose is pinned to the verified bas-orchestrator:<version>
+  # via compose/VERSION, and setup.sh --offline loads that image after verification.
 
   log "Staging BAS files..."
   rm -rf "$STAGING"

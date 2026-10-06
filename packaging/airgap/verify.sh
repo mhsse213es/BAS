@@ -82,7 +82,7 @@ PASS_COUNT=0
 while IFS= read -r line; do
   expected_hash="${line%% *}"
   rel_path="${line#*  }"   # sha256sum format: "<hash>  <path>"
-  rel_path="${rel_path#\*}"; rel_path="${rel_path#./}"
+  rel_path="${rel_path#./}"
   abs_path="${BUNDLE_DIR}/${rel_path}"
 
   if [[ ! -f "$abs_path" ]]; then
@@ -106,6 +106,10 @@ if [[ $FAIL_COUNT -gt 0 ]]; then
   exit 1
 fi
 
+if [[ $PASS_COUNT -eq 0 ]]; then
+  err "Manifest is empty -- nothing verified. Do NOT import this bundle."
+  exit 1
+fi
 log "${PASS_COUNT} files verified."
 
 # ── 3. Check required files ────────────────────────────────────────────────────
@@ -113,6 +117,8 @@ REQUIRED=(
   "images/bas-orchestrator-${VERSION}.tar"
   "images/bas-orchestrator-${VERSION}.tar.bundle"
   "cosign.pub"
+  "compose/cosign.pub"
+  "cosign-verify-lib.sh"
   "images/postgres-16-alpine.tar.gz"
   "compose/setup.sh"
   "compose/docker-compose.yml"
@@ -134,7 +140,9 @@ if ! $all_present; then
 fi
 
 # ── 4. Verify orchestrator image cosign signature ─────────────────────────────
-# Trusted helper from next to this script -- never from inside the bundle under test.
+# Trust model: the verifier (this lib, next to the script) and cosign.pub both
+# come from the same bundle distribution, so this check proves integrity and
+# consistency only. The outer GPG .asc (verify-sig.sh) is the trust anchor.
 AIRGAP_LIB="$(dirname "$0")/cosign-verify-lib.sh"
 if [[ ! -f "$AIRGAP_LIB" ]]; then
   err "cosign-verify-lib.sh not found next to verify.sh -- cannot verify signature."

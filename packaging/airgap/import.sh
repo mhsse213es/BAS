@@ -81,7 +81,9 @@ if [[ -f "$SIGFILE" ]]; then
       exit 1
     fi
   else
-    warn ".asc signature file found but verify-sig.sh not available — skipping GPG check."
+    err ".asc signature file found but verify-sig.sh is not available -- cannot verify it. Import aborted."
+    echo "  Place verify-sig.sh (shipped in the bundle) next to import.sh." >&2
+    exit 1
   fi
 else
   warn "No GPG signature (.asc) found — proceeding without signature verification."
@@ -113,9 +115,9 @@ if [[ -f "$MANIFEST" ]]; then
     hash=$(awk '{print $1}' <<<"$line")
     rel=$(awk '{print $2}' <<<"$line"); rel="${rel#\*}"; rel="${rel#./}"
     abs="${BUNDLE_DIR}/${rel}"
-    [[ ! -f "$abs" ]] && { err "Missing: $rel"; ((FAIL++)); continue; }
+    [[ ! -f "$abs" ]] && { err "Missing: $rel"; FAIL=$((FAIL+1)); continue; }
     actual=$(sha256sum "$abs" | cut -d' ' -f1)
-    [[ "$actual" != "$hash" ]] && { err "Corrupt: $rel"; ((FAIL++)); }
+    [[ "$actual" != "$hash" ]] && { err "Corrupt: $rel"; FAIL=$((FAIL+1)); }
   done < "$MANIFEST"
   if [[ $FAIL -gt 0 ]]; then
     err "${FAIL} file(s) failed verification. Abort."
@@ -166,11 +168,10 @@ docker images | grep -E "(bas-orchestrator|postgres)" | awk '{printf "  %-40s %s
 
 # ── Tag orchestrator image as expected by docker-compose.yml ──────────────────
 # docker-compose.yml uses bas-orchestrator:${BAS_VERSION:-latest}
-# Ensure the versioned image is also tagged :latest for default installs
-if ! docker image inspect "bas-orchestrator:latest" &>/dev/null; then
-  log "  Tagging bas-orchestrator:${VERSION} as bas-orchestrator:latest..."
-  docker tag "bas-orchestrator:${VERSION}" "bas-orchestrator:latest"
-fi
+# Always (re)point :latest at the VERIFIED versioned image, so a pre-existing
+# or bundle-planted :latest can never be what compose runs.
+log "  Tagging bas-orchestrator:${VERSION} as bas-orchestrator:latest..."
+docker tag "bas-orchestrator:${VERSION}" "bas-orchestrator:latest"
 
 # ── Run setup wizard ───────────────────────────────────────────────────────────
 SETUP_SCRIPT="${BUNDLE_DIR}/compose/setup.sh"
@@ -180,7 +181,13 @@ if [[ ! -f "$SETUP_SCRIPT" ]]; then
 fi
 chmod +x "$SETUP_SCRIPT"
 # setup.sh --offline re-verifies the signed artifact from <its dir>/images.
-[[ -e "${BUNDLE_DIR}/compose/images" ]] || ln -s ../images "${BUNDLE_DIR}/compose/images"
+# Never trust a bundle-shipped compose/images or compose/cosign.pub.
+rm -rf "${BUNDLE_DIR}/compose/images"
+ln -s ../images "${BUNDLE_DIR}/compose/images"
+if ! cmp -s "${BUNDLE_DIR}/cosign.pub" "${BUNDLE_DIR}/compose/cosign.pub"; then
+  err "compose/cosign.pub differs from the verified cosign.pub -- bundle is inconsistent. Import aborted."
+  exit 1
+fi
 
 log "Launching BAS setup wizard (offline mode)..."
 echo ""

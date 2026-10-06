@@ -24,8 +24,10 @@ echo "docker $*" >> "$STUB_LOG"
 case "$1" in
   info|tag) exit 0 ;;
   images) echo "bas-orchestrator 9.9.9 abc123"; exit 0 ;;
-  image) exit 1 ;;
-  load) cat > /dev/null; exit 0 ;;
+  image) [ -n "${FAKE_LATEST_EXISTS:-}" ] && exit 0; exit 1 ;;
+  load) cat > "$STUB_LOG.in"
+        if gzip -t "$STUB_LOG.in" 2>/dev/null; then c=$(gzip -dc "$STUB_LOG.in"); else c=$(cat "$STUB_LOG.in"); fi
+        echo "LOADED $c" >> "$STUB_LOG"; exit 0 ;;
 esac
 EOF
 cat > "$STUBS/cosign" <<'EOF'
@@ -52,10 +54,10 @@ make_bundle() {
   echo fake-orchestrator-image > "$b/images/bas-orchestrator-9.9.9.tar"
   sha256sum "$b/images/bas-orchestrator-9.9.9.tar" | cut -d' ' -f1 > "$b/images/bas-orchestrator-9.9.9.tar.bundle"
   echo fake-postgres | gzip > "$b/images/postgres-16-alpine.tar.gz"
-  echo fake-pub > "$b/cosign.pub"
+  echo fake-pub > "$b/cosign.pub"; echo fake-pub > "$b/compose/cosign.pub"; echo 9.9.9 > "$b/compose/VERSION"
   printf '#!/usr/bin/env bash\necho SETUP-RAN >> "$STUB_LOG"\n' > "$b/compose/setup.sh"
   for f in docker-compose.yml docker-compose.prod.yml; do : > "$b/compose/$f"; done
-  : > "$b/import.sh"
+  : > "$b/import.sh"; cp "$HERE/cosign-verify-lib.sh" "$b/"
   [ -n "${MUTATE:-}" ] && eval "$MUTATE"
   # Manifest regenerated AFTER mutation so only cosign (not the manifest) can catch it.
   (cd "$b" && find . -type f ! -name MANIFEST.sha256 | sort | while read -r f; do sha256sum "$f" | sed 's/^\([a-f0-9]*\) \*\(.*\)/\1  \2/'; done) > "$b/MANIFEST.sha256"
@@ -80,12 +82,28 @@ TEST_PATH="$STUBS:$PATH"
 
 echo "TEST: valid bundle -> verified, loads orchestrator LAST, runs setup"
 MUTATE="" make_bundle "$T/b.tar.gz"
+check_valid() { # <label> ; asserts order: postgres load, orchestrator load, THEN tag latest from verified, THEN setup
+  local rc=0; run_import "$T/b.tar.gz" || rc=$?
+  if [ "$rc" -ne 0 ]; then echo "FAIL: $1 rc=$rc"; cat "$T/out.txt"; FAILED=1; return; fi
+  local lines; lines=$(grep -n -E '^(LOADED|docker tag|SETUP-RAN|cosign verify-blob)' "$STUB_LOG" | sed 's/^[0-9]*://' | tr '
+' '|')
+  local want='cosign verify-blob --key '
+  case "$lines" in
+    "cosign verify-blob"*"|LOADED fake-postgres|LOADED fake-orchestrator-image|docker tag bas-orchestrator:9.9.9 bas-orchestrator:latest|SETUP-RAN|")
+      echo "PASS: $1" ;;
+    *) echo "FAIL: $1 -- wrong order: $lines"; FAILED=1 ;;
+  esac
+  : "$want"
+}
+MUTATE="" make_bundle "$T/b.tar.gz"
+check_valid "valid: verify, postgres load, orchestrator load LAST, tag :latest from verified, then setup"
+echo "TEST: pre-existing/planted :latest is overwritten, not trusted"
+FAKE_LATEST_EXISTS=1 check_valid "valid with pre-existing :latest still re-tags unconditionally"
+
+echo "TEST: bundle-shipped compose/cosign.pub that differs -> abort"
+MUTATE='echo other > "$b/compose/cosign.pub"' make_bundle "$T/b.tar.gz"
 rc=0; run_import "$T/b.tar.gz" || rc=$?
-if [ "$rc" -ne 0 ]; then echo "FAIL: valid import rc=$rc"; cat "$T/out.txt"; FAILED=1
-else
-  [ "$(grep -c '^docker load' "$STUB_LOG")" -eq 2 ] && grep -q SETUP-RAN "$STUB_LOG" && grep -q 'verify-blob' "$STUB_LOG" \
-    && echo "PASS: valid" || { echo "FAIL: valid -- expected verify-blob, 2 loads, setup"; cat "$STUB_LOG"; FAILED=1; }
-fi
+{ [ "$rc" -ne 0 ] && ! grep -q SETUP-RAN "$STUB_LOG" && echo "PASS: compose/cosign.pub mismatch"; } || { echo "FAIL: pub mismatch accepted"; FAILED=1; }
 
 echo "TEST: tampered tarball -> abort before docker load"
 MUTATE='echo evil >> "$b/images/bas-orchestrator-9.9.9.tar"' make_bundle "$T/b.tar.gz"
@@ -126,6 +144,20 @@ rc=0; PATH="$TEST_PATH" bash "$T/tools/verify.sh" "$T/b.tar.gz" > "$T/out.txt" 2
 [ "$rc" -eq 0 ] && echo "PASS: verify.sh valid" || { echo "FAIL: verify.sh valid rc=$rc"; cat "$T/out.txt"; FAILED=1; }
 MUTATE='echo evil >> "$b/images/bas-orchestrator-9.9.9.tar"' make_bundle "$T/b.tar.gz"
 rc=0; PATH="$TEST_PATH" bash "$T/tools/verify.sh" "$T/b.tar.gz" > "$T/out.txt" 2>&1 || rc=$?
-[ "$rc" -ne 0 ] && echo "PASS: verify.sh tampered" || { echo "FAIL: verify.sh accepted tampered tar"; FAILED=1; }
+[ "$rc" -ne 0 ] && grep -q "verification FAILED" "$T/out.txt" && echo "PASS: verify.sh tampered (cosign reason)" || { echo "FAIL: verify.sh accepted tampered tar"; FAILED=1; }
+
+echo "TEST: ISO post-install.sh and packer install-bas.sh refuse a legacy orchestrator tar.gz BEFORE any docker load"
+MUTATE='rm "$b/images/bas-orchestrator-9.9.9.tar" "$b/images/bas-orchestrator-9.9.9.tar.bundle"; echo x | gzip > "$b/images/bas-orchestrator-9.9.9.tar.gz"' make_bundle "$T/legacy.tar.gz"
+REPO="$HERE/../.."
+mkdir -p "$T/pi"
+sed -e "s|^LOG=.*|LOG=\"$T/pi/log\"|" -e "s|^STAGING=.*|STAGING=\"$T/pi/staging\"|"     -e "s|^DONE_MARKER=.*|DONE_MARKER=\"$T/pi/done\"|" -e "s|^AIRGAP_BUNDLE=.*|AIRGAP_BUNDLE=\"$T/legacy.tar.gz\"|"     "$REPO/packaging/iso/autoinstall/scripts/post-install.sh" > "$T/pi/post-install.sh"
+sed -e "s|^BUNDLE=.*|BUNDLE=\"$T/legacy.tar.gz\"|" -e "s|^STAGING_DIR=.*|STAGING_DIR=\"$T/pi/stg2\"|"     "$REPO/packaging/packer/scripts/install-bas.sh" > "$T/pi/install-bas.sh"
+for sc in post-install install-bas; do
+  : > "$STUB_LOG"; rc=0
+  PATH="$STUBS:$PATH" bash "$T/pi/$sc.sh" > "$T/out.txt" 2>&1 || rc=$?
+  if [ "$rc" -ne 0 ] && ! grep -q '^docker load' "$STUB_LOG" && { grep -q "legacy unsigned" "$T/out.txt" || grep -q "legacy unsigned" "$T/pi/log" 2>/dev/null; }; then
+    echo "PASS: $sc refuses legacy tar.gz before load"
+  else echo "FAIL: $sc rc=$rc"; cat "$STUB_LOG"; FAILED=1; fi
+done
 
 [ "$FAILED" -eq 0 ] && echo "ALL PASS" || { echo "SOME FAILED"; exit 1; }

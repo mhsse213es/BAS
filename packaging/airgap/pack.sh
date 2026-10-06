@@ -160,6 +160,11 @@ cp "${BUILD_DIR}/cosign.pub" "${BUILD_DIR}/compose/cosign.pub"
 
 # Write version file
 echo "${VERSION}" > "${BUILD_DIR}/VERSION"
+# setup.sh reads ${SCRIPT_DIR}/VERSION (compose/VERSION) to pin BAS_VERSION in
+# .env; without it compose would run bas-orchestrator:latest, not the verified tag.
+echo "${VERSION}" > "${BUILD_DIR}/compose/VERSION"
+# verify-sig.sh ships in the bundle so import.sh can honour a present .asc.
+cp "${REPO_ROOT}/packaging/signing/verify-sig.sh" "${REPO_ROOT}/packaging/signing/pubkey.asc" "${BUILD_DIR}/"
 
 # ── 6. Generate sha256 manifest ───────────────────────────────────────────────
 log "Generating file manifest..."
