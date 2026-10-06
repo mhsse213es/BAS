@@ -79,7 +79,7 @@
  },
  {
   "sink_id": "_vexRenderQueuePanel:panel:=:b153a86b8dca",
-  "line": 20915,
+  "line": 20917,
   "function": "_vexRenderQueuePanel",
   "target": "panel",
   "op": "=",
@@ -586,7 +586,7 @@
  },
  {
   "sink_id": "filterVexTechniques:el:=:b51334baf721",
-  "line": 20737,
+  "line": 20739,
   "function": "filterVexTechniques",
   "target": "el",
   "op": "=",
@@ -599,7 +599,7 @@
  },
  {
   "sink_id": "filterVexTechniques:el:=:fe7e0ce19e69",
-  "line": 20740,
+  "line": 20742,
   "function": "filterVexTechniques",
   "target": "el",
   "op": "=",
@@ -776,7 +776,7 @@
   "final_category": "unescaped_html",
   "severity_tier": 4,
   "data_source_tags": "",
-  "trace_notes": "killChainNodes() @L19881 (scope-resolved): 1 return(s) -> unescaped_html",
+  "trace_notes": "killChainNodes() @L19883 (scope-resolved): 1 return(s) -> unescaped_html",
   "rhs": "'<div class=\"killchain\">' + killChainNodes(kc) + '</div>'"
  },
  {
@@ -2094,7 +2094,7 @@
  },
  {
   "sink_id": "loadVariantCoverage:el:=:5ad448abef7d",
-  "line": 20767,
+  "line": 20769,
   "function": "loadVariantCoverage",
   "target": "el",
   "op": "=",
@@ -2107,7 +2107,7 @@
  },
  {
   "sink_id": "loadVariantCoverage:el:=:a79e43cbcf7f",
-  "line": 20794,
+  "line": 20796,
   "function": "loadVariantCoverage",
   "target": "el",
   "op": "=",
@@ -2120,7 +2120,7 @@
  },
  {
   "sink_id": "loadVariantCoverage:el:=:c944b2f9b670",
-  "line": 20764,
+  "line": 20766,
   "function": "loadVariantCoverage",
   "target": "el",
   "op": "=",
@@ -2133,7 +2133,7 @@
  },
  {
   "sink_id": "loadVariantCoverage:el:=:e5e239560bc1",
-  "line": 20792,
+  "line": 20794,
   "function": "loadVariantCoverage",
   "target": "el",
   "op": "=",
@@ -2141,12 +2141,12 @@
   "final_category": "partial_escaped",
   "severity_tier": 3,
   "data_source_tags": "",
-  "trace_notes": "3 assignment(s) to 'html' inside loadVariantCoverage() @L20761 (scope-resolved) -> partial_escaped",
+  "trace_notes": "3 assignment(s) to 'html' inside loadVariantCoverage() @L20763 (scope-resolved) -> partial_escaped",
   "rhs": "html"
  },
  {
   "sink_id": "loadVariantStats:el:=:357036e91e03",
-  "line": 20323,
+  "line": 20325,
   "function": "loadVariantStats",
   "target": "el",
   "op": "=",
@@ -2154,7 +2154,7 @@
   "final_category": "partial_escaped",
   "severity_tier": 3,
   "data_source_tags": "",
-  "trace_notes": "executions(): no declaration found anywhere in file; var(): no declaration found anywhere in file; vexStatCard() @L20336 (scope-resolved): 1 return(s) -> partial_escaped",
+  "trace_notes": "executions(): no declaration found anywhere in file; var(): no declaration found anywhere in file; vexStatCard() @L20338 (scope-resolved): 1 return(s) -> partial_escaped",
   "rhs": "vexStatCard('Executed Variants',     s.executedVariants,       'var(--accent)', null,\n        'How many individual variant executions (encoding \\xd7 privilege \\xd7 context combinations) have actually completed so far, summed across every finished variant run — not the total available.') +\n      vexStatCard('Total Variants',        s.availableVariants,      'var(--text)',   artAtomic.toLocaleString"
  },
  {
@@ -2783,7 +2783,7 @@
  },
  {
   "sink_id": "pollVariantRun:if (p) p:=:7216b4ea81b4",
-  "line": 21014,
+  "line": 21016,
   "function": "pollVariantRun",
   "target": "if (p) p",
   "op": "=",
@@ -2796,7 +2796,7 @@
  },
  {
   "sink_id": "pollVariantRun:if (panel) panel:=:852c6910cc5b",
-  "line": 20985,
+  "line": 20987,
   "function": "pollVariantRun",
   "target": "if (panel) panel",
   "op": "=",
@@ -2835,7 +2835,7 @@
  },
  {
   "sink_id": "populateVexAgents:if (sel) sel:=:d2a1edd66cf8",
-  "line": 20365,
+  "line": 20367,
   "function": "populateVexAgents",
   "target": "if (sel) sel",
   "op": "=",
@@ -2843,12 +2843,12 @@
   "final_category": "escaped",
   "severity_tier": 1,
   "data_source_tags": "",
-  "trace_notes": "1 assignment(s) to 'opts' inside populateVexAgents() @L20352 (scope-resolved) -> escaped",
+  "trace_notes": "1 assignment(s) to 'opts' inside populateVexAgents() @L20354 (scope-resolved) -> escaped",
   "rhs": "opts"
  },
  {
   "sink_id": "populateVexAgents:if (sweepSel) sweepSel:=:d2a1edd66cf8",
-  "line": 20367,
+  "line": 20369,
   "function": "populateVexAgents",
   "target": "if (sweepSel) sweepSel",
   "op": "=",
@@ -2856,12 +2856,12 @@
   "final_category": "escaped",
   "severity_tier": 1,
   "data_source_tags": "",
-  "trace_notes": "1 assignment(s) to 'opts' inside populateVexAgents() @L20352 (scope-resolved) -> escaped",
+  "trace_notes": "1 assignment(s) to 'opts' inside populateVexAgents() @L20354 (scope-resolved) -> escaped",
   "rhs": "opts"
  },
  {
   "sink_id": "populateVexTechniques:if (el) el:=:63e9d5f1a93f",
-  "line": 20407,
+  "line": 20409,
   "function": "populateVexTechniques",
   "target": "if (el) el",
   "op": "=",
@@ -2874,7 +2874,7 @@
  },
  {
   "sink_id": "populateVexTechniques:tacSel:=:ce309d68b711",
-  "line": 20402,
+  "line": 20404,
   "function": "populateVexTechniques",
   "target": "tacSel",
   "op": "=",
@@ -2882,7 +2882,7 @@
   "final_category": "unescaped_html",
   "severity_tier": 4,
   "data_source_tags": "",
-  "trace_notes": "2 assignment(s) to 'tacOpts' inside populateVexTechniques() @L20379 (scope-resolved) -> unescaped_html",
+  "trace_notes": "2 assignment(s) to 'tacOpts' inside populateVexTechniques() @L20381 (scope-resolved) -> unescaped_html",
   "rhs": "tacOpts"
  },
  {
@@ -4759,7 +4759,7 @@
  },
  {
   "sink_id": "renderVariantRun:cell:=:2ff32a8ace7a",
-  "line": 21164,
+  "line": 21166,
   "function": "renderVariantRun",
   "target": "cell",
   "op": "=",
@@ -4772,7 +4772,7 @@
  },
  {
   "sink_id": "renderVariantRun:if (wrapperEl) wrapperEl:=:8e94bcdd09f7",
-  "line": 21159,
+  "line": 21161,
   "function": "renderVariantRun",
   "target": "if (wrapperEl) wrapperEl",
   "op": "=",
@@ -4780,12 +4780,12 @@
   "final_category": "partial_escaped",
   "severity_tier": 3,
   "data_source_tags": "",
-  "trace_notes": "24 assignment(s) to 'wrapperHtml' inside renderVariantRun() @L21092 (scope-resolved) -> partial_escaped",
+  "trace_notes": "24 assignment(s) to 'wrapperHtml' inside renderVariantRun() @L21094 (scope-resolved) -> partial_escaped",
   "rhs": "wrapperHtml"
  },
  {
   "sink_id": "renderVariantRun:panel:=:8576b16b3214",
-  "line": 21176,
+  "line": 21178,
   "function": "renderVariantRun",
   "target": "panel",
   "op": "=",
@@ -4798,7 +4798,7 @@
  },
  {
   "sink_id": "renderVexSweepList:el:=:6f49cdbd80e1",
-  "line": 20498,
+  "line": 20500,
   "function": "renderVexSweepList",
   "target": "el",
   "op": "=",
@@ -4811,7 +4811,7 @@
  },
  {
   "sink_id": "renderVexSweepList:el:=:84f7e3c3eda0",
-  "line": 20500,
+  "line": 20502,
   "function": "renderVexSweepList",
   "target": "el",
   "op": "=",
@@ -5092,7 +5092,7 @@
   "final_category": "partial_escaped",
   "severity_tier": 3,
   "data_source_tags": "",
-  "trace_notes": "renderRunReportExtra() @L19911 (scope-resolved): 5 return(s) -> partial_escaped",
+  "trace_notes": "renderRunReportExtra() @L19913 (scope-resolved): 5 return(s) -> partial_escaped",
   "rhs": "renderRunReportExtra(rep)"
  },
  {
@@ -5118,7 +5118,7 @@
   "final_category": "unescaped_html",
   "severity_tier": 4,
   "data_source_tags": "",
-  "trace_notes": "renderAttackFlow() @L19787 (scope-resolved): 6 return(s) -> unescaped_html",
+  "trace_notes": "renderAttackFlow() @L19789 (scope-resolved): 6 return(s) -> unescaped_html",
   "rhs": "renderAttackFlow(af.nodes || [], af.summary || {})"
  },
  {
@@ -5170,7 +5170,7 @@
   "final_category": "unescaped_html",
   "severity_tier": 4,
   "data_source_tags": "",
-  "trace_notes": "renderRunFindings() @L20207 (scope-resolved): 3 return(s) -> unescaped_html",
+  "trace_notes": "renderRunFindings() @L20209 (scope-resolved): 3 return(s) -> unescaped_html",
   "rhs": "renderRunFindings(rep)"
  },
  {
@@ -5222,7 +5222,7 @@
   "final_category": "unescaped_html",
   "severity_tier": 4,
   "data_source_tags": "",
-  "trace_notes": "renderRunRecommendations() @L20234 (scope-resolved): 3 return(s) -> unescaped_html",
+  "trace_notes": "renderRunRecommendations() @L20236 (scope-resolved): 3 return(s) -> unescaped_html",
   "rhs": "renderRunRecommendations(rep)"
  },
  {
@@ -5357,7 +5357,7 @@
  },
  {
   "sink_id": "stopVex:if (panel) panel:=:f892e36d9a7f",
-  "line": 21046,
+  "line": 21048,
   "function": "stopVex",
   "target": "if (panel) panel",
   "op": "=",

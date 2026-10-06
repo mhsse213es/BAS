@@ -1,5 +1,6 @@
 import { apicall } from '../core/api.js';
 import { x } from '../core/escape.js';
+import { on } from '../core/actions.js';
 
 
 // ── Variant Coverage Report rendering ────────────────────────────────────────
@@ -96,7 +97,7 @@ export function renderVariantCoverage(data) {
           (points ? '<ul style="margin:0;padding-left:1.2em;font-size:0.7rem;color:var(--muted)">' + points + '</ul>' : '') +
         '</div>' +
         '<div style="margin-top:0.5rem;display:flex;gap:0.35rem;flex-wrap:wrap;align-items:center">' +
-          '<button class="btn btn-sm btn-outline" style="font-size:0.62rem;padding:2px 8px" onclick="loadVariantMatrix(this,\'' + x(data.runId) + '\',\'' + x(t.techniqueId) + '\')">' +
+          '<button class="btn btn-sm btn-outline" style="font-size:0.62rem;padding:2px 8px"' + on('click', 'loadVariantMatrixFromButton', data.runId, t.techniqueId) + '>' +
             '&#9783; View variant matrix' +
           '</button>' +
         '</div>' +
@@ -158,6 +159,8 @@ export function renderVariantCoverage(data) {
 
 // Loads and renders the per-technique variant matrix into an inline container.
 // Called by the "View variant matrix" button inside a bypass finding card.
+export function loadVariantMatrixFromButton(runId, techniqueId, btn) { loadVariantMatrix(btn, runId, techniqueId); }
+
 export function loadVariantMatrix(btn, runId, techniqueId) {
   var card = btn.closest ? btn.closest('[data-matrix]') : null;
   var containerId = 'vmatrix-' + techniqueId.replace(/\./g, '-');

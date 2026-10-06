@@ -1078,43 +1078,43 @@ line,function,target,op,category,data_source_tags,rhs_len,rhs
         var textStyle = isVariantRow ? 'font-weight:700;color:var(--accent)'
                       : isSection    ? 'font-weight:700;color:var(--text)'
                       :                "
-20323,loadVariantStats,el,=,indirect_builder,,1601,"vexStatCard('Executed Variants',     s.executedVariants,       'var(--accent)', null,
+20325,loadVariantStats,el,=,indirect_builder,,1601,"vexStatCard('Executed Variants',     s.executedVariants,       'var(--accent)', null,
         'How many individual variant executions (encoding \xd7 privilege \xd7 context combinations) have actually completed so far, summed across every finished variant run — not the total available.') +
       vexStatCard('Total Variants',        s.availableVariants,      'var(--text)',   artAtomic.toLocaleString"
-20365,populateVexAgents,if (sel) sel,=,indirect_variable,,4,opts
-20367,populateVexAgents,if (sweepSel) sweepSel,=,indirect_variable,,4,opts
-20402,populateVexTechniques,tacSel,=,indirect_variable,,7,tacOpts
-20407,populateVexTechniques,if (el) el,=,static,,99,"'<div style=""color:var(--danger);font-size:0.75rem;padding:0.4rem"">Failed to load techniques</div>'"
-20498,renderVexSweepList,el,=,static_empty,,2,''
-20500,renderVexSweepList,el,=,unescaped_html,agent,1839,"sweeps.map(function(sw) {
+20367,populateVexAgents,if (sel) sel,=,indirect_variable,,4,opts
+20369,populateVexAgents,if (sweepSel) sweepSel,=,indirect_variable,,4,opts
+20404,populateVexTechniques,tacSel,=,indirect_variable,,7,tacOpts
+20409,populateVexTechniques,if (el) el,=,static,,99,"'<div style=""color:var(--danger);font-size:0.75rem;padding:0.4rem"">Failed to load techniques</div>'"
+20500,renderVexSweepList,el,=,static_empty,,2,''
+20502,renderVexSweepList,el,=,unescaped_html,agent,1839,"sweeps.map(function(sw) {
     // A full sweep can have thousands of total variants, so a handful of
     // real completions can round down to a misleading ""0%"" -- floor any
     // nonzero progress at 1% so the bar never looks stuck when it isn't.
     var rawPct = sw.totalVariants > 0 ? (sw.completedVariants / sw.totalVariants) * 100 : 0;
     var pct = rawPct > 0 && rawPct < 1 ? 1 : Math.round(rawP"
-20737,filterVexTechniques,el,=,static,,92,"'<div style=""color:var(--muted);font-size:0.75rem;padding:0.4rem"">No techniques match</div>'"
-20740,filterVexTechniques,el,=,escaped,user_created_name,576,"filtered.map(function(t) {
+20739,filterVexTechniques,el,=,static,,92,"'<div style=""color:var(--muted);font-size:0.75rem;padding:0.4rem"">No techniques match</div>'"
+20742,filterVexTechniques,el,=,escaped,user_created_name,576,"filtered.map(function(t) {
     return '<label style=""display:flex;align-items:center;gap:0.5rem;padding:2px 4px;cursor:pointer;border-radius:3px"">' +
       '<input type=""checkbox"" class=""vex-tech-cb"" value=""' + x(t.id) + '"" style=""accent-color:var(--accent);flex-shrink:0"">' +
       '<span style=""font-family:var(--font-mono);font-size:0.76rem;flex-shrink:0"">' + x(t.id) + '</span>' +
       (t.name ?"
-20764,loadVariantCoverage,el,=,static,,58,"'<div class=""empty"" style=""padding:1.5rem"">Loading…</div>'"
-20767,loadVariantCoverage,el,=,static,,120,"'<div class=""empty"" style=""padding:1.5rem"">No variant runs yet. Run variants on a technique to see coverage here.</div>'"
-20792,loadVariantCoverage,el,=,indirect_variable,,4,html
-20794,loadVariantCoverage,el,=,escaped,error_message,116,"'<div class=""empty"" style=""color:var(--danger);padding:1rem"">' + x(e.message || 'Error loading coverage') + '</div>'"
-20915,_vexRenderQueuePanel,panel,=,partial_escaped,,942,"'<div class=""card"" style=""padding:1.5rem"">' +
+20766,loadVariantCoverage,el,=,static,,58,"'<div class=""empty"" style=""padding:1.5rem"">Loading…</div>'"
+20769,loadVariantCoverage,el,=,static,,120,"'<div class=""empty"" style=""padding:1.5rem"">No variant runs yet. Run variants on a technique to see coverage here.</div>'"
+20794,loadVariantCoverage,el,=,indirect_variable,,4,html
+20796,loadVariantCoverage,el,=,escaped,error_message,116,"'<div class=""empty"" style=""color:var(--danger);padding:1rem"">' + x(e.message || 'Error loading coverage') + '</div>'"
+20917,_vexRenderQueuePanel,panel,=,partial_escaped,,942,"'<div class=""card"" style=""padding:1.5rem"">' +
     '<div class=""card-title"" style=""margin-bottom:0.75rem"">Queue Progress</div>' +
     '<div style=""font-size:0.83rem;color:var(--muted);margin-bottom:0.6rem"">Running <span style=""font-family:var(--font-mono);color:var(--text)"">' + x(tid) + '</span> — <span style=""color:var(--accent);font-weight:600"">' + (idx + 1) + ' / ' + techniques.length + '</span>"
-20985,pollVariantRun,if (panel) panel,=,escaped,,520,"'<div class=""card"" style=""padding:1.5rem;text-align:center;color:var(--muted)"">' +
+20987,pollVariantRun,if (panel) panel,=,escaped,,520,"'<div class=""card"" style=""padding:1.5rem;text-align:center;color:var(--muted)"">' +
     '<div style=""margin-bottom:0.5rem;font-size:0.9rem"">Executing variants…</div>' +
     '<div class=""tiny"" style=""font-family:var(--font-mono);margin-bottom:0.75rem"">' + x(vrId) + '</div>' +
     '<div id=""vex-poll-status"" class=""tiny"" style=""min-height:1em;margin-bottom:0.5rem""></div>' +
     '<button class=""btn btn"
-21014,pollVariantRun,if (p) p,=,escaped,,796,"'<div class=""card"" style=""padding:1.5rem;text-align:center;color:var(--muted)"">' +
+21016,pollVariantRun,if (p) p,=,escaped,,796,"'<div class=""card"" style=""padding:1.5rem;text-align:center;color:var(--muted)"">' +
           '<div style=""margin-bottom:0.5rem;font-size:0.9rem;color:var(--danger)"">Unable to retrieve execution status</div>' +
           '<div class=""tiny"" style=""font-family:var(--font-mono);margin-bottom:0.75rem"">' + x(vrId) + '</div>' +
           '<div class=""tiny muted"" style=""margin-bottom:0.75rem"">The run may "
-21046,stopVex,if (panel) panel,=,static,,116,"'<div class=""card"" style=""padding:1.25rem;color:var(--warning);text-align:center"">&#9632; Variant run stopped</div>'"
-21159,renderVariantRun,if (wrapperEl) wrapperEl,=,indirect_variable,,11,wrapperHtml
-21164,renderVariantRun,cell,=,partial_escaped,,119,"'<span style=""color:' + _vexVerdictColor(r.verdict) + ';font-weight:600;font-size:0.78rem"">' + x(r.verdict) + '</span>'"
-21176,renderVariantRun,panel,=,unescaped_html,,166,"'<div class=""card""><div data-vex-wrapper style=""display:flex;flex-direction:column;gap:1.2rem;margin-bottom:0.75rem"">' + wrapperHtml + '</div>' + tableHtml + '</div>'"
+21048,stopVex,if (panel) panel,=,static,,116,"'<div class=""card"" style=""padding:1.25rem;color:var(--warning);text-align:center"">&#9632; Variant run stopped</div>'"
+21161,renderVariantRun,if (wrapperEl) wrapperEl,=,indirect_variable,,11,wrapperHtml
+21166,renderVariantRun,cell,=,partial_escaped,,119,"'<span style=""color:' + _vexVerdictColor(r.verdict) + ';font-weight:600;font-size:0.78rem"">' + x(r.verdict) + '</span>'"
+21178,renderVariantRun,panel,=,unescaped_html,,166,"'<div class=""card""><div data-vex-wrapper style=""display:flex;flex-direction:column;gap:1.2rem;margin-bottom:0.75rem"">' + wrapperHtml + '</div>' + tableHtml + '</div>'"

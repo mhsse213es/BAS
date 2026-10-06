@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import { setupDom, load, PAYLOADS } from './dom.mjs';
 
 setupDom();
-const { initiativeStateLabel, openAdvDrawer, openFinding, renderRunReportExtra } =
-  await load(['initiativeStateLabel', 'openAdvDrawer', 'openFinding', 'renderRunReportExtra']);
+const { initiativeStateLabel, openAdvDrawer, openFinding, renderRunReportExtra, renderVariantCoverage } =
+  await load(['initiativeStateLabel', 'openAdvDrawer', 'openFinding', 'renderRunReportExtra', 'renderVariantCoverage']);
 const tick = () => new Promise((r) => setTimeout(r, 0));
 
 function assertInert(container, label) {
@@ -53,5 +53,18 @@ test('renderRunReportExtra: attack-surface and restoration fields stay inert', (
     });
     assertInert(div, 'renderRunReportExtra');
     assert.ok(div.textContent.includes(p), 'payload text should be rendered as text');
+  }
+});
+
+test('variant-report: renderVariantCoverage keeps payloads inside data-args', () => {
+  for (const p of PAYLOADS) {
+    const div = document.createElement('div');
+    div.innerHTML = renderVariantCoverage({
+      runId: p, variantDepth: 'quick', summary: {},
+      techniques: [{ techniqueId: p, techniqueName: p, hasBypass: true, bypassRate: 50, headline: p, remediationPoints: [p], bestBypass: { encoding: p, verdict: 'bypassed' } }],
+    });
+    assertInert(div, 'renderVariantCoverage');
+    const args = [...div.querySelectorAll('[data-args]')].map((e) => e.getAttribute('data-args')).join(' ');
+    assert.ok(args.includes(JSON.stringify(p).slice(1, -1)), 'payload should travel as data-args');
   }
 });

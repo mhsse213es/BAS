@@ -18,7 +18,7 @@ _selectCmpScenario:document.getElementById('cmp-scenario'):=:7d56bfcc3cb2,8502,_
     state.scenarios.map(function(s) {
       return '<option value=""' + x(s.id) + '""' + (s.id === id ? ' selected' : '') + '>' + x(s.name) + '</option>';
     }).join('')"
-_vexRenderQueuePanel:panel:=:b153a86b8dca,20915,_vexRenderQueuePanel,panel,=,partial_escaped,partial_escaped,3,,,"'<div class=""card"" style=""padding:1.5rem"">' +
+_vexRenderQueuePanel:panel:=:b153a86b8dca,20917,_vexRenderQueuePanel,panel,=,partial_escaped,partial_escaped,3,,,"'<div class=""card"" style=""padding:1.5rem"">' +
     '<div class=""card-title"" style=""margin-bottom:0.75rem"">Queue Progress</div>' +
     '<div style=""font-size:0.83rem;color:var(--muted);margin-bottom:0.6rem"">Running <span style=""font-family:var(--font-mono);color:var(--text)"">' + x(tid) + '</span> — <span style=""color:var(--accent);font-weight:600"">' + (idx + 1) + ' / ' + techniques.length + '</span>"
 addStep:div:=:7ac68f61520c,16704,addStep,div,=,partial_escaped,partial_escaped,3,user_created_name,,"'<div class=""bld-step-hdr""><span class=""bld-step-num"">Step</span>' +
@@ -92,8 +92,8 @@ fill:sel:=:208268b2e954,6204,fill,sel,=,escaped,escaped,1,agent,,"(state.agents 
       return '<option value=""' + x(a.agentId) + '"">' + x(a.hostname || a.agentId) + (a.status === 'offline' ? ' (offline)' : '') + '</option>';
     }).join('') || '<option value="""">No agents enrolled</option>'"
 fillBuilder:steps:=:6f49cdbd80e1,16397,fillBuilder,steps,=,static_empty,static_empty,0,,,''
-filterVexTechniques:el:=:b51334baf721,20737,filterVexTechniques,el,=,static,static,0,,,"'<div style=""color:var(--muted);font-size:0.75rem;padding:0.4rem"">No techniques match</div>'"
-filterVexTechniques:el:=:fe7e0ce19e69,20740,filterVexTechniques,el,=,escaped,escaped,1,user_created_name,,"filtered.map(function(t) {
+filterVexTechniques:el:=:b51334baf721,20739,filterVexTechniques,el,=,static,static,0,,,"'<div style=""color:var(--muted);font-size:0.75rem;padding:0.4rem"">No techniques match</div>'"
+filterVexTechniques:el:=:fe7e0ce19e69,20742,filterVexTechniques,el,=,escaped,escaped,1,user_created_name,,"filtered.map(function(t) {
     return '<label style=""display:flex;align-items:center;gap:0.5rem;padding:2px 4px;cursor:pointer;border-radius:3px"">' +
       '<input type=""checkbox"" class=""vex-tech-cb"" value=""' + x(t.id) + '"" style=""accent-color:var(--accent);flex-shrink:0"">' +
       '<span style=""font-family:var(--font-mono);font-size:0.76rem;flex-shrink:0"">' + x(t.id) + '</span>' +
@@ -124,7 +124,7 @@ kv:document.getElementById('campaigns-detail'):=:71d9ba121342,8175,kv,document.g
         '<h1 style=""font-family:var(--font-display);font-size:1.5rem;font-weight:700;letter-spacing:-0.02em;margin:0.3rem 0;color:var(--text)"">'"
 lg:afEl:=:045b2d7bf19f,11761,lg,afEl,=,static,static,0,,,"'<div class=""empty"" style=""padding:1.5rem"">No kill-chain data for the latest run.</div>'"
 lg:afEl:=:742a1d68308b,11765,lg,afEl,=,static,static,0,,,"'<div class=""empty"" style=""padding:1.5rem"">Attack flow unavailable.</div>'"
-lg:afEl:=:af6127e6cf99,11762,lg,afEl,=,indirect_builder,unescaped_html,4,,killChainNodes() @L19881 (scope-resolved): 1 return(s) -> unescaped_html,"'<div class=""killchain"">' + killChainNodes(kc) + '</div>'"
+lg:afEl:=:af6127e6cf99,11762,lg,afEl,=,indirect_builder,unescaped_html,4,,killChainNodes() @L19883 (scope-resolved): 1 return(s) -> unescaped_html,"'<div class=""killchain"">' + killChainNodes(kc) + '</div>'"
 lg:attckEl:=:15344d1eaefd,11845,lg,attckEl,=,unescaped_html,unescaped_html,4,,,"tactics.map(function(tactic) {
         var d = tacticMap[tactic];
         var total = d.pass + d.fail;
@@ -377,11 +377,11 @@ loadUsers:tbody:=:59926b90a0ae,11412,loadUsers,tbody,=,unescaped_html,unescaped_
       var mustPw = u.mustChangePw ? ' <span class=""tag u-warning"">pw reset</span>' : '';
       var actions =
         '<button class=""btn btn-outline btn-sm"" onclick=""openEditUser(\'' + x(u.id) + '\',\'' + x(u.username) + '\',\'' + x(u.role"
-loadVariantCoverage:el:=:5ad448abef7d,20767,loadVariantCoverage,el,=,static,static,0,,,"'<div class=""empty"" style=""padding:1.5rem"">No variant runs yet. Run variants on a technique to see coverage here.</div>'"
-loadVariantCoverage:el:=:a79e43cbcf7f,20794,loadVariantCoverage,el,=,escaped,escaped,1,error_message,,"'<div class=""empty"" style=""color:var(--danger);padding:1rem"">' + x(e.message || 'Error loading coverage') + '</div>'"
-loadVariantCoverage:el:=:c944b2f9b670,20764,loadVariantCoverage,el,=,static,static,0,,,"'<div class=""empty"" style=""padding:1.5rem"">Loading…</div>'"
-loadVariantCoverage:el:=:e5e239560bc1,20792,loadVariantCoverage,el,=,indirect_variable,partial_escaped,3,,3 assignment(s) to 'html' inside loadVariantCoverage() @L20761 (scope-resolved) -> partial_escaped,html
-loadVariantStats:el:=:357036e91e03,20323,loadVariantStats,el,=,indirect_builder,partial_escaped,3,,executions(): no declaration found anywhere in file; var(): no declaration found anywhere in file; vexStatCard() @L20336 (scope-resolved): 1 return(s) -> partial_escaped,"vexStatCard('Executed Variants',     s.executedVariants,       'var(--accent)', null,
+loadVariantCoverage:el:=:5ad448abef7d,20769,loadVariantCoverage,el,=,static,static,0,,,"'<div class=""empty"" style=""padding:1.5rem"">No variant runs yet. Run variants on a technique to see coverage here.</div>'"
+loadVariantCoverage:el:=:a79e43cbcf7f,20796,loadVariantCoverage,el,=,escaped,escaped,1,error_message,,"'<div class=""empty"" style=""color:var(--danger);padding:1rem"">' + x(e.message || 'Error loading coverage') + '</div>'"
+loadVariantCoverage:el:=:c944b2f9b670,20766,loadVariantCoverage,el,=,static,static,0,,,"'<div class=""empty"" style=""padding:1.5rem"">Loading…</div>'"
+loadVariantCoverage:el:=:e5e239560bc1,20794,loadVariantCoverage,el,=,indirect_variable,partial_escaped,3,,3 assignment(s) to 'html' inside loadVariantCoverage() @L20763 (scope-resolved) -> partial_escaped,html
+loadVariantStats:el:=:357036e91e03,20325,loadVariantStats,el,=,indirect_builder,partial_escaped,3,,executions(): no declaration found anywhere in file; var(): no declaration found anywhere in file; vexStatCard() @L20338 (scope-resolved): 1 return(s) -> partial_escaped,"vexStatCard('Executed Variants',     s.executedVariants,       'var(--accent)', null,
         'How many individual variant executions (encoding \xd7 privilege \xd7 context combinations) have actually completed so far, summed across every finished variant run — not the total available.') +
       vexStatCard('Total Variants',        s.availableVariants,      'var(--text)',   artAtomic.toLocaleString"
 loadVerificationTab:sel:=:d2a1edd66cf8,9428,loadVerificationTab,sel,=,indirect_variable,escaped,1,,1 assignment(s) to 'opts' inside loadVerificationTab() @L9411 (scope-resolved) -> escaped,opts
@@ -483,11 +483,11 @@ openSweepDrilldown:document.getElementById('sweep-drilldown-list'):=:00fdd243fc3
 openSweepDrilldown:document.getElementById('sweep-drilldown-list'):=:6f49cdbd80e1,13972,openSweepDrilldown,document.getElementById('sweep-drilldown-list'),=,static_empty,static_empty,0,,,''
 openTechnique:document.getElementById('results-export'):=:6f49cdbd80e1,9368,openTechnique,document.getElementById('results-export'),=,static_empty,static_empty,0,,,''
 openTmplRun:if (srcsEl) srcsEl:=:35fcdf336154,4135,openTmplRun,if (srcsEl) srcsEl,=,unescaped_html,unescaped_html,4,,,"srcRows || '<span style=""color:var(--muted);font-size:0.8rem"">No sources configured for this template.</span>'"
-pollVariantRun:if (p) p:=:7216b4ea81b4,21014,pollVariantRun,if (p) p,=,escaped,escaped,1,,,"'<div class=""card"" style=""padding:1.5rem;text-align:center;color:var(--muted)"">' +
+pollVariantRun:if (p) p:=:7216b4ea81b4,21016,pollVariantRun,if (p) p,=,escaped,escaped,1,,,"'<div class=""card"" style=""padding:1.5rem;text-align:center;color:var(--muted)"">' +
           '<div style=""margin-bottom:0.5rem;font-size:0.9rem;color:var(--danger)"">Unable to retrieve execution status</div>' +
           '<div class=""tiny"" style=""font-family:var(--font-mono);margin-bottom:0.75rem"">' + x(vrId) + '</div>' +
           '<div class=""tiny muted"" style=""margin-bottom:0.75rem"">The run may "
-pollVariantRun:if (panel) panel:=:852c6910cc5b,20985,pollVariantRun,if (panel) panel,=,escaped,escaped,1,,,"'<div class=""card"" style=""padding:1.5rem;text-align:center;color:var(--muted)"">' +
+pollVariantRun:if (panel) panel:=:852c6910cc5b,20987,pollVariantRun,if (panel) panel,=,escaped,escaped,1,,,"'<div class=""card"" style=""padding:1.5rem;text-align:center;color:var(--muted)"">' +
     '<div style=""margin-bottom:0.5rem;font-size:0.9rem"">Executing variants…</div>' +
     '<div class=""tiny"" style=""font-family:var(--font-mono);margin-bottom:0.75rem"">' + x(vrId) + '</div>' +
     '<div id=""vex-poll-status"" class=""tiny"" style=""min-height:1em;margin-bottom:0.5rem""></div>' +
@@ -496,10 +496,10 @@ populateCoverageFilters:agSel:=:9863b81ed88c,9070,populateCoverageFilters,agSel,
       (state.agents || []).map(function(a) { return '<option value=""' + x(a.agentId) + '"">' + x(a.hostname || a.agentId) + '</option>'; }).join('')"
 populateCoverageFilters:scenSel:=:0056b3f421bf,9062,populateCoverageFilters,scenSel,=,escaped,escaped,1,user_created_name,,"'<option value="""">All scenarios</option>' +
       (state.scenarios || []).map(function(s) { return '<option value=""' + x(s.id) + '"">' + x(s.name) + '</option>'; }).join('')"
-populateVexAgents:if (sel) sel:=:d2a1edd66cf8,20365,populateVexAgents,if (sel) sel,=,indirect_variable,escaped,1,,1 assignment(s) to 'opts' inside populateVexAgents() @L20352 (scope-resolved) -> escaped,opts
-populateVexAgents:if (sweepSel) sweepSel:=:d2a1edd66cf8,20367,populateVexAgents,if (sweepSel) sweepSel,=,indirect_variable,escaped,1,,1 assignment(s) to 'opts' inside populateVexAgents() @L20352 (scope-resolved) -> escaped,opts
-populateVexTechniques:if (el) el:=:63e9d5f1a93f,20407,populateVexTechniques,if (el) el,=,static,static,0,,,"'<div style=""color:var(--danger);font-size:0.75rem;padding:0.4rem"">Failed to load techniques</div>'"
-populateVexTechniques:tacSel:=:ce309d68b711,20402,populateVexTechniques,tacSel,=,indirect_variable,unescaped_html,4,,2 assignment(s) to 'tacOpts' inside populateVexTechniques() @L20379 (scope-resolved) -> unescaped_html,tacOpts
+populateVexAgents:if (sel) sel:=:d2a1edd66cf8,20367,populateVexAgents,if (sel) sel,=,indirect_variable,escaped,1,,1 assignment(s) to 'opts' inside populateVexAgents() @L20354 (scope-resolved) -> escaped,opts
+populateVexAgents:if (sweepSel) sweepSel:=:d2a1edd66cf8,20369,populateVexAgents,if (sweepSel) sweepSel,=,indirect_variable,escaped,1,,1 assignment(s) to 'opts' inside populateVexAgents() @L20354 (scope-resolved) -> escaped,opts
+populateVexTechniques:if (el) el:=:63e9d5f1a93f,20409,populateVexTechniques,if (el) el,=,static,static,0,,,"'<div style=""color:var(--danger);font-size:0.75rem;padding:0.4rem"">Failed to load techniques</div>'"
+populateVexTechniques:tacSel:=:ce309d68b711,20404,populateVexTechniques,tacSel,=,indirect_variable,unescaped_html,4,,2 assignment(s) to 'tacOpts' inside populateVexTechniques() @L20381 (scope-resolved) -> unescaped_html,tacOpts
 prepareRestore:wrap:=:15e764735eba,7924,prepareRestore,wrap,=,escaped,escaped,1,api_response,,"'<div class=""empty"" style=""padding:1rem;color:var(--danger)"">' + x(res.error) + '</div>'"
 prepareRestore:wrap:=:33a5df9d0735,7925,prepareRestore,wrap,=,escaped,escaped,1,api_response,,"'<div class=""conn-cfg-card"" style=""margin-top:1rem;border-color:var(--warning)"">' +
         '<div style=""font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--warning);margin-bottom:0.5rem"">Restore must be run on the host</div>' +
@@ -950,11 +950,11 @@ renderTmplOSCompat:warnEl:=:6f49cdbd80e1,4348,renderTmplOSCompat,warnEl,=,static
 renderTmplWarn:warn:=:1570473181c7,4284,renderTmplWarn,warn,=,static,static,0,,,"'<div style=""padding:0.55rem 0.75rem;background:rgba(218,54,51,.1);border:1px solid rgba(218,54,51,.3);border-radius:var(--radius);color:#f85149"">Lab mode — full fidelity. Run ONLY in isolated lab range. High-risk techniques will execute without production-safe guards.</div>'"
 renderTmplWarn:warn:=:3b41cec7506f,4282,renderTmplWarn,warn,=,static,static,0,,,"'<div style=""padding:0.55rem 0.75rem;background:rgba(35,134,54,.1);border:1px solid rgba(35,134,54,.3);border-radius:var(--radius);color:#56d364"">Telemetry mode — real techniques executed with production-safe guards. All cleanup steps run automatically.</div>'"
 renderTmplWarn:warn:=:6f49cdbd80e1,4286,renderTmplWarn,warn,=,static_empty,static_empty,0,,,''
-renderVariantRun:cell:=:2ff32a8ace7a,21164,renderVariantRun,cell,=,partial_escaped,partial_escaped,3,,,"'<span style=""color:' + _vexVerdictColor(r.verdict) + ';font-weight:600;font-size:0.78rem"">' + x(r.verdict) + '</span>'"
-renderVariantRun:if (wrapperEl) wrapperEl:=:8e94bcdd09f7,21159,renderVariantRun,if (wrapperEl) wrapperEl,=,indirect_variable,partial_escaped,3,,24 assignment(s) to 'wrapperHtml' inside renderVariantRun() @L21092 (scope-resolved) -> partial_escaped,wrapperHtml
-renderVariantRun:panel:=:8576b16b3214,21176,renderVariantRun,panel,=,unescaped_html,unescaped_html,4,,,"'<div class=""card""><div data-vex-wrapper style=""display:flex;flex-direction:column;gap:1.2rem;margin-bottom:0.75rem"">' + wrapperHtml + '</div>' + tableHtml + '</div>'"
-renderVexSweepList:el:=:6f49cdbd80e1,20498,renderVexSweepList,el,=,static_empty,static_empty,0,,,''
-renderVexSweepList:el:=:84f7e3c3eda0,20500,renderVexSweepList,el,=,unescaped_html,unescaped_html,4,agent,,"sweeps.map(function(sw) {
+renderVariantRun:cell:=:2ff32a8ace7a,21166,renderVariantRun,cell,=,partial_escaped,partial_escaped,3,,,"'<span style=""color:' + _vexVerdictColor(r.verdict) + ';font-weight:600;font-size:0.78rem"">' + x(r.verdict) + '</span>'"
+renderVariantRun:if (wrapperEl) wrapperEl:=:8e94bcdd09f7,21161,renderVariantRun,if (wrapperEl) wrapperEl,=,indirect_variable,partial_escaped,3,,24 assignment(s) to 'wrapperHtml' inside renderVariantRun() @L21094 (scope-resolved) -> partial_escaped,wrapperHtml
+renderVariantRun:panel:=:8576b16b3214,21178,renderVariantRun,panel,=,unescaped_html,unescaped_html,4,,,"'<div class=""card""><div data-vex-wrapper style=""display:flex;flex-direction:column;gap:1.2rem;margin-bottom:0.75rem"">' + wrapperHtml + '</div>' + tableHtml + '</div>'"
+renderVexSweepList:el:=:6f49cdbd80e1,20500,renderVexSweepList,el,=,static_empty,static_empty,0,,,''
+renderVexSweepList:el:=:84f7e3c3eda0,20502,renderVexSweepList,el,=,unescaped_html,unescaped_html,4,agent,,"sweeps.map(function(sw) {
     // A full sweep can have thousands of total variants, so a handful of
     // real completions can round down to a misleading ""0%"" -- floor any
     // nonzero progress at 1% so the bar never looks stuck when it isn't.
@@ -1004,17 +1004,17 @@ soonPanel:document.getElementById('run-tabbar'):=:ec3077d5757a,17436,soonPanel,d
   }).join('')"
 soonPanel:extraEl:=:000e9faf7dc9,17475,soonPanel,extraEl,=,static,static,0,,,"'<div style=""color:var(--muted);font-size:0.72rem;padding:0.4rem 0"">Loading&#8230;</div>'"
 soonPanel:extraEl:=:6f49cdbd80e1,17487,soonPanel,extraEl,=,static_empty,static_empty,0,,,''
-soonPanel:extraEl:=:8a89f49e5dd6,17479,soonPanel,extraEl,=,indirect_builder,partial_escaped,3,,renderRunReportExtra() @L19911 (scope-resolved): 5 return(s) -> partial_escaped,renderRunReportExtra(rep)
+soonPanel:extraEl:=:8a89f49e5dd6,17479,soonPanel,extraEl,=,indirect_builder,partial_escaped,3,,renderRunReportExtra() @L19913 (scope-resolved): 5 return(s) -> partial_escaped,renderRunReportExtra(rep)
 soonPanel:if (el) el:=:05b3ceeea0fb,17500,soonPanel,if (el) el,=,static,static,0,,,"'<div style=""color:var(--muted);font-size:0.72rem;padding:1.5rem 0;text-align:center"">Attack flow unavailable.</div>'"
-soonPanel:if (el) el:=:05d28a38e57d,17497,soonPanel,if (el) el,=,indirect_builder,unescaped_html,4,,renderAttackFlow() @L19787 (scope-resolved): 6 return(s) -> unescaped_html,"renderAttackFlow(af.nodes || [], af.summary || {})"
+soonPanel:if (el) el:=:05d28a38e57d,17497,soonPanel,if (el) el,=,indirect_builder,unescaped_html,4,,renderAttackFlow() @L19789 (scope-resolved): 6 return(s) -> unescaped_html,"renderAttackFlow(af.nodes || [], af.summary || {})"
 soonPanel:if (el) el:=:4b2a80780dc0,17527,soonPanel,if (el) el,=,static,static,0,,,"'<div style=""color:var(--muted);font-size:0.8rem;padding:2.5rem 0;text-align:center"">Indicators unavailable.</div>'"
 soonPanel:if (el) el:=:57e4ff8ae29b,17506,soonPanel,if (el) el,=,indirect_builder,unescaped_html,4,,renderVariantCoverage() @L19581 (scope-resolved): 11 return(s) -> unescaped_html,renderVariantCoverage(cov)
 soonPanel:if (el) el:=:9d4d108e29ef,17509,soonPanel,if (el) el,=,static,static,0,,,"'<div style=""color:var(--muted);font-size:0.72rem;padding:1.5rem 0;text-align:center"">Variant coverage unavailable.</div>'"
-soonPanel:if (findingsEl) findingsEl:=:1ab55760a1c3,17481,soonPanel,if (findingsEl) findingsEl,=,indirect_builder,unescaped_html,4,,renderRunFindings() @L20207 (scope-resolved): 3 return(s) -> unescaped_html,renderRunFindings(rep)
+soonPanel:if (findingsEl) findingsEl:=:1ab55760a1c3,17481,soonPanel,if (findingsEl) findingsEl,=,indirect_builder,unescaped_html,4,,renderRunFindings() @L20209 (scope-resolved): 3 return(s) -> unescaped_html,renderRunFindings(rep)
 soonPanel:if (findingsEl) findingsEl:=:af0652ed63c6,17489,soonPanel,if (findingsEl) findingsEl,=,static,static,0,,,"'<div style=""color:var(--muted);font-size:0.8rem;padding:2.5rem 0;text-align:center"">Findings unavailable.</div>'"
 soonPanel:if (findingsElEarly) findingsElEarly:=:5ddfcb3cebd4,17535,soonPanel,if (findingsElEarly) findingsElEarly,=,indirect_variable,static,0,,1 assignment(s) to 'notReady' inside viewRunResults() @L16907 (scope-resolved) -> static,notReady
 soonPanel:if (iocElEarly) iocElEarly:=:5ddfcb3cebd4,17539,soonPanel,if (iocElEarly) iocElEarly,=,indirect_variable,static,0,,1 assignment(s) to 'notReady' inside viewRunResults() @L16907 (scope-resolved) -> static,notReady
-soonPanel:if (recEl) recEl:=:cc3ff533d162,17483,soonPanel,if (recEl) recEl,=,indirect_builder,unescaped_html,4,,renderRunRecommendations() @L20234 (scope-resolved): 3 return(s) -> unescaped_html,renderRunRecommendations(rep)
+soonPanel:if (recEl) recEl:=:cc3ff533d162,17483,soonPanel,if (recEl) recEl,=,indirect_builder,unescaped_html,4,,renderRunRecommendations() @L20236 (scope-resolved): 3 return(s) -> unescaped_html,renderRunRecommendations(rep)
 soonPanel:if (recEl) recEl:=:f64c73cc64ef,17491,soonPanel,if (recEl) recEl,=,static,static,0,,,"'<div style=""color:var(--muted);font-size:0.8rem;padding:2.5rem 0;text-align:center"">Recommendations unavailable.</div>'"
 soonPanel:if (recElEarly) recElEarly:=:5ddfcb3cebd4,17537,soonPanel,if (recElEarly) recElEarly,=,indirect_variable,static,0,,1 assignment(s) to 'notReady' inside viewRunResults() @L16907 (scope-resolved) -> static,notReady
 soonPanel:reportsEl:=:a0e2dc3988f7,17450,soonPanel,reportsEl,=,partial_escaped,partial_escaped,3,agent,,"'<div class=""dash-panel u-mb-1""><div class=""dash-panel-hdr"">Run Metadata</div><div class=""dash-panel-body"">' +
@@ -1035,7 +1035,7 @@ stat:el:=:5b4ce0e8f2ff,5760,stat,el,=,unescaped_html,unescaped_html,4,,,"'<div c
       '<th>Technique</th><th>Severity</th><th>Days open</th><th>First seen</th><th>Reopened</th>' +
     '</tr></thead><tbody>' + rows + '</tbody></table></div>' +
   '</div>'"
-stopVex:if (panel) panel:=:f892e36d9a7f,21046,stopVex,if (panel) panel,=,static,static,0,,,"'<div class=""card"" style=""padding:1.25rem;color:var(--warning);text-align:center"">&#9632; Variant run stopped</div>'"
+stopVex:if (panel) panel:=:f892e36d9a7f,21048,stopVex,if (panel) panel,=,static,static,0,,,"'<div class=""card"" style=""padding:1.25rem;color:var(--warning);text-align:center"">&#9632; Variant run stopped</div>'"
 submitInitiativeAttach:errEl:=:34df0875fe33,12783,submitInitiativeAttach,errEl,=,static,static,0,,,"'<div class=""tiny u-danger"">Select a job to attach.</div>'"
 submitInitiativeAttach:errEl:=:5cfb084d1944,12790,submitInitiativeAttach,errEl,=,escaped,escaped,1,api_response,,"'<div class=""tiny u-danger"">' + x(res.error) + '</div>'"
 submitInitiativeAttach:errEl:=:6f49cdbd80e1,12786,submitInitiativeAttach,errEl,=,static_empty,static_empty,0,,,''

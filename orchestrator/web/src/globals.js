@@ -25,7 +25,7 @@ import { cancelScheduledAssessment, closeSchedWizard, loadScheduledAssessments, 
 import { _dismissLicenseGraceBanner, ackAllTamperEvents, doLogin, doLogoutFromMenu, goToProfileFromMenu, openSettingsFromMenu, setAgentsView, setDashView, showTab, tamperAckHoverOff, tamperAckHoverOn, toggleSidebarCollapsed, toggleUserMenuFromEvent } from './features/shell.js';
 import { closeTAXIIConnectorModal, deleteTAXIIConnector, loadARTContentStatus, loadTAXIIConnectors, openTAXIIConnectorModal, removeConnectorConfig, reseedART, saveConnectorConfig, saveTAXIIConnectorForm, simCovHoverOff, simCovHoverOn, syncTAXIIConnectorNow, taxiiToggleAuthFields, testConnectorConfig, testTAXIIConnectorForm, toggleSimCoverage, triggerConnectorSync } from './features/threat-intel.js';
 import { loadVariantTab } from './features/variant-executor.js';
-import { loadVariantMatrix } from './features/variant-report.js';
+import { loadVariantMatrixFromButton } from './features/variant-report.js';
 import { _vexCheckAgentSweepConflict, filterVexTechniques, pollVariantRun, renderVexGroupSummary, renderVexRunGroupSummary, runVariants, setVexRunTargetMode, setVexTargetMode, showVexStatHelp, stopVex, stopVexSweep, vexClearAll, vexRunFullSweep, vexSelectAll } from './features/variants.js';
 
 // Called from inline on*= handlers.
@@ -172,7 +172,6 @@ export const HANDLER_FUNCTIONS = {
   loadScenarios,
   loadScheduledAssessments,
   loadTAXIIConnectors,
-  loadVariantMatrix,
   loadVariantTab,
   moveAgentToGroupPrompt,
   moveStep,
@@ -419,6 +418,7 @@ export const ACTIONS = {
   goToProfileFromMenu,
   loadAdversariesStop,
   loadIOCRegistryOnEnter,
+  loadVariantMatrixFromButton,
   manageUsersLink,
   openSettingsFromMenu,
   pickScenarioUploadFile,
