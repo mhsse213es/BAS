@@ -39,7 +39,9 @@ _bas_version="${_bas_version//$'\r'/}"
 _bas_version="${_bas_version//[[:space:]]/}"
 readonly BAS_VERSION="${_bas_version:-latest}"
 
-# Set by --offline flag; skips docker pull (images already loaded)
+# true = install from this bundle's signed images/ (the ONLY supported mode).
+# Set by --offline, and forced by parse_args whenever ${SCRIPT_DIR}/images
+# exists; without images/ the install refuses (setup.sh never pulls).
 OFFLINE=false
 
 # Set during prereq checks — installer auto-installs these if missing
@@ -654,9 +656,14 @@ do_install() {
   fi
 }
 
+# ── Bundle image verification + load ─────────────────────────────────────────
+# _expected_image_tag, _verify_all_images and _load_verified_images are
+# BYTE-IDENTICAL in packaging/compose/install.sh and packaging/compose/setup.sh
+# (packaging/airgap/airgap-cosign.test.sh fails if they drift): edit both.
+
 # Image tag each shipped tar must carry (name is pinned to the bundle version).
 # Every bundle type (release ZIP, build.sh bundle, air-gap bundle) ships these
-# signed; anything else in images/ is refused.
+# four signed; anything else in images/ is refused.
 _expected_image_tag() {
   case "$1" in
     "bas-orchestrator-${BAS_VERSION}.tar") echo "bas-orchestrator:${BAS_VERSION}" ;;
@@ -667,47 +674,74 @@ _expected_image_tag() {
   esac
 }
 
-# Verify EVERYTHING in images/ before anything is loaded or written. Signed
-# images are REQUIRED (no opt-out): every tar must be a known <name>.tar with a
-# valid cosign .bundle, and its manifest.json must carry exactly the expected tag.
-# Fills IMG_TARS/IMG_TAGS/IMG_IDS (non-orchestrator, load order) and
-# ORCH_IMG/ORCH_ID. A tar with no signature, an unlisted file or a legacy .tar.gz
-# is fatal.
+# _verify_all_images <images_dir> <what>
+# Verifies EVERY image tar (cosign + exact RepoTag) BEFORE any is loaded. A
+# missing images/ directory is FATAL: nothing is ever pulled from a registry,
+# every runtime image must come from this bundle. Fills IMG_TARS/IMG_TAGS/IMG_IDS
+# (everything but the orchestrator) and ORCH_TAR/ORCH_ID. Unsigned, unlisted or
+# legacy .tar.gz files are fatal. <what> ("installation"/"upgrade") words errors.
 _verify_all_images() {
-  IMG_TARS=(); IMG_TAGS=(); IMG_IDS=(); ORCH_IMG=""; ORCH_ID=""
-  local img base tag id
-  for img in "${SCRIPT_DIR}"/images/*; do
+  local images_dir="$1" what="$2" img base tag id
+  IMG_TARS=(); IMG_TAGS=(); IMG_IDS=(); ORCH_TAR=""; ORCH_ID=""
+  if [[ ! -d "$images_dir" ]]; then
+    err "images/ directory not found at ${images_dir} -- ${what} aborted. Every runtime image must come from this bundle's signed images/ (nothing is pulled from a registry)."
+    exit 1
+  fi
+  for img in "${images_dir}"/*; do
     [[ -f "$img" ]] || continue
     base="$(basename "$img")"
     case "$base" in
       *.bundle) continue ;;
       *.tar) ;;
-      *) err "Unexpected file in images/: ${base} -- refusing (only signed .tar images are allowed)."; exit 1 ;;
+      *) err "Unexpected file in images/: ${base} -- ${what} aborted (only signed .tar images are allowed)."; exit 1 ;;
     esac
-    tag=$(_expected_image_tag "$base") || { err "Unlisted image tar in images/: ${base} -- refusing."; exit 1; }
-    _verify_orchestrator_artifact "$img" || { err "Image ${base} failed verification -- installation aborted."; exit 1; }
-    id=$(_tar_image_id "$img" "$tag") || { err "${base}: manifest.json does not carry exactly the tag ${tag} -- refusing (the verified image must be the one compose runs)."; exit 1; }
+    tag=$(_expected_image_tag "$base") || { err "Unlisted image tar in images/: ${base} -- ${what} aborted."; exit 1; }
+    _verify_orchestrator_artifact "$img" || { err "Image ${base} failed verification -- ${what} aborted."; exit 1; }
+    id=$(_tar_image_id "$img" "$tag") || { err "${base}: manifest.json does not carry exactly the tag ${tag} -- ${what} aborted (the verified image must be the one compose runs)."; exit 1; }
     if [[ "$base" == bas-orchestrator-* ]]; then
-      ORCH_IMG="$img"; ORCH_ID="$id"
+      ORCH_TAR="$img"; ORCH_ID="$id"
     else
       IMG_TARS+=("$img"); IMG_TAGS+=("$tag"); IMG_IDS+=("$id")
     fi
   done
-  if [[ -z "$ORCH_IMG" ]]; then
-    err "No orchestrator artifact (bas-orchestrator-${BAS_VERSION}.tar) found in ${SCRIPT_DIR}/images -- refusing to install without it."
+  if [[ -z "$ORCH_TAR" ]]; then
+    err "No orchestrator artifact (bas-orchestrator-${BAS_VERSION}.tar) found in ${images_dir} -- ${what} aborted."
     exit 1
   fi
   # ALL runtime images are required (compose starts them with no profile).
   local req
   for req in postgres-16-alpine.tar headless-shell.tar "bas-caldera-${BAS_VERSION}.tar"; do
-    [[ -f "${SCRIPT_DIR}/images/${req}" ]] || { err "Required runtime image ${req} missing from ${SCRIPT_DIR}/images -- refusing."; exit 1; }
+    [[ -f "${images_dir}/${req}" ]] || { err "Required runtime image ${req} missing from ${images_dir} -- ${what} aborted."; exit 1; }
   done
 }
 
+# _load_verified_images <what>   (after _verify_all_images)
+# Loads every other image first and the orchestrator LAST. Deliberate: docker
+# load's tag assignment is last-write-wins and tags are embedded in each tar's
+# own manifest, independent of its filename, so nothing loaded after the
+# orchestrator can re-point "bas-orchestrator:<ver>". After EVERY load the tag
+# must resolve to the image ID recorded from the verified tar.
+_load_verified_images() {
+  local what="$1" i
+  for i in "${!IMG_TARS[@]}"; do
+    docker load < "${IMG_TARS[$i]}" || { err "docker load failed for $(basename "${IMG_TARS[$i]}") -- ${what} aborted."; exit 1; }
+    _docker_tag_is "${IMG_TAGS[$i]}" "${IMG_IDS[$i]}" || { err "${IMG_TAGS[$i]} is not the verified image after load -- ${what} aborted."; exit 1; }
+    log "Loaded: $(basename "${IMG_TARS[$i]}")"
+  done
+  docker load < "$ORCH_TAR" || { err "docker load failed for $(basename "$ORCH_TAR") -- ${what} aborted."; exit 1; }
+  _docker_tag_is "bas-orchestrator:${BAS_VERSION}" "$ORCH_ID" || { err "bas-orchestrator:${BAS_VERSION} is not the verified image after load -- ${what} aborted."; exit 1; }
+  log "Loaded: $(basename "$ORCH_TAR")"
+}
+
 _do_install_steps() {
-  if [[ "$OFFLINE" == "true" ]]; then
-    _verify_all_images
+  # Fail closed: every runtime image comes from this bundle's signed images/
+  # (parse_args sets OFFLINE=true whenever it exists). Without it there is
+  # nothing verifiable to run, so refuse instead of pulling from a registry.
+  if [[ "$OFFLINE" != "true" ]]; then
+    err "No images/ directory next to setup.sh (${SCRIPT_DIR}/images) -- refusing to install: every runtime image must come from this bundle's signed images/ (nothing is pulled from a registry)."
+    exit 1
   fi
+  _verify_all_images "${SCRIPT_DIR}/images" "installation"
 
   _step 5 "Installing Docker CE (may take 1-2 minutes)..."
   if $NEED_DOCKER; then
@@ -769,24 +803,11 @@ EOF
   chown root:root "${INSTALL_DIR}/.env"
 
   _step 50 "Loading Docker images..."
-  if [[ "$OFFLINE" == "true" ]]; then
-    # Everything was verified up front (_verify_all_images). Load the other
-    # images first, the orchestrator LAST, and after each load require the tag
-    # to resolve to exactly the image ID recorded from the verified tar's
-    # manifest, so no tag planted elsewhere can be what compose runs.
-    local i
-    for i in "${!IMG_TARS[@]}"; do
-      _step 55 "Loading $(basename "${IMG_TARS[$i]}")..."
-      docker load < "${IMG_TARS[$i]}" || { err "docker load failed for $(basename "${IMG_TARS[$i]}")"; exit 1; }
-      _docker_tag_is "${IMG_TAGS[$i]}" "${IMG_IDS[$i]}" || { err "${IMG_TAGS[$i]} is not the verified image after load -- aborting."; exit 1; }
-    done
-    _step 55 "Loading $(basename "$ORCH_IMG")..."
-    docker load < "$ORCH_IMG"
-    _docker_tag_is "bas-orchestrator:${BAS_VERSION}" "$ORCH_ID" || { err "bas-orchestrator:${BAS_VERSION} is not the verified image after load -- aborting before starting services."; exit 1; }
-  else
-    cd "${INSTALL_DIR}"
-    docker compose -f docker-compose.yml pull --quiet || true
-  fi
+  # Everything was verified up front (_verify_all_images). The other images are
+  # loaded first, the orchestrator LAST, and after each load the tag must
+  # resolve to exactly the image ID recorded from the verified tar's manifest,
+  # so no tag planted elsewhere can be what compose runs. Nothing is pulled.
+  _load_verified_images "installation"
 
   _step 80 "Installing systemd service..."
   sed "s|/opt/bas-platform|${INSTALL_DIR}|g" \
@@ -1195,27 +1216,49 @@ Useful commands:
 Press OK to exit the installer." 28 74
 }
 
+# ── Flags ──────────────────────────────────────────────────────────────────────
+# Supported: --offline, --no-wizard, --config <file>, --gpg-pub <key.asc>,
+# --cosign-pub <key.pub> (both also as --flag=<path>; the cosign flag overrides
+# BAS_COSIGN_PUB), and the no-ops --non-interactive (passed by import.sh) and
+# --web (the web wizard is already the default without setup.conf). A flag
+# missing its value or any unknown flag is an error (a typo must never silently
+# drop a key), matching import.sh.
+parse_args() {
+  local v
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --offline)   OFFLINE=true; shift ;;
+      --no-wizard) NO_WIZARD=true; shift ;;
+      --non-interactive|--web) shift ;;
+      --gpg-pub=*|--cosign-pub=*|--config=*)
+        v="${1#*=}"
+        [[ -n "$v" ]] || { err "${1%%=*} requires a value"; exit 1; }
+        case "$1" in
+          --gpg-pub=*)    GPG_PUB_FLAG="$v" ;;
+          --cosign-pub=*) BAS_COSIGN_PUB="$v"; export BAS_COSIGN_PUB ;;
+          --config=*)     CONFIG_FILE="$v" ;;
+        esac
+        shift ;;
+      --gpg-pub|--cosign-pub|--config)
+        [[ $# -ge 2 && -n "$2" && "$2" != --* ]] || { err "$1 requires a value"; exit 1; }
+        case "$1" in
+          --gpg-pub)    GPG_PUB_FLAG="$2" ;;
+          --cosign-pub) BAS_COSIGN_PUB="$2"; export BAS_COSIGN_PUB ;;
+          --config)     CONFIG_FILE="$2" ;;
+        esac
+        shift 2 ;;
+      *) err "Unknown option: $1"; exit 1 ;;
+    esac
+  done
+  # A bundle with images/ is ALWAYS installed from (and verified against) it,
+  # whether or not --offline was passed.
+  [[ -d "${SCRIPT_DIR}/images" ]] && OFFLINE=true
+  return 0
+}
+
 # ── Main ───────────────────────────────────────────────────────────────────────
 main() {
-  # ── Parse flags ──────────────────────────────────────────────────────────────
-  local _args=("$@")
-  local i=0
-  while [[ $i -lt ${#_args[@]} ]]; do
-    case "${_args[$i]}" in
-      --offline)   OFFLINE=true ;;
-      --no-wizard) NO_WIZARD=true ;;
-      --gpg-pub=*) GPG_PUB_FLAG="${_args[$i]#--gpg-pub=}" ;;
-      --gpg-pub)
-        i=$(( i + 1 ))
-        GPG_PUB_FLAG="${_args[$i]:-}"
-        ;;
-      --config)
-        i=$(( i + 1 ))
-        CONFIG_FILE="${_args[$i]:-}"
-        ;;
-    esac
-    i=$(( i + 1 ))
-  done
+  parse_args "$@"
 
   # ── No-wizard mode: called internally by Python wizard subprocess ─────────────
   # Pure stdout, no whiptail; all output captured by Python SSE streamer.

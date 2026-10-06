@@ -8,6 +8,9 @@ services:
   # ── PostgreSQL ───────────────────────────────────────────────────────────────
   postgres:
     image: postgres:16-alpine
+    # Runtime images come ONLY from the bundle's cosign-verified images/ (loaded
+    # and ID-bound by install.sh/setup.sh/import.sh); compose must never pull.
+    pull_policy: never
     container_name: audspect-postgres
     environment:
       POSTGRES_DB:       ${POSTGRES_DB:-bas_platform}
@@ -28,6 +31,9 @@ services:
   # ── Caldera (MITRE ATT&CK simulation engine) ─────────────────────────────────
   caldera:
     image: ${REGISTRY:-}bas-caldera:${BAS_VERSION:-latest}
+    # Runtime images come ONLY from the bundle's cosign-verified images/ (loaded
+    # and ID-bound by install.sh/setup.sh/import.sh); compose must never pull.
+    pull_policy: never
     container_name: audspect-caldera
     environment:
       API_KEY_RED:  ${CALDERA_API_KEY:-BASPlatform2024}
@@ -55,6 +61,9 @@ services:
   # service is absent the orchestrator falls back to its built-in PDF renderer.
   chrome:
     image: chromedp/headless-shell:151.0.7922.109
+    # Runtime images come ONLY from the bundle's cosign-verified images/ (loaded
+    # and ID-bound by install.sh/setup.sh/import.sh); compose must never pull.
+    pull_policy: never
     container_name: audspect-chrome
     # The image's own ENTRYPOINT (/headless-shell/run.sh) already starts
     # Chrome on internal 127.0.0.1:9223 and a `socat` relay publishing that
@@ -97,6 +106,9 @@ services:
   # ── BAS Orchestrator ─────────────────────────────────────────────────────────
   orchestrator:
     image: ${REGISTRY:-}bas-orchestrator:${BAS_VERSION:-latest}
+    # Runtime images come ONLY from the bundle's cosign-verified images/ (loaded
+    # and ID-bound by install.sh/setup.sh/import.sh); compose must never pull.
+    pull_policy: never
     container_name: audspect-orchestrator
     # NET_BIND_SERVICE (not root) lets the orchestrator bind privileged ports
     # directly: UDP/53 for the DNS-tunneling exfiltration listener

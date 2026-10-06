@@ -6,7 +6,8 @@
 #
 # Expects either:
 #   (a) /var/tmp/bas-airgap.tar.gz  — embedded bundle (offline install)
-#   (b) Internet access             — Docker pulled, BAS setup via setup.sh
+#   (b) signed images already staged in /opt/bas-platform-src/compose/images
+#       (Packer-built base); setup.sh never pulls BAS images from a registry
 set -euo pipefail
 
 # BAS_ROOT is a path prefix used ONLY by the test suite to sandbox every path
@@ -111,8 +112,10 @@ if [[ -f "$AIRGAP_BUNDLE" ]]; then
   rm -f "$AIRGAP_BUNDLE"
   log "Airgap import complete."
 else
-  # Online path — images will be pulled at setup time
-  log "No airgap bundle — BAS images will be pulled from registry during setup."
+  # No embedded bundle: setup.sh NEVER pulls images. It installs only from signed
+  # images already staged under ${STAGING}/compose/images (e.g. by the Packer
+  # install-bas.sh build) and refuses to install without them.
+  log "No airgap bundle — setup.sh will use the signed images staged in ${STAGING}/compose/images (it refuses without them; nothing is pulled)."
   mkdir -p "$STAGING/compose"
   # Copy compose files if they were bundled with the OS image by the Packer build
   # (they would be at /opt/bas-platform-src already if using Packer-built base)

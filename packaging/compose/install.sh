@@ -479,6 +479,14 @@ _docker_tag_is() {
   return 1
 }
 
+# ── Bundle image verification + load ─────────────────────────────────────────
+# _expected_image_tag, _verify_all_images and _load_verified_images are
+# BYTE-IDENTICAL in packaging/compose/install.sh and packaging/compose/setup.sh
+# (packaging/airgap/airgap-cosign.test.sh fails if they drift): edit both.
+
+# Image tag each shipped tar must carry (name is pinned to the bundle version).
+# Every bundle type (release ZIP, build.sh bundle, air-gap bundle) ships these
+# four signed; anything else in images/ is refused.
 _expected_image_tag() {
   case "$1" in
     "bas-orchestrator-${BAS_VERSION}.tar") echo "bas-orchestrator:${BAS_VERSION}" ;;
@@ -489,13 +497,19 @@ _expected_image_tag() {
   esac
 }
 
-# Verifies EVERY image tar in <images_dir> (cosign + exact RepoTag) BEFORE any is
-# loaded. Fills IMG_TARS/IMG_TAGS/IMG_IDS (everything but the orchestrator) and
-# ORCH_TAR/ORCH_ID. Unsigned, unlisted or legacy .tar.gz files are fatal. The
-# caller supplies the failure wording via $1 ("installation"/"upgrade").
+# _verify_all_images <images_dir> <what>
+# Verifies EVERY image tar (cosign + exact RepoTag) BEFORE any is loaded. A
+# missing images/ directory is FATAL: nothing is ever pulled from a registry,
+# every runtime image must come from this bundle. Fills IMG_TARS/IMG_TAGS/IMG_IDS
+# (everything but the orchestrator) and ORCH_TAR/ORCH_ID. Unsigned, unlisted or
+# legacy .tar.gz files are fatal. <what> ("installation"/"upgrade") words errors.
 _verify_all_images() {
   local images_dir="$1" what="$2" img base tag id
   IMG_TARS=(); IMG_TAGS=(); IMG_IDS=(); ORCH_TAR=""; ORCH_ID=""
+  if [[ ! -d "$images_dir" ]]; then
+    err "images/ directory not found at ${images_dir} -- ${what} aborted. Every runtime image must come from this bundle's signed images/ (nothing is pulled from a registry)."
+    exit 1
+  fi
   for img in "${images_dir}"/*; do
     [[ -f "$img" ]] || continue
     base="$(basename "$img")"
@@ -522,6 +536,24 @@ _verify_all_images() {
   for req in postgres-16-alpine.tar headless-shell.tar "bas-caldera-${BAS_VERSION}.tar"; do
     [[ -f "${images_dir}/${req}" ]] || { err "Required runtime image ${req} missing from ${images_dir} -- ${what} aborted."; exit 1; }
   done
+}
+
+# _load_verified_images <what>   (after _verify_all_images)
+# Loads every other image first and the orchestrator LAST. Deliberate: docker
+# load's tag assignment is last-write-wins and tags are embedded in each tar's
+# own manifest, independent of its filename, so nothing loaded after the
+# orchestrator can re-point "bas-orchestrator:<ver>". After EVERY load the tag
+# must resolve to the image ID recorded from the verified tar.
+_load_verified_images() {
+  local what="$1" i
+  for i in "${!IMG_TARS[@]}"; do
+    docker load < "${IMG_TARS[$i]}" || { err "docker load failed for $(basename "${IMG_TARS[$i]}") -- ${what} aborted."; exit 1; }
+    _docker_tag_is "${IMG_TAGS[$i]}" "${IMG_IDS[$i]}" || { err "${IMG_TAGS[$i]} is not the verified image after load -- ${what} aborted."; exit 1; }
+    log "Loaded: $(basename "${IMG_TARS[$i]}")"
+  done
+  docker load < "$ORCH_TAR" || { err "docker load failed for $(basename "$ORCH_TAR") -- ${what} aborted."; exit 1; }
+  _docker_tag_is "bas-orchestrator:${BAS_VERSION}" "$ORCH_ID" || { err "bas-orchestrator:${BAS_VERSION} is not the verified image after load -- ${what} aborted."; exit 1; }
+  log "Loaded: $(basename "$ORCH_TAR")"
 }
 
 COSIGN_PUB_USED="${SCRIPT_DIR}/cosign.pub"
@@ -881,6 +913,9 @@ mode_install() {
   if [[ "$BAS_TLS" == "true" ]]; then results+=( "$(_check_tls_certs "$TLS_CERT" "$TLS_KEY")" ); fi
   results+=( "$(_check_licence "$LIC_PATH")" )
   render_checks "${results[@]}" || exit 1
+  # Verify EVERY bundled image before anything is installed or written: a
+  # missing images/ or any unsigned/unlisted/tampered tar aborts here.
+  _verify_all_images "${SCRIPT_DIR}/images" "installation"
 
   step "2/10  Docker Engine"
   if $NEED_DOCKER || $NEED_COMPOSE; then
@@ -925,33 +960,10 @@ mode_install() {
   log "Created: ${DATA_DIR}"
 
   step "4/10  Loading Docker images (air-gap safe -no pull)"
-  local images_dir="${SCRIPT_DIR}/images"
-  if [[ -d "$images_dir" ]]; then
-    # Load every other image first, then verify+load the orchestrator
-    # artifact LAST. This is deliberate, not cosmetic: singling out the
-    # orchestrator by filename alone would (1) silently skip verification
-    # if no bas-orchestrator-* file exists at all, and (2) let a later tar
-    # in the loop re-point the "bas-orchestrator:<ver>" tag after a
-    # verified load, since docker load's tag assignment is last-write-wins
-    # and tags are embedded in the tar's own manifest, independent of its
-    # filename on disk. Loading the orchestrator last closes both: nothing
-    # can load after it to override its tag, and its absence is now fatal
-    # instead of silent.
-    _verify_all_images "$images_dir" "installation"
-    local i orch_tar="$ORCH_TAR" orch_id="$ORCH_ID"
-    for i in "${!IMG_TARS[@]}"; do
-      info "Loading $(basename "${IMG_TARS[$i]}")..."
-      docker load < "${IMG_TARS[$i]}" || { err "docker load failed for $(basename "${IMG_TARS[$i]}") -- installation aborted."; exit 1; }
-      _docker_tag_is "${IMG_TAGS[$i]}" "${IMG_IDS[$i]}" || { err "${IMG_TAGS[$i]} is not the verified image after load -- installation aborted."; exit 1; }
-      log "Loaded: $(basename "${IMG_TARS[$i]}")"
-    done
-    info "Loading $(basename "$orch_tar")..."
-    docker load < "$orch_tar"
-    _docker_tag_is "bas-orchestrator:${BAS_VERSION}" "$orch_id" || { err "bas-orchestrator:${BAS_VERSION} is not the verified image after load -- installation aborted."; exit 1; }
-    log "Loaded: $(basename "$orch_tar")"
-  else
-    warn "images/ directory not found -Docker will attempt to pull (requires internet)"
-  fi
+  # Fail closed: every tar was verified after the prerequisite checks (a missing
+  # images/ is fatal, nothing is ever pulled); the orchestrator is loaded last
+  # and every tag is bound to its verified image ID (see _load_verified_images).
+  _load_verified_images "installation"
 
   step "5/10  Staging bundle files"
   # Scenarios
@@ -1071,6 +1083,11 @@ mode_upgrade() {
     fi
   fi
 
+  # Verify EVERY bundled image before anything is backed up or replaced: a
+  # missing images/ is FATAL (nothing is pulled, BAS_VERSION is not rewritten).
+  local what="upgrade (the previous version is still running; nothing was replaced)"
+  _verify_all_images "${SCRIPT_DIR}/images" "$what"
+
   step "1/5  Backup current installation"
   local backup_ts backup_dir
   backup_ts=$(date -u '+%Y%m%d-%H%M%S')
@@ -1082,22 +1099,9 @@ mode_upgrade() {
   log "Backup created: ${backup_dir}"
 
   step "2/5  Loading new images"
-  local images_dir="${SCRIPT_DIR}/images"
-  if [[ -d "$images_dir" ]]; then
-    # Same deliberate ordering as mode_install: load every other image
-    # first, then verify+load the orchestrator artifact LAST, so nothing
-    # loaded after it can override the "bas-orchestrator:<ver>" tag, and
-    # its absence is fatal rather than silently skipped.
-    _verify_all_images "$images_dir" "upgrade (the previous version is still running; nothing was replaced)"
-    local i orch_tar="$ORCH_TAR" orch_id="$ORCH_ID"
-    for i in "${!IMG_TARS[@]}"; do
-      docker load < "${IMG_TARS[$i]}" || { err "docker load failed for $(basename "${IMG_TARS[$i]}") -- upgrade aborted."; exit 1; }
-      _docker_tag_is "${IMG_TAGS[$i]}" "${IMG_IDS[$i]}" || { err "${IMG_TAGS[$i]} is not the verified image after load -- upgrade aborted."; exit 1; }
-      log "Loaded: $(basename "${IMG_TARS[$i]}")"
-    done
-    docker load < "$orch_tar" && log "Loaded: $(basename "$orch_tar")"
-    _docker_tag_is "bas-orchestrator:${BAS_VERSION}" "$orch_id" || { err "bas-orchestrator:${BAS_VERSION} is not the verified image after load -- upgrade aborted."; exit 1; }
-  fi
+  # Same as mode_install: everything was verified above; the orchestrator is
+  # loaded last and every tag is bound to its verified image ID.
+  _load_verified_images "$what"
 
   step "3/5  Updating bundle files"
   [[ -d "${SCRIPT_DIR}/scenarios"   ]] && cp -r "${SCRIPT_DIR}/scenarios/."   "${DATA_DIR}/scenarios/"
