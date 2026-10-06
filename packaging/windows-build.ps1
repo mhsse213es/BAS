@@ -32,12 +32,20 @@ param(
     # behavior, so the existing local dev/test loop isn't broken by this task.
     [string] $WindowsCertThumbprint = $env:BAS_WINDOWS_CERT_THUMBPRINT,
     [Nullable[bool]] $WindowsSigningRequired = $null,
-    [Nullable[bool]] $GpgSigningRequired     = $null
+    [Nullable[bool]] $GpgSigningRequired     = $null,
+
+    # cosign image signing is SEPARATE from Authenticode: it needs only the local
+    # packaging\signing\cosign.key, so it is required on EVERY build (customer or
+    # dev). -AllowUnsignedImages is the explicit dev-only escape hatch; such a
+    # bundle is refused by install.sh/setup.sh and must never be shipped.
+    [Nullable[bool]] $CosignSigningRequired  = $null,
+    [switch] $AllowUnsignedImages
 )
 
 $IsCustomerBuild = ($Customer -ne "" -and $CustomerID -ne "")
 if ($null -eq $WindowsSigningRequired) { $WindowsSigningRequired = $IsCustomerBuild }
 if ($null -eq $GpgSigningRequired)     { $GpgSigningRequired     = $IsCustomerBuild }
+if ($null -eq $CosignSigningRequired)  { $CosignSigningRequired  = (-not $AllowUnsignedImages) }
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
@@ -188,27 +196,51 @@ if (-not $SkipBuild) {
 }
 
 # -- 2. Pull dependency images ------------------------------------------------
-Log "Pulling postgres:16-alpine..."
-docker pull postgres:16-alpine
-if ($LASTEXITCODE -ne 0) { Err "Failed to pull postgres:16-alpine." }
-
-# chromedp/headless-shell: pinned by version AND digest (packaging/images.pin).
-# Pulled by digest, digest confirmed, then tagged with the version tag compose
-# runs. No warn-and-continue: compose starts chrome with no profile, so a bundle
-# without it cannot start.
-$pin = @{}
-foreach ($line in (Get-Content "$RepoRoot\packaging\images.pin")) {
-    if ($line -match '^\s*([A-Z_]+)=(\S+)\s*$') { $pin[$Matches[1]] = $Matches[2] }
+# postgres and chromedp/headless-shell are pinned by tag AND digest in
+# packaging\images.pin. PARSED with the same rules as rel_read_pin
+# (packaging/signing/release-images.sh): only comments, blank lines and
+# KEY=value for the known keys, each exactly once; an unknown/duplicate key, a
+# malformed line/value or a CR (CRLF checkout) is fatal. Each image is pulled
+# by digest, the digest confirmed, then tagged with the tag compose runs. No
+# warn-and-continue: compose starts both with no profile.
+$pinPath = "$RepoRoot\packaging\images.pin"
+$pinText = [System.IO.File]::ReadAllText($pinPath)
+if ($pinText.Contains("`r")) { Err "packaging\images.pin contains CR characters (CRLF checkout?)." }
+$pinRules = @{
+    'CHROME_VERSION'  = '^[0-9]+(\.[0-9]+)+$'
+    'CHROME_DIGEST'   = '^sha256:[0-9a-f]{64}$'
+    'POSTGRES_TAG'    = '^[A-Za-z0-9][A-Za-z0-9._-]*$'
+    'POSTGRES_DIGEST' = '^sha256:[0-9a-f]{64}$'
 }
-if (-not $pin['CHROME_VERSION'] -or $pin['CHROME_DIGEST'] -notmatch '^sha256:[0-9a-f]{64}$') { Err "packaging\images.pin is missing a valid CHROME_VERSION/CHROME_DIGEST." }
+$pin = @{}
+$pinLineNo = 0
+foreach ($line in ($pinText -split "`n")) {
+    $pinLineNo++
+    if ($line -eq '' -or $line.StartsWith('#')) { continue }
+    if ($line -cnotmatch '^([A-Z_]+)=(\S+)$') { Err "packaging\images.pin:${pinLineNo}: malformed line (expected KEY=value)." }
+    $k = $Matches[1]; $v = $Matches[2]
+    if (-not $pinRules.ContainsKey($k)) { Err "packaging\images.pin:${pinLineNo}: unknown key $k." }
+    if ($pin.ContainsKey($k)) { Err "packaging\images.pin:${pinLineNo}: duplicate key $k." }
+    if ($v -cnotmatch $pinRules[$k]) { Err "packaging\images.pin:${pinLineNo}: invalid value for $k." }
+    $pin[$k] = $v
+}
+foreach ($k in $pinRules.Keys) { if (-not $pin.ContainsKey($k)) { Err "packaging\images.pin: missing $k." } }
+if ($pin['POSTGRES_TAG'] -ne '16-alpine') { Err "POSTGRES_TAG=$($pin['POSTGRES_TAG']): the installers expect postgres:16-alpine (postgres-16-alpine.tar) -- update them together." }
+
+function Get-PinnedImage {
+    param([string] $Repo, [string] $Tag, [string] $Digest)
+    Log "Pulling $Repo@$Digest ($Tag)..."
+    docker pull "$Repo@$Digest"
+    if ($LASTEXITCODE -ne 0) { Err "Failed to pull $Repo@$Digest." }
+    $repoDigests = docker image inspect --format '{{json .RepoDigests}}' "$Repo@$Digest"
+    if ($LASTEXITCODE -ne 0 -or ($repoDigests -notmatch [regex]::Escape($Digest))) { Err "Pulled $Repo image does not carry the pinned digest $Digest." }
+    docker tag "$Repo@$Digest" "${Repo}:$Tag"
+    if ($LASTEXITCODE -ne 0) { Err "Failed to tag ${Repo}:$Tag." }
+}
+$PostgresImage = "postgres:$($pin['POSTGRES_TAG'])"
+Get-PinnedImage -Repo 'postgres' -Tag $pin['POSTGRES_TAG'] -Digest $pin['POSTGRES_DIGEST']
 $ChromeImage = "chromedp/headless-shell:$($pin['CHROME_VERSION'])"
-Log "Pulling chromedp/headless-shell@$($pin['CHROME_DIGEST']) ($($pin['CHROME_VERSION']))..."
-docker pull "chromedp/headless-shell@$($pin['CHROME_DIGEST'])"
-if ($LASTEXITCODE -ne 0) { Err "Failed to pull chromedp/headless-shell@$($pin['CHROME_DIGEST'])." }
-$chromeDigests = docker image inspect --format '{{json .RepoDigests}}' "chromedp/headless-shell@$($pin['CHROME_DIGEST'])"
-if ($LASTEXITCODE -ne 0 -or ($chromeDigests -notmatch [regex]::Escape($pin['CHROME_DIGEST']))) { Err "Pulled chrome image does not carry the pinned digest $($pin['CHROME_DIGEST'])." }
-docker tag "chromedp/headless-shell@$($pin['CHROME_DIGEST'])" $ChromeImage
-if ($LASTEXITCODE -ne 0) { Err "Failed to tag $ChromeImage." }
+Get-PinnedImage -Repo 'chromedp/headless-shell' -Tag $pin['CHROME_VERSION'] -Digest $pin['CHROME_DIGEST']
 
 # Build the custom Caldera image with the adversary-emulation library baked in.
 # This is the only place the emulation library is cloned (build host has internet).
@@ -233,9 +265,9 @@ New-Item -ItemType Directory -Force -Path "$OutDir\systemd" | Out-Null
 # -- 4. Save Docker images (.tar -- docker load accepts both .tar and .tar.gz) -
 Log "Saving Docker images (this may take a few minutes)..."
 
-Log "  Saving postgres:16-alpine..."
-docker save postgres:16-alpine -o "$OutDir\images\postgres-16-alpine.tar"
-if ($LASTEXITCODE -ne 0) { Err "Failed to save postgres:16-alpine image." }
+Log "  Saving $PostgresImage..."
+docker save $PostgresImage -o "$OutDir\images\postgres-16-alpine.tar"
+if ($LASTEXITCODE -ne 0) { Err "Failed to save $PostgresImage image." }
 Log "  Saved: postgres-16-alpine.tar"
 
 Log "  Saving $ChromeImage..."
@@ -647,23 +679,24 @@ if ($LASTEXITCODE -ne 0) { Err "Failed to save orchestrator image." }
 # repo's packaging/signing/cosign.sh (bash, used by build.sh); this calls
 # the native cosign.exe binary directly, same pattern this file already
 # uses for gpg.exe rather than shelling out to a bash script. Gated by the
-# existing $WindowsSigningRequired (already = $IsCustomerBuild by
-# default): a customer build that can't sign+verify must not ship; a dev
-# build without cosign configured proceeds unsigned, loudly.
+# $CosignSigningRequired -- NOT by Authenticode's $WindowsSigningRequired:
+# cosign needs only the local cosign.key, so it is required on every build
+# unless -AllowUnsignedImages (dev only) is passed, in which case the build
+# proceeds unsigned, loudly, and the ZIP gate below lets it through.
 $CosignKey = "$RepoRoot\packaging\signing\cosign.key"
 $CosignPub = "$RepoRoot\packaging\signing\cosign.pub"
 $cosignCmd = Get-Command cosign -ErrorAction SilentlyContinue
 if (-not $cosignCmd) {
-    if ($WindowsSigningRequired) {
-        Err "cosign is not installed, and cosign signing is mandatory for this customer build. Install: https://docs.sigstore.dev/cosign/system_config/installation/"
+    if ($CosignSigningRequired) {
+        Err "cosign is not installed, and cosign image signing is required (dev only: -AllowUnsignedImages). Install: https://docs.sigstore.dev/cosign/system_config/installation/"
     } else {
-        Warn "  cosign not found -- orchestrator artifact will not be cosign-signed (not required for this build)."
+        Warn "  cosign not found -- orchestrator artifact will not be cosign-signed (-AllowUnsignedImages)."
     }
 } elseif (-not (Test-Path $CosignKey)) {
-    if ($WindowsSigningRequired) {
-        Err "cosign.key not found at $CosignKey, and cosign signing is mandatory for this customer build. Run: bash packaging/signing/cosign.sh --keygen"
+    if ($CosignSigningRequired) {
+        Err "cosign.key not found at $CosignKey, and cosign image signing is required (dev only: -AllowUnsignedImages). Run: bash packaging/signing/cosign.sh --keygen"
     } else {
-        Warn "  cosign.key not found -- orchestrator artifact will NOT be cosign-signed (not required for this build). This bundle will be refused by install.sh/setup.sh, which require a signed orchestrator artifact -- fine for a purely local test, but it cannot be deployed to staging or a customer site."
+        Warn "  cosign.key not found -- orchestrator artifact will NOT be cosign-signed (-AllowUnsignedImages). This bundle will be refused by install.sh/setup.sh, which require a signed orchestrator artifact -- fine for a purely local test, but it cannot be deployed to staging or a customer site."
     }
 } else {
     Log "  Signing $OrchTar with cosign..."
@@ -702,8 +735,8 @@ if (-not $cosignCmd) {
     Get-Content $signStdout, $signStderr -ErrorAction SilentlyContinue | ForEach-Object { Log "    $_" }
     Remove-Item -ErrorAction SilentlyContinue $emptyStdin, $signStdout, $signStderr
     if ($signProc.ExitCode -ne 0) {
-        if ($WindowsSigningRequired) { Err "cosign signing failed for $OrchTar -- aborting customer build." }
-        else { Warn "  cosign signing failed -- continuing unsigned (not required for this build)." }
+        if ($CosignSigningRequired) { Err "cosign signing failed for $OrchTar -- aborting build." }
+        else { Warn "  cosign signing failed -- continuing unsigned (-AllowUnsignedImages)." }
     } else {
         # Offline-signing invariant: --tlog-upload=false --use-signing-config=false
         # (above) must produce a bundle with no transparency-log entry. cosign has
@@ -739,14 +772,14 @@ if (-not $cosignCmd) {
 # cosign binary, key and gating as the orchestrator above: setup.sh/install.sh
 # refuse any image tar without a valid bundle, so an unsigned supporting image
 # makes the bundle uninstallable. Signing is exactly as mandatory as for the
-# orchestrator ($WindowsSigningRequired): required -> Err; otherwise the bundle
+# orchestrator ($CosignSigningRequired): required -> Err; otherwise the bundle
 # ships unsigned (and is refused by the installers), loudly.
 $cosignReady = ($cosignCmd -and (Test-Path $CosignKey))
 foreach ($imgTar in (Get-ChildItem -Path "$OutDir\images" -Filter "*.tar" -File | Where-Object { $_.FullName -ne (Get-Item $OrchTar).FullName })) {
     $imgPath = $imgTar.FullName
     if (-not $cosignReady) {
-        if ($WindowsSigningRequired) { Err "Cannot cosign-sign $imgPath (cosign or cosign.key missing) and signing is mandatory for this customer build." }
-        else { Warn "  $($imgTar.Name) will NOT be cosign-signed (not required for this build); this bundle will be refused by install.sh/setup.sh."; continue }
+        if ($CosignSigningRequired) { Err "Cannot cosign-sign $imgPath (cosign or cosign.key missing) and cosign image signing is required (dev only: -AllowUnsignedImages)." }
+        else { Warn "  $($imgTar.Name) will NOT be cosign-signed (-AllowUnsignedImages); this bundle will be refused by install.sh/setup.sh."; continue }
     }
     Log "  Signing $imgPath with cosign..."
     $emptyStdin = "$OutDir\.cosign-empty-stdin"
@@ -761,8 +794,8 @@ foreach ($imgTar in (Get-ChildItem -Path "$OutDir\images" -Filter "*.tar" -File 
     Get-Content $signStdout, $signStderr -ErrorAction SilentlyContinue | ForEach-Object { Log "    $_" }
     Remove-Item -ErrorAction SilentlyContinue $emptyStdin, $signStdout, $signStderr
     if ($signProc.ExitCode -ne 0) {
-        if ($WindowsSigningRequired) { Err "cosign signing failed for $imgPath -- aborting customer build." }
-        else { Warn "  cosign signing failed for $($imgTar.Name) -- continuing unsigned (not required for this build)."; continue }
+        if ($CosignSigningRequired) { Err "cosign signing failed for $imgPath -- aborting build." }
+        else { Warn "  cosign signing failed for $($imgTar.Name) -- continuing unsigned (-AllowUnsignedImages)."; continue }
     }
     if ((Get-Content "$imgPath.bundle" -Raw) -match '"tlogEntries"') {
         Err "cosign produced a bundle containing a transparency-log entry for $imgPath -- offline-signing invariant violated."
@@ -989,6 +1022,24 @@ if ($Customer -ne "" -and $CustomerID -ne "") {
 } else {
     Warn "No -Customer / -CustomerID provided - skipping license generation."
     Warn "Generate manually: go run packaging\licensing\licensegen\main.go -customer '...' -id '...' -days 365"
+}
+
+# -- 8b. Image signature gate -------------------------------------------------
+# Every runtime image tar must ship with its cosign .bundle: install.sh and
+# setup.sh refuse an unsigned image, so an unsigned ZIP is never deliverable.
+# Only the explicit dev switch -AllowUnsignedImages lets one through.
+$unsignedImages = @(Get-ChildItem -Path "$OutDir\images" -Filter "*.tar" -File | Where-Object {
+    -not (Test-Path "$($_.FullName).bundle" -PathType Leaf) -or (Get-Item "$($_.FullName).bundle").Length -eq 0
+})
+if ($unsignedImages.Count -gt 0) {
+    $names = ($unsignedImages | ForEach-Object { $_.Name }) -join ", "
+    if ($AllowUnsignedImages) {
+        Warn "  -AllowUnsignedImages: shipping UNSIGNED image(s) $names -- install.sh/setup.sh will refuse this bundle (dev/local use only)."
+    } else {
+        Err "Image(s) without a cosign .bundle: $names -- refusing to create the ZIP (dev only: -AllowUnsignedImages)."
+    }
+} else {
+    Log "  Image signature gate passed: every images\*.tar has its cosign .bundle."
 }
 
 # -- 9. Create ZIP for transfer -----------------------------------------------

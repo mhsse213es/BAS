@@ -1,12 +1,23 @@
 # Pinned runtime images shared by every release path (pack.sh, build.sh,
-# windows-build.ps1). Sourced by bash; parsed line-by-line by PowerShell.
+# windows-build.ps1). PARSED, never sourced: rel_read_pin (packaging/signing/
+# release-images.sh) and windows-build.ps1 accept only `KEY=value` lines with
+# the keys below (each exactly once), comments and blank lines; an unknown or
+# duplicate key, a malformed value or a CR (CRLF checkout) is fatal.
+#
+# Release builds pull each image BY DIGEST and fail if the pulled image does not
+# carry it; the image is then tagged with the version tag compose runs, saved,
+# cosign-signed and shipped. The tags in docker-compose.yml, setup.sh,
+# install.sh and cosign-verify-lib.sh must equal these (airgap-cosign.test.sh).
+#
 # CHROME: chromedp/headless-shell 151.0.7922.109 (Docker Hub tag, 2026-08-11).
 # DIGEST is the multi-arch manifest-list digest published by the registry
-# (https://hub.docker.com/v2/repositories/chromedp/headless-shell/tags). Release
-# builds pull BY DIGEST and fail if the pulled image does not carry it; the
-# image is then tagged CHROME_VERSION, saved, cosign-signed and shipped. The
-# tag in docker-compose.yml, setup.sh, install.sh and cosign-verify-lib.sh must
-# equal chromedp/headless-shell:CHROME_VERSION (checked by airgap-cosign.test.sh).
-# CALDERA's base image is pinned (tag + digest) in packaging/caldera/Dockerfile.
+# (https://hub.docker.com/v2/repositories/chromedp/headless-shell/tags).
 CHROME_VERSION=151.0.7922.109
 CHROME_DIGEST=sha256:2d349b544a1ea6b5b5fd7c0fe99215ff662339c57407ee2e8c0a11af93516b04
+# POSTGRES: library/postgres:16-alpine OCI image index digest, read 2026-10-06
+# from the registry (docker-content-digest of a manifest HEAD on
+# registry-1.docker.io/v2/library/postgres/manifests/16-alpine; `docker buildx
+# imagetools inspect postgres:16-alpine` reports the same digest).
+POSTGRES_TAG=16-alpine
+POSTGRES_DIGEST=sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea
+# CALDERA's base image is pinned (tag + digest) in packaging/caldera/Dockerfile.

@@ -5,7 +5,8 @@
 # with the same helper and key as the orchestrator. Every step is fatal: there is
 # no warn-and-continue, because a bundle missing any runtime image cannot start.
 #
-# Runtime image set: orchestrator, postgres, bas-caldera, chromedp/headless-shell.
+# Runtime image set: orchestrator, postgres, bas-caldera, chromedp/headless-shell
+# (postgres and chrome pulled by the digests in packaging/images.pin).
 # (golang is build/dev-only -- compose profile "audit" -- and is never shipped.)
 
 # rel_sign_tar <tar> <cosign.sh>: sign, then verify what was just produced.
@@ -30,19 +31,61 @@ rel_build_caldera() {
   docker build -t "bas-caldera:${ver}" "${root}/packaging/caldera" || { err "Failed to build bas-caldera:${ver} -- aborting."; exit 1; }
 }
 
-# rel_pull_chrome <repo root>: pull chromedp/headless-shell BY DIGEST (packaging/images.pin),
-# confirm the digest, and tag it CHROME_VERSION (the tag compose runs). Sets CHROME_IMAGE.
+# rel_read_pin <images.pin>: PARSE (never source) the pin file. Accepts only
+# comments, blank lines and KEY=value lines for the known keys, each exactly
+# once; an unknown or duplicate key, a malformed line/value or any CR (CRLF
+# checkout) is fatal. Sets CHROME_VERSION CHROME_DIGEST POSTGRES_TAG POSTGRES_DIGEST.
+rel_read_pin() {
+  local file="$1" line key val n=0 seen=" "
+  CHROME_VERSION=""; CHROME_DIGEST=""; POSTGRES_TAG=""; POSTGRES_DIGEST=""
+  [[ -f "$file" ]] || { err "${file} not found -- aborting."; exit 1; }
+  if grep -q $'\r' "$file"; then err "${file} contains CR characters (CRLF checkout?) -- aborting."; exit 1; fi
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    n=$((n + 1))
+    [[ -z "$line" || "$line" == \#* ]] && continue
+    [[ "$line" =~ ^([A-Z_]+)=([^[:space:]]+)$ ]] || { err "${file}:${n}: malformed line (expected KEY=value) -- aborting."; exit 1; }
+    key="${BASH_REMATCH[1]}"; val="${BASH_REMATCH[2]}"
+    case "$key" in
+      CHROME_VERSION)  [[ "$val" =~ ^[0-9]+(\.[0-9]+)+$ ]] ;;
+      CHROME_DIGEST|POSTGRES_DIGEST) [[ "$val" =~ ^sha256:[0-9a-f]{64}$ ]] ;;
+      POSTGRES_TAG)    [[ "$val" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] ;;
+      *) err "${file}:${n}: unknown key ${key} -- aborting."; exit 1 ;;
+    esac || { err "${file}:${n}: invalid value for ${key} -- aborting."; exit 1; }
+    [[ "$seen" == *" ${key} "* ]] && { err "${file}:${n}: duplicate key ${key} -- aborting."; exit 1; }
+    seen="${seen}${key} "
+    printf -v "$key" '%s' "$val"
+  done < "$file"
+  for key in CHROME_VERSION CHROME_DIGEST POSTGRES_TAG POSTGRES_DIGEST; do
+    [[ -n "${!key}" ]] || { err "${file}: missing ${key} -- aborting."; exit 1; }
+  done
+}
+
+# rel_pull_pinned <repo> <tag> <digest>: pull <repo>@<digest>, confirm the
+# pulled image carries that digest, then tag it <repo>:<tag> (the tag compose runs).
+rel_pull_pinned() {
+  local repo="$1" tag="$2" digest="$3"
+  log "Pulling ${repo}@${digest} (${tag})..."
+  docker pull "${repo}@${digest}" || { err "Failed to pull ${repo}@${digest} -- aborting."; exit 1; }
+  docker image inspect --format '{{json .RepoDigests}}' "${repo}@${digest}" 2>/dev/null | grep -q "${digest}"     || { err "Pulled ${repo} image does not carry the pinned digest ${digest} -- aborting."; exit 1; }
+  docker tag "${repo}@${digest}" "${repo}:${tag}" || { err "docker tag ${repo}:${tag} failed -- aborting."; exit 1; }
+}
+
+# rel_pull_chrome <repo root>: chromedp/headless-shell BY DIGEST (packaging/images.pin),
+# tagged CHROME_VERSION. Sets CHROME_IMAGE.
 rel_pull_chrome() {
-  local root="$1" CHROME_VERSION="" CHROME_DIGEST=""
-  # shellcheck disable=SC1090,SC1091
-  source "${root}/packaging/images.pin"
-  [[ -n "$CHROME_VERSION" && "$CHROME_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]] || { err "packaging/images.pin is missing a valid CHROME_VERSION/CHROME_DIGEST."; exit 1; }
+  rel_read_pin "$1/packaging/images.pin"
   CHROME_IMAGE="chromedp/headless-shell:${CHROME_VERSION}"
-  log "Pulling chromedp/headless-shell@${CHROME_DIGEST} (${CHROME_VERSION})..."
-  docker pull "chromedp/headless-shell@${CHROME_DIGEST}" || { err "Failed to pull chromedp/headless-shell@${CHROME_DIGEST} -- aborting."; exit 1; }
-  docker image inspect --format '{{json .RepoDigests}}' "chromedp/headless-shell@${CHROME_DIGEST}" 2>/dev/null | grep -q "${CHROME_DIGEST}" \
-    || { err "Pulled chrome image does not carry the pinned digest ${CHROME_DIGEST} -- aborting."; exit 1; }
-  docker tag "chromedp/headless-shell@${CHROME_DIGEST}" "$CHROME_IMAGE" || { err "docker tag ${CHROME_IMAGE} failed -- aborting."; exit 1; }
+  rel_pull_pinned chromedp/headless-shell "$CHROME_VERSION" "$CHROME_DIGEST"
+}
+
+# rel_ship_postgres <repo root> <images dir> <cosign.sh>: postgres BY DIGEST
+# (packaging/images.pin), tagged postgres:POSTGRES_TAG, saved + signed.
+rel_ship_postgres() {
+  local root="$1" dir="$2" cs="$3"
+  rel_read_pin "${root}/packaging/images.pin"
+  [[ "$POSTGRES_TAG" == "16-alpine" ]] || { err "POSTGRES_TAG=${POSTGRES_TAG}: the installers expect postgres:16-alpine (postgres-16-alpine.tar) -- update them together. Aborting."; exit 1; }
+  rel_pull_pinned postgres "$POSTGRES_TAG" "$POSTGRES_DIGEST"
+  rel_save_sign "postgres:${POSTGRES_TAG}" "${dir}/postgres-${POSTGRES_TAG}.tar" "$cs"
 }
 
 # rel_ship_caldera_chrome <version> <repo root> <images dir> <cosign.sh>

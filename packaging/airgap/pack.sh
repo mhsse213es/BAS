@@ -15,7 +15,7 @@
 #   dist/bas-airgap-<version>.tar.gz.sha256
 #
 # Requires cosign + packaging/signing/cosign.key and internet access (builds
-# bas-caldera, pulls the pinned chrome image). Every runtime image tar --
+# bas-caldera, pulls postgres and chrome BY DIGEST from packaging/images.pin). Every runtime image tar --
 # orchestrator, postgres, bas-caldera, chromedp/headless-shell -- is signed;
 # import.sh refuses any unsigned one. Any failure to build/pull/save/sign aborts.
 #
@@ -75,12 +75,12 @@ log "Staging air-gap bundle v${VERSION}..."
 rm -rf "${BUILD_DIR}"
 mkdir -p "${BUILD_DIR}/images" "${BUILD_DIR}/compose/systemd"
 
-# ── 2. Pull Docker images ──────────────────────────────────────────────────────
+# ── 2. Runtime images ──────────────────────────────────────────────────────────
 ORCHESTRATOR_IMAGE="bas-orchestrator:${VERSION}"
-POSTGRES_IMAGE="postgres:16-alpine"
-
-log "Pulling ${POSTGRES_IMAGE}..."
-docker pull "${POSTGRES_IMAGE}"
+# Shared release helpers: images.pin parser, pull-by-digest, save + sign.
+# shellcheck source=../signing/release-images.sh
+source "${REPO_ROOT}/packaging/signing/release-images.sh"
+rel_read_pin "${REPO_ROOT}/packaging/images.pin"   # fail fast on a bad pin file
 
 # orchestrator image must already be built locally (run packaging/build.sh first)
 if ! docker image inspect "${ORCHESTRATOR_IMAGE}" &>/dev/null; then
@@ -116,24 +116,11 @@ fi
 # Top level: used by import.sh / verify.sh. compose/: used by setup.sh --offline.
 cp "$COSIGN_PUB" "${BUILD_DIR}/cosign.pub"
 
-# Postgres: also UNCOMPRESSED + cosign-signed with the same helper -- the importer
-# refuses to load ANY image tar that lacks a valid signature.
-PG_TAR="${BUILD_DIR}/images/postgres-16-alpine.tar"
-docker save "${POSTGRES_IMAGE}" -o "${PG_TAR}"
-log "  Saved: postgres-16-alpine.tar ($(du -sh "${PG_TAR}" | cut -f1))"
-log "Signing postgres image with cosign..."
-if ! bash "${COSIGN_SCRIPT}" --sign "${PG_TAR}"; then
-  err "cosign signing failed for ${PG_TAR} -- aborting."
-  exit 1
-fi
-if ! bash "${COSIGN_SCRIPT}" --verify "${PG_TAR}"; then
-  err "cosign verification FAILED immediately after signing ${PG_TAR} -- investigate before shipping."
-  exit 1
-fi
+# Postgres: pulled BY DIGEST (images.pin), UNCOMPRESSED + cosign-signed with the
+# same helper -- the importer refuses to load ANY image tar that lacks a valid signature.
+rel_ship_postgres "${REPO_ROOT}" "${BUILD_DIR}/images" "${COSIGN_SCRIPT}"
 # Caldera (baked emu library, pinned base) and chrome (pinned version+digest):
 # compose starts both with no profile, so an offline install needs them.
-# shellcheck source=../signing/release-images.sh
-source "${REPO_ROOT}/packaging/signing/release-images.sh"
 rel_ship_caldera_chrome "${VERSION}" "${REPO_ROOT}" "${BUILD_DIR}/images" "${COSIGN_SCRIPT}"
 
 # Every file under images/ must be a signed .tar (fail closed on anything else).
@@ -246,9 +233,10 @@ echo "  Checksum:  ${CHECKSUM}"
 echo ""
 echo "  Transfer bundle + .sha256 + .asc (if signed) to the air-gapped server."
 echo "  TRUST BOOTSTRAP: verify-sig.sh ships INSIDE the bundle, so with an out-of-band"
-echo "  GPG key do the FIRST check with the host's own gpg BEFORE extracting/running anything:"
-echo "    GNUPGHOME=\$(mktemp -d) gpg --import <oob.asc> && gpg --status-fd 1 --verify bas-airgap-${VERSION}.tar.gz.asc bas-airgap-${VERSION}.tar.gz"
-echo "  and compare the VALIDSIG fingerprint with the published Audspect one. Then run:"
+echo "  GPG key do the FIRST check with the host's own gpg BEFORE extracting/running anything"
+echo "  (oob.asc = the Audspect key obtained out of band; canonical text: packaging/airgap/trust-bootstrap.sh):"
+sed -e "s/bundle\.tar\.gz/bas-airgap-${VERSION}.tar.gz/g" -e 's/^/    /' "${REPO_ROOT}/packaging/airgap/trust-bootstrap.sh"
+echo "  Then run:"
 echo "  (cosign >= v3.1.0 must already be installed on the air-gapped server)"
 echo "    bash verify-sig.sh bas-airgap-${VERSION}.tar.gz   # if signed"
 echo "    bash verify.sh bas-airgap-${VERSION}.tar.gz"
