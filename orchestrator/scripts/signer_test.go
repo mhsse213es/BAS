@@ -80,6 +80,52 @@ func TestVerifyAllMissingSig(t *testing.T) {
 	}
 }
 
+func TestVerifyAllSkipsCustomIntel(t *testing.T) {
+	dir := setupSigned(t)
+	for _, d := range []string{"custom", "intel"} {
+		if err := os.MkdirAll(filepath.Join(dir, d), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, d, "u.yaml"), []byte("x: 1\n"), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var out bytes.Buffer
+	if rc := verifyAll(dir, false, &out); rc != 0 || !strings.Contains(out.String(), "ok=2 fail=0") {
+		t.Fatalf("rc=%d out=%s", rc, out.String())
+	}
+	// Nested custom/ is NOT exempt.
+	if err := os.MkdirAll(filepath.Join(dir, "sub", "custom"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "sub", "custom", "u.yaml"), []byte("x: 1\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if rc := verifyAll(dir, false, &out); rc == 0 {
+		t.Fatal("nested custom/ unsigned yaml should fail")
+	}
+}
+
+func TestVerifyAllEmptyAndMissingDir(t *testing.T) {
+	setupSigned(t)
+	var out bytes.Buffer
+	if rc := verifyAll(t.TempDir(), false, &out); rc == 0 {
+		t.Fatal("empty dir passed")
+	}
+	if rc := verifyAll(filepath.Join(t.TempDir(), "nope"), false, &out); rc == 0 {
+		t.Fatal("missing dir passed")
+	}
+}
+
+func TestVerifyAllAllowDevPlaceholder(t *testing.T) {
+	dir := setupSigned(t)
+	integrity.ScenarioPublicKeyPEM = "SIGNING_KEYGEN_REQUIRED"
+	var out bytes.Buffer
+	if rc := verifyAll(dir, true, &out); rc != 0 {
+		t.Fatalf("rc=%d out=%s", rc, out.String())
+	}
+}
+
 func TestVerifyAllPlaceholderFails(t *testing.T) {
 	dir := setupSigned(t)
 	integrity.ScenarioPublicKeyPEM = "SIGNING_KEYGEN_REQUIRED" // restored by setupSigned cleanup

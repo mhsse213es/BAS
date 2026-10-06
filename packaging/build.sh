@@ -156,7 +156,7 @@ chmod +x "${BUILD_DIR}/setup.sh" "${BUILD_DIR}/uninstall.sh"
 # against the COMPILED public key (calls integrity.VerifyScenarioFile). Runs
 # before scenarios are copied into the bundle. Go is already required above.
 log "Verifying builtin scenario signatures..."
-if ! (cd "${REPO_ROOT}/orchestrator" && go run scripts/signer.go verify-all "${REPO_ROOT}/scenarios"); then
+if ! (cd "${REPO_ROOT}/orchestrator" && env -u GOOS -u GOARCH go run scripts/signer.go verify-all "${REPO_ROOT}/scenarios"); then
   err "builtin scenario signatures are stale -- re-sign on the build host with orchestrator/private_key.pem (see docs/internal/build-guide.md)"
   exit 1
 fi

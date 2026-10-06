@@ -22,6 +22,7 @@ func main() {
 		fmt.Println("Usage:")
 		fmt.Println("  go run signer.go keygen")
 		fmt.Println("  go run signer.go sign <private_key.pem> <file_to_sign>")
+		fmt.Println("  go run signer.go verify-all [--allow-dev] <dir>")
 		os.Exit(1)
 	}
 
@@ -70,6 +71,11 @@ func verifyAll(dir string, allowDev bool, out io.Writer) int {
 	err := filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
 			return err
+		}
+		// Mirror production: custom/ and intel/ directly under the root are
+		// unsigned by design (engine.go sourceForPath).
+		if d.IsDir() && filepath.Dir(path) == filepath.Clean(dir) && (d.Name() == "custom" || d.Name() == "intel") {
+			return filepath.SkipDir
 		}
 		if d.IsDir() || !strings.HasSuffix(path, ".yaml") {
 			return nil
