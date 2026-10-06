@@ -23,6 +23,7 @@ import (
 	"github.com/audspect/bas/internal/cmdsigning"
 	"github.com/audspect/bas/internal/compliance"
 	"github.com/audspect/bas/internal/connector"
+	"github.com/audspect/bas/internal/contentregistry"
 	"github.com/audspect/bas/internal/controlhealth"
 	"github.com/audspect/bas/internal/correlation"
 	"github.com/audspect/bas/internal/db"
@@ -53,6 +54,7 @@ import (
 	"github.com/audspect/bas/internal/sftpsink"
 	"github.com/audspect/bas/internal/smtpsink"
 	"github.com/audspect/bas/internal/taxii"
+	"github.com/audspect/bas/internal/threatidentity"
 	"github.com/audspect/bas/internal/threatpriority"
 	"github.com/audspect/bas/internal/ticketing"
 	"github.com/audspect/bas/internal/verification"
@@ -310,8 +312,17 @@ func main() {
 
 	// ── Scenario Engine ───────────────────────────────────────────────────
 	engine := scenario.NewEngine(cfg.ScenariosDir)
-	if err := engine.Load(); err != nil {
-		log.Printf("[!] scenario load warning: %v", err)
+	contentRegistry := contentregistry.New(pool, integrity.CompiledVerifier{})
+	if !(integrity.CompiledVerifier{}).SigningEnabled() {
+		// Spec §6.3: make the dev-build trust downgrade impossible to miss.
+		log.Printf("[!] DEV BUILD: unsigned vendor content is executable; production builds deny it")
+	}
+	engine.AttachRegistry(contentRegistry)
+	scenarioLoadErr := engine.Load()
+	// Captured now: later Loads (connector scheduler) reset the counter.
+	bootIntakeFailures := engine.LastLoadIntakeFailures()
+	if scenarioLoadErr != nil {
+		log.Printf("[!] scenario load warning: %v", scenarioLoadErr)
 	}
 	log.Printf("[+] Loaded %d scenarios from %s", engine.Count(), cfg.ScenariosDir)
 
@@ -402,7 +413,15 @@ func main() {
 	// verification_history — only manual/API attestations were. This poller
 	// closes that gap so Store.CurrentForRun/History are complete for every
 	// consumer, not just human-reviewed expectations.
-	verifyJob := verifysync.NewJob(pool, verificationStore, engine)
+	// Run-scoped content view (TCF Phase 1 §7): post-run verification and
+	// reporting interpret each run against its pinned content version. Wired
+	// before the poller starts so Tick never races the assignment.
+	runContent := func(ctx context.Context, runID string) reporting.RunContentInfo {
+		rr := contentRegistry.ForRun(ctx, runID, engine)
+		return reporting.RunContentInfo{Resolver: rr, Status: string(rr.Content.Status), Label: rr.Content.Label(),
+			Transient: rr.Content.Transient}
+	}
+	verifyJob := verifysync.NewJob(pool, verificationStore, engine).WithRunContent(runContent)
 	verifySyncScheduler := exercise.NewPollScheduler(5 * time.Minute)
 	verifySyncScheduler.Start(verifyJob.Tick)
 	log.Println("[+] Automatic verdict persistence poller started")
@@ -423,7 +442,8 @@ func main() {
 		WithScenarios(engine).
 		WithVerifications(verificationStore).
 		WithRuleLibrary(rulesEngine).
-		WithSectorRegion(cfg.ThreatIntelSectors, cfg.ThreatIntelRegions)
+		WithSectorRegion(cfg.ThreatIntelSectors, cfg.ThreatIntelRegions).
+		WithRunContent(runContent)
 	log.Println("[+] Reporting engine ready")
 
 	// ── Ticketing Manager ─────────────────────────────────────────────────
@@ -452,10 +472,24 @@ func main() {
 	for _, src := range tiSources {
 		log.Printf("[+] %s connector configured", src.Name())
 	}
-	gen := connector.NewGenerator(cfg.ScenariosDir, cfg.ThreatIntelSectors, cfg.ThreatIntelRegions, engine.Profiles())
+	gen := connector.NewGenerator(cfg.ScenariosDir, cfg.ThreatIntelSectors, cfg.ThreatIntelRegions, engine.Profiles()).WithRegistrar(contentRegistry).
+		WithComponentVersions(connector.DBComponentVersions(pool))
 	priorityEngine := threatpriority.NewEngine(pool, engine, cfg.ThreatIntelSectors, cfg.ThreatIntelRegions)
 	correlationEngine := correlation.NewEngine(pool, engine)
-	scheduler := connector.NewScheduler(tiSources, gen, engine, cfg.ThreatIntelPollHours, pool, priorityEngine)
+	identityStore := threatidentity.NewStore(pool)
+	if rep, err := identityStore.Backfill(context.Background()); err != nil {
+		log.Printf("[!] threat identity backfill: %v", err)
+	} else {
+		log.Printf("[+] threat identity: %d threat(s) created; entity actor links +%d, %d unmatched, %d queued",
+			rep.Threats, rep.Links.Linked, rep.Links.Unmatched, rep.Links.Queued)
+	}
+	if legacy, err := contentRegistry.LegacyIntelContent(context.Background()); err != nil {
+		log.Printf("[!] legacy intel inventory: %v", err)
+	} else if len(legacy) > 0 {
+		log.Printf("[!] %d legacy name-derived intel content item(s); see GET /api/content-registry/migration-report (legacyIntel)", len(legacy))
+	}
+	scheduler := connector.NewScheduler(tiSources, gen, engine, cfg.ThreatIntelPollHours, pool, priorityEngine).
+		WithIdentityStore(identityStore)
 	tiActivitySources, err := connector.LoadActivitySourcesFromDB(context.Background(), pool)
 	if err != nil {
 		log.Printf("[!] threat-intel activity source load warning: %v", err)
@@ -739,6 +773,20 @@ func main() {
 		WithEMSweep(emSweepStore, emSweepDispatcher).
 		WithTAXII(taxiiStore, taxiiManager).
 		WithIOCProvider(iocProvider)
+
+	// Content registry migration marker: only after a clean scenario load with zero intake
+	// infrastructure failures, so a partial intake never ends custom-file grandfathering. A failure here is
+	// logged and retried next boot (marker stays absent); it never blocks boot.
+	if scenarioLoadErr == nil && bootIntakeFailures == 0 {
+		if inv, first, err := contentRegistry.CompleteMigration(context.Background()); err != nil {
+			log.Printf("[contentregistry] migration inventory: %v", err)
+		} else if first {
+			log.Printf("[contentregistry] migration complete: %d intel scenario(s) now DRAFT, %d schedule(s) and %d campaign(s) affected, %d custom scenario(s) grandfathered, %d builtin file(s) refused",
+				len(inv.IntelDrafted), len(inv.AffectedSchedules), len(inv.AffectedCampaigns), len(inv.CustomGrandfathered), len(inv.BuiltinRefused))
+		}
+	} else {
+		log.Printf("[contentregistry] migration deferred: %d intake failures (load error: %v)", bootIntakeFailures, scenarioLoadErr)
+	}
 
 	vexSweepScheduler.Start(func(ctx context.Context) {
 		if err := vexSweepDispatcher.Tick(ctx); err != nil {

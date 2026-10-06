@@ -4,12 +4,13 @@ import { apicall } from '../core/api.js';
 import { x } from '../core/escape.js';
 import { ago, fmtDate, showToast } from '../core/util.js';
 import { _templates, renderTemplateGrid } from './adversaries.js';
-import { _agtDetailId, loadAgtAttackPath } from './agent-drawer.js';
+import { _agtDetailId, downloadAuditPack, downloadFullReportCSV, downloadFullReportJSON, downloadFullReportPDF, loadAgtAttackPath, openAgentDetail, openFullReport, safeScan } from './agent-drawer.js';
+import { openRemoveAgentModal, openStopAgentModal, openUninstallAgentModal } from './agent-actions.js';
 import { loadAuditLogs, loadBackups, loadLicenseInfo } from './audit-logs.js';
 import { loadCalderaStatus } from './compliance.js';
 import { loadUsers } from './evidence.js';
 import { loadOpenAEVConfig, renderAttackPath } from './openaev.js';
-import { loadRuns, loadSIEMCorrelationPanel } from './reports.js';
+import { loadRuns, loadSIEMCorrelationPanel, openModal } from './reports.js';
 import { SCHED, renderScheduledAssessmentsList } from './scheduled.js';
 import { ROLE, STRIPE_COLORS, scenarioSrcCollapsed, setAgentsView, showTab } from './shell.js';
 import { loadARTContentStatus, loadConnectorStatus, loadTAXIIConnectors, loadThreatIntelConfig } from './threat-intel.js';
@@ -80,7 +81,7 @@ export function loadExposureAssets() {
       return;
     }
     body.innerHTML = assets.map(function(a) {
-      return '<tr class="u-pointer" onclick="openExposureDetail(\'' + x(a.asset.hostKey) + '\')">' +
+      return '<tr class="u-pointer"' + on('click', 'openExposureDetail', a.asset.hostKey) + '>' +
         '<td class="u-fw600">' + x(a.asset.label) + '</td>' +
         '<td>' + (a.asset.managed ? '<span class="badge">Managed</span>' : '<span class="badge u-muted">Discovered</span>') + '</td>' +
         '<td style="color:' + apColor(a.exposureScore) + ';font-weight:700">' + a.exposureScore + '</td>' +
@@ -369,7 +370,7 @@ export function loadThreatPriorityActors() {
       }
       empty.style.display = 'none';
       body.innerHTML = TP_ACTOR_CACHE.map(function(a) {
-        return '<tr class="u-pointer" onclick=\'showThreatPriorityDetail(' + JSON.stringify(a.actorName).replace(/'/g, "&#39;") + ')\'>' +
+        return '<tr class="u-pointer"' + on('click', 'showThreatPriorityDetail', a.actorName) + '>' +
           '<td class="u-fw600">' + x(a.actorName) + '</td>' +
           '<td>' + tpTierBadge(a.tier) + '</td>' +
           '<td>' + x(a.score) + '</td>' +
@@ -1020,6 +1021,10 @@ export function _onRevalidationStarted(msg) {
     loadRuns();
   } else if (status === 'no_scenario') {
     showToast('Auto-revalidation: no scenario for ' + tech + ' — re-validate manually via Remediations.', 'warn');
+  } else if (status === 'error') {
+    // Content Registry gate denial (revalidation.content_not_executable): the
+    // scenario is not approved, so this is terminal until an operator approves it.
+    showToast(d.message || ('Auto-revalidation of ' + tech + ' was blocked.'), 'err');
   }
 }
 
@@ -1057,7 +1062,7 @@ function renderAPAssets() {
         '<label style="margin-right:0.4rem"><input type="checkbox" id="apt-prod-' + i + '"' + (a.production ? ' checked' : '') + '> Prod</label>' +
         '<input id="apt-cs-' + i + '" value="' + x((a.complianceScope || []).join(', ')) + '" placeholder="compliance scope, comma-sep" style="' + AP_INPUT_STYLE + ';margin-top:0.2rem;display:block;width:160px">' +
       '</td>' +
-      '<td><button class="btn btn-outline btn-sm" onclick="saveAPAsset(' + i + ')">Save</button></td>' +
+      '<td><button class="btn btn-outline btn-sm"' + on('click', 'saveAPAsset', i) + '>Save</button></td>' +
     '</tr>';
   }).join('');
 }
@@ -1198,7 +1203,7 @@ export function loadAgentGroupTree() {
 function renderAgentGroupTree() {
   var root = document.getElementById('agent-tree-root');
   if (!root) return;
-  var allRow = '<div class="at-node' + (activeAgentGroupId === null ? ' active' : '') + '" onclick="selectAgentGroup(null)">' +
+  var allRow = '<div class="at-node' + (activeAgentGroupId === null ? ' active' : '') + '"' + on('click', 'selectAgentGroup', null) + '>' +
     '<span class="at-caret"></span><span class="at-name">All</span></div>';
   root.innerHTML = allRow + agentGroupTree.map(renderAgentGroupNode).join('');
 }
@@ -1207,11 +1212,11 @@ function renderAgentGroupNode(node) {
   var hasChildren = node.children && node.children.length;
   var caret = hasChildren ? '&#9662;' : '';
   var active = activeAgentGroupId === node.id ? ' active' : '';
-  var html = '<div class="at-node' + active + '" onclick="selectAgentGroup(' + node.id + ')">' +
+  var html = '<div class="at-node' + active + '"' + on('click', 'selectAgentGroup', node.id) + '>' +
     '<span class="at-caret">' + caret + '</span>' +
     '<span class="at-name">' + x(node.name) + '</span>' +
     '<span class="at-count">' + node.totalAgentCount + '</span>' +
-    '<span class="at-menu" onclick="event.stopPropagation();openAgentGroupMenu(event,' + node.id + ')">&#8942;</span>' +
+    '<span class="at-menu"' + on('click', 'openAgentGroupMenuStop', node.id) + '>&#8942;</span>' +
     '</div>';
   if (hasChildren) {
     html += '<div class="at-children">' + node.children.map(renderAgentGroupNode).join('') + '</div>';
@@ -1224,6 +1229,8 @@ export function selectAgentGroup(groupId) {
   renderAgentGroupTree();
   loadAgents();
 }
+
+export function openAgentGroupMenuStop(id, el, event) { event.stopPropagation(); openAgentGroupMenu(event, id); }
 
 export function openAgentGroupMenu(ev, groupId) {
   var action = prompt('Type: rename / new / move / delete');
@@ -1525,24 +1532,24 @@ function renderAgentRows() {
       '<td class="tiny" style="font-family:var(--font-mono)">' + (a.sims || 0) + '</td>' +
       '<td>' +
         '<div class="row-menu-wrap">' +
-        '<button class="btn btn-outline btn-sm row-menu-btn" onclick="toggleRowMenu(event,\'' + menuId + '\')" title="Actions" aria-haspopup="true">&#8942;</button>' +
+        '<button class="btn btn-outline btn-sm row-menu-btn"' + on('click', 'toggleRowMenuById', menuId) + ' title="Actions" aria-haspopup="true">&#8942;</button>' +
         '<div class="row-menu-panel" id="' + menuId + '">' +
-          '<button class="row-menu-item" onclick="closeAllRowMenus();openAgentDetail(\'' + x(a.agentId) + '\')">&#128269; Detail</button>' +
-          '<button class="row-menu-item" onclick="closeAllRowMenus();openModal(null,\'' + x(a.agentId) + '\')">&#9654; Run simulation</button>' +
-          '<button class="row-menu-item" onclick="closeAllRowMenus();safeScan(\'' + x(a.agentId) + '\')">&#128737; Safe Scan</button>' +
-          '<button class="row-menu-item" onclick="closeAllRowMenus();openFullReport(\'' + x(a.agentId) + '\')">&#128196; Report (HTML)</button>' +
-          '<button class="row-menu-item" onclick="closeAllRowMenus();downloadFullReportPDF(\'' + x(a.agentId) + '\')">&#8595; Report (PDF)</button>' +
-          '<button class="row-menu-item" onclick="closeAllRowMenus();downloadFullReportCSV(\'' + x(a.agentId) + '\')">&#8595; Report (CSV)</button>' +
-          '<button class="row-menu-item" onclick="closeAllRowMenus();downloadFullReportJSON(\'' + x(a.agentId) + '\')">&#8595; Report (JSON)</button>' +
-          '<button class="row-menu-item" onclick="closeAllRowMenus();downloadAuditPack(\'' + x(a.agentId) + '\')">&#8659; Download audit pack</button>' +
+          '<button class="row-menu-item"' + on('click', 'rowMenuDetail', a.agentId) + '>&#128269; Detail</button>' +
+          '<button class="row-menu-item"' + on('click', 'rowMenuRunSimulation', a.agentId) + '>&#9654; Run simulation</button>' +
+          '<button class="row-menu-item"' + on('click', 'rowMenuSafeScan', a.agentId) + '>&#128737; Safe Scan</button>' +
+          '<button class="row-menu-item"' + on('click', 'rowMenuReportHtml', a.agentId) + '>&#128196; Report (HTML)</button>' +
+          '<button class="row-menu-item"' + on('click', 'rowMenuReportPdf', a.agentId) + '>&#8595; Report (PDF)</button>' +
+          '<button class="row-menu-item"' + on('click', 'rowMenuReportCsv', a.agentId) + '>&#8595; Report (CSV)</button>' +
+          '<button class="row-menu-item"' + on('click', 'rowMenuReportJson', a.agentId) + '>&#8595; Report (JSON)</button>' +
+          '<button class="row-menu-item"' + on('click', 'rowMenuAuditPack', a.agentId) + '>&#8659; Download audit pack</button>' +
           (ROLE === 'admin' ?
-            '<button class="row-menu-item" onclick="closeAllRowMenus();moveAgentToGroupPrompt(\'' + x(a.agentId) + '\')">&#128193; Move to group…</button>' : '') +
+            '<button class="row-menu-item"' + on('click', 'rowMenuMoveGroup', a.agentId) + '>&#128193; Move to group…</button>' : '') +
           (ROLE === 'admin' && a.status !== 'offline' ?
-            '<button class="row-menu-item row-menu-item-danger" onclick="closeAllRowMenus();openStopAgentModal(\'' + x(a.agentId) + '\',\'' + x(a.hostname || a.agentId) + '\')">&#9209; Stop agent</button>' : '') +
+            '<button class="row-menu-item row-menu-item-danger"' + on('click', 'rowMenuStopAgent', a.agentId, a.hostname || a.agentId) + '>&#9209; Stop agent</button>' : '') +
           (ROLE === 'admin' ?
-            '<button class="row-menu-item row-menu-item-danger" onclick="closeAllRowMenus();openUninstallAgentModal(\'' + x(a.agentId) + '\',\'' + x(a.hostname || a.agentId) + '\')">&#128465; Uninstall Agent</button>' : '') +
+            '<button class="row-menu-item row-menu-item-danger"' + on('click', 'rowMenuUninstallAgent', a.agentId, a.hostname || a.agentId) + '>&#128465; Uninstall Agent</button>' : '') +
           (ROLE === 'admin' ?
-            '<button class="row-menu-item row-menu-item-danger" onclick="closeAllRowMenus();openRemoveAgentModal(\'' + x(a.agentId) + '\',\'' + x(a.hostname || a.agentId) + '\')">&#9888; Force Remove…</button>' : '') +
+            '<button class="row-menu-item row-menu-item-danger"' + on('click', 'rowMenuRemoveAgent', a.agentId, a.hostname || a.agentId) + '>&#9888; Force Remove…</button>' : '') +
         '</div>' +
         '</div>' +
       '</td></tr>';
@@ -1551,8 +1558,25 @@ function renderAgentRows() {
 // Row action menus (the "⋮" dropdown in the Agents table Actions column).
 // Only one panel is ever open at a time; toggling re-closes any other open
 // panel first so stale menus never linger behind a newly opened one.
-export function toggleRowMenu(ev, id) {
-  ev.stopPropagation();
+export function toggleRowMenuById(id, el, event) { event.stopPropagation(); toggleRowMenu(el, id); }
+
+export function openModalForScenario(id) { openModal(id, null); }
+
+// Agent row-menu items: close the menu, then run the item's action.
+export function rowMenuDetail(id) { closeAllRowMenus(); openAgentDetail(id); }
+export function rowMenuRunSimulation(id) { closeAllRowMenus(); openModal(null, id); }
+export function rowMenuSafeScan(id) { closeAllRowMenus(); safeScan(id); }
+export function rowMenuReportHtml(id) { closeAllRowMenus(); openFullReport(id); }
+export function rowMenuReportPdf(id) { closeAllRowMenus(); downloadFullReportPDF(id); }
+export function rowMenuReportCsv(id) { closeAllRowMenus(); downloadFullReportCSV(id); }
+export function rowMenuReportJson(id) { closeAllRowMenus(); downloadFullReportJSON(id); }
+export function rowMenuAuditPack(id) { closeAllRowMenus(); downloadAuditPack(id); }
+export function rowMenuMoveGroup(id) { closeAllRowMenus(); moveAgentToGroupPrompt(id); }
+export function rowMenuStopAgent(id, hostname) { closeAllRowMenus(); openStopAgentModal(id, hostname); }
+export function rowMenuUninstallAgent(id, hostname) { closeAllRowMenus(); openUninstallAgentModal(id, hostname); }
+export function rowMenuRemoveAgent(id, hostname) { closeAllRowMenus(); openRemoveAgentModal(id, hostname); }
+
+export function toggleRowMenu(btn, id) {
   var panel = document.getElementById(id);
   if (!panel) return;
   var wasOpen = panel.classList.contains('open');
@@ -1561,7 +1585,7 @@ export function toggleRowMenu(ev, id) {
   // Position as fixed viewport coordinates from the trigger button's own
   // rect (see the .row-menu-panel CSS comment for why fixed instead of
   // absolute), right-aligned under the button like a standard menu.
-  var btnRect = ev.currentTarget.getBoundingClientRect();
+  var btnRect = btn.getBoundingClientRect();
   panel.style.right = (window.innerWidth - btnRect.right) + 'px';
   panel.style.left = 'auto';
   panel.style.top = (btnRect.bottom + 4) + 'px';
@@ -1727,10 +1751,12 @@ export function loadScenarios() {
         intelActor:         s.intelActor          || '',
         intelConfidence:    s.intelConfidence      || '',
         artTechniques:      s.artTechniques       || [],
-        supportedOs:        s.supportedOs         || []
+        supportedOs:        s.supportedOs         || [],
+        registry:           s.registry            || null
       };
     });
     renderScenarios();
+    loadRegistryMigrationBanner();
     // renderScheduledAssessmentsList() looks up each schedule's human name
     // from this scenarios array client-side, falling back to the raw
     // scenario ID when not found. loadScenarios() and
@@ -1740,6 +1766,134 @@ export function loadScenarios() {
     // re-renders it. Re-render now that scenarios is actually populated.
     if (SCHED.schedules.length) renderScheduledAssessmentsList();
   }).catch(function(e) { showToast(e.message, 'err'); });
+}
+
+// TCF Phase 1: registry lifecycle/trust badge. Only server-provided enum
+// strings and numbers, all escaped via x().
+function registryBadge(s) {
+  var r = s.registry;
+  if (!r) return '<span class="tag" title="Not registered — cannot run">unregistered</span> ';
+  if (r.executableVersion) {
+    var label = r.executableTrust === 'VENDOR_SIGNED' ? 'signed v' : (r.executableTrust === 'LOCAL_TRUSTED' ? 'approved v' : 'dev-unsigned v');
+    var pending = r.latestVersion > r.executableVersion
+      ? ' <span class="tag" title="Newer version awaiting approval">v' + x(String(r.latestVersion)) + ' ' + x(r.latestLifecycle) + '</span>'
+      : '';
+    return '<span class="tag tag-approved">' + label + x(String(r.executableVersion)) + '</span>' + pending + ' ';
+  }
+  return '<span class="tag tag-pending" title="Not executable until approved">v' +
+    x(String(r.latestVersion)) + ' ' + x(r.latestLifecycle) + '</span> ';
+}
+
+// Approvable: the latest version is a DRAFT/VALIDATED intel or custom one and
+// either nothing is executable yet or it is newer than the executable one
+// (e.g. an approved intel id's regenerated DRAFT). role defaults to the
+// signed-in role (parameter for tests).
+export function canApproveForLocal(s, role) {
+  if (role === undefined) role = ROLE;
+  var r = s.registry;
+  if (role !== 'admin' || !r || !(s.source === 'intel' || s.source === 'custom')) return false;
+  if (r.latestLifecycle !== 'DRAFT' && r.latestLifecycle !== 'VALIDATED') return false;
+  return !r.executableVersion || r.latestVersion > r.executableVersion;
+}
+
+function approveButton(s) {
+  return '<button class="btn btn-outline btn-sm"' + on('click', 'approveForLocalUse', s.id, s.registry.latestVersionId) + '>&#10003; Approve</button> ';
+}
+
+// Approve-for-local-use is a deliberate, in-page confirmation (no
+// window.prompt/confirm): it loads the exact version first and shows what it
+// will run -- step count, ART techniques, safety verdicts, a link to the
+// stored bytes -- and stays disabled until the operator ticks the review box
+// and gives a reason. All server text goes through x().
+var _approveTarget = null; // { id, versionId } of the loaded version
+var _approveSeq = 0;        // request token: only the latest load may render
+
+export function approveForLocalUse(id, versionId) {
+  var body = document.getElementById('approve-local-body');
+  var overlay = document.getElementById('approve-local-overlay');
+  if (!body || !overlay) return;
+  _approveTarget = null;
+  var tok = ++_approveSeq;
+  document.getElementById('approve-local-ack').checked = false;
+  document.getElementById('approve-local-reason').value = '';
+  document.getElementById('approve-local-submit-btn').disabled = true;
+  body.innerHTML = '<p class="sub2">Loading version&hellip;</p>';
+  overlay.classList.add('open');
+  apicall('/api/content-registry/versions/' + encodeURIComponent(versionId)).then(function(d) {
+    if (tok !== _approveSeq) return; // a later click (or close) superseded this load
+    if (!d || d.error) throw new Error((d && d.error) || 'version not found');
+    if (d.id !== versionId || d.contentId !== id) throw new Error('version does not match this scenario');
+    body.innerHTML = approveSummaryHTML(d);
+    _approveTarget = { id: id, versionId: versionId };
+    approveLocalAckChanged();
+  }).catch(function(e) {
+    if (tok !== _approveSeq) return;
+    body.innerHTML = '<p class="u-danger">Could not load the version to review: ' + x(e.message) + '</p>';
+  });
+}
+
+function approveSummaryHTML(d) {
+  var steps = (d.stepCount === null || d.stepCount === undefined) ? 'unreadable artifact' : String(d.stepCount);
+  var techs = d.artTechniques || [];
+  var techList = techs.slice(0, 20).join(', ') + (techs.length > 20 ? ', … (+' + (techs.length - 20) + ')' : '');
+  var verdicts = Array.isArray(d.safetyVerdicts) ? d.safetyVerdicts : [];
+  var safety = verdicts.length
+    ? verdicts.map(function(v) { return x(v.classifier) + ' ' + x(v.classifierVersion) + ': <strong>' + x(v.verdict) + '</strong>'; }).join('<br>')
+    : 'no safety verdict recorded';
+  var href = '/api/content-registry/versions/' + encodeURIComponent(d.id) + '/artifact';
+  return '<table class="approve-kv"><tbody>' +
+    '<tr><th>Scenario</th><td><code>' + x(d.contentId) + '</code> v' + x(String(d.version)) + '</td></tr>' +
+    '<tr><th>State</th><td>' + x(d.lifecycle) + ' / ' + x(d.trust) + ' (' + x(d.intakeSource) + ')</td></tr>' +
+    '<tr><th>Custom steps</th><td>' + x(steps) + '</td></tr>' +
+    '<tr><th>ART techniques</th><td>' + x(String(techs.length)) + (techs.length ? ' &mdash; ' + x(techList) : '') + '</td></tr>' +
+    '<tr><th>Safety</th><td>' + safety + '</td></tr>' +
+    '<tr><th>SHA-256</th><td><code>' + x(d.artifactSha256) + '</code></td></tr>' +
+    '<tr><th>Artifact</th><td><a href="' + x(href) + '" download>Download the exact bytes to review</a></td></tr>' +
+    '</tbody></table>';
+}
+
+export function approveLocalAckChanged() {
+  var ok = !!_approveTarget && document.getElementById('approve-local-ack').checked &&
+    document.getElementById('approve-local-reason').value.trim() !== '';
+  document.getElementById('approve-local-submit-btn').disabled = !ok;
+}
+
+export function closeApproveLocalModal() {
+  _approveTarget = null;
+  _approveSeq++; // drop any in-flight load
+  document.getElementById('approve-local-overlay').classList.remove('open');
+}
+
+export function submitApproveLocal() {
+  var t = _approveTarget;
+  var reason = document.getElementById('approve-local-reason').value.trim();
+  if (!t || !reason || !document.getElementById('approve-local-ack').checked) return;
+  var btn = document.getElementById('approve-local-submit-btn');
+  btn.disabled = true;
+  apicall('/api/content-registry/versions/' + encodeURIComponent(t.versionId) + '/transition', {
+    method: 'POST',
+    body: JSON.stringify({ to: 'PUBLISHED_LOCAL', reason: reason })
+  }).then(function(d) {
+    if (d && d.error) throw new Error(d.error);
+    closeApproveLocalModal();
+    showToast('Approved ' + t.id + ' for local use', 'ok');
+    loadScenarios();
+  }).catch(function(e) { btn.disabled = false; showToast('Approval failed: ' + e.message, 'err'); });
+}
+
+// Admin-only banner: schedules whose scenario is no longer executable after the
+// registry migration. Text via textContent only (scenario ids are data).
+function loadRegistryMigrationBanner() {
+  if (ROLE !== 'admin') return;
+  apicall('/api/content-registry/migration-report').then(function(m) {
+    var host = document.getElementById('registryMigrationBanner');
+    if (!host) return;
+    var b = m && m.blockedSchedules;
+    if (!b || !b.length) { host.hidden = true; return; }
+    host.textContent = b.length + ' scheduled assessment(s) reference threat-intel scenarios that now need approval before they can run (' +
+      b.map(function(r) { return r.scenarioId; }).join(', ') + '). Approve them on their scenario cards.';
+    host.hidden = false;
+  }).catch(function() {});
 }
 
 var SCENARIO_CATEGORIES = {
@@ -1787,8 +1941,7 @@ function renderScenarioLanding(list, src) {
       [c.builtin ? c.builtin + ' Built-in' : '', c.custom ? c.custom + ' Custom' : '', c.intel ? c.intel + ' Intel' : '']
       .filter(Boolean).join(' · ');
     return '<div class="sc-cat-card sc-fade" tabindex="0" role="button" ' +
-      'onclick="openScenarioCategory(\'' + key + '\')" ' +
-      'onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();openScenarioCategory(\'' + key + '\');}">' +
+      on('click', 'openScenarioCategory', key) + on('keydown', 'scenarioCategoryKeydown', key) + '>' +
       '<h3>' + cat.icon + x(cat.label) + '</h3>' +
       '<div class="sc-cat-count">' + c.total + ' scenario' + (c.total === 1 ? '' : 's') + '</div>' +
       '<div class="sc-cat-breakdown">' + x(breakdown) + '</div>' +
@@ -1807,8 +1960,7 @@ function renderScenarioLanding(list, src) {
   }
   if (_templates.length) {
     html += '<div class="sc-cat-card sc-fade" tabindex="0" role="button" ' +
-      'onclick="openScenarioCategory(\'templates\')" ' +
-      'onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();openScenarioCategory(\'templates\');}">' +
+      on('click', 'openScenarioCategory', 'templates') + on('keydown', 'scenarioCategoryKeydown', 'templates') + '>' +
       '<h3>' + TMPL_ICON + 'Adversary Templates</h3>' +
       '<div class="sc-cat-count">' + _templates.length + ' template' + (_templates.length === 1 ? '' : 's') + '</div>' +
     '</div>';
@@ -1816,7 +1968,11 @@ function renderScenarioLanding(list, src) {
   el.innerHTML = html || '<p class="empty">No scenarios loaded.</p>';
 }
 
-function openScenarioCategory(key) {
+export function scenarioCategoryKeydown(key, el, event) {
+  if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); openScenarioCategory(key); }
+}
+
+export function openScenarioCategory(key) {
   state.scenarioView = key;
   closeScenarioOverlay();
   history.pushState({ scenarioView: key }, '', '#tab-scenarios/' + key);
@@ -1959,11 +2115,10 @@ function descHtml(desc, sid, opts) {
   return '<p style="' + style + '">' +
     '<span id="' + id + '-s">' + x(preview) + '&hellip; </span>' +
     '<span id="' + id + '-f" style="display:none">' + x(desc) + ' </span>' +
-    '<a href="javascript:void(0)" class="desc-toggle" ' +
-      'onclick="toggleDesc(\'' + id + '\',this);return false;">Read more</a>' +
+    '<a href="#" class="desc-toggle"' + on('click', 'toggleDesc', id) + '>Read more</a>' +
     '</p>';
 }
-function toggleDesc(id, el) {
+export function toggleDesc(id, el) {
   var sEl = document.getElementById(id + '-s');
   var fEl = document.getElementById(id + '-f');
   if (!sEl || !fEl) return;
@@ -2006,9 +2161,7 @@ function scenarioTileHTML(s) {
   var color = s.intelSource ? '#2f81f7' : stripeColor(s.id);
   var sid = x(s.id);
   return '<div class="sc-tile" tabindex="0" role="button" aria-expanded="false" data-sid="' + sid + '" ' +
-    'onmouseenter="previewScenarioOverlay(\'' + sid + '\')" onmouseleave="unpreviewScenarioOverlay(\'' + sid + '\')" ' +
-    'onclick="toggleScenarioPin(event,\'' + sid + '\')" ' +
-    'onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();toggleScenarioPin(event,\'' + sid + '\');}">' +
+    on('mouseenter', 'previewScenarioOverlay', s.id) + on('mouseleave', 'unpreviewScenarioOverlay', s.id) + on('click', 'toggleScenarioPinFromEvent', s.id) + on('keydown', 'scenarioPinKeydown', s.id) + '>' +
     '<div class="sc-tile-stripe" style="background:' + color + '"></div>' +
     '<div class="sc-tile-name">' + x(s.name) + '</div>' +
     '<div class="sc-tile-badges">' + scenarioTileOSBadges(s) + scenarioTileMitreBadge(s) + '</div>' +
@@ -2032,7 +2185,7 @@ function renderScenarioTileGroup(viewKey, list) {
   return activeSources.map(function(k) {
     var collapsed = !!(scenarioSrcCollapsed[viewKey] && scenarioSrcCollapsed[viewKey][k]);
     return '<div class="sc-src-group">' +
-      '<div class="sc-src-hdr' + (collapsed ? ' collapsed' : '') + '" onclick="toggleScenarioSrcGroup(\'' + viewKey + '\',\'' + k + '\')">' +
+      '<div class="sc-src-hdr' + (collapsed ? ' collapsed' : '') + '"' + on('click', 'toggleScenarioSrcGroup', viewKey, k) + '>' +
         '<span class="chev">&#9660;</span>' + x(SCENARIO_SOURCE_LABELS[k]) + ' (' + bySrc[k].length + ')' +
       '</div>' +
       '<div class="sc-src-body' + (collapsed ? ' collapsed' : '') + '">' + bySrc[k].map(scenarioTileHTML).join('') + '</div>' +
@@ -2067,7 +2220,7 @@ function _scPositionOverlay(id) {
   }
 }
 
-function previewScenarioOverlay(id) {
+export function previewScenarioOverlay(id) {
   if (state.overlayPinned) return; // a pinned overlay is never disturbed by hovering elsewhere
   var detail = _scOverlayEl(id);
   if (!detail) return;
@@ -2079,6 +2232,12 @@ export function unpreviewScenarioOverlay(id) {
   var detail = _scOverlayEl(id);
   if (detail) detail.classList.remove('show');
 }
+export function toggleScenarioPinFromEvent(id, el, event) { toggleScenarioPin(event, id); }
+
+export function scenarioPinKeydown(id, el, event) {
+  if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); toggleScenarioPin(event, id); }
+}
+
 function toggleScenarioPin(event, id) {
   // A click on a button/link inside the already-open detail panel must not
   // re-toggle the tile's own pin state — the panel is a DOM child of the
@@ -2140,13 +2299,14 @@ function scenarioDetailHTML(s) {
         // scenarios cannot be deleted by anyone, through any path (the
         // backend enforces this too; see Engine.Delete's intel-source guard).
         var footerMeta = techCount + ' techniques';
-        return '<div>' + intelBadge + '</div>' +
+        return '<div>' + registryBadge(s) + intelBadge + '</div>' +
           '<h3>' + x(s.name) + '</h3>' +
           descHtml(s.description, s.id, {limit:120, style:'font-size:0.78rem;color:var(--muted)'}) +
           '<div class="tags">' + tags + '</div>' +
           '<div class="card-footer">' +
             '<div class="card-meta">' + footerMeta + '</div>' +
-            '<button class="btn btn-outline-green btn-sm" onclick="openModal(\'' + x(s.id) + '\',null)">&#9654; Run</button>' +
+            (canApproveForLocal(s) ? approveButton(s) : '') +
+            '<button class="btn btn-outline-green btn-sm"' + on('click', 'openModalForScenario', s.id) + '>&#9654; Run</button>' +
           '</div>';
       }
       var canEdit = (ROLE === 'admin' || ROLE === 'analyst');
@@ -2154,11 +2314,12 @@ function scenarioDetailHTML(s) {
         ? '<span class="tag" style="background:rgba(47,216,195,0.15);color:#5cead8;border-color:rgba(47,216,195,0.4)">custom</span> '
         : '';
       var editBtns = '';
+      if (canApproveForLocal(s)) editBtns += approveButton(s);
       if (canEdit) {
-        editBtns += '<button class="btn btn-outline btn-sm" onclick="cloneScenario(\'' + x(s.id) + '\')" title="Clone into an editable custom scenario">&#9112; Clone</button> ';
+        editBtns += '<button class="btn btn-outline btn-sm"' + on('click', 'cloneScenario', s.id) + ' title="Clone into an editable custom scenario">&#9112; Clone</button> ';
         if (s.source === 'custom') {
-          editBtns += '<button class="btn btn-outline btn-sm" onclick="openBuilder(\'' + x(s.id) + '\')" title="Edit">&#9998; Edit</button> ';
-          editBtns += '<button class="btn btn-sm" style="background:rgba(218,54,51,0.12);color:#f85149" onclick="deleteCustomScenario(\'' + x(s.id) + '\')" title="Delete">&#10005;</button> ';
+          editBtns += '<button class="btn btn-outline btn-sm"' + on('click', 'openBuilder', s.id) + ' title="Edit">&#9998; Edit</button> ';
+          editBtns += '<button class="btn btn-sm" style="background:rgba(218,54,51,0.12);color:#f85149"' + on('click', 'deleteCustomScenario', s.id) + ' title="Delete">&#10005;</button> ';
         }
       }
       // Mode label — describe what the scenario actually runs. Sweep scenarios
@@ -2169,8 +2330,7 @@ function scenarioDetailHTML(s) {
       var modeMeta;
       var stepN = (s.steps || []).length;
       if (s.localCheck) {
-        modeMeta = '<a href="javascript:void(0)" class="desc-toggle" title="Choose which posture checks to run" ' +
-          'onclick="openModal(\'' + x(s.id) + '\',null);return false;">Posture check &#9881;</a>';
+        modeMeta = '<a href="#" class="desc-toggle" title="Choose which posture checks to run"' + on('click', 'openModalForScenario', s.id) + '>Posture check &#9881;</a>';
       } else if (s.artAllWindows) {
         modeMeta = 'Full ART sweep' + (state.artCatalog.length ? ' · ' + state.artCatalog.length + ' techniques' : '');
       } else if (s.artAllPlatform) {
@@ -2191,8 +2351,7 @@ function scenarioDetailHTML(s) {
       } else if (stepN) {
         // The step count is a live entry point to the step picker — operators can
         // click it to choose which steps to run (steps come straight from the YAML).
-        modeMeta = '<a href="javascript:void(0)" class="desc-toggle" title="Choose which steps to run" ' +
-          'onclick="openPicker(\'' + x(s.id) + '\',\'steps\');return false;">' +
+        modeMeta = '<a href="#" class="desc-toggle" title="Choose which steps to run"' + on('click', 'openPicker', s.id, 'steps') + '>' +
           stepN + (stepN === 1 ? ' step' : ' steps') + '</a>';
       } else {
         modeMeta = '—';
@@ -2230,14 +2389,14 @@ function scenarioDetailHTML(s) {
       // read-only Detailed view replaces the selectable Customize button
       // here too (same reasoning as renderModalSelection for the Run modal).
       var customizeBtn = (s.artAllWindows || s.artAllPlatform)
-        ? '<button class="btn btn-outline btn-sm" onclick="openDetailedViewForScenario(\'' + x(s.id) + '\')" ' +
+        ? '<button class="btn btn-outline btn-sm"' + on('click', 'openDetailedViewForScenario', s.id) + ' ' +
           'title="Every atomic test that will run">&#128269; Detailed view</button> '
         : fw
-        ? '<button class="btn btn-outline btn-sm" onclick="openPicker(\'' + x(s.id) + '\',\'' + fw + '\')" ' +
+        ? '<button class="btn btn-outline btn-sm"' + on('click', 'openPicker', s.id, fw) + ' ' +
           'title="Choose which ' + fwNoun + ' to run">&#9881; Customize</button> '
         : '';
 
-      return '<div>' + customBadge + '</div>' +
+      return '<div>' + registryBadge(s) + customBadge + '</div>' +
         '<h3>' + x(s.name) + '</h3>' +
         descHtml(s.description, s.id, {limit:140}) +
         '<div class="tags">' + osBadge + tags + '</div>' +
@@ -2245,7 +2404,7 @@ function scenarioDetailHTML(s) {
           '<div class="card-meta">' + modeMeta + '</div>' +
           '<div style="display:flex;gap:0.3rem;flex-wrap:wrap;justify-content:flex-end">' +
             editBtns + customizeBtn +
-            '<button class="btn btn-outline-green btn-sm" onclick="openModal(\'' + x(s.id) + '\',null)">&#9654; Run</button>' +
+            '<button class="btn btn-outline-green btn-sm"' + on('click', 'openModalForScenario', s.id) + '>&#9654; Run</button>' +
           '</div>' +
         '</div>';
 }

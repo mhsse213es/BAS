@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
+	"github.com/audspect/bas/internal/contentregistry"
 	"github.com/audspect/bas/internal/jobs"
 )
 
@@ -34,12 +36,31 @@ func (h *Handler) dispatchScheduledAssessmentTarget(ctx context.Context, job job
 	if err := json.Unmarshal(job.Payload, &payload); err != nil {
 		return "", err
 	}
-	sc, ok := h.engine.Get(payload.ScenarioID)
-	if !ok {
-		return "", errors.New("scenario not found")
+	// Resolve the executable version once, before any side effect, and judge
+	// every policy check against the pinned bytes that will run -- never a
+	// newer on-disk DRAFT. A denial carries the "content not executable: "
+	// text so the jobs failure + notification path reports it verbatim.
+	ev, gerr := h.engine.ResolveExecutable(ctx, payload.ScenarioID)
+	if gerr != nil {
+		var ne *contentregistry.ErrNotExecutable
+		if errors.As(gerr, &ne) && ne.Reason == "not registered" {
+			if _, onDisk := h.engine.Get(payload.ScenarioID); !onDisk {
+				return "", errors.New("scenario not found")
+			}
+		}
+		return "", errors.New("content not executable: " + strings.TrimPrefix(gerr.Error(), "content not executable: "))
+	}
+	sc := ev.Scenario
+	for _, idx := range payload.Steps {
+		if idx < 0 || idx >= len(sc.Steps) {
+			return "", fmt.Errorf("step index %d out of range — scenario has %d step(s)", idx, len(sc.Steps))
+		}
 	}
 
 	live := payload.Mode == "telemetry"
+	if live && !sc.Executable {
+		return "", errors.New("scenario does not support live execution — run it in posture mode")
+	}
 	if live && sc.LivePolicy != nil && sc.LivePolicy.ExecutionWindow != "" {
 		within, werr := withinWindow(sc.LivePolicy.ExecutionWindow, time.Now())
 		if werr != nil {
@@ -54,6 +75,7 @@ func (h *Handler) dispatchScheduledAssessmentTarget(ctx context.Context, job job
 	runID, skip, dispatchErr := h.dispatchRun(ctx, sc, target.AgentID, dispatchOpts{
 		Mode: payload.Mode, ConfirmLive: live, Techniques: payload.Techniques, Steps: payload.Steps,
 		InitiatedBy: &createdBy, RunLabel: "Scheduled: " + sc.Name,
+		Resolved: &ev,
 	})
 	if dispatchErr != nil {
 		return "", dispatchErr

@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -34,7 +35,7 @@ func newFileEngine(t *testing.T) (string, *scenario.Engine) {
 // tests that aren't about the Create/Upload path itself can set up fixtures.
 func seedCustomScenario(t *testing.T, e *scenario.Engine, sc *scenario.Scenario) {
 	t.Helper()
-	if err := e.Save(sc); err != nil {
+	if err := e.SaveAs(context.Background(), sc, "user:test"); err != nil {
 		t.Fatalf("seed scenario %q: %v", sc.ID, err)
 	}
 }

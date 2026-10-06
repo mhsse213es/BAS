@@ -9,7 +9,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/audspect/bas/internal/contentregistry"
 	"github.com/audspect/bas/internal/scenario"
+	"github.com/audspect/bas/internal/testutil"
 	"github.com/audspect/bas/internal/ws"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -40,6 +42,8 @@ func TestRunScenario_MissingAgentID(t *testing.T) {
 
 func TestRunScenario_ScenarioNotFound(t *testing.T) {
 	engine := scenario.NewEngine(t.TempDir())
+	engine.SetVerifier(testutil.DevVerifier())
+	engine.AttachRegistry(contentregistry.New(sharedDB.Pool, testutil.DevVerifier()))
 	h := New(nil, ws.NewHub(), engine, "")
 	rec := httptest.NewRecorder()
 	h.RunScenario(rec, runScenarioReq("does-not-exist", map[string]any{"agentId": "a1"}))
@@ -157,7 +161,7 @@ func TestRunScenario_OSMismatch(t *testing.T) {
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
 		sc, engine := minimalLiveScenario(t, "scenario-osmismatch")
 		sc.SupportedOS = []string{"linux"}
-		if err := engine.Save(sc); err != nil {
+		if err := engine.SaveAs(context.Background(), sc, "user:test"); err != nil {
 			t.Fatalf("re-save with SupportedOS: %v", err)
 		}
 		h := New(pool, ws.NewHub(), engine, "")
@@ -192,7 +196,7 @@ func TestRunScenario_ExecutionWindowRejection(t *testing.T) {
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
 		sc, engine := minimalLiveScenario(t, "scenario-window")
 		sc.LivePolicy = &scenario.LivePolicy{ExecutionWindow: "00:00-00:01"} // a window almost certainly not "now"
-		if err := engine.Save(sc); err != nil {
+		if err := engine.SaveAs(context.Background(), sc, "user:test"); err != nil {
 			t.Fatalf("re-save with LivePolicy: %v", err)
 		}
 		h := New(pool, ws.NewHub(), engine, "")
@@ -207,7 +211,7 @@ func TestRunScenario_ExecutionWindowRejection(t *testing.T) {
 
 		badWindow, badWindowEngine := minimalLiveScenario(t, "scenario-badwindow")
 		badWindow.LivePolicy = &scenario.LivePolicy{ExecutionWindow: "not-a-window"}
-		if err := badWindowEngine.Save(badWindow); err != nil {
+		if err := badWindowEngine.SaveAs(context.Background(), badWindow, "user:test"); err != nil {
 			t.Fatalf("re-save with bad LivePolicy: %v", err)
 		}
 		h2 := New(pool, ws.NewHub(), badWindowEngine, "")

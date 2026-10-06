@@ -26,15 +26,18 @@ jobs:
           python3 scripts/g1-innerhtml-sink-classifier.py
           python3 scripts/g1-trace-indirect-sinks.py
           python3 scripts/g1-merge-classification.py
-          git diff --exit-code Assessment/G1_INNERHTML_SINK_INVENTORY.csv Assessment/G1_INNERHTML_SINK_INVENTORY.json Assessment/G1_INDIRECT_SINK_TRACE.csv Assessment/G1_FINAL_CLASSIFICATION.json Assessment/G1_FINAL_CLASSIFICATION.csv || \
-            (echo "::error::G1 audit artifacts are stale -- run scripts/g1-innerhtml-sink-classifier.py, scripts/g1-trace-indirect-sinks.py and scripts/g1-merge-classification.py, then commit Assessment/G1_*." && exit 1)
+          git diff --exit-code security/g1/G1_INNERHTML_SINK_INVENTORY.csv security/g1/G1_INNERHTML_SINK_INVENTORY.json security/g1/G1_INDIRECT_SINK_TRACE.csv security/g1/G1_FINAL_CLASSIFICATION.json security/g1/G1_FINAL_CLASSIFICATION.csv || \
+            (echo "::error::G1 audit artifacts are stale -- run scripts/g1-innerhtml-sink-classifier.py, scripts/g1-trace-indirect-sinks.py and scripts/g1-merge-classification.py, then commit security/g1/G1_*." && exit 1)
           # CI-only: a --depth fetch makes a full local clone shallow.
           if [ -z "$BASE_SHA" ] || [ "$BASE_SHA" = "0000000000000000000000000000000000000000" ]; then
             echo "::warning::No base commit for this event -- G1 regression comparison skipped."
             echo "{}" > /tmp/g1_base.json
           else
             git fetch --no-tags --depth=1 origin "$BASE_SHA"
-            if git cat-file -e "$BASE_SHA:Assessment/G1_FINAL_CLASSIFICATION.json" 2>/dev/null; then
+            if git cat-file -e "$BASE_SHA:security/g1/G1_FINAL_CLASSIFICATION.json" 2>/dev/null; then
+              git show "$BASE_SHA:security/g1/G1_FINAL_CLASSIFICATION.json" > /tmp/g1_base.json
+            elif git cat-file -e "$BASE_SHA:Assessment/G1_FINAL_CLASSIFICATION.json" 2>/dev/null; then
+              # Bases from before the move out of the private Assessment/ folder.
               git show "$BASE_SHA:Assessment/G1_FINAL_CLASSIFICATION.json" > /tmp/g1_base.json
             else
               echo "::warning::Base $BASE_SHA has no G1 baseline -- G1 regression comparison skipped."

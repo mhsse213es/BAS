@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -8,8 +9,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/audspect/bas/internal/contentregistry"
 	"github.com/audspect/bas/internal/models"
 	"github.com/audspect/bas/internal/scenario"
+	"github.com/audspect/bas/internal/testutil"
 	"github.com/audspect/bas/internal/ws"
 	"github.com/gorilla/websocket"
 )
@@ -196,12 +199,14 @@ func TestFakeAgent_ConnectSendDisconnect(t *testing.T) {
 func minimalPostureScenario(t *testing.T, id string) (*scenario.Scenario, *scenario.Engine) {
 	t.Helper()
 	engine := scenario.NewEngine(t.TempDir())
+	engine.SetVerifier(testutil.DevVerifier())
+	engine.AttachRegistry(contentregistry.New(sharedDB.Pool, testutil.DevVerifier()))
 	sc := &scenario.Scenario{
 		ID:         id,
 		Name:       "Posture Test Scenario",
 		LocalCheck: true,
 	}
-	if err := engine.Save(sc); err != nil {
+	if err := engine.SaveAs(context.Background(), sc, "user:test"); err != nil {
 		t.Fatalf("save posture scenario: %v", err)
 	}
 	got, _ := engine.Get(id)
@@ -216,13 +221,15 @@ func minimalLiveScenario(t *testing.T, id string, steps ...scenario.Step) (*scen
 		}
 	}
 	engine := scenario.NewEngine(t.TempDir())
+	engine.SetVerifier(testutil.DevVerifier())
+	engine.AttachRegistry(contentregistry.New(sharedDB.Pool, testutil.DevVerifier()))
 	sc := &scenario.Scenario{
 		ID:         id,
 		Name:       "Live Test Scenario",
 		Executable: true,
 		Steps:      steps,
 	}
-	if err := engine.Save(sc); err != nil {
+	if err := engine.SaveAs(context.Background(), sc, "user:test"); err != nil {
 		t.Fatalf("save live scenario: %v", err)
 	}
 	got, _ := engine.Get(id)

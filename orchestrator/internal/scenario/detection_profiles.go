@@ -23,14 +23,14 @@ import (
 // the step's inline expectations, keyed by expectation id.
 
 // loadProfiles walks the detection-profiles subdir, verifies signatures, parses,
-// validates, and registers each profile. Errors are logged and the offending
-// profile is skipped — one bad profile never blocks the rest, and never loads a
+// validates, and returns the profiles in a fresh map (Load swaps it in).
+// Errors are logged and the offending profile is skipped — one bad profile never blocks the rest, and never loads a
 // half-valid profile into the map.
-func (e *Engine) loadProfiles() {
-	e.profiles = make(map[string]*DetectionProfile)
+func (e *Engine) loadProfiles() map[string]*DetectionProfile {
+	profiles := make(map[string]*DetectionProfile)
 	dir := filepath.Join(e.dir, profilesSubdir)
 	if _, err := os.Stat(dir); err != nil {
-		return // no profiles directory — feature simply inactive
+		return profiles // no profiles directory — feature simply inactive
 	}
 	_ = filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -59,24 +59,30 @@ func (e *Engine) loadProfiles() {
 			log.Printf("[!] detection profile %s invalid: %v — skipping", path, err)
 			return nil
 		}
-		if _, dup := e.profiles[p.Profile]; dup {
+		if _, dup := profiles[p.Profile]; dup {
 			log.Printf("[!] detection profile: duplicate name %q in %s — skipping", p.Profile, path)
 			return nil
 		}
-		e.profiles[p.Profile] = &p
+		profiles[p.Profile] = &p
 		return nil
 	})
 	// Cross-profile checks that need the full set (inheritance targets + cycles).
-	for name, p := range e.profiles {
-		if err := checkInheritance(name, p, e.profiles, nil); err != nil {
+	for name, p := range profiles {
+		if err := checkInheritance(name, p, profiles, nil); err != nil {
 			log.Printf("[!] detection profile %q: %v — removing from registry", name, err)
-			delete(e.profiles, name)
+			delete(profiles, name)
 		}
 	}
+	return profiles
 }
 
 // Profiles returns a snapshot map of loaded profiles (name → profile).
-func (e *Engine) Profiles() map[string]*DetectionProfile { return e.profiles }
+// The map is never mutated after Load swaps it in.
+func (e *Engine) Profiles() map[string]*DetectionProfile {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return e.profiles
+}
 
 // validateProfile checks a single profile's own fields (structural validation
 // that does not need the full profile set). Returns the first problem found.
@@ -175,7 +181,7 @@ func checkInheritance(name string, p *DetectionProfile, all map[string]*Detectio
 // referenced profile's own expectations, then the step's inline expectations.
 // Later declarations override earlier ones with the same id.
 func (e *Engine) ResolveStepExpectations(step Step) ([]ExpectedDetection, []ProfileRef) {
-	return ResolveExpectations(step.DetectionProfiles, step.ExpectedDetections, e.profiles)
+	return ResolveExpectations(step.DetectionProfiles, step.ExpectedDetections, e.Profiles())
 }
 
 // ResolveExpectations is the pure resolution used by ResolveStepExpectations and

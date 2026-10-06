@@ -38,7 +38,7 @@ func verificationScenario(t *testing.T, id string) (*scenario.Scenario, *scenari
 			},
 		},
 	}
-	if err := engine.Save(sc); err != nil {
+	if err := engine.SaveAs(context.Background(), sc, "user:test"); err != nil {
 		t.Fatalf("save verification scenario: %v", err)
 	}
 	got, _ := engine.Get(id)

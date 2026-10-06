@@ -1,6 +1,7 @@
 import { state } from '../core/state.js';
 import { apicall } from '../core/api.js';
 import { x } from '../core/escape.js';
+import { on } from '../core/actions.js';
 import { daysAgo, fmtDate, showToast } from '../core/util.js';
 import { covSegHtml, statTileCard } from './attack-path.js';
 import { openModal, scenarioFramework } from './reports.js';
@@ -155,16 +156,16 @@ function renderFindingsRows() {
   if (!l.length) { tb.innerHTML = '<tr><td colspan="' + colCount + '" class="empty">No findings' + (FINDING_TAB === 'all' ? ' yet.' : ' in this state.') + '</td></tr>'; return; }
   tb.innerHTML = l.map(function(f) {
     var checkCell = (_findingsBulkMode && canPush)
-      ? '<td onclick="event.stopPropagation()" style="padding:0.2rem 0.5rem"><input type="checkbox" ' + (_findingsSelected[f.id] ? 'checked' : '') + ' onchange="toggleFindingCheck(\'' + x(f.id) + '\')" class="u-pointer"></td>'
+      ? '<td' + on('click', 'stopEvent') + ' style="padding:0.2rem 0.5rem"><input type="checkbox" ' + (_findingsSelected[f.id] ? 'checked' : '') + ' ' + on('change', 'toggleFindingCheck', f.id) + ' class="u-pointer"></td>'
       : '';
     var isTicketed = _ticketCandidateIds && (f.status === 'open' || f.status === 'triaged') && !_ticketCandidateIds.has(f.id);
     var ticketCell = '';
     if (canPush) {
-      ticketCell = '<td onclick="event.stopPropagation()" style="padding:0.2rem 0.5rem">' +
+      ticketCell = '<td' + on('click', 'stopEvent') + ' style="padding:0.2rem 0.5rem">' +
         (isTicketed
           ? '<span class="sbadge" style="background:rgba(47,129,247,0.12);color:var(--accent);font-size:0.68rem">ticketed</span>'
           : (f.status === 'open' || f.status === 'triaged')
-            ? '<button class="btn btn-sm" style="font-size:0.68rem;padding:0.15rem 0.4rem;background:transparent;border:1px solid var(--border);color:var(--muted)" onclick="pushFindingToITSM(\'' + x(f.id) + '\')">+ ticket</button>'
+            ? '<button class="btn btn-sm" style="font-size:0.68rem;padding:0.15rem 0.4rem;background:transparent;border:1px solid var(--border);color:var(--muted)"' + on('click', 'pushFindingToITSM', f.id) + '>+ ticket</button>'
             : '') +
         '</td>';
     }
@@ -172,12 +173,12 @@ function renderFindingsRows() {
     if (canTriage) {
       var nextStates = ['open', 'triaged', 'remediated', 'risk_accepted'].filter(function(st) { return st !== f.status; });
       var opts = nextStates.map(function(st) { return '<option value="' + st + '">' + st.replace('_', ' ') + '</option>'; }).join('');
-      triageCell = '<td onclick="event.stopPropagation()" style="padding:0.2rem 0.5rem">'
-        + '<select class="triage-sel" onchange="quickTriageFinding(\'' + x(f.id) + '\',this)"'
+      triageCell = '<td' + on('click', 'stopEvent') + ' style="padding:0.2rem 0.5rem">'
+        + '<select class="triage-sel"' + on('change', 'quickTriageFinding', f.id)
         + ' style="font-size:0.72rem;padding:0.2rem 0.35rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--muted);cursor:pointer">'
         + '<option value="">Set…</option>' + opts + '</select></td>';
     }
-    return '<tr class="u-pointer" onclick="openFinding(\'' + x(f.id) + '\')">'
+    return '<tr class="u-pointer"' + on('click', 'openFinding', f.id) + '>'
       + checkCell
       + '<td class="cell-main">' + x(f.techniqueName || f.techniqueId) + (f.reopenedCount > 0 ? ' <span class="sbadge s-partial">reopened</span>' : '') + '</td>'
       + '<td><span class="tech-id">' + x(f.techniqueId) + '</span></td>'
@@ -206,11 +207,11 @@ export function openFinding(id) {
     var row = function(k, v) { return v && v.length ? '<div style="display:flex;gap:0.6rem;padding:0.35rem 0;border-bottom:1px solid var(--border);font-size:0.8rem"><span style="color:var(--muted);min-width:140px">' + k + '</span><span class="u-flex1">' + v + '</span></div>' : ''; };
     var list = function(a) { return (a || []).map(x).join(', '); };
     var canPush = (ROLE === 'admin' || ROLE === 'analyst');
-    var pushBtn = canPush ? '<button class="btn btn-outline btn-sm" onclick="pushFindingToITSM(\'' + x(f.id) + '\')">+ Ticket</button>' : '';
-    var respondBtn = (ROLE === 'admin') ? '<button class="btn btn-outline btn-sm" onclick="openRespondModal()">Respond</button>' : '';
+    var pushBtn = canPush ? '<button class="btn btn-outline btn-sm"' + on('click', 'pushFindingToITSM', f.id) + '>+ Ticket</button>' : '';
+    var respondBtn = (ROLE === 'admin') ? '<button class="btn btn-outline btn-sm"' + on('click', 'openRespondModal') + '>Respond</button>' : '';
     var actions = (canPush
       ? ['open', 'triaged', 'remediated', 'risk_accepted'].filter(function(st) { return st !== f.status; })
-          .map(function(st) { return '<button class="btn btn-outline btn-sm" onclick="setFindingStatus(\'' + x(f.id) + '\',\'' + st + '\')">' + st.replace('_', ' ') + '</button>'; }).join(' ')
+          .map(function(st) { return '<button class="btn btn-outline btn-sm"' + on('click', 'setFindingStatus', f.id, st) + '>' + st.replace('_', ' ') + '</button>'; }).join(' ')
       : '');
     document.getElementById('results-export').innerHTML = (actions ? actions + ' ' : '') + pushBtn + (pushBtn && respondBtn ? ' ' : '') + respondBtn;
     var ticketSectionId = 'finding-tickets-' + f.id;
@@ -323,9 +324,9 @@ function renderRemList() {
         '</div>' +
       '</div>' +
       '<div class="rem-actions">' +
-        '<button class="btn btn-outline btn-sm" onclick="openRemediation(' + i + ')">View</button>' +
-        (ROLE === 'admin' || ROLE === 'analyst' ? '<button class="btn btn-outline btn-sm" onclick="remSingleTicket(' + i + ')">&#128279; Ticket</button>' : '') +
-        '<button class="btn btn-primary btn-sm" onclick="revalidateRemediation(\'' + x(r.techniqueId) + '\')">&#8635; Re-validate</button>' +
+        '<button class="btn btn-outline btn-sm"' + on('click', 'openRemediation', i) + '>View</button>' +
+        (ROLE === 'admin' || ROLE === 'analyst' ? '<button class="btn btn-outline btn-sm"' + on('click', 'remSingleTicket', i) + '>&#128279; Ticket</button>' : '') +
+        '<button class="btn btn-primary btn-sm"' + on('click', 'revalidateRemediation', r.techniqueId) + '>&#8635; Re-validate</button>' +
       '</div>' +
     '</div>';
   }).join('');
@@ -335,8 +336,8 @@ export function openRemediation(i) {
   if (!r) return;
   document.getElementById('results-title').textContent = r.techniqueId + ' — Remediation';
   document.getElementById('results-export').innerHTML =
-    (ROLE === 'admin' || ROLE === 'analyst' ? '<button class="btn btn-outline btn-sm" onclick="remSingleTicket(' + i + ')">&#128279; Create Ticket</button>' : '') +
-    '<button class="btn btn-primary btn-sm" onclick="revalidateRemediation(\'' + x(r.techniqueId) + '\')">&#8635; Re-validate</button>';
+    (ROLE === 'admin' || ROLE === 'analyst' ? '<button class="btn btn-outline btn-sm"' + on('click', 'remSingleTicket', i) + '>&#128279; Create Ticket</button>' : '') +
+    '<button class="btn btn-primary btn-sm"' + on('click', 'revalidateRemediation', r.techniqueId) + '>&#8635; Re-validate</button>';
   var ctrls = (r.controlClasses || []).map(x).join(', ') || '—';
   var stat = function(l, v) { return '<div class="rem-stat"><div class="lbl">' + l + '</div><div class="val">' + v + '</div></div>'; };
   var statGrid = '<div class="rem-stat-grid">' +
@@ -519,13 +520,13 @@ export function pushFindingToITSM(findingId) {
 }
 
 // ── Findings bulk select ────────────────────────────────────────────────────
-function toggleFindingsBulkMode(on) {
-  _findingsBulkMode = on;
+function toggleFindingsBulkMode(enabled) {
+  _findingsBulkMode = enabled;
   _findingsSelected = {};
   var checkCol = document.getElementById('findings-th-check');
   var bulkBtn = document.getElementById('findings-bulk-btn');
-  if (checkCol) checkCol.style.display = on ? '' : 'none';
-  if (bulkBtn) bulkBtn.style.display = on ? '' : 'none';
+  if (checkCol) checkCol.style.display = enabled ? '' : 'none';
+  if (bulkBtn) bulkBtn.style.display = enabled ? '' : 'none';
   renderFindingsRows();
 }
 

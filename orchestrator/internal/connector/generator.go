@@ -1,20 +1,46 @@
 package connector
 
 import (
+	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
-	"time"
+	"unicode"
 
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"gopkg.in/yaml.v3"
+
+	"github.com/audspect/bas/internal/contentregistry"
+	"github.com/audspect/bas/internal/reporting/attackdata"
 	"github.com/audspect/bas/internal/scenario"
+	"github.com/audspect/bas/internal/threatidentity"
 )
 
 const minTechniques = 2 // minimum techniques before generating a scenario
+
+// Registrar is the slice of the Content Registry the generator writes to.
+type Registrar interface {
+	RegisterGenerated(ctx context.Context, c contentregistry.GeneratedCandidate) (string, bool, error)
+}
+
+const (
+	generatorName = "connector/generator"
+	// 2 = registry-backed, deterministic YAML (TCF Phase 1).
+	// 3 = yaml.Marshal encoding + sanitized, rune-capped intel text (final
+	//     review I3). New bytes => a new DRAFT version of the same content id.
+	// 4 = threat-derived content id (TCF Phase 2A).
+	generatorVersion = "4"
+	mappingVersion   = "1"
+)
 
 // Generator converts ThreatActor profiles into BAS scenario YAML files.
 type Generator struct {
@@ -31,6 +57,40 @@ type Generator struct {
 	// names (Detection Profile Inheritance). Built once at construction
 	// time from the profiles the caller already loaded.
 	techniqueIdx map[string][]string
+
+	registrar Registrar
+	// componentVersions reads the pinned catalog versions recorded in each
+	// new version's generation metadata (spec 4.4). nil => unknown.
+	componentVersions func(context.Context) (scenario.ComponentVersions, error)
+	// attackMeta overrides attackdata.DatasetMeta (tests).
+	attackMeta func() attackdata.Meta
+}
+
+// WithComponentVersions sets the catalog-version source for generation
+// metadata (see DBComponentVersions).
+func (g *Generator) WithComponentVersions(fn func(context.Context) (scenario.ComponentVersions, error)) *Generator {
+	g.componentVersions = fn
+	return g
+}
+
+// DBComponentVersions reads the ART catalog version from art_content_meta.
+// There is no Caldera version source today (spec 4.9), so Caldera is "".
+func DBComponentVersions(pool *pgxpool.Pool) func(context.Context) (scenario.ComponentVersions, error) {
+	return func(ctx context.Context) (scenario.ComponentVersions, error) {
+		var art string
+		err := pool.QueryRow(ctx, `SELECT source_version FROM art_content_meta WHERE id = 1`).Scan(&art)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return scenario.ComponentVersions{}, nil
+		}
+		return scenario.ComponentVersions{ART: art}, err
+	}
+}
+
+// WithRegistrar makes the generator register every candidate as a
+// LOCAL/UNTRUSTED/DRAFT version in the Content Registry.
+func (g *Generator) WithRegistrar(r Registrar) *Generator {
+	g.registrar = r
+	return g
 }
 
 // NewGenerator creates a Generator that writes to intelDir, tagging
@@ -51,108 +111,209 @@ func NewGenerator(scenariosDir string, sectors, regions []string, profiles map[s
 // GenerateResult summarises what was written in one sync.
 type GenerateResult struct {
 	Created int
-	Updated int
+	Updated int // no longer set by the generator; kept for existing readers
 	Skipped int
+	// Changed counts working-copy files whose bytes differ from what was on
+	// disk (new or rewritten), independent of the registry outcome. The
+	// scheduler reloads the scenario engine when Changed > 0.
+	Changed int
+	// Failed counts candidates that were not registered or written (registry
+	// error, source/origin collision, file write error).
+	Failed int
 }
 
 // Write generates scenario YAMLs for each actor and returns a result summary.
-// Files are named by a fingerprint of (actor name + sorted technique IDs),
-// so the same actor+techniques never produces a duplicate file.
+// Files are named by the threat-derived content ID (threatidentity.ContentID), and the
+// YAML is byte-deterministic for unchanged inputs. The working copy is
+// rewritten only when its bytes differ; every candidate is registered with
+// the Content Registry (which dedups identical bytes). Created counts
+// versions the registry created; Skipped covers everything else.
 func (g *Generator) Write(actors []ThreatActor) (GenerateResult, error) {
 	if err := os.MkdirAll(g.intelDir, 0755); err != nil {
 		return GenerateResult{}, fmt.Errorf("mkdir %s: %w", g.intelDir, err)
 	}
 
+	// Catalog versions are read once per sync; they describe this run.
+	var cv scenario.ComponentVersions
+	var cvErr error
+	if g.componentVersions != nil {
+		cv, cvErr = g.componentVersions(context.Background())
+		if cvErr != nil {
+			log.Printf("[connector/gen] component versions unavailable: %v", cvErr)
+		}
+	}
+
 	var res GenerateResult
 	for _, actor := range actors {
+		if actor.ThreatID == "" {
+			// Unresolved identity never yields content (TCF Phase 2 spec §3.2).
+			res.Skipped++
+			continue
+		}
 		if len(actor.Techniques) < minTechniques {
 			res.Skipped++
 			continue
 		}
 
-		fp := actorFingerprint(actor)
-		fname := filepath.Join(g.intelDir, "intel-"+fp+".yaml")
+		id := threatidentity.ContentID(actor.ThreatID)
+		body := g.buildYAML(actor, id)
+		fname := filepath.Join(g.intelDir, id+".yaml")
 
-		if _, err := os.Stat(fname); err == nil {
-			// File exists — fingerprint unchanged, skip
+		// Register first: the version (with its provenance snapshot) must exist
+		// before the file does, so a concurrent engine.Load() intake dedups by
+		// hash instead of creating the version without sources. On failure the
+		// file is left unwritten and the next sync retries.
+		created := false
+		if g.registrar != nil {
+			var err error
+			key := generationKey(actor)
+			_, created, err = g.registrar.RegisterGenerated(context.Background(), contentregistry.GeneratedCandidate{
+				ContentID: id, Artifact: []byte(body), GenerationKey: key, GenerationRef: key, ThreatID: actor.ThreatID,
+				Generation: g.generationMeta(actor, cv, cvErr),
+				Sources: []contentregistry.SourceRef{{EntityType: "actor", EntityID: actor.Name, Provider: actor.Source,
+					ExternalID: actor.SourceID, Role: "primary"}},
+			})
+			if err != nil {
+				switch {
+				case errors.Is(err, contentregistry.ErrSourceCollision):
+					log.Printf("[connector/gen] %s (%s) collides with a custom scenario of the same id; not written: %v", id, actor.Name, err)
+				case errors.Is(err, contentregistry.ErrOriginCollision):
+					log.Printf("[connector/gen] %s (%s) collides with content of a different origin; not written: %v", id, actor.Name, err)
+				case errors.Is(err, contentregistry.ErrThreatCollision):
+					log.Printf("[connector/gen] %s (%s) content id owned by a different threat; not written: %v", id, actor.Name, err)
+				default:
+					log.Printf("[connector/gen] register %s: %v", id, err)
+				}
+				res.Failed++
+				continue
+			}
+		}
+		if old, err := os.ReadFile(fname); err != nil || !bytes.Equal(old, []byte(body)) {
+			if err := os.WriteFile(fname, []byte(body), 0644); err != nil {
+				log.Printf("[connector/gen] write %s: %v", fname, err)
+				res.Failed++
+				continue
+			}
+			res.Changed++
+		}
+		if created {
+			log.Printf("[connector/gen] new DRAFT %s (%s, %d techniques)", id, actor.Name, len(actor.Techniques))
+			res.Created++
+		} else {
 			res.Skipped++
-			continue
 		}
-
-		yaml := g.buildYAML(actor, fp)
-		if err := os.WriteFile(fname, []byte(yaml), 0644); err != nil {
-			log.Printf("[connector/gen] write %s: %v", fname, err)
-			continue
-		}
-		log.Printf("[connector/gen] wrote %s (%s, %d techniques)", fname, actor.Name, len(actor.Techniques))
-		res.Created++
 	}
 	return res, nil
 }
 
 // ── YAML builder ──────────────────────────────────────────────────────────────
 
-func (g *Generator) buildYAML(actor ThreatActor, fingerprint string) string {
-	id := "intel-" + fingerprint
-	date := time.Now().UTC().Format("2006-01-02")
+// intelScenarioYAML fixes the generated document's key order. Every value
+// goes through yaml.Marshal, so external intel text (MISP/OpenCTI/OTX) is
+// always a quoted/escaped scalar and can never add keys such as steps:.
+type intelScenarioYAML struct {
+	ID                string   `yaml:"id"`
+	Name              string   `yaml:"name"`
+	Description       string   `yaml:"description"`
+	Author            string   `yaml:"author"`
+	Tags              []string `yaml:"tags"`
+	MITREPhases       []string `yaml:"mitre_phases"`
+	IntelSource       string   `yaml:"intel_source"`
+	IntelSourceID     string   `yaml:"intel_source_id"`
+	IntelActor        string   `yaml:"intel_actor"`
+	IntelConfidence   string   `yaml:"intel_confidence"`
+	ARTTechniques     []string `yaml:"art_techniques"`
+	DetectionProfiles []string `yaml:"detection_profiles,omitempty"`
+}
 
-	// Collect unique technique IDs
-	techIDs := dedupedTechniqueIDs(actor.Techniques)
+// Rune caps for actor-derived display text.
+const (
+	maxIntelNameRunes        = 128
+	maxIntelDescriptionRunes = 200
+	maxIntelFieldRunes       = 128 // source, source id, confidence, sector, technique id, tactic
+)
 
-	// Derive MITRE phases from techniques
-	phases := deriveMITREPhases(actor.Techniques)
+// sanitizeIntelText drops invalid UTF-8 and every control character
+// (including CR, LF, NUL and ESC) from external intel text, trims it, and
+// caps it at max runes -- never mid-rune. truncated reports a cut.
+func sanitizeIntelText(s string, max int) (out string, truncated bool) {
+	s = strings.ToValidUTF8(s, "")
+	s = strings.Map(func(r rune) rune {
+		// Controls (CR, LF, NUL, ESC...), format characters (bidi
+		// overrides, ZWSP, BOM) and line/paragraph separators.
+		if unicode.IsControl(r) || unicode.In(r, unicode.Cf, unicode.Zl, unicode.Zp) {
+			return -1
+		}
+		return r
+	}, s)
+	s = strings.TrimSpace(s)
+	n := 0
+	for i := range s {
+		if n == max {
+			return strings.TrimSpace(s[:i]), true
+		}
+		n++
+	}
+	return s, false
+}
+
+// cleanDedupeSort cleans each value, drops empties and duplicates, and sorts.
+func cleanDedupeSort(in []string) []string {
+	seen := map[string]bool{}
+	out := []string{}
+	for _, v := range in {
+		if c := cleanIntel(v); c != "" && !seen[c] {
+			seen[c] = true
+			out = append(out, c)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+func cleanIntel(s string) string {
+	out, _ := sanitizeIntelText(s, maxIntelFieldRunes)
+	return out
+}
+
+// buildYAML renders the scenario YAML. It is deterministic: no wall-clock or
+// last-seen values, so unchanged techniques/confidence give identical bytes.
+func (g *Generator) buildYAML(actor ThreatActor, contentID string) string {
+	name, _ := sanitizeIntelText(actor.Name, maxIntelNameRunes)
+	source := cleanIntel(actor.Source)
+	confidence := cleanIntel(actor.Confidence)
+
+	// Clean first, then dedupe and sort: provider ordering, and values that
+	// only differ before cleaning, must not change the bytes.
+	techs := make([]TechniqueRef, 0, len(actor.Techniques))
+	for _, t := range actor.Techniques {
+		techs = append(techs, TechniqueRef{ID: cleanIntel(t.ID), Tactic: cleanIntel(t.Tactic)})
+	}
+	techIDs := dedupedTechniqueIDs(techs) // uppercased, deduped, sorted
+	phases := deriveMITREPhases(techs)    // deduped, kill-chain ordered
+	if phases == nil {
+		phases = []string{}
+	}
+	sectors := cleanDedupeSort(actor.Sectors)
+	regions := cleanDedupeSort(actor.Regions)
 
 	// Tags
-	tags := []string{"intel", "auto-generated", strings.ToLower(strings.ReplaceAll(actor.Name, " ", "-"))}
-	if len(actor.Sectors) > 0 {
-		tags = append(tags, actor.Sectors...)
-	}
-	if intersects(actor.Sectors, g.sectors) {
+	tags := []string{"intel", "auto-generated", strings.ToLower(strings.ReplaceAll(name, " ", "-"))}
+	tags = append(tags, sectors...)
+	if intersects(sectors, g.sectors) {
 		tags = append(tags, "sector-relevant")
 	}
-	if intersects(actor.Regions, g.regions) {
+	if intersects(regions, g.regions) {
 		tags = append(tags, "region-relevant")
 	}
 
 	// Description
-	lastSeen := "unknown"
-	if !actor.LastSeen.IsZero() {
-		lastSeen = actor.LastSeen.Format("2006-01-02")
-	}
-	description := actor.Description
+	description, cut := sanitizeIntelText(actor.Description, maxIntelDescriptionRunes)
 	if description == "" {
-		description = fmt.Sprintf("%s threat actor profile.", actor.Name)
+		description, cut = sanitizeIntelText(fmt.Sprintf("%s threat actor profile.", name), maxIntelDescriptionRunes)
 	}
-	if len(description) > 200 {
-		description = description[:200] + "..."
-	}
-
-	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("id: %s\n", id))
-	sb.WriteString(fmt.Sprintf("name: \"%s — Active Campaign (Intel, %s)\"\n", actor.Name, date))
-	sb.WriteString(fmt.Sprintf("description: \"Auto-generated from %s. %s Confidence: %s. Last seen: %s.\"\n",
-		actor.Source, strings.ReplaceAll(description, `"`, `'`), actor.Confidence, lastSeen))
-	sb.WriteString(fmt.Sprintf("author: \"Threat Intel Connector (%s)\"\n", actor.Source))
-
-	sb.WriteString("tags:\n")
-	for _, tag := range tags {
-		sb.WriteString(fmt.Sprintf("  - %s\n", tag))
-	}
-
-	sb.WriteString("mitre_phases:\n")
-	for _, p := range phases {
-		sb.WriteString(fmt.Sprintf("  - %s\n", p))
-	}
-
-	sb.WriteString(fmt.Sprintf("intel_source: %s\n", actor.Source))
-	sb.WriteString(fmt.Sprintf("intel_source_id: \"%s\"\n", actor.SourceID))
-	sb.WriteString(fmt.Sprintf("intel_actor: \"%s\"\n", actor.Name))
-	sb.WriteString(fmt.Sprintf("intel_confidence: %s\n", actor.Confidence))
-	sb.WriteString(fmt.Sprintf("intel_generated_at: \"%s\"\n", time.Now().UTC().Format(time.RFC3339)))
-
-	sb.WriteString("art_techniques:\n")
-	for _, t := range techIDs {
-		sb.WriteString(fmt.Sprintf("  - %s\n", t))
+	if cut {
+		description += "..."
 	}
 
 	// Detection Profile Inheritance: attach any profile whose TechniqueIDs
@@ -160,20 +321,36 @@ func (g *Generator) buildYAML(actor ThreatActor, fingerprint string) string {
 	var detectionProfiles []string
 	seenProfiles := make(map[string]bool)
 	for _, id := range techIDs {
-		if name := resolveProfile(g.techniqueIdx, id); name != "" && !seenProfiles[name] {
-			seenProfiles[name] = true
-			detectionProfiles = append(detectionProfiles, name)
+		if pn := resolveProfile(g.techniqueIdx, id); pn != "" && !seenProfiles[pn] {
+			seenProfiles[pn] = true
+			detectionProfiles = append(detectionProfiles, pn)
 		}
 	}
-	if len(detectionProfiles) > 0 {
-		sort.Strings(detectionProfiles)
-		sb.WriteString("detection_profiles:\n")
-		for _, p := range detectionProfiles {
-			sb.WriteString(fmt.Sprintf("  - %s\n", p))
-		}
-	}
+	sort.Strings(detectionProfiles)
 
-	return sb.String()
+	doc := intelScenarioYAML{
+		ID:                contentID,
+		Name:              name + " — Active Campaign (Intel)",
+		Description:       fmt.Sprintf("Auto-generated from %s. %s Confidence: %s.", source, description, confidence),
+		Author:            fmt.Sprintf("Threat Intel Connector (%s)", source),
+		Tags:              tags,
+		MITREPhases:       phases,
+		IntelSource:       source,
+		IntelSourceID:     cleanIntel(actor.SourceID),
+		IntelActor:        name,
+		IntelConfidence:   confidence,
+		ARTTechniques:     techIDs,
+		DetectionProfiles: detectionProfiles,
+	}
+	var buf bytes.Buffer
+	enc := yaml.NewEncoder(&buf)
+	enc.SetIndent(2)
+	if err := enc.Encode(doc); err != nil {
+		// Only strings and string slices: Encode cannot fail on this type.
+		panic(fmt.Sprintf("connector/generator: encode %s: %v", contentID, err))
+	}
+	_ = enc.Close()
+	return buf.String()
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -200,15 +377,82 @@ func dedupedTechniqueIDs(techs []TechniqueRef) []string {
 	return out
 }
 
-func actorFingerprint(actor ThreatActor) string {
-	ids := make([]string, len(actor.Techniques))
-	for i, t := range actor.Techniques {
-		ids[i] = strings.ToUpper(t.ID)
+// generationInputs names the intelligence entities a candidate derives from;
+// shared by generationKey and the stored generation metadata.
+func generationInputs(a ThreatActor) []map[string]string {
+	return []map[string]string{
+		{"entity_type": "threat", "entity_id": a.ThreatID},
+		{"entity_type": "actor", "entity_id": a.ActorID, "provider": a.Source, "external_id": a.SourceID},
 	}
-	sort.Strings(ids)
-	key := strings.ToLower(actor.Name) + "|" + strings.Join(ids, ",")
-	h := sha256.Sum256([]byte(key))
-	return hex.EncodeToString(h[:])[:12]
+}
+
+// Reasons recorded when a version source does not exist. Never invent a value.
+const (
+	reasonNoSource    = "no catalog version source configured for this generator"
+	reasonNoCaldera   = "no Caldera version source exists (spec 4.9)"
+	reasonNoART       = "art_content_meta has no source_version recorded"
+	reasonARTReadFail = "art_content_meta could not be read at generation time"
+	reasonNoAttack    = "dataset version unavailable"
+)
+
+// What the embedded ATT&CK dataset influenced in a generated candidate, so
+// the record is precise: the dataset canonicalizes actors (actor_merge.go /
+// otx.go via ATT&CK groups); tactics come from tacticsForTechniquePrefix.
+const (
+	attackDatasetUse = "actor canonicalization (ATT&CK groups)"
+	tacticMapping    = "static prefix table (mapping_version)"
+)
+
+// generationMeta is the immutable generation JSON stored on the new version
+// (spec 4.4): generator identity, inputs, parameters, component_versions and
+// attack_version. A missing version is null with a *_reason field.
+func (g *Generator) generationMeta(a ThreatActor, cv scenario.ComponentVersions, cvErr error) map[string]any {
+	comp := map[string]any{}
+	switch {
+	case cvErr != nil:
+		comp["art"], comp["art_reason"] = nil, reasonARTReadFail
+	case g.componentVersions == nil:
+		comp["art"], comp["art_reason"] = nil, reasonNoSource
+	case cv.ART == "":
+		comp["art"], comp["art_reason"] = nil, reasonNoART
+	default:
+		comp["art"] = cv.ART
+	}
+	if cv.Caldera != "" && cvErr == nil {
+		comp["caldera"] = cv.Caldera
+	} else {
+		comp["caldera"], comp["caldera_reason"] = nil, reasonNoCaldera
+	}
+	out := map[string]any{
+		"generator": generatorName, "generator_version": generatorVersion, "mapping_version": mappingVersion,
+		"parameters":         map[string]any{"min_techniques": minTechniques},
+		"inputs":             generationInputs(a),
+		"component_versions": comp,
+		"attack_dataset_use": attackDatasetUse,
+		"tactic_mapping":     tacticMapping,
+	}
+	am := attackdata.DatasetMeta
+	if g.attackMeta != nil {
+		am = g.attackMeta
+	}
+	if m := am(); m.Known() {
+		out["attack_version"] = m.AttackVersion
+		out["attack_dataset_sha256"] = m.SourceBundleSHA256
+	} else {
+		out["attack_version"], out["attack_version_reason"] = nil, reasonNoAttack
+	}
+	return out
+}
+
+func generationKey(a ThreatActor) string {
+	b, _ := json.Marshal(map[string]any{
+		"generator": generatorName, "generator_version": generatorVersion, "mapping_version": mappingVersion,
+		"inputs":     generationInputs(a),
+		"techniques": dedupedTechniqueIDs(a.Techniques),
+		"parameters": map[string]any{"min_techniques": minTechniques},
+	})
+	h := sha256.Sum256(b)
+	return hex.EncodeToString(h[:])
 }
 
 var tacticsForTechniquePrefix = map[string]string{
@@ -252,7 +496,10 @@ func deriveMITREPhases(techniques []TechniqueRef) []string {
 		"command-and-control": 10, "impact": 11,
 	}
 	sort.Slice(phases, func(i, j int) bool {
-		return order[phases[i]] < order[phases[j]]
+		if order[phases[i]] != order[phases[j]] {
+			return order[phases[i]] < order[phases[j]]
+		}
+		return phases[i] < phases[j] // unknown tactics tie at 0: order by name, not input order
 	})
 	return phases
 }

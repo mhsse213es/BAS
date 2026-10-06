@@ -35,7 +35,8 @@ func TestDispatchRun_ConcurrentDispatchToIdleAgent_ExactlyOneWins(t *testing.T) 
 			`INSERT INTO agents (agent_id, hostname, state) VALUES ($1,'h','active')`, agentID); err != nil {
 			t.Fatalf("seed agent: %v", err)
 		}
-		sc, _ := minimalPostureScenario(t, "scenario-race")
+		sc, eng := minimalPostureScenario(t, "scenario-race")
+		h.engine = eng // dispatch resolves through the engine that registered sc
 		fake := startFakeAgent(t, h.hub, agentID)
 		defer fake.Disconnect(t)
 

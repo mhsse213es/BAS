@@ -174,7 +174,7 @@ func registerOSFixtureScenario(t *testing.T, eng *scenario.Engine, id string, su
 			Framework: "custom", Executor: "local", Command: "echo PASS: fixture", TimeoutSec: 10,
 		}},
 	}
-	if err := eng.Save(sc); err != nil {
+	if err := eng.SaveAs(context.Background(), sc, "user:test"); err != nil {
 		t.Fatalf("register OS fixture scenario: %v", err)
 	}
 }

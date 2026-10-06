@@ -1,5 +1,5 @@
-// Package detectverify queries Microsoft Sentinel and Microsoft Defender XDR
-// for whether they detected a run's executed techniques, then writes the
+// Package detectverify queries detection providers (Sentinel, Defender XDR,
+// Splunk, QRadar, CrowdStrike, Trellix, Elastic) for whether they detected a run's executed techniques, then writes the
 // verdict into the Verification Store (internal/verification) with
 // Source=api. It is deliberately independent of internal/siem — see
 // docs/superpowers/specs/2026-07-14-detection-verification-connectors-design.md
@@ -37,7 +37,7 @@ const (
 type Config struct {
 	ID                 string
 	Name               string
-	Provider           string // "microsoft_sentinel" | "microsoft_defender" | "splunk" | "qradar" | "crowdstrike" | "trellix"
+	Provider           string // "microsoft_sentinel" | "microsoft_defender" | "splunk" | "qradar" | "crowdstrike" | "trellix" | "elastic"
 	Enabled            bool
 	AutoVerify         bool
 	TenantID           string
@@ -45,7 +45,7 @@ type Config struct {
 	ClientSecret       string
 	WorkspaceID        string // Sentinel only; empty for Defender XDR
 	BaseURL            string // Splunk/QRadar: management API base URL
-	APIToken           string // Splunk/QRadar: bearer token
+	APIToken           string // Splunk/QRadar: bearer token; Elastic: API key
 	InsecureTLS        bool   // skip TLS verification (self-signed on-prem appliances)
 	VerifyDelaySeconds int
 }
@@ -103,8 +103,7 @@ type Connector interface {
 }
 
 // NewConnector builds the Connector for cfg.Provider. Returns an error for
-// any provider not yet implemented — Elastic arrives in a later slice using
-// this same framework.
+// any provider not yet implemented.
 func NewConnector(cfg Config) (Connector, error) {
 	switch cfg.Provider {
 	case "microsoft_sentinel":
@@ -119,6 +118,8 @@ func NewConnector(cfg Config) (Connector, error) {
 		return newCrowdStrikeConnector(cfg), nil
 	case "trellix":
 		return newTrellixConnector(cfg), nil
+	case "elastic":
+		return newElasticConnector(cfg), nil
 	default:
 		return nil, fmt.Errorf("detectverify: provider %q not supported", cfg.Provider)
 	}

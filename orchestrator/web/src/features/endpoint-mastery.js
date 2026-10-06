@@ -1,6 +1,7 @@
 import { state } from '../core/state.js';
 import { apicall } from '../core/api.js';
 import { x } from '../core/escape.js';
+import { on } from '../core/actions.js';
 import { ago, showToast } from '../core/util.js';
 import { agentGroupTree, gpFlattenGroups, resolveGroupTargetAgents, scenarioCategoryOf } from './attack-path.js';
 import { loadRuns, openModal, sweepStatusLabel, verdictBadge, verdictCounts } from './reports.js';
@@ -123,10 +124,10 @@ export function loadEmTab() {
           '</div>' +
         '</div>' +
         '<div style="border-top:1px solid var(--border);padding:0.5rem 1rem;display:flex;gap:0.5rem;align-items:center">' +
-          (run ? '<a style="font-size:0.75rem;color:var(--accent);cursor:pointer" onclick=\'viewRunResults(' + JSON.stringify(run).replace(/'/g,"&#39;") + ')\'>View report →</a>' : '') +
+          (run ? '<a style="font-size:0.75rem;color:var(--accent);cursor:pointer" ' + on('click', 'viewRunResults', run) + '>View report →</a>' : '') +
           '<span class="u-flex1"></span>' +
-          ((ROLE === 'admin' || ROLE === 'analyst') ? '<button class="btn btn-outline btn-sm" style="font-size:0.72rem;padding:0.2rem 0.6rem" onclick="cloneScenario(\'' + x(e.id) + '\')" title="Clone into an editable custom scenario">&#9112; Clone</button>' : '') +
-          (canRun ? '<button class="btn btn-outline btn-sm" style="font-size:0.72rem;padding:0.2rem 0.6rem" onclick="emRunLayer(\'' + x(e.id) + '\')" title="Run this layer">&#9654; Run</button>' : '') +
+          ((ROLE === 'admin' || ROLE === 'analyst') ? '<button class="btn btn-outline btn-sm" style="font-size:0.72rem;padding:0.2rem 0.6rem"' + on('click', 'cloneScenario', e.id) + ' title="Clone into an editable custom scenario">&#9112; Clone</button>' : '') +
+          (canRun ? '<button class="btn btn-outline btn-sm" style="font-size:0.72rem;padding:0.2rem 0.6rem"' + on('click', 'emRunLayer', e.id) + ' title="Run this layer">&#9654; Run</button>' : '') +
         '</div>' +
       '</div>';
     }).join('');
@@ -182,7 +183,7 @@ function renderEMSweepGroupList() {
   list.innerHTML = options.map(function(o) {
     return '<label style="display:flex;align-items:center;gap:0.5rem;padding:0.25rem 0.3rem;cursor:pointer">' +
       '<input type="checkbox" ' + (state._emGroupSel[o.id] ? 'checked' : '') +
-      ' onchange="_emGroupSel[' + o.id + ']=this.checked">' +
+      on('change', 'emGroupSelChange', o.id) + '>' +
       '<span style="font-size:0.8rem">' + x(o.label) + '</span></label>';
   }).join('');
 }
@@ -372,8 +373,8 @@ function renderSweepPreview() {
         return '<option value="' + x(t) + '"' + (t === _vexPreviewTactic ? ' selected' : '') + '>' + x(t) + '</option>';
       }).join('');
     filtersEl.innerHTML =
-      '<select onchange="_setVexPreviewTactic(this.value)" class="btn btn-outline btn-sm u-flex1">' + tacticOpts + '</select>' +
-      '<input type="text" placeholder="Search T-ID or name…" value="' + x(_vexPreviewSearch) + '" oninput="_setVexPreviewSearch(this.value)" class="btn btn-outline btn-sm u-flex1">';
+      '<select' + on('change', 'setVexPreviewTacticFromSelect') + ' class="btn btn-outline btn-sm u-flex1">' + tacticOpts + '</select>' +
+      '<input type="text" placeholder="Search T-ID or name…" value="' + x(_vexPreviewSearch) + '"' + on('input', 'setVexPreviewSearchFromInput') + ' class="btn btn-outline btn-sm u-flex1">';
     _renderVexPreviewList();
   } else if (_sweepPreviewType === 'em') {
     var emTargets = _sweepPreviewTargets;
@@ -382,10 +383,16 @@ function renderSweepPreview() {
     summaryEl.textContent = 'Targeting ' + (emTargets.agentIds || []).length + ' agent(s). ' +
       EM_CATALOG.length + ' fixed layers' + (extraCount ? ' + ' + extraCount + ' extra scenario(s)' : '') +
       ' run sequentially per agent.';
-    filtersEl.innerHTML = '<input type="text" placeholder="Search extra scenarios to add…" value="' + x(_emExtraSearch) + '" oninput="_setEMExtraSearch(this.value)" class="btn btn-outline btn-sm u-flex1">';
+    filtersEl.innerHTML = '<input type="text" placeholder="Search extra scenarios to add…" value="' + x(_emExtraSearch) + '"' + on('input', 'setEMExtraSearchFromInput') + ' class="btn btn-outline btn-sm u-flex1">';
     _renderEMPreviewList();
   }
 }
+
+export function setVexPreviewTacticFromSelect(el) { _setVexPreviewTactic(el.value); }
+export function setVexPreviewSearchFromInput(el) { _setVexPreviewSearch(el.value); }
+export function setEMExtraSearchFromInput(el) { _setEMExtraSearch(el.value); }
+export function emGroupSelChange(id, el) { state._emGroupSel[id] = el.checked; }
+export function openEMSweepReport(sweepId) { window.open('/api/em/sweeps/' + encodeURIComponent(sweepId) + '/report', '_blank'); }
 
 export function _setVexPreviewTactic(v) { _vexPreviewTactic = v; _renderVexPreviewList(); }
 export function _setVexPreviewSearch(v) { _vexPreviewSearch = v; _renderVexPreviewList(); }
@@ -409,7 +416,7 @@ function _renderVexPreviewList() {
 }
 
 function _renderVexPreviewSection(source, label, filtered, collapsed) {
-  var header = '<div style="display:flex;align-items:center;gap:0.5rem;padding:0.5rem 0.6rem;cursor:pointer;background:var(--elevated);border-bottom:1px solid var(--border)" onclick="_toggleVexPreviewSection(\'' + source + '\')">' +
+  var header = '<div style="display:flex;align-items:center;gap:0.5rem;padding:0.5rem 0.6rem;cursor:pointer;background:var(--elevated);border-bottom:1px solid var(--border)"' + on('click', '_toggleVexPreviewSection', source) + '>' +
       '<span style="width:12px;flex-shrink:0;color:var(--muted);font-size:0.7rem">' + (collapsed ? '&#9656;' : '&#9662;') + '</span>' +
       '<span style="font-weight:600;font-size:0.78rem;letter-spacing:0.02em">' + label + '</span>' +
       '<span style="color:var(--muted);font-size:0.74rem">' + filtered.length + ' technique(s)</span>' +
@@ -422,7 +429,7 @@ function _renderVexPreviewSection(source, label, filtered, collapsed) {
     var key = source + ':' + t.id;
     var expanded = _vexPreviewExpandedKey === key;
     return '<div style="border-bottom:1px solid var(--border)">' +
-      '<div style="display:flex;align-items:center;gap:0.5rem;padding:0.5rem 0.6rem 0.5rem 1.7rem;cursor:pointer" onclick="_toggleVexPreviewRow(\'' + source + '\',\'' + x(t.id) + '\')">' +
+      '<div style="display:flex;align-items:center;gap:0.5rem;padding:0.5rem 0.6rem 0.5rem 1.7rem;cursor:pointer"' + on('click', '_toggleVexPreviewRow', source, t.id) + '>' +
         '<span style="width:12px;flex-shrink:0;color:var(--muted);font-size:0.7rem">' + (expanded ? '&#9662;' : '&#9656;') + '</span>' +
         '<span style="font-family:var(--font-mono);font-size:0.8rem;flex-shrink:0">' + x(t.id) + '</span>' +
         (t.name ? '<span style="color:var(--muted);font-size:0.78rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + x(t.name) + '</span>' : '') +
@@ -526,7 +533,7 @@ function _renderEMPreviewList() {
   var fixedHtml = EM_CATALOG.map(function(layer) {
     var expanded = _emPreviewExpandedId === layer.id;
     return '<div style="border-bottom:1px solid var(--border)">' +
-      '<div style="display:flex;align-items:center;gap:0.5rem;padding:0.5rem 0.6rem;cursor:pointer" onclick="_toggleEMPreviewRow(\'' + x(layer.id) + '\')">' +
+      '<div style="display:flex;align-items:center;gap:0.5rem;padding:0.5rem 0.6rem;cursor:pointer"' + on('click', '_toggleEMPreviewRow', layer.id) + '>' +
         '<span style="width:12px;flex-shrink:0;color:var(--muted);font-size:0.7rem">' + (expanded ? '&#9662;' : '&#9656;') + '</span>' +
         '<span style="font-weight:600;font-size:0.8rem;flex-shrink:0">Layer ' + x(layer.num) + ' — ' + x(layer.name) + '</span>' +
         '<span style="color:var(--muted);font-size:0.76rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + x(layer.desc) + '</span>' +
@@ -540,7 +547,7 @@ function _renderEMPreviewList() {
   var extraRowsHtml = extraFiltered.length ? extraFiltered.map(function(s) {
     var checked = !!_emExtraSelected[s.id];
     return '<label style="display:flex;align-items:center;gap:0.55rem;padding:0.45rem 0.6rem;cursor:pointer;border-bottom:1px solid var(--border)">' +
-      '<input type="checkbox"' + (checked ? ' checked' : '') + ' onchange="_toggleEMExtraScenario(\'' + x(s.id) + '\')">' +
+      '<input type="checkbox"' + (checked ? ' checked' : '') + on('change', '_toggleEMExtraScenario', s.id) + '>' +
       '<span style="font-size:0.8rem;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + x(s.name || s.id) + '</span>' +
       '<span style="font-family:var(--font-mono);font-size:0.68rem;color:var(--muted);flex-shrink:0">' + x(s.id) + '</span>' +
     '</label>';
@@ -717,14 +724,14 @@ function renderEMSweepProgress(sw, runs) {
   // for EM's 14 fixed-layer structure than waiting for the real thing.
   var terminal = sw.status !== 'running' && sw.status !== 'agent_disconnected';
   document.getElementById('em-sweep-progress-actions').innerHTML = terminal
-    ? '<button class="btn btn-outline btn-sm" onclick="window.open(\'/api/em/sweeps/' + encodeURIComponent(sw.id) + '/report\',\'_blank\')" title="Open the combined EM sweep report">&#8599; HTML Report</button> ' +
-      '<button class="btn btn-outline btn-sm" onclick="downloadEMSweepReport(\'' + x(sw.id) + '\')" title="Download the combined EM sweep report as a PDF file">&#8595; PDF Report</button>'
+    ? '<button class="btn btn-outline btn-sm"' + on('click', 'openEMSweepReport', sw.id) + ' title="Open the combined EM sweep report">&#8599; HTML Report</button> ' +
+      '<button class="btn btn-outline btn-sm"' + on('click', 'downloadEMSweepReport', sw.id) + ' title="Download the combined EM sweep report as a PDF file">&#8595; PDF Report</button>'
     // Previously there was no cancel control here at all -- a sweep stuck in
     // agent_disconnected (e.g. the agent's heartbeat looks fine but its
     // WebSocket never reconnected) had a working server-side cancel endpoint
     // (POST /api/em/sweeps/{id}/cancel) with no UI path to reach it, so an
     // operator had no way to unblock a new sweep short of a raw API call.
-    : '<button class="btn btn-outline-red btn-sm" onclick="cancelEMSweep(\'' + x(sw.id) + '\')" title="Stop this sweep -- the current layer finishes or is cancelled; no further layers dispatch">&#9632; Cancel Sweep</button>' +
+    : '<button class="btn btn-outline-red btn-sm"' + on('click', 'cancelEMSweep', sw.id) + ' title="Stop this sweep -- the current layer finishes or is cancelled; no further layers dispatch">&#9632; Cancel Sweep</button>' +
       (sw.status === 'agent_disconnected' ? ' <span class="tiny u-warning">Paused -- agent not connected. Will resume automatically on reconnect, or cancel to start a new sweep now.</span>' : '');
   var runsByScenario = {};
   (runs || []).forEach(function(r) { runsByScenario[r.scenarioId] = r; });
@@ -738,9 +745,9 @@ function renderEMSweepProgress(sw, runs) {
     if (r) {
       var badge = verdictBadge(r, r.status);
       if (r.id && r.status === 'running') {
-        actionHtml = '<button class="btn btn-outline btn-sm" onclick="openRunPanel(\'' + x(r.id) + '\',\'' + x(r.name).replace(/'/g,'&#39;') + '\',' + ((r.progress && r.progress.stepsTotal) || 0) + ',\'' + x(r.mode||'') + '\',\'' + x(r.maxPrivilege||'') + '\')">&#9673; Live</button>';
+        actionHtml = '<button class="btn btn-outline btn-sm"' + on('click', 'openRunPanelAction', r.id, r.name, (r.progress && r.progress.stepsTotal) || 0, r.mode || '', r.maxPrivilege || '') + '>&#9673; Live</button>';
       } else if (verdictCounts(r).total) {
-        actionHtml = '<button class="btn btn-outline btn-sm" onclick=\'viewRunResults(' + JSON.stringify(r).replace(/'/g,"&#39;") + ')\'>' + badge + '</button>';
+        actionHtml = '<button class="btn btn-outline btn-sm"' + on('click', 'viewRunResults', r) + '>' + badge + '</button>';
       } else if (r.id && r.progress) {
         // A cancelled/partial layer (e.g. the agent disconnected mid-sweep)
         // never gets the agent's one atomic `results` write, so verdictCounts(r).total is 0 --
@@ -750,7 +757,7 @@ function renderEMSweepProgress(sw, runs) {
         // layer with no way to see what it found.
         var pr = r.progress;
         var toBadge = pr.stepsFailed + ' fail / ' + pr.stepsPassed + ' pass' + (pr.stepsTimeout ? ' / ' + pr.stepsTimeout + ' timeout' : '');
-        actionHtml = '<button class="btn btn-outline btn-sm" onclick="openRunPanel(\'' + x(r.id) + '\',\'' + x(r.name).replace(/'/g,'&#39;') + '\',' + (pr.stepsTotal || 0) + ',\'' + x(r.mode||'') + '\',\'' + x(r.maxPrivilege||'') + '\')">' + toBadge + '</button>';
+        actionHtml = '<button class="btn btn-outline btn-sm"' + on('click', 'openRunPanelAction', r.id, r.name, pr.stepsTotal || 0, r.mode || '', r.maxPrivilege || '') + '>' + toBadge + '</button>';
       } else {
         actionHtml = '<span class="tiny muted">' + x(badge) + '</span>';
       }

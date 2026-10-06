@@ -37,6 +37,59 @@ CREATE TABLE action_requests (
     completed_at timestamp with time zone
 );
 
+CREATE TABLE actor_identity_overrides (
+    id bigint NOT NULL,
+    source text NOT NULL,
+    source_id text NOT NULL,
+    actor_id text NOT NULL,
+    candidate_id text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT actor_identity_overrides_source_id_check CHECK ((source_id <> ''::text))
+);
+
+CREATE SEQUENCE actor_identity_overrides_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+ALTER SEQUENCE actor_identity_overrides_id_seq OWNED BY actor_identity_overrides.id;
+
+CREATE TABLE actor_resolution_candidates (
+    id text DEFAULT ('arc-'::text || (gen_random_uuid())::text) NOT NULL,
+    kind text NOT NULL,
+    source text NOT NULL,
+    external_id text DEFAULT ''::text NOT NULL,
+    raw_name text NOT NULL,
+    ref_entity_id text DEFAULT ''::text NOT NULL,
+    reason text NOT NULL,
+    resolver_context jsonb NOT NULL,
+    resolver_context_hash text NOT NULL,
+    status text DEFAULT 'unresolved'::text NOT NULL,
+    decided_actor_id text,
+    decided_by text,
+    decided_at timestamp with time zone,
+    decision_reason text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT actor_resolution_candidates_check CHECK (((status = 'unresolved'::text) = (decided_at IS NULL))),
+    CONSTRAINT actor_resolution_candidates_check1 CHECK (((status = 'unresolved'::text) OR ((decided_by IS NOT NULL) AND (decision_reason IS NOT NULL) AND (decision_reason <> ''::text)))),
+    CONSTRAINT actor_resolution_candidates_check2 CHECK (((status = ANY (ARRAY['linked'::text, 'new_actor'::text])) = (decided_actor_id IS NOT NULL))),
+    CONSTRAINT actor_resolution_candidates_kind_check CHECK ((kind = ANY (ARRAY['source_record'::text, 'campaign_ref'::text, 'malware_ref'::text, 'tool_ref'::text]))),
+    CONSTRAINT actor_resolution_candidates_status_check CHECK ((status = ANY (ARRAY['unresolved'::text, 'linked'::text, 'new_actor'::text, 'dismissed'::text])))
+);
+
+CREATE TABLE actor_source_identities (
+    source text NOT NULL,
+    source_id text NOT NULL,
+    actor_id text NOT NULL,
+    linked_by text NOT NULL,
+    linked_ref text DEFAULT ''::text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT actor_source_identities_linked_by_check CHECK ((linked_by = ANY (ARRAY['resolver'::text, 'admin'::text]))),
+    CONSTRAINT actor_source_identities_source_id_check CHECK ((source_id <> ''::text))
+);
+
 CREATE TABLE agent_certificates (
     serial_number text NOT NULL,
     agent_id text NOT NULL,
@@ -350,6 +403,14 @@ CREATE TABLE backup_jobs (
     CONSTRAINT backup_jobs_trigger_check CHECK ((trigger = ANY (ARRAY['console'::text, 'scheduled'::text, 'cli'::text, 'pre_restore'::text])))
 );
 
+CREATE TABLE campaign_actors (
+    campaign_id text NOT NULL,
+    actor_id text NOT NULL,
+    linked_by text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT campaign_actors_linked_by_check CHECK ((linked_by = ANY (ARRAY['resolver'::text, 'admin'::text])))
+);
+
 CREATE TABLE campaign_variant_summary (
     campaign_id text NOT NULL,
     techniques_tested integer DEFAULT 0 NOT NULL,
@@ -403,6 +464,137 @@ CREATE TABLE compliance_snapshots (
     failing_controls integer DEFAULT 0 NOT NULL,
     manual_controls integer DEFAULT 0 NOT NULL,
     tenant_id text DEFAULT 'default'::text NOT NULL
+);
+
+CREATE TABLE content_generation_owners (
+    content_id text NOT NULL,
+    threat_id text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+CREATE TABLE content_registry_state (
+    id integer DEFAULT 1 NOT NULL,
+    migrated_at timestamp with time zone DEFAULT now() NOT NULL,
+    inventory jsonb DEFAULT '{}'::jsonb NOT NULL,
+    CONSTRAINT content_registry_state_id_check CHECK ((id = 1))
+);
+
+CREATE TABLE content_safety_verdicts (
+    id bigint NOT NULL,
+    content_version_id text NOT NULL,
+    classifier text NOT NULL,
+    classifier_version text NOT NULL,
+    verdict text NOT NULL,
+    detail jsonb DEFAULT '[]'::jsonb NOT NULL,
+    evaluated_at timestamp with time zone DEFAULT now() NOT NULL,
+    tenant_id text DEFAULT 'default'::text NOT NULL
+);
+
+CREATE SEQUENCE content_safety_verdicts_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+ALTER SEQUENCE content_safety_verdicts_id_seq OWNED BY content_safety_verdicts.id;
+
+CREATE TABLE content_validations (
+    id text DEFAULT (gen_random_uuid())::text NOT NULL,
+    content_version_id text NOT NULL,
+    level text NOT NULL,
+    outcome text NOT NULL,
+    run_id text,
+    validator text NOT NULL,
+    validator_version text NOT NULL,
+    environment jsonb DEFAULT '{}'::jsonb NOT NULL,
+    detail jsonb DEFAULT '{}'::jsonb NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    tenant_id text DEFAULT 'default'::text NOT NULL,
+    CONSTRAINT content_validations_check CHECK (((level = ANY (ARRAY['STRUCTURAL'::text, 'STATIC'::text])) OR (outcome <> 'PASS'::text) OR (run_id IS NOT NULL))),
+    CONSTRAINT content_validations_check1 CHECK (((level <> 'DETECTION'::text) OR (outcome <> ALL (ARRAY['PASS'::text, 'FAIL'::text])))),
+    CONSTRAINT content_validations_level_check CHECK ((level = ANY (ARRAY['STRUCTURAL'::text, 'STATIC'::text, 'EXECUTION'::text, 'TELEMETRY'::text, 'DETECTION'::text]))),
+    CONSTRAINT content_validations_outcome_check CHECK ((outcome = ANY (ARRAY['PASS'::text, 'FAIL'::text, 'ERROR'::text, 'DETECTED'::text, 'PREVENTED'::text, 'LOGGED'::text, 'MISSED'::text, 'NO_DATA'::text, 'NOT_APPLICABLE'::text])))
+);
+
+CREATE TABLE content_version_events (
+    id bigint NOT NULL,
+    content_version_id text NOT NULL,
+    from_lifecycle text,
+    to_lifecycle text NOT NULL,
+    from_trust text,
+    to_trust text NOT NULL,
+    actor text NOT NULL,
+    reason text DEFAULT ''::text NOT NULL,
+    at timestamp with time zone DEFAULT now() NOT NULL,
+    tenant_id text DEFAULT 'default'::text NOT NULL,
+    CONSTRAINT content_version_events_check CHECK (((to_lifecycle <> ALL (ARRAY['APPROVED'::text, 'PUBLISHED_LOCAL'::text, 'REJECTED'::text])) OR (actor ~~ 'user:_%'::text) OR (actor = 'migration:pre-registry'::text)))
+);
+
+CREATE SEQUENCE content_version_events_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+ALTER SEQUENCE content_version_events_id_seq OWNED BY content_version_events.id;
+
+CREATE TABLE content_version_sources (
+    content_version_id text NOT NULL,
+    entity_type text NOT NULL,
+    entity_id text NOT NULL,
+    provider text NOT NULL,
+    external_id text DEFAULT ''::text NOT NULL,
+    confidence_at_generation text DEFAULT ''::text NOT NULL,
+    first_seen_at_generation timestamp with time zone,
+    last_sync_at_generation timestamp with time zone,
+    role text NOT NULL,
+    tenant_id text DEFAULT 'default'::text NOT NULL,
+    CONSTRAINT content_version_sources_entity_type_check CHECK ((entity_type = ANY (ARRAY['actor'::text, 'campaign'::text, 'malware'::text, 'tool'::text, 'technique_evidence'::text]))),
+    CONSTRAINT content_version_sources_role_check CHECK ((role = ANY (ARRAY['primary'::text, 'supporting'::text])))
+);
+
+CREATE TABLE content_version_threats (
+    content_version_id text NOT NULL,
+    threat_id text NOT NULL,
+    relationship_kind text NOT NULL,
+    provenance_type text NOT NULL,
+    provenance_ref text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT content_version_threats_check CHECK (((relationship_kind <> 'generated_for'::text) OR (provenance_type = 'generator'::text))),
+    CONSTRAINT content_version_threats_provenance_type_check CHECK ((provenance_type = ANY (ARRAY['generator'::text, 'vendor_signed_metadata'::text, 'admin'::text]))),
+    CONSTRAINT content_version_threats_relationship_kind_check CHECK ((relationship_kind = ANY (ARRAY['generated_for'::text, 'emulates'::text])))
+);
+
+CREATE TABLE content_versions (
+    id text DEFAULT (gen_random_uuid())::text NOT NULL,
+    content_id text NOT NULL,
+    origin text NOT NULL,
+    version integer NOT NULL,
+    artifact_sha256 text NOT NULL,
+    artifact_size integer NOT NULL,
+    artifact_bytes bytea NOT NULL,
+    signature_bytes bytea,
+    trust_level text NOT NULL,
+    lifecycle text NOT NULL,
+    intake_source text NOT NULL,
+    schema_version integer NOT NULL,
+    technique_ids text[] DEFAULT '{}'::text[] NOT NULL,
+    supported_os text[] DEFAULT '{}'::text[] NOT NULL,
+    generation jsonb DEFAULT '{}'::jsonb NOT NULL,
+    created_by text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    tenant_id text DEFAULT 'default'::text NOT NULL,
+    CONSTRAINT content_versions_check CHECK ((artifact_size = octet_length(artifact_bytes))),
+    CONSTRAINT content_versions_check1 CHECK (((trust_level <> 'VENDOR_SIGNED'::text) OR ((origin = 'VENDOR'::text) AND (signature_bytes IS NOT NULL)))),
+    CONSTRAINT content_versions_check2 CHECK (((trust_level <> 'LOCAL_TRUSTED'::text) OR (origin = 'LOCAL'::text))),
+    CONSTRAINT content_versions_check3 CHECK (((lifecycle <> 'PUBLISHED'::text) OR (origin = 'VENDOR'::text))),
+    CONSTRAINT content_versions_check4 CHECK (((lifecycle <> 'PUBLISHED_LOCAL'::text) OR (origin = 'LOCAL'::text))),
+    CONSTRAINT content_versions_intake_source_check CHECK ((intake_source = ANY (ARRAY['builtin'::text, 'custom'::text, 'intel'::text]))),
+    CONSTRAINT content_versions_lifecycle_check CHECK ((lifecycle = ANY (ARRAY['DRAFT'::text, 'VALIDATING'::text, 'VALIDATED'::text, 'APPROVED'::text, 'PUBLISHED'::text, 'PUBLISHED_LOCAL'::text, 'RETIRED'::text, 'REJECTED'::text]))),
+    CONSTRAINT content_versions_trust_level_check CHECK ((trust_level = ANY (ARRAY['VENDOR_SIGNED'::text, 'LOCAL_TRUSTED'::text, 'UNTRUSTED'::text]))),
+    CONSTRAINT content_versions_version_check CHECK ((version >= 1))
 );
 
 CREATE TABLE cve_epss (
@@ -902,6 +1094,14 @@ CREATE TABLE legacy_transport_unattributed (
     request_count integer DEFAULT 1 NOT NULL
 );
 
+CREATE TABLE malware_actors (
+    malware_id text NOT NULL,
+    actor_id text NOT NULL,
+    linked_by text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT malware_actors_linked_by_check CHECK ((linked_by = ANY (ARRAY['resolver'::text, 'admin'::text])))
+);
+
 CREATE TABLE notification_webhooks (
     id text DEFAULT (gen_random_uuid())::text NOT NULL,
     name text NOT NULL,
@@ -1155,7 +1355,11 @@ CREATE TABLE scenario_runs (
     sweep_id text,
     em_sweep_id text,
     dispatch_subset jsonb,
-    fail_reason text
+    fail_reason text,
+    content_version_id text,
+    execution_kind text DEFAULT 'legacy'::text NOT NULL,
+    CONSTRAINT scenario_runs_content_needs_version_check CHECK (((execution_kind <> 'content'::text) OR (content_version_id IS NOT NULL))),
+    CONSTRAINT scenario_runs_execution_kind_check CHECK ((execution_kind = ANY (ARRAY['content'::text, 'remediation'::text, 'technique_verification'::text, 'variant'::text, 'adhoc_adversary'::text, 'legacy'::text])))
 );
 
 CREATE TABLE scenario_techniques (
@@ -1212,7 +1416,11 @@ CREATE TABLE scenarios (
     name text DEFAULT ''::text NOT NULL,
     category text DEFAULT ''::text NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    tenant_id text DEFAULT 'default'::text NOT NULL
+    tenant_id text DEFAULT 'default'::text NOT NULL,
+    origin text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    generation_key text,
+    CONSTRAINT scenarios_origin_check CHECK ((origin = ANY (ARRAY['VENDOR'::text, 'LOCAL'::text])))
 );
 
 CREATE TABLE scim_configs (
@@ -1483,7 +1691,8 @@ CREATE TABLE threat_actor_profiles (
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     confidence text DEFAULT ''::text NOT NULL,
     canonical_group_id text DEFAULT ''::text NOT NULL,
-    techniques text[] DEFAULT '{}'::text[] NOT NULL
+    techniques text[] DEFAULT '{}'::text[] NOT NULL,
+    id text DEFAULT ('act-'::text || (gen_random_uuid())::text) NOT NULL
 );
 
 CREATE TABLE threat_actor_sources (
@@ -1553,6 +1762,24 @@ CREATE SEQUENCE threat_readiness_history_id_seq
 
 ALTER SEQUENCE threat_readiness_history_id_seq OWNED BY threat_readiness_history.id;
 
+CREATE TABLE threats (
+    id text NOT NULL,
+    subject_type text NOT NULL,
+    subject_id text NOT NULL,
+    actor_id text,
+    title text NOT NULL,
+    summary text DEFAULT ''::text NOT NULL,
+    first_seen_at timestamp with time zone,
+    last_seen_at timestamp with time zone,
+    status text DEFAULT 'active'::text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    tenant_id text DEFAULT 'default'::text NOT NULL,
+    CONSTRAINT threats_check CHECK (((subject_type = 'actor'::text) = (actor_id IS NOT NULL))),
+    CONSTRAINT threats_check1 CHECK (((subject_type <> 'actor'::text) OR (actor_id = subject_id))),
+    CONSTRAINT threats_status_check CHECK ((status = ANY (ARRAY['active'::text, 'inactive'::text]))),
+    CONSTRAINT threats_subject_type_check CHECK ((subject_type = ANY (ARRAY['actor'::text, 'campaign'::text, 'malware'::text, 'tool'::text])))
+);
+
 CREATE TABLE ticketing_configs (
     id text DEFAULT (gen_random_uuid())::text NOT NULL,
     name text NOT NULL,
@@ -1568,6 +1795,14 @@ CREATE TABLE ticketing_configs (
     last_test_at timestamp with time zone,
     last_test_error text DEFAULT ''::text NOT NULL,
     tenant_id text DEFAULT 'default'::text NOT NULL
+);
+
+CREATE TABLE tool_actors (
+    tool_id text NOT NULL,
+    actor_id text NOT NULL,
+    linked_by text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT tool_actors_linked_by_check CHECK ((linked_by = ANY (ARRAY['resolver'::text, 'admin'::text])))
 );
 
 CREATE TABLE users (
@@ -1699,6 +1934,8 @@ CREATE TABLE vex_sweeps (
     disconnected_at timestamp with time zone
 );
 
+ALTER TABLE ONLY actor_identity_overrides ALTER COLUMN id SET DEFAULT nextval('actor_identity_overrides_id_seq'::regclass);
+
 ALTER TABLE ONLY agent_groups ALTER COLUMN id SET DEFAULT nextval('agent_groups_id_seq'::regclass);
 
 ALTER TABLE ONLY agent_op_logs ALTER COLUMN id SET DEFAULT nextval('agent_op_logs_id_seq'::regclass);
@@ -1710,6 +1947,10 @@ ALTER TABLE ONLY agent_telemetry ALTER COLUMN id SET DEFAULT nextval('agent_tele
 ALTER TABLE ONLY art_atomic_tests ALTER COLUMN id SET DEFAULT nextval('art_atomic_tests_id_seq'::regclass);
 
 ALTER TABLE ONLY audit_logs ALTER COLUMN id SET DEFAULT nextval('audit_logs_id_seq'::regclass);
+
+ALTER TABLE ONLY content_safety_verdicts ALTER COLUMN id SET DEFAULT nextval('content_safety_verdicts_id_seq'::regclass);
+
+ALTER TABLE ONLY content_version_events ALTER COLUMN id SET DEFAULT nextval('content_version_events_id_seq'::regclass);
 
 ALTER TABLE ONLY dashboard_snapshots ALTER COLUMN id SET DEFAULT nextval('dashboard_snapshots_id_seq'::regclass);
 
@@ -1736,6 +1977,15 @@ ALTER TABLE ONLY action_connectors
 
 ALTER TABLE ONLY action_requests
     ADD CONSTRAINT action_requests_pkey PRIMARY KEY (id);
+
+ALTER TABLE ONLY actor_identity_overrides
+    ADD CONSTRAINT actor_identity_overrides_pkey PRIMARY KEY (id);
+
+ALTER TABLE ONLY actor_resolution_candidates
+    ADD CONSTRAINT actor_resolution_candidates_pkey PRIMARY KEY (id);
+
+ALTER TABLE ONLY actor_source_identities
+    ADD CONSTRAINT actor_source_identities_pkey PRIMARY KEY (source, source_id);
 
 ALTER TABLE ONLY agent_certificates
     ADD CONSTRAINT agent_certificates_pkey PRIMARY KEY (serial_number);
@@ -1797,6 +2047,9 @@ ALTER TABLE ONLY audit_logs
 ALTER TABLE ONLY backup_jobs
     ADD CONSTRAINT backup_jobs_pkey PRIMARY KEY (id);
 
+ALTER TABLE ONLY campaign_actors
+    ADD CONSTRAINT campaign_actors_pkey PRIMARY KEY (campaign_id, actor_id);
+
 ALTER TABLE ONLY campaign_variant_summary
     ADD CONSTRAINT campaign_variant_summary_pkey PRIMARY KEY (campaign_id);
 
@@ -1805,6 +2058,42 @@ ALTER TABLE ONLY campaigns
 
 ALTER TABLE ONLY compliance_snapshots
     ADD CONSTRAINT compliance_snapshots_pkey PRIMARY KEY (agent_id, framework_id);
+
+ALTER TABLE ONLY content_generation_owners
+    ADD CONSTRAINT content_generation_owners_pkey PRIMARY KEY (content_id);
+
+ALTER TABLE ONLY content_generation_owners
+    ADD CONSTRAINT content_generation_owners_threat_id_key UNIQUE (threat_id);
+
+ALTER TABLE ONLY content_registry_state
+    ADD CONSTRAINT content_registry_state_pkey PRIMARY KEY (id);
+
+ALTER TABLE ONLY content_safety_verdicts
+    ADD CONSTRAINT content_safety_verdicts_content_version_id_classifier_class_key UNIQUE (content_version_id, classifier, classifier_version);
+
+ALTER TABLE ONLY content_safety_verdicts
+    ADD CONSTRAINT content_safety_verdicts_pkey PRIMARY KEY (id);
+
+ALTER TABLE ONLY content_validations
+    ADD CONSTRAINT content_validations_pkey PRIMARY KEY (id);
+
+ALTER TABLE ONLY content_version_events
+    ADD CONSTRAINT content_version_events_pkey PRIMARY KEY (id);
+
+ALTER TABLE ONLY content_version_sources
+    ADD CONSTRAINT content_version_sources_pkey PRIMARY KEY (content_version_id, entity_type, entity_id, provider);
+
+ALTER TABLE ONLY content_version_threats
+    ADD CONSTRAINT content_version_threats_pkey PRIMARY KEY (content_version_id, threat_id, relationship_kind);
+
+ALTER TABLE ONLY content_versions
+    ADD CONSTRAINT content_versions_content_id_artifact_sha256_key UNIQUE (content_id, artifact_sha256);
+
+ALTER TABLE ONLY content_versions
+    ADD CONSTRAINT content_versions_content_id_version_key UNIQUE (content_id, version);
+
+ALTER TABLE ONLY content_versions
+    ADD CONSTRAINT content_versions_pkey PRIMARY KEY (id);
 
 ALTER TABLE ONLY cve_epss
     ADD CONSTRAINT cve_epss_pkey PRIMARY KEY (cve_id);
@@ -1920,6 +2209,9 @@ ALTER TABLE ONLY legacy_transport_log
 ALTER TABLE ONLY legacy_transport_unattributed
     ADD CONSTRAINT legacy_transport_unattributed_pkey PRIMARY KEY (day);
 
+ALTER TABLE ONLY malware_actors
+    ADD CONSTRAINT malware_actors_pkey PRIMARY KEY (malware_id, actor_id);
+
 ALTER TABLE ONLY notification_webhooks
     ADD CONSTRAINT notification_webhooks_pkey PRIMARY KEY (id);
 
@@ -1979,6 +2271,9 @@ ALTER TABLE ONLY scenario_variant_technique_summary
 
 ALTER TABLE ONLY scenario_variant_technique_summary
     ADD CONSTRAINT scenario_variant_technique_summary_run_id_technique_id_key UNIQUE (run_id, technique_id);
+
+ALTER TABLE ONLY scenarios
+    ADD CONSTRAINT scenarios_id_origin_key UNIQUE (scenario_id, origin);
 
 ALTER TABLE ONLY scenarios
     ADD CONSTRAINT scenarios_pkey PRIMARY KEY (scenario_id);
@@ -2065,7 +2360,10 @@ ALTER TABLE ONLY threat_actor_activity
     ADD CONSTRAINT threat_actor_activity_pkey PRIMARY KEY (actor_name, source);
 
 ALTER TABLE ONLY threat_actor_profiles
-    ADD CONSTRAINT threat_actor_profiles_pkey PRIMARY KEY (name);
+    ADD CONSTRAINT threat_actor_profiles_name_key UNIQUE (name);
+
+ALTER TABLE ONLY threat_actor_profiles
+    ADD CONSTRAINT threat_actor_profiles_pkey PRIMARY KEY (id);
 
 ALTER TABLE ONLY threat_actor_sources
     ADD CONSTRAINT threat_actor_sources_pkey PRIMARY KEY (actor_name, source);
@@ -2079,8 +2377,17 @@ ALTER TABLE ONLY threat_priority_history
 ALTER TABLE ONLY threat_readiness_history
     ADD CONSTRAINT threat_readiness_history_pkey PRIMARY KEY (id);
 
+ALTER TABLE ONLY threats
+    ADD CONSTRAINT threats_pkey PRIMARY KEY (id);
+
+ALTER TABLE ONLY threats
+    ADD CONSTRAINT threats_subject_type_subject_id_key UNIQUE (subject_type, subject_id);
+
 ALTER TABLE ONLY ticketing_configs
     ADD CONSTRAINT ticketing_configs_pkey PRIMARY KEY (id);
+
+ALTER TABLE ONLY tool_actors
+    ADD CONSTRAINT tool_actors_pkey PRIMARY KEY (tool_id, actor_id);
 
 ALTER TABLE ONLY findings
     ADD CONSTRAINT uq_finding UNIQUE (agent_id, technique_id, control_class);
@@ -2121,7 +2428,15 @@ ALTER TABLE ONLY verification_history
 ALTER TABLE ONLY vex_sweeps
     ADD CONSTRAINT vex_sweeps_pkey PRIMARY KEY (id);
 
+CREATE UNIQUE INDEX actor_resolution_candidates_open ON actor_resolution_candidates USING btree (kind, source, external_id, raw_name, ref_entity_id) WHERE (status = 'unresolved'::text);
+
 CREATE INDEX compliance_snapshots_agent ON compliance_snapshots USING btree (agent_id);
+
+CREATE INDEX content_validations_vid ON content_validations USING btree (content_version_id, level);
+
+CREATE INDEX content_version_events_vid ON content_version_events USING btree (content_version_id, at);
+
+CREATE INDEX content_versions_techniques ON content_versions USING gin (technique_ids);
 
 CREATE INDEX idx_action_requests_run_id ON action_requests USING btree (run_id) WHERE (run_id <> ''::text);
 
@@ -2271,6 +2586,8 @@ CREATE UNIQUE INDEX idx_scenario_runs_agent_running ON scenario_runs USING btree
 
 CREATE INDEX idx_scenario_runs_campaign ON scenario_runs USING btree (campaign_id);
 
+CREATE INDEX idx_scenario_runs_content_version ON scenario_runs USING btree (content_version_id) WHERE (content_version_id IS NOT NULL);
+
 CREATE INDEX idx_scenario_runs_em_sweep_id ON scenario_runs USING btree (em_sweep_id);
 
 CREATE INDEX idx_scenario_runs_scenario ON scenario_runs USING btree (scenario_id);
@@ -2355,6 +2672,18 @@ CREATE INDEX trh_agent_actor_time ON threat_readiness_history USING btree (agent
 
 CREATE UNIQUE INDEX trh_run_actor ON threat_readiness_history USING btree (run_id, actor_name);
 
+ALTER TABLE ONLY actor_identity_overrides
+    ADD CONSTRAINT actor_identity_overrides_actor_id_fkey FOREIGN KEY (actor_id) REFERENCES threat_actor_profiles(id);
+
+ALTER TABLE ONLY actor_identity_overrides
+    ADD CONSTRAINT actor_identity_overrides_candidate_id_fkey FOREIGN KEY (candidate_id) REFERENCES actor_resolution_candidates(id);
+
+ALTER TABLE ONLY actor_resolution_candidates
+    ADD CONSTRAINT actor_resolution_candidates_decided_actor_id_fkey FOREIGN KEY (decided_actor_id) REFERENCES threat_actor_profiles(id);
+
+ALTER TABLE ONLY actor_source_identities
+    ADD CONSTRAINT actor_source_identities_actor_id_fkey FOREIGN KEY (actor_id) REFERENCES threat_actor_profiles(id);
+
 ALTER TABLE ONLY art_atomic_raw
     ADD CONSTRAINT art_atomic_raw_technique_id_fkey FOREIGN KEY (technique_id) REFERENCES techniques(technique_id) ON DELETE CASCADE;
 
@@ -2363,6 +2692,42 @@ ALTER TABLE ONLY art_atomic_tests
 
 ALTER TABLE ONLY backup_jobs
     ADD CONSTRAINT backup_jobs_restore_of_id_fkey FOREIGN KEY (restore_of_id) REFERENCES backup_jobs(id);
+
+ALTER TABLE ONLY campaign_actors
+    ADD CONSTRAINT campaign_actors_actor_id_fkey FOREIGN KEY (actor_id) REFERENCES threat_actor_profiles(id);
+
+ALTER TABLE ONLY campaign_actors
+    ADD CONSTRAINT campaign_actors_campaign_id_fkey FOREIGN KEY (campaign_id) REFERENCES intelligence_campaigns(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY content_generation_owners
+    ADD CONSTRAINT content_generation_owners_content_id_fkey FOREIGN KEY (content_id) REFERENCES scenarios(scenario_id);
+
+ALTER TABLE ONLY content_generation_owners
+    ADD CONSTRAINT content_generation_owners_threat_id_fkey FOREIGN KEY (threat_id) REFERENCES threats(id);
+
+ALTER TABLE ONLY content_safety_verdicts
+    ADD CONSTRAINT content_safety_verdicts_content_version_id_fkey FOREIGN KEY (content_version_id) REFERENCES content_versions(id);
+
+ALTER TABLE ONLY content_validations
+    ADD CONSTRAINT content_validations_content_version_id_fkey FOREIGN KEY (content_version_id) REFERENCES content_versions(id);
+
+ALTER TABLE ONLY content_validations
+    ADD CONSTRAINT content_validations_run_id_fkey FOREIGN KEY (run_id) REFERENCES scenario_runs(id);
+
+ALTER TABLE ONLY content_version_events
+    ADD CONSTRAINT content_version_events_content_version_id_fkey FOREIGN KEY (content_version_id) REFERENCES content_versions(id);
+
+ALTER TABLE ONLY content_version_sources
+    ADD CONSTRAINT content_version_sources_content_version_id_fkey FOREIGN KEY (content_version_id) REFERENCES content_versions(id);
+
+ALTER TABLE ONLY content_version_threats
+    ADD CONSTRAINT content_version_threats_content_version_id_fkey FOREIGN KEY (content_version_id) REFERENCES content_versions(id);
+
+ALTER TABLE ONLY content_version_threats
+    ADD CONSTRAINT content_version_threats_threat_id_fkey FOREIGN KEY (threat_id) REFERENCES threats(id);
+
+ALTER TABLE ONLY content_versions
+    ADD CONSTRAINT content_versions_content_id_origin_fkey FOREIGN KEY (content_id, origin) REFERENCES scenarios(scenario_id, origin);
 
 ALTER TABLE ONLY exercise_events
     ADD CONSTRAINT exercise_events_execution_id_fkey FOREIGN KEY (execution_id) REFERENCES exercise_executions(id) ON DELETE CASCADE;
@@ -2394,6 +2759,12 @@ ALTER TABLE ONLY ioc_sightings
 ALTER TABLE ONLY job_targets
     ADD CONSTRAINT job_targets_job_id_fkey FOREIGN KEY (job_id) REFERENCES jobs(id);
 
+ALTER TABLE ONLY malware_actors
+    ADD CONSTRAINT malware_actors_actor_id_fkey FOREIGN KEY (actor_id) REFERENCES threat_actor_profiles(id);
+
+ALTER TABLE ONLY malware_actors
+    ADD CONSTRAINT malware_actors_malware_id_fkey FOREIGN KEY (malware_id) REFERENCES intelligence_malware(id) ON DELETE CASCADE;
+
 ALTER TABLE ONLY notifications
     ADD CONSTRAINT notifications_job_id_fkey FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE CASCADE;
 
@@ -2402,6 +2773,9 @@ ALTER TABLE ONLY openaev_scenarios
 
 ALTER TABLE ONLY relationship_evidence
     ADD CONSTRAINT relationship_evidence_relationship_id_fkey FOREIGN KEY (relationship_id) REFERENCES technique_cve_relationships(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY scenario_runs
+    ADD CONSTRAINT scenario_runs_content_version_id_fkey FOREIGN KEY (content_version_id) REFERENCES content_versions(id);
 
 ALTER TABLE ONLY scenario_runs
     ADD CONSTRAINT scenario_runs_em_sweep_id_fkey FOREIGN KEY (em_sweep_id) REFERENCES em_sweeps(id);
@@ -2449,7 +2823,7 @@ ALTER TABLE ONLY technique_cves
     ADD CONSTRAINT technique_cves_technique_id_fkey FOREIGN KEY (technique_id) REFERENCES techniques(technique_id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY technique_evidence
-    ADD CONSTRAINT technique_evidence_actor_name_fkey FOREIGN KEY (actor_name) REFERENCES threat_actor_profiles(name) ON DELETE CASCADE;
+    ADD CONSTRAINT technique_evidence_actor_name_fkey FOREIGN KEY (actor_name) REFERENCES threat_actor_profiles(name) ON UPDATE CASCADE ON DELETE CASCADE;
 
 ALTER TABLE ONLY technique_owasp
     ADD CONSTRAINT technique_owasp_risk_id_fkey FOREIGN KEY (risk_id) REFERENCES owasp_risks(risk_id) ON DELETE CASCADE;
@@ -2461,10 +2835,19 @@ ALTER TABLE ONLY technique_verification_runs
     ADD CONSTRAINT technique_verification_runs_request_id_fkey FOREIGN KEY (request_id) REFERENCES remediation_requests(id);
 
 ALTER TABLE ONLY threat_actor_activity
-    ADD CONSTRAINT threat_actor_activity_actor_name_fkey FOREIGN KEY (actor_name) REFERENCES threat_actor_profiles(name) ON DELETE CASCADE;
+    ADD CONSTRAINT threat_actor_activity_actor_name_fkey FOREIGN KEY (actor_name) REFERENCES threat_actor_profiles(name) ON UPDATE CASCADE ON DELETE CASCADE;
 
 ALTER TABLE ONLY threat_actor_sources
-    ADD CONSTRAINT threat_actor_sources_actor_name_fkey FOREIGN KEY (actor_name) REFERENCES threat_actor_profiles(name) ON DELETE CASCADE;
+    ADD CONSTRAINT threat_actor_sources_actor_name_fkey FOREIGN KEY (actor_name) REFERENCES threat_actor_profiles(name) ON UPDATE CASCADE ON DELETE CASCADE;
+
+ALTER TABLE ONLY threats
+    ADD CONSTRAINT threats_actor_id_fkey FOREIGN KEY (actor_id) REFERENCES threat_actor_profiles(id);
+
+ALTER TABLE ONLY tool_actors
+    ADD CONSTRAINT tool_actors_actor_id_fkey FOREIGN KEY (actor_id) REFERENCES threat_actor_profiles(id);
+
+ALTER TABLE ONLY tool_actors
+    ADD CONSTRAINT tool_actors_tool_id_fkey FOREIGN KEY (tool_id) REFERENCES intelligence_tools(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY users
     ADD CONSTRAINT users_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES tenants(id);

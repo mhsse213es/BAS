@@ -1,5 +1,6 @@
 import { apicall } from '../core/api.js';
 import { x } from '../core/escape.js';
+import { on } from '../core/actions.js';
 import { ago, showToast } from '../core/util.js';
 import { loadScenarios } from './attack-path.js';
 import { _diffRow, _diffSecretRow, _renderConnectorCard, openConfirmDiffModal } from './compliance.js';
@@ -31,9 +32,9 @@ export function loadThreatIntelConfig(name) {
         '<label class="tiny muted" style="display:flex;align-items:center;gap:0.3rem"><input type="checkbox" id="ti-' + name + '-enabled" ' + (cfg.enabled ? 'checked' : '') + '> Enabled</label>' +
       '</div>' +
       '<div class="kpi-row" style="margin-top:0.5rem">' +
-        '<button class="btn btn-outline btn-sm" onclick="testConnectorConfig(\'' + name + '\')">Test Connection</button>' +
-        '<button class="btn btn-primary btn-sm" onclick="saveConnectorConfig(\'' + name + '\')">Save</button>' +
-        (cfg.configured ? '<button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger)" onclick="removeConnectorConfig(\'' + name + '\')">Remove</button>' : '') +
+        '<button class="btn btn-outline btn-sm"' + on('click', 'testConnectorConfig', name) + '>Test Connection</button>' +
+        '<button class="btn btn-primary btn-sm"' + on('click', 'saveConnectorConfig', name) + '>Save</button>' +
+        (cfg.configured ? '<button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger)"' + on('click', 'removeConnectorConfig', name) + '>Remove</button>' : '') +
         '<span id="ti-' + name + '-test-result" class="tiny muted"></span>' +
       '</div>';
   }).catch(function(e) { showToast('Failed to load ' + name + ' config: ' + (e.message || 'error'), 'err'); });
@@ -158,9 +159,9 @@ function renderTAXIIConnectorsList() {
       '<td class="tiny muted">' + x(lastPoll) + '</td>' +
       '<td class="tiny" style="color:' + resultColor + '">' + resultText + '</td>' +
       '<td>' +
-        '<button class="btn btn-outline btn-sm" onclick="openTAXIIConnectorModal(\'' + x(c.id) + '\')">Edit</button> ' +
-        '<button class="btn btn-outline btn-sm" onclick="syncTAXIIConnectorNow(\'' + x(c.id) + '\')">Sync Now</button> ' +
-        '<button class="btn btn-outline btn-sm" onclick="deleteTAXIIConnector(\'' + x(c.id) + '\')">Delete</button>' +
+        '<button class="btn btn-outline btn-sm"' + on('click', 'openTAXIIConnectorModal', c.id) + '>Edit</button> ' +
+        '<button class="btn btn-outline btn-sm"' + on('click', 'syncTAXIIConnectorNow', c.id) + '>Sync Now</button> ' +
+        '<button class="btn btn-outline btn-sm"' + on('click', 'deleteTAXIIConnector', c.id) + '>Delete</button>' +
       '</td>' +
     '</tr>';
   }).join('');

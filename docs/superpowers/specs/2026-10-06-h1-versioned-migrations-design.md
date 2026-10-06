@@ -50,6 +50,7 @@ All three need `DATABASE_ADMIN_URL` (bas_user). `install.sh` runs them as `docke
 - `internal/db/migrations/` — `000001_baseline.{up,down}.sql`, then `00000N_<name>.{up,down}.sql`; `embed.FS`; `README.md` with the development rules (§7).
 - `internal/db/seed/` — `*.sql` (e.g. `system_defaults.sql`, `tenants.sql`, `payload_families.sql`) applied in lexical order, plus `SEED_VERSION` (integer); `embed.FS`.
 - `internal/db/legacy/` — today's seven `Ensure*Schema` functions moved verbatim and frozen; called only by adoption. `EnsureAppRole` is not moved (its logic is re-homed in `migrate`, §4.3).
+  - *Amendment 2026-10-07:* TCF Phase 1 + 2A merged to main before H1 and added two more boot functions (`EnsureContentRegistrySchema`, `EnsureThreatIdentitySchema`). They joined the legacy chain verbatim (nine in all, `main.go` order), `FROZEN.sha256` and `000001` were recaptured (123 tables), and TCF's bas_app REVOKE/column-GRANT lines moved from `app_role.go` into `migrate/role.go`.
 - `internal/db/schemacheck/` — `Fingerprint(ctx, conn, schema) (Fingerprint, error)` over the catalog: tables; columns (name, type, nullability, default, identity/generated); constraints (type, columns, definition); indexes (definition); sequences; functions; triggers; extensions. Column order is not part of the fingerprint. `Diff(want, got) (missing, different, extra []Object)`.
 - `internal/db/migrate/` — orchestration: classification, golang-migrate wrapper, adoption, seed, role, status, and `CheckRuntime(ctx, pool) error` used by the server at startup.
 

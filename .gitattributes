@@ -14,8 +14,8 @@
 # G1 audit artifacts: the classifier/tracer write CSV rows with CRLF (Python's
 # csv default) on every OS. Normalizing keeps CI's freshness diff
 # (.github/workflows/test.yml) comparing content, not line endings.
-Assessment/G1_*.csv   text eol=lf
-Assessment/G1_*.json  text eol=lf
+security/g1/G1_*.csv   text eol=lf
+security/g1/G1_*.json  text eol=lf
 # G1c: the generator and split:check compare bytes, so web sources are LF on
 # every platform (Windows checkouts would otherwise get CRLF).
 orchestrator/web/**/*.html text eol=lf

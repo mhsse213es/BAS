@@ -7,8 +7,10 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/audspect/bas/internal/contentregistry"
 	"github.com/audspect/bas/internal/jobs"
 	"github.com/audspect/bas/internal/scenario"
+	"github.com/audspect/bas/internal/testutil"
 	"github.com/audspect/bas/internal/ws"
 )
 
@@ -20,6 +22,8 @@ func TestDispatchScheduledAssessmentTarget_PostureMode_CreatesScenarioRun(t *tes
 		mustExecAPI(t, pool, `INSERT INTO agents (agent_id, hostname, os_version) VALUES ('sa-disp-1', 'SA-DISP-HOST', 'windows')`)
 
 		eng := scenario.NewEngine(t.TempDir())
+		eng.SetVerifier(testutil.DevVerifier())
+		eng.AttachRegistry(contentregistry.New(sharedDB.Pool, testutil.DevVerifier()))
 		registerFixtureScenario(t, eng, "fixture-check")
 		h := New(pool, ws.NewHub(), eng, "")
 		fake := startFakeAgent(t, h.hub, "sa-disp-1")

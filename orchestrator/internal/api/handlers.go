@@ -32,6 +32,7 @@ import (
 	"github.com/audspect/bas/internal/cmdsigning"
 	"github.com/audspect/bas/internal/compliance"
 	"github.com/audspect/bas/internal/connector"
+	"github.com/audspect/bas/internal/contentregistry"
 	"github.com/audspect/bas/internal/controlhealth"
 	"github.com/audspect/bas/internal/correlation"
 	"github.com/audspect/bas/internal/db"
@@ -1447,17 +1448,20 @@ func (h *Handler) EnrollAgent(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) TriggerScan(w http.ResponseWriter, r *http.Request) {
 	agentID := chi.URLParam(r, "agentId")
 
-	sc, ok := h.engine.Get("full-scan")
-	if !ok {
-		jsonError(w, "full-scan scenario not found — add scenarios/full-scan.yaml to the scenarios directory", http.StatusNotFound)
+	ev, gerr := h.engine.ResolveExecutable(r.Context(), "full-scan")
+	if gerr != nil {
+		jsonError(w, gerr.Error(), http.StatusConflict)
 		return
 	}
+	sc := ev.Scenario
 
 	steps, _, err := scenario.BuildSteps(sc, h.calderaURL, h.calderaKey, h.artStore, "windows")
 	if err != nil {
 		jsonError(w, "build steps: "+err.Error(), http.StatusUnprocessableEntity)
 		return
 	}
+	stampDispatchPlatform(steps, "windows")
+	resolved := scenario.ResolvedHashes(steps)
 
 	runID := newID()
 	var initiatedBy *string
@@ -1465,9 +1469,9 @@ func (h *Handler) TriggerScan(w http.ResponseWriter, r *http.Request) {
 		initiatedBy = &c.UserID
 	}
 	_, err = h.db.Exec(r.Context(),
-		`INSERT INTO scenario_runs (id, scenario_id, agent_id, name, status, initiated_by, started_at, mode)
-		 VALUES ($1, $2, $3, $4, 'running', $5, NOW(), 'posture')`,
-		runID, "full-scan", agentID, sc.Name, initiatedBy,
+		`INSERT INTO scenario_runs (id, scenario_id, agent_id, name, status, initiated_by, started_at, mode, execution_kind, content_version_id)
+		 VALUES ($1, $2, $3, $4, 'running', $5, NOW(), 'posture', 'content', $6)`,
+		runID, "full-scan", agentID, sc.Name, initiatedBy, ev.VersionID,
 	)
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
@@ -1481,7 +1485,7 @@ func (h *Handler) TriggerScan(w http.ResponseWriter, r *http.Request) {
 		log.Printf("[phase0b] insert execution_attempt for run %s: %v", runID, err)
 	}
 
-	h.persistStepMeta(r.Context(), runID, steps)
+	h.persistStepMeta(r.Context(), runID, steps, resolved)
 
 	cmd := scenario.ScenarioCommand{
 		RunID:      runID,
@@ -1509,11 +1513,12 @@ func (h *Handler) TriggerScan(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) SafeScan(w http.ResponseWriter, r *http.Request) {
 	agentID := chi.URLParam(r, "agentId")
 
-	sc, ok := h.engine.Get("safe-simulation")
-	if !ok {
-		jsonError(w, "safe-simulation scenario not found — add scenarios/safe-simulation.yaml", http.StatusNotFound)
+	ev, gerr := h.engine.ResolveExecutable(r.Context(), "safe-simulation")
+	if gerr != nil {
+		jsonError(w, gerr.Error(), http.StatusConflict)
 		return
 	}
+	sc := ev.Scenario
 
 	runID := newID()
 	var initiatedBy *string
@@ -1521,9 +1526,9 @@ func (h *Handler) SafeScan(w http.ResponseWriter, r *http.Request) {
 		initiatedBy = &c.UserID
 	}
 	_, err := h.db.Exec(r.Context(),
-		`INSERT INTO scenario_runs (id, scenario_id, agent_id, name, status, initiated_by, started_at, mode)
-		 VALUES ($1, $2, $3, $4, 'running', $5, NOW(), 'posture')`,
-		runID, "safe-simulation", agentID, sc.Name, initiatedBy,
+		`INSERT INTO scenario_runs (id, scenario_id, agent_id, name, status, initiated_by, started_at, mode, execution_kind, content_version_id)
+		 VALUES ($1, $2, $3, $4, 'running', $5, NOW(), 'posture', 'content', $6)`,
+		runID, "safe-simulation", agentID, sc.Name, initiatedBy, ev.VersionID,
 	)
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
@@ -1552,7 +1557,33 @@ func (h *Handler) SafeScan(w http.ResponseWriter, r *http.Request) {
 
 // GET /api/scenarios
 func (h *Handler) ListScenarios(w http.ResponseWriter, r *http.Request) {
-	respond(w, h.engine.List())
+	list := h.engine.List()
+	// One query for every content id (no N+1). A registry failure must not
+	// fail the list: log it and omit the enrichment.
+	var sums map[string]contentregistry.Summary
+	if reg, ok := h.engine.Registry().(*contentregistry.Registry); ok && reg != nil {
+		var err error
+		if sums, err = reg.Summaries(r.Context()); err != nil {
+			log.Printf("[scenarios] registry summaries unavailable, listing without badges: %v", err)
+			sums = nil
+		}
+	}
+	out := make([]scenarioListItem, 0, len(list))
+	for _, sc := range list {
+		it := scenarioListItem{Scenario: sc}
+		if s, ok := sums[sc.ID]; ok {
+			it.Registry = &s
+		}
+		out = append(out, it)
+	}
+	respond(w, out)
+}
+
+// scenarioListItem embeds the scenario so the JSON shape stays a superset of
+// what the dashboard already reads, plus the registry badge summary.
+type scenarioListItem struct {
+	*scenario.Scenario
+	Registry *contentregistry.Summary `json:"registry,omitempty"`
 }
 
 // GET /api/scenarios/{id}
@@ -1601,6 +1632,17 @@ type dispatchOpts struct {
 	SweepName  string
 	SweepLabel string
 	SweepFinal bool
+	// Kind is scenario_runs.execution_kind. "" means "content": the scenario
+	// is resolved through the Content Registry gate and the run is pinned to
+	// the resolved version. Synthetic callers MUST set their kind explicitly;
+	// forgetting to do so fails closed (an unregistered synthetic id is denied).
+	Kind string
+	// Resolved, when set (and Kind is content), is the version the caller
+	// already resolved and validated against (RunScenario checks step indices
+	// on it). dispatchRun executes exactly that version instead of resolving
+	// again, so a publish between the two lookups cannot make the validated
+	// and the executed versions differ. nil means dispatchRun resolves itself.
+	Resolved *scenario.ExecutableVersion
 }
 
 // nullIfEmpty maps "" to a SQL NULL so an ad-hoc run leaves campaign_id null
@@ -1761,6 +1803,26 @@ func (h *Handler) dispatchRun(ctx context.Context, sc *scenario.Scenario, agentI
 	if license.Current().State == license.StateLocked {
 		return "", "license_locked", nil
 	}
+	kind := o.Kind
+	if kind == "" {
+		kind = contentregistry.KindContent
+	}
+	var contentVersionID *string
+	if kind == contentregistry.KindContent {
+		ev := o.Resolved
+		if ev == nil {
+			if h.engine == nil { // fail closed rather than panic: no engine means no registry
+				return "", "content not executable: " + scenario.ErrNoRegistry.Error(), nil
+			}
+			resolved, gerr := h.engine.ResolveExecutable(ctx, sc.ID)
+			if gerr != nil {
+				return "", "content not executable: " + strings.TrimPrefix(gerr.Error(), "content not executable: "), nil
+			}
+			ev = &resolved
+		}
+		sc = ev.Scenario // execute the pinned version's stored bytes, never the disk file
+		contentVersionID = &ev.VersionID
+	}
 	live := o.Mode == "telemetry" || o.Mode == "lab"
 
 	// ── Agent state gate ─────────────────────────────────────────────────────
@@ -1841,9 +1903,9 @@ func (h *Handler) dispatchRun(ctx context.Context, sc *scenario.Scenario, agentI
 		return "", "", err
 	}
 	_, err = h.db.Exec(ctx,
-		`INSERT INTO scenario_runs (id, scenario_id, agent_id, name, status, initiated_by, started_at, campaign_id, variant_depth, mode, max_privilege, dispatch_subset)
-		 VALUES ($1, $2, $3, $4, 'running', $5, NOW(), $6, $7, $8, $9, $10)`,
-		runID, sc.ID, agentID, runName, o.InitiatedBy, nullIfEmpty(o.CampaignID), vdepth, mode, o.MaxPrivilege, subsetJSON,
+		`INSERT INTO scenario_runs (id, scenario_id, agent_id, name, status, initiated_by, started_at, campaign_id, variant_depth, mode, max_privilege, dispatch_subset, execution_kind, content_version_id)
+		 VALUES ($1, $2, $3, $4, 'running', $5, NOW(), $6, $7, $8, $9, $10, $11, $12)`,
+		runID, sc.ID, agentID, runName, o.InitiatedBy, nullIfEmpty(o.CampaignID), vdepth, mode, o.MaxPrivilege, subsetJSON, kind, contentVersionID,
 	)
 	if err != nil {
 		if isUniqueViolation(err) {
@@ -1969,6 +2031,8 @@ func (h *Handler) dispatchRun(ctx context.Context, sc *scenario.Scenario, agentI
 		h.markRunFailed(context.Background(), runID, "Failed to build scenario steps: "+err.Error())
 		return "", "", fmt.Errorf("build steps: %w", err)
 	}
+	stampDispatchPlatform(steps, agentOS)
+	resolved := scenario.ResolvedHashes(steps)
 	steps = h.applyGeneratedArtifacts(ctx, sc.ID, runID, agentID, steps)
 	steps, err = h.issueSinkTokensAndSubstitute(ctx, runID, h.publicBaseURL, steps)
 	if err != nil {
@@ -2114,7 +2178,7 @@ func (h *Handler) dispatchRun(ctx context.Context, sc *scenario.Scenario, agentI
 			runID, o.VariantDepth, baseCount, len(steps))
 	}
 
-	h.persistStepMeta(ctx, runID, steps)
+	h.persistStepMeta(ctx, runID, steps, resolved)
 
 	cmd := scenario.ScenarioCommand{
 		RunID:                runID,
@@ -2170,11 +2234,19 @@ func (h *Handler) RunScenario(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sc, ok := h.engine.Get(scenarioID)
-	if !ok {
-		jsonError(w, "scenario not found", http.StatusNotFound)
+	ev, gerr := h.engine.ResolveExecutable(r.Context(), scenarioID)
+	if gerr != nil {
+		var ne *contentregistry.ErrNotExecutable
+		if errors.As(gerr, &ne) && ne.Reason == "not registered" {
+			if _, onDisk := h.engine.Get(scenarioID); !onDisk {
+				jsonError(w, "scenario not found", http.StatusNotFound)
+				return
+			}
+		}
+		jsonError(w, gerr.Error(), http.StatusConflict)
 		return
 	}
+	sc := ev.Scenario // step-index validation below now checks the executed version (Review Focus 1)
 
 	// Validate any operator-selected ART technique subset against the live catalog
 	// before we touch the database, so a bad request can't leave a dangling run.
@@ -2304,6 +2376,7 @@ func (h *Handler) RunScenario(w http.ResponseWriter, r *http.Request) {
 		Techniques: req.Techniques, Abilities: req.Abilities, Steps: req.Steps, Checks: req.Checks,
 		InitiatedBy: initiatedBy, VariantDepth: req.VariantDepth, RunLabel: req.RunLabel,
 		MaxPrivilege: req.ExecutionPolicy.MaxPrivilege,
+		Resolved:     &ev, // same version the step indices were validated against
 	})
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
@@ -2311,6 +2384,8 @@ func (h *Handler) RunScenario(w http.ResponseWriter, r *http.Request) {
 	}
 	if skip != "" {
 		switch {
+		case strings.HasPrefix(skip, "content not executable: "):
+			jsonError(w, skip, http.StatusConflict)
 		case skip == "agent busy":
 			jsonError(w, "agent busy — a scenario is already running on this agent; wait for it to finish before starting another", http.StatusConflict)
 		case skip == "offline":
@@ -2345,7 +2420,7 @@ func (h *Handler) CreateScenario(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, fmt.Sprintf("scenario %q already exists — choose a different id or edit the existing one", sc.ID), http.StatusConflict)
 		return
 	}
-	if err := h.engine.Save(&sc); err != nil {
+	if err := h.engine.SaveAs(r.Context(), &sc, actorFor(r)); err != nil {
 		jsonError(w, err.Error(), http.StatusUnprocessableEntity)
 		return
 	}
@@ -2373,7 +2448,7 @@ func (h *Handler) UpdateScenario(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	sc.ID = id // the URL is authoritative — ignore any mismatched body id
-	if err := h.engine.Save(&sc); err != nil {
+	if err := h.engine.SaveAs(r.Context(), &sc, actorFor(r)); err != nil {
 		jsonError(w, err.Error(), http.StatusUnprocessableEntity)
 		return
 	}
@@ -2435,7 +2510,7 @@ func (h *Handler) CloneScenario(w http.ResponseWriter, r *http.Request) {
 		clone.Name = src.Name + " (copy)"
 	}
 
-	if err := h.engine.Save(&clone); err != nil {
+	if err := h.engine.SaveAs(r.Context(), &clone, actorFor(r)); err != nil {
 		jsonError(w, err.Error(), http.StatusUnprocessableEntity)
 		return
 	}
@@ -2460,7 +2535,7 @@ func (h *Handler) UploadScenario(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, fmt.Sprintf("scenario %q already exists — rename the id in the file or delete the existing one", sc.ID), http.StatusConflict)
 		return
 	}
-	if err := h.engine.Save(sc); err != nil {
+	if err := h.engine.SaveAs(r.Context(), sc, actorFor(r)); err != nil {
 		jsonError(w, err.Error(), http.StatusUnprocessableEntity)
 		return
 	}
@@ -2482,7 +2557,7 @@ func (h *Handler) DeleteScenario(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, fmt.Sprintf("scenario %q is %s and cannot be deleted here", id, sc.Source), http.StatusBadRequest)
 		return
 	}
-	if err := h.engine.Delete(id); err != nil {
+	if err := h.engine.DeleteAs(r.Context(), id, actorFor(r)); err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -2587,17 +2662,60 @@ func normStr(s, def string) string {
 	return s
 }
 
+// runContent is the ONLY way post-run code may obtain a run's scenario
+// (spec §7). Without a registry (unit tests) it degrades to the legacy path.
+func (h *Handler) runContent(ctx context.Context, runID string) contentregistry.RunContent {
+	if h.engine == nil {
+		return contentregistry.RunContent{Status: contentregistry.RunUnversioned}
+	}
+	reg, ok := h.engine.Registry().(*contentregistry.Registry)
+	if !ok || reg == nil {
+		var sid string
+		_ = h.db.QueryRow(ctx, `SELECT scenario_id FROM scenario_runs WHERE id = $1`, runID).Scan(&sid)
+		sc, _ := h.engine.Get(sid)
+		return contentregistry.RunContent{Status: contentregistry.RunUnversioned, Scenario: sc, ContentID: sid}
+	}
+	return reg.RunContent(ctx, runID, h.engine)
+}
+
+// runResolver is the run-scoped scenario resolver for detection verification.
+// Without a registry (unit tests) it degrades to the engine itself, which is
+// exactly the legacy (current-content) behaviour including profile expansion.
+func (h *Handler) runResolver(ctx context.Context, runID string) detectverify.ScenarioResolver {
+	if h.engine != nil {
+		if reg, ok := h.engine.Registry().(*contentregistry.Registry); ok && reg != nil {
+			return reg.ForRun(ctx, runID, h.engine)
+		}
+	}
+	return h.engine
+}
+
+// RunResolver must serve both post-run consumers. Asserted here (not in
+// contentregistry) so contentregistry never imports reporting/detectverify.
+var (
+	_ reporting.ScenarioResolver    = contentregistry.RunResolver{}
+	_ detectverify.ScenarioResolver = contentregistry.RunResolver{}
+)
+
 // persistStepMeta saves the TaskID→{technique,name,framework} map for the steps
 // actually dispatched, so results from dynamically-built ART/Caldera steps (not
 // present in the scenario's static Steps) can be interpreted correctly.
-func (h *Handler) persistStepMeta(ctx context.Context, runID string, steps []scenario.ScenarioStep) {
-	raw, err := json.Marshal(scenario.BuildStepMeta(steps))
+func (h *Handler) persistStepMeta(ctx context.Context, runID string, steps []scenario.ScenarioStep, resolved map[string]string) {
+	raw, err := json.Marshal(scenario.BuildStepMeta(steps, resolved, h.componentVersions(ctx)))
 	if err != nil {
 		return
 	}
 	if _, err := h.db.Exec(ctx, `UPDATE scenario_runs SET step_meta = $1 WHERE id = $2`, raw, runID); err != nil {
 		log.Printf("[scenario] persist step_meta for run %s: %v", runID, err)
 	}
+}
+
+// componentVersions reads the pinned catalog versions. There is no Caldera
+// version source today (spec §4.9), so Caldera is always "".
+func (h *Handler) componentVersions(ctx context.Context) scenario.ComponentVersions {
+	var art string
+	_ = h.db.QueryRow(ctx, `SELECT source_version FROM art_content_meta WHERE id = 1`).Scan(&art)
+	return scenario.ComponentVersions{ART: art}
 }
 
 // POST /api/scenarios/result — agents post raw execution results here.
@@ -2642,7 +2760,7 @@ func (h *Handler) SubmitScenarioResult(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Look up the scenario to get framework context for interpretation
-	sc, _ := h.engine.Get(raw.ScenarioID)
+	sc := h.runContent(r.Context(), raw.RunID).Scenario
 
 	// Build a taskId→Step map for O(1) lookup. Static YAML steps come from the
 	// scenario; dynamically-built ART/Caldera steps are NOT in sc.Steps, so we
@@ -4189,6 +4307,7 @@ func (h *Handler) RunAdversaryTemplate(w http.ResponseWriter, r *http.Request) {
 			}
 			artOpts := base
 			artOpts.Techniques = tmpl.ARTTechniques
+			artOpts.Kind = contentregistry.KindAdhocAdversary
 			runID, skip, err := h.dispatchRun(r.Context(), synthSc, agentID, artOpts)
 			switch {
 			case err != nil:
@@ -4212,7 +4331,9 @@ func (h *Handler) RunAdversaryTemplate(w http.ResponseWriter, r *http.Request) {
 					Executable:         true,
 					SupportedOS:        []string{"windows"},
 				}
-				runID, skip, err := h.dispatchRun(r.Context(), synthSc, agentID, base)
+				calOpts := base
+				calOpts.Kind = contentregistry.KindAdhocAdversary
+				runID, skip, err := h.dispatchRun(r.Context(), synthSc, agentID, calOpts)
 				switch {
 				case err != nil:
 					skipped = append(skipped, result{AgentID: agentID, Source: "caldera", Reason: err.Error()})
@@ -4900,6 +5021,7 @@ func (h *Handler) RunCalderaAdversary(w http.ResponseWriter, r *http.Request) {
 	runID, skipReason, err := h.dispatchRun(r.Context(), synthSc, req.AgentID, dispatchOpts{
 		Mode: mode, ConfirmLive: req.ConfirmLive, ConfirmLab: req.ConfirmLab,
 		Reason: req.Reason, InitiatedBy: initiatedBy, MaxPrivilege: req.ExecutionPolicy.MaxPrivilege,
+		Kind: contentregistry.KindAdhocAdversary,
 	})
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
@@ -5686,6 +5808,21 @@ func (h *Handler) GetRunForensicCSV(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
 	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, fname))
 	reporting.WriteForensicCSV(w, name, results, filter, totalCount)
+}
+
+// stampDispatchPlatform records the OS the steps were built for on every step
+// that does not already carry one, so step_meta holds the real dispatch
+// platform (drift rebuilds must not guess it). Platform is json:"-" and not
+// part of StepCommandSHA256, so dispatched commands and hashes are unchanged.
+func stampDispatchPlatform(steps []scenario.ScenarioStep, os string) {
+	if os == "" {
+		return
+	}
+	for i := range steps {
+		if steps[i].Platform == "" {
+			steps[i].Platform = os
+		}
+	}
 }
 
 // classifyAgentOS maps a raw os_version string to "windows", "linux", or "darwin".

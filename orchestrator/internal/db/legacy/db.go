@@ -23,6 +23,7 @@ func EnsureAll(ctx context.Context, db DB) error {
 	for _, f := range []func(context.Context, DB) error{
 		EnsureSchema, EnsureContentSchema, EnsureIOCSchema, EnsureIOCEnrichmentSchema,
 		EnsureAgentGroupSchema, EnsureAgentUninstallSchema, EnsureExerciseSchema,
+		EnsureContentRegistrySchema, EnsureThreatIdentitySchema,
 	} {
 		if err := f(ctx, db); err != nil {
 			return err

@@ -1094,6 +1094,12 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
         <div class="cg-label">Last Scenario</div>
         <div class="cg-value">{{.summary.lastScenarioName}}</div>
       </div>
+      {{if .contentProvenance}}
+      <div class="cg-cell">
+        <div class="cg-label">Content Version</div>
+        <div class="cg-value">{{.contentProvenance.label}}</div>
+      </div>
+      {{end}}
       {{if .agent.status}}
       <div class="cg-cell">
         <div class="cg-label">Agent Status</div>

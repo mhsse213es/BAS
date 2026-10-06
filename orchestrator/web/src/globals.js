@@ -1,40 +1,37 @@
 import { state } from './core/state.js';
 import { x } from './core/escape.js';
 import { stopEvent } from './core/actions.js';
-import { closeAdvDrawer, closeAdvRunModal, closeTmplRun, confirmAdversaryRun, confirmTmplRun, loadAdversariesStop, openAdvDrawer, openAdvRunModal, openTmplRun, renderAdvRunWarn, renderAdversaryLibrary, renderTmplAgentCount, renderTmplGroupSummary, renderTmplOSCompat, setTmplFilter, setTmplTargetMode, tmplRunModeChange, toggleAdversarySection } from './features/adversaries.js';
-import { closeRemoveAgentModal, closeStopAgentModal, closeUninstallAgentModal, openRemoveAgentModal, openStopAgentModal, openUninstallAgentModal, submitRemoveAgent, submitStopAgent, submitUninstallAgent, triggerTicketingSync } from './features/agent-actions.js';
-import { closeAgentDetail, closeAgentDetailOnBackdrop, downloadAuditPack, downloadFullReportCSV, downloadFullReportJSON, downloadFullReportPDF, exportCompliance, filterControls, loadAgtLogs, loadComplianceReport, openAgentDetail, openFullReport, safeScan, setAgentState, showAgentTab, toggleEvidence, updateLinuxDownloadCmd } from './features/agent-drawer.js';
-import { _apCancelJob, apAssetsClose, apCollectClose, apCollectViewResults, apCountTargets, apDiscoverSubnet, apScheduleClose, closeAPAbout, closeAllRowMenus, closeExposureDetail, closeExposureDetailOnBackdrop, closeGroupPicker, closeScenarioCategoryView, copyRecommendedScenario, copyText, createAgentGroupPrompt, dispatchAPCollect, loadAgents, loadAttackPath, loadCoverageMatrix, loadExecDashboard, loadExposureAssets, loadMoreAgents, loadRecommendations, loadScenarios, manageUsersLink, moveAgentToGroupPrompt, onAgentSearchInput, openAPAbout, openAPAssets, openAPCollect, openAPSchedule, openAgentGroupMenu, openExposureDetail, renderScenarios, saveAPAsset, saveAPSchedule, scenarioSearchClear, selectAgentGroup, selectDashPref, selectTheme, setAgentFilter, showAgentDownload, showSettingsSection, showThreatPriorityDetail, showThreatPriorityList, submitGroupPicker, toggleRowMenu, toggleScenarioSrcGroup, toggleSecret, unpreviewScenarioOverlay } from './features/attack-path.js';
+import { closeAdvDrawer, closeAdvRunModal, closeTmplRun, confirmAdversaryRun, confirmTmplRun, loadAdversariesStop, openAdvDrawer, openAdvRunModal, openTmplRun, renderAdvRunWarn, renderAdversaryLibrary, renderTmplGroupSummary, renderTmplOSCompat, setTmplFilter, setTmplTargetMode, tmplGroupChange, tmplRunModeChange, tmplSelAgentChange, toggleAdversarySection } from './features/adversaries.js';
+import { closeRemoveAgentModal, closeStopAgentModal, closeUninstallAgentModal, submitRemoveAgent, submitStopAgent, submitUninstallAgent, triggerTicketingSync } from './features/agent-actions.js';
+import { closeAgentDetail, closeAgentDetailOnBackdrop, exportCompliance, filterControls, loadAgtLogs, loadAgtLogsTelemetryMetric, loadComplianceReport, openAgentDetail, setAgentState, showAgentTab, toggleEvidence, updateLinuxDownloadCmd } from './features/agent-drawer.js';
+import { _apCancelJob, apAssetsClose, apCollectClose, apCollectViewResults, apCountTargets, apDiscoverSubnet, apScheduleClose, approveForLocalUse, approveLocalAckChanged, closeAPAbout, closeApproveLocalModal, closeExposureDetail, closeExposureDetailOnBackdrop, closeGroupPicker, closeScenarioCategoryView, copyRecommendedScenario, copyText, createAgentGroupPrompt, dispatchAPCollect, loadAgents, loadAttackPath, loadCoverageMatrix, loadExecDashboard, loadExposureAssets, loadMoreAgents, loadRecommendations, loadScenarios, manageUsersLink, onAgentSearchInput, openAPAbout, openAPAssets, openAPCollect, openAPSchedule, openAgentGroupMenuStop, openExposureDetail, openModalForScenario, openScenarioCategory, previewScenarioOverlay, renderScenarios, rowMenuAuditPack, rowMenuDetail, rowMenuMoveGroup, rowMenuRemoveAgent, rowMenuReportCsv, rowMenuReportHtml, rowMenuReportJson, rowMenuReportPdf, rowMenuRunSimulation, rowMenuSafeScan, rowMenuStopAgent, rowMenuUninstallAgent, saveAPAsset, saveAPSchedule, scenarioCategoryKeydown, scenarioPinKeydown, scenarioSearchClear, selectAgentGroup, selectDashPref, selectTheme, setAgentFilter, showAgentDownload, showSettingsSection, showThreatPriorityDetail, showThreatPriorityList, submitApproveLocal, submitGroupPicker, toggleDesc, toggleRowMenuById, toggleScenarioPinFromEvent, toggleScenarioSrcGroup, toggleSecret, unpreviewScenarioOverlay } from './features/attack-path.js';
 import { auditPage, backupNow, exportAuditLogs, loadAuditLogs, loadBackups, loadLicenseInfo, prepareRestore } from './features/audit-logs.js';
-import { closeCampaignDetail, closeCampaignLaunch, cmpAllConfirmChange, cmpOnExistingScenarioChange, cmpOnGroupChange, cmpOnTargetTypeChange, cmpSelectAllFiltered, cmpToggleExclusion, cmpUpdateCount, generateTIScenario, loadCampaigns, loadKEVPack, openCampaignDetail, openCampaignLaunch, openRunFromCampaign, pauseCampaign, renderCampaignTargets, resumeCampaign, selectTIPack, setCampaignSource, setCampaignTab, stopCampaign, submitCampaign } from './features/campaigns.js';
+import { closeCampaignDetail, closeCampaignLaunch, cmpAllConfirmChange, cmpOnExistingScenarioChange, cmpOnGroupChange, cmpOnTargetTypeChange, cmpSelChange, cmpSelectAllFiltered, cmpToggleExclusionFromChecked, generateTIScenario, loadCampaigns, loadKEVPack, openCampaignDetail, openCampaignLaunch, openRunFromCampaign, openThreatPriorityActor, pauseCampaign, renderCampaignTargets, resumeCampaign, selectTIPack, setCampaignSource, setCampaignTab, stopCampaign, submitCampaign } from './features/campaigns.js';
 import { closeChangePassword, closeChangePasswordOnBackdrop, closeConfirmDiffModal, loadCalderaStatus, openChangePassword, openComplianceDetail, runConfirmDiffModal, submitChangePassword } from './features/compliance.js';
 import { loadCoverageAnalytics, openTechnique, renderUTL, setCovView, setUTLFilter } from './features/coverage.js';
 import { vfCloseDetail, vfDeleteEvidence, vfLoadQueue, vfPickResult, vfSelect, vfSetDomain, vfSubmit, vfToggleHistory, vfUploadEvidence } from './features/detection-verification.js';
-import { _setEMExtraSearch, _setVexPreviewSearch, _setVexPreviewTactic, _toggleEMExtraScenario, _toggleEMPreviewRow, _toggleVexPreviewRow, _toggleVexPreviewSection, cancelEMSweep, closeEMSweepModal, closeEMSweepModalOnBackdrop, closeEMSweepProgress, closeEMSweepProgressOnBackdrop, closeSweepPreview, closeSweepPreviewOnBackdrop, emRunLayer, emSweepDispatch, loadEmTab, openEMSweepModal, openEMSweepProgress, setEMSweepTargetMode, startSweepFromPreview, stopEMSweep, stopEMSweepCurrent } from './features/endpoint-mastery.js';
-import { closeCreateUser, closeCreateUserOnBackdrop, closeDownloadOptions, closeEditUser, closeEditUserOnBackdrop, closeEvidence, closeEvidenceOnBackdrop, confirmRun, copyRaw, doResetPassword, downloadCampaignCSV, downloadCampaignReport, downloadEMSweepReport, downloadRunCSV, downloadRunReport, downloadSweepReport, exportRunJSON, openCampaignReport, openCmdk, openCreateUser, openEditUser, openEvidence, openRunReport, pauseRun, resumeRun, stopRun, submitCreateUser, submitEditUser, toggleUserActive } from './features/evidence.js';
+import { _toggleEMExtraScenario, _toggleEMPreviewRow, _toggleVexPreviewRow, _toggleVexPreviewSection, cancelEMSweep, closeEMSweepModal, closeEMSweepModalOnBackdrop, closeEMSweepProgress, closeEMSweepProgressOnBackdrop, closeSweepPreview, closeSweepPreviewOnBackdrop, emGroupSelChange, emRunLayer, emSweepDispatch, loadEmTab, openEMSweepModal, openEMSweepProgress, openEMSweepReport, setEMExtraSearchFromInput, setEMSweepTargetMode, setVexPreviewSearchFromInput, setVexPreviewTacticFromSelect, startSweepFromPreview, stopEMSweep, stopEMSweepCurrent } from './features/endpoint-mastery.js';
+import { closeCreateUser, closeCreateUserOnBackdrop, closeDownloadOptions, closeEditUser, closeEditUserOnBackdrop, closeEvidence, closeEvidenceOnBackdrop, confirmRun, copyRaw, doResetPassword, downloadCampaignCSV, downloadCampaignReport, downloadEMSweepReport, downloadRunCSV, downloadRunReport, downloadSweepReport, exportRunJSON, openCampaignReport, openCmdk, openCreateUser, openEditUser, openEvidence, openFindingFromDashboard, openRunReport, pauseRun, resumeRun, stopRun, submitCreateUser, submitEditUser, toggleUserActive } from './features/evidence.js';
 import { bulkPushSelectedFindings, loadFindings, loadSLAReport, openFinding, openRemediation, pushFindingToITSM, quickTriageFinding, remBulkTicket, remSingleTicket, revalidateRemediation, setFindingStatus, setFindingTab, toggleAllFindingChecksFromChecked, toggleFindingCheck } from './features/findings.js';
-import { closeInitiativeAttachDrawer, closeInitiativeAttachDrawerOnBackdrop, closeInitiativeCreateDrawer, closeInitiativeCreateDrawerOnBackdrop, closeInitiativeDrawer, closeInitiativeDrawerOnBackdrop, initiativeArchiveAction, initiativeCloseAction, initiativeDeleteAction, initiativeDetachJob, initiativeRenderAttachList, initiativeSetFilter, loadInitiatives, openInitiativeAttachDrawer, openInitiativeCreateDrawer, openInitiativeDrawer, submitInitiativeAttach, submitInitiativeCreate } from './features/initiatives.js';
-import { closeConnectorForm, closeRespondModal, closeResponseConnectorForm, deleteConnector, deleteResponseConnector, fetchConnectorProjects, openAddConnector, openAddResponseConnector, openEditConnector, openEditResponseConnector, openRespondModal, renderConnectorSettings, renderRespondFields, renderResponseConnectorFields, saveConnectorForm, saveResponseConnectorForm, submitRespondAction, testConnectorById, testConnectorForm, testResponseConnectorById } from './features/integrations.js';
+import { closeInitiativeAttachDrawer, closeInitiativeAttachDrawerOnBackdrop, closeInitiativeCreateDrawer, closeInitiativeCreateDrawerOnBackdrop, closeInitiativeDrawer, closeInitiativeDrawerOnBackdrop, initiativeArchiveAction, initiativeAttachSelect, initiativeCloseAction, initiativeDeleteFromMenu, initiativeDetachJob, initiativeRenderAttachList, initiativeSetFilter, loadInitiatives, openInitiativeAttachDrawer, openInitiativeCreateDrawer, openInitiativeDrawer, submitInitiativeAttach, submitInitiativeCreate } from './features/initiatives.js';
+import { closeConnectorForm, closeRespondModal, closeResponseConnectorForm, connectorProjectSelectChange, deleteConnector, deleteResponseConnector, fetchConnectorProjects, openAddConnector, openAddResponseConnector, openEditConnector, openEditResponseConnector, openRespondModal, renderConnectorSettings, renderRespondFields, renderResponseConnectorFields, saveConnectorForm, saveResponseConnectorForm, submitRespondAction, testConnectorById, testConnectorForm, testResponseConnectorById } from './features/integrations.js';
 import { closeIOCImportModal, closeResults, closeResultsOnBackdrop, loadIOCRegistry, loadIOCRegistryOnEnter, openIOCDetail, openIOCImportModal, setRunIOCSearchFromInput, setRunIOCTypeFilter, submitIOCImport, toggleIOCSuppressed, toggleRunIOCRow } from './features/iocs.js';
-import { closeRunLive, closeRunLiveOnBackdrop, closeSweepDrilldown, closeSweepDrilldownOnBackdrop, openSweepDrilldown } from './features/live-run.js';
-import { abortExecution, approveExStep, closeExerciseDetail, closeExerciseDetailOnBackdrop, closeOpenAEVDetail, closeOpenAEVDetailOnBackdrop, createPlanFromOpenAEV, launchExercisePrompt, openExerciseDetail, openOpenAEVDetail, removeOpenAEVConfig, saveOpenAEVConfig, syncOpenAEVNow, testOpenAEVConfig, toggleAPHistory } from './features/openaev.js';
+import { closeRunLive, closeRunLiveOnBackdrop, closeSweepDrilldown, closeSweepDrilldownOnBackdrop, openRunPanelAction, openSweepDrilldown, openSweepReport, toggleLiveStepAction } from './features/live-run.js';
+import { abortExecution, abortExecutionStop, approveExStep, closeExerciseDetail, closeExerciseDetailOnBackdrop, closeOpenAEVDetail, closeOpenAEVDetailOnBackdrop, createPlanFromOpenAEV, launchExercisePrompt, openExerciseDetail, openOpenAEVDetail, removeOpenAEVConfig, saveOpenAEVConfig, syncOpenAEVNow, testOpenAEVConfig, toggleAPHistory } from './features/openaev.js';
 import { runRansomwareDrill } from './features/ransomware.js';
-import { addStep, applyPicker, clearSelection, cloneScenario, closeBuilder, closeBuilderOnBackdrop, closeModal, closePicker, closeReportGen, deleteCustomScenario, downloadBuilderYaml, genAgentReport, loadRuns, moveStep, openBuilder, openBuilderARTPicker, openBuilderCalderaPicker, openDetailedViewForScenario, openModal, openPicker, openPickerFromModal, openReportGen, pickScenarioUploadFile, pickerSelectAll, pickerToggle, removeStep, renderAdditionalAgentsCount, renderBuilderMode, renderGroupTargetSummary, renderPickerList, renderRunMode, saveScenario, selectAllAdditionalAgents, setPF, setTargetMode, submitReport, switchRunTab, techChangeSelection, techCopyId, techOnBlur, techOnKeydown, techSelectRow, updateVariantDepthNote, uploadScenarioFile, viewRunResults, wizardNav } from './features/reports.js';
+import { addStep, addlSelChange, applyPicker, clearSelection, cloneScenario, closeBuilder, closeBuilderOnBackdrop, closeModal, closePicker, closeReportGen, deleteCustomScenario, downloadBuilderYaml, genAgentReport, loadRuns, moveStepBy, openBuilder, openBuilderARTPicker, openBuilderCalderaPicker, openDetailedViewForScenario, openModal, openPicker, openPickerFromModal, openReportGen, pickScenarioUploadFile, pickerSelectAll, pickerToggle, removeStep, renderBuilderMode, renderGroupTargetSummary, renderPickerList, renderRunMode, runGroupChange, saveScenario, selectAllAdditionalAgents, setPF, setTargetMode, submitReport, switchRunTab, techChangeSelection, techCopyId, techKeydown, techOnBlur, techOnInput, techSelectRow, updateVariantDepthNote, uploadScenarioFile, viewRunResults, wizardNav } from './features/reports.js';
 import { closeRerunReview, closeRerunReviewOnBackdrop, openCampaignRerunReview, openRerunReview, startRerunFromReview } from './features/rerun-review.js';
 import { cancelScheduledAssessment, closeSchedWizard, loadScheduledAssessments, openSchedWizard, openSchedWizardForEdit, schedAuthCheckChange, schedOnModeChange, schedOnRecurrenceChange, schedToggleAgentFromChecked, schedToggleGroupFromChecked, schedWizardNav, submitScheduledAssessment } from './features/scheduled.js';
 import { _dismissLicenseGraceBanner, ackAllTamperEvents, doLogin, doLogoutFromMenu, goToProfileFromMenu, licenseBannerDismissHoverOff, licenseBannerDismissHoverOn, openAgentDetailRiskTab, openSettingsFromMenu, setAgentsView, setDashView, showTab, tamperAckHoverOff, tamperAckHoverOn, toggleSidebarCollapsed, toggleUserMenuFromEvent } from './features/shell.js';
 import { closeTAXIIConnectorModal, deleteTAXIIConnector, loadARTContentStatus, loadTAXIIConnectors, openTAXIIConnectorModal, removeConnectorConfig, reseedART, saveConnectorConfig, saveTAXIIConnectorForm, simCovHoverOff, simCovHoverOn, syncTAXIIConnectorNow, taxiiToggleAuthFields, testConnectorConfig, testTAXIIConnectorForm, toggleSimCoverage, triggerConnectorSync } from './features/threat-intel.js';
 import { loadVariantTab } from './features/variant-executor.js';
 import { loadVariantMatrixFromButton } from './features/variant-report.js';
-import { _vexCheckAgentSweepConflict, filterVexTechniques, pollVariantRun, renderVexGroupSummary, renderVexRunGroupSummary, runVariants, setVexRunTargetMode, setVexTargetMode, showVexStatHelp, stopVex, stopVexSweep, vexClearAll, vexRunFullSweep, vexSelectAll } from './features/variants.js';
+import { _vexCheckAgentSweepConflict, filterVexTechniques, pollVariantRun, renderVexGroupSummary, renderVexRunGroupSummary, runVariants, setVexRunTargetMode, setVexTargetMode, showVexStatHelp, stopVex, stopVexSweep, vexClearAll, vexRunFullSweep, vexRunGroupChange, vexSelectAll, vexSweepGroupChange } from './features/variants.js';
 
 // Called from inline on*= handlers.
 export const HANDLER_FUNCTIONS = {
   _apCancelJob,
   _dismissLicenseGraceBanner,
-  _setEMExtraSearch,
-  _setVexPreviewSearch,
-  _setVexPreviewTactic,
   _toggleEMExtraScenario,
   _toggleEMPreviewRow,
   _toggleVexPreviewRow,
@@ -59,7 +56,6 @@ export const HANDLER_FUNCTIONS = {
   closeAdvDrawer,
   closeAdvRunModal,
   closeAgentDetail,
-  closeAllRowMenus,
   closeBuilder,
   closeCampaignDetail,
   closeCampaignLaunch,
@@ -101,8 +97,6 @@ export const HANDLER_FUNCTIONS = {
   cmpOnGroupChange,
   cmpOnTargetTypeChange,
   cmpSelectAllFiltered,
-  cmpToggleExclusion,
-  cmpUpdateCount,
   confirmAdversaryRun,
   confirmRun,
   confirmTmplRun,
@@ -118,14 +112,10 @@ export const HANDLER_FUNCTIONS = {
   dispatchAPCollect,
   doLogin,
   doResetPassword,
-  downloadAuditPack,
   downloadBuilderYaml,
   downloadCampaignCSV,
   downloadCampaignReport,
   downloadEMSweepReport,
-  downloadFullReportCSV,
-  downloadFullReportJSON,
-  downloadFullReportPDF,
   downloadRunCSV,
   downloadRunReport,
   downloadSweepReport,
@@ -141,7 +131,6 @@ export const HANDLER_FUNCTIONS = {
   generateTIScenario,
   initiativeArchiveAction,
   initiativeCloseAction,
-  initiativeDeleteAction,
   initiativeDetachJob,
   initiativeRenderAttachList,
   initiativeSetFilter,
@@ -173,8 +162,6 @@ export const HANDLER_FUNCTIONS = {
   loadScheduledAssessments,
   loadTAXIIConnectors,
   loadVariantTab,
-  moveAgentToGroupPrompt,
-  moveStep,
   onAgentSearchInput,
   openAPAbout,
   openAPAssets,
@@ -185,7 +172,6 @@ export const HANDLER_FUNCTIONS = {
   openAdvDrawer,
   openAdvRunModal,
   openAgentDetail,
-  openAgentGroupMenu,
   openBuilder,
   openBuilderARTPicker,
   openBuilderCalderaPicker,
@@ -206,7 +192,6 @@ export const HANDLER_FUNCTIONS = {
   openExerciseDetail,
   openExposureDetail,
   openFinding,
-  openFullReport,
   openIOCDetail,
   openIOCImportModal,
   openInitiativeAttachDrawer,
@@ -217,7 +202,6 @@ export const HANDLER_FUNCTIONS = {
   openPicker,
   openPickerFromModal,
   openRemediation,
-  openRemoveAgentModal,
   openReportGen,
   openRerunReview,
   openRespondModal,
@@ -225,12 +209,10 @@ export const HANDLER_FUNCTIONS = {
   openRunReport,
   openSchedWizard,
   openSchedWizardForEdit,
-  openStopAgentModal,
   openSweepDrilldown,
   openTAXIIConnectorModal,
   openTechnique,
   openTmplRun,
-  openUninstallAgentModal,
   pauseCampaign,
   pauseRun,
   pickerSelectAll,
@@ -244,7 +226,6 @@ export const HANDLER_FUNCTIONS = {
   removeConnectorConfig,
   removeOpenAEVConfig,
   removeStep,
-  renderAdditionalAgentsCount,
   renderAdvRunWarn,
   renderAdversaryLibrary,
   renderBuilderMode,
@@ -256,7 +237,6 @@ export const HANDLER_FUNCTIONS = {
   renderResponseConnectorFields,
   renderRunMode,
   renderScenarios,
-  renderTmplAgentCount,
   renderTmplGroupSummary,
   renderTmplOSCompat,
   renderUTL,
@@ -269,7 +249,6 @@ export const HANDLER_FUNCTIONS = {
   runConfirmDiffModal,
   runRansomwareDrill,
   runVariants,
-  safeScan,
   saveAPAsset,
   saveAPSchedule,
   saveConnectorConfig,
@@ -339,7 +318,6 @@ export const HANDLER_FUNCTIONS = {
   techChangeSelection,
   techCopyId,
   techOnBlur,
-  techOnKeydown,
   techSelectRow,
   testConnectorById,
   testConnectorConfig,
@@ -352,7 +330,6 @@ export const HANDLER_FUNCTIONS = {
   toggleEvidence,
   toggleFindingCheck,
   toggleIOCSuppressed,
-  toggleRowMenu,
   toggleRunIOCRow,
   toggleScenarioSrcGroup,
   toggleSecret,
@@ -388,6 +365,12 @@ export const HANDLER_FUNCTIONS = {
 export const ACTIONS = {
   ...HANDLER_FUNCTIONS,
   stopEvent,
+  abortExecutionStop,
+  addlSelChange,
+  approveForLocalUse,
+  approveLocalAckChanged,
+  closeApproveLocalModal,
+  submitApproveLocal,
   apAssetsClose,
   apCollectViewResults,
   apScheduleClose,
@@ -411,36 +394,82 @@ export const ACTIONS = {
   closeSweepDrilldownOnBackdrop,
   closeSweepPreviewOnBackdrop,
   cmpAllConfirmChange,
+  cmpSelChange,
+  cmpToggleExclusionFromChecked,
+  connectorProjectSelectChange,
   doLogoutFromMenu,
+  emGroupSelChange,
   goToProfileFromMenu,
+  initiativeAttachSelect,
+  initiativeDeleteFromMenu,
   licenseBannerDismissHoverOff,
   licenseBannerDismissHoverOn,
   loadAdversariesStop,
+  loadAgtLogsTelemetryMetric,
   loadIOCRegistryOnEnter,
   loadVariantMatrixFromButton,
   manageUsersLink,
+  moveStepBy,
   openAgentDetailRiskTab,
+  openAgentGroupMenuStop,
   openComplianceDetail,
+  openEMSweepReport,
+  openFindingFromDashboard,
+  openModalForScenario,
+  openRunPanelAction,
+  openScenarioCategory,
   openSettingsFromMenu,
+  openSweepReport,
+  openThreatPriorityActor,
   pickScenarioUploadFile,
+  previewScenarioOverlay,
+  rowMenuAuditPack,
+  rowMenuDetail,
+  rowMenuMoveGroup,
+  rowMenuRemoveAgent,
+  rowMenuReportCsv,
+  rowMenuReportHtml,
+  rowMenuReportJson,
+  rowMenuReportPdf,
+  rowMenuRunSimulation,
+  rowMenuSafeScan,
+  rowMenuStopAgent,
+  rowMenuUninstallAgent,
+  runGroupChange,
+  scenarioCategoryKeydown,
+  scenarioPinKeydown,
   scenarioSearchClear,
   schedAuthCheckChange,
   schedToggleAgentFromChecked,
   schedToggleGroupFromChecked,
+  setEMExtraSearchFromInput,
   setRunIOCSearchFromInput,
+  setVexPreviewSearchFromInput,
+  setVexPreviewTacticFromSelect,
   simCovHoverOff,
   simCovHoverOn,
   stopEMSweepCurrent,
   tamperAckHoverOff,
   tamperAckHoverOn,
+  techKeydown,
+  techOnInput,
+  tmplGroupChange,
   tmplRunModeChange,
+  tmplSelAgentChange,
   toggleAllFindingChecksFromChecked,
+  toggleDesc,
+  toggleLiveStepAction,
+  toggleRowMenuById,
+  toggleScenarioPinFromEvent,
   toggleUserMenuFromEvent,
+  vexRunGroupChange,
+  vexSweepGroupChange,
 };
 
 // Named only via strings: window[name] lookups and handler names built at runtime
 // (e.g. covSegHtml(..., 'setAgentFilter')). Keep this list in sync when adding one.
 export const DYNAMIC_HANDLERS = [
+  'openAgentDetail',
   'openEMSweepProgress',
   'openSweepDrilldown',
   'renderGroupTargetSummary',

@@ -3,6 +3,7 @@
 import { state as appState } from '../core/state.js';
 import { apicall } from '../core/api.js';
 import { x } from '../core/escape.js';
+import { on } from '../core/actions.js';
 import { showToast } from '../core/util.js';
 import { MODE_LABELS, verdictBadge, verdictCounts } from './reports.js';
 
@@ -148,7 +149,7 @@ export function __init_L16159() {
       }
 
       rows.push(
-        '<li style="border-bottom:1px solid var(--border);padding:0.3rem 0;cursor:pointer" onclick="window.toggleLiveStep(\'' + task.replace(/\\/g, '\\\\').replace(/'/g, "\\'") + '\')">' +
+        '<li style="border-bottom:1px solid var(--border);padding:0.3rem 0;cursor:pointer"' + on('click', 'toggleLiveStepAction', task) + '>' +
           // Main line: dot · ID · name · state. name wraps onto additional
           // lines rather than truncating with an ellipsis, so the complete
           // title (including its own technique-ID prefix, when the real ART
@@ -239,7 +240,7 @@ export function __init_L16159() {
   // overwrites this via applyEvent's own assignment -- harmless, since both
   // sources should always agree once it's found.
   // mode/maxPrivilege are passed as plain strings (not a JSON object) since
-  // this is invoked from inline onclick="..." HTML attributes elsewhere —
+  // this is invoked from data-args action attributes elsewhere —
   // an embedded JSON.stringify object's double quotes would terminate the
   // attribute early.
   window.openRunPanel = async function (runId, name, knownStepsTotal, mode, maxPrivilege) {
@@ -271,6 +272,10 @@ export function __init_L16159() {
 }
 
 
+export function toggleLiveStepAction(taskId) { window.toggleLiveStep(taskId); }
+export function openRunPanelAction(runId, name, knownStepsTotal, mode, maxPrivilege) { return window.openRunPanel(runId, name, knownStepsTotal, mode, maxPrivilege); }
+export function openSweepReport(sweepId) { window.open('/api/vex/sweeps/' + encodeURIComponent(sweepId) + '/report', '_blank'); }
+
 export function closeRunLive() { document.getElementById('run-live-overlay').classList.remove('open'); }
 export function closeRunLiveOnBackdrop(el, event) { if (event.target === el) closeRunLive(); }
 
@@ -290,12 +295,12 @@ export function openSweepDrilldown(sweepId) {
     document.getElementById('sweep-drilldown-summary').textContent =
       sw.status + ' · ' + childRuns.length + ' technique(s) dispatched';
     document.getElementById('sweep-drilldown-actions').innerHTML =
-      '<button class="btn btn-outline btn-sm" onclick="window.open(\'/api/vex/sweeps/' + encodeURIComponent(sweepId) + '/report\',\'_blank\')" title="Open the combined sweep report">&#8599; HTML Report</button> ' +
-      '<button class="btn btn-outline btn-sm" onclick="downloadSweepReport(\'' + x(sweepId) + '\')" title="Download the combined sweep report as a PDF file">&#8595; PDF Report</button>';
+      '<button class="btn btn-outline btn-sm"' + on('click', 'openSweepReport', sweepId) + ' title="Open the combined sweep report">&#8599; HTML Report</button> ' +
+      '<button class="btn btn-outline btn-sm"' + on('click', 'downloadSweepReport', sweepId) + ' title="Download the combined sweep report as a PDF file">&#8595; PDF Report</button>';
     document.getElementById('sweep-drilldown-list').innerHTML = childRuns.map(function(r) {
       var badge = verdictBadge(r, r.status);
       var liveBtn = (r.id && r.status === 'running')
-        ? '<button class="btn btn-outline btn-sm" onclick="openRunPanel(\'' + x(r.id) + '\',\'' + x(r.name).replace(/'/g,'&#39;') + '\',' + ((r.progress && r.progress.stepsTotal) || 0) + ',\'' + x(r.mode||'') + '\',\'' + x(r.maxPrivilege||'') + '\')">&#9673; Live</button> '
+        ? '<button class="btn btn-outline btn-sm" ' + on('click', 'openRunPanelAction', r.id, r.name, (r.progress && r.progress.stepsTotal) || 0, r.mode || '', r.maxPrivilege || '') + '>&#9673; Live</button> '
         : '';
       // A cancelled/partial technique run never gets the agent's one atomic
       // `results` write, so verdictCounts(r).total is always 0 -- but its per-step pass/fail
@@ -304,11 +309,11 @@ export function openSweepDrilldown(sweepId) {
       // that real data instead of a plain, unclickable status label.
       var resultBtn;
       if (verdictCounts(r).total) {
-        resultBtn = '<button class="btn btn-outline btn-sm" onclick=\'viewRunResults(' + JSON.stringify(r).replace(/'/g,"&#39;") + ')\'>' + badge + '</button>';
+        resultBtn = '<button class="btn btn-outline btn-sm" ' + on('click', 'viewRunResults', r) + '>' + badge + '</button>';
       } else if (r.id && r.status !== 'running' && r.progress) {
         var pr = r.progress;
         var toBadge = pr.stepsFailed + ' fail / ' + pr.stepsPassed + ' pass' + (pr.stepsTimeout ? ' / ' + pr.stepsTimeout + ' timeout' : '');
-        resultBtn = '<button class="btn btn-outline btn-sm" onclick="openRunPanel(\'' + x(r.id) + '\',\'' + x(r.name).replace(/'/g,'&#39;') + '\',' + (pr.stepsTotal || 0) + ',\'' + x(r.mode||'') + '\',\'' + x(r.maxPrivilege||'') + '\')">' + toBadge + '</button>';
+        resultBtn = '<button class="btn btn-outline btn-sm"' + on('click', 'openRunPanelAction', r.id, r.name, pr.stepsTotal || 0, r.mode || '', r.maxPrivilege || '') + '>' + toBadge + '</button>';
       } else {
         resultBtn = '<span class="tiny muted">' + x(badge) + '</span>';
       }

@@ -106,7 +106,10 @@ func TestHasPermission_MatrixIsComplete(t *testing.T) {
 		CanViewSSOConfig: true, CanManageSSOConfig: true,
 		CanViewSCIMConfig: true, CanManageSCIMConfig: true,
 		CanExecuteRemediation: true, CanApproveRemediation: true,
-		CanManageBackups: true,
+		CanManageBackups:        true,
+		CanResolveActorIdentity: true,
+
+		CanViewContentArtifact: true, CanTransitionContent: true, CanViewContentMigrationReport: true,
 	}
 	for _, p := range Permissions(RoleAdmin) {
 		if !tested[p] {
@@ -157,6 +160,8 @@ func TestPermissions_Ordering(t *testing.T) {
 
 		CanExecuteRemediation, CanApproveRemediation,
 		CanManageBackups,
+		CanResolveActorIdentity,
+		CanViewContentArtifact, CanTransitionContent, CanViewContentMigrationReport,
 	}
 	if len(got) != len(want) {
 		t.Fatalf("Permissions(RoleAdmin) len = %d, want %d", len(got), len(want))
@@ -309,5 +314,30 @@ func TestCanManageBackups_AdminOnly(t *testing.T) {
 	}
 	if HasPermission(RoleViewer, CanManageBackups) {
 		t.Error("expected RoleViewer NOT to hold CanManageBackups")
+	}
+}
+
+// Content registry: artifact view is Analyst+Admin; transition and the
+// migration report are Admin only; Viewer holds none.
+func TestContentRegistryPermissions(t *testing.T) {
+	cases := []struct {
+		role Role
+		perm Permission
+		want bool
+	}{
+		{RoleAdmin, CanViewContentArtifact, true},
+		{RoleAnalyst, CanViewContentArtifact, true},
+		{RoleViewer, CanViewContentArtifact, false},
+		{RoleAdmin, CanTransitionContent, true},
+		{RoleAnalyst, CanTransitionContent, false},
+		{RoleViewer, CanTransitionContent, false},
+		{RoleAdmin, CanViewContentMigrationReport, true},
+		{RoleAnalyst, CanViewContentMigrationReport, false},
+		{RoleViewer, CanViewContentMigrationReport, false},
+	}
+	for _, c := range cases {
+		if got := HasPermission(c.role, c.perm); got != c.want {
+			t.Errorf("HasPermission(%s, %s) = %v, want %v", c.role, c.perm, got, c.want)
+		}
 	}
 }

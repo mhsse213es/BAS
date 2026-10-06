@@ -78,6 +78,36 @@ func grantApp(ctx context.Context, conn *pgx.Conn) error {
 			GRANT USAGE, SELECT ON SEQUENCES TO ` + AppRole,
 		// audit_logs is append-only; must follow the blanket grant above.
 		`REVOKE UPDATE, DELETE ON audit_logs FROM ` + AppRole,
+
+		// Content Registry immutability (TCF Phase 1 §4.2). A table-level
+		// REVOKE also removes column privileges, so the column GRANT must
+		// come after it -- otherwise the blanket grant above would keep
+		// bas_app able to rewrite artifact bytes.
+		`REVOKE UPDATE, DELETE ON content_versions FROM ` + AppRole,
+		`GRANT UPDATE (lifecycle, trust_level, signature_bytes) ON content_versions TO ` + AppRole,
+		`REVOKE UPDATE, DELETE ON content_version_events FROM ` + AppRole,
+		`REVOKE UPDATE, DELETE ON content_version_sources FROM ` + AppRole,
+		`REVOKE UPDATE, DELETE ON content_safety_verdicts FROM ` + AppRole,
+		`REVOKE DELETE ON scenarios FROM ` + AppRole,
+		`REVOKE UPDATE, DELETE ON content_validations FROM ` + AppRole,
+		`REVOKE UPDATE, DELETE ON content_registry_state FROM ` + AppRole,
+
+		// TCF Phase 2A identity (spec 2026-10-06 §12). Append-only evidence of
+		// identity decisions; candidates change only through Decide's columns;
+		// actor ids are immutable (no UPDATE on id).
+		`REVOKE UPDATE, DELETE ON actor_source_identities FROM ` + AppRole,
+		`REVOKE UPDATE, DELETE ON actor_identity_overrides FROM ` + AppRole,
+		`REVOKE UPDATE, DELETE ON campaign_actors FROM ` + AppRole,
+		`REVOKE UPDATE, DELETE ON malware_actors FROM ` + AppRole,
+		`REVOKE UPDATE, DELETE ON tool_actors FROM ` + AppRole,
+		`REVOKE UPDATE, DELETE ON content_generation_owners FROM ` + AppRole,
+		`REVOKE UPDATE, DELETE ON content_version_threats FROM ` + AppRole,
+		`REVOKE DELETE ON threats FROM ` + AppRole,
+		`REVOKE UPDATE, DELETE ON actor_resolution_candidates FROM ` + AppRole,
+		`GRANT UPDATE (status, decided_actor_id, decided_by, decided_at, decision_reason) ON actor_resolution_candidates TO ` + AppRole,
+		`REVOKE UPDATE, DELETE ON threat_actor_profiles FROM ` + AppRole,
+		`GRANT UPDATE (name, aliases, sectors, regions, source, last_seen, confidence, canonical_group_id, techniques, updated_at) ON threat_actor_profiles TO ` + AppRole,
+
 		// Bookkeeping is read-only at runtime (CheckRuntime SELECTs it): a
 		// write could mark the schema dirty/newer and force a rollback.
 		`REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON schema_migrations, reference_data_version, h1_adoption_report FROM ` + AppRole,

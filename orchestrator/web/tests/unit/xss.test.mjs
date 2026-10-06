@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import { setupDom, load, PAYLOADS } from './dom.mjs';
 
 setupDom();
-const { initiativeStateLabel, openAdvDrawer, openFinding, renderRunReportExtra, renderVariantCoverage, complianceTile, renderAgentRiskSummary, loadScheduledAssessments } =
-  await load(['initiativeStateLabel', 'openAdvDrawer', 'openFinding', 'renderRunReportExtra', 'renderVariantCoverage', 'complianceTile', 'renderAgentRiskSummary', 'loadScheduledAssessments']);
+const { initiativeStateLabel, openAdvDrawer, openFinding, renderRunReportExtra, renderVariantCoverage, complianceTile, renderAgentRiskSummary, loadScheduledAssessments, loadTAXIIConnectors, loadUsers, openSweepDrilldown, loadAgtLogs, renderResponseConnectorList, loadInitiatives, loadAdversaries, vexStatCard, vfLoadQueue, loadExercisesTab, loadFindings, loadEmTab, loadCampaigns, loadRuns, loadAgents } =
+  await load(['initiativeStateLabel', 'openAdvDrawer', 'openFinding', 'renderRunReportExtra', 'renderVariantCoverage', 'complianceTile', 'renderAgentRiskSummary', 'loadScheduledAssessments', 'loadTAXIIConnectors', 'loadUsers', 'openSweepDrilldown', 'loadAgtLogs', 'renderResponseConnectorList', 'loadInitiatives', 'loadAdversaries', 'vexStatCard', 'vfLoadQueue', 'loadExercisesTab', 'loadFindings', 'loadEmTab', 'loadCampaigns', 'loadRuns', 'loadAgents']);
 const tick = () => new Promise((r) => setTimeout(r, 0));
 
 function assertInert(container, label) {
@@ -96,6 +96,197 @@ test('scheduled: loadScheduledAssessments keeps payloads inside data-args', asyn
     await tick(); await tick();
     const div = document.getElementById('sched-body');
     assertInert(div, 'loadScheduledAssessments');
+    assert.ok(div.querySelector('[data-args]'), 'fixture did not render');
+    const args = [...div.querySelectorAll('[data-args]')].map((e) => e.getAttribute('data-args')).join(' ');
+    assert.ok(args.includes(JSON.stringify(p).slice(1, -1)), 'payload should travel as data-args');
+  }
+});
+
+test('threat-intel: loadTAXIIConnectors keeps payloads inside data-args', async () => {
+  for (const p of PAYLOADS) {
+    globalThis.fetch = async () => ({ status: 200, json: async () => [{ id: p, name: p, serverUrl: p, enabled: true }] });
+    loadTAXIIConnectors();
+    await tick(); await tick();
+    const div = document.getElementById('taxii-connectors-body');
+    assertInert(div, 'loadTAXIIConnectors');
+    assert.ok(div.querySelector('[data-args]'), 'fixture did not render');
+    const args = [...div.querySelectorAll('[data-args]')].map((e) => e.getAttribute('data-args')).join(' ');
+    assert.ok(args.includes(JSON.stringify(p).slice(1, -1)), 'payload should travel as data-args');
+  }
+});
+
+test('evidence: loadUsers keeps payloads inside data-args', async () => {
+  for (const p of PAYLOADS) {
+    globalThis.fetch = async () => ({ status: 200, json: async () => ([{ id: p, username: p, role: p, isActive: true }]) });
+    loadUsers();
+    await tick(); await tick();
+    const div = document.getElementById('users-body');
+    assertInert(div, 'loadUsers');
+    assert.ok(div.querySelector('[data-args]'), 'fixture did not render');
+    const args = [...div.querySelectorAll('[data-args]')].map((e) => e.getAttribute('data-args')).join(' ');
+    assert.ok(args.includes(JSON.stringify(p).slice(1, -1)), 'payload should travel as data-args');
+  }
+});
+
+test('live-run: openSweepDrilldown keeps payloads inside data-args', async () => {
+  for (const p of PAYLOADS) {
+    globalThis.fetch = async () => ({ status: 200, json: async () => ({ sweep: { agentId: p, status: p }, runs: [{ id: p, name: p, status: 'running', mode: p, maxPrivilege: p }] }) });
+    openSweepDrilldown('sweep1');
+    await tick(); await tick();
+    const div = document.getElementById('sweep-drilldown-list');
+    assertInert(div, 'openSweepDrilldown');
+    assert.ok(div.querySelector('[data-args]'), 'fixture did not render');
+    const args = [...div.querySelectorAll('[data-args]')].map((e) => e.getAttribute('data-args')).join(' ');
+    assert.ok(args.includes(JSON.stringify(p).slice(1, -1)), 'payload should travel as data-args');
+  }
+});
+
+test('agent-drawer: loadAgtLogs keeps payloads inside data-args', async () => {
+  for (const p of PAYLOADS) {
+    globalThis.fetch = async () => ({ status: 200, json: async () => ({ entries: [], logs: [] }) });
+    loadAgtLogs(p, 'operational');
+    await tick(); await tick();
+    const div = document.getElementById('agt-tab-logs');
+    assertInert(div, 'loadAgtLogs');
+    assert.ok(div.querySelector('[data-args]'), 'fixture did not render');
+    const args = [...div.querySelectorAll('[data-args]')].map((e) => e.getAttribute('data-args')).join(' ');
+    assert.ok(args.includes(JSON.stringify(p).slice(1, -1)), 'payload should travel as data-args');
+  }
+});
+
+test('integrations: renderResponseConnectorList keeps payloads inside data-args', () => {
+  for (const p of PAYLOADS) {
+    renderResponseConnectorList([{ id: p, name: p, provider: 'crowdstrike', enabled: true }]);
+    const div = document.getElementById('response-connectors-list');
+    assertInert(div, 'renderResponseConnectorList');
+    assert.ok(div.querySelector('[data-args]'), 'fixture did not render');
+    const args = [...div.querySelectorAll('[data-args]')].map((e) => e.getAttribute('data-args')).join(' ');
+    assert.ok(args.includes(JSON.stringify(p).slice(1, -1)), 'payload should travel as data-args');
+  }
+});
+
+test('initiatives: loadInitiatives keeps payloads inside data-args', async () => {
+  for (const p of PAYLOADS) {
+    globalThis.fetch = async () => ({ status: 200, json: async () => ({ initiatives: [{ ID: p, Name: p, State: 'archived', CreatedBy: p }] }) });
+    loadInitiatives();
+    await tick(); await tick();
+    const div = document.getElementById('init-body');
+    assertInert(div, 'loadInitiatives');
+    assert.ok(div.querySelector('[data-args]'), 'fixture did not render');
+    const args = [...div.querySelectorAll('[data-args]')].map((e) => e.getAttribute('data-args')).join(' ');
+    assert.ok(args.includes(JSON.stringify(p).slice(1, -1)), 'payload should travel as data-args');
+  }
+});
+
+test('adversaries: loadAdversaries keeps payloads inside data-args', async () => {
+  for (const p of PAYLOADS) {
+    globalThis.fetch = async () => ({ status: 200, json: async () => ([{ id: p, name: p, description: p, tactics: [p] }]) });
+    loadAdversaries();
+    await tick(); await tick();
+    const div = document.getElementById('adv-grid');
+    assertInert(div, 'loadAdversaries');
+    assert.ok(div.querySelector('[data-args]'), 'fixture did not render');
+    const args = [...div.querySelectorAll('[data-args]')].map((e) => e.getAttribute('data-args')).join(' ');
+    assert.ok(args.includes(JSON.stringify(p).slice(1, -1)), 'payload should travel as data-args');
+  }
+});
+
+test('variants: vexStatCard keeps payloads inside data-args', () => {
+  for (const p of PAYLOADS) {
+    const div = document.createElement('div');
+    div.innerHTML = vexStatCard('Label', 5, 'var(--accent)', 'sub', p);
+    assertInert(div, 'vexStatCard');
+    const args = [...div.querySelectorAll('[data-args]')].map((e) => e.getAttribute('data-args')).join(' ');
+    assert.ok(args.includes(JSON.stringify(p).slice(1, -1)), 'payload should travel as data-args');
+  }
+});
+
+test('detection-verification: vfLoadQueue keeps payloads inside data-args', async () => {
+  for (const p of PAYLOADS) {
+    document.getElementById('vf-run').innerHTML = '<option value="run1" selected>run1</option>';
+    globalThis.fetch = async () => ({ status: 200, json: async () => ({ items: [{ expectationId: p, verificationId: p, status: 'pending', techniqueId: p, technique: p, name: p, domain: p }] }) });
+    vfLoadQueue();
+    await tick(); await tick();
+    const div = document.getElementById('vf-queue');
+    assertInert(div, 'vfLoadQueue');
+    assert.ok(div.querySelector('[data-args]'), 'fixture did not render');
+    const args = [...div.querySelectorAll('[data-args]')].map((e) => e.getAttribute('data-args')).join(' ');
+    assert.ok(args.includes(JSON.stringify(p).slice(1, -1)), 'payload should travel as data-args');
+  }
+});
+
+test('openaev: loadExercisesTab keeps payloads inside data-args', async () => {
+  for (const p of PAYLOADS) {
+    globalThis.fetch = async () => ({ status: 200, json: async () => ([{ id: p, name: p, steps: [] }]) });
+    loadExercisesTab();
+    await tick(); await tick();
+    const div = document.getElementById('ex-plans-body');
+    assertInert(div, 'loadExercisesTab');
+    assert.ok(div.querySelector('[data-args]'), 'fixture did not render');
+    const args = [...div.querySelectorAll('[data-args]')].map((e) => e.getAttribute('data-args')).join(' ');
+    assert.ok(args.includes(JSON.stringify(p).slice(1, -1)), 'payload should travel as data-args');
+  }
+});
+
+test('findings: loadFindings keeps payloads inside data-args', async () => {
+  for (const p of PAYLOADS) {
+    globalThis.fetch = async () => ({ status: 200, json: async () => ([{ id: p, status: 'open', techniqueId: p, techniqueName: p, severity: 'high', agentId: p }]) });
+    loadFindings();
+    await tick(); await tick();
+    const div = document.getElementById('findings-body');
+    assertInert(div, 'loadFindings');
+    assert.ok(div.querySelector('[data-args]'), 'fixture did not render');
+    const args = [...div.querySelectorAll('[data-args]')].map((e) => e.getAttribute('data-args')).join(' ');
+    assert.ok(args.includes(JSON.stringify(p).slice(1, -1)), 'payload should travel as data-args');
+  }
+});
+
+test('endpoint-mastery: loadEmTab keeps payloads inside data-args', async () => {
+  for (const p of PAYLOADS) {
+    globalThis.fetch = async (url) => ({ status: 200, json: async () => (String(url).includes('/api/agents') ? [{ agentId: p }] : [{ id: p, scenarioId: 'em-01-control-validation', name: p, status: 'completed', results: [{ result: 'pass' }] }]) });
+    loadEmTab();
+    await tick(); await tick();
+    const div = document.getElementById('em-grid');
+    assertInert(div, 'loadEmTab');
+    assert.ok(div.querySelector('[data-args]'), 'fixture did not render');
+    const args = [...div.querySelectorAll('[data-args]')].map((e) => e.getAttribute('data-args')).join(' ');
+    assert.ok(args.includes(JSON.stringify(p).slice(1, -1)), 'payload should travel as data-args');
+  }
+});
+
+test('campaigns: loadCampaigns keeps payloads inside data-args', async () => {
+  for (const p of PAYLOADS) {
+    globalThis.fetch = async () => ({ status: 200, json: async () => ([{ id: p, name: p, summary: { status: 'completed' }, targetType: 'agent' }]) });
+    loadCampaigns();
+    await tick(); await tick();
+    const div = document.getElementById('campaigns-body');
+    assertInert(div, 'loadCampaigns');
+    assert.ok(div.querySelector('[data-args]'), 'fixture did not render');
+    const args = [...div.querySelectorAll('[data-args]')].map((e) => e.getAttribute('data-args')).join(' ');
+    assert.ok(args.includes(JSON.stringify(p).slice(1, -1)), 'payload should travel as data-args');
+  }
+});
+
+test('reports: loadRuns keeps payloads inside data-args', async () => {
+  for (const p of PAYLOADS) {
+    globalThis.fetch = async () => ({ status: 200, json: async () => ([{ id: p, name: p, status: 'running', agentId: p, mode: p, maxPrivilege: p, startedAt: '2026-01-01T00:00:00Z' }]) });
+    loadRuns();
+    await tick(); await tick();
+    const div = document.getElementById('runs-body');
+    assertInert(div, 'loadRuns');
+    assert.ok(div.querySelector('[data-args]'), 'fixture did not render');
+    const args = [...div.querySelectorAll('[data-args]')].map((e) => e.getAttribute('data-args')).join(' ');
+    assert.ok(args.includes(JSON.stringify(p).slice(1, -1)), 'payload should travel as data-args');
+  }
+});
+
+test('attack-path: loadAgents keeps payloads inside data-args', async () => {
+  for (const p of PAYLOADS) {
+    globalThis.fetch = async () => ({ status: 200, json: async () => ({ items: [{ agentId: p, hostname: p, status: 'online', osVersion: 'x' }], totals: { online: 1, degraded: 0, offline: 0, retired: 0 } }) });
+    loadAgents();
+    await tick(); await tick();
+    const div = document.getElementById('agents-body');
+    assertInert(div, 'loadAgents');
     assert.ok(div.querySelector('[data-args]'), 'fixture did not render');
     const args = [...div.querySelectorAll('[data-args]')].map((e) => e.getAttribute('data-args')).join(' ');
     assert.ok(args.includes(JSON.stringify(p).slice(1, -1)), 'payload should travel as data-args');

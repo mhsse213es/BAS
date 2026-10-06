@@ -24,7 +24,7 @@ const result = await build({
   entryNames: '[name].[hash]',
   // Absolute same-origin URLs in CSS (e.g. url(/images/logo.png)) are served
   // as-is, never inlined or resolved by the bundler.
-  external: ['/images/*', '/assets/*'],
+  external: ['/images/*', '/assets/*', '/fonts/*'],
   metafile: true,
   logLevel: 'warning',
 });
@@ -40,6 +40,7 @@ if (!jsName || !cssName) throw new Error('esbuild did not emit app js/css');
 const html = readFileSync(join(web, 'index.html'), 'utf8').replace('%%APP_JS%%', jsName).replace('%%APP_CSS%%', cssName);
 writeFileSync(join(dist, 'index.html'), html);
 cpSync(join(web, 'images'), join(dist, 'images'), { recursive: true });
+cpSync(join(web, 'fonts'), join(dist, 'fonts'), { recursive: true, filter: (p) => !p.endsWith('.txt') });
 
 const files = [];
 (function walk(d) { for (const e of readdirSync(d)) { const p = join(d, e); if (statSync(p).isDirectory()) walk(p); else files.push(p); } })(dist);

@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """Deterministic merge of the G1 classifier + indirect-sink-trace outputs
-into Assessment/G1_FINAL_CLASSIFICATION.json (CI source of truth) and
-Assessment/G1_FINAL_CLASSIFICATION.csv (human/audit view).
+into security/g1/G1_FINAL_CLASSIFICATION.json (CI source of truth) and
+security/g1/G1_FINAL_CLASSIFICATION.csv (human/audit view).
 
 Reads (never modifies, never re-derives):
-  Assessment/G1_INNERHTML_SINK_INVENTORY.csv  (from g1-innerhtml-sink-classifier.py)
-  Assessment/G1_INDIRECT_SINK_TRACE.csv       (from g1-trace-indirect-sinks.py)
+  security/g1/G1_INNERHTML_SINK_INVENTORY.csv  (from g1-innerhtml-sink-classifier.py)
+  security/g1/G1_INDIRECT_SINK_TRACE.csv       (from g1-trace-indirect-sinks.py)
 
 Trusts both files' function/target/op/rhs columns verbatim. The only
 judgment this script adds on top of the two upstream scripts is the
@@ -24,10 +24,10 @@ import re
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-INV_CSV = REPO_ROOT / "Assessment" / "G1_INNERHTML_SINK_INVENTORY.csv"
-TRACE_CSV = REPO_ROOT / "Assessment" / "G1_INDIRECT_SINK_TRACE.csv"
-OUT_JSON = REPO_ROOT / "Assessment" / "G1_FINAL_CLASSIFICATION.json"
-OUT_CSV = REPO_ROOT / "Assessment" / "G1_FINAL_CLASSIFICATION.csv"
+INV_CSV = REPO_ROOT / "security" / "g1" / "G1_INNERHTML_SINK_INVENTORY.csv"
+TRACE_CSV = REPO_ROOT / "security" / "g1" / "G1_INDIRECT_SINK_TRACE.csv"
+OUT_JSON = REPO_ROOT / "security" / "g1" / "G1_FINAL_CLASSIFICATION.json"
+OUT_CSV = REPO_ROOT / "security" / "g1" / "G1_FINAL_CLASSIFICATION.csv"
 
 INDIRECT_CATEGORIES = {"indirect_builder", "indirect_variable"}
 UNRESOLVED_CATEGORIES = {"indirect_builder", "indirect_variable", "unclear"}

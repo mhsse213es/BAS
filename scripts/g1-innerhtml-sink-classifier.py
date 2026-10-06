@@ -44,7 +44,7 @@ than forced guesses. See Assessment/G1_INNERHTML_SINK_INVENTORY_SUMMARY.md
 for the write-up of a run's results.
 
 Usage: python scripts/g1-innerhtml-sink-classifier.py
-Output: Assessment/G1_INNERHTML_SINK_INVENTORY.csv (+ .json), and a category
+Output: security/g1/G1_INNERHTML_SINK_INVENTORY.csv (+ .json), and a category
 count summary printed to stdout.
 """
 import csv
@@ -55,8 +55,8 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SRC = REPO_ROOT / "orchestrator" / "wwwroot" / "index.html"
-OUT_CSV = REPO_ROOT / "Assessment" / "G1_INNERHTML_SINK_INVENTORY.csv"
-OUT_JSON = REPO_ROOT / "Assessment" / "G1_INNERHTML_SINK_INVENTORY.json"
+OUT_CSV = REPO_ROOT / "security" / "g1" / "G1_INNERHTML_SINK_INVENTORY.csv"
+OUT_JSON = REPO_ROOT / "security" / "g1" / "G1_INNERHTML_SINK_INVENTORY.json"
 
 text = SRC.read_text(encoding="utf-8")
 lines = text.split("\n")

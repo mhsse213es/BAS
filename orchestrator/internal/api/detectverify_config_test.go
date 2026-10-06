@@ -86,7 +86,9 @@ func TestCreateDetectionConnector_ValidationErrors(t *testing.T) {
 		}{
 			{"missing name", map[string]any{"provider": "microsoft_sentinel"}},
 			{"missing provider", map[string]any{"name": "x"}},
-			{"invalid provider", map[string]any{"name": "x", "provider": "elastic"}},
+			{"invalid provider", map[string]any{"name": "x", "provider": "not_a_real_provider"}},
+			{"elastic no creds", map[string]any{"name": "x", "provider": "elastic"}},
+			{"elastic both creds", map[string]any{"name": "x", "provider": "elastic", "apiToken": "k", "clientId": "u", "clientSecret": "p"}},
 		}
 		for _, c := range cases {
 			rec := httptest.NewRecorder()

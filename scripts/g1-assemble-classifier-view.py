@@ -25,8 +25,15 @@ IMPORT_LINE = re.compile(r"^import [^\n]*;\n", re.M)
 EXPORT_KW = re.compile(r"^export (?=(?:async\s+)?function\b|var\b|let\b|const\b)", re.M)
 
 
+# on() (core/actions.js) returns only x()-escaped attribute text; the proven
+# classifier does not know the name, so the view presents it as the escaper.
+# Calls only: on()'s own definition must keep its name, or the view gets a
+# second, impure `function x` and the canonical-escaper check fails.
+ON_CALL = re.compile(r"(?<![\w$.])(?<!function )on\(")
+
+
 def _as_script(js):
-    return EXPORT_KW.sub("", IMPORT_LINE.sub("", js))
+    return ON_CALL.sub("x(", EXPORT_KW.sub("", IMPORT_LINE.sub("", js)))
 
 
 def assemble(web_dir):
