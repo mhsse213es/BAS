@@ -6,7 +6,7 @@ import { closeRemoveAgentModal, closeStopAgentModal, closeUninstallAgentModal, o
 import { closeAgentDetail, closeAgentDetailOnBackdrop, downloadAuditPack, downloadFullReportCSV, downloadFullReportJSON, downloadFullReportPDF, exportCompliance, filterControls, loadAgtLogs, loadAgtLogsTelemetryMetric, loadComplianceReport, openAgentDetail, openFullReport, safeScan, setAgentState, showAgentTab, toggleEvidence, updateLinuxDownloadCmd } from './features/agent-drawer.js';
 import { _apCancelJob, apAssetsClose, apCollectClose, apCollectViewResults, apCountTargets, apDiscoverSubnet, apScheduleClose, closeAPAbout, closeAllRowMenus, closeExposureDetail, closeExposureDetailOnBackdrop, closeGroupPicker, closeScenarioCategoryView, copyRecommendedScenario, copyText, createAgentGroupPrompt, dispatchAPCollect, loadAgents, loadAttackPath, loadCoverageMatrix, loadExecDashboard, loadExposureAssets, loadMoreAgents, loadRecommendations, loadScenarios, manageUsersLink, moveAgentToGroupPrompt, onAgentSearchInput, openAPAbout, openAPAssets, openAPCollect, openAPSchedule, openAgentGroupMenu, openExposureDetail, renderScenarios, saveAPAsset, saveAPSchedule, scenarioSearchClear, selectAgentGroup, selectDashPref, selectTheme, setAgentFilter, showAgentDownload, showSettingsSection, showThreatPriorityDetail, showThreatPriorityList, submitGroupPicker, toggleRowMenu, toggleRowMenuById, toggleScenarioSrcGroup, toggleSecret, unpreviewScenarioOverlay } from './features/attack-path.js';
 import { auditPage, backupNow, exportAuditLogs, loadAuditLogs, loadBackups, loadLicenseInfo, prepareRestore } from './features/audit-logs.js';
-import { closeCampaignDetail, closeCampaignLaunch, cmpAllConfirmChange, cmpOnExistingScenarioChange, cmpOnGroupChange, cmpOnTargetTypeChange, cmpSelectAllFiltered, cmpToggleExclusion, cmpUpdateCount, generateTIScenario, loadCampaigns, loadKEVPack, openCampaignDetail, openCampaignLaunch, openRunFromCampaign, pauseCampaign, renderCampaignTargets, resumeCampaign, selectTIPack, setCampaignSource, setCampaignTab, stopCampaign, submitCampaign } from './features/campaigns.js';
+import { closeCampaignDetail, closeCampaignLaunch, cmpAllConfirmChange, cmpOnExistingScenarioChange, cmpOnGroupChange, cmpOnTargetTypeChange, cmpSelChange, cmpSelectAllFiltered, cmpToggleExclusionFromChecked, generateTIScenario, loadCampaigns, loadKEVPack, openCampaignDetail, openCampaignLaunch, openRunFromCampaign, openThreatPriorityActor, pauseCampaign, renderCampaignTargets, resumeCampaign, selectTIPack, setCampaignSource, setCampaignTab, stopCampaign, submitCampaign } from './features/campaigns.js';
 import { closeChangePassword, closeChangePasswordOnBackdrop, closeConfirmDiffModal, loadCalderaStatus, openChangePassword, openComplianceDetail, runConfirmDiffModal, submitChangePassword } from './features/compliance.js';
 import { loadCoverageAnalytics, openTechnique, renderUTL, setCovView, setUTLFilter } from './features/coverage.js';
 import { vfCloseDetail, vfDeleteEvidence, vfLoadQueue, vfPickResult, vfSelect, vfSetDomain, vfSubmit, vfToggleHistory, vfUploadEvidence } from './features/detection-verification.js';
@@ -98,8 +98,6 @@ export const HANDLER_FUNCTIONS = {
   cmpOnGroupChange,
   cmpOnTargetTypeChange,
   cmpSelectAllFiltered,
-  cmpToggleExclusion,
-  cmpUpdateCount,
   confirmAdversaryRun,
   confirmRun,
   confirmTmplRun,
@@ -407,6 +405,8 @@ export const ACTIONS = {
   closeSweepDrilldownOnBackdrop,
   closeSweepPreviewOnBackdrop,
   cmpAllConfirmChange,
+  cmpSelChange,
+  cmpToggleExclusionFromChecked,
   connectorProjectSelectChange,
   doLogoutFromMenu,
   emGroupSelChange,
@@ -428,6 +428,7 @@ export const ACTIONS = {
   openRunPanelAction,
   openSettingsFromMenu,
   openSweepReport,
+  openThreatPriorityActor,
   pickScenarioUploadFile,
   scenarioSearchClear,
   schedAuthCheckChange,

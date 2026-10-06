@@ -1255,7 +1255,7 @@
   "target": "tb",
   "op": "=",
   "rhs": "list.map(function(c) {\n    var s = c.summary || {};\n    var cds = campaignDisplayStatus(s);\n    var status = '<span class=\"sbadge s-' + cds.cls + '\">' + x(cds.label) + '</span>';\n    if (s.status === 'running') {\n      status += '<div class=\"prog\" style=\"width:90px;margin-top:5px\"><i style=\"width:' + (s.progress || 0) + '%\"></i></div>' +\n        '<span class=\"tiny muted\">' + (s.progress || 0) + '%",
-  "rhs_len": 1364,
+  "rhs_len": 1360,
   "category": "unescaped_html",
   "data_source_tags": "user_created_name"
  },
@@ -1264,8 +1264,8 @@
   "function": "kv",
   "target": "document.getElementById('campaigns-detail')",
   "op": "=",
-  "rhs": "'<div style=\"display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;margin-bottom:1rem;flex-wrap:wrap\">' +\n        '<div><a class=\"tiny\" style=\"color:var(--accent);cursor:pointer\" onclick=\"closeCampaignDetail()\">&larr; Campaigns</a>' +\n        '<h1 style=\"font-family:var(--font-display);font-size:1.5rem;font-weight:700;letter-spacing:-0.02em;margin:0.3rem 0;color:var(--text)\">'",
-  "rhs_len": 1160,
+  "rhs": "'<div style=\"display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;margin-bottom:1rem;flex-wrap:wrap\">' +\n        '<div><a class=\"tiny\" style=\"color:var(--accent);cursor:pointer\"' + x('click', 'closeCampaignDetail') + '>&larr; Campaigns</a>' +\n        '<h1 style=\"font-family:var(--font-display);font-size:1.5rem;font-weight:700;letter-spacing:-0.02em;margin:0.3rem 0;color:var(-",
+  "rhs_len": 1169,
   "category": "partial_escaped",
   "data_source_tags": "user_created_name"
  },
@@ -1374,13 +1374,13 @@
   "function": "renderCampaignGroupPreview",
   "target": "document.getElementById('cmp-exclusions')",
   "op": "=",
-  "rhs": "list.map(function(a) {\n    return '<label style=\"display:flex;align-items:center;gap:0.5rem;padding:0.25rem 0.3rem;cursor:pointer\">' +\n      '<input type=\"checkbox\" onchange=\"cmpToggleExclusion(\\'' + x(a.agentId) + '\\',this.checked)\">' +\n      '<code style=\"font-size:0.72rem\">' + x(a.agentId) + '</code><span class=\"tiny muted\">' + x(a.hostname) + '</span></label>';\n  }).join('')",
-  "rhs_len": 381,
+  "rhs": "list.map(function(a) {\n    return '<label style=\"display:flex;align-items:center;gap:0.5rem;padding:0.25rem 0.3rem;cursor:pointer\">' +\n      '<input type=\"checkbox\"' + x('change', 'cmpToggleExclusionFromChecked', a.agentId) + '>' +\n      '<code style=\"font-size:0.72rem\">' + x(a.agentId) + '</code><span class=\"tiny muted\">' + x(a.hostname) + '</span></label>';\n  }).join('')",
+  "rhs_len": 375,
   "category": "escaped",
   "data_source_tags": "agent"
  },
  {
-  "line": 8411,
+  "line": 8423,
   "function": "setCampaignSource",
   "target": "document.getElementById('cmp-scenario-preview')",
   "op": "=",
@@ -1390,7 +1390,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 8439,
+  "line": 8451,
   "function": "selectTIPack",
   "target": "info",
   "op": "=",
@@ -1400,7 +1400,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 8448,
+  "line": 8460,
   "function": "selectTIPack",
   "target": "info",
   "op": "=",
@@ -1410,7 +1410,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 8456,
+  "line": 8468,
   "function": "selectTIPack",
   "target": "info",
   "op": "=",
@@ -1420,7 +1420,7 @@
   "data_source_tags": "api_response"
  },
  {
-  "line": 8492,
+  "line": 8504,
   "function": "_applyGeneratedTIScenario",
   "target": "el",
   "op": "=",
@@ -1430,7 +1430,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 8521,
+  "line": 8533,
   "function": "_selectCmpScenario",
   "target": "document.getElementById('cmp-scenario')",
   "op": "=",
@@ -1440,7 +1440,7 @@
   "data_source_tags": "scenario,user_created_name"
  },
  {
-  "line": 8533,
+  "line": 8545,
   "function": "cmpOnExistingScenarioChange",
   "target": "el",
   "op": "=",
@@ -1450,7 +1450,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 8535,
+  "line": 8547,
   "function": "cmpOnExistingScenarioChange",
   "target": "el",
   "op": "=",
@@ -1460,7 +1460,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 8539,
+  "line": 8551,
   "function": "cmpOnExistingScenarioChange",
   "target": "el",
   "op": "=",
@@ -1470,7 +1470,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 8558,
+  "line": 8570,
   "function": "loadKEVWidget",
   "target": "tiles",
   "op": "=",
@@ -1480,7 +1480,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 8578,
+  "line": 8590,
   "function": "renderTIActors",
   "target": "el",
   "op": "=",
@@ -1490,17 +1490,17 @@
   "data_source_tags": ""
  },
  {
-  "line": 8579,
+  "line": 8591,
   "function": "renderTIActors",
   "target": "el",
   "op": "=",
-  "rhs": "'<div style=\"font-size:0.68rem;font-weight:600;letter-spacing:0.05em;color:var(--muted);text-transform:uppercase;margin:0.75rem 0 0.4rem\">Top Threat Actors</div>' +\n    actors.map(function(a) {\n      return '<div style=\"display:flex;justify-content:space-between;align-items:center;padding:0.35rem 0;border-bottom:1px solid var(--border)\">' +\n        '<span style=\"font-weight:600;cursor:pointer\" onc",
-  "rhs_len": 749,
+  "rhs": "'<div style=\"font-size:0.68rem;font-weight:600;letter-spacing:0.05em;color:var(--muted);text-transform:uppercase;margin:0.75rem 0 0.4rem\">Top Threat Actors</div>' +\n    actors.map(function(a) {\n      return '<div style=\"display:flex;justify-content:space-between;align-items:center;padding:0.35rem 0;border-bottom:1px solid var(--border)\">' +\n        '<span style=\"font-weight:600;cursor:pointer\"' + ",
+  "rhs_len": 660,
   "category": "unescaped_html",
   "data_source_tags": "actor"
  },
  {
-  "line": 8623,
+  "line": 8635,
   "function": "loadEndpointPostureWidget",
   "target": "tiles",
   "op": "=",
@@ -1510,7 +1510,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 8646,
+  "line": 8658,
   "function": "loadReadinessTrends",
   "target": "summary",
   "op": "=",
@@ -1520,7 +1520,7 @@
   "data_source_tags": "api_response"
  },
  {
-  "line": 8653,
+  "line": 8665,
   "function": "loadReadinessTrends",
   "target": "el",
   "op": "=",
@@ -1530,17 +1530,17 @@
   "data_source_tags": ""
  },
  {
-  "line": 8681,
+  "line": 8693,
   "function": "renderCampaignTargets",
   "target": "document.getElementById('cmp-targets')",
   "op": "=",
-  "rhs": "list.length ? list.map(function(a) {\n    return '<label style=\"display:flex;align-items:center;gap:0.5rem;padding:0.25rem 0.3rem;cursor:pointer\">' +\n      '<input type=\"checkbox\" ' + (state._cmpSel[a.agentId] ? 'checked' : '') + ' onchange=\"_cmpSel[\\'' + x(a.agentId) + '\\']=this.checked;cmpUpdateCount()\">' +\n      '<code style=\"font-size:0.72rem\">' + x(a.agentId) + '</code><span class=\"tiny muted\"",
-  "rhs_len": 546,
+  "rhs": "list.length ? list.map(function(a) {\n    return '<label style=\"display:flex;align-items:center;gap:0.5rem;padding:0.25rem 0.3rem;cursor:pointer\">' +\n      '<input type=\"checkbox\" ' + (state._cmpSel[a.agentId] ? 'checked' : '') + ' ' + x('change', 'cmpSelChange', a.agentId) + '>' +\n      '<code style=\"font-size:0.72rem\">' + x(a.agentId) + '</code><span class=\"tiny muted\">' + x(a.hostname) + ' \u00b7 ' +",
+  "rhs_len": 518,
   "category": "unescaped_html",
   "data_source_tags": "agent"
  },
  {
-  "line": 8747,
+  "line": 8759,
   "function": "loadComplianceScores",
   "target": "el",
   "op": "=",
@@ -1550,7 +1550,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 8750,
+  "line": 8762,
   "function": "loadComplianceScores",
   "target": "el",
   "op": "=",
@@ -1560,7 +1560,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 8874,
+  "line": 8886,
   "function": "refreshDashboardCampaigns",
   "target": "el",
   "op": "=",
@@ -1570,7 +1570,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 8875,
+  "line": 8887,
   "function": "refreshDashboardCampaigns",
   "target": "el",
   "op": "=",
@@ -1580,7 +1580,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 8941,
+  "line": 8953,
   "function": "loadCalderaStatus",
   "target": "document.getElementById('cs-caldera-status')",
   "op": "=",
@@ -1590,7 +1590,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 8967,
+  "line": 8979,
   "function": "loadCalderaStatus",
   "target": "document.getElementById('cs-caldera-status')",
   "op": "=",
@@ -1600,7 +1600,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 9009,
+  "line": 9021,
   "function": "openConfirmDiffModal",
   "target": "document.getElementById('confirm-diff-body')",
   "op": "=",
@@ -1610,7 +1610,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 9081,
+  "line": 9093,
   "function": "populateCoverageFilters",
   "target": "scenSel",
   "op": "=",
@@ -1620,7 +1620,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 9089,
+  "line": 9101,
   "function": "populateCoverageFilters",
   "target": "agSel",
   "op": "=",
@@ -1630,7 +1630,7 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 9124,
+  "line": 9136,
   "function": "renderCoverageAnalytics",
   "target": "tacBody",
   "op": "=",
@@ -1640,7 +1640,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 9140,
+  "line": 9152,
   "function": "renderCoverageAnalytics",
   "target": "missedBody",
   "op": "=",
@@ -1650,7 +1650,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 9173,
+  "line": 9185,
   "function": "renderPrivilegeCoverage",
   "target": "cards",
   "op": "=",
@@ -1660,7 +1660,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 9189,
+  "line": 9201,
   "function": "renderPrivilegeCoverage",
   "target": "tierBody",
   "op": "=",
@@ -1670,7 +1670,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 9215,
+  "line": 9227,
   "function": "renderPrivilegeCoverage",
   "target": "gapBody",
   "op": "=",
@@ -1680,7 +1680,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 9217,
+  "line": 9229,
   "function": "renderPrivilegeCoverage",
   "target": "gapBody",
   "op": "=",
@@ -1690,7 +1690,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 9230,
+  "line": 9242,
   "function": "renderPrivilegeCoverage",
   "target": "gapBody",
   "op": "+=",
@@ -1700,7 +1700,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 9252,
+  "line": 9264,
   "function": "loadUnifiedTechniques",
   "target": "sel",
   "op": "=",
@@ -1710,7 +1710,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 9328,
+  "line": 9340,
   "function": "cell",
   "target": "if (body) body",
   "op": "=",
@@ -1720,7 +1720,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 9353,
+  "line": 9365,
   "function": "loadCoverage",
   "target": "document.getElementById('cov-matrix')",
   "op": "=",
@@ -1730,7 +1730,7 @@
   "data_source_tags": "error_message"
  },
  {
-  "line": 9358,
+  "line": 9370,
   "function": "renderCovMatrix",
   "target": "document.getElementById('cov-matrix')",
   "op": "=",
@@ -1740,7 +1740,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 9374,
+  "line": 9386,
   "function": "badge",
   "target": "document.getElementById('cov-toolbar')",
   "op": "=",
@@ -1750,7 +1750,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 9387,
+  "line": 9399,
   "function": "openTechnique",
   "target": "document.getElementById('results-export')",
   "op": "=",
@@ -1760,7 +1760,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 9395,
+  "line": 9407,
   "function": "list",
   "target": "document.getElementById('results-body')",
   "op": "=",
@@ -1770,7 +1770,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 9447,
+  "line": 9459,
   "function": "loadVerificationTab",
   "target": "sel",
   "op": "=",
@@ -1780,7 +1780,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 9456,
+  "line": 9468,
   "function": "vfRenderDomainChips",
   "target": "wrap",
   "op": "=",
@@ -1790,7 +1790,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 9471,
+  "line": 9483,
   "function": "vfLoadQueue",
   "target": "box",
   "op": "=",
@@ -1800,7 +1800,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 9472,
+  "line": 9484,
   "function": "vfLoadQueue",
   "target": "box",
   "op": "=",
@@ -1810,7 +1810,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 9475,
+  "line": 9487,
   "function": "vfLoadQueue",
   "target": "box",
   "op": "=",
@@ -1820,7 +1820,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 9478,
+  "line": 9490,
   "function": "vfLoadQueue",
   "target": "box",
   "op": "=",
@@ -1830,7 +1830,7 @@
   "data_source_tags": "error_message"
  },
  {
-  "line": 9487,
+  "line": 9499,
   "function": "vfRenderQueue",
   "target": "box",
   "op": "=",
@@ -1840,7 +1840,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 9506,
+  "line": 9518,
   "function": "vfRenderQueue",
   "target": "box",
   "op": "=",
@@ -1850,7 +1850,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 9535,
+  "line": 9547,
   "function": "resultBtn",
   "target": "host",
   "op": "=",
@@ -1860,7 +1860,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 9565,
+  "line": 9577,
   "function": "vfCloseDetail",
   "target": "if (h) h",
   "op": "=",
@@ -1870,7 +1870,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 9621,
+  "line": 9633,
   "function": "vfLoadEvidence",
   "target": "host",
   "op": "=",
@@ -1880,7 +1880,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 9623,
+  "line": 9635,
   "function": "vfLoadEvidence",
   "target": "host",
   "op": "=",
@@ -1890,7 +1890,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 9634,
+  "line": 9646,
   "function": "vfLoadEvidence",
   "target": "host",
   "op": "=",
@@ -1900,7 +1900,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 9657,
+  "line": 9669,
   "function": "vfToggleHistory",
   "target": "host",
   "op": "=",
@@ -1910,7 +1910,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 9659,
+  "line": 9671,
   "function": "vfToggleHistory",
   "target": "host",
   "op": "=",
@@ -1920,7 +1920,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 9662,
+  "line": 9674,
   "function": "vfToggleHistory",
   "target": "host",
   "op": "=",
@@ -1930,7 +1930,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 9663,
+  "line": 9675,
   "function": "vfToggleHistory",
   "target": "host",
   "op": "=",
@@ -1940,7 +1940,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 9675,
+  "line": 9687,
   "function": "vfToggleHistory",
   "target": "host",
   "op": "=",
@@ -1950,7 +1950,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 9732,
+  "line": 9744,
   "function": "loadEmTab",
   "target": "summaryEl",
   "op": "=",
@@ -1960,7 +1960,7 @@
   "data_source_tags": "api_response"
  },
  {
-  "line": 9736,
+  "line": 9748,
   "function": "loadEmTab",
   "target": "summaryEl",
   "op": "=",
@@ -1970,7 +1970,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 9754,
+  "line": 9766,
   "function": "loadEmTab",
   "target": "gridEl",
   "op": "=",
@@ -1980,7 +1980,7 @@
   "data_source_tags": "agent,user_created_name"
  },
  {
-  "line": 9831,
+  "line": 9843,
   "function": "openEMSweepModal",
   "target": "sel",
   "op": "=",
@@ -1990,7 +1990,7 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 9846,
+  "line": 9858,
   "function": "renderEMSweepGroupList",
   "target": "list",
   "op": "=",
@@ -2000,7 +2000,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 9849,
+  "line": 9861,
   "function": "renderEMSweepGroupList",
   "target": "list",
   "op": "=",
@@ -2010,7 +2010,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 10041,
+  "line": 10053,
   "function": "renderSweepPreview",
   "target": "filtersEl",
   "op": "=",
@@ -2020,7 +2020,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 10052,
+  "line": 10064,
   "function": "renderSweepPreview",
   "target": "filtersEl",
   "op": "=",
@@ -2030,7 +2030,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 10079,
+  "line": 10091,
   "function": "_renderVexPreviewList",
   "target": "listEl",
   "op": "=",
@@ -2040,7 +2040,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 10222,
+  "line": 10234,
   "function": "_renderEMPreviewList",
   "target": "listEl",
   "op": "=",
@@ -2050,7 +2050,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 10325,
+  "line": 10337,
   "function": "openEMSweepProgress",
   "target": "document.getElementById('em-sweep-progress-actions')",
   "op": "=",
@@ -2060,7 +2060,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 10385,
+  "line": 10397,
   "function": "renderEMSweepProgress",
   "target": "document.getElementById('em-sweep-progress-summary')",
   "op": "=",
@@ -2070,7 +2070,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 10392,
+  "line": 10404,
   "function": "renderEMSweepProgress",
   "target": "document.getElementById('em-sweep-progress-actions')",
   "op": "=",
@@ -2080,7 +2080,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 10405,
+  "line": 10417,
   "function": "renderEMSweepProgress",
   "target": "list",
   "op": "=",
@@ -2090,7 +2090,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 10756,
+  "line": 10768,
   "function": "fmt",
   "target": "document.getElementById('evidence-content')",
   "op": "=",
@@ -2100,7 +2100,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11063,
+  "line": 11075,
   "function": "confirmRun",
   "target": "runBtn",
   "op": "=",
@@ -2110,7 +2110,7 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 11082,
+  "line": 11094,
   "function": "confirmRun",
   "target": "runBtn",
   "op": "=",
@@ -2120,7 +2120,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11236,
+  "line": 11248,
   "function": "cmdkResultFallback",
   "target": "document.getElementById('results-export')",
   "op": "=",
@@ -2130,7 +2130,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11237,
+  "line": 11249,
   "function": "cmdkResultFallback",
   "target": "document.getElementById('results-summary')",
   "op": "=",
@@ -2140,7 +2140,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11238,
+  "line": 11250,
   "function": "cmdkResultFallback",
   "target": "document.getElementById('results-body')",
   "op": "=",
@@ -2150,7 +2150,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 11268,
+  "line": 11280,
   "function": "openCmdk",
   "target": "wrap",
   "op": "=",
@@ -2160,7 +2160,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11375,
+  "line": 11387,
   "function": "render",
   "target": "list",
   "op": "=",
@@ -2170,7 +2170,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11376,
+  "line": 11388,
   "function": "render",
   "target": "list",
   "op": "=",
@@ -2180,7 +2180,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11434,
+  "line": 11446,
   "function": "loadUsers",
   "target": "tbody",
   "op": "=",
@@ -2190,7 +2190,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11435,
+  "line": 11447,
   "function": "loadUsers",
   "target": "tbody",
   "op": "=",
@@ -2200,7 +2200,7 @@
   "data_source_tags": "api_response,user_created_name"
  },
  {
-  "line": 11683,
+  "line": 11695,
   "function": "aggOf",
   "target": "if (trend === 'Improving')      tEl",
   "op": "=",
@@ -2210,7 +2210,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11684,
+  "line": 11696,
   "function": "aggOf",
   "target": "else if (trend === 'Degrading') tEl",
   "op": "=",
@@ -2220,7 +2220,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11685,
+  "line": 11697,
   "function": "aggOf",
   "target": "else                            tEl",
   "op": "=",
@@ -2230,7 +2230,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11687,
+  "line": 11699,
   "function": "aggOf",
   "target": "document.getElementById('kpi-score-spark')",
   "op": "=",
@@ -2240,7 +2240,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11690,
+  "line": 11702,
   "function": "aggOf",
   "target": "document.getElementById('dash-gauge')",
   "op": "=",
@@ -2250,7 +2250,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11700,
+  "line": 11712,
   "function": "aggOf",
   "target": "document.getElementById('dash-posture-bars')",
   "op": "=",
@@ -2260,7 +2260,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11728,
+  "line": 11740,
   "function": "aggOf",
   "target": "document.getElementById('kpi-cov-spark')",
   "op": "=",
@@ -2270,7 +2270,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11748,
+  "line": 11760,
   "function": "aggOf",
   "target": "donutEl",
   "op": "=",
@@ -2280,7 +2280,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11759,
+  "line": 11771,
   "function": "lg",
   "target": "donutEl",
   "op": "=",
@@ -2290,7 +2290,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11789,
+  "line": 11801,
   "function": "lg",
   "target": "afEl",
   "op": "=",
@@ -2300,7 +2300,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11790,
+  "line": 11802,
   "function": "lg",
   "target": "afEl",
   "op": "=",
@@ -2310,7 +2310,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11793,
+  "line": 11805,
   "function": "lg",
   "target": "afEl",
   "op": "=",
@@ -2320,7 +2320,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11800,
+  "line": 11812,
   "function": "lg",
   "target": "rrEl",
   "op": "=",
@@ -2330,7 +2330,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11802,
+  "line": 11814,
   "function": "lg",
   "target": "rrEl",
   "op": "=",
@@ -2340,7 +2340,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 11845,
+  "line": 11857,
   "function": "lg",
   "target": "tfEl",
   "op": "=",
@@ -2350,7 +2350,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11848,
+  "line": 11860,
   "function": "lg",
   "target": "tfEl",
   "op": "=",
@@ -2360,7 +2360,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 11871,
+  "line": 11883,
   "function": "lg",
   "target": "attckEl",
   "op": "=",
@@ -2370,7 +2370,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11873,
+  "line": 11885,
   "function": "lg",
   "target": "attckEl",
   "op": "=",
@@ -2380,7 +2380,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11923,
+  "line": 11935,
   "function": "lg",
   "target": "bodyEl",
   "op": "=",
@@ -2390,7 +2390,7 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 11980,
+  "line": 11992,
   "function": "renderSLAKPIs",
   "target": "document.getElementById('sla-rpt-kpis')",
   "op": "=",
@@ -2400,7 +2400,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11994,
+  "line": 12006,
   "function": "rank",
   "target": "el",
   "op": "=",
@@ -2410,7 +2410,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11995,
+  "line": 12007,
   "function": "rank",
   "target": "el",
   "op": "=",
@@ -2420,7 +2420,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 12007,
+  "line": 12019,
   "function": "renderSLAMonthlyTrend",
   "target": "body",
   "op": "=",
@@ -2430,7 +2430,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 12008,
+  "line": 12020,
   "function": "renderSLAMonthlyTrend",
   "target": "body",
   "op": "=",
@@ -2440,7 +2440,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 12016,
+  "line": 12028,
   "function": "renderSLARecentlyResolved",
   "target": "body",
   "op": "=",
@@ -2450,7 +2450,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 12017,
+  "line": 12029,
   "function": "renderSLARecentlyResolved",
   "target": "body",
   "op": "=",
@@ -2460,7 +2460,7 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 12061,
+  "line": 12073,
   "function": "renderFindingsTiles",
   "target": "document.getElementById('findings-tiles')",
   "op": "=",
@@ -2470,7 +2470,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 12071,
+  "line": 12083,
   "function": "c",
   "target": "document.getElementById('findings-toolbar')",
   "op": "=",
@@ -2480,7 +2480,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 12089,
+  "line": 12101,
   "function": "renderFindingsRows",
   "target": "tb",
   "op": "=",
@@ -2490,7 +2490,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 12090,
+  "line": 12102,
   "function": "renderFindingsRows",
   "target": "tb",
   "op": "=",
@@ -2500,7 +2500,7 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 12149,
+  "line": 12161,
   "function": "list",
   "target": "document.getElementById('results-export')",
   "op": "=",
@@ -2510,7 +2510,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 12177,
+  "line": 12189,
   "function": "list",
   "target": "document.getElementById('results-body')",
   "op": "=",
@@ -2520,7 +2520,7 @@
   "data_source_tags": "agent,threat_intel,user_created_name"
  },
  {
-  "line": 12213,
+  "line": 12225,
   "function": "loadRemediations",
   "target": "document.getElementById('rem-list')",
   "op": "=",
@@ -2530,7 +2530,7 @@
   "data_source_tags": "error_message"
  },
  {
-  "line": 12235,
+  "line": 12247,
   "function": "tile",
   "target": "document.getElementById('rem-tiles')",
   "op": "=",
@@ -2540,7 +2540,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 12243,
+  "line": 12255,
   "function": "renderRemList",
   "target": "el",
   "op": "=",
@@ -2550,7 +2550,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 12244,
+  "line": 12256,
   "function": "renderRemList",
   "target": "el",
   "op": "=",
@@ -2560,7 +2560,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 12271,
+  "line": 12283,
   "function": "openRemediation",
   "target": "document.getElementById('results-export')",
   "op": "=",
@@ -2570,7 +2570,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 12292,
+  "line": 12304,
   "function": "stat",
   "target": "document.getElementById('results-body')",
   "op": "=",
@@ -2580,7 +2580,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 12406,
+  "line": 12418,
   "function": "tile",
   "target": "document.getElementById('dash-itsm-tiles')",
   "op": "=",
@@ -2590,7 +2590,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 12417,
+  "line": 12429,
   "function": "loadFindingTickets",
   "target": "container",
   "op": "=",
@@ -2600,7 +2600,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 12420,
+  "line": 12432,
   "function": "loadFindingTickets",
   "target": "container",
   "op": "=",
@@ -2610,7 +2610,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 12429,
+  "line": 12441,
   "function": "loadFindingTickets",
   "target": "if (container) container",
   "op": "=",
@@ -2620,7 +2620,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 12585,
+  "line": 12597,
   "function": "renderInitiativesList",
   "target": "tbody",
   "op": "=",
@@ -2630,7 +2630,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 12588,
+  "line": 12600,
   "function": "renderInitiativesList",
   "target": "tbody",
   "op": "=",
@@ -2640,7 +2640,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 12657,
+  "line": 12669,
   "function": "renderInitiativeDrawer",
   "target": "document.getElementById('init-drawer-body')",
   "op": "=",
@@ -2650,7 +2650,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 12697,
+  "line": 12709,
   "function": "initiativeShowDrawerError",
   "target": "if (el) el",
   "op": "=",
@@ -2660,7 +2660,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 12725,
+  "line": 12737,
   "function": "openInitiativeCreateDrawer",
   "target": "document.getElementById('init-create-error')",
   "op": "=",
@@ -2670,7 +2670,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 12738,
+  "line": 12750,
   "function": "submitInitiativeCreate",
   "target": "errEl",
   "op": "=",
@@ -2680,7 +2680,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 12741,
+  "line": 12753,
   "function": "submitInitiativeCreate",
   "target": "errEl",
   "op": "=",
@@ -2690,7 +2690,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 12744,
+  "line": 12756,
   "function": "submitInitiativeCreate",
   "target": "errEl",
   "op": "=",
@@ -2700,7 +2700,7 @@
   "data_source_tags": "api_response"
  },
  {
-  "line": 12749,
+  "line": 12761,
   "function": "submitInitiativeCreate",
   "target": "errEl",
   "op": "=",
@@ -2710,7 +2710,7 @@
   "data_source_tags": "error_message"
  },
  {
-  "line": 12779,
+  "line": 12791,
   "function": "openInitiativeAttachDrawer",
   "target": "document.getElementById('init-attach-error')",
   "op": "=",
@@ -2720,7 +2720,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 12780,
+  "line": 12792,
   "function": "openInitiativeAttachDrawer",
   "target": "document.getElementById('init-attach-list')",
   "op": "=",
@@ -2730,7 +2730,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 12783,
+  "line": 12795,
   "function": "openInitiativeAttachDrawer",
   "target": "document.getElementById('init-attach-list')",
   "op": "=",
@@ -2740,7 +2740,7 @@
   "data_source_tags": "api_response"
  },
  {
-  "line": 12786,
+  "line": 12798,
   "function": "openInitiativeAttachDrawer",
   "target": "document.getElementById('init-attach-list')",
   "op": "=",
@@ -2750,7 +2750,7 @@
   "data_source_tags": "error_message"
  },
  {
-  "line": 12801,
+  "line": 12813,
   "function": "initiativeRenderAttachList",
   "target": "list",
   "op": "=",
@@ -2760,7 +2760,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 12804,
+  "line": 12816,
   "function": "initiativeRenderAttachList",
   "target": "list",
   "op": "=",
@@ -2770,7 +2770,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 12818,
+  "line": 12830,
   "function": "submitInitiativeAttach",
   "target": "errEl",
   "op": "=",
@@ -2780,7 +2780,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 12821,
+  "line": 12833,
   "function": "submitInitiativeAttach",
   "target": "errEl",
   "op": "=",
@@ -2790,7 +2790,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 12825,
+  "line": 12837,
   "function": "submitInitiativeAttach",
   "target": "errEl",
   "op": "=",
@@ -2800,7 +2800,7 @@
   "data_source_tags": "api_response"
  },
  {
-  "line": 12829,
+  "line": 12841,
   "function": "submitInitiativeAttach",
   "target": "errEl",
   "op": "=",
@@ -2810,7 +2810,7 @@
   "data_source_tags": "error_message"
  },
  {
-  "line": 12862,
+  "line": 12874,
   "function": "renderConnectorList",
   "target": "el",
   "op": "=",
@@ -2820,7 +2820,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 12867,
+  "line": 12879,
   "function": "renderConnectorList",
   "target": "el",
   "op": "=",
@@ -2830,7 +2830,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 12985,
+  "line": 12997,
   "function": "renderConnectorSettings",
   "target": "document.getElementById('cf-settings')",
   "op": "=",
@@ -2840,7 +2840,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 13042,
+  "line": 13054,
   "function": "fetchConnectorProjects",
   "target": "sel",
   "op": "=",
@@ -2850,7 +2850,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 13196,
+  "line": 13208,
   "function": "renderResponseConnectorList",
   "target": "el",
   "op": "=",
@@ -2860,7 +2860,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 13202,
+  "line": 13214,
   "function": "renderResponseConnectorList",
   "target": "el",
   "op": "=",
@@ -2870,7 +2870,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 13331,
+  "line": 13343,
   "function": "openRespondModal",
   "target": "sel",
   "op": "=",
@@ -2880,7 +2880,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 13333,
+  "line": 13345,
   "function": "openRespondModal",
   "target": "sel",
   "op": "=",
@@ -2890,7 +2890,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 13446,
+  "line": 13458,
   "function": "renderRunIOCToolbar",
   "target": "el",
   "op": "=",
@@ -2900,7 +2900,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 13489,
+  "line": 13501,
   "function": "renderRunIOCList",
   "target": "el",
   "op": "=",
@@ -2910,7 +2910,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 13494,
+  "line": 13506,
   "function": "renderRunIOCList",
   "target": "el",
   "op": "=",
@@ -2920,7 +2920,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 13544,
+  "line": 13556,
   "function": "loadIOCRegistry",
   "target": "if (el) el",
   "op": "=",
@@ -2930,7 +2930,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 13562,
+  "line": 13574,
   "function": "loadIOCRegistry",
   "target": "tbody",
   "op": "=",
@@ -2940,7 +2940,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 13571,
+  "line": 13583,
   "function": "loadIOCRegistry",
   "target": "tbody",
   "op": "=",
@@ -2950,7 +2950,7 @@
   "data_source_tags": "error_message"
  },
  {
-  "line": 13593,
+  "line": 13605,
   "function": "tile",
   "target": "el",
   "op": "=",
@@ -2960,7 +2960,7 @@
   "data_source_tags": "api_response"
  },
  {
-  "line": 13603,
+  "line": 13615,
   "function": "renderIOCRegistryTable",
   "target": "tbody",
   "op": "=",
@@ -2970,7 +2970,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 13606,
+  "line": 13618,
   "function": "renderIOCRegistryTable",
   "target": "tbody",
   "op": "=",
@@ -2980,7 +2980,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 13654,
+  "line": 13666,
   "function": "openIOCDetail",
   "target": "document.getElementById('results-export')",
   "op": "=",
@@ -2990,7 +2990,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 13671,
+  "line": 13683,
   "function": "rowHtml",
   "target": "document.getElementById('results-body')",
   "op": "=",
@@ -3000,7 +3000,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 13690,
+  "line": 13702,
   "function": "rowHtml",
   "target": "el",
   "op": "=",
@@ -3010,7 +3010,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 13693,
+  "line": 13705,
   "function": "rowHtml",
   "target": "if (el) el",
   "op": "=",
@@ -3020,7 +3020,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 13796,
+  "line": 13808,
   "function": "render",
   "target": "document.getElementById('run-live-progress')",
   "op": "=",
@@ -3030,7 +3030,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 13808,
+  "line": 13820,
   "function": "render",
   "target": "ul",
   "op": "=",
@@ -3040,7 +3040,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 13901,
+  "line": 13913,
   "function": "render",
   "target": "ul",
   "op": "=",
@@ -3050,7 +3050,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 14015,
+  "line": 14027,
   "function": "openSweepDrilldown",
   "target": "document.getElementById('sweep-drilldown-actions')",
   "op": "=",
@@ -3060,7 +3060,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 14016,
+  "line": 14028,
   "function": "openSweepDrilldown",
   "target": "document.getElementById('sweep-drilldown-list')",
   "op": "=",
@@ -3070,7 +3070,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 14023,
+  "line": 14035,
   "function": "openSweepDrilldown",
   "target": "document.getElementById('sweep-drilldown-actions')",
   "op": "=",
@@ -3080,7 +3080,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 14026,
+  "line": 14038,
   "function": "openSweepDrilldown",
   "target": "document.getElementById('sweep-drilldown-list')",
   "op": "=",
@@ -3090,7 +3090,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 14068,
+  "line": 14080,
   "function": "loadOpenAEVConfig",
   "target": "configPanel",
   "op": "=",
@@ -3100,7 +3100,7 @@
   "data_source_tags": "openaev"
  },
  {
-  "line": 14083,
+  "line": 14095,
   "function": "loadOpenAEVConfig",
   "target": "configPanel",
   "op": "=",
@@ -3110,7 +3110,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 14144,
+  "line": 14156,
   "function": "loadOpenAEVScenarios",
   "target": "body",
   "op": "=",
@@ -3120,7 +3120,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 14149,
+  "line": 14161,
   "function": "loadOpenAEVScenarios",
   "target": "body",
   "op": "=",
@@ -3130,7 +3130,7 @@
   "data_source_tags": "openaev"
  },
  {
-  "line": 14235,
+  "line": 14247,
   "function": "openOpenAEVDetail",
   "target": "body",
   "op": "=",
@@ -3140,7 +3140,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 14237,
+  "line": 14249,
   "function": "openOpenAEVDetail",
   "target": "body",
   "op": "+=",
@@ -3150,7 +3150,7 @@
   "data_source_tags": "openaev"
  },
  {
-  "line": 14254,
+  "line": 14266,
   "function": "loadExercisesTab",
   "target": "body",
   "op": "=",
@@ -3160,7 +3160,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 14256,
+  "line": 14268,
   "function": "loadExercisesTab",
   "target": "body",
   "op": "=",
@@ -3170,7 +3170,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 14269,
+  "line": 14281,
   "function": "loadExercisesTab",
   "target": "body",
   "op": "=",
@@ -3180,7 +3180,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 14271,
+  "line": 14283,
   "function": "loadExercisesTab",
   "target": "body",
   "op": "=",
@@ -3190,7 +3190,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 14415,
+  "line": 14427,
   "function": "openExerciseDetail",
   "target": "document.getElementById('exercise-detail-body')",
   "op": "=",
@@ -3200,7 +3200,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 14648,
+  "line": 14660,
   "function": "loadAPHistory",
   "target": "tb",
   "op": "=",
@@ -3210,7 +3210,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 14651,
+  "line": 14663,
   "function": "loadAPHistory",
   "target": "tb",
   "op": "=",
@@ -3220,7 +3220,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 14654,
+  "line": 14666,
   "function": "loadAPHistory",
   "target": "tb",
   "op": "=",
@@ -3230,7 +3230,7 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 14670,
+  "line": 14682,
   "function": "loadAPHistory",
   "target": "tb",
   "op": "=",
@@ -3240,7 +3240,7 @@
   "data_source_tags": "error_message"
  },
  {
-  "line": 14679,
+  "line": 14691,
   "function": "renderAttackPath",
   "target": "body",
   "op": "=",
@@ -3250,7 +3250,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 14725,
+  "line": 14737,
   "function": "renderAttackPath",
   "target": "body",
   "op": "=",
@@ -3260,7 +3260,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 14758,
+  "line": 14770,
   "function": "loadRansomwareReadiness",
   "target": "bodyEl",
   "op": "=",
@@ -3270,7 +3270,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 14830,
+  "line": 14842,
   "function": "loadRansomwareReadiness",
   "target": "bodyEl",
   "op": "=",
@@ -3280,7 +3280,7 @@
   "data_source_tags": "agent,user_created_name"
  },
  {
-  "line": 14885,
+  "line": 14897,
   "function": "loadReports",
   "target": "el",
   "op": "=",
@@ -3290,7 +3290,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 14889,
+  "line": 14901,
   "function": "loadReports",
   "target": "el",
   "op": "=",
@@ -3300,7 +3300,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 14902,
+  "line": 14914,
   "function": "loadReports",
   "target": "document.getElementById('rep-available')",
   "op": "=",
@@ -3310,7 +3310,7 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 14910,
+  "line": 14922,
   "function": "renderRepHistory",
   "target": "tb",
   "op": "=",
@@ -3320,7 +3320,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 14914,
+  "line": 14926,
   "function": "renderRepHistory",
   "target": "tb",
   "op": "=",
@@ -3330,7 +3330,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 14956,
+  "line": 14968,
   "function": "openReportGen",
   "target": "document.getElementById('rep-agent')",
   "op": "=",
@@ -3340,7 +3340,7 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 14960,
+  "line": 14972,
   "function": "openReportGen",
   "target": "document.getElementById('rep-format')",
   "op": "=",
@@ -3350,7 +3350,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 14969,
+  "line": 14981,
   "function": "openReportGen",
   "target": "document.getElementById('rep-fw')",
   "op": "=",
@@ -3360,7 +3360,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 15280,
+  "line": 15292,
   "function": "loadRuns",
   "target": "tbody",
   "op": "=",
@@ -3370,7 +3370,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 15297,
+  "line": 15309,
   "function": "byStartedAtDesc",
   "target": "tbody",
   "op": "=",
@@ -3380,7 +3380,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 15333,
+  "line": 15345,
   "function": "byStartedAtDesc",
   "target": "tbody",
   "op": "=",
@@ -3390,7 +3390,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 15344,
+  "line": 15356,
   "function": "openModal",
   "target": "scSel",
   "op": "=",
@@ -3400,7 +3400,7 @@
   "data_source_tags": "scenario,user_created_name"
  },
  {
-  "line": 15355,
+  "line": 15367,
   "function": "openModal",
   "target": "document.getElementById('modal-agent')",
   "op": "=",
@@ -3410,7 +3410,7 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 15417,
+  "line": 15429,
   "function": "renderRunMode",
   "target": "btn",
   "op": "=",
@@ -3420,7 +3420,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 15457,
+  "line": 15469,
   "function": "renderRunMode",
   "target": "warn",
   "op": "=",
@@ -3430,7 +3430,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 15461,
+  "line": 15473,
   "function": "renderRunMode",
   "target": "btn",
   "op": "=",
@@ -3440,7 +3440,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 15475,
+  "line": 15487,
   "function": "renderRunMode",
   "target": "warn",
   "op": "=",
@@ -3450,7 +3450,7 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 15477,
+  "line": 15489,
   "function": "renderRunMode",
   "target": "btn",
   "op": "=",
@@ -3460,7 +3460,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 15489,
+  "line": 15501,
   "function": "renderRunMode",
   "target": "warn",
   "op": "=",
@@ -3470,7 +3470,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 15490,
+  "line": 15502,
   "function": "renderRunMode",
   "target": "btn",
   "op": "=",
@@ -3480,7 +3480,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 15496,
+  "line": 15508,
   "function": "renderRunMode",
   "target": "warn",
   "op": "=",
@@ -3490,7 +3490,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 15497,
+  "line": 15509,
   "function": "renderRunMode",
   "target": "btn",
   "op": "=",
@@ -3500,7 +3500,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 15504,
+  "line": 15516,
   "function": "renderRunMode",
   "target": "warn",
   "op": "=",
@@ -3510,7 +3510,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 15508,
+  "line": 15520,
   "function": "renderRunMode",
   "target": "btn",
   "op": "=",
@@ -3520,7 +3520,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 15559,
+  "line": 15571,
   "function": "renderAdditionalAgents",
   "target": "list",
   "op": "=",
@@ -3530,7 +3530,7 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 15812,
+  "line": 15824,
   "function": "row",
   "target": "document.getElementById('wz-review')",
   "op": "=",
@@ -3540,7 +3540,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 15978,
+  "line": 15990,
   "function": "openPickerWith",
   "target": "tacticSel",
   "op": "=",
@@ -3550,7 +3550,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 16135,
+  "line": 16147,
   "function": "renderPickerList",
   "target": "document.getElementById('picker-list')",
   "op": "=",
@@ -3560,7 +3560,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 16240,
+  "line": 16252,
   "function": "renderModalSelection",
   "target": "link",
   "op": "=",
@@ -3570,7 +3570,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 16259,
+  "line": 16271,
   "function": "renderModalSelection",
   "target": "link",
   "op": "=",
@@ -3580,7 +3580,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 16273,
+  "line": 16285,
   "function": "renderModalSelection",
   "target": "note",
   "op": "=",
@@ -3590,7 +3590,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 16289,
+  "line": 16301,
   "function": "renderModalSelection",
   "target": "note",
   "op": "=",
@@ -3600,7 +3600,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 16319,
+  "line": 16331,
   "function": "renderModalSelection",
   "target": "note",
   "op": "=",
@@ -3610,7 +3610,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 16322,
+  "line": 16334,
   "function": "renderModalSelection",
   "target": "note",
   "op": "=",
@@ -3620,7 +3620,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 16390,
+  "line": 16402,
   "function": "doOpen",
   "target": "tacticSel",
   "op": "=",
@@ -3630,7 +3630,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 16443,
+  "line": 16455,
   "function": "fillBuilder",
   "target": "steps",
   "op": "=",
@@ -3640,7 +3640,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 16614,
+  "line": 16626,
   "function": "techRenderSelected",
   "target": "box",
   "op": "=",
@@ -3650,7 +3650,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 16624,
+  "line": 16636,
   "function": "techRenderSelected",
   "target": "box",
   "op": "=",
@@ -3660,7 +3660,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 16664,
+  "line": 16676,
   "function": "techOnInput",
   "target": "panel",
   "op": "=",
@@ -3670,7 +3670,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 16674,
+  "line": 16686,
   "function": "techRenderResults",
   "target": "panel",
   "op": "=",
@@ -3680,7 +3680,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 16678,
+  "line": 16690,
   "function": "techRenderResults",
   "target": "panel",
   "op": "=",
@@ -3690,7 +3690,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 16695,
+  "line": 16707,
   "function": "techSelectRow",
   "target": "panel",
   "op": "=",
@@ -3700,7 +3700,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 16719,
+  "line": 16731,
   "function": "techOnKeydown",
   "target": "panel",
   "op": "=",
@@ -3710,7 +3710,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 16730,
+  "line": 16742,
   "function": "techOnBlur",
   "target": "panel",
   "op": "=",
@@ -3720,7 +3720,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 16750,
+  "line": 16762,
   "function": "addStep",
   "target": "div",
   "op": "=",
@@ -3730,7 +3730,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 17008,
+  "line": 17020,
   "function": "viewRunResults",
   "target": "document.getElementById('results-summary')",
   "op": "=",
@@ -3740,7 +3740,7 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 17013,
+  "line": 17025,
   "function": "viewRunResults",
   "target": "document.getElementById('results-summary')",
   "op": "=",
@@ -3750,7 +3750,7 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 17025,
+  "line": 17037,
   "function": "viewRunResults",
   "target": "document.getElementById('results-export')",
   "op": "=",
@@ -3760,7 +3760,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17031,
+  "line": 17043,
   "function": "viewRunResults",
   "target": "document.getElementById('results-title')",
   "op": "=",
@@ -3770,7 +3770,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 17053,
+  "line": 17065,
   "function": "viewRunResults",
   "target": "document.getElementById('results-header-actions')",
   "op": "=",
@@ -3780,7 +3780,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17103,
+  "line": 17115,
   "function": "kpiGaugeCard",
   "target": "document.getElementById('run-kpi-strip')",
   "op": "=",
@@ -3790,7 +3790,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17445,
+  "line": 17457,
   "function": "soonPanel",
   "target": "document.getElementById('run-tab-content')",
   "op": "=",
@@ -3800,7 +3800,7 @@
   "data_source_tags": "threat_intel"
  },
  {
-  "line": 17482,
+  "line": 17494,
   "function": "soonPanel",
   "target": "document.getElementById('run-tabbar')",
   "op": "=",
@@ -3810,7 +3810,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17496,
+  "line": 17508,
   "function": "soonPanel",
   "target": "reportsEl",
   "op": "=",
@@ -3820,7 +3820,7 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 17511,
+  "line": 17523,
   "function": "soonPanel",
   "target": "reportsEl",
   "op": "=",
@@ -3830,7 +3830,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17521,
+  "line": 17533,
   "function": "soonPanel",
   "target": "extraEl",
   "op": "=",
@@ -3840,7 +3840,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17525,
+  "line": 17537,
   "function": "soonPanel",
   "target": "extraEl",
   "op": "=",
@@ -3850,7 +3850,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17527,
+  "line": 17539,
   "function": "soonPanel",
   "target": "if (findingsEl) findingsEl",
   "op": "=",
@@ -3860,7 +3860,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17529,
+  "line": 17541,
   "function": "soonPanel",
   "target": "if (recEl) recEl",
   "op": "=",
@@ -3870,7 +3870,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17533,
+  "line": 17545,
   "function": "soonPanel",
   "target": "extraEl",
   "op": "=",
@@ -3880,7 +3880,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17535,
+  "line": 17547,
   "function": "soonPanel",
   "target": "if (findingsEl) findingsEl",
   "op": "=",
@@ -3890,7 +3890,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17537,
+  "line": 17549,
   "function": "soonPanel",
   "target": "if (recEl) recEl",
   "op": "=",
@@ -3900,7 +3900,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17543,
+  "line": 17555,
   "function": "soonPanel",
   "target": "if (el) el",
   "op": "=",
@@ -3910,7 +3910,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17546,
+  "line": 17558,
   "function": "soonPanel",
   "target": "if (el) el",
   "op": "=",
@@ -3920,7 +3920,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17552,
+  "line": 17564,
   "function": "soonPanel",
   "target": "if (el) el",
   "op": "=",
@@ -3930,7 +3930,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17555,
+  "line": 17567,
   "function": "soonPanel",
   "target": "if (el) el",
   "op": "=",
@@ -3940,7 +3940,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17573,
+  "line": 17585,
   "function": "soonPanel",
   "target": "if (el) el",
   "op": "=",
@@ -3950,7 +3950,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17581,
+  "line": 17593,
   "function": "soonPanel",
   "target": "if (findingsElEarly) findingsElEarly",
   "op": "=",
@@ -3960,7 +3960,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17583,
+  "line": 17595,
   "function": "soonPanel",
   "target": "if (recElEarly) recElEarly",
   "op": "=",
@@ -3970,7 +3970,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17585,
+  "line": 17597,
   "function": "soonPanel",
   "target": "if (iocElEarly) iocElEarly",
   "op": "=",
@@ -3980,7 +3980,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17683,
+  "line": 17695,
   "function": "renderDetectionValidationTab",
   "target": "el",
   "op": "=",
@@ -3990,7 +3990,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17737,
+  "line": 17749,
   "function": "loadSIEMCorrelationPanel",
   "target": "el",
   "op": "=",
@@ -4000,7 +4000,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17830,
+  "line": 17842,
   "function": "openRerunReview",
   "target": "document.getElementById('rerun-review-body')",
   "op": "=",
@@ -4010,7 +4010,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17878,
+  "line": 17890,
   "function": "startRerunFromReview",
   "target": "btn",
   "op": "=",
@@ -4020,7 +4020,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17885,
+  "line": 17897,
   "function": "startRerunFromReview",
   "target": "btn",
   "op": "=",
@@ -4030,7 +4030,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17925,
+  "line": 17937,
   "function": "openCampaignRerunReview",
   "target": "document.getElementById('rerun-review-body')",
   "op": "=",
@@ -4040,7 +4040,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17958,
+  "line": 17970,
   "function": "startCampaignRerunFromReview",
   "target": "btn",
   "op": "=",
@@ -4050,7 +4050,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17965,
+  "line": 17977,
   "function": "startCampaignRerunFromReview",
   "target": "btn",
   "op": "=",
@@ -4060,7 +4060,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18047,
+  "line": 18059,
   "function": "renderScheduledAssessmentsList",
   "target": "tbody",
   "op": "=",
@@ -4070,7 +4070,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18050,
+  "line": 18062,
   "function": "renderScheduledAssessmentsList",
   "target": "tbody",
   "op": "=",
@@ -4080,7 +4080,7 @@
   "data_source_tags": "scenario,telemetry_log,user_created_name"
  },
  {
-  "line": 18118,
+  "line": 18130,
   "function": "openSchedWizard",
   "target": "sel",
   "op": "=",
@@ -4090,7 +4090,7 @@
   "data_source_tags": "scenario,user_created_name"
  },
  {
-  "line": 18175,
+  "line": 18187,
   "function": "openSchedWizardForEdit",
   "target": "sel",
   "op": "=",
@@ -4100,7 +4100,7 @@
   "data_source_tags": "scenario,user_created_name"
  },
  {
-  "line": 18239,
+  "line": 18251,
   "function": "renderSchedGroupTree",
   "target": "root",
   "op": "=",
@@ -4110,7 +4110,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18244,
+  "line": 18256,
   "function": "renderSchedGroupTree",
   "target": "root",
   "op": "=",
@@ -4120,7 +4120,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18307,
+  "line": 18319,
   "function": "renderSchedAgentList",
   "target": "root",
   "op": "=",
@@ -4130,7 +4130,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18309,
+  "line": 18321,
   "function": "renderSchedAgentList",
   "target": "root",
   "op": "=",
@@ -4140,7 +4140,7 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 18336,
+  "line": 18348,
   "function": "renderSchedInitiativeSelect",
   "target": "sel",
   "op": "=",
@@ -4150,7 +4150,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18349,
+  "line": 18361,
   "function": "renderSchedModeRecurrencePane",
   "target": "modeSel",
   "op": "=",
@@ -4160,7 +4160,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18455,
+  "line": 18467,
   "function": "renderSchedReview",
   "target": "document.getElementById('sched-review')",
   "op": "=",
@@ -4170,7 +4170,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18592,
+  "line": 18604,
   "function": "renderLicenseLockedScreen",
   "target": "el",
   "op": "=",
@@ -4180,7 +4180,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18658,
+  "line": 18670,
   "function": "renderLicenseGraceBanner",
   "target": "el",
   "op": "=",
@@ -4190,7 +4190,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18675,
+  "line": 18687,
   "function": "maybeShowLicenseGraceModal",
   "target": "overlay",
   "op": "=",
@@ -4200,7 +4200,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18870,
+  "line": 18882,
   "function": "goToProfile",
   "target": "el",
   "op": "=",
@@ -4210,7 +4210,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18929,
+  "line": 18941,
   "function": "loadAgentRiskSummary",
   "target": "if (tb) tb",
   "op": "=",
@@ -4220,7 +4220,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18951,
+  "line": 18963,
   "function": "renderAgentRiskSummary",
   "target": "tb",
   "op": "=",
@@ -4230,7 +4230,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18961,
+  "line": 18973,
   "function": "renderAgentRiskSummary",
   "target": "tb",
   "op": "=",
@@ -4240,7 +4240,7 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 19091,
+  "line": 19103,
   "function": "loadThreatIntelConfig",
   "target": "if (panel) panel",
   "op": "=",
@@ -4250,7 +4250,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 19100,
+  "line": 19112,
   "function": "loadThreatIntelConfig",
   "target": "panel",
   "op": "=",
@@ -4260,7 +4260,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 19206,
+  "line": 19218,
   "function": "loadTAXIIConnectors",
   "target": "tbody",
   "op": "=",
@@ -4270,7 +4270,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 19211,
+  "line": 19223,
   "function": "loadTAXIIConnectors",
   "target": "tbody",
   "op": "=",
@@ -4280,7 +4280,7 @@
   "data_source_tags": "error_message"
  },
  {
-  "line": 19218,
+  "line": 19230,
   "function": "renderTAXIIConnectorsList",
   "target": "tbody",
   "op": "=",
@@ -4290,7 +4290,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 19221,
+  "line": 19233,
   "function": "renderTAXIIConnectorsList",
   "target": "tbody",
   "op": "=",
@@ -4300,7 +4300,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 19397,
+  "line": 19409,
   "function": "loadARTContentStatus",
   "target": "statusEl",
   "op": "=",
@@ -4310,7 +4310,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 19399,
+  "line": 19411,
   "function": "loadARTContentStatus",
   "target": "statusEl",
   "op": "=",
@@ -4320,7 +4320,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 19439,
+  "line": 19451,
   "function": "loadARTContentStatus",
   "target": "document.getElementById('cs-art-status')",
   "op": "=",
@@ -4330,7 +4330,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 19452,
+  "line": 19464,
   "function": "toggleSimCoverage",
   "target": "if (car) car",
   "op": "=",
@@ -4340,7 +4340,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 19567,
+  "line": 19579,
   "function": "loadSimCoverage",
   "target": "bodyEl",
   "op": "=",
@@ -4350,7 +4350,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 20385,
+  "line": 20397,
   "function": "loadVariantStats",
   "target": "el",
   "op": "=",
@@ -4360,7 +4360,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 20427,
+  "line": 20439,
   "function": "populateVexAgents",
   "target": "if (sel) sel",
   "op": "=",
@@ -4370,7 +4370,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 20429,
+  "line": 20441,
   "function": "populateVexAgents",
   "target": "if (sweepSel) sweepSel",
   "op": "=",
@@ -4380,7 +4380,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 20464,
+  "line": 20476,
   "function": "populateVexTechniques",
   "target": "tacSel",
   "op": "=",
@@ -4390,7 +4390,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 20469,
+  "line": 20481,
   "function": "populateVexTechniques",
   "target": "if (el) el",
   "op": "=",
@@ -4400,7 +4400,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 20560,
+  "line": 20572,
   "function": "renderVexSweepList",
   "target": "el",
   "op": "=",
@@ -4410,7 +4410,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 20562,
+  "line": 20574,
   "function": "renderVexSweepList",
   "target": "el",
   "op": "=",
@@ -4420,7 +4420,7 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 20799,
+  "line": 20811,
   "function": "filterVexTechniques",
   "target": "el",
   "op": "=",
@@ -4430,7 +4430,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 20802,
+  "line": 20814,
   "function": "filterVexTechniques",
   "target": "el",
   "op": "=",
@@ -4440,7 +4440,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 20826,
+  "line": 20838,
   "function": "loadVariantCoverage",
   "target": "el",
   "op": "=",
@@ -4450,7 +4450,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 20829,
+  "line": 20841,
   "function": "loadVariantCoverage",
   "target": "el",
   "op": "=",
@@ -4460,7 +4460,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 20854,
+  "line": 20866,
   "function": "loadVariantCoverage",
   "target": "el",
   "op": "=",
@@ -4470,7 +4470,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 20856,
+  "line": 20868,
   "function": "loadVariantCoverage",
   "target": "el",
   "op": "=",
@@ -4480,7 +4480,7 @@
   "data_source_tags": "error_message"
  },
  {
-  "line": 20977,
+  "line": 20989,
   "function": "_vexRenderQueuePanel",
   "target": "panel",
   "op": "=",
@@ -4490,7 +4490,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 21047,
+  "line": 21059,
   "function": "pollVariantRun",
   "target": "if (panel) panel",
   "op": "=",
@@ -4500,7 +4500,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 21076,
+  "line": 21088,
   "function": "pollVariantRun",
   "target": "if (p) p",
   "op": "=",
@@ -4510,7 +4510,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 21108,
+  "line": 21120,
   "function": "stopVex",
   "target": "if (panel) panel",
   "op": "=",
@@ -4520,7 +4520,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 21221,
+  "line": 21233,
   "function": "renderVariantRun",
   "target": "if (wrapperEl) wrapperEl",
   "op": "=",
@@ -4530,7 +4530,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 21226,
+  "line": 21238,
   "function": "renderVariantRun",
   "target": "cell",
   "op": "=",
@@ -4540,7 +4540,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 21238,
+  "line": 21250,
   "function": "renderVariantRun",
   "target": "panel",
   "op": "=",
