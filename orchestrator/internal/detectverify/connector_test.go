@@ -24,7 +24,7 @@ func TestNewConnector_DispatchesKnownProviders(t *testing.T) {
 }
 
 func TestNewConnector_UnsupportedProvider_ReturnsError(t *testing.T) {
-	if _, err := NewConnector(Config{Provider: "elastic"}); err == nil {
+	if _, err := NewConnector(Config{Provider: "not_a_real_provider"}); err == nil {
 		t.Fatal("expected an error for a provider not yet implemented in this slice")
 	}
 }

@@ -37,7 +37,7 @@ const (
 type Config struct {
 	ID                 string
 	Name               string
-	Provider           string // "microsoft_sentinel" | "microsoft_defender" | "splunk" | "qradar" | "crowdstrike" | "trellix"
+	Provider           string // "microsoft_sentinel" | "microsoft_defender" | "splunk" | "qradar" | "crowdstrike" | "trellix" | "elastic"
 	Enabled            bool
 	AutoVerify         bool
 	TenantID           string
@@ -45,7 +45,7 @@ type Config struct {
 	ClientSecret       string
 	WorkspaceID        string // Sentinel only; empty for Defender XDR
 	BaseURL            string // Splunk/QRadar: management API base URL
-	APIToken           string // Splunk/QRadar: bearer token
+	APIToken           string // Splunk/QRadar: bearer token; Elastic: API key
 	InsecureTLS        bool   // skip TLS verification (self-signed on-prem appliances)
 	VerifyDelaySeconds int
 }
@@ -119,6 +119,8 @@ func NewConnector(cfg Config) (Connector, error) {
 		return newCrowdStrikeConnector(cfg), nil
 	case "trellix":
 		return newTrellixConnector(cfg), nil
+	case "elastic":
+		return newElasticConnector(cfg), nil
 	default:
 		return nil, fmt.Errorf("detectverify: provider %q not supported", cfg.Provider)
 	}

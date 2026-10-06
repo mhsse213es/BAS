@@ -78,11 +78,17 @@ func (h *Handler) CreateDetectionConnector(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	validProviders := map[string]bool{
-		"microsoft_sentinel": true, "microsoft_defender": true, "splunk": true, "qradar": true, "crowdstrike": true, "trellix": true,
+		"microsoft_sentinel": true, "microsoft_defender": true, "splunk": true, "qradar": true, "crowdstrike": true, "trellix": true, "elastic": true,
 	}
 	if !validProviders[req.Provider] {
-		jsonError(w, "provider must be microsoft_sentinel | microsoft_defender | splunk | qradar | crowdstrike | trellix", http.StatusBadRequest)
+		jsonError(w, "provider must be microsoft_sentinel | microsoft_defender | splunk | qradar | crowdstrike | trellix | elastic", http.StatusBadRequest)
 		return
+	}
+	if req.Provider == "elastic" {
+		if err := detectverify.ValidateElasticAuth(detectverify.Config{ClientID: req.ClientID, ClientSecret: req.ClientSecret, APIToken: req.APIToken}); err != nil {
+			jsonError(w, err.Error(), http.StatusBadRequest)
+			return
+		}
 	}
 	if req.VerifyDelaySeconds <= 0 {
 		req.VerifyDelaySeconds = 120
@@ -133,6 +139,14 @@ func (h *Handler) UpdateDetectionConnector(w http.ResponseWriter, r *http.Reques
 	}
 	if req.APIToken == "***" {
 		req.APIToken = existingToken
+	}
+	var provider string
+	h.db.QueryRow(r.Context(), `SELECT provider FROM detection_connectors WHERE id=$1`, id).Scan(&provider)
+	if provider == "elastic" {
+		if err := detectverify.ValidateElasticAuth(detectverify.Config{ClientID: req.ClientID, ClientSecret: req.ClientSecret, APIToken: req.APIToken}); err != nil {
+			jsonError(w, err.Error(), http.StatusBadRequest)
+			return
+		}
 	}
 	if req.VerifyDelaySeconds <= 0 {
 		req.VerifyDelaySeconds = 120
