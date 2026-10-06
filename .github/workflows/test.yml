@@ -121,6 +121,7 @@ jobs:
       - name: Smoke harness (bundled build)
         env:
           SMOKE_ROOT: dist
+          SMOKE_CSP: enforce
           SMOKE_STRICT: '1'
         run: npm run smoke
       - name: Upload smoke artifacts on failure
