@@ -62,3 +62,6 @@ node_modules/
 
 # G1c: build output of orchestrator/web (see web/tools/dev-build.sh)
 /orchestrator/wwwroot/
+
+# Private reference material, never committed
+/Assessment/
