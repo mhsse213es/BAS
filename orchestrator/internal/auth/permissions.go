@@ -274,7 +274,7 @@ var rolePermissions = map[Role]map[Permission]bool{
 		CanViewSSOConfig: true, CanManageSSOConfig: true,
 		CanViewSCIMConfig: true, CanManageSCIMConfig: true,
 		CanExecuteRemediation: true, CanApproveRemediation: true,
-		CanManageBackups: true,
+		CanManageBackups:        true,
 		CanResolveActorIdentity: true,
 	},
 	RoleAnalyst: {

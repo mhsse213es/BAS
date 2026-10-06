@@ -106,7 +106,7 @@ func TestHasPermission_MatrixIsComplete(t *testing.T) {
 		CanViewSSOConfig: true, CanManageSSOConfig: true,
 		CanViewSCIMConfig: true, CanManageSCIMConfig: true,
 		CanExecuteRemediation: true, CanApproveRemediation: true,
-		CanManageBackups: true,
+		CanManageBackups:        true,
 		CanResolveActorIdentity: true,
 
 		CanViewContentArtifact: true, CanTransitionContent: true, CanViewContentMigrationReport: true,
