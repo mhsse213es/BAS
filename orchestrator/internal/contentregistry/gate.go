@@ -24,6 +24,13 @@ func errString(err error) string {
 // VENDOR_SIGNED versions are re-verified on every resolution; a failure
 // denies (it never falls through to an older version) and audits a tamper.
 func (r *Registry) ResolveExecutable(ctx context.Context, contentID string) (scenario.ExecutableVersion, error) {
+	return r.resolveExecutable(ctx, contentID, true)
+}
+
+// resolveExecutable is ResolveExecutable with the audit writes switchable.
+// audit=false (used by polled read-only checks) still re-verifies signatures
+// and denies identically; it only suppresses the audit_logs rows.
+func (r *Registry) resolveExecutable(ctx context.Context, contentID string, audit bool) (scenario.ExecutableVersion, error) {
 	versions, err := r.ListVersions(ctx, contentID)
 	if err != nil {
 		return scenario.ExecutableVersion{}, fmt.Errorf("content registry unavailable: %w", err)
@@ -38,15 +45,19 @@ func (r *Registry) ResolveExecutable(ctx context.Context, contentID string) (sce
 		if v.Trust == TrustVendorSigned {
 			if !r.verifier.SigningEnabled() {
 				// A dev build cannot verify signatures: deny, but this is not tampering.
-				r.audit(ctx, "content_registry.signing_unavailable", v.ID, map[string]any{
-					"content_id": contentID, "version": v.Number}, "denied")
+				if audit {
+					r.audit(ctx, "content_registry.signing_unavailable", v.ID, map[string]any{
+						"content_id": contentID, "version": v.Number}, "denied")
+				}
 				return scenario.ExecutableVersion{}, &ErrNotExecutable{ContentID: contentID,
 					Reason: fmt.Sprintf("v%d is vendor-signed but this build cannot verify signatures", v.Number)}
 			}
 			ok, verr := r.verifier.Verify(v.Artifact, v.Signature)
 			if !ok || verr != nil {
-				r.audit(ctx, "content_registry.tamper", v.ID, map[string]any{
-					"content_id": contentID, "version": v.Number, "error": errString(verr)}, "denied")
+				if audit {
+					r.audit(ctx, "content_registry.tamper", v.ID, map[string]any{
+						"content_id": contentID, "version": v.Number, "error": errString(verr)}, "denied")
+				}
 				return scenario.ExecutableVersion{}, &ErrNotExecutable{ContentID: contentID,
 					Reason: fmt.Sprintf("signature re-verification failed for v%d", v.Number)}
 			}

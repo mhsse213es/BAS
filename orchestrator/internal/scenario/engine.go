@@ -11,6 +11,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync/atomic"
 
 	"gopkg.in/yaml.v3"
 
@@ -35,6 +36,9 @@ type Engine struct {
 	// (ResolveExecutable fails closed); the disk map still serves authoring.
 	registry ContentRegistry
 	verifier integrity.Verifier
+	// intakeFailures counts registry Intake infrastructure errors (err != nil)
+	// in the last Load. Policy refusals are not counted.
+	intakeFailures atomic.Int32
 }
 
 // NewEngine creates an Engine that reads scenarios from dir.
@@ -46,6 +50,10 @@ func NewEngine(dir string) *Engine {
 		verifier:  integrity.CompiledVerifier{},
 	}
 }
+
+// LastLoadIntakeFailures is the number of files the last Load could not hand
+// to the registry because Intake returned an error (not a policy refusal).
+func (e *Engine) LastLoadIntakeFailures() int { return int(e.intakeFailures.Load()) }
 
 // AttachRegistry wires the TCF Content Registry into the engine.
 func (e *Engine) AttachRegistry(r ContentRegistry) { e.registry = r }
@@ -81,6 +89,7 @@ var sourceRank = map[string]int{"builtin": 0, "custom": 1, "intel": 2}
 // Individual file errors are logged and skipped — a bad file never blocks the rest.
 // Safe to call multiple times — reloads on each call.
 func (e *Engine) Load() error {
+	e.intakeFailures.Store(0)
 	e.scenarios = make(map[string]*Scenario)
 	// Load Detection Validation profiles first so scenario resolution can
 	// reference them. Profile errors are logged, never fatal.
@@ -146,6 +155,7 @@ func (e *Engine) Load() error {
 			d, ierr := e.registry.Intake(ctx, IntakeFile{Path: f.path, Source: f.source, Artifact: f.bytes,
 				Signature: sig, SignatureVerified: verified})
 			if ierr != nil {
+				e.intakeFailures.Add(1)
 				log.Printf("[!] content registry intake %s: %v — not loaded", f.path, ierr)
 				continue
 			}

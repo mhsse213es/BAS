@@ -4,6 +4,7 @@ import (
 	"context"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -67,6 +68,54 @@ func TestMigrationIdempotentWithInventory(t *testing.T) { // A14
 		if err != nil || len(blocked) != 1 {
 			t.Fatalf("blocked schedules = %d err=%v", len(blocked), err)
 		}
+
+		// A custom file first seen after the marker is DRAFT and not grandfathered.
+		in("custom", "id: c2\nname: C2\nlocal_check: true\n")
+		vs, err := r.ListVersions(ctx, "c2")
+		if err != nil || len(vs) != 1 || vs[0].Lifecycle != LifecycleDraft {
+			t.Fatalf("post-marker custom file must be DRAFT: %+v err=%v", vs, err)
+		}
+		inv3, first3, err := r.CompleteMigration(ctx)
+		if err != nil || first3 {
+			t.Fatalf("third run: first=%v err=%v", first3, err)
+		}
+		for _, id := range inv3.CustomGrandfathered {
+			if id == "c2" {
+				t.Fatalf("c2 must not be grandfathered: %+v", inv3.CustomGrandfathered)
+			}
+		}
+	})
+}
+
+// The polled blocked-schedule check must fail closed without writing audit rows.
+func TestBlockedSchedulesWritesNoAudit(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		signer := testutil.NewTestSigner(t)
+		r := New(pool, testutil.DevVerifier()) // dev build: VENDOR_SIGNED cannot be verified, so denied
+		signedPublished(t, r, signer, "vs1", "V")
+		if _, err := pool.Exec(ctx, `INSERT INTO job_schedules (type, payload, agent_ids, day_of_week, time_of_day) VALUES
+			('scheduled_assessment', '{"scenarioId":"vs1"}', '[]', 1, '09:00'),
+			('scheduled_assessment', '{"scenarioId":"vs1"}', '[]', 2, '09:00')`); err != nil {
+			t.Fatal(err)
+		}
+		count := func() int {
+			var n int
+			if err := pool.QueryRow(ctx, `SELECT count(*) FROM audit_logs`).Scan(&n); err != nil {
+				t.Fatal(err)
+			}
+			return n
+		}
+		before := count()
+		for i := 0; i < 2; i++ {
+			blocked, err := r.BlockedSchedules(ctx)
+			if err != nil || len(blocked) != 2 {
+				t.Fatalf("denied vendor-signed content must block both schedules: %+v err=%v", blocked, err)
+			}
+		}
+		if after := count(); after != before {
+			t.Fatalf("audit_logs rows %d -> %d; BlockedSchedules must not audit", before, after)
+		}
 	})
 }
 
@@ -106,26 +155,36 @@ func TestCompleteMigrationConcurrentSingleWinner(t *testing.T) {
 		r := New(pool, testutil.DevVerifier())
 		var mu sync.Mutex
 		wins := 0
+		var stamps []time.Time
 		var wg sync.WaitGroup
 		for i := 0; i < 6; i++ {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				_, first, err := r.CompleteMigration(ctx)
+				inv, first, err := r.CompleteMigration(ctx)
 				if err != nil {
 					t.Errorf("CompleteMigration: %v", err)
 					return
 				}
+				mu.Lock()
+				stamps = append(stamps, inv.MigratedAt)
 				if first {
-					mu.Lock()
 					wins++
-					mu.Unlock()
 				}
+				mu.Unlock()
 			}()
 		}
 		wg.Wait()
 		if wins != 1 {
 			t.Fatalf("firstTime winners = %d, want 1", wins)
+		}
+		if len(stamps) != 6 {
+			t.Fatalf("callers returned %d results", len(stamps))
+		}
+		for _, ts := range stamps {
+			if ts.IsZero() || !ts.Equal(stamps[0]) {
+				t.Fatalf("callers must return the same stored inventory: %v vs %v", ts, stamps[0])
+			}
 		}
 	})
 }

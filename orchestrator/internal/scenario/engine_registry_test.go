@@ -145,6 +145,16 @@ func TestLoad_IntakeErrorKeepsLoadingAndDoesNotExecute(t *testing.T) { // Review
 	if _, ok := e.Get("b"); !ok {
 		t.Fatal("load must continue past one intake error")
 	}
+	if n := e.LastLoadIntakeFailures(); n != 1 {
+		t.Fatalf("intake failures = %d, want 1", n)
+	}
+	delete(f.errIDs, "a")
+	if err := e.Load(); err != nil {
+		t.Fatal(err)
+	}
+	if n := e.LastLoadIntakeFailures(); n != 0 {
+		t.Fatalf("intake failures after recovery = %d, want 0 (counter must reset per load)", n)
+	}
 }
 
 func TestResolveExecutable_NoRegistryFailsClosed(t *testing.T) {

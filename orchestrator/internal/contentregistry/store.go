@@ -154,6 +154,12 @@ func (r *Registry) createVersion(ctx context.Context, nv newVersion) (string, bo
 	}
 
 	if nv.grandfatherEligible {
+		// Shared: many grandfather intakes may run together, but never while
+		// CompleteMigration (exclusive) is computing the inventory and setting
+		// the marker. Held until this transaction ends.
+		if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock_shared($1)`, migrationLockKey); err != nil {
+			return "", false, err
+		}
 		var stillEligible bool
 		if err := tx.QueryRow(ctx,
 			`SELECT NOT EXISTS (SELECT 1 FROM content_registry_state)

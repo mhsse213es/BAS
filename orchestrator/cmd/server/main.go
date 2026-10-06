@@ -786,10 +786,10 @@ func main() {
 		WithTAXII(taxiiStore, taxiiManager).
 		WithIOCProvider(iocProvider)
 
-	// Content registry migration marker: only after a clean scenario load, so a
-	// partial intake never ends custom-file grandfathering. A failure here is
+	// Content registry migration marker: only after a clean scenario load with zero intake
+	// infrastructure failures, so a partial intake never ends custom-file grandfathering. A failure here is
 	// logged and retried next boot (marker stays absent); it never blocks boot.
-	if scenarioLoadErr == nil {
+	if n := engine.LastLoadIntakeFailures(); scenarioLoadErr == nil && n == 0 {
 		if inv, first, err := contentRegistry.CompleteMigration(context.Background()); err != nil {
 			log.Printf("[contentregistry] migration inventory: %v", err)
 		} else if first {
@@ -797,7 +797,7 @@ func main() {
 				len(inv.IntelDrafted), len(inv.AffectedSchedules), len(inv.AffectedCampaigns), len(inv.CustomGrandfathered), len(inv.BuiltinRefused))
 		}
 	} else {
-		log.Printf("[contentregistry] migration deferred: scenario load failed")
+		log.Printf("[contentregistry] migration deferred: %d intake failures (load error: %v)", engine.LastLoadIntakeFailures(), scenarioLoadErr)
 	}
 
 	vexSweepScheduler.Start(func(ctx context.Context) {
