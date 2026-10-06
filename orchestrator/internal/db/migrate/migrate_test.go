@@ -117,24 +117,44 @@ func TestUp_Idempotent(t *testing.T) { // H1-T2
 	}
 }
 
-func TestUp_ConcurrentRunsSerialize(t *testing.T) { // Review Focus: double-run
-	dsn := pgtest.NewDatabase(t)
+// concurrentUp starts three Up runs at once and requires that exactly one did
+// any work: the others must wait on the lock and then find nothing pending.
+func concurrentUp(t *testing.T, dsn string) {
+	t.Helper()
 	var wg sync.WaitGroup
+	res := make([]migrate.Result, 3)
 	errs := make([]error, 3)
 	for i := range errs {
 		wg.Add(1)
-		go func(i int) { defer wg.Done(); _, errs[i] = migrate.Up(context.Background(), dsn, noRole) }(i)
+		go func(i int) { defer wg.Done(); res[i], errs[i] = migrate.Up(context.Background(), dsn, noRole) }(i)
 	}
 	wg.Wait()
+	worked := 0
 	for i, err := range errs {
 		if err != nil {
 			t.Fatalf("run %d: %v", i, err)
 		}
+		r := res[i]
+		if r.Adopted || r.FromVersion != r.ToVersion || r.FromSeed != r.ToSeed {
+			worked++
+		}
+	}
+	if worked != 1 {
+		t.Fatalf("%d runs did work, want exactly 1: %+v", worked, res)
 	}
 	st, _ := migrate.GetStatus(context.Background(), dsn)
 	if st.Dirty || st.Pending {
 		t.Fatalf("status %+v", st)
 	}
+}
+
+func TestUp_ConcurrentRunsSerialize(t *testing.T) { // Review Focus: double-run
+	concurrentUp(t, pgtest.NewDatabase(t))
+}
+
+func TestUp_ConcurrentAdoptionSerializes(t *testing.T) { // Review Focus: double-run on a pre-H1 install
+	dsn, _ := legacyInstall(t)
+	concurrentUp(t, dsn)
 }
 
 func TestMigrationSet_OrderedNoGapsNoDuplicates(t *testing.T) { // H1-T4
