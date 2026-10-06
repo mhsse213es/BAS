@@ -1041,6 +1041,33 @@ if ($unsignedImages.Count -gt 0) {
 } else {
     Log "  Image signature gate passed: every images\*.tar has its cosign .bundle."
 }
+# Existence is not enough: re-verify EVERY image tar's signature against the
+# cosign.pub that ships in this bundle, with the exact verify-blob key/flags
+# install.sh's _verify_all_images uses, so a corrupted .bundle or a tar modified
+# after signing is never zipped. -AllowUnsignedImages (i.e.
+# $CosignSigningRequired = $false) keeps the existence-only behaviour above.
+if ($CosignSigningRequired) {
+    $zipPub = "$OutDir\cosign.pub"
+    if (-not (Test-Path $zipPub -PathType Leaf)) { Err "cosign.pub missing from $OutDir -- refusing to create the ZIP." }
+    $badSig = @()
+    foreach ($imgTar in (Get-ChildItem -Path "$OutDir\images" -Filter "*.tar" -File)) {
+        # Same EAP handling as the post-sign verify above: cosign's routine
+        # stderr must not become a terminating NativeCommandError.
+        $prevEAP = $ErrorActionPreference
+        $ErrorActionPreference = 'Continue'
+        try {
+            & $cosignCmd.Source verify-blob --key $zipPub --bundle "$($imgTar.FullName).bundle" --insecure-ignore-tlog "$($imgTar.FullName)" 2>&1 | ForEach-Object { Log "    $_" }
+            $zipVerifyExit = $LASTEXITCODE
+        } finally {
+            $ErrorActionPreference = $prevEAP
+        }
+        if ($zipVerifyExit -ne 0) { $badSig += $imgTar.Name }
+    }
+    if ($badSig.Count -gt 0) {
+        Err "cosign verify-blob FAILED at ZIP time for: $($badSig -join ', ') -- refusing to create the ZIP."
+    }
+    Log "  ZIP-time cosign gate passed: every images\*.tar verified against $zipPub."
+}
 
 # -- 9. Create ZIP for transfer -----------------------------------------------
 Log "Creating ZIP: $ZipPath"

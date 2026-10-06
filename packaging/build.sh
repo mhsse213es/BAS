@@ -276,6 +276,10 @@ rel_ship_postgres "${REPO_ROOT}" "${BUILD_DIR}/images" "${COSIGN_SCRIPT}"
 # compose starts both with no profile, so the bundle needs them, signed.
 rel_ship_caldera_chrome "${VERSION}" "${REPO_ROOT}" "${BUILD_DIR}/images" "${COSIGN_SCRIPT}"
 
+# Packaging gate: re-verify EVERY image tar against the cosign.pub that ships in
+# the bundle (same verify-blob key/flags as install.sh) -- existence is not enough.
+rel_verify_all_images "${BUILD_DIR}/images" "${BUILD_DIR}/cosign.pub"
+
 # ── 5. Package tarball ─────────────────────────────────────────────────────────
 TARBALL="${DIST_DIR}/${BUILD_NAME}.tar.gz"
 log "Creating ${TARBALL}..."

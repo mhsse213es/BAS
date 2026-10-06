@@ -16,6 +16,31 @@ rel_sign_tar() {
   bash "$cs" --verify "$tar" || { err "cosign verification FAILED immediately after signing ${tar} -- investigate before shipping."; exit 1; }
 }
 
+# rel_verify_all_images <images dir> <cosign.pub>: packaging-time gate, run on the
+# final images/ just before the tarball. Every file must be a .tar with a
+# non-empty .bundle (or that .bundle), and EVERY tar is re-verified with the exact
+# verify-blob key/flags install.sh's _verify_all_images uses, against the
+# cosign.pub that ships in the bundle. A corrupted .bundle or a tar modified
+# after signing is fatal: it is never packaged.
+rel_verify_all_images() {
+  local dir="$1" pub="$2" tar n=0
+  [[ -f "$pub" ]] || { err "cosign public key not found at ${pub} -- refusing to package."; exit 1; }
+  for tar in "$dir"/*; do
+    [[ -f "$tar" ]] || continue
+    case "$tar" in
+      *.tar.bundle) ;;
+      *.tar)
+        [[ -s "${tar}.bundle" ]] || { err "$(basename "$tar") has no cosign .bundle -- refusing to package."; exit 1; }
+        cosign verify-blob --key "$pub" --bundle "${tar}.bundle" --insecure-ignore-tlog "$tar" \
+          || { err "cosign verification FAILED for $(basename "$tar") at packaging time -- refusing to package."; exit 1; }
+        n=$((n + 1)) ;;
+      *) err "Unexpected file in images/: $(basename "$tar") -- refusing to package."; exit 1 ;;
+    esac
+  done
+  [[ "$n" -gt 0 ]] || { err "No image tars in ${dir} -- refusing to package."; exit 1; }
+  log "  Packaging gate: all ${n} image tar(s) re-verified with cosign verify-blob."
+}
+
 # rel_save_sign <image> <out.tar> <cosign.sh>
 rel_save_sign() {
   local img="$1" tar="$2" cs="$3"

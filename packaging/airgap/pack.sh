@@ -123,14 +123,10 @@ rel_ship_postgres "${REPO_ROOT}" "${BUILD_DIR}/images" "${COSIGN_SCRIPT}"
 # compose starts both with no profile, so an offline install needs them.
 rel_ship_caldera_chrome "${VERSION}" "${REPO_ROOT}" "${BUILD_DIR}/images" "${COSIGN_SCRIPT}"
 
-# Every file under images/ must be a signed .tar (fail closed on anything else).
-for f in "${BUILD_DIR}"/images/*; do
-  case "$f" in
-    *.tar.bundle) ;;
-    *.tar) [[ -f "${f}.bundle" ]] || { err "${f} has no cosign .bundle -- aborting."; exit 1; } ;;
-    *) err "Unexpected file in images/: ${f} -- aborting."; exit 1 ;;
-  esac
-done
+# Every file under images/ must be a .tar whose signature VERIFIES against the
+# bundled cosign.pub (same verify-blob key/flags as the importer); fail closed on
+# anything else. images/ is final from here on.
+rel_verify_all_images "${BUILD_DIR}/images" "${BUILD_DIR}/cosign.pub"
 
 # ── 4. Copy compose bundle ─────────────────────────────────────────────────────
 log "Copying compose bundle..."

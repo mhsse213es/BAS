@@ -754,4 +754,42 @@ compose_up=$(find "$REPO/packaging" \( -name '*.sh' -o -name '*.service' \) ! -n
 no_pull=$(grep -v -- '--pull never' <<<"$compose_up" || true)
 [ -z "$no_pull" ] && pass "every compose up/create/run line has --pull never" || { fail "compose invocation without --pull never"; echo "$no_pull"; }
 
+echo "TEST: packaging-time gate (build.sh + pack.sh): every image tar re-verified with cosign verify-blob before the tarball"
+GIMG="$T/gimg"
+gate_case() { # <label> <expect ok|fail> <mutation, eval'd with $GIMG>
+  rm -rf "$GIMG"; mkdir -p "$GIMG"
+  mk_image_tar "$GIMG/bas-orchestrator-9.9.9.tar" '"bas-orchestrator:9.9.9"' orch; sign_tar "$GIMG/bas-orchestrator-9.9.9.tar" fake-pub
+  mk_image_tar "$GIMG/postgres-16-alpine.tar" '"postgres:16-alpine"' pg;          sign_tar "$GIMG/postgres-16-alpine.tar" fake-pub
+  printf 'fake-pub' > "$T/gate.pub"
+  eval "$3"
+  : > "$STUB_LOG"; local rc=0
+  PATH="$STUBS:$PATH" bash -c 'set -euo pipefail; log(){ echo "$*"; }; err(){ echo "ERR $*" >&2; }; source "$1"; rel_verify_all_images "$2" "$3"' _ \
+    "$REPO/packaging/signing/release-images.sh" "$GIMG" "$T/gate.pub" > "$T/out.txt" 2>&1 || rc=$?
+  if [ "$2" = ok ]; then
+    [ "$rc" -eq 0 ] && [ "$(grep -c '^cosign verify-blob' "$STUB_LOG")" -eq 2 ] && pass "gate: $1" || { fail "gate: $1 (rc=$rc)"; cat "$T/out.txt"; }
+  else
+    [ "$rc" -ne 0 ] && pass "gate: $1" || fail "gate: $1 -- packaging gate accepted it"
+  fi
+}
+gate_case "two correctly signed tars pass, each verified with verify-blob" ok ""
+gate_case "corrupted .bundle refused" fail 'echo garbage > "$GIMG/postgres-16-alpine.tar.bundle"'
+gate_case "tar modified after signing refused" fail 'echo tampered >> "$GIMG/bas-orchestrator-9.9.9.tar"'
+gate_case "signed by a different key than the shipped cosign.pub refused" fail 'sign_tar "$GIMG/postgres-16-alpine.tar" other-key'
+gate_case "empty .bundle refused" fail ': > "$GIMG/postgres-16-alpine.tar.bundle"'
+gate_case "missing .bundle refused" fail 'rm "$GIMG/postgres-16-alpine.tar.bundle"'
+gate_case "unexpected file in images/ refused" fail 'echo x > "$GIMG/notes.txt"'
+gate_case "empty images/ refused" fail 'rm -f "$GIMG"/*'
+grep -q 'cosign verify-blob --key "$pub" --bundle "${tar}.bundle" --insecure-ignore-tlog "$tar"' "$REPO/packaging/signing/release-images.sh" \
+  && pass "gate uses the installer's exact verify-blob key/flags" || fail "gate verify-blob flags differ from install.sh"
+for f in packaging/build.sh packaging/airgap/pack.sh; do
+  g=$(grep -n '^rel_verify_all_images "\${BUILD_DIR}/images" "\${BUILD_DIR}/cosign.pub"$' "$REPO/$f" | head -1 | cut -d: -f1 || true)
+  z=$(grep -n '^tar -czf "\${TARBALL}"' "$REPO/$f" | head -1 | cut -d: -f1 || true)
+  [ -n "$g" ] && [ -n "$z" ] && [ "$g" -lt "$z" ] && pass "$f: packaging gate runs against the shipped cosign.pub before the tarball" || fail "$f: packaging gate missing/misplaced"
+done
+gate_ps=$(grep -n 'verify-blob --key \$zipPub --bundle "\$(\$imgTar.FullName).bundle" --insecure-ignore-tlog "\$(\$imgTar.FullName)"' "$PS1" | head -1 | cut -d: -f1 || true)
+[ -n "$gate_ps" ] && [ -n "$gate_line" ] && [ -n "$zip_line" ] && [ "$gate_line" -lt "$gate_ps" ] && [ "$gate_ps" -lt "$zip_line" ] \
+  && pass "windows-build.ps1: ZIP-time verify-blob of every image tar sits between the .bundle gate and Compress-Archive (static; not executed)" || fail "windows-build.ps1 ZIP-time verify missing/misplaced"
+awk '/^# -- 8b\. Image signature gate/{f=1} /^# -- 9\. Create ZIP/{f=0} f' "$PS1" | grep -q 'if (\$CosignSigningRequired) {' \
+  && pass "windows-build.ps1: ZIP-time verify honours -AllowUnsignedImages / -CosignSigningRequired:\$false" || fail "windows-build.ps1 ZIP-time verify ignores the escape hatch"
+
 if [ "$FAILED" -eq 0 ]; then echo "ALL PASS"; else echo "SOME FAILED"; exit 1; fi
