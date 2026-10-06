@@ -11,7 +11,7 @@ import { loadUsers } from './evidence.js';
 import { loadOpenAEVConfig, renderAttackPath } from './openaev.js';
 import { loadRuns, loadSIEMCorrelationPanel } from './reports.js';
 import { SCHED, renderScheduledAssessmentsList } from './scheduled.js';
-import { ROLE, STRIPE_COLORS, scenarioSrcCollapsed, setAgentsView } from './shell.js';
+import { ROLE, STRIPE_COLORS, scenarioSrcCollapsed, setAgentsView, showTab } from './shell.js';
 import { loadARTContentStatus, loadConnectorStatus, loadTAXIIConnectors, loadThreatIntelConfig } from './threat-intel.js';
 
 
@@ -1144,6 +1144,7 @@ export function showSettingsSection(name) {
   else if (name === 'dashprefs') syncDashPrefCards();
   else if (name === 'backup') loadBackups();
 }
+export function manageUsersLink() { showTab('settings'); showSettingsSection('users'); }
 
 export function selectDashPref(pref) {
   localStorage.setItem('bas_dash_pref', pref);

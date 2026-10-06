@@ -1247,7 +1247,7 @@
         </div>
 
         <div id="profile-admin-shortcut" style="display:none;max-width:560px">
-          <a href="javascript:void(0)" class="desc-toggle" onclick="showTab('settings');showSettingsSection('users');return false;">&#9881; Manage users &amp; roles &rarr;</a>
+          <a href="#" class="desc-toggle" data-on-click="manageUsersLink">&#9881; Manage users &amp; roles &rarr;</a>
         </div>
       </div>
 
@@ -2855,7 +2855,7 @@
       <div class="wz-pane" data-pane="3" style="display:none">
         <!-- Customize — only shown for ART/Caldera/steps/posture scenarios -->
         <div id="modal-customize-wrap" style="display:none">
-          <a href="javascript:void(0)" class="desc-toggle" id="modal-customize-link" onclick="openPickerFromModal();return false;">&#9881; Customize</a>
+          <a href="#" class="desc-toggle" id="modal-customize-link" data-on-click="openPickerFromModal">&#9881; Customize</a>
         </div>
         <div id="modal-selection" style="display:none;margin-top:0.6rem;padding:0.5rem 0.7rem;border:1px solid var(--border);border-radius:var(--radius);font-size:0.78rem;background:var(--elevated);color:var(--text)"></div>
 
@@ -3270,8 +3270,8 @@
     </div>
 
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.5rem;font-size:0.78rem">
-      <span id="picker-selectall-wrap"><a href="javascript:void(0)" class="desc-toggle" onclick="pickerSelectAll(true);return false;">Select all</a>
-        &nbsp;·&nbsp; <a href="javascript:void(0)" class="desc-toggle" onclick="pickerSelectAll(false);return false;">None</a></span>
+      <span id="picker-selectall-wrap"><a href="#" class="desc-toggle" data-on-click="pickerSelectAll" data-args="[true]">Select all</a>
+        &nbsp;·&nbsp; <a href="#" class="desc-toggle" data-on-click="pickerSelectAll" data-args="[false]">None</a></span>
       <span id="picker-count" class="card-meta"></span>
     </div>
     <div id="picker-list" style="flex:1;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius);padding:0.25rem"></div>
@@ -3695,7 +3695,7 @@
         <div class="form-group">
           <label style="display:flex;align-items:center;justify-content:space-between">
             <span>ATT&amp;CK technique IDs (one per line or comma separated)</span>
-            <a href="javascript:void(0)" class="desc-toggle" style="font-size:0.78rem;white-space:nowrap;margin-left:0.75rem" onclick="openBuilderARTPicker();return false;">&#128269; Browse catalog</a>
+            <a href="#" class="desc-toggle" style="font-size:0.78rem;white-space:nowrap;margin-left:0.75rem" data-on-click="openBuilderARTPicker">&#128269; Browse catalog</a>
           </label>
           <textarea id="bld-art-list" rows="4" placeholder="T1059.001&#10;T1003.001&#10;T1486"></textarea>
         </div>
@@ -3707,7 +3707,7 @@
         <div class="form-group">
           <label style="display:flex;align-items:center;justify-content:space-between">
             <span>Caldera ability IDs (one per line or comma separated)</span>
-            <a href="javascript:void(0)" class="desc-toggle" style="font-size:0.78rem;white-space:nowrap;margin-left:0.75rem" onclick="openBuilderCalderaPicker();return false;">&#128269; Browse catalog</a>
+            <a href="#" class="desc-toggle" style="font-size:0.78rem;white-space:nowrap;margin-left:0.75rem" data-on-click="openBuilderCalderaPicker">&#128269; Browse catalog</a>
           </label>
           <textarea id="bld-caldera-list" rows="4" placeholder="ability-uuid-1&#10;ability-uuid-2"></textarea>
         </div>
