@@ -2938,7 +2938,7 @@
   "rhs": "'<div class=\"empty\" style=\"padding:1.25rem\">No severities with SLA episodes.</div>'"
  },
  {
-  "sink_id": "refreshDashboardCampaigns:el:=:216e81e517a2",
+  "sink_id": "refreshDashboardCampaigns:el:=:6ffbaac85fca",
   "line": 8856,
   "function": "refreshDashboardCampaigns",
   "target": "el",
@@ -2948,7 +2948,7 @@
   "severity_tier": 4,
   "data_source_tags": "user_created_name",
   "trace_notes": "",
-  "rhs": "liveList.map(function(c) {\n      var s = c.summary || {};\n      var cds = campaignDisplayStatus(s);\n      return '<div class=\"lrow u-pointer\" onclick=\"openCampaignDetail(\\'' + x(c.id) + '\\')\">' +\n        '<div class=\"lic\" style=\"color:var(--accent);background:rgba(47,129,247,0.1)\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 16 16\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.4\"><path d=\"M1 8h3l2"
+  "rhs": "liveList.map(function(c) {\n      var s = c.summary || {};\n      var cds = campaignDisplayStatus(s);\n      return '<div class=\"lrow u-pointer\"' + on('click', 'openCampaignDetail', c.id) + '>' +\n        '<div class=\"lic\" style=\"color:var(--accent);background:rgba(47,129,247,0.1)\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 16 16\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.4\"><path d=\"M1 8h3l2-5 "
  },
  {
   "sink_id": "refreshDashboardCampaigns:el:=:ab5b04e634ec",

@@ -1,6 +1,7 @@
 import { state } from '../core/state.js';
 import { apicall } from '../core/api.js';
 import { x } from '../core/escape.js';
+import { on } from '../core/actions.js';
 import { showToast } from '../core/util.js';
 import { loadComplianceReport } from './agent-drawer.js';
 import { campaignDisplayStatus } from './campaigns.js';
@@ -39,7 +40,7 @@ function complianceWhy(fw) {
     failing + ' failing, ' + untested + ' untested.';
 }
 
-function openComplianceDetail(frameworkId, agentId) {
+export function openComplianceDetail(frameworkId, agentId) {
   showTab('compliance');
   var fwSel = document.getElementById('cmp-fw-sel');
   var agSel = document.getElementById('cmp-agent-sel');
@@ -48,7 +49,7 @@ function openComplianceDetail(frameworkId, agentId) {
   loadComplianceReport();
 }
 
-function complianceTile(fw) {
+export function complianceTile(fw) {
   var pct     = fw.compliancePct  || 0;
   var cov     = fw.coveragePct    || 0;
   var tested  = fw.testedControls || 0;
@@ -102,7 +103,7 @@ function complianceTile(fw) {
 
   return '<div class="kpi-card stat-tile" ' +
     'style="border-left:3px solid ' + borderColor + ';cursor:pointer;min-width:155px;max-width:220px" ' +
-    'onclick="openComplianceDetail(\'' + x(fw.frameworkId) + '\', \'' + x(fw.agentId) + '\')" ' +
+    on('click', 'openComplianceDetail', fw.frameworkId, fw.agentId) + ' ' +
     'title="' + x(fw.frameworkName) + '\n' + x(complianceWhy(fw)) + '">' +
     '<div class="stat-top">' +
       '<div style="flex:1;min-width:0">' +
@@ -149,7 +150,7 @@ export function refreshDashboardCampaigns() {
     el.innerHTML = liveList.map(function(c) {
       var s = c.summary || {};
       var cds = campaignDisplayStatus(s);
-      return '<div class="lrow u-pointer" onclick="openCampaignDetail(\'' + x(c.id) + '\')">' +
+      return '<div class="lrow u-pointer"' + on('click', 'openCampaignDetail', c.id) + '>' +
         '<div class="lic" style="color:var(--accent);background:rgba(47,129,247,0.1)"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M1 8h3l2-5 4 10 2-5h3"/></svg></div>' +
         '<div class="lmain"><div class="lt">' + x(c.name) + ' <span class="sbadge s-' + cds.cls + '">' + x(cds.label) + '</span></div>' +
           '<div class="ls">' + x(c.scenarioName || '') + ' · ' + (s.dispatched || 0) + '/' + (s.targets || 0) + ' agents</div>' +

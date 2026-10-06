@@ -510,11 +510,11 @@ rank:el:=:53dbb64ac0d2,11967,rank,el,=,unescaped_html,unescaped_html,4,,,"sorted
       '<div class=""bar-label""><span>' + x(s.severity) + '</span><span style=""color:' + rate.color + '"">' + rate.text + '</span></div>' +
       '<div class=""bar-track""><div class=""bar-fill"" style=""width:' + s.complianceRate + '%;background:' + rate.color + '""></div></div>"
 rank:el:=:d0b2d3123aea,11966,rank,el,=,static,static,0,,,"'<div class=""empty"" style=""padding:1.25rem"">No severities with SLA episodes.</div>'"
-refreshDashboardCampaigns:el:=:216e81e517a2,8856,refreshDashboardCampaigns,el,=,unescaped_html,unescaped_html,4,user_created_name,,"liveList.map(function(c) {
+refreshDashboardCampaigns:el:=:6ffbaac85fca,8856,refreshDashboardCampaigns,el,=,unescaped_html,unescaped_html,4,user_created_name,,"liveList.map(function(c) {
       var s = c.summary || {};
       var cds = campaignDisplayStatus(s);
-      return '<div class=""lrow u-pointer"" onclick=""openCampaignDetail(\'' + x(c.id) + '\')"">' +
-        '<div class=""lic"" style=""color:var(--accent);background:rgba(47,129,247,0.1)""><svg width=""16"" height=""16"" viewBox=""0 0 16 16"" fill=""none"" stroke=""currentColor"" stroke-width=""1.4""><path d=""M1 8h3l2"
+      return '<div class=""lrow u-pointer""' + on('click', 'openCampaignDetail', c.id) + '>' +
+        '<div class=""lic"" style=""color:var(--accent);background:rgba(47,129,247,0.1)""><svg width=""16"" height=""16"" viewBox=""0 0 16 16"" fill=""none"" stroke=""currentColor"" stroke-width=""1.4""><path d=""M1 8h3l2-5 "
 refreshDashboardCampaigns:el:=:ab5b04e634ec,8855,refreshDashboardCampaigns,el,=,static,static,0,,,"'<div class=""empty"" style=""padding:1.5rem"">No campaigns running.</div>'"
 render:document.getElementById('run-live-progress'):=:f94ae6248a6e,13756,render,document.getElementById('run-live-progress'),=,partial_escaped,partial_escaped,3,,,"'<div style=""display:flex;gap:0.55rem;margin-bottom:0.6rem"">' +
         statCell(state.done + '/' + state.total, 'completed', 'var(--accent)') +

@@ -1574,8 +1574,8 @@
   "function": "refreshDashboardCampaigns",
   "target": "el",
   "op": "=",
-  "rhs": "liveList.map(function(c) {\n      var s = c.summary || {};\n      var cds = campaignDisplayStatus(s);\n      return '<div class=\"lrow u-pointer\" onclick=\"openCampaignDetail(\\'' + x(c.id) + '\\')\">' +\n        '<div class=\"lic\" style=\"color:var(--accent);background:rgba(47,129,247,0.1)\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 16 16\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.4\"><path d=\"M1 8h3l2",
-  "rhs_len": 956,
+  "rhs": "liveList.map(function(c) {\n      var s = c.summary || {};\n      var cds = campaignDisplayStatus(s);\n      return '<div class=\"lrow u-pointer\"' + on('click', 'openCampaignDetail', c.id) + '>' +\n        '<div class=\"lic\" style=\"color:var(--accent);background:rgba(47,129,247,0.1)\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 16 16\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.4\"><path d=\"M1 8h3l2-5 ",
+  "rhs_len": 953,
   "category": "unescaped_html",
   "data_source_tags": "user_created_name"
  },

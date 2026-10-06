@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import { setupDom, load, PAYLOADS } from './dom.mjs';
 
 setupDom();
-const { initiativeStateLabel, openAdvDrawer, openFinding, renderRunReportExtra, renderVariantCoverage } =
-  await load(['initiativeStateLabel', 'openAdvDrawer', 'openFinding', 'renderRunReportExtra', 'renderVariantCoverage']);
+const { initiativeStateLabel, openAdvDrawer, openFinding, renderRunReportExtra, renderVariantCoverage, complianceTile } =
+  await load(['initiativeStateLabel', 'openAdvDrawer', 'openFinding', 'renderRunReportExtra', 'renderVariantCoverage', 'complianceTile']);
 const tick = () => new Promise((r) => setTimeout(r, 0));
 
 function assertInert(container, label) {
@@ -64,6 +64,16 @@ test('variant-report: renderVariantCoverage keeps payloads inside data-args', ()
       techniques: [{ techniqueId: p, techniqueName: p, hasBypass: true, bypassRate: 50, headline: p, remediationPoints: [p], bestBypass: { encoding: p, verdict: 'bypassed' } }],
     });
     assertInert(div, 'renderVariantCoverage');
+    const args = [...div.querySelectorAll('[data-args]')].map((e) => e.getAttribute('data-args')).join(' ');
+    assert.ok(args.includes(JSON.stringify(p).slice(1, -1)), 'payload should travel as data-args');
+  }
+});
+
+test('compliance: complianceTile keeps payloads inside data-args', () => {
+  for (const p of PAYLOADS) {
+    const div = document.createElement('div');
+    div.innerHTML = complianceTile({ frameworkId: p, agentId: p, frameworkName: p, testedControls: 1, passingControls: 1, compliancePct: 100 });
+    assertInert(div, 'complianceTile');
     const args = [...div.querySelectorAll('[data-args]')].map((e) => e.getAttribute('data-args')).join(' ');
     assert.ok(args.includes(JSON.stringify(p).slice(1, -1)), 'payload should travel as data-args');
   }

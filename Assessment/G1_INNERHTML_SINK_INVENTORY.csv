@@ -392,11 +392,11 @@ line,function,target,op,category,data_source_tags,rhs_len,rhs
 8728,loadComplianceScores,el,=,static,,134,"'<div style=""color:var(--muted);font-size:0.78rem;padding:0.4rem 0"">No compliance data yet — run a scenario to generate scores.</div>'"
 8731,loadComplianceScores,el,=,unescaped_text,,35,scores.map(complianceTile).join('')
 8855,refreshDashboardCampaigns,el,=,static,,71,"'<div class=""empty"" style=""padding:1.5rem"">No campaigns running.</div>'"
-8856,refreshDashboardCampaigns,el,=,unescaped_html,user_created_name,956,"liveList.map(function(c) {
+8856,refreshDashboardCampaigns,el,=,unescaped_html,user_created_name,953,"liveList.map(function(c) {
       var s = c.summary || {};
       var cds = campaignDisplayStatus(s);
-      return '<div class=""lrow u-pointer"" onclick=""openCampaignDetail(\'' + x(c.id) + '\')"">' +
-        '<div class=""lic"" style=""color:var(--accent);background:rgba(47,129,247,0.1)""><svg width=""16"" height=""16"" viewBox=""0 0 16 16"" fill=""none"" stroke=""currentColor"" stroke-width=""1.4""><path d=""M1 8h3l2"
+      return '<div class=""lrow u-pointer""' + on('click', 'openCampaignDetail', c.id) + '>' +
+        '<div class=""lic"" style=""color:var(--accent);background:rgba(47,129,247,0.1)""><svg width=""16"" height=""16"" viewBox=""0 0 16 16"" fill=""none"" stroke=""currentColor"" stroke-width=""1.4""><path d=""M1 8h3l2-5 "
 8922,loadCalderaStatus,document.getElementById('cs-caldera-status'),=,indirect_variable,,3,dot
 8948,loadCalderaStatus,document.getElementById('cs-caldera-status'),=,static,,53,"'<span class=""u-danger"">Error checking status</span>'"
 8990,openConfirmDiffModal,document.getElementById('confirm-diff-body'),=,indirect_variable,,8,diffHtml
