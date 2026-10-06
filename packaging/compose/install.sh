@@ -1132,7 +1132,7 @@ mode_upgrade() {
 
   step "4/5  Rolling restart"
   systemctl restart "${SERVICE_NAME}" 2>/dev/null \
-    || (cd "${DATA_DIR}" && docker compose -p "$COMPOSE_PROJECT" up -d --remove-orphans)
+    || (cd "${DATA_DIR}" && docker compose -p "$COMPOSE_PROJECT" up -d --pull never --remove-orphans)
   log "Stack restarted"
   _wait_healthy
 
@@ -1180,7 +1180,7 @@ mode_rollback() {
   log "Compose and .env restored (version: ${prev_ver})"
 
   systemctl restart "${SERVICE_NAME}" 2>/dev/null \
-    || (cd "${install_dir}" && docker compose -p "$COMPOSE_PROJECT" up -d --remove-orphans)
+    || (cd "${install_dir}" && docker compose -p "$COMPOSE_PROJECT" up -d --pull never --remove-orphans)
   log "Stack restarted with previous version"
   _wait_healthy
   log "Rollback complete (v${BAS_VERSION} → v${prev_ver})"
@@ -1338,7 +1338,7 @@ Type=oneshot
 RemainAfterExit=yes
 WorkingDirectory=${DATA_DIR}
 EnvironmentFile=${DATA_DIR}/.env
-ExecStart=/usr/bin/docker compose -p ${COMPOSE_PROJECT} up -d --remove-orphans
+ExecStart=/usr/bin/docker compose -p ${COMPOSE_PROJECT} up -d --pull never --remove-orphans
 ExecStop=/usr/bin/docker compose -p ${COMPOSE_PROJECT} down
 TimeoutStartSec=300
 TimeoutStopSec=120
@@ -1737,7 +1737,7 @@ mode_restore() {
   tar -xf "${work_dir}/config.tar" -C "${DATA_DIR}"
 
   step "7/8  Starting services"
-  (cd "${DATA_DIR}" && docker compose -p "$COMPOSE_PROJECT" up -d --remove-orphans)
+  (cd "${DATA_DIR}" && docker compose -p "$COMPOSE_PROJECT" up -d --pull never --remove-orphans)
   _wait_healthy
 
   step "8/8  Health check"
@@ -1829,7 +1829,7 @@ _diagnose_orchestrator_failure() {
       echo "    clears it, but that briefly stops EVERY container on this"
       echo "    host -- not something to do unattended. To do it manually:"
       echo "      sudo systemctl restart docker"
-      echo "      docker compose -p ${COMPOSE_PROJECT} up -d"
+      echo "      docker compose -p ${COMPOSE_PROJECT} up -d --pull never"
       echo "    If you can't take that downtime right now, temporarily drop"
       echo "    the conflicting port from the orchestrator service's"
       echo "    'ports:' list in ${DATA_DIR}/docker-compose.yml and re-run"

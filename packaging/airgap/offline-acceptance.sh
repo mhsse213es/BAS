@@ -5,7 +5,7 @@
 # daemon that has NO registry access, the REAL import.sh copies, checks, cosign-
 # verifies and loads every image, then at its setup.sh hand-off setup.sh's own
 # (extracted, unmodified) verify + load functions run against the staged
-# compose/ dir, and the stack is started with `docker compose -p audspect up -d`
+# compose/ dir, and the stack is started with `docker compose -p audspect up -d --pull never`
 # (the exact command bas-compose.service runs). Any image Docker would silently
 # pull makes the test fail.
 #
@@ -180,7 +180,7 @@ mkdir -p /work/itmp; df -h /tmp /work/itmp || true
 PATH="/work/shim:$PATH" TMPDIR=/work/itmp bash /work/tools/import.sh /work/bundle.tar.gz --non-interactive || { echo "INNER-FAIL import.sh"; exit 12; }
 [[ -f /work/staged-compose/docker-compose.yml ]] || { echo "INNER-FAIL setup.sh hand-off not reached"; exit 12; }
 cd /work/staged-compose
-echo "== docker compose -p audspect up -d  (exact bas-compose.service command)"
+echo "== docker compose -p audspect up -d --pull never  (exact bas-compose.service command)"
 cp .env.example .env
 rnd() { head -c "$1" /dev/urandom | od -An -tx1 | tr -d ' \n'; }
 sed -i \
@@ -194,7 +194,7 @@ sed -i \
   -e "s|^CALDERA_API_KEY_BLUE=.*|CALDERA_API_KEY_BLUE=$(rnd 12)|" .env
 echo "BAS_APP_DB_PASSWORD=$(rnd 16)" >> .env
 grep -q '^DNS_SINK_BIND_IP=' .env || echo "DNS_SINK_BIND_IP=127.0.0.1" >> .env
-if ! docker compose -p audspect up -d --remove-orphans; then echo "INNER-FAIL compose up"; kill $EVPID 2>/dev/null || true; exit 13; fi
+if ! docker compose -p audspect up -d --pull never --remove-orphans; then echo "INNER-FAIL compose up"; kill $EVPID 2>/dev/null || true; exit 13; fi
 sleep 25
 kill $EVPID 2>/dev/null || true
 echo "== orchestrator log tail"; docker logs --tail 15 audspect-orchestrator 2>&1 || true

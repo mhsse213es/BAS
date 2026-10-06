@@ -744,4 +744,14 @@ raw_load=$(find "$REPO/docs" "$REPO/packaging" -name '*.md' -not -path "$REPO/do
   | xargs -0 grep -nE 'docker load([[:space:]]*<|[[:space:]]+(-i|--input)([[:space:]=]|$))' | grep -iv 'do not' || true)
 [ -z "$raw_load" ] && pass "docs: no raw 'docker load' instruction in docs/ or packaging/ *.md" || { fail "docs: raw 'docker load' instruction found"; echo "$raw_load"; }
 
+echo "TEST: every compose up in shipped scripts/units carries --pull never (no-pull holds even with an old, restored compose file)"
+# --rollback / --restore put back an older docker-compose.yml that may lack
+# pull_policy: never; the CLI flag makes the invariant independent of the file.
+compose_up=$(find "$REPO/packaging" \( -name '*.sh' -o -name '*.service' \) ! -name airgap-cosign.test.sh -print0 \
+  | xargs -0 grep -nE 'docker[- ]compose([[:space:]][^#]*)?[[:space:]](up|create|run)([[:space:]]|$|")' \
+  | grep -vE '^[^:]*:[0-9]+:[[:space:]]*#' || true)
+[ -n "$compose_up" ] && pass "found $(wc -l <<<"$compose_up") compose up/create/run invocations to check" || fail "no compose up invocation found (scan broken)"
+no_pull=$(grep -v -- '--pull never' <<<"$compose_up" || true)
+[ -z "$no_pull" ] && pass "every compose up/create/run line has --pull never" || { fail "compose invocation without --pull never"; echo "$no_pull"; }
+
 if [ "$FAILED" -eq 0 ]; then echo "ALL PASS"; else echo "SOME FAILED"; exit 1; fi
