@@ -12,8 +12,10 @@
 # --cosign-pub <path> / env BAS_COSIGN_PUB verify with an out-of-band key
 # (precedence: flag, env, bundled cosign.pub); the key fingerprint is printed.
 #
-# Also verifies the cosign signature of EVERY image tar (orchestrator, postgres). cosign >= v3.1.0
-# must be installed; if it is not, verification FAILS (cannot verify signature).
+# Also verifies the cosign signature and expected tag of EVERY runtime image tar
+# (orchestrator, postgres, bas-caldera, chrome; all four are required). Nothing is
+# loaded here. cosign >= v3.1.0 must be installed; if it is not, verification
+# FAILS (cannot verify signature).
 set -euo pipefail
 
 if [ -t 1 ]; then

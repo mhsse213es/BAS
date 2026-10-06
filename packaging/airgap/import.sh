@@ -21,14 +21,21 @@
 # `sudo BAS_COSIGN_PUB=<path> bash import.sh ...`. Compare the printed key
 # fingerprints with the ones Audspect publishes. A bundled key only proves
 # integrity, not origin. To anchor trust out-of-band, check the bundle's GPG
-# signature with your OWN gpg BEFORE extracting or running anything from it:
-#   GNUPGHOME=$(mktemp -d) gpg --import <oob.asc> && \
-#     gpg --status-fd 1 --verify bundle.tar.gz.asc bundle.tar.gz
-# and compare the VALIDSIG fingerprint.
+# signature with your OWN gpg BEFORE extracting or running anything from it,
+# using the trust-bootstrap command in docs/guides/installation.md ("Trust
+# bootstrap"; canonical text: packaging/airgap/trust-bootstrap.sh, also printed
+# by pack.sh). It uses a fresh --homedir for BOTH gpg calls, so only the
+# out-of-band key can vouch; compare the VALIDSIG fingerprint it prints.
 #
-# EVERY image tar (orchestrator, postgres) is cosign-verified BEFORE any is
-# loaded, bound to its expected tag and image ID, and loaded orchestrator-last;
-# an unsigned, tampered, unlisted or legacy .tar.gz image is refused.
+# Temporary space: the bundle is copied and extracted under ${TMPDIR:-/tmp},
+# which needs >= 3x the bundle size free (checked up front). Point TMPDIR at a
+# larger filesystem if needed: sudo TMPDIR=/data/tmp bash import.sh ...
+#
+# EVERY runtime image tar (orchestrator, postgres, bas-caldera, chrome) is
+# cosign-verified BEFORE any is loaded and bound to its expected tag; the others
+# are then loaded in images/ order and the orchestrator LAST, and after each
+# load the tag must resolve to the image ID recorded from the verified tar. An
+# unsigned, tampered, unlisted or legacy .tar.gz image is refused.
 # PREREQUISITE: cosign >= v3.1.0 must be pre-installed on this air-gapped host
 # (copy the release binary from https://github.com/sigstore/cosign/releases
 # over offline: install -m 0755 cosign-linux-amd64 /usr/local/bin/cosign).
@@ -115,6 +122,20 @@ fi
 airgap_external_pub "$COSIGN_PUB_FLAG" || { err "Import aborted."; exit 1; }
 
 # ── Work on a private COPY of the bundle (no verify-then-swap race) ───────────
+# The copy plus its extraction need roughly 3x the bundle size in ${TMPDIR:-/tmp}.
+TMP_ROOT="${TMPDIR:-/tmp}"
+BUNDLE_KB=$(( ($(stat -c %s -- "$TARBALL") + 1023) / 1024 ))
+NEED_KB=$(( BUNDLE_KB * 3 ))
+FREE_KB=$(df -Pk -- "$TMP_ROOT" 2>/dev/null | awk 'NR==2 {print $4}')
+if [[ ! "$FREE_KB" =~ ^[0-9]+$ ]]; then
+  err "Cannot determine free space in ${TMP_ROOT} -- import aborted."
+  exit 1
+fi
+if (( FREE_KB < NEED_KB )); then
+  err "Not enough free space in ${TMP_ROOT}: $(( FREE_KB / 1024 )) MiB free, $(( NEED_KB / 1024 )) MiB needed (3x the bundle, for the private copy and its extraction). Import aborted."
+  echo "  Free space there, or point TMPDIR at a larger filesystem: sudo TMPDIR=/path/with/space bash import.sh ..." >&2
+  exit 1
+fi
 WORK_DIR=$(mktemp -d)
 trap 'rm -rf "$WORK_DIR"' EXIT
 chmod 700 "$WORK_DIR"
@@ -233,5 +254,5 @@ fi
 log "Launching BAS setup wizard (offline mode)..."
 echo ""
 
-# Pass --offline so setup.sh skips docker pull
+# --offline: setup.sh re-verifies and loads from compose/images (it never pulls).
 bash "$SETUP_SCRIPT" --offline ${SETUP_EXTRA_ARGS[@]+"${SETUP_EXTRA_ARGS[@]}"}

@@ -179,8 +179,9 @@ airgap_verify_images() {
 
 # airgap_verify_and_load_images <images dir> <cosign.pub> <version>
 # Phase 1 = airgap_verify_images (all verified before any load). Phase 2: load
-# postgres first and the orchestrator last; after every load the tag must
-# resolve to exactly the image ID recorded in phase 1.
+# the supporting images in images/ glob order (bas-caldera, headless-shell,
+# postgres) and the orchestrator LAST; after every load the tag must resolve to
+# exactly the image ID recorded in phase 1.
 airgap_verify_and_load_images() {
   local i
   airgap_verify_images "$@" || return 1
