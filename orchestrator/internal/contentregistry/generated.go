@@ -41,7 +41,8 @@ func (r *Registry) RegisterGenerated(ctx context.Context, c GeneratedCandidate) 
 	}
 	return r.createVersion(ctx, newVersion{contentID: c.ContentID, origin: OriginLocal, source: SourceIntel,
 		artifact: c.Artifact, trust: TrustUntrusted, lifecycle: LifecycleDraft, actor: ActorGenerator,
-		analysis: a, generation: c.Generation, generationKey: c.GenerationKey, sources: snaps})
+		analysis: a, generation: c.Generation, generationKey: c.GenerationKey, sources: snaps,
+		exclusiveLocalSource: true})
 }
 
 func earliest(ts ...*time.Time) *time.Time {

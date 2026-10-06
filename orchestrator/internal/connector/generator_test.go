@@ -2,6 +2,8 @@ package connector
 
 import (
 	"context"
+	"errors"
+	"math/rand"
 	"os"
 	"path/filepath"
 	"strings"
@@ -185,5 +187,43 @@ func TestGenerator_WriteRegistersAndRewritesWorkingCopy(t *testing.T) { // A2 ge
 	}
 	if _, err := os.Stat(filepath.Join(dir, "intel", intelContentID("Akira")+".yaml")); err != nil {
 		t.Fatalf("working copy: %v", err)
+	}
+}
+
+type failRegistrar struct{}
+
+func (failRegistrar) RegisterGenerated(context.Context, contentregistry.GeneratedCandidate) (string, bool, error) {
+	return "", false, errors.New("boom")
+}
+
+func TestGenerator_RegistrationFailureWritesNoFile(t *testing.T) {
+	dir := t.TempDir()
+	g := NewGenerator(dir, nil, nil, nil).WithRegistrar(failRegistrar{})
+	a := ThreatActor{Name: "Akira", Source: "opencti", SourceID: "x", Confidence: "medium",
+		Techniques: []TechniqueRef{{ID: "T1082"}, {ID: "T1083"}}}
+	res, err := g.Write([]ThreatActor{a})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Failed != 1 || res.Changed != 0 || res.Created != 0 {
+		t.Fatalf("result: %+v", res)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "intel", intelContentID("Akira")+".yaml")); !os.IsNotExist(err) {
+		t.Fatalf("file must not exist after a failed registration: %v", err)
+	}
+}
+
+func TestDeriveMITREPhases_DeterministicRegardlessOfOrder(t *testing.T) {
+	techs := []TechniqueRef{
+		{ID: "T1082"}, {ID: "T1059"}, {ID: "T9001", Tactic: "zeta-unknown"},
+		{ID: "T9002", Tactic: "alpha-unknown"}, {ID: "T1486"},
+	}
+	want := strings.Join(deriveMITREPhases(techs), ",")
+	for i := 0; i < 20; i++ {
+		shuffled := append([]TechniqueRef(nil), techs...)
+		rand.Shuffle(len(shuffled), func(a, b int) { shuffled[a], shuffled[b] = shuffled[b], shuffled[a] })
+		if got := strings.Join(deriveMITREPhases(shuffled), ","); got != want {
+			t.Fatalf("order-dependent phases: %s vs %s", got, want)
+		}
 	}
 }

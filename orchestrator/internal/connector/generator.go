@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -74,12 +75,15 @@ func NewGenerator(scenariosDir string, sectors, regions []string, profiles map[s
 // GenerateResult summarises what was written in one sync.
 type GenerateResult struct {
 	Created int
-	Updated int
+	Updated int // no longer set by the generator; kept for existing readers
 	Skipped int
 	// Changed counts working-copy files whose bytes differ from what was on
 	// disk (new or rewritten), independent of the registry outcome. The
 	// scheduler reloads the scenario engine when Changed > 0.
 	Changed int
+	// Failed counts candidates that were not registered or written (registry
+	// error, source/origin collision, file write error).
+	Failed int
 }
 
 // Write generates scenario YAMLs for each actor and returns a result summary.
@@ -103,27 +107,41 @@ func (g *Generator) Write(actors []ThreatActor) (GenerateResult, error) {
 		id := intelContentID(actor.Name)
 		body := g.buildYAML(actor, id)
 		fname := filepath.Join(g.intelDir, id+".yaml")
+
+		// Register first: the version (with its provenance snapshot) must exist
+		// before the file does, so a concurrent engine.Load() intake dedups by
+		// hash instead of creating the version without sources. On failure the
+		// file is left unwritten and the next sync retries.
+		created := false
+		if g.registrar != nil {
+			var err error
+			_, created, err = g.registrar.RegisterGenerated(context.Background(), contentregistry.GeneratedCandidate{
+				ContentID: id, Artifact: []byte(body), GenerationKey: generationKey(actor),
+				Generation: map[string]any{"generator": generatorName, "generator_version": generatorVersion,
+					"mapping_version": mappingVersion, "parameters": map[string]any{"min_techniques": minTechniques}},
+				Sources: []contentregistry.SourceRef{{EntityType: "actor", EntityID: actor.Name, Provider: actor.Source,
+					ExternalID: actor.SourceID, Role: "primary"}},
+			})
+			if err != nil {
+				switch {
+				case errors.Is(err, contentregistry.ErrSourceCollision):
+					log.Printf("[connector/gen] %s (%s) collides with a custom scenario of the same id; not written: %v", id, actor.Name, err)
+				case errors.Is(err, contentregistry.ErrOriginCollision):
+					log.Printf("[connector/gen] %s (%s) collides with content of a different origin; not written: %v", id, actor.Name, err)
+				default:
+					log.Printf("[connector/gen] register %s: %v", id, err)
+				}
+				res.Failed++
+				continue
+			}
+		}
 		if old, err := os.ReadFile(fname); err != nil || !bytes.Equal(old, []byte(body)) {
 			if err := os.WriteFile(fname, []byte(body), 0644); err != nil {
 				log.Printf("[connector/gen] write %s: %v", fname, err)
+				res.Failed++
 				continue
 			}
 			res.Changed++
-		}
-		if g.registrar == nil {
-			res.Skipped++
-			continue
-		}
-		_, created, err := g.registrar.RegisterGenerated(context.Background(), contentregistry.GeneratedCandidate{
-			ContentID: id, Artifact: []byte(body), GenerationKey: generationKey(actor),
-			Generation: map[string]any{"generator": generatorName, "generator_version": generatorVersion,
-				"mapping_version": mappingVersion, "parameters": map[string]any{"min_techniques": minTechniques}},
-			Sources: []contentregistry.SourceRef{{EntityType: "actor", EntityID: actor.Name, Provider: actor.Source,
-				ExternalID: actor.SourceID, Role: "primary"}},
-		})
-		if err != nil {
-			log.Printf("[connector/gen] register %s: %v", id, err)
-			continue
 		}
 		if created {
 			log.Printf("[connector/gen] new DRAFT %s (%s, %d techniques)", id, actor.Name, len(actor.Techniques))
@@ -300,7 +318,10 @@ func deriveMITREPhases(techniques []TechniqueRef) []string {
 		"command-and-control": 10, "impact": 11,
 	}
 	sort.Slice(phases, func(i, j int) bool {
-		return order[phases[i]] < order[phases[j]]
+		if order[phases[i]] != order[phases[j]] {
+			return order[phases[i]] < order[phases[j]]
+		}
+		return phases[i] < phases[j] // unknown tactics tie at 0: order by name, not input order
 	})
 	return phases
 }
