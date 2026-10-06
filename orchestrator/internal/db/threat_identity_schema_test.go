@@ -113,6 +113,8 @@ func TestEnsureAppRole_ThreatIdentityGrants(t *testing.T) {
 			`DELETE FROM threats`,
 			`UPDATE actor_source_identities SET actor_id = actor_id`,
 			`DELETE FROM actor_source_identities`,
+			`UPDATE actor_identity_overrides SET actor_id = actor_id`,
+			`DELETE FROM actor_identity_overrides`,
 			`UPDATE actor_resolution_candidates SET reason = reason`,
 			`DELETE FROM actor_resolution_candidates`,
 			`UPDATE content_version_threats SET provenance_ref = provenance_ref`,

@@ -408,13 +408,13 @@ func (s *Scheduler) sync() {
 	// or given a minimal stub if nothing curated matches. MUST also run
 	// after upsertActorProfiles for the same FK reason.
 	for _, r := range activityResults {
-		s.upsertActivitySignals(r.source, r.signals, resolved)
+		s.upsertActivitySignals(r.source, r.signals, actors)
 	}
 	// Per-relationship technique evidence (OpenCTI only) -- resolved
 	// against the merged roster; unlike activity signals, an unresolved
 	// actor's evidence is dropped, not stubbed (this enriches an actor
 	// that must already exist via a curated source).
-	s.upsertTechniqueEvidence(techEvidence, resolved)
+	s.upsertTechniqueEvidence(techEvidence, actors)
 
 	if s.pool != nil {
 		for _, c := range allCampaigns {
@@ -648,6 +648,14 @@ func (s *Scheduler) upsertActivitySignals(source string, signals []ActivitySigna
 	}
 	ctx := context.Background()
 	for _, sig := range signals {
+		if s.identity != nil {
+			actorName, ok := s.evidenceActor(source, sig.ActorName, merged, true)
+			if !ok {
+				continue
+			}
+			s.upsertActivityRow(ctx, actorName, source, sig)
+			continue
+		}
 		actorName, found := resolveActivitySignalActor(sig.ActorName, merged)
 		if !found {
 			actorName = sig.ActorName
@@ -659,19 +667,56 @@ func (s *Scheduler) upsertActivitySignals(source string, signals []ActivitySigna
 				continue
 			}
 		}
-		_, err := s.pool.Exec(ctx,
-			`INSERT INTO threat_actor_activity (actor_name, source, pulse_count, first_observed, last_observed, updated_at)
-			 VALUES ($1,$2,$3,$4,$5,NOW())
-			 ON CONFLICT (actor_name, source) DO UPDATE SET
-			   pulse_count = EXCLUDED.pulse_count,
-			   first_observed = LEAST(threat_actor_activity.first_observed, EXCLUDED.first_observed),
-			   last_observed = GREATEST(threat_actor_activity.last_observed, EXCLUDED.last_observed),
-			   updated_at = NOW()`,
-			actorName, source, sig.PulseCount, sig.FirstObserved, sig.LastObserved)
-		if err != nil {
-			log.Printf("[connector] upsert activity signal %q/%q: %v", actorName, source, err)
-		}
+		s.upsertActivityRow(ctx, actorName, source, sig)
 	}
+}
+
+func (s *Scheduler) upsertActivityRow(ctx context.Context, actorName, source string, sig ActivitySignal) {
+	_, err := s.pool.Exec(ctx,
+		`INSERT INTO threat_actor_activity (actor_name, source, pulse_count, first_observed, last_observed, updated_at)
+		 VALUES ($1,$2,$3,$4,$5,NOW())
+		 ON CONFLICT (actor_name, source) DO UPDATE SET
+		   pulse_count = EXCLUDED.pulse_count,
+		   first_observed = LEAST(threat_actor_activity.first_observed, EXCLUDED.first_observed),
+		   last_observed = GREATEST(threat_actor_activity.last_observed, EXCLUDED.last_observed),
+		   updated_at = NOW()`,
+		actorName, source, sig.PulseCount, sig.FirstObserved, sig.LastObserved)
+	if err != nil {
+		log.Printf("[connector] upsert activity signal %q/%q: %v", actorName, source, err)
+	}
+}
+
+// evidenceActor maps an evidence record's actor name to the profile name it
+// attaches to, through identity (final review: evidence must never route
+// around the resolver). A roster match on an unresolved merged actor is
+// dropped. Otherwise, with create, the name resolves through the store
+// without rewriting an existing profile (KeepExisting); a new actor gets a
+// profile and a Threat, an ambiguous one is queued and dropped. Without
+// create, a name outside the roster is dropped (technique evidence never
+// establishes an actor).
+func (s *Scheduler) evidenceActor(source, name string, merged []ThreatActor, create bool) (string, bool) {
+	if actorName, found := resolveActivitySignalActor(name, merged); found {
+		for _, a := range merged {
+			if a.Name == actorName && a.ActorID != "" {
+				return actorName, true
+			}
+		}
+		return "", false
+	}
+	if !create {
+		return "", false
+	}
+	res, err := s.identity.ResolveAndPersist(context.Background(),
+		threatidentity.Incoming{Name: name, Sources: threatidentity.KeysFor(source, "", name)},
+		threatidentity.ProfileFields{KeepExisting: true})
+	if err != nil {
+		log.Printf("[connector] resolve activity actor %q: %v", name, err)
+		return "", false
+	}
+	if res.Outcome == threatidentity.OutcomeAmbiguous {
+		return "", false
+	}
+	return res.DisplayName, true
 }
 
 // upsertTechniqueEvidence resolves each evidence record against the
@@ -689,6 +734,9 @@ func (s *Scheduler) upsertTechniqueEvidence(evidence []TechniqueEvidence, merged
 	ctx := context.Background()
 	for _, ev := range evidence {
 		actorName, found := resolveActivitySignalActor(ev.ActorName, merged)
+		if s.identity != nil {
+			actorName, found = s.evidenceActor("opencti", ev.ActorName, merged, false)
+		}
 		if !found {
 			log.Printf("[connector] technique evidence for unresolved actor %q dropped (technique %s)", ev.ActorName, ev.TechniqueID)
 			continue

@@ -100,6 +100,7 @@ func EnsureAppRole(ctx context.Context, pool *pgxpool.Pool, appPassword string) 
 		// identity decisions; candidates change only through Decide's columns;
 		// actor ids are immutable (no UPDATE on id).
 		`REVOKE UPDATE, DELETE ON actor_source_identities FROM ` + appRole,
+		`REVOKE UPDATE, DELETE ON actor_identity_overrides FROM ` + appRole,
 		`REVOKE UPDATE, DELETE ON campaign_actors FROM ` + appRole,
 		`REVOKE UPDATE, DELETE ON malware_actors FROM ` + appRole,
 		`REVOKE UPDATE, DELETE ON tool_actors FROM ` + appRole,

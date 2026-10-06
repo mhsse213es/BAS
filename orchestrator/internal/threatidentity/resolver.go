@@ -36,6 +36,9 @@ type KnownActor struct {
 type Snapshot struct {
 	Actors           []KnownActor
 	SourceIdentities map[SourceKey]string
+	// AdminOverrides maps a source key to the actor an admin decided it
+	// belongs to; the latest decision per key wins. Outranks every other rule.
+	AdminOverrides map[SourceKey]string
 }
 
 type Outcome string
@@ -85,6 +88,12 @@ func Resolve(in Incoming, snap Snapshot) Decision {
 		byID[a.ID] = a
 	}
 
+	byOverride := set{}
+	for _, k := range in.Sources {
+		if id, ok := snap.AdminOverrides[k]; ok {
+			byOverride.add(id)
+		}
+	}
 	bySource := set{}
 	for _, k := range in.Sources {
 		if id, ok := snap.SourceIdentities[k]; ok {
@@ -117,6 +126,11 @@ func Resolve(in Incoming, snap Snapshot) Decision {
 
 	var d Decision
 	switch {
+	case len(byOverride) > 1:
+		d = Decision{Outcome: OutcomeAmbiguous, Rule: "admin_decision", Reason: "admin decisions map to different actors",
+			CandidateIDs: byOverride.sorted()}
+	case len(byOverride) == 1:
+		d = Decision{Outcome: OutcomeExisting, ActorID: byOverride.only(), Rule: "admin_decision"}
 	case len(bySource) > 1:
 		d = Decision{Outcome: OutcomeAmbiguous, Rule: "source_identity", Reason: "source identities map to different actors",
 			CandidateIDs: bySource.sorted()}

@@ -37,6 +37,9 @@ type ProfileFields struct {
 	Confidence                string
 	CanonicalGroupID          string
 	Techniques                []string
+	// KeepExisting: an existing actor's profile columns are left untouched
+	// (evidence-only callers such as OTX activity, which carry no profile data).
+	KeepExisting bool
 }
 
 type Resolved struct {
@@ -71,7 +74,13 @@ func (s *Store) ResolveAndPersist(ctx context.Context, in Incoming, f ProfileFie
 	var res Resolved
 	switch d.Outcome {
 	case OutcomeExisting:
-		name, err := updateProfile(ctx, tx, d.ActorID, in.Name, f)
+		var name string
+		var err error
+		if f.KeepExisting {
+			err = tx.QueryRow(ctx, `SELECT name FROM threat_actor_profiles WHERE id = $1`, d.ActorID).Scan(&name)
+		} else {
+			name, err = updateProfile(ctx, tx, d.ActorID, in.Name, f)
+		}
 		if err != nil {
 			return Resolved{}, err
 		}
@@ -111,7 +120,7 @@ func (s *Store) ResolveAndPersist(ctx context.Context, in Incoming, f ProfileFie
 }
 
 func loadSnapshot(ctx context.Context, q Querier) (Snapshot, error) {
-	snap := Snapshot{SourceIdentities: map[SourceKey]string{}}
+	snap := Snapshot{SourceIdentities: map[SourceKey]string{}, AdminOverrides: map[SourceKey]string{}}
 	rows, err := q.Query(ctx, `SELECT id, name, aliases, canonical_group_id FROM threat_actor_profiles ORDER BY id`)
 	if err != nil {
 		return snap, err
@@ -123,6 +132,23 @@ func loadSnapshot(ctx context.Context, q Querier) (Snapshot, error) {
 			return snap, err
 		}
 		snap.Actors = append(snap.Actors, a)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return snap, err
+	}
+	rows, err = q.Query(ctx, `SELECT source, source_id, actor_id FROM actor_identity_overrides ORDER BY id`)
+	if err != nil {
+		return snap, err
+	}
+	for rows.Next() {
+		var k SourceKey
+		var id string
+		if err := rows.Scan(&k.Source, &k.ID, &id); err != nil {
+			rows.Close()
+			return snap, err
+		}
+		snap.AdminOverrides[k] = id // ascending id: the latest decision wins
 	}
 	rows.Close()
 	if err := rows.Err(); err != nil {

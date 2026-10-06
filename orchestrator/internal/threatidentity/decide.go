@@ -171,6 +171,17 @@ func (s *Store) applyLink(ctx context.Context, tx pgx.Tx, c Candidate, actorID s
 		if err := recordIdentities(ctx, tx, keys, actorID, "admin", c.ID); err != nil {
 			return err
 		}
+		// recordIdentities keeps any conflicting resolver mapping (append-only);
+		// the override is what makes the decision outrank it on future syncs.
+		for _, k := range keys {
+			if k.ID == "" {
+				continue
+			}
+			if _, err := tx.Exec(ctx, `INSERT INTO actor_identity_overrides (source, source_id, actor_id, candidate_id)
+				VALUES ($1, $2, $3, $4)`, k.Source, k.ID, actorID, c.ID); err != nil {
+				return err
+			}
+		}
 	default:
 		var spec entityLinkSpec
 		for _, v := range entityLinkTables {

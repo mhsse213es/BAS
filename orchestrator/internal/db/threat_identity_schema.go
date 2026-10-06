@@ -172,6 +172,16 @@ var threatIdentityTables = []string{
 	`CREATE UNIQUE INDEX IF NOT EXISTS actor_resolution_candidates_open
 		ON actor_resolution_candidates (kind, source, external_id, raw_name, ref_entity_id)
 		WHERE status = 'unresolved'`,
+	// Admin decisions per source key (final review: a link must outrank
+	// conflicting resolver mappings, which are append-only). Latest id wins.
+	`CREATE TABLE IF NOT EXISTS actor_identity_overrides (
+		id           bigserial   PRIMARY KEY,
+		source       text        NOT NULL,
+		source_id    text        NOT NULL CHECK (source_id <> ''),
+		actor_id     text        NOT NULL REFERENCES threat_actor_profiles(id),
+		candidate_id text        NOT NULL REFERENCES actor_resolution_candidates(id),
+		created_at   timestamptz NOT NULL DEFAULT NOW()
+	)`,
 	`CREATE TABLE IF NOT EXISTS campaign_actors (
 		campaign_id text        NOT NULL REFERENCES intelligence_campaigns(id) ON DELETE CASCADE,
 		actor_id    text        NOT NULL REFERENCES threat_actor_profiles(id),
