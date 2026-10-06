@@ -15,6 +15,8 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"gopkg.in/yaml.v3"
 
 	"github.com/audspect/bas/internal/contentregistry"
@@ -54,6 +56,29 @@ type Generator struct {
 	techniqueIdx map[string][]string
 
 	registrar Registrar
+	// componentVersions reads the pinned catalog versions recorded in each
+	// new version's generation metadata (spec 4.4). nil => unknown.
+	componentVersions func(context.Context) (scenario.ComponentVersions, error)
+}
+
+// WithComponentVersions sets the catalog-version source for generation
+// metadata (see DBComponentVersions).
+func (g *Generator) WithComponentVersions(fn func(context.Context) (scenario.ComponentVersions, error)) *Generator {
+	g.componentVersions = fn
+	return g
+}
+
+// DBComponentVersions reads the ART catalog version from art_content_meta.
+// There is no Caldera version source today (spec 4.9), so Caldera is "".
+func DBComponentVersions(pool *pgxpool.Pool) func(context.Context) (scenario.ComponentVersions, error) {
+	return func(ctx context.Context) (scenario.ComponentVersions, error) {
+		var art string
+		err := pool.QueryRow(ctx, `SELECT source_version FROM art_content_meta WHERE id = 1`).Scan(&art)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return scenario.ComponentVersions{}, nil
+		}
+		return scenario.ComponentVersions{ART: art}, err
+	}
 }
 
 // WithRegistrar makes the generator register every candidate as a
@@ -103,6 +128,16 @@ func (g *Generator) Write(actors []ThreatActor) (GenerateResult, error) {
 		return GenerateResult{}, fmt.Errorf("mkdir %s: %w", g.intelDir, err)
 	}
 
+	// Catalog versions are read once per sync; they describe this run.
+	var cv scenario.ComponentVersions
+	var cvErr error
+	if g.componentVersions != nil {
+		cv, cvErr = g.componentVersions(context.Background())
+		if cvErr != nil {
+			log.Printf("[connector/gen] component versions unavailable: %v", cvErr)
+		}
+	}
+
 	var res GenerateResult
 	for _, actor := range actors {
 		if len(actor.Techniques) < minTechniques {
@@ -123,8 +158,7 @@ func (g *Generator) Write(actors []ThreatActor) (GenerateResult, error) {
 			var err error
 			_, created, err = g.registrar.RegisterGenerated(context.Background(), contentregistry.GeneratedCandidate{
 				ContentID: id, Artifact: []byte(body), GenerationKey: generationKey(actor),
-				Generation: map[string]any{"generator": generatorName, "generator_version": generatorVersion,
-					"mapping_version": mappingVersion, "parameters": map[string]any{"min_techniques": minTechniques}},
+				Generation: g.generationMeta(actor, cv, cvErr),
 				Sources: []contentregistry.SourceRef{{EntityType: "actor", EntityID: actor.Name, Provider: actor.Source,
 					ExternalID: actor.SourceID, Role: "primary"}},
 			})
@@ -321,10 +355,54 @@ func intelContentID(actorName string) string {
 	return "intel-" + hex.EncodeToString(h[:])[:12]
 }
 
+// generationInputs names the intelligence entities a candidate derives from;
+// shared by generationKey and the stored generation metadata.
+func generationInputs(a ThreatActor) []map[string]string {
+	return []map[string]string{{"entity_type": "actor", "entity_id": a.Name, "provider": a.Source, "external_id": a.SourceID}}
+}
+
+// Reasons recorded when a version source does not exist. Never invent a value.
+const (
+	reasonNoSource    = "no catalog version source configured for this generator"
+	reasonNoCaldera   = "no Caldera version source exists (spec 4.9)"
+	reasonNoART       = "art_content_meta has no source_version recorded"
+	reasonARTReadFail = "art_content_meta could not be read at generation time"
+	reasonNoAttack    = "the bundled ATT&CK enrichment dataset does not record its STIX bundle version"
+)
+
+// generationMeta is the immutable generation JSON stored on the new version
+// (spec 4.4): generator identity, inputs, parameters, component_versions and
+// attack_version. A missing version is null with a *_reason field.
+func (g *Generator) generationMeta(a ThreatActor, cv scenario.ComponentVersions, cvErr error) map[string]any {
+	comp := map[string]any{}
+	switch {
+	case cvErr != nil:
+		comp["art"], comp["art_reason"] = nil, reasonARTReadFail
+	case g.componentVersions == nil:
+		comp["art"], comp["art_reason"] = nil, reasonNoSource
+	case cv.ART == "":
+		comp["art"], comp["art_reason"] = nil, reasonNoART
+	default:
+		comp["art"] = cv.ART
+	}
+	if cv.Caldera != "" && cvErr == nil {
+		comp["caldera"] = cv.Caldera
+	} else {
+		comp["caldera"], comp["caldera_reason"] = nil, reasonNoCaldera
+	}
+	return map[string]any{
+		"generator": generatorName, "generator_version": generatorVersion, "mapping_version": mappingVersion,
+		"parameters":         map[string]any{"min_techniques": minTechniques},
+		"inputs":             generationInputs(a),
+		"component_versions": comp,
+		"attack_version":     nil, "attack_version_reason": reasonNoAttack,
+	}
+}
+
 func generationKey(a ThreatActor) string {
 	b, _ := json.Marshal(map[string]any{
 		"generator": generatorName, "generator_version": generatorVersion, "mapping_version": mappingVersion,
-		"inputs":     []map[string]string{{"entity_type": "actor", "entity_id": a.Name, "provider": a.Source, "external_id": a.SourceID}},
+		"inputs":     generationInputs(a),
 		"techniques": dedupedTechniqueIDs(a.Techniques),
 		"parameters": map[string]any{"min_techniques": minTechniques},
 	})
