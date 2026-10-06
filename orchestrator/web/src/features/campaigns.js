@@ -1,8 +1,9 @@
 import { state } from '../core/state.js';
 import { apicall } from '../core/api.js';
 import { x } from '../core/escape.js';
+import { on } from '../core/actions.js';
 import { fmtDate, showToast } from '../core/util.js';
-import { covSegHtml, loadScenarios, tpTierBadge } from './attack-path.js';
+import { covSegHtml, loadScenarios, showThreatPriorityDetail, tpTierBadge } from './attack-path.js';
 import { refreshDashboardCampaigns } from './compliance.js';
 import { findingSevBadge } from './findings.js';
 import { viewRunResults } from './reports.js';
@@ -62,7 +63,7 @@ function renderCampaignRows() {
     var targetLabel = c.targetType === 'group'
       ? (CMP.groupsById[c.targetGroupId] || ('Group #' + c.targetGroupId))
       : c.targetType === 'all' ? 'All Agents' : 'Agents';
-    return '<tr class="u-pointer" onclick="openCampaignDetail(\'' + x(c.id) + '\')">' +
+    return '<tr class="u-pointer"' + on('click', 'openCampaignDetail', c.id) + '>' +
       '<td><div class="cell-main">' + x(c.name) + '</div><div class="tiny muted" style="font-family:var(--font-mono);font-size:0.6rem">' + x(c.id) + (c.createdBy ? ' · ' + x(c.createdBy) : '') + '</div></td>' +
       '<td class="tiny muted">' + x(c.scenarioName) + '<div class="tiny muted" style="opacity:0.75">' + x(targetLabel) + '</div></td>' +
       '<td class="tiny">' + (s.dispatched || 0) + '/' + (s.targets || 0) + (s.skipped ? ' <span class="tiny muted">(' + s.skipped + ' skipped)</span>' : '') + '</td>' +
@@ -113,7 +114,7 @@ export function openCampaignDetail(id) {
       return '<tr><td><span class="sbadge ' + (rnPaused ? 's-paused' : 's-' + x(rn.status)) + '">' + (rnPaused ? 'paused' : x(rn.status)) + '</span></td>' +
         '<td style="font-family:var(--font-mono);font-size:0.72rem">' + x(rn.agentId) + '</td>' +
         '<td style="font-weight:600;color:' + col + '">' + (rn.preventionScore ? Math.round(rn.preventionScore) + '%' : '—') + '</td>' +
-        '<td class="td-r"><button class="btn btn-outline btn-sm" onclick="openRunFromCampaign(\'' + x(rn.runId) + '\')">Results &rarr;</button></td></tr>';
+        '<td class="td-r"><button class="btn btn-outline btn-sm"' + on('click', 'openRunFromCampaign', rn.runId) + '>Results &rarr;</button></td></tr>';
     }).join('') || '<tr><td colspan="4" class="empty">No child runs dispatched.</td></tr>';
     var perAgent = '<div class="dash-panel" style="margin-bottom:1.25rem"><div class="dash-panel-hdr">Per-agent results</div>' +
       '<div class="dash-panel-body" style="padding:0"><div class="tbl-wrap"><table>' +
@@ -137,19 +138,19 @@ export function openCampaignDetail(id) {
     // ── actions ──
     var actions = (s.status === 'running')
       ? (s.paused
-          ? '<button class="btn btn-outline btn-sm" onclick="resumeCampaign(\'' + x(c.id) + '\')" title="Resume every paused child run">&#9654; Resume campaign</button> '
-          : '<button class="btn btn-outline btn-sm" onclick="pauseCampaign(\'' + x(c.id) + '\')" title="Pause every running child run">&#10073;&#10073; Pause campaign</button> ')
-        + '<button class="btn btn-outline-red btn-sm" onclick="stopCampaign(\'' + x(c.id) + '\')">&#9632; Stop campaign</button>'
-      : '<button class="btn btn-outline btn-sm" onclick="openCampaignReport(\'' + x(c.id) + '\')" title="Open the fleet-wide HTML report">&#8599; HTML Report</button>' +
-        ' <button class="btn btn-outline btn-sm" onclick="downloadCampaignReport(\'' + x(c.id) + '\')" title="Download the fleet-wide report as a PDF file">&#8595; PDF Report</button>' +
-        ' <button class="btn btn-outline btn-sm" onclick="downloadCampaignCSV(\'' + x(c.id) + '\')" title="Download the fleet forensic CSV (one row per technique across all agents)">&#8595; CSV</button>' +
+          ? '<button class="btn btn-outline btn-sm"' + on('click', 'resumeCampaign', c.id) + ' title="Resume every paused child run">&#9654; Resume campaign</button> '
+          : '<button class="btn btn-outline btn-sm"' + on('click', 'pauseCampaign', c.id) + ' title="Pause every running child run">&#10073;&#10073; Pause campaign</button> ')
+        + '<button class="btn btn-outline-red btn-sm"' + on('click', 'stopCampaign', c.id) + '>&#9632; Stop campaign</button>'
+      : '<button class="btn btn-outline btn-sm"' + on('click', 'openCampaignReport', c.id) + ' title="Open the fleet-wide HTML report">&#8599; HTML Report</button>' +
+        ' <button class="btn btn-outline btn-sm"' + on('click', 'downloadCampaignReport', c.id) + ' title="Download the fleet-wide report as a PDF file">&#8595; PDF Report</button>' +
+        ' <button class="btn btn-outline btn-sm"' + on('click', 'downloadCampaignCSV', c.id) + ' title="Download the fleet forensic CSV (one row per technique across all agents)">&#8595; CSV</button>' +
         ' ' + ((ROLE === 'admin' || ROLE === 'analyst')
-          ? '<button class="btn btn-outline btn-sm" onclick=\'openCampaignRerunReview(' + JSON.stringify(c).replace(/'/g,"&#39;") + ')\' title="Review and re-run this exact campaign configuration">Re-run</button>'
+          ? '<button class="btn btn-outline btn-sm"' + on('click', 'openCampaignRerunReview', c) + ' title="Review and re-run this exact campaign configuration">Re-run</button>'
           : '<button class="btn btn-outline btn-sm" disabled style="opacity:0.5;cursor:not-allowed" title="Re-run requires the Analyst or Admin role">Re-run</button>');
 
     document.getElementById('campaigns-detail').innerHTML =
       '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;margin-bottom:1rem;flex-wrap:wrap">' +
-        '<div><a class="tiny" style="color:var(--accent);cursor:pointer" onclick="closeCampaignDetail()">&larr; Campaigns</a>' +
+        '<div><a class="tiny" style="color:var(--accent);cursor:pointer"' + on('click', 'closeCampaignDetail') + '>&larr; Campaigns</a>' +
         '<h1 style="font-family:var(--font-display);font-size:1.5rem;font-weight:700;letter-spacing:-0.02em;margin:0.3rem 0;color:var(--text)">' + x(c.name) + ' <span class="sbadge s-' + cds.cls + '" style="font-size:0.7rem;vertical-align:middle">' + liveDot + status + '</span></h1>' +
         '<div style="font-size:0.8rem;color:var(--muted)">' + x(c.scenarioName) + ' · ' + (s.dispatched || 0) + '/' + (s.targets || 0) + ' agents · started ' + fmtDate(c.startedAt) + (c.createdBy ? ' by ' + x(c.createdBy) : '') + '</div></div>' +
         '<div style="display:flex;gap:0.5rem;flex-shrink:0">' + actions + '</div>' +
@@ -176,7 +177,7 @@ function renderCampaignRecs(campaignId) {
     var regr = mine.filter(function(f) { return f.reopenedCount > 0 && f.status === 'open'; }).slice(0, 3);
     var hdr = function(t) { return '<div style="font-size:0.6rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:0.5rem 0 0.3rem">' + t + '</div>'; };
     var rowf = function(f) {
-      return '<div class="lrow u-pointer" onclick="showTab(\'findings\');setTimeout(function(){openFinding(\'' + x(f.id) + '\')},150)">' +
+      return '<div class="lrow u-pointer"' + on('click', 'openFindingFromDashboard', f.id) + '>' +
         '<div class="lmain"><div class="lt">' + x(f.techniqueName || f.techniqueId) + '</div>' +
         '<div class="ls"><span class="tech-id">' + x(f.techniqueId) + '</span> · ' + x(f.controlClass) + ' · ' + x(f.agentId) + '</div></div>' +
         '<div class="lr">' + findingSevBadge(f.severity, f.exposureState) + '</div></div>';
@@ -306,10 +307,22 @@ function renderCampaignGroupPreview(list) {
     '<div>' + online + ' online · ' + offline + ' offline</div>';
   document.getElementById('cmp-exclusions').innerHTML = list.map(function(a) {
     return '<label style="display:flex;align-items:center;gap:0.5rem;padding:0.25rem 0.3rem;cursor:pointer">' +
-      '<input type="checkbox" onchange="cmpToggleExclusion(\'' + x(a.agentId) + '\',this.checked)">' +
+      '<input type="checkbox"' + on('change', 'cmpToggleExclusionFromChecked', a.agentId) + '>' +
       '<code style="font-size:0.72rem">' + x(a.agentId) + '</code><span class="tiny muted">' + x(a.hostname) + '</span></label>';
   }).join('');
   cmpUpdateExclusionCount();
+}
+
+export function cmpToggleExclusionFromChecked(agentId, el) { cmpToggleExclusion(agentId, el.checked); }
+
+export function cmpSelChange(agentId, el) {
+  state._cmpSel[agentId] = el.checked;
+  cmpUpdateCount();
+}
+
+export function openThreatPriorityActor(actorName) {
+  showTab('threat-priority');
+  setTimeout(function() { showThreatPriorityDetail(actorName); }, 150);
 }
 
 export function cmpToggleExclusion(agentId, checked) {
@@ -536,7 +549,7 @@ function renderTIActors(actors) {
     '<div style="font-size:0.68rem;font-weight:600;letter-spacing:0.05em;color:var(--muted);text-transform:uppercase;margin:0.75rem 0 0.4rem">Top Threat Actors</div>' +
     actors.map(function(a) {
       return '<div style="display:flex;justify-content:space-between;align-items:center;padding:0.35rem 0;border-bottom:1px solid var(--border)">' +
-        '<span style="font-weight:600;cursor:pointer" onclick="showTab(\'threat-priority\');setTimeout(function(){ showThreatPriorityDetail(\'' + x(a.actorName).replace(/'/g, "&#39;") + '\'); }, 150)">' + x(a.actorName) + '</span>' +
+        '<span style="font-weight:600;cursor:pointer"' + on('click', 'openThreatPriorityActor', a.actorName) + '>' + x(a.actorName) + '</span>' +
         '<span style="display:flex;align-items:center;gap:0.5rem">' + tpTierBadge(a.tier) + '<strong>' + x(a.score) + '</strong></span>' +
         '</div>';
     }).join('');
@@ -555,23 +568,23 @@ export function loadEndpointPostureWidget() {
     document.getElementById('dash-endpoint-section').style.display = '';
     var tiles = document.getElementById('dash-endpoint-tiles');
     var html =
-      '<div class="kpi-card stat-tile u-pointer" onclick="showTab(\'agents\')" title="Agents currently reachable vs. past the 90s heartbeat window">' +
+      '<div class="kpi-card stat-tile u-pointer"' + on('click', 'showTab', 'agents') + ' title="Agents currently reachable vs. past the 90s heartbeat window">' +
       '<div class="stat-top"><div><div class="kpi-label">Online / Offline</div><div class="kpi-value">' + p.onlineAgents + ' <span class="tiny muted">/ ' + p.offlineAgents + '</span></div></div>' +
       '<div class="stat-icon" style="background:rgba(35,134,54,0.10);color:var(--success)">&#9679;</div></div>' +
       '<div class="kpi-sub">' + p.totalAgents + ' total agents</div></div>' +
-      '<div class="kpi-card stat-tile u-pointer" onclick="showTab(\'agents\')" title="Agent lifecycle state breakdown">' +
+      '<div class="kpi-card stat-tile u-pointer"' + on('click', 'showTab', 'agents') + ' title="Agent lifecycle state breakdown">' +
       '<div class="stat-top"><div><div class="kpi-label">Lifecycle</div><div class="kpi-value">' + p.activeAgents + ' <span class="tiny muted">active</span></div></div></div>' +
       '<div class="kpi-sub">' + p.restrictedAgents + ' restricted · ' + p.quarantinedAgents + ' quarantined · ' + p.retiredAgents + ' retired</div></div>';
     if (p.untrustedBinaryCount > 0) {
       html +=
-        '<div class="kpi-card stat-tile u-pointer" onclick="showTab(\'agents\')" title="Agents whose binary hash failed trust verification">' +
+        '<div class="kpi-card stat-tile u-pointer"' + on('click', 'showTab', 'agents') + ' title="Agents whose binary hash failed trust verification">' +
         '<div class="stat-top"><div><div class="kpi-label">Untrusted Binaries</div><div class="kpi-value u-danger">' + p.untrustedBinaryCount + '</div></div>' +
         '<div class="stat-icon" style="background:rgba(218,54,51,0.10);color:var(--danger)">&#9888;</div></div>' +
         '<div class="kpi-sub">binary hash failed trust verification</div></div>';
     }
     if (p.currentlyIsolated > 0) {
       html +=
-        '<div class="kpi-card stat-tile u-pointer" onclick="showTab(\'agents\')" title="Endpoints currently isolated via an EPP response action">' +
+        '<div class="kpi-card stat-tile u-pointer"' + on('click', 'showTab', 'agents') + ' title="Endpoints currently isolated via an EPP response action">' +
         '<div class="stat-top"><div><div class="kpi-label">Currently Isolated</div><div class="kpi-value u-warning">' + p.currentlyIsolated + '</div></div>' +
         '<div class="stat-icon" style="background:rgba(210,153,34,0.10);color:var(--warning)">&#128274;</div></div>' +
         '<div class="kpi-sub">via EPP response action</div></div>';
@@ -636,7 +649,7 @@ export function renderCampaignTargets() {
   var list = cmpFiltered();
   document.getElementById('cmp-targets').innerHTML = list.length ? list.map(function(a) {
     return '<label style="display:flex;align-items:center;gap:0.5rem;padding:0.25rem 0.3rem;cursor:pointer">' +
-      '<input type="checkbox" ' + (state._cmpSel[a.agentId] ? 'checked' : '') + ' onchange="_cmpSel[\'' + x(a.agentId) + '\']=this.checked;cmpUpdateCount()">' +
+      '<input type="checkbox" ' + (state._cmpSel[a.agentId] ? 'checked' : '') + ' ' + on('change', 'cmpSelChange', a.agentId) + '>' +
       '<code style="font-size:0.72rem">' + x(a.agentId) + '</code><span class="tiny muted">' + x(a.hostname) + ' · ' + cmpAgentOS(a) + '</span></label>';
   }).join('') : '<div class="empty tiny">No online agents match the filter.</div>';
   cmpUpdateCount();

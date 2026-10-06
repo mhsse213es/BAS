@@ -9,8 +9,12 @@ import (
 	"encoding/base64"
 	"encoding/pem"
 	"fmt"
+	"io"
 	"os"
+	"path/filepath"
 	"strings"
+
+	"github.com/audspect/bas/internal/integrity"
 )
 
 func main() {
@@ -18,6 +22,7 @@ func main() {
 		fmt.Println("Usage:")
 		fmt.Println("  go run signer.go keygen")
 		fmt.Println("  go run signer.go sign <private_key.pem> <file_to_sign>")
+		fmt.Println("  go run signer.go verify-all [--allow-dev] <dir>")
 		os.Exit(1)
 	}
 
@@ -32,10 +37,70 @@ func main() {
 			os.Exit(1)
 		}
 		signFile(os.Args[2], os.Args[3])
+	case "verify-all":
+		args := os.Args[2:]
+		allowDev := false
+		if len(args) > 0 && args[0] == "--allow-dev" {
+			allowDev = true
+			args = args[1:]
+		}
+		if len(args) != 1 {
+			fmt.Println("Usage: go run signer.go verify-all [--allow-dev] <dir>")
+			os.Exit(1)
+		}
+		os.Exit(verifyAll(args[0], allowDev, os.Stdout))
 	default:
 		fmt.Printf("Unknown command: %s\n", cmd)
 		os.Exit(1)
 	}
+}
+
+// verifyAll checks every *.yaml under dir (recursively) with the binary's own
+// integrity.VerifyScenarioFile, i.e. exactly what production enforces against
+// the compiled-in public key. A missing .sig is a failure. It returns the
+// process exit code: 0 only if every file verifies.
+//
+// If the compiled key is the dev placeholder, VerifyScenarioFile would skip
+// verification and pass vacuously, so verifyAll fails instead unless allowDev.
+func verifyAll(dir string, allowDev bool, out io.Writer) int {
+	if integrity.ScenarioPublicKeyPEM == "SIGNING_KEYGEN_REQUIRED" && !allowDev {
+		fmt.Fprintln(out, "FAIL: ScenarioPublicKeyPEM is the SIGNING_KEYGEN_REQUIRED placeholder; signatures cannot be verified (release builds need a real key)")
+		return 1
+	}
+	ok, fail := 0, 0
+	err := filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		// Mirror production: custom/ and intel/ directly under the root are
+		// unsigned by design (engine.go sourceForPath).
+		if d.IsDir() && filepath.Dir(path) == filepath.Clean(dir) && (d.Name() == "custom" || d.Name() == "intel") {
+			return filepath.SkipDir
+		}
+		if d.IsDir() || !strings.HasSuffix(path, ".yaml") {
+			return nil
+		}
+		if verr := integrity.VerifyScenarioFile(path); verr != nil {
+			fail++
+			fmt.Fprintf(out, "FAIL %s: %v\n", path, verr)
+		} else {
+			ok++
+		}
+		return nil
+	})
+	if err != nil {
+		fmt.Fprintf(out, "FAIL walking %s: %v\n", dir, err)
+		return 1
+	}
+	if ok+fail == 0 {
+		fmt.Fprintf(out, "FAIL: no *.yaml files found under %s\n", dir)
+		return 1
+	}
+	fmt.Fprintf(out, "ok=%d fail=%d\n", ok, fail)
+	if fail > 0 {
+		return 1
+	}
+	return 0
 }
 
 func generateKeys() {

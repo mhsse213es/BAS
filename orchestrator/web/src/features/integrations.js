@@ -1,6 +1,7 @@
 import { state } from '../core/state.js';
 import { apicall } from '../core/api.js';
 import { x } from '../core/escape.js';
+import { on } from '../core/actions.js';
 import { showToast } from '../core/util.js';
 import { _diffRow, _diffSecretRow, openConfirmDiffModal } from './compliance.js';
 import { _ticketingConfigs, loadTicketingConfigs } from './findings.js';
@@ -79,9 +80,9 @@ function renderConnectorList(list) {
         '</div>' +
         '<div style="display:flex;align-items:center;gap:0.65rem">' +
           '<span class="tiny" style="color:' + statusColor + '" title="' + x(statusTitle) + '">' + statusDot + '</span>' +
-          '<button class="btn btn-outline btn-sm" onclick="testConnectorById(\'' + x(c.id) + '\',this)">Test</button>' +
-          '<button class="btn btn-outline btn-sm" onclick="openEditConnector(\'' + x(c.id) + '\')">Edit</button>' +
-          '<button class="btn btn-sm" style="color:var(--danger);background:rgba(218,54,51,0.08);border:1px solid rgba(218,54,51,0.25)" onclick="deleteConnector(\'' + x(c.id) + '\',\'' + x(c.name) + '\')">Delete</button>' +
+          '<button class="btn btn-outline btn-sm"' + on('click', 'testConnectorById', c.id) + '>Test</button>' +
+          '<button class="btn btn-outline btn-sm"' + on('click', 'openEditConnector', c.id) + '>Edit</button>' +
+          '<button class="btn btn-sm" style="color:var(--danger);background:rgba(218,54,51,0.08);border:1px solid rgba(218,54,51,0.25)"' + on('click', 'deleteConnector', c.id, c.name) + '>Delete</button>' +
         '</div>' +
       '</div>' +
       errorRow +
@@ -173,9 +174,9 @@ export function renderConnectorSettings(saved) {
       return '<div style="margin-bottom:0.6rem">' +
         '<div class="conn-cfg-label" style="margin-bottom:0.25rem">' + f.label + '</div>' +
         '<div style="display:flex;gap:0.4rem;align-items:center">' +
-          '<select id="cfs-' + f.key + '-sel" class="inp-sm" style="flex:1;display:none" onchange="document.getElementById(\'cfs-' + f.key + '\').value=this.value"></select>' +
+          '<select id="cfs-' + f.key + '-sel" class="inp-sm" style="flex:1;display:none"' + on('change', 'connectorProjectSelectChange', f.key) + '></select>' +
           '<input type="text" id="cfs-' + f.key + '" placeholder="' + f.placeholder + '" value="' + x(s[f.key] || '') + '" class="inp-sm u-flex1">' +
-          '<button type="button" class="btn btn-outline btn-sm" style="white-space:nowrap;font-size:0.72rem" onclick="fetchConnectorProjects()">↓ Fetch</button>' +
+          '<button type="button" class="btn btn-outline btn-sm" style="white-space:nowrap;font-size:0.72rem"' + on('click', 'fetchConnectorProjects') + '>↓ Fetch</button>' +
         '</div>' +
         '<div id="cfs-' + f.key + '-hint" style="font-size:0.65rem;color:var(--muted);margin-top:0.2rem"></div>' +
         '</div>';
@@ -185,6 +186,10 @@ export function renderConnectorSettings(saved) {
       '<input type="' + f.type + '" id="cfs-' + f.key + '" placeholder="' + f.placeholder + '" value="' + x(s[f.key] || '') + '" class="inp-sm u-w100">' +
       '</div>';
   }).join('');
+}
+
+export function connectorProjectSelectChange(key, el) {
+  document.getElementById('cfs-' + key).value = el.value;
 }
 
 export function fetchConnectorProjects() {
@@ -382,9 +387,9 @@ export function renderResponseConnectorList(list) {
           '<div class="tiny muted">' + (providerLabels[c.provider] || x(c.provider)) + '</div></div>' +
         '<div style="display:flex;align-items:center;gap:0.65rem">' +
           '<span class="tiny" style="color:' + statusColor + '">' + statusDot + '</span>' +
-          '<button class="btn btn-outline btn-sm" onclick="testResponseConnectorById(\'' + x(c.id) + '\',this)">Test</button>' +
-          '<button class="btn btn-outline btn-sm" onclick="openEditResponseConnector(\'' + x(c.id) + '\')">Edit</button>' +
-          '<button class="btn btn-sm" style="color:var(--danger);background:rgba(218,54,51,0.08);border:1px solid rgba(218,54,51,0.25)" onclick="deleteResponseConnector(\'' + x(c.id) + '\',\'' + x(c.name) + '\')">Delete</button>' +
+          '<button class="btn btn-outline btn-sm"' + on('click', 'testResponseConnectorById', c.id) + '>Test</button>' +
+          '<button class="btn btn-outline btn-sm"' + on('click', 'openEditResponseConnector', c.id) + '>Edit</button>' +
+          '<button class="btn btn-sm" style="color:var(--danger);background:rgba(218,54,51,0.08);border:1px solid rgba(218,54,51,0.25)"' + on('click', 'deleteResponseConnector', c.id, c.name) + '>Delete</button>' +
         '</div>' +
       '</div>' +
     '</div>';

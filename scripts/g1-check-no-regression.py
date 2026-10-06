@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """CI regression guard for G1's XSS-sink classification.
 
-Compares the current Assessment/G1_FINAL_CLASSIFICATION.json against a
+Compares the current security/g1/G1_FINAL_CLASSIFICATION.json against a
 --against baseline JSON (the base branch's committed version, or the
 literal content "{}" if none exists yet) and fails when a
 (function, target, op) "slot" that existed in the baseline has gotten
@@ -23,7 +23,7 @@ import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-CURRENT_JSON = REPO_ROOT / "Assessment" / "G1_FINAL_CLASSIFICATION.json"
+CURRENT_JSON = REPO_ROOT / "security" / "g1" / "G1_FINAL_CLASSIFICATION.json"
 
 
 def load_json(path):

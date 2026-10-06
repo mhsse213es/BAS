@@ -1,3 +1,10 @@
+/* Self-hosted (G1d: font-src 'self'; air-gapped installs). OFL-1.1, see fonts/OFL-*.txt.
+   Variable fonts from @fontsource-variable 5.3.0, latin subset.
+   Weight ranges match the previous Google Fonts request so appearance is unchanged. */
+@font-face { font-family: 'Inter'; font-style: normal; font-display: swap; font-weight: 300 700; src: url(/fonts/inter-latin-wght-normal.woff2) format('woff2'); }
+@font-face { font-family: 'Space Grotesk'; font-style: normal; font-display: swap; font-weight: 500 700; src: url(/fonts/space-grotesk-latin-wght-normal.woff2) format('woff2'); }
+@font-face { font-family: 'JetBrains Mono'; font-style: normal; font-display: swap; font-weight: 400 500; src: url(/fonts/jetbrains-mono-latin-wght-normal.woff2) format('woff2'); }
+
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {

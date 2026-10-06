@@ -1,6 +1,7 @@
 import { state } from '../core/state.js';
 import { apicall } from '../core/api.js';
 import { x } from '../core/escape.js';
+import { on } from '../core/actions.js';
 import { ago, fmtDate, fmtRunIdCode, showToast } from '../core/util.js';
 import { renderGroupCheckboxList } from './adversaries.js';
 import { agentBucket, loadScenarios, renderScenarios, resolveGroupTargetAgents } from './attack-path.js';
@@ -43,9 +44,9 @@ export function loadReports() {
         '<div class="rep-main"><div class="rep-host">' + x(host) + '</div>' +
           '<div class="rep-sub">Reports on: <strong class="u-text">' + x(lastName || 'unnamed scenario') + '</strong> (latest run) · ' + n + ' run' + (n === 1 ? '' : 's') + ' total · last ' + ago(byAgent[id].last) + '</div></div>' +
         '<div class="rep-acts">' +
-          '<button class="btn btn-outline btn-sm" onclick="genAgentReport(\'' + x(id) + '\',\'posture\',\'pdf\')">PDF Report</button>' +
-          '<button class="btn btn-outline btn-sm" onclick="genAgentReport(\'' + x(id) + '\',\'posture\',\'csv\')">CSV</button>' +
-          '<button class="btn btn-outline btn-sm" onclick="genAgentReport(\'' + x(id) + '\',\'audit\',\'\')">Audit pack</button>' +
+          '<button class="btn btn-outline btn-sm"' + on('click', 'genAgentReport', id, 'posture', 'pdf') + '>PDF Report</button>' +
+          '<button class="btn btn-outline btn-sm"' + on('click', 'genAgentReport', id, 'posture', 'csv') + '>CSV</button>' +
+          '<button class="btn btn-outline btn-sm"' + on('click', 'genAgentReport', id, 'audit', '') + '>Audit pack</button>' +
         '</div></div>';
     }).join('');
   }).catch(function() {
@@ -251,18 +252,18 @@ function runRowHtml(r) {
       // it's terminal (partial/completed), the same underlying data (see
       // below) is history, not a live stream, so it gets the results-style
       // pass/fail label instead of "Live".
-      if (r.id && r.status === 'running') acts += '<button class="btn btn-outline btn-sm" onclick="openRunPanel(\'' + x(r.id) + '\',\'' + x(r.name).replace(/'/g,'&#39;') + '\',' + ((r.progress && r.progress.stepsTotal) || 0) + ',\'' + x(r.mode||'') + '\',\'' + x(r.maxPrivilege||'') + '\')" title="Live run timeline + progress">&#9673; Live</button> ';
-      if (r.id && r.status === 'running') acts += '<button class="btn btn-outline-red btn-sm" onclick="stopRun(\'' + x(r.id) + '\')" title="Stop this run — keeps completed steps, marks the run partial">&#9632; Stop</button> ';
+      if (r.id && r.status === 'running') acts += '<button class="btn btn-outline btn-sm"' + on('click', 'openRunPanelAction', r.id, r.name, (r.progress && r.progress.stepsTotal) || 0, r.mode || '', r.maxPrivilege || '') + ' title="Live run timeline + progress">&#9673; Live</button> ';
+      if (r.id && r.status === 'running') acts += '<button class="btn btn-outline-red btn-sm"' + on('click', 'stopRun', r.id) + ' title="Stop this run — keeps completed steps, marks the run partial">&#9632; Stop</button> ';
       // Pause/Resume works for every run mode now -- both the ART/Custom step
       // scheduler (runScenario) and the posture local-check path (runLocalScan)
       // share the same agent-side gate/emit wiring.
       if (r.id && r.status === 'running') {
         acts += r.paused
-          ? '<button class="btn btn-outline btn-sm" id="pause-btn-' + x(r.id) + '" onclick="resumeRun(\'' + x(r.id) + '\')">&#9654; Resume</button> '
-          : '<button class="btn btn-outline btn-sm" id="pause-btn-' + x(r.id) + '" onclick="pauseRun(\'' + x(r.id) + '\')">&#10073;&#10073; Pause</button> ';
+          ? '<button class="btn btn-outline btn-sm" id="pause-btn-' + x(r.id) + '"' + on('click', 'resumeRun', r.id) + '>&#9654; Resume</button> '
+          : '<button class="btn btn-outline btn-sm" id="pause-btn-' + x(r.id) + '"' + on('click', 'pauseRun', r.id) + '>&#10073;&#10073; Pause</button> ';
       }
       if (verdictCounts(r).total) {
-        acts += '<button class="btn btn-outline btn-sm" onclick=\'viewRunResults(' + JSON.stringify(r).replace(/'/g,"&#39;") + ')\'>' + badge + '</button>';
+        acts += '<button class="btn btn-outline btn-sm"' + on('click', 'viewRunResults', r) + '>' + badge + '</button>';
       } else if (r.id && r.status !== 'running' && r.progress) {
         // A cancelled/partial run never gets the agent's one atomic
         // `results` write (see cancelScenarioRun/forceCancelAfterGracePeriod
@@ -274,7 +275,7 @@ function runRowHtml(r) {
         // labeled as a completed (partial) run's results instead of "Live".
         var pr = r.progress;
         var toBadge = pr.stepsFailed + ' fail / ' + pr.stepsPassed + ' pass' + (pr.stepsTimeout ? ' / ' + pr.stepsTimeout + ' timeout' : '');
-        acts += '<button class="btn btn-outline btn-sm" onclick="openRunPanel(\'' + x(r.id) + '\',\'' + x(r.name).replace(/'/g,'&#39;') + '\',' + (pr.stepsTotal || 0) + ',\'' + x(r.mode||'') + '\',\'' + x(r.maxPrivilege||'') + '\')" title="Per-step results for this partial run">' + toBadge + '</button>';
+        acts += '<button class="btn btn-outline btn-sm"' + on('click', 'openRunPanelAction', r.id, r.name, pr.stepsTotal || 0, r.mode || '', r.maxPrivilege || '') + ' title="Per-step results for this partial run">' + toBadge + '</button>';
       } else if (r.failReason) {
         // A run that failed before any step produced results/progress (e.g.
         // dispatch-time failure -- agent offline, no matching agent, etc.)
@@ -361,10 +362,10 @@ function _sweepRowHtml(payload, opts) {
     '<td style="color:var(--muted);font-size:0.78rem">' + x(sw.createdBy || '—') + '</td>' +
     '<td style="color:var(--muted);font-size:0.78rem">' + fmtDate(sw.startedAt) + '</td>' +
     '<td style="color:var(--muted);font-size:0.78rem">' + (sw.completedAt ? fmtDate(sw.completedAt) : '—') + '</td>' +
-    '<td><button class="btn btn-outline btn-sm" onclick="' + opts.drilldownFn + '(\'' + x(sw.id) + '\')" title="' + opts.drilldownTitle + '">' +
+    '<td><button class="btn btn-outline btn-sm"' + on('click', opts.drilldownFn, sw.id) + ' title="' + opts.drilldownTitle + '">' +
         x(opts.progressLabel(sw)) + ' — ' + badge + '</button>' +
         ((sw.status === 'running' || sw.status === 'agent_disconnected')
-          ? ' <button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger)" onclick="' + opts.stopFn + '(\'' + x(sw.id) + '\')">&#9632; Stop</button>'
+          ? ' <button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger)"' + on('click', opts.stopFn, sw.id) + '>&#9632; Stop</button>'
           : '') + '</td>' +
     '<td>' + sweepAggregateScoreHtml(childRuns) + '</td></tr>';
 }
@@ -541,6 +542,11 @@ export function openModal(scenarioId, preAgent, lockAgent) {
 
 // renderRunMode shows the Posture/Live selector only for executable (hybrid)
 // scenarios, and toggles the live-execution warning.
+export function runGroupChange(id, el) {
+  state._groupSel[id] = el.checked;
+  renderRunMode();
+}
+
 export function renderRunMode() {
   renderModalSelection();
   renderAdditionalAgents();
@@ -709,7 +715,7 @@ function renderAdditionalAgents() {
   list.innerHTML = eligible.map(function(a) {
     return '<label style="display:flex;align-items:center;gap:0.5rem;padding:0.25rem 0.3rem;cursor:pointer">' +
       '<input type="checkbox" ' + (state._addlSel[a.agentId] ? 'checked' : '') +
-      ' onchange="_addlSel[\'' + x(a.agentId) + '\']=this.checked;renderAdditionalAgentsCount()">' +
+      on('change', 'addlSelChange', a.agentId) + '>' +
       '<code style="font-size:0.72rem">' + x(a.agentId) + '</code><span class="tiny muted">' + x(a.hostname) + ' · ' + cmpAgentOS(a) + '</span></label>';
   }).join('');
   renderAdditionalAgentsCount();
@@ -762,7 +768,7 @@ export function resolvedAllTargetIds() {
 // showing that group's own totalAgentCount as a quick-glance hint before any
 // OS filtering is applied.
 function renderGroupTargetList() {
-  renderGroupCheckboxList('modal-group-list', 'sub2', '_groupSel', 'renderGroupTargetSummary', ['renderRunMode']);
+  renderGroupCheckboxList('modal-group-list', 'sub2', '_groupSel', 'renderGroupTargetSummary', 'runGroupChange');
 }
 
 // renderGroupTargetSummary/renderAllTargetSummary only update their own summary
@@ -1272,7 +1278,7 @@ export function renderPickerList() {
       if (it.requiresAdmin)   extraBadges += ' <span style="font-size:0.65rem;padding:1px 5px;border-radius:7px;background:rgba(240,136,62,0.12);border:1px solid rgba(240,136,62,0.3);color:#f0883e">admin</span>';
     }
     var checkbox = _pickerReadOnly ? '' :
-      '<input type="checkbox" data-id="' + x(it.id) + '"' + checked + ' onchange="pickerToggle(this)" style="margin-top:2px">';
+      '<input type="checkbox" data-id="' + x(it.id) + '"' + checked + on('change', 'pickerToggle') + ' style="margin-top:2px">';
     return '<label style="display:flex;align-items:flex-start;gap:0.55rem;padding:0.4rem 0.5rem;border-bottom:1px solid var(--border);' +
       (_pickerReadOnly ? '' : 'cursor:pointer;') + 'font-size:0.8rem">' +
       checkbox +
@@ -1292,8 +1298,8 @@ export function pickerToggle(el) {
   updatePickerCount();
 }
 
-export function pickerSelectAll(on) {
-  if (on) {
+export function pickerSelectAll(selectAll) {
+  if (selectAll) {
     // Scoped to the currently filtered/visible items -- lets an operator
     // narrow with the search/filter chips and bulk-check just that subset.
     _pickerFiltered.forEach(function(it) { _pickerSel[it.id] = true; });
@@ -1422,7 +1428,7 @@ function renderModalSelection() {
     note.style.display = 'block';
     note.innerHTML = '&#9989; Running a selected subset: <strong>' + state._runSelection.ids.length + '</strong> ' + noun +
       (state._runSelection.locked ? ' (targeted re-validate)' :
-       ' <a href="javascript:void(0)" class="desc-toggle" style="margin-left:8px" onclick="clearSelection();return false;">Clear</a>');
+       ' <a href="#" class="desc-toggle" style="margin-left:8px"' + on('click', 'clearSelection') + '>Clear</a>');
   } else if (fw === 'posture' && document.getElementById('modal-agent').value) {
     // No explicit subset chosen — show what "run everything" actually means
     // instead of leaving the operator to guess or dig into Customize. Uses
@@ -1737,7 +1743,7 @@ function techFieldHTML(st) {
       '<div class="st-tech-selected" style="display:' + (hasSelection ? '' : 'none') + '"></div>' +
       '<input class="st-tech-search" type="text" placeholder="Search ATT&amp;CK technique (ID, name, keyword...)" autocomplete="off" ' +
         'style="display:' + (hasSelection ? 'none' : '') + '" ' +
-        'oninput="techOnInput(this)" onkeydown="techOnKeydown(event,this)" onblur="techOnBlur(this)">' +
+        on('input', 'techOnInput') + on('keydown', 'techKeydown') + on('blur', 'techOnBlur') + '>' +
       '<div class="bld-mode-help" style="margin:0.3rem 0 0">Examples: T1055 &middot; credential dumping &middot; lsass &middot; powershell &middot; registry run</div>' +
       '<div class="st-tech-panel"></div>' +
     '</div>';
@@ -1765,7 +1771,7 @@ function techRenderSelected(wrap, id) {
       '<div><span class="st-tech-sel-id">' + x(id) + '</span>' +
         '<span class="tiny muted" style="margin-left:0.4rem">' +
         (techniqueCatalog === null ? 'resolving…' : 'not recognized') + '</span></div>' +
-      '<span class="st-tech-sel-actions"><a href="javascript:void(0)" onclick="techChangeSelection(this)">&#10005; change</a></span>';
+      '<span class="st-tech-sel-actions"><a href="#"' + on('click', 'techChangeSelection') + '>&#10005; change</a></span>';
     return;
   }
   box.className = 'st-tech-selected';
@@ -1778,8 +1784,8 @@ function techRenderSelected(wrap, id) {
     '</div>' +
     '<span class="st-tech-sel-actions">' +
       (t.url ? '<a href="' + x(t.url) + '" target="_blank" rel="noopener">View ATT&amp;CK</a> ' : '') +
-      '<a href="javascript:void(0)" onclick="techCopyId(this)" data-id="' + x(t.id) + '">Copy ID</a> ' +
-      '<a href="javascript:void(0)" onclick="techChangeSelection(this)">&#10005; change</a>' +
+      '<a href="#"' + on('click', 'techCopyId') + ' data-id="' + x(t.id) + '">Copy ID</a> ' +
+      '<a href="#"' + on('click', 'techChangeSelection') + '>&#10005; change</a>' +
     '</span>';
 }
 
@@ -1807,7 +1813,7 @@ export function techCopyId(el) {
   }
 }
 
-function techOnInput(input) {
+export function techOnInput(input) {
   var wrap = input.closest('.st-tech-wrap');
   var panel = wrap.querySelector('.st-tech-panel');
   if (_techSearchTimer) clearTimeout(_techSearchTimer);
@@ -1828,7 +1834,7 @@ function techRenderResults(wrap, query) {
   panel.innerHTML = results.map(function(t, i) {
     var tactics = (t.tactics || []).join(', ');
     var platforms = (t.platforms || []).join(', ');
-    return '<div class="st-tech-row' + (i === 0 ? ' active' : '') + '" data-id="' + x(t.id) + '" onmousedown="techSelectRow(this)">' +
+    return '<div class="st-tech-row' + (i === 0 ? ' active' : '') + '" data-id="' + x(t.id) + '"' + on('mousedown', 'techSelectRow') + '>' +
       '<span class="st-tech-row-id">' + x(t.id) + '</span><span class="st-tech-row-name">' + x(t.name) + '</span>' +
       (tactics ? '<div class="st-tech-row-meta">' + x(tactics) + '</div>' : '') +
       (platforms ? '<div class="st-tech-row-meta">' + x(platforms) + '</div>' : '') +
@@ -1900,9 +1906,9 @@ export function addStep(st) {
   div.innerHTML =
     '<div class="bld-step-hdr"><span class="bld-step-num">Step</span>' +
       '<span class="bld-actions">' +
-        '<button type="button" onclick="moveStep(this,-1)" title="Move up">&#9650;</button>' +
-        '<button type="button" onclick="moveStep(this,1)" title="Move down">&#9660;</button>' +
-        '<button type="button" onclick="removeStep(this)" title="Remove">&#10005;</button>' +
+        '<button type="button"' + on('click', 'moveStepBy', -1) + ' title="Move up">&#9650;</button>' +
+        '<button type="button"' + on('click', 'moveStepBy', 1) + ' title="Move down">&#9660;</button>' +
+        '<button type="button"' + on('click', 'removeStep') + ' title="Remove">&#10005;</button>' +
       '</span></div>' +
     '<div class="bld-grid">' +
       techFieldHTML(st) +
@@ -1918,6 +1924,15 @@ export function addStep(st) {
   techInitField(div, st.techniqueId);
   renumberSteps();
 }
+
+export function addlSelChange(agentId, el) {
+  state._addlSel[agentId] = el.checked;
+  renderAdditionalAgentsCount();
+}
+
+export function techKeydown(el, event) { techOnKeydown(event, el); }
+
+export function moveStepBy(dir, el) { moveStep(el, dir); }
 
 export function removeStep(btn) { btn.closest('.bld-step').remove(); renumberSteps(); }
 
@@ -2210,13 +2225,13 @@ export function viewRunResults(run) {
   if (hasOutput) {
     var canRerun = ROLE === 'admin' || ROLE === 'analyst';
     actionsHtml =
-      '<button class="btn btn-sm btn-outline" onclick="exportRunJSON(\'' + runId + '\')" title="Download full run data as JSON">&#8595; JSON</button>' +
-      '<button class="btn btn-sm btn-outline" onclick="openRunReport(\'' + runId + '\')" title="Open self-contained HTML report in new tab">&#8599; HTML Report</button>' +
-      '<button class="btn btn-sm btn-outline" onclick="downloadRunReport(\'' + runId + '\')" title="Download the report as a PDF file">&#8595; PDF Report</button>' +
-      '<button class="btn btn-sm btn-outline" onclick="downloadRunCSV(\'' + runId + '\')" title="Download forensic CSV (one row per technique)">&#8595; CSV</button>' +
+      '<button class="btn btn-sm btn-outline"' + on('click', 'exportRunJSON', runId) + ' title="Download full run data as JSON">&#8595; JSON</button>' +
+      '<button class="btn btn-sm btn-outline"' + on('click', 'openRunReport', runId) + ' title="Open self-contained HTML report in new tab">&#8599; HTML Report</button>' +
+      '<button class="btn btn-sm btn-outline"' + on('click', 'downloadRunReport', runId) + ' title="Download the report as a PDF file">&#8595; PDF Report</button>' +
+      '<button class="btn btn-sm btn-outline"' + on('click', 'downloadRunCSV', runId) + ' title="Download forensic CSV (one row per technique)">&#8595; CSV</button>' +
       '<button class="btn btn-outline btn-sm" disabled style="opacity:0.5;cursor:not-allowed" title="Compare against another run — coming soon">Compare</button>' +
       (canRerun
-        ? '<button class="btn btn-outline btn-sm" onclick=\'openRerunReview(' + JSON.stringify(run).replace(/'/g,"&#39;") + ')\' title="Review and re-run this exact configuration">Re-run</button>'
+        ? '<button class="btn btn-outline btn-sm"' + on('click', 'openRerunReview', run) + ' title="Review and re-run this exact configuration">Re-run</button>'
         : '<button class="btn btn-outline btn-sm" disabled style="opacity:0.5;cursor:not-allowed" title="Re-run requires the Analyst or Admin role">Re-run</button>');
   }
   document.getElementById('results-header-actions').innerHTML = actionsHtml;
@@ -2459,7 +2474,7 @@ export function viewRunResults(run) {
         privBadge = '<span style="font-size:0.6rem;font-weight:500;text-transform:uppercase;background:rgba(255,255,255,0.02);color:var(--muted);border-radius:2px;padding:1px 5px;margin-left:2px;border:1px solid rgba(154,169,188,0.2)" title="Privilege tier not annotated — technique ran in the agent\'s own security context. Add requires_priv: user|admin|system to the scenario step YAML for explicit tracking.">inherited</span>';
       }
       var techId = (c.technique && c.technique.id) ? '<code style="font-size:0.68rem;color:var(--muted)">' + x(c.technique.id) + '</code> ' : '';
-      var evidenceBtn = '<button onclick="openEvidence('+c._eidx+')" style="background:none;border:1px solid var(--border);border-radius:3px;color:var(--accent);cursor:pointer;font-size:0.6rem;padding:0.18rem 0.45rem;flex-shrink:0;margin-left:0.35rem;white-space:nowrap" title="View execution evidence">&#128269; Evidence</button>';
+      var evidenceBtn = '<button'+ on('click', 'openEvidence', c._eidx) + ' style="background:none;border:1px solid var(--border);border-radius:3px;color:var(--accent);cursor:pointer;font-size:0.6rem;padding:0.18rem 0.45rem;flex-shrink:0;margin-left:0.35rem;white-space:nowrap" title="View execution evidence">&#128269; Evidence</button>';
       return '<div style="padding:0.32rem 0;border-bottom:1px solid rgba(34,50,74,0.45)">' +
         '<div style="display:flex;align-items:center;gap:0.45rem;flex-wrap:wrap">' +
           '<span style="color:' + col + ';font-size:0.7rem;font-weight:600;min-width:46px">' + x(c.result) + '</span>' +
@@ -2649,7 +2664,7 @@ export function viewRunResults(run) {
     ['reports', 'Reports']
   ];
   document.getElementById('run-tabbar').innerHTML = RUN_TABS.map(function(t, i) {
-    return '<button class="run-tab-btn' + (i === 0 ? ' active' : '') + '" id="run-tabbtn-' + t[0] + '" onclick="switchRunTab(\'' + t[0] + '\')">' + x(t[1]) + '</button>';
+    return '<button class="run-tab-btn' + (i === 0 ? ' active' : '') + '" id="run-tabbtn-' + t[0] + '"' + on('click', 'switchRunTab', t[0]) + '>' + x(t[1]) + '</button>';
   }).join('');
 
   document.getElementById('results-summary').style.display = 'none';
@@ -2671,10 +2686,10 @@ export function viewRunResults(run) {
           '</div>' +
         '</div></div>' +
         '<div class="dash-panel"><div class="dash-panel-hdr">Export</div><div class="dash-panel-body" style="display:flex;gap:0.5rem;flex-wrap:wrap">' +
-          '<button class="btn btn-sm btn-outline" onclick="exportRunJSON(\'' + runId + '\')">&#8595; JSON</button>' +
-          '<button class="btn btn-sm btn-outline" onclick="openRunReport(\'' + runId + '\')">&#8599; HTML Report</button>' +
-          '<button class="btn btn-sm btn-outline" onclick="downloadRunReport(\'' + runId + '\')">&#8595; PDF Report</button>' +
-          '<button class="btn btn-sm btn-outline" onclick="downloadRunCSV(\'' + runId + '\')">&#8595; CSV</button>' +
+          '<button class="btn btn-sm btn-outline"' + on('click', 'exportRunJSON', runId) + '>&#8595; JSON</button>' +
+          '<button class="btn btn-sm btn-outline"' + on('click', 'openRunReport', runId) + '>&#8599; HTML Report</button>' +
+          '<button class="btn btn-sm btn-outline"' + on('click', 'downloadRunReport', runId) + '>&#8595; PDF Report</button>' +
+          '<button class="btn btn-sm btn-outline"' + on('click', 'downloadRunCSV', runId) + '>&#8595; CSV</button>' +
         '</div></div>';
     } else {
       reportsEl.innerHTML = '<div style="color:var(--muted);font-size:0.8rem;padding:1rem 0">No exportable output yet — this run hasn\'t completed.</div>';

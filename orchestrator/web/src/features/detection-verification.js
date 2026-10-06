@@ -1,5 +1,6 @@
 import { apicall } from '../core/api.js';
 import { x } from '../core/escape.js';
+import { on } from '../core/actions.js';
 import { fmtDate, showToast } from '../core/util.js';
 
 
@@ -61,7 +62,7 @@ function vfRenderDomainChips() {
   var all = [{k:'',label:'All domains'}].concat(VF_DOMAINS.map(function(d){ return {k:d,label:d}; }));
   wrap.innerHTML = all.map(function(d) {
     var active = VF.domain === d.k;
-    return '<span onclick="vfSetDomain(\'' + d.k + '\')" style="cursor:pointer;text-transform:capitalize;padding:0.3rem 0.7rem;border-radius:999px;font-size:0.74rem;border:1px solid ' +
+    return '<span' + on('click', 'vfSetDomain', d.k) + ' style="cursor:pointer;text-transform:capitalize;padding:0.3rem 0.7rem;border-radius:999px;font-size:0.74rem;border:1px solid ' +
       (active ? 'var(--accent)' : 'var(--border)') + ';color:' + (active ? 'var(--accent)' : 'var(--muted)') +
       ';background:' + (active ? 'rgba(79,142,247,0.12)' : 'transparent') + '">' + x(d.label) + '</span>';
   }).join('');
@@ -106,7 +107,7 @@ function vfRenderQueue() {
       '<td style="padding:0.6rem 0.8rem;font-size:0.78rem;text-transform:capitalize">' + x(i.confidence) + '</td>' +
       '<td style="padding:0.6rem 0.8rem;font-size:0.78rem">' + analyst + '</td>' +
       '<td style="padding:0.6rem 0.8rem;font-size:0.78rem">' + ev + '</td>' +
-      '<td style="padding:0.6rem 0.8rem;text-align:right"><button class="btn btn-outline btn-sm" onclick="vfSelect(\'' + x(i.expectationId) + '\')">' + (i.verificationId ? 'Review' : 'Verify') + '</button></td>' +
+      '<td style="padding:0.6rem 0.8rem;text-align:right"><button class="btn btn-outline btn-sm"' + on('click', 'vfSelect', i.expectationId) + '>' + (i.verificationId ? 'Review' : 'Verify') + '</button></td>' +
       '</tr>';
   }).join('');
   box.innerHTML =
@@ -128,13 +129,13 @@ export function vfSelect(expId) {
   var canVerify = vfCan('verification:verify');
   var canReview = vfCan('verification:review');
   var resultBtn = function(val, label, col) {
-    return '<button type="button" id="vf-res-' + val + '" onclick="vfPickResult(\'' + val + '\')" class="btn btn-outline btn-sm" style="border-color:' + col + ';color:' + col + '">' + label + '</button>';
+    return '<button type="button" id="vf-res-' + val + '"' + on('click', 'vfPickResult', val) + ' class="btn btn-outline btn-sm" style="border-color:' + col + ';color:' + col + '">' + label + '</button>';
   };
   var evSection = i.verificationId
     ? '<div style="margin-top:0.9rem"><div style="font-size:0.72rem;text-transform:uppercase;letter-spacing:0.04em;color:var(--muted);margin-bottom:0.4rem">Evidence <span style="text-transform:none;color:var(--muted)">— SHA-256 recorded at upload</span></div>' +
         '<div id="vf-evlist" style="margin-bottom:0.5rem"></div>' +
         (vfCan('verification:evidence:upload')
-          ? '<input type="file" id="vf-evfile" style="font-size:0.78rem"> <button class="btn btn-outline btn-sm" onclick="vfUploadEvidence(\'' + x(i.verificationId) + '\')">Attach</button>'
+          ? '<input type="file" id="vf-evfile" style="font-size:0.78rem"> <button class="btn btn-outline btn-sm"' + on('click', 'vfUploadEvidence', i.verificationId) + '>Attach</button>'
           : '<div style="font-size:0.74rem;color:var(--muted)">You do not have permission to upload evidence.</div>') +
         '</div>'
     : '<div style="margin-top:0.9rem;font-size:0.74rem;color:var(--muted)">Save a verification first, then attach evidence (screenshots, exported alerts, KQL, CSV).</div>';
@@ -142,7 +143,7 @@ export function vfSelect(expId) {
     '<div style="border-top:2px solid var(--accent);background:var(--bg);padding:1rem 1.1rem">' +
     '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:1rem;margin-bottom:0.7rem">' +
       '<div><strong style="font-size:0.9rem">' + x(i.providerDisplay || i.provider) + '</strong> · <code style="font-size:0.72rem">' + x(i.techniqueId) + '</code> · <span style="text-transform:capitalize;color:var(--muted);font-size:0.78rem">' + x(i.domain) + '</span></div>' +
-      '<button class="btn btn-outline btn-sm" onclick="vfCloseDetail()">Close</button>' +
+      '<button class="btn btn-outline btn-sm"' + on('click', 'vfCloseDetail') + '>Close</button>' +
     '</div>' +
     (i.profileName ? '<div style="font-size:0.7rem;color:var(--muted);margin-bottom:0.6rem">Validated against <strong>' + x(i.profileName) + '</strong> v' + (i.profileVersion||1) + ' · expectation <code>' + x(i.expectationId) + '</code></div>' : '') +
     (canVerify
@@ -152,14 +153,14 @@ export function vfSelect(expId) {
         '<input type="hidden" id="vf-result" value="' + x(i.result||'') + '">' +
         '<div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap">' +
           (canReview
-            ? '<button class="btn btn-primary btn-sm" onclick="vfSubmit(\'' + x(i.expectationId) + '\',\'Approved\')">Approve &amp; Save</button>' +
-              '<button class="btn btn-outline btn-sm" onclick="vfSubmit(\'' + x(i.expectationId) + '\',\'NeedsReview\')">Submit for Review</button>' +
-              '<button class="btn btn-outline-red btn-sm" onclick="vfSubmit(\'' + x(i.expectationId) + '\',\'Rejected\')">Reject</button>'
-            : '<button class="btn btn-primary btn-sm" onclick="vfSubmit(\'' + x(i.expectationId) + '\',\'NeedsReview\')">Submit for Review</button>') +
+            ? '<button class="btn btn-primary btn-sm" ' + on('click', 'vfSubmit', i.expectationId, 'Approved') + '>Approve &amp; Save</button>' +
+              '<button class="btn btn-outline btn-sm" ' + on('click', 'vfSubmit', i.expectationId, 'NeedsReview') + '>Submit for Review</button>' +
+              '<button class="btn btn-outline-red btn-sm" ' + on('click', 'vfSubmit', i.expectationId, 'Rejected') + '>Reject</button>'
+            : '<button class="btn btn-primary btn-sm" ' + on('click', 'vfSubmit', i.expectationId, 'NeedsReview') + '>Submit for Review</button>') +
           '<span class="u-flex1"></span>' +
-          '<button class="btn btn-outline btn-sm" onclick="vfToggleHistory(\'' + x(i.expectationId) + '\')">History</button>' +
+          '<button class="btn btn-outline btn-sm"' + on('click', 'vfToggleHistory', i.expectationId) + '>History</button>' +
         '</div>'
-      : '<div style="font-size:0.78rem;color:var(--muted)">You do not have permission to verify. <button class="btn btn-outline btn-sm" onclick="vfToggleHistory(\'' + x(i.expectationId) + '\')">View History</button></div>') +
+      : '<div style="font-size:0.78rem;color:var(--muted)">You do not have permission to verify. <button class="btn btn-outline btn-sm"' + on('click', 'vfToggleHistory', i.expectationId) + '>View History</button></div>') +
     evSection +
     '<div id="vf-history" style="margin-top:0.8rem"></div>' +
     '</div>';
@@ -234,7 +235,7 @@ function vfLoadEvidence(verificationId) {
         '<span style="color:var(--muted);font-family:monospace;font-size:0.66rem" title="' + x(e.hashAlgorithm) + ': ' + x(e.contentHash) + '">' + x((e.contentHash||'').substring(0,12)) + '…</span>' +
         '<span class="u-flex1"></span>' +
         '<span style="color:var(--muted);font-size:0.68rem">' + x(e.uploadedBy||'') + '</span>' +
-        (canDel ? '<button class="btn btn-outline-red btn-sm" onclick="vfDeleteEvidence(\'' + x(e.id) + '\',\'' + x(verificationId) + '\')">Delete</button>' : '') +
+        (canDel ? '<button class="btn btn-outline-red btn-sm"' + on('click', 'vfDeleteEvidence', e.id, verificationId) + '>Delete</button>' : '') +
         '</div>';
     }).join('');
   }).catch(function(){ host.innerHTML = '<div style="font-size:0.74rem;color:var(--danger)">Failed to load evidence.</div>'; });
