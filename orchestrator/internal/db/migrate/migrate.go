@@ -112,9 +112,10 @@ func Up(ctx context.Context, adminDSN string, opt Options) (Result, error) {
 	case Unrecognised:
 		return r, fmt.Errorf("%w: public has tables but not the Audspect sentinel set (%v); refusing to touch it", ErrUnrecognised, sentinels)
 	case PreH1:
-		if err := adopt(ctx, conn, opt, &r); err != nil {
+		if r.Extra, err = adopt(ctx, conn, opt); err != nil {
 			return r, err
 		}
+		r.Adopted = true
 	}
 	opt.printf("migrate: %s, schema version %d", state, r.FromVersion)
 
@@ -137,6 +138,11 @@ func Up(ctx context.Context, adminDSN string, opt Options) (Result, error) {
 		return r, err
 	}
 	r.ToVersion = v
+	if r.Adopted {
+		if err := finishAdoption(ctx, conn, r.Extra); err != nil {
+			return r, err
+		}
+	}
 
 	tx, err := conn.Begin(ctx)
 	if err != nil {
