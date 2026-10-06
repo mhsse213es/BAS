@@ -60,7 +60,7 @@ err()  { echo -e "${RED}[✗]${NC} $*" >&2; }
 # ── Prerequisites ──────────────────────────────────────────────────────────────
 log "Checking prerequisites..."
 MISSING=()
-for tool in xorriso openssl sha256sum; do
+for tool in xorriso openssl sha256sum curl; do
   command -v "$tool" &>/dev/null || MISSING+=("$tool")
 done
 if [[ ${#MISSING[@]} -gt 0 ]]; then

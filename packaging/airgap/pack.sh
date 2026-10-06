@@ -14,8 +14,8 @@
 #   dist/bas-airgap-<version>.tar.gz      (transfer this to the air-gapped server)
 #   dist/bas-airgap-<version>.tar.gz.sha256
 #
-# Requires cosign + packaging/signing/cosign.key (the orchestrator image is
-# signed; import.sh refuses an unsigned one).
+# Requires cosign + packaging/signing/cosign.key (every image tar -- orchestrator
+# and postgres -- is signed; import.sh refuses any unsigned one).
 #
 # Run from the repository root.
 set -euo pipefail
@@ -110,8 +110,28 @@ fi
 # Top level: used by import.sh / verify.sh. compose/: used by setup.sh --offline.
 cp "$COSIGN_PUB" "${BUILD_DIR}/cosign.pub"
 
-docker save "${POSTGRES_IMAGE}" | gzip > "${BUILD_DIR}/images/postgres-16-alpine.tar.gz"
-log "  Saved: postgres-16-alpine.tar.gz ($(du -sh "${BUILD_DIR}/images/postgres-16-alpine.tar.gz" | cut -f1))"
+# Postgres: also UNCOMPRESSED + cosign-signed with the same helper -- the importer
+# refuses to load ANY image tar that lacks a valid signature.
+PG_TAR="${BUILD_DIR}/images/postgres-16-alpine.tar"
+docker save "${POSTGRES_IMAGE}" -o "${PG_TAR}"
+log "  Saved: postgres-16-alpine.tar ($(du -sh "${PG_TAR}" | cut -f1))"
+log "Signing postgres image with cosign..."
+if ! bash "${COSIGN_SCRIPT}" --sign "${PG_TAR}"; then
+  err "cosign signing failed for ${PG_TAR} -- aborting."
+  exit 1
+fi
+if ! bash "${COSIGN_SCRIPT}" --verify "${PG_TAR}"; then
+  err "cosign verification FAILED immediately after signing ${PG_TAR} -- investigate before shipping."
+  exit 1
+fi
+# Every file under images/ must be a signed .tar (fail closed on anything else).
+for f in "${BUILD_DIR}"/images/*; do
+  case "$f" in
+    *.tar.bundle) ;;
+    *.tar) [[ -f "${f}.bundle" ]] || { err "${f} has no cosign .bundle -- aborting."; exit 1; } ;;
+    *) err "Unexpected file in images/: ${f} -- aborting."; exit 1 ;;
+  esac
+done
 
 # ── 4. Copy compose bundle ─────────────────────────────────────────────────────
 log "Copying compose bundle..."
@@ -205,7 +225,11 @@ echo ""
 echo "  Bundle:    ${TARBALL}  (${BUNDLE_SIZE})"
 echo "  Checksum:  ${CHECKSUM}"
 echo ""
-echo "  Transfer bundle + .sha256 + .asc (if signed) to the air-gapped server, then run:"
+echo "  Transfer bundle + .sha256 + .asc (if signed) to the air-gapped server."
+echo "  TRUST BOOTSTRAP: verify-sig.sh ships INSIDE the bundle, so with an out-of-band"
+echo "  GPG key do the FIRST check with the host's own gpg BEFORE extracting/running anything:"
+echo "    GNUPGHOME=\$(mktemp -d) gpg --import <oob.asc> && gpg --status-fd 1 --verify bas-airgap-${VERSION}.tar.gz.asc bas-airgap-${VERSION}.tar.gz"
+echo "  and compare the VALIDSIG fingerprint with the published Audspect one. Then run:"
 echo "  (cosign >= v3.1.0 must already be installed on the air-gapped server)"
 echo "    bash verify-sig.sh bas-airgap-${VERSION}.tar.gz   # if signed"
 echo "    bash verify.sh bas-airgap-${VERSION}.tar.gz"

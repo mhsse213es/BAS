@@ -2,13 +2,21 @@
 # Packer provisioner — Step 2: Stage BAS files and install first-boot service
 set -euo pipefail
 
-BAS_VERSION="${BAS_VERSION:-latest}"
-BUNDLE="/var/tmp/bas-airgap.tar.gz"
-STAGING_DIR="/opt/bas-platform-src"
+# BAS_ROOT is a path prefix used ONLY by the test suite to sandbox every path
+# below (empty on a real VM).
+R="${BAS_ROOT:-}"
+BUNDLE="${R}/var/tmp/bas-airgap.tar.gz"
+STAGING_DIR="${R}/opt/bas-platform-src"
+APPLIANCE_DIR="${APPLIANCE_DIR:-${R}/var/tmp/bas-appliance}"
+COSIGN_BIN="${R}/usr/local/bin/cosign"
+
+err() { echo "ERROR: $*" >&2; }
 
 # ── 0. Install pinned cosign (build-time download, sha256-pinned; fails the build) ─
-bash /var/tmp/bas-appliance/fetch-cosign.sh /usr/local/bin/cosign /var/tmp/bas-appliance/cosign.pin
-rm -rf /var/tmp/bas-appliance
+bash "${APPLIANCE_DIR}/fetch-cosign.sh" "$COSIGN_BIN" "${APPLIANCE_DIR}/cosign.pin" \
+  || { err "pinned cosign could not be installed -- failing the image build."; exit 1; }
+PATH="$(dirname "$COSIGN_BIN"):$PATH"; export PATH
+rm -rf "$APPLIANCE_DIR"
 
 # ── 1. Extract air-gap bundle ──────────────────────────────────────────────────
 echo "[install-bas] Extracting bundle..."
@@ -22,45 +30,35 @@ trap 'rm -rf "$WORK"' EXIT
 tar -xzf "$BUNDLE" -C "$WORK"
 BUNDLE_DIR=$(find "$WORK" -maxdepth 1 -mindepth 1 -type d | head -1)
 
-# ── 2. Load Docker images (baked into VM so first-boot is instant) ─────────────
-# Refuse a legacy (unsigned) orchestrator image BEFORE any docker load.
-if compgen -G "${BUNDLE_DIR}/images/bas-orchestrator-*.tar.gz" >/dev/null; then
-  echo "ERROR: legacy unsigned orchestrator image (bas-orchestrator-*.tar.gz) in bundle -- refusing. Re-pack with the current packaging/airgap/pack.sh." >&2
+# The bundle's own VERSION is authoritative; compose/VERSION (which setup.sh pins
+# .env to) must equal it, so compose runs the image we verify.
+BAS_VERSION=$(cat "${BUNDLE_DIR}/VERSION" 2>/dev/null || echo "latest")
+if [[ "$(tr -d '[:space:]' < "${BUNDLE_DIR}/compose/VERSION" 2>/dev/null)" != "$(echo "$BAS_VERSION" | tr -d '[:space:]')" ]]; then
+  err "compose/VERSION does not match bundle VERSION (${BAS_VERSION}) -- refusing."
   exit 1
 fi
 
-# The orchestrator image is a cosign-signed bas-orchestrator-<v>.tar (not .tar.gz):
-# NOT loaded here. It is staged below; setup.sh --offline verifies the signature
-# (cosign >= v3.1.0 required on the VM) before loading it at first boot.
-# Fail a bad bundle at image-build time where cosign already exists; otherwise
-# setup.sh --offline performs the (mandatory) verification at first boot.
-if command -v cosign &>/dev/null; then
-  err() { echo "ERROR: $*" >&2; }
-  # shellcheck source=/dev/null
-  source "${BUNDLE_DIR}/cosign-verify-lib.sh"
-  BV=$(cat "${BUNDLE_DIR}/VERSION")
-  airgap_verify_orchestrator "${BUNDLE_DIR}/images/bas-orchestrator-${BV}.tar" "${BUNDLE_DIR}/cosign.pub" || exit 1
-fi
-echo "[install-bas] Loading Docker images (non-orchestrator)..."
-for img in "${BUNDLE_DIR}"/images/*.tar.gz; do
-  case "$(basename "$img")" in bas-orchestrator-*) continue ;; esac
-  echo "  Loading: $(basename "$img")"
-  docker load < "$img"
-done
-
-# No :latest tagging here: compose is pinned to the verified bas-orchestrator:<version>
-# via compose/VERSION, and setup.sh --offline loads that image after verification.
+# ── 2. Verify EVERY image (cosign + tag + image ID), then load orchestrator-last ─
+# Nothing unverified is ever loaded; a legacy .tar.gz or any unsigned/unlisted
+# file is fatal. A bad bundle fails the image build here, not at first boot.
+# shellcheck source=/dev/null
+source "${BUNDLE_DIR}/cosign-verify-lib.sh"
+echo "[install-bas] Verifying and loading Docker images..."
+airgap_verify_and_load_images "${BUNDLE_DIR}/images" "${BUNDLE_DIR}/cosign.pub" "$BAS_VERSION" \
+  || { err "image verification/loading failed -- failing the image build."; exit 1; }
+# No :latest tagging: compose is pinned to the verified bas-orchestrator:<version>
+# via compose/VERSION.
 
 echo "[install-bas] Docker images loaded:"
-docker images | grep -E "(bas-orchestrator|postgres)" | awk '{printf "  %-40s %s\n", $1":"$2, $3}'
+docker images | grep -E "(bas-orchestrator|postgres)" | awk '{printf "  %-40s %s\n", $1":"$2, $3}' || true
 
 # ── 3. Stage compose bundle ────────────────────────────────────────────────────
 echo "[install-bas] Staging BAS files to ${STAGING_DIR}..."
 rm -rf "$STAGING_DIR"
-mkdir -p "$STAGING_DIR/compose"
-cp -r "${BUNDLE_DIR}/compose/." "$STAGING_DIR/compose/"
 mkdir -p "$STAGING_DIR/compose/images"
-cp "${BUNDLE_DIR}"/images/bas-orchestrator-* "$STAGING_DIR/compose/images/"
+cp -r "${BUNDLE_DIR}/compose/." "$STAGING_DIR/compose/"
+# Signed tars + bundles + key: setup.sh --offline re-verifies from here at first boot.
+cp "${BUNDLE_DIR}"/images/*.tar "${BUNDLE_DIR}"/images/*.tar.bundle "$STAGING_DIR/compose/images/"
 cp "${BUNDLE_DIR}/cosign.pub" "$STAGING_DIR/compose/cosign.pub"
 echo "${BAS_VERSION}" > "$STAGING_DIR/VERSION"
 
@@ -97,7 +95,7 @@ echo "  It will only run once. Press ENTER to begin..."
 read -r
 
 # Run setup wizard in offline mode (Docker images are pre-loaded in this VM)
-bash "$SETUP_SCRIPT" --offline
+BAS_REQUIRE_SIGNED_IMAGES=1 bash "$SETUP_SCRIPT" --offline
 SETUP_RC=$?
 
 if [[ $SETUP_RC -eq 0 ]]; then

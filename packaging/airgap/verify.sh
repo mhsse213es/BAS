@@ -12,7 +12,7 @@
 # --cosign-pub <path> / env BAS_COSIGN_PUB verify with an out-of-band key
 # (precedence: flag, env, bundled cosign.pub); the key fingerprint is printed.
 #
-# Also verifies the orchestrator image's cosign signature. cosign >= v3.1.0
+# Also verifies the cosign signature of EVERY image tar (orchestrator, postgres). cosign >= v3.1.0
 # must be installed; if it is not, verification FAILS (cannot verify signature).
 set -euo pipefail
 
@@ -31,6 +31,8 @@ GPG_PUB_FLAG=""
 shift || true
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --cosign-pub=*) COSIGN_PUB_FLAG="${1#--cosign-pub=}"; [[ -n "$COSIGN_PUB_FLAG" ]] || { echo "--cosign-pub requires a path" >&2; exit 1; }; shift ;;
+    --gpg-pub=*)    GPG_PUB_FLAG="${1#--gpg-pub=}";       [[ -n "$GPG_PUB_FLAG" ]]    || { echo "--gpg-pub requires a path" >&2; exit 1; }; shift ;;
     --cosign-pub) COSIGN_PUB_FLAG="${2:-}"; [[ -n "$COSIGN_PUB_FLAG" ]] || { echo "--cosign-pub requires a path" >&2; exit 1; }; shift 2 ;;
     --gpg-pub)    GPG_PUB_FLAG="${2:-}";    [[ -n "$GPG_PUB_FLAG" ]]    || { echo "--gpg-pub requires a path" >&2; exit 1; }; shift 2 ;;
     *) echo "Unknown argument: $1" >&2; exit 1 ;;
@@ -110,30 +112,17 @@ echo "  Version:  ${VERSION}"
 echo -n "  Verifying file manifest... "
 FAIL_COUNT=0
 PASS_COUNT=0
-while IFS= read -r line; do
-  expected_hash="${line%% *}"
-  rel_path="${line#*  }"   # sha256sum format: "<hash>  <path>"
-  rel_path="${rel_path#./}"
-  abs_path="${BUNDLE_DIR}/${rel_path}"
-
-  if [[ ! -f "$abs_path" ]]; then
-    err "Missing: ${rel_path}"
-    FAIL_COUNT=$((FAIL_COUNT + 1))
-    continue
-  fi
-
-  actual_hash=$(sha256sum "$abs_path" | cut -d' ' -f1)
-  if [[ "$actual_hash" != "$expected_hash" ]]; then
-    err "Corrupt: ${rel_path}"
-    FAIL_COUNT=$((FAIL_COUNT + 1))
-  else
-    PASS_COUNT=$((PASS_COUNT + 1))
-  fi
-done < "$MANIFEST"
+mrc=0
+mout=$(cd "$BUNDLE_DIR" && sha256sum --check --strict MANIFEST.sha256 2>&1) || mrc=$?
+PASS_COUNT=$(grep -c ': OK$' <<<"$mout" || true)
+if [[ $mrc -ne 0 ]]; then
+  grep -v ': OK$' <<<"$mout" | while IFS= read -r l; do err "$l"; done
+  FAIL_COUNT=1
+fi
 
 if [[ $FAIL_COUNT -gt 0 ]]; then
   echo ""
-  err "${FAIL_COUNT} file(s) failed verification. Do NOT import this bundle."
+  err "Bundle manifest verification failed (corrupt, missing or malformed entries). Do NOT import this bundle."
   exit 1
 fi
 
@@ -149,8 +138,10 @@ REQUIRED=(
   "images/bas-orchestrator-${VERSION}.tar.bundle"
   "cosign.pub"
   "compose/cosign.pub"
+  "compose/VERSION"
   "cosign-verify-lib.sh"
-  "images/postgres-16-alpine.tar.gz"
+  "images/postgres-16-alpine.tar"
+  "images/postgres-16-alpine.tar.bundle"
   "compose/setup.sh"
   "compose/docker-compose.yml"
   "compose/docker-compose.prod.yml"
@@ -185,8 +176,12 @@ fi
 source "$AIRGAP_LIB"
 airgap_external_pub "$COSIGN_PUB_FLAG" || { err "Cannot verify signature -- do NOT import this bundle."; exit 1; }
 airgap_select_pub "${BUNDLE_DIR}/cosign.pub"
-if ! airgap_verify_orchestrator "${BUNDLE_DIR}/images/bas-orchestrator-${VERSION}.tar" "$AIRGAP_PUB"; then
+if ! airgap_verify_images "${BUNDLE_DIR}/images" "$AIRGAP_PUB" "$VERSION"; then
   err "Cannot verify signature -- do NOT import this bundle."
+  exit 1
+fi
+if [[ "$(tr -d '[:space:]' < "${BUNDLE_DIR}/compose/VERSION" 2>/dev/null)" != "$(echo "$VERSION" | tr -d '[:space:]')" ]]; then
+  err "compose/VERSION does not match the bundle VERSION (${VERSION}) -- do NOT import this bundle."
   exit 1
 fi
 

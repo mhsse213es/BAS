@@ -54,7 +54,8 @@ readonly MIN_DISK_MB=10240        # 10 GB -images + DB + logs
 readonly MIN_CPU_CORES=2
 readonly COMPOSE_PROJECT="audspect"
 readonly SERVICE_NAME="audspect"
-readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+unset CDPATH
+readonly SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 
 # Read version from bundle VERSION file (written by windows-build.ps1).
 _ver="$(cat "${SCRIPT_DIR}/VERSION" 2>/dev/null || true)"
@@ -102,20 +103,22 @@ while [[ $# -gt 0 ]]; do
       RESTORE_ARCHIVE="${1:-}"
       ;;
     --config)       shift; CONFIG_FILE="$1" ;;
+    --cosign-pub=*) COSIGN_PUB_FLAG="${1#--cosign-pub=}"
+                    [[ -n "$COSIGN_PUB_FLAG" ]] || { echo "--cosign-pub requires a path"; exit 1; } ;;
     --cosign-pub)   shift; COSIGN_PUB_FLAG="${1:-}"
                     [[ -n "$COSIGN_PUB_FLAG" ]] || { echo "--cosign-pub requires a path"; exit 1; } ;;
     --purge-images) PURGE_IMAGES=true ;;
     --yes|-y)       YES=true ;;
     *)
       echo "Unknown option: $1"
-      echo "Usage: sudo bash install.sh --check | --install --config setup.conf | --upgrade --config setup.conf | --rollback | --status | --uninstall [--purge-images] [--yes]   (--check/--install/--upgrade accept: --cosign-pub <key.pub>, or env BAS_COSIGN_PUB)"
+      echo "Usage: sudo bash install.sh --check | --install --config setup.conf | --upgrade --config setup.conf | --rollback | --status | --uninstall [--purge-images] [--yes]   (--check/--install/--upgrade accept: --cosign-pub <key.pub> | --cosign-pub=<key.pub>, or env BAS_COSIGN_PUB)"
       exit 1 ;;
   esac
   shift
 done
 
 if [[ -z "$MODE" ]]; then
-  echo "Usage: sudo bash install.sh --check | --install --config setup.conf | --upgrade --config setup.conf | --rollback | --status | --uninstall [--purge-images] [--yes]   (--check/--install/--upgrade accept: --cosign-pub <key.pub>, or env BAS_COSIGN_PUB)"
+  echo "Usage: sudo bash install.sh --check | --install --config setup.conf | --upgrade --config setup.conf | --rollback | --status | --uninstall [--purge-images] [--yes]   (--check/--install/--upgrade accept: --cosign-pub <key.pub> | --cosign-pub=<key.pub>, or env BAS_COSIGN_PUB)"
   exit 1
 fi
 
@@ -428,6 +431,40 @@ _cosign_version_ok() {
 # path is fatal. Sets COSIGN_PUB_USED and prints its sha256 fingerprint.
 # (Duplicated from packaging/airgap/cosign-verify-lib.sh on purpose: install.sh
 # ships flat in the release bundle with no lib next to it.)
+
+# Key fingerprint: sha256 of the DER SubjectPublicKeyInfo (stable across PEM
+# re-wrapping; openssl is already required by this installer). Falls back to the
+# plain file sha256, labelled as such, if openssl cannot parse the key.
+_key_fp() {
+  local f="$1"
+  if command -v openssl &>/dev/null && openssl pkey -pubin -in "$f" -noout 2>/dev/null; then
+    openssl pkey -pubin -in "$f" -outform DER 2>/dev/null | sha256sum | cut -d' ' -f1
+  else
+    echo "$(sha256sum "$f" | cut -d' ' -f1) (file sha256; not a parsable public key)"
+  fi
+}
+
+# Image ID a `docker save` tar will produce, and proof it carries exactly the
+# expected tag: manifest.json must hold ONE image whose RepoTags is exactly
+# [<expected-tag>]. Echoes sha256:<config digest>; nonzero otherwise. Run on a
+# tar that has ALREADY passed cosign verification.
+_tar_image_id() {
+  local tar="$1" want="$2" m cfg tags
+  m=$(tar -xOf "$tar" --occurrence=1 manifest.json 2>/dev/null) || return 1
+  [[ $(grep -o '"Config"' <<<"$m" | wc -l) -eq 1 ]] || return 1
+  tags=$(sed -n 's/.*"RepoTags":\[\([^]]*\)\].*/\1/p' <<<"$m")
+  [[ "$tags" == "\"${want}\"" ]] || return 1
+  cfg=$(sed -n 's/.*"Config":"\([^"]*\)".*/\1/p' <<<"$m")
+  cfg="${cfg##*/}"; cfg="${cfg%.json}"
+  [[ "$cfg" =~ ^[0-9a-f]{64}$ ]] || return 1
+  echo "sha256:${cfg}"
+}
+
+# Fails (nonzero) unless <tag> in the local daemon now has exactly <id>.
+_docker_tag_is() {
+  [[ "$(docker image inspect -f '{{.Id}}' "$1" 2>/dev/null)" == "$2" ]]
+}
+
 COSIGN_PUB_USED="${SCRIPT_DIR}/cosign.pub"
 _resolve_cosign_pub() {
   local ext="${COSIGN_PUB_FLAG:-${BAS_COSIGN_PUB:-}}" bundled="${SCRIPT_DIR}/cosign.pub" fp
@@ -436,8 +473,8 @@ _resolve_cosign_pub() {
       err "External cosign public key not found or unreadable: ${ext}"
       return 1
     fi
-    COSIGN_PUB_USED="$(cd "$(dirname "$ext")" && pwd)/$(basename "$ext")"
-    fp=$(sha256sum "$COSIGN_PUB_USED" | cut -d' ' -f1)
+    COSIGN_PUB_USED="$(unset CDPATH; cd -- "$(dirname -- "$ext")" && pwd)/$(basename -- "$ext")"
+    fp=$(_key_fp "$COSIGN_PUB_USED")
     {
       echo ""
       echo "  ============================================================"
@@ -447,12 +484,12 @@ _resolve_cosign_pub() {
       echo ""
     } >&2
     if [[ -f "$bundled" ]] && ! cmp -s "$bundled" "$COSIGN_PUB_USED"; then
-      warn "The bundle's own cosign.pub DIFFERS from the external key (sha256: $(sha256sum "$bundled" | cut -d' ' -f1)). The external key is used."
+      warn "The bundle's own cosign.pub DIFFERS from the external key (sha256: $(_key_fp "$bundled")). The external key is used."
     fi
   else
     COSIGN_PUB_USED="$bundled"
     if [[ -f "$bundled" ]]; then
-      info "Verifying with BUNDLED key, sha256: $(sha256sum "$bundled" | cut -d' ' -f1) (use --cosign-pub or BAS_COSIGN_PUB for an out-of-band key)"
+      info "Verifying with BUNDLED key, sha256: $(_key_fp "$bundled") (use --cosign-pub or BAS_COSIGN_PUB for an out-of-band key)"
     fi
   fi
 }
@@ -493,9 +530,10 @@ _verify_orchestrator_artifact() {
     err "Signature bundle not found: $(basename "$tar").bundle -- refusing to install an unsigned orchestrator artifact"
     return 1
   fi
-  local verify_output
+  local verify_output kind=BUNDLED
+  [[ -n "${COSIGN_PUB_FLAG:-${BAS_COSIGN_PUB:-}}" ]] && kind=EXTERNAL
   if ! verify_output=$(cosign verify-blob --key "$COSIGN_PUB_USED" --bundle "${tar}.bundle" --insecure-ignore-tlog "$tar" 2>&1); then
-    err "cosign verification FAILED for $(basename "$tar") -- refusing to install a tampered or unsigned orchestrator artifact"
+    err "cosign verification FAILED for $(basename "$tar") using ${kind} key ${COSIGN_PUB_USED} (fingerprint $(_key_fp "$COSIGN_PUB_USED")) -- refusing to install a tampered or unsigned orchestrator artifact"
     echo "$verify_output" >&2
     return 1
   fi
@@ -856,8 +894,12 @@ mode_install() {
       exit 1
     fi
     _verify_orchestrator_artifact "$orch_tar" || { err "Orchestrator artifact failed verification -- installation aborted."; exit 1; }
+    [[ "$(basename "$orch_tar")" == "bas-orchestrator-${BAS_VERSION}.tar" ]] || { err "Orchestrator artifact $(basename "$orch_tar") does not match this bundle's version (${BAS_VERSION}) -- installation aborted."; exit 1; }
+    local orch_id
+    orch_id=$(_tar_image_id "$orch_tar" "bas-orchestrator:${BAS_VERSION}") || { err "Orchestrator tar's manifest.json does not carry exactly bas-orchestrator:${BAS_VERSION} -- installation aborted (the verified image must be the one compose runs)."; exit 1; }
     info "Loading $(basename "$orch_tar")..."
     docker load < "$orch_tar"
+    _docker_tag_is "bas-orchestrator:${BAS_VERSION}" "$orch_id" || { err "bas-orchestrator:${BAS_VERSION} is not the verified image after load -- installation aborted."; exit 1; }
     log "Loaded: $(basename "$orch_tar")"
   else
     warn "images/ directory not found -Docker will attempt to pull (requires internet)"
@@ -1012,7 +1054,11 @@ mode_upgrade() {
       exit 1
     fi
     _verify_orchestrator_artifact "$orch_tar" || { err "Orchestrator artifact failed verification -- upgrade aborted. The previous version is still running; nothing was replaced."; exit 1; }
+    [[ "$(basename "$orch_tar")" == "bas-orchestrator-${BAS_VERSION}.tar" ]] || { err "Orchestrator artifact $(basename "$orch_tar") does not match this bundle's version (${BAS_VERSION}) -- upgrade aborted."; exit 1; }
+    local orch_id
+    orch_id=$(_tar_image_id "$orch_tar" "bas-orchestrator:${BAS_VERSION}") || { err "Orchestrator tar's manifest.json does not carry exactly bas-orchestrator:${BAS_VERSION} -- upgrade aborted."; exit 1; }
     docker load < "$orch_tar" && log "Loaded: $(basename "$orch_tar")"
+    _docker_tag_is "bas-orchestrator:${BAS_VERSION}" "$orch_id" || { err "bas-orchestrator:${BAS_VERSION} is not the verified image after load -- upgrade aborted."; exit 1; }
   fi
 
   step "3/5  Updating bundle files"
