@@ -640,11 +640,11 @@ line,function,target,op,category,data_source_tags,rhs_len,rhs
     FINDING_TAB, 'setFindingTab', c
   )"
 12083,renderFindingsRows,tb,=,partial_escaped,,133,"'<tr><td colspan=""' + colCount + '"" class=""empty"">No findings' + (FINDING_TAB === 'all' ? ' yet.' : ' in this state.') + '</td></tr>'"
-12084,renderFindingsRows,tb,=,unescaped_html,agent,2749,"l.map(function(f) {
+12084,renderFindingsRows,tb,=,unescaped_html,agent,2715,"l.map(function(f) {
     var checkCell = (_findingsBulkMode && canPush)
-      ? '<td onclick=""event.stopPropagation()"" style=""padding:0.2rem 0.5rem""><input type=""checkbox"" ' + (_findingsSelected[f.id] ? 'checked' : '') + ' onchange=""toggleFindingCheck(\'' + x(f.id) + '\')"" class=""u-pointer""></td>'
+      ? '<td' + x('click', 'stopEvent') + ' style=""padding:0.2rem 0.5rem""><input type=""checkbox"" ' + (_findingsSelected[f.id] ? 'checked' : '') + ' ' + x('change', 'toggleFindingCheck', f.id) + ' class=""u-pointer""></td>'
       : '';
-    var isTicketed = _ticketCandidateIds && (f.status === 'open' || f.status === 'triaged'"
+    var isTicketed = _ticketCandidateIds && (f.status === 'open' || f.status === 'triaged') && !"
 12143,list,document.getElementById('results-export'),=,partial_escaped,,90,(actions ? actions + ' ' : '') + pushBtn + (pushBtn && respondBtn ? ' ' : '') + respondBtn
 12171,list,document.getElementById('results-body'),=,partial_escaped,"agent,threat_intel,user_created_name",1603,"'<div style=""margin-bottom:0.9rem"">' + findingSevBadge(f.severity, f.exposureState) +
         ' <span class=""sbadge s-' + findingStatusClass(f.status) + '"">' + x((f.status || '').replace('_', ' ')) + '</span></div>' +
@@ -655,15 +655,15 @@ line,function,target,op,category,data_source_tags,rhs_len,rhs
     tile('Affected findings', findingsTotal, findingsTotal ? 'var(--danger)' : 'var(--success)', 'rgba(218,54,51,0.12)', REM_SVG.flag, 'closed if all applied') +
     tile('Critical remediations', crit, crit ? 'var(--danger)' : 'var(--muted)', crit ? "
 12237,renderRemList,el,=,static,,96,"'<div class=""empty"" style=""padding:2rem"">No open remediations — nothing to fix right now.</div>'"
-12238,renderRemList,el,=,unescaped_html,,1466,"l.map(function(r, i) {
+12238,renderRemList,el,=,unescaped_html,,1468,"l.map(function(r, i) {
     var critCls = r.severity === 'Critical' ? ' crit' : '';
     var ctrls = (r.controlClasses || []).map(x).join(', ') || '—';
     return '<div class=""rem-card"">' +
       '<div class=""rem-ic' + critCls + '"">' + REM_SVG.wrench + '</div>' +
       '<div class=""rem-main"">' +
         '<div class=""rem-top"">' + findingSevBadge(r.severity, '') + ' <span class=""tech-id"">' + x(r.techn"
-12265,openRemediation,document.getElementById('results-export'),=,partial_escaped,,296,"(ROLE === 'admin' || ROLE === 'analyst' ? '<button class=""btn btn-outline btn-sm"" onclick=""remSingleTicket(' + i + ')"">&#128279; Create Ticket</button>' : '') +
-    '<button class=""btn btn-primary btn-sm"" onclick=""revalidateRemediation(\'' + x(r.techniqueId) + '\')"">&#8635; Re-validate</button>'"
+12265,openRemediation,document.getElementById('results-export'),=,escaped,,295,"(ROLE === 'admin' || ROLE === 'analyst' ? '<button class=""btn btn-outline btn-sm""' + x('click', 'remSingleTicket', i) + '>&#128279; Create Ticket</button>' : '') +
+    '<button class=""btn btn-primary btn-sm""' + x('click', 'revalidateRemediation', r.techniqueId) + '>&#8635; Re-validate</button>'"
 12286,stat,document.getElementById('results-body'),=,partial_escaped,,1114,"'<div style=""display:flex;align-items:center;gap:0.5rem;margin-bottom:0.3rem"">' + findingSevBadge(r.severity, '') + ' <span class=""tech-id"">' + x(r.techniqueId) + '</span></div>' +
     '<div style=""font-weight:600;font-size:0.98rem;color:var(--text);margin-bottom:0.25rem;line-height:1.3"">' + x(r.techniqueName) + '</div>' +
     '<div class=""tiny muted"" style=""margin-bottom:0.6rem"">Closes ' + r.find"

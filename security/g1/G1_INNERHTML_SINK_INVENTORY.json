@@ -2494,8 +2494,8 @@
   "function": "renderFindingsRows",
   "target": "tb",
   "op": "=",
-  "rhs": "l.map(function(f) {\n    var checkCell = (_findingsBulkMode && canPush)\n      ? '<td onclick=\"event.stopPropagation()\" style=\"padding:0.2rem 0.5rem\"><input type=\"checkbox\" ' + (_findingsSelected[f.id] ? 'checked' : '') + ' onchange=\"toggleFindingCheck(\\'' + x(f.id) + '\\')\" class=\"u-pointer\"></td>'\n      : '';\n    var isTicketed = _ticketCandidateIds && (f.status === 'open' || f.status === 'triaged'",
-  "rhs_len": 2749,
+  "rhs": "l.map(function(f) {\n    var checkCell = (_findingsBulkMode && canPush)\n      ? '<td' + x('click', 'stopEvent') + ' style=\"padding:0.2rem 0.5rem\"><input type=\"checkbox\" ' + (_findingsSelected[f.id] ? 'checked' : '') + ' ' + x('change', 'toggleFindingCheck', f.id) + ' class=\"u-pointer\"></td>'\n      : '';\n    var isTicketed = _ticketCandidateIds && (f.status === 'open' || f.status === 'triaged') && !",
+  "rhs_len": 2715,
   "category": "unescaped_html",
   "data_source_tags": "agent"
  },
@@ -2555,7 +2555,7 @@
   "target": "el",
   "op": "=",
   "rhs": "l.map(function(r, i) {\n    var critCls = r.severity === 'Critical' ? ' crit' : '';\n    var ctrls = (r.controlClasses || []).map(x).join(', ') || '\u2014';\n    return '<div class=\"rem-card\">' +\n      '<div class=\"rem-ic' + critCls + '\">' + REM_SVG.wrench + '</div>' +\n      '<div class=\"rem-main\">' +\n        '<div class=\"rem-top\">' + findingSevBadge(r.severity, '') + ' <span class=\"tech-id\">' + x(r.techn",
-  "rhs_len": 1466,
+  "rhs_len": 1468,
   "category": "unescaped_html",
   "data_source_tags": ""
  },
@@ -2564,9 +2564,9 @@
   "function": "openRemediation",
   "target": "document.getElementById('results-export')",
   "op": "=",
-  "rhs": "(ROLE === 'admin' || ROLE === 'analyst' ? '<button class=\"btn btn-outline btn-sm\" onclick=\"remSingleTicket(' + i + ')\">&#128279; Create Ticket</button>' : '') +\n    '<button class=\"btn btn-primary btn-sm\" onclick=\"revalidateRemediation(\\'' + x(r.techniqueId) + '\\')\">&#8635; Re-validate</button>'",
-  "rhs_len": 296,
-  "category": "partial_escaped",
+  "rhs": "(ROLE === 'admin' || ROLE === 'analyst' ? '<button class=\"btn btn-outline btn-sm\"' + x('click', 'remSingleTicket', i) + '>&#128279; Create Ticket</button>' : '') +\n    '<button class=\"btn btn-primary btn-sm\"' + x('click', 'revalidateRemediation', r.techniqueId) + '>&#8635; Re-validate</button>'",
+  "rhs_len": 295,
+  "category": "escaped",
   "data_source_tags": ""
  },
  {

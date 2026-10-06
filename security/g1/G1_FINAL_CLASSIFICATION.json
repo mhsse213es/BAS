@@ -2587,17 +2587,17 @@
   "rhs": "'<option value=\"all\">All tactics</option>' + tacticOpts"
  },
  {
-  "sink_id": "openRemediation:document.getElementById('results-export'):=:2816ca742c36",
+  "sink_id": "openRemediation:document.getElementById('results-export'):=:ce24bb8c18a0",
   "line": 12265,
   "function": "openRemediation",
   "target": "document.getElementById('results-export')",
   "op": "=",
-  "baseline_category": "partial_escaped",
-  "final_category": "partial_escaped",
-  "severity_tier": 3,
+  "baseline_category": "escaped",
+  "final_category": "escaped",
+  "severity_tier": 1,
   "data_source_tags": "",
   "trace_notes": "",
-  "rhs": "(ROLE === 'admin' || ROLE === 'analyst' ? '<button class=\"btn btn-outline btn-sm\" onclick=\"remSingleTicket(' + i + ')\">&#128279; Create Ticket</button>' : '') +\n    '<button class=\"btn btn-primary btn-sm\" onclick=\"revalidateRemediation(\\'' + x(r.techniqueId) + '\\')\">&#8635; Re-validate</button>'"
+  "rhs": "(ROLE === 'admin' || ROLE === 'analyst' ? '<button class=\"btn btn-outline btn-sm\"' + x('click', 'remSingleTicket', i) + '>&#128279; Create Ticket</button>' : '') +\n    '<button class=\"btn btn-primary btn-sm\"' + x('click', 'revalidateRemediation', r.techniqueId) + '>&#8635; Re-validate</button>'"
  },
  {
   "sink_id": "openReportGen:document.getElementById('rep-agent'):=:449a6c764d46",
@@ -3588,7 +3588,7 @@
   "rhs": "'<div class=\"card\" style=\"margin-top:1rem;padding:1rem\">' +\n      '<span class=\"kpi-label\">Open exposure windows</span>' +\n      '<div class=\"tiny muted\" style=\"margin-top:0.4rem\">No open findings.</div></div>'"
  },
  {
-  "sink_id": "renderFindingsRows:tb:=:3e800d98f4e7",
+  "sink_id": "renderFindingsRows:tb:=:6fe7cd46ac6e",
   "line": 12084,
   "function": "renderFindingsRows",
   "target": "tb",
@@ -3598,7 +3598,7 @@
   "severity_tier": 4,
   "data_source_tags": "agent",
   "trace_notes": "",
-  "rhs": "l.map(function(f) {\n    var checkCell = (_findingsBulkMode && canPush)\n      ? '<td onclick=\"event.stopPropagation()\" style=\"padding:0.2rem 0.5rem\"><input type=\"checkbox\" ' + (_findingsSelected[f.id] ? 'checked' : '') + ' onchange=\"toggleFindingCheck(\\'' + x(f.id) + '\\')\" class=\"u-pointer\"></td>'\n      : '';\n    var isTicketed = _ticketCandidateIds && (f.status === 'open' || f.status === 'triaged'"
+  "rhs": "l.map(function(f) {\n    var checkCell = (_findingsBulkMode && canPush)\n      ? '<td' + x('click', 'stopEvent') + ' style=\"padding:0.2rem 0.5rem\"><input type=\"checkbox\" ' + (_findingsSelected[f.id] ? 'checked' : '') + ' ' + x('change', 'toggleFindingCheck', f.id) + ' class=\"u-pointer\"></td>'\n      : '';\n    var isTicketed = _ticketCandidateIds && (f.status === 'open' || f.status === 'triaged') && !"
  },
  {
   "sink_id": "renderFindingsRows:tb:=:877b0f0dc728",
