@@ -23,6 +23,11 @@ type ThreatActor struct {
 	// resolve one. See
 	// docs/superpowers/specs/2026-08-11-canonical-mitre-actor-identity-design.md.
 	CanonicalGroupID string `json:"canonical_group_id,omitempty"`
+	// ActorID / ThreatID are the immutable Audspect identities assigned by
+	// threatidentity resolution during sync (TCF Phase 2 spec §3). Never
+	// part of the bundle format; empty means "not resolved".
+	ActorID  string `json:"-"`
+	ThreatID string `json:"-"`
 }
 
 // TechniqueRef is one MITRE ATT&CK technique from a threat-actor profile.

@@ -53,6 +53,7 @@ import (
 	"github.com/audspect/bas/internal/sftpsink"
 	"github.com/audspect/bas/internal/smtpsink"
 	"github.com/audspect/bas/internal/taxii"
+	"github.com/audspect/bas/internal/threatidentity"
 	"github.com/audspect/bas/internal/threatpriority"
 	"github.com/audspect/bas/internal/ticketing"
 	"github.com/audspect/bas/internal/verification"
@@ -511,7 +512,15 @@ func main() {
 		WithComponentVersions(connector.DBComponentVersions(pool))
 	priorityEngine := threatpriority.NewEngine(pool, engine, cfg.ThreatIntelSectors, cfg.ThreatIntelRegions)
 	correlationEngine := correlation.NewEngine(pool, engine)
-	scheduler := connector.NewScheduler(tiSources, gen, engine, cfg.ThreatIntelPollHours, pool, priorityEngine)
+	identityStore := threatidentity.NewStore(pool)
+	if rep, err := identityStore.Backfill(context.Background()); err != nil {
+		log.Printf("[!] threat identity backfill: %v", err)
+	} else {
+		log.Printf("[+] threat identity: %d threat(s) created; entity actor links +%d, %d unmatched, %d queued",
+			rep.Threats, rep.Links.Linked, rep.Links.Unmatched, rep.Links.Queued)
+	}
+	scheduler := connector.NewScheduler(tiSources, gen, engine, cfg.ThreatIntelPollHours, pool, priorityEngine).
+		WithIdentityStore(identityStore)
 	tiActivitySources, err := connector.LoadActivitySourcesFromDB(context.Background(), pool)
 	if err != nil {
 		log.Printf("[!] threat-intel activity source load warning: %v", err)
