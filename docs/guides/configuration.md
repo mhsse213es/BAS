@@ -126,7 +126,9 @@ Appliances that present a self-signed certificate — common for air-gapped MISP
 |---|---|
 | MISP | **Settings → Threat Intelligence → MISP → Skip TLS verify** |
 | TAXII | **Settings → TAXII Connectors → (edit) → Skip TLS certificate verification** |
-| Splunk / QRadar / Trellix | `"insecureTls": true` on `POST`/`PUT /api/detectverify/configs` |
+| Splunk / QRadar / Trellix / Elastic | `"insecureTls": true` on `POST`/`PUT /api/detectverify/configs` |
+
+**Elastic Security detection connector:** requires Elastic Stack 8.x (alerts-as-data, `.alerts-security.alerts-<space>` indices). Set `baseUrl` to the Elasticsearch URL and configure exactly one auth mode: an API key in `apiToken`, or a username in `clientId` and password in `clientSecret`. The credentials need read privilege on `.alerts-security.alerts-*`.
 
 Prefer installing the appliance's CA certificate on the orchestrator host over disabling verification.
 

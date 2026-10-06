@@ -21,10 +21,13 @@ func TestNewConnector_DispatchesKnownProviders(t *testing.T) {
 	if _, err := NewConnector(Config{Provider: "trellix", BaseURL: "https://api.manage.trellix.com"}); err != nil {
 		t.Errorf("trellix: %v", err)
 	}
+	if _, err := NewConnector(Config{Provider: "elastic", BaseURL: "https://elastic.example", APIToken: "k"}); err != nil {
+		t.Errorf("elastic: %v", err)
+	}
 }
 
 func TestNewConnector_UnsupportedProvider_ReturnsError(t *testing.T) {
-	if _, err := NewConnector(Config{Provider: "elastic"}); err == nil {
+	if _, err := NewConnector(Config{Provider: "not_a_real_provider"}); err == nil {
 		t.Fatal("expected an error for a provider not yet implemented in this slice")
 	}
 }
