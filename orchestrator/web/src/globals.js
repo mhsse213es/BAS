@@ -10,7 +10,7 @@ import { closeCampaignDetail, closeCampaignLaunch, cmpAllConfirmChange, cmpOnExi
 import { closeChangePassword, closeChangePasswordOnBackdrop, closeConfirmDiffModal, loadCalderaStatus, openChangePassword, openComplianceDetail, runConfirmDiffModal, submitChangePassword } from './features/compliance.js';
 import { loadCoverageAnalytics, openTechnique, renderUTL, setCovView, setUTLFilter } from './features/coverage.js';
 import { vfCloseDetail, vfDeleteEvidence, vfLoadQueue, vfPickResult, vfSelect, vfSetDomain, vfSubmit, vfToggleHistory, vfUploadEvidence } from './features/detection-verification.js';
-import { _setEMExtraSearch, _setVexPreviewSearch, _setVexPreviewTactic, _toggleEMExtraScenario, _toggleEMPreviewRow, _toggleVexPreviewRow, _toggleVexPreviewSection, cancelEMSweep, closeEMSweepModal, closeEMSweepModalOnBackdrop, closeEMSweepProgress, closeEMSweepProgressOnBackdrop, closeSweepPreview, closeSweepPreviewOnBackdrop, emRunLayer, emSweepDispatch, loadEmTab, openEMSweepModal, openEMSweepProgress, setEMSweepTargetMode, startSweepFromPreview, stopEMSweep, stopEMSweepCurrent } from './features/endpoint-mastery.js';
+import { _toggleEMExtraScenario, _toggleEMPreviewRow, _toggleVexPreviewRow, _toggleVexPreviewSection, cancelEMSweep, closeEMSweepModal, closeEMSweepModalOnBackdrop, closeEMSweepProgress, closeEMSweepProgressOnBackdrop, closeSweepPreview, closeSweepPreviewOnBackdrop, emGroupSelChange, emRunLayer, emSweepDispatch, loadEmTab, openEMSweepModal, openEMSweepProgress, openEMSweepReport, setEMExtraSearchFromInput, setEMSweepTargetMode, setVexPreviewSearchFromInput, setVexPreviewTacticFromSelect, startSweepFromPreview, stopEMSweep, stopEMSweepCurrent } from './features/endpoint-mastery.js';
 import { closeCreateUser, closeCreateUserOnBackdrop, closeDownloadOptions, closeEditUser, closeEditUserOnBackdrop, closeEvidence, closeEvidenceOnBackdrop, confirmRun, copyRaw, doResetPassword, downloadCampaignCSV, downloadCampaignReport, downloadEMSweepReport, downloadRunCSV, downloadRunReport, downloadSweepReport, exportRunJSON, openCampaignReport, openCmdk, openCreateUser, openEditUser, openEvidence, openFindingFromDashboard, openRunReport, pauseRun, resumeRun, stopRun, submitCreateUser, submitEditUser, toggleUserActive } from './features/evidence.js';
 import { bulkPushSelectedFindings, loadFindings, loadSLAReport, openFinding, openRemediation, pushFindingToITSM, quickTriageFinding, remBulkTicket, remSingleTicket, revalidateRemediation, setFindingStatus, setFindingTab, toggleAllFindingChecksFromChecked, toggleFindingCheck } from './features/findings.js';
 import { closeInitiativeAttachDrawer, closeInitiativeAttachDrawerOnBackdrop, closeInitiativeCreateDrawer, closeInitiativeCreateDrawerOnBackdrop, closeInitiativeDrawer, closeInitiativeDrawerOnBackdrop, initiativeArchiveAction, initiativeAttachSelect, initiativeCloseAction, initiativeDeleteFromMenu, initiativeDetachJob, initiativeRenderAttachList, initiativeSetFilter, loadInitiatives, openInitiativeAttachDrawer, openInitiativeCreateDrawer, openInitiativeDrawer, submitInitiativeAttach, submitInitiativeCreate } from './features/initiatives.js';
@@ -32,9 +32,6 @@ import { _vexCheckAgentSweepConflict, filterVexTechniques, pollVariantRun, rende
 export const HANDLER_FUNCTIONS = {
   _apCancelJob,
   _dismissLicenseGraceBanner,
-  _setEMExtraSearch,
-  _setVexPreviewSearch,
-  _setVexPreviewTactic,
   _toggleEMExtraScenario,
   _toggleEMPreviewRow,
   _toggleVexPreviewRow,
@@ -412,6 +409,7 @@ export const ACTIONS = {
   cmpAllConfirmChange,
   connectorProjectSelectChange,
   doLogoutFromMenu,
+  emGroupSelChange,
   goToProfileFromMenu,
   groupCheckboxChange,
   initiativeAttachSelect,
@@ -425,6 +423,7 @@ export const ACTIONS = {
   manageUsersLink,
   openAgentDetailRiskTab,
   openComplianceDetail,
+  openEMSweepReport,
   openFindingFromDashboard,
   openRunPanelAction,
   openSettingsFromMenu,
@@ -434,7 +433,10 @@ export const ACTIONS = {
   schedAuthCheckChange,
   schedToggleAgentFromChecked,
   schedToggleGroupFromChecked,
+  setEMExtraSearchFromInput,
   setRunIOCSearchFromInput,
+  setVexPreviewSearchFromInput,
+  setVexPreviewTacticFromSelect,
   simCovHoverOff,
   simCovHoverOn,
   stopEMSweepCurrent,

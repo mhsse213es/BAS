@@ -1975,7 +1975,7 @@
   "target": "gridEl",
   "op": "=",
   "rhs": "EM_CATALOG.map(function(e) {\n      var run = lastRunMap[e.id];\n      var p = 0, f = 0;\n      if (run) {\n        (run.results || []).forEach(function(c) {\n          if (c.result === 'pass' || c.result === 'blocked') p++;\n          else if (c.result === 'fail') f++;\n        });\n      }\n      var pct = (p + f) ? Math.round(p / (p + f) * 100) : null;\n      var col = pct === null ? 'var(--muted)' : _ri",
-  "rhs_len": 3506,
+  "rhs_len": 3462,
   "category": "unescaped_html",
   "data_source_tags": "agent,user_created_name"
  },
@@ -2004,9 +2004,9 @@
   "function": "renderEMSweepGroupList",
   "target": "list",
   "op": "=",
-  "rhs": "options.map(function(o) {\n    return '<label style=\"display:flex;align-items:center;gap:0.5rem;padding:0.25rem 0.3rem;cursor:pointer\">' +\n      '<input type=\"checkbox\" ' + (state._emGroupSel[o.id] ? 'checked' : '') +\n      ' onchange=\"_emGroupSel[' + o.id + ']=this.checked\">' +\n      '<span style=\"font-size:0.8rem\">' + x(o.label) + '</span></label>';\n  }).join('')",
-  "rhs_len": 366,
-  "category": "unescaped_html",
+  "rhs": "options.map(function(o) {\n    return '<label style=\"display:flex;align-items:center;gap:0.5rem;padding:0.25rem 0.3rem;cursor:pointer\">' +\n      '<input type=\"checkbox\" ' + (state._emGroupSel[o.id] ? 'checked' : '') +\n      x('change', 'emGroupSelChange', o.id) + '>' +\n      '<span style=\"font-size:0.8rem\">' + x(o.label) + '</span></label>';\n  }).join('')",
+  "rhs_len": 356,
+  "category": "escaped",
   "data_source_tags": ""
  },
  {
@@ -2014,8 +2014,8 @@
   "function": "renderSweepPreview",
   "target": "filtersEl",
   "op": "=",
-  "rhs": "'<select onchange=\"_setVexPreviewTactic(this.value)\" class=\"btn btn-outline btn-sm u-flex1\">' + tacticOpts + '</select>' +\n      '<input type=\"text\" placeholder=\"Search T-ID or name\u2026\" value=\"' + x(_vexPreviewSearch) + '\" oninput=\"_setVexPreviewSearch(this.value)\" class=\"btn btn-outline btn-sm u-flex1\">'",
-  "rhs_len": 304,
+  "rhs": "'<select' + x('change', 'setVexPreviewTacticFromSelect') + ' class=\"btn btn-outline btn-sm u-flex1\">' + tacticOpts + '</select>' +\n      '<input type=\"text\" placeholder=\"Search T-ID or name\u2026\" value=\"' + x(_vexPreviewSearch) + '\"' + x('input', 'setVexPreviewSearchFromInput') + ' class=\"btn btn-outline btn-sm u-flex1\">'",
+  "rhs_len": 319,
   "category": "partial_escaped",
   "data_source_tags": ""
  },
@@ -2024,13 +2024,13 @@
   "function": "renderSweepPreview",
   "target": "filtersEl",
   "op": "=",
-  "rhs": "'<input type=\"text\" placeholder=\"Search extra scenarios to add\u2026\" value=\"' + x(_emExtraSearch) + '\" oninput=\"_setEMExtraSearch(this.value)\" class=\"btn btn-outline btn-sm u-flex1\">'",
-  "rhs_len": 179,
+  "rhs": "'<input type=\"text\" placeholder=\"Search extra scenarios to add\u2026\" value=\"' + x(_emExtraSearch) + '\"' + x('input', 'setEMExtraSearchFromInput') + ' class=\"btn btn-outline btn-sm u-flex1\">'",
+  "rhs_len": 186,
   "category": "escaped",
   "data_source_tags": ""
  },
  {
-  "line": 10073,
+  "line": 10079,
   "function": "_renderVexPreviewList",
   "target": "listEl",
   "op": "=",
@@ -2040,7 +2040,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 10216,
+  "line": 10222,
   "function": "_renderEMPreviewList",
   "target": "listEl",
   "op": "=",
@@ -2050,7 +2050,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 10319,
+  "line": 10325,
   "function": "openEMSweepProgress",
   "target": "document.getElementById('em-sweep-progress-actions')",
   "op": "=",
@@ -2060,7 +2060,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 10379,
+  "line": 10385,
   "function": "renderEMSweepProgress",
   "target": "document.getElementById('em-sweep-progress-summary')",
   "op": "=",
@@ -2070,27 +2070,27 @@
   "data_source_tags": ""
  },
  {
-  "line": 10386,
+  "line": 10392,
   "function": "renderEMSweepProgress",
   "target": "document.getElementById('em-sweep-progress-actions')",
   "op": "=",
-  "rhs": "terminal\n    ? '<button class=\"btn btn-outline btn-sm\" onclick=\"window.open(\\'/api/em/sweeps/' + encodeURIComponent(sw.id) + '/report\\',\\'_blank\\')\" title=\"Open the combined EM sweep report\">&#8599; HTML Report</button> ' +\n      '<button class=\"btn btn-outline btn-sm\" onclick=\"downloadEMSweepReport(\\'' + x(sw.id) + '\\')\" title=\"Download the combined EM sweep report as a PDF file\">&#8595; PDF Repo",
-  "rhs_len": 1215,
+  "rhs": "terminal\n    ? '<button class=\"btn btn-outline btn-sm\"' + x('click', 'openEMSweepReport', sw.id) + ' title=\"Open the combined EM sweep report\">&#8599; HTML Report</button> ' +\n      '<button class=\"btn btn-outline btn-sm\"' + x('click', 'downloadEMSweepReport', sw.id) + ' title=\"Download the combined EM sweep report as a PDF file\">&#8595; PDF Report</button>'\n    // Previously there was no cancel c",
+  "rhs_len": 1159,
   "category": "partial_escaped",
   "data_source_tags": ""
  },
  {
-  "line": 10399,
+  "line": 10405,
   "function": "renderEMSweepProgress",
   "target": "list",
   "op": "=",
   "rhs": "(sw.layers || []).map(function(layerId, i) {\n    var layerState = i < sw.currentIndex ? 'done' : (i === sw.currentIndex && sw.status === 'running') ? 'running' : 'pending';\n    var color = layerState === 'done' ? 'var(--success)' : layerState === 'running' ? 'var(--accent)' : 'var(--muted)';\n    var label = layerState === 'done' ? '&#10003;' : layerState === 'running' ? '&#9679;' : '&#9675;';\n    ",
-  "rhs_len": 2427,
+  "rhs_len": 2256,
   "category": "unescaped_html",
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 10750,
+  "line": 10756,
   "function": "fmt",
   "target": "document.getElementById('evidence-content')",
   "op": "=",
@@ -2100,7 +2100,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11057,
+  "line": 11063,
   "function": "confirmRun",
   "target": "runBtn",
   "op": "=",
@@ -2110,7 +2110,7 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 11076,
+  "line": 11082,
   "function": "confirmRun",
   "target": "runBtn",
   "op": "=",
@@ -2120,7 +2120,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11230,
+  "line": 11236,
   "function": "cmdkResultFallback",
   "target": "document.getElementById('results-export')",
   "op": "=",
@@ -2130,7 +2130,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11231,
+  "line": 11237,
   "function": "cmdkResultFallback",
   "target": "document.getElementById('results-summary')",
   "op": "=",
@@ -2140,7 +2140,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11232,
+  "line": 11238,
   "function": "cmdkResultFallback",
   "target": "document.getElementById('results-body')",
   "op": "=",
@@ -2150,7 +2150,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 11262,
+  "line": 11268,
   "function": "openCmdk",
   "target": "wrap",
   "op": "=",
@@ -2160,7 +2160,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11369,
+  "line": 11375,
   "function": "render",
   "target": "list",
   "op": "=",
@@ -2170,7 +2170,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11370,
+  "line": 11376,
   "function": "render",
   "target": "list",
   "op": "=",
@@ -2180,7 +2180,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11428,
+  "line": 11434,
   "function": "loadUsers",
   "target": "tbody",
   "op": "=",
@@ -2190,7 +2190,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11429,
+  "line": 11435,
   "function": "loadUsers",
   "target": "tbody",
   "op": "=",
@@ -2200,7 +2200,7 @@
   "data_source_tags": "api_response,user_created_name"
  },
  {
-  "line": 11677,
+  "line": 11683,
   "function": "aggOf",
   "target": "if (trend === 'Improving')      tEl",
   "op": "=",
@@ -2210,7 +2210,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11678,
+  "line": 11684,
   "function": "aggOf",
   "target": "else if (trend === 'Degrading') tEl",
   "op": "=",
@@ -2220,7 +2220,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11679,
+  "line": 11685,
   "function": "aggOf",
   "target": "else                            tEl",
   "op": "=",
@@ -2230,7 +2230,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11681,
+  "line": 11687,
   "function": "aggOf",
   "target": "document.getElementById('kpi-score-spark')",
   "op": "=",
@@ -2240,7 +2240,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11684,
+  "line": 11690,
   "function": "aggOf",
   "target": "document.getElementById('dash-gauge')",
   "op": "=",
@@ -2250,7 +2250,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11694,
+  "line": 11700,
   "function": "aggOf",
   "target": "document.getElementById('dash-posture-bars')",
   "op": "=",
@@ -2260,7 +2260,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11722,
+  "line": 11728,
   "function": "aggOf",
   "target": "document.getElementById('kpi-cov-spark')",
   "op": "=",
@@ -2270,7 +2270,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11742,
+  "line": 11748,
   "function": "aggOf",
   "target": "donutEl",
   "op": "=",
@@ -2280,7 +2280,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11753,
+  "line": 11759,
   "function": "lg",
   "target": "donutEl",
   "op": "=",
@@ -2290,7 +2290,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11783,
+  "line": 11789,
   "function": "lg",
   "target": "afEl",
   "op": "=",
@@ -2300,7 +2300,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11784,
+  "line": 11790,
   "function": "lg",
   "target": "afEl",
   "op": "=",
@@ -2310,7 +2310,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11787,
+  "line": 11793,
   "function": "lg",
   "target": "afEl",
   "op": "=",
@@ -2320,7 +2320,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11794,
+  "line": 11800,
   "function": "lg",
   "target": "rrEl",
   "op": "=",
@@ -2330,7 +2330,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11796,
+  "line": 11802,
   "function": "lg",
   "target": "rrEl",
   "op": "=",
@@ -2340,7 +2340,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 11839,
+  "line": 11845,
   "function": "lg",
   "target": "tfEl",
   "op": "=",
@@ -2350,7 +2350,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11842,
+  "line": 11848,
   "function": "lg",
   "target": "tfEl",
   "op": "=",
@@ -2360,7 +2360,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 11865,
+  "line": 11871,
   "function": "lg",
   "target": "attckEl",
   "op": "=",
@@ -2370,7 +2370,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11867,
+  "line": 11873,
   "function": "lg",
   "target": "attckEl",
   "op": "=",
@@ -2380,7 +2380,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11917,
+  "line": 11923,
   "function": "lg",
   "target": "bodyEl",
   "op": "=",
@@ -2390,7 +2390,7 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 11974,
+  "line": 11980,
   "function": "renderSLAKPIs",
   "target": "document.getElementById('sla-rpt-kpis')",
   "op": "=",
@@ -2400,7 +2400,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11988,
+  "line": 11994,
   "function": "rank",
   "target": "el",
   "op": "=",
@@ -2410,7 +2410,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11989,
+  "line": 11995,
   "function": "rank",
   "target": "el",
   "op": "=",
@@ -2420,7 +2420,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 12001,
+  "line": 12007,
   "function": "renderSLAMonthlyTrend",
   "target": "body",
   "op": "=",
@@ -2430,7 +2430,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 12002,
+  "line": 12008,
   "function": "renderSLAMonthlyTrend",
   "target": "body",
   "op": "=",
@@ -2440,7 +2440,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 12010,
+  "line": 12016,
   "function": "renderSLARecentlyResolved",
   "target": "body",
   "op": "=",
@@ -2450,7 +2450,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 12011,
+  "line": 12017,
   "function": "renderSLARecentlyResolved",
   "target": "body",
   "op": "=",
@@ -2460,7 +2460,7 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 12055,
+  "line": 12061,
   "function": "renderFindingsTiles",
   "target": "document.getElementById('findings-tiles')",
   "op": "=",
@@ -2470,7 +2470,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 12065,
+  "line": 12071,
   "function": "c",
   "target": "document.getElementById('findings-toolbar')",
   "op": "=",
@@ -2480,7 +2480,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 12083,
+  "line": 12089,
   "function": "renderFindingsRows",
   "target": "tb",
   "op": "=",
@@ -2490,7 +2490,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 12084,
+  "line": 12090,
   "function": "renderFindingsRows",
   "target": "tb",
   "op": "=",
@@ -2500,7 +2500,7 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 12143,
+  "line": 12149,
   "function": "list",
   "target": "document.getElementById('results-export')",
   "op": "=",
@@ -2510,7 +2510,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 12171,
+  "line": 12177,
   "function": "list",
   "target": "document.getElementById('results-body')",
   "op": "=",
@@ -2520,7 +2520,7 @@
   "data_source_tags": "agent,threat_intel,user_created_name"
  },
  {
-  "line": 12207,
+  "line": 12213,
   "function": "loadRemediations",
   "target": "document.getElementById('rem-list')",
   "op": "=",
@@ -2530,7 +2530,7 @@
   "data_source_tags": "error_message"
  },
  {
-  "line": 12229,
+  "line": 12235,
   "function": "tile",
   "target": "document.getElementById('rem-tiles')",
   "op": "=",
@@ -2540,7 +2540,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 12237,
+  "line": 12243,
   "function": "renderRemList",
   "target": "el",
   "op": "=",
@@ -2550,7 +2550,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 12238,
+  "line": 12244,
   "function": "renderRemList",
   "target": "el",
   "op": "=",
@@ -2560,7 +2560,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 12265,
+  "line": 12271,
   "function": "openRemediation",
   "target": "document.getElementById('results-export')",
   "op": "=",
@@ -2570,7 +2570,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 12286,
+  "line": 12292,
   "function": "stat",
   "target": "document.getElementById('results-body')",
   "op": "=",
@@ -2580,7 +2580,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 12400,
+  "line": 12406,
   "function": "tile",
   "target": "document.getElementById('dash-itsm-tiles')",
   "op": "=",
@@ -2590,7 +2590,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 12411,
+  "line": 12417,
   "function": "loadFindingTickets",
   "target": "container",
   "op": "=",
@@ -2600,7 +2600,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 12414,
+  "line": 12420,
   "function": "loadFindingTickets",
   "target": "container",
   "op": "=",
@@ -2610,7 +2610,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 12423,
+  "line": 12429,
   "function": "loadFindingTickets",
   "target": "if (container) container",
   "op": "=",
@@ -2620,7 +2620,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 12579,
+  "line": 12585,
   "function": "renderInitiativesList",
   "target": "tbody",
   "op": "=",
@@ -2630,7 +2630,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 12582,
+  "line": 12588,
   "function": "renderInitiativesList",
   "target": "tbody",
   "op": "=",
@@ -2640,7 +2640,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 12651,
+  "line": 12657,
   "function": "renderInitiativeDrawer",
   "target": "document.getElementById('init-drawer-body')",
   "op": "=",
@@ -2650,7 +2650,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 12691,
+  "line": 12697,
   "function": "initiativeShowDrawerError",
   "target": "if (el) el",
   "op": "=",
@@ -2660,29 +2660,9 @@
   "data_source_tags": ""
  },
  {
-  "line": 12719,
+  "line": 12725,
   "function": "openInitiativeCreateDrawer",
   "target": "document.getElementById('init-create-error')",
-  "op": "=",
-  "rhs": "''",
-  "rhs_len": 2,
-  "category": "static_empty",
-  "data_source_tags": ""
- },
- {
-  "line": 12732,
-  "function": "submitInitiativeCreate",
-  "target": "errEl",
-  "op": "=",
-  "rhs": "'<div class=\"tiny u-danger\">Name is required.</div>'",
-  "rhs_len": 52,
-  "category": "static",
-  "data_source_tags": ""
- },
- {
-  "line": 12735,
-  "function": "submitInitiativeCreate",
-  "target": "errEl",
   "op": "=",
   "rhs": "''",
   "rhs_len": 2,
@@ -2694,13 +2674,33 @@
   "function": "submitInitiativeCreate",
   "target": "errEl",
   "op": "=",
+  "rhs": "'<div class=\"tiny u-danger\">Name is required.</div>'",
+  "rhs_len": 52,
+  "category": "static",
+  "data_source_tags": ""
+ },
+ {
+  "line": 12741,
+  "function": "submitInitiativeCreate",
+  "target": "errEl",
+  "op": "=",
+  "rhs": "''",
+  "rhs_len": 2,
+  "category": "static_empty",
+  "data_source_tags": ""
+ },
+ {
+  "line": 12744,
+  "function": "submitInitiativeCreate",
+  "target": "errEl",
+  "op": "=",
   "rhs": "'<div class=\"tiny u-danger\">' + x(res.error) + '</div>'",
   "rhs_len": 55,
   "category": "escaped",
   "data_source_tags": "api_response"
  },
  {
-  "line": 12743,
+  "line": 12749,
   "function": "submitInitiativeCreate",
   "target": "errEl",
   "op": "=",
@@ -2710,7 +2710,7 @@
   "data_source_tags": "error_message"
  },
  {
-  "line": 12773,
+  "line": 12779,
   "function": "openInitiativeAttachDrawer",
   "target": "document.getElementById('init-attach-error')",
   "op": "=",
@@ -2720,7 +2720,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 12774,
+  "line": 12780,
   "function": "openInitiativeAttachDrawer",
   "target": "document.getElementById('init-attach-list')",
   "op": "=",
@@ -2730,7 +2730,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 12777,
+  "line": 12783,
   "function": "openInitiativeAttachDrawer",
   "target": "document.getElementById('init-attach-list')",
   "op": "=",
@@ -2740,7 +2740,7 @@
   "data_source_tags": "api_response"
  },
  {
-  "line": 12780,
+  "line": 12786,
   "function": "openInitiativeAttachDrawer",
   "target": "document.getElementById('init-attach-list')",
   "op": "=",
@@ -2750,7 +2750,7 @@
   "data_source_tags": "error_message"
  },
  {
-  "line": 12795,
+  "line": 12801,
   "function": "initiativeRenderAttachList",
   "target": "list",
   "op": "=",
@@ -2760,7 +2760,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 12798,
+  "line": 12804,
   "function": "initiativeRenderAttachList",
   "target": "list",
   "op": "=",
@@ -2770,7 +2770,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 12812,
+  "line": 12818,
   "function": "submitInitiativeAttach",
   "target": "errEl",
   "op": "=",
@@ -2780,7 +2780,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 12815,
+  "line": 12821,
   "function": "submitInitiativeAttach",
   "target": "errEl",
   "op": "=",
@@ -2790,7 +2790,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 12819,
+  "line": 12825,
   "function": "submitInitiativeAttach",
   "target": "errEl",
   "op": "=",
@@ -2800,7 +2800,7 @@
   "data_source_tags": "api_response"
  },
  {
-  "line": 12823,
+  "line": 12829,
   "function": "submitInitiativeAttach",
   "target": "errEl",
   "op": "=",
@@ -2810,7 +2810,7 @@
   "data_source_tags": "error_message"
  },
  {
-  "line": 12856,
+  "line": 12862,
   "function": "renderConnectorList",
   "target": "el",
   "op": "=",
@@ -2820,7 +2820,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 12861,
+  "line": 12867,
   "function": "renderConnectorList",
   "target": "el",
   "op": "=",
@@ -2830,7 +2830,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 12979,
+  "line": 12985,
   "function": "renderConnectorSettings",
   "target": "document.getElementById('cf-settings')",
   "op": "=",
@@ -2840,7 +2840,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 13036,
+  "line": 13042,
   "function": "fetchConnectorProjects",
   "target": "sel",
   "op": "=",
@@ -2850,7 +2850,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 13190,
+  "line": 13196,
   "function": "renderResponseConnectorList",
   "target": "el",
   "op": "=",
@@ -2860,7 +2860,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 13196,
+  "line": 13202,
   "function": "renderResponseConnectorList",
   "target": "el",
   "op": "=",
@@ -2870,7 +2870,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 13325,
+  "line": 13331,
   "function": "openRespondModal",
   "target": "sel",
   "op": "=",
@@ -2880,7 +2880,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 13327,
+  "line": 13333,
   "function": "openRespondModal",
   "target": "sel",
   "op": "=",
@@ -2890,7 +2890,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 13440,
+  "line": 13446,
   "function": "renderRunIOCToolbar",
   "target": "el",
   "op": "=",
@@ -2900,7 +2900,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 13483,
+  "line": 13489,
   "function": "renderRunIOCList",
   "target": "el",
   "op": "=",
@@ -2910,7 +2910,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 13488,
+  "line": 13494,
   "function": "renderRunIOCList",
   "target": "el",
   "op": "=",
@@ -2920,7 +2920,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 13538,
+  "line": 13544,
   "function": "loadIOCRegistry",
   "target": "if (el) el",
   "op": "=",
@@ -2930,7 +2930,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 13556,
+  "line": 13562,
   "function": "loadIOCRegistry",
   "target": "tbody",
   "op": "=",
@@ -2940,7 +2940,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 13565,
+  "line": 13571,
   "function": "loadIOCRegistry",
   "target": "tbody",
   "op": "=",
@@ -2950,7 +2950,7 @@
   "data_source_tags": "error_message"
  },
  {
-  "line": 13587,
+  "line": 13593,
   "function": "tile",
   "target": "el",
   "op": "=",
@@ -2960,7 +2960,7 @@
   "data_source_tags": "api_response"
  },
  {
-  "line": 13597,
+  "line": 13603,
   "function": "renderIOCRegistryTable",
   "target": "tbody",
   "op": "=",
@@ -2970,7 +2970,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 13600,
+  "line": 13606,
   "function": "renderIOCRegistryTable",
   "target": "tbody",
   "op": "=",
@@ -2980,7 +2980,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 13648,
+  "line": 13654,
   "function": "openIOCDetail",
   "target": "document.getElementById('results-export')",
   "op": "=",
@@ -2990,7 +2990,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 13665,
+  "line": 13671,
   "function": "rowHtml",
   "target": "document.getElementById('results-body')",
   "op": "=",
@@ -3000,7 +3000,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 13684,
+  "line": 13690,
   "function": "rowHtml",
   "target": "el",
   "op": "=",
@@ -3010,7 +3010,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 13687,
+  "line": 13693,
   "function": "rowHtml",
   "target": "if (el) el",
   "op": "=",
@@ -3020,7 +3020,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 13790,
+  "line": 13796,
   "function": "render",
   "target": "document.getElementById('run-live-progress')",
   "op": "=",
@@ -3030,7 +3030,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 13802,
+  "line": 13808,
   "function": "render",
   "target": "ul",
   "op": "=",
@@ -3040,7 +3040,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 13895,
+  "line": 13901,
   "function": "render",
   "target": "ul",
   "op": "=",
@@ -3050,7 +3050,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 14009,
+  "line": 14015,
   "function": "openSweepDrilldown",
   "target": "document.getElementById('sweep-drilldown-actions')",
   "op": "=",
@@ -3060,7 +3060,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 14010,
+  "line": 14016,
   "function": "openSweepDrilldown",
   "target": "document.getElementById('sweep-drilldown-list')",
   "op": "=",
@@ -3070,7 +3070,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 14017,
+  "line": 14023,
   "function": "openSweepDrilldown",
   "target": "document.getElementById('sweep-drilldown-actions')",
   "op": "=",
@@ -3080,7 +3080,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 14020,
+  "line": 14026,
   "function": "openSweepDrilldown",
   "target": "document.getElementById('sweep-drilldown-list')",
   "op": "=",
@@ -3090,7 +3090,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 14062,
+  "line": 14068,
   "function": "loadOpenAEVConfig",
   "target": "configPanel",
   "op": "=",
@@ -3100,7 +3100,7 @@
   "data_source_tags": "openaev"
  },
  {
-  "line": 14077,
+  "line": 14083,
   "function": "loadOpenAEVConfig",
   "target": "configPanel",
   "op": "=",
@@ -3110,7 +3110,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 14138,
+  "line": 14144,
   "function": "loadOpenAEVScenarios",
   "target": "body",
   "op": "=",
@@ -3120,7 +3120,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 14143,
+  "line": 14149,
   "function": "loadOpenAEVScenarios",
   "target": "body",
   "op": "=",
@@ -3130,7 +3130,7 @@
   "data_source_tags": "openaev"
  },
  {
-  "line": 14229,
+  "line": 14235,
   "function": "openOpenAEVDetail",
   "target": "body",
   "op": "=",
@@ -3140,7 +3140,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 14231,
+  "line": 14237,
   "function": "openOpenAEVDetail",
   "target": "body",
   "op": "+=",
@@ -3150,7 +3150,7 @@
   "data_source_tags": "openaev"
  },
  {
-  "line": 14248,
+  "line": 14254,
   "function": "loadExercisesTab",
   "target": "body",
   "op": "=",
@@ -3160,7 +3160,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 14250,
+  "line": 14256,
   "function": "loadExercisesTab",
   "target": "body",
   "op": "=",
@@ -3170,7 +3170,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 14263,
+  "line": 14269,
   "function": "loadExercisesTab",
   "target": "body",
   "op": "=",
@@ -3180,7 +3180,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 14265,
+  "line": 14271,
   "function": "loadExercisesTab",
   "target": "body",
   "op": "=",
@@ -3190,7 +3190,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 14409,
+  "line": 14415,
   "function": "openExerciseDetail",
   "target": "document.getElementById('exercise-detail-body')",
   "op": "=",
@@ -3200,7 +3200,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 14642,
+  "line": 14648,
   "function": "loadAPHistory",
   "target": "tb",
   "op": "=",
@@ -3210,7 +3210,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 14645,
+  "line": 14651,
   "function": "loadAPHistory",
   "target": "tb",
   "op": "=",
@@ -3220,7 +3220,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 14648,
+  "line": 14654,
   "function": "loadAPHistory",
   "target": "tb",
   "op": "=",
@@ -3230,7 +3230,7 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 14664,
+  "line": 14670,
   "function": "loadAPHistory",
   "target": "tb",
   "op": "=",
@@ -3240,7 +3240,7 @@
   "data_source_tags": "error_message"
  },
  {
-  "line": 14673,
+  "line": 14679,
   "function": "renderAttackPath",
   "target": "body",
   "op": "=",
@@ -3250,7 +3250,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 14719,
+  "line": 14725,
   "function": "renderAttackPath",
   "target": "body",
   "op": "=",
@@ -3260,7 +3260,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 14752,
+  "line": 14758,
   "function": "loadRansomwareReadiness",
   "target": "bodyEl",
   "op": "=",
@@ -3270,7 +3270,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 14824,
+  "line": 14830,
   "function": "loadRansomwareReadiness",
   "target": "bodyEl",
   "op": "=",
@@ -3280,7 +3280,7 @@
   "data_source_tags": "agent,user_created_name"
  },
  {
-  "line": 14879,
+  "line": 14885,
   "function": "loadReports",
   "target": "el",
   "op": "=",
@@ -3290,7 +3290,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 14883,
+  "line": 14889,
   "function": "loadReports",
   "target": "el",
   "op": "=",
@@ -3300,7 +3300,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 14896,
+  "line": 14902,
   "function": "loadReports",
   "target": "document.getElementById('rep-available')",
   "op": "=",
@@ -3310,7 +3310,7 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 14904,
+  "line": 14910,
   "function": "renderRepHistory",
   "target": "tb",
   "op": "=",
@@ -3320,7 +3320,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 14908,
+  "line": 14914,
   "function": "renderRepHistory",
   "target": "tb",
   "op": "=",
@@ -3330,7 +3330,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 14950,
+  "line": 14956,
   "function": "openReportGen",
   "target": "document.getElementById('rep-agent')",
   "op": "=",
@@ -3340,7 +3340,7 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 14954,
+  "line": 14960,
   "function": "openReportGen",
   "target": "document.getElementById('rep-format')",
   "op": "=",
@@ -3350,7 +3350,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 14963,
+  "line": 14969,
   "function": "openReportGen",
   "target": "document.getElementById('rep-fw')",
   "op": "=",
@@ -3360,7 +3360,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 15274,
+  "line": 15280,
   "function": "loadRuns",
   "target": "tbody",
   "op": "=",
@@ -3370,7 +3370,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 15291,
+  "line": 15297,
   "function": "byStartedAtDesc",
   "target": "tbody",
   "op": "=",
@@ -3380,7 +3380,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 15327,
+  "line": 15333,
   "function": "byStartedAtDesc",
   "target": "tbody",
   "op": "=",
@@ -3390,7 +3390,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 15338,
+  "line": 15344,
   "function": "openModal",
   "target": "scSel",
   "op": "=",
@@ -3400,7 +3400,7 @@
   "data_source_tags": "scenario,user_created_name"
  },
  {
-  "line": 15349,
+  "line": 15355,
   "function": "openModal",
   "target": "document.getElementById('modal-agent')",
   "op": "=",
@@ -3410,7 +3410,7 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 15411,
+  "line": 15417,
   "function": "renderRunMode",
   "target": "btn",
   "op": "=",
@@ -3420,7 +3420,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 15451,
+  "line": 15457,
   "function": "renderRunMode",
   "target": "warn",
   "op": "=",
@@ -3430,7 +3430,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 15455,
+  "line": 15461,
   "function": "renderRunMode",
   "target": "btn",
   "op": "=",
@@ -3440,7 +3440,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 15469,
+  "line": 15475,
   "function": "renderRunMode",
   "target": "warn",
   "op": "=",
@@ -3450,7 +3450,7 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 15471,
+  "line": 15477,
   "function": "renderRunMode",
   "target": "btn",
   "op": "=",
@@ -3460,7 +3460,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 15483,
+  "line": 15489,
   "function": "renderRunMode",
   "target": "warn",
   "op": "=",
@@ -3470,7 +3470,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 15484,
+  "line": 15490,
   "function": "renderRunMode",
   "target": "btn",
   "op": "=",
@@ -3480,7 +3480,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 15490,
+  "line": 15496,
   "function": "renderRunMode",
   "target": "warn",
   "op": "=",
@@ -3490,7 +3490,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 15491,
+  "line": 15497,
   "function": "renderRunMode",
   "target": "btn",
   "op": "=",
@@ -3500,7 +3500,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 15498,
+  "line": 15504,
   "function": "renderRunMode",
   "target": "warn",
   "op": "=",
@@ -3510,7 +3510,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 15502,
+  "line": 15508,
   "function": "renderRunMode",
   "target": "btn",
   "op": "=",
@@ -3520,7 +3520,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 15553,
+  "line": 15559,
   "function": "renderAdditionalAgents",
   "target": "list",
   "op": "=",
@@ -3530,7 +3530,7 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 15806,
+  "line": 15812,
   "function": "row",
   "target": "document.getElementById('wz-review')",
   "op": "=",
@@ -3540,7 +3540,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 15972,
+  "line": 15978,
   "function": "openPickerWith",
   "target": "tacticSel",
   "op": "=",
@@ -3550,7 +3550,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 16129,
+  "line": 16135,
   "function": "renderPickerList",
   "target": "document.getElementById('picker-list')",
   "op": "=",
@@ -3560,7 +3560,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 16234,
+  "line": 16240,
   "function": "renderModalSelection",
   "target": "link",
   "op": "=",
@@ -3570,7 +3570,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 16253,
+  "line": 16259,
   "function": "renderModalSelection",
   "target": "link",
   "op": "=",
@@ -3580,7 +3580,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 16267,
+  "line": 16273,
   "function": "renderModalSelection",
   "target": "note",
   "op": "=",
@@ -3590,7 +3590,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 16283,
+  "line": 16289,
   "function": "renderModalSelection",
   "target": "note",
   "op": "=",
@@ -3600,7 +3600,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 16313,
+  "line": 16319,
   "function": "renderModalSelection",
   "target": "note",
   "op": "=",
@@ -3610,7 +3610,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 16316,
+  "line": 16322,
   "function": "renderModalSelection",
   "target": "note",
   "op": "=",
@@ -3620,7 +3620,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 16384,
+  "line": 16390,
   "function": "doOpen",
   "target": "tacticSel",
   "op": "=",
@@ -3630,7 +3630,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 16437,
+  "line": 16443,
   "function": "fillBuilder",
   "target": "steps",
   "op": "=",
@@ -3640,7 +3640,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 16608,
+  "line": 16614,
   "function": "techRenderSelected",
   "target": "box",
   "op": "=",
@@ -3650,7 +3650,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 16618,
+  "line": 16624,
   "function": "techRenderSelected",
   "target": "box",
   "op": "=",
@@ -3660,7 +3660,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 16658,
+  "line": 16664,
   "function": "techOnInput",
   "target": "panel",
   "op": "=",
@@ -3670,7 +3670,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 16668,
+  "line": 16674,
   "function": "techRenderResults",
   "target": "panel",
   "op": "=",
@@ -3680,7 +3680,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 16672,
+  "line": 16678,
   "function": "techRenderResults",
   "target": "panel",
   "op": "=",
@@ -3690,7 +3690,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 16689,
+  "line": 16695,
   "function": "techSelectRow",
   "target": "panel",
   "op": "=",
@@ -3700,7 +3700,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 16713,
+  "line": 16719,
   "function": "techOnKeydown",
   "target": "panel",
   "op": "=",
@@ -3710,7 +3710,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 16724,
+  "line": 16730,
   "function": "techOnBlur",
   "target": "panel",
   "op": "=",
@@ -3720,7 +3720,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 16744,
+  "line": 16750,
   "function": "addStep",
   "target": "div",
   "op": "=",
@@ -3730,7 +3730,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 17002,
+  "line": 17008,
   "function": "viewRunResults",
   "target": "document.getElementById('results-summary')",
   "op": "=",
@@ -3740,7 +3740,7 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 17007,
+  "line": 17013,
   "function": "viewRunResults",
   "target": "document.getElementById('results-summary')",
   "op": "=",
@@ -3750,7 +3750,7 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 17019,
+  "line": 17025,
   "function": "viewRunResults",
   "target": "document.getElementById('results-export')",
   "op": "=",
@@ -3760,7 +3760,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17025,
+  "line": 17031,
   "function": "viewRunResults",
   "target": "document.getElementById('results-title')",
   "op": "=",
@@ -3770,7 +3770,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 17047,
+  "line": 17053,
   "function": "viewRunResults",
   "target": "document.getElementById('results-header-actions')",
   "op": "=",
@@ -3780,7 +3780,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17097,
+  "line": 17103,
   "function": "kpiGaugeCard",
   "target": "document.getElementById('run-kpi-strip')",
   "op": "=",
@@ -3790,7 +3790,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17439,
+  "line": 17445,
   "function": "soonPanel",
   "target": "document.getElementById('run-tab-content')",
   "op": "=",
@@ -3800,7 +3800,7 @@
   "data_source_tags": "threat_intel"
  },
  {
-  "line": 17476,
+  "line": 17482,
   "function": "soonPanel",
   "target": "document.getElementById('run-tabbar')",
   "op": "=",
@@ -3810,7 +3810,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17490,
+  "line": 17496,
   "function": "soonPanel",
   "target": "reportsEl",
   "op": "=",
@@ -3820,7 +3820,7 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 17505,
+  "line": 17511,
   "function": "soonPanel",
   "target": "reportsEl",
   "op": "=",
@@ -3830,7 +3830,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17515,
+  "line": 17521,
   "function": "soonPanel",
   "target": "extraEl",
   "op": "=",
@@ -3840,7 +3840,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17519,
+  "line": 17525,
   "function": "soonPanel",
   "target": "extraEl",
   "op": "=",
@@ -3850,7 +3850,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17521,
+  "line": 17527,
   "function": "soonPanel",
   "target": "if (findingsEl) findingsEl",
   "op": "=",
@@ -3860,7 +3860,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17523,
+  "line": 17529,
   "function": "soonPanel",
   "target": "if (recEl) recEl",
   "op": "=",
@@ -3870,7 +3870,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17527,
+  "line": 17533,
   "function": "soonPanel",
   "target": "extraEl",
   "op": "=",
@@ -3880,7 +3880,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17529,
+  "line": 17535,
   "function": "soonPanel",
   "target": "if (findingsEl) findingsEl",
   "op": "=",
@@ -3890,7 +3890,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17531,
+  "line": 17537,
   "function": "soonPanel",
   "target": "if (recEl) recEl",
   "op": "=",
@@ -3900,7 +3900,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17537,
+  "line": 17543,
   "function": "soonPanel",
   "target": "if (el) el",
   "op": "=",
@@ -3910,7 +3910,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17540,
+  "line": 17546,
   "function": "soonPanel",
   "target": "if (el) el",
   "op": "=",
@@ -3920,7 +3920,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17546,
+  "line": 17552,
   "function": "soonPanel",
   "target": "if (el) el",
   "op": "=",
@@ -3930,7 +3930,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17549,
+  "line": 17555,
   "function": "soonPanel",
   "target": "if (el) el",
   "op": "=",
@@ -3940,7 +3940,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17567,
+  "line": 17573,
   "function": "soonPanel",
   "target": "if (el) el",
   "op": "=",
@@ -3950,7 +3950,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17575,
+  "line": 17581,
   "function": "soonPanel",
   "target": "if (findingsElEarly) findingsElEarly",
   "op": "=",
@@ -3960,7 +3960,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17577,
+  "line": 17583,
   "function": "soonPanel",
   "target": "if (recElEarly) recElEarly",
   "op": "=",
@@ -3970,7 +3970,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17579,
+  "line": 17585,
   "function": "soonPanel",
   "target": "if (iocElEarly) iocElEarly",
   "op": "=",
@@ -3980,7 +3980,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17677,
+  "line": 17683,
   "function": "renderDetectionValidationTab",
   "target": "el",
   "op": "=",
@@ -3990,7 +3990,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17731,
+  "line": 17737,
   "function": "loadSIEMCorrelationPanel",
   "target": "el",
   "op": "=",
@@ -4000,7 +4000,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17824,
+  "line": 17830,
   "function": "openRerunReview",
   "target": "document.getElementById('rerun-review-body')",
   "op": "=",
@@ -4010,7 +4010,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17872,
+  "line": 17878,
   "function": "startRerunFromReview",
   "target": "btn",
   "op": "=",
@@ -4020,7 +4020,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17879,
+  "line": 17885,
   "function": "startRerunFromReview",
   "target": "btn",
   "op": "=",
@@ -4030,7 +4030,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17919,
+  "line": 17925,
   "function": "openCampaignRerunReview",
   "target": "document.getElementById('rerun-review-body')",
   "op": "=",
@@ -4040,7 +4040,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17952,
+  "line": 17958,
   "function": "startCampaignRerunFromReview",
   "target": "btn",
   "op": "=",
@@ -4050,7 +4050,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17959,
+  "line": 17965,
   "function": "startCampaignRerunFromReview",
   "target": "btn",
   "op": "=",
@@ -4060,7 +4060,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18041,
+  "line": 18047,
   "function": "renderScheduledAssessmentsList",
   "target": "tbody",
   "op": "=",
@@ -4070,7 +4070,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18044,
+  "line": 18050,
   "function": "renderScheduledAssessmentsList",
   "target": "tbody",
   "op": "=",
@@ -4080,7 +4080,7 @@
   "data_source_tags": "scenario,telemetry_log,user_created_name"
  },
  {
-  "line": 18112,
+  "line": 18118,
   "function": "openSchedWizard",
   "target": "sel",
   "op": "=",
@@ -4090,7 +4090,7 @@
   "data_source_tags": "scenario,user_created_name"
  },
  {
-  "line": 18169,
+  "line": 18175,
   "function": "openSchedWizardForEdit",
   "target": "sel",
   "op": "=",
@@ -4100,7 +4100,7 @@
   "data_source_tags": "scenario,user_created_name"
  },
  {
-  "line": 18233,
+  "line": 18239,
   "function": "renderSchedGroupTree",
   "target": "root",
   "op": "=",
@@ -4110,7 +4110,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18238,
+  "line": 18244,
   "function": "renderSchedGroupTree",
   "target": "root",
   "op": "=",
@@ -4120,7 +4120,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18301,
+  "line": 18307,
   "function": "renderSchedAgentList",
   "target": "root",
   "op": "=",
@@ -4130,7 +4130,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18303,
+  "line": 18309,
   "function": "renderSchedAgentList",
   "target": "root",
   "op": "=",
@@ -4140,7 +4140,7 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 18330,
+  "line": 18336,
   "function": "renderSchedInitiativeSelect",
   "target": "sel",
   "op": "=",
@@ -4150,7 +4150,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18343,
+  "line": 18349,
   "function": "renderSchedModeRecurrencePane",
   "target": "modeSel",
   "op": "=",
@@ -4160,7 +4160,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18449,
+  "line": 18455,
   "function": "renderSchedReview",
   "target": "document.getElementById('sched-review')",
   "op": "=",
@@ -4170,7 +4170,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18586,
+  "line": 18592,
   "function": "renderLicenseLockedScreen",
   "target": "el",
   "op": "=",
@@ -4180,7 +4180,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18652,
+  "line": 18658,
   "function": "renderLicenseGraceBanner",
   "target": "el",
   "op": "=",
@@ -4190,7 +4190,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18669,
+  "line": 18675,
   "function": "maybeShowLicenseGraceModal",
   "target": "overlay",
   "op": "=",
@@ -4200,7 +4200,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18864,
+  "line": 18870,
   "function": "goToProfile",
   "target": "el",
   "op": "=",
@@ -4210,7 +4210,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18923,
+  "line": 18929,
   "function": "loadAgentRiskSummary",
   "target": "if (tb) tb",
   "op": "=",
@@ -4220,7 +4220,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18945,
+  "line": 18951,
   "function": "renderAgentRiskSummary",
   "target": "tb",
   "op": "=",
@@ -4230,7 +4230,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18955,
+  "line": 18961,
   "function": "renderAgentRiskSummary",
   "target": "tb",
   "op": "=",
@@ -4240,7 +4240,7 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 19085,
+  "line": 19091,
   "function": "loadThreatIntelConfig",
   "target": "if (panel) panel",
   "op": "=",
@@ -4250,7 +4250,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 19094,
+  "line": 19100,
   "function": "loadThreatIntelConfig",
   "target": "panel",
   "op": "=",
@@ -4260,7 +4260,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 19200,
+  "line": 19206,
   "function": "loadTAXIIConnectors",
   "target": "tbody",
   "op": "=",
@@ -4270,7 +4270,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 19205,
+  "line": 19211,
   "function": "loadTAXIIConnectors",
   "target": "tbody",
   "op": "=",
@@ -4280,7 +4280,7 @@
   "data_source_tags": "error_message"
  },
  {
-  "line": 19212,
+  "line": 19218,
   "function": "renderTAXIIConnectorsList",
   "target": "tbody",
   "op": "=",
@@ -4290,7 +4290,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 19215,
+  "line": 19221,
   "function": "renderTAXIIConnectorsList",
   "target": "tbody",
   "op": "=",
@@ -4300,7 +4300,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 19391,
+  "line": 19397,
   "function": "loadARTContentStatus",
   "target": "statusEl",
   "op": "=",
@@ -4310,7 +4310,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 19393,
+  "line": 19399,
   "function": "loadARTContentStatus",
   "target": "statusEl",
   "op": "=",
@@ -4320,7 +4320,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 19433,
+  "line": 19439,
   "function": "loadARTContentStatus",
   "target": "document.getElementById('cs-art-status')",
   "op": "=",
@@ -4330,7 +4330,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 19446,
+  "line": 19452,
   "function": "toggleSimCoverage",
   "target": "if (car) car",
   "op": "=",
@@ -4340,7 +4340,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 19561,
+  "line": 19567,
   "function": "loadSimCoverage",
   "target": "bodyEl",
   "op": "=",
@@ -4350,7 +4350,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 20379,
+  "line": 20385,
   "function": "loadVariantStats",
   "target": "el",
   "op": "=",
@@ -4360,7 +4360,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 20421,
+  "line": 20427,
   "function": "populateVexAgents",
   "target": "if (sel) sel",
   "op": "=",
@@ -4370,7 +4370,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 20423,
+  "line": 20429,
   "function": "populateVexAgents",
   "target": "if (sweepSel) sweepSel",
   "op": "=",
@@ -4380,7 +4380,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 20458,
+  "line": 20464,
   "function": "populateVexTechniques",
   "target": "tacSel",
   "op": "=",
@@ -4390,7 +4390,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 20463,
+  "line": 20469,
   "function": "populateVexTechniques",
   "target": "if (el) el",
   "op": "=",
@@ -4400,7 +4400,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 20554,
+  "line": 20560,
   "function": "renderVexSweepList",
   "target": "el",
   "op": "=",
@@ -4410,7 +4410,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 20556,
+  "line": 20562,
   "function": "renderVexSweepList",
   "target": "el",
   "op": "=",
@@ -4420,7 +4420,7 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 20793,
+  "line": 20799,
   "function": "filterVexTechniques",
   "target": "el",
   "op": "=",
@@ -4430,7 +4430,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 20796,
+  "line": 20802,
   "function": "filterVexTechniques",
   "target": "el",
   "op": "=",
@@ -4440,7 +4440,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 20820,
+  "line": 20826,
   "function": "loadVariantCoverage",
   "target": "el",
   "op": "=",
@@ -4450,7 +4450,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 20823,
+  "line": 20829,
   "function": "loadVariantCoverage",
   "target": "el",
   "op": "=",
@@ -4460,7 +4460,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 20848,
+  "line": 20854,
   "function": "loadVariantCoverage",
   "target": "el",
   "op": "=",
@@ -4470,7 +4470,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 20850,
+  "line": 20856,
   "function": "loadVariantCoverage",
   "target": "el",
   "op": "=",
@@ -4480,7 +4480,7 @@
   "data_source_tags": "error_message"
  },
  {
-  "line": 20971,
+  "line": 20977,
   "function": "_vexRenderQueuePanel",
   "target": "panel",
   "op": "=",
@@ -4490,7 +4490,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 21041,
+  "line": 21047,
   "function": "pollVariantRun",
   "target": "if (panel) panel",
   "op": "=",
@@ -4500,7 +4500,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 21070,
+  "line": 21076,
   "function": "pollVariantRun",
   "target": "if (p) p",
   "op": "=",
@@ -4510,7 +4510,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 21102,
+  "line": 21108,
   "function": "stopVex",
   "target": "if (panel) panel",
   "op": "=",
@@ -4520,7 +4520,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 21215,
+  "line": 21221,
   "function": "renderVariantRun",
   "target": "if (wrapperEl) wrapperEl",
   "op": "=",
@@ -4530,7 +4530,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 21220,
+  "line": 21226,
   "function": "renderVariantRun",
   "target": "cell",
   "op": "=",
@@ -4540,7 +4540,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 21232,
+  "line": 21238,
   "function": "renderVariantRun",
   "target": "panel",
   "op": "=",
