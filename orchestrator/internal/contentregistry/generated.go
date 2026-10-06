@@ -2,6 +2,7 @@ package contentregistry
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 )
@@ -20,14 +21,23 @@ type GeneratedCandidate struct {
 	ContentID     string
 	Artifact      []byte
 	GenerationKey string
+	// GenerationRef is the provenance_ref of the generated_for link.
+	GenerationRef string
 	Generation    map[string]any
 	Sources       []SourceRef
+	// ThreatID is the canonical Threat this content is generated for. The
+	// registry claims content-id ownership for it and records a
+	// generated_for relationship on every new version (TCF Phase 2 §4.3).
+	ThreatID string
 }
 
 // RegisterGenerated records a generator candidate as LOCAL/UNTRUSTED/DRAFT
 // with point-in-time provenance snapshots (spec 4.5, 5.2). Identical bytes
 // are a no-op (created=false).
 func (r *Registry) RegisterGenerated(ctx context.Context, c GeneratedCandidate) (string, bool, error) {
+	if c.ThreatID == "" {
+		return "", false, errors.New("generated candidate requires a threat id")
+	}
 	a, err := analyzeArtifact(c.Artifact)
 	if err != nil {
 		return "", false, err
@@ -42,7 +52,7 @@ func (r *Registry) RegisterGenerated(ctx context.Context, c GeneratedCandidate) 
 	return r.createVersion(ctx, newVersion{contentID: c.ContentID, origin: OriginLocal, source: SourceIntel,
 		artifact: c.Artifact, trust: TrustUntrusted, lifecycle: LifecycleDraft, actor: ActorGenerator,
 		analysis: a, generation: c.Generation, generationKey: c.GenerationKey, sources: snaps,
-		exclusiveLocalSource: true})
+		exclusiveLocalSource: true, threatID: c.ThreatID, generationRef: c.GenerationRef})
 }
 
 func earliest(ts ...*time.Time) *time.Time {

@@ -22,6 +22,7 @@ import (
 	"github.com/audspect/bas/internal/contentregistry"
 	"github.com/audspect/bas/internal/reporting/attackdata"
 	"github.com/audspect/bas/internal/scenario"
+	"github.com/audspect/bas/internal/threatidentity"
 )
 
 const minTechniques = 2 // minimum techniques before generating a scenario
@@ -36,7 +37,8 @@ const (
 	// 2 = registry-backed, deterministic YAML (TCF Phase 1).
 	// 3 = yaml.Marshal encoding + sanitized, rune-capped intel text (final
 	//     review I3). New bytes => a new DRAFT version of the same content id.
-	generatorVersion = "3"
+	// 4 = threat-derived content id (TCF Phase 2A).
+	generatorVersion = "4"
 	mappingVersion   = "1"
 )
 
@@ -121,7 +123,7 @@ type GenerateResult struct {
 }
 
 // Write generates scenario YAMLs for each actor and returns a result summary.
-// Files are named by the actor-derived content ID (intelContentID), and the
+// Files are named by the threat-derived content ID (threatidentity.ContentID), and the
 // YAML is byte-deterministic for unchanged inputs. The working copy is
 // rewritten only when its bytes differ; every candidate is registered with
 // the Content Registry (which dedups identical bytes). Created counts
@@ -143,12 +145,17 @@ func (g *Generator) Write(actors []ThreatActor) (GenerateResult, error) {
 
 	var res GenerateResult
 	for _, actor := range actors {
+		if actor.ThreatID == "" {
+			// Unresolved identity never yields content (TCF Phase 2 spec §3.2).
+			res.Skipped++
+			continue
+		}
 		if len(actor.Techniques) < minTechniques {
 			res.Skipped++
 			continue
 		}
 
-		id := intelContentID(actor.Name)
+		id := threatidentity.ContentID(actor.ThreatID)
 		body := g.buildYAML(actor, id)
 		fname := filepath.Join(g.intelDir, id+".yaml")
 
@@ -159,8 +166,9 @@ func (g *Generator) Write(actors []ThreatActor) (GenerateResult, error) {
 		created := false
 		if g.registrar != nil {
 			var err error
+			key := generationKey(actor)
 			_, created, err = g.registrar.RegisterGenerated(context.Background(), contentregistry.GeneratedCandidate{
-				ContentID: id, Artifact: []byte(body), GenerationKey: generationKey(actor),
+				ContentID: id, Artifact: []byte(body), GenerationKey: key, GenerationRef: key, ThreatID: actor.ThreatID,
 				Generation: g.generationMeta(actor, cv, cvErr),
 				Sources: []contentregistry.SourceRef{{EntityType: "actor", EntityID: actor.Name, Provider: actor.Source,
 					ExternalID: actor.SourceID, Role: "primary"}},
@@ -171,6 +179,8 @@ func (g *Generator) Write(actors []ThreatActor) (GenerateResult, error) {
 					log.Printf("[connector/gen] %s (%s) collides with a custom scenario of the same id; not written: %v", id, actor.Name, err)
 				case errors.Is(err, contentregistry.ErrOriginCollision):
 					log.Printf("[connector/gen] %s (%s) collides with content of a different origin; not written: %v", id, actor.Name, err)
+				case errors.Is(err, contentregistry.ErrThreatCollision):
+					log.Printf("[connector/gen] %s (%s) content id owned by a different threat; not written: %v", id, actor.Name, err)
 				default:
 					log.Printf("[connector/gen] register %s: %v", id, err)
 				}
@@ -367,17 +377,13 @@ func dedupedTechniqueIDs(techs []TechniqueRef) []string {
 	return out
 }
 
-// intelContentID is derived from the actor identity only, so technique-set
-// changes become versions of one content id (spec 5.2).
-func intelContentID(actorName string) string {
-	h := sha256.Sum256([]byte(strings.ToLower(strings.TrimSpace(actorName))))
-	return "intel-" + hex.EncodeToString(h[:])[:12]
-}
-
 // generationInputs names the intelligence entities a candidate derives from;
 // shared by generationKey and the stored generation metadata.
 func generationInputs(a ThreatActor) []map[string]string {
-	return []map[string]string{{"entity_type": "actor", "entity_id": a.Name, "provider": a.Source, "external_id": a.SourceID}}
+	return []map[string]string{
+		{"entity_type": "threat", "entity_id": a.ThreatID},
+		{"entity_type": "actor", "entity_id": a.ActorID, "provider": a.Source, "external_id": a.SourceID},
+	}
 }
 
 // Reasons recorded when a version source does not exist. Never invent a value.

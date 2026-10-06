@@ -118,6 +118,10 @@ type newVersion struct {
 	// RegisterGenerated) refuses a custom version when the
 	// id already has intel versions and vice versa, re-checked under the lock.
 	exclusiveLocalSource bool
+	// threatID/generationRef (RegisterGenerated only) claim content-id
+	// ownership and record the generated_for link inside this transaction.
+	threatID      string
+	generationRef string
 }
 
 // createVersion inserts identity (if new), version, creation event,
@@ -137,6 +141,16 @@ func (r *Registry) createVersion(ctx context.Context, nv newVersion) (string, bo
 	}
 	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtext($1))`, nv.contentID); err != nil {
 		return "", false, err
+	}
+	if nv.threatID != "" {
+		var owner string
+		err := tx.QueryRow(ctx, `SELECT threat_id FROM content_generation_owners WHERE content_id = $1`, nv.contentID).Scan(&owner)
+		switch {
+		case err == nil && owner != nv.threatID:
+			return "", false, ErrThreatCollision
+		case err != nil && !errors.Is(err, pgx.ErrNoRows):
+			return "", false, err
+		}
 	}
 	if other := otherLocalSource(nv.source); nv.exclusiveLocalSource && other != "" {
 		clash, err := hasVersionsFromSource(ctx, tx, nv.contentID, other)
@@ -202,6 +216,12 @@ func (r *Registry) createVersion(ctx context.Context, nv newVersion) (string, bo
 	if err != nil {
 		return "", false, err
 	}
+	if nv.threatID != "" {
+		if _, err := tx.Exec(ctx, `INSERT INTO content_generation_owners (content_id, threat_id) VALUES ($1, $2)
+			ON CONFLICT (content_id) DO NOTHING`, nv.contentID, nv.threatID); err != nil {
+			return "", false, err
+		}
+	}
 
 	var next int
 	if err := tx.QueryRow(ctx, `SELECT COALESCE(MAX(version), 0) + 1 FROM content_versions WHERE content_id = $1`,
@@ -236,6 +256,13 @@ func (r *Registry) createVersion(ctx context.Context, nv newVersion) (string, bo
 		 VALUES ($1, NULL, $2, NULL, $3, $4, $5)`,
 		vid, string(nv.lifecycle), string(nv.trust), nv.actor, nv.reason); err != nil {
 		return "", false, err
+	}
+	if nv.threatID != "" {
+		if _, err := tx.Exec(ctx, `INSERT INTO content_version_threats
+			   (content_version_id, threat_id, relationship_kind, provenance_type, provenance_ref)
+			 VALUES ($1, $2, 'generated_for', 'generator', $3)`, vid, nv.threatID, nv.generationRef); err != nil {
+			return "", false, err
+		}
 	}
 
 	structural := nv.analysis.structural

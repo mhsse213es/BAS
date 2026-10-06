@@ -11,6 +11,7 @@ import (
 	"github.com/audspect/bas/internal/reporting/attackdata"
 	"github.com/audspect/bas/internal/scenario"
 	"github.com/audspect/bas/internal/testutil"
+	"github.com/audspect/bas/internal/threatidentity"
 )
 
 // Final-review M2 (spec 4.4): the stored generation JSON carries inputs,
@@ -25,14 +26,22 @@ func TestGenerator_GenerationMetadataStoredOnDraft(t *testing.T) {
 		}
 		reg := contentregistry.New(pool, testutil.DevVerifier())
 		g := NewGenerator(t.TempDir(), nil, nil, nil).WithRegistrar(reg).WithComponentVersions(DBComponentVersions(pool))
-		a := ThreatActor{Name: "Meta Bear", Source: "misp", SourceID: "evt-7", Confidence: "high",
+		var actorID, threatID string
+		if err := pool.QueryRow(ctx, `INSERT INTO threat_actor_profiles (name) VALUES ('Meta Bear') RETURNING id`).Scan(&actorID); err != nil {
+			t.Fatal(err)
+		}
+		if err := pool.QueryRow(ctx, `INSERT INTO threats (id, subject_type, subject_id, actor_id, title)
+			VALUES ('thr-' || gen_random_uuid()::text, 'actor', $1, $1, 'Meta Bear') RETURNING id`, actorID).Scan(&threatID); err != nil {
+			t.Fatal(err)
+		}
+		a := ThreatActor{Name: "Meta Bear", ActorID: actorID, ThreatID: threatID, Source: "misp", SourceID: "evt-7", Confidence: "high",
 			Techniques: []TechniqueRef{{ID: "T1082"}, {ID: "T1083"}}}
 		if res, err := g.Write([]ThreatActor{a}); err != nil || res.Created != 1 {
 			t.Fatalf("write: %+v %v", res, err)
 		}
 		var raw []byte
 		if err := pool.QueryRow(ctx, `SELECT generation FROM content_versions WHERE content_id = $1`,
-			intelContentID(a.Name)).Scan(&raw); err != nil {
+			threatidentity.ContentID(a.ThreatID)).Scan(&raw); err != nil {
 			t.Fatal(err)
 		}
 		var gen map[string]any
@@ -40,12 +49,16 @@ func TestGenerator_GenerationMetadataStoredOnDraft(t *testing.T) {
 			t.Fatal(err)
 		}
 		inputs, _ := gen["inputs"].([]any)
-		if len(inputs) != 1 {
+		if len(inputs) != 2 {
 			t.Fatalf("inputs: %s", raw)
 		}
 		in0, _ := inputs[0].(map[string]any)
-		if in0["entity_type"] != "actor" || in0["entity_id"] != "Meta Bear" || in0["provider"] != "misp" || in0["external_id"] != "evt-7" {
+		in1, _ := inputs[1].(map[string]any)
+		if in0["entity_type"] != "threat" || in0["entity_id"] != threatID {
 			t.Fatalf("inputs[0]: %s", raw)
+		}
+		if in1["entity_type"] != "actor" || in1["entity_id"] != actorID || in1["provider"] != "misp" || in1["external_id"] != "evt-7" {
+			t.Fatalf("inputs[1]: %s", raw)
 		}
 		cv, _ := gen["component_versions"].(map[string]any)
 		if cv == nil || cv["art"] != "art-v9" {
