@@ -53,7 +53,7 @@ echo "                         the entire fleet until each agent is manually"
 echo "                         re-bootstrapped against a new CA)"
 echo "    • Docker network     audspect_bas-internal"
 if $PURGE_IMAGES; then
-echo "    • Docker images      bas-orchestrator:*  bas-caldera:*  postgres:16-alpine  chromedp/headless-shell:latest"
+echo "    • Docker images      bas-orchestrator:*  bas-caldera:*  postgres:16-alpine  chromedp/headless-shell:*"
 fi
 echo "    • Install directory  $INSTALL_DIR"
 echo ""
@@ -114,7 +114,7 @@ step "5/6  Removing Docker images..."
 if $PURGE_IMAGES; then
   mapfile -t imgs < <(docker images --format '{{.Repository}}:{{.Tag}}' \
     | grep -E '^bas-orchestrator:|^bas-caldera:' || true)
-  for img in "${imgs[@]:-}" "postgres:16-alpine" "chromedp/headless-shell:latest"; do
+  for img in "${imgs[@]:-}" "postgres:16-alpine" "chromedp/headless-shell:latest" "chromedp/headless-shell:151.0.7922.109"; do
     [[ -z "$img" ]] && continue
     if docker image inspect "$img" &>/dev/null 2>&1; then
       docker rmi -f "$img" && log "Removed image: $img" || warn "Could not remove: $img"
@@ -184,7 +184,7 @@ done
 
 # Images (only checked when --purge-images was requested)
 if $PURGE_IMAGES; then
-  for img in "postgres:16-alpine" "chromedp/headless-shell:latest"; do
+  for img in "postgres:16-alpine" "chromedp/headless-shell:latest" "chromedp/headless-shell:151.0.7922.109"; do
     docker image inspect "$img" &>/dev/null 2>&1 \
       && fail "Image still present: $img" \
       || ok  "Image removed: $img"

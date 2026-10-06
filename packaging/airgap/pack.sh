@@ -14,8 +14,10 @@
 #   dist/bas-airgap-<version>.tar.gz      (transfer this to the air-gapped server)
 #   dist/bas-airgap-<version>.tar.gz.sha256
 #
-# Requires cosign + packaging/signing/cosign.key (every image tar -- orchestrator
-# and postgres -- is signed; import.sh refuses any unsigned one).
+# Requires cosign + packaging/signing/cosign.key and internet access (builds
+# bas-caldera, pulls the pinned chrome image). Every runtime image tar --
+# orchestrator, postgres, bas-caldera, chromedp/headless-shell -- is signed;
+# import.sh refuses any unsigned one. Any failure to build/pull/save/sign aborts.
 #
 # Run from the repository root.
 set -euo pipefail
@@ -124,6 +126,12 @@ if ! bash "${COSIGN_SCRIPT}" --verify "${PG_TAR}"; then
   err "cosign verification FAILED immediately after signing ${PG_TAR} -- investigate before shipping."
   exit 1
 fi
+# Caldera (baked emu library, pinned base) and chrome (pinned version+digest):
+# compose starts both with no profile, so an offline install needs them.
+# shellcheck source=../signing/release-images.sh
+source "${REPO_ROOT}/packaging/signing/release-images.sh"
+rel_ship_caldera_chrome "${VERSION}" "${REPO_ROOT}" "${BUILD_DIR}/images" "${COSIGN_SCRIPT}"
+
 # Every file under images/ must be a signed .tar (fail closed on anything else).
 for f in "${BUILD_DIR}"/images/*; do
   case "$f" in

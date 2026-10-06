@@ -183,20 +183,29 @@ Log "Pulling postgres:16-alpine..."
 docker pull postgres:16-alpine
 if ($LASTEXITCODE -ne 0) { Err "Failed to pull postgres:16-alpine." }
 
-Log "Pulling ghcr.io/mitre/caldera:latest..."
-docker pull ghcr.io/mitre/caldera:latest
-if ($LASTEXITCODE -ne 0) { Warn "Failed to pull Caldera image - bundle will exclude it." }
-
-Log "Pulling chromedp/headless-shell:latest (HTML->PDF report renderer)..."
-docker pull chromedp/headless-shell:latest
-if ($LASTEXITCODE -ne 0) { Warn "Failed to pull headless-shell - PDF reports will fall back to the built-in renderer." }
+# chromedp/headless-shell: pinned by version AND digest (packaging/images.pin).
+# Pulled by digest, digest confirmed, then tagged with the version tag compose
+# runs. No warn-and-continue: compose starts chrome with no profile, so a bundle
+# without it cannot start.
+$pin = @{}
+foreach ($line in (Get-Content "$RepoRoot\packaging\images.pin")) {
+    if ($line -match '^\s*([A-Z_]+)=(\S+)\s*$') { $pin[$Matches[1]] = $Matches[2] }
+}
+if (-not $pin['CHROME_VERSION'] -or $pin['CHROME_DIGEST'] -notmatch '^sha256:[0-9a-f]{64}$') { Err "packaging\images.pin is missing a valid CHROME_VERSION/CHROME_DIGEST." }
+$ChromeImage = "chromedp/headless-shell:$($pin['CHROME_VERSION'])"
+Log "Pulling chromedp/headless-shell@$($pin['CHROME_DIGEST']) ($($pin['CHROME_VERSION']))..."
+docker pull "chromedp/headless-shell@$($pin['CHROME_DIGEST'])"
+if ($LASTEXITCODE -ne 0) { Err "Failed to pull chromedp/headless-shell@$($pin['CHROME_DIGEST'])." }
+$chromeDigests = docker image inspect --format '{{json .RepoDigests}}' "chromedp/headless-shell@$($pin['CHROME_DIGEST'])"
+if ($LASTEXITCODE -ne 0 -or ($chromeDigests -notmatch [regex]::Escape($pin['CHROME_DIGEST']))) { Err "Pulled chrome image does not carry the pinned digest $($pin['CHROME_DIGEST'])." }
+docker tag "chromedp/headless-shell@$($pin['CHROME_DIGEST'])" $ChromeImage
+if ($LASTEXITCODE -ne 0) { Err "Failed to tag $ChromeImage." }
 
 # Build the custom Caldera image with the adversary-emulation library baked in.
 # This is the only place the emulation library is cloned (build host has internet).
 Log "Building bas-caldera:$Version (emu library)..."
 # Same stderr/$ErrorActionPreference issue as the orchestrator docker build
-# above -- without this, a failure here doesn't even reach the graceful
-# Warn-and-continue below; the whole script aborts instead.
+# above -- without this, a native stderr line aborts before $LASTEXITCODE is checked.
 $prevEAP = $ErrorActionPreference
 $ErrorActionPreference = 'Continue'
 try {
@@ -204,7 +213,7 @@ try {
 } finally {
     $ErrorActionPreference = $prevEAP
 }
-if ($LASTEXITCODE -ne 0) { Warn "Failed to build bas-caldera image - bundle will fall back to stock Caldera." }
+if ($LASTEXITCODE -ne 0) { Err "Failed to build bas-caldera:$Version." }
 
 # -- 3. Create output directory structure -------------------------------------
 Log "Staging delivery package: $OutDir"
@@ -220,31 +229,16 @@ docker save postgres:16-alpine -o "$OutDir\images\postgres-16-alpine.tar"
 if ($LASTEXITCODE -ne 0) { Err "Failed to save postgres:16-alpine image." }
 Log "  Saved: postgres-16-alpine.tar"
 
-$chromeExists = docker image inspect "chromedp/headless-shell:latest" 2>$null
-if ($chromeExists) {
-    Log "  Saving chromedp/headless-shell:latest..."
-    docker save chromedp/headless-shell:latest -o "$OutDir\images\headless-shell.tar"
-    $csMB = [math]::Round((Get-Item "$OutDir\images\headless-shell.tar").Length / 1MB)
-    Log "  Saved: headless-shell.tar (${csMB}MB)"
-} else {
-    Warn "  headless-shell image not present - PDF reports will use the built-in fallback renderer."
-}
+Log "  Saving $ChromeImage..."
+docker save $ChromeImage -o "$OutDir\images\headless-shell.tar"
+if ($LASTEXITCODE -ne 0) { Err "Failed to save $ChromeImage." }
+$csMB = [math]::Round((Get-Item "$OutDir\images\headless-shell.tar").Length / 1MB)
+Log "  Saved: headless-shell.tar (${csMB}MB)"
 
-$basCalderaExists = docker image inspect "bas-caldera:$Version" 2>$null
-if ($basCalderaExists) {
-    Log "  Saving bas-caldera:$Version..."
-    docker save "bas-caldera:$Version" -o "$OutDir\images\bas-caldera-$Version.tar"
-    Log "  Saved: bas-caldera-$Version.tar"
-} else {
-    $calderaExists = docker image inspect "ghcr.io/mitre/caldera:latest" 2>$null
-    if ($calderaExists) {
-        Log "  Saving fallback ghcr.io/mitre/caldera:latest..."
-        docker save ghcr.io/mitre/caldera:latest -o "$OutDir\images\caldera-latest.tar"
-        Log "  Saved: caldera-latest.tar"
-    } else {
-        Warn "No Caldera image available - skipping."
-    }
-}
+Log "  Saving bas-caldera:$Version..."
+docker save "bas-caldera:$Version" -o "$OutDir\images\bas-caldera-$Version.tar"
+if ($LASTEXITCODE -ne 0) { Err "Failed to save bas-caldera:$Version." }
+Log "  Saved: bas-caldera-$Version.tar"
 
 . "$RepoRoot\packaging\signing\sign-windows.ps1"
 
@@ -732,7 +726,7 @@ if (-not $cosignCmd) {
         Copy-Item $CosignPub "$OutDir\cosign.pub" -Force
     }
 }
-# Supporting images (postgres, headless-shell, caldera) are signed with the SAME
+# Supporting images (postgres, headless-shell, bas-caldera) are signed with the SAME
 # cosign binary, key and gating as the orchestrator above: setup.sh/install.sh
 # refuse any image tar without a valid bundle, so an unsigned supporting image
 # makes the bundle uninstallable. Signing is exactly as mandatory as for the

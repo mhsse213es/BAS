@@ -54,7 +54,7 @@ services:
   # so PDF generation prints the report HTML via this sidecar over CDP. If this
   # service is absent the orchestrator falls back to its built-in PDF renderer.
   chrome:
-    image: chromedp/headless-shell:latest
+    image: chromedp/headless-shell:151.0.7922.109
     container_name: audspect-chrome
     # The image's own ENTRYPOINT (/headless-shell/run.sh) already starts
     # Chrome on internal 127.0.0.1:9223 and a `socat` relay publishing that

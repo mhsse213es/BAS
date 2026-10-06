@@ -483,9 +483,8 @@ _expected_image_tag() {
   case "$1" in
     "bas-orchestrator-${BAS_VERSION}.tar") echo "bas-orchestrator:${BAS_VERSION}" ;;
     postgres-16-alpine.tar)                echo "postgres:16-alpine" ;;
-    headless-shell.tar)                    echo "chromedp/headless-shell:latest" ;;
+    headless-shell.tar)                    echo "chromedp/headless-shell:151.0.7922.109" ;;
     "bas-caldera-${BAS_VERSION}.tar")      echo "bas-caldera:${BAS_VERSION}" ;;
-    caldera-latest.tar)                    echo "ghcr.io/mitre/caldera:latest" ;;
     *) return 1 ;;
   esac
 }
@@ -518,6 +517,11 @@ _verify_all_images() {
     err "No orchestrator artifact (bas-orchestrator-${BAS_VERSION}.tar) found in ${images_dir} -- ${what} aborted."
     exit 1
   fi
+  # ALL runtime images are required (compose starts them with no profile).
+  local req
+  for req in postgres-16-alpine.tar headless-shell.tar "bas-caldera-${BAS_VERSION}.tar"; do
+    [[ -f "${images_dir}/${req}" ]] || { err "Required runtime image ${req} missing from ${images_dir} -- ${what} aborted."; exit 1; }
+  done
 }
 
 COSIGN_PUB_USED="${SCRIPT_DIR}/cosign.pub"

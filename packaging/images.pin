@@ -1,0 +1,12 @@
+# Pinned runtime images shared by every release path (pack.sh, build.sh,
+# windows-build.ps1). Sourced by bash; parsed line-by-line by PowerShell.
+# CHROME: chromedp/headless-shell 151.0.7922.109 (Docker Hub tag, 2026-08-11).
+# DIGEST is the multi-arch manifest-list digest published by the registry
+# (https://hub.docker.com/v2/repositories/chromedp/headless-shell/tags). Release
+# builds pull BY DIGEST and fail if the pulled image does not carry it; the
+# image is then tagged CHROME_VERSION, saved, cosign-signed and shipped. The
+# tag in docker-compose.yml, setup.sh, install.sh and cosign-verify-lib.sh must
+# equal chromedp/headless-shell:CHROME_VERSION (checked by airgap-cosign.test.sh).
+# CALDERA's base image is pinned (tag + digest) in packaging/caldera/Dockerfile.
+CHROME_VERSION=151.0.7922.109
+CHROME_DIGEST=sha256:2d349b544a1ea6b5b5fd7c0fe99215ff662339c57407ee2e8c0a11af93516b04

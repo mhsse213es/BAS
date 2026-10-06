@@ -270,6 +270,12 @@ if ! bash "${COSIGN_SCRIPT}" --verify "${PG_TAR}"; then
   exit 1
 fi
 
+# Caldera (baked emu library, pinned base) and chrome (pinned version+digest):
+# compose starts both with no profile, so the bundle needs them, signed.
+# shellcheck source=signing/release-images.sh
+source "${REPO_ROOT}/packaging/signing/release-images.sh"
+rel_ship_caldera_chrome "${VERSION}" "${REPO_ROOT}" "${BUILD_DIR}/images" "${COSIGN_SCRIPT}"
+
 # ── 5. Package tarball ─────────────────────────────────────────────────────────
 TARBALL="${DIST_DIR}/${BUILD_NAME}.tar.gz"
 log "Creating ${TARBALL}..."

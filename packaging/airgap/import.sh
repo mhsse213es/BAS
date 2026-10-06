@@ -199,7 +199,7 @@ if ! airgap_verify_and_load_images "${BUNDLE_DIR}/images" "$AIRGAP_PUB" "$VERSIO
 fi
 
 log "Docker images loaded:"
-docker images | grep -E "(bas-orchestrator|postgres)" | awk '{printf "  %-40s %s\n", $1":"$2, $3}'
+docker images | grep -E "(bas-orchestrator|bas-caldera|headless-shell|postgres)" | awk '{printf "  %-40s %s\n", $1":"$2, $3}'
 
 # ── Tag orchestrator image as expected by docker-compose.yml ──────────────────
 # docker-compose.yml uses bas-orchestrator:${BAS_VERSION:-latest}

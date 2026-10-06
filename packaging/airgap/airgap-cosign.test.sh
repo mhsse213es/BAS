@@ -86,6 +86,8 @@ cp "$STUB_CURL_SRC" "$out"
 EOF
 chmod +x "$STUBS/docker" "$STUBS/cosign" "$STUBS/curl"
 
+# Runtime image pin (packaging/images.pin) -- the chrome tag every consumer must agree on.
+CHROME_TAG="chromedp/headless-shell:$(sed -n 's/^CHROME_VERSION=//p' "$REPO/packaging/images.pin")"
 # ── Image / bundle builders ────────────────────────────────────────────────────
 # Mimics `docker save` on a containerd-store daemon (manifest.json + OCI index.json);
 # a 4th arg "noindex" mimics an older tar with manifest.json only.
@@ -113,6 +115,8 @@ make_bundle() {
   echo 9.9.9 > "$b/VERSION"
   mk_image_tar "$b/images/bas-orchestrator-9.9.9.tar" '"bas-orchestrator:9.9.9"' orch; sign_tar "$b/images/bas-orchestrator-9.9.9.tar" "${SIGN_KEY:-fake-pub}"
   mk_image_tar "$b/images/postgres-16-alpine.tar" '"postgres:16-alpine"' pg;          sign_tar "$b/images/postgres-16-alpine.tar" "${SIGN_KEY:-fake-pub}"
+  mk_image_tar "$b/images/headless-shell.tar" "\"$CHROME_TAG\"" chrome;               sign_tar "$b/images/headless-shell.tar" "${SIGN_KEY:-fake-pub}"
+  mk_image_tar "$b/images/bas-caldera-9.9.9.tar" '"bas-caldera:9.9.9"' caldera;         sign_tar "$b/images/bas-caldera-9.9.9.tar" "${SIGN_KEY:-fake-pub}"
   printf '%s' "${BUNDLED_PUB:-fake-pub}" > "$b/cosign.pub"; cp "$b/cosign.pub" "$b/compose/cosign.pub"; echo 9.9.9 > "$b/compose/VERSION"
   printf '#!/usr/bin/env bash\necho "PUBENV=${BAS_COSIGN_PUB:-}" >> "$STUB_LOG"; echo "GPGENV=${BAS_GPG_PUB:-}" >> "$STUB_LOG"; echo "STRICT=${BAS_REQUIRE_SIGNED_IMAGES:-}" >> "$STUB_LOG"; echo SETUP-RAN >> "$STUB_LOG"\n' > "$b/compose/setup.sh"
   for f in docker-compose.yml docker-compose.prod.yml; do : > "$b/compose/$f"; done
@@ -155,11 +159,11 @@ check_valid() { # <label>  (verify, postgres load, orchestrator load LAST, :late
   seq=$(grep -E '^(LOADED|docker tag|SETUP-RAN)' "$STUB_LOG" | tr '\n' '|')
   firstload=$(grep -n '^LOADED' "$STUB_LOG" | head -1 | cut -d: -f1)
   lastverify=$(grep -n '^cosign verify-blob' "$STUB_LOG" | tail -1 | cut -d: -f1)
-  if [ "$seq" != "LOADED postgres:16-alpine|LOADED bas-orchestrator:9.9.9|docker tag bas-orchestrator:9.9.9 bas-orchestrator:latest|SETUP-RAN|" ]; then
+  if [ "$seq" != "LOADED bas-caldera:9.9.9|LOADED $CHROME_TAG|LOADED postgres:16-alpine|LOADED bas-orchestrator:9.9.9|docker tag bas-orchestrator:9.9.9 bas-orchestrator:latest|SETUP-RAN|" ]; then
     fail "$1 -- wrong order: $seq"; return
   fi
-  if [ "$(grep -c '^cosign verify-blob' "$STUB_LOG")" -ne 2 ] || [ "$lastverify" -gt "$firstload" ]; then
-    fail "$1 -- both images must be verified before the first load"; return
+  if [ "$(grep -c '^cosign verify-blob' "$STUB_LOG")" -ne 4 ] || [ "$lastverify" -gt "$firstload" ]; then
+    fail "$1 -- all four images must be verified before the first load"; return
   fi
   local lid; lid="$(cat "$DOCKER_STATE/tag.bas-orchestrator_latest")"
   if [ "$lid" != "$(img_id orch)" ] && [ "$lid" != "$(idx_id orch)" ]; then
@@ -312,7 +316,7 @@ stage_setup() { # build bundle (MUTATE) and unpack it so SX=<bundle>/compose wit
 }
 sv_ok() { local rc=0; run_setup_verify "$@" || rc=$?; [ "$rc" -eq 0 ]; }
 MUTATE="" stage_setup
-if sv_ok BAS_REQUIRE_SIGNED_IMAGES=1 && grep -q "^OK orch_id=$(img_id orch) $(idx_id orch) imgs=1" "$T/out.txt"; then pass "setup.sh strict: valid images verified up front, orchestrator ID recorded"; else fail "setup.sh strict valid"; cat "$T/out.txt"; fi
+if sv_ok BAS_REQUIRE_SIGNED_IMAGES=1 && grep -q "^OK orch_id=$(img_id orch) $(idx_id orch) imgs=3" "$T/out.txt"; then pass "setup.sh strict: valid images verified up front, orchestrator ID recorded"; else fail "setup.sh strict valid"; cat "$T/out.txt"; fi
 MUTATE='echo x > "$b/images/extra.tar"' stage_setup
 sv_ok BAS_REQUIRE_SIGNED_IMAGES=1 && fail "setup.sh strict accepted extra unsigned tar" || pass "setup.sh strict: extra unsigned tar refused"
 MUTATE='rm "$b/images/postgres-16-alpine.tar.bundle"' stage_setup
@@ -358,7 +362,7 @@ case "$1" in
 esac
 CEOF
 chmod +x "$BSTUB/docker" "$BSTUB/cosign.sh"
-awk '/^# Postgres: saved UNCOMPRESSED/{f=1} /^# .* 5\. Package tarball/{f=0} f' "$REPO/packaging/build.sh" > "$T/build-pg-block.sh"
+awk '/^# Postgres: saved UNCOMPRESSED/{f=1} /^# Caldera \(baked emu/{f=0} f' "$REPO/packaging/build.sh" > "$T/build-pg-block.sh"
 [ -s "$T/build-pg-block.sh" ] && pass "extracted build.sh postgres block" || fail "could not extract build.sh postgres block"
 run_build_block() {
   rm -rf "$T/bb"; mkdir -p "$T/bb/images"
@@ -367,6 +371,35 @@ run_build_block() {
 if run_build_block && [ -f "$T/bb/images/postgres-16-alpine.tar" ] && [ -f "$T/bb/images/postgres-16-alpine.tar.bundle" ] && [ ! -e "$T/bb/images/postgres-16-alpine.tar.gz" ]; then pass "build.sh: postgres-16-alpine.tar and .bundle produced, no .tar.gz"; else fail "build.sh postgres block"; cat "$T/out.txt"; fi
 tar -tf "$T/bb/images/postgres-16-alpine.tar" >/dev/null 2>&1 && pass "build.sh: postgres tar is uncompressed" || fail "build.sh postgres tar not a plain tar"
 run_build_block FAKE_NO_PG=1 && fail "build.sh continued without a postgres image" || pass "build.sh: missing postgres image is fatal"
+
+echo "TEST: runtime image set: orchestrator + postgres + bas-caldera + chrome are ALL required, signed and bound; golang is never shipped"
+DIGEST="$(sed -n 's/^CHROME_DIGEST=//p' "$REPO/packaging/images.pin")"
+echo "$DIGEST" | grep -Eq '^sha256:[0-9a-f]{64}$' && pass "images.pin carries a sha256 digest" || fail "images.pin digest malformed"
+grep -q "image: $CHROME_TAG\$" "$REPO/packaging/compose/docker-compose.yml" && pass "compose chrome image == images.pin version tag (no :latest)" || fail "compose chrome tag drifted from images.pin"
+for f in packaging/compose/setup.sh packaging/compose/install.sh packaging/airgap/cosign-verify-lib.sh; do
+  grep -q "\"$CHROME_TAG\"" "$REPO/$f" && pass "$f expects $CHROME_TAG" || fail "$f chrome tag drifted from images.pin"
+done
+grep -Eq '^FROM ghcr.io/mitre/caldera:[0-9][0-9.]*@sha256:[0-9a-f]{64}$' "$REPO/packaging/caldera/Dockerfile" && pass "caldera base pinned by version and digest" || fail "caldera base not pinned"
+! grep -rn "caldera-latest\|ghcr.io/mitre/caldera:latest\|headless-shell:latest" "$REPO/packaging/compose" "$REPO/packaging/airgap" "$REPO/packaging/build.sh" "$REPO/packaging/windows-build.ps1" --include=*.sh --include=*.yml --include=*.ps1 --exclude=uninstall.sh | grep -v "airgap-cosign.test.sh" | grep -q . && pass "no :latest / stock-caldera fallback left in runtime paths" || fail "stale :latest / stock caldera reference"
+! grep -rq "golang:" "$REPO/packaging/airgap/pack.sh" "$REPO/packaging/build.sh" "$REPO/packaging/signing/release-images.sh" "$REPO/packaging/compose/setup.sh" "$REPO/packaging/compose/install.sh" && pass "golang image not shipped by any bundle script" || fail "golang referenced by a bundle script"
+for missing in headless-shell.tar headless-shell.tar.bundle bas-caldera-9.9.9.tar bas-caldera-9.9.9.tar.bundle; do
+  MUTATE="rm \"\$b/images/$missing\"" make_bundle "$T/b.tar.gz"
+  expect_abort "import: bundle missing $missing is refused (nothing loaded)"
+done
+MUTATE='echo tampered >> "$b/images/headless-shell.tar"' make_bundle "$T/b.tar.gz"
+expect_abort "import: tampered chrome tar refused"
+MUTATE='mk_image_tar "$b/images/bas-caldera-9.9.9.tar" "\"bas-caldera:9.9.9\",\"bas-orchestrator:9.9.9\"" caldera; sign_tar "$b/images/bas-caldera-9.9.9.tar"' make_bundle "$T/b.tar.gz"
+expect_abort "import: caldera tar carrying an extra orchestrator tag refused"
+MUTATE='mk_image_tar "$b/images/headless-shell.tar" "\"chromedp/headless-shell:latest\"" chrome; sign_tar "$b/images/headless-shell.tar"' make_bundle "$T/b.tar.gz"
+expect_abort "import: chrome tar not carrying the pinned version tag refused"
+MUTATE="" make_bundle "$T/b.tar.gz"
+for missing in headless-shell.tar bas-caldera-9.9.9.tar; do
+  MUTATE="rm \"\$b/images/$missing\"" stage_setup
+  sv_ok && fail "setup.sh accepted bundle without $missing" || pass "setup.sh: bundle without $missing is fatal"
+  MUTATE="rm \"\$b/images/$missing.bundle\"" stage_setup
+  sv_ok && fail "setup.sh accepted unsigned $missing" || pass "setup.sh: unsigned $missing is fatal"
+done
+MUTATE="" stage_setup
 
 echo "TEST: GPG (real throwaway keys): verify-sig.sh, import.sh, verify.sh and setup.sh agent check"
 if ! command -v gpg >/dev/null 2>&1; then

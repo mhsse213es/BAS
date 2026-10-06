@@ -93,10 +93,14 @@ _airgap_fp() {
 
 # airgap_expected_tag <tar basename> <bundle version>
 # The ONLY images this flow ships, and the one tag each must carry.
+# Must equal packaging/images.pin (CHROME_VERSION) and docker-compose.yml.
+AIRGAP_CHROME_TAG="chromedp/headless-shell:151.0.7922.109"
 airgap_expected_tag() {
   case "$1" in
     "bas-orchestrator-$2.tar") echo "bas-orchestrator:$2" ;;
     postgres-16-alpine.tar)    echo "postgres:16-alpine" ;;
+    headless-shell.tar)        echo "$AIRGAP_CHROME_TAG" ;;
+    "bas-caldera-$2.tar")      echo "bas-caldera:$2" ;;
     *) return 1 ;;
   esac
 }
@@ -139,8 +143,8 @@ airgap_docker_tag_is() {
 # airgap_verify_images <images dir> <cosign.pub> <version>
 # Nothing touches docker: every file in images/ must be a known <name>.tar with
 # a valid cosign .bundle and a manifest carrying exactly its expected tag;
-# anything else (unsigned/unlisted file, legacy .tar.gz) is fatal, and both the
-# orchestrator and postgres tars must be present. Fills AIRGAP_TARS/TAGS/IDS
+# anything else (unsigned/unlisted file, legacy .tar.gz) is fatal, and all four runtime tars
+# (orchestrator, postgres, caldera, chrome) must be present. Fills AIRGAP_TARS/TAGS/IDS
 # (supporting images) and AIRGAP_ORCH/ORCH_TAG/ORCH_ID.
 airgap_verify_images() {
   local dir="$1" pub="$2" ver="$3" f base tag id
@@ -164,7 +168,12 @@ airgap_verify_images() {
     fi
   done
   [[ -n "$AIRGAP_ORCH" ]] || { err "Orchestrator image bas-orchestrator-${ver}.tar missing from images/."; return 1; }
-  [[ ${#AIRGAP_TARS[@]} -gt 0 ]] || { err "Image postgres-16-alpine.tar missing from images/."; return 1; }
+  # ALL runtime images are required: compose starts postgres, caldera, chrome and
+  # the orchestrator with no profile, so a missing one aborts `docker compose up`.
+  local req
+  for req in postgres-16-alpine.tar headless-shell.tar "bas-caldera-${ver}.tar"; do
+    [[ -f "$dir/$req" ]] || { err "Required runtime image ${req} missing from images/ -- refusing."; return 1; }
+  done
   return 0
 }
 

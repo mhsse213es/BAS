@@ -50,7 +50,7 @@ airgap_verify_and_load_images "${BUNDLE_DIR}/images" "${BUNDLE_DIR}/cosign.pub" 
 # via compose/VERSION.
 
 echo "[install-bas] Docker images loaded:"
-docker images | grep -E "(bas-orchestrator|postgres)" | awk '{printf "  %-40s %s\n", $1":"$2, $3}' || true
+docker images | grep -E "(bas-orchestrator|bas-caldera|headless-shell|postgres)" | awk '{printf "  %-40s %s\n", $1":"$2, $3}' || true
 
 # ── 3. Stage compose bundle ────────────────────────────────────────────────────
 echo "[install-bas] Staging BAS files to ${STAGING_DIR}..."
