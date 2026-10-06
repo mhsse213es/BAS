@@ -444,12 +444,8 @@ _key_fp() {
   fi
 }
 
-# Image ID a `docker save` tar will produce, and proof it carries exactly the
-# expected tag: manifest.json must hold ONE image whose RepoTags is exactly
-# [<expected-tag>]. Echoes sha256:<config digest>; nonzero otherwise. Run on a
-# tar that has ALREADY passed cosign verification.
 _tar_image_id() {
-  local tar="$1" want="$2" m cfg tags
+  local tar="$1" want="$2" m cfg tags idx d ids
   m=$(tar -xOf "$tar" --occurrence=1 manifest.json 2>/dev/null) || return 1
   [[ $(grep -o '"Config"' <<<"$m" | wc -l) -eq 1 ]] || return 1
   tags=$(sed -n 's/.*"RepoTags":\[\([^]]*\)\].*/\1/p' <<<"$m")
@@ -457,12 +453,71 @@ _tar_image_id() {
   cfg=$(sed -n 's/.*"Config":"\([^"]*\)".*/\1/p' <<<"$m")
   cfg="${cfg##*/}"; cfg="${cfg%.json}"
   [[ "$cfg" =~ ^[0-9a-f]{64}$ ]] || return 1
-  echo "sha256:${cfg}"
+  # Candidate 1 (classic overlay2 store): the Config digest. Candidate 2
+  # (containerd store, the default on new Docker Engines): `docker image inspect`
+  # reports the top-level manifest/index digest from index.json. Both come from
+  # the cosign-verified tar, so neither can be chosen by an attacker. Older
+  # `docker save` tars have no index.json: Config only.
+  ids="sha256:${cfg}"
+  idx=$(tar -xOf "$tar" --occurrence=1 index.json 2>/dev/null || true)
+  if [[ -n "$idx" ]]; then
+    for d in $(grep -o '"digest"[[:space:]]*:[[:space:]]*"sha256:[0-9a-f]\{64\}"' <<<"$idx" | grep -o 'sha256:[0-9a-f]*'); do
+      ids="${ids} ${d}"
+    done
+  fi
+  echo "$ids"
 }
 
-# Fails (nonzero) unless <tag> in the local daemon now has exactly <id>.
+# <tag>'s ID in the local daemon must equal one of the space-separated candidate
+# IDs recorded from the verified tar (see above); anything else is a mismatch.
 _docker_tag_is() {
-  [[ "$(docker image inspect -f '{{.Id}}' "$1" 2>/dev/null)" == "$2" ]]
+  local got want
+  got=$(docker image inspect -f '{{.Id}}' "$1" 2>/dev/null) || return 1
+  for want in $2; do
+    [[ "$got" == "$want" ]] && return 0
+  done
+  return 1
+}
+
+_expected_image_tag() {
+  case "$1" in
+    "bas-orchestrator-${BAS_VERSION}.tar") echo "bas-orchestrator:${BAS_VERSION}" ;;
+    postgres-16-alpine.tar)                echo "postgres:16-alpine" ;;
+    headless-shell.tar)                    echo "chromedp/headless-shell:latest" ;;
+    "bas-caldera-${BAS_VERSION}.tar")      echo "bas-caldera:${BAS_VERSION}" ;;
+    caldera-latest.tar)                    echo "ghcr.io/mitre/caldera:latest" ;;
+    *) return 1 ;;
+  esac
+}
+
+# Verifies EVERY image tar in <images_dir> (cosign + exact RepoTag) BEFORE any is
+# loaded. Fills IMG_TARS/IMG_TAGS/IMG_IDS (everything but the orchestrator) and
+# ORCH_TAR/ORCH_ID. Unsigned, unlisted or legacy .tar.gz files are fatal. The
+# caller supplies the failure wording via $1 ("installation"/"upgrade").
+_verify_all_images() {
+  local images_dir="$1" what="$2" img base tag id
+  IMG_TARS=(); IMG_TAGS=(); IMG_IDS=(); ORCH_TAR=""; ORCH_ID=""
+  for img in "${images_dir}"/*; do
+    [[ -f "$img" ]] || continue
+    base="$(basename "$img")"
+    case "$base" in
+      *.bundle) continue ;;
+      *.tar) ;;
+      *) err "Unexpected file in images/: ${base} -- ${what} aborted (only signed .tar images are allowed)."; exit 1 ;;
+    esac
+    tag=$(_expected_image_tag "$base") || { err "Unlisted image tar in images/: ${base} -- ${what} aborted."; exit 1; }
+    _verify_orchestrator_artifact "$img" || { err "Image ${base} failed verification -- ${what} aborted."; exit 1; }
+    id=$(_tar_image_id "$img" "$tag") || { err "${base}: manifest.json does not carry exactly the tag ${tag} -- ${what} aborted (the verified image must be the one compose runs)."; exit 1; }
+    if [[ "$base" == bas-orchestrator-* ]]; then
+      ORCH_TAR="$img"; ORCH_ID="$id"
+    else
+      IMG_TARS+=("$img"); IMG_TAGS+=("$tag"); IMG_IDS+=("$id")
+    fi
+  done
+  if [[ -z "$ORCH_TAR" ]]; then
+    err "No orchestrator artifact (bas-orchestrator-${BAS_VERSION}.tar) found in ${images_dir} -- ${what} aborted."
+    exit 1
+  fi
 }
 
 COSIGN_PUB_USED="${SCRIPT_DIR}/cosign.pub"
@@ -878,25 +933,14 @@ mode_install() {
     # filename on disk. Loading the orchestrator last closes both: nothing
     # can load after it to override its tag, and its absence is now fatal
     # instead of silent.
-    local orch_tar=""
-    for tar in "${images_dir}"/*.tar; do
-      [[ -f "$tar" ]] || continue
-      if [[ "$(basename "$tar")" == bas-orchestrator-* ]]; then
-        orch_tar="$tar"
-        continue
-      fi
-      info "Loading $(basename "$tar")..."
-      docker load < "$tar"
-      log "Loaded: $(basename "$tar")"
+    _verify_all_images "$images_dir" "installation"
+    local i orch_tar="$ORCH_TAR" orch_id="$ORCH_ID"
+    for i in "${!IMG_TARS[@]}"; do
+      info "Loading $(basename "${IMG_TARS[$i]}")..."
+      docker load < "${IMG_TARS[$i]}" || { err "docker load failed for $(basename "${IMG_TARS[$i]}") -- installation aborted."; exit 1; }
+      _docker_tag_is "${IMG_TAGS[$i]}" "${IMG_IDS[$i]}" || { err "${IMG_TAGS[$i]} is not the verified image after load -- installation aborted."; exit 1; }
+      log "Loaded: $(basename "${IMG_TARS[$i]}")"
     done
-    if [[ -z "$orch_tar" ]]; then
-      err "No orchestrator artifact (bas-orchestrator-*.tar) found in ${images_dir} -- refusing to install without it."
-      exit 1
-    fi
-    _verify_orchestrator_artifact "$orch_tar" || { err "Orchestrator artifact failed verification -- installation aborted."; exit 1; }
-    [[ "$(basename "$orch_tar")" == "bas-orchestrator-${BAS_VERSION}.tar" ]] || { err "Orchestrator artifact $(basename "$orch_tar") does not match this bundle's version (${BAS_VERSION}) -- installation aborted."; exit 1; }
-    local orch_id
-    orch_id=$(_tar_image_id "$orch_tar" "bas-orchestrator:${BAS_VERSION}") || { err "Orchestrator tar's manifest.json does not carry exactly bas-orchestrator:${BAS_VERSION} -- installation aborted (the verified image must be the one compose runs)."; exit 1; }
     info "Loading $(basename "$orch_tar")..."
     docker load < "$orch_tar"
     _docker_tag_is "bas-orchestrator:${BAS_VERSION}" "$orch_id" || { err "bas-orchestrator:${BAS_VERSION} is not the verified image after load -- installation aborted."; exit 1; }
@@ -1040,23 +1084,13 @@ mode_upgrade() {
     # first, then verify+load the orchestrator artifact LAST, so nothing
     # loaded after it can override the "bas-orchestrator:<ver>" tag, and
     # its absence is fatal rather than silently skipped.
-    local orch_tar=""
-    for tar in "${images_dir}"/*.tar; do
-      [[ -f "$tar" ]] || continue
-      if [[ "$(basename "$tar")" == bas-orchestrator-* ]]; then
-        orch_tar="$tar"
-        continue
-      fi
-      docker load < "$tar" && log "Loaded: $(basename "$tar")"
+    _verify_all_images "$images_dir" "upgrade (the previous version is still running; nothing was replaced)"
+    local i orch_tar="$ORCH_TAR" orch_id="$ORCH_ID"
+    for i in "${!IMG_TARS[@]}"; do
+      docker load < "${IMG_TARS[$i]}" || { err "docker load failed for $(basename "${IMG_TARS[$i]}") -- upgrade aborted."; exit 1; }
+      _docker_tag_is "${IMG_TAGS[$i]}" "${IMG_IDS[$i]}" || { err "${IMG_TAGS[$i]} is not the verified image after load -- upgrade aborted."; exit 1; }
+      log "Loaded: $(basename "${IMG_TARS[$i]}")"
     done
-    if [[ -z "$orch_tar" ]]; then
-      err "No orchestrator artifact (bas-orchestrator-*.tar) found in ${images_dir} -- upgrade aborted. The previous version is still running; nothing was replaced."
-      exit 1
-    fi
-    _verify_orchestrator_artifact "$orch_tar" || { err "Orchestrator artifact failed verification -- upgrade aborted. The previous version is still running; nothing was replaced."; exit 1; }
-    [[ "$(basename "$orch_tar")" == "bas-orchestrator-${BAS_VERSION}.tar" ]] || { err "Orchestrator artifact $(basename "$orch_tar") does not match this bundle's version (${BAS_VERSION}) -- upgrade aborted."; exit 1; }
-    local orch_id
-    orch_id=$(_tar_image_id "$orch_tar" "bas-orchestrator:${BAS_VERSION}") || { err "Orchestrator tar's manifest.json does not carry exactly bas-orchestrator:${BAS_VERSION} -- upgrade aborted."; exit 1; }
     docker load < "$orch_tar" && log "Loaded: $(basename "$orch_tar")"
     _docker_tag_is "bas-orchestrator:${BAS_VERSION}" "$orch_id" || { err "bas-orchestrator:${BAS_VERSION} is not the verified image after load -- upgrade aborted."; exit 1; }
   fi

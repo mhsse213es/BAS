@@ -54,6 +54,11 @@ case "$1" in
         cfg=$(sed -n 's/.*"Config":"\([^"]*\)".*/\1/p' <<<"$m"); cfg="${cfg##*/}"
         for t in $tags; do
           id="sha256:$cfg"
+          idx=$(tar -xOf "$S/in.tar" index.json 2>/dev/null | grep -o 'sha256:[0-9a-f]*' | head -1 || true)
+          case "${FAKE_DOCKER_ID_MODE:-config}" in
+            index) [ -n "$idx" ] && id="$idx" ;;
+            third) id="sha256:$(printf 'e%.0s' $(seq 64))" ;;
+          esac
           if [ -n "${FAKE_DOCKER_CLOBBER:-}" ] && [[ "$t" == bas-orchestrator:* ]]; then id="sha256:$(printf 'f%.0s' $(seq 64))"; fi
           echo "$id" > "$S/tag.$(k "$t")"
         done
@@ -82,13 +87,22 @@ EOF
 chmod +x "$STUBS/docker" "$STUBS/cosign" "$STUBS/curl"
 
 # ── Image / bundle builders ────────────────────────────────────────────────────
-mk_image_tar() { # <out> <quoted,comma,separated RepoTags> <config seed>
-  local d="$T/imgtmp" hex; rm -rf "$d"; mkdir -p "$d"
+# Mimics `docker save` on a containerd-store daemon (manifest.json + OCI index.json);
+# a 4th arg "noindex" mimics an older tar with manifest.json only.
+mk_image_tar() { # <out> <quoted,comma,separated RepoTags> <config seed> [noindex]
+  local d="$T/imgtmp" hex ihex; rm -rf "$d"; mkdir -p "$d"
   hex=$(printf '%s' "$3" | sha256sum | cut -d' ' -f1)
+  ihex=$(printf '%s-idx' "$3" | sha256sum | cut -d' ' -f1)
   printf '[{"Config":"blobs/sha256/%s","RepoTags":[%s],"Layers":[]}]' "$hex" "$2" > "$d/manifest.json"
-  tar -cf "$1" -C "$d" manifest.json
+  if [ "${4:-}" = noindex ]; then
+    tar -cf "$1" -C "$d" manifest.json
+  else
+    printf '{"schemaVersion":2,"mediaType":"application/vnd.oci.image.index.v1+json","manifests":[{"mediaType":"application/vnd.oci.image.manifest.v1+json","digest":"sha256:%s","size":1}]}' "$ihex" > "$d/index.json"
+    tar -cf "$1" -C "$d" manifest.json index.json
+  fi
 }
-img_id() { echo "sha256:$(printf '%s' "$1" | sha256sum | cut -d' ' -f1)"; }
+img_id() { echo "sha256:$(printf '%s' "$1" | sha256sum | cut -d' ' -f1)"; }   # manifest Config digest
+idx_id() { echo "sha256:$(printf '%s-idx' "$1" | sha256sum | cut -d' ' -f1)"; } # index.json digest
 sign_tar() { echo "$(sha256sum "$1" | cut -d' ' -f1):${2:-fake-pub}" > "$1.bundle"; }
 
 # Build a signed bundle tarball ($1 = output). MUTATE (eval'd, may use $b) tweaks it
@@ -147,7 +161,8 @@ check_valid() { # <label>  (verify, postgres load, orchestrator load LAST, :late
   if [ "$(grep -c '^cosign verify-blob' "$STUB_LOG")" -ne 2 ] || [ "$lastverify" -gt "$firstload" ]; then
     fail "$1 -- both images must be verified before the first load"; return
   fi
-  if [ "$(cat "$DOCKER_STATE/tag.bas-orchestrator_latest")" != "$(img_id orch)" ]; then
+  local lid; lid="$(cat "$DOCKER_STATE/tag.bas-orchestrator_latest")"
+  if [ "$lid" != "$(img_id orch)" ] && [ "$lid" != "$(idx_id orch)" ]; then
     fail "$1 -- :latest does not point at the verified orchestrator image"; return
   fi
   pass "$1"
@@ -156,7 +171,8 @@ check_valid() { # <label>  (verify, postgres load, orchestrator load LAST, :late
 echo "TEST: valid bundle -> every image verified first, postgres then orchestrator loaded, :latest re-tagged from the verified image, then setup"
 MUTATE="" make_bundle "$T/b.tar.gz"
 check_valid "valid bundle"
-grep -q "^STRICT=1" "$STUB_LOG" && pass "setup.sh told to require signed images" || fail "BAS_REQUIRE_SIGNED_IMAGES not exported"
+grep -q "^STRICT=$" "$STUB_LOG" && pass "no BAS_REQUIRE_SIGNED_IMAGES opt-in exported (signed images are always required)" || fail "opt-in env still exported"
+! grep -rq "BAS_REQUIRE_SIGNED_IMAGES" "$REPO/packaging/compose" "$REPO/packaging/iso" "$REPO/packaging/packer" "$REPO/packaging/airgap/import.sh" && pass "no BAS_REQUIRE_SIGNED_IMAGES opt-in left in setup/install/ISO/Packer/import" || fail "BAS_REQUIRE_SIGNED_IMAGES still referenced"
 echo "TEST: a pre-existing/planted :latest is overwritten, not trusted"
 FAKE_LATEST_EXISTS=1 check_valid "pre-existing :latest re-tagged unconditionally"
 
@@ -185,6 +201,17 @@ MUTATE='mk_image_tar "$b/images/bas-orchestrator-9.9.9.tar" "\"bas-orchestrator:
 MUTATE="" make_bundle "$T/b.tar.gz"
 rc=0; FAKE_DOCKER_CLOBBER=1 run_import "$T/b.tar.gz" || rc=$?
 if [ "$rc" -ne 0 ] && ! grep -q SETUP-RAN "$STUB_LOG" && grep -q "not the verified image after load" "$T/out.txt"; then pass "daemon resolving the orchestrator tag to a different image ID after load aborts before setup"; else fail "post-load ID mismatch not caught (rc=$rc)"; fi
+
+echo "TEST: post-load image ID: Config digest (overlay2) OR index digest (containerd store), both from the signed tar"
+FAKE_DOCKER_ID_MODE=config check_valid "daemon reports the Config digest -> accepted"
+FAKE_DOCKER_ID_MODE=index  check_valid "daemon reports the index digest (containerd store) -> accepted"
+rc=0; FAKE_DOCKER_ID_MODE=third run_import "$T/b.tar.gz" || rc=$?
+if [ "$rc" -ne 0 ] && ! grep -q SETUP-RAN "$STUB_LOG" && grep -q "not the verified image after load" "$T/out.txt"; then pass "daemon reports a third (unsigned-tar) digest -> refused"; else fail "third digest accepted (rc=$rc)"; fi
+MUTATE='mk_image_tar "$b/images/bas-orchestrator-9.9.9.tar" "\"bas-orchestrator:9.9.9\"" orch noindex; sign_tar "$b/images/bas-orchestrator-9.9.9.tar"; mk_image_tar "$b/images/postgres-16-alpine.tar" "\"postgres:16-alpine\"" pg noindex; sign_tar "$b/images/postgres-16-alpine.tar"' make_bundle "$T/b.tar.gz"
+FAKE_DOCKER_ID_MODE=config check_valid "older tars without index.json: Config match accepted"
+rc=0; FAKE_DOCKER_ID_MODE=index run_import "$T/b.tar.gz" || rc=$?
+[ "$rc" -eq 0 ] && pass "no index.json: daemon falls back to Config digest in the stub -> accepted" || fail "noindex fallback rc=$rc"
+MUTATE="" make_bundle "$T/b.tar.gz"
 
 echo "TEST: out-of-band cosign key governs EVERY image"
 printf 'fake-pub' > "$T/ext-good.pub"; printf 'other-pub' > "$T/ext-bad.pub"; printf 'ext-pub' > "$T/ext-only.pub"
@@ -266,7 +293,7 @@ grep -q -- '--cosign-pub=\*' "$INST" && pass "install.sh accepts --cosign-pub=<p
 for F in "$T/inst-fns.sh" "$T/setup-fns.sh"; do
   n=$(basename "$F" -fns.sh)
   id=$(bash -c 'source "$1"; _tar_image_id "$2" "bas-orchestrator:9.9.9"' _ "$F" "$IB/o.tar" 2>/dev/null) || id=""
-  [ "$id" = "$(img_id orch)" ] && pass "$n: _tar_image_id returns the manifest Config digest" || fail "$n: _tar_image_id ($id)"
+  [ "$id" = "$(img_id orch) $(idx_id orch)" ] && pass "$n: _tar_image_id returns the Config digest AND the index.json digest" || fail "$n: _tar_image_id ($id)"
   if bash -c 'source "$1"; _tar_image_id "$2" "bas-orchestrator:9.9.8"' _ "$F" "$IB/o.tar" >/dev/null 2>&1; then fail "$n: wrong expected tag accepted"; else pass "$n: tag mismatch refused"; fi
 done
 
@@ -285,7 +312,7 @@ stage_setup() { # build bundle (MUTATE) and unpack it so SX=<bundle>/compose wit
 }
 sv_ok() { local rc=0; run_setup_verify "$@" || rc=$?; [ "$rc" -eq 0 ]; }
 MUTATE="" stage_setup
-if sv_ok BAS_REQUIRE_SIGNED_IMAGES=1 && grep -q "^OK orch_id=$(img_id orch) imgs=1" "$T/out.txt"; then pass "setup.sh strict: valid images verified up front, orchestrator ID recorded"; else fail "setup.sh strict valid"; cat "$T/out.txt"; fi
+if sv_ok BAS_REQUIRE_SIGNED_IMAGES=1 && grep -q "^OK orch_id=$(img_id orch) $(idx_id orch) imgs=1" "$T/out.txt"; then pass "setup.sh strict: valid images verified up front, orchestrator ID recorded"; else fail "setup.sh strict valid"; cat "$T/out.txt"; fi
 MUTATE='echo x > "$b/images/extra.tar"' stage_setup
 sv_ok BAS_REQUIRE_SIGNED_IMAGES=1 && fail "setup.sh strict accepted extra unsigned tar" || pass "setup.sh strict: extra unsigned tar refused"
 MUTATE='rm "$b/images/postgres-16-alpine.tar.bundle"' stage_setup
@@ -294,10 +321,15 @@ MUTATE='mk_image_tar "$b/images/postgres-16-alpine.tar" "\"postgres:16-alpine\",
 sv_ok BAS_REQUIRE_SIGNED_IMAGES=1 && fail "setup.sh accepted planted tag" || pass "setup.sh: planted orchestrator tag inside postgres tar refused"
 MUTATE='mk_image_tar "$b/images/bas-orchestrator-9.9.9.tar" "\"bas-orchestrator:9.9.8\"" older; sign_tar "$b/images/bas-orchestrator-9.9.9.tar"' stage_setup
 sv_ok BAS_REQUIRE_SIGNED_IMAGES=1 && fail "setup.sh accepted older tar renamed" || pass "setup.sh: older signed tar renamed to this version refused"
-sv_ok && fail "setup.sh (non-strict) accepted renamed older orchestrator" || pass "setup.sh non-strict: orchestrator identity still enforced"
+sv_ok && fail "setup.sh accepted renamed older orchestrator" || pass "setup.sh: orchestrator identity enforced (no env needed)"
 MUTATE='rm "$b/images/postgres-16-alpine.tar" "$b/images/postgres-16-alpine.tar.bundle"; echo x | gzip > "$b/images/postgres-16-alpine.tar.gz"' stage_setup
-sv_ok && pass "setup.sh non-strict (release-ZIP style bundle with unsigned postgres.tar.gz) unchanged" || { fail "setup.sh non-strict regression"; cat "$T/out.txt"; }
-sv_ok BAS_REQUIRE_SIGNED_IMAGES=1 && fail "setup.sh strict accepted .tar.gz" || pass "setup.sh strict: legacy .tar.gz refused"
+sv_ok && fail "setup.sh accepted release-ZIP-style unsigned postgres.tar.gz" || pass "setup.sh: legacy unsigned postgres.tar.gz is fatal by default (no env)"
+MUTATE='rm "$b/images/postgres-16-alpine.tar.bundle"' stage_setup
+sv_ok && fail "setup.sh accepted unsigned postgres tar by default" || pass "setup.sh: release-ZIP-shaped bundle, unsigned postgres tar, no env -> fatal"
+MUTATE='echo tampered >> "$b/images/postgres-16-alpine.tar"' stage_setup
+sv_ok && fail "setup.sh accepted tampered postgres tar" || pass "setup.sh: release-ZIP-shaped bundle, tampered postgres tar -> fatal"
+MUTATE="" stage_setup
+sv_ok && grep -q "^OK orch_id=" "$T/out.txt" && pass "setup.sh: correctly signed release-ZIP-shaped bundle passes with no env" || { fail "setup.sh signed bundle default"; cat "$T/out.txt"; }
 MUTATE="" stage_setup
 sv_ok BAS_REQUIRE_SIGNED_IMAGES=1 BAS_COSIGN_PUB="$T/ext-bad.pub" && fail "setup.sh ignored external cosign key" || pass "setup.sh: external cosign key (BAS_COSIGN_PUB) governs verification"
 grep -q "EXTERNAL key" "$T/out.txt" && pass "setup.sh error shows EXTERNAL label + key path" || fail "setup.sh error context missing"
@@ -306,6 +338,35 @@ sv_ok BAS_REQUIRE_SIGNED_IMAGES=1 BAS_COSIGN_PUB="$T/ext-good.pub" && pass "setu
 rm -rf "$DOCKER_STATE"; mkdir -p "$DOCKER_STATE"; echo "$(img_id orch)" > "$DOCKER_STATE/tag.bas-orchestrator_9.9.9"
 PATH="$STUBS:$PATH" bash -c 'source "$1"; _docker_tag_is bas-orchestrator:9.9.9 "$2"' _ "$T/setup-fns.sh" "$(img_id orch)" && pass "_docker_tag_is: matching ID" || fail "_docker_tag_is match"
 PATH="$STUBS:$PATH" bash -c 'source "$1"; _docker_tag_is bas-orchestrator:9.9.9 "$2"' _ "$T/setup-fns.sh" "$(img_id other)" && fail "_docker_tag_is accepted wrong ID" || pass "_docker_tag_is: wrong ID refused"
+PATH="$STUBS:$PATH" bash -c 'source "$1"; _docker_tag_is bas-orchestrator:9.9.9 "$2"' _ "$T/setup-fns.sh" "$(img_id other) $(img_id orch)" && pass "_docker_tag_is: matches any ONE of the candidate digests" || fail "_docker_tag_is candidate list"
+
+echo "TEST: build.sh produces a signed, uncompressed postgres tar (stubbed docker/cosign)"
+BSTUB="$T/bstub"; rm -rf "$BSTUB"; mkdir -p "$BSTUB"
+cat > "$BSTUB/docker" <<'DEOF'
+#!/usr/bin/env bash
+[ "$1" = save ] || exit 0
+[ -n "${FAKE_NO_PG:-}" ] && exit 1
+out=""; while [ $# -gt 0 ]; do [ "$1" = -o ] && out="$2"; shift; done
+d=$(mktemp -d); printf '[{"Config":"blobs/sha256/%064d","RepoTags":["postgres:16-alpine"],"Layers":[]}]' 1 > "$d/manifest.json"
+tar -cf "$out" -C "$d" manifest.json
+DEOF
+cat > "$BSTUB/cosign.sh" <<'CEOF'
+#!/usr/bin/env bash
+case "$1" in
+  --sign) sha256sum "$2" | cut -d' ' -f1 > "$2.bundle" ;;
+  --verify) [ "$(cat "$2.bundle")" = "$(sha256sum "$2" | cut -d' ' -f1)" ] ;;
+esac
+CEOF
+chmod +x "$BSTUB/docker" "$BSTUB/cosign.sh"
+awk '/^# Postgres: saved UNCOMPRESSED/{f=1} /^# .* 5\. Package tarball/{f=0} f' "$REPO/packaging/build.sh" > "$T/build-pg-block.sh"
+[ -s "$T/build-pg-block.sh" ] && pass "extracted build.sh postgres block" || fail "could not extract build.sh postgres block"
+run_build_block() {
+  rm -rf "$T/bb"; mkdir -p "$T/bb/images"
+  env "$@" PATH="$BSTUB:$PATH" bash -c 'log(){ echo "$*"; }; err(){ echo "ERR $*" >&2; }; BUILD_DIR="$1"; COSIGN_SCRIPT="$2"; set -e; source "$3"' _ "$T/bb" "$BSTUB/cosign.sh" "$T/build-pg-block.sh" > "$T/out.txt" 2>&1
+}
+if run_build_block && [ -f "$T/bb/images/postgres-16-alpine.tar" ] && [ -f "$T/bb/images/postgres-16-alpine.tar.bundle" ] && [ ! -e "$T/bb/images/postgres-16-alpine.tar.gz" ]; then pass "build.sh: postgres-16-alpine.tar and .bundle produced, no .tar.gz"; else fail "build.sh postgres block"; cat "$T/out.txt"; fi
+tar -tf "$T/bb/images/postgres-16-alpine.tar" >/dev/null 2>&1 && pass "build.sh: postgres tar is uncompressed" || fail "build.sh postgres tar not a plain tar"
+run_build_block FAKE_NO_PG=1 && fail "build.sh continued without a postgres image" || pass "build.sh: missing postgres image is fatal"
 
 echo "TEST: GPG (real throwaway keys): verify-sig.sh, import.sh, verify.sh and setup.sh agent check"
 if ! command -v gpg >/dev/null 2>&1; then

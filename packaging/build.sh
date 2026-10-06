@@ -251,9 +251,24 @@ if [[ ! -f "$COSIGN_PUB" ]]; then
 fi
 cp "$COSIGN_PUB" "${BUILD_DIR}/"
 
-docker save "postgres:16-alpine" \
-  | gzip > "${BUILD_DIR}/images/postgres-16-alpine.tar.gz" 2>/dev/null || \
-  warn "postgres:16-alpine not pulled locally — run 'docker pull postgres:16-alpine' to include it"
+# Postgres: saved UNCOMPRESSED and cosign-signed with the same helper and key as
+# the orchestrator (signing is mandatory in this script, so it is mandatory here
+# too). setup.sh/import flows refuse any image tar that lacks a valid signature,
+# so a bundle without postgres is not installable: a missing local image is fatal.
+PG_TAR="${BUILD_DIR}/images/postgres-16-alpine.tar"
+if ! docker save "postgres:16-alpine" -o "${PG_TAR}"; then
+  err "postgres:16-alpine not available locally -- run 'docker pull postgres:16-alpine' and re-run."
+  exit 1
+fi
+log "Signing postgres image with cosign..."
+if ! bash "${COSIGN_SCRIPT}" --sign "${PG_TAR}"; then
+  err "cosign signing failed for ${PG_TAR} -- aborting release build."
+  exit 1
+fi
+if ! bash "${COSIGN_SCRIPT}" --verify "${PG_TAR}"; then
+  err "cosign verification FAILED immediately after signing ${PG_TAR} -- this should be structurally impossible; investigate before shipping."
+  exit 1
+fi
 
 # ── 5. Package tarball ─────────────────────────────────────────────────────────
 TARBALL="${DIST_DIR}/${BUILD_NAME}.tar.gz"

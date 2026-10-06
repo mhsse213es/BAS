@@ -135,7 +135,7 @@ echo "  ╚═══════════════════════
 echo ""
 echo "  See /root/LUKS-PASSPHRASE.txt for your disk encryption key."
 echo ""
-BAS_REQUIRE_SIGNED_IMAGES=1 bash "$SETUP_SCRIPT" --offline
+bash "$SETUP_SCRIPT" --offline
 if [[ $? -eq 0 ]]; then
   mkdir -p "$(dirname "$CONFIGURED_MARKER")"
   touch "$CONFIGURED_MARKER"

@@ -282,12 +282,8 @@ _key_fp() {
   fi
 }
 
-# Image ID a `docker save` tar will produce, and proof it carries exactly the
-# expected tag: manifest.json must hold ONE image whose RepoTags is exactly
-# [<expected-tag>]. Echoes sha256:<config digest>; nonzero otherwise. Run on a
-# tar that has ALREADY passed cosign verification.
 _tar_image_id() {
-  local tar="$1" want="$2" m cfg tags
+  local tar="$1" want="$2" m cfg tags idx d ids
   m=$(tar -xOf "$tar" --occurrence=1 manifest.json 2>/dev/null) || return 1
   [[ $(grep -o '"Config"' <<<"$m" | wc -l) -eq 1 ]] || return 1
   tags=$(sed -n 's/.*"RepoTags":\[\([^]]*\)\].*/\1/p' <<<"$m")
@@ -295,12 +291,30 @@ _tar_image_id() {
   cfg=$(sed -n 's/.*"Config":"\([^"]*\)".*/\1/p' <<<"$m")
   cfg="${cfg##*/}"; cfg="${cfg%.json}"
   [[ "$cfg" =~ ^[0-9a-f]{64}$ ]] || return 1
-  echo "sha256:${cfg}"
+  # Candidate 1 (classic overlay2 store): the Config digest. Candidate 2
+  # (containerd store, the default on new Docker Engines): `docker image inspect`
+  # reports the top-level manifest/index digest from index.json. Both come from
+  # the cosign-verified tar, so neither can be chosen by an attacker. Older
+  # `docker save` tars have no index.json: Config only.
+  ids="sha256:${cfg}"
+  idx=$(tar -xOf "$tar" --occurrence=1 index.json 2>/dev/null || true)
+  if [[ -n "$idx" ]]; then
+    for d in $(grep -o '"digest"[[:space:]]*:[[:space:]]*"sha256:[0-9a-f]\{64\}"' <<<"$idx" | grep -o 'sha256:[0-9a-f]*'); do
+      ids="${ids} ${d}"
+    done
+  fi
+  echo "$ids"
 }
 
-# Fails (nonzero) unless <tag> in the local daemon now has exactly <id>.
+# <tag>'s ID in the local daemon must equal one of the space-separated candidate
+# IDs recorded from the verified tar (see above); anything else is a mismatch.
 _docker_tag_is() {
-  [[ "$(docker image inspect -f '{{.Id}}' "$1" 2>/dev/null)" == "$2" ]]
+  local got want
+  got=$(docker image inspect -f '{{.Id}}' "$1" 2>/dev/null) || return 1
+  for want in $2; do
+    [[ "$got" == "$want" ]] && return 0
+  done
+  return 1
 }
 
 # Verifies the orchestrator tarball against the bundle's cosign.pub BEFORE
@@ -641,57 +655,50 @@ do_install() {
 }
 
 # Image tag each shipped tar must carry (name is pinned to the bundle version).
+# Every bundle type (release ZIP, build.sh bundle, air-gap bundle) ships these
+# signed; anything else in images/ is refused.
 _expected_image_tag() {
   case "$1" in
     "bas-orchestrator-${BAS_VERSION}.tar") echo "bas-orchestrator:${BAS_VERSION}" ;;
     postgres-16-alpine.tar)                echo "postgres:16-alpine" ;;
+    headless-shell.tar)                    echo "chromedp/headless-shell:latest" ;;
+    "bas-caldera-${BAS_VERSION}.tar")      echo "bas-caldera:${BAS_VERSION}" ;;
+    caldera-latest.tar)                    echo "ghcr.io/mitre/caldera:latest" ;;
     *) return 1 ;;
   esac
 }
 
-# Verify EVERYTHING in images/ before anything is loaded or written. Fills
-# IMG_TARS/IMG_TAGS/IMG_IDS (non-orchestrator, load order) and ORCH_IMG/ORCH_ID.
-# The orchestrator is always verified and tag/ID-bound. Other images are too when
-# BAS_REQUIRE_SIGNED_IMAGES is set (air-gap import, ISO, Packer): then a tar with
-# no signature, an unlisted file or a legacy .tar.gz is fatal. Without it (older
-# release-ZIP bundles whose postgres tar is not signed) they load as before.
+# Verify EVERYTHING in images/ before anything is loaded or written. Signed
+# images are REQUIRED (no opt-out): every tar must be a known <name>.tar with a
+# valid cosign .bundle, and its manifest.json must carry exactly the expected tag.
+# Fills IMG_TARS/IMG_TAGS/IMG_IDS (non-orchestrator, load order) and
+# ORCH_IMG/ORCH_ID. A tar with no signature, an unlisted file or a legacy .tar.gz
+# is fatal.
 _verify_all_images() {
   IMG_TARS=(); IMG_TAGS=(); IMG_IDS=(); ORCH_IMG=""; ORCH_ID=""
-  local img base tag id strict="${BAS_REQUIRE_SIGNED_IMAGES:-}"
+  local img base tag id
   for img in "${SCRIPT_DIR}"/images/*; do
     [[ -f "$img" ]] || continue
     base="$(basename "$img")"
     case "$base" in
       *.bundle) continue ;;
-      *.tar|*.tar.gz) ;;
-      *) [[ -n "$strict" ]] && { err "Unexpected file in images/: ${base} -- refusing."; exit 1; }; continue ;;
+      *.tar) ;;
+      *) err "Unexpected file in images/: ${base} -- refusing (only signed .tar images are allowed)."; exit 1 ;;
     esac
+    tag=$(_expected_image_tag "$base") || { err "Unlisted image tar in images/: ${base} -- refusing."; exit 1; }
+    _verify_orchestrator_artifact "$img" || { err "Image ${base} failed verification -- installation aborted."; exit 1; }
+    id=$(_tar_image_id "$img" "$tag") || { err "${base}: manifest.json does not carry exactly the tag ${tag} -- refusing (the verified image must be the one compose runs)."; exit 1; }
     if [[ "$base" == bas-orchestrator-* ]]; then
-      if [[ "$base" != "bas-orchestrator-${BAS_VERSION}.tar" ]]; then
-        err "Orchestrator artifact ${base} does not match this bundle's version (${BAS_VERSION}) -- refusing."
-        exit 1
-      fi
-      ORCH_IMG="$img"; continue
-    fi
-    if [[ -n "$strict" ]]; then
-      tag=$(_expected_image_tag "$base") || { err "Unlisted/legacy image file in images/: ${base} -- refusing (signed-images mode)."; exit 1; }
-      _verify_orchestrator_artifact "$img" || { err "Image ${base} failed verification -- installation aborted."; exit 1; }
-      id=$(_tar_image_id "$img" "$tag") || { err "${base}: manifest.json does not carry exactly the tag ${tag} -- refusing."; exit 1; }
-      IMG_TARS+=("$img"); IMG_TAGS+=("$tag"); IMG_IDS+=("$id")
+      ORCH_IMG="$img"; ORCH_ID="$id"
     else
-      IMG_TARS+=("$img"); IMG_TAGS+=(""); IMG_IDS+=("")
+      IMG_TARS+=("$img"); IMG_TAGS+=("$tag"); IMG_IDS+=("$id")
     fi
   done
   if [[ -z "$ORCH_IMG" ]]; then
     err "No orchestrator artifact (bas-orchestrator-${BAS_VERSION}.tar) found in ${SCRIPT_DIR}/images -- refusing to install without it."
     exit 1
   fi
-  _verify_orchestrator_artifact "$ORCH_IMG" || { err "Orchestrator artifact failed verification -- installation aborted."; exit 1; }
-  ORCH_ID=$(_tar_image_id "$ORCH_IMG" "bas-orchestrator:${BAS_VERSION}") || {
-    err "Orchestrator tar's manifest.json does not carry exactly bas-orchestrator:${BAS_VERSION} -- refusing (the verified image must be the one compose runs)."
-    exit 1
-  }
-  if [[ -n "$strict" && ${#IMG_TARS[@]} -eq 0 ]]; then
+  if [[ ${#IMG_TARS[@]} -eq 0 ]]; then
     err "No supporting images (postgres) found in ${SCRIPT_DIR}/images -- refusing."
     exit 1
   fi
@@ -770,12 +777,8 @@ EOF
     local i
     for i in "${!IMG_TARS[@]}"; do
       _step 55 "Loading $(basename "${IMG_TARS[$i]}")..."
-      if [[ -n "${BAS_REQUIRE_SIGNED_IMAGES:-}" ]]; then
-        docker load < "${IMG_TARS[$i]}" || { err "docker load failed for $(basename "${IMG_TARS[$i]}")"; exit 1; }
-        _docker_tag_is "${IMG_TAGS[$i]}" "${IMG_IDS[$i]}" || { err "${IMG_TAGS[$i]} is not the verified image after load -- aborting."; exit 1; }
-      else
-        docker load < "${IMG_TARS[$i]}" || true
-      fi
+      docker load < "${IMG_TARS[$i]}" || { err "docker load failed for $(basename "${IMG_TARS[$i]}")"; exit 1; }
+      _docker_tag_is "${IMG_TAGS[$i]}" "${IMG_IDS[$i]}" || { err "${IMG_TAGS[$i]} is not the verified image after load -- aborting."; exit 1; }
     done
     _step 55 "Loading $(basename "$ORCH_IMG")..."
     docker load < "$ORCH_IMG"

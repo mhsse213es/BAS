@@ -732,6 +732,51 @@ if (-not $cosignCmd) {
         Copy-Item $CosignPub "$OutDir\cosign.pub" -Force
     }
 }
+# Supporting images (postgres, headless-shell, caldera) are signed with the SAME
+# cosign binary, key and gating as the orchestrator above: setup.sh/install.sh
+# refuse any image tar without a valid bundle, so an unsigned supporting image
+# makes the bundle uninstallable. Signing is exactly as mandatory as for the
+# orchestrator ($WindowsSigningRequired): required -> Err; otherwise the bundle
+# ships unsigned (and is refused by the installers), loudly.
+$cosignReady = ($cosignCmd -and (Test-Path $CosignKey))
+foreach ($imgTar in (Get-ChildItem -Path "$OutDir\images" -Filter "*.tar" -File | Where-Object { $_.FullName -ne (Get-Item $OrchTar).FullName })) {
+    $imgPath = $imgTar.FullName
+    if (-not $cosignReady) {
+        if ($WindowsSigningRequired) { Err "Cannot cosign-sign $imgPath (cosign or cosign.key missing) and signing is mandatory for this customer build." }
+        else { Warn "  $($imgTar.Name) will NOT be cosign-signed (not required for this build); this bundle will be refused by install.sh/setup.sh."; continue }
+    }
+    Log "  Signing $imgPath with cosign..."
+    $emptyStdin = "$OutDir\.cosign-empty-stdin"
+    New-Item -ItemType File -Force -Path $emptyStdin | Out-Null
+    $signStdout = "$OutDir\.cosign-sign-stdout.log"
+    $signStderr = "$OutDir\.cosign-sign-stderr.log"
+    $signProc = Start-Process -FilePath $cosignCmd.Source -ArgumentList @(
+        "sign-blob", "--key", "`"$CosignKey`"", "--yes", "--tlog-upload=false", "--use-signing-config=false",
+        "--bundle", "`"$imgPath.bundle`"", "`"$imgPath`""
+    ) -RedirectStandardInput $emptyStdin -NoNewWindow -Wait -PassThru `
+      -RedirectStandardOutput $signStdout -RedirectStandardError $signStderr
+    Get-Content $signStdout, $signStderr -ErrorAction SilentlyContinue | ForEach-Object { Log "    $_" }
+    Remove-Item -ErrorAction SilentlyContinue $emptyStdin, $signStdout, $signStderr
+    if ($signProc.ExitCode -ne 0) {
+        if ($WindowsSigningRequired) { Err "cosign signing failed for $imgPath -- aborting customer build." }
+        else { Warn "  cosign signing failed for $($imgTar.Name) -- continuing unsigned (not required for this build)."; continue }
+    }
+    if ((Get-Content "$imgPath.bundle" -Raw) -match '"tlogEntries"') {
+        Err "cosign produced a bundle containing a transparency-log entry for $imgPath -- offline-signing invariant violated."
+    }
+    $prevEAP = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        & $cosignCmd.Source verify-blob --key $CosignPub --bundle "$imgPath.bundle" --insecure-ignore-tlog "$imgPath" 2>&1 | ForEach-Object { Log "    $_" }
+        $verifyExit = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $prevEAP
+    }
+    if ($verifyExit -ne 0) {
+        Err "cosign verification FAILED immediately after signing $imgPath -- investigate before shipping."
+    }
+    Log "  $imgPath signed and verified."
+}
 $orchSizeMB = [math]::Round((Get-Item "$OutDir\images\bas-orchestrator-$Version.tar").Length / 1MB)
 Log "  Saved: bas-orchestrator-$Version.tar (${orchSizeMB}MB)"
 

@@ -95,7 +95,7 @@ echo "  It will only run once. Press ENTER to begin..."
 read -r
 
 # Run setup wizard in offline mode (Docker images are pre-loaded in this VM)
-BAS_REQUIRE_SIGNED_IMAGES=1 bash "$SETUP_SCRIPT" --offline
+bash "$SETUP_SCRIPT" --offline
 SETUP_RC=$?
 
 if [[ $SETUP_RC -eq 0 ]]; then

@@ -101,12 +101,8 @@ airgap_expected_tag() {
   esac
 }
 
-# airgap_tar_image_id <tar> <expected-tag>
-# manifest.json of the (already cosign-verified) tar must hold ONE image whose
-# RepoTags is exactly [<expected-tag>]. Echoes sha256:<Config digest> (the image
-# ID docker will report after load); nonzero otherwise.
 airgap_tar_image_id() {
-  local tar="$1" want="$2" m cfg tags
+  local tar="$1" want="$2" m cfg tags idx d ids
   m=$(tar -xOf "$tar" --occurrence=1 manifest.json 2>/dev/null) || return 1
   [[ $(grep -o '"Config"' <<<"$m" | wc -l) -eq 1 ]] || return 1
   tags=$(sed -n 's/.*"RepoTags":\[\([^]]*\)\].*/\1/p' <<<"$m")
@@ -114,12 +110,30 @@ airgap_tar_image_id() {
   cfg=$(sed -n 's/.*"Config":"\([^"]*\)".*/\1/p' <<<"$m")
   cfg="${cfg##*/}"; cfg="${cfg%.json}"
   [[ "$cfg" =~ ^[0-9a-f]{64}$ ]] || return 1
-  echo "sha256:${cfg}"
+  # Candidate 1 (classic overlay2 store): the Config digest. Candidate 2
+  # (containerd store, the default on new Docker Engines): `docker image inspect`
+  # reports the top-level manifest/index digest from index.json. Both come from
+  # the cosign-verified tar, so neither can be chosen by an attacker. Older
+  # `docker save` tars have no index.json: Config only.
+  ids="sha256:${cfg}"
+  idx=$(tar -xOf "$tar" --occurrence=1 index.json 2>/dev/null || true)
+  if [[ -n "$idx" ]]; then
+    for d in $(grep -o '"digest"[[:space:]]*:[[:space:]]*"sha256:[0-9a-f]\{64\}"' <<<"$idx" | grep -o 'sha256:[0-9a-f]*'); do
+      ids="${ids} ${d}"
+    done
+  fi
+  echo "$ids"
 }
 
-# airgap_docker_tag_is <tag> <id>: the local daemon's <tag> must be exactly <id>.
+# <tag>'s ID in the local daemon must equal one of the space-separated candidate
+# IDs recorded from the verified tar (see above); anything else is a mismatch.
 airgap_docker_tag_is() {
-  [[ "$(docker image inspect -f '{{.Id}}' "$1" 2>/dev/null)" == "$2" ]]
+  local got want
+  got=$(docker image inspect -f '{{.Id}}' "$1" 2>/dev/null) || return 1
+  for want in $2; do
+    [[ "$got" == "$want" ]] && return 0
+  done
+  return 1
 }
 
 # airgap_verify_images <images dir> <cosign.pub> <version>

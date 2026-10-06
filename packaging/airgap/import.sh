@@ -229,8 +229,6 @@ if [[ -n "$GPG_PUB_FLAG" ]]; then
   BAS_GPG_PUB="$(cd -- "$(dirname -- "$GPG_PUB_FLAG")" && pwd)/$(basename -- "$GPG_PUB_FLAG")"
   export BAS_GPG_PUB
 fi
-# Every image in this flow is signed: setup.sh must refuse unsigned tars.
-export BAS_REQUIRE_SIGNED_IMAGES=1
 
 log "Launching BAS setup wizard (offline mode)..."
 echo ""
