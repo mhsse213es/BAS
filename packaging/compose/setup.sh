@@ -25,8 +25,8 @@ readonly DEFAULT_INSTALL_DIR="/opt/bas-platform"
 readonly DEFAULT_PORT="9000"
 readonly MIN_RAM_MB=3800
 readonly MIN_DISK_MB=5120
-readonly SERVICE_NAME="bas-compose"
-readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+readonly SCRIPT_DIR
 
 # Version is read from the bundle's VERSION file (written by the packager) so the
 # .env image tag ALWAYS matches the images shipped in THIS bundle — never a
@@ -301,9 +301,9 @@ _tar_image_id() {
   ids="sha256:${cfg}"
   idx=$(tar -xOf "$tar" --occurrence=1 index.json 2>/dev/null || true)
   if [[ -n "$idx" ]]; then
-    for d in $(grep -o '"digest"[[:space:]]*:[[:space:]]*"sha256:[0-9a-f]\{64\}"' <<<"$idx" | grep -o 'sha256:[0-9a-f]*'); do
+    while read -r d; do
       ids="${ids} ${d}"
-    done
+    done < <(grep -o '"digest"[[:space:]]*:[[:space:]]*"sha256:[0-9a-f]\{64\}"' <<<"$idx" | grep -o 'sha256:[0-9a-f]*')
   fi
   echo "$ids"
 }

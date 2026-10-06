@@ -79,6 +79,7 @@ mkdir -p "${BUILD_DIR}/images" "${BUILD_DIR}/compose/systemd"
 ORCHESTRATOR_IMAGE="bas-orchestrator:${VERSION}"
 # Shared release helpers: images.pin parser, pull-by-digest, save + sign.
 # shellcheck source=../signing/release-images.sh
+# shellcheck disable=SC1091  # repo-relative helper; followed with shellcheck -x
 source "${REPO_ROOT}/packaging/signing/release-images.sh"
 rel_read_pin "${REPO_ROOT}/packaging/images.pin"   # fail fast on a bad pin file
 

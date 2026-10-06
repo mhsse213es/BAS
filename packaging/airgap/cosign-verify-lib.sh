@@ -122,9 +122,9 @@ airgap_tar_image_id() {
   ids="sha256:${cfg}"
   idx=$(tar -xOf "$tar" --occurrence=1 index.json 2>/dev/null || true)
   if [[ -n "$idx" ]]; then
-    for d in $(grep -o '"digest"[[:space:]]*:[[:space:]]*"sha256:[0-9a-f]\{64\}"' <<<"$idx" | grep -o 'sha256:[0-9a-f]*'); do
+    while read -r d; do
       ids="${ids} ${d}"
-    done
+    done < <(grep -o '"digest"[[:space:]]*:[[:space:]]*"sha256:[0-9a-f]\{64\}"' <<<"$idx" | grep -o 'sha256:[0-9a-f]*')
   fi
   echo "$ids"
 }

@@ -111,6 +111,7 @@ if [[ ! -f "$AIRGAP_LIB" ]]; then
   exit 1
 fi
 # shellcheck source=cosign-verify-lib.sh
+# shellcheck disable=SC1091  # sourced from the script's own dir at runtime; followed with shellcheck -x
 source "$AIRGAP_LIB"
 
 # An explicitly supplied GPG key (flag or env) with no .asc to check is an error,
@@ -214,6 +215,7 @@ fi
 # Nothing reaches the Docker daemon unless every image tar verifies.
 airgap_select_pub "${BUNDLE_DIR}/cosign.pub"
 log "Verifying image signatures and loading images..."
+# shellcheck disable=SC2153  # AIRGAP_PUB is set by airgap_select_pub in the sourced cosign-verify-lib.sh
 if ! airgap_verify_and_load_images "${BUNDLE_DIR}/images" "$AIRGAP_PUB" "$VERSION"; then
   err "Image verification/loading failed. Import aborted."
   exit 1

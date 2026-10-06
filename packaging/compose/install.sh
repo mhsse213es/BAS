@@ -55,7 +55,8 @@ readonly MIN_CPU_CORES=2
 readonly COMPOSE_PROJECT="audspect"
 readonly SERVICE_NAME="audspect"
 unset CDPATH
-readonly SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+readonly SCRIPT_DIR
 
 # Read version from bundle VERSION file (written by windows-build.ps1).
 _ver="$(cat "${SCRIPT_DIR}/VERSION" 2>/dev/null || true)"
@@ -461,9 +462,9 @@ _tar_image_id() {
   ids="sha256:${cfg}"
   idx=$(tar -xOf "$tar" --occurrence=1 index.json 2>/dev/null || true)
   if [[ -n "$idx" ]]; then
-    for d in $(grep -o '"digest"[[:space:]]*:[[:space:]]*"sha256:[0-9a-f]\{64\}"' <<<"$idx" | grep -o 'sha256:[0-9a-f]*'); do
+    while read -r d; do
       ids="${ids} ${d}"
-    done
+    done < <(grep -o '"digest"[[:space:]]*:[[:space:]]*"sha256:[0-9a-f]\{64\}"' <<<"$idx" | grep -o 'sha256:[0-9a-f]*')
   fi
   echo "$ids"
 }
@@ -1154,6 +1155,7 @@ mode_rollback() {
 
   # Find most recent backup
   local latest
+  # shellcheck disable=SC2012  # glob only matches YYYYMMDD-HHMMSS dirs (no whitespace); ls -t is the mtime sort
   latest=$(ls -1dt "${backup_root}"/[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]-[0-9][0-9][0-9][0-9][0-9][0-9]/ 2>/dev/null | head -1 || true)
   if [[ -z "$latest" ]]; then
     err "No backup found under ${backup_root}. Cannot rollback."
@@ -1282,7 +1284,7 @@ mode_uninstall() {
   step "1/5  Stopping systemd service"
   local svc_unit="/etc/systemd/system/${SERVICE_NAME}.service"
   if systemctl is-active --quiet "${SERVICE_NAME}" 2>/dev/null; then
-    systemctl stop "${SERVICE_NAME}" && log "Service stopped" || warn "Stop failed (continuing)"
+    if systemctl stop "${SERVICE_NAME}"; then log "Service stopped"; else warn "Stop failed (continuing)"; fi
   fi
   if systemctl is-enabled --quiet "${SERVICE_NAME}" 2>/dev/null; then
     systemctl disable "${SERVICE_NAME}" && log "Service disabled"
@@ -1293,8 +1295,11 @@ mode_uninstall() {
 
   step "2/5  Removing containers and volumes"
   if [[ -f "${data_dir}/docker-compose.yml" ]]; then
-    (cd "${data_dir}" && docker compose -p "$COMPOSE_PROJECT" down --volumes --remove-orphans 2>&1) \
-      && log "Compose stack removed" || warn "Compose down had errors (continuing)"
+    if (cd "${data_dir}" && docker compose -p "$COMPOSE_PROJECT" down --volumes --remove-orphans 2>&1); then
+      log "Compose stack removed"
+    else
+      warn "Compose down had errors (continuing)"
+    fi
   else
     for ctr in audspect-orchestrator audspect-caldera audspect-postgres audspect-chrome; do
       docker inspect "$ctr" &>/dev/null 2>&1 && docker rm -f "$ctr" && log "Removed: $ctr"
@@ -1563,7 +1568,8 @@ _prune_backups() {
   monthly_cutoff=$(date -d "-$((BACKUP_RETENTION_MONTHLY * 30)) days" +%s 2>/dev/null || date -v-"$((BACKUP_RETENTION_MONTHLY * 30))"d +%s)
 
   local seen_weeks="" seen_months=""
-  for f in $(ls -1t "${dir}"/audspect-backup-*.tar.enc 2>/dev/null); do
+  # shellcheck disable=SC2012  # names are audspect-backup-<UTC ts>.tar.enc (no whitespace); ls -t is the newest-first mtime sort
+  while IFS= read -r f; do
     local mtime week_key month_key
     mtime=$(stat -c %Y "$f" 2>/dev/null || stat -f %m "$f")
     [[ "$mtime" -ge "$daily_cutoff" ]] && continue
@@ -1576,7 +1582,7 @@ _prune_backups() {
     else
       rm -f "$f"
     fi
-  done
+  done < <(ls -1t "${dir}"/audspect-backup-*.tar.enc 2>/dev/null)
 }
 
 # _run_backup_engine performs one full backup and prints the result as

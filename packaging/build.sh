@@ -269,6 +269,7 @@ cp "$COSIGN_PUB" "${BUILD_DIR}/"
 # orchestrator. setup.sh/install.sh refuse any image tar without a valid
 # signature, so a bundle without postgres is not installable: any failure is fatal.
 # shellcheck source=signing/release-images.sh
+# shellcheck disable=SC1091  # repo-relative helper; followed with shellcheck -x
 source "${REPO_ROOT}/packaging/signing/release-images.sh"
 rel_ship_postgres "${REPO_ROOT}" "${BUILD_DIR}/images" "${COSIGN_SCRIPT}"
 

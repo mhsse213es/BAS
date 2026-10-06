@@ -57,6 +57,7 @@ FAILED=0
 pass() { echo "PASS: $*"; }
 fail() { echo "FAIL: $*"; FAILED=1; }
 
+# shellcheck disable=SC2329  # invoked via trap cleanup EXIT below
 cleanup() {
   docker rm -fv "$DIND" >/dev/null 2>&1 || true
   docker network rm "$NET" >/dev/null 2>&1 || true
@@ -210,6 +211,7 @@ dk cp "$(hostpath "$WORK/inner.sh")" "$DIND:/work/inner.sh"
 INNER_RC=0
 dk exec "$DIND" bash /work/inner.sh "$VERSION" 2>&1 | tee "$WORK/inner.out" || INNER_RC=${PIPESTATUS[0]}
 
+# shellcheck disable=SC2015  # pass/fail only echo (always succeed): C runs only when A fails
 grep -q "INNER-FAIL" "$WORK/inner.out" && fail "inner step failed: $(grep INNER-FAIL "$WORK/inner.out")" || pass "bundle verify.sh, the real import.sh (verify + load), setup.sh's verify + load functions, and compose up all succeeded offline"
 if grep -q "^SETUP-HANDOFF reached: setup.sh --offline" "$WORK/inner.out" && grep -q "^SETUP-VERIFY-LOAD-OK" "$WORK/inner.out"; then pass "import.sh handed off to setup.sh --offline, whose own verify + load passed"; else fail "setup.sh hand-off / verify + load not observed"; fi
 if grep -q "Not enough free space" "$WORK/inner.out"; then fail "import.sh free-space check refused (test daemon disk too small)"; fi

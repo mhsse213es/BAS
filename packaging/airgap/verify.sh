@@ -107,7 +107,6 @@ if [[ ! -f "$MANIFEST" ]]; then
   exit 1
 fi
 
-VERSION_FILE="${BUNDLE_DIR}/VERSION"
 VERSION=$(cat "$BUNDLE_DIR/VERSION" 2>/dev/null || echo "unknown")
 echo "  Version:  ${VERSION}"
 
@@ -179,9 +178,11 @@ if [[ ! -f "$AIRGAP_LIB" ]]; then
   exit 1
 fi
 # shellcheck source=cosign-verify-lib.sh
+# shellcheck disable=SC1091  # sourced from the script's own dir at runtime; followed with shellcheck -x
 source "$AIRGAP_LIB"
 airgap_external_pub "$COSIGN_PUB_FLAG" || { err "Cannot verify signature -- do NOT import this bundle."; exit 1; }
 airgap_select_pub "${BUNDLE_DIR}/cosign.pub"
+# shellcheck disable=SC2153  # AIRGAP_PUB is set by airgap_select_pub in the sourced cosign-verify-lib.sh
 if ! airgap_verify_images "${BUNDLE_DIR}/images" "$AIRGAP_PUB" "$VERSION"; then
   err "Cannot verify signature -- do NOT import this bundle."
   exit 1

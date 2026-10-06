@@ -6,6 +6,7 @@
 # Usage: sudo bash uninstall.sh [--purge-images] [--yes]
 #   --purge-images   Also remove Docker images
 #   --yes / -y       Skip confirmation prompt
+# shellcheck disable=SC2015  # every "A && B || C" here has B = log/ok/fail, which only echo (always succeed): C runs only when A fails
 set -euo pipefail
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; BOLD='\033[1m'; NC='\033[0m'

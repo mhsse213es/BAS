@@ -15,6 +15,7 @@
 #  - fake docker models tags -> image IDs from each loaded tar's manifest.json
 #    (last load wins, like the real daemon), so planted/clobbered tags are real.
 # NOT covered here: a real `cosign sign-blob` / `docker save` round trip.
+# shellcheck disable=SC2015,SC2016  # "A && pass || fail": pass/fail only echo (always succeed); single quotes are deliberate (eval / bash -c bodies, literal greps)
 set -euo pipefail
 [ -z "${T_DEBUG:-}" ] || set -x
 unset CDPATH
@@ -343,7 +344,7 @@ sv_ok BAS_COSIGN_PUB="$T/ext-bad.pub" && fail "setup.sh ignored external cosign 
 grep -q "EXTERNAL key" "$T/out.txt" && pass "setup.sh error shows EXTERNAL label + key path" || fail "setup.sh error context missing"
 sv_ok BAS_COSIGN_PUB="$T/ext-good.pub" && pass "setup.sh: matching external key accepted" || fail "setup.sh external good"
 # post-load identity (setup.sh and install.sh share _docker_tag_is)
-rm -rf "$DOCKER_STATE"; mkdir -p "$DOCKER_STATE"; echo "$(img_id orch)" > "$DOCKER_STATE/tag.bas-orchestrator_9.9.9"
+rm -rf "$DOCKER_STATE"; mkdir -p "$DOCKER_STATE"; img_id orch > "$DOCKER_STATE/tag.bas-orchestrator_9.9.9"
 PATH="$STUBS:$PATH" bash -c 'source "$1"; _docker_tag_is bas-orchestrator:9.9.9 "$2"' _ "$T/setup-fns.sh" "$(img_id orch)" && pass "_docker_tag_is: matching ID" || fail "_docker_tag_is match"
 PATH="$STUBS:$PATH" bash -c 'source "$1"; _docker_tag_is bas-orchestrator:9.9.9 "$2"' _ "$T/setup-fns.sh" "$(img_id other)" && fail "_docker_tag_is accepted wrong ID" || pass "_docker_tag_is: wrong ID refused"
 PATH="$STUBS:$PATH" bash -c 'source "$1"; _docker_tag_is bas-orchestrator:9.9.9 "$2"' _ "$T/setup-fns.sh" "$(img_id other) $(img_id orch)" && pass "_docker_tag_is: matches any ONE of the candidate digests" || fail "_docker_tag_is candidate list"
@@ -555,6 +556,7 @@ chmod +x "$STUBS/df"
 MUTATE="" make_bundle "$T/b.tar.gz"
 FAKE_DF_KB=1 expect_abort "import.sh: too little free space in TMPDIR -> abort before copying"
 grep -q "Not enough free space" "$T/out.txt" && grep -q "TMPDIR" "$T/out.txt" && pass "free-space error is clear and names TMPDIR" || fail "free-space message"
+# shellcheck disable=SC2017  # deliberate: round UP to whole KiB first, then x3 (matches import.sh)
 need_kb=$(( ( $(wc -c < "$T/b.tar.gz") + 1023 ) / 1024 * 3 ))
 FAKE_DF_KB=$((need_kb - 1)) expect_abort "import.sh: just under 3x the bundle size -> abort"
 FAKE_DF_KB=$need_kb check_valid "import.sh: exactly 3x the bundle size free -> proceeds"
