@@ -3,20 +3,12 @@ package db_test
 import (
 	"context"
 	"testing"
-
-	"github.com/audspect/bas/internal/db"
 )
 
-// EnsureAgentUninstallSchema must be safe to call repeatedly (startup runs
-// it every boot) and must leave every new column in place.
-func TestEnsureAgentUninstallSchema_Idempotent(t *testing.T) {
+// The migrated schema has every agent-uninstall column on agents
+// (re-running is covered by migrate.TestUp_Idempotent since H1).
+func TestSchema_AgentUninstallColumns(t *testing.T) {
 	ctx := context.Background()
-	if err := db.EnsureAgentUninstallSchema(ctx, sharedDB.Pool); err != nil {
-		t.Fatalf("first EnsureAgentUninstallSchema: %v", err)
-	}
-	if err := db.EnsureAgentUninstallSchema(ctx, sharedDB.Pool); err != nil {
-		t.Fatalf("second EnsureAgentUninstallSchema (idempotency): %v", err)
-	}
 
 	cols := []string{
 		"uninstall_requested_by", "uninstall_requested_at", "uninstall_reason",

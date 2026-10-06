@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/audspect/bas/internal/db"
+	"github.com/audspect/bas/internal/db/legacy"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -39,10 +39,9 @@ func TestSLAMigration_BackfillsExistingOpenFindings(t *testing.T) {
 			`INSERT INTO posture_findings (id, agent_id, check_id, category, title, severity, status, first_seen, last_seen, last_observed_at)
 			 VALUES ('pf-backfill-1', 'backfill-agent', 'windows-firewall-enabled', 'security-configuration', 'Windows Firewall disabled', 'High', 'open', NOW(), NOW(), NOW())`)
 
-		// Re-running EnsureSchema simulates this migration landing against a
-		// fleet that already has open posture_findings rows from before this
-		// sub-project shipped.
-		if err := db.EnsureSchema(context.Background(), pool); err != nil {
+		// The backfill is a one-time repair inside the frozen pre-H1 chain; it
+		// runs when migrate adopts a pre-H1 install (internal/db/legacy).
+		if err := legacy.EnsureSchema(context.Background(), pool); err != nil {
 			t.Fatalf("EnsureSchema (2nd run): %v", err)
 		}
 
@@ -63,7 +62,7 @@ func TestSLAMigration_BackfillsExistingOpenFindings(t *testing.T) {
 
 		// Idempotency: a 3rd EnsureSchema run must not create a 2nd row for
 		// the same posture_finding_id.
-		if err := db.EnsureSchema(context.Background(), pool); err != nil {
+		if err := legacy.EnsureSchema(context.Background(), pool); err != nil {
 			t.Fatalf("EnsureSchema (3rd run): %v", err)
 		}
 		var n int

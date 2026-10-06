@@ -17,12 +17,6 @@ func TestRunEventsSchemaCreated(t *testing.T) {
 		t.Fatalf("connect: %v", err)
 	}
 	defer pool.Close()
-	if err := EnsureSchema(ctx, pool); err != nil {
-		t.Fatalf("ensure 1: %v", err)
-	}
-	if err := EnsureSchema(ctx, pool); err != nil {
-		t.Fatalf("ensure 2 (idempotency): %v", err)
-	}
 	var n int
 	if err := pool.QueryRow(ctx,
 		`SELECT count(*) FROM information_schema.tables WHERE table_name = 'run_events'`,

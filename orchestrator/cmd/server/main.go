@@ -26,6 +26,7 @@ import (
 	"github.com/audspect/bas/internal/controlhealth"
 	"github.com/audspect/bas/internal/correlation"
 	"github.com/audspect/bas/internal/db"
+	"github.com/audspect/bas/internal/db/migrate"
 	"github.com/audspect/bas/internal/detect"
 	"github.com/audspect/bas/internal/dnssink"
 	"github.com/audspect/bas/internal/emsweep"
@@ -184,6 +185,16 @@ func main() {
 	if len(os.Args) > 1 && os.Args[1] == "--healthcheck" {
 		os.Exit(runHealthcheck())
 	}
+	// `orchestrator migrate up|status|rotate-app-password` (H1): the only code
+	// path that changes the schema. Run by install.sh, never by the server.
+	if len(os.Args) > 1 && os.Args[1] == "migrate" {
+		cfg, err := config.Load("config.json")
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "migrate: config: %v\n", err)
+			os.Exit(1)
+		}
+		os.Exit(runMigrateCmd(os.Args[2:], cfg, os.Stdout))
+	}
 
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
@@ -238,56 +249,10 @@ func main() {
 		}
 	}
 
-	// ── Database: bootstrap connection (bas_user) ───────────────────────────
-	// Schema DDL and bas_app provisioning run here, as the privileged
-	// bootstrap/schema-owner role. Closed once that work is done -- the
-	// application never holds this connection past startup. See
-	// docs/superpowers/specs/2026-09-30-runtime-role-separation-design.md.
-	adminCtx, adminCancel := context.WithTimeout(context.Background(), 30*time.Second)
-	adminPool, err := db.Connect(adminCtx, cfg.DatabaseAdminURL)
-	adminCancel()
-	if err != nil {
-		log.Fatalf("[FATAL] db admin connect: %v", err)
-	}
-	log.Println("[+] PostgreSQL (admin) connected")
-
-	if err := db.EnsureSchema(context.Background(), adminPool); err != nil {
-		log.Fatalf("[FATAL] schema bootstrap: %v", err)
-	}
-	if err := db.EnsureContentSchema(context.Background(), adminPool); err != nil {
-		log.Fatalf("[FATAL] content schema bootstrap: %v", err)
-	}
-	if err := db.EnsureIOCSchema(context.Background(), adminPool); err != nil {
-		log.Fatalf("[FATAL] ioc schema bootstrap: %v", err)
-	}
-	if err := db.EnsureIOCEnrichmentSchema(context.Background(), adminPool); err != nil {
-		log.Fatalf("[FATAL] ioc enrichment schema bootstrap: %v", err)
-	}
-	if err := db.EnsureAgentGroupSchema(context.Background(), adminPool); err != nil {
-		log.Fatalf("[FATAL] agent group schema bootstrap: %v", err)
-	}
-	if err := db.EnsureAgentUninstallSchema(context.Background(), adminPool); err != nil {
-		log.Fatalf("[FATAL] agent uninstall schema bootstrap: %v", err)
-	}
-	if err := db.EnsureExerciseSchema(context.Background(), adminPool); err != nil {
-		log.Fatalf("[FATAL] exercise schema: %v", err)
-	}
-	log.Println("[+] Schema verified")
-
-	// ── bas_app provisioning ─────────────────────────────────────────────
-	// Idempotent every boot: creates bas_app if absent, syncs its password
-	// from BAS_APP_DB_PASSWORD, and grants exactly the runtime DML it needs.
-	// Must run after every schema call above, against every table those
-	// calls just created.
-	if err := db.EnsureAppRole(context.Background(), adminPool, cfg.AppDBPassword); err != nil {
-		log.Fatalf("[FATAL] bas_app provisioning: %v", err)
-	}
-	adminPool.Close()
-	log.Println("[+] bas_app provisioned")
-
 	// ── Database: runtime connection (bas_app) ───────────────────────────
-	// Every application code path from here on uses this pool -- the
-	// bootstrap connection above is already closed.
+	// The server never runs DDL, DML on reference data, or role statements:
+	// `orchestrator migrate up` (install.sh) owns all of that (H1). Startup
+	// only checks that the schema and reference data match this release.
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	pool, err := db.Connect(ctx, cfg.DatabaseURL)
 	cancel()
@@ -296,6 +261,11 @@ func main() {
 	}
 	defer pool.Close()
 	log.Println("[+] PostgreSQL (runtime) connected")
+
+	if err := migrate.CheckRuntime(context.Background(), pool); err != nil {
+		log.Fatalf("[FATAL] %v", err)
+	}
+	log.Println("[+] Schema version verified")
 
 	if err := assertRuntimeIdentity(context.Background(), pool); err != nil {
 		log.Fatalf("[FATAL] runtime identity check: %v", err)

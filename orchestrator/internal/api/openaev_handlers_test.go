@@ -10,7 +10,6 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/audspect/bas/internal/db"
 	"github.com/audspect/bas/internal/openaev"
 	"github.com/audspect/bas/internal/scenario"
 	"github.com/audspect/bas/internal/ws"
@@ -37,7 +36,6 @@ func TestGetOpenAEVConfig_RedactsToken(t *testing.T) {
 		t.Skip("skipping container-backed test in -short mode")
 	}
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
-		db.EnsureSchema(context.Background(), pool)
 		pool.Exec(context.Background(),
 			`INSERT INTO openaev_config (id, base_url, bearer_token, enabled) VALUES (1, 'https://openaev.local', 'super-secret', true)
 			 ON CONFLICT (id) DO UPDATE SET base_url = EXCLUDED.base_url, bearer_token = EXCLUDED.bearer_token, enabled = EXCLUDED.enabled`)
@@ -71,7 +69,6 @@ func TestGetOpenAEVConfig_ConfiguredFlagDistinguishesFirstTimeFromUpdate(t *test
 		t.Skip("skipping container-backed test in -short mode")
 	}
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
-		db.EnsureSchema(context.Background(), pool)
 		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "")
 
 		preRec := httptest.NewRecorder()
@@ -106,7 +103,6 @@ func TestDeleteOpenAEVConfig_RemovesStoredCredentials(t *testing.T) {
 		t.Skip("skipping container-backed test in -short mode")
 	}
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
-		db.EnsureSchema(context.Background(), pool)
 		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "")
 
 		h.PutOpenAEVConfig(httptest.NewRecorder(), httptest.NewRequest(http.MethodPut, "/api/openaev/config",
@@ -141,7 +137,6 @@ func TestGetOpenAEVStatus_ReturnsSyncCounts(t *testing.T) {
 		t.Skip("skipping container-backed test in -short mode")
 	}
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
-		db.EnsureSchema(context.Background(), pool)
 		pool.Exec(context.Background(),
 			`INSERT INTO openaev_config (id, enabled, last_sync_status, last_sync_created, last_sync_updated, last_sync_skipped, last_sync_errored)
 			 VALUES (1, true, 'ok', 3, 2, 5, 1)
@@ -172,7 +167,6 @@ func TestGetOpenAEVConfig_ReturnsSyncCountsDefaultZero(t *testing.T) {
 		t.Skip("skipping container-backed test in -short mode")
 	}
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
-		db.EnsureSchema(context.Background(), pool)
 		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "")
 		rec := httptest.NewRecorder()
 		h.GetOpenAEVConfig(rec, httptest.NewRequest(http.MethodGet, "/api/openaev/config", nil))
@@ -190,7 +184,6 @@ func TestListOpenAEVScenarios_EmptyByDefault(t *testing.T) {
 		t.Skip("skipping container-backed test in -short mode")
 	}
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
-		db.EnsureContentSchema(context.Background(), pool)
 		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "")
 		rec := httptest.NewRecorder()
 		h.ListOpenAEVScenarios(rec, httptest.NewRequest(http.MethodGet, "/api/openaev/scenarios", nil))
@@ -211,7 +204,6 @@ func TestListOpenAEVScenarios_DefaultsToScenarioType(t *testing.T) {
 		t.Skip("skipping container-backed test in -short mode")
 	}
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
-		db.EnsureContentSchema(context.Background(), pool)
 		store := openaev.NewSQLStore(pool)
 		store.Upsert(context.Background(), openaev.Scenario{OpenAEVScenarioID: "sc-filter-1", Name: "Scn", SourceType: "scenario"}, openaev.Detail{}, "h1", 10, 1)
 		store.Upsert(context.Background(), openaev.Scenario{OpenAEVScenarioID: "sc-filter-2", Name: "Exc", SourceType: "exercise"}, openaev.Detail{}, "h2", 10, 1)
@@ -235,7 +227,6 @@ func TestListOpenAEVScenarios_TypeExercise_FiltersToExercises(t *testing.T) {
 		t.Skip("skipping container-backed test in -short mode")
 	}
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
-		db.EnsureContentSchema(context.Background(), pool)
 		store := openaev.NewSQLStore(pool)
 		store.Upsert(context.Background(), openaev.Scenario{OpenAEVScenarioID: "sc-filter-3", Name: "Scn", SourceType: "scenario"}, openaev.Detail{}, "h3", 10, 1)
 		store.Upsert(context.Background(), openaev.Scenario{OpenAEVScenarioID: "sc-filter-4", Name: "Exc", SourceType: "exercise"}, openaev.Detail{}, "h4", 10, 1)
@@ -266,8 +257,6 @@ func TestImportOpenAEVBundle_ParsesAndStores(t *testing.T) {
 		t.Skip("skipping container-backed test in -short mode")
 	}
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
-		db.EnsureSchema(context.Background(), pool)
-		db.EnsureContentSchema(context.Background(), pool)
 		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "")
 
 		var body bytes.Buffer

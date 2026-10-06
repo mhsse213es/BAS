@@ -7,7 +7,6 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/audspect/bas/internal/db"
 	"github.com/audspect/bas/internal/testutil"
 )
 
@@ -25,12 +24,6 @@ func TestStore_UpsertThenGet(t *testing.T) {
 		t.Skip("skipping container-backed test in -short mode")
 	}
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
-		if err := db.EnsureSchema(context.Background(), pool); err != nil {
-			t.Fatalf("EnsureSchema: %v", err)
-		}
-		if err := db.EnsureContentSchema(context.Background(), pool); err != nil {
-			t.Fatalf("EnsureContentSchema: %v", err)
-		}
 		store := NewSQLStore(pool)
 
 		scenario := Scenario{
@@ -65,8 +58,6 @@ func TestStore_UpsertSameHashDoesNotBumpRevision(t *testing.T) {
 		t.Skip("skipping container-backed test in -short mode")
 	}
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
-		db.EnsureSchema(context.Background(), pool)
-		db.EnsureContentSchema(context.Background(), pool)
 		store := NewSQLStore(pool)
 
 		scenario := Scenario{OpenAEVScenarioID: "sc-store-002", Name: "A"}
@@ -88,8 +79,6 @@ func TestStore_UpsertDifferentHashBumpsRevision(t *testing.T) {
 		t.Skip("skipping container-backed test in -short mode")
 	}
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
-		db.EnsureSchema(context.Background(), pool)
-		db.EnsureContentSchema(context.Background(), pool)
 		store := NewSQLStore(pool)
 
 		scenario := Scenario{OpenAEVScenarioID: "sc-store-003", Name: "A"}
@@ -111,8 +100,6 @@ func TestStore_SyncState_NotFound(t *testing.T) {
 		t.Skip("skipping container-backed test in -short mode")
 	}
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
-		db.EnsureSchema(context.Background(), pool)
-		db.EnsureContentSchema(context.Background(), pool)
 		store := NewSQLStore(pool)
 
 		_, _, found, err := store.SyncState(context.Background(), "no-such-scenario")
@@ -130,8 +117,6 @@ func TestStore_UpsertPersistsSourceType(t *testing.T) {
 		t.Skip("skipping container-backed test in -short mode")
 	}
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
-		db.EnsureSchema(context.Background(), pool)
-		db.EnsureContentSchema(context.Background(), pool)
 		store := NewSQLStore(pool)
 
 		scenario := Scenario{OpenAEVScenarioID: "sc-sourcetype-001", Name: "A", SourceType: "exercise"}
@@ -154,8 +139,6 @@ func TestStore_UpsertDefaultsEmptySourceTypeToScenario(t *testing.T) {
 		t.Skip("skipping container-backed test in -short mode")
 	}
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
-		db.EnsureSchema(context.Background(), pool)
-		db.EnsureContentSchema(context.Background(), pool)
 		store := NewSQLStore(pool)
 
 		scenario := Scenario{OpenAEVScenarioID: "sc-sourcetype-002", Name: "A"} // SourceType left unset
@@ -173,8 +156,6 @@ func TestStore_ListFiltersBySourceType(t *testing.T) {
 		t.Skip("skipping container-backed test in -short mode")
 	}
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
-		db.EnsureSchema(context.Background(), pool)
-		db.EnsureContentSchema(context.Background(), pool)
 		store := NewSQLStore(pool)
 
 		store.Upsert(context.Background(), Scenario{OpenAEVScenarioID: "sc-list-scn", Name: "Scn", SourceType: "scenario"}, Detail{}, "h1", 10, 1)

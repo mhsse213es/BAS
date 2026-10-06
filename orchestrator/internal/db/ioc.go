@@ -4,19 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/audspect/bas/internal/db/legacy"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/audspect/bas/internal/ioc"
 )
-
-// EnsureIOCSchema creates the run_iocs table. Idempotent -- safe to call on
-// every startup.
-func EnsureIOCSchema(ctx context.Context, pool *pgxpool.Pool) error {
-	return legacy.EnsureIOCSchema(ctx, pool)
-}
 
 // UpsertRunIOCs replaces the full set of extracted indicators for a run.
 // Delete-then-insert (not a merge) mirrors the "agent always submits a

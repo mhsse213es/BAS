@@ -135,16 +135,15 @@ services:
       # or sslmode=verify-full with PGSSLROOTCERT set.
       #
       # DATABASE_URL is the orchestrator's normal runtime connection -- bas_app,
-      # NOSUPERUSER/NOBYPASSRLS, owns nothing. DATABASE_ADMIN_URL is used only
-      # during startup schema bootstrap/bas_app provisioning, then closed. See
-      # docs/superpowers/specs/2026-09-30-runtime-role-separation-design.md.
+      # NOSUPERUSER/NOBYPASSRLS, owns nothing. The server never runs DDL and
+      # never receives the schema-owner credentials: install.sh runs
+      # `orchestrator migrate up` as a one-off container with
+      # DATABASE_ADMIN_URL passed only to that run (H1, see
+      # docs/superpowers/specs/2026-10-06-h1-versioned-migrations-design.md).
       DATABASE_URL:       "postgres://bas_app:${BAS_APP_DB_PASSWORD}@postgres:5432/${POSTGRES_DB:-bas_platform}?sslmode=prefer"
-      DATABASE_ADMIN_URL: "postgres://${POSTGRES_USER:-bas_user}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-bas_platform}?sslmode=prefer"
-      # Also passed standalone (not just embedded in DATABASE_URL above) --
-      # config.Load() reads BAS_APP_DB_PASSWORD directly via os.Getenv, it
-      # never parses the DSN. Both references interpolate from the same
-      # compose variable (sourced from the one .env value install.sh
-      # writes), so they cannot diverge.
+      # Read standalone by config.Load() (it never parses the DSN); used by
+      # the migrate run, unused by the server. Same .env value as above, so
+      # the two cannot diverge.
       BAS_APP_DB_PASSWORD: ${BAS_APP_DB_PASSWORD}
       JWT_SECRET:       ${JWT_SECRET}
       AGENT_SECRET:     ${AGENT_SECRET:-}

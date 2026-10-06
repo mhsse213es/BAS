@@ -3,7 +3,6 @@ package db
 import (
 	"context"
 	"fmt"
-	"github.com/audspect/bas/internal/db/legacy"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -20,12 +19,6 @@ func Connect(ctx context.Context, dsn string) (*pgxpool.Pool, error) {
 		return nil, fmt.Errorf("db ping: %w", err)
 	}
 	return pool, nil
-}
-
-// EnsureSchema creates all required tables if they do not exist.
-// Idempotent — safe to call on every startup.
-func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
-	return legacy.EnsureSchema(ctx, pool)
 }
 
 // ── Compliance snapshots ──────────────────────────────────────────────────────

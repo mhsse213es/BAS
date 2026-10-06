@@ -192,18 +192,19 @@ func TestLoad_LegacyListenerEnabledFalseOverride(t *testing.T) {
 	}
 }
 
-func TestLoad_DatabaseAdminURLRequired(t *testing.T) {
+// H1: the server connects only as bas_app and never runs DDL, so it needs
+// neither DATABASE_ADMIN_URL nor BAS_APP_DB_PASSWORD; only `orchestrator
+// migrate` requires them (checked in cmd/server/migrate_cmd.go).
+func TestLoad_ServerNeedsNoAdminURLOrAppPassword(t *testing.T) {
 	os.Setenv("DATABASE_URL", "postgres://bas_app:pw@localhost/bas_platform")
 	os.Setenv("JWT_SECRET", "test-secret-32-bytes-long-enough")
-	os.Setenv("BAS_APP_DB_PASSWORD", "test-app-password")
 	os.Unsetenv("DATABASE_ADMIN_URL")
+	os.Unsetenv("BAS_APP_DB_PASSWORD")
 	defer os.Unsetenv("DATABASE_URL")
 	defer os.Unsetenv("JWT_SECRET")
-	defer os.Unsetenv("BAS_APP_DB_PASSWORD")
 
-	_, err := Load("/nonexistent/config.json")
-	if err == nil {
-		t.Fatal("expected an error when DATABASE_ADMIN_URL is unset, got nil")
+	if _, err := Load("/nonexistent/config.json"); err != nil {
+		t.Fatalf("Load without admin URL / app password: %v", err)
 	}
 }
 
@@ -246,21 +247,6 @@ func TestLoad_ToleratesStrayBreakglassEnvVar(t *testing.T) {
 
 	if _, err := Load("/nonexistent/config.json"); err != nil {
 		t.Fatalf("Load should tolerate a stray BAS_DB_BREAKGLASS_PASSWORD, got: %v", err)
-	}
-}
-
-func TestLoad_AppDBPasswordRequired(t *testing.T) {
-	os.Setenv("DATABASE_URL", "postgres://bas_app:pw@localhost/bas_platform")
-	os.Setenv("DATABASE_ADMIN_URL", "postgres://bas_user:pw@localhost/bas_platform")
-	os.Setenv("JWT_SECRET", "test-secret-32-bytes-long-enough")
-	os.Unsetenv("BAS_APP_DB_PASSWORD")
-	defer os.Unsetenv("DATABASE_URL")
-	defer os.Unsetenv("DATABASE_ADMIN_URL")
-	defer os.Unsetenv("JWT_SECRET")
-
-	_, err := Load("/nonexistent/config.json")
-	if err == nil {
-		t.Fatal("expected an error when BAS_APP_DB_PASSWORD is unset, got nil")
 	}
 }
 

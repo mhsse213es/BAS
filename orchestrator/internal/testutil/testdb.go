@@ -12,7 +12,7 @@ import (
 	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
 
-	"github.com/audspect/bas/internal/db"
+	"github.com/audspect/bas/internal/db/migrate"
 )
 
 // TestDB is a live Postgres instance backing one or more tests.
@@ -23,8 +23,8 @@ type TestDB struct {
 }
 
 // newTestDB starts a postgres:16-alpine container (matching production —
-// see packaging/compose/docker-compose.yml), applies the real schema via
-// db.EnsureSchema + db.EnsureContentSchema + db.EnsureExerciseSchema, and returns a ready harness.
+// see packaging/compose/docker-compose.yml), applies the real schema with
+// migrate.Up, and returns a ready harness.
 func newTestDB(ctx context.Context) (*TestDB, error) {
 	// Bounded so a Docker/WSL2 networking stall during container startup or
 	// the initial connection fails fast with a clear error instead of
@@ -73,40 +73,12 @@ func newTestDB(ctx context.Context) (*TestDB, error) {
 		return nil, fmt.Errorf("testutil: ping pool: %w", err)
 	}
 
-	if err := db.EnsureSchema(ctx, pool); err != nil {
+	// The real schema and reference data, exactly as `orchestrator migrate up`
+	// builds them (H1). No role step: tests connect as the schema owner.
+	if _, err := migrate.Up(ctx, dsn, migrate.Options{SkipRole: true}); err != nil {
 		pool.Close()
 		_ = container.Terminate(context.Background())
-		return nil, fmt.Errorf("testutil: EnsureSchema: %w", err)
-	}
-	if err := db.EnsureContentSchema(ctx, pool); err != nil {
-		pool.Close()
-		_ = container.Terminate(context.Background())
-		return nil, fmt.Errorf("testutil: EnsureContentSchema: %w", err)
-	}
-	if err := db.EnsureExerciseSchema(ctx, pool); err != nil {
-		pool.Close()
-		_ = container.Terminate(context.Background())
-		return nil, fmt.Errorf("testutil: EnsureExerciseSchema: %w", err)
-	}
-	if err := db.EnsureIOCSchema(ctx, pool); err != nil {
-		pool.Close()
-		_ = container.Terminate(context.Background())
-		return nil, fmt.Errorf("testutil: EnsureIOCSchema: %w", err)
-	}
-	if err := db.EnsureIOCEnrichmentSchema(ctx, pool); err != nil {
-		pool.Close()
-		_ = container.Terminate(context.Background())
-		return nil, fmt.Errorf("testutil: EnsureIOCEnrichmentSchema: %w", err)
-	}
-	if err := db.EnsureAgentGroupSchema(ctx, pool); err != nil {
-		pool.Close()
-		_ = container.Terminate(context.Background())
-		return nil, fmt.Errorf("testutil: EnsureAgentGroupSchema: %w", err)
-	}
-	if err := db.EnsureAgentUninstallSchema(ctx, pool); err != nil {
-		pool.Close()
-		_ = container.Terminate(context.Background())
-		return nil, fmt.Errorf("testutil: EnsureAgentUninstallSchema: %w", err)
+		return nil, fmt.Errorf("testutil: migrate up: %w", err)
 	}
 
 	return &TestDB{
@@ -201,12 +173,17 @@ func truncateAll(t *testing.T, pool *pgxpool.Pool) {
 	}
 	rows.Close()
 	for _, name := range tables {
+		// Migration and reference-data versions describe the schema, not
+		// per-test data; truncating them would make the database look unmigrated.
+		if name == "schema_migrations" || name == "reference_data_version" {
+			continue
+		}
 		if _, err := pool.Exec(ctx, `TRUNCATE TABLE "`+name+`" CASCADE`); err != nil {
 			t.Fatalf("testutil: truncate %s: %v", name, err)
 		}
 	}
 	// Truncation wiped the tenants bootstrap row. Restore the invariant
-	// EnsureSchema establishes ("a 'default' tenant always exists") so
+	// seed 0001 establishes ("a 'default' tenant always exists") so
 	// users.tenant_id's FK and its DEFAULT 'default' keep working for every
 	// subsequent test in the shared container.
 	if _, err := pool.Exec(ctx, `INSERT INTO tenants (id, name, slug, status)
@@ -214,7 +191,7 @@ func truncateAll(t *testing.T, pool *pgxpool.Pool) {
 		ON CONFLICT (id) DO NOTHING`); err != nil {
 		t.Fatalf("testutil: reseed default tenant: %v", err)
 	}
-	// Same problem, same fix, for sla_policy -- EnsureSchema's 4 default
+	// Same problem, same fix, for sla_policy -- seed 0001's 4 default
 	// severity rows are reference data, not per-test data, but the blanket
 	// TRUNCATE above wipes them like any other table. Without this, only
 	// the first test in a shared container to touch sla_policy would ever

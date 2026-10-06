@@ -3,21 +3,12 @@ package db_test
 import (
 	"context"
 	"testing"
-
-	"github.com/audspect/bas/internal/db"
 )
 
-// EnsureAgentGroupSchema must be safe to call repeatedly (startup runs it
-// every boot) and must leave both the new table and the new agents column
-// in place.
-func TestEnsureAgentGroupSchema_Idempotent(t *testing.T) {
+// The migrated schema has the agent_groups table and agents.group_id
+// (re-running is covered by migrate.TestUp_Idempotent since H1).
+func TestSchema_AgentGroupObjects(t *testing.T) {
 	ctx := context.Background()
-	if err := db.EnsureAgentGroupSchema(ctx, sharedDB.Pool); err != nil {
-		t.Fatalf("first EnsureAgentGroupSchema: %v", err)
-	}
-	if err := db.EnsureAgentGroupSchema(ctx, sharedDB.Pool); err != nil {
-		t.Fatalf("second EnsureAgentGroupSchema (idempotency): %v", err)
-	}
 
 	var tableExists bool
 	err := sharedDB.Pool.QueryRow(ctx,

@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/audspect/bas/internal/db/legacy"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -13,12 +12,6 @@ import (
 
 	"github.com/audspect/bas/internal/ioc"
 )
-
-// EnsureIOCEnrichmentSchema creates the ioc_enrichment cache table. Idempotent
-// -- safe to call on every startup.
-func EnsureIOCEnrichmentSchema(ctx context.Context, pool *pgxpool.Pool) error {
-	return legacy.EnsureIOCEnrichmentSchema(ctx, pool)
-}
 
 // Enrichment is one cached provider lookup result for one indicator.
 type Enrichment struct {
