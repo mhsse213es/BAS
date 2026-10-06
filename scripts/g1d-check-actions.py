@@ -75,6 +75,16 @@ def check(web_dir, baseline_path=DEFAULT_BASELINE):
     for name in sorted(explicit - used - builtins):
         errors.append(f"unused action: {name}")
 
+    window_writes = set(_block(globals_js, "WINDOW_WRITES")) if "WINDOW_WRITES" in globals_js else set()
+    for p, text in js.items():
+        if p.name == "globals.js":
+            continue
+        for name in re.findall(r"(?<![\w$.])window\.([A-Za-z_$][\w$]*)\s*=(?!=)", text):
+            if name not in window_writes:
+                errors.append(f"window write not in WINDOW_WRITES: {name}")
+        if re.search(r"(?<![\w$.])window\[", text):
+            errors.append(f"window[...] lookup in {p.relative_to(web_dir).as_posix()}")
+
     now = counts(web_dir)
     base = json.loads(Path(baseline_path).read_text(encoding="utf-8"))
     for key, label in (("inline_handlers", "inline handlers"), ("javascript_urls", "javascript: URLs")):

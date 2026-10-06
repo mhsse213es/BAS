@@ -20,7 +20,7 @@ export function on(eventType, name, ...args) {
   return attr;
 }
 
-// Common action: replaces onclick="event.stopPropagation()".
+// Common action: replaces an inline click handler that called event.stopPropagation().
 export function stopEvent(el, event) { event.stopPropagation(); }
 
 export function dispatch(registry, type, event) {

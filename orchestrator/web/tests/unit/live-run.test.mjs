@@ -7,7 +7,7 @@ import { setupDom, load } from './dom.mjs';
 import { state } from '../../src/core/state.js';
 
 setupDom();
-const { __init_L16159 } = await load(['__init_L16159']);
+const { __init_L16159, openRunPanel, onRunEvent } = await load(['__init_L16159', 'openRunPanel', 'onRunEvent']);
 __init_L16159();
 
 const events = [
@@ -18,7 +18,7 @@ const events = [
 test('openRunPanel replays technique steps and takes their tactic from the shared ART catalog', async () => {
   state.artCatalog = [{ id: 'T1059', name: 'Command and Scripting Interpreter', tactic: 'execution' }];
   globalThis.fetch = async () => ({ ok: true, json: async () => events });
-  await window.openRunPanel('run-1', 'Run', 1);
+  await openRunPanel('run-1', 'Run', 1);
   const timeline = document.getElementById('run-live-timeline').textContent;
   assert.match(timeline, /T1059/, 'replayed step was not rendered');
   assert.match(timeline, /Execution/, 'tactic not resolved from the ART catalog');
@@ -27,7 +27,7 @@ test('openRunPanel replays technique steps and takes their tactic from the share
 test('onRunEvent renders a live technique step without throwing', async () => {
   state.artCatalog = [];
   globalThis.fetch = async () => ({ ok: true, json: async () => [] });
-  await window.openRunPanel('run-2', 'Run', 1);
-  window.onRunEvent({ type: 'run_event', data: { runId: 'run-2', events: [{ type: 'queued', taskId: 't9', techniqueId: 'T1082', stepName: 'live step' }] } });
+  await openRunPanel('run-2', 'Run', 1);
+  onRunEvent({ type: 'run_event', data: { runId: 'run-2', events: [{ type: 'queued', taskId: 't9', techniqueId: 'T1082', stepName: 'live step' }] } });
   assert.match(document.getElementById('run-live-timeline').textContent, /T1082/);
 });

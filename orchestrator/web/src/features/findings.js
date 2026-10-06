@@ -17,7 +17,7 @@ export function findingSevBadge(sev, exp) {
 }
 export function loadSLAReport() {
   apicall('/api/sla/report').then(function(rep) {
-    window._slaReport = rep;
+    state._slaReport = rep;
     var empty = document.getElementById('sla-rpt-empty');
     var body = document.getElementById('sla-rpt-body');
     if (!rep.overall || rep.overall.totalEpisodes === 0) {
@@ -99,7 +99,7 @@ function formatFindingAge(f) {
 function findingStatusClass(st) { return st === 'open' ? 'failed' : st === 'remediated' ? 'completed' : 'partial'; }
 export function loadFindings() {
   apicall('/api/findings').then(function(list) {
-    window._findings = list || [];
+    state._findings = list || [];
     renderFindingsTiles(); renderFindingsTabs(); renderFindingsRows();
     // Async: load ticket candidates to show ticket badges on rows (analyst+)
     if (ROLE === 'admin' || ROLE === 'analyst') loadTicketCandidates();
@@ -112,7 +112,7 @@ export function loadFindings() {
   }).catch(function(e) { showToast(e.message, 'err'); });
 }
 function renderFindingsTiles() {
-  var l = window._findings || [];
+  var l = state._findings || [];
   var open = l.filter(function(f) { return f.status === 'open'; }).length;
   var crit = l.filter(function(f) { return f.status === 'open' && f.severity === 'Critical'; }).length;
   var reopened = l.filter(function(f) { return f.status === 'open' && f.reopenedCount > 0; }).length;
@@ -133,7 +133,7 @@ function renderFindingsTiles() {
     tile('Remediated · 30d', remediated, 'var(--success)');
 }
 function renderFindingsTabs() {
-  var l = window._findings || [];
+  var l = state._findings || [];
   var c = function(k) { return k === 'all' ? l.length : l.filter(function(f) { return f.status === k; }).length; };
   document.getElementById('findings-toolbar').innerHTML = covSegHtml(
     [['all', 'All'], ['open', 'Open'], ['triaged', 'Triaged'], ['remediated', 'Remediated'], ['risk_accepted', 'Risk-accepted']],
@@ -142,7 +142,7 @@ function renderFindingsTabs() {
 }
 export function setFindingTab(v) { FINDING_TAB = v; renderFindingsTabs(); renderFindingsRows(); }
 function renderFindingsRows() {
-  var l = (window._findings || []).filter(function(f) { return FINDING_TAB === 'all' || f.status === FINDING_TAB; });
+  var l = (state._findings || []).filter(function(f) { return FINDING_TAB === 'all' || f.status === FINDING_TAB; });
   var tb = document.getElementById('findings-body');
   var canTriage = (ROLE === 'admin' || ROLE === 'analyst');
   var canPush = canTriage;
@@ -275,7 +275,7 @@ export function setFindingStatus(id, status) {
 // ── Remediation ──────────────────────────────────────────────────────────────
 export function loadRemediations() {
   apicall('/api/remediations').then(function(list) {
-    window._rems = list || [];
+    state._rems = list || [];
     renderRemTiles(); renderRemList();
   }).catch(function(e) { document.getElementById('rem-list').innerHTML = '<div class="empty" style="padding:2rem">' + x(e.message) + '</div>'; });
 }
@@ -290,7 +290,7 @@ var REM_SVG = {
   eye12: '<svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1 8s2.5-5 7-5 7 5 7 5-2.5 5-7 5-7-5-7-5z"/><circle cx="8" cy="8" r="2"/></svg>'
 };
 function renderRemTiles() {
-  var l = window._rems || [];
+  var l = state._rems || [];
   var findingsTotal = l.reduce(function(s, r) { return s + (r.findingCount || 0); }, 0);
   var crit = l.filter(function(r) { return r.severity === 'Critical'; }).length;
   var tile = function(lbl, val, col, iconBg, icon, foot) {
@@ -305,7 +305,7 @@ function renderRemTiles() {
     tile('Critical remediations', crit, crit ? 'var(--danger)' : 'var(--muted)', crit ? 'rgba(218,54,51,0.12)' : 'rgba(154,169,188,0.12)', REM_SVG.shield, 'highest attacker value');
 }
 function renderRemList() {
-  var l = window._rems || [];
+  var l = state._rems || [];
   var el = document.getElementById('rem-list');
   if (!l.length) { el.innerHTML = '<div class="empty" style="padding:2rem">No open remediations — nothing to fix right now.</div>'; return; }
   el.innerHTML = l.map(function(r, i) {
@@ -332,7 +332,7 @@ function renderRemList() {
   }).join('');
 }
 export function openRemediation(i) {
-  var r = (window._rems || [])[i];
+  var r = (state._rems || [])[i];
   if (!r) return;
   document.getElementById('results-title').textContent = r.techniqueId + ' — Remediation';
   document.getElementById('results-export').innerHTML =
@@ -533,7 +533,7 @@ function toggleFindingsBulkMode(enabled) {
 export function toggleAllFindingChecks(checked) {
   _findingsSelected = {};
   if (checked) {
-    var l = (window._findings || []).filter(function(f) { return FINDING_TAB === 'all' || f.status === FINDING_TAB; });
+    var l = (state._findings || []).filter(function(f) { return FINDING_TAB === 'all' || f.status === FINDING_TAB; });
     l.forEach(function(f) { _findingsSelected[f.id] = true; });
   }
   renderFindingsRows();
@@ -572,7 +572,7 @@ export function bulkPushSelectedFindings() {
 
 // ── Remediation bulk tickets ─────────────────────────────────────────────────
 export function remBulkTicket(filter) {
-  var rems = window._rems || [];
+  var rems = state._rems || [];
   var targets = filter === 'critical' ? rems.filter(function(r) { return r.severity === 'Critical'; }) : rems;
   if (!targets.length) { showToast('No remediations to ticket', 'err'); return; }
   var findingIds = [];
@@ -582,7 +582,7 @@ export function remBulkTicket(filter) {
 }
 
 export function remSingleTicket(i) {
-  var r = (window._rems || [])[i];
+  var r = (state._rems || [])[i];
   if (!r) return;
   var findingIds = r.findingIds || [];
   if (!findingIds.length) { showToast(r.techniqueId + ' has no finding IDs — re-validate first', 'err'); return; }

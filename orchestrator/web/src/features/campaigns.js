@@ -34,14 +34,14 @@ export function campaignDisplayStatus(s) {
 var CAMPAIGN_TAB = 'all';
 export function loadCampaigns() {
   apicall('/api/campaigns').then(function(list) {
-    window._campaigns = list || [];
-    document.getElementById('campaign-cnt').textContent = window._campaigns.length;
+    state._campaigns = list || [];
+    document.getElementById('campaign-cnt').textContent = state._campaigns.length;
     renderCampaignToolbar();
     renderCampaignRows();
   }).catch(function(e) { showToast(e.message, 'err'); });
 }
 function renderCampaignToolbar() {
-  var list = window._campaigns || [];
+  var list = state._campaigns || [];
   var count = function(k) { return k === 'all' ? list.length : list.filter(function(c) { return (c.summary || {}).status === k; }).length; };
   var items = [['all', 'All'], ['running', 'Running'], ['completed', 'Completed'], ['partial', 'Partial'], ['failed', 'Failed'], ['stopped', 'Stopped'], ['empty', 'Empty']]
     .filter(function(o) { return o[0] === 'all' || count(o[0]) > 0; });
@@ -49,7 +49,7 @@ function renderCampaignToolbar() {
 }
 export function setCampaignTab(v) { CAMPAIGN_TAB = v; renderCampaignToolbar(); renderCampaignRows(); }
 function renderCampaignRows() {
-  var list = (window._campaigns || []).filter(function(c) { return CAMPAIGN_TAB === 'all' || (c.summary || {}).status === CAMPAIGN_TAB; });
+  var list = (state._campaigns || []).filter(function(c) { return CAMPAIGN_TAB === 'all' || (c.summary || {}).status === CAMPAIGN_TAB; });
   var tb = document.getElementById('campaigns-body');
   if (!list.length) { tb.innerHTML = '<tr><td colspan="6" class="empty">No campaigns' + (CAMPAIGN_TAB === 'all' ? ' yet.' : ' in this state.') + '</td></tr>'; return; }
   tb.innerHTML = list.map(function(c) {

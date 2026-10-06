@@ -214,9 +214,9 @@ export function renderTmplAgentCount() {
 // replaces: "renderTmplGroupList mirrors renderVexRunGroupList's exact
 // pattern"): flatten the agent-group tree into a checkbox list showing
 // each group's total agent count. stateVarName names the global
-// {groupId: bool} selection map (read live via window[] so the render
-// always reflects current state); summaryFnName is called after every
-// render, empty or not; onchangeFnNames lists every function (by name,
+// {groupId: bool} selection map (a key of the shared state object, read live so
+// the render always reflects current state); summaryFn is the summary
+// function itself, called after every render, empty or not; onchangeFnNames lists every function (by name,
 // in order) a checkbox's own onchange should call after updating the
 // selection map -- this is NOT always just [summaryFnName]
 // (renderGroupTargetList's checkboxes call renderRunMode() instead, and
@@ -237,14 +237,14 @@ export function tmplGroupChange(id, el) {
   renderTmplOSCompat();
 }
 
-export function renderGroupCheckboxList(listElId, emptyClass, stateVarName, summaryFnName, changeAction) {
+export function renderGroupCheckboxList(listElId, emptyClass, stateVarName, summaryFn, changeAction) {
   var list = document.getElementById(listElId);
   if (!list) return;
-  var stateVar = window[stateVarName];
+  var stateVar = state[stateVarName];
   var options = gpFlattenGroups(agentGroupTree, 0, null, []);
   if (!options.length) {
     list.innerHTML = '<p class="' + emptyClass + '" style="margin:0">No agent groups have been created yet.</p>';
-    window[summaryFnName]();
+    summaryFn();
     return;
   }
   var countMap = {};
@@ -258,10 +258,10 @@ export function renderGroupCheckboxList(listElId, emptyClass, stateVarName, summ
       '<span style="font-size:0.8rem">' + x(o.label) + '</span>' +
       '<span class="tiny muted">(' + (countMap[o.id] || 0) + ' agents)</span></label>';
   }).join('');
-  window[summaryFnName]();
+  summaryFn();
 }
 function renderTmplGroupList() {
-  renderGroupCheckboxList('tmpl-run-group-list', 'tiny muted', '_tmplGroupSel', 'renderTmplGroupSummary', 'tmplGroupChange');
+  renderGroupCheckboxList('tmpl-run-group-list', 'tiny muted', '_tmplGroupSel', renderTmplGroupSummary, 'tmplGroupChange');
 }
 
 function tmplResolvedGroupAgents() {

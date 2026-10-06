@@ -15,6 +15,9 @@ import { MODE_LABELS, verdictBadge, verdictCounts } from './reports.js';
 // reconstructs the same state, then live frames take over. Each step row shows
 // the technique ID, human-readable step name, tactic badge, state, verdict, and
 // duration. Click a row to expand full detail (ATT&CK link, exit code, etc.).
+// Assigned by the Live Run IIFE below (__init_L16159) and called through the
+// module-level exports at the bottom; never published on window.
+let _toggleLiveStep, _openRunPanel, _onRunEvent;
 export function __init_L16159() {
 (function () {
   var state = { runId: null, steps: new Map(), total: 0, done: 0, failed: 0, running: 0 };
@@ -176,7 +179,7 @@ export function __init_L16159() {
   }
 
   // Toggle expanded detail for a step row (click handler).
-  window.toggleLiveStep = function (taskId) {
+  _toggleLiveStep = function (taskId) {
     var s = state.steps.get(taskId);
     if (!s) return;
     s.expanded = !s.expanded;
@@ -226,7 +229,7 @@ export function __init_L16159() {
   }
 
   // Opened from a run row. Replays persisted events first (reconnect-safe), then
-  // live frames arrive via window.onRunEvent.
+  // live frames arrive via onRunEvent().
   //
   // knownStepsTotal seeds state.total directly from the run row's own
   // progress summary (scenario_runs.steps_total, always populated once any
@@ -243,7 +246,7 @@ export function __init_L16159() {
   // this is invoked from data-args action attributes elsewhere —
   // an embedded JSON.stringify object's double quotes would terminate the
   // attribute early.
-  window.openRunPanel = async function (runId, name, knownStepsTotal, mode, maxPrivilege) {
+  _openRunPanel = async function (runId, name, knownStepsTotal, mode, maxPrivilege) {
     state.runId = runId; state.steps = new Map(); state.total = knownStepsTotal || 0;
     state.done = 0; state.failed = 0; state.running = 0;
     document.getElementById('run-live-title').textContent = (name || 'Run') + ' — Live';
@@ -262,7 +265,7 @@ export function __init_L16159() {
   };
 
   // Called from the shared browser-WS onmessage handler for run_event frames.
-  window.onRunEvent = function (msg) {
+  _onRunEvent = function (msg) {
     if (!msg || msg.type !== 'run_event' || !msg.data) return;
     if (msg.data.runId !== state.runId) return;
     (msg.data.events || []).forEach(applyEvent);
@@ -272,8 +275,12 @@ export function __init_L16159() {
 }
 
 
-export function toggleLiveStepAction(taskId) { window.toggleLiveStep(taskId); }
-export function openRunPanelAction(runId, name, knownStepsTotal, mode, maxPrivilege) { return window.openRunPanel(runId, name, knownStepsTotal, mode, maxPrivilege); }
+export function toggleLiveStep(taskId) { return _toggleLiveStep(taskId); }
+export function openRunPanel(runId, name, knownStepsTotal, mode, maxPrivilege) { return _openRunPanel(runId, name, knownStepsTotal, mode, maxPrivilege); }
+// Called from the shared browser-WS onmessage handler (features/evidence.js).
+export function onRunEvent(msg) { return _onRunEvent(msg); }
+export function toggleLiveStepAction(taskId) { toggleLiveStep(taskId); }
+export function openRunPanelAction(runId, name, knownStepsTotal, mode, maxPrivilege) { return openRunPanel(runId, name, knownStepsTotal, mode, maxPrivilege); }
 export function openSweepReport(sweepId) { window.open('/api/vex/sweeps/' + encodeURIComponent(sweepId) + '/report', '_blank'); }
 
 export function closeRunLive() { document.getElementById('run-live-overlay').classList.remove('open'); }

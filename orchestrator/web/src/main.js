@@ -1,4 +1,4 @@
-import { installGlobals, ACTIONS } from './globals.js';
+import { ACTIONS } from './globals.js';
 import { installActions } from './core/actions.js';
 import './core/api.js';
 import './core/escape.js';
@@ -30,7 +30,6 @@ import './features/variant-executor.js';
 import './features/variant-report.js';
 import './features/variants.js';
 
-installGlobals();
 installActions(ACTIONS);
 __init_L5162();
 __init_L5212();

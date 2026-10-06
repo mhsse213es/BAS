@@ -347,7 +347,7 @@ export function setVexTargetMode(mode) {
 // gpFlattenGroups (the same helper the Run Scenario wizard's own Group(s)
 // mode already uses), each row showing that group's own totalAgentCount.
 function renderVexGroupList() {
-  renderGroupCheckboxList('vex-sweep-group-list', 'tiny muted', '_vexGroupSel', 'renderVexGroupSummary', 'vexSweepGroupChange');
+  renderGroupCheckboxList('vex-sweep-group-list', 'tiny muted', '_vexGroupSel', renderVexGroupSummary, 'vexSweepGroupChange');
 }
 
 // vexResolvedGroupAgents resolves the currently-checked groups to their
@@ -594,7 +594,7 @@ export function setVexRunTargetMode(mode) {
 // Full Sweep's own Group(s) modes already use), each row showing that
 // group's own totalAgentCount.
 function renderVexRunGroupList() {
-  renderGroupCheckboxList('vex-run-group-list', 'tiny muted', '_vexRunGroupSel', 'renderVexRunGroupSummary', 'vexRunGroupChange');
+  renderGroupCheckboxList('vex-run-group-list', 'tiny muted', '_vexRunGroupSel', renderVexRunGroupSummary, 'vexRunGroupChange');
 }
 
 // vexRunResolvedGroupAgents resolves the currently-checked groups to their

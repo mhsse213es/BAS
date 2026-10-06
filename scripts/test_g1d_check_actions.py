@@ -100,6 +100,15 @@ class TestActions(unittest.TestCase):
         d, _ = make('<a href="javascript:void(0)" onclick="f()"></a>', "s = '<b onchange=\\\"g()\\\">';\n")
         self.assertEqual(g.counts(d), {"inline_handlers": 2, "javascript_urls": 1})
 
+    def test_window_write_outside_allowlist_fails(self):
+        g_js = GLOBALS + "export const WINDOW_WRITES = [\n  'onRunEvent',\n];\n"
+        d, b = make(CLEAN_HTML, "window.onRunEvent = f;\nwindow.sneaky = 1;\n", globals_js=g_js)
+        self.assertIn("window write not in WINDOW_WRITES: sneaky", g.check(d, b))
+
+    def test_window_bracket_lookup_fails(self):
+        d, b = make(CLEAN_HTML, "var sel = window[name];\n")
+        self.assertIn("window[...] lookup in src/a.js", g.check(d, b))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -7,6 +7,7 @@ import { _apOnCollected, _apOnJobUpdate, _apOnProgress, _onRevalidationStarted, 
 import { loadEndpointPostureWidget, loadKEVWidget, loadReadinessTrends } from './campaigns.js';
 import { loadComplianceScores, refreshDashboardCampaigns } from './compliance.js';
 import { openTechnique } from './coverage.js';
+import { onRunEvent } from './live-run.js';
 import { findingSevBadge, loadDashboardITSM, openFinding } from './findings.js';
 import { loadRansomwareReadiness } from './ransomware.js';
 import { additionalAgentIds, closeModal, loadRuns, openBuilder, openModal, resolvedAllTargetIds, resolvedGroupTargetIds, scenarioFramework, viewRunResults } from './reports.js';
@@ -60,7 +61,7 @@ export function copyRaw(text) {
 }
 
 export function openEvidence(idx) {
-  var results = window._evidenceResults || [];
+  var results = state._evidenceResults || [];
   var c = results[idx];
   if (!c) return;
   var techName = (c.technique && c.technique.name) || c.name || 'Technique';
@@ -690,9 +691,9 @@ export function connectWS() {
     try {
       var msg = JSON.parse(evt.data);
       if (msg.type === 'run_event') {
-        window.onRunEvent(msg);
+        onRunEvent(msg);
         // A paused/resumed confirmation must refresh the Live Runs table --
-        // window.onRunEvent above only updates the Live drawer (scoped to
+        // onRunEvent above only updates the Live drawer (scoped to
         // whichever single run's drawer, if any, is currently open). Filtered
         // to this rare event type so it doesn't fire loadRuns() on every
         // routine step-level event.
@@ -773,7 +774,7 @@ function cmdkOpenResult(r) {
     setTimeout(function() { showThreatPriorityDetail(r.title); }, 150);
   } else if (r.docType === 'technique') {
     // The 150ms delay matters here, not just as a defensive habit:
-    // openTechnique() reads window._covSt[id], populated asynchronously by
+    // openTechnique() reads state._covSt[id], populated asynchronously by
     // loadCoverageMatrix() (kicked off by showTab('attack-coverage')) --
     // calling it too early shows a wrong "Untested" badge for a technique
     // that may actually be covered.
