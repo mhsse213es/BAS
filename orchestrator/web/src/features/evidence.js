@@ -1,6 +1,7 @@
 import { state } from '../core/state.js';
 import { apicall } from '../core/api.js';
 import { x } from '../core/escape.js';
+import { on } from '../core/actions.js';
 import { ago, daysAgo, fmtDate, showToast } from '../core/util.js';
 import { _apOnCollected, _apOnJobUpdate, _apOnProgress, _onRevalidationStarted, _onSIEMCorrelationComplete, renderScenarios, requestAgentsLiveRefresh, showSettingsSection, showThreatPriorityDetail } from './attack-path.js';
 import { loadEndpointPostureWidget, loadKEVWidget, loadReadinessTrends } from './campaigns.js';
@@ -183,7 +184,7 @@ function renderEvidencePanel(c) {
       return '<div style="display:flex;align-items:center;gap:0.5rem;padding:0.16rem 0">'
         + '<code style="font-size:0.64rem;color:var(--accent);min-width:2.8rem">' + evIdStr + '</code>'
         + '<span style="font-size:0.69rem;color:var(--text);flex:1">' + x(evName) + '</span>'
-        + '<button onclick="copyRaw(\'' + evIdStr + '\')" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:0.63rem;padding:0" title="Copy ID">&#128203;</button>'
+        + '<button' + on('click', 'copyRaw', String(evId)) + ' style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:0.63rem;padding:0" title="Copy ID">&#128203;</button>'
         + '</div>';
     }).join('');
     srHtml += '</div>';
@@ -208,13 +209,12 @@ function renderEvidencePanel(c) {
 
   var exHtml = kv('Method', x(cmdMethod));
   if (cmd) {
-    var cmdJson = JSON.stringify(cmd);
     exHtml += '<div style="display:flex;gap:0.75rem;padding:0.18rem 0;border-bottom:1px solid rgba(34,50,74,0.4)">'
       + '<span style="min-width:6.5rem;color:var(--muted);font-size:0.69rem;flex-shrink:0;padding-top:0.05rem">Command</span>'
       + '<details style="flex:1;cursor:pointer"><summary style="list-style:none;color:var(--accent);font-size:0.68rem">View Full Command &#9660;</summary>'
       + '<div style="margin-top:0.4rem;display:flex;gap:0.4rem;align-items:flex-start">'
       + '<code style="font-size:0.62rem;background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:0.35rem 0.5rem;display:block;word-break:break-all;flex:1;color:var(--text);line-height:1.5">' + x(cmd) + '</code>'
-      + '<button onclick="copyRaw(' + cmdJson + ')" style="background:none;border:1px solid var(--border);border-radius:3px;color:var(--muted);cursor:pointer;font-size:0.63rem;padding:0.2rem 0.35rem;flex-shrink:0" title="Copy">&#128203;</button>'
+      + '<button' + on('click', 'copyRaw', cmd) + ' style="background:none;border:1px solid var(--border);border-radius:3px;color:var(--muted);cursor:pointer;font-size:0.63rem;padding:0.2rem 0.35rem;flex-shrink:0" title="Copy">&#128203;</button>'
       + '</div></details></div>';
   }
   if (c.pid) exHtml += kv('PID', x(String(c.pid)));
@@ -308,13 +308,12 @@ function renderEvidencePanel(c) {
 
   // ── 7. Execution Logs ──
   if (c.rawOutput) {
-    var rawJson = JSON.stringify(c.rawOutput);
     var logsHtml = '<details><summary style="cursor:pointer;list-style:none;display:flex;align-items:center;gap:0.5rem;color:var(--muted);font-size:0.72rem">'
       + '<span style="color:var(--accent)">&#9658;</span> View Execution Logs</summary>'
       + '<div style="margin-top:0.5rem">'
       + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.3rem">'
       + '<span style="font-size:0.62rem;color:var(--muted)">stdout / stderr</span>'
-      + '<button onclick="copyRaw(' + rawJson + ')" style="background:none;border:1px solid var(--border);border-radius:3px;color:var(--muted);cursor:pointer;font-size:0.62rem;padding:0.15rem 0.4rem">&#128203; Copy</button>'
+      + '<button' + on('click', 'copyRaw', c.rawOutput) + ' style="background:none;border:1px solid var(--border);border-radius:3px;color:var(--muted);cursor:pointer;font-size:0.62rem;padding:0.15rem 0.4rem">&#128203; Copy</button>'
       + '</div>'
       + '<pre style="background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:0.6rem;font-size:0.64rem;color:var(--text);overflow-x:auto;white-space:pre-wrap;word-break:break-all;max-height:180px;overflow-y:auto;margin:0">'
       + x(c.rawOutput) + '</pre></div></details>';
@@ -1004,9 +1003,9 @@ export function loadUsers() {
       var statusBadge = u.isActive ? '<span class="sbadge s-completed">Active</span>' : '<span class="sbadge s-offline">Disabled</span>';
       var mustPw = u.mustChangePw ? ' <span class="tag u-warning">pw reset</span>' : '';
       var actions =
-        '<button class="btn btn-outline btn-sm" onclick="openEditUser(\'' + x(u.id) + '\',\'' + x(u.username) + '\',\'' + x(u.role) + '\')">Edit</button>' +
-        ' <button class="btn btn-outline btn-sm" onclick="doResetPassword(\'' + x(u.id) + '\',\'' + x(u.username) + '\')" style="margin-left:0.3rem">Reset PW</button>' +
-        ' <button class="btn btn-outline-' + (u.isActive ? 'red' : 'green') + ' btn-sm" onclick="toggleUserActive(\'' + x(u.id) + '\',' + !u.isActive + ')" style="margin-left:0.3rem">' + (u.isActive ? 'Disable' : 'Enable') + '</button>';
+        '<button class="btn btn-outline btn-sm"' + on('click', 'openEditUser', u.id, u.username, u.role) + '>Edit</button>' +
+        ' <button class="btn btn-outline btn-sm"' + on('click', 'doResetPassword', u.id, u.username) + ' style="margin-left:0.3rem">Reset PW</button>' +
+        ' <button class="btn btn-outline-' + (u.isActive ? 'red' : 'green') + ' btn-sm"' + on('click', 'toggleUserActive', u.id, !u.isActive) + ' style="margin-left:0.3rem">' + (u.isActive ? 'Disable' : 'Enable') + '</button>';
       return '<tr>' +
         '<td><strong>' + x(u.username) + '</strong>' + mustPw + '</td>' +
         '<td>' + (ROLE_LABELS[u.role] || x(u.role)) + '</td>' +
@@ -1040,6 +1039,11 @@ export function submitCreateUser() {
     closeCreateUser(); showToast('User ' + username + ' created', 'ok'); loadUsers();
   })
   .catch(function(e) { document.getElementById('cu-err').textContent = e.message; });
+}
+
+export function openFindingFromDashboard(id) {
+  showTab('findings');
+  setTimeout(function() { openFinding(id); }, 150);
 }
 
 export function openEditUser(id, username, role) {
@@ -1484,7 +1488,7 @@ export function loadDashboard() {
         var top = open.slice(0, 5);
         if (bodyEl) {
           bodyEl.innerHTML = top.length ? top.map(function(f) {
-            return '<div class="lrow u-pointer" onclick="showTab(\'findings\');setTimeout(function(){openFinding(\'' + x(f.id) + '\')},150)">' +
+            return '<div class="lrow u-pointer"' + on('click', 'openFindingFromDashboard', f.id) + '>' +
               '<div class="lmain"><div class="lt">' + x(f.techniqueName || f.techniqueId) + '</div>' +
               '<div class="ls"><span class="tech-id">' + x(f.techniqueId) + '</span> · ' + x(f.controlClass) + ' · ' + x(f.agentId) + '</div></div>' +
               '<div class="lr">' + findingSevBadge(f.severity, f.exposureState) + '</div></div>';
