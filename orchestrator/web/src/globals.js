@@ -16,7 +16,7 @@ import { bulkPushSelectedFindings, loadFindings, loadSLAReport, openFinding, ope
 import { closeInitiativeAttachDrawer, closeInitiativeAttachDrawerOnBackdrop, closeInitiativeCreateDrawer, closeInitiativeCreateDrawerOnBackdrop, closeInitiativeDrawer, closeInitiativeDrawerOnBackdrop, initiativeArchiveAction, initiativeCloseAction, initiativeDeleteAction, initiativeDetachJob, initiativeRenderAttachList, initiativeSetFilter, loadInitiatives, openInitiativeAttachDrawer, openInitiativeCreateDrawer, openInitiativeDrawer, submitInitiativeAttach, submitInitiativeCreate } from './features/initiatives.js';
 import { closeConnectorForm, closeRespondModal, closeResponseConnectorForm, deleteConnector, deleteResponseConnector, fetchConnectorProjects, openAddConnector, openAddResponseConnector, openEditConnector, openEditResponseConnector, openRespondModal, renderConnectorSettings, renderRespondFields, renderResponseConnectorFields, saveConnectorForm, saveResponseConnectorForm, submitRespondAction, testConnectorById, testConnectorForm, testResponseConnectorById } from './features/integrations.js';
 import { closeIOCImportModal, closeResults, closeResultsOnBackdrop, loadIOCRegistry, loadIOCRegistryOnEnter, openIOCDetail, openIOCImportModal, setRunIOCSearchFromInput, setRunIOCTypeFilter, submitIOCImport, toggleIOCSuppressed, toggleRunIOCRow } from './features/iocs.js';
-import { closeRunLive, closeRunLiveOnBackdrop, closeSweepDrilldown, closeSweepDrilldownOnBackdrop, openSweepDrilldown } from './features/live-run.js';
+import { closeRunLive, closeRunLiveOnBackdrop, closeSweepDrilldown, closeSweepDrilldownOnBackdrop, openRunPanelAction, openSweepDrilldown, openSweepReport, toggleLiveStepAction } from './features/live-run.js';
 import { abortExecution, approveExStep, closeExerciseDetail, closeExerciseDetailOnBackdrop, closeOpenAEVDetail, closeOpenAEVDetailOnBackdrop, createPlanFromOpenAEV, launchExercisePrompt, openExerciseDetail, openOpenAEVDetail, removeOpenAEVConfig, saveOpenAEVConfig, syncOpenAEVNow, testOpenAEVConfig, toggleAPHistory } from './features/openaev.js';
 import { runRansomwareDrill } from './features/ransomware.js';
 import { addStep, applyPicker, clearSelection, cloneScenario, closeBuilder, closeBuilderOnBackdrop, closeModal, closePicker, closeReportGen, deleteCustomScenario, downloadBuilderYaml, genAgentReport, loadRuns, moveStep, openBuilder, openBuilderARTPicker, openBuilderCalderaPicker, openDetailedViewForScenario, openModal, openPicker, openPickerFromModal, openReportGen, pickScenarioUploadFile, pickerSelectAll, pickerToggle, removeStep, renderAdditionalAgentsCount, renderBuilderMode, renderGroupTargetSummary, renderPickerList, renderRunMode, saveScenario, selectAllAdditionalAgents, setPF, setTargetMode, submitReport, switchRunTab, techChangeSelection, techCopyId, techOnBlur, techOnKeydown, techSelectRow, updateVariantDepthNote, uploadScenarioFile, viewRunResults, wizardNav } from './features/reports.js';
@@ -422,7 +422,9 @@ export const ACTIONS = {
   openAgentDetailRiskTab,
   openComplianceDetail,
   openFindingFromDashboard,
+  openRunPanelAction,
   openSettingsFromMenu,
+  openSweepReport,
   pickScenarioUploadFile,
   scenarioSearchClear,
   schedAuthCheckChange,
@@ -436,6 +438,7 @@ export const ACTIONS = {
   tamperAckHoverOn,
   tmplRunModeChange,
   toggleAllFindingChecksFromChecked,
+  toggleLiveStepAction,
   toggleUserMenuFromEvent,
 };
 
