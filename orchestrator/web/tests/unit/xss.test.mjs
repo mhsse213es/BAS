@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import { setupDom, load, PAYLOADS } from './dom.mjs';
 
 setupDom();
-const { initiativeStateLabel, openAdvDrawer, openFinding, renderRunReportExtra, renderVariantCoverage, complianceTile, renderAgentRiskSummary, loadScheduledAssessments, loadTAXIIConnectors, loadUsers, openSweepDrilldown, loadAgtLogs, renderResponseConnectorList, loadInitiatives, loadAdversaries, vexStatCard, vfLoadQueue } =
-  await load(['initiativeStateLabel', 'openAdvDrawer', 'openFinding', 'renderRunReportExtra', 'renderVariantCoverage', 'complianceTile', 'renderAgentRiskSummary', 'loadScheduledAssessments', 'loadTAXIIConnectors', 'loadUsers', 'openSweepDrilldown', 'loadAgtLogs', 'renderResponseConnectorList', 'loadInitiatives', 'loadAdversaries', 'vexStatCard', 'vfLoadQueue']);
+const { initiativeStateLabel, openAdvDrawer, openFinding, renderRunReportExtra, renderVariantCoverage, complianceTile, renderAgentRiskSummary, loadScheduledAssessments, loadTAXIIConnectors, loadUsers, openSweepDrilldown, loadAgtLogs, renderResponseConnectorList, loadInitiatives, loadAdversaries, vexStatCard, vfLoadQueue, loadExercisesTab } =
+  await load(['initiativeStateLabel', 'openAdvDrawer', 'openFinding', 'renderRunReportExtra', 'renderVariantCoverage', 'complianceTile', 'renderAgentRiskSummary', 'loadScheduledAssessments', 'loadTAXIIConnectors', 'loadUsers', 'openSweepDrilldown', 'loadAgtLogs', 'renderResponseConnectorList', 'loadInitiatives', 'loadAdversaries', 'vexStatCard', 'vfLoadQueue', 'loadExercisesTab']);
 const tick = () => new Promise((r) => setTimeout(r, 0));
 
 function assertInert(container, label) {
@@ -209,6 +209,19 @@ test('detection-verification: vfLoadQueue keeps payloads inside data-args', asyn
     await tick(); await tick();
     const div = document.getElementById('vf-queue');
     assertInert(div, 'vfLoadQueue');
+    assert.ok(div.querySelector('[data-args]'), 'fixture did not render');
+    const args = [...div.querySelectorAll('[data-args]')].map((e) => e.getAttribute('data-args')).join(' ');
+    assert.ok(args.includes(JSON.stringify(p).slice(1, -1)), 'payload should travel as data-args');
+  }
+});
+
+test('openaev: loadExercisesTab keeps payloads inside data-args', async () => {
+  for (const p of PAYLOADS) {
+    globalThis.fetch = async () => ({ status: 200, json: async () => ([{ id: p, name: p, steps: [] }]) });
+    loadExercisesTab();
+    await tick(); await tick();
+    const div = document.getElementById('ex-plans-body');
+    assertInert(div, 'loadExercisesTab');
     assert.ok(div.querySelector('[data-args]'), 'fixture did not render');
     const args = [...div.querySelectorAll('[data-args]')].map((e) => e.getAttribute('data-args')).join(' ');
     assert.ok(args.includes(JSON.stringify(p).slice(1, -1)), 'payload should travel as data-args');

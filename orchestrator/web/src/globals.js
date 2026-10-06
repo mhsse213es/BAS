@@ -17,7 +17,7 @@ import { closeInitiativeAttachDrawer, closeInitiativeAttachDrawerOnBackdrop, clo
 import { closeConnectorForm, closeRespondModal, closeResponseConnectorForm, connectorProjectSelectChange, deleteConnector, deleteResponseConnector, fetchConnectorProjects, openAddConnector, openAddResponseConnector, openEditConnector, openEditResponseConnector, openRespondModal, renderConnectorSettings, renderRespondFields, renderResponseConnectorFields, saveConnectorForm, saveResponseConnectorForm, submitRespondAction, testConnectorById, testConnectorForm, testResponseConnectorById } from './features/integrations.js';
 import { closeIOCImportModal, closeResults, closeResultsOnBackdrop, loadIOCRegistry, loadIOCRegistryOnEnter, openIOCDetail, openIOCImportModal, setRunIOCSearchFromInput, setRunIOCTypeFilter, submitIOCImport, toggleIOCSuppressed, toggleRunIOCRow } from './features/iocs.js';
 import { closeRunLive, closeRunLiveOnBackdrop, closeSweepDrilldown, closeSweepDrilldownOnBackdrop, openRunPanelAction, openSweepDrilldown, openSweepReport, toggleLiveStepAction } from './features/live-run.js';
-import { abortExecution, approveExStep, closeExerciseDetail, closeExerciseDetailOnBackdrop, closeOpenAEVDetail, closeOpenAEVDetailOnBackdrop, createPlanFromOpenAEV, launchExercisePrompt, openExerciseDetail, openOpenAEVDetail, removeOpenAEVConfig, saveOpenAEVConfig, syncOpenAEVNow, testOpenAEVConfig, toggleAPHistory } from './features/openaev.js';
+import { abortExecution, abortExecutionStop, approveExStep, closeExerciseDetail, closeExerciseDetailOnBackdrop, closeOpenAEVDetail, closeOpenAEVDetailOnBackdrop, createPlanFromOpenAEV, launchExercisePrompt, openExerciseDetail, openOpenAEVDetail, removeOpenAEVConfig, saveOpenAEVConfig, syncOpenAEVNow, testOpenAEVConfig, toggleAPHistory } from './features/openaev.js';
 import { runRansomwareDrill } from './features/ransomware.js';
 import { addStep, applyPicker, clearSelection, cloneScenario, closeBuilder, closeBuilderOnBackdrop, closeModal, closePicker, closeReportGen, deleteCustomScenario, downloadBuilderYaml, genAgentReport, loadRuns, moveStep, openBuilder, openBuilderARTPicker, openBuilderCalderaPicker, openDetailedViewForScenario, openModal, openPicker, openPickerFromModal, openReportGen, pickScenarioUploadFile, pickerSelectAll, pickerToggle, removeStep, renderAdditionalAgentsCount, renderBuilderMode, renderGroupTargetSummary, renderPickerList, renderRunMode, saveScenario, selectAllAdditionalAgents, setPF, setTargetMode, submitReport, switchRunTab, techChangeSelection, techCopyId, techOnBlur, techOnKeydown, techSelectRow, updateVariantDepthNote, uploadScenarioFile, viewRunResults, wizardNav } from './features/reports.js';
 import { closeRerunReview, closeRerunReviewOnBackdrop, openCampaignRerunReview, openRerunReview, startRerunFromReview } from './features/rerun-review.js';
@@ -386,6 +386,7 @@ export const HANDLER_FUNCTIONS = {
 export const ACTIONS = {
   ...HANDLER_FUNCTIONS,
   stopEvent,
+  abortExecutionStop,
   apAssetsClose,
   apCollectViewResults,
   apScheduleClose,
