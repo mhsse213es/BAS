@@ -542,6 +542,11 @@ export function openModal(scenarioId, preAgent, lockAgent) {
 
 // renderRunMode shows the Posture/Live selector only for executable (hybrid)
 // scenarios, and toggles the live-execution warning.
+export function runGroupChange(id, el) {
+  state._groupSel[id] = el.checked;
+  renderRunMode();
+}
+
 export function renderRunMode() {
   renderModalSelection();
   renderAdditionalAgents();
@@ -763,7 +768,7 @@ export function resolvedAllTargetIds() {
 // showing that group's own totalAgentCount as a quick-glance hint before any
 // OS filtering is applied.
 function renderGroupTargetList() {
-  renderGroupCheckboxList('modal-group-list', 'sub2', '_groupSel', 'renderGroupTargetSummary', ['renderRunMode']);
+  renderGroupCheckboxList('modal-group-list', 'sub2', '_groupSel', 'renderGroupTargetSummary', 'runGroupChange');
 }
 
 // renderGroupTargetSummary/renderAllTargetSummary only update their own summary

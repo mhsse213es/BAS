@@ -7,7 +7,8 @@ import assert from 'node:assert/strict';
 import { setupDom, load } from './dom.mjs';
 
 setupDom();
-const fns = await load(['toggleRowMenuById', 'openComplianceDetail']);
+const fns = await load(['toggleRowMenuById', 'openComplianceDetail', 'tmplGroupChange', 'runGroupChange', 'vexSweepGroupChange', 'vexRunGroupChange']);
+const { state } = await import('../../src/core/state.js');
 const tick = () => new Promise((r) => setTimeout(r, 0));
 
 function delegatedEvent(extra = {}) {
@@ -63,3 +64,19 @@ test('openComplianceDetail selects the framework only after the options have loa
   assert.equal(document.getElementById('cmp-fw-sel').value, 'fw-1');
   assert.ok(urls.some((u) => u.includes('/api/compliance/frameworks')), 'frameworks fetched');
 });
+
+// Group-selection checkboxes: each caller has its own fixed state key and
+// renderers; nothing is looked up by a name taken from data-args.
+for (const [action, key] of [['tmplGroupChange', '_tmplGroupSel'], ['runGroupChange', '_groupSel'], ['vexSweepGroupChange', '_vexGroupSel'], ['vexRunGroupChange', '_vexRunGroupSel']]) {
+  test(`${action} records the checkbox in state.${key} when dispatched`, () => {
+    state[key] = {};
+    const box = document.createElement('input');
+    box.type = 'checkbox';
+    box.checked = true;
+    dispatchTo(fns[action], box, [7], delegatedEvent());
+    assert.deepEqual(state[key], { 7: true });
+    box.checked = false;
+    dispatchTo(fns[action], box, [7], delegatedEvent());
+    assert.deepEqual(state[key], { 7: false });
+  });
+}

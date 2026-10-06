@@ -347,7 +347,7 @@ export function setVexTargetMode(mode) {
 // gpFlattenGroups (the same helper the Run Scenario wizard's own Group(s)
 // mode already uses), each row showing that group's own totalAgentCount.
 function renderVexGroupList() {
-  renderGroupCheckboxList('vex-sweep-group-list', 'tiny muted', '_vexGroupSel', 'renderVexGroupSummary', ['renderVexGroupSummary']);
+  renderGroupCheckboxList('vex-sweep-group-list', 'tiny muted', '_vexGroupSel', 'renderVexGroupSummary', 'vexSweepGroupChange');
 }
 
 // vexResolvedGroupAgents resolves the currently-checked groups to their
@@ -357,6 +357,16 @@ function renderVexGroupList() {
 function vexResolvedGroupAgents() {
   var selectedGroupIds = Object.keys(state._vexGroupSel).filter(function(k) { return state._vexGroupSel[k]; }).map(Number);
   return resolveGroupTargetAgents(selectedGroupIds);
+}
+
+export function vexSweepGroupChange(id, el) {
+  state._vexGroupSel[id] = el.checked;
+  renderVexGroupSummary();
+}
+
+export function vexRunGroupChange(id, el) {
+  state._vexRunGroupSel[id] = el.checked;
+  renderVexRunGroupSummary();
 }
 
 export function renderVexGroupSummary() {
@@ -584,7 +594,7 @@ export function setVexRunTargetMode(mode) {
 // Full Sweep's own Group(s) modes already use), each row showing that
 // group's own totalAgentCount.
 function renderVexRunGroupList() {
-  renderGroupCheckboxList('vex-run-group-list', 'tiny muted', '_vexRunGroupSel', 'renderVexRunGroupSummary', ['renderVexRunGroupSummary']);
+  renderGroupCheckboxList('vex-run-group-list', 'tiny muted', '_vexRunGroupSel', 'renderVexRunGroupSummary', 'vexRunGroupChange');
 }
 
 // vexRunResolvedGroupAgents resolves the currently-checked groups to their
