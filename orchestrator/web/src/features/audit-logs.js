@@ -1,5 +1,6 @@
 import { apicall } from '../core/api.js';
 import { x } from '../core/escape.js';
+import { on } from '../core/actions.js';
 import { showToast } from '../core/util.js';
 import { buildReportFilename } from './evidence.js';
 
@@ -141,7 +142,7 @@ function renderBackupJobsTable(jobs) {
       '<td style="padding:0.4rem 0.5rem">' + (j.remotePath ? '✓' : '—') + '</td>' +
       '<td style="padding:0.4rem 0.5rem"><span class="sbadge" style="background:' + color + '22;color:' + color + ';border:1px solid ' + color + '44;font-size:0.7rem">' + x(label) + '</span></td>' +
       '<td style="padding:0.4rem 0.5rem">' +
-        (canRestore ? '<button class="btn btn-outline btn-sm" onclick="prepareRestore(\'' + j.id + '\')">Prepare Restore</button>' : '—') +
+        (canRestore ? '<button class="btn btn-outline btn-sm"' + on('click', 'prepareRestore', j.id) + '>Prepare Restore</button>' : '—') +
       '</td>' +
     '</tr>';
   }).join('');
