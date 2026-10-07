@@ -51,6 +51,10 @@ BAS_TLS=false                     # true | false
 # set it back to enforce and re-run --upgrade. There is no "off".
 BAS_CSP_MODE=enforce              # enforce | report-only
 
+# Optional trace export to a Tempo or Jaeger OTLP/HTTP receiver. Leave blank to
+# keep tracing off. Must be an http(s) URL, e.g. http://tempo.internal:4318.
+BAS_OTLP_ENDPOINT=
+
 # DNS_SINK_BIND_IP is the host IP the DLP DNS-tunneling sink (UDP/53) binds
 # to. Auto-detected (first non-loopback IP via `hostname -I`) if left blank.
 # It is deliberately NOT bound to 0.0.0.0 (all interfaces): on most Linux

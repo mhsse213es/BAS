@@ -57,5 +57,20 @@ for bad in off none reportonly; do
   fi
 done
 
+out="$(run_case '')"
+grep -q '^BAS_OTLP_ENDPOINT=$' <<<"$out" && pass "OTLP endpoint unset -> empty (tracing off)" || fail "OTLP unset: $out"
+
+out="$(run_case 'BAS_OTLP_ENDPOINT=http://tempo.internal:4318   # traces')"
+grep -q '^BAS_OTLP_ENDPOINT=http://tempo.internal:4318$' <<<"$out" && pass "OTLP endpoint from setup.conf reaches .env" || fail "OTLP set: $out"
+
+for bad in 'ftp://tempo:4318' 'tempo:4318' 'http://tempo 4318'; do
+  out="$(run_case "BAS_OTLP_ENDPOINT=${bad}")"
+  if grep -q 'ERR: .*BAS_OTLP_ENDPOINT' <<<"$out" && ! grep -q '^rc=0$' <<<"$out"; then
+    pass "BAS_OTLP_ENDPOINT=${bad} refused"
+  else
+    fail "BAS_OTLP_ENDPOINT=${bad} not refused: $out"
+  fi
+done
+
 echo
 [[ $fails -eq 0 ]] && echo "ALL PASS" || { echo "${fails} FAILED"; exit 1; }

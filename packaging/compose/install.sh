@@ -151,6 +151,7 @@ DNS_SINK_BIND_IP=""
 BAS_TLS=""
 BAS_SERVER_SANS=""
 BAS_CSP_MODE=""
+BAS_OTLP_ENDPOINT=""
 TLS_CERT=""
 TLS_KEY=""
 DB_PASSWORD=""
@@ -207,6 +208,7 @@ load_config() {
       BAS_TLS)              BAS_TLS="$val"              ;;
       BAS_SERVER_SANS)      BAS_SERVER_SANS="$val"      ;;
       BAS_CSP_MODE)         BAS_CSP_MODE="$val"         ;;
+      BAS_OTLP_ENDPOINT)    BAS_OTLP_ENDPOINT="$val"    ;;
       TLS_CERT)             TLS_CERT="$val"             ;;
       TLS_KEY)              TLS_KEY="$val"              ;;
       DB_PASSWORD)          DB_PASSWORD="$val"          ;;
@@ -263,6 +265,11 @@ load_config() {
     enforce|report-only) ;;
     *) err "setup.conf: BAS_CSP_MODE must be enforce or report-only (got: ${BAS_CSP_MODE})."; exit 1 ;;
   esac
+  # Trace export (optional, empty = off). The orchestrator skips a malformed
+  # endpoint with a log line, so refuse it here instead of shipping no traces.
+  if [[ -n "$BAS_OTLP_ENDPOINT" ]] && ! [[ "$BAS_OTLP_ENDPOINT" =~ ^https?://[^[:space:]]+$ ]]; then
+    err "setup.conf: BAS_OTLP_ENDPOINT must be an http(s) URL (got: ${BAS_OTLP_ENDPOINT})."; exit 1
+  fi
   [[ -z "$LOG_RETENTION_DAYS" ]] && LOG_RETENTION_DAYS="90"
   [[ -z "$BACKUP_RETENTION_DAILY"   ]] && BACKUP_RETENTION_DAILY="7"
   [[ -z "$BACKUP_RETENTION_WEEKLY"  ]] && BACKUP_RETENTION_WEEKLY="4"
@@ -1353,6 +1360,7 @@ DNS_SINK_BIND_IP=${DNS_SINK_BIND_IP}
 BAS_SERVER_SANS=${BAS_SERVER_SANS}
 BAS_TLS=${BAS_TLS}
 BAS_CSP_MODE=${BAS_CSP_MODE}
+BAS_OTLP_ENDPOINT=${BAS_OTLP_ENDPOINT}
 TLS_CERT=${TLS_CERT:-}
 TLS_KEY=${TLS_KEY:-}
 TLS_CERT_CONTAINER_PATH=${tls_cert_container_path}

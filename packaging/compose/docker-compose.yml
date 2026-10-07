@@ -231,6 +231,7 @@ services:
       # violations (POST /api/csp-report -> orchestrator log) -- a temporary
       # escape hatch if a client hits a violation. No "off" value exists.
       BAS_CSP_MODE: ${BAS_CSP_MODE:-enforce}
+      BAS_OTLP_ENDPOINT: ${BAS_OTLP_ENDPOINT:-}
       # How long a signed command envelope remains valid after issuance
       # (internal/ws/hub.go's commandEnvelopeTTLFromEnv); defaults to 60s if unset.
       COMMAND_ENVELOPE_TTL_SECONDS: ${COMMAND_ENVELOPE_TTL_SECONDS:-}
