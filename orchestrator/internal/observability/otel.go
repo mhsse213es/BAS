@@ -89,9 +89,27 @@ func NewTracerProviderWithConfig(config *OTelConfig) *trace.TracerProvider {
 		}
 	}
 
-	// TODO: Add Prometheus remote-write exporter (Task 6)
-	// TODO: Add Tempo exporter (Task 6)
-	// TODO: Add Jaeger exporter (Task 6)
+	// Prometheus remote-write is deliberately not wired here: it's a
+	// metrics-ingestion protocol and cannot carry trace spans at all, so a
+	// trace.SpanExporter is the wrong shape for it regardless of config --
+	// see the doc comment on NewPrometheusRemoteWriteExporter. Real
+	// Prometheus metrics already flow via the working, MetricsToken-gated
+	// /metrics scrape endpoint (metrics.go); config.Exporters.
+	// PrometheusRemoteWrite stays unused until a genuine push-based OTLP
+	// *metrics* exporter (otlpmetrichttp, a different SDK pipeline
+	// entirely) is wanted in addition to that.
+	if config.Exporters.TempoEndpoint != "" {
+		exporter, err := NewTempoExporter(config.Exporters.TempoEndpoint)
+		if err == nil {
+			exporters = append(exporters, exporter)
+		}
+	}
+	if config.Exporters.JaegerEndpoint != "" {
+		exporter, err := NewJaegerExporter(config.Exporters.JaegerEndpoint)
+		if err == nil {
+			exporters = append(exporters, exporter)
+		}
+	}
 
 	// Create tracer provider with exporters
 	var opts []trace.TracerProviderOption

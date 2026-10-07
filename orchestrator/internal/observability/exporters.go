@@ -9,10 +9,22 @@ import (
 	"go.opentelemetry.io/otel/sdk/trace"
 )
 
-// NewPrometheusRemoteWriteExporter creates a span exporter for Prometheus remote-write API.
-// Endpoint should be the full URL to the remote-write endpoint (e.g., http://prometheus:9009/api/v1/write).
-// Note: This returns a trace exporter stub for now. Full Prometheus metrics export is handled
-// separately via the metrics registry (Task 3).
+// NewPrometheusRemoteWriteExporter always returns a no-op exporter, by
+// design, not as an unfinished stub: Prometheus remote-write is a
+// metrics-ingestion protocol (a stream of timeseries samples), and
+// trace.SpanExporter -- this function's return type -- exports trace
+// spans. There is no shape of "Prometheus remote-write trace exporter" to
+// implement; the two don't carry the same data.
+//
+// Real Prometheus metrics export already works today via the separate,
+// MetricsToken-gated /metrics scrape endpoint (see metrics.go) -- which is
+// also the more standard deployment shape for a self-hosted Prometheus
+// against a single on-prem instance (it scrapes you; you don't push to it).
+// If a push-based OTLP *metrics* exporter is ever wanted in addition to
+// that, it needs the otlpmetrichttp exporter type and its own SDK metrics
+// pipeline, not this function. Endpoint/URL validation is still performed
+// so a misconfigured endpoint fails loudly instead of being silently
+// accepted.
 func NewPrometheusRemoteWriteExporter(endpoint string) (trace.SpanExporter, error) {
 	if endpoint == "" {
 		return nil, fmt.Errorf("prometheus remote-write endpoint cannot be empty")
@@ -23,9 +35,6 @@ func NewPrometheusRemoteWriteExporter(endpoint string) (trace.SpanExporter, erro
 		return nil, fmt.Errorf("invalid prometheus endpoint URL: %w", err)
 	}
 
-	// TODO: Implement actual Prometheus remote-write exporter in a future phase.
-	// For now, return a no-op exporter to satisfy the interface.
-	// This allows the configuration to be wired without blocking on Prometheus integration.
 	return newNoOpExporter(), nil
 }
 

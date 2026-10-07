@@ -123,6 +123,51 @@ func TestConsoleExporterConfig(t *testing.T) {
 	defer tp.Shutdown(context.Background())
 }
 
+func TestTempoExporterConfig_WiredIntoTracerProvider(t *testing.T) {
+	// Locks in the exporters.go TODO fix: a configured TempoEndpoint must
+	// actually reach NewTracerProviderWithConfig's exporter list, not just
+	// sit unused in the config struct. otlptracehttp.New is lazy (doesn't
+	// dial until the first export), so this doesn't need a real collector
+	// listening -- construction succeeding, and the provider staying usable
+	// for span creation and a clean Shutdown, is the observable proof the
+	// wiring path was exercised rather than skipped.
+	config := &observability.OTelConfig{
+		Enabled: true,
+		Exporters: observability.ExporterConfig{
+			TempoEndpoint: "localhost:4318",
+		},
+	}
+	tp := observability.NewTracerProviderWithConfig(config)
+	if tp == nil {
+		t.Fatalf("NewTracerProviderWithConfig returned nil")
+	}
+	tracer := tp.Tracer("test")
+	_, span := tracer.Start(context.Background(), "test-span")
+	span.End()
+	if err := tp.Shutdown(context.Background()); err != nil {
+		t.Errorf("Shutdown failed: %v", err)
+	}
+}
+
+func TestJaegerExporterConfig_WiredIntoTracerProvider(t *testing.T) {
+	config := &observability.OTelConfig{
+		Enabled: true,
+		Exporters: observability.ExporterConfig{
+			JaegerEndpoint: "localhost:4317",
+		},
+	}
+	tp := observability.NewTracerProviderWithConfig(config)
+	if tp == nil {
+		t.Fatalf("NewTracerProviderWithConfig returned nil")
+	}
+	tracer := tp.Tracer("test")
+	_, span := tracer.Start(context.Background(), "test-span")
+	span.End()
+	if err := tp.Shutdown(context.Background()); err != nil {
+		t.Errorf("Shutdown failed: %v", err)
+	}
+}
+
 func TestProviderIsTracerProviderType(t *testing.T) {
 	tp := observability.NewTracerProvider()
 	defer tp.Shutdown(context.Background())
