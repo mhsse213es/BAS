@@ -216,35 +216,28 @@ func (e *AlertEngine) GetFiredAlerts() []string {
 	return fired
 }
 
-// PrebuiltRules returns common alert rules (P0 example rules).
-func PrebuiltRules(metrics *MetricsRegistry) []*AlertRule {
+// PrebuiltRules returns the three operational rules. Each condition reads the
+// metrics registry (alert_conditions.go); schedulerInterval is the poll
+// interval of the scheduler whose tick rate is watched.
+func PrebuiltRules(metrics *MetricsRegistry, schedulerInterval time.Duration) []*AlertRule {
 	return []*AlertRule{
 		{
 			Name:        "high_active_tasks",
-			Description: "Executor has > 50 active tasks (possible queue buildup)",
+			Description: "More than 50 exercise steps are running or waiting (possible queue buildup)",
 			Severity:    "warning",
-			Condition: func() bool {
-				// TODO: Read from metrics registry when integrated
-				return false
-			},
+			Condition:   ActiveStepsAbove(metrics, 50),
 		},
 		{
 			Name:        "execution_errors_spike",
-			Description: "Execution errors increase > 10% in last 60s",
+			Description: "More than 10% of executions failed to dispatch in the last 60s",
 			Severity:    "critical",
-			Condition: func() bool {
-				// TODO: Compare histograms from metrics registry
-				return false
-			},
+			Condition:   ExecutionErrorSpike(metrics),
 		},
 		{
 			Name:        "scheduler_stalled",
-			Description: "Scheduler ticks dropped below 0.5/sec",
+			Description: "Scheduler tick rate fell below half its poll interval over the last 60s",
 			Severity:    "critical",
-			Condition: func() bool {
-				// TODO: Monitor scheduler tick frequency
-				return false
-			},
+			Condition:   SchedulerStalled(metrics, schedulerInterval),
 		},
 	}
 }

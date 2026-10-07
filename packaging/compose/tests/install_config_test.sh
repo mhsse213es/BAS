@@ -72,5 +72,20 @@ for bad in 'ftp://tempo:4318' 'tempo:4318' 'http://tempo 4318'; do
   fi
 done
 
+out="$(run_case 'BAS_ALERT_WEBHOOK=https://hooks.example.internal/bas')"
+grep -q '^BAS_ALERT_WEBHOOK=https://hooks.example.internal/bas$' <<<"$out" && pass "alert webhook from setup.conf reaches .env" || fail "alert webhook: $out"
+
+out="$(run_case '')"
+grep -q '^BAS_ALERT_WEBHOOK=$' <<<"$out" && pass "alert webhook unset -> empty (history only)" || fail "alert webhook unset: $out"
+
+for bad in 'ftp://hooks.example.internal' 'hooks.example.internal/bas'; do
+  out="$(run_case "BAS_ALERT_WEBHOOK=${bad}")"
+  if grep -q 'ERR: .*BAS_ALERT_WEBHOOK' <<<"$out" && ! grep -q '^rc=0$' <<<"$out"; then
+    pass "BAS_ALERT_WEBHOOK=${bad} refused"
+  else
+    fail "BAS_ALERT_WEBHOOK=${bad} not refused: $out"
+  fi
+done
+
 echo
 [[ $fails -eq 0 ]] && echo "ALL PASS" || { echo "${fails} FAILED"; exit 1; }

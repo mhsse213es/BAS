@@ -55,6 +55,10 @@ BAS_CSP_MODE=enforce              # enforce | report-only
 # keep tracing off. Must be an http(s) URL, e.g. http://tempo.internal:4318.
 BAS_OTLP_ENDPOINT=
 
+# Optional webhook for alert state changes (FIRING / RESOLVED), sent as JSON.
+# Blank keeps alerts in the server history only. Must be an http(s) URL.
+BAS_ALERT_WEBHOOK=
+
 # DNS_SINK_BIND_IP is the host IP the DLP DNS-tunneling sink (UDP/53) binds
 # to. Auto-detected (first non-loopback IP via `hostname -I`) if left blank.
 # It is deliberately NOT bound to 0.0.0.0 (all interfaces): on most Linux

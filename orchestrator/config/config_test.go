@@ -406,3 +406,18 @@ func TestLoad_OTLPEndpointFromEnv(t *testing.T) {
 		t.Fatalf("OTLPEndpoint = %q, want http://tempo:4318", cfg.OTLPEndpoint)
 	}
 }
+
+func TestLoad_AlertWebhookFromEnv(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://test")
+	t.Setenv("DATABASE_ADMIN_URL", "postgres://test-admin")
+	t.Setenv("BAS_APP_DB_PASSWORD", "test-app-password")
+	t.Setenv("JWT_SECRET", "test-secret-32-bytes-long-enough")
+	t.Setenv("BAS_ALERT_WEBHOOK", "https://hooks.example.internal/bas")
+	cfg, err := Load("/nonexistent/config.json")
+	if err != nil {
+		t.Fatalf("Load() err = %v", err)
+	}
+	if cfg.AlertWebhook != "https://hooks.example.internal/bas" {
+		t.Fatalf("AlertWebhook = %q", cfg.AlertWebhook)
+	}
+}

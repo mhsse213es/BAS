@@ -182,6 +182,10 @@ func checkCANotSilentlyRotated(ctx context.Context, pool *pgxpool.Pool, caKeyExi
 	return fmt.Errorf("a new deployment CA was just generated (no existing CA found at PKI_DIR), but agent_certificates already has valid, non-revoked entries -- this looks like CA loss on an EXISTING deployment, not a fresh install, and would silently lock out the entire enrolled fleet. If this is a genuine fresh install with stale leftover database rows, or an intentional CA rotation, set BAS_CONFIRM_NEW_CA=true and restart")
 }
 
+// exerciseTickInterval is the exercise scheduler poll interval. The stall
+// alert derives its threshold from it, so the two must not drift apart.
+const exerciseTickInterval = 5 * time.Second
+
 func main() {
 	if len(os.Args) > 1 && os.Args[1] == "--healthcheck" {
 		os.Exit(runHealthcheck())
@@ -639,7 +643,19 @@ func main() {
 	}
 	exRegistry := exercise.NewRegistry()
 	exMetrics := observability.NewMetricsRegistry()
-	exScheduler := exercise.NewPollScheduler(5 * time.Second).WithMetrics(exMetrics)
+	exScheduler := exercise.NewPollScheduler(exerciseTickInterval).WithMetrics(exMetrics)
+	// Alert rules run every 30s against the metrics registry. The stall rule
+	// reads the exercise scheduler's tick rate, so it uses the same interval.
+	alertEngine := observability.NewAlertEngine(30 * time.Second)
+	for _, rule := range observability.PrebuiltRules(exMetrics, exerciseTickInterval) {
+		rule.NotificationWebhook = cfg.AlertWebhook
+		if err := alertEngine.AddRule(rule); err != nil {
+			log.Fatalf("[!] alert rule %s: %v", rule.Name, err)
+		}
+	}
+	activeStepsCtx, stopActiveSteps := context.WithCancel(context.Background())
+	defer stopActiveSteps()
+	go observability.RunActiveStepsSampler(activeStepsCtx, exMetrics, exStore.CountActiveSteps, 15*time.Second)
 	exExecutor := exercise.NewExecutor(exStore, exChain, exRegistry, exScheduler, nil).WithMetrics(exMetrics)
 	exExecutor.WithVerification(verificationStore)
 	exExecutor.RegisterBuiltins(smtpInj, smsInj, slackInj, teamsInj)
@@ -1128,6 +1144,8 @@ func main() {
 	<-quit
 
 	log.Println("[*] Shutting down gracefully...")
+	alertEngine.Stop()
+	stopActiveSteps()
 	shutCtx, shutCancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer shutCancel()
 	for _, s := range []*http.Server{mtlsSrv, enrollSrv, legacySrv, dashboardSrv} {

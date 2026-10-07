@@ -32,6 +32,10 @@ type MetricsRegistry struct {
 	// Labels: agent_pool (bounded)
 	AgentAvailable *prometheus.GaugeVec
 
+	// ActiveSteps is the number of exercise steps running or waiting, sampled
+	// from the store (see RunActiveStepsSampler).
+	ActiveSteps prometheus.Gauge
+
 	// CollectorRegistry is the underlying Prometheus registry these metrics use.
 	// Exposed for testing and to support Gather().
 	CollectorRegistry prometheus.Registerer
@@ -91,6 +95,12 @@ func NewMetricsRegistryWithRegisterer(reg prometheus.Registerer) *MetricsRegistr
 				Help: "Number of available agents ready to receive tasks, labeled by agent pool.",
 			},
 			[]string{"agent_pool"},
+		),
+		ActiveSteps: promauto.With(reg).NewGauge(
+			prometheus.GaugeOpts{
+				Name: "exercise_active_steps",
+				Help: "Exercise steps currently running or waiting on an external event, across all executions.",
+			},
 		),
 		CollectorRegistry: reg,
 	}
