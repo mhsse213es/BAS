@@ -40,6 +40,49 @@ type bhMember struct {
 	ObjectType       string `json:"ObjectType"`
 }
 
+// bhAce is one Access Control Entry: a principal's right over the object
+// whose Aces array this entry appears in.
+type bhAce struct {
+	PrincipalSID string `json:"PrincipalSID"`
+	RightName    string `json:"RightName"`
+	IsInherited  bool   `json:"IsInherited"` // parsed, not yet used by any logic
+}
+
+// aceRightEdgeKinds maps a BloodHound ACE RightName (case-insensitively) to
+// the EdgeKind it represents. An unrecognized RightName is intentionally
+// absent and must be skipped by the caller, never fatal.
+var aceRightEdgeKinds = map[string]EdgeKind{
+	"genericall":           EdgeGenericAll,
+	"genericwrite":         EdgeGenericWrite,
+	"writeowner":           EdgeWriteOwner,
+	"writedacl":            EdgeWriteDacl,
+	"owns":                 EdgeOwns,
+	"allextendedrights":    EdgeAllExtendedRights,
+	"forcechangepassword":  EdgeForceChangePassword,
+	"addmember":            EdgeAddMember,
+	"addself":              EdgeAddSelf,
+	"addkeycredentiallink": EdgeAddKeyCredentialLink,
+	"readlapspassword":     EdgeReadLAPSPassword,
+}
+
+// addAceEdges appends one edge per recognized, well-formed ACE in aces,
+// where objectID is the object the Aces array is attached to (the ACL
+// target). Unrecognized RightName values and ACEs with no PrincipalSID are
+// skipped, never fatal — consistent with this file's defensive-parsing
+// principle.
+func addAceEdges(edges *[]Edge, objectID string, aces []bhAce) {
+	for _, ace := range aces {
+		if ace.PrincipalSID == "" {
+			continue
+		}
+		kind, ok := aceRightEdgeKinds[strings.ToLower(ace.RightName)]
+		if !ok {
+			continue
+		}
+		*edges = append(*edges, Edge{From: ace.PrincipalSID, To: objectID, Kind: kind})
+	}
+}
+
 type bhComputer struct {
 	ObjectIdentifier string  `json:"ObjectIdentifier"`
 	Properties       bhProps `json:"Properties"`
@@ -52,17 +95,20 @@ type bhComputer struct {
 			ComputerSID string `json:"ComputerSID"`
 		} `json:"Results"`
 	} `json:"Sessions"`
+	Aces []bhAce `json:"Aces"`
 }
 
 type bhUser struct {
 	ObjectIdentifier string  `json:"ObjectIdentifier"`
 	Properties       bhProps `json:"Properties"`
+	Aces             []bhAce `json:"Aces"`
 }
 
 type bhGroup struct {
 	ObjectIdentifier string     `json:"ObjectIdentifier"`
 	Properties       bhProps    `json:"Properties"`
 	Members          []bhMember `json:"Members"`
+	Aces             []bhAce    `json:"Aces"`
 }
 
 // bhFile is the envelope every BloodHound JSON file shares.
@@ -159,6 +205,7 @@ func buildSharpHoundCollection(computers []bhComputer, users []bhUser, groups []
 		c.Nodes = append(c.Nodes, Node{
 			ID: u.ObjectIdentifier, Kind: KindUser, Label: labelOf(u.Properties, u.ObjectIdentifier),
 		})
+		addAceEdges(&c.Edges, u.ObjectIdentifier, u.Aces)
 	}
 
 	for _, g := range groups {
@@ -175,6 +222,7 @@ func buildSharpHoundCollection(computers []bhComputer, users []bhUser, groups []
 			}
 			c.Edges = append(c.Edges, Edge{From: m.ObjectIdentifier, To: g.ObjectIdentifier, Kind: EdgeMemberOf})
 		}
+		addAceEdges(&c.Edges, g.ObjectIdentifier, g.Aces)
 	}
 
 	for _, cm := range computers {
@@ -205,6 +253,7 @@ func buildSharpHoundCollection(computers []bhComputer, users []bhUser, groups []
 			}
 			c.Edges = append(c.Edges, Edge{From: cm.ObjectIdentifier, To: s.UserSID, Kind: EdgeHasSession})
 		}
+		addAceEdges(&c.Edges, cm.ObjectIdentifier, cm.Aces)
 	}
 	return c
 }

@@ -57,6 +57,22 @@ const (
 	EdgeHasSession EdgeKind = "has-session" // host has an interactive session for user (creds harvestable)
 	EdgeMemberOf   EdgeKind = "member-of"   // user/group is a member of group
 	EdgeCredential EdgeKind = "credential"  // reusable credential edge (e.g. shared local-admin password)
+
+	// ACL-abuse edges (from SharpHound's Aces arrays). From = the ACE's
+	// PrincipalSID (the grantee, who an attacker must control); To = the
+	// object the Aces array is attached to (whose rights the grantee holds).
+	// See docs/superpowers/specs/2026-10-07-ad-acl-delegation-graph-model-design.md.
+	EdgeGenericAll           EdgeKind = "generic-all"
+	EdgeGenericWrite         EdgeKind = "generic-write"
+	EdgeWriteOwner           EdgeKind = "write-owner"
+	EdgeWriteDacl            EdgeKind = "write-dacl"
+	EdgeOwns                 EdgeKind = "owns"
+	EdgeAllExtendedRights    EdgeKind = "all-extended-rights"
+	EdgeForceChangePassword  EdgeKind = "force-change-password"
+	EdgeAddMember            EdgeKind = "add-member"
+	EdgeAddSelf              EdgeKind = "add-self"
+	EdgeAddKeyCredentialLink EdgeKind = "add-key-credential-link"
+	EdgeReadLAPSPassword     EdgeKind = "read-laps-password"
 )
 
 // reachKinds are the edge kinds that represent host-to-host lateral movement
