@@ -66,3 +66,34 @@ node_modules/
 # Stale copies of the G1 audit data; the live artifacts are security/g1/G1_*
 /Assessment/G1_*.csv
 /Assessment/G1_*.json
+
+# Group J (2026-10-07): generated/sample reports, demo media, stray docs
+# that were committed to the repo root by mistake. Never recommit these.
+/ARTfix.docx
+/AudspectPhase1.1.mp4
+/AudspectPhase1.mp4
+/Audspect_BAS_Report_Linux_Defense_Evasion__-__Log_Cl-audspecterver_2026-09-03_11-47-43.pdf
+/bas-report-Active_Directory_Credential_Acce-DESKTOP-5TVEBSI-18bdd72a.pdf
+/bas-report-APT36_Kill_Chain__Three-Tier_-18b7b4cd.pdf
+/bas-report-Atomic_Red_Team_Selecti-18b7a4ac.pdf
+/bas-report-Atomic_Red_Team__-__Selective_Te-18b7f39d.pdf
+/bas-report-Atomic_Red_TeaSelecti-18b7b40d.pdf
+/bas-report-Endpoint_Mastery_01_____Endpoint-18ba273d.pdf
+/bas-report-Full_Security_Posture_Scan-18b7b540.pdf
+/bas-report-LOLBin_Execution_Coverage-18b7b11f.pdf
+/bas-report-SEBI_CSCRF-MII_Continuous_Contro-18b7b4f8.pdf
+/BASAgent.pdb
+/BAS_Report_DESKTOP-GIT40B7.pdf
+/BAS_WriteUp.pdf
+/data_exfiltration_csv_report.csv
+/Infrastructure Changes.docx
+/logo.PNG
+/OnPrem.mp4
+/OnPrem1.1.mp4
+/OnPrem1.2.mp4
+/reportfix.docx
+/resultPage.png
+/ScorigEngine.docx
+/Threat_Intel_Installation.docx
+/troubleshootingOfAgents.docx
+/updt_bas-report-Atomic_Red_Team__-__Selective_Te-18b8523b.pdf
