@@ -267,10 +267,13 @@ func (h *Handler) validateAgentAuth(r *http.Request) bool {
 	if h.agentSecret == "" {
 		return true
 	}
+	// Header only (B2): a secret in the URL query string is recorded
+	// verbatim by proxies, load balancers, and access logs along the whole
+	// network path. The agent has sent the header-only form since
+	// agent/protocol/websocket.go's DialAgentWSWithDialer; wsAgentAuthorized
+	// (the /ws/agent path) made the same change already -- this removes the
+	// last query-param fallback, on the non-WS agent endpoints.
 	provided := r.Header.Get("X-Agent-Token")
-	if provided == "" {
-		provided = r.URL.Query().Get("agentSecret")
-	}
 	return subtle.ConstantTimeCompare([]byte(provided), []byte(h.agentSecret)) == 1
 }
 

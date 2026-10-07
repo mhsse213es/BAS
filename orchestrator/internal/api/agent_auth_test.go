@@ -12,7 +12,14 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-func TestValidateAgentAuth_Precedence(t *testing.T) {
+// TestValidateAgentAuth_HeaderOnly_QueryParamNeverHonored locks in the B2
+// fix for the non-WebSocket agent endpoints (heartbeat, ping, enroll, ...):
+// a secret placed in the URL query string -- which proxies, load balancers,
+// and access logs record verbatim -- must never authenticate a request, even
+// when the header is absent or wrong. This mirrors
+// TestWSAgentAuthorized_QueryParamSecretRejected, which already locked in
+// the same fix for the /ws/agent path.
+func TestValidateAgentAuth_HeaderOnly_QueryParamNeverHonored(t *testing.T) {
 	h := &Handler{agentSecret: "shh"}
 
 	newReq := func() *http.Request {
@@ -26,10 +33,10 @@ func TestValidateAgentAuth_Precedence(t *testing.T) {
 		wantAllowed bool
 	}{
 		{"header-only-correct", "shh", "", true},
-		{"query-only-correct", "", "shh", true},
-		{"both-correct", "shh", "shh", true},
+		{"query-only-correct", "", "shh", false},        // query param is never honored, even alone
+		{"both-correct", "shh", "shh", true},             // header present and correct: allowed
 		{"header-wrong-query-correct", "nope", "shh", false}, // header wins even though wrong; never falls back
-		{"header-empty-query-correct", "", "shh", true},      // falls through when header is empty
+		{"header-empty-query-correct", "", "shh", false}, // no header means no auth, regardless of query
 		{"neither-present", "", "", false},
 		{"header-correct-query-wrong", "shh", "nope", true}, // header wins, query ignored
 	}
