@@ -1,7 +1,13 @@
 package observability
 
 import (
+	"bytes"
+	"context"
+	"encoding/json"
 	"fmt"
+	"io"
+	"log"
+	"net/http"
 	"sync"
 	"time"
 )
@@ -30,6 +36,7 @@ type Alert struct {
 	RuleName        string
 	Description     string
 	Severity        string
+	Firing          bool // true for FIRING, false for RESOLVED
 	FiredAt         time.Time
 	NotificationURL string
 	Message         string
@@ -125,6 +132,7 @@ func (e *AlertEngine) fireAlert(rule *AlertRule, firing bool) {
 		RuleName:        rule.Name,
 		Description:     rule.Description,
 		Severity:        rule.Severity,
+		Firing:          firing,
 		FiredAt:         time.Now(),
 		NotificationURL: rule.NotificationWebhook,
 		Message:         fmt.Sprintf("%s: %s (%s)", state, rule.Description, rule.Severity),
@@ -132,8 +140,53 @@ func (e *AlertEngine) fireAlert(rule *AlertRule, firing bool) {
 
 	e.history = append(e.history, alert)
 
-	// TODO: POST to NotificationWebhook if configured (Task 7 future work)
-	// For now, alerts are logged to history only
+	// Delivery runs off the evaluation path: a slow or dead receiver must not
+	// delay the next rule check. Failures are logged, not retried.
+	if rule.NotificationWebhook != "" {
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), alertWebhookTimeout)
+			defer cancel()
+			if err := postAlert(ctx, rule.NotificationWebhook, alert); err != nil {
+				log.Printf("[observability] alert webhook for %s failed: %v", rule.Name, err)
+			}
+		}()
+	}
+}
+
+const alertWebhookTimeout = 10 * time.Second
+
+// postAlert sends one alert state change as JSON. Any non-2xx response is an error.
+func postAlert(ctx context.Context, url string, a Alert) error {
+	state := "RESOLVED"
+	if a.Firing {
+		state = "FIRING"
+	}
+	body, err := json.Marshal(map[string]any{
+		"rule":        a.RuleName,
+		"state":       state,
+		"severity":    a.Severity,
+		"description": a.Description,
+		"firedAt":     a.FiredAt.UTC().Format(time.RFC3339),
+		"message":     a.Message,
+	})
+	if err != nil {
+		return err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
+	if resp.StatusCode < 200 || resp.StatusCode > 299 {
+		return fmt.Errorf("webhook returned HTTP %d", resp.StatusCode)
+	}
+	return nil
 }
 
 // Stop shuts down the alert engine.
