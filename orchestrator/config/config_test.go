@@ -2,6 +2,7 @@ package config
 
 import (
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -369,5 +370,24 @@ func TestLoad_CSPMode(t *testing.T) {
 				t.Fatalf("CSPMode = %q, want %q", cfg.CSPMode, tc.want)
 			}
 		})
+	}
+}
+
+func TestLoad_CSPModeFromConfigFileIsNormalised(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://test")
+	t.Setenv("DATABASE_ADMIN_URL", "postgres://test-admin")
+	t.Setenv("BAS_APP_DB_PASSWORD", "test-app-password")
+	t.Setenv("JWT_SECRET", "test-secret-32-bytes-long-enough")
+	t.Setenv("BAS_CSP_MODE", "")
+	path := filepath.Join(t.TempDir(), "config.json")
+	if err := os.WriteFile(path, []byte(`{"csp_mode": " Report-Only "}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load() err = %v", err)
+	}
+	if cfg.CSPMode != "report-only" {
+		t.Fatalf("CSPMode = %q, want %q", cfg.CSPMode, "report-only")
 	}
 }

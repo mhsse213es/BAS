@@ -391,11 +391,15 @@ func Load(path string) (*Config, error) {
 			cfg.LegacyListenerEnabled = b
 		}
 	}
+	cspSource := "csp_mode"
 	if v := strings.TrimSpace(os.Getenv("BAS_CSP_MODE")); v != "" {
-		cfg.CSPMode = strings.ToLower(v)
+		cfg.CSPMode = v
+		cspSource = "BAS_CSP_MODE"
 	}
+	// Same normalisation for config.json and the env var.
+	cfg.CSPMode = strings.ToLower(strings.TrimSpace(cfg.CSPMode))
 	if cfg.CSPMode != "enforce" && cfg.CSPMode != "report-only" {
-		return nil, fmt.Errorf("BAS_CSP_MODE=%q: must be \"enforce\" or \"report-only\"", cfg.CSPMode)
+		return nil, fmt.Errorf("%s=%q: must be \"enforce\" or \"report-only\"", cspSource, cfg.CSPMode)
 	}
 	if v := os.Getenv("HTTP_PORT_ENROLL"); v != "" {
 		fmt.Sscanf(v, "%d", &cfg.EnrollHTTPPort)
