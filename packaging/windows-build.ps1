@@ -916,6 +916,15 @@ $lines = Get-ChildItem -Path $OutDir -Recurse -File |
 Log "  MANIFEST.sha256 generated ($($lines.Count) files indexed)"
 
 # -- 8. Generate license ------------------------------------------------------
+# Only needed here because this run is building a package to ship *with* a
+# new license attached. A license-only change (renewal, feature change, a
+# fresh license for an already-installed customer) needs none of this
+# script's other 9 steps -- the license is a plain file, verified at
+# runtime against the one Audspect-wide public key already embedded in
+# every build (orchestrator/internal/license/license_key.go), and the
+# orchestrator re-reads it every 5 minutes on its own. Use
+# packaging/licensing/issue-license.sh for that case instead of rerunning
+# this whole build.
 $LicensePath = ""
 if ($Customer -ne "" -and $CustomerID -ne "") {
     Log "Generating license for $Customer ($CustomerID) - valid $Days days..."
@@ -924,7 +933,7 @@ if ($Customer -ne "" -and $CustomerID -ne "") {
 
     if (-not (Test-Path $LicPrivKey)) {
         Warn "License private key not found at $LicPrivKey - skipping license generation."
-        Warn "Run: cd packaging\licensing && bash keygen.sh"
+        Warn "Run: bash packaging/licensing/keygen.sh"
     } else {
         Push-Location $RepoRoot
         go run "$LicGenDir\main.go" `
@@ -949,7 +958,7 @@ if ($Customer -ne "" -and $CustomerID -ne "") {
     }
 } else {
     Warn "No -Customer / -CustomerID provided - skipping license generation."
-    Warn "Generate manually: go run packaging\licensing\licensegen\main.go -customer '...' -id '...' -days 365"
+    Warn "Generate standalone (no rebuild needed): bash packaging/licensing/issue-license.sh -customer '...' -id '...' -days 365"
 }
 
 # -- 9. Create ZIP for transfer -----------------------------------------------
