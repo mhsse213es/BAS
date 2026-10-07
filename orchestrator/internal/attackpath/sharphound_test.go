@@ -247,3 +247,77 @@ func TestParseSharpHoundFiles_Aces_DuplicateAceDoesNotDuplicateEdgeAfterBuildGra
 		t.Fatalf("expected exactly 1 deduplicated generic-write edge from a duplicate ACE pair, got %d", count)
 	}
 }
+
+const shComputersDelegation = `{"meta":{"type":"computers","count":2},"data":[
+  {"ObjectIdentifier":"S-1-5-21-1-1-1-6001","Properties":{"name":"WEBSVC01.CORP.LOCAL","domain":"CORP.LOCAL"},
+   "LocalAdmins":{"Results":[]},"Sessions":{"Results":[]},
+   "AllowedToDelegate":["S-1-5-21-1-1-1-6002"]},
+  {"ObjectIdentifier":"S-1-5-21-1-1-1-6002","Properties":{"name":"TARGET01.CORP.LOCAL","domain":"CORP.LOCAL"},
+   "LocalAdmins":{"Results":[]},"Sessions":{"Results":[]},
+   "AllowedToAct":[{"ObjectIdentifier":"S-1-5-21-1-1-1-6001","ObjectType":"Computer"}]}
+]}`
+
+func TestParseSharpHoundFiles_Delegation_ProducesCorrectlyDirectedEdges(t *testing.T) {
+	c := parseSharpHoundFiles([][]byte{[]byte(shComputersDelegation)})
+	g := BuildGraph(c)
+
+	// AllowedToDelegate: WEBSVC01 (the computer carrying the property) is
+	// From; TARGET01 (the listed target) is To -- control WEBSVC01, gain the
+	// ability to authenticate to TARGET01 as an arbitrary user.
+	foundDelegate := false
+	for _, e := range g.Edges() {
+		if e.From == "S-1-5-21-1-1-1-6001" && e.To == "S-1-5-21-1-1-1-6002" && e.Kind == EdgeAllowedToDelegate {
+			foundDelegate = true
+		}
+	}
+	if !foundDelegate {
+		t.Fatal("expected {From: WEBSVC01, To: TARGET01, Kind: allowed-to-delegate}")
+	}
+
+	// AllowedToAct: WEBSVC01 (the listed principal) is From; TARGET01 (the
+	// computer carrying the property) is To -- control WEBSVC01, gain the
+	// ability to impersonate arbitrary users to TARGET01 via RBCD. Note the
+	// direction is the OPPOSITE of AllowedToDelegate relative to "the
+	// computer carrying the JSON property" -- this is exactly the mistake
+	// the spec's direction table exists to prevent.
+	foundAct := false
+	for _, e := range g.Edges() {
+		if e.From == "S-1-5-21-1-1-1-6001" && e.To == "S-1-5-21-1-1-1-6002" && e.Kind == EdgeAllowedToAct {
+			foundAct = true
+		}
+	}
+	if !foundAct {
+		t.Fatal("expected {From: WEBSVC01, To: TARGET01, Kind: allowed-to-act}")
+	}
+}
+
+const shComputersDelegationMissingFields = `{"meta":{"type":"computers","count":1},"data":[
+  {"ObjectIdentifier":"S-1-5-21-1-1-1-7001","Properties":{"name":"SRV77.CORP.LOCAL","domain":"CORP.LOCAL"},
+   "LocalAdmins":{"Results":[]},"Sessions":{"Results":[]}}
+]}`
+
+func TestParseSharpHoundFiles_Delegation_MissingFieldsDoNotCrash(t *testing.T) {
+	c := parseSharpHoundFiles([][]byte{[]byte(shComputersDelegationMissingFields)})
+	g := BuildGraph(c)
+
+	for _, e := range g.Edges() {
+		if e.Kind == EdgeAllowedToDelegate || e.Kind == EdgeAllowedToAct {
+			t.Fatalf("expected no delegation edges for an object with neither field present, got %+v", e)
+		}
+	}
+}
+
+const shComputersSelfDelegation = `{"meta":{"type":"computers","count":1},"data":[
+  {"ObjectIdentifier":"S-1-5-21-1-1-1-8001","Properties":{"name":"SRV88.CORP.LOCAL","domain":"CORP.LOCAL"},
+   "LocalAdmins":{"Results":[]},"Sessions":{"Results":[]},
+   "AllowedToDelegate":["S-1-5-21-1-1-1-8001"]}
+]}`
+
+func TestParseSharpHoundFiles_Delegation_SelfReferentialDoesNotHangPathFinding(t *testing.T) {
+	c := parseSharpHoundFiles([][]byte{[]byte(shComputersSelfDelegation)})
+	g := BuildGraph(c)
+
+	if p := g.ShortestPath("S-1-5-21-1-1-1-8001", "nonexistent-target"); p != nil {
+		t.Fatalf("expected nil for an unreachable target, got %+v", p)
+	}
+}

@@ -95,7 +95,9 @@ type bhComputer struct {
 			ComputerSID string `json:"ComputerSID"`
 		} `json:"Results"`
 	} `json:"Sessions"`
-	Aces []bhAce `json:"Aces"`
+	Aces              []bhAce    `json:"Aces"`
+	AllowedToDelegate []string   `json:"AllowedToDelegate"`
+	AllowedToAct      []bhMember `json:"AllowedToAct"`
 }
 
 type bhUser struct {
@@ -254,6 +256,22 @@ func buildSharpHoundCollection(computers []bhComputer, users []bhUser, groups []
 			c.Edges = append(c.Edges, Edge{From: cm.ObjectIdentifier, To: s.UserSID, Kind: EdgeHasSession})
 		}
 		addAceEdges(&c.Edges, cm.ObjectIdentifier, cm.Aces)
+		// AllowedToDelegate: cm (the computer with this property) is From; each
+		// listed target is To.
+		for _, target := range cm.AllowedToDelegate {
+			if target == "" {
+				continue
+			}
+			c.Edges = append(c.Edges, Edge{From: cm.ObjectIdentifier, To: target, Kind: EdgeAllowedToDelegate})
+		}
+		// AllowedToAct: each listed principal is From; cm (the computer with this
+		// property) is To. Direction is the OPPOSITE of AllowedToDelegate above.
+		for _, p := range cm.AllowedToAct {
+			if p.ObjectIdentifier == "" {
+				continue
+			}
+			c.Edges = append(c.Edges, Edge{From: p.ObjectIdentifier, To: cm.ObjectIdentifier, Kind: EdgeAllowedToAct})
+		}
 	}
 	return c
 }

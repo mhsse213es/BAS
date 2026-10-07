@@ -73,6 +73,12 @@ const (
 	EdgeAddSelf              EdgeKind = "add-self"
 	EdgeAddKeyCredentialLink EdgeKind = "add-key-credential-link"
 	EdgeReadLAPSPassword     EdgeKind = "read-laps-password"
+
+	// Kerberos delegation-abuse edges. See the spec's direction table --
+	// AllowedToDelegate and AllowedToAct have OPPOSITE grantee positions
+	// relative to "the computer carrying the JSON property".
+	EdgeAllowedToDelegate EdgeKind = "allowed-to-delegate"
+	EdgeAllowedToAct      EdgeKind = "allowed-to-act"
 )
 
 // reachKinds are the edge kinds that represent host-to-host lateral movement
