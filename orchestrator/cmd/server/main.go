@@ -656,6 +656,15 @@ func main() {
 	activeStepsCtx, stopActiveSteps := context.WithCancel(context.Background())
 	defer stopActiveSteps()
 	go observability.RunActiveStepsSampler(activeStepsCtx, exMetrics, exStore.CountActiveSteps, 15*time.Second)
+	// Remote-write push, only when a receiver is configured.
+	remoteWriter, err := observability.NewRemoteWriter(cfg.RemoteWriteURL, exMetrics.Families)
+	if err != nil {
+		log.Fatalf("[!] remote_write_url: %v", err)
+	}
+	if remoteWriter != nil {
+		go observability.RunRemoteWrite(activeStepsCtx, remoteWriter, 15*time.Second)
+		log.Printf("[*] metrics remote-write enabled -> %s", cfg.RemoteWriteURL)
+	}
 	exExecutor := exercise.NewExecutor(exStore, exChain, exRegistry, exScheduler, nil).WithMetrics(exMetrics)
 	exExecutor.WithVerification(verificationStore)
 	exExecutor.RegisterBuiltins(smtpInj, smsInj, slackInj, teamsInj)

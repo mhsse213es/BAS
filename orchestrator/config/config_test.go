@@ -421,3 +421,18 @@ func TestLoad_AlertWebhookFromEnv(t *testing.T) {
 		t.Fatalf("AlertWebhook = %q", cfg.AlertWebhook)
 	}
 }
+
+func TestLoad_RemoteWriteURLFromEnv(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://test")
+	t.Setenv("DATABASE_ADMIN_URL", "postgres://test-admin")
+	t.Setenv("BAS_APP_DB_PASSWORD", "test-app-password")
+	t.Setenv("JWT_SECRET", "test-secret-32-bytes-long-enough")
+	t.Setenv("BAS_REMOTE_WRITE_URL", "https://mimir.internal/api/v1/push")
+	cfg, err := Load("/nonexistent/config.json")
+	if err != nil {
+		t.Fatalf("Load() err = %v", err)
+	}
+	if cfg.RemoteWriteURL != "https://mimir.internal/api/v1/push" {
+		t.Fatalf("RemoteWriteURL = %q", cfg.RemoteWriteURL)
+	}
+}

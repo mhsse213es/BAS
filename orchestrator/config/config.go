@@ -147,6 +147,10 @@ type Config struct {
 	// change (FIRING/RESOLVED). Empty keeps alerts in the in-memory history only.
 	AlertWebhook string `json:"alert_webhook,omitempty"`
 
+	// RemoteWriteURL, when set, pushes metrics to a Prometheus remote-write
+	// receiver (Prometheus, Mimir, VictoriaMetrics). Empty means no push.
+	RemoteWriteURL string `json:"remote_write_url,omitempty"`
+
 	// Agent trust model (B1/B3) — deployment CA + per-agent mTLS.
 	// See docs/superpowers/specs/2026-09-27-agent-trust-model-b1-b3-b4-design.md.
 	// PKIDir holds the deployment CA's keypair/cert (ca-key.pem, ca-cert.pem),
@@ -393,6 +397,9 @@ func Load(path string) (*Config, error) {
 	}
 	if v := os.Getenv("BAS_ALERT_WEBHOOK"); v != "" {
 		cfg.AlertWebhook = v
+	}
+	if v := os.Getenv("BAS_REMOTE_WRITE_URL"); v != "" {
+		cfg.RemoteWriteURL = v
 	}
 	if v := os.Getenv("PKI_DIR"); v != "" {
 		cfg.PKIDir = v

@@ -87,5 +87,20 @@ for bad in 'ftp://hooks.example.internal' 'hooks.example.internal/bas'; do
   fi
 done
 
+out="$(run_case 'BAS_REMOTE_WRITE_URL=https://mimir.internal/api/v1/push')"
+grep -q '^BAS_REMOTE_WRITE_URL=https://mimir.internal/api/v1/push$' <<<"$out" && pass "remote-write URL from setup.conf reaches .env" || fail "remote-write set: $out"
+
+out="$(run_case '')"
+grep -q '^BAS_REMOTE_WRITE_URL=$' <<<"$out" && pass "remote-write unset -> empty (no push)" || fail "remote-write unset: $out"
+
+for bad in 'ftp://mimir.internal/push' 'mimir.internal:9009'; do
+  out="$(run_case "BAS_REMOTE_WRITE_URL=${bad}")"
+  if grep -q 'ERR: .*BAS_REMOTE_WRITE_URL' <<<"$out" && ! grep -q '^rc=0$' <<<"$out"; then
+    pass "BAS_REMOTE_WRITE_URL=${bad} refused"
+  else
+    fail "BAS_REMOTE_WRITE_URL=${bad} not refused: $out"
+  fi
+done
+
 echo
 [[ $fails -eq 0 ]] && echo "ALL PASS" || { echo "${fails} FAILED"; exit 1; }

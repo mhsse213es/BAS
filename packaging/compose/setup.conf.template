@@ -59,6 +59,10 @@ BAS_OTLP_ENDPOINT=
 # Blank keeps alerts in the server history only. Must be an http(s) URL.
 BAS_ALERT_WEBHOOK=
 
+# Optional Prometheus remote-write receiver (Prometheus, Mimir, VictoriaMetrics).
+# Blank = no push; /metrics stays available for scraping either way.
+BAS_REMOTE_WRITE_URL=
+
 # DNS_SINK_BIND_IP is the host IP the DLP DNS-tunneling sink (UDP/53) binds
 # to. Auto-detected (first non-loopback IP via `hostname -I`) if left blank.
 # It is deliberately NOT bound to 0.0.0.0 (all interfaces): on most Linux
