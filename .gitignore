@@ -54,6 +54,10 @@ api/__pycache__/
 **/bin/
 **/obj/
 
+# go test -coverprofile output (CI's "coverage gate" step consumes it, then
+# it's discarded -- never a tracked artifact)
+orchestrator/coverage.out
+
 # Node
 node_modules/
 

@@ -92,6 +92,10 @@ jobs:
       - name: go test (race + coverage)
         run: go test ./... -race -timeout 30m -coverprofile=coverage.out
 
+      - name: coverage gate (no sizeable package at 0%)
+        working-directory: .
+        run: python3 scripts/check-test-coverage-gate.py orchestrator/coverage.out
+
       - name: test container diagnostics
         if: failure()
         run: |
