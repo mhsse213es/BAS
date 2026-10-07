@@ -105,6 +105,12 @@ jobs:
       - name: coverage package summary
         run: go run ./scripts/coveragesummary -profile=coverage.out | tee coverage-summary.txt
 
+      - name: package test gate (internal/ packages over 200 lines need tests)
+        working-directory: .
+        run: |
+          python3 scripts/check-package-tests.py orchestrator
+          cd scripts && python3 -m unittest test_check_package_tests -v
+
       - uses: actions/upload-artifact@v4
         with:
           name: coverage-reports
