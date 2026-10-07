@@ -134,6 +134,10 @@ func (c *QRadarClient) waitForSearch(ctx context.Context, searchID string, timeo
 		if err != nil {
 			return err
 		}
+		if resp.StatusCode >= 400 {
+			resp.Body.Close()
+			return fmt.Errorf("qradar search %s status HTTP %d", searchID, resp.StatusCode)
+		}
 		var status struct {
 			Status string `json:"status"`
 		}
@@ -166,6 +170,12 @@ func (c *QRadarClient) fetchResults(ctx context.Context, searchID string) ([]SIE
 		return nil, fmt.Errorf("qradar fetch results: %w", err)
 	}
 	defer resp.Body.Close()
+	// An error body decodes to zero events; without this check a failed query
+	// reads as "no alerts" and every executed technique scores undetected.
+	if resp.StatusCode >= 400 {
+		raw, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		return nil, fmt.Errorf("qradar fetch results HTTP %d: %s", resp.StatusCode, string(raw))
+	}
 
 	// QRadar returns {"events": [...]} for event searches.
 	var raw struct {
