@@ -29,13 +29,13 @@ func TestDefenderXDRVerify_HostMatchedTechniqueTaggedAlert_Detected(t *testing.T
 				{
 					"id": "alert-1", "title": "Suspicious process", "severity": "high",
 					"createdDateTime": alertTime.Format(time.RFC3339),
-					"techniques":      []string{"T1055"},
+					"mitreTechniques": []string{"T1055"},
 					"evidence":        []map[string]any{{"deviceDnsName": "HOST1"}},
 				},
 				{
 					"id": "alert-2", "title": "Unrelated host alert", "severity": "low",
 					"createdDateTime": alertTime.Format(time.RFC3339),
-					"techniques":      []string{"T1055"},
+					"mitreTechniques": []string{"T1055"},
 					"evidence":        []map[string]any{{"deviceDnsName": "OTHERHOST"}},
 				},
 			},
