@@ -2,11 +2,47 @@ package detectverify
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"testing"
 	"time"
 )
+
+// Splunk's own docs (mitre_attack_enrichment lookup) describe sub-fields
+// named annotations.mitre_attack.mitre_technique_id, mitre_tactic, etc. --
+// implying annotations.mitre_attack is an array of enrichment objects, not
+// a flat list of technique ID strings as this parser originally assumed.
+// These three pin the parser to both the real (object) shape and the
+// original (flat) shape, since the exact export format wasn't confirmed
+// against a live instance.
+func TestParseMitreAttack_NestedEnrichmentObjects(t *testing.T) {
+	raw := json.RawMessage(`[{"mitre_technique_id":["T1059.001"],"mitre_tactic":["execution"]},{"mitre_technique_id":"T1055"}]`)
+	got := parseMitreAttack(raw)
+	want := []string{"T1059.001", "T1055"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("parseMitreAttack = %v, want %v", got, want)
+	}
+}
+
+func TestParseMitreAttack_SingleEnrichmentObject(t *testing.T) {
+	raw := json.RawMessage(`{"mitre_technique_id":"T1059.001"}`)
+	got := parseMitreAttack(raw)
+	want := []string{"T1059.001"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("parseMitreAttack = %v, want %v", got, want)
+	}
+}
+
+func TestParseMitreAttack_FlatArrayStillWorks(t *testing.T) {
+	raw := json.RawMessage(`["T1059.001","T1055"]`)
+	got := parseMitreAttack(raw)
+	want := []string{"T1059.001", "T1055"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("parseMitreAttack = %v, want %v", got, want)
+	}
+}
 
 func newTestSplunkConnector(t *testing.T, exportURL string) *splunkConnector {
 	t.Helper()

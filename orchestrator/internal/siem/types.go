@@ -2,14 +2,16 @@ package siem
 
 import "time"
 
-// Provider identifies the SIEM vendor.
+// Provider identifies the SIEM vendor. Only qradar has a working client in
+// this correlator (see queryAlerts/TestConnectivity below) -- splunk, wazuh
+// and sentinel were never implemented here and are rejected at config
+// creation (see api.CreateSIEMConfig), so no stray constants for them exist
+// to be mistaken for support. Splunk/Sentinel/Elastic/Defender/CrowdStrike/
+// Trellix detection validation lives in the separate detectverify package.
 type Provider string
 
 const (
-	ProviderQRadar   Provider = "qradar"
-	ProviderSplunk   Provider = "splunk"
-	ProviderWazuh    Provider = "wazuh"
-	ProviderSentinel Provider = "sentinel"
+	ProviderQRadar Provider = "qradar"
 )
 
 // Config holds the connection settings for one SIEM integration.

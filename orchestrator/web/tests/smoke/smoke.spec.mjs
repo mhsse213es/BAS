@@ -1,79 +1,11 @@
 import { test, expect } from '@playwright/test';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { fixtureFor, RENDER_MARKERS } from './fixtures.mjs';
+import { RENDER_MARKERS } from './fixtures.mjs';
+import { boot, tabNames, openTab, DRAWERS, openDrawer } from './harness.mjs';
 
 const BASELINE = fileURLToPath(new URL('./baseline.json', import.meta.url));
 const RECORD = process.env.SMOKE_RECORD === '1';
-
-// Errors are compared after removing volatile parts (asset hashes, line/col,
-// URLs), so the monolith baseline is comparable with the bundled build.
-function normalize(msg) {
-  return msg
-    .replace(/https?:\/\/[^\s)]+/g, '<url>')
-    .replace(/:\d+:\d+/g, '')
-    .replace(/app\.[0-9A-Za-z]+\.js/g, 'app.js')
-    .trim();
-}
-
-async function boot(page) {
-  const errors = [];
-  page.on('pageerror', (e) => errors.push(normalize(`pageerror: ${e.message}`)));
-  page.on('console', (m) => { if (m.type() === 'error') errors.push(normalize(`console: ${m.text()}`)); });
-  await page.addInitScript(() => {
-    localStorage.setItem('bas_role', 'admin');
-    window.__xss = undefined;
-    // Every CSP violation is an error (G1d). Without a policy header this
-    // never fires.
-    document.addEventListener('securitypolicyviolation', (e) => {
-      console.error(`csp: ${e.effectiveDirective} blocked ${e.blockedURI || 'inline'} at ${e.sourceFile || ''}:${e.lineNumber || 0}`);
-    });
-    // Loaders catch their own errors and show them as an error toast
-    // (#toast.err) instead of throwing; surface those as errors too, or a
-    // ReferenceError inside a .then() would go unnoticed.
-    document.addEventListener('DOMContentLoaded', () => {
-      const toast = document.getElementById('toast');
-      if (!toast) return;
-      new MutationObserver(() => {
-        if (toast.classList.contains('err')) console.error(`toast: ${toast.textContent}`);
-      }).observe(toast, { attributes: true, childList: true, characterData: true, subtree: true });
-    });
-  });
-  await page.route('**/*', (route) => {
-    const u = new URL(route.request().url());
-    if (u.pathname === '/ready' || u.pathname.startsWith('/api/')) {
-      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(fixtureFor(route.request().method(), u)) });
-    }
-    if (u.hostname !== '127.0.0.1') return route.fulfill({ status: 204, body: '' }); // fonts etc.: never leave the sandbox
-    return route.continue();
-  });
-  // The live-update socket is accepted and kept silent, so its connection
-  // error cannot land nondeterministically on whichever tab is open.
-  await page.routeWebSocket(/\/ws\//, () => {});
-  await page.goto('/index.html');
-  await page.waitForFunction(() => getComputedStyle(document.getElementById('app')).display !== 'none', null, { timeout: 15_000 });
-  // Let boot-time loaders settle so their errors cannot be attributed to the
-  // first tab measured on a slower machine.
-  await page.waitForLoadState('networkidle', { timeout: 10_000 }).catch(() => {});
-  return errors;
-}
-
-// Tabs are discovered from the markup -- inline onclick="showTab('x')" or the
-// G1d form data-on-click="showTab" data-args='["x"]' -- never from app internals.
-async function tabNames(page) {
-  return page.$$eval('[onclick^="showTab(\'"],[data-on-click="showTab"]', (els) => [...new Set(els.map((e) => {
-    const a = e.getAttribute('data-args');
-    return a ? JSON.parse(a)[0] : e.getAttribute('onclick').match(/showTab\('([^']+)'\)/)[1];
-  }))].sort());
-}
-
-async function openTab(page, tab) {
-  await page.evaluate((t) => {
-    const el = [...document.querySelectorAll('[data-on-click="showTab"]')].find((e) => JSON.parse(e.getAttribute('data-args') || '[]')[0] === t)
-      || document.querySelector(`[onclick="showTab('${t}')"]`);
-    el.click(); // element.click(): some nav entries live in a collapsed dropdown
-  }, tab);
-}
 
 // Inline handlers and javascript: URLs left in the live DOM (G1d strict mode).
 async function inlineLeft(page) {
@@ -155,25 +87,15 @@ test('every tab renders with no errors beyond the monolith baseline', async ({ p
   expect(regressions, 'new errors versus the monolith baseline').toEqual([]);
 });
 
-// Drawers reachable from the tabs, opened through the same window functions
-// their rows' handlers call (spec section 9). Each must render its marker
-// with no errors; there is no monolith baseline for these, so none are known.
-const DRAWERS = [
-  { name: 'live run', open: "openRunPanel('run-smoke-1', 'Run', 2)", selector: '#run-live-timeline', marker: 'T1059' },
-  { name: 'run results', open: "viewRunResults({ id: 'run-smoke-1', name: 'Smoke run', status: 'completed', results: [] })", selector: '#results-title', marker: 'Smoke run' },
-  { name: 'finding', open: "openFinding('finding-smoke-1')", selector: '#results-title', marker: 'Finding' },
-  { name: 'agent detail', open: "openAgentDetail('agent-smoke-1')", selector: '#agt-detail-title', marker: 'Agent: host' },
-  { name: 'campaign detail', open: "openCampaignDetail('campaign-smoke-1')", selector: 'body', marker: 'Campaign "><img' },
-];
-
 test('drawers open and render with no errors', async ({ page }) => {
   const errors = await boot(page);
   const problems = [];
   for (const d of DRAWERS) {
     errors.length = 0;
     // Recorded, not thrown, so one broken drawer cannot hide the next.
-    try { await page.evaluate((code) => { (0, eval)(code); }, d.open); } catch (e) { problems.push(`${d.name}: ${e.message.split('\n')[0]}`); continue; }
-    await page.waitForTimeout(500);
+    try {
+      await openDrawer(page, d);
+    } catch (e) { problems.push(`${d.name}: ${e.message.split('\n')[0]}`); continue; }
     const text = await page.evaluate((sel) => document.querySelector(sel)?.textContent || '', d.selector);
     if (!text.includes(d.marker)) problems.push(`${d.name}: marker "${d.marker}" not rendered`);
     for (const e of errors) problems.push(`${d.name}: ${e}`);

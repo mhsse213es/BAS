@@ -76,9 +76,15 @@ func (h *Handler) CreateSIEMConfig(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "name and provider are required", http.StatusBadRequest)
 		return
 	}
-	validProviders := map[string]bool{"qradar": true, "splunk": true, "wazuh": true, "sentinel": true}
+	// Only qradar has a working client in this correlator (see
+	// queryAlerts/TestConnectivity in siem/correlator.go). Accepting
+	// splunk/wazuh/sentinel here would let a config validate successfully
+	// and then silently fail "not yet supported" only at query/test time.
+	// Splunk/Sentinel/Elastic/Defender/CrowdStrike/Trellix detection
+	// validation is available today via the Detection Validation connectors.
+	validProviders := map[string]bool{"qradar": true}
 	if !validProviders[req.Provider] {
-		jsonError(w, "provider must be qradar | splunk | wazuh | sentinel", http.StatusBadRequest)
+		jsonError(w, "provider must be qradar (for splunk, sentinel, elastic, defender, crowdstrike or trellix, use the Detection Validation connectors instead)", http.StatusBadRequest)
 		return
 	}
 	var id string

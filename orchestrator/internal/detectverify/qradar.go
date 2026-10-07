@@ -104,6 +104,11 @@ func (q *qradarConnector) submitSearch(ctx context.Context, aql string) (string,
 	defer resp.Body.Close()
 	data, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if resp.StatusCode >= 400 {
+		if strings.Contains(string(data), "mitre_technique") && strings.Contains(string(data), "does not exist") {
+			return "", fmt.Errorf("qradar submit search: HTTP %d: %s -- mitre_technique is not a built-in QRadar event field; "+
+				"create a Custom Event Property named exactly \"mitre_technique\" (Admin > Custom Event Properties) mapping your "+
+				"ATT&CK-tagged rules, or this connector's technique matching will never see a result", resp.StatusCode, data)
+		}
 		return "", fmt.Errorf("qradar submit search: HTTP %d: %s", resp.StatusCode, data)
 	}
 	var out struct {

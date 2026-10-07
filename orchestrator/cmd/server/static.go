@@ -80,9 +80,14 @@ func resolveScenariosDir(configured string) string {
 	return configured
 }
 
-func StaticHandler() http.Handler {
+func StaticHandler(cspMode string) http.Handler {
 	wwwrootDir := resolveWWWRoot()
 	reporting.SetWWWRoot(wwwrootDir)
+	if cspMode == "report-only" {
+		log.Println("[~] dashboard CSP: report-only (BAS_CSP_MODE) -- violations are logged, not blocked")
+	} else {
+		log.Println("[+] dashboard CSP: enforce")
+	}
 
 	if expectedWWWManifestHash != "" {
 		if err := verifyWWWRoot(wwwrootDir, expectedWWWManifestHash); err != nil {
@@ -93,10 +98,10 @@ func StaticHandler() http.Handler {
 		if err != nil {
 			log.Fatalf("[FATAL] wwwroot integrity: %v", err)
 		}
-		return cacheHeaders(h)
+		return cspHeaders(cspMode, cacheHeaders(h))
 	}
 	log.Println("[~] wwwroot integrity: no reference hash compiled in — hash check disabled (dev build)")
-	return cacheHeaders(http.FileServer(http.Dir(wwwrootDir)))
+	return cspHeaders(cspMode, cacheHeaders(http.FileServer(http.Dir(wwwrootDir))))
 }
 
 // manifestOnly answers only paths listed in dir's MANIFEST.sha256 ("/" is
@@ -199,6 +204,31 @@ func wwwRootWatchList(dir string) []string {
 		}
 	}
 	return out
+}
+
+// dashboardCSP is the dashboard Content-Security-Policy (G1d spec 4.5).
+// script-src is 'self' only -- no inline script, no eval, no hashes; the
+// G1c build leaves no inline script, so no nonce is needed.
+// TestDashboardCSP_ScriptSrcIsStrict fails if that ever changes.
+// style-src 'unsafe-inline' is the staged G1e item (style= attributes).
+// Must stay byte-identical to web/tests/smoke/csp-policy.txt.
+const dashboardCSP = "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'self'; object-src 'none'; frame-ancestors 'none'; report-uri /api/csp-report"
+
+func cspHeaderName(mode string) string {
+	if mode == "report-only" {
+		return "Content-Security-Policy-Report-Only"
+	}
+	return "Content-Security-Policy"
+}
+
+// cspHeaders sets the policy on every dashboard response (document and
+// assets), on both StaticHandler branches (release and dev builds).
+func cspHeaders(mode string, h http.Handler) http.Handler {
+	name := cspHeaderName(mode)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set(name, dashboardCSP)
+		h.ServeHTTP(w, r)
+	})
 }
 
 // cacheHeaders: hashed assets never change under the same name; index.html

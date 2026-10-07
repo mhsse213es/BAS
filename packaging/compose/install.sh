@@ -160,6 +160,8 @@ BAS_LEGACY_PORT=""
 BAS_DASHBOARD_PORT=""
 DNS_SINK_BIND_IP=""
 BAS_TLS=""
+BAS_SERVER_SANS=""
+BAS_CSP_MODE=""
 TLS_CERT=""
 TLS_KEY=""
 DB_PASSWORD=""
@@ -214,6 +216,8 @@ load_config() {
       BAS_DASHBOARD_PORT)   BAS_DASHBOARD_PORT="$val"   ;;
       DNS_SINK_BIND_IP)     DNS_SINK_BIND_IP="$val"     ;;
       BAS_TLS)              BAS_TLS="$val"              ;;
+      BAS_SERVER_SANS)      BAS_SERVER_SANS="$val"      ;;
+      BAS_CSP_MODE)         BAS_CSP_MODE="$val"         ;;
       TLS_CERT)             TLS_CERT="$val"             ;;
       TLS_KEY)              TLS_KEY="$val"              ;;
       DB_PASSWORD)          DB_PASSWORD="$val"          ;;
@@ -262,6 +266,14 @@ load_config() {
   # setup.conf) without touching the DNS sink's own binding.
   [[ -z "$BAS_SERVER_SANS"    ]] && BAS_SERVER_SANS="$DNS_SINK_BIND_IP"
   [[ -z "$BAS_TLS"            ]] && BAS_TLS="false"
+  # Dashboard Content-Security-Policy (G1d): enforce, or report-only as a
+  # temporary escape hatch. No "off"; the orchestrator refuses anything else
+  # at boot, so refuse it here first rather than install a server that won't start.
+  BAS_CSP_MODE="$(tr '[:upper:]' '[:lower:]' <<<"${BAS_CSP_MODE:-enforce}")"
+  case "$BAS_CSP_MODE" in
+    enforce|report-only) ;;
+    *) err "setup.conf: BAS_CSP_MODE must be enforce or report-only (got: ${BAS_CSP_MODE})."; exit 1 ;;
+  esac
   [[ -z "$LOG_RETENTION_DAYS" ]] && LOG_RETENTION_DAYS="90"
   [[ -z "$BACKUP_RETENTION_DAILY"   ]] && BACKUP_RETENTION_DAILY="7"
   [[ -z "$BACKUP_RETENTION_WEEKLY"  ]] && BACKUP_RETENTION_WEEKLY="4"
@@ -1475,6 +1487,7 @@ BAS_DASHBOARD_PORT=${BAS_DASHBOARD_PORT}
 DNS_SINK_BIND_IP=${DNS_SINK_BIND_IP}
 BAS_SERVER_SANS=${BAS_SERVER_SANS}
 BAS_TLS=${BAS_TLS}
+BAS_CSP_MODE=${BAS_CSP_MODE}
 TLS_CERT=${TLS_CERT:-}
 TLS_KEY=${TLS_KEY:-}
 TLS_CERT_CONTAINER_PATH=${tls_cert_container_path}

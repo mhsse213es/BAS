@@ -54,6 +54,13 @@ type Config struct {
 	AppDBPassword     string `json:"-"`
 	JWTSecret         string `json:"jwt_secret"`
 	AgentSecret       string `json:"agent_secret,omitempty"`
+	// IngestAPIKey gates POST /api/ingest/v1/events, the generic inbound
+	// detection/evidence ingestion API (internal/ingest). Empty disables
+	// the endpoint entirely -- unlike AgentSecret, there is no other
+	// protection layer in front of it, so "unset" must mean "off", not
+	// "open". One shared secret per deployment: this is a single-tenant
+	// on-prem product, so there is no per-customer key to manage.
+	IngestAPIKey      string `json:"-"`
 	HTTPPort          int    `json:"http_port"`
 	ScenariosDir      string `json:"scenarios_dir"`
 	ARTDir            string `json:"art_dir,omitempty"`
@@ -176,6 +183,12 @@ type Config struct {
 	// re-enables the listener.
 	LegacyListenerEnabled bool `json:"legacy_listener_enabled,omitempty"`
 
+	// CSPMode (BAS_CSP_MODE) selects how the dashboard Content-Security-Policy
+	// is sent (G1d): "enforce" (default) or "report-only" -- the escape hatch
+	// for a client hitting a violation. There is deliberately no "off"; any
+	// other value fails Load.
+	CSPMode string `json:"csp_mode,omitempty"`
+
 	// DashboardHTTPPort serves the browser dashboard (StaticHandler + JWT
 	// API + /ws/browser) over TLS with NO client-cert requirement --
 	// separate from the mTLS agent listener (HTTPPort) so a browser (which
@@ -219,6 +232,7 @@ func Load(path string) (*Config, error) {
 		LegacyHTTPPort:        9000,
 		DashboardHTTPPort:     9543,
 		LegacyListenerEnabled: true,
+		CSPMode:               "enforce",
 	}
 
 	// Try file first (local dev)
@@ -278,6 +292,9 @@ func Load(path string) (*Config, error) {
 	}
 	if v := os.Getenv("AGENT_SECRET"); v != "" {
 		cfg.AgentSecret = v
+	}
+	if v := os.Getenv("BAS_INGEST_API_KEY"); v != "" {
+		cfg.IngestAPIKey = v
 	}
 	if v := os.Getenv("SMTP_HOST"); v != "" {
 		cfg.SMTPHost = v
@@ -384,6 +401,16 @@ func Load(path string) (*Config, error) {
 		if b, err := strconv.ParseBool(v); err == nil {
 			cfg.LegacyListenerEnabled = b
 		}
+	}
+	cspSource := "csp_mode"
+	if v := strings.TrimSpace(os.Getenv("BAS_CSP_MODE")); v != "" {
+		cfg.CSPMode = v
+		cspSource = "BAS_CSP_MODE"
+	}
+	// Same normalisation for config.json and the env var.
+	cfg.CSPMode = strings.ToLower(strings.TrimSpace(cfg.CSPMode))
+	if cfg.CSPMode != "enforce" && cfg.CSPMode != "report-only" {
+		return nil, fmt.Errorf("%s=%q: must be \"enforce\" or \"report-only\"", cspSource, cfg.CSPMode)
 	}
 	if v := os.Getenv("HTTP_PORT_ENROLL"); v != "" {
 		fmt.Sscanf(v, "%d", &cfg.EnrollHTTPPort)

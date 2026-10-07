@@ -768,7 +768,7 @@ export function resolvedAllTargetIds() {
 // showing that group's own totalAgentCount as a quick-glance hint before any
 // OS filtering is applied.
 function renderGroupTargetList() {
-  renderGroupCheckboxList('modal-group-list', 'sub2', '_groupSel', 'renderGroupTargetSummary', 'runGroupChange');
+  renderGroupCheckboxList('modal-group-list', 'sub2', '_groupSel', renderGroupTargetSummary, 'runGroupChange');
 }
 
 // renderGroupTargetSummary/renderAllTargetSummary only update their own summary
@@ -1208,14 +1208,14 @@ function openDetailedView(sc, items) {
   document.getElementById('picker-overlay').classList.add('open');
 }
 
-// ensureCovStatus populates window._covSt (technique→last-verdict) once, so the
+// ensureCovStatus populates state._covSt (technique→last-verdict) once, so the
 // picker can show coverage badges even if the Coverage tab was never opened.
 function ensureCovStatus(cb) {
-  if (window._covSt) { cb(); return; }
+  if (state._covSt) { cb(); return; }
   apicall('/api/scenarios/runs').then(function(runs) {
-    window._covSt = covStatusMap(runs || []);
+    state._covSt = covStatusMap(runs || []);
   }).catch(function() {
-    window._covSt = window._covSt || {};
+    state._covSt = state._covSt || {};
   }).then(cb, cb);
 }
 // pickerTechId resolves the ATT&CK technique id for a picker item per framework.
@@ -1227,7 +1227,7 @@ function pickerTechId(it, fw) {
 // covBadge renders this technique's last validated result (none for untested).
 function covBadge(techId) {
   if (!techId) return '';
-  var m = { cov: ['Prevented', 'var(--success)'], part: ['Detected', 'var(--warning)'], gap: ['Missed', 'var(--danger)'] }[(window._covSt || {})[techId]];
+  var m = { cov: ['Prevented', 'var(--success)'], part: ['Detected', 'var(--warning)'], gap: ['Missed', 'var(--danger)'] }[(state._covSt || {})[techId]];
   if (!m) return '';
   return ' <span class="sbadge" style="background:transparent;border:1px solid ' + m[1] + ';color:' + m[1] + ';font-size:0.55rem;padding:1px 5px">' + m[0] + '</span>';
 }
@@ -2434,7 +2434,7 @@ export function viewRunResults(run) {
     scorePanel += '<div style="' + dimStyle2 + '"><div style="' + labelStyle2 + '">Privilege Tier Breakdown</div>' + rows + '</div>';
   })();
 
-  window._evidenceResults = results;
+  state._evidenceResults = results;
   results.forEach(function(c, i) { c._eidx = i; });
 
   function resultColor(c) {

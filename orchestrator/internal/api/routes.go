@@ -41,7 +41,7 @@ func MountEnrollment(h *Handler) http.Handler {
 }
 
 // Mount builds the full HTTP router and returns it.
-// staticHandler serves the dashboard SPA — pass StaticHandler() in production
+// staticHandler serves the dashboard SPA — pass StaticHandler(cfg.CSPMode) in production
 // (embedded FS) or http.FileServer(http.Dir("./wwwroot")) in tests/dev.
 // rateLimitPerMin <= 0 disables rate limiting entirely (the default —
 // existing installs are never surprise-limited on upgrade).
@@ -75,6 +75,21 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 	r.Get("/login/{tenantSlug}/sso", h.InitiateSSOLogin)
 	r.Get("/api/auth/sso/callback", h.SSOCallback)
 	r.Get("/api/config/ca-root", h.GetCARoot)
+	r.Post("/api/csp-report", h.CSPReport) // CSP violation reports; browsers send them without credentials (G1d)
+
+	// Generic inbound security-event ingestion -- authenticated by its own
+	// shared secret (see validateIngestAuth), not the JWT session auth
+	// this group's name implies; placed here because it is, like the CSP
+	// report endpoint above, called by something other than a logged-in
+	// browser session. IngestEvents itself 404s when unconfigured. Rate
+	// limited like the JWT/SCIM groups below: an externally-reachable
+	// write endpoint is exactly the runaway-client case that guard exists
+	// for.
+	if rateLimit != nil {
+		r.With(rateLimit).Post("/api/ingest/v1/events", h.IngestEvents)
+	} else {
+		r.Post("/api/ingest/v1/events", h.IngestEvents)
+	}
 
 	// Agent endpoints — protected by optional AGENT_SECRET shared token.
 	// When agentSecret is empty these remain open (backward compat).

@@ -45,7 +45,7 @@ function populateCoverageFilters(d) {
   _caFiltersPopulated = true;
   // Scenario dropdown from loaded scenario list.
   var scenSel = document.getElementById('ca-scenario');
-  if (scenSel && window.scenarios) {
+  if (scenSel && state.scenarios) {
     var cur = scenSel.value;
     scenSel.innerHTML = '<option value="">All scenarios</option>' +
       (state.scenarios || []).map(function(s) { return '<option value="' + x(s.id) + '">' + x(s.name) + '</option>'; }).join('');
@@ -266,7 +266,7 @@ export function renderUTL() {
   if (sumEl) sumEl.textContent = _utlData.length.toLocaleString() + ' unique techniques — ' +
     'BAS ' + totBAS + ' · ART ' + totART + ' · Emu ' + totEmu + ' · Atomic ' + totAtomic;
 
-  var cov = window._covSt || {};
+  var cov = state._covSt || {};
   var rows = filtered.map(function(t, i) {
     var bg = i % 2 === 0 ? '' : 'background:rgba(255,255,255,.02)';
     var verdict = cov[t.techniqueId] || '';
@@ -313,7 +313,7 @@ export function loadCoverage() {
         counts[s]++; counts.total++;
       });
     });
-    window._covCounts = counts; window._covTactics = tactics; window._covSt = st;
+    state._covCounts = counts; state._covTactics = tactics; state._covSt = st;
     renderCovToolbar(); renderCovMatrix();
     document.getElementById('cov-foot').textContent =
       'Showing ' + counts.total + ' techniques across ' + tactics.length +
@@ -323,8 +323,8 @@ export function loadCoverage() {
   });
 }
 function renderCovMatrix() {
-  var st = window._covSt || {}, view = COV_VIEW;
-  document.getElementById('cov-matrix').innerHTML = '<div class="mx">' + (window._covTactics || []).map(function(t) {
+  var st = state._covSt || {}, view = COV_VIEW;
+  document.getElementById('cov-matrix').innerHTML = '<div class="mx">' + (state._covTactics || []).map(function(t) {
     var techs = t.techniques || [];
     var cov = techs.filter(function(c) { return st[c.id] === 'cov'; }).length;
     var cells = techs.map(function(c) {
@@ -337,7 +337,7 @@ function renderCovMatrix() {
   }).join('') + '</div>';
 }
 function renderCovToolbar() {
-  var c = window._covCounts || { cov: 0, part: 0, gap: 0, none: 0 };
+  var c = state._covCounts || { cov: 0, part: 0, gap: 0, none: 0 };
   var seg = covSegHtml([['all', 'All'], ['cov', 'Prevented'], ['part', 'Detected'], ['gap', 'Missed'], ['none', 'Untested']], COV_VIEW, 'setCovView');
   var badge = function(col, l, v) { return '<span class="sbadge" style="background:transparent;border:1px solid var(--border);color:' + col + '">' + v + ' ' + l + '</span>'; };
   document.getElementById('cov-toolbar').innerHTML =
@@ -348,7 +348,7 @@ function renderCovToolbar() {
 export function setCovView(v) { COV_VIEW = v; renderCovToolbar(); renderCovMatrix(); }
 export function openTechnique(id) {
   document.getElementById('results-overlay').classList.remove('run-mode');
-  var st = (window._covSt || {})[id] || 'none';
+  var st = (state._covSt || {})[id] || 'none';
   var meta = { cov: ['Prevented', 'var(--success)'], part: ['Detected only', 'var(--warning)'], gap: ['Missed', 'var(--danger)'], none: ['Untested', 'var(--muted)'] }[st];
   apicall('/api/attack/technique/' + encodeURIComponent(id)).then(function(e) {
     e = e || {};

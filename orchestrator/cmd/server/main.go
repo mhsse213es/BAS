@@ -745,6 +745,7 @@ func main() {
 		WithContentSeed(cfg.ARTDir, cfg.ARTPayloadDir, cfg.KEVFile, cfg.ARTContentVersion).
 		WithEPSSFile(cfg.EPSSFile).
 		WithAgentSecret(cfg.AgentSecret).
+		WithIngestAPIKey(cfg.IngestAPIKey).
 		WithPKI(ca).
 		WithCommandSigningKey(signingKey).
 		WithMetricsToken(cfg.MetricsToken).
@@ -857,7 +858,7 @@ func main() {
 	if cfg.RateLimitEnabled {
 		rateLimitPerMin = cfg.RateLimitPerMin
 	}
-	router := api.Mount(handler, hub, cfg.JWTSecret, cfg.AgentSecret, StaticHandler(), rateLimitPerMin, cfg.RateLimitBurst, exTracker)
+	router := api.Mount(handler, hub, cfg.JWTSecret, cfg.AgentSecret, StaticHandler(cfg.CSPMode), rateLimitPerMin, cfg.RateLimitBurst, exTracker)
 
 	// ── Agent Staleness Monitor ───────────────────────────────────────────
 	// Marks agents offline if no heartbeat received within 90 seconds and

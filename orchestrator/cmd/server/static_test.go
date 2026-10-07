@@ -247,3 +247,81 @@ func TestManifestOnly_MissingManifestFails(t *testing.T) {
 		t.Fatal("manifestOnly accepted a wwwroot without MANIFEST.sha256")
 	}
 }
+
+func TestDashboardCSP_ScriptSrcIsStrict(t *testing.T) {
+	dirs := map[string]string{}
+	for _, d := range strings.Split(dashboardCSP, ";") {
+		f := strings.Fields(d)
+		if len(f) > 0 {
+			dirs[f[0]] = strings.Join(f[1:], " ")
+		}
+	}
+	if dirs["script-src"] != "'self'" {
+		t.Fatalf("script-src = %q, want exactly 'self'", dirs["script-src"])
+	}
+	if dirs["default-src"] != "'none'" || dirs["object-src"] != "'none'" || dirs["base-uri"] != "'none'" || dirs["frame-ancestors"] != "'none'" {
+		t.Fatalf("lockdown directives changed: %v", dirs)
+	}
+	for _, bad := range []string{"unsafe-eval", "unsafe-hashes", "*", "http:", "https:"} {
+		if strings.Contains(dirs["script-src"], bad) || strings.Contains(dirs["default-src"], bad) {
+			t.Fatalf("policy weakened with %q: %s", bad, dashboardCSP)
+		}
+	}
+}
+
+func TestDashboardCSP_MatchesSmokePolicy(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("..", "..", "web", "tests", "smoke", "csp-policy.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.TrimSpace(string(raw)); got != dashboardCSP {
+		t.Fatalf("smoke policy and server policy differ:\nsmoke:  %s\nserver: %s", got, dashboardCSP)
+	}
+}
+
+func TestCSPHeaders_Modes(t *testing.T) {
+	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {})
+	for mode, want := range map[string]string{"enforce": "Content-Security-Policy", "report-only": "Content-Security-Policy-Report-Only"} {
+		rec := httptest.NewRecorder()
+		cspHeaders(mode, inner).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+		if rec.Header().Get(want) != dashboardCSP {
+			t.Errorf("%s: %s = %q", mode, want, rec.Header().Get(want))
+		}
+		other := "Content-Security-Policy-Report-Only"
+		if want == other {
+			other = "Content-Security-Policy"
+		}
+		if rec.Header().Get(other) != "" {
+			t.Errorf("%s: unexpected %s header", mode, other)
+		}
+	}
+}
+
+// Release builds compile in a wwwroot manifest hash and serve through the
+// integrity-checked branch of StaticHandler; dev builds do not. Both must
+// send the policy.
+func TestStaticHandler_CSPOnDevAndReleaseBuilds(t *testing.T) {
+	index := []byte("<!doctype html><title>t</title>")
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "wwwroot"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "wwwroot", "index.html"), index, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	manifest := []byte(fmt.Sprintf("%x  index.html\n", sha256.Sum256(index)))
+	if err := os.WriteFile(filepath.Join(dir, "wwwroot", wwwManifestName), manifest, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(dir)
+	saved := expectedWWWManifestHash
+	t.Cleanup(func() { expectedWWWManifestHash = saved })
+	for name, hash := range map[string]string{"dev": "", "release": fmt.Sprintf("%x", sha256.Sum256(manifest))} {
+		expectedWWWManifestHash = hash
+		rec := httptest.NewRecorder()
+		StaticHandler("enforce").ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/index.html", nil))
+		if rec.Header().Get("Content-Security-Policy") != dashboardCSP {
+			t.Errorf("%s build: Content-Security-Policy = %q", name, rec.Header().Get("Content-Security-Policy"))
+		}
+	}
+}

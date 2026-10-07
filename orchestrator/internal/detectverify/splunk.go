@@ -148,19 +148,55 @@ func parseSplunkResults(data []byte, uiBase string) ([]normalizedAlert, error) {
 	return out, nil
 }
 
+// parseMitreAttack accepts every shape Splunk's mitre_attack_enrichment
+// lookup has been documented to produce for annotations.mitre_attack: a
+// flat list or single string of technique IDs (the original assumption
+// here), or -- per Splunk's own docs, which describe sub-fields named
+// annotations.mitre_attack.mitre_technique_id/mitre_tactic/etc. -- a single
+// enrichment object or array of them, each carrying its technique id(s)
+// under mitre_technique_id (itself a string or an array). The exact export
+// shape wasn't confirmed against a live instance, so every form is tried
+// rather than guessing one.
 func parseMitreAttack(raw json.RawMessage) []string {
 	if len(raw) == 0 {
 		return nil
 	}
 	var list []string
-	if err := json.Unmarshal(raw, &list); err == nil {
+	if err := json.Unmarshal(raw, &list); err == nil && len(list) > 0 {
 		return list
 	}
 	var single string
 	if err := json.Unmarshal(raw, &single); err == nil && single != "" {
 		return []string{single}
 	}
+	var objs []map[string]any
+	if err := json.Unmarshal(raw, &objs); err == nil && len(objs) > 0 {
+		return mitreIDsFromEnrichmentObjects(objs)
+	}
+	var obj map[string]any
+	if err := json.Unmarshal(raw, &obj); err == nil && len(obj) > 0 {
+		return mitreIDsFromEnrichmentObjects([]map[string]any{obj})
+	}
 	return nil
+}
+
+func mitreIDsFromEnrichmentObjects(objs []map[string]any) []string {
+	var out []string
+	for _, o := range objs {
+		switch v := o["mitre_technique_id"].(type) {
+		case string:
+			if v != "" {
+				out = append(out, v)
+			}
+		case []any:
+			for _, x := range v {
+				if s, ok := x.(string); ok && s != "" {
+					out = append(out, s)
+				}
+			}
+		}
+	}
+	return out
 }
 
 func parseSplunkTime(s string) time.Time {

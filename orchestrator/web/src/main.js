@@ -1,5 +1,6 @@
-import { installGlobals, ACTIONS } from './globals.js';
+import { ACTIONS } from './globals.js';
 import { installActions } from './core/actions.js';
+import { installCssVars } from './core/css-vars.js';
 import './core/api.js';
 import './core/escape.js';
 import './core/util.js';
@@ -30,8 +31,8 @@ import './features/variant-executor.js';
 import './features/variant-report.js';
 import './features/variants.js';
 
-installGlobals();
 installActions(ACTIONS);
+installCssVars();
 __init_L5162();
 __init_L5212();
 __init_L5490();

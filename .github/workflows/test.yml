@@ -47,12 +47,11 @@ jobs:
           python3 scripts/g1-check-no-regression.py --against /tmp/g1_base.json
           cd scripts && python3 -m unittest test_g1_merge_classification test_g1_check_no_regression test_g1_assemble_classifier_view -v
 
-      - name: G1c globals registry check
+      - name: G1d action registry check
         working-directory: .
         run: |
-          python3 scripts/g1c-check-globals.py
           python3 scripts/g1d-check-actions.py
-          cd scripts && python3 -m unittest test_g1c_check_globals test_g1d_check_actions -v
+          cd scripts && python3 -m unittest test_g1d_check_actions -v
 
       # H1: only `orchestrator migrate` changes the schema. Migration/seed
       # immutability, the legacy freeze and baseline equivalence run in go test.
@@ -94,11 +93,26 @@ jobs:
       - name: go build server without go.work (as the image does)
         env:
           CGO_ENABLED: "0"
-          GOWORK: "off"
         run: go build -o /dev/null ./cmd/server
+
+      # Record every test-container lifecycle event, so a database container
+      # that disappears mid-run shows whether it was killed (and by which
+      # signal), OOM-killed, or crashed on its own.
+      - name: watch test containers
+        run: |
+          nohup docker events --filter type=container \
+            --format '{{.TimeNano}} {{.Action}} image={{.Actor.Attributes.image}} exit={{.Actor.Attributes.exitCode}} signal={{.Actor.Attributes.signal}} id={{printf "%.12s" .Actor.ID}}' \
+            > "$RUNNER_TEMP/docker-events.log" 2>&1 &
 
       - name: go test (race + coverage)
         run: go test ./... -race -timeout 30m -coverprofile=coverage.out
+
+      - name: test container diagnostics
+        if: failure()
+        run: |
+          grep -vE ' (exec_|attach|resize|top)' "$RUNNER_TEMP/docker-events.log" | grep -vE ' (create|start) ' | tail -200 || true
+          sudo dmesg -T | grep -iE 'oom|killed process|out of memory' || echo "no OOM in kernel log"
+          free -m
 
       - name: coverage HTML report
         run: go tool cover -html=coverage.out -o coverage.html
@@ -138,6 +152,8 @@ jobs:
       - name: Smoke harness (bundled build)
         env:
           SMOKE_ROOT: dist
+          SMOKE_CSP: enforce
+          SMOKE_STRICT: '1'
         run: npm run smoke
       - name: Upload smoke artifacts on failure
         if: failure()
@@ -147,3 +163,18 @@ jobs:
           path: |
             orchestrator/web/test-results
             orchestrator/web/playwright-report
+
+  web-visual:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: G1e visual equivalence (baseline build vs HEAD)
+        run: bash orchestrator/web/tools/visual.sh
+      - name: Upload visual artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: visual-artifacts
+          path: orchestrator/web/.visual/results

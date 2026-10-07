@@ -68,6 +68,15 @@ func TestCreateSIEMConfig_ValidationErrors(t *testing.T) {
 			{"missing name", map[string]any{"provider": "qradar"}},
 			{"missing provider", map[string]any{"name": "x"}},
 			{"invalid provider", map[string]any{"name": "x", "provider": "bogus"}},
+			// This correlator only has a working client for qradar (see
+			// queryAlerts/TestConnectivity in siem/correlator.go) -- splunk,
+			// wazuh and sentinel must never validate as creatable here, or a
+			// config silently fails later at query/test time instead of at
+			// creation. Splunk/Sentinel detection validation is available
+			// today via the separate Detection Validation connectors.
+			{"splunk not implemented in this correlator", map[string]any{"name": "x", "provider": "splunk"}},
+			{"wazuh not implemented in this correlator", map[string]any{"name": "x", "provider": "wazuh"}},
+			{"sentinel not implemented in this correlator", map[string]any{"name": "x", "provider": "sentinel"}},
 		}
 		for _, c := range cases {
 			rec := httptest.NewRecorder()

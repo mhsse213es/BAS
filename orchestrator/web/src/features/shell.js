@@ -311,8 +311,8 @@ function bootApp() {
     try { var s = JSON.parse(localStorage.getItem('_apCurrentJob') || 'null'); return !!(s && s.jobId); } catch(e) { return false; }
   })();
   showTab(hasPendingJob ? 'attackpath' : lastTab);
-  if (!window._cmdkBound) {
-    window._cmdkBound = true;
+  if (!state._cmdkBound) {
+    state._cmdkBound = true;
     document.addEventListener('keydown', function(e) {
       if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')) { e.preventDefault(); openCmdk(); }
     });

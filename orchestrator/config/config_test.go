@@ -2,6 +2,8 @@ package config
 
 import (
 	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -317,5 +319,101 @@ func TestLoad_AppDBPasswordFromEnv(t *testing.T) {
 	}
 	if cfg.AppDBPassword != "rotated-password" {
 		t.Errorf("AppDBPassword = %q, want the env value", cfg.AppDBPassword)
+	}
+}
+
+func TestLoad_CSPMode(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://test")
+	t.Setenv("DATABASE_ADMIN_URL", "postgres://test-admin")
+	t.Setenv("BAS_APP_DB_PASSWORD", "test-app-password")
+	t.Setenv("JWT_SECRET", "test-secret-32-bytes-long-enough")
+	for _, tc := range []struct {
+		env, want string
+		wantErr   bool
+	}{
+		{"", "enforce", false},
+		{"enforce", "enforce", false},
+		{"report-only", "report-only", false},
+		{" Report-Only ", "report-only", false},
+		{"ENFORCE", "enforce", false},
+		{"off", "", true},
+		{"none", "", true},
+		{"reportonly", "", true},
+	} {
+		t.Run(tc.env, func(t *testing.T) {
+			t.Setenv("BAS_CSP_MODE", tc.env)
+			cfg, err := Load("/nonexistent/config.json")
+			if tc.wantErr {
+				if err == nil || !strings.Contains(err.Error(), "BAS_CSP_MODE") {
+					t.Fatalf("Load() err = %v, want a BAS_CSP_MODE error", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("Load() err = %v", err)
+			}
+			if cfg.CSPMode != tc.want {
+				t.Fatalf("CSPMode = %q, want %q", cfg.CSPMode, tc.want)
+			}
+		})
+	}
+}
+
+func TestLoad_CSPModeFromConfigFileIsNormalised(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://test")
+	t.Setenv("DATABASE_ADMIN_URL", "postgres://test-admin")
+	t.Setenv("BAS_APP_DB_PASSWORD", "test-app-password")
+	t.Setenv("JWT_SECRET", "test-secret-32-bytes-long-enough")
+	t.Setenv("BAS_CSP_MODE", "")
+	path := filepath.Join(t.TempDir(), "config.json")
+	if err := os.WriteFile(path, []byte(`{"csp_mode": " Report-Only "}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load() err = %v", err)
+	}
+	if cfg.CSPMode != "report-only" {
+		t.Fatalf("CSPMode = %q, want %q", cfg.CSPMode, "report-only")
+	}
+}
+
+func TestLoad_IngestAPIKeyFromEnv(t *testing.T) {
+	os.Setenv("DATABASE_URL", "postgres://test")
+	os.Setenv("DATABASE_ADMIN_URL", "postgres://test-admin")
+	os.Setenv("BAS_APP_DB_PASSWORD", "test-app-password")
+	os.Setenv("JWT_SECRET", "test-secret-32-bytes-long-enough")
+	os.Setenv("BAS_INGEST_API_KEY", "test-ingest-key")
+	defer os.Unsetenv("DATABASE_URL")
+	defer os.Unsetenv("DATABASE_ADMIN_URL")
+	defer os.Unsetenv("BAS_APP_DB_PASSWORD")
+	defer os.Unsetenv("JWT_SECRET")
+	defer os.Unsetenv("BAS_INGEST_API_KEY")
+
+	cfg, err := Load("/nonexistent/config.json")
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.IngestAPIKey != "test-ingest-key" {
+		t.Errorf("IngestAPIKey = %q, want %q", cfg.IngestAPIKey, "test-ingest-key")
+	}
+}
+
+func TestLoad_IngestAPIKeyDefaultsEmpty(t *testing.T) {
+	os.Setenv("DATABASE_URL", "postgres://test")
+	os.Setenv("DATABASE_ADMIN_URL", "postgres://test-admin")
+	os.Setenv("BAS_APP_DB_PASSWORD", "test-app-password")
+	os.Setenv("JWT_SECRET", "test-secret-32-bytes-long-enough")
+	defer os.Unsetenv("DATABASE_URL")
+	defer os.Unsetenv("DATABASE_ADMIN_URL")
+	defer os.Unsetenv("BAS_APP_DB_PASSWORD")
+	defer os.Unsetenv("JWT_SECRET")
+
+	cfg, err := Load("/nonexistent/config.json")
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.IngestAPIKey != "" {
+		t.Errorf("IngestAPIKey = %q, want empty (disabled by default)", cfg.IngestAPIKey)
 	}
 }
