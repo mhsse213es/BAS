@@ -321,3 +321,49 @@ func TestParseSharpHoundFiles_Delegation_SelfReferentialDoesNotHangPathFinding(t
 		t.Fatalf("expected nil for an unreachable target, got %+v", p)
 	}
 }
+
+const shComputersUnconstrainedDelegation = `{"meta":{"type":"computers","count":1},"data":[
+  {"ObjectIdentifier":"S-1-5-21-1-1-1-9001","Properties":{"name":"LEGACY01.CORP.LOCAL","domain":"CORP.LOCAL","unconstraineddelegation":true},
+   "LocalAdmins":{"Results":[]},"Sessions":{"Results":[]}}
+]}`
+
+const shUsersUnconstrainedDelegation = `{"meta":{"type":"users","count":1},"data":[
+  {"ObjectIdentifier":"S-1-5-21-1-1-1-9100","Properties":{"name":"SVCACCT@CORP.LOCAL","domain":"CORP.LOCAL","unconstraineddelegation":true}}
+]}`
+
+func TestParseSharpHoundFiles_UnconstrainedDelegation_SetsFlagNotEdge(t *testing.T) {
+	c := parseSharpHoundFiles([][]byte{
+		[]byte(shComputersUnconstrainedDelegation),
+		[]byte(shUsersUnconstrainedDelegation),
+	})
+	before := len(c.Edges)
+	g := BuildGraph(c)
+
+	host, ok := g.Node("S-1-5-21-1-1-1-9001")
+	if !ok || !host.UnconstrainedDelegation {
+		t.Fatalf("expected LEGACY01.UnconstrainedDelegation == true, got %+v (ok=%v)", host, ok)
+	}
+	user, ok := g.Node("S-1-5-21-1-1-1-9100")
+	if !ok || !user.UnconstrainedDelegation {
+		t.Fatalf("expected SVCACCT.UnconstrainedDelegation == true, got %+v (ok=%v)", user, ok)
+	}
+	// The property must never create an edge -- it's a capability flag, not
+	// a relationship to a fixed target (see the spec).
+	if len(c.Edges) != before {
+		t.Fatalf("unconstrained delegation must not add any edges, got %d edges (started with %d)", len(c.Edges), before)
+	}
+}
+
+func TestParseSharpHoundFiles_UnconstrainedDelegation_IndependentOfAcesAndDelegationFields(t *testing.T) {
+	// shComputersWithAces (Task 1) has Aces but no AllowedToDelegate/unconstraineddelegation.
+	c := parseSharpHoundFiles([][]byte{[]byte(shComputersWithAces)})
+	g := BuildGraph(c)
+
+	n, ok := g.Node("S-1-5-21-1-1-1-2001")
+	if !ok {
+		t.Fatal("FILESRV02 node should exist")
+	}
+	if n.UnconstrainedDelegation {
+		t.Fatal("a computer with only Aces present must not have UnconstrainedDelegation set")
+	}
+}

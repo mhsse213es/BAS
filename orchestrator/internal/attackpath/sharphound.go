@@ -30,8 +30,9 @@ const domainControllersRID = "-516" // Domain Controllers group
 
 // bhProps is the subset of BloodHound node Properties we use.
 type bhProps struct {
-	Name   string `json:"name"`
-	Domain string `json:"domain"`
+	Name                    string `json:"name"`
+	Domain                  string `json:"domain"`
+	UnconstrainedDelegation bool   `json:"unconstraineddelegation"`
 }
 
 // bhMember is a group member / local-admin principal reference.
@@ -206,6 +207,7 @@ func buildSharpHoundCollection(computers []bhComputer, users []bhUser, groups []
 		}
 		c.Nodes = append(c.Nodes, Node{
 			ID: u.ObjectIdentifier, Kind: KindUser, Label: labelOf(u.Properties, u.ObjectIdentifier),
+			UnconstrainedDelegation: u.Properties.UnconstrainedDelegation,
 		})
 		addAceEdges(&c.Edges, u.ObjectIdentifier, u.Aces)
 	}
@@ -240,6 +242,7 @@ func buildSharpHoundCollection(computers []bhComputer, users []bhUser, groups []
 		c.Nodes = append(c.Nodes, Node{
 			ID: cm.ObjectIdentifier, Kind: KindHost,
 			Label: labelOf(cm.Properties, cm.ObjectIdentifier), Role: role,
+			UnconstrainedDelegation: cm.Properties.UnconstrainedDelegation,
 		})
 		// Local admins → principal is admin-to this computer.
 		for _, a := range cm.LocalAdmins.Results {

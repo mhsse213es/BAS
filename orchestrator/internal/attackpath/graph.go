@@ -44,6 +44,13 @@ type Node struct {
 	IdentityExposed bool     `json:"identityExposed,omitempty"`
 	Production      bool     `json:"production,omitempty"`
 	ComplianceScope []string `json:"complianceScope,omitempty"`
+
+	// UnconstrainedDelegation marks a principal (computer or user) configured
+	// for unconstrained Kerberos delegation: whoever controls it can harvest
+	// and reuse the TGT of ANY user who authenticates to it. Deliberately a
+	// flag, not an edge -- there is no single fixed target to draw an edge
+	// to. See docs/superpowers/specs/2026-10-07-ad-acl-delegation-graph-model-design.md.
+	UnconstrainedDelegation bool `json:"unconstrainedDelegation,omitempty"`
 }
 
 // EdgeKind is a traversable relationship an attacker can use.
