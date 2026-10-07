@@ -1,0 +1,4 @@
+/* G1e: former inline style attributes, one rule per line, sorted, declarations
+   verbatim (docs/superpowers/specs/2026-10-06-g1e-strict-style-csp-design.md).
+   Unlayered, so these rules outrank @layer app exactly as inline styles did. */
+.is-hidden { display: none; }
