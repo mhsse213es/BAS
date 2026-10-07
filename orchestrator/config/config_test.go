@@ -391,3 +391,43 @@ func TestLoad_CSPModeFromConfigFileIsNormalised(t *testing.T) {
 		t.Fatalf("CSPMode = %q, want %q", cfg.CSPMode, "report-only")
 	}
 }
+
+func TestLoad_IngestAPIKeyFromEnv(t *testing.T) {
+	os.Setenv("DATABASE_URL", "postgres://test")
+	os.Setenv("DATABASE_ADMIN_URL", "postgres://test-admin")
+	os.Setenv("BAS_APP_DB_PASSWORD", "test-app-password")
+	os.Setenv("JWT_SECRET", "test-secret-32-bytes-long-enough")
+	os.Setenv("BAS_INGEST_API_KEY", "test-ingest-key")
+	defer os.Unsetenv("DATABASE_URL")
+	defer os.Unsetenv("DATABASE_ADMIN_URL")
+	defer os.Unsetenv("BAS_APP_DB_PASSWORD")
+	defer os.Unsetenv("JWT_SECRET")
+	defer os.Unsetenv("BAS_INGEST_API_KEY")
+
+	cfg, err := Load("/nonexistent/config.json")
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.IngestAPIKey != "test-ingest-key" {
+		t.Errorf("IngestAPIKey = %q, want %q", cfg.IngestAPIKey, "test-ingest-key")
+	}
+}
+
+func TestLoad_IngestAPIKeyDefaultsEmpty(t *testing.T) {
+	os.Setenv("DATABASE_URL", "postgres://test")
+	os.Setenv("DATABASE_ADMIN_URL", "postgres://test-admin")
+	os.Setenv("BAS_APP_DB_PASSWORD", "test-app-password")
+	os.Setenv("JWT_SECRET", "test-secret-32-bytes-long-enough")
+	defer os.Unsetenv("DATABASE_URL")
+	defer os.Unsetenv("DATABASE_ADMIN_URL")
+	defer os.Unsetenv("BAS_APP_DB_PASSWORD")
+	defer os.Unsetenv("JWT_SECRET")
+
+	cfg, err := Load("/nonexistent/config.json")
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.IngestAPIKey != "" {
+		t.Errorf("IngestAPIKey = %q, want empty (disabled by default)", cfg.IngestAPIKey)
+	}
+}

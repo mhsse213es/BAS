@@ -37,6 +37,11 @@ const (
 	// human-entered like SourceManual, and not observed during our own
 	// execution like SourceDetectionAlert/SourceScenario/SourceVariant.
 	SourceThreatFeed Source = "threat_feed"
+	// SourceCustomerDetection marks an indicator reported by the customer's
+	// own security tooling (SIEM/SOAR/ITSM) via the generic ingestion API
+	// (internal/ingest) -- distinct from SourceDetectionAlert (observed
+	// during our own execution) and SourceThreatFeed (external intel feed).
+	SourceCustomerDetection Source = "customer_detection"
 )
 
 type Origin string

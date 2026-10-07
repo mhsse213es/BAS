@@ -90,6 +90,7 @@ type Handler struct {
 	actionVendorClient   func(actions.ConnectorConfig) (actions.VendorClient, error)
 	secret               string
 	agentSecret          string                 // optional shared secret for agent-facing endpoints
+	ingestAPIKey         string                 // shared secret for POST /api/ingest/v1/events; empty disables the endpoint
 	pki                  *pki.CA                // deployment CA for agent mTLS enrollment (B1/B3)
 	signingKey           *cmdsigning.SigningKey // deployment command-signing key (B4) -- separate trust domain from pki above, never chained to it
 	calderaURL           string
@@ -231,6 +232,14 @@ func (h *Handler) WithMetrics(reg *observability.MetricsRegistry) *Handler {
 // WithAgentSecret configures the optional agent shared secret.
 func (h *Handler) WithAgentSecret(s string) *Handler {
 	h.agentSecret = s
+	return h
+}
+
+// WithIngestAPIKey configures the shared secret for the generic inbound
+// ingestion API. Unlike WithAgentSecret, an empty key disables the
+// endpoint rather than leaving it open -- see the ingestAPIKey field doc.
+func (h *Handler) WithIngestAPIKey(s string) *Handler {
+	h.ingestAPIKey = s
 	return h
 }
 

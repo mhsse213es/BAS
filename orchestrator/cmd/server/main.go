@@ -265,6 +265,9 @@ func main() {
 	if err := db.EnsureIOCEnrichmentSchema(context.Background(), adminPool); err != nil {
 		log.Fatalf("[FATAL] ioc enrichment schema bootstrap: %v", err)
 	}
+	if err := db.EnsureIngestSchema(context.Background(), adminPool); err != nil {
+		log.Fatalf("[FATAL] ingest schema bootstrap: %v", err)
+	}
 	if err := db.EnsureAgentGroupSchema(context.Background(), adminPool); err != nil {
 		log.Fatalf("[FATAL] agent group schema bootstrap: %v", err)
 	}
@@ -781,6 +784,7 @@ func main() {
 		WithContentSeed(cfg.ARTDir, cfg.ARTPayloadDir, cfg.KEVFile, cfg.ARTContentVersion).
 		WithEPSSFile(cfg.EPSSFile).
 		WithAgentSecret(cfg.AgentSecret).
+		WithIngestAPIKey(cfg.IngestAPIKey).
 		WithPKI(ca).
 		WithCommandSigningKey(signingKey).
 		WithMetricsToken(cfg.MetricsToken).

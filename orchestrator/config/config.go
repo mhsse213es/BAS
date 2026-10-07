@@ -53,6 +53,13 @@ type Config struct {
 	AppDBPassword     string `json:"-"`
 	JWTSecret         string `json:"jwt_secret"`
 	AgentSecret       string `json:"agent_secret,omitempty"`
+	// IngestAPIKey gates POST /api/ingest/v1/events, the generic inbound
+	// detection/evidence ingestion API (internal/ingest). Empty disables
+	// the endpoint entirely -- unlike AgentSecret, there is no other
+	// protection layer in front of it, so "unset" must mean "off", not
+	// "open". One shared secret per deployment: this is a single-tenant
+	// on-prem product, so there is no per-customer key to manage.
+	IngestAPIKey      string `json:"-"`
 	HTTPPort          int    `json:"http_port"`
 	ScenariosDir      string `json:"scenarios_dir"`
 	ARTDir            string `json:"art_dir,omitempty"`
@@ -284,6 +291,9 @@ func Load(path string) (*Config, error) {
 	}
 	if v := os.Getenv("AGENT_SECRET"); v != "" {
 		cfg.AgentSecret = v
+	}
+	if v := os.Getenv("BAS_INGEST_API_KEY"); v != "" {
+		cfg.IngestAPIKey = v
 	}
 	if v := os.Getenv("SMTP_HOST"); v != "" {
 		cfg.SMTPHost = v
