@@ -9,24 +9,18 @@ import (
 	"go.opentelemetry.io/otel/sdk/trace"
 )
 
-// NewPrometheusRemoteWriteExporter creates a span exporter for Prometheus remote-write API.
-// Endpoint should be the full URL to the remote-write endpoint (e.g., http://prometheus:9009/api/v1/write).
-// Note: This returns a trace exporter stub for now. Full Prometheus metrics export is handled
-// separately via the metrics registry (Task 3).
-func NewPrometheusRemoteWriteExporter(endpoint string) (trace.SpanExporter, error) {
-	if endpoint == "" {
-		return nil, fmt.Errorf("prometheus remote-write endpoint cannot be empty")
+// otlpTracesURL turns an OTLP/HTTP base URL into the traces endpoint. A bare
+// base (http://tempo:4318) gets the OTLP path /v1/traces; an explicit path is
+// kept as given.
+func otlpTracesURL(endpoint string) (string, error) {
+	u, err := url.Parse(endpoint)
+	if err != nil {
+		return "", err
 	}
-
-	// Validate URL
-	if _, err := url.Parse(endpoint); err != nil {
-		return nil, fmt.Errorf("invalid prometheus endpoint URL: %w", err)
+	if u.Path == "" || u.Path == "/" {
+		u.Path = "/v1/traces"
 	}
-
-	// TODO: Implement actual Prometheus remote-write exporter in a future phase.
-	// For now, return a no-op exporter to satisfy the interface.
-	// This allows the configuration to be wired without blocking on Prometheus integration.
-	return newNoOpExporter(), nil
+	return u.String(), nil
 }
 
 // NewTempoExporter creates a span exporter for Grafana Tempo via OTLP HTTP.
@@ -42,7 +36,11 @@ func NewTempoExporter(endpoint string) (trace.SpanExporter, error) {
 	}
 
 	// Create OTLP HTTP trace exporter
-	exporter, err := otlptracehttp.New(context.Background(), otlptracehttp.WithEndpoint(endpoint))
+	tracesURL, err := otlpTracesURL(endpoint)
+	if err != nil {
+		return nil, fmt.Errorf("invalid tempo endpoint URL: %w", err)
+	}
+	exporter, err := otlptracehttp.New(context.Background(), otlptracehttp.WithEndpointURL(tracesURL))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create tempo exporter: %w", err)
 	}
@@ -63,29 +61,14 @@ func NewJaegerExporter(endpoint string) (trace.SpanExporter, error) {
 	}
 
 	// Create OTLP HTTP trace exporter (Jaeger also supports OTLP)
-	exporter, err := otlptracehttp.New(context.Background(), otlptracehttp.WithEndpoint(endpoint))
+	tracesURL, err := otlpTracesURL(endpoint)
+	if err != nil {
+		return nil, fmt.Errorf("invalid tempo endpoint URL: %w", err)
+	}
+	exporter, err := otlptracehttp.New(context.Background(), otlptracehttp.WithEndpointURL(tracesURL))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create jaeger exporter: %w", err)
 	}
 
 	return exporter, nil
-}
-
-// noOpExporter is a placeholder span exporter that does nothing.
-// Used for exporters that are not yet fully implemented but need to satisfy the interface.
-type noOpExporter struct{}
-
-// ExportSpans implements the SpanExporter interface (no-op).
-func (e *noOpExporter) ExportSpans(ctx context.Context, spans []trace.ReadOnlySpan) error {
-	return nil
-}
-
-// Shutdown implements the SpanExporter interface (no-op).
-func (e *noOpExporter) Shutdown(ctx context.Context) error {
-	return nil
-}
-
-// newNoOpExporter creates a new no-op exporter.
-func newNoOpExporter() trace.SpanExporter {
-	return &noOpExporter{}
 }

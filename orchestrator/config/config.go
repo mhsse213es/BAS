@@ -139,6 +139,10 @@ type Config struct {
 	// posture as RateLimitEnabled.
 	MetricsToken string `json:"metrics_token,omitempty"`
 
+	// OTLPEndpoint, when set, exports request and span traces to an OTLP/HTTP
+	// receiver (Tempo or Jaeger), e.g. http://tempo:4318. Empty disables export.
+	OTLPEndpoint string `json:"otlp_endpoint,omitempty"`
+
 	// Agent trust model (B1/B3) — deployment CA + per-agent mTLS.
 	// See docs/superpowers/specs/2026-09-27-agent-trust-model-b1-b3-b4-design.md.
 	// PKIDir holds the deployment CA's keypair/cert (ca-key.pem, ca-cert.pem),
@@ -379,6 +383,9 @@ func Load(path string) (*Config, error) {
 	}
 	if v := os.Getenv("METRICS_TOKEN"); v != "" {
 		cfg.MetricsToken = v
+	}
+	if v := os.Getenv("BAS_OTLP_ENDPOINT"); v != "" {
+		cfg.OTLPEndpoint = v
 	}
 	if v := os.Getenv("PKI_DIR"); v != "" {
 		cfg.PKIDir = v

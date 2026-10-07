@@ -2,6 +2,7 @@ package observability
 
 import (
 	"io"
+	"log"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/stdout/stdouttrace"
@@ -30,16 +31,10 @@ type ExporterConfig struct {
 	// Console exports spans to stdout for development/testing.
 	Console bool
 
-	// PrometheusRemoteWrite exports metrics via Prometheus remote-write API.
-	// (Implemented in exporters.go)
-	PrometheusRemoteWrite bool
-
 	// TempoEndpoint exports traces to a Tempo OTLP HTTP receiver (e.g., http://localhost:4318).
-	// (Implemented in exporters.go)
 	TempoEndpoint string
 
-	// JaegerEndpoint exports traces to a Jaeger OTLP HTTP receiver (e.g., http://localhost:4317).
-	// (Implemented in exporters.go)
+	// JaegerEndpoint exports traces to a Jaeger OTLP HTTP receiver (e.g., http://localhost:4318).
 	JaegerEndpoint string
 }
 
@@ -89,9 +84,22 @@ func NewTracerProviderWithConfig(config *OTelConfig) *trace.TracerProvider {
 		}
 	}
 
-	// TODO: Add Prometheus remote-write exporter (Task 6)
-	// TODO: Add Tempo exporter (Task 6)
-	// TODO: Add Jaeger exporter (Task 6)
+	// An exporter that cannot be built is logged and skipped rather than
+	// stopping the server: tracing is optional.
+	if config.Exporters.TempoEndpoint != "" {
+		if exp, err := NewTempoExporter(config.Exporters.TempoEndpoint); err != nil {
+			log.Printf("[observability] tempo exporter disabled: %v", err)
+		} else {
+			exporters = append(exporters, exp)
+		}
+	}
+	if config.Exporters.JaegerEndpoint != "" {
+		if exp, err := NewJaegerExporter(config.Exporters.JaegerEndpoint); err != nil {
+			log.Printf("[observability] jaeger exporter disabled: %v", err)
+		} else {
+			exporters = append(exporters, exp)
+		}
+	}
 
 	// Create tracer provider with exporters
 	var opts []trace.TracerProviderOption

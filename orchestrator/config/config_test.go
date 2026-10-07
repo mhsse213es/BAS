@@ -391,3 +391,18 @@ func TestLoad_CSPModeFromConfigFileIsNormalised(t *testing.T) {
 		t.Fatalf("CSPMode = %q, want %q", cfg.CSPMode, "report-only")
 	}
 }
+
+func TestLoad_OTLPEndpointFromEnv(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://test")
+	t.Setenv("DATABASE_ADMIN_URL", "postgres://test-admin")
+	t.Setenv("BAS_APP_DB_PASSWORD", "test-app-password")
+	t.Setenv("JWT_SECRET", "test-secret-32-bytes-long-enough")
+	t.Setenv("BAS_OTLP_ENDPOINT", "http://tempo:4318")
+	cfg, err := Load("/nonexistent/config.json")
+	if err != nil {
+		t.Fatalf("Load() err = %v", err)
+	}
+	if cfg.OTLPEndpoint != "http://tempo:4318" {
+		t.Fatalf("OTLPEndpoint = %q, want http://tempo:4318", cfg.OTLPEndpoint)
+	}
+}

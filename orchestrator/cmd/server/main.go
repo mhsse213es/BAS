@@ -895,6 +895,16 @@ func main() {
 	}
 	router := api.Mount(handler, hub, cfg.JWTSecret, cfg.AgentSecret, StaticHandler(cfg.CSPMode), rateLimitPerMin, cfg.RateLimitBurst, exTracker)
 
+	// Tracing: exports only when BAS_OTLP_ENDPOINT / otlp_endpoint is set. The
+	// request span wraps the agent and dashboard listeners either way; without
+	// an exporter the provider is a no-op.
+	tracerProvider := observability.NewTracerProviderWithConfig(&observability.OTelConfig{
+		Enabled:     cfg.OTLPEndpoint != "",
+		Exporters:   observability.ExporterConfig{TempoEndpoint: cfg.OTLPEndpoint},
+		ServiceName: "audspect-orchestrator",
+	})
+	tracedRouter := observability.RequestSpanMiddleware(tracerProvider.Tracer("audspect-orchestrator"), router)
+
 	// ── Agent Staleness Monitor ───────────────────────────────────────────
 	// Marks agents offline if no heartbeat received within 90 seconds and
 	// broadcasts the change so the dashboard updates in real time.
@@ -1013,7 +1023,7 @@ func main() {
 	// 9443 — mandatory mTLS, canonical secure endpoint for enrolled agents
 	// (normal operation + certificate renewal). Never weaken this to
 	// VerifyClientCertIfGiven -- see spec Section 1.
-	mtlsHandler := api.WithMTLSIdentity(router)
+	mtlsHandler := api.WithMTLSIdentity(tracedRouter)
 	mtlsSrv := &http.Server{
 		Addr:    fmt.Sprintf(":%d", cfg.HTTPPort),
 		Handler: mtlsHandler,
@@ -1071,7 +1081,7 @@ func main() {
 	}
 	dashboardSrv := &http.Server{
 		Addr:    fmt.Sprintf(":%d", cfg.DashboardHTTPPort),
-		Handler: router,
+		Handler: tracedRouter,
 		TLSConfig: &tls.Config{
 			Certificates: []tls.Certificate{dashboardTLSCert},
 			ClientAuth:   tls.NoClientCert,
@@ -1124,6 +1134,9 @@ func main() {
 		if err := s.Shutdown(shutCtx); err != nil {
 			log.Printf("[!] shutdown error: %v", err)
 		}
+	}
+	if err := tracerProvider.Shutdown(shutCtx); err != nil {
+		log.Printf("[!] tracer shutdown: %v", err)
 	}
 	log.Println("[*] Server stopped.")
 }
