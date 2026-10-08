@@ -11,4 +11,5 @@ export const CSS_VAR_RULES = {
   'g1-v-9ffd39ba': {"prop":"background","value":"{0}","types":["color"]},
   'g1-v-bd5c5d10': {"prop":"background","value":"conic-gradient({0} {1}%, var(--elevated) 0%)","types":["color","integer"]},
   'g1-v-c3984016': {"prop":"border-top","value":"2px solid {0}","types":["color"]},
+  'g1-v-d59a9269': {"prop":"border","value":"1px solid {0}44","types":["color"]},
 };

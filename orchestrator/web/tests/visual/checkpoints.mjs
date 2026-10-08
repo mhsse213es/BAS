@@ -43,6 +43,19 @@ export const CHECKPOINTS = [
     { click: '.mx-cell >> nth=0' },
   ] },
 
+  // -- audit-logs.js: Settings sub-sections, lazily loaded by
+  // showSettingsSection() -- not reached by a plain tab visit (default
+  // sub-section is 'users').
+  { name: "audit-logs.js:59,64 license panel", tab: 'settings', steps: [
+    { click: '[data-set="license"]' },
+  ] },
+  { name: "audit-logs.js:116,143 backup jobs table", tab: 'settings', steps: [
+    { click: '[data-set="backup"]' },
+  ] },
+  { name: "audit-logs.js:217,255 audit log outcome badges", tab: 'settings', steps: [
+    { click: '[data-set="audit"]' },
+  ] },
+
   // -- campaigns.js
   { name: "campaigns.js:165 campaign detail view", tab: 'campaigns', steps: [
     { click: '[data-on-click="openCampaignDetail"] >> nth=0' },

@@ -111,6 +111,40 @@ const attackMatrix = {
   ],
 };
 
+// License panel (audit-logs.js loadLicenseInfo, Settings > License):
+// status 'grace' exercises the daysRemaining/lockoutAt extra row and the
+// warning statusColor branch (distinct from the backups fixture below's
+// success/danger branches).
+const license = {
+  status: 'grace', customer: `Acme Corp ${PAYLOAD}`, customerId: 'cust-smoke-1',
+  issuedAt: '2026-01-01', expiresAt: '2026-12-31', daysRemaining: 14,
+  lockoutAt: '2027-01-14', features: ['ransomware', 'purple-team'],
+};
+
+// Backup jobs (audit-logs.js loadBackups, Settings > Backup): two jobs
+// exercise success (protected, canRestore) and danger (remote_failed,
+// with errorMessage) status-color branches.
+const backupJob1 = {
+  id: 'backup-smoke-1', status: 'protected', archiveSizeBytes: 5242880,
+  requestedAt: NOW, trigger: 'manual', localPath: '/backups/1.tar.gz', remotePath: 's3://bucket/1.tar.gz',
+};
+const backupJob2 = {
+  id: 'backup-smoke-2', status: 'remote_failed', archiveSizeBytes: 3145728,
+  requestedAt: NOW, trigger: 'scheduled', localPath: '/backups/2.tar.gz', remotePath: null,
+  errorMessage: `Upload failed ${PAYLOAD}`,
+};
+
+// Audit log entries (audit-logs.js loadAuditLogs, Settings > Audit Log):
+// one 'ok' and one failing outcome exercise both outcome-badge classes.
+const auditEntry1 = {
+  ts: NOW, actorName: `admin ${PAYLOAD}`, action: 'user.login', outcome: 'ok',
+  ip: '10.0.0.9', detail: JSON.stringify({ username: 'admin' }),
+};
+const auditEntry2 = {
+  ts: NOW, actorName: `admin ${PAYLOAD}`, action: 'user.login', outcome: 'denied',
+  ip: '10.0.0.9', detail: JSON.stringify({ username: 'admin', reason: 'bad password' }),
+};
+
 const finding = {
   id: 'finding-smoke-1', techniqueId: 'T1082', techniqueName: `System Info ${PAYLOAD}`, title: `Finding ${PAYLOAD}`,
   severity: 'high', status: 'open', runId: 'run-smoke-1', agentId: 'agent-smoke-1', hostname: `host ${PAYLOAD}`,
@@ -181,6 +215,9 @@ export const FIXTURES = {
   'GET /api/coverage/analytics': coverageAnalytics,
   'GET /api/techniques/unified': [unifiedTechnique],
   'GET /api/attack/matrix': attackMatrix,
+  'GET /api/license': license,
+  'GET /api/backups': [backupJob1, backupJob2],
+  'GET /api/audit-logs': { entries: [auditEntry1, auditEntry2] },
   'GET /api/scenarios/runs/run-smoke-1/iocs': [runIOC],
   'GET /api/iocs': [iocRegistryRow],
   'GET /api/analytics/iocs': iocAnalytics,
