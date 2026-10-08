@@ -28,6 +28,13 @@ const (
 	CapNTLMHash                 CapabilityKind = "NTLM_HASH"
 	CapTicket                   CapabilityKind = "TICKET"
 	CapDomainCredentialMaterial CapabilityKind = "DOMAIN_CREDENTIAL_MATERIAL"
+
+	// The 2 below are DISCOVERY-type capabilities (knowledge of a target,
+	// not possession of a credential), added for the Kerberoasting/AS-REP
+	// catalog backfill -- CapabilityKind was always an open string type,
+	// so this extends it rather than redesigning it.
+	CapKerberoastableTargetKnown CapabilityKind = "KERBEROASTABLE_TARGET_KNOWN"
+	CapASREPRoastableTargetKnown CapabilityKind = "ASREP_ROASTABLE_TARGET_KNOWN"
 )
 
 // Capability is an attacker capability state, optionally scoped to a
