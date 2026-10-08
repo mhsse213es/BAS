@@ -17,6 +17,7 @@ var KerberoastingCatalog = []Primitive{
 			Capabilities: []Capability{{Kind: CapDomainUser}},
 		},
 		Postconditions: []Capability{{Kind: CapKerberoastableTargetKnown}},
+		RiskClass:      RiskNonDestructive,
 	},
 	{
 		// Backfills Stage 2 ("AD Stage 2 -- Kerberoasting TGS-REP Request
@@ -29,6 +30,7 @@ var KerberoastingCatalog = []Primitive{
 			Capabilities: []Capability{{Kind: CapKerberoastableTargetKnown}},
 		},
 		Postconditions: []Capability{{Kind: CapServiceAccountCredential}},
+		RiskClass:      RiskPotentiallyDestructive,
 	},
 	{
 		// Backfills Stage 3 ("AD Stage 3 -- AS-REP Roastable Account
@@ -44,6 +46,7 @@ var KerberoastingCatalog = []Primitive{
 			Capabilities: []Capability{{Kind: CapDomainUser}},
 		},
 		Postconditions: []Capability{{Kind: CapASREPRoastableTargetKnown}},
+		RiskClass:      RiskNonDestructive,
 	},
 }
 
@@ -75,6 +78,7 @@ var ACLAbuseCatalog = []Primitive{
 			Conditions:   map[string]bool{"acl_right_held:ForceChangePassword": true},
 		},
 		Postconditions: []Capability{{Kind: CapControlledAccount}},
+		RiskClass:      RiskPotentiallyDestructive,
 	},
 	{
 		ID: "acl-genericall-takeover", Name: "GenericAll ACL Takeover",
@@ -84,6 +88,7 @@ var ACLAbuseCatalog = []Primitive{
 			Conditions:   map[string]bool{"acl_right_held:GenericAll": true},
 		},
 		Postconditions: []Capability{{Kind: CapControlledAccount}},
+		RiskClass:      RiskPotentiallyDestructive,
 	},
 	{
 		ID: "acl-addmember-privileged-group", Name: "AddMember Privileged Group Join",
@@ -93,6 +98,7 @@ var ACLAbuseCatalog = []Primitive{
 			Conditions:   map[string]bool{"acl_right_held:AddMember": true},
 		},
 		Postconditions: []Capability{{Kind: CapGroupMember}},
+		RiskClass:      RiskPotentiallyDestructive,
 	},
 	{
 		ID: "acl-addself-privileged-group", Name: "AddSelf Privileged Group Join",
@@ -102,6 +108,7 @@ var ACLAbuseCatalog = []Primitive{
 			Conditions:   map[string]bool{"acl_right_held:AddSelf": true},
 		},
 		Postconditions: []Capability{{Kind: CapGroupMember}},
+		RiskClass:      RiskPotentiallyDestructive,
 	},
 }
 
@@ -130,6 +137,7 @@ var RBCDCatalog = []Primitive{
 			Conditions:   map[string]bool{"acl_right_held:GenericWrite": true},
 		},
 		Postconditions: []Capability{{Kind: CapRBCDConfigured}},
+		RiskClass:      RiskPotentiallyDestructive,
 	},
 	{
 		ID: "rbcd-impersonate", Name: "RBCD S4U2Proxy Impersonation",
@@ -138,6 +146,7 @@ var RBCDCatalog = []Primitive{
 			Capabilities: []Capability{{Kind: CapRBCDConfigured}},
 		},
 		Postconditions: []Capability{{Kind: CapLocalAdmin}},
+		RiskClass:      RiskPotentiallyDestructive,
 	},
 }
 
@@ -166,6 +175,7 @@ var DCSyncCatalog = []Primitive{
 			Conditions:   map[string]bool{"acl_right_held:AllExtendedRights": true},
 		},
 		Postconditions: []Capability{{Kind: CapDomainCredentialMaterial}},
+		RiskClass:      RiskPotentiallyDestructive,
 	},
 }
 
@@ -188,6 +198,7 @@ var ADCSCatalog = []Primitive{
 			Conditions:   map[string]bool{"esc1_vulnerable_template": true},
 		},
 		Postconditions: []Capability{{Kind: CapControlledAccount}},
+		RiskClass:      RiskPotentiallyDestructive,
 	},
 	{
 		ID: "adcs-esc2", Name: "ADCS ESC2: Any-Purpose EKU", TechniqueID: "T1649",
@@ -197,6 +208,7 @@ var ADCSCatalog = []Primitive{
 			Conditions:   map[string]bool{"esc2_vulnerable_template": true},
 		},
 		Postconditions: []Capability{{Kind: CapControlledAccount}},
+		RiskClass:      RiskPotentiallyDestructive,
 	},
 	{
 		ID: "adcs-esc3", Name: "ADCS ESC3: Enrollment Agent Template", TechniqueID: "T1649",
@@ -206,6 +218,7 @@ var ADCSCatalog = []Primitive{
 			Conditions:   map[string]bool{"esc3_vulnerable_template": true},
 		},
 		Postconditions: []Capability{{Kind: CapControlledAccount}},
+		RiskClass:      RiskPotentiallyDestructive,
 	},
 	{
 		ID: "adcs-esc4", Name: "ADCS ESC4: Template ACL Abuse", TechniqueID: "T1649",
@@ -215,5 +228,6 @@ var ADCSCatalog = []Primitive{
 			Conditions:   map[string]bool{"esc4_template_write_access": true},
 		},
 		Postconditions: []Capability{{Kind: CapTemplateControlled}},
+		RiskClass:      RiskPotentiallyDestructive,
 	},
 }

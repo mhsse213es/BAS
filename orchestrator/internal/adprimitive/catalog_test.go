@@ -11,6 +11,36 @@ func findPrimitive(id string) (Primitive, bool) {
 	return Primitive{}, false
 }
 
+func TestAllCatalogs_EveryPrimitiveHasAValidRiskClass(t *testing.T) {
+	valid := map[RiskClass]bool{
+		RiskNonDestructive:         true,
+		RiskPotentiallyDestructive: true,
+		RiskDestructive:            true,
+	}
+	all := append(append(append(append(append([]Primitive{}, KerberoastingCatalog...), ACLAbuseCatalog...), RBCDCatalog...), DCSyncCatalog...), ADCSCatalog...)
+	if len(all) != 14 {
+		t.Fatalf("expected 14 total primitives across all catalogs, got %d", len(all))
+	}
+	for _, p := range all {
+		if !valid[p.RiskClass] {
+			t.Errorf("%s: RiskClass %q is not one of the 3 defined values", p.ID, p.RiskClass)
+		}
+	}
+}
+
+func TestKerberoastingCatalog_OnlyDiscoveryPrimitivesAreNonDestructive(t *testing.T) {
+	nonDestructiveIDs := map[string]bool{"spn-enumerate": true, "asrep-roast-discover": true}
+	for _, p := range KerberoastingCatalog {
+		want := RiskPotentiallyDestructive
+		if nonDestructiveIDs[p.ID] {
+			want = RiskNonDestructive
+		}
+		if p.RiskClass != want {
+			t.Errorf("%s: expected RiskClass %q, got %q", p.ID, want, p.RiskClass)
+		}
+	}
+}
+
 func TestKerberoastingCatalog_Stage1And2ShareTechniqueIDButAreDistinctPrimitives(t *testing.T) {
 	enum, ok := findPrimitive("spn-enumerate")
 	if !ok || enum.TechniqueID != "T1558.003" {

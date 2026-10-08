@@ -57,6 +57,21 @@ const (
 	CapTemplateControlled CapabilityKind = "TEMPLATE_CONTROLLED"
 )
 
+// RiskClass is structural metadata only: a 3-value tier matching
+// scenario.ExecutionClass's exact string values, assigned per primitive
+// by postcondition shape (discovery-type postcondition ->
+// RiskNonDestructive; credential/account/group/delegation postcondition
+// -> RiskPotentiallyDestructive). adprimitive has no dependency on
+// scenario -- this is a documented value-correspondence, not a typed
+// reference.
+type RiskClass string
+
+const (
+	RiskNonDestructive         RiskClass = "non_destructive"
+	RiskPotentiallyDestructive RiskClass = "potentially_destructive"
+	RiskDestructive            RiskClass = "destructive"
+)
+
 // Capability is an attacker capability state, optionally scoped to a
 // target (e.g. LOCAL_ADMIN@SERVER01 is Capability{Kind: CapLocalAdmin,
 // Target: "SERVER01"}; DOMAIN_USER is host-agnostic, Target stays "").
@@ -95,4 +110,5 @@ type Primitive struct {
 
 	Prerequisites  Prerequisites `json:"prerequisites"`
 	Postconditions []Capability  `json:"postconditions,omitempty"` // capabilities GAINED once this primitive succeeds
+	RiskClass      RiskClass     `json:"riskClass"`
 }
