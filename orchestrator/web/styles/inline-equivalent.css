@@ -70,6 +70,7 @@
 .g1-s-1722ff17 { font-size:0.72rem;color:var(--accent) }
 .g1-s-17850e86 { margin:0.25rem 0 0 1.1rem;padding:0;list-style:disc;color:var(--muted) }
 .g1-s-1851fb03 { text-align:center;padding:3rem;color:var(--muted) }
+.g1-s-18a8eb32 { color:var(--danger);background:rgba(218,54,51,0.08);border:1px solid rgba(218,54,51,0.25) }
 .g1-s-1923a62e { width:100%;padding:0.5rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text) }
 .g1-s-199650cf { align-items:center;gap:0.5rem;padding:0.25rem 0.3rem }
 .g1-s-19a27a33 { color:#fff;background:var(--danger) }
@@ -99,6 +100,7 @@
 .g1-s-2278d819 { grid-template-columns:minmax(320px,380px) 1fr;width:100%;gap:1rem;margin-bottom:1rem;align-items:start }
 .g1-s-229dc0cb { min-width:90px }
 .g1-s-22a08c80 { min-width:0 }
+.g1-s-239398d5 { font-size:0.65rem;color:var(--muted);margin-top:0.2rem;margin-left:1.4rem }
 .g1-s-239490c1 { font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:0.4rem }
 .g1-s-23bf11e0 { padding:0.45rem 0.75rem;text-align:right;font-size:0.7rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em }
 .g1-s-23e8b6cb { padding:0.6rem 1.4rem;background:var(--danger,#da3633);color:#fff;border-radius:6px;text-decoration:none;font-weight:600 }
@@ -268,6 +270,7 @@
 .g1-s-6674349e { align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap }
 .g1-s-66e6b652 { margin-top:1rem }
 .g1-s-67391a34 { height:7px;width:38%;background:var(--elevated);border-radius:4px }
+.g1-s-68ab4b84 { font-size:0.65rem;color:var(--muted);margin-top:0.2rem }
 .g1-s-68ba3aaa { font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:0.5rem }
 .g1-s-68fa3498 { width:400px }
 .g1-s-691a68f3 { font-size:0.8rem;color:var(--text-dim);margin-bottom:1.1rem;line-height:1.5 }
@@ -293,6 +296,7 @@
 .g1-s-76497c6f { border-bottom:1px solid var(--border) }
 .g1-s-765a0fbc { padding:2px 8px;font-size:0.7rem }
 .g1-s-76b6d51e { color:var(--muted);text-decoration:underline }
+.g1-s-76f7b01e { align-items:center;gap:0.65rem }
 .g1-s-779f6e95 { width:440px }
 .g1-s-783cc6a9 { justify-content:flex-end; gap:0.5rem }
 .g1-s-787094fd { cursor:pointer;min-width:155px;max-width:220px }
@@ -318,6 +322,7 @@
 .g1-s-82c4416d { grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:1rem;width:100% }
 .g1-s-82cece3f { font-family:var(--font-mono) }
 .g1-s-836e23a2 { font-size:1rem;font-weight:700;color:var(--text) }
+.g1-s-83725d2c { flex:1 }
 .g1-s-83fe4178 { position:fixed;top:0;left:0;right:0;z-index:9999;
   background:linear-gradient(90deg,#b91c1c,#dc2626);
   color:#fff;font-family:inherit;font-size:13px;
@@ -336,10 +341,12 @@
 .g1-s-86b92508 { font-size:0.66rem;color:var(--muted);margin-right:3px }
 .g1-s-870226af { align-items:center;gap:0.5rem;padding:0.5rem 0.75rem;border-bottom:1px solid var(--border);cursor:pointer;font-size:0.78rem }
 .g1-s-87635de2 { color:var(--muted,#9aa9bc);line-height:1.6;margin-bottom:1rem }
+.g1-s-87670393 { text-align:center;padding:2rem;color:var(--muted) }
 .g1-s-878436dc { font-size:0.7rem;font-weight:700;letter-spacing:0.07em;text-transform:uppercase;color:var(--accent);margin-bottom:0.65rem }
 .g1-s-883a4152 { height: 38px; width: auto }
 .g1-s-8861c9c7 { grid-template-columns:repeat(3,1fr);gap:0.75rem;margin-bottom:0.75rem }
 .g1-s-892c8f87 { align-items:center;justify-content:space-between;margin-bottom:0.5rem;font-size:0.78rem }
+.g1-s-898cff8a { width:32px;height:32px;border-radius:6px;background:rgba(47,129,247,0.12);color:var(--accent);align-items:center;justify-content:center }
 .g1-s-89b169c7 { border-top:1px solid rgba(47,129,247,0.2);padding-top:0.7rem;align-items:center;gap:0.75rem;flex-wrap:wrap }
 .g1-s-8a2cc60c { font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:0.2rem }
 .g1-s-8a7b32bc { padding:0.35rem 0.6rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:0.78rem;font-family:inherit;min-width:200px }
@@ -380,6 +387,7 @@
 .g1-s-95891841 { font-size:0.85rem;font-weight:600;color:var(--text) }
 .g1-s-95d31bb4 { margin:0.65rem 0 0;padding:0.85rem 1rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius) }
 .g1-s-961fd92c { font-size:0.68rem;font-weight:700 }
+.g1-s-975e501c { white-space:nowrap;font-size:0.72rem }
 .g1-s-97e39a69 { flex-direction:column;gap:0.55rem;margin-top:0.5rem }
 .g1-s-98d234b9 { color:var(--muted);font-size:0.72rem;text-align:center;margin-top:0.3rem }
 .g1-s-99215b85 { position:fixed;top:0;right:0;height:100%;width:min(480px,95vw);background:var(--surface);border-left:1px solid var(--border);z-index:501;overflow-y:auto;padding:1.5rem 1.25rem;box-shadow:-4px 0 24px rgba(0,0,0,0.3) }
@@ -425,7 +433,9 @@
 .g1-s-a8e7c80e { width:32px;height:32px;margin:0 auto 0.75rem;opacity:0.35 }
 .g1-s-a9785b97 { margin-bottom:1.25rem;cursor:pointer;user-select:none;transition:box-shadow .15s }
 .g1-s-a9b4215f { font-size:0.64rem;color:var(--muted) }
+.g1-s-aab81e99 { width:7px;height:7px;border-radius:50%;margin-right:5px }
 .g1-s-aacbb670 { padding:0.2rem 0.55rem }
+.g1-s-ab03ec3f { font-weight:600;font-size:0.85rem;color:var(--text) }
 .g1-s-ab376776 { background:rgba(255,255,255,.02) }
 .g1-s-ab3da75b { align-items:center;gap:0.5rem;cursor:pointer;font-size:0.82rem;color:var(--muted);margin-top:0.2rem }
 .g1-s-ab79ea2b { margin:0 }
@@ -536,6 +546,7 @@
 .g1-s-dae4bea2 { font-weight:700;color:var(--warning) }
 .g1-s-db95677a { font-family:var(--font-mono);font-size:0.78rem;color:var(--muted) }
 .g1-s-dbdd527f { font-family:var(--font-mono);color:var(--muted) }
+.g1-s-dc6ac68b { margin-top:0.5rem;padding:0.4rem 0.6rem;background:rgba(218,54,51,0.07);border:1px solid rgba(218,54,51,0.2);border-radius:5px;font-size:0.72rem;color:var(--danger) }
 .g1-s-dd11a3a0 { margin-bottom:0.6rem }
 .g1-s-ddc46798 { font-size:1.1rem;font-weight:700;line-height:1 }
 .g1-s-ddf6ed84 { opacity:0.5;cursor:not-allowed }

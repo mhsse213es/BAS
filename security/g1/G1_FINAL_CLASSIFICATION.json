@@ -3419,6 +3419,19 @@
   "rhs": "'<div class=\"cmp-kpi-row\">' +\n    kpis.map(function(k) {\n      return '<div class=\"cmp-kpi-card\" style=\"border-left:3px solid ' + k.border + '\">' +\n        '<div class=\"cmp-kpi-icon\" style=\"color:' + k.color + ';background:' + k.dim + '\">' + k.icon + '</div>' +\n        '<div class=\"cmp-kpi-value\" style=\"color:' + k.color + '\">' + k.val + '</div>' +\n        '<div class=\"cmp-kpi-label\">' + k.label +"
  },
  {
+  "sink_id": "renderConnectorList:el:=:478cbd7e3d30",
+  "line": 13171,
+  "function": "renderConnectorList",
+  "target": "el",
+  "op": "=",
+  "baseline_category": "static",
+  "final_category": "static",
+  "severity_tier": 0,
+  "data_source_tags": "",
+  "trace_notes": "",
+  "rhs": "'<div class=\"conn-cfg-card g1-s-87670393\">' +\n      '<div class=\"g1-s-04f181fe\">No connectors configured.</div>' +\n      '<div class=\"tiny\">Add a ServiceNow, Jira, or webhook connector to push findings to your ITSM.</div></div>'"
+ },
+ {
   "sink_id": "renderConnectorList:el:=:703cef8c4c77",
   "line": 13176,
   "function": "renderConnectorList",
@@ -3432,20 +3445,7 @@
   "rhs": "list.map(function(c) {\n    var ac = c.autoCreate === 'off' || !c.autoCreate ? 'Manual only' : c.autoCreate.replace('_', '+');\n\n    // Honest connection status — 4 states, not just enabled/disabled\n    var statusColor, statusLabel, statusTitle;\n    if (!c.enabled) {\n      statusColor = 'var(--muted)';\n      statusLabel = 'Disabled';\n      statusTitle = 'Connector is turned off';\n    } else if (c.la"
  },
  {
-  "sink_id": "renderConnectorList:el:=:b382f82521d0",
-  "line": 13171,
-  "function": "renderConnectorList",
-  "target": "el",
-  "op": "=",
-  "baseline_category": "static",
-  "final_category": "static",
-  "severity_tier": 0,
-  "data_source_tags": "",
-  "trace_notes": "",
-  "rhs": "'<div class=\"conn-cfg-card\" style=\"text-align:center;padding:2rem;color:var(--muted)\">' +\n      '<div style=\"margin-bottom:0.5rem\">No connectors configured.</div>' +\n      '<div class=\"tiny\">Add a ServiceNow, Jira, or webhook connector to push findings to your ITSM.</div></div>'"
- },
- {
-  "sink_id": "renderConnectorSettings:document.getElementById('cf-settings'):=:53246d2e3178",
+  "sink_id": "renderConnectorSettings:document.getElementById('cf-settings'):=:9e6c49687b1a",
   "line": 13294,
   "function": "renderConnectorSettings",
   "target": "document.getElementById('cf-settings')",
@@ -3455,7 +3455,7 @@
   "severity_tier": 4,
   "data_source_tags": "",
   "trace_notes": "",
-  "rhs": "fields.map(function(f) {\n    if (f.type === 'checkbox') {\n      return '<div style=\"margin-bottom:0.6rem\">' +\n        '<label style=\"display:flex;align-items:center;gap:0.5rem;cursor:pointer\">' +\n          '<input type=\"checkbox\" id=\"cfs-' + f.key + '\"' + (s[f.key] === 'yes' ? ' checked' : '') + '>' +\n          '<span class=\"conn-cfg-label\" style=\"margin:0\">' + f.label + '</span>' +\n        '</lab"
+  "rhs": "fields.map(function(f) {\n    if (f.type === 'checkbox') {\n      return '<div class=\"g1-s-dd11a3a0\">' +\n        '<label class=\"g1-display-flex g1-s-b0ace2ed\">' +\n          '<input type=\"checkbox\" id=\"cfs-' + f.key + '\"' + (s[f.key] === 'yes' ? ' checked' : '') + '>' +\n          '<span class=\"conn-cfg-label g1-s-ab79ea2b\">' + f.label + '</span>' +\n        '</label>' +\n        (f.hint ? '<div class=\""
  },
  {
   "sink_id": "renderControlsTable:document.getElementById('cmp-controls-body'):=:163c6c68698d",
@@ -4056,7 +4056,7 @@
   "rhs": "list.map(function(r) {\n      var st = r.status === 'failed' ? 's-failed' : 's-completed';\n      return '<tr>' +\n        '<td class=\"cell-main\">' + x(label[r.reportType] || r.reportType) + '</td>' +\n        '<td class=\"tiny muted\">' + x(r.scopeLabel) + '</td>' +\n        '<td class=\"tiny\">' + x((r.format || '—').toUpperCase()) + '</td>' +\n        '<td class=\"tiny muted\">' + x(r.generatedBy || '—') +"
  },
  {
-  "sink_id": "renderResponseConnectorList:el:=:3d148461a96d",
+  "sink_id": "renderResponseConnectorList:el:=:7e78a05def5b",
   "line": 13505,
   "function": "renderResponseConnectorList",
   "target": "el",
@@ -4066,10 +4066,10 @@
   "severity_tier": 0,
   "data_source_tags": "",
   "trace_notes": "",
-  "rhs": "'<div class=\"conn-cfg-card\" style=\"text-align:center;padding:2rem;color:var(--muted)\">' +\n      '<div style=\"margin-bottom:0.5rem\">No response connectors configured.</div>' +\n      '<div class=\"tiny\">Add a CrowdStrike or Defender connector to enable Respond actions from Findings.</div></div>'"
+  "rhs": "'<div class=\"conn-cfg-card g1-s-87670393\">' +\n      '<div class=\"g1-s-04f181fe\">No response connectors configured.</div>' +\n      '<div class=\"tiny\">Add a CrowdStrike or Defender connector to enable Respond actions from Findings.</div></div>'"
  },
  {
-  "sink_id": "renderResponseConnectorList:el:=:a27464dcf3bf",
+  "sink_id": "renderResponseConnectorList:el:=:dd59f75ffc07",
   "line": 13511,
   "function": "renderResponseConnectorList",
   "target": "el",
@@ -4079,7 +4079,7 @@
   "severity_tier": 4,
   "data_source_tags": "user_created_name",
   "trace_notes": "",
-  "rhs": "list.map(function(c) {\n    var statusColor = c.enabled ? 'var(--success)' : 'var(--muted)';\n    var statusLabel = c.enabled ? 'Enabled' : 'Disabled';\n    var statusDot = '<span style=\"display:inline-block;width:7px;height:7px;border-radius:50%;background:' + statusColor + ';margin-right:5px\"></span>' + statusLabel;\n    return '<div class=\"conn-cfg-card\" style=\"margin-bottom:0.75rem\">' +\n      '<di"
+  "rhs": "list.map(function(c) {\n    var statusColor = c.enabled ? 'var(--success)' : 'var(--muted)';\n    var statusLabel = c.enabled ? 'Enabled' : 'Disabled';\n    var statusDot = '<span class=\"g1-display-inline-block g1-s-aab81e99\"' + cssVars(['g1-v-9ffd39ba', statusColor]) + '></span>' + statusLabel;\n    return '<div class=\"conn-cfg-card g1-s-2fc766d7\">' +\n      '<div class=\"g1-display-flex g1-s-0bdc41ee\""
  },
  {
   "sink_id": "renderRunIOCList:el:=:e0fb92df4f2d",

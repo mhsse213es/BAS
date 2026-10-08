@@ -714,10 +714,10 @@ line,function,target,op,category,data_source_tags,rhs_len,rhs
 13130,submitInitiativeAttach,errEl,=,static_empty,,2,''
 13134,submitInitiativeAttach,errEl,=,escaped,api_response,55,"'<div class=""tiny u-danger"">' + x(res.error) + '</div>'"
 13138,submitInitiativeAttach,errEl,=,escaped,error_message,55,"'<div class=""tiny u-danger"">' + x(e.message) + '</div>'"
-13171,renderConnectorList,el,=,static,,279,"'<div class=""conn-cfg-card"" style=""text-align:center;padding:2rem;color:var(--muted)"">' +
-      '<div style=""margin-bottom:0.5rem"">No connectors configured.</div>' +
+13171,renderConnectorList,el,=,static,,228,"'<div class=""conn-cfg-card g1-s-87670393"">' +
+      '<div class=""g1-s-04f181fe"">No connectors configured.</div>' +
       '<div class=""tiny"">Add a ServiceNow, Jira, or webhook connector to push findings to your ITSM.</div></div>'"
-13176,renderConnectorList,el,=,unescaped_html,user_created_name,2937,"list.map(function(c) {
+13176,renderConnectorList,el,=,unescaped_html,user_created_name,2450,"list.map(function(c) {
     var ac = c.autoCreate === 'off' || !c.autoCreate ? 'Manual only' : c.autoCreate.replace('_', '+');
 
     // Honest connection status — 4 states, not just enabled/disabled
@@ -727,25 +727,26 @@ line,function,target,op,category,data_source_tags,rhs_len,rhs
       statusLabel = 'Disabled';
       statusTitle = 'Connector is turned off';
     } else if (c.la"
-13294,renderConnectorSettings,document.getElementById('cf-settings'),=,unescaped_html,,1784,"fields.map(function(f) {
+13294,renderConnectorSettings,document.getElementById('cf-settings'),=,unescaped_html,,1551,"fields.map(function(f) {
     if (f.type === 'checkbox') {
-      return '<div style=""margin-bottom:0.6rem"">' +
-        '<label style=""display:flex;align-items:center;gap:0.5rem;cursor:pointer"">' +
+      return '<div class=""g1-s-dd11a3a0"">' +
+        '<label class=""g1-display-flex g1-s-b0ace2ed"">' +
           '<input type=""checkbox"" id=""cfs-' + f.key + '""' + (s[f.key] === 'yes' ? ' checked' : '') + '>' +
-          '<span class=""conn-cfg-label"" style=""margin:0"">' + f.label + '</span>' +
-        '</lab"
+          '<span class=""conn-cfg-label g1-s-ab79ea2b"">' + f.label + '</span>' +
+        '</label>' +
+        (f.hint ? '<div class="""
 13351,fetchConnectorProjects,sel,=,escaped,user_created_name,189,"projects.map(function(p) {
         return '<option value=""' + x(p.key) + '""' + (inp.value === p.key ? ' selected' : '') + '>' + x(p.key) + ' — ' + x(p.name) + '</option>';
       }).join('')"
-13505,renderResponseConnectorList,el,=,static,,293,"'<div class=""conn-cfg-card"" style=""text-align:center;padding:2rem;color:var(--muted)"">' +
-      '<div style=""margin-bottom:0.5rem"">No response connectors configured.</div>' +
+13505,renderResponseConnectorList,el,=,static,,242,"'<div class=""conn-cfg-card g1-s-87670393"">' +
+      '<div class=""g1-s-04f181fe"">No response connectors configured.</div>' +
       '<div class=""tiny"">Add a CrowdStrike or Defender connector to enable Respond actions from Findings.</div></div>'"
-13511,renderResponseConnectorList,el,=,unescaped_html,user_created_name,1374,"list.map(function(c) {
+13511,renderResponseConnectorList,el,=,unescaped_html,user_created_name,1171,"list.map(function(c) {
     var statusColor = c.enabled ? 'var(--success)' : 'var(--muted)';
     var statusLabel = c.enabled ? 'Enabled' : 'Disabled';
-    var statusDot = '<span style=""display:inline-block;width:7px;height:7px;border-radius:50%;background:' + statusColor + ';margin-right:5px""></span>' + statusLabel;
-    return '<div class=""conn-cfg-card"" style=""margin-bottom:0.75rem"">' +
-      '<di"
+    var statusDot = '<span class=""g1-display-inline-block g1-s-aab81e99""' + cssVars(['g1-v-9ffd39ba', statusColor]) + '></span>' + statusLabel;
+    return '<div class=""conn-cfg-card g1-s-2fc766d7"">' +
+      '<div class=""g1-display-flex g1-s-0bdc41ee"""
 13640,openRespondModal,sel,=,static,,59,"'<option value="""">No enabled connector configured</option>'"
 13642,openRespondModal,sel,=,escaped,user_created_name,158,"enabled.map(function(c) {
         return '<option value=""' + x(c.id) + '"" data-provider=""' + x(c.provider) + '"">' + x(c.name) + '</option>';

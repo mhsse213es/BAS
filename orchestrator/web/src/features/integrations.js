@@ -6,6 +6,7 @@ import { showToast } from '../core/util.js';
 import { _diffRow, _diffSecretRow, openConfirmDiffModal } from './compliance.js';
 import { _ticketingConfigs, loadTicketingConfigs } from './findings.js';
 import { displayOf, setDisplay } from '../core/inline-style.js';
+import { cssVars } from '../core/css-vars.js';
 
 
 // ── Integrations tab ────────────────────────────────────────────────────────
@@ -38,8 +39,8 @@ function renderConnectorList(list) {
   var el = document.getElementById('integrations-list');
   if (!el) return;
   if (!list || !list.length) {
-    el.innerHTML = '<div class="conn-cfg-card" style="text-align:center;padding:2rem;color:var(--muted)">' +
-      '<div style="margin-bottom:0.5rem">No connectors configured.</div>' +
+    el.innerHTML = '<div class="conn-cfg-card g1-s-87670393">' +
+      '<div class="g1-s-04f181fe">No connectors configured.</div>' +
       '<div class="tiny">Add a ServiceNow, Jira, or webhook connector to push findings to your ITSM.</div></div>';
     return;
   }
@@ -65,25 +66,25 @@ function renderConnectorList(list) {
       statusLabel = 'Connection error';
       statusTitle = c.lastTestError || 'Last test failed';
     }
-    var statusDot = '<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:' + statusColor + ';margin-right:5px"></span>' + statusLabel;
+    var statusDot = '<span class="g1-display-inline-block g1-s-aab81e99"' + cssVars(['g1-v-9ffd39ba', statusColor]) + '></span>' + statusLabel;
 
     // Error detail row (only shown when last test failed)
     var errorRow = (c.enabled && c.lastTestOk === false && c.lastTestError)
-      ? '<div style="margin-top:0.5rem;padding:0.4rem 0.6rem;background:rgba(218,54,51,0.07);border:1px solid rgba(218,54,51,0.2);border-radius:5px;font-size:0.72rem;color:var(--danger)">' + x(c.lastTestError) + '</div>'
+      ? '<div class="g1-s-dc6ac68b">' + x(c.lastTestError) + '</div>'
       : '';
 
-    return '<div class="conn-cfg-card" style="margin-bottom:0.75rem">' +
-      '<div style="display:flex;align-items:center;justify-content:space-between;gap:1rem">' +
-        '<div style="display:flex;align-items:center;gap:0.75rem">' +
-          '<div style="width:32px;height:32px;border-radius:6px;background:rgba(47,129,247,0.12);color:var(--accent);display:flex;align-items:center;justify-content:center">' + (PROVIDER_ICONS[c.provider] || '') + '</div>' +
-          '<div><div style="font-weight:600;font-size:0.85rem;color:var(--text)">' + x(c.name) + '</div>' +
+    return '<div class="conn-cfg-card g1-s-2fc766d7">' +
+      '<div class="g1-display-flex g1-s-0bdc41ee">' +
+        '<div class="g1-display-flex g1-s-56a8386c">' +
+          '<div class="g1-display-flex g1-s-898cff8a">' + (PROVIDER_ICONS[c.provider] || '') + '</div>' +
+          '<div><div class="g1-s-ab03ec3f">' + x(c.name) + '</div>' +
             '<div class="tiny muted">' + (PROVIDER_LABELS[c.provider] || x(c.provider)) + ' &nbsp;·&nbsp; Auto-create: ' + x(ac) + '</div></div>' +
         '</div>' +
-        '<div style="display:flex;align-items:center;gap:0.65rem">' +
-          '<span class="tiny" style="color:' + statusColor + '" title="' + x(statusTitle) + '">' + statusDot + '</span>' +
+        '<div class="g1-display-flex g1-s-76f7b01e">' +
+          '<span class="tiny"' + cssVars(['g1-v-7d75dfc9', statusColor]) + ' title="' + x(statusTitle) + '">' + statusDot + '</span>' +
           '<button class="btn btn-outline btn-sm"' + on('click', 'testConnectorById', c.id) + '>Test</button>' +
           '<button class="btn btn-outline btn-sm"' + on('click', 'openEditConnector', c.id) + '>Edit</button>' +
-          '<button class="btn btn-sm" style="color:var(--danger);background:rgba(218,54,51,0.08);border:1px solid rgba(218,54,51,0.25)"' + on('click', 'deleteConnector', c.id, c.name) + '>Delete</button>' +
+          '<button class="btn btn-sm g1-s-18a8eb32"' + on('click', 'deleteConnector', c.id, c.name) + '>Delete</button>' +
         '</div>' +
       '</div>' +
       errorRow +
@@ -163,27 +164,27 @@ export function renderConnectorSettings(saved) {
   var s = saved || {};
   document.getElementById('cf-settings').innerHTML = fields.map(function(f) {
     if (f.type === 'checkbox') {
-      return '<div style="margin-bottom:0.6rem">' +
-        '<label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer">' +
+      return '<div class="g1-s-dd11a3a0">' +
+        '<label class="g1-display-flex g1-s-b0ace2ed">' +
           '<input type="checkbox" id="cfs-' + f.key + '"' + (s[f.key] === 'yes' ? ' checked' : '') + '>' +
-          '<span class="conn-cfg-label" style="margin:0">' + f.label + '</span>' +
+          '<span class="conn-cfg-label g1-s-ab79ea2b">' + f.label + '</span>' +
         '</label>' +
-        (f.hint ? '<div style="font-size:0.65rem;color:var(--muted);margin-top:0.2rem;margin-left:1.4rem">' + f.hint + '</div>' : '') +
+        (f.hint ? '<div class="g1-s-239398d5">' + f.hint + '</div>' : '') +
         '</div>';
     }
     if (f.type === 'project_picker') {
-      return '<div style="margin-bottom:0.6rem">' +
-        '<div class="conn-cfg-label" style="margin-bottom:0.25rem">' + f.label + '</div>' +
-        '<div style="display:flex;gap:0.4rem;align-items:center">' +
-          '<select id="cfs-' + f.key + '-sel" class="inp-sm" style="flex:1;display:none"' + on('change', 'connectorProjectSelectChange', f.key) + '></select>' +
+      return '<div class="g1-s-dd11a3a0">' +
+        '<div class="conn-cfg-label g1-s-e02b1221">' + f.label + '</div>' +
+        '<div class="g1-display-flex g1-s-35646f83">' +
+          '<select id="cfs-' + f.key + '-sel" class="inp-sm is-hidden g1-s-83725d2c"' + on('change', 'connectorProjectSelectChange', f.key) + '></select>' +
           '<input type="text" id="cfs-' + f.key + '" placeholder="' + f.placeholder + '" value="' + x(s[f.key] || '') + '" class="inp-sm u-flex1">' +
-          '<button type="button" class="btn btn-outline btn-sm" style="white-space:nowrap;font-size:0.72rem"' + on('click', 'fetchConnectorProjects') + '>↓ Fetch</button>' +
+          '<button type="button" class="btn btn-outline btn-sm g1-s-975e501c"' + on('click', 'fetchConnectorProjects') + '>↓ Fetch</button>' +
         '</div>' +
-        '<div id="cfs-' + f.key + '-hint" style="font-size:0.65rem;color:var(--muted);margin-top:0.2rem"></div>' +
+        '<div id="cfs-' + f.key + '-hint" class="g1-s-68ab4b84"></div>' +
         '</div>';
     }
-    return '<div style="margin-bottom:0.6rem">' +
-      '<div class="conn-cfg-label" style="margin-bottom:0.25rem">' + f.label + '</div>' +
+    return '<div class="g1-s-dd11a3a0">' +
+      '<div class="conn-cfg-label g1-s-e02b1221">' + f.label + '</div>' +
       '<input type="' + f.type + '" id="cfs-' + f.key + '" placeholder="' + f.placeholder + '" value="' + x(s[f.key] || '') + '" class="inp-sm u-w100">' +
       '</div>';
   }).join('');
@@ -275,7 +276,7 @@ export function saveConnectorForm() {
   if (body.name !== (prev.name || '')) rows += _diffRow('Name', prev.name, body.name);
   if (prov !== (prev.provider || '')) {
     rows += _diffRow('Provider', PROVIDER_LABELS[prev.provider] || prev.provider, PROVIDER_LABELS[prov] || prov);
-    rows += '<div class="tiny muted" style="margin-bottom:0.4rem">Changing provider reconfigures every connection field below.</div>';
+    rows += '<div class="tiny muted g1-s-0990a875">Changing provider reconfigures every connection field below.</div>';
   } else {
     var prevSettings = prev.settings || {};
     fields.forEach(function(f) {
@@ -372,8 +373,8 @@ export function renderResponseConnectorList(list) {
   var el = document.getElementById('response-connectors-list');
   if (!el) return;
   if (!list || !list.length) {
-    el.innerHTML = '<div class="conn-cfg-card" style="text-align:center;padding:2rem;color:var(--muted)">' +
-      '<div style="margin-bottom:0.5rem">No response connectors configured.</div>' +
+    el.innerHTML = '<div class="conn-cfg-card g1-s-87670393">' +
+      '<div class="g1-s-04f181fe">No response connectors configured.</div>' +
       '<div class="tiny">Add a CrowdStrike or Defender connector to enable Respond actions from Findings.</div></div>';
     return;
   }
@@ -381,16 +382,16 @@ export function renderResponseConnectorList(list) {
   el.innerHTML = list.map(function(c) {
     var statusColor = c.enabled ? 'var(--success)' : 'var(--muted)';
     var statusLabel = c.enabled ? 'Enabled' : 'Disabled';
-    var statusDot = '<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:' + statusColor + ';margin-right:5px"></span>' + statusLabel;
-    return '<div class="conn-cfg-card" style="margin-bottom:0.75rem">' +
-      '<div style="display:flex;align-items:center;justify-content:space-between;gap:1rem">' +
-        '<div><div style="font-weight:600;font-size:0.85rem;color:var(--text)">' + x(c.name) + '</div>' +
+    var statusDot = '<span class="g1-display-inline-block g1-s-aab81e99"' + cssVars(['g1-v-9ffd39ba', statusColor]) + '></span>' + statusLabel;
+    return '<div class="conn-cfg-card g1-s-2fc766d7">' +
+      '<div class="g1-display-flex g1-s-0bdc41ee">' +
+        '<div><div class="g1-s-ab03ec3f">' + x(c.name) + '</div>' +
           '<div class="tiny muted">' + (providerLabels[c.provider] || x(c.provider)) + '</div></div>' +
-        '<div style="display:flex;align-items:center;gap:0.65rem">' +
-          '<span class="tiny" style="color:' + statusColor + '">' + statusDot + '</span>' +
+        '<div class="g1-display-flex g1-s-76f7b01e">' +
+          '<span class="tiny"' + cssVars(['g1-v-7d75dfc9', statusColor]) + '>' + statusDot + '</span>' +
           '<button class="btn btn-outline btn-sm"' + on('click', 'testResponseConnectorById', c.id) + '>Test</button>' +
           '<button class="btn btn-outline btn-sm"' + on('click', 'openEditResponseConnector', c.id) + '>Edit</button>' +
-          '<button class="btn btn-sm" style="color:var(--danger);background:rgba(218,54,51,0.08);border:1px solid rgba(218,54,51,0.25)"' + on('click', 'deleteResponseConnector', c.id, c.name) + '>Delete</button>' +
+          '<button class="btn btn-sm g1-s-18a8eb32"' + on('click', 'deleteResponseConnector', c.id, c.name) + '>Delete</button>' +
         '</div>' +
       '</div>' +
     '</div>';

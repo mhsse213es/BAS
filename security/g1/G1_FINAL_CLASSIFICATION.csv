@@ -641,6 +641,9 @@ renderComplianceReport:document.getElementById('cmp-kpi-area'):=:f94d2a59832c,55
         '<div class=""cmp-kpi-icon"" style=""color:' + k.color + ';background:' + k.dim + '"">' + k.icon + '</div>' +
         '<div class=""cmp-kpi-value"" style=""color:' + k.color + '"">' + k.val + '</div>' +
         '<div class=""cmp-kpi-label"">' + k.label +"
+renderConnectorList:el:=:478cbd7e3d30,13171,renderConnectorList,el,=,static,static,0,,,"'<div class=""conn-cfg-card g1-s-87670393"">' +
+      '<div class=""g1-s-04f181fe"">No connectors configured.</div>' +
+      '<div class=""tiny"">Add a ServiceNow, Jira, or webhook connector to push findings to your ITSM.</div></div>'"
 renderConnectorList:el:=:703cef8c4c77,13176,renderConnectorList,el,=,unescaped_html,unescaped_html,4,user_created_name,,"list.map(function(c) {
     var ac = c.autoCreate === 'off' || !c.autoCreate ? 'Manual only' : c.autoCreate.replace('_', '+');
 
@@ -651,16 +654,14 @@ renderConnectorList:el:=:703cef8c4c77,13176,renderConnectorList,el,=,unescaped_h
       statusLabel = 'Disabled';
       statusTitle = 'Connector is turned off';
     } else if (c.la"
-renderConnectorList:el:=:b382f82521d0,13171,renderConnectorList,el,=,static,static,0,,,"'<div class=""conn-cfg-card"" style=""text-align:center;padding:2rem;color:var(--muted)"">' +
-      '<div style=""margin-bottom:0.5rem"">No connectors configured.</div>' +
-      '<div class=""tiny"">Add a ServiceNow, Jira, or webhook connector to push findings to your ITSM.</div></div>'"
-renderConnectorSettings:document.getElementById('cf-settings'):=:53246d2e3178,13294,renderConnectorSettings,document.getElementById('cf-settings'),=,unescaped_html,unescaped_html,4,,,"fields.map(function(f) {
+renderConnectorSettings:document.getElementById('cf-settings'):=:9e6c49687b1a,13294,renderConnectorSettings,document.getElementById('cf-settings'),=,unescaped_html,unescaped_html,4,,,"fields.map(function(f) {
     if (f.type === 'checkbox') {
-      return '<div style=""margin-bottom:0.6rem"">' +
-        '<label style=""display:flex;align-items:center;gap:0.5rem;cursor:pointer"">' +
+      return '<div class=""g1-s-dd11a3a0"">' +
+        '<label class=""g1-display-flex g1-s-b0ace2ed"">' +
           '<input type=""checkbox"" id=""cfs-' + f.key + '""' + (s[f.key] === 'yes' ? ' checked' : '') + '>' +
-          '<span class=""conn-cfg-label"" style=""margin:0"">' + f.label + '</span>' +
-        '</lab"
+          '<span class=""conn-cfg-label g1-s-ab79ea2b"">' + f.label + '</span>' +
+        '</label>' +
+        (f.hint ? '<div class="""
 renderControlsTable:document.getElementById('cmp-controls-body'):=:163c6c68698d,5635,renderControlsTable,document.getElementById('cmp-controls-body'),=,static,static,0,,,"'<tr><td colspan=""7"" class=""empty"">No controls match this filter.</td></tr>'"
 renderControlsTable:document.getElementById('cmp-controls-body'):=:5387bef00084,5604,renderControlsTable,document.getElementById('cmp-controls-body'),=,unescaped_html,unescaped_html,4,user_created_name,,"rows.map(function(c, i) {
     var badge = '<span class=""cmp-badge ' + c.status + '"">' + (statusLabel[c.status] || c.status) + '</span>';
@@ -834,15 +835,15 @@ renderRepHistory:tb:=:b9e0ef311b73,15230,renderRepHistory,tb,=,unescaped_html,un
         '<td class=""tiny muted"">' + x(r.scopeLabel) + '</td>' +
         '<td class=""tiny"">' + x((r.format || '—').toUpperCase()) + '</td>' +
         '<td class=""tiny muted"">' + x(r.generatedBy || '—') +"
-renderResponseConnectorList:el:=:3d148461a96d,13505,renderResponseConnectorList,el,=,static,static,0,,,"'<div class=""conn-cfg-card"" style=""text-align:center;padding:2rem;color:var(--muted)"">' +
-      '<div style=""margin-bottom:0.5rem"">No response connectors configured.</div>' +
+renderResponseConnectorList:el:=:7e78a05def5b,13505,renderResponseConnectorList,el,=,static,static,0,,,"'<div class=""conn-cfg-card g1-s-87670393"">' +
+      '<div class=""g1-s-04f181fe"">No response connectors configured.</div>' +
       '<div class=""tiny"">Add a CrowdStrike or Defender connector to enable Respond actions from Findings.</div></div>'"
-renderResponseConnectorList:el:=:a27464dcf3bf,13511,renderResponseConnectorList,el,=,unescaped_html,unescaped_html,4,user_created_name,,"list.map(function(c) {
+renderResponseConnectorList:el:=:dd59f75ffc07,13511,renderResponseConnectorList,el,=,unescaped_html,unescaped_html,4,user_created_name,,"list.map(function(c) {
     var statusColor = c.enabled ? 'var(--success)' : 'var(--muted)';
     var statusLabel = c.enabled ? 'Enabled' : 'Disabled';
-    var statusDot = '<span style=""display:inline-block;width:7px;height:7px;border-radius:50%;background:' + statusColor + ';margin-right:5px""></span>' + statusLabel;
-    return '<div class=""conn-cfg-card"" style=""margin-bottom:0.75rem"">' +
-      '<di"
+    var statusDot = '<span class=""g1-display-inline-block g1-s-aab81e99""' + cssVars(['g1-v-9ffd39ba', statusColor]) + '></span>' + statusLabel;
+    return '<div class=""conn-cfg-card g1-s-2fc766d7"">' +
+      '<div class=""g1-display-flex g1-s-0bdc41ee"""
 renderRunIOCList:el:=:e0fb92df4f2d,13803,renderRunIOCList,el,=,unescaped_html,unescaped_html,4,,,"list.map(function(ind, idx) {
     var expanded = _runIOCExpandedIdx === idx;
     var techs = (ind.techniqueIds || []).map(function(t) {

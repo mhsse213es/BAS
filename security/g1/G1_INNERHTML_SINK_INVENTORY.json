@@ -2844,8 +2844,8 @@
   "function": "renderConnectorList",
   "target": "el",
   "op": "=",
-  "rhs": "'<div class=\"conn-cfg-card\" style=\"text-align:center;padding:2rem;color:var(--muted)\">' +\n      '<div style=\"margin-bottom:0.5rem\">No connectors configured.</div>' +\n      '<div class=\"tiny\">Add a ServiceNow, Jira, or webhook connector to push findings to your ITSM.</div></div>'",
-  "rhs_len": 279,
+  "rhs": "'<div class=\"conn-cfg-card g1-s-87670393\">' +\n      '<div class=\"g1-s-04f181fe\">No connectors configured.</div>' +\n      '<div class=\"tiny\">Add a ServiceNow, Jira, or webhook connector to push findings to your ITSM.</div></div>'",
+  "rhs_len": 228,
   "category": "static",
   "data_source_tags": ""
  },
@@ -2855,7 +2855,7 @@
   "target": "el",
   "op": "=",
   "rhs": "list.map(function(c) {\n    var ac = c.autoCreate === 'off' || !c.autoCreate ? 'Manual only' : c.autoCreate.replace('_', '+');\n\n    // Honest connection status \u2014 4 states, not just enabled/disabled\n    var statusColor, statusLabel, statusTitle;\n    if (!c.enabled) {\n      statusColor = 'var(--muted)';\n      statusLabel = 'Disabled';\n      statusTitle = 'Connector is turned off';\n    } else if (c.la",
-  "rhs_len": 2937,
+  "rhs_len": 2450,
   "category": "unescaped_html",
   "data_source_tags": "user_created_name"
  },
@@ -2864,8 +2864,8 @@
   "function": "renderConnectorSettings",
   "target": "document.getElementById('cf-settings')",
   "op": "=",
-  "rhs": "fields.map(function(f) {\n    if (f.type === 'checkbox') {\n      return '<div style=\"margin-bottom:0.6rem\">' +\n        '<label style=\"display:flex;align-items:center;gap:0.5rem;cursor:pointer\">' +\n          '<input type=\"checkbox\" id=\"cfs-' + f.key + '\"' + (s[f.key] === 'yes' ? ' checked' : '') + '>' +\n          '<span class=\"conn-cfg-label\" style=\"margin:0\">' + f.label + '</span>' +\n        '</lab",
-  "rhs_len": 1784,
+  "rhs": "fields.map(function(f) {\n    if (f.type === 'checkbox') {\n      return '<div class=\"g1-s-dd11a3a0\">' +\n        '<label class=\"g1-display-flex g1-s-b0ace2ed\">' +\n          '<input type=\"checkbox\" id=\"cfs-' + f.key + '\"' + (s[f.key] === 'yes' ? ' checked' : '') + '>' +\n          '<span class=\"conn-cfg-label g1-s-ab79ea2b\">' + f.label + '</span>' +\n        '</label>' +\n        (f.hint ? '<div class=\"",
+  "rhs_len": 1551,
   "category": "unescaped_html",
   "data_source_tags": ""
  },
@@ -2884,8 +2884,8 @@
   "function": "renderResponseConnectorList",
   "target": "el",
   "op": "=",
-  "rhs": "'<div class=\"conn-cfg-card\" style=\"text-align:center;padding:2rem;color:var(--muted)\">' +\n      '<div style=\"margin-bottom:0.5rem\">No response connectors configured.</div>' +\n      '<div class=\"tiny\">Add a CrowdStrike or Defender connector to enable Respond actions from Findings.</div></div>'",
-  "rhs_len": 293,
+  "rhs": "'<div class=\"conn-cfg-card g1-s-87670393\">' +\n      '<div class=\"g1-s-04f181fe\">No response connectors configured.</div>' +\n      '<div class=\"tiny\">Add a CrowdStrike or Defender connector to enable Respond actions from Findings.</div></div>'",
+  "rhs_len": 242,
   "category": "static",
   "data_source_tags": ""
  },
@@ -2894,8 +2894,8 @@
   "function": "renderResponseConnectorList",
   "target": "el",
   "op": "=",
-  "rhs": "list.map(function(c) {\n    var statusColor = c.enabled ? 'var(--success)' : 'var(--muted)';\n    var statusLabel = c.enabled ? 'Enabled' : 'Disabled';\n    var statusDot = '<span style=\"display:inline-block;width:7px;height:7px;border-radius:50%;background:' + statusColor + ';margin-right:5px\"></span>' + statusLabel;\n    return '<div class=\"conn-cfg-card\" style=\"margin-bottom:0.75rem\">' +\n      '<di",
-  "rhs_len": 1374,
+  "rhs": "list.map(function(c) {\n    var statusColor = c.enabled ? 'var(--success)' : 'var(--muted)';\n    var statusLabel = c.enabled ? 'Enabled' : 'Disabled';\n    var statusDot = '<span class=\"g1-display-inline-block g1-s-aab81e99\"' + cssVars(['g1-v-9ffd39ba', statusColor]) + '></span>' + statusLabel;\n    return '<div class=\"conn-cfg-card g1-s-2fc766d7\">' +\n      '<div class=\"g1-display-flex g1-s-0bdc41ee\"",
+  "rhs_len": 1171,
   "category": "unescaped_html",
   "data_source_tags": "user_created_name"
  },
