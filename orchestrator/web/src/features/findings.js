@@ -7,6 +7,7 @@ import { covSegHtml, statTileCard } from './attack-path.js';
 import { openModal, scenarioFramework } from './reports.js';
 import { ROLE, _riskScoreColor } from './shell.js';
 import { setDisplay } from '../core/inline-style.js';
+import { cssVars } from '../core/css-vars.js';
 
 
 // ── Findings ─────────────────────────────────────────────────────────────────
@@ -14,7 +15,7 @@ var FINDING_TAB = 'all';
 export function findingSevBadge(sev, exp) {
   var col = { Critical: 'var(--danger)', High: '#e0873a', Medium: 'var(--warning)', Low: 'var(--muted)' }[sev] || 'var(--muted)';
   var ex = exp === 'detected_only' ? ' <span class="tiny muted">· Detected only</span>' : '';
-  return '<span class="sbadge" style="background:transparent;border:1px solid ' + col + ';color:' + col + '">' + x(sev) + '</span>' + ex;
+  return '<span class="sbadge g1-s-e02ce1a7"' + cssVars(['g1-v-97993078', col], ['g1-v-7d75dfc9', col]) + '>' + x(sev) + '</span>' + ex;
 }
 export function loadSLAReport() {
   apicall('/api/sla/report').then(function(rep) {
@@ -59,13 +60,13 @@ function renderSLASeverityBars(bySeverity) {
   var rank = function(sev) { return sev in order ? order[sev] : 9; };
   var sorted = bySeverity.slice().sort(function(a, b) { return rank(a.severity) - rank(b.severity); });
   var el = document.getElementById('sla-rpt-severity');
-  if (!sorted.length) { el.innerHTML = '<div class="empty" style="padding:1.25rem">No severities with SLA episodes.</div>'; return; }
+  if (!sorted.length) { el.innerHTML = '<div class="empty g1-s-decac807">No severities with SLA episodes.</div>'; return; }
   el.innerHTML = sorted.map(function(s) {
     var rate = slaRateDisplay(s.onTime, s.late, s.complianceRate);
     return '<div class="bar-row">' +
-      '<div class="bar-label"><span>' + x(s.severity) + '</span><span style="color:' + rate.color + '">' + rate.text + '</span></div>' +
-      '<div class="bar-track"><div class="bar-fill" style="width:' + s.complianceRate + '%;background:' + rate.color + '"></div></div>' +
-      '<div style="font-size:0.68rem;color:var(--muted);margin-top:0.15rem">' + s.onTime + ' on-time &middot; ' + s.late + ' late &middot; ' + s.currentlyOpen + ' open</div>' +
+      '<div class="bar-label"><span>' + x(s.severity) + '</span><span' + cssVars(['g1-v-7d75dfc9', rate.color]) + '>' + rate.text + '</span></div>' +
+      '<div class="bar-track"><div class="bar-fill"' + cssVars(['g1-v-9b890877', s.complianceRate], ['g1-v-9ffd39ba', rate.color]) + '></div></div>' +
+      '<div class="g1-s-6769b269">' + s.onTime + ' on-time &middot; ' + s.late + ' late &middot; ' + s.currentlyOpen + ' open</div>' +
       '</div>';
   }).join('');
 }
@@ -76,7 +77,7 @@ function renderSLAMonthlyTrend(monthlyTrend) {
   body.innerHTML = sorted.map(function(m) {
     var rate = slaRateDisplay(m.onTime, m.resolved - m.onTime, m.complianceRate);
     return '<tr><td>' + x(m.month) + '</td><td>' + m.resolved + '</td><td>' + m.onTime + '</td>' +
-      '<td style="color:' + rate.color + '">' + rate.text + '</td></tr>';
+      '<td' + cssVars(['g1-v-7d75dfc9', rate.color]) + '>' + rate.text + '</td></tr>';
   }).join('');
 }
 function renderSLARecentlyResolved(recentlyResolved) {
@@ -84,8 +85,8 @@ function renderSLARecentlyResolved(recentlyResolved) {
   if (!recentlyResolved.length) { body.innerHTML = '<tr><td colspan="5" class="empty">No resolved episodes yet.</td></tr>'; return; }
   body.innerHTML = recentlyResolved.map(function(r) {
     var outcome = r.onTime
-      ? '<span class="sbadge" style="background:transparent;border:1px solid var(--success);color:var(--success)">On time</span>'
-      : '<span class="sbadge" style="background:transparent;border:1px solid var(--danger);color:var(--danger)">Late</span>';
+      ? '<span class="sbadge g1-s-43c234c9">On time</span>'
+      : '<span class="sbadge g1-s-99a3db64">Late</span>';
     return '<tr><td>' + x(r.agentId) + '</td><td>' + x(r.checkId) + '</td><td>' + findingSevBadge(r.severity) + '</td>' +
       '<td>' + fmtDate(r.resolvedAt) + '</td><td>' + outcome + '</td></tr>';
   }).join('');
@@ -157,16 +158,16 @@ function renderFindingsRows() {
   if (!l.length) { tb.innerHTML = '<tr><td colspan="' + colCount + '" class="empty">No findings' + (FINDING_TAB === 'all' ? ' yet.' : ' in this state.') + '</td></tr>'; return; }
   tb.innerHTML = l.map(function(f) {
     var checkCell = (_findingsBulkMode && canPush)
-      ? '<td' + on('click', 'stopEvent') + ' style="padding:0.2rem 0.5rem"><input type="checkbox" ' + (_findingsSelected[f.id] ? 'checked' : '') + ' ' + on('change', 'toggleFindingCheck', f.id) + ' class="u-pointer"></td>'
+      ? '<td class="g1-s-49946d6d"' + on('click', 'stopEvent') + '><input type="checkbox" ' + (_findingsSelected[f.id] ? 'checked' : '') + ' ' + on('change', 'toggleFindingCheck', f.id) + ' class="u-pointer"></td>'
       : '';
     var isTicketed = _ticketCandidateIds && (f.status === 'open' || f.status === 'triaged') && !_ticketCandidateIds.has(f.id);
     var ticketCell = '';
     if (canPush) {
-      ticketCell = '<td' + on('click', 'stopEvent') + ' style="padding:0.2rem 0.5rem">' +
+      ticketCell = '<td class="g1-s-49946d6d"' + on('click', 'stopEvent') + '>' +
         (isTicketed
-          ? '<span class="sbadge" style="background:rgba(47,129,247,0.12);color:var(--accent);font-size:0.68rem">ticketed</span>'
+          ? '<span class="sbadge g1-s-15c2f776">ticketed</span>'
           : (f.status === 'open' || f.status === 'triaged')
-            ? '<button class="btn btn-sm" style="font-size:0.68rem;padding:0.15rem 0.4rem;background:transparent;border:1px solid var(--border);color:var(--muted)"' + on('click', 'pushFindingToITSM', f.id) + '>+ ticket</button>'
+            ? '<button class="btn btn-sm g1-s-274769a5"' + on('click', 'pushFindingToITSM', f.id) + '>+ ticket</button>'
             : '') +
         '</td>';
     }
@@ -174,9 +175,9 @@ function renderFindingsRows() {
     if (canTriage) {
       var nextStates = ['open', 'triaged', 'remediated', 'risk_accepted'].filter(function(st) { return st !== f.status; });
       var opts = nextStates.map(function(st) { return '<option value="' + st + '">' + st.replace('_', ' ') + '</option>'; }).join('');
-      triageCell = '<td' + on('click', 'stopEvent') + ' style="padding:0.2rem 0.5rem">'
-        + '<select class="triage-sel"' + on('change', 'quickTriageFinding', f.id)
-        + ' style="font-size:0.72rem;padding:0.2rem 0.35rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--muted);cursor:pointer">'
+      triageCell = '<td class="g1-s-49946d6d"' + on('click', 'stopEvent') + '>'
+        + '<select class="triage-sel g1-s-08c6acf5"' + on('change', 'quickTriageFinding', f.id)
+        + '>'
         + '<option value="">Set…</option>' + opts + '</select></td>';
     }
     return '<tr class="u-pointer"' + on('click', 'openFinding', f.id) + '>'
@@ -185,7 +186,7 @@ function renderFindingsRows() {
       + '<td><span class="tech-id">' + x(f.techniqueId) + '</span></td>'
       + '<td>' + findingSevBadge(f.severity, f.exposureState) + '</td>'
       + '<td class="tiny muted">' + x(f.controlClass) + '</td>'
-      + '<td class="tiny muted" style="font-family:var(--font-mono)">' + x(f.agentId) + '</td>'
+      + '<td class="tiny muted g1-s-82cece3f">' + x(f.agentId) + '</td>'
       + '<td><span class="sbadge s-' + findingStatusClass(f.status) + '">' + x((f.status || '').replace('_', ' ')) + '</span></td>'
       + '<td class="tiny muted" title="First seen: ' + fmtDate(f.firstSeen) + (f.resolvedAt ? '\nResolved: ' + fmtDate(f.resolvedAt) : '') + '">' + formatFindingAge(f) + '</td>'
       + ticketCell
@@ -205,7 +206,7 @@ export function openFinding(id) {
     state._currentFinding = f;
     var e = f.enrichment || {};
     document.getElementById('results-title').textContent = (f.techniqueName || f.techniqueId) + ' — Finding';
-    var row = function(k, v) { return v && v.length ? '<div style="display:flex;gap:0.6rem;padding:0.35rem 0;border-bottom:1px solid var(--border);font-size:0.8rem"><span style="color:var(--muted);min-width:140px">' + k + '</span><span class="u-flex1">' + v + '</span></div>' : ''; };
+    var row = function(k, v) { return v && v.length ? '<div class="g1-display-flex g1-s-b60b87ad"><span class="g1-s-0a1d5a85">' + k + '</span><span class="u-flex1">' + v + '</span></div>' : ''; };
     var list = function(a) { return (a || []).map(x).join(', '); };
     var canPush = (ROLE === 'admin' || ROLE === 'analyst');
     var pushBtn = canPush ? '<button class="btn btn-outline btn-sm"' + on('click', 'pushFindingToITSM', f.id) + '>+ Ticket</button>' : '';
@@ -230,9 +231,9 @@ export function openFinding(id) {
         return '<div class="cmp-ev-row"><span class="cmp-ev-badge ' + cls + '">' + label + '</span>' +
           '<span class="cmp-ev-detail">' + x((r.details || '').substring(0, 140)) + '</span></div>';
       }).join('');
-      vbHtml = '<div style="margin-top:1rem;padding-top:0.75rem;border-top:1px solid var(--border)">' +
-        '<div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:0.4rem">Variant Breakdown</div>' +
-        '<div style="font-size:0.8rem;margin-bottom:0.5rem">' + vb.prevented + ' of ' + vb.total + ' variants blocked (' + vbPct + '%)' +
+      vbHtml = '<div class="g1-s-48ee26f0">' +
+        '<div class="g1-s-29cafabe">Variant Breakdown</div>' +
+        '<div class="g1-s-2abdc95d">' + vb.prevented + ' of ' + vb.total + ' variants blocked (' + vbPct + '%)' +
           (vb.detectedOnly ? ', ' + vb.detectedOnly + ' detected only' : '') +
           (vb.missed ? ', ' + vb.missed + ' still missed entirely' : '') + '.' +
           ((vb.missed > 0 || vb.detectedOnly > 0)
@@ -243,7 +244,7 @@ export function openFinding(id) {
       '</div>';
     }
     document.getElementById('results-body').innerHTML =
-      '<div style="margin-bottom:0.9rem">' + findingSevBadge(f.severity, f.exposureState) +
+      '<div class="g1-s-462c8de6">' + findingSevBadge(f.severity, f.exposureState) +
         ' <span class="sbadge s-' + findingStatusClass(f.status) + '">' + x((f.status || '').replace('_', ' ')) + '</span></div>' +
       row('Technique', '<span class="tech-id">' + x(f.techniqueId) + '</span> ' + x(f.techniqueName)) +
       row('Tactic', x(f.tactic)) + row('Expected control', x(f.controlClass)) +
@@ -253,11 +254,11 @@ export function openFinding(id) {
       row('First seen', fmtDate(f.firstSeen)) + row('Last seen', fmtDate(f.lastSeen)) +
       row('Exposure age', formatFindingAge(f)) +
       vbHtml +
-      (e.description ? '<div style="margin-top:0.8rem;font-size:0.8rem;color:var(--text-dim);line-height:1.5">' + x(e.description) + '</div>' : '') +
-      (e.url ? '<div class="u-mt-06"><a href="' + x(e.url) + '" target="_blank" rel="noopener" style="color:var(--accent);font-size:0.78rem">View on attack.mitre.org →</a></div>' : '') +
+      (e.description ? '<div class="g1-s-34d69e4c">' + x(e.description) + '</div>' : '') +
+      (e.url ? '<div class="u-mt-06"><a href="' + x(e.url) + '" target="_blank" rel="noopener" class="g1-s-824141a9">View on attack.mitre.org →</a></div>' : '') +
       (canPush
-        ? '<div style="margin-top:1rem;padding-top:0.75rem;border-top:1px solid var(--border)">' +
-            '<div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:0.4rem">ITSM Tickets</div>' +
+        ? '<div class="g1-s-48ee26f0">' +
+            '<div class="g1-s-29cafabe">ITSM Tickets</div>' +
             '<div id="' + x(ticketSectionId) + '"><div class="tiny muted">Loading…</div></div>' +
           '</div>'
         : '');
@@ -278,7 +279,7 @@ export function loadRemediations() {
   apicall('/api/remediations').then(function(list) {
     state._rems = list || [];
     renderRemTiles(); renderRemList();
-  }).catch(function(e) { document.getElementById('rem-list').innerHTML = '<div class="empty" style="padding:2rem">' + x(e.message) + '</div>'; });
+  }).catch(function(e) { document.getElementById('rem-list').innerHTML = '<div class="empty g1-s-be6df18e">' + x(e.message) + '</div>'; });
 }
 var REM_SVG = {
   wrench: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a4 4 0 0 1-5.4 5.4L4 17v3h3l5.3-5.3a4 4 0 0 1 5.4-5.4l-2.5 2.5-2-2 2.5-2.5z"/></svg>',
@@ -296,8 +297,8 @@ function renderRemTiles() {
   var crit = l.filter(function(r) { return r.severity === 'Critical'; }).length;
   var tile = function(lbl, val, col, iconBg, icon, foot) {
     return '<div class="kpi-card stat-tile"><div class="stat-top">' +
-      '<div><div class="kpi-label">' + lbl + '</div><div class="kpi-value" style="color:' + col + '">' + val + '</div></div>' +
-      '<div class="stat-icon" style="background:' + iconBg + ';color:' + col + '">' + icon + '</div></div>' +
+      '<div><div class="kpi-label">' + lbl + '</div><div class="kpi-value"' + cssVars(['g1-v-7d75dfc9', col]) + '>' + val + '</div></div>' +
+      '<div class="stat-icon"' + cssVars(['g1-v-9ffd39ba', iconBg], ['g1-v-7d75dfc9', col]) + '>' + icon + '</div></div>' +
       '<div class="kpi-sub">' + foot + '</div></div>';
   };
   document.getElementById('rem-tiles').innerHTML =
@@ -308,7 +309,7 @@ function renderRemTiles() {
 function renderRemList() {
   var l = state._rems || [];
   var el = document.getElementById('rem-list');
-  if (!l.length) { el.innerHTML = '<div class="empty" style="padding:2rem">No open remediations — nothing to fix right now.</div>'; return; }
+  if (!l.length) { el.innerHTML = '<div class="empty g1-s-be6df18e">No open remediations — nothing to fix right now.</div>'; return; }
   el.innerHTML = l.map(function(r, i) {
     var critCls = r.severity === 'Critical' ? ' crit' : '';
     var ctrls = (r.controlClasses || []).map(x).join(', ') || '—';
@@ -354,19 +355,19 @@ export function openRemediation(i) {
   }).join('') || '<div class="tiny muted">No ATT&CK mitigations listed for this technique.</div>';
   var agents = (r.recommendedTargets || []).map(function(a) { return '<span class="tool-tag">' + x(a) + '</span>'; }).join(' ') || '<span class="tiny muted">—</span>';
   var detection = r.detection
-    ? '<div class="rem-eyebrow">ATT&amp;CK Detection Guidance</div><div class="tiny" style="color:var(--text-dim);line-height:1.55">' + x(r.detection) + '</div>'
+    ? '<div class="rem-eyebrow">ATT&amp;CK Detection Guidance</div><div class="tiny g1-s-bf6d0f4b">' + x(r.detection) + '</div>'
     : '';
-  var checkSvg = '<svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" style="flex-shrink:0;margin-top:1px"><path d="M3 8.5l3.2 3.2L13 5"/></svg>';
+  var checkSvg = '<svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" class="g1-s-0689b472"><path d="M3 8.5l3.2 3.2L13 5"/></svg>';
   document.getElementById('results-body').innerHTML =
-    '<div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.3rem">' + findingSevBadge(r.severity, '') + ' <span class="tech-id">' + x(r.techniqueId) + '</span></div>' +
-    '<div style="font-weight:600;font-size:0.98rem;color:var(--text);margin-bottom:0.25rem;line-height:1.3">' + x(r.techniqueName) + '</div>' +
-    '<div class="tiny muted" style="margin-bottom:0.6rem">Closes ' + r.findingCount + ' finding' + (r.findingCount === 1 ? '' : 's') + ' on ' + r.agentCount + ' agent' + (r.agentCount === 1 ? '' : 's') + ' · Missed ' + r.missed + ' · Detected only ' + r.detectedOnly + '</div>' +
+    '<div class="g1-display-flex g1-s-bf6d23db">' + findingSevBadge(r.severity, '') + ' <span class="tech-id">' + x(r.techniqueId) + '</span></div>' +
+    '<div class="g1-s-d5980386">' + x(r.techniqueName) + '</div>' +
+    '<div class="tiny muted g1-s-dd11a3a0">Closes ' + r.findingCount + ' finding' + (r.findingCount === 1 ? '' : 's') + ' on ' + r.agentCount + ' agent' + (r.agentCount === 1 ? '' : 's') + ' · Missed ' + r.missed + ' · Detected only ' + r.detectedOnly + '</div>' +
     statGrid +
     '<div class="rem-eyebrow">Implementation Steps — ATT&amp;CK Mitigations</div>' + steps +
     detection +
     '<div class="rem-eyebrow">Affected Agents</div><div>' + agents + '</div>' +
     '<div class="rem-tip">' + checkSvg + '<span>After applying these mitigations, re-run the linked scenario to confirm the gap is closed and posture improves.</span></div>' +
-    '<div class="tiny muted" style="margin-top:0.8rem;opacity:0.8">Mitigation &amp; detection content © MITRE ATT&CK&reg;.</div>';
+    '<div class="tiny muted g1-s-0e2f4ee5">Mitigation &amp; detection content © MITRE ATT&CK&reg;.</div>';
   document.getElementById('results-overlay').classList.add('open');
 }
 export function revalidateRemediation(techniqueId) {
@@ -463,7 +464,7 @@ export function loadDashboardITSM() {
     setDisplay(sec, '');
     var tile = function(lbl, val, col) {
       return '<div class="kpi-card"><div class="kpi-label">' + lbl + '</div>' +
-        '<div class="kpi-value" style="color:' + col + '">' + val + '</div></div>';
+        '<div class="kpi-value"' + cssVars(['g1-v-7d75dfc9', col]) + '>' + val + '</div></div>';
     };
     var html = tile('Open tickets', open, open ? 'var(--warning)' : 'var(--success)') +
       tile('Resolved tickets', resolved, 'var(--success)') +
@@ -482,16 +483,16 @@ function loadFindingTickets(findingId, container) {
   apicall('/api/findings/' + encodeURIComponent(findingId) + '/tickets').then(function(tickets) {
     if (!container) return;
     if (!tickets || !tickets.length) {
-      container.innerHTML = '<div class="tiny muted" style="padding:0.3rem 0">No tickets yet.</div>';
+      container.innerHTML = '<div class="tiny muted g1-s-4a562a0b">No tickets yet.</div>';
       return;
     }
     container.innerHTML = tickets.map(function(t) {
       var statusColor = t.status === 'resolved' ? 'var(--success)' : t.status === 'open' ? 'var(--warning)' : 'var(--muted)';
-      var link = t.ticketUrl ? '<a href="' + x(t.ticketUrl) + '" target="_blank" rel="noopener" style="color:var(--accent);font-size:0.78rem;margin-left:0.4rem">↗</a>' : '';
-      var reval = t.revalidationRequired ? ' <span class="sbadge" style="background:rgba(218,54,51,0.12);color:var(--danger);font-size:0.65rem">revalidate</span>' : '';
-      return '<div style="display:flex;align-items:center;gap:0.5rem;padding:0.3rem 0;border-bottom:1px solid var(--border);font-size:0.8rem">' +
-        '<span class="tech-id" style="font-size:0.75rem">' + x(t.ticketId) + '</span>' + link +
-        '<span class="tiny" style="color:' + statusColor + ';margin-left:auto">' + x(t.status) + '</span>' + reval +
+      var link = t.ticketUrl ? '<a href="' + x(t.ticketUrl) + '" target="_blank" rel="noopener" class="g1-s-35b86d92">↗</a>' : '';
+      var reval = t.revalidationRequired ? ' <span class="sbadge g1-s-e0409a47">revalidate</span>' : '';
+      return '<div class="g1-display-flex g1-s-37583365">' +
+        '<span class="tech-id g1-s-34c7a996">' + x(t.ticketId) + '</span>' + link +
+        '<span class="tiny g1-s-ca6fc035"' + cssVars(['g1-v-7d75dfc9', statusColor]) + '>' + x(t.status) + '</span>' + reval +
         '</div>';
     }).join('');
   }).catch(function() { if (container) container.innerHTML = '<div class="tiny muted">Failed to load tickets.</div>'; });

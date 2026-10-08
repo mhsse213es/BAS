@@ -936,7 +936,7 @@
   "rhs": "body"
  },
  {
-  "sink_id": "list:document.getElementById('results-body'):=:4eb1c57d1f9c",
+  "sink_id": "list:document.getElementById('results-body'):=:5d2daf4d85b2",
   "line": 12488,
   "function": "list",
   "target": "document.getElementById('results-body')",
@@ -946,7 +946,7 @@
   "severity_tier": 3,
   "data_source_tags": "agent,threat_intel,user_created_name",
   "trace_notes": "",
-  "rhs": "'<div style=\"margin-bottom:0.9rem\">' + findingSevBadge(f.severity, f.exposureState) +\n        ' <span class=\"sbadge s-' + findingStatusClass(f.status) + '\">' + x((f.status || '').replace('_', ' ')) + '</span></div>' +\n      row('Technique', '<span class=\"tech-id\">' + x(f.techniqueId) + '</span> ' + x(f.techniqueName)) +\n      row('Tactic', x(f.tactic)) + row('Expected control', x(f.controlClass)) "
+  "rhs": "'<div class=\"g1-s-462c8de6\">' + findingSevBadge(f.severity, f.exposureState) +\n        ' <span class=\"sbadge s-' + findingStatusClass(f.status) + '\">' + x((f.status || '').replace('_', ' ')) + '</span></div>' +\n      row('Technique', '<span class=\"tech-id\">' + x(f.techniqueId) + '</span> ' + x(f.techniqueName)) +\n      row('Tactic', x(f.tactic)) + row('Expected control', x(f.controlClass)) +\n     "
  },
  {
   "sink_id": "list:document.getElementById('results-export'):=:cfdd80621952",
@@ -1625,7 +1625,7 @@
   "rhs": "'<tr><td colspan=\"8\" class=\"empty u-danger\">Failed to load: ' + x(e.message) + '</td></tr>'"
  },
  {
-  "sink_id": "loadFindingTickets:container:=:3b0ad29b6834",
+  "sink_id": "loadFindingTickets:container:=:22168e4e10e7",
   "line": 12728,
   "function": "loadFindingTickets",
   "target": "container",
@@ -1635,10 +1635,10 @@
   "severity_tier": 0,
   "data_source_tags": "",
   "trace_notes": "",
-  "rhs": "'<div class=\"tiny muted\" style=\"padding:0.3rem 0\">No tickets yet.</div>'"
+  "rhs": "'<div class=\"tiny muted g1-s-4a562a0b\">No tickets yet.</div>'"
  },
  {
-  "sink_id": "loadFindingTickets:container:=:d3ba7728b85f",
+  "sink_id": "loadFindingTickets:container:=:de85796d4333",
   "line": 12731,
   "function": "loadFindingTickets",
   "target": "container",
@@ -1648,7 +1648,7 @@
   "severity_tier": 4,
   "data_source_tags": "",
   "trace_notes": "",
-  "rhs": "tickets.map(function(t) {\n      var statusColor = t.status === 'resolved' ? 'var(--success)' : t.status === 'open' ? 'var(--warning)' : 'var(--muted)';\n      var link = t.ticketUrl ? '<a href=\"' + x(t.ticketUrl) + '\" target=\"_blank\" rel=\"noopener\" style=\"color:var(--accent);font-size:0.78rem;margin-left:0.4rem\">↗</a>' : '';\n      var reval = t.revalidationRequired ? ' <span class=\"sbadge\" style=\"b"
+  "rhs": "tickets.map(function(t) {\n      var statusColor = t.status === 'resolved' ? 'var(--success)' : t.status === 'open' ? 'var(--warning)' : 'var(--muted)';\n      var link = t.ticketUrl ? '<a href=\"' + x(t.ticketUrl) + '\" target=\"_blank\" rel=\"noopener\" class=\"g1-s-35b86d92\">↗</a>' : '';\n      var reval = t.revalidationRequired ? ' <span class=\"sbadge g1-s-e0409a47\">revalidate</span>' : '';\n      return"
  },
  {
   "sink_id": "loadFindingTickets:if (container) container:=:020617a0dd2e",
@@ -1898,7 +1898,7 @@
   "rhs": "'<tr><td colspan=\"7\" class=\"empty u-danger\">Failed to load: ' + x(e.message) + '</td></tr>'"
  },
  {
-  "sink_id": "loadRemediations:document.getElementById('rem-list'):=:9bbe032fcd11",
+  "sink_id": "loadRemediations:document.getElementById('rem-list'):=:6087e3ce4ca1",
   "line": 12524,
   "function": "loadRemediations",
   "target": "document.getElementById('rem-list')",
@@ -1908,7 +1908,7 @@
   "severity_tier": 1,
   "data_source_tags": "error_message",
   "trace_notes": "",
-  "rhs": "'<div class=\"empty\" style=\"padding:2rem\">' + x(e.message) + '</div>'"
+  "rhs": "'<div class=\"empty g1-s-be6df18e\">' + x(e.message) + '</div>'"
  },
  {
   "sink_id": "loadReports:document.getElementById('rep-available'):=:568454456a1f",
@@ -2951,7 +2951,7 @@
   "rhs": "'<div class=\"conn-cfg-card g1-s-7b0aa428\">' +\n        '<div class=\"g1-s-21b099fc\">Restore must be run on the host</div>' +\n        '<div class=\"g1-s-1236f559\">This console cannot and will not run this for you. An administrator with root access to the server must run the command below and type <b>RESTORE</b> to confirm.</div>' +\n        '<code class=\"g1-display-block g1-s-dca1d235\">' + x(res.restor"
  },
  {
-  "sink_id": "rank:el:=:53dbb64ac0d2",
+  "sink_id": "rank:el:=:4707dd6e635f",
   "line": 12306,
   "function": "rank",
   "target": "el",
@@ -2961,10 +2961,10 @@
   "severity_tier": 4,
   "data_source_tags": "",
   "trace_notes": "",
-  "rhs": "sorted.map(function(s) {\n    var rate = slaRateDisplay(s.onTime, s.late, s.complianceRate);\n    return '<div class=\"bar-row\">' +\n      '<div class=\"bar-label\"><span>' + x(s.severity) + '</span><span style=\"color:' + rate.color + '\">' + rate.text + '</span></div>' +\n      '<div class=\"bar-track\"><div class=\"bar-fill\" style=\"width:' + s.complianceRate + '%;background:' + rate.color + '\"></div></div>"
+  "rhs": "sorted.map(function(s) {\n    var rate = slaRateDisplay(s.onTime, s.late, s.complianceRate);\n    return '<div class=\"bar-row\">' +\n      '<div class=\"bar-label\"><span>' + x(s.severity) + '</span><span' + cssVars(['g1-v-7d75dfc9', rate.color]) + '>' + rate.text + '</span></div>' +\n      '<div class=\"bar-track\"><div class=\"bar-fill\"' + cssVars(['g1-v-9b890877', s.complianceRate], ['g1-v-9ffd39ba', rat"
  },
  {
-  "sink_id": "rank:el:=:d0b2d3123aea",
+  "sink_id": "rank:el:=:ffaf4aec391d",
   "line": 12305,
   "function": "rank",
   "target": "el",
@@ -2974,7 +2974,7 @@
   "severity_tier": 0,
   "data_source_tags": "",
   "trace_notes": "",
-  "rhs": "'<div class=\"empty\" style=\"padding:1.25rem\">No severities with SLA episodes.</div>'"
+  "rhs": "'<div class=\"empty g1-s-decac807\">No severities with SLA episodes.</div>'"
  },
  {
   "sink_id": "refreshDashboardCampaigns:el:=:4d6db4ecdebe",
@@ -3627,19 +3627,6 @@
   "rhs": "'<div class=\"card\" style=\"margin-top:1rem;padding:1rem\">' +\n      '<span class=\"kpi-label\">Open exposure windows</span>' +\n      '<div class=\"tiny muted\" style=\"margin-top:0.4rem\">No open findings.</div></div>'"
  },
  {
-  "sink_id": "renderFindingsRows:tb:=:6fe7cd46ac6e",
-  "line": 12401,
-  "function": "renderFindingsRows",
-  "target": "tb",
-  "op": "=",
-  "baseline_category": "unescaped_html",
-  "final_category": "unescaped_html",
-  "severity_tier": 4,
-  "data_source_tags": "agent",
-  "trace_notes": "",
-  "rhs": "l.map(function(f) {\n    var checkCell = (_findingsBulkMode && canPush)\n      ? '<td' + x('click', 'stopEvent') + ' style=\"padding:0.2rem 0.5rem\"><input type=\"checkbox\" ' + (_findingsSelected[f.id] ? 'checked' : '') + ' ' + x('change', 'toggleFindingCheck', f.id) + ' class=\"u-pointer\"></td>'\n      : '';\n    var isTicketed = _ticketCandidateIds && (f.status === 'open' || f.status === 'triaged') && !"
- },
- {
   "sink_id": "renderFindingsRows:tb:=:877b0f0dc728",
   "line": 12400,
   "function": "renderFindingsRows",
@@ -3651,6 +3638,19 @@
   "data_source_tags": "",
   "trace_notes": "",
   "rhs": "'<tr><td colspan=\"' + colCount + '\" class=\"empty\">No findings' + (FINDING_TAB === 'all' ? ' yet.' : ' in this state.') + '</td></tr>'"
+ },
+ {
+  "sink_id": "renderFindingsRows:tb:=:c8b88e3d2320",
+  "line": 12401,
+  "function": "renderFindingsRows",
+  "target": "tb",
+  "op": "=",
+  "baseline_category": "unescaped_html",
+  "final_category": "unescaped_html",
+  "severity_tier": 4,
+  "data_source_tags": "agent",
+  "trace_notes": "",
+  "rhs": "l.map(function(f) {\n    var checkCell = (_findingsBulkMode && canPush)\n      ? '<td class=\"g1-s-49946d6d\"' + x('click', 'stopEvent') + '><input type=\"checkbox\" ' + (_findingsSelected[f.id] ? 'checked' : '') + ' ' + x('change', 'toggleFindingCheck', f.id) + ' class=\"u-pointer\"></td>'\n      : '';\n    var isTicketed = _ticketCandidateIds && (f.status === 'open' || f.status === 'triaged') && !_ticketC"
  },
  {
   "sink_id": "renderFindingsTiles:document.getElementById('findings-tiles'):=:9c715967ff22",
@@ -4004,7 +4004,7 @@
   "rhs": "list.map(function(t) {\n    var threat = [];\n    if (t.kev) threat.push('<span class=\"badge\" style=\"color:var(--danger);border-color:var(--danger)\">KEV</span>');\n    if (t.epssPercentile) threat.push('<span class=\"badge\">EPSS ' + Math.round(t.epssPercentile) + '</span>');\n    if (t.threatActors) threat.push('<span class=\"badge\">' + t.threatActors + ' group' + (t.threatActors === 1 ? '' : 's') + '</"
  },
  {
-  "sink_id": "renderRemList:el:=:00da7cd51723",
+  "sink_id": "renderRemList:el:=:4e937d27ac6a",
   "line": 12554,
   "function": "renderRemList",
   "target": "el",
@@ -4014,7 +4014,7 @@
   "severity_tier": 0,
   "data_source_tags": "",
   "trace_notes": "",
-  "rhs": "'<div class=\"empty\" style=\"padding:2rem\">No open remediations — nothing to fix right now.</div>'"
+  "rhs": "'<div class=\"empty g1-s-be6df18e\">No open remediations — nothing to fix right now.</div>'"
  },
  {
   "sink_id": "renderRemList:el:=:5b15f65ece96",
@@ -4290,7 +4290,7 @@
   "rhs": "'<tr><td colspan=\"4\" class=\"empty\">No resolved episodes yet.</td></tr>'"
  },
  {
-  "sink_id": "renderSLAMonthlyTrend:body:=:da4a484c0ebc",
+  "sink_id": "renderSLAMonthlyTrend:body:=:bf020b8e13bb",
   "line": 12319,
   "function": "renderSLAMonthlyTrend",
   "target": "body",
@@ -4300,7 +4300,7 @@
   "severity_tier": 4,
   "data_source_tags": "",
   "trace_notes": "",
-  "rhs": "sorted.map(function(m) {\n    var rate = slaRateDisplay(m.onTime, m.resolved - m.onTime, m.complianceRate);\n    return '<tr><td>' + x(m.month) + '</td><td>' + m.resolved + '</td><td>' + m.onTime + '</td>' +\n      '<td style=\"color:' + rate.color + '\">' + rate.text + '</td></tr>';\n  }).join('')"
+  "rhs": "sorted.map(function(m) {\n    var rate = slaRateDisplay(m.onTime, m.resolved - m.onTime, m.complianceRate);\n    return '<tr><td>' + x(m.month) + '</td><td>' + m.resolved + '</td><td>' + m.onTime + '</td>' +\n      '<td' + cssVars(['g1-v-7d75dfc9', rate.color]) + '>' + rate.text + '</td></tr>';\n  }).join('')"
  },
  {
   "sink_id": "renderSLARecentlyResolved:body:=:a850a41455a5",
@@ -4316,7 +4316,7 @@
   "rhs": "'<tr><td colspan=\"5\" class=\"empty\">No resolved episodes yet.</td></tr>'"
  },
  {
-  "sink_id": "renderSLARecentlyResolved:body:=:d31824d4b9af",
+  "sink_id": "renderSLARecentlyResolved:body:=:e3220de76af7",
   "line": 12328,
   "function": "renderSLARecentlyResolved",
   "target": "body",
@@ -4326,7 +4326,7 @@
   "severity_tier": 4,
   "data_source_tags": "agent",
   "trace_notes": "",
-  "rhs": "recentlyResolved.map(function(r) {\n    var outcome = r.onTime\n      ? '<span class=\"sbadge\" style=\"background:transparent;border:1px solid var(--success);color:var(--success)\">On time</span>'\n      : '<span class=\"sbadge\" style=\"background:transparent;border:1px solid var(--danger);color:var(--danger)\">Late</span>';\n    return '<tr><td>' + x(r.agentId) + '</td><td>' + x(r.checkId) + '</td><td>' + "
+  "rhs": "recentlyResolved.map(function(r) {\n    var outcome = r.onTime\n      ? '<span class=\"sbadge g1-s-43c234c9\">On time</span>'\n      : '<span class=\"sbadge g1-s-99a3db64\">Late</span>';\n    return '<tr><td>' + x(r.agentId) + '</td><td>' + x(r.checkId) + '</td><td>' + findingSevBadge(r.severity) + '</td>' +\n      '<td>' + fmtDate(r.resolvedAt) + '</td><td>' + outcome + '</td></tr>';\n  }).join('')"
  },
  {
   "sink_id": "renderScenarioLanding:el:=:b9d3bf75bccc",
@@ -5369,7 +5369,7 @@
   "rhs": "'&#9654; Start Re-run'"
  },
  {
-  "sink_id": "stat:document.getElementById('results-body'):=:ba7ff7c8a7a1",
+  "sink_id": "stat:document.getElementById('results-body'):=:b70061af02e2",
   "line": 12603,
   "function": "stat",
   "target": "document.getElementById('results-body')",
@@ -5379,7 +5379,7 @@
   "severity_tier": 3,
   "data_source_tags": "",
   "trace_notes": "",
-  "rhs": "'<div style=\"display:flex;align-items:center;gap:0.5rem;margin-bottom:0.3rem\">' + findingSevBadge(r.severity, '') + ' <span class=\"tech-id\">' + x(r.techniqueId) + '</span></div>' +\n    '<div style=\"font-weight:600;font-size:0.98rem;color:var(--text);margin-bottom:0.25rem;line-height:1.3\">' + x(r.techniqueName) + '</div>' +\n    '<div class=\"tiny muted\" style=\"margin-bottom:0.6rem\">Closes ' + r.find"
+  "rhs": "'<div class=\"g1-display-flex g1-s-bf6d23db\">' + findingSevBadge(r.severity, '') + ' <span class=\"tech-id\">' + x(r.techniqueId) + '</span></div>' +\n    '<div class=\"g1-s-d5980386\">' + x(r.techniqueName) + '</div>' +\n    '<div class=\"tiny muted g1-s-dd11a3a0\">Closes ' + r.findingCount + ' finding' + (r.findingCount === 1 ? '' : 's') + ' on ' + r.agentCount + ' agent' + (r.agentCount === 1 ? '' : 's'"
  },
  {
   "sink_id": "stat:el:=:5b4ce0e8f2ff",
@@ -5648,10 +5648,10 @@
   "target": "document.getElementById('rem-tiles')",
   "op": "=",
   "baseline_category": "indirect_builder",
-  "final_category": "unescaped_html",
-  "severity_tier": 4,
+  "final_category": "partial_escaped",
+  "severity_tier": 3,
   "data_source_tags": "",
-  "trace_notes": "rgba(): no declaration found anywhere in file; tile() @L12540 (scope-resolved): 1 return(s) -> unescaped_html; var(): no declaration found anywhere in file",
+  "trace_notes": "rgba(): no declaration found anywhere in file; tile() @L12540 (scope-resolved): 1 return(s) -> partial_escaped; var(): no declaration found anywhere in file",
   "rhs": "tile('Open remediations', l.length, l.length ? 'var(--warning)' : 'var(--success)', 'rgba(210,153,34,0.12)', REM_SVG.wrench16, 'prioritized fixes') +\n    tile('Affected findings', findingsTotal, findingsTotal ? 'var(--danger)' : 'var(--success)', 'rgba(218,54,51,0.12)', REM_SVG.flag, 'closed if all applied') +\n    tile('Critical remediations', crit, crit ? 'var(--danger)' : 'var(--muted)', crit ? "
  },
  {

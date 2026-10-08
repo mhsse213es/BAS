@@ -49,7 +49,7 @@ line,function,original_category,resolved_category,notes,rhs
     [['all', 'All'], ['open', 'Open'], ['triaged', 'Triaged'], ['remediated', 'Remediated'], ['risk_accepted', 'Risk-accepted']],
     FINDING_TAB, 'setFindingTab', c
   )"
-12546,tile,indirect_builder,unescaped_html,rgba(): no declaration found anywhere in file; tile() @L12540 (scope-resolved): 1 return(s) -> unescaped_html; var(): no declaration found anywhere in file,"tile('Open remediations', l.length, l.length ? 'var(--warning)' : 'var(--success)', 'rgba(210,153,34,0.12)', REM_SVG.wrench16, 'prioritized fixes') +
+12546,tile,indirect_builder,partial_escaped,rgba(): no declaration found anywhere in file; tile() @L12540 (scope-resolved): 1 return(s) -> partial_escaped; var(): no declaration found anywhere in file,"tile('Open remediations', l.length, l.length ? 'var(--warning)' : 'var(--success)', 'rgba(210,153,34,0.12)', REM_SVG.wrench16, 'prioritized fixes') +
     tile('Affected findings', findingsTotal, findi"
 12717,tile,indirect_variable,indirect_builder,2 assignment(s) to 'html' inside loadDashboardITSM() @L12698 (scope-resolved) -> indirect_builder,html
 13904,tile,indirect_builder,unescaped_html,tile() @L13897 (scope-resolved): 1 return(s) -> unescaped_html,"tile('Most Detected', result.mostDetected, ' detections') +

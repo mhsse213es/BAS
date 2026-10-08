@@ -626,24 +626,26 @@ line,function,target,op,category,data_source_tags,rhs_len,rhs
     tile('On-Time', overall.onTime, 'var(--success)') +
     tile('Late', overall.late, overall.late ? 'var(--danger)' : 'var(--muted)') +
     tile('Currently Open', overall.currentlyOpen, overall.currentlyOpen ? 'var(--warning)' : 'var(--muted)')"
-12305,rank,el,=,static,,83,"'<div class=""empty"" style=""padding:1.25rem"">No severities with SLA episodes.</div>'"
-12306,rank,el,=,unescaped_html,,610,"sorted.map(function(s) {
+12305,rank,el,=,static,,73,"'<div class=""empty g1-s-decac807"">No severities with SLA episodes.</div>'"
+12306,rank,el,=,unescaped_html,,594,"sorted.map(function(s) {
     var rate = slaRateDisplay(s.onTime, s.late, s.complianceRate);
     return '<div class=""bar-row"">' +
-      '<div class=""bar-label""><span>' + x(s.severity) + '</span><span style=""color:' + rate.color + '"">' + rate.text + '</span></div>' +
-      '<div class=""bar-track""><div class=""bar-fill"" style=""width:' + s.complianceRate + '%;background:' + rate.color + '""></div></div>"
+      '<div class=""bar-label""><span>' + x(s.severity) + '</span><span' + cssVars(['g1-v-7d75dfc9', rate.color]) + '>' + rate.text + '</span></div>' +
+      '<div class=""bar-track""><div class=""bar-fill""' + cssVars(['g1-v-9b890877', s.complianceRate], ['g1-v-9ffd39ba', rat"
 12318,renderSLAMonthlyTrend,body,=,static,,71,"'<tr><td colspan=""4"" class=""empty"">No resolved episodes yet.</td></tr>'"
-12319,renderSLAMonthlyTrend,body,=,unescaped_html,,293,"sorted.map(function(m) {
+12319,renderSLAMonthlyTrend,body,=,unescaped_html,,306,"sorted.map(function(m) {
     var rate = slaRateDisplay(m.onTime, m.resolved - m.onTime, m.complianceRate);
     return '<tr><td>' + x(m.month) + '</td><td>' + m.resolved + '</td><td>' + m.onTime + '</td>' +
-      '<td style=""color:' + rate.color + '"">' + rate.text + '</td></tr>';
+      '<td' + cssVars(['g1-v-7d75dfc9', rate.color]) + '>' + rate.text + '</td></tr>';
   }).join('')"
 12327,renderSLARecentlyResolved,body,=,static,,71,"'<tr><td colspan=""5"" class=""empty"">No resolved episodes yet.</td></tr>'"
-12328,renderSLARecentlyResolved,body,=,unescaped_html,agent,530,"recentlyResolved.map(function(r) {
+12328,renderSLARecentlyResolved,body,=,unescaped_html,agent,392,"recentlyResolved.map(function(r) {
     var outcome = r.onTime
-      ? '<span class=""sbadge"" style=""background:transparent;border:1px solid var(--success);color:var(--success)"">On time</span>'
-      : '<span class=""sbadge"" style=""background:transparent;border:1px solid var(--danger);color:var(--danger)"">Late</span>';
-    return '<tr><td>' + x(r.agentId) + '</td><td>' + x(r.checkId) + '</td><td>' + "
+      ? '<span class=""sbadge g1-s-43c234c9"">On time</span>'
+      : '<span class=""sbadge g1-s-99a3db64"">Late</span>';
+    return '<tr><td>' + x(r.agentId) + '</td><td>' + x(r.checkId) + '</td><td>' + findingSevBadge(r.severity) + '</td>' +
+      '<td>' + fmtDate(r.resolvedAt) + '</td><td>' + outcome + '</td></tr>';
+  }).join('')"
 12372,renderFindingsTiles,document.getElementById('findings-tiles'),=,indirect_builder,,357,"tile('Open findings', open, open ? 'var(--danger)' : 'var(--success)') +
     tile('Attack Surface Age', open ? maxAge + ' days' : '0 days', ageCol) +
     tile('Critical', crit, crit ? 'var(--danger)' : 'var(--muted)') +
@@ -654,21 +656,22 @@ line,function,target,op,category,data_source_tags,rhs_len,rhs
     FINDING_TAB, 'setFindingTab', c
   )"
 12400,renderFindingsRows,tb,=,partial_escaped,,133,"'<tr><td colspan=""' + colCount + '"" class=""empty"">No findings' + (FINDING_TAB === 'all' ? ' yet.' : ' in this state.') + '</td></tr>'"
-12401,renderFindingsRows,tb,=,unescaped_html,agent,2715,"l.map(function(f) {
+12401,renderFindingsRows,tb,=,unescaped_html,agent,2340,"l.map(function(f) {
     var checkCell = (_findingsBulkMode && canPush)
-      ? '<td' + x('click', 'stopEvent') + ' style=""padding:0.2rem 0.5rem""><input type=""checkbox"" ' + (_findingsSelected[f.id] ? 'checked' : '') + ' ' + x('change', 'toggleFindingCheck', f.id) + ' class=""u-pointer""></td>'
+      ? '<td class=""g1-s-49946d6d""' + x('click', 'stopEvent') + '><input type=""checkbox"" ' + (_findingsSelected[f.id] ? 'checked' : '') + ' ' + x('change', 'toggleFindingCheck', f.id) + ' class=""u-pointer""></td>'
       : '';
-    var isTicketed = _ticketCandidateIds && (f.status === 'open' || f.status === 'triaged') && !"
+    var isTicketed = _ticketCandidateIds && (f.status === 'open' || f.status === 'triaged') && !_ticketC"
 12460,list,document.getElementById('results-export'),=,partial_escaped,,90,(actions ? actions + ' ' : '') + pushBtn + (pushBtn && respondBtn ? ' ' : '') + respondBtn
-12488,list,document.getElementById('results-body'),=,partial_escaped,"agent,threat_intel,user_created_name",1603,"'<div style=""margin-bottom:0.9rem"">' + findingSevBadge(f.severity, f.exposureState) +
+12488,list,document.getElementById('results-body'),=,partial_escaped,"agent,threat_intel,user_created_name",1350,"'<div class=""g1-s-462c8de6"">' + findingSevBadge(f.severity, f.exposureState) +
         ' <span class=""sbadge s-' + findingStatusClass(f.status) + '"">' + x((f.status || '').replace('_', ' ')) + '</span></div>' +
       row('Technique', '<span class=""tech-id"">' + x(f.techniqueId) + '</span> ' + x(f.techniqueName)) +
-      row('Tactic', x(f.tactic)) + row('Expected control', x(f.controlClass)) "
-12524,loadRemediations,document.getElementById('rem-list'),=,escaped,error_message,68,"'<div class=""empty"" style=""padding:2rem"">' + x(e.message) + '</div>'"
+      row('Tactic', x(f.tactic)) + row('Expected control', x(f.controlClass)) +
+     "
+12524,loadRemediations,document.getElementById('rem-list'),=,escaped,error_message,61,"'<div class=""empty g1-s-be6df18e"">' + x(e.message) + '</div>'"
 12546,tile,document.getElementById('rem-tiles'),=,indirect_builder,,492,"tile('Open remediations', l.length, l.length ? 'var(--warning)' : 'var(--success)', 'rgba(210,153,34,0.12)', REM_SVG.wrench16, 'prioritized fixes') +
     tile('Affected findings', findingsTotal, findingsTotal ? 'var(--danger)' : 'var(--success)', 'rgba(218,54,51,0.12)', REM_SVG.flag, 'closed if all applied') +
     tile('Critical remediations', crit, crit ? 'var(--danger)' : 'var(--muted)', crit ? "
-12554,renderRemList,el,=,static,,96,"'<div class=""empty"" style=""padding:2rem"">No open remediations — nothing to fix right now.</div>'"
+12554,renderRemList,el,=,static,,89,"'<div class=""empty g1-s-be6df18e"">No open remediations — nothing to fix right now.</div>'"
 12555,renderRemList,el,=,unescaped_html,,1468,"l.map(function(r, i) {
     var critCls = r.severity === 'Critical' ? ' crit' : '';
     var ctrls = (r.controlClasses || []).map(x).join(', ') || '—';
@@ -678,15 +681,16 @@ line,function,target,op,category,data_source_tags,rhs_len,rhs
         '<div class=""rem-top"">' + findingSevBadge(r.severity, '') + ' <span class=""tech-id"">' + x(r.techn"
 12582,openRemediation,document.getElementById('results-export'),=,escaped,,295,"(ROLE === 'admin' || ROLE === 'analyst' ? '<button class=""btn btn-outline btn-sm""' + x('click', 'remSingleTicket', i) + '>&#128279; Create Ticket</button>' : '') +
     '<button class=""btn btn-primary btn-sm""' + x('click', 'revalidateRemediation', r.techniqueId) + '>&#8635; Re-validate</button>'"
-12603,stat,document.getElementById('results-body'),=,partial_escaped,,1114,"'<div style=""display:flex;align-items:center;gap:0.5rem;margin-bottom:0.3rem"">' + findingSevBadge(r.severity, '') + ' <span class=""tech-id"">' + x(r.techniqueId) + '</span></div>' +
-    '<div style=""font-weight:600;font-size:0.98rem;color:var(--text);margin-bottom:0.25rem;line-height:1.3"">' + x(r.techniqueName) + '</div>' +
-    '<div class=""tiny muted"" style=""margin-bottom:0.6rem"">Closes ' + r.find"
+12603,stat,document.getElementById('results-body'),=,partial_escaped,,965,"'<div class=""g1-display-flex g1-s-bf6d23db"">' + findingSevBadge(r.severity, '') + ' <span class=""tech-id"">' + x(r.techniqueId) + '</span></div>' +
+    '<div class=""g1-s-d5980386"">' + x(r.techniqueName) + '</div>' +
+    '<div class=""tiny muted g1-s-dd11a3a0"">Closes ' + r.findingCount + ' finding' + (r.findingCount === 1 ? '' : 's') + ' on ' + r.agentCount + ' agent' + (r.agentCount === 1 ? '' : 's'"
 12717,tile,document.getElementById('dash-itsm-tiles'),=,indirect_variable,,4,html
-12728,loadFindingTickets,container,=,static,,72,"'<div class=""tiny muted"" style=""padding:0.3rem 0"">No tickets yet.</div>'"
-12731,loadFindingTickets,container,=,unescaped_html,,887,"tickets.map(function(t) {
+12728,loadFindingTickets,container,=,static,,61,"'<div class=""tiny muted g1-s-4a562a0b"">No tickets yet.</div>'"
+12731,loadFindingTickets,container,=,unescaped_html,,693,"tickets.map(function(t) {
       var statusColor = t.status === 'resolved' ? 'var(--success)' : t.status === 'open' ? 'var(--warning)' : 'var(--muted)';
-      var link = t.ticketUrl ? '<a href=""' + x(t.ticketUrl) + '"" target=""_blank"" rel=""noopener"" style=""color:var(--accent);font-size:0.78rem;margin-left:0.4rem"">↗</a>' : '';
-      var reval = t.revalidationRequired ? ' <span class=""sbadge"" style=""b"
+      var link = t.ticketUrl ? '<a href=""' + x(t.ticketUrl) + '"" target=""_blank"" rel=""noopener"" class=""g1-s-35b86d92"">↗</a>' : '';
+      var reval = t.revalidationRequired ? ' <span class=""sbadge g1-s-e0409a47"">revalidate</span>' : '';
+      return"
 12740,loadFindingTickets,if (container) container,=,static,,55,"'<div class=""tiny muted"">Failed to load tickets.</div>'"
 12896,renderInitiativesList,tbody,=,static,,65,"'<tr><td colspan=""5"" class=""empty"">No initiatives yet.</td></tr>'"
 12899,renderInitiativesList,tbody,=,unescaped_html,,1097,"INITIATIVES.list.map(function(it, idx) {
