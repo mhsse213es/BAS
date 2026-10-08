@@ -52,8 +52,20 @@ func fullEnvironment() Environment {
 			SecurityPolicies: []string{"password-complexity"},
 		},
 		PKI: PKI{
-			CAs:       []CertificateAuthority{{Name: "CORP-CA"}},
-			Templates: []CertTemplate{{Name: "User", EnrollmentRights: []string{"Domain Users"}, ManagerApprovalRequired: false, AuthenticationEKU: true}},
+			CAs: []CertificateAuthority{{
+				Name:               "CORP-CA",
+				PublishedTemplates: []string{"User", "WebServer"},
+				EnrollmentRights:   []string{"Domain Computers"},
+			}},
+			Templates: []CertTemplate{{
+				Name:                    "User",
+				EKUs:                    []string{"Client Authentication", "Smart Card Logon"},
+				EnrollmentRights:        []string{"Domain Users"},
+				WriteRights:             []string{"Domain Admins"},
+				ManagerApprovalRequired: false,
+				EnrolleeSuppliesSubject: false,
+				PublishedToCA:           true,
+			}},
 		},
 	}
 }

@@ -215,15 +215,39 @@ type PKI struct {
 // CertificateAuthority is one enterprise/standalone CA.
 type CertificateAuthority struct {
 	Name string `json:"name"`
+
+	// PublishedTemplates are the certificate templates this CA will
+	// issue certificates against. A template not listed here cannot be
+	// requested through this CA regardless of its own properties.
+	PublishedTemplates []string `json:"publishedTemplates,omitempty"`
+
+	// EnrollmentRights are principals who hold enrollment permission on
+	// the CA object itself -- a separate permission layer from any given
+	// template's own EnrollmentRights below; both must be held to
+	// successfully request a certificate.
+	EnrollmentRights []string `json:"enrollmentRights,omitempty"`
 }
 
-// CertTemplate is one certificate template, carrying the fields AD.txt
-// names as ESC-relevant (manager approval, authentication EKU, enrollment
-// rights) so a later phase can compute ESC1/ESC2/etc. applicability without
-// re-deriving this data.
+// CertTemplate is one certificate template's configuration: the
+// properties a certificate-services configuration review inspects.
 type CertTemplate struct {
-	Name                    string   `json:"name"`
-	EnrollmentRights        []string `json:"enrollmentRights,omitempty"` // principals who can enroll
-	ManagerApprovalRequired bool     `json:"managerApprovalRequired"`
-	AuthenticationEKU       bool     `json:"authenticationEku"` // template's EKU includes Client Authentication
+	Name string `json:"name"`
+
+	// EKUs are the Extended Key Usages this template's issued
+	// certificates may be used for (e.g. "Client Authentication",
+	// "Any Purpose", "Certificate Request Agent", "Smart Card Logon"). A
+	// template may carry more than one.
+	EKUs []string `json:"ekus,omitempty"`
+
+	EnrollmentRights []string `json:"enrollmentRights,omitempty"` // principals who hold Enroll/AutoEnroll on this template
+	WriteRights      []string `json:"writeRights,omitempty"`      // principals who hold GenericWrite/WriteOwner/WriteDacl on the TEMPLATE object itself
+
+	ManagerApprovalRequired bool `json:"managerApprovalRequired"`
+	EnrolleeSuppliesSubject bool `json:"enrolleeSuppliesSubject"` // the template's CT_FLAG_ENROLLEE_SUPPLIES_SUBJECT flag
+
+	// PublishedToCA mirrors CertificateAuthority.PublishedTemplates from
+	// the template's own side -- nothing in this schema enforces the two
+	// stay consistent with each other; that is a future validation
+	// concern, not this type's job.
+	PublishedToCA bool `json:"publishedToCA"`
 }
