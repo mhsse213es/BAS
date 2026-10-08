@@ -38,6 +38,16 @@ test('css round-trips byte-identically and stays sorted', () => {
   assert.ok(css.indexOf('.g1-display-flex') < css.indexOf('.g1-s-ffffffff') && css.indexOf('.g1-s-ffffffff') < css.indexOf('.is-hidden'));
 });
 
+test('css round-trip preserves a multi-line rule', () => {
+  const header = '/* h */\n';
+  const multiline = '.g1-s-53dda9d3 { background:#fff2;border:1px solid rgba(255,255,255,.4);\n    color:#fff;border-radius:6px;padding:4px 14px;\n    transition:background .2s }';
+  const rules = new Map([['g1-s-53dda9d3', multiline], ['g1-s-ffffffff', '.g1-s-ffffffff { a:b }']]);
+  const css = writeCss(header, rules);
+  const reparsed = parseCss(css);
+  assert.equal(reparsed.rules.get('g1-s-53dda9d3'), multiline);
+  assert.equal(writeCss(reparsed.header, reparsed.rules), css);
+});
+
 test('markup: class merged into an existing class attribute, attributes otherwise unchanged', () => {
   const html = '<div id="a" class="card x" style="color:red" title="t &amp; u"><p style="display:none">x</p></div>';
   const { html: out } = convertMarkup(html);

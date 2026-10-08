@@ -146,9 +146,20 @@ export function parseCss(css) {
   }
   const header = css.slice(0, headerEnd);
   const rules = new Map();
-  for (const line of css.slice(headerEnd).split('\n')) {
+  const body = css.slice(headerEnd).split('\n');
+  const braceDelta = (s) => (s.match(/\{/g) || []).length - (s.match(/\}/g) || []).length;
+  for (let i = 0; i < body.length; i++) {
+    const line = body[i];
     const m = /^\.([\w-]+)\s*\{/.exec(line);
-    if (m) rules.set(m[1], line);
+    if (!m) continue;
+    let text = line;
+    let depth = braceDelta(line);
+    while (depth > 0 && i + 1 < body.length) {
+      i++;
+      text += '\n' + body[i];
+      depth += braceDelta(body[i]);
+    }
+    rules.set(m[1], text);
   }
   return { header, rules };
 }

@@ -96,7 +96,7 @@ export function renderScheduledAssessmentsList() {
     var payload = sch.Payload || {};
     var sc = state.scenarios.find(function(s) { return s.id === payload.scenarioId; });
     var name = sc ? sc.name : (payload.scenarioId || '—');
-    var modeColor = sch.Mode === 'telemetry' ? 'var(--warning)' : 'var(--muted)';
+    var modeColor = sch.Mode === 'telemetry' ? 'g1-s-d6e5d834' : 'g1-s-8297411d';
     var modeLabel = sch.Mode === 'telemetry' ? 'Telemetry' : 'Posture';
     // A "once" schedule's Enabled flag is never flipped after it fires --
     // only LastOccurrenceAt gets set (see internal/jobs/dispatch.go's
@@ -105,16 +105,16 @@ export function renderScheduledAssessmentsList() {
     // side; mirror that here so Edit/Cancel stop being offered for a
     // one-time schedule that has nothing left to edit or cancel.
     var onceCompleted = sch.RecurrenceType === 'once' && !!sch.LastOccurrenceAt;
-    var statusColor = onceCompleted ? 'var(--accent)' : (sch.Enabled ? 'var(--success)' : 'var(--muted)');
+    var statusColor = onceCompleted ? 'g1-s-10acb108' : (sch.Enabled ? 'g1-s-f213c12d' : 'g1-s-8297411d');
     var statusLabel = onceCompleted ? 'Completed' : (sch.Enabled ? 'Enabled' : 'Cancelled');
     var lastRun = sch.LastOccurrenceAt ? fmtDate(sch.LastOccurrenceAt) : 'Never';
     return '<tr>' +
       '<td>' + x(name) + '</td>' +
-      '<td><span class="badge" style="color:' + modeColor + ';border-color:' + modeColor + '">' + modeLabel + '</span></td>' +
+      '<td><span class="badge ' + modeColor + '">' + modeLabel + '</span></td>' +
       '<td>' + x(schedTargetsText(sch)) + '</td>' +
       '<td>' + x(schedRecurrenceText(sch)) + '</td>' +
       '<td>' + x(lastRun) + '</td>' +
-      '<td><span class="badge" style="color:' + statusColor + ';border-color:' + statusColor + '">' + statusLabel + '</span></td>' +
+      '<td><span class="badge ' + statusColor + '">' + statusLabel + '</span></td>' +
       '<td>' +
         (onceCompleted
           ? '<span class="tiny muted">Ran once — nothing to edit or cancel</span>'
@@ -288,7 +288,7 @@ function renderSchedGroupNode(node) {
   var hasChildren = node.children && node.children.length;
   var checked = SCHED.selGroups[node.id] ? ' checked' : '';
   var html = '<div class="at-node">' +
-    '<label style="display:flex;align-items:center;gap:6px;cursor:pointer;width:100%">' +
+    '<label class="g1-display-flex g1-s-16487d2d">' +
     '<input type="checkbox"' + checked + on('change', 'schedToggleGroupFromChecked', node.id) + '>' +
     '<span class="at-name">' + x(node.name) + '</span>' +
     '<span class="at-count">' + node.totalAgentCount + '</span>' +
@@ -354,9 +354,9 @@ function renderSchedAgentList() {
     var checked = SCHED.selAgents[a.agentId] ? ' checked' : '';
     var disabled = compatible ? '' : ' disabled';
     var warn = compatible ? '' : ' <span class="tiny u-danger">Platform mismatch</span>';
-    return '<label style="display:flex;align-items:center;gap:0.5rem;padding:0.25rem 0.3rem;cursor:' + (compatible ? 'pointer' : 'not-allowed') + ';opacity:' + (compatible ? '1' : '0.55') + '">' +
+    return '<label class="g1-display-flex g1-s-199650cf ' + (compatible ? 'g1-s-46d9ceb8' : 'g1-s-3b456e9f') + '">' +
       '<input type="checkbox"' + checked + disabled + on('change', 'schedToggleAgentFromChecked', a.agentId) + '>' +
-      '<code style="font-size:0.72rem">' + x(a.agentId) + '</code><span class="tiny muted">' + x(a.hostname) + ' — ' + x(a.osVersion || 'Unknown OS') + '</span>' + warn + '</label>';
+      '<code class="g1-s-8f55e862">' + x(a.agentId) + '</code><span class="tiny muted">' + x(a.hostname) + ' — ' + x(a.osVersion || 'Unknown OS') + '</span>' + warn + '</label>';
   }).join('');
   document.getElementById('sched-agent-cnt').textContent = '(' + Object.keys(SCHED.selAgents).length + ' selected)';
 }
@@ -470,7 +470,7 @@ function renderSchedReview() {
     : 'Weekly · ' + SCHED_DOW[payload.dayOfWeek] + ' · ' + payload.timeOfDay;
   var initiative = SCHED.initiativesActive.find(function(it) { return it.ID === payload.initiativeId; });
 
-  var html = '<div style="font-size:0.82rem;line-height:1.9">' +
+  var html = '<div class="g1-s-1662da4e">' +
     '<div><strong>Scenario:</strong> ' + x(sc ? sc.name : payload.scenarioId) + '</div>' +
     '<div><strong>Mode:</strong> ' + x(payload.mode === 'telemetry' ? 'Telemetry' : 'Posture') + '</div>' +
     '<div><strong>Targets:</strong> ' + x(targetsLine) + '</div>' +
@@ -482,11 +482,11 @@ function renderSchedReview() {
 
   var authWrap = '';
   if (payload.mode === 'telemetry') {
-    authWrap = '<div style="margin-top:0.9rem;padding:0.75rem;border-radius:var(--radius);border:1px solid rgba(210,153,34,0.5);background:rgba(210,153,34,0.08)">' +
-      '<div style="font-weight:600;color:var(--warning);margin-bottom:0.4rem">&#9888; Unattended Telemetry Authorization</div>' +
-      '<div style="font-size:0.78rem;line-height:1.5;margin-bottom:0.5rem">This schedule will execute real techniques that may generate security alerts on the selected targets, on every future occurrence, with no further confirmation.</div>' +
-      '<div style="font-size:0.78rem;margin-bottom:0.5rem"><strong>Reason:</strong> ' + x(payload.reason || '(none entered)') + '</div>' +
-      '<label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;font-size:0.8rem">' +
+    authWrap = '<div class="g1-s-8b8a9186">' +
+      '<div class="g1-s-0f7fb8b9">&#9888; Unattended Telemetry Authorization</div>' +
+      '<div class="g1-s-e761abd2">This schedule will execute real techniques that may generate security alerts on the selected targets, on every future occurrence, with no further confirmation.</div>' +
+      '<div class="g1-s-13741987"><strong>Reason:</strong> ' + x(payload.reason || '(none entered)') + '</div>' +
+      '<label class="g1-display-flex g1-s-5914e41c">' +
       '<input type="checkbox" id="sched-auth-check"' + on('change', 'schedAuthCheckChange') + '>' +
       'I authorize this recurring unattended execution</label>' +
       '</div>';

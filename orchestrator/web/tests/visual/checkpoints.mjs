@@ -150,6 +150,21 @@ export const CHECKPOINTS = [
   // always returns total:0 and the row falls to the openRunPanelAction
   // branch instead. See UNREACHABLE_SITES.
 
+  // -- scheduled.js: the main table's modeColor/statusColor either-or
+  // classes render from the plain tab visit (3-row fixture covers all 5
+  // branches). The wizard's agent-list compatible/not-allowed pair
+  // (scheduled.js:357) only needs opening -- compatible is always true
+  // under these fixtures (empty /api/scenarios means
+  // schedSelectedScenarioSupportedOS() has nothing to constrain against,
+  // so schedAgentCompatible's early `!supportedOS.length` return always
+  // wins); the not-allowed/opacity:0.55 branch (g1-s-3b456e9f) can't be
+  // reached without a scenario fixture carrying a supportedOs constraint,
+  // which risks the exact loadScenarios() regression noted above --
+  // declined rather than risk it for one cosmetic disabled-state pair.
+  { name: "scheduled.js:357 new-schedule wizard agent list", tab: 'scheduled-assessments', steps: [
+    { click: '[data-on-click="openSchedWizard"]' },
+  ] },
+
   // -- threat-intel.js: loadConnectorStatus/loadARTContentStatus's own
   // reveals (278,292,318,355) fire at boot already (admin-only init in
   // bootApp); nothing extra needed for them here. Same for

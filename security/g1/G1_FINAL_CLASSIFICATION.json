@@ -1,7 +1,7 @@
 [
  {
   "sink_id": "_apOnCollected:tl:=:6d95588273ae",
-  "line": 6650,
+  "line": 6636,
   "function": "_apOnCollected",
   "target": "tl",
   "op": "=",
@@ -14,7 +14,7 @@
  },
  {
   "sink_id": "_apRenderJobState:tl:=:7258ec278590",
-  "line": 6548,
+  "line": 6534,
   "function": "_apRenderJobState",
   "target": "tl",
   "op": "=",
@@ -22,12 +22,12 @@
   "final_category": "unescaped_html",
   "severity_tier": 4,
   "data_source_tags": "",
-  "trace_notes": "_apStep() @L6408 (scope-resolved): 1 return(s) -> unescaped_html",
+  "trace_notes": "_apStep() @L6394 (scope-resolved): 1 return(s) -> unescaped_html",
   "rhs": "_apStep(dispatchState, 'Job dispatched — ' + job.id.slice(0,8),\n      job.targetCount > 0 ? job.targetCount + ' target' + (job.targetCount === 1 ? '' : 's') + ' queued' : '') +\n    _apStep(ackState, statusLabel, '') +\n    _apStep(probeState, 'Executing on agent', progDetail) +\n    _apStep(uploadState, 'Uploading results…', '') +\n    _apStep(graphState, 'Graph built &amp; analysis complete',\n      "
  },
  {
   "sink_id": "_applyGeneratedTIScenario:el:=:3a75cf0d8be3",
-  "line": 8807,
+  "line": 8793,
   "function": "_applyGeneratedTIScenario",
   "target": "el",
   "op": "=",
@@ -40,7 +40,7 @@
  },
  {
   "sink_id": "_renderEMPreviewList:listEl:=:347204cd7ffa",
-  "line": 10540,
+  "line": 10526,
   "function": "_renderEMPreviewList",
   "target": "listEl",
   "op": "=",
@@ -53,7 +53,7 @@
  },
  {
   "sink_id": "_renderVexPreviewList:listEl:=:e00a99d0e67c",
-  "line": 10397,
+  "line": 10383,
   "function": "_renderVexPreviewList",
   "target": "listEl",
   "op": "=",
@@ -61,12 +61,12 @@
   "final_category": "unescaped_html",
   "severity_tier": 4,
   "data_source_tags": "",
-  "trace_notes": "_renderVexPreviewSection() @L10402 (scope-resolved): 4 return(s) -> unescaped_html",
+  "trace_notes": "_renderVexPreviewSection() @L10388 (scope-resolved): 4 return(s) -> unescaped_html",
   "rhs": "_renderVexPreviewSection('art', 'ART', artFiltered, _vexPreviewArtCollapsed) +\n    _renderVexPreviewSection('caldera', 'Caldera', calderaFiltered, _vexPreviewCalderaCollapsed)"
  },
  {
   "sink_id": "_selectCmpScenario:document.getElementById('cmp-scenario'):=:7d56bfcc3cb2",
-  "line": 8836,
+  "line": 8822,
   "function": "_selectCmpScenario",
   "target": "document.getElementById('cmp-scenario')",
   "op": "=",
@@ -79,7 +79,7 @@
  },
  {
   "sink_id": "_vexRenderQueuePanel:panel:=:b153a86b8dca",
-  "line": 21345,
+  "line": 21331,
   "function": "_vexRenderQueuePanel",
   "target": "panel",
   "op": "=",
@@ -92,7 +92,7 @@
  },
  {
   "sink_id": "addStep:div:=:bfed555e8b25",
-  "line": 17080,
+  "line": 17066,
   "function": "addStep",
   "target": "div",
   "op": "=",
@@ -105,7 +105,7 @@
  },
  {
   "sink_id": "aggOf:document.getElementById('dash-gauge'):=:c2776b093e85",
-  "line": 12008,
+  "line": 11994,
   "function": "aggOf",
   "target": "document.getElementById('dash-gauge')",
   "op": "=",
@@ -118,7 +118,7 @@
  },
  {
   "sink_id": "aggOf:document.getElementById('dash-posture-bars'):=:1c09c35c581f",
-  "line": 12018,
+  "line": 12004,
   "function": "aggOf",
   "target": "document.getElementById('dash-posture-bars')",
   "op": "=",
@@ -126,12 +126,12 @@
   "final_category": "unescaped_html",
   "severity_tier": 4,
   "data_source_tags": "",
-  "trace_notes": "miniBars() @L11884 (scope-resolved): 3 return(s) -> unescaped_html",
+  "trace_notes": "miniBars() @L11870 (scope-resolved): 3 return(s) -> unescaped_html",
   "rhs": "miniBars(barData, 320, 64)"
  },
  {
   "sink_id": "aggOf:document.getElementById('kpi-cov-spark'):=:85105375906e",
-  "line": 12046,
+  "line": 12032,
   "function": "aggOf",
   "target": "document.getElementById('kpi-cov-spark')",
   "op": "=",
@@ -139,12 +139,12 @@
   "final_category": "unescaped_html",
   "severity_tier": 4,
   "data_source_tags": "",
-  "trace_notes": "sparkSVG() @L11859 (scope-resolved): 4 return(s) -> unescaped_html; var(): no declaration found anywhere in file",
+  "trace_notes": "sparkSVG() @L11845 (scope-resolved): 4 return(s) -> unescaped_html; var(): no declaration found anywhere in file",
   "rhs": "sparkSVG(covSeries, 110, 30, 'var(--warning)')"
  },
  {
   "sink_id": "aggOf:document.getElementById('kpi-score-spark'):=:0319aaf8760d",
-  "line": 12005,
+  "line": 11991,
   "function": "aggOf",
   "target": "document.getElementById('kpi-score-spark')",
   "op": "=",
@@ -152,12 +152,12 @@
   "final_category": "unescaped_html",
   "severity_tier": 4,
   "data_source_tags": "",
-  "trace_notes": "sparkSVG() @L11859 (scope-resolved): 4 return(s) -> unescaped_html; var(): no declaration found anywhere in file",
+  "trace_notes": "sparkSVG() @L11845 (scope-resolved): 4 return(s) -> unescaped_html; var(): no declaration found anywhere in file",
   "rhs": "sparkSVG(prevSeries, 110, 30, 'var(--teal)')"
  },
  {
   "sink_id": "aggOf:donutEl:=:bb66089500d8",
-  "line": 12066,
+  "line": 12052,
   "function": "aggOf",
   "target": "donutEl",
   "op": "=",
@@ -170,7 +170,7 @@
  },
  {
   "sink_id": "aggOf:else                            tEl:=:1c87b321677d",
-  "line": 12003,
+  "line": 11989,
   "function": "aggOf",
   "target": "else                            tEl",
   "op": "=",
@@ -183,7 +183,7 @@
  },
  {
   "sink_id": "aggOf:else if (trend === 'Degrading') tEl:=:10f698d311c8",
-  "line": 12002,
+  "line": 11988,
   "function": "aggOf",
   "target": "else if (trend === 'Degrading') tEl",
   "op": "=",
@@ -196,7 +196,7 @@
  },
  {
   "sink_id": "aggOf:if (trend === 'Improving')      tEl:=:c5109212a34d",
-  "line": 12001,
+  "line": 11987,
   "function": "aggOf",
   "target": "if (trend === 'Improving')      tEl",
   "op": "=",
@@ -209,7 +209,7 @@
  },
  {
   "sink_id": "apDiscoverSubnet:btn:=:ec0171b2a89a",
-  "line": 6392,
+  "line": 6378,
   "function": "apDiscoverSubnet",
   "target": "btn",
   "op": "=",
@@ -222,7 +222,7 @@
  },
  {
   "sink_id": "apDiscoverSubnet:btn:=:ec0171b2a89a",
-  "line": 6402,
+  "line": 6388,
   "function": "apDiscoverSubnet",
   "target": "btn",
   "op": "=",
@@ -235,7 +235,7 @@
  },
  {
   "sink_id": "approveForLocalUse:body:=:34b32986665b",
-  "line": 7490,
+  "line": 7476,
   "function": "approveForLocalUse",
   "target": "body",
   "op": "=",
@@ -248,7 +248,7 @@
  },
  {
   "sink_id": "approveForLocalUse:body:=:497b2f8517d3",
-  "line": 7479,
+  "line": 7465,
   "function": "approveForLocalUse",
   "target": "body",
   "op": "=",
@@ -261,7 +261,7 @@
  },
  {
   "sink_id": "approveForLocalUse:body:=:870368394ccb",
-  "line": 7485,
+  "line": 7471,
   "function": "approveForLocalUse",
   "target": "body",
   "op": "=",
@@ -269,12 +269,12 @@
   "final_category": "partial_escaped",
   "severity_tier": 3,
   "data_source_tags": "",
-  "trace_notes": "approveSummaryHTML() @L7494 (scope-resolved): 2 return(s) -> partial_escaped",
+  "trace_notes": "approveSummaryHTML() @L7480 (scope-resolved): 2 return(s) -> partial_escaped",
   "rhs": "approveSummaryHTML(d)"
  },
  {
   "sink_id": "badge:document.getElementById('cov-toolbar'):=:a56e7fcad41e",
-  "line": 9692,
+  "line": 9678,
   "function": "badge",
   "target": "document.getElementById('cov-toolbar')",
   "op": "=",
@@ -287,7 +287,7 @@
  },
  {
   "sink_id": "byStartedAtDesc:tbody:=:a84861ce6bf1",
-  "line": 15658,
+  "line": 15644,
   "function": "byStartedAtDesc",
   "target": "tbody",
   "op": "=",
@@ -300,7 +300,7 @@
  },
  {
   "sink_id": "byStartedAtDesc:tbody:=:f78d2a49fc20",
-  "line": 15622,
+  "line": 15608,
   "function": "byStartedAtDesc",
   "target": "tbody",
   "op": "=",
@@ -313,7 +313,7 @@
  },
  {
   "sink_id": "c:document.getElementById('findings-toolbar'):=:c3213155c165",
-  "line": 12389,
+  "line": 12375,
   "function": "c",
   "target": "document.getElementById('findings-toolbar')",
   "op": "=",
@@ -321,12 +321,12 @@
   "final_category": "unescaped_html",
   "severity_tier": 4,
   "data_source_tags": "",
-  "trace_notes": "covSegHtml() @L7129 (scope-resolved): 1 return(s) -> unescaped_html",
+  "trace_notes": "covSegHtml() @L7115 (scope-resolved): 1 return(s) -> unescaped_html",
   "rhs": "covSegHtml(\n    [['all', 'All'], ['open', 'Open'], ['triaged', 'Triaged'], ['remediated', 'Remediated'], ['risk_accepted', 'Risk-accepted']],\n    FINDING_TAB, 'setFindingTab', c\n  )"
  },
  {
   "sink_id": "c:if (el) el:=:6f6e0b1c7346",
-  "line": 7141,
+  "line": 7127,
   "function": "c",
   "target": "if (el) el",
   "op": "=",
@@ -334,12 +334,12 @@
   "final_category": "unescaped_html",
   "severity_tier": 4,
   "data_source_tags": "",
-  "trace_notes": "covSegHtml() @L7129 (scope-resolved): 1 return(s) -> unescaped_html",
+  "trace_notes": "covSegHtml() @L7115 (scope-resolved): 1 return(s) -> unescaped_html",
   "rhs": "covSegHtml(\n    [['all', 'All'], ['online', 'Online'], ['degraded', 'Degraded'], ['offline', 'Offline'], ['retired', 'Retired']],\n    AGENT_FILTER, 'setAgentFilter', c\n  )"
  },
  {
   "sink_id": "cell:if (body) body:=:3c853fbcca72",
-  "line": 9646,
+  "line": 9632,
   "function": "cell",
   "target": "if (body) body",
   "op": "=",
@@ -352,7 +352,7 @@
  },
  {
   "sink_id": "cmdkResultFallback:document.getElementById('results-body'):=:12f11fe6b7e3",
-  "line": 11556,
+  "line": 11542,
   "function": "cmdkResultFallback",
   "target": "document.getElementById('results-body')",
   "op": "=",
@@ -365,7 +365,7 @@
  },
  {
   "sink_id": "cmdkResultFallback:document.getElementById('results-export'):=:6f49cdbd80e1",
-  "line": 11554,
+  "line": 11540,
   "function": "cmdkResultFallback",
   "target": "document.getElementById('results-export')",
   "op": "=",
@@ -378,7 +378,7 @@
  },
  {
   "sink_id": "cmdkResultFallback:document.getElementById('results-summary'):=:6f49cdbd80e1",
-  "line": 11555,
+  "line": 11541,
   "function": "cmdkResultFallback",
   "target": "document.getElementById('results-summary')",
   "op": "=",
@@ -391,7 +391,7 @@
  },
  {
   "sink_id": "cmpOnExistingScenarioChange:el:=:6f49cdbd80e1",
-  "line": 8848,
+  "line": 8834,
   "function": "cmpOnExistingScenarioChange",
   "target": "el",
   "op": "=",
@@ -404,7 +404,7 @@
  },
  {
   "sink_id": "cmpOnExistingScenarioChange:el:=:6f49cdbd80e1",
-  "line": 8850,
+  "line": 8836,
   "function": "cmpOnExistingScenarioChange",
   "target": "el",
   "op": "=",
@@ -417,7 +417,7 @@
  },
  {
   "sink_id": "cmpOnExistingScenarioChange:el:=:cdf355211d13",
-  "line": 8854,
+  "line": 8840,
   "function": "cmpOnExistingScenarioChange",
   "target": "el",
   "op": "=",
@@ -430,7 +430,7 @@
  },
  {
   "sink_id": "cmpOnGroupChange:document.getElementById('cmp-exclusions'):=:6f49cdbd80e1",
-  "line": 8636,
+  "line": 8622,
   "function": "cmpOnGroupChange",
   "target": "document.getElementById('cmp-exclusions')",
   "op": "=",
@@ -443,7 +443,7 @@
  },
  {
   "sink_id": "cmpOnGroupChange:document.getElementById('cmp-group-preview'):=:6f49cdbd80e1",
-  "line": 8636,
+  "line": 8622,
   "function": "cmpOnGroupChange",
   "target": "document.getElementById('cmp-group-preview')",
   "op": "=",
@@ -456,7 +456,7 @@
  },
  {
   "sink_id": "confirmRun:runBtn:=:8eab6fb9be00",
-  "line": 11381,
+  "line": 11367,
   "function": "confirmRun",
   "target": "runBtn",
   "op": "=",
@@ -469,7 +469,7 @@
  },
  {
   "sink_id": "confirmRun:runBtn:=:cd9227672841",
-  "line": 11400,
+  "line": 11386,
   "function": "confirmRun",
   "target": "runBtn",
   "op": "=",
@@ -482,7 +482,7 @@
  },
  {
   "sink_id": "count:document.getElementById('campaign-toolbar'):=:df279ec14359",
-  "line": 8394,
+  "line": 8380,
   "function": "count",
   "target": "document.getElementById('campaign-toolbar')",
   "op": "=",
@@ -490,12 +490,12 @@
   "final_category": "unescaped_html",
   "severity_tier": 4,
   "data_source_tags": "",
-  "trace_notes": "covSegHtml() @L7129 (scope-resolved): 1 return(s) -> unescaped_html",
+  "trace_notes": "covSegHtml() @L7115 (scope-resolved): 1 return(s) -> unescaped_html",
   "rhs": "covSegHtml(items, CAMPAIGN_TAB, 'setCampaignTab', count)"
  },
  {
   "sink_id": "dispatchAPCollect:tl:=:79a513ef9789",
-  "line": 6447,
+  "line": 6433,
   "function": "dispatchAPCollect",
   "target": "tl",
   "op": "=",
@@ -503,12 +503,12 @@
   "final_category": "unescaped_html",
   "severity_tier": 4,
   "data_source_tags": "",
-  "trace_notes": "_apStep() @L6408 (scope-resolved): 1 return(s) -> unescaped_html; _apTimestamp() @L6421 (scope-resolved): 1 return(s) -> unescaped_text",
+  "trace_notes": "_apStep() @L6394 (scope-resolved): 1 return(s) -> unescaped_html; _apTimestamp() @L6407 (scope-resolved): 1 return(s) -> unescaped_text",
   "rhs": "_apStep('done', 'Collection started for ' + x(agentLabel) + ' at ' + _apTimestamp(),\n        targets.length + ' target' + (targets.length === 1 ? '' : 's') + ' queued — job ' + (r.job ? r.job.id.slice(0,8) : '')) +\n      (shDetail ? _apStep('warn', 'SharpHound notice', shDetail) : '') +\n      _apStep(jobStatus === 'dispatched' || jobStatus === 'running' ? 'done' : 'active',\n        jobStatus === '"
  },
  {
   "sink_id": "doOpen:tacticSel:=:84dac746f49b",
-  "line": 16720,
+  "line": 16706,
   "function": "doOpen",
   "target": "tacticSel",
   "op": "=",
@@ -521,7 +521,7 @@
  },
  {
   "sink_id": "expCard:body:=:0218a335dcfb",
-  "line": 6302,
+  "line": 6288,
   "function": "expCard",
   "target": "body",
   "op": "=",
@@ -534,7 +534,7 @@
  },
  {
   "sink_id": "expCard:body:=:aaa9402664f1",
-  "line": 6300,
+  "line": 6286,
   "function": "expCard",
   "target": "body",
   "op": "=",
@@ -542,12 +542,12 @@
   "final_category": "partial_escaped",
   "severity_tier": 3,
   "data_source_tags": "",
-  "trace_notes": "20 assignment(s) to 'h' inside openExposureDetail() @L6231 (scope-resolved) -> partial_escaped",
+  "trace_notes": "20 assignment(s) to 'h' inside openExposureDetail() @L6217 (scope-resolved) -> partial_escaped",
   "rhs": "h"
  },
  {
   "sink_id": "fetchAuditPage:if (tbody) tbody:=:1a277fe0c0f1",
-  "line": 8334,
+  "line": 8320,
   "function": "fetchAuditPage",
   "target": "if (tbody) tbody",
   "op": "=",
@@ -560,7 +560,7 @@
  },
  {
   "sink_id": "fetchAuditPage:tbody:=:04dd9c2b9f5a",
-  "line": 8273,
+  "line": 8259,
   "function": "fetchAuditPage",
   "target": "tbody",
   "op": "=",
@@ -573,7 +573,7 @@
  },
  {
   "sink_id": "fetchAuditPage:tbody:=:3fb9ba42cd8e",
-  "line": 8275,
+  "line": 8261,
   "function": "fetchAuditPage",
   "target": "tbody",
   "op": "=",
@@ -586,7 +586,7 @@
  },
  {
   "sink_id": "fetchConnectorProjects:sel:=:d2134590b864",
-  "line": 13360,
+  "line": 13346,
   "function": "fetchConnectorProjects",
   "target": "sel",
   "op": "=",
@@ -599,7 +599,7 @@
  },
  {
   "sink_id": "fill:sel:=:208268b2e954",
-  "line": 6368,
+  "line": 6354,
   "function": "fill",
   "target": "sel",
   "op": "=",
@@ -612,7 +612,7 @@
  },
  {
   "sink_id": "fillBuilder:steps:=:6f49cdbd80e1",
-  "line": 16773,
+  "line": 16759,
   "function": "fillBuilder",
   "target": "steps",
   "op": "=",
@@ -625,7 +625,7 @@
  },
  {
   "sink_id": "filterVexTechniques:el:=:b51334baf721",
-  "line": 21167,
+  "line": 21153,
   "function": "filterVexTechniques",
   "target": "el",
   "op": "=",
@@ -638,7 +638,7 @@
  },
  {
   "sink_id": "filterVexTechniques:el:=:fe7e0ce19e69",
-  "line": 21170,
+  "line": 21156,
   "function": "filterVexTechniques",
   "target": "el",
   "op": "=",
@@ -651,7 +651,7 @@
  },
  {
   "sink_id": "fmt:document.getElementById('evidence-content'):=:e5e239560bc1",
-  "line": 11074,
+  "line": 11060,
   "function": "fmt",
   "target": "document.getElementById('evidence-content')",
   "op": "=",
@@ -659,12 +659,12 @@
   "final_category": "unescaped_html",
   "severity_tier": 4,
   "data_source_tags": "",
-  "trace_notes": "15 assignment(s) to 'html' inside renderEvidencePanel() @L10830 (scope-resolved) -> unescaped_html",
+  "trace_notes": "15 assignment(s) to 'html' inside renderEvidencePanel() @L10816 (scope-resolved) -> unescaped_html",
   "rhs": "html"
  },
  {
   "sink_id": "goToProfile:el:=:dbb79cb6cb5d",
-  "line": 19228,
+  "line": 19214,
   "function": "goToProfile",
   "target": "el",
   "op": "=",
@@ -677,7 +677,7 @@
  },
  {
   "sink_id": "initComplianceTab:agSel:=:6f767b9cccfa",
-  "line": 5480,
+  "line": 5466,
   "function": "initComplianceTab",
   "target": "agSel",
   "op": "=",
@@ -690,7 +690,7 @@
  },
  {
   "sink_id": "initComplianceTab:fwSel:=:18790df34fb9",
-  "line": 5473,
+  "line": 5459,
   "function": "initComplianceTab",
   "target": "fwSel",
   "op": "=",
@@ -703,7 +703,7 @@
  },
  {
   "sink_id": "initComplianceTab:fwSel:=:d5816a8a7e4c",
-  "line": 5469,
+  "line": 5455,
   "function": "initComplianceTab",
   "target": "fwSel",
   "op": "=",
@@ -716,7 +716,7 @@
  },
  {
   "sink_id": "initiativeRenderAttachList:list:=:148282bf6ed7",
-  "line": 13119,
+  "line": 13105,
   "function": "initiativeRenderAttachList",
   "target": "list",
   "op": "=",
@@ -729,7 +729,7 @@
  },
  {
   "sink_id": "initiativeRenderAttachList:list:=:a1e2bcc23e83",
-  "line": 13122,
+  "line": 13108,
   "function": "initiativeRenderAttachList",
   "target": "list",
   "op": "=",
@@ -742,7 +742,7 @@
  },
  {
   "sink_id": "initiativeShowDrawerError:if (el) el:=:6720deede4b8",
-  "line": 13015,
+  "line": 13001,
   "function": "initiativeShowDrawerError",
   "target": "if (el) el",
   "op": "=",
@@ -755,7 +755,7 @@
  },
  {
   "sink_id": "kpiGaugeCard:document.getElementById('run-kpi-strip'):=:9f61190ab079",
-  "line": 17461,
+  "line": 17447,
   "function": "kpiGaugeCard",
   "target": "document.getElementById('run-kpi-strip')",
   "op": "=",
@@ -768,7 +768,7 @@
  },
  {
   "sink_id": "kv:document.getElementById('campaigns-detail'):=:fb43cd0d56fa",
-  "line": 8497,
+  "line": 8483,
   "function": "kv",
   "target": "document.getElementById('campaigns-detail')",
   "op": "=",
@@ -781,7 +781,7 @@
  },
  {
   "sink_id": "lg:afEl:=:045b2d7bf19f",
-  "line": 12107,
+  "line": 12093,
   "function": "lg",
   "target": "afEl",
   "op": "=",
@@ -794,7 +794,7 @@
  },
  {
   "sink_id": "lg:afEl:=:742a1d68308b",
-  "line": 12111,
+  "line": 12097,
   "function": "lg",
   "target": "afEl",
   "op": "=",
@@ -807,7 +807,7 @@
  },
  {
   "sink_id": "lg:afEl:=:af6127e6cf99",
-  "line": 12108,
+  "line": 12094,
   "function": "lg",
   "target": "afEl",
   "op": "=",
@@ -815,12 +815,12 @@
   "final_category": "unescaped_html",
   "severity_tier": 4,
   "data_source_tags": "",
-  "trace_notes": "killChainNodes() @L20301 (scope-resolved): 1 return(s) -> unescaped_html",
+  "trace_notes": "killChainNodes() @L20287 (scope-resolved): 1 return(s) -> unescaped_html",
   "rhs": "'<div class=\"killchain\">' + killChainNodes(kc) + '</div>'"
  },
  {
   "sink_id": "lg:attckEl:=:15344d1eaefd",
-  "line": 12191,
+  "line": 12177,
   "function": "lg",
   "target": "attckEl",
   "op": "=",
@@ -833,7 +833,7 @@
  },
  {
   "sink_id": "lg:attckEl:=:29910ff5e4fc",
-  "line": 12189,
+  "line": 12175,
   "function": "lg",
   "target": "attckEl",
   "op": "=",
@@ -846,7 +846,7 @@
  },
  {
   "sink_id": "lg:bodyEl:=:e7f5a6fa079b",
-  "line": 12241,
+  "line": 12227,
   "function": "lg",
   "target": "bodyEl",
   "op": "=",
@@ -859,7 +859,7 @@
  },
  {
   "sink_id": "lg:donutEl:=:b908d493e3d4",
-  "line": 12077,
+  "line": 12063,
   "function": "lg",
   "target": "donutEl",
   "op": "=",
@@ -872,7 +872,7 @@
  },
  {
   "sink_id": "lg:rrEl:=:40cfa668e770",
-  "line": 12120,
+  "line": 12106,
   "function": "lg",
   "target": "rrEl",
   "op": "=",
@@ -885,7 +885,7 @@
  },
  {
   "sink_id": "lg:rrEl:=:a15994e328c4",
-  "line": 12118,
+  "line": 12104,
   "function": "lg",
   "target": "rrEl",
   "op": "=",
@@ -898,7 +898,7 @@
  },
  {
   "sink_id": "lg:tfEl:=:3c8626d1c7ac",
-  "line": 12163,
+  "line": 12149,
   "function": "lg",
   "target": "tfEl",
   "op": "=",
@@ -911,7 +911,7 @@
  },
  {
   "sink_id": "lg:tfEl:=:e009cf04aee2",
-  "line": 12166,
+  "line": 12152,
   "function": "lg",
   "target": "tfEl",
   "op": "=",
@@ -924,7 +924,7 @@
  },
  {
   "sink_id": "list:document.getElementById('results-body'):=:230d8358dc8e",
-  "line": 9713,
+  "line": 9699,
   "function": "list",
   "target": "document.getElementById('results-body')",
   "op": "=",
@@ -932,12 +932,12 @@
   "final_category": "partial_escaped",
   "severity_tier": 3,
   "data_source_tags": "",
-  "trace_notes": "1 assignment(s) to 'body' inside openTechnique() @L9698 (scope-resolved) -> partial_escaped",
+  "trace_notes": "1 assignment(s) to 'body' inside openTechnique() @L9684 (scope-resolved) -> partial_escaped",
   "rhs": "body"
  },
  {
   "sink_id": "list:document.getElementById('results-body'):=:4eb1c57d1f9c",
-  "line": 12495,
+  "line": 12481,
   "function": "list",
   "target": "document.getElementById('results-body')",
   "op": "=",
@@ -950,7 +950,7 @@
  },
  {
   "sink_id": "list:document.getElementById('results-export'):=:cfdd80621952",
-  "line": 12467,
+  "line": 12453,
   "function": "list",
   "target": "document.getElementById('results-export')",
   "op": "=",
@@ -963,7 +963,7 @@
  },
  {
   "sink_id": "loadAPHistory:tb:=:19f226136597",
-  "line": 14973,
+  "line": 14959,
   "function": "loadAPHistory",
   "target": "tb",
   "op": "=",
@@ -976,7 +976,7 @@
  },
  {
   "sink_id": "loadAPHistory:tb:=:1e8414e7c561",
-  "line": 14995,
+  "line": 14981,
   "function": "loadAPHistory",
   "target": "tb",
   "op": "=",
@@ -989,7 +989,7 @@
  },
  {
   "sink_id": "loadAPHistory:tb:=:b41e906344fa",
-  "line": 14976,
+  "line": 14962,
   "function": "loadAPHistory",
   "target": "tb",
   "op": "=",
@@ -1002,7 +1002,7 @@
  },
  {
   "sink_id": "loadAPHistory:tb:=:e93f630359cd",
-  "line": 14979,
+  "line": 14965,
   "function": "loadAPHistory",
   "target": "tb",
   "op": "=",
@@ -1015,7 +1015,7 @@
  },
  {
   "sink_id": "loadARTContentStatus:document.getElementById('cs-art-status'):=:f83cfb2e045d",
-  "line": 19797,
+  "line": 19783,
   "function": "loadARTContentStatus",
   "target": "document.getElementById('cs-art-status')",
   "op": "=",
@@ -1028,7 +1028,7 @@
  },
  {
   "sink_id": "loadARTContentStatus:statusEl:=:231d8ed13a85",
-  "line": 19755,
+  "line": 19741,
   "function": "loadARTContentStatus",
   "target": "statusEl",
   "op": "=",
@@ -1041,7 +1041,7 @@
  },
  {
   "sink_id": "loadARTContentStatus:statusEl:=:240aa95af980",
-  "line": 19757,
+  "line": 19743,
   "function": "loadARTContentStatus",
   "target": "statusEl",
   "op": "=",
@@ -1054,7 +1054,7 @@
  },
  {
   "sink_id": "loadAgentRiskSummary:if (tb) tb:=:19f226136597",
-  "line": 19287,
+  "line": 19273,
   "function": "loadAgentRiskSummary",
   "target": "if (tb) tb",
   "op": "=",
@@ -1067,7 +1067,7 @@
  },
  {
   "sink_id": "loadAgtAttackPath:pane:=:288757584172",
-  "line": 5380,
+  "line": 5366,
   "function": "loadAgtAttackPath",
   "target": "pane",
   "op": "=",
@@ -1080,7 +1080,7 @@
  },
  {
   "sink_id": "loadAgtAttackPath:pane:=:43b384bfff79",
-  "line": 5336,
+  "line": 5322,
   "function": "loadAgtAttackPath",
   "target": "pane",
   "op": "=",
@@ -1093,7 +1093,7 @@
  },
  {
   "sink_id": "loadAgtAttackPath:pane:=:6a8bdfbcf6ec",
-  "line": 5370,
+  "line": 5356,
   "function": "loadAgtAttackPath",
   "target": "pane",
   "op": "=",
@@ -1106,7 +1106,7 @@
  },
  {
   "sink_id": "loadAgtAttackPath:pane:=:da5763be1e80",
-  "line": 5339,
+  "line": 5325,
   "function": "loadAgtAttackPath",
   "target": "pane",
   "op": "=",
@@ -1119,7 +1119,7 @@
  },
  {
   "sink_id": "loadAgtHealth:pane:=:288757584172",
-  "line": 5247,
+  "line": 5233,
   "function": "loadAgtHealth",
   "target": "pane",
   "op": "=",
@@ -1132,7 +1132,7 @@
  },
  {
   "sink_id": "loadAgtHealth:pane:=:43b384bfff79",
-  "line": 5233,
+  "line": 5219,
   "function": "loadAgtHealth",
   "target": "pane",
   "op": "=",
@@ -1145,7 +1145,7 @@
  },
  {
   "sink_id": "loadAgtHealth:pane:=:d5a054771a40",
-  "line": 5245,
+  "line": 5231,
   "function": "loadAgtHealth",
   "target": "pane",
   "op": "=",
@@ -1158,7 +1158,7 @@
  },
  {
   "sink_id": "loadAgtLogs:pane:=:60b1035f544d",
-  "line": 5151,
+  "line": 5137,
   "function": "loadAgtLogs",
   "target": "pane",
   "op": "=",
@@ -1171,7 +1171,7 @@
  },
  {
   "sink_id": "loadAgtLogs:pane:=:b8f9c6af53e6",
-  "line": 5156,
+  "line": 5142,
   "function": "loadAgtLogs",
   "target": "pane",
   "op": "=",
@@ -1184,7 +1184,7 @@
  },
  {
   "sink_id": "loadAgtOverview:pane:=:288757584172",
-  "line": 5006,
+  "line": 4992,
   "function": "loadAgtOverview",
   "target": "pane",
   "op": "=",
@@ -1197,7 +1197,7 @@
  },
  {
   "sink_id": "loadAgtOverview:pane:=:43b384bfff79",
-  "line": 4942,
+  "line": 4928,
   "function": "loadAgtOverview",
   "target": "pane",
   "op": "=",
@@ -1210,7 +1210,7 @@
  },
  {
   "sink_id": "loadAgtOverview:pane:=:b7211515933c",
-  "line": 4949,
+  "line": 4935,
   "function": "loadAgtOverview",
   "target": "pane",
   "op": "=",
@@ -1223,7 +1223,7 @@
  },
  {
   "sink_id": "loadAgtOverview:pane:=:c0900c037a1c",
-  "line": 4945,
+  "line": 4931,
   "function": "loadAgtOverview",
   "target": "pane",
   "op": "=",
@@ -1236,7 +1236,7 @@
  },
  {
   "sink_id": "loadAgtRisk:if (panel) panel:=:775979a09db1",
-  "line": 5254,
+  "line": 5240,
   "function": "loadAgtRisk",
   "target": "if (panel) panel",
   "op": "=",
@@ -1249,7 +1249,7 @@
  },
  {
   "sink_id": "loadAgtRisk:if (panel) panel:=:a5895f159558",
-  "line": 5257,
+  "line": 5243,
   "function": "loadAgtRisk",
   "target": "if (panel) panel",
   "op": "=",
@@ -1262,7 +1262,7 @@
  },
  {
   "sink_id": "loadAgtScenarios:pane:=:288757584172",
-  "line": 5064,
+  "line": 5050,
   "function": "loadAgtScenarios",
   "target": "pane",
   "op": "=",
@@ -1275,7 +1275,7 @@
  },
  {
   "sink_id": "loadAgtScenarios:pane:=:43b384bfff79",
-  "line": 5034,
+  "line": 5020,
   "function": "loadAgtScenarios",
   "target": "pane",
   "op": "=",
@@ -1288,7 +1288,7 @@
  },
  {
   "sink_id": "loadAgtScenarios:pane:=:56f8dd6f831b",
-  "line": 5037,
+  "line": 5023,
   "function": "loadAgtScenarios",
   "target": "pane",
   "op": "=",
@@ -1301,7 +1301,7 @@
  },
  {
   "sink_id": "loadAgtScenarios:pane:=:ef1e71317aff",
-  "line": 5054,
+  "line": 5040,
   "function": "loadAgtScenarios",
   "target": "pane",
   "op": "=",
@@ -1314,7 +1314,7 @@
  },
  {
   "sink_id": "loadAttackPath:if (body) body:=:775979a09db1",
-  "line": 5681,
+  "line": 5667,
   "function": "loadAttackPath",
   "target": "if (body) body",
   "op": "=",
@@ -1327,7 +1327,7 @@
  },
  {
   "sink_id": "loadBackups:if (wrap) wrap:=:26bb601d6dfd",
-  "line": 8155,
+  "line": 8141,
   "function": "loadBackups",
   "target": "if (wrap) wrap",
   "op": "=",
@@ -1340,7 +1340,7 @@
  },
  {
   "sink_id": "loadBackups:if (wrap) wrap:=:52aae5451493",
-  "line": 8161,
+  "line": 8147,
   "function": "loadBackups",
   "target": "if (wrap) wrap",
   "op": "=",
@@ -1353,7 +1353,7 @@
  },
  {
   "sink_id": "loadCalderaStatus:document.getElementById('cs-caldera-status'):=:e392dad8b085",
-  "line": 9259,
+  "line": 9245,
   "function": "loadCalderaStatus",
   "target": "document.getElementById('cs-caldera-status')",
   "op": "=",
@@ -1361,12 +1361,12 @@
   "final_category": "static",
   "severity_tier": 0,
   "data_source_tags": "",
-  "trace_notes": "3 assignment(s) to 'dot' inside loadCalderaStatus() @L9244 (scope-resolved) -> static",
+  "trace_notes": "3 assignment(s) to 'dot' inside loadCalderaStatus() @L9230 (scope-resolved) -> static",
   "rhs": "dot"
  },
  {
   "sink_id": "loadCalderaStatus:document.getElementById('cs-caldera-status'):=:f83cfb2e045d",
-  "line": 9285,
+  "line": 9271,
   "function": "loadCalderaStatus",
   "target": "document.getElementById('cs-caldera-status')",
   "op": "=",
@@ -1379,7 +1379,7 @@
  },
  {
   "sink_id": "loadComplianceScores:el:=:3507e053d334",
-  "line": 9062,
+  "line": 9048,
   "function": "loadComplianceScores",
   "target": "el",
   "op": "=",
@@ -1392,7 +1392,7 @@
  },
  {
   "sink_id": "loadComplianceScores:el:=:39fb08138cd0",
-  "line": 9065,
+  "line": 9051,
   "function": "loadComplianceScores",
   "target": "el",
   "op": "=",
@@ -1405,7 +1405,7 @@
  },
  {
   "sink_id": "loadCoverage:document.getElementById('cov-matrix'):=:9bbe032fcd11",
-  "line": 9671,
+  "line": 9657,
   "function": "loadCoverage",
   "target": "document.getElementById('cov-matrix')",
   "op": "=",
@@ -1418,7 +1418,7 @@
  },
  {
   "sink_id": "loadCoverageMatrix:body:=:33f2a6ace2f9",
-  "line": 5972,
+  "line": 5958,
   "function": "loadCoverageMatrix",
   "target": "body",
   "op": "=",
@@ -1431,7 +1431,7 @@
  },
  {
   "sink_id": "loadCoverageMatrix:body:=:3b7e776d736b",
-  "line": 5983,
+  "line": 5969,
   "function": "loadCoverageMatrix",
   "target": "body",
   "op": "=",
@@ -1444,7 +1444,7 @@
  },
  {
   "sink_id": "loadCoverageMatrix:body:=:6db277ff2d5b",
-  "line": 5995,
+  "line": 5981,
   "function": "loadCoverageMatrix",
   "target": "body",
   "op": "=",
@@ -1457,7 +1457,7 @@
  },
  {
   "sink_id": "loadCoverageMatrix:body:=:6f49cdbd80e1",
-  "line": 5978,
+  "line": 5964,
   "function": "loadCoverageMatrix",
   "target": "body",
   "op": "=",
@@ -1470,7 +1470,7 @@
  },
  {
   "sink_id": "loadEmTab:gridEl:=:1988c3855d7f",
-  "line": 10072,
+  "line": 10058,
   "function": "loadEmTab",
   "target": "gridEl",
   "op": "=",
@@ -1483,7 +1483,7 @@
  },
  {
   "sink_id": "loadEmTab:summaryEl:=:0b3c56ec65da",
-  "line": 10050,
+  "line": 10036,
   "function": "loadEmTab",
   "target": "summaryEl",
   "op": "=",
@@ -1496,7 +1496,7 @@
  },
  {
   "sink_id": "loadEmTab:summaryEl:=:a1ac946a6dd4",
-  "line": 10054,
+  "line": 10040,
   "function": "loadEmTab",
   "target": "summaryEl",
   "op": "=",
@@ -1509,7 +1509,7 @@
  },
  {
   "sink_id": "loadEndpointPostureWidget:tiles:=:e5e239560bc1",
-  "line": 8938,
+  "line": 8924,
   "function": "loadEndpointPostureWidget",
   "target": "tiles",
   "op": "=",
@@ -1517,12 +1517,12 @@
   "final_category": "partial_escaped",
   "severity_tier": 3,
   "data_source_tags": "",
-  "trace_notes": "3 assignment(s) to 'html' inside loadEndpointPostureWidget() @L8909 (scope-resolved) -> partial_escaped",
+  "trace_notes": "3 assignment(s) to 'html' inside loadEndpointPostureWidget() @L8895 (scope-resolved) -> partial_escaped",
   "rhs": "html"
  },
  {
   "sink_id": "loadExercisesTab:body:=:171b52a67827",
-  "line": 14581,
+  "line": 14567,
   "function": "loadExercisesTab",
   "target": "body",
   "op": "=",
@@ -1535,7 +1535,7 @@
  },
  {
   "sink_id": "loadExercisesTab:body:=:6f49cdbd80e1",
-  "line": 14579,
+  "line": 14565,
   "function": "loadExercisesTab",
   "target": "body",
   "op": "=",
@@ -1548,7 +1548,7 @@
  },
  {
   "sink_id": "loadExercisesTab:body:=:6f49cdbd80e1",
-  "line": 14594,
+  "line": 14580,
   "function": "loadExercisesTab",
   "target": "body",
   "op": "=",
@@ -1561,7 +1561,7 @@
  },
  {
   "sink_id": "loadExercisesTab:body:=:dde610979c8b",
-  "line": 14596,
+  "line": 14582,
   "function": "loadExercisesTab",
   "target": "body",
   "op": "=",
@@ -1574,7 +1574,7 @@
  },
  {
   "sink_id": "loadExposureAssets:body:=:53ffa97366ab",
-  "line": 5736,
+  "line": 5722,
   "function": "loadExposureAssets",
   "target": "body",
   "op": "=",
@@ -1587,7 +1587,7 @@
  },
  {
   "sink_id": "loadExposureAssets:body:=:7aa750446b7d",
-  "line": 5739,
+  "line": 5725,
   "function": "loadExposureAssets",
   "target": "body",
   "op": "=",
@@ -1600,7 +1600,7 @@
  },
  {
   "sink_id": "loadExposureAssets:body:=:bfee51193562",
-  "line": 5742,
+  "line": 5728,
   "function": "loadExposureAssets",
   "target": "body",
   "op": "=",
@@ -1613,7 +1613,7 @@
  },
  {
   "sink_id": "loadExposureAssets:body:=:e2f15271ecc0",
-  "line": 5755,
+  "line": 5741,
   "function": "loadExposureAssets",
   "target": "body",
   "op": "=",
@@ -1626,7 +1626,7 @@
  },
  {
   "sink_id": "loadFindingTickets:container:=:3b0ad29b6834",
-  "line": 12735,
+  "line": 12721,
   "function": "loadFindingTickets",
   "target": "container",
   "op": "=",
@@ -1639,7 +1639,7 @@
  },
  {
   "sink_id": "loadFindingTickets:container:=:d3ba7728b85f",
-  "line": 12738,
+  "line": 12724,
   "function": "loadFindingTickets",
   "target": "container",
   "op": "=",
@@ -1652,7 +1652,7 @@
  },
  {
   "sink_id": "loadFindingTickets:if (container) container:=:020617a0dd2e",
-  "line": 12747,
+  "line": 12733,
   "function": "loadFindingTickets",
   "target": "if (container) container",
   "op": "=",
@@ -1665,7 +1665,7 @@
  },
  {
   "sink_id": "loadIOCRegistry:if (el) el:=:6f49cdbd80e1",
-  "line": 13862,
+  "line": 13848,
   "function": "loadIOCRegistry",
   "target": "if (el) el",
   "op": "=",
@@ -1678,7 +1678,7 @@
  },
  {
   "sink_id": "loadIOCRegistry:tbody:=:f0443ab03823",
-  "line": 13889,
+  "line": 13875,
   "function": "loadIOCRegistry",
   "target": "tbody",
   "op": "=",
@@ -1691,7 +1691,7 @@
  },
  {
   "sink_id": "loadIOCRegistry:tbody:=:f799a3a2f7e0",
-  "line": 13880,
+  "line": 13866,
   "function": "loadIOCRegistry",
   "target": "tbody",
   "op": "=",
@@ -1704,7 +1704,7 @@
  },
  {
   "sink_id": "loadKEVWidget:tiles:=:fd8f7ce0da32",
-  "line": 8873,
+  "line": 8859,
   "function": "loadKEVWidget",
   "target": "tiles",
   "op": "=",
@@ -1717,7 +1717,7 @@
  },
  {
   "sink_id": "loadLicenseInfo:wrap:=:1e2b1bb5184e",
-  "line": 8118,
+  "line": 8104,
   "function": "loadLicenseInfo",
   "target": "wrap",
   "op": "=",
@@ -1730,7 +1730,7 @@
  },
  {
   "sink_id": "loadLicenseInfo:wrap:=:52aae5451493",
-  "line": 8131,
+  "line": 8117,
   "function": "loadLicenseInfo",
   "target": "wrap",
   "op": "=",
@@ -1743,7 +1743,7 @@
  },
  {
   "sink_id": "loadLicenseInfo:wrap:=:58373f9eeda5",
-  "line": 8112,
+  "line": 8098,
   "function": "loadLicenseInfo",
   "target": "wrap",
   "op": "=",
@@ -1756,7 +1756,7 @@
  },
  {
   "sink_id": "loadLicenseInfo:wrap:=:775979a09db1",
-  "line": 8110,
+  "line": 8096,
   "function": "loadLicenseInfo",
   "target": "wrap",
   "op": "=",
@@ -1769,7 +1769,7 @@
  },
  {
   "sink_id": "loadOpenAEVConfig:configPanel:=:44e8a8bb59a5",
-  "line": 14393,
+  "line": 14379,
   "function": "loadOpenAEVConfig",
   "target": "configPanel",
   "op": "=",
@@ -1782,7 +1782,7 @@
  },
  {
   "sink_id": "loadOpenAEVConfig:configPanel:=:6f49cdbd80e1",
-  "line": 14408,
+  "line": 14394,
   "function": "loadOpenAEVConfig",
   "target": "configPanel",
   "op": "=",
@@ -1795,7 +1795,7 @@
  },
  {
   "sink_id": "loadOpenAEVScenarios:body:=:6f49cdbd80e1",
-  "line": 14469,
+  "line": 14455,
   "function": "loadOpenAEVScenarios",
   "target": "body",
   "op": "=",
@@ -1808,7 +1808,7 @@
  },
  {
   "sink_id": "loadOpenAEVScenarios:body:=:c54a183e5be8",
-  "line": 14474,
+  "line": 14460,
   "function": "loadOpenAEVScenarios",
   "target": "body",
   "op": "=",
@@ -1821,7 +1821,7 @@
  },
  {
   "sink_id": "loadRansomwareReadiness:bodyEl:=:a96a125c81c6",
-  "line": 15155,
+  "line": 15141,
   "function": "loadRansomwareReadiness",
   "target": "bodyEl",
   "op": "=",
@@ -1834,7 +1834,7 @@
  },
  {
   "sink_id": "loadRansomwareReadiness:bodyEl:=:deb9f6bd377e",
-  "line": 15083,
+  "line": 15069,
   "function": "loadRansomwareReadiness",
   "target": "bodyEl",
   "op": "=",
@@ -1847,7 +1847,7 @@
  },
  {
   "sink_id": "loadReadinessTrends:el:=:8b32cd795356",
-  "line": 8968,
+  "line": 8954,
   "function": "loadReadinessTrends",
   "target": "el",
   "op": "=",
@@ -1860,7 +1860,7 @@
  },
  {
   "sink_id": "loadReadinessTrends:summary:=:17c655bcb80a",
-  "line": 8961,
+  "line": 8947,
   "function": "loadReadinessTrends",
   "target": "summary",
   "op": "=",
@@ -1873,7 +1873,7 @@
  },
  {
   "sink_id": "loadRecommendations:body:=:19f226136597",
-  "line": 6176,
+  "line": 6162,
   "function": "loadRecommendations",
   "target": "body",
   "op": "=",
@@ -1886,7 +1886,7 @@
  },
  {
   "sink_id": "loadRecommendations:body:=:45fc1c5a0961",
-  "line": 6180,
+  "line": 6166,
   "function": "loadRecommendations",
   "target": "body",
   "op": "=",
@@ -1899,7 +1899,7 @@
  },
  {
   "sink_id": "loadRemediations:document.getElementById('rem-list'):=:9bbe032fcd11",
-  "line": 12531,
+  "line": 12517,
   "function": "loadRemediations",
   "target": "document.getElementById('rem-list')",
   "op": "=",
@@ -1912,7 +1912,7 @@
  },
  {
   "sink_id": "loadReports:document.getElementById('rep-available'):=:568454456a1f",
-  "line": 15227,
+  "line": 15213,
   "function": "loadReports",
   "target": "document.getElementById('rep-available')",
   "op": "=",
@@ -1925,7 +1925,7 @@
  },
  {
   "sink_id": "loadReports:el:=:211a4d2abf4a",
-  "line": 15210,
+  "line": 15196,
   "function": "loadReports",
   "target": "el",
   "op": "=",
@@ -1938,7 +1938,7 @@
  },
  {
   "sink_id": "loadReports:el:=:b1f98f11e298",
-  "line": 15214,
+  "line": 15200,
   "function": "loadReports",
   "target": "el",
   "op": "=",
@@ -1951,7 +1951,7 @@
  },
  {
   "sink_id": "loadRuns:tbody:=:f259d05495ad",
-  "line": 15605,
+  "line": 15591,
   "function": "loadRuns",
   "target": "tbody",
   "op": "=",
@@ -1964,7 +1964,7 @@
  },
  {
   "sink_id": "loadSIEMCorrelationPanel:el:=:a0696ac13148",
-  "line": 18095,
+  "line": 18081,
   "function": "loadSIEMCorrelationPanel",
   "target": "el",
   "op": "=",
@@ -1977,7 +1977,7 @@
  },
  {
   "sink_id": "loadSimCoverage:bodyEl:=:b822322bb95c",
-  "line": 19925,
+  "line": 19911,
   "function": "loadSimCoverage",
   "target": "bodyEl",
   "op": "=",
@@ -1990,7 +1990,7 @@
  },
  {
   "sink_id": "loadTAXIIConnectors:tbody:=:1f42fbd5bac8",
-  "line": 19569,
+  "line": 19555,
   "function": "loadTAXIIConnectors",
   "target": "tbody",
   "op": "=",
@@ -2003,7 +2003,7 @@
  },
  {
   "sink_id": "loadTAXIIConnectors:tbody:=:e683e20284c5",
-  "line": 19564,
+  "line": 19550,
   "function": "loadTAXIIConnectors",
   "target": "tbody",
   "op": "=",
@@ -2016,7 +2016,7 @@
  },
  {
   "sink_id": "loadThreatIntelConfig:if (panel) panel:=:6f49cdbd80e1",
-  "line": 19449,
+  "line": 19435,
   "function": "loadThreatIntelConfig",
   "target": "if (panel) panel",
   "op": "=",
@@ -2029,7 +2029,7 @@
  },
  {
   "sink_id": "loadThreatIntelConfig:panel:=:a9b597bb6c96",
-  "line": 19458,
+  "line": 19444,
   "function": "loadThreatIntelConfig",
   "target": "panel",
   "op": "=",
@@ -2042,7 +2042,7 @@
  },
  {
   "sink_id": "loadThreatPriorityActors:body:=:2651c788f8da",
-  "line": 6031,
+  "line": 6017,
   "function": "loadThreatPriorityActors",
   "target": "body",
   "op": "=",
@@ -2055,7 +2055,7 @@
  },
  {
   "sink_id": "loadThreatPriorityActors:body:=:2843e7de1bbf",
-  "line": 6042,
+  "line": 6028,
   "function": "loadThreatPriorityActors",
   "target": "body",
   "op": "=",
@@ -2068,7 +2068,7 @@
  },
  {
   "sink_id": "loadThreatPriorityActors:body:=:6f49cdbd80e1",
-  "line": 6026,
+  "line": 6012,
   "function": "loadThreatPriorityActors",
   "target": "body",
   "op": "=",
@@ -2081,7 +2081,7 @@
  },
  {
   "sink_id": "loadThreatPriorityActors:body:=:f880d42927c9",
-  "line": 6021,
+  "line": 6007,
   "function": "loadThreatPriorityActors",
   "target": "body",
   "op": "=",
@@ -2094,7 +2094,7 @@
  },
  {
   "sink_id": "loadUnifiedTechniques:sel:=:b2f5b56a3a23",
-  "line": 9570,
+  "line": 9556,
   "function": "loadUnifiedTechniques",
   "target": "sel",
   "op": "=",
@@ -2107,7 +2107,7 @@
  },
  {
   "sink_id": "loadUsers:tbody:=:58af379b3e34",
-  "line": 11752,
+  "line": 11738,
   "function": "loadUsers",
   "target": "tbody",
   "op": "=",
@@ -2120,7 +2120,7 @@
  },
  {
   "sink_id": "loadUsers:tbody:=:6598e2c0c746",
-  "line": 11753,
+  "line": 11739,
   "function": "loadUsers",
   "target": "tbody",
   "op": "=",
@@ -2133,7 +2133,7 @@
  },
  {
   "sink_id": "loadVariantCoverage:el:=:5ad448abef7d",
-  "line": 21197,
+  "line": 21183,
   "function": "loadVariantCoverage",
   "target": "el",
   "op": "=",
@@ -2146,7 +2146,7 @@
  },
  {
   "sink_id": "loadVariantCoverage:el:=:a79e43cbcf7f",
-  "line": 21224,
+  "line": 21210,
   "function": "loadVariantCoverage",
   "target": "el",
   "op": "=",
@@ -2159,7 +2159,7 @@
  },
  {
   "sink_id": "loadVariantCoverage:el:=:c944b2f9b670",
-  "line": 21194,
+  "line": 21180,
   "function": "loadVariantCoverage",
   "target": "el",
   "op": "=",
@@ -2172,7 +2172,7 @@
  },
  {
   "sink_id": "loadVariantCoverage:el:=:e5e239560bc1",
-  "line": 21222,
+  "line": 21208,
   "function": "loadVariantCoverage",
   "target": "el",
   "op": "=",
@@ -2180,12 +2180,12 @@
   "final_category": "partial_escaped",
   "severity_tier": 3,
   "data_source_tags": "",
-  "trace_notes": "3 assignment(s) to 'html' inside loadVariantCoverage() @L21191 (scope-resolved) -> partial_escaped",
+  "trace_notes": "3 assignment(s) to 'html' inside loadVariantCoverage() @L21177 (scope-resolved) -> partial_escaped",
   "rhs": "html"
  },
  {
   "sink_id": "loadVariantStats:el:=:357036e91e03",
-  "line": 20743,
+  "line": 20729,
   "function": "loadVariantStats",
   "target": "el",
   "op": "=",
@@ -2193,12 +2193,12 @@
   "final_category": "partial_escaped",
   "severity_tier": 3,
   "data_source_tags": "",
-  "trace_notes": "executions(): no declaration found anywhere in file; var(): no declaration found anywhere in file; vexStatCard() @L20756 (scope-resolved): 1 return(s) -> partial_escaped",
+  "trace_notes": "executions(): no declaration found anywhere in file; var(): no declaration found anywhere in file; vexStatCard() @L20742 (scope-resolved): 1 return(s) -> partial_escaped",
   "rhs": "vexStatCard('Executed Variants',     s.executedVariants,       'var(--accent)', null,\n        'How many individual variant executions (encoding \\xd7 privilege \\xd7 context combinations) have actually completed so far, summed across every finished variant run — not the total available.') +\n      vexStatCard('Total Variants',        s.availableVariants,      'var(--text)',   artAtomic.toLocaleString"
  },
  {
   "sink_id": "loadVerificationTab:sel:=:d2a1edd66cf8",
-  "line": 9765,
+  "line": 9751,
   "function": "loadVerificationTab",
   "target": "sel",
   "op": "=",
@@ -2206,12 +2206,12 @@
   "final_category": "escaped",
   "severity_tier": 1,
   "data_source_tags": "",
-  "trace_notes": "1 assignment(s) to 'opts' inside loadVerificationTab() @L9748 (scope-resolved) -> escaped",
+  "trace_notes": "1 assignment(s) to 'opts' inside loadVerificationTab() @L9734 (scope-resolved) -> escaped",
   "rhs": "opts"
  },
  {
   "sink_id": "maybeShowLicenseGraceModal:overlay:=:07494db8034d",
-  "line": 19033,
+  "line": 19019,
   "function": "maybeShowLicenseGraceModal",
   "target": "overlay",
   "op": "=",
@@ -2219,12 +2219,12 @@
   "final_category": "partial_escaped",
   "severity_tier": 3,
   "data_source_tags": "",
-  "trace_notes": "_licenseBannerHTML() @L18965 (scope-resolved): 1 return(s) -> partial_escaped; var(): no declaration found anywhere in file",
+  "trace_notes": "_licenseBannerHTML() @L18951 (scope-resolved): 1 return(s) -> partial_escaped; var(): no declaration found anywhere in file",
   "rhs": "'<div style=\"max-width:480px;background:var(--surface,#152338);border:1px solid var(--warning,#d29922);border-radius:8px;padding:1.5rem;color:var(--text,#e6e6e6)\">' +\n      _licenseBannerHTML(info) +\n      '<div style=\"text-align:right;margin-top:1rem\"><button id=\"license-grace-modal-dismiss\" style=\"padding:0.4rem 1rem;border-radius:6px;border:1px solid var(--border,#22324a);background:transparent"
  },
  {
   "sink_id": "openAPAssets:document.getElementById('ap-assets-body'):=:a0dfbbddf3d5",
-  "line": 6694,
+  "line": 6680,
   "function": "openAPAssets",
   "target": "document.getElementById('ap-assets-body')",
   "op": "=",
@@ -2237,7 +2237,7 @@
  },
  {
   "sink_id": "openAdvDrawer:abEl:=:10f800eddb16",
-  "line": 4660,
+  "line": 4646,
   "function": "openAdvDrawer",
   "target": "abEl",
   "op": "=",
@@ -2250,7 +2250,7 @@
  },
  {
   "sink_id": "openAdvDrawer:abEl:=:1bc301895d82",
-  "line": 4696,
+  "line": 4682,
   "function": "openAdvDrawer",
   "target": "abEl",
   "op": "=",
@@ -2263,7 +2263,7 @@
  },
  {
   "sink_id": "openAdvDrawer:abEl:=:9b29f26921f0",
-  "line": 4677,
+  "line": 4663,
   "function": "openAdvDrawer",
   "target": "abEl",
   "op": "=",
@@ -2276,7 +2276,7 @@
  },
  {
   "sink_id": "openAdvDrawer:abEl:=:b07cafbe5731",
-  "line": 4672,
+  "line": 4658,
   "function": "openAdvDrawer",
   "target": "abEl",
   "op": "=",
@@ -2289,7 +2289,7 @@
  },
  {
   "sink_id": "openAdvDrawer:runWrap:=:ab8284a36c79",
-  "line": 4663,
+  "line": 4649,
   "function": "openAdvDrawer",
   "target": "runWrap",
   "op": "=",
@@ -2302,7 +2302,7 @@
  },
  {
   "sink_id": "openAdvRunModal:agSel:=:271855403668",
-  "line": 4715,
+  "line": 4701,
   "function": "openAdvRunModal",
   "target": "agSel",
   "op": "=",
@@ -2315,7 +2315,7 @@
  },
  {
   "sink_id": "openCampaignLaunch:document.getElementById('cmp-filter-env'):=:b3b728aa58f5",
-  "line": 8594,
+  "line": 8580,
   "function": "openCampaignLaunch",
   "target": "document.getElementById('cmp-filter-env')",
   "op": "=",
@@ -2328,7 +2328,7 @@
  },
  {
   "sink_id": "openCampaignLaunch:document.getElementById('cmp-scenario'):=:49277d7d901c",
-  "line": 8578,
+  "line": 8564,
   "function": "openCampaignLaunch",
   "target": "document.getElementById('cmp-scenario')",
   "op": "=",
@@ -2341,7 +2341,7 @@
  },
  {
   "sink_id": "openCampaignLaunch:document.getElementById('cmp-scenario-preview'):=:6f49cdbd80e1",
-  "line": 8580,
+  "line": 8566,
   "function": "openCampaignLaunch",
   "target": "document.getElementById('cmp-scenario-preview')",
   "op": "=",
@@ -2354,7 +2354,7 @@
  },
  {
   "sink_id": "openCampaignLaunch:groupSel:=:b0bb4615fc24",
-  "line": 8609,
+  "line": 8595,
   "function": "openCampaignLaunch",
   "target": "groupSel",
   "op": "=",
@@ -2367,7 +2367,7 @@
  },
  {
   "sink_id": "openCampaignLaunch:typeSel:=:d2a1edd66cf8",
-  "line": 8601,
+  "line": 8587,
   "function": "openCampaignLaunch",
   "target": "typeSel",
   "op": "=",
@@ -2375,12 +2375,12 @@
   "final_category": "static",
   "severity_tier": 0,
   "data_source_tags": "",
-  "trace_notes": "2 assignment(s) to 'opts' inside openCampaignLaunch() @L8573 (scope-resolved) -> static",
+  "trace_notes": "2 assignment(s) to 'opts' inside openCampaignLaunch() @L8559 (scope-resolved) -> static",
   "rhs": "opts"
  },
  {
   "sink_id": "openCampaignRerunReview:document.getElementById('rerun-review-body'):=:a694e4076aeb",
-  "line": 18283,
+  "line": 18269,
   "function": "openCampaignRerunReview",
   "target": "document.getElementById('rerun-review-body')",
   "op": "=",
@@ -2393,7 +2393,7 @@
  },
  {
   "sink_id": "openCmdk:wrap:=:e5b2adf984bd",
-  "line": 11586,
+  "line": 11572,
   "function": "openCmdk",
   "target": "wrap",
   "op": "=",
@@ -2406,7 +2406,7 @@
  },
  {
   "sink_id": "openConfirmDiffModal:document.getElementById('confirm-diff-body'):=:2da3370e4143",
-  "line": 9327,
+  "line": 9313,
   "function": "openConfirmDiffModal",
   "target": "document.getElementById('confirm-diff-body')",
   "op": "=",
@@ -2419,7 +2419,7 @@
  },
  {
   "sink_id": "openEMSweepModal:sel:=:449a6c764d46",
-  "line": 10149,
+  "line": 10135,
   "function": "openEMSweepModal",
   "target": "sel",
   "op": "=",
@@ -2432,7 +2432,7 @@
  },
  {
   "sink_id": "openEMSweepProgress:document.getElementById('em-sweep-progress-actions'):=:6f49cdbd80e1",
-  "line": 10643,
+  "line": 10629,
   "function": "openEMSweepProgress",
   "target": "document.getElementById('em-sweep-progress-actions')",
   "op": "=",
@@ -2445,7 +2445,7 @@
  },
  {
   "sink_id": "openExerciseDetail:document.getElementById('exercise-detail-body'):=:372807e2ccce",
-  "line": 14740,
+  "line": 14726,
   "function": "openExerciseDetail",
   "target": "document.getElementById('exercise-detail-body')",
   "op": "=",
@@ -2458,7 +2458,7 @@
  },
  {
   "sink_id": "openExposureDetail:body:=:775979a09db1",
-  "line": 6234,
+  "line": 6220,
   "function": "openExposureDetail",
   "target": "body",
   "op": "=",
@@ -2471,7 +2471,7 @@
  },
  {
   "sink_id": "openGroupPicker:document.getElementById('gp-select'):=:e921aae928a4",
-  "line": 6980,
+  "line": 6966,
   "function": "openGroupPicker",
   "target": "document.getElementById('gp-select')",
   "op": "=",
@@ -2484,7 +2484,7 @@
  },
  {
   "sink_id": "openIOCDetail:document.getElementById('results-export'):=:6f49cdbd80e1",
-  "line": 13972,
+  "line": 13958,
   "function": "openIOCDetail",
   "target": "document.getElementById('results-export')",
   "op": "=",
@@ -2497,7 +2497,7 @@
  },
  {
   "sink_id": "openInitiativeAttachDrawer:document.getElementById('init-attach-error'):=:6f49cdbd80e1",
-  "line": 13097,
+  "line": 13083,
   "function": "openInitiativeAttachDrawer",
   "target": "document.getElementById('init-attach-error')",
   "op": "=",
@@ -2510,7 +2510,7 @@
  },
  {
   "sink_id": "openInitiativeAttachDrawer:document.getElementById('init-attach-list'):=:17cdfc73f855",
-  "line": 13098,
+  "line": 13084,
   "function": "openInitiativeAttachDrawer",
   "target": "document.getElementById('init-attach-list')",
   "op": "=",
@@ -2523,7 +2523,7 @@
  },
  {
   "sink_id": "openInitiativeAttachDrawer:document.getElementById('init-attach-list'):=:6e32df6b622b",
-  "line": 13104,
+  "line": 13090,
   "function": "openInitiativeAttachDrawer",
   "target": "document.getElementById('init-attach-list')",
   "op": "=",
@@ -2536,7 +2536,7 @@
  },
  {
   "sink_id": "openInitiativeAttachDrawer:document.getElementById('init-attach-list'):=:b4b3accad9c5",
-  "line": 13101,
+  "line": 13087,
   "function": "openInitiativeAttachDrawer",
   "target": "document.getElementById('init-attach-list')",
   "op": "=",
@@ -2549,7 +2549,7 @@
  },
  {
   "sink_id": "openInitiativeCreateDrawer:document.getElementById('init-create-error'):=:6f49cdbd80e1",
-  "line": 13043,
+  "line": 13029,
   "function": "openInitiativeCreateDrawer",
   "target": "document.getElementById('init-create-error')",
   "op": "=",
@@ -2562,7 +2562,7 @@
  },
  {
   "sink_id": "openModal:document.getElementById('modal-agent'):=:aec9738cf908",
-  "line": 15680,
+  "line": 15666,
   "function": "openModal",
   "target": "document.getElementById('modal-agent')",
   "op": "=",
@@ -2575,7 +2575,7 @@
  },
  {
   "sink_id": "openModal:scSel:=:99fea35738b6",
-  "line": 15669,
+  "line": 15655,
   "function": "openModal",
   "target": "scSel",
   "op": "=",
@@ -2588,7 +2588,7 @@
  },
  {
   "sink_id": "openOpenAEVDetail:body:+=:e40d8a518ef9",
-  "line": 14562,
+  "line": 14548,
   "function": "openOpenAEVDetail",
   "target": "body",
   "op": "+=",
@@ -2601,7 +2601,7 @@
  },
  {
   "sink_id": "openOpenAEVDetail:body:=:26b9cf015d37",
-  "line": 14560,
+  "line": 14546,
   "function": "openOpenAEVDetail",
   "target": "body",
   "op": "=",
@@ -2614,7 +2614,7 @@
  },
  {
   "sink_id": "openPickerWith:tacticSel:=:56ff914bbfc9",
-  "line": 16308,
+  "line": 16294,
   "function": "openPickerWith",
   "target": "tacticSel",
   "op": "=",
@@ -2627,7 +2627,7 @@
  },
  {
   "sink_id": "openRemediation:document.getElementById('results-export'):=:ce24bb8c18a0",
-  "line": 12589,
+  "line": 12575,
   "function": "openRemediation",
   "target": "document.getElementById('results-export')",
   "op": "=",
@@ -2640,7 +2640,7 @@
  },
  {
   "sink_id": "openReportGen:document.getElementById('rep-agent'):=:449a6c764d46",
-  "line": 15281,
+  "line": 15267,
   "function": "openReportGen",
   "target": "document.getElementById('rep-agent')",
   "op": "=",
@@ -2653,7 +2653,7 @@
  },
  {
   "sink_id": "openReportGen:document.getElementById('rep-format'):=:f36948ae35eb",
-  "line": 15285,
+  "line": 15271,
   "function": "openReportGen",
   "target": "document.getElementById('rep-format')",
   "op": "=",
@@ -2666,7 +2666,7 @@
  },
  {
   "sink_id": "openReportGen:document.getElementById('rep-fw'):=:cf81daeadfa1",
-  "line": 15294,
+  "line": 15280,
   "function": "openReportGen",
   "target": "document.getElementById('rep-fw')",
   "op": "=",
@@ -2679,7 +2679,7 @@
  },
  {
   "sink_id": "openRerunReview:document.getElementById('rerun-review-body'):=:a694e4076aeb",
-  "line": 18188,
+  "line": 18174,
   "function": "openRerunReview",
   "target": "document.getElementById('rerun-review-body')",
   "op": "=",
@@ -2692,7 +2692,7 @@
  },
  {
   "sink_id": "openRespondModal:sel:=:204b8e4a701b",
-  "line": 13649,
+  "line": 13635,
   "function": "openRespondModal",
   "target": "sel",
   "op": "=",
@@ -2705,7 +2705,7 @@
  },
  {
   "sink_id": "openRespondModal:sel:=:d39662b3126f",
-  "line": 13651,
+  "line": 13637,
   "function": "openRespondModal",
   "target": "sel",
   "op": "=",
@@ -2718,7 +2718,7 @@
  },
  {
   "sink_id": "openSchedWizard:sel:=:894f3c4e7f0f",
-  "line": 18476,
+  "line": 18462,
   "function": "openSchedWizard",
   "target": "sel",
   "op": "=",
@@ -2731,7 +2731,7 @@
  },
  {
   "sink_id": "openSchedWizardForEdit:sel:=:894f3c4e7f0f",
-  "line": 18533,
+  "line": 18519,
   "function": "openSchedWizardForEdit",
   "target": "sel",
   "op": "=",
@@ -2744,7 +2744,7 @@
  },
  {
   "sink_id": "openSweepDrilldown:document.getElementById('sweep-drilldown-actions'):=:6f49cdbd80e1",
-  "line": 14340,
+  "line": 14326,
   "function": "openSweepDrilldown",
   "target": "document.getElementById('sweep-drilldown-actions')",
   "op": "=",
@@ -2757,7 +2757,7 @@
  },
  {
   "sink_id": "openSweepDrilldown:document.getElementById('sweep-drilldown-actions'):=:d62ae8a5d0c0",
-  "line": 14348,
+  "line": 14334,
   "function": "openSweepDrilldown",
   "target": "document.getElementById('sweep-drilldown-actions')",
   "op": "=",
@@ -2770,7 +2770,7 @@
  },
  {
   "sink_id": "openSweepDrilldown:document.getElementById('sweep-drilldown-list'):=:1c7e431196ab",
-  "line": 14351,
+  "line": 14337,
   "function": "openSweepDrilldown",
   "target": "document.getElementById('sweep-drilldown-list')",
   "op": "=",
@@ -2783,7 +2783,7 @@
  },
  {
   "sink_id": "openSweepDrilldown:document.getElementById('sweep-drilldown-list'):=:6f49cdbd80e1",
-  "line": 14341,
+  "line": 14327,
   "function": "openSweepDrilldown",
   "target": "document.getElementById('sweep-drilldown-list')",
   "op": "=",
@@ -2796,7 +2796,7 @@
  },
  {
   "sink_id": "openTechnique:document.getElementById('results-export'):=:6f49cdbd80e1",
-  "line": 9705,
+  "line": 9691,
   "function": "openTechnique",
   "target": "document.getElementById('results-export')",
   "op": "=",
@@ -2809,7 +2809,7 @@
  },
  {
   "sink_id": "openTmplRun:if (srcsEl) srcsEl:=:35fcdf336154",
-  "line": 4277,
+  "line": 4263,
   "function": "openTmplRun",
   "target": "if (srcsEl) srcsEl",
   "op": "=",
@@ -2822,7 +2822,7 @@
  },
  {
   "sink_id": "pollVariantRun:if (p) p:=:7216b4ea81b4",
-  "line": 21444,
+  "line": 21430,
   "function": "pollVariantRun",
   "target": "if (p) p",
   "op": "=",
@@ -2835,7 +2835,7 @@
  },
  {
   "sink_id": "pollVariantRun:if (panel) panel:=:852c6910cc5b",
-  "line": 21415,
+  "line": 21401,
   "function": "pollVariantRun",
   "target": "if (panel) panel",
   "op": "=",
@@ -2848,7 +2848,7 @@
  },
  {
   "sink_id": "populateCoverageFilters:agSel:=:9863b81ed88c",
-  "line": 9407,
+  "line": 9393,
   "function": "populateCoverageFilters",
   "target": "agSel",
   "op": "=",
@@ -2861,7 +2861,7 @@
  },
  {
   "sink_id": "populateCoverageFilters:scenSel:=:0056b3f421bf",
-  "line": 9399,
+  "line": 9385,
   "function": "populateCoverageFilters",
   "target": "scenSel",
   "op": "=",
@@ -2874,7 +2874,7 @@
  },
  {
   "sink_id": "populateVexAgents:if (sel) sel:=:d2a1edd66cf8",
-  "line": 20785,
+  "line": 20771,
   "function": "populateVexAgents",
   "target": "if (sel) sel",
   "op": "=",
@@ -2882,12 +2882,12 @@
   "final_category": "escaped",
   "severity_tier": 1,
   "data_source_tags": "",
-  "trace_notes": "1 assignment(s) to 'opts' inside populateVexAgents() @L20772 (scope-resolved) -> escaped",
+  "trace_notes": "1 assignment(s) to 'opts' inside populateVexAgents() @L20758 (scope-resolved) -> escaped",
   "rhs": "opts"
  },
  {
   "sink_id": "populateVexAgents:if (sweepSel) sweepSel:=:d2a1edd66cf8",
-  "line": 20787,
+  "line": 20773,
   "function": "populateVexAgents",
   "target": "if (sweepSel) sweepSel",
   "op": "=",
@@ -2895,12 +2895,12 @@
   "final_category": "escaped",
   "severity_tier": 1,
   "data_source_tags": "",
-  "trace_notes": "1 assignment(s) to 'opts' inside populateVexAgents() @L20772 (scope-resolved) -> escaped",
+  "trace_notes": "1 assignment(s) to 'opts' inside populateVexAgents() @L20758 (scope-resolved) -> escaped",
   "rhs": "opts"
  },
  {
   "sink_id": "populateVexTechniques:if (el) el:=:63e9d5f1a93f",
-  "line": 20827,
+  "line": 20813,
   "function": "populateVexTechniques",
   "target": "if (el) el",
   "op": "=",
@@ -2913,7 +2913,7 @@
  },
  {
   "sink_id": "populateVexTechniques:tacSel:=:ce309d68b711",
-  "line": 20822,
+  "line": 20808,
   "function": "populateVexTechniques",
   "target": "tacSel",
   "op": "=",
@@ -2921,12 +2921,12 @@
   "final_category": "unescaped_html",
   "severity_tier": 4,
   "data_source_tags": "",
-  "trace_notes": "2 assignment(s) to 'tacOpts' inside populateVexTechniques() @L20799 (scope-resolved) -> unescaped_html",
+  "trace_notes": "2 assignment(s) to 'tacOpts' inside populateVexTechniques() @L20785 (scope-resolved) -> unescaped_html",
   "rhs": "tacOpts"
  },
  {
   "sink_id": "prepareRestore:wrap:=:15e764735eba",
-  "line": 8246,
+  "line": 8232,
   "function": "prepareRestore",
   "target": "wrap",
   "op": "=",
@@ -2939,7 +2939,7 @@
  },
  {
   "sink_id": "prepareRestore:wrap:=:33a5df9d0735",
-  "line": 8247,
+  "line": 8233,
   "function": "prepareRestore",
   "target": "wrap",
   "op": "=",
@@ -2952,7 +2952,7 @@
  },
  {
   "sink_id": "rank:el:=:53dbb64ac0d2",
-  "line": 12313,
+  "line": 12299,
   "function": "rank",
   "target": "el",
   "op": "=",
@@ -2965,7 +2965,7 @@
  },
  {
   "sink_id": "rank:el:=:d0b2d3123aea",
-  "line": 12312,
+  "line": 12298,
   "function": "rank",
   "target": "el",
   "op": "=",
@@ -2978,7 +2978,7 @@
  },
  {
   "sink_id": "refreshDashboardCampaigns:el:=:8f1894efcd36",
-  "line": 9193,
+  "line": 9179,
   "function": "refreshDashboardCampaigns",
   "target": "el",
   "op": "=",
@@ -2991,7 +2991,7 @@
  },
  {
   "sink_id": "refreshDashboardCampaigns:el:=:ab5b04e634ec",
-  "line": 9192,
+  "line": 9178,
   "function": "refreshDashboardCampaigns",
   "target": "el",
   "op": "=",
@@ -3004,7 +3004,7 @@
  },
  {
   "sink_id": "render:document.getElementById('run-live-progress'):=:f94ae6248a6e",
-  "line": 14117,
+  "line": 14103,
   "function": "render",
   "target": "document.getElementById('run-live-progress')",
   "op": "=",
@@ -3017,7 +3017,7 @@
  },
  {
   "sink_id": "render:list:=:969e22921b7e",
-  "line": 11694,
+  "line": 11680,
   "function": "render",
   "target": "list",
   "op": "=",
@@ -3030,7 +3030,7 @@
  },
  {
   "sink_id": "render:list:=:a8f1044c4fed",
-  "line": 11693,
+  "line": 11679,
   "function": "render",
   "target": "list",
   "op": "=",
@@ -3043,7 +3043,7 @@
  },
  {
   "sink_id": "render:ul:=:e54d2e84b096",
-  "line": 14129,
+  "line": 14115,
   "function": "render",
   "target": "ul",
   "op": "=",
@@ -3056,7 +3056,7 @@
  },
  {
   "sink_id": "render:ul:=:fd19c074919d",
-  "line": 14222,
+  "line": 14208,
   "function": "render",
   "target": "ul",
   "op": "=",
@@ -3069,7 +3069,7 @@
  },
  {
   "sink_id": "renderAPAssets:tb:=:512e62596fa4",
-  "line": 6704,
+  "line": 6690,
   "function": "renderAPAssets",
   "target": "tb",
   "op": "=",
@@ -3082,7 +3082,7 @@
  },
  {
   "sink_id": "renderAPAssets:tb:=:5c60c426e589",
-  "line": 6707,
+  "line": 6693,
   "function": "renderAPAssets",
   "target": "tb",
   "op": "=",
@@ -3095,7 +3095,7 @@
  },
  {
   "sink_id": "renderAdditionalAgents:list:=:0da5a03f7570",
-  "line": 15889,
+  "line": 15875,
   "function": "renderAdditionalAgents",
   "target": "list",
   "op": "=",
@@ -3108,7 +3108,7 @@
  },
  {
   "sink_id": "renderAdvRunWarn:warn:=:2a45fbf139c8",
-  "line": 4746,
+  "line": 4732,
   "function": "renderAdvRunWarn",
   "target": "warn",
   "op": "=",
@@ -3121,7 +3121,7 @@
  },
  {
   "sink_id": "renderAdvRunWarn:warn:=:8e67d1356d39",
-  "line": 4740,
+  "line": 4726,
   "function": "renderAdvRunWarn",
   "target": "warn",
   "op": "=",
@@ -3134,7 +3134,7 @@
  },
  {
   "sink_id": "renderAdversaryLibrary:grid:=:49c89f59e166",
-  "line": 4616,
+  "line": 4602,
   "function": "renderAdversaryLibrary",
   "target": "grid",
   "op": "=",
@@ -3147,7 +3147,7 @@
  },
  {
   "sink_id": "renderAgentGroupTree:root:=:431ef9e1bbb7",
-  "line": 6867,
+  "line": 6853,
   "function": "renderAgentGroupTree",
   "target": "root",
   "op": "=",
@@ -3160,7 +3160,7 @@
  },
  {
   "sink_id": "renderAgentRiskSummary:tb:=:b2f34185c24f",
-  "line": 19309,
+  "line": 19295,
   "function": "renderAgentRiskSummary",
   "target": "tb",
   "op": "=",
@@ -3173,7 +3173,7 @@
  },
  {
   "sink_id": "renderAgentRiskSummary:tb:=:df1b491f9634",
-  "line": 19319,
+  "line": 19305,
   "function": "renderAgentRiskSummary",
   "target": "tb",
   "op": "=",
@@ -3186,7 +3186,7 @@
  },
  {
   "sink_id": "renderAgentRows:tbody:=:7a6d1d98a0c2",
-  "line": 7161,
+  "line": 7147,
   "function": "renderAgentRows",
   "target": "tbody",
   "op": "=",
@@ -3199,7 +3199,7 @@
  },
  {
   "sink_id": "renderAgentRows:tbody:=:9ea28b375edf",
-  "line": 7158,
+  "line": 7144,
   "function": "renderAgentRows",
   "target": "tbody",
   "op": "=",
@@ -3212,7 +3212,7 @@
  },
  {
   "sink_id": "renderAgentTiles:if (el) el:=:3bd67afa61e6",
-  "line": 7117,
+  "line": 7103,
   "function": "renderAgentTiles",
   "target": "if (el) el",
   "op": "=",
@@ -3220,12 +3220,12 @@
   "final_category": "unescaped_html",
   "severity_tier": 4,
   "data_source_tags": "",
-  "trace_notes": "tile() @L8434 (scope-resolved): 1 return(s) -> unescaped_html; var(): no declaration found anywhere in file",
+  "trace_notes": "tile() @L8420 (scope-resolved): 1 return(s) -> unescaped_html; var(): no declaration found anywhere in file",
   "rhs": "tile('Total agents', b.online + b.degraded + b.offline, 'var(--text)') +\n    tile('Online', b.online, b.online ? 'var(--success)' : 'var(--muted)') +\n    tile('Degraded', b.degraded, b.degraded ? 'var(--warning)' : 'var(--muted)') +\n    tile('Offline', b.offline, b.offline ? 'var(--danger)' : 'var(--muted)') +\n    tile('Retired', b.retired, 'var(--muted)')"
  },
  {
   "sink_id": "renderAgtRisk:panel:=:aaa9402664f1",
-  "line": 5330,
+  "line": 5316,
   "function": "renderAgtRisk",
   "target": "panel",
   "op": "=",
@@ -3233,12 +3233,12 @@
   "final_category": "unescaped_html",
   "severity_tier": 4,
   "data_source_tags": "",
-  "trace_notes": "7 assignment(s) to 'h' inside renderAgtRisk() @L5280 (scope-resolved) -> unescaped_html",
+  "trace_notes": "7 assignment(s) to 'h' inside renderAgtRisk() @L5266 (scope-resolved) -> unescaped_html",
   "rhs": "h"
  },
  {
   "sink_id": "renderAttackPath:body:=:2f57ae966a62",
-  "line": 15004,
+  "line": 14990,
   "function": "renderAttackPath",
   "target": "body",
   "op": "=",
@@ -3251,7 +3251,7 @@
  },
  {
   "sink_id": "renderAttackPath:body:=:aaa9402664f1",
-  "line": 15050,
+  "line": 15036,
   "function": "renderAttackPath",
   "target": "body",
   "op": "=",
@@ -3259,12 +3259,12 @@
   "final_category": "unescaped_text",
   "severity_tier": 4,
   "data_source_tags": "",
-  "trace_notes": "20 assignment(s) to 'h' inside renderAttackPath() @L14999 (scope-resolved) -> unescaped_text",
+  "trace_notes": "20 assignment(s) to 'h' inside renderAttackPath() @L14985 (scope-resolved) -> unescaped_text",
   "rhs": "h"
  },
  {
   "sink_id": "renderBackupJobsTable:tbody:=:423c796e7f78",
-  "line": 8197,
+  "line": 8183,
   "function": "renderBackupJobsTable",
   "target": "tbody",
   "op": "=",
@@ -3277,7 +3277,7 @@
  },
  {
   "sink_id": "renderBackupJobsTable:tbody:=:565b6f3c0fe1",
-  "line": 8194,
+  "line": 8180,
   "function": "renderBackupJobsTable",
   "target": "tbody",
   "op": "=",
@@ -3290,7 +3290,7 @@
  },
  {
   "sink_id": "renderBackupStatusCard:wrap:=:36bf4a81d3a8",
-  "line": 8175,
+  "line": 8161,
   "function": "renderBackupStatusCard",
   "target": "wrap",
   "op": "=",
@@ -3303,7 +3303,7 @@
  },
  {
   "sink_id": "renderBackupStatusCard:wrap:=:ea4c4d4a618d",
-  "line": 8169,
+  "line": 8155,
   "function": "renderBackupStatusCard",
   "target": "wrap",
   "op": "=",
@@ -3316,7 +3316,7 @@
  },
  {
   "sink_id": "renderCampaignGroupPreview:document.getElementById('cmp-exclusions'):=:7bfd2c61d74d",
-  "line": 8654,
+  "line": 8640,
   "function": "renderCampaignGroupPreview",
   "target": "document.getElementById('cmp-exclusions')",
   "op": "=",
@@ -3329,7 +3329,7 @@
  },
  {
   "sink_id": "renderCampaignGroupPreview:document.getElementById('cmp-group-preview'):=:c589344cb954",
-  "line": 8651,
+  "line": 8637,
   "function": "renderCampaignGroupPreview",
   "target": "document.getElementById('cmp-group-preview')",
   "op": "=",
@@ -3342,7 +3342,7 @@
  },
  {
   "sink_id": "renderCampaignRows:tb:=:7cc0df0eb85d",
-  "line": 8401,
+  "line": 8387,
   "function": "renderCampaignRows",
   "target": "tb",
   "op": "=",
@@ -3355,7 +3355,7 @@
  },
  {
   "sink_id": "renderCampaignRows:tb:=:e491827be2ae",
-  "line": 8400,
+  "line": 8386,
   "function": "renderCampaignRows",
   "target": "tb",
   "op": "=",
@@ -3368,7 +3368,7 @@
  },
  {
   "sink_id": "renderCampaignTargets:document.getElementById('cmp-targets'):=:eeeb58f208db",
-  "line": 8996,
+  "line": 8982,
   "function": "renderCampaignTargets",
   "target": "document.getElementById('cmp-targets')",
   "op": "=",
@@ -3381,7 +3381,7 @@
  },
  {
   "sink_id": "renderComplianceReport:document.getElementById('cmp-domain-area'):=:1c1fd00f146b",
-  "line": 5579,
+  "line": 5565,
   "function": "renderComplianceReport",
   "target": "document.getElementById('cmp-domain-area')",
   "op": "=",
@@ -3394,7 +3394,7 @@
  },
  {
   "sink_id": "renderComplianceReport:document.getElementById('cmp-header-area'):=:2a19df749157",
-  "line": 5530,
+  "line": 5516,
   "function": "renderComplianceReport",
   "target": "document.getElementById('cmp-header-area')",
   "op": "=",
@@ -3407,7 +3407,7 @@
  },
  {
   "sink_id": "renderComplianceReport:document.getElementById('cmp-kpi-area'):=:f94d2a59832c",
-  "line": 5567,
+  "line": 5553,
   "function": "renderComplianceReport",
   "target": "document.getElementById('cmp-kpi-area')",
   "op": "=",
@@ -3420,7 +3420,7 @@
  },
  {
   "sink_id": "renderConnectorList:el:=:703cef8c4c77",
-  "line": 13185,
+  "line": 13171,
   "function": "renderConnectorList",
   "target": "el",
   "op": "=",
@@ -3433,7 +3433,7 @@
  },
  {
   "sink_id": "renderConnectorList:el:=:b382f82521d0",
-  "line": 13180,
+  "line": 13166,
   "function": "renderConnectorList",
   "target": "el",
   "op": "=",
@@ -3446,7 +3446,7 @@
  },
  {
   "sink_id": "renderConnectorSettings:document.getElementById('cf-settings'):=:53246d2e3178",
-  "line": 13303,
+  "line": 13289,
   "function": "renderConnectorSettings",
   "target": "document.getElementById('cf-settings')",
   "op": "=",
@@ -3459,7 +3459,7 @@
  },
  {
   "sink_id": "renderControlsTable:document.getElementById('cmp-controls-body'):=:163c6c68698d",
-  "line": 5642,
+  "line": 5628,
   "function": "renderControlsTable",
   "target": "document.getElementById('cmp-controls-body')",
   "op": "=",
@@ -3472,7 +3472,7 @@
  },
  {
   "sink_id": "renderControlsTable:document.getElementById('cmp-controls-body'):=:5387bef00084",
-  "line": 5611,
+  "line": 5597,
   "function": "renderControlsTable",
   "target": "document.getElementById('cmp-controls-body')",
   "op": "=",
@@ -3485,7 +3485,7 @@
  },
  {
   "sink_id": "renderCovMatrix:document.getElementById('cov-matrix'):=:16d93323c11e",
-  "line": 9676,
+  "line": 9662,
   "function": "renderCovMatrix",
   "target": "document.getElementById('cov-matrix')",
   "op": "=",
@@ -3498,7 +3498,7 @@
  },
  {
   "sink_id": "renderCoverageAnalytics:missedBody:=:b78b0951bee8",
-  "line": 9458,
+  "line": 9444,
   "function": "renderCoverageAnalytics",
   "target": "missedBody",
   "op": "=",
@@ -3511,7 +3511,7 @@
  },
  {
   "sink_id": "renderCoverageAnalytics:tacBody:=:4e39dac2ae8c",
-  "line": 9442,
+  "line": 9428,
   "function": "renderCoverageAnalytics",
   "target": "tacBody",
   "op": "=",
@@ -3524,7 +3524,7 @@
  },
  {
   "sink_id": "renderDetectionValidationTab:el:=:84cc57f30541",
-  "line": 18041,
+  "line": 18027,
   "function": "renderDetectionValidationTab",
   "target": "el",
   "op": "=",
@@ -3537,7 +3537,7 @@
  },
  {
   "sink_id": "renderEMSweepGroupList:list:=:2660b7c02980",
-  "line": 10164,
+  "line": 10150,
   "function": "renderEMSweepGroupList",
   "target": "list",
   "op": "=",
@@ -3550,7 +3550,7 @@
  },
  {
   "sink_id": "renderEMSweepGroupList:list:=:69ad1799beb3",
-  "line": 10167,
+  "line": 10153,
   "function": "renderEMSweepGroupList",
   "target": "list",
   "op": "=",
@@ -3563,7 +3563,7 @@
  },
  {
   "sink_id": "renderEMSweepProgress:document.getElementById('em-sweep-progress-actions'):=:69a85969e964",
-  "line": 10710,
+  "line": 10696,
   "function": "renderEMSweepProgress",
   "target": "document.getElementById('em-sweep-progress-actions')",
   "op": "=",
@@ -3576,7 +3576,7 @@
  },
  {
   "sink_id": "renderEMSweepProgress:document.getElementById('em-sweep-progress-summary'):=:4af87292bb0a",
-  "line": 10703,
+  "line": 10689,
   "function": "renderEMSweepProgress",
   "target": "document.getElementById('em-sweep-progress-summary')",
   "op": "=",
@@ -3589,7 +3589,7 @@
  },
  {
   "sink_id": "renderEMSweepProgress:list:=:d0d00af7935d",
-  "line": 10723,
+  "line": 10709,
   "function": "renderEMSweepProgress",
   "target": "list",
   "op": "=",
@@ -3602,7 +3602,7 @@
  },
  {
   "sink_id": "renderExecDashboard:el:=:54460ff68c62",
-  "line": 5825,
+  "line": 5811,
   "function": "renderExecDashboard",
   "target": "el",
   "op": "=",
@@ -3610,12 +3610,12 @@
   "final_category": "partial_escaped",
   "severity_tier": 3,
   "data_source_tags": "",
-  "trace_notes": "edKpiCard() @L5804 (scope-resolved): 1 return(s) -> partial_escaped",
+  "trace_notes": "edKpiCard() @L5790 (scope-resolved): 1 return(s) -> partial_escaped",
   "rhs": "edKpiCard('Risk Score', current.avgRiskScore, risk) +\n    edKpiCard('Exposure Score', current.exposureScore, exp, noAttackPathData) +\n    edKpiCard('Detection Coverage', current.detectionCoverage, det, noAttackPathData) +\n    edKpiCard('Fleet Assets', current.assetCount, cnt)"
  },
  {
   "sink_id": "renderExposure:el:=:e62a6b6cf073",
-  "line": 5902,
+  "line": 5888,
   "function": "renderExposure",
   "target": "el",
   "op": "=",
@@ -3628,7 +3628,7 @@
  },
  {
   "sink_id": "renderFindingsRows:tb:=:6fe7cd46ac6e",
-  "line": 12408,
+  "line": 12394,
   "function": "renderFindingsRows",
   "target": "tb",
   "op": "=",
@@ -3641,7 +3641,7 @@
  },
  {
   "sink_id": "renderFindingsRows:tb:=:877b0f0dc728",
-  "line": 12407,
+  "line": 12393,
   "function": "renderFindingsRows",
   "target": "tb",
   "op": "=",
@@ -3654,7 +3654,7 @@
  },
  {
   "sink_id": "renderFindingsTiles:document.getElementById('findings-tiles'):=:9c715967ff22",
-  "line": 12379,
+  "line": 12365,
   "function": "renderFindingsTiles",
   "target": "document.getElementById('findings-tiles')",
   "op": "=",
@@ -3662,12 +3662,12 @@
   "final_category": "unescaped_html",
   "severity_tier": 4,
   "data_source_tags": "",
-  "trace_notes": "tile() @L8434 (scope-resolved): 1 return(s) -> unescaped_html; var(): no declaration found anywhere in file",
+  "trace_notes": "tile() @L8420 (scope-resolved): 1 return(s) -> unescaped_html; var(): no declaration found anywhere in file",
   "rhs": "tile('Open findings', open, open ? 'var(--danger)' : 'var(--success)') +\n    tile('Attack Surface Age', open ? maxAge + ' days' : '0 days', ageCol) +\n    tile('Critical', crit, crit ? 'var(--danger)' : 'var(--muted)') +\n    tile('Reopened', reopened, reopened ? 'var(--warning)' : 'var(--muted)') +\n    tile('Remediated · 30d', remediated, 'var(--success)')"
  },
  {
   "sink_id": "renderForecast:el:=:512173c3d0ae",
-  "line": 5888,
+  "line": 5874,
   "function": "renderForecast",
   "target": "el",
   "op": "=",
@@ -3680,7 +3680,7 @@
  },
  {
   "sink_id": "renderForecast:el:=:6f49cdbd80e1",
-  "line": 5881,
+  "line": 5867,
   "function": "renderForecast",
   "target": "el",
   "op": "=",
@@ -3693,7 +3693,7 @@
  },
  {
   "sink_id": "renderGroupCheckboxList:list:=:6d4ec42ee14c",
-  "line": 4386,
+  "line": 4372,
   "function": "renderGroupCheckboxList",
   "target": "list",
   "op": "=",
@@ -3706,7 +3706,7 @@
  },
  {
   "sink_id": "renderGroupCheckboxList:list:=:f12076e1bae1",
-  "line": 4394,
+  "line": 4380,
   "function": "renderGroupCheckboxList",
   "target": "list",
   "op": "=",
@@ -3719,7 +3719,7 @@
  },
  {
   "sink_id": "renderIOCRegistryTable:tbody:=:343fc91b0722",
-  "line": 13921,
+  "line": 13907,
   "function": "renderIOCRegistryTable",
   "target": "tbody",
   "op": "=",
@@ -3732,7 +3732,7 @@
  },
  {
   "sink_id": "renderIOCRegistryTable:tbody:=:9f380c9e400b",
-  "line": 13924,
+  "line": 13910,
   "function": "renderIOCRegistryTable",
   "target": "tbody",
   "op": "=",
@@ -3745,7 +3745,7 @@
  },
  {
   "sink_id": "renderInitiativeDrawer:document.getElementById('init-drawer-body'):=:6b07b8153ff4",
-  "line": 12975,
+  "line": 12961,
   "function": "renderInitiativeDrawer",
   "target": "document.getElementById('init-drawer-body')",
   "op": "=",
@@ -3758,7 +3758,7 @@
  },
  {
   "sink_id": "renderInitiativesList:tbody:=:110e8207439a",
-  "line": 12906,
+  "line": 12892,
   "function": "renderInitiativesList",
   "target": "tbody",
   "op": "=",
@@ -3771,7 +3771,7 @@
  },
  {
   "sink_id": "renderInitiativesList:tbody:=:5aed99bfcbf1",
-  "line": 12903,
+  "line": 12889,
   "function": "renderInitiativesList",
   "target": "tbody",
   "op": "=",
@@ -3784,7 +3784,7 @@
  },
  {
   "sink_id": "renderLegacyMigrationPanel:el:=:3401671f918d",
-  "line": 7059,
+  "line": 7045,
   "function": "renderLegacyMigrationPanel",
   "target": "el",
   "op": "=",
@@ -3797,7 +3797,7 @@
  },
  {
   "sink_id": "renderLicenseGraceBanner:el:=:20267c198848",
-  "line": 19016,
+  "line": 19002,
   "function": "renderLicenseGraceBanner",
   "target": "el",
   "op": "=",
@@ -3810,7 +3810,7 @@
  },
  {
   "sink_id": "renderLicenseLockedScreen:el:=:56bd2dda6569",
-  "line": 18950,
+  "line": 18936,
   "function": "renderLicenseLockedScreen",
   "target": "el",
   "op": "=",
@@ -3823,7 +3823,7 @@
  },
  {
   "sink_id": "renderModalSelection:link:=:3ac9eb36dbbe",
-  "line": 16570,
+  "line": 16556,
   "function": "renderModalSelection",
   "target": "link",
   "op": "=",
@@ -3836,7 +3836,7 @@
  },
  {
   "sink_id": "renderModalSelection:link:=:a31134ee495c",
-  "line": 16589,
+  "line": 16575,
   "function": "renderModalSelection",
   "target": "link",
   "op": "=",
@@ -3849,7 +3849,7 @@
  },
  {
   "sink_id": "renderModalSelection:note:=:3673014e72b6",
-  "line": 16652,
+  "line": 16638,
   "function": "renderModalSelection",
   "target": "note",
   "op": "=",
@@ -3862,7 +3862,7 @@
  },
  {
   "sink_id": "renderModalSelection:note:=:5978b6adc180",
-  "line": 16603,
+  "line": 16589,
   "function": "renderModalSelection",
   "target": "note",
   "op": "=",
@@ -3875,7 +3875,7 @@
  },
  {
   "sink_id": "renderModalSelection:note:=:f6a1dba9d317",
-  "line": 16619,
+  "line": 16605,
   "function": "renderModalSelection",
   "target": "note",
   "op": "=",
@@ -3888,7 +3888,7 @@
  },
  {
   "sink_id": "renderModalSelection:note:=:f6a1dba9d317",
-  "line": 16649,
+  "line": 16635,
   "function": "renderModalSelection",
   "target": "note",
   "op": "=",
@@ -3901,7 +3901,7 @@
  },
  {
   "sink_id": "renderPickerList:document.getElementById('picker-list'):=:86bc3b918fa9",
-  "line": 16465,
+  "line": 16451,
   "function": "renderPickerList",
   "target": "document.getElementById('picker-list')",
   "op": "=",
@@ -3914,7 +3914,7 @@
  },
  {
   "sink_id": "renderPrivilegeCoverage:cards:=:a48f8f61cde9",
-  "line": 9491,
+  "line": 9477,
   "function": "renderPrivilegeCoverage",
   "target": "cards",
   "op": "=",
@@ -3927,7 +3927,7 @@
  },
  {
   "sink_id": "renderPrivilegeCoverage:gapBody:+=:22ac3a331462",
-  "line": 9548,
+  "line": 9534,
   "function": "renderPrivilegeCoverage",
   "target": "gapBody",
   "op": "+=",
@@ -3940,7 +3940,7 @@
  },
  {
   "sink_id": "renderPrivilegeCoverage:gapBody:=:5cb5d1bd1649",
-  "line": 9535,
+  "line": 9521,
   "function": "renderPrivilegeCoverage",
   "target": "gapBody",
   "op": "=",
@@ -3953,7 +3953,7 @@
  },
  {
   "sink_id": "renderPrivilegeCoverage:gapBody:=:89c801d71a34",
-  "line": 9533,
+  "line": 9519,
   "function": "renderPrivilegeCoverage",
   "target": "gapBody",
   "op": "=",
@@ -3966,7 +3966,7 @@
  },
  {
   "sink_id": "renderPrivilegeCoverage:tierBody:=:7122e1adc294",
-  "line": 9507,
+  "line": 9493,
   "function": "renderPrivilegeCoverage",
   "target": "tierBody",
   "op": "=",
@@ -3979,7 +3979,7 @@
  },
  {
   "sink_id": "renderRecommendations:body:=:b98b92dc917f",
-  "line": 6189,
+  "line": 6175,
   "function": "renderRecommendations",
   "target": "body",
   "op": "=",
@@ -3992,7 +3992,7 @@
  },
  {
   "sink_id": "renderRecommendations:body:=:fc2a515d08b8",
-  "line": 6192,
+  "line": 6178,
   "function": "renderRecommendations",
   "target": "body",
   "op": "=",
@@ -4005,7 +4005,7 @@
  },
  {
   "sink_id": "renderRemList:el:=:00da7cd51723",
-  "line": 12561,
+  "line": 12547,
   "function": "renderRemList",
   "target": "el",
   "op": "=",
@@ -4018,7 +4018,7 @@
  },
  {
   "sink_id": "renderRemList:el:=:5b15f65ece96",
-  "line": 12562,
+  "line": 12548,
   "function": "renderRemList",
   "target": "el",
   "op": "=",
@@ -4031,7 +4031,7 @@
  },
  {
   "sink_id": "renderRepHistory:tb:=:913a94a62edf",
-  "line": 15235,
+  "line": 15221,
   "function": "renderRepHistory",
   "target": "tb",
   "op": "=",
@@ -4044,7 +4044,7 @@
  },
  {
   "sink_id": "renderRepHistory:tb:=:b9e0ef311b73",
-  "line": 15239,
+  "line": 15225,
   "function": "renderRepHistory",
   "target": "tb",
   "op": "=",
@@ -4057,7 +4057,7 @@
  },
  {
   "sink_id": "renderResponseConnectorList:el:=:3d148461a96d",
-  "line": 13514,
+  "line": 13500,
   "function": "renderResponseConnectorList",
   "target": "el",
   "op": "=",
@@ -4070,7 +4070,7 @@
  },
  {
   "sink_id": "renderResponseConnectorList:el:=:a27464dcf3bf",
-  "line": 13520,
+  "line": 13506,
   "function": "renderResponseConnectorList",
   "target": "el",
   "op": "=",
@@ -4083,7 +4083,7 @@
  },
  {
   "sink_id": "renderRunIOCList:el:=:196f9154d695",
-  "line": 13812,
+  "line": 13798,
   "function": "renderRunIOCList",
   "target": "el",
   "op": "=",
@@ -4096,7 +4096,7 @@
  },
  {
   "sink_id": "renderRunIOCList:el:=:bc77e667f8a5",
-  "line": 13807,
+  "line": 13793,
   "function": "renderRunIOCList",
   "target": "el",
   "op": "=",
@@ -4109,7 +4109,7 @@
  },
  {
   "sink_id": "renderRunIOCToolbar:el:=:6410de5ba68c",
-  "line": 13764,
+  "line": 13750,
   "function": "renderRunIOCToolbar",
   "target": "el",
   "op": "=",
@@ -4122,7 +4122,7 @@
  },
  {
   "sink_id": "renderRunMode:btn:=:4959506b17ea",
-  "line": 15747,
+  "line": 15733,
   "function": "renderRunMode",
   "target": "btn",
   "op": "=",
@@ -4135,7 +4135,7 @@
  },
  {
   "sink_id": "renderRunMode:btn:=:5b98d58b0313",
-  "line": 15827,
+  "line": 15813,
   "function": "renderRunMode",
   "target": "btn",
   "op": "=",
@@ -4148,7 +4148,7 @@
  },
  {
   "sink_id": "renderRunMode:btn:=:6b374eeb8131",
-  "line": 15807,
+  "line": 15793,
   "function": "renderRunMode",
   "target": "btn",
   "op": "=",
@@ -4161,7 +4161,7 @@
  },
  {
   "sink_id": "renderRunMode:btn:=:ad81ad1f4514",
-  "line": 15820,
+  "line": 15806,
   "function": "renderRunMode",
   "target": "btn",
   "op": "=",
@@ -4174,7 +4174,7 @@
  },
  {
   "sink_id": "renderRunMode:btn:=:cd9227672841",
-  "line": 15791,
+  "line": 15777,
   "function": "renderRunMode",
   "target": "btn",
   "op": "=",
@@ -4187,7 +4187,7 @@
  },
  {
   "sink_id": "renderRunMode:btn:=:cd9227672841",
-  "line": 15838,
+  "line": 15824,
   "function": "renderRunMode",
   "target": "btn",
   "op": "=",
@@ -4200,7 +4200,7 @@
  },
  {
   "sink_id": "renderRunMode:warn:=:37e38ab2c4c2",
-  "line": 15787,
+  "line": 15773,
   "function": "renderRunMode",
   "target": "warn",
   "op": "=",
@@ -4208,12 +4208,12 @@
   "final_category": "escaped",
   "severity_tier": 1,
   "data_source_tags": "",
-  "trace_notes": "2 assignment(s) to 'osMismatchMsg' inside renderRunMode() @L15724 (scope-resolved) -> escaped",
+  "trace_notes": "2 assignment(s) to 'osMismatchMsg' inside renderRunMode() @L15710 (scope-resolved) -> escaped",
   "rhs": "osMismatchMsg"
  },
  {
   "sink_id": "renderRunMode:warn:=:37e38ab2c4c2",
-  "line": 15834,
+  "line": 15820,
   "function": "renderRunMode",
   "target": "warn",
   "op": "=",
@@ -4221,12 +4221,12 @@
   "final_category": "escaped",
   "severity_tier": 1,
   "data_source_tags": "",
-  "trace_notes": "2 assignment(s) to 'osMismatchMsg' inside renderRunMode() @L15724 (scope-resolved) -> escaped",
+  "trace_notes": "2 assignment(s) to 'osMismatchMsg' inside renderRunMode() @L15710 (scope-resolved) -> escaped",
   "rhs": "osMismatchMsg"
  },
  {
   "sink_id": "renderRunMode:warn:=:41e9204bcecf",
-  "line": 15805,
+  "line": 15791,
   "function": "renderRunMode",
   "target": "warn",
   "op": "=",
@@ -4239,7 +4239,7 @@
  },
  {
   "sink_id": "renderRunMode:warn:=:7945c45dabe0",
-  "line": 15826,
+  "line": 15812,
   "function": "renderRunMode",
   "target": "warn",
   "op": "=",
@@ -4252,7 +4252,7 @@
  },
  {
   "sink_id": "renderRunMode:warn:=:7cbf4609536e",
-  "line": 15819,
+  "line": 15805,
   "function": "renderRunMode",
   "target": "warn",
   "op": "=",
@@ -4260,12 +4260,12 @@
   "final_category": "unescaped_html",
   "severity_tier": 4,
   "data_source_tags": "",
-  "trace_notes": "2 assignment(s) to 'warnText' inside renderRunMode() @L15724 (scope-resolved) -> unescaped_html",
+  "trace_notes": "2 assignment(s) to 'warnText' inside renderRunMode() @L15710 (scope-resolved) -> unescaped_html",
   "rhs": "warnText"
  },
  {
   "sink_id": "renderSLAKPIs:document.getElementById('sla-rpt-kpis'):=:5622a6c839d8",
-  "line": 12298,
+  "line": 12284,
   "function": "renderSLAKPIs",
   "target": "document.getElementById('sla-rpt-kpis')",
   "op": "=",
@@ -4273,12 +4273,12 @@
   "final_category": "unescaped_html",
   "severity_tier": 4,
   "data_source_tags": "",
-  "trace_notes": "tile() @L8434 (scope-resolved): 1 return(s) -> unescaped_html; var(): no declaration found anywhere in file",
+  "trace_notes": "tile() @L8420 (scope-resolved): 1 return(s) -> unescaped_html; var(): no declaration found anywhere in file",
   "rhs": "tile('Compliance Rate', rate.text, rate.color) +\n    tile('On-Time', overall.onTime, 'var(--success)') +\n    tile('Late', overall.late, overall.late ? 'var(--danger)' : 'var(--muted)') +\n    tile('Currently Open', overall.currentlyOpen, overall.currentlyOpen ? 'var(--warning)' : 'var(--muted)')"
  },
  {
   "sink_id": "renderSLAMonthlyTrend:body:=:494ec628665c",
-  "line": 12325,
+  "line": 12311,
   "function": "renderSLAMonthlyTrend",
   "target": "body",
   "op": "=",
@@ -4291,7 +4291,7 @@
  },
  {
   "sink_id": "renderSLAMonthlyTrend:body:=:da4a484c0ebc",
-  "line": 12326,
+  "line": 12312,
   "function": "renderSLAMonthlyTrend",
   "target": "body",
   "op": "=",
@@ -4304,7 +4304,7 @@
  },
  {
   "sink_id": "renderSLARecentlyResolved:body:=:a850a41455a5",
-  "line": 12334,
+  "line": 12320,
   "function": "renderSLARecentlyResolved",
   "target": "body",
   "op": "=",
@@ -4317,7 +4317,7 @@
  },
  {
   "sink_id": "renderSLARecentlyResolved:body:=:d31824d4b9af",
-  "line": 12335,
+  "line": 12321,
   "function": "renderSLARecentlyResolved",
   "target": "body",
   "op": "=",
@@ -4330,7 +4330,7 @@
  },
  {
   "sink_id": "renderScenarioLanding:el:=:b9d3bf75bccc",
-  "line": 7627,
+  "line": 7613,
   "function": "renderScenarioLanding",
   "target": "el",
   "op": "=",
@@ -4343,7 +4343,7 @@
  },
  {
   "sink_id": "renderScenarios:grid:=:927dbfa214df",
-  "line": 7751,
+  "line": 7737,
   "function": "renderScenarios",
   "target": "grid",
   "op": "=",
@@ -4351,12 +4351,12 @@
   "final_category": "unescaped_html",
   "severity_tier": 4,
   "data_source_tags": "",
-  "trace_notes": "renderScenarioTileGroup() @L7831 (scope-resolved): 3 return(s) -> unescaped_html",
+  "trace_notes": "renderScenarioTileGroup() @L7817 (scope-resolved): 3 return(s) -> unescaped_html",
   "rhs": "inCat.length\n    ? '<div class=\"sc-fade\">' + renderScenarioTileGroup(state.scenarioView, inCat) + '</div>'\n    : '<p class=\"empty\">No scenarios match your filter.</p>'"
  },
  {
   "sink_id": "renderScenarios:landingEl:=:4378fed73bb8",
-  "line": 7677,
+  "line": 7663,
   "function": "renderScenarios",
   "target": "landingEl",
   "op": "=",
@@ -4369,7 +4369,7 @@
  },
  {
   "sink_id": "renderScenarios:sgrid:=:f4ffae003e16",
-  "line": 7722,
+  "line": 7708,
   "function": "renderScenarios",
   "target": "sgrid",
   "op": "=",
@@ -4377,12 +4377,12 @@
   "final_category": "unescaped_html",
   "severity_tier": 4,
   "data_source_tags": "",
-  "trace_notes": "renderScenarioTileGroup() @L7831 (scope-resolved): 3 return(s) -> unescaped_html",
+  "trace_notes": "renderScenarioTileGroup() @L7817 (scope-resolved): 3 return(s) -> unescaped_html",
   "rhs": "results.length\n      ? '<div class=\"sc-fade\">' + renderScenarioTileGroup('search', results) + '</div>'\n      : '<p class=\"empty\">No scenarios match your search.</p>'"
  },
  {
   "sink_id": "renderSchedAgentList:root:=:5d77463a1d25",
-  "line": 18665,
+  "line": 18651,
   "function": "renderSchedAgentList",
   "target": "root",
   "op": "=",
@@ -4395,7 +4395,7 @@
  },
  {
   "sink_id": "renderSchedAgentList:root:=:d702422fe11a",
-  "line": 18667,
+  "line": 18653,
   "function": "renderSchedAgentList",
   "target": "root",
   "op": "=",
@@ -4408,7 +4408,7 @@
  },
  {
   "sink_id": "renderSchedGroupTree:root:=:a9d9375b0173",
-  "line": 18597,
+  "line": 18583,
   "function": "renderSchedGroupTree",
   "target": "root",
   "op": "=",
@@ -4421,7 +4421,7 @@
  },
  {
   "sink_id": "renderSchedGroupTree:root:=:cdd0f2fd36f8",
-  "line": 18602,
+  "line": 18588,
   "function": "renderSchedGroupTree",
   "target": "root",
   "op": "=",
@@ -4434,7 +4434,7 @@
  },
  {
   "sink_id": "renderSchedInitiativeSelect:sel:=:0614a03d92d3",
-  "line": 18694,
+  "line": 18680,
   "function": "renderSchedInitiativeSelect",
   "target": "sel",
   "op": "=",
@@ -4447,7 +4447,7 @@
  },
  {
   "sink_id": "renderSchedModeRecurrencePane:modeSel:=:d2a1edd66cf8",
-  "line": 18707,
+  "line": 18693,
   "function": "renderSchedModeRecurrencePane",
   "target": "modeSel",
   "op": "=",
@@ -4455,12 +4455,12 @@
   "final_category": "static",
   "severity_tier": 0,
   "data_source_tags": "",
-  "trace_notes": "2 assignment(s) to 'opts' inside renderSchedModeRecurrencePane() @L18699 (scope-resolved) -> static",
+  "trace_notes": "2 assignment(s) to 'opts' inside renderSchedModeRecurrencePane() @L18685 (scope-resolved) -> static",
   "rhs": "opts"
  },
  {
   "sink_id": "renderSchedReview:document.getElementById('sched-review'):=:530136e85d80",
-  "line": 18813,
+  "line": 18799,
   "function": "renderSchedReview",
   "target": "document.getElementById('sched-review')",
   "op": "=",
@@ -4473,7 +4473,7 @@
  },
  {
   "sink_id": "renderScheduledAssessmentsList:tbody:=:b49d64237e49",
-  "line": 18405,
+  "line": 18391,
   "function": "renderScheduledAssessmentsList",
   "target": "tbody",
   "op": "=",
@@ -4486,7 +4486,7 @@
  },
  {
   "sink_id": "renderScheduledAssessmentsList:tbody:=:dab79a0dc67d",
-  "line": 18408,
+  "line": 18394,
   "function": "renderScheduledAssessmentsList",
   "target": "tbody",
   "op": "=",
@@ -4499,7 +4499,7 @@
  },
  {
   "sink_id": "renderSweepPreview:filtersEl:=:94b14ea06676",
-  "line": 10370,
+  "line": 10356,
   "function": "renderSweepPreview",
   "target": "filtersEl",
   "op": "=",
@@ -4512,7 +4512,7 @@
  },
  {
   "sink_id": "renderSweepPreview:filtersEl:=:e09058149f74",
-  "line": 10359,
+  "line": 10345,
   "function": "renderSweepPreview",
   "target": "filtersEl",
   "op": "=",
@@ -4525,7 +4525,7 @@
  },
  {
   "sink_id": "renderTAXIIConnectorsList:tbody:=:09e758a55a6d",
-  "line": 19579,
+  "line": 19565,
   "function": "renderTAXIIConnectorsList",
   "target": "tbody",
   "op": "=",
@@ -4538,7 +4538,7 @@
  },
  {
   "sink_id": "renderTAXIIConnectorsList:tbody:=:59d7910c503d",
-  "line": 19576,
+  "line": 19562,
   "function": "renderTAXIIConnectorsList",
   "target": "tbody",
   "op": "=",
@@ -4551,7 +4551,7 @@
  },
  {
   "sink_id": "renderTIActors:el:=:0f9760a8d8e8",
-  "line": 8894,
+  "line": 8880,
   "function": "renderTIActors",
   "target": "el",
   "op": "=",
@@ -4564,7 +4564,7 @@
  },
  {
   "sink_id": "renderTIActors:el:=:6f49cdbd80e1",
-  "line": 8893,
+  "line": 8879,
   "function": "renderTIActors",
   "target": "el",
   "op": "=",
@@ -4577,7 +4577,7 @@
  },
  {
   "sink_id": "renderTemplateGrid:grid:=:22bebea10749",
-  "line": 4224,
+  "line": 4210,
   "function": "renderTemplateGrid",
   "target": "grid",
   "op": "=",
@@ -4590,7 +4590,7 @@
  },
  {
   "sink_id": "renderThreatPriorityDetail:document.getElementById('tp-detail-coverage'):=:245364ce0236",
-  "line": 6089,
+  "line": 6075,
   "function": "renderThreatPriorityDetail",
   "target": "document.getElementById('tp-detail-coverage')",
   "op": "=",
@@ -4603,7 +4603,7 @@
  },
  {
   "sink_id": "renderThreatPriorityDetail:document.getElementById('tp-detail-factors'):=:34d08d947ad6",
-  "line": 6075,
+  "line": 6061,
   "function": "renderThreatPriorityDetail",
   "target": "document.getElementById('tp-detail-factors')",
   "op": "=",
@@ -4616,7 +4616,7 @@
  },
  {
   "sink_id": "renderThreatPriorityDetail:document.getElementById('tp-detail-sources'):=:220b67ae2510",
-  "line": 6106,
+  "line": 6092,
   "function": "renderThreatPriorityDetail",
   "target": "document.getElementById('tp-detail-sources')",
   "op": "=",
@@ -4629,7 +4629,7 @@
  },
  {
   "sink_id": "renderThreatPriorityDetail:document.getElementById('tp-detail-summary'):=:74eef6fc3726",
-  "line": 6062,
+  "line": 6048,
   "function": "renderThreatPriorityDetail",
   "target": "document.getElementById('tp-detail-summary')",
   "op": "=",
@@ -4642,7 +4642,7 @@
  },
  {
   "sink_id": "renderThreatPriorityDetail:document.getElementById('tp-detail-title'):=:82f38c25cdbc",
-  "line": 6059,
+  "line": 6045,
   "function": "renderThreatPriorityDetail",
   "target": "document.getElementById('tp-detail-title')",
   "op": "=",
@@ -4655,7 +4655,7 @@
  },
  {
   "sink_id": "renderThreatPriorityDetail:document.getElementById('tp-detail-uncovered'):=:7772b63947aa",
-  "line": 6078,
+  "line": 6064,
   "function": "renderThreatPriorityDetail",
   "target": "document.getElementById('tp-detail-uncovered')",
   "op": "=",
@@ -4668,7 +4668,7 @@
  },
  {
   "sink_id": "renderTmplAgentList:list:=:2751bfd505c0",
-  "line": 4331,
+  "line": 4317,
   "function": "renderTmplAgentList",
   "target": "list",
   "op": "=",
@@ -4681,7 +4681,7 @@
  },
  {
   "sink_id": "renderTmplAgentList:list:=:290ddc7ab3cb",
-  "line": 4333,
+  "line": 4319,
   "function": "renderTmplAgentList",
   "target": "list",
   "op": "=",
@@ -4694,7 +4694,7 @@
  },
  {
   "sink_id": "renderTmplOSCompat:warnEl:=:21810e7717a7",
-  "line": 4512,
+  "line": 4498,
   "function": "renderTmplOSCompat",
   "target": "warnEl",
   "op": "=",
@@ -4707,7 +4707,7 @@
  },
  {
   "sink_id": "renderTmplOSCompat:warnEl:=:58c623ab8a40",
-  "line": 4521,
+  "line": 4507,
   "function": "renderTmplOSCompat",
   "target": "warnEl",
   "op": "=",
@@ -4720,7 +4720,7 @@
  },
  {
   "sink_id": "renderTmplOSCompat:warnEl:=:6f49cdbd80e1",
-  "line": 4467,
+  "line": 4453,
   "function": "renderTmplOSCompat",
   "target": "warnEl",
   "op": "=",
@@ -4733,7 +4733,7 @@
  },
  {
   "sink_id": "renderTmplOSCompat:warnEl:=:6f49cdbd80e1",
-  "line": 4485,
+  "line": 4471,
   "function": "renderTmplOSCompat",
   "target": "warnEl",
   "op": "=",
@@ -4746,7 +4746,7 @@
  },
  {
   "sink_id": "renderTmplOSCompat:warnEl:=:6f49cdbd80e1",
-  "line": 4502,
+  "line": 4488,
   "function": "renderTmplOSCompat",
   "target": "warnEl",
   "op": "=",
@@ -4759,7 +4759,7 @@
  },
  {
   "sink_id": "renderTmplWarn:warn:=:1570473181c7",
-  "line": 4438,
+  "line": 4424,
   "function": "renderTmplWarn",
   "target": "warn",
   "op": "=",
@@ -4772,7 +4772,7 @@
  },
  {
   "sink_id": "renderTmplWarn:warn:=:3b41cec7506f",
-  "line": 4436,
+  "line": 4422,
   "function": "renderTmplWarn",
   "target": "warn",
   "op": "=",
@@ -4785,7 +4785,7 @@
  },
  {
   "sink_id": "renderTmplWarn:warn:=:6f49cdbd80e1",
-  "line": 4440,
+  "line": 4426,
   "function": "renderTmplWarn",
   "target": "warn",
   "op": "=",
@@ -4798,7 +4798,7 @@
  },
  {
   "sink_id": "renderVariantRun:cell:=:2ff32a8ace7a",
-  "line": 21594,
+  "line": 21580,
   "function": "renderVariantRun",
   "target": "cell",
   "op": "=",
@@ -4811,7 +4811,7 @@
  },
  {
   "sink_id": "renderVariantRun:if (wrapperEl) wrapperEl:=:8e94bcdd09f7",
-  "line": 21589,
+  "line": 21575,
   "function": "renderVariantRun",
   "target": "if (wrapperEl) wrapperEl",
   "op": "=",
@@ -4819,12 +4819,12 @@
   "final_category": "partial_escaped",
   "severity_tier": 3,
   "data_source_tags": "",
-  "trace_notes": "24 assignment(s) to 'wrapperHtml' inside renderVariantRun() @L21522 (scope-resolved) -> partial_escaped",
+  "trace_notes": "24 assignment(s) to 'wrapperHtml' inside renderVariantRun() @L21508 (scope-resolved) -> partial_escaped",
   "rhs": "wrapperHtml"
  },
  {
   "sink_id": "renderVariantRun:panel:=:8576b16b3214",
-  "line": 21606,
+  "line": 21592,
   "function": "renderVariantRun",
   "target": "panel",
   "op": "=",
@@ -4837,7 +4837,7 @@
  },
  {
   "sink_id": "renderVexSweepList:el:=:6f49cdbd80e1",
-  "line": 20918,
+  "line": 20904,
   "function": "renderVexSweepList",
   "target": "el",
   "op": "=",
@@ -4850,7 +4850,7 @@
  },
  {
   "sink_id": "renderVexSweepList:el:=:84f7e3c3eda0",
-  "line": 20920,
+  "line": 20906,
   "function": "renderVexSweepList",
   "target": "el",
   "op": "=",
@@ -4863,7 +4863,7 @@
  },
  {
   "sink_id": "resultBtn:host:=:ffa3f74923be",
-  "line": 9853,
+  "line": 9839,
   "function": "resultBtn",
   "target": "host",
   "op": "=",
@@ -4876,7 +4876,7 @@
  },
  {
   "sink_id": "row:document.getElementById('tp-detail-evidence'):=:9c37de47b653",
-  "line": 6141,
+  "line": 6127,
   "function": "row",
   "target": "document.getElementById('tp-detail-evidence')",
   "op": "=",
@@ -4889,7 +4889,7 @@
  },
  {
   "sink_id": "row:document.getElementById('tp-detail-history'):=:1bfa85a5a567",
-  "line": 6154,
+  "line": 6140,
   "function": "row",
   "target": "document.getElementById('tp-detail-history')",
   "op": "=",
@@ -4902,7 +4902,7 @@
  },
  {
   "sink_id": "row:document.getElementById('tp-detail-recs'):=:898ae3b87a57",
-  "line": 6168,
+  "line": 6154,
   "function": "row",
   "target": "document.getElementById('tp-detail-recs')",
   "op": "=",
@@ -4915,7 +4915,7 @@
  },
  {
   "sink_id": "row:document.getElementById('tp-detail-recs'):=:fb59f7a0d2bc",
-  "line": 6164,
+  "line": 6150,
   "function": "row",
   "target": "document.getElementById('tp-detail-recs')",
   "op": "=",
@@ -4928,7 +4928,7 @@
  },
  {
   "sink_id": "row:document.getElementById('wz-review'):=:e5e239560bc1",
-  "line": 16142,
+  "line": 16128,
   "function": "row",
   "target": "document.getElementById('wz-review')",
   "op": "=",
@@ -4936,12 +4936,12 @@
   "final_category": "unescaped_html",
   "severity_tier": 4,
   "data_source_tags": "",
-  "trace_notes": "3 assignment(s) to 'html' inside renderWizardReview() @L16045 (scope-resolved) -> unescaped_html",
+  "trace_notes": "3 assignment(s) to 'html' inside renderWizardReview() @L16031 (scope-resolved) -> unescaped_html",
   "rhs": "html"
  },
  {
   "sink_id": "rowHtml:document.getElementById('results-body'):=:230d8358dc8e",
-  "line": 13989,
+  "line": 13975,
   "function": "rowHtml",
   "target": "document.getElementById('results-body')",
   "op": "=",
@@ -4954,7 +4954,7 @@
  },
  {
   "sink_id": "rowHtml:el:=:a8dfe7e921d5",
-  "line": 14008,
+  "line": 13994,
   "function": "rowHtml",
   "target": "el",
   "op": "=",
@@ -4967,7 +4967,7 @@
  },
  {
   "sink_id": "rowHtml:if (el) el:=:4d45c9a1c090",
-  "line": 14011,
+  "line": 13997,
   "function": "rowHtml",
   "target": "if (el) el",
   "op": "=",
@@ -4980,7 +4980,7 @@
  },
  {
   "sink_id": "rowf:el:=:279053ca0050",
-  "line": 8535,
+  "line": 8521,
   "function": "rowf",
   "target": "el",
   "op": "=",
@@ -4993,7 +4993,7 @@
  },
  {
   "sink_id": "rowf:el:=:63338db7d63f",
-  "line": 8532,
+  "line": 8518,
   "function": "rowf",
   "target": "el",
   "op": "=",
@@ -5001,12 +5001,12 @@
   "final_category": "unescaped_html",
   "severity_tier": 4,
   "data_source_tags": "",
-  "trace_notes": "hdr() @L8524 (scope-resolved): 1 return(s) -> unescaped_html",
+  "trace_notes": "hdr() @L8510 (scope-resolved): 1 return(s) -> unescaped_html",
   "rhs": "hdr('Recommended next steps') + '<div class=\"tiny muted\">No open findings for this campaign.</div>'"
  },
  {
   "sink_id": "selectTIPack:info:=:123406a83550",
-  "line": 8771,
+  "line": 8757,
   "function": "selectTIPack",
   "target": "info",
   "op": "=",
@@ -5019,7 +5019,7 @@
  },
  {
   "sink_id": "selectTIPack:info:=:70695333f35a",
-  "line": 8754,
+  "line": 8740,
   "function": "selectTIPack",
   "target": "info",
   "op": "=",
@@ -5032,7 +5032,7 @@
  },
  {
   "sink_id": "selectTIPack:info:=:a06eb30b9758",
-  "line": 8763,
+  "line": 8749,
   "function": "selectTIPack",
   "target": "info",
   "op": "=",
@@ -5045,7 +5045,7 @@
  },
  {
   "sink_id": "setCampaignSource:document.getElementById('cmp-scenario-preview'):=:6f49cdbd80e1",
-  "line": 8726,
+  "line": 8712,
   "function": "setCampaignSource",
   "target": "document.getElementById('cmp-scenario-preview')",
   "op": "=",
@@ -5058,7 +5058,7 @@
  },
  {
   "sink_id": "showThreatPriorityDetail:document.getElementById('tp-detail-factors'):=:0218a335dcfb",
-  "line": 6054,
+  "line": 6040,
   "function": "showThreatPriorityDetail",
   "target": "document.getElementById('tp-detail-factors')",
   "op": "=",
@@ -5071,7 +5071,7 @@
  },
  {
   "sink_id": "soonPanel:document.getElementById('run-tab-content'):=:7adc696626b0",
-  "line": 17803,
+  "line": 17789,
   "function": "soonPanel",
   "target": "document.getElementById('run-tab-content')",
   "op": "=",
@@ -5084,7 +5084,7 @@
  },
  {
   "sink_id": "soonPanel:document.getElementById('run-tabbar'):=:f5456d6560d5",
-  "line": 17840,
+  "line": 17826,
   "function": "soonPanel",
   "target": "document.getElementById('run-tabbar')",
   "op": "=",
@@ -5097,7 +5097,7 @@
  },
  {
   "sink_id": "soonPanel:extraEl:=:000e9faf7dc9",
-  "line": 17879,
+  "line": 17865,
   "function": "soonPanel",
   "target": "extraEl",
   "op": "=",
@@ -5110,7 +5110,7 @@
  },
  {
   "sink_id": "soonPanel:extraEl:=:6f49cdbd80e1",
-  "line": 17891,
+  "line": 17877,
   "function": "soonPanel",
   "target": "extraEl",
   "op": "=",
@@ -5123,7 +5123,7 @@
  },
  {
   "sink_id": "soonPanel:extraEl:=:8a89f49e5dd6",
-  "line": 17883,
+  "line": 17869,
   "function": "soonPanel",
   "target": "extraEl",
   "op": "=",
@@ -5131,12 +5131,12 @@
   "final_category": "partial_escaped",
   "severity_tier": 3,
   "data_source_tags": "",
-  "trace_notes": "renderRunReportExtra() @L20331 (scope-resolved): 5 return(s) -> partial_escaped",
+  "trace_notes": "renderRunReportExtra() @L20317 (scope-resolved): 5 return(s) -> partial_escaped",
   "rhs": "renderRunReportExtra(rep)"
  },
  {
   "sink_id": "soonPanel:if (el) el:=:05b3ceeea0fb",
-  "line": 17904,
+  "line": 17890,
   "function": "soonPanel",
   "target": "if (el) el",
   "op": "=",
@@ -5149,7 +5149,7 @@
  },
  {
   "sink_id": "soonPanel:if (el) el:=:05d28a38e57d",
-  "line": 17901,
+  "line": 17887,
   "function": "soonPanel",
   "target": "if (el) el",
   "op": "=",
@@ -5157,12 +5157,12 @@
   "final_category": "unescaped_html",
   "severity_tier": 4,
   "data_source_tags": "",
-  "trace_notes": "renderAttackFlow() @L20207 (scope-resolved): 6 return(s) -> unescaped_html",
+  "trace_notes": "renderAttackFlow() @L20193 (scope-resolved): 6 return(s) -> unescaped_html",
   "rhs": "renderAttackFlow(af.nodes || [], af.summary || {})"
  },
  {
   "sink_id": "soonPanel:if (el) el:=:4b2a80780dc0",
-  "line": 17931,
+  "line": 17917,
   "function": "soonPanel",
   "target": "if (el) el",
   "op": "=",
@@ -5175,7 +5175,7 @@
  },
  {
   "sink_id": "soonPanel:if (el) el:=:57e4ff8ae29b",
-  "line": 17910,
+  "line": 17896,
   "function": "soonPanel",
   "target": "if (el) el",
   "op": "=",
@@ -5183,12 +5183,12 @@
   "final_category": "unescaped_html",
   "severity_tier": 4,
   "data_source_tags": "",
-  "trace_notes": "renderVariantCoverage() @L19999 (scope-resolved): 11 return(s) -> unescaped_html",
+  "trace_notes": "renderVariantCoverage() @L19985 (scope-resolved): 11 return(s) -> unescaped_html",
   "rhs": "renderVariantCoverage(cov)"
  },
  {
   "sink_id": "soonPanel:if (el) el:=:9d4d108e29ef",
-  "line": 17913,
+  "line": 17899,
   "function": "soonPanel",
   "target": "if (el) el",
   "op": "=",
@@ -5201,7 +5201,7 @@
  },
  {
   "sink_id": "soonPanel:if (findingsEl) findingsEl:=:1ab55760a1c3",
-  "line": 17885,
+  "line": 17871,
   "function": "soonPanel",
   "target": "if (findingsEl) findingsEl",
   "op": "=",
@@ -5209,12 +5209,12 @@
   "final_category": "unescaped_html",
   "severity_tier": 4,
   "data_source_tags": "",
-  "trace_notes": "renderRunFindings() @L20627 (scope-resolved): 3 return(s) -> unescaped_html",
+  "trace_notes": "renderRunFindings() @L20613 (scope-resolved): 3 return(s) -> unescaped_html",
   "rhs": "renderRunFindings(rep)"
  },
  {
   "sink_id": "soonPanel:if (findingsEl) findingsEl:=:af0652ed63c6",
-  "line": 17893,
+  "line": 17879,
   "function": "soonPanel",
   "target": "if (findingsEl) findingsEl",
   "op": "=",
@@ -5227,7 +5227,7 @@
  },
  {
   "sink_id": "soonPanel:if (findingsElEarly) findingsElEarly:=:5ddfcb3cebd4",
-  "line": 17939,
+  "line": 17925,
   "function": "soonPanel",
   "target": "if (findingsElEarly) findingsElEarly",
   "op": "=",
@@ -5235,12 +5235,12 @@
   "final_category": "static",
   "severity_tier": 0,
   "data_source_tags": "",
-  "trace_notes": "1 assignment(s) to 'notReady' inside viewRunResults() @L17292 (scope-resolved) -> static",
+  "trace_notes": "1 assignment(s) to 'notReady' inside viewRunResults() @L17278 (scope-resolved) -> static",
   "rhs": "notReady"
  },
  {
   "sink_id": "soonPanel:if (iocElEarly) iocElEarly:=:5ddfcb3cebd4",
-  "line": 17943,
+  "line": 17929,
   "function": "soonPanel",
   "target": "if (iocElEarly) iocElEarly",
   "op": "=",
@@ -5248,12 +5248,12 @@
   "final_category": "static",
   "severity_tier": 0,
   "data_source_tags": "",
-  "trace_notes": "1 assignment(s) to 'notReady' inside viewRunResults() @L17292 (scope-resolved) -> static",
+  "trace_notes": "1 assignment(s) to 'notReady' inside viewRunResults() @L17278 (scope-resolved) -> static",
   "rhs": "notReady"
  },
  {
   "sink_id": "soonPanel:if (recEl) recEl:=:cc3ff533d162",
-  "line": 17887,
+  "line": 17873,
   "function": "soonPanel",
   "target": "if (recEl) recEl",
   "op": "=",
@@ -5261,12 +5261,12 @@
   "final_category": "unescaped_html",
   "severity_tier": 4,
   "data_source_tags": "",
-  "trace_notes": "renderRunRecommendations() @L20654 (scope-resolved): 3 return(s) -> unescaped_html",
+  "trace_notes": "renderRunRecommendations() @L20640 (scope-resolved): 3 return(s) -> unescaped_html",
   "rhs": "renderRunRecommendations(rep)"
  },
  {
   "sink_id": "soonPanel:if (recEl) recEl:=:f64c73cc64ef",
-  "line": 17895,
+  "line": 17881,
   "function": "soonPanel",
   "target": "if (recEl) recEl",
   "op": "=",
@@ -5279,7 +5279,7 @@
  },
  {
   "sink_id": "soonPanel:if (recElEarly) recElEarly:=:5ddfcb3cebd4",
-  "line": 17941,
+  "line": 17927,
   "function": "soonPanel",
   "target": "if (recElEarly) recElEarly",
   "op": "=",
@@ -5287,12 +5287,12 @@
   "final_category": "static",
   "severity_tier": 0,
   "data_source_tags": "",
-  "trace_notes": "1 assignment(s) to 'notReady' inside viewRunResults() @L17292 (scope-resolved) -> static",
+  "trace_notes": "1 assignment(s) to 'notReady' inside viewRunResults() @L17278 (scope-resolved) -> static",
   "rhs": "notReady"
  },
  {
   "sink_id": "soonPanel:reportsEl:=:a0e2dc3988f7",
-  "line": 17854,
+  "line": 17840,
   "function": "soonPanel",
   "target": "reportsEl",
   "op": "=",
@@ -5305,7 +5305,7 @@
  },
  {
   "sink_id": "soonPanel:reportsEl:=:ae6324141a3e",
-  "line": 17869,
+  "line": 17855,
   "function": "soonPanel",
   "target": "reportsEl",
   "op": "=",
@@ -5318,7 +5318,7 @@
  },
  {
   "sink_id": "startCampaignRerunFromReview:btn:=:c420793ec474",
-  "line": 18316,
+  "line": 18302,
   "function": "startCampaignRerunFromReview",
   "target": "btn",
   "op": "=",
@@ -5331,7 +5331,7 @@
  },
  {
   "sink_id": "startCampaignRerunFromReview:btn:=:c420793ec474",
-  "line": 18323,
+  "line": 18309,
   "function": "startCampaignRerunFromReview",
   "target": "btn",
   "op": "=",
@@ -5344,7 +5344,7 @@
  },
  {
   "sink_id": "startRerunFromReview:btn:=:c420793ec474",
-  "line": 18236,
+  "line": 18222,
   "function": "startRerunFromReview",
   "target": "btn",
   "op": "=",
@@ -5357,7 +5357,7 @@
  },
  {
   "sink_id": "startRerunFromReview:btn:=:c420793ec474",
-  "line": 18243,
+  "line": 18229,
   "function": "startRerunFromReview",
   "target": "btn",
   "op": "=",
@@ -5370,7 +5370,7 @@
  },
  {
   "sink_id": "stat:document.getElementById('results-body'):=:ba7ff7c8a7a1",
-  "line": 12610,
+  "line": 12596,
   "function": "stat",
   "target": "document.getElementById('results-body')",
   "op": "=",
@@ -5383,7 +5383,7 @@
  },
  {
   "sink_id": "stat:el:=:5b4ce0e8f2ff",
-  "line": 5924,
+  "line": 5910,
   "function": "stat",
   "target": "el",
   "op": "=",
@@ -5396,7 +5396,7 @@
  },
  {
   "sink_id": "stopVex:if (panel) panel:=:f892e36d9a7f",
-  "line": 21476,
+  "line": 21462,
   "function": "stopVex",
   "target": "if (panel) panel",
   "op": "=",
@@ -5409,7 +5409,7 @@
  },
  {
   "sink_id": "submitInitiativeAttach:errEl:=:34df0875fe33",
-  "line": 13136,
+  "line": 13122,
   "function": "submitInitiativeAttach",
   "target": "errEl",
   "op": "=",
@@ -5422,7 +5422,7 @@
  },
  {
   "sink_id": "submitInitiativeAttach:errEl:=:5cfb084d1944",
-  "line": 13143,
+  "line": 13129,
   "function": "submitInitiativeAttach",
   "target": "errEl",
   "op": "=",
@@ -5435,7 +5435,7 @@
  },
  {
   "sink_id": "submitInitiativeAttach:errEl:=:6f49cdbd80e1",
-  "line": 13139,
+  "line": 13125,
   "function": "submitInitiativeAttach",
   "target": "errEl",
   "op": "=",
@@ -5448,7 +5448,7 @@
  },
  {
   "sink_id": "submitInitiativeAttach:errEl:=:a63991083727",
-  "line": 13147,
+  "line": 13133,
   "function": "submitInitiativeAttach",
   "target": "errEl",
   "op": "=",
@@ -5461,7 +5461,7 @@
  },
  {
   "sink_id": "submitInitiativeCreate:errEl:=:5cfb084d1944",
-  "line": 13062,
+  "line": 13048,
   "function": "submitInitiativeCreate",
   "target": "errEl",
   "op": "=",
@@ -5474,7 +5474,7 @@
  },
  {
   "sink_id": "submitInitiativeCreate:errEl:=:6f49cdbd80e1",
-  "line": 13059,
+  "line": 13045,
   "function": "submitInitiativeCreate",
   "target": "errEl",
   "op": "=",
@@ -5487,7 +5487,7 @@
  },
  {
   "sink_id": "submitInitiativeCreate:errEl:=:a63991083727",
-  "line": 13067,
+  "line": 13053,
   "function": "submitInitiativeCreate",
   "target": "errEl",
   "op": "=",
@@ -5500,7 +5500,7 @@
  },
  {
   "sink_id": "submitInitiativeCreate:errEl:=:e1cb6e5dbccd",
-  "line": 13056,
+  "line": 13042,
   "function": "submitInitiativeCreate",
   "target": "errEl",
   "op": "=",
@@ -5513,7 +5513,7 @@
  },
  {
   "sink_id": "tacticChip:grid:=:a66ebb4166b3",
-  "line": 4631,
+  "line": 4617,
   "function": "tacticChip",
   "target": "grid",
   "op": "=",
@@ -5526,7 +5526,7 @@
  },
  {
   "sink_id": "techOnBlur:panel:=:6f49cdbd80e1",
-  "line": 17060,
+  "line": 17046,
   "function": "techOnBlur",
   "target": "panel",
   "op": "=",
@@ -5539,7 +5539,7 @@
  },
  {
   "sink_id": "techOnInput:panel:=:6f49cdbd80e1",
-  "line": 16994,
+  "line": 16980,
   "function": "techOnInput",
   "target": "panel",
   "op": "=",
@@ -5552,7 +5552,7 @@
  },
  {
   "sink_id": "techOnKeydown:panel:=:6f49cdbd80e1",
-  "line": 17049,
+  "line": 17035,
   "function": "techOnKeydown",
   "target": "panel",
   "op": "=",
@@ -5565,7 +5565,7 @@
  },
  {
   "sink_id": "techRenderResults:panel:=:80cdc4a637c4",
-  "line": 17004,
+  "line": 16990,
   "function": "techRenderResults",
   "target": "panel",
   "op": "=",
@@ -5578,7 +5578,7 @@
  },
  {
   "sink_id": "techRenderResults:panel:=:e57789690f0b",
-  "line": 17008,
+  "line": 16994,
   "function": "techRenderResults",
   "target": "panel",
   "op": "=",
@@ -5591,7 +5591,7 @@
  },
  {
   "sink_id": "techRenderSelected:box:=:ca8ba03219cc",
-  "line": 16944,
+  "line": 16930,
   "function": "techRenderSelected",
   "target": "box",
   "op": "=",
@@ -5604,7 +5604,7 @@
  },
  {
   "sink_id": "techRenderSelected:box:=:f4b5d505bc4a",
-  "line": 16954,
+  "line": 16940,
   "function": "techRenderSelected",
   "target": "box",
   "op": "=",
@@ -5617,7 +5617,7 @@
  },
  {
   "sink_id": "techSelectRow:panel:=:6f49cdbd80e1",
-  "line": 17025,
+  "line": 17011,
   "function": "techSelectRow",
   "target": "panel",
   "op": "=",
@@ -5630,7 +5630,7 @@
  },
  {
   "sink_id": "tile:document.getElementById('dash-itsm-tiles'):=:e5e239560bc1",
-  "line": 12724,
+  "line": 12710,
   "function": "tile",
   "target": "document.getElementById('dash-itsm-tiles')",
   "op": "=",
@@ -5643,7 +5643,7 @@
  },
  {
   "sink_id": "tile:document.getElementById('rem-tiles'):=:d1843405b08b",
-  "line": 12553,
+  "line": 12539,
   "function": "tile",
   "target": "document.getElementById('rem-tiles')",
   "op": "=",
@@ -5651,12 +5651,12 @@
   "final_category": "unescaped_html",
   "severity_tier": 4,
   "data_source_tags": "",
-  "trace_notes": "rgba(): no declaration found anywhere in file; tile() @L12547 (scope-resolved): 1 return(s) -> unescaped_html; var(): no declaration found anywhere in file",
+  "trace_notes": "rgba(): no declaration found anywhere in file; tile() @L12533 (scope-resolved): 1 return(s) -> unescaped_html; var(): no declaration found anywhere in file",
   "rhs": "tile('Open remediations', l.length, l.length ? 'var(--warning)' : 'var(--success)', 'rgba(210,153,34,0.12)', REM_SVG.wrench16, 'prioritized fixes') +\n    tile('Affected findings', findingsTotal, findingsTotal ? 'var(--danger)' : 'var(--success)', 'rgba(218,54,51,0.12)', REM_SVG.flag, 'closed if all applied') +\n    tile('Critical remediations', crit, crit ? 'var(--danger)' : 'var(--muted)', crit ? "
  },
  {
   "sink_id": "tile:el:=:aa0da7afd29e",
-  "line": 13911,
+  "line": 13897,
   "function": "tile",
   "target": "el",
   "op": "=",
@@ -5664,12 +5664,12 @@
   "final_category": "unescaped_html",
   "severity_tier": 4,
   "data_source_tags": "api_response",
-  "trace_notes": "tile() @L13904 (scope-resolved): 1 return(s) -> unescaped_html",
+  "trace_notes": "tile() @L13890 (scope-resolved): 1 return(s) -> unescaped_html",
   "rhs": "tile('Most Detected', result.mostDetected, ' detections') +\n    tile('Highest Bypass Rate', result.highestBypassRate, ' bypasses') +\n    tile('Frequently Reused', result.frequentlyReused, ' sightings') +\n    tile('Longest Surviving', result.longestSurviving, ' sightings')"
  },
  {
   "sink_id": "toggleSimCoverage:if (car) car:=:9c822af7dbd9",
-  "line": 19810,
+  "line": 19796,
   "function": "toggleSimCoverage",
   "target": "if (car) car",
   "op": "=",
@@ -5682,7 +5682,7 @@
  },
  {
   "sink_id": "vfCloseDetail:if (h) h:=:6f49cdbd80e1",
-  "line": 9883,
+  "line": 9869,
   "function": "vfCloseDetail",
   "target": "if (h) h",
   "op": "=",
@@ -5695,7 +5695,7 @@
  },
  {
   "sink_id": "vfLoadEvidence:host:=:5af37790c274",
-  "line": 9952,
+  "line": 9938,
   "function": "vfLoadEvidence",
   "target": "host",
   "op": "=",
@@ -5708,7 +5708,7 @@
  },
  {
   "sink_id": "vfLoadEvidence:host:=:cf367cccc2b5",
-  "line": 9941,
+  "line": 9927,
   "function": "vfLoadEvidence",
   "target": "host",
   "op": "=",
@@ -5721,7 +5721,7 @@
  },
  {
   "sink_id": "vfLoadEvidence:host:=:d51a2c150e66",
-  "line": 9939,
+  "line": 9925,
   "function": "vfLoadEvidence",
   "target": "host",
   "op": "=",
@@ -5734,7 +5734,7 @@
  },
  {
   "sink_id": "vfLoadQueue:box:=:52aae5451493",
-  "line": 9796,
+  "line": 9782,
   "function": "vfLoadQueue",
   "target": "box",
   "op": "=",
@@ -5747,7 +5747,7 @@
  },
  {
   "sink_id": "vfLoadQueue:box:=:b2d40dbd06a2",
-  "line": 9789,
+  "line": 9775,
   "function": "vfLoadQueue",
   "target": "box",
   "op": "=",
@@ -5760,7 +5760,7 @@
  },
  {
   "sink_id": "vfLoadQueue:box:=:ef5962205875",
-  "line": 9790,
+  "line": 9776,
   "function": "vfLoadQueue",
   "target": "box",
   "op": "=",
@@ -5773,7 +5773,7 @@
  },
  {
   "sink_id": "vfLoadQueue:box:=:fca586893f1d",
-  "line": 9793,
+  "line": 9779,
   "function": "vfLoadQueue",
   "target": "box",
   "op": "=",
@@ -5786,7 +5786,7 @@
  },
  {
   "sink_id": "vfRenderDomainChips:wrap:=:372a9ff00b9e",
-  "line": 9774,
+  "line": 9760,
   "function": "vfRenderDomainChips",
   "target": "wrap",
   "op": "=",
@@ -5799,7 +5799,7 @@
  },
  {
   "sink_id": "vfRenderQueue:box:=:c77bfe52318d",
-  "line": 9824,
+  "line": 9810,
   "function": "vfRenderQueue",
   "target": "box",
   "op": "=",
@@ -5812,7 +5812,7 @@
  },
  {
   "sink_id": "vfRenderQueue:box:=:cad1094f2793",
-  "line": 9805,
+  "line": 9791,
   "function": "vfRenderQueue",
   "target": "box",
   "op": "=",
@@ -5825,7 +5825,7 @@
  },
  {
   "sink_id": "vfToggleHistory:host:=:3ca1c1f96652",
-  "line": 9977,
+  "line": 9963,
   "function": "vfToggleHistory",
   "target": "host",
   "op": "=",
@@ -5838,7 +5838,7 @@
  },
  {
   "sink_id": "vfToggleHistory:host:=:5c8cf40f83f5",
-  "line": 9993,
+  "line": 9979,
   "function": "vfToggleHistory",
   "target": "host",
   "op": "=",
@@ -5851,7 +5851,7 @@
  },
  {
   "sink_id": "vfToggleHistory:host:=:61bf78f8afa9",
-  "line": 9981,
+  "line": 9967,
   "function": "vfToggleHistory",
   "target": "host",
   "op": "=",
@@ -5864,7 +5864,7 @@
  },
  {
   "sink_id": "vfToggleHistory:host:=:6f49cdbd80e1",
-  "line": 9975,
+  "line": 9961,
   "function": "vfToggleHistory",
   "target": "host",
   "op": "=",
@@ -5877,7 +5877,7 @@
  },
  {
   "sink_id": "vfToggleHistory:host:=:eee07750c4e9",
-  "line": 9980,
+  "line": 9966,
   "function": "vfToggleHistory",
   "target": "host",
   "op": "=",
@@ -5890,7 +5890,7 @@
  },
  {
   "sink_id": "viewRunResults:document.getElementById('results-export'):=:6f49cdbd80e1",
-  "line": 17383,
+  "line": 17369,
   "function": "viewRunResults",
   "target": "document.getElementById('results-export')",
   "op": "=",
@@ -5903,7 +5903,7 @@
  },
  {
   "sink_id": "viewRunResults:document.getElementById('results-header-actions'):=:8d3e295873f1",
-  "line": 17411,
+  "line": 17397,
   "function": "viewRunResults",
   "target": "document.getElementById('results-header-actions')",
   "op": "=",
@@ -5911,12 +5911,12 @@
   "final_category": "escaped",
   "severity_tier": 1,
   "data_source_tags": "",
-  "trace_notes": "2 assignment(s) to 'actionsHtml' inside viewRunResults() @L17292 (scope-resolved) -> escaped",
+  "trace_notes": "2 assignment(s) to 'actionsHtml' inside viewRunResults() @L17278 (scope-resolved) -> escaped",
   "rhs": "actionsHtml"
  },
  {
   "sink_id": "viewRunResults:document.getElementById('results-summary'):=:14ac4be88bd0",
-  "line": 17352,
+  "line": 17338,
   "function": "viewRunResults",
   "target": "document.getElementById('results-summary')",
   "op": "=",
@@ -5929,7 +5929,7 @@
  },
  {
   "sink_id": "viewRunResults:document.getElementById('results-summary'):=:b5178044b390",
-  "line": 17347,
+  "line": 17333,
   "function": "viewRunResults",
   "target": "document.getElementById('results-summary')",
   "op": "=",
@@ -5942,7 +5942,7 @@
  },
  {
   "sink_id": "viewRunResults:document.getElementById('results-title'):=:5ca182313248",
-  "line": 17389,
+  "line": 17375,
   "function": "viewRunResults",
   "target": "document.getElementById('results-title')",
   "op": "=",

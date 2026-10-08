@@ -29,6 +29,27 @@ const campaign = {
   createdAt: NOW, updatedAt: NOW, scenarioIds: [], steps: [], targets: [],
 };
 
+// Scheduled Assessments rows (jobs.Schedule, PascalCase, no JSON tags
+// server-side -- see scheduled.js's own comment). Three rows exercise every
+// modeColor/statusColor either-or branch the G1e codemod produced:
+// telemetry+enabled (warning/success), posture+disabled (muted/muted), and
+// a completed one-time run (muted mode/accent status).
+const schedule1 = {
+  ID: 'sched-smoke-1', Mode: 'telemetry', Enabled: true, RecurrenceType: 'weekly',
+  DayOfWeek: 1, TimeOfDay: '02:00', Timezone: 'UTC', GroupIDs: [], AgentIDs: ['agent-smoke-1'],
+  Payload: { scenarioId: 'sc-smoke-1' }, LastOccurrenceAt: null,
+};
+const schedule2 = {
+  ID: 'sched-smoke-2', Mode: 'posture', Enabled: false, RecurrenceType: 'weekly',
+  DayOfWeek: 3, TimeOfDay: '04:00', Timezone: 'UTC', GroupIDs: [], AgentIDs: [],
+  Payload: { scenarioId: 'sc-smoke-1' }, LastOccurrenceAt: null,
+};
+const schedule3 = {
+  ID: 'sched-smoke-3', Mode: 'posture', Enabled: true, RecurrenceType: 'once',
+  RunAt: NOW, Timezone: 'UTC', GroupIDs: [], AgentIDs: [],
+  Payload: { scenarioId: 'sc-smoke-1' }, LastOccurrenceAt: NOW,
+};
+
 // Live Run replay: ART steps carry a techniqueId, which drives the ART
 // catalog lookup (G1c final review C1 broke exactly this path).
 const runEvents = [
@@ -56,6 +77,7 @@ export const FIXTURES = {
   // Loaded at boot by loadScenarios(); the {} default made .map throw, and the
   // resulting toast landed on whichever tab was open (flaky in CI).
   'GET /api/scenarios': [],
+  'GET /api/scheduled-assessments': { schedules: [schedule1, schedule2, schedule3] },
   // Drawers (smoke.spec.mjs "drawers"): detail endpoints for the list fixtures.
   'GET /api/scenarios/runs/run-smoke-1/events': runEvents,
   'GET /api/findings/finding-smoke-1': finding,
