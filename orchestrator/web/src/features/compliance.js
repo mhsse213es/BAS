@@ -7,6 +7,7 @@ import { initComplianceTab, loadComplianceReport } from './agent-drawer.js';
 import { campaignDisplayStatus } from './campaigns.js';
 import { showTab } from './shell.js';
 import { clearInlineStyle, replaceClasses, setCssText, setDisplay } from '../core/inline-style.js';
+import { cssVars } from '../core/css-vars.js';
 
 
 // ── Compliance score tiles ─────────────────────────────────────────────────
@@ -20,7 +21,7 @@ export function loadComplianceScores(agentId) {
     var el = document.getElementById('compliance-tiles');
     if (!el) return;
     if (!scores || !scores.length) {
-      el.innerHTML = '<div style="color:var(--muted);font-size:0.78rem;padding:0.4rem 0">No compliance data yet — run a scenario to generate scores.</div>';
+      el.innerHTML = '<div class="g1-s-b32f8255">No compliance data yet — run a scenario to generate scores.</div>';
       return;
     }
     el.innerHTML = scores.map(complianceTile).join('');
@@ -83,7 +84,7 @@ export function complianceTile(fw) {
   // finding bypasses is the point) reads as "everything is broken" rather
   // than "gating is strict — see the Controls table for the real pass rate."
   var gatingNote = (hasData && failing > 0)
-    ? '<div style="font-size:0.6rem;color:var(--muted);margin-top:0.2rem;font-style:italic">Any 1 failed test fails the control — see breakdown</div>'
+    ? '<div class="g1-s-042ee910">Any 1 failed test fails the control — see breakdown</div>'
     : '';
 
   // Compliance % is only computed over TESTED controls (passing/tested) --
@@ -92,35 +93,33 @@ export function complianceTile(fw) {
   // doesn't mean the framework is broadly satisfied; it means the controls
   // you've actually run are passing. Flag it when coverage itself is thin.
   var lowCoverageNote = (hasData && cov < 50)
-    ? '<div style="font-size:0.6rem;color:var(--muted);margin-top:0.2rem;font-style:italic">Only ' + Math.round(cov) + '% of testable controls covered — untested controls aren\'t reflected in this %</div>'
+    ? '<div class="g1-s-042ee910">Only ' + Math.round(cov) + '% of testable controls covered — untested controls aren\'t reflected in this %</div>'
     : '';
 
   var covBar = hasData
-    ? '<div style="margin-top:0.5rem">' +
-        '<div style="background:var(--border);border-radius:2px;height:3px;overflow:hidden">' +
-          '<div style="height:3px;width:' + Math.round(cov) + '%;background:' + covColor +
-               ';border-radius:2px;transition:width 0.4s ease"></div>' +
+    ? '<div class="g1-s-acd4d170">' +
+        '<div class="g1-s-ce99d481">' +
+          '<div class="g1-s-9dced569"' + cssVars(['g1-v-9b890877', Math.round(cov)], ['g1-v-9ffd39ba', covColor]) + '></div>' +
         '</div>' +
-        '<div style="font-size:0.63rem;color:var(--muted);margin-top:0.2rem">' + Math.round(cov) + '% coverage</div>' +
+        '<div class="g1-s-03370085">' + Math.round(cov) + '% coverage</div>' +
       '</div>'
     : '';
 
-  return '<div class="kpi-card stat-tile" ' +
-    'style="border-left:3px solid ' + borderColor + ';cursor:pointer;min-width:155px;max-width:220px" ' +
+  return '<div class="kpi-card stat-tile g1-s-787094fd"' + cssVars(['g1-v-882d6893', borderColor]) + ' ' +
     on('click', 'openComplianceDetail', fw.frameworkId, fw.agentId) + ' ' +
     'title="' + x(fw.frameworkName) + '\n' + x(complianceWhy(fw)) + '">' +
     '<div class="stat-top">' +
-      '<div style="flex:1;min-width:0">' +
-        '<div class="kpi-label" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + x(fw.shortName) + '</div>' +
-        '<div class="kpi-value" style="font-size:1.6rem;line-height:1.1;color:' + scoreColor + '">' + scoreStr + '</div>' +
+      '<div class="g1-s-28637295">' +
+        '<div class="kpi-label g1-s-eb7edfae">' + x(fw.shortName) + '</div>' +
+        '<div class="kpi-value g1-s-ef49234c"' + cssVars(['g1-v-7d75dfc9', scoreColor]) + '>' + scoreStr + '</div>' +
       '</div>' +
-      '<div style="font-size:0.62rem;text-align:right;color:var(--muted);line-height:1.5;flex-shrink:0;margin-left:0.5rem">' +
+      '<div class="g1-s-c3a4f7f5">' +
         '<div class="u-fw600">' + x(fw.regulator) + '</div>' +
         (hasData ? '<div>' + fw.totalControls + ' controls</div>' : '') +
       '</div>' +
     '</div>' +
     covBar +
-    '<div class="kpi-sub" style="font-size:0.66rem;margin-top:0.3rem;line-height:1.4">' + subLine + '</div>' +
+    '<div class="kpi-sub g1-s-250d28a3">' + subLine + '</div>' +
     gatingNote +
     lowCoverageNote +
     '</div>';
@@ -150,16 +149,16 @@ export function refreshDashboardCampaigns() {
     var el = document.getElementById('dash-campaigns');
     if (!el) return;
     var liveList = (cs || []).filter(function(c) { return c.summary && c.summary.status === 'running'; });
-    if (!liveList.length) { el.innerHTML = '<div class="empty" style="padding:1.5rem">No campaigns running.</div>'; return; }
+    if (!liveList.length) { el.innerHTML = '<div class="empty g1-s-1eb1d451">No campaigns running.</div>'; return; }
     el.innerHTML = liveList.map(function(c) {
       var s = c.summary || {};
       var cds = campaignDisplayStatus(s);
       return '<div class="lrow u-pointer"' + on('click', 'openCampaignDetail', c.id) + '>' +
-        '<div class="lic" style="color:var(--accent);background:rgba(47,129,247,0.1)"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M1 8h3l2-5 4 10 2-5h3"/></svg></div>' +
+        '<div class="lic g1-s-2f77bd19"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M1 8h3l2-5 4 10 2-5h3"/></svg></div>' +
         '<div class="lmain"><div class="lt">' + x(c.name) + ' <span class="sbadge s-' + cds.cls + '">' + x(cds.label) + '</span></div>' +
           '<div class="ls">' + x(c.scenarioName || '') + ' · ' + (s.dispatched || 0) + '/' + (s.targets || 0) + ' agents</div>' +
-          '<div class="prog"><i style="width:' + (s.progress || 0) + '%"></i></div></div>' +
-        '<div class="lr"><div style="font-family:var(--font-display);font-size:1rem;font-weight:700">' + (s.progress || 0) + '%</div></div></div>';
+          '<div class="prog"><i' + cssVars(['g1-v-9b890877', s.progress || 0]) + '></i></div></div>' +
+        '<div class="lr"><div class="g1-s-b612ca4a">' + (s.progress || 0) + '%</div></div></div>';
     }).join('');
   }).catch(function() {});
 }
@@ -211,11 +210,11 @@ export function loadCalderaStatus() {
   apicall('/api/caldera/status').then(function(d) {
     var dot;
     if (d.reachable) {
-      dot = '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--success);margin-right:6px;vertical-align:middle"></span><span class="u-success">Connected</span>';
+      dot = '<span class="g1-display-inline-block g1-s-a3bc72af"></span><span class="u-success">Connected</span>';
     } else if (d.httpStatus === 401) {
-      dot = '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--warning);margin-right:6px;vertical-align:middle"></span><span class="u-warning">Auth Error — wrong API key</span>';
+      dot = '<span class="g1-display-inline-block g1-s-d9fd6a0b"></span><span class="u-warning">Auth Error — wrong API key</span>';
     } else {
-      dot = '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--danger);margin-right:6px;vertical-align:middle"></span><span class="u-danger">Unreachable</span>';
+      dot = '<span class="g1-display-inline-block g1-s-d966ce5b"></span><span class="u-danger">Unreachable</span>';
     }
     document.getElementById('cs-caldera-status').innerHTML = dot;
     document.getElementById('cs-caldera-url').textContent = d.url || '(not configured)';
@@ -304,14 +303,14 @@ export function runConfirmDiffModal() {
 
 // Old-value-struck-through / new-value-highlighted row for a plain field.
 export function _diffRow(label, oldVal, newVal) {
-  return '<div class="tiny" style="margin-bottom:0.4rem"><span class="muted">' + x(label) + ':</span><br>' +
-    '<span style="color:var(--danger);text-decoration:line-through">' + x(oldVal || '(empty)') + '</span><br>' +
+  return '<div class="tiny g1-s-0990a875"><span class="muted">' + x(label) + ':</span><br>' +
+    '<span class="g1-s-91e61789">' + x(oldVal || '(empty)') + '</span><br>' +
     '<span class="u-success">' + x(newVal || '(empty)') + '</span></div>';
 }
 
 // A secret/password field never round-trips its real value to the browser, so it
 // can only ever say whether it will change, never show old/new text.
 export function _diffSecretRow(label, changed) {
-  return '<div class="tiny" style="margin-bottom:0.4rem"><span class="muted">' + x(label) + ':</span> ' +
+  return '<div class="tiny g1-s-0990a875"><span class="muted">' + x(label) + ':</span> ' +
     (changed ? '<span class="u-warning">will be replaced</span>' : '<span class="muted">unchanged (kept)</span>') + '</div>';
 }

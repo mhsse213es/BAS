@@ -38,6 +38,18 @@ const rrRun = {
   ],
 };
 
+// Compliance dashboard tile (compliance.js complianceTile, fired from
+// evidence.js's dashboard load): hasData=true (testedControls>0) so the
+// kpi-card border-left/score-value colors and the coverage bar both
+// render; failingControls>0 and coveragePct<50 also exercise the
+// gating/low-coverage notes.
+const complianceScore = {
+  frameworkId: 'nist-800-53', agentId: 'agent-smoke-1', frameworkName: `NIST 800-53 ${PAYLOAD}`,
+  shortName: 'NIST 800-53', regulator: 'NIST',
+  compliancePct: 72, coveragePct: 40, testedControls: 20, passingControls: 14,
+  failingControls: 6, untestedControls: 10, testableControls: 30, totalControls: 50,
+};
+
 const finding = {
   id: 'finding-smoke-1', techniqueId: 'T1082', techniqueName: `System Info ${PAYLOAD}`, title: `Finding ${PAYLOAD}`,
   severity: 'high', status: 'open', runId: 'run-smoke-1', agentId: 'agent-smoke-1', hostname: `host ${PAYLOAD}`,
@@ -104,6 +116,7 @@ export const FIXTURES = {
   'GET /api/agents/legacy-migration-status': { blockingAgents: [], unattributedRequests: null },
   'GET /api/agent-groups': [{ id: 1, name: `Group ${PAYLOAD}`, totalAgentCount: 1, agentCount: 1, children: [] }],
   'GET /api/scenarios/runs': [run, rrRun],
+  'GET /api/compliance/scores': [complianceScore],
   'GET /api/findings': [finding],
   'GET /api/campaigns': [campaign],
   // Variants tab polls this every 3s; a non-list makes it toast forever.
