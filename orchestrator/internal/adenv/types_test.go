@@ -74,6 +74,24 @@ func TestEnvironment_JSONRoundTrip_FullyPopulated(t *testing.T) {
 	}
 }
 
+func TestACLRight_MatchesAttackpathEdgeKindValues(t *testing.T) {
+	// These 4 constants must carry the exact string values
+	// attackpath.EdgeKind already uses for the same SharpHound ACE
+	// RightName, so a future mapper can convert one to the other by
+	// value, not by a hand-maintained lookup table.
+	cases := map[ACLRight]string{
+		ACLOwns:                 "owns",
+		ACLAllExtendedRights:    "all-extended-rights",
+		ACLAddKeyCredentialLink: "add-key-credential-link",
+		ACLReadLAPSPassword:     "read-laps-password",
+	}
+	for right, want := range cases {
+		if string(right) != want {
+			t.Errorf("ACLRight %v: got %q, want %q", right, string(right), want)
+		}
+	}
+}
+
 func TestEnvironment_JSONRoundTrip_ZeroValue(t *testing.T) {
 	var env Environment // nothing discovered yet
 

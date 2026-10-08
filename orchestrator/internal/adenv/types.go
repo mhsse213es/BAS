@@ -174,6 +174,15 @@ const (
 	ACLForceChangePassword ACLRight = "ForceChangePassword"
 	ACLAddMember           ACLRight = "AddMember"
 	ACLAddSelf             ACLRight = "AddSelf"
+
+	// The 4 below match attackpath.EdgeKind values already shipped in
+	// AD-M03's graph (orchestrator/internal/attackpath/graph.go) --
+	// added here so adenv's enum doesn't lag what the graph already
+	// models.
+	ACLOwns                 ACLRight = "owns"
+	ACLAllExtendedRights    ACLRight = "all-extended-rights"
+	ACLAddKeyCredentialLink ACLRight = "add-key-credential-link"
+	ACLReadLAPSPassword     ACLRight = "read-laps-password"
 )
 
 // ACLEntry is one ACL grant from a principal onto a target object.
