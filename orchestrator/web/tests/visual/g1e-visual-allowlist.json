@@ -1,1 +1,22 @@
-[]
+[
+  {
+    "checkpoint": "checkpoint:attack-path.js:1632 agent-download panel",
+    "mask": "#cfg-server-url",
+    "reason": "injectServerURL/loadConnectionConfig bake window.location.origin -- including the Playwright web server's ephemeral port -- into this element's text; the port differs run to run by construction, not a rendering difference"
+  },
+  {
+    "checkpoint": "checkpoint:attack-path.js:1632 agent-download panel",
+    "mask": "#win-server-url",
+    "reason": "same window.location.origin/port issue as #cfg-server-url, rendered inline in the Windows Agent card's step 3 text"
+  },
+  {
+    "checkpoint": "checkpoint:attack-path.js:1632 agent-download panel",
+    "mask": "#win-cli-cmd",
+    "reason": "same window.location.origin/port issue as #cfg-server-url, rendered inside the Windows CLI install command"
+  },
+  {
+    "checkpoint": "checkpoint:attack-path.js:1632 agent-download panel",
+    "mask": "#mac-cmd",
+    "reason": "same window.location.origin/port issue as #cfg-server-url, rendered inside the macOS CLI install command"
+  }
+]

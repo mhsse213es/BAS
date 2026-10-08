@@ -22,6 +22,7 @@ import { loadReports, loadRuns } from './reports.js';
 import { loadScheduledAssessments } from './scheduled.js';
 import { loadARTContentStatus, loadConnectorStatus, loadSimCoverage, loadTAXIIConnectors, loadThreatIntelConfig } from './threat-intel.js';
 import { loadVariantTab } from './variant-executor.js';
+import { displayOf, replaceClasses, setCssText, setDisplay } from '../core/inline-style.js';
 export function __init_L5162() {
 (function() {
   var t = localStorage.getItem('audspect_theme') || 'dark';
@@ -119,11 +120,11 @@ function initLoginScreen() {
 }
 
 function renderLicenseLockedScreen(info) {
-  document.getElementById('login-screen').style.display = 'none';
-  document.getElementById('app').style.display = 'none';
+  setDisplay(document.getElementById('login-screen'), 'none');
+  setDisplay(document.getElementById('app'), 'none');
   var el = document.createElement('div');
   el.id = 'license-locked-screen';
-  el.style.cssText = 'position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:var(--bg,#0b0e14);z-index:9999;padding:2rem';
+  setCssText(el, 'position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:var(--bg,#0b0e14);z-index:9999;padding:2rem');
   el.innerHTML =
     '<div style="max-width:520px;text-align:center;color:var(--text,#e6e6e6)">' +
       '<div style="font-size:2.5rem;margin-bottom:1rem">&#x1F512;</div>' +
@@ -189,7 +190,7 @@ function renderLicenseGraceBanner(info) {
   // them, so opening any wizard/drawer left its top content painted over
   // by this banner instead of the banner yielding to whatever the
   // operator actually opened.
-  el.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:90;padding:0.75rem 2.5rem;background:var(--warning,#d29922);color:#1a1200;font-size:0.85rem;line-height:1.5;text-align:center';
+  setCssText(el, 'position:fixed;top:0;left:0;right:0;z-index:90;padding:0.75rem 2.5rem;background:var(--warning,#d29922);color:#1a1200;font-size:0.85rem;line-height:1.5;text-align:center');
   el.innerHTML = _licenseBannerHTML(info) +
     '<button' + on('click', '_dismissLicenseGraceBanner') + ' aria-label="Dismiss" title="Dismiss" ' +
       'style="position:absolute;top:0.5rem;right:0.6rem;width:24px;height:24px;display:flex;align-items:center;justify-content:center;' +
@@ -206,7 +207,7 @@ function maybeShowLicenseGraceModal(info) {
   sessionStorage.setItem('bas_license_grace_modal_shown', '1');
   var overlay = document.createElement('div');
   overlay.id = 'license-grace-modal-overlay';
-  overlay.style.cssText = 'position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.6);z-index:10000';
+  setCssText(overlay, 'position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.6);z-index:10000');
   overlay.innerHTML =
     '<div style="max-width:480px;background:var(--surface,#152338);border:1px solid var(--warning,#d29922);border-radius:8px;padding:1.5rem;color:var(--text,#e6e6e6)">' +
       _licenseBannerHTML(info) +
@@ -237,7 +238,7 @@ export function doLogin() {
       state._pwForced = true;
       document.getElementById('changepw-title').textContent = 'Set New Password';
       document.getElementById('changepw-sub').textContent = 'Your account requires a password change before continuing.';
-      document.getElementById('cpw-cancel-btn').style.display = 'none';
+      setDisplay(document.getElementById('cpw-cancel-btn'), 'none');
       document.getElementById('changepw-overlay').classList.add('open');
     }
   })
@@ -249,35 +250,35 @@ export function doLogout() {
   localStorage.removeItem('bas_role');
   if (state.socket) state.socket.close();
   fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' }).catch(function(){});
-  document.getElementById('app').style.display = 'none';
-  document.getElementById('login-screen').style.display = 'flex';
+  setDisplay(document.getElementById('app'), 'none');
+  setDisplay(document.getElementById('login-screen'), 'flex');
   document.getElementById('inp-pass').value = '';
 }
 
 function bootApp() {
   if (LICENSE_INFO && LICENSE_INFO.state === 'grace') renderLicenseGraceBanner(LICENSE_INFO);
-  document.getElementById('login-screen').style.display = 'none';
-  document.getElementById('app').style.display = 'flex';
+  setDisplay(document.getElementById('login-screen'), 'none');
+  setDisplay(document.getElementById('app'), 'flex');
   document.getElementById('role-badge').textContent = ROLE;
-  document.getElementById('nav-settings').style.display = '';
+  setDisplay(document.getElementById('nav-settings'), '');
   loadCurrentUser();
   // Integrations nav — admin only
   var navInt = document.getElementById('nav-integrations');
-  if (navInt) navInt.style.display = ROLE === 'admin' ? '' : 'none';
+  if (navInt) setDisplay(navInt, ROLE === 'admin' ? '' : 'none');
   // Scheduled Assessments nav — Analyst+Admin (same tier the API itself requires)
   var navSched = document.getElementById('nav-scheduled-assessments');
-  if (navSched) navSched.style.display = (ROLE === 'admin' || ROLE === 'analyst') ? '' : 'none';
+  if (navSched) setDisplay(navSched, (ROLE === 'admin' || ROLE === 'analyst') ? '' : 'none');
   if (ROLE === 'admin') {
     document.querySelectorAll('.settings-nav a').forEach(function(el) {
-      if (el.getAttribute('data-set') !== 'theme') el.style.display = '';
+      if (el.getAttribute('data-set') !== 'theme') setDisplay(el, '');
     });
-    document.getElementById('sim-cov-card').style.display = '';
+    setDisplay(document.getElementById('sim-cov-card'), '');
   } else {
     document.querySelectorAll('.settings-nav a').forEach(function(el) {
-      if (el.getAttribute('data-set') !== 'theme') el.style.display = 'none';
+      if (el.getAttribute('data-set') !== 'theme') setDisplay(el, 'none');
     });
-    document.getElementById('sim-cov-card').style.display = 'none';
-    document.getElementById('sim-cov-detail').style.display = 'none';
+    setDisplay(document.getElementById('sim-cov-card'), 'none');
+    setDisplay(document.getElementById('sim-cov-detail'), 'none');
     if (state.SETTINGS_SECTION !== 'theme') {
       state.SETTINGS_SECTION = 'theme';
     }
@@ -285,12 +286,12 @@ function bootApp() {
   selectTheme(localStorage.getItem('audspect_theme') || 'dark');
   // Scenario authoring is Analyst+Admin only — hide builder entry points for viewers.
   if (ROLE !== 'admin' && ROLE !== 'analyst') {
-    var nb = document.getElementById('sc-new-btn');     if (nb) nb.style.display = 'none';
-    var ub = document.getElementById('sc-upload-btn');  if (ub) ub.style.display = 'none';
+    var nb = document.getElementById('sc-new-btn');     if (nb) setDisplay(nb, 'none');
+    var ub = document.getElementById('sc-upload-btn');  if (ub) setDisplay(ub, 'none');
   }
   // Remediation bulk ticket actions — analyst+
   var remTicketActions = document.getElementById('rem-ticket-actions');
-  if (remTicketActions) remTicketActions.style.display = (ROLE === 'admin' || ROLE === 'analyst') ? 'flex' : 'none';
+  if (remTicketActions) setDisplay(remTicketActions, (ROLE === 'admin' || ROLE === 'analyst') ? 'flex' : 'none');
   connectWS();
   loadAgents();
   loadAgentGroupTree();
@@ -390,11 +391,11 @@ export function goToProfile() {
     roleChip.textContent = u.role || '—';
     var statusBadge = document.getElementById('profile-status-badge');
     statusBadge.textContent = u.isActive ? 'Active' : 'Inactive';
-    statusBadge.className = 'sbadge ' + (u.isActive ? 's-active' : 's-retired');
+    replaceClasses(statusBadge, 'sbadge ' + (u.isActive ? 's-active' : 's-retired'));
     document.getElementById('profile-created').textContent = u.createdAt ? new Date(u.createdAt).toLocaleDateString() : '—';
     document.getElementById('profile-last-login').textContent = u.lastLogin ? new Date(u.lastLogin).toLocaleString() : 'Never';
     document.getElementById('profile-auth-source').textContent = u.authSource === 'sso' ? 'Single sign-on (SSO)' : 'Username & password';
-    document.getElementById('profile-admin-shortcut').style.display = u.role === 'admin' ? '' : 'none';
+    setDisplay(document.getElementById('profile-admin-shortcut'), u.role === 'admin' ? '' : 'none');
   }).catch(function() {
     document.getElementById('profile-username').textContent = 'Failed to load profile';
   });
@@ -419,7 +420,7 @@ export function doLogoutFromMenu() { closeUserMenu(); doLogout(); }
 export function activateTab(name) {
   ['dashboard','agents','scenarios','runs','scheduled-assessments','initiatives','campaigns','coverage','findings','remediation','reports','verification','compliance','settings','variants','em','attackpath','exposure','recommendations','integrations','exercises','attack-coverage','threat-priority','iocs','profile','sla-report'].forEach(function(t) {
     var el = document.getElementById('tab-' + t);
-    if (el) el.style.display = t === name ? '' : 'none';
+    if (el) setDisplay(el, t === name ? '' : 'none');
     var nav = document.querySelector('[data-tab="' + t + '"]');
     if (nav) nav.classList.toggle('active', t === name);
   });
@@ -441,8 +442,8 @@ function resolveDashView() {
 
 export function setDashView(view) {
   DASH_VIEW = view;
-  document.getElementById('dash-view-operational').style.display = view === 'operational' ? '' : 'none';
-  document.getElementById('dash-view-executive').style.display = view === 'executive' ? '' : 'none';
+  setDisplay(document.getElementById('dash-view-operational'), view === 'operational' ? '' : 'none');
+  setDisplay(document.getElementById('dash-view-executive'), view === 'executive' ? '' : 'none');
   document.querySelectorAll('.dash-view-btn').forEach(function(b) {
     b.classList.toggle('active', b.getAttribute('data-view') === view);
   });
@@ -451,9 +452,9 @@ export function setDashView(view) {
   else { stopDashCampPoll(); loadExecDashboard(); }
 }
 export function setAgentsView(view) {
-  document.getElementById('agents-view-systemtree').style.display = view === 'systemtree' ? '' : 'none';
-  document.getElementById('agents-view-operational').style.display = view === 'operational' ? '' : 'none';
-  document.getElementById('agents-view-risk').style.display = view === 'risk' ? '' : 'none';
+  setDisplay(document.getElementById('agents-view-systemtree'), view === 'systemtree' ? '' : 'none');
+  setDisplay(document.getElementById('agents-view-operational'), view === 'operational' ? '' : 'none');
+  setDisplay(document.getElementById('agents-view-risk'), view === 'risk' ? '' : 'none');
   document.querySelectorAll('[data-agents-view]').forEach(function(b) {
     b.classList.toggle('active', b.getAttribute('data-agents-view') === view);
   });
@@ -516,7 +517,7 @@ function startDashCampPoll() {
   clearInterval(state._dashCampPoll);
   state._dashCampPoll = setInterval(function() {
     var dash = document.getElementById('tab-dashboard');
-    if (dash && dash.style.display !== 'none' && DASH_VIEW === 'operational') {
+    if (dash && displayOf(dash) !== 'none' && DASH_VIEW === 'operational') {
       refreshDashboardCampaigns();
     } else {
       clearInterval(state._dashCampPoll);
@@ -577,7 +578,7 @@ export function showTamperBanner(data) {
   msg.textContent = '⚠ Unexpected file ' + evt + ' detected: ' +
     (_tamperPaths.length === 1 ? _tamperPaths[0] : _tamperPaths.length + ' protected files') +
     ' — Run dispatch is suspended. Acknowledge to resume.';
-  banner.style.display = 'flex';
+  setDisplay(banner, 'flex');
   // Shift the main content down so the fixed banner doesn't cover it.
   document.body.style.paddingTop = '46px';
 }
@@ -586,7 +587,7 @@ export function ackAllTamperEvents() {
     .then(function() {
       _tamperPaths = [];
       var banner = document.getElementById('tamper-banner');
-      if (banner) banner.style.display = 'none';
+      if (banner) setDisplay(banner, 'none');
       document.body.style.paddingTop = '';
     })
     .catch(function() { alert('Failed to acknowledge tamper events. Check server logs.'); });

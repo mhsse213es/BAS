@@ -13,6 +13,7 @@ import { loadRansomwareReadiness } from './ransomware.js';
 import { additionalAgentIds, closeModal, loadRuns, openBuilder, openModal, resolvedAllTargetIds, resolvedGroupTargetIds, scenarioFramework, viewRunResults } from './reports.js';
 import { ROLE, _riskScoreColor, showTab, showTamperBanner } from './shell.js';
 import { killChainNodes } from './variant-report.js';
+import { displayOf, replaceClasses, setDisplay } from '../core/inline-style.js';
 
 
 // ── Evidence Panel ────────────────────────────────────────────────────────────
@@ -69,11 +70,11 @@ export function openEvidence(idx) {
   var stepSuffix = (c.stepName && c.stepName !== techName) ? ' (' + c.stepName + ')' : '';
   document.getElementById('evidence-title').textContent = techId + techName + stepSuffix;
   renderEvidencePanel(c);
-  document.getElementById('evidence-overlay').style.display = 'block';
+  setDisplay(document.getElementById('evidence-overlay'), 'block');
 }
 
 export function closeEvidence() {
-  document.getElementById('evidence-overlay').style.display = 'none';
+  setDisplay(document.getElementById('evidence-overlay'), 'none');
 }
 export function closeEvidenceOnBackdrop(el, event) { if (event.target === el) closeEvidence(); }
 
@@ -552,7 +553,7 @@ export function confirmRun() {
 
   var sc = state.scenarios.find(function(s) { return s.id === scenarioId; });
   var modeWrap = document.getElementById('modal-mode-wrap');
-  var mode = (modeWrap.style.display !== 'none') ? document.getElementById('modal-mode').value : 'posture';
+  var mode = (displayOf(modeWrap) !== 'none') ? document.getElementById('modal-mode').value : 'posture';
   var confirmLive = false, confirmLab = false;
 
   var agentListText = agentIds.map(function(id) {
@@ -606,7 +607,7 @@ export function confirmRun() {
   var reasonEl = document.getElementById('modal-reason');
   var reason = (mode !== 'posture' && reasonEl) ? reasonEl.value.trim() : '';
   var variantDepthEl = document.getElementById('modal-variant-depth');
-  var variantDepth = (variantDepthEl && document.getElementById('modal-variant-wrap').style.display !== 'none')
+  var variantDepth = (variantDepthEl && displayOf(document.getElementById('modal-variant-wrap')) !== 'none')
     ? variantDepthEl.value : 'none';
 
   var baseBody = { mode: mode, confirmLive: confirmLive, confirmLab: confirmLab,
@@ -832,7 +833,7 @@ export function openCmdk() {
   _cmdkOpen = true;
   var cmds = cmdkCommands();
   var wrap = document.createElement('div');
-  wrap.className = 'cmdk-scrim';
+  replaceClasses(wrap, 'cmdk-scrim');
   wrap.innerHTML =
     '<div class="cmdk" role="dialog" aria-label="Command palette">' +
       '<div class="cmdk-in">' +
@@ -892,7 +893,7 @@ export function openCmdk() {
     if (!typeOp) return;
     var hint = wrap.querySelector('#cmdk-ops-hint');
     hint.textContent = 'Tip: ' + typeOp.values.map(function(v) { return 'type:' + v; }).join(', ') + ' to filter by type.';
-    hint.style.display = '';
+    setDisplay(hint, '');
   }).catch(function() { /* fails soft -- footer just stays hidden */ });
 
   function selectable() { return flat.map(function(f, i) { return f.sec ? -1 : i; }).filter(function(i) { return i >= 0; }); }
@@ -1321,7 +1322,7 @@ export function loadDashboard() {
           '<span style="width:10px;height:10px;border-radius:3px;background:' + color + ';flex-shrink:0"></span>' +
           label + '<span style="margin-left:auto;font-weight:600;color:var(--text)">' + val + '</span></div>';
       };
-      donutEl.style.display = 'flex';
+      setDisplay(donutEl, 'flex');
       donutEl.style.gap = '1.5rem';
       donutEl.style.alignItems = 'center';
       donutEl.innerHTML =
@@ -1357,7 +1358,7 @@ export function loadDashboard() {
         if (!kc.length) { afEl.innerHTML = '<div class="empty" style="padding:1.5rem">No kill-chain data for the latest run.</div>'; return; }
         afEl.innerHTML = '<div class="killchain">' + killChainNodes(kc) + '</div>';
         var openLink = document.getElementById('dash-attackflow-open');
-        if (openLink) { openLink.style.display = ''; openLink.onclick = function() { viewRunResults(lastDone); }; }
+        if (openLink) { setDisplay(openLink, ''); openLink.onclick = function() { viewRunResults(lastDone); }; }
       }).catch(function() { afEl.innerHTML = '<div class="empty" style="padding:1.5rem">Attack flow unavailable.</div>'; });
     }
 

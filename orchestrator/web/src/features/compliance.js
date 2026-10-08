@@ -6,6 +6,7 @@ import { showToast } from '../core/util.js';
 import { initComplianceTab, loadComplianceReport } from './agent-drawer.js';
 import { campaignDisplayStatus } from './campaigns.js';
 import { showTab } from './shell.js';
+import { clearInlineStyle, replaceClasses, setCssText, setDisplay } from '../core/inline-style.js';
 
 
 // ── Compliance score tiles ─────────────────────────────────────────────────
@@ -140,9 +141,9 @@ export function refreshDashboardCampaigns() {
       var kpiDot = document.getElementById('kpi-campaigns-dot');
       var panelDot = document.getElementById('dash-campaigns-dot');
       if (running) {
-        [kpiDot, panelDot].forEach(function(d) { if (d) { d.className = 'dot-live'; d.removeAttribute('style'); } });
+        [kpiDot, panelDot].forEach(function(d) { if (d) { replaceClasses(d, 'dot-live'); clearInlineStyle(d); } });
       } else {
-        [kpiDot, panelDot].forEach(function(d) { if (d) { d.className = ''; d.style.cssText = 'display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--muted);vertical-align:middle;flex-shrink:0;'; } });
+        [kpiDot, panelDot].forEach(function(d) { if (d) { replaceClasses(d, ''); setCssText(d, 'display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--muted);vertical-align:middle;flex-shrink:0;'); } });
       }
     }
     // Live campaigns panel.
@@ -167,7 +168,7 @@ export function openChangePassword() {
   state._pwForced = false;
   document.getElementById('changepw-title').textContent = 'Change Password';
   document.getElementById('changepw-sub').textContent = 'Update your account password.';
-  document.getElementById('cpw-cancel-btn').style.display = '';
+  setDisplay(document.getElementById('cpw-cancel-btn'), '');
   document.getElementById('cpw-current').value = '';
   document.getElementById('cpw-new').value = '';
   document.getElementById('cpw-confirm').value = '';
@@ -203,7 +204,7 @@ export function submitChangePassword() {
 
 export function loadCalderaStatus() {
   var wrap = document.getElementById('caldera-status-wrap');
-  if (wrap) wrap.style.display = '';
+  if (wrap) setDisplay(wrap, '');
   var btn = document.getElementById('caldera-check-btn');
   if (btn) btn.disabled = true;
 
@@ -235,13 +236,13 @@ export function loadCalderaStatus() {
     var errEl = document.getElementById('cs-caldera-error');
     if (d.error) {
       errEl.textContent = d.error;
-      errEl.style.display = '';
+      setDisplay(errEl, '');
     } else {
-      errEl.style.display = 'none';
+      setDisplay(errEl, 'none');
     }
   }).catch(function(e) {
     var errEl = document.getElementById('cs-caldera-error');
-    if (errEl) { errEl.textContent = e.message; errEl.style.display = ''; }
+    if (errEl) { errEl.textContent = e.message; setDisplay(errEl, ''); }
     document.getElementById('cs-caldera-status').innerHTML =
       '<span class="u-danger">Error checking status</span>';
   }).finally(function() {
@@ -271,8 +272,8 @@ export function _renderConnectorCard(prefix, enabled, stat, rawCountElId) {
   document.getElementById('cs-' + prefix + '-actors').textContent = stat ? stat.actorCount.toLocaleString() : '—';
   document.getElementById('cs-' + prefix + '-lastfetch').textContent = (stat && stat.fetchedAt) ? new Date(stat.fetchedAt).toLocaleString() : '—';
   var errEl = document.getElementById('cs-' + prefix + '-error');
-  if (stat && stat.error) { errEl.textContent = stat.error; errEl.style.display = ''; }
-  else { errEl.style.display = 'none'; }
+  if (stat && stat.error) { errEl.textContent = stat.error; setDisplay(errEl, ''); }
+  else { setDisplay(errEl, 'none'); }
 }
 
 // ── Generic config-save confirmation ────────────────────────────────────────

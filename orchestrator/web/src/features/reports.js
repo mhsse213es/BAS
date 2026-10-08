@@ -13,6 +13,7 @@ import { renderRunIOCList, renderRunIOCToolbar } from './iocs.js';
 import { rerunSubset } from './rerun-review.js';
 import { ROLE, _artCatalogByPlatform, _riskScoreColor } from './shell.js';
 import { renderAttackFlow, renderRunFindings, renderRunRecommendations, renderRunReportExtra, renderVariantCoverage } from './variant-report.js';
+import { displayOf, replaceClasses, setDisplay } from '../core/inline-style.js';
 
 
 // ── Reports ──────────────────────────────────────────────────────────────────
@@ -115,20 +116,20 @@ export function openReportGen(type) {
   }).join('');
   var fwWrap = document.getElementById('rep-fw-wrap');
   if (type === 'compliance') {
-    fwWrap.style.display = '';
+    setDisplay(fwWrap, '');
     apicall('/api/compliance/frameworks').then(function(fws) {
       document.getElementById('rep-fw').innerHTML = (fws || []).map(function(f) {
         return '<option value="' + x(f.id) + '">' + x(f.name || f.id) + '</option>';
       }).join('');
     });
   } else {
-    fwWrap.style.display = 'none';
+    setDisplay(fwWrap, 'none');
   }
   var filterWrap = document.getElementById('rep-filter-wrap');
   if (type === 'audit') {
-    if (filterWrap) filterWrap.style.display = 'none';
+    if (filterWrap) setDisplay(filterWrap, 'none');
   } else {
-    if (filterWrap) filterWrap.style.display = '';
+    if (filterWrap) setDisplay(filterWrap, '');
   }
   document.getElementById('report-overlay').classList.add('open');
 }
@@ -496,7 +497,7 @@ export function openModal(scenarioId, preAgent, lockAgent) {
     var desc = s.description ? ' — ' + (s.description.length > 90 ? s.description.substring(0, 87) + '...' : s.description) : '';
     return '<option value="' + x(s.id) + '"' + (s.id === scenarioId ? ' selected' : '') + '>' + x(s.name) + x(desc) + '</option>';
   }).join('');
-  scWrap.style.display = scenarioId ? 'none' : 'block';
+  setDisplay(scWrap, scenarioId ? 'none' : 'block');
   var sc = scenarioId ? state.scenarios.find(function(s) { return s.id === scenarioId; }) : null;
   if (lockAgent) {
     document.getElementById('modal-title').textContent = 'Safe Scan' + (sc ? ': ' + sc.name : '');
@@ -519,20 +520,20 @@ export function openModal(scenarioId, preAgent, lockAgent) {
   state._targetMode = 'individual';
   var indRadio = document.querySelector('input[name="modal-target-mode"][value="individual"]');
   if (indRadio) indRadio.checked = true;
-  document.getElementById('modal-individual-wrap').style.display = 'block';
-  document.getElementById('modal-group-wrap').style.display = 'none';
-  document.getElementById('modal-all-wrap').style.display = 'none';
+  setDisplay(document.getElementById('modal-individual-wrap'), 'block');
+  setDisplay(document.getElementById('modal-group-wrap'), 'none');
+  setDisplay(document.getElementById('modal-all-wrap'), 'none');
   var allLabel = document.getElementById('modal-target-all-label');
-  if (allLabel) allLabel.style.display = (ROLE === 'admin') ? 'flex' : 'none';
+  if (allLabel) setDisplay(allLabel, (ROLE === 'admin') ? 'flex' : 'none');
   renderRunMode();
   document.getElementById('run-overlay').classList.add('open');
   // Wizard: skip Scenario step when scenarioId fixed; skip Target step when agent is
   // locked (safe scan from agent row — endpoint already known). Jump straight to
   // Options after a picker selection so the chosen subset shows in context.
   var pip1 = document.querySelector('[data-pip="1"]');
-  if (pip1) pip1.style.display = scenarioId ? 'none' : '';
+  if (pip1) setDisplay(pip1, scenarioId ? 'none' : '');
   var pip2 = document.querySelector('[data-pip="2"]');
-  if (pip2) pip2.style.display = lockAgent ? 'none' : '';
+  if (pip2) setDisplay(pip2, lockAgent ? 'none' : '');
   _wzMin = lockAgent ? 3 : (scenarioId ? 2 : 1);
   var effId = scenarioId || document.getElementById('modal-sc').value;
   var start = (state._runSelection && state._runSelection.scId === effId && state._runSelection.ids && state._runSelection.ids.length)
@@ -567,8 +568,8 @@ export function renderRunMode() {
   if (state._targetMode === 'group' || state._targetMode === 'all') {
     var resolved = state._targetMode === 'group' ? resolvedGroupTargetIds() : resolvedAllTargetIds();
     if (!resolved.eligible.length) {
-      wrap.style.display = 'none';
-      warn.style.display = 'none';
+      setDisplay(wrap, 'none');
+      setDisplay(warn, 'none');
       btn.disabled = true;
       btn.innerHTML = '&#9888; No Eligible Agents';
       return;
@@ -603,28 +604,28 @@ export function renderRunMode() {
   btn.disabled = false;
 
   if (!sc || !sc.executable) {
-    wrap.style.display = 'none';
+    setDisplay(wrap, 'none');
     modeSel.value = 'posture';
     if (osMismatch) {
-      warn.style.display = 'block';
+      setDisplay(warn, 'block');
       warn.style.border = '1px solid rgba(218,54,51,0.5)';
       warn.style.background = 'rgba(218,54,51,0.08)';
       warn.style.color = '#f85149';
       warn.innerHTML = osMismatchMsg;
     } else {
-      warn.style.display = 'none';
+      setDisplay(warn, 'none');
     }
     btn.innerHTML = '&#9654; Run';
     return;
   }
-  wrap.style.display = 'block';
+  setDisplay(wrap, 'block');
   var mode = modeSel.value;
   var reasonWrap = document.getElementById('modal-reason-wrap');
-  reasonWrap.style.display = (mode === 'posture') ? 'none' : 'block';
+  setDisplay(reasonWrap, (mode === 'posture') ? 'none' : 'block');
 
   // OS mismatch overrides mode warnings for live modes
   if (osMismatch && (mode === 'telemetry' || mode === 'lab')) {
-    warn.style.display = 'block';
+    setDisplay(warn, 'block');
     warn.style.border = '1px solid rgba(218,54,51,0.5)';
     warn.style.background = 'rgba(218,54,51,0.08)';
     warn.style.color = '#f85149';
@@ -636,7 +637,7 @@ export function renderRunMode() {
   btn.disabled = false;
 
   if (mode === 'telemetry') {
-    warn.style.display = 'block';
+    setDisplay(warn, 'block');
     warn.style.border = '1px solid rgba(210,153,34,0.5)';
     warn.style.background = 'rgba(210,153,34,0.12)';
     warn.style.color = '#d29922';
@@ -645,7 +646,7 @@ export function renderRunMode() {
     warn.innerHTML = warnText;
     btn.innerHTML = '&#9654; Run Telemetry';
   } else if (mode === 'lab') {
-    warn.style.display = 'block';
+    setDisplay(warn, 'block');
     warn.style.border = '1px solid rgba(218,54,51,0.5)';
     warn.style.background = 'rgba(218,54,51,0.12)';
     warn.style.color = '#f85149';
@@ -653,13 +654,13 @@ export function renderRunMode() {
     btn.innerHTML = '&#9654; Run LAB';
   } else {
     if (osMismatch) {
-      warn.style.display = 'block';
+      setDisplay(warn, 'block');
       warn.style.border = '1px solid rgba(218,54,51,0.4)';
       warn.style.background = 'rgba(218,54,51,0.08)';
       warn.style.color = '#f85149';
       warn.innerHTML = osMismatchMsg;
     } else {
-      warn.style.display = 'none';
+      setDisplay(warn, 'none');
     }
     btn.innerHTML = '&#9654; Run';
   }
@@ -669,7 +670,7 @@ export function renderRunMode() {
   var variantWrap = document.getElementById('modal-variant-wrap');
   var showVariant = (mode === 'telemetry' || mode === 'lab') && (fw === 'art');
   if (variantWrap) {
-    variantWrap.style.display = showVariant ? 'block' : 'none';
+    setDisplay(variantWrap, showVariant ? 'block' : 'none');
     if (showVariant) updateVariantDepthNote();
   }
 }
@@ -710,8 +711,8 @@ function renderAdditionalAgents() {
   var eligibleIds = {};
   eligible.forEach(function(a) { eligibleIds[a.agentId] = true; });
   Object.keys(state._addlSel).forEach(function(k) { if (!eligibleIds[k]) delete state._addlSel[k]; });
-  if (!eligible.length) { wrap.style.display = 'none'; return; }
-  wrap.style.display = 'block';
+  if (!eligible.length) { setDisplay(wrap, 'none'); return; }
+  setDisplay(wrap, 'block');
   list.innerHTML = eligible.map(function(a) {
     return '<label style="display:flex;align-items:center;gap:0.5rem;padding:0.25rem 0.3rem;cursor:pointer">' +
       '<input type="checkbox" ' + (state._addlSel[a.agentId] ? 'checked' : '') +
@@ -740,9 +741,9 @@ export function setTargetMode(mode) {
   state._targetMode = mode;
   if (mode !== 'group') state._groupSel = {};
   if (mode !== 'individual') state._addlSel = {};
-  document.getElementById('modal-individual-wrap').style.display = mode === 'individual' ? 'block' : 'none';
-  document.getElementById('modal-group-wrap').style.display = mode === 'group' ? 'block' : 'none';
-  document.getElementById('modal-all-wrap').style.display = mode === 'all' ? 'block' : 'none';
+  setDisplay(document.getElementById('modal-individual-wrap'), mode === 'individual' ? 'block' : 'none');
+  setDisplay(document.getElementById('modal-group-wrap'), mode === 'group' ? 'block' : 'none');
+  setDisplay(document.getElementById('modal-all-wrap'), mode === 'all' ? 'block' : 'none');
   if (mode === 'group') renderGroupTargetList();
   renderRunMode();
 }
@@ -837,9 +838,9 @@ export function closeModal() {
   state._modalScId = null; state._runSelection = null;
   // Restore pip visibility so next open() always starts clean
   var p2 = document.querySelector('[data-pip="2"]');
-  if (p2) p2.style.display = '';
+  if (p2) setDisplay(p2, '');
   var p1 = document.querySelector('[data-pip="1"]');
-  if (p1) p1.style.display = '';
+  if (p1) setDisplay(p1, '');
 }
 
 /* ── Run wizard navigation ─────────────────────────────────────────────────
@@ -853,17 +854,17 @@ function wizardSet(step) {
   _wzStep = step;
   [1, 2, 3, 4].forEach(function(n) {
     var pane = document.querySelector('[data-pane="' + n + '"]');
-    if (pane) pane.style.display = (n === step) ? 'block' : 'none';
+    if (pane) setDisplay(pane, (n === step) ? 'block' : 'none');
     var pip = document.querySelector('[data-pip="' + n + '"]');
     if (pip) { pip.classList.toggle('active', n === step); pip.classList.toggle('done', n < step); }
   });
-  document.getElementById('wz-back').style.display = (step > _wzMin) ? '' : 'none';
-  document.getElementById('wz-next').style.display = (step < 4) ? '' : 'none';
-  document.getElementById('modal-run-btn').style.display = (step === 4) ? '' : 'none';
+  setDisplay(document.getElementById('wz-back'), (step > _wzMin) ? '' : 'none');
+  setDisplay(document.getElementById('wz-next'), (step < 4) ? '' : 'none');
+  setDisplay(document.getElementById('modal-run-btn'), (step === 4) ? '' : 'none');
   if (step === 3) {
     renderRunMode();
     var mw = document.getElementById('modal-mode-wrap');
-    document.getElementById('wz-mode-note').style.display = (mw.style.display === 'none') ? 'block' : 'none';
+    setDisplay(document.getElementById('wz-mode-note'), (displayOf(mw) === 'none') ? 'block' : 'none');
   }
   if (step === 4) renderWizardReview();
 }
@@ -875,7 +876,7 @@ function renderWizardReview() {
   var agSel = document.getElementById('modal-agent');
   var agTxt = (agSel.options[agSel.selectedIndex] || {}).text || agSel.value;
   var modeWrap = document.getElementById('modal-mode-wrap');
-  var mode = (modeWrap.style.display !== 'none') ? document.getElementById('modal-mode').value : 'posture';
+  var mode = (displayOf(modeWrap) !== 'none') ? document.getElementById('modal-mode').value : 'posture';
   var modeLabel = { posture: 'Posture — read-only', telemetry: 'Telemetry — identity-safe', lab: 'Lab — full-fidelity' }[mode] || mode;
   var fw = scenarioFramework(sc);
   var noun = (fw === 'art') ? 'techniques' : (fw === 'caldera') ? 'abilities' : (fw === 'posture') ? 'checks' : 'steps';
@@ -891,7 +892,7 @@ function renderWizardReview() {
   var variantDepthEl2 = document.getElementById('modal-variant-depth');
   var variantWrap2 = document.getElementById('modal-variant-wrap');
   var variantLabel = '';
-  if (variantDepthEl2 && variantWrap2 && variantWrap2.style.display !== 'none') {
+  if (variantDepthEl2 && variantWrap2 && displayOf(variantWrap2) !== 'none') {
     var vd = variantDepthEl2.value || 'none';
     variantLabel = { none: 'None (base only)', quick: 'Quick (~5 per PS step)', standard: 'Standard (~15 per PS step)', full: 'Full (33 per PS step)' }[vd] || vd;
   }
@@ -958,7 +959,7 @@ function renderWizardReview() {
              (maxPrivLabel ? row('Max privilege', x(maxPrivLabel)) : '') +
              (reason ? row('Reason', x(reason)) : '');
   var warnEl = document.getElementById('modal-mode-warn');
-  if (warnEl.style.display !== 'none' && warnEl.innerHTML.trim()) {
+  if (displayOf(warnEl) !== 'none' && warnEl.innerHTML.trim()) {
     html += '<div class="wz-rev-warn">' + warnEl.innerHTML + '</div>';
   }
   if (fw === 'posture' && sel && addlIds.length) {
@@ -1082,9 +1083,9 @@ function openPickerWith(scId, fw, sc, items) {
   // flow) must never inherit read-only from a previous Detailed-view visit.
   _pickerReadOnly = false;
   var selAllWrap = document.getElementById('picker-selectall-wrap');
-  if (selAllWrap) selAllWrap.style.display = '';
+  if (selAllWrap) setDisplay(selAllWrap, '');
   var applyBtn = document.getElementById('picker-apply');
-  if (applyBtn) applyBtn.style.display = '';
+  if (applyBtn) setDisplay(applyBtn, '');
   var cancelBtn = document.getElementById('picker-cancel-btn');
   if (cancelBtn) cancelBtn.textContent = 'Cancel';
   _pickerItems = items;
@@ -1116,7 +1117,7 @@ function openPickerWith(scId, fw, sc, items) {
   document.getElementById('picker-search').value = '';
   // Show / hide metadata filters and populate tactic dropdown for Caldera.
   var filtersEl = document.getElementById('picker-caldera-filters');
-  if (filtersEl) filtersEl.style.display = fw === 'caldera' ? '' : 'none';
+  if (filtersEl) setDisplay(filtersEl, fw === 'caldera' ? '' : 'none');
   if (fw === 'caldera') {
     // Reset all filter chips to 'all'.
     _pf = { plugin: 'all', payload: 'all', admin: 'all', platform: 'all', tactic: 'all' };
@@ -1197,11 +1198,11 @@ function openDetailedView(sc, items) {
     items.length + ' atomic test' + (items.length === 1 ? '' : 's') + ' across every ' + platformLabel + '-runnable technique will run. Search by technique ID or atomic name — this list is not selectable.';
   document.getElementById('picker-search').value = '';
   var filtersEl = document.getElementById('picker-caldera-filters');
-  if (filtersEl) filtersEl.style.display = 'none';
+  if (filtersEl) setDisplay(filtersEl, 'none');
   var selAllWrap = document.getElementById('picker-selectall-wrap');
-  if (selAllWrap) selAllWrap.style.display = 'none';
+  if (selAllWrap) setDisplay(selAllWrap, 'none');
   var applyBtn = document.getElementById('picker-apply');
-  if (applyBtn) applyBtn.style.display = 'none';
+  if (applyBtn) setDisplay(applyBtn, 'none');
   var cancelBtn = document.getElementById('picker-cancel-btn');
   if (cancelBtn) cancelBtn.textContent = 'Close';
   renderPickerList();
@@ -1384,7 +1385,7 @@ function renderModalSelection() {
   var id = state._modalScId || document.getElementById('modal-sc').value;
   var sc = state.scenarios.find(function(s) { return s.id === id; });
   var fw = scenarioFramework(sc);
-  if (!sc || !fw) { cw.style.display = 'none'; note.style.display = 'none'; return; }
+  if (!sc || !fw) { setDisplay(cw, 'none'); setDisplay(note, 'none'); return; }
   // art_all_windows/art_all_platform scenarios always run every atomic for
   // every technique their target platform supports -- there is no subset
   // to choose, so "Customize" would be misleading here. Show a read-only
@@ -1392,12 +1393,12 @@ function renderModalSelection() {
   // rest of this function entirely, since none of the selection/subset
   // logic below applies to a scenario that has nothing to select.
   if (sc.artAllWindows || sc.artAllPlatform) {
-    cw.style.display = 'block';
+    setDisplay(cw, 'block');
     link.innerHTML = '&#128269; Detailed view — every atomic test that will run';
     link.style.opacity = '';
     link.style.pointerEvents = '';
     link.onclick = function() { openDetailedViewFromModal(); return false; };
-    note.style.display = 'none';
+    setDisplay(note, 'none');
     return;
   }
   link.onclick = function() { openPickerFromModal(); return false; };
@@ -1410,7 +1411,7 @@ function renderModalSelection() {
   }
   var noun = (fw === 'art') ? 'techniques' : (fw === 'caldera') ? 'abilities' : (fw === 'posture') ? 'checks' : 'steps';
   var has = state._runSelection && state._runSelection.scId === id && state._runSelection.fw === fw && state._runSelection.ids.length > 0;
-  cw.style.display = 'block';
+  setDisplay(cw, 'block');
   if (fw === 'posture' && !document.getElementById('modal-agent').value) {
     link.innerHTML = '&#9881; Customize — select a target agent first';
     link.style.opacity = '0.5';
@@ -1425,7 +1426,7 @@ function renderModalSelection() {
     link.textContent = '⚙ ' + (has ? 'Change selection' : 'Customize — select ' + noun + ' to run');
   }
   if (has) {
-    note.style.display = 'block';
+    setDisplay(note, 'block');
     note.innerHTML = '&#9989; Running a selected subset: <strong>' + state._runSelection.ids.length + '</strong> ' + noun +
       (state._runSelection.locked ? ' (targeted re-validate)' :
        ' <a href="#" class="desc-toggle" style="margin-left:8px"' + on('click', 'clearSelection') + '>Clear</a>');
@@ -1441,7 +1442,7 @@ function renderModalSelection() {
     var cached = _postureSummaryCache[cacheKey];
     if (cached === undefined) {
       _postureSummaryCache[cacheKey] = 'pending';
-      note.style.display = 'block';
+      setDisplay(note, 'block');
       note.innerHTML = '<span class="u-muted">Loading check catalog…</span>';
       apicall('/api/posture/catalog?agentId=' + encodeURIComponent(agentId) + '&scenario=' + encodeURIComponent(id))
         .then(function(d) {
@@ -1471,16 +1472,16 @@ function renderModalSelection() {
           }
         });
     } else if (cached === 'pending') {
-      note.style.display = 'block';
+      setDisplay(note, 'block');
       note.innerHTML = '<span class="u-muted">Loading check catalog…</span>';
     } else if (cached) {
-      note.style.display = 'block';
+      setDisplay(note, 'block');
       note.innerHTML = cached;
     } else {
-      note.style.display = 'none';
+      setDisplay(note, 'none');
     }
   } else {
-    note.style.display = 'none';
+    setDisplay(note, 'none');
   }
 }
 
@@ -1505,7 +1506,7 @@ export function openBuilderARTPicker() {
     document.getElementById('picker-sub').textContent = 'Tick the ATT&CK techniques to include. Search by ID or atomic name.';
     document.getElementById('picker-search').value = '';
     var filtersEl = document.getElementById('picker-caldera-filters');
-    if (filtersEl) filtersEl.style.display = 'none';
+    if (filtersEl) setDisplay(filtersEl, 'none');
     ensureCovStatus(renderPickerList);
     document.getElementById('picker-overlay').classList.add('open');
   }
@@ -1534,7 +1535,7 @@ export function openBuilderCalderaPicker() {
     document.getElementById('picker-search').value = '';
     // Show Caldera metadata filters and reset them.
     var filtersEl = document.getElementById('picker-caldera-filters');
-    if (filtersEl) filtersEl.style.display = '';
+    if (filtersEl) setDisplay(filtersEl, '');
     _pf = { plugin: 'all', payload: 'all', admin: 'all', platform: 'all', tactic: 'all' };
     document.querySelectorAll('.pfbtn').forEach(function(b) {
       b.classList.toggle('active', b.getAttribute('data-val') === 'all');
@@ -1612,10 +1613,10 @@ export function closeBuilderOnBackdrop(el, event) { if (event.target === el) clo
 
 export function renderBuilderMode() {
   var mode = document.getElementById('bld-mode').value;
-  document.getElementById('bld-custom').style.display  = mode === 'custom'  ? 'block' : 'none';
-  document.getElementById('bld-art').style.display     = mode === 'art'     ? 'block' : 'none';
-  document.getElementById('bld-caldera').style.display = mode === 'caldera' ? 'block' : 'none';
-  document.getElementById('bld-local').style.display   = mode === 'local'   ? 'block' : 'none';
+  setDisplay(document.getElementById('bld-custom'), mode === 'custom'  ? 'block' : 'none');
+  setDisplay(document.getElementById('bld-art'), mode === 'art'     ? 'block' : 'none');
+  setDisplay(document.getElementById('bld-caldera'), mode === 'caldera' ? 'block' : 'none');
+  setDisplay(document.getElementById('bld-local'), mode === 'local'   ? 'block' : 'none');
   if (mode === 'custom' && !document.getElementById('bld-steps').children.length) addStep(null);
 }
 
@@ -1762,11 +1763,11 @@ function techRenderSelected(wrap, id) {
   var search = wrap.querySelector('.st-tech-search');
   var hidden = wrap.querySelector('.st-tech');
   hidden.value = id;
-  search.style.display = 'none';
-  box.style.display = '';
+  setDisplay(search, 'none');
+  setDisplay(box, '');
   var t = techFindById(id);
   if (!t) {
-    box.className = 'st-tech-selected unresolved';
+    replaceClasses(box, 'st-tech-selected unresolved');
     box.innerHTML =
       '<div><span class="st-tech-sel-id">' + x(id) + '</span>' +
         '<span class="tiny muted" style="margin-left:0.4rem">' +
@@ -1774,7 +1775,7 @@ function techRenderSelected(wrap, id) {
       '<span class="st-tech-sel-actions"><a href="#"' + on('click', 'techChangeSelection') + '>&#10005; change</a></span>';
     return;
   }
-  box.className = 'st-tech-selected';
+  replaceClasses(box, 'st-tech-selected');
   var tactics = (t.tactics || []).join(', ');
   var subText = t.subCount ? (t.subCount + (t.subCount === 1 ? ' sub-technique' : ' sub-techniques')) : '';
   box.innerHTML =
@@ -1799,9 +1800,9 @@ function techRefreshAllTechCards() {
 export function techChangeSelection(el) {
   var wrap = el.closest('.st-tech-wrap');
   wrap.querySelector('.st-tech').value = '';
-  wrap.querySelector('.st-tech-selected').style.display = 'none';
+  setDisplay(wrap.querySelector('.st-tech-selected'), 'none');
   var search = wrap.querySelector('.st-tech-search');
-  search.style.display = '';
+  setDisplay(search, '');
   search.value = '';
   search.focus();
 }
@@ -1902,7 +1903,7 @@ export function addStep(st) {
     return '<option value="' + t[0] + '"' + (t[0] === curPriv ? ' selected' : '') + '>' + t[1] + '</option>';
   }).join('');
   var div = document.createElement('div');
-  div.className = 'bld-step';
+  replaceClasses(div, 'bld-step');
   div.innerHTML =
     '<div class="bld-step-hdr"><span class="bld-step-num">Step</span>' +
       '<span class="bld-actions">' +
@@ -2200,7 +2201,7 @@ export function viewRunResults(run) {
       if (stale) stale.remove();
       var el = document.createElement('span');
       el.id = 'runContentProvenance';
-      el.className = 'card-meta';
+      replaceClasses(el, 'card-meta');
       el.textContent = 'Content: ' + c.label;
       titleEl.insertAdjacentElement('afterend', el);
     }).catch(function() {});
@@ -2667,11 +2668,11 @@ export function viewRunResults(run) {
     return '<button class="run-tab-btn' + (i === 0 ? ' active' : '') + '" id="run-tabbtn-' + t[0] + '"' + on('click', 'switchRunTab', t[0]) + '>' + x(t[1]) + '</button>';
   }).join('');
 
-  document.getElementById('results-summary').style.display = 'none';
-  document.getElementById('results-body').style.display = 'none';
-  document.getElementById('run-kpi-strip').style.display = '';
-  document.getElementById('run-tabbar').style.display = '';
-  document.getElementById('run-tab-content').style.display = '';
+  setDisplay(document.getElementById('results-summary'), 'none');
+  setDisplay(document.getElementById('results-body'), 'none');
+  setDisplay(document.getElementById('run-kpi-strip'), '');
+  setDisplay(document.getElementById('run-tabbar'), '');
+  setDisplay(document.getElementById('run-tab-content'), '');
   document.getElementById('results-overlay').classList.add('open');
 
   var reportsEl = document.getElementById('run-tab-reports');
@@ -2778,7 +2779,7 @@ export function switchRunTab(tabId) {
   var content = document.getElementById('run-tab-content');
   if (!content) return;
   Array.prototype.forEach.call(content.querySelectorAll('.run-tab-panel'), function(panel) {
-    panel.style.display = (panel.id === 'run-tab-' + tabId) ? '' : 'none';
+    setDisplay(panel, (panel.id === 'run-tab-' + tabId) ? '' : 'none');
   });
   Array.prototype.forEach.call(document.getElementById('run-tabbar').querySelectorAll('.run-tab-btn'), function(btn) {
     btn.classList.toggle('active', btn.id === 'run-tabbtn-' + tabId);

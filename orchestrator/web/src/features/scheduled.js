@@ -4,6 +4,7 @@ import { x } from '../core/escape.js';
 import { on } from '../core/actions.js';
 import { fmtDate, showToast } from '../core/util.js';
 import { ROLE } from './shell.js';
+import { setDisplay } from '../core/inline-style.js';
 
 
 // ── Scheduled Assessments ──────────────────────────────────────────────────
@@ -238,13 +239,13 @@ function schedWizardSet(step) {
   SCHED.step = step;
   [1, 2, 3, 4].forEach(function(n) {
     var pane = document.querySelector('[data-sched-pane="' + n + '"]');
-    if (pane) pane.style.display = (n === step) ? 'block' : 'none';
+    if (pane) setDisplay(pane, (n === step) ? 'block' : 'none');
     var pip = document.querySelector('[data-sched-pip="' + n + '"]');
     if (pip) { pip.classList.toggle('active', n === step); pip.classList.toggle('done', n < step); }
   });
-  document.getElementById('sched-wz-back').style.display = (step > 1) ? '' : 'none';
-  document.getElementById('sched-wz-next').style.display = (step < 4) ? '' : 'none';
-  document.getElementById('sched-create-btn').style.display = (step === 4) ? '' : 'none';
+  setDisplay(document.getElementById('sched-wz-back'), (step > 1) ? '' : 'none');
+  setDisplay(document.getElementById('sched-wz-next'), (step < 4) ? '' : 'none');
+  setDisplay(document.getElementById('sched-create-btn'), (step === 4) ? '' : 'none');
   // Re-evaluate agent platform compatibility every time step 2 is entered --
   // covers Back-then-forward after switching the step-1 scenario selection.
   if (step === 2) renderSchedAgentList();
@@ -411,16 +412,16 @@ function renderSchedModeRecurrencePane() {
 export function schedOnModeChange() {
   var mode = document.getElementById('sched-mode').value;
   var isTelemetry = mode === 'telemetry';
-  document.getElementById('sched-mode-warn').style.display = isTelemetry ? 'block' : 'none';
-  document.getElementById('sched-reason-wrap').style.display = isTelemetry ? 'block' : 'none';
+  setDisplay(document.getElementById('sched-mode-warn'), isTelemetry ? 'block' : 'none');
+  setDisplay(document.getElementById('sched-reason-wrap'), isTelemetry ? 'block' : 'none');
 }
 
 export function schedOnRecurrenceChange() {
   var type = document.getElementById('sched-recurrence-type').value;
-  document.getElementById('sched-once-wrap').style.display = (type === 'once') ? 'block' : 'none';
-  document.getElementById('sched-dow-wrap').style.display = (type === 'weekly') ? 'block' : 'none';
-  document.getElementById('sched-dom-wrap').style.display = (type === 'monthly') ? 'block' : 'none';
-  document.getElementById('sched-time-wrap').style.display = (type === 'once') ? 'none' : 'block';
+  setDisplay(document.getElementById('sched-once-wrap'), (type === 'once') ? 'block' : 'none');
+  setDisplay(document.getElementById('sched-dow-wrap'), (type === 'weekly') ? 'block' : 'none');
+  setDisplay(document.getElementById('sched-dom-wrap'), (type === 'monthly') ? 'block' : 'none');
+  setDisplay(document.getElementById('sched-time-wrap'), (type === 'once') ? 'none' : 'block');
 }
 
 // schedBuildPayload assembles the exact POST body scheduled_assessment_handlers.go

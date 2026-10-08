@@ -4,6 +4,7 @@ import { on } from '../core/actions.js';
 import { ago, showToast } from '../core/util.js';
 import { openModal } from './reports.js';
 import { _riskScoreColor, showTab } from './shell.js';
+import { setDisplay } from '../core/inline-style.js';
 
 
 // ── Ransomware Readiness Module ───────────────────────────────────────────────
@@ -75,7 +76,7 @@ export function loadRansomwareReadiness(runs) {
     tierEl.textContent = tierLabel;
     tierEl.style.background = tierBg;
     tierEl.style.color = tierColor;
-    tierEl.style.display = '';
+    setDisplay(tierEl, '');
   }
 
   // Score gauge + category bars

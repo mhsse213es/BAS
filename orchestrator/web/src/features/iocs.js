@@ -5,6 +5,7 @@ import { on } from '../core/actions.js';
 import { ago, showToast } from '../core/util.js';
 import { covSegHtml } from './attack-path.js';
 import { ROLE } from './shell.js';
+import { setDisplay } from '../core/inline-style.js';
 
 
 // ── Indicators (IOCs) tab ────────────────────────────────────────────────────
@@ -119,7 +120,7 @@ var _iocRegistryRows = [];
 
 export function loadIOCRegistry() {
   var importBtn = document.getElementById('ioc-import-btn');
-  if (importBtn) importBtn.style.display = ROLE === 'admin' ? '' : 'none';
+  if (importBtn) setDisplay(importBtn, ROLE === 'admin' ? '' : 'none');
 
   apicall('/api/analytics/iocs?limit=5').then(renderIOCAnalyticsTiles).catch(function() {
     var el = document.getElementById('ioc-analytics-tiles');
@@ -278,7 +279,7 @@ export function openIOCDetail(idx) {
 
 export function openIOCImportModal() {
   document.getElementById('ioc-import-text').value = '';
-  document.getElementById('ioc-import-err').style.display = 'none';
+  setDisplay(document.getElementById('ioc-import-err'), 'none');
   document.getElementById('ioc-import-overlay').classList.add('open');
 }
 export function closeIOCImportModal() { document.getElementById('ioc-import-overlay').classList.remove('open'); }
@@ -286,17 +287,17 @@ export function closeIOCImportModal() { document.getElementById('ioc-import-over
 export function submitIOCImport() {
   var raw = document.getElementById('ioc-import-text').value;
   var errEl = document.getElementById('ioc-import-err');
-  errEl.style.display = 'none';
+  setDisplay(errEl, 'none');
 
   var lines = raw.split('\n').map(function(l) { return l.trim(); }).filter(function(l) { return l; });
-  if (!lines.length) { errEl.textContent = 'Enter at least one type,value line.'; errEl.style.display = ''; return; }
+  if (!lines.length) { errEl.textContent = 'Enter at least one type,value line.'; setDisplay(errEl, ''); return; }
 
   var entries = [];
   for (var i = 0; i < lines.length; i++) {
     var parts = lines[i].split(',');
     if (parts.length < 2 || !parts[0].trim() || !parts.slice(1).join(',').trim()) {
       errEl.textContent = 'Line ' + (i + 1) + ' is not "type,value": ' + lines[i];
-      errEl.style.display = '';
+      setDisplay(errEl, '');
       return;
     }
     entries.push({ type: parts[0].trim(), value: parts.slice(1).join(',').trim() });
@@ -311,5 +312,5 @@ export function submitIOCImport() {
       closeIOCImportModal();
       loadIOCRegistry();
     })
-    .catch(function(e) { btn.disabled = false; errEl.textContent = e.message || 'Import failed'; errEl.style.display = ''; });
+    .catch(function(e) { btn.disabled = false; errEl.textContent = e.message || 'Import failed'; setDisplay(errEl, ''); });
 }

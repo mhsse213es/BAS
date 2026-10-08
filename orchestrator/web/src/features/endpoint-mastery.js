@@ -7,6 +7,7 @@ import { agentGroupTree, gpFlattenGroups, resolveGroupTargetAgents, scenarioCate
 import { loadRuns, openModal, sweepStatusLabel, verdictBadge, verdictCounts } from './reports.js';
 import { ROLE, _riskScoreColor, showTab } from './shell.js';
 import { _vexAllTechniques, _vexAvailableVariants, _vexCalderaTechniques, _vexDispatchFullSweep, filterVexTechniqueList } from './variants.js';
+import { setDisplay } from '../core/inline-style.js';
 
 
 // ── Endpoint Mastery ──────────────────────────────────────────────────────────
@@ -159,8 +160,8 @@ export function openEMSweepModal() {
   _emTargetMode = 'individual';
   state._emGroupSel = {};
   document.querySelector('input[name="em-sweep-target-mode"][value="individual"]').checked = true;
-  document.getElementById('em-sweep-individual-wrap').style.display = '';
-  document.getElementById('em-sweep-group-wrap').style.display = 'none';
+  setDisplay(document.getElementById('em-sweep-individual-wrap'), '');
+  setDisplay(document.getElementById('em-sweep-group-wrap'), 'none');
   var sel = document.getElementById('em-sweep-agent');
   sel.innerHTML = state.agents.map(function(a) {
     return '<option value="' + x(a.agentId) + '">' + x(a.agentId) + ' — ' + x(a.hostname) + '</option>';
@@ -195,8 +196,8 @@ export function closeEMSweepModalOnBackdrop(el, event) { if (event.target === el
 
 export function setEMSweepTargetMode(mode) {
   _emTargetMode = mode;
-  document.getElementById('em-sweep-individual-wrap').style.display = mode === 'individual' ? '' : 'none';
-  document.getElementById('em-sweep-group-wrap').style.display = mode === 'group' ? '' : 'none';
+  setDisplay(document.getElementById('em-sweep-individual-wrap'), mode === 'individual' ? '' : 'none');
+  setDisplay(document.getElementById('em-sweep-group-wrap'), mode === 'group' ? '' : 'none');
 }
 
 // emResolvedGroupAgents resolves the currently-checked groups to their
@@ -767,7 +768,7 @@ function renderEMSweepProgress(sw, runs) {
       '<span style="white-space:nowrap">' + actionHtml + '</span></li>';
   }).join('');
   var stopBtn = document.getElementById('em-sweep-stop-btn');
-  stopBtn.style.display = (sw.status === 'running' || sw.status === 'agent_disconnected') ? '' : 'none';
+  setDisplay(stopBtn, (sw.status === 'running' || sw.status === 'agent_disconnected') ? '' : 'none');
 }
 
 export function stopEMSweep(sweepId) {

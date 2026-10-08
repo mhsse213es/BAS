@@ -6,6 +6,7 @@ import { daysAgo, fmtDate, showToast } from '../core/util.js';
 import { covSegHtml, statTileCard } from './attack-path.js';
 import { openModal, scenarioFramework } from './reports.js';
 import { ROLE, _riskScoreColor } from './shell.js';
+import { setDisplay } from '../core/inline-style.js';
 
 
 // ── Findings ─────────────────────────────────────────────────────────────────
@@ -21,12 +22,12 @@ export function loadSLAReport() {
     var empty = document.getElementById('sla-rpt-empty');
     var body = document.getElementById('sla-rpt-body');
     if (!rep.overall || rep.overall.totalEpisodes === 0) {
-      empty.style.display = '';
-      body.style.display = 'none';
+      setDisplay(empty, '');
+      setDisplay(body, 'none');
       return;
     }
-    empty.style.display = 'none';
-    body.style.display = '';
+    setDisplay(empty, 'none');
+    setDisplay(body, '');
     renderSLAKPIs(rep.overall);
     renderSLASeverityBars(rep.bySeverity || []);
     renderSLAMonthlyTrend(rep.monthlyTrend || []);
@@ -107,8 +108,8 @@ export function loadFindings() {
     var bulkBtn = document.getElementById('findings-bulk-btn');
     var ticketTh = document.getElementById('findings-th-ticket');
     var canPush = ROLE === 'admin' || ROLE === 'analyst';
-    if (bulkBtn) bulkBtn.style.display = canPush ? '' : 'none';
-    if (ticketTh) ticketTh.style.display = canPush ? '' : 'none';
+    if (bulkBtn) setDisplay(bulkBtn, canPush ? '' : 'none');
+    if (ticketTh) setDisplay(ticketTh, canPush ? '' : 'none');
   }).catch(function(e) { showToast(e.message, 'err'); });
 }
 function renderFindingsTiles() {
@@ -149,9 +150,9 @@ function renderFindingsRows() {
   var thTriage = document.getElementById('findings-th-triage');
   var thCheck = document.getElementById('findings-th-check');
   var thTicket = document.getElementById('findings-th-ticket');
-  if (thTriage) thTriage.style.display = canTriage ? '' : 'none';
-  if (thCheck) thCheck.style.display = (_findingsBulkMode && canPush) ? '' : 'none';
-  if (thTicket) thTicket.style.display = canPush ? '' : 'none';
+  if (thTriage) setDisplay(thTriage, canTriage ? '' : 'none');
+  if (thCheck) setDisplay(thCheck, (_findingsBulkMode && canPush) ? '' : 'none');
+  if (thTicket) setDisplay(thTicket, canPush ? '' : 'none');
   var colCount = 8 + (canTriage ? 1 : 0) + (canPush ? 1 : 0) + (_findingsBulkMode ? 1 : 0);
   if (!l.length) { tb.innerHTML = '<tr><td colspan="' + colCount + '" class="empty">No findings' + (FINDING_TAB === 'all' ? ' yet.' : ' in this state.') + '</td></tr>'; return; }
   tb.innerHTML = l.map(function(f) {
@@ -457,9 +458,9 @@ export function loadDashboardITSM() {
     if (!sec) return;
     var open = s.openTickets || 0, resolved = s.resolvedTickets || 0, pend = s.pendingRevalidation || 0;
     if (open + resolved + pend === 0 && !(s.byProvider && s.byProvider.length)) {
-      sec.style.display = 'none'; return;
+      setDisplay(sec, 'none'); return;
     }
-    sec.style.display = '';
+    setDisplay(sec, '');
     var tile = function(lbl, val, col) {
       return '<div class="kpi-card"><div class="kpi-label">' + lbl + '</div>' +
         '<div class="kpi-value" style="color:' + col + '">' + val + '</div></div>';
@@ -525,8 +526,8 @@ function toggleFindingsBulkMode(enabled) {
   _findingsSelected = {};
   var checkCol = document.getElementById('findings-th-check');
   var bulkBtn = document.getElementById('findings-bulk-btn');
-  if (checkCol) checkCol.style.display = enabled ? '' : 'none';
-  if (bulkBtn) bulkBtn.style.display = enabled ? '' : 'none';
+  if (checkCol) setDisplay(checkCol, enabled ? '' : 'none');
+  if (bulkBtn) setDisplay(bulkBtn, enabled ? '' : 'none');
   renderFindingsRows();
 }
 

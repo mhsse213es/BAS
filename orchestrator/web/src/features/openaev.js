@@ -5,6 +5,7 @@ import { ago, showToast } from '../core/util.js';
 import { apBandColor, apCard, apColor, apFreshness } from './attack-path.js';
 import { _diffRow, _diffSecretRow, openConfirmDiffModal } from './compliance.js';
 import { ROLE, showTab } from './shell.js';
+import { displayOf, setDisplay } from '../core/inline-style.js';
 
 
 // ── OpenAEV Connector — config/status card lives in Settings → Threat Intel,
@@ -66,8 +67,8 @@ export function loadOpenAEVConfig() {
     if (lastFetchEl) lastFetchEl.textContent = s.lastSyncAt ? new Date(s.lastSyncAt).toLocaleString() : '—';
     var errEl = document.getElementById('cs-openaev-error');
     if (errEl) {
-      if (s.lastError) { errEl.textContent = s.lastError; errEl.style.display = ''; }
-      else { errEl.style.display = 'none'; }
+      if (s.lastError) { errEl.textContent = s.lastError; setDisplay(errEl, ''); }
+      else { setDisplay(errEl, 'none'); }
     }
   }).catch(function(e) { showToast('Failed to load OpenAEV status: ' + (e.message || 'error'), 'err'); });
 }
@@ -96,10 +97,10 @@ function loadOpenAEVScenarios(type, bodyId, emptyId) {
     var empty = document.getElementById(emptyId);
     if (!list || !list.length) {
       body.innerHTML = '';
-      empty.style.display = 'block';
+      setDisplay(empty, 'block');
       return;
     }
-    empty.style.display = 'none';
+    setDisplay(empty, 'none');
     body.innerHTML = list.map(function(sc) {
       return '<tr class="u-pointer"' + on('click', 'openOpenAEVDetail', sc.OpenAEVScenarioID) + '>' +
         '<td>' + x(sc.Name) + '</td>' +
@@ -205,8 +206,8 @@ export function loadExercisesTab() {
   apicall('/api/exercises/plans').then(function(plans) {
     var body = document.getElementById('ex-plans-body');
     var empty = document.getElementById('ex-plans-empty');
-    if (!plans || !plans.length) { body.innerHTML = ''; empty.style.display = 'block'; return; }
-    empty.style.display = 'none';
+    if (!plans || !plans.length) { body.innerHTML = ''; setDisplay(empty, 'block'); return; }
+    setDisplay(empty, 'none');
     body.innerHTML = plans.map(function(p) {
       return '<tr>' +
         '<td>' + x(p.name) + '</td>' +
@@ -220,8 +221,8 @@ export function loadExercisesTab() {
   apicall('/api/exercises/executions').then(function(execs) {
     var body = document.getElementById('ex-execs-body');
     var empty = document.getElementById('ex-execs-empty');
-    if (!execs || !execs.length) { body.innerHTML = ''; empty.style.display = 'block'; stopExPoll(); return; }
-    empty.style.display = 'none';
+    if (!execs || !execs.length) { body.innerHTML = ''; setDisplay(empty, 'block'); stopExPoll(); return; }
+    setDisplay(empty, 'none');
     body.innerHTML = execs.map(function(e) {
       var live = e.status === 'running' || e.status === 'paused';
       var progress = e.steps_total
@@ -257,7 +258,7 @@ function startExPoll() {
   if (_exPollTimer) return;
   _exPollTimer = setInterval(function() {
     var tab = document.getElementById('tab-exercises');
-    if (!tab || tab.style.display === 'none') { stopExPoll(); return; }
+    if (!tab || displayOf(tab) === 'none') { stopExPoll(); return; }
     loadExercisesTab();
     if (_exDetailOpenId) openExerciseDetail(_exDetailOpenId);
   }, 5000);
@@ -567,7 +568,7 @@ function _apUpdateMetaBar(d) {
   var bar = document.getElementById('ap-current-graph-bar');
   if (!bar) return;
   if (!d || !d.collected || !d.agentMeta || !d.agentMeta.length) {
-    bar.style.display = 'none';
+    setDisplay(bar, 'none');
     return;
   }
   var m = d.agentMeta[0]; // most recently collected agent
@@ -583,16 +584,16 @@ function _apUpdateMetaBar(d) {
   var freshEl = document.getElementById('ap-meta-freshness');
   freshEl.textContent = fresh.label;
   freshEl.style.color = fresh.color;
-  bar.style.display = '';
+  setDisplay(bar, '');
 }
 
 export function toggleAPHistory() {
   var p = document.getElementById('ap-history-panel');
-  if (p.style.display === 'none' || !p.style.display) {
-    p.style.display = '';
+  if (displayOf(p) === 'none' || !displayOf(p)) {
+    setDisplay(p, '');
     loadAPHistory();
   } else {
-    p.style.display = 'none';
+    setDisplay(p, 'none');
   }
 }
 

@@ -9,6 +9,7 @@ import { openSweepPreview } from './endpoint-mastery.js';
 import { schedClassifyOS, vexFilterWindowsAgents } from './scheduled.js';
 import { ROLE } from './shell.js';
 import { VEX_POLL_MAX_FAILURES } from './variant-executor.js';
+import { setDisplay } from '../core/inline-style.js';
 
 
 // ── Run Variants reload-survival ────────────────────────────────────────────
@@ -131,7 +132,7 @@ export function populateVexAgents() {
     var sweepSel = document.getElementById('vex-sweep-agent');
     if (sweepSel) sweepSel.innerHTML = opts;
     var allLabel = document.getElementById('vex-run-all-label');
-    if (allLabel) allLabel.style.display = (ROLE === 'admin') ? 'flex' : 'none';
+    if (allLabel) setDisplay(allLabel, (ROLE === 'admin') ? 'flex' : 'none');
   }).catch(function(e) { showToast('Failed to load agents: ' + (e.message || 'error'), 'err'); });
 }
 
@@ -326,8 +327,8 @@ export function setVexTargetMode(mode) {
   if (mode !== 'group') state._vexGroupSel = {};
   var indWrap = document.getElementById('vex-sweep-individual-wrap');
   var grpWrap = document.getElementById('vex-sweep-group-wrap');
-  if (indWrap) indWrap.style.display = mode === 'individual' ? 'flex' : 'none';
-  if (grpWrap) grpWrap.style.display = mode === 'group' ? 'block' : 'none';
+  if (indWrap) setDisplay(indWrap, mode === 'individual' ? 'flex' : 'none');
+  if (grpWrap) setDisplay(grpWrap, mode === 'group' ? 'block' : 'none');
   if (mode === 'group') renderVexGroupList();
 
   // Start Sweep stays inline in Individual mode (compact, single row) but
@@ -583,9 +584,9 @@ export function setVexRunTargetMode(mode) {
   var indWrap = document.getElementById('vex-run-individual-wrap');
   var grpWrap = document.getElementById('vex-run-group-wrap');
   var allWrap = document.getElementById('vex-run-all-wrap');
-  if (indWrap) indWrap.style.display = mode === 'individual' ? 'block' : 'none';
-  if (grpWrap) grpWrap.style.display = mode === 'group' ? 'block' : 'none';
-  if (allWrap) allWrap.style.display = mode === 'all' ? 'block' : 'none';
+  if (indWrap) setDisplay(indWrap, mode === 'individual' ? 'block' : 'none');
+  if (grpWrap) setDisplay(grpWrap, mode === 'group' ? 'block' : 'none');
+  if (allWrap) setDisplay(allWrap, mode === 'all' ? 'block' : 'none');
   if (mode === 'group') renderVexRunGroupList();
 }
 

@@ -7,6 +7,7 @@ import { agentGroupTree, gpFlattenGroups, renderScenarios, resolveGroupTargetAge
 import { loadRuns } from './reports.js';
 import { schedAgentCompatible } from './scheduled.js';
 import { ROLE, showTab } from './shell.js';
+import { setDisplay } from '../core/inline-style.js';
 
 // ── Threat Actor Library (Caldera emu adversary profiles) ──────────────────────
 
@@ -141,7 +142,7 @@ export function openTmplRun(templateId) {
   state._tmplGroupSel = {};
   _tmplTargetMode = 'individual';
   var allLabel = document.getElementById('tmpl-run-all-label');
-  if (allLabel) allLabel.style.display = (ROLE === 'admin') ? 'flex' : 'none';
+  if (allLabel) setDisplay(allLabel, (ROLE === 'admin') ? 'flex' : 'none');
   var indRadio = document.querySelector('input[name="tmpl-run-target-mode"][value="individual"]');
   if (indRadio) indRadio.checked = true;
   setTmplTargetMode('individual');
@@ -151,12 +152,12 @@ export function openTmplRun(templateId) {
   renderTmplWarn();
   renderTmplOSCompat();
   var overlay = document.getElementById('tmpl-run-overlay');
-  if (overlay) { overlay.style.display = 'flex'; }
+  if (overlay) { setDisplay(overlay, 'flex'); }
 }
 
 export function closeTmplRun() {
   var overlay = document.getElementById('tmpl-run-overlay');
-  if (overlay) overlay.style.display = 'none';
+  if (overlay) setDisplay(overlay, 'none');
   _tmplRunID = null; _tmplCalderaID = '';
 }
 
@@ -175,9 +176,9 @@ export function setTmplTargetMode(mode) {
   var indWrap = document.getElementById('tmpl-run-individual-wrap');
   var grpWrap = document.getElementById('tmpl-run-group-wrap');
   var allWrap = document.getElementById('tmpl-run-all-wrap');
-  if (indWrap) indWrap.style.display = mode === 'individual' ? 'block' : 'none';
-  if (grpWrap) grpWrap.style.display = mode === 'group' ? 'block' : 'none';
-  if (allWrap) allWrap.style.display = mode === 'all' ? 'block' : 'none';
+  if (indWrap) setDisplay(indWrap, mode === 'individual' ? 'block' : 'none');
+  if (grpWrap) setDisplay(grpWrap, mode === 'group' ? 'block' : 'none');
+  if (allWrap) setDisplay(allWrap, mode === 'all' ? 'block' : 'none');
   if (mode === 'individual') renderTmplAgentList();
   if (mode === 'group') renderTmplGroupList();
   renderTmplOSCompat();
@@ -444,7 +445,7 @@ export function toggleAdversarySection() {
   var hdr = document.getElementById('adversary-hdr');
   var body = document.getElementById('adversary-body');
   if (hdr) hdr.classList.toggle('collapsed', _adversaryCollapsed);
-  if (body) body.style.display = _adversaryCollapsed ? 'none' : '';
+  if (body) setDisplay(body, _adversaryCollapsed ? 'none' : '');
 }
 
 export function loadAdversaries() {
@@ -469,7 +470,7 @@ export function renderAdversaryLibrary() {
            (a.tactics || []).some(function(t) { return t.toLowerCase().indexOf(q) !== -1; });
   });
 
-  section.style.display = _adversaries.length ? '' : 'none';
+  setDisplay(section, _adversaries.length ? '' : 'none');
   if (cnt) cnt.textContent = _adversaries.length;
 
   if (!filtered.length) {
@@ -524,8 +525,8 @@ export function openAdvDrawer(adversaryId) {
       ? '<button class="btn btn-primary btn-sm u-w100"' + on('click', 'openAdvRunModal', adversaryId, adv ? adv.name : adversaryId) + '>&#9654; Run this adversary</button>'
       : '';
   }
-  document.getElementById('adv-drawer-overlay').style.display = '';
-  document.getElementById('adv-drawer').style.display = '';
+  setDisplay(document.getElementById('adv-drawer-overlay'), '');
+  setDisplay(document.getElementById('adv-drawer'), '');
 
   apicall('/api/caldera/adversaries/' + encodeURIComponent(adversaryId)).then(function(d) {
     var abs = (d && d.abilities) || [];
@@ -558,8 +559,8 @@ export function openAdvDrawer(adversaryId) {
 }
 
 export function closeAdvDrawer() {
-  document.getElementById('adv-drawer-overlay').style.display = 'none';
-  document.getElementById('adv-drawer').style.display = 'none';
+  setDisplay(document.getElementById('adv-drawer-overlay'), 'none');
+  setDisplay(document.getElementById('adv-drawer'), 'none');
   _advDrawerID = null;
 }
 
@@ -579,12 +580,12 @@ export function openAdvRunModal(adversaryId, adversaryName) {
   document.getElementById('adv-run-mode').value = 'telemetry';
   document.getElementById('adv-run-reason').value = '';
   renderAdvRunWarn();
-  overlay.style.display = 'flex';
+  setDisplay(overlay, 'flex');
 }
 
 export function closeAdvRunModal() {
   var overlay = document.getElementById('adv-run-overlay');
-  if (overlay) overlay.style.display = 'none';
+  if (overlay) setDisplay(overlay, 'none');
   _advRunID = null; _advRunName = null;
 }
 
@@ -593,19 +594,19 @@ export function renderAdvRunWarn() {
   var warn = document.getElementById('adv-run-warn');
   if (!warn) return;
   if (mode === 'telemetry') {
-    warn.style.display = '';
+    setDisplay(warn, '');
     warn.style.background = 'rgba(210,153,34,0.12)';
     warn.style.border = '1px solid rgba(210,153,34,0.35)';
     warn.style.color = '#d29922';
     warn.innerHTML = '&#9888; <strong>TELEMETRY mode</strong> — runs real, identity-safe ATT&amp;CK techniques and <strong>will generate EDR/SIEM alerts</strong>. Only proceed on an approved, monitored endpoint.';
   } else if (mode === 'lab') {
-    warn.style.display = '';
+    setDisplay(warn, '');
     warn.style.background = 'rgba(218,54,51,0.10)';
     warn.style.border = '1px solid rgba(218,54,51,0.35)';
     warn.style.color = '#da3633';
     warn.innerHTML = '&#9888; <strong>LAB mode — FULL FIDELITY</strong>. Payload-bearing abilities (credential tools, lateral movement payloads) will execute. <strong>ISOLATED AD RANGE ONLY — NEVER PRODUCTION.</strong>';
   } else {
-    warn.style.display = 'none';
+    setDisplay(warn, 'none');
   }
 }
 

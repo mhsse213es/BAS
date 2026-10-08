@@ -8,6 +8,7 @@ import { buildReportFilename, showDownloadOptions, triggerDownload } from './evi
 import { apArrow, apNodePill } from './openaev.js';
 import { openModal } from './reports.js';
 import { _riskScoreColor, _riskTrendBadge } from './shell.js';
+import { setDisplay } from '../core/inline-style.js';
 
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -46,7 +47,7 @@ export function closeAgentDetail() {
 export function closeAgentDetailOnBackdrop(el, event) { if (event.target === el) closeAgentDetail(); }
 export function showAgentTab(tab) {
   ['overview','scenarios','logs','health','attackpath','risk'].forEach(function(t) {
-    document.getElementById('agt-tab-' + t).style.display = (t === tab ? '' : 'none');
+    setDisplay(document.getElementById('agt-tab-' + t), t === tab ? '' : 'none');
   });
   document.querySelectorAll('#agt-tab-bar .tab-btn').forEach(function(btn, i) {
     var tabs = ['overview','scenarios','logs','health','attackpath','risk'];
@@ -619,10 +620,10 @@ export function loadComplianceReport() {
   if (!framework) { showToast('Select a framework first', 'warn'); return; }
 
   document.getElementById('cmp-placeholder').textContent = 'Generating report…';
-  document.getElementById('cmp-placeholder').style.display = '';
-  document.getElementById('cmp-report').style.display = 'none';
+  setDisplay(document.getElementById('cmp-placeholder'), '');
+  setDisplay(document.getElementById('cmp-report'), 'none');
   ['cmp-export-json','cmp-export-csv'].forEach(function(id) {
-    document.getElementById(id).style.display = 'none';
+    setDisplay(document.getElementById(id), 'none');
   });
 
   apicall('/api/compliance/report?agentId=' + encodeURIComponent(agentId) + '&framework=' + encodeURIComponent(framework))
@@ -630,10 +631,10 @@ export function loadComplianceReport() {
       _cmpReport = report;
       _cmpFilter = '';
       renderComplianceReport(report);
-      document.getElementById('cmp-placeholder').style.display = 'none';
-      document.getElementById('cmp-report').style.display = '';
+      setDisplay(document.getElementById('cmp-placeholder'), 'none');
+      setDisplay(document.getElementById('cmp-report'), '');
       ['cmp-export-json','cmp-export-csv'].forEach(function(id) {
-        document.getElementById(id).style.display = '';
+        setDisplay(document.getElementById(id), '');
       });
     })
     .catch(function(e) {

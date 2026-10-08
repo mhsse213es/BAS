@@ -14,6 +14,7 @@ import { loadRuns, loadSIEMCorrelationPanel, openModal } from './reports.js';
 import { SCHED, renderScheduledAssessmentsList } from './scheduled.js';
 import { ROLE, STRIPE_COLORS, scenarioSrcCollapsed, setAgentsView, showTab } from './shell.js';
 import { loadARTContentStatus, loadConnectorStatus, loadTAXIIConnectors, loadThreatIntelConfig } from './threat-intel.js';
+import { displayOf, setCssText, setDisplay } from '../core/inline-style.js';
 
 
 // ── Attack Path Validation ─────────────────────────────────────────────────
@@ -36,9 +37,9 @@ export function loadAttackPath() {
           _apCollectAgentId = job.agentId;
           var panel = document.getElementById('ap-collect');
           if (panel) {
-            panel.style.display = '';
-            document.getElementById('ap-form').style.display = 'none';
-            document.getElementById('ap-progress').style.display = '';
+            setDisplay(panel, '');
+            setDisplay(document.getElementById('ap-form'), 'none');
+            setDisplay(document.getElementById('ap-progress'), '');
             _apRenderJobState(job);
           }
         } else if (job.status === 'completed') {
@@ -317,10 +318,10 @@ export function loadCoverageMatrix() {
       rows = rows || [];
       if (!rows.length) {
         body.innerHTML = '';
-        empty.style.display = '';
+        setDisplay(empty, '');
         return;
       }
-      empty.style.display = 'none';
+      setDisplay(empty, 'none');
       body.innerHTML = rows.map(function(r) {
         return '<tr>' +
           '<td class="u-fw600">' + x(r.techniqueId) + '</td>' +
@@ -340,8 +341,8 @@ export function loadCoverageMatrix() {
 var TP_ACTOR_CACHE = [];
 
 export function showThreatPriorityList() {
-  document.getElementById('tp-list-view').style.display = '';
-  document.getElementById('tp-detail-view').style.display = 'none';
+  setDisplay(document.getElementById('tp-list-view'), '');
+  setDisplay(document.getElementById('tp-detail-view'), 'none');
 }
 
 export function tpTierBadge(tier) {
@@ -365,10 +366,10 @@ export function loadThreatPriorityActors() {
       TP_ACTOR_CACHE = actors || [];
       if (!TP_ACTOR_CACHE.length) {
         body.innerHTML = '';
-        empty.style.display = '';
+        setDisplay(empty, '');
         return;
       }
-      empty.style.display = 'none';
+      setDisplay(empty, 'none');
       body.innerHTML = TP_ACTOR_CACHE.map(function(a) {
         return '<tr class="u-pointer"' + on('click', 'showThreatPriorityDetail', a.actorName) + '>' +
           '<td class="u-fw600">' + x(a.actorName) + '</td>' +
@@ -385,8 +386,8 @@ export function loadThreatPriorityActors() {
 }
 
 export function showThreatPriorityDetail(actorName) {
-  document.getElementById('tp-list-view').style.display = 'none';
-  document.getElementById('tp-detail-view').style.display = '';
+  setDisplay(document.getElementById('tp-list-view'), 'none');
+  setDisplay(document.getElementById('tp-detail-view'), '');
   document.getElementById('tp-detail-title').textContent = actorName;
 
   apicall('/api/threat-priority/actors/' + encodeURIComponent(actorName))
@@ -478,7 +479,7 @@ function renderThreatPriorityDetail(d) {
   var techEvidence = (d.techniqueEvidence || []);
   var evidenceCard = document.getElementById('tp-detail-evidence-card');
   if (techEvidence.length) {
-    evidenceCard.style.display = '';
+    setDisplay(evidenceCard, '');
     document.getElementById('tp-detail-evidence').innerHTML =
       '<table class="u-w100"><thead><tr><th>Technique</th><th>Via</th><th>Confidence</th><th>Since</th></tr></thead><tbody>' +
       techEvidence.map(function(e) {
@@ -488,7 +489,7 @@ function renderThreatPriorityDetail(d) {
       }).join('') +
       '</tbody></table>';
   } else {
-    evidenceCard.style.display = 'none';
+    setDisplay(evidenceCard, 'none');
   }
 
   var hist = (d.history || []);
@@ -671,26 +672,26 @@ function _apClearPending() { _apClearJobId(); }
 function _apLoadPending() { return null; }
 
 export function apCollectClose() {
-  document.getElementById('ap-collect').style.display = 'none';
+  setDisplay(document.getElementById('ap-collect'), 'none');
   _apCollectAgentId = null;
   _apCurrentJobId = null;
   _apClearJobId();
   // reset to form mode for next open
-  document.getElementById('ap-form').style.display = '';
-  document.getElementById('ap-progress').style.display = 'none';
-  document.getElementById('ap-done-actions').style.display = 'none';
+  setDisplay(document.getElementById('ap-form'), '');
+  setDisplay(document.getElementById('ap-progress'), 'none');
+  setDisplay(document.getElementById('ap-done-actions'), 'none');
 }
 export function apCollectViewResults() { loadAttackPath(); apCollectClose(); }
-export function apAssetsClose() { document.getElementById('ap-assets').style.display = 'none'; }
-export function apScheduleClose() { document.getElementById('ap-schedule').style.display = 'none'; }
+export function apAssetsClose() { setDisplay(document.getElementById('ap-assets'), 'none'); }
+export function apScheduleClose() { setDisplay(document.getElementById('ap-schedule'), 'none'); }
 
 export function openAPCollect() {
   var sel = document.getElementById('ap-agent');
   var panel = document.getElementById('ap-collect');
   // reset to configure mode
-  document.getElementById('ap-form').style.display = '';
-  document.getElementById('ap-progress').style.display = 'none';
-  document.getElementById('ap-done-actions').style.display = 'none';
+  setDisplay(document.getElementById('ap-form'), '');
+  setDisplay(document.getElementById('ap-progress'), 'none');
+  setDisplay(document.getElementById('ap-done-actions'), 'none');
   document.getElementById('ap-targets').value = '';
   document.getElementById('ap-target-count').textContent = '';
 
@@ -700,16 +701,16 @@ export function openAPCollect() {
   var metaTs = document.getElementById('ap-meta-ts');
   if (metaTs && metaTs.textContent && metaTs.textContent !== '—') {
     if (ctxTs) ctxTs.textContent = metaTs.textContent;
-    if (ctxEl) ctxEl.style.display = '';
+    if (ctxEl) setDisplay(ctxEl, '');
   } else {
-    if (ctxEl) ctxEl.style.display = 'none';
+    if (ctxEl) setDisplay(ctxEl, 'none');
   }
 
   function fill() {
     sel.innerHTML = (state.agents || []).map(function(a) {
       return '<option value="' + x(a.agentId) + '">' + x(a.hostname || a.agentId) + (a.status === 'offline' ? ' (offline)' : '') + '</option>';
     }).join('') || '<option value="">No agents enrolled</option>';
-    panel.style.display = '';
+    setDisplay(panel, '');
   }
   if (!state.agents || !state.agents.length) {
     apicall('/api/agents').then(function(d) { state.agents = d || []; fill(); }).catch(function(e) { showToast(e.message, 'err'); });
@@ -777,8 +778,8 @@ export function dispatchAPCollect() {
     if (_apCurrentJobId) _apSaveJobId(_apCurrentJobId, agentId);
 
     // Switch panel to progress timeline
-    document.getElementById('ap-form').style.display = 'none';
-    document.getElementById('ap-progress').style.display = '';
+    setDisplay(document.getElementById('ap-form'), 'none');
+    setDisplay(document.getElementById('ap-progress'), '');
 
     var tl = document.getElementById('ap-timeline');
     var shNote = shEnabled ? (r.sharpHoundDelivered ? ' + SharpHound domain mapping' : ' (SharpHound binary not configured server-side — skipping)') : '';
@@ -850,7 +851,7 @@ function _apRenderJobState(job) {
 
   // Cancel button: visible while job is active (dispatched or running), hidden once terminal.
   var cancelEl = document.getElementById('ap-cancel-action');
-  if (cancelEl) cancelEl.style.display = (!isTerminal && s !== 'queued') ? '' : 'none';
+  if (cancelEl) setDisplay(cancelEl, (!isTerminal && s !== 'queued') ? '' : 'none');
 
   // Step states by job status
   var dispatchState = (s === 'queued') ? 'active' : 'done';
@@ -896,13 +897,13 @@ function _apRenderJobState(job) {
       job.metrics ? job.metrics.nodeCount + ' nodes · ' + job.metrics.edgeCount + ' edges' : '');
 
   if (isTerminal) {
-    if (cancelEl) cancelEl.style.display = 'none';
+    if (cancelEl) setDisplay(cancelEl, 'none');
     var doneDiv = document.getElementById('ap-done-actions');
-    if (doneDiv) doneDiv.style.display = 'flex';
+    if (doneDiv) setDisplay(doneDiv, 'flex');
     var retryBtn2 = document.getElementById('ap-retry-btn');
-    if (retryBtn2) retryBtn2.style.display = (s === 'completed') ? 'none' : '';
+    if (retryBtn2) setDisplay(retryBtn2, (s === 'completed') ? 'none' : '');
     var viewBtn = doneDiv && doneDiv.querySelector('button.btn-primary');
-    if (viewBtn) viewBtn.style.display = (s === 'completed') ? '' : 'none';
+    if (viewBtn) setDisplay(viewBtn, (s === 'completed') ? '' : 'none');
   }
 }
 
@@ -930,7 +931,7 @@ export function _apOnJobUpdate(msg) {
   // Refresh Attack Path tab in the agent detail drawer if it's showing this agent.
   if (_agtDetailId && _agtDetailId === agentId) {
     var apPane = document.getElementById('agt-tab-attackpath');
-    if (apPane && apPane.style.display !== 'none') loadAgtAttackPath(agentId);
+    if (apPane && displayOf(apPane) !== 'none') loadAgtAttackPath(agentId);
   }
   // Only update the progress panel if this is the panel's current job.
   if (_apCurrentJobId && job.id !== _apCurrentJobId) return;
@@ -940,15 +941,15 @@ export function _apOnJobUpdate(msg) {
     if (!saved || saved.jobId !== job.id) return;
     _apCurrentJobId = job.id;
     _apCollectAgentId = agentId;
-    document.getElementById('ap-form').style.display = 'none';
-    document.getElementById('ap-progress').style.display = '';
+    setDisplay(document.getElementById('ap-form'), 'none');
+    setDisplay(document.getElementById('ap-progress'), '');
   }
   _apRenderJobState(job);
   if (job.status === 'completed') {
     loadAttackPath();
     _apClearJobId();
     var da = document.getElementById('ap-done-actions');
-    if (da) { da.style.display = 'flex'; var rb = document.getElementById('ap-retry-btn'); if (rb) rb.style.display = 'none'; }
+    if (da) { setDisplay(da, 'flex'); var rb = document.getElementById('ap-retry-btn'); if (rb) setDisplay(rb, 'none'); }
     showToast('Attack-path collection complete — graph updated.', 'ok');
   } else if (job.status === 'timed_out') {
     showToast('Attack-path job timed out — agent did not complete in time.', 'warn');
@@ -962,7 +963,7 @@ export function _apOnProgress(msg) {
   if (!msg || !msg.data) return;
   var d = msg.data;
   if (_apCurrentJobId && d.jobId !== _apCurrentJobId) return;
-  if (document.getElementById('ap-progress').style.display === 'none') return;
+  if (displayOf(document.getElementById('ap-progress')) === 'none') return;
   // Synthesise a minimal job object so _apRenderJobState can re-render fully.
   _apRenderJobState({
     id: d.jobId || _apCurrentJobId || '',
@@ -981,7 +982,7 @@ export function _apOnCollected(msg) {
   var tl = document.getElementById('ap-timeline');
   if (!tl) return;
   // If the job update already rendered completion, skip double-render.
-  if (document.getElementById('ap-done-actions').style.display !== 'none') return;
+  if (displayOf(document.getElementById('ap-done-actions')) !== 'none') return;
 
   var label = d.hostname || msg.agentId || 'agent';
   var nodes = d.nodes || 0;
@@ -996,7 +997,7 @@ export function _apOnCollected(msg) {
     _apStep('done', 'Graph analysis complete — results are ready', 'Attack path score, lateral movement risk, and domain reachability have been recalculated. Click View Results to review.');
 
   var doneDiv2 = document.getElementById('ap-done-actions');
-  if (doneDiv2) { doneDiv2.style.display = 'flex'; var rb = document.getElementById('ap-retry-btn'); if (rb) rb.style.display = 'none'; }
+  if (doneDiv2) { setDisplay(doneDiv2, 'flex'); var rb = document.getElementById('ap-retry-btn'); if (rb) setDisplay(rb, 'none'); }
   loadAttackPath();
   showToast(label + ': ' + nodes + ' nodes collected — attack path updated.', 'ok');
 }
@@ -1031,7 +1032,7 @@ export function _onRevalidationStarted(msg) {
 var AP_ASSETS = [];
 var AP_INPUT_STYLE = 'width:100%;padding:0.35rem 0.5rem;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:5px;font-size:0.78rem';
 export function openAPAssets() {
-  document.getElementById('ap-assets').style.display = '';
+  setDisplay(document.getElementById('ap-assets'), '');
   document.getElementById('ap-assets-body').innerHTML = '<tr><td colspan="5" class="empty">Loading…</td></tr>';
   apicall('/api/attackpath/assets').then(function(d) {
     AP_ASSETS = (d && d.assets) || [];
@@ -1091,18 +1092,18 @@ export function saveAPAsset(i) {
 }
 
 export function openAPAbout() {
-  document.getElementById('ap-about-backdrop').style.display = '';
-  document.getElementById('ap-about-modal').style.display = '';
+  setDisplay(document.getElementById('ap-about-backdrop'), '');
+  setDisplay(document.getElementById('ap-about-modal'), '');
   document.getElementById('ap-about-modal').scrollTop = 0;
 }
 export function closeAPAbout() {
-  document.getElementById('ap-about-backdrop').style.display = 'none';
-  document.getElementById('ap-about-modal').style.display = 'none';
+  setDisplay(document.getElementById('ap-about-backdrop'), 'none');
+  setDisplay(document.getElementById('ap-about-modal'), 'none');
 }
 
 export function openAPSchedule() {
   var panel = document.getElementById('ap-schedule');
-  panel.style.display = '';
+  setDisplay(panel, '');
   document.getElementById('ap-sched-last').textContent = '';
   apicall('/api/attackpath/schedule').then(function(s) {
     document.getElementById('ap-sched-enabled').checked = !!s.enabled;
@@ -1125,7 +1126,7 @@ export function saveAPSchedule() {
     runSharpHound: document.getElementById('ap-sched-sharphound').checked
   };
   apicall('/api/attackpath/schedule', { method: 'POST', body: JSON.stringify(payload) }).then(function(r) {
-    document.getElementById('ap-schedule').style.display = 'none';
+    setDisplay(document.getElementById('ap-schedule'), 'none');
     showToast(r.enabled ? 'Scheduled collection enabled (every ' + r.intervalMinutes + ' min)' : 'Scheduled collection disabled', 'ok');
   }).catch(function(e) { showToast(e.message, 'err'); });
 }
@@ -1136,7 +1137,7 @@ export function showSettingsSection(name) {
   state.SETTINGS_SECTION = name;
   ['users', 'engine', 'intel', 'art', 'audit', 'theme', 'dashprefs', 'license', 'backup'].forEach(function(s) {
     var el = document.getElementById('set-' + s);
-    if (el) el.style.display = s === name ? '' : 'none';
+    if (el) setDisplay(el, s === name ? '' : 'none');
     var nav = document.querySelector('[data-set="' + s + '"]');
     if (nav) nav.classList.toggle('active', s === name);
   });
@@ -1493,7 +1494,7 @@ function renderAgentRows() {
   var q = searchEl ? searchEl.value.trim() : '';
   var tbody = document.getElementById('agents-body');
   var loadMoreWrap = document.getElementById('agent-load-more-wrap');
-  if (loadMoreWrap) loadMoreWrap.style.display = state.agentsHasMore ? '' : 'none';
+  if (loadMoreWrap) setDisplay(loadMoreWrap, state.agentsHasMore ? '' : 'none');
   if (!list.length) {
     var emptyMsg = q ? 'No agents match "' + x(q) + '".' : ('No agents' + (AGENT_FILTER === 'all' ? ' registered yet.' : ' in this state.'));
     tbody.innerHTML = '<tr><td colspan="8" class="empty">' + emptyMsg + '</td></tr>';
@@ -1629,7 +1630,7 @@ export function showAgentDownload() {
   setAgentsView('operational');
   var w = document.getElementById('conn-cfg-wrap');
   if (!w) return;
-  w.style.display = '';
+  setDisplay(w, '');
   if (typeof loadConnectionConfig === 'function') loadConnectionConfig();
   w.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
@@ -1655,7 +1656,7 @@ export function loadConnectionConfig() {
   apicall('/api/config/connection').then(function(data) {
     var wrap = document.getElementById('conn-cfg-wrap');
     if (!wrap) return;
-    wrap.style.display = '';
+    setDisplay(wrap, '');
     document.getElementById('cfg-server-url').textContent = window.location.origin;
     var secretEl = document.getElementById('cfg-agent-secret');
     secretEl.dataset.value = data.agentSecret || '';
@@ -1695,7 +1696,7 @@ export function copyText(elId, btn) {
   } else {
     var ta = document.createElement('textarea');
     ta.value = text;
-    ta.style.cssText = 'position:fixed;opacity:0;pointer-events:none';
+    setCssText(ta, 'position:fixed;opacity:0;pointer-events:none');
     document.body.appendChild(ta);
     ta.select();
     try { document.execCommand('copy') ? onSuccess() : onFail(); } catch(e) { onFail(); }
@@ -1991,7 +1992,7 @@ export function closeScenarioCategoryView() {
 export function __init_L8723() {
 window.addEventListener('popstate', function(e) {
   var tab = document.getElementById('tab-scenarios');
-  if (!tab || tab.style.display === 'none') return;
+  if (!tab || displayOf(tab) === 'none') return;
   var view = (e.state && e.state.scenarioView) || 'landing';
   if (view === 'landing') {
     var se = document.getElementById('sc-search');
@@ -2013,8 +2014,8 @@ export function renderScenarios() {
   if (!landingEl || !catEl) return;
 
   if (!state.scenarios.length) {
-    catEl.style.display = 'none';
-    landingEl.style.display = 'block';
+    setDisplay(catEl, 'none');
+    setDisplay(landingEl, 'block');
     landingEl.innerHTML = '<p class="empty">No scenarios loaded.</p>';
     document.getElementById('sc-cnt').textContent = 0;
     return;
@@ -2036,22 +2037,22 @@ export function renderScenarios() {
     return true;
   });
   document.getElementById('sc-cnt').textContent = filtered.length;
-  document.getElementById('sc-tmpl-filters').style.display = 'none';
+  setDisplay(document.getElementById('sc-tmpl-filters'), 'none');
   // Adversary Templates aren't drawn from `scenarios` and carry no
   // builtin/custom/intel source field, so this dropdown can't filter them --
   // hide it in template view rather than let it show a stale/irrelevant
   // count for an unrelated array. See sc-tmpl-filters above for the
   // filter that actually applies to templates (category, not source).
-  document.getElementById('sc-filter-source').style.display = '';
+  setDisplay(document.getElementById('sc-filter-source'), '');
   // Same reasoning as sc-filter-source above -- renderTemplateGrid() never
   // reads this either, and templates carry no supportedOs field.
-  document.getElementById('sc-filter-os').style.display = '';
+  setDisplay(document.getElementById('sc-filter-os'), '');
 
   if (q) { state.scenarioView = 'search'; }
 
   if (state.scenarioView === 'search') {
-    landingEl.style.display = 'none';
-    catEl.style.display = 'block';
+    setDisplay(landingEl, 'none');
+    setDisplay(catEl, 'block');
     var results = filtered.filter(function(s) {
       var hay = [s.id, s.name, s.description, (s.tags || []).join(' '),
                  (s.mitrePhases || []).join(' '), (s.artTechniques || []).join(' '),
@@ -2067,24 +2068,24 @@ export function renderScenarios() {
   }
 
   if (state.scenarioView === 'landing') {
-    catEl.style.display = 'none';
-    landingEl.style.display = 'block';
+    setDisplay(catEl, 'none');
+    setDisplay(landingEl, 'block');
     renderScenarioLanding(filtered, src);
     return;
   }
 
   if (state.scenarioView === 'templates') {
-    landingEl.style.display = 'none';
-    catEl.style.display = 'block';
-    document.getElementById('sc-tmpl-filters').style.display = 'flex';
-    document.getElementById('sc-filter-source').style.display = 'none';
-    document.getElementById('sc-filter-os').style.display = 'none';
+    setDisplay(landingEl, 'none');
+    setDisplay(catEl, 'block');
+    setDisplay(document.getElementById('sc-tmpl-filters'), 'flex');
+    setDisplay(document.getElementById('sc-filter-source'), 'none');
+    setDisplay(document.getElementById('sc-filter-os'), 'none');
     renderTemplateGrid();
     return;
   }
 
-  landingEl.style.display = 'none';
-  catEl.style.display = 'block';
+  setDisplay(landingEl, 'none');
+  setDisplay(catEl, 'block');
   var cat = SCENARIO_CATEGORIES[state.scenarioView];
   var inCat = filtered.filter(function(s) { return scenarioCategoryOf(s) === state.scenarioView; });
   document.getElementById('sc-backbar-title').textContent = cat.label + ' (' + inCat.length + ')';
@@ -2122,9 +2123,9 @@ export function toggleDesc(id, el) {
   var sEl = document.getElementById(id + '-s');
   var fEl = document.getElementById(id + '-f');
   if (!sEl || !fEl) return;
-  var expanded = (fEl.style.display !== 'none');
-  sEl.style.display = expanded ? 'inline' : 'none';
-  fEl.style.display = expanded ? 'none' : 'inline';
+  var expanded = (displayOf(fEl) !== 'none');
+  setDisplay(sEl, expanded ? 'inline' : 'none');
+  setDisplay(fEl, expanded ? 'none' : 'inline');
   el.textContent = expanded ? 'Read more' : 'Read less';
 }
 

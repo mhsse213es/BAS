@@ -4,6 +4,7 @@ import { x } from '../core/escape.js';
 import { on } from '../core/actions.js';
 import { showToast } from '../core/util.js';
 import { covSegHtml } from './attack-path.js';
+import { setDisplay } from '../core/inline-style.js';
 
 
 // ── ATT&CK Coverage ──────────────────────────────────────────────────────────
@@ -67,9 +68,9 @@ function renderCoverageAnalytics(d) {
   var emEl = document.getElementById('ca-empty');
   var detEl = document.getElementById('ca-detail');
   var ratesEl = document.getElementById('ca-rates');
-  if (emEl) emEl.style.display = hasData ? 'none' : '';
-  if (detEl) detEl.style.display = hasData ? '' : 'none';
-  if (ratesEl) ratesEl.style.display = hasData ? '' : 'none';
+  if (emEl) setDisplay(emEl, hasData ? 'none' : '');
+  if (detEl) setDisplay(detEl, hasData ? '' : 'none');
+  if (ratesEl) setDisplay(ratesEl, hasData ? '' : 'none');
 
   // Scorecards.
   setText('ca-attempted', hasData ? s.attempted : '—');
@@ -128,8 +129,8 @@ function renderPrivilegeCoverage(pc) {
   var tiers = (pc && pc.byTier) || [];
   var gaps  = (pc && pc.gapTechs) || [];
   var hasTiers = tiers.length > 0;
-  if (empty)   empty.style.display   = hasTiers ? 'none' : '';
-  if (content) content.style.display = hasTiers ? ''     : 'none';
+  if (empty)   setDisplay(empty, hasTiers ? 'none' : '');
+  if (content) setDisplay(content, hasTiers ? ''     : 'none');
   if (!hasTiers) return;
 
   // Tier colour map.

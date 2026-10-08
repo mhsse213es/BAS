@@ -5,6 +5,7 @@ import { on } from '../core/actions.js';
 import { showToast } from '../core/util.js';
 import { _diffRow, _diffSecretRow, openConfirmDiffModal } from './compliance.js';
 import { _ticketingConfigs, loadTicketingConfigs } from './findings.js';
+import { displayOf, setDisplay } from '../core/inline-style.js';
 
 
 // ── Integrations tab ────────────────────────────────────────────────────────
@@ -17,11 +18,11 @@ export function loadIntegrations() {
     var wrap = document.getElementById('integrations-reval');
     if (!wrap) return;
     if (cnt > 0) {
-      wrap.style.display = '';
+      setDisplay(wrap, '');
       var el = document.getElementById('integrations-reval-count');
       if (el) el.textContent = cnt;
     } else {
-      wrap.style.display = 'none';
+      setDisplay(wrap, 'none');
     }
   }).catch(function() {});
 }
@@ -102,9 +103,9 @@ export function openAddConnector() {
   document.getElementById('cf-auto-close').checked = true;
   document.getElementById('cf-enabled').checked = true;
   document.getElementById('connector-form-title').textContent = 'Add Connector';
-  document.getElementById('cf-test-result').style.display = 'none';
+  setDisplay(document.getElementById('cf-test-result'), 'none');
   renderConnectorSettings();
-  document.getElementById('connector-form-wrap').style.display = '';
+  setDisplay(document.getElementById('connector-form-wrap'), '');
   document.getElementById('connector-form-wrap').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
@@ -120,14 +121,14 @@ export function openEditConnector(id) {
   document.getElementById('cf-auto-close').checked = !!c.autoClose;
   document.getElementById('cf-enabled').checked = !!c.enabled;
   document.getElementById('connector-form-title').textContent = 'Edit Connector';
-  document.getElementById('cf-test-result').style.display = 'none';
+  setDisplay(document.getElementById('cf-test-result'), 'none');
   renderConnectorSettings(c.settings || {});
-  document.getElementById('connector-form-wrap').style.display = '';
+  setDisplay(document.getElementById('connector-form-wrap'), '');
   document.getElementById('connector-form-wrap').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 export function closeConnectorForm() {
-  document.getElementById('connector-form-wrap').style.display = 'none';
+  setDisplay(document.getElementById('connector-form-wrap'), 'none');
 }
 
 var CONNECTOR_FIELDS = {
@@ -220,8 +221,8 @@ export function fetchConnectorProjects() {
       sel.innerHTML = projects.map(function(p) {
         return '<option value="' + x(p.key) + '"' + (inp.value === p.key ? ' selected' : '') + '>' + x(p.key) + ' — ' + x(p.name) + '</option>';
       }).join('');
-      sel.style.display = 'block';
-      inp.style.display = 'none';
+      setDisplay(sel, 'block');
+      setDisplay(inp, 'none');
       if (!inp.value && projects.length) { sel.value = projects[0].key; }
       if (hint) { hint.textContent = projects.length + ' project(s) found'; hint.style.color = 'var(--success)'; }
     })
@@ -231,7 +232,7 @@ export function fetchConnectorProjects() {
 function _connectorFieldValue(f) {
   if (f.type === 'project_picker') {
     var sel = document.getElementById('cfs-' + f.key + '-sel');
-    if (sel && sel.style.display !== 'none') return sel.value || '';
+    if (sel && displayOf(sel) !== 'none') return sel.value || '';
     var inp = document.getElementById('cfs-' + f.key);
     return inp ? (inp.value || '') : '';
   }
@@ -336,7 +337,7 @@ export function testConnectorForm() {
     if (v) settings[f.key] = v;
   });
   var res = document.getElementById('cf-test-result');
-  res.style.display = ''; res.style.color = 'var(--muted)'; res.textContent = 'Testing…';
+  setDisplay(res, ''); res.style.color = 'var(--muted)'; res.textContent = 'Testing…';
   apicall('/api/ticketing/probe', { method: 'POST', body: JSON.stringify({ provider: prov, settings: settings }) })
     .then(function(r) {
       res.style.color = r.ok ? 'var(--success)' : 'var(--danger)';
@@ -398,8 +399,8 @@ export function renderResponseConnectorList(list) {
 
 export function renderResponseConnectorFields() {
   var prov = document.getElementById('rc-provider').value;
-  document.getElementById('rc-crowdstrike-fields').style.display = (prov === 'crowdstrike') ? '' : 'none';
-  document.getElementById('rc-defender-fields').style.display = (prov === 'microsoft_defender') ? '' : 'none';
+  setDisplay(document.getElementById('rc-crowdstrike-fields'), (prov === 'crowdstrike') ? '' : 'none');
+  setDisplay(document.getElementById('rc-defender-fields'), (prov === 'microsoft_defender') ? '' : 'none');
 }
 
 export function openAddResponseConnector() {
@@ -414,7 +415,7 @@ export function openAddResponseConnector() {
   document.getElementById('rc-enabled').checked = true;
   document.getElementById('response-connector-form-title').textContent = 'Add Connector';
   renderResponseConnectorFields();
-  document.getElementById('response-connector-form-wrap').style.display = '';
+  setDisplay(document.getElementById('response-connector-form-wrap'), '');
   document.getElementById('response-connector-form-wrap').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
@@ -432,12 +433,12 @@ export function openEditResponseConnector(id) {
   document.getElementById('rc-enabled').checked = !!c.enabled;
   document.getElementById('response-connector-form-title').textContent = 'Edit Connector';
   renderResponseConnectorFields();
-  document.getElementById('response-connector-form-wrap').style.display = '';
+  setDisplay(document.getElementById('response-connector-form-wrap'), '');
   document.getElementById('response-connector-form-wrap').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 export function closeResponseConnectorForm() {
-  document.getElementById('response-connector-form-wrap').style.display = 'none';
+  setDisplay(document.getElementById('response-connector-form-wrap'), 'none');
 }
 
 export function saveResponseConnectorForm() {
@@ -532,11 +533,11 @@ export function renderRespondFields() {
   var input = document.getElementById('respond-extra-value');
 
   if (action === 'endpoint.kill_process') {
-    wrap.style.display = '';
+    setDisplay(wrap, '');
     label.textContent = 'Process ID (PID)';
     input.placeholder = 'e.g. 4821';
   } else if (action === 'endpoint.quarantine_file') {
-    wrap.style.display = '';
+    setDisplay(wrap, '');
     if (provider === 'microsoft_defender') {
       label.textContent = 'File SHA1 hash';
       input.placeholder = 'e.g. aabbccddeeff00112233445566778899aabbccdd';
@@ -545,7 +546,7 @@ export function renderRespondFields() {
       input.placeholder = 'e.g. C:\\Users\\victim\\evil.exe';
     }
   } else {
-    wrap.style.display = 'none';
+    setDisplay(wrap, 'none');
   }
 }
 

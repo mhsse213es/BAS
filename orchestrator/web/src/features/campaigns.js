@@ -8,6 +8,7 @@ import { refreshDashboardCampaigns } from './compliance.js';
 import { findingSevBadge } from './findings.js';
 import { viewRunResults } from './reports.js';
 import { ROLE, _riskScoreColor, activateTab, showTab } from './shell.js';
+import { setDisplay } from '../core/inline-style.js';
 
 
 // ── Campaigns ────────────────────────────────────────────────────────────────
@@ -74,8 +75,8 @@ function renderCampaignRows() {
 }
 
 export function closeCampaignDetail() {
-  document.getElementById('campaigns-detail').style.display = 'none';
-  document.getElementById('campaigns-list').style.display = '';
+  setDisplay(document.getElementById('campaigns-detail'), 'none');
+  setDisplay(document.getElementById('campaigns-list'), '');
   loadCampaigns();
 }
 export function openCampaignDetail(id) {
@@ -161,8 +162,8 @@ export function openCampaignDetail(id) {
         '<div>' + summary + '<div id="cmp-recs" style="margin-top:1.25rem"></div></div>' +
       '</div>';
     activateTab('campaigns'); // in case opened from the dashboard
-    document.getElementById('campaigns-list').style.display = 'none';
-    document.getElementById('campaigns-detail').style.display = '';
+    setDisplay(document.getElementById('campaigns-list'), 'none');
+    setDisplay(document.getElementById('campaigns-detail'), '');
     renderCampaignRecs(c.id);
   }).catch(function(e) { showToast(e.message, 'err'); });
 }
@@ -238,8 +239,8 @@ export function openCampaignLaunch() {
   CMP_SOURCE = 'threat_informed';
   _tiPackData = null;
   _tiGeneratedScenarioId = null;
-  document.getElementById('ti-pack-preview').style.display = 'none';
-  document.getElementById('ti-generated-preview').style.display = 'none';
+  setDisplay(document.getElementById('ti-pack-preview'), 'none');
+  setDisplay(document.getElementById('ti-generated-preview'), 'none');
   document.querySelectorAll('#ti-pack-grid .btn').forEach(function(b) { b.style.borderColor = ''; });
   document.querySelector('input[name="cmp-source"][value="threat_informed"]').checked = true;
   renderCampaignSourceUI();
@@ -270,9 +271,9 @@ export function openCampaignLaunch() {
 }
 export function cmpOnTargetTypeChange() {
   var type = document.getElementById('cmp-target-type').value;
-  document.getElementById('cmp-target-agents-wrap').style.display = (type === 'agents') ? 'block' : 'none';
-  document.getElementById('cmp-target-group-wrap').style.display = (type === 'group') ? 'block' : 'none';
-  document.getElementById('cmp-target-all-wrap').style.display = (type === 'all') ? 'block' : 'none';
+  setDisplay(document.getElementById('cmp-target-agents-wrap'), (type === 'agents') ? 'block' : 'none');
+  setDisplay(document.getElementById('cmp-target-group-wrap'), (type === 'group') ? 'block' : 'none');
+  setDisplay(document.getElementById('cmp-target-all-wrap'), (type === 'all') ? 'block' : 'none');
   var launchBtn = document.getElementById('cmp-launch-btn');
   if (type === 'all') {
     launchBtn.disabled = !document.getElementById('cmp-all-confirm').checked;
@@ -348,8 +349,8 @@ var CMP_SOURCE = 'threat_informed'; // 'threat_informed' | 'existing_scenario'
 var _tiGeneratedScenarioId = null;  // set once Generate Campaign succeeds; null = nothing generated yet
 
 function renderCampaignSourceUI() {
-  document.getElementById('cmp-source-ti').style.display = (CMP_SOURCE === 'threat_informed') ? '' : 'none';
-  document.getElementById('cmp-source-existing').style.display = (CMP_SOURCE === 'existing_scenario') ? '' : 'none';
+  setDisplay(document.getElementById('cmp-source-ti'), (CMP_SOURCE === 'threat_informed') ? '' : 'none');
+  setDisplay(document.getElementById('cmp-source-existing'), (CMP_SOURCE === 'existing_scenario') ? '' : 'none');
 }
 
 // setCampaignSource: switches the campaign's source. If the source being left
@@ -373,8 +374,8 @@ export function setCampaignSource(newSource) {
   CMP_SOURCE = newSource;
   _tiGeneratedScenarioId = null;
   _tiPackData = null;
-  document.getElementById('ti-pack-preview').style.display = 'none';
-  document.getElementById('ti-generated-preview').style.display = 'none';
+  setDisplay(document.getElementById('ti-pack-preview'), 'none');
+  setDisplay(document.getElementById('ti-generated-preview'), 'none');
   document.querySelectorAll('#ti-pack-grid .btn').forEach(function(b) { b.style.borderColor = ''; });
   document.getElementById('cmp-scenario').value = '';
   document.getElementById('cmp-scenario-preview').innerHTML = '';
@@ -393,12 +394,12 @@ var _tiPackIcons = {
 export function selectTIPack(type) {
   var preview = document.getElementById('ti-pack-preview');
   var info = document.getElementById('ti-pack-info');
-  preview.style.display = 'none';
+  setDisplay(preview, 'none');
   info.textContent = 'Loading…';
   // Picking a (possibly different) pack starts over -- any earlier generated
   // campaign from a prior pack in this same session no longer applies.
   _tiGeneratedScenarioId = null;
-  document.getElementById('ti-generated-preview').style.display = 'none';
+  setDisplay(document.getElementById('ti-generated-preview'), 'none');
   // Highlight selected button
   document.querySelectorAll('#ti-pack-grid .btn').forEach(function(b) { b.style.borderColor = ''; });
   event && event.target && (event.target.style.borderColor = 'var(--accent)');
@@ -406,7 +407,7 @@ export function selectTIPack(type) {
     _tiPackData = pack;
     if (!pack || !pack.hasData) {
       info.innerHTML = '<span class="u-danger">No data available for this pack — run more scenarios or reseed content first.</span>';
-      preview.style.display = '';
+      setDisplay(preview, '');
       return;
     }
     var tacticSet = {};
@@ -417,13 +418,13 @@ export function selectTIPack(type) {
     info.innerHTML = (_tiPackIcons[type] || '') + ' <strong>' + x(pack.packName) + '</strong><br>' +
       '<span class="u-muted">' + x(pack.description) + '</span><br>' +
       '<span style="font-size:0.75rem;margin-top:4px;display:inline-block"><strong>' + pack.techniqueCount + '</strong> techniques &middot; <strong>' + tacticCount + '</strong> tactics' + kevNote + ransomNote + '</span>';
-    preview.style.display = '';
+    setDisplay(preview, '');
     // Pre-fill campaign name
     var nameEl = document.getElementById('cmp-name');
     if (!nameEl.value) nameEl.value = pack.suggestedName || '';
   }).catch(function() {
     info.innerHTML = '<span class="u-danger">Failed to fetch pack data.</span>';
-    preview.style.display = '';
+    setDisplay(preview, '');
   });
 }
 
@@ -457,7 +458,7 @@ function _applyGeneratedTIScenario(pack) {
   _selectCmpScenario(pack.suggestedId);
   _tiGeneratedScenarioId = pack.suggestedId;
   var el = document.getElementById('ti-generated-preview');
-  el.style.display = '';
+  setDisplay(el, '');
   el.innerHTML = '&#10003; Generated: <strong>' + x(pack.suggestedName) + '</strong> — ' + pack.techniqueCount + ' techniques. Ready to configure targets below.';
 }
 
@@ -522,7 +523,7 @@ export function loadKEVWidget() {
     var actors = (summary && summary.topActors) || [];
     if (!hasKev && !actors.length) return;
     _kevWidgetLoaded = true;
-    document.getElementById('dash-ti-section').style.display = '';
+    setDisplay(document.getElementById('dash-ti-section'), '');
     var tiles = document.getElementById('dash-ti-tiles');
     tiles.innerHTML = hasKev ?
       '<div class="kpi-card stat-tile" title="Techniques with CISA KEV CVEs — create a pack to validate them">' +
@@ -565,7 +566,7 @@ export function loadEndpointPostureWidget() {
   apicall('/api/analytics/endpoint-posture').then(function(p) {
     if (!p || !p.totalAgents) return;
     _endpointPostureLoaded = true;
-    document.getElementById('dash-endpoint-section').style.display = '';
+    setDisplay(document.getElementById('dash-endpoint-section'), '');
     var tiles = document.getElementById('dash-endpoint-tiles');
     var html =
       '<div class="kpi-card stat-tile u-pointer"' + on('click', 'showTab', 'agents') + ' title="Agents currently reachable vs. past the 90s heartbeat window">' +
@@ -604,7 +605,7 @@ export function loadReadinessTrends() {
     if (!data || !data.trends || data.trends.length === 0) return;
     _trendsLoaded = true;
     var sec = document.getElementById('dash-trends-section');
-    if (sec) sec.style.display = '';
+    if (sec) setDisplay(sec, '');
     var el = document.getElementById('dash-trends-table');
     if (!el) return;
     var improved = data.trends.filter(function(t) { return t.direction === 'up'; }).length;

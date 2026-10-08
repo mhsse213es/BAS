@@ -5,6 +5,7 @@ import { ago, showToast } from '../core/util.js';
 import { loadScenarios } from './attack-path.js';
 import { _diffRow, _diffSecretRow, _renderConnectorCard, openConfirmDiffModal } from './compliance.js';
 import { ROLE } from './shell.js';
+import { setDisplay } from '../core/inline-style.js';
 
 
 // ── Threat Intel connector config (MISP/OpenCTI/OTX) — editable, matching
@@ -169,7 +170,7 @@ function renderTAXIIConnectorsList() {
 
 export function taxiiToggleAuthFields() {
   var authType = document.getElementById('taxii-conn-auth-type').value;
-  document.getElementById('taxii-conn-basic-fields').style.display = authType === 'basic' ? '' : 'none';
+  setDisplay(document.getElementById('taxii-conn-basic-fields'), authType === 'basic' ? '' : 'none');
 }
 
 export function openTAXIIConnectorModal(id) {
@@ -275,7 +276,7 @@ export function syncTAXIIConnectorNow(id) {
 export function loadConnectorStatus() {
   var wrap = document.getElementById('connector-status-wrap');
   if (!wrap) return;
-  wrap.style.display = '';
+  setDisplay(wrap, '');
   apicall('/api/connector/status').then(function(s) {
     var bySource = s.bySource || {};
     _renderConnectorCard('misp', s.mispEnabled, bySource.misp, 'cs-misp-events');
@@ -289,8 +290,8 @@ export function loadConnectorStatus() {
     statusEl.textContent = s.lastSyncStatus || 'never';
     statusEl.style.color = s.lastSyncStatus === 'ok' ? '#5cead8' : s.lastSyncStatus === 'error' ? '#f85149' : 'var(--muted)';
     var errEl = document.getElementById('cs-error');
-    if (s.lastError) { errEl.textContent = s.lastError; errEl.style.display = ''; }
-    else { errEl.style.display = 'none'; }
+    if (s.lastError) { errEl.textContent = s.lastError; setDisplay(errEl, ''); }
+    else { setDisplay(errEl, 'none'); }
   }).catch(function(e) { showToast('Failed to load connector status: ' + (e.message || 'error'), 'err'); });
 }
 
@@ -315,7 +316,7 @@ export function triggerConnectorSync() {
 export function loadARTContentStatus() {
   var wrap = document.getElementById('art-content-wrap');
   if (!wrap) return;
-  wrap.style.display = '';
+  setDisplay(wrap, '');
   var btn = document.getElementById('art-check-btn');
   if (btn) btn.disabled = true;
   apicall('/api/art/content/status').then(function(d) {
@@ -352,9 +353,9 @@ export function loadARTContentStatus() {
         var extra = missingCount > 5 ? ' +' + (missingCount - 5) + ' more' : '';
         document.getElementById('cs-art-payloads-missing').textContent =
           '⚠ ' + missingCount + ' referenced but not indexed: ' + names + extra;
-        missingRow.style.display = '';
+        setDisplay(missingRow, '');
       } else {
-        missingRow.style.display = 'none';
+        setDisplay(missingRow, 'none');
       }
     }
     document.getElementById('cs-art-kev').textContent =
@@ -375,7 +376,7 @@ export function toggleSimCoverage() {
   SIM_COV_OPEN = !SIM_COV_OPEN;
   var det = document.getElementById('sim-cov-detail');
   var car = document.getElementById('sim-caret');
-  if (det) det.style.display = SIM_COV_OPEN ? '' : 'none';
+  if (det) setDisplay(det, SIM_COV_OPEN ? '' : 'none');
   if (car) car.innerHTML = SIM_COV_OPEN ? '&#9660;' : '&#9654;';
 }
 export function simCovHoverOn() { this.style.boxShadow = '0 0 0 1px var(--accent)'; }
