@@ -57,6 +57,13 @@ const riskAgent = {
   healthScore: 82, criticalityRisk: 2, trend: 'Improving', topDeficitCategory: 'Patch', openFindingsCount: 1,
 };
 
+// Initiative Layer (initiatives.js): one active initiative so the list row
+// and its drawer (progress bar's g1-v width rule) both render.
+const initiative1 = {
+  ID: 'init-smoke-1', Name: `Initiative ${PAYLOAD}`, State: 'active',
+  CreatedBy: 'smoke', CreatedAt: NOW, Description: `Desc ${PAYLOAD}`,
+};
+
 // Live Run replay: ART steps carry a techniqueId, which drives the ART
 // catalog lookup (G1c final review C1 broke exactly this path).
 const runEvents = [
@@ -86,6 +93,8 @@ export const FIXTURES = {
   'GET /api/scenarios': [],
   'GET /api/scheduled-assessments': { schedules: [schedule1, schedule2, schedule3] },
   'GET /api/agents/risk-summary': { agents: [riskAgent] },
+  'GET /api/initiatives': { initiatives: [initiative1] },
+  'GET /api/initiatives/init-smoke-1': { initiative: initiative1, progress: { PercentComplete: 45 }, jobs: [] },
   // Drawers (smoke.spec.mjs "drawers"): detail endpoints for the list fixtures.
   'GET /api/scenarios/runs/run-smoke-1/events': runEvents,
   'GET /api/findings/finding-smoke-1': finding,

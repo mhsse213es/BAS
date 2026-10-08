@@ -141,7 +141,7 @@ export function parseCss(css) {
   let charPos = 0;
   let headerEnd = css.length;
   for (const line of lines) {
-    if (/^\.([\w-]+)\s*\{/.test(line)) { headerEnd = charPos; break; }
+    if (/^\.([\w-]+)(?:\.[\w-]+)*\s*\{/.test(line)) { headerEnd = charPos; break; }
     charPos += line.length + 1;
   }
   const header = css.slice(0, headerEnd);
@@ -150,7 +150,7 @@ export function parseCss(css) {
   const braceDelta = (s) => (s.match(/\{/g) || []).length - (s.match(/\}/g) || []).length;
   for (let i = 0; i < body.length; i++) {
     const line = body[i];
-    const m = /^\.([\w-]+)\s*\{/.exec(line);
+    const m = /^\.([\w-]+)(?:\.[\w-]+)*\s*\{/.exec(line);
     if (!m) continue;
     let text = line;
     let depth = braceDelta(line);

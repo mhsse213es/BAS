@@ -90,6 +90,11 @@ export const CHECKPOINTS = [
     { select: ['#respond-action', 'endpoint.kill_process'] },
   ] },
 
+  // -- initiatives.js
+  { name: "initiatives.js:136 initiative drawer progress bar", tab: 'initiatives', steps: [
+    { click: '[data-on-click="openInitiativeDrawer"] >> nth=0' },
+  ] },
+
   // -- integrations.js
   { name: "integrations.js:107 add-connector form", tab: 'integrations', steps: [
     { click: '[data-on-click="openAddConnector"]' },

@@ -48,6 +48,16 @@ test('css round-trip preserves a multi-line rule', () => {
   assert.equal(writeCss(reparsed.header, reparsed.rules), css);
 });
 
+test('css round-trip preserves a doubled-class g1-v rule', () => {
+  const header = '/* h */\n';
+  const doubled = '.g1-v-7d75dfc9.g1-v-7d75dfc9 { color: var(--g1-v-7d75dfc9); }';
+  const rules = new Map([['g1-v-7d75dfc9', doubled], ['g1-s-ffffffff', '.g1-s-ffffffff { a:b }']]);
+  const css = writeCss(header, rules);
+  const reparsed = parseCss(css);
+  assert.equal(reparsed.rules.get('g1-v-7d75dfc9'), doubled);
+  assert.equal(writeCss(reparsed.header, reparsed.rules), css);
+});
+
 test('css-var-rules round-trip does not truncate on the header comment\'s own {0}..{n} example', () => {
   const src = "// Registry of data-driven declarations (G1e spec 4.4). Maintained by\n" +
     "// tools/g1e-codemod.mjs --split; keys sorted. Each rule is one declaration:\n" +

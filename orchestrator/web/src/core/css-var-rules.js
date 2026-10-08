@@ -3,4 +3,5 @@
 // prop, value template with {0}..{n} placeholders, and one type per placeholder.
 export const CSS_VAR_RULES = {
   'g1-v-7d75dfc9': {"prop":"color","value":"{0}","types":["color"]},
+  'g1-v-9b890877': {"prop":"width","value":"{0}%","types":["integer"]},
 };
