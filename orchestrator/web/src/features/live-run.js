@@ -6,6 +6,7 @@ import { x } from '../core/escape.js';
 import { on } from '../core/actions.js';
 import { showToast } from '../core/util.js';
 import { MODE_LABELS, verdictBadge, verdictCounts } from './reports.js';
+import { cssVars } from '../core/css-vars.js';
 
 
 // ── Live Run Panel ────────────────────────────────────────────────────────────
@@ -62,27 +63,27 @@ export function __init_L16159() {
   }
 
   function statCell(value, label, color) {
-    return '<div style="flex:1;background:var(--elevated);border:1px solid var(--border);border-radius:4px;padding:0.55rem 0.7rem">' +
-      '<div style="font-size:1.35rem;font-weight:700;line-height:1.1;color:' + color + '">' + value + '</div>' +
-      '<div style="font-size:0.6rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-top:0.15rem">' + label + '</div>' +
+    return '<div class="g1-s-f89e8d63">' +
+      '<div class="g1-s-3c237332"' + cssVars(['g1-v-7d75dfc9', color]) + '>' + value + '</div>' +
+      '<div class="g1-s-1dbe5979">' + label + '</div>' +
     '</div>';
   }
 
   function render() {
     var pct = state.total ? Math.round((state.done / state.total) * 100) : 0;
     document.getElementById('run-live-progress').innerHTML =
-      '<div style="display:flex;gap:0.55rem;margin-bottom:0.6rem">' +
+      '<div class="g1-display-flex g1-s-d3e598d0">' +
         statCell(state.done + '/' + state.total, 'completed', 'var(--accent)') +
         statCell(state.failed, 'failed', state.failed ? 'var(--danger)' : 'var(--muted)') +
         statCell(state.running, 'running', state.running ? 'var(--accent)' : 'var(--muted)') +
       '</div>' +
-      '<div style="height:4px;background:var(--elevated);border-radius:2px;overflow:hidden;margin-bottom:1.1rem">' +
-        '<div style="height:100%;width:' + pct + '%;background:var(--accent);transition:width .3s ease"></div>' +
+      '<div class="g1-s-e6e1105c">' +
+        '<div class="g1-s-1f095c2b"' + cssVars(['g1-v-9b890877', pct]) + '></div>' +
       '</div>';
 
     var ul = document.getElementById('run-live-timeline');
     if (!state.steps.size) {
-      ul.innerHTML = '<li style="color:var(--muted);font-size:0.78rem;padding:0.4rem 0">Waiting for the first step…</li>';
+      ul.innerHTML = '<li class="g1-s-b32f8255">Waiting for the first step…</li>';
       return;
     }
 
@@ -124,17 +125,17 @@ export function __init_L16159() {
       var vColor = (s.verdict && VERDICT_COLOR[s.verdict]) || color;
       var vLabel = (s.verdict && VERDICT_LABEL[s.verdict]) || '';
       var verdictHtml = vLabel
-        ? ' <span style="background:' + vColor + '22;color:' + vColor + ';border:1px solid ' + vColor + '55;border-radius:3px;font-size:0.62rem;padding:0.05rem 0.28rem;text-transform:uppercase;letter-spacing:.04em;flex-shrink:0">' + x(vLabel) + '</span>'
+        ? ' <span class="g1-s-e493f968"' + cssVars(['g1-v-9a515764', vColor], ['g1-v-7d75dfc9', vColor], ['g1-v-1978c967', vColor]) + '>' + x(vLabel) + '</span>'
         : '';
 
       // Tactic badge
       var tacticHtml = s.tactic
-        ? '<span style="font-size:0.61rem;color:var(--muted);background:var(--elevated);border:1px solid var(--border);border-radius:3px;padding:0.03rem 0.28rem;text-transform:capitalize;flex-shrink:0">' + x(humanTactic(s.tactic)) + '</span>'
+        ? '<span class="g1-s-203779fe">' + x(humanTactic(s.tactic)) + '</span>'
         : '';
 
       // Duration (only when completed)
       var durHtml = (s.durationMs != null && (s.state === 'done' || s.state === 'timeout'))
-        ? '<span style="font-size:0.64rem;color:var(--muted)">∼' + s.durationMs + ' ms</span>'
+        ? '<span class="g1-s-a9b4215f">∼' + s.durationMs + ' ms</span>'
         : '';
 
       // Expandable detail block
@@ -143,30 +144,30 @@ export function __init_L16159() {
         var dl = [];
         if (s.stepName) dl.push('<b>Test:</b> ' + x(s.stepName));
         if (s.tactic)   dl.push('<b>Tactic:</b> ' + x(humanTactic(s.tactic)));
-        if (vLabel)     dl.push('<b>Verdict:</b> <span style="color:' + vColor + '">' + x(vLabel) + '</span>');
+        if (vLabel)     dl.push('<b>Verdict:</b> <span' + cssVars(['g1-v-7d75dfc9', vColor]) + '>' + x(vLabel) + '</span>');
         if (s.durationMs != null) dl.push('<b>Duration:</b> ' + s.durationMs + ' ms');
         if (s.exitCode  != null)  dl.push('<b>Exit&nbsp;code:</b> ' + s.exitCode);
-        if (s.tech)     dl.push('<b>ATT&amp;CK:</b> <a href="' + attackUrl(s.tech) + '" target="_blank" style="color:var(--accent)">' + x(s.tech) + ' &#8599;</a>');
-        detailHtml = '<div style="margin:0.3rem 0 0.1rem 1.25rem;padding:0.35rem 0.6rem;background:var(--elevated);border-left:2px solid var(--border);border-radius:0 4px 4px 0;font-size:0.71rem;color:var(--text);line-height:1.75">' +
+        if (s.tech)     dl.push('<b>ATT&amp;CK:</b> <a href="' + attackUrl(s.tech) + '" target="_blank" class="g1-s-097ae647">' + x(s.tech) + ' &#8599;</a>');
+        detailHtml = '<div class="g1-s-9111be16">' +
           dl.join('<br>') + '</div>';
       }
 
       rows.push(
-        '<li style="border-bottom:1px solid var(--border);padding:0.3rem 0;cursor:pointer"' + on('click', 'toggleLiveStepAction', task) + '>' +
+        '<li class="g1-s-bb89a7c6"' + on('click', 'toggleLiveStepAction', task) + '>' +
           // Main line: dot · ID · name · state. name wraps onto additional
           // lines rather than truncating with an ellipsis, so the complete
           // title (including its own technique-ID prefix, when the real ART
           // atomic name has one) is always fully visible.
-          '<div style="display:flex;align-items:flex-start;gap:0.5rem;font-size:0.78rem">' +
-            '<span style="width:7px;height:7px;border-radius:50%;flex-shrink:0;margin-top:0.42em;background:' + color + blink + '"></span>' +
-            '<span style="font-family:var(--font-mono);font-size:0.72rem;color:var(--accent);flex-shrink:0;min-width:5.2rem;padding-top:0.1em">' + x(techId) + '</span>' +
-            '<span style="flex:1;color:var(--text);word-break:break-word">' + x(s.stepName || techId) + '</span>' +
-            '<span style="color:' + color + ';font-size:0.67rem;text-transform:uppercase;letter-spacing:.04em;flex-shrink:0;padding-top:0.1em">' + x(s.state === 'done' ? 'done' : s.state) + '</span>' +
+          '<div class="g1-display-flex g1-s-3e257d5f">' +
+            '<span class="g1-s-59566913' + (blink ? ' g1-s-5302a419' : '') + '"' + cssVars(['g1-v-9ffd39ba', color]) + '></span>' +
+            '<span class="g1-s-f5447c1a">' + x(techId) + '</span>' +
+            '<span class="g1-s-7158533f">' + x(s.stepName || techId) + '</span>' +
+            '<span class="g1-s-bacb7a09"' + cssVars(['g1-v-7d75dfc9', color]) + '>' + x(s.state === 'done' ? 'done' : s.state) + '</span>' +
             verdictHtml +
           '</div>' +
           // Sub-line: tactic badge · duration (step name is already the main-line title above)
           (s.tactic || durHtml
-            ? '<div style="display:flex;align-items:center;gap:0.35rem;margin-top:0.12rem;margin-left:1.25rem;font-size:0.7rem;color:var(--muted);overflow:hidden">' +
+            ? '<div class="g1-display-flex g1-s-5282dde1">' +
                 tacticHtml +
                 '<span class="u-flex1"></span>' +
                 durHtml +
@@ -324,9 +325,9 @@ export function openSweepDrilldown(sweepId) {
       } else {
         resultBtn = '<span class="tiny muted">' + x(badge) + '</span>';
       }
-      return '<li style="padding:0.5rem 0;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:0.5rem">' +
+      return '<li class="g1-display-flex g1-s-7ac8d119">' +
         '<span>' + x(r.name) + '</span>' +
-        '<span style="white-space:nowrap">' + liveBtn + resultBtn + '</span></li>';
+        '<span class="g1-s-eb99a4c1">' + liveBtn + resultBtn + '</span></li>';
     }).join('');
   }).catch(function(e) { showToast(e.message, 'err'); closeSweepDrilldown(); });
 }
