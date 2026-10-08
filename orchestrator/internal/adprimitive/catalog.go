@@ -140,3 +140,31 @@ var RBCDCatalog = []Primitive{
 		Postconditions: []Capability{{Kind: CapLocalAdmin}},
 	},
 }
+
+// DCSyncCatalog defines the single DCSync primitive. DS-Replication-Get-
+// Changes and DS-Replication-Get-Changes-All (the 2 extended rights
+// DCSync requires) collapse into attackpath's single AllExtendedRights
+// ACE right -- the same "acl_right_held:<RightName>" convention
+// ACLAbuseCatalog/RBCDCatalog already use. Unlike those two, DCSync has
+// a clean 1:1 MITRE mapping (T1003.006) and NO scenario YAML exists for
+// it yet (confirmed by grep; the only scenarios/*.yaml matches for
+// "replicat" are an unrelated coincidental use of the word in
+// ransomware-encryption prose) -- primitive knowledge, not a backfill,
+// same status as every other catalog in this file.
+//
+// This Conditions-based convention cannot structurally express that the
+// right must be held specifically on the DOMAIN object, not just any
+// object -- resolving that specificity against a real environment's
+// graph is AD-M05's job, the same deferral already established for every
+// ACL-shaped primitive here.
+var DCSyncCatalog = []Primitive{
+	{
+		ID: "dcsync", Name: "DCSync Directory Replication", TechniqueID: "T1003.006",
+		Prerequisites: Prerequisites{
+			DomainJoined: true,
+			Capabilities: []Capability{{Kind: CapDomainUser}},
+			Conditions:   map[string]bool{"acl_right_held:AllExtendedRights": true},
+		},
+		Postconditions: []Capability{{Kind: CapDomainCredentialMaterial}},
+	},
+}

@@ -187,6 +187,28 @@ func TestRBCDCatalog_NoneHaveATechniqueID(t *testing.T) {
 	}
 }
 
+func TestDCSyncCatalog_RequiresAllExtendedRightsAndHasTechniqueID(t *testing.T) {
+	if len(DCSyncCatalog) != 1 {
+		t.Fatalf("expected exactly 1 primitive in DCSyncCatalog, got %d", len(DCSyncCatalog))
+	}
+	p := DCSyncCatalog[0]
+	if p.ID != "dcsync" {
+		t.Fatalf("expected ID dcsync, got %q", p.ID)
+	}
+	if p.TechniqueID != "T1003.006" {
+		t.Fatalf("expected TechniqueID T1003.006, got %q", p.TechniqueID)
+	}
+	if !p.Prerequisites.Conditions["acl_right_held:AllExtendedRights"] {
+		t.Fatalf("expected dcsync to require acl_right_held:AllExtendedRights, got %+v", p.Prerequisites.Conditions)
+	}
+	// Reuses the pre-existing constant from AD-M04's original schema
+	// (AD.txt's own "After DCSync: DOMAIN_CREDENTIAL_MATERIAL" example),
+	// not a newly-invented one.
+	if len(p.Postconditions) != 1 || p.Postconditions[0].Kind != CapDomainCredentialMaterial {
+		t.Fatalf("expected postcondition CapDomainCredentialMaterial, got %+v", p.Postconditions)
+	}
+}
+
 func TestKerberoastingCatalog_ASREPDiscoverDoesNotClaimCredentialCapability(t *testing.T) {
 	asrep, ok := findPrimitive("asrep-roast-discover")
 	if !ok || asrep.TechniqueID != "T1558.004" {
