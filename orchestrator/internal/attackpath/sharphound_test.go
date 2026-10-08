@@ -367,3 +367,38 @@ func TestParseSharpHoundFiles_UnconstrainedDelegation_IndependentOfAcesAndDelega
 		t.Fatal("a computer with only Aces present must not have UnconstrainedDelegation set")
 	}
 }
+
+const shUsersKerberoastAndASREP = `{"meta":{"type":"users","count":2},"data":[
+  {"ObjectIdentifier":"SVCACCT2","Properties":{"name":"svc_sql2@CORP.LOCAL","domain":"CORP.LOCAL","hasspn":true,"dontreqpreauth":false}},
+  {"ObjectIdentifier":"NORMALUSER","Properties":{"name":"NORMALUSER@CORP.LOCAL","domain":"CORP.LOCAL","hasspn":false,"dontreqpreauth":true}}
+]}`
+
+const shComputersSPNPropertyIgnored = `{"meta":{"type":"computers","count":1},"data":[
+  {"ObjectIdentifier":"LEGACY02","Properties":{"name":"LEGACY02.CORP.LOCAL","domain":"CORP.LOCAL","hasspn":true}}
+]}`
+
+func TestParseSharpHoundFiles_KerberoastAndASREP_SetFlagsOnUsersOnly(t *testing.T) {
+	c := parseSharpHoundFiles([][]byte{
+		[]byte(shUsersKerberoastAndASREP),
+		[]byte(shComputersSPNPropertyIgnored),
+	})
+	g := BuildGraph(c)
+
+	svc, ok := g.Node("SVCACCT2")
+	if !ok || !svc.HasSPN || svc.DontRequirePreauth {
+		t.Fatalf("expected SVCACCT2 HasSPN=true DontRequirePreauth=false, got %+v (ok=%v)", svc, ok)
+	}
+
+	normal, ok := g.Node("NORMALUSER")
+	if !ok || normal.HasSPN || !normal.DontRequirePreauth {
+		t.Fatalf("expected NORMALUSER HasSPN=false DontRequirePreauth=true, got %+v (ok=%v)", normal, ok)
+	}
+
+	// SharpHound reports hasspn for computers too (every computer has a
+	// default machine-account SPN), but it is not a meaningful attack
+	// signal there -- must not be copied onto the host node.
+	host, ok := g.Node("LEGACY02")
+	if !ok || host.HasSPN {
+		t.Fatalf("expected LEGACY02 (a computer) to NOT have HasSPN set even though SharpHound reported hasspn:true, got %+v (ok=%v)", host, ok)
+	}
+}

@@ -33,6 +33,8 @@ type bhProps struct {
 	Name                    string `json:"name"`
 	Domain                  string `json:"domain"`
 	UnconstrainedDelegation bool   `json:"unconstraineddelegation"`
+	HasSPN                  bool   `json:"hasspn"`
+	DontRequirePreauth      bool   `json:"dontreqpreauth"`
 }
 
 // bhMember is a group member / local-admin principal reference.
@@ -208,6 +210,8 @@ func buildSharpHoundCollection(computers []bhComputer, users []bhUser, groups []
 		c.Nodes = append(c.Nodes, Node{
 			ID: u.ObjectIdentifier, Kind: KindUser, Label: labelOf(u.Properties, u.ObjectIdentifier),
 			UnconstrainedDelegation: u.Properties.UnconstrainedDelegation,
+			HasSPN:                  u.Properties.HasSPN,
+			DontRequirePreauth:      u.Properties.DontRequirePreauth,
 		})
 		addAceEdges(&c.Edges, u.ObjectIdentifier, u.Aces)
 	}

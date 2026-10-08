@@ -51,6 +51,16 @@ type Node struct {
 	// flag, not an edge -- there is no single fixed target to draw an edge
 	// to. See docs/superpowers/specs/2026-10-07-ad-acl-delegation-graph-model-design.md.
 	UnconstrainedDelegation bool `json:"unconstrainedDelegation,omitempty"`
+
+	// HasSPN and DontRequirePreauth mark a USER account (never set on a
+	// computer/host node, even though SharpHound reports hasspn for
+	// computers too -- every computer carries a default machine-account
+	// SPN, so the signal is only meaningful for users) as Kerberoastable
+	// or AS-REP-roastable respectively. Deliberately flags, not edges,
+	// matching UnconstrainedDelegation above: there is no single fixed
+	// target to draw an edge to.
+	HasSPN             bool `json:"hasSPN,omitempty"`
+	DontRequirePreauth bool `json:"dontRequirePreauth,omitempty"`
 }
 
 // EdgeKind is a traversable relationship an attacker can use.
