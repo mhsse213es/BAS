@@ -165,6 +165,17 @@ export const CHECKPOINTS = [
     { click: '[data-on-click="openSchedWizard"]' },
   ] },
 
+  // -- shell.js: the license-grace banner (shell.js:193-198) is rendered
+  // once at boot from the pre-login /api/license/status check, before any
+  // tab exists to checkpoint from, and gating it on state:'grace' would
+  // change that fixture for every single checkpoint in this file (a new
+  // banner on every page) rather than just this one widget -- declined.
+  // Its g1-s-94d252ab class isn't a g1-v rule, so it isn't coverage-
+  // enforced either.
+  { name: "shell.js:501 agent risk & remediation table", tab: 'agents', steps: [
+    { click: '[data-agents-view="risk"]' },
+  ] },
+
   // -- threat-intel.js: loadConnectorStatus/loadARTContentStatus's own
   // reveals (278,292,318,355) fire at boot already (admin-only init in
   // bootApp); nothing extra needed for them here. Same for

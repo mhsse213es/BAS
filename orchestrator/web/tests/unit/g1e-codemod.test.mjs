@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { JSDOM } from 'jsdom';
-import { classFor, splitDecls, planStyle, parseCss, writeCss, convertMarkup, convertJs, splitDynamic } from '../../tools/g1e-codemod.mjs';
+import { classFor, splitDecls, planStyle, parseCss, writeCss, convertMarkup, convertJs, splitDynamic, parseCssVarRules, writeCssVarRules } from '../../tools/g1e-codemod.mjs';
 
 const h8 = (t) => createHash('sha256').update(t).digest('hex').slice(0, 8);
 
@@ -46,6 +46,22 @@ test('css round-trip preserves a multi-line rule', () => {
   const reparsed = parseCss(css);
   assert.equal(reparsed.rules.get('g1-s-53dda9d3'), multiline);
   assert.equal(writeCss(reparsed.header, reparsed.rules), css);
+});
+
+test('css-var-rules round-trip does not truncate on the header comment\'s own {0}..{n} example', () => {
+  const src = "// Registry of data-driven declarations (G1e spec 4.4). Maintained by\n" +
+    "// tools/g1e-codemod.mjs --split; keys sorted. Each rule is one declaration:\n" +
+    "// prop, value template with {0}..{n} placeholders, and one type per placeholder.\n" +
+    "export const CSS_VAR_RULES = {\n" +
+    "};\n";
+  const { header, footer, entries } = parseCssVarRules(src);
+  assert.ok(header.includes('export const CSS_VAR_RULES = {'), 'header lost the declaration line');
+  assert.equal(entries.size, 0);
+  entries.set('g1-v-7d75dfc9', '{"prop":"color","value":"{0}","types":["color"]}');
+  const out = writeCssVarRules(header, footer, entries);
+  const reparsed = parseCssVarRules(out);
+  assert.equal(reparsed.entries.get('g1-v-7d75dfc9'), '{"prop":"color","value":"{0}","types":["color"]}');
+  assert.ok(out.includes('export const CSS_VAR_RULES = {'), 'round-trip lost the declaration line');
 });
 
 test('markup: class merged into an existing class attribute, attributes otherwise unchanged', () => {

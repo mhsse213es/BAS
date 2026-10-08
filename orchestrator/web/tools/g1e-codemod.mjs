@@ -4,7 +4,7 @@
 // docs/superpowers/specs/2026-10-06-g1e-strict-style-csp-design.md §4.1.
 //
 // Exports: classFor, splitDecls, planStyle, parseCss, writeCss, convertMarkup,
-// convertJs, splitDynamic. CLI: --markup <file>, --js <file>..., --split
+// convertJs, splitDynamic, parseCssVarRules, writeCssVarRules. CLI: --markup <file>, --js <file>..., --split
 // '<text>' --types t1,t2, --class '<text>', --check-determinism <dir>.
 import { createHash } from 'node:crypto';
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
@@ -456,20 +456,26 @@ export function splitDynamic(template, types) {
 // ---------------------------------------------------------------------------
 // CSS_VAR_RULES (src/core/css-var-rules.js) read/merge/write, Task 2 format
 
-function parseCssVarRules(src) {
-  const start = src.indexOf('{');
+export function parseCssVarRules(src) {
+  const open = /CSS_VAR_RULES\s*=\s*\{/.exec(src);
+  if (!open) throw new Error('refused: CSS_VAR_RULES declaration not found');
+  const start = open.index + open[0].length - 1;
   const end = src.lastIndexOf('}');
   const header = src.slice(0, start + 1);
   const footer = src.slice(end);
   const body = src.slice(start + 1, end);
   const entries = new Map();
-  const entryRe = /'([^']+)':\s*(\{[^}]*\}),?/g;
-  let m;
-  while ((m = entryRe.exec(body))) entries.set(m[1], m[2]);
+  for (const line of body.split('\n')) {
+    const m = /^\s*'([^']+)':\s*(.*)$/.exec(line);
+    if (!m) continue;
+    let value = m[2].trim();
+    if (value.endsWith(',')) value = value.slice(0, -1);
+    entries.set(m[1], value);
+  }
   return { header, footer, entries };
 }
 
-function writeCssVarRules(header, footer, entries) {
+export function writeCssVarRules(header, footer, entries) {
   const lines = [...entries.keys()].sort().map((k) => `  '${k}': ${entries.get(k)},`);
   return `${header}\n${lines.join('\n')}\n${footer}`;
 }

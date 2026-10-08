@@ -23,6 +23,7 @@ import { loadScheduledAssessments } from './scheduled.js';
 import { loadARTContentStatus, loadConnectorStatus, loadSimCoverage, loadTAXIIConnectors, loadThreatIntelConfig } from './threat-intel.js';
 import { loadVariantTab } from './variant-executor.js';
 import { displayOf, replaceClasses, setCssText, setDisplay } from '../core/inline-style.js';
+import { cssVars } from '../core/css-vars.js';
 export function __init_L5162() {
 (function() {
   var t = localStorage.getItem('audspect_theme') || 'dark';
@@ -126,16 +127,16 @@ function renderLicenseLockedScreen(info) {
   el.id = 'license-locked-screen';
   setCssText(el, 'position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:var(--bg,#0b0e14);z-index:9999;padding:2rem');
   el.innerHTML =
-    '<div style="max-width:520px;text-align:center;color:var(--text,#e6e6e6)">' +
-      '<div style="font-size:2.5rem;margin-bottom:1rem">&#x1F512;</div>' +
-      '<h1 style="font-size:1.4rem;margin-bottom:0.75rem">BAS LICENSE EXPIRED</h1>' +
-      '<p style="color:var(--muted,#9aa9bc);line-height:1.6;margin-bottom:1rem">This Audspect BAS Server is currently unavailable because its license and grace period have expired.</p>' +
-      '<p style="color:var(--muted,#9aa9bc);line-height:1.6;margin-bottom:1.5rem">Please contact your licensing administrator to renew the license.</p>' +
-      '<div style="font-size:0.85rem;color:var(--muted,#9aa9bc);margin-bottom:1.5rem">' +
+    '<div class="g1-s-0461ffe3">' +
+      '<div class="g1-s-bb46f5f1">&#x1F512;</div>' +
+      '<h1 class="g1-s-e34130f8">BAS LICENSE EXPIRED</h1>' +
+      '<p class="g1-s-87635de2">This Audspect BAS Server is currently unavailable because its license and grace period have expired.</p>' +
+      '<p class="g1-s-a7798008">Please contact your licensing administrator to renew the license.</p>' +
+      '<div class="g1-s-5ef62bec">' +
         'License Expiry: ' + x(info.expiresAt) + '<br>' +
         'Access Disabled On: ' + x(info.lockoutAt) +
       '</div>' +
-      '<a href="mailto:support@audspect.com" style="display:inline-block;padding:0.6rem 1.4rem;background:var(--danger,#da3633);color:#fff;border-radius:6px;text-decoration:none;font-weight:600">Contact Licensing Support</a>' +
+      '<a href="mailto:support@audspect.com" class="g1-display-inline-block g1-s-23e8b6cb">Contact Licensing Support</a>' +
     '</div>';
   document.body.appendChild(el);
 }
@@ -148,7 +149,7 @@ function _licenseBannerHTML(info) {
     '<strong>Grace Period Remaining: ' + info.daysRemaining + ' ' + dayWord + '</strong><br>' +
     'The BAS platform will become inaccessible after the grace period expires. Please contact your Audspect administrator or licensing representative to renew your license.' + tomorrowNote + '<br>' +
     'License Expiry: ' + x(info.expiresAt) + ' &middot; Access Disabled On: ' + x(info.lockoutAt) + ' ' +
-    '<a href="mailto:support@audspect.com" style="color:inherit;text-decoration:underline">[Contact Licensing Support]</a>';
+    '<a href="mailto:support@audspect.com" class="g1-s-cfb29488">[Contact Licensing Support]</a>';
 }
 
 function _syncLicenseBannerHeight() {
@@ -193,8 +194,7 @@ function renderLicenseGraceBanner(info) {
   setCssText(el, 'position:fixed;top:0;left:0;right:0;z-index:90;padding:0.75rem 2.5rem;background:var(--warning,#d29922);color:#1a1200;font-size:0.85rem;line-height:1.5;text-align:center');
   el.innerHTML = _licenseBannerHTML(info) +
     '<button' + on('click', '_dismissLicenseGraceBanner') + ' aria-label="Dismiss" title="Dismiss" ' +
-      'style="position:absolute;top:0.5rem;right:0.6rem;width:24px;height:24px;display:flex;align-items:center;justify-content:center;' +
-      'background:transparent;border:none;color:inherit;font-size:1.1rem;line-height:1;cursor:pointer;opacity:0.75" ' +
+      'class="g1-display-flex g1-s-94d252ab" ' +
       on('mouseover', 'licenseBannerDismissHoverOn') + on('mouseout', 'licenseBannerDismissHoverOff') + '>&#10005;</button>';
   document.body.insertBefore(el, document.body.firstChild);
   _syncLicenseBannerHeight();
@@ -209,9 +209,9 @@ function maybeShowLicenseGraceModal(info) {
   overlay.id = 'license-grace-modal-overlay';
   setCssText(overlay, 'position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.6);z-index:10000');
   overlay.innerHTML =
-    '<div style="max-width:480px;background:var(--surface,#152338);border:1px solid var(--warning,#d29922);border-radius:8px;padding:1.5rem;color:var(--text,#e6e6e6)">' +
+    '<div class="g1-s-fd040b75">' +
       _licenseBannerHTML(info) +
-      '<div style="text-align:right;margin-top:1rem"><button id="license-grace-modal-dismiss" style="padding:0.4rem 1rem;border-radius:6px;border:1px solid var(--border,#22324a);background:transparent;color:inherit;cursor:pointer">Dismiss</button></div>' +
+      '<div class="g1-s-39cd98a9"><button id="license-grace-modal-dismiss" class="g1-s-08ac4010">Dismiss</button></div>' +
     '</div>';
   document.body.appendChild(overlay);
   document.getElementById('license-grace-modal-dismiss').addEventListener('click', function() {
@@ -404,7 +404,7 @@ export function goToProfile() {
     if (!d || !Array.isArray(d.permissions)) { el.textContent = 'Unable to load permissions.'; return; }
     if (!d.permissions.length) { el.textContent = 'No permissions granted.'; return; }
     el.innerHTML = d.permissions.slice().sort().map(function(p) {
-      return '<span class="tag" style="display:inline-block;margin:0 0.3rem 0.3rem 0">' + x(p) + '</span>';
+      return '<span class="tag g1-display-inline-block g1-s-cbab8d6c">' + x(p) + '</span>';
     }).join('');
   }).catch(function() {
     document.getElementById('profile-permissions').textContent = 'Unable to load permissions.';
@@ -498,7 +498,7 @@ export function renderAgentRiskSummary(rows) {
     return '<tr>' +
       '<td>' + x(a.hostname || a.agentId) + '</td>' +
       (a.measurable
-        ? '<td style="color:' + _riskScoreColor(a.healthScore) + ';font-weight:700">' + a.healthScore + '</td>'
+        ? '<td' + cssVars(['g1-v-7d75dfc9', _riskScoreColor(a.healthScore)]) + ' class="g1-s-c6fa01b3">' + a.healthScore + '</td>'
         : '<td class="u-muted" title="Nothing collected for this endpoint yet — an absent score is not a safe score">— no data</td>') +
       '<td>' + (a.criticalityRisk || 0) + '</td>' +
       '<td>' + _riskTrendBadge(a.trend) + '</td>' +

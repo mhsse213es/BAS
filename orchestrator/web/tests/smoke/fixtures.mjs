@@ -50,6 +50,13 @@ const schedule3 = {
   Payload: { scenarioId: 'sc-smoke-1' }, LastOccurrenceAt: NOW,
 };
 
+// Agent Risk & Remediation table (shell.js renderAgentRiskSummary): one
+// measurable row so the healthScore cell's g1-v color rule renders.
+const riskAgent = {
+  agentId: 'agent-smoke-1', hostname: `host ${PAYLOAD}`, measurable: true,
+  healthScore: 82, criticalityRisk: 2, trend: 'Improving', topDeficitCategory: 'Patch', openFindingsCount: 1,
+};
+
 // Live Run replay: ART steps carry a techniqueId, which drives the ART
 // catalog lookup (G1c final review C1 broke exactly this path).
 const runEvents = [
@@ -78,6 +85,7 @@ export const FIXTURES = {
   // resulting toast landed on whichever tab was open (flaky in CI).
   'GET /api/scenarios': [],
   'GET /api/scheduled-assessments': { schedules: [schedule1, schedule2, schedule3] },
+  'GET /api/agents/risk-summary': { agents: [riskAgent] },
   // Drawers (smoke.spec.mjs "drawers"): detail endpoints for the list fixtures.
   'GET /api/scenarios/runs/run-smoke-1/events': runEvents,
   'GET /api/findings/finding-smoke-1': finding,
