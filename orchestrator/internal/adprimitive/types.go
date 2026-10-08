@@ -43,6 +43,11 @@ const (
 	// is now a member of a specific group" (AddMember/AddSelf).
 	CapControlledAccount CapabilityKind = "CONTROLLED_ACCOUNT"
 	CapGroupMember       CapabilityKind = "GROUP_MEMBER"
+
+	// CapRBCDConfigured is the intermediate state between configuring
+	// Resource-Based Constrained Delegation on a target and actually
+	// impersonating a user through it (added for RBCDCatalog).
+	CapRBCDConfigured CapabilityKind = "RBCD_CONFIGURED"
 )
 
 // Capability is an attacker capability state, optionally scoped to a

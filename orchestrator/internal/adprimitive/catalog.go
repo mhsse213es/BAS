@@ -104,3 +104,39 @@ var ACLAbuseCatalog = []Primitive{
 		Postconditions: []Capability{{Kind: CapGroupMember}},
 	},
 }
+
+// RBCDCatalog defines 2 chained primitives for Resource-Based Constrained
+// Delegation abuse, following the same "no scenario YAML yet, primitive
+// knowledge only" status as ACLAbuseCatalog (confirmed by grep across
+// scenarios/*.yaml).
+//
+// rbcd-configure requires BOTH a write-capable ACL right over the target
+// (the same "acl_right_held:<RightName>" convention ACLAbuseCatalog
+// established) AND an already-controlled principal to name in the
+// target's msDS-AllowedToActOnBehalfOfOtherIdentity attribute -- commonly
+// a computer account the attacker created via MachineAccountQuota (which
+// lets any domain user create new computer accounts by default). Once
+// configured, rbcd-impersonate requests a service ticket via
+// S4U2Self+S4U2Proxy impersonating ANY user (including a Domain Admin) to
+// the target -- exactly AD.txt's own worked LOCAL_ADMIN@SERVER01 example
+// (lines 385-386), reusing the pre-existing CapLocalAdmin constant rather
+// than inventing a new one.
+var RBCDCatalog = []Primitive{
+	{
+		ID: "rbcd-configure", Name: "Configure Resource-Based Constrained Delegation",
+		Prerequisites: Prerequisites{
+			DomainJoined: true,
+			Capabilities: []Capability{{Kind: CapControlledAccount}},
+			Conditions:   map[string]bool{"acl_right_held:GenericWrite": true},
+		},
+		Postconditions: []Capability{{Kind: CapRBCDConfigured}},
+	},
+	{
+		ID: "rbcd-impersonate", Name: "RBCD S4U2Proxy Impersonation",
+		Prerequisites: Prerequisites{
+			DomainJoined: true,
+			Capabilities: []Capability{{Kind: CapRBCDConfigured}},
+		},
+		Postconditions: []Capability{{Kind: CapLocalAdmin}},
+	},
+}

@@ -124,6 +124,69 @@ func TestACLAbuseCatalog_NoneHaveATechniqueID(t *testing.T) {
 	}
 }
 
+func findInRBCDCatalog(id string) (Primitive, bool) {
+	for _, p := range RBCDCatalog {
+		if p.ID == id {
+			return p, true
+		}
+	}
+	return Primitive{}, false
+}
+
+func TestRBCDCatalog_ConfigureRequiresBothACLRightAndControlledPrincipal(t *testing.T) {
+	cfg, ok := findInRBCDCatalog("rbcd-configure")
+	if !ok {
+		t.Fatal("expected rbcd-configure in RBCDCatalog")
+	}
+	if !cfg.Prerequisites.Conditions["acl_right_held:GenericWrite"] {
+		t.Fatalf("expected rbcd-configure to require acl_right_held:GenericWrite, got %+v", cfg.Prerequisites.Conditions)
+	}
+	hasControlledAccount := false
+	for _, c := range cfg.Prerequisites.Capabilities {
+		if c.Kind == CapControlledAccount {
+			hasControlledAccount = true
+		}
+	}
+	if !hasControlledAccount {
+		t.Fatalf("expected rbcd-configure to require CapControlledAccount (a principal to name in the attribute), got %+v", cfg.Prerequisites.Capabilities)
+	}
+}
+
+func TestRBCDCatalog_ConfigurePostconditionSatisfiesImpersonatePrerequisite(t *testing.T) {
+	cfg, _ := findInRBCDCatalog("rbcd-configure")
+	imp, ok := findInRBCDCatalog("rbcd-impersonate")
+	if !ok {
+		t.Fatal("expected rbcd-impersonate in RBCDCatalog")
+	}
+
+	satisfied := false
+	for _, have := range cfg.Postconditions {
+		for _, need := range imp.Prerequisites.Capabilities {
+			if have == need {
+				satisfied = true
+			}
+		}
+	}
+	if !satisfied {
+		t.Fatalf("expected rbcd-configure's postcondition %+v to satisfy rbcd-impersonate's prerequisite %+v", cfg.Postconditions, imp.Prerequisites.Capabilities)
+	}
+
+	// The outcome is exactly AD.txt's own worked LOCAL_ADMIN@SERVER01
+	// example (lines 385-386) -- reusing the pre-existing CapLocalAdmin
+	// constant, not inventing a new one.
+	if len(imp.Postconditions) != 1 || imp.Postconditions[0].Kind != CapLocalAdmin {
+		t.Fatalf("expected rbcd-impersonate postcondition CapLocalAdmin, got %+v", imp.Postconditions)
+	}
+}
+
+func TestRBCDCatalog_NoneHaveATechniqueID(t *testing.T) {
+	for _, p := range RBCDCatalog {
+		if p.TechniqueID != "" {
+			t.Errorf("expected %s to have no TechniqueID, got %q", p.ID, p.TechniqueID)
+		}
+	}
+}
+
 func TestKerberoastingCatalog_ASREPDiscoverDoesNotClaimCredentialCapability(t *testing.T) {
 	asrep, ok := findPrimitive("asrep-roast-discover")
 	if !ok || asrep.TechniqueID != "T1558.004" {
