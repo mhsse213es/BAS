@@ -750,17 +750,19 @@ line,function,target,op,category,data_source_tags,rhs_len,rhs
 13642,openRespondModal,sel,=,escaped,user_created_name,158,"enabled.map(function(c) {
         return '<option value=""' + x(c.id) + '"" data-provider=""' + x(c.provider) + '"">' + x(c.name) + '</option>';
       }).join('')"
-13755,renderRunIOCToolbar,el,=,partial_escaped,,448,"covSegHtml(types, _runIOCTypeFilter, 'setRunIOCTypeFilter', function(k) { return counts[k] || 0; }) +
-    '<input type=""text"" id=""run-ioc-search"" placeholder=""Search indicators…"" value=""' + x(_runIOCSearch) + '""' + x('input', 'setRunIOCSearchFromInput') + ' style=""padding:0.35rem 0.6rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-siz"
-13798,renderRunIOCList,el,=,escaped,,212,"'<div style=""color:var(--muted);font-size:0.8rem;padding:2.5rem 0;text-align:center"">' +
+13755,renderRunIOCToolbar,el,=,partial_escaped,,281,"covSegHtml(types, _runIOCTypeFilter, 'setRunIOCTypeFilter', function(k) { return counts[k] || 0; }) +
+    '<input type=""text"" id=""run-ioc-search"" placeholder=""Search indicators…"" value=""' + x(_runIOCSearch) + '""' + x('input', 'setRunIOCSearchFromInput') + ' class=""g1-s-1230a88f"">'"
+13798,renderRunIOCList,el,=,escaped,,155,"'<div class=""g1-s-3414c9bc"">' +
       (state._runIOCsAll.length ? 'No indicators match this filter.' : 'No indicators extracted from this run.') + '</div>'"
-13803,renderRunIOCList,el,=,unescaped_html,,2822,"list.map(function(ind, idx) {
+13803,renderRunIOCList,el,=,unescaped_html,,2122,"list.map(function(ind, idx) {
     var expanded = _runIOCExpandedIdx === idx;
     var techs = (ind.techniqueIds || []).map(function(t) {
-      return '<code style=""font-size:0.66rem;color:var(--muted);margin-right:3px"">' + x(t) + '</code>';
+      return '<code class=""g1-s-86b92508"">' + x(t) + '</code>';
     }).join('');
     var tags = (ind.tags || []).map(function(t) {
-      return '<span class=""tiny"" style=""background:var(--elevated);border:1px solid var(--bor"
+      return '<span class=""tiny g1-display-inline-block g1-s-7c8b2a40"">' + x(t) + '</span>';
+    }).join('');
+    var detail = !expan"
 13853,loadIOCRegistry,if (el) el,=,static_empty,,2,''
 13871,loadIOCRegistry,tbody,=,static,,54,"'<tr><td colspan=""9"" class=""empty"">Loading…</td></tr>'"
 13880,loadIOCRegistry,tbody,=,escaped,error_message,101,"'<tr><td colspan=""9"" class=""empty"">Failed to load: ' + x(e.message || 'unknown error') + '</td></tr>'"
@@ -769,10 +771,11 @@ line,function,target,op,category,data_source_tags,rhs_len,rhs
     tile('Frequently Reused', result.frequentlyReused, ' sightings') +
     tile('Longest Surviving', result.longestSurviving, ' sightings')"
 13912,renderIOCRegistryTable,tbody,=,static,,78,"'<tr><td colspan=""9"" class=""empty"">No indicators match this filter.</td></tr>'"
-13915,renderIOCRegistryTable,tbody,=,unescaped_html,,1428,"_iocRegistryRows.map(function(row, idx) {
-    var suppressedBadge = row.suppressed ? ' <span class=""sbadge"" style=""background:rgba(154,169,188,.12);color:var(--muted)"" title=""' + x(row.suppressionReason || '') + '"">suppressed</span>' : '';
+13915,renderIOCRegistryTable,tbody,=,unescaped_html,,1243,"_iocRegistryRows.map(function(row, idx) {
+    var suppressedBadge = row.suppressed ? ' <span class=""sbadge g1-s-3518ee58"" title=""' + x(row.suppressionReason || '') + '"">suppressed</span>' : '';
     return '<tr class=""u-pointer""' + x('click', 'openIOCDetail', idx) + '>' +
-      '<td><span class=""tiny"" style=""background:var(--elevated);border:1px solid v"
+      '<td><span class=""tiny g1-s-e4cd03d6"">' + x(IOC_TYPE_LABEL_REGISTRY[row.type] || row.type) + '</span></td>' +
+      '<td><"
 13963,openIOCDetail,document.getElementById('results-export'),=,static_empty,,2,''
 13980,rowHtml,document.getElementById('results-body'),=,indirect_variable,,4,body
 13999,rowHtml,el,=,unescaped_html,,70,"sections || '<div class=""tiny muted"">No relationships recorded.</div>'"

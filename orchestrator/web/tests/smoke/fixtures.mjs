@@ -50,6 +50,25 @@ const complianceScore = {
   failingControls: 6, untestedControls: 10, testableControls: 30, totalControls: 50,
 };
 
+// Per-run indicators (iocs.js renderRunIOCToolbar/renderRunIOCList, fired
+// from reports.js's viewRunResults "run results" drawer): one entry so the
+// tier badge and row header render.
+const runIOC = { type: 'ip', value: `5.6.7.8 ${PAYLOAD}`, source: 'ART', tier: 'suspicious', pulseCount: 2 };
+
+// Cross-run IOC registry + analytics tiles (iocs.js loadIOCRegistry, fired
+// automatically on the 'iocs' tab): suppressed:true so the suppressed badge
+// renders too (ROLE is 'admin' per the auth fixture, so the suppress button
+// always renders regardless).
+const iocRegistryRow = {
+  id: 'ioc-smoke-1', type: 'ip', value: `1.2.3.4 ${PAYLOAD}`, source: 'ART', origin: 'run',
+  status: 'active', sightingCount: 3, firstSeen: NOW, lastSeen: NOW,
+  suppressed: true, suppressionReason: 'known-good',
+};
+const iocAnalytics = {
+  mostDetected: [{ value: `evil.exe ${PAYLOAD}`, sightingCount: 7 }],
+  highestBypassRate: [], frequentlyReused: [], longestSurviving: [],
+};
+
 const finding = {
   id: 'finding-smoke-1', techniqueId: 'T1082', techniqueName: `System Info ${PAYLOAD}`, title: `Finding ${PAYLOAD}`,
   severity: 'high', status: 'open', runId: 'run-smoke-1', agentId: 'agent-smoke-1', hostname: `host ${PAYLOAD}`,
@@ -117,6 +136,9 @@ export const FIXTURES = {
   'GET /api/agent-groups': [{ id: 1, name: `Group ${PAYLOAD}`, totalAgentCount: 1, agentCount: 1, children: [] }],
   'GET /api/scenarios/runs': [run, rrRun],
   'GET /api/compliance/scores': [complianceScore],
+  'GET /api/scenarios/runs/run-smoke-1/iocs': [runIOC],
+  'GET /api/iocs': [iocRegistryRow],
+  'GET /api/analytics/iocs': iocAnalytics,
   'GET /api/findings': [finding],
   'GET /api/campaigns': [campaign],
   // Variants tab polls this every 3s; a non-list makes it toast forever.

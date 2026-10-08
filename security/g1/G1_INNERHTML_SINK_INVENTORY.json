@@ -2924,8 +2924,8 @@
   "function": "renderRunIOCToolbar",
   "target": "el",
   "op": "=",
-  "rhs": "covSegHtml(types, _runIOCTypeFilter, 'setRunIOCTypeFilter', function(k) { return counts[k] || 0; }) +\n    '<input type=\"text\" id=\"run-ioc-search\" placeholder=\"Search indicators\u2026\" value=\"' + x(_runIOCSearch) + '\"' + x('input', 'setRunIOCSearchFromInput') + ' style=\"padding:0.35rem 0.6rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-siz",
-  "rhs_len": 448,
+  "rhs": "covSegHtml(types, _runIOCTypeFilter, 'setRunIOCTypeFilter', function(k) { return counts[k] || 0; }) +\n    '<input type=\"text\" id=\"run-ioc-search\" placeholder=\"Search indicators\u2026\" value=\"' + x(_runIOCSearch) + '\"' + x('input', 'setRunIOCSearchFromInput') + ' class=\"g1-s-1230a88f\">'",
+  "rhs_len": 281,
   "category": "partial_escaped",
   "data_source_tags": ""
  },
@@ -2934,8 +2934,8 @@
   "function": "renderRunIOCList",
   "target": "el",
   "op": "=",
-  "rhs": "'<div style=\"color:var(--muted);font-size:0.8rem;padding:2.5rem 0;text-align:center\">' +\n      (state._runIOCsAll.length ? 'No indicators match this filter.' : 'No indicators extracted from this run.') + '</div>'",
-  "rhs_len": 212,
+  "rhs": "'<div class=\"g1-s-3414c9bc\">' +\n      (state._runIOCsAll.length ? 'No indicators match this filter.' : 'No indicators extracted from this run.') + '</div>'",
+  "rhs_len": 155,
   "category": "escaped",
   "data_source_tags": ""
  },
@@ -2944,8 +2944,8 @@
   "function": "renderRunIOCList",
   "target": "el",
   "op": "=",
-  "rhs": "list.map(function(ind, idx) {\n    var expanded = _runIOCExpandedIdx === idx;\n    var techs = (ind.techniqueIds || []).map(function(t) {\n      return '<code style=\"font-size:0.66rem;color:var(--muted);margin-right:3px\">' + x(t) + '</code>';\n    }).join('');\n    var tags = (ind.tags || []).map(function(t) {\n      return '<span class=\"tiny\" style=\"background:var(--elevated);border:1px solid var(--bor",
-  "rhs_len": 2822,
+  "rhs": "list.map(function(ind, idx) {\n    var expanded = _runIOCExpandedIdx === idx;\n    var techs = (ind.techniqueIds || []).map(function(t) {\n      return '<code class=\"g1-s-86b92508\">' + x(t) + '</code>';\n    }).join('');\n    var tags = (ind.tags || []).map(function(t) {\n      return '<span class=\"tiny g1-display-inline-block g1-s-7c8b2a40\">' + x(t) + '</span>';\n    }).join('');\n    var detail = !expan",
+  "rhs_len": 2122,
   "category": "unescaped_html",
   "data_source_tags": ""
  },
@@ -3004,8 +3004,8 @@
   "function": "renderIOCRegistryTable",
   "target": "tbody",
   "op": "=",
-  "rhs": "_iocRegistryRows.map(function(row, idx) {\n    var suppressedBadge = row.suppressed ? ' <span class=\"sbadge\" style=\"background:rgba(154,169,188,.12);color:var(--muted)\" title=\"' + x(row.suppressionReason || '') + '\">suppressed</span>' : '';\n    return '<tr class=\"u-pointer\"' + x('click', 'openIOCDetail', idx) + '>' +\n      '<td><span class=\"tiny\" style=\"background:var(--elevated);border:1px solid v",
-  "rhs_len": 1428,
+  "rhs": "_iocRegistryRows.map(function(row, idx) {\n    var suppressedBadge = row.suppressed ? ' <span class=\"sbadge g1-s-3518ee58\" title=\"' + x(row.suppressionReason || '') + '\">suppressed</span>' : '';\n    return '<tr class=\"u-pointer\"' + x('click', 'openIOCDetail', idx) + '>' +\n      '<td><span class=\"tiny g1-s-e4cd03d6\">' + x(IOC_TYPE_LABEL_REGISTRY[row.type] || row.type) + '</span></td>' +\n      '<td><",
+  "rhs_len": 1243,
   "category": "unescaped_html",
   "data_source_tags": ""
  },

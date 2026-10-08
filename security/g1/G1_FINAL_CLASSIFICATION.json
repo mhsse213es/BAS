@@ -3731,7 +3731,7 @@
   "rhs": "'<tr><td colspan=\"9\" class=\"empty\">No indicators match this filter.</td></tr>'"
  },
  {
-  "sink_id": "renderIOCRegistryTable:tbody:=:9f380c9e400b",
+  "sink_id": "renderIOCRegistryTable:tbody:=:661e20d53a76",
   "line": 13915,
   "function": "renderIOCRegistryTable",
   "target": "tbody",
@@ -3741,7 +3741,7 @@
   "severity_tier": 4,
   "data_source_tags": "",
   "trace_notes": "",
-  "rhs": "_iocRegistryRows.map(function(row, idx) {\n    var suppressedBadge = row.suppressed ? ' <span class=\"sbadge\" style=\"background:rgba(154,169,188,.12);color:var(--muted)\" title=\"' + x(row.suppressionReason || '') + '\">suppressed</span>' : '';\n    return '<tr class=\"u-pointer\"' + x('click', 'openIOCDetail', idx) + '>' +\n      '<td><span class=\"tiny\" style=\"background:var(--elevated);border:1px solid v"
+  "rhs": "_iocRegistryRows.map(function(row, idx) {\n    var suppressedBadge = row.suppressed ? ' <span class=\"sbadge g1-s-3518ee58\" title=\"' + x(row.suppressionReason || '') + '\">suppressed</span>' : '';\n    return '<tr class=\"u-pointer\"' + x('click', 'openIOCDetail', idx) + '>' +\n      '<td><span class=\"tiny g1-s-e4cd03d6\">' + x(IOC_TYPE_LABEL_REGISTRY[row.type] || row.type) + '</span></td>' +\n      '<td><"
  },
  {
   "sink_id": "renderInitiativeDrawer:document.getElementById('init-drawer-body'):=:295fbc427b0e",
@@ -4082,7 +4082,7 @@
   "rhs": "list.map(function(c) {\n    var statusColor = c.enabled ? 'var(--success)' : 'var(--muted)';\n    var statusLabel = c.enabled ? 'Enabled' : 'Disabled';\n    var statusDot = '<span style=\"display:inline-block;width:7px;height:7px;border-radius:50%;background:' + statusColor + ';margin-right:5px\"></span>' + statusLabel;\n    return '<div class=\"conn-cfg-card\" style=\"margin-bottom:0.75rem\">' +\n      '<di"
  },
  {
-  "sink_id": "renderRunIOCList:el:=:196f9154d695",
+  "sink_id": "renderRunIOCList:el:=:e0fb92df4f2d",
   "line": 13803,
   "function": "renderRunIOCList",
   "target": "el",
@@ -4092,10 +4092,10 @@
   "severity_tier": 4,
   "data_source_tags": "",
   "trace_notes": "",
-  "rhs": "list.map(function(ind, idx) {\n    var expanded = _runIOCExpandedIdx === idx;\n    var techs = (ind.techniqueIds || []).map(function(t) {\n      return '<code style=\"font-size:0.66rem;color:var(--muted);margin-right:3px\">' + x(t) + '</code>';\n    }).join('');\n    var tags = (ind.tags || []).map(function(t) {\n      return '<span class=\"tiny\" style=\"background:var(--elevated);border:1px solid var(--bor"
+  "rhs": "list.map(function(ind, idx) {\n    var expanded = _runIOCExpandedIdx === idx;\n    var techs = (ind.techniqueIds || []).map(function(t) {\n      return '<code class=\"g1-s-86b92508\">' + x(t) + '</code>';\n    }).join('');\n    var tags = (ind.tags || []).map(function(t) {\n      return '<span class=\"tiny g1-display-inline-block g1-s-7c8b2a40\">' + x(t) + '</span>';\n    }).join('');\n    var detail = !expan"
  },
  {
-  "sink_id": "renderRunIOCList:el:=:bc77e667f8a5",
+  "sink_id": "renderRunIOCList:el:=:e22c78fe4eb1",
   "line": 13798,
   "function": "renderRunIOCList",
   "target": "el",
@@ -4105,10 +4105,10 @@
   "severity_tier": 1,
   "data_source_tags": "",
   "trace_notes": "",
-  "rhs": "'<div style=\"color:var(--muted);font-size:0.8rem;padding:2.5rem 0;text-align:center\">' +\n      (state._runIOCsAll.length ? 'No indicators match this filter.' : 'No indicators extracted from this run.') + '</div>'"
+  "rhs": "'<div class=\"g1-s-3414c9bc\">' +\n      (state._runIOCsAll.length ? 'No indicators match this filter.' : 'No indicators extracted from this run.') + '</div>'"
  },
  {
-  "sink_id": "renderRunIOCToolbar:el:=:6410de5ba68c",
+  "sink_id": "renderRunIOCToolbar:el:=:c59f1d30410b",
   "line": 13755,
   "function": "renderRunIOCToolbar",
   "target": "el",
@@ -4118,7 +4118,7 @@
   "severity_tier": 3,
   "data_source_tags": "",
   "trace_notes": "",
-  "rhs": "covSegHtml(types, _runIOCTypeFilter, 'setRunIOCTypeFilter', function(k) { return counts[k] || 0; }) +\n    '<input type=\"text\" id=\"run-ioc-search\" placeholder=\"Search indicators…\" value=\"' + x(_runIOCSearch) + '\"' + x('input', 'setRunIOCSearchFromInput') + ' style=\"padding:0.35rem 0.6rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-siz"
+  "rhs": "covSegHtml(types, _runIOCTypeFilter, 'setRunIOCTypeFilter', function(k) { return counts[k] || 0; }) +\n    '<input type=\"text\" id=\"run-ioc-search\" placeholder=\"Search indicators…\" value=\"' + x(_runIOCSearch) + '\"' + x('input', 'setRunIOCSearchFromInput') + ' class=\"g1-s-1230a88f\">'"
  },
  {
   "sink_id": "renderRunMode:btn:=:4959506b17ea",

@@ -746,10 +746,11 @@ renderGroupCheckboxList:list:=:f12076e1bae1,4387,renderGroupCheckboxList,list,=,
       '<span style=""font-size:0.8rem"">' + x(o.label) + '</span>' +
       '<span class=""tiny muted"">(' + (countMap[o.id] || 0) + ' agents)</span></"
 renderIOCRegistryTable:tbody:=:343fc91b0722,13912,renderIOCRegistryTable,tbody,=,static,static,0,,,"'<tr><td colspan=""9"" class=""empty"">No indicators match this filter.</td></tr>'"
-renderIOCRegistryTable:tbody:=:9f380c9e400b,13915,renderIOCRegistryTable,tbody,=,unescaped_html,unescaped_html,4,,,"_iocRegistryRows.map(function(row, idx) {
-    var suppressedBadge = row.suppressed ? ' <span class=""sbadge"" style=""background:rgba(154,169,188,.12);color:var(--muted)"" title=""' + x(row.suppressionReason || '') + '"">suppressed</span>' : '';
+renderIOCRegistryTable:tbody:=:661e20d53a76,13915,renderIOCRegistryTable,tbody,=,unescaped_html,unescaped_html,4,,,"_iocRegistryRows.map(function(row, idx) {
+    var suppressedBadge = row.suppressed ? ' <span class=""sbadge g1-s-3518ee58"" title=""' + x(row.suppressionReason || '') + '"">suppressed</span>' : '';
     return '<tr class=""u-pointer""' + x('click', 'openIOCDetail', idx) + '>' +
-      '<td><span class=""tiny"" style=""background:var(--elevated);border:1px solid v"
+      '<td><span class=""tiny g1-s-e4cd03d6"">' + x(IOC_TYPE_LABEL_REGISTRY[row.type] || row.type) + '</span></td>' +
+      '<td><"
 renderInitiativeDrawer:document.getElementById('init-drawer-body'):=:295fbc427b0e,12966,renderInitiativeDrawer,document.getElementById('init-drawer-body'),=,partial_escaped,partial_escaped,3,,,"'<div class=""u-mb-1"">' +
       '<span class=""badge ' + col + '"">' + initiativeStateLabel(it.State) + '</span> ' +
       '<span class=""tiny muted"">Created by ' + x(it.CreatedBy || '—') + ' · ' + x(fmtDate(it.CreatedAt)) + '</span>' +
@@ -842,17 +843,19 @@ renderResponseConnectorList:el:=:a27464dcf3bf,13511,renderResponseConnectorList,
     var statusDot = '<span style=""display:inline-block;width:7px;height:7px;border-radius:50%;background:' + statusColor + ';margin-right:5px""></span>' + statusLabel;
     return '<div class=""conn-cfg-card"" style=""margin-bottom:0.75rem"">' +
       '<di"
-renderRunIOCList:el:=:196f9154d695,13803,renderRunIOCList,el,=,unescaped_html,unescaped_html,4,,,"list.map(function(ind, idx) {
+renderRunIOCList:el:=:e0fb92df4f2d,13803,renderRunIOCList,el,=,unescaped_html,unescaped_html,4,,,"list.map(function(ind, idx) {
     var expanded = _runIOCExpandedIdx === idx;
     var techs = (ind.techniqueIds || []).map(function(t) {
-      return '<code style=""font-size:0.66rem;color:var(--muted);margin-right:3px"">' + x(t) + '</code>';
+      return '<code class=""g1-s-86b92508"">' + x(t) + '</code>';
     }).join('');
     var tags = (ind.tags || []).map(function(t) {
-      return '<span class=""tiny"" style=""background:var(--elevated);border:1px solid var(--bor"
-renderRunIOCList:el:=:bc77e667f8a5,13798,renderRunIOCList,el,=,escaped,escaped,1,,,"'<div style=""color:var(--muted);font-size:0.8rem;padding:2.5rem 0;text-align:center"">' +
+      return '<span class=""tiny g1-display-inline-block g1-s-7c8b2a40"">' + x(t) + '</span>';
+    }).join('');
+    var detail = !expan"
+renderRunIOCList:el:=:e22c78fe4eb1,13798,renderRunIOCList,el,=,escaped,escaped,1,,,"'<div class=""g1-s-3414c9bc"">' +
       (state._runIOCsAll.length ? 'No indicators match this filter.' : 'No indicators extracted from this run.') + '</div>'"
-renderRunIOCToolbar:el:=:6410de5ba68c,13755,renderRunIOCToolbar,el,=,partial_escaped,partial_escaped,3,,,"covSegHtml(types, _runIOCTypeFilter, 'setRunIOCTypeFilter', function(k) { return counts[k] || 0; }) +
-    '<input type=""text"" id=""run-ioc-search"" placeholder=""Search indicators…"" value=""' + x(_runIOCSearch) + '""' + x('input', 'setRunIOCSearchFromInput') + ' style=""padding:0.35rem 0.6rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-siz"
+renderRunIOCToolbar:el:=:c59f1d30410b,13755,renderRunIOCToolbar,el,=,partial_escaped,partial_escaped,3,,,"covSegHtml(types, _runIOCTypeFilter, 'setRunIOCTypeFilter', function(k) { return counts[k] || 0; }) +
+    '<input type=""text"" id=""run-ioc-search"" placeholder=""Search indicators…"" value=""' + x(_runIOCSearch) + '""' + x('input', 'setRunIOCSearchFromInput') + ' class=""g1-s-1230a88f"">'"
 renderRunMode:btn:=:4959506b17ea,15738,renderRunMode,btn,=,static,static,0,,,'&#9888; No Eligible Agents'
 renderRunMode:btn:=:5b98d58b0313,15818,renderRunMode,btn,=,static,static,0,,,'&#9654; Run LAB'
 renderRunMode:btn:=:6b374eeb8131,15798,renderRunMode,btn,=,static,static,0,,,'&#9888; OS Mismatch'

@@ -6,6 +6,7 @@ import { ago, showToast } from '../core/util.js';
 import { covSegHtml } from './attack-path.js';
 import { ROLE } from './shell.js';
 import { setDisplay } from '../core/inline-style.js';
+import { cssVars } from '../core/css-vars.js';
 
 
 // ── Indicators (IOCs) tab ────────────────────────────────────────────────────
@@ -28,7 +29,7 @@ export function renderRunIOCToolbar() {
   var types = [['all', 'All'], ['ip', 'IP'], ['domain', 'Domain'], ['url', 'URL'], ['hash', 'Hash'], ['cve', 'CVE']];
   el.innerHTML =
     covSegHtml(types, _runIOCTypeFilter, 'setRunIOCTypeFilter', function(k) { return counts[k] || 0; }) +
-    '<input type="text" id="run-ioc-search" placeholder="Search indicators…" value="' + x(_runIOCSearch) + '"' + on('input', 'setRunIOCSearchFromInput') + ' style="padding:0.35rem 0.6rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:0.78rem;font-family:inherit;min-width:220px">';
+    '<input type="text" id="run-ioc-search" placeholder="Search indicators…" value="' + x(_runIOCSearch) + '"' + on('input', 'setRunIOCSearchFromInput') + ' class="g1-s-1230a88f">';
 }
 export function setRunIOCTypeFilter(t) {
   _runIOCTypeFilter = t;
@@ -58,7 +59,7 @@ function _iocTierBadge(ind) {
   };
   var m = map[ind.tier] || [ind.tier, 'var(--muted)'];
   var pulses = ind.pulseCount ? ' &middot; ' + ind.pulseCount + ' pulse' + (ind.pulseCount === 1 ? '' : 's') : '';
-  return '<span style="font-size:0.68rem;font-weight:700;color:' + m[1] + '">' + x(m[0]) + pulses + '</span>';
+  return '<span class="g1-s-961fd92c"' + cssVars(['g1-v-7d75dfc9', m[1]]) + '>' + x(m[0]) + pulses + '</span>';
 }
 export function renderRunIOCList() {
   var el = document.getElementById('run-ioc-list');
@@ -69,7 +70,7 @@ export function renderRunIOCList() {
     return true;
   });
   if (!list.length) {
-    el.innerHTML = '<div style="color:var(--muted);font-size:0.8rem;padding:2.5rem 0;text-align:center">' +
+    el.innerHTML = '<div class="g1-s-3414c9bc">' +
       (state._runIOCsAll.length ? 'No indicators match this filter.' : 'No indicators extracted from this run.') + '</div>';
     return;
   }
@@ -77,30 +78,30 @@ export function renderRunIOCList() {
   el.innerHTML = list.map(function(ind, idx) {
     var expanded = _runIOCExpandedIdx === idx;
     var techs = (ind.techniqueIds || []).map(function(t) {
-      return '<code style="font-size:0.66rem;color:var(--muted);margin-right:3px">' + x(t) + '</code>';
+      return '<code class="g1-s-86b92508">' + x(t) + '</code>';
     }).join('');
     var tags = (ind.tags || []).map(function(t) {
-      return '<span class="tiny" style="background:var(--elevated);border:1px solid var(--border);border-radius:9px;padding:1px 7px;margin-right:4px;display:inline-block;margin-bottom:3px">' + x(t) + '</span>';
+      return '<span class="tiny g1-display-inline-block g1-s-7c8b2a40">' + x(t) + '</span>';
     }).join('');
     var detail = !expanded ? '' :
-      '<div style="padding:0.7rem 1rem 0.9rem;background:var(--elevated);border-top:1px solid var(--border);font-size:0.78rem">' +
-        '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:0.6rem">' +
+      '<div class="g1-s-70a1b066">' +
+        '<div class="g1-display-grid g1-s-ee837f27">' +
           '<div><div class="kpi-label">Source</div><div>' + x(ind.source || '—') + '</div></div>' +
           '<div><div class="kpi-label">Confidence</div><div>' + (ind.confidence || 0) + '%</div></div>' +
           '<div><div class="kpi-label">Extracted</div><div>' + (ind.extractedAt ? ago(ind.extractedAt) : '—') + '</div></div>' +
           '<div><div class="kpi-label">Seen in techniques</div><div>' + (techs || '<span class="muted">—</span>') + '</div></div>' +
         '</div>' +
-        (tags ? '<div class="u-mt-06"><div class="kpi-label" style="margin-bottom:0.3rem">Threat tags</div>' + tags + '</div>' : '') +
-        ((ind.malwareFamilies || []).length ? '<div class="u-mt-06"><div class="kpi-label" style="margin-bottom:0.2rem">Malware families</div>' + x(ind.malwareFamilies.join(', ')) + '</div>' : '') +
-        ((ind.adversaryNames || []).length ? '<div class="u-mt-06"><div class="kpi-label" style="margin-bottom:0.2rem">Associated actors</div>' + x(ind.adversaryNames.join(', ')) + '</div>' : '') +
+        (tags ? '<div class="u-mt-06"><div class="kpi-label g1-s-9f42fc4f">Threat tags</div>' + tags + '</div>' : '') +
+        ((ind.malwareFamilies || []).length ? '<div class="u-mt-06"><div class="kpi-label g1-s-0c393a5c">Malware families</div>' + x(ind.malwareFamilies.join(', ')) + '</div>' : '') +
+        ((ind.adversaryNames || []).length ? '<div class="u-mt-06"><div class="kpi-label g1-s-0c393a5c">Associated actors</div>' + x(ind.adversaryNames.join(', ')) + '</div>' : '') +
       '</div>';
-    return '<div style="border:1px solid var(--border);border-radius:var(--radius);margin-bottom:0.5rem;overflow:hidden">' +
-      '<div style="display:flex;align-items:center;gap:0.75rem;padding:0.6rem 1rem;cursor:pointer"' + on('click', 'toggleRunIOCRow', idx) + '>' +
-        '<span class="tiny" style="background:var(--elevated);border:1px solid var(--border);border-radius:4px;padding:1px 7px;text-transform:uppercase;flex-shrink:0">' + x(IOC_TYPE_LABEL[ind.type] || ind.type) + '</span>' +
-        '<code style="font-size:0.82rem;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + x(ind.value) + '</code>' +
-        '<span class="tiny muted" style="flex-shrink:0">' + x(ind.source || '') + '</span>' +
-        '<span style="flex-shrink:0">' + _iocTierBadge(ind) + '</span>' +
-        '<span class="tiny muted" style="flex-shrink:0">' + (expanded ? '&#9650;' : '&#9660;') + '</span>' +
+    return '<div class="g1-s-37461afc">' +
+      '<div class="g1-display-flex g1-s-4f930f48"' + on('click', 'toggleRunIOCRow', idx) + '>' +
+        '<span class="tiny g1-s-e739ad1b">' + x(IOC_TYPE_LABEL[ind.type] || ind.type) + '</span>' +
+        '<code class="g1-s-7b055023">' + x(ind.value) + '</code>' +
+        '<span class="tiny muted g1-s-867764b6">' + x(ind.source || '') + '</span>' +
+        '<span class="g1-s-867764b6">' + _iocTierBadge(ind) + '</span>' +
+        '<span class="tiny muted g1-s-867764b6">' + (expanded ? '&#9650;' : '&#9660;') + '</span>' +
       '</div>' +
       detail +
     '</div>';
@@ -169,9 +170,9 @@ function renderIOCAnalyticsTiles(result) {
   function tile(label, entries, valueSuffix) {
     var top = (entries || [])[0];
     var body = top
-      ? '<div class="tiny" style="font-family:var(--font-mono);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px" title="' + x(top.value) + '">' + x(top.value) + '</div><div class="tiny muted">' + top.sightingCount + valueSuffix + '</div>'
+      ? '<div class="tiny g1-s-59558949" title="' + x(top.value) + '">' + x(top.value) + '</div><div class="tiny muted">' + top.sightingCount + valueSuffix + '</div>'
       : '<div class="tiny muted">No data yet</div>';
-    return '<div class="kpi-card stat-tile"><div class="stat-top"><div><div class="kpi-label">' + label + '</div><div style="margin-top:0.3rem">' + body + '</div></div></div></div>';
+    return '<div class="kpi-card stat-tile"><div class="stat-top"><div><div class="kpi-label">' + label + '</div><div class="g1-s-f10b735a">' + body + '</div></div></div></div>';
   }
   el.innerHTML =
     tile('Most Detected', result.mostDetected, ' detections') +
@@ -187,19 +188,19 @@ function renderIOCRegistryTable() {
     return;
   }
   tbody.innerHTML = _iocRegistryRows.map(function(row, idx) {
-    var suppressedBadge = row.suppressed ? ' <span class="sbadge" style="background:rgba(154,169,188,.12);color:var(--muted)" title="' + x(row.suppressionReason || '') + '">suppressed</span>' : '';
+    var suppressedBadge = row.suppressed ? ' <span class="sbadge g1-s-3518ee58" title="' + x(row.suppressionReason || '') + '">suppressed</span>' : '';
     return '<tr class="u-pointer"' + on('click', 'openIOCDetail', idx) + '>' +
-      '<td><span class="tiny" style="background:var(--elevated);border:1px solid var(--border);border-radius:4px;padding:1px 7px">' + x(IOC_TYPE_LABEL_REGISTRY[row.type] || row.type) + '</span></td>' +
-      '<td><code style="font-size:0.8rem">' + x(row.value) + '</code>' + suppressedBadge + '</td>' +
+      '<td><span class="tiny g1-s-e4cd03d6">' + x(IOC_TYPE_LABEL_REGISTRY[row.type] || row.type) + '</span></td>' +
+      '<td><code class="g1-s-51a7b72a">' + x(row.value) + '</code>' + suppressedBadge + '</td>' +
       '<td class="tiny muted">' + x(row.source || '—') + '</td>' +
       '<td class="tiny muted">' + x(row.origin || '—') + '</td>' +
       '<td class="tiny">' + x(row.status || '—') + '</td>' +
-      '<td class="tiny" style="font-family:var(--font-mono)">' + (row.sightingCount || 0) + '</td>' +
+      '<td class="tiny g1-s-82cece3f">' + (row.sightingCount || 0) + '</td>' +
       '<td class="tiny muted">' + (row.firstSeen ? ago(row.firstSeen) : '—') + '</td>' +
       '<td class="tiny muted">' + (row.lastSeen ? ago(row.lastSeen) : '—') + '</td>' +
       '<td' + on('click', 'stopEvent') + '>' +
         (ROLE === 'admin' ?
-          '<button class="btn btn-outline btn-sm" style="padding:2px 8px;font-size:0.7rem"' + on('click', 'toggleIOCSuppressed', idx) + '>' + (row.suppressed ? 'Unsuppress' : 'Suppress') + '</button>'
+          '<button class="btn btn-outline btn-sm g1-s-765a0fbc"' + on('click', 'toggleIOCSuppressed', idx) + '>' + (row.suppressed ? 'Unsuppress' : 'Suppress') + '</button>'
           : '') +
       '</td>' +
     '</tr>';
@@ -240,7 +241,7 @@ export function openIOCDetail(idx) {
   // pre-escaped HTML (G1a hardening: this used to rely on every call site
   // remembering to pre-escape, which was safe only by caller discipline).
   var rowHtml = function(k, v) {
-    return v ? '<div style="display:flex;gap:0.6rem;padding:0.35rem 0;border-bottom:1px solid var(--border);font-size:0.8rem"><span style="color:var(--muted);min-width:120px">' + k + '</span><span class="u-flex1">' + x(v) + '</span></div>' : '';
+    return v ? '<div class="g1-display-flex g1-s-b60b87ad"><span class="g1-s-485ffd37">' + k + '</span><span class="u-flex1">' + x(v) + '</span></div>' : '';
   };
   var body =
     rowHtml('Source', row.source || '—') +
@@ -250,7 +251,7 @@ export function openIOCDetail(idx) {
     rowHtml('First seen', row.firstSeen ? new Date(row.firstSeen).toLocaleString() : '—') +
     rowHtml('Last seen', row.lastSeen ? new Date(row.lastSeen).toLocaleString() : '—') +
     (row.suppressed ? rowHtml('Suppressed', row.suppressionReason || 'yes') : '') +
-    '<div id="ioc-detail-relationships" style="margin-top:1rem"><div class="tiny muted">Loading relationships…</div></div>';
+    '<div id="ioc-detail-relationships" class="g1-s-66e6b652"><div class="tiny muted">Loading relationships…</div></div>';
   document.getElementById('results-body').innerHTML = body;
   document.getElementById('results-overlay').classList.add('open');
 
@@ -265,9 +266,9 @@ export function openIOCDetail(idx) {
     var groupLabels = { scenario: 'Seen in scenarios', run: 'Seen in runs', agent: 'Seen on agents', technique: 'Seen with techniques' };
     var sections = Object.keys(groupLabels).map(function(t) {
       if (!byType[t].length) return '';
-      return '<div style="margin-top:0.7rem"><div class="kpi-label" style="margin-bottom:0.3rem">' + groupLabels[t] + ' (' + byType[t].length + ')</div>' +
-        '<div style="display:flex;flex-wrap:wrap;gap:5px">' +
-        byType[t].map(function(l) { return '<span class="tiny" style="background:var(--elevated);border:1px solid var(--border);border-radius:9px;padding:2px 8px">' + x(l) + '</span>'; }).join('') +
+      return '<div class="g1-s-80cee471"><div class="kpi-label g1-s-9f42fc4f">' + groupLabels[t] + ' (' + byType[t].length + ')</div>' +
+        '<div class="g1-display-flex g1-s-14755e4d">' +
+        byType[t].map(function(l) { return '<span class="tiny g1-s-90caba8c">' + x(l) + '</span>'; }).join('') +
         '</div></div>';
     }).join('');
     el.innerHTML = sections || '<div class="tiny muted">No relationships recorded.</div>';
