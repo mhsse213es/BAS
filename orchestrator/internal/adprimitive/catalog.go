@@ -168,3 +168,52 @@ var DCSyncCatalog = []Primitive{
 		Postconditions: []Capability{{Kind: CapDomainCredentialMaterial}},
 	},
 }
+
+// ADCSCatalog connects adenv's ESC1-4 configuration predicates
+// (IsESC1Vulnerable, IsESC2Vulnerable, IsESC3Vulnerable,
+// HasTemplateWriteAccess) to AD-M04's prerequisite/postcondition model.
+// Each Conditions key names the predicate it corresponds to -- a
+// documented naming correspondence, not a typed dependency, preserving
+// adprimitive's independence from adenv. All 4 share TechniqueID T1649
+// (Steal or Forge Authentication Certificates), the same pattern
+// KerberoastingCatalog established for T1558.003. No scenario YAML
+// exists for any ESC variant yet; primitive knowledge only, same status
+// as every other catalog in this file.
+var ADCSCatalog = []Primitive{
+	{
+		ID: "adcs-esc1", Name: "ADCS ESC1: Enrollee-Supplied Subject", TechniqueID: "T1649",
+		Prerequisites: Prerequisites{
+			DomainJoined: true,
+			Capabilities: []Capability{{Kind: CapDomainUser}},
+			Conditions:   map[string]bool{"esc1_vulnerable_template": true},
+		},
+		Postconditions: []Capability{{Kind: CapControlledAccount}},
+	},
+	{
+		ID: "adcs-esc2", Name: "ADCS ESC2: Any-Purpose EKU", TechniqueID: "T1649",
+		Prerequisites: Prerequisites{
+			DomainJoined: true,
+			Capabilities: []Capability{{Kind: CapDomainUser}},
+			Conditions:   map[string]bool{"esc2_vulnerable_template": true},
+		},
+		Postconditions: []Capability{{Kind: CapControlledAccount}},
+	},
+	{
+		ID: "adcs-esc3", Name: "ADCS ESC3: Enrollment Agent Template", TechniqueID: "T1649",
+		Prerequisites: Prerequisites{
+			DomainJoined: true,
+			Capabilities: []Capability{{Kind: CapDomainUser}},
+			Conditions:   map[string]bool{"esc3_vulnerable_template": true},
+		},
+		Postconditions: []Capability{{Kind: CapControlledAccount}},
+	},
+	{
+		ID: "adcs-esc4", Name: "ADCS ESC4: Template ACL Abuse", TechniqueID: "T1649",
+		Prerequisites: Prerequisites{
+			DomainJoined: true,
+			Capabilities: []Capability{{Kind: CapDomainUser}},
+			Conditions:   map[string]bool{"esc4_template_write_access": true},
+		},
+		Postconditions: []Capability{{Kind: CapTemplateControlled}},
+	},
+}

@@ -209,6 +209,54 @@ func TestDCSyncCatalog_RequiresAllExtendedRightsAndHasTechniqueID(t *testing.T) 
 	}
 }
 
+func findInADCSCatalog(id string) (Primitive, bool) {
+	for _, p := range ADCSCatalog {
+		if p.ID == id {
+			return p, true
+		}
+	}
+	return Primitive{}, false
+}
+
+func TestADCSCatalog_FourDistinctPrimitivesShareTechniqueID(t *testing.T) {
+	if len(ADCSCatalog) != 4 {
+		t.Fatalf("expected exactly 4 primitives in ADCSCatalog, got %d", len(ADCSCatalog))
+	}
+	seenConditionKeys := map[string]bool{}
+	for _, p := range ADCSCatalog {
+		if p.TechniqueID != "T1649" {
+			t.Errorf("%s: expected TechniqueID T1649, got %q", p.ID, p.TechniqueID)
+		}
+		if len(p.Prerequisites.Conditions) != 1 {
+			t.Fatalf("%s: expected exactly 1 Conditions entry, got %+v", p.ID, p.Prerequisites.Conditions)
+		}
+		for key := range p.Prerequisites.Conditions {
+			if seenConditionKeys[key] {
+				t.Fatalf("condition key %q reused across more than one primitive", key)
+			}
+			seenConditionKeys[key] = true
+		}
+	}
+
+	esc4, ok := findInADCSCatalog("adcs-esc4")
+	if !ok {
+		t.Fatal("expected adcs-esc4 in ADCSCatalog")
+	}
+	if len(esc4.Postconditions) != 1 || esc4.Postconditions[0].Kind != CapTemplateControlled {
+		t.Fatalf("expected adcs-esc4 postcondition CapTemplateControlled, got %+v", esc4.Postconditions)
+	}
+
+	for _, id := range []string{"adcs-esc1", "adcs-esc2", "adcs-esc3"} {
+		p, ok := findInADCSCatalog(id)
+		if !ok {
+			t.Fatalf("expected %s in ADCSCatalog", id)
+		}
+		if len(p.Postconditions) != 1 || p.Postconditions[0].Kind != CapControlledAccount {
+			t.Fatalf("expected %s postcondition CapControlledAccount, got %+v", id, p.Postconditions)
+		}
+	}
+}
+
 func TestKerberoastingCatalog_ASREPDiscoverDoesNotClaimCredentialCapability(t *testing.T) {
 	asrep, ok := findPrimitive("asrep-roast-discover")
 	if !ok || asrep.TechniqueID != "T1558.004" {

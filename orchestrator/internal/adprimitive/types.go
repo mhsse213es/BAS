@@ -48,6 +48,13 @@ const (
 	// Resource-Based Constrained Delegation on a target and actually
 	// impersonating a user through it (added for RBCDCatalog).
 	CapRBCDConfigured CapabilityKind = "RBCD_CONFIGURED"
+
+	// CapTemplateControlled is ESC4's outcome -- the holder can
+	// reconfigure a certificate template's own properties, but has not
+	// yet exploited it for account takeover the way ESC1/ESC2/ESC3 do.
+	// Connecting this to ESC1-style exploitation as a 2-step chain is
+	// left to AD-M05.
+	CapTemplateControlled CapabilityKind = "TEMPLATE_CONTROLLED"
 )
 
 // Capability is an attacker capability state, optionally scoped to a
