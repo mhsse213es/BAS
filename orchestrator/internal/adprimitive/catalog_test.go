@@ -42,6 +42,88 @@ func TestKerberoastingCatalog_EnumeratePostconditionSatisfiesKerberoastPrerequis
 	}
 }
 
+func findInACLAbuseCatalog(id string) (Primitive, bool) {
+	for _, p := range ACLAbuseCatalog {
+		if p.ID == id {
+			return p, true
+		}
+	}
+	return Primitive{}, false
+}
+
+func TestACLAbuseCatalog_ForceChangePasswordAndGenericAllConvergeOnSameCapability(t *testing.T) {
+	fcp, ok := findInACLAbuseCatalog("acl-forcechangepassword-abuse")
+	if !ok {
+		t.Fatal("expected acl-forcechangepassword-abuse in ACLAbuseCatalog")
+	}
+	// Copied literally from adenv.ACLForceChangePassword's value
+	// ("ForceChangePassword") -- see this plan's Review Focus.
+	if !fcp.Prerequisites.Conditions["acl_right_held:ForceChangePassword"] {
+		t.Fatalf("expected acl-forcechangepassword-abuse to require acl_right_held:ForceChangePassword, got %+v", fcp.Prerequisites.Conditions)
+	}
+	if len(fcp.Postconditions) != 1 || fcp.Postconditions[0].Kind != CapControlledAccount {
+		t.Fatalf("expected acl-forcechangepassword-abuse postcondition CapControlledAccount, got %+v", fcp.Postconditions)
+	}
+
+	gca, ok := findInACLAbuseCatalog("acl-genericall-takeover")
+	if !ok {
+		t.Fatal("expected acl-genericall-takeover in ACLAbuseCatalog")
+	}
+	// Copied literally from adenv.ACLGenericAll's value ("GenericAll").
+	if !gca.Prerequisites.Conditions["acl_right_held:GenericAll"] {
+		t.Fatalf("expected acl-genericall-takeover to require acl_right_held:GenericAll, got %+v", gca.Prerequisites.Conditions)
+	}
+	if len(gca.Postconditions) != 1 || gca.Postconditions[0].Kind != CapControlledAccount {
+		t.Fatalf("expected acl-genericall-takeover postcondition CapControlledAccount, got %+v", gca.Postconditions)
+	}
+
+	// Different prerequisite rights, same outcome kind -- multiple paths
+	// to the same capability, not a 1:1 technique-to-capability mapping.
+	if fcp.ID == gca.ID {
+		t.Fatal("acl-forcechangepassword-abuse and acl-genericall-takeover must be distinct primitives")
+	}
+}
+
+func TestACLAbuseCatalog_AddMemberAndAddSelfAreDistinctPrimitives(t *testing.T) {
+	am, ok := findInACLAbuseCatalog("acl-addmember-privileged-group")
+	if !ok {
+		t.Fatal("expected acl-addmember-privileged-group in ACLAbuseCatalog")
+	}
+	// Copied literally from adenv.ACLAddMember's value ("AddMember").
+	if !am.Prerequisites.Conditions["acl_right_held:AddMember"] {
+		t.Fatalf("expected acl-addmember-privileged-group to require acl_right_held:AddMember, got %+v", am.Prerequisites.Conditions)
+	}
+
+	as, ok := findInACLAbuseCatalog("acl-addself-privileged-group")
+	if !ok {
+		t.Fatal("expected acl-addself-privileged-group in ACLAbuseCatalog")
+	}
+	// Copied literally from adenv.ACLAddSelf's value ("AddSelf").
+	if !as.Prerequisites.Conditions["acl_right_held:AddSelf"] {
+		t.Fatalf("expected acl-addself-privileged-group to require acl_right_held:AddSelf, got %+v", as.Prerequisites.Conditions)
+	}
+
+	if am.ID == as.ID {
+		t.Fatal("acl-addmember-privileged-group and acl-addself-privileged-group must be distinct primitives")
+	}
+	for _, p := range []Primitive{am, as} {
+		if len(p.Postconditions) != 1 || p.Postconditions[0].Kind != CapGroupMember {
+			t.Fatalf("expected %s postcondition CapGroupMember, got %+v", p.ID, p.Postconditions)
+		}
+	}
+}
+
+func TestACLAbuseCatalog_NoneHaveATechniqueID(t *testing.T) {
+	// ACL-rights abuse via inherited permissions has no clean 1:1 ATT&CK
+	// sub-technique -- leaving TechniqueID empty is more honest than an
+	// imprecise tag (see this plan's Global Constraints).
+	for _, p := range ACLAbuseCatalog {
+		if p.TechniqueID != "" {
+			t.Errorf("expected %s to have no TechniqueID, got %q", p.ID, p.TechniqueID)
+		}
+	}
+}
+
 func TestKerberoastingCatalog_ASREPDiscoverDoesNotClaimCredentialCapability(t *testing.T) {
 	asrep, ok := findPrimitive("asrep-roast-discover")
 	if !ok || asrep.TechniqueID != "T1558.004" {

@@ -35,6 +35,14 @@ const (
 	// so this extends it rather than redesigning it.
 	CapKerberoastableTargetKnown CapabilityKind = "KERBEROASTABLE_TARGET_KNOWN"
 	CapASREPRoastableTargetKnown CapabilityKind = "ASREP_ROASTABLE_TARGET_KNOWN"
+
+	// The 2 below are the outcomes of ACL-rights abuse (added for the
+	// ACLAbuseCatalog): CapControlledAccount is "the attacker now has
+	// usable credentials for, or full control of, a specific account"
+	// (ForceChangePassword/GenericAll); CapGroupMember is "the attacker
+	// is now a member of a specific group" (AddMember/AddSelf).
+	CapControlledAccount CapabilityKind = "CONTROLLED_ACCOUNT"
+	CapGroupMember       CapabilityKind = "GROUP_MEMBER"
 )
 
 // Capability is an attacker capability state, optionally scoped to a
