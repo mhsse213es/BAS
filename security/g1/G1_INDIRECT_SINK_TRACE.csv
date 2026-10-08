@@ -1,86 +1,86 @@
 line,function,original_category,resolved_category,notes,rhs
-5318,renderAgtRisk,indirect_variable,unescaped_html,7 assignment(s) to 'h' inside renderAgtRisk() @L5268 (scope-resolved) -> unescaped_html,h
-5813,renderExecDashboard,indirect_builder,partial_escaped,edKpiCard() @L5792 (scope-resolved): 1 return(s) -> partial_escaped,"edKpiCard('Risk Score', current.avgRiskScore, risk) +
+5320,renderAgtRisk,indirect_variable,unescaped_html,7 assignment(s) to 'h' inside renderAgtRisk() @L5270 (scope-resolved) -> unescaped_html,h
+5815,renderExecDashboard,indirect_builder,partial_escaped,edKpiCard() @L5794 (scope-resolved): 1 return(s) -> partial_escaped,"edKpiCard('Risk Score', current.avgRiskScore, risk) +
     edKpiCard('Exposure Score', current.exposureScore, exp, noAttackPathData) +
     edKpiCard('Detection Coverage', current.detectionCoverage, det"
-6288,expCard,indirect_variable,partial_escaped,20 assignment(s) to 'h' inside openExposureDetail() @L6219 (scope-resolved) -> partial_escaped,h
-6435,dispatchAPCollect,indirect_builder,unescaped_html,_apStep() @L6396 (scope-resolved): 1 return(s) -> unescaped_html; _apTimestamp() @L6409 (scope-resolved): 1 return(s) -> unescaped_text,"_apStep('done', 'Collection started for ' + x(agentLabel) + ' at ' + _apTimestamp(),
+6290,expCard,indirect_variable,partial_escaped,20 assignment(s) to 'h' inside openExposureDetail() @L6221 (scope-resolved) -> partial_escaped,h
+6437,dispatchAPCollect,indirect_builder,unescaped_html,_apStep() @L6398 (scope-resolved): 1 return(s) -> unescaped_html; _apTimestamp() @L6411 (scope-resolved): 1 return(s) -> unescaped_text,"_apStep('done', 'Collection started for ' + x(agentLabel) + ' at ' + _apTimestamp(),
         targets.length + ' target' + (targets.length === 1 ? '' : 's') + ' queued — job ' + (r.job ? r.job.id.slice"
-6536,_apRenderJobState,indirect_builder,unescaped_html,_apStep() @L6396 (scope-resolved): 1 return(s) -> unescaped_html,"_apStep(dispatchState, 'Job dispatched — ' + job.id.slice(0,8),
+6538,_apRenderJobState,indirect_builder,unescaped_html,_apStep() @L6398 (scope-resolved): 1 return(s) -> unescaped_html,"_apStep(dispatchState, 'Job dispatched — ' + job.id.slice(0,8),
       job.targetCount > 0 ? job.targetCount + ' target' + (job.targetCount === 1 ? '' : 's') + ' queued' : '') +
     _apStep(ackState, s"
-7105,renderAgentTiles,indirect_builder,unescaped_html,tile() @L8422 (scope-resolved): 1 return(s) -> unescaped_html; var(): no declaration found anywhere in file,"tile('Total agents', b.online + b.degraded + b.offline, 'var(--text)') +
+7107,renderAgentTiles,indirect_builder,unescaped_html,tile() @L8424 (scope-resolved): 1 return(s) -> unescaped_html; var(): no declaration found anywhere in file,"tile('Total agents', b.online + b.degraded + b.offline, 'var(--text)') +
     tile('Online', b.online, b.online ? 'var(--success)' : 'var(--muted)') +
     tile('Degraded', b.degraded, b.degraded ? 'var"
-7129,c,indirect_builder,unescaped_html,covSegHtml() @L7117 (scope-resolved): 1 return(s) -> unescaped_html,"covSegHtml(
+7131,c,indirect_builder,unescaped_html,covSegHtml() @L7119 (scope-resolved): 1 return(s) -> unescaped_html,"covSegHtml(
     [['all', 'All'], ['online', 'Online'], ['degraded', 'Degraded'], ['offline', 'Offline'], ['retired', 'Retired']],
     AGENT_FILTER, 'setAgentFilter', c
   )"
-7473,approveForLocalUse,indirect_builder,partial_escaped,approveSummaryHTML() @L7482 (scope-resolved): 2 return(s) -> partial_escaped,approveSummaryHTML(d)
-7710,renderScenarios,indirect_builder,unescaped_html,renderScenarioTileGroup() @L7819 (scope-resolved): 3 return(s) -> unescaped_html,"results.length
+7475,approveForLocalUse,indirect_builder,partial_escaped,approveSummaryHTML() @L7484 (scope-resolved): 2 return(s) -> partial_escaped,approveSummaryHTML(d)
+7712,renderScenarios,indirect_builder,unescaped_html,renderScenarioTileGroup() @L7821 (scope-resolved): 3 return(s) -> unescaped_html,"results.length
       ? '<div class=""sc-fade"">' + renderScenarioTileGroup('search', results) + '</div>'
       : '<p class=""empty"">No scenarios match your search.</p>'"
-7739,renderScenarios,indirect_builder,unescaped_html,renderScenarioTileGroup() @L7819 (scope-resolved): 3 return(s) -> unescaped_html,"inCat.length
+7741,renderScenarios,indirect_builder,unescaped_html,renderScenarioTileGroup() @L7821 (scope-resolved): 3 return(s) -> unescaped_html,"inCat.length
     ? '<div class=""sc-fade"">' + renderScenarioTileGroup(state.scenarioView, inCat) + '</div>'
     : '<p class=""empty"">No scenarios match your filter.</p>'"
-8382,count,indirect_builder,unescaped_html,covSegHtml() @L7117 (scope-resolved): 1 return(s) -> unescaped_html,"covSegHtml(items, CAMPAIGN_TAB, 'setCampaignTab', count)"
-8520,rowf,indirect_builder,unescaped_html,hdr() @L8512 (scope-resolved): 1 return(s) -> unescaped_html,"hdr('Recommended next steps') + '<div class=""tiny muted"">No open findings for this campaign.</div>'"
-8589,openCampaignLaunch,indirect_variable,static,2 assignment(s) to 'opts' inside openCampaignLaunch() @L8561 (scope-resolved) -> static,opts
-8926,loadEndpointPostureWidget,indirect_variable,partial_escaped,3 assignment(s) to 'html' inside loadEndpointPostureWidget() @L8897 (scope-resolved) -> partial_escaped,html
-9247,loadCalderaStatus,indirect_variable,static,3 assignment(s) to 'dot' inside loadCalderaStatus() @L9232 (scope-resolved) -> static,dot
-9315,openConfirmDiffModal,indirect_variable,unclear,"no assignment to 'diffHtml' found inside its real enclosing function (openConfirmDiffModal() @L9313, scope-resolved by position) -- likely a function parameter, needs a caller-level trace",diffHtml
-9701,list,indirect_variable,partial_escaped,1 assignment(s) to 'body' inside openTechnique() @L9686 (scope-resolved) -> partial_escaped,body
-9753,loadVerificationTab,indirect_variable,escaped,1 assignment(s) to 'opts' inside loadVerificationTab() @L9736 (scope-resolved) -> escaped,opts
-10385,_renderVexPreviewList,indirect_builder,unescaped_html,_renderVexPreviewSection() @L10390 (scope-resolved): 4 return(s) -> unescaped_html,"_renderVexPreviewSection('art', 'ART', artFiltered, _vexPreviewArtCollapsed) +
+8384,count,indirect_builder,unescaped_html,covSegHtml() @L7119 (scope-resolved): 1 return(s) -> unescaped_html,"covSegHtml(items, CAMPAIGN_TAB, 'setCampaignTab', count)"
+8522,rowf,indirect_builder,unescaped_html,hdr() @L8514 (scope-resolved): 1 return(s) -> unescaped_html,"hdr('Recommended next steps') + '<div class=""tiny muted"">No open findings for this campaign.</div>'"
+8591,openCampaignLaunch,indirect_variable,static,2 assignment(s) to 'opts' inside openCampaignLaunch() @L8563 (scope-resolved) -> static,opts
+8928,loadEndpointPostureWidget,indirect_variable,partial_escaped,3 assignment(s) to 'html' inside loadEndpointPostureWidget() @L8899 (scope-resolved) -> partial_escaped,html
+9249,loadCalderaStatus,indirect_variable,static,3 assignment(s) to 'dot' inside loadCalderaStatus() @L9234 (scope-resolved) -> static,dot
+9317,openConfirmDiffModal,indirect_variable,unclear,"no assignment to 'diffHtml' found inside its real enclosing function (openConfirmDiffModal() @L9315, scope-resolved by position) -- likely a function parameter, needs a caller-level trace",diffHtml
+9703,list,indirect_variable,partial_escaped,1 assignment(s) to 'body' inside openTechnique() @L9688 (scope-resolved) -> partial_escaped,body
+9755,loadVerificationTab,indirect_variable,escaped,1 assignment(s) to 'opts' inside loadVerificationTab() @L9738 (scope-resolved) -> escaped,opts
+10387,_renderVexPreviewList,indirect_builder,unescaped_html,_renderVexPreviewSection() @L10392 (scope-resolved): 4 return(s) -> unescaped_html,"_renderVexPreviewSection('art', 'ART', artFiltered, _vexPreviewArtCollapsed) +
     _renderVexPreviewSection('caldera', 'Caldera', calderaFiltered, _vexPreviewCalderaCollapsed)"
-11062,fmt,indirect_variable,unescaped_html,15 assignment(s) to 'html' inside renderEvidencePanel() @L10818 (scope-resolved) -> unescaped_html,html
-11993,aggOf,indirect_builder,unescaped_html,sparkSVG() @L11847 (scope-resolved): 4 return(s) -> unescaped_html; var(): no declaration found anywhere in file,"sparkSVG(prevSeries, 110, 30, 'var(--teal)')"
-12006,aggOf,indirect_builder,unescaped_html,miniBars() @L11872 (scope-resolved): 3 return(s) -> unescaped_html,"miniBars(barData, 320, 64)"
-12034,aggOf,indirect_builder,unescaped_html,sparkSVG() @L11847 (scope-resolved): 4 return(s) -> unescaped_html; var(): no declaration found anywhere in file,"sparkSVG(covSeries, 110, 30, 'var(--warning)')"
-12096,lg,indirect_builder,unescaped_html,killChainNodes() @L20288 (scope-resolved): 1 return(s) -> unescaped_html,"'<div class=""killchain"">' + killChainNodes(kc) + '</div>'"
-12286,renderSLAKPIs,indirect_builder,unescaped_html,tile() @L8422 (scope-resolved): 1 return(s) -> unescaped_html; var(): no declaration found anywhere in file,"tile('Compliance Rate', rate.text, rate.color) +
+11064,fmt,indirect_variable,unescaped_html,15 assignment(s) to 'html' inside renderEvidencePanel() @L10820 (scope-resolved) -> unescaped_html,html
+11995,aggOf,indirect_builder,unescaped_html,sparkSVG() @L11849 (scope-resolved): 4 return(s) -> unescaped_html; var(): no declaration found anywhere in file,"sparkSVG(prevSeries, 110, 30, 'var(--teal)')"
+12008,aggOf,indirect_builder,unescaped_html,miniBars() @L11874 (scope-resolved): 3 return(s) -> unescaped_html,"miniBars(barData, 320, 64)"
+12036,aggOf,indirect_builder,unescaped_html,sparkSVG() @L11849 (scope-resolved): 4 return(s) -> unescaped_html; var(): no declaration found anywhere in file,"sparkSVG(covSeries, 110, 30, 'var(--warning)')"
+12098,lg,indirect_builder,unescaped_html,killChainNodes() @L20290 (scope-resolved): 1 return(s) -> unescaped_html,"'<div class=""killchain"">' + killChainNodes(kc) + '</div>'"
+12288,renderSLAKPIs,indirect_builder,unescaped_html,tile() @L8424 (scope-resolved): 1 return(s) -> unescaped_html; var(): no declaration found anywhere in file,"tile('Compliance Rate', rate.text, rate.color) +
     tile('On-Time', overall.onTime, 'var(--success)') +
     tile('Late', overall.late, overall.late ? 'var(--danger)' : 'var(--muted)') +
     tile('Cur"
-12367,renderFindingsTiles,indirect_builder,unescaped_html,tile() @L8422 (scope-resolved): 1 return(s) -> unescaped_html; var(): no declaration found anywhere in file,"tile('Open findings', open, open ? 'var(--danger)' : 'var(--success)') +
+12369,renderFindingsTiles,indirect_builder,unescaped_html,tile() @L8424 (scope-resolved): 1 return(s) -> unescaped_html; var(): no declaration found anywhere in file,"tile('Open findings', open, open ? 'var(--danger)' : 'var(--success)') +
     tile('Attack Surface Age', open ? maxAge + ' days' : '0 days', ageCol) +
     tile('Critical', crit, crit ? 'var(--danger)' "
-12377,c,indirect_builder,unescaped_html,covSegHtml() @L7117 (scope-resolved): 1 return(s) -> unescaped_html,"covSegHtml(
+12379,c,indirect_builder,unescaped_html,covSegHtml() @L7119 (scope-resolved): 1 return(s) -> unescaped_html,"covSegHtml(
     [['all', 'All'], ['open', 'Open'], ['triaged', 'Triaged'], ['remediated', 'Remediated'], ['risk_accepted', 'Risk-accepted']],
     FINDING_TAB, 'setFindingTab', c
   )"
-12541,tile,indirect_builder,unescaped_html,rgba(): no declaration found anywhere in file; tile() @L12535 (scope-resolved): 1 return(s) -> unescaped_html; var(): no declaration found anywhere in file,"tile('Open remediations', l.length, l.length ? 'var(--warning)' : 'var(--success)', 'rgba(210,153,34,0.12)', REM_SVG.wrench16, 'prioritized fixes') +
+12543,tile,indirect_builder,unescaped_html,rgba(): no declaration found anywhere in file; tile() @L12537 (scope-resolved): 1 return(s) -> unescaped_html; var(): no declaration found anywhere in file,"tile('Open remediations', l.length, l.length ? 'var(--warning)' : 'var(--success)', 'rgba(210,153,34,0.12)', REM_SVG.wrench16, 'prioritized fixes') +
     tile('Affected findings', findingsTotal, findi"
-12712,tile,indirect_variable,indirect_builder,2 assignment(s) to 'html' inside loadDashboardITSM() @L12693 (scope-resolved) -> indirect_builder,html
-13899,tile,indirect_builder,unescaped_html,tile() @L13892 (scope-resolved): 1 return(s) -> unescaped_html,"tile('Most Detected', result.mostDetected, ' detections') +
+12714,tile,indirect_variable,indirect_builder,2 assignment(s) to 'html' inside loadDashboardITSM() @L12695 (scope-resolved) -> indirect_builder,html
+13901,tile,indirect_builder,unescaped_html,tile() @L13894 (scope-resolved): 1 return(s) -> unescaped_html,"tile('Most Detected', result.mostDetected, ' detections') +
     tile('Highest Bypass Rate', result.highestBypassRate, ' bypasses') +
     tile('Frequently Reused', result.frequentlyReused, ' sightings'"
-13977,rowHtml,indirect_variable,indirect_builder,1 assignment(s) to 'body' inside openIOCDetail() @L13955 (scope-resolved) -> indirect_builder,body
-15038,renderAttackPath,indirect_variable,unescaped_text,20 assignment(s) to 'h' inside renderAttackPath() @L14987 (scope-resolved) -> unescaped_text,h
-15646,byStartedAtDesc,indirect_builder,unclear,no callable name found in rhs,allEntries.map(function(e) { return e.html; }).join('')
-15775,renderRunMode,indirect_variable,escaped,2 assignment(s) to 'osMismatchMsg' inside renderRunMode() @L15712 (scope-resolved) -> escaped,osMismatchMsg
-15807,renderRunMode,indirect_variable,unescaped_html,2 assignment(s) to 'warnText' inside renderRunMode() @L15712 (scope-resolved) -> unescaped_html,warnText
-15822,renderRunMode,indirect_variable,escaped,2 assignment(s) to 'osMismatchMsg' inside renderRunMode() @L15712 (scope-resolved) -> escaped,osMismatchMsg
-16130,row,indirect_variable,unescaped_html,3 assignment(s) to 'html' inside renderWizardReview() @L16033 (scope-resolved) -> unescaped_html,html
-16640,renderModalSelection,indirect_variable,indirect_variable,1 assignment(s) to 'cached' inside renderModalSelection() @L16541 (scope-resolved) -> indirect_variable,cached
-17399,viewRunResults,indirect_variable,escaped,2 assignment(s) to 'actionsHtml' inside viewRunResults() @L17280 (scope-resolved) -> escaped,actionsHtml
-17871,soonPanel,indirect_builder,partial_escaped,renderRunReportExtra() @L20318 (scope-resolved): 5 return(s) -> partial_escaped,renderRunReportExtra(rep)
-17873,soonPanel,indirect_builder,unescaped_html,renderRunFindings() @L20614 (scope-resolved): 3 return(s) -> unescaped_html,renderRunFindings(rep)
-17875,soonPanel,indirect_builder,unescaped_html,renderRunRecommendations() @L20641 (scope-resolved): 3 return(s) -> unescaped_html,renderRunRecommendations(rep)
-17889,soonPanel,indirect_builder,unescaped_html,renderAttackFlow() @L20194 (scope-resolved): 6 return(s) -> unescaped_html,"renderAttackFlow(af.nodes || [], af.summary || {})"
-17898,soonPanel,indirect_builder,unescaped_html,renderVariantCoverage() @L19986 (scope-resolved): 11 return(s) -> unescaped_html,renderVariantCoverage(cov)
-17927,soonPanel,indirect_variable,static,1 assignment(s) to 'notReady' inside viewRunResults() @L17280 (scope-resolved) -> static,notReady
-17929,soonPanel,indirect_variable,static,1 assignment(s) to 'notReady' inside viewRunResults() @L17280 (scope-resolved) -> static,notReady
-17931,soonPanel,indirect_variable,static,1 assignment(s) to 'notReady' inside viewRunResults() @L17280 (scope-resolved) -> static,notReady
-18695,renderSchedModeRecurrencePane,indirect_variable,static,2 assignment(s) to 'opts' inside renderSchedModeRecurrencePane() @L18687 (scope-resolved) -> static,opts
-19020,maybeShowLicenseGraceModal,indirect_builder,partial_escaped,_licenseBannerHTML() @L18953 (scope-resolved): 1 return(s) -> partial_escaped,"'<div class=""g1-s-fd040b75"">' +
+13979,rowHtml,indirect_variable,indirect_builder,1 assignment(s) to 'body' inside openIOCDetail() @L13957 (scope-resolved) -> indirect_builder,body
+15040,renderAttackPath,indirect_variable,unescaped_text,20 assignment(s) to 'h' inside renderAttackPath() @L14989 (scope-resolved) -> unescaped_text,h
+15648,byStartedAtDesc,indirect_builder,unclear,no callable name found in rhs,allEntries.map(function(e) { return e.html; }).join('')
+15777,renderRunMode,indirect_variable,escaped,2 assignment(s) to 'osMismatchMsg' inside renderRunMode() @L15714 (scope-resolved) -> escaped,osMismatchMsg
+15809,renderRunMode,indirect_variable,unescaped_html,2 assignment(s) to 'warnText' inside renderRunMode() @L15714 (scope-resolved) -> unescaped_html,warnText
+15824,renderRunMode,indirect_variable,escaped,2 assignment(s) to 'osMismatchMsg' inside renderRunMode() @L15714 (scope-resolved) -> escaped,osMismatchMsg
+16132,row,indirect_variable,unescaped_html,3 assignment(s) to 'html' inside renderWizardReview() @L16035 (scope-resolved) -> unescaped_html,html
+16642,renderModalSelection,indirect_variable,indirect_variable,1 assignment(s) to 'cached' inside renderModalSelection() @L16543 (scope-resolved) -> indirect_variable,cached
+17401,viewRunResults,indirect_variable,escaped,2 assignment(s) to 'actionsHtml' inside viewRunResults() @L17282 (scope-resolved) -> escaped,actionsHtml
+17873,soonPanel,indirect_builder,partial_escaped,renderRunReportExtra() @L20320 (scope-resolved): 5 return(s) -> partial_escaped,renderRunReportExtra(rep)
+17875,soonPanel,indirect_builder,unescaped_html,renderRunFindings() @L20616 (scope-resolved): 3 return(s) -> unescaped_html,renderRunFindings(rep)
+17877,soonPanel,indirect_builder,unescaped_html,renderRunRecommendations() @L20643 (scope-resolved): 3 return(s) -> unescaped_html,renderRunRecommendations(rep)
+17891,soonPanel,indirect_builder,unescaped_html,renderAttackFlow() @L20196 (scope-resolved): 6 return(s) -> unescaped_html,"renderAttackFlow(af.nodes || [], af.summary || {})"
+17900,soonPanel,indirect_builder,unescaped_html,renderVariantCoverage() @L19988 (scope-resolved): 11 return(s) -> unescaped_html,renderVariantCoverage(cov)
+17929,soonPanel,indirect_variable,static,1 assignment(s) to 'notReady' inside viewRunResults() @L17282 (scope-resolved) -> static,notReady
+17931,soonPanel,indirect_variable,static,1 assignment(s) to 'notReady' inside viewRunResults() @L17282 (scope-resolved) -> static,notReady
+17933,soonPanel,indirect_variable,static,1 assignment(s) to 'notReady' inside viewRunResults() @L17282 (scope-resolved) -> static,notReady
+18697,renderSchedModeRecurrencePane,indirect_variable,static,2 assignment(s) to 'opts' inside renderSchedModeRecurrencePane() @L18689 (scope-resolved) -> static,opts
+19022,maybeShowLicenseGraceModal,indirect_builder,partial_escaped,_licenseBannerHTML() @L18955 (scope-resolved): 1 return(s) -> partial_escaped,"'<div class=""g1-s-fd040b75"">' +
       _licenseBannerHTML(info) +
       '<div class=""g1-s-39cd98a9""><button id=""license-grace-modal-dismiss"" class=""g1-s-08ac4010"">Dismiss</button></div>' +
     '</div>'"
-20730,loadVariantStats,indirect_builder,partial_escaped,executions(): no declaration found anywhere in file; var(): no declaration found anywhere in file; vexStatCard() @L20743 (scope-resolved): 1 return(s) -> partial_escaped,"vexStatCard('Executed Variants',     s.executedVariants,       'var(--accent)', null,
+20732,loadVariantStats,indirect_builder,partial_escaped,executions(): no declaration found anywhere in file; var(): no declaration found anywhere in file; vexStatCard() @L20745 (scope-resolved): 1 return(s) -> partial_escaped,"vexStatCard('Executed Variants',     s.executedVariants,       'var(--accent)', null,
         'How many individual variant executions (encoding \xd7 privilege \xd7 context combinations) have actually "
-20772,populateVexAgents,indirect_variable,escaped,1 assignment(s) to 'opts' inside populateVexAgents() @L20759 (scope-resolved) -> escaped,opts
-20774,populateVexAgents,indirect_variable,escaped,1 assignment(s) to 'opts' inside populateVexAgents() @L20759 (scope-resolved) -> escaped,opts
-20809,populateVexTechniques,indirect_variable,unescaped_html,2 assignment(s) to 'tacOpts' inside populateVexTechniques() @L20786 (scope-resolved) -> unescaped_html,tacOpts
-21209,loadVariantCoverage,indirect_variable,partial_escaped,3 assignment(s) to 'html' inside loadVariantCoverage() @L21178 (scope-resolved) -> partial_escaped,html
-21576,renderVariantRun,indirect_variable,partial_escaped,24 assignment(s) to 'wrapperHtml' inside renderVariantRun() @L21509 (scope-resolved) -> partial_escaped,wrapperHtml
+20774,populateVexAgents,indirect_variable,escaped,1 assignment(s) to 'opts' inside populateVexAgents() @L20761 (scope-resolved) -> escaped,opts
+20776,populateVexAgents,indirect_variable,escaped,1 assignment(s) to 'opts' inside populateVexAgents() @L20761 (scope-resolved) -> escaped,opts
+20811,populateVexTechniques,indirect_variable,unescaped_html,2 assignment(s) to 'tacOpts' inside populateVexTechniques() @L20788 (scope-resolved) -> unescaped_html,tacOpts
+21211,loadVariantCoverage,indirect_variable,partial_escaped,3 assignment(s) to 'html' inside loadVariantCoverage() @L21180 (scope-resolved) -> partial_escaped,html
+21578,renderVariantRun,indirect_variable,partial_escaped,24 assignment(s) to 'wrapperHtml' inside renderVariantRun() @L21511 (scope-resolved) -> partial_escaped,wrapperHtml

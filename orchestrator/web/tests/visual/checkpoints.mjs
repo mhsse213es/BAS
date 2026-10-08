@@ -125,6 +125,11 @@ export const CHECKPOINTS = [
     { click: '[data-set="intel"]' },
   ] },
 
+  // -- ransomware.js: loadRansomwareReadiness fires from evidence.js's
+  // loadDashboard, which the 'dashboard' tab's default dash-view
+  // ('operational', shell.js resolveDashView) already calls with no click
+  // needed -- the standard tab:dashboard checkpoint covers #rr-body.
+
   // -- reports.js
   { name: "reports.js:118,131 report-gen filter wraps", tab: 'reports', steps: [
     { click: '[data-on-click="openReportGen"]' },

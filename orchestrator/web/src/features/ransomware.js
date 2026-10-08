@@ -5,6 +5,7 @@ import { ago, showToast } from '../core/util.js';
 import { openModal } from './reports.js';
 import { _riskScoreColor, showTab } from './shell.js';
 import { setDisplay } from '../core/inline-style.js';
+import { cssVars } from '../core/css-vars.js';
 
 
 // ── Ransomware Readiness Module ───────────────────────────────────────────────
@@ -37,7 +38,7 @@ export function loadRansomwareReadiness(runs) {
   }
 
   if (!rrRun) {
-    bodyEl.innerHTML = '<div class="empty" style="padding:0.5rem">Run the <strong>Ransomware Drill</strong> or <strong>EM-07</strong> scenario to generate a readiness score.</div>';
+    bodyEl.innerHTML = '<div class="empty g1-s-dab79d7d">Run the <strong>Ransomware Drill</strong> or <strong>EM-07</strong> scenario to generate a readiness score.</div>';
     return;
   }
 
@@ -82,10 +83,10 @@ export function loadRansomwareReadiness(runs) {
   // Score gauge + category bars
   var catKeys = Object.keys(cats);
   var scoreHtml = overallPct !== null
-    ? '<div style="display:flex;align-items:center;justify-content:center;width:80px;height:80px;border-radius:50%;background:conic-gradient(' + _riskScoreColor(overallPct) + ' ' + overallPct + '%, var(--elevated) 0%);flex-shrink:0">' +
-        '<div style="width:58px;height:58px;border-radius:50%;background:var(--surface);display:flex;flex-direction:column;align-items:center;justify-content:center">' +
-          '<span style="font-size:1.1rem;font-weight:700;line-height:1;color:' + _riskScoreColor(overallPct) + '">' + overallPct + '</span>' +
-          '<span style="font-size:0.55rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.04em">score</span>' +
+    ? '<div class="g1-display-flex g1-s-73ecc07e"' + cssVars(['g1-v-bd5c5d10', _riskScoreColor(overallPct), overallPct]) + '>' +
+        '<div class="g1-display-flex g1-s-cbd566af">' +
+          '<span class="g1-s-ddc46798"' + cssVars(['g1-v-7d75dfc9', _riskScoreColor(overallPct)]) + '>' + overallPct + '</span>' +
+          '<span class="g1-s-e8485c25">score</span>' +
         '</div>' +
       '</div>'
     : '';
@@ -97,29 +98,29 @@ export function loadRansomwareReadiness(runs) {
     var cfg = RR_CATS[k] || { label: k.replace(/-/g, ' '), icon: '' };
     var col = pct === null ? 'var(--muted)' : _riskScoreColor(pct);
     var pctLabel = pct !== null ? pct + '%' : 'no data';
-    return '<div style="margin-bottom:0.5rem">' +
-      '<div style="display:flex;justify-content:space-between;font-size:0.76rem;margin-bottom:0.2rem">' +
+    return '<div class="g1-s-04f181fe">' +
+      '<div class="g1-display-flex g1-s-58f2e5c4">' +
         '<span class="u-text">' + cfg.icon + ' ' + x(cfg.label) + '</span>' +
-        '<span style="font-weight:600;color:' + col + '">' + pctLabel + '</span>' +
+        '<span class="g1-s-6e8bcfac"' + cssVars(['g1-v-7d75dfc9', col]) + '>' + pctLabel + '</span>' +
       '</div>' +
-      '<div style="height:5px;background:var(--elevated);border-radius:3px;overflow:hidden">' +
-        (pct !== null ? '<div style="height:100%;width:' + pct + '%;background:' + col + ';border-radius:3px;transition:width .6s ease"></div>' : '') +
+      '<div class="g1-s-abdb10c3">' +
+        (pct !== null ? '<div class="g1-s-2cd8e04f"' + cssVars(['g1-v-9b890877', pct], ['g1-v-9ffd39ba', col]) + '></div>' : '') +
       '</div>' +
-      '<div style="font-size:0.66rem;color:var(--muted);margin-top:0.15rem">' + d.pass + ' pass &middot; ' + d.fail + ' fail' + (d.skip ? ' &middot; ' + d.skip + ' skip' : '') + '</div>' +
+      '<div class="g1-s-e79e1ce2">' + d.pass + ' pass &middot; ' + d.fail + ' fail' + (d.skip ? ' &middot; ' + d.skip + ' skip' : '') + '</div>' +
     '</div>';
-  }).join('') : '<div class="empty" style="padding:0.5rem">No categorised results in this run.</div>';
+  }).join('') : '<div class="empty g1-s-dab79d7d">No categorised results in this run.</div>';
 
   bodyEl.innerHTML =
-    '<div style="display:flex;gap:1.5rem;align-items:flex-start">' +
+    '<div class="g1-display-flex g1-s-d7f84b58">' +
       scoreHtml +
-      '<div style="flex:1;min-width:0">' + barsHtml + '</div>' +
-      '<div style="flex-shrink:0;display:flex;flex-direction:column;gap:0.4rem;min-width:160px;font-size:0.75rem;color:var(--muted)">' +
-        '<div><span style="color:var(--text);font-weight:500">' + x(rrRun.name || rrRun.scenarioId) + '</span></div>' +
+      '<div class="g1-s-28637295">' + barsHtml + '</div>' +
+      '<div class="g1-display-flex g1-s-7d5960f3">' +
+        '<div><span class="g1-s-13457f1d">' + x(rrRun.name || rrRun.scenarioId) + '</span></div>' +
         '<div>' + (rrRun.agentId ? 'Agent: ' + x(rrRun.agentId) : '') + '</div>' +
-        '<div style="margin-top:0.25rem">' +
+        '<div class="g1-s-f6c1493f">' +
           '<span class="sbadge s-' + x(rrRun.status) + '">' + x(rrRun.status) + '</span>' +
         '</div>' +
-        '<a style="color:var(--accent);cursor:pointer;margin-top:0.4rem"' + on('click', 'viewRunResults', rrRun) + '>View full report →</a>' +
+        '<a class="g1-s-9ed2816e"' + on('click', 'viewRunResults', rrRun) + '>View full report →</a>' +
       '</div>' +
     '</div>';
 }

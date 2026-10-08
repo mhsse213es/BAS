@@ -18,6 +18,26 @@ const run = {
   progress: { stepsTotal: 5, stepsDone: 5 },
 };
 
+// Ransomware Readiness panel (ransomware.js loadRansomwareReadiness, fired
+// from evidence.js's dashboard load on Agents > Operational view): needs a
+// run with this exact scenarioId and a non-empty `results` array to resolve
+// rrRun truthy. Mixed pass/fail across categories so the score gauge and
+// at least one category bar render their g1-v color/width rules.
+const rrRun = {
+  id: 'run-rr-smoke-1', name: `RR Run ${PAYLOAD}`, scenarioId: 'ransomware-drill',
+  status: 'completed', startedAt: NOW, completedAt: NOW,
+  results: [
+    { phase: 'prevention-posture', result: 'pass' },
+    { phase: 'prevention-posture', result: 'pass' },
+    { phase: 'prevention-posture', result: 'fail' },
+    { phase: 'backup-resilience', result: 'pass' },
+    { phase: 'backup-resilience', result: 'pass' },
+    { phase: 'backup-resilience', result: 'pass' },
+    { phase: 'recovery-posture', result: 'fail' },
+    { phase: 'recovery-posture', result: 'fail' },
+  ],
+};
+
 const finding = {
   id: 'finding-smoke-1', techniqueId: 'T1082', techniqueName: `System Info ${PAYLOAD}`, title: `Finding ${PAYLOAD}`,
   severity: 'high', status: 'open', runId: 'run-smoke-1', agentId: 'agent-smoke-1', hostname: `host ${PAYLOAD}`,
@@ -83,7 +103,7 @@ export const FIXTURES = {
     : [agent]),
   'GET /api/agents/legacy-migration-status': { blockingAgents: [], unattributedRequests: null },
   'GET /api/agent-groups': [{ id: 1, name: `Group ${PAYLOAD}`, totalAgentCount: 1, agentCount: 1, children: [] }],
-  'GET /api/scenarios/runs': [run],
+  'GET /api/scenarios/runs': [run, rrRun],
   'GET /api/findings': [finding],
   'GET /api/campaigns': [campaign],
   // Variants tab polls this every 3s; a non-list makes it toast forever.
