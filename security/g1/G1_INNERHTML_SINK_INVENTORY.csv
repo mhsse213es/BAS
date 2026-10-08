@@ -1068,31 +1068,35 @@ line,function,target,op,category,data_source_tags,rhs_len,rhs
         : '<td class=""u-muted"" title=""Nothing collected for this endpoint yet — an absent score is not a safe score"">— no data</td>') +
       '<td>' + ("
 19438,loadThreatIntelConfig,if (panel) panel,=,static_empty,,2,''
-19447,loadThreatIntelConfig,panel,=,partial_escaped,,999,"'<div class=""kpi-row"">' +
+19447,loadThreatIntelConfig,panel,=,partial_escaped,,925,"'<div class=""kpi-row"">' +
         urlField +
         '<input id=""ti-' + name + '-key"" type=""password"" placeholder=""API key (leave blank to keep current)"" class=""inp-sm u-flex1"">' +
         insecureField +
-        '<label class=""tiny muted"" style=""display:flex;align-items:center;gap:0.3rem""><input type=""checkbox"" id=""ti-' + name + '-enabled"" ' + (cfg.enabled ? 'checked' : '') + '> Enabled</label>' "
+        '<label class=""tiny muted g1-display-flex g1-s-4f83cf12""><input type=""checkbox"" id=""ti-' + name + '-enabled"" ' + (cfg.enabled ? 'checked' : '') + '> Enabled</label>' +
+      '</div>' +
+  "
 19553,loadTAXIIConnectors,tbody,=,static,,54,"'<tr><td colspan=""6"" class=""empty"">Loading…</td></tr>'"
 19558,loadTAXIIConnectors,tbody,=,escaped,error_message,101,"'<tr><td colspan=""6"" class=""empty"">Failed to load: ' + x(e.message || 'unknown error') + '</td></tr>'"
 19565,renderTAXIIConnectorsList,tbody,=,static,,81,"'<tr><td colspan=""6"" class=""empty"">No TAXII connectors configured yet.</td></tr>'"
-19568,renderTAXIIConnectorsList,tbody,=,unescaped_html,user_created_name,1427,"TAXII_CONNECTORS.map(function(c) {
+19568,renderTAXIIConnectorsList,tbody,=,unescaped_html,user_created_name,1331,"TAXII_CONNECTORS.map(function(c) {
     var lastPoll = c.lastPollAt ? ago(c.lastPollAt) : 'Never';
-    var resultColor = c.lastPollStatus === 'ok' ? 'var(--success)' : (c.lastPollStatus === 'error' ? 'var(--danger)' : 'var(--muted)');
+    var resultColor = c.lastPollStatus === 'ok' ? 'g1-s-f83fcad9' : (c.lastPollStatus === 'error' ? 'g1-s-b83ba243' : 'g1-s-eac76940');
     var summary = c.lastPollSummary || {};
     var resultText = c.lastPollStatus === 'ok'
       ? (summary.processed || 0) + ' processed, ' + (summary.skipped || 0) +"
-19744,loadARTContentStatus,statusEl,=,static,,185,"'<span style=""display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--success);margin-right:6px;vertical-align:middle""></span><span class=""u-success"">Seeded</span>'"
-19746,loadARTContentStatus,statusEl,=,static,,189,"'<span style=""display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--warning);margin-right:6px;vertical-align:middle""></span><span class=""u-warning"">Not seeded</span>'"
+19744,loadARTContentStatus,statusEl,=,static,,98,"'<span class=""g1-display-inline-block g1-s-a3bc72af""></span><span class=""u-success"">Seeded</span>'"
+19746,loadARTContentStatus,statusEl,=,static,,102,"'<span class=""g1-display-inline-block g1-s-d9fd6a0b""></span><span class=""u-warning"">Not seeded</span>'"
 19786,loadARTContentStatus,document.getElementById('cs-art-status'),=,static,,53,"'<span class=""u-danger"">Error checking status</span>'"
 19799,toggleSimCoverage,if (car) car,=,static,,36,SIM_COV_OPEN ? '&#9660;' : '&#9654;'
-19914,loadSimCoverage,bodyEl,=,unescaped_html,,2162,"rows.map(function(r, i) {
-        var bg = i % 2 === 0 ? '' : 'background:rgba(255,255,255,.02)';
+19914,loadSimCoverage,bodyEl,=,unescaped_html,,1467,"rows.map(function(r, i) {
+        var rowClass = i % 2 === 0 ? '' : ' g1-s-ab376776';
         var isVariantRow = r[0].indexOf('Variant Engine') !== -1;
         var isSection = !!sectionKeys[r[0]];
-        var textStyle = isVariantRow ? 'font-weight:700;color:var(--accent)'
-                      : isSection    ? 'font-weight:700;color:var(--text)'
-                      :                "
+        var textClass = isVariantRow ? 'g1-s-c941d204'
+                      : isSection    ? 'g1-s-7069a0c6'
+                      :                'g1-s-eac76940';
+        var numClass = isVariantRow
+ "
 20732,loadVariantStats,el,=,indirect_builder,,1601,"vexStatCard('Executed Variants',     s.executedVariants,       'var(--accent)', null,
         'How many individual variant executions (encoding \xd7 privilege \xd7 context combinations) have actually completed so far, summed across every finished variant run — not the total available.') +
       vexStatCard('Total Variants',        s.availableVariants,      'var(--text)',   artAtomic.toLocaleString"

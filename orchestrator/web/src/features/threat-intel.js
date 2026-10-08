@@ -24,18 +24,18 @@ export function loadThreatIntelConfig(name) {
     // MISP is the only curated source whose client honours this -- OTX is a
     // hosted service with a valid cert, and the OpenCTI client always verifies.
     var insecureField = name !== 'misp' ? '' :
-      '<label class="tiny muted" style="display:flex;align-items:center;gap:0.3rem" title="Only enable for an air-gapped MISP presenting a self-signed certificate. Disabling verification exposes your API key to interception."><input type="checkbox" id="ti-' + name + '-insecure" ' + (cfg.insecureTls ? 'checked' : '') + '> Skip TLS verify</label>';
+      '<label class="tiny muted g1-display-flex g1-s-4f83cf12" title="Only enable for an air-gapped MISP presenting a self-signed certificate. Disabling verification exposes your API key to interception."><input type="checkbox" id="ti-' + name + '-insecure" ' + (cfg.insecureTls ? 'checked' : '') + '> Skip TLS verify</label>';
     panel.innerHTML =
       '<div class="kpi-row">' +
         urlField +
         '<input id="ti-' + name + '-key" type="password" placeholder="API key (leave blank to keep current)" class="inp-sm u-flex1">' +
         insecureField +
-        '<label class="tiny muted" style="display:flex;align-items:center;gap:0.3rem"><input type="checkbox" id="ti-' + name + '-enabled" ' + (cfg.enabled ? 'checked' : '') + '> Enabled</label>' +
+        '<label class="tiny muted g1-display-flex g1-s-4f83cf12"><input type="checkbox" id="ti-' + name + '-enabled" ' + (cfg.enabled ? 'checked' : '') + '> Enabled</label>' +
       '</div>' +
-      '<div class="kpi-row" style="margin-top:0.5rem">' +
+      '<div class="kpi-row g1-s-acd4d170">' +
         '<button class="btn btn-outline btn-sm"' + on('click', 'testConnectorConfig', name) + '>Test Connection</button>' +
         '<button class="btn btn-primary btn-sm"' + on('click', 'saveConnectorConfig', name) + '>Save</button>' +
-        (cfg.configured ? '<button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger)"' + on('click', 'removeConnectorConfig', name) + '>Remove</button>' : '') +
+        (cfg.configured ? '<button class="btn btn-outline btn-sm g1-s-0171e242"' + on('click', 'removeConnectorConfig', name) + '>Remove</button>' : '') +
         '<span id="ti-' + name + '-test-result" class="tiny muted"></span>' +
       '</div>';
   }).catch(function(e) { showToast('Failed to load ' + name + ' config: ' + (e.message || 'error'), 'err'); });
@@ -113,7 +113,7 @@ function doSaveConnectorConfig(name, payload) {
 // connector stops syncing immediately, no restart needed.
 export function removeConnectorConfig(name) {
   var rows = _diffRow('Base URL', TI_CONNECTOR_LOADED[name] ? TI_CONNECTOR_LOADED[name].baseUrl : '', '(removed)') +
-    '<div class="tiny muted" style="margin-top:0.4rem">This deletes the stored API key too. ' + TI_CONNECTOR_LABELS[name] + ' will stop syncing immediately.</div>';
+    '<div class="tiny muted g1-s-d21775d3">This deletes the stored API key too. ' + TI_CONNECTOR_LABELS[name] + ' will stop syncing immediately.</div>';
   openConfirmDiffModal('Remove ' + TI_CONNECTOR_LABELS[name] + ' Config', rows, function() {
     apicall('/api/threat-intel/' + name + '/config', { method: 'DELETE' }).then(function(res) {
       if (res && res.warning) showToast(res.warning, 'err');
@@ -148,7 +148,7 @@ function renderTAXIIConnectorsList() {
   }
   tbody.innerHTML = TAXII_CONNECTORS.map(function(c) {
     var lastPoll = c.lastPollAt ? ago(c.lastPollAt) : 'Never';
-    var resultColor = c.lastPollStatus === 'ok' ? 'var(--success)' : (c.lastPollStatus === 'error' ? 'var(--danger)' : 'var(--muted)');
+    var resultColor = c.lastPollStatus === 'ok' ? 'g1-s-f83fcad9' : (c.lastPollStatus === 'error' ? 'g1-s-b83ba243' : 'g1-s-eac76940');
     var summary = c.lastPollSummary || {};
     var resultText = c.lastPollStatus === 'ok'
       ? (summary.processed || 0) + ' processed, ' + (summary.skipped || 0) + ' skipped, ' + (summary.malformed || 0) + ' malformed'
@@ -156,9 +156,9 @@ function renderTAXIIConnectorsList() {
     return '<tr>' +
       '<td>' + x(c.name) + '</td>' +
       '<td class="tiny muted">' + x(c.serverUrl) + '</td>' +
-      '<td>' + (c.enabled ? '<span class="badge" style="color:var(--success);border-color:var(--success)">Enabled</span>' : '<span class="badge" style="color:var(--muted);border-color:var(--muted)">Disabled</span>') + '</td>' +
+      '<td>' + (c.enabled ? '<span class="badge g1-s-f213c12d">Enabled</span>' : '<span class="badge g1-s-8297411d">Disabled</span>') + '</td>' +
       '<td class="tiny muted">' + x(lastPoll) + '</td>' +
-      '<td class="tiny" style="color:' + resultColor + '">' + resultText + '</td>' +
+      '<td class="tiny ' + resultColor + '">' + resultText + '</td>' +
       '<td>' +
         '<button class="btn btn-outline btn-sm"' + on('click', 'openTAXIIConnectorModal', c.id) + '>Edit</button> ' +
         '<button class="btn btn-outline btn-sm"' + on('click', 'syncTAXIIConnectorNow', c.id) + '>Sync Now</button> ' +
@@ -322,9 +322,9 @@ export function loadARTContentStatus() {
   apicall('/api/art/content/status').then(function(d) {
     var statusEl = document.getElementById('cs-art-status');
     if (d.seeded) {
-      statusEl.innerHTML = '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--success);margin-right:6px;vertical-align:middle"></span><span class="u-success">Seeded</span>';
+      statusEl.innerHTML = '<span class="g1-display-inline-block g1-s-a3bc72af"></span><span class="u-success">Seeded</span>';
     } else {
-      statusEl.innerHTML = '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--warning);margin-right:6px;vertical-align:middle"></span><span class="u-warning">Not seeded</span>';
+      statusEl.innerHTML = '<span class="g1-display-inline-block g1-s-d9fd6a0b"></span><span class="u-warning">Not seeded</span>';
     }
     document.getElementById('cs-art-version').textContent = d.version || '(unversioned)';
     var loaded = d.techniquesLoaded != null ? d.techniquesLoaded : (d.techniqueCount || 0);
@@ -493,30 +493,30 @@ export function loadSimCoverage() {
       };
 
       bodyEl.innerHTML = rows.map(function(r, i) {
-        var bg = i % 2 === 0 ? '' : 'background:rgba(255,255,255,.02)';
+        var rowClass = i % 2 === 0 ? '' : ' g1-s-ab376776';
         var isVariantRow = r[0].indexOf('Variant Engine') !== -1;
         var isSection = !!sectionKeys[r[0]];
-        var textStyle = isVariantRow ? 'font-weight:700;color:var(--accent)'
-                      : isSection    ? 'font-weight:700;color:var(--text)'
-                      :                'color:var(--muted)';
-        var numStyle = isVariantRow
-          ? 'font-family:var(--font-mono);font-size:0.9rem;font-weight:800;color:var(--accent)'
-          : 'font-family:var(--font-mono);font-size:0.78rem;color:' + (isSection ? 'var(--text)' : 'var(--muted)');
-        return '<tr style="' + bg + '">' +
-          '<td style="padding:0.5rem 0.9rem;' + textStyle + '">' + r[0] + '</td>' +
-          '<td style="padding:0.5rem 0.9rem;' + numStyle + '">' + (r[1] || 0).toLocaleString() + '</td>' +
-          '<td style="padding:0.5rem 0.9rem;font-size:0.74rem;color:var(--muted)">' + r[2] + '</td>' +
+        var textClass = isVariantRow ? 'g1-s-c941d204'
+                      : isSection    ? 'g1-s-7069a0c6'
+                      :                'g1-s-eac76940';
+        var numClass = isVariantRow
+          ? 'g1-s-3b823d8b'
+          : (isSection ? 'g1-s-a37e17b4' : 'g1-s-db95677a');
+        return '<tr class="' + rowClass.trim() + '">' +
+          '<td class="g1-s-b8a8dca6 ' + textClass + '">' + r[0] + '</td>' +
+          '<td class="g1-s-b8a8dca6 ' + numClass + '">' + (r[1] || 0).toLocaleString() + '</td>' +
+          '<td class="g1-s-ccf5d4f9">' + r[2] + '</td>' +
         '</tr>';
       }).join('') +
-      '<tr style="border-top:1px solid var(--border);background:rgba(47,129,247,.06)">' +
-        '<td style="padding:0.55rem 0.9rem;font-weight:700;color:var(--text)">Unique ATT&amp;CK endpoint techniques (all sources)</td>' +
-        '<td style="padding:0.55rem 0.9rem;font-family:var(--font-mono);font-size:0.9rem;font-weight:800;color:var(--accent)">' + unifiedTotal.toLocaleString() + '</td>' +
-        '<td style="padding:0.55rem 0.9rem;font-size:0.74rem;color:var(--muted)">Deduplicated ATT&CK technique IDs across ART + Caldera + BAS scenarios</td>' +
+      '<tr class="g1-s-2feabc06">' +
+        '<td class="g1-s-1b983c61">Unique ATT&amp;CK endpoint techniques (all sources)</td>' +
+        '<td class="g1-s-1f449709">' + unifiedTotal.toLocaleString() + '</td>' +
+        '<td class="g1-s-41d9bd81">Deduplicated ATT&CK technique IDs across ART + Caldera + BAS scenarios</td>' +
       '</tr>' +
-      '<tr style="border-top:1px solid var(--border);background:rgba(47,129,247,.03)">' +
-        '<td style="padding:0.55rem 0.9rem;font-weight:600;color:var(--text)">Base simulations (pre-variant)</td>' +
-        '<td style="padding:0.55rem 0.9rem;font-family:var(--font-mono);font-size:0.78rem;font-weight:700;color:var(--text)">' + baseTotal.toLocaleString() + '</td>' +
-        '<td style="padding:0.55rem 0.9rem;font-size:0.74rem;color:var(--muted)">ART atomics + Caldera + all scenarios, no variant multiplication</td>' +
+      '<tr class="g1-s-f4bb2f9a">' +
+        '<td class="g1-s-5f4eefe2">Base simulations (pre-variant)</td>' +
+        '<td class="g1-s-44ce555a">' + baseTotal.toLocaleString() + '</td>' +
+        '<td class="g1-s-41d9bd81">ART atomics + Caldera + all scenarios, no variant multiplication</td>' +
       '</tr>';
     }
   }).catch(function() {

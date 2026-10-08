@@ -1027,20 +1027,7 @@
   "rhs": "'<span class=\"u-danger\">Error checking status</span>'"
  },
  {
-  "sink_id": "loadARTContentStatus:statusEl:=:231d8ed13a85",
-  "line": 19744,
-  "function": "loadARTContentStatus",
-  "target": "statusEl",
-  "op": "=",
-  "baseline_category": "static",
-  "final_category": "static",
-  "severity_tier": 0,
-  "data_source_tags": "",
-  "trace_notes": "",
-  "rhs": "'<span style=\"display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--success);margin-right:6px;vertical-align:middle\"></span><span class=\"u-success\">Seeded</span>'"
- },
- {
-  "sink_id": "loadARTContentStatus:statusEl:=:240aa95af980",
+  "sink_id": "loadARTContentStatus:statusEl:=:85ac724b048e",
   "line": 19746,
   "function": "loadARTContentStatus",
   "target": "statusEl",
@@ -1050,7 +1037,20 @@
   "severity_tier": 0,
   "data_source_tags": "",
   "trace_notes": "",
-  "rhs": "'<span style=\"display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--warning);margin-right:6px;vertical-align:middle\"></span><span class=\"u-warning\">Not seeded</span>'"
+  "rhs": "'<span class=\"g1-display-inline-block g1-s-d9fd6a0b\"></span><span class=\"u-warning\">Not seeded</span>'"
+ },
+ {
+  "sink_id": "loadARTContentStatus:statusEl:=:f648e57eafe2",
+  "line": 19744,
+  "function": "loadARTContentStatus",
+  "target": "statusEl",
+  "op": "=",
+  "baseline_category": "static",
+  "final_category": "static",
+  "severity_tier": 0,
+  "data_source_tags": "",
+  "trace_notes": "",
+  "rhs": "'<span class=\"g1-display-inline-block g1-s-a3bc72af\"></span><span class=\"u-success\">Seeded</span>'"
  },
  {
   "sink_id": "loadAgentRiskSummary:if (tb) tb:=:19f226136597",
@@ -1976,7 +1976,7 @@
   "rhs": "'<div style=\"padding:1rem 0 0.5rem\">' +\n        '<div style=\"display:flex;gap:1.5rem;margin-bottom:1rem;flex-wrap:wrap\">' +\n          '<div class=\"u-center\">' +\n            '<div style=\"font-size:1.7rem;font-weight:700;color:' + color + '\">' + detRate + '%</div>' +\n            '<div style=\"font-size:0.68rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em\">SIEM Detection Rate</div>"
  },
  {
-  "sink_id": "loadSimCoverage:bodyEl:=:b822322bb95c",
+  "sink_id": "loadSimCoverage:bodyEl:=:5b3e9dfbf888",
   "line": 19914,
   "function": "loadSimCoverage",
   "target": "bodyEl",
@@ -1986,7 +1986,7 @@
   "severity_tier": 4,
   "data_source_tags": "",
   "trace_notes": "",
-  "rhs": "rows.map(function(r, i) {\n        var bg = i % 2 === 0 ? '' : 'background:rgba(255,255,255,.02)';\n        var isVariantRow = r[0].indexOf('Variant Engine') !== -1;\n        var isSection = !!sectionKeys[r[0]];\n        var textStyle = isVariantRow ? 'font-weight:700;color:var(--accent)'\n                      : isSection    ? 'font-weight:700;color:var(--text)'\n                      :                "
+  "rhs": "rows.map(function(r, i) {\n        var rowClass = i % 2 === 0 ? '' : ' g1-s-ab376776';\n        var isVariantRow = r[0].indexOf('Variant Engine') !== -1;\n        var isSection = !!sectionKeys[r[0]];\n        var textClass = isVariantRow ? 'g1-s-c941d204'\n                      : isSection    ? 'g1-s-7069a0c6'\n                      :                'g1-s-eac76940';\n        var numClass = isVariantRow\n "
  },
  {
   "sink_id": "loadTAXIIConnectors:tbody:=:1f42fbd5bac8",
@@ -2028,7 +2028,7 @@
   "rhs": "''"
  },
  {
-  "sink_id": "loadThreatIntelConfig:panel:=:a9b597bb6c96",
+  "sink_id": "loadThreatIntelConfig:panel:=:d0348085206d",
   "line": 19447,
   "function": "loadThreatIntelConfig",
   "target": "panel",
@@ -2038,7 +2038,7 @@
   "severity_tier": 3,
   "data_source_tags": "",
   "trace_notes": "",
-  "rhs": "'<div class=\"kpi-row\">' +\n        urlField +\n        '<input id=\"ti-' + name + '-key\" type=\"password\" placeholder=\"API key (leave blank to keep current)\" class=\"inp-sm u-flex1\">' +\n        insecureField +\n        '<label class=\"tiny muted\" style=\"display:flex;align-items:center;gap:0.3rem\"><input type=\"checkbox\" id=\"ti-' + name + '-enabled\" ' + (cfg.enabled ? 'checked' : '') + '> Enabled</label>' "
+  "rhs": "'<div class=\"kpi-row\">' +\n        urlField +\n        '<input id=\"ti-' + name + '-key\" type=\"password\" placeholder=\"API key (leave blank to keep current)\" class=\"inp-sm u-flex1\">' +\n        insecureField +\n        '<label class=\"tiny muted g1-display-flex g1-s-4f83cf12\"><input type=\"checkbox\" id=\"ti-' + name + '-enabled\" ' + (cfg.enabled ? 'checked' : '') + '> Enabled</label>' +\n      '</div>' +\n  "
  },
  {
   "sink_id": "loadThreatPriorityActors:body:=:2651c788f8da",
@@ -4524,7 +4524,7 @@
   "rhs": "'<select' + x('change', 'setVexPreviewTacticFromSelect') + ' class=\"btn btn-outline btn-sm u-flex1\">' + tacticOpts + '</select>' +\n      '<input type=\"text\" placeholder=\"Search T-ID or name…\" value=\"' + x(_vexPreviewSearch) + '\"' + x('input', 'setVexPreviewSearchFromInput') + ' class=\"btn btn-outline btn-sm u-flex1\">'"
  },
  {
-  "sink_id": "renderTAXIIConnectorsList:tbody:=:09e758a55a6d",
+  "sink_id": "renderTAXIIConnectorsList:tbody:=:23ba7feae2c3",
   "line": 19568,
   "function": "renderTAXIIConnectorsList",
   "target": "tbody",
@@ -4534,7 +4534,7 @@
   "severity_tier": 4,
   "data_source_tags": "user_created_name",
   "trace_notes": "",
-  "rhs": "TAXII_CONNECTORS.map(function(c) {\n    var lastPoll = c.lastPollAt ? ago(c.lastPollAt) : 'Never';\n    var resultColor = c.lastPollStatus === 'ok' ? 'var(--success)' : (c.lastPollStatus === 'error' ? 'var(--danger)' : 'var(--muted)');\n    var summary = c.lastPollSummary || {};\n    var resultText = c.lastPollStatus === 'ok'\n      ? (summary.processed || 0) + ' processed, ' + (summary.skipped || 0) +"
+  "rhs": "TAXII_CONNECTORS.map(function(c) {\n    var lastPoll = c.lastPollAt ? ago(c.lastPollAt) : 'Never';\n    var resultColor = c.lastPollStatus === 'ok' ? 'g1-s-f83fcad9' : (c.lastPollStatus === 'error' ? 'g1-s-b83ba243' : 'g1-s-eac76940');\n    var summary = c.lastPollSummary || {};\n    var resultText = c.lastPollStatus === 'ok'\n      ? (summary.processed || 0) + ' processed, ' + (summary.skipped || 0) +"
  },
  {
   "sink_id": "renderTAXIIConnectorsList:tbody:=:59d7910c503d",
