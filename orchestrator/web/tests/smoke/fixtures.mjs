@@ -69,6 +69,48 @@ const iocAnalytics = {
   highestBypassRate: [], frequentlyReused: [], longestSurviving: [],
 };
 
+// ATT&CK Coverage tab (coverage.js loadCoverageAnalytics/loadUnifiedTechniques/
+// loadCoverage, all fired on 'coverage' tab visit): 3 tiers (success/warning/
+// danger rateColor branches) with mixed missed=0/missed>0 rows, a gapTechs
+// row spanning 2 tiers (exercises the tier-badge border+color pair), and a
+// byTactic/byTechnique pair exercising both zebra-stripe and verdict-color
+// branches.
+const coverageAnalytics = {
+  runsAnalyzed: 3,
+  summary: { attempted: 20, prevented: 14, detectedOnly: 4, missed: 2, preventionRate: 70, detectionCoverage: 90 },
+  byTactic: [
+    { tactic: 'Execution', prevented: 5, detectedOnly: 1, missed: 0 },
+    { tactic: 'Persistence', prevented: 3, detectedOnly: 0, missed: 1 },
+  ],
+  byTechnique: [
+    { techniqueId: 'T1059', name: `Command Scripting ${PAYLOAD}`, runCount: 4, bestVerdict: 'missed' },
+    { techniqueId: 'T1547', name: `Boot Persist ${PAYLOAD}`, runCount: 2, bestVerdict: 'detectedOnly' },
+  ],
+  privilegeCoverage: {
+    byTier: [
+      { tier: 'user', attempted: 10, prevented: 9, preventionRate: 90, missed: 0 },
+      { tier: 'admin', attempted: 6, prevented: 3, preventionRate: 50, missed: 2 },
+      { tier: 'system', attempted: 4, prevented: 1, preventionRate: 25, missed: 1 },
+    ],
+    gapTechs: [
+      { techniqueId: 'T1068', name: `Privilege Escalation ${PAYLOAD}`, tiers: ['admin', 'system'] },
+    ],
+  },
+};
+
+// Unified Technique Library (coverage.js loadUnifiedTechniques).
+const unifiedTechnique = {
+  techniqueId: 'T1082', name: `System Info ${PAYLOAD}`, tactic: 'Discovery',
+  basCount: 2, artCount: 1, emuCount: 0, atomicCount: 3, totalVariants: 6,
+};
+
+// ATT&CK coverage matrix (coverage.js loadCoverage).
+const attackMatrix = {
+  tactics: [
+    { name: 'Discovery', techniques: [{ id: 'T1082', name: `System Info ${PAYLOAD}` }] },
+  ],
+};
+
 const finding = {
   id: 'finding-smoke-1', techniqueId: 'T1082', techniqueName: `System Info ${PAYLOAD}`, title: `Finding ${PAYLOAD}`,
   severity: 'high', status: 'open', runId: 'run-smoke-1', agentId: 'agent-smoke-1', hostname: `host ${PAYLOAD}`,
@@ -136,6 +178,9 @@ export const FIXTURES = {
   'GET /api/agent-groups': [{ id: 1, name: `Group ${PAYLOAD}`, totalAgentCount: 1, agentCount: 1, children: [] }],
   'GET /api/scenarios/runs': [run, rrRun],
   'GET /api/compliance/scores': [complianceScore],
+  'GET /api/coverage/analytics': coverageAnalytics,
+  'GET /api/techniques/unified': [unifiedTechnique],
+  'GET /api/attack/matrix': attackMatrix,
   'GET /api/scenarios/runs/run-smoke-1/iocs': [runIOC],
   'GET /api/iocs': [iocRegistryRow],
   'GET /api/analytics/iocs': iocAnalytics,

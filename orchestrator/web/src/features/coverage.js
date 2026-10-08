@@ -5,6 +5,7 @@ import { on } from '../core/actions.js';
 import { showToast } from '../core/util.js';
 import { covSegHtml } from './attack-path.js';
 import { setDisplay } from '../core/inline-style.js';
+import { cssVars } from '../core/css-vars.js';
 
 
 // ── ATT&CK Coverage ──────────────────────────────────────────────────────────
@@ -92,13 +93,13 @@ function renderCoverageAnalytics(d) {
   var tacBody = document.getElementById('ca-tactic-body');
   if (tacBody) {
     tacBody.innerHTML = (d.byTactic || []).map(function(t, i) {
-      var bg = i % 2 ? 'background:rgba(255,255,255,.02)' : '';
-      var mColor = t.missed > 0 ? 'color:var(--danger);font-weight:700' : 'color:var(--muted)';
-      return '<tr style="' + bg + '">' +
+      var bg = i % 2 ? 'g1-s-ab376776' : '';
+      var mColor = t.missed > 0 ? 'g1-s-d55cf847' : 'g1-s-c6db10d2';
+      return '<tr class="' + bg + '">' +
         '<td>' + x(t.tactic) + '</td>' +
-        '<td style="text-align:center;color:var(--success)">' + t.prevented + '</td>' +
-        '<td style="text-align:center;color:var(--warning)">' + t.detectedOnly + '</td>' +
-        '<td style="text-align:center;' + mColor + '">' + t.missed + '</td>' +
+        '<td class="g1-s-ffa42d22">' + t.prevented + '</td>' +
+        '<td class="g1-s-08242b1e">' + t.detectedOnly + '</td>' +
+        '<td class="' + mColor + '">' + t.missed + '</td>' +
       '</tr>';
     }).join('') || '<tr><td colspan="4" class="empty">No data</td></tr>';
   }
@@ -108,13 +109,13 @@ function renderCoverageAnalytics(d) {
   if (missedBody) {
     var missed = (d.byTechnique || []).filter(function(t) { return t.bestVerdict === 'missed' || t.bestVerdict === 'detectedOnly'; }).slice(0, 20);
     missedBody.innerHTML = missed.map(function(t, i) {
-      var bg = i % 2 ? 'background:rgba(255,255,255,.02)' : '';
-      var vColor = t.bestVerdict === 'missed' ? 'color:var(--danger)' : 'color:var(--warning)';
+      var bg = i % 2 ? 'g1-s-ab376776' : '';
+      var vColor = t.bestVerdict === 'missed' ? 'g1-s-97b209c3' : 'g1-s-ce668815';
       var vDot   = t.bestVerdict === 'missed' ? '● ' : '◐ ';
-      return '<tr style="' + bg + '">' +
-        '<td style="font-family:var(--font-mono);font-size:0.76rem;' + vColor + '">' + vDot + x(t.techniqueId) + '</td>' +
-        '<td style="font-size:0.76rem;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + x(t.name || '—') + '</td>' +
-        '<td style="text-align:center;color:var(--muted);font-size:0.76rem">' + t.runCount + '</td>' +
+      return '<tr class="' + bg + '">' +
+        '<td class="' + vColor + '">' + vDot + x(t.techniqueId) + '</td>' +
+        '<td class="g1-s-5d164a6d">' + x(t.name || '—') + '</td>' +
+        '<td class="g1-s-557a346f">' + t.runCount + '</td>' +
       '</tr>';
     }).join('') || '<tr><td colspan="3" class="empty u-success">✓ No gaps detected</td></tr>';
   }
@@ -144,10 +145,10 @@ function renderPrivilegeCoverage(pc) {
       var col  = tierColor[t.tier] || 'var(--muted)';
       var lbl  = tierLabel[t.tier] || t.tier;
       var rate = t.attempted > 0 ? t.preventionRate : 0;
-      var rateColor = rate >= 75 ? 'var(--success)' : rate >= 40 ? 'var(--warning)' : 'var(--danger)';
-      return '<div class="ca-card" style="border-top:2px solid ' + col + '">' +
-        '<div class="ca-label" style="color:' + col + '">' + lbl + '</div>' +
-        '<div class="ca-val" style="font-size:1.5rem;color:' + rateColor + '">' + rate + '%</div>' +
+      var rateColor = rate >= 75 ? 'g1-s-da30d03b' : rate >= 40 ? 'g1-s-c16ccf0e' : 'g1-s-7419514e';
+      return '<div class="ca-card"' + cssVars(['g1-v-c3984016', col]) + '>' +
+        '<div class="ca-label"' + cssVars(['g1-v-7d75dfc9', col]) + '>' + lbl + '</div>' +
+        '<div class="ca-val ' + rateColor + '">' + rate + '%</div>' +
         '<div class="ca-sub">' + t.prevented + '/' + t.attempted + ' prevented</div>' +
       '</div>';
     }).join('');
@@ -157,21 +158,22 @@ function renderPrivilegeCoverage(pc) {
   var tierBody = document.getElementById('priv-tier-body');
   if (tierBody) {
     tierBody.innerHTML = tiers.map(function(t, i) {
-      var bg   = i % 2 ? 'background:rgba(255,255,255,.02)' : '';
+      var bg   = i % 2 ? 'g1-s-ab376776' : '';
       var col  = tierColor[t.tier] || 'var(--muted)';
       var lbl  = tierLabel[t.tier] || t.tier;
       var rate = t.attempted > 0 ? t.preventionRate : 0;
-      var rateColor = rate >= 75 ? 'color:var(--success)' : rate >= 40 ? 'color:var(--warning)' : 'color:var(--danger)';
+      var rateColor = rate >= 75 ? 'g1-s-01465934' : rate >= 40 ? 'g1-s-a21d7ec5' : 'g1-s-1ea0edbe';
       var barW = Math.min(100, rate);
-      return '<tr style="' + bg + '">' +
-        '<td><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:' + col + ';margin-right:5px"></span>' + lbl + '</td>' +
+      var missedColor = t.missed > 0 ? 'g1-s-d55cf847' : 'g1-s-1724190c';
+      return '<tr class="' + bg + '">' +
+        '<td><span class="g1-display-inline-block g1-s-acac4f97"' + cssVars(['g1-v-9ffd39ba', col]) + '></span>' + lbl + '</td>' +
         '<td class="u-center">' + t.attempted + '</td>' +
-        '<td style="text-align:center;color:var(--success)">' + t.prevented + '</td>' +
-        '<td style="text-align:center;color:' + (t.missed > 0 ? 'var(--danger)' : 'var(--muted)') + ';font-weight:' + (t.missed > 0 ? '700' : '400') + '">' + t.missed + '</td>' +
-        '<td style="min-width:90px">' +
-          '<div style="display:flex;align-items:center;gap:4px">' +
-            '<div style="flex:1;height:6px;background:var(--elevated);border-radius:3px;overflow:hidden"><div style="height:100%;width:' + barW + '%;background:' + (col) + ';transition:width .4s"></div></div>' +
-            '<span style="font-size:0.7rem;' + rateColor + ';white-space:nowrap">' + rate + '%</span>' +
+        '<td class="g1-s-ffa42d22">' + t.prevented + '</td>' +
+        '<td class="' + missedColor + '">' + t.missed + '</td>' +
+        '<td class="g1-s-229dc0cb">' +
+          '<div class="g1-display-flex g1-s-04e50eda">' +
+            '<div class="g1-s-8987c970"><div class="g1-s-32cf8ef3"' + cssVars(['g1-v-9b890877', barW], ['g1-v-9ffd39ba', col]) + '></div></div>' +
+            '<span class="' + rateColor + '">' + rate + '%</span>' +
           '</div>' +
         '</td>' +
       '</tr>';
@@ -185,19 +187,19 @@ function renderPrivilegeCoverage(pc) {
       gapBody.innerHTML = '<tr><td colspan="3" class="empty u-success">✓ All annotated techniques tested at user tier</td></tr>';
     } else {
       gapBody.innerHTML = gaps.slice(0, 25).map(function(g, i) {
-        var bg = i % 2 ? 'background:rgba(255,255,255,.02)' : '';
+        var bg = i % 2 ? 'g1-s-ab376776' : '';
         var tierBadges = (g.tiers || []).map(function(t) {
           var c = tierColor[t] || 'var(--muted)';
-          return '<span style="font-size:0.65rem;border:1px solid ' + c + ';color:' + c + ';border-radius:2px;padding:1px 4px;margin-right:2px">' + (tierLabel[t] || t) + '</span>';
+          return '<span class="g1-s-1fd67b02"' + cssVars(['g1-v-97993078', c], ['g1-v-7d75dfc9', c]) + '>' + (tierLabel[t] || t) + '</span>';
         }).join('');
-        return '<tr style="' + bg + '">' +
-          '<td style="font-family:var(--font-mono);font-size:0.76rem;color:var(--warning)">' + x(g.techniqueId) + '</td>' +
-          '<td style="font-size:0.75rem;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + x(g.name || '') + '">' + x(g.name || '—') + '</td>' +
+        return '<tr class="' + bg + '">' +
+          '<td class="g1-s-ce668815">' + x(g.techniqueId) + '</td>' +
+          '<td class="g1-s-20a371c8" title="' + x(g.name || '') + '">' + x(g.name || '—') + '</td>' +
           '<td>' + tierBadges + '</td>' +
         '</tr>';
       }).join('');
       if (gaps.length > 25) {
-        gapBody.innerHTML += '<tr><td colspan="3" style="text-align:center;color:var(--muted);font-size:0.72rem;padding:4px">… and ' + (gaps.length - 25) + ' more</td></tr>';
+        gapBody.innerHTML += '<tr><td colspan="3" class="g1-s-f85dc79d">… and ' + (gaps.length - 25) + ' more</td></tr>';
       }
     }
   }
@@ -269,7 +271,7 @@ export function renderUTL() {
 
   var cov = state._covSt || {};
   var rows = filtered.map(function(t, i) {
-    var bg = i % 2 === 0 ? '' : 'background:rgba(255,255,255,.02)';
+    var bg = i % 2 === 0 ? '' : 'g1-s-ab376776';
     var verdict = cov[t.techniqueId] || '';
     var vdot = verdict === 'pass'  ? '<span class="u-success">●</span>' :
                verdict === 'fail'  ? '<span class="u-danger">●</span>'  :
@@ -280,16 +282,16 @@ export function renderUTL() {
                : '<span class="utl-zero">—</span>') + '</td>';
     }
     var nsrc = srcCount(t);
-    var srcBadge = '<span style="font-size:0.7rem;color:' + (nsrc > 1 ? 'var(--accent)' : 'var(--muted)') + '">' + nsrc + (nsrc === 1 ? ' src' : ' srcs') + '</span>';
-    return '<tr style="' + bg + '">' +
-      '<td style="font-family:var(--font-mono);font-size:0.8rem;color:var(--accent)">' + x(t.techniqueId) + ' ' + vdot + '</td>' +
-      '<td style="font-size:0.8rem;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + x(t.name || '') + '">' + x(t.name || '—') + '</td>' +
-      '<td style="font-size:0.75rem;color:var(--muted)">' + x(t.tactic || '—') + '</td>' +
+    var srcBadge = '<span class="g1-s-62899a0f"' + cssVars(['g1-v-7d75dfc9', nsrc > 1 ? 'var(--accent)' : 'var(--muted)']) + '>' + nsrc + (nsrc === 1 ? ' src' : ' srcs') + '</span>';
+    return '<tr class="' + bg + '">' +
+      '<td class="g1-s-2f6cdc06">' + x(t.techniqueId) + ' ' + vdot + '</td>' +
+      '<td class="g1-s-21dc2c7f" title="' + x(t.name || '') + '">' + x(t.name || '—') + '</td>' +
+      '<td class="g1-s-b80a2c9b">' + x(t.tactic || '—') + '</td>' +
       cell(t.basCount,   'utl-bas') +
       cell(t.artCount,   'utl-art') +
       cell(t.emuCount,   'utl-emu') +
       cell(t.atomicCount,'utl-atomic') +
-      '<td style="text-align:center;font-family:var(--font-mono);font-size:0.78rem;color:var(--text)">' + t.totalVariants + '</td>' +
+      '<td class="g1-s-16d97c43">' + t.totalVariants + '</td>' +
       '<td class="u-center">' + srcBadge + '</td>' +
     '</tr>';
   }).join('');
@@ -320,7 +322,7 @@ export function loadCoverage() {
       'Showing ' + counts.total + ' techniques across ' + tactics.length +
       ' tactics · coverage = last validated result per technique, not theoretical inventory.';
   }).catch(function(e) {
-    document.getElementById('cov-matrix').innerHTML = '<div class="empty" style="padding:2rem">' + x(e.message) + '</div>';
+    document.getElementById('cov-matrix').innerHTML = '<div class="empty g1-s-be6df18e">' + x(e.message) + '</div>';
   });
 }
 function renderCovMatrix() {
@@ -330,7 +332,7 @@ function renderCovMatrix() {
     var cov = techs.filter(function(c) { return st[c.id] === 'cov'; }).length;
     var cells = techs.map(function(c) {
       var s = st[c.id] || 'none', dim = view !== 'all' && view !== s;
-      return '<div class="mx-cell ' + s + '"' + on('click', 'openTechnique', c.id) + ' style="' + (dim ? 'opacity:.12' : '') + '">' +
+      return '<div class="mx-cell ' + s + (dim ? ' g1-s-c1f75ce4' : '') + '"' + on('click', 'openTechnique', c.id) + '>' +
         '<span class="mc-id">' + x(c.id) + '</span>' + x(c.name) + '</div>';
     }).join('');
     return '<div class="mx-col"><div class="mx-col-h"><div class="tac-name">' + x(t.name) + '</div>' +
@@ -340,7 +342,7 @@ function renderCovMatrix() {
 function renderCovToolbar() {
   var c = state._covCounts || { cov: 0, part: 0, gap: 0, none: 0 };
   var seg = covSegHtml([['all', 'All'], ['cov', 'Prevented'], ['part', 'Detected'], ['gap', 'Missed'], ['none', 'Untested']], COV_VIEW, 'setCovView');
-  var badge = function(col, l, v) { return '<span class="sbadge" style="background:transparent;border:1px solid var(--border);color:' + col + '">' + v + ' ' + l + '</span>'; };
+  var badge = function(col, l, v) { return '<span class="sbadge g1-s-e9d33194"' + cssVars(['g1-v-7d75dfc9', col]) + '>' + v + ' ' + l + '</span>'; };
   document.getElementById('cov-toolbar').innerHTML =
     seg + '<span class="u-flex1"></span>' +
     badge('var(--success)', 'Prevented', c.cov) + badge('var(--warning)', 'Detected', c.part) +
@@ -355,13 +357,13 @@ export function openTechnique(id) {
     e = e || {};
     document.getElementById('results-title').textContent = id + ' — ' + (e.name || 'Technique');
     document.getElementById('results-export').innerHTML = '';
-    var row = function(k, v) { return v && v.length ? '<div style="display:flex;gap:0.6rem;padding:0.35rem 0;border-bottom:1px solid var(--border);font-size:0.8rem"><span style="color:var(--muted);min-width:120px">' + k + '</span><span class="u-flex1">' + v + '</span></div>' : ''; };
+    var row = function(k, v) { return v && v.length ? '<div class="g1-display-flex g1-s-b60b87ad"><span class="g1-s-485ffd37">' + k + '</span><span class="u-flex1">' + v + '</span></div>' : ''; };
     var list = function(a) { return (a || []).map(x).join(', '); };
-    var body = '<div style="margin-bottom:0.9rem"><span class="sbadge" style="background:transparent;border:1px solid ' + meta[1] + ';color:' + meta[1] + '">' + meta[0] + '</span></div>' +
+    var body = '<div class="g1-s-462c8de6"><span class="sbadge g1-s-e02ce1a7"' + cssVars(['g1-v-97993078', meta[1]], ['g1-v-7d75dfc9', meta[1]]) + '>' + meta[0] + '</span></div>' +
       row('Tactics', list(e.tactics)) + row('Platforms', list(e.platforms)) +
       row('Known actors', list(e.groups)) + row('Data sources', list(e.dataSources)) +
-      (e.description ? '<div style="margin-top:0.8rem;font-size:0.8rem;color:var(--text-dim);line-height:1.5">' + x(e.description) + '</div>' : '') +
-      (e.url ? '<div style="margin-top:0.8rem"><a href="' + x(e.url) + '" target="_blank" rel="noopener" style="color:var(--accent);font-size:0.78rem">View on attack.mitre.org →</a></div>' : '');
+      (e.description ? '<div class="g1-s-34d69e4c">' + x(e.description) + '</div>' : '') +
+      (e.url ? '<div class="g1-s-6695a6e2"><a href="' + x(e.url) + '" target="_blank" rel="noopener" class="g1-s-824141a9">View on attack.mitre.org →</a></div>' : '');
     document.getElementById('results-body').innerHTML = body;
     document.getElementById('results-overlay').classList.add('open');
   }).catch(function(err) { showToast(err.message, 'err'); });

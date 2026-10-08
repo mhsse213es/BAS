@@ -38,6 +38,11 @@ export const CHECKPOINTS = [
   // detail view (389,481) is unreachable for the same reason as
   // adversaries.js below -- see UNREACHABLE_SITES.
 
+  // -- coverage.js
+  { name: "coverage.js:362 technique detail badge", tab: 'coverage', steps: [
+    { click: '.mx-cell >> nth=0' },
+  ] },
+
   // -- campaigns.js
   { name: "campaigns.js:165 campaign detail view", tab: 'campaigns', steps: [
     { click: '[data-on-click="openCampaignDetail"] >> nth=0' },
