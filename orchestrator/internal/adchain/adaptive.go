@@ -1,6 +1,10 @@
 package adchain
 
-import "github.com/audspect/bas/internal/adprimitive"
+import (
+	"sort"
+
+	"github.com/audspect/bas/internal/adprimitive"
+)
 
 // riskWeight maps a primitive's RiskClass to a numeric cost. An
 // unrecognized or empty class scores the maximum (fail-closed, mirroring
@@ -69,4 +73,57 @@ func PlanExcluding(catalog []adprimitive.Primitive, held []adprimitive.Capabilit
 			return nil, false
 		}
 	}
+}
+
+// RankedPlan is one candidate plan to a target, with its total PathRisk.
+type RankedPlan struct {
+	Steps []adprimitive.Primitive
+	Risk  int
+}
+
+// RankedPlans returns candidate plans from held to target, lowest-risk
+// first. It computes the primary plan, then one alternative per primitive
+// in it (re-routing around that primitive via PlanExcluding), dedups
+// identical plans, and sorts ascending by PathRisk with a deterministic
+// tie-break on the plans' primitive-ID sequences. Empty if the target is
+// unreachable at all.
+func RankedPlans(catalog []adprimitive.Primitive, held []adprimitive.Capability, target adprimitive.Capability, resolver ConditionResolver) []RankedPlan {
+	primary, ok := Plan(catalog, held, target, resolver)
+	if !ok {
+		return nil
+	}
+
+	candidates := [][]adprimitive.Primitive{primary}
+	for _, step := range primary {
+		if alt, ok := PlanExcluding(catalog, held, target, resolver, map[string]bool{step.ID: true}); ok {
+			candidates = append(candidates, alt)
+		}
+	}
+
+	seen := map[string]bool{}
+	var out []RankedPlan
+	for _, c := range candidates {
+		key := planKey(c)
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		out = append(out, RankedPlan{Steps: c, Risk: PathRisk(c)})
+	}
+
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Risk != out[j].Risk {
+			return out[i].Risk < out[j].Risk
+		}
+		return planKey(out[i].Steps) < planKey(out[j].Steps)
+	})
+	return out
+}
+
+func planKey(path []adprimitive.Primitive) string {
+	s := ""
+	for _, p := range path {
+		s += p.ID + "\x00"
+	}
+	return s
 }

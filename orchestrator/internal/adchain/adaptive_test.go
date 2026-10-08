@@ -79,3 +79,49 @@ func TestPlanExcluding_UnreachableWhenAllRoutesExcluded(t *testing.T) {
 		t.Fatal("expected ok=false: every route to the target is excluded")
 	}
 }
+
+func planIDs(p RankedPlan) string {
+	s := ""
+	for _, step := range p.Steps {
+		s += step.ID + ","
+	}
+	return s
+}
+
+func TestRankedPlans_SortedByAscendingRiskAndDeduped(t *testing.T) {
+	held := []adprimitive.Capability{{Kind: adprimitive.CapDomainUser}}
+	target := adprimitive.Capability{Kind: adprimitive.CapLocalAdmin}
+
+	ranked := RankedPlans(adaptiveCatalog(), held, target, MapResolver{})
+	if len(ranked) < 2 {
+		t.Fatalf("expected at least 2 distinct candidate plans, got %d: %+v", len(ranked), ranked)
+	}
+	// Ascending risk: the cheap-a/cheap-b route (3+3=6) must rank
+	// before the risky-direct route (9).
+	for i := 1; i < len(ranked); i++ {
+		if ranked[i-1].Risk > ranked[i].Risk {
+			t.Fatalf("plans not sorted ascending by risk: %d before %d", ranked[i-1].Risk, ranked[i].Risk)
+		}
+	}
+	if ranked[0].Risk != 6 {
+		t.Errorf("expected the lowest-risk plan to be the 2-step route (risk 6), got %d", ranked[0].Risk)
+	}
+	// No duplicate plans.
+	seen := map[string]bool{}
+	for _, p := range ranked {
+		id := planIDs(p)
+		if seen[id] {
+			t.Fatalf("duplicate plan in ranked output: %s", id)
+		}
+		seen[id] = true
+	}
+}
+
+func TestRankedPlans_EmptyWhenTargetUnreachable(t *testing.T) {
+	held := []adprimitive.Capability{{Kind: adprimitive.CapDomainUser}}
+	unreachable := adprimitive.Capability{Kind: adprimitive.CapDomainCredentialMaterial}
+	ranked := RankedPlans(adaptiveCatalog(), held, unreachable, MapResolver{})
+	if len(ranked) != 0 {
+		t.Fatalf("expected no plans for an unreachable target, got %+v", ranked)
+	}
+}
