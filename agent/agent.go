@@ -30,12 +30,12 @@ type Agent struct {
 	// outcomeLegacyPending). Every caller reaches them through cfg()/
 	// httpClient() so the swap is visible atomically, with no torn read and
 	// no client rebuild required at any call site.
-	cfgPtr         atomic.Pointer[Config]
-	id             Identity
-	status         string
-	state          string // server-assigned lifecycle state: active|restricted|quarantined|retired
-	mu             sync.Mutex
-	clientPtr      atomic.Pointer[http.Client]
+	cfgPtr    atomic.Pointer[Config]
+	id        Identity
+	status    string
+	state     string // server-assigned lifecycle state: active|restricted|quarantined|retired
+	mu        sync.Mutex
+	clientPtr atomic.Pointer[http.Client]
 	// wsConn/wsConnMu track the currently active WebSocket connection so
 	// upgradeToMTLS can force it closed from another goroutine: closing it
 	// unblocks connectWS's in-flight ReadMessage, which sends it back to the
@@ -51,8 +51,8 @@ type Agent struct {
 	// cancelScenario: calling a stale cancel() again is a harmless no-op,
 	// but calling a stale emit() would incorrectly mark an already-finished
 	// run as paused).
-	pauseGate   *sched.Gate
-	pauseEmit   func(RunEvent)
+	pauseGate *sched.Gate
+	pauseEmit func(RunEvent)
 	// activeLimiter, activeWorkers, and activeRiskGate belong to whichever run
 	// is currently active, exactly like pauseGate/pauseEmit above (nil/0 when
 	// idle or between runs) -- the pressure loop reads these every tick under
@@ -61,12 +61,12 @@ type Agent struct {
 	activeLimiter  *sched.ConcurrencyLimiter
 	activeWorkers  int
 	activeRiskGate *sched.RiskGate
-	binaryHash    string           // SHA-256 of own binary, computed once at startup
-	logger      *Logger          // 3-tier structured logger
-	localSt     *LocalAgentState // in-memory state for local status API
-	secProducts []string         // installed security products, enumerated once at startup (guarded by mu)
-	spoolMu     sync.Mutex       // serializes spool drains so a tick and a reconnect-kick can't double-send
-	spoolKick   chan struct{}    // buffered (cap 1): nudges the drainer to deliver immediately on reconnect
+	binaryHash     string           // SHA-256 of own binary, computed once at startup
+	logger         *Logger          // 3-tier structured logger
+	localSt        *LocalAgentState // in-memory state for local status API
+	secProducts    []string         // installed security products, enumerated once at startup (guarded by mu)
+	spoolMu        sync.Mutex       // serializes spool drains so a tick and a reconnect-kick can't double-send
+	spoolKick      chan struct{}    // buffered (cap 1): nudges the drainer to deliver immediately on reconnect
 
 	// Disconnect tracking for the pause-then-finalize watchdog (guarded by mu).
 	disconnectedSince time.Time // when the server link was lost; zero = connected
@@ -571,22 +571,22 @@ func (a *Agent) runDisconnectWatchdog() {
 // need, so it's deliberately not mirrored here (final whole-branch
 // review, Minor: this field used to exist and sit unused).
 type ScenarioStep struct {
-	TaskID            string
-	TechniqueID       string
-	Name              string
-	Executor          string
-	Command           string
-	TimeoutSec        int
-	Payloads          []protocol.Payload
-	Cleanup           string
-	PayloadDir        string
-	Resource          *sched.ResourceProfile
-	Timeout           *sched.TimeoutProfile
-	Env               map[string]string
-	RequiresPriv      string
-	ActionKey         string
-	ExecutionClass    string
-	BlastRadius       string
+	TaskID         string
+	TechniqueID    string
+	Name           string
+	Executor       string
+	Command        string
+	TimeoutSec     int
+	Payloads       []protocol.Payload
+	Cleanup        string
+	PayloadDir     string
+	Resource       *sched.ResourceProfile
+	Timeout        *sched.TimeoutProfile
+	Env            map[string]string
+	RequiresPriv   string
+	ActionKey      string
+	ExecutionClass string
+	BlastRadius    string
 }
 
 // decodeStep converts one wire-format protocol.ScenarioStep into the
@@ -659,6 +659,23 @@ func (a *Agent) runScenario(ctx context.Context, cmd protocol.ScenarioCommand) {
 			ExitCode:      -1,
 			Blocked:       true,
 			BlockedReason: "aborted by domain-controller safety interlock — live AD techniques must not run on a domain controller",
+			ExecutedAt:    time.Now(),
+		}}, false, nil)
+		a.setStatus("idle")
+		a.sendHeartbeat("idle")
+		return
+	}
+
+	// A scenario can separately require that a domain controller be reachable
+	// at all (e.g. an AD drill run against a non-domain-joined host would have
+	// every step individually SKIP for the same underlying reason) — abort once
+	// up front with one clear reason instead of N per-step SKIPs.
+	if cmd.Policy != nil && cmd.Policy.RequireDCReachable && !canReachDomainController() {
+		log.Printf("[!] ABORT: policy requires a reachable domain controller and none was found (run %s)", cmd.RunID)
+		a.submitResults(cmd, []protocol.ExecResult{{
+			ExitCode:      -1,
+			Blocked:       true,
+			BlockedReason: "aborted by domain-controller-reachability policy — no domain controller was reachable from this host",
 			ExecutedAt:    time.Now(),
 		}}, false, nil)
 		a.setStatus("idle")

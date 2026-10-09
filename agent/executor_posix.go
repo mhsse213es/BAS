@@ -74,6 +74,13 @@ func collectRecentEvents(_ context.Context, _ time.Time) []string {
 // Windows Active Directory concept.
 func hostIsDomainController() bool { return false }
 
+// canReachDomainController is always false on Linux/macOS — AD domain-controller
+// reachability is not implemented on this platform. A scenario that sets
+// live_policy.require_dc_reachable is Windows-specific in practice (enforced by
+// the server-side supported_os check before dispatch), so this path is not
+// expected to be exercised for a genuinely cross-platform scenario.
+func canReachDomainController() bool { return false }
+
 // applyExecutionContext resolves the privilege context for a step and, for
 // "user" steps, switches the child process to the interactive user's identity
 // via SysProcAttr.Credential — the POSIX equivalent of CreateProcessAsUser.

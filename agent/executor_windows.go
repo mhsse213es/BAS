@@ -153,6 +153,22 @@ func hostIsDomainController() bool {
 	return strings.Contains(string(out), "LanmanNT")
 }
 
+// canReachDomainController reports whether this host can currently reach a
+// domain controller, via the same LDAP RootDSE lookup technique
+// scenarios/kerberoasting-ad-drill.yaml's own steps already use to self-detect
+// a non-domain-joined or DC-unreachable host (reusing a proven technique
+// rather than introducing a new one). A short timeout keeps the probe fast;
+// any failure (not domain-joined, DC unreachable, PowerShell unavailable)
+// returns false -- it never blocks or panics the caller.
+func canReachDomainController() bool {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "powershell",
+		"-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command",
+		`try { $null = ([ADSI]"LDAP://RootDSE").defaultNamingContext; exit 0 } catch { exit 1 }`)
+	return cmd.Run() == nil
+}
+
 // runCleanup executes the step's cleanup command and returns a verdict --
 // "reverted" (exit 0), "partial" (non-zero exit), or "leaked" (start/timeout
 // failure) -- plus a detail string. detail is empty on success; on failure it
