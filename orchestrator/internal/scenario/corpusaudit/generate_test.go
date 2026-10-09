@@ -2,15 +2,14 @@ package corpusaudit
 
 import (
 	"bytes"
-	"go/parser"
-	"go/token"
+	"encoding/json"
 	"strings"
 	"testing"
 
 	"github.com/audspect/bas/internal/scenario"
 )
 
-func TestWriteGeneratedGo_ProducesValidGoSyntax(t *testing.T) {
+func TestWriteGeneratedJSON_ProducesValidSortedJSON(t *testing.T) {
 	items := []ClassifiedItem{
 		{KeyedItem: KeyedItem{DiscoveredItem: DiscoveredItem{TechniqueID: "T1082", Command: "whoami"}, ActionKey: "whoami_test"},
 			Status: StatusClassified, Class: scenario.ClassNonDestructive, DestructiveAction: "whoami_test", BlastRadius: "read-only identity query"},
@@ -20,27 +19,24 @@ func TestWriteGeneratedGo_ProducesValidGoSyntax(t *testing.T) {
 			Status: StatusUnresolved},
 	}
 	var buf bytes.Buffer
-	if err := WriteGeneratedGo(&buf, items); err != nil {
-		t.Fatalf("WriteGeneratedGo: %v", err)
+	if err := WriteGeneratedJSON(&buf, items); err != nil {
+		t.Fatalf("WriteGeneratedJSON: %v", err)
 	}
-	fset := token.NewFileSet()
-	if _, err := parser.ParseFile(fset, "execclass_generated.go", buf.String(), 0); err != nil {
-		t.Fatalf("generated file is not valid Go: %v\n---\n%s", err, buf.String())
+	var got []generatedEntry
+	if err := json.Unmarshal(buf.Bytes(), &got); err != nil {
+		t.Fatalf("generated file is not valid JSON: %v\n---\n%s", err, buf.String())
 	}
-	out := buf.String()
-	if !strings.Contains(out, "package scenario") {
-		t.Error("expected package scenario declaration")
+	if len(got) != 2 {
+		t.Fatalf("expected exactly the 2 classified entries (unresolved excluded), got %d: %+v", len(got), got)
 	}
-	if !strings.Contains(out, "DO NOT EDIT") {
-		t.Error("expected a DO NOT EDIT header")
+	// Sorted by (technique_id, action_key): T1082 before T1490.
+	if got[0].T != "T1082" || got[0].A != "whoami_test" || got[0].C != string(scenario.ClassNonDestructive) {
+		t.Errorf("entry 0 wrong: %+v", got[0])
 	}
-	if !strings.Contains(out, `"T1082"`) || !strings.Contains(out, `"whoami_test"`) {
-		t.Error("expected the classified non_destructive entry to appear")
+	if got[1].T != "T1490" || got[1].A != "vss_delete_test" || got[1].C != string(scenario.ClassDestructive) {
+		t.Errorf("entry 1 wrong: %+v", got[1])
 	}
-	if !strings.Contains(out, `"T1490"`) || !strings.Contains(out, `"vss_delete_test"`) {
-		t.Error("expected the classified destructive entry to appear")
-	}
-	if strings.Contains(out, "T9999") {
+	if strings.Contains(buf.String(), "T9999") {
 		t.Error("expected an unresolved item to be excluded from the generated catalog entirely")
 	}
 }

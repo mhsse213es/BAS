@@ -39,7 +39,7 @@ func writeFileAtomically(path string, write func(io.Writer) error) error {
 }
 
 const (
-	generatedPath = "internal/scenario/execclass_generated.go"
+	generatedPath = "internal/scenario/execclass_generated.json"
 	reviewedPath  = "internal/scenario/execclass_reviewed.yaml"
 	reportPath    = "internal/scenario/testdata/execclass_corpus_report.md"
 )
@@ -114,7 +114,7 @@ func main() {
 	classified := corpusaudit.Triage(keyed, reviewed)
 
 	if err := writeFileAtomically(generatedPath, func(w io.Writer) error {
-		return corpusaudit.WriteGeneratedGo(w, classified)
+		return corpusaudit.WriteGeneratedJSON(w, classified)
 	}); err != nil {
 		log.Fatalf("write %s: %v", generatedPath, err)
 	}
