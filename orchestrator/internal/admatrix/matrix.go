@@ -370,6 +370,7 @@ func AllEntries() []Entry {
 	out = append(out, DCSyncEntries()...)
 	out = append(out, DelegationEntries()...)
 	out = append(out, TrustEntries()...)
+	out = append(out, GPOEntries()...)
 	return out
 }
 

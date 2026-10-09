@@ -17,9 +17,9 @@ func TestAllCatalogs_EveryPrimitiveHasAValidRiskClass(t *testing.T) {
 		RiskPotentiallyDestructive: true,
 		RiskDestructive:            true,
 	}
-	all := append(append(append(append(append(append(append([]Primitive{}, KerberoastingCatalog...), ACLAbuseCatalog...), RBCDCatalog...), DCSyncCatalog...), ADCSCatalog...), DelegationCatalog...), TrustAbuseCatalog...)
-	if len(all) != 20 {
-		t.Fatalf("expected 20 total primitives across all catalogs, got %d", len(all))
+	all := append(append(append(append(append(append(append(append([]Primitive{}, KerberoastingCatalog...), ACLAbuseCatalog...), RBCDCatalog...), DCSyncCatalog...), ADCSCatalog...), DelegationCatalog...), TrustAbuseCatalog...), GPOAbuseCatalog...)
+	if len(all) != 21 {
+		t.Fatalf("expected 21 total primitives across all catalogs, got %d", len(all))
 	}
 	for _, p := range all {
 		if !valid[p.RiskClass] {
@@ -249,6 +249,22 @@ func findInADCSCatalog(id string) (Primitive, bool) {
 		}
 	}
 	return Primitive{}, false
+}
+
+func TestGPOAbuseCatalog_WritableLinkedScope(t *testing.T) {
+	if len(GPOAbuseCatalog) != 1 {
+		t.Fatalf("expected exactly 1 GPO-abuse primitive, got %d", len(GPOAbuseCatalog))
+	}
+	p := GPOAbuseCatalog[0]
+	if p.TechniqueID != "T1484.001" {
+		t.Errorf("expected TechniqueID T1484.001, got %q", p.TechniqueID)
+	}
+	if !p.Prerequisites.Conditions["controls_writable_linked_gpo"] {
+		t.Fatalf("expected condition controls_writable_linked_gpo, got %+v", p.Prerequisites.Conditions)
+	}
+	if len(p.Postconditions) != 1 || p.Postconditions[0].Kind != CapLocalAdmin {
+		t.Fatalf("expected postcondition CapLocalAdmin, got %+v", p.Postconditions)
+	}
 }
 
 func TestTrustAbuseCatalog_IntraAndCrossForest(t *testing.T) {

@@ -79,9 +79,28 @@ func (r *EnvResolver) Resolve(key string) bool {
 		return r.hasIntraForestTrustAbuse()
 	case "cross_forest_trust_sid_filter_disabled":
 		return r.hasCrossForestSIDAbuse()
+	case "controls_writable_linked_gpo":
+		return r.controlsWritableLinkedGPO()
 	default:
 		return false
 	}
+}
+
+// controlsWritableLinkedGPO is true when the attacker controls a principal that
+// can edit a GPO which is linked somewhere -- edit rights on an unlinked GPO
+// reach nothing, so affected scope is required.
+func (r *EnvResolver) controlsWritableLinkedGPO() bool {
+	for _, g := range r.env.Policy.GPOs {
+		if !adenv.GPOAffectsScope(g) {
+			continue
+		}
+		for p := range r.controlled {
+			if adenv.HasGPOWriteAccess(g, p) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // hasIntraForestTrustAbuse is true when the forest contains a parent-child trust,

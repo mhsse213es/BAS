@@ -209,6 +209,24 @@ var TrustAbuseCatalog = []Primitive{
 	},
 }
 
+// GPOAbuseCatalog covers Group Policy abuse (T1484.001): edit rights on a GPO
+// that is linked to a populated scope let an attacker push policy (an immediate
+// scheduled task, local-admin membership) that executes as SYSTEM on every
+// object under the link -- modeled by the permission (writable) and affected
+// scope (linked) together, with a privilege path to local admin.
+var GPOAbuseCatalog = []Primitive{
+	{
+		ID: "gpo-abuse-linked-scope", Name: "GPO Abuse: Policy Push to Linked Scope", TechniqueID: "T1484.001",
+		Prerequisites: Prerequisites{
+			DomainJoined: true,
+			Capabilities: []Capability{{Kind: CapControlledAccount}},
+			Conditions:   map[string]bool{"controls_writable_linked_gpo": true},
+		},
+		Postconditions: []Capability{{Kind: CapLocalAdmin}},
+		RiskClass:      RiskPotentiallyDestructive,
+	},
+}
+
 // DCSyncCatalog defines the single DCSync primitive. DS-Replication-Get-
 // Changes and DS-Replication-Get-Changes-All (the 2 extended rights
 // DCSync requires) collapse into attackpath's single AllExtendedRights

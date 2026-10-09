@@ -210,6 +210,12 @@ type Policy struct {
 type GPO struct {
 	Name      string   `json:"name"`
 	LinkedOUs []string `json:"linkedOUs,omitempty"`
+
+	// WritePrincipals are principals holding edit rights on this GPO object
+	// (e.g. GpoEditDeleteModifySecurity / GenericWrite on the gPLink). A
+	// principal here can alter the policy applied to every object under
+	// LinkedOUs -- the GPO-abuse primitive's foothold.
+	WritePrincipals []string `json:"writePrincipals,omitempty"`
 }
 
 // PKI is the ADCS layer.
