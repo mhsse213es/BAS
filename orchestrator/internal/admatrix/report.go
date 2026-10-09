@@ -53,11 +53,20 @@ type ReportSummary struct {
 // actually exists. ContentStates spans every AD primitive (including the
 // Kerberoasting baseline that is not a gap entry), so it is broader than
 // Capabilities.
+//
+// CapabilityStates/CapabilityStateSummary are a third, additive axis (AD
+// Mastery E2E Directive Phase 1): the single authoritative record per
+// primitive across modeling, content availability, scenario composition,
+// execution validation and detection validation as five INDEPENDENT fields,
+// rather than CoverageStatus's single collapsed status. It also spans all 21
+// primitives. Neither existing axis is replaced or recomputed from this one.
 type CoverageReport struct {
-	Summary        ReportSummary        `json:"summary"`
-	Capabilities   []CapabilityCoverage `json:"capabilities"`
-	ContentSummary ContentSummary       `json:"contentSummary"`
-	ContentStates  []ContentEvidence    `json:"contentStates"`
+	Summary                ReportSummary          `json:"summary"`
+	Capabilities           []CapabilityCoverage   `json:"capabilities"`
+	ContentSummary         ContentSummary         `json:"contentSummary"`
+	ContentStates          []ContentEvidence      `json:"contentStates"`
+	CapabilityStateSummary CapabilityStateSummary `json:"capabilityStateSummary"`
+	CapabilityStates       []CapabilityState      `json:"capabilityStates"`
 }
 
 func catalogByID() map[string]adprimitive.Primitive {
@@ -151,5 +160,7 @@ func Report() CoverageReport {
 	}
 	rep.ContentStates = ContentStates()
 	rep.ContentSummary = SummarizeContent()
+	rep.CapabilityStates = CapabilityStates()
+	rep.CapabilityStateSummary = SummarizeCapabilityStates()
 	return rep
 }
