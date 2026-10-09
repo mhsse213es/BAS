@@ -183,6 +183,33 @@ func TestInterpretCustomClassifiesScriptCrash(t *testing.T) {
 		{"informational line before FAIL verdict", ExecResult{ExitCode: 0}, "EXEC T1558.003: found 3 kerberoastable accounts\nFAIL: enumeration ran unimpeded", models.ResultFail},
 		{"informational line before PASS verdict", ExecResult{ExitCode: 0}, "EXEC T1558.004: enumerated 0 roastable accounts\nPASS: no AS-REP roastable accounts exposed", models.ResultPass},
 		{"informational line before SKIP verdict", ExecResult{ExitCode: 0}, "INFO: probing domain reachability\nSKIP: host is not domain-joined", models.ResultSkipped},
+
+		// Empty output: no verdict line, no informational text at all. Pre-existing,
+		// unchanged behavior -- pinned so a future change can't silently alter it.
+		{"empty output, exit 0, falls to Pass default", ExecResult{ExitCode: 0}, "", models.ResultPass},
+		{"empty output, exit 1, falls to Fail default", ExecResult{ExitCode: 1}, "", models.ResultFail},
+
+		// Malformed verdicts: close to the real prefix but not an exact match.
+		// Pre-existing, unchanged behavior -- these must keep falling through to
+		// the exit-code default rather than being loosely matched.
+		{"malformed verdict, misspelled word", ExecResult{ExitCode: 0}, "PASSED: looks fine", models.ResultPass},      // exit-0 default, not a Pass match
+		{"malformed verdict, space before colon", ExecResult{ExitCode: 1}, "FAIL : broken", models.ResultFail},        // exit-1 default, not a Fail match
+		{"malformed verdict, no colon at all", ExecResult{ExitCode: 0}, "FAIL something is wrong", models.ResultPass}, // exit-0 default -- "FAIL something" never matches "fail:"
+
+		// Conflicting verdict TYPES in the same output: never produced by any
+		// committed scenario today (every step's branches are mutually
+		// exclusive -- verified against scenarios/kerberoasting-ad-drill.yaml
+		// and the wider corpus), but output can still be malformed or
+		// hand-crafted, and this function must have one explicit, documented
+		// answer rather than an accidental one. Fail-safe policy: FAIL must
+		// never be silently suppressed by a PASS or SKIP line elsewhere in the
+		// same output (mirrors this file's existing bias -- see Vetoed/TimedOut
+		// in Interpret -- toward never overstating a defensive win when there
+		// is ambiguity). Priority: FAIL > SKIP > PASS, independent of which
+		// line appears first.
+		{"conflicting FAIL after PASS: FAIL wins despite position", ExecResult{ExitCode: 0}, "PASS: looked clean at first\nFAIL: actually exploitable", models.ResultFail},
+		{"conflicting PASS after FAIL: FAIL still wins", ExecResult{ExitCode: 0}, "FAIL: exploitable\nPASS: contradicts the above", models.ResultFail},
+		{"conflicting SKIP and PASS (no FAIL): SKIP wins", ExecResult{ExitCode: 0}, "SKIP: not applicable here\nPASS: contradicts the above", models.ResultSkipped},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

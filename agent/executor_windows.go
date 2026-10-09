@@ -153,20 +153,66 @@ func hostIsDomainController() bool {
 	return strings.Contains(string(out), "LanmanNT")
 }
 
+// dcProbeTimeout bounds canReachDomainController's wait before treating the
+// host as unreachable -- a probe that hangs must never block scenario
+// dispatch indefinitely.
+const dcProbeTimeout = 5 * time.Second
+
 // canReachDomainController reports whether this host can currently reach a
 // domain controller, via the same LDAP RootDSE lookup technique
 // scenarios/kerberoasting-ad-drill.yaml's own steps already use to self-detect
 // a non-domain-joined or DC-unreachable host (reusing a proven technique
-// rather than introducing a new one). A short timeout keeps the probe fast;
-// any failure (not domain-joined, DC unreachable, PowerShell unavailable)
-// returns false -- it never blocks or panics the caller.
+// rather than introducing a new one).
 func canReachDomainController() bool {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	return runPowerShellProbeWithTimeout(dcProbeTimeout,
+		`try { $null = ([ADSI]"LDAP://RootDSE").defaultNamingContext; exit 0 } catch { exit 1 }`)
+}
+
+// runPowerShellProbeWithTimeout runs script under PowerShell with the given
+// timeout and reports whether it completed cleanly (exit 0). This is the
+// fail-safe contract canReachDomainController relies on: an LDAP timeout (the
+// context deadline fires and the process is killed), a DNS failure or an
+// unreachable DC (the script's own catch block exits 1), and PowerShell being
+// unavailable (the command never starts) are ALL indistinguishable from each
+// other at this layer and ALL map to false -- there is no path by which any
+// of them is mistaken for a clean success. Extracted so this contract is
+// provable with real processes (TestCanReachDomainController_* in
+// executor_windows_test.go) rather than needing a live AD lab.
+// hardProbeSlack bounds how much longer runPowerShellProbeWithTimeout waits
+// past its requested timeout before giving up on the OS ever killing the
+// process, on top of the normal context-cancellation + WaitDelay path.
+const hardProbeSlack = 5 * time.Second
+
+func runPowerShellProbeWithTimeout(timeout time.Duration, script string) bool {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "powershell",
-		"-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command",
-		`try { $null = ([ADSI]"LDAP://RootDSE").defaultNamingContext; exit 0 } catch { exit 1 }`)
-	return cmd.Run() == nil
+		"-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script)
+	// WaitDelay forces Wait to return once Cancel (TerminateProcess) has been
+	// sent, even if a lingering child/handle would otherwise keep the I/O
+	// pipes open -- Go's own documented fix for exactly that class of hang.
+	cmd.WaitDelay = 2 * time.Second
+
+	done := make(chan error, 1)
+	go func() { done <- cmd.Run() }()
+
+	select {
+	case err := <-done:
+		return err == nil
+	case <-time.After(timeout + hardProbeSlack):
+		// Found 2026-10-09: an LDAP/ADSI (COM-based) bind against an
+		// unreachable DC was observed taking ~11-16s to return REGARDLESS of
+		// the requested context timeout (500ms, 1s, and 2s all landed in that
+		// same range) -- neither the context cancellation nor WaitDelay
+		// bounded it on this host, so the underlying COM call does not
+		// reliably die with its process. This hard outer deadline is the
+		// belt-and-suspenders fix: this function must still return within a
+		// bounded time to its caller regardless of what the OS does with the
+		// orphaned process (left for the OS to reap, never retried or
+		// awaited here). "Did not finish" is treated exactly like every
+		// other failure mode -- not reachable, fail-safe.
+		return false
+	}
 }
 
 // runCleanup executes the step's cleanup command and returns a verdict --

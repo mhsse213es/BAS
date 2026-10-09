@@ -135,3 +135,65 @@ func TestRunCleanup_SuccessReportsNoDetail(t *testing.T) {
 		t.Errorf("detail = %q, want empty on success", detail)
 	}
 }
+
+// canReachDomainController's fail-safe contract (increment 2.1, 2026-10-09):
+// LDAP timeout, DNS failure, an unreachable DC, and a malformed RootDSE
+// response are all indistinguishable at the probe-execution layer -- they
+// either make the real PowerShell script's own try/catch exit 1, or make the
+// process itself run past its deadline. runPowerShellProbeWithTimeout is the
+// extracted mechanism both canReachDomainController's real LDAP probe and
+// these tests exercise, so the fail-safe behavior is proven with real
+// processes (this file's existing convention, e.g.
+// TestExecStepExecuteTimeout) instead of needing a live AD lab.
+
+// TestCanReachDomainController_ProbeSucceedsOnCleanExit: a DC-reachable probe
+// (real script: no exception from the LDAP RootDSE bind) exits 0.
+func TestCanReachDomainController_ProbeSucceedsOnCleanExit(t *testing.T) {
+	if !runPowerShellProbeWithTimeout(5*time.Second, "exit 0") {
+		t.Error("a clean exit 0 must be treated as reachable")
+	}
+}
+
+// TestCanReachDomainController_ProbeFailsSafeOnError stands in for DNS
+// failure / unreachable DC / malformed RootDSE response: the real script's
+// try/catch maps every one of those into exit 1. Must be treated as
+// unreachable, never silently as success.
+func TestCanReachDomainController_ProbeFailsSafeOnError(t *testing.T) {
+	if runPowerShellProbeWithTimeout(5*time.Second, "exit 1") {
+		t.Error("a non-zero exit (DNS failure / unreachable DC / malformed response) must be treated as unreachable")
+	}
+}
+
+// TestCanReachDomainController_ProbeFailsSafeOnTimeout stands in for an LDAP
+// call that hangs (e.g. a DC that accepts the connection but never answers):
+// the context deadline must kill it promptly and report unreachable, never
+// block indefinitely or report success.
+func TestCanReachDomainController_ProbeFailsSafeOnTimeout(t *testing.T) {
+	start := time.Now()
+	ok := runPowerShellProbeWithTimeout(300*time.Millisecond, "Start-Sleep -Seconds 10")
+	elapsed := time.Since(start)
+	if ok {
+		t.Error("a probe that times out must be treated as unreachable")
+	}
+	if elapsed > 5*time.Second {
+		t.Errorf("timeout not honored: took %v for a 300ms timeout", elapsed)
+	}
+}
+
+// TestCanReachDomainController_CompletesWithinItsTimeout pins the real
+// function's wiring to its own timeout constant without asserting the
+// boolean result (which depends on whether THIS build host is domain-joined)
+// -- only the time bound is deterministic across environments.
+func TestCanReachDomainController_CompletesWithinItsTimeout(t *testing.T) {
+	// The function's own worst-case bound is dcProbeTimeout+hardProbeSlack
+	// (the hard outer deadline in runPowerShellProbeWithTimeout); this test
+	// adds its own margin on top for scheduling jitter, rather than reusing
+	// the exact same bound the code enforces.
+	bound := dcProbeTimeout + hardProbeSlack + 3*time.Second
+	start := time.Now()
+	_ = canReachDomainController()
+	if elapsed := time.Since(start); elapsed > bound {
+		t.Errorf("canReachDomainController took %v, want <= %v (dcProbeTimeout %v + hardProbeSlack %v + test margin)",
+			elapsed, bound, dcProbeTimeout, hardProbeSlack)
+	}
+}
