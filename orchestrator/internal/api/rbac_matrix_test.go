@@ -44,6 +44,7 @@ var routeMatrix = []routeCase{
 	{http.MethodGet, "/api/scenarios", tierAny, ""},
 	{http.MethodGet, "/api/scenarios/{id}", tierAny, ""},
 	{http.MethodGet, "/api/ad/coverage", tierAny, ""},
+	{http.MethodGet, "/api/ad/content-inventory", tierPermission, auth.CanViewARTContentStatus},
 	{http.MethodGet, "/api/content-registry/content/{id}/versions", tierAny, ""},
 	{http.MethodGet, "/api/content-registry/versions/{vid}", tierAny, ""},
 	{http.MethodGet, "/api/content-registry/runs/{runId}/drift", tierAny, ""},

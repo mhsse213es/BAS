@@ -227,6 +227,9 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.Get("/api/scenarios", h.ListScenarios)
 		r.Get("/api/scenarios/{id}", h.GetScenario)
 		r.Get("/api/ad/coverage", h.GetADCoverage)
+		// Admin-only: inventories the live ART/Caldera libraries for the AD
+		// primitive set (read-only; reuses the ART content-status permission).
+		r.With(auth.RequirePermission(auth.CanViewARTContentStatus)).Get("/api/ad/content-inventory", h.GetADContentInventory)
 		r.Get("/api/content-registry/content/{id}/versions", h.ListContentVersions)
 		r.Get("/api/content-registry/versions/{vid}", h.GetContentVersion)
 		r.Get("/api/content-registry/runs/{runId}/drift", h.GetRunDrift)

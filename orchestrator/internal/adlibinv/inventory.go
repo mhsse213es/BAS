@@ -35,18 +35,20 @@ type CalderaSource interface {
 // TechCoverage is the inventory result for one distinct ATT&CK technique that
 // at least one input primitive maps to.
 type TechCoverage struct {
-	TechniqueID  string
-	PrimitiveIDs []string
-	ARTAtomics   int
-	CalderaAbils int
-	Covered      bool
+	TechniqueID  string   `json:"techniqueId"`
+	PrimitiveIDs []string `json:"primitiveIds"`
+	ARTAtomics   int      `json:"artAtomics"`
+	CalderaAbils int      `json:"calderaAbilities"`
+	Covered      bool     `json:"covered"`
 }
 
-// Report is the full inventory over a set of primitives.
+// Report is the full inventory over a set of primitives. JSON tags are explicit
+// so the garble-obfuscated release build emits stable keys when the report is
+// served over the API (see the AD content-inventory handler).
 type Report struct {
-	Covered       []TechCoverage
-	Missing       []TechCoverage
-	NoTechniqueID []string
+	Covered       []TechCoverage `json:"covered"`
+	Missing       []TechCoverage `json:"missing"`
+	NoTechniqueID []string       `json:"noTechniqueId"`
 }
 
 // Inventory reports, per technique, whether the live ART/Caldera libraries
