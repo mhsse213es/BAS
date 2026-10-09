@@ -46,9 +46,18 @@ type ReportSummary struct {
 }
 
 // CoverageReport is the full product-facing AD coverage report.
+//
+// ContentSummary/ContentStates are an additive, backward-compatible second axis
+// (AD.txt line 1194): CoverageStatus/Capabilities describe validation progress,
+// while the content fields describe what evidence-backed execution content
+// actually exists. ContentStates spans every AD primitive (including the
+// Kerberoasting baseline that is not a gap entry), so it is broader than
+// Capabilities.
 type CoverageReport struct {
-	Summary      ReportSummary        `json:"summary"`
-	Capabilities []CapabilityCoverage `json:"capabilities"`
+	Summary        ReportSummary        `json:"summary"`
+	Capabilities   []CapabilityCoverage `json:"capabilities"`
+	ContentSummary ContentSummary       `json:"contentSummary"`
+	ContentStates  []ContentEvidence    `json:"contentStates"`
 }
 
 func catalogByID() map[string]adprimitive.Primitive {
@@ -140,5 +149,7 @@ func Report() CoverageReport {
 			rep.Summary.RequiringDomainJoinedHost++
 		}
 	}
+	rep.ContentStates = ContentStates()
+	rep.ContentSummary = SummarizeContent()
 	return rep
 }

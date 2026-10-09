@@ -80,6 +80,26 @@ func TestContentStates_KnownClassifications(t *testing.T) {
 	}
 }
 
+// The report exposes the content axis additively without disturbing the existing
+// validation-progress axis.
+func TestReport_ExposesContentAxisWithoutBreakingCoverage(t *testing.T) {
+	r := Report()
+	// Existing axis intact: one capability per gap matrix entry.
+	if len(r.Capabilities) != len(AllEntries()) {
+		t.Fatalf("Capabilities must still cover every matrix entry: %d vs %d", len(r.Capabilities), len(AllEntries()))
+	}
+	// New axis present and spans all 21 primitives (broader than the 18 gap entries).
+	if len(r.ContentStates) != 21 {
+		t.Fatalf("report must expose a content state for all 21 primitives, got %d", len(r.ContentStates))
+	}
+	if r.ContentSummary != SummarizeContent() {
+		t.Fatalf("report ContentSummary must equal SummarizeContent(): %+v vs %+v", r.ContentSummary, SummarizeContent())
+	}
+	if r.ContentSummary.Total != len(r.ContentStates) {
+		t.Fatalf("content summary total %d must match states %d", r.ContentSummary.Total, len(r.ContentStates))
+	}
+}
+
 func TestSummarizeContent_MeasuresRealExecutableCoverage(t *testing.T) {
 	s := SummarizeContent()
 	if s.Total != 21 {
