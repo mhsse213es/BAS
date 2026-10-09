@@ -226,6 +226,7 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.Get("/api/agents/download/{platform}", h.DownloadAgent)
 		r.Get("/api/scenarios", h.ListScenarios)
 		r.Get("/api/scenarios/{id}", h.GetScenario)
+		r.Get("/api/ad/coverage", h.GetADCoverage)
 		r.Get("/api/content-registry/content/{id}/versions", h.ListContentVersions)
 		r.Get("/api/content-registry/versions/{vid}", h.GetContentVersion)
 		r.Get("/api/content-registry/runs/{runId}/drift", h.GetRunDrift)

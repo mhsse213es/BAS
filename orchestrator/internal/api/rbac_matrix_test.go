@@ -43,6 +43,7 @@ var routeMatrix = []routeCase{
 	{http.MethodGet, "/api/agents/download/{platform}", tierAny, ""},
 	{http.MethodGet, "/api/scenarios", tierAny, ""},
 	{http.MethodGet, "/api/scenarios/{id}", tierAny, ""},
+	{http.MethodGet, "/api/ad/coverage", tierAny, ""},
 	{http.MethodGet, "/api/content-registry/content/{id}/versions", tierAny, ""},
 	{http.MethodGet, "/api/content-registry/versions/{vid}", tierAny, ""},
 	{http.MethodGet, "/api/content-registry/runs/{runId}/drift", tierAny, ""},
@@ -407,6 +408,7 @@ var publicRoutes = map[string]bool{
 	"GET /api/auth/sso/callback":                  true,
 	"GET /api/config/ca-root":                     true, // public CA certificate (never the key), fetched by install commands before enrollment
 	"POST /api/csp-report":                        true, // CSP violation reports (G1d); browsers send them unauthenticated
+	"POST /api/ingest/v1/events":                  true, // authenticated by its own shared secret (validateIngestAuth), not JWT -- outside the JWT group (added by af56e351, omitted from this list)
 	"GET /scim/v2/ServiceProviderConfig":          true,
 	"GET /scim/v2/ResourceTypes":                  true,
 	"GET /scim/v2/Schemas":                        true,
