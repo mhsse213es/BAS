@@ -1,0 +1,124 @@
+id: gpo-writable-linked-exposure-audit
+name: GPO Writable-Linked Exposure Audit
+description: >
+  Single-stage, read-only Active Directory audit: reads groupPolicyContainer
+  objects for a security descriptor that grants write access
+  (GenericAll/GenericWrite/WriteDacl/WriteOwner/WriteProperty) to a
+  non-tier-0 principal AND that is linked (gPLink) to a populated scope --
+  the domain head, an organizational unit, or a site (T1484.001). A GPO
+  that is both attacker-writable and linked is an edit-to-execute path:
+  policy pushed to it runs on every object under the link.
+
+  SAFETY: This step only READS GPO security descriptors and the gPLink
+  attributes of the domain / OUs / sites via .NET DirectoryServices. It
+  NEVER modifies a GPO, pushes policy, or creates a scheduled task. It
+  proves only whether a writable-and-linked GPO is EXPOSED. On a non-domain
+  host it returns a clean SKIP.
+  PRODUCTION-SAFE: runs in telemetry mode. Windows domain members only.
+author: Audspect Research
+executable: true
+local_check: false
+supported_os: [windows]
+tags:
+  - active-directory
+  - gpo
+  - group-policy
+  - privilege-escalation
+  - t1484
+  - mitre
+mitre_phases:
+  - discovery
+  - privilege-escalation
+
+live_policy:
+  block_on_domain_controller: false
+  require_dc_reachable: true
+  max_spray_attempts: 0
+  spray_account_allowlist: []
+  execution_window: ""
+
+steps:
+
+  # ---------------------------------------------------------------------------
+  # Stage 1 — Writable-Linked GPO Exposure Audit (T1484.001)
+  # ---------------------------------------------------------------------------
+  - name: "GPO Stage 1 — Writable-Linked GPO Exposure Audit (T1484.001)"
+    technique_id: T1484.001
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Reads groupPolicyContainer security descriptors and the gPLink attributes of the domain / OUs / sites via System.DirectoryServices (read-only) and reports GPOs that are both writable by a non-tier-0 principal and linked to a populated scope. Never modifies a GPO, pushes policy, or creates a scheduled task. Generates LDAP searches against the DC."
+    telemetry:
+      - "DC: LDAP read of groupPolicyContainer security descriptors and gPLink attributes — not separately audited by default"
+      - "Sysmon EID 1: powershell.exe performing an LDAP GPO / gPLink enumeration"
+    detection:
+      - "SIEM: a Group Policy object writable by a non-tier-0 principal is linked to a populated scope (domain/OU/site) — GPO exposure IOC"
+      - "SIEM: an LDAP enumeration of groupPolicyContainer objects and gPLinks from a workstation — GPO reconnaissance IOC"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $findings = @()
+      try {
+        $rootDSE = [ADSI]"LDAP://RootDSE"
+        $domainDN = $rootDSE.defaultNamingContext
+        $configDN = $rootDSE.configurationNamingContext
+        if (-not $domainDN) { throw "no domain" }
+
+        $tier0 = @('S-1-5-18','S-1-5-32-544','S-1-5-9','*-512','*-516','*-519','*-518','*-521','*-500','*-517')
+        function Is-Tier0([string]$sid) { foreach ($t in $tier0) { if ($sid -like $t) { return $true } }; return $false }
+        $writeRights = [System.DirectoryServices.ActiveDirectoryRights]'GenericAll,GenericWrite,WriteDacl,WriteOwner,WriteProperty'
+
+        # 1) Collect all linked GPO DNs from gPLink on domain head, OUs, sites.
+        $linked = @{}
+        foreach ($base in @("LDAP://$domainDN", "LDAP://CN=Sites,$configDN")) {
+          $ls = New-Object System.DirectoryServices.DirectorySearcher
+          $ls.SearchRoot = New-Object System.DirectoryServices.DirectoryEntry($base)
+          $ls.PageSize = 500
+          $ls.Filter = "(gPLink=*)"
+          [void]$ls.PropertiesToLoad.Add('gPLink')
+          foreach ($res in $ls.FindAll()) {
+            $gplink = [string]$res.Properties['gplink'][0]
+            foreach ($m in [regex]::Matches($gplink, '(?i)LDAP://(CN=\{[0-9A-F-]+\},CN=POLICIES,CN=SYSTEM,' + [regex]::Escape($domainDN) + ')')) {
+              $linked[$m.Groups[1].Value.ToUpper()] = $true
+            }
+          }
+        }
+
+        # 2) For each GPO that is linked, check its DACL for non-tier-0 write.
+        $gs = New-Object System.DirectoryServices.DirectorySearcher
+        $gs.SearchRoot = New-Object System.DirectoryServices.DirectoryEntry("LDAP://CN=Policies,CN=System,$domainDN")
+        $gs.PageSize = 500
+        $gs.Filter = "(objectClass=groupPolicyContainer)"
+        [void]$gs.PropertiesToLoad.Add('distinguishedName')
+        [void]$gs.PropertiesToLoad.Add('displayName')
+        foreach ($res in $gs.FindAll()) {
+          $dn = ([string]$res.Properties['distinguishedname'][0]).ToUpper()
+          if (-not $linked.ContainsKey($dn)) { continue }
+          $name = [string]$res.Properties['displayname'][0]
+          $entry = $res.GetDirectoryEntry()
+          $rules = $entry.ObjectSecurity.GetAccessRules($true, $true, [System.Security.Principal.SecurityIdentifier])
+          $writable = $false
+          foreach ($r in $rules) {
+            if ($r.AccessControlType -ne [System.Security.AccessControl.AccessControlType]::Allow) { continue }
+            if (Is-Tier0 $r.IdentityReference.Value) { continue }
+            if (($r.ActiveDirectoryRights -band $writeRights) -ne 0) { $writable = $true }
+          }
+          if ($writable) { $findings += "$name (writable by non-tier-0 and linked)" }
+        }
+        $count = $findings.Count
+      } catch {
+        $count = -1
+      }
+      if ($count -lt 0) {
+        Write-Output "SKIP: GPO exposure audit unavailable — host is not domain-joined or the DC is unreachable. [BAS-SIM-GPO-S1]"
+      } elseif ($count -eq 0) {
+        Write-Output "PASS: no Group Policy object is both writable by a non-tier-0 principal and linked to a populated scope — no GPO privilege-escalation path exposed from this context. [BAS-SIM-GPO-S1]"
+      } else {
+        Write-Output "EXEC T1484.001: found $count GPO(s) writable by a non-tier-0 principal and linked to a populated scope. Reads GPO DACLs and gPLinks only — this is a detection-and-exposure probe, it pushes no policy. [BAS-SIM-GPO-S1]"
+        Write-Output "FAIL: a non-tier-0 principal can edit a Group Policy object linked to a populated scope, letting them push policy (an immediate scheduled task, Restricted Groups membership) that executes as SYSTEM on every object under the link, enabling privilege escalation. Review the flagged GPO(s): restrict their DACLs to tier-0 trustees, and audit Directory Service Changes (5136) and SYSVOL GPO version changes."
+      }
+    cleanup: ""

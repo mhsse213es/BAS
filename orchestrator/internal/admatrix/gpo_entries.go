@@ -23,6 +23,9 @@ var gpoTelemetry = map[string][]string{
 func GPOEntries() []Entry {
 	out := make([]Entry, 0, len(adprimitive.GPOAbuseCatalog))
 	for _, p := range adprimitive.GPOAbuseCatalog {
+		if p.ID == "gpo-abuse-exposure-check" {
+			continue // read-only discovery primitive, tracked via realScenarioEvidenceByID
+		}
 		out = append(out, Entry{
 			PrimitiveID:            p.ID,
 			TechniqueID:            p.TechniqueID,

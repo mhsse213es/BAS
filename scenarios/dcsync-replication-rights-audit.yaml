@@ -1,0 +1,91 @@
+id: dcsync-replication-rights-audit
+name: DCSync Replication-Rights Exposure Audit
+description: >
+  Single-stage, read-only Active Directory configuration audit: checks
+  whether the CURRENT principal already holds DS-Replication-Get-Changes
+  and/or DS-Replication-Get-Changes-All on the domain object -- the two
+  extended rights that enable DCSync-style directory replication (T1003.006).
+
+  SAFETY: This step reads the domain object's own access-control list via
+  .NET DirectoryServices and compares it against the current Windows token's
+  SID set. It NEVER invokes directory replication (DRSUAPI/DRSGetNCChanges),
+  never requests or returns any credential material, and modifies nothing.
+  It proves only whether the PREREQUISITE for DCSync is exposed on this
+  principal, not that replication would succeed or has been attempted. On a
+  non-domain host it returns a clean SKIP.
+  PRODUCTION-SAFE: runs in telemetry mode. Windows domain members only.
+author: Audspect Research
+executable: true
+local_check: false
+supported_os: [windows]
+tags:
+  - dcsync
+  - active-directory
+  - credential-access
+  - replication
+  - t1003
+  - mitre
+mitre_phases:
+  - credential-access
+
+live_policy:
+  block_on_domain_controller: false
+  require_dc_reachable: true
+  max_spray_attempts: 0
+  spray_account_allowlist: []
+  execution_window: ""
+
+steps:
+
+  # ---------------------------------------------------------------------------
+  # Stage 1 — DS-Replication Extended-Right Exposure Check (T1003.006)
+  # ---------------------------------------------------------------------------
+  - name: "DCSync Stage 1 — DS-Replication Extended-Right Exposure Check (T1003.006)"
+    technique_id: T1003.006
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Reads the domain object's own access-control list via System.DirectoryServices (read-only) and checks whether the current token's SIDs hold DS-Replication-Get-Changes or DS-Replication-Get-Changes-All. Never invokes DRSUAPI replication and extracts no credential material. Generates an LDAP security-descriptor read against the DC."
+    telemetry:
+      - "DC: access-control read of the domain object's own security descriptor (nTSecurityDescriptor) — not separately audited by default"
+      - "Sysmon EID 1: powershell.exe reading domain-object ACL via DirectoryServices"
+    detection:
+      - "SIEM: a non-DC, non-tier-0 principal holds DS-Replication-Get-Changes / -All on the domain object — DCSync-prerequisite exposure IOC"
+      - "SIEM: a security-descriptor read of the domain object from a workstation — ACL reconnaissance IOC"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      try {
+        $domainDN = ([ADSI]"LDAP://RootDSE").defaultNamingContext
+        if (-not $domainDN) { throw "no domain" }
+        $domainEntry = New-Object System.DirectoryServices.DirectoryEntry("LDAP://$domainDN")
+        $sd = $domainEntry.ObjectSecurity
+        $rules = $sd.GetAccessRules($true, $true, [System.Security.Principal.SecurityIdentifier])
+        $me = [System.Security.Principal.WindowsIdentity]::GetCurrent()
+        $mySids = @($me.User.Value) + ($me.Groups | ForEach-Object { $_.Value })
+        $getChanges    = [guid]'1131f6aa-9c07-11d1-f79f-00c04fc2dcd2'
+        $getChangesAll = [guid]'1131f6ad-9c07-11d1-f79f-00c04fc2dcd2'
+        $grants = @()
+        foreach ($r in $rules) {
+          if ($r.AccessControlType -ne [System.Security.AccessControl.AccessControlType]::Allow) { continue }
+          if (($r.ActiveDirectoryRights -band [System.DirectoryServices.ActiveDirectoryRights]::ExtendedRight) -eq 0) { continue }
+          if ($r.ObjectType -ne $getChanges -and $r.ObjectType -ne $getChangesAll) { continue }
+          if ($mySids -contains $r.IdentityReference.Value) { $grants += $r }
+        }
+        $count = $grants.Count
+      } catch {
+        $count = -1
+      }
+      if ($count -lt 0) {
+        Write-Output "SKIP: DS-Replication exposure check unavailable — host is not domain-joined or the DC is unreachable. [BAS-SIM-DCS-S1]"
+      } elseif ($count -eq 0) {
+        Write-Output "PASS: the current principal does not hold DS-Replication-Get-Changes / DS-Replication-Get-Changes-All on the domain object — DCSync is not directly exploitable from this context. [BAS-SIM-DCS-S1]"
+      } else {
+        Write-Output "EXEC T1003.006: current principal holds $count DS-Replication extended-right grant(s) on the domain object (DCSync prerequisite). Does NOT request replication data — this is a detection-and-prerequisite probe only. [BAS-SIM-DCS-S1]"
+        Write-Output "FAIL: this principal can run DCSync (e.g. mimikatz lsadump::dcsync / DSInternals Get-ADReplAccount) and extract every domain account's credential material, including krbtgt. Restrict DS-Replication-Get-Changes[-All] to Domain Controllers and tier-0 admins only, and alert on DRSUAPI replication requests (4662) from non-DC sources."
+      }
+    cleanup: ""

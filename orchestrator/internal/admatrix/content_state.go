@@ -88,6 +88,59 @@ var contentEvidenceByID = map[string]ContentEvidence{
 		Rationale: "a public DCSync atomic exists upstream and is cited in source; no committed Audspect scenario integrates it",
 		Reason:    reasonNotIntegrated,
 	},
+	// DCSync replication-rights exposure check -- a SEPARATE, narrower
+	// primitive from dcsync above. It has its own real committed scenario
+	// (deliberately NOT bound to the real ART atomic -- a prerequisite-only
+	// check, never full DCSync execution) so it is scenario-composable in
+	// its own right, independent of dcsync's own reusable-unmapped status.
+	"dcsync-replication-right-exposure-check": {
+		State: ContentScenarioComposable, RepoVerified: true,
+		Source:    "scenarios/dcsync-replication-rights-audit.yaml (Stage 1, T1003.006)",
+		Rationale: "committed scenario checks whether the current principal holds DS-Replication-Get-Changes[-All] on the domain object",
+	},
+	// ACL privilege exposure audit -- the read-only DISCOVERY counterpart to
+	// the four ACL ABUSE primitives, with its own real committed scenario
+	// (reads privileged objects' DACLs, never resets a password / takes over
+	// an object / adds a member). Scenario-composable in its own right; the
+	// four abuse primitives stay model-only, unchanged.
+	"acl-privilege-exposure-check": {
+		State: ContentScenarioComposable, RepoVerified: true,
+		Source:    "scenarios/acl-privilege-exposure-audit.yaml (Stage 1, T1069)",
+		Rationale: "committed scenario reads privileged objects' DACLs for dangerous rights granted to non-tier-0 principals",
+	},
+	// ADCS ESC template exposure audit -- the read-only DISCOVERY counterpart
+	// to the six ESC ABUSE primitives, with its own real committed scenario
+	// (reads the Configuration partition's certificate templates, requests no
+	// certificate, takes over no template). Scenario-composable in its own
+	// right; the six ESC abuse primitives stay model-only, unchanged.
+	"adcs-esc-exposure-check": {
+		State: ContentScenarioComposable, RepoVerified: true,
+		Source:    "scenarios/adcs-esc-template-exposure-audit.yaml (Stage 1, T1649)",
+		Rationale: "committed scenario reads certificate-template configuration for ESC1-4-class misconfigurations enrollable by non-tier-0 principals",
+	},
+	// Kerberos delegation exposure audit -- read-only DISCOVERY counterpart to
+	// the two delegation ABUSE primitives, with its own real committed
+	// scenario. Scenario-composable in its own right; the abuse primitives
+	// stay model-only, unchanged.
+	"kerberos-delegation-exposure-check": {
+		State: ContentScenarioComposable, RepoVerified: true,
+		Source:    "scenarios/kerberos-delegation-exposure-audit.yaml (Stage 1, T1558)",
+		Rationale: "committed scenario reads the directory for unconstrained/constrained/resource-based delegation misconfigurations",
+	},
+	// Trust / SID-history exposure audit -- read-only DISCOVERY counterpart to
+	// the two trust ABUSE primitives, with its own real committed scenario.
+	"trust-sid-history-exposure-check": {
+		State: ContentScenarioComposable, RepoVerified: true,
+		Source:    "scenarios/trust-sid-history-exposure-audit.yaml (Stage 1, T1134.005)",
+		Rationale: "committed scenario reads trustedDomain SID-filtering state and accounts' populated sIDHistory",
+	},
+	// GPO writable-linked exposure audit -- read-only DISCOVERY counterpart to
+	// the GPO ABUSE primitive, with its own real committed scenario.
+	"gpo-abuse-exposure-check": {
+		State: ContentScenarioComposable, RepoVerified: true,
+		Source:    "scenarios/gpo-writable-linked-exposure-audit.yaml (Stage 1, T1484.001)",
+		Rationale: "committed scenario reads groupPolicyContainer DACLs for non-tier-0 write access on GPOs linked to a populated scope",
+	},
 }
 
 // ContentStates returns the content-availability classification for every AD

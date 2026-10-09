@@ -33,8 +33,15 @@ func TestSimulate_ConstrainedDelegationReachableWhenPrincipalControlled(t *testi
 }
 
 func TestDelegationEntries_GroundedAndHonest(t *testing.T) {
-	if len(DelegationEntries()) != len(adprimitive.DelegationCatalog) {
-		t.Fatalf("DelegationEntries must cover every delegation catalog primitive")
+	// Excludes kerberos-delegation-exposure-check (read-only discovery
+	// primitive with its own real scenario, tracked via realScenarioEvidenceByID).
+	if len(DelegationEntries()) != len(adprimitive.DelegationCatalog)-1 {
+		t.Fatalf("DelegationEntries must cover every delegation catalog primitive except the exposure-check, got %d of %d", len(DelegationEntries()), len(adprimitive.DelegationCatalog))
+	}
+	for _, e := range DelegationEntries() {
+		if e.PrimitiveID == "kerberos-delegation-exposure-check" {
+			t.Fatal("kerberos-delegation-exposure-check must NOT appear as a gap-matrix Entry")
+		}
 	}
 	for _, e := range DelegationEntries() {
 		if e.CurrentValidation != LevelModelSimulated {

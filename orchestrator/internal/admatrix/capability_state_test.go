@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/audspect/bas/internal/adprimitive"
 	"github.com/audspect/bas/internal/scenario"
 )
 
@@ -21,8 +22,8 @@ func capStatesByID(t *testing.T) map[string]CapabilityState {
 
 func TestCapabilityStates_CoverAll21WithIndependentAxes(t *testing.T) {
 	states := CapabilityStates()
-	if len(states) != 21 {
-		t.Fatalf("expected one authoritative state per primitive (21), got %d", len(states))
+	if len(states) != 27 {
+		t.Fatalf("expected one authoritative state per primitive (27), got %d", len(states))
 	}
 	for _, cs := range states {
 		if cs.PrimitiveID == "" || cs.Name == "" {
@@ -77,11 +78,11 @@ func TestCapabilityStates_AxesAreIndependentPerCapability(t *testing.T) {
 
 func TestSummarizeCapabilityStates_HonestRollup(t *testing.T) {
 	s := SummarizeCapabilityStates()
-	if s.Total != 21 || s.Modeled != 21 {
-		t.Fatalf("expected 21 total/modeled, got total=%d modeled=%d", s.Total, s.Modeled)
+	if s.Total != 27 || s.Modeled != 27 {
+		t.Fatalf("expected 27 total/modeled, got total=%d modeled=%d", s.Total, s.Modeled)
 	}
-	if s.ScenarioComposed != 3 {
-		t.Errorf("expected 3 scenario-composed (Kerberoast baseline), got %d", s.ScenarioComposed)
+	if s.ScenarioComposed != 9 {
+		t.Errorf("expected 9 scenario-composed (Kerberoast baseline + DCSync/ACL/ADCS/Delegation/Trust/GPO exposure checks), got %d", s.ScenarioComposed)
 	}
 	if s.Executed != 0 {
 		t.Errorf("expected 0 executed (no real runs in this build), got %d", s.Executed)
@@ -184,13 +185,204 @@ func containsAny(list []string, want string) bool {
 	return slices.Contains(list, want)
 }
 
+// TestCapabilityStates_DCSyncExposureCheckCitesRealScenarioContent mirrors
+// TestCapabilityStates_KerberoastingCitesRealScenarioContent for the new
+// dcsync-replication-right-exposure-check primitive: parses the real,
+// committed scenario and proves every cited Telemetry/Evidence/Cleanup
+// string genuinely appears in it -- never hand-invented drift.
+func TestCapabilityStates_DCSyncExposureCheckCitesRealScenarioContent(t *testing.T) {
+	path := filepath.Join("..", "..", "..", "scenarios", "dcsync-replication-rights-audit.yaml")
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read %s: %v", path, err)
+	}
+	sc, err := scenario.ParseYAML(b)
+	if err != nil {
+		t.Fatalf("parse %s: %v", path, err)
+	}
+	if len(sc.Steps) != 1 {
+		t.Fatalf("expected exactly 1 step in %s, got %d", path, len(sc.Steps))
+	}
+	step := sc.Steps[0]
+
+	byID := capStatesByID(t)
+	cs := byID["dcsync-replication-right-exposure-check"]
+
+	for _, telemetry := range cs.TelemetrySources {
+		if !containsAny(step.Telemetry, telemetry) {
+			t.Errorf("cited telemetry %q not found in %s's real Telemetry list %v", telemetry, step.Name, step.Telemetry)
+		}
+	}
+	for _, evidence := range cs.EvidenceRequirements {
+		if !containsAny(step.Detection, evidence) {
+			t.Errorf("cited evidence %q not found in %s's real Detection list %v", evidence, step.Name, step.Detection)
+		}
+	}
+	if step.Cleanup != "" {
+		t.Fatalf("test assumes the real cleanup is empty (read-only); file now has %q -- update the curated Cleanup citation", step.Cleanup)
+	}
+	if len(cs.Cleanup) == 0 {
+		t.Error("must explicitly state no cleanup is required, citing the real stage")
+	}
+	// The whole point of this primitive: it must never claim the full
+	// DCSync postcondition (real credential material), only the discovery
+	// of the prerequisite right.
+	if len(cs.ExpectedPostconditions) != 1 || cs.ExpectedPostconditions[0].Kind != adprimitive.CapDCSyncRightHolderKnown {
+		t.Fatalf("expected postcondition CapDCSyncRightHolderKnown, got %+v", cs.ExpectedPostconditions)
+	}
+}
+
+// TestCapabilityStates_ACLExposureCheckCitesRealScenarioContent mirrors the
+// DCSync grounding test for the ACL exposure-check: parses the real,
+// committed scenario and proves every cited Telemetry/Evidence/Cleanup
+// string genuinely appears in it, and that the primitive only ever claims
+// the discovery postcondition -- never a real takeover.
+func TestCapabilityStates_ACLExposureCheckCitesRealScenarioContent(t *testing.T) {
+	path := filepath.Join("..", "..", "..", "scenarios", "acl-privilege-exposure-audit.yaml")
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read %s: %v", path, err)
+	}
+	sc, err := scenario.ParseYAML(b)
+	if err != nil {
+		t.Fatalf("parse %s: %v", path, err)
+	}
+	if len(sc.Steps) != 1 {
+		t.Fatalf("expected exactly 1 step in %s, got %d", path, len(sc.Steps))
+	}
+	step := sc.Steps[0]
+
+	byID := capStatesByID(t)
+	cs := byID["acl-privilege-exposure-check"]
+
+	for _, telemetry := range cs.TelemetrySources {
+		if !containsAny(step.Telemetry, telemetry) {
+			t.Errorf("cited telemetry %q not found in %s's real Telemetry list %v", telemetry, step.Name, step.Telemetry)
+		}
+	}
+	for _, evidence := range cs.EvidenceRequirements {
+		if !containsAny(step.Detection, evidence) {
+			t.Errorf("cited evidence %q not found in %s's real Detection list %v", evidence, step.Name, step.Detection)
+		}
+	}
+	if step.Cleanup != "" {
+		t.Fatalf("test assumes the real cleanup is empty (read-only); file now has %q -- update the curated Cleanup citation", step.Cleanup)
+	}
+	if len(cs.Cleanup) == 0 {
+		t.Error("must explicitly state no cleanup is required, citing the real stage")
+	}
+	if len(cs.ExpectedPostconditions) != 1 || cs.ExpectedPostconditions[0].Kind != adprimitive.CapACLPrivilegeExposureKnown {
+		t.Fatalf("expected postcondition CapACLPrivilegeExposureKnown (discovery, not takeover), got %+v", cs.ExpectedPostconditions)
+	}
+}
+
+// TestCapabilityStates_ADCSExposureCheckCitesRealScenarioContent mirrors the
+// DCSync/ACL grounding tests for the ADCS ESC template exposure-check: parses
+// the real, committed scenario and proves every cited Telemetry/Evidence/
+// Cleanup string genuinely appears in it, and that the primitive only ever
+// claims the discovery postcondition -- never a real certificate request.
+func TestCapabilityStates_ADCSExposureCheckCitesRealScenarioContent(t *testing.T) {
+	path := filepath.Join("..", "..", "..", "scenarios", "adcs-esc-template-exposure-audit.yaml")
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read %s: %v", path, err)
+	}
+	sc, err := scenario.ParseYAML(b)
+	if err != nil {
+		t.Fatalf("parse %s: %v", path, err)
+	}
+	if len(sc.Steps) != 1 {
+		t.Fatalf("expected exactly 1 step in %s, got %d", path, len(sc.Steps))
+	}
+	step := sc.Steps[0]
+
+	byID := capStatesByID(t)
+	cs := byID["adcs-esc-exposure-check"]
+
+	for _, telemetry := range cs.TelemetrySources {
+		if !containsAny(step.Telemetry, telemetry) {
+			t.Errorf("cited telemetry %q not found in %s's real Telemetry list %v", telemetry, step.Name, step.Telemetry)
+		}
+	}
+	for _, evidence := range cs.EvidenceRequirements {
+		if !containsAny(step.Detection, evidence) {
+			t.Errorf("cited evidence %q not found in %s's real Detection list %v", evidence, step.Name, step.Detection)
+		}
+	}
+	if step.Cleanup != "" {
+		t.Fatalf("test assumes the real cleanup is empty (read-only); file now has %q -- update the curated Cleanup citation", step.Cleanup)
+	}
+	if len(cs.Cleanup) == 0 {
+		t.Error("must explicitly state no cleanup is required, citing the real stage")
+	}
+	if len(cs.ExpectedPostconditions) != 1 || cs.ExpectedPostconditions[0].Kind != adprimitive.CapADCSTemplateExposureKnown {
+		t.Fatalf("expected postcondition CapADCSTemplateExposureKnown (discovery, not certificate request), got %+v", cs.ExpectedPostconditions)
+	}
+}
+
+// TestCapabilityStates_DelegationTrustGPOExposureChecksCiteRealScenarioContent
+// is the table-driven grounding test for the delegation, trust, and GPO
+// exposure-checks: for each, it parses the real committed scenario and proves
+// every cited Telemetry/Evidence/Cleanup string genuinely appears in it, and
+// that the primitive only ever claims the discovery postcondition.
+func TestCapabilityStates_DelegationTrustGPOExposureChecksCiteRealScenarioContent(t *testing.T) {
+	cases := []struct {
+		primitiveID string
+		file        string
+		wantPost    adprimitive.CapabilityKind
+	}{
+		{"kerberos-delegation-exposure-check", "kerberos-delegation-exposure-audit.yaml", adprimitive.CapDelegationExposureKnown},
+		{"trust-sid-history-exposure-check", "trust-sid-history-exposure-audit.yaml", adprimitive.CapTrustExposureKnown},
+		{"gpo-abuse-exposure-check", "gpo-writable-linked-exposure-audit.yaml", adprimitive.CapGPOExposureKnown},
+	}
+	byID := capStatesByID(t)
+	for _, tc := range cases {
+		t.Run(tc.primitiveID, func(t *testing.T) {
+			path := filepath.Join("..", "..", "..", "scenarios", tc.file)
+			b, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatalf("read %s: %v", path, err)
+			}
+			sc, err := scenario.ParseYAML(b)
+			if err != nil {
+				t.Fatalf("parse %s: %v", path, err)
+			}
+			if len(sc.Steps) != 1 {
+				t.Fatalf("expected exactly 1 step in %s, got %d", path, len(sc.Steps))
+			}
+			step := sc.Steps[0]
+			cs := byID[tc.primitiveID]
+
+			for _, telemetry := range cs.TelemetrySources {
+				if !containsAny(step.Telemetry, telemetry) {
+					t.Errorf("cited telemetry %q not found in %s's real Telemetry list %v", telemetry, step.Name, step.Telemetry)
+				}
+			}
+			for _, evidence := range cs.EvidenceRequirements {
+				if !containsAny(step.Detection, evidence) {
+					t.Errorf("cited evidence %q not found in %s's real Detection list %v", evidence, step.Name, step.Detection)
+				}
+			}
+			if step.Cleanup != "" {
+				t.Fatalf("test assumes the real cleanup is empty (read-only); file now has %q", step.Cleanup)
+			}
+			if len(cs.Cleanup) == 0 {
+				t.Error("must explicitly state no cleanup is required, citing the real stage")
+			}
+			if len(cs.ExpectedPostconditions) != 1 || cs.ExpectedPostconditions[0].Kind != tc.wantPost {
+				t.Fatalf("expected discovery postcondition %q, got %+v", tc.wantPost, cs.ExpectedPostconditions)
+			}
+		})
+	}
+}
+
 func TestReport_ExposesCapabilityStatesAsTheAuthoritativeModel(t *testing.T) {
 	r := Report()
-	// The authoritative Phase-1 model spans all 21 primitives -- broader than
+	// The authoritative Phase-1 model spans all 27 primitives -- broader than
 	// Capabilities (18 gap entries) and distinct from ContentStates (which
 	// does not carry ExecutionValidation/DetectionValidation/Outstanding).
-	if len(r.CapabilityStates) != 21 {
-		t.Fatalf("report must expose a CapabilityState for all 21 primitives, got %d", len(r.CapabilityStates))
+	if len(r.CapabilityStates) != 27 {
+		t.Fatalf("report must expose a CapabilityState for all 27 primitives, got %d", len(r.CapabilityStates))
 	}
 	if r.CapabilityStateSummary != SummarizeCapabilityStates() {
 		t.Fatalf("report CapabilityStateSummary must equal SummarizeCapabilityStates(): %+v vs %+v",
@@ -200,7 +392,7 @@ func TestReport_ExposesCapabilityStatesAsTheAuthoritativeModel(t *testing.T) {
 	if len(r.Capabilities) != len(AllEntries()) {
 		t.Fatalf("Capabilities must still cover every matrix entry: %d vs %d", len(r.Capabilities), len(AllEntries()))
 	}
-	if len(r.ContentStates) != 21 {
-		t.Fatalf("ContentStates must still cover all 21 primitives, got %d", len(r.ContentStates))
+	if len(r.ContentStates) != 27 {
+		t.Fatalf("ContentStates must still cover all 27 primitives, got %d", len(r.ContentStates))
 	}
 }

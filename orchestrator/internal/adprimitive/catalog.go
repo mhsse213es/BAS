@@ -110,6 +110,28 @@ var ACLAbuseCatalog = []Primitive{
 		Postconditions: []Capability{{Kind: CapGroupMember}},
 		RiskClass:      RiskPotentiallyDestructive,
 	},
+	// acl-privilege-exposure-check is the read-only DISCOVERY counterpart to
+	// the four ABUSE primitives above (same family role as DCSyncCatalog's
+	// dcsync-replication-right-exposure-check): it reads privileged objects'
+	// DACLs to learn whether a dangerous takeover-enabling right
+	// (GenericAll/GenericWrite/WriteDacl/WriteOwner/ForceChangePassword/
+	// AddMember/AddSelf/AllExtendedRights) is granted to a non-tier-0
+	// principal. It has NO acl_right_held precondition -- it discovers which
+	// rights exist rather than requiring one be held -- and is non-destructive
+	// (it resets no password, takes over no object, adds no member). Unlike
+	// its abuse siblings it carries a TechniqueID, because permission-grant
+	// discovery IS a clean ATT&CK technique (T1069, Permission Groups
+	// Discovery), whereas the abuse-via-inherited-rights primitives have no
+	// crisp 1:1 sub-technique.
+	{
+		ID: "acl-privilege-exposure-check", Name: "ACL Privilege Exposure Audit", TechniqueID: "T1069",
+		Prerequisites: Prerequisites{
+			DomainJoined: true,
+			Capabilities: []Capability{{Kind: CapDomainUser}},
+		},
+		Postconditions: []Capability{{Kind: CapACLPrivilegeExposureKnown}},
+		RiskClass:      RiskNonDestructive,
+	},
 }
 
 // RBCDCatalog defines 2 chained primitives for Resource-Based Constrained
@@ -180,6 +202,25 @@ var DelegationCatalog = []Primitive{
 		Postconditions: []Capability{{Kind: CapTicket}},
 		RiskClass:      RiskPotentiallyDestructive,
 	},
+	// kerberos-delegation-exposure-check is the read-only DISCOVERY
+	// counterpart to the two delegation ABUSE primitives above (same family
+	// role as the DCSync/ACL/ADCS exposure-checks): it reads the directory
+	// for delegation misconfigurations -- a non-DC account trusted for
+	// unconstrained delegation (userAccountControl TRUSTED_FOR_DELEGATION),
+	// a constrained-delegation account (msDS-AllowedToDelegateTo), or a
+	// resource-based delegation target (msDS-AllowedToActOnBehalfOf...). It
+	// has NO controls_*_delegation_principal precondition -- it discovers
+	// the misconfiguration rather than requiring control of the principal --
+	// and is non-destructive (coerces no authentication, forges no ticket).
+	{
+		ID: "kerberos-delegation-exposure-check", Name: "Kerberos Delegation Exposure Audit", TechniqueID: "T1558",
+		Prerequisites: Prerequisites{
+			DomainJoined: true,
+			Capabilities: []Capability{{Kind: CapDomainUser}},
+		},
+		Postconditions: []Capability{{Kind: CapDelegationExposureKnown}},
+		RiskClass:      RiskNonDestructive,
+	},
 }
 
 // TrustAbuseCatalog covers SID-history injection across AD trusts (T1134.005):
@@ -207,6 +248,23 @@ var TrustAbuseCatalog = []Primitive{
 		Postconditions: []Capability{{Kind: CapTicket}},
 		RiskClass:      RiskPotentiallyDestructive,
 	},
+	// trust-sid-history-exposure-check is the read-only DISCOVERY counterpart
+	// to the two trust ABUSE primitives above (same family role as the other
+	// exposure-checks): it reads trustedDomain objects for a cross-forest
+	// trust whose SID filtering/quarantine is disabled, and reads accounts
+	// for a populated sIDHistory attribute. It has NO *_trust_* precondition
+	// and requires no CapDomainCredentialMaterial -- it discovers the
+	// condition rather than requiring domain credential material to abuse it
+	// -- and is non-destructive (forges no inter-realm ticket).
+	{
+		ID: "trust-sid-history-exposure-check", Name: "Trust / SID-History Exposure Audit", TechniqueID: "T1134.005",
+		Prerequisites: Prerequisites{
+			DomainJoined: true,
+			Capabilities: []Capability{{Kind: CapDomainUser}},
+		},
+		Postconditions: []Capability{{Kind: CapTrustExposureKnown}},
+		RiskClass:      RiskNonDestructive,
+	},
 }
 
 // GPOAbuseCatalog covers Group Policy abuse (T1484.001): edit rights on a GPO
@@ -224,6 +282,22 @@ var GPOAbuseCatalog = []Primitive{
 		},
 		Postconditions: []Capability{{Kind: CapLocalAdmin}},
 		RiskClass:      RiskPotentiallyDestructive,
+	},
+	// gpo-abuse-exposure-check is the read-only DISCOVERY counterpart to the
+	// GPO ABUSE primitive above (same family role as the other
+	// exposure-checks): it reads groupPolicyContainer objects for a DACL
+	// writable by a non-tier-0 principal AND a gPLink to a populated scope
+	// (domain/OU/site). It has NO controls_writable_linked_gpo precondition
+	// -- it discovers the exposed GPO rather than requiring control of it --
+	// and is non-destructive (pushes no policy, creates no scheduled task).
+	{
+		ID: "gpo-abuse-exposure-check", Name: "GPO Writable-Linked Exposure Audit", TechniqueID: "T1484.001",
+		Prerequisites: Prerequisites{
+			DomainJoined: true,
+			Capabilities: []Capability{{Kind: CapDomainUser}},
+		},
+		Postconditions: []Capability{{Kind: CapGPOExposureKnown}},
+		RiskClass:      RiskNonDestructive,
 	},
 }
 
@@ -253,6 +327,28 @@ var DCSyncCatalog = []Primitive{
 		},
 		Postconditions: []Capability{{Kind: CapDomainCredentialMaterial}},
 		RiskClass:      RiskPotentiallyDestructive,
+	},
+	// dcsync-replication-right-exposure-check is a SEPARATE, narrower
+	// primitive from dcsync above -- it reads the domain object's own
+	// access-control list to learn whether the current principal already
+	// holds DS-Replication-Get-Changes[-All] (the 2 extended rights DCSync
+	// requires), exactly the same discovery-vs-exploitation split the
+	// Kerberoasting/AS-REP backfill already established (spn-enumerate vs
+	// kerberoast-tgs-request). It does NOT request directory replication
+	// data and produces no credential material -- its postcondition is the
+	// discovery capability CapDCSyncRightHolderKnown, never
+	// CapDomainCredentialMaterial. Has its own scenario (unlike dcsync
+	// itself, which remains reusable-unmapped -- see admatrix's content
+	// state for both): checking who already holds this right is read-only
+	// and requires none of the privilege dcsync's own real exploitation does.
+	{
+		ID: "dcsync-replication-right-exposure-check", Name: "DCSync Replication-Right Exposure Check", TechniqueID: "T1003.006",
+		Prerequisites: Prerequisites{
+			DomainJoined: true,
+			Capabilities: []Capability{{Kind: CapDomainUser}},
+		},
+		Postconditions: []Capability{{Kind: CapDCSyncRightHolderKnown}},
+		RiskClass:      RiskNonDestructive,
 	},
 }
 
@@ -334,5 +430,26 @@ var ADCSCatalog = []Primitive{
 		},
 		Postconditions: []Capability{{Kind: CapControlledAccount}},
 		RiskClass:      RiskPotentiallyDestructive,
+	},
+	// adcs-esc-exposure-check is the read-only DISCOVERY counterpart to the
+	// six ESC ABUSE primitives above (same family role as the DCSync and ACL
+	// exposure-checks): it reads the AD Configuration partition's certificate
+	// templates to learn whether an ESC1-4-class misconfiguration exists
+	// (enrollee-supplied subject + authentication EKU + low-privileged
+	// enroll, Any-Purpose/no EKU, enrollment-agent EKU, or a template DACL
+	// writable by a non-tier-0 principal). It has NO esc*_vulnerable
+	// precondition -- it discovers which templates are misconfigured rather
+	// than requiring one be -- and is non-destructive (it requests no
+	// certificate, takes over no template). Scoped to the LDAP-readable
+	// template surface (ESC1-4); the CA-host flags (ESC6) and web-enrollment
+	// reach (ESC8) need reach a Configuration-partition read does not give.
+	{
+		ID: "adcs-esc-exposure-check", Name: "ADCS ESC Template Exposure Audit", TechniqueID: "T1649",
+		Prerequisites: Prerequisites{
+			DomainJoined: true,
+			Capabilities: []Capability{{Kind: CapDomainUser}},
+		},
+		Postconditions: []Capability{{Kind: CapADCSTemplateExposureKnown}},
+		RiskClass:      RiskNonDestructive,
 	},
 }

@@ -26,8 +26,15 @@ func TestSimulate_GPOAbuseReachableWithWritableLinkedGPO(t *testing.T) {
 }
 
 func TestGPOEntries_GroundedAndHonest(t *testing.T) {
-	if len(GPOEntries()) != len(adprimitive.GPOAbuseCatalog) {
-		t.Fatalf("GPOEntries must cover every GPO-abuse catalog primitive")
+	// Excludes gpo-abuse-exposure-check (read-only discovery primitive with
+	// its own real scenario, tracked via realScenarioEvidenceByID).
+	if len(GPOEntries()) != len(adprimitive.GPOAbuseCatalog)-1 {
+		t.Fatalf("GPOEntries must cover every GPO-abuse catalog primitive except the exposure-check, got %d of %d", len(GPOEntries()), len(adprimitive.GPOAbuseCatalog))
+	}
+	for _, e := range GPOEntries() {
+		if e.PrimitiveID == "gpo-abuse-exposure-check" {
+			t.Fatal("gpo-abuse-exposure-check must NOT appear as a gap-matrix Entry")
+		}
 	}
 	for _, e := range GPOEntries() {
 		if e.CurrentValidation != LevelModelSimulated {

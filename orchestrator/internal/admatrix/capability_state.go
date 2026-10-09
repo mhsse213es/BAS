@@ -96,7 +96,7 @@ type CapabilityState struct {
 	// Cleanup, EvidenceRequirements and TelemetrySources are grounded in the
 	// matrix Entry for the 18 gap primitives (matrix.go) and in the real,
 	// committed scenario YAML for the 3 Kerberoasting-baseline primitives
-	// (see kerberoastingScenarioEvidenceByID) -- never invented.
+	// (see realScenarioEvidenceByID) -- never invented.
 	Cleanup              []string
 	EvidenceRequirements []string
 	TelemetrySources     []string
@@ -125,21 +125,24 @@ type CapabilityStateSummary struct {
 	DetectionValidated int
 }
 
-// kerberoastingEvidence is the Cleanup/EvidenceRequirements/TelemetrySources
-// citation for the 3 Kerberoasting-baseline primitives, grounded in the real,
-// committed scenarios/kerberoasting-ad-drill.yaml (Stages 1-3). It is the only
-// curated citation needed because these are the only primitives that are both
-// scenario-composed AND have a real scenario in this repository -- the 18 gap
-// primitives get the same fields from their existing matrix Entry instead.
-// TestCapabilityStates_KerberoastingCitesRealScenarioContent parses that file
-// and proves every string below actually appears in the cited stage.
-type kerberoastingEvidence struct {
+// realScenarioEvidence is the Cleanup/EvidenceRequirements/TelemetrySources/
+// Limitations citation for a primitive that is scenario-composed via a REAL,
+// committed scenario YAML but is NOT one of the 18 gap-matrix primitives
+// (matrix.go) -- currently the 3 Kerberoasting-baseline primitives
+// (scenarios/kerberoasting-ad-drill.yaml) and
+// dcsync-replication-right-exposure-check
+// (scenarios/dcsync-replication-rights-audit.yaml). Grounding tests parse
+// each cited file and prove every string below actually appears in it --
+// never invented. The 18 gap primitives get the same fields from their
+// existing matrix Entry instead.
+type realScenarioEvidence struct {
 	Cleanup              []string
 	EvidenceRequirements []string
 	TelemetrySources     []string
+	Limitations          []string
 }
 
-var kerberoastingScenarioEvidenceByID = map[string]kerberoastingEvidence{
+var realScenarioEvidenceByID = map[string]realScenarioEvidence{
 	"spn-enumerate": {
 		Cleanup: []string{"No cleanup required: Stage 1 is read-only LDAP/Kerberos enumeration (setspn -Q + LDAP SPN sweep); no state change (scenarios/kerberoasting-ad-drill.yaml Stage 1)."},
 		EvidenceRequirements: []string{
@@ -150,6 +153,7 @@ var kerberoastingScenarioEvidenceByID = map[string]kerberoastingEvidence{
 			"Sysmon EID 1: setspn.exe -Q */*",
 			"DC: LDAP search filter (servicePrincipalName=*) — Directory Services / 1644 if verbose LDAP logging enabled",
 		},
+		Limitations: kerberoastingLimitations,
 	},
 	"kerberoast-tgs-request": {
 		Cleanup: []string{"No cleanup required: Stage 2 requests but never extracts, exports or cracks the service ticket; no account or ticket state is modified (scenarios/kerberoasting-ad-drill.yaml Stage 2)."},
@@ -161,6 +165,7 @@ var kerberoastingScenarioEvidenceByID = map[string]kerberoastingEvidence{
 			"DC Security EID 4769: Kerberos service ticket requested (ticket encryption 0x17=RC4 is the Kerberoast tell)",
 			"Sysmon EID 1: powershell.exe requesting a service ticket",
 		},
+		Limitations: kerberoastingLimitations,
 	},
 	"asrep-roast-discover": {
 		Cleanup: []string{"No cleanup required: Stage 3 is a read-only LDAP query for DONT_REQ_PREAUTH accounts; no ticket requested, no state change (scenarios/kerberoasting-ad-drill.yaml Stage 3)."},
@@ -172,6 +177,67 @@ var kerberoastingScenarioEvidenceByID = map[string]kerberoastingEvidence{
 			"DC: LDAP search for userAccountControl:1.2.840.113556.1.4.803:=4194304",
 			"Sysmon EID 1: powershell.exe LDAP enumeration",
 		},
+		Limitations: kerberoastingLimitations,
+	},
+	"dcsync-replication-right-exposure-check": {
+		Cleanup: []string{"No cleanup required: the check only reads the domain object's own access-control list; no state change (scenarios/dcsync-replication-rights-audit.yaml Stage 1)."},
+		EvidenceRequirements: []string{
+			"SIEM: a non-DC, non-tier-0 principal holds DS-Replication-Get-Changes / -All on the domain object — DCSync-prerequisite exposure IOC",
+		},
+		TelemetrySources: []string{
+			"DC: access-control read of the domain object's own security descriptor (nTSecurityDescriptor) — not separately audited by default",
+		},
+		Limitations: dcsyncExposureCheckLimitations,
+	},
+	"acl-privilege-exposure-check": {
+		Cleanup: []string{"No cleanup required: the check only reads privileged objects' access-control lists; no state change (scenarios/acl-privilege-exposure-audit.yaml Stage 1)."},
+		EvidenceRequirements: []string{
+			"SIEM: a non-tier-0 principal holds a takeover-enabling right (GenericAll/GenericWrite/WriteDacl/WriteOwner/ForceChangePassword/AddMember/AddSelf/AllExtendedRights) over a privileged object — ACL exposure IOC",
+		},
+		TelemetrySources: []string{
+			"DC: access-control read of privileged objects' security descriptors (nTSecurityDescriptor) — not separately audited by default",
+		},
+		Limitations: aclExposureCheckLimitations,
+	},
+	"adcs-esc-exposure-check": {
+		Cleanup: []string{"No cleanup required: the check only reads certificate-template configuration from the AD Configuration partition; no state change (scenarios/adcs-esc-template-exposure-audit.yaml Stage 1)."},
+		EvidenceRequirements: []string{
+			"SIEM: a certificate template enrollable by a non-tier-0 principal carries an ESC1-4-class misconfiguration (enrollee-supplied subject + authentication EKU, Any-Purpose/no EKU, enrollment-agent EKU, or a non-tier-0-writable template DACL) — AD CS template exposure IOC",
+		},
+		TelemetrySources: []string{
+			"DC: LDAP read of pKICertificateTemplate objects under the Configuration partition — not separately audited by default",
+		},
+		Limitations: adcsExposureCheckLimitations,
+	},
+	"kerberos-delegation-exposure-check": {
+		Cleanup: []string{"No cleanup required: the check only reads delegation attributes from the directory; no state change (scenarios/kerberos-delegation-exposure-audit.yaml Stage 1)."},
+		EvidenceRequirements: []string{
+			"SIEM: a non-DC account trusted for unconstrained delegation, or a constrained/resource-based delegation configuration, is present in the directory — Kerberos delegation exposure IOC",
+		},
+		TelemetrySources: []string{
+			"DC: LDAP read of userAccountControl / msDS-AllowedToDelegateTo / msDS-AllowedToActOnBehalfOfOtherIdentity — not separately audited by default",
+		},
+		Limitations: delegationExposureCheckLimitations,
+	},
+	"trust-sid-history-exposure-check": {
+		Cleanup: []string{"No cleanup required: the check only reads trust and sIDHistory attributes from the directory; no state change (scenarios/trust-sid-history-exposure-audit.yaml Stage 1)."},
+		EvidenceRequirements: []string{
+			"SIEM: a cross-forest trust with SID filtering disabled, or an account carrying a populated sIDHistory, is present in the directory — trust / SID-history exposure IOC",
+		},
+		TelemetrySources: []string{
+			"DC: LDAP read of trustedDomain trustAttributes and accounts' sIDHistory — not separately audited by default",
+		},
+		Limitations: trustExposureCheckLimitations,
+	},
+	"gpo-abuse-exposure-check": {
+		Cleanup: []string{"No cleanup required: the check only reads groupPolicyContainer DACLs and gPLinks from the directory; no state change (scenarios/gpo-writable-linked-exposure-audit.yaml Stage 1)."},
+		EvidenceRequirements: []string{
+			"SIEM: a Group Policy object writable by a non-tier-0 principal is linked to a populated scope (domain/OU/site) — GPO exposure IOC",
+		},
+		TelemetrySources: []string{
+			"DC: LDAP read of groupPolicyContainer security descriptors and gPLink attributes — not separately audited by default",
+		},
+		Limitations: gpoExposureCheckLimitations,
 	},
 }
 
@@ -180,6 +246,56 @@ var kerberoastingScenarioEvidenceByID = map[string]kerberoastingEvidence{
 // through the supported workflow in this build).
 var kerberoastingLimitations = []string{
 	"Scenario-composed (scenarios/kerberoasting-ad-drill.yaml) but not yet executed through the supported agent/orchestrator workflow in this build; execution and detection validation are outstanding.",
+}
+
+// dcsyncExposureCheckLimitations: the check proves whether the DCSync
+// prerequisite is held, never that replication succeeded -- distinct from
+// dcsync's own limitation, which is about the unintegrated real atomic.
+var dcsyncExposureCheckLimitations = []string{
+	"Scenario-composed (scenarios/dcsync-replication-rights-audit.yaml) but not yet executed through the supported agent/orchestrator workflow in this build; execution and detection validation are outstanding.",
+	"Proves only whether the DS-Replication prerequisite is held -- never binds to the real DCSync atomic (lsadump::dcsync / Get-ADReplAccount) and is not evidence that replication itself would succeed or has been attempted.",
+}
+
+// aclExposureCheckLimitations: the audit proves whether a takeover-enabling
+// ACL right is exposed, never that it was used -- distinct from the four
+// ACL ABUSE primitives, which remain model-only and unintegrated.
+var aclExposureCheckLimitations = []string{
+	"Scenario-composed (scenarios/acl-privilege-exposure-audit.yaml) but not yet executed through the supported agent/orchestrator workflow in this build; execution and detection validation are outstanding.",
+	"Reads DACLs to report which dangerous rights are exposed -- never exercises any of them (resets no password, takes over no object, adds no group member) and is not evidence that a takeover would succeed or has been attempted.",
+}
+
+// adcsExposureCheckLimitations: the audit proves whether an ESC1-4-class
+// template misconfiguration is exposed, never that a certificate was
+// requested -- distinct from the six ESC ABUSE primitives, which remain
+// model-only and unintegrated. Scoped to the LDAP-readable template surface.
+var adcsExposureCheckLimitations = []string{
+	"Scenario-composed (scenarios/adcs-esc-template-exposure-audit.yaml) but not yet executed through the supported agent/orchestrator workflow in this build; execution and detection validation are outstanding.",
+	"Reads certificate-template configuration to report ESC1-4-class exposure -- never requests a certificate or takes over a template, and is not evidence that abuse would succeed or has been attempted.",
+	"Scoped to the LDAP-readable template surface (ESC1-4); the CA-host-level SAN policy flag (ESC6) and HTTP web-enrollment reach (ESC8) are outside a Configuration-partition read and are not assessed.",
+}
+
+// delegationExposureCheckLimitations: the audit proves whether a delegation
+// misconfiguration is exposed, never that it was abused -- distinct from the
+// two delegation ABUSE primitives, which remain model-only and unintegrated.
+var delegationExposureCheckLimitations = []string{
+	"Scenario-composed (scenarios/kerberos-delegation-exposure-audit.yaml) but not yet executed through the supported agent/orchestrator workflow in this build; execution and detection validation are outstanding.",
+	"Reads delegation attributes to report exposure -- never coerces an authentication or forges/uses a ticket, and is not evidence that abuse would succeed or has been attempted.",
+}
+
+// trustExposureCheckLimitations: the audit proves whether a trust/SID-history
+// abuse condition is exposed, never that it was abused -- distinct from the
+// two trust ABUSE primitives, which remain model-only and unintegrated.
+var trustExposureCheckLimitations = []string{
+	"Scenario-composed (scenarios/trust-sid-history-exposure-audit.yaml) but not yet executed through the supported agent/orchestrator workflow in this build; execution and detection validation are outstanding.",
+	"Reads trust SID-filtering state and sIDHistory to report exposure -- never forges an inter-realm ticket, and is not evidence that abuse would succeed or has been attempted.",
+}
+
+// gpoExposureCheckLimitations: the audit proves whether a writable linked GPO
+// is exposed, never that policy was pushed -- distinct from the GPO ABUSE
+// primitive, which remains model-only and unintegrated.
+var gpoExposureCheckLimitations = []string{
+	"Scenario-composed (scenarios/gpo-writable-linked-exposure-audit.yaml) but not yet executed through the supported agent/orchestrator workflow in this build; execution and detection validation are outstanding.",
+	"Reads GPO DACLs and gPLinks to report exposure -- never pushes policy or creates a scheduled task, and is not evidence that abuse would succeed or has been attempted.",
 }
 
 // outstandingFor derives the honest outstanding-work list for a capability
@@ -246,13 +362,15 @@ func CapabilityStates() []CapabilityState {
 			cs.EvidenceRequirements = e.EvidenceRequirements
 			cs.TelemetrySources = e.TelemetrySources
 			cs.Limitations = limitationsFor(e, coverageStatusFor(e))
-		} else if kev, ok := kerberoastingScenarioEvidenceByID[p.ID]; ok {
-			// One of the 3 Kerberoasting-baseline primitives: cite the real
-			// committed scenario instead (grounding test parses the file).
-			cs.Cleanup = kev.Cleanup
-			cs.EvidenceRequirements = kev.EvidenceRequirements
-			cs.TelemetrySources = kev.TelemetrySources
-			cs.Limitations = kerberoastingLimitations
+		} else if rev, ok := realScenarioEvidenceByID[p.ID]; ok {
+			// A primitive with a real committed scenario that isn't one of
+			// the 18 gap-matrix primitives (Kerberoasting baseline, or the
+			// DCSync exposure-check): cite that scenario instead (grounding
+			// tests parse each file).
+			cs.Cleanup = rev.Cleanup
+			cs.EvidenceRequirements = rev.EvidenceRequirements
+			cs.TelemetrySources = rev.TelemetrySources
+			cs.Limitations = rev.Limitations
 		}
 		cs.Outstanding = outstandingFor(cs)
 		out = append(out, cs)

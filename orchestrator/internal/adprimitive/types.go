@@ -55,6 +55,70 @@ const (
 	// Connecting this to ESC1-style exploitation as a 2-step chain is
 	// left to AD-M05.
 	CapTemplateControlled CapabilityKind = "TEMPLATE_CONTROLLED"
+
+	// CapDCSyncRightHolderKnown is another DISCOVERY-type capability (same
+	// family as CapKerberoastableTargetKnown/CapASREPRoastableTargetKnown
+	// above): the current principal's possession of a DCSync-enabling
+	// extended right (DS-Replication-Get-Changes[-All]) is now KNOWN, not
+	// exercised. Deliberately distinct from CapDomainCredentialMaterial --
+	// learning the right is held is not the same as having replicated
+	// anything with it (added for DCSyncCatalog's exposure-check primitive).
+	CapDCSyncRightHolderKnown CapabilityKind = "DCSYNC_RIGHT_HOLDER_KNOWN"
+
+	// CapACLPrivilegeExposureKnown is another DISCOVERY-type capability (same
+	// family as CapDCSyncRightHolderKnown above): the presence of a
+	// dangerous inbound ACL grant (GenericAll/GenericWrite/WriteDacl/
+	// WriteOwner/ForceChangePassword/AddMember/AddSelf/AllExtendedRights)
+	// held by a non-tier-0 principal over a privileged object is now KNOWN,
+	// not exercised. Deliberately distinct from CapControlledAccount and
+	// CapGroupMember -- auditing that a takeover-enabling right is exposed
+	// is not the same as having used it to take over an account or join a
+	// group (added for ACLAbuseCatalog's read-only exposure-check primitive).
+	CapACLPrivilegeExposureKnown CapabilityKind = "ACL_PRIVILEGE_EXPOSURE_KNOWN"
+
+	// CapADCSTemplateExposureKnown is another DISCOVERY-type capability (same
+	// family as CapACLPrivilegeExposureKnown above): the presence of an
+	// ESC1-4-class certificate-template misconfiguration (enrollee-supplied
+	// subject + authentication EKU + low-privileged enroll, Any-Purpose/no
+	// EKU, enrollment-agent EKU, or a template DACL writable by a non-tier-0
+	// principal) readable from the AD Configuration partition is now KNOWN,
+	// not exercised. Deliberately distinct from CapControlledAccount and
+	// CapTemplateControlled -- auditing that a template is misconfigured is
+	// not the same as having requested a certificate or taken over a
+	// template. Scoped to the LDAP-readable template surface (ESC1-4); the
+	// CA-host-level flags (ESC6) and web-enrollment reach (ESC8) are out of
+	// a Configuration-partition read's scope (added for ADCSCatalog's
+	// read-only exposure-check primitive).
+	CapADCSTemplateExposureKnown CapabilityKind = "ADCS_TEMPLATE_EXPOSURE_KNOWN"
+
+	// CapDelegationExposureKnown is a DISCOVERY-type capability: the presence
+	// of a Kerberos delegation misconfiguration (an account trusted for
+	// unconstrained delegation that is not a Domain Controller, or a
+	// constrained-delegation / resource-based-constrained-delegation
+	// configuration) readable from the directory is now KNOWN, not exercised.
+	// Deliberately distinct from CapTicket -- auditing that a delegation
+	// primitive is exposed is not the same as having coerced an
+	// authentication or forged a ticket through it (added for
+	// DelegationCatalog's read-only exposure-check primitive).
+	CapDelegationExposureKnown CapabilityKind = "DELEGATION_EXPOSURE_KNOWN"
+
+	// CapTrustExposureKnown is a DISCOVERY-type capability: the presence of a
+	// trust/SID-history abuse condition (a cross-forest trust with SID
+	// filtering disabled, or accounts carrying a populated sIDHistory)
+	// readable from the directory is now KNOWN, not exercised. Deliberately
+	// distinct from CapTicket -- auditing that the condition is exposed is
+	// not the same as having forged an inter-realm ticket through it (added
+	// for TrustAbuseCatalog's read-only exposure-check primitive).
+	CapTrustExposureKnown CapabilityKind = "TRUST_EXPOSURE_KNOWN"
+
+	// CapGPOExposureKnown is a DISCOVERY-type capability: the presence of a
+	// Group Policy object that is writable by a non-tier-0 principal AND
+	// linked to a populated scope, readable from the directory, is now
+	// KNOWN, not exercised. Deliberately distinct from CapLocalAdmin --
+	// auditing that a writable linked GPO is exposed is not the same as
+	// having pushed policy through it to gain code execution (added for
+	// GPOAbuseCatalog's read-only exposure-check primitive).
+	CapGPOExposureKnown CapabilityKind = "GPO_EXPOSURE_KNOWN"
 )
 
 // RiskClass is structural metadata only: a 3-value tier matching

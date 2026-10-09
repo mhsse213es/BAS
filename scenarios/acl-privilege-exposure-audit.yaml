@@ -1,0 +1,112 @@
+id: acl-privilege-exposure-audit
+name: ACL Privilege Exposure Audit
+description: >
+  Single-stage, read-only Active Directory configuration audit: reads the
+  access-control lists of privileged objects (the Domain Admins group, the
+  domain head object, and AdminSDHolder) and reports any takeover-enabling
+  right -- GenericAll, GenericWrite, WriteDacl, WriteOwner, WriteProperty,
+  ForceChangePassword (via the reset-password extended right), AddMember
+  (self-membership / member writes), or AllExtendedRights -- granted to a
+  principal that is not a built-in tier-0 trustee (T1069).
+
+  SAFETY: This step only READS object security descriptors via .NET
+  DirectoryServices. It NEVER modifies a DACL, resets a password, takes
+  ownership, or changes group membership. It proves only whether a
+  dangerous right is EXPOSED, not that it was ever used. On a non-domain
+  host it returns a clean SKIP.
+  PRODUCTION-SAFE: runs in telemetry mode. Windows domain members only.
+author: Audspect Research
+executable: true
+local_check: false
+supported_os: [windows]
+tags:
+  - acl
+  - active-directory
+  - privilege-escalation
+  - permission-discovery
+  - t1069
+  - mitre
+mitre_phases:
+  - discovery
+  - privilege-escalation
+
+live_policy:
+  block_on_domain_controller: false
+  require_dc_reachable: true
+  max_spray_attempts: 0
+  spray_account_allowlist: []
+  execution_window: ""
+
+steps:
+
+  # ---------------------------------------------------------------------------
+  # Stage 1 — Privileged-Object DACL Exposure Audit (T1069)
+  # ---------------------------------------------------------------------------
+  - name: "ACL Stage 1 — Privileged-Object DACL Exposure Audit (T1069)"
+    technique_id: T1069
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 45
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Reads the security descriptors of the Domain Admins group, the domain head object, and AdminSDHolder via System.DirectoryServices (read-only) and reports takeover-enabling rights held by non-tier-0 principals. Never modifies a DACL, resets a password, takes ownership, or changes group membership. Generates LDAP security-descriptor reads against the DC."
+    telemetry:
+      - "DC: access-control read of privileged objects' security descriptors (nTSecurityDescriptor) — not separately audited by default"
+      - "Sysmon EID 1: powershell.exe reading object ACLs via DirectoryServices"
+    detection:
+      - "SIEM: a non-tier-0 principal holds a takeover-enabling right (GenericAll/GenericWrite/WriteDacl/WriteOwner/ForceChangePassword/AddMember/AddSelf/AllExtendedRights) over a privileged object — ACL exposure IOC"
+      - "SIEM: a security-descriptor read of privileged objects from a workstation — ACL reconnaissance IOC"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $findings = @()
+      try {
+        $rootDSE = [ADSI]"LDAP://RootDSE"
+        $domainDN = $rootDSE.defaultNamingContext
+        if (-not $domainDN) { throw "no domain" }
+        # Well-known tier-0 trustees that are EXPECTED to hold these rights.
+        $tier0 = @(
+          'S-1-5-18','S-1-5-32-544','S-1-5-9',
+          '*-512','*-516','*-519','*-518','*-521','*-498','*-500'
+        )
+        function Is-Tier0([string]$sid) {
+          foreach ($t in $tier0) { if ($sid -like $t) { return $true } }
+          return $false
+        }
+        # Dangerous generic/standard right bits (takeover-enabling).
+        $dangerous = [System.DirectoryServices.ActiveDirectoryRights]'GenericAll,GenericWrite,WriteDacl,WriteOwner,WriteProperty'
+        # Extended-right GUIDs: reset password + the membership-related rights.
+        $resetPwd  = [guid]'00299570-246d-11d0-a768-00aa006e0529'
+        $targets = @()
+        $targets += "LDAP://CN=Domain Admins,CN=Users,$domainDN"
+        $targets += "LDAP://$domainDN"
+        $targets += "LDAP://CN=AdminSDHolder,CN=System,$domainDN"
+        foreach ($path in $targets) {
+          $entry = New-Object System.DirectoryServices.DirectoryEntry($path)
+          if (-not $entry.Name) { continue }
+          $rules = $entry.ObjectSecurity.GetAccessRules($true, $true, [System.Security.Principal.SecurityIdentifier])
+          foreach ($r in $rules) {
+            if ($r.AccessControlType -ne [System.Security.AccessControl.AccessControlType]::Allow) { continue }
+            $sid = $r.IdentityReference.Value
+            if (Is-Tier0 $sid) { continue }
+            $hit = $false
+            if (($r.ActiveDirectoryRights -band $dangerous) -ne 0) { $hit = $true }
+            if (($r.ActiveDirectoryRights -band [System.DirectoryServices.ActiveDirectoryRights]::ExtendedRight) -ne 0 -and ($r.ObjectType -eq $resetPwd -or $r.ObjectType -eq [guid]::Empty)) { $hit = $true }
+            if ($hit) { $findings += "$sid on $($entry.Name): $($r.ActiveDirectoryRights)" }
+          }
+        }
+        $count = $findings.Count
+      } catch {
+        $count = -1
+      }
+      if ($count -lt 0) {
+        Write-Output "SKIP: ACL exposure audit unavailable — host is not domain-joined or the DC is unreachable. [BAS-SIM-ACL-S1]"
+      } elseif ($count -eq 0) {
+        Write-Output "PASS: no non-tier-0 principal holds a takeover-enabling right over the Domain Admins group, the domain head, or AdminSDHolder — no ACL-based privilege-escalation path exposed from this context. [BAS-SIM-ACL-S1]"
+      } else {
+        Write-Output "EXEC T1069: found $count non-tier-0 principal(s) holding takeover-enabling rights over privileged objects. Reads DACLs only — this is a detection-and-exposure probe, it exercises none of the rights. [BAS-SIM-ACL-S1]"
+        Write-Output "FAIL: a non-tier-0 principal holds a right (GenericAll/GenericWrite/WriteDacl/WriteOwner/ForceChangePassword/AddMember/AllExtendedRights) that permits takeover of a privileged object, enabling domain privilege escalation. Review and remove the unexpected grant(s), restrict privileged-object DACLs to tier-0 trustees, and alert on Directory Service Changes (5136) to these objects."
+      }
+    cleanup: ""

@@ -32,8 +32,15 @@ func TestSimulate_CrossForestTrustReachableOnlyWhenSIDFilterDisabled(t *testing.
 }
 
 func TestTrustEntries_GroundedAndHonest(t *testing.T) {
-	if len(TrustEntries()) != len(adprimitive.TrustAbuseCatalog) {
-		t.Fatalf("TrustEntries must cover every trust-abuse catalog primitive")
+	// Excludes trust-sid-history-exposure-check (read-only discovery
+	// primitive with its own real scenario, tracked via realScenarioEvidenceByID).
+	if len(TrustEntries()) != len(adprimitive.TrustAbuseCatalog)-1 {
+		t.Fatalf("TrustEntries must cover every trust-abuse catalog primitive except the exposure-check, got %d of %d", len(TrustEntries()), len(adprimitive.TrustAbuseCatalog))
+	}
+	for _, e := range TrustEntries() {
+		if e.PrimitiveID == "trust-sid-history-exposure-check" {
+			t.Fatal("trust-sid-history-exposure-check must NOT appear as a gap-matrix Entry")
+		}
 	}
 	for _, e := range TrustEntries() {
 		if e.CurrentValidation != LevelModelSimulated {

@@ -186,11 +186,27 @@ func TestSimulate_ResultIsAlwaysModelSimulated(t *testing.T) {
 // --- #2/#3 code-grounded matrix + honest validation levels ---
 
 func TestEntries_GroundedInRealCatalog(t *testing.T) {
-	if len(ADCSEntries()) != len(adprimitive.ADCSCatalog) {
-		t.Fatalf("ADCSEntries must cover every ADCS catalog primitive")
+	// ADCSEntries covers the six ESC ABUSE primitives but deliberately
+	// excludes adcs-esc-exposure-check (a read-only discovery primitive with
+	// its own real scenario, tracked via realScenarioEvidenceByID).
+	if len(ADCSEntries()) != len(adprimitive.ADCSCatalog)-1 {
+		t.Fatalf("ADCSEntries must cover every ADCS catalog primitive except the exposure-check, got %d of %d", len(ADCSEntries()), len(adprimitive.ADCSCatalog))
 	}
-	if len(ACLEntries()) != len(adprimitive.ACLAbuseCatalog) {
-		t.Fatalf("ACLEntries must cover every ACL-abuse catalog primitive")
+	for _, e := range ADCSEntries() {
+		if e.PrimitiveID == "adcs-esc-exposure-check" {
+			t.Fatal("adcs-esc-exposure-check must NOT appear as a gap-matrix Entry")
+		}
+	}
+	// ACLEntries covers the four ACL-ABUSE primitives but deliberately
+	// excludes acl-privilege-exposure-check (a read-only discovery primitive
+	// with its own real scenario, tracked via realScenarioEvidenceByID).
+	if len(ACLEntries()) != len(adprimitive.ACLAbuseCatalog)-1 {
+		t.Fatalf("ACLEntries must cover every ACL-abuse catalog primitive except the exposure-check, got %d of %d", len(ACLEntries()), len(adprimitive.ACLAbuseCatalog))
+	}
+	for _, e := range ACLEntries() {
+		if e.PrimitiveID == "acl-privilege-exposure-check" {
+			t.Fatal("acl-privilege-exposure-check must NOT appear as a gap-matrix Entry")
+		}
 	}
 	byID := map[string]adprimitive.Primitive{}
 	for _, p := range append(append([]adprimitive.Primitive{}, adprimitive.ADCSCatalog...), adprimitive.ACLAbuseCatalog...) {
@@ -302,6 +318,22 @@ func TestDCSyncEntry_HasReusableContentButStaysModelSimulated(t *testing.T) {
 
 // --- #2 aggregate matrix is grounded + honest across every catalog ---
 
+// isExposureCheckPrimitive reports whether an ID is one of the read-only
+// discovery exposure-checks that are deliberately NOT gap-matrix entries --
+// each has its own real committed scenario, tracked via realScenarioEvidenceByID.
+func isExposureCheckPrimitive(id string) bool {
+	switch id {
+	case "dcsync-replication-right-exposure-check",
+		"acl-privilege-exposure-check",
+		"adcs-esc-exposure-check",
+		"kerberos-delegation-exposure-check",
+		"trust-sid-history-exposure-check",
+		"gpo-abuse-exposure-check":
+		return true
+	}
+	return false
+}
+
 func TestAllEntries_GroundedAndHonest(t *testing.T) {
 	byID := map[string]adprimitive.Primitive{}
 	for _, c := range [][]adprimitive.Primitive{
@@ -309,6 +341,13 @@ func TestAllEntries_GroundedAndHonest(t *testing.T) {
 		adprimitive.DelegationCatalog, adprimitive.TrustAbuseCatalog, adprimitive.GPOAbuseCatalog,
 	} {
 		for _, p := range c {
+			if isExposureCheckPrimitive(p.ID) {
+				// Deliberately NOT gap-matrix entries: each has its own real
+				// committed scenario (ContentState + CapabilityState's
+				// realScenarioEvidenceByID instead), the same category as the
+				// Kerberoasting baseline primitives.
+				continue
+			}
 			byID[p.ID] = p
 		}
 	}

@@ -138,11 +138,21 @@ var adcsTelemetry = map[string][]string{
 	"adcs-esc8": {"IIS/certsrv web-enrollment access logs", "AD CS CA issuance audit (events 4886/4887)", "authentication-coercion network signatures (e.g. PetitPotam/EfsRpc)"},
 }
 
-// ADCSEntries returns the coverage-matrix rows for ADCS ESC1-4, iterating the
-// real adprimitive.ADCSCatalog so postconditions and IDs cannot drift from it.
+// ADCSEntries returns the coverage-matrix rows for the six ESC ABUSE
+// primitives (ESC1-4, ESC6, ESC8), iterating the real adprimitive.ADCSCatalog
+// so postconditions and IDs cannot drift from it.
+//
+// Deliberately skips adcs-esc-exposure-check: that read-only discovery
+// primitive has its own real committed scenario and is tracked the same way
+// the Kerberoasting baseline and the DCSync/ACL exposure-checks are
+// (ContentState + CapabilityState's realScenarioEvidenceByID), never as a
+// gap Entry here.
 func ADCSEntries() []Entry {
 	out := make([]Entry, 0, len(adprimitive.ADCSCatalog))
 	for _, p := range adprimitive.ADCSCatalog {
+		if p.ID == "adcs-esc-exposure-check" {
+			continue
+		}
 		out = append(out, Entry{
 			PrimitiveID:            p.ID,
 			TechniqueID:            p.TechniqueID,
@@ -187,12 +197,21 @@ var aclTelemetry = map[string][]string{
 	"acl-addself-privileged-group":   {"Security event log: security-enabled group member added (4728/4732/4756)"},
 }
 
-// ACLEntries returns the coverage-matrix rows for the ACL-abuse catalog
-// (ForceChangePassword, GenericAll, AddMember, AddSelf), iterating the real
-// adprimitive.ACLAbuseCatalog so IDs and postconditions cannot drift.
+// ACLEntries returns the coverage-matrix rows for the four ACL-ABUSE
+// primitives (ForceChangePassword, GenericAll, AddMember, AddSelf),
+// iterating the real adprimitive.ACLAbuseCatalog so IDs and postconditions
+// cannot drift.
+//
+// Deliberately skips acl-privilege-exposure-check: that read-only discovery
+// primitive has its own real committed scenario and is tracked the same way
+// the Kerberoasting baseline and the DCSync exposure-check are (ContentState
+// + CapabilityState's realScenarioEvidenceByID), never as a gap Entry here.
 func ACLEntries() []Entry {
 	out := make([]Entry, 0, len(adprimitive.ACLAbuseCatalog))
 	for _, p := range adprimitive.ACLAbuseCatalog {
+		if p.ID == "acl-privilege-exposure-check" {
+			continue
+		}
 		out = append(out, Entry{
 			PrimitiveID:            p.ID,
 			TechniqueID:            p.TechniqueID,
@@ -251,16 +270,26 @@ func RBCDEntries() []Entry {
 	return out
 }
 
-// DCSyncEntries returns the coverage-matrix row(s) for DCSync. DCSync is the one
+// DCSyncEntries returns the coverage-matrix row for the dcsync primitive only
+// (the real-replication capability, DOMAIN_CREDENTIAL_MATERIAL). It is the one
 // gap capability with genuinely REUSABLE executable content -- the stock
 // redcanaryco Atomic Red Team atomic for T1003.006 -- so its ExecutionMethod is
 // art-atomic, not a synthetic predicate. Its validation level nonetheless stays
 // LevelModelSimulated: reusable content is not evidence that it executed and
 // produced the expected outcome against a real domain (requirement #5).
+//
+// Deliberately scoped to "dcsync" alone, NOT the whole DCSyncCatalog: the
+// catalog's second primitive, dcsync-replication-right-exposure-check, has a
+// REAL committed scenario of its own and none of this entry's art-atomic/
+// replication-evidence shape applies to it -- it is tracked the same way the
+// Kerberoasting baseline primitives are (via ContentState + CapabilityState's
+// curated evidence, not a gap Entry here), never through this function.
 func DCSyncEntries() []Entry {
-	out := make([]Entry, 0, len(adprimitive.DCSyncCatalog))
 	for _, p := range adprimitive.DCSyncCatalog {
-		out = append(out, Entry{
+		if p.ID != "dcsync" {
+			continue
+		}
+		return []Entry{{
 			PrimitiveID:            p.ID,
 			TechniqueID:            p.TechniqueID,
 			RequiredEnvToExecute:   EnvDomainController, // DCSync replicates from a real DC
@@ -271,9 +300,9 @@ func DCSyncEntries() []Entry {
 			TelemetrySources:       []string{"Directory Service Access auditing (4662) with the DS-Replication-Get-Changes / -All extended-right GUIDs", "network: DRSUAPI DRSGetNCChanges from a non-DC host"},
 			Cleanup:                []string{"none required to undo (read-only replication); remove any ACL grant made to enable it"},
 			CurrentValidation:      LevelModelSimulated,
-		})
+		}}
 	}
-	return out
+	return nil
 }
 
 var delegationReuse = map[string]string{
@@ -302,6 +331,9 @@ var delegationTelemetry = map[string][]string{
 func DelegationEntries() []Entry {
 	out := make([]Entry, 0, len(adprimitive.DelegationCatalog))
 	for _, p := range adprimitive.DelegationCatalog {
+		if p.ID == "kerberos-delegation-exposure-check" {
+			continue // read-only discovery primitive, tracked via realScenarioEvidenceByID
+		}
 		out = append(out, Entry{
 			PrimitiveID:            p.ID,
 			TechniqueID:            p.TechniqueID,
@@ -344,6 +376,9 @@ var trustTelemetry = map[string][]string{
 func TrustEntries() []Entry {
 	out := make([]Entry, 0, len(adprimitive.TrustAbuseCatalog))
 	for _, p := range adprimitive.TrustAbuseCatalog {
+		if p.ID == "trust-sid-history-exposure-check" {
+			continue // read-only discovery primitive, tracked via realScenarioEvidenceByID
+		}
 		out = append(out, Entry{
 			PrimitiveID:            p.ID,
 			TechniqueID:            p.TechniqueID,
