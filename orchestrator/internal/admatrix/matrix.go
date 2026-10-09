@@ -183,3 +183,104 @@ func ACLEntries() []Entry {
 	}
 	return out
 }
+
+var rbcdReuse = map[string]string{
+	"rbcd-configure":   "adlab EnvResolver(acl_right_held:GenericWrite) + MachineAccountQuota foothold",
+	"rbcd-impersonate": "adchain capability-chain from CapRBCDConfigured (S4U2Self+S4U2Proxy)",
+}
+
+var rbcdEvidence = map[string][]string{
+	"rbcd-configure":   {"msDS-AllowedToActOnBehalfOfOtherIdentity written on the target computer object", "attacker-controlled principal named in the delegation attribute"},
+	"rbcd-impersonate": {"S4U2Self/S4U2Proxy service-ticket request (event 4769) impersonating a privileged user", "successful access to the target service as the impersonated principal"},
+}
+
+var rbcdCleanup = map[string][]string{
+	"rbcd-configure":   {"clear msDS-AllowedToActOnBehalfOfOtherIdentity on the target", "remove any attacker-created computer account"},
+	"rbcd-impersonate": {"purge forged/obtained service tickets"},
+}
+
+// RBCDEntries returns the coverage-matrix rows for Resource-Based Constrained
+// Delegation (configure -> impersonate), iterating the real
+// adprimitive.RBCDCatalog so IDs and postconditions cannot drift.
+func RBCDEntries() []Entry {
+	out := make([]Entry, 0, len(adprimitive.RBCDCatalog))
+	for _, p := range adprimitive.RBCDCatalog {
+		out = append(out, Entry{
+			PrimitiveID:            p.ID,
+			TechniqueID:            p.TechniqueID,
+			RequiredEnvToExecute:   EnvDomainController, // RBCD abuse needs a real domain
+			ExecutionMethod:        "synthetic-predicate",
+			ReuseSource:            rbcdReuse[p.ID],
+			ExpectedPostconditions: p.Postconditions,
+			EvidenceRequirements:   rbcdEvidence[p.ID],
+			Cleanup:                rbcdCleanup[p.ID],
+			CurrentValidation:      LevelModelSimulated,
+		})
+	}
+	return out
+}
+
+// DCSyncEntries returns the coverage-matrix row(s) for DCSync. DCSync is the one
+// gap capability with genuinely REUSABLE executable content -- the stock
+// redcanaryco Atomic Red Team atomic for T1003.006 -- so its ExecutionMethod is
+// art-atomic, not a synthetic predicate. Its validation level nonetheless stays
+// LevelModelSimulated: reusable content is not evidence that it executed and
+// produced the expected outcome against a real domain (requirement #5).
+func DCSyncEntries() []Entry {
+	out := make([]Entry, 0, len(adprimitive.DCSyncCatalog))
+	for _, p := range adprimitive.DCSyncCatalog {
+		out = append(out, Entry{
+			PrimitiveID:            p.ID,
+			TechniqueID:            p.TechniqueID,
+			RequiredEnvToExecute:   EnvDomainController, // DCSync replicates from a real DC
+			ExecutionMethod:        "art-atomic",
+			ReuseSource:            "art:T1003.006 (redcanaryco atomic)",
+			ExpectedPostconditions: p.Postconditions,
+			EvidenceRequirements:   []string{"directory-replication request from a non-DC principal (event 4662 with the replication GUIDs)", "secrets (krbtgt/other hashes) returned by the replication"},
+			Cleanup:                []string{"none required to undo (read-only replication); remove any ACL grant made to enable it"},
+			CurrentValidation:      LevelModelSimulated,
+		})
+	}
+	return out
+}
+
+// AllEntries is the full AD coverage matrix across every gap catalog, in a
+// deterministic order (ADCS, ACL, RBCD, DCSync).
+func AllEntries() []Entry {
+	var out []Entry
+	out = append(out, ADCSEntries()...)
+	out = append(out, ACLEntries()...)
+	out = append(out, RBCDEntries()...)
+	out = append(out, DCSyncEntries()...)
+	return out
+}
+
+// Summary is a measurable rollup of a set of matrix entries.
+type Summary struct {
+	Total               int
+	ByValidationLevel   map[ValidationLevel]int
+	WithReusableContent int // entries backed by reusable EXECUTABLE content (art-atomic / caldera-ability)
+	RequiringDC         int
+	RequiringHost       int
+}
+
+// Summarize computes coverage counts. "Reusable content" means a real,
+// executable asset exists (an ART atomic or a Caldera ability) -- a synthetic
+// predicate reuses a model check, not executable content, so it does not count.
+func Summarize(entries []Entry) Summary {
+	s := Summary{Total: len(entries), ByValidationLevel: map[ValidationLevel]int{}}
+	for _, e := range entries {
+		s.ByValidationLevel[e.CurrentValidation]++
+		switch e.ExecutionMethod {
+		case "art-atomic", "caldera-ability":
+			s.WithReusableContent++
+		}
+		switch e.RequiredEnvToExecute {
+		case EnvDomainController:
+			s.RequiringDC++
+		case EnvDomainJoinedHost:
+			s.RequiringHost++
+		}
+	}
+	return s
+}

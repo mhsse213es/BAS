@@ -228,8 +228,11 @@ func TestDCSyncCatalog_RequiresAllExtendedRightsAndHasTechniqueID(t *testing.T) 
 	if p.TechniqueID != "T1003.006" {
 		t.Fatalf("expected TechniqueID T1003.006, got %q", p.TechniqueID)
 	}
-	if !p.Prerequisites.Conditions["acl_right_held:AllExtendedRights"] {
-		t.Fatalf("expected dcsync to require acl_right_held:AllExtendedRights, got %+v", p.Prerequisites.Conditions)
+	// Canonical kebab-case value, matching adenv.ACLAllExtendedRights /
+	// attackpath.EdgeAllExtendedRights / the sharphound mapping -- so DCSync
+	// resolves against an env derived from real BloodHound data.
+	if !p.Prerequisites.Conditions["acl_right_held:all-extended-rights"] {
+		t.Fatalf("expected dcsync to require acl_right_held:all-extended-rights, got %+v", p.Prerequisites.Conditions)
 	}
 	// Reuses the pre-existing constant from AD-M04's original schema
 	// (AD.txt's own "After DCSync: DOMAIN_CREDENTIAL_MATERIAL" example),

@@ -172,7 +172,7 @@ var DCSyncCatalog = []Primitive{
 		Prerequisites: Prerequisites{
 			DomainJoined: true,
 			Capabilities: []Capability{{Kind: CapDomainUser}},
-			Conditions:   map[string]bool{"acl_right_held:AllExtendedRights": true},
+			Conditions:   map[string]bool{"acl_right_held:all-extended-rights": true},
 		},
 		Postconditions: []Capability{{Kind: CapDomainCredentialMaterial}},
 		RiskClass:      RiskPotentiallyDestructive,
