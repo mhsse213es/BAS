@@ -65,6 +65,12 @@ type Trust struct {
 	Direction    TrustDirection `json:"direction"`
 	Type         TrustType      `json:"type"`
 	Transitive   bool           `json:"transitive"`
+
+	// SIDFilteringDisabled records that SID filtering (quarantine) has been
+	// turned off on a cross-forest/external trust, which re-enables SID-history
+	// injection across it. The zero value is the safe default (filtering on);
+	// intra-forest parent-child trusts never apply SID filtering regardless.
+	SIDFilteringDisabled bool `json:"sidFilteringDisabled"`
 }
 
 // Identity is the user/group/account layer.

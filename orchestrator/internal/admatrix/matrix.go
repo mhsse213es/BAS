@@ -318,8 +318,50 @@ func DelegationEntries() []Entry {
 	return out
 }
 
+var trustReuse = map[string]string{
+	"trust-intra-forest-sid-history": "adenv.IsIntraForestTrustAbusable + adlab EnvResolver(intra_forest_trust_abusable)",
+	"trust-cross-forest-sid-history": "adenv.IsCrossForestSIDAbusable + adlab EnvResolver(cross_forest_trust_sid_filter_disabled)",
+}
+
+var trustEvidence = map[string][]string{
+	"trust-intra-forest-sid-history": {"an inter-realm TGT forged with an extra SID (forest-root Enterprise Admins) presented across the trust", "access to the forest-root domain as a principal never granted it"},
+	"trust-cross-forest-sid-history": {"an inter-realm TGT carrying a cross-forest SID that SID filtering should have stripped", "access in the trusting forest as a filtered SID"},
+}
+
+var trustCleanup = map[string][]string{
+	"trust-intra-forest-sid-history": {"rotate the compromised domain's krbtgt twice", "invalidate forged tickets"},
+	"trust-cross-forest-sid-history": {"re-enable SID filtering/quarantine on the trust (netdom trust /quarantine:yes)", "invalidate forged tickets"},
+}
+
+var trustTelemetry = map[string][]string{
+	"trust-intra-forest-sid-history": {"Kerberos TGS referrals carrying unexpected SID history (event 4769)", "krbtgt usage anomalies / golden-ticket indicators", "cross-domain authentications from a newly-privileged SID"},
+	"trust-cross-forest-sid-history": {"trust SID-filtering/quarantine configuration state (netdom trust)", "Kerberos cross-forest TGS with unexpected SIDs (event 4769)", "authentications from foreign-forest SIDs that should be filtered"},
+}
+
+// TrustEntries returns the coverage-matrix rows for AD trust abuse (SID-history
+// injection intra- and cross-forest), iterating adprimitive.TrustAbuseCatalog so
+// IDs and postconditions cannot drift.
+func TrustEntries() []Entry {
+	out := make([]Entry, 0, len(adprimitive.TrustAbuseCatalog))
+	for _, p := range adprimitive.TrustAbuseCatalog {
+		out = append(out, Entry{
+			PrimitiveID:            p.ID,
+			TechniqueID:            p.TechniqueID,
+			RequiredEnvToExecute:   EnvDomainController, // trust abuse crosses real domains
+			ExecutionMethod:        "synthetic-predicate",
+			ReuseSource:            trustReuse[p.ID],
+			ExpectedPostconditions: p.Postconditions,
+			EvidenceRequirements:   trustEvidence[p.ID],
+			TelemetrySources:       trustTelemetry[p.ID],
+			Cleanup:                trustCleanup[p.ID],
+			CurrentValidation:      LevelModelSimulated,
+		})
+	}
+	return out
+}
+
 // AllEntries is the full AD coverage matrix across every gap catalog, in a
-// deterministic order (ADCS, ACL, RBCD, DCSync, delegation).
+// deterministic order (ADCS, ACL, RBCD, DCSync, delegation, trust).
 func AllEntries() []Entry {
 	var out []Entry
 	out = append(out, ADCSEntries()...)
@@ -327,6 +369,7 @@ func AllEntries() []Entry {
 	out = append(out, RBCDEntries()...)
 	out = append(out, DCSyncEntries()...)
 	out = append(out, DelegationEntries()...)
+	out = append(out, TrustEntries()...)
 	return out
 }
 

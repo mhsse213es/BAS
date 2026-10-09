@@ -17,9 +17,9 @@ func TestAllCatalogs_EveryPrimitiveHasAValidRiskClass(t *testing.T) {
 		RiskPotentiallyDestructive: true,
 		RiskDestructive:            true,
 	}
-	all := append(append(append(append(append(append([]Primitive{}, KerberoastingCatalog...), ACLAbuseCatalog...), RBCDCatalog...), DCSyncCatalog...), ADCSCatalog...), DelegationCatalog...)
-	if len(all) != 18 {
-		t.Fatalf("expected 18 total primitives across all catalogs, got %d", len(all))
+	all := append(append(append(append(append(append(append([]Primitive{}, KerberoastingCatalog...), ACLAbuseCatalog...), RBCDCatalog...), DCSyncCatalog...), ADCSCatalog...), DelegationCatalog...), TrustAbuseCatalog...)
+	if len(all) != 20 {
+		t.Fatalf("expected 20 total primitives across all catalogs, got %d", len(all))
 	}
 	for _, p := range all {
 		if !valid[p.RiskClass] {
@@ -249,6 +249,33 @@ func findInADCSCatalog(id string) (Primitive, bool) {
 		}
 	}
 	return Primitive{}, false
+}
+
+func TestTrustAbuseCatalog_IntraAndCrossForest(t *testing.T) {
+	if len(TrustAbuseCatalog) != 2 {
+		t.Fatalf("expected exactly 2 trust-abuse primitives, got %d", len(TrustAbuseCatalog))
+	}
+	seenCond := map[string]bool{}
+	for _, p := range TrustAbuseCatalog {
+		if p.TechniqueID != "T1134.005" {
+			t.Errorf("%s: expected TechniqueID T1134.005, got %q", p.ID, p.TechniqueID)
+		}
+		if len(p.Prerequisites.Conditions) != 1 {
+			t.Fatalf("%s: expected exactly 1 condition, got %+v", p.ID, p.Prerequisites.Conditions)
+		}
+		for k := range p.Prerequisites.Conditions {
+			if seenCond[k] {
+				t.Fatalf("condition key %q reused across trust-abuse primitives", k)
+			}
+			seenCond[k] = true
+		}
+		if len(p.Postconditions) != 1 || p.Postconditions[0].Kind != CapTicket {
+			t.Fatalf("%s: expected postcondition CapTicket, got %+v", p.ID, p.Postconditions)
+		}
+	}
+	if !seenCond["intra_forest_trust_abusable"] || !seenCond["cross_forest_trust_sid_filter_disabled"] {
+		t.Fatalf("expected both trust condition keys, got %+v", seenCond)
+	}
 }
 
 func TestDelegationCatalog_UnconstrainedAndConstrained(t *testing.T) {

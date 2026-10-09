@@ -306,7 +306,7 @@ func TestAllEntries_GroundedAndHonest(t *testing.T) {
 	byID := map[string]adprimitive.Primitive{}
 	for _, c := range [][]adprimitive.Primitive{
 		adprimitive.ADCSCatalog, adprimitive.ACLAbuseCatalog, adprimitive.RBCDCatalog, adprimitive.DCSyncCatalog,
-		adprimitive.DelegationCatalog,
+		adprimitive.DelegationCatalog, adprimitive.TrustAbuseCatalog,
 	} {
 		for _, p := range c {
 			byID[p.ID] = p

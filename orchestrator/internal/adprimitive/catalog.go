@@ -182,6 +182,33 @@ var DelegationCatalog = []Primitive{
 	},
 }
 
+// TrustAbuseCatalog covers SID-history injection across AD trusts (T1134.005):
+// intra-forest parent-child trusts (no SID filtering) and cross-forest trusts
+// whose SID filtering has been disabled. Both model an attacker who already owns
+// one domain's credential material forging an inter-realm TGT into the other.
+var TrustAbuseCatalog = []Primitive{
+	{
+		ID: "trust-intra-forest-sid-history", Name: "Intra-Forest Trust Abuse (SID History to Forest Root)", TechniqueID: "T1134.005",
+		Prerequisites: Prerequisites{
+			DomainJoined: true,
+			Capabilities: []Capability{{Kind: CapDomainCredentialMaterial}},
+			Conditions:   map[string]bool{"intra_forest_trust_abusable": true},
+		},
+		Postconditions: []Capability{{Kind: CapTicket}},
+		RiskClass:      RiskPotentiallyDestructive,
+	},
+	{
+		ID: "trust-cross-forest-sid-history", Name: "Cross-Forest Trust Abuse (SID Filtering Disabled)", TechniqueID: "T1134.005",
+		Prerequisites: Prerequisites{
+			DomainJoined: true,
+			Capabilities: []Capability{{Kind: CapDomainCredentialMaterial}},
+			Conditions:   map[string]bool{"cross_forest_trust_sid_filter_disabled": true},
+		},
+		Postconditions: []Capability{{Kind: CapTicket}},
+		RiskClass:      RiskPotentiallyDestructive,
+	},
+}
+
 // DCSyncCatalog defines the single DCSync primitive. DS-Replication-Get-
 // Changes and DS-Replication-Get-Changes-All (the 2 extended rights
 // DCSync requires) collapse into attackpath's single AllExtendedRights

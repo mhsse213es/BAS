@@ -55,7 +55,7 @@ func catalogByID() map[string]adprimitive.Primitive {
 	m := map[string]adprimitive.Primitive{}
 	for _, c := range [][]adprimitive.Primitive{
 		adprimitive.ADCSCatalog, adprimitive.ACLAbuseCatalog, adprimitive.RBCDCatalog, adprimitive.DCSyncCatalog,
-		adprimitive.DelegationCatalog,
+		adprimitive.DelegationCatalog, adprimitive.TrustAbuseCatalog,
 	} {
 		for _, p := range c {
 			m[p.ID] = p

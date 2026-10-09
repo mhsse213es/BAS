@@ -75,9 +75,35 @@ func (r *EnvResolver) Resolve(key string) bool {
 		return r.controlsUnconstrainedDelegation()
 	case "controls_constrained_delegation_principal":
 		return r.controlsConstrainedDelegation()
+	case "intra_forest_trust_abusable":
+		return r.hasIntraForestTrustAbuse()
+	case "cross_forest_trust_sid_filter_disabled":
+		return r.hasCrossForestSIDAbuse()
 	default:
 		return false
 	}
+}
+
+// hasIntraForestTrustAbuse is true when the forest contains a parent-child trust,
+// across which SID-history injection needs no disabled protection.
+func (r *EnvResolver) hasIntraForestTrustAbuse() bool {
+	for _, tr := range r.env.Forest.Trusts {
+		if adenv.IsIntraForestTrustAbusable(tr) {
+			return true
+		}
+	}
+	return false
+}
+
+// hasCrossForestSIDAbuse is true when the forest contains a cross-forest/external
+// trust whose SID filtering has been disabled.
+func (r *EnvResolver) hasCrossForestSIDAbuse() bool {
+	for _, tr := range r.env.Forest.Trusts {
+		if adenv.IsCrossForestSIDAbusable(tr) {
+			return true
+		}
+	}
+	return false
 }
 
 // controlsUnconstrainedDelegation is true when the attacker controls a principal
