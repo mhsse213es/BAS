@@ -250,19 +250,26 @@ func interpretCaldera(r ExecResult, combined string) (models.CheckResult, string
 }
 
 // interpretCustom interprets a custom PowerShell check or local posture check.
-// Checks output "PASS: ...", "FAIL: ...", or "SKIP: ..." as the first line.
-// If no structured prefix: exit 0 = pass, non-zero = fail.
+// Looks for a "PASS: ...", "FAIL: ...", or "SKIP: ..." structured verdict line
+// ANYWHERE in the output, not only the first line (found 2026-10-09: ~38
+// builtin scenarios, including scenarios/kerberoasting-ad-drill.yaml, write an
+// informational line -- e.g. "EXEC T1558.003: found 3 kerberoastable
+// accounts" -- before their verdict line; a first-line-only check never saw
+// the verdict and silently scored every one of those findings Pass via the
+// exit-code default below). If no structured prefix is found anywhere: exit 0
+// = pass, non-zero = fail.
 func interpretCustom(r ExecResult, combined string) (models.CheckResult, string) {
 	first := strings.TrimSpace(firstLine(combined))
-	lower := strings.ToLower(first)
 
-	switch {
-	case strings.HasPrefix(lower, "pass:"):
-		return models.ResultPass, stripPrefix(first)
-	case strings.HasPrefix(lower, "fail:"):
-		return models.ResultFail, stripPrefix(first)
-	case strings.HasPrefix(lower, "skip:"):
-		return models.ResultSkipped, stripPrefix(first)
+	if verdict, ok := firstVerdictLine(combined); ok {
+		switch {
+		case strings.HasPrefix(strings.ToLower(verdict), "pass:"):
+			return models.ResultPass, stripPrefix(verdict)
+		case strings.HasPrefix(strings.ToLower(verdict), "fail:"):
+			return models.ResultFail, stripPrefix(verdict)
+		case strings.HasPrefix(strings.ToLower(verdict), "skip:"):
+			return models.ResultSkipped, stripPrefix(verdict)
+		}
 	}
 
 	if r.ExitCode == 0 {
@@ -290,6 +297,24 @@ func firstLine(s string) string {
 		}
 	}
 	return s
+}
+
+// firstVerdictLine scans every non-empty line of s, in order, for Audspect's
+// structured pass:/fail:/skip: verdict prefix and returns the first match. It
+// is deliberately NOT limited to the first line of output -- see
+// interpretCustom's doc comment for why that distinction matters.
+func firstVerdictLine(s string) (string, bool) {
+	for _, l := range strings.Split(s, "\n") {
+		t := strings.TrimSpace(l)
+		if t == "" {
+			continue
+		}
+		lower := strings.ToLower(t)
+		if strings.HasPrefix(lower, "pass:") || strings.HasPrefix(lower, "fail:") || strings.HasPrefix(lower, "skip:") {
+			return t, true
+		}
+	}
+	return "", false
 }
 
 func stripPrefix(s string) string {
