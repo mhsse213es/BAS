@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"audspect/agent/protocol"
 	"audspect/agent/sched"
 )
 
@@ -195,5 +196,87 @@ func TestCanReachDomainController_CompletesWithinItsTimeout(t *testing.T) {
 	if elapsed := time.Since(start); elapsed > bound {
 		t.Errorf("canReachDomainController took %v, want <= %v (dcProbeTimeout %v + hardProbeSlack %v + test margin)",
 			elapsed, bound, dcProbeTimeout, hardProbeSlack)
+	}
+}
+
+// The next two tests close increment 2.2's property-3 gap (cleanup on
+// cancellation): runCleanup has direct unit tests in isolation, but nothing
+// proved cleanup still runs, through the real execStep path, when the main
+// command is killed by an operator cancel or an execute timeout rather than
+// exiting on its own. Both derive the main command's kill from the SAME
+// mechanism agent.go's real cancellation paths use (parentCtx cancellation /
+// the execute-timeout deadline); runCleanup's own context is deliberately
+// independent of parentCtx (executor_windows.go), so cleanup gets its own
+// full window regardless of why the main command died.
+
+// TestExecStepCleanupRunsAfterOperatorCancel proves an operator cancel
+// (parentCtx cancelled while the main command is still running) does not
+// skip the step's cleanup command.
+func TestExecStepCleanupRunsAfterOperatorCancel(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	step := ScenarioStep{
+		TaskID:   "cleanup-cancel",
+		Executor: "powershell",
+		Command:  "Start-Sleep -Seconds 30",
+		Cleanup:  "exit 0",
+		Timeout:  &sched.TimeoutProfile{ExecuteSec: 600, GraceSec: 2},
+	}
+	out := make(chan protocol.ExecResult, 1)
+	go func() { out <- execStep(ctx, step, nil) }()
+
+	// Found while writing this test (2026-10-09): when step.Cleanup is set,
+	// execStep captures a pre-cleanup snapshot (captureSnapshotLite) BEFORE
+	// starting the main command, and that capture alone took >1s on this
+	// host. A short delay here would fire cancel() before cmd.Start() even
+	// runs, hitting the "never started" early-return path instead of
+	// actually killing a running process -- a different, already-correct
+	// case, not the one this test means to exercise. 2s gives Start() room
+	// to be reached first, so cancel() lands on a genuinely running step.
+	time.Sleep(2 * time.Second)
+	cancel() // operator cancel, not a timeout
+
+	select {
+	case r := <-out:
+		if r.TimedOut {
+			t.Fatalf("TimedOut = true, want false -- this was an operator cancel, not an execute-timeout")
+		}
+		if r.CleanupVerdict != "reverted" {
+			t.Fatalf("CleanupVerdict = %q, want %q -- cleanup must still run and succeed after a cancel", r.CleanupVerdict, "reverted")
+		}
+	case <-time.After(15 * time.Second):
+		t.Fatal("execStep did not return within 15s of cancel -- cleanup may be blocking on the cancelled parentCtx instead of its own independent context")
+	}
+}
+
+// TestExecStepCleanupRunsAfterExecuteTimeout proves an execute-timeout kill
+// (the step's own ExecuteSec deadline, not an external cancel) also does not
+// skip the step's cleanup command.
+func TestExecStepCleanupRunsAfterExecuteTimeout(t *testing.T) {
+	step := ScenarioStep{
+		TaskID:   "cleanup-timeout",
+		Executor: "powershell",
+		Command:  "Start-Sleep -Seconds 30",
+		Cleanup:  "exit 0",
+		// ExecuteSec must leave room for step.Cleanup's pre-cleanup snapshot
+		// capture (captureSnapshotLite), which runs BEFORE cmd.Start() and
+		// took >1s on this host -- too tight a deadline fires before the
+		// main command ever starts, hitting the "never started" early-return
+		// path instead of actually timing out a running command.
+		Timeout: &sched.TimeoutProfile{ExecuteSec: 5, GraceSec: 2},
+	}
+
+	out := make(chan protocol.ExecResult, 1)
+	go func() { out <- execStep(context.Background(), step, nil) }()
+
+	select {
+	case r := <-out:
+		if !r.TimedOut {
+			t.Fatalf("TimedOut = false, want true")
+		}
+		if r.CleanupVerdict != "reverted" {
+			t.Fatalf("CleanupVerdict = %q, want %q -- cleanup must still run and succeed after an execute-timeout kill", r.CleanupVerdict, "reverted")
+		}
+	case <-time.After(15 * time.Second):
+		t.Fatal("execStep did not return within 15s of its 1s timeout -- cleanup may be blocking indefinitely")
 	}
 }
