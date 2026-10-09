@@ -107,6 +107,8 @@ var adcsReuse = map[string]string{
 	"adcs-esc2": "adenv.IsESC2Vulnerable + adlab EnvResolver(esc2_vulnerable_template)",
 	"adcs-esc3": "adenv.IsESC3Vulnerable + adlab EnvResolver(esc3_vulnerable_template)",
 	"adcs-esc4": "adenv.HasTemplateWriteAccess + adlab EnvResolver(esc4_template_write_access)",
+	"adcs-esc6": "adenv.IsESC6Vulnerable + adlab EnvResolver(esc6_vulnerable_ca)",
+	"adcs-esc8": "adenv.IsESC8Vulnerable + adlab EnvResolver(esc8_relayable_ca)",
 }
 
 var adcsEvidence = map[string][]string{
@@ -114,6 +116,8 @@ var adcsEvidence = map[string][]string{
 	"adcs-esc2": {"certificate issued from an Any-Purpose template", "certificate used for client authentication as a non-held principal"},
 	"adcs-esc3": {"enrollment-agent certificate issued", "on-behalf-of certificate request succeeded for a target principal"},
 	"adcs-esc4": {"template ACL modification event on the template object", "template reconfigured to an ESC1-equivalent state"},
+	"adcs-esc6": {"certificate issued with an attacker-chosen SAN from a non-SAN template (CA audit 4886/4887)", "authentication as the impersonated principal using that certificate"},
+	"adcs-esc8": {"NTLM authentication relayed to the CA web-enrollment endpoint", "certificate issued for a coerced/relayed principal (CA audit 4886/4887)"},
 }
 
 var adcsCleanup = map[string][]string{
@@ -121,6 +125,8 @@ var adcsCleanup = map[string][]string{
 	"adcs-esc2": {"revoke the issued certificate"},
 	"adcs-esc3": {"revoke the enrollment-agent and on-behalf-of certificates"},
 	"adcs-esc4": {"restore the template's original ACL and configuration"},
+	"adcs-esc6": {"revoke the issued certificate", "clear EDITF_ATTRIBUTESUBJECTALTNAME2 on the CA"},
+	"adcs-esc8": {"revoke the issued certificate", "disable HTTP web enrollment or enforce EPA/HTTPS on the CA"},
 }
 
 var adcsTelemetry = map[string][]string{
@@ -128,6 +134,8 @@ var adcsTelemetry = map[string][]string{
 	"adcs-esc2": {"AD CS CA issuance audit (events 4886/4887)", "Security event log: client-auth logon with the issued certificate"},
 	"adcs-esc3": {"AD CS CA issuance audit (events 4886/4887) for the enrollment-agent and on-behalf-of requests"},
 	"adcs-esc4": {"Directory Service Changes auditing on the template object (event 5136)"},
+	"adcs-esc6": {"AD CS CA issuance audit (events 4886/4887)", "CA policy flag state (certutil -getreg policy\\EditFlags)"},
+	"adcs-esc8": {"IIS/certsrv web-enrollment access logs", "AD CS CA issuance audit (events 4886/4887)", "authentication-coercion network signatures (e.g. PetitPotam/EfsRpc)"},
 }
 
 // ADCSEntries returns the coverage-matrix rows for ADCS ESC1-4, iterating the

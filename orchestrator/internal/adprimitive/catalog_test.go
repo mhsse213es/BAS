@@ -18,8 +18,8 @@ func TestAllCatalogs_EveryPrimitiveHasAValidRiskClass(t *testing.T) {
 		RiskDestructive:            true,
 	}
 	all := append(append(append(append(append([]Primitive{}, KerberoastingCatalog...), ACLAbuseCatalog...), RBCDCatalog...), DCSyncCatalog...), ADCSCatalog...)
-	if len(all) != 14 {
-		t.Fatalf("expected 14 total primitives across all catalogs, got %d", len(all))
+	if len(all) != 16 {
+		t.Fatalf("expected 16 total primitives across all catalogs, got %d", len(all))
 	}
 	for _, p := range all {
 		if !valid[p.RiskClass] {
@@ -252,8 +252,8 @@ func findInADCSCatalog(id string) (Primitive, bool) {
 }
 
 func TestADCSCatalog_FourDistinctPrimitivesShareTechniqueID(t *testing.T) {
-	if len(ADCSCatalog) != 4 {
-		t.Fatalf("expected exactly 4 primitives in ADCSCatalog, got %d", len(ADCSCatalog))
+	if len(ADCSCatalog) != 6 {
+		t.Fatalf("expected exactly 6 primitives in ADCSCatalog (ESC1-4, ESC6, ESC8), got %d", len(ADCSCatalog))
 	}
 	seenConditionKeys := map[string]bool{}
 	for _, p := range ADCSCatalog {

@@ -67,9 +67,51 @@ func (r *EnvResolver) Resolve(key string) bool {
 		return r.hasEnrollableVulnerableTemplate(adenv.IsESC3Vulnerable)
 	case "esc4_template_write_access":
 		return r.hasWritableTemplate()
+	case "esc6_vulnerable_ca":
+		return r.esc6Reachable()
+	case "esc8_relayable_ca":
+		return r.esc8Relayable()
 	default:
 		return false
 	}
+}
+
+func (r *EnvResolver) templateByName(name string) (adenv.CertTemplate, bool) {
+	for _, t := range r.env.PKI.Templates {
+		if t.Name == name {
+			return t, true
+		}
+	}
+	return adenv.CertTemplate{}, false
+}
+
+// esc6Reachable is true when some CA carries the SAN policy flag AND publishes a
+// template the attacker can enroll in that yields a client-auth certificate --
+// enrollment then grants a cert for an arbitrary identity.
+func (r *EnvResolver) esc6Reachable() bool {
+	for _, ca := range r.env.PKI.CAs {
+		if !adenv.IsESC6Vulnerable(ca) {
+			continue
+		}
+		for _, name := range ca.PublishedTemplates {
+			if t, ok := r.templateByName(name); ok && r.canEnroll(t) && adenv.HasClientAuthEKU(t) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// esc8Relayable is true when some CA exposes a web-enrollment endpoint without
+// EPA. ESC8 relays a coerced principal's authentication, so it needs no
+// attacker enrollment right -- only the relayable endpoint.
+func (r *EnvResolver) esc8Relayable() bool {
+	for _, ca := range r.env.PKI.CAs {
+		if adenv.IsESC8Vulnerable(ca) {
+			return true
+		}
+	}
+	return false
 }
 
 func (r *EnvResolver) holdsACLRight(right adenv.ACLRight) bool {

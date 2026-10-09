@@ -110,6 +110,46 @@ func TestSimulate_AddMemberAndAddSelfReachable(t *testing.T) {
 	}
 }
 
+func TestSimulate_ESC6ReachableWithCASanFlag(t *testing.T) {
+	env := adenv.Environment{PKI: adenv.PKI{
+		CAs:       []adenv.CertificateAuthority{{Name: "CA", EditfAttributeSubjectAltName2: true, PublishedTemplates: []string{"User"}}},
+		Templates: []adenv.CertTemplate{{Name: "User", EKUs: []string{"Client Authentication"}, EnrollmentRights: []string{"attacker"}}},
+	}}
+	res := Simulate(adprimitive.ADCSCatalog, env, "attacker", domainUser, adprimitive.Capability{Kind: adprimitive.CapControlledAccount})
+	if !res.Reachable {
+		t.Fatalf("ESC6 must be reachable with the CA SAN flag + enrollable auth template: %+v", res)
+	}
+}
+
+func TestSimulate_ESC6UnreachableWithoutFlag(t *testing.T) {
+	env := adenv.Environment{PKI: adenv.PKI{
+		CAs:       []adenv.CertificateAuthority{{Name: "CA", PublishedTemplates: []string{"User"}}}, // no SAN flag
+		Templates: []adenv.CertTemplate{{Name: "User", EKUs: []string{"Client Authentication"}, EnrollmentRights: []string{"attacker"}}},
+	}}
+	// Target only ESC6's condition by using a template that is NOT ESC1/2/3-vulnerable
+	// (no EnrolleeSuppliesSubject, named client-auth EKU only) and no write access.
+	res := Simulate(adprimitive.ADCSCatalog, env, "attacker", domainUser, adprimitive.Capability{Kind: adprimitive.CapControlledAccount})
+	if res.Reachable {
+		t.Fatalf("ESC6 must NOT be reachable without the CA SAN flag (and no other ESC applies): %+v", res)
+	}
+}
+
+func TestSimulate_ESC8ReachableWhenRelayable(t *testing.T) {
+	env := adenv.Environment{PKI: adenv.PKI{CAs: []adenv.CertificateAuthority{{Name: "CA", WebEnrollmentEnabled: true}}}}
+	res := Simulate(adprimitive.ADCSCatalog, env, "attacker", domainUser, adprimitive.Capability{Kind: adprimitive.CapControlledAccount})
+	if !res.Reachable {
+		t.Fatalf("ESC8 must be reachable for a relayable CA web-enrollment endpoint: %+v", res)
+	}
+}
+
+func TestSimulate_ESC8UnreachableWithEPA(t *testing.T) {
+	env := adenv.Environment{PKI: adenv.PKI{CAs: []adenv.CertificateAuthority{{Name: "CA", WebEnrollmentEnabled: true, RequireEPA: true}}}}
+	res := Simulate(adprimitive.ADCSCatalog, env, "attacker", domainUser, adprimitive.Capability{Kind: adprimitive.CapControlledAccount})
+	if res.Reachable {
+		t.Fatalf("ESC8 must NOT be reachable when EPA is enforced: %+v", res)
+	}
+}
+
 // --- #4 prerequisite failure ---
 
 func TestSimulate_PrerequisiteFailureNotEnrollable(t *testing.T) {

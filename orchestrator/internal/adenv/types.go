@@ -226,6 +226,19 @@ type CertificateAuthority struct {
 	// template's own EnrollmentRights below; both must be held to
 	// successfully request a certificate.
 	EnrollmentRights []string `json:"enrollmentRights,omitempty"`
+
+	// EditfAttributeSubjectAltName2 is the CA policy flag that lets ANY
+	// requester specify an arbitrary Subject Alternative Name on any
+	// issued certificate -- the ESC6 misconfiguration (equivalent to
+	// enrollee-supplied-subject applied CA-wide, regardless of template).
+	EditfAttributeSubjectAltName2 bool `json:"editfAttributeSubjectAltName2"`
+
+	// WebEnrollmentEnabled is true when the CA exposes the HTTP web
+	// enrollment endpoint (certsrv). RequireEPA is true when Extended
+	// Protection for Authentication (channel binding) is enforced on it.
+	// A reachable web-enrollment endpoint without EPA is relayable (ESC8).
+	WebEnrollmentEnabled bool `json:"webEnrollmentEnabled"`
+	RequireEPA           bool `json:"requireEpa"`
 }
 
 // CertTemplate is one certificate template's configuration: the

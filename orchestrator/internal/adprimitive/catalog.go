@@ -230,4 +230,32 @@ var ADCSCatalog = []Primitive{
 		Postconditions: []Capability{{Kind: CapTemplateControlled}},
 		RiskClass:      RiskPotentiallyDestructive,
 	},
+	{
+		// ESC6: the CA's EDITF_ATTRIBUTESUBJECTALTNAME2 flag lets a requester
+		// put an arbitrary SAN on a cert from ANY enrollable auth template --
+		// like ESC1 but a CA-wide misconfiguration, independent of the
+		// template's own EnrolleeSuppliesSubject.
+		ID: "adcs-esc6", Name: "ADCS ESC6: CA SAN Policy Flag (EDITF_ATTRIBUTESUBJECTALTNAME2)", TechniqueID: "T1649",
+		Prerequisites: Prerequisites{
+			DomainJoined: true,
+			Capabilities: []Capability{{Kind: CapDomainUser}},
+			Conditions:   map[string]bool{"esc6_vulnerable_ca": true},
+		},
+		Postconditions: []Capability{{Kind: CapControlledAccount}},
+		RiskClass:      RiskPotentiallyDestructive,
+	},
+	{
+		// ESC8: NTLM relay to the CA's HTTP web-enrollment endpoint. Needs no
+		// attacker enrollment right -- a coerced principal's authentication is
+		// relayed to obtain a cert as that principal. Modeled from a domain
+		// foothold for chain purposes.
+		ID: "adcs-esc8", Name: "ADCS ESC8: NTLM Relay to Web Enrollment", TechniqueID: "T1649",
+		Prerequisites: Prerequisites{
+			DomainJoined: true,
+			Capabilities: []Capability{{Kind: CapDomainUser}},
+			Conditions:   map[string]bool{"esc8_relayable_ca": true},
+		},
+		Postconditions: []Capability{{Kind: CapControlledAccount}},
+		RiskClass:      RiskPotentiallyDestructive,
+	},
 }
