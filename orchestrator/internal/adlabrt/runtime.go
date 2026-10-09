@@ -17,6 +17,10 @@ import (
 	"github.com/audspect/bas/internal/scenario"
 )
 
+// teardownTimeout bounds the independent cleanup context so teardown cannot
+// hang forever yet always runs regardless of the request context's state.
+const teardownTimeout = 2 * time.Minute
+
 // Substrate is the only seam to real infrastructure. Phase A: a fake. Phase B:
 // a disposable-VM adapter (deferred).
 type Substrate interface {
@@ -125,13 +129,17 @@ func (r *Runtime) Validate(ctx context.Context, req Request) (res Result) {
 
 	// Teardown is guaranteed from here on -- success, error, or panic. The
 	// deferred closure writes the final Evidence and any teardown error into the
-	// named return value.
+	// named return value. Cleanup runs on a context DETACHED from the request's
+	// cancellation (context.WithoutCancel) but bounded by teardownTimeout, so a
+	// cancelled or timed-out run can never silently leak a provisioned lab.
 	defer func() {
 		if rec := recover(); rec != nil {
 			res.Status = StatusExecutionErrored
 			ev.Detail = fmt.Sprintf("panic: %v", rec)
 		}
-		if e := r.Sub.Teardown(ctx, target); e != nil {
+		tctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), teardownTimeout)
+		defer cancel()
+		if e := r.Sub.Teardown(tctx, target); e != nil {
 			res.TeardownErr = e
 		}
 		ev.EndedAt = r.now()

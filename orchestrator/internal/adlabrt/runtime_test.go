@@ -11,14 +11,15 @@ import (
 
 // fakeSub is an in-process Substrate whose every stage is scriptable.
 type fakeSub struct {
-	provErr     error
-	iso         IsolationResult
-	isoErr      error
-	obs         Observation
-	execErr     error
-	execPanic   bool
-	teardowns   int
-	teardownErr error
+	provErr        error
+	iso            IsolationResult
+	isoErr         error
+	obs            Observation
+	execErr        error
+	execPanic      bool
+	teardowns      int
+	teardownErr    error
+	teardownCtxErr error // ctx.Err() observed inside Teardown
 }
 
 func (f *fakeSub) Provision(ctx context.Context, s LabSpec) (Target, error) {
@@ -38,6 +39,7 @@ func (f *fakeSub) Execute(ctx context.Context, t Target, vc ValidationCase) (Obs
 }
 func (f *fakeSub) Teardown(ctx context.Context, t Target) error {
 	f.teardowns++
+	f.teardownCtxErr = ctx.Err()
 	return f.teardownErr
 }
 
@@ -160,5 +162,18 @@ func TestValidate_TeardownErrorSurfaced(t *testing.T) {
 	res := (&Runtime{Sub: f}).Validate(context.Background(), baseReq())
 	if res.TeardownErr == nil {
 		t.Fatal("teardown error must be surfaced in Result, not swallowed")
+	}
+}
+
+func TestValidate_TeardownUsesIndependentContextOnCancellation(t *testing.T) {
+	f := &fakeSub{iso: verified(), obs: Observation{PostconditionObserved: true, Complete: true}}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // request context already cancelled before teardown
+	_ = (&Runtime{Sub: f}).Validate(ctx, baseReq())
+	if f.teardowns != 1 {
+		t.Fatalf("teardown must run even when the request context is cancelled, ran %d", f.teardowns)
+	}
+	if f.teardownCtxErr != nil {
+		t.Fatalf("teardown must receive an independent (non-cancelled) context, got err %v", f.teardownCtxErr)
 	}
 }
