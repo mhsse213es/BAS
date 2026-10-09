@@ -57,5 +57,17 @@ for bad in off none reportonly; do
   fi
 done
 
+# Staging (zain@audspecterver 192.168.10.78) overrides BAS_ENROLL_PORT/
+# BAS_LEGACY_PORT in packaging/compose/setup.conf because install.sh's own
+# defaults (9444/9000) conflict there with apache2 and docker-proxy.
+out="$(run_case 'BAS_ENROLL_PORT=9441
+BAS_LEGACY_PORT=9005')"
+grep -q '^BAS_ENROLL_PORT=9441$' <<<"$out" && pass "BAS_ENROLL_PORT override reaches .env" || fail "BAS_ENROLL_PORT override: $out"
+grep -q '^BAS_LEGACY_PORT=9005$' <<<"$out" && pass "BAS_LEGACY_PORT override reaches .env" || fail "BAS_LEGACY_PORT override: $out"
+
+out="$(run_case '')"
+grep -q '^BAS_ENROLL_PORT=9444$' <<<"$out" && pass "BAS_ENROLL_PORT blank -> install.sh default (9444)" || fail "BAS_ENROLL_PORT default: $out"
+grep -q '^BAS_LEGACY_PORT=9000$' <<<"$out" && pass "BAS_LEGACY_PORT blank -> install.sh default (9000)" || fail "BAS_LEGACY_PORT default: $out"
+
 echo
 [[ $fails -eq 0 ]] && echo "ALL PASS" || { echo "${fails} FAILED"; exit 1; }
