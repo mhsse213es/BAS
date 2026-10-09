@@ -276,14 +276,57 @@ func DCSyncEntries() []Entry {
 	return out
 }
 
+var delegationReuse = map[string]string{
+	"kerberos-unconstrained-delegation": "adlab EnvResolver(controls_unconstrained_delegation_principal)",
+	"kerberos-constrained-delegation":   "adlab EnvResolver(controls_constrained_delegation_principal)",
+}
+
+var delegationEvidence = map[string][]string{
+	"kerberos-unconstrained-delegation": {"a coerced privileged authentication (e.g. a DC machine account) to the delegation host", "the victim's forwarded TGT captured on the delegation host"},
+	"kerberos-constrained-delegation":   {"S4U2Self/S4U2Proxy ticket requests from the controlled principal", "a service ticket to a configured target SPN issued for an arbitrary user"},
+}
+
+var delegationCleanup = map[string][]string{
+	"kerberos-unconstrained-delegation": {"remove the TRUSTED_FOR_DELEGATION flag from the abused principal", "purge captured tickets"},
+	"kerberos-constrained-delegation":   {"remove the msDS-AllowedToDelegateTo / protocol-transition configuration from the principal", "purge obtained service tickets"},
+}
+
+var delegationTelemetry = map[string][]string{
+	"kerberos-unconstrained-delegation": {"authentication-coercion signatures (PetitPotam/PrinterBug/DFSCoerce)", "Kerberos AS/TGS activity to the delegation host (events 4768/4769)", "accounts flagged TRUSTED_FOR_DELEGATION in userAccountControl"},
+	"kerberos-constrained-delegation":   {"Kerberos service-ticket requests with the S4U2Proxy flag (event 4769)", "msDS-AllowedToDelegateTo attribute state", "TrustedToAuthForDelegation (protocol transition) flag changes"},
+}
+
+// DelegationEntries returns the coverage-matrix rows for non-RBCD Kerberos
+// delegation abuse (unconstrained TGT capture, constrained S4U2Proxy), iterating
+// the real adprimitive.DelegationCatalog so IDs and postconditions cannot drift.
+func DelegationEntries() []Entry {
+	out := make([]Entry, 0, len(adprimitive.DelegationCatalog))
+	for _, p := range adprimitive.DelegationCatalog {
+		out = append(out, Entry{
+			PrimitiveID:            p.ID,
+			TechniqueID:            p.TechniqueID,
+			RequiredEnvToExecute:   EnvDomainController, // delegation abuse needs a real domain
+			ExecutionMethod:        "synthetic-predicate",
+			ReuseSource:            delegationReuse[p.ID],
+			ExpectedPostconditions: p.Postconditions,
+			EvidenceRequirements:   delegationEvidence[p.ID],
+			TelemetrySources:       delegationTelemetry[p.ID],
+			Cleanup:                delegationCleanup[p.ID],
+			CurrentValidation:      LevelModelSimulated,
+		})
+	}
+	return out
+}
+
 // AllEntries is the full AD coverage matrix across every gap catalog, in a
-// deterministic order (ADCS, ACL, RBCD, DCSync).
+// deterministic order (ADCS, ACL, RBCD, DCSync, delegation).
 func AllEntries() []Entry {
 	var out []Entry
 	out = append(out, ADCSEntries()...)
 	out = append(out, ACLEntries()...)
 	out = append(out, RBCDEntries()...)
 	out = append(out, DCSyncEntries()...)
+	out = append(out, DelegationEntries()...)
 	return out
 }
 

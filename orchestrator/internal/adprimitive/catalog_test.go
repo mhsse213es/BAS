@@ -17,9 +17,9 @@ func TestAllCatalogs_EveryPrimitiveHasAValidRiskClass(t *testing.T) {
 		RiskPotentiallyDestructive: true,
 		RiskDestructive:            true,
 	}
-	all := append(append(append(append(append([]Primitive{}, KerberoastingCatalog...), ACLAbuseCatalog...), RBCDCatalog...), DCSyncCatalog...), ADCSCatalog...)
-	if len(all) != 16 {
-		t.Fatalf("expected 16 total primitives across all catalogs, got %d", len(all))
+	all := append(append(append(append(append(append([]Primitive{}, KerberoastingCatalog...), ACLAbuseCatalog...), RBCDCatalog...), DCSyncCatalog...), ADCSCatalog...), DelegationCatalog...)
+	if len(all) != 18 {
+		t.Fatalf("expected 18 total primitives across all catalogs, got %d", len(all))
 	}
 	for _, p := range all {
 		if !valid[p.RiskClass] {
@@ -249,6 +249,33 @@ func findInADCSCatalog(id string) (Primitive, bool) {
 		}
 	}
 	return Primitive{}, false
+}
+
+func TestDelegationCatalog_UnconstrainedAndConstrained(t *testing.T) {
+	if len(DelegationCatalog) != 2 {
+		t.Fatalf("expected exactly 2 delegation primitives (unconstrained, constrained), got %d", len(DelegationCatalog))
+	}
+	seenCond := map[string]bool{}
+	for _, p := range DelegationCatalog {
+		if p.TechniqueID != "T1558" {
+			t.Errorf("%s: expected TechniqueID T1558, got %q", p.ID, p.TechniqueID)
+		}
+		if len(p.Prerequisites.Conditions) != 1 {
+			t.Fatalf("%s: expected exactly 1 condition, got %+v", p.ID, p.Prerequisites.Conditions)
+		}
+		for k := range p.Prerequisites.Conditions {
+			if seenCond[k] {
+				t.Fatalf("condition key %q reused across delegation primitives", k)
+			}
+			seenCond[k] = true
+		}
+		if len(p.Postconditions) != 1 || p.Postconditions[0].Kind != CapTicket {
+			t.Fatalf("%s: expected postcondition CapTicket, got %+v", p.ID, p.Postconditions)
+		}
+	}
+	if !seenCond["controls_unconstrained_delegation_principal"] || !seenCond["controls_constrained_delegation_principal"] {
+		t.Fatalf("expected both delegation condition keys, got %+v", seenCond)
+	}
 }
 
 func TestADCSCatalog_FourDistinctPrimitivesShareTechniqueID(t *testing.T) {

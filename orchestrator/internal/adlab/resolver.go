@@ -71,9 +71,37 @@ func (r *EnvResolver) Resolve(key string) bool {
 		return r.esc6Reachable()
 	case "esc8_relayable_ca":
 		return r.esc8Relayable()
+	case "controls_unconstrained_delegation_principal":
+		return r.controlsUnconstrainedDelegation()
+	case "controls_constrained_delegation_principal":
+		return r.controlsConstrainedDelegation()
 	default:
 		return false
 	}
+}
+
+// controlsUnconstrainedDelegation is true when the attacker controls a principal
+// configured for unconstrained delegation -- the position from which a coerced
+// privileged authentication yields that principal's TGT.
+func (r *EnvResolver) controlsUnconstrainedDelegation() bool {
+	for _, p := range r.env.Delegation.Unconstrained {
+		if r.controlled[p] {
+			return true
+		}
+	}
+	return false
+}
+
+// controlsConstrainedDelegation is true when the attacker controls a principal
+// configured for constrained delegation -- the position from which S4U lets it
+// obtain a service ticket to one of its configured targets as another user.
+func (r *EnvResolver) controlsConstrainedDelegation() bool {
+	for _, cd := range r.env.Delegation.Constrained {
+		if r.controlled[cd.Principal] {
+			return true
+		}
+	}
+	return false
 }
 
 func (r *EnvResolver) templateByName(name string) (adenv.CertTemplate, bool) {

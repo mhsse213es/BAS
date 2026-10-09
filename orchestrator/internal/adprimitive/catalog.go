@@ -150,6 +150,38 @@ var RBCDCatalog = []Primitive{
 	},
 }
 
+// DelegationCatalog covers the two Kerberos delegation abuses that are NOT
+// resource-based (RBCD lives in RBCDCatalog above): unconstrained delegation
+// (TGT capture) and constrained delegation (S4U2Proxy). All share T1558.
+var DelegationCatalog = []Primitive{
+	{
+		// Control of a principal trusted for unconstrained delegation lets the
+		// attacker coerce a privileged account to authenticate to it and keep
+		// that account's forwarded TGT.
+		ID: "kerberos-unconstrained-delegation", Name: "Unconstrained Delegation TGT Capture", TechniqueID: "T1558",
+		Prerequisites: Prerequisites{
+			DomainJoined: true,
+			Capabilities: []Capability{{Kind: CapControlledAccount}},
+			Conditions:   map[string]bool{"controls_unconstrained_delegation_principal": true},
+		},
+		Postconditions: []Capability{{Kind: CapTicket}},
+		RiskClass:      RiskPotentiallyDestructive,
+	},
+	{
+		// Control of a principal configured for constrained delegation lets the
+		// attacker use S4U2Proxy (with S4U2Self when protocol transition is set)
+		// to obtain a service ticket to a configured target as an arbitrary user.
+		ID: "kerberos-constrained-delegation", Name: "Constrained Delegation S4U2Proxy Abuse", TechniqueID: "T1558",
+		Prerequisites: Prerequisites{
+			DomainJoined: true,
+			Capabilities: []Capability{{Kind: CapControlledAccount}},
+			Conditions:   map[string]bool{"controls_constrained_delegation_principal": true},
+		},
+		Postconditions: []Capability{{Kind: CapTicket}},
+		RiskClass:      RiskPotentiallyDestructive,
+	},
+}
+
 // DCSyncCatalog defines the single DCSync primitive. DS-Replication-Get-
 // Changes and DS-Replication-Get-Changes-All (the 2 extended rights
 // DCSync requires) collapse into attackpath's single AllExtendedRights
