@@ -138,6 +138,47 @@ func TestSubmitScenarioResult_UnknownRunID(t *testing.T) {
 	})
 }
 
+// TestSubmitScenarioResult_RejectsResultFromWrongAgent is the regression
+// test for a real trust-boundary defect found during increment 2.2's
+// attribution investigation (2026-10-09): SubmitScenarioResult authenticates
+// via a single fleet-wide shared secret (validateAgentAuth/verifyResultMAC)
+// but never checks that the submitted AgentID actually matches the agent
+// this run was dispatched to -- unlike /ws/agent's wsAgentAuthorized, which
+// explicitly enforces that a cert issued for one agent can't claim another's
+// identity. Without this check, any agent holding the shared secret could
+// submit results claiming to be a DIFFERENT agent for ANY existing run,
+// silently overwriting its results (confirmed REPLACE semantics, see
+// TestSubmitScenarioResult_REPLACENotAppend above).
+func TestSubmitScenarioResult_RejectsResultFromWrongAgent(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "")
+		seedRunRow(t, pool, "attrib-run", "sc-attrib", "agent-real", "running")
+
+		// agent-impostor was never dispatched this run, but claims to be
+		// submitting for it anyway.
+		rec := httptest.NewRecorder()
+		body := rawResultBody(t, scenario.RawRunResult{
+			RunID: "attrib-run", ScenarioID: "sc-attrib", AgentID: "agent-impostor",
+			Results: []scenario.ExecResult{{TaskID: "t0", ExitCode: 0, Stdout: "PASS: should never be persisted"}},
+		})
+		h.SubmitScenarioResult(rec, validSubmitResultReq("", body))
+		if rec.Code != http.StatusForbidden {
+			t.Fatalf("status = %d, want 403 (agent mismatch), body = %s", rec.Code, rec.Body.String())
+		}
+
+		var count int
+		if err := pool.QueryRow(context.Background(), `SELECT COALESCE(array_length(array(SELECT 1 FROM jsonb_array_elements(COALESCE(results,'[]'::jsonb))),1),0) FROM scenario_runs WHERE id=$1`, "attrib-run").Scan(&count); err != nil {
+			t.Fatalf("read results count: %v", err)
+		}
+		if count != 0 {
+			t.Fatalf("results count = %d, want 0 -- the impostor's submission must never be persisted", count)
+		}
+	})
+}
+
 func TestSubmitScenarioResult_REPLACENotAppend(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping container-backed test in -short mode")

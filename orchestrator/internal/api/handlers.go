@@ -2753,6 +2753,23 @@ func (h *Handler) SubmitScenarioResult(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "invalid payload — expected {runId, scenarioId, agentId, results}", http.StatusBadRequest)
 		return
 	}
+	// validateAgentAuth/verifyResultMAC only prove possession of the
+	// fleet-wide shared secret, not which specific agent is submitting --
+	// reject a result that names an agent other than the one this run was
+	// actually dispatched to (mirrors wsAgentAuthorized's equivalent check
+	// for /ws/agent). An unknown RunID is deliberately left to the existing
+	// no-op-accept behavior below (see TestSubmitScenarioResult_UnknownRunID)
+	// rather than rejected here.
+	var dispatchedAgentID string
+	if err := h.db.QueryRow(r.Context(),
+		`SELECT agent_id FROM scenario_runs WHERE id = $1`, raw.RunID,
+	).Scan(&dispatchedAgentID); err == nil {
+		if raw.AgentID != "" && dispatchedAgentID != "" && raw.AgentID != dispatchedAgentID {
+			log.Printf("[!] result for run %s claims agent %q but was dispatched to %q — rejecting", raw.RunID, raw.AgentID, dispatchedAgentID)
+			jsonError(w, "agent mismatch for this run", http.StatusForbidden)
+			return
+		}
+	}
 	// Phase 0A: closes the span opened by dispatch_queued_at/dispatch_sent_at
 	// in dispatchRun. dispatch_sent_at → result_received_at covers agent
 	// execution (all steps, run internally) + the WS round trip -- the
