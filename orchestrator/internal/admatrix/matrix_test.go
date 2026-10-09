@@ -187,6 +187,14 @@ func TestEntries_HonestValidationLevelAndEnv(t *testing.T) {
 	}
 }
 
+func TestEntries_HaveTelemetrySources(t *testing.T) {
+	for _, e := range AllEntries() {
+		if len(e.TelemetrySources) == 0 {
+			t.Fatalf("entry %q must map the telemetry sources that would observe it", e.PrimitiveID)
+		}
+	}
+}
+
 func TestValidationLevel_Ordered(t *testing.T) {
 	if !(LevelModelSimulated < LevelEndpointExecuted &&
 		LevelEndpointExecuted < LevelRealADExecuted &&

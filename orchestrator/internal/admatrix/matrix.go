@@ -72,6 +72,7 @@ type Entry struct {
 	ReuseSource            string // non-empty when existing content/predicate is reused
 	ExpectedPostconditions []adprimitive.Capability
 	EvidenceRequirements   []string
+	TelemetrySources       []string // the sensors/data sources that would observe this technique
 	Cleanup                []string
 	CurrentValidation      ValidationLevel // honest: the highest level actually demonstrated so far
 }
@@ -122,6 +123,13 @@ var adcsCleanup = map[string][]string{
 	"adcs-esc4": {"restore the template's original ACL and configuration"},
 }
 
+var adcsTelemetry = map[string][]string{
+	"adcs-esc1": {"AD CS CA issuance audit (events 4886/4887)", "Security event log: PKINIT/Kerberos logon (4768/4624)"},
+	"adcs-esc2": {"AD CS CA issuance audit (events 4886/4887)", "Security event log: client-auth logon with the issued certificate"},
+	"adcs-esc3": {"AD CS CA issuance audit (events 4886/4887) for the enrollment-agent and on-behalf-of requests"},
+	"adcs-esc4": {"Directory Service Changes auditing on the template object (event 5136)"},
+}
+
 // ADCSEntries returns the coverage-matrix rows for ADCS ESC1-4, iterating the
 // real adprimitive.ADCSCatalog so postconditions and IDs cannot drift from it.
 func ADCSEntries() []Entry {
@@ -135,6 +143,7 @@ func ADCSEntries() []Entry {
 			ReuseSource:            adcsReuse[p.ID],
 			ExpectedPostconditions: p.Postconditions,
 			EvidenceRequirements:   adcsEvidence[p.ID],
+			TelemetrySources:       adcsTelemetry[p.ID],
 			Cleanup:                adcsCleanup[p.ID],
 			CurrentValidation:      LevelModelSimulated,
 		})
@@ -163,6 +172,13 @@ var aclCleanup = map[string][]string{
 	"acl-addself-privileged-group":   {"remove the attacker principal from the privileged group"},
 }
 
+var aclTelemetry = map[string][]string{
+	"acl-forcechangepassword-abuse":  {"Security event log: account password reset (4724)", "Directory Service Access (4662)"},
+	"acl-genericall-takeover":        {"Directory Service Changes on the target object (5136)", "Directory Service Access (4662)"},
+	"acl-addmember-privileged-group": {"Security event log: security-enabled group member added (4728/4732/4756)"},
+	"acl-addself-privileged-group":   {"Security event log: security-enabled group member added (4728/4732/4756)"},
+}
+
 // ACLEntries returns the coverage-matrix rows for the ACL-abuse catalog
 // (ForceChangePassword, GenericAll, AddMember, AddSelf), iterating the real
 // adprimitive.ACLAbuseCatalog so IDs and postconditions cannot drift.
@@ -177,6 +193,7 @@ func ACLEntries() []Entry {
 			ReuseSource:            aclReuse[p.ID],
 			ExpectedPostconditions: p.Postconditions,
 			EvidenceRequirements:   aclEvidence[p.ID],
+			TelemetrySources:       aclTelemetry[p.ID],
 			Cleanup:                aclCleanup[p.ID],
 			CurrentValidation:      LevelModelSimulated,
 		})
@@ -199,6 +216,11 @@ var rbcdCleanup = map[string][]string{
 	"rbcd-impersonate": {"purge forged/obtained service tickets"},
 }
 
+var rbcdTelemetry = map[string][]string{
+	"rbcd-configure":   {"Directory Service Changes: msDS-AllowedToActOnBehalfOfOtherIdentity write (5136)", "computer-account creation (4741)"},
+	"rbcd-impersonate": {"Security event log: Kerberos service-ticket request (4769) with S4U2Self/S4U2Proxy"},
+}
+
 // RBCDEntries returns the coverage-matrix rows for Resource-Based Constrained
 // Delegation (configure -> impersonate), iterating the real
 // adprimitive.RBCDCatalog so IDs and postconditions cannot drift.
@@ -213,6 +235,7 @@ func RBCDEntries() []Entry {
 			ReuseSource:            rbcdReuse[p.ID],
 			ExpectedPostconditions: p.Postconditions,
 			EvidenceRequirements:   rbcdEvidence[p.ID],
+			TelemetrySources:       rbcdTelemetry[p.ID],
 			Cleanup:                rbcdCleanup[p.ID],
 			CurrentValidation:      LevelModelSimulated,
 		})
@@ -237,6 +260,7 @@ func DCSyncEntries() []Entry {
 			ReuseSource:            "art:T1003.006 (redcanaryco atomic)",
 			ExpectedPostconditions: p.Postconditions,
 			EvidenceRequirements:   []string{"directory-replication request from a non-DC principal (event 4662 with the replication GUIDs)", "secrets (krbtgt/other hashes) returned by the replication"},
+			TelemetrySources:       []string{"Directory Service Access auditing (4662) with the DS-Replication-Get-Changes / -All extended-right GUIDs", "network: DRSUAPI DRSGetNCChanges from a non-DC host"},
 			Cleanup:                []string{"none required to undo (read-only replication); remove any ACL grant made to enable it"},
 			CurrentValidation:      LevelModelSimulated,
 		})
