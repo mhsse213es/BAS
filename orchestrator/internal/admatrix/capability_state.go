@@ -88,6 +88,25 @@ type CapabilityState struct {
 	Prerequisites          adprimitive.Prerequisites
 	ExpectedPostconditions []adprimitive.Capability
 
+	// RiskClass is the safety-requirement signal, carried straight from the
+	// adprimitive catalog (non_destructive / potentially_destructive /
+	// destructive) -- never re-derived or guessed here.
+	RiskClass adprimitive.RiskClass
+
+	// Cleanup, EvidenceRequirements and TelemetrySources are grounded in the
+	// matrix Entry for the 18 gap primitives (matrix.go) and in the real,
+	// committed scenario YAML for the 3 Kerberoasting-baseline primitives
+	// (see kerberoastingScenarioEvidenceByID) -- never invented.
+	Cleanup              []string
+	EvidenceRequirements []string
+	TelemetrySources     []string
+
+	// Limitations are the known constraints on what has actually been
+	// demonstrated so far -- distinct from Outstanding (what remains to be
+	// done): a capability can be scenario-composed and still have the
+	// limitation "not yet executed against a real domain".
+	Limitations []string
+
 	// Outstanding is the explicit, honest list of remaining work for this
 	// capability. Never silently inferred from a promoted status -- every
 	// entry is traceable to a concrete gap (no content mapping, not
@@ -104,6 +123,63 @@ type CapabilityStateSummary struct {
 	ScenarioComposed   int
 	Executed           int
 	DetectionValidated int
+}
+
+// kerberoastingEvidence is the Cleanup/EvidenceRequirements/TelemetrySources
+// citation for the 3 Kerberoasting-baseline primitives, grounded in the real,
+// committed scenarios/kerberoasting-ad-drill.yaml (Stages 1-3). It is the only
+// curated citation needed because these are the only primitives that are both
+// scenario-composed AND have a real scenario in this repository -- the 18 gap
+// primitives get the same fields from their existing matrix Entry instead.
+// TestCapabilityStates_KerberoastingCitesRealScenarioContent parses that file
+// and proves every string below actually appears in the cited stage.
+type kerberoastingEvidence struct {
+	Cleanup              []string
+	EvidenceRequirements []string
+	TelemetrySources     []string
+}
+
+var kerberoastingScenarioEvidenceByID = map[string]kerberoastingEvidence{
+	"spn-enumerate": {
+		Cleanup: []string{"No cleanup required: Stage 1 is read-only LDAP/Kerberos enumeration (setspn -Q + LDAP SPN sweep); no state change (scenarios/kerberoasting-ad-drill.yaml Stage 1)."},
+		EvidenceRequirements: []string{
+			"EDR: setspn.exe -Q enumeration — Sigma proc_creation_win_setspn_enum.yml",
+			"SIEM: LDAP query for all servicePrincipalName values — Kerberoast reconnaissance IOC",
+		},
+		TelemetrySources: []string{
+			"Sysmon EID 1: setspn.exe -Q */*",
+			"DC: LDAP search filter (servicePrincipalName=*) — Directory Services / 1644 if verbose LDAP logging enabled",
+		},
+	},
+	"kerberoast-tgs-request": {
+		Cleanup: []string{"No cleanup required: Stage 2 requests but never extracts, exports or cracks the service ticket; no account or ticket state is modified (scenarios/kerberoasting-ad-drill.yaml Stage 2)."},
+		EvidenceRequirements: []string{
+			"SIEM: EID 4769 with Ticket Encryption Type 0x17 (RC4) — high-fidelity Kerberoast IOC",
+			"SIEM: single principal requesting many distinct service tickets in a short window",
+		},
+		TelemetrySources: []string{
+			"DC Security EID 4769: Kerberos service ticket requested (ticket encryption 0x17=RC4 is the Kerberoast tell)",
+			"Sysmon EID 1: powershell.exe requesting a service ticket",
+		},
+	},
+	"asrep-roast-discover": {
+		Cleanup: []string{"No cleanup required: Stage 3 is a read-only LDAP query for DONT_REQ_PREAUTH accounts; no ticket requested, no state change (scenarios/kerberoasting-ad-drill.yaml Stage 3)."},
+		EvidenceRequirements: []string{
+			"SIEM: LDAP query filtering on DONT_REQ_PREAUTH — AS-REP Roast reconnaissance IOC",
+			"SIEM: EID 4768 AS-REQ without pre-auth (encryption 0x17) — AS-REP roast in progress",
+		},
+		TelemetrySources: []string{
+			"DC: LDAP search for userAccountControl:1.2.840.113556.1.4.803:=4194304",
+			"Sysmon EID 1: powershell.exe LDAP enumeration",
+		},
+	},
+}
+
+// kerberoastingLimitations is shared by all 3 Kerberoasting-baseline
+// primitives: identical real constraint (committed scenario, not yet run
+// through the supported workflow in this build).
+var kerberoastingLimitations = []string{
+	"Scenario-composed (scenarios/kerberoasting-ad-drill.yaml) but not yet executed through the supported agent/orchestrator workflow in this build; execution and detection validation are outstanding.",
 }
 
 // outstandingFor derives the honest outstanding-work list for a capability
@@ -139,6 +215,10 @@ func CapabilityStates() []CapabilityState {
 	for _, ev := range ContentStates() {
 		content[ev.PrimitiveID] = ev
 	}
+	entries := make(map[string]Entry, len(AllEntries()))
+	for _, e := range AllEntries() {
+		entries[e.PrimitiveID] = e
+	}
 
 	var out []CapabilityState
 	for _, p := range adprimitive.All() {
@@ -157,6 +237,22 @@ func CapabilityStates() []CapabilityState {
 			DetectionValidation:    DetNotValidated,
 			Prerequisites:          p.Prerequisites,
 			ExpectedPostconditions: p.Postconditions,
+			RiskClass:              p.RiskClass,
+		}
+		if e, ok := entries[p.ID]; ok {
+			// One of the 18 gap-matrix primitives: reuse its real Entry and
+			// the same honest limitations report.go already derives for it.
+			cs.Cleanup = e.Cleanup
+			cs.EvidenceRequirements = e.EvidenceRequirements
+			cs.TelemetrySources = e.TelemetrySources
+			cs.Limitations = limitationsFor(e, coverageStatusFor(e))
+		} else if kev, ok := kerberoastingScenarioEvidenceByID[p.ID]; ok {
+			// One of the 3 Kerberoasting-baseline primitives: cite the real
+			// committed scenario instead (grounding test parses the file).
+			cs.Cleanup = kev.Cleanup
+			cs.EvidenceRequirements = kev.EvidenceRequirements
+			cs.TelemetrySources = kev.TelemetrySources
+			cs.Limitations = kerberoastingLimitations
 		}
 		cs.Outstanding = outstandingFor(cs)
 		out = append(out, cs)
