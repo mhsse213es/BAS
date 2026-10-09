@@ -1,6 +1,9 @@
 package adlab
 
-import "github.com/audspect/bas/internal/adenv"
+import (
+	"github.com/audspect/bas/internal/adenv"
+	"github.com/audspect/bas/internal/adgate"
+)
 
 // SyntheticProvider returns the deterministic built-in labs. It never errors.
 type SyntheticProvider struct{}
@@ -21,6 +24,7 @@ func aclGenericAllTakeoverLab() Lab {
 		Name:        "acl-genericall-takeover",
 		Description: "Attacker's group holds GenericAll over a service account.",
 		Attacker:    "attacker",
+		Attestation: adgate.SyntheticProvenance(),
 		Env: adenv.Environment{
 			Identity: adenv.Identity{Groups: []adenv.Group{
 				{Name: "Helpdesk", Members: []string{"attacker"}},
@@ -39,6 +43,7 @@ func adcsESC1EnrollableLab() Lab {
 		Name:        "adcs-esc1-enrollable",
 		Description: "ESC1-vulnerable template; attacker's group has enrollment rights.",
 		Attacker:    "attacker",
+		Attestation: adgate.SyntheticProvenance(),
 		Env: adenv.Environment{
 			Identity: adenv.Identity{Groups: []adenv.Group{
 				{Name: "Domain Users", Members: []string{"attacker"}},
@@ -62,6 +67,7 @@ func adcsESC1NotEnrollableLab() Lab {
 		Name:        "adcs-esc1-not-enrollable",
 		Description: "ESC1-vulnerable template, but attacker cannot enroll in it.",
 		Attacker:    "attacker",
+		Attestation: adgate.SyntheticProvenance(),
 		Env: adenv.Environment{
 			PKI: adenv.PKI{Templates: []adenv.CertTemplate{{
 				Name:                    "VulnWebAuth",
@@ -82,6 +88,7 @@ func noFootholdSafeLab() Lab {
 		Name:        "no-foothold-safe",
 		Description: "Attacker has a domain-user foothold but no abusable rights.",
 		Attacker:    "attacker",
+		Attestation: adgate.SyntheticProvenance(),
 		Env: adenv.Environment{
 			Identity: adenv.Identity{Users: []adenv.User{{Name: "attacker", Enabled: true}}},
 		},
