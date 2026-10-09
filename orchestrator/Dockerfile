@@ -201,9 +201,23 @@ COPY --from=web /web-manifest.sha256 /web-manifest.sha256
 # deps (esp. github.com/go-pdf/fpdf) renames their reflection-driven struct
 # fields and breaks PDF font loading ("font has not been set") — and protects no
 # IP, since those libs are public OSS.
+# Build-time memory knobs so garble -literals fits on RAM-constrained build
+# hosts. -literals' peak RSS grows with the codebase; on a small host (e.g. an
+# ~8 GB machine whose Docker/WSL VM has ~6 GB) the default all-cores parallel
+# build runs several multi-GB compiles at once, exceeds the VM's RAM, and either
+# OOMs ("cannot allocate memory") or thrashes to swap for hours. Serializing
+# package compilation (-p) and capping the Go heap (GOMEMLIMIT/GOGC) keeps peak
+# memory under the VM ceiling so the build COMPLETES. These affect only
+# build-time resource use, never the output binary (same -literals, same
+# ldflags). On a large build host, restore parallelism for speed, e.g.:
+#   docker build --build-arg ORCH_BUILD_P=8 --build-arg ORCH_GOMEMLIMIT=off ...
+ARG ORCH_BUILD_P=1
+ARG ORCH_GOMEMLIMIT=5800MiB
+ARG ORCH_GOGC=40
 RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
     CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GOGARBLE='github.com/audspect/*' \
-    garble -literals build \
+    GOMEMLIMIT=${ORCH_GOMEMLIMIT} GOGC=${ORCH_GOGC} \
+    garble -literals build -p=${ORCH_BUILD_P} \
     -ldflags="-s -w -X main.expectedWWWManifestHash=$(cat /web-manifest.sha256)" \
     -o /bin/orchestrator ./cmd/server
 
