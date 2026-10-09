@@ -63,6 +63,53 @@ func TestSimulate_ACLForceChangePasswordReachable(t *testing.T) {
 	}
 }
 
+// --- coverage proof: every remaining gap primitive is reachable in a correct env ---
+
+func TestSimulate_ESC2ReachableAnyPurposeEKU(t *testing.T) {
+	env := adenv.Environment{PKI: adenv.PKI{Templates: []adenv.CertTemplate{{
+		Name: "AnyPurpose", PublishedToCA: true, EnrolleeSuppliesSubject: true,
+		EKUs: []string{"Any Purpose"}, EnrollmentRights: []string{"attacker"},
+	}}}}
+	res := Simulate(adprimitive.ADCSCatalog, env, "attacker", domainUser, adprimitive.Capability{Kind: adprimitive.CapControlledAccount})
+	if !res.Reachable {
+		t.Fatalf("ESC2 must be reachable: %+v", res)
+	}
+}
+
+func TestSimulate_ESC3ReachableEnrollmentAgent(t *testing.T) {
+	env := adenv.Environment{PKI: adenv.PKI{Templates: []adenv.CertTemplate{{
+		Name: "EnrollAgent", PublishedToCA: true,
+		EKUs: []string{"Certificate Request Agent"}, EnrollmentRights: []string{"attacker"},
+	}}}}
+	res := Simulate(adprimitive.ADCSCatalog, env, "attacker", domainUser, adprimitive.Capability{Kind: adprimitive.CapControlledAccount})
+	if !res.Reachable {
+		t.Fatalf("ESC3 must be reachable: %+v", res)
+	}
+}
+
+func TestSimulate_ESC4ReachableTemplateWrite(t *testing.T) {
+	env := adenv.Environment{PKI: adenv.PKI{Templates: []adenv.CertTemplate{{
+		Name: "Writable", WriteRights: []string{"attacker"},
+	}}}}
+	// ESC4's postcondition is TemplateControlled, NOT ControlledAccount.
+	res := Simulate(adprimitive.ADCSCatalog, env, "attacker", domainUser, adprimitive.Capability{Kind: adprimitive.CapTemplateControlled})
+	if !res.Reachable {
+		t.Fatalf("ESC4 must be reachable to TemplateControlled: %+v", res)
+	}
+}
+
+func TestSimulate_AddMemberAndAddSelfReachable(t *testing.T) {
+	for _, right := range []adenv.ACLRight{adenv.ACLAddMember, adenv.ACLAddSelf} {
+		env := adenv.Environment{Authorization: adenv.Authorization{ACLs: []adenv.ACLEntry{
+			{Principal: "attacker", Target: "Domain Admins", Right: right},
+		}}}
+		res := Simulate(adprimitive.ACLAbuseCatalog, env, "attacker", domainUser, adprimitive.Capability{Kind: adprimitive.CapGroupMember})
+		if !res.Reachable {
+			t.Fatalf("privileged-group join via %s must be reachable: %+v", right, res)
+		}
+	}
+}
+
 // --- #4 prerequisite failure ---
 
 func TestSimulate_PrerequisiteFailureNotEnrollable(t *testing.T) {
