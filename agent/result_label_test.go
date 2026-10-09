@@ -12,9 +12,14 @@ import (
 // scored steps is "Error", not "Evaded".
 func TestDeriveLocalResultLabel(t *testing.T) {
 	blocked := protocol.ExecResult{Blocked: true}
-	evaded := protocol.ExecResult{ExitCode: 0}                 // ran clean, unblocked → FAIL
+	evaded := protocol.ExecResult{ExitCode: 0}                    // ran clean, unblocked → FAIL
 	timedOut := protocol.ExecResult{ExitCode: -1, TimedOut: true} // ERROR
-	errExit := protocol.ExecResult{ExitCode: 1}                // non-zero, not blocked → ERROR
+	errExit := protocol.ExecResult{ExitCode: 1}                   // non-zero, not blocked → ERROR
+	// Shape the domain-controller safety interlock (agent.go runScenario)
+	// actually submits (increment 2.1, 2026-10-09): Vetoed, never Blocked --
+	// nothing was attempted, so this must never resolve to "Detected" (that
+	// would falsely claim a customer control stopped a real attempt).
+	dcVetoed := protocol.ExecResult{ExitCode: -1, Vetoed: true, VetoedBlockSource: "domain_controller_interlock"}
 
 	cases := []struct {
 		name    string
@@ -37,6 +42,10 @@ func TestDeriveLocalResultLabel(t *testing.T) {
 		// evaded → Evaded (errors excluded, not masking the real finding).
 		{"one evaded rest errored is evaded", []protocol.ExecResult{evaded, errExit, timedOut}, false, "Evaded"},
 		{"blocked evaded and errored mix", []protocol.ExecResult{blocked, evaded, errExit}, false, "Partial"},
+		// The DC-interlock abort must read as inconclusive (Error), never as
+		// a defensive win (Detected) or an attack success (Evaded) -- nothing
+		// was attempted at all.
+		{"domain-controller interlock abort is error, not detected", []protocol.ExecResult{dcVetoed}, false, "Error"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

@@ -120,6 +120,46 @@ func TestInterpretARTBlockDetection(t *testing.T) {
 	}
 }
 
+// TestInterpret_DomainControllerInterlockAbortIsVetoedNeverFail is the
+// critical regression test for a real scoring defect found 2026-10-09 while
+// proving the AD Mastery E2E Directive's evidence/safety contract (increment
+// 2.1): agent.go's domain-controller safety interlock (both
+// BlockOnDomainController and RequireDCReachable) originally submitted
+// {ExitCode:-1, Blocked:true, BlockedReason:"..."}. scenario.ExecResult (this
+// package's own type) has no Blocked/BlockedReason field by deliberate design
+// (see its doc comment) -- so those two fields were silently dropped at JSON
+// unmarshal, Interpret() never saw any signal that the run was never
+// attempted, and the result fell through to interpretCustom's final default:
+// ResultFail, "Step failed (exit -1)" -- a false "attack succeeded, defenses
+// did not stop it" finding for a run that never executed a single step.
+//
+// The fix submits {Vetoed:true, VetoedActionKey/Class/Source:...} instead --
+// the SAME structured field Interpret() already special-cases before the
+// framework switch for a B5 destructive-action veto, with its own scoring-
+// exclusion already established. This test uses exactly the shape the agent
+// now submits: TaskID is empty (the interlock fires before any step is
+// chosen), so Step is the real fallback {Framework: "custom"} the server
+// builds when a TaskID lookup misses -- proving the fix through the actual
+// top-level Interpret() entry point, not a single framework interpreter.
+func TestInterpret_DomainControllerInterlockAbortIsVetoedNeverFail(t *testing.T) {
+	step := Step{Framework: "custom"} // the real fallback for an unmatched TaskID
+	r := ExecResult{
+		ExitCode:             -1,
+		Vetoed:               true,
+		VetoedActionKey:      "live_ad_execution",
+		VetoedExecutionClass: "environment_safety_policy",
+		VetoedBlockSource:    "domain_controller_interlock",
+	}
+	res := Interpret(step, r)
+
+	if res.Result != models.ResultVetoed {
+		t.Fatalf("Result = %q, want %q -- the interlock abort must never be scored as a real finding", res.Result, models.ResultVetoed)
+	}
+	if res.Result == models.ResultFail || res.Result == models.ResultPass || res.Result == models.ResultBlocked {
+		t.Fatalf("Result = %q -- an unattempted run must never be mistaken for either an attack success (Fail) or a defensive win (Pass/Blocked)", res.Result)
+	}
+}
+
 func TestInterpretART_VetoedMapsToResultVetoedNeverResultPass(t *testing.T) {
 	r := ExecResult{Vetoed: true, VetoedActionKey: "vss_delete", VetoedExecutionClass: "destructive"}
 	result, _ := interpretART(r, "")

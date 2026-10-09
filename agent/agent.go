@@ -653,13 +653,27 @@ func (a *Agent) runScenario(ctx context.Context, cmd protocol.ScenarioCommand) {
 	// ── Domain-controller safety interlock ───────────────────────────────────
 	// Live AD drills must never run directly on a domain controller. If policy
 	// requires it and this host is a DC, abort the whole run before any step.
+	//
+	// Uses Vetoed (never Blocked): Blocked/BlockedReason mean "a CUSTOMER
+	// security control stopped a real attempt" (protocol/messages.go's own
+	// doc comment on the server-side mirror of these fields warns that
+	// conflating the two is a scoring-honesty bug). This interlock is Audspect
+	// refusing to attempt anything at all -- no step ever ran -- which is
+	// exactly Vetoed's existing, already-scored-correctly meaning (excluded
+	// from scoring as ResultVetoed, same as a B5 destructive-action veto).
+	// Found 2026-10-09: the original Blocked-based version was silently
+	// dropped by the server (scenario.ExecResult has no Blocked field) and
+	// fell through to ResultFail -- a false "attack succeeded, defenses did
+	// not stop it" finding for a run that never attempted anything.
 	if cmd.Policy != nil && cmd.Policy.BlockOnDomainController && hostIsDomainController() {
 		log.Printf("[!] ABORT: host is a domain controller and policy blocks live execution on DCs (run %s)", cmd.RunID)
 		a.submitResults(cmd, []protocol.ExecResult{{
-			ExitCode:      -1,
-			Blocked:       true,
-			BlockedReason: "aborted by domain-controller safety interlock — live AD techniques must not run on a domain controller",
-			ExecutedAt:    time.Now(),
+			ExitCode:             -1,
+			Vetoed:               true,
+			VetoedActionKey:      "live_ad_execution",
+			VetoedExecutionClass: "environment_safety_policy",
+			VetoedBlockSource:    "domain_controller_interlock",
+			ExecutedAt:           time.Now(),
 		}}, false, nil)
 		a.setStatus("idle")
 		a.sendHeartbeat("idle")
@@ -669,14 +683,18 @@ func (a *Agent) runScenario(ctx context.Context, cmd protocol.ScenarioCommand) {
 	// A scenario can separately require that a domain controller be reachable
 	// at all (e.g. an AD drill run against a non-domain-joined host would have
 	// every step individually SKIP for the same underlying reason) — abort once
-	// up front with one clear reason instead of N per-step SKIPs.
+	// up front with one clear reason instead of N per-step SKIPs. Same Vetoed
+	// rationale as the interlock above; a distinct VetoedBlockSource keeps the
+	// two abort reasons distinguishable in logs/reports.
 	if cmd.Policy != nil && cmd.Policy.RequireDCReachable && !canReachDomainController() {
 		log.Printf("[!] ABORT: policy requires a reachable domain controller and none was found (run %s)", cmd.RunID)
 		a.submitResults(cmd, []protocol.ExecResult{{
-			ExitCode:      -1,
-			Blocked:       true,
-			BlockedReason: "aborted by domain-controller-reachability policy — no domain controller was reachable from this host",
-			ExecutedAt:    time.Now(),
+			ExitCode:             -1,
+			Vetoed:               true,
+			VetoedActionKey:      "live_ad_execution",
+			VetoedExecutionClass: "environment_safety_policy",
+			VetoedBlockSource:    "domain_controller_reachability_interlock",
+			ExecutedAt:           time.Now(),
 		}}, false, nil)
 		a.setStatus("idle")
 		a.sendHeartbeat("idle")

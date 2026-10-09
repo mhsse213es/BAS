@@ -40,6 +40,54 @@ func readRunResults(t *testing.T, pool *pgxpool.Pool, runID string) []models.Sim
 	return results
 }
 
+// TestSubmitScenarioResult_DomainControllerInterlockAbortIsVetoedNotFail is
+// the integration-level regression test for increment 2.1's newly-discovered
+// defect: agent.go's domain-controller safety interlock originally submitted
+// {ExitCode:-1, Blocked:true, BlockedReason:"..."}. scenario.ExecResult has
+// no Blocked/BlockedReason field (deliberately, per its own doc comment --
+// conflating a customer-defense block with Audspect refusing to attempt
+// anything is a scoring-honesty bug), so those fields were silently dropped
+// at JSON unmarshal and the abort fell through to a false ResultFail finding
+// for a run that never executed a single step.
+//
+// internal/scenario's own TestInterpret_DomainControllerInterlockAbortIsVetoedNeverFail
+// proves the fix at the Interpret() unit level; this test proves it through
+// the real HTTP handler and persisted row, exactly as the agent's real
+// submission would arrive.
+func TestSubmitScenarioResult_DomainControllerInterlockAbortIsVetoedNotFail(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "")
+		runID := "dc-interlock-run"
+		seedRunRow(t, pool, runID, "sc-dc-interlock", "agent-dc-interlock", "running")
+
+		// Exactly the shape agent.go's domain-controller safety interlock
+		// submits: no TaskID (the interlock fires before any step is
+		// chosen), Vetoed with the interlock's own identifying fields.
+		submitResultOK(t, h, scenario.RawRunResult{
+			RunID: runID, ScenarioID: "sc-dc-interlock", AgentID: "agent-dc-interlock",
+			Results: []scenario.ExecResult{{
+				ExitCode:             -1,
+				Vetoed:               true,
+				VetoedActionKey:      "live_ad_execution",
+				VetoedExecutionClass: "environment_safety_policy",
+				VetoedBlockSource:    "domain_controller_interlock",
+			}},
+		})
+
+		results := readRunResults(t, pool, runID)
+		if len(results) != 1 {
+			t.Fatalf("got %d persisted results, want 1", len(results))
+		}
+		if results[0].Result != models.ResultVetoed {
+			t.Fatalf("persisted Result = %q, want %q -- the interlock abort must never be persisted as a real finding (the original defect persisted it as %q)",
+				results[0].Result, models.ResultVetoed, models.ResultFail)
+		}
+	})
+}
+
 func TestSubmitScenarioResult_MissingRunID(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping container-backed test in -short mode")
