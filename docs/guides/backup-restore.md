@@ -14,6 +14,7 @@
 |---|---|---|
 | PostgreSQL database | Docker volume `audspect-postgres-data` | Critical |
 | Environment config | `<DATA_DIR>/.env` (default `/opt/audspect/.env`) — also auto-backed-up by every `install.sh --upgrade` | Critical |
+| Deployment CA keypair | `<DATA_DIR>/pki/` (`ca-key.pem` + `ca-cert.pem`; bind-mounted to `/etc/audspect/pki` in the container) — also auto-backed-up by every `install.sh --upgrade` | Critical |
 | License file | `<DATA_DIR>/bas.lic` | Critical |
 | Custom scenarios | Created via the dashboard, stored in the database — covered by the database backup, not a separate file backup | High |
 | Generated reports | Rendered on-demand from HTML at request time — nothing to back up | N/A |
@@ -68,6 +69,30 @@ cp /opt/audspect/bas.lic /opt/backups/bas-license.lic
 ```
 
 Store configuration backups in an encrypted location (vault, encrypted USB, or secrets manager). The `.env` file contains JWT and agent secrets — treat it as a credential. Note that `install.sh --upgrade` already does this automatically for every upgrade (under `<DATA_DIR>/backups/`) — this manual step is for backing up on a schedule independent of upgrades, or before non-upgrade maintenance.
+
+---
+
+## Deployment CA Backup (mTLS trust root)
+
+The orchestrator generates a per-deployment certificate authority on first boot and **never regenerates it**. Every agent's mTLS client certificate chains to this CA. The keypair lives on the host at `<DATA_DIR>/pki/` (`ca-key.pem`, `ca-cert.pem`), bind-mounted into the orchestrator at `/etc/audspect/pki`.
+
+**If this keypair is lost and you have no backup, there is no recovery except regenerating the CA and re-enrolling every agent in the fleet.** Back it up with the rest of your critical data:
+
+```bash
+tar czf /opt/backups/bas-pki-$(date +%Y%m%d).tgz -C /opt/audspect pki
+```
+
+Treat the archive as a credential (it contains the CA private key) and store it encrypted. `install.sh --upgrade` also captures `<DATA_DIR>/pki/` into its automatic pre-upgrade backup, but — like the database — a scheduled, off-host copy is yours to own.
+
+To recover onto a fresh host, restore `<DATA_DIR>/pki/` (preserving `ca-key.pem`'s `0600` mode) **before** the orchestrator first starts, so it loads the existing CA instead of generating a new one:
+
+```bash
+mkdir -p /opt/audspect/pki
+tar xzf /opt/backups/bas-pki-YYYYMMDD.tgz -C /opt/audspect
+chmod 600 /opt/audspect/pki/ca-key.pem
+```
+
+Agents then keep working with no re-enrollment.
 
 ---
 

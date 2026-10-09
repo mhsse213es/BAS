@@ -956,6 +956,10 @@ mode_upgrade() {
   mkdir -p "$backup_dir"
   cp "${DATA_DIR}/docker-compose.yml" "${backup_dir}/docker-compose.yml"
   [[ -f "${DATA_DIR}/.env" ]] && cp "${DATA_DIR}/.env" "${backup_dir}/.env"
+  # Deployment CA keypair (bind-mounted ./pki -> /etc/audspect/pki). It is
+  # generated once and never regenerated, so losing it forces regenerating the
+  # CA and re-enrolling every agent. -a preserves the 0600 mode on ca-key.pem.
+  [[ -d "${DATA_DIR}/pki" ]] && cp -a "${DATA_DIR}/pki" "${backup_dir}/pki"
   echo "$BAS_VERSION" > "${backup_dir}/VERSION"
   log "Backup created: ${backup_dir}"
 
