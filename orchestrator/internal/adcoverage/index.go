@@ -1,7 +1,6 @@
 package adcoverage
 
 import (
-	"fmt"
 	"io/fs"
 	"strings"
 
@@ -12,8 +11,10 @@ import (
 
 // IndexScenarios parses every *.yaml scenario reachable under fsys into a
 // TechniqueID -> []StepRef index. Non-.yaml files (including .yaml.sig) are
-// skipped; steps with an empty TechniqueID are skipped (un-joinable). An
-// empty corpus yields an empty index and a nil error.
+// skipped; a .yaml that does not parse as a scenario is skipped (so one
+// malformed or non-scenario file never fails the whole index); steps with
+// an empty TechniqueID are skipped (un-joinable). An empty corpus yields an
+// empty index and a nil error.
 func IndexScenarios(fsys fs.FS) (map[string][]StepRef, error) {
 	index := map[string][]StepRef{}
 	err := fs.WalkDir(fsys, ".", func(path string, d fs.DirEntry, err error) error {
@@ -29,7 +30,10 @@ func IndexScenarios(fsys fs.FS) (map[string][]StepRef, error) {
 		}
 		var sc scenario.Scenario
 		if err := yaml.Unmarshal(raw, &sc); err != nil {
-			return fmt.Errorf("parse %s: %w", path, err)
+			// A single malformed or non-scenario .yaml must not fail the whole
+			// index -- skip it and keep cataloging the rest (same spirit as
+			// skipping non-.yaml files and empty-technique steps).
+			return nil
 		}
 		scID := sc.ID
 		if scID == "" {

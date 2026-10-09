@@ -156,9 +156,11 @@ Pure `go test`, no DB, no containers.
 ## Error handling
 
 - `Map` is pure; no error path.
-- `IndexScenarios` returns an error only on a filesystem read or YAML parse
-  failure. An empty corpus yields an empty index and a nil error. A step with no
-  `TechniqueID` is skipped silently (it is un-joinable, not malformed).
+- `IndexScenarios` returns an error only on a filesystem walk/read failure. A
+  `.yaml` that does not parse as a scenario is skipped, so one malformed or
+  non-scenario file never fails the whole index. An empty corpus yields an empty
+  index and a nil error. A step with no `TechniqueID` is skipped silently (it is
+  un-joinable, not malformed).
 
 ## Dependencies & boundaries
 

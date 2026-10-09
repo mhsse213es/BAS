@@ -30,6 +30,23 @@ func TestIndexScenarios_GroupsByTechniqueSkipsNonYAMLAndEmptyTechnique(t *testin
 	}
 }
 
+func TestIndexScenarios_SkipsUnparseableFileContinuesRest(t *testing.T) {
+	fsys := fstest.MapFS{
+		"good.yaml": {Data: []byte("id: scen-good\nname: Good\nsteps:\n" +
+			"  - name: s\n    technique_id: T1001\n    framework: custom\n")},
+		// Valid YAML, wrong shape: a scalar where Steps expects a list ->
+		// yaml.Unmarshal fails for this one file.
+		"broken.yaml": {Data: []byte("steps: this-is-a-scalar-not-a-list\n")},
+	}
+	index, err := IndexScenarios(fsys)
+	if err != nil {
+		t.Fatalf("one unparseable file must not fail the whole index: %v", err)
+	}
+	if len(index["T1001"]) != 1 {
+		t.Fatalf("expected the good file still indexed despite the broken one, got %+v", index["T1001"])
+	}
+}
+
 func TestIndexScenarios_EmptyCorpusIsEmptyIndexNilError(t *testing.T) {
 	index, err := IndexScenarios(fstest.MapFS{})
 	if err != nil {
