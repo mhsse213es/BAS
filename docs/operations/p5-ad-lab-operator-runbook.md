@@ -244,3 +244,68 @@ Readiness (extends §8): a real `ControlDecisionSource` must read the DC's DRSUA
 result (primary) + 4662 (corroboration), correlated to each run. **None ships** —
 `adefficacy` is fake-backed and performs **no** `CapabilityStates()`/`dispatchRun`
 wiring. The live DCSync run against the real DC is **lab-gated** and operator-run.
+
+### 10.1 Enable corroboration auditing (VM-side, before any run)
+
+```powershell
+auditpol /set /subcategory:"Directory Service Access" /success:enable /failure:enable
+```
+
+4662 for the replication extended rights sometimes needs a SACL on the domain
+head to fire reliably; if it never appears, that is not a blocker — DRSUAPI is
+the *primary* evidence and alone determines the outcome (section 2 above).
+
+### 10.2 Confirm isolation before the run
+
+Run every check in section 4 and confirm all four pass (determinate, verified)
+before executing DCSync as either principal. An unverified lab produces no
+usable evidence either way — stop and fix isolation first.
+
+### 10.3 Execute the DCSync attempt
+
+Authenticate the replication request as each principal in turn, using whichever
+DCSync execution method the operator already has on hand for this lab (the
+technique itself is documented by the existing `dcsync` catalog entry,
+`adprimitive.DCSyncCatalog`, T1003.006 — this runbook does not re-specify the
+tool invocation). Run `labuser` and `attacker` **in the same lab build**, and
+note the UTC start/end time bracketing each attempt — that window is what
+correlates the DRSUAPI result to the 4662 pull below.
+
+### 10.4 Pull the corroborating 4662 events (VM-side)
+
+```powershell
+Get-WinEvent -FilterHashtable @{LogName='Security'; Id=4662; StartTime=(Get-Date).AddMinutes(-15)} |
+  Where-Object { $_.Message -match '1131f6aa|1131f6ad' } |   # the two replication extended-right GUIDs
+  Select-Object TimeCreated, @{n='User';e={$_.Properties[1].Value}}, Message | Format-List
+```
+
+Adjust `StartTime` to bracket each principal's run window from §10.3.
+
+### 10.5 Evidence package (hand back per principal)
+
+For **each** of `attacker` and `labuser`, capture:
+
+```
+principal:        attacker | labuser
+runID:            <unique label for this attempt>
+target:           dc01 (lab IP)
+window_utc:       start=<...>  end=<...>
+drsuapi_result:   succeeded | access_denied | indeterminate
+drsuapi_raw:      <the key line(s) showing the DRSUAPI call's own result>
+event_4662:       present | absent
+event_4662_raw:   <TimeCreated + User + the extended-right GUID/Accesses lines, if present>
+```
+
+Never include principal passwords in the evidence package — DSRM and the two
+principals' passwords stay runtime-only (section 1).
+
+With both packages, the real `ControlDecisionSource` is implemented against the
+exact evidence shapes captured here, replacing the fake. If either case comes
+back `indeterminate` or uncorrelated, the result is `SKIPPED` — not a claimed
+pass or fail — per the fail-closed contract in `internal/controlval`.
+
+### 10.6 Teardown
+
+```powershell
+Restore-VMSnapshot -VMName dc01 -Name "dc01-base-clean" -Confirm:$false
+```
