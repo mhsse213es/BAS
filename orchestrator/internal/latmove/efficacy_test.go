@@ -103,6 +103,25 @@ func TestEndToEnd_IndeterminateIsSkipped(t *testing.T) {
 
 func passV() controlval.Validation { return controlval.Validation{Verdict: controlval.VerdictPass, Reason: "ok"} }
 
+func TestEndToEnd_GeneralizesToASecondTechnique(t *testing.T) {
+	// Proves the Vertical 1b layer is technique-agnostic, not WMI-specific:
+	// the same ControlProvider/ClassifyAttempt pipeline, pointed at
+	// RemoteServiceCreation's expectations, grades a denied unauthorized
+	// attempt correctly.
+	tech := RemoteServiceCreation()
+	key := controlval.CorrelationKey{RunID: "r-svc", Target: "ws02", Action: tech.ID}
+	obs := Observation{Call: CallAccessDenied, Marker: MarkerCheck{Correlated: true, Found: false}}
+	p := &ControlProvider{ProviderName: "latmove-remote-service", Obs: &FakeObserver{Obs: map[string]Observation{"r-svc/" + tech.ID: obs}}}
+	o, err := p.Observe(context.Background(), key)
+	v := controlval.Evaluate(NegativeExpectationFor(tech), &o, err)
+	if v.Verdict != controlval.VerdictPass {
+		t.Fatalf("verdict = %q, want PASS (unauthorized remote-service-creation correctly denied)", v.Verdict)
+	}
+	if o.Provider != "latmove-remote-service" {
+		t.Fatalf("provider = %q, want latmove-remote-service", o.Provider)
+	}
+}
+
 func TestPair_NegativePassAcceptedWhenPositivePass(t *testing.T) {
 	v, _ := Pair{Positive: passV(), Negative: passV()}.AcceptedNegativeVerdict()
 	if v != controlval.VerdictPass {

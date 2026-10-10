@@ -21,3 +21,18 @@ func WMIRemoteProcessCreation() Technique {
 		RiskClass: adprimitive.RiskNonDestructive,
 	}
 }
+
+// RemoteServiceCreation is the second technique in the family: "PsExec-style"
+// lateral movement -- copy a binary to the destination's admin share, then
+// create and start a Windows service to run it (T1543.003, with T1021.002 as
+// the lateral-tool-transfer leg). Unlike WMI's one-shot call, this creates a
+// PERSISTENT artifact (the service) that must be torn down even on failure,
+// so RiskClass is potentially_destructive, not non_destructive.
+func RemoteServiceCreation() Technique {
+	return Technique{
+		ID:        "remote-service-creation",
+		Name:      "Remote Service Creation",
+		MitreID:   "T1543.003",
+		RiskClass: adprimitive.RiskPotentiallyDestructive,
+	}
+}
