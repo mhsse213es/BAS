@@ -40,3 +40,39 @@ func TestRemoteServiceCreation_StableIdentity(t *testing.T) {
 		t.Fatal("techniques must have distinct ids")
 	}
 }
+
+func TestScheduledTaskRemote_StableIdentity(t *testing.T) {
+	tech := ScheduledTaskRemote()
+	if tech.ID != "scheduled-task-remote" {
+		t.Fatalf("id = %q", tech.ID)
+	}
+	if tech.MitreID != "T1053.005" {
+		t.Fatalf("mitreID = %q, want T1053.005", tech.MitreID)
+	}
+	if tech.RiskClass != adprimitive.RiskPotentiallyDestructive {
+		t.Fatalf("riskClass = %q, want potentially_destructive (persistent task artifact)", tech.RiskClass)
+	}
+}
+
+func TestWinRMRemoteExecution_StableIdentity(t *testing.T) {
+	tech := WinRMRemoteExecution()
+	if tech.ID != "winrm-remote-execution" {
+		t.Fatalf("id = %q", tech.ID)
+	}
+	if tech.MitreID != "T1021.006" {
+		t.Fatalf("mitreID = %q, want T1021.006", tech.MitreID)
+	}
+	if tech.RiskClass != adprimitive.RiskNonDestructive {
+		t.Fatalf("riskClass = %q, want non_destructive (one-shot Invoke-Command, no persistence, like WMI)", tech.RiskClass)
+	}
+}
+
+func TestAllTechniques_HaveDistinctIDs(t *testing.T) {
+	seen := map[string]bool{}
+	for _, tech := range []Technique{WMIRemoteProcessCreation(), RemoteServiceCreation(), ScheduledTaskRemote(), WinRMRemoteExecution()} {
+		if seen[tech.ID] {
+			t.Fatalf("duplicate technique id: %q", tech.ID)
+		}
+		seen[tech.ID] = true
+	}
+}

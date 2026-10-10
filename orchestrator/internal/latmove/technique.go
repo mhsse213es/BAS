@@ -36,3 +36,28 @@ func RemoteServiceCreation() Technique {
 		RiskClass: adprimitive.RiskPotentiallyDestructive,
 	}
 }
+
+// ScheduledTaskRemote is the third technique: creating a scheduled task on
+// the destination to achieve remote execution (T1053.005). Like remote
+// service creation, it leaves a PERSISTENT artifact (the task) that must be
+// torn down even on failure, so RiskClass is potentially_destructive.
+func ScheduledTaskRemote() Technique {
+	return Technique{
+		ID:        "scheduled-task-remote",
+		Name:      "Scheduled Task (Remote)",
+		MitreID:   "T1053.005",
+		RiskClass: adprimitive.RiskPotentiallyDestructive,
+	}
+}
+
+// WinRMRemoteExecution is the fourth technique: PowerShell remoting
+// (Invoke-Command/New-PSSession) to the destination (T1021.006). Like WMI,
+// a one-shot command leaves no persistence, so RiskClass is non_destructive.
+func WinRMRemoteExecution() Technique {
+	return Technique{
+		ID:        "winrm-remote-execution",
+		Name:      "WinRM Remote Execution",
+		MitreID:   "T1021.006",
+		RiskClass: adprimitive.RiskNonDestructive,
+	}
+}
