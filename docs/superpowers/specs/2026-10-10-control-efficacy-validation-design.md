@@ -301,6 +301,31 @@ wiring; the axis stays not-evaluated.
    proven.
 5. `PolicyVerified` honesty: ensure no code path sets it true from test-supplied input.
 
+## 12a. Open contract decisions (unresolved — tracked, not settled by the fake)
+
+These are genuinely open; the fake does **not** settle them. Stamping the requested key
+inside `FakeProvider.Observe` proves the **seam** works — it does **not** prove that a real
+provider correctly correlated its observation to the attempted action, target and run. A
+real adapter must establish correlation itself; `Confidence` is where that quality is graded.
+
+1. **Correlation-enforcement location.** `Evaluate(exp, obs, opErr)` grades `(exp, obs)` and
+   does not itself verify that `obs.Key` matches the intended action/target/run (`Expectation`
+   carries no key). Correlation is currently enforced **upstream** (the provider returns only
+   observations it correlated; the bridge builds the key), with `Confidence` encoding
+   correlation quality. Alternative: pass an intended `CorrelationKey` into `Evaluate` and
+   downgrade to `SKIPPED` on mismatch. **Leaning upstream; unconfirmed.**
+2. **Unset `MinConfidence`.** Treated as permissive: any confidence ≥ `low` clears an unset
+   floor; only `None`/`Unknown` are fail-closed to `SKIPPED`. Alternative: require every
+   `Expectation` to set a floor, treating unset as `high` (strict). **Leaning permissive;
+   unconfirmed.**
+3. **Two different prevention outcomes.** `expected=blocked, observed=terminated` (both
+   prevention, not equal) currently → `FAIL` (exact-match). Alternative: treat any prevention
+   outcome as satisfying a prevention expectation. **Leaning exact-match; unconfirmed.**
+
+Until resolved, none is encoded as a settled rule; each would slot behind the existing seams
+(a field on `Expectation`, a param on `Evaluate`, or a comparison helper) without reshaping
+the model.
+
 ## 13. Decisions locked (recorded)
 
 - Product-neutral control-efficacy layer; Silverfort first provider; broad "control"
