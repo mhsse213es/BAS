@@ -101,7 +101,9 @@ func TestEndToEnd_IndeterminateIsSkipped(t *testing.T) {
 	}
 }
 
-func passV() controlval.Validation { return controlval.Validation{Verdict: controlval.VerdictPass, Reason: "ok"} }
+func passV() controlval.Validation {
+	return controlval.Validation{Verdict: controlval.VerdictPass, Reason: "ok"}
+}
 
 func TestEndToEnd_GeneralizesToASecondTechnique(t *testing.T) {
 	// Proves the Vertical 1b layer is technique-agnostic, not WMI-specific:

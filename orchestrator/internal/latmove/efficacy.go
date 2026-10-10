@@ -46,8 +46,12 @@ func PositiveExpectationFor(tech Technique) controlval.Expectation {
 // NegativeExpectation/PositiveExpectation: WMI-specific convenience wrappers
 // kept for Vertical 1b's existing call sites; equivalent to calling the *For
 // functions with WMIRemoteProcessCreation().
-func NegativeExpectation() controlval.Expectation { return NegativeExpectationFor(WMIRemoteProcessCreation()) }
-func PositiveExpectation() controlval.Expectation { return PositiveExpectationFor(WMIRemoteProcessCreation()) }
+func NegativeExpectation() controlval.Expectation {
+	return NegativeExpectationFor(WMIRemoteProcessCreation())
+}
+func PositiveExpectation() controlval.Expectation {
+	return PositiveExpectationFor(WMIRemoteProcessCreation())
+}
 
 // ControlProvider adapts an ExecutionObserver + ClassifyAttempt to
 // controlval.Provider. It performs no attempt itself. ProviderName identifies
