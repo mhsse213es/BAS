@@ -39,3 +39,17 @@ func DataEncryptedForImpact() Technique {
 		RiskClass: adprimitive.RiskDestructive,
 	}
 }
+
+// DataExfiltrationToCloud is the third technique this package supports:
+// cloud-storage egress reachability (T1567.002) -- the double-extortion
+// precursor, matching clop-kill-chain.yaml's Stage 4 exactly (a reachability
+// probe only, no actual upload, same scenario this package reads evidence
+// for elsewhere). Non-destructive: it probes reachability, nothing more.
+func DataExfiltrationToCloud() Technique {
+	return Technique{
+		ID:        "data-exfiltration-to-cloud",
+		Name:      "Exfiltration to Cloud Storage (Reachability Probe)",
+		MitreID:   "T1567.002",
+		RiskClass: adprimitive.RiskNonDestructive,
+	}
+}
