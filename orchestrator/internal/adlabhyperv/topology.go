@@ -70,6 +70,19 @@ var catalog = map[string]Topology{
 			{Name: "ws02", Role: RoleClient, BaseCheckpoint: "ws02-base-clean", VCPU: 2, MemoryMB: 4096, DiskGB: 40},
 		},
 	},
+	// client-to-dc is Vertical 1c: the SAME WMI technique, source=ws01,
+	// destination=dc01 instead of ws02 -- a higher-stakes target than ordinary
+	// lateral movement, reusing the existing dc01 VM/base-checkpoint from
+	// dc-only rather than provisioning a second DC. Same private switch, same
+	// isolation checks; no change to the other two topologies.
+	"client-to-dc": {
+		Name:   "client-to-dc",
+		Switch: "audspect-lab-private",
+		VMs: []VMSpec{
+			{Name: "ws01", Role: RoleClient, BaseCheckpoint: "ws01-base-clean", VCPU: 2, MemoryMB: 4096, DiskGB: 40},
+			{Name: "dc01", Role: RoleDC, BaseCheckpoint: "dc01-base-clean", VCPU: 2, MemoryMB: 4096, DiskGB: 40},
+		},
+	},
 }
 
 // LookupTopology returns the named topology; ok is false for an unknown name,

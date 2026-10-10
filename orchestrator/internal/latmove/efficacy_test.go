@@ -120,6 +120,21 @@ func TestPair_NegativePassNotTrustedWhenPositiveNotPass(t *testing.T) {
 	}
 }
 
+func TestEndToEnd_AuthorizedExecutedAgainstDCIsPass(t *testing.T) {
+	// Vertical 1c: the SAME code generalizes to Destination="dc01" with no
+	// production change -- AttemptKey.Destination is already a plain string.
+	obs := Observation{Call: CallSucceeded, Marker: MarkerCheck{Correlated: true, Found: true}}
+	p := &ControlProvider{Obs: &FakeObserver{Obs: map[string]Observation{"r-dc/" + WMIRemoteProcessCreation().ID: obs}}}
+	o, err := p.Observe(context.Background(), ckey("r-dc", "dc01"))
+	v := controlval.Evaluate(PositiveExpectation(), &o, err)
+	if v.Verdict != controlval.VerdictPass {
+		t.Fatalf("verdict = %q, want PASS (client-to-dc target, same vertical)", v.Verdict)
+	}
+	if v.Key.Target != "dc01" {
+		t.Fatalf("target = %q, want dc01", v.Key.Target)
+	}
+}
+
 func TestPair_DoesNotMutateRawOrUpgrade(t *testing.T) {
 	neg := passV()
 	p := Pair{Positive: controlval.Validation{Verdict: controlval.VerdictFail}, Negative: neg}
