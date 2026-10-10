@@ -57,6 +57,19 @@ var catalog = map[string]Topology{
 		}},
 		Attacker: AttackerIdentity{Principal: `LAB\attacker`, Rights: "AllExtendedRights@domain-root"},
 	},
+	// client-pair backs the latmove execution-validation vertical (WMI T1047,
+	// client-to-client). Same isolated switch as dc-only; no new switch, no
+	// change to isolation checks. Attacker is intentionally zero-value: this
+	// topology is for execution-validation only -- rights-gating is a later,
+	// separate vertical that assigns identities when it is built.
+	"client-pair": {
+		Name:   "client-pair",
+		Switch: "audspect-lab-private",
+		VMs: []VMSpec{
+			{Name: "ws01", Role: RoleClient, BaseCheckpoint: "ws01-base-clean", VCPU: 2, MemoryMB: 4096, DiskGB: 40},
+			{Name: "ws02", Role: RoleClient, BaseCheckpoint: "ws02-base-clean", VCPU: 2, MemoryMB: 4096, DiskGB: 40},
+		},
+	},
 }
 
 // LookupTopology returns the named topology; ok is false for an unknown name,
