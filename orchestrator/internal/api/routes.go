@@ -227,6 +227,11 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.Get("/api/scenarios", h.ListScenarios)
 		r.Get("/api/scenarios/{id}", h.GetScenario)
 		r.Get("/api/ad/coverage", h.GetADCoverage)
+		// AD coverage assessment report, from the same admatrix.Report() data as
+		// /api/ad/coverage: PDF (primary), HTML, and JSON (secondary). Read-only.
+		r.Get("/api/ad/assessment.pdf", h.GetADAssessmentPDF)
+		r.Get("/api/ad/assessment.html", h.GetADAssessmentHTML)
+		r.Get("/api/ad/assessment.json", h.GetADAssessmentJSON)
 		// Admin-only: inventories the live ART/Caldera libraries for the AD
 		// primitive set (read-only; reuses the ART content-status permission).
 		r.With(auth.RequirePermission(auth.CanViewARTContentStatus)).Get("/api/ad/content-inventory", h.GetADContentInventory)

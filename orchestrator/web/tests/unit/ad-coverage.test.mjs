@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import { setupDom, load, PAYLOADS } from './dom.mjs';
 
 setupDom();
-const { renderADCoverage, loadADCoverage, setADFilter } =
-  await load(['renderADCoverage', 'loadADCoverage', 'setADFilter']);
+const { renderADCoverage, loadADCoverage, setADFilter, exportADReportPDF, exportADReportJSON } =
+  await load(['renderADCoverage', 'loadADCoverage', 'setADFilter', 'exportADReportPDF', 'exportADReportJSON']);
 const tick = () => new Promise((r) => setTimeout(r, 0));
 
 function assertInert(container, label) {
@@ -96,6 +96,19 @@ test('a failed (e.g. unauthorized) content-inventory call does not blank the pag
   await tick(); await tick(); await tick();
   assert.ok(document.getElementById('adc-list').querySelectorAll('details.adc-cap').length === 1, 'capabilities still render');
   assert.ok(/unavailable/.test(document.getElementById('adc-inventory-note').textContent), 'inventory note explains the gap');
+});
+
+test('report exports open the server-generated PDF and JSON assessment endpoints', () => {
+  const opened = [];
+  const orig = globalThis.window.open;
+  globalThis.window.open = (url) => { opened.push(url); };
+  try {
+    exportADReportPDF();
+    exportADReportJSON();
+  } finally {
+    globalThis.window.open = orig;
+  }
+  assert.deepEqual(opened, ['/api/ad/assessment.pdf', '/api/ad/assessment.json']);
 });
 
 test('setADFilter by family narrows the rendered rows', async () => {

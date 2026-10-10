@@ -69,6 +69,12 @@ export function setADFilter(dim, val) {
   renderADCoverage(_adData);
 }
 
+// Report exports open the server-generated assessment report, built from the
+// SAME /api/ad/coverage data this view renders (no separate client tallies):
+// PDF is the primary enterprise deliverable, JSON the machine-readable export.
+export function exportADReportPDF() { window.open('/api/ad/assessment.pdf', '_blank'); }
+export function exportADReportJSON() { window.open('/api/ad/assessment.json', '_blank'); }
+
 // renderADCoverage is a pure render from a coverage report (as returned by
 // /api/ad/coverage). Exported so it is unit-testable with crafted data,
 // including hostile strings in names/evidence.
