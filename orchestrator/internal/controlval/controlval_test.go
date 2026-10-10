@@ -121,6 +121,36 @@ func TestEvaluate_DoesNotAlterPolicyVerified(t *testing.T) {
 	}
 }
 
+func TestEvaluate_UnsetMinConfidenceIsStrict(t *testing.T) {
+	// Locked ruling 2 (strict default): an unset MinConfidence resolves to a
+	// HIGH floor, so a medium-confidence observed outcome fails closed to
+	// SKIPPED rather than silently passing on weak evidence.
+	v := Evaluate(Expectation{Expected: OutcomeBlocked}, // MinConfidence unset
+		obs(OutcomeBlocked, EvidenceObserved, ConfidenceMedium), nil)
+	if v.Verdict != VerdictSkipped {
+		t.Fatalf("verdict = %q, want SKIPPED (unset floor is strict/high)", v.Verdict)
+	}
+}
+
+func TestEvaluate_UnsetMinConfidenceHighObservedPasses(t *testing.T) {
+	v := Evaluate(Expectation{Expected: OutcomeBlocked}, // MinConfidence unset
+		obs(OutcomeBlocked, EvidenceObserved, ConfidenceHigh), nil)
+	if v.Verdict != VerdictPass {
+		t.Fatalf("verdict = %q, want PASS (high clears the strict default floor)", v.Verdict)
+	}
+}
+
+func TestEvaluate_DifferentPreventionOutcomesFailExactMatch(t *testing.T) {
+	// Locked ruling 3 (exact-match): a prevention outcome that is not the EXACT
+	// expected one is a FAIL -- the control prevented, but not the way policy
+	// specified (terminated session vs blocked auth).
+	v := Evaluate(Expectation{Expected: OutcomeBlocked, MinConfidence: ConfidenceHigh},
+		obs(OutcomeTerminated, EvidenceObserved, ConfidenceHigh), nil)
+	if v.Verdict != VerdictFail {
+		t.Fatalf("verdict = %q, want FAIL (terminated != blocked, exact-match)", v.Verdict)
+	}
+}
+
 func TestEvaluate_IsDeterministic(t *testing.T) {
 	// Criterion 6: same inputs -> same output, no hidden state/clock/provider.
 	exp := Expectation{Expected: OutcomeBlocked, MinConfidence: ConfidenceHigh}

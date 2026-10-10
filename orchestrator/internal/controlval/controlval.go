@@ -55,6 +55,18 @@ const (
 	ConfidenceNone   Confidence = "none"
 )
 
+// effectiveFloor resolves the required confidence floor. Locked ruling: an
+// UNSET (empty) MinConfidence is STRICT -- it resolves to ConfidenceHigh so a
+// forgotten floor fails safe rather than accepting weak evidence for a
+// security verdict. An explicit value (including ConfidenceNone, a deliberate
+// opt-out) is used as given.
+func effectiveFloor(c Confidence) Confidence {
+	if c == "" {
+		return ConfidenceHigh
+	}
+	return c
+}
+
 // confidenceRank orders confidence levels. ConfidenceNone and the zero value
 // both rank 0 (no confidence).
 func confidenceRank(c Confidence) int {
@@ -138,6 +150,11 @@ type Validation struct {
 // Invariant B: a nil observation is SKIPPED, never fabricated from another
 // stream. Error precedence: a technical opErr yields ERROR even when an
 // observation is present.
+//
+// Locked ruling: correlation (that obs really belongs to this action/target/
+// run) is enforced UPSTREAM -- the provider returns only observations it
+// correlated and the bridge builds the key. Evaluate does not re-check obs.Key;
+// Confidence is where correlation quality is graded.
 func Evaluate(exp Expectation, obs *Observation, opErr error) Validation {
 	v := Validation{Expectation: exp, Observation: obs}
 	if obs != nil {
@@ -150,7 +167,7 @@ func Evaluate(exp Expectation, obs *Observation, opErr error) Validation {
 		v.Verdict, v.Reason = VerdictSkipped, "control response not recorded"
 	case obs.Outcome == OutcomeUnknown:
 		v.Verdict, v.Reason = VerdictSkipped, "control outcome unknown"
-	case confidenceRank(obs.Confidence) == 0 || confidenceRank(obs.Confidence) < confidenceRank(exp.MinConfidence):
+	case confidenceRank(obs.Confidence) == 0 || confidenceRank(obs.Confidence) < confidenceRank(effectiveFloor(exp.MinConfidence)):
 		v.Verdict, v.Reason = VerdictSkipped, "below required confidence threshold"
 	case exp.Expected.IsPrevention() && obs.EvidenceKind == EvidenceInferred:
 		v.Verdict, v.Reason = VerdictSkipped, "inferred-only evidence cannot establish prevention"
