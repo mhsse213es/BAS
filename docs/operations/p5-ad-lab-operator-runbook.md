@@ -210,3 +210,37 @@ probing, or DC execution is performed.
   for agent-based scenarios.
 - **M3 (+AD CS)** — add the AD CS role (on `dc01` for M3-minimal, or a dedicated
   CA VM) to validate ESC1–4/6/8 certificate scenarios.
+
+## 10. DCSync control-efficacy (Phase 5 vertical)
+
+The first real control-efficacy test (`internal/adefficacy`): does AD's **native
+replication-rights control** prevent DCSync by an unauthorized principal? Design:
+`docs/superpowers/specs/2026-10-10-p5-dcsync-efficacy-vertical-design.md`.
+
+Run both principals **in the same lab build** (the §3.3 pair):
+
+- **`LAB\labuser`** (negative control, no rights) → run DCSync → **expect `blocked`**.
+- **`LAB\attacker`** (positive control, rights granted) → run DCSync → **expect `allowed`**.
+
+Evidence hierarchy — **do not conflate these**:
+
+- **Primary: the DRSUAPI replication result.** `access_denied` → `blocked`;
+  `succeeded` (secrets returned) → `allowed`; no conclusive result →
+  `indeterminate`. This alone determines the outcome.
+- **Secondary: Security event 4662** (directory-object access) — **corroboration
+  only**. A 4662 by itself never proves a block, and is never assumed to mean
+  success or failure; interpret it alongside the DRSUAPI result.
+
+Acceptance rules (enforced by `adefficacy`):
+
+- Only a **correlated, conclusive** DRSUAPI result yields a determinate verdict
+  (`high` confidence). Uncorrelated, `indeterminate`, or 4662-only evidence →
+  **`SKIPPED`** — never a PASS, so no false protection claim is possible.
+- The `labuser` denial (negative PASS) is **accepted as trustworthy only when the
+  `attacker` run cleanly PASSed** in the same build (`Pair.AcceptedNegativeVerdict`);
+  otherwise it is downgraded to `SKIPPED`.
+
+Readiness (extends §8): a real `ControlDecisionSource` must read the DC's DRSUAPI
+result (primary) + 4662 (corroboration), correlated to each run. **None ships** —
+`adefficacy` is fake-backed and performs **no** `CapabilityStates()`/`dispatchRun`
+wiring. The live DCSync run against the real DC is **lab-gated** and operator-run.
