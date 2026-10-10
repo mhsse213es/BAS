@@ -46,3 +46,20 @@ type AttemptKey struct {
 	RunID       string
 	TechniqueID string
 }
+
+// NotApplicable records that capability genuinely does not apply to tech --
+// e.g. Recovery for T1486, or Containment/DataProtection for T1490. reason
+// must always explain why, so a reader never mistakes an inapplicable
+// capability for a gap. Per the coverage-math rule (spec section 3,
+// invariant 4, not implemented in this slice): not_applicable results are
+// excluded from both the numerator and denominator of any future tested-
+// coverage calculation -- neutral, never inflating and never penalizing.
+func NotApplicable(capability Capability, tech Technique, reason string) CapabilityResult {
+	return CapabilityResult{
+		Capability:  capability,
+		TechniqueID: tech.MitreID,
+		Verdict:     controlval.VerdictSkipped,
+		SkipReason:  controlval.SkipNotApplicable,
+		Reason:      reason,
+	}
+}

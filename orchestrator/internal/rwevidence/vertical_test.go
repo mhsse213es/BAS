@@ -45,6 +45,37 @@ func TestEndToEnd_VSSInhibition_ThreeCapabilitiesIndependentlyVerified(t *testin
 	}
 }
 
+func TestEndToEnd_GeneralizesToASecondTechnique(t *testing.T) {
+	// Proves Prevention/Detection are technique-agnostic, not
+	// VSSInhibition-specific: the same PreventionExpectationFor/
+	// PreventionFromValidation/DetectionFromProfileResult functions, pointed
+	// at DataEncryptedForImpact (T1486), grade a blocked encryption attempt
+	// correctly with zero code change. Recovery does not apply to T1486
+	// itself (that's T1490's domain) -- recorded explicitly via
+	// NotApplicable, never silently omitted.
+	tech := DataEncryptedForImpact()
+	key := controlval.CorrelationKey{RunID: "r-encrypt", Target: "ws01", Action: tech.ID}
+
+	provider := &controlval.FakeProvider{ProviderName: "microsoft_defender", Obs: map[string]controlval.Observation{
+		tech.ID: {Outcome: controlval.OutcomeBlocked, EvidenceKind: controlval.EvidenceObserved, Confidence: controlval.ConfidenceHigh},
+	}}
+	o, err := provider.Observe(context.Background(), key)
+	prevention := PreventionFromValidation(tech, controlval.Evaluate(PreventionExpectationFor(tech), &o, err))
+	if prevention.Verdict != controlval.VerdictPass {
+		t.Fatalf("prevention verdict = %q, want PASS (Controlled Folder Access blocked the mass-encryption attempt)", prevention.Verdict)
+	}
+
+	detection := DetectionFromProfileResult(tech, true, true, "mass-encryption-edr and ransom-note-edr both fired")
+	if detection.Verdict != controlval.VerdictPass {
+		t.Fatalf("detection verdict = %q, want PASS", detection.Verdict)
+	}
+
+	recovery := NotApplicable(CapabilityRecovery, tech, "T1486 is about whether files get encrypted, not whether recovery mechanisms survive -- that is T1490's domain")
+	if recovery.Verdict != controlval.VerdictSkipped || recovery.SkipReason != controlval.SkipNotApplicable {
+		t.Fatalf("recovery = %+v, want SKIPPED/not_applicable", recovery)
+	}
+}
+
 func TestIndependence_PreventionAndRecoveryNeverCrossContaminate(t *testing.T) {
 	tech := VSSInhibition()
 	key := controlval.CorrelationKey{RunID: "r-mixed", Target: "ws01", Action: tech.ID}

@@ -23,3 +23,19 @@ func VSSInhibition() Technique {
 		RiskClass: adprimitive.RiskDestructive,
 	}
 }
+
+// DataEncryptedForImpact is the second technique this package supports:
+// mass file encryption plus ransom-note deployment (T1486, Data Encrypted
+// for Impact) -- the defining ransomware behavior. Recovery does NOT apply
+// to this technique directly: T1486 is about whether files get encrypted,
+// not about whether recovery mechanisms survive -- that is T1490's domain.
+// A caller must record Recovery as NotApplicable for T1486, never silently
+// omit it.
+func DataEncryptedForImpact() Technique {
+	return Technique{
+		ID:        "data-encrypted-for-impact",
+		Name:      "Data Encrypted for Impact (Mass Encryption + Ransom Note)",
+		MitreID:   "T1486",
+		RiskClass: adprimitive.RiskDestructive,
+	}
+}
