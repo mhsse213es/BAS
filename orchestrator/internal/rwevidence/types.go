@@ -63,3 +63,24 @@ func NotApplicable(capability Capability, tech Technique, reason string) Capabil
 		Reason:      reason,
 	}
 }
+
+// NotTested records that capability was never evaluated for tech at all --
+// distinct from an observer running and coming back ambiguous
+// (insufficient_evidence, see RecoveryFromSurvival's SurvivalIndeterminate
+// branch). reason must always explain why.
+func NotTested(capability Capability, tech Technique, reason string) CapabilityResult {
+	return CapabilityResult{
+		Capability:  capability,
+		TechniqueID: tech.MitreID,
+		Verdict:     controlval.VerdictSkipped,
+		SkipReason:  controlval.SkipNotTested,
+		Reason:      reason,
+	}
+}
+
+// Valid reports whether cr's own Verdict/SkipReason pair satisfies the
+// canonical taxonomy's invariants (controlval.ValidSkipPair) -- delegated,
+// never a second copy of the rule.
+func (cr CapabilityResult) Valid() error {
+	return controlval.ValidSkipPair(cr.Verdict, cr.SkipReason)
+}
