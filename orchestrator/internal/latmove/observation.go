@@ -46,13 +46,18 @@ type MarkerCheck struct {
 	Found      bool
 }
 
-// Corroboration is supporting detail only -- the parent-process chain
-// (WmiPrvSE.exe) and the WMI-Activity operational log. NEVER
+// Corroboration is supporting detail only -- the parent-process chain and
+// whatever technique-specific secondary log exists (WMI-Activity operational
+// log for WMI, Security 4697/7045 for service creation, etc.). NEVER
 // outcome-determining on its own, exactly as event 4662 was for DCSync.
+// Generic across techniques: SecondaryLogDetail names which log/event this
+// attempt's technique produces, so the field stays meaningful without a
+// per-technique struct.
 type Corroboration struct {
 	ParentProcessObserved bool
 	ParentProcessName     string
-	WMIActivityLogged     bool
+	SecondaryLogObserved  bool
+	SecondaryLogDetail    string // e.g. "WMI-Activity/Operational", "Security 4697/7045"
 }
 
 // Observation is one recorded attempt's full evidence.

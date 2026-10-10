@@ -7,43 +7,59 @@ package latmove
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/audspect/bas/internal/controlval"
 )
 
-// Principal roles for the rights-gating pair.
+// Principal roles for the rights-gating pair. Generic across techniques: the
+// pairing shape (an identity that holds the required rights vs. one that
+// doesn't) is the same for every technique this package validates.
 const (
-	PrincipalAuthorized   = "authorized"   // local-admin/DCOM rights on destination: WMI should succeed
-	PrincipalUnprivileged = "unprivileged" // no such rights: WMI should be denied
+	PrincipalAuthorized   = "authorized"   // holds the rights the technique requires on the destination
+	PrincipalUnprivileged = "unprivileged" // lacks those rights
 )
 
-// NegativeExpectation: the unprivileged principal's WMI call must be denied.
-func NegativeExpectation() controlval.Expectation {
+// NegativeExpectationFor: the unprivileged principal's attempt at tech must be
+// denied. Generic across techniques -- PolicyBasis names the technique so the
+// rationale stays specific without a per-technique function.
+func NegativeExpectationFor(tech Technique) controlval.Expectation {
 	return controlval.Expectation{
 		Expected:       controlval.OutcomeBlocked,
-		PolicyBasis:    "unprivileged principal lacks local-admin/DCOM rights on the destination",
+		PolicyBasis:    fmt.Sprintf("unprivileged principal lacks the rights %s requires on the destination", tech.Name),
 		PolicyVerified: false,
 		MinConfidence:  controlval.ConfidenceHigh,
 	}
 }
 
-// PositiveExpectation: the authorized principal's WMI call must succeed.
-func PositiveExpectation() controlval.Expectation {
+// PositiveExpectationFor: the authorized principal's attempt at tech must
+// succeed (the positive control that makes a negative denial trustworthy).
+func PositiveExpectationFor(tech Technique) controlval.Expectation {
 	return controlval.Expectation{
 		Expected:       controlval.OutcomeAllowed,
-		PolicyBasis:    "authorized principal holds local-admin rights on the destination (positive control)",
+		PolicyBasis:    fmt.Sprintf("authorized principal holds the rights %s requires on the destination (positive control)", tech.Name),
 		PolicyVerified: false,
 		MinConfidence:  controlval.ConfidenceHigh,
 	}
 }
 
+// NegativeExpectation/PositiveExpectation: WMI-specific convenience wrappers
+// kept for Vertical 1b's existing call sites; equivalent to calling the *For
+// functions with WMIRemoteProcessCreation().
+func NegativeExpectation() controlval.Expectation { return NegativeExpectationFor(WMIRemoteProcessCreation()) }
+func PositiveExpectation() controlval.Expectation { return PositiveExpectationFor(WMIRemoteProcessCreation()) }
+
 // ControlProvider adapts an ExecutionObserver + ClassifyAttempt to
-// controlval.Provider. It performs no attempt itself.
+// controlval.Provider. It performs no attempt itself. ProviderName identifies
+// which technique's provider this is (e.g. "latmove-wmi",
+// "latmove-remote-service"); a zero value is invalid for a real caller but
+// harmless for tests that don't assert on Name().
 type ControlProvider struct {
-	Obs ExecutionObserver
+	Obs          ExecutionObserver
+	ProviderName string
 }
 
-func (p *ControlProvider) Name() string { return "latmove-wmi" }
+func (p *ControlProvider) Name() string { return p.ProviderName }
 
 // Observe maps a controlval.CorrelationKey to a latmove.AttemptKey (RunID and
 // Action/Technique carry straight through; Target becomes Destination -- the

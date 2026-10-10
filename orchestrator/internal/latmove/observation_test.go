@@ -45,7 +45,7 @@ func TestClassifyAttempt_CorroborationNeverDeterminesResultAlone(t *testing.T) {
 	obs := Observation{
 		Call:          CallSucceeded,
 		Marker:        MarkerCheck{Correlated: false, Found: false},
-		Corroboration: Corroboration{ParentProcessObserved: true, ParentProcessName: "WmiPrvSE.exe", WMIActivityLogged: true},
+		Corroboration: Corroboration{ParentProcessObserved: true, ParentProcessName: "WmiPrvSE.exe", SecondaryLogObserved: true, SecondaryLogDetail: "WMI-Activity/Operational"},
 	}
 	if got := ClassifyAttempt(obs); got != ResultIndeterminate {
 		t.Fatalf("result = %q, want indeterminate (corroboration alone must not decide)", got)
