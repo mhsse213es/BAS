@@ -22,8 +22,8 @@ func capStatesByID(t *testing.T) map[string]CapabilityState {
 
 func TestCapabilityStates_CoverAll21WithIndependentAxes(t *testing.T) {
 	states := CapabilityStates()
-	if len(states) != 27 {
-		t.Fatalf("expected one authoritative state per primitive (27), got %d", len(states))
+	if len(states) != 28 {
+		t.Fatalf("expected one authoritative state per primitive (28), got %d", len(states))
 	}
 	for _, cs := range states {
 		if cs.PrimitiveID == "" || cs.Name == "" {
@@ -78,11 +78,11 @@ func TestCapabilityStates_AxesAreIndependentPerCapability(t *testing.T) {
 
 func TestSummarizeCapabilityStates_HonestRollup(t *testing.T) {
 	s := SummarizeCapabilityStates()
-	if s.Total != 27 || s.Modeled != 27 {
-		t.Fatalf("expected 27 total/modeled, got total=%d modeled=%d", s.Total, s.Modeled)
+	if s.Total != 28 || s.Modeled != 28 {
+		t.Fatalf("expected 28 total/modeled, got total=%d modeled=%d", s.Total, s.Modeled)
 	}
-	if s.ScenarioComposed != 9 {
-		t.Errorf("expected 9 scenario-composed (Kerberoast baseline + DCSync/ACL/ADCS/Delegation/Trust/GPO exposure checks), got %d", s.ScenarioComposed)
+	if s.ScenarioComposed != 10 {
+		t.Errorf("expected 10 scenario-composed (Kerberoast baseline + DCSync/ACL/ADCS/Delegation/Trust/GPO/RBCD exposure checks), got %d", s.ScenarioComposed)
 	}
 	if s.Executed != 0 {
 		t.Errorf("expected 0 executed (no real runs in this build), got %d", s.Executed)
@@ -334,6 +334,7 @@ func TestCapabilityStates_DelegationTrustGPOExposureChecksCiteRealScenarioConten
 		{"kerberos-delegation-exposure-check", "kerberos-delegation-exposure-audit.yaml", adprimitive.CapDelegationExposureKnown},
 		{"trust-sid-history-exposure-check", "trust-sid-history-exposure-audit.yaml", adprimitive.CapTrustExposureKnown},
 		{"gpo-abuse-exposure-check", "gpo-writable-linked-exposure-audit.yaml", adprimitive.CapGPOExposureKnown},
+		{"rbcd-configure-exposure-check", "rbcd-configure-exposure-audit.yaml", adprimitive.CapRBCDExposureKnown},
 	}
 	byID := capStatesByID(t)
 	for _, tc := range cases {
@@ -378,11 +379,11 @@ func TestCapabilityStates_DelegationTrustGPOExposureChecksCiteRealScenarioConten
 
 func TestReport_ExposesCapabilityStatesAsTheAuthoritativeModel(t *testing.T) {
 	r := Report()
-	// The authoritative Phase-1 model spans all 27 primitives -- broader than
+	// The authoritative Phase-1 model spans all 28 primitives -- broader than
 	// Capabilities (18 gap entries) and distinct from ContentStates (which
 	// does not carry ExecutionValidation/DetectionValidation/Outstanding).
-	if len(r.CapabilityStates) != 27 {
-		t.Fatalf("report must expose a CapabilityState for all 27 primitives, got %d", len(r.CapabilityStates))
+	if len(r.CapabilityStates) != 28 {
+		t.Fatalf("report must expose a CapabilityState for all 28 primitives, got %d", len(r.CapabilityStates))
 	}
 	if r.CapabilityStateSummary != SummarizeCapabilityStates() {
 		t.Fatalf("report CapabilityStateSummary must equal SummarizeCapabilityStates(): %+v vs %+v",
@@ -392,7 +393,7 @@ func TestReport_ExposesCapabilityStatesAsTheAuthoritativeModel(t *testing.T) {
 	if len(r.Capabilities) != len(AllEntries()) {
 		t.Fatalf("Capabilities must still cover every matrix entry: %d vs %d", len(r.Capabilities), len(AllEntries()))
 	}
-	if len(r.ContentStates) != 27 {
-		t.Fatalf("ContentStates must still cover all 27 primitives, got %d", len(r.ContentStates))
+	if len(r.ContentStates) != 28 {
+		t.Fatalf("ContentStates must still cover all 28 primitives, got %d", len(r.ContentStates))
 	}
 }

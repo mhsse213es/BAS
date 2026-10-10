@@ -254,6 +254,9 @@ var rbcdTelemetry = map[string][]string{
 func RBCDEntries() []Entry {
 	out := make([]Entry, 0, len(adprimitive.RBCDCatalog))
 	for _, p := range adprimitive.RBCDCatalog {
+		if p.ID == "rbcd-configure-exposure-check" {
+			continue // read-only discovery primitive, tracked via realScenarioEvidenceByID
+		}
 		out = append(out, Entry{
 			PrimitiveID:            p.ID,
 			TechniqueID:            p.TechniqueID,

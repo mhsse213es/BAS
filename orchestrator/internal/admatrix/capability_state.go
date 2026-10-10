@@ -239,6 +239,16 @@ var realScenarioEvidenceByID = map[string]realScenarioEvidence{
 		},
 		Limitations: gpoExposureCheckLimitations,
 	},
+	"rbcd-configure-exposure-check": {
+		Cleanup: []string{"No cleanup required: the check only reads computer DACLs and the domain's ms-DS-MachineAccountQuota; no state change (scenarios/rbcd-configure-exposure-audit.yaml Stage 1)."},
+		EvidenceRequirements: []string{
+			"SIEM: a non-tier-0 principal holds write access over a computer object while ms-DS-MachineAccountQuota is non-zero — RBCD configure-surface exposure IOC",
+		},
+		TelemetrySources: []string{
+			"DC: LDAP read of computer-object security descriptors and the domain ms-DS-MachineAccountQuota — not separately audited by default",
+		},
+		Limitations: rbcdExposureCheckLimitations,
+	},
 }
 
 // kerberoastingLimitations is shared by all 3 Kerberoasting-baseline
@@ -296,6 +306,15 @@ var trustExposureCheckLimitations = []string{
 var gpoExposureCheckLimitations = []string{
 	"Scenario-composed (scenarios/gpo-writable-linked-exposure-audit.yaml) but not yet executed through the supported agent/orchestrator workflow in this build; execution and detection validation are outstanding.",
 	"Reads GPO DACLs and gPLinks to report exposure -- never pushes policy or creates a scheduled task, and is not evidence that abuse would succeed or has been attempted.",
+}
+
+// rbcdExposureCheckLimitations: the audit proves whether the RBCD-configure
+// precondition (non-tier-0 write over a computer + non-zero MachineAccountQuota)
+// is exposed, never that RBCD was configured or abused -- distinct from the two
+// RBCD ABUSE primitives, which remain model-only and unintegrated.
+var rbcdExposureCheckLimitations = []string{
+	"Scenario-composed (scenarios/rbcd-configure-exposure-audit.yaml) but not yet executed through the supported agent/orchestrator workflow in this build; execution and detection validation are outstanding.",
+	"Reads computer DACLs and ms-DS-MachineAccountQuota to report the configure-surface -- never writes msDS-AllowedToActOnBehalfOfOtherIdentity, creates a machine account, or impersonates anyone, and is not evidence that abuse would succeed or has been attempted.",
 }
 
 // outstandingFor derives the honest outstanding-work list for a capability

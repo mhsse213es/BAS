@@ -170,6 +170,28 @@ var RBCDCatalog = []Primitive{
 		Postconditions: []Capability{{Kind: CapLocalAdmin}},
 		RiskClass:      RiskPotentiallyDestructive,
 	},
+	// rbcd-configure-exposure-check is the read-only DISCOVERY counterpart to
+	// the two RBCD ABUSE primitives above (same family role as the other
+	// exposure-checks): it reads computer objects' DACLs for non-tier-0 write
+	// access (the rbcd-configure precondition) and reads the domain's
+	// ms-DS-MachineAccountQuota (the foothold that lets any domain user create
+	// the impersonation principal). It has NO acl_right_held precondition --
+	// it discovers the write surface rather than requiring the right be held
+	// -- and is non-destructive (writes no delegation attribute, impersonates
+	// no one). It is narrower than kerberos-delegation-exposure-check, which
+	// reports delegation attributes ALREADY set; this reports the write-
+	// ability to set them. Carries a TechniqueID (T1069, Permission Groups
+	// Discovery) because permission-grant discovery IS a clean ATT&CK
+	// technique, unlike the abuse-via-write primitives.
+	{
+		ID: "rbcd-configure-exposure-check", Name: "RBCD Configure-Surface Exposure Audit", TechniqueID: "T1069",
+		Prerequisites: Prerequisites{
+			DomainJoined: true,
+			Capabilities: []Capability{{Kind: CapDomainUser}},
+		},
+		Postconditions: []Capability{{Kind: CapRBCDExposureKnown}},
+		RiskClass:      RiskNonDestructive,
+	},
 }
 
 // DelegationCatalog covers the two Kerberos delegation abuses that are NOT

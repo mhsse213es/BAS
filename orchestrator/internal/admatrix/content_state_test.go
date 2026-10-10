@@ -5,8 +5,8 @@ import "testing"
 // All 23 AD primitives must be classified, each with an evidence record.
 func TestContentStates_CoversAllPrimitives(t *testing.T) {
 	states := ContentStates()
-	if len(states) != 27 {
-		t.Fatalf("expected a content state for all 27 catalog primitives, got %d", len(states))
+	if len(states) != 28 {
+		t.Fatalf("expected a content state for all 28 catalog primitives, got %d", len(states))
 	}
 	seen := map[string]bool{}
 	for _, e := range states {
@@ -88,9 +88,9 @@ func TestReport_ExposesContentAxisWithoutBreakingCoverage(t *testing.T) {
 	if len(r.Capabilities) != len(AllEntries()) {
 		t.Fatalf("Capabilities must still cover every matrix entry: %d vs %d", len(r.Capabilities), len(AllEntries()))
 	}
-	// New axis present and spans all 27 primitives (broader than the 18 gap entries).
-	if len(r.ContentStates) != 27 {
-		t.Fatalf("report must expose a content state for all 27 primitives, got %d", len(r.ContentStates))
+	// New axis present and spans all 28 primitives (broader than the 18 gap entries).
+	if len(r.ContentStates) != 28 {
+		t.Fatalf("report must expose a content state for all 28 primitives, got %d", len(r.ContentStates))
 	}
 	if r.ContentSummary != SummarizeContent() {
 		t.Fatalf("report ContentSummary must equal SummarizeContent(): %+v vs %+v", r.ContentSummary, SummarizeContent())
@@ -102,11 +102,11 @@ func TestReport_ExposesContentAxisWithoutBreakingCoverage(t *testing.T) {
 
 func TestSummarizeContent_MeasuresRealExecutableCoverage(t *testing.T) {
 	s := SummarizeContent()
-	if s.Total != 27 {
-		t.Fatalf("expected total 27, got %d", s.Total)
+	if s.Total != 28 {
+		t.Fatalf("expected total 28, got %d", s.Total)
 	}
-	if s.ScenarioComposable != 9 {
-		t.Errorf("expected 9 scenario-composable (Kerberoast baseline + DCSync/ACL/ADCS/Delegation/Trust/GPO exposure checks), got %d", s.ScenarioComposable)
+	if s.ScenarioComposable != 10 {
+		t.Errorf("expected 10 scenario-composable (Kerberoast baseline + DCSync/ACL/ADCS/Delegation/Trust/GPO/RBCD exposure checks), got %d", s.ScenarioComposable)
 	}
 	if s.ReusableUnmapped != 1 {
 		t.Errorf("expected 1 reusable-unmapped (DCSync), got %d", s.ReusableUnmapped)

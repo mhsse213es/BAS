@@ -18,8 +18,8 @@ func TestAllCatalogs_EveryPrimitiveHasAValidRiskClass(t *testing.T) {
 		RiskDestructive:            true,
 	}
 	all := append(append(append(append(append(append(append(append([]Primitive{}, KerberoastingCatalog...), ACLAbuseCatalog...), RBCDCatalog...), DCSyncCatalog...), ADCSCatalog...), DelegationCatalog...), TrustAbuseCatalog...), GPOAbuseCatalog...)
-	if len(all) != 27 {
-		t.Fatalf("expected 27 total primitives across all catalogs, got %d", len(all))
+	if len(all) != 28 {
+		t.Fatalf("expected 28 total primitives across all catalogs, got %d", len(all))
 	}
 	for _, p := range all {
 		if !valid[p.RiskClass] {
@@ -247,9 +247,41 @@ func TestRBCDCatalog_ConfigurePostconditionSatisfiesImpersonatePrerequisite(t *t
 
 func TestRBCDCatalog_NoneHaveATechniqueID(t *testing.T) {
 	for _, p := range RBCDCatalog {
+		if p.ID == "rbcd-configure-exposure-check" {
+			// The read-only exposure-check is genuine permission-groups
+			// DISCOVERY (T1069) -- see its own test below.
+			continue
+		}
 		if p.TechniqueID != "" {
 			t.Errorf("expected %s to have no TechniqueID, got %q", p.ID, p.TechniqueID)
 		}
+	}
+}
+
+// TestRBCDCatalog_ExposureCheckIsDiscoveryOnlyNonDestructive pins the
+// discovery-vs-abuse distinction for RBCD: a read-only audit (reads computer
+// DACLs for non-tier-0 write access and reads ms-DS-MachineAccountQuota) must
+// never be confused with the rbcd-configure/rbcd-impersonate abuse primitives,
+// which write the delegation attribute and impersonate through it.
+func TestRBCDCatalog_ExposureCheckIsDiscoveryOnlyNonDestructive(t *testing.T) {
+	p, ok := findInRBCDCatalog("rbcd-configure-exposure-check")
+	if !ok {
+		t.Fatal("expected an rbcd-configure-exposure-check primitive in RBCDCatalog")
+	}
+	if p.TechniqueID != "T1069" {
+		t.Fatalf("expected TechniqueID T1069 (Permission Groups Discovery), got %q", p.TechniqueID)
+	}
+	if !p.Prerequisites.DomainJoined {
+		t.Fatal("expected DomainJoined prerequisite")
+	}
+	if len(p.Prerequisites.Conditions) != 0 {
+		t.Fatalf("expected NO acl_right_held precondition (it discovers the write surface), got %+v", p.Prerequisites.Conditions)
+	}
+	if len(p.Postconditions) != 1 || p.Postconditions[0].Kind != CapRBCDExposureKnown {
+		t.Fatalf("expected postcondition CapRBCDExposureKnown (discovery, not CapRBCDConfigured/CapLocalAdmin), got %+v", p.Postconditions)
+	}
+	if p.RiskClass != RiskNonDestructive {
+		t.Fatalf("expected RiskNonDestructive (reads DACLs + MAQ, writes nothing), got %q", p.RiskClass)
 	}
 }
 

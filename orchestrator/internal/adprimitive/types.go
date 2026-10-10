@@ -119,6 +119,21 @@ const (
 	// having pushed policy through it to gain code execution (added for
 	// GPOAbuseCatalog's read-only exposure-check primitive).
 	CapGPOExposureKnown CapabilityKind = "GPO_EXPOSURE_KNOWN"
+
+	// CapRBCDExposureKnown is a DISCOVERY-type capability: the presence of
+	// the RBCD-configure precondition -- a non-tier-0 principal holding
+	// write access (GenericAll/GenericWrite/WriteProperty/WriteDacl/
+	// WriteOwner) over a computer object, together with a non-zero
+	// ms-DS-MachineAccountQuota that lets any domain user create the
+	// machine account used as the impersonation principal -- readable from
+	// the directory, is now KNOWN, not exercised. Deliberately distinct
+	// from CapRBCDConfigured and CapLocalAdmin -- auditing that the
+	// configure precondition is exposed is not the same as having written
+	// the delegation attribute or impersonated anyone through it (added for
+	// RBCDCatalog's read-only exposure-check primitive). It is also narrower
+	// than CapDelegationExposureKnown, which reports delegation attributes
+	// ALREADY set; this reports the write-ability to set them.
+	CapRBCDExposureKnown CapabilityKind = "RBCD_EXPOSURE_KNOWN"
 )
 
 // RiskClass is structural metadata only: a 3-value tier matching

@@ -4,8 +4,8 @@ import "testing"
 
 func TestAll_CoversEveryCatalogWithoutDuplicateIDs(t *testing.T) {
 	all := All()
-	if len(all) != 27 {
-		t.Fatalf("expected 27 primitives across all catalogs, got %d", len(all))
+	if len(all) != 28 {
+		t.Fatalf("expected 28 primitives across all catalogs, got %d", len(all))
 	}
 	seen := map[string]bool{}
 	for _, p := range all {

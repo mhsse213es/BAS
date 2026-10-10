@@ -328,7 +328,8 @@ func isExposureCheckPrimitive(id string) bool {
 		"adcs-esc-exposure-check",
 		"kerberos-delegation-exposure-check",
 		"trust-sid-history-exposure-check",
-		"gpo-abuse-exposure-check":
+		"gpo-abuse-exposure-check",
+		"rbcd-configure-exposure-check":
 		return true
 	}
 	return false

@@ -141,6 +141,13 @@ var contentEvidenceByID = map[string]ContentEvidence{
 		Source:    "scenarios/gpo-writable-linked-exposure-audit.yaml (Stage 1, T1484.001)",
 		Rationale: "committed scenario reads groupPolicyContainer DACLs for non-tier-0 write access on GPOs linked to a populated scope",
 	},
+	// RBCD configure-surface exposure audit -- read-only DISCOVERY counterpart
+	// to the two RBCD ABUSE primitives, with its own real committed scenario.
+	"rbcd-configure-exposure-check": {
+		State: ContentScenarioComposable, RepoVerified: true,
+		Source:    "scenarios/rbcd-configure-exposure-audit.yaml (Stage 1, T1069)",
+		Rationale: "committed scenario reads computer DACLs for non-tier-0 write access and reads ms-DS-MachineAccountQuota",
+	},
 }
 
 // ContentStates returns the content-availability classification for every AD
