@@ -89,6 +89,12 @@ ul{margin:0 0 12px 18px}li{font-size:.8rem;margin-bottom:5px}
 <tr><td>Missing executable content</td><td>{{.Report.ContentSummary.MissingExecutable}}</td></tr>
 </tbody>
 </table>
+<h2>Live Content Inventory</h2>
+{{if .InventoryComplete}}
+<p>Both live content stores were attached when this report was generated (ART and Caldera). The content-availability figures above reflect the attached libraries.</p>
+{{else}}
+<div class="callout"><strong>Incomplete live inventory.</strong> ART store {{if .ARTStoreLoaded}}attached{{else}}not attached{{end}}; Caldera store {{if .CalderaStoreLoaded}}attached{{else}}not attached{{end}}. The content-availability figures in this report are a repository classification only: "missing" means not found in the repository mapping, not a verified absence across the live libraries.</div>
+{{end}}
 <div class="pf"><span>Audspect BAS — AD Coverage Assessment</span><span>CONFIDENTIAL</span></div>
 </div></div>
 
@@ -102,7 +108,7 @@ ul{margin:0 0 12px 18px}li{font-size:.8rem;margin-bottom:5px}
 <tbody>
 {{range .Caps}}
 <tr>
-<td>{{.Name}}<div class="mono">{{.PrimitiveID}}</div></td>
+<td>{{.Name}}<div class="mono">{{.PrimitiveID}}</div>{{if .ContentSource}}<div class="mono" style="color:#0d9488">{{.ContentSource}}</div>{{end}}</td>
 <td class="mono">{{.TechniqueID}}</td>
 <td><span class="pill p-grey">{{contentLabel .ContentAvailability}}</span></td>
 <td><span class="pill {{if .ScenarioComposed}}p-green{{else}}p-grey{{end}}">{{composedLabel .ScenarioComposed}}</span></td>
@@ -123,6 +129,17 @@ ul{margin:0 0 12px 18px}li{font-size:.8rem;margin-bottom:5px}
 {{if .AllLimitations}}
 <ul>{{range .AllLimitations}}<li>{{.}}</li>{{end}}</ul>
 {{else}}<p>No capability-specific limitations recorded.</p>{{end}}
+<h2>Content Provenance</h2>
+{{if .ProvenancedCapabilities}}
+<table>
+<thead><tr><th>Capability</th><th>Content state</th><th>Evidence</th><th>Source</th></tr></thead>
+<tbody>
+{{range .ProvenancedCapabilities}}
+<tr><td>{{.Name}}</td><td>{{contentLabel .ContentAvailability}}</td><td>{{if .ContentRepoVerified}}Repository-verified{{else}}External reference{{end}}</td><td class="mono">{{.ContentSource}}</td></tr>
+{{end}}
+</tbody>
+</table>
+{{else}}<p>No cited content provenance for any capability.</p>{{end}}
 <div class="pf"><span>Audspect BAS — AD Coverage Assessment</span><span>CONFIDENTIAL</span></div>
 </div></div>
 

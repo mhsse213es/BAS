@@ -14,7 +14,12 @@ import (
 // admatrix.Report() the operator UI reads -- so the PDF/JSON exports can never
 // drift from what the screen shows, and carry no report-local hardcoded counts.
 func (h *Handler) adAssessment() reporting.ADAssessmentReport {
-	return reporting.ADAssessmentReport{GeneratedAt: time.Now().UTC(), Report: admatrix.Report()}
+	return reporting.ADAssessmentReport{
+		GeneratedAt:        time.Now().UTC(),
+		Report:             admatrix.Report(),
+		ARTStoreLoaded:     h.artStore != nil,
+		CalderaStoreLoaded: h.calderaStore != nil,
+	}
 }
 
 // GetADAssessmentJSON serves the assessment as JSON (the secondary export).

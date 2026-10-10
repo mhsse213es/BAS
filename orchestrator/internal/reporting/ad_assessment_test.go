@@ -103,6 +103,56 @@ func TestADAssessmentReportHTML_EscapesHostileCapabilityNames(t *testing.T) {
 	}
 }
 
+func TestADAssessmentReportHTML_StatesLiveStoreAttachment(t *testing.T) {
+	// Partial attachment must read as incomplete, never as a verified absence.
+	partial := ADAssessmentReport{
+		GeneratedAt: time.Now(), ARTStoreLoaded: true, CalderaStoreLoaded: false,
+		Report: admatrix.CoverageReport{CapabilityStateSummary: admatrix.CapabilityStateSummary{Total: 1}},
+	}
+	var buf bytes.Buffer
+	if err := ADAssessmentReportHTML(&buf, partial); err != nil {
+		t.Fatalf("html: %v", err)
+	}
+	s := strings.ToLower(buf.String())
+	if !strings.Contains(s, "caldera") || !strings.Contains(s, "not attached") {
+		t.Errorf("report must state the Caldera store is not attached")
+	}
+	if !strings.Contains(s, "not a verified absence") {
+		t.Errorf("report must warn that an incomplete inventory is not a verified absence of content")
+	}
+
+	both := partial
+	both.CalderaStoreLoaded = true
+	buf.Reset()
+	if err := ADAssessmentReportHTML(&buf, both); err != nil {
+		t.Fatalf("html: %v", err)
+	}
+	if !strings.Contains(buf.String(), "ART and Caldera") && !strings.Contains(strings.ToLower(buf.String()), "both") {
+		t.Errorf("with both stores attached the report should say so")
+	}
+}
+
+func TestADAssessmentReportHTML_RendersContentProvenance(t *testing.T) {
+	rep := ADAssessmentReport{
+		GeneratedAt: time.Now(),
+		Report: admatrix.CoverageReport{
+			CapabilityStateSummary: admatrix.CapabilityStateSummary{Total: 1, Modeled: 1},
+			CapabilityStates: []admatrix.CapabilityState{{
+				PrimitiveID: "spn-enumerate", Name: "SPN enumeration", Family: "Kerberoasting",
+				ContentAvailability: admatrix.ContentScenarioComposable, ContentRepoVerified: true,
+				ContentSource: "scenarios/kerberoasting-ad-drill.yaml (Stage 1, T1558.003)",
+			}},
+		},
+	}
+	var buf bytes.Buffer
+	if err := ADAssessmentReportHTML(&buf, rep); err != nil {
+		t.Fatalf("html: %v", err)
+	}
+	if !strings.Contains(buf.String(), "scenarios/kerberoasting-ad-drill.yaml (Stage 1, T1558.003)") {
+		t.Errorf("report must render each capability's content provenance (ContentSource)")
+	}
+}
+
 func TestADAssessmentReportPDF_FallsBackWithoutSidecar(t *testing.T) {
 	t.Setenv("CHROME_WS_URL", "") // force the fpdf fallback path
 	var buf bytes.Buffer

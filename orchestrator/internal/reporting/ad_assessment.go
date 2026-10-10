@@ -31,6 +31,34 @@ import (
 type ADAssessmentReport struct {
 	GeneratedAt time.Time               `json:"generatedAt"`
 	Report      admatrix.CoverageReport `json:"report"`
+
+	// Live content-store attachment at report time. When a store is not
+	// attached, the content-availability figures in this report are a
+	// REPOSITORY classification only -- "missing" means not found in the
+	// repository mapping, never a verified absence across the live libraries.
+	// Stated explicitly so the PDF is never mistaken for a complete live
+	// inventory. Mirrors /api/ad/content-inventory's store-loaded flags.
+	ARTStoreLoaded     bool `json:"artStoreLoaded"`
+	CalderaStoreLoaded bool `json:"calderaStoreLoaded"`
+}
+
+// InventoryComplete reports whether both live content stores were attached when
+// the report was generated. When false, content-availability is repository
+// classification only, not a verified live-store inventory.
+func (r ADAssessmentReport) InventoryComplete() bool {
+	return r.ARTStoreLoaded && r.CalderaStoreLoaded
+}
+
+// ProvenancedCapabilities returns the capabilities that carry a cited content
+// source, for the Content Provenance section.
+func (r ADAssessmentReport) ProvenancedCapabilities() []admatrix.CapabilityState {
+	var out []admatrix.CapabilityState
+	for _, c := range r.Report.CapabilityStates {
+		if c.ContentSource != "" {
+			out = append(out, c)
+		}
+	}
+	return out
 }
 
 // ADFamilyGroup is one attack family and its capabilities, for per-family tables.
@@ -193,6 +221,12 @@ func adAssessmentFallbackPDF(w io.Writer, rep ADAssessmentReport) error {
 	pdf.MultiCell(0, 5, tr(fmt.Sprintf(
 		"%d capabilities modeled; %d scenario-composed. %d of %d capabilities executed and %d detection-validated against real Active Directory. These results are not validated against real Active Directory: modeled coverage and scenario composition do not imply a technique has run against, or been detected in, a live domain.",
 		sum.Modeled, sum.ScenarioComposed, sum.Executed, sum.Total, sum.DetectionValidated)), "", "L", false)
+	if !rep.InventoryComplete() {
+		pdf.SetFont("Helvetica", "I", 8)
+		pdf.MultiCell(0, 5, tr(fmt.Sprintf(
+			"Incomplete live inventory: ART store %s, Caldera store %s. Content-availability figures are a repository classification, not a verified absence across the live libraries.",
+			attachedLabel(rep.ARTStoreLoaded), attachedLabel(rep.CalderaStoreLoaded))), "", "L", false)
+	}
 	pdf.Ln(2)
 
 	pdf.SetFont("Helvetica", "B", 11)
@@ -231,6 +265,13 @@ func adAssessmentFallbackPDF(w io.Writer, rep ADAssessmentReport) error {
 		}
 	}
 	return pdf.Output(w)
+}
+
+func attachedLabel(b bool) string {
+	if b {
+		return "attached"
+	}
+	return "not attached"
 }
 
 func trunc(s string, n int) string {
