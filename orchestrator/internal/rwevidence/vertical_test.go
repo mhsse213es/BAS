@@ -76,6 +76,35 @@ func TestEndToEnd_GeneralizesToASecondTechnique(t *testing.T) {
 	}
 }
 
+func TestVSSInhibition_ContainmentAndDataProtectionAreNotApplicable(t *testing.T) {
+	// Move 2 of 3: T1490 is a single-host VSS/backup-catalog deletion -- it
+	// has no lateral-reachability or exfiltration dimension, so Containment
+	// and DataProtection genuinely do not apply. Recorded explicitly, not
+	// silently left unrepresented, so a reader can never mistake "doesn't
+	// apply" for "wasn't tested" or "failed."
+	tech := VSSInhibition()
+	containment := NotApplicable(CapabilityContainment, tech, "T1490 is a single-host VSS/backup-catalog deletion -- it has no lateral-reachability dimension to contain")
+	dataProtection := NotApplicable(CapabilityDataProtection, tech, "T1490 destroys recovery mechanisms; it does not access, stage, or exfiltrate data")
+
+	for _, cr := range []CapabilityResult{containment, dataProtection} {
+		if cr.Verdict != controlval.VerdictSkipped {
+			t.Fatalf("%s: verdict = %q, want SKIPPED", cr.Capability, cr.Verdict)
+		}
+		if cr.SkipReason != controlval.SkipNotApplicable {
+			t.Fatalf("%s: skipReason = %q, want not_applicable", cr.Capability, cr.SkipReason)
+		}
+		if cr.TechniqueID != "T1490" {
+			t.Fatalf("%s: techniqueID = %q, want T1490", cr.Capability, cr.TechniqueID)
+		}
+	}
+	if containment.Capability != CapabilityContainment {
+		t.Fatalf("capability = %q, want containment", containment.Capability)
+	}
+	if dataProtection.Capability != CapabilityDataProtection {
+		t.Fatalf("capability = %q, want data_protection", dataProtection.Capability)
+	}
+}
+
 func TestIndependence_PreventionAndRecoveryNeverCrossContaminate(t *testing.T) {
 	tech := VSSInhibition()
 	key := controlval.CorrelationKey{RunID: "r-mixed", Target: "ws01", Action: tech.ID}
