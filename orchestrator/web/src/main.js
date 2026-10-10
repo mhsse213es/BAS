@@ -14,6 +14,7 @@ import './features/compliance.js';
 import './features/coverage.js';
 import './features/detection-verification.js';
 import './features/endpoint-mastery.js';
+import './features/ad-coverage.js';
 import { __init_L16846 } from './features/evidence.js';
 import './features/findings.js';
 import './features/initiatives.js';

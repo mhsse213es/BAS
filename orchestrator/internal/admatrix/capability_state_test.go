@@ -29,6 +29,9 @@ func TestCapabilityStates_CoverAll21WithIndependentAxes(t *testing.T) {
 		if cs.PrimitiveID == "" || cs.Name == "" {
 			t.Fatalf("incomplete record: %+v", cs)
 		}
+		if cs.Family == "" {
+			t.Fatalf("%s: every capability must carry an attack-family grouping", cs.PrimitiveID)
+		}
 		if !cs.Modeled {
 			t.Fatalf("%s: every catalog primitive is modeled", cs.PrimitiveID)
 		}

@@ -121,6 +121,12 @@
           </svg>
           Endpoint Mastery
         </div>
+        <div class="nav-item" data-tab="ad-coverage" title="AD Coverage" data-on-click="showTab" data-args="[&quot;ad-coverage&quot;]">
+          <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
+            <rect x="2" y="2" width="5" height="5" rx="1"/><rect x="9" y="2" width="5" height="5" rx="1"/><rect x="2" y="9" width="5" height="5" rx="1"/><rect x="9" y="9" width="5" height="5" rx="1"/>
+          </svg>
+          AD Coverage
+        </div>
       </div>
       <div class="nav-group">
         <div class="nav-group-label">Visibility</div>
@@ -1497,6 +1503,25 @@
           </div>
         </div>
         <div id="campaigns-detail" class="is-hidden"></div>
+      </div>
+
+      <!-- Active Directory Coverage -->
+      <div id="tab-ad-coverage" class="is-hidden">
+        <div class="dash-panel">
+          <div class="dash-panel-hdr g1-display-flex">
+            <span>Active Directory Coverage &amp; Assessment</span>
+            <div class="u-flex1"></div>
+            <button class="btn btn-outline btn-sm" data-on-click="loadADCoverage">Refresh</button>
+          </div>
+          <div class="dash-panel-body">
+            <div id="adc-disclaimer"></div>
+            <div id="adc-summary" class="g1-display-grid g1-s-45a0dd65"></div>
+            <div id="adc-inventory-note"></div>
+            <div id="adc-filters" class="u-mt-06"></div>
+            <div id="adc-list" class="u-mt-06"><div class="empty">Loading AD coverage…</div></div>
+            <div id="adc-foot" class="u-muted u-mt-06"></div>
+          </div>
+        </div>
       </div>
 
       <!-- ATT&CK Coverage -->

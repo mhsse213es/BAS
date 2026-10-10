@@ -61,6 +61,13 @@ type CapabilityState struct {
 	Name        string `json:"name"`
 	TechniqueID string `json:"techniqueId,omitempty"`
 
+	// Family is the attack-family grouping label (which catalog the
+	// primitive belongs to: Kerberoasting / ACL / RBCD / DCSync / ADCS /
+	// Delegation / Trust / GPO). A static presentation grouping derived
+	// once here from catalog membership so the UI never has to classify
+	// primitives itself -- it is NOT a coverage or validation state.
+	Family string `json:"family"`
+
 	// Modeled: represented in the adprimitive catalog with adenv predicates
 	// and an adlab resolver. True for every primitive adprimitive.All()
 	// returns -- that is what "modeled" means in this codebase.
@@ -345,6 +352,32 @@ func outstandingFor(cs CapabilityState) []string {
 // deterministic order. It composes adprimitive.All() (the full primitive set)
 // with ContentStates() (content_state.go's provenance-bearing classification)
 // -- it does not re-derive or duplicate either.
+// familyByPrimitiveID maps every primitive to its attack-family label from the
+// catalog it belongs to -- the single place this grouping is defined, so the UI
+// renders it rather than classifying primitives itself.
+func familyByPrimitiveID() map[string]string {
+	fams := []struct {
+		label string
+		cat   []adprimitive.Primitive
+	}{
+		{"Kerberoasting", adprimitive.KerberoastingCatalog},
+		{"ACL", adprimitive.ACLAbuseCatalog},
+		{"RBCD", adprimitive.RBCDCatalog},
+		{"DCSync", adprimitive.DCSyncCatalog},
+		{"ADCS", adprimitive.ADCSCatalog},
+		{"Delegation", adprimitive.DelegationCatalog},
+		{"Trust", adprimitive.TrustAbuseCatalog},
+		{"GPO", adprimitive.GPOAbuseCatalog},
+	}
+	m := map[string]string{}
+	for _, f := range fams {
+		for _, p := range f.cat {
+			m[p.ID] = f.label
+		}
+	}
+	return m
+}
+
 func CapabilityStates() []CapabilityState {
 	content := make(map[string]ContentEvidence, len(adprimitive.All()))
 	for _, ev := range ContentStates() {
@@ -355,6 +388,7 @@ func CapabilityStates() []CapabilityState {
 		entries[e.PrimitiveID] = e
 	}
 
+	family := familyByPrimitiveID()
 	var out []CapabilityState
 	for _, p := range adprimitive.All() {
 		ev := content[p.ID]
@@ -362,6 +396,7 @@ func CapabilityStates() []CapabilityState {
 			PrimitiveID:            p.ID,
 			Name:                   p.Name,
 			TechniqueID:            p.TechniqueID,
+			Family:                 family[p.ID],
 			Modeled:                true,
 			ContentAvailability:    ev.State,
 			ContentSource:          ev.Source,

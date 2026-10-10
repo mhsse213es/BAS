@@ -8,6 +8,7 @@ import { auditPage, backupNow, exportAuditLogs, loadAuditLogs, loadBackups, load
 import { closeCampaignDetail, closeCampaignLaunch, cmpAllConfirmChange, cmpOnExistingScenarioChange, cmpOnGroupChange, cmpOnTargetTypeChange, cmpSelChange, cmpSelectAllFiltered, cmpToggleExclusionFromChecked, generateTIScenario, loadCampaigns, loadKEVPack, openCampaignDetail, openCampaignLaunch, openRunFromCampaign, openThreatPriorityActor, pauseCampaign, renderCampaignTargets, resumeCampaign, selectTIPack, setCampaignSource, setCampaignTab, stopCampaign, submitCampaign } from './features/campaigns.js';
 import { closeChangePassword, closeChangePasswordOnBackdrop, closeConfirmDiffModal, loadCalderaStatus, openChangePassword, openComplianceDetail, runConfirmDiffModal, submitChangePassword } from './features/compliance.js';
 import { loadCoverageAnalytics, openTechnique, renderUTL, setCovView, setUTLFilter } from './features/coverage.js';
+import { loadADCoverage, setADFilter } from './features/ad-coverage.js';
 import { vfCloseDetail, vfDeleteEvidence, vfLoadQueue, vfPickResult, vfSelect, vfSetDomain, vfSubmit, vfToggleHistory, vfUploadEvidence } from './features/detection-verification.js';
 import { _toggleEMExtraScenario, _toggleEMPreviewRow, _toggleVexPreviewRow, _toggleVexPreviewSection, cancelEMSweep, closeEMSweepModal, closeEMSweepModalOnBackdrop, closeEMSweepProgress, closeEMSweepProgressOnBackdrop, closeSweepPreview, closeSweepPreviewOnBackdrop, emGroupSelChange, emRunLayer, emSweepDispatch, loadEmTab, openEMSweepModal, openEMSweepProgress, openEMSweepReport, setEMExtraSearchFromInput, setEMSweepTargetMode, setVexPreviewSearchFromInput, setVexPreviewTacticFromSelect, startSweepFromPreview, stopEMSweep, stopEMSweepCurrent } from './features/endpoint-mastery.js';
 import { closeCreateUser, closeCreateUserOnBackdrop, closeDownloadOptions, closeEditUser, closeEditUserOnBackdrop, closeEvidence, closeEvidenceOnBackdrop, confirmRun, copyRaw, doResetPassword, downloadCampaignCSV, downloadCampaignReport, downloadEMSweepReport, downloadRunCSV, downloadRunReport, downloadSweepReport, exportRunJSON, openCampaignReport, openCmdk, openCreateUser, openEditUser, openEvidence, openFindingFromDashboard, openRunReport, pauseRun, resumeRun, stopRun, submitCreateUser, submitEditUser, toggleUserActive } from './features/evidence.js';
@@ -189,6 +190,8 @@ export const ACTIONS = {
   loadCoverageAnalytics,
   loadCoverageMatrix,
   loadEmTab,
+  loadADCoverage,
+  setADFilter,
   loadExecDashboard,
   loadExposureAssets,
   loadFindings,
