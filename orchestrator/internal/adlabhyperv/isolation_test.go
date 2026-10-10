@@ -42,6 +42,13 @@ func TestEvaluateIsolation_IndeterminateIsNotIsolated(t *testing.T) {
 	}
 }
 
+func TestEvaluateIsolation_EmptyRequiredDenies(t *testing.T) {
+	// Fail-closed: a requirement set with no checks must never verify a lab.
+	if EvaluateIsolation(nil, allPass()).Verified {
+		t.Fatal("an empty required-checks set must deny, not vacuously verify")
+	}
+}
+
 func TestEvaluateIsolation_FailedCheckDenies(t *testing.T) {
 	m := allPass()
 	m[CheckPrivateSwitch] = ProbeResult{Passed: false, Determinate: true, Detail: "adapter on External switch"}

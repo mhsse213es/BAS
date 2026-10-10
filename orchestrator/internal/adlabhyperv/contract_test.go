@@ -62,6 +62,11 @@ func TestContract_IsolationUnverifiedMintsNoProvenance(t *testing.T) {
 	if res.TeardownErr != nil {
 		t.Errorf("teardown must still run: %v", res.TeardownErr)
 	}
+	for _, c := range f.calls {
+		if c.Kind == CmdExecuteCase {
+			t.Fatal("no validation case may execute when isolation is unverified")
+		}
+	}
 }
 
 func TestContract_GateDeniedWhenUnauthorized(t *testing.T) {

@@ -115,6 +115,12 @@ The real Hyper-V execution is implemented/run only when **all** hold:
    never committed.
 5. Operator authorization (`adgate.Authorization{Authorized, DestructiveApproved}`)
    is bound to *this* run and *this* target, not an ambient flag.
+6. The real `Commander` returns a **run-unique** target handle and makes
+   provisioning **atomic**: if it partially creates a switch/VM and then fails,
+   it cleans up its own partial state before returning the error. (`adlabrt`
+   only guarantees teardown once provisioning has *succeeded*, so partial-failure
+   cleanup is the Commander's responsibility — the fake-backed slice cannot
+   defend it.)
 
 Until all five hold, only the lab-independent substrate code (the `adlabhyperv`
 package, tested against a fake command seam) exists; no real provisioning,

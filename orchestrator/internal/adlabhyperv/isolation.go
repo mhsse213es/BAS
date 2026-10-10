@@ -35,6 +35,11 @@ func RequiredChecks() []CheckKind {
 // indeterminate result denies. Method records which checks ran and their
 // outcomes; Detail names the first failing/missing check.
 func EvaluateIsolation(required []CheckKind, results map[CheckKind]ProbeResult) adlabrt.IsolationResult {
+	// Fail-closed: a lab with no required checks is never "isolated". An empty
+	// requirement set must deny, not vacuously verify.
+	if len(required) == 0 {
+		return adlabrt.IsolationResult{Verified: false, Method: "checks[]", Detail: "no isolation checks required"}
+	}
 	var method []string
 	verified := true
 	detail := ""

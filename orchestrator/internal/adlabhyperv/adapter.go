@@ -34,17 +34,24 @@ func (h *HyperV) Provision(ctx context.Context, spec adlabrt.LabSpec) (adlabrt.T
 	if !out.OK {
 		return adlabrt.Target{}, fmt.Errorf("provision %q did not complete: %s", topo.Name, out.Detail)
 	}
-	id := out.TargetID
-	if id == "" {
-		id = topo.Name
+	// The Commander must return a run-unique handle. Defaulting to the topology
+	// name would hand concurrent runs the same Target, so one run's teardown
+	// could revert another's live lab -- fail closed instead.
+	if out.TargetID == "" {
+		return adlabrt.Target{}, fmt.Errorf("provision %q returned no target handle", topo.Name)
 	}
-	return adlabrt.Target{ID: id}, nil
+	return adlabrt.Target{ID: out.TargetID}, nil
 }
 
 // Teardown asks the Commander to revert and destroy the run's VMs. It is
 // idempotent: a commander that reports the target already gone returns OK, and
 // an empty target id is a no-op success.
 func (h *HyperV) Teardown(ctx context.Context, t adlabrt.Target) error {
+	// An empty target handle means nothing was provisioned (or already gone):
+	// a no-op success, with no command sent to the Commander.
+	if t.ID == "" {
+		return nil
+	}
 	out, err := h.Cmd.Run(ctx, Command{Kind: CmdTeardown, Args: map[string]string{"target": t.ID}})
 	if err != nil {
 		return fmt.Errorf("teardown %q: %w", t.ID, err)

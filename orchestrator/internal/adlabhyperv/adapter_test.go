@@ -35,6 +35,28 @@ func TestProvision_CommanderErrorSurfaces(t *testing.T) {
 	}
 }
 
+func TestProvision_EmptyTargetIDErrors(t *testing.T) {
+	f := newFakeCommander()
+	f.provision = func(Command) (Output, error) { return Output{OK: true, TargetID: ""}, nil }
+	h := &HyperV{Cmd: f}
+	if _, err := h.Provision(context.Background(), adlabrt.LabSpec{Name: "dc-only"}); err == nil {
+		t.Fatal("an empty TargetID must error, not default to a shared non-unique id")
+	}
+}
+
+func TestTeardown_EmptyTargetIsNoOpAndIssuesNoCommand(t *testing.T) {
+	f := newFakeCommander()
+	h := &HyperV{Cmd: f}
+	if err := h.Teardown(context.Background(), adlabrt.Target{ID: ""}); err != nil {
+		t.Fatalf("empty-target teardown must be a no-op success: %v", err)
+	}
+	for _, c := range f.calls {
+		if c.Kind == CmdTeardown {
+			t.Fatal("empty-target teardown must not send a teardown command to the Commander")
+		}
+	}
+}
+
 func TestTeardown_IdempotentOnCommanderDone(t *testing.T) {
 	h := &HyperV{Cmd: newFakeCommander()}
 	if err := h.Teardown(context.Background(), adlabrt.Target{ID: "dc-only/run1"}); err != nil {
