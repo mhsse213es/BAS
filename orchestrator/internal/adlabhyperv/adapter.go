@@ -13,6 +13,9 @@ type HyperV struct {
 	Cmd Commander
 }
 
+// compile-time proof HyperV satisfies the substrate seam (interface unchanged).
+var _ adlabrt.Substrate = (*HyperV)(nil)
+
 // Provision resolves the topology and asks the Commander to stand it up on the
 // topology's dedicated private switch. An unknown topology errors rather than
 // provisioning an empty environment.
@@ -50,4 +53,42 @@ func (h *HyperV) Teardown(ctx context.Context, t adlabrt.Target) error {
 		return fmt.Errorf("teardown %q did not complete: %s", t.ID, out.Detail)
 	}
 	return nil
+}
+
+// VerifyIsolation runs each required isolation check through the Commander and
+// aggregates them fail-closed. A probe that errors is recorded as an
+// indeterminate result (never isolated), so a failed probe can never be
+// mistaken for a verified-isolated lab.
+func (h *HyperV) VerifyIsolation(ctx context.Context, t adlabrt.Target) (adlabrt.IsolationResult, error) {
+	required := RequiredChecks()
+	results := make(map[CheckKind]ProbeResult, len(required))
+	for _, c := range required {
+		out, err := h.Cmd.Run(ctx, Command{Kind: CmdProbe, Args: map[string]string{"target": t.ID, "check": string(c)}})
+		if err != nil {
+			results[c] = ProbeResult{Passed: false, Determinate: false, Detail: "probe error: " + err.Error()}
+			continue
+		}
+		results[c] = ProbeResult{Passed: out.Passed, Determinate: out.Determinate, Detail: out.Detail}
+	}
+	return EvaluateIsolation(required, results), nil
+}
+
+// Execute runs the validation case through the Commander and maps its output to
+// an Observation. It authors no attack content: it passes the case/primitive
+// identity to the Commander (the lab-gated real runner resolves it to existing
+// reusable content). An incomplete output stays Complete=false (inconclusive).
+func (h *HyperV) Execute(ctx context.Context, t adlabrt.Target, vc adlabrt.ValidationCase) (adlabrt.Observation, error) {
+	out, err := h.Cmd.Run(ctx, Command{Kind: CmdExecuteCase, Args: map[string]string{
+		"target":    t.ID,
+		"case":      vc.Name,
+		"primitive": vc.Primitive.ID,
+	}})
+	if err != nil {
+		return adlabrt.Observation{}, fmt.Errorf("execute case %q: %w", vc.Name, err)
+	}
+	return adlabrt.Observation{
+		PostconditionObserved: out.PostconditionObserved,
+		Complete:              out.Complete,
+		Detail:                out.Detail,
+	}, nil
 }
