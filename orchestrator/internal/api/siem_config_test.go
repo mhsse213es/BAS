@@ -191,38 +191,11 @@ func TestTestSIEMConfig_NotFound(t *testing.T) {
 	})
 }
 
-// TestTestSIEMConfig_UnsupportedProvider pins that only QRadar is actually
-// implemented (see internal/siem/correlator.go's queryAlerts/TestConnectivity
-// switch) — a config for any other valid provider enum value gets a clean
-// ok:false rather than a panic or a misleading success.
-func TestTestSIEMConfig_UnsupportedProvider(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping container-backed test in -short mode")
-	}
-	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
-		h := siemHandler(t, pool)
-		createRec := httptest.NewRecorder()
-		h.CreateSIEMConfig(createRec, siemConfigReq(map[string]any{"name": "x", "provider": "splunk"}))
-		var created struct {
-			ID string `json:"id"`
-		}
-		json.Unmarshal(createRec.Body.Bytes(), &created)
-
-		rec := httptest.NewRecorder()
-		h.TestSIEMConfig(rec, withURLParam(httptest.NewRequest(http.MethodPost, "/x", nil), "id", created.ID))
-		if rec.Code != http.StatusOK {
-			t.Fatalf("status = %d, want 200 (ok:false body, not an HTTP error)", rec.Code)
-		}
-		var out struct {
-			OK    bool   `json:"ok"`
-			Error string `json:"error"`
-		}
-		json.Unmarshal(rec.Body.Bytes(), &out)
-		if out.OK || out.Error == "" {
-			t.Fatalf("out = %+v, want ok:false with a not-yet-supported error", out)
-		}
-	})
-}
+// Note: there is deliberately no "test an unsupported-provider config" case
+// here. Non-qradar providers are now rejected at creation (see
+// CreateSIEMConfig and TestCreateSIEMConfig_ValidationErrors), so a config
+// that TestSIEMConfig could run against is always qradar -- there is no
+// reachable unsupported-provider state left to exercise at test time.
 
 func TestTestSIEMConfig_QRadarSuccessAndAuthFailure(t *testing.T) {
 	if testing.Short() {
