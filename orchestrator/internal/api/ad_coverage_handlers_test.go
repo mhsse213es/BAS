@@ -49,3 +49,42 @@ func TestGetADCoverage_ReturnsMatrixReport(t *testing.T) {
 		t.Fatalf("dcsync must remain model_simulated in the report, got %q", dcsync.ValidationLevel)
 	}
 }
+
+// TestGetADCoverage_CapabilityStatesUseCamelCaseJSON locks the UI-facing
+// contract: every object in the payload (including capabilityStates[], which
+// once serialized with PascalCase Go field names) uses camelCase keys, so the
+// frontend reads one consistent convention across the whole report.
+func TestGetADCoverage_CapabilityStatesUseCamelCaseJSON(t *testing.T) {
+	h := &Handler{}
+	rr := httptest.NewRecorder()
+	h.GetADCoverage(rr, httptest.NewRequest(http.MethodGet, "/api/ad/coverage", nil))
+
+	var raw struct {
+		CapabilityStates []map[string]json.RawMessage `json:"capabilityStates"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &raw); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(raw.CapabilityStates) == 0 {
+		t.Fatal("expected capabilityStates in the report")
+	}
+	first := raw.CapabilityStates[0]
+	for _, want := range []string{"primitiveId", "contentAvailability", "executionValidation", "detectionValidation", "riskClass"} {
+		if _, ok := first[want]; !ok {
+			t.Errorf("capabilityStates[0] missing camelCase key %q (keys: %v)", want, keysOf(first))
+		}
+	}
+	for _, bad := range []string{"PrimitiveID", "ContentAvailability", "ExecutionValidation"} {
+		if _, ok := first[bad]; ok {
+			t.Errorf("capabilityStates[0] still has PascalCase key %q", bad)
+		}
+	}
+}
+
+func keysOf(m map[string]json.RawMessage) []string {
+	ks := make([]string, 0, len(m))
+	for k := range m {
+		ks = append(ks, k)
+	}
+	return ks
+}

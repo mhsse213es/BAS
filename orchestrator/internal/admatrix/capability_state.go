@@ -57,72 +57,72 @@ const (
 // (content_state.go); it is not a new inventory, primitive, matrix, or
 // validation package, and it changes no production dispatch behavior.
 type CapabilityState struct {
-	PrimitiveID string
-	Name        string
-	TechniqueID string
+	PrimitiveID string `json:"primitiveId"`
+	Name        string `json:"name"`
+	TechniqueID string `json:"techniqueId,omitempty"`
 
 	// Modeled: represented in the adprimitive catalog with adenv predicates
 	// and an adlab resolver. True for every primitive adprimitive.All()
 	// returns -- that is what "modeled" means in this codebase.
-	Modeled bool
+	Modeled bool `json:"modeled"`
 
 	// ContentAvailability/ContentSource/ContentRepoVerified/ContentReason
 	// mirror content_state.go's ContentEvidence exactly -- the single
 	// existing source of truth for what reusable execution content exists
 	// and its provenance. Not duplicated logic, just carried through.
-	ContentAvailability ContentState
-	ContentSource       string
-	ContentRepoVerified bool
-	ContentReason       string
+	ContentAvailability ContentState `json:"contentAvailability"`
+	ContentSource       string       `json:"contentSource,omitempty"`
+	ContentRepoVerified bool         `json:"contentRepoVerified"`
+	ContentReason       string       `json:"contentReason,omitempty"`
 
 	// ScenarioComposed is true only when a committed Audspect scenario
 	// actually performs this capability. Being scenario-composed does NOT
 	// imply execution occurred -- that is ExecutionValidation's job. These
 	// two axes are deliberately allowed to disagree (e.g. DCSync: reusable
 	// content is cited but nothing is scenario-composed or executed).
-	ScenarioComposed bool
+	ScenarioComposed bool `json:"scenarioComposed"`
 
-	ExecutionValidation ExecutionValidation
-	DetectionValidation DetectionValidation
+	ExecutionValidation ExecutionValidation `json:"executionValidation"`
+	DetectionValidation DetectionValidation `json:"detectionValidation"`
 
-	Prerequisites          adprimitive.Prerequisites
-	ExpectedPostconditions []adprimitive.Capability
+	Prerequisites          adprimitive.Prerequisites `json:"prerequisites"`
+	ExpectedPostconditions []adprimitive.Capability  `json:"expectedPostconditions,omitempty"`
 
 	// RiskClass is the safety-requirement signal, carried straight from the
 	// adprimitive catalog (non_destructive / potentially_destructive /
 	// destructive) -- never re-derived or guessed here.
-	RiskClass adprimitive.RiskClass
+	RiskClass adprimitive.RiskClass `json:"riskClass"`
 
 	// Cleanup, EvidenceRequirements and TelemetrySources are grounded in the
 	// matrix Entry for the 18 gap primitives (matrix.go) and in the real,
 	// committed scenario YAML for the 3 Kerberoasting-baseline primitives
 	// (see realScenarioEvidenceByID) -- never invented.
-	Cleanup              []string
-	EvidenceRequirements []string
-	TelemetrySources     []string
+	Cleanup              []string `json:"cleanup,omitempty"`
+	EvidenceRequirements []string `json:"evidenceRequirements,omitempty"`
+	TelemetrySources     []string `json:"telemetrySources,omitempty"`
 
 	// Limitations are the known constraints on what has actually been
 	// demonstrated so far -- distinct from Outstanding (what remains to be
 	// done): a capability can be scenario-composed and still have the
 	// limitation "not yet executed against a real domain".
-	Limitations []string
+	Limitations []string `json:"limitations"`
 
 	// Outstanding is the explicit, honest list of remaining work for this
 	// capability. Never silently inferred from a promoted status -- every
 	// entry is traceable to a concrete gap (no content mapping, not
 	// integrated into a scenario, not executed, not detection-validated).
-	Outstanding []string
+	Outstanding []string `json:"outstanding"`
 }
 
 // CapabilityStateSummary is the measurable rollup across CapabilityStates.
 // Every count is traceable back to the per-capability records; nothing here
 // is derived independently of them.
 type CapabilityStateSummary struct {
-	Total              int
-	Modeled            int
-	ScenarioComposed   int
-	Executed           int
-	DetectionValidated int
+	Total              int `json:"total"`
+	Modeled            int `json:"modeled"`
+	ScenarioComposed   int `json:"scenarioComposed"`
+	Executed           int `json:"executed"`
+	DetectionValidated int `json:"detectionValidated"`
 }
 
 // realScenarioEvidence is the Cleanup/EvidenceRequirements/TelemetrySources/
