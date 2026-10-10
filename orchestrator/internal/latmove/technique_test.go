@@ -67,9 +67,22 @@ func TestWinRMRemoteExecution_StableIdentity(t *testing.T) {
 	}
 }
 
+func TestRDPInteractiveLogon_StableIdentity(t *testing.T) {
+	tech := RDPInteractiveLogon()
+	if tech.ID != "rdp-interactive-logon" {
+		t.Fatalf("id = %q", tech.ID)
+	}
+	if tech.MitreID != "T1021.001" {
+		t.Fatalf("mitreID = %q, want T1021.001", tech.MitreID)
+	}
+	if tech.RiskClass != adprimitive.RiskNonDestructive {
+		t.Fatalf("riskClass = %q, want non_destructive (session establishment alone, no further action)", tech.RiskClass)
+	}
+}
+
 func TestAllTechniques_HaveDistinctIDs(t *testing.T) {
 	seen := map[string]bool{}
-	for _, tech := range []Technique{WMIRemoteProcessCreation(), RemoteServiceCreation(), ScheduledTaskRemote(), WinRMRemoteExecution()} {
+	for _, tech := range []Technique{WMIRemoteProcessCreation(), RemoteServiceCreation(), ScheduledTaskRemote(), WinRMRemoteExecution(), RDPInteractiveLogon()} {
 		if seen[tech.ID] {
 			t.Fatalf("duplicate technique id: %q", tech.ID)
 		}

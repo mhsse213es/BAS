@@ -61,3 +61,22 @@ func WinRMRemoteExecution() Technique {
 		RiskClass: adprimitive.RiskNonDestructive,
 	}
 }
+
+// RDPInteractiveLogon is the fifth technique: establishing an interactive
+// Remote Desktop session (T1021.001). RDP has no built-in command/response
+// channel, so "marker" here means something different from the other four
+// techniques: MarkerCheck.Found represents whether a CORRELATED interactive
+// logon session (Security 4624, Logon Type 10, matching this attempt's
+// principal/source/window) was observed on the destination -- not a
+// self-written token. A real observer implementing this technique correlates
+// via the session's own identity metadata, not content it wrote. Session
+// establishment alone (no further action inside the session) is
+// non-destructive.
+func RDPInteractiveLogon() Technique {
+	return Technique{
+		ID:        "rdp-interactive-logon",
+		Name:      "RDP Interactive Logon",
+		MitreID:   "T1021.001",
+		RiskClass: adprimitive.RiskNonDestructive,
+	}
+}
