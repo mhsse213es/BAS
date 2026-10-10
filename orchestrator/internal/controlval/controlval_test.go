@@ -121,6 +121,71 @@ func TestEvaluate_DoesNotAlterPolicyVerified(t *testing.T) {
 	}
 }
 
+func TestValidSkipPair_RequiredTestMatrix(t *testing.T) {
+	cases := []struct {
+		name    string
+		verdict Verdict
+		reason  SkipReason
+		wantErr bool
+	}{
+		{"valid PASS, empty reason", VerdictPass, "", false},
+		{"valid FAIL, empty reason", VerdictFail, "", false},
+		{"valid ERROR, empty reason", VerdictError, "", false},
+		{"SKIPPED + insufficient_evidence", VerdictSkipped, SkipInsufficientEvidence, false},
+		{"SKIPPED + not_applicable", VerdictSkipped, SkipNotApplicable, false},
+		{"SKIPPED + not_tested", VerdictSkipped, SkipNotTested, false},
+		{"SKIPPED with no reason", VerdictSkipped, "", true},
+		{"PASS with a skip reason", VerdictPass, SkipInsufficientEvidence, true},
+		{"unknown skip reason", VerdictSkipped, SkipReason("made_up"), true},
+	}
+	for _, c := range cases {
+		err := ValidSkipPair(c.verdict, c.reason)
+		if c.wantErr && err == nil {
+			t.Errorf("%s: want rejected, got accepted", c.name)
+		}
+		if !c.wantErr && err != nil {
+			t.Errorf("%s: want accepted, got rejected: %v", c.name, err)
+		}
+	}
+}
+
+func TestValidation_Valid_DelegatesToValidSkipPair(t *testing.T) {
+	v := Validation{Verdict: VerdictSkipped, SkipReason: SkipInsufficientEvidence}
+	if err := v.Valid(); err != nil {
+		t.Fatalf("expected valid, got %v", err)
+	}
+	bad := Validation{Verdict: VerdictPass, SkipReason: SkipNotTested}
+	if err := bad.Valid(); err == nil {
+		t.Fatal("expected rejection for PASS carrying a SkipReason")
+	}
+}
+
+func TestEvaluate_OutputIsAlwaysStructurallyValid(t *testing.T) {
+	// Every branch Evaluate can take must produce a Valid() result -- this
+	// is the structural counterpart to TestEvaluate_SkippedAlwaysHasRecognizedReason/
+	// TestEvaluate_NonSkippedNeverHasSkipReason, checked via the shared
+	// validator rather than re-deriving the rule.
+	cases := []struct {
+		exp Expectation
+		obs *Observation
+		err error
+	}{
+		{Expectation{Expected: OutcomeBlocked}, nil, errors.New("api down")},
+		{Expectation{Expected: OutcomeBlocked, MinConfidence: ConfidenceHigh}, nil, nil},
+		{Expectation{Expected: OutcomeBlocked, MinConfidence: ConfidenceLow}, obs(OutcomeUnknown, EvidenceObserved, ConfidenceHigh), nil},
+		{Expectation{Expected: OutcomeBlocked, MinConfidence: ConfidenceHigh}, obs(OutcomeBlocked, EvidenceObserved, ConfidenceLow), nil},
+		{Expectation{Expected: OutcomeBlocked, MinConfidence: ConfidenceHigh}, obs(OutcomeBlocked, EvidenceInferred, ConfidenceHigh), nil},
+		{Expectation{Expected: OutcomeBlocked, MinConfidence: ConfidenceHigh}, obs(OutcomeBlocked, EvidenceObserved, ConfidenceHigh), nil},
+		{Expectation{Expected: OutcomeBlocked, MinConfidence: ConfidenceHigh}, obs(OutcomeAllowed, EvidenceObserved, ConfidenceHigh), nil},
+	}
+	for _, c := range cases {
+		v := Evaluate(c.exp, c.obs, c.err)
+		if err := v.Valid(); err != nil {
+			t.Errorf("Evaluate produced an invalid Validation: %v (verdict=%q skipReason=%q)", err, v.Verdict, v.SkipReason)
+		}
+	}
+}
+
 func TestEvaluate_SkippedAlwaysHasRecognizedReason(t *testing.T) {
 	recognized := map[SkipReason]bool{
 		SkipInsufficientEvidence: true,

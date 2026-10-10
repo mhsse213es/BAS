@@ -10,7 +10,10 @@
 // or detection telemetry alone.
 package controlval
 
-import "time"
+import (
+	"fmt"
+	"time"
+)
 
 // Outcome is what a deployed control did about an attack attempt.
 type Outcome string
@@ -152,6 +155,37 @@ type Validation struct {
 	Verdict     Verdict
 	SkipReason  SkipReason `json:"skipReason,omitempty"`
 	Reason      string
+}
+
+// ValidSkipPair rejects a Verdict/SkipReason combination that violates the
+// canonical taxonomy's invariants: a Validation (or any analogous result,
+// such as rwevidence.CapabilityResult) is never automatically correct just
+// because it is a well-typed Go struct -- a hand-constructed value can still
+// carry an invalid combination, and this is the single, shared place that
+// catches it, so no consumer package needs (or should write) its own copy.
+func ValidSkipPair(v Verdict, sr SkipReason) error {
+	switch v {
+	case VerdictSkipped:
+		switch sr {
+		case SkipInsufficientEvidence, SkipNotApplicable, SkipNotTested:
+			return nil
+		default:
+			return fmt.Errorf("SKIPPED verdict must carry one of the 3 recognized SkipReasons, got %q", sr)
+		}
+	case VerdictPass, VerdictFail, VerdictError:
+		if sr != "" {
+			return fmt.Errorf("%s verdict must not carry a SkipReason, got %q", v, sr)
+		}
+		return nil
+	default:
+		return fmt.Errorf("unrecognized Verdict %q", v)
+	}
+}
+
+// Valid reports whether v's own Verdict/SkipReason pair satisfies
+// ValidSkipPair.
+func (v Validation) Valid() error {
+	return ValidSkipPair(v.Verdict, v.SkipReason)
 }
 
 // Evaluate grades an observed control response against an expectation. It is
