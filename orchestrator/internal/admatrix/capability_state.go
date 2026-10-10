@@ -92,6 +92,16 @@ type CapabilityState struct {
 	ExecutionValidation ExecutionValidation `json:"executionValidation"`
 	DetectionValidation DetectionValidation `json:"detectionValidation"`
 
+	// ControlEfficacy is the sixth, INDEPENDENT axis: whether a DEPLOYED
+	// security control produced its expected response to this capability. Zero
+	// value = not evaluated. It never modifies or collapses the five axes
+	// above, and it is independent of DetectionValidation -- a blocked attempt
+	// with no SIEM alert may be a PASS here and a detection failure. Populated
+	// only via the adcontrolval bridge from real provider observations; live
+	// wiring is DEFERRED (lab-gated), so CapabilityStates() leaves this at its
+	// zero value in this slice.
+	ControlEfficacy ControlEfficacyState `json:"controlEfficacy"`
+
 	Prerequisites          adprimitive.Prerequisites `json:"prerequisites"`
 	ExpectedPostconditions []adprimitive.Capability  `json:"expectedPostconditions,omitempty"`
 
@@ -121,6 +131,28 @@ type CapabilityState struct {
 	Outstanding []string `json:"outstanding"`
 }
 
+// controlEfficacyPass is the one verdict string this package tests for in the
+// rollup. It is the SAME PASS value as the shared scoring taxonomy
+// (controlval.VerdictPass / project_scoring_verdicts); declared locally only so
+// admatrix need not import controlval. It is not a second taxonomy.
+const controlEfficacyPass = "PASS"
+
+// ControlEfficacyState is the admatrix-local view of a control-efficacy
+// result. It is filled by the adcontrolval bridge from a controlval.Validation;
+// admatrix imports no controlval or vendor code. Verdict reuses the existing
+// PASS/FAIL/ERROR/SKIPPED taxonomy -- there is no second verdict vocabulary,
+// and Evaluated=true does NOT imply success.
+type ControlEfficacyState struct {
+	Evaluated    bool   `json:"evaluated"`
+	Verdict      string `json:"verdict,omitempty"`
+	Provider     string `json:"provider,omitempty"`
+	Observed     string `json:"observedOutcome,omitempty"`
+	Expected     string `json:"expectedOutcome,omitempty"`
+	EvidenceKind string `json:"evidenceKind,omitempty"`
+	Confidence   string `json:"confidence,omitempty"`
+	Reason       string `json:"reason,omitempty"`
+}
+
 // CapabilityStateSummary is the measurable rollup across CapabilityStates.
 // Every count is traceable back to the per-capability records; nothing here
 // is derived independently of them.
@@ -130,6 +162,7 @@ type CapabilityStateSummary struct {
 	ScenarioComposed   int `json:"scenarioComposed"`
 	Executed           int `json:"executed"`
 	DetectionValidated int `json:"detectionValidated"`
+	ControlValidated   int `json:"controlValidated"`
 }
 
 // realScenarioEvidence is the Cleanup/EvidenceRequirements/TelemetrySources/
@@ -449,6 +482,11 @@ func SummarizeCapabilityStates() CapabilityStateSummary {
 		}
 		if cs.DetectionValidation == DetTelemetryObserved {
 			s.DetectionValidated++
+		}
+		// Independent sixth axis: counted only for an explicit PASS verdict.
+		// Evaluated-but-not-PASS (FAIL/ERROR/SKIPPED) never increments this.
+		if cs.ControlEfficacy.Verdict == string(controlEfficacyPass) {
+			s.ControlValidated++
 		}
 	}
 	return s
