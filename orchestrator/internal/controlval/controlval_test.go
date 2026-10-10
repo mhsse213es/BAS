@@ -121,6 +121,55 @@ func TestEvaluate_DoesNotAlterPolicyVerified(t *testing.T) {
 	}
 }
 
+func TestEvaluate_SkippedAlwaysHasRecognizedReason(t *testing.T) {
+	recognized := map[SkipReason]bool{
+		SkipInsufficientEvidence: true,
+		SkipNotApplicable:        true,
+		SkipNotTested:            true,
+	}
+	cases := []struct {
+		name string
+		exp  Expectation
+		obs  *Observation
+	}{
+		{"nil observation", Expectation{Expected: OutcomeBlocked, MinConfidence: ConfidenceHigh}, nil},
+		{"unknown outcome", Expectation{Expected: OutcomeBlocked, MinConfidence: ConfidenceLow}, obs(OutcomeUnknown, EvidenceObserved, ConfidenceHigh)},
+		{"below confidence floor", Expectation{Expected: OutcomeBlocked, MinConfidence: ConfidenceHigh}, obs(OutcomeBlocked, EvidenceObserved, ConfidenceLow)},
+		{"inferred cannot establish prevention", Expectation{Expected: OutcomeBlocked, MinConfidence: ConfidenceHigh}, obs(OutcomeBlocked, EvidenceInferred, ConfidenceHigh)},
+	}
+	for _, c := range cases {
+		v := Evaluate(c.exp, c.obs, nil)
+		if v.Verdict != VerdictSkipped {
+			t.Fatalf("%s: verdict = %q, want SKIPPED", c.name, v.Verdict)
+		}
+		if !recognized[v.SkipReason] {
+			t.Fatalf("%s: SkipReason = %q, want one of the 3 recognized reasons", c.name, v.SkipReason)
+		}
+	}
+}
+
+func TestEvaluate_NonSkippedNeverHasSkipReason(t *testing.T) {
+	cases := []struct {
+		name string
+		exp  Expectation
+		obs  *Observation
+		err  error
+	}{
+		{"error", Expectation{Expected: OutcomeBlocked}, nil, errors.New("api down")},
+		{"pass", Expectation{Expected: OutcomeBlocked, MinConfidence: ConfidenceHigh}, obs(OutcomeBlocked, EvidenceObserved, ConfidenceHigh), nil},
+		{"fail", Expectation{Expected: OutcomeBlocked, MinConfidence: ConfidenceHigh}, obs(OutcomeAllowed, EvidenceObserved, ConfidenceHigh), nil},
+	}
+	for _, c := range cases {
+		v := Evaluate(c.exp, c.obs, c.err)
+		if v.Verdict == VerdictSkipped {
+			t.Fatalf("%s: unexpectedly SKIPPED", c.name)
+		}
+		if v.SkipReason != "" {
+			t.Fatalf("%s: verdict %q has non-empty SkipReason %q, want empty", c.name, v.Verdict, v.SkipReason)
+		}
+	}
+}
+
 func TestEvaluate_UnsetMinConfidenceIsStrict(t *testing.T) {
 	// Locked ruling 2 (strict default): an unset MinConfidence resolves to a
 	// HIGH floor, so a medium-confidence observed outcome fails closed to

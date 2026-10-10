@@ -130,6 +130,18 @@ const (
 	VerdictSkipped Verdict = "SKIPPED"
 )
 
+// SkipReason explains WHY a SKIPPED verdict occurred -- canonical, shared
+// across every consumer of this taxonomy. It always rides on top of
+// VerdictSkipped; it is never a verdict value on its own, and it never
+// fragments the taxonomy into a second one.
+type SkipReason string
+
+const (
+	SkipInsufficientEvidence SkipReason = "insufficient_evidence" // evidence exists but does not establish the outcome
+	SkipNotApplicable        SkipReason = "not_applicable"        // the capability genuinely does not apply here -- Evaluate never sets this itself; only a caller does, for an attempt it never ran
+	SkipNotTested            SkipReason = "not_tested"            // no evaluation was ever attempted
+)
+
 // Validation is the graded result of comparing an observation to an
 // expectation. Observation is nil when the control-response stream is
 // explicitly missing.
@@ -138,6 +150,7 @@ type Validation struct {
 	Expectation Expectation
 	Observation *Observation
 	Verdict     Verdict
+	SkipReason  SkipReason `json:"skipReason,omitempty"`
 	Reason      string
 }
 
@@ -164,13 +177,13 @@ func Evaluate(exp Expectation, obs *Observation, opErr error) Validation {
 	case opErr != nil:
 		v.Verdict, v.Reason = VerdictError, "provider/validation operation failed: "+opErr.Error()
 	case obs == nil:
-		v.Verdict, v.Reason = VerdictSkipped, "control response not recorded"
+		v.Verdict, v.SkipReason, v.Reason = VerdictSkipped, SkipNotTested, "control response not recorded"
 	case obs.Outcome == OutcomeUnknown:
-		v.Verdict, v.Reason = VerdictSkipped, "control outcome unknown"
+		v.Verdict, v.SkipReason, v.Reason = VerdictSkipped, SkipInsufficientEvidence, "control outcome unknown"
 	case confidenceRank(obs.Confidence) == 0 || confidenceRank(obs.Confidence) < confidenceRank(effectiveFloor(exp.MinConfidence)):
-		v.Verdict, v.Reason = VerdictSkipped, "below required confidence threshold"
+		v.Verdict, v.SkipReason, v.Reason = VerdictSkipped, SkipInsufficientEvidence, "below required confidence threshold"
 	case exp.Expected.IsPrevention() && obs.EvidenceKind == EvidenceInferred:
-		v.Verdict, v.Reason = VerdictSkipped, "inferred-only evidence cannot establish prevention"
+		v.Verdict, v.SkipReason, v.Reason = VerdictSkipped, SkipInsufficientEvidence, "inferred-only evidence cannot establish prevention"
 	case obs.Outcome == exp.Expected:
 		v.Verdict, v.Reason = VerdictPass, "observed outcome matches expectation"
 	case exp.Expected.IsPrevention() && obs.Outcome == OutcomeAllowed:
