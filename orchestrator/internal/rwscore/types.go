@@ -35,14 +35,14 @@ type CoverageRow struct {
 // caller might want to surface is hidden behind a single opaque
 // percentage.
 type DimensionScore struct {
-	Dimension     Dimension
-	Pass          int
-	Fail          int
-	Error         int
-	Unknown       int
-	NotApplicable int
-	NotTested     int
-	PassRate      float64
+	Dimension     Dimension `json:"dimension"`
+	Pass          int       `json:"pass"`
+	Fail          int       `json:"fail"`
+	Error         int       `json:"error"`
+	Unknown       int       `json:"unknown"`
+	NotApplicable int       `json:"notApplicable"`
+	NotTested     int       `json:"notTested"`
+	PassRate      float64   `json:"passRate"`
 }
 
 // Rating is the overall qualitative rating a customer sees.
@@ -54,11 +54,14 @@ const (
 	RatingVulnerable Rating = "vulnerable"
 )
 
-// RunScore is this sub-project's complete deliverable for one run.
+// RunScore is this sub-project's complete deliverable for one run. JSON
+// tags are camelCase, matching every other API response struct in this
+// codebase (e.g. VariantCoverageReport) -- found missing during final
+// review.
 type RunScore struct {
-	Overall          float64
-	Rating           Rating
-	Dimensions       []DimensionScore
-	CriticalFailures []string
-	GateTriggered    bool
+	Overall          float64          `json:"overall"`
+	Rating           Rating           `json:"rating"`
+	Dimensions       []DimensionScore `json:"dimensions"`
+	CriticalFailures []string         `json:"criticalFailures"`
+	GateTriggered    bool             `json:"gateTriggered"`
 }
