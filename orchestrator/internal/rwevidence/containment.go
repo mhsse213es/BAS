@@ -39,7 +39,7 @@ type FakeContainmentObserver struct {
 }
 
 func containmentKey(key AttemptKey) string {
-	return key.RunID + "/" + key.TechniqueID
+	return key.RunID + "/" + key.TechniqueID + "/" + key.Action
 }
 
 func (f *FakeContainmentObserver) ObserveContainment(_ context.Context, key AttemptKey) (ContainmentResult, error) {

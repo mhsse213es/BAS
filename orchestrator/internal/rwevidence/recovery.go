@@ -34,7 +34,7 @@ type FakeRecoveryObserver struct {
 }
 
 func recoveryKey(key AttemptKey) string {
-	return key.RunID + "/" + key.TechniqueID
+	return key.RunID + "/" + key.TechniqueID + "/" + key.Action
 }
 
 func (f *FakeRecoveryObserver) ObserveSurvival(_ context.Context, key AttemptKey) (SurvivalResult, error) {

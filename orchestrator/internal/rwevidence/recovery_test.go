@@ -11,7 +11,7 @@ import (
 
 func TestFakeRecoveryObserver_ReturnsCannedResult(t *testing.T) {
 	key := AttemptKey{RunID: "r1", TechniqueID: "T1490"}
-	f := &FakeRecoveryObserver{Results: map[string]SurvivalResult{"r1/T1490": SurvivalConfirmed}}
+	f := &FakeRecoveryObserver{Results: map[string]SurvivalResult{recoveryKey(key): SurvivalConfirmed}}
 	got, err := f.ObserveSurvival(context.Background(), key)
 	if err != nil {
 		t.Fatal(err)
@@ -22,7 +22,7 @@ func TestFakeRecoveryObserver_ReturnsCannedResult(t *testing.T) {
 }
 
 func TestFakeRecoveryObserver_UncapturedKeyIsIndeterminate(t *testing.T) {
-	f := &FakeRecoveryObserver{Results: map[string]SurvivalResult{"other/x": SurvivalConfirmed}}
+	f := &FakeRecoveryObserver{Results: map[string]SurvivalResult{recoveryKey(AttemptKey{RunID: "other", TechniqueID: "x"}): SurvivalConfirmed}}
 	got, err := f.ObserveSurvival(context.Background(), AttemptKey{RunID: "r2", TechniqueID: "x"})
 	if err != nil {
 		t.Fatal(err)
@@ -33,7 +33,7 @@ func TestFakeRecoveryObserver_UncapturedKeyIsIndeterminate(t *testing.T) {
 }
 
 func TestFakeRecoveryObserver_ConfiguredErrorPropagates(t *testing.T) {
-	f := &FakeRecoveryObserver{Err: map[string]error{"boom/x": errors.New("wmi unreachable")}}
+	f := &FakeRecoveryObserver{Err: map[string]error{recoveryKey(AttemptKey{RunID: "boom", TechniqueID: "x"}): errors.New("wmi unreachable")}}
 	if _, err := f.ObserveSurvival(context.Background(), AttemptKey{RunID: "boom", TechniqueID: "x"}); err == nil {
 		t.Fatal("expected the configured error to propagate")
 	}

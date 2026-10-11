@@ -11,7 +11,7 @@ import (
 
 func TestFakeContainmentObserver_ReturnsCannedResult(t *testing.T) {
 	key := AttemptKey{RunID: "r1", TechniqueID: "T1486"}
-	f := &FakeContainmentObserver{Results: map[string]ContainmentResult{"r1/T1486": ContainmentConfirmed}}
+	f := &FakeContainmentObserver{Results: map[string]ContainmentResult{containmentKey(key): ContainmentConfirmed}}
 	got, err := f.ObserveContainment(context.Background(), key)
 	if err != nil {
 		t.Fatal(err)
@@ -22,7 +22,7 @@ func TestFakeContainmentObserver_ReturnsCannedResult(t *testing.T) {
 }
 
 func TestFakeContainmentObserver_UncapturedKeyIsIndeterminate(t *testing.T) {
-	f := &FakeContainmentObserver{Results: map[string]ContainmentResult{"other/x": ContainmentConfirmed}}
+	f := &FakeContainmentObserver{Results: map[string]ContainmentResult{containmentKey(AttemptKey{RunID: "other", TechniqueID: "x"}): ContainmentConfirmed}}
 	got, err := f.ObserveContainment(context.Background(), AttemptKey{RunID: "r2", TechniqueID: "x"})
 	if err != nil {
 		t.Fatal(err)
@@ -33,7 +33,7 @@ func TestFakeContainmentObserver_UncapturedKeyIsIndeterminate(t *testing.T) {
 }
 
 func TestFakeContainmentObserver_ConfiguredErrorPropagates(t *testing.T) {
-	f := &FakeContainmentObserver{Err: map[string]error{"boom/x": errors.New("edr api unreachable")}}
+	f := &FakeContainmentObserver{Err: map[string]error{containmentKey(AttemptKey{RunID: "boom", TechniqueID: "x"}): errors.New("edr api unreachable")}}
 	if _, err := f.ObserveContainment(context.Background(), AttemptKey{RunID: "boom", TechniqueID: "x"}); err == nil {
 		t.Fatal("expected the configured error to propagate")
 	}

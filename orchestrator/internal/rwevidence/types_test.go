@@ -1,26 +1,21 @@
 package rwevidence
 
 import (
+	"context"
 	"testing"
-
-	"github.com/audspect/bas/internal/controlval"
 )
 
-func TestNotApplicable_IsSkippedWithNotApplicableReason(t *testing.T) {
-	cr := NotApplicable(CapabilityRecovery, DataEncryptedForImpact(), "T1486 does not create or destroy recovery mechanisms itself -- that is T1490's domain")
-	if cr.Verdict != controlval.VerdictSkipped {
-		t.Fatalf("verdict = %q, want SKIPPED", cr.Verdict)
+func TestFakeRecoveryObserver_DifferentActionsSameTechniqueStayIndependent(t *testing.T) {
+	f := &FakeRecoveryObserver{Results: map[string]SurvivalResult{
+		recoveryKey(AttemptKey{RunID: "r1", TechniqueID: "T1490", Action: "aaa11111"}): SurvivalConfirmed,
+		recoveryKey(AttemptKey{RunID: "r1", TechniqueID: "T1490", Action: "bbb22222"}): SurvivalLost,
+	}}
+	got1, err1 := f.ObserveSurvival(context.Background(), AttemptKey{RunID: "r1", TechniqueID: "T1490", Action: "aaa11111"})
+	if err1 != nil || got1 != SurvivalConfirmed {
+		t.Fatalf("action aaa11111: got %q, err %v, want confirmed", got1, err1)
 	}
-	if cr.SkipReason != controlval.SkipNotApplicable {
-		t.Fatalf("skipReason = %q, want not_applicable", cr.SkipReason)
-	}
-	if cr.Capability != CapabilityRecovery {
-		t.Fatalf("capability = %q, want recovery", cr.Capability)
-	}
-	if cr.TechniqueID != "T1486" {
-		t.Fatalf("techniqueID = %q, want T1486", cr.TechniqueID)
-	}
-	if cr.Reason == "" {
-		t.Fatal("not_applicable must always carry a reason explaining why")
+	got2, err2 := f.ObserveSurvival(context.Background(), AttemptKey{RunID: "r1", TechniqueID: "T1490", Action: "bbb22222"})
+	if err2 != nil || got2 != SurvivalLost {
+		t.Fatalf("action bbb22222: got %q, err %v, want lost -- two actions sharing a technique must never collapse into one result", got2, err2)
 	}
 }

@@ -20,8 +20,9 @@ func TestEndToEnd_VSSInhibition_ThreeCapabilitiesIndependentlyVerified(t *testin
 	prevention.Provenance = key
 
 	// Recovery: the targeted shadow copies survived.
-	recoveryObs := &FakeRecoveryObserver{Results: map[string]SurvivalResult{"r-vss/" + tech.MitreID: SurvivalConfirmed}}
-	survival, rerr := recoveryObs.ObserveSurvival(context.Background(), AttemptKey{RunID: "r-vss", TechniqueID: tech.MitreID})
+	recoveryAttempt := AttemptKey{RunID: "r-vss", TechniqueID: tech.MitreID}
+	recoveryObs := &FakeRecoveryObserver{Results: map[string]SurvivalResult{recoveryKey(recoveryAttempt): SurvivalConfirmed}}
+	survival, rerr := recoveryObs.ObserveSurvival(context.Background(), recoveryAttempt)
 	if rerr != nil {
 		t.Fatal(rerr)
 	}
@@ -77,8 +78,9 @@ func TestEndToEnd_GeneralizesToASecondTechnique(t *testing.T) {
 
 	// Containment DOES apply to T1486 (encryption can spread host-to-host) --
 	// unlike Recovery, proving the observer contract is technique-agnostic too.
-	containmentObs := &FakeContainmentObserver{Results: map[string]ContainmentResult{"r-encrypt/" + tech.MitreID: ContainmentConfirmed}}
-	containmentResult, cerr := containmentObs.ObserveContainment(context.Background(), AttemptKey{RunID: "r-encrypt", TechniqueID: tech.MitreID})
+	containmentAttempt := AttemptKey{RunID: "r-encrypt", TechniqueID: tech.MitreID}
+	containmentObs := &FakeContainmentObserver{Results: map[string]ContainmentResult{containmentKey(containmentAttempt): ContainmentConfirmed}}
+	containmentResult, cerr := containmentObs.ObserveContainment(context.Background(), containmentAttempt)
 	if cerr != nil {
 		t.Fatal(cerr)
 	}

@@ -41,10 +41,17 @@ type CapabilityResult struct {
 }
 
 // AttemptKey identifies one technique attempt, for correlating independent
-// observers (Recovery, ...) against the same event.
+// observers (Recovery, Containment, ...) against the same event. Action
+// distinguishes multiple distinct attempts sharing one technique within the
+// same run (e.g. em-07's three independent T1490 steps: shadow-copy
+// deletion, wbadmin catalog deletion, bcdedit disable) -- without it they
+// collapse onto one result. Action is scenario.TaskID(step.TechniqueID,
+// step.Name), reused from the existing step-identity mechanism, never
+// reimplemented here.
 type AttemptKey struct {
 	RunID       string
 	TechniqueID string
+	Action      string
 }
 
 // NotApplicable records that capability genuinely does not apply to tech --
