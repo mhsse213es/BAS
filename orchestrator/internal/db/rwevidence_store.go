@@ -102,3 +102,31 @@ func RWCapabilityCoverage(ctx context.Context, pool *pgxpool.Pool, runID string)
 	}
 	return out, rows.Err()
 }
+
+// RWCoverageSummary distinguishes a technique-level coverage gap from an
+// individual capability evaluation gap, per the spec's coverage-accounting
+// requirement. Evaluated counts every row whose evaluator actually ran
+// (PASS/FAIL/ERROR, or SKIPPED/insufficient_evidence -- the evaluator ran
+// and came back ambiguous, which is still "evaluated", not "not tested").
+type RWCoverageSummary struct {
+	Evaluated         int
+	NotApplicable     int
+	NotTestedByReason map[string]int
+}
+
+func SummarizeRWCoverage(rows []RWCoverageRow) RWCoverageSummary {
+	s := RWCoverageSummary{NotTestedByReason: map[string]int{}}
+	for _, r := range rows {
+		switch {
+		case r.Verdict != "SKIPPED":
+			s.Evaluated += r.Count
+		case r.SkipReason == "insufficient_evidence":
+			s.Evaluated += r.Count
+		case r.SkipReason == "not_applicable":
+			s.NotApplicable += r.Count
+		case r.SkipReason == "not_tested":
+			s.NotTestedByReason[r.SpecificReason] += r.Count
+		}
+	}
+	return s
+}

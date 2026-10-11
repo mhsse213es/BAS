@@ -52,6 +52,29 @@ func TestWriteRWCapabilityResults_RoundTripAndUpsertNoDuplicate(t *testing.T) {
 	})
 }
 
+func TestSummarizeRWCoverage_DistinguishesEvaluatedNotApplicableAndNotTestedReasons(t *testing.T) {
+	rows := []db.RWCoverageRow{
+		{Capability: "prevention", Verdict: "PASS", Count: 3},
+		{Capability: "recovery", Verdict: "FAIL", Count: 1},
+		{Capability: "containment", Verdict: "SKIPPED", SkipReason: "not_applicable", Count: 2},
+		{Capability: "data_protection", Verdict: "SKIPPED", SkipReason: "not_tested", SpecificReason: "technique_not_mapped", Count: 10},
+		{Capability: "detection", Verdict: "SKIPPED", SkipReason: "not_tested", SpecificReason: "gate_not_confirmed", Count: 1},
+	}
+	s := db.SummarizeRWCoverage(rows)
+	if s.Evaluated != 4 { // PASS(3) + FAIL(1)
+		t.Errorf("evaluated = %d, want 4", s.Evaluated)
+	}
+	if s.NotApplicable != 2 {
+		t.Errorf("notApplicable = %d, want 2", s.NotApplicable)
+	}
+	if s.NotTestedByReason["technique_not_mapped"] != 10 {
+		t.Errorf("not_tested/technique_not_mapped = %d, want 10", s.NotTestedByReason["technique_not_mapped"])
+	}
+	if s.NotTestedByReason["gate_not_confirmed"] != 1 {
+		t.Errorf("not_tested/gate_not_confirmed = %d, want 1", s.NotTestedByReason["gate_not_confirmed"])
+	}
+}
+
 func TestWriteRWCapabilityResults_RejectsInvalidSkipPair(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping container-backed test in -short mode")
