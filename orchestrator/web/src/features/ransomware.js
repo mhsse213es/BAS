@@ -6,20 +6,35 @@ import { openModal } from './reports.js';
 import { _riskScoreColor, showTab } from './shell.js';
 import { setDisplay } from '../core/inline-style.js';
 import { cssVars } from '../core/css-vars.js';
+import { apicall } from '../core/api.js';
 
 
 // ── Ransomware Readiness Module ───────────────────────────────────────────────
+//
+// Scoring is computed server-side by internal/rwscore (sub-project #2 of
+// the ransomware-mastery roadmap) and fetched from GET
+// /api/scenarios/runs/{runId}/rw-score -- this module never recomputes or
+// blends a score client-side.
 
-var RR_SCENARIO_IDS = ['ransomware-drill', 'em-07-ransomware-readiness'];
+var RR_SCENARIO_IDS = [
+  'akira-kill-chain', 'blackcat-kill-chain', 'clop-kill-chain', 'lockbit-kill-chain',
+  'play-kill-chain', 'ransomhub-kill-chain', 'ransomware-drill', 'em-07-ransomware-readiness'
+];
 
-// Category display config: id → { label, icon }
-var RR_CATS = {
-  'prevention-posture':  { label: 'Prevention',  icon: '&#x1F6E1;' },
-  'backup-resilience':   { label: 'Backup',       icon: '&#x1F4BE;' },
-  'recovery-posture':    { label: 'Recovery',     icon: '&#x1F504;' },
-  'identity-hardening':  { label: 'Identity',     icon: '&#x1F512;' },
-  'detection-posture':   { label: 'Detection',    icon: '&#x1F50D;' },
-  'lateral-movement':    { label: 'Lateral Mvmt', icon: '&#x21C4;' }
+// Dimension display config: rwscore.Dimension value → { label, icon }
+var RW_DIMENSIONS = {
+  prevention:      { label: 'Prevention',      icon: '&#x1F6E1;' },
+  detection:        { label: 'Detection',       icon: '&#x1F50D;' },
+  containment:      { label: 'Containment',     icon: '&#x1F6A7;' },
+  recovery:         { label: 'Recovery',        icon: '&#x1F504;' },
+  data_protection:  { label: 'Data Protection', icon: '&#x1F4BE;' }
+};
+
+// Rating display config: rwscore.Rating value → { label, bg, color }
+var RW_RATING_TIERS = {
+  protected:  { label: 'Protected',  bg: 'rgba(35,134,54,0.15)',  color: 'var(--success)' },
+  at_risk:    { label: 'At Risk',    bg: 'rgba(210,153,34,0.15)', color: 'var(--warning)' },
+  vulnerable: { label: 'Vulnerable', bg: 'rgba(218,54,51,0.15)',  color: 'var(--danger)' }
 };
 
 export function loadRansomwareReadiness(runs) {
@@ -28,7 +43,8 @@ export function loadRansomwareReadiness(runs) {
   var lastEl = document.getElementById('rr-last');
   if (!bodyEl) return;
 
-  // Find the most recent ransomware-drill or em-07 run that has results
+  // Find the most recent run across the 8 real ransomware scenarios
+  // (runs is already ORDER BY started_at DESC, so first match wins).
   var rrRun = null;
   for (var i = 0; i < runs.length; i++) {
     var r = runs[i];
@@ -38,7 +54,7 @@ export function loadRansomwareReadiness(runs) {
   }
 
   if (!rrRun) {
-    bodyEl.innerHTML = '<div class="empty g1-s-dab79d7d">Run the <strong>Ransomware Drill</strong> or <strong>EM-07</strong> scenario to generate a readiness score.</div>';
+    bodyEl.innerHTML = '<div class="empty g1-s-dab79d7d">Run one of the ransomware scenarios to generate a readiness score.</div>';
     return;
   }
 
@@ -46,58 +62,38 @@ export function loadRansomwareReadiness(runs) {
   var ts = rrRun.completedAt || rrRun.startedAt;
   if (lastEl && ts) lastEl.textContent = ago(ts);
 
-  // Group results by phase/category
-  var cats = {};
-  (rrRun.results || []).forEach(function(c) {
-    var phase = c.phase || c.category || 'other';
-    if (!cats[phase]) cats[phase] = { pass: 0, fail: 0, skip: 0 };
-    var r = (c.result || '').toLowerCase();
-    if (r === 'pass' || r === 'blocked') cats[phase].pass++;
-    else if (r === 'fail') cats[phase].fail++;
-    else cats[phase].skip++;
+  apicall('/api/scenarios/runs/' + encodeURIComponent(rrRun.id) + '/rw-score').then(function(score) {
+    renderRansomwareScore(bodyEl, tierEl, rrRun, score);
+  }).catch(function() {
+    bodyEl.innerHTML = '<div class="empty g1-s-dab79d7d">Score unavailable for the latest run.</div>';
   });
+}
 
-  // Compute overall score (pass / (pass + fail) across all categories)
-  var totalPass = 0, totalFail = 0;
-  Object.keys(cats).forEach(function(k) { totalPass += cats[k].pass; totalFail += cats[k].fail; });
-  var overallPct = (totalPass + totalFail) ? Math.round(totalPass / (totalPass + totalFail) * 100) : null;
-
-  // Derive tier
-  var tierLabel, tierBg, tierColor;
-  if (overallPct === null) {
-    tierLabel = 'No data'; tierBg = 'var(--elevated)'; tierColor = 'var(--muted)';
-  } else if (overallPct >= 80) {
-    tierLabel = 'Protected'; tierBg = 'rgba(35,134,54,0.15)'; tierColor = 'var(--success)';
-  } else if (overallPct >= 50) {
-    tierLabel = 'Partially Protected'; tierBg = 'rgba(210,153,34,0.15)'; tierColor = 'var(--warning)';
-  } else {
-    tierLabel = 'At Risk'; tierBg = 'rgba(218,54,51,0.15)'; tierColor = 'var(--danger)';
-  }
+function renderRansomwareScore(bodyEl, tierEl, rrRun, score) {
+  var tier = RW_RATING_TIERS[score.rating] || { label: score.rating || 'Unknown', bg: 'var(--elevated)', color: 'var(--muted)' };
   if (tierEl) {
-    tierEl.textContent = tierLabel;
-    tierEl.style.background = tierBg;
-    tierEl.style.color = tierColor;
+    tierEl.textContent = tier.label;
+    tierEl.style.background = tier.bg;
+    tierEl.style.color = tier.color;
     setDisplay(tierEl, '');
   }
 
-  // Score gauge + category bars
-  var catKeys = Object.keys(cats);
-  var scoreHtml = overallPct !== null
-    ? '<div class="g1-display-flex g1-s-73ecc07e"' + cssVars(['g1-v-bd5c5d10', _riskScoreColor(overallPct), overallPct]) + '>' +
-        '<div class="g1-display-flex g1-s-cbd566af">' +
-          '<span class="g1-s-ddc46798"' + cssVars(['g1-v-7d75dfc9', _riskScoreColor(overallPct)]) + '>' + overallPct + '</span>' +
-          '<span class="g1-s-e8485c25">score</span>' +
-        '</div>' +
-      '</div>'
-    : '';
+  var overallPct = Math.round(score.overall);
+  var scoreHtml = '<div class="g1-display-flex g1-s-73ecc07e"' + cssVars(['g1-v-bd5c5d10', _riskScoreColor(overallPct), overallPct]) + '>' +
+      '<div class="g1-display-flex g1-s-cbd566af">' +
+        '<span class="g1-s-ddc46798"' + cssVars(['g1-v-7d75dfc9', _riskScoreColor(overallPct)]) + '>' + overallPct + '</span>' +
+        '<span class="g1-s-e8485c25">score</span>' +
+      '</div>' +
+    '</div>';
 
-  var barsHtml = catKeys.length ? catKeys.map(function(k) {
-    var d = cats[k];
-    var total = d.pass + d.fail;
-    var pct = total ? Math.round(d.pass / total * 100) : null;
-    var cfg = RR_CATS[k] || { label: k.replace(/-/g, ' '), icon: '' };
+  var dims = score.dimensions || [];
+  var barsHtml = dims.length ? dims.map(function(d) {
+    var cfg = RW_DIMENSIONS[d.dimension] || { label: (d.dimension || '').replace(/_/g, ' '), icon: '' };
+    var evaluated = (d.pass || 0) + (d.fail || 0) + (d.error || 0) + (d.unknown || 0);
+    var pct = evaluated ? Math.round(d.passRate * 100) : null;
     var col = pct === null ? 'var(--muted)' : _riskScoreColor(pct);
     var pctLabel = pct !== null ? pct + '%' : 'no data';
+    var unresolved = (d.error || 0) + (d.unknown || 0);
     return '<div class="g1-s-04f181fe">' +
       '<div class="g1-display-flex g1-s-58f2e5c4">' +
         '<span class="u-text">' + cfg.icon + ' ' + x(cfg.label) + '</span>' +
@@ -106,14 +102,19 @@ export function loadRansomwareReadiness(runs) {
       '<div class="g1-s-abdb10c3">' +
         (pct !== null ? '<div class="g1-s-2cd8e04f"' + cssVars(['g1-v-9b890877', pct], ['g1-v-9ffd39ba', col]) + '></div>' : '') +
       '</div>' +
-      '<div class="g1-s-e79e1ce2">' + d.pass + ' pass &middot; ' + d.fail + ' fail' + (d.skip ? ' &middot; ' + d.skip + ' skip' : '') + '</div>' +
+      '<div class="g1-s-e79e1ce2">' + (d.pass || 0) + ' pass &middot; ' + (d.fail || 0) + ' fail' + (unresolved ? ' &middot; ' + unresolved + ' unresolved' : '') + '</div>' +
     '</div>';
-  }).join('') : '<div class="empty g1-s-dab79d7d">No categorised results in this run.</div>';
+  }).join('') : '<div class="empty g1-s-dab79d7d">No dimension data in this run.</div>';
+
+  var gateHtml = score.gateTriggered && (score.criticalFailures || []).length
+    ? '<div class="g1-s-e79e1ce2"' + cssVars(['g1-v-7d75dfc9', 'var(--danger)']) + '>&#x26A0; ' + x(score.criticalFailures.join('; ')) + '</div>'
+    : '';
 
   bodyEl.innerHTML =
     '<div class="g1-display-flex g1-s-d7f84b58">' +
       scoreHtml +
       '<div class="g1-s-28637295">' + barsHtml + '</div>' +
+      gateHtml +
       '<div class="g1-display-flex g1-s-7d5960f3">' +
         '<div><span class="g1-s-13457f1d">' + x(rrRun.name || rrRun.scenarioId) + '</span></div>' +
         '<div>' + (rrRun.agentId ? 'Agent: ' + x(rrRun.agentId) : '') + '</div>' +

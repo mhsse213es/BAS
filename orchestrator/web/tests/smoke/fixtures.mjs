@@ -38,6 +38,22 @@ const rrRun = {
   ],
 };
 
+// rwscore.RunScore for rrRun (ransomware.js loadRansomwareReadiness fetches
+// this from GET .../rw-score instead of computing a score client-side):
+// mixed pass/fail/unresolved across dimensions so the gauge, bar color/width
+// rules, the "unresolved" subtitle, and the gate warning line all render.
+const rrRunScore = {
+  overall: 62, rating: 'at_risk', gateTriggered: true,
+  criticalFailures: ['Recovery FAILED for T1490 (2 attempt(s))'],
+  dimensions: [
+    { dimension: 'prevention', pass: 2, fail: 1, error: 0, unknown: 0, notApplicable: 0, notTested: 0, passRate: 0.67 },
+    { dimension: 'detection', pass: 0, fail: 0, error: 0, unknown: 1, notApplicable: 0, notTested: 0, passRate: 0 },
+    { dimension: 'containment', pass: 0, fail: 0, error: 0, unknown: 0, notApplicable: 3, notTested: 0, passRate: 0 },
+    { dimension: 'recovery', pass: 0, fail: 2, error: 0, unknown: 0, notApplicable: 0, notTested: 0, passRate: 0 },
+    { dimension: 'data_protection', pass: 3, fail: 0, error: 0, unknown: 0, notApplicable: 0, notTested: 0, passRate: 1 },
+  ],
+};
+
 // Compliance dashboard tile (compliance.js complianceTile, fired from
 // evidence.js's dashboard load): hasData=true (testedControls>0) so the
 // kpi-card border-left/score-value colors and the coverage bar both
@@ -151,9 +167,20 @@ const finding = {
   createdAt: NOW, updatedAt: NOW, firstSeen: NOW, lastSeen: NOW, enrichment: {},
 };
 
+// status 'running' + non-zero prevented/detected/missed exercises
+// campaigns.js's segmented mix bar (g1-v-764cd56d flex rule) and the
+// running-progress banner (g1-v-161b49bb border-color rule) -- both new,
+// unreused-elsewhere rules that only render on this exact branch.
+// paused:true (not live) deliberately avoids .dot-live's infinite
+// `blink 1.5s infinite` CSS animation, which never settles for the
+// visual-regression harness's frame-stability wait and hangs the whole
+// run (confirmed 2026-10-08: two full tools/visual.sh runs stalled for
+// 30min on this exact checkpoint before this fix).
 const campaign = {
-  id: 'campaign-smoke-1', name: `Campaign ${PAYLOAD}`, description: PAYLOAD, status: 'draft',
+  id: 'campaign-smoke-1', name: `Campaign ${PAYLOAD}`, description: PAYLOAD, status: 'running',
   createdAt: NOW, updatedAt: NOW, scenarioIds: [], steps: [], targets: [],
+  summary: { status: 'running', paused: true, prevented: 5, detected: 2, missed: 1, dispatched: 7, targets: 8, progress: 60 },
+  runs: [{ status: 'completed', agentId: 'agent-smoke-1', preventionScore: 72, runId: 'run-smoke-1' }],
 };
 
 // Scheduled Assessments rows (jobs.Schedule, PascalCase, no JSON tags
@@ -219,6 +246,7 @@ export const FIXTURES = {
   'GET /api/backups': [backupJob1, backupJob2],
   'GET /api/audit-logs': { entries: [auditEntry1, auditEntry2] },
   'GET /api/scenarios/runs/run-smoke-1/iocs': [runIOC],
+  'GET /api/scenarios/runs/run-rr-smoke-1/rw-score': rrRunScore,
   'GET /api/iocs': [iocRegistryRow],
   'GET /api/analytics/iocs': iocAnalytics,
   'GET /api/findings': [finding],
