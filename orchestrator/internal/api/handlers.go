@@ -2856,7 +2856,9 @@ func (h *Handler) SubmitScenarioResult(w http.ResponseWriter, r *http.Request) {
 			if !found {
 				step = scenario.Step{Framework: "custom"}
 			}
-			simResults = append(simResults, scenario.Interpret(step, execResult))
+			sim := scenario.Interpret(step, execResult)
+			simResults = append(simResults, sim)
+			h.recordRWEvidence(r.Context(), raw.RunID, raw.ScenarioID, step, sim)
 		}
 	}
 
