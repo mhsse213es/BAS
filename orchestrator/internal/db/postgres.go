@@ -1824,6 +1824,27 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		`CREATE INDEX IF NOT EXISTS idx_execution_attempts_technique ON execution_attempts(technique_id) WHERE technique_id IS NOT NULL`,
 		`CREATE INDEX IF NOT EXISTS idx_execution_attempts_status ON execution_attempts(status)`,
 
+		// ── Ransomware Mastery Evidence Engine: scenario-dispatch integration ──
+		`CREATE TABLE IF NOT EXISTS rw_capability_results (
+			id              text        PRIMARY KEY DEFAULT gen_random_uuid()::text,
+			run_id          text        NOT NULL,
+			action          text        NOT NULL,
+			technique_id    text        NOT NULL,
+			capability      text        NOT NULL,
+			verdict         text        NOT NULL CHECK (verdict IN ('PASS','FAIL','ERROR','SKIPPED')),
+			skip_reason     text        CHECK (skip_reason IN ('insufficient_evidence','not_applicable','not_tested')),
+			specific_reason text        NOT NULL DEFAULT '',
+			reason          text        NOT NULL DEFAULT '',
+			simulated       boolean     NOT NULL DEFAULT true,
+			provenance      jsonb,
+			created_at      timestamptz NOT NULL DEFAULT NOW(),
+
+			CONSTRAINT rw_capres_skip_ck CHECK (
+				(verdict = 'SKIPPED' AND skip_reason IS NOT NULL) OR
+				(verdict <> 'SKIPPED' AND skip_reason IS NULL)),
+			CONSTRAINT rw_capres_identity UNIQUE (run_id, action, capability)
+		)`,
+
 		// ── Legacy transport retirement (B2) ──────────────────────────────────
 		// One row per agent per UTC day, not per request -- a heartbeating-every-
 		// 30s agent would otherwise produce ~2,880 rows/day/agent for no benefit;
