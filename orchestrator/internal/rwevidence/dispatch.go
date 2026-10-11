@@ -49,6 +49,16 @@ func classifyRansomwareStep(in StepInput) (modeled bool, isAttempt bool, specifi
 		return true, false, "not_an_attempt"
 	}
 
+	if in.CheckResult == "vetoed" {
+		// scenario.Interpret can report ResultVetoed independently of any
+		// scenario-authored safety gate (interpreter.go:75-89) -- Audspect's
+		// own local destructive-action policy refused to run the step, for
+		// any framework. Treating this as a genuine attempt would fabricate
+		// Prevention/Recovery/Detection/DataProtection findings for a
+		// technique never actually tried -- found during final review.
+		return true, false, "vetoed_by_policy"
+	}
+
 	if in.CheckResult != "skipped" {
 		return true, true, ""
 	}
@@ -261,6 +271,8 @@ func specificReasonText(code string) string {
 		return "no viable target existed for the attempt to run against"
 	case "skip_unclassified":
 		return "the step reported skipped for a reason this integration does not yet recognize"
+	case "vetoed_by_policy":
+		return "Audspect's own destructive-action policy prevented this step from running -- it was never actually attempted"
 	case "applicability_undecided":
 		return "applicability not yet decided for this (technique, capability) pair"
 	}

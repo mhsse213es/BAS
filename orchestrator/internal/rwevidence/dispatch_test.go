@@ -256,3 +256,30 @@ func TestEvaluateStep_UnmodeledTechnique_ReturnsNotTestedForAllFiveCapabilities(
 		}
 	}
 }
+
+func TestClassify_VetoedStepIsNeverTreatedAsAGenuineAttempt(t *testing.T) {
+	// Audspect's own local destructive-action policy can veto a step's
+	// execution independently of any scenario-authored safety gate
+	// (scenario.Interpret's models.ResultVetoed, interpreter.go:75-89,
+	// reachable for any framework). Without a dedicated branch here,
+	// classifyRansomwareStep's `CheckResult != "skipped"` check treats a
+	// vetoed step as a genuine attempt and routes it through the real
+	// Prevention/Recovery/Detection/DataProtection evaluators, fabricating
+	// PASS/FAIL findings for a technique Audspect never actually tried --
+	// the exact bug class interpreter.go's own C1 fix comment describes.
+	in := StepInput{
+		TechniqueID: "T1490", StepName: "VSS Shadow Copy Deletion via WMI", RunID: "r1", Action: "x",
+		CheckResult: "vetoed",
+		Details:     "VETOED — Audspect prevented execution under its local destructive-action policy (action=vssadmin_delete_shadows, class=destructive, source=policy_b5). Customer defensive controls were not tested by this step.",
+	}
+	modeled, isAttempt, specificReason := classifyRansomwareStep(in)
+	if !modeled {
+		t.Fatal("T1490 is modeled")
+	}
+	if isAttempt {
+		t.Fatal("a vetoed step was never actually attempted -- it must not be classified as an attempt")
+	}
+	if specificReason != "vetoed_by_policy" {
+		t.Fatalf("specificReason = %q, want vetoed_by_policy", specificReason)
+	}
+}
