@@ -38,6 +38,11 @@ type CapabilityResult struct {
 	SkipReason  controlval.SkipReason
 	Reason      string
 	Provenance  controlval.CorrelationKey
+	// SpecificReason is a short, queryable machine code -- set only by
+	// EvaluateStep's not-tested/not-applicable paths (see dispatch.go);
+	// every direct capability-function call (PreventionFromValidation etc.)
+	// leaves it empty, same as it always has.
+	SpecificReason string
 }
 
 // AttemptKey identifies one technique attempt, for correlating independent
