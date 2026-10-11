@@ -84,10 +84,20 @@ func TestIndexScenarios_RealCorpusReflectsReality(t *testing.T) {
 			t.Errorf("expected %s covered by the real corpus", id)
 		}
 	}
-	// DCSync (T1003.006) and ADCS (T1649) have no scenario coverage -> gaps.
+	// DCSync (T1003.006) and ADCS (T1649) now have real exposure-check
+	// scenario coverage (scenarios/dcsync-replication-rights-audit.yaml,
+	// scenarios/adcs-esc-template-exposure-audit.yaml) -> covered, not gaps.
 	for _, id := range []string{"dcsync", "adcs-esc1", "adcs-esc2", "adcs-esc3", "adcs-esc4"} {
+		if !covered[id] {
+			t.Errorf("expected %s covered by the real corpus", id)
+		}
+	}
+	// The ACL-abuse/RBCD primitives carry no TechniqueID at all (structural
+	// metadata only, see adprimitive.RiskClass's doc comment) -> gaps.
+	for _, id := range []string{"acl-addmember-privileged-group", "acl-addself-privileged-group",
+		"acl-forcechangepassword-abuse", "acl-genericall-takeover", "rbcd-configure", "rbcd-impersonate"} {
 		if !gaps[id] {
-			t.Errorf("expected %s in gaps (no scenario coverage)", id)
+			t.Errorf("expected %s in gaps (no TechniqueID, so no scenario coverage is possible)", id)
 		}
 	}
 }

@@ -56,18 +56,23 @@ func TestCompute_CountsDedupsAndSorts(t *testing.T) {
 	}
 }
 
-func TestAll_ReturnsTheFourteenShippedPrimitives(t *testing.T) {
+func TestAll_ReturnsTheTwentyShippedPrimitives(t *testing.T) {
+	// Grew from 14: ADCS 4->7 (ESC6/8 additions) and DCSync 1->2, plus
+	// ACL-abuse/RBCD gained 2 mapped primitives (combined 6->8, still 6
+	// unmapped). Re-derive from adprimitive's catalogs directly rather than
+	// re-hardcoding a second snapshot if this needs updating again.
 	all := All()
-	if len(all) != 14 {
-		t.Fatalf("expected 14 primitives across the five shipped catalogs, got %d", len(all))
+	if len(all) != 20 {
+		t.Fatalf("expected 20 primitives across the five shipped catalogs, got %d", len(all))
 	}
 	b := Compute(All())
-	if b.TotalPrimitives != 14 {
-		t.Errorf("expected benchmark total 14, got %d", b.TotalPrimitives)
+	if b.TotalPrimitives != 20 {
+		t.Errorf("expected benchmark total 20, got %d", b.TotalPrimitives)
 	}
-	// Of the 14, exactly 8 carry a TechniqueID (Kerberoasting 3 + DCSync 1 +
-	// ADCS 4); the 6 ACL-abuse/RBCD primitives carry none.
-	if b.TechniqueMapped != 8 {
-		t.Errorf("expected 8 technique-mapped primitives, got %d", b.TechniqueMapped)
+	// Of the 20, exactly 14 carry a TechniqueID (Kerberoasting 3 + ACLAbuse 1
+	// + RBCD 1 + DCSync 2 + ADCS 7); the remaining 6 (4 ACL-abuse + 2 RBCD)
+	// carry none.
+	if b.TechniqueMapped != 14 {
+		t.Errorf("expected 14 technique-mapped primitives, got %d", b.TechniqueMapped)
 	}
 }
