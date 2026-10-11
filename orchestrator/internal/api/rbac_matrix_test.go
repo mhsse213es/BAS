@@ -190,6 +190,8 @@ var routeMatrix = []routeCase{
 	{http.MethodPost, "/api/attackpath/jobs/{id}/retry", tierPermission, auth.CanRetryAttackPathJob},
 	{http.MethodPost, "/api/attackpath/assets", tierPermission, auth.CanSetAttackPathAsset},
 	{http.MethodPost, "/api/scenarios/{id}/run", tierPermission, auth.CanRunScenario},
+	{http.MethodPost, "/api/backup-assurance/assessments", tierPermission, auth.CanRunScenario},
+	{http.MethodGet, "/api/backup-assurance/assessments/{assessmentId}", tierAny, ""},
 	{http.MethodPost, "/api/caldera/adversaries/{adversaryId}/run", tierPermission, auth.CanRunCalderaAdversary},
 	{http.MethodPost, "/api/adversary-templates/{id}/run", tierPermission, auth.CanRunAdversaryTemplate},
 	{http.MethodPost, "/api/scenarios/runs/{runId}/cancel", tierPermission, auth.CanCancelScenarioRun},

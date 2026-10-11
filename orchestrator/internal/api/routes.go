@@ -404,6 +404,8 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.With(auth.RequirePermission(auth.CanRetryAttackPathJob)).Post("/api/attackpath/jobs/{id}/retry", h.RetryAttackPathJob)
 		r.With(auth.RequirePermission(auth.CanSetAttackPathAsset)).Post("/api/attackpath/assets", h.SetAttackPathAsset)
 		r.With(auth.RequirePermission(auth.CanRunScenario)).Post("/api/scenarios/{id}/run", h.RunScenario)
+		r.With(auth.RequirePermission(auth.CanRunScenario)).Post("/api/backup-assurance/assessments", h.TriggerBackupAssuranceAssessment)
+		r.Get("/api/backup-assurance/assessments/{assessmentId}", h.GetBackupAssuranceAssessment)
 		r.With(auth.RequirePermission(auth.CanRunCalderaAdversary)).Post("/api/caldera/adversaries/{adversaryId}/run", h.RunCalderaAdversary)
 		r.With(auth.RequirePermission(auth.CanRunAdversaryTemplate)).Post("/api/adversary-templates/{id}/run", h.RunAdversaryTemplate)
 		r.With(auth.RequirePermission(auth.CanCancelScenarioRun)).Post("/api/scenarios/runs/{runId}/cancel", h.CancelRun)
