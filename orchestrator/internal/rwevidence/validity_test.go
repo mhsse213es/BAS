@@ -41,7 +41,12 @@ func TestAllShippedProducers_AlwaysProduceValidCapabilityResults(t *testing.T) {
 		DataProtectionFromDLPResult(exfil, "NotDetected", ""),
 		DataProtectionFromDLPResult(exfil, "NotApplicable", ""),
 		DataProtectionFromDLPResult(exfil, "Unknown", ""),
+		ContainmentFromObservation(encrypt, ContainmentConfirmed, ""),
+		ContainmentFromObservation(encrypt, ContainmentFailed, ""),
+		ContainmentFromObservation(vss, ContainmentIndeterminate, ""),
+		ContainmentResultFor(vss, ContainmentConfirmed, context.DeadlineExceeded, ""),
 		NotApplicable(CapabilityRecovery, encrypt, "T1486 does not apply"),
+		NotApplicable(CapabilityContainment, exfil, "containment of an exfil channel is covered by DataProtection"),
 		NotTested(CapabilityRecovery, vss, "no observer was ever invoked for this run"),
 	}
 	for i, cr := range results {

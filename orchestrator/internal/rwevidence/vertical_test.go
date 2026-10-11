@@ -74,6 +74,18 @@ func TestEndToEnd_GeneralizesToASecondTechnique(t *testing.T) {
 	if recovery.Verdict != controlval.VerdictSkipped || recovery.SkipReason != controlval.SkipNotApplicable {
 		t.Fatalf("recovery = %+v, want SKIPPED/not_applicable", recovery)
 	}
+
+	// Containment DOES apply to T1486 (encryption can spread host-to-host) --
+	// unlike Recovery, proving the observer contract is technique-agnostic too.
+	containmentObs := &FakeContainmentObserver{Results: map[string]ContainmentResult{"r-encrypt/" + tech.MitreID: ContainmentConfirmed}}
+	containmentResult, cerr := containmentObs.ObserveContainment(context.Background(), AttemptKey{RunID: "r-encrypt", TechniqueID: tech.MitreID})
+	if cerr != nil {
+		t.Fatal(cerr)
+	}
+	containment := ContainmentFromObservation(tech, containmentResult, "edr-isolate-success fired")
+	if containment.Verdict != controlval.VerdictPass {
+		t.Fatalf("containment verdict = %q, want PASS (the infected host was isolated before encryption spread)", containment.Verdict)
+	}
 }
 
 func TestVSSInhibition_ContainmentAndDataProtectionAreNotApplicable(t *testing.T) {
