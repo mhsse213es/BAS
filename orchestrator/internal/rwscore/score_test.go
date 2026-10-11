@@ -97,3 +97,124 @@ func TestBucketDimension_IgnoresRowsForOtherDimensions(t *testing.T) {
 		t.Fatalf("Pass=%d Fail=%d, want 0/1 -- a row for a different capability must never be counted", ds.Pass, ds.Fail)
 	}
 }
+
+func TestScoreRun_FullWeightedAverageAllDimensionsPresent(t *testing.T) {
+	rows := []CoverageRow{
+		{Capability: "prevention", Verdict: "PASS", Count: 10},     // PassRate 1.0
+		{Capability: "detection", Verdict: "FAIL", Count: 10},       // PassRate 0.0
+		{Capability: "containment", Verdict: "PASS", Count: 5},
+		{Capability: "containment", Verdict: "FAIL", Count: 5},      // PassRate 0.5
+		{Capability: "recovery", Verdict: "PASS", Count: 10},        // PassRate 1.0
+		{Capability: "data_protection", Verdict: "PASS", Count: 10}, // PassRate 1.0
+	}
+	score := ScoreRun(rows)
+	// Overall = 100 * (0.25*1.0 + 0.20*0.0 + 0.20*0.5 + 0.25*1.0 + 0.10*1.0)
+	//         = 100 * (0.25 + 0 + 0.10 + 0.25 + 0.10) = 100 * 0.70 = 70
+	if score.Overall != 70.0 {
+		t.Fatalf("Overall = %v, want 70.0", score.Overall)
+	}
+	if score.Rating != RatingAtRisk { // 50 <= 70 < 80
+		t.Fatalf("Rating = %q, want at_risk", score.Rating)
+	}
+	if len(score.Dimensions) != 5 {
+		t.Fatalf("got %d dimensions, want 5", len(score.Dimensions))
+	}
+}
+
+func TestScoreRun_EmptyDimensionExcludedAndWeightRedistributed(t *testing.T) {
+	// Recovery has zero evaluated rows (entirely not_tested). Spec section
+	// C requires its 0.25 weight to be EXCLUDED and the remaining weights
+	// (Prevention .25 + Detection .20 + Containment .20 + DataProtection
+	// .10 = 0.75) rescaled to sum to 1.0 -- not Recovery counted as a hard
+	// 0. With all 4 remaining PassRates at 1.0, the correct redistributed
+	// Overall is 100.0. A WRONG implementation that instead counts the
+	// empty Recovery dimension as a hard 0 with its original 0.25 weight
+	// would compute 100*(0.25+0.20+0.20+0+0.10) = 75.0 -- a different,
+	// distinguishable number, not just "doesn't error."
+	rows := []CoverageRow{
+		{Capability: "prevention", Verdict: "PASS", Count: 10},
+		{Capability: "detection", Verdict: "PASS", Count: 10},
+		{Capability: "containment", Verdict: "PASS", Count: 10},
+		{Capability: "recovery", Verdict: "SKIPPED", SkipReason: "not_tested", Count: 10},
+		{Capability: "data_protection", Verdict: "PASS", Count: 10},
+	}
+	score := ScoreRun(rows)
+	if score.Overall != 100.0 {
+		t.Fatalf("Overall = %v, want 100.0 (redistributed) -- a hard-0 implementation would give 75.0 instead", score.Overall)
+	}
+}
+
+func TestScoreRun_AllDimensionsEmptyGivesZeroAndVulnerable(t *testing.T) {
+	rows := []CoverageRow{
+		{Capability: "prevention", Verdict: "SKIPPED", SkipReason: "not_tested", Count: 1},
+		{Capability: "detection", Verdict: "SKIPPED", SkipReason: "not_tested", Count: 1},
+		{Capability: "containment", Verdict: "SKIPPED", SkipReason: "not_applicable", Count: 1},
+		{Capability: "recovery", Verdict: "SKIPPED", SkipReason: "not_tested", Count: 1},
+		{Capability: "data_protection", Verdict: "SKIPPED", SkipReason: "not_tested", Count: 1},
+	}
+	score := ScoreRun(rows)
+	if score.Overall != 0.0 {
+		t.Fatalf("Overall = %v, want 0.0", score.Overall)
+	}
+	if score.Rating != RatingVulnerable {
+		t.Fatalf("Rating = %q, want vulnerable -- absence of evidence must never read as safety", score.Rating)
+	}
+}
+
+func TestScoreRun_RecoveryFailureCapsRatingAtAtRiskEvenWithHighOverall(t *testing.T) {
+	rows := []CoverageRow{
+		{Capability: "prevention", Verdict: "PASS", Count: 10},
+		{Capability: "detection", Verdict: "PASS", Count: 10},
+		{Capability: "containment", Verdict: "PASS", Count: 10},
+		{Capability: "recovery", Verdict: "FAIL", TechniqueID: "T1490", Count: 1},
+		{Capability: "data_protection", Verdict: "PASS", Count: 10},
+	}
+	score := ScoreRun(rows)
+	if score.Rating != RatingAtRisk {
+		t.Fatalf("Rating = %q, want at_risk -- a failed critical Recovery test must never allow Protected regardless of the numeric score", score.Rating)
+	}
+	if !score.GateTriggered {
+		t.Fatal("GateTriggered = false, want true")
+	}
+}
+
+func TestScoreRun_GateNeverUpgradesALowRating(t *testing.T) {
+	rows := []CoverageRow{
+		{Capability: "prevention", Verdict: "FAIL", Count: 10},
+		{Capability: "detection", Verdict: "FAIL", Count: 10},
+		{Capability: "containment", Verdict: "FAIL", Count: 10},
+		{Capability: "recovery", Verdict: "FAIL", TechniqueID: "T1490", Count: 1},
+		{Capability: "data_protection", Verdict: "FAIL", Count: 10},
+	}
+	score := ScoreRun(rows)
+	if score.Rating != RatingVulnerable {
+		t.Fatalf("Rating = %q, want vulnerable -- the gate is a ceiling, never an upgrade", score.Rating)
+	}
+}
+
+func TestScoreRun_CriticalFailuresNameTheExactTechniqueAndCount(t *testing.T) {
+	rows := []CoverageRow{
+		{Capability: "prevention", Verdict: "PASS", Count: 10},
+		{Capability: "detection", Verdict: "PASS", Count: 10},
+		{Capability: "containment", Verdict: "PASS", Count: 10},
+		{Capability: "recovery", Verdict: "FAIL", TechniqueID: "T1490", Count: 2},
+		{Capability: "data_protection", Verdict: "PASS", Count: 10},
+	}
+	score := ScoreRun(rows)
+	if len(score.CriticalFailures) != 1 || score.CriticalFailures[0] != "Recovery FAILED for T1490 (2 attempt(s))" {
+		t.Fatalf("CriticalFailures = %v, want [\"Recovery FAILED for T1490 (2 attempt(s))\"]", score.CriticalFailures)
+	}
+}
+
+func TestScoreRun_NoCriticalFailuresWhenGateNotTriggered(t *testing.T) {
+	rows := []CoverageRow{
+		{Capability: "recovery", Verdict: "PASS", Count: 10},
+	}
+	score := ScoreRun(rows)
+	if len(score.CriticalFailures) != 0 {
+		t.Fatalf("CriticalFailures = %v, want empty", score.CriticalFailures)
+	}
+	if score.GateTriggered {
+		t.Fatal("GateTriggered = true, want false")
+	}
+}

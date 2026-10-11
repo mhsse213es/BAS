@@ -44,3 +44,21 @@ type DimensionScore struct {
 	NotTested     int
 	PassRate      float64
 }
+
+// Rating is the overall qualitative rating a customer sees.
+type Rating string
+
+const (
+	RatingProtected  Rating = "protected"
+	RatingAtRisk     Rating = "at_risk"
+	RatingVulnerable Rating = "vulnerable"
+)
+
+// RunScore is this sub-project's complete deliverable for one run.
+type RunScore struct {
+	Overall          float64
+	Rating           Rating
+	Dimensions       []DimensionScore
+	CriticalFailures []string
+	GateTriggered    bool
+}
