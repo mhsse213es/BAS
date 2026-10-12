@@ -21,7 +21,7 @@ func (e *AWSEvaluator) EvaluatePermission(edge *CloudPermission, ctx *RequestCon
 		}
 	}
 
-	if hasPolicy && hasAllowStatement(policyDoc, edge.Action) {
+	if hasPolicy && hasAllowStatement(policyDoc, edge.Action) && principalMatches(edge, policyDoc) {
 		return &EvaluationResult{
 			State:            PolicySupported,
 			AllowedBy:        edge.SourceType,
@@ -44,4 +44,13 @@ func hasDenyStatement(policyDoc, action string) bool {
 // hasAllowStatement checks if policy has an Allow for the action
 func hasAllowStatement(policyDoc, action string) bool {
 	return strings.Contains(policyDoc, `"Effect":"Allow"`) && strings.Contains(policyDoc, action)
+}
+
+// principalMatches verifies that role-trust policies name the requesting identity as Principal.
+// Non-trust policies (identity-policy, resource-policy) have no Principal clause to check here.
+func principalMatches(edge *CloudPermission, policyDoc string) bool {
+	if edge.SourceType != "role-trust" {
+		return true
+	}
+	return strings.Contains(policyDoc, edge.Source.CanonicalID)
 }
