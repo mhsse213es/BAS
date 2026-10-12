@@ -74,23 +74,47 @@ type LateralMovementExecution struct {
 	Result latmove.AttemptResult
 }
 
-// RansomwareContainment is the ransomware-payload leg's containment
+// TechniqueContainmentStatus distinguishes WHY a technique's containment
+// entry has no real verdict, when it has none -- three semantically
+// different situations that must never be collapsed into one another:
+type TechniqueContainmentStatus string
+
+const (
+	// ContainmentStatusEvaluated means a real PASS/FAIL/ERROR containment
+	// row exists for this technique: a genuine verdict was reached.
+	ContainmentStatusEvaluated TechniqueContainmentStatus = "evaluated"
+	// ContainmentStatusNotApplicable means rwevidence itself decided
+	// containment does not apply to this technique (a SKIPPED row with
+	// SkipReason == not_applicable exists) -- a decided "no", not a gap.
+	ContainmentStatusNotApplicable TechniqueContainmentStatus = "not_applicable"
+	// ContainmentStatusNotInstrumented means this technique was attempted
+	// in the run (it appears in RansomwareRows under some OTHER
+	// capability) but carries ZERO containment-capability rows at all --
+	// an instrumentation gap, never silently dropped or treated as a
+	// negative (FAIL) result.
+	ContainmentStatusNotInstrumented TechniqueContainmentStatus = "not_instrumented"
+)
+
+// RansomwareContainment is one ransomware technique's containment
 // evidence, read from the same run-scoped rows #5/#6 already consume.
 // Scope note, load-bearing: this measures containment of the SPECIFIC
 // ransomware capability attempt only -- never a claim about the AD or
 // lateral-movement legs, which have no containment observer at all (see
-// ContainmentNoObserver below).
+// ContainmentNoObserver below). Verdict and CreatedAt are zero-valued
+// when Status == ContainmentStatusNotInstrumented -- there is no row to
+// read them from.
 type RansomwareContainment struct {
 	TechniqueID string
+	Status      TechniqueContainmentStatus
 	Verdict     controlval.Verdict
 	Reason      string
 	CreatedAt   time.Time
 }
 
-// ContainmentAvailability distinguishes "we checked and it held/failed"
-// from "there is no observer for this leg" -- the latter is not a verdict,
-// it is an honest statement that nothing in this codebase can answer the
-// question yet.
+// ContainmentAvailability distinguishes "this leg has at least one
+// technique-level entry to report" from "there is no observer for this
+// leg at all" -- the latter is not a verdict, it is an honest statement
+// that nothing in this codebase can answer the question yet.
 type ContainmentAvailability string
 
 const (
@@ -99,11 +123,14 @@ const (
 )
 
 // LegContainment pairs a propagation leg with its containment
-// availability and, only when Measured, its verdict.
+// availability and, only when Measured, one entry per distinct
+// TechniqueID attempted on that leg. Never one value standing in for
+// several techniques: T1486's containment outcome must never be read as
+// speaking for T1490's, T1567.002's, or T1560.001's.
 type LegContainment struct {
 	Leg          string // "ad" | "lateral_movement" | "ransomware_payload"
 	Availability ContainmentAvailability
-	Containment  *RansomwareContainment // non-nil only when Availability == ContainmentMeasured
+	Containment  []RansomwareContainment // one entry per distinct TechniqueID; empty when Availability == ContainmentNoObserver
 }
 
 // TimeToIsolateStatus mirrors rwresponse.ResponseLatencyStatus's semantics
@@ -189,7 +216,17 @@ type Report struct {
 2. **Per-item tag check.** Otherwise, for each tagged item in `ADReachability`, `LateralMovementAccess`, and `LateralMovementExecution`: if `item.AssessmentID != input.Context.AssessmentID`, append an `Exclusion` (naming the source and the mismatch) and drop the item from the corresponding typed slice in `Report` — it is never included in a report whose `Correlation` claims to be established.
 3. **Report-level flag.** If `len(Exclusions) > 0` for any reason (including the empty-context case), `Correlation = CorrelationUncorrelated` for the whole report — one mismatched item taints the correlation claim as a whole, even though every correctly-tagged item still appears in its slice. `Correlation = CorrelationEstablished` only when the context is non-empty and every supplied item matched.
 4. **Empty-but-correctly-tagged is not an exclusion.** A leg with zero supplied items (nothing to report, not a mismatch) never produces an `Exclusion` and never affects `Correlation` — "nothing was supplied" and "something was supplied but doesn't belong" are different, and must stay visibly different in the output.
-5. **Containment.** The `"ad"` and `"lateral_movement"` `LegContainment` entries are always `ContainmentNoObserver`, independent of everything above. The `"ransomware_payload"` entry is computed from `input.RansomwareRows` (the row where `Capability == "containment"`, mapped the same way `rwresponse`'s existing `DimensionEvidence` mapping already does) — if `RansomwareRows` contains no containment row, the leg is `ContainmentNoObserver` too, for the ordinary reason that nothing was supplied, not because the observer doesn't exist for this leg.
+5. **Containment.** The `"ad"` and `"lateral_movement"` `LegContainment` entries are always `ContainmentNoObserver` with an empty `Containment` slice, independent of everything above. The `"ransomware_payload"` entry is derived from `input.RansomwareRows` as follows:
+   a. `techniqueSet` = every distinct `TechniqueID` appearing anywhere in `RansomwareRows`, under any capability — "attempted in this run," sorted lexicographically for stable output order.
+   b. If `techniqueSet` is empty (no ransomware rows supplied at all), the leg is `ContainmentNoObserver` with an empty `Containment` slice — nothing was attempted, so there is nothing to report, the same "nothing supplied" case as the other legs.
+   c. Otherwise the leg is `ContainmentMeasured`, and for each technique in `techniqueSet`, one `RansomwareContainment` entry is built:
+      - `containmentRows` = the subset of `RansomwareRows` for this technique where `Capability == "containment"`.
+      - If `containmentRows` is empty: `Status = ContainmentStatusNotInstrumented`, `Verdict` and `CreatedAt` left zero-valued, `Reason = ""`. The technique was attempted (it has rows under some other capability) but nothing ever checked containment for it.
+      - Otherwise, pick one row deterministically: earliest `CreatedAt` wins; if multiple rows share the earliest `CreatedAt`, the one with the lexicographically smallest `Action` wins (a deterministic, data-derived tie-break — never dependent on input slice order). Call it `r`.
+        - If `r.Verdict == controlval.VerdictSkipped && r.SkipReason == controlval.SkipNotApplicable`: `Status = ContainmentStatusNotApplicable`.
+        - Otherwise: `Status = ContainmentStatusEvaluated`.
+        - Either way, `Verdict = r.Verdict`, `Reason = r.Reason`, `CreatedAt = r.CreatedAt`.
+   A technique's entry never represents another technique's evidence — `ContainmentStatusNotApplicable` for T1490 and `ContainmentStatusEvaluated` for T1486 coexist in the same slice without either one influencing the other.
 6. **Time to isolate.** `TimeToIsolate = TimeToIsolateNotEstablishable` unconditionally, with `TimeToIsolateReason` set to a fixed string explaining why (no causal detection→isolation link exists in this codebase today) — never computed from any timestamp present in the input, because no such timestamp means what it would need to mean.
 
 ## D. Testing strategy
@@ -203,8 +240,10 @@ This package needs **zero database integration tests.** It only consumes `[]db.R
 
 **Containment-scope structural tests**
 - `BuildReport` always returns exactly 3 `LegContainment` entries, legs `"ad"`, `"lateral_movement"`, `"ransomware_payload"`, in that fixed order.
-- `"ad"` and `"lateral_movement"` are `ContainmentNoObserver` unconditionally — true even when the input supplies AD/lateral-movement evidence, since there is no field through which such evidence could reach a containment verdict.
-- `"ransomware_payload"` is computed correctly from realistic `db.RWAttemptRow` rows (`Capability == "containment"`, PASS/FAIL/SKIPPED mapped through), and is `ContainmentNoObserver` (not `ContainmentMeasured`) when no containment row is supplied.
+- `"ad"` and `"lateral_movement"` are `ContainmentNoObserver` with an empty `Containment` slice unconditionally — true even when the input supplies AD/lateral-movement evidence, since there is no field through which such evidence could reach a containment verdict.
+- `"ransomware_payload"` is `ContainmentNoObserver` with an empty slice when `RansomwareRows` is empty.
+- A multi-technique run (e.g. T1486 with a real PASS containment row, T1490 with a SKIPPED/not_applicable containment row, and T1560.001 with only a Prevention row and zero containment rows) produces exactly 3 `RansomwareContainment` entries — one per technique, each with its own correct `Status` (`evaluated` / `not_applicable` / `not_instrumented` respectively) — and T1486's `Status`/`Verdict` must not appear on, or influence, T1490's or T1560.001's entries.
+- Duplicate containment rows for the same technique with different `CreatedAt` resolve to the earliest; duplicate rows with the *same* `CreatedAt` resolve deterministically by lexicographically-smallest `Action`, and this result does not change when the input slice is reordered.
 
 **Time-to-isolate invariant**
 - `TimeToIsolateNotEstablishable` regardless of any input shape, including inputs that carry real `CreatedAt` timestamps elsewhere in the report — proving independence, the same test shape as `rwresponse`'s `TestBuildEffectivenessReport_ResponseLatencyAlwaysNotEstablishable`.
@@ -220,7 +259,7 @@ This package needs **zero database integration tests.** It only consumes `[]db.R
 - The same `Input` with its slices reordered produces an identical `Report` (`Correlation`, `Exclusions`, every leg's contents) — mirrors `dxcorrelate`'s and `rwresponse`'s existing order-independence tests.
 
 **One real cross-package test**
-- Construct a real `admatrix.SimResult` via `admatrix.Simulate()` against a small real catalog slice, a real `latmove.Observation` classified via `latmove.ClassifyAttempt()`, and a literal `db.RWAttemptRow` shaped like a genuine ransomware containment row (`Capability: "containment"`, a real `controlval.Verdict`) — all three tagged to the same `AssessmentContext`. Assert the resulting `Report` is `CorrelationEstablished`, all three legs populated, and every provenance/validation-level field intact. This is the "the join actually works end-to-end" test, without needing Postgres.
+- Construct a real `admatrix.SimResult` via `admatrix.Simulate()` against a small real catalog slice, a real `latmove.Observation` classified via `latmove.ClassifyAttempt()`, and literal `db.RWAttemptRow` values shaped like a genuine ransomware run (e.g. a T1486 containment row with a real `controlval.Verdict`, plus a T1490 row under a different capability to exercise the `not_instrumented` path) — all three tagged to the same `AssessmentContext`. Assert the resulting `Report` is `CorrelationEstablished`, all three legs populated, the `ransomware_payload` leg carries one entry per technique with the right `Status` each, and every provenance/validation-level field intact. This is the "the join actually works end-to-end" test, without needing Postgres.
 
 ## E. Explicitly deferred (not in this spec)
 
