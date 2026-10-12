@@ -121,3 +121,216 @@ steps:
 		t.Fatalf("verdict = %s", a.safety.verdict)
 	}
 }
+
+func TestAnalyze_FamilyAttributionAllFourValuesValidWhenProperlySourced(t *testing.T) {
+	cases := []struct {
+		name       string
+		confidence string
+		sources    string
+	}{
+		{"unsourced needs none", "unsourced", ""},
+		{"inferred needs one", "inferred", `
+    threat_intel_sources:
+      - reference: "Vendor Report A"`},
+		{"reported needs one", "reported", `
+    threat_intel_sources:
+      - reference: "Vendor Report A"`},
+		{"confirmed needs two", "confirmed", `
+    threat_intel_sources:
+      - reference: "Vendor Report A"
+      - reference: "CISA AA23-158A"`},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			yaml := "id: x\nname: X\nsteps:\n  - name: s\n    technique_id: T1486\n    framework: custom\n    command: whoami\n    family_attribution_confidence: " + c.confidence + c.sources + "\n"
+			a, err := analyzeArtifact([]byte(yaml))
+			if err != nil {
+				t.Fatalf("parse: %v", err)
+			}
+			if a.structural.outcome != "PASS" {
+				t.Fatalf("structural = %+v, want PASS", a.structural)
+			}
+		})
+	}
+}
+
+func TestAnalyze_FamilyAttributionInvalidValueRejectedRegardlessOfSourceCount(t *testing.T) {
+	a, err := analyzeArtifact([]byte(`id: x
+name: X
+steps:
+  - name: s
+    technique_id: T1486
+    framework: custom
+    command: whoami
+    family_attribution_confidence: definitely
+    threat_intel_sources:
+      - reference: "Vendor Report A"
+      - reference: "CISA AA23-158A"
+`))
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if a.structural.outcome != "FAIL" {
+		t.Fatalf("structural = %+v, want FAIL", a.structural)
+	}
+	if !containsProblem(a.structural, "invalid family_attribution_confidence value") {
+		t.Errorf("problems = %v, want to contain the invalid-value message", a.structural.detail["problems"])
+	}
+}
+
+func TestAnalyze_FamilyAttributionNonUnsourcedRequiresAtLeastOneSource(t *testing.T) {
+	for _, confidence := range []string{"inferred", "reported", "confirmed"} {
+		t.Run(confidence, func(t *testing.T) {
+			a, err := analyzeArtifact([]byte("id: x\nname: X\nsteps:\n  - name: s\n    technique_id: T1486\n    framework: custom\n    command: whoami\n    family_attribution_confidence: " + confidence + "\n"))
+			if err != nil {
+				t.Fatalf("parse: %v", err)
+			}
+			if a.structural.outcome != "FAIL" {
+				t.Fatalf("structural = %+v, want FAIL (zero sources)", a.structural)
+			}
+			if !containsProblem(a.structural, "non-unsourced family_attribution_confidence requires at least one threat_intel_sources entry") {
+				t.Errorf("problems = %v, want to contain the missing-source message", a.structural.detail["problems"])
+			}
+		})
+	}
+}
+
+func TestAnalyze_FamilyAttributionConfirmedRejectsExactlyOneSource(t *testing.T) {
+	a, err := analyzeArtifact([]byte(`id: x
+name: X
+steps:
+  - name: s
+    technique_id: T1486
+    framework: custom
+    command: whoami
+    family_attribution_confidence: confirmed
+    threat_intel_sources:
+      - reference: "Vendor Report A"
+`))
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if a.structural.outcome != "FAIL" {
+		t.Fatalf("structural = %+v, want FAIL (confirmed with only 1 source)", a.structural)
+	}
+	if !containsProblem(a.structural, "confirmed family_attribution_confidence requires at least 2 threat_intel_sources entries") {
+		t.Errorf("problems = %v, want to contain the confirmed-count message", a.structural.detail["problems"])
+	}
+}
+
+// TestAnalyze_FamilyAttributionUnsourcedAllowsSourcesToStillBePresent proves
+// the rule is one-directional: a step may cite sources for other reasons
+// while still rating its OWN family attribution as unsourced. Citing a
+// source does not by itself establish family attribution.
+func TestAnalyze_FamilyAttributionUnsourcedAllowsSourcesToStillBePresent(t *testing.T) {
+	a, err := analyzeArtifact([]byte(`id: x
+name: X
+steps:
+  - name: s
+    technique_id: T1486
+    framework: custom
+    command: whoami
+    family_attribution_confidence: unsourced
+    threat_intel_sources:
+      - reference: "Vendor Report A"
+      - reference: "CISA AA23-158A"
+`))
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if a.structural.outcome != "PASS" {
+		t.Fatalf("structural = %+v, want PASS -- unsourced with sources present must not be rejected", a.structural)
+	}
+}
+
+func TestAnalyze_ThreatIntelSourceEmptyReferenceRejected(t *testing.T) {
+	a, err := analyzeArtifact([]byte(`id: x
+name: X
+steps:
+  - name: s
+    technique_id: T1486
+    framework: custom
+    command: whoami
+    threat_intel_sources:
+      - reference: ""
+        url: "https://example.com"
+`))
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if a.structural.outcome != "FAIL" {
+		t.Fatalf("structural = %+v, want FAIL", a.structural)
+	}
+	if !containsProblem(a.structural, "threat_intel_sources entry missing reference") {
+		t.Errorf("problems = %v, want to contain the missing-reference message", a.structural.detail["problems"])
+	}
+}
+
+func TestAnalyze_LastReviewedValidation(t *testing.T) {
+	cases := []struct {
+		name    string
+		value   string
+		wantErr bool
+	}{
+		{"well-formed date accepted", "2026-10-12", false},
+		{"non-date string rejected", "not-a-date", true},
+		{"wrong-format date rejected", "10/12/2026", true},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			a, err := analyzeArtifact([]byte("id: x\nname: X\nsteps:\n  - name: s\n    technique_id: T1486\n    framework: custom\n    command: whoami\n    last_reviewed: \"" + c.value + "\"\n"))
+			if err != nil {
+				t.Fatalf("parse: %v", err)
+			}
+			wantOutcome := "PASS"
+			if c.wantErr {
+				wantOutcome = "FAIL"
+			}
+			if a.structural.outcome != wantOutcome {
+				t.Fatalf("structural = %+v, want %s", a.structural, wantOutcome)
+			}
+			if c.wantErr && !containsProblem(a.structural, "last_reviewed is not a valid date") {
+				t.Errorf("problems = %v, want to contain the invalid-date message", a.structural.detail["problems"])
+			}
+		})
+	}
+}
+
+// TestAnalyze_StepProvenanceFieldsAllAbsentProducesNoNewProblems is the
+// backward-compatibility guarantee at the structural-check layer: a step
+// setting none of the three provenance fields -- exactly what every step in
+// every one of the 9 real scenarios does today -- must add zero new
+// problems, verified directly rather than only through Task 3's real-corpus
+// test.
+func TestAnalyze_StepProvenanceFieldsAllAbsentProducesNoNewProblems(t *testing.T) {
+	a, err := analyzeArtifact([]byte(`id: x
+name: X
+steps:
+  - name: s
+    technique_id: T1486
+    framework: custom
+    command: whoami
+`))
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if a.structural.outcome != "PASS" {
+		t.Fatalf("structural = %+v, want PASS", a.structural)
+	}
+	if problems, _ := a.structural.detail["problems"].([]string); len(problems) != 0 {
+		t.Errorf("problems = %v, want empty", problems)
+	}
+}
+
+// containsProblem is a small test helper shared by this file's new cases --
+// checkResult.detail["problems"] is a []string by construction (see
+// structuralCheck), never anything else.
+func containsProblem(cr checkResult, want string) bool {
+	problems, _ := cr.detail["problems"].([]string)
+	for _, p := range problems {
+		if p == want {
+			return true
+		}
+	}
+	return false
+}
