@@ -94,3 +94,47 @@ func TestCorrelate_DuplicateOccurredRowsForOneLeg_DeterministicallyUsesEarliest(
 		t.Fatalf("order-dependent result: %q vs %q", resultA.Classification, resultB.Classification)
 	}
 }
+
+func TestCorrelate_OutOfOrderEvidence_DowngradesToPartialWithAnomaly(t *testing.T) {
+	rows := []AttemptRow{
+		row(LegStaging, "a1", EfficacyNotDetected, BehaviorOccurred, t0.Add(2*time.Hour)), // staging AFTER transfer
+		row(LegTransfer, "a2", EfficacyNotDetected, BehaviorOccurred, t0),
+	}
+	result := Correlate(rows)
+	if result.Classification != ClassificationPartialBehaviorEvidence {
+		t.Fatalf("Classification = %q, want partial_behavior_evidence for out-of-order evidence", result.Classification)
+	}
+	if result.Anomaly == "" {
+		t.Fatal("Anomaly is empty, want a non-empty explanation of the ordering violation")
+	}
+}
+
+func TestCorrelate_TemporallyUnrelatedEvidence_DowngradesToPartialWithAnomaly(t *testing.T) {
+	// Correctly ordered, but far outside MaxCorrelationWindow -- a DIFFERENT
+	// rule from the ordering test above; this must not be confused with it.
+	rows := []AttemptRow{
+		row(LegStaging, "a1", EfficacyNotDetected, BehaviorOccurred, t0),
+		row(LegTransfer, "a2", EfficacyNotDetected, BehaviorOccurred, t0.Add(MaxCorrelationWindow+time.Hour)),
+	}
+	result := Correlate(rows)
+	if result.Classification != ClassificationPartialBehaviorEvidence {
+		t.Fatalf("Classification = %q, want partial_behavior_evidence for temporally-unrelated evidence", result.Classification)
+	}
+	if result.Anomaly == "" {
+		t.Fatal("Anomaly is empty, want a non-empty explanation of the time-window violation")
+	}
+}
+
+func TestCorrelate_WithinWindowAndOrder_StaysConfirmed(t *testing.T) {
+	rows := []AttemptRow{
+		row(LegStaging, "a1", EfficacyNotDetected, BehaviorOccurred, t0),
+		row(LegTransfer, "a2", EfficacyNotDetected, BehaviorOccurred, t0.Add(MaxCorrelationWindow-time.Hour)),
+	}
+	result := Correlate(rows)
+	if result.Classification != ClassificationExfiltrationConfirmedEncryptionNotEstablished {
+		t.Fatalf("Classification = %q, want exfiltration_confirmed_encryption_not_established", result.Classification)
+	}
+	if result.Anomaly != "" {
+		t.Fatalf("Anomaly = %q, want empty for evidence within the window and correctly ordered", result.Anomaly)
+	}
+}

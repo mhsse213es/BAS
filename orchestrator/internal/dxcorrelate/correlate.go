@@ -1,6 +1,16 @@
 package dxcorrelate
 
-import "sort"
+import (
+	"fmt"
+	"sort"
+	"time"
+)
+
+// MaxCorrelationWindow is deliberately generous: this correlates
+// simulated/fake-backed evidence today, not real attacker telemetry, so
+// tuning a realistic threshold is explicitly deferred to the
+// real-observer sub-project.
+const MaxCorrelationWindow = 24 * time.Hour
 
 // Correlate always returns exactly 3 LegEvidence entries, in allLegs'
 // fixed order. Classification is computed from Behavior alone --
@@ -11,7 +21,45 @@ func Correlate(rows []AttemptRow) CorrelationResult {
 	for _, leg := range allLegs {
 		legs = append(legs, selectLegEvidence(leg, rows))
 	}
-	return CorrelationResult{Legs: legs, Classification: classify(legs)}
+	classification := classify(legs)
+	anomaly := ""
+	if isConfirmedClassification(classification) {
+		if issue := orderingOrWindowIssue(legs); issue != "" {
+			classification = ClassificationPartialBehaviorEvidence
+			anomaly = issue
+		}
+	}
+	return CorrelationResult{Legs: legs, Classification: classification, Anomaly: anomaly}
+}
+
+func isConfirmedClassification(c Classification) bool {
+	return c == ClassificationThreeLegConfirmed ||
+		c == ClassificationExfiltrationConfirmedEncryptionNotEstablished ||
+		c == ClassificationEncryptionConfirmedExfiltrationNotEstablished
+}
+
+// orderingOrWindowIssue checks only the Occurred legs, in allLegs' fixed
+// canonical order (staging, transfer, encryption) -- a coherent
+// double-extortion sequence requires each later leg's evidence to arrive
+// no earlier, and no more than MaxCorrelationWindow later, than the
+// previous one.
+func orderingOrWindowIssue(legs []LegEvidence) string {
+	var occurred []LegEvidence
+	for _, l := range legs {
+		if l.Behavior == BehaviorOccurred {
+			occurred = append(occurred, l)
+		}
+	}
+	for i := 1; i < len(occurred); i++ {
+		prev, cur := occurred[i-1], occurred[i]
+		if cur.CreatedAt.Before(prev.CreatedAt) {
+			return fmt.Sprintf("out-of-order evidence: %s (%s) occurs before %s (%s)", cur.Leg, cur.CreatedAt, prev.Leg, prev.CreatedAt)
+		}
+		if gap := cur.CreatedAt.Sub(prev.CreatedAt); gap > MaxCorrelationWindow {
+			return fmt.Sprintf("temporally unrelated evidence: %s to %s gap of %s exceeds max correlation window of %s", prev.Leg, cur.Leg, gap, MaxCorrelationWindow)
+		}
+	}
+	return ""
 }
 
 // selectLegEvidence picks, among rows matching leg, the earliest row
