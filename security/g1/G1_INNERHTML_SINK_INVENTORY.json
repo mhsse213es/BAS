@@ -1,6 +1,6 @@
 [
  {
-  "line": 4097,
+  "line": 4220,
   "function": "renderTemplateGrid",
   "target": "grid",
   "op": "=",
@@ -10,7 +10,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 4150,
+  "line": 4273,
   "function": "openTmplRun",
   "target": "if (srcsEl) srcsEl",
   "op": "=",
@@ -20,7 +20,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 4204,
+  "line": 4327,
   "function": "renderTmplAgentList",
   "target": "list",
   "op": "=",
@@ -30,7 +30,7 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 4206,
+  "line": 4329,
   "function": "renderTmplAgentList",
   "target": "list",
   "op": "=",
@@ -40,7 +40,7 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 4259,
+  "line": 4382,
   "function": "renderGroupCheckboxList",
   "target": "list",
   "op": "=",
@@ -50,7 +50,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 4267,
+  "line": 4390,
   "function": "renderGroupCheckboxList",
   "target": "list",
   "op": "=",
@@ -60,7 +60,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 4309,
+  "line": 4432,
   "function": "renderTmplWarn",
   "target": "warn",
   "op": "=",
@@ -70,7 +70,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 4311,
+  "line": 4434,
   "function": "renderTmplWarn",
   "target": "warn",
   "op": "=",
@@ -80,7 +80,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 4313,
+  "line": 4436,
   "function": "renderTmplWarn",
   "target": "warn",
   "op": "=",
@@ -90,7 +90,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 4340,
+  "line": 4463,
   "function": "renderTmplOSCompat",
   "target": "warnEl",
   "op": "=",
@@ -100,7 +100,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 4358,
+  "line": 4481,
   "function": "renderTmplOSCompat",
   "target": "warnEl",
   "op": "=",
@@ -110,7 +110,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 4375,
+  "line": 4498,
   "function": "renderTmplOSCompat",
   "target": "warnEl",
   "op": "=",
@@ -120,7 +120,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 4385,
+  "line": 4508,
   "function": "renderTmplOSCompat",
   "target": "warnEl",
   "op": "=",
@@ -130,7 +130,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 4394,
+  "line": 4517,
   "function": "renderTmplOSCompat",
   "target": "warnEl",
   "op": "=",
@@ -140,7 +140,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 4489,
+  "line": 4612,
   "function": "renderAdversaryLibrary",
   "target": "grid",
   "op": "=",
@@ -150,7 +150,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 4504,
+  "line": 4627,
   "function": "tacticChip",
   "target": "grid",
   "op": "=",
@@ -160,7 +160,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 4533,
+  "line": 4656,
   "function": "openAdvDrawer",
   "target": "abEl",
   "op": "=",
@@ -170,7 +170,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 4536,
+  "line": 4659,
   "function": "openAdvDrawer",
   "target": "runWrap",
   "op": "=",
@@ -180,7 +180,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 4545,
+  "line": 4668,
   "function": "openAdvDrawer",
   "target": "abEl",
   "op": "=",
@@ -190,7 +190,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 4550,
+  "line": 4673,
   "function": "openAdvDrawer",
   "target": "abEl",
   "op": "=",
@@ -200,7 +200,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 4569,
+  "line": 4692,
   "function": "openAdvDrawer",
   "target": "abEl",
   "op": "=",
@@ -210,7 +210,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 4588,
+  "line": 4711,
   "function": "openAdvRunModal",
   "target": "agSel",
   "op": "=",
@@ -220,7 +220,7 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 4613,
+  "line": 4736,
   "function": "renderAdvRunWarn",
   "target": "warn",
   "op": "=",
@@ -230,7 +230,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 4619,
+  "line": 4742,
   "function": "renderAdvRunWarn",
   "target": "warn",
   "op": "=",
@@ -240,7 +240,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 4815,
+  "line": 4938,
   "function": "loadAgtOverview",
   "target": "pane",
   "op": "=",
@@ -250,7 +250,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 4818,
+  "line": 4941,
   "function": "loadAgtOverview",
   "target": "pane",
   "op": "=",
@@ -260,7 +260,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 4822,
+  "line": 4945,
   "function": "loadAgtOverview",
   "target": "pane",
   "op": "=",
@@ -270,7 +270,7 @@
   "data_source_tags": "agent,scenario,user_created_name"
  },
  {
-  "line": 4879,
+  "line": 5002,
   "function": "loadAgtOverview",
   "target": "pane",
   "op": "=",
@@ -280,7 +280,7 @@
   "data_source_tags": "error_message"
  },
  {
-  "line": 4907,
+  "line": 5030,
   "function": "loadAgtScenarios",
   "target": "pane",
   "op": "=",
@@ -290,7 +290,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 4910,
+  "line": 5033,
   "function": "loadAgtScenarios",
   "target": "pane",
   "op": "=",
@@ -300,7 +300,7 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 4927,
+  "line": 5050,
   "function": "loadAgtScenarios",
   "target": "pane",
   "op": "=",
@@ -310,7 +310,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 4937,
+  "line": 5060,
   "function": "loadAgtScenarios",
   "target": "pane",
   "op": "=",
@@ -320,7 +320,7 @@
   "data_source_tags": "error_message"
  },
  {
-  "line": 5024,
+  "line": 5147,
   "function": "loadAgtLogs",
   "target": "pane",
   "op": "=",
@@ -330,7 +330,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 5029,
+  "line": 5152,
   "function": "loadAgtLogs",
   "target": "pane",
   "op": "=",
@@ -340,7 +340,7 @@
   "data_source_tags": "error_message"
  },
  {
-  "line": 5106,
+  "line": 5229,
   "function": "loadAgtHealth",
   "target": "pane",
   "op": "=",
@@ -350,7 +350,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 5118,
+  "line": 5241,
   "function": "loadAgtHealth",
   "target": "pane",
   "op": "=",
@@ -360,7 +360,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 5120,
+  "line": 5243,
   "function": "loadAgtHealth",
   "target": "pane",
   "op": "=",
@@ -370,7 +370,7 @@
   "data_source_tags": "error_message"
  },
  {
-  "line": 5127,
+  "line": 5250,
   "function": "loadAgtRisk",
   "target": "if (panel) panel",
   "op": "=",
@@ -380,7 +380,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 5130,
+  "line": 5253,
   "function": "loadAgtRisk",
   "target": "if (panel) panel",
   "op": "=",
@@ -390,7 +390,7 @@
   "data_source_tags": "error_message"
  },
  {
-  "line": 5203,
+  "line": 5326,
   "function": "renderAgtRisk",
   "target": "panel",
   "op": "=",
@@ -400,7 +400,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 5209,
+  "line": 5332,
   "function": "loadAgtAttackPath",
   "target": "pane",
   "op": "=",
@@ -410,7 +410,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 5212,
+  "line": 5335,
   "function": "loadAgtAttackPath",
   "target": "pane",
   "op": "=",
@@ -420,7 +420,7 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 5243,
+  "line": 5366,
   "function": "loadAgtAttackPath",
   "target": "pane",
   "op": "=",
@@ -430,7 +430,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 5253,
+  "line": 5376,
   "function": "loadAgtAttackPath",
   "target": "pane",
   "op": "=",
@@ -440,7 +440,7 @@
   "data_source_tags": "error_message"
  },
  {
-  "line": 5342,
+  "line": 5465,
   "function": "initComplianceTab",
   "target": "fwSel",
   "op": "=",
@@ -450,7 +450,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 5346,
+  "line": 5469,
   "function": "initComplianceTab",
   "target": "fwSel",
   "op": "=",
@@ -460,7 +460,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 5353,
+  "line": 5476,
   "function": "initComplianceTab",
   "target": "agSel",
   "op": "=",
@@ -470,7 +470,7 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 5403,
+  "line": 5526,
   "function": "renderComplianceReport",
   "target": "document.getElementById('cmp-header-area')",
   "op": "=",
@@ -480,7 +480,7 @@
   "data_source_tags": "agent,user_created_name"
  },
  {
-  "line": 5440,
+  "line": 5563,
   "function": "renderComplianceReport",
   "target": "document.getElementById('cmp-kpi-area')",
   "op": "=",
@@ -490,7 +490,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 5452,
+  "line": 5575,
   "function": "renderComplianceReport",
   "target": "document.getElementById('cmp-domain-area')",
   "op": "=",
@@ -500,7 +500,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 5484,
+  "line": 5607,
   "function": "renderControlsTable",
   "target": "document.getElementById('cmp-controls-body')",
   "op": "=",
@@ -510,7 +510,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 5515,
+  "line": 5638,
   "function": "renderControlsTable",
   "target": "document.getElementById('cmp-controls-body')",
   "op": "=",
@@ -520,7 +520,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 5554,
+  "line": 5677,
   "function": "loadAttackPath",
   "target": "if (body) body",
   "op": "=",
@@ -530,7 +530,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 5609,
+  "line": 5732,
   "function": "loadExposureAssets",
   "target": "body",
   "op": "=",
@@ -540,7 +540,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 5612,
+  "line": 5735,
   "function": "loadExposureAssets",
   "target": "body",
   "op": "=",
@@ -550,7 +550,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 5615,
+  "line": 5738,
   "function": "loadExposureAssets",
   "target": "body",
   "op": "=",
@@ -560,7 +560,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 5628,
+  "line": 5751,
   "function": "loadExposureAssets",
   "target": "body",
   "op": "=",
@@ -570,7 +570,7 @@
   "data_source_tags": "error_message"
  },
  {
-  "line": 5698,
+  "line": 5821,
   "function": "renderExecDashboard",
   "target": "el",
   "op": "=",
@@ -580,7 +580,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 5754,
+  "line": 5877,
   "function": "renderForecast",
   "target": "el",
   "op": "=",
@@ -590,7 +590,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 5761,
+  "line": 5884,
   "function": "renderForecast",
   "target": "el",
   "op": "=",
@@ -600,7 +600,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 5775,
+  "line": 5898,
   "function": "renderExposure",
   "target": "el",
   "op": "=",
@@ -610,7 +610,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 5797,
+  "line": 5920,
   "function": "stat",
   "target": "el",
   "op": "=",
@@ -620,7 +620,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 5845,
+  "line": 5968,
   "function": "loadCoverageMatrix",
   "target": "body",
   "op": "=",
@@ -630,7 +630,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 5851,
+  "line": 5974,
   "function": "loadCoverageMatrix",
   "target": "body",
   "op": "=",
@@ -640,7 +640,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 5856,
+  "line": 5979,
   "function": "loadCoverageMatrix",
   "target": "body",
   "op": "=",
@@ -650,7 +650,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 5868,
+  "line": 5991,
   "function": "loadCoverageMatrix",
   "target": "body",
   "op": "=",
@@ -660,7 +660,7 @@
   "data_source_tags": "error_message"
  },
  {
-  "line": 5894,
+  "line": 6017,
   "function": "loadThreatPriorityActors",
   "target": "body",
   "op": "=",
@@ -670,7 +670,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 5899,
+  "line": 6022,
   "function": "loadThreatPriorityActors",
   "target": "body",
   "op": "=",
@@ -680,7 +680,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 5904,
+  "line": 6027,
   "function": "loadThreatPriorityActors",
   "target": "body",
   "op": "=",
@@ -690,7 +690,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 5915,
+  "line": 6038,
   "function": "loadThreatPriorityActors",
   "target": "body",
   "op": "=",
@@ -700,7 +700,7 @@
   "data_source_tags": "error_message"
  },
  {
-  "line": 5927,
+  "line": 6050,
   "function": "showThreatPriorityDetail",
   "target": "document.getElementById('tp-detail-factors')",
   "op": "=",
@@ -710,7 +710,7 @@
   "data_source_tags": "error_message"
  },
  {
-  "line": 5932,
+  "line": 6055,
   "function": "renderThreatPriorityDetail",
   "target": "document.getElementById('tp-detail-title')",
   "op": "=",
@@ -720,7 +720,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 5935,
+  "line": 6058,
   "function": "renderThreatPriorityDetail",
   "target": "document.getElementById('tp-detail-summary')",
   "op": "=",
@@ -730,7 +730,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 5948,
+  "line": 6071,
   "function": "renderThreatPriorityDetail",
   "target": "document.getElementById('tp-detail-factors')",
   "op": "=",
@@ -740,7 +740,7 @@
   "data_source_tags": "api_response"
  },
  {
-  "line": 5951,
+  "line": 6074,
   "function": "renderThreatPriorityDetail",
   "target": "document.getElementById('tp-detail-uncovered')",
   "op": "=",
@@ -750,7 +750,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 5962,
+  "line": 6085,
   "function": "renderThreatPriorityDetail",
   "target": "document.getElementById('tp-detail-coverage')",
   "op": "=",
@@ -760,7 +760,7 @@
   "data_source_tags": "api_response"
  },
  {
-  "line": 5979,
+  "line": 6102,
   "function": "renderThreatPriorityDetail",
   "target": "document.getElementById('tp-detail-sources')",
   "op": "=",
@@ -770,7 +770,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 6014,
+  "line": 6137,
   "function": "row",
   "target": "document.getElementById('tp-detail-evidence')",
   "op": "=",
@@ -780,7 +780,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 6027,
+  "line": 6150,
   "function": "row",
   "target": "document.getElementById('tp-detail-history')",
   "op": "=",
@@ -790,7 +790,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 6037,
+  "line": 6160,
   "function": "row",
   "target": "document.getElementById('tp-detail-recs')",
   "op": "=",
@@ -800,7 +800,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 6041,
+  "line": 6164,
   "function": "row",
   "target": "document.getElementById('tp-detail-recs')",
   "op": "=",
@@ -810,7 +810,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 6049,
+  "line": 6172,
   "function": "loadRecommendations",
   "target": "body",
   "op": "=",
@@ -820,7 +820,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 6053,
+  "line": 6176,
   "function": "loadRecommendations",
   "target": "body",
   "op": "=",
@@ -830,7 +830,7 @@
   "data_source_tags": "error_message"
  },
  {
-  "line": 6062,
+  "line": 6185,
   "function": "renderRecommendations",
   "target": "body",
   "op": "=",
@@ -840,7 +840,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 6065,
+  "line": 6188,
   "function": "renderRecommendations",
   "target": "body",
   "op": "=",
@@ -850,7 +850,7 @@
   "data_source_tags": "threat_intel,user_created_name"
  },
  {
-  "line": 6107,
+  "line": 6230,
   "function": "openExposureDetail",
   "target": "body",
   "op": "=",
@@ -860,7 +860,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 6173,
+  "line": 6296,
   "function": "expCard",
   "target": "body",
   "op": "=",
@@ -870,7 +870,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 6175,
+  "line": 6298,
   "function": "expCard",
   "target": "body",
   "op": "=",
@@ -880,7 +880,7 @@
   "data_source_tags": "error_message"
  },
  {
-  "line": 6241,
+  "line": 6364,
   "function": "fill",
   "target": "sel",
   "op": "=",
@@ -890,7 +890,7 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 6265,
+  "line": 6388,
   "function": "apDiscoverSubnet",
   "target": "btn",
   "op": "=",
@@ -900,7 +900,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 6275,
+  "line": 6398,
   "function": "apDiscoverSubnet",
   "target": "btn",
   "op": "=",
@@ -910,7 +910,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 6320,
+  "line": 6443,
   "function": "dispatchAPCollect",
   "target": "tl",
   "op": "=",
@@ -920,7 +920,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 6421,
+  "line": 6544,
   "function": "_apRenderJobState",
   "target": "tl",
   "op": "=",
@@ -930,7 +930,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 6523,
+  "line": 6646,
   "function": "_apOnCollected",
   "target": "tl",
   "op": "=",
@@ -940,7 +940,7 @@
   "data_source_tags": "api_response"
  },
  {
-  "line": 6567,
+  "line": 6690,
   "function": "openAPAssets",
   "target": "document.getElementById('ap-assets-body')",
   "op": "=",
@@ -950,7 +950,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 6577,
+  "line": 6700,
   "function": "renderAPAssets",
   "target": "tb",
   "op": "=",
@@ -960,7 +960,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 6580,
+  "line": 6703,
   "function": "renderAPAssets",
   "target": "tb",
   "op": "=",
@@ -970,7 +970,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 6740,
+  "line": 6863,
   "function": "renderAgentGroupTree",
   "target": "root",
   "op": "=",
@@ -980,7 +980,7 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 6853,
+  "line": 6976,
   "function": "openGroupPicker",
   "target": "document.getElementById('gp-select')",
   "op": "=",
@@ -990,7 +990,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 6932,
+  "line": 7055,
   "function": "renderLegacyMigrationPanel",
   "target": "el",
   "op": "=",
@@ -1000,7 +1000,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 6990,
+  "line": 7113,
   "function": "renderAgentTiles",
   "target": "if (el) el",
   "op": "=",
@@ -1010,7 +1010,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 7014,
+  "line": 7137,
   "function": "c",
   "target": "if (el) el",
   "op": "=",
@@ -1020,7 +1020,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 7031,
+  "line": 7154,
   "function": "renderAgentRows",
   "target": "tbody",
   "op": "=",
@@ -1030,7 +1030,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 7034,
+  "line": 7157,
   "function": "renderAgentRows",
   "target": "tbody",
   "op": "=",
@@ -1040,7 +1040,7 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 7352,
+  "line": 7475,
   "function": "approveForLocalUse",
   "target": "body",
   "op": "=",
@@ -1050,7 +1050,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 7358,
+  "line": 7481,
   "function": "approveForLocalUse",
   "target": "body",
   "op": "=",
@@ -1060,7 +1060,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 7363,
+  "line": 7486,
   "function": "approveForLocalUse",
   "target": "body",
   "op": "=",
@@ -1070,7 +1070,7 @@
   "data_source_tags": "error_message"
  },
  {
-  "line": 7500,
+  "line": 7623,
   "function": "renderScenarioLanding",
   "target": "el",
   "op": "=",
@@ -1080,7 +1080,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 7550,
+  "line": 7673,
   "function": "renderScenarios",
   "target": "landingEl",
   "op": "=",
@@ -1090,7 +1090,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 7595,
+  "line": 7718,
   "function": "renderScenarios",
   "target": "sgrid",
   "op": "=",
@@ -1100,7 +1100,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 7624,
+  "line": 7747,
   "function": "renderScenarios",
   "target": "grid",
   "op": "=",
@@ -1110,157 +1110,157 @@
   "data_source_tags": ""
  },
  {
-  "line": 7983,
+  "line": 8106,
   "function": "loadLicenseInfo",
   "target": "wrap",
   "op": "=",
-  "rhs": "'<div class=\"empty\" style=\"padding:2rem\">Loading\u2026</div>'",
-  "rhs_len": 56,
+  "rhs": "'<div class=\"empty g1-s-be6df18e\">Loading\u2026</div>'",
+  "rhs_len": 49,
   "category": "static",
   "data_source_tags": ""
  },
  {
-  "line": 7985,
+  "line": 8108,
   "function": "loadLicenseInfo",
   "target": "wrap",
   "op": "=",
-  "rhs": "'<div class=\"empty\" style=\"padding:2rem;color:var(--danger)\">' + x(lic.error) + '</div>'",
-  "rhs_len": 88,
+  "rhs": "'<div class=\"empty g1-s-8e56e4c3\">' + x(lic.error) + '</div>'",
+  "rhs_len": 61,
   "category": "escaped",
   "data_source_tags": ""
  },
  {
-  "line": 7991,
+  "line": 8114,
   "function": "loadLicenseInfo",
   "target": "wrap",
   "op": "=",
-  "rhs": "'<div class=\"conn-cfg-card\" style=\"max-width:540px\">' +\n        '<div style=\"display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem\">' +\n          '<div style=\"font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)\">Entitlement</div>' +\n          '<span class=\"sbadge\" style=\"background:' + statusColor + '22;color:' + statusColor",
-  "rhs_len": 1340,
+  "rhs": "'<div class=\"conn-cfg-card g1-s-ed5b0ac3\">' +\n        '<div class=\"g1-display-flex g1-s-7cd1f313\">' +\n          '<div class=\"g1-s-0c5a3e12\">Entitlement</div>' +\n          '<span class=\"sbadge g1-s-1b1dd8f9\"' + cssVars(['g1-v-9a515764', statusColor], ['g1-v-7d75dfc9', statusColor], ['g1-v-d59a9269', statusColor]) + '>' + statusLabel + '</span>' +\n        '</div>' +\n        _licRow('Customer',    x(",
+  "rhs_len": 1051,
   "category": "partial_escaped",
   "data_source_tags": ""
  },
  {
-  "line": 8004,
+  "line": 8127,
   "function": "loadLicenseInfo",
   "target": "wrap",
   "op": "=",
-  "rhs": "'<div class=\"empty\" style=\"padding:2rem;color:var(--danger)\">' + x(e.message) + '</div>'",
-  "rhs_len": 88,
+  "rhs": "'<div class=\"empty g1-s-8e56e4c3\">' + x(e.message) + '</div>'",
+  "rhs_len": 61,
   "category": "escaped",
   "data_source_tags": "error_message"
  },
  {
-  "line": 8028,
+  "line": 8151,
   "function": "loadBackups",
   "target": "if (wrap) wrap",
   "op": "=",
-  "rhs": "'<div class=\"empty\" style=\"padding:2rem;color:var(--danger)\">' + x(jobs.error) + '</div>'",
-  "rhs_len": 89,
+  "rhs": "'<div class=\"empty g1-s-8e56e4c3\">' + x(jobs.error) + '</div>'",
+  "rhs_len": 62,
   "category": "escaped",
   "data_source_tags": ""
  },
  {
-  "line": 8034,
+  "line": 8157,
   "function": "loadBackups",
   "target": "if (wrap) wrap",
   "op": "=",
-  "rhs": "'<div class=\"empty\" style=\"padding:2rem;color:var(--danger)\">' + x(e.message) + '</div>'",
-  "rhs_len": 88,
+  "rhs": "'<div class=\"empty g1-s-8e56e4c3\">' + x(e.message) + '</div>'",
+  "rhs_len": 61,
   "category": "escaped",
   "data_source_tags": "error_message"
  },
  {
-  "line": 8042,
+  "line": 8165,
   "function": "renderBackupStatusCard",
   "target": "wrap",
   "op": "=",
-  "rhs": "'<div class=\"conn-cfg-card\"><div class=\"empty\" style=\"padding:1rem 0\">No backups yet. Click \"Backup Now\" to create one.</div></div>'",
-  "rhs_len": 132,
+  "rhs": "'<div class=\"conn-cfg-card\"><div class=\"empty g1-s-c19e0f28\">No backups yet. Click \"Backup Now\" to create one.</div></div>'",
+  "rhs_len": 123,
   "category": "static",
   "data_source_tags": ""
  },
  {
-  "line": 8048,
+  "line": 8171,
   "function": "renderBackupStatusCard",
   "target": "wrap",
   "op": "=",
-  "rhs": "'<div class=\"conn-cfg-card\">' +\n      '<div style=\"display:flex;align-items:center;justify-content:space-between;margin-bottom:0.6rem\">' +\n        '<div style=\"font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)\">Most recent backup</div>' +\n        '<span class=\"sbadge\" style=\"background:' + color + '22;color:' + color + ';border:1px solid ' + color +",
-  "rhs_len": 1470,
+  "rhs": "'<div class=\"conn-cfg-card\">' +\n      '<div class=\"g1-display-flex g1-s-c91d8485\">' +\n        '<div class=\"g1-s-0c5a3e12\">Most recent backup</div>' +\n        '<span class=\"sbadge g1-s-1b1dd8f9\"' + cssVars(['g1-v-9a515764', color], ['g1-v-7d75dfc9', color], ['g1-v-d59a9269', color]) + '>' + x(label) + '</span>' +\n      '</div>' +\n      '<div class=\"conn-cfg-row\"><span class=\"conn-cfg-label\">Request",
+  "rhs_len": 1318,
   "category": "partial_escaped",
   "data_source_tags": ""
  },
  {
-  "line": 8067,
+  "line": 8190,
   "function": "renderBackupJobsTable",
   "target": "tbody",
   "op": "=",
-  "rhs": "'<tr><td colspan=\"6\" style=\"text-align:center;color:var(--muted);padding:1.5rem\">No backups yet.</td></tr>'",
-  "rhs_len": 107,
+  "rhs": "'<tr><td colspan=\"6\" class=\"g1-s-6928ed1e\">No backups yet.</td></tr>'",
+  "rhs_len": 69,
   "category": "static",
   "data_source_tags": ""
  },
  {
-  "line": 8070,
+  "line": 8193,
   "function": "renderBackupJobsTable",
   "target": "tbody",
   "op": "=",
-  "rhs": "jobs.map(function(j) {\n    var color = BACKUP_STATUS_COLOR[j.status] || 'var(--muted)';\n    var label = BACKUP_STATUS_LABEL[j.status] || j.status;\n    var canRestore = (j.status === 'protected' || j.status === 'local_success');\n    return '<tr style=\"border-bottom:1px solid var(--border)\">' +\n      '<td style=\"padding:0.4rem 0.5rem\">' + x(new Date(j.requestedAt).toLocaleString()) + '</td>' +\n     ",
-  "rhs_len": 1057,
+  "rhs": "jobs.map(function(j) {\n    var color = BACKUP_STATUS_COLOR[j.status] || 'var(--muted)';\n    var label = BACKUP_STATUS_LABEL[j.status] || j.status;\n    var canRestore = (j.status === 'protected' || j.status === 'local_success');\n    return '<tr class=\"g1-s-76497c6f\">' +\n      '<td class=\"g1-s-b86389a4\">' + x(new Date(j.requestedAt).toLocaleString()) + '</td>' +\n      '<td class=\"g1-s-b86389a4\">' + ",
+  "rhs_len": 987,
   "category": "unescaped_html",
   "data_source_tags": ""
  },
  {
-  "line": 8119,
+  "line": 8242,
   "function": "prepareRestore",
   "target": "wrap",
   "op": "=",
-  "rhs": "'<div class=\"empty\" style=\"padding:1rem;color:var(--danger)\">' + x(res.error) + '</div>'",
-  "rhs_len": 88,
+  "rhs": "'<div class=\"empty g1-s-9b78712f\">' + x(res.error) + '</div>'",
+  "rhs_len": 61,
   "category": "escaped",
   "data_source_tags": "api_response"
  },
  {
-  "line": 8120,
+  "line": 8243,
   "function": "prepareRestore",
   "target": "wrap",
   "op": "=",
-  "rhs": "'<div class=\"conn-cfg-card\" style=\"margin-top:1rem;border-color:var(--warning)\">' +\n        '<div style=\"font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--warning);margin-bottom:0.5rem\">Restore must be run on the host</div>' +\n        '<div style=\"font-size:0.8rem;color:var(--muted);margin-bottom:0.6rem\">This console cannot and will not run this for you. A",
-  "rhs_len": 749,
+  "rhs": "'<div class=\"conn-cfg-card g1-s-7b0aa428\">' +\n        '<div class=\"g1-s-21b099fc\">Restore must be run on the host</div>' +\n        '<div class=\"g1-s-1236f559\">This console cannot and will not run this for you. An administrator with root access to the server must run the command below and type <b>RESTORE</b> to confirm.</div>' +\n        '<code class=\"g1-display-block g1-s-dca1d235\">' + x(res.restor",
+  "rhs_len": 438,
   "category": "escaped",
   "data_source_tags": "api_response"
  },
  {
-  "line": 8146,
+  "line": 8269,
   "function": "fetchAuditPage",
   "target": "tbody",
   "op": "=",
-  "rhs": "'<tr><td colspan=\"6\" style=\"text-align:center;color:var(--muted);padding:2rem\">No audit records found.</td></tr>'",
-  "rhs_len": 113,
+  "rhs": "'<tr><td colspan=\"6\" class=\"g1-s-5b31a60f\">No audit records found.</td></tr>'",
+  "rhs_len": 77,
   "category": "static",
   "data_source_tags": ""
  },
  {
-  "line": 8148,
+  "line": 8271,
   "function": "fetchAuditPage",
   "target": "tbody",
   "op": "=",
-  "rhs": "entries.map(function(e) {\n        var ts = new Date(e.ts);\n        var tsStr = ts.toLocaleDateString() + ' ' + ts.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'});\n        var actionLabel = AUDIT_ACTION_LABELS[e.action] || e.action;\n        var outcomeStyle = e.outcome === 'ok'\n          ? 'background:rgba(35,134,54,.18);color:#3fb950;border:1px solid rgba(35,134,54,.35)'",
-  "rhs_len": 3010,
+  "rhs": "entries.map(function(e) {\n        var ts = new Date(e.ts);\n        var tsStr = ts.toLocaleDateString() + ' ' + ts.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'});\n        var actionLabel = AUDIT_ACTION_LABELS[e.action] || e.action;\n        var outcomeClass = e.outcome === 'ok' ? 'g1-display-inline-block g1-s-8e6255cd' : 'g1-display-inline-block g1-s-55cda534';\n        va",
+  "rhs_len": 2665,
   "category": "unescaped_html",
   "data_source_tags": "agent,user_created_name"
  },
  {
-  "line": 8207,
+  "line": 8328,
   "function": "fetchAuditPage",
   "target": "if (tbody) tbody",
   "op": "=",
-  "rhs": "'<tr><td colspan=\"6\" style=\"text-align:center;color:var(--danger);padding:2rem\">Failed to load audit logs.</td></tr>'",
-  "rhs_len": 117,
+  "rhs": "'<tr><td colspan=\"6\" class=\"g1-s-6c42391e\">Failed to load audit logs.</td></tr>'",
+  "rhs_len": 80,
   "category": "static",
   "data_source_tags": "telemetry_log"
  },
  {
-  "line": 8267,
+  "line": 8388,
   "function": "count",
   "target": "document.getElementById('campaign-toolbar')",
   "op": "=",
@@ -1270,7 +1270,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 8273,
+  "line": 8394,
   "function": "renderCampaignRows",
   "target": "tb",
   "op": "=",
@@ -1280,7 +1280,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 8274,
+  "line": 8395,
   "function": "renderCampaignRows",
   "target": "tb",
   "op": "=",
@@ -1290,7 +1290,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 8370,
+  "line": 8491,
   "function": "kv",
   "target": "document.getElementById('campaigns-detail')",
   "op": "=",
@@ -1300,7 +1300,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 8405,
+  "line": 8526,
   "function": "rowf",
   "target": "el",
   "op": "=",
@@ -1310,7 +1310,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 8408,
+  "line": 8529,
   "function": "rowf",
   "target": "el",
   "op": "=",
@@ -1320,7 +1320,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 8451,
+  "line": 8572,
   "function": "openCampaignLaunch",
   "target": "document.getElementById('cmp-scenario')",
   "op": "=",
@@ -1330,7 +1330,7 @@
   "data_source_tags": "scenario,user_created_name"
  },
  {
-  "line": 8453,
+  "line": 8574,
   "function": "openCampaignLaunch",
   "target": "document.getElementById('cmp-scenario-preview')",
   "op": "=",
@@ -1340,7 +1340,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 8467,
+  "line": 8588,
   "function": "openCampaignLaunch",
   "target": "document.getElementById('cmp-filter-env')",
   "op": "=",
@@ -1350,7 +1350,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 8474,
+  "line": 8595,
   "function": "openCampaignLaunch",
   "target": "typeSel",
   "op": "=",
@@ -1360,7 +1360,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 8482,
+  "line": 8603,
   "function": "openCampaignLaunch",
   "target": "groupSel",
   "op": "=",
@@ -1370,7 +1370,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 8509,
+  "line": 8630,
   "function": "cmpOnGroupChange",
   "target": "document.getElementById('cmp-group-preview')",
   "op": "=",
@@ -1380,7 +1380,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 8509,
+  "line": 8630,
   "function": "cmpOnGroupChange",
   "target": "document.getElementById('cmp-exclusions')",
   "op": "=",
@@ -1390,7 +1390,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 8524,
+  "line": 8645,
   "function": "renderCampaignGroupPreview",
   "target": "document.getElementById('cmp-group-preview')",
   "op": "=",
@@ -1400,7 +1400,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 8527,
+  "line": 8648,
   "function": "renderCampaignGroupPreview",
   "target": "document.getElementById('cmp-exclusions')",
   "op": "=",
@@ -1410,7 +1410,7 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 8599,
+  "line": 8720,
   "function": "setCampaignSource",
   "target": "document.getElementById('cmp-scenario-preview')",
   "op": "=",
@@ -1420,7 +1420,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 8627,
+  "line": 8748,
   "function": "selectTIPack",
   "target": "info",
   "op": "=",
@@ -1430,7 +1430,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 8636,
+  "line": 8757,
   "function": "selectTIPack",
   "target": "info",
   "op": "=",
@@ -1440,7 +1440,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 8644,
+  "line": 8765,
   "function": "selectTIPack",
   "target": "info",
   "op": "=",
@@ -1450,7 +1450,7 @@
   "data_source_tags": "api_response"
  },
  {
-  "line": 8680,
+  "line": 8801,
   "function": "_applyGeneratedTIScenario",
   "target": "el",
   "op": "=",
@@ -1460,7 +1460,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 8709,
+  "line": 8830,
   "function": "_selectCmpScenario",
   "target": "document.getElementById('cmp-scenario')",
   "op": "=",
@@ -1470,7 +1470,7 @@
   "data_source_tags": "scenario,user_created_name"
  },
  {
-  "line": 8721,
+  "line": 8842,
   "function": "cmpOnExistingScenarioChange",
   "target": "el",
   "op": "=",
@@ -1480,7 +1480,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 8723,
+  "line": 8844,
   "function": "cmpOnExistingScenarioChange",
   "target": "el",
   "op": "=",
@@ -1490,7 +1490,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 8727,
+  "line": 8848,
   "function": "cmpOnExistingScenarioChange",
   "target": "el",
   "op": "=",
@@ -1500,7 +1500,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 8746,
+  "line": 8867,
   "function": "loadKEVWidget",
   "target": "tiles",
   "op": "=",
@@ -1510,7 +1510,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 8766,
+  "line": 8887,
   "function": "renderTIActors",
   "target": "el",
   "op": "=",
@@ -1520,7 +1520,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 8767,
+  "line": 8888,
   "function": "renderTIActors",
   "target": "el",
   "op": "=",
@@ -1530,7 +1530,7 @@
   "data_source_tags": "actor"
  },
  {
-  "line": 8811,
+  "line": 8932,
   "function": "loadEndpointPostureWidget",
   "target": "tiles",
   "op": "=",
@@ -1540,7 +1540,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 8834,
+  "line": 8955,
   "function": "loadReadinessTrends",
   "target": "summary",
   "op": "=",
@@ -1550,7 +1550,7 @@
   "data_source_tags": "api_response"
  },
  {
-  "line": 8841,
+  "line": 8962,
   "function": "loadReadinessTrends",
   "target": "el",
   "op": "=",
@@ -1560,7 +1560,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 8869,
+  "line": 8990,
   "function": "renderCampaignTargets",
   "target": "document.getElementById('cmp-targets')",
   "op": "=",
@@ -1570,17 +1570,17 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 8935,
+  "line": 9056,
   "function": "loadComplianceScores",
   "target": "el",
   "op": "=",
-  "rhs": "'<div style=\"color:var(--muted);font-size:0.78rem;padding:0.4rem 0\">No compliance data yet \u2014 run a scenario to generate scores.</div>'",
-  "rhs_len": 134,
+  "rhs": "'<div class=\"g1-s-b32f8255\">No compliance data yet \u2014 run a scenario to generate scores.</div>'",
+  "rhs_len": 94,
   "category": "static",
   "data_source_tags": ""
  },
  {
-  "line": 8938,
+  "line": 9059,
   "function": "loadComplianceScores",
   "target": "el",
   "op": "=",
@@ -1590,27 +1590,27 @@
   "data_source_tags": ""
  },
  {
-  "line": 9065,
+  "line": 9184,
   "function": "refreshDashboardCampaigns",
   "target": "el",
   "op": "=",
-  "rhs": "'<div class=\"empty\" style=\"padding:1.5rem\">No campaigns running.</div>'",
-  "rhs_len": 71,
+  "rhs": "'<div class=\"empty g1-s-1eb1d451\">No campaigns running.</div>'",
+  "rhs_len": 62,
   "category": "static",
   "data_source_tags": ""
  },
  {
-  "line": 9066,
+  "line": 9185,
   "function": "refreshDashboardCampaigns",
   "target": "el",
   "op": "=",
-  "rhs": "liveList.map(function(c) {\n      var s = c.summary || {};\n      var cds = campaignDisplayStatus(s);\n      return '<div class=\"lrow u-pointer\"' + x('click', 'openCampaignDetail', c.id) + '>' +\n        '<div class=\"lic\" style=\"color:var(--accent);background:rgba(47,129,247,0.1)\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 16 16\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.4\"><path d=\"M1 8h3l2-5 4",
-  "rhs_len": 952,
+  "rhs": "liveList.map(function(c) {\n      var s = c.summary || {};\n      var cds = campaignDisplayStatus(s);\n      return '<div class=\"lrow u-pointer\"' + x('click', 'openCampaignDetail', c.id) + '>' +\n        '<div class=\"lic g1-s-2f77bd19\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 16 16\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.4\"><path d=\"M1 8h3l2-5 4 10 2-5h3\"/></svg></div>' +\n        '<div clas",
+  "rhs_len": 867,
   "category": "unescaped_html",
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 9132,
+  "line": 9251,
   "function": "loadCalderaStatus",
   "target": "document.getElementById('cs-caldera-status')",
   "op": "=",
@@ -1620,7 +1620,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 9158,
+  "line": 9277,
   "function": "loadCalderaStatus",
   "target": "document.getElementById('cs-caldera-status')",
   "op": "=",
@@ -1630,7 +1630,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 9200,
+  "line": 9319,
   "function": "openConfirmDiffModal",
   "target": "document.getElementById('confirm-diff-body')",
   "op": "=",
@@ -1640,7 +1640,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 9272,
+  "line": 9391,
   "function": "populateCoverageFilters",
   "target": "scenSel",
   "op": "=",
@@ -1650,7 +1650,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 9280,
+  "line": 9399,
   "function": "populateCoverageFilters",
   "target": "agSel",
   "op": "=",
@@ -1660,47 +1660,47 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 9315,
+  "line": 9434,
   "function": "renderCoverageAnalytics",
   "target": "tacBody",
   "op": "=",
-  "rhs": "(d.byTactic || []).map(function(t, i) {\n      var bg = i % 2 ? 'background:rgba(255,255,255,.02)' : '';\n      var mColor = t.missed > 0 ? 'color:var(--danger);font-weight:700' : 'color:var(--muted)';\n      return '<tr style=\"' + bg + '\">' +\n        '<td>' + x(t.tactic) + '</td>' +\n        '<td style=\"text-align:center;color:var(--success)\">' + t.prevented + '</td>' +\n        '<td style=\"text-align",
-  "rhs_len": 627,
+  "rhs": "(d.byTactic || []).map(function(t, i) {\n      var bg = i % 2 ? 'g1-s-ab376776' : '';\n      var mColor = t.missed > 0 ? 'g1-s-d55cf847' : 'g1-s-c6db10d2';\n      return '<tr class=\"' + bg + '\">' +\n        '<td>' + x(t.tactic) + '</td>' +\n        '<td class=\"g1-s-ffa42d22\">' + t.prevented + '</td>' +\n        '<td class=\"g1-s-08242b1e\">' + t.detectedOnly + '</td>' +\n        '<td class=\"' + mColor + '\"",
+  "rhs_len": 513,
   "category": "unescaped_html",
   "data_source_tags": ""
  },
  {
-  "line": 9331,
+  "line": 9450,
   "function": "renderCoverageAnalytics",
   "target": "missedBody",
   "op": "=",
-  "rhs": "missed.map(function(t, i) {\n      var bg = i % 2 ? 'background:rgba(255,255,255,.02)' : '';\n      var vColor = t.bestVerdict === 'missed' ? 'color:var(--danger)' : 'color:var(--warning)';\n      var vDot   = t.bestVerdict === 'missed' ? '\u25cf ' : '\u25d0 ';\n      return '<tr style=\"' + bg + '\">' +\n        '<td style=\"font-family:var(--font-mono);font-size:0.76rem;' + vColor + '\">' + vDot + x(t.techniqueId)",
-  "rhs_len": 770,
+  "rhs": "missed.map(function(t, i) {\n      var bg = i % 2 ? 'g1-s-ab376776' : '';\n      var vColor = t.bestVerdict === 'missed' ? 'g1-s-97b209c3' : 'g1-s-ce668815';\n      var vDot   = t.bestVerdict === 'missed' ? '\u25cf ' : '\u25d0 ';\n      return '<tr class=\"' + bg + '\">' +\n        '<td class=\"' + vColor + '\">' + vDot + x(t.techniqueId) + '</td>' +\n        '<td class=\"g1-s-5d164a6d\">' + x(t.name || '\u2014') + '</td>' ",
+  "rhs_len": 572,
   "category": "unescaped_html",
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 9364,
+  "line": 9483,
   "function": "renderPrivilegeCoverage",
   "target": "cards",
   "op": "=",
-  "rhs": "tiers.map(function(t) {\n      var col  = tierColor[t.tier] || 'var(--muted)';\n      var lbl  = tierLabel[t.tier] || t.tier;\n      var rate = t.attempted > 0 ? t.preventionRate : 0;\n      var rateColor = rate >= 75 ? 'var(--success)' : rate >= 40 ? 'var(--warning)' : 'var(--danger)';\n      return '<div class=\"ca-card\" style=\"border-top:2px solid ' + col + '\">' +\n        '<div class=\"ca-label\" style",
-  "rhs_len": 662,
+  "rhs": "tiers.map(function(t) {\n      var col  = tierColor[t.tier] || 'var(--muted)';\n      var lbl  = tierLabel[t.tier] || t.tier;\n      var rate = t.attempted > 0 ? t.preventionRate : 0;\n      var rateColor = rate >= 75 ? 'g1-s-da30d03b' : rate >= 40 ? 'g1-s-c16ccf0e' : 'g1-s-7419514e';\n      return '<div class=\"ca-card\"' + cssVars(['g1-v-c3984016', col]) + '>' +\n        '<div class=\"ca-label\"' + cssVar",
+  "rhs_len": 640,
   "category": "unescaped_html",
   "data_source_tags": ""
  },
  {
-  "line": 9380,
+  "line": 9499,
   "function": "renderPrivilegeCoverage",
   "target": "tierBody",
   "op": "=",
-  "rhs": "tiers.map(function(t, i) {\n      var bg   = i % 2 ? 'background:rgba(255,255,255,.02)' : '';\n      var col  = tierColor[t.tier] || 'var(--muted)';\n      var lbl  = tierLabel[t.tier] || t.tier;\n      var rate = t.attempted > 0 ? t.preventionRate : 0;\n      var rateColor = rate >= 75 ? 'color:var(--success)' : rate >= 40 ? 'color:var(--warning)' : 'color:var(--danger)';\n      var barW = Math.min(100",
-  "rhs_len": 1480,
+  "rhs": "tiers.map(function(t, i) {\n      var bg   = i % 2 ? 'g1-s-ab376776' : '';\n      var col  = tierColor[t.tier] || 'var(--muted)';\n      var lbl  = tierLabel[t.tier] || t.tier;\n      var rate = t.attempted > 0 ? t.preventionRate : 0;\n      var rateColor = rate >= 75 ? 'g1-s-01465934' : rate >= 40 ? 'g1-s-a21d7ec5' : 'g1-s-1ea0edbe';\n      var barW = Math.min(100, rate);\n      var missedColor = t.miss",
+  "rhs_len": 1242,
   "category": "unescaped_html",
   "data_source_tags": ""
  },
  {
-  "line": 9406,
+  "line": 9526,
   "function": "renderPrivilegeCoverage",
   "target": "gapBody",
   "op": "=",
@@ -1710,27 +1710,27 @@
   "data_source_tags": ""
  },
  {
-  "line": 9408,
+  "line": 9528,
   "function": "renderPrivilegeCoverage",
   "target": "gapBody",
   "op": "=",
-  "rhs": "gaps.slice(0, 25).map(function(g, i) {\n        var bg = i % 2 ? 'background:rgba(255,255,255,.02)' : '';\n        var tierBadges = (g.tiers || []).map(function(t) {\n          var c = tierColor[t] || 'var(--muted)';\n          return '<span style=\"font-size:0.65rem;border:1px solid ' + c + ';color:' + c + ';border-radius:2px;padding:1px 4px;margin-right:2px\">' + (tierLabel[t] || t) + '</span>';\n     ",
-  "rhs_len": 839,
+  "rhs": "gaps.slice(0, 25).map(function(g, i) {\n        var bg = i % 2 ? 'g1-s-ab376776' : '';\n        var tierBadges = (g.tiers || []).map(function(t) {\n          var c = tierColor[t] || 'var(--muted)';\n          return '<span class=\"g1-s-1fd67b02\"' + cssVars(['g1-v-97993078', c], ['g1-v-7d75dfc9', c]) + '>' + (tierLabel[t] || t) + '</span>';\n        }).join('');\n        return '<tr class=\"' + bg + '\">' +",
+  "rhs_len": 649,
   "category": "unescaped_html",
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 9421,
+  "line": 9541,
   "function": "renderPrivilegeCoverage",
   "target": "gapBody",
   "op": "+=",
-  "rhs": "'<tr><td colspan=\"3\" style=\"text-align:center;color:var(--muted);font-size:0.72rem;padding:4px\">\u2026 and ' + (gaps.length - 25) + ' more</td></tr>'",
-  "rhs_len": 144,
+  "rhs": "'<tr><td colspan=\"3\" class=\"g1-s-f85dc79d\">\u2026 and ' + (gaps.length - 25) + ' more</td></tr>'",
+  "rhs_len": 91,
   "category": "unescaped_likely_safe",
   "data_source_tags": ""
  },
  {
-  "line": 9443,
+  "line": 9563,
   "function": "loadUnifiedTechniques",
   "target": "sel",
   "op": "=",
@@ -1740,7 +1740,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 9519,
+  "line": 9639,
   "function": "cell",
   "target": "if (body) body",
   "op": "=",
@@ -1750,27 +1750,27 @@
   "data_source_tags": ""
  },
  {
-  "line": 9544,
+  "line": 9664,
   "function": "loadCoverage",
   "target": "document.getElementById('cov-matrix')",
   "op": "=",
-  "rhs": "'<div class=\"empty\" style=\"padding:2rem\">' + x(e.message) + '</div>'",
-  "rhs_len": 68,
+  "rhs": "'<div class=\"empty g1-s-be6df18e\">' + x(e.message) + '</div>'",
+  "rhs_len": 61,
   "category": "escaped",
   "data_source_tags": "error_message"
  },
  {
-  "line": 9549,
+  "line": 9669,
   "function": "renderCovMatrix",
   "target": "document.getElementById('cov-matrix')",
   "op": "=",
-  "rhs": "'<div class=\"mx\">' + (window._covTactics || []).map(function(t) {\n    var techs = t.techniques || [];\n    var cov = techs.filter(function(c) { return st[c.id] === 'cov'; }).length;\n    var cells = techs.map(function(c) {\n      var s = st[c.id] || 'none', dim = view !== 'all' && view !== s;\n      return '<div class=\"mx-cell ' + s + '\"' + x('click', 'openTechnique', c.id) + ' style=\"' + (dim ? 'opac",
-  "rhs_len": 749,
+  "rhs": "'<div class=\"mx\">' + (state._covTactics || []).map(function(t) {\n    var techs = t.techniques || [];\n    var cov = techs.filter(function(c) { return st[c.id] === 'cov'; }).length;\n    var cells = techs.map(function(c) {\n      var s = st[c.id] || 'none', dim = view !== 'all' && view !== s;\n      return '<div class=\"mx-cell ' + s + (dim ? ' g1-s-c1f75ce4' : '') + '\"' + x('click', 'openTechnique', c.",
+  "rhs_len": 737,
   "category": "unescaped_html",
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 9565,
+  "line": 9685,
   "function": "badge",
   "target": "document.getElementById('cov-toolbar')",
   "op": "=",
@@ -1780,7 +1780,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 9578,
+  "line": 9698,
   "function": "openTechnique",
   "target": "document.getElementById('results-export')",
   "op": "=",
@@ -1790,7 +1790,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 9586,
+  "line": 9706,
   "function": "list",
   "target": "document.getElementById('results-body')",
   "op": "=",
@@ -1800,7 +1800,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 9638,
+  "line": 9758,
   "function": "loadVerificationTab",
   "target": "sel",
   "op": "=",
@@ -1810,7 +1810,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 9647,
+  "line": 9767,
   "function": "vfRenderDomainChips",
   "target": "wrap",
   "op": "=",
@@ -1820,7 +1820,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 9662,
+  "line": 9782,
   "function": "vfLoadQueue",
   "target": "box",
   "op": "=",
@@ -1830,7 +1830,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 9663,
+  "line": 9783,
   "function": "vfLoadQueue",
   "target": "box",
   "op": "=",
@@ -1840,7 +1840,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 9666,
+  "line": 9786,
   "function": "vfLoadQueue",
   "target": "box",
   "op": "=",
@@ -1850,7 +1850,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 9669,
+  "line": 9789,
   "function": "vfLoadQueue",
   "target": "box",
   "op": "=",
@@ -1860,7 +1860,7 @@
   "data_source_tags": "error_message"
  },
  {
-  "line": 9678,
+  "line": 9798,
   "function": "vfRenderQueue",
   "target": "box",
   "op": "=",
@@ -1870,7 +1870,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 9697,
+  "line": 9817,
   "function": "vfRenderQueue",
   "target": "box",
   "op": "=",
@@ -1880,7 +1880,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 9726,
+  "line": 9846,
   "function": "resultBtn",
   "target": "host",
   "op": "=",
@@ -1890,7 +1890,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 9756,
+  "line": 9876,
   "function": "vfCloseDetail",
   "target": "if (h) h",
   "op": "=",
@@ -1900,7 +1900,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 9812,
+  "line": 9932,
   "function": "vfLoadEvidence",
   "target": "host",
   "op": "=",
@@ -1910,7 +1910,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 9814,
+  "line": 9934,
   "function": "vfLoadEvidence",
   "target": "host",
   "op": "=",
@@ -1920,7 +1920,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 9825,
+  "line": 9945,
   "function": "vfLoadEvidence",
   "target": "host",
   "op": "=",
@@ -1930,7 +1930,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 9848,
+  "line": 9968,
   "function": "vfToggleHistory",
   "target": "host",
   "op": "=",
@@ -1940,7 +1940,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 9850,
+  "line": 9970,
   "function": "vfToggleHistory",
   "target": "host",
   "op": "=",
@@ -1950,7 +1950,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 9853,
+  "line": 9973,
   "function": "vfToggleHistory",
   "target": "host",
   "op": "=",
@@ -1960,7 +1960,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 9854,
+  "line": 9974,
   "function": "vfToggleHistory",
   "target": "host",
   "op": "=",
@@ -1970,7 +1970,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 9866,
+  "line": 9986,
   "function": "vfToggleHistory",
   "target": "host",
   "op": "=",
@@ -1980,7 +1980,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 9923,
+  "line": 10043,
   "function": "loadEmTab",
   "target": "summaryEl",
   "op": "=",
@@ -1990,7 +1990,7 @@
   "data_source_tags": "api_response"
  },
  {
-  "line": 9927,
+  "line": 10047,
   "function": "loadEmTab",
   "target": "summaryEl",
   "op": "=",
@@ -2000,7 +2000,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 9945,
+  "line": 10065,
   "function": "loadEmTab",
   "target": "gridEl",
   "op": "=",
@@ -2010,7 +2010,7 @@
   "data_source_tags": "agent,user_created_name"
  },
  {
-  "line": 10022,
+  "line": 10142,
   "function": "openEMSweepModal",
   "target": "sel",
   "op": "=",
@@ -2020,7 +2020,7 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 10037,
+  "line": 10157,
   "function": "renderEMSweepGroupList",
   "target": "list",
   "op": "=",
@@ -2030,7 +2030,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 10040,
+  "line": 10160,
   "function": "renderEMSweepGroupList",
   "target": "list",
   "op": "=",
@@ -2040,7 +2040,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 10232,
+  "line": 10352,
   "function": "renderSweepPreview",
   "target": "filtersEl",
   "op": "=",
@@ -2050,7 +2050,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 10243,
+  "line": 10363,
   "function": "renderSweepPreview",
   "target": "filtersEl",
   "op": "=",
@@ -2060,7 +2060,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 10270,
+  "line": 10390,
   "function": "_renderVexPreviewList",
   "target": "listEl",
   "op": "=",
@@ -2070,7 +2070,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 10413,
+  "line": 10533,
   "function": "_renderEMPreviewList",
   "target": "listEl",
   "op": "=",
@@ -2080,7 +2080,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 10516,
+  "line": 10636,
   "function": "openEMSweepProgress",
   "target": "document.getElementById('em-sweep-progress-actions')",
   "op": "=",
@@ -2090,7 +2090,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 10576,
+  "line": 10696,
   "function": "renderEMSweepProgress",
   "target": "document.getElementById('em-sweep-progress-summary')",
   "op": "=",
@@ -2100,7 +2100,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 10583,
+  "line": 10703,
   "function": "renderEMSweepProgress",
   "target": "document.getElementById('em-sweep-progress-actions')",
   "op": "=",
@@ -2110,7 +2110,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 10596,
+  "line": 10716,
   "function": "renderEMSweepProgress",
   "target": "list",
   "op": "=",
@@ -2120,7 +2120,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 10947,
+  "line": 11067,
   "function": "fmt",
   "target": "document.getElementById('evidence-content')",
   "op": "=",
@@ -2130,7 +2130,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11254,
+  "line": 11374,
   "function": "confirmRun",
   "target": "runBtn",
   "op": "=",
@@ -2140,7 +2140,7 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 11273,
+  "line": 11393,
   "function": "confirmRun",
   "target": "runBtn",
   "op": "=",
@@ -2150,7 +2150,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11427,
+  "line": 11547,
   "function": "cmdkResultFallback",
   "target": "document.getElementById('results-export')",
   "op": "=",
@@ -2160,7 +2160,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11428,
+  "line": 11548,
   "function": "cmdkResultFallback",
   "target": "document.getElementById('results-summary')",
   "op": "=",
@@ -2170,7 +2170,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11429,
+  "line": 11549,
   "function": "cmdkResultFallback",
   "target": "document.getElementById('results-body')",
   "op": "=",
@@ -2180,7 +2180,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 11459,
+  "line": 11579,
   "function": "openCmdk",
   "target": "wrap",
   "op": "=",
@@ -2190,7 +2190,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11566,
+  "line": 11686,
   "function": "render",
   "target": "list",
   "op": "=",
@@ -2200,7 +2200,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11567,
+  "line": 11687,
   "function": "render",
   "target": "list",
   "op": "=",
@@ -2210,7 +2210,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11625,
+  "line": 11745,
   "function": "loadUsers",
   "target": "tbody",
   "op": "=",
@@ -2220,7 +2220,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11626,
+  "line": 11746,
   "function": "loadUsers",
   "target": "tbody",
   "op": "=",
@@ -2230,7 +2230,7 @@
   "data_source_tags": "api_response,user_created_name"
  },
  {
-  "line": 11874,
+  "line": 11994,
   "function": "aggOf",
   "target": "if (trend === 'Improving')      tEl",
   "op": "=",
@@ -2240,7 +2240,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11875,
+  "line": 11995,
   "function": "aggOf",
   "target": "else if (trend === 'Degrading') tEl",
   "op": "=",
@@ -2250,7 +2250,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11876,
+  "line": 11996,
   "function": "aggOf",
   "target": "else                            tEl",
   "op": "=",
@@ -2260,7 +2260,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11878,
+  "line": 11998,
   "function": "aggOf",
   "target": "document.getElementById('kpi-score-spark')",
   "op": "=",
@@ -2270,7 +2270,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11881,
+  "line": 12001,
   "function": "aggOf",
   "target": "document.getElementById('dash-gauge')",
   "op": "=",
@@ -2280,7 +2280,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11891,
+  "line": 12011,
   "function": "aggOf",
   "target": "document.getElementById('dash-posture-bars')",
   "op": "=",
@@ -2290,7 +2290,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11919,
+  "line": 12039,
   "function": "aggOf",
   "target": "document.getElementById('kpi-cov-spark')",
   "op": "=",
@@ -2300,7 +2300,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11939,
+  "line": 12059,
   "function": "aggOf",
   "target": "donutEl",
   "op": "=",
@@ -2310,7 +2310,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11950,
+  "line": 12070,
   "function": "lg",
   "target": "donutEl",
   "op": "=",
@@ -2320,7 +2320,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11980,
+  "line": 12100,
   "function": "lg",
   "target": "afEl",
   "op": "=",
@@ -2330,7 +2330,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11981,
+  "line": 12101,
   "function": "lg",
   "target": "afEl",
   "op": "=",
@@ -2340,7 +2340,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11984,
+  "line": 12104,
   "function": "lg",
   "target": "afEl",
   "op": "=",
@@ -2350,7 +2350,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11991,
+  "line": 12111,
   "function": "lg",
   "target": "rrEl",
   "op": "=",
@@ -2360,7 +2360,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 11993,
+  "line": 12113,
   "function": "lg",
   "target": "rrEl",
   "op": "=",
@@ -2370,7 +2370,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 12036,
+  "line": 12156,
   "function": "lg",
   "target": "tfEl",
   "op": "=",
@@ -2380,7 +2380,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 12039,
+  "line": 12159,
   "function": "lg",
   "target": "tfEl",
   "op": "=",
@@ -2390,7 +2390,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 12062,
+  "line": 12182,
   "function": "lg",
   "target": "attckEl",
   "op": "=",
@@ -2400,7 +2400,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 12064,
+  "line": 12184,
   "function": "lg",
   "target": "attckEl",
   "op": "=",
@@ -2410,7 +2410,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 12114,
+  "line": 12234,
   "function": "lg",
   "target": "bodyEl",
   "op": "=",
@@ -2420,7 +2420,7 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 12171,
+  "line": 12291,
   "function": "renderSLAKPIs",
   "target": "document.getElementById('sla-rpt-kpis')",
   "op": "=",
@@ -2430,27 +2430,27 @@
   "data_source_tags": ""
  },
  {
-  "line": 12185,
+  "line": 12305,
   "function": "rank",
   "target": "el",
   "op": "=",
-  "rhs": "'<div class=\"empty\" style=\"padding:1.25rem\">No severities with SLA episodes.</div>'",
-  "rhs_len": 83,
+  "rhs": "'<div class=\"empty g1-s-decac807\">No severities with SLA episodes.</div>'",
+  "rhs_len": 73,
   "category": "static",
   "data_source_tags": ""
  },
  {
-  "line": 12186,
+  "line": 12306,
   "function": "rank",
   "target": "el",
   "op": "=",
-  "rhs": "sorted.map(function(s) {\n    var rate = slaRateDisplay(s.onTime, s.late, s.complianceRate);\n    return '<div class=\"bar-row\">' +\n      '<div class=\"bar-label\"><span>' + x(s.severity) + '</span><span style=\"color:' + rate.color + '\">' + rate.text + '</span></div>' +\n      '<div class=\"bar-track\"><div class=\"bar-fill\" style=\"width:' + s.complianceRate + '%;background:' + rate.color + '\"></div></div>",
-  "rhs_len": 610,
+  "rhs": "sorted.map(function(s) {\n    var rate = slaRateDisplay(s.onTime, s.late, s.complianceRate);\n    return '<div class=\"bar-row\">' +\n      '<div class=\"bar-label\"><span>' + x(s.severity) + '</span><span' + cssVars(['g1-v-7d75dfc9', rate.color]) + '>' + rate.text + '</span></div>' +\n      '<div class=\"bar-track\"><div class=\"bar-fill\"' + cssVars(['g1-v-9b890877', s.complianceRate], ['g1-v-9ffd39ba', rat",
+  "rhs_len": 594,
   "category": "unescaped_html",
   "data_source_tags": ""
  },
  {
-  "line": 12198,
+  "line": 12318,
   "function": "renderSLAMonthlyTrend",
   "target": "body",
   "op": "=",
@@ -2460,17 +2460,17 @@
   "data_source_tags": ""
  },
  {
-  "line": 12199,
+  "line": 12319,
   "function": "renderSLAMonthlyTrend",
   "target": "body",
   "op": "=",
-  "rhs": "sorted.map(function(m) {\n    var rate = slaRateDisplay(m.onTime, m.resolved - m.onTime, m.complianceRate);\n    return '<tr><td>' + x(m.month) + '</td><td>' + m.resolved + '</td><td>' + m.onTime + '</td>' +\n      '<td style=\"color:' + rate.color + '\">' + rate.text + '</td></tr>';\n  }).join('')",
-  "rhs_len": 293,
+  "rhs": "sorted.map(function(m) {\n    var rate = slaRateDisplay(m.onTime, m.resolved - m.onTime, m.complianceRate);\n    return '<tr><td>' + x(m.month) + '</td><td>' + m.resolved + '</td><td>' + m.onTime + '</td>' +\n      '<td' + cssVars(['g1-v-7d75dfc9', rate.color]) + '>' + rate.text + '</td></tr>';\n  }).join('')",
+  "rhs_len": 306,
   "category": "unescaped_html",
   "data_source_tags": ""
  },
  {
-  "line": 12207,
+  "line": 12327,
   "function": "renderSLARecentlyResolved",
   "target": "body",
   "op": "=",
@@ -2480,17 +2480,17 @@
   "data_source_tags": ""
  },
  {
-  "line": 12208,
+  "line": 12328,
   "function": "renderSLARecentlyResolved",
   "target": "body",
   "op": "=",
-  "rhs": "recentlyResolved.map(function(r) {\n    var outcome = r.onTime\n      ? '<span class=\"sbadge\" style=\"background:transparent;border:1px solid var(--success);color:var(--success)\">On time</span>'\n      : '<span class=\"sbadge\" style=\"background:transparent;border:1px solid var(--danger);color:var(--danger)\">Late</span>';\n    return '<tr><td>' + x(r.agentId) + '</td><td>' + x(r.checkId) + '</td><td>' + ",
-  "rhs_len": 530,
+  "rhs": "recentlyResolved.map(function(r) {\n    var outcome = r.onTime\n      ? '<span class=\"sbadge g1-s-43c234c9\">On time</span>'\n      : '<span class=\"sbadge g1-s-99a3db64\">Late</span>';\n    return '<tr><td>' + x(r.agentId) + '</td><td>' + x(r.checkId) + '</td><td>' + findingSevBadge(r.severity) + '</td>' +\n      '<td>' + fmtDate(r.resolvedAt) + '</td><td>' + outcome + '</td></tr>';\n  }).join('')",
+  "rhs_len": 392,
   "category": "unescaped_html",
   "data_source_tags": "agent"
  },
  {
-  "line": 12252,
+  "line": 12372,
   "function": "renderFindingsTiles",
   "target": "document.getElementById('findings-tiles')",
   "op": "=",
@@ -2500,7 +2500,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 12262,
+  "line": 12382,
   "function": "c",
   "target": "document.getElementById('findings-toolbar')",
   "op": "=",
@@ -2510,7 +2510,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 12280,
+  "line": 12400,
   "function": "renderFindingsRows",
   "target": "tb",
   "op": "=",
@@ -2520,17 +2520,17 @@
   "data_source_tags": ""
  },
  {
-  "line": 12281,
+  "line": 12401,
   "function": "renderFindingsRows",
   "target": "tb",
   "op": "=",
-  "rhs": "l.map(function(f) {\n    var checkCell = (_findingsBulkMode && canPush)\n      ? '<td' + x('click', 'stopEvent') + ' style=\"padding:0.2rem 0.5rem\"><input type=\"checkbox\" ' + (_findingsSelected[f.id] ? 'checked' : '') + ' ' + x('change', 'toggleFindingCheck', f.id) + ' class=\"u-pointer\"></td>'\n      : '';\n    var isTicketed = _ticketCandidateIds && (f.status === 'open' || f.status === 'triaged') && !",
-  "rhs_len": 2715,
+  "rhs": "l.map(function(f) {\n    var checkCell = (_findingsBulkMode && canPush)\n      ? '<td class=\"g1-s-49946d6d\"' + x('click', 'stopEvent') + '><input type=\"checkbox\" ' + (_findingsSelected[f.id] ? 'checked' : '') + ' ' + x('change', 'toggleFindingCheck', f.id) + ' class=\"u-pointer\"></td>'\n      : '';\n    var isTicketed = _ticketCandidateIds && (f.status === 'open' || f.status === 'triaged') && !_ticketC",
+  "rhs_len": 2340,
   "category": "unescaped_html",
   "data_source_tags": "agent"
  },
  {
-  "line": 12340,
+  "line": 12460,
   "function": "list",
   "target": "document.getElementById('results-export')",
   "op": "=",
@@ -2540,27 +2540,27 @@
   "data_source_tags": ""
  },
  {
-  "line": 12368,
+  "line": 12488,
   "function": "list",
   "target": "document.getElementById('results-body')",
   "op": "=",
-  "rhs": "'<div style=\"margin-bottom:0.9rem\">' + findingSevBadge(f.severity, f.exposureState) +\n        ' <span class=\"sbadge s-' + findingStatusClass(f.status) + '\">' + x((f.status || '').replace('_', ' ')) + '</span></div>' +\n      row('Technique', '<span class=\"tech-id\">' + x(f.techniqueId) + '</span> ' + x(f.techniqueName)) +\n      row('Tactic', x(f.tactic)) + row('Expected control', x(f.controlClass)) ",
-  "rhs_len": 1603,
+  "rhs": "'<div class=\"g1-s-462c8de6\">' + findingSevBadge(f.severity, f.exposureState) +\n        ' <span class=\"sbadge s-' + findingStatusClass(f.status) + '\">' + x((f.status || '').replace('_', ' ')) + '</span></div>' +\n      row('Technique', '<span class=\"tech-id\">' + x(f.techniqueId) + '</span> ' + x(f.techniqueName)) +\n      row('Tactic', x(f.tactic)) + row('Expected control', x(f.controlClass)) +\n     ",
+  "rhs_len": 1350,
   "category": "partial_escaped",
   "data_source_tags": "agent,threat_intel,user_created_name"
  },
  {
-  "line": 12404,
+  "line": 12524,
   "function": "loadRemediations",
   "target": "document.getElementById('rem-list')",
   "op": "=",
-  "rhs": "'<div class=\"empty\" style=\"padding:2rem\">' + x(e.message) + '</div>'",
-  "rhs_len": 68,
+  "rhs": "'<div class=\"empty g1-s-be6df18e\">' + x(e.message) + '</div>'",
+  "rhs_len": 61,
   "category": "escaped",
   "data_source_tags": "error_message"
  },
  {
-  "line": 12426,
+  "line": 12546,
   "function": "tile",
   "target": "document.getElementById('rem-tiles')",
   "op": "=",
@@ -2570,17 +2570,17 @@
   "data_source_tags": ""
  },
  {
-  "line": 12434,
+  "line": 12554,
   "function": "renderRemList",
   "target": "el",
   "op": "=",
-  "rhs": "'<div class=\"empty\" style=\"padding:2rem\">No open remediations \u2014 nothing to fix right now.</div>'",
-  "rhs_len": 96,
+  "rhs": "'<div class=\"empty g1-s-be6df18e\">No open remediations \u2014 nothing to fix right now.</div>'",
+  "rhs_len": 89,
   "category": "static",
   "data_source_tags": ""
  },
  {
-  "line": 12435,
+  "line": 12555,
   "function": "renderRemList",
   "target": "el",
   "op": "=",
@@ -2590,7 +2590,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 12462,
+  "line": 12582,
   "function": "openRemediation",
   "target": "document.getElementById('results-export')",
   "op": "=",
@@ -2600,17 +2600,17 @@
   "data_source_tags": ""
  },
  {
-  "line": 12483,
+  "line": 12603,
   "function": "stat",
   "target": "document.getElementById('results-body')",
   "op": "=",
-  "rhs": "'<div style=\"display:flex;align-items:center;gap:0.5rem;margin-bottom:0.3rem\">' + findingSevBadge(r.severity, '') + ' <span class=\"tech-id\">' + x(r.techniqueId) + '</span></div>' +\n    '<div style=\"font-weight:600;font-size:0.98rem;color:var(--text);margin-bottom:0.25rem;line-height:1.3\">' + x(r.techniqueName) + '</div>' +\n    '<div class=\"tiny muted\" style=\"margin-bottom:0.6rem\">Closes ' + r.find",
-  "rhs_len": 1114,
+  "rhs": "'<div class=\"g1-display-flex g1-s-bf6d23db\">' + findingSevBadge(r.severity, '') + ' <span class=\"tech-id\">' + x(r.techniqueId) + '</span></div>' +\n    '<div class=\"g1-s-d5980386\">' + x(r.techniqueName) + '</div>' +\n    '<div class=\"tiny muted g1-s-dd11a3a0\">Closes ' + r.findingCount + ' finding' + (r.findingCount === 1 ? '' : 's') + ' on ' + r.agentCount + ' agent' + (r.agentCount === 1 ? '' : 's'",
+  "rhs_len": 965,
   "category": "partial_escaped",
   "data_source_tags": ""
  },
  {
-  "line": 12597,
+  "line": 12717,
   "function": "tile",
   "target": "document.getElementById('dash-itsm-tiles')",
   "op": "=",
@@ -2620,27 +2620,27 @@
   "data_source_tags": ""
  },
  {
-  "line": 12608,
+  "line": 12728,
   "function": "loadFindingTickets",
   "target": "container",
   "op": "=",
-  "rhs": "'<div class=\"tiny muted\" style=\"padding:0.3rem 0\">No tickets yet.</div>'",
-  "rhs_len": 72,
+  "rhs": "'<div class=\"tiny muted g1-s-4a562a0b\">No tickets yet.</div>'",
+  "rhs_len": 61,
   "category": "static",
   "data_source_tags": ""
  },
  {
-  "line": 12611,
+  "line": 12731,
   "function": "loadFindingTickets",
   "target": "container",
   "op": "=",
-  "rhs": "tickets.map(function(t) {\n      var statusColor = t.status === 'resolved' ? 'var(--success)' : t.status === 'open' ? 'var(--warning)' : 'var(--muted)';\n      var link = t.ticketUrl ? '<a href=\"' + x(t.ticketUrl) + '\" target=\"_blank\" rel=\"noopener\" style=\"color:var(--accent);font-size:0.78rem;margin-left:0.4rem\">\u2197</a>' : '';\n      var reval = t.revalidationRequired ? ' <span class=\"sbadge\" style=\"b",
-  "rhs_len": 887,
+  "rhs": "tickets.map(function(t) {\n      var statusColor = t.status === 'resolved' ? 'var(--success)' : t.status === 'open' ? 'var(--warning)' : 'var(--muted)';\n      var link = t.ticketUrl ? '<a href=\"' + x(t.ticketUrl) + '\" target=\"_blank\" rel=\"noopener\" class=\"g1-s-35b86d92\">\u2197</a>' : '';\n      var reval = t.revalidationRequired ? ' <span class=\"sbadge g1-s-e0409a47\">revalidate</span>' : '';\n      return",
+  "rhs_len": 693,
   "category": "unescaped_html",
   "data_source_tags": ""
  },
  {
-  "line": 12620,
+  "line": 12740,
   "function": "loadFindingTickets",
   "target": "if (container) container",
   "op": "=",
@@ -2650,7 +2650,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 12776,
+  "line": 12896,
   "function": "renderInitiativesList",
   "target": "tbody",
   "op": "=",
@@ -2660,27 +2660,27 @@
   "data_source_tags": ""
  },
  {
-  "line": 12779,
+  "line": 12899,
   "function": "renderInitiativesList",
   "target": "tbody",
   "op": "=",
-  "rhs": "INITIATIVES.list.map(function(it, idx) {\n    var col = initiativeStateColor(it.State);\n    var menuId = 'init-menu-' + idx;\n    var canDelete = it.State === 'archived' && ROLE === 'admin';\n    return '<tr' + x('click', 'openInitiativeDrawer', it.ID) + ' class=\"u-pointer\">' +\n      '<td>' + x(it.Name) + '</td>' +\n      '<td><span class=\"badge\" style=\"color:' + col + ';border-color:' + col + '\">' + ",
-  "rhs_len": 1136,
+  "rhs": "INITIATIVES.list.map(function(it, idx) {\n    var col = initiativeStateColor(it.State);\n    var menuId = 'init-menu-' + idx;\n    var canDelete = it.State === 'archived' && ROLE === 'admin';\n    return '<tr' + x('click', 'openInitiativeDrawer', it.ID) + ' class=\"u-pointer\">' +\n      '<td>' + x(it.Name) + '</td>' +\n      '<td><span class=\"badge ' + col + '\">' + initiativeStateLabel(it.State) + '</spa",
+  "rhs_len": 1097,
   "category": "unescaped_html",
   "data_source_tags": ""
  },
  {
-  "line": 12848,
+  "line": 12968,
   "function": "renderInitiativeDrawer",
   "target": "document.getElementById('init-drawer-body')",
   "op": "=",
-  "rhs": "'<div class=\"u-mb-1\">' +\n      '<span class=\"badge\" style=\"color:' + col + ';border-color:' + col + '\">' + initiativeStateLabel(it.State) + '</span> ' +\n      '<span class=\"tiny muted\">Created by ' + x(it.CreatedBy || '\u2014') + ' \u00b7 ' + x(fmtDate(it.CreatedAt)) + '</span>' +\n    '</div>' +\n    '<div style=\"display:flex;gap:0.5rem;margin-bottom:1rem\">' +\n      (it.State === 'active' ? '<button class=\"b",
-  "rhs_len": 1882,
+  "rhs": "'<div class=\"u-mb-1\">' +\n      '<span class=\"badge ' + col + '\">' + initiativeStateLabel(it.State) + '</span> ' +\n      '<span class=\"tiny muted\">Created by ' + x(it.CreatedBy || '\u2014') + ' \u00b7 ' + x(fmtDate(it.CreatedAt)) + '</span>' +\n    '</div>' +\n    '<div class=\"g1-display-flex g1-s-de98f8b6\">' +\n      (it.State === 'active' ? '<button class=\"btn btn-outline btn-sm\"' + x('click', 'initiativeClos",
+  "rhs_len": 1602,
   "category": "partial_escaped",
   "data_source_tags": ""
  },
  {
-  "line": 12888,
+  "line": 13008,
   "function": "initiativeShowDrawerError",
   "target": "if (el) el",
   "op": "=",
@@ -2690,7 +2690,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 12916,
+  "line": 13036,
   "function": "openInitiativeCreateDrawer",
   "target": "document.getElementById('init-create-error')",
   "op": "=",
@@ -2700,7 +2700,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 12929,
+  "line": 13049,
   "function": "submitInitiativeCreate",
   "target": "errEl",
   "op": "=",
@@ -2710,7 +2710,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 12932,
+  "line": 13052,
   "function": "submitInitiativeCreate",
   "target": "errEl",
   "op": "=",
@@ -2720,7 +2720,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 12935,
+  "line": 13055,
   "function": "submitInitiativeCreate",
   "target": "errEl",
   "op": "=",
@@ -2730,7 +2730,7 @@
   "data_source_tags": "api_response"
  },
  {
-  "line": 12940,
+  "line": 13060,
   "function": "submitInitiativeCreate",
   "target": "errEl",
   "op": "=",
@@ -2740,7 +2740,7 @@
   "data_source_tags": "error_message"
  },
  {
-  "line": 12970,
+  "line": 13090,
   "function": "openInitiativeAttachDrawer",
   "target": "document.getElementById('init-attach-error')",
   "op": "=",
@@ -2750,57 +2750,57 @@
   "data_source_tags": ""
  },
  {
-  "line": 12971,
+  "line": 13091,
   "function": "openInitiativeAttachDrawer",
   "target": "document.getElementById('init-attach-list')",
   "op": "=",
-  "rhs": "'<div class=\"tiny muted\" style=\"padding:0.75rem\">Loading\u2026</div>'",
-  "rhs_len": 64,
+  "rhs": "'<div class=\"tiny muted g1-s-d1aafd03\">Loading\u2026</div>'",
+  "rhs_len": 54,
   "category": "static",
   "data_source_tags": ""
  },
  {
-  "line": 12974,
+  "line": 13094,
   "function": "openInitiativeAttachDrawer",
   "target": "document.getElementById('init-attach-list')",
   "op": "=",
-  "rhs": "'<div class=\"tiny\" style=\"color:var(--danger);padding:0.75rem\">' + x(res.error) + '</div>'",
-  "rhs_len": 90,
+  "rhs": "'<div class=\"tiny g1-s-1bf97088\">' + x(res.error) + '</div>'",
+  "rhs_len": 60,
   "category": "escaped",
   "data_source_tags": "api_response"
  },
  {
-  "line": 12977,
+  "line": 13097,
   "function": "openInitiativeAttachDrawer",
   "target": "document.getElementById('init-attach-list')",
   "op": "=",
-  "rhs": "'<div class=\"tiny\" style=\"color:var(--danger);padding:0.75rem\">' + x(e.message) + '</div>'",
-  "rhs_len": 90,
+  "rhs": "'<div class=\"tiny g1-s-1bf97088\">' + x(e.message) + '</div>'",
+  "rhs_len": 60,
   "category": "escaped",
   "data_source_tags": "error_message"
  },
  {
-  "line": 12992,
+  "line": 13112,
   "function": "initiativeRenderAttachList",
   "target": "list",
   "op": "=",
-  "rhs": "'<div class=\"tiny muted\" style=\"padding:0.75rem\">No unassigned jobs found.</div>'",
-  "rhs_len": 81,
+  "rhs": "'<div class=\"tiny muted g1-s-d1aafd03\">No unassigned jobs found.</div>'",
+  "rhs_len": 71,
   "category": "static",
   "data_source_tags": ""
  },
  {
-  "line": 12995,
+  "line": 13115,
   "function": "initiativeRenderAttachList",
   "target": "list",
   "op": "=",
-  "rhs": "filtered.map(function(j) {\n    var checked = j.id === state.INIT_ATTACH_SELECTED ? 'checked' : '';\n    return '<label style=\"display:flex;align-items:center;gap:0.5rem;padding:0.5rem 0.75rem;border-bottom:1px solid var(--border);cursor:pointer;font-size:0.78rem\">' +\n      '<input type=\"radio\" name=\"init-attach-radio\" value=\"' + x(j.id) + '\" ' + checked + x('change', 'initiativeAttachSelect') + '>'",
-  "rhs_len": 636,
+  "rhs": "filtered.map(function(j) {\n    var checked = j.id === state.INIT_ATTACH_SELECTED ? 'checked' : '';\n    return '<label class=\"g1-display-flex g1-s-870226af\">' +\n      '<input type=\"radio\" name=\"init-attach-radio\" value=\"' + x(j.id) + '\" ' + checked + x('change', 'initiativeAttachSelect') + '>' +\n      '<span class=\"g1-s-dbdd527f\">' + x(j.id.slice(0, 8)) + '</span>' +\n      '<span>' + x(j.type) + '<",
+  "rhs_len": 495,
   "category": "unescaped_html",
   "data_source_tags": ""
  },
  {
-  "line": 13009,
+  "line": 13129,
   "function": "submitInitiativeAttach",
   "target": "errEl",
   "op": "=",
@@ -2810,7 +2810,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 13012,
+  "line": 13132,
   "function": "submitInitiativeAttach",
   "target": "errEl",
   "op": "=",
@@ -2820,7 +2820,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 13016,
+  "line": 13136,
   "function": "submitInitiativeAttach",
   "target": "errEl",
   "op": "=",
@@ -2830,7 +2830,7 @@
   "data_source_tags": "api_response"
  },
  {
-  "line": 13020,
+  "line": 13140,
   "function": "submitInitiativeAttach",
   "target": "errEl",
   "op": "=",
@@ -2840,37 +2840,37 @@
   "data_source_tags": "error_message"
  },
  {
-  "line": 13053,
+  "line": 13173,
   "function": "renderConnectorList",
   "target": "el",
   "op": "=",
-  "rhs": "'<div class=\"conn-cfg-card\" style=\"text-align:center;padding:2rem;color:var(--muted)\">' +\n      '<div style=\"margin-bottom:0.5rem\">No connectors configured.</div>' +\n      '<div class=\"tiny\">Add a ServiceNow, Jira, or webhook connector to push findings to your ITSM.</div></div>'",
-  "rhs_len": 279,
+  "rhs": "'<div class=\"conn-cfg-card g1-s-87670393\">' +\n      '<div class=\"g1-s-04f181fe\">No connectors configured.</div>' +\n      '<div class=\"tiny\">Add a ServiceNow, Jira, or webhook connector to push findings to your ITSM.</div></div>'",
+  "rhs_len": 228,
   "category": "static",
   "data_source_tags": ""
  },
  {
-  "line": 13058,
+  "line": 13178,
   "function": "renderConnectorList",
   "target": "el",
   "op": "=",
   "rhs": "list.map(function(c) {\n    var ac = c.autoCreate === 'off' || !c.autoCreate ? 'Manual only' : c.autoCreate.replace('_', '+');\n\n    // Honest connection status \u2014 4 states, not just enabled/disabled\n    var statusColor, statusLabel, statusTitle;\n    if (!c.enabled) {\n      statusColor = 'var(--muted)';\n      statusLabel = 'Disabled';\n      statusTitle = 'Connector is turned off';\n    } else if (c.la",
-  "rhs_len": 2937,
+  "rhs_len": 2450,
   "category": "unescaped_html",
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 13176,
+  "line": 13296,
   "function": "renderConnectorSettings",
   "target": "document.getElementById('cf-settings')",
   "op": "=",
-  "rhs": "fields.map(function(f) {\n    if (f.type === 'checkbox') {\n      return '<div style=\"margin-bottom:0.6rem\">' +\n        '<label style=\"display:flex;align-items:center;gap:0.5rem;cursor:pointer\">' +\n          '<input type=\"checkbox\" id=\"cfs-' + f.key + '\"' + (s[f.key] === 'yes' ? ' checked' : '') + '>' +\n          '<span class=\"conn-cfg-label\" style=\"margin:0\">' + f.label + '</span>' +\n        '</lab",
-  "rhs_len": 1784,
+  "rhs": "fields.map(function(f) {\n    if (f.type === 'checkbox') {\n      return '<div class=\"g1-s-dd11a3a0\">' +\n        '<label class=\"g1-display-flex g1-s-b0ace2ed\">' +\n          '<input type=\"checkbox\" id=\"cfs-' + f.key + '\"' + (s[f.key] === 'yes' ? ' checked' : '') + '>' +\n          '<span class=\"conn-cfg-label g1-s-ab79ea2b\">' + f.label + '</span>' +\n        '</label>' +\n        (f.hint ? '<div class=\"",
+  "rhs_len": 1551,
   "category": "unescaped_html",
   "data_source_tags": ""
  },
  {
-  "line": 13233,
+  "line": 13353,
   "function": "fetchConnectorProjects",
   "target": "sel",
   "op": "=",
@@ -2880,27 +2880,27 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 13387,
+  "line": 13507,
   "function": "renderResponseConnectorList",
   "target": "el",
   "op": "=",
-  "rhs": "'<div class=\"conn-cfg-card\" style=\"text-align:center;padding:2rem;color:var(--muted)\">' +\n      '<div style=\"margin-bottom:0.5rem\">No response connectors configured.</div>' +\n      '<div class=\"tiny\">Add a CrowdStrike or Defender connector to enable Respond actions from Findings.</div></div>'",
-  "rhs_len": 293,
+  "rhs": "'<div class=\"conn-cfg-card g1-s-87670393\">' +\n      '<div class=\"g1-s-04f181fe\">No response connectors configured.</div>' +\n      '<div class=\"tiny\">Add a CrowdStrike or Defender connector to enable Respond actions from Findings.</div></div>'",
+  "rhs_len": 242,
   "category": "static",
   "data_source_tags": ""
  },
  {
-  "line": 13393,
+  "line": 13513,
   "function": "renderResponseConnectorList",
   "target": "el",
   "op": "=",
-  "rhs": "list.map(function(c) {\n    var statusColor = c.enabled ? 'var(--success)' : 'var(--muted)';\n    var statusLabel = c.enabled ? 'Enabled' : 'Disabled';\n    var statusDot = '<span style=\"display:inline-block;width:7px;height:7px;border-radius:50%;background:' + statusColor + ';margin-right:5px\"></span>' + statusLabel;\n    return '<div class=\"conn-cfg-card\" style=\"margin-bottom:0.75rem\">' +\n      '<di",
-  "rhs_len": 1374,
+  "rhs": "list.map(function(c) {\n    var statusColor = c.enabled ? 'var(--success)' : 'var(--muted)';\n    var statusLabel = c.enabled ? 'Enabled' : 'Disabled';\n    var statusDot = '<span class=\"g1-display-inline-block g1-s-aab81e99\"' + cssVars(['g1-v-9ffd39ba', statusColor]) + '></span>' + statusLabel;\n    return '<div class=\"conn-cfg-card g1-s-2fc766d7\">' +\n      '<div class=\"g1-display-flex g1-s-0bdc41ee\"",
+  "rhs_len": 1171,
   "category": "unescaped_html",
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 13522,
+  "line": 13642,
   "function": "openRespondModal",
   "target": "sel",
   "op": "=",
@@ -2910,7 +2910,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 13524,
+  "line": 13644,
   "function": "openRespondModal",
   "target": "sel",
   "op": "=",
@@ -2920,37 +2920,37 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 13637,
+  "line": 13757,
   "function": "renderRunIOCToolbar",
   "target": "el",
   "op": "=",
-  "rhs": "covSegHtml(types, _runIOCTypeFilter, 'setRunIOCTypeFilter', function(k) { return counts[k] || 0; }) +\n    '<input type=\"text\" id=\"run-ioc-search\" placeholder=\"Search indicators\u2026\" value=\"' + x(_runIOCSearch) + '\"' + x('input', 'setRunIOCSearchFromInput') + ' style=\"padding:0.35rem 0.6rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-siz",
-  "rhs_len": 448,
+  "rhs": "covSegHtml(types, _runIOCTypeFilter, 'setRunIOCTypeFilter', function(k) { return counts[k] || 0; }) +\n    '<input type=\"text\" id=\"run-ioc-search\" placeholder=\"Search indicators\u2026\" value=\"' + x(_runIOCSearch) + '\"' + x('input', 'setRunIOCSearchFromInput') + ' class=\"g1-s-1230a88f\">'",
+  "rhs_len": 281,
   "category": "partial_escaped",
   "data_source_tags": ""
  },
  {
-  "line": 13680,
+  "line": 13800,
   "function": "renderRunIOCList",
   "target": "el",
   "op": "=",
-  "rhs": "'<div style=\"color:var(--muted);font-size:0.8rem;padding:2.5rem 0;text-align:center\">' +\n      (state._runIOCsAll.length ? 'No indicators match this filter.' : 'No indicators extracted from this run.') + '</div>'",
-  "rhs_len": 212,
+  "rhs": "'<div class=\"g1-s-3414c9bc\">' +\n      (state._runIOCsAll.length ? 'No indicators match this filter.' : 'No indicators extracted from this run.') + '</div>'",
+  "rhs_len": 155,
   "category": "escaped",
   "data_source_tags": ""
  },
  {
-  "line": 13685,
+  "line": 13805,
   "function": "renderRunIOCList",
   "target": "el",
   "op": "=",
-  "rhs": "list.map(function(ind, idx) {\n    var expanded = _runIOCExpandedIdx === idx;\n    var techs = (ind.techniqueIds || []).map(function(t) {\n      return '<code style=\"font-size:0.66rem;color:var(--muted);margin-right:3px\">' + x(t) + '</code>';\n    }).join('');\n    var tags = (ind.tags || []).map(function(t) {\n      return '<span class=\"tiny\" style=\"background:var(--elevated);border:1px solid var(--bor",
-  "rhs_len": 2822,
+  "rhs": "list.map(function(ind, idx) {\n    var expanded = _runIOCExpandedIdx === idx;\n    var techs = (ind.techniqueIds || []).map(function(t) {\n      return '<code class=\"g1-s-86b92508\">' + x(t) + '</code>';\n    }).join('');\n    var tags = (ind.tags || []).map(function(t) {\n      return '<span class=\"tiny g1-display-inline-block g1-s-7c8b2a40\">' + x(t) + '</span>';\n    }).join('');\n    var detail = !expan",
+  "rhs_len": 2122,
   "category": "unescaped_html",
   "data_source_tags": ""
  },
  {
-  "line": 13735,
+  "line": 13855,
   "function": "loadIOCRegistry",
   "target": "if (el) el",
   "op": "=",
@@ -2960,7 +2960,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 13753,
+  "line": 13873,
   "function": "loadIOCRegistry",
   "target": "tbody",
   "op": "=",
@@ -2970,7 +2970,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 13762,
+  "line": 13882,
   "function": "loadIOCRegistry",
   "target": "tbody",
   "op": "=",
@@ -2980,7 +2980,7 @@
   "data_source_tags": "error_message"
  },
  {
-  "line": 13784,
+  "line": 13904,
   "function": "tile",
   "target": "el",
   "op": "=",
@@ -2990,7 +2990,7 @@
   "data_source_tags": "api_response"
  },
  {
-  "line": 13794,
+  "line": 13914,
   "function": "renderIOCRegistryTable",
   "target": "tbody",
   "op": "=",
@@ -3000,17 +3000,17 @@
   "data_source_tags": ""
  },
  {
-  "line": 13797,
+  "line": 13917,
   "function": "renderIOCRegistryTable",
   "target": "tbody",
   "op": "=",
-  "rhs": "_iocRegistryRows.map(function(row, idx) {\n    var suppressedBadge = row.suppressed ? ' <span class=\"sbadge\" style=\"background:rgba(154,169,188,.12);color:var(--muted)\" title=\"' + x(row.suppressionReason || '') + '\">suppressed</span>' : '';\n    return '<tr class=\"u-pointer\"' + x('click', 'openIOCDetail', idx) + '>' +\n      '<td><span class=\"tiny\" style=\"background:var(--elevated);border:1px solid v",
-  "rhs_len": 1428,
+  "rhs": "_iocRegistryRows.map(function(row, idx) {\n    var suppressedBadge = row.suppressed ? ' <span class=\"sbadge g1-s-3518ee58\" title=\"' + x(row.suppressionReason || '') + '\">suppressed</span>' : '';\n    return '<tr class=\"u-pointer\"' + x('click', 'openIOCDetail', idx) + '>' +\n      '<td><span class=\"tiny g1-s-e4cd03d6\">' + x(IOC_TYPE_LABEL_REGISTRY[row.type] || row.type) + '</span></td>' +\n      '<td><",
+  "rhs_len": 1243,
   "category": "unescaped_html",
   "data_source_tags": ""
  },
  {
-  "line": 13845,
+  "line": 13965,
   "function": "openIOCDetail",
   "target": "document.getElementById('results-export')",
   "op": "=",
@@ -3020,7 +3020,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 13862,
+  "line": 13982,
   "function": "rowHtml",
   "target": "document.getElementById('results-body')",
   "op": "=",
@@ -3030,7 +3030,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 13881,
+  "line": 14001,
   "function": "rowHtml",
   "target": "el",
   "op": "=",
@@ -3040,7 +3040,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 13884,
+  "line": 14004,
   "function": "rowHtml",
   "target": "if (el) el",
   "op": "=",
@@ -3050,27 +3050,27 @@
   "data_source_tags": ""
  },
  {
-  "line": 13987,
+  "line": 14110,
   "function": "render",
   "target": "document.getElementById('run-live-progress')",
   "op": "=",
-  "rhs": "'<div style=\"display:flex;gap:0.55rem;margin-bottom:0.6rem\">' +\n        statCell(state.done + '/' + state.total, 'completed', 'var(--accent)') +\n        statCell(state.failed, 'failed', state.failed ? 'var(--danger)' : 'var(--muted)') +\n        statCell(state.running, 'running', state.running ? 'var(--accent)' : 'var(--muted)') +\n      '</div>' +\n      '<div style=\"height:4px;background:var(--elev",
-  "rhs_len": 594,
-  "category": "partial_escaped",
+  "rhs": "'<div class=\"g1-display-flex g1-s-d3e598d0\">' +\n        statCell(state.done + '/' + state.total, 'completed', 'var(--accent)') +\n        statCell(state.failed, 'failed', state.failed ? 'var(--danger)' : 'var(--muted)') +\n        statCell(state.running, 'running', state.running ? 'var(--accent)' : 'var(--muted)') +\n      '</div>' +\n      '<div class=\"g1-s-e6e1105c\">' +\n        '<div class=\"g1-s-1f0",
+  "rhs_len": 470,
+  "category": "indirect_builder",
   "data_source_tags": ""
  },
  {
-  "line": 13999,
+  "line": 14122,
   "function": "render",
   "target": "ul",
   "op": "=",
-  "rhs": "'<li style=\"color:var(--muted);font-size:0.78rem;padding:0.4rem 0\">Waiting for the first step\u2026</li>'",
-  "rhs_len": 100,
+  "rhs": "'<li class=\"g1-s-b32f8255\">Waiting for the first step\u2026</li>'",
+  "rhs_len": 60,
   "category": "static",
   "data_source_tags": ""
  },
  {
-  "line": 14092,
+  "line": 14215,
   "function": "render",
   "target": "ul",
   "op": "=",
@@ -3080,7 +3080,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 14206,
+  "line": 14333,
   "function": "openSweepDrilldown",
   "target": "document.getElementById('sweep-drilldown-actions')",
   "op": "=",
@@ -3090,7 +3090,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 14207,
+  "line": 14334,
   "function": "openSweepDrilldown",
   "target": "document.getElementById('sweep-drilldown-list')",
   "op": "=",
@@ -3100,7 +3100,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 14214,
+  "line": 14341,
   "function": "openSweepDrilldown",
   "target": "document.getElementById('sweep-drilldown-actions')",
   "op": "=",
@@ -3110,17 +3110,17 @@
   "data_source_tags": ""
  },
  {
-  "line": 14217,
+  "line": 14344,
   "function": "openSweepDrilldown",
   "target": "document.getElementById('sweep-drilldown-list')",
   "op": "=",
   "rhs": "childRuns.map(function(r) {\n      var badge = verdictBadge(r, r.status);\n      var liveBtn = (r.id && r.status === 'running')\n        ? '<button class=\"btn btn-outline btn-sm\" ' + x('click', 'openRunPanelAction', r.id, r.name, (r.progress && r.progress.stepsTotal) || 0, r.mode || '', r.maxPrivilege || '') + '>&#9673; Live</button> '\n        : '';\n      // A cancelled/partial technique run never ge",
-  "rhs_len": 1751,
+  "rhs_len": 1648,
   "category": "unescaped_html",
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 14259,
+  "line": 14386,
   "function": "loadOpenAEVConfig",
   "target": "configPanel",
   "op": "=",
@@ -3130,7 +3130,7 @@
   "data_source_tags": "openaev"
  },
  {
-  "line": 14274,
+  "line": 14401,
   "function": "loadOpenAEVConfig",
   "target": "configPanel",
   "op": "=",
@@ -3140,7 +3140,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 14335,
+  "line": 14462,
   "function": "loadOpenAEVScenarios",
   "target": "body",
   "op": "=",
@@ -3150,7 +3150,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 14340,
+  "line": 14467,
   "function": "loadOpenAEVScenarios",
   "target": "body",
   "op": "=",
@@ -3160,7 +3160,7 @@
   "data_source_tags": "openaev"
  },
  {
-  "line": 14426,
+  "line": 14553,
   "function": "openOpenAEVDetail",
   "target": "body",
   "op": "=",
@@ -3170,7 +3170,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 14428,
+  "line": 14555,
   "function": "openOpenAEVDetail",
   "target": "body",
   "op": "+=",
@@ -3180,7 +3180,7 @@
   "data_source_tags": "openaev"
  },
  {
-  "line": 14445,
+  "line": 14572,
   "function": "loadExercisesTab",
   "target": "body",
   "op": "=",
@@ -3190,7 +3190,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 14447,
+  "line": 14574,
   "function": "loadExercisesTab",
   "target": "body",
   "op": "=",
@@ -3200,7 +3200,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 14460,
+  "line": 14587,
   "function": "loadExercisesTab",
   "target": "body",
   "op": "=",
@@ -3210,7 +3210,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 14462,
+  "line": 14589,
   "function": "loadExercisesTab",
   "target": "body",
   "op": "=",
@@ -3220,7 +3220,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 14606,
+  "line": 14733,
   "function": "openExerciseDetail",
   "target": "document.getElementById('exercise-detail-body')",
   "op": "=",
@@ -3230,7 +3230,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 14839,
+  "line": 14966,
   "function": "loadAPHistory",
   "target": "tb",
   "op": "=",
@@ -3240,7 +3240,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 14842,
+  "line": 14969,
   "function": "loadAPHistory",
   "target": "tb",
   "op": "=",
@@ -3250,7 +3250,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 14845,
+  "line": 14972,
   "function": "loadAPHistory",
   "target": "tb",
   "op": "=",
@@ -3260,7 +3260,7 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 14861,
+  "line": 14988,
   "function": "loadAPHistory",
   "target": "tb",
   "op": "=",
@@ -3270,7 +3270,7 @@
   "data_source_tags": "error_message"
  },
  {
-  "line": 14870,
+  "line": 14997,
   "function": "renderAttackPath",
   "target": "body",
   "op": "=",
@@ -3280,7 +3280,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 14916,
+  "line": 15043,
   "function": "renderAttackPath",
   "target": "body",
   "op": "=",
@@ -3290,27 +3290,27 @@
   "data_source_tags": ""
  },
  {
-  "line": 14949,
+  "line": 15076,
   "function": "loadRansomwareReadiness",
   "target": "bodyEl",
   "op": "=",
-  "rhs": "'<div class=\"empty\" style=\"padding:0.5rem\">Run the <strong>Ransomware Drill</strong> or <strong>EM-07</strong> scenario to generate a readiness score.</div>'",
-  "rhs_len": 157,
+  "rhs": "'<div class=\"empty g1-s-dab79d7d\">Run the <strong>Ransomware Drill</strong> or <strong>EM-07</strong> scenario to generate a readiness score.</div>'",
+  "rhs_len": 148,
   "category": "static",
   "data_source_tags": ""
  },
  {
-  "line": 15021,
+  "line": 15148,
   "function": "loadRansomwareReadiness",
   "target": "bodyEl",
   "op": "=",
-  "rhs": "'<div style=\"display:flex;gap:1.5rem;align-items:flex-start\">' +\n      scoreHtml +\n      '<div style=\"flex:1;min-width:0\">' + barsHtml + '</div>' +\n      '<div style=\"flex-shrink:0;display:flex;flex-direction:column;gap:0.4rem;min-width:160px;font-size:0.75rem;color:var(--muted)\">' +\n        '<div><span style=\"color:var(--text);font-weight:500\">' + x(rrRun.name || rrRun.scenarioId) + '</span></div",
-  "rhs_len": 815,
+  "rhs": "'<div class=\"g1-display-flex g1-s-d7f84b58\">' +\n      scoreHtml +\n      '<div class=\"g1-s-28637295\">' + barsHtml + '</div>' +\n      '<div class=\"g1-display-flex g1-s-7d5960f3\">' +\n        '<div><span class=\"g1-s-13457f1d\">' + x(rrRun.name || rrRun.scenarioId) + '</span></div>' +\n        '<div>' + (rrRun.agentId ? 'Agent: ' + x(rrRun.agentId) : '') + '</div>' +\n        '<div class=\"g1-s-f6c1493f\">'",
+  "rhs_len": 646,
   "category": "partial_escaped",
   "data_source_tags": "agent,user_created_name"
  },
  {
-  "line": 15076,
+  "line": 15203,
   "function": "loadReports",
   "target": "el",
   "op": "=",
@@ -3320,7 +3320,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 15080,
+  "line": 15207,
   "function": "loadReports",
   "target": "el",
   "op": "=",
@@ -3330,7 +3330,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 15093,
+  "line": 15220,
   "function": "loadReports",
   "target": "document.getElementById('rep-available')",
   "op": "=",
@@ -3340,7 +3340,7 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 15101,
+  "line": 15228,
   "function": "renderRepHistory",
   "target": "tb",
   "op": "=",
@@ -3350,7 +3350,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 15105,
+  "line": 15232,
   "function": "renderRepHistory",
   "target": "tb",
   "op": "=",
@@ -3360,7 +3360,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 15147,
+  "line": 15274,
   "function": "openReportGen",
   "target": "document.getElementById('rep-agent')",
   "op": "=",
@@ -3370,7 +3370,7 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 15151,
+  "line": 15278,
   "function": "openReportGen",
   "target": "document.getElementById('rep-format')",
   "op": "=",
@@ -3380,7 +3380,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 15160,
+  "line": 15287,
   "function": "openReportGen",
   "target": "document.getElementById('rep-fw')",
   "op": "=",
@@ -3390,7 +3390,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 15471,
+  "line": 15598,
   "function": "loadRuns",
   "target": "tbody",
   "op": "=",
@@ -3400,7 +3400,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 15488,
+  "line": 15615,
   "function": "byStartedAtDesc",
   "target": "tbody",
   "op": "=",
@@ -3410,7 +3410,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 15524,
+  "line": 15651,
   "function": "byStartedAtDesc",
   "target": "tbody",
   "op": "=",
@@ -3420,7 +3420,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 15535,
+  "line": 15662,
   "function": "openModal",
   "target": "scSel",
   "op": "=",
@@ -3430,7 +3430,7 @@
   "data_source_tags": "scenario,user_created_name"
  },
  {
-  "line": 15546,
+  "line": 15673,
   "function": "openModal",
   "target": "document.getElementById('modal-agent')",
   "op": "=",
@@ -3440,7 +3440,7 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 15613,
+  "line": 15740,
   "function": "renderRunMode",
   "target": "btn",
   "op": "=",
@@ -3450,7 +3450,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 15653,
+  "line": 15780,
   "function": "renderRunMode",
   "target": "warn",
   "op": "=",
@@ -3460,7 +3460,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 15657,
+  "line": 15784,
   "function": "renderRunMode",
   "target": "btn",
   "op": "=",
@@ -3470,7 +3470,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 15671,
+  "line": 15798,
   "function": "renderRunMode",
   "target": "warn",
   "op": "=",
@@ -3480,7 +3480,7 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 15673,
+  "line": 15800,
   "function": "renderRunMode",
   "target": "btn",
   "op": "=",
@@ -3490,7 +3490,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 15685,
+  "line": 15812,
   "function": "renderRunMode",
   "target": "warn",
   "op": "=",
@@ -3500,7 +3500,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 15686,
+  "line": 15813,
   "function": "renderRunMode",
   "target": "btn",
   "op": "=",
@@ -3510,7 +3510,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 15692,
+  "line": 15819,
   "function": "renderRunMode",
   "target": "warn",
   "op": "=",
@@ -3520,7 +3520,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 15693,
+  "line": 15820,
   "function": "renderRunMode",
   "target": "btn",
   "op": "=",
@@ -3530,7 +3530,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 15700,
+  "line": 15827,
   "function": "renderRunMode",
   "target": "warn",
   "op": "=",
@@ -3540,7 +3540,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 15704,
+  "line": 15831,
   "function": "renderRunMode",
   "target": "btn",
   "op": "=",
@@ -3550,7 +3550,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 15755,
+  "line": 15882,
   "function": "renderAdditionalAgents",
   "target": "list",
   "op": "=",
@@ -3560,7 +3560,7 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 16008,
+  "line": 16135,
   "function": "row",
   "target": "document.getElementById('wz-review')",
   "op": "=",
@@ -3570,7 +3570,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 16174,
+  "line": 16301,
   "function": "openPickerWith",
   "target": "tacticSel",
   "op": "=",
@@ -3580,7 +3580,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 16331,
+  "line": 16458,
   "function": "renderPickerList",
   "target": "document.getElementById('picker-list')",
   "op": "=",
@@ -3590,7 +3590,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 16436,
+  "line": 16563,
   "function": "renderModalSelection",
   "target": "link",
   "op": "=",
@@ -3600,7 +3600,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 16455,
+  "line": 16582,
   "function": "renderModalSelection",
   "target": "link",
   "op": "=",
@@ -3610,7 +3610,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 16469,
+  "line": 16596,
   "function": "renderModalSelection",
   "target": "note",
   "op": "=",
@@ -3620,7 +3620,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 16485,
+  "line": 16612,
   "function": "renderModalSelection",
   "target": "note",
   "op": "=",
@@ -3630,7 +3630,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 16515,
+  "line": 16642,
   "function": "renderModalSelection",
   "target": "note",
   "op": "=",
@@ -3640,7 +3640,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 16518,
+  "line": 16645,
   "function": "renderModalSelection",
   "target": "note",
   "op": "=",
@@ -3650,7 +3650,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 16586,
+  "line": 16713,
   "function": "doOpen",
   "target": "tacticSel",
   "op": "=",
@@ -3660,7 +3660,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 16639,
+  "line": 16766,
   "function": "fillBuilder",
   "target": "steps",
   "op": "=",
@@ -3670,7 +3670,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 16810,
+  "line": 16937,
   "function": "techRenderSelected",
   "target": "box",
   "op": "=",
@@ -3680,7 +3680,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 16820,
+  "line": 16947,
   "function": "techRenderSelected",
   "target": "box",
   "op": "=",
@@ -3690,7 +3690,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 16860,
+  "line": 16987,
   "function": "techOnInput",
   "target": "panel",
   "op": "=",
@@ -3700,7 +3700,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 16870,
+  "line": 16997,
   "function": "techRenderResults",
   "target": "panel",
   "op": "=",
@@ -3710,7 +3710,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 16874,
+  "line": 17001,
   "function": "techRenderResults",
   "target": "panel",
   "op": "=",
@@ -3720,7 +3720,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 16891,
+  "line": 17018,
   "function": "techSelectRow",
   "target": "panel",
   "op": "=",
@@ -3730,7 +3730,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 16915,
+  "line": 17042,
   "function": "techOnKeydown",
   "target": "panel",
   "op": "=",
@@ -3740,7 +3740,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 16926,
+  "line": 17053,
   "function": "techOnBlur",
   "target": "panel",
   "op": "=",
@@ -3750,7 +3750,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 16946,
+  "line": 17073,
   "function": "addStep",
   "target": "div",
   "op": "=",
@@ -3760,7 +3760,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 17213,
+  "line": 17340,
   "function": "viewRunResults",
   "target": "document.getElementById('results-summary')",
   "op": "=",
@@ -3770,7 +3770,7 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 17218,
+  "line": 17345,
   "function": "viewRunResults",
   "target": "document.getElementById('results-summary')",
   "op": "=",
@@ -3780,7 +3780,7 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 17249,
+  "line": 17376,
   "function": "viewRunResults",
   "target": "document.getElementById('results-export')",
   "op": "=",
@@ -3790,7 +3790,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17255,
+  "line": 17382,
   "function": "viewRunResults",
   "target": "document.getElementById('results-title')",
   "op": "=",
@@ -3800,7 +3800,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 17277,
+  "line": 17404,
   "function": "viewRunResults",
   "target": "document.getElementById('results-header-actions')",
   "op": "=",
@@ -3810,7 +3810,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17327,
+  "line": 17454,
   "function": "kpiGaugeCard",
   "target": "document.getElementById('run-kpi-strip')",
   "op": "=",
@@ -3820,7 +3820,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17669,
+  "line": 17796,
   "function": "soonPanel",
   "target": "document.getElementById('run-tab-content')",
   "op": "=",
@@ -3830,7 +3830,7 @@
   "data_source_tags": "threat_intel"
  },
  {
-  "line": 17706,
+  "line": 17833,
   "function": "soonPanel",
   "target": "document.getElementById('run-tabbar')",
   "op": "=",
@@ -3840,7 +3840,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17720,
+  "line": 17847,
   "function": "soonPanel",
   "target": "reportsEl",
   "op": "=",
@@ -3850,7 +3850,7 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 17735,
+  "line": 17862,
   "function": "soonPanel",
   "target": "reportsEl",
   "op": "=",
@@ -3860,7 +3860,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17745,
+  "line": 17872,
   "function": "soonPanel",
   "target": "extraEl",
   "op": "=",
@@ -3870,7 +3870,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17749,
+  "line": 17876,
   "function": "soonPanel",
   "target": "extraEl",
   "op": "=",
@@ -3880,7 +3880,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17751,
+  "line": 17878,
   "function": "soonPanel",
   "target": "if (findingsEl) findingsEl",
   "op": "=",
@@ -3890,7 +3890,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17753,
+  "line": 17880,
   "function": "soonPanel",
   "target": "if (recEl) recEl",
   "op": "=",
@@ -3900,7 +3900,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17757,
+  "line": 17884,
   "function": "soonPanel",
   "target": "extraEl",
   "op": "=",
@@ -3910,7 +3910,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17759,
+  "line": 17886,
   "function": "soonPanel",
   "target": "if (findingsEl) findingsEl",
   "op": "=",
@@ -3920,7 +3920,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17761,
+  "line": 17888,
   "function": "soonPanel",
   "target": "if (recEl) recEl",
   "op": "=",
@@ -3930,7 +3930,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17767,
+  "line": 17894,
   "function": "soonPanel",
   "target": "if (el) el",
   "op": "=",
@@ -3940,7 +3940,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17770,
+  "line": 17897,
   "function": "soonPanel",
   "target": "if (el) el",
   "op": "=",
@@ -3950,7 +3950,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17776,
+  "line": 17903,
   "function": "soonPanel",
   "target": "if (el) el",
   "op": "=",
@@ -3960,7 +3960,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17779,
+  "line": 17906,
   "function": "soonPanel",
   "target": "if (el) el",
   "op": "=",
@@ -3970,7 +3970,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17797,
+  "line": 17924,
   "function": "soonPanel",
   "target": "if (el) el",
   "op": "=",
@@ -3980,7 +3980,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17805,
+  "line": 17932,
   "function": "soonPanel",
   "target": "if (findingsElEarly) findingsElEarly",
   "op": "=",
@@ -3990,7 +3990,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17807,
+  "line": 17934,
   "function": "soonPanel",
   "target": "if (recElEarly) recElEarly",
   "op": "=",
@@ -4000,7 +4000,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17809,
+  "line": 17936,
   "function": "soonPanel",
   "target": "if (iocElEarly) iocElEarly",
   "op": "=",
@@ -4010,7 +4010,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17907,
+  "line": 18034,
   "function": "renderDetectionValidationTab",
   "target": "el",
   "op": "=",
@@ -4020,7 +4020,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 17961,
+  "line": 18088,
   "function": "loadSIEMCorrelationPanel",
   "target": "el",
   "op": "=",
@@ -4030,7 +4030,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18054,
+  "line": 18181,
   "function": "openRerunReview",
   "target": "document.getElementById('rerun-review-body')",
   "op": "=",
@@ -4040,7 +4040,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18102,
+  "line": 18229,
   "function": "startRerunFromReview",
   "target": "btn",
   "op": "=",
@@ -4050,7 +4050,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18109,
+  "line": 18236,
   "function": "startRerunFromReview",
   "target": "btn",
   "op": "=",
@@ -4060,7 +4060,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18149,
+  "line": 18276,
   "function": "openCampaignRerunReview",
   "target": "document.getElementById('rerun-review-body')",
   "op": "=",
@@ -4070,7 +4070,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18182,
+  "line": 18309,
   "function": "startCampaignRerunFromReview",
   "target": "btn",
   "op": "=",
@@ -4080,7 +4080,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18189,
+  "line": 18316,
   "function": "startCampaignRerunFromReview",
   "target": "btn",
   "op": "=",
@@ -4090,7 +4090,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18271,
+  "line": 18398,
   "function": "renderScheduledAssessmentsList",
   "target": "tbody",
   "op": "=",
@@ -4100,17 +4100,17 @@
   "data_source_tags": ""
  },
  {
-  "line": 18274,
+  "line": 18401,
   "function": "renderScheduledAssessmentsList",
   "target": "tbody",
   "op": "=",
   "rhs": "SCHED.schedules.map(function(sch) {\n    // sch.Payload is a Go json.RawMessage with no json:\"...\" tag override, so\n    // it arrives already embedded as a real object in the outer response --\n    // NOT as a JSON string needing a second JSON.parse (that silently threw,\n    // caught below, and always fell back to {} -- see openSchedWizardForEdit's\n    // identical fix for the same root cause).\n   ",
-  "rhs_len": 2429,
+  "rhs_len": 2337,
   "category": "unescaped_html",
   "data_source_tags": "scenario,telemetry_log,user_created_name"
  },
  {
-  "line": 18342,
+  "line": 18469,
   "function": "openSchedWizard",
   "target": "sel",
   "op": "=",
@@ -4120,7 +4120,7 @@
   "data_source_tags": "scenario,user_created_name"
  },
  {
-  "line": 18399,
+  "line": 18526,
   "function": "openSchedWizardForEdit",
   "target": "sel",
   "op": "=",
@@ -4130,7 +4130,7 @@
   "data_source_tags": "scenario,user_created_name"
  },
  {
-  "line": 18463,
+  "line": 18590,
   "function": "renderSchedGroupTree",
   "target": "root",
   "op": "=",
@@ -4140,7 +4140,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18468,
+  "line": 18595,
   "function": "renderSchedGroupTree",
   "target": "root",
   "op": "=",
@@ -4150,7 +4150,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18531,
+  "line": 18658,
   "function": "renderSchedAgentList",
   "target": "root",
   "op": "=",
@@ -4160,17 +4160,17 @@
   "data_source_tags": ""
  },
  {
-  "line": 18533,
+  "line": 18660,
   "function": "renderSchedAgentList",
   "target": "root",
   "op": "=",
   "rhs": "SCHED.agentsAll.map(function(a) {\n    var compatible = schedAgentCompatible(a, supportedOS);\n    // A previously-checked agent that's now incompatible (scenario changed\n    // after selection) must not stay silently selected.\n    if (!compatible && SCHED.selAgents[a.agentId]) delete SCHED.selAgents[a.agentId];\n    var checked = SCHED.selAgents[a.agentId] ? ' checked' : '';\n    var disabled = compa",
-  "rhs_len": 1025,
+  "rhs_len": 942,
   "category": "unescaped_html",
   "data_source_tags": "agent"
  },
  {
-  "line": 18560,
+  "line": 18687,
   "function": "renderSchedInitiativeSelect",
   "target": "sel",
   "op": "=",
@@ -4180,7 +4180,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18573,
+  "line": 18700,
   "function": "renderSchedModeRecurrencePane",
   "target": "modeSel",
   "op": "=",
@@ -4190,7 +4190,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 18679,
+  "line": 18806,
   "function": "renderSchedReview",
   "target": "document.getElementById('sched-review')",
   "op": "=",
@@ -4200,47 +4200,47 @@
   "data_source_tags": ""
  },
  {
-  "line": 18816,
+  "line": 18943,
   "function": "renderLicenseLockedScreen",
   "target": "el",
   "op": "=",
-  "rhs": "'<div style=\"max-width:520px;text-align:center;color:var(--text,#e6e6e6)\">' +\n      '<div style=\"font-size:2.5rem;margin-bottom:1rem\">&#x1F512;</div>' +\n      '<h1 style=\"font-size:1.4rem;margin-bottom:0.75rem\">BAS LICENSE EXPIRED</h1>' +\n      '<p style=\"color:var(--muted,#9aa9bc);line-height:1.6;margin-bottom:1rem\">This Audspect BAS Server is currently unavailable because its license and grace p",
-  "rhs_len": 1040,
+  "rhs": "'<div class=\"g1-s-0461ffe3\">' +\n      '<div class=\"g1-s-bb46f5f1\">&#x1F512;</div>' +\n      '<h1 class=\"g1-s-e34130f8\">BAS LICENSE EXPIRED</h1>' +\n      '<p class=\"g1-s-87635de2\">This Audspect BAS Server is currently unavailable because its license and grace period have expired.</p>' +\n      '<p class=\"g1-s-a7798008\">Please contact your licensing administrator to renew the license.</p>' +\n      '<d",
+  "rhs_len": 693,
   "category": "escaped",
   "data_source_tags": ""
  },
  {
-  "line": 18882,
+  "line": 19009,
   "function": "renderLicenseGraceBanner",
   "target": "el",
   "op": "=",
-  "rhs": "_licenseBannerHTML(info) +\n    '<button' + x('click', '_dismissLicenseGraceBanner') + ' aria-label=\"Dismiss\" title=\"Dismiss\" ' +\n      'style=\"position:absolute;top:0.5rem;right:0.6rem;width:24px;height:24px;display:flex;align-items:center;justify-content:center;' +\n      'background:transparent;border:none;color:inherit;font-size:1.1rem;line-height:1;cursor:pointer;opacity:0.75\" ' +\n      x('mous",
-  "rhs_len": 509,
+  "rhs": "_licenseBannerHTML(info) +\n    '<button' + x('click', '_dismissLicenseGraceBanner') + ' aria-label=\"Dismiss\" title=\"Dismiss\" ' +\n      'class=\"g1-display-flex g1-s-94d252ab\" ' +\n      x('mouseover', 'licenseBannerDismissHoverOn') + x('mouseout', 'licenseBannerDismissHoverOff') + '>&#10005;</button>'",
+  "rhs_len": 300,
   "category": "partial_escaped",
   "data_source_tags": ""
  },
  {
-  "line": 18899,
+  "line": 19025,
   "function": "maybeShowLicenseGraceModal",
   "target": "overlay",
   "op": "=",
-  "rhs": "'<div style=\"max-width:480px;background:var(--surface,#152338);border:1px solid var(--warning,#d29922);border-radius:8px;padding:1.5rem;color:var(--text,#e6e6e6)\">' +\n      _licenseBannerHTML(info) +\n      '<div style=\"text-align:right;margin-top:1rem\"><button id=\"license-grace-modal-dismiss\" style=\"padding:0.4rem 1rem;border-radius:6px;border:1px solid var(--border,#22324a);background:transparent",
-  "rhs_len": 469,
+  "rhs": "'<div class=\"g1-s-fd040b75\">' +\n      _licenseBannerHTML(info) +\n      '<div class=\"g1-s-39cd98a9\"><button id=\"license-grace-modal-dismiss\" class=\"g1-s-08ac4010\">Dismiss</button></div>' +\n    '</div>'",
+  "rhs_len": 200,
   "category": "indirect_builder",
   "data_source_tags": ""
  },
  {
-  "line": 19094,
+  "line": 19220,
   "function": "goToProfile",
   "target": "el",
   "op": "=",
-  "rhs": "d.permissions.slice().sort().map(function(p) {\n      return '<span class=\"tag\" style=\"display:inline-block;margin:0 0.3rem 0.3rem 0\">' + x(p) + '</span>';\n    }).join('')",
-  "rhs_len": 170,
+  "rhs": "d.permissions.slice().sort().map(function(p) {\n      return '<span class=\"tag g1-display-inline-block g1-s-cbab8d6c\">' + x(p) + '</span>';\n    }).join('')",
+  "rhs_len": 154,
   "category": "escaped",
   "data_source_tags": ""
  },
  {
-  "line": 19153,
+  "line": 19279,
   "function": "loadAgentRiskSummary",
   "target": "if (tb) tb",
   "op": "=",
@@ -4250,7 +4250,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 19175,
+  "line": 19301,
   "function": "renderAgentRiskSummary",
   "target": "tb",
   "op": "=",
@@ -4260,17 +4260,17 @@
   "data_source_tags": ""
  },
  {
-  "line": 19185,
+  "line": 19311,
   "function": "renderAgentRiskSummary",
   "target": "tb",
   "op": "=",
-  "rhs": "rows.map(function(a) {\n    return '<tr>' +\n      '<td>' + x(a.hostname || a.agentId) + '</td>' +\n      (a.measurable\n        ? '<td style=\"color:' + _riskScoreColor(a.healthScore) + ';font-weight:700\">' + a.healthScore + '</td>'\n        : '<td class=\"u-muted\" title=\"Nothing collected for this endpoint yet \u2014 an absent score is not a safe score\">\u2014 no data</td>') +\n      '<td>' + (a.criticalityRisk |",
-  "rhs_len": 736,
+  "rhs": "rows.map(function(a) {\n    return '<tr>' +\n      '<td>' + x(a.hostname || a.agentId) + '</td>' +\n      (a.measurable\n        ? '<td' + cssVars(['g1-v-7d75dfc9', _riskScoreColor(a.healthScore)]) + ' class=\"g1-s-c6fa01b3\">' + a.healthScore + '</td>'\n        : '<td class=\"u-muted\" title=\"Nothing collected for this endpoint yet \u2014 an absent score is not a safe score\">\u2014 no data</td>') +\n      '<td>' + (",
+  "rhs_len": 755,
   "category": "unescaped_html",
   "data_source_tags": "agent"
  },
  {
-  "line": 19315,
+  "line": 19441,
   "function": "loadThreatIntelConfig",
   "target": "if (panel) panel",
   "op": "=",
@@ -4280,17 +4280,17 @@
   "data_source_tags": ""
  },
  {
-  "line": 19324,
+  "line": 19450,
   "function": "loadThreatIntelConfig",
   "target": "panel",
   "op": "=",
-  "rhs": "'<div class=\"kpi-row\">' +\n        urlField +\n        '<input id=\"ti-' + name + '-key\" type=\"password\" placeholder=\"API key (leave blank to keep current)\" class=\"inp-sm u-flex1\">' +\n        insecureField +\n        '<label class=\"tiny muted\" style=\"display:flex;align-items:center;gap:0.3rem\"><input type=\"checkbox\" id=\"ti-' + name + '-enabled\" ' + (cfg.enabled ? 'checked' : '') + '> Enabled</label>' ",
-  "rhs_len": 999,
+  "rhs": "'<div class=\"kpi-row\">' +\n        urlField +\n        '<input id=\"ti-' + name + '-key\" type=\"password\" placeholder=\"API key (leave blank to keep current)\" class=\"inp-sm u-flex1\">' +\n        insecureField +\n        '<label class=\"tiny muted g1-display-flex g1-s-4f83cf12\"><input type=\"checkbox\" id=\"ti-' + name + '-enabled\" ' + (cfg.enabled ? 'checked' : '') + '> Enabled</label>' +\n      '</div>' +\n  ",
+  "rhs_len": 925,
   "category": "partial_escaped",
   "data_source_tags": ""
  },
  {
-  "line": 19430,
+  "line": 19556,
   "function": "loadTAXIIConnectors",
   "target": "tbody",
   "op": "=",
@@ -4300,7 +4300,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 19435,
+  "line": 19561,
   "function": "loadTAXIIConnectors",
   "target": "tbody",
   "op": "=",
@@ -4310,7 +4310,7 @@
   "data_source_tags": "error_message"
  },
  {
-  "line": 19442,
+  "line": 19568,
   "function": "renderTAXIIConnectorsList",
   "target": "tbody",
   "op": "=",
@@ -4320,37 +4320,37 @@
   "data_source_tags": ""
  },
  {
-  "line": 19445,
+  "line": 19571,
   "function": "renderTAXIIConnectorsList",
   "target": "tbody",
   "op": "=",
-  "rhs": "TAXII_CONNECTORS.map(function(c) {\n    var lastPoll = c.lastPollAt ? ago(c.lastPollAt) : 'Never';\n    var resultColor = c.lastPollStatus === 'ok' ? 'var(--success)' : (c.lastPollStatus === 'error' ? 'var(--danger)' : 'var(--muted)');\n    var summary = c.lastPollSummary || {};\n    var resultText = c.lastPollStatus === 'ok'\n      ? (summary.processed || 0) + ' processed, ' + (summary.skipped || 0) +",
-  "rhs_len": 1427,
+  "rhs": "TAXII_CONNECTORS.map(function(c) {\n    var lastPoll = c.lastPollAt ? ago(c.lastPollAt) : 'Never';\n    var resultColor = c.lastPollStatus === 'ok' ? 'g1-s-f83fcad9' : (c.lastPollStatus === 'error' ? 'g1-s-b83ba243' : 'g1-s-eac76940');\n    var summary = c.lastPollSummary || {};\n    var resultText = c.lastPollStatus === 'ok'\n      ? (summary.processed || 0) + ' processed, ' + (summary.skipped || 0) +",
+  "rhs_len": 1331,
   "category": "unescaped_html",
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 19621,
+  "line": 19747,
   "function": "loadARTContentStatus",
   "target": "statusEl",
   "op": "=",
-  "rhs": "'<span style=\"display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--success);margin-right:6px;vertical-align:middle\"></span><span class=\"u-success\">Seeded</span>'",
-  "rhs_len": 185,
+  "rhs": "'<span class=\"g1-display-inline-block g1-s-a3bc72af\"></span><span class=\"u-success\">Seeded</span>'",
+  "rhs_len": 98,
   "category": "static",
   "data_source_tags": ""
  },
  {
-  "line": 19623,
+  "line": 19749,
   "function": "loadARTContentStatus",
   "target": "statusEl",
   "op": "=",
-  "rhs": "'<span style=\"display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--warning);margin-right:6px;vertical-align:middle\"></span><span class=\"u-warning\">Not seeded</span>'",
-  "rhs_len": 189,
+  "rhs": "'<span class=\"g1-display-inline-block g1-s-d9fd6a0b\"></span><span class=\"u-warning\">Not seeded</span>'",
+  "rhs_len": 102,
   "category": "static",
   "data_source_tags": ""
  },
  {
-  "line": 19663,
+  "line": 19789,
   "function": "loadARTContentStatus",
   "target": "document.getElementById('cs-art-status')",
   "op": "=",
@@ -4360,7 +4360,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 19676,
+  "line": 19802,
   "function": "toggleSimCoverage",
   "target": "if (car) car",
   "op": "=",
@@ -4370,17 +4370,17 @@
   "data_source_tags": ""
  },
  {
-  "line": 19791,
+  "line": 19917,
   "function": "loadSimCoverage",
   "target": "bodyEl",
   "op": "=",
-  "rhs": "rows.map(function(r, i) {\n        var bg = i % 2 === 0 ? '' : 'background:rgba(255,255,255,.02)';\n        var isVariantRow = r[0].indexOf('Variant Engine') !== -1;\n        var isSection = !!sectionKeys[r[0]];\n        var textStyle = isVariantRow ? 'font-weight:700;color:var(--accent)'\n                      : isSection    ? 'font-weight:700;color:var(--text)'\n                      :                ",
-  "rhs_len": 2162,
+  "rhs": "rows.map(function(r, i) {\n        var rowClass = i % 2 === 0 ? '' : ' g1-s-ab376776';\n        var isVariantRow = r[0].indexOf('Variant Engine') !== -1;\n        var isSection = !!sectionKeys[r[0]];\n        var textClass = isVariantRow ? 'g1-s-c941d204'\n                      : isSection    ? 'g1-s-7069a0c6'\n                      :                'g1-s-eac76940';\n        var numClass = isVariantRow\n ",
+  "rhs_len": 1467,
   "category": "unescaped_html",
   "data_source_tags": ""
  },
  {
-  "line": 20609,
+  "line": 20735,
   "function": "loadVariantStats",
   "target": "el",
   "op": "=",
@@ -4390,7 +4390,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 20651,
+  "line": 20777,
   "function": "populateVexAgents",
   "target": "if (sel) sel",
   "op": "=",
@@ -4400,7 +4400,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 20653,
+  "line": 20779,
   "function": "populateVexAgents",
   "target": "if (sweepSel) sweepSel",
   "op": "=",
@@ -4410,7 +4410,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 20688,
+  "line": 20814,
   "function": "populateVexTechniques",
   "target": "tacSel",
   "op": "=",
@@ -4420,7 +4420,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 20693,
+  "line": 20819,
   "function": "populateVexTechniques",
   "target": "if (el) el",
   "op": "=",
@@ -4430,7 +4430,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 20784,
+  "line": 20910,
   "function": "renderVexSweepList",
   "target": "el",
   "op": "=",
@@ -4440,7 +4440,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 20786,
+  "line": 20912,
   "function": "renderVexSweepList",
   "target": "el",
   "op": "=",
@@ -4450,7 +4450,7 @@
   "data_source_tags": "agent"
  },
  {
-  "line": 21033,
+  "line": 21159,
   "function": "filterVexTechniques",
   "target": "el",
   "op": "=",
@@ -4460,7 +4460,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 21036,
+  "line": 21162,
   "function": "filterVexTechniques",
   "target": "el",
   "op": "=",
@@ -4470,7 +4470,7 @@
   "data_source_tags": "user_created_name"
  },
  {
-  "line": 21060,
+  "line": 21186,
   "function": "loadVariantCoverage",
   "target": "el",
   "op": "=",
@@ -4480,7 +4480,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 21063,
+  "line": 21189,
   "function": "loadVariantCoverage",
   "target": "el",
   "op": "=",
@@ -4490,7 +4490,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 21088,
+  "line": 21214,
   "function": "loadVariantCoverage",
   "target": "el",
   "op": "=",
@@ -4500,7 +4500,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 21090,
+  "line": 21216,
   "function": "loadVariantCoverage",
   "target": "el",
   "op": "=",
@@ -4510,7 +4510,7 @@
   "data_source_tags": "error_message"
  },
  {
-  "line": 21211,
+  "line": 21337,
   "function": "_vexRenderQueuePanel",
   "target": "panel",
   "op": "=",
@@ -4520,7 +4520,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 21281,
+  "line": 21407,
   "function": "pollVariantRun",
   "target": "if (panel) panel",
   "op": "=",
@@ -4530,7 +4530,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 21310,
+  "line": 21436,
   "function": "pollVariantRun",
   "target": "if (p) p",
   "op": "=",
@@ -4540,7 +4540,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 21342,
+  "line": 21468,
   "function": "stopVex",
   "target": "if (panel) panel",
   "op": "=",
@@ -4550,7 +4550,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 21455,
+  "line": 21581,
   "function": "renderVariantRun",
   "target": "if (wrapperEl) wrapperEl",
   "op": "=",
@@ -4560,7 +4560,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 21460,
+  "line": 21586,
   "function": "renderVariantRun",
   "target": "cell",
   "op": "=",
@@ -4570,7 +4570,7 @@
   "data_source_tags": ""
  },
  {
-  "line": 21472,
+  "line": 21598,
   "function": "renderVariantRun",
   "target": "panel",
   "op": "=",

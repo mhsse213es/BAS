@@ -95,6 +95,22 @@ func EnsureAppRole(ctx context.Context, pool *pgxpool.Pool, appPassword string) 
 		`REVOKE DELETE ON scenarios FROM ` + appRole,
 		`REVOKE UPDATE, DELETE ON content_validations FROM ` + appRole,
 		`REVOKE UPDATE, DELETE ON content_registry_state FROM ` + appRole,
+
+		// TCF Phase 2A identity (spec 2026-10-06 §12). Append-only evidence of
+		// identity decisions; candidates change only through Decide's columns;
+		// actor ids are immutable (no UPDATE on id).
+		`REVOKE UPDATE, DELETE ON actor_source_identities FROM ` + appRole,
+		`REVOKE UPDATE, DELETE ON actor_identity_overrides FROM ` + appRole,
+		`REVOKE UPDATE, DELETE ON campaign_actors FROM ` + appRole,
+		`REVOKE UPDATE, DELETE ON malware_actors FROM ` + appRole,
+		`REVOKE UPDATE, DELETE ON tool_actors FROM ` + appRole,
+		`REVOKE UPDATE, DELETE ON content_generation_owners FROM ` + appRole,
+		`REVOKE UPDATE, DELETE ON content_version_threats FROM ` + appRole,
+		`REVOKE DELETE ON threats FROM ` + appRole,
+		`REVOKE UPDATE, DELETE ON actor_resolution_candidates FROM ` + appRole,
+		`GRANT UPDATE (status, decided_actor_id, decided_by, decided_at, decision_reason) ON actor_resolution_candidates TO ` + appRole,
+		`REVOKE UPDATE, DELETE ON threat_actor_profiles FROM ` + appRole,
+		`GRANT UPDATE (name, aliases, sectors, regions, source, last_seen, confidence, canonical_group_id, techniques, updated_at) ON threat_actor_profiles TO ` + appRole,
 	}
 	for _, stmt := range grants {
 		if _, err := pool.Exec(ctx, stmt); err != nil {

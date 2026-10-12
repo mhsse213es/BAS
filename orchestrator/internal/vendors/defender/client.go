@@ -104,7 +104,9 @@ type graphAlert struct {
 	Title           string   `json:"title"`
 	Severity        string   `json:"severity"`
 	CreatedDateTime string   `json:"createdDateTime"`
-	Techniques      []string `json:"techniques"`
+	// The Graph alerts_v2 field is "mitreTechniques", not "techniques" --
+	// confirmed against Microsoft's published alert schema.
+	Techniques      []string `json:"mitreTechniques"`
 	Evidence        []struct {
 		DeviceDNSName string `json:"deviceDnsName"`
 	} `json:"evidence"`

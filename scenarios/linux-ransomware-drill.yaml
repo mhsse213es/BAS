@@ -1,0 +1,207 @@
+id: linux-ransomware-drill
+name: Linux Ransomware Drill — LVM Snapshot and File-Encryption Validation
+description: >
+  Linux analog of ransomware-drill.yaml's T1490/T1486 validation. MITRE's own
+  definitions of T1490 (Inhibit System Recovery) and T1486 (Data Encrypted for
+  Impact) explicitly cover Linux procedures -- LVM snapshot deletion and
+  shell-based file encryption -- so this reuses the same two techniques
+  rwevidence already evaluates, with Linux-native commands in place of
+  PowerShell/vssadmin. A distinct execution and evidence adapter, not a
+  cosmetic command-swap: Linux-specific safety constraints (lvremove's real
+  deletion semantics, bash file permissions) are validated on their own
+  terms, never assumed equivalent to the Windows steps' behavior just
+  because the TechniqueID matches.
+
+  STEPS:
+    1. Discovery          — LVM Snapshot Enumeration (T1490, safe, read-only)
+    2. Recovery Inhibition — LVM Snapshot Removal, lab-only, gated behind BAS_CONFIRM_LVM_DELETE=true
+    3. Encryption probe    — File Rename Probe .bas_locked (T1486, safe, reversible)
+    4. Encryption          — XOR Encryption Simulation, lab-only, isolated scratch dir
+
+  SAFETY: Step 2 deletes a real LVM snapshot only when explicitly confirmed
+  via env var, after verifying one exists -- same risk profile as
+  ransomware-drill.yaml's VSS deletion step, default-disabled. Steps 3-4 use
+  synthetic decoy data only, scoped to an isolated /tmp directory, with
+  forced cleanup and byte-for-byte XOR restoration (XOR is its own inverse).
+  All steps are [BAS-SIM] tagged. Linux only.
+author: Audspect Research
+executable: true
+local_check: false
+supported_os: [linux]
+tags:
+  - ransomware
+  - linux
+  - lvm
+  - t1486
+  - t1490
+  - mitre
+mitre_phases:
+  - discovery
+  - impact
+
+live_policy:
+  block_on_domain_controller: false
+  require_dc_reachable: false
+  max_spray_attempts: 0
+  spray_account_allowlist: []
+  execution_window: ""
+
+steps:
+
+  # ---------------------------------------------------------------------------
+  # Step 1 — Discovery: LVM Snapshot Enumeration (T1490)
+  # ---------------------------------------------------------------------------
+  - name: "LVM Snapshot Enumeration"
+    technique_id: T1490
+    action_key: enumerate
+    detection_profiles:
+      - linux_lvm_snapshot_inhibition
+    framework: custom
+    executor: bash
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Read-only enumeration of LVM snapshots via lvs. No snapshots deleted; no backup jobs modified."
+    reversible: true
+    telemetry:
+      - "auditd: execve of lvs"
+    detection:
+      - "SIEM: lvs invocation from a non-backup process  -  ransomware pre-deletion recon"
+      - "EDR: repeated lvs/lvdisplay calls preceding an lvremove  -  backup-destruction staging"
+    command: |
+      set +e
+      snapshot_count=$(lvs --noheadings -o lv_attr 2>/dev/null | awk '$1 ~ /^s/' | wc -l)
+      echo "EXEC: LVM snapshot enumeration - ${snapshot_count} snapshot(s) found. Ransomware operators enumerate these before deletion. No snapshots removed. [BAS-SIM]"
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Step 2 — Recovery Inhibition: LVM Snapshot Removal (T1490, lab-only)
+  # ---------------------------------------------------------------------------
+  - name: "LVM Snapshot Removal (lab  -  requires BAS_CONFIRM_LVM_DELETE=true)"
+    technique_id: T1490
+    action_key: lvm_delete
+    detection_profiles:
+      - linux_lvm_snapshot_inhibition
+    framework: custom
+    executor: bash
+    requires_priv: admin
+    timeout_sec: 60
+    fidelity: lab-only
+    production_safe: false
+    risk: high
+    blast_radius: "Deletes ONE oldest LVM snapshot. Requires explicit BAS_CONFIRM_LVM_DELETE=true env var and verifies a snapshot exists first. Default-disabled without the flag."
+    reversible: false
+    telemetry:
+      - "auditd: execve of lvremove with -f"
+    detection:
+      - "EDR: lvremove with -f argument  -  ransomware pre-encryption technique"
+      - "SIEM: LVM snapshot count decrease; alert if count drops to 0"
+    command: |
+      set +e
+      if [ "${BAS_CONFIRM_LVM_DELETE}" != "true" ]; then
+        echo "SKIP: BAS_CONFIRM_LVM_DELETE not set to 'true' - LVM snapshot deletion skipped (default-disabled per ransomware safety policy). Set env var explicitly in isolated lab to enable. [BAS-SIM]"
+        exit 0
+      fi
+      target=$(lvs --noheadings -o vg_name,lv_name,lv_time,lv_attr --sort lv_time 2>/dev/null | awk '$4 ~ /^s/' | head -n1)
+      if [ -z "${target}" ]; then
+        echo "SKIP: no LVM snapshots exist - nothing to delete. Create a snapshot first with: lvcreate -s. [BAS-SIM]"
+        exit 0
+      fi
+      vg=$(echo "${target}" | awk '{print $1}')
+      lv=$(echo "${target}" | awk '{print $2}')
+      lvremove -f "/dev/${vg}/${lv}" >/dev/null 2>&1
+      remaining=$(lvs --noheadings -o lv_attr 2>/dev/null | awk '$1 ~ /^s/' | wc -l)
+      echo "FAIL: LVM snapshot ${vg}/${lv} deleted - expect auditd lvremove event. ${remaining} snapshot(s) remaining. Create a new snapshot to restore recovery capability. [BAS-SIM]"
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Step 3 — Encryption probe: File Rename Probe (.bas_locked extension) (T1486)
+  # ---------------------------------------------------------------------------
+  - name: "File Rename Probe (.bas_locked extension)"
+    technique_id: T1486
+    detection_profiles:
+      - linux_ransomware_encryption
+    framework: custom
+    executor: bash
+    requires_priv: user
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Creates a single marker file in /tmp, renames to .bas_locked, renames back, then deletes. No real data files touched."
+    reversible: true
+    telemetry:
+      - "auditd: rename of bas_ransom_probe_<id>.txt in /tmp to .bas_locked"
+    detection:
+      - "EDR: file renamed to known ransomware extension (.bas_locked)  -  extension-change detection rule"
+      - "SIEM: rapid file rename to uncommon extension"
+    command: |
+      set +e
+      run_id="${BAS_RUN_ID:-$(od -An -N4 -tx1 /dev/urandom | tr -d ' ')}"
+      run_id="${run_id:0:8}"
+      orig="/tmp/bas_ransom_probe_${run_id}.txt"
+      locked="/tmp/bas_ransom_probe_${run_id}.bas_locked"
+      echo "BAS-SIM T1486 rename probe run-id=${run_id}" > "${orig}"
+      mv "${orig}" "${locked}" 2>/dev/null
+      if [ -f "${locked}" ]; then renamed=1; else renamed=0; fi
+      mv "${locked}" "${orig}" 2>/dev/null
+      rm -f "${orig}" "${locked}"
+      if [ "${renamed}" = "1" ]; then
+        echo "EXEC: file renamed to .bas_locked extension (run-id=${run_id})  -  expect auditd rename event. [BAS-SIM]"
+      else
+        echo "PASS: file rename blocked  -  a mandatory access control policy prevented the .bas_locked extension rename."
+      fi
+    cleanup: |
+      rm -f /tmp/bas_ransom_probe_*.txt /tmp/bas_ransom_probe_*.bas_locked
+
+  # ---------------------------------------------------------------------------
+  # Step 4 — Encryption: XOR Encryption Simulation (T1486, lab-only)
+  # ---------------------------------------------------------------------------
+  - name: "XOR Encryption Simulation (lab  -  isolated temp dir, forced cleanup)"
+    technique_id: T1486
+    detection_profiles:
+      - linux_ransomware_encryption
+    framework: custom
+    executor: bash
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: lab-only
+    production_safe: false
+    risk: high
+    blast_radius: "Creates isolated /tmp/bas_range_<id>/ with <=3 benign dummy files, XOR-encrypts in-place, drops marker ransom note, XOR-decrypts to restore, deletes entire directory. File cap + size cap + cleanup verification enforced."
+    reversible: true
+    telemetry:
+      - "auditd: file create/modify under /tmp/bas_range_<id>/"
+    detection:
+      - "EDR: rapid sequential file modification pattern across multiple files  -  encryption behaviour"
+      - "SIEM: high file-modify rate on /tmp path  -  ransomware staging signal"
+    command: |
+      set +e
+      run_id="${BAS_RUN_ID:-$(od -An -N4 -tx1 /dev/urandom | tr -d ' ')}"
+      run_id="${run_id:0:8}"
+      range_dir="/tmp/bas_range_${run_id}"
+      mkdir -p "${range_dir}"
+      for f in finance_q4.txt customer_export.txt swift_ops.txt; do
+        printf 'BAS-SIM DUMMY DATA run-id=%s file=%s' "${run_id}" "${f}" > "${range_dir}/${f}"
+      done
+      enc_count=0
+      for f in "${range_dir}"/*; do
+        python3 -c "data = open('${f}', 'rb').read(); xored = bytes(b ^ 0xAB for b in data); open('${f}.bas_locked', 'wb').write(xored)"
+        rm -f "${f}"
+        enc_count=$((enc_count + 1))
+      done
+      note_file="${range_dir}/README_RESTORE_BAS_SIM.txt"
+      echo "BAS-SIM RANSOM NOTE  -  run-id=${run_id}  -  THIS IS A CONTROLLED DRILL" > "${note_file}"
+      echo "EXEC: ${enc_count} file(s) XOR-encrypted in ${range_dir}  -  expect EDR encryption-behaviour alert. Restoring now. [BAS-SIM]"
+      for f in "${range_dir}"/*.bas_locked; do
+        python3 -c "data = open('${f}', 'rb').read(); plain = bytes(b ^ 0xAB for b in data); orig = '${f}'[:-len('.bas_locked')]; open(orig, 'wb').write(plain)"
+        rm -f "${f}"
+      done
+      rm -f "${note_file}"
+      rm -rf "${range_dir}"
+      if [ -d "${range_dir}" ]; then cleaned=0; else cleaned=1; fi
+      echo "CLEANUP: range directory removed=${cleaned}. No encrypted data remains. [BAS-SIM]"
+    cleanup: |
+      rm -rf /tmp/bas_range_*

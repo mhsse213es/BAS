@@ -185,5 +185,10 @@ func (h *Handler) GetContentMigrationReport(w http.ResponseWriter, r *http.Reque
 		jsonError(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	respond(w, map[string]any{"migrated": done, "inventory": inv, "blockedSchedules": blocked})
+	legacy, err := reg.LegacyIntelContent(r.Context())
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	respond(w, map[string]any{"migrated": done, "inventory": inv, "blockedSchedules": blocked, "legacyIntel": legacy})
 }

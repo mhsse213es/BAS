@@ -12,6 +12,7 @@ import { loadCalderaStatus, refreshDashboardCampaigns } from './compliance.js';
 import { loadCoverage, loadCoverageAnalytics, loadUnifiedTechniques } from './coverage.js';
 import { loadVerificationTab } from './detection-verification.js';
 import { loadEmTab } from './endpoint-mastery.js';
+import { loadADCoverage } from './ad-coverage.js';
 import { connectWS, loadDashboard, openCmdk } from './evidence.js';
 import { loadFindings, loadRemediations, loadSLAReport } from './findings.js';
 import { loadInitiatives } from './initiatives.js';
@@ -22,6 +23,8 @@ import { loadReports, loadRuns } from './reports.js';
 import { loadScheduledAssessments } from './scheduled.js';
 import { loadARTContentStatus, loadConnectorStatus, loadSimCoverage, loadTAXIIConnectors, loadThreatIntelConfig } from './threat-intel.js';
 import { loadVariantTab } from './variant-executor.js';
+import { displayOf, replaceClasses, setCssText, setDisplay } from '../core/inline-style.js';
+import { cssVars } from '../core/css-vars.js';
 export function __init_L5162() {
 (function() {
   var t = localStorage.getItem('audspect_theme') || 'dark';
@@ -43,7 +46,7 @@ export function toggleSidebarCollapsed() {
   try { localStorage.setItem('bas_sidebar_collapsed', collapsed ? '1' : '0'); } catch (e) {}
   document.getElementById('sidebar-collapse-btn').title = collapsed ? 'Expand sidebar' : 'Collapse sidebar';
 }
-var TAB_TITLES = { dashboard:'Dashboard', agents:'Agents', scenarios:'Scenarios', runs:'Live Runs', 'scheduled-assessments':'Scheduled Assessments', initiatives:'Initiatives', campaigns:'Campaigns', coverage:'ATT&CK Coverage', findings:'Findings', remediation:'Remediation', reports:'Reports', verification:'Detection Verification', users:'Users', compliance:'Compliance', settings:'Settings', variants:'Variant Executor', em:'Endpoint Mastery', exposure:'Exposure Explorer', recommendations:'Recommendations', exercises:'Exercises', 'attack-coverage':'Technique Coverage', 'threat-priority':'Threat Prioritization', iocs:'IOC Registry', profile:'My Profile', 'sla-report':'SLA Compliance' };
+var TAB_TITLES = { dashboard:'Dashboard', agents:'Agents', scenarios:'Scenarios', runs:'Live Runs', 'scheduled-assessments':'Scheduled Assessments', initiatives:'Initiatives', campaigns:'Campaigns', coverage:'ATT&CK Coverage', findings:'Findings', remediation:'Remediation', reports:'Reports', verification:'Detection Verification', users:'Users', compliance:'Compliance', settings:'Settings', variants:'Variant Executor', em:'Endpoint Mastery', 'ad-coverage':'AD Coverage', exposure:'Exposure Explorer', recommendations:'Recommendations', exercises:'Exercises', 'attack-coverage':'Technique Coverage', 'threat-priority':'Threat Prioritization', iocs:'IOC Registry', profile:'My Profile', 'sla-report':'SLA Compliance' };
 export var STRIPE_COLORS = ['#2f81f7','#da3633','#d29922','#e0609e','#8957e5','#2fd8c3'];
 
 var TOKEN    = ''; // kept in memory only — never persisted to localStorage
@@ -119,22 +122,22 @@ function initLoginScreen() {
 }
 
 function renderLicenseLockedScreen(info) {
-  document.getElementById('login-screen').style.display = 'none';
-  document.getElementById('app').style.display = 'none';
+  setDisplay(document.getElementById('login-screen'), 'none');
+  setDisplay(document.getElementById('app'), 'none');
   var el = document.createElement('div');
   el.id = 'license-locked-screen';
-  el.style.cssText = 'position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:var(--bg,#0b0e14);z-index:9999;padding:2rem';
+  setCssText(el, 'position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:var(--bg,#0b0e14);z-index:9999;padding:2rem');
   el.innerHTML =
-    '<div style="max-width:520px;text-align:center;color:var(--text,#e6e6e6)">' +
-      '<div style="font-size:2.5rem;margin-bottom:1rem">&#x1F512;</div>' +
-      '<h1 style="font-size:1.4rem;margin-bottom:0.75rem">BAS LICENSE EXPIRED</h1>' +
-      '<p style="color:var(--muted,#9aa9bc);line-height:1.6;margin-bottom:1rem">This Audspect BAS Server is currently unavailable because its license and grace period have expired.</p>' +
-      '<p style="color:var(--muted,#9aa9bc);line-height:1.6;margin-bottom:1.5rem">Please contact your licensing administrator to renew the license.</p>' +
-      '<div style="font-size:0.85rem;color:var(--muted,#9aa9bc);margin-bottom:1.5rem">' +
+    '<div class="g1-s-0461ffe3">' +
+      '<div class="g1-s-bb46f5f1">&#x1F512;</div>' +
+      '<h1 class="g1-s-e34130f8">BAS LICENSE EXPIRED</h1>' +
+      '<p class="g1-s-87635de2">This Audspect BAS Server is currently unavailable because its license and grace period have expired.</p>' +
+      '<p class="g1-s-a7798008">Please contact your licensing administrator to renew the license.</p>' +
+      '<div class="g1-s-5ef62bec">' +
         'License Expiry: ' + x(info.expiresAt) + '<br>' +
         'Access Disabled On: ' + x(info.lockoutAt) +
       '</div>' +
-      '<a href="mailto:support@audspect.com" style="display:inline-block;padding:0.6rem 1.4rem;background:var(--danger,#da3633);color:#fff;border-radius:6px;text-decoration:none;font-weight:600">Contact Licensing Support</a>' +
+      '<a href="mailto:support@audspect.com" class="g1-display-inline-block g1-s-23e8b6cb">Contact Licensing Support</a>' +
     '</div>';
   document.body.appendChild(el);
 }
@@ -147,7 +150,7 @@ function _licenseBannerHTML(info) {
     '<strong>Grace Period Remaining: ' + info.daysRemaining + ' ' + dayWord + '</strong><br>' +
     'The BAS platform will become inaccessible after the grace period expires. Please contact your Audspect administrator or licensing representative to renew your license.' + tomorrowNote + '<br>' +
     'License Expiry: ' + x(info.expiresAt) + ' &middot; Access Disabled On: ' + x(info.lockoutAt) + ' ' +
-    '<a href="mailto:support@audspect.com" style="color:inherit;text-decoration:underline">[Contact Licensing Support]</a>';
+    '<a href="mailto:support@audspect.com" class="g1-s-cfb29488">[Contact Licensing Support]</a>';
 }
 
 function _syncLicenseBannerHeight() {
@@ -189,11 +192,10 @@ function renderLicenseGraceBanner(info) {
   // them, so opening any wizard/drawer left its top content painted over
   // by this banner instead of the banner yielding to whatever the
   // operator actually opened.
-  el.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:90;padding:0.75rem 2.5rem;background:var(--warning,#d29922);color:#1a1200;font-size:0.85rem;line-height:1.5;text-align:center';
+  setCssText(el, 'position:fixed;top:0;left:0;right:0;z-index:90;padding:0.75rem 2.5rem;background:var(--warning,#d29922);color:#1a1200;font-size:0.85rem;line-height:1.5;text-align:center');
   el.innerHTML = _licenseBannerHTML(info) +
     '<button' + on('click', '_dismissLicenseGraceBanner') + ' aria-label="Dismiss" title="Dismiss" ' +
-      'style="position:absolute;top:0.5rem;right:0.6rem;width:24px;height:24px;display:flex;align-items:center;justify-content:center;' +
-      'background:transparent;border:none;color:inherit;font-size:1.1rem;line-height:1;cursor:pointer;opacity:0.75" ' +
+      'class="g1-display-flex g1-s-94d252ab" ' +
       on('mouseover', 'licenseBannerDismissHoverOn') + on('mouseout', 'licenseBannerDismissHoverOff') + '>&#10005;</button>';
   document.body.insertBefore(el, document.body.firstChild);
   _syncLicenseBannerHeight();
@@ -206,11 +208,11 @@ function maybeShowLicenseGraceModal(info) {
   sessionStorage.setItem('bas_license_grace_modal_shown', '1');
   var overlay = document.createElement('div');
   overlay.id = 'license-grace-modal-overlay';
-  overlay.style.cssText = 'position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.6);z-index:10000';
+  setCssText(overlay, 'position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.6);z-index:10000');
   overlay.innerHTML =
-    '<div style="max-width:480px;background:var(--surface,#152338);border:1px solid var(--warning,#d29922);border-radius:8px;padding:1.5rem;color:var(--text,#e6e6e6)">' +
+    '<div class="g1-s-fd040b75">' +
       _licenseBannerHTML(info) +
-      '<div style="text-align:right;margin-top:1rem"><button id="license-grace-modal-dismiss" style="padding:0.4rem 1rem;border-radius:6px;border:1px solid var(--border,#22324a);background:transparent;color:inherit;cursor:pointer">Dismiss</button></div>' +
+      '<div class="g1-s-39cd98a9"><button id="license-grace-modal-dismiss" class="g1-s-08ac4010">Dismiss</button></div>' +
     '</div>';
   document.body.appendChild(overlay);
   document.getElementById('license-grace-modal-dismiss').addEventListener('click', function() {
@@ -237,7 +239,7 @@ export function doLogin() {
       state._pwForced = true;
       document.getElementById('changepw-title').textContent = 'Set New Password';
       document.getElementById('changepw-sub').textContent = 'Your account requires a password change before continuing.';
-      document.getElementById('cpw-cancel-btn').style.display = 'none';
+      setDisplay(document.getElementById('cpw-cancel-btn'), 'none');
       document.getElementById('changepw-overlay').classList.add('open');
     }
   })
@@ -249,35 +251,35 @@ export function doLogout() {
   localStorage.removeItem('bas_role');
   if (state.socket) state.socket.close();
   fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' }).catch(function(){});
-  document.getElementById('app').style.display = 'none';
-  document.getElementById('login-screen').style.display = 'flex';
+  setDisplay(document.getElementById('app'), 'none');
+  setDisplay(document.getElementById('login-screen'), 'flex');
   document.getElementById('inp-pass').value = '';
 }
 
 function bootApp() {
   if (LICENSE_INFO && LICENSE_INFO.state === 'grace') renderLicenseGraceBanner(LICENSE_INFO);
-  document.getElementById('login-screen').style.display = 'none';
-  document.getElementById('app').style.display = 'flex';
+  setDisplay(document.getElementById('login-screen'), 'none');
+  setDisplay(document.getElementById('app'), 'flex');
   document.getElementById('role-badge').textContent = ROLE;
-  document.getElementById('nav-settings').style.display = '';
+  setDisplay(document.getElementById('nav-settings'), '');
   loadCurrentUser();
   // Integrations nav — admin only
   var navInt = document.getElementById('nav-integrations');
-  if (navInt) navInt.style.display = ROLE === 'admin' ? '' : 'none';
+  if (navInt) setDisplay(navInt, ROLE === 'admin' ? '' : 'none');
   // Scheduled Assessments nav — Analyst+Admin (same tier the API itself requires)
   var navSched = document.getElementById('nav-scheduled-assessments');
-  if (navSched) navSched.style.display = (ROLE === 'admin' || ROLE === 'analyst') ? '' : 'none';
+  if (navSched) setDisplay(navSched, (ROLE === 'admin' || ROLE === 'analyst') ? '' : 'none');
   if (ROLE === 'admin') {
     document.querySelectorAll('.settings-nav a').forEach(function(el) {
-      if (el.getAttribute('data-set') !== 'theme') el.style.display = '';
+      if (el.getAttribute('data-set') !== 'theme') setDisplay(el, '');
     });
-    document.getElementById('sim-cov-card').style.display = '';
+    setDisplay(document.getElementById('sim-cov-card'), '');
   } else {
     document.querySelectorAll('.settings-nav a').forEach(function(el) {
-      if (el.getAttribute('data-set') !== 'theme') el.style.display = 'none';
+      if (el.getAttribute('data-set') !== 'theme') setDisplay(el, 'none');
     });
-    document.getElementById('sim-cov-card').style.display = 'none';
-    document.getElementById('sim-cov-detail').style.display = 'none';
+    setDisplay(document.getElementById('sim-cov-card'), 'none');
+    setDisplay(document.getElementById('sim-cov-detail'), 'none');
     if (state.SETTINGS_SECTION !== 'theme') {
       state.SETTINGS_SECTION = 'theme';
     }
@@ -285,12 +287,12 @@ function bootApp() {
   selectTheme(localStorage.getItem('audspect_theme') || 'dark');
   // Scenario authoring is Analyst+Admin only — hide builder entry points for viewers.
   if (ROLE !== 'admin' && ROLE !== 'analyst') {
-    var nb = document.getElementById('sc-new-btn');     if (nb) nb.style.display = 'none';
-    var ub = document.getElementById('sc-upload-btn');  if (ub) ub.style.display = 'none';
+    var nb = document.getElementById('sc-new-btn');     if (nb) setDisplay(nb, 'none');
+    var ub = document.getElementById('sc-upload-btn');  if (ub) setDisplay(ub, 'none');
   }
   // Remediation bulk ticket actions — analyst+
   var remTicketActions = document.getElementById('rem-ticket-actions');
-  if (remTicketActions) remTicketActions.style.display = (ROLE === 'admin' || ROLE === 'analyst') ? 'flex' : 'none';
+  if (remTicketActions) setDisplay(remTicketActions, (ROLE === 'admin' || ROLE === 'analyst') ? 'flex' : 'none');
   connectWS();
   loadAgents();
   loadAgentGroupTree();
@@ -311,8 +313,8 @@ function bootApp() {
     try { var s = JSON.parse(localStorage.getItem('_apCurrentJob') || 'null'); return !!(s && s.jobId); } catch(e) { return false; }
   })();
   showTab(hasPendingJob ? 'attackpath' : lastTab);
-  if (!window._cmdkBound) {
-    window._cmdkBound = true;
+  if (!state._cmdkBound) {
+    state._cmdkBound = true;
     document.addEventListener('keydown', function(e) {
       if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')) { e.preventDefault(); openCmdk(); }
     });
@@ -390,11 +392,11 @@ export function goToProfile() {
     roleChip.textContent = u.role || '—';
     var statusBadge = document.getElementById('profile-status-badge');
     statusBadge.textContent = u.isActive ? 'Active' : 'Inactive';
-    statusBadge.className = 'sbadge ' + (u.isActive ? 's-active' : 's-retired');
+    replaceClasses(statusBadge, 'sbadge ' + (u.isActive ? 's-active' : 's-retired'));
     document.getElementById('profile-created').textContent = u.createdAt ? new Date(u.createdAt).toLocaleDateString() : '—';
     document.getElementById('profile-last-login').textContent = u.lastLogin ? new Date(u.lastLogin).toLocaleString() : 'Never';
     document.getElementById('profile-auth-source').textContent = u.authSource === 'sso' ? 'Single sign-on (SSO)' : 'Username & password';
-    document.getElementById('profile-admin-shortcut').style.display = u.role === 'admin' ? '' : 'none';
+    setDisplay(document.getElementById('profile-admin-shortcut'), u.role === 'admin' ? '' : 'none');
   }).catch(function() {
     document.getElementById('profile-username').textContent = 'Failed to load profile';
   });
@@ -403,7 +405,7 @@ export function goToProfile() {
     if (!d || !Array.isArray(d.permissions)) { el.textContent = 'Unable to load permissions.'; return; }
     if (!d.permissions.length) { el.textContent = 'No permissions granted.'; return; }
     el.innerHTML = d.permissions.slice().sort().map(function(p) {
-      return '<span class="tag" style="display:inline-block;margin:0 0.3rem 0.3rem 0">' + x(p) + '</span>';
+      return '<span class="tag g1-display-inline-block g1-s-cbab8d6c">' + x(p) + '</span>';
     }).join('');
   }).catch(function() {
     document.getElementById('profile-permissions').textContent = 'Unable to load permissions.';
@@ -417,9 +419,9 @@ export function doLogoutFromMenu() { closeUserMenu(); doLogout(); }
 // data loaders — so callers like openCampaignDetail can switch to a tab and then
 // render their own sub-view without the tab's loader resetting it.
 export function activateTab(name) {
-  ['dashboard','agents','scenarios','runs','scheduled-assessments','initiatives','campaigns','coverage','findings','remediation','reports','verification','compliance','settings','variants','em','attackpath','exposure','recommendations','integrations','exercises','attack-coverage','threat-priority','iocs','profile','sla-report'].forEach(function(t) {
+  ['dashboard','agents','scenarios','runs','scheduled-assessments','initiatives','campaigns','coverage','findings','remediation','reports','verification','compliance','settings','variants','em','ad-coverage','attackpath','exposure','recommendations','integrations','exercises','attack-coverage','threat-priority','iocs','profile','sla-report'].forEach(function(t) {
     var el = document.getElementById('tab-' + t);
-    if (el) el.style.display = t === name ? '' : 'none';
+    if (el) setDisplay(el, t === name ? '' : 'none');
     var nav = document.querySelector('[data-tab="' + t + '"]');
     if (nav) nav.classList.toggle('active', t === name);
   });
@@ -441,8 +443,8 @@ function resolveDashView() {
 
 export function setDashView(view) {
   DASH_VIEW = view;
-  document.getElementById('dash-view-operational').style.display = view === 'operational' ? '' : 'none';
-  document.getElementById('dash-view-executive').style.display = view === 'executive' ? '' : 'none';
+  setDisplay(document.getElementById('dash-view-operational'), view === 'operational' ? '' : 'none');
+  setDisplay(document.getElementById('dash-view-executive'), view === 'executive' ? '' : 'none');
   document.querySelectorAll('.dash-view-btn').forEach(function(b) {
     b.classList.toggle('active', b.getAttribute('data-view') === view);
   });
@@ -451,9 +453,9 @@ export function setDashView(view) {
   else { stopDashCampPoll(); loadExecDashboard(); }
 }
 export function setAgentsView(view) {
-  document.getElementById('agents-view-systemtree').style.display = view === 'systemtree' ? '' : 'none';
-  document.getElementById('agents-view-operational').style.display = view === 'operational' ? '' : 'none';
-  document.getElementById('agents-view-risk').style.display = view === 'risk' ? '' : 'none';
+  setDisplay(document.getElementById('agents-view-systemtree'), view === 'systemtree' ? '' : 'none');
+  setDisplay(document.getElementById('agents-view-operational'), view === 'operational' ? '' : 'none');
+  setDisplay(document.getElementById('agents-view-risk'), view === 'risk' ? '' : 'none');
   document.querySelectorAll('[data-agents-view]').forEach(function(b) {
     b.classList.toggle('active', b.getAttribute('data-agents-view') === view);
   });
@@ -497,7 +499,7 @@ export function renderAgentRiskSummary(rows) {
     return '<tr>' +
       '<td>' + x(a.hostname || a.agentId) + '</td>' +
       (a.measurable
-        ? '<td style="color:' + _riskScoreColor(a.healthScore) + ';font-weight:700">' + a.healthScore + '</td>'
+        ? '<td' + cssVars(['g1-v-7d75dfc9', _riskScoreColor(a.healthScore)]) + ' class="g1-s-c6fa01b3">' + a.healthScore + '</td>'
         : '<td class="u-muted" title="Nothing collected for this endpoint yet — an absent score is not a safe score">— no data</td>') +
       '<td>' + (a.criticalityRisk || 0) + '</td>' +
       '<td>' + _riskTrendBadge(a.trend) + '</td>' +
@@ -516,7 +518,7 @@ function startDashCampPoll() {
   clearInterval(state._dashCampPoll);
   state._dashCampPoll = setInterval(function() {
     var dash = document.getElementById('tab-dashboard');
-    if (dash && dash.style.display !== 'none' && DASH_VIEW === 'operational') {
+    if (dash && displayOf(dash) !== 'none' && DASH_VIEW === 'operational') {
       refreshDashboardCampaigns();
     } else {
       clearInterval(state._dashCampPoll);
@@ -548,6 +550,7 @@ export function showTab(name) {
   if (name === 'exercises') loadExercisesTab();
   if (name === 'variants') loadVariantTab();
   if (name === 'em') loadEmTab();
+  if (name === 'ad-coverage') loadADCoverage();
   if (name === 'scenarios') { state.scenarioView = 'landing'; closeScenarioOverlay(); if (state.scenarios.length) renderScenarios(); }
   if (name === 'dashboard') {
     setDashView(resolveDashView());
@@ -577,7 +580,7 @@ export function showTamperBanner(data) {
   msg.textContent = '⚠ Unexpected file ' + evt + ' detected: ' +
     (_tamperPaths.length === 1 ? _tamperPaths[0] : _tamperPaths.length + ' protected files') +
     ' — Run dispatch is suspended. Acknowledge to resume.';
-  banner.style.display = 'flex';
+  setDisplay(banner, 'flex');
   // Shift the main content down so the fixed banner doesn't cover it.
   document.body.style.paddingTop = '46px';
 }
@@ -586,7 +589,7 @@ export function ackAllTamperEvents() {
     .then(function() {
       _tamperPaths = [];
       var banner = document.getElementById('tamper-banner');
-      if (banner) banner.style.display = 'none';
+      if (banner) setDisplay(banner, 'none');
       document.body.style.paddingTop = '';
     })
     .catch(function() { alert('Failed to acknowledge tamper events. Check server logs.'); });

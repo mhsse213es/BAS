@@ -13,6 +13,7 @@
     "@playwright/test": "1.63.0",
     "esbuild": "0.28.2",
     "eslint": "10.12.0",
+    "espree": "11.2.0",
     "jsdom": "30.1.2"
   }
 }

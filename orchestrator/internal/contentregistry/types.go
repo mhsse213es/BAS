@@ -65,6 +65,10 @@ var (
 	ErrOriginCollision = errors.New("content id already registered with a different origin")
 	ErrSourceCollision = errors.New("content id already registered from the other local intake source (custom vs intel)")
 	ErrVersionNotFound = errors.New("content version not found")
+	// ErrThreatCollision: the threat-derived intel content id is already
+	// owned by a different threat (a hash collision). Generation fails
+	// closed (TCF Phase 2 spec §4.3).
+	ErrThreatCollision = errors.New("intel content id is owned by a different threat")
 )
 
 // ErrNotExecutable is the runtime gate's denial. Its Error() text is what

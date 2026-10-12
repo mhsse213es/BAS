@@ -23,6 +23,51 @@ func trellixDetectionsPage(dets ...trellixDetection) string {
 	return string(b)
 }
 
+// The confirmed field name for this exact endpoint's detection timestamp
+// couldn't be pinned down from public docs -- different Trellix API
+// surfaces documented elsewhere use detectionDate (alert-type objects) or
+// firstDetected (host-type objects), neither of which is detectedAt. This
+// hand-writes the JSON body directly, rather than through
+// trellixDetectionsPage (which marshals the same struct this test is
+// checking, so it could never catch a real field-name mismatch) -- the
+// same blind spot that hid the Defender XDR "techniques"/"mitreTechniques"
+// bug.
+func TestTrellixQueryPage_AcceptsAlternateTimestampFieldNames(t *testing.T) {
+	when := time.Date(2026, 8, 24, 9, 30, 0, 0, time.UTC)
+	body := `{"data":[` +
+		`{"id":"det-detectiondate","hostName":"HOST1","detectionDate":"` + when.Format(time.RFC3339) + `"},` +
+		`{"id":"det-firstdetected","hostName":"HOST1","firstDetected":"` + when.Add(time.Minute).Format(time.RFC3339) + `"},` +
+		`{"id":"det-detectedat","hostName":"HOST1","detectedAt":"` + when.Add(2*time.Minute).Format(time.RFC3339) + `"}` +
+		`]}`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(body))
+	}))
+	defer srv.Close()
+
+	c := newTestTrellixConnector(t, srv.URL)
+	page, err := c.queryPage(context.Background(), when.Add(-time.Hour), 0)
+	if err != nil {
+		t.Fatalf("queryPage: %v", err)
+	}
+	if len(page) != 3 {
+		t.Fatalf("page = %+v, want 3 detections", page)
+	}
+	want := map[string]time.Time{
+		"det-detectiondate": when,
+		"det-firstdetected": when.Add(time.Minute),
+		"det-detectedat":    when.Add(2 * time.Minute),
+	}
+	for _, d := range page {
+		w, ok := want[d.ID]
+		if !ok {
+			t.Fatalf("unexpected detection id %q", d.ID)
+		}
+		if !d.DetectedAt.Equal(w) {
+			t.Errorf("%s: DetectedAt = %v, want %v", d.ID, d.DetectedAt, w)
+		}
+	}
+}
+
 func TestTrellixQueryPage_SetsAuthorizationSinceAndLimit(t *testing.T) {
 	var gotAuth, gotSince, gotLimit, gotOffset string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

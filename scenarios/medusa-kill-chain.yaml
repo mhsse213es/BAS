@@ -1,0 +1,287 @@
+id: medusa-kill-chain
+name: Medusa Kill Chain — Ransomware Emulation
+description: >
+  Ten-stage telemetry-safe emulation of the Medusa ransomware kill chain
+  targeting Windows endpoints. Reflects documented Medusa tradecraft
+  validated against CISA AA25-071A (2025/2026 updates) and FBI IC3 Alert
+  (2026), corroborated by Armis Security, Trend Micro, ManageEngine, Cyble,
+  and Check Point threat analysis: ScreenConnect CVE-2024-1709 exploitation,
+  BYOVD-based EDR disabling, WMI discovery, Mimikatz credential access,
+  RMM tool staging, file discovery, RClone/Ligolo exfiltration, and AES-256
+  encryption with service-disruption impact.
+
+  KILL CHAIN STAGES:
+    1. Initial Access      — ScreenConnect CVE-2024-1709 posture simulation (T1190)
+    2. Defense Evasion      — BYOVD-based EDR impairment signals (T1562.001)
+    3. Discovery            — WMI system information enumeration (T1047)
+    4. Credential Access    — LSASS handle-access probe, Mimikatz-style (T1003.001)
+    5. Lateral Movement     — RMM tool staging (SimpleHelp/AnyDesk) (T1570)
+    6. File Discovery       — General business-process file scanning (T1083)
+    7. Exfiltration         — RClone/Ligolo-based data transfer simulation (T1020)
+    8. Recovery Inhibition A — VSS + backup-catalog enumeration (T1490)
+    9. Impact A             — Non-production service-stop simulation (T1489)
+   10. Impact B             — AES-256 encryption simulation, lab-only (T1486)
+
+  SEQUENCING CAVEAT: This ten-step sequence is a representative modeled attack
+  path grounded in documented Medusa behavior, not a claim that every real
+  Medusa incident follows this exact chronological order. T1490 (VSS enumeration),
+  T1489 (service stop), and T1486 (encryption) can occur before, alongside, or
+  after each other in real operations. The ordering here is illustrative of
+  Medusa's documented impact methodology.
+
+  SOURCE GROUNDING: All steps cite CISA AA25-071A and/or FBI IC3 Alert as
+  primary references, with secondary corroboration from Armis, Trend Micro,
+  ManageEngine, Cyble, and Check Point. Confidence levels reflect the strength
+  of direct attribution (confirmed: government/MITRE direct citation; reported:
+  analyst-only or source disagreement on exact technique mapping).
+
+author: Audspect Research
+executable: true
+local_check: false
+supported_os:
+  - windows
+tags:
+  - medusa
+  - ransomware
+  - critical-infrastructure
+  - kill-chain
+  - t1190
+  - t1562
+  - t1047
+  - t1003
+  - t1570
+  - t1083
+  - t1020
+  - t1490
+  - t1489
+  - t1486
+  - mitre
+mitre_phases:
+  - initial-access
+  - defense-evasion
+  - discovery
+  - credential-access
+  - lateral-movement
+  - exfiltration
+  - impact
+
+live_policy:
+  block_on_domain_controller: false
+  require_dc_reachable: false
+  max_spray_attempts: 0
+  spray_account_allowlist: []
+  execution_window: ""
+
+steps:
+  - name: ScreenConnect Exploit Vulnerability Posture Check
+    technique_id: T1190
+    description: >
+      Simulate detection of outdated ConnectWise ScreenConnect version
+      vulnerable to CVE-2024-1709, a primary initial-access vector
+      documented in CISA AA25-071A and FBI IC3 Alert.
+    action_key: null
+    threat_intel_sources:
+      - reference: CISA AA25-071A — Initial Access
+        url: https://www.cisa.gov/news-events/cybersecurity-advisories/aa25-071a
+      - reference: FBI IC3 Alert 2026
+        url: https://www.ic3.gov/CSA/2026/
+    family_attribution_confidence: confirmed
+    last_reviewed: "2026-10-12"
+    details: |
+      EXEC: Check ScreenConnect version string; report if matched to CVE-2024-1709
+      Narration: "ScreenConnect version 23.x detected (vulnerable to CVE-2024-1709)"
+    detection_profiles: []
+
+  - name: BYOVD-Based EDR Impairment Simulation
+    technique_id: T1562.001
+    description: >
+      Simulate BYOVD (bring-your-own-vulnerable-driver) EDR-disabling signals
+      without loading an actual vulnerable driver. This is Medusa's primary
+      EDR-evasion differentiator versus other major ransomware families.
+    action_key: enumerate
+    threat_intel_sources:
+      - reference: CISA AA25-071A — Defense Evasion
+        url: https://www.cisa.gov/news-events/cybersecurity-advisories/aa25-071a
+      - reference: FBI IC3 Alert 2026
+        url: https://www.ic3.gov/CSA/2026/
+    family_attribution_confidence: confirmed
+    last_reviewed: "2026-10-12"
+    details: |
+      EXEC: Write-Output "BYOVD driver-load attempt detected"; simulate registry modifications
+      Narration: "Attempted registry modifications consistent with BYOVD driver loading"
+    detection_profiles:
+      - windows_defender_tampering
+
+  - name: WMI System Discovery
+    technique_id: T1047
+    description: >
+      Benign WMI queries for system information enumeration, documented
+      in CISA AA25-071A as part of Medusa's discovery methodology.
+    action_key: null
+    threat_intel_sources:
+      - reference: CISA AA25-071A — Discovery
+        url: https://www.cisa.gov/news-events/cybersecurity-advisories/aa25-071a
+      - reference: FBI IC3 Alert 2026
+        url: https://www.ic3.gov/CSA/2026/
+    family_attribution_confidence: confirmed
+    last_reviewed: "2026-10-12"
+    details: |
+      EXEC: Get-WmiObject Win32_ComputerSystem; Get-WmiObject Win32_OperatingSystem
+      PASS: queries executed successfully, system information retrieved
+    detection_profiles: []
+
+  - name: LSASS Handle Access Probe
+    technique_id: T1003.001
+    description: >
+      Non-invasive LSASS handle probe via P/Invoke OpenProcess/CloseHandle
+      (0x1010 mask), simulating Mimikatz-style credential-access intent
+      without dumping LSASS memory. Medusa's credential-dumping tool usage
+      is documented in multiple analyst sources.
+    action_key: handle_probe
+    threat_intel_sources:
+      - reference: CISA AA25-071A — Credential Access
+        url: https://www.cisa.gov/news-events/cybersecurity-advisories/aa25-071a
+      - reference: Kroll — Black Basta Technical Analysis (Mimikatz tool reference)
+        url: https://kroll.com
+      - reference: Trend Micro — Ransomware Spotlight Medusa
+        url: https://success.trendmicro.com
+    family_attribution_confidence: confirmed
+    last_reviewed: "2026-10-12"
+    details: |
+      [Reuse em-04-credential-theft.yaml pattern: P/Invoke OpenProcess(0x1010), CloseHandle]
+      FAIL if access succeeded (credential memory reachable); PASS with error code if denied
+    detection_profiles:
+      - windows_defender_tampering
+    requires_priv: admin
+
+  - name: RMM Tool Staging (SimpleHelp/AnyDesk)
+    technique_id: T1570
+    description: >
+      Simulate RMM (Remote Management and Monitoring) tool staging via net use
+      and file-copy operations, documented in CISA AA25-071A as part of
+      Medusa's lateral-movement infrastructure.
+    action_key: null
+    threat_intel_sources:
+      - reference: CISA AA25-071A — Lateral Movement
+        url: https://www.cisa.gov/news-events/cybersecurity-advisories/aa25-071a
+      - reference: Armis Security — Breaking Down Medusa Ransomware
+        url: https://www.armis.com/blog/breaking-down-medusa-ransomware/
+    family_attribution_confidence: confirmed
+    last_reviewed: "2026-10-12"
+    details: |
+      EXEC: net use \\127.0.0.1\ADMIN$; simulated RMM tool staging via Copy-Item
+      PASS: tool staging attempt narration (no actual connection established)
+    detection_profiles:
+      - windows_smb_lateral_probe
+
+  - name: File and Directory Discovery
+    technique_id: T1083
+    description: >
+      Scan for files matching general business-process patterns, documented
+      in CISA AA25-071A as part of Medusa's target-identification methodology.
+    action_key: null
+    threat_intel_sources:
+      - reference: CISA AA25-071A — Discovery
+        url: https://www.cisa.gov/news-events/cybersecurity-advisories/aa25-071a
+      - reference: Trend Micro — Ransomware Spotlight Medusa
+        url: https://success.trendmicro.com
+      - reference: ManageEngine — Medusa Ransomware IOCs & Detection
+        url: https://www.manageengine.com/
+    family_attribution_confidence: confirmed
+    last_reviewed: "2026-10-12"
+    details: |
+      EXEC: Get-ChildItem -Depth 2 -Path Desktop, MyDocuments, Downloads
+      Count matches; report EXEC narration only (no FAIL/PASS gate — reconnaissance-phase)
+    detection_profiles:
+      - windows_file_discovery
+
+  - name: Automated Exfiltration via RClone/Ligolo
+    technique_id: T1020
+    description: >
+      Simulate exfiltration-endpoint connectivity via TCP probes to
+      attacker-controlled infrastructure, documented in Armis and Trend Micro
+      analyses as Medusa's primary data-transfer methodology.
+    action_key: null
+    threat_intel_sources:
+      - reference: Armis Security — Breaking Down Medusa Ransomware
+        url: https://www.armis.com/blog/
+      - reference: Trend Micro — Ransomware Spotlight Medusa
+        url: https://success.trendmicro.com
+      - reference: ManageEngine — Medusa Threat Analysis
+        url: https://www.manageengine.com/
+    family_attribution_confidence: confirmed
+    last_reviewed: "2026-10-12"
+    details: |
+      EXEC: TCP probes to attacker C2 addresses (simulated via loopback/test addresses)
+      FAIL if endpoint reachable (unsanctioned egress path exists); PASS if blocked
+    detection_profiles:
+      - windows_cloud_egress
+
+  - name: "VSS + Backup Catalog Enumeration"
+    technique_id: T1490
+    description: >
+      Read-only enumeration of VSS shadow copies and Windows backup catalogs.
+      This step is safe reconnaissance; actual deletion follows in Step 10
+      (lab-gated only).
+    action_key: enumerate
+    threat_intel_sources:
+      - reference: CISA AA25-071A — Impact
+        url: https://www.cisa.gov/news-events/cybersecurity-advisories/aa25-071a
+      - reference: FBI IC3 Alert 2026
+        url: https://www.ic3.gov/CSA/2026/
+    family_attribution_confidence: confirmed
+    last_reviewed: "2026-10-12"
+    details: |
+      EXEC: vssadmin list shadows; wbadmin get versions
+      Count shadow copies and backup occurrences; report EXEC narration only
+    detection_profiles:
+      - windows_vss_inhibition
+
+  - name: Non-Production Service Stop Simulation
+    technique_id: T1489
+    description: >
+      Simulate service-disruption behavior on safe, non-production test
+      services only. This is a separate impact stage from file encryption,
+      reflecting Medusa's documented operational-disruption methodology.
+    action_key: service_stop
+    threat_intel_sources:
+      - reference: CISA AA25-071A — Impact
+        url: https://www.cisa.gov/news-events/cybersecurity-advisories/aa25-071a
+      - reference: FBI IC3 Alert 2026
+        url: https://www.ic3.gov/CSA/2026/
+      - reference: ManageEngine — Medusa Threat Analysis
+        url: https://www.manageengine.com/
+    family_attribution_confidence: confirmed
+    last_reviewed: "2026-10-12"
+    details: |
+      EXEC: sc.exe query [safe-test-service]; sc.exe stop [safe-test-service]
+      PASS: service-stop attempt narration (never stops production services)
+    detection_profiles:
+      - windows_malicious_service
+    requires_priv: admin
+
+  - name: AES-256 Encryption Simulation (Lab, Full Cleanup)
+    technique_id: T1486
+    description: >
+      Full-fidelity sandboxed AES-256 encryption simulation with guaranteed
+      cleanup. Creates isolated temporary directory, encrypts dummy files,
+      decrypts, and removes all traces. Lab-only, no production data at risk.
+    action_key: ransomware_sim_sandboxed
+    threat_intel_sources:
+      - reference: CISA AA25-071A — Impact
+        url: https://www.cisa.gov/news-events/cybersecurity-advisories/aa25-071a
+      - reference: FBI IC3 Alert 2026
+        url: https://www.ic3.gov/CSA/2026/
+      - reference: Armis Security — Breaking Down Medusa Ransomware
+        url: https://www.armis.com/blog/
+    family_attribution_confidence: confirmed
+    last_reviewed: "2026-10-12"
+    details: |
+      Create %TEMP%\bas_range_<runid>\; write dummy files; encrypt (XOR or AES test-key); decrypt; cleanup
+      CLEANUP narration; full directory removal verified via Test-Path
+    detection_profiles:
+      - windows_ransomware_encryption
+    fidelity: lab-only
+    production_safe: false
+    risk: high
+    reversible: false

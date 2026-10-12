@@ -41,7 +41,7 @@ func MountEnrollment(h *Handler) http.Handler {
 }
 
 // Mount builds the full HTTP router and returns it.
-// staticHandler serves the dashboard SPA — pass StaticHandler() in production
+// staticHandler serves the dashboard SPA — pass StaticHandler(cfg.CSPMode) in production
 // (embedded FS) or http.FileServer(http.Dir("./wwwroot")) in tests/dev.
 // rateLimitPerMin <= 0 disables rate limiting entirely (the default —
 // existing installs are never surprise-limited on upgrade).
@@ -75,6 +75,21 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 	r.Get("/login/{tenantSlug}/sso", h.InitiateSSOLogin)
 	r.Get("/api/auth/sso/callback", h.SSOCallback)
 	r.Get("/api/config/ca-root", h.GetCARoot)
+	r.Post("/api/csp-report", h.CSPReport) // CSP violation reports; browsers send them without credentials (G1d)
+
+	// Generic inbound security-event ingestion -- authenticated by its own
+	// shared secret (see validateIngestAuth), not the JWT session auth
+	// this group's name implies; placed here because it is, like the CSP
+	// report endpoint above, called by something other than a logged-in
+	// browser session. IngestEvents itself 404s when unconfigured. Rate
+	// limited like the JWT/SCIM groups below: an externally-reachable
+	// write endpoint is exactly the runaway-client case that guard exists
+	// for.
+	if rateLimit != nil {
+		r.With(rateLimit).Post("/api/ingest/v1/events", h.IngestEvents)
+	} else {
+		r.Post("/api/ingest/v1/events", h.IngestEvents)
+	}
 
 	// Agent endpoints — protected by optional AGENT_SECRET shared token.
 	// When agentSecret is empty these remain open (backward compat).
@@ -211,6 +226,15 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.Get("/api/agents/download/{platform}", h.DownloadAgent)
 		r.Get("/api/scenarios", h.ListScenarios)
 		r.Get("/api/scenarios/{id}", h.GetScenario)
+		r.Get("/api/ad/coverage", h.GetADCoverage)
+		// AD coverage assessment report, from the same admatrix.Report() data as
+		// /api/ad/coverage: PDF (primary), HTML, and JSON (secondary). Read-only.
+		r.Get("/api/ad/assessment.pdf", h.GetADAssessmentPDF)
+		r.Get("/api/ad/assessment.html", h.GetADAssessmentHTML)
+		r.Get("/api/ad/assessment.json", h.GetADAssessmentJSON)
+		// Admin-only: inventories the live ART/Caldera libraries for the AD
+		// primitive set (read-only; reuses the ART content-status permission).
+		r.With(auth.RequirePermission(auth.CanViewARTContentStatus)).Get("/api/ad/content-inventory", h.GetADContentInventory)
 		r.Get("/api/content-registry/content/{id}/versions", h.ListContentVersions)
 		r.Get("/api/content-registry/versions/{vid}", h.GetContentVersion)
 		r.Get("/api/content-registry/runs/{runId}/drift", h.GetRunDrift)
@@ -226,6 +250,9 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.Get("/api/scenarios/runs/{runId}/pdf", h.GetRunPDF)
 		r.Get("/api/scenarios/runs/{runId}/forensic.csv", h.GetRunForensicCSV)
 		r.Get("/api/scenarios/runs/{runId}/iocs", h.GetRunIOCs)
+		r.Get("/api/scenarios/runs/{runId}/rw-score", h.GetRunRWScore)
+		r.Get("/api/scenarios/runs/{runId}/double-extortion-correlation", h.GetDoubleExtortionCorrelation)
+		r.Get("/api/scenarios/runs/{runId}/detection-response-effectiveness", h.GetDetectionResponseEffectiveness)
 		r.Get("/api/campaigns", h.ListCampaigns)
 		r.Get("/api/campaigns/{id}", h.GetCampaign)
 		r.Get("/api/campaigns/{id}/summary", h.CampaignSummary)
@@ -379,6 +406,8 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.With(auth.RequirePermission(auth.CanRetryAttackPathJob)).Post("/api/attackpath/jobs/{id}/retry", h.RetryAttackPathJob)
 		r.With(auth.RequirePermission(auth.CanSetAttackPathAsset)).Post("/api/attackpath/assets", h.SetAttackPathAsset)
 		r.With(auth.RequirePermission(auth.CanRunScenario)).Post("/api/scenarios/{id}/run", h.RunScenario)
+		r.With(auth.RequirePermission(auth.CanRunScenario)).Post("/api/backup-assurance/assessments", h.TriggerBackupAssuranceAssessment)
+		r.Get("/api/backup-assurance/assessments/{assessmentId}", h.GetBackupAssuranceAssessment)
 		r.With(auth.RequirePermission(auth.CanRunCalderaAdversary)).Post("/api/caldera/adversaries/{adversaryId}/run", h.RunCalderaAdversary)
 		r.With(auth.RequirePermission(auth.CanRunAdversaryTemplate)).Post("/api/adversary-templates/{id}/run", h.RunAdversaryTemplate)
 		r.With(auth.RequirePermission(auth.CanCancelScenarioRun)).Post("/api/scenarios/runs/{runId}/cancel", h.CancelRun)
@@ -407,6 +436,8 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.With(auth.RequirePermission(auth.CanViewContentArtifact)).Get("/api/content-registry/versions/{vid}/artifact", h.GetContentArtifact)
 		r.With(auth.RequirePermission(auth.CanTransitionContent)).Post("/api/content-registry/versions/{vid}/transition", h.TransitionContentVersion)
 		r.With(auth.RequirePermission(auth.CanViewContentMigrationReport)).Get("/api/content-registry/migration-report", h.GetContentMigrationReport)
+		r.With(auth.RequirePermission(auth.CanResolveActorIdentity)).Get("/api/intel/actor-resolutions", h.ListActorResolutions)
+		r.With(auth.RequirePermission(auth.CanResolveActorIdentity)).Post("/api/intel/actor-resolutions/{id}", h.DecideActorResolution)
 
 		// Variant executor — multi-variant technique execution
 		r.With(auth.RequirePermission(auth.CanGenerateVariants)).Post("/api/variants/generate", h.GenerateVariants)

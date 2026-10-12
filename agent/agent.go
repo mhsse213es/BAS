@@ -30,12 +30,12 @@ type Agent struct {
 	// outcomeLegacyPending). Every caller reaches them through cfg()/
 	// httpClient() so the swap is visible atomically, with no torn read and
 	// no client rebuild required at any call site.
-	cfgPtr         atomic.Pointer[Config]
-	id             Identity
-	status         string
-	state          string // server-assigned lifecycle state: active|restricted|quarantined|retired
-	mu             sync.Mutex
-	clientPtr      atomic.Pointer[http.Client]
+	cfgPtr    atomic.Pointer[Config]
+	id        Identity
+	status    string
+	state     string // server-assigned lifecycle state: active|restricted|quarantined|retired
+	mu        sync.Mutex
+	clientPtr atomic.Pointer[http.Client]
 	// wsConn/wsConnMu track the currently active WebSocket connection so
 	// upgradeToMTLS can force it closed from another goroutine: closing it
 	// unblocks connectWS's in-flight ReadMessage, which sends it back to the
@@ -51,8 +51,8 @@ type Agent struct {
 	// cancelScenario: calling a stale cancel() again is a harmless no-op,
 	// but calling a stale emit() would incorrectly mark an already-finished
 	// run as paused).
-	pauseGate   *sched.Gate
-	pauseEmit   func(RunEvent)
+	pauseGate *sched.Gate
+	pauseEmit func(RunEvent)
 	// activeLimiter, activeWorkers, and activeRiskGate belong to whichever run
 	// is currently active, exactly like pauseGate/pauseEmit above (nil/0 when
 	// idle or between runs) -- the pressure loop reads these every tick under
@@ -61,12 +61,12 @@ type Agent struct {
 	activeLimiter  *sched.ConcurrencyLimiter
 	activeWorkers  int
 	activeRiskGate *sched.RiskGate
-	binaryHash    string           // SHA-256 of own binary, computed once at startup
-	logger      *Logger          // 3-tier structured logger
-	localSt     *LocalAgentState // in-memory state for local status API
-	secProducts []string         // installed security products, enumerated once at startup (guarded by mu)
-	spoolMu     sync.Mutex       // serializes spool drains so a tick and a reconnect-kick can't double-send
-	spoolKick   chan struct{}    // buffered (cap 1): nudges the drainer to deliver immediately on reconnect
+	binaryHash     string           // SHA-256 of own binary, computed once at startup
+	logger         *Logger          // 3-tier structured logger
+	localSt        *LocalAgentState // in-memory state for local status API
+	secProducts    []string         // installed security products, enumerated once at startup (guarded by mu)
+	spoolMu        sync.Mutex       // serializes spool drains so a tick and a reconnect-kick can't double-send
+	spoolKick      chan struct{}    // buffered (cap 1): nudges the drainer to deliver immediately on reconnect
 
 	// Disconnect tracking for the pause-then-finalize watchdog (guarded by mu).
 	disconnectedSince time.Time // when the server link was lost; zero = connected
@@ -571,22 +571,22 @@ func (a *Agent) runDisconnectWatchdog() {
 // need, so it's deliberately not mirrored here (final whole-branch
 // review, Minor: this field used to exist and sit unused).
 type ScenarioStep struct {
-	TaskID            string
-	TechniqueID       string
-	Name              string
-	Executor          string
-	Command           string
-	TimeoutSec        int
-	Payloads          []protocol.Payload
-	Cleanup           string
-	PayloadDir        string
-	Resource          *sched.ResourceProfile
-	Timeout           *sched.TimeoutProfile
-	Env               map[string]string
-	RequiresPriv      string
-	ActionKey         string
-	ExecutionClass    string
-	BlastRadius       string
+	TaskID         string
+	TechniqueID    string
+	Name           string
+	Executor       string
+	Command        string
+	TimeoutSec     int
+	Payloads       []protocol.Payload
+	Cleanup        string
+	PayloadDir     string
+	Resource       *sched.ResourceProfile
+	Timeout        *sched.TimeoutProfile
+	Env            map[string]string
+	RequiresPriv   string
+	ActionKey      string
+	ExecutionClass string
+	BlastRadius    string
 }
 
 // decodeStep converts one wire-format protocol.ScenarioStep into the
@@ -653,13 +653,48 @@ func (a *Agent) runScenario(ctx context.Context, cmd protocol.ScenarioCommand) {
 	// ── Domain-controller safety interlock ───────────────────────────────────
 	// Live AD drills must never run directly on a domain controller. If policy
 	// requires it and this host is a DC, abort the whole run before any step.
+	//
+	// Uses Vetoed (never Blocked): Blocked/BlockedReason mean "a CUSTOMER
+	// security control stopped a real attempt" (protocol/messages.go's own
+	// doc comment on the server-side mirror of these fields warns that
+	// conflating the two is a scoring-honesty bug). This interlock is Audspect
+	// refusing to attempt anything at all -- no step ever ran -- which is
+	// exactly Vetoed's existing, already-scored-correctly meaning (excluded
+	// from scoring as ResultVetoed, same as a B5 destructive-action veto).
+	// Found 2026-10-09: the original Blocked-based version was silently
+	// dropped by the server (scenario.ExecResult has no Blocked field) and
+	// fell through to ResultFail -- a false "attack succeeded, defenses did
+	// not stop it" finding for a run that never attempted anything.
 	if cmd.Policy != nil && cmd.Policy.BlockOnDomainController && hostIsDomainController() {
 		log.Printf("[!] ABORT: host is a domain controller and policy blocks live execution on DCs (run %s)", cmd.RunID)
 		a.submitResults(cmd, []protocol.ExecResult{{
-			ExitCode:      -1,
-			Blocked:       true,
-			BlockedReason: "aborted by domain-controller safety interlock — live AD techniques must not run on a domain controller",
-			ExecutedAt:    time.Now(),
+			ExitCode:             -1,
+			Vetoed:               true,
+			VetoedActionKey:      "live_ad_execution",
+			VetoedExecutionClass: "environment_safety_policy",
+			VetoedBlockSource:    "domain_controller_interlock",
+			ExecutedAt:           time.Now(),
+		}}, false, nil)
+		a.setStatus("idle")
+		a.sendHeartbeat("idle")
+		return
+	}
+
+	// A scenario can separately require that a domain controller be reachable
+	// at all (e.g. an AD drill run against a non-domain-joined host would have
+	// every step individually SKIP for the same underlying reason) — abort once
+	// up front with one clear reason instead of N per-step SKIPs. Same Vetoed
+	// rationale as the interlock above; a distinct VetoedBlockSource keeps the
+	// two abort reasons distinguishable in logs/reports.
+	if cmd.Policy != nil && cmd.Policy.RequireDCReachable && !canReachDomainController() {
+		log.Printf("[!] ABORT: policy requires a reachable domain controller and none was found (run %s)", cmd.RunID)
+		a.submitResults(cmd, []protocol.ExecResult{{
+			ExitCode:             -1,
+			Vetoed:               true,
+			VetoedActionKey:      "live_ad_execution",
+			VetoedExecutionClass: "environment_safety_policy",
+			VetoedBlockSource:    "domain_controller_reachability_interlock",
+			ExecutedAt:           time.Now(),
 		}}, false, nil)
 		a.setStatus("idle")
 		a.sendHeartbeat("idle")

@@ -22,10 +22,11 @@ func TestRegisterGenerated_TraceableCandidate(t *testing.T) { // A1
 			VALUES ('RansomHub','misp','evt-1','RansomHub','high',$1), ('RansomHub','opencti','oc-9','RansomHub','medium',$1)`, seen); err != nil {
 			t.Fatal(err)
 		}
+		thr := seedThreat(t, pool, "RansomHub")
 		r := New(pool, testutil.DevVerifier())
 		art := []byte("id: intel-abc\nname: RansomHub — Active Campaign (Intel)\nart_techniques: [T1059.001, T1082]\n")
 		vid, created, err := r.RegisterGenerated(ctx, GeneratedCandidate{ContentID: "intel-abc", Artifact: art,
-			GenerationKey: "k1", Generation: map[string]any{"generator": "connector/generator"},
+			GenerationKey: "k1", Generation: map[string]any{"generator": "connector/generator"}, ThreatID: thr,
 			Sources: []SourceRef{{EntityType: "actor", EntityID: "RansomHub", Provider: "misp", ExternalID: "evt-1", Role: "primary"}}})
 		if err != nil || !created {
 			t.Fatalf("register: %v", err)
@@ -108,7 +109,7 @@ func TestRegisterGenerated_RefusesCustomSourceCollision(t *testing.T) {
 		}
 		_, _, err = r.RegisterGenerated(ctx, GeneratedCandidate{ContentID: "intel-col",
 			Artifact:      []byte("id: intel-col\nname: I\nart_techniques: [T1082]\n"),
-			GenerationKey: "k"})
+			GenerationKey: "k", ThreatID: seedThreat(t, pool, "I")})
 		if !errors.Is(err, ErrSourceCollision) {
 			t.Fatalf("want ErrSourceCollision, got %v", err)
 		}
@@ -122,7 +123,7 @@ func TestVersionDetail_ReportsWhatWillRun(t *testing.T) {
 		ctx := context.Background()
 		r := New(pool, testutil.DevVerifier())
 		art := []byte("id: intel-cnt\nname: N\nart_techniques: [T1059.001, T1082, T1083]\nsteps:\n- name: s1\n  technique_id: T1082\n  command: whoami\n")
-		vid, _, err := r.RegisterGenerated(ctx, GeneratedCandidate{ContentID: "intel-cnt", Artifact: art})
+		vid, _, err := r.RegisterGenerated(ctx, GeneratedCandidate{ContentID: "intel-cnt", Artifact: art, ThreatID: seedThreat(t, pool, "N")})
 		if err != nil {
 			t.Fatal(err)
 		}

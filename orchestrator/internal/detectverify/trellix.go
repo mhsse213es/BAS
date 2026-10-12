@@ -101,6 +101,38 @@ type trellixDetection struct {
 	MitreAttack []string  `json:"mitreAttack"`
 }
 
+// UnmarshalJSON accepts every detection-timestamp field name found across
+// Trellix's documented API surfaces: detectedAt (this endpoint's assumed
+// name), detectionDate (alert-type objects) and firstDetected (host-type
+// objects). Which one /edr/v2/detections actually sends was never confirmed
+// against a live instance, so all three are tried rather than guessing one.
+func (d *trellixDetection) UnmarshalJSON(data []byte) error {
+	var raw struct {
+		ID            string     `json:"id"`
+		Severity      string     `json:"severity"`
+		ProcessName   string     `json:"processName"`
+		HostName      string     `json:"hostName"`
+		DetectedAt    *time.Time `json:"detectedAt"`
+		DetectionDate *time.Time `json:"detectionDate"`
+		FirstDetected *time.Time `json:"firstDetected"`
+		MitreAttack   []string   `json:"mitreAttack"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	d.ID, d.Severity, d.ProcessName, d.HostName, d.MitreAttack =
+		raw.ID, raw.Severity, raw.ProcessName, raw.HostName, raw.MitreAttack
+	switch {
+	case raw.DetectedAt != nil:
+		d.DetectedAt = *raw.DetectedAt
+	case raw.DetectionDate != nil:
+		d.DetectedAt = *raw.DetectionDate
+	case raw.FirstDetected != nil:
+		d.DetectedAt = *raw.FirstDetected
+	}
+	return nil
+}
+
 func (t *trellixConnector) queryPage(ctx context.Context, since time.Time, offset int) ([]trellixDetection, error) {
 	u, err := url.Parse(t.baseURL + "/edr/v2/detections")
 	if err != nil {

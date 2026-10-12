@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -38,6 +39,89 @@ func readRunResults(t *testing.T, pool *pgxpool.Pool, runID string) []models.Sim
 		t.Fatalf("decode results: %v", err)
 	}
 	return results
+}
+
+// TestSubmitScenarioResult_DomainControllerInterlockAbortIsVetoedNotFail is
+// the integration-level regression test for increment 2.1's newly-discovered
+// defect: agent.go's domain-controller safety interlock originally submitted
+// {ExitCode:-1, Blocked:true, BlockedReason:"..."}. scenario.ExecResult has
+// no Blocked/BlockedReason field (deliberately, per its own doc comment --
+// conflating a customer-defense block with Audspect refusing to attempt
+// anything is a scoring-honesty bug), so those fields were silently dropped
+// at JSON unmarshal and the abort fell through to a false ResultFail finding
+// for a run that never executed a single step.
+//
+// internal/scenario's own TestInterpret_DomainControllerInterlockAbortIsVetoedNeverFail
+// proves the fix at the Interpret() unit level; this test proves it through
+// the real HTTP handler and persisted row, exactly as the agent's real
+// submission would arrive.
+func TestSubmitScenarioResult_DomainControllerInterlockAbortIsVetoedNotFail(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "")
+		runID := "dc-interlock-run"
+		seedRunRow(t, pool, runID, "sc-dc-interlock", "agent-dc-interlock", "running")
+
+		// Exactly the shape agent.go's domain-controller safety interlock
+		// submits: no TaskID (the interlock fires before any step is
+		// chosen), Vetoed with the interlock's own identifying fields.
+		submitResultOK(t, h, scenario.RawRunResult{
+			RunID: runID, ScenarioID: "sc-dc-interlock", AgentID: "agent-dc-interlock",
+			Results: []scenario.ExecResult{{
+				ExitCode:             -1,
+				Vetoed:               true,
+				VetoedActionKey:      "live_ad_execution",
+				VetoedExecutionClass: "environment_safety_policy",
+				VetoedBlockSource:    "domain_controller_interlock",
+			}},
+		})
+
+		results := readRunResults(t, pool, runID)
+		if len(results) != 1 {
+			t.Fatalf("got %d persisted results, want 1", len(results))
+		}
+		if results[0].Result != models.ResultVetoed {
+			t.Fatalf("persisted Result = %q, want %q -- the interlock abort must never be persisted as a real finding (the original defect persisted it as %q)",
+				results[0].Result, models.ResultVetoed, models.ResultFail)
+		}
+	})
+}
+
+// TestSubmitScenarioResult_TimedOutStepPersistsAsErrorNeverPass closes
+// increment 2.2's property-4 gap: scenario/outcome_test.go and
+// timeout_scoring_test.go already prove at the Interpret()-unit level that a
+// TimedOut step is never scored Pass/Fail (it's inconclusive, not evidence
+// either way), but nothing proved that survives unchanged through the real
+// handler to the persisted row.
+func TestSubmitScenarioResult_TimedOutStepPersistsAsErrorNeverPass(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		steps := []scenario.Step{{Name: "step-0", TechniqueID: "T1059", Framework: "custom", Command: "echo 0"}}
+		sc, engine := minimalLiveScenario(t, "sc-timedout", steps...)
+		h := New(pool, ws.NewHub(), engine, "")
+		seedRunRow(t, pool, "timedout-run", sc.ID, "agent-timedout", "running")
+
+		submitResultOK(t, h, scenario.RawRunResult{
+			RunID: "timedout-run", ScenarioID: sc.ID, AgentID: "agent-timedout",
+			Results: []scenario.ExecResult{{
+				TaskID: scenario.TaskID("T1059", "step-0"), ExitCode: 0, TimedOut: true,
+				Stdout: "PASS: this text must not override the TimedOut signal",
+			}},
+		})
+
+		results := readRunResults(t, pool, "timedout-run")
+		if len(results) != 1 {
+			t.Fatalf("got %d persisted results, want 1", len(results))
+		}
+		if results[0].Result != models.ResultError {
+			t.Fatalf("persisted Result = %q, want %q -- a timed-out step's partial output is not evidence either way, and must never be read as a Pass",
+				results[0].Result, models.ResultError)
+		}
+	})
 }
 
 func TestSubmitScenarioResult_MissingRunID(t *testing.T) {
@@ -86,6 +170,47 @@ func TestSubmitScenarioResult_UnknownRunID(t *testing.T) {
 		h.SubmitScenarioResult(rec, validSubmitResultReq("", body))
 		if rec.Code != http.StatusOK {
 			t.Fatalf("unknown runId: status = %d, want 200 (no-op accept), body = %s", rec.Code, rec.Body.String())
+		}
+	})
+}
+
+// TestSubmitScenarioResult_RejectsResultFromWrongAgent is the regression
+// test for a real trust-boundary defect found during increment 2.2's
+// attribution investigation (2026-10-09): SubmitScenarioResult authenticates
+// via a single fleet-wide shared secret (validateAgentAuth/verifyResultMAC)
+// but never checks that the submitted AgentID actually matches the agent
+// this run was dispatched to -- unlike /ws/agent's wsAgentAuthorized, which
+// explicitly enforces that a cert issued for one agent can't claim another's
+// identity. Without this check, any agent holding the shared secret could
+// submit results claiming to be a DIFFERENT agent for ANY existing run,
+// silently overwriting its results (confirmed REPLACE semantics, see
+// TestSubmitScenarioResult_REPLACENotAppend above).
+func TestSubmitScenarioResult_RejectsResultFromWrongAgent(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "")
+		seedRunRow(t, pool, "attrib-run", "sc-attrib", "agent-real", "running")
+
+		// agent-impostor was never dispatched this run, but claims to be
+		// submitting for it anyway.
+		rec := httptest.NewRecorder()
+		body := rawResultBody(t, scenario.RawRunResult{
+			RunID: "attrib-run", ScenarioID: "sc-attrib", AgentID: "agent-impostor",
+			Results: []scenario.ExecResult{{TaskID: "t0", ExitCode: 0, Stdout: "PASS: should never be persisted"}},
+		})
+		h.SubmitScenarioResult(rec, validSubmitResultReq("", body))
+		if rec.Code != http.StatusForbidden {
+			t.Fatalf("status = %d, want 403 (agent mismatch), body = %s", rec.Code, rec.Body.String())
+		}
+
+		var count int
+		if err := pool.QueryRow(context.Background(), `SELECT COALESCE(array_length(array(SELECT 1 FROM jsonb_array_elements(COALESCE(results,'[]'::jsonb))),1),0) FROM scenario_runs WHERE id=$1`, "attrib-run").Scan(&count); err != nil {
+			t.Fatalf("read results count: %v", err)
+		}
+		if count != 0 {
+			t.Fatalf("results count = %d, want 0 -- the impostor's submission must never be persisted", count)
 		}
 	})
 }
@@ -197,6 +322,97 @@ func TestSubmitScenarioResult_ResultsInterpretedViaSteps(t *testing.T) {
 		results := readRunResults(t, pool, "interp-run")
 		if len(results) != 1 || results[0].Technique.ID != "T1059" || results[0].Result != models.ResultPass {
 			t.Fatalf("results = %+v, want one T1059 pass result derived via scenario.Interpret", results)
+		}
+	})
+}
+
+// The next three tests close increment 2.2's property-1 gap: each of
+// scenario/interpret_test.go's unit-level cases for an execution error, a
+// customer-defense block, and a plain unblocked technique had never been
+// proven through the real SubmitScenarioResult handler to the persisted
+// scenario_runs.results row -- only called directly against
+// interpretART/interpretCustom. These submit the same shapes through the
+// real handler.
+
+func TestSubmitScenarioResult_ExecutionErrorNotScoredAsFinding(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		steps := []scenario.Step{{Name: "step-0", TechniqueID: "T1082", Framework: "art", Command: "echo 0"}}
+		sc, engine := minimalLiveScenario(t, "sc-exec-error", steps...)
+		h := New(pool, ws.NewHub(), engine, "")
+		seedRunRow(t, pool, "exec-error-run", sc.ID, "agent-exec-error", "running")
+
+		submitResultOK(t, h, scenario.RawRunResult{
+			RunID: "exec-error-run", ScenarioID: sc.ID, AgentID: "agent-exec-error",
+			Results: []scenario.ExecResult{{
+				TaskID: scenario.TaskID("T1082", "step-0"), ExitCode: -1,
+				Stdout: "schedule timeout: resource locks unavailable within 30s",
+			}},
+		})
+
+		results := readRunResults(t, pool, "exec-error-run")
+		if len(results) != 1 || results[0].Result != models.ResultError {
+			t.Fatalf("results = %+v, want one ResultError -- a BAS execution problem must never be scored as a security finding", results)
+		}
+	})
+}
+
+func TestSubmitScenarioResult_CustomerDefenseBlockPersistsAsPass(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		steps := []scenario.Step{{Name: "step-0", TechniqueID: "T1003", Framework: "art", Command: "echo 0"}}
+		sc, engine := minimalLiveScenario(t, "sc-blocked", steps...)
+		h := New(pool, ws.NewHub(), engine, "")
+		seedRunRow(t, pool, "blocked-run", sc.ID, "agent-blocked", "running")
+
+		submitResultOK(t, h, scenario.RawRunResult{
+			RunID: "blocked-run", ScenarioID: sc.ID, AgentID: "agent-blocked",
+			Results: []scenario.ExecResult{{
+				TaskID: scenario.TaskID("T1003", "step-0"), ExitCode: 1,
+				Stdout: "Access is denied.",
+			}},
+		})
+
+		results := readRunResults(t, pool, "blocked-run")
+		// interpretART's own block-signature detection (TestInterpretARTBlockDetection)
+		// scores a customer-defense block as ResultPass, not the distinct
+		// ResultBlocked value (which score.go treats identically to Pass for
+		// scoring purposes, but which the ART/Caldera/custom exec-result path
+		// never actually assigns -- confirmed by reading that path, not assumed).
+		if len(results) != 1 || results[0].Result != models.ResultPass {
+			t.Fatalf("results = %+v, want one ResultPass -- a customer-defense block must persist as a defensive win", results)
+		}
+		if !strings.Contains(strings.ToLower(results[0].Details), "block") {
+			t.Fatalf("Details = %q, want it to describe the block (not just a bare pass)", results[0].Details)
+		}
+	})
+}
+
+func TestSubmitScenarioResult_UnblockedTechniquePersistsAsFail(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		steps := []scenario.Step{{Name: "step-0", TechniqueID: "T1003", Framework: "art", Command: "echo 0"}}
+		sc, engine := minimalLiveScenario(t, "sc-unblocked", steps...)
+		h := New(pool, ws.NewHub(), engine, "")
+		seedRunRow(t, pool, "unblocked-run", sc.ID, "agent-unblocked", "running")
+
+		submitResultOK(t, h, scenario.RawRunResult{
+			RunID: "unblocked-run", ScenarioID: sc.ID, AgentID: "agent-unblocked",
+			Results: []scenario.ExecResult{{
+				TaskID: scenario.TaskID("T1003", "step-0"), ExitCode: 0,
+				Stdout: "whoami\\nDESKTOP\\\\admin",
+			}},
+		})
+
+		results := readRunResults(t, pool, "unblocked-run")
+		if len(results) != 1 || results[0].Result != models.ResultFail {
+			t.Fatalf("results = %+v, want one ResultFail -- the technique ran unimpeded, defenses did not stop it", results)
 		}
 	})
 }

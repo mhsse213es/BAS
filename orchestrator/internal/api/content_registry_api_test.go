@@ -177,7 +177,7 @@ func TestMigrationReport_IncludesBlockedSchedulesAndDetailEndpoint(t *testing.T)
 		}
 		var out map[string]json.RawMessage
 		_ = json.Unmarshal(rec.Body.Bytes(), &out)
-		for _, k := range []string{"migrated", "inventory", "blockedSchedules"} {
+		for _, k := range []string{"migrated", "inventory", "blockedSchedules", "legacyIntel"} {
 			if _, ok := out[k]; !ok {
 				t.Fatalf("missing %q: %s", k, rec.Body.String())
 			}

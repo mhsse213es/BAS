@@ -1,0 +1,47 @@
+title = "Audspect BAS gitleaks config"
+
+[extend]
+useDefault = true
+
+# Every path below was individually checked against the finding it
+# suppresses before being added here -- not a blanket "tests are safe"
+# rule. See the commit that introduced this file for the verification.
+#
+# Unanchored on purpose: gitleaks matches these against whatever path
+# string it reports a finding against, which in --no-git mode is prefixed
+# by --source's own path (e.g. /repo/src/orchestrator/...), not a
+# repo-root-relative path -- a leading ^ never matches in CI, where
+# --source is the checkout root, or locally, where it's some scratch
+# directory. Each pattern below is specific enough not to need anchoring.
+[allowlist]
+description = "The product's own DLP/exfiltration-channel test fixtures and signing golden vectors, which deliberately contain fake-secret-shaped content so the detection/signing code under test has something realistic to match against."
+paths = [
+  # Sample "exfiltrated data" reports used by the DLP validation scenarios
+  # (scenarios/dlp-exfiltration-*.yaml) -- e.g. the well-known AWS
+  # "...EXAMPLE" credential pair, embedded on purpose as simulated leaked
+  # content.
+  '''reports/.*\.csv$''',
+
+  # Planning/spec docs for the exfiltration-channel features themselves;
+  # code snippets like `token := "..."` are illustrative example code, not
+  # committed credentials.
+  '''orchestrator/docs/superpowers/plans/.*exfiltration.*\.md$''',
+  '''orchestrator/docs/superpowers/plans/2026-09-02-dlp-content-type-diversity\.md$''',
+  '''orchestrator/docs/superpowers/specs/2026-09-02-dlp-content-type-diversity-design\.md$''',
+
+  # Scenario definitions for the DLP exfiltration-channel validation
+  # suite -- same simulated-leak content as the reports/ CSVs above.
+  '''scenarios/dlp-exfiltration-.*\.yaml$''',
+
+  # Unit tests for the exfiltration-channel sink implementations
+  # (webhook/SFTP/cloud-storage/telnet/SMTP) -- fixed fake tokens/URLs used
+  # only to assert the sink parses/validates its own test fixtures.
+  '''orchestrator/internal/(webhooksink|sftpsink|cloudsink|telnetsink|smtpsink)/.*_test\.go$''',
+
+  # Fixed, frozen RSA keypair + expected signature bytes, generated once
+  # specifically to prove two independent Go types (orchestrator and agent
+  # modules) produce byte-identical signed output -- see the doc comment
+  # on goldenPrivateKeyPEM in golden_vector_test.go. Never used as a real
+  # key anywhere.
+  '''orchestrator/internal/cmdsigning/golden_vector_test\.go$''',
+]

@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -13,6 +14,7 @@ import (
 
 	"github.com/audspect/bas/internal/intelligence"
 	"github.com/audspect/bas/internal/scenario"
+	"github.com/audspect/bas/internal/threatidentity"
 	"github.com/audspect/bas/internal/threatpriority"
 )
 
@@ -28,6 +30,9 @@ type Scheduler struct {
 	// internal/reporting's priority-score weighting. See
 	// docs/superpowers/specs/2026-07-19-sp5-sector-region-weighting-design.md.
 	pool *pgxpool.Pool
+	// identity resolves merged actors to immutable ids before any
+	// persistence (TCF Phase 2 spec §3). See WithIdentityStore.
+	identity *threatidentity.Store
 
 	// priorityEngine recomputes and snapshots Threat Prioritization scores
 	// whenever intel changes -- connector sync IS the change-detection
@@ -383,7 +388,19 @@ func (s *Scheduler) sync() {
 
 	// Persist actor profiles (sectors/regions) for reporting's priority-score
 	// weighting — see docs/superpowers/specs/2026-07-19-sp5-sector-region-weighting-design.md.
-	s.upsertActorProfiles(actors)
+	if s.identity != nil {
+		actors = s.resolveActors(rawActors, actors, groups)
+	} else {
+		s.upsertActorProfiles(actors)
+	}
+	// resolved drops actors whose identity is unresolved: they get no
+	// evidence rows and no content (spec §3.2, §3.4).
+	resolved := make([]ThreatActor, 0, len(actors))
+	for _, a := range actors {
+		if s.identity == nil || a.ActorID != "" {
+			resolved = append(resolved, a)
+		}
+	}
 	// Per-source provenance. MUST run after upsertActorProfiles -- these rows
 	// carry a foreign key to threat_actor_profiles(name).
 	s.upsertActorSources(rawActors, actors, groups)
@@ -403,16 +420,22 @@ func (s *Scheduler) sync() {
 		for _, c := range allCampaigns {
 			if err := intelligence.UpsertCampaign(context.Background(), s.pool, c); err != nil {
 				log.Printf("[connector] upsert campaign %q: %v", c.ID, err)
+			} else {
+				s.linkEntityActors(threatidentity.EntityCampaign, c.ID, c.Source.Provider, c.ThreatActorIDs)
 			}
 		}
 		for _, m := range allMalware {
 			if err := intelligence.UpsertMalware(context.Background(), s.pool, m); err != nil {
 				log.Printf("[connector] upsert malware %q: %v", m.ID, err)
+			} else {
+				s.linkEntityActors(threatidentity.EntityMalware, m.ID, m.Source.Provider, m.ThreatActorIDs)
 			}
 		}
 		for _, tl := range allTools {
 			if err := intelligence.UpsertTool(context.Background(), s.pool, tl); err != nil {
 				log.Printf("[connector] upsert tool %q: %v", tl.ID, err)
+			} else {
+				s.linkEntityActors(threatidentity.EntityTool, tl.ID, tl.Source.Provider, tl.ThreatActorIDs)
 			}
 		}
 	}
@@ -424,7 +447,7 @@ func (s *Scheduler) sync() {
 	}
 
 	// ── Generate scenarios ────────────────────────────────────────────────
-	result, err := s.generator.Write(actors)
+	result, err := s.generator.Write(resolved)
 	if err != nil {
 		log.Printf("[connector/gen] write error: %v", err)
 		s.setError("Generator: "+err.Error(), bySource)
@@ -552,6 +575,9 @@ func (s *Scheduler) upsertActorSources(rawActors, merged []ThreatActor, groups [
 		if gi >= len(merged) {
 			continue // defensive: groups is index-aligned with merged by construction
 		}
+		if s.identity != nil && merged[gi].ActorID == "" {
+			continue // unresolved: no profile row to attach to (spec §3.4)
+		}
 		actorName := merged[gi].Name
 		for _, ri := range idxs {
 			if ri >= len(rawActors) {
@@ -622,6 +648,14 @@ func (s *Scheduler) upsertActivitySignals(source string, signals []ActivitySigna
 	}
 	ctx := context.Background()
 	for _, sig := range signals {
+		if s.identity != nil {
+			actorName, ok := s.evidenceActor(source, sig.ActorName, merged, true)
+			if !ok {
+				continue
+			}
+			s.upsertActivityRow(ctx, actorName, source, sig)
+			continue
+		}
 		actorName, found := resolveActivitySignalActor(sig.ActorName, merged)
 		if !found {
 			actorName = sig.ActorName
@@ -633,19 +667,56 @@ func (s *Scheduler) upsertActivitySignals(source string, signals []ActivitySigna
 				continue
 			}
 		}
-		_, err := s.pool.Exec(ctx,
-			`INSERT INTO threat_actor_activity (actor_name, source, pulse_count, first_observed, last_observed, updated_at)
-			 VALUES ($1,$2,$3,$4,$5,NOW())
-			 ON CONFLICT (actor_name, source) DO UPDATE SET
-			   pulse_count = EXCLUDED.pulse_count,
-			   first_observed = LEAST(threat_actor_activity.first_observed, EXCLUDED.first_observed),
-			   last_observed = GREATEST(threat_actor_activity.last_observed, EXCLUDED.last_observed),
-			   updated_at = NOW()`,
-			actorName, source, sig.PulseCount, sig.FirstObserved, sig.LastObserved)
-		if err != nil {
-			log.Printf("[connector] upsert activity signal %q/%q: %v", actorName, source, err)
-		}
+		s.upsertActivityRow(ctx, actorName, source, sig)
 	}
+}
+
+func (s *Scheduler) upsertActivityRow(ctx context.Context, actorName, source string, sig ActivitySignal) {
+	_, err := s.pool.Exec(ctx,
+		`INSERT INTO threat_actor_activity (actor_name, source, pulse_count, first_observed, last_observed, updated_at)
+		 VALUES ($1,$2,$3,$4,$5,NOW())
+		 ON CONFLICT (actor_name, source) DO UPDATE SET
+		   pulse_count = EXCLUDED.pulse_count,
+		   first_observed = LEAST(threat_actor_activity.first_observed, EXCLUDED.first_observed),
+		   last_observed = GREATEST(threat_actor_activity.last_observed, EXCLUDED.last_observed),
+		   updated_at = NOW()`,
+		actorName, source, sig.PulseCount, sig.FirstObserved, sig.LastObserved)
+	if err != nil {
+		log.Printf("[connector] upsert activity signal %q/%q: %v", actorName, source, err)
+	}
+}
+
+// evidenceActor maps an evidence record's actor name to the profile name it
+// attaches to, through identity (final review: evidence must never route
+// around the resolver). A roster match on an unresolved merged actor is
+// dropped. Otherwise, with create, the name resolves through the store
+// without rewriting an existing profile (KeepExisting); a new actor gets a
+// profile and a Threat, an ambiguous one is queued and dropped. Without
+// create, a name outside the roster is dropped (technique evidence never
+// establishes an actor).
+func (s *Scheduler) evidenceActor(source, name string, merged []ThreatActor, create bool) (string, bool) {
+	if actorName, found := resolveActivitySignalActor(name, merged); found {
+		for _, a := range merged {
+			if a.Name == actorName && a.ActorID != "" {
+				return actorName, true
+			}
+		}
+		return "", false
+	}
+	if !create {
+		return "", false
+	}
+	res, err := s.identity.ResolveAndPersist(context.Background(),
+		threatidentity.Incoming{Name: name, Sources: threatidentity.KeysFor(source, "", name)},
+		threatidentity.ProfileFields{KeepExisting: true})
+	if err != nil {
+		log.Printf("[connector] resolve activity actor %q: %v", name, err)
+		return "", false
+	}
+	if res.Outcome == threatidentity.OutcomeAmbiguous {
+		return "", false
+	}
+	return res.DisplayName, true
 }
 
 // upsertTechniqueEvidence resolves each evidence record against the
@@ -663,6 +734,9 @@ func (s *Scheduler) upsertTechniqueEvidence(evidence []TechniqueEvidence, merged
 	ctx := context.Background()
 	for _, ev := range evidence {
 		actorName, found := resolveActivitySignalActor(ev.ActorName, merged)
+		if s.identity != nil {
+			actorName, found = s.evidenceActor("opencti", ev.ActorName, merged, false)
+		}
 		if !found {
 			log.Printf("[connector] technique evidence for unresolved actor %q dropped (technique %s)", ev.ActorName, ev.TechniqueID)
 			continue
@@ -677,5 +751,85 @@ func (s *Scheduler) upsertTechniqueEvidence(evidence []TechniqueEvidence, merged
 		if err != nil {
 			log.Printf("[connector] upsert technique evidence %q/%s: %v", actorName, ev.TechniqueID, err)
 		}
+	}
+}
+
+// WithIdentityStore attaches canonical actor identity (TCF Phase 2 spec §3).
+// With it, every merged actor is resolved to an immutable id before any
+// persistence; unresolved actors are queued for an admin and skipped.
+// Without it (no database), sync keeps the legacy name-keyed upsert and
+// the generator produces nothing. Chainable; call before Start.
+func (s *Scheduler) WithIdentityStore(st *threatidentity.Store) *Scheduler {
+	s.identity = st
+	return s
+}
+
+// resolveActors resolves each merged actor through the identity store and
+// returns the same index-aligned slice with ActorID/ThreatID set and Name
+// replaced by the actor's stored display name, so every later name-keyed
+// write lands on the right profile. Unresolved actors keep ActorID == "".
+func (s *Scheduler) resolveActors(rawActors, merged []ThreatActor, groups [][]int) []ThreatActor {
+	ctx := context.Background()
+	out := append([]ThreatActor(nil), merged...)
+	queued := 0
+	for gi := range out {
+		a := &out[gi]
+		in := threatidentity.Incoming{Name: a.Name, Aliases: a.Aliases, CanonicalGroupID: a.CanonicalGroupID}
+		var nameKeys []threatidentity.SourceKey
+		if gi < len(groups) {
+			for _, ri := range groups[gi] {
+				if ri >= len(rawActors) || rawActors[ri].Source == "" {
+					continue
+				}
+				r := rawActors[ri]
+				for _, k := range threatidentity.KeysFor(r.Source, r.SourceID, r.Name) {
+					if strings.HasPrefix(k.ID, "name:") {
+						nameKeys = append(nameKeys, k)
+					} else {
+						in.Sources = append(in.Sources, k)
+					}
+				}
+			}
+		}
+		in.Sources = append(in.Sources, nameKeys...) // external ids first: candidates key on Sources[0]
+		if len(in.Sources) == 0 {
+			in.Sources = threatidentity.KeysFor(a.Source, a.SourceID, a.Name)
+		}
+		if len(in.Sources) == 0 {
+			log.Printf("[connector] actor %q has no source identity; skipped", a.Name)
+			continue
+		}
+		var lastSeen *time.Time
+		if !a.LastSeen.IsZero() {
+			t := a.LastSeen
+			lastSeen = &t
+		}
+		res, err := s.identity.ResolveAndPersist(ctx, in, threatidentity.ProfileFields{
+			Sectors: a.Sectors, Regions: a.Regions, Source: a.Source, LastSeen: lastSeen,
+			Confidence: a.Confidence, Techniques: dedupedTechniqueIDs(a.Techniques)})
+		if err != nil {
+			log.Printf("[connector] resolve actor %q: %v", a.Name, err)
+			continue
+		}
+		if res.Outcome == threatidentity.OutcomeAmbiguous {
+			queued++
+			continue
+		}
+		a.ActorID, a.ThreatID, a.Name = res.ActorID, res.ThreatID, res.DisplayName
+	}
+	if queued > 0 {
+		log.Printf("[connector] %d actor(s) unresolved; see GET /api/intel/actor-resolutions", queued)
+	}
+	return out
+}
+
+// linkEntityActors maps a campaign/malware/tool's actor names to actor ids
+// (spec §3.5). Best-effort: a failure is logged, never aborts the sync.
+func (s *Scheduler) linkEntityActors(kind threatidentity.EntityKind, id, provider string, names []string) {
+	if s.identity == nil || len(names) == 0 {
+		return
+	}
+	if _, err := s.identity.LinkEntityActors(context.Background(), kind, id, provider, names); err != nil {
+		log.Printf("[connector] link %s %q actors: %v", kind, id, err)
 	}
 }

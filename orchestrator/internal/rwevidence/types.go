@@ -1,0 +1,98 @@
+// Package rwevidence is a dedicated, capability-specific evidence engine
+// for ransomware techniques -- the ransomware equivalent of
+// adprimitive/admatrix/controlval (AD) and latmove/latdetect (lateral
+// movement). It proves whether a deployed control actually prevented,
+// detected, contained, recovered from, or protected data against a
+// ransomware behavior, as independently-verified evidence rather than a
+// scenario step merely running.
+//
+// This first slice covers exactly one technique (T1490, Inhibit System
+// Recovery) and three of the five capability dimensions (Prevention,
+// Recovery, Detection). Containment and DataProtection, every real
+// observer, and any scoring/weighting UI are explicitly deferred.
+package rwevidence
+
+import "github.com/audspect/bas/internal/controlval"
+
+// Capability names one of the five ransomware-mastery reporting dimensions.
+// These are reporting categories, not independent execution engines: one
+// technique can and does produce several independently-verified
+// CapabilityResults, one per applicable dimension -- never inferred from
+// each other.
+type Capability string
+
+const (
+	CapabilityPrevention     Capability = "prevention"
+	CapabilityDetection      Capability = "detection"
+	CapabilityContainment    Capability = "containment"
+	CapabilityRecovery       Capability = "recovery"
+	CapabilityDataProtection Capability = "data_protection"
+)
+
+// CapabilityResult is one independently-verified claim about one capability
+// dimension for one technique attempt.
+type CapabilityResult struct {
+	Capability  Capability
+	TechniqueID string
+	Verdict     controlval.Verdict
+	SkipReason  controlval.SkipReason
+	Reason      string
+	Provenance  controlval.CorrelationKey
+	// SpecificReason is a short, queryable machine code -- set only by
+	// EvaluateStep's not-tested/not-applicable paths (see dispatch.go);
+	// every direct capability-function call (PreventionFromValidation etc.)
+	// leaves it empty, same as it always has.
+	SpecificReason string
+}
+
+// AttemptKey identifies one technique attempt, for correlating independent
+// observers (Recovery, Containment, ...) against the same event. Action
+// distinguishes multiple distinct attempts sharing one technique within the
+// same run (e.g. em-07's three independent T1490 steps: shadow-copy
+// deletion, wbadmin catalog deletion, bcdedit disable) -- without it they
+// collapse onto one result. Action is scenario.TaskID(step.TechniqueID,
+// step.Name), reused from the existing step-identity mechanism, never
+// reimplemented here.
+type AttemptKey struct {
+	RunID       string
+	TechniqueID string
+	Action      string
+}
+
+// NotApplicable records that capability genuinely does not apply to tech --
+// e.g. Recovery for T1486, or Containment/DataProtection for T1490. reason
+// must always explain why, so a reader never mistakes an inapplicable
+// capability for a gap. Per the coverage-math rule (spec section 3,
+// invariant 4, not implemented in this slice): not_applicable results are
+// excluded from both the numerator and denominator of any future tested-
+// coverage calculation -- neutral, never inflating and never penalizing.
+func NotApplicable(capability Capability, tech Technique, reason string) CapabilityResult {
+	return CapabilityResult{
+		Capability:  capability,
+		TechniqueID: tech.MitreID,
+		Verdict:     controlval.VerdictSkipped,
+		SkipReason:  controlval.SkipNotApplicable,
+		Reason:      reason,
+	}
+}
+
+// NotTested records that capability was never evaluated for tech at all --
+// distinct from an observer running and coming back ambiguous
+// (insufficient_evidence, see RecoveryFromSurvival's SurvivalIndeterminate
+// branch). reason must always explain why.
+func NotTested(capability Capability, tech Technique, reason string) CapabilityResult {
+	return CapabilityResult{
+		Capability:  capability,
+		TechniqueID: tech.MitreID,
+		Verdict:     controlval.VerdictSkipped,
+		SkipReason:  controlval.SkipNotTested,
+		Reason:      reason,
+	}
+}
+
+// Valid reports whether cr's own Verdict/SkipReason pair satisfies the
+// canonical taxonomy's invariants (controlval.ValidSkipPair) -- delegated,
+// never a second copy of the rule.
+func (cr CapabilityResult) Valid() error {
+	return controlval.ValidSkipPair(cr.Verdict, cr.SkipReason)
+}

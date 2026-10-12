@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 )
@@ -102,6 +103,35 @@ func TestQRadarVerify_SubmitHTTPError_ReturnsError(t *testing.T) {
 	c := newTestQRadarConnector(t, srv.URL)
 	if _, err := c.Verify(context.Background(), VerifyRequest{TechniqueID: "T1059.001", StepExecutedAt: time.Now()}); err == nil {
 		t.Fatal("expected an error from a 500 submit response, not a fabricated NotDetected")
+	}
+}
+
+// QRadar's events table has no built-in MITRE technique column -- it's
+// IBM's Use Case Manager/Cyber Adversary Framework that maps rules to
+// ATT&CK, not a queryable AQL field. mitre_technique only resolves if the
+// customer has created a Custom Event Property with exactly that name, an
+// undocumented prerequisite. QRadar fails this loudly (confirmed: an
+// unknown AQL column returns "Field ... does not exist in catalog"), so
+// this isn't a silent-failure bug like the others -- but the raw vendor
+// error gives no hint that a setup step is missing, so it's wrapped with
+// one.
+func TestQRadarVerify_MitreTechniqueFieldMissing_ErrorExplainsSetup(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		json.NewEncoder(w).Encode(map[string]any{
+			"message": `Field "mitre_technique" does not exist in catalog "events"`,
+			"code":    2000,
+		})
+	}))
+	defer srv.Close()
+
+	c := newTestQRadarConnector(t, srv.URL)
+	_, err := c.Verify(context.Background(), VerifyRequest{TechniqueID: "T1059.001", StepExecutedAt: time.Now()})
+	if err == nil {
+		t.Fatal("expected an error")
+	}
+	if !strings.Contains(err.Error(), "Custom Event Property") {
+		t.Fatalf("error = %q, want it to explain the mitre_technique Custom Event Property setup step", err.Error())
 	}
 }
 

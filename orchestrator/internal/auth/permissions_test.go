@@ -106,7 +106,8 @@ func TestHasPermission_MatrixIsComplete(t *testing.T) {
 		CanViewSSOConfig: true, CanManageSSOConfig: true,
 		CanViewSCIMConfig: true, CanManageSCIMConfig: true,
 		CanExecuteRemediation: true, CanApproveRemediation: true,
-		CanManageBackups: true,
+		CanManageBackups:        true,
+		CanResolveActorIdentity: true,
 
 		CanViewContentArtifact: true, CanTransitionContent: true, CanViewContentMigrationReport: true,
 	}
@@ -159,6 +160,7 @@ func TestPermissions_Ordering(t *testing.T) {
 
 		CanExecuteRemediation, CanApproveRemediation,
 		CanManageBackups,
+		CanResolveActorIdentity,
 		CanViewContentArtifact, CanTransitionContent, CanViewContentMigrationReport,
 	}
 	if len(got) != len(want) {

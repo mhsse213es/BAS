@@ -13,7 +13,7 @@ mkdirSync(join(dist, 'assets'), { recursive: true });
 
 const result = await build({
   absWorkingDir: web,
-  entryPoints: { app: 'src/main.js', 'app-css': 'styles/app.css' },
+  entryPoints: { app: 'src/main.js', 'app-css': 'styles/index.css' },
   bundle: true,
   format: 'iife',
   target: 'es2020',

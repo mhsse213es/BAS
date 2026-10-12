@@ -30,14 +30,60 @@ const domainControllersRID = "-516" // Domain Controllers group
 
 // bhProps is the subset of BloodHound node Properties we use.
 type bhProps struct {
-	Name   string `json:"name"`
-	Domain string `json:"domain"`
+	Name                    string `json:"name"`
+	Domain                  string `json:"domain"`
+	UnconstrainedDelegation bool   `json:"unconstraineddelegation"`
+	HasSPN                  bool   `json:"hasspn"`
+	DontRequirePreauth      bool   `json:"dontreqpreauth"`
 }
 
 // bhMember is a group member / local-admin principal reference.
 type bhMember struct {
 	ObjectIdentifier string `json:"ObjectIdentifier"`
 	ObjectType       string `json:"ObjectType"`
+}
+
+// bhAce is one Access Control Entry: a principal's right over the object
+// whose Aces array this entry appears in.
+type bhAce struct {
+	PrincipalSID string `json:"PrincipalSID"`
+	RightName    string `json:"RightName"`
+	IsInherited  bool   `json:"IsInherited"` // parsed, not yet used by any logic
+}
+
+// aceRightEdgeKinds maps a BloodHound ACE RightName (case-insensitively) to
+// the EdgeKind it represents. An unrecognized RightName is intentionally
+// absent and must be skipped by the caller, never fatal.
+var aceRightEdgeKinds = map[string]EdgeKind{
+	"genericall":           EdgeGenericAll,
+	"genericwrite":         EdgeGenericWrite,
+	"writeowner":           EdgeWriteOwner,
+	"writedacl":            EdgeWriteDacl,
+	"owns":                 EdgeOwns,
+	"allextendedrights":    EdgeAllExtendedRights,
+	"forcechangepassword":  EdgeForceChangePassword,
+	"addmember":            EdgeAddMember,
+	"addself":              EdgeAddSelf,
+	"addkeycredentiallink": EdgeAddKeyCredentialLink,
+	"readlapspassword":     EdgeReadLAPSPassword,
+}
+
+// addAceEdges appends one edge per recognized, well-formed ACE in aces,
+// where objectID is the object the Aces array is attached to (the ACL
+// target). Unrecognized RightName values and ACEs with no PrincipalSID are
+// skipped, never fatal — consistent with this file's defensive-parsing
+// principle.
+func addAceEdges(edges *[]Edge, objectID string, aces []bhAce) {
+	for _, ace := range aces {
+		if ace.PrincipalSID == "" {
+			continue
+		}
+		kind, ok := aceRightEdgeKinds[strings.ToLower(ace.RightName)]
+		if !ok {
+			continue
+		}
+		*edges = append(*edges, Edge{From: ace.PrincipalSID, To: objectID, Kind: kind})
+	}
 }
 
 type bhComputer struct {
@@ -52,17 +98,22 @@ type bhComputer struct {
 			ComputerSID string `json:"ComputerSID"`
 		} `json:"Results"`
 	} `json:"Sessions"`
+	Aces              []bhAce    `json:"Aces"`
+	AllowedToDelegate []string   `json:"AllowedToDelegate"`
+	AllowedToAct      []bhMember `json:"AllowedToAct"`
 }
 
 type bhUser struct {
 	ObjectIdentifier string  `json:"ObjectIdentifier"`
 	Properties       bhProps `json:"Properties"`
+	Aces             []bhAce `json:"Aces"`
 }
 
 type bhGroup struct {
 	ObjectIdentifier string     `json:"ObjectIdentifier"`
 	Properties       bhProps    `json:"Properties"`
 	Members          []bhMember `json:"Members"`
+	Aces             []bhAce    `json:"Aces"`
 }
 
 // bhFile is the envelope every BloodHound JSON file shares.
@@ -158,7 +209,11 @@ func buildSharpHoundCollection(computers []bhComputer, users []bhUser, groups []
 		}
 		c.Nodes = append(c.Nodes, Node{
 			ID: u.ObjectIdentifier, Kind: KindUser, Label: labelOf(u.Properties, u.ObjectIdentifier),
+			UnconstrainedDelegation: u.Properties.UnconstrainedDelegation,
+			HasSPN:                  u.Properties.HasSPN,
+			DontRequirePreauth:      u.Properties.DontRequirePreauth,
 		})
+		addAceEdges(&c.Edges, u.ObjectIdentifier, u.Aces)
 	}
 
 	for _, g := range groups {
@@ -175,6 +230,7 @@ func buildSharpHoundCollection(computers []bhComputer, users []bhUser, groups []
 			}
 			c.Edges = append(c.Edges, Edge{From: m.ObjectIdentifier, To: g.ObjectIdentifier, Kind: EdgeMemberOf})
 		}
+		addAceEdges(&c.Edges, g.ObjectIdentifier, g.Aces)
 	}
 
 	for _, cm := range computers {
@@ -190,6 +246,7 @@ func buildSharpHoundCollection(computers []bhComputer, users []bhUser, groups []
 		c.Nodes = append(c.Nodes, Node{
 			ID: cm.ObjectIdentifier, Kind: KindHost,
 			Label: labelOf(cm.Properties, cm.ObjectIdentifier), Role: role,
+			UnconstrainedDelegation: cm.Properties.UnconstrainedDelegation,
 		})
 		// Local admins → principal is admin-to this computer.
 		for _, a := range cm.LocalAdmins.Results {
@@ -204,6 +261,23 @@ func buildSharpHoundCollection(computers []bhComputer, users []bhUser, groups []
 				continue
 			}
 			c.Edges = append(c.Edges, Edge{From: cm.ObjectIdentifier, To: s.UserSID, Kind: EdgeHasSession})
+		}
+		addAceEdges(&c.Edges, cm.ObjectIdentifier, cm.Aces)
+		// AllowedToDelegate: cm (the computer with this property) is From; each
+		// listed target is To.
+		for _, target := range cm.AllowedToDelegate {
+			if target == "" {
+				continue
+			}
+			c.Edges = append(c.Edges, Edge{From: cm.ObjectIdentifier, To: target, Kind: EdgeAllowedToDelegate})
+		}
+		// AllowedToAct: each listed principal is From; cm (the computer with this
+		// property) is To. Direction is the OPPOSITE of AllowedToDelegate above.
+		for _, p := range cm.AllowedToAct {
+			if p.ObjectIdentifier == "" {
+				continue
+			}
+			c.Edges = append(c.Edges, Edge{From: p.ObjectIdentifier, To: cm.ObjectIdentifier, Kind: EdgeAllowedToAct})
 		}
 	}
 	return c

@@ -15,6 +15,7 @@ import (
 
 	"github.com/audspect/bas/internal/contentregistry"
 	"github.com/audspect/bas/internal/scenario"
+	"github.com/audspect/bas/internal/threatidentity"
 )
 
 func TestBuildYAML_TagsSectorAndRegionRelevance(t *testing.T) {
@@ -134,21 +135,12 @@ func TestGenerator_UnchangedInputsSameBytes(t *testing.T) { // Review Focus 3
 	a := ThreatActor{Name: "RansomHub", Source: "misp", SourceID: "evt-1", Confidence: "high",
 		LastSeen:   time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC),
 		Techniques: []TechniqueRef{{ID: "T1082"}, {ID: "T1059.001"}}}
-	id := intelContentID(a.Name)
+	id := threatidentity.ContentID(a.ThreatID)
 	first := g.buildYAML(a, id)
 	time.Sleep(1100 * time.Millisecond)         // a wall-clock timestamp in the YAML would now differ
 	a.LastSeen = a.LastSeen.Add(24 * time.Hour) // last-seen churn alone must not change bytes
 	if second := g.buildYAML(a, id); first != second {
 		t.Fatalf("YAML must be deterministic for unchanged techniques/confidence:\n%s\n---\n%s", first, second)
-	}
-}
-
-func TestIntelContentID_StablePerActor(t *testing.T) {
-	if intelContentID("RansomHub") != intelContentID(" ransomhub ") {
-		t.Fatal("content id must depend on the normalized actor name only")
-	}
-	if intelContentID("RansomHub") == intelContentID("Akira") {
-		t.Fatal("different actors must not collide")
 	}
 }
 
@@ -165,7 +157,7 @@ func TestGenerator_WriteRegistersAndRewritesWorkingCopy(t *testing.T) { // A2 ge
 	dir := t.TempDir()
 	rec := &recRegistrar{}
 	g := NewGenerator(dir, nil, nil, nil).WithRegistrar(rec)
-	a := ThreatActor{Name: "Akira", Source: "opencti", SourceID: "x", Confidence: "medium",
+	a := ThreatActor{Name: "Akira", ThreatID: "thr-akira", Source: "opencti", SourceID: "x", Confidence: "medium",
 		Techniques: []TechniqueRef{{ID: "T1082"}, {ID: "T1083"}}}
 	r1, err := g.Write([]ThreatActor{a})
 	if err != nil {
@@ -185,10 +177,10 @@ func TestGenerator_WriteRegistersAndRewritesWorkingCopy(t *testing.T) { // A2 ge
 		string(rec.got[0].Artifact) != string(rec.got[1].Artifact) {
 		t.Fatalf("same inputs must yield same key and bytes: %+v", rec.got)
 	}
-	if rec.got[0].ContentID != intelContentID("Akira") || rec.got[0].Sources[0].Role != "primary" {
+	if rec.got[0].ContentID != threatidentity.ContentID("thr-akira") || rec.got[0].Sources[0].Role != "primary" {
 		t.Fatalf("candidate: %+v", rec.got[0])
 	}
-	if _, err := os.Stat(filepath.Join(dir, "intel", intelContentID("Akira")+".yaml")); err != nil {
+	if _, err := os.Stat(filepath.Join(dir, "intel", threatidentity.ContentID("thr-akira")+".yaml")); err != nil {
 		t.Fatalf("working copy: %v", err)
 	}
 }
@@ -202,7 +194,7 @@ func (failRegistrar) RegisterGenerated(context.Context, contentregistry.Generate
 func TestGenerator_RegistrationFailureWritesNoFile(t *testing.T) {
 	dir := t.TempDir()
 	g := NewGenerator(dir, nil, nil, nil).WithRegistrar(failRegistrar{})
-	a := ThreatActor{Name: "Akira", Source: "opencti", SourceID: "x", Confidence: "medium",
+	a := ThreatActor{Name: "Akira", ThreatID: "thr-akira", Source: "opencti", SourceID: "x", Confidence: "medium",
 		Techniques: []TechniqueRef{{ID: "T1082"}, {ID: "T1083"}}}
 	res, err := g.Write([]ThreatActor{a})
 	if err != nil {
@@ -211,7 +203,7 @@ func TestGenerator_RegistrationFailureWritesNoFile(t *testing.T) {
 	if res.Failed != 1 || res.Changed != 0 || res.Created != 0 {
 		t.Fatalf("result: %+v", res)
 	}
-	if _, err := os.Stat(filepath.Join(dir, "intel", intelContentID("Akira")+".yaml")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(dir, "intel", threatidentity.ContentID("thr-akira")+".yaml")); !os.IsNotExist(err) {
 		t.Fatalf("file must not exist after a failed registration: %v", err)
 	}
 }
@@ -234,8 +226,8 @@ func TestBuildYAML_ExternalFieldsCannotInjectStructure(t *testing.T) {
 			Confidence: "high\nlocal_check: true", Description: "d\"\n- command: evil",
 			Sectors:    []string{"x", "fin\nsteps:\n- command: evil", "&b *b"},
 			Techniques: []TechniqueRef{{ID: "T1082"}, {ID: "T1083\nsteps: [x]"}}}
-		out := g.buildYAML(a, intelContentID(a.Name))
-		if out != g.buildYAML(a, intelContentID(a.Name)) {
+		out := g.buildYAML(a, threatidentity.ContentID(a.ThreatID))
+		if out != g.buildYAML(a, threatidentity.ContentID(a.ThreatID)) {
 			t.Fatalf("%q: output not deterministic", h.in)
 		}
 		var top map[string]any
@@ -304,7 +296,7 @@ func TestBuildYAML_TruncatesOnRuneBoundary(t *testing.T) {
 	g := NewGenerator(t.TempDir(), nil, nil, nil)
 	a := ThreatActor{Name: strings.Repeat("é", 500), Source: "otx", Description: strings.Repeat("日", 300),
 		Techniques: []TechniqueRef{{ID: "T1082"}, {ID: "T1083"}}}
-	out := g.buildYAML(a, intelContentID(a.Name))
+	out := g.buildYAML(a, threatidentity.ContentID(a.ThreatID))
 	if !utf8.ValidString(out) {
 		t.Fatal("output must be valid UTF-8")
 	}
@@ -333,5 +325,37 @@ func TestDeriveMITREPhases_DeterministicRegardlessOfOrder(t *testing.T) {
 		if got := strings.Join(deriveMITREPhases(shuffled), ","); got != want {
 			t.Fatalf("order-dependent phases: %s vs %s", got, want)
 		}
+	}
+}
+
+func TestGenerator_ContentIDFollowsThreatNotName(t *testing.T) { // acceptance 10
+	dir := t.TempDir()
+	rec := &recRegistrar{}
+	g := NewGenerator(dir, nil, nil, nil).WithRegistrar(rec)
+	techs := []TechniqueRef{{ID: "T1059.001"}, {ID: "T1082"}}
+	a := ThreatActor{Name: "APT29", ThreatID: "thr-fixed", Source: "misp", Techniques: techs}
+	b := ThreatActor{Name: "Midnight Blizzard", ThreatID: "thr-fixed", Source: "misp", Techniques: techs}
+	if _, err := g.Write([]ThreatActor{a}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := g.Write([]ThreatActor{b}); err != nil {
+		t.Fatal(err)
+	}
+	if rec.got[0].ContentID != rec.got[1].ContentID || rec.got[0].ContentID != threatidentity.ContentID("thr-fixed") {
+		t.Fatalf("ids %q %q", rec.got[0].ContentID, rec.got[1].ContentID)
+	}
+	if rec.got[0].ThreatID != "thr-fixed" {
+		t.Fatalf("threat not passed: %+v", rec.got[0])
+	}
+}
+
+func TestGenerator_SkipsUnresolvedActor(t *testing.T) { // acceptance 12 (no content for unresolved)
+	dir := t.TempDir()
+	rec := &recRegistrar{}
+	g := NewGenerator(dir, nil, nil, nil).WithRegistrar(rec)
+	res, err := g.Write([]ThreatActor{{Name: "Panda", Source: "misp",
+		Techniques: []TechniqueRef{{ID: "T1059.001"}, {ID: "T1082"}}}})
+	if err != nil || res.Skipped != 1 || len(rec.got) != 0 {
+		t.Fatalf("res=%+v got=%d err=%v", res, len(rec.got), err)
 	}
 }

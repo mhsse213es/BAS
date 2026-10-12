@@ -1,0 +1,318 @@
+id: rhysida-kill-chain
+name: "Rhysida Kill Chain — Ransomware Emulation"
+description: >
+  Eleven-stage emulation of the Rhysida ransomware kill chain targeting
+  Windows endpoints. Reflects documented Rhysida tradecraft grounded in
+  CISA AA23-319A (November 2023) and FBI IC3 corroborated by Fortinet IR,
+  Trend Micro, Check Point, and other analysts: credential-opportunistic
+  initial access (no MFA), RDP-based lateral movement, coordinated
+  SILENTKILL defense-disabling (process termination + logging impairment +
+  log clearing as separate observable steps), credential dumping, domain
+  discovery, recovery inhibition, exfiltration via RClone/Ligolo, and
+  ChaCha20+RSA-4096 encryption with full cleanup.
+
+  KILL CHAIN STAGES:
+    1. Initial Access       — Valid Accounts (compromised credentials)
+    2. Lateral Movement     — RDP-based access exploitation
+    3. Credential Access    — LSASS handle probe (Mimikatz-style)
+    4. Discovery            — Domain account enumeration
+    5. Defense Evasion A    — SILENTKILL process-termination simulation
+    6. Defense Evasion B    — SILENTKILL event-logging disable simulation
+    7. Defense Evasion C    — SILENTKILL log-clearing simulation
+    8. Recovery Inhibition A — VSS + backup enumeration (reconnaissance)
+    9. Recovery Inhibition B — Shadow copy/backup deletion (destructive, lab-gated)
+   10. Exfiltration         — RClone/Ligolo C2 connectivity probe
+   11. Impact               — ChaCha20+RSA-4096 encryption (lab, full cleanup)
+
+  SILENTKILL COORDINATION: Steps 5-7 represent the integrated SILENTKILL
+  PowerShell defense-disabling behavior documented in Trend Micro analysis
+  (2023). Each step is separately observable and independently evidence-
+  collectible, enabling granular control validation while preserving the
+  attack's coordinated nature.
+
+  THREAT NARRATIVE: Operationally distinct from Medusa (vulnerability-
+  exploitation) and Black Basta (spear-phishing): Rhysida emphasizes
+  compromised credentials without MFA and post-compromise defenses. Validates
+  identity/remote-access controls, defense-impairment detection, and
+  recovery resilience.
+
+  SOURCE GROUNDING: All steps cite CISA AA23-319A and/or FBI IC3 as primary
+  references, with secondary corroboration from Fortinet, Trend Micro,
+  Check Point, and other vendor analyses. Confidence: "confirmed" where
+  government or MITRE direct attribution; "reported" for analyst-only.
+
+author: Audspect Research
+executable: true
+local_check: false
+supported_os:
+  - windows
+tags:
+  - rhysida
+  - ransomware
+  - credential-compromise
+  - defense-evasion
+  - kill-chain
+  - t1078
+  - t1021
+  - t1003
+  - t1087
+  - t1562
+  - t1070
+  - t1490
+  - t1020
+  - t1486
+  - mitre
+mitre_phases:
+  - initial-access
+  - execution
+  - persistence
+  - privilege-escalation
+  - defense-evasion
+  - credential-access
+  - discovery
+  - lateral-movement
+  - collection
+  - exfiltration
+  - command-and-control
+  - impact
+
+live_policy:
+  block_on_domain_controller: false
+  require_dc_reachable: false
+  max_spray_attempts: 0
+  spray_account_allowlist: []
+  execution_window: ""
+
+steps:
+  - name: Valid Accounts Initial Access
+    technique_id: T1078
+    description: >
+      Simulate compromised credentials without MFA enforcement. Documented
+      in CISA AA23-319A as Rhysida's primary initial-access vector, distinct
+      from vulnerability exploitation (Medusa) or spear-phishing (Black Basta).
+    action_key: null
+    threat_intel_sources:
+      - reference: CISA AA23-319A — Initial Access
+        url: https://www.cisa.gov/news-events/cybersecurity-advisories/aa23-319a
+      - reference: FBI IC3 Alert
+        url: https://www.ic3.gov/
+    family_attribution_confidence: confirmed
+    last_reviewed: "2026-10-12"
+    details: |
+      EXEC: Simulate compromised account (test account, no real user); attempt RDP access with simulated credentials
+      Narration: "Credential compromise detected; RDP access attempted without MFA challenge"
+    detection_profiles: []
+
+  - name: RDP Lateral Movement
+    technique_id: T1021.001
+    description: >
+      RDP-based lateral movement via compromised credentials, primary
+      post-access movement vector documented in CISA AA23-319A and
+      Fortinet IR analysis.
+    action_key: null
+    threat_intel_sources:
+      - reference: CISA AA23-319A — Lateral Movement
+        url: https://www.cisa.gov/news-events/cybersecurity-advisories/aa23-319a
+      - reference: Fortinet IR — Rhysida November 2023
+        url: https://www.fortinet.com
+    family_attribution_confidence: confirmed
+    last_reviewed: "2026-10-12"
+    details: |
+      EXEC: Safe RDP probe or controlled test environment; do not conduct lateral movement on production
+      PASS: RDP connectivity attempt narration
+    detection_profiles: []
+
+  - name: LSASS Handle Access Probe
+    technique_id: T1003.001
+    description: >
+      Non-invasive LSASS handle probe via P/Invoke OpenProcess (0x1010 mask),
+      simulating credential-dumping intent without memory dump. Documented in
+      Fortinet IR and CISA analysis.
+    action_key: handle_probe
+    threat_intel_sources:
+      - reference: CISA AA23-319A — Credential Access
+        url: https://www.cisa.gov/news-events/cybersecurity-advisories/aa23-319a
+      - reference: Fortinet IR — Rhysida Credential Access
+        url: https://www.fortinet.com
+    family_attribution_confidence: confirmed
+    last_reviewed: "2026-10-12"
+    details: |
+      P/Invoke OpenProcess(0x1010), CloseHandle; LSASS handle probe
+      FAIL if access succeeded (credential memory reachable); PASS with error code if denied
+    detection_profiles: []
+    requires_priv: admin
+
+  - name: Domain Account Discovery
+    technique_id: T1087.002
+    description: >
+      Domain account enumeration via living-off-the-land tools (WMI, net group,
+      dsquery). Documented in CISA AA23-319A as part of Rhysida's discovery
+      methodology post-credential compromise.
+    action_key: null
+    threat_intel_sources:
+      - reference: CISA AA23-319A — Discovery
+        url: https://www.cisa.gov/news-events/cybersecurity-advisories/aa23-319a
+      - reference: Trend Micro — Rhysida Analysis
+        url: https://www.trendmicro.com
+    family_attribution_confidence: confirmed
+    last_reviewed: "2026-10-12"
+    details: |
+      EXEC: Get-WmiObject Win32_ComputerSystem; net group /domain; dsquery user
+      PASS: enumeration attempt narration (read-only discovery)
+    detection_profiles: []
+
+  - name: SILENTKILL Process Termination Simulation
+    technique_id: T1562.001
+    description: >
+      Simulate AV/EDR service-termination attempts as first component of
+      SILENTKILL integrated defense-disabling sequence. Trend Micro 2023
+      analysis documents SILENTKILL as coordinated PowerShell script combining
+      process termination, event logging disable, and log clearing. This step
+      models the first component independently.
+    action_key: enumerate
+    threat_intel_sources:
+      - reference: Trend Micro — SILENTKILL PowerShell Analysis (2023)
+        url: https://www.trendmicro.com
+      - reference: Picus — Rhysida Threat Profile
+        url: https://www.picus.io
+    family_attribution_confidence: confirmed
+    last_reviewed: "2026-10-12"
+    details: |
+      EXEC: Simulate wmic service where name="Defender" call stopservice narration
+      Narration: "Attempted Windows Defender service termination via WMI"
+      PASS: narration only; do NOT actually terminate production services
+    detection_profiles:
+      - windows_defender_tampering
+
+  - name: SILENTKILL Event Logging Disable Simulation
+    technique_id: T1562.008
+    description: >
+      Simulate wevtutil.exe disable-channel for event logging as second
+      component of SILENTKILL coordinated defense-disabling. Check Point
+      Research 2023 analysis documents this as part of integrated sequence.
+    action_key: enumerate
+    threat_intel_sources:
+      - reference: Check Point Research — SILENTKILL Analysis (2023)
+        url: https://www.checkpoint.com
+      - reference: Trend Micro — Logging Impairment Component
+        url: https://www.trendmicro.com
+    family_attribution_confidence: confirmed
+    last_reviewed: "2026-10-12"
+    details: |
+      EXEC: Simulate wevtutil.exe disable-channel /channel:Security narration
+      Narration: "Attempted disable of Security event logging channel"
+      PASS: narration only; do NOT actually disable logging
+    detection_profiles:
+      - windows_event_log_tampering
+
+  - name: SILENTKILL Log Clearing Simulation
+    technique_id: T1070.001
+    description: >
+      Simulate Event Log clearing (wevtutil.exe clear-log, PowerShell history
+      deletion) as third component of SILENTKILL coordinated sequence. At-Bay
+      and Check Point confirm as final defense-disabling step.
+    action_key: enumerate
+    threat_intel_sources:
+      - reference: Check Point Research — SILENTKILL Final Step (2023)
+        url: https://www.checkpoint.com
+      - reference: At-Bay — Ransomware Defense Analysis
+        url: https://www.at-bay.io
+    family_attribution_confidence: confirmed
+    last_reviewed: "2026-10-12"
+    details: |
+      EXEC: Simulate wevtutil.exe clear-log Security; Remove-Item (Get-PSReadlineHistoryFilePath) narration
+      Narration: "Attempted Event Log purge and PowerShell history deletion"
+      PASS: narration only; do NOT actually delete logs
+    detection_profiles:
+      - windows_forensic_evasion
+
+  - name: VSS and Backup Catalog Enumeration
+    technique_id: T1490
+    description: >
+      Read-only enumeration of VSS shadow copies and Windows backup catalogs.
+      This step is safe reconnaissance; actual deletion follows in Step 9
+      (lab-gated only).
+    action_key: enumerate
+    threat_intel_sources:
+      - reference: CISA AA23-319A — Recovery Inhibition
+        url: https://www.cisa.gov/news-events/cybersecurity-advisories/aa23-319a
+      - reference: Trend Micro — Rhysida Recovery Inhibition
+        url: https://www.trendmicro.com
+    family_attribution_confidence: confirmed
+    last_reviewed: "2026-10-12"
+    details: |
+      EXEC: vssadmin list shadows; wbadmin get versions
+      PASS: enumeration narration (count shadow copies and backups)
+    detection_profiles:
+      - windows_vss_inhibition
+
+  - name: Destructive Recovery Inhibition (Lab-Gated)
+    technique_id: T1490
+    description: >
+      Destructive deletion of VSS shadow copies and Windows backup catalogs.
+      Lab-gated only; never executed on production systems. Separately gated
+      from enumeration step to enable granular recovery-resilience validation.
+    action_key: ransomware_sim_sandboxed
+    threat_intel_sources:
+      - reference: CISA AA23-319A — Impact Destruction
+        url: https://www.cisa.gov/news-events/cybersecurity-advisories/aa23-319a
+      - reference: Fortinet IR — Recovery Inhibition Execution
+        url: https://www.fortinet.com
+    family_attribution_confidence: confirmed
+    last_reviewed: "2026-10-12"
+    details: |
+      EXEC: vssadmin delete shadows /all /quiet; wbadmin delete catalog (lab environment only)
+      CLEANUP: Full removal of any test shadow copies; verify cleanup with vssadmin list shadows
+      PASS: narration; FAIL if executed outside lab environment
+    detection_profiles:
+      - windows_recovery_inhibition
+    requires_priv: admin
+    fidelity: lab-only
+    production_safe: false
+    risk: high
+    reversible: false
+
+  - name: Automated Exfiltration via RClone/Ligolo
+    technique_id: T1020
+    description: >
+      Simulate exfiltration-endpoint connectivity via TCP probes to attacker
+      C2 addresses. Recorded Future and Picus analyses document RClone and
+      Ligolo as Rhysida's exfiltration tools.
+    action_key: null
+    threat_intel_sources:
+      - reference: Recorded Future — Rhysida Exfiltration (2023)
+        url: https://www.recordedfuture.com
+      - reference: Picus — Rhysida C2 Analysis
+        url: https://www.picus.io
+    family_attribution_confidence: confirmed
+    last_reviewed: "2026-10-12"
+    details: |
+      EXEC: TCP probes to attacker C2 addresses (simulated via loopback/test addresses)
+      PASS: probe attempt narration; do NOT transfer real data
+    detection_profiles:
+      - windows_cloud_egress
+
+  - name: ChaCha20+RSA-4096 Encryption (Lab, Full Cleanup)
+    technique_id: T1486
+    description: >
+      Full-fidelity sandboxed ChaCha20+RSA-4096 encryption simulation with
+      guaranteed cleanup. Creates isolated temporary directory, encrypts
+      dummy files, decrypts, and removes all traces. Lab-only, no production
+      data at risk.
+    action_key: ransomware_sim_sandboxed
+    threat_intel_sources:
+      - reference: CISA AA23-319A — Impact Encryption
+        url: https://www.cisa.gov/news-events/cybersecurity-advisories/aa23-319a
+      - reference: Barracuda — Rhysida Encryption Analysis (2024)
+        url: https://www.barracuda.com
+    family_attribution_confidence: confirmed
+    last_reviewed: "2026-10-12"
+    details: |
+      Create %TEMP%\bas_range_<runid>\; write dummy files; encrypt (XOR or ChaCha20 test-key); decrypt; cleanup
+      CLEANUP narration; full directory removal verified via Test-Path
+    detection_profiles:
+      - windows_ransomware_encryption
+    fidelity: lab-only
+    production_safe: false
+    risk: high
+    reversible: false

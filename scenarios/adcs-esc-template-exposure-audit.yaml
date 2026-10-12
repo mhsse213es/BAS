@@ -1,0 +1,128 @@
+id: adcs-esc-template-exposure-audit
+name: ADCS ESC Template Exposure Audit
+description: >
+  Single-stage, read-only Active Directory Certificate Services audit: reads
+  the certificate templates published under the AD Configuration partition
+  and reports ESC1-4-class misconfigurations that a non-tier-0 principal
+  could abuse (T1649) -- a template that supplies its own subject together
+  with an authentication EKU and low-privileged enrollment (ESC1), an
+  Any-Purpose / no-EKU template (ESC2), an enrollment-agent template (ESC3),
+  or a template whose own DACL is writable by a non-tier-0 principal (ESC4).
+
+  SAFETY: This step only READS pKICertificateTemplate objects and their
+  security descriptors via .NET DirectoryServices. It NEVER requests or
+  enrolls a certificate, modifies a template, or contacts a CA's enrollment
+  endpoint. It proves only whether a template misconfiguration is EXPOSED,
+  not that a certificate was ever obtained. The CA-host-level SAN policy
+  flag (ESC6) and HTTP web-enrollment reach (ESC8) are outside a
+  Configuration-partition read and are not assessed here. On a non-domain
+  host it returns a clean SKIP.
+  PRODUCTION-SAFE: runs in telemetry mode. Windows domain members only.
+author: Audspect Research
+executable: true
+local_check: false
+supported_os: [windows]
+tags:
+  - adcs
+  - active-directory
+  - certificate-templates
+  - privilege-escalation
+  - t1649
+  - mitre
+mitre_phases:
+  - discovery
+  - privilege-escalation
+
+live_policy:
+  block_on_domain_controller: false
+  require_dc_reachable: true
+  max_spray_attempts: 0
+  spray_account_allowlist: []
+  execution_window: ""
+
+steps:
+
+  # ---------------------------------------------------------------------------
+  # Stage 1 — Certificate-Template ESC Exposure Audit (T1649)
+  # ---------------------------------------------------------------------------
+  - name: "ADCS Stage 1 — Certificate-Template ESC Exposure Audit (T1649)"
+    technique_id: T1649
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Reads pKICertificateTemplate objects and their security descriptors from the AD Configuration partition via System.DirectoryServices (read-only) and reports ESC1-4-class misconfigurations enrollable by non-tier-0 principals. Never requests or enrolls a certificate, modifies a template, or contacts a CA enrollment endpoint. Generates LDAP reads against the DC's Configuration partition."
+    telemetry:
+      - "DC: LDAP read of pKICertificateTemplate objects under the Configuration partition — not separately audited by default"
+      - "Sysmon EID 1: powershell.exe reading certificate-template objects via DirectoryServices"
+    detection:
+      - "SIEM: a certificate template enrollable by a non-tier-0 principal carries an ESC1-4-class misconfiguration (enrollee-supplied subject + authentication EKU, Any-Purpose/no EKU, enrollment-agent EKU, or a non-tier-0-writable template DACL) — AD CS template exposure IOC"
+      - "SIEM: an LDAP enumeration of the certificate-templates container from a workstation — AD CS reconnaissance IOC"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $findings = @()
+      try {
+        $rootDSE = [ADSI]"LDAP://RootDSE"
+        $configDN = $rootDSE.configurationNamingContext
+        if (-not $configDN) { throw "no domain" }
+        $templatesDN = "CN=Certificate Templates,CN=Public Key Services,CN=Services,$configDN"
+        $container = New-Object System.DirectoryServices.DirectoryEntry("LDAP://$templatesDN")
+        if (-not $container.Name) { throw "no adcs" }
+
+        # Well-known tier-0 trustees expected to hold enrollment/write rights.
+        $tier0 = @('S-1-5-18','S-1-5-32-544','S-1-5-9','*-512','*-516','*-519','*-518','*-521','*-498','*-500','*-517')
+        function Is-Tier0([string]$sid) { foreach ($t in $tier0) { if ($sid -like $t) { return $true } }; return $false }
+
+        $authEKU = @('1.3.6.1.5.5.7.3.2','1.3.6.1.4.1.311.20.2.2','1.3.6.1.5.2.3.4','2.5.29.37.0')
+        $agentEKU = '1.3.6.1.4.1.311.20.2.1'
+        $anyEKU = '2.5.29.37.0'
+        $enrollRight = [guid]'0e10c968-78fb-11d2-90d4-00c04f79dc55'
+        $autoEnroll  = [guid]'a05b8cc2-17bc-4802-a710-e7c15ab866a2'
+        $writeRights = [System.DirectoryServices.ActiveDirectoryRights]'GenericAll,GenericWrite,WriteDacl,WriteOwner,WriteProperty'
+
+        foreach ($tmpl in $container.Children) {
+          if ($tmpl.SchemaClassName -ne 'pKICertificateTemplate') { continue }
+          $name = [string]$tmpl.Properties['cn'].Value
+          $nameFlag = [int]($tmpl.Properties['msPKI-Certificate-Name-Flag'].Value)
+          $enrollFlag = [int]($tmpl.Properties['msPKI-Enrollment-Flag'].Value)
+          $ekus = @($tmpl.Properties['pKIExtendedKeyUsage'] | ForEach-Object { [string]$_ })
+          $suppliesSubject = ($nameFlag -band 0x1) -ne 0
+          $mgrApproval = ($enrollFlag -band 0x2) -ne 0
+          $hasAuthEKU = $false; foreach ($e in $ekus) { if ($authEKU -contains $e) { $hasAuthEKU = $true } }
+          $hasAgentEKU = $ekus -contains $agentEKU
+          $hasAnyOrNoEKU = ($ekus.Count -eq 0) -or ($ekus -contains $anyEKU)
+
+          $lowPrivEnroll = $false; $nonTier0Write = $false
+          $rules = $tmpl.ObjectSecurity.GetAccessRules($true, $true, [System.Security.Principal.SecurityIdentifier])
+          foreach ($r in $rules) {
+            if ($r.AccessControlType -ne [System.Security.AccessControl.AccessControlType]::Allow) { continue }
+            $sid = $r.IdentityReference.Value
+            if (Is-Tier0 $sid) { continue }
+            if (($r.ActiveDirectoryRights -band [System.DirectoryServices.ActiveDirectoryRights]::ExtendedRight) -ne 0 -and ($r.ObjectType -eq $enrollRight -or $r.ObjectType -eq $autoEnroll)) { $lowPrivEnroll = $true }
+            if (($r.ActiveDirectoryRights -band $writeRights) -ne 0) { $nonTier0Write = $true }
+          }
+
+          $escs = @()
+          if ($suppliesSubject -and $hasAuthEKU -and (-not $mgrApproval) -and $lowPrivEnroll) { $escs += 'ESC1' }
+          if ($hasAnyOrNoEKU -and $lowPrivEnroll -and (-not $mgrApproval)) { $escs += 'ESC2' }
+          if ($hasAgentEKU -and $lowPrivEnroll) { $escs += 'ESC3' }
+          if ($nonTier0Write) { $escs += 'ESC4' }
+          if ($escs.Count -gt 0) { $findings += "$name: $($escs -join ',')" }
+        }
+        $count = $findings.Count
+      } catch {
+        $count = -1
+      }
+      if ($count -lt 0) {
+        Write-Output "SKIP: AD CS template exposure audit unavailable — host is not domain-joined, the DC is unreachable, or no AD CS templates container exists. [BAS-SIM-ADCS-S1]"
+      } elseif ($count -eq 0) {
+        Write-Output "PASS: no certificate template exposes an ESC1-4-class misconfiguration enrollable by a non-tier-0 principal — no AD CS template privilege-escalation path exposed from this context. [BAS-SIM-ADCS-S1]"
+      } else {
+        Write-Output "EXEC T1649: found $count certificate template(s) with an ESC1-4-class misconfiguration enrollable by non-tier-0 principals. Reads template configuration only — this is a detection-and-exposure probe, it requests no certificate. [BAS-SIM-ADCS-S1]"
+        Write-Output "FAIL: a certificate template permits a non-tier-0 principal to obtain a certificate usable for authentication as another principal (ESC1-4), enabling domain privilege escalation. Review the flagged template(s): remove enrollee-supplied-subject, require manager approval, restrict enrollment and template DACLs to tier-0 trustees, and audit CA issuance (events 4886/4887)."
+      }
+    cleanup: ""
