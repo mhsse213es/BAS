@@ -16,10 +16,10 @@ const (
 
 // AccountScope identifies the cloud account/subscription/project owning a resource
 type AccountScope struct {
-	Provider   string // "aws", "azure", "gcp"
-	AccountID  string // AWS account ID, Azure subscription ID, GCP project ID
-	TenantID   string // Azure tenant ID (if applicable)
-	Region     string // Optional: geographic scope
+	Provider  string // "aws", "azure", "gcp"
+	AccountID string // AWS account ID, Azure subscription ID, GCP project ID
+	TenantID  string // Azure tenant ID (if applicable)
+	Region    string // Optional: geographic scope
 }
 
 // Provenance tracks where an observation came from and its freshness
@@ -33,39 +33,39 @@ type Provenance struct {
 
 // CloudResource represents a normalized cloud resource (S3 bucket, storage account, role, etc.)
 type CloudResource struct {
-	CanonicalID   string              // Provider ARN or resource path (not synthetic)
-	Kind          string              // "s3-bucket", "storage-account", "iam-role", etc.
-	AccountScope  *AccountScope       // Owner account/subscription/project
-	DisplayName   string              // User-visible name
-	Attributes    map[string]string   // Provider-specific metadata
-	Provenance    *Provenance         // Discovery source, freshness, confidence
+	CanonicalID  string            // Provider ARN or resource path (not synthetic)
+	Kind         string            // "s3-bucket", "storage-account", "iam-role", etc.
+	AccountScope *AccountScope     // Owner account/subscription/project
+	DisplayName  string            // User-visible name
+	Attributes   map[string]string // Provider-specific metadata
+	Provenance   *Provenance       // Discovery source, freshness, confidence
 }
 
 // CloudIdentity represents a cloud principal (IAM user, role, service principal, etc.)
 type CloudIdentity struct {
-	CanonicalID string            // Provider ARN or identity path
-	Kind        string            // "iam-user", "iam-role", "service-principal", "managed-identity"
-	AccountScope *AccountScope    // Owner account/subscription/project
-	Attributes  map[string]string // MFA enabled, last-used, etc.
-	Provenance  *Provenance       // Discovery source, freshness
+	CanonicalID  string            // Provider ARN or identity path
+	Kind         string            // "iam-user", "iam-role", "service-principal", "managed-identity"
+	AccountScope *AccountScope     // Owner account/subscription/project
+	Attributes   map[string]string // MFA enabled, last-used, etc.
+	Provenance   *Provenance       // Discovery source, freshness
 }
 
 // Condition represents a prerequisite or constraint on authorization (IP restriction, MFA, etc.)
 type Condition struct {
-	Type          string // "ip-address", "mfa-required", "time-based", etc.
-	Value         string // Condition value
-	EvaluatedAs   string // "satisfied", "unsatisfied", "unknown"
+	Type        string // "ip-address", "mfa-required", "time-based", etc.
+	Value       string // Condition value
+	EvaluatedAs string // "satisfied", "unsatisfied", "unknown"
 }
 
 // CloudPermission represents an authorization edge from identity to resource
 type CloudPermission struct {
-	Source         *CloudIdentity    // Who has the permission
-	Target         *CloudResource    // What they can access
-	Action         string            // "sts:AssumeRole", "s3:GetObject", etc.
-	Conditions     []*Condition      // Authorization conditions
-	SourceType     string            // "identity-policy", "resource-policy", "org-scp", "role-trust"
-	Attributes     map[string]string // Raw policy document and other evaluator inputs
-	Provenance     *Provenance       // Collection source
+	Source     *CloudIdentity    // Who has the permission
+	Target     *CloudResource    // What they can access
+	Action     string            // "sts:AssumeRole", "s3:GetObject", etc.
+	Conditions []*Condition      // Authorization conditions
+	SourceType string            // "identity-policy", "resource-policy", "org-scp", "role-trust"
+	Attributes map[string]string // Raw policy document and other evaluator inputs
+	Provenance *Provenance       // Collection source
 }
 
 // RequestContext provides request-time information (IP, principal, timestamp)
@@ -103,9 +103,9 @@ type CloudEvent struct {
 // EventSearchResult represents findings from a CloudTrail/audit log query
 type EventSearchResult struct {
 	EventsFound      []*CloudEvent
-	SearchStatus     string        // "success", "partial", "unavailable"
-	SearchError      string        // Error detail if unavailable
-	WindowStart      time.Time     // Search window used
+	SearchStatus     string    // "success", "partial", "unavailable"
+	SearchError      string    // Error detail if unavailable
+	WindowStart      time.Time // Search window used
 	WindowEnd        time.Time
 	EventsSearched   int           // Total events examined
 	MatchQuality     string        // "perfect", "partial", "delayed", "none"
