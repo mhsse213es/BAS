@@ -167,3 +167,72 @@ func TestDiscoverIdentities_GraphHTTPError_FailsFastNoPartialResults(t *testing.
 		t.Fatalf("DiscoverIdentities: want (nil, nil, err), got (%+v, %+v, %v)", identities, stats, err)
 	}
 }
+
+func TestDiscoverResources_NormalizesARMResources(t *testing.T) {
+	tokenSrv := azureTokenMock(t)
+	defer tokenSrv.Close()
+
+	armSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/subscriptions/sub-1/resources" {
+			t.Fatalf("unexpected ARM path %s", r.URL.Path)
+		}
+		json.NewEncoder(w).Encode(map[string]any{
+			"value": []map[string]any{
+				{
+					"id":   "/subscriptions/sub-1/resourceGroups/rg-1/providers/Microsoft.Storage/storageAccounts/foo",
+					"type": "Microsoft.Storage/storageAccounts",
+				},
+			},
+		})
+	}))
+	defer armSrv.Close()
+
+	c := newTestAzureDiscoveryClient(t, tokenSrv.URL, "", armSrv.URL)
+	resources, stats, err := c.DiscoverResources(context.Background())
+	if err != nil {
+		t.Fatalf("DiscoverResources: %v", err)
+	}
+	if stats.ItemsFound != 1 || len(resources) != 1 {
+		t.Fatalf("resources = %+v, stats = %+v, want 1 resource", resources, stats)
+	}
+	r := resources[0]
+	wantID := "/subscriptions/sub-1/resourceGroups/rg-1/providers/Microsoft.Storage/storageAccounts/foo"
+	if r.CanonicalID != wantID || r.Kind != "Microsoft.Storage/storageAccounts" {
+		t.Fatalf("resource = %+v, want CanonicalID %s, Kind Microsoft.Storage/storageAccounts", r, wantID)
+	}
+	if r.Provenance == nil || r.Provenance.Source != "azure:arm-resources" || r.Provenance.Confidence != "observed" {
+		t.Fatalf("resource provenance = %+v, want Source azure:arm-resources, Confidence observed", r.Provenance)
+	}
+}
+
+func TestDiscoverResources_FollowsARMPagination(t *testing.T) {
+	tokenSrv := azureTokenMock(t)
+	defer tokenSrv.Close()
+
+	var armSrv *httptest.Server
+	armSrv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/subscriptions/sub-1/resources":
+			json.NewEncoder(w).Encode(map[string]any{
+				"value":    []map[string]any{{"id": "/subscriptions/sub-1/resourceGroups/rg-1/res-a", "type": "t1"}},
+				"nextLink": armSrv.URL + "/resourcesPage2",
+			})
+		case "/resourcesPage2":
+			json.NewEncoder(w).Encode(map[string]any{
+				"value": []map[string]any{{"id": "/subscriptions/sub-1/resourceGroups/rg-1/res-b", "type": "t1"}},
+			})
+		default:
+			t.Fatalf("unexpected ARM path %s", r.URL.Path)
+		}
+	}))
+	defer armSrv.Close()
+
+	c := newTestAzureDiscoveryClient(t, tokenSrv.URL, "", armSrv.URL)
+	resources, stats, err := c.DiscoverResources(context.Background())
+	if err != nil {
+		t.Fatalf("DiscoverResources: %v", err)
+	}
+	if stats.ItemsFound != 2 || len(resources) != 2 {
+		t.Fatalf("resources = %+v, stats = %+v, want 2 resources across both pages", resources, stats)
+	}
+}

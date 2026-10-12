@@ -175,3 +175,36 @@ func (c *AzureDiscoveryClient) DiscoverIdentities(ctx context.Context) ([]*Cloud
 
 	return identities, &DiscoveryStats{ItemsFound: len(identities)}, nil
 }
+
+type armResource struct {
+	ID   string `json:"id"`
+	Type string `json:"type"`
+}
+
+// DiscoverResources enumerates Azure resources in the configured
+// subscription via Azure Resource Manager. ARM's "id" field is already the
+// full hierarchical resource path, so it is used as CanonicalID unchanged --
+// no transformation needed, since it is identical in shape to the Phase 4/5
+// test fixtures.
+func (c *AzureDiscoveryClient) DiscoverResources(ctx context.Context) ([]*CloudResource, *DiscoveryStats, error) {
+	url := fmt.Sprintf("%s/subscriptions/%s/resources?api-version=2021-04-01", c.ARMBaseURL, c.subscriptionID)
+	pages, err := c.fetchAllPages(ctx, url, c.armTokens)
+	if err != nil {
+		return nil, nil, fmt.Errorf("azure discovery: listing resources: %w", err)
+	}
+
+	var resources []*CloudResource
+	for _, raw := range pages {
+		var r armResource
+		if err := json.Unmarshal(raw, &r); err != nil {
+			return nil, nil, fmt.Errorf("azure discovery: parsing resource: %w", err)
+		}
+		resources = append(resources, &CloudResource{
+			CanonicalID: r.ID,
+			Kind:        r.Type,
+			Provenance:  &Provenance{Source: "azure:arm-resources", Confidence: "observed"},
+		})
+	}
+
+	return resources, &DiscoveryStats{ItemsFound: len(resources)}, nil
+}
