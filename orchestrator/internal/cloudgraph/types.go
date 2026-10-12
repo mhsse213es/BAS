@@ -86,3 +86,30 @@ type EvaluationResult struct {
 	MatchedStatements []int     // Statement indices in policy that matched
 	MatchedConditions []string  // Condition names that were satisfied
 }
+
+// CloudEvent represents an audit log entry (CloudTrail, Activity Log, etc.)
+type CloudEvent struct {
+	Principal    string    // IAM ARN or Entra principal
+	Action       string    // API action (e.g., sts:AssumeRole, s3:GetObject)
+	Resource     string    // Resource ARN
+	Timestamp    time.Time // When the action occurred
+	Result       string    // "Success", "Failure", "MFAChallenge"
+	Source       string    // "cloudtrail", "activity-log", "s3-access-logs"
+	SessionToken string    // Session ID for correlation
+	SourceIP     string    // Caller IP
+	UserAgent    string    // API caller
+}
+
+// EventSearchResult represents findings from a CloudTrail/audit log query
+type EventSearchResult struct {
+	EventsFound      []*CloudEvent
+	SearchStatus     string        // "success", "partial", "unavailable"
+	SearchError      string        // Error detail if unavailable
+	WindowStart      time.Time     // Search window used
+	WindowEnd        time.Time
+	EventsSearched   int           // Total events examined
+	MatchQuality     string        // "perfect", "partial", "delayed", "none"
+	TelemetryDelay   time.Duration // Time from action to event logged
+	MissingTelemetry []string      // ["mfa-challenge-events"] if partial
+	Confidence       string        // "high", "medium", "low"
+}
