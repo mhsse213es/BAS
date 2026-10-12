@@ -53,3 +53,19 @@ func DataExfiltrationToCloud() Technique {
 		RiskClass: adprimitive.RiskNonDestructive,
 	}
 }
+
+// ArchiveStagingViaUtility is the fourth technique this package supports:
+// local staging/archival of collected data via a compression utility
+// (T1560.001, Archive Collected Data: Archive via Utility) -- the staging
+// leg of the double-extortion correlation engine (sub-project #5),
+// matching clop-kill-chain.yaml's Stage 3 exactly (Compress-Archive zips a
+// decoy file; no real sensitive data is touched). Non-destructive: it
+// stages/compresses, nothing more.
+func ArchiveStagingViaUtility() Technique {
+	return Technique{
+		ID:        "archive-staging-via-utility",
+		Name:      "Archive Staging via Compress-Archive (Archive Collected Data)",
+		MitreID:   "T1560.001",
+		RiskClass: adprimitive.RiskNonDestructive,
+	}
+}

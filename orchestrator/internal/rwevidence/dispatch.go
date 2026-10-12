@@ -39,7 +39,7 @@ var reconnaissanceStepNames = map[string]bool{
 // attempt genuinely ran and needs real evaluation (Task 3).
 func classifyRansomwareStep(in StepInput) (modeled bool, isAttempt bool, specificReason string) {
 	switch in.TechniqueID {
-	case "T1490", "T1486", "T1567.002":
+	case "T1490", "T1486", "T1567.002", "T1560.001":
 		modeled = true
 	default:
 		return false, false, "technique_not_mapped"
@@ -149,6 +149,7 @@ var allCapabilities = []Capability{
 var undecidedApplicability = map[string]map[Capability]bool{
 	"T1486":     {CapabilityDataProtection: true},
 	"T1567.002": {CapabilityPrevention: true, CapabilityRecovery: true, CapabilityDetection: true},
+	"T1560.001": {CapabilityPrevention: true, CapabilityRecovery: true, CapabilityDetection: true},
 }
 
 // notApplicable names the (technique, capability) pairs with a DECIDED "no"
@@ -158,6 +159,7 @@ var notApplicable = map[string]map[Capability]string{
 	"T1490":     {CapabilityContainment: "T1490 is a single-host VSS/backup-catalog deletion -- it has no lateral-reachability dimension to contain", CapabilityDataProtection: "T1490 destroys recovery mechanisms; it does not access, stage, or exfiltrate data"},
 	"T1486":     {CapabilityRecovery: "T1486 is about whether files get encrypted, not whether recovery mechanisms survive -- that is T1490's domain"},
 	"T1567.002": {CapabilityContainment: "containment of an exfil channel is covered by the DataProtection capability, not a separate Containment check"},
+	"T1560.001": {CapabilityContainment: "archiving collected data locally has no lateral-reachability dimension to contain"},
 }
 
 func techniqueFor(id string) Technique {
@@ -168,6 +170,8 @@ func techniqueFor(id string) Technique {
 		return DataEncryptedForImpact()
 	case "T1567.002":
 		return DataExfiltrationToCloud()
+	case "T1560.001":
+		return ArchiveStagingViaUtility()
 	}
 	return Technique{}
 }

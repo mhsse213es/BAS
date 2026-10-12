@@ -7,6 +7,47 @@ import (
 	"github.com/audspect/bas/internal/controlval"
 )
 
+func TestEvaluateStep_T1560001Attempt_SameApplicabilitySplitAsT1567002(t *testing.T) {
+	in := StepInput{
+		RunID: "r1", Action: "staging-1", TechniqueID: "T1560.001",
+		StepName: "Archive Staging via Compress-Archive", CheckResult: "fail", Details: "FAIL: zip created unblocked",
+	}
+	deps := StepDependencies{
+		Prevention:     &controlval.FakeProvider{},
+		Recovery:       &FakeRecoveryObserver{},
+		Containment:    &FakeContainmentObserver{},
+		Detection:      &FakeDetectionLookup{},
+		DataProtection: &FakeDataProtectionLookup{Status: map[string]string{"r1/T1560.001/staging-1": "NotDetected"}},
+	}
+	results := EvaluateStep(in, deps)
+	byCapability := map[Capability]CapabilityResult{}
+	for _, r := range results {
+		byCapability[r.Capability] = r
+	}
+	for _, cap := range []Capability{CapabilityPrevention, CapabilityRecovery, CapabilityDetection} {
+		r := byCapability[cap]
+		if r.Verdict != controlval.VerdictSkipped || r.SkipReason != controlval.SkipNotTested {
+			t.Errorf("%s = %+v, want SKIPPED/not_tested (applicability_undecided)", cap, r)
+		}
+	}
+	if r := byCapability[CapabilityContainment]; r.Verdict != controlval.VerdictSkipped || r.SkipReason != controlval.SkipNotApplicable {
+		t.Errorf("containment = %+v, want SKIPPED/not_applicable", r)
+	}
+	if byCapability[CapabilityDataProtection].Verdict != controlval.VerdictFail {
+		t.Errorf("data_protection = %+v, want FAIL (NotDetected)", byCapability[CapabilityDataProtection])
+	}
+}
+
+func TestTechniqueFor_T1560001ReturnsArchiveStagingViaUtility(t *testing.T) {
+	tech := techniqueFor("T1560.001")
+	if tech.MitreID != "T1560.001" {
+		t.Fatalf("MitreID = %q, want T1560.001", tech.MitreID)
+	}
+	if tech.ID != "archive-staging-via-utility" {
+		t.Fatalf("ID = %q, want archive-staging-via-utility", tech.ID)
+	}
+}
+
 func TestClassify_UnmodeledTechnique(t *testing.T) {
 	in := StepInput{TechniqueID: "T1059", StepName: "PowerShell Execution", RunID: "r1", Action: "x", CheckResult: "fail"}
 	modeled, isAttempt, specificReason := classifyRansomwareStep(in)
