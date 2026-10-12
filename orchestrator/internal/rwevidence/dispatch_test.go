@@ -76,6 +76,50 @@ func TestClassify_ReconnaissanceStep(t *testing.T) {
 	}
 }
 
+func TestClassify_LinuxLVMReconnaissanceStep(t *testing.T) {
+	in := StepInput{TechniqueID: "T1490", StepName: "LVM Snapshot Enumeration", RunID: "r1", Action: "x", CheckResult: "pass"}
+	modeled, isAttempt, specificReason := classifyRansomwareStep(in)
+	if !modeled {
+		t.Fatal("T1490 is modeled")
+	}
+	if isAttempt {
+		t.Fatal("an LVM enumeration step is not an attempt")
+	}
+	if specificReason != "not_an_attempt" {
+		t.Fatalf("specificReason = %q, want not_an_attempt", specificReason)
+	}
+}
+
+func TestClassify_LinuxLVMGateNotConfirmed(t *testing.T) {
+	in := StepInput{
+		TechniqueID: "T1490", StepName: "LVM Snapshot Removal", RunID: "r1", Action: "x",
+		CheckResult: "skipped",
+		Details:     "SKIP: BAS_CONFIRM_LVM_DELETE not set to 'true' - LVM snapshot deletion skipped (default-disabled per ransomware safety policy).",
+	}
+	modeled, isAttempt, specificReason := classifyRansomwareStep(in)
+	if !modeled || !isAttempt {
+		t.Fatalf("modeled=%v isAttempt=%v, want true/true (this IS the destructive attempt step, it just didn't run)", modeled, isAttempt)
+	}
+	if specificReason != "gate_not_confirmed" {
+		t.Fatalf("specificReason = %q, want gate_not_confirmed", specificReason)
+	}
+}
+
+func TestClassify_LinuxLVMNoTargetPrecondition(t *testing.T) {
+	in := StepInput{
+		TechniqueID: "T1490", StepName: "LVM Snapshot Removal", RunID: "r1", Action: "x",
+		CheckResult: "skipped",
+		Details:     "SKIP: no LVM snapshots exist - nothing to delete. Create a snapshot first with: lvcreate -s.",
+	}
+	modeled, isAttempt, specificReason := classifyRansomwareStep(in)
+	if !modeled || !isAttempt {
+		t.Fatalf("modeled=%v isAttempt=%v, want true/true", modeled, isAttempt)
+	}
+	if specificReason != "no_target_precondition" {
+		t.Fatalf("specificReason = %q, want no_target_precondition", specificReason)
+	}
+}
+
 func TestClassify_GateNotConfirmed(t *testing.T) {
 	in := StepInput{
 		TechniqueID: "T1490", StepName: "VSS Shadow Copy Deletion via WMI", RunID: "r1", Action: "x",

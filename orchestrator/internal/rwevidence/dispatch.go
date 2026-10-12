@@ -26,6 +26,7 @@ type StepInput struct {
 var reconnaissanceStepNames = map[string]bool{
 	"VSS Snapshot Enumeration":         true,
 	"VSS + Backup Catalog Enumeration": true,
+	"LVM Snapshot Enumeration":         true,
 }
 
 // classifyRansomwareStep is the first stage of EvaluateStep's decision tree
@@ -67,7 +68,11 @@ func classifyRansomwareStep(in StepInput) (modeled bool, isAttempt bool, specifi
 	switch {
 	case strings.Contains(lower, "bas_confirm_vss_delete not set"):
 		return true, true, "gate_not_confirmed"
+	case strings.Contains(lower, "bas_confirm_lvm_delete not set"):
+		return true, true, "gate_not_confirmed"
 	case strings.Contains(lower, "no c: vss shadow copies exist"):
+		return true, true, "no_target_precondition"
+	case strings.Contains(lower, "no lvm snapshots exist"):
 		return true, true, "no_target_precondition"
 	default:
 		return true, true, "skip_unclassified"
