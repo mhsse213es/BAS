@@ -28,6 +28,7 @@ var ransomwareScenarioIDs = map[string]bool{
 	"ransomhub-kill-chain":       true,
 	"ransomware-drill":           true,
 	"em-07-ransomware-readiness": true,
+	"linux-ransomware-drill":     true,
 }
 
 // recordRWEvidence is additive and best-effort toward scoring (there is no

@@ -33,4 +33,6 @@ var RansomwareRelevantProfiles = []string{
 	"windows_smb_lateral_probe",
 	"windows_vss_inhibition",
 	"windows_vulnerable_driver_load",
+	"linux_lvm_snapshot_inhibition",
+	"linux_ransomware_encryption",
 }

@@ -18,7 +18,8 @@ import { apicall } from '../core/api.js';
 
 var RR_SCENARIO_IDS = [
   'akira-kill-chain', 'blackcat-kill-chain', 'clop-kill-chain', 'lockbit-kill-chain',
-  'play-kill-chain', 'ransomhub-kill-chain', 'ransomware-drill', 'em-07-ransomware-readiness'
+  'play-kill-chain', 'ransomhub-kill-chain', 'ransomware-drill', 'em-07-ransomware-readiness',
+  'linux-ransomware-drill'
 ];
 
 // Dimension display config: rwscore.Dimension value → { label, icon }
