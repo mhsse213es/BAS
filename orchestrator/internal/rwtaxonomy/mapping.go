@@ -23,6 +23,8 @@ var TechniqueDomain = map[string]Domain{
 	"T1003.001": DomainCredentialAccess,
 	// OS Credential Dumping: SAM
 	"T1003.002": DomainCredentialAccess,
+	// OS Credential Dumping: DCSync
+	"T1003.006": DomainCredentialAccess,
 	// Remote Services: RDP
 	"T1021.001": DomainLateralMovement,
 	// Remote Services: SMB/Windows Admin Shares
@@ -57,6 +59,8 @@ var TechniqueDomain = map[string]Domain{
 	"T1490": DomainRecoveryInhibition,
 	// Security Software Discovery
 	"T1518.001": DomainPreparationAndPersistence,
+	// Web Shell
+	"T1505.003": DomainPreparationAndPersistence,
 	// Create or Modify System Process: Windows Service
 	"T1543.003": DomainPreparationAndPersistence,
 	// Archive Collected Data via Utility
@@ -65,6 +69,8 @@ var TechniqueDomain = map[string]Domain{
 	"T1562.001": DomainDefenseEvasion,
 	// Impair Defenses: Disable Windows Event Logging
 	"T1562.008": DomainDefenseEvasion,
+	// Impair Defenses: Modify Authentication Process (CVE-2020-1472 Zerologon)
+	"T1556": DomainDefenseEvasion,
 	// Exfiltration to Cloud Storage
 	"T1567.002": DomainExfiltration,
 }

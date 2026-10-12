@@ -16,7 +16,7 @@ var ransomwareScenarioFiles = []string{
 	"lockbit-kill-chain.yaml", "play-kill-chain.yaml", "ransomhub-kill-chain.yaml",
 	"ransomware-drill.yaml", "endpoint-mastery/em-07-ransomware-readiness.yaml",
 	"linux-ransomware-drill.yaml", "black-basta-kill-chain.yaml", "medusa-kill-chain.yaml",
-	"rhysida-kill-chain.yaml",
+	"rhysida-kill-chain.yaml", "hunters-international-kill-chain.yaml",
 }
 
 func repoScenariosDir(t *testing.T) string {
