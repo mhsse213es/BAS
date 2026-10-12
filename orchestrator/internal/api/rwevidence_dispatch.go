@@ -31,6 +31,7 @@ var ransomwareScenarioIDs = map[string]bool{
 	"linux-ransomware-drill":     true,
 	"black-basta-kill-chain":     true,
 	"medusa-kill-chain":          true,
+	"rhysida-kill-chain":         true,
 }
 
 // recordRWEvidence is additive and best-effort toward scoring (there is no
