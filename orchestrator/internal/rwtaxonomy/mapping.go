@@ -13,6 +13,8 @@ var techniqueIDPattern = regexp.MustCompile(`^T[0-9]{4}(\.[0-9]{3})?$`)
 // every ATT&CK context -- only that, as used in Audspect's ransomware
 // corpus today, this is its primary classification.
 var TechniqueDomain = map[string]Domain{
+	// Valid Accounts (compromised credentials, no MFA)
+	"T1078": DomainInitialAccess,
 	// Exploit Public-Facing Application (e.g. ScreenConnect CVE-2024-1709)
 	"T1190": DomainInitialAccess,
 	// Phishing: Spearphishing Attachment
@@ -61,6 +63,8 @@ var TechniqueDomain = map[string]Domain{
 	"T1560.001": DomainDataDiscoveryAndStaging,
 	// Impair Defenses: Disable or Modify Tools
 	"T1562.001": DomainDefenseEvasion,
+	// Impair Defenses: Disable Windows Event Logging
+	"T1562.008": DomainDefenseEvasion,
 	// Exfiltration to Cloud Storage
 	"T1567.002": DomainExfiltration,
 }
