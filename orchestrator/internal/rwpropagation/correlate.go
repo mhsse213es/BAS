@@ -40,10 +40,10 @@ type TaggedLateralMovementExecution struct {
 // separate RunID field on db.RWAttemptRow to check here.
 type Input struct {
 	Context                  AssessmentContext
-	ADReachability            []TaggedADReachability
-	LateralMovementAccess     []TaggedLateralMovementAccess
-	LateralMovementExecution  []TaggedLateralMovementExecution
-	RansomwareRows            []db.RWAttemptRow
+	ADReachability           []TaggedADReachability
+	LateralMovementAccess    []TaggedLateralMovementAccess
+	LateralMovementExecution []TaggedLateralMovementExecution
+	RansomwareRows           []db.RWAttemptRow
 }
 
 // Exclusion records one supplied item this package declined to include
@@ -69,12 +69,12 @@ type Report struct {
 	Correlation CorrelationStatus
 	Exclusions  []Exclusion
 
-	ADReachability            []ADReachability
-	LateralMovementAccess     []LateralMovementAccess
-	LateralMovementExecution  []LateralMovementExecution
-	Containment               []LegContainment
-	TimeToIsolate             TimeToIsolateStatus
-	TimeToIsolateReason       string
+	ADReachability           []ADReachability
+	LateralMovementAccess    []LateralMovementAccess
+	LateralMovementExecution []LateralMovementExecution
+	Containment              []LegContainment
+	TimeToIsolate            TimeToIsolateStatus
+	TimeToIsolateReason      string
 }
 
 const timeToIsolateReason = "no causal link between a detection event and an isolation action exists in this codebase today"
