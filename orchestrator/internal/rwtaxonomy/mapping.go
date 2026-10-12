@@ -13,6 +13,10 @@ var techniqueIDPattern = regexp.MustCompile(`^T[0-9]{4}(\.[0-9]{3})?$`)
 // every ATT&CK context -- only that, as used in Audspect's ransomware
 // corpus today, this is its primary classification.
 var TechniqueDomain = map[string]Domain{
+	// Phishing: Spearphishing Attachment
+	"T1566.001": DomainInitialAccess,
+	// OS Credential Dumping: LSASS
+	"T1003.001": DomainCredentialAccess,
 	// OS Credential Dumping: SAM
 	"T1003.002": DomainCredentialAccess,
 	// Remote Services: RDP

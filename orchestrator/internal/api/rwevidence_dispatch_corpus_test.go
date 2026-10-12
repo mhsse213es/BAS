@@ -29,7 +29,7 @@ func TestRansomwareScenarioIDs_MatchesRealCorpus(t *testing.T) {
 		"akira-kill-chain.yaml", "blackcat-kill-chain.yaml", "clop-kill-chain.yaml",
 		"lockbit-kill-chain.yaml", "play-kill-chain.yaml", "ransomhub-kill-chain.yaml",
 		"ransomware-drill.yaml", "endpoint-mastery/em-07-ransomware-readiness.yaml",
-		"linux-ransomware-drill.yaml",
+		"linux-ransomware-drill.yaml", "black-basta-kill-chain.yaml",
 	}
 	dir := repoScenariosDirForRWDispatch(t)
 	seen := map[string]bool{}

@@ -29,6 +29,7 @@ var ransomwareScenarioIDs = map[string]bool{
 	"ransomware-drill":           true,
 	"em-07-ransomware-readiness": true,
 	"linux-ransomware-drill":     true,
+	"black-basta-kill-chain":     true,
 }
 
 // recordRWEvidence is additive and best-effort toward scoring (there is no
