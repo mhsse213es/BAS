@@ -217,7 +217,7 @@ steps:
     detection_profiles:
       - windows_cloud_egress
 
-  - name: VSS and Backup Catalog Enumeration
+  - name: "VSS + Backup Catalog Enumeration"
     technique_id: T1490
     description: >
       Read-only enumeration of VSS shadow copies and Windows backup catalogs.
