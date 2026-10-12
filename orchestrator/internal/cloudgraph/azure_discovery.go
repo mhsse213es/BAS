@@ -223,9 +223,46 @@ type armRoleDefinition struct {
 	Properties struct {
 		RoleName    string `json:"roleName"`
 		Permissions []struct {
-			Actions []string `json:"actions"`
+			Actions        []string `json:"actions"`
+			NotActions     []string `json:"notActions"`
+			DataActions    []string `json:"dataActions"`
+			NotDataActions []string `json:"notDataActions"`
 		} `json:"permissions"`
 	} `json:"properties"`
+}
+
+// effectiveRoleActions computes the net set of actions a role definition
+// grants, applying Azure's control-plane (actions/notActions) and
+// data-plane (dataActions/notDataActions) exclusion semantics per
+// permission block, then flattening into one ordered, de-duplicated list --
+// the shape the role_actions Attribute (and AzureEvaluator's exact-match
+// actionListContains) expects. Ignoring notActions/dataActions/
+// notDataActions here would over-report control-plane access (roles that
+// carve out exclusions via notActions) and under-report data-plane access
+// (most PaaS services grant access almost entirely via dataActions).
+func effectiveRoleActions(def *armRoleDefinition) []string {
+	seen := make(map[string]bool)
+	var actions []string
+	for _, perm := range def.Properties.Permissions {
+		excluded := make(map[string]bool, len(perm.NotActions)+len(perm.NotDataActions))
+		for _, na := range perm.NotActions {
+			excluded[na] = true
+		}
+		for _, nda := range perm.NotDataActions {
+			excluded[nda] = true
+		}
+		granted := make([]string, 0, len(perm.Actions)+len(perm.DataActions))
+		granted = append(granted, perm.Actions...)
+		granted = append(granted, perm.DataActions...)
+		for _, a := range granted {
+			if excluded[a] || seen[a] {
+				continue
+			}
+			seen[a] = true
+			actions = append(actions, a)
+		}
+	}
+	return actions
 }
 
 var (
@@ -334,10 +371,7 @@ func (c *AzureDiscoveryClient) DiscoverPermissions(ctx context.Context, identiti
 			roleDefCache[a.Properties.RoleDefinitionID] = def
 		}
 
-		var actions []string
-		for _, perm := range def.Properties.Permissions {
-			actions = append(actions, perm.Actions...)
-		}
+		actions := effectiveRoleActions(def)
 		roleActionsJoined := strings.Join(actions, ",")
 
 		target, ok := resourceByCanonicalID[a.Properties.Scope]

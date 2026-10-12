@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -441,8 +442,8 @@ func TestDiscoverPermissions_ScopeFallbackSynthesizesResourceGroupResource(t *te
 
 func TestScopeKind_ClassifiesByExactShape(t *testing.T) {
 	cases := map[string]string{
-		"/subscriptions/sub-1":                              "subscription",
-		"/subscriptions/sub-1/resourceGroups/rg-1":           "resource-group",
+		"/subscriptions/sub-1":                     "subscription",
+		"/subscriptions/sub-1/resourceGroups/rg-1": "resource-group",
 		"/subscriptions/sub-1/resourceGroups/rg-1/providers/Microsoft.Storage/storageAccounts/foo": "unknown-scope",
 		"": "unknown-scope",
 	}
@@ -542,5 +543,85 @@ func TestDiscoverPermissions_RoleDefinitionFetchError_FailsFastNoPartialResults(
 	}
 	if permissions != nil || stats != nil {
 		t.Fatalf("DiscoverPermissions: want (nil, nil, err) on failure, got (%+v, %+v, %v)", permissions, stats, err)
+	}
+}
+
+// TestDiscoverPermissions_ExcludesNotActionsAndIncludesDataActions is the
+// fix-pass test for the final review's Important finding: the role
+// definition mapping ignored notActions/dataActions/notDataActions,
+// which would under-report data-plane permissions (most PaaS services
+// grant access almost entirely via dataActions) and over-report
+// control-plane permissions for roles that carve out exclusions via
+// notActions.
+func TestDiscoverPermissions_ExcludesNotActionsAndIncludesDataActions(t *testing.T) {
+	tokenSrv := azureTokenMock(t)
+	defer tokenSrv.Close()
+
+	roleDefID := "/role-mixed"
+	armSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/subscriptions/sub-1/providers/Microsoft.Authorization/roleAssignments":
+			json.NewEncoder(w).Encode(map[string]any{
+				"value": []map[string]any{
+					{"properties": map[string]any{
+						"principalId":      "user-1",
+						"scope":            "/subscriptions/sub-1/resourceGroups/rg-1/providers/Microsoft.Storage/storageAccounts/foo",
+						"roleDefinitionId": roleDefID,
+					}},
+				},
+			})
+		case roleDefID:
+			json.NewEncoder(w).Encode(map[string]any{
+				"properties": map[string]any{
+					"roleName": "Custom Mixed Role",
+					"permissions": []map[string]any{
+						{
+							"actions":        []string{"Microsoft.Storage/storageAccounts/read", "Microsoft.Storage/storageAccounts/write"},
+							"notActions":     []string{"Microsoft.Storage/storageAccounts/write"},
+							"dataActions":    []string{"Microsoft.Storage/storageAccounts/blobServices/containers/blobs/read"},
+							"notDataActions": []string{},
+						},
+					},
+				},
+			})
+		default:
+			t.Fatalf("unexpected ARM path %s", r.URL.Path)
+		}
+	}))
+	defer armSrv.Close()
+
+	c := newTestAzureDiscoveryClient(t, tokenSrv.URL, "", armSrv.URL)
+	identities := []*CloudIdentity{{CanonicalID: "azure:user_user-1", Kind: "entra-user"}}
+	resources := []*CloudResource{{
+		CanonicalID: "/subscriptions/sub-1/resourceGroups/rg-1/providers/Microsoft.Storage/storageAccounts/foo",
+		Kind:        "Microsoft.Storage/storageAccounts",
+	}}
+
+	permissions, stats, err := c.DiscoverPermissions(context.Background(), identities, resources)
+	if err != nil {
+		t.Fatalf("DiscoverPermissions: %v", err)
+	}
+
+	gotActions := map[string]bool{}
+	for _, p := range permissions {
+		gotActions[p.Action] = true
+	}
+
+	if gotActions["Microsoft.Storage/storageAccounts/write"] {
+		t.Fatalf("gotActions = %+v, want write excluded (it is in notActions)", gotActions)
+	}
+	if !gotActions["Microsoft.Storage/storageAccounts/read"] {
+		t.Fatalf("gotActions = %+v, want read present (in actions, not excluded)", gotActions)
+	}
+	if !gotActions["Microsoft.Storage/storageAccounts/blobServices/containers/blobs/read"] {
+		t.Fatalf("gotActions = %+v, want the dataAction present (data-plane grants must be included)", gotActions)
+	}
+	if len(permissions) != 2 || stats.ItemsFound != 2 {
+		t.Fatalf("permissions = %+v, stats = %+v, want exactly 2 edges (read + dataAction, write excluded)", permissions, stats)
+	}
+	for _, p := range permissions {
+		if strings.Contains(p.Attributes["role_actions"], "write") {
+			t.Fatalf("role_actions = %q, must not contain the excluded write action", p.Attributes["role_actions"])
+		}
 	}
 }
