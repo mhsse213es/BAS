@@ -154,7 +154,34 @@ with a matching `.sig`.
   `TechniqueID`s) — the cheapest possible proof the file itself is
   well-formed, independent of any Go dispatch logic.
 
-## F. Explicitly deferred (not this pass)
+## F. Platform-isolation guardrail
+
+Linux is a distinct execution and evidence adapter, not a cosmetic
+command-swap of the Windows content. Two concrete risks this design must not
+create, even without a `Platform` field anywhere:
+
+- **A Linux-run result must never be reportable as validating Windows
+  capability, or vice versa, just because both share `TechniqueID` T1490 or
+  T1486.** This holds structurally today without any new field: every
+  `rw_capability_results` row is scoped to one `RunID`, and one `RunID` is one
+  scenario execution on one agent/OS — a Linux run's rows and a Windows run's
+  rows are never the same row, and nothing in this pass introduces any
+  cross-run rollup that could blur them. The concrete, testable guard this
+  pass adds: the new scenario's `detection_profiles` entries are
+  Linux-specific names (`linux_lvm_snapshot_inhibition`,
+  `linux_ransomware_encryption`), never the existing `windows_*`-prefixed
+  ones — so anyone cross-referencing a result's detection profile can tell
+  which platform actually produced it, even though `CapabilityResult` itself
+  carries no explicit platform tag.
+- **Linux-host coverage must never be read as establishing ESXi, NAS, cloud
+  storage, or hypervisor-identity coverage.** This pass touches none of those
+  surfaces' content, code, or registration lists — section D's six
+  touchpoints are all Linux-file-server-specific. Each of the other five
+  platform surfaces §6 names gets its own later pass, its own spec, and its
+  own registration work; nothing here pre-populates or implies progress on
+  them.
+
+## G. Explicitly deferred (not this pass)
 
 - Real Linux command execution/wiring beyond what the new scenario's own
   `command:` blocks already specify — this pass is design + content + the
