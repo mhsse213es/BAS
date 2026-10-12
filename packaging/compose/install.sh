@@ -394,14 +394,30 @@ _check_docker() {
   echo "PASS:Docker -${ver}"
 }
 
+# Minimum Docker Compose version: v2.8.0 added `--pull`, which this installer
+# (and setup.sh/import.sh) rely on everywhere images are loaded offline
+# (`--pull never`). An older Compose would silently lack the flag. Numeric
+# major.minor compare only -- never a naive string compare (e.g. "2.9" < "2.10"
+# as strings but not as versions).
+_compose_version_ok() {
+  local ver="$1" major minor
+  IFS='.' read -r major minor _ <<< "${ver#v}"
+  [[ "$major" =~ ^[0-9]+$ && "$minor" =~ ^[0-9]+$ ]] || return 1
+  (( major > 2 || (major == 2 && minor >= 8) ))
+}
+
 _check_compose() {
-  if docker compose version &>/dev/null 2>&1; then
-    local ver
-    ver=$(docker compose version 2>/dev/null | grep -oP '[\d]+\.[\d]+\.[\d]+' | head -1 || echo "?")
-    echo "PASS:Docker Compose -${ver}"
-  else
+  if ! docker compose version &>/dev/null 2>&1; then
     echo "INST:Docker Compose -not installed (installer can install it with your consent)"
+    return
   fi
+  local ver
+  ver=$(docker compose version --short 2>/dev/null | tr -d '[:space:]')
+  if [[ -z "$ver" ]] || ! _compose_version_ok "$ver"; then
+    echo "FAIL:Docker Compose -version ${ver:-unknown} is too old (need >= 2.8.0, which added --pull; this installer depends on it for every offline image load)"
+    return
+  fi
+  echo "PASS:Docker Compose -${ver}"
 }
 
 # The orchestrator release artifact ships cosign-signed (packaging/build.sh,

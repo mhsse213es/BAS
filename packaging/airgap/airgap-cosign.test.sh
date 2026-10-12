@@ -64,6 +64,19 @@ case "$1" in
           echo "$id" > "$S/tag.$(k "$t")"
         done
         echo "LOADED $tags" >> "$STUB_LOG"; exit 0 ;;
+  compose)
+    [ -n "${FAKE_COMPOSE_MISSING:-}" ] && exit 1
+    if [ "$2" = "version" ]; then
+      short=""
+      for a in "$@"; do [ "$a" = "--short" ] && short=1; done
+      if [ -n "$short" ]; then
+        if [ -n "${FAKE_COMPOSE_EMPTY:-}" ]; then echo ""; else echo "${FAKE_COMPOSE_VERSION:-2.39.1}"; fi
+      else
+        echo "Docker Compose version v${FAKE_COMPOSE_VERSION:-2.39.1}"
+      fi
+      exit 0
+    fi
+    exit 1 ;;
 esac
 EOF
 cat > "$STUBS/cosign" <<'EOF'
@@ -276,6 +289,76 @@ for fn in _key_fp _tar_image_id _docker_tag_is _cosign_version_ok _expected_imag
   a="$(extract_fn "$INST" "$fn")"; s="$(extract_fn "$SETUP" "$fn")"
   if [ -n "$a" ] && [ "$a" = "$s" ]; then pass "$fn is byte-identical in install.sh and setup.sh"; else fail "$fn drifted between install.sh and setup.sh (or is missing)"; fi
 done
+
+echo "TEST: Docker Compose version floor >= 2.8.0 (install.sh _check_compose / setup.sh check_compose)"
+extract_fn "$INST" _compose_version_ok > "$T/inst-compose-fn.sh"; extract_fn "$INST" _check_compose >> "$T/inst-compose-fn.sh"
+extract_fn "$SETUP" _compose_version_ok > "$T/setup-compose-fn.sh"; extract_fn "$SETUP" check_compose >> "$T/setup-compose-fn.sh"
+run_check_compose() { # <fn-file> <fn-name>  -- real function, stubbed docker on PATH (FAKE_COMPOSE_* env)
+  PATH="$STUBS:$PATH" bash -c 'source "$1"; "$2"' _ "$1" "$2"
+}
+# A real docker-compose (v1) binary may already be on this host's PATH (e.g. Docker
+# Desktop ships one) -- "compose entirely missing" must hide it too, not just avoid
+# shadowing it, or setup.sh's check_compose would wrongly take the v1-found branch.
+path_sans_docker_compose() {
+  local out="$STUBS" p
+  while IFS= read -r p; do
+    [ -n "$p" ] && [ ! -e "$p/docker-compose" ] && out="$out:$p"
+  done <<< "$(tr ':' '\n' <<< "$PATH")"
+  printf '%s' "$out"
+}
+# install.sh: _check_compose
+out=$(FAKE_COMPOSE_VERSION=2.8.0 run_check_compose "$T/inst-compose-fn.sh" _check_compose)
+[[ "$out" == PASS:* ]] && pass "install.sh _check_compose: 2.8.0 exactly passes (boundary)" || fail "install.sh _check_compose 2.8.0 boundary ($out)"
+out=$(FAKE_COMPOSE_VERSION=2.39.1 run_check_compose "$T/inst-compose-fn.sh" _check_compose)
+[[ "$out" == PASS:* ]] && pass "install.sh _check_compose: 2.39.1 (> 2.8.0) passes" || fail "install.sh _check_compose 2.39.1 ($out)"
+out=$(FAKE_COMPOSE_VERSION=2.7.3 run_check_compose "$T/inst-compose-fn.sh" _check_compose)
+if [[ "$out" == FAIL:* && "$out" == *"2.8.0"* && "$out" == *"2.7.3"* ]]; then pass "install.sh _check_compose: 2.7.3 fails, message names floor 2.8.0 and detected 2.7.3"; else fail "install.sh _check_compose 2.7.3 ($out)"; fi
+out=$(FAKE_COMPOSE_MISSING=1 run_check_compose "$T/inst-compose-fn.sh" _check_compose)
+[[ "$out" == INST:* ]] && pass "install.sh _check_compose: compose entirely missing stays INST/auto-install (regression, not a new hard FAIL)" || fail "install.sh _check_compose missing ($out)"
+out=$(FAKE_COMPOSE_EMPTY=1 run_check_compose "$T/inst-compose-fn.sh" _check_compose)
+[[ "$out" == FAIL:* ]] && pass "install.sh _check_compose: empty --short output fails closed (never a silent pass)" || fail "install.sh _check_compose empty ($out)"
+out=$(FAKE_COMPOSE_VERSION=garbage run_check_compose "$T/inst-compose-fn.sh" _check_compose)
+[[ "$out" == FAIL:* ]] && pass "install.sh _check_compose: unparseable version (no dots) fails closed, no crash" || fail "install.sh _check_compose garbage ($out)"
+# setup.sh: check_compose
+out=$(FAKE_COMPOSE_VERSION=2.8.0 run_check_compose "$T/setup-compose-fn.sh" check_compose)
+[[ "$out" == PASS:* ]] && pass "setup.sh check_compose: 2.8.0 exactly passes (boundary)" || fail "setup.sh check_compose 2.8.0 boundary ($out)"
+out=$(FAKE_COMPOSE_VERSION=2.39.1 run_check_compose "$T/setup-compose-fn.sh" check_compose)
+[[ "$out" == PASS:* ]] && pass "setup.sh check_compose: 2.39.1 (> 2.8.0) passes" || fail "setup.sh check_compose 2.39.1 ($out)"
+out=$(FAKE_COMPOSE_VERSION=2.7.3 run_check_compose "$T/setup-compose-fn.sh" check_compose)
+if [[ "$out" == FAIL:* && "$out" == *"2.8.0"* && "$out" == *"2.7.3"* ]]; then pass "setup.sh check_compose: 2.7.3 fails, message names floor 2.8.0 and detected 2.7.3"; else fail "setup.sh check_compose 2.7.3 ($out)"; fi
+out=$(FAKE_COMPOSE_MISSING=1 PATH="$(path_sans_docker_compose)" bash -c 'source "$1"; check_compose' _ "$T/setup-compose-fn.sh")
+[[ "$out" == INST:* ]] && pass "setup.sh check_compose: compose entirely missing stays INST/auto-install (regression, not a new hard FAIL)" || fail "setup.sh check_compose missing ($out)"
+out=$(FAKE_COMPOSE_EMPTY=1 run_check_compose "$T/setup-compose-fn.sh" check_compose)
+[[ "$out" == FAIL:* ]] && pass "setup.sh check_compose: empty --short output fails closed (never a silent pass)" || fail "setup.sh check_compose empty ($out)"
+out=$(FAKE_COMPOSE_VERSION=garbage run_check_compose "$T/setup-compose-fn.sh" check_compose)
+[[ "$out" == FAIL:* ]] && pass "setup.sh check_compose: unparseable version (no dots) fails closed, no crash" || fail "setup.sh check_compose garbage ($out)"
+# setup.sh: legacy docker-compose v1 only (no v2 plugin) must FAIL, not WARN
+STUBS_V1="$T/stubs-v1"; rm -rf "$STUBS_V1"; mkdir -p "$STUBS_V1"
+printf '#!/usr/bin/env bash\nexit 0\n' > "$STUBS_V1/docker-compose"; chmod +x "$STUBS_V1/docker-compose"
+out=$(FAKE_COMPOSE_MISSING=1 PATH="$STUBS_V1:$STUBS:$PATH" bash -c 'source "$1"; check_compose' _ "$T/setup-compose-fn.sh")
+if [[ "$out" == FAIL:* && "$out" == *"v1"* && "$out" == *"incompatible"* ]]; then pass "setup.sh check_compose: legacy docker-compose v1 only -> FAIL (was WARN, now incompatible)"; else fail "setup.sh check_compose v1-only ($out)"; fi
+
+echo "TEST: setup.sh non-wizard CLI prereq loop -- compose floor FAILs before do_install (ordering)"
+run_setup_cli_order() { # <FAKE_COMPOSE_VERSION>
+  : > "$STUB_LOG"
+  FAKE_COMPOSE_VERSION="$1" PATH="$STUBS:$PATH" bash -c '
+    set -euo pipefail
+    err() { echo "ERR: $*" >&2; }; warn() { echo "WARN: $*"; }; log() { echo "$*"; }
+    do_install() { echo "DO_INSTALL" >> "$STUB_LOG"; }
+    for f in check_os check_ram check_disk check_docker check_cosign check_port; do eval "$f() { echo PASS:stub; }"; done
+    source "$1"
+    while IFS= read -r result; do
+      status="${result%%:*}"; message="${result#*:}"
+      case "$status" in
+        FAIL) err "  !! ${message}"; exit 1 ;;
+      esac
+    done < <(check_os; check_ram; check_disk x; check_docker; check_compose; check_cosign; check_port 1)
+    do_install' _ "$T/setup-compose-fn.sh" > "$T/out.txt" 2>&1
+}
+rc=0; run_setup_cli_order "2.7.3" || rc=$?
+if [ "$rc" -eq 1 ] && ! grep -q "DO_INSTALL" "$STUB_LOG" && grep -q "2.8.0" "$T/out.txt" && grep -q "2.7.3" "$T/out.txt"; then pass "setup.sh CLI prereq loop: compose 2.7.3 FAILs before do_install runs (nothing installed)"; else fail "setup.sh CLI ordering 2.7.3 (rc=$rc)"; cat "$T/out.txt"; fi
+rc=0; run_setup_cli_order "2.39.1" || rc=$?
+if [ "$rc" -eq 0 ] && grep -q "DO_INSTALL" "$STUB_LOG"; then pass "setup.sh CLI prereq loop: compose 2.39.1 passes, do_install runs (control)"; else fail "setup.sh CLI ordering control (rc=$rc)"; cat "$T/out.txt"; fi
 
 IB="$T/instbundle"; rm -rf "$IB"; mkdir -p "$IB"
 mk_image_tar "$IB/o.tar" '"bas-orchestrator:9.9.9"' orch; sign_tar "$IB/o.tar"
@@ -544,6 +627,33 @@ for m in mode_install mode_upgrade; do
 done
 [ ! -e "$T/datadir/backups" ] && pass "install.sh mode_upgrade: a refused bundle writes no backup" || fail "mode_upgrade wrote a backup before verifying"
 MUTATE="" stage_setup
+
+echo "TEST: compose version floor FAILs before any image verify/load (ordering)"
+{ cat "$T/inst-fns.sh"; extract_fn "$INST" render_checks; extract_fn "$INST" _compose_version_ok; extract_fn "$INST" _check_compose; extract_fn "$INST" mode_install; extract_fn "$INST" mode_upgrade; } > "$T/inst-mode-realcompose-fns.sh"
+run_mode_compose() { # <mode> <script dir> <FAKE_COMPOSE_VERSION>  -- real render_checks + real _check_compose; other checks stubbed PASS
+  : > "$STUB_LOG"; rm -rf "$DOCKER_STATE" "$T/datadir2"; mkdir -p "$DOCKER_STATE" "$T/datadir2"
+  if [ "$1" = mode_upgrade ]; then : > "$T/datadir2/docker-compose.yml"; echo "BAS_ENROLL_PORT=9443" > "$T/datadir2/.env"; fi
+  FAKE_COMPOSE_VERSION="$3" PATH="$STUBS:$PATH" bash -c '
+    set -euo pipefail
+    err() { echo "ERR: $*" >&2; }; warn() { echo "WARN: $*"; }; info() { echo "$*"; }; log() { echo "$*"; }
+    step() { echo "STEP $*" >> "$STUB_LOG"; case "$*" in 5/10*|3/5*) exit 42 ;; esac; }
+    load_config() { :; }; chown() { :; }
+    GREEN=""; RED=""; YELLOW=""; CYAN=""; NC=""; BOLD=""
+    for f in _check_os _check_docker _check_cosign _check_ram _check_cpu _check_disk _check_port _check_dns_sink_port _check_openssl _check_bundle_integrity _check_licence _check_tls_certs; do eval "$f() { echo PASS:stub; }"; done
+    SCRIPT_DIR="$2"; DATA_DIR="$3"; CONFIG_FILE=x; BAS_VERSION=9.9.9; YES=true; NEED_DOCKER=false; NEED_COMPOSE=false
+    BAS_TLS=false; BAS_PORT=1; BAS_ENROLL_PORT=2; BAS_LEGACY_PORT=3; BAS_DASHBOARD_PORT=4; DNS_SINK_BIND_IP=x; LIC_PATH=x; PRODUCT=x
+    COSIGN_PUB_FLAG=""; COSIGN_PUB_USED="$2/cosign.pub"
+    source "$4"; _resolve_cosign_pub
+    "$1"' _ "$1" "$2" "$T/datadir2" "$T/inst-mode-realcompose-fns.sh" > "$T/out.txt" 2>&1
+}
+rc=0; run_mode_compose mode_install "$SX" "2.7.3" || rc=$?
+if [ "$rc" -ne 0 ] && [ "$rc" -ne 42 ] && ! grep -q '^LOADED' "$STUB_LOG" && ! grep -q '^cosign verify-blob' "$STUB_LOG" && grep -q "2.8.0" "$T/out.txt" && grep -q "2.7.3" "$T/out.txt"; then
+  pass "install.sh mode_install: compose 2.7.3 FAILs the prerequisite checks before any image verify/load (nothing verified, nothing loaded)"
+else
+  fail "install.sh mode_install compose-floor ordering (rc=$rc)"; cat "$T/out.txt"
+fi
+rc=0; run_mode_compose mode_install "$SX" "2.39.1" || rc=$?
+if [ "$rc" -eq 42 ] && grep -q '^LOADED bas-orchestrator' "$STUB_LOG"; then pass "install.sh mode_install: compose 2.39.1 passes checks, proceeds to verify+load images (control)"; else fail "install.sh mode_install compose-floor control (rc=$rc)"; cat "$T/out.txt"; fi
 
 echo "TEST: import.sh checks free space in \${TMPDIR:-/tmp} before copying"
 REAL_DF="$(command -v df)"
