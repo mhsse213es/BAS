@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -98,6 +99,48 @@ func RWCapabilityCoverage(ctx context.Context, pool *pgxpool.Pool, runID string)
 		if err := rows.Scan(&r.TechniqueID, &r.Capability, &r.Verdict, &r.SkipReason, &r.SpecificReason, &r.Count); err != nil {
 			return nil, err
 		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
+// RWAttemptRow is one individual, non-aggregated capability-result row --
+// unlike RWCoverageRow, this preserves action and created_at per row,
+// needed by sub-project #5's correlation engine for event ordering.
+type RWAttemptRow struct {
+	TechniqueID string
+	Action      string
+	Capability  string
+	Verdict     controlval.Verdict
+	SkipReason  controlval.SkipReason
+	Reason      string
+	CreatedAt   time.Time
+}
+
+// RWCapabilityAttempts returns every row for runID individually, ordered
+// by created_at ascending -- no GROUP BY, no aggregation. Kept entirely
+// separate from RWCapabilityCoverage, which rwscore depends on in its
+// exact aggregated form.
+func RWCapabilityAttempts(ctx context.Context, pool *pgxpool.Pool, runID string) ([]RWAttemptRow, error) {
+	rows, err := pool.Query(ctx, `
+		SELECT technique_id, action, capability, verdict, COALESCE(skip_reason, ''), reason, created_at
+		FROM rw_capability_results
+		WHERE run_id = $1
+		ORDER BY created_at ASC`, runID)
+	if err != nil {
+		return nil, fmt.Errorf("rw_capability_results attempts query failed for run=%s: %w", runID, err)
+	}
+	defer rows.Close()
+
+	var out []RWAttemptRow
+	for rows.Next() {
+		var r RWAttemptRow
+		var verdict, skipReason string
+		if err := rows.Scan(&r.TechniqueID, &r.Action, &r.Capability, &verdict, &skipReason, &r.Reason, &r.CreatedAt); err != nil {
+			return nil, fmt.Errorf("rw_capability_results attempts scan failed for run=%s: %w", runID, err)
+		}
+		r.Verdict = controlval.Verdict(verdict)
+		r.SkipReason = controlval.SkipReason(skipReason)
 		out = append(out, r)
 	}
 	return out, rows.Err()

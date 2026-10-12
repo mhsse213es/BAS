@@ -88,3 +88,38 @@ func TestWriteRWCapabilityResults_RejectsInvalidSkipPair(t *testing.T) {
 		}
 	})
 }
+
+func TestRWCapabilityAttempts_PreservesActionAndTimestampPerRowUnlikeCoverage(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		runID := "attempts-test-run"
+		staging := []rwevidence.CapabilityResult{{Capability: rwevidence.CapabilityDataProtection, TechniqueID: "T1560.001", Verdict: "FAIL"}}
+		if err := db.WriteRWCapabilityResults(context.Background(), pool, runID, "action-staging", staging); err != nil {
+			t.Fatalf("seed staging: %v", err)
+		}
+		transfer := []rwevidence.CapabilityResult{{Capability: rwevidence.CapabilityDataProtection, TechniqueID: "T1567.002", Verdict: "FAIL"}}
+		if err := db.WriteRWCapabilityResults(context.Background(), pool, runID, "action-transfer", transfer); err != nil {
+			t.Fatalf("seed transfer: %v", err)
+		}
+
+		rows, err := db.RWCapabilityAttempts(context.Background(), pool, runID)
+		if err != nil {
+			t.Fatalf("RWCapabilityAttempts: %v", err)
+		}
+		if len(rows) != 2 {
+			t.Fatalf("got %d rows, want 2 -- no aggregation across distinct actions", len(rows))
+		}
+		actions := map[string]bool{}
+		for _, r := range rows {
+			actions[r.Action] = true
+			if r.CreatedAt.IsZero() {
+				t.Fatalf("CreatedAt is zero for action=%s, want a real timestamp", r.Action)
+			}
+		}
+		if !actions["action-staging"] || !actions["action-transfer"] {
+			t.Fatalf("got actions %v, want both action-staging and action-transfer preserved distinctly", actions)
+		}
+	})
+}
