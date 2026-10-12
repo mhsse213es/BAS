@@ -64,12 +64,12 @@ type DetectionLatencyEvidence struct {
 // evidence side by side, plus latency context.
 type EffectivenessRow struct {
 	TechniqueID           string
-	Detection              *DimensionEvidence
-	Containment            *DimensionEvidence
-	Recovery               *DimensionEvidence
-	DetectionLatency       *time.Duration
-	ResponseLatency        ResponseLatencyStatus
-	ResponseLatencyReason  string
+	Detection             *DimensionEvidence
+	Containment           *DimensionEvidence
+	Recovery              *DimensionEvidence
+	DetectionLatency      *time.Duration
+	ResponseLatency       ResponseLatencyStatus
+	ResponseLatencyReason string
 }
 
 // EffectivenessReport is the full join for one run. Rows is empty (never
