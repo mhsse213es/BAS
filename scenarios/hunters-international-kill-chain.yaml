@@ -1,0 +1,176 @@
+id: hunters-international-kill-chain
+name: "Hunters International Kill Chain — Oracle WebLogic to Ransomware"
+description: >
+  Nine-stage emulation of the Hunters International RaaS attack chain
+  targeting Windows endpoints. Reflects documented Hunters International
+  tradecraft grounded in CISA/FBI/IC3 advisories and Barracuda, BlackPoint,
+  AttackIQ, Forescout, Brandefense, and Orange CERT Polska threat intelligence:
+  Oracle WebLogic CVE-2020-14644 exploitation, China Chopper web shell
+  deployment, Zerologon (CVE-2020-1472) domain-controller targeting,
+  credential replication (DCSync), RDP-based lateral movement, data
+  exfiltration via Software Storage tool, recovery inhibition (shadow copy
+  enumeration + safe deletion simulation), and AES-256+RSA-4096 encryption
+  (lab-gated, full cleanup).
+
+  KILL CHAIN STAGES:
+     1. Initial Access           — Oracle WebLogic CVE-2020-14644 Exposure Assessment
+     2. Persistence              — China Chopper Web Shell Detection/Deployment
+     3. Discovery                — Domain Account Enumeration
+     4. Lateral Movement Prep    — Zerologon CVE-2020-1472 Vulnerability Assessment
+     5. Credential Access        — DCSync Credential Replication (Safe Simulation)
+     6. Lateral Movement         — RDP Access to Secondary Systems
+     7. Exfiltration             — Automated Exfiltration (Software Storage Pattern)
+     8. Recovery Inhibition A    — Shadow Copy Enumeration (Safe)
+     9. Recovery Inhibition B+Impact — Shadow Copy Deletion Sim + Encryption Sim (Lab-gated)
+
+  DISTINCTIVE FEATURES: Hunters International's three-layer vulnerability
+  sequence (WebLogic → China Chopper → Zerologon) tests security boundaries
+  distinct from Black Basta (phishing entry), Medusa (generic exploitation),
+  and Rhysida (credential-first). Validates vulnerability exposure detection,
+  web-server monitoring, domain-controller targeting detection, and recovery
+  resilience.
+
+  SOURCE GROUNDING: All steps cite Barracuda Security Blog, AttackIQ,
+  Forescout, BlackPoint Cyber, Brandefense, Orange CERT Polska, and Vectra
+  threat intelligence. Confidence: "confirmed" where multiple sources
+  specifically attribute behavior to Hunters International.
+
+author: Audspect Research
+executable: true
+local_check: false
+supported_os:
+  - windows
+tags:
+  - hunters-international
+  - ransomware
+  - credential-opportunistic
+  - web-shell
+  - zerologon
+
+steps:
+  - name: "Oracle WebLogic CVE-2020-14644 Exposure Assessment"
+    technique_id: T1190
+    description: >
+      Non-destructive assessment of Oracle WebLogic exposure to CVE-2020-14644.
+      Hunters International's primary initial-access vector, targeting unpatched
+      public-facing Oracle instances documented across CISA, FBI, and analyst reports.
+      Validates whether vulnerability detection and monitoring identify exposed
+      WebLogic servers.
+    action_key: enumerate
+    threat_intel_sources:
+      - reference: "Barracuda Security Blog: Hunters International"
+        url: "https://blog.barracuda.com/2024/07/29/hunters-international--your-data-is-the-prey"
+      - reference: "AttackIQ Emulation Report: Emulating the Splintered Hunters"
+        url: "https://www.attackiq.com/2025/01/27/emulating-the-splintered-hunters/"
+      - reference: "Forescout: Anatomy of an Attack — Hunters International Ransomware"
+    family_attribution_confidence: confirmed
+    last_reviewed: "2026-10-12"
+
+  - name: "China Chopper Web Shell Detection"
+    technique_id: T1505.003
+    description: >
+      Model China Chopper web shell deployment or its detection-relevant behavioral
+      signature. Hunters International's primary post-compromise web-based C2 backdoor.
+      Validates web-server monitoring, EDR, and SIEM detection of unauthorized
+      backdoor installation.
+    action_key: enumerate
+    threat_intel_sources:
+      - reference: "Barracuda Security Blog: Hunters International"
+      - reference: "BlackPoint Cyber Threat Profile"
+      - reference: "Brandefense Technical Analysis"
+    family_attribution_confidence: confirmed
+    last_reviewed: "2026-10-12"
+
+  - name: "Domain Account Discovery"
+    technique_id: T1087.002
+    description: >
+      Enumerate domain users and groups using living-off-the-land reconnaissance
+      (net group, Get-ADUser equivalent). Validates whether discovery reconnaissance
+      is monitored and alerted on.
+    action_key: enumerate
+    threat_intel_sources:
+      - reference: "Forescout: Anatomy of an Attack"
+      - reference: "Brandefense Technical Analysis"
+    family_attribution_confidence: reported
+    last_reviewed: "2026-10-12"
+
+  - name: "CVE-2020-1472 Zerologon Vulnerability Assessment"
+    technique_id: T1556
+    description: >
+      Check for Zerologon-vulnerable domain controller indicators and configuration
+      evidence. Enumeration only; no actual exploitation or DC machine-account password
+      reset. Validates whether DC exposure to CVE-2020-1472 is detected.
+    action_key: enumerate
+    threat_intel_sources:
+      - reference: "Forescout: Anatomy of an Attack"
+      - reference: "Orange CERT Polska CTI Report"
+      - reference: "Vectra Threat Actor Profile"
+    family_attribution_confidence: reported
+    last_reviewed: "2026-10-12"
+
+  - name: "DCSync Credential Replication — Safe Simulation"
+    technique_id: T1003.006
+    description: >
+      Safe simulation or lab-based modeling of credential replication abuse (DCSync).
+      No actual AD replication executed. Validates whether credential-access behavior
+      (domain replication attempts) is detected without actual credentials compromised.
+    action_key: enumerate
+    threat_intel_sources:
+      - reference: "Forescout: Anatomy of an Attack"
+      - reference: "Brandefense Technical Analysis"
+    family_attribution_confidence: inferred
+    last_reviewed: "2026-10-12"
+
+  - name: "RDP Lateral Movement to Secondary Systems"
+    technique_id: T1021.001
+    description: >
+      Lateral movement to secondary systems via RDP using valid test-environment
+      credentials. Validates post-compromise movement detection and remote-access
+      control efficacy.
+    action_key: enumerate
+    threat_intel_sources:
+      - reference: "Forescout: Anatomy of an Attack"
+      - reference: "Barracuda Security Blog: Hunters International"
+    family_attribution_confidence: confirmed
+    last_reviewed: "2026-10-12"
+
+  - name: "Automated Exfiltration — Software Storage Behavior"
+    technique_id: T1020
+    description: >
+      Simulate automated exfiltration behavior documented as Hunters International's
+      Software Storage tool pattern. Uses synthetic data and test-controlled destination.
+      No external data transmission. Validates exfiltration behavior detection.
+    action_key: enumerate
+    threat_intel_sources:
+      - reference: "Barracuda Security Blog: Hunters International"
+      - reference: "Forescout: Anatomy of an Attack"
+      - reference: "Brandefense Technical Analysis"
+    family_attribution_confidence: reported
+    last_reviewed: "2026-10-12"
+
+  - name: "Shadow Copy Enumeration"
+    technique_id: T1490
+    description: >
+      Enumerate shadow copies and recovery volumes without deletion. Safe step.
+      Validates whether recovery volume enumeration is detected.
+    action_key: enumerate
+    threat_intel_sources:
+      - reference: "Forescout: Anatomy of an Attack"
+      - reference: "AttackIQ Emulation Report"
+    family_attribution_confidence: inferred
+    last_reviewed: "2026-10-12"
+
+  - name: "Shadow Copy Deletion + Encryption Simulation"
+    technique_id: T1486
+    description: >
+      Lab-only destructive action: simulate shadow copy deletion and ChaCha20 encryption.
+      Full recovery capability. Validates whether recovery prevention and encryption
+      impact are detected in controlled environment.
+    action_key: ransomware_sim_sandboxed
+    fidelity: lab-only
+    threat_intel_sources:
+      - reference: "Barracuda Security Blog: Hunters International"
+      - reference: "Brandefense Technical Analysis"
+      - reference: "Orange CERT Polska CTI Report"
+    family_attribution_confidence: confirmed
+    last_reviewed: "2026-10-12"
