@@ -13,6 +13,8 @@ var techniqueIDPattern = regexp.MustCompile(`^T[0-9]{4}(\.[0-9]{3})?$`)
 // every ATT&CK context -- only that, as used in Audspect's ransomware
 // corpus today, this is its primary classification.
 var TechniqueDomain = map[string]Domain{
+	// Exploit Public-Facing Application (e.g. ScreenConnect CVE-2024-1709)
+	"T1190": DomainInitialAccess,
 	// Phishing: Spearphishing Attachment
 	"T1566.001": DomainInitialAccess,
 	// OS Credential Dumping: LSASS
@@ -23,6 +25,8 @@ var TechniqueDomain = map[string]Domain{
 	"T1021.001": DomainLateralMovement,
 	// Remote Services: SMB/Windows Admin Shares
 	"T1021.002": DomainLateralMovement,
+	// Windows Management Instrumentation (system discovery)
+	"T1047": DomainDataDiscoveryAndStaging,
 	// Indicator Removal: Clear Windows Event Logs. Ambiguous case,
 	// documented per the spec: this could reasonably sit under Defense
 	// Evasion (MITRE's own tactic for it) instead. Chosen as Post-Incident
@@ -33,12 +37,16 @@ var TechniqueDomain = map[string]Domain{
 	// security-tool tampering and agent health, not log/forensic-trail
 	// destruction.
 	"T1070.001": DomainPostIncidentAssurance,
+	// Automated Exfiltration (RClone, Ligolo, Cloudflared)
+	"T1020": DomainExfiltration,
 	// File and Directory Discovery (BFSI sensitive-file recon ahead of staging)
 	"T1083": DomainDataDiscoveryAndStaging,
 	// Account Discovery: Domain Account
 	"T1087.002": DomainPreparationAndPersistence,
 	// Network Share Discovery (ahead of SMB-based lateral movement)
 	"T1135": DomainLateralMovement,
+	// Lateral Tool Transfer (RMM tool staging: SimpleHelp, AnyDesk)
+	"T1570": DomainLateralMovement,
 	// Data Encrypted for Impact
 	"T1486": DomainEncryptionAndDestruction,
 	// Service Stop (backup service stop attempt, em-07 Stage 5A)
