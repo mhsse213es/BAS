@@ -59,10 +59,30 @@ type Condition struct {
 
 // CloudPermission represents an authorization edge from identity to resource
 type CloudPermission struct {
-	Source         *CloudIdentity   // Who has the permission
-	Target         *CloudResource   // What they can access
-	Action         string           // "sts:AssumeRole", "s3:GetObject", etc.
-	Conditions     []*Condition     // Authorization conditions
-	SourceType     string           // "identity-policy", "resource-policy", "org-scp", "role-trust"
-	Provenance     *Provenance      // Collection source
+	Source         *CloudIdentity    // Who has the permission
+	Target         *CloudResource    // What they can access
+	Action         string            // "sts:AssumeRole", "s3:GetObject", etc.
+	Conditions     []*Condition      // Authorization conditions
+	SourceType     string            // "identity-policy", "resource-policy", "org-scp", "role-trust"
+	Attributes     map[string]string // Raw policy document and other evaluator inputs
+	Provenance     *Provenance       // Collection source
+}
+
+// RequestContext provides request-time information (IP, principal, timestamp)
+type RequestContext struct {
+	PrincipalArn     string
+	SourceIP         string
+	Timestamp        time.Time
+	MFAAuthenticated bool
+}
+
+// EvaluationResult represents authorization evaluation outcome
+type EvaluationResult struct {
+	State             PathState // Blocked, PolicySupported, ConditionallyReachable, Unknown
+	AllowedBy         string    // "identity-policy", "resource-policy", "org-scp", "role-trust", "explicit-deny"
+	BlockedBy         string    // "explicit-deny", "implicit-deny", "condition-unmet", "missing-permission"
+	UnresolvedConds   []string  // ["ip-restriction", "mfa-required"] if ConditionallyReachable
+	EvaluationMethod  string    // "iam-simulator", "hand-coded-rules", "synthetic"
+	MatchedStatements []int     // Statement indices in policy that matched
+	MatchedConditions []string  // Condition names that were satisfied
 }
