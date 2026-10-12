@@ -65,6 +65,7 @@ var routeMatrix = []routeCase{
 	{http.MethodGet, "/api/scenarios/runs/{runId}/iocs", tierAny, ""},
 	{http.MethodGet, "/api/scenarios/runs/{runId}/rw-score", tierAny, ""},
 	{http.MethodGet, "/api/scenarios/runs/{runId}/double-extortion-correlation", tierAny, ""},
+	{http.MethodGet, "/api/scenarios/runs/{runId}/detection-response-effectiveness", tierAny, ""},
 	{http.MethodGet, "/api/campaigns", tierAny, ""},
 	{http.MethodGet, "/api/campaigns/{id}", tierAny, ""},
 	{http.MethodGet, "/api/campaigns/{id}/summary", tierAny, ""},
