@@ -85,3 +85,85 @@ func TestDiscoverIdentities_NormalizesUsersAndServicePrincipals(t *testing.T) {
 		t.Fatalf("sp provenance = %+v, want Source azure:graph-service-principals", sp.Provenance)
 	}
 }
+
+func TestDiscoverIdentities_FollowsGraphPagination(t *testing.T) {
+	tokenSrv := azureTokenMock(t)
+	defer tokenSrv.Close()
+
+	var graphSrv *httptest.Server
+	graphSrv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/users" && r.URL.Path != "/usersPage2" {
+			json.NewEncoder(w).Encode(map[string]any{"value": []map[string]any{}})
+			return
+		}
+		if r.URL.Path == "/users" {
+			json.NewEncoder(w).Encode(map[string]any{
+				"value":           []map[string]any{{"id": "user-1", "userPrincipalName": "a@x.com"}},
+				"@odata.nextLink": graphSrv.URL + "/usersPage2",
+			})
+			return
+		}
+		json.NewEncoder(w).Encode(map[string]any{
+			"value": []map[string]any{{"id": "user-2", "userPrincipalName": "b@x.com"}},
+		})
+	}))
+	defer graphSrv.Close()
+
+	c := newTestAzureDiscoveryClient(t, tokenSrv.URL, graphSrv.URL, "")
+	identities, stats, err := c.DiscoverIdentities(context.Background())
+	if err != nil {
+		t.Fatalf("DiscoverIdentities: %v", err)
+	}
+	userCount := 0
+	for _, id := range identities {
+		if id.Kind == "entra-user" {
+			userCount++
+		}
+	}
+	if userCount != 2 {
+		t.Fatalf("got %d users across pages, want 2 (stats=%+v)", userCount, stats)
+	}
+}
+
+func TestDiscoverIdentities_RepeatedNextLinkReturnsErrorNotInfiniteLoop(t *testing.T) {
+	tokenSrv := azureTokenMock(t)
+	defer tokenSrv.Close()
+
+	var graphSrv *httptest.Server
+	graphSrv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/users" {
+			json.NewEncoder(w).Encode(map[string]any{"value": []map[string]any{}})
+			return
+		}
+		json.NewEncoder(w).Encode(map[string]any{
+			"value":           []map[string]any{{"id": "user-1", "userPrincipalName": "a@x.com"}},
+			"@odata.nextLink": graphSrv.URL + "/users", // malformed: points back at itself
+		})
+	}))
+	defer graphSrv.Close()
+
+	c := newTestAzureDiscoveryClient(t, tokenSrv.URL, graphSrv.URL, "")
+	_, _, err := c.DiscoverIdentities(context.Background())
+	if err == nil {
+		t.Fatal("DiscoverIdentities: want error on repeated nextLink, got nil (would have looped forever without the guard)")
+	}
+}
+
+func TestDiscoverIdentities_GraphHTTPError_FailsFastNoPartialResults(t *testing.T) {
+	tokenSrv := azureTokenMock(t)
+	defer tokenSrv.Close()
+
+	graphSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer graphSrv.Close()
+
+	c := newTestAzureDiscoveryClient(t, tokenSrv.URL, graphSrv.URL, "")
+	identities, stats, err := c.DiscoverIdentities(context.Background())
+	if err == nil {
+		t.Fatal("DiscoverIdentities: want error on HTTP 500, got nil")
+	}
+	if identities != nil || stats != nil {
+		t.Fatalf("DiscoverIdentities: want (nil, nil, err), got (%+v, %+v, %v)", identities, stats, err)
+	}
+}
