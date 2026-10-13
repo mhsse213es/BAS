@@ -1,0 +1,62 @@
+package api
+
+import (
+	"encoding/json"
+	"net/http"
+
+	"github.com/audspect/bas/internal/auth"
+	"github.com/audspect/bas/internal/db"
+)
+
+// POST /api/cloud-runs — runs cloudgraph.CloudPlan for one account against a
+// caller-supplied permission graph and persists the outcome as a cloud_runs
+// row. Synchronous: CloudPlan has no I/O today, so there is nothing to poll.
+func (h *Handler) TriggerCloudPlanRun(w http.ResponseWriter, r *http.Request) {
+	var req db.CloudPlanRunRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonError(w, "invalid request body: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	if req.ScenarioID == "" {
+		jsonError(w, "scenarioId required", http.StatusBadRequest)
+		return
+	}
+	if req.Target == "" {
+		jsonError(w, "target required", http.StatusBadRequest)
+		return
+	}
+	switch req.Account.Provider {
+	case "aws", "azure", "gcp":
+		// ok
+	default:
+		jsonError(w, "invalid provider — use aws | azure | gcp", http.StatusBadRequest)
+		return
+	}
+
+	// InitiatedBy is never trusted from the request body -- always the
+	// authenticated caller, matching RunScenario's own convention.
+	if c, ok := auth.ClaimsFrom(r.Context()); ok && c != nil {
+		req.InitiatedBy = c.UserID
+	}
+
+	run, err := db.ExecuteCloudPlanRun(r.Context(), h.db, req)
+	if err != nil {
+		// run is non-nil whenever a row actually exists (it's always nil only
+		// when InsertCloudRun itself never created one) -- use its ID for
+		// audit correlation when available, "" otherwise.
+		failedRunID := ""
+		if run != nil {
+			failedRunID = run.ID
+		}
+		h.auditLog(r, "cloudrun.plan.run", failedRunID, map[string]any{
+			"scenarioId": req.ScenarioID, "provider": req.Account.Provider, "error": err.Error(),
+		}, "error")
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	h.auditLog(r, "cloudrun.plan.run", run.ID, map[string]any{
+		"scenarioId": req.ScenarioID, "provider": req.Account.Provider, "status": string(run.Status),
+	}, "ok")
+	respondStatus(w, run, http.StatusCreated)
+}

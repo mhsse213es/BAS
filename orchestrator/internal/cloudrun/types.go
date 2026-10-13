@@ -25,16 +25,16 @@ const (
 // lifecycle a run goes through, not what a given scenario's execution
 // harness (a later sub-project) actually produces as evidence.
 type CloudRun struct {
-	ID          string
-	ScenarioID  string
-	Provider    string
-	AccountID   string
-	TenantID    string
-	Region      string
-	Status      Status
-	Result      json.RawMessage
-	Error       string
-	InitiatedBy string
-	StartedAt   time.Time
-	CompletedAt *time.Time
+	ID          string          `json:"id"`
+	ScenarioID  string          `json:"scenarioId"`
+	Provider    string          `json:"provider"`
+	AccountID   string          `json:"accountId"`
+	TenantID    string          `json:"tenantId,omitempty"`
+	Region      string          `json:"region,omitempty"`
+	Status      Status          `json:"status"`
+	Result      json.RawMessage `json:"result,omitempty"`
+	Error       string          `json:"error,omitempty"`
+	InitiatedBy string          `json:"initiatedBy,omitempty"`
+	StartedAt   time.Time       `json:"startedAt"`
+	CompletedAt *time.Time      `json:"completedAt,omitempty"`
 }

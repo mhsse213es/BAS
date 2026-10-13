@@ -20,13 +20,13 @@ import (
 // both the cloudrun types AND db's own store functions -- cannot live in
 // cloudrun without db importing back into it.
 type CloudPlanRunRequest struct {
-	ScenarioID  string
-	Account     cloudgraph.AccountScope
-	Edges       []*cloudgraph.CloudPermission
-	Held        []string
-	Target      string
-	MaxHops     int
-	InitiatedBy string
+	ScenarioID  string                        `json:"scenarioId"`
+	Account     cloudgraph.AccountScope       `json:"account"`
+	Edges       []*cloudgraph.CloudPermission `json:"edges"`
+	Held        []string                      `json:"held"`
+	Target      string                        `json:"target"`
+	MaxHops     int                           `json:"maxHops"`
+	InitiatedBy string                        `json:"-"`
 }
 
 // evaluatorFor maps a cloud_runs.provider value to the concrete evaluator
