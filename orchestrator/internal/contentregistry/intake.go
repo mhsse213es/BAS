@@ -265,5 +265,8 @@ func (r *Registry) Transition(ctx context.Context, versionID string, to Lifecycl
 		versionID, lc, string(to), trust, string(newTrust), actor, reason); err != nil {
 		return err
 	}
+	if err := r.recordCoverageIfExecutable(ctx, tx, versionID, Origin(origin), newTrust, to); err != nil {
+		return err
+	}
 	return tx.Commit(ctx)
 }
