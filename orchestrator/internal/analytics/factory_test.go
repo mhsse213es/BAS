@@ -8,6 +8,48 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+func TestStaticValidationPassRate_NoDataWhenNoneRunInWindow(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		got, err := staticValidationPassRate(context.Background(), pool, time.Now().Add(time.Hour))
+		if err != nil {
+			t.Fatalf("staticValidationPassRate: %v", err)
+		}
+		if got.State != DataNoData {
+			t.Fatalf("got %+v, want no_data when zero STRUCTURAL/STATIC validations ran in window", got)
+		}
+	})
+}
+
+func TestStaticValidationPassRate_ExcludesExecutionLevelAndNoDataOutcome(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		since := time.Now().Add(-24 * time.Hour)
+		vid := seedPublishedContentVersion(t, pool, "cv-passrate-1")
+		mustExec(t, pool, `INSERT INTO content_validations (content_version_id, level, outcome, validator, validator_version) VALUES ($1,'STATIC','PASS','test','1')`, vid)
+		mustExec(t, pool, `INSERT INTO content_validations (content_version_id, level, outcome, validator, validator_version) VALUES ($1,'STRUCTURAL','FAIL','test','1')`, vid)
+		mustExec(t, pool, `INSERT INTO content_validations (content_version_id, level, outcome, validator, validator_version) VALUES ($1,'STATIC','NO_DATA','test','1')`, vid)
+		// EXECUTION-level PASS requires a run_id (content_validations' own
+		// CHECK); use DETECTED instead -- still proves the STATIC/STRUCTURAL
+		// filter excludes EXECUTION-level rows regardless of outcome.
+		mustExec(t, pool, `INSERT INTO content_validations (content_version_id, level, outcome, validator, validator_version) VALUES ($1,'EXECUTION','DETECTED','test','1')`, vid)
+
+		got, err := staticValidationPassRate(context.Background(), pool, since)
+		if err != nil {
+			t.Fatalf("staticValidationPassRate: %v", err)
+		}
+		// Denominator = 2 (the STATIC PASS + STRUCTURAL FAIL; the NO_DATA
+		// outcome and the EXECUTION-level row are both excluded).
+		if got.State != DataMeasured || *got.Value != 0.5 {
+			t.Fatalf("got %+v, want measured 0.5 (1 PASS of 2 qualifying STRUCTURAL/STATIC rows)", got)
+		}
+	})
+}
+
 func TestCoreCounts_ThreatsAndPublishedContent(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping container-backed test in -short mode")

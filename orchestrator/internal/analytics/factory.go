@@ -69,3 +69,28 @@ func coreCounts(ctx context.Context, pool *pgxpool.Pool, since time.Time) (CoreC
 		SourceToTechniqueCoverage: coverage,
 	}, nil
 }
+
+// staticValidationPassRate is the pass rate among STRUCTURAL/STATIC
+// content_validations rows only -- the only validation level with real
+// data today (spec: Phase 6 doesn't exist yet). Labeled explicitly as
+// "static" everywhere it surfaces, never implying execution or detection
+// validation occurred. NO_DATA and NOT_APPLICABLE outcomes are excluded
+// from both numerator and denominator -- they are neither a pass nor a
+// fail.
+func staticValidationPassRate(ctx context.Context, pool *pgxpool.Pool, since time.Time) (Metric, error) {
+	var total, passed int
+	err := pool.QueryRow(ctx, `
+		SELECT
+			count(*) FILTER (WHERE outcome IN ('PASS','FAIL','ERROR')),
+			count(*) FILTER (WHERE outcome = 'PASS')
+		FROM content_validations
+		WHERE level IN ('STRUCTURAL','STATIC') AND created_at >= $1`, since,
+	).Scan(&total, &passed)
+	if err != nil {
+		return Metric{}, err
+	}
+	if total == 0 {
+		return noData("no STRUCTURAL/STATIC validations ran in the selected window"), nil
+	}
+	return measured(float64(passed) / float64(total)), nil
+}
