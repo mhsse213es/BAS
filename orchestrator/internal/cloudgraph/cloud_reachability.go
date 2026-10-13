@@ -72,3 +72,64 @@ func worstState(states []PathState) PathState {
 	}
 	return Observed
 }
+
+// CloudPlan searches for one ordered path from held to target, returning
+// ok=false if target cannot be confirmed reachable within maxHops passes.
+// ok=false means "no path could be confirmed from available evidence," not
+// "no real-world path exists" -- a search that dead-ends at an Unknown edge
+// has hit the limit of what the available evidence can confirm, not proven
+// the edge is actually closed (see spec amendment point 2). Mirrors
+// adchain.Plan's exact shape, substituting the reachedAsSource/
+// reachedAsTarget CanonicalID tracking described in spec amendment point 3
+// for capability equality.
+func CloudPlan(edges []*CloudPermission, held []string, target string, evaluator AuthorizationEvaluator, ctx *RequestContext, maxHops int) (*CloudPath, bool) {
+	reachedAsTarget := make(map[string]bool, len(held))
+	reachedAsSource := make(map[string]bool, len(held))
+	for _, id := range held {
+		reachedAsTarget[id] = true
+		reachedAsSource[id] = true
+	}
+	if reachedAsTarget[target] {
+		return &CloudPath{Hops: nil, OverallState: PolicySupported}, true
+	}
+
+	var hops []*CloudHop
+	for pass := 0; pass < maxHops; pass++ {
+		added := false
+		for _, edge := range edges {
+			if !reachedAsSource[edge.Source.CanonicalID] {
+				continue
+			}
+			if reachedAsTarget[edge.Target.CanonicalID] {
+				continue
+			}
+			result := evaluator.EvaluatePermission(edge, ctx)
+			if !isViable(result.State) {
+				continue
+			}
+			reachedAsTarget[edge.Target.CanonicalID] = true
+			if assumableIdentityKinds[edge.Target.Kind] {
+				reachedAsSource[edge.Target.CanonicalID] = true
+			}
+			hops = append(hops, &CloudHop{Edge: edge, Result: result})
+			added = true
+			if edge.Target.CanonicalID == target {
+				return &CloudPath{Hops: hops, OverallState: worstState(hopStates(hops))}, true
+			}
+		}
+		if !added {
+			break
+		}
+	}
+	return nil, false
+}
+
+// hopStates extracts the per-hop PathState values from an ordered hop list,
+// for feeding into worstState.
+func hopStates(hops []*CloudHop) []PathState {
+	states := make([]PathState, len(hops))
+	for i, h := range hops {
+		states[i] = h.Result.State
+	}
+	return states
+}
