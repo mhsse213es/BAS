@@ -218,6 +218,9 @@ const (
 
 	// TCF Phase 2A: link/new/dismiss unresolved actor identities (Admin only).
 	CanResolveActorIdentity Permission = "intel:resolve-actor"
+
+	// TCF Phase 2B: change a source instance's trust state (Admin only).
+	CanManageSourceTrust Permission = "intel:manage-source-trust"
 )
 
 // rolePermissions maps each role to the permissions it holds. Viewer is
@@ -276,6 +279,7 @@ var rolePermissions = map[Role]map[Permission]bool{
 		CanExecuteRemediation: true, CanApproveRemediation: true,
 		CanManageBackups:        true,
 		CanResolveActorIdentity: true,
+		CanManageSourceTrust:    true,
 	},
 	RoleAnalyst: {
 		CanVerify:            true,
@@ -361,6 +365,7 @@ func Permissions(role Role) []Permission {
 		CanExecuteRemediation, CanApproveRemediation,
 		CanManageBackups,
 		CanResolveActorIdentity,
+		CanManageSourceTrust,
 		CanViewContentArtifact, CanTransitionContent, CanViewContentMigrationReport,
 	} {
 		if set[p] {
