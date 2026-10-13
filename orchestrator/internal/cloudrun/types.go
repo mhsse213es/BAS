@@ -35,6 +35,7 @@ type CloudRun struct {
 	Result      json.RawMessage `json:"result,omitempty"`
 	Error       string          `json:"error,omitempty"`
 	InitiatedBy string          `json:"initiatedBy,omitempty"`
+	CampaignID  string          `json:"campaignId,omitempty"`
 	StartedAt   time.Time       `json:"startedAt"`
 	CompletedAt *time.Time      `json:"completedAt,omitempty"`
 }

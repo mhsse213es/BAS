@@ -27,6 +27,7 @@ type CloudPlanRunRequest struct {
 	Target      string                        `json:"target"`
 	MaxHops     int                           `json:"maxHops"`
 	InitiatedBy string                        `json:"-"`
+	CampaignID  string                        `json:"-"`
 }
 
 // evaluatorFor maps a cloud_runs.provider value to the concrete evaluator
@@ -111,6 +112,7 @@ func ExecuteCloudPlanRun(ctx context.Context, pool *pgxpool.Pool, req CloudPlanR
 		Region:      req.Account.Region,
 		Status:      cloudrun.StatusRunning,
 		InitiatedBy: req.InitiatedBy,
+		CampaignID:  req.CampaignID,
 		StartedAt:   time.Now().UTC(),
 	}
 	if err := InsertCloudRun(ctx, pool, run); err != nil {

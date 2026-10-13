@@ -322,3 +322,19 @@ func TestExecuteCloudPlanRun_MismatchedProviderEdgeMarksRowFailed(t *testing.T) 
 		}
 	})
 }
+
+func TestExecuteCloudPlanRun_CampaignIDIsPersistedOnTheRow(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		req := db.CloudPlanRunRequest{
+			ScenarioID: "s", Account: cloudgraph.AccountScope{Provider: "aws", AccountID: "111"},
+			Target: "arn:aws:iam::111:role/admin", CampaignID: "test-campaign-threading",
+		}
+		run, err := db.ExecuteCloudPlanRun(context.Background(), pool, req)
+		if err != nil {
+			t.Fatalf("ExecuteCloudPlanRun: %v", err)
+		}
+		if run.CampaignID != "test-campaign-threading" {
+			t.Fatalf("CampaignID: got %q want %q", run.CampaignID, "test-campaign-threading")
+		}
+	})
+}

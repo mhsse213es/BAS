@@ -268,3 +268,41 @@ func TestUpdateCloudRunStatus_PropagatesContextCancellation(t *testing.T) {
 		}
 	})
 }
+
+func TestInsertCloudRun_CampaignIDRoundTripsThroughGetAndList(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		run := &cloudrun.CloudRun{
+			ID: "campaign-id-test-run", ScenarioID: "s", Provider: "aws",
+			AccountID: "111", Status: cloudrun.StatusRunning,
+			CampaignID: "test-campaign-1", StartedAt: time.Now().UTC(),
+		}
+		if err := db.InsertCloudRun(context.Background(), pool, run); err != nil {
+			t.Fatalf("insert: %v", err)
+		}
+
+		got, err := db.GetCloudRun(context.Background(), pool, run.ID)
+		if err != nil {
+			t.Fatalf("get: %v", err)
+		}
+		if got.CampaignID != "test-campaign-1" {
+			t.Fatalf("CampaignID: got %q want %q", got.CampaignID, "test-campaign-1")
+		}
+
+		list, err := db.ListCloudRuns(context.Background(), pool, 100)
+		if err != nil {
+			t.Fatalf("list: %v", err)
+		}
+		found := false
+		for _, r := range list {
+			if r.ID == run.ID {
+				found = true
+				if r.CampaignID != "test-campaign-1" {
+					t.Fatalf("ListCloudRuns CampaignID: got %q want %q", r.CampaignID, "test-campaign-1")
+				}
+			}
+		}
+		if !found {
+			t.Fatal("run not found in ListCloudRuns")
+		}
+	})
+}

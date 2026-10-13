@@ -37,6 +37,14 @@ func EnsureCloudRunSchema(ctx context.Context, pool *pgxpool.Pool) error {
 	if err != nil {
 		return fmt.Errorf("cloud_runs: ensure schema: %w", err)
 	}
+	_, err = pool.Exec(ctx, `ALTER TABLE cloud_runs ADD COLUMN IF NOT EXISTS campaign_id text`)
+	if err != nil {
+		return fmt.Errorf("cloud_runs: add campaign_id: %w", err)
+	}
+	_, err = pool.Exec(ctx, `CREATE INDEX IF NOT EXISTS idx_cloud_runs_campaign ON cloud_runs (campaign_id)`)
+	if err != nil {
+		return fmt.Errorf("cloud_runs: create campaign index: %w", err)
+	}
 	return nil
 }
 
@@ -48,10 +56,10 @@ func EnsureCloudRunSchema(ctx context.Context, pool *pgxpool.Pool) error {
 // the caller.
 func InsertCloudRun(ctx context.Context, pool *pgxpool.Pool, run *cloudrun.CloudRun) error {
 	_, err := pool.Exec(ctx, `
-		INSERT INTO cloud_runs (id, scenario_id, provider, account_id, tenant_id, region, status, result, error, initiated_by, started_at, completed_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+		INSERT INTO cloud_runs (id, scenario_id, provider, account_id, tenant_id, region, status, result, error, initiated_by, started_at, completed_at, campaign_id)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
 		run.ID, run.ScenarioID, run.Provider, run.AccountID, run.TenantID, run.Region,
-		string(run.Status), run.Result, run.Error, run.InitiatedBy, run.StartedAt, run.CompletedAt)
+		string(run.Status), run.Result, run.Error, run.InitiatedBy, run.StartedAt, run.CompletedAt, run.CampaignID)
 	if err != nil {
 		return fmt.Errorf("cloud_runs: insert %s: %w", run.ID, err)
 	}
@@ -64,7 +72,7 @@ func scanCloudRun(row pgx.Row) (*cloudrun.CloudRun, error) {
 	run := &cloudrun.CloudRun{}
 	var status string
 	if err := row.Scan(&run.ID, &run.ScenarioID, &run.Provider, &run.AccountID, &run.TenantID, &run.Region,
-		&status, &run.Result, &run.Error, &run.InitiatedBy, &run.StartedAt, &run.CompletedAt); err != nil {
+		&status, &run.Result, &run.Error, &run.InitiatedBy, &run.StartedAt, &run.CompletedAt, &run.CampaignID); err != nil {
 		return nil, err
 	}
 	run.Status = cloudrun.Status(status)
@@ -76,7 +84,7 @@ func scanCloudRun(row pgx.Row) (*cloudrun.CloudRun, error) {
 // not a custom "not found" sentinel.
 func GetCloudRun(ctx context.Context, pool *pgxpool.Pool, id string) (*cloudrun.CloudRun, error) {
 	row := pool.QueryRow(ctx, `
-		SELECT id, scenario_id, provider, account_id, tenant_id, region, status, result, error, initiated_by, started_at, completed_at
+		SELECT id, scenario_id, provider, account_id, tenant_id, region, status, result, error, initiated_by, started_at, completed_at, campaign_id
 		FROM cloud_runs WHERE id = $1`, id)
 	run, err := scanCloudRun(row)
 	if err != nil {
@@ -112,7 +120,7 @@ func UpdateCloudRunStatus(ctx context.Context, pool *pgxpool.Pool, id string, st
 // needed.
 func ListCloudRuns(ctx context.Context, pool *pgxpool.Pool, limit int) ([]*cloudrun.CloudRun, error) {
 	rows, err := pool.Query(ctx, `
-		SELECT id, scenario_id, provider, account_id, tenant_id, region, status, result, error, initiated_by, started_at, completed_at
+		SELECT id, scenario_id, provider, account_id, tenant_id, region, status, result, error, initiated_by, started_at, completed_at, campaign_id
 		FROM cloud_runs ORDER BY started_at DESC LIMIT $1`, limit)
 	if err != nil {
 		return nil, fmt.Errorf("cloud_runs: list: %w", err)
@@ -128,6 +136,32 @@ func ListCloudRuns(ctx context.Context, pool *pgxpool.Pool, limit int) ([]*cloud
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("cloud_runs: list rows: %w", err)
+	}
+	return runs, nil
+}
+
+// ListCloudRunsByCampaign returns every cloud_runs row for one campaign,
+// oldest started_at first (matching the on-prem campaign's own per-campaign
+// child-run ordering convention, distinct from ListCloudRuns' own
+// newest-first global feed).
+func ListCloudRunsByCampaign(ctx context.Context, pool *pgxpool.Pool, campaignID string) ([]*cloudrun.CloudRun, error) {
+	rows, err := pool.Query(ctx, `
+		SELECT id, scenario_id, provider, account_id, tenant_id, region, status, result, error, initiated_by, started_at, completed_at, campaign_id
+		FROM cloud_runs WHERE campaign_id = $1 ORDER BY started_at ASC`, campaignID)
+	if err != nil {
+		return nil, fmt.Errorf("cloud_runs: list by campaign %s: %w", campaignID, err)
+	}
+	defer rows.Close()
+	var runs []*cloudrun.CloudRun
+	for rows.Next() {
+		run, err := scanCloudRun(rows)
+		if err != nil {
+			return nil, fmt.Errorf("cloud_runs: list by campaign %s scan: %w", campaignID, err)
+		}
+		runs = append(runs, run)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("cloud_runs: list by campaign %s rows: %w", campaignID, err)
 	}
 	return runs, nil
 }
