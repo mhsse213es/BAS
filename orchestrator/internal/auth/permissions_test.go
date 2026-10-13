@@ -108,6 +108,7 @@ func TestHasPermission_MatrixIsComplete(t *testing.T) {
 		CanExecuteRemediation: true, CanApproveRemediation: true,
 		CanManageBackups:        true,
 		CanResolveActorIdentity: true,
+		CanManageSourceTrust:    true,
 
 		CanViewContentArtifact: true, CanTransitionContent: true, CanViewContentMigrationReport: true,
 	}
@@ -161,6 +162,7 @@ func TestPermissions_Ordering(t *testing.T) {
 		CanExecuteRemediation, CanApproveRemediation,
 		CanManageBackups,
 		CanResolveActorIdentity,
+		CanManageSourceTrust,
 		CanViewContentArtifact, CanTransitionContent, CanViewContentMigrationReport,
 	}
 	if len(got) != len(want) {
