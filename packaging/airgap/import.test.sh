@@ -84,4 +84,13 @@ fi
 grep -q '"\${BUNDLE_DIR}/setup.sh"' "$IMPORT_SRC" || { echo "FAIL: expected import.sh to reference \${BUNDLE_DIR}/setup.sh"; exit 1; }
 echo "PASS"
 
-echo "ALL TESTS PASSED"
+echo "TEST: import.sh's usage comment names the real setup.sh flags, not a nonexistent --non-interactive"
+if grep -q -- '--non-interactive' "$(dirname "$0")/import.sh"; then
+  echo "FAIL: import.sh must not document a --non-interactive flag that setup.sh never parses"
+  exit 1
+fi
+grep -q -- '--resume' "$(dirname "$0")/import.sh" || { echo "FAIL: expected import.sh to document --resume"; exit 1; }
+grep -q -- '--reinstall' "$(dirname "$0")/import.sh" || { echo "FAIL: expected import.sh to document --reinstall"; exit 1; }
+echo "PASS"
+
+echo "ALL TESTS PASSED (import.sh, extended)"
