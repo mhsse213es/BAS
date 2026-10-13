@@ -86,3 +86,45 @@ func TestTransition_RecordsCoverageFirstWhenLinkedVersionBecomesExecutable(t *te
 		}
 	})
 }
+
+func TestAttachVendorSignature_RecordsCoverageFirstOnTrustFlipAlone(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		signer := testutil.NewTestSigner(t)
+		reg := New(pool, signer.Verifier())
+		threatID := seedThreatForTCVTest(t, pool, "APT-signature-coverage")
+
+		// VENDOR + PUBLISHED but NOT yet signed -- not executable yet (the
+		// runtime gate requires VENDOR_SIGNED). Lifecycle never changes in
+		// this test; only trust flips, via AttachVendorSignature alone.
+		art := []byte("id: cv-signature-coverage\nname: G\nlocal_check: true\n")
+		vid, _, err := reg.createVersion(ctx, newVersion{
+			contentID: "cv-signature-coverage", artifact: art,
+			analysis: mustAnalyze(t, string(art)),
+			actor: ActorIntake, source: SourceBuiltin, origin: OriginVendor,
+			trust: TrustUntrusted, lifecycle: LifecyclePublished,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := pool.Exec(ctx, `INSERT INTO content_version_threats
+			(content_version_id, threat_id, relationship_kind, provenance_type, provenance_ref)
+			VALUES ($1, $2, 'emulates', 'vendor_signed_metadata', 'G0016')`, vid, threatID); err != nil {
+			t.Fatal(err)
+		}
+
+		sig := signer.Sign(art)
+		if err := reg.AttachVendorSignature(ctx, vid, sig, "user:admin"); err != nil {
+			t.Fatal(err)
+		}
+
+		var count int
+		if err := pool.QueryRow(ctx, `SELECT count(*) FROM threat_coverage_firsts WHERE threat_id = $1 AND relationship_kind = 'emulates'`,
+			threatID).Scan(&count); err != nil {
+			t.Fatal(err)
+		}
+		if count != 1 {
+			t.Fatalf("threat_coverage_firsts rows = %d, want 1 (lifecycle never changed; only AttachVendorSignature's trust flip made this executable)", count)
+		}
+	})
+}

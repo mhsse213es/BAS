@@ -126,5 +126,8 @@ func (r *Registry) AttachVendorSignature(ctx context.Context, versionID string, 
 		versionID, lc, trust, actor); err != nil {
 		return err
 	}
+	if err := r.recordCoverageIfExecutable(ctx, tx, versionID, OriginVendor, TrustVendorSigned, Lifecycle(lc)); err != nil {
+		return err
+	}
 	return tx.Commit(ctx)
 }
