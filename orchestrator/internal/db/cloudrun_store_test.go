@@ -241,3 +241,30 @@ func TestListCloudRuns_OrderingAndLimit(t *testing.T) {
 		}
 	})
 }
+
+func TestUpdateCloudRunStatus_PropagatesContextCancellation(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		run := &cloudrun.CloudRun{ID: "ctx-cancel-case", ScenarioID: "x", Provider: "aws", Status: cloudrun.StatusRunning, StartedAt: time.Now().UTC()}
+		if err := db.InsertCloudRun(ctx, pool, run); err != nil {
+			t.Fatalf("insert: %v", err)
+		}
+		canceledCtx, cancel := context.WithCancel(ctx)
+		cancel()
+		err := db.UpdateCloudRunStatus(canceledCtx, pool, "ctx-cancel-case", cloudrun.StatusCompleted, nil, "")
+		if err == nil {
+			t.Fatal("want non-nil error from a canceled context, got nil")
+		}
+
+		// A failed write must never be mistaken for a successful one: the row's
+		// status must be exactly what it was before the failed call, not
+		// StatusCompleted and not some corrupted in-between state.
+		got, getErr := db.GetCloudRun(ctx, pool, "ctx-cancel-case")
+		if getErr != nil {
+			t.Fatalf("get: %v", getErr)
+		}
+		if got.Status != cloudrun.StatusRunning {
+			t.Fatalf("status after failed update: got %s want running (unchanged)", got.Status)
+		}
+	})
+}
