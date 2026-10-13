@@ -30,8 +30,10 @@ make_tarball() {
 
 docker() {
   echo "docker $*" >> "$CALL_LOG"
-  [[ "$1 $2" == "compose version" ]] && { echo "2.24.5"; return 0; }
-  [[ "$1" == "info" ]] && return 0
+  # exported functions inherit the caller's `set -u` -- guard every
+  # positional access, since import.sh itself calls `docker info` with
+  # only one argument.
+  [[ "${1:-}" == "compose" && "${2:-}" == "version" ]] && { echo "2.24.5"; return 0; }
   return 0
 }
 export -f docker
@@ -91,6 +93,37 @@ if grep -q -- '--non-interactive' "$(dirname "$0")/import.sh"; then
 fi
 grep -q -- '--resume' "$(dirname "$0")/import.sh" || { echo "FAIL: expected import.sh to document --resume"; exit 1; }
 grep -q -- '--reinstall' "$(dirname "$0")/import.sh" || { echo "FAIL: expected import.sh to document --reinstall"; exit 1; }
+echo "PASS"
+
+echo "TEST: import.sh never calls docker load itself -- setup.sh's cosign-gated loop is the sole loader"
+E2E_DIR="$TESTDIR/e2e"
+BUNDLE3="$E2E_DIR/bas-airgap-1.0.0"
+make_bundle "$BUNDLE3"
+cat > "$BUNDLE3/setup.sh" << 'EOF'
+#!/usr/bin/env bash
+echo "setup.sh $*" >> "$CALL_LOG_PATH"
+exit 0
+EOF
+chmod +x "$BUNDLE3/setup.sh"
+# make_bundle already wrote the manifest with a different setup.sh's hash;
+# regenerate it now that setup.sh has real content.
+(cd "$BUNDLE3" && find . -type f ! -name MANIFEST.sha256 | sort | while read -r f; do
+  sha256sum "$f" | sed 's/^\([a-f0-9]*\) \*\(.*\)/\1  \2/'
+done) > "$BUNDLE3/MANIFEST.sha256"
+TARBALL3="$E2E_DIR/bas-airgap-1.0.0.tar.gz"
+make_tarball "$BUNDLE3" "$TARBALL3"
+touch "${TARBALL3}.asc"
+
+: > "$CALL_LOG"
+BAS_IMPORT_SKIP_ROOT_CHECK=1 BAS_VERIFY_PUBKEY="$TESTDIR/pubkey.asc" \
+  bash "$(dirname "$0")/import.sh" "$TARBALL3" >> "$CALL_LOG" 2>&1 || true
+
+if grep -q "docker load" "$CALL_LOG"; then
+  echo "FAIL: import.sh itself called docker load -- setup.sh's cosign-gated loop must be the sole loader"
+  cat "$CALL_LOG"
+  exit 1
+fi
+grep -q "^setup.sh" "$CALL_LOG" || { echo "FAIL: setup.sh was never invoked"; cat "$CALL_LOG"; exit 1; }
 echo "PASS"
 
 echo "ALL TESTS PASSED (import.sh, extended)"

@@ -3,8 +3,10 @@
 #
 # Run on the AIR-GAPPED target server (no internet required).
 # Verifies the bundle (GPG signature, manifest, Compose version), THEN
-# loads Docker images, then launches the setup wizard. No step after
-# verification can run if any check before it failed -- see
+# hands off to setup.sh, which loads every Docker image itself -- it is
+# the sole place the orchestrator image is cosign-gated before any
+# `docker load` touches it. This script never calls `docker load`. No
+# step after verification can run if any check before it failed -- see
 # verify-common.sh for the shared checks with verify.sh.
 #
 # Usage:
@@ -28,7 +30,9 @@ fi
 log()  { echo -e "${GREEN}[+]${NC} $*"; }
 err()  { echo -e "${RED}[✗]${NC} $*" >&2; }
 
-if [[ $EUID -ne 0 ]]; then
+# BAS_IMPORT_SKIP_ROOT_CHECK is a test-only escape hatch (same pattern as
+# BAS_VERIFY_PUBKEY / BAS_PACK_SIGNING_DIR) -- never set outside a test harness.
+if [[ $EUID -ne 0 ]] && [[ "${BAS_IMPORT_SKIP_ROOT_CHECK:-}" != "1" ]]; then
   err "This importer must be run as root."
   echo "  Run: sudo bash $0 <bundle>"
   exit 1
@@ -98,35 +102,15 @@ if ! check_compose_version_floor "2.8.0"; then
 fi
 log "Docker Compose version OK."
 
-# ── 5. Load Docker images -- only reached after every check above passed ───────
-log "Loading Docker images..."
-
-ORCHESTRATOR_IMG="${BUNDLE_DIR}/images/bas-orchestrator-${VERSION}.tar.gz"
-POSTGRES_IMG="${BUNDLE_DIR}/images/postgres-16-alpine.tar.gz"
-
-if [[ -f "$ORCHESTRATOR_IMG" ]]; then
-  log "  Loading bas-orchestrator:${VERSION}..."
-  docker load < "$ORCHESTRATOR_IMG"
-else
-  err "Image not found: images/bas-orchestrator-${VERSION}.tar.gz"
-  exit 1
-fi
-
-if [[ -f "$POSTGRES_IMG" ]]; then
-  log "  Loading postgres:16-alpine..."
-  docker load < "$POSTGRES_IMG"
-else
-  err "Image not found: images/postgres-16-alpine.tar.gz"
-  exit 1
-fi
-
-log "Docker images loaded:"
-docker images | grep -E "(bas-orchestrator|postgres)" | awk '{printf "  %-40s %s\n", $1":"$2, $3}'
-
-if ! docker image inspect "bas-orchestrator:latest" &>/dev/null; then
-  log "  Tagging bas-orchestrator:${VERSION} as bas-orchestrator:latest..."
-  docker tag "bas-orchestrator:${VERSION}" "bas-orchestrator:latest"
-fi
+# ── 5. Docker images are NOT loaded here ────────────────────────────────────────
+# setup.sh's own _do_install_steps loop is the sole loader of every image in
+# ${BUNDLE_DIR}/images/ -- it is the only place that gate-checks the
+# orchestrator artifact against cosign.pub + the .bundle signature before
+# calling `docker load` on it (see setup.sh's _verify_orchestrator_artifact).
+# Loading images here first, ahead of that gate, would let a cosign failure
+# discovered moments later be reported against an image already sitting in
+# the local Docker store -- exactly the bytes-never-reach-the-daemon
+# invariant that check exists to guarantee.
 
 # ── 6. Run setup wizard (flat layout -- setup.sh is at the bundle root) ────────
 SETUP_SCRIPT="${BUNDLE_DIR}/setup.sh"

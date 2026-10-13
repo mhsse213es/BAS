@@ -21,6 +21,8 @@ make_signed_bundle() {
   local dir="$TESTDIR/$name"
   mkdir -p "$dir/images"
   echo "fake-orch"   > "$dir/images/bas-orchestrator-1.0.0.tar.gz"
+  echo "fake-bundle" > "$dir/images/bas-orchestrator-1.0.0.tar.gz.bundle"
+  echo "fake-cosign-pub" > "$dir/cosign.pub"
   echo "fake-pg"     > "$dir/images/postgres-16-alpine.tar.gz"
   touch "$dir/setup.sh" "$dir/docker-compose.yml" "$dir/docker-compose.prod.yml" "$dir/import.sh"
   echo "1.0.0" > "$dir/VERSION"

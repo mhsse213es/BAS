@@ -78,6 +78,8 @@ log "Docker Compose version OK."
 # ── 5. Required files present (flat layout) ─────────────────────────────────────
 REQUIRED=(
   "images/bas-orchestrator-${VERSION}.tar.gz"
+  "images/bas-orchestrator-${VERSION}.tar.gz.bundle"
+  "cosign.pub"
   "images/postgres-16-alpine.tar.gz"
   "setup.sh"
   "docker-compose.yml"
