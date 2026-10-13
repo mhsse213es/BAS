@@ -2,6 +2,8 @@ package connector
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"log"
 	"os"
@@ -12,6 +14,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/audspect/bas/internal/evidence"
 	"github.com/audspect/bas/internal/intelligence"
 	"github.com/audspect/bas/internal/scenario"
 	"github.com/audspect/bas/internal/threatidentity"
@@ -33,6 +36,10 @@ type Scheduler struct {
 	// identity resolves merged actors to immutable ids before any
 	// persistence (TCF Phase 2 spec §3). See WithIdentityStore.
 	identity *threatidentity.Store
+
+	// evidence records source syncs/observations/claims and projects the
+	// active technique set (TCF Phase 2 spec §5-§8). See WithEvidenceStore.
+	evidence *evidence.Store
 
 	// priorityEngine recomputes and snapshots Threat Prioritization scores
 	// whenever intel changes -- connector sync IS the change-detection
@@ -318,11 +325,20 @@ func (s *Scheduler) sync() {
 	activitySources := s.activitySources
 	s.mu.RUnlock()
 	var techEvidence []TechniqueEvidence
+	var allPending []pendingClaim
 	for _, src := range sources {
 		got, err := src.Fetch()
 		if ss, ok := src.(StatsSource); ok {
 			bySource[src.Name()] = ss.Stats()
 		}
+		var rawClaims []evidence.RawClaim
+		if es, ok := src.(EvidenceSource); ok {
+			rawClaims = es.RawClaims()
+		} else if _, ok := src.(*BundleSource); ok && err == nil {
+			rawClaims = bundleClaimsFrom(got)
+		}
+		completeness, diagnostic := sourceCompleteness(src)
+		allPending = append(allPending, s.recordSourceSync(context.Background(), src.Name(), rawClaims, err, completeness, diagnostic)...)
 		if err != nil {
 			log.Printf("[connector/%s] fetch error: %v", src.Name(), err)
 			s.setError(src.Name()+": "+err.Error(), bySource)
@@ -363,6 +379,8 @@ func (s *Scheduler) sync() {
 		if ss, ok := asrc.(StatsSource); ok {
 			bySource[asrc.Name()] = ss.Stats()
 		}
+		completeness, diagnostic := sourceCompleteness(asrc)
+		s.recordSourceSync(context.Background(), asrc.Name(), nil, err, completeness, diagnostic)
 		if err != nil {
 			log.Printf("[connector/%s] fetch error: %v", asrc.Name(), err)
 			continue
@@ -415,6 +433,10 @@ func (s *Scheduler) sync() {
 	// actor's evidence is dropped, not stubbed (this enriches an actor
 	// that must already exist via a curated source).
 	s.upsertTechniqueEvidence(techEvidence, actors)
+
+	if s.evidence != nil && len(allPending) > 0 {
+		s.resolvePendingClaims(context.Background(), allPending, actors)
+	}
 
 	if s.pool != nil {
 		for _, c := range allCampaigns {
@@ -762,6 +784,170 @@ func (s *Scheduler) upsertTechniqueEvidence(evidence []TechniqueEvidence, merged
 func (s *Scheduler) WithIdentityStore(st *threatidentity.Store) *Scheduler {
 	s.identity = st
 	return s
+}
+
+// WithEvidenceStore wires the evidence layer (TCF Phase 2 spec §5-§8). A nil
+// evidence store (the default) means sync() skips all evidence recording --
+// the same opt-in pattern WithIdentityStore already uses for identity.
+func (s *Scheduler) WithEvidenceStore(st *evidence.Store) *Scheduler {
+	s.evidence = st
+	return s
+}
+
+// sourceEvidenceDefaults is the spec §5.1 default-trust table, keyed by
+// Source.Name()/ActivitySource.Name().
+var sourceEvidenceDefaults = map[string]struct {
+	sourceType string
+	mode       evidence.ObservationMode
+	trust      evidence.TrustState
+}{
+	"bundle":  {"bundle", evidence.ModeSnapshot, evidence.TrustTrusted},
+	"misp":    {"misp", evidence.ModeSnapshot, evidence.TrustTrusted},
+	"opencti": {"opencti", evidence.ModeSnapshot, evidence.TrustTrusted},
+	"otx":     {"otx", evidence.ModeActivityWindow, evidence.TrustUntrusted},
+}
+
+type pendingClaim struct {
+	actorName, techniqueID, externalID, rawConfidence, sourceType string
+	observedAt                                                    time.Time
+	syncID, instanceID                                            string
+	trustVersionID                                                int64
+}
+
+func claimRecordHash(instanceID, actorName, techniqueID, externalID string) string {
+	sum := sha256.Sum256([]byte(instanceID + "|" + actorName + "|" + techniqueID + "|" + externalID))
+	return hex.EncodeToString(sum[:])
+}
+
+// recordSourceSync writes the source_instances/source_syncs evidence for one
+// source's Fetch() outcome and returns any raw claims it captured, ready to
+// be resolved against the threat roster once identity resolution has run.
+// completeness/diagnostic come from the source's own CompletenessSource
+// report when it implements one (every call site below computes this before
+// calling in); a fetchErr always forces status=failed, completeness=Failed,
+// regardless of what the caller passed. A no-op (returns nil) when the
+// evidence store isn't wired, or the source name has no entry in
+// sourceEvidenceDefaults.
+func (s *Scheduler) recordSourceSync(ctx context.Context, name string, rawClaims []evidence.RawClaim, fetchErr error, completeness evidence.Completeness, diagnostic string) []pendingClaim {
+	if s.evidence == nil {
+		return nil
+	}
+	def, ok := sourceEvidenceDefaults[name]
+	if !ok {
+		return nil
+	}
+	if err := s.evidence.EnsureSourceInstance(ctx, name, def.sourceType, name, def.mode, def.trust); err != nil {
+		log.Printf("[connector/evidence] ensure source instance %s: %v", name, err)
+		return nil
+	}
+	status := "succeeded"
+	if fetchErr != nil {
+		status = "failed"
+		completeness = evidence.Failed
+		diagnostic = fetchErr.Error()
+	}
+	syncID, _, err := s.evidence.RecordSync(ctx, name, def.mode, time.Now(), status, completeness, diagnostic)
+	if err != nil {
+		log.Printf("[connector/evidence] record sync %s: %v", name, err)
+		return nil
+	}
+	if fetchErr != nil {
+		return nil
+	}
+	_, trustVersionID, err := s.evidence.CurrentTrust(ctx, name)
+	if err != nil {
+		log.Printf("[connector/evidence] current trust %s: %v", name, err)
+		return nil
+	}
+	pending := make([]pendingClaim, 0, len(rawClaims))
+	for _, rc := range rawClaims {
+		pending = append(pending, pendingClaim{
+			actorName: rc.ActorName, techniqueID: rc.TechniqueID, externalID: rc.ExternalID,
+			rawConfidence: rc.RawConfidence, sourceType: def.sourceType, observedAt: rc.ObservedAt,
+			syncID: syncID, instanceID: name, trustVersionID: trustVersionID,
+		})
+	}
+	return pending
+}
+
+// sourceCompleteness reads a source's own CompletenessSource report when it
+// implements one, defaulting to Complete for a source that doesn't (bundle,
+// misp, opencti and otx all implement it as of Tasks 8-10, so this default
+// only matters for a future source type or a test double that doesn't).
+func sourceCompleteness(src any) (evidence.Completeness, string) {
+	if cs, ok := src.(CompletenessSource); ok {
+		r := cs.Completeness()
+		return r.Completeness, r.Diagnostic
+	}
+	return evidence.Complete, ""
+}
+
+// bundleClaimsFrom builds pendingClaim-shaped raw claims directly from the
+// bundle source's own return value -- it applies no 2-technique filter
+// (types.go's SourceStat doc comment), so nothing needs recovering the way
+// MISP/OpenCTI's EvidenceSource does.
+func bundleClaimsFrom(actors []ThreatActor) []evidence.RawClaim {
+	var out []evidence.RawClaim
+	for _, a := range actors {
+		for _, tech := range a.Techniques {
+			out = append(out, evidence.RawClaim{
+				ActorName: a.Name, TechniqueID: tech.ID, ExternalID: a.SourceID,
+				ObservedAt: a.LastSeen, RawConfidence: a.Confidence,
+			})
+		}
+	}
+	return out
+}
+
+// resolvePendingClaims maps each pending raw claim's actor name to its
+// resolved ThreatID (from the merged, identity-resolved roster) and writes
+// the observation/threat-source link/claim for every one that resolved,
+// then recomputes the projection for every threat touched (spec §7.4's
+// "after every sync" rule). An actor that never resolved gets no claim --
+// unresolved identities get no evidence tied to a Threat (spec §3.2).
+func (s *Scheduler) resolvePendingClaims(ctx context.Context, pending []pendingClaim, resolved []ThreatActor) {
+	threatByName := make(map[string]string, len(resolved))
+	for _, a := range resolved {
+		if a.ThreatID != "" {
+			threatByName[a.Name] = a.ThreatID
+		}
+	}
+	var claims []evidence.Claim
+	touched := map[string]bool{}
+	for _, pc := range pending {
+		threatID, ok := threatByName[pc.actorName]
+		if !ok {
+			continue
+		}
+		hash := claimRecordHash(pc.instanceID, pc.actorName, pc.techniqueID, pc.externalID)
+		obsID, err := s.evidence.RecordObservation(ctx, pc.syncID, pc.instanceID, pc.externalID, pc.actorName, hash,
+			pc.observedAt, map[string]any{"actor_name": pc.actorName, "technique_id": pc.techniqueID}, pc.trustVersionID)
+		if err != nil {
+			log.Printf("[connector/evidence] record observation: %v", err)
+			continue
+		}
+		_, normConf, _ := evidence.NormalizeConfidence(pc.sourceType, pc.rawConfidence)
+		if err := s.evidence.LinkThreatSource(ctx, threatID, obsID, pc.sourceType, pc.externalID, pc.observedAt, normConf, hash, "resolver", ""); err != nil {
+			log.Printf("[connector/evidence] link threat source: %v", err)
+			continue
+		}
+		claims = append(claims, evidence.Claim{
+			ObservationID: obsID, SyncID: pc.syncID, InstanceID: pc.instanceID, ThreatID: threatID,
+			TechniqueID: pc.techniqueID, Kind: evidence.ClaimAsserted, RawConfidence: pc.rawConfidence,
+			Source: pc.sourceType, TrustVersionID: pc.trustVersionID, ObservedAt: pc.observedAt, RecordHash: hash,
+		})
+		touched[threatID] = true
+	}
+	if len(claims) > 0 {
+		if err := s.evidence.RecordClaims(ctx, claims); err != nil {
+			log.Printf("[connector/evidence] record claims: %v", err)
+		}
+	}
+	for threatID := range touched {
+		if err := s.evidence.RecomputeThreatTechniques(ctx, threatID); err != nil {
+			log.Printf("[connector/evidence] recompute %s: %v", threatID, err)
+		}
+	}
 }
 
 // resolveActors resolves each merged actor through the identity store and
