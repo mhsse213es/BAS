@@ -1,6 +1,7 @@
 package db
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/audspect/bas/internal/cloudgraph"
@@ -56,5 +57,37 @@ func TestEvaluatorFor_SupportedProvidersAreAccepted(t *testing.T) {
 		if _, err := evaluatorFor(provider); err != nil {
 			t.Errorf("provider=%q: got error %v, want nil", provider, err)
 		}
+	}
+}
+
+// Both functions below live in package db, not cloudrun, after the Task 1
+// import-cycle relocation -- their error messages must not claim the stale
+// "cloudrun:" package prefix, which would mislead anyone grepping logs by
+// package name.
+
+func TestEvaluatorFor_ErrorMessageDoesNotClaimStalePackageName(t *testing.T) {
+	_, err := evaluatorFor("unknown")
+	if err == nil {
+		t.Fatal("want non-nil error, got nil")
+	}
+	if strings.Contains(err.Error(), "cloudrun:") {
+		t.Fatalf("error message %q still uses the stale cloudrun: package prefix", err.Error())
+	}
+}
+
+func TestValidateEdgesMatchProvider_ErrorMessageDoesNotClaimStalePackageName(t *testing.T) {
+	source := &cloudgraph.CloudIdentity{CanonicalID: "alice", Kind: "iam-user"}
+	target := &cloudgraph.CloudResource{
+		CanonicalID:  "azure-role",
+		Kind:         "iam-role",
+		AccountScope: &cloudgraph.AccountScope{Provider: "azure"},
+	}
+	edge := &cloudgraph.CloudPermission{Source: source, Target: target, Action: "sts:AssumeRole"}
+	err := validateEdgesMatchProvider([]*cloudgraph.CloudPermission{edge}, "aws")
+	if err == nil {
+		t.Fatal("want non-nil error, got nil")
+	}
+	if strings.Contains(err.Error(), "cloudrun:") {
+		t.Fatalf("error message %q still uses the stale cloudrun: package prefix", err.Error())
 	}
 }

@@ -43,7 +43,7 @@ func evaluatorFor(provider string) (cloudgraph.AuthorizationEvaluator, error) {
 	case "gcp":
 		return &cloudgraph.GCPEvaluator{}, nil
 	default:
-		return nil, fmt.Errorf("cloudrun: unknown provider %q", provider)
+		return nil, fmt.Errorf("cloudplan: unknown provider %q", provider)
 	}
 }
 
@@ -54,7 +54,7 @@ func validateEdgesMatchProvider(edges []*cloudgraph.CloudPermission, provider st
 	for _, edge := range edges {
 		for _, scope := range []*cloudgraph.AccountScope{edge.Source.AccountScope, edge.Target.AccountScope} {
 			if scope != nil && scope.Provider != "" && scope.Provider != provider {
-				return fmt.Errorf("cloudrun: edge references provider %q, run is scoped to %q", scope.Provider, provider)
+				return fmt.Errorf("cloudplan: edge references provider %q, run is scoped to %q", scope.Provider, provider)
 			}
 		}
 	}
