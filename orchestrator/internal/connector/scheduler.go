@@ -326,6 +326,7 @@ func (s *Scheduler) sync() {
 	s.mu.RUnlock()
 	var techEvidence []TechniqueEvidence
 	var allPending []pendingClaim
+	authoritativeSyncs := map[string]string{} // instanceID -> syncID, this cycle's authoritative (complete snapshot) syncs
 	for _, src := range sources {
 		got, err := src.Fetch()
 		if ss, ok := src.(StatsSource); ok {
@@ -338,7 +339,11 @@ func (s *Scheduler) sync() {
 			rawClaims = bundleClaimsFrom(got)
 		}
 		completeness, diagnostic := sourceCompleteness(src)
-		allPending = append(allPending, s.recordSourceSync(context.Background(), src.Name(), rawClaims, err, completeness, diagnostic)...)
+		pending, authoritative, syncID := s.recordSourceSync(context.Background(), src.Name(), rawClaims, err, completeness, diagnostic)
+		allPending = append(allPending, pending...)
+		if authoritative {
+			authoritativeSyncs[src.Name()] = syncID
+		}
 		if err != nil {
 			log.Printf("[connector/%s] fetch error: %v", src.Name(), err)
 			s.setError(src.Name()+": "+err.Error(), bySource)
@@ -380,7 +385,7 @@ func (s *Scheduler) sync() {
 			bySource[asrc.Name()] = ss.Stats()
 		}
 		completeness, diagnostic := sourceCompleteness(asrc)
-		s.recordSourceSync(context.Background(), asrc.Name(), nil, err, completeness, diagnostic)
+		s.recordSourceSync(context.Background(), asrc.Name(), nil, err, completeness, diagnostic) //nolint:errcheck // activity sources are never ModeSnapshot, so RecordSync's authoritative is always false here
 		if err != nil {
 			log.Printf("[connector/%s] fetch error: %v", asrc.Name(), err)
 			continue
@@ -434,8 +439,8 @@ func (s *Scheduler) sync() {
 	// that must already exist via a curated source).
 	s.upsertTechniqueEvidence(techEvidence, actors)
 
-	if s.evidence != nil && len(allPending) > 0 {
-		s.resolvePendingClaims(context.Background(), allPending, actors)
+	if s.evidence != nil && (len(allPending) > 0 || len(authoritativeSyncs) > 0) {
+		s.resolvePendingClaims(context.Background(), allPending, actors, authoritativeSyncs)
 	}
 
 	if s.pool != nil {
@@ -828,17 +833,23 @@ func claimRecordHash(instanceID, actorName, techniqueID, externalID string) stri
 // regardless of what the caller passed. A no-op (returns nil) when the
 // evidence store isn't wired, or the source name has no entry in
 // sourceEvidenceDefaults.
-func (s *Scheduler) recordSourceSync(ctx context.Context, name string, rawClaims []evidence.RawClaim, fetchErr error, completeness evidence.Completeness, diagnostic string) []pendingClaim {
+// recordSourceSync records this cycle's sync outcome and returns the
+// pending claims it captured, plus whether this sync was authoritative
+// (complete snapshot) and its syncID -- an authoritative sync is the only
+// case where absence of a previously-claimed technique means retraction
+// (spec §6.1), and the caller needs the syncID to attribute the
+// retraction claims it writes.
+func (s *Scheduler) recordSourceSync(ctx context.Context, name string, rawClaims []evidence.RawClaim, fetchErr error, completeness evidence.Completeness, diagnostic string) (pending []pendingClaim, authoritative bool, syncID string) {
 	if s.evidence == nil {
-		return nil
+		return nil, false, ""
 	}
 	def, ok := sourceEvidenceDefaults[name]
 	if !ok {
-		return nil
+		return nil, false, ""
 	}
 	if err := s.evidence.EnsureSourceInstance(ctx, name, def.sourceType, name, def.mode, def.trust); err != nil {
 		log.Printf("[connector/evidence] ensure source instance %s: %v", name, err)
-		return nil
+		return nil, false, ""
 	}
 	status := "succeeded"
 	if fetchErr != nil {
@@ -846,20 +857,20 @@ func (s *Scheduler) recordSourceSync(ctx context.Context, name string, rawClaims
 		completeness = evidence.Failed
 		diagnostic = fetchErr.Error()
 	}
-	syncID, _, err := s.evidence.RecordSync(ctx, name, def.mode, time.Now(), status, completeness, diagnostic)
+	syncID, authoritative, err := s.evidence.RecordSync(ctx, name, def.mode, time.Now(), status, completeness, diagnostic)
 	if err != nil {
 		log.Printf("[connector/evidence] record sync %s: %v", name, err)
-		return nil
+		return nil, false, ""
 	}
 	if fetchErr != nil {
-		return nil
+		return nil, false, ""
 	}
 	_, trustVersionID, err := s.evidence.CurrentTrust(ctx, name)
 	if err != nil {
 		log.Printf("[connector/evidence] current trust %s: %v", name, err)
-		return nil
+		return nil, authoritative, syncID
 	}
-	pending := make([]pendingClaim, 0, len(rawClaims))
+	pending = make([]pendingClaim, 0, len(rawClaims))
 	for _, rc := range rawClaims {
 		pending = append(pending, pendingClaim{
 			actorName: rc.ActorName, techniqueID: rc.TechniqueID, externalID: rc.ExternalID,
@@ -867,7 +878,7 @@ func (s *Scheduler) recordSourceSync(ctx context.Context, name string, rawClaims
 			syncID: syncID, instanceID: name, trustVersionID: trustVersionID,
 		})
 	}
-	return pending
+	return pending, authoritative, syncID
 }
 
 // sourceCompleteness reads a source's own CompletenessSource report when it
@@ -905,7 +916,12 @@ func bundleClaimsFrom(actors []ThreatActor) []evidence.RawClaim {
 // then recomputes the projection for every threat touched (spec §7.4's
 // "after every sync" rule). An actor that never resolved gets no claim --
 // unresolved identities get no evidence tied to a Threat (spec §3.2).
-func (s *Scheduler) resolvePendingClaims(ctx context.Context, pending []pendingClaim, resolved []ThreatActor) {
+// resolvePendingClaims writes this cycle's asserted claims, then, for every
+// instance whose sync this cycle was authoritative (complete snapshot),
+// retracts any technique that instance previously actively claimed but did
+// not claim again this cycle -- absence from a complete snapshot sync is
+// itself evidence of retraction (spec §6.1).
+func (s *Scheduler) resolvePendingClaims(ctx context.Context, pending []pendingClaim, resolved []ThreatActor, authoritative map[string]string) {
 	threatByName := make(map[string]string, len(resolved))
 	for _, a := range resolved {
 		if a.ThreatID != "" {
@@ -914,6 +930,7 @@ func (s *Scheduler) resolvePendingClaims(ctx context.Context, pending []pendingC
 	}
 	var claims []evidence.Claim
 	touched := map[string]bool{}
+	currentByInstance := map[string]map[string]bool{} // instanceID -> "threatID|techniqueID" set, this cycle
 	for _, pc := range pending {
 		threatID, ok := threatByName[pc.actorName]
 		if !ok {
@@ -937,7 +954,55 @@ func (s *Scheduler) resolvePendingClaims(ctx context.Context, pending []pendingC
 			Source: pc.sourceType, TrustVersionID: pc.trustVersionID, ObservedAt: pc.observedAt, RecordHash: hash,
 		})
 		touched[threatID] = true
+		if currentByInstance[pc.instanceID] == nil {
+			currentByInstance[pc.instanceID] = map[string]bool{}
+		}
+		currentByInstance[pc.instanceID][threatID+"|"+pc.techniqueID] = true
 	}
+
+	for instanceID, syncID := range authoritative {
+		active, err := s.evidence.ActiveClaimedTechniques(ctx, instanceID)
+		if err != nil {
+			log.Printf("[connector/evidence] active claimed techniques %s: %v", instanceID, err)
+			continue
+		}
+		var toRetract []evidence.ClaimedPair
+		for _, p := range active {
+			if !currentByInstance[instanceID][p.ThreatID+"|"+p.TechniqueID] {
+				toRetract = append(toRetract, p)
+			}
+		}
+		if len(toRetract) == 0 {
+			continue
+		}
+		def, ok := sourceEvidenceDefaults[instanceID]
+		if !ok {
+			continue
+		}
+		_, trustVersionID, err := s.evidence.CurrentTrust(ctx, instanceID)
+		if err != nil {
+			log.Printf("[connector/evidence] current trust %s: %v", instanceID, err)
+			continue
+		}
+		observedAt := time.Now()
+		hash := claimRecordHash(instanceID, "sync-absence", syncID, "")
+		obsID, err := s.evidence.RecordObservation(ctx, syncID, instanceID, "sync-absence", "", hash,
+			observedAt, map[string]any{"reason": "techniques absent from complete snapshot"}, trustVersionID)
+		if err != nil {
+			log.Printf("[connector/evidence] record retraction observation %s: %v", instanceID, err)
+			continue
+		}
+		for _, p := range toRetract {
+			claims = append(claims, evidence.Claim{
+				ObservationID: obsID, SyncID: syncID, InstanceID: instanceID, ThreatID: p.ThreatID,
+				TechniqueID: p.TechniqueID, Kind: evidence.ClaimRetracted, Source: def.sourceType,
+				TrustVersionID: trustVersionID, ObservedAt: observedAt,
+				RecordHash: claimRecordHash(instanceID, p.ThreatID, p.TechniqueID, syncID),
+			})
+			touched[p.ThreatID] = true
+		}
+	}
+
 	if len(claims) > 0 {
 		if err := s.evidence.RecordClaims(ctx, claims); err != nil {
 			log.Printf("[connector/evidence] record claims: %v", err)

@@ -20,7 +20,10 @@ func TestMISPClient_Fetch_CapturesRawClaimsBeforeFilterAndReportsPartial(t *test
 			json.NewEncoder(w).Encode(events)
 		case "/events/1":
 			// One technique only -- below the 2-technique generation
-			// threshold, but a raw claim must still be captured (spec §6.2).
+			// threshold, but a raw claim must still be captured (spec §6.2),
+			// and the actor itself must still be returned by Fetch(): the
+			// generation threshold is Generator.Write()'s concern, not an
+			// evidence-boundary concern (spec §6.2).
 			var detail mispEventDetail
 			detail.Event.Tag = []mispTag{{Name: `misp-galaxy:threat-actor="Solo Actor"`}}
 			detail.Event.GalaxyCluster = []mispGalaxy{{
@@ -44,8 +47,8 @@ func TestMISPClient_Fetch_CapturesRawClaimsBeforeFilterAndReportsPartial(t *test
 	if err != nil {
 		t.Fatalf("Fetch: %v", err)
 	}
-	if len(actors) != 0 {
-		t.Fatalf("actors = %+v, want none (Solo Actor has only 1 technique, below the generation minimum)", actors)
+	if len(actors) != 1 || actors[0].Name != "Solo Actor" {
+		t.Fatalf("actors = %+v, want Solo Actor returned despite being below the generation minimum (that filter belongs to Generator.Write(), not Fetch())", actors)
 	}
 
 	claims := c.RawClaims()

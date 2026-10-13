@@ -84,3 +84,40 @@ func (s *Store) RecordClaims(ctx context.Context, claims []Claim) error {
 	}
 	return tx.Commit(ctx)
 }
+
+// ClaimedPair identifies one (threat, technique) a source instance's most
+// recent top-level claim currently asserts.
+type ClaimedPair struct {
+	ThreatID    string
+	TechniqueID string
+}
+
+// ActiveClaimedTechniques returns every (threat, technique) pair this
+// instance's latest top-level claim (via = "") still asserts, i.e. kind =
+// 'claim' and not superseded by a later retraction. A caller diffs this
+// against what the current sync just asserted to detect techniques a
+// later, authoritative sync no longer claims (spec §6.1).
+func (s *Store) ActiveClaimedTechniques(ctx context.Context, instanceID string) ([]ClaimedPair, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT DISTINCT ON (threat_id, technique_id) threat_id, technique_id, kind
+		  FROM technique_claims
+		 WHERE source_instance_id = $1 AND via = '' AND via_name = ''
+		 ORDER BY threat_id, technique_id, observed_at DESC, id DESC`, instanceID)
+	if err != nil {
+		return nil, fmt.Errorf("evidence: active claimed techniques: %w", err)
+	}
+	defer rows.Close()
+
+	var out []ClaimedPair
+	for rows.Next() {
+		var p ClaimedPair
+		var kind ClaimKind
+		if err := rows.Scan(&p.ThreatID, &p.TechniqueID, &kind); err != nil {
+			return nil, fmt.Errorf("evidence: scan active claimed technique: %w", err)
+		}
+		if kind == ClaimAsserted {
+			out = append(out, p)
+		}
+	}
+	return out, rows.Err()
+}

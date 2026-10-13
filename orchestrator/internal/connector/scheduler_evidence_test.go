@@ -2,6 +2,9 @@ package connector
 
 import (
 	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -74,6 +77,127 @@ func TestScheduler_Sync_RecordsEvidenceAndProjectsActiveTechniques(t *testing.T)
 		}
 		if claimCount != 2 {
 			t.Fatalf("technique_claims rows = %d, want 2", claimCount)
+		}
+	})
+}
+
+// TestScheduler_Sync_SubThresholdActorStillGetsClaimRecorded pins the
+// finding from the 2B final review: MISP's Fetch() drops an actor with
+// fewer than 2 techniques from its OWN returned actor list (misp.go's
+// generation-threshold filter), so that actor never enters the merged,
+// identity-resolved roster sync() builds threatByName from -- its captured
+// RawClaims() then has no ThreatID to resolve against and is silently
+// dropped. The generation-threshold filter must live only in
+// Generator.Write() (Task 13's ActiveTechniques check); Fetch() itself must
+// return every actor with at least one technique.
+func TestScheduler_Sync_SubThresholdActorStillGetsClaimRecorded(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			switch r.URL.Path {
+			case "/events/index":
+				json.NewEncoder(w).Encode([]mispEventIndex{
+					{ID: "1", Info: "solo event", Tag: []mispTag{{Name: "mitre-attack-pattern"}}},
+				})
+			case "/events/1":
+				var detail mispEventDetail
+				detail.Event.Tag = []mispTag{{Name: `misp-galaxy:threat-actor="Solo Sched Actor"`}}
+				detail.Event.GalaxyCluster = []mispGalaxy{{
+					Type: "mitre-attack-pattern",
+					Meta: struct {
+						ExternalID []string `json:"external_id"`
+						KillChain  []string `json:"kill_chain"`
+					}{ExternalID: []string{"T1059"}},
+				}}
+				json.NewEncoder(w).Encode(detail)
+			default:
+				t.Fatalf("unexpected request path: %s", r.URL.Path)
+			}
+		}))
+		defer server.Close()
+
+		src := NewMISPClient(server.URL, "test-key", nil, nil, false)
+		s := &Scheduler{pool: pool, sources: []Source{src}, generator: NewGenerator(t.TempDir(), nil, nil, nil), engine: scenarioEngineForTest(t)}
+		s.WithIdentityStore(threatidentity.NewStore(pool))
+		s.WithEvidenceStore(evidence.NewStore(pool))
+
+		s.sync()
+
+		var threatID string
+		if err := pool.QueryRow(ctx, `SELECT t.id FROM threats t JOIN threat_actor_profiles p ON p.id = t.actor_id
+			WHERE p.name = 'Solo Sched Actor'`).Scan(&threatID); err != nil {
+			t.Fatalf("resolved threat not found for sub-threshold actor: %v", err)
+		}
+
+		var claimCount int
+		if err := pool.QueryRow(ctx,
+			`SELECT count(*) FROM technique_claims WHERE threat_id = $1 AND technique_id = 'T1059'`, threatID).Scan(&claimCount); err != nil {
+			t.Fatal(err)
+		}
+		if claimCount != 1 {
+			t.Fatalf("technique_claims rows for the sub-threshold actor's single technique = %d, want 1 (evidence must survive even though generation excludes it)", claimCount)
+		}
+	})
+}
+
+// TestScheduler_Sync_AuthoritativeSyncRetractsAbsentTechnique pins the
+// second finding from the 2B final review: nothing in the live scheduler
+// ever emitted a ClaimRetracted. A complete snapshot sync that no longer
+// claims a previously-claimed technique must retract it (spec §6.1).
+func TestScheduler_Sync_AuthoritativeSyncRetractsAbsentTechnique(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		observedAt := time.Now()
+		src := &stubEvidenceSource{
+			name: "misp",
+			actors: []ThreatActor{
+				{Name: "APT-retraction-sched", Source: "misp", SourceID: "evt-1",
+					Techniques: []TechniqueRef{{ID: "T1059"}, {ID: "T1055"}}},
+			},
+			claims: []evidence.RawClaim{
+				{ActorName: "APT-retraction-sched", TechniqueID: "T1059", ExternalID: "evt-1", ObservedAt: observedAt, RawConfidence: "high"},
+				{ActorName: "APT-retraction-sched", TechniqueID: "T1055", ExternalID: "evt-1", ObservedAt: observedAt, RawConfidence: "high"},
+			},
+		}
+		s := &Scheduler{pool: pool, sources: []Source{src}, generator: NewGenerator(t.TempDir(), nil, nil, nil), engine: scenarioEngineForTest(t)}
+		s.WithIdentityStore(threatidentity.NewStore(pool))
+		s.WithEvidenceStore(evidence.NewStore(pool))
+
+		s.sync()
+
+		var threatID string
+		if err := pool.QueryRow(ctx, `SELECT t.id FROM threats t JOIN threat_actor_profiles p ON p.id = t.actor_id
+			WHERE p.name = 'APT-retraction-sched'`).Scan(&threatID); err != nil {
+			t.Fatalf("resolved threat not found: %v", err)
+		}
+
+		// A second, later, complete snapshot sync no longer sees T1055.
+		src.actors = []ThreatActor{
+			{Name: "APT-retraction-sched", Source: "misp", SourceID: "evt-2",
+				Techniques: []TechniqueRef{{ID: "T1059"}}},
+		}
+		src.claims = []evidence.RawClaim{
+			{ActorName: "APT-retraction-sched", TechniqueID: "T1059", ExternalID: "evt-2", ObservedAt: observedAt.Add(time.Hour), RawConfidence: "high"},
+		}
+		s.sync()
+
+		var retractionCount int
+		if err := pool.QueryRow(ctx,
+			`SELECT count(*) FROM technique_claims WHERE threat_id = $1 AND technique_id = 'T1055' AND kind = 'retraction'`,
+			threatID).Scan(&retractionCount); err != nil {
+			t.Fatal(err)
+		}
+		if retractionCount != 1 {
+			t.Fatalf("retraction rows for T1055 = %d, want 1 (complete snapshot no longer claims it)", retractionCount)
+		}
+
+		var status string
+		if err := pool.QueryRow(ctx,
+			`SELECT status FROM threat_techniques WHERE threat_id = $1 AND technique_id = 'T1055'`, threatID).Scan(&status); err != nil {
+			t.Fatal(err)
+		}
+		if status != "retracted" {
+			t.Fatalf("T1055 status = %q, want retracted", status)
 		}
 	})
 }

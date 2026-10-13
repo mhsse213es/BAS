@@ -24,7 +24,10 @@ func TestOpenCTIClient_Fetch_TruncatedAtPageLimitAndCapturesRawClaims(t *testing
 		}
 		// One real actor with a single technique -- below the 2-technique
 		// generation threshold, but a raw claim must still be captured
-		// (spec §6.2).
+		// (spec §6.2), and the actor itself must still be returned by
+		// Fetch() (that threshold is Generator.Write()'s concern, not an
+		// evidence-boundary concern). The 100 zero-technique "Bulk Actor"
+		// edges have no evidence either way and stay excluded.
 		solo := octiThreatActorNode{ID: "solo-1", Name: "Solo Actor", Confidence: 70}
 		solo.AttackPatterns.Edges = []octiRelationshipEdge{{Node: octiRelationshipNode{
 			To: octiRelatedEntity{XMitreID: "T1059", Name: "Command Line"},
@@ -39,8 +42,8 @@ func TestOpenCTIClient_Fetch_TruncatedAtPageLimitAndCapturesRawClaims(t *testing
 	if err != nil {
 		t.Fatalf("Fetch: %v", err)
 	}
-	if len(actors) != 0 {
-		t.Fatalf("actors = %+v, want none (Solo Actor has only 1 technique)", actors)
+	if len(actors) != 1 || actors[0].Name != "Solo Actor" {
+		t.Fatalf("actors = %+v, want only Solo Actor (zero-technique Bulk Actor edges stay excluded; Solo Actor's below-threshold technique count no longer excludes it from Fetch())", actors)
 	}
 
 	claims := c.RawClaims()

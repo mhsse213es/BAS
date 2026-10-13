@@ -96,7 +96,13 @@ func (c *OpenCTIClient) Fetch() ([]ThreatActor, error) {
 		}
 
 		actor := c.convertActor(raw)
-		if actor == nil || len(actor.Techniques) < 2 {
+		// Only the generation-threshold (2+) filter moves downstream to
+		// Generator.Write()'s ActiveTechniques check (spec §6.2) -- an actor
+		// with zero techniques has no evidence to preserve either way, and
+		// Fetch() must return every actor with at least one so its captured
+		// RawClaims() has a ThreatID to resolve against once identity
+		// resolution runs.
+		if actor == nil || len(actor.Techniques) == 0 {
 			continue
 		}
 		actors = append(actors, *actor)

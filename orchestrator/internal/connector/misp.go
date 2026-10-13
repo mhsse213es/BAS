@@ -101,7 +101,10 @@ func (c *MISPClient) Fetch() ([]ThreatActor, error) {
 				})
 			}
 		}
-		if actor == nil || len(actor.Techniques) < 2 {
+		// Only the generation-threshold (2+) filter moves downstream to
+		// Generator.Write()'s ActiveTechniques check (spec §6.2) -- an actor
+		// with zero techniques has no evidence to preserve either way.
+		if actor == nil || len(actor.Techniques) == 0 {
 			continue
 		}
 
@@ -124,11 +127,13 @@ func (c *MISPClient) Fetch() ([]ThreatActor, error) {
 		tools = append(tools, eventTools...)
 	}
 
+	// The generation-threshold filter lives only in Generator.Write()'s
+	// ActiveTechniques check (spec §6.2) -- Fetch() must return every actor
+	// it saw at least one technique for, so its captured RawClaims() has a
+	// ThreatID to resolve against once identity resolution runs.
 	out := make([]ThreatActor, 0, len(actorMap))
 	for _, a := range actorMap {
-		if len(a.Techniques) >= 2 {
-			out = append(out, *a)
-		}
+		out = append(out, *a)
 	}
 	c.lastStat = SourceStat{Name: "misp", RawCount: len(events), ActorCount: len(out), FetchedAt: time.Now()}
 	c.lastCampaigns = campaigns
