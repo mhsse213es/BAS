@@ -17,6 +17,7 @@ import (
 	"github.com/audspect/bas/internal/evidence"
 	"github.com/audspect/bas/internal/intelligence"
 	"github.com/audspect/bas/internal/scenario"
+	"github.com/audspect/bas/internal/tcv"
 	"github.com/audspect/bas/internal/threatidentity"
 	"github.com/audspect/bas/internal/threatpriority"
 )
@@ -817,6 +818,7 @@ type pendingClaim struct {
 	observedAt                                                    time.Time
 	syncID, instanceID                                            string
 	trustVersionID                                                int64
+	trustState                                                    evidence.TrustState
 }
 
 func claimRecordHash(instanceID, actorName, techniqueID, externalID string) string {
@@ -865,7 +867,7 @@ func (s *Scheduler) recordSourceSync(ctx context.Context, name string, rawClaims
 	if fetchErr != nil {
 		return nil, false, ""
 	}
-	_, trustVersionID, err := s.evidence.CurrentTrust(ctx, name)
+	trustState, trustVersionID, err := s.evidence.CurrentTrust(ctx, name)
 	if err != nil {
 		log.Printf("[connector/evidence] current trust %s: %v", name, err)
 		return nil, authoritative, syncID
@@ -875,7 +877,7 @@ func (s *Scheduler) recordSourceSync(ctx context.Context, name string, rawClaims
 		pending = append(pending, pendingClaim{
 			actorName: rc.ActorName, techniqueID: rc.TechniqueID, externalID: rc.ExternalID,
 			rawConfidence: rc.RawConfidence, sourceType: def.sourceType, observedAt: rc.ObservedAt,
-			syncID: syncID, instanceID: name, trustVersionID: trustVersionID,
+			syncID: syncID, instanceID: name, trustVersionID: trustVersionID, trustState: trustState,
 		})
 	}
 	return pending, authoritative, syncID
@@ -958,6 +960,16 @@ func (s *Scheduler) resolvePendingClaims(ctx context.Context, pending []pendingC
 			currentByInstance[pc.instanceID] = map[string]bool{}
 		}
 		currentByInstance[pc.instanceID][threatID+"|"+pc.techniqueID] = true
+		if pc.trustState == evidence.TrustTrusted {
+			if err := tcv.RecordThreatClockStart(ctx, s.pool, threatID, pc.observedAt, pc.syncID); err != nil {
+				log.Printf("[connector/tcv] record threat clock start %s: %v", threatID, err)
+			}
+			if completedAt, err := s.evidence.SyncCompletedAt(ctx, pc.syncID); err != nil {
+				log.Printf("[connector/tcv] sync completed_at %s: %v", pc.syncID, err)
+			} else if err := tcv.RecordIntelligenceClockStart(ctx, s.pool, threatID, completedAt, pc.syncID); err != nil {
+				log.Printf("[connector/tcv] record intelligence clock start %s: %v", threatID, err)
+			}
+		}
 	}
 
 	for instanceID, syncID := range authoritative {

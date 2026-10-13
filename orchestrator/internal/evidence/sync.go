@@ -28,3 +28,16 @@ func (s *Store) RecordSync(ctx context.Context, instanceID string, mode Observat
 	}
 	return syncID, authoritative, nil
 }
+
+// SyncCompletedAt returns one sync's completed_at, recorded by RecordSync.
+// Lets a caller that only has a syncID (the connector scheduler) start the
+// intelligence clock without RecordSync threading a new return value
+// through every 2B call site.
+func (s *Store) SyncCompletedAt(ctx context.Context, syncID string) (time.Time, error) {
+	var completedAt time.Time
+	err := s.pool.QueryRow(ctx, `SELECT completed_at FROM source_syncs WHERE id = $1`, syncID).Scan(&completedAt)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("evidence: sync completed_at for %s: %w", syncID, err)
+	}
+	return completedAt, nil
+}

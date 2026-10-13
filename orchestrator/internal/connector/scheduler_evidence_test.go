@@ -201,3 +201,46 @@ func TestScheduler_Sync_AuthoritativeSyncRetractsAbsentTechnique(t *testing.T) {
 		}
 	})
 }
+
+// TestScheduler_Sync_StartsThreatAndIntelligenceClocksOnTrustedClaim closes
+// spec §10.2: resolving a trusted claim through the live scheduler path
+// must start both the threat clock (at the claim's observed_at) and the
+// intelligence clock (at the sync's completed_at).
+func TestScheduler_Sync_StartsThreatAndIntelligenceClocksOnTrustedClaim(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		observedAt := time.Now().Add(-6 * time.Hour)
+		src := &stubEvidenceSource{
+			name: "misp",
+			actors: []ThreatActor{
+				{Name: "APT-clock-sched", Source: "misp", SourceID: "evt-1",
+					Techniques: []TechniqueRef{{ID: "T1059"}, {ID: "T1055"}}},
+			},
+			claims: []evidence.RawClaim{
+				{ActorName: "APT-clock-sched", TechniqueID: "T1059", ExternalID: "evt-1", ObservedAt: observedAt, RawConfidence: "high"},
+			},
+		}
+		s := &Scheduler{pool: pool, sources: []Source{src}, generator: NewGenerator(t.TempDir(), nil, nil, nil), engine: scenarioEngineForTest(t)}
+		s.WithIdentityStore(threatidentity.NewStore(pool))
+		s.WithEvidenceStore(evidence.NewStore(pool))
+
+		s.sync()
+
+		var threatID string
+		if err := pool.QueryRow(ctx, `SELECT t.id FROM threats t JOIN threat_actor_profiles p ON p.id = t.actor_id
+			WHERE p.name = 'APT-clock-sched'`).Scan(&threatID); err != nil {
+			t.Fatalf("resolved threat not found: %v", err)
+		}
+
+		var threatClockCount, intelClockCount int
+		if err := pool.QueryRow(ctx, `SELECT count(*) FROM threat_clock_starts WHERE threat_id = $1 AND clock = 'threat'`, threatID).Scan(&threatClockCount); err != nil {
+			t.Fatal(err)
+		}
+		if err := pool.QueryRow(ctx, `SELECT count(*) FROM threat_clock_starts WHERE threat_id = $1 AND clock = 'intelligence'`, threatID).Scan(&intelClockCount); err != nil {
+			t.Fatal(err)
+		}
+		if threatClockCount != 1 || intelClockCount != 1 {
+			t.Fatalf("threat clock rows = %d, intelligence clock rows = %d, want 1 each", threatClockCount, intelClockCount)
+		}
+	})
+}
