@@ -236,3 +236,73 @@ func (h *Handler) CreateCloudCampaign(w http.ResponseWriter, r *http.Request) {
 		"results":    results,
 	}, http.StatusCreated)
 }
+
+// cloudCampaignRollup computes a campaign's summary fresh from its
+// persisted child runs -- compute-on-read, matching the on-prem campaign
+// pattern. Reuses bucketCloudRunStatus so a campaign's rollup is bucketed
+// identically whether it's being read moments after creation (CreateCloudCampaign)
+// or much later via this GET path.
+func cloudCampaignRollup(runs []*cloudrun.CloudRun) map[string]any {
+	var total, completed, partial, failed int
+	for _, run := range runs {
+		total++
+		switch bucketCloudRunStatus(run) {
+		case "completed":
+			completed++
+		case "partial":
+			partial++
+		default:
+			failed++
+		}
+	}
+	return map[string]any{"total": total, "completed": completed, "partial": partial, "failed": failed}
+}
+
+// GET /api/cloud-campaigns/{id} -- baseline-auth-only, matching GetCloudRun.
+func (h *Handler) GetCloudCampaign(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	campaign, err := db.GetCloudCampaign(r.Context(), h.db, id)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			jsonError(w, "cloud campaign not found", http.StatusNotFound)
+			return
+		}
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	runs, err := db.ListCloudRunsByCampaign(r.Context(), h.db, id)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	respond(w, map[string]any{
+		"id": campaign.ID, "name": campaign.Name, "createdBy": campaign.CreatedBy, "createdAt": campaign.CreatedAt,
+		"summary": cloudCampaignRollup(runs), "runs": runs,
+	})
+}
+
+// GET /api/cloud-campaigns -- baseline-auth-only, matching ListCloudRuns.
+func (h *Handler) ListCloudCampaigns(w http.ResponseWriter, r *http.Request) {
+	limit := 20
+	if l, err := strconv.Atoi(r.URL.Query().Get("limit")); err == nil && l > 0 && l <= 100 {
+		limit = l
+	}
+	campaigns, err := db.ListCloudCampaigns(r.Context(), h.db, limit)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	out := make([]map[string]any, 0, len(campaigns))
+	for _, c := range campaigns {
+		runs, err := db.ListCloudRunsByCampaign(r.Context(), h.db, c.ID)
+		if err != nil {
+			jsonError(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		out = append(out, map[string]any{
+			"id": c.ID, "name": c.Name, "createdBy": c.CreatedBy, "createdAt": c.CreatedAt,
+			"summary": cloudCampaignRollup(runs),
+		})
+	}
+	respond(w, out)
+}

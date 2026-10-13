@@ -311,3 +311,132 @@ func TestCreateCloudCampaign_AuditsOkEvenWhenSomeAccountsFail(t *testing.T) {
 		}
 	})
 }
+
+func TestGetCloudCampaign_RoundTripsARealCampaign(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret)
+		body := map[string]any{
+			"name": "Round Trip Test",
+			"runs": []map[string]any{
+				oneCloudCampaignRun("s1", "111", "arn:aws:iam::111:role/admin"),
+				oneCloudCampaignRun("s2", "222", "arn:aws:iam::222:role/admin"),
+			},
+		}
+		createReq, _ := createCloudCampaignReq(t, pool, body)
+		createRec := callAuthed(h.CreateCloudCampaign, createReq)
+		if createRec.Code != http.StatusCreated {
+			t.Fatalf("setup create failed: status = %d, body = %s", createRec.Code, createRec.Body.String())
+		}
+		var created struct{ CampaignID string `json:"campaignId"` }
+		_ = json.Unmarshal(createRec.Body.Bytes(), &created)
+
+		getReq := authedRequest(t, http.MethodGet, "/api/cloud-campaigns/"+created.CampaignID, nil, auth.RoleAnalyst, "any-authenticated-user")
+		getReq = withURLParam(getReq, "id", created.CampaignID)
+		rec := callAuthed(h.GetCloudCampaign, getReq)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+		}
+		var resp struct {
+			ID      string                                          `json:"id"`
+			Summary struct{ Total, Completed, Partial, Failed int } `json:"summary"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		if resp.ID != created.CampaignID {
+			t.Fatalf("ID: got %q want %q", resp.ID, created.CampaignID)
+		}
+		if resp.Summary.Total != 2 || resp.Summary.Completed != 2 {
+			t.Fatalf("summary = %+v, want total:2 completed:2", resp.Summary)
+		}
+	})
+}
+
+func TestGetCloudCampaign_NonexistentIDReturns404(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret)
+		getReq := authedRequest(t, http.MethodGet, "/api/cloud-campaigns/nonexistent-id", nil, auth.RoleAnalyst, "any-authenticated-user")
+		getReq = withURLParam(getReq, "id", "nonexistent-id")
+		rec := callAuthed(h.GetCloudCampaign, getReq)
+		if rec.Code != http.StatusNotFound {
+			t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+		}
+	})
+}
+
+// TestGetCloudCampaign_RollupIsRecomputedIndependentlyOfPostTime proves the
+// weaker, directly testable half of the spec's documented POST-vs-GET
+// accounting distinction: GET recomputes its rollup from cloud_runs rather
+// than trusting POST's in-memory result, and the two agree when nothing
+// failed to persist. Forcing the InsertCloudRun-failure asymmetry itself
+// is not reachable through integration, matching sub-project #3's own
+// documented, accepted gap for that branch.
+func TestGetCloudCampaign_RollupIsRecomputedIndependentlyOfPostTime(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret)
+		body := map[string]any{
+			"name": "Recompute Test",
+			"runs": []map[string]any{oneCloudCampaignRun("s1", "111", "arn:aws:iam::111:role/admin")},
+		}
+		createReq, _ := createCloudCampaignReq(t, pool, body)
+		createRec := callAuthed(h.CreateCloudCampaign, createReq)
+		var created struct {
+			CampaignID string                             `json:"campaignId"`
+			Summary    struct{ Total, Completed int }     `json:"summary"`
+		}
+		_ = json.Unmarshal(createRec.Body.Bytes(), &created)
+
+		getReq := authedRequest(t, http.MethodGet, "/api/cloud-campaigns/"+created.CampaignID, nil, auth.RoleAnalyst, "any-authenticated-user")
+		getReq = withURLParam(getReq, "id", created.CampaignID)
+		rec := callAuthed(h.GetCloudCampaign, getReq)
+		var resp struct{ Summary struct{ Total, Completed int } `json:"summary"` }
+		_ = json.Unmarshal(rec.Body.Bytes(), &resp)
+		if resp.Summary.Total != created.Summary.Total || resp.Summary.Completed != created.Summary.Completed {
+			t.Fatalf("GET summary %+v should match POST summary %+v when nothing failed to persist", resp.Summary, created.Summary)
+		}
+	})
+}
+
+func TestListCloudCampaigns_LimitBoundaryValues(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret)
+		for i := 0; i < 3; i++ {
+			body := map[string]any{"name": fmt.Sprintf("Limit Test %d", i), "runs": []map[string]any{oneCloudCampaignRun("s1", "111", "arn:aws:iam::111:role/admin")}}
+			req, _ := createCloudCampaignReq(t, pool, body)
+			if rec := callAuthed(h.CreateCloudCampaign, req); rec.Code != http.StatusCreated {
+				t.Fatalf("seed campaign %d failed: status = %d, body = %s", i, rec.Code, rec.Body.String())
+			}
+		}
+
+		cases := []struct {
+			name        string
+			limitParam  string
+			wantMaxRows int // 0 means "don't check row count, only status"
+		}{
+			{"malformed", "not-a-number", 0},
+			{"zero", "0", 0},
+			{"negative", "-1", 0},
+			{"justOverMax", "101", 0},
+			{"exactlyMax", "100", 0},
+			{"validSmall", "1", 1},
+		}
+		for _, c := range cases {
+			t.Run(c.name, func(t *testing.T) {
+				listReq := authedRequest(t, http.MethodGet, "/api/cloud-campaigns?limit="+c.limitParam, nil, auth.RoleAnalyst, "any-authenticated-user")
+				rec := callAuthed(h.ListCloudCampaigns, listReq)
+				if rec.Code != http.StatusOK {
+					t.Fatalf("status = %d, body = %s (an invalid limit must silently fall back to the default, never 400)", rec.Code, rec.Body.String())
+				}
+				if c.wantMaxRows > 0 {
+					var list []map[string]any
+					if err := json.Unmarshal(rec.Body.Bytes(), &list); err != nil {
+						t.Fatalf("decode: %v", err)
+					}
+					if len(list) != c.wantMaxRows {
+						t.Fatalf("rows: got %d want exactly %d", len(list), c.wantMaxRows)
+					}
+				}
+			})
+		}
+	})
+}
