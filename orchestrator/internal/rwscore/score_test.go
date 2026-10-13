@@ -100,8 +100,8 @@ func TestBucketDimension_IgnoresRowsForOtherDimensions(t *testing.T) {
 
 func TestScoreRun_FullWeightedAverageAllDimensionsPresent(t *testing.T) {
 	rows := []CoverageRow{
-		{Capability: "prevention", Verdict: "PASS", Count: 10},     // PassRate 1.0
-		{Capability: "detection", Verdict: "FAIL", Count: 10},       // PassRate 0.0
+		{Capability: "prevention", Verdict: "PASS", Count: 10}, // PassRate 1.0
+		{Capability: "detection", Verdict: "FAIL", Count: 10},  // PassRate 0.0
 		{Capability: "containment", Verdict: "PASS", Count: 5},
 		{Capability: "containment", Verdict: "FAIL", Count: 5},      // PassRate 0.5
 		{Capability: "recovery", Verdict: "PASS", Count: 10},        // PassRate 1.0

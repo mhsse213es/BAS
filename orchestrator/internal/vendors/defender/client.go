@@ -100,14 +100,14 @@ func (c *Client) TokenURL() *string { return &c.tokens.TokenURL }
 func (c *Client) ActionTokenURL() *string { return &c.actionTokens.TokenURL }
 
 type graphAlert struct {
-	ID              string   `json:"id"`
-	Title           string   `json:"title"`
-	Severity        string   `json:"severity"`
-	CreatedDateTime string   `json:"createdDateTime"`
+	ID              string `json:"id"`
+	Title           string `json:"title"`
+	Severity        string `json:"severity"`
+	CreatedDateTime string `json:"createdDateTime"`
 	// The Graph alerts_v2 field is "mitreTechniques", not "techniques" --
 	// confirmed against Microsoft's published alert schema.
-	Techniques      []string `json:"mitreTechniques"`
-	Evidence        []struct {
+	Techniques []string `json:"mitreTechniques"`
+	Evidence   []struct {
 		DeviceDNSName string `json:"deviceDnsName"`
 	} `json:"evidence"`
 }
