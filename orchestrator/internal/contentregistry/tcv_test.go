@@ -128,3 +128,36 @@ func TestAttachVendorSignature_RecordsCoverageFirstOnTrustFlipAlone(t *testing.T
 		}
 	})
 }
+
+func TestCreateVersion_RecordsCoverageFirstWhenAlreadyExecutableAtCreation(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		signer := testutil.NewTestSigner(t)
+		reg := New(pool, signer.Verifier())
+		threatID := seedThreatForTCVTest(t, pool, "APT-createversion-coverage")
+
+		// A signature-verified builtin is created already PUBLISHED +
+		// VENDOR_SIGNED -- executable from the moment createVersion commits,
+		// with no later Transition/AttachVendorSignature call at all.
+		art := []byte("id: cv-createversion-coverage\nname: G\nlocal_check: true\n")
+		vid, _, err := reg.createVersion(ctx, newVersion{
+			contentID: "cv-createversion-coverage", artifact: art, signature: signer.Sign(art),
+			analysis: mustAnalyze(t, string(art)),
+			actor: ActorIntake, source: SourceBuiltin, origin: OriginVendor,
+			trust: TrustVendorSigned, lifecycle: LifecyclePublished,
+			emulatesLinks: []emulatesLink{{threatID: threatID, provenanceRef: "G0016"}},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		var count int
+		if err := pool.QueryRow(ctx, `SELECT count(*) FROM threat_coverage_firsts WHERE threat_id = $1 AND relationship_kind = 'emulates'`,
+			threatID).Scan(&count); err != nil {
+			t.Fatal(err)
+		}
+		if count != 1 {
+			t.Fatalf("threat_coverage_firsts rows = %d, want 1 (version %s was executable at the moment it was created)", count, vid)
+		}
+	})
+}

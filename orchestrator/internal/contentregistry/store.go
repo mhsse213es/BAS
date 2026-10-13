@@ -122,6 +122,16 @@ type newVersion struct {
 	// ownership and record the generated_for link inside this transaction.
 	threatID      string
 	generationRef string
+	// emulatesLinks are written as `emulates` content_version_threats rows
+	// in this same transaction (spec §9.1-§9.2); resolved by the caller
+	// (Intake, Task 9) before createVersion ever begins, since resolution
+	// needs its own transaction via threatidentity.Store.
+	emulatesLinks []emulatesLink
+}
+
+type emulatesLink struct {
+	threatID      string
+	provenanceRef string // the external_id (e.g. MITRE group "G0016") this threat was resolved from
 }
 
 // createVersion inserts identity (if new), version, creation event,
@@ -264,6 +274,15 @@ func (r *Registry) createVersion(ctx context.Context, nv newVersion) (string, bo
 			return "", false, err
 		}
 	}
+	for _, el := range nv.emulatesLinks {
+		if _, err := tx.Exec(ctx, `INSERT INTO content_version_threats
+			   (content_version_id, threat_id, relationship_kind, provenance_type, provenance_ref)
+			 VALUES ($1, $2, 'emulates', 'vendor_signed_metadata', $3)
+			 ON CONFLICT (content_version_id, threat_id, relationship_kind) DO NOTHING`,
+			vid, el.threatID, el.provenanceRef); err != nil {
+			return "", false, err
+		}
+	}
 
 	structural := nv.analysis.structural
 	if err := checkTechniqueCatalog(ctx, tx, nv.analysis.techniqueIDs, &structural); err != nil {
@@ -292,6 +311,9 @@ func (r *Registry) createVersion(ctx context.Context, nv newVersion) (string, bo
 			s.firstSeen, s.lastSync, s.ref.Role); err != nil {
 			return "", false, err
 		}
+	}
+	if err := r.recordCoverageIfExecutable(ctx, tx, vid, nv.origin, nv.trust, nv.lifecycle); err != nil {
+		return "", false, err
 	}
 	return vid, true, tx.Commit(ctx)
 }
