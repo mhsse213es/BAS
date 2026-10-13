@@ -555,3 +555,45 @@ func TestCloudReachable_NonAssumableResourceNeverUnlocksMismatchedEdge(t *testin
 		t.Error("Expected the bucket itself to still be reachable (it's a legitimate dead-end target)")
 	}
 }
+
+// TestCloudPlan_NonAssumableResourceNeverUnlocksMismatchedEdge mirrors
+// TestCloudReachable_NonAssumableResourceNeverUnlocksMismatchedEdge, but
+// through CloudPlan. Review finding (Minor 2): the reachedAsSource/
+// reachedAsTarget Kind-gating logic is duplicated between CloudPlan and
+// CloudReachable; only CloudReachable's copy had a dedicated test. This
+// closes that gap -- CloudPlan's copy of the same logic is independently
+// verified here, not just assumed identical by inspection.
+func TestCloudPlan_NonAssumableResourceNeverUnlocksMismatchedEdge(t *testing.T) {
+	user := &CloudIdentity{CanonicalID: "arn:aws:iam::123456789012:user/attacker", Kind: "iam-user"}
+	bucket := &CloudResource{CanonicalID: "arn:aws:s3:::reused-id-bucket", Kind: "s3-bucket"}
+	mismatchedSource := &CloudIdentity{CanonicalID: bucket.CanonicalID, Kind: "iam-role"}
+	otherTarget := &CloudResource{CanonicalID: "arn:aws:s3:::other-bucket", Kind: "s3-bucket"}
+
+	edges := []*CloudPermission{
+		{
+			Source:     user,
+			Target:     bucket,
+			Action:     "s3:GetObject",
+			SourceType: "identity-policy",
+			Attributes: map[string]string{
+				"policy_document": `{"Statement":[{"Effect":"Allow","Action":"s3:GetObject","Resource":"arn:aws:s3:::reused-id-bucket/*"}]}`,
+			},
+		},
+		{
+			Source:     mismatchedSource,
+			Target:     otherTarget,
+			Action:     "s3:GetObject",
+			SourceType: "identity-policy",
+			Attributes: map[string]string{
+				"policy_document": `{"Statement":[{"Effect":"Allow","Action":"s3:GetObject","Resource":"arn:aws:s3:::other-bucket/*"}]}`,
+			},
+		},
+	}
+
+	evaluator := &AWSEvaluator{}
+	path, ok := CloudPlan(edges, []string{user.CanonicalID}, otherTarget.CanonicalID, evaluator, &RequestContext{}, 10)
+
+	if ok {
+		t.Fatalf("otherTarget must NOT be confirmed reachable -- the bucket's CanonicalID must never be treated as a valid Source just because it was reached as a Target, got path=%+v", path)
+	}
+}

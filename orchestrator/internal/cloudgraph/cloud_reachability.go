@@ -86,15 +86,42 @@ func worstState(states []PathState) PathState {
 	return Unknown
 }
 
+// tryAdvance evaluates edge as a candidate hop given the current
+// reachedAsSource/reachedAsTarget frontier. If edge.Source isn't already a
+// legitimate traversal source, or edge.Target is already reached, or the
+// evaluation isn't viable, it returns ok=false and leaves both maps
+// untouched. Otherwise it marks edge.Target reached -- extending
+// reachedAsSource too if edge.Target.Kind is in assumableIdentityKinds
+// (spec amendment point 3) -- and returns the evaluation result with
+// ok=true. Shared by CloudPlan and CloudReachable so the reachedAsSource/
+// reachedAsTarget gating logic -- the one place correctness depends on
+// exactly matching spec amendment point 3 -- exists in only one place
+// rather than two copies that could drift.
+func tryAdvance(edge *CloudPermission, reachedAsTarget, reachedAsSource map[string]bool, evaluator AuthorizationEvaluator, ctx *RequestContext) (*EvaluationResult, bool) {
+	if !reachedAsSource[edge.Source.CanonicalID] {
+		return nil, false
+	}
+	if reachedAsTarget[edge.Target.CanonicalID] {
+		return nil, false
+	}
+	result := evaluator.EvaluatePermission(edge, ctx)
+	if !isViable(result.State) {
+		return nil, false
+	}
+	reachedAsTarget[edge.Target.CanonicalID] = true
+	if assumableIdentityKinds[edge.Target.Kind] {
+		reachedAsSource[edge.Target.CanonicalID] = true
+	}
+	return result, true
+}
+
 // CloudPlan searches for one ordered path from held to target, returning
 // ok=false if target cannot be confirmed reachable within maxHops passes.
 // ok=false means "no path could be confirmed from available evidence," not
 // "no real-world path exists" -- a search that dead-ends at an Unknown edge
 // has hit the limit of what the available evidence can confirm, not proven
 // the edge is actually closed (see spec amendment point 2). Mirrors
-// adchain.Plan's exact shape, substituting the reachedAsSource/
-// reachedAsTarget CanonicalID tracking described in spec amendment point 3
-// for capability equality.
+// adchain.Plan's exact shape.
 func CloudPlan(edges []*CloudPermission, held []string, target string, evaluator AuthorizationEvaluator, ctx *RequestContext, maxHops int) (*CloudPath, bool) {
 	reachedAsTarget := make(map[string]bool, len(held))
 	reachedAsSource := make(map[string]bool, len(held))
@@ -110,19 +137,9 @@ func CloudPlan(edges []*CloudPermission, held []string, target string, evaluator
 	for pass := 0; pass < maxHops; pass++ {
 		added := false
 		for _, edge := range edges {
-			if !reachedAsSource[edge.Source.CanonicalID] {
+			result, ok := tryAdvance(edge, reachedAsTarget, reachedAsSource, evaluator, ctx)
+			if !ok {
 				continue
-			}
-			if reachedAsTarget[edge.Target.CanonicalID] {
-				continue
-			}
-			result := evaluator.EvaluatePermission(edge, ctx)
-			if !isViable(result.State) {
-				continue
-			}
-			reachedAsTarget[edge.Target.CanonicalID] = true
-			if assumableIdentityKinds[edge.Target.Kind] {
-				reachedAsSource[edge.Target.CanonicalID] = true
 			}
 			hops = append(hops, &CloudHop{Edge: edge, Result: result})
 			added = true
@@ -151,9 +168,7 @@ func hopStates(hops []*CloudHop) []PathState {
 // held by repeatedly walking edges whose Source is already a legitimate
 // traversal source and whose evaluation is viable, until a pass adds
 // nothing new (fixpoint) or maxHops passes have run. Mirrors
-// adchain.Reachable's exact shape, substituting the reachedAsSource/
-// reachedAsTarget CanonicalID tracking described in spec amendment point 3
-// for capability equality.
+// adchain.Reachable's exact shape.
 func CloudReachable(edges []*CloudPermission, held []string, evaluator AuthorizationEvaluator, ctx *RequestContext, maxHops int) []string {
 	reached := append([]string{}, held...)
 	reachedAsTarget := make(map[string]bool, len(reached))
@@ -166,21 +181,11 @@ func CloudReachable(edges []*CloudPermission, held []string, evaluator Authoriza
 	for pass := 0; pass < maxHops; pass++ {
 		added := false
 		for _, edge := range edges {
-			if !reachedAsSource[edge.Source.CanonicalID] {
-				continue
-			}
-			if reachedAsTarget[edge.Target.CanonicalID] {
-				continue
-			}
-			result := evaluator.EvaluatePermission(edge, ctx)
-			if !isViable(result.State) {
+			_, ok := tryAdvance(edge, reachedAsTarget, reachedAsSource, evaluator, ctx)
+			if !ok {
 				continue
 			}
 			reached = append(reached, edge.Target.CanonicalID)
-			reachedAsTarget[edge.Target.CanonicalID] = true
-			if assumableIdentityKinds[edge.Target.Kind] {
-				reachedAsSource[edge.Target.CanonicalID] = true
-			}
 			added = true
 		}
 		if !added {
