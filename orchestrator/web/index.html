@@ -115,6 +115,12 @@
           </svg>
           Campaigns
         </div>
+        <div class="nav-item" data-tab="factory-health" title="Factory Health" data-on-click="showTab" data-args="[&quot;factory-health&quot;]">
+          <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
+            <path d="M2 14h12M4 14V8M8 14V4M12 14V10"/>
+          </svg>
+          Factory Health
+        </div>
         <div class="nav-item" data-tab="coverage" title="Coverage" data-on-click="showTab" data-args="[&quot;coverage&quot;]">
           <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
             <path d="M2 12a6 6 0 0 1 12 0"/><path d="M8 12L11 7"/><circle cx="8" cy="12" r="1" fill="currentColor" stroke="none"/>
@@ -1486,6 +1492,15 @@
             </tbody>
           </table>
         </div>
+      </div>
+
+      <!-- Factory Health -->
+      <div id="tab-factory-health" style="display:none">
+        <div id="factory-health-tiles" class="kpi-row"></div>
+        <div id="factory-health-funnel" class="kpi-row"></div>
+        <div id="factory-health-dataquality"></div>
+        <div id="factory-health-threats-trend"></div>
+        <div id="factory-health-tcv-trend"></div>
       </div>
 
       <!-- Campaigns -->

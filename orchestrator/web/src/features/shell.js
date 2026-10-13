@@ -18,6 +18,7 @@ import { loadInitiatives } from './initiatives.js';
 import { loadIntegrations, loadResponseConnectors, renderResponseConnectorList } from './integrations.js';
 import { loadIOCRegistry } from './iocs.js';
 import { loadExercisesTab } from './openaev.js';
+import { loadFactoryHealth } from './factory-health.js';
 import { loadReports, loadRuns } from './reports.js';
 import { loadScheduledAssessments } from './scheduled.js';
 import { loadARTContentStatus, loadConnectorStatus, loadSimCoverage, loadTAXIIConnectors, loadThreatIntelConfig } from './threat-intel.js';
@@ -546,6 +547,7 @@ export function showTab(name) {
   if (name === 'exposure') loadExposureAssets();
   if (name === 'recommendations') loadRecommendations();
   if (name === 'exercises') loadExercisesTab();
+  if (name === 'factory-health') loadFactoryHealth();
   if (name === 'variants') loadVariantTab();
   if (name === 'em') loadEmTab();
   if (name === 'scenarios') { state.scenarioView = 'landing'; closeScenarioOverlay(); if (state.scenarios.length) renderScenarios(); }
