@@ -244,3 +244,77 @@ func TestScheduler_Sync_StartsThreatAndIntelligenceClocksOnTrustedClaim(t *testi
 		}
 	})
 }
+
+// TestScheduler_Sync_ClockNotRestartedAcrossRetractionThenReappearance closes
+// acceptance test 31 at the REAL call site: the scheduler itself, across
+// three separate sync() cycles (claim -> authoritative-snapshot retraction
+// -> reappearance), rather than replaying tcv.RecordThreatClockStart calls
+// by hand against the package (as the Task 13 integration test does, out of
+// architectural necessity since internal/evidence cannot import
+// internal/connector). Pins the final-review finding that no single test
+// exercised this sequence through resolvePendingClaims's own decision logic.
+func TestScheduler_Sync_ClockNotRestartedAcrossRetractionThenReappearance(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		firstSeen := time.Now().Add(-72 * time.Hour)
+		src := &stubEvidenceSource{
+			name: "misp",
+			actors: []ThreatActor{
+				{Name: "APT-clock-cycle", Source: "misp", SourceID: "evt-1",
+					Techniques: []TechniqueRef{{ID: "T1059"}}},
+			},
+			claims: []evidence.RawClaim{
+				{ActorName: "APT-clock-cycle", TechniqueID: "T1059", ExternalID: "evt-1", ObservedAt: firstSeen, RawConfidence: "high"},
+			},
+		}
+		s := &Scheduler{pool: pool, sources: []Source{src}, generator: NewGenerator(t.TempDir(), nil, nil, nil), engine: scenarioEngineForTest(t)}
+		s.WithIdentityStore(threatidentity.NewStore(pool))
+		s.WithEvidenceStore(evidence.NewStore(pool))
+
+		// Cycle 1: claim asserted, clock starts at firstSeen.
+		s.sync()
+
+		var threatID string
+		if err := pool.QueryRow(ctx, `SELECT t.id FROM threats t JOIN threat_actor_profiles p ON p.id = t.actor_id
+			WHERE p.name = 'APT-clock-cycle'`).Scan(&threatID); err != nil {
+			t.Fatalf("resolved threat not found: %v", err)
+		}
+
+		// Cycle 2: a complete snapshot that still mentions the actor (so
+		// sync()'s own "no actors returned from any source" early-return at
+		// scheduler.go doesn't skip the retraction path entirely) but no
+		// longer claims the technique -- the authoritative-absence path
+		// retracts T1059.
+		src.claims = nil
+		s.sync()
+
+		var retractedCount int
+		if err := pool.QueryRow(ctx, `SELECT count(*) FROM technique_claims WHERE threat_id = $1 AND technique_id = 'T1059' AND kind = 'retraction'`,
+			threatID).Scan(&retractedCount); err != nil {
+			t.Fatal(err)
+		}
+		if retractedCount != 1 {
+			t.Fatalf("retraction rows for T1059 = %d, want 1 (cycle 2 complete snapshot no longer claims it)", retractedCount)
+		}
+
+		// Cycle 3: the technique reappears -- reasserting it must NOT move
+		// the clock already written in cycle 1.
+		src.actors = []ThreatActor{
+			{Name: "APT-clock-cycle", Source: "misp", SourceID: "evt-1",
+				Techniques: []TechniqueRef{{ID: "T1059"}}},
+		}
+		src.claims = []evidence.RawClaim{
+			{ActorName: "APT-clock-cycle", TechniqueID: "T1059", ExternalID: "evt-1", ObservedAt: time.Now(), RawConfidence: "high"},
+		}
+		s.sync()
+
+		var startedAt time.Time
+		if err := pool.QueryRow(ctx, `SELECT started_at FROM threat_clock_starts WHERE threat_id = $1 AND clock = 'threat'`,
+			threatID).Scan(&startedAt); err != nil {
+			t.Fatal(err)
+		}
+		if diff := startedAt.Sub(firstSeen); diff < -time.Second || diff > time.Second {
+			t.Fatalf("started_at = %v, want the cycle-1 original %v (retraction+reappearance through the scheduler must not restart the clock)", startedAt, firstSeen)
+		}
+	})
+}
