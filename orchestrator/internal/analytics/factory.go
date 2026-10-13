@@ -160,3 +160,81 @@ func ingestionHealth(ctx context.Context, pool *pgxpool.Pool, since time.Time) (
 
 	return IngestionHealth{Sources: sources, UnresolvedCandidates: unresolved}, nil
 }
+
+type LifecycleFunnel struct {
+	Candidate int `json:"candidate"`
+	Validated int `json:"validated"`
+	Published int `json:"published"`
+	Rejected  int `json:"rejected"`
+}
+
+// lifecycleFunnel buckets every content_versions row by its current,
+// real, distinct lifecycle state -- no inference, no ambiguity between
+// "candidate" and "rejected" (spec: these are unambiguous CHECK-constrained
+// states, confirmed against internal/contentregistry/lifecycle.go).
+func lifecycleFunnel(ctx context.Context, pool *pgxpool.Pool) (LifecycleFunnel, error) {
+	var f LifecycleFunnel
+	err := pool.QueryRow(ctx, `
+		SELECT
+			count(*) FILTER (WHERE lifecycle IN ('DRAFT','VALIDATING')),
+			count(*) FILTER (WHERE lifecycle = 'VALIDATED'),
+			count(*) FILTER (WHERE lifecycle IN ('PUBLISHED','PUBLISHED_LOCAL')),
+			count(*) FILTER (WHERE lifecycle = 'REJECTED')
+		FROM content_versions`).Scan(&f.Candidate, &f.Validated, &f.Published, &f.Rejected)
+	return f, err
+}
+
+// DataQuality surfaces signals that undermine trust in the other metrics:
+// sources that have gone quiet, and content stuck mid-validation.
+type DataQuality struct {
+	StaleSources     []string `json:"staleSources"`
+	StaleValidations int      `json:"staleValidations"`
+}
+
+// dataQuality reports sources with no successful sync in staleAfter (this
+// also catches a source that has NEVER synced successfully -- NOT EXISTS
+// is true for both cases, and surfacing a never-synced source as "stale"
+// here is correct: it IS stale, just maximally so; ingestionHealth is
+// where the never-vs-stale distinction is reported precisely), and
+// content_versions stuck in VALIDATING whose transition into that state
+// happened more than staleAfter ago.
+func dataQuality(ctx context.Context, pool *pgxpool.Pool, staleAfter time.Duration) (DataQuality, error) {
+	cutoff := time.Now().Add(-staleAfter)
+
+	rows, err := pool.Query(ctx, `
+		SELECT si.display_name FROM source_instances si
+		WHERE NOT EXISTS (
+			SELECT 1 FROM source_syncs ss
+			WHERE ss.source_instance_id = si.id AND ss.status = 'succeeded' AND ss.completed_at >= $1
+		)
+		ORDER BY si.id`, cutoff)
+	if err != nil {
+		return DataQuality{}, err
+	}
+	defer rows.Close()
+	var staleSources []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return DataQuality{}, err
+		}
+		staleSources = append(staleSources, name)
+	}
+	if err := rows.Err(); err != nil {
+		return DataQuality{}, err
+	}
+
+	var staleValidations int
+	err = pool.QueryRow(ctx, `
+		SELECT count(*) FROM content_versions cv
+		WHERE cv.lifecycle = 'VALIDATING'
+		AND EXISTS (
+			SELECT 1 FROM content_version_events e
+			WHERE e.content_version_id = cv.id AND e.to_lifecycle = 'VALIDATING' AND e.at < $1
+		)`, cutoff).Scan(&staleValidations)
+	if err != nil {
+		return DataQuality{}, err
+	}
+
+	return DataQuality{StaleSources: staleSources, StaleValidations: staleValidations}, nil
+}

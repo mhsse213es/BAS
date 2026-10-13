@@ -123,6 +123,70 @@ func TestIngestionHealth_CountsFailuresInWindowAndUnresolvedCandidates(t *testin
 	})
 }
 
+func TestLifecycleFunnel_BucketsByLifecycle(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		seedPublishedContentVersion(t, pool, "cv-funnel-published")
+		seedContentVersionWithLifecycle(t, pool, "cv-funnel-draft", "DRAFT")
+		seedContentVersionWithLifecycle(t, pool, "cv-funnel-validated", "VALIDATED")
+		seedContentVersionWithLifecycle(t, pool, "cv-funnel-rejected", "REJECTED")
+
+		got, err := lifecycleFunnel(context.Background(), pool)
+		if err != nil {
+			t.Fatalf("lifecycleFunnel: %v", err)
+		}
+		if got.Candidate < 1 || got.Validated < 1 || got.Published < 1 || got.Rejected < 1 {
+			t.Fatalf("got %+v, want all four buckets to have at least the one seeded row each", got)
+		}
+	})
+}
+
+func TestDataQuality_FlagsNeverSyncedSourceAndStaleValidation(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		mustExec(t, pool, `INSERT INTO source_instances (id, source_type, display_name, observation_mode) VALUES ('src-stale-dq','misp','Stale DQ Source','snapshot')`)
+		vid := seedContentVersionWithLifecycle(t, pool, "cv-dq-stale-validating", "VALIDATING")
+		mustExec(t, pool, `
+			INSERT INTO content_version_events (content_version_id, to_lifecycle, to_trust, actor, at)
+			VALUES ($1, 'VALIDATING', 'LOCAL_TRUSTED', 'user:test', now() - interval '10 days')`, vid)
+
+		got, err := dataQuality(context.Background(), pool, 7*24*time.Hour)
+		if err != nil {
+			t.Fatalf("dataQuality: %v", err)
+		}
+		found := false
+		for _, name := range got.StaleSources {
+			if name == "Stale DQ Source" {
+				found = true
+			}
+		}
+		if !found {
+			t.Fatalf("StaleSources = %v, want to include 'Stale DQ Source'", got.StaleSources)
+		}
+		if got.StaleValidations < 1 {
+			t.Fatalf("StaleValidations = %d, want >= 1", got.StaleValidations)
+		}
+	})
+}
+
+func seedContentVersionWithLifecycle(t *testing.T, pool *pgxpool.Pool, contentID, lifecycle string) string {
+	t.Helper()
+	mustExec(t, pool, `INSERT INTO scenarios (scenario_id, origin) VALUES ($1, 'LOCAL') ON CONFLICT DO NOTHING`, contentID)
+	var vid string
+	if err := pool.QueryRow(context.Background(), `
+		INSERT INTO content_versions (content_id, origin, version, artifact_sha256, artifact_size, artifact_bytes,
+			trust_level, lifecycle, intake_source, schema_version, created_by)
+		VALUES ($1, 'LOCAL', 1, 'sha-'||$1, 1, 'x', 'LOCAL_TRUSTED', $2, 'custom', 1, 'migration:test')
+		RETURNING id`, contentID, lifecycle).Scan(&vid); err != nil {
+		t.Fatalf("seedContentVersionWithLifecycle: %v", err)
+	}
+	return vid
+}
+
 func TestCoreCounts_ThreatsAndPublishedContent(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping container-backed test in -short mode")
