@@ -12,10 +12,10 @@
 
 ### 1.1 The airgap install path is broken today, and fails after mutating the host
 
-- `pack.sh:56` stages images at `<bundle-root>/images/`, a sibling of `<bundle-root>/compose/`.
-- `setup.sh` (copied into `<bundle-root>/compose/setup.sh` by `pack.sh:87`) computes `SCRIPT_DIR` as its own containing directory and globs `"${SCRIPT_DIR}"/images/*.tar.gz` (`setup.sh:607`) — which resolves to `<bundle-root>/compose/images/*`, a path that never exists in a `pack.sh`-produced bundle. No `nullglob` is set, so the glob stays literal, the loop body never runs, and `setup.sh:616-618` aborts: `"No orchestrator artifact ... refusing to install without it."`
+- `pack.sh:56` stages images at `<bundle-root>/images/`, with `setup.sh` nested one level down at `<bundle-root>/compose/setup.sh` (`pack.sh:87`).
+- `setup.sh` computes `SCRIPT_DIR` as its own containing directory and globs `"${SCRIPT_DIR}"/images/*.tar.gz` (`setup.sh:607`), reads `"${SCRIPT_DIR}"/VERSION` (`setup.sh:36`), and looks for `"${SCRIPT_DIR}"/cosign.pub` (`setup.sh:265,278`) — all three resolve to `<bundle-root>/compose/*`, one level off from where `pack.sh` actually puts `images/`, `VERSION`, and (if it produced one) `cosign.pub`. No `nullglob` is set, so the images glob stays literal, the loop body never runs, and `setup.sh:616-618` aborts: `"No orchestrator artifact ... refusing to install without it."`
 - By the time that abort fires, `import.sh:120-134` has already run `docker load` for **both** images unconditionally, and `setup.sh:580-594` has already generated and written `${INSTALL_DIR}/.env` (containing `POSTGRES_PASSWORD`, `JWT_SECRET`, `AGENT_SECRET`, admin credentials) to disk — both before `setup.sh`'s own image-loading block at line 596+607 ever runs.
-- Separately, `setup.sh:278-280`'s `_verify_orchestrator_artifact` expects a `cosign.pub` and a `.bundle` signature inside the bundle; `pack.sh` never produces either, so this check would fail even if the path bug were fixed. This is dead, unreachable scaffolding for a verification path that was never finished on the producing side.
+- **Root cause, confirmed against the other packager:** `packaging/build.sh` (the online release builder) copies `setup.sh` to its bundle **root** (`build.sh:149`) as a flat sibling of `images/`, `VERSION`, and `cosign.pub` (`build.sh:241,265`) — exactly the layout `setup.sh`'s `${SCRIPT_DIR}`-relative paths expect. `pack.sh`'s airgap bundle nests `setup.sh` inside a `compose/` subdirectory instead, which is the actual defect: not a bug in `setup.sh`, but `pack.sh` producing a bundle shape `setup.sh` was never written to consume.
 
 **Net: every real airgap run today loads both Docker images and writes generated secrets to disk, then fails.** The signing model is moot while the pipeline can't complete — this is the P0.
 
@@ -38,9 +38,13 @@
 - No lockfile, sentinel, or completion marker exists anywhere under `packaging/airgap/` or in `setup.sh`. A second run after a kill/power-loss mid-install re-extracts, re-loads images (idempotent), and **re-runs `setup.sh`'s secret generation unconditionally**, overwriting `${INSTALL_DIR}/.env` with freshly generated values — silently rotating credentials for what may have been a working partial or complete install.
 - Precedent exists in the separate, non-airgap `install.sh` flow: `install.sh:123-136`'s `_on_interrupt` (bound via `trap _on_interrupt INT TERM`) checks for `${DATA_DIR}/docker-compose.yml` as a stand-in completion marker and tells the operator explicitly how to resume. `install.sh:970`'s upgrade-abort message ("the previous version is still running; nothing was replaced") shows the same codebase already has a rollback-safety convention — the airgap path just never adopted it.
 
-### 1.5 Cosign: resolved, no independent benefit
+### 1.5 Cosign: resolved — keep and finish, not remove (revised 2026-10-13)
 
-`pack.sh:132-141` generates `MANIFEST.sha256` (every bundle file's checksum, excluding itself) **before** the tarball is built (`pack.sh:144-146`) and signed (`sign.sh:74-81`, a plain `gpg --detach-sign` over the exact tarball bytes, no re-touch after). The manifest is therefore inside the GPG-signed scope: a valid signature over the tarball transitively authenticates every file the manifest checksums, including both image tarballs, at the same trust level cosign's sign-blob/verify-blob model would add — and for the whole bundle, not one artifact. **Making GPG mandatory and manifest-checked makes `setup.sh`'s dead cosign scaffolding redundant.** Per the approved decision: remove/simplify it rather than finish it. Cosign is not extended to any other artifact in this phase.
+**This corrects an earlier resolution in this same spec's history.** The first pass concluded GPG-over-the-bundle made `setup.sh`'s cosign check redundant, reasoning only from `pack.sh`'s own manifest/signing scope. That missed that `setup.sh` is shared code: `packaging/build.sh` (§1.1) already cosign-signs the orchestrator tarball unconditionally (`build.sh:216-265`: installs are refused without cosign present, a valid key, and a successful self-verify immediately after signing) and ships `cosign.pub` with the bundle. `windows-build.ps1:672` confirms the same requirement from the Windows build path: *"This bundle will be refused by install.sh/setup.sh, which require a signed orchestrator artifact."* `setup.sh:221-295`'s `check_cosign`/`_verify_orchestrator_artifact` is not unfinished scaffolding — it is real, already-tested, cross-version-compatibility-checked verification logic (the comments document specific testing across cosign v2.2.4 through v3.1.3) that one producing pipeline (`build.sh`) already satisfies and the other (`pack.sh`) simply never has.
+
+**Resolution:** fix `pack.sh` to produce what `setup.sh` already expects, instead of changing `setup.sh`. Concretely: `pack.sh` adopts `build.sh`'s flat bundle layout (§1.1) and reuses `packaging/signing/cosign.sh`'s existing sign/verify calls to cosign-sign the orchestrator tarball exactly as `build.sh:251-260` does, producing the `cosign.pub` + `<tar>.bundle` that `setup.sh`'s unmodified, already-correct check already looks for. No changes to `setup.sh`'s cosign logic; no new verification code to write or test for this artifact — the work is entirely in `pack.sh` reusing an existing, working mechanism.
+
+GPG-over-the-bundle remains mandatory and is still the right outer layer — it is the *only* mechanism authenticating the compose files, the postgres image, scenarios, and ART payloads, none of which cosign touches. GPG and cosign are complementary, not redundant: GPG authenticates the bundle as a transport unit; cosign specifically authenticates the one artifact (`bas-orchestrator` image) that both distribution pipelines need to verify identically before `docker load`, using the mechanism already established for it. Cosign is still not extended to the postgres image or the content bundle (matches the approved scope) — only the orchestrator tarball, where it already exists.
 
 ### 1.6 Out of scope, confirmed correct, do not touch
 
@@ -90,9 +94,17 @@ Extract the GPG + manifest + Compose-version checks (§2.2) into one script, `pa
 - `verify-common.sh` prints the fingerprint it is about to trust before verifying, so an operator following the documented process can compare it against the independently-communicated value.
 - This phase does not build new key-distribution infrastructure (no KMS, no PKI hierarchy) — it documents and surfaces the fingerprint-comparison step that today doesn't exist even as a manual process.
 
-### 2.6 Remove dead cosign scaffolding
+### 2.6 Align `pack.sh` with `build.sh`'s bundle layout and cosign-sign the orchestrator tarball
 
-Remove `setup.sh:278-280`'s `_verify_orchestrator_artifact` cosign check and the `cosign.pub`-in-bundle expectation it implies, since §1.5 establishes it adds no independent verification property once GPG is mandatory and manifest-checked. `packaging/signing/cosign.sh` itself (the separate, optional Docker-image-blob signer invoked via `sign.sh --cosign`) is untouched — it's a distinct, already-functioning, already-opt-in path for a different distribution channel, not part of the airgap bundle flow this spec covers.
+Per §1.5's revised resolution, `setup.sh`'s `check_cosign`/`_verify_orchestrator_artifact` are kept unmodified. `pack.sh` changes to:
+
+1. **Flat layout, matching `build.sh` exactly, not partially.** `setup.sh` resolves every one of the following via `${SCRIPT_DIR}` (confirmed by reading every `${SCRIPT_DIR}` use in the file): `VERSION`, `cosign.pub`, `images/`, `docker-compose.yml`, `docker-compose.prod.yml`, `systemd/bas-compose.service`, `scenarios/`, `wwwroot/`, `art-payloads/`, and optionally `setup.conf`/`agents/`. `build.sh` already stages all of these flat at its bundle root with no nested subdirectory (confirmed: `build.sh`'s only `mkdir -p` calls are for `systemd/`, `art-payloads/`, `agents/`, and `images/` — all direct children of `${BUILD_DIR}`, never a `compose/` wrapper). `pack.sh` drops its `compose/` subdirectory entirely and stages everything flat the same way: `setup.sh`, `uninstall.sh`, `VERSION`, `cosign.pub`, `docker-compose.yml`, `docker-compose.prod.yml`, `.env.example`, `systemd/`, `scenarios/`, `wwwroot/`, `art-payloads/` all become direct children of the bundle root, as siblings of `images/`. This single layout change is also the fix for the §1.1 path bug, since every one of those paths resolves correctly once `setup.sh` is a direct sibling of all of them, matching `build.sh`.
+2. **Cosign-sign the orchestrator tarball**, reusing `packaging/signing/cosign.sh`'s existing `--sign`/`--verify` calls exactly as `build.sh:251-260` does: sign immediately after `docker save`, self-verify, fail the pack build (not warn) if cosign isn't installed, the key is missing, or self-verify fails — matching `build.sh`'s own unconditional-mandatory behavior, not `pack.sh`'s current GPG-is-optional pattern.
+3. `cosign.pub` ships in the bundle (as `build.sh` already does); the `<tar>.bundle` signature file sits alongside the orchestrator tarball in `images/`.
+
+`packaging/signing/cosign.sh` itself is untouched — both `build.sh` and `pack.sh` now call the same existing script the same way.
+
+**Downstream of the layout change:** `verify.sh`'s `REQUIRED` array (`verify.sh:109-116`, currently `"compose/setup.sh"`, `"compose/docker-compose.yml"`, `"compose/docker-compose.prod.yml"`) and `import.sh`'s `SETUP_SCRIPT` path (`import.sh:148`, currently `"${BUNDLE_DIR}/compose/setup.sh"`) both hardcode the old nested layout and must be updated to the flat paths in the same change — `import.sh`'s `ORCHESTRATOR_IMG`/`POSTGRES_IMG` paths (`import.sh:117-118`) already point at `${BUNDLE_DIR}/images/...` and need no change.
 
 ---
 
@@ -108,6 +120,10 @@ For every negative-path test below, assert **zero `docker load` calls occurred a
 - Compose plugin absent.
 - Compose version below `2.8.0`.
 - Compose version string unparseable (e.g. a non-semver build tag).
+- Missing `cosign.pub` in the bundle.
+- Missing `<orchestrator-tar>.bundle` cosign signature file.
+- Cosign installed but below the version floor `setup.sh:247-252`'s `_cosign_version_ok` already enforces (v3.1.0).
+- Orchestrator tarball altered after cosign-signing (cosign verify-blob failure) — distinct from a GPG/manifest failure, since this exercises `setup.sh`'s own gate, reached only after the outer bundle-level checks already passed.
 
 For the interruption case (process killed mid-install, after some mutation has legitimately started):
 
@@ -128,10 +144,13 @@ For the positive path: a correctly signed, correctly versioned bundle on a host 
 
 ## 5. Out of scope
 
-- Finishing or extending cosign to any artifact (§1.5, resolved no).
+- Extending cosign to the postgres image or the content/scenario bundle — only the orchestrator tarball, where `setup.sh` already requires it (§1.5/§2.6).
+- Changes to `setup.sh`'s cosign verification logic itself (`check_cosign`/`_verify_orchestrator_artifact`) — already correct and already tested; the fix is entirely on `pack.sh`'s producing side.
+- Changes to `packaging/signing/cosign.sh` — both `build.sh` and `pack.sh` reuse it unchanged.
 - New key-distribution infrastructure beyond documenting fingerprint comparison (§2.5).
 - Changes to `internal/integrity`'s content-signing layer (§1.6) — already correct, unrelated.
 - Changes to the separate, non-airgap `install.sh`/compose-only installer, except as a design precedent to follow (§1.4) — it is not broken and is not touched by this phase.
+- Changes to `packaging/build.sh` itself — it is the reference implementation `pack.sh` is being aligned to, not a thing this phase modifies.
 
 ## 6. Review Focus (for the implementation plan)
 
