@@ -67,7 +67,7 @@ func TestCorrelate_ClassifiesEachResultKind(t *testing.T) {
 	defer srv.Close()
 
 	results := []models.SimulationResult{
-		resultAt("T1059.001", "PowerShell", models.ResultFail, t1059ExecutedAt, 5000),       // detected
+		resultAt("T1059.001", "PowerShell", models.ResultFail, t1059ExecutedAt, 5000),                // detected
 		resultAt("T1055", "Process Injection", models.ResultFail, runStart.Add(5*time.Minute), 5000), // undetected (alert out of window)
 		resultAt("T1562", "Disable Defenses", models.ResultBlocked, runStart.Add(1*time.Minute), 1000),
 		resultAt("T1105", "Ingress Tool Transfer", models.ResultPass, runStart.Add(3*time.Minute), 1000),

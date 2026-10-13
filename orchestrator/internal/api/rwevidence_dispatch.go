@@ -20,18 +20,18 @@ import (
 // system-wide, which is both out of the spec's defined scope and needless
 // write load on every dispatch in the product, not just ransomware's.
 var ransomwareScenarioIDs = map[string]bool{
-	"akira-kill-chain":            true,
-	"blackcat-kill-chain":         true,
-	"clop-kill-chain":             true,
-	"lockbit-kill-chain":          true,
-	"play-kill-chain":             true,
-	"ransomhub-kill-chain":        true,
-	"ransomware-drill":            true,
-	"em-07-ransomware-readiness":  true,
-	"linux-ransomware-drill":      true,
-	"black-basta-kill-chain":      true,
-	"medusa-kill-chain":           true,
-	"rhysida-kill-chain":          true,
+	"akira-kill-chain":                 true,
+	"blackcat-kill-chain":              true,
+	"clop-kill-chain":                  true,
+	"lockbit-kill-chain":               true,
+	"play-kill-chain":                  true,
+	"ransomhub-kill-chain":             true,
+	"ransomware-drill":                 true,
+	"em-07-ransomware-readiness":       true,
+	"linux-ransomware-drill":           true,
+	"black-basta-kill-chain":           true,
+	"medusa-kill-chain":                true,
+	"rhysida-kill-chain":               true,
 	"hunters-international-kill-chain": true,
 }
 

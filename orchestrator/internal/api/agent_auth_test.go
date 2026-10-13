@@ -33,10 +33,10 @@ func TestValidateAgentAuth_HeaderOnly_QueryParamNeverHonored(t *testing.T) {
 		wantAllowed bool
 	}{
 		{"header-only-correct", "shh", "", true},
-		{"query-only-correct", "", "shh", false},        // query param is never honored, even alone
-		{"both-correct", "shh", "shh", true},             // header present and correct: allowed
+		{"query-only-correct", "", "shh", false},             // query param is never honored, even alone
+		{"both-correct", "shh", "shh", true},                 // header present and correct: allowed
 		{"header-wrong-query-correct", "nope", "shh", false}, // header wins even though wrong; never falls back
-		{"header-empty-query-correct", "", "shh", false}, // no header means no auth, regardless of query
+		{"header-empty-query-correct", "", "shh", false},     // no header means no auth, regardless of query
 		{"neither-present", "", "", false},
 		{"header-correct-query-wrong", "shh", "nope", true}, // header wins, query ignored
 	}

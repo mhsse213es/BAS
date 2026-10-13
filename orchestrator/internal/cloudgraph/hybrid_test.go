@@ -7,7 +7,7 @@ import (
 // TestHybridGraph_IdentityCorrelationMatch verifies AD user linked to cloud identity
 func TestHybridGraph_IdentityCorrelationMatch(t *testing.T) {
 	// Synthetic AD user (simulated)
-	adUserID := "S-1-5-21-DOMAIN-500"  // SID format (placeholder)
+	adUserID := "S-1-5-21-DOMAIN-500" // SID format (placeholder)
 	adUserName := "alice@corp.local"
 
 	// Synchronized cloud identity (Entra ID)
@@ -17,7 +17,7 @@ func TestHybridGraph_IdentityCorrelationMatch(t *testing.T) {
 	// For Phase 1, verify that identity types and account scopes are compatible
 
 	adUser := &CloudIdentity{
-		CanonicalID: "ad:" + adUserID,  // Prefixed to distinguish from cloud
+		CanonicalID: "ad:" + adUserID, // Prefixed to distinguish from cloud
 		Kind:        "ad-user",
 		AccountScope: &AccountScope{
 			Provider: "ad",
@@ -105,7 +105,7 @@ func TestHybridGraph_PermissionDeniedUnderCloudPolicy(t *testing.T) {
 		Conditions: []*Condition{
 			{
 				Type:  "ip-address",
-				Value: "10.0.0.0/8",  // Corporate network only
+				Value: "10.0.0.0/8", // Corporate network only
 			},
 		},
 		Provenance: &Provenance{
@@ -116,7 +116,7 @@ func TestHybridGraph_PermissionDeniedUnderCloudPolicy(t *testing.T) {
 
 	// Scenario request has unknown source IP (test environment not in 10.0.0.0/8)
 	// Path state should be ConditionallyReachable (not Blocked, not Allowed)
-	requestIP := "203.0.113.1"  // Example external IP
+	requestIP := "203.0.113.1" // Example external IP
 
 	if len(edge.Conditions) == 0 {
 		t.Error("Conditions not preserved")
@@ -129,7 +129,7 @@ func TestHybridGraph_PermissionDeniedUnderCloudPolicy(t *testing.T) {
 
 	// In Phase 2, evaluator will mark state = ConditionallyReachable
 	// with UnresolvedConds = [IP restriction]
-	_ = requestIP  // Used in Phase 2 evaluation
+	_ = requestIP // Used in Phase 2 evaluation
 }
 
 // TestHybridGraph_StaleEvidenceDoesNotFabricate tests unknown state
@@ -144,7 +144,7 @@ func TestHybridGraph_StaleEvidenceDoesNotFabricate(t *testing.T) {
 	// AWS IAM policy changed yesterday
 	iamPolicyChange := &Provenance{
 		Source:        "aws:iam-get-user-policy",
-		CollectionAge: 24 * 3600,  // 1 day old
+		CollectionAge: 24 * 3600, // 1 day old
 		Confidence:    "observed",
 	}
 

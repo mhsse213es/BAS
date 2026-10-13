@@ -46,12 +46,12 @@ func TestRhysidaKillChain_ParsesWithElevenStepsWindowsOnlyFullyGrounded(t *testi
 
 	// Verify action_keys for key steps
 	wantActionKeys := map[int]string{
-		4: "enumerate",                                          // T1562.001
-		5: "enumerate",                                          // T1562.008
-		6: "enumerate",                                          // T1070.001
-		7: "enumerate",                                          // T1490 enum
-		8: "ransomware_sim_sandboxed",                           // T1490 delete (could also be service_stop)
-		10: "ransomware_sim_sandboxed",                          // T1486
+		4:  "enumerate",                // T1562.001
+		5:  "enumerate",                // T1562.008
+		6:  "enumerate",                // T1070.001
+		7:  "enumerate",                // T1490 enum
+		8:  "ransomware_sim_sandboxed", // T1490 delete (could also be service_stop)
+		10: "ransomware_sim_sandboxed", // T1486
 	}
 	for stepIdx, wantKey := range wantActionKeys {
 		gotKey := sc.Steps[stepIdx].ActionKey
