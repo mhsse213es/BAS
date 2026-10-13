@@ -20,12 +20,18 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/audspect/bas/internal/contentregistry"
+	"github.com/audspect/bas/internal/evidence"
 	"github.com/audspect/bas/internal/reporting/attackdata"
 	"github.com/audspect/bas/internal/scenario"
 	"github.com/audspect/bas/internal/threatidentity"
 )
 
 const minTechniques = 2 // minimum techniques before generating a scenario
+
+// generationPolicyVersion versions the policy RecordGeneration snapshots
+// are taken under (spec §8). Bump it when the active-set-vs-generation
+// policy itself changes.
+const generationPolicyVersion = "tcf2b-generation-v1"
 
 // Registrar is the slice of the Content Registry the generator writes to.
 type Registrar interface {
@@ -64,6 +70,10 @@ type Generator struct {
 	componentVersions func(context.Context) (scenario.ComponentVersions, error)
 	// attackMeta overrides attackdata.DatasetMeta (tests).
 	attackMeta func() attackdata.Meta
+
+	// evidence, when set, makes Write consult the evidence layer's active
+	// technique set instead of actor.Techniques (TCF Phase 2 spec §6.2, §8).
+	evidence *evidence.Store
 }
 
 // WithComponentVersions sets the catalog-version source for generation
@@ -90,6 +100,15 @@ func DBComponentVersions(pool *pgxpool.Pool) func(context.Context) (scenario.Com
 // LOCAL/UNTRUSTED/DRAFT version in the Content Registry.
 func (g *Generator) WithRegistrar(r Registrar) *Generator {
 	g.registrar = r
+	return g
+}
+
+// WithEvidenceStore wires the evidence layer's active technique set into
+// generation policy (TCF Phase 2 spec §6.2, §8). A nil evidence store (the
+// default) falls back to the pre-2B behavior: policy reads actor.Techniques
+// directly.
+func (g *Generator) WithEvidenceStore(st *evidence.Store) *Generator {
+	g.evidence = st
 	return g
 }
 
@@ -150,7 +169,18 @@ func (g *Generator) Write(actors []ThreatActor) (GenerateResult, error) {
 			res.Skipped++
 			continue
 		}
-		if len(actor.Techniques) < minTechniques {
+
+		activeTechniques := dedupedTechniqueIDs(actor.Techniques)
+		if g.evidence != nil {
+			at, err := g.evidence.ActiveTechniques(context.Background(), actor.ThreatID)
+			if err != nil {
+				log.Printf("[connector/gen] active techniques for %s: %v", actor.ThreatID, err)
+				res.Failed++
+				continue
+			}
+			activeTechniques = at
+		}
+		if len(activeTechniques) < minTechniques {
 			res.Skipped++
 			continue
 		}
@@ -197,8 +227,16 @@ func (g *Generator) Write(actors []ThreatActor) (GenerateResult, error) {
 			res.Changed++
 		}
 		if created {
-			log.Printf("[connector/gen] new DRAFT %s (%s, %d techniques)", id, actor.Name, len(actor.Techniques))
+			log.Printf("[connector/gen] new DRAFT %s (%s, %d active techniques)", id, actor.Name, len(activeTechniques))
 			res.Created++
+			if g.evidence != nil {
+				genNum, err := g.evidence.NextGenerationNumber(context.Background(), actor.ThreatID)
+				if err != nil {
+					log.Printf("[connector/gen] next generation number for %s: %v", actor.ThreatID, err)
+				} else if err := g.evidence.RecordGeneration(context.Background(), actor.ThreatID, id, "", genNum, generationPolicyVersion); err != nil {
+					log.Printf("[connector/gen] record generation for %s: %v", actor.ThreatID, err)
+				}
+			}
 		} else {
 			res.Skipped++
 		}
