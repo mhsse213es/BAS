@@ -105,3 +105,58 @@ func staticValidationPassRate(ctx context.Context, pool *pgxpool.Pool, since tim
 func duplicateGenerationRate() Metric {
 	return noData("generation-attempt telemetry is not yet persisted (tracked for Phase 9)")
 }
+
+// SourceHealth is one source instance's ingestion health. LastSuccessAt
+// is nil when the source has never once synced successfully -- this is
+// deliberately distinct from a non-nil-but-old timestamp (stale), which
+// dataQuality reports separately.
+type SourceHealth struct {
+	SourceInstanceID string     `json:"sourceInstanceId"`
+	DisplayName      string     `json:"displayName"`
+	LastSuccessAt    *time.Time `json:"lastSuccessAt"`
+	FailuresInWindow int        `json:"failuresInWindow"`
+	LastDiagnostic   string     `json:"lastDiagnostic,omitempty"`
+}
+
+type IngestionHealth struct {
+	Sources              []SourceHealth `json:"sources"`
+	UnresolvedCandidates int            `json:"unresolvedCandidates"`
+}
+
+func ingestionHealth(ctx context.Context, pool *pgxpool.Pool, since time.Time) (IngestionHealth, error) {
+	rows, err := pool.Query(ctx, `
+		SELECT
+			si.id, si.display_name,
+			(SELECT max(completed_at) FROM source_syncs WHERE source_instance_id = si.id AND status = 'succeeded'),
+			(SELECT count(*) FROM source_syncs WHERE source_instance_id = si.id AND status = 'failed' AND started_at >= $1),
+			(SELECT diagnostic FROM source_syncs WHERE source_instance_id = si.id AND status = 'failed' ORDER BY started_at DESC LIMIT 1)
+		FROM source_instances si
+		ORDER BY si.id`, since)
+	if err != nil {
+		return IngestionHealth{}, err
+	}
+	defer rows.Close()
+
+	var sources []SourceHealth
+	for rows.Next() {
+		var s SourceHealth
+		var diagnostic *string
+		if err := rows.Scan(&s.SourceInstanceID, &s.DisplayName, &s.LastSuccessAt, &s.FailuresInWindow, &diagnostic); err != nil {
+			return IngestionHealth{}, err
+		}
+		if diagnostic != nil {
+			s.LastDiagnostic = *diagnostic
+		}
+		sources = append(sources, s)
+	}
+	if err := rows.Err(); err != nil {
+		return IngestionHealth{}, err
+	}
+
+	var unresolved int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM actor_resolution_candidates WHERE status = 'unresolved'`).Scan(&unresolved); err != nil {
+		return IngestionHealth{}, err
+	}
+
+	return IngestionHealth{Sources: sources, UnresolvedCandidates: unresolved}, nil
+}

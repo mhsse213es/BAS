@@ -63,6 +63,66 @@ func TestDuplicateGenerationRate_AlwaysNoData(t *testing.T) {
 	}
 }
 
+func TestIngestionHealth_DistinguishesNeverSyncedFromStale(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		mustExec(t, pool, `INSERT INTO source_instances (id, source_type, display_name, observation_mode) VALUES ('src-never','misp','Never Synced','snapshot')`)
+		mustExec(t, pool, `INSERT INTO source_instances (id, source_type, display_name, observation_mode) VALUES ('src-ok','misp','Healthy Source','snapshot')`)
+		mustExec(t, pool, `
+			INSERT INTO source_syncs (source_instance_id, started_at, completed_at, status, completeness, authoritative, diagnostic)
+			VALUES ('src-ok', now(), now(), 'succeeded', 'complete', true, '')`)
+
+		got, err := ingestionHealth(context.Background(), pool, time.Now().Add(-24*time.Hour))
+		if err != nil {
+			t.Fatalf("ingestionHealth: %v", err)
+		}
+		bySource := map[string]SourceHealth{}
+		for _, s := range got.Sources {
+			bySource[s.SourceInstanceID] = s
+		}
+		if bySource["src-never"].LastSuccessAt != nil {
+			t.Fatalf("src-never LastSuccessAt = %v, want nil (never synced)", bySource["src-never"].LastSuccessAt)
+		}
+		if bySource["src-ok"].LastSuccessAt == nil {
+			t.Fatal("src-ok LastSuccessAt = nil, want a real timestamp")
+		}
+	})
+}
+
+func TestIngestionHealth_CountsFailuresInWindowAndUnresolvedCandidates(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		mustExec(t, pool, `INSERT INTO source_instances (id, source_type, display_name, observation_mode) VALUES ('src-fail','misp','Flaky Source','snapshot')`)
+		mustExec(t, pool, `
+			INSERT INTO source_syncs (source_instance_id, started_at, status, completeness, authoritative, diagnostic)
+			VALUES ('src-fail', now(), 'failed', 'failed', false, 'connection timeout')`)
+		mustExec(t, pool, `
+			INSERT INTO actor_resolution_candidates (kind, source, raw_name, reason, resolver_context, resolver_context_hash)
+			VALUES ('source_record', 'misp', 'Unresolved Actor', 'test', '{}', 'hash-ingestion-health-1')`)
+
+		got, err := ingestionHealth(context.Background(), pool, time.Now().Add(-24*time.Hour))
+		if err != nil {
+			t.Fatalf("ingestionHealth: %v", err)
+		}
+		var flaky SourceHealth
+		for _, s := range got.Sources {
+			if s.SourceInstanceID == "src-fail" {
+				flaky = s
+			}
+		}
+		if flaky.FailuresInWindow != 1 || flaky.LastDiagnostic != "connection timeout" {
+			t.Fatalf("flaky source = %+v, want FailuresInWindow=1 and diagnostic set", flaky)
+		}
+		if got.UnresolvedCandidates < 1 {
+			t.Fatalf("UnresolvedCandidates = %d, want >= 1", got.UnresolvedCandidates)
+		}
+	})
+}
+
 func TestCoreCounts_ThreatsAndPublishedContent(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping container-backed test in -short mode")
