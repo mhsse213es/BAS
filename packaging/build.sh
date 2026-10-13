@@ -264,9 +264,22 @@ if [[ ! -f "$COSIGN_PUB" ]]; then
 fi
 cp "$COSIGN_PUB" "${BUILD_DIR}/"
 
-docker save "postgres:16-alpine" \
-  | gzip > "${BUILD_DIR}/images/postgres-16-alpine.tar.gz" 2>/dev/null || \
-  warn "postgres:16-alpine not pulled locally — run 'docker pull postgres:16-alpine' to include it"
+# Postgres: pulled BY DIGEST (packaging/images.pin; a digest mismatch is fatal),
+# saved UNCOMPRESSED and cosign-signed with the same helper and key as the
+# orchestrator. setup.sh/install.sh refuse any image tar without a valid
+# signature, so a bundle without postgres is not installable: any failure is fatal.
+# shellcheck source=signing/release-images.sh
+# shellcheck disable=SC1091  # repo-relative helper; followed with shellcheck -x
+source "${REPO_ROOT}/packaging/signing/release-images.sh"
+rel_ship_postgres "${REPO_ROOT}" "${BUILD_DIR}/images" "${COSIGN_SCRIPT}"
+
+# Caldera (baked emu library, pinned base) and chrome (pinned version+digest):
+# compose starts both with no profile, so the bundle needs them, signed.
+rel_ship_caldera_chrome "${VERSION}" "${REPO_ROOT}" "${BUILD_DIR}/images" "${COSIGN_SCRIPT}"
+
+# Packaging gate: re-verify EVERY image tar against the cosign.pub that ships in
+# the bundle (same verify-blob key/flags as install.sh) -- existence is not enough.
+rel_verify_all_images "${BUILD_DIR}/images" "${BUILD_DIR}/cosign.pub"
 
 # ── 5. Package tarball ─────────────────────────────────────────────────────────
 TARBALL="${DIST_DIR}/${BUILD_NAME}.tar.gz"

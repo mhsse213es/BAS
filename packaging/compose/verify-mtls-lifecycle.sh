@@ -96,7 +96,7 @@ ENVEOF
 pass
 
 STAGE="fresh install: stack up"
-(cd "$WORKDIR" && docker compose -p "$PROJECT" up -d) || fail "docker compose up failed"
+(cd "$WORKDIR" && docker compose -p "$PROJECT" up -d --pull never) || fail "docker compose up failed"
 status=""
 for i in $(seq 1 60); do
   status=$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{end}}' "audspect-orchestrator" 2>/dev/null || echo "")

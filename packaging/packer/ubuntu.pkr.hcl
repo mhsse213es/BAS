@@ -110,6 +110,19 @@ build {
     destination = "/var/tmp/bas-airgap.tar.gz"
   }
 
+  # The file provisioner below uses a trailing-slash directory source, which
+  # uploads INTO the destination and does not create it: make it first (as the
+  # ssh user, so the upload can write into it).
+  provisioner "shell" {
+    inline = ["mkdir -p /var/tmp/bas-appliance"]
+  }
+
+  # Pinned-cosign pin + fetch helper (appliance build dependency)
+  provisioner "file" {
+    source      = "${path.root}/../appliance/"
+    destination = "/var/tmp/bas-appliance/"
+  }
+
   # Step 1 — Install Docker + system dependencies
   provisioner "shell" {
     execute_command = "echo '${var.packer_ssh_pass}' | sudo -S env {{.Vars}} bash {{.Path}}"

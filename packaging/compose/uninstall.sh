@@ -6,6 +6,7 @@
 # Usage: sudo bash uninstall.sh [--purge-images] [--yes]
 #   --purge-images   Also remove Docker images
 #   --yes / -y       Skip confirmation prompt
+# shellcheck disable=SC2015  # every "A && B || C" here has B = log/ok/fail, which only echo (always succeed): C runs only when A fails
 set -euo pipefail
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; BOLD='\033[1m'; NC='\033[0m'
@@ -53,7 +54,7 @@ echo "                         the entire fleet until each agent is manually"
 echo "                         re-bootstrapped against a new CA)"
 echo "    • Docker network     audspect_bas-internal"
 if $PURGE_IMAGES; then
-echo "    • Docker images      bas-orchestrator:*  bas-caldera:*  postgres:16-alpine  chromedp/headless-shell:latest"
+echo "    • Docker images      bas-orchestrator:*  bas-caldera:*  postgres:16-alpine  chromedp/headless-shell:*"
 fi
 echo "    • Install directory  $INSTALL_DIR"
 echo ""
@@ -113,8 +114,8 @@ done
 step "5/6  Removing Docker images..."
 if $PURGE_IMAGES; then
   mapfile -t imgs < <(docker images --format '{{.Repository}}:{{.Tag}}' \
-    | grep -E '^bas-orchestrator:|^bas-caldera:' || true)
-  for img in "${imgs[@]:-}" "postgres:16-alpine" "chromedp/headless-shell:latest"; do
+    | grep -E '^(bas-orchestrator|bas-caldera|chromedp/headless-shell):' | grep -v ':<none>$' || true)
+  for img in "${imgs[@]:-}" "postgres:16-alpine"; do
     [[ -z "$img" ]] && continue
     if docker image inspect "$img" &>/dev/null 2>&1; then
       docker rmi -f "$img" && log "Removed image: $img" || warn "Could not remove: $img"
@@ -184,11 +185,12 @@ done
 
 # Images (only checked when --purge-images was requested)
 if $PURGE_IMAGES; then
-  for img in "postgres:16-alpine" "chromedp/headless-shell:latest"; do
-    docker image inspect "$img" &>/dev/null 2>&1 \
-      && fail "Image still present: $img" \
-      || ok  "Image removed: $img"
-  done
+  docker image inspect "postgres:16-alpine" &>/dev/null 2>&1 \
+    && fail "Image still present: postgres:16-alpine" \
+    || ok  "Image removed: postgres:16-alpine"
+  docker images --format '{{.Repository}}:{{.Tag}}' | grep -q '^chromedp/headless-shell:' \
+    && fail "Image still present: chromedp/headless-shell:*" \
+    || ok  "Image removed: chromedp/headless-shell:*"
   docker images --format '{{.Repository}}:{{.Tag}}' | grep -q '^bas-orchestrator' \
     && fail "Image still present: bas-orchestrator:*" \
     || ok  "Image removed: bas-orchestrator:*"
