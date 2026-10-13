@@ -133,6 +133,11 @@ func newTestDB(ctx context.Context) (*TestDB, error) {
 		_ = container.Terminate(context.Background())
 		return nil, fmt.Errorf("testutil: EnsureCloudCampaignSchema: %w", err)
 	}
+	if err := db.EnsureNetworkDiscoverySchema(ctx, pool); err != nil {
+		pool.Close()
+		_ = container.Terminate(context.Background())
+		return nil, fmt.Errorf("testutil: EnsureNetworkDiscoverySchema: %w", err)
+	}
 
 	return &TestDB{
 		Pool:      pool,
