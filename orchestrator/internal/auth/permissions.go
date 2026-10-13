@@ -218,6 +218,12 @@ const (
 
 	// TCF Phase 2A: link/new/dismiss unresolved actor identities (Admin only).
 	CanResolveActorIdentity Permission = "intel:resolve-actor"
+
+	// network-policy:import gates importing a normalized firewall/
+	// segmentation policy document (Network BAS Phase 2A) -- granted
+	// alongside CanRunScenario, not admin-only, since this is an
+	// analyst-usable, evidence-producing action.
+	CanImportNetworkPolicy Permission = "network-policy:import"
 )
 
 // rolePermissions maps each role to the permissions it holds. Viewer is
@@ -276,6 +282,7 @@ var rolePermissions = map[Role]map[Permission]bool{
 		CanExecuteRemediation: true, CanApproveRemediation: true,
 		CanManageBackups:        true,
 		CanResolveActorIdentity: true,
+		CanImportNetworkPolicy:  true,
 	},
 	RoleAnalyst: {
 		CanVerify:            true,
@@ -291,6 +298,7 @@ var rolePermissions = map[Role]map[Permission]bool{
 		CanTriggerScan: true, CanCollectAttackPath: true, CanCreateAttackPathJob: true,
 		CanCancelAttackPathJob: true, CanRetryAttackPathJob: true, CanSetAttackPathAsset: true,
 		CanRunScenario: true, CanRunCalderaAdversary: true, CanRunAdversaryTemplate: true,
+		CanImportNetworkPolicy: true,
 		CanCancelScenarioRun: true, CanCorrelateSIEM: true, CanViewSIEMCorrelations: true,
 		CanRunDetectionVerification: true, CanCreateCampaign: true, CanStopCampaign: true,
 		CanSetFindingStatus: true, CanPushToITSM: true, CanBulkPushToITSM: true,
