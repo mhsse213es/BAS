@@ -54,6 +54,7 @@ func worstState(states []PathState) PathState {
 	}
 	sawUnknown := false
 	sawPolicySupported := false
+	sawObserved := false
 	for _, s := range states {
 		switch s {
 		case Blocked:
@@ -62,6 +63,8 @@ func worstState(states []PathState) PathState {
 			sawUnknown = true
 		case PolicySupported:
 			sawPolicySupported = true
+		case Observed:
+			sawObserved = true
 		}
 	}
 	if sawUnknown {
@@ -70,7 +73,17 @@ func worstState(states []PathState) PathState {
 	if sawPolicySupported {
 		return PolicySupported
 	}
-	return Observed
+	if sawObserved {
+		return Observed
+	}
+	// No recognized confirmed-or-unknown state was present at all (e.g. an
+	// input of only Candidate/ConditionallyReachable -- states isViable
+	// never lets through to a real CloudPath, but which a direct caller of
+	// this function could still pass). Defaulting to Unknown, not Observed,
+	// keeps "never report stronger evidence than the weakest hop actually
+	// has" honest for every input, not only the ones CloudPlan/CloudReachable
+	// currently produce.
+	return Unknown
 }
 
 // CloudPlan searches for one ordered path from held to target, returning

@@ -2,6 +2,33 @@ package cloudgraph
 
 import "testing"
 
+// TestIsViable_AllSixStates gives isViable direct coverage of every
+// PathState, matching its own doc comment's claim: only PolicySupported and
+// Observed are viable; Blocked, Unknown, Candidate, and
+// ConditionallyReachable are all treated identically (none let a hop
+// continue). Previously this was only exercised indirectly through
+// AWSEvaluator fixtures, which never produce Candidate/ConditionallyReachable
+// at all.
+func TestIsViable_AllSixStates(t *testing.T) {
+	cases := []struct {
+		state PathState
+		want  bool
+	}{
+		{Candidate, false},
+		{ConditionallyReachable, false},
+		{PolicySupported, true},
+		{Observed, true},
+		{Blocked, false},
+		{Unknown, false},
+	}
+	for _, c := range cases {
+		got := isViable(c.state)
+		if got != c.want {
+			t.Errorf("isViable(%s) = %v, want %v", c.state, got, c.want)
+		}
+	}
+}
+
 func TestWorstState_AllPolicySupported(t *testing.T) {
 	got := worstState([]PathState{PolicySupported, PolicySupported})
 	if got != PolicySupported {
@@ -41,6 +68,24 @@ func TestWorstState_EmptySliceDefaultsToPolicySupported(t *testing.T) {
 	got := worstState(nil)
 	if got != PolicySupported {
 		t.Errorf("Expected PolicySupported for empty input, got %s", got)
+	}
+}
+
+// TestWorstState_OnlyUnconfirmedStatesDefaultsToUnknown pins a fix: neither
+// CloudPlan nor CloudReachable ever feeds worstState a state that isViable
+// didn't already approve (only PolicySupported/Observed), so this input
+// shape is unreachable through either public function today. But
+// worstState is tested directly, and a direct caller could pass it. Before
+// this fix, an input containing only Candidate/ConditionallyReachable (no
+// Blocked/Unknown/PolicySupported/Observed at all) fell through to the
+// final `return Observed` -- the STRONGEST possible verdict for an input
+// that contains no confirmed evidence at all, directly contradicting the
+// function's own "never report stronger evidence than the weakest hop
+// actually has" contract.
+func TestWorstState_OnlyUnconfirmedStatesDefaultsToUnknown(t *testing.T) {
+	got := worstState([]PathState{Candidate, ConditionallyReachable})
+	if got != Unknown {
+		t.Errorf("Expected Unknown (never claim stronger evidence than the weakest hop), got %s", got)
 	}
 }
 
