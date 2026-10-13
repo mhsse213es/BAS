@@ -48,7 +48,7 @@ func TestAzureDiscovery_Integration(t *testing.T) {
 		t.Fatalf("DiscoverResources: found 0 resources in subscription %s, expected at least 1", subscriptionID)
 	}
 
-	permissions, permStats, err := c.DiscoverPermissions(ctx, identities, resources)
+	_, permStats, err := c.DiscoverPermissions(ctx, identities, resources)
 	if err != nil {
 		t.Fatalf("DiscoverPermissions: %v", err)
 	}
