@@ -114,6 +114,13 @@ func (h *Handler) GetCloudRun(w http.ResponseWriter, r *http.Request) {
 const (
 	maxCloudCampaignAccounts = 25
 	maxEdgesPerAccount       = 500
+	// maxCloudCampaignRequestBytes bounds the raw request body before it is
+	// ever unmarshaled -- the account/edge caps above only run on an
+	// already-decoded req, so without this the whole body is read into
+	// memory first regardless of size. 25*500 = 12,500 edges max; 16MiB
+	// budgets ~1.3KB/edge, comfortably covering real policy-document
+	// payloads while keeping worst case far below this host's available RAM.
+	maxCloudCampaignRequestBytes = 16 << 20
 )
 
 // cloudCampaignAccountResult is one account's outcome within a campaign
@@ -159,7 +166,7 @@ func (h *Handler) CreateCloudCampaign(w http.ResponseWriter, r *http.Request) {
 		Name string                   `json:"name"`
 		Runs []db.CloudPlanRunRequest `json:"runs"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxCloudCampaignRequestBytes)).Decode(&req); err != nil {
 		jsonError(w, "invalid request body: "+err.Error(), http.StatusBadRequest)
 		return
 	}

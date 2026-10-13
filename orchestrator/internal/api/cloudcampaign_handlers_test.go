@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -117,6 +118,31 @@ func TestCreateCloudCampaign_OneMalformedSubRequestRejectsWholeRequest(t *testin
 		_ = pool.QueryRow(context.Background(), `SELECT COUNT(*) FROM cloud_runs WHERE scenario_id IN ('s1','s2')`).Scan(&runCount)
 		if campaignCount != 0 || runCount != 0 {
 			t.Fatalf("campaignCount=%d runCount=%d, want 0 and 0 -- nothing should persist when any sub-request is invalid", campaignCount, runCount)
+		}
+	})
+}
+
+// TestCreateCloudCampaign_OversizedBodyRejectedBeforeFullDecode proves the
+// request body is bounded (http.MaxBytesReader) before JSON decoding, not
+// just after -- the 25-account/500-edge caps only run on an already-decoded
+// req, so without this guard an oversized payload is fully materialized
+// into memory before either cap gets a chance to reject it.
+func TestCreateCloudCampaign_OversizedBodyRejectedBeforeFullDecode(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret)
+		// An oversized JSON *string* value, not a bare number -- the decoder
+		// must scan through to a closing quote that never arrives within the
+		// byte budget, forcing it to keep reading (and so hit the
+		// MaxBytesReader limit) rather than erroring out early on invalid
+		// number syntax.
+		oversized := []byte(`{"name":"` + strings.Repeat("x", maxCloudCampaignRequestBytes+1) + `"}`)
+		req := authedRequest(t, http.MethodPost, "/api/cloud-campaigns", bytes.NewReader(oversized), auth.RoleAnalyst, "any-user")
+		rec := callAuthed(h.CreateCloudCampaign, req)
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+		}
+		if !strings.Contains(rec.Body.String(), "too large") {
+			t.Fatalf("expected a body-too-large error, got: %s", rec.Body.String())
 		}
 	})
 }
