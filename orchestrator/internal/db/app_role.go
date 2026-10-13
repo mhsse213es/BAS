@@ -122,6 +122,11 @@ func EnsureAppRole(ctx context.Context, pool *pgxpool.Pool, appPassword string) 
 		`REVOKE UPDATE, DELETE ON technique_claims FROM ` + appRole,
 		`REVOKE UPDATE, DELETE ON content_generations FROM ` + appRole,
 		`REVOKE DELETE ON threat_techniques FROM ` + appRole,
+
+		// TCF Phase 2C TCV (spec 2026-10-06 §12). Both tables are write-once,
+		// append-only clocks/stops.
+		`REVOKE UPDATE, DELETE ON threat_clock_starts FROM ` + appRole,
+		`REVOKE UPDATE, DELETE ON threat_coverage_firsts FROM ` + appRole,
 	}
 	for _, stmt := range grants {
 		if _, err := pool.Exec(ctx, stmt); err != nil {

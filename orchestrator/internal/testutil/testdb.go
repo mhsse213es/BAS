@@ -123,6 +123,11 @@ func newTestDB(ctx context.Context) (*TestDB, error) {
 		_ = container.Terminate(context.Background())
 		return nil, fmt.Errorf("testutil: EnsureEvidenceSchema: %w", err)
 	}
+	if err := db.EnsureTCVSchema(ctx, pool); err != nil {
+		pool.Close()
+		_ = container.Terminate(context.Background())
+		return nil, fmt.Errorf("testutil: EnsureTCVSchema: %w", err)
+	}
 
 	return &TestDB{
 		Pool:      pool,

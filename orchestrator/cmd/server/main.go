@@ -283,6 +283,9 @@ func main() {
 	if err := db.EnsureEvidenceSchema(context.Background(), adminPool); err != nil {
 		log.Fatalf("[FATAL] evidence schema: %v", err)
 	}
+	if err := db.EnsureTCVSchema(context.Background(), adminPool); err != nil {
+		log.Fatalf("[FATAL] TCV schema: %v", err)
+	}
 	log.Println("[+] Schema verified")
 
 	// ── bas_app provisioning ─────────────────────────────────────────────
