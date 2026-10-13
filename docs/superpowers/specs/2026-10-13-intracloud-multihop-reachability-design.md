@@ -98,3 +98,43 @@ All tests in `cloud_reachability_test.go`, synthetic fixtures only (no real clou
 7. **`worstState` unit tests directly** — table-driven: all-`PolicySupported` → `PolicySupported`; any-`Blocked` present → `Blocked`; any-`Unknown` present with no `Blocked` → `Unknown`. Isolated from the search so a future change to the precedence rule has a fast, focused test to fail.
 
 This gives direct coverage of every type, algorithm decision, and edge case in this spec.
+
+## Amendment (2026-10-13, same day): state/traversal contract refinements
+
+Five refinements to the contract above, made before implementation started, in response to review of this spec:
+
+1. **All four non-confirmed states are excluded from traversal identically, not just two.** `isViable` returning true only for `PolicySupported`/`Observed` was already correct, but this amendment makes explicit that `Blocked`, `Unknown`, `Candidate`, and `ConditionallyReachable` are *all* treated the same way by this search: none of them let a hop continue. Surfacing a tentative path through a `Candidate`/`ConditionallyReachable` edge (e.g. "this becomes reachable if condition X is met") is explicitly deferred, for the same reason the "show the path even though it's blocked" mode was already deferred in the base spec — this increment only ever reports confirmed-or-nothing.
+
+2. **`CloudPlan`/`CloudReachable` never set `EvaluationResult.State` themselves.** They only consume whatever state the supplied `AuthorizationEvaluator` returns and propagate the *weakest* one through `worstState`. Today none of `AWSEvaluator`/`AzureEvaluator`/`GCPEvaluator` ever return `Observed` (confirmed by inspection — it's reserved for a future evidence-correlation-aware evaluator); this design does not change that, and must not be read as upgrading a policy prediction into observed evidence. Consequently: a `PolicySupported` hop is a **policy prediction**, never a claim that the action was actually executed or observed — that distinction belongs to `cloud_outcomes.go` (`NewCloudControlOutcome`), which this design does not touch or duplicate. Additionally, `CloudPlan` returning `ok=false` means **"no path could be confirmed from available evidence,"** never **"no real-world path exists."** A search that dead-ends at an `Unknown` edge is reporting the limit of what could be confirmed, not asserting the edge is actually closed — callers must not conflate the two.
+
+3. **Role-transition validation (real design change — see updated Algorithm, point 2, below).** The base spec's reliance on the caller constructing a matching `*CloudIdentity` for any resource that should continue a chain (the `e2e_test.go` convention) had no validation that doing so was sane — nothing prevented an edge's `Source.CanonicalID` from accidentally colliding with a reached resource that has no business acting as an identity (e.g. an `s3-bucket`). The algorithm now tracks two sets instead of one:
+   - `reachedAsTarget` — every `CanonicalID` reached, for dedup and for `CloudReachable`'s/`CloudPlan`'s target-match check (unchanged from the base spec's single `reached` set).
+   - `reachedAsSource` — only `CanonicalID`s legitimately usable as the `Source` of a *later* hop. Seeded from `held` (identities are trusted by construction — that's what `held` means). Extended, per hop, with the hop's `Target.CanonicalID` **only if** `Target.Kind` is in an explicit allowlist: `iam-role`, `service-principal`, `managed-identity` (exactly the non-`iam-user` identity kinds `types.go` documents for `CloudIdentity.Kind`). A reached `s3-bucket` (or any other non-identity-kind resource) is still recorded in `reachedAsTarget` — so it remains targetable by `CloudPlan` and enumerable by `CloudReachable` — but its `CanonicalID` is never added to `reachedAsSource`, so it can never unlock a mismatched edge even if one happens to name the same `CanonicalID` as its `Source`.
+   - The caller still constructs the continuation edge's `*CloudIdentity` object by hand (unavoidable: `CloudPermission.Source` is concretely typed `*CloudIdentity`, and this design does not change that type, per the base spec's additive-only scope) — this change makes the search *validate* that construction against the target's actual `Kind` rather than trusting any `CanonicalID` match blindly.
+   - The traversal condition for both functions becomes: `edge.Source.CanonicalID` must be in `reachedAsSource` (not `reachedAsTarget`) to be considered at all; `edge.Target.CanonicalID` must not already be in `reachedAsTarget` to be worth evaluating.
+
+4. **Additional test cases**, beyond the base spec's seven:
+   - **Duplicate viable edges between the same pair** — two edges, same `Source`/`Target`, both evaluate viable: assert the search behaves deterministically for a fixed input order (one of them is recorded, the target is reached exactly once) without asserting *which* edge "should" win — the base spec already accepts this as order-dependent and unspecified.
+   - **Structurally unreachable target** — a target with no edge path to it at all (not merely a blocked one): `CloudPlan` returns `ok=false` cleanly, no error, no panic.
+   - **Non-assumable resource never unlocks a mismatched edge** — the Kind-validation behavior from point 3 above, directly tested: a reached `s3-bucket` whose `CanonicalID` is reused (deliberately, in the test) as another edge's `Source.CanonicalID` must not let that edge be traversed, proving `reachedAsSource` — not `reachedAsTarget` — gates traversal.
+
+5. **Purity — confirmed, no change needed.** Both functions were already pure (in-memory only; `AuthorizationEvaluator.EvaluatePermission` is synchronous with no I/O per `evaluator.go`). This amendment adds no new side effects; it only adds the `reachedAsSource`/`reachedAsTarget` bookkeeping described in point 3, which is itself pure.
+
+### Updated types and signatures (supersede the base spec's `Algorithm` section where they differ)
+
+```go
+// assumableIdentityKinds are CloudResource.Kind values that represent a
+// resource which, once reached, can legitimately act as a CloudIdentity for
+// further traversal (e.g. an IAM role or service principal, once assumed,
+// becomes a principal in its own right). A resource outside this set (e.g.
+// an s3-bucket) is recorded as reached for reporting/targeting purposes but
+// is never treated as a usable Source for a later hop, even if some other
+// edge's Source.CanonicalID happens to collide with its CanonicalID.
+var assumableIdentityKinds = map[string]bool{
+    "iam-role":          true,
+    "service-principal": true,
+    "managed-identity":  true,
+}
+```
+
+`CloudReachable` and `CloudPlan` keep their signatures from the base spec unchanged; only their internal bookkeeping gains the `reachedAsSource`/`reachedAsTarget` split described in point 3.
