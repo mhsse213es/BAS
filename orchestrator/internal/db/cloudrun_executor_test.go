@@ -227,3 +227,77 @@ func TestExecuteCloudPlanRun_MaxHopsIsPlumbedThroughNotHardcoded(t *testing.T) {
 		}
 	})
 }
+
+// TestExecuteCloudPlanRun_UnsupportedProviderRejectedAtInsert proves an
+// unsupported provider is rejected cleanly, with no row created at all --
+// not via evaluatorFor's own rejection logic, which cannot be reached here.
+// cloud_runs.provider's CHECK constraint (sub-project #1) only accepts
+// aws/azure/gcp, the exact same set evaluatorFor recognizes, so an
+// unsupported value always fails at InsertCloudRun first; evaluatorFor's
+// default case is correct but unreachable through this integration path
+// (same situation as statusForPath's Partial branch) and is tested directly,
+// in isolation, in executor_internal_test.go instead.
+func TestExecuteCloudPlanRun_UnsupportedProviderRejectedAtInsert(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		req := db.CloudPlanRunRequest{
+			ScenarioID: "test-scenario",
+			Account:    cloudgraph.AccountScope{Provider: "unknown", AccountID: "111"},
+			Held:       []string{"x"},
+			Target:     "y",
+			MaxHops:    1,
+		}
+		_, err := db.ExecuteCloudPlanRun(ctx, pool, req)
+		if err == nil {
+			t.Fatal("want non-nil error, got nil")
+		}
+
+		rows, listErr := db.ListCloudRuns(ctx, pool, 1)
+		if listErr != nil {
+			t.Fatalf("list: %v", listErr)
+		}
+		if len(rows) != 0 {
+			t.Fatalf("len: got %d want 0 (insert itself must reject an unsupported provider)", len(rows))
+		}
+	})
+}
+
+func TestExecuteCloudPlanRun_MismatchedProviderEdgeMarksRowFailed(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		alice := identity("arn:aws:iam::111:user/alice", "iam-user")
+		azureRole := &cloudgraph.CloudResource{
+			CanonicalID:  "arn:azure:role/admin",
+			Kind:         "iam-role",
+			AccountScope: &cloudgraph.AccountScope{Provider: "azure"},
+		}
+		req := db.CloudPlanRunRequest{
+			ScenarioID: "test-scenario",
+			// The run is scoped to aws, but the only edge's Target explicitly
+			// claims azure -- this must be rejected before any evaluation.
+			Account: cloudgraph.AccountScope{Provider: "aws", AccountID: "111"},
+			Edges:   []*cloudgraph.CloudPermission{allowEdge(alice, azureRole, "sts:AssumeRole")},
+			Held:    []string{alice.CanonicalID},
+			Target:  azureRole.CanonicalID,
+			MaxHops: 1,
+		}
+		_, err := db.ExecuteCloudPlanRun(ctx, pool, req)
+		if err == nil {
+			t.Fatal("want non-nil error, got nil")
+		}
+
+		rows, listErr := db.ListCloudRuns(ctx, pool, 1)
+		if listErr != nil {
+			t.Fatalf("list: %v", listErr)
+		}
+		if len(rows) != 1 {
+			t.Fatalf("len: got %d want 1", len(rows))
+		}
+		if rows[0].Status != cloudrun.StatusFailed {
+			t.Fatalf("status: got %s want failed", rows[0].Status)
+		}
+		if rows[0].Error == "" {
+			t.Fatal("want Error set, got empty string")
+		}
+	})
+}
