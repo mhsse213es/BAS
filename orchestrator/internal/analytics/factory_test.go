@@ -224,6 +224,27 @@ func TestThreatsProcessedTrend_MeetsMinimumReturnsPoints(t *testing.T) {
 	})
 }
 
+func TestFactoryHealth_AssemblesAllSectionsWithNoDataWhenEmpty(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		got, err := FactoryHealth(context.Background(), pool, 30*24*time.Hour)
+		if err != nil {
+			t.Fatalf("FactoryHealth: %v", err)
+		}
+		if got.ThreatsProcessed.State != DataMeasured || *got.ThreatsProcessed.Value != 0 {
+			t.Fatalf("ThreatsProcessed = %+v, want measured 0 (a real zero, not no_data) on a fresh database", got.ThreatsProcessed)
+		}
+		if got.MedianThreatToContentTCV.State != DataNoData {
+			t.Fatalf("MedianThreatToContentTCV = %+v, want no_data on a fresh database", got.MedianThreatToContentTCV)
+		}
+		if got.DuplicateGenerationRate.State != DataNoData {
+			t.Fatalf("DuplicateGenerationRate = %+v, want no_data unconditionally", got.DuplicateGenerationRate)
+		}
+	})
+}
+
 func TestCoreCounts_ThreatsAndPublishedContent(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping container-backed test in -short mode")

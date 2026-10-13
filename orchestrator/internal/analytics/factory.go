@@ -5,6 +5,8 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/audspect/bas/internal/tcv"
 )
 
 // DataState is explicit per spec's NO_DATA discipline: every factory-health
@@ -311,4 +313,88 @@ func tcvTrend(ctx context.Context, pool *pgxpool.Pool, since time.Time) ([]Trend
 		return nil, nil
 	}
 	return points, nil
+}
+
+type PipelineStatus struct {
+	Ingestion   IngestionHealth `json:"ingestion"`
+	Funnel      LifecycleFunnel `json:"funnel"`
+	DataQuality DataQuality     `json:"dataQuality"`
+}
+
+// FactoryHealthReport is the full GET /api/analytics/factory-health
+// response (spec: docs/superpowers/specs/2026-10-13-tcf-phase11-factory-analytics-design.md).
+type FactoryHealthReport struct {
+	WindowSince               time.Time      `json:"windowSince"`
+	ThreatsProcessed          Metric         `json:"threatsProcessed"`
+	PublishedContent          Metric         `json:"publishedContent"`
+	MedianThreatToContentTCV  Metric         `json:"medianThreatToContentTcv"`
+	P95ThreatToContentTCV     Metric         `json:"p95ThreatToContentTcv"`
+	StaticValidationPassRate  Metric         `json:"staticValidationPassRate"`
+	DuplicateGenerationRate   Metric         `json:"duplicateGenerationRate"`
+	SourceToTechniqueCoverage Metric         `json:"sourceToTechniqueCoverage"`
+	Pipeline                  PipelineStatus `json:"pipeline"`
+	Trends                    Trends         `json:"trends"`
+}
+
+const staleAfter = 7 * 24 * time.Hour
+
+// FactoryHealth assembles every factory-health metric for the trailing
+// window. window is the lookback used by count/rate metrics and the
+// trend queries; staleAfter (the data-quality staleness threshold) is
+// fixed separately at 7 days regardless of window.
+func FactoryHealth(ctx context.Context, pool *pgxpool.Pool, window time.Duration) (FactoryHealthReport, error) {
+	since := time.Now().Add(-window)
+
+	counts, err := coreCounts(ctx, pool, since)
+	if err != nil {
+		return FactoryHealthReport{}, err
+	}
+	passRate, err := staticValidationPassRate(ctx, pool, since)
+	if err != nil {
+		return FactoryHealthReport{}, err
+	}
+	ingestion, err := ingestionHealth(ctx, pool, since)
+	if err != nil {
+		return FactoryHealthReport{}, err
+	}
+	funnel, err := lifecycleFunnel(ctx, pool)
+	if err != nil {
+		return FactoryHealthReport{}, err
+	}
+	dq, err := dataQuality(ctx, pool, staleAfter)
+	if err != nil {
+		return FactoryHealthReport{}, err
+	}
+	threatsTrend, err := threatsProcessedTrend(ctx, pool, since)
+	if err != nil {
+		return FactoryHealthReport{}, err
+	}
+	tcvTrendPts, err := tcvTrend(ctx, pool, since)
+	if err != nil {
+		return FactoryHealthReport{}, err
+	}
+	tcvAgg, err := tcv.AggregateMetrics(ctx, pool)
+	if err != nil {
+		return FactoryHealthReport{}, err
+	}
+
+	median := noData("no threats have measured threat-to-emulation TCV yet")
+	p95 := noData("no threats have measured threat-to-emulation TCV yet")
+	if tcvAgg.SampleSize > 0 {
+		median = measured(*tcvAgg.MedianSeconds)
+		p95 = measured(*tcvAgg.P95Seconds)
+	}
+
+	return FactoryHealthReport{
+		WindowSince:               since,
+		ThreatsProcessed:          counts.ThreatsProcessed,
+		PublishedContent:          counts.PublishedContent,
+		MedianThreatToContentTCV:  median,
+		P95ThreatToContentTCV:     p95,
+		StaticValidationPassRate:  passRate,
+		DuplicateGenerationRate:   duplicateGenerationRate(),
+		SourceToTechniqueCoverage: counts.SourceToTechniqueCoverage,
+		Pipeline:                  PipelineStatus{Ingestion: ingestion, Funnel: funnel, DataQuality: dq},
+		Trends:                    Trends{ThreatsProcessedByDay: threatsTrend, TCVByDay: tcvTrendPts},
+	}, nil
 }
