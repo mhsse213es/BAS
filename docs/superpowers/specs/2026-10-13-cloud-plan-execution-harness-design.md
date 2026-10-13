@@ -149,4 +149,51 @@ New file `orchestrator/internal/cloudrun/executor_test.go`, using hand-built fix
 5. **Insert failure propagates as a real error, not a false success** -- a pre-canceled `context.Context` makes the initial `InsertCloudRun` fail; assert `ExecuteCloudPlanRun` returns a non-nil error and no row is created.
 6. **Unknown provider produces `StatusFailed`, not a silent stuck `StatusRunning`** -- `req.Account.Provider = "unknown"` triggers the `evaluatorFor` error path; assert the persisted row is `StatusFailed` with `Error` set, and the function returns a non-nil error.
 
-One test originally planned differently: isolating "the row is inserted successfully, then *specifically* the terminal update call fails" through the full `ExecuteCloudPlanRun` wrapper has no clean, deterministic trigger -- there is no dependency-injection seam in this design (by choice: adding one solely to manufacture this one scenario would be over-engineering for this increment), and a timing-based trick (racing a context cancellation against the DB calls) would be flaky. Instead, that exact code path -- "a DB error from `UpdateCloudRunStatus` is returned as-is, not swallowed" -- is covered by a new, additive test in the *already-shipped* `orchestrator/internal/db/cloudrun_store_test.go` (no production code change there, just one more test case): calling `db.UpdateCloudRunStatus` directly with a pre-canceled context and asserting the wrapped error is non-nil. `ExecuteCloudPlanRun`'s own step 7 does nothing beyond `return err` on that call, which is verifiable by reading the four-line step, not by an integration test.
+One test originally planned differently: isolating "the row is inserted successfully, then *specifically* the terminal update call fails" through the full `ExecuteCloudPlanRun` wrapper has no clean, deterministic trigger -- there is no dependency-injection seam in this design (by choice: adding one solely to manufacture this one scenario would be over-engineering for this increment), and a timing-based trick (racing a context cancellation against the DB calls) would be flaky. Instead, that exact code path -- "a DB error from `UpdateCloudRunStatus` is returned as-is, not swallowed" -- is covered by a new, additive test in the *already-shipped* `orchestrator/internal/db/cloudrun_store_test.go` (no production code change there, just one more test case): calling `db.UpdateCloudRunStatus` directly with a pre-canceled context and asserting the wrapped error is non-nil, **and that the row's status is unaffected (still whatever it was before the failed call) -- a failed write must never be mistaken for a successful one.**
+
+## Amendment (2026-10-13, same day)
+
+Before implementation began, the user reviewed this spec and required four corrections. Addressed here precisely; the plan is rewritten to match.
+
+**1. Explicit evaluator selection, reject mismatched providers, no silent fallback.** `evaluatorFor` already rejected unsupported provider strings with no fallback (unchanged). Added: before calling `CloudPlan`, `ExecuteCloudPlanRun` validates that every edge's `Source.AccountScope`/`Target.AccountScope` (when non-nil) agrees with `req.Account.Provider`. A nil `AccountScope` makes no claim and is not a mismatch (many legitimate edges, including every fixture in this increment's own tests, don't set it); an explicit, differing provider is a mismatch and is treated exactly like an unsupported provider -- `StatusFailed`, no evaluation attempted.
+
+```go
+func validateEdgesMatchProvider(edges []*cloudgraph.CloudPermission, provider string) error {
+	for _, edge := range edges {
+		for _, scope := range []*cloudgraph.AccountScope{edge.Source.AccountScope, edge.Target.AccountScope} {
+			if scope != nil && scope.Provider != "" && scope.Provider != provider {
+				return fmt.Errorf("cloudrun: edge references provider %q, run is scoped to %q", scope.Provider, provider)
+			}
+		}
+	}
+	return nil
+}
+```
+
+**2. Precise status semantics.** The original mapping (`CloudPlan`'s `ok=false` → `StatusPartial`) is **reversed**. The user's definitions, applied against what `CloudPlan`/the evaluators can actually produce today:
+
+- **Completed**: the search ran to a definitive conclusion within the evidence and hop budget available -- including a confirmed no-path result (`ok=false`). A blocked edge is not a failure; it is evidence the search correctly acted on. This also means the harness no longer distinguishes "found" from "confirmed not found" by status -- both are `Completed`; the *path itself* (empty/nil `Result` vs. a populated one) is what tells the caller which.
+- **Partial**: the search produced a result but at least one hop in it rode through an unresolved condition (`EvaluationResult.UnresolvedConds` non-empty on some hop in the returned path). **Honesty note:** none of the three current evaluators (`AWSEvaluator`/`AzureEvaluator`/`GCPEvaluator`, Phase 2 hand-coded logic) ever populate `UnresolvedConds` -- so `StatusPartial` is correctly, defensively coded against `EvaluationResult`'s own documented meaning, but is **not reachable through any of today's three real evaluators**. This mirrors sub-project #1's own `worstState` precedent (a documented, defensive branch unreachable through current callers, kept because it matches the type's contract for a future caller, not because today's code exercises it). Tested via a standalone unit test of the extracted mapping function, using a hand-built `EvaluationResult` with `UnresolvedConds` set -- not via a real evaluator, since no real evaluator can trigger it yet.
+- **Failed**: invalid input (a mismatched or unsupported provider), or a persistence failure (insert/update error) prevented a trustworthy result from even being attempted or recorded. `CloudPlan` itself has no error return and therefore cannot itself cause `Failed` -- every `Failed` in this increment originates from the harness's own surrounding code, never from `CloudPlan`'s verdict.
+
+The mapping is extracted into its own pure, directly unit-testable function (unexported, tested from an internal `package cloudrun` test file since it takes no DB/network dependency and testing it through the public API would require fabricating an evaluator the production code never actually selects):
+
+```go
+func statusForPath(path *cloudgraph.CloudPath, ok bool) Status {
+	if !ok {
+		return StatusCompleted
+	}
+	for _, hop := range path.Hops {
+		if len(hop.Result.UnresolvedConds) > 0 {
+			return StatusPartial
+		}
+	}
+	return StatusCompleted
+}
+```
+
+**3. Persistence honesty.** Already the design's core guarantee (see "Error handling summary" above: an `UpdateCloudRunStatus` failure returns the error and leaves the row exactly as it was, never advancing it to a successful-looking state). Strengthened the one test this touches to also assert the row's status is unchanged after a failed update attempt, not merely that the call returned an error.
+
+**4. Test boundary.** Confirmed, not just assumed: `AWSEvaluator`/`AzureEvaluator`/`GCPEvaluator` are hand-coded string-matching logic (`aws_evaluator.go` etc.) with zero network calls, zero SDK clients, and zero credential requirements -- every path-behavior test in this increment uses them (or, for the `Partial` case, a hand-built `EvaluationResult`) against hand-built fixture edges. Only `cloud_runs` persistence touches anything external (the real Postgres testcontainer). No test in this increment can reach a live cloud API even by accident.
+
+**Strengthened assertions**, per the user's explicit request: tests now assert hop *ordering* (not just hop count), each hop's individual `Result.State` (not just the path's overall verdict), the overall verdict, and the hop-limit outcome -- the last of these now expressed as "was a path found at all" (`Result` populated vs. literally `"null"`) rather than via `Status`, since `Status` no longer differs between a hop-limited search and a successful one (both are `Completed` under the corrected semantics above).
