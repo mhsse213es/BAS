@@ -1,8 +1,12 @@
 package db
 
 import (
+	"context"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/audspect/bas/internal/cloudgraph"
 	"github.com/audspect/bas/internal/cloudrun"
@@ -89,5 +93,32 @@ func TestValidateEdgesMatchProvider_ErrorMessageDoesNotClaimStalePackageName(t *
 	}
 	if strings.Contains(err.Error(), "cloudrun:") {
 		t.Fatalf("error message %q still uses the stale cloudrun: package prefix", err.Error())
+	}
+}
+
+// TestCurrentRunOrNil_ReturnsNilWhenTheRowCannotBeFetched is a hermetic unit
+// test -- no live Postgres needed. pgxpool.New never connects eagerly (only
+// the first query attempt does), so a pool pointed at an unreachable address
+// is enough to force GetCloudRun's error path without a testcontainer. This
+// package's internal test files cannot import internal/testutil for a real
+// pool: testutil imports internal/db itself, so that import would be a
+// genuine cycle (confirmed directly: `go vet` reports "import cycle not
+// allowed in test" for exactly this). currentRunOrNil's happy path (a real
+// row comes back) is already proven by
+// TestExecuteCloudPlanRun_MismatchedProviderEdgeMarksRowFailed in
+// cloudrun_executor_test.go (package db_test, which *can* reach a real
+// pool) -- that test exercises this exact function via ExecuteCloudPlanRun's
+// validateEdgesMatchProvider branch.
+func TestCurrentRunOrNil_ReturnsNilWhenTheRowCannotBeFetched(t *testing.T) {
+	pool, err := pgxpool.New(context.Background(), "postgres://nouser:nopass@127.0.0.1:1/nodb")
+	if err != nil {
+		t.Fatalf("construct pool: %v", err)
+	}
+	defer pool.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	if got := currentRunOrNil(ctx, pool, "any-id"); got != nil {
+		t.Fatalf("want nil when the row can't be fetched, got %+v", got)
 	}
 }

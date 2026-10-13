@@ -3,6 +3,7 @@ package db_test
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -281,7 +282,7 @@ func TestExecuteCloudPlanRun_MismatchedProviderEdgeMarksRowFailed(t *testing.T) 
 			Target:  azureRole.CanonicalID,
 			MaxHops: 1,
 		}
-		_, err := db.ExecuteCloudPlanRun(ctx, pool, req)
+		run, err := db.ExecuteCloudPlanRun(ctx, pool, req)
 		if err == nil {
 			t.Fatal("want non-nil error, got nil")
 		}
@@ -298,6 +299,26 @@ func TestExecuteCloudPlanRun_MismatchedProviderEdgeMarksRowFailed(t *testing.T) 
 		}
 		if rows[0].Error == "" {
 			t.Fatal("want Error set, got empty string")
+		}
+
+		// Decision 10: ExecuteCloudPlanRun's own return value must also carry
+		// the row's true persisted state now, not just a bare error -- so a
+		// caller (the API handler, sub-project #3) can correlate a failure
+		// back to its row without a second query.
+		if run == nil {
+			t.Fatal("want non-nil run (a row was already inserted before the mismatch was caught), got nil")
+		}
+		if run.Status != cloudrun.StatusFailed {
+			t.Fatalf("run.Status: got %s want failed", run.Status)
+		}
+		if run.Error == "" {
+			t.Fatal("want run.Error set, got empty string")
+		}
+		if run.ID != rows[0].ID {
+			t.Fatalf("run.ID: got %s want %s (must match the row ListCloudRuns found)", run.ID, rows[0].ID)
+		}
+		if !strings.Contains(err.Error(), run.ID) {
+			t.Fatalf("error %q does not mention run ID %s -- correlation must survive in the error text even when the struct can't be trusted", err.Error(), run.ID)
 		}
 	})
 }

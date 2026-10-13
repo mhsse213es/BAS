@@ -84,6 +84,19 @@ func statusForPath(path *cloudgraph.CloudPath, ok bool) cloudrun.Status {
 	return cloudrun.StatusCompleted
 }
 
+// currentRunOrNil re-fetches id's row to report its true persisted state
+// alongside an error -- never a locally-guessed value, since a best-effort
+// status write (see the call sites below) may itself have failed, leaving
+// the row's actual status different from what was intended. Returns nil,
+// not a stale/wrong struct, if even the re-fetch isn't reliable.
+func currentRunOrNil(ctx context.Context, pool *pgxpool.Pool, id string) *cloudrun.CloudRun {
+	run, err := GetCloudRun(ctx, pool, id)
+	if err != nil {
+		return nil
+	}
+	return run
+}
+
 // ExecuteCloudPlanRun runs cloudgraph.CloudPlan for one account and records
 // the outcome as a cloud_runs row. It is a plain Go function, not an HTTP
 // handler -- a later sub-project decides how (or whether) this is exposed
@@ -107,11 +120,11 @@ func ExecuteCloudPlanRun(ctx context.Context, pool *pgxpool.Pool, req CloudPlanR
 	evaluator, err := evaluatorFor(req.Account.Provider)
 	if err != nil {
 		_ = UpdateCloudRunStatus(ctx, pool, run.ID, cloudrun.StatusFailed, nil, err.Error())
-		return nil, err
+		return currentRunOrNil(ctx, pool, run.ID), fmt.Errorf("cloud run %s: %w", run.ID, err)
 	}
 	if err := validateEdgesMatchProvider(req.Edges, req.Account.Provider); err != nil {
 		_ = UpdateCloudRunStatus(ctx, pool, run.ID, cloudrun.StatusFailed, nil, err.Error())
-		return nil, err
+		return currentRunOrNil(ctx, pool, run.ID), fmt.Errorf("cloud run %s: %w", run.ID, err)
 	}
 
 	path, ok := cloudgraph.CloudPlan(req.Edges, req.Held, req.Target, evaluator, &cloudgraph.RequestContext{}, req.MaxHops)
@@ -119,12 +132,12 @@ func ExecuteCloudPlanRun(ctx context.Context, pool *pgxpool.Pool, req CloudPlanR
 	resultJSON, marshalErr := json.Marshal(path)
 	if marshalErr != nil {
 		_ = UpdateCloudRunStatus(ctx, pool, run.ID, cloudrun.StatusFailed, nil, marshalErr.Error())
-		return nil, marshalErr
+		return currentRunOrNil(ctx, pool, run.ID), fmt.Errorf("cloud run %s: %w", run.ID, marshalErr)
 	}
 
 	status := statusForPath(path, ok)
 	if err := UpdateCloudRunStatus(ctx, pool, run.ID, status, resultJSON, ""); err != nil {
-		return nil, err
+		return currentRunOrNil(ctx, pool, run.ID), fmt.Errorf("cloud run %s: %w", run.ID, err)
 	}
 
 	return GetCloudRun(ctx, pool, run.ID)
