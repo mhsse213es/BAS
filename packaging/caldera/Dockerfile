@@ -3,10 +3,10 @@
 # connected Windows build host; the clone happens inside this image layer and is
 # never written to the host filesystem (keeps host AV out of the loop).
 
-# NOTE: 'latest' is intentional — this image is rebuilt on the internet-connected
-# Windows host per release. For reproducible builds, pin to a digest
-# (ghcr.io/mitre/caldera@sha256:...) and record it in the release notes.
-FROM ghcr.io/mitre/caldera:latest
+# Base pinned by version AND digest (5.2.0, manifest-list digest from ghcr.io on
+# 2026-10-06; identical to :latest at that date). To bump: pick a new tag, read its
+# digest from the registry, update both here.
+FROM ghcr.io/mitre/caldera:5.2.0@sha256:97a8f9fd052aaabdee76e8367d1ec985b3e44e6add0b27a28d8fee9cafe426c7
 
 # 1. Pull the full adversary-emulation library into the emu plugin's data dir.
 #    The base image ships a stub adversary-emulation-plans/turla directory (payloads

@@ -295,13 +295,16 @@ sudo bash install.sh --rollback
 
 This restores the most recent timestamped backup under `<DATA_DIR>/backups/` (the `docker-compose.yml`, `.env`, and version marker `install.sh --upgrade` saved in Step 3) and restarts the stack on the previous version. It prompts for confirmation unless run with `--yes`.
 
-If the target Docker images for the previous version are no longer present locally (e.g. pruned after upgrade), reload them first:
+`--rollback` does not load or verify any image. It starts the previous version from the images still in Docker's local image store, which `install.sh` verified (cosign signature, exact tag, post-load image ID) when it installed that version. The stack is started with `docker compose up --pull never`, so nothing is ever pulled from a registry. If those images are no longer present (for example, pruned after the upgrade), the restart fails with a missing-image error rather than fetching anything.
+
+In that case, do **not** `docker load` the old tars by hand: a manual load skips every check. Re-run the previous version's own bundle installer instead. `--upgrade` has no version-direction check, so it installs whichever bundle it is run from, after verifying every image in that bundle's `images/` before anything is loaded or replaced:
 
 ```bash
-cd /path/to/previous/bas-install-<previous-version>/images
-for f in *.tar; do sudo docker load < "$f"; done
-sudo bash install.sh --rollback
+cd /path/to/previous/bas-install-<previous-version>
+sudo bash install.sh --upgrade --config setup.conf
 ```
+
+This takes a fresh config backup, loads the verified images, writes that bundle's `docker-compose.yml`, refreshes `.env` (your existing secrets are preserved), and restarts the stack.
 
 If a schema change means the old binary can no longer read the current database, restore from the pre-upgrade database dump instead:
 

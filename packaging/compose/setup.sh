@@ -25,8 +25,8 @@ readonly DEFAULT_INSTALL_DIR="/opt/bas-platform"
 readonly DEFAULT_PORT="9000"
 readonly MIN_RAM_MB=3800
 readonly MIN_DISK_MB=5120
-readonly SERVICE_NAME="bas-compose"
-readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+readonly SCRIPT_DIR
 
 # Version is read from the bundle's VERSION file (written by the packager) so the
 # .env image tag ALWAYS matches the images shipped in THIS bundle — never a
@@ -39,7 +39,9 @@ _bas_version="${_bas_version//$'\r'/}"
 _bas_version="${_bas_version//[[:space:]]/}"
 readonly BAS_VERSION="${_bas_version:-latest}"
 
-# Set by --offline flag; skips docker pull (images already loaded)
+# true = install from this bundle's signed images/ (the ONLY supported mode).
+# Set by --offline, and forced by parse_args whenever ${SCRIPT_DIR}/images
+# exists; without images/ the install refuses (setup.sh never pulls).
 OFFLINE=false
 
 # Set during prereq checks — installer auto-installs these if missing
@@ -218,11 +220,29 @@ check_docker() {
   echo "PASS:Docker — $(docker --version | grep -oP 'Docker version \K[^,]+')"
 }
 
+# Minimum Docker Compose version: v2.8.0 added `--pull`, which this installer
+# (and install.sh/import.sh) rely on everywhere images are loaded offline
+# (`--pull never`). An older Compose would silently lack the flag. Numeric
+# major.minor compare only -- never a naive string compare (e.g. "2.9" < "2.10"
+# as strings but not as versions).
+_compose_version_ok() {
+  local ver="$1" major minor
+  IFS='.' read -r major minor _ <<< "${ver#v}"
+  [[ "$major" =~ ^[0-9]+$ && "$minor" =~ ^[0-9]+$ ]] || return 1
+  (( major > 2 || (major == 2 && minor >= 8) ))
+}
+
 check_compose() {
   if docker compose version &>/dev/null 2>&1; then
-    echo "PASS:Compose — $(docker compose version --short 2>/dev/null || echo 'v2')"
+    local ver
+    ver=$(docker compose version --short 2>/dev/null | tr -d '[:space:]')
+    if [[ -z "$ver" ]] || ! _compose_version_ok "$ver"; then
+      echo "FAIL:Compose — version ${ver:-unknown} is too old (need >= 2.8.0, which added --pull; this installer depends on it for every offline image load)"
+      return
+    fi
+    echo "PASS:Compose — ${ver}"
   elif command -v docker-compose &>/dev/null; then
-    echo "WARN:Compose — docker-compose v1 found (v2 plugin recommended)"
+    echo "FAIL:Compose — only legacy docker-compose v1 found (incompatible: v1 has no --pull flag, which this installer requires for offline image loads; install the Docker Compose v2 plugin)"
   else
     NEED_COMPOSE=true
     echo "INST:Compose — not installed (will be auto-installed with Docker)"
@@ -262,11 +282,59 @@ check_cosign() {
     echo "FAIL:Cosign — version ${ver:-unknown} is too old (need >= v3.1.0 to verify the sigstore bundle format this bundle's signature uses)"
     return
   fi
-  if [[ ! -f "${SCRIPT_DIR}/cosign.pub" ]]; then
+  if [[ ! -f "${BAS_COSIGN_PUB:-${SCRIPT_DIR}/cosign.pub}" ]]; then
     echo "FAIL:Cosign — public key not found in bundle at ${SCRIPT_DIR}/cosign.pub (corrupt or incomplete release bundle)"
     return
   fi
   echo "PASS:Cosign — ${ver}"
+}
+
+
+# Key fingerprint: sha256 of the DER SubjectPublicKeyInfo (stable across PEM
+# re-wrapping; openssl is already required by this installer). Falls back to the
+# plain file sha256, labelled as such, if openssl cannot parse the key.
+_key_fp() {
+  local f="$1"
+  if command -v openssl &>/dev/null && openssl pkey -pubin -in "$f" -noout 2>/dev/null; then
+    openssl pkey -pubin -in "$f" -outform DER 2>/dev/null | sha256sum | cut -d' ' -f1
+  else
+    echo "$(sha256sum "$f" | cut -d' ' -f1) (file sha256; not a parsable public key)"
+  fi
+}
+
+_tar_image_id() {
+  local tar="$1" want="$2" m cfg tags idx d ids
+  m=$(tar -xOf "$tar" --occurrence=1 manifest.json 2>/dev/null) || return 1
+  [[ $(grep -o '"Config"' <<<"$m" | wc -l) -eq 1 ]] || return 1
+  tags=$(sed -n 's/.*"RepoTags":\[\([^]]*\)\].*/\1/p' <<<"$m")
+  [[ "$tags" == "\"${want}\"" ]] || return 1
+  cfg=$(sed -n 's/.*"Config":"\([^"]*\)".*/\1/p' <<<"$m")
+  cfg="${cfg##*/}"; cfg="${cfg%.json}"
+  [[ "$cfg" =~ ^[0-9a-f]{64}$ ]] || return 1
+  # Candidate 1 (classic overlay2 store): the Config digest. Candidate 2
+  # (containerd store, the default on new Docker Engines): `docker image inspect`
+  # reports the top-level manifest/index digest from index.json. Both come from
+  # the cosign-verified tar, so neither can be chosen by an attacker. Older
+  # `docker save` tars have no index.json: Config only.
+  ids="sha256:${cfg}"
+  idx=$(tar -xOf "$tar" --occurrence=1 index.json 2>/dev/null || true)
+  if [[ -n "$idx" ]]; then
+    while read -r d; do
+      ids="${ids} ${d}"
+    done < <(grep -o '"digest"[[:space:]]*:[[:space:]]*"sha256:[0-9a-f]\{64\}"' <<<"$idx" | grep -o 'sha256:[0-9a-f]*')
+  fi
+  echo "$ids"
+}
+
+# <tag>'s ID in the local daemon must equal one of the space-separated candidate
+# IDs recorded from the verified tar (see above); anything else is a mismatch.
+_docker_tag_is() {
+  local got want
+  got=$(docker image inspect -f '{{.Id}}' "$1" 2>/dev/null) || return 1
+  for want in $2; do
+    [[ "$got" == "$want" ]] && return 0
+  done
+  return 1
 }
 
 # Verifies the orchestrator tarball against the bundle's cosign.pub BEFORE
@@ -275,8 +343,10 @@ check_cosign() {
 # return as fatal (abort the whole install), not skip-and-continue.
 _verify_orchestrator_artifact() {
   local tar="$1"
-  if [[ ! -f "${SCRIPT_DIR}/cosign.pub" ]]; then
-    err "cosign.pub not found in bundle -- cannot verify $(basename "$tar"), refusing to proceed"
+  local pub="${BAS_COSIGN_PUB:-${SCRIPT_DIR}/cosign.pub}" kind=BUNDLED ctx
+  [[ -n "${BAS_COSIGN_PUB:-}" ]] && kind=EXTERNAL
+  if [[ ! -f "$pub" ]]; then
+    err "cosign.pub not found (${kind} key ${pub}) -- cannot verify $(basename "$tar"), refusing to proceed"
     return 1
   fi
   if ! command -v cosign &>/dev/null; then
@@ -287,9 +357,11 @@ _verify_orchestrator_artifact() {
     err "Signature bundle not found: $(basename "$tar").bundle -- refusing to install an unsigned orchestrator artifact"
     return 1
   fi
+  ctx="${kind} key ${pub}, fingerprint $(_key_fp "$pub")"
+  log "cosign: verifying $(basename "$tar") with ${ctx}"
   local verify_output
-  if ! verify_output=$(cosign verify-blob --key "${SCRIPT_DIR}/cosign.pub" --bundle "${tar}.bundle" --insecure-ignore-tlog "$tar" 2>&1); then
-    err "cosign verification FAILED for $(basename "$tar") -- refusing to install a tampered or unsigned orchestrator artifact"
+  if ! verify_output=$(cosign verify-blob --key "$pub" --bundle "${tar}.bundle" --insecure-ignore-tlog "$tar" 2>&1); then
+    err "cosign verification FAILED for $(basename "$tar") using ${ctx} -- refusing to install a tampered or unsigned orchestrator artifact"
     echo "$verify_output" >&2
     return 1
   fi
@@ -307,36 +379,95 @@ check_port() {
 }
 
 # ── Binary manifest verification ──────────────────────────────────────────────
-# Runs silently if no signing artifacts are present (unsigned dev bundle).
-# Aborts installation if signatures are present but fail to verify.
+# GPG key selection (precedence): --gpg-pub flag, BAS_GPG_PUB env, then the
+# bundle's agents/pubkey.asc. An external key is used EXCLUSIVELY (the bundled
+# one is never consulted) and a missing/unreadable path is fatal. A bundled key
+# only proves integrity, not origin.
+GPG_PUB_FLAG=""
+
+# _gpg_verify_single_key <sig> <file> <pubkey> <kind>
+# Same hardening as packaging/signing/verify-sig.sh (duplicated here because
+# verify-sig.sh is not guaranteed to sit next to setup.sh in a release bundle):
+# throwaway keyring, exactly ONE primary key in the key file, and the signature's
+# VALIDSIG primary fingerprint must equal that key's fingerprint, which is printed.
+_gpg_verify_single_key() {
+  local sig="$1" file="$2" pub="$3" kind="$4" home listing n fpr status rc=0 l primary ok
+  home=$(mktemp -d); chmod 700 "$home"
+  # shellcheck disable=SC2064
+  trap "rm -rf '$home'" RETURN
+  local G=(gpg --homedir "$home" --batch --quiet --no-autostart)
+  "${G[@]}" --import "$pub" 2>/dev/null || { err "Could not import the GPG public key from ${pub}."; return 1; }
+  listing=$("${G[@]}" --with-colons --list-keys 2>/dev/null)
+  n=$(grep -c '^pub:' <<<"$listing" || true)
+  if [[ "$n" -ne 1 ]]; then
+    err "GPG key file ${pub} contains ${n} primary keys; exactly one is required. Refusing."
+    return 1
+  fi
+  fpr=$(awk -F: '/^fpr/{print $10; exit}' <<<"$listing")
+  [[ -n "$fpr" ]] || { err "Could not read the GPG key fingerprint from ${pub}."; return 1; }
+  echo "" >&2
+  echo "  ============================================================" >&2
+  echo "   Verifying with ${kind} GPG key, fingerprint: ${fpr}" >&2
+  echo "   (compare with the fingerprint Audspect publishes)" >&2
+  echo "  ============================================================" >&2
+  if [[ "$kind" == BUNDLED ]]; then
+    warn "A bundled key proves integrity, not origin, unless its fingerprint matches the published one (or use --gpg-pub / BAS_GPG_PUB)."
+  fi
+  status=$("${G[@]}" --status-fd 1 --verify "$sig" "$file" 2>/dev/null) || rc=$?
+  l=$(grep '^\[GNUPG:\] VALIDSIG ' <<<"$status" || true)
+  ok=false
+  if [[ $rc -eq 0 && -n "$l" ]]; then
+    ok=true
+    while IFS= read -r line; do
+      primary=$(awk '{print toupper($12)}' <<<"$line")
+      [[ "$primary" == "$(tr '[:lower:]' '[:upper:]' <<<"$fpr")" ]] || ok=false
+    done <<<"$l"
+  fi
+  $ok
+}
+
+# Silent only when the bundle has no BINARIES.sha256 at all (unsigned dev/test
+# bundle) and no external key was requested. A manifest with no .asc stays a
+# warning (deliberate, pre-existing) unless an external key was requested. A
+# present .asc that cannot be verified -- INCLUDING gpg not being installed -- is
+# fatal. After the signature verifies, every binary is checked against the
+# manifest and any mismatch/missing file is fatal.
 verify_bundle_signatures() {
   local agents_dir="${SCRIPT_DIR}/agents"
   local manifest="${agents_dir}/BINARIES.sha256"
   local manifest_sig="${agents_dir}/BINARIES.sha256.asc"
-  local pubkey="${agents_dir}/pubkey.asc"
+  local pubkey="${agents_dir}/pubkey.asc" kind=BUNDLED
+  local ext="${GPG_PUB_FLAG:-${BAS_GPG_PUB:-}}"
 
-  # No signing artifacts — skip silently (dev/test bundle)
-  [[ -f "$manifest" ]] || return 0
-  [[ -f "$manifest_sig" ]] || { warn "Binary manifest present but unsigned — skipping verification."; return 0; }
+  if [[ -n "$ext" ]]; then
+    if [[ ! -f "$ext" || ! -r "$ext" ]]; then
+      err "External GPG public key not found or unreadable: ${ext}"
+      exit 1
+    fi
+    pubkey="$ext"; kind=EXTERNAL
+  fi
+
+  if [[ ! -f "$manifest" ]]; then
+    [[ -z "$ext" ]] && return 0
+    err "An external GPG key was supplied but ${manifest} does not exist -- cannot verify the agent binaries."
+    exit 1
+  fi
+  if [[ ! -f "$manifest_sig" ]]; then
+    if [[ -n "$ext" ]]; then
+      err "An external GPG key was supplied but ${manifest_sig} does not exist -- cannot verify the agent binaries."
+      exit 1
+    fi
+    warn "Binary manifest present but unsigned — skipping verification."
+    return 0
+  fi
   [[ -f "$pubkey" ]] || { err "pubkey.asc missing alongside BINARIES.sha256 — cannot verify."; exit 1; }
 
-  command -v gpg &>/dev/null || {
-    warn "gpg not installed — cannot verify binary signatures (install gnupg to enable)."
-    return 0
-  }
+  if ! command -v gpg &>/dev/null; then
+    err "gpg is not installed, but ${manifest_sig} is present -- refusing to continue without verifying the agent binaries. Install gnupg (apt-get install -y gnupg)."
+    exit 1
+  fi
 
-  local tmpring
-  tmpring=$(mktemp -d)
-  # shellcheck disable=SC2064
-  trap "rm -rf '$tmpring'" RETURN
-
-  gpg --quiet --batch --no-default-keyring \
-      --keyring "${tmpring}/bas.gpg" \
-      --import "${pubkey}" 2>/dev/null
-
-  if ! gpg --quiet --batch --no-default-keyring \
-           --keyring "${tmpring}/bas.gpg" \
-           --verify "${manifest_sig}" "${manifest}" 2>/dev/null; then
+  if ! _gpg_verify_single_key "$manifest_sig" "$manifest" "$pubkey" "$kind"; then
     err "SECURITY: Binary manifest signature verification FAILED."
     echo ""
     echo "  The agent binaries in this bundle may have been tampered with."
@@ -344,8 +475,18 @@ verify_bundle_signatures() {
     echo "  Contact Audspect support if you received this bundle from an official source."
     exit 1
   fi
+  log "Binary manifest signature verified (${kind} GPG key)."
 
-  log "Binary manifest signature verified (Audspect release key)."
+  # The signed manifest is only meaningful if the binaries still match it.
+  if [[ ! -s "$manifest" ]]; then
+    err "Binary manifest ${manifest} is empty -- nothing to verify against. Refusing."
+    exit 1
+  fi
+  if ! (cd "$agents_dir" && sha256sum --check --strict --quiet BINARIES.sha256 >/dev/null 2>&1); then
+    err "SECURITY: an agent binary does not match the signed BINARIES.sha256 (modified or missing). Do NOT continue installation."
+    exit 1
+  fi
+  log "Agent binaries match the signed manifest."
 }
 
 # ── Docker CE installation (Ubuntu/Debian) ─────────────────────────────────────
@@ -533,7 +674,93 @@ do_install() {
   fi
 }
 
+# ── Bundle image verification + load ─────────────────────────────────────────
+# _expected_image_tag, _verify_all_images and _load_verified_images are
+# BYTE-IDENTICAL in packaging/compose/install.sh and packaging/compose/setup.sh
+# (packaging/airgap/airgap-cosign.test.sh fails if they drift): edit both.
+
+# Image tag each shipped tar must carry (name is pinned to the bundle version).
+# Every bundle type (release ZIP, build.sh bundle, air-gap bundle) ships these
+# four signed; anything else in images/ is refused.
+_expected_image_tag() {
+  case "$1" in
+    "bas-orchestrator-${BAS_VERSION}.tar") echo "bas-orchestrator:${BAS_VERSION}" ;;
+    postgres-16-alpine.tar)                echo "postgres:16-alpine" ;;
+    headless-shell.tar)                    echo "chromedp/headless-shell:151.0.7922.109" ;;
+    "bas-caldera-${BAS_VERSION}.tar")      echo "bas-caldera:${BAS_VERSION}" ;;
+    *) return 1 ;;
+  esac
+}
+
+# _verify_all_images <images_dir> <what>
+# Verifies EVERY image tar (cosign + exact RepoTag) BEFORE any is loaded. A
+# missing images/ directory is FATAL: nothing is ever pulled from a registry,
+# every runtime image must come from this bundle. Fills IMG_TARS/IMG_TAGS/IMG_IDS
+# (everything but the orchestrator) and ORCH_TAR/ORCH_ID. Unsigned, unlisted or
+# legacy .tar.gz files are fatal. <what> ("installation"/"upgrade") words errors.
+_verify_all_images() {
+  local images_dir="$1" what="$2" img base tag id
+  IMG_TARS=(); IMG_TAGS=(); IMG_IDS=(); ORCH_TAR=""; ORCH_ID=""
+  if [[ ! -d "$images_dir" ]]; then
+    err "images/ directory not found at ${images_dir} -- ${what} aborted. Every runtime image must come from this bundle's signed images/ (nothing is pulled from a registry)."
+    exit 1
+  fi
+  for img in "${images_dir}"/*; do
+    [[ -f "$img" ]] || continue
+    base="$(basename "$img")"
+    case "$base" in
+      *.bundle) continue ;;
+      *.tar) ;;
+      *) err "Unexpected file in images/: ${base} -- ${what} aborted (only signed .tar images are allowed)."; exit 1 ;;
+    esac
+    tag=$(_expected_image_tag "$base") || { err "Unlisted image tar in images/: ${base} -- ${what} aborted."; exit 1; }
+    _verify_orchestrator_artifact "$img" || { err "Image ${base} failed verification -- ${what} aborted."; exit 1; }
+    id=$(_tar_image_id "$img" "$tag") || { err "${base}: manifest.json does not carry exactly the tag ${tag} -- ${what} aborted (the verified image must be the one compose runs)."; exit 1; }
+    if [[ "$base" == bas-orchestrator-* ]]; then
+      ORCH_TAR="$img"; ORCH_ID="$id"
+    else
+      IMG_TARS+=("$img"); IMG_TAGS+=("$tag"); IMG_IDS+=("$id")
+    fi
+  done
+  if [[ -z "$ORCH_TAR" ]]; then
+    err "No orchestrator artifact (bas-orchestrator-${BAS_VERSION}.tar) found in ${images_dir} -- ${what} aborted."
+    exit 1
+  fi
+  # ALL runtime images are required (compose starts them with no profile).
+  local req
+  for req in postgres-16-alpine.tar headless-shell.tar "bas-caldera-${BAS_VERSION}.tar"; do
+    [[ -f "${images_dir}/${req}" ]] || { err "Required runtime image ${req} missing from ${images_dir} -- ${what} aborted."; exit 1; }
+  done
+}
+
+# _load_verified_images <what>   (after _verify_all_images)
+# Loads every other image first and the orchestrator LAST. Deliberate: docker
+# load's tag assignment is last-write-wins and tags are embedded in each tar's
+# own manifest, independent of its filename, so nothing loaded after the
+# orchestrator can re-point "bas-orchestrator:<ver>". After EVERY load the tag
+# must resolve to the image ID recorded from the verified tar.
+_load_verified_images() {
+  local what="$1" i
+  for i in "${!IMG_TARS[@]}"; do
+    docker load < "${IMG_TARS[$i]}" || { err "docker load failed for $(basename "${IMG_TARS[$i]}") -- ${what} aborted."; exit 1; }
+    _docker_tag_is "${IMG_TAGS[$i]}" "${IMG_IDS[$i]}" || { err "${IMG_TAGS[$i]} is not the verified image after load -- ${what} aborted."; exit 1; }
+    log "Loaded: $(basename "${IMG_TARS[$i]}")"
+  done
+  docker load < "$ORCH_TAR" || { err "docker load failed for $(basename "$ORCH_TAR") -- ${what} aborted."; exit 1; }
+  _docker_tag_is "bas-orchestrator:${BAS_VERSION}" "$ORCH_ID" || { err "bas-orchestrator:${BAS_VERSION} is not the verified image after load -- ${what} aborted."; exit 1; }
+  log "Loaded: $(basename "$ORCH_TAR")"
+}
+
 _do_install_steps() {
+  # Fail closed: every runtime image comes from this bundle's signed images/
+  # (parse_args sets OFFLINE=true whenever it exists). Without it there is
+  # nothing verifiable to run, so refuse instead of pulling from a registry.
+  if [[ "$OFFLINE" != "true" ]]; then
+    err "No images/ directory next to setup.sh (${SCRIPT_DIR}/images) -- refusing to install: every runtime image must come from this bundle's signed images/ (nothing is pulled from a registry)."
+    exit 1
+  fi
+  _verify_all_images "${SCRIPT_DIR}/images" "installation"
+
   _step 5 "Installing Docker CE (may take 1-2 minutes)..."
   if $NEED_DOCKER; then
     install_docker || { err "Docker install failed."; exit 1; }
@@ -594,36 +821,11 @@ EOF
   chown root:root "${INSTALL_DIR}/.env"
 
   _step 50 "Loading Docker images..."
-  if [[ "$OFFLINE" == "true" ]]; then
-    # Load every other image first, then verify+load the orchestrator
-    # artifact LAST -- same deliberate ordering as install.sh. Singling
-    # it out by filename alone would (1) silently skip verification if
-    # no bas-orchestrator-* file exists, and (2) let a later tar in the
-    # loop re-point the "bas-orchestrator:<ver>" tag after a verified
-    # load (docker load's tag assignment is last-write-wins, and tags
-    # are embedded in the tar's own manifest, independent of its
-    # filename on disk). Loading it last closes both.
-    local orch_img=""
-    for img in "${SCRIPT_DIR}"/images/*.tar.gz "${SCRIPT_DIR}"/images/*.tar; do
-      [[ -f "$img" ]] || continue
-      if [[ "$(basename "$img")" == bas-orchestrator-* ]]; then
-        orch_img="$img"
-        continue
-      fi
-      _step 55 "Loading $(basename "$img")..."
-      docker load < "$img" || true
-    done
-    if [[ -z "$orch_img" ]]; then
-      err "No orchestrator artifact (bas-orchestrator-*.tar) found in ${SCRIPT_DIR}/images -- refusing to install without it."
-      exit 1
-    fi
-    _step 55 "Loading $(basename "$orch_img")..."
-    _verify_orchestrator_artifact "$orch_img" || { err "Orchestrator artifact failed verification -- installation aborted."; exit 1; }
-    docker load < "$orch_img"
-  else
-    cd "${INSTALL_DIR}"
-    docker compose -f docker-compose.yml pull --quiet || true
-  fi
+  # Everything was verified up front (_verify_all_images). The other images are
+  # loaded first, the orchestrator LAST, and after each load the tag must
+  # resolve to exactly the image ID recorded from the verified tar's manifest,
+  # so no tag planted elsewhere can be what compose runs. Nothing is pulled.
+  _load_verified_images "installation"
 
   _step 80 "Installing systemd service..."
   sed "s|/opt/bas-platform|${INSTALL_DIR}|g" \
@@ -1032,22 +1234,49 @@ Useful commands:
 Press OK to exit the installer." 28 74
 }
 
+# ── Flags ──────────────────────────────────────────────────────────────────────
+# Supported: --offline, --no-wizard, --config <file>, --gpg-pub <key.asc>,
+# --cosign-pub <key.pub> (both also as --flag=<path>; the cosign flag overrides
+# BAS_COSIGN_PUB), and the no-ops --non-interactive (passed by import.sh) and
+# --web (the web wizard is already the default without setup.conf). A flag
+# missing its value or any unknown flag is an error (a typo must never silently
+# drop a key), matching import.sh.
+parse_args() {
+  local v
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --offline)   OFFLINE=true; shift ;;
+      --no-wizard) NO_WIZARD=true; shift ;;
+      --non-interactive|--web) shift ;;
+      --gpg-pub=*|--cosign-pub=*|--config=*)
+        v="${1#*=}"
+        [[ -n "$v" ]] || { err "${1%%=*} requires a value"; exit 1; }
+        case "$1" in
+          --gpg-pub=*)    GPG_PUB_FLAG="$v" ;;
+          --cosign-pub=*) BAS_COSIGN_PUB="$v"; export BAS_COSIGN_PUB ;;
+          --config=*)     CONFIG_FILE="$v" ;;
+        esac
+        shift ;;
+      --gpg-pub|--cosign-pub|--config)
+        [[ $# -ge 2 && -n "$2" && "$2" != --* ]] || { err "$1 requires a value"; exit 1; }
+        case "$1" in
+          --gpg-pub)    GPG_PUB_FLAG="$2" ;;
+          --cosign-pub) BAS_COSIGN_PUB="$2"; export BAS_COSIGN_PUB ;;
+          --config)     CONFIG_FILE="$2" ;;
+        esac
+        shift 2 ;;
+      *) err "Unknown option: $1"; exit 1 ;;
+    esac
+  done
+  # A bundle with images/ is ALWAYS installed from (and verified against) it,
+  # whether or not --offline was passed.
+  [[ -d "${SCRIPT_DIR}/images" ]] && OFFLINE=true
+  return 0
+}
+
 # ── Main ───────────────────────────────────────────────────────────────────────
 main() {
-  # ── Parse flags ──────────────────────────────────────────────────────────────
-  local _args=("$@")
-  local i=0
-  while [[ $i -lt ${#_args[@]} ]]; do
-    case "${_args[$i]}" in
-      --offline)   OFFLINE=true ;;
-      --no-wizard) NO_WIZARD=true ;;
-      --config)
-        i=$(( i + 1 ))
-        CONFIG_FILE="${_args[$i]:-}"
-        ;;
-    esac
-    i=$(( i + 1 ))
-  done
+  parse_args "$@"
 
   # ── No-wizard mode: called internally by Python wizard subprocess ─────────────
   # Pure stdout, no whiptail; all output captured by Python SSE streamer.

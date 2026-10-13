@@ -6,18 +6,32 @@
 #
 # Expects either:
 #   (a) /var/tmp/bas-airgap.tar.gz  — embedded bundle (offline install)
-#   (b) Internet access             — Docker pulled, BAS setup via setup.sh
+#   (b) signed images already staged in /opt/bas-platform-src/compose/images
+#       (Packer-built base); setup.sh never pulls BAS images from a registry
 set -euo pipefail
 
-LOG="/var/log/bas-postinstall.log"
-STAGING="/opt/bas-platform-src"
-DONE_MARKER="/opt/bas-platform/.postinstall-done"
-AIRGAP_BUNDLE="/var/tmp/bas-airgap.tar.gz"
-IMPORT_SCRIPT="/opt/bas-install/import.sh"
+# BAS_ROOT is a path prefix used ONLY by the test suite to sandbox every path
+# below (empty on a real host).
+R="${BAS_ROOT:-}"
+LOG="${R}/var/log/bas-postinstall.log"
+STAGING="${R}/opt/bas-platform-src"
+DONE_MARKER="${R}/opt/bas-platform/.postinstall-done"
+AIRGAP_BUNDLE="${R}/var/tmp/bas-airgap.tar.gz"
+APPLIANCE_DIR="${APPLIANCE_DIR:-${R}/opt/bas-install/appliance}"
+COSIGN_BIN="${R}/usr/local/bin/cosign"
 
 exec >> "${LOG}" 2>&1
 
 log() { echo "[$(date -u +%T)] $*"; }
+# Fail-closed errors go to the log, the journal AND the console (the log alone
+# is invisible to an operator watching first boot).
+fatal() {
+  echo "ERROR: $*" >&2
+  logger -t bas-postinstall -p user.err -- "$*" 2>/dev/null || true
+  { echo "bas-postinstall: ERROR: $*" > /dev/console; } 2>/dev/null || true
+  exit 1
+}
+err() { echo "ERROR: $*" >&2; }
 
 log "BAS post-install starting..."
 
@@ -59,29 +73,49 @@ if [[ -f "$AIRGAP_BUNDLE" ]]; then
   tar -xzf "$AIRGAP_BUNDLE" -C "$WORK"
   BUNDLE_DIR=$(find "$WORK" -maxdepth 1 -mindepth 1 -type d | head -1)
 
-  log "Loading Docker images..."
-  for img in "${BUNDLE_DIR}"/images/*.tar.gz; do
-    log "  Loading $(basename "$img")..."
-    docker load < "$img"
-  done
-
   BAS_VERSION=$(cat "${BUNDLE_DIR}/VERSION" 2>/dev/null || echo "latest")
-  if docker image inspect "bas-orchestrator:${BAS_VERSION}" &>/dev/null && \
-     ! docker image inspect "bas-orchestrator:latest" &>/dev/null; then
-    docker tag "bas-orchestrator:${BAS_VERSION}" "bas-orchestrator:latest"
+  # setup.sh pins .env to compose/VERSION: it must equal the version we verify.
+  [[ "$(tr -d '[:space:]' < "${BUNDLE_DIR}/compose/VERSION" 2>/dev/null)" == "$(echo "$BAS_VERSION" | tr -d '[:space:]')" ]] \
+    || fatal "compose/VERSION does not match bundle VERSION (${BAS_VERSION}) -- compose would run a different image than the verified one."
+
+  # Install the pinned cosign staged on the ISO (re-checked against cosign.pin).
+  if ! command -v cosign &>/dev/null; then
+    if [[ -f "${APPLIANCE_DIR}/cosign-linux-amd64" ]] && \
+       bash "${APPLIANCE_DIR}/fetch-cosign.sh" --verify "${APPLIANCE_DIR}/cosign-linux-amd64" "${APPLIANCE_DIR}/cosign.pin"; then
+      mkdir -p "$(dirname "$COSIGN_BIN")"
+      install -m 0755 "${APPLIANCE_DIR}/cosign-linux-amd64" "$COSIGN_BIN"
+      PATH="$(dirname "$COSIGN_BIN"):$PATH"; export PATH
+      log "Installed pinned cosign to ${COSIGN_BIN}."
+    else
+      fatal "pinned cosign missing or failed its checksum -- cannot verify the images."
+    fi
   fi
+
+  # Verify EVERY image tar (cosign + tag + image-ID binding), then load them
+  # orchestrator-last. Nothing unverified is ever loaded; a legacy .tar.gz or any
+  # unsigned/unlisted file is fatal. A bad bundle fails here, not at first boot.
+  # shellcheck source=/dev/null
+  source "${BUNDLE_DIR}/cosign-verify-lib.sh"
+  log "Verifying and loading Docker images..."
+  airgap_verify_and_load_images "${BUNDLE_DIR}/images" "${BUNDLE_DIR}/cosign.pub" "$BAS_VERSION" \
+    || fatal "image verification/loading failed -- refusing to continue."
 
   log "Staging BAS files..."
   rm -rf "$STAGING"
-  mkdir -p "$STAGING/compose"
+  mkdir -p "$STAGING/compose/images"
   cp -r "${BUNDLE_DIR}/compose/." "$STAGING/compose/"
+  # Signed tars + bundles + key: setup.sh --offline re-verifies from here at first boot.
+  cp "${BUNDLE_DIR}"/images/*.tar "${BUNDLE_DIR}"/images/*.tar.bundle "$STAGING/compose/images/"
+  cp "${BUNDLE_DIR}/cosign.pub" "$STAGING/compose/cosign.pub"
   echo "${BAS_VERSION}" > "$STAGING/VERSION"
 
   rm -f "$AIRGAP_BUNDLE"
   log "Airgap import complete."
 else
-  # Online path — images will be pulled at setup time
-  log "No airgap bundle — BAS images will be pulled from registry during setup."
+  # No embedded bundle: setup.sh NEVER pulls images. It installs only from signed
+  # images already staged under ${STAGING}/compose/images (e.g. by the Packer
+  # install-bas.sh build) and refuses to install without them.
+  log "No airgap bundle — setup.sh will use the signed images staged in ${STAGING}/compose/images (it refuses without them; nothing is pulled)."
   mkdir -p "$STAGING/compose"
   # Copy compose files if they were bundled with the OS image by the Packer build
   # (they would be at /opt/bas-platform-src already if using Packer-built base)
