@@ -40,6 +40,7 @@ import (
 	"github.com/audspect/bas/internal/jobs"
 	"github.com/audspect/bas/internal/license"
 	"github.com/audspect/bas/internal/models"
+	"github.com/audspect/bas/internal/networkgraph"
 	"github.com/audspect/bas/internal/notifications"
 	"github.com/audspect/bas/internal/observability"
 	"github.com/audspect/bas/internal/openaev"
@@ -786,6 +787,11 @@ func main() {
 		log.Fatalf("[FATAL] load/generate deployment CA: %v", err)
 	}
 
+	networkVP, err := networkgraph.LoadVantagePoint()
+	if err != nil {
+		log.Printf("[WARN] network discovery vantage point not configured: %v -- /api/network-discovery-runs will return 503 until NETWORK_VANTAGE_POINT_ID and NETWORK_VANTAGE_POINT_POSITION are both set", err)
+	}
+
 	handler := api.New(pool, hub, engine, cfg.JWTSecret).
 		WithCaldera(cfg.CalderaURL, cfg.CalderaAPIKey).
 		WithART(artStore).
@@ -821,7 +827,8 @@ func main() {
 		WithVexSweep(vexSweepStore, vexSweepDispatcher).
 		WithEMSweep(emSweepStore, emSweepDispatcher).
 		WithTAXII(taxiiStore, taxiiManager).
-		WithIOCProvider(iocProvider)
+		WithIOCProvider(iocProvider).
+		WithNetworkVantagePoint(networkVP)
 
 	// Content registry migration marker: only after a clean scenario load with zero intake
 	// infrastructure failures, so a partial intake never ends custom-file grandfathering. A failure here is

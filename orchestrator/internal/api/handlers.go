@@ -47,6 +47,7 @@ import (
 	"github.com/audspect/bas/internal/jobs"
 	"github.com/audspect/bas/internal/license"
 	"github.com/audspect/bas/internal/models"
+	"github.com/audspect/bas/internal/networkgraph"
 	"github.com/audspect/bas/internal/notifications"
 	"github.com/audspect/bas/internal/observability"
 	"github.com/audspect/bas/internal/pki"
@@ -143,6 +144,11 @@ type Handler struct {
 	// metricsRegistry is the observability metrics registry.
 	// nil when not configured.
 	metricsRegistry *observability.MetricsRegistry
+	// networkVantagePoint identifies where Network BAS Phase 1 discovery
+	// probes originate. Zero value until WithNetworkVantagePoint is called
+	// -- Configured() is then false and discovery requests are refused
+	// with 503, never a default/fabricated vantage point.
+	networkVantagePoint networkgraph.VantagePoint
 }
 
 // New creates a Handler.
@@ -160,6 +166,13 @@ func New(db *pgxpool.Pool, hub *ws.Hub, engine *scenario.Engine, secret string) 
 // WithCompliance attaches the compliance mapper.
 func (h *Handler) WithCompliance(m *compliance.Mapper) *Handler {
 	h.complianceMapper = m
+	return h
+}
+
+// WithNetworkVantagePoint attaches the orchestrator's configured network
+// vantage point (see internal/networkgraph.LoadVantagePoint).
+func (h *Handler) WithNetworkVantagePoint(vp networkgraph.VantagePoint) *Handler {
+	h.networkVantagePoint = vp
 	return h
 }
 
