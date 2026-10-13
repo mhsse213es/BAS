@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 
@@ -10,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/audspect/bas/internal/auth"
+	"github.com/audspect/bas/internal/cloudgraph"
 	"github.com/audspect/bas/internal/cloudrun"
 	"github.com/audspect/bas/internal/db"
 )
@@ -107,4 +109,130 @@ func (h *Handler) GetCloudRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	respond(w, run)
+}
+
+const (
+	maxCloudCampaignAccounts = 25
+	maxEdgesPerAccount       = 500
+)
+
+// cloudCampaignAccountResult is one account's outcome within a campaign
+// response. Status is always run.Status verbatim when a row exists --
+// never invented from err != nil, since UpdateCloudRunStatus's own
+// failure can leave a row honestly sitting at "running", not "failed".
+type cloudCampaignAccountResult struct {
+	Account cloudgraph.AccountScope `json:"account"`
+	RunID   string                  `json:"runId,omitempty"`
+	Status  string                  `json:"status,omitempty"`
+	Error   string                  `json:"error,omitempty"`
+}
+
+// bucketCloudRunStatus folds one account's (run, err) outcome into the
+// campaign rollup's three buckets. A run's own real status
+// (completed/partial/failed) is used directly; a non-terminal status
+// (running/pending -- the UpdateCloudRunStatus-failure edge case) and a
+// nil run (the InsertCloudRun-failure edge case) both fold into "failed"
+// for rollup purposes only -- the per-account result's own Status field
+// is set separately, from run.Status verbatim, never overwritten here.
+func bucketCloudRunStatus(run *cloudrun.CloudRun) (bucket string) {
+	if run == nil {
+		return "failed"
+	}
+	switch run.Status {
+	case cloudrun.StatusCompleted:
+		return "completed"
+	case cloudrun.StatusPartial:
+		return "partial"
+	case cloudrun.StatusFailed:
+		return "failed"
+	default: // StatusRunning, StatusPending -- never confirmed terminal
+		return "failed"
+	}
+}
+
+// POST /api/cloud-campaigns -- fans db.ExecuteCloudPlanRun out across every
+// sub-request in runs, sequentially (CloudPlan has no I/O today -- see the
+// design spec's Decision 3). Synchronous: every child evaluation finishes
+// before this handler returns.
+func (h *Handler) CreateCloudCampaign(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Name string                   `json:"name"`
+		Runs []db.CloudPlanRunRequest `json:"runs"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonError(w, "invalid request body: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	if req.Name == "" {
+		jsonError(w, "name required", http.StatusBadRequest)
+		return
+	}
+	if len(req.Runs) == 0 {
+		jsonError(w, "at least one run is required", http.StatusBadRequest)
+		return
+	}
+	if len(req.Runs) > maxCloudCampaignAccounts {
+		jsonError(w, fmt.Sprintf("too many accounts — got %d, max %d", len(req.Runs), maxCloudCampaignAccounts), http.StatusBadRequest)
+		return
+	}
+	for i, run := range req.Runs {
+		if err := validateCloudPlanRunRequest(run); err != nil {
+			jsonError(w, fmt.Sprintf("runs[%d]: %s", i, err.Error()), http.StatusBadRequest)
+			return
+		}
+		if len(run.Edges) > maxEdgesPerAccount {
+			jsonError(w, fmt.Sprintf("runs[%d]: too many edges — got %d, max %d", i, len(run.Edges), maxEdgesPerAccount), http.StatusBadRequest)
+			return
+		}
+	}
+
+	var initiatedBy string
+	if c, ok := auth.ClaimsFrom(r.Context()); ok && c != nil {
+		initiatedBy = c.UserID
+	}
+
+	campaign := &db.CloudCampaign{ID: newID(), Name: req.Name, CreatedBy: initiatedBy}
+	if err := db.InsertCloudCampaign(r.Context(), h.db, campaign); err != nil {
+		h.auditLog(r, "cloudcampaign.create", "", map[string]any{"name": req.Name, "error": err.Error()}, "error")
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	results := make([]cloudCampaignAccountResult, len(req.Runs))
+	var total, completed, partial, failed int
+	for i, subReq := range req.Runs {
+		subReq.InitiatedBy = initiatedBy
+		subReq.CampaignID = campaign.ID
+		run, err := db.ExecuteCloudPlanRun(r.Context(), h.db, subReq)
+
+		res := cloudCampaignAccountResult{Account: subReq.Account}
+		if run != nil {
+			res.RunID = run.ID
+			res.Status = string(run.Status)
+		}
+		if err != nil {
+			res.Error = err.Error()
+		}
+		results[i] = res
+
+		total++
+		switch bucketCloudRunStatus(run) {
+		case "completed":
+			completed++
+		case "partial":
+			partial++
+		default:
+			failed++
+		}
+	}
+
+	h.auditLog(r, "cloudcampaign.create", campaign.ID, map[string]any{
+		"name": req.Name, "total": total, "completed": completed, "partial": partial, "failed": failed,
+	}, "ok")
+	respondStatus(w, map[string]any{
+		"campaignId": campaign.ID,
+		"name":       campaign.Name,
+		"summary":    map[string]any{"total": total, "completed": completed, "partial": partial, "failed": failed},
+		"results":    results,
+	}, http.StatusCreated)
 }
