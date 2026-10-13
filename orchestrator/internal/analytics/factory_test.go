@@ -50,6 +50,19 @@ func TestStaticValidationPassRate_ExcludesExecutionLevelAndNoDataOutcome(t *test
 	})
 }
 
+func TestDuplicateGenerationRate_AlwaysNoData(t *testing.T) {
+	got := duplicateGenerationRate()
+	if got.State != DataNoData {
+		t.Fatalf("got %+v, want no_data unconditionally -- generation-attempt telemetry is not persisted in this phase", got)
+	}
+	if got.Value != nil {
+		t.Fatalf("got Value = %v, want nil for a no_data metric", got.Value)
+	}
+	if got.Reason == "" {
+		t.Fatal("got empty Reason -- the UI needs this to explain why the metric is unavailable")
+	}
+}
+
 func TestCoreCounts_ThreatsAndPublishedContent(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping container-backed test in -short mode")

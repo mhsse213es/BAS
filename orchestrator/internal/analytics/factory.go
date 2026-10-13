@@ -94,3 +94,14 @@ func staticValidationPassRate(ctx context.Context, pool *pgxpool.Pool, since tim
 	}
 	return measured(float64(passed) / float64(total)), nil
 }
+
+// duplicateGenerationRate is always NO_DATA in this phase. Generation
+// attempts happen (Scheduler.sync calls Generator.Write on every poll,
+// idempotent via content_versions' dedup) but their outcomes are only
+// logged to stdout and an in-memory, process-lifetime counter -- never
+// persisted. Persisting a per-attempt log is Phase 9's deliverable, not
+// this phase's; adding it here would be new write-path infrastructure
+// this phase deliberately excludes.
+func duplicateGenerationRate() Metric {
+	return noData("generation-attempt telemetry is not yet persisted (tracked for Phase 9)")
+}
