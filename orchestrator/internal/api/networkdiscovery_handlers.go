@@ -94,6 +94,11 @@ func (h *Handler) TriggerNetworkDiscoveryRun(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	if err := db.InsertNetworkObservations(r.Context(), h.db, run.ID, result.Observations); err != nil {
+		// The run row is already persisted claiming result.Status
+		// ("completed"/"partial") -- without this, a reader would see a
+		// run claiming success with zero backing observations. Best
+		// effort: the original error is already what's reported below.
+		_ = db.UpdateNetworkDiscoveryRunStatus(r.Context(), h.db, run.ID, "failed")
 		h.auditLog(r, "networkdiscovery.run", run.ID, map[string]any{"targetCount": len(req.Targets), "error": err.Error()}, "error")
 		jsonError(w, err.Error(), http.StatusInternalServerError)
 		return

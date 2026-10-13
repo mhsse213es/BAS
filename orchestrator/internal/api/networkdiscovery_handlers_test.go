@@ -151,6 +151,48 @@ func TestTriggerNetworkDiscoveryRun_UnconfiguredVantagePointReturns503(t *testin
 	})
 }
 
+// TestTriggerNetworkDiscoveryRun_ObservationInsertFailureMarksRunFailed
+// forces a real, deterministic Postgres write failure on the
+// observations insert (a target label containing an embedded NUL byte,
+// which text columns reject outright) while the run row insert still
+// succeeds -- reproducing the finding from the final review: without a
+// fix, the run row is left claiming "completed" with zero backing
+// observations. The label never reaches DialerProbe (only Host/Port are
+// dialed), so RunDiscovery itself completes normally; only the DB write
+// fails.
+func TestTriggerNetworkDiscoveryRun_ObservationInsertFailureMarksRunFailed(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret).WithNetworkVantagePoint(testVantagePoint())
+		userID := seedUser(t, pool, "netdiscovery-op-insertfail", "pw12345678", string(auth.RoleAnalyst), true)
+		body := map[string]any{"targets": []map[string]any{
+			{"host": "127.0.0.1", "port": 9, "label": "bad\x00label"},
+		}}
+		b, _ := json.Marshal(body)
+		req := authedRequest(t, http.MethodPost, "/api/network-discovery-runs", bytes.NewReader(b), auth.RoleAnalyst, userID)
+		rec := callAuthed(h.TriggerNetworkDiscoveryRun, req)
+		if rec.Code != http.StatusInternalServerError {
+			t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+		}
+
+		runs, err := db.ListNetworkDiscoveryRuns(context.Background(), pool, 100)
+		if err != nil {
+			t.Fatalf("list runs: %v", err)
+		}
+		var found *db.NetworkDiscoveryRun
+		for _, r := range runs {
+			if r.RequestedBy == userID {
+				found = r
+			}
+		}
+		if found == nil {
+			t.Fatal("expected the run row to have been persisted despite the observation-insert failure")
+		}
+		if found.Status != "failed" {
+			t.Fatalf("Status = %q, want failed -- a run must never be left claiming completed/partial with zero backing observations", found.Status)
+		}
+	})
+}
+
 func TestTriggerNetworkDiscoveryRun_OversizedBodyRejectedBeforeFullDecode(t *testing.T) {
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
 		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret).WithNetworkVantagePoint(testVantagePoint())

@@ -94,6 +94,19 @@ func scanNetworkDiscoveryRun(row pgx.Row) (*NetworkDiscoveryRun, error) {
 	return run, nil
 }
 
+// UpdateNetworkDiscoveryRunStatus transitions a network_discovery_runs
+// row's status and sets completed_at to NOW(). Used when a run's
+// observations fail to persist after its row has already been inserted --
+// mirrors cloud_run's UpdateCloudRunStatus pattern so a reader never sees
+// a run claiming "completed"/"partial" with zero backing observations.
+func UpdateNetworkDiscoveryRunStatus(ctx context.Context, pool *pgxpool.Pool, id string, status string) error {
+	_, err := pool.Exec(ctx, `UPDATE network_discovery_runs SET status = $1, completed_at = NOW() WHERE id = $2`, status, id)
+	if err != nil {
+		return fmt.Errorf("network_discovery_runs: update status for %s: %w", id, err)
+	}
+	return nil
+}
+
 // GetNetworkDiscoveryRun returns one run by id. A missing id returns an
 // error satisfying errors.Is(err, pgx.ErrNoRows).
 func GetNetworkDiscoveryRun(ctx context.Context, pool *pgxpool.Pool, id string) (*NetworkDiscoveryRun, error) {

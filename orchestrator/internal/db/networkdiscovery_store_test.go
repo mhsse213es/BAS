@@ -50,6 +50,30 @@ func TestInsertNetworkDiscoveryRun_RoundTripsThroughGetAndList(t *testing.T) {
 	})
 }
 
+func TestUpdateNetworkDiscoveryRunStatus_SetsStatusAndCompletedAt(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		run := &db.NetworkDiscoveryRun{ID: "ndrun-update-1", VantagePointID: "vp-1", TargetCount: 1, Status: "completed"}
+		if err := db.InsertNetworkDiscoveryRun(context.Background(), pool, run); err != nil {
+			t.Fatalf("insert: %v", err)
+		}
+
+		if err := db.UpdateNetworkDiscoveryRunStatus(context.Background(), pool, run.ID, "failed"); err != nil {
+			t.Fatalf("update status: %v", err)
+		}
+
+		got, err := db.GetNetworkDiscoveryRun(context.Background(), pool, run.ID)
+		if err != nil {
+			t.Fatalf("get: %v", err)
+		}
+		if got.Status != "failed" {
+			t.Fatalf("Status = %q, want failed", got.Status)
+		}
+		if got.CompletedAt == nil {
+			t.Fatal("CompletedAt should be set once the run reaches a terminal status")
+		}
+	})
+}
+
 func TestGetNetworkDiscoveryRun_NonexistentIDReturnsErrNoRows(t *testing.T) {
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
 		_, err := db.GetNetworkDiscoveryRun(context.Background(), pool, "nonexistent-run-id")
