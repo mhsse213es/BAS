@@ -1,12 +1,19 @@
 #!/usr/bin/env bash
 # BAS Platform — Air-Gap Bundle Verifier
 #
-# Verifies the integrity of a bas-airgap bundle before import.
-# Run on the air-gapped target server before import.sh.
+# Verifies the integrity, authenticity, and host compatibility of a
+# bas-airgap bundle before import. Run on the air-gapped target server
+# before import.sh. Shares every check with import.sh via
+# verify-common.sh -- this script and import.sh can never enforce
+# different rules.
 #
 # Usage:
 #   bash verify.sh <path/to/bas-airgap-<version>.tar.gz>
 set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC1091
+source "${SCRIPT_DIR}/verify-common.sh"
 
 if [ -t 1 ]; then
   GREEN='\033[0;32m'; YELLOW='\033[1;33m'; RED='\033[0;31m'; NC='\033[0m'
@@ -14,7 +21,6 @@ else
   GREEN=''; YELLOW=''; RED=''; NC=''
 fi
 log()  { echo -e "${GREEN}[✓]${NC} $*"; }
-warn() { echo -e "${YELLOW}[!]${NC} $*"; }
 err()  { echo -e "${RED}[✗]${NC} $*" >&2; }
 
 TARBALL="${1:-}"
@@ -27,91 +33,55 @@ if [[ ! -f "$TARBALL" ]]; then
   exit 1
 fi
 
-CHECKSUM_FILE="${TARBALL}.sha256"
-
-# ── 1. Verify outer checksum ───────────────────────────────────────────────────
 echo ""
 echo "  BAS Platform — Bundle Verification"
 echo "  Bundle: $(basename "$TARBALL")"
-echo "  Size:   $(du -sh "$TARBALL" | cut -f1)"
 echo ""
 
-if [[ -f "$CHECKSUM_FILE" ]]; then
-  echo -n "  Checking outer sha256... "
-  if sha256sum --check --status "$CHECKSUM_FILE" 2>/dev/null || \
-     shasum -a 256 --check --status "$CHECKSUM_FILE" 2>/dev/null; then
-    log "outer sha256 OK"
-  else
-    err "Outer sha256 MISMATCH — bundle may be corrupt or tampered."
-    exit 1
-  fi
-else
-  warn "No .sha256 file found alongside bundle — skipping outer checksum."
+# ── 1. GPG signature (mandatory) ────────────────────────────────────────────────
+PUBKEY="${BAS_VERIFY_PUBKEY:-${SCRIPT_DIR}/pubkey.asc}"
+if ! verify_gpg_signature "$TARBALL" "${TARBALL}.asc" "$PUBKEY"; then
+  err "GPG signature verification FAILED. Do NOT import this bundle."
+  exit 1
 fi
+log "GPG signature valid."
 
-# ── 2. Extract and verify inner manifest ──────────────────────────────────────
+# ── 2. Extract into a controlled staging directory ─────────────────────────────
 WORK_DIR=$(mktemp -d)
 trap 'rm -rf "$WORK_DIR"' EXIT
+chmod 700 "$WORK_DIR"
 
-echo -n "  Extracting bundle... "
 tar -xzf "$TARBALL" -C "$WORK_DIR"
-echo "done."
-
 BUNDLE_DIR=$(find "$WORK_DIR" -maxdepth 1 -mindepth 1 -type d | head -1)
 if [[ -z "$BUNDLE_DIR" ]]; then
   err "Bundle appears empty or malformed."
   exit 1
 fi
 
-MANIFEST="${BUNDLE_DIR}/MANIFEST.sha256"
-if [[ ! -f "$MANIFEST" ]]; then
-  err "MANIFEST.sha256 not found inside bundle."
-  exit 1
-fi
-
-VERSION_FILE="${BUNDLE_DIR}/VERSION"
-VERSION=$(cat "$BUNDLE_DIR/VERSION" 2>/dev/null || echo "unknown")
+VERSION=$(cat "${BUNDLE_DIR}/VERSION" 2>/dev/null || echo "unknown")
 echo "  Version:  ${VERSION}"
 
-echo -n "  Verifying file manifest... "
-FAIL_COUNT=0
-PASS_COUNT=0
-while IFS= read -r line; do
-  expected_hash="${line%% *}"
-  rel_path="${line#* }"
-  rel_path="${rel_path#./}"
-  abs_path="${BUNDLE_DIR}/${rel_path}"
-
-  if [[ ! -f "$abs_path" ]]; then
-    err "Missing: ${rel_path}"
-    ((FAIL_COUNT++))
-    continue
-  fi
-
-  actual_hash=$(sha256sum "$abs_path" | cut -d' ' -f1)
-  if [[ "$actual_hash" != "$expected_hash" ]]; then
-    err "Corrupt: ${rel_path}"
-    ((FAIL_COUNT++))
-  else
-    ((PASS_COUNT++))
-  fi
-done < "$MANIFEST"
-
-if [[ $FAIL_COUNT -gt 0 ]]; then
-  echo ""
-  err "${FAIL_COUNT} file(s) failed verification. Do NOT import this bundle."
+# ── 3. Manifest check against the extracted files ───────────────────────────────
+if ! verify_manifest "$BUNDLE_DIR"; then
+  err "Bundle integrity check FAILED. Do NOT import this bundle."
   exit 1
 fi
+log "Bundle manifest verified."
 
-log "${PASS_COUNT} files verified."
+# ── 4. Compose version floor ─────────────────────────────────────────────────────
+if ! check_compose_version_floor "2.8.0"; then
+  err "Docker Compose on this host does not meet the required floor (2.8.0)."
+  exit 1
+fi
+log "Docker Compose version OK."
 
-# ── 3. Check required files ────────────────────────────────────────────────────
+# ── 5. Required files present (flat layout) ─────────────────────────────────────
 REQUIRED=(
   "images/bas-orchestrator-${VERSION}.tar.gz"
   "images/postgres-16-alpine.tar.gz"
-  "compose/setup.sh"
-  "compose/docker-compose.yml"
-  "compose/docker-compose.prod.yml"
+  "setup.sh"
+  "docker-compose.yml"
+  "docker-compose.prod.yml"
   "import.sh"
 )
 
