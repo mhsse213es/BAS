@@ -14,6 +14,25 @@ import (
 	"github.com/audspect/bas/internal/db"
 )
 
+// validateCloudPlanRunRequest checks the three required-field/provider
+// constraints a single CloudPlanRunRequest must satisfy, shared by
+// TriggerCloudPlanRun (one request) and CreateCloudCampaign (N requests,
+// each checked the same way before any persistence).
+func validateCloudPlanRunRequest(req db.CloudPlanRunRequest) error {
+	if req.ScenarioID == "" {
+		return errors.New("scenarioId required")
+	}
+	if req.Target == "" {
+		return errors.New("target required")
+	}
+	switch req.Account.Provider {
+	case "aws", "azure", "gcp":
+		return nil
+	default:
+		return errors.New("invalid provider — use aws | azure | gcp")
+	}
+}
+
 // POST /api/cloud-runs — runs cloudgraph.CloudPlan for one account against a
 // caller-supplied permission graph and persists the outcome as a cloud_runs
 // row. Synchronous: CloudPlan has no I/O today, so there is nothing to poll.
@@ -23,19 +42,8 @@ func (h *Handler) TriggerCloudPlanRun(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "invalid request body: "+err.Error(), http.StatusBadRequest)
 		return
 	}
-	if req.ScenarioID == "" {
-		jsonError(w, "scenarioId required", http.StatusBadRequest)
-		return
-	}
-	if req.Target == "" {
-		jsonError(w, "target required", http.StatusBadRequest)
-		return
-	}
-	switch req.Account.Provider {
-	case "aws", "azure", "gcp":
-		// ok
-	default:
-		jsonError(w, "invalid provider — use aws | azure | gcp", http.StatusBadRequest)
+	if err := validateCloudPlanRunRequest(req); err != nil {
+		jsonError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
