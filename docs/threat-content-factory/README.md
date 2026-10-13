@@ -30,7 +30,7 @@ Customer execution and evidence
 | 2 | Canonical threat identity + evidence engine — actor/threat identity, intel content identity, evidence model with claims/retractions, `threat_techniques` projection, generation reproducibility, content↔threat relationships (`generated_for`/`emulates`), TCV clocks and stops | Normalize, deduplicate and prioritize threats; canonical identity, provenance, ATT&CK mapping | [2026-10-06-tcf-phase2-canonical-threat-design.md](../superpowers/specs/2026-10-06-tcf-phase2-canonical-threat-design.md) | Done (2A, 2B, 2C) |
 | 11 | Factory analytics | Measures content velocity, freshness, coverage, validation quality, and reuse | — | Not started — next to spec |
 | 8 | Signing and distribution | Publishes trusted vendor content for online and air-gapped customer installations, with verified integrity | — | Not started |
-| 9 | Threat-content scheduling | Automates ingestion-to-content workflows with reliable retries and lifecycle handling | — | Not started |
+| 9 | Threat-content generation observability | Generation already runs automatically on every intel sync and is idempotent — adds persisted per-attempt outcomes for durable failure visibility and a real duplicate-generation-rate metric | — | Not started |
 | 7 | Approval pipeline | Extends the existing lifecycle state machine only where a demonstrated gap exists | — | Not started |
 | 10 | Threat exposure | Prioritizes threats against a customer's technologies, controls, and environment | — | Not started |
 | 4 | Content reuse and composition | Reuses ART, Caldera, and existing Audspect scenarios before generating new behavior | — | Not started |
