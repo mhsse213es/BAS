@@ -118,6 +118,11 @@ func newTestDB(ctx context.Context) (*TestDB, error) {
 		_ = container.Terminate(context.Background())
 		return nil, fmt.Errorf("testutil: EnsureThreatIdentitySchema: %w", err)
 	}
+	if err := db.EnsureEvidenceSchema(ctx, pool); err != nil {
+		pool.Close()
+		_ = container.Terminate(context.Background())
+		return nil, fmt.Errorf("testutil: EnsureEvidenceSchema: %w", err)
+	}
 
 	return &TestDB{
 		Pool:      pool,

@@ -280,6 +280,9 @@ func main() {
 	if err := db.EnsureThreatIdentitySchema(context.Background(), adminPool); err != nil {
 		log.Fatalf("[FATAL] threat identity schema: %v", err)
 	}
+	if err := db.EnsureEvidenceSchema(context.Background(), adminPool); err != nil {
+		log.Fatalf("[FATAL] evidence schema: %v", err)
+	}
 	log.Println("[+] Schema verified")
 
 	// ── bas_app provisioning ─────────────────────────────────────────────

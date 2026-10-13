@@ -111,6 +111,17 @@ func EnsureAppRole(ctx context.Context, pool *pgxpool.Pool, appPassword string) 
 		`GRANT UPDATE (status, decided_actor_id, decided_by, decided_at, decision_reason) ON actor_resolution_candidates TO ` + appRole,
 		`REVOKE UPDATE, DELETE ON threat_actor_profiles FROM ` + appRole,
 		`GRANT UPDATE (name, aliases, sectors, regions, source, last_seen, confidence, canonical_group_id, techniques, updated_at) ON threat_actor_profiles TO ` + appRole,
+
+		// TCF Phase 2B evidence (spec 2026-10-06 §12). Append-only evidence
+		// of sources, syncs, observations and claims; threat_techniques is
+		// the only mutable projection (recomputed in place, never deleted).
+		`REVOKE UPDATE, DELETE ON source_trust_versions FROM ` + appRole,
+		`REVOKE UPDATE, DELETE ON source_syncs FROM ` + appRole,
+		`REVOKE UPDATE, DELETE ON source_observations FROM ` + appRole,
+		`REVOKE UPDATE, DELETE ON threat_sources FROM ` + appRole,
+		`REVOKE UPDATE, DELETE ON technique_claims FROM ` + appRole,
+		`REVOKE UPDATE, DELETE ON content_generations FROM ` + appRole,
+		`REVOKE DELETE ON threat_techniques FROM ` + appRole,
 	}
 	for _, stmt := range grants {
 		if _, err := pool.Exec(ctx, stmt); err != nil {
