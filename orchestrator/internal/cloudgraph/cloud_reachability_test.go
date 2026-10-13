@@ -336,3 +336,177 @@ func TestCloudPlan_StructurallyUnreachableTarget(t *testing.T) {
 		t.Errorf("Expected nil path, got %+v", path)
 	}
 }
+
+func TestCloudReachable_MutualTrustCycleTerminates(t *testing.T) {
+	roleA := &CloudIdentity{CanonicalID: "arn:aws:iam::123456789012:role/role-a", Kind: "iam-role"}
+	roleAAsResource := &CloudResource{CanonicalID: roleA.CanonicalID, Kind: "iam-role"}
+	roleB := &CloudIdentity{CanonicalID: "arn:aws:iam::123456789012:role/role-b", Kind: "iam-role"}
+	roleBAsResource := &CloudResource{CanonicalID: roleB.CanonicalID, Kind: "iam-role"}
+
+	edges := []*CloudPermission{
+		{
+			Source:     roleA,
+			Target:     roleBAsResource,
+			Action:     "sts:AssumeRole",
+			SourceType: "role-trust",
+			Attributes: map[string]string{
+				"policy_document": `{"Statement":[{"Effect":"Allow","Principal":{"AWS":"arn:aws:iam::123456789012:role/role-a"},"Action":"sts:AssumeRole"}]}`,
+			},
+		},
+		{
+			Source:     roleB,
+			Target:     roleAAsResource,
+			Action:     "sts:AssumeRole",
+			SourceType: "role-trust",
+			Attributes: map[string]string{
+				"policy_document": `{"Statement":[{"Effect":"Allow","Principal":{"AWS":"arn:aws:iam::123456789012:role/role-b"},"Action":"sts:AssumeRole"}]}`,
+			},
+		},
+	}
+
+	evaluator := &AWSEvaluator{}
+	reached := CloudReachable(edges, []string{roleA.CanonicalID}, evaluator, &RequestContext{}, 10)
+
+	if len(reached) != 2 {
+		t.Fatalf("Expected 2 reached nodes (role A and role B), got %d: %v", len(reached), reached)
+	}
+	foundA, foundB := false, false
+	for _, id := range reached {
+		if id == roleA.CanonicalID {
+			foundA = true
+		}
+		if id == roleB.CanonicalID {
+			foundB = true
+		}
+	}
+	if !foundA || !foundB {
+		t.Errorf("Expected both role A and role B reached, got %v", reached)
+	}
+}
+
+func TestCloudReachable_MaxHopsCapCutsOffLongChain(t *testing.T) {
+	start := &CloudIdentity{CanonicalID: "test:n0", Kind: "iam-user"}
+	n1 := &CloudResource{CanonicalID: "test:n1", Kind: "iam-role"}
+	n1AsIdentity := &CloudIdentity{CanonicalID: n1.CanonicalID, Kind: "iam-role"}
+	n2 := &CloudResource{CanonicalID: "test:n2", Kind: "iam-role"}
+	n2AsIdentity := &CloudIdentity{CanonicalID: n2.CanonicalID, Kind: "iam-role"}
+	n3 := &CloudResource{CanonicalID: "test:n3", Kind: "iam-role"}
+	n3AsIdentity := &CloudIdentity{CanonicalID: n3.CanonicalID, Kind: "iam-role"}
+	n4 := &CloudResource{CanonicalID: "test:n4", Kind: "iam-role"}
+	n4AsIdentity := &CloudIdentity{CanonicalID: n4.CanonicalID, Kind: "iam-role"}
+	n5 := &CloudResource{CanonicalID: "test:n5", Kind: "iam-role"}
+
+	allow := map[string]string{"policy_document": `{"Statement":[{"Effect":"Allow","Action":"sts:AssumeRole"}]}`}
+	// Edges are listed in REVERSED dependency order deliberately. Both
+	// CloudReachable and adchain.Reachable (the pattern it mirrors) mutate
+	// the reached set while iterating a single pass, so if these were
+	// listed in forward order (start->n1, n1->n2, ...), all 5 hops would
+	// cascade through in pass 0 alone -- n1 would be marked reached, and
+	// the very next edge in the same pass would already see it. Listing
+	// them backwards means each edge's enabling predecessor is later in
+	// the slice, so it isn't satisfied until the NEXT pass, giving exactly
+	// one new hop per pass -- the only way this test can exercise maxHops
+	// meaningfully instead of finishing in one pass regardless of the cap.
+	edges := []*CloudPermission{
+		{Source: n4AsIdentity, Target: n5, Action: "sts:AssumeRole", SourceType: "identity-policy", Attributes: allow},
+		{Source: n3AsIdentity, Target: n4, Action: "sts:AssumeRole", SourceType: "identity-policy", Attributes: allow},
+		{Source: n2AsIdentity, Target: n3, Action: "sts:AssumeRole", SourceType: "identity-policy", Attributes: allow},
+		{Source: n1AsIdentity, Target: n2, Action: "sts:AssumeRole", SourceType: "identity-policy", Attributes: allow},
+		{Source: start, Target: n1, Action: "sts:AssumeRole", SourceType: "identity-policy", Attributes: allow},
+	}
+
+	evaluator := &AWSEvaluator{}
+
+	// With maxHops=2 (passes 0 and 1), this reversed ordering advances the
+	// frontier by exactly one new node per pass: pass 0 reaches only n1
+	// (the start->n1 edge is last in the slice but is the only one whose
+	// Source is already reached); pass 1 reaches only n2 (n1->n2 is now
+	// satisfied, but n2->n3 still isn't, since it comes before n1->n2 in
+	// the slice and n2 wasn't reached until partway through pass 1). So 2
+	// passes reach n1 and n2 but never n3/n4/n5.
+	reached := CloudReachable(edges, []string{start.CanonicalID}, evaluator, &RequestContext{}, 2)
+	if len(reached) != 3 { // start, n1, n2
+		t.Fatalf("Expected 3 reached nodes (start, n1, n2) with maxHops=2, got %d: %v", len(reached), reached)
+	}
+
+	path, ok := CloudPlan(edges, []string{start.CanonicalID}, n5.CanonicalID, evaluator, &RequestContext{}, 2)
+	if ok {
+		t.Fatalf("Expected CloudPlan to fail to confirm n5 within maxHops=2, got path %+v", path)
+	}
+}
+
+func TestCloudReachable_MaxHopsZeroReturnsHeldUnchanged(t *testing.T) {
+	start := &CloudIdentity{CanonicalID: "test:n0", Kind: "iam-user"}
+	n1 := &CloudResource{CanonicalID: "test:n1", Kind: "iam-role"}
+	edges := []*CloudPermission{
+		{
+			Source:     start,
+			Target:     n1,
+			Action:     "sts:AssumeRole",
+			SourceType: "identity-policy",
+			Attributes: map[string]string{"policy_document": `{"Statement":[{"Effect":"Allow","Action":"sts:AssumeRole"}]}`},
+		},
+	}
+	evaluator := &AWSEvaluator{}
+
+	reached := CloudReachable(edges, []string{start.CanonicalID}, evaluator, &RequestContext{}, 0)
+	if len(reached) != 1 || reached[0] != start.CanonicalID {
+		t.Fatalf("Expected held unchanged with maxHops=0, got %v", reached)
+	}
+
+	_, ok := CloudPlan(edges, []string{start.CanonicalID}, n1.CanonicalID, evaluator, &RequestContext{}, 0)
+	if ok {
+		t.Fatal("Expected CloudPlan to return ok=false with maxHops=0 and target not already held")
+	}
+}
+
+func TestCloudReachable_NonAssumableResourceNeverUnlocksMismatchedEdge(t *testing.T) {
+	user := &CloudIdentity{CanonicalID: "arn:aws:iam::123456789012:user/attacker", Kind: "iam-user"}
+	bucket := &CloudResource{CanonicalID: "arn:aws:s3:::reused-id-bucket", Kind: "s3-bucket"}
+
+	// mismatchedSource deliberately reuses the bucket's CanonicalID as an
+	// *identity* -- a nonsensical construction (buckets cannot act as
+	// principals), simulating a data bug or adversarial edge. Reaching the
+	// bucket must never make this edge traversable.
+	mismatchedSource := &CloudIdentity{CanonicalID: bucket.CanonicalID, Kind: "iam-role"}
+	otherTarget := &CloudResource{CanonicalID: "arn:aws:s3:::other-bucket", Kind: "s3-bucket"}
+
+	edges := []*CloudPermission{
+		{
+			Source:     user,
+			Target:     bucket,
+			Action:     "s3:GetObject",
+			SourceType: "identity-policy",
+			Attributes: map[string]string{
+				"policy_document": `{"Statement":[{"Effect":"Allow","Action":"s3:GetObject","Resource":"arn:aws:s3:::reused-id-bucket/*"}]}`,
+			},
+		},
+		{
+			Source:     mismatchedSource,
+			Target:     otherTarget,
+			Action:     "s3:GetObject",
+			SourceType: "identity-policy",
+			Attributes: map[string]string{
+				"policy_document": `{"Statement":[{"Effect":"Allow","Action":"s3:GetObject","Resource":"arn:aws:s3:::other-bucket/*"}]}`,
+			},
+		},
+	}
+
+	evaluator := &AWSEvaluator{}
+	reached := CloudReachable(edges, []string{user.CanonicalID}, evaluator, &RequestContext{}, 10)
+
+	for _, id := range reached {
+		if id == otherTarget.CanonicalID {
+			t.Fatalf("otherTarget must NOT be reachable -- the bucket's CanonicalID must never be treated as a valid Source just because it was reached as a Target, got reached=%v", reached)
+		}
+	}
+	foundBucket := false
+	for _, id := range reached {
+		if id == bucket.CanonicalID {
+			foundBucket = true
+		}
+	}
+	if !foundBucket {
+		t.Error("Expected the bucket itself to still be reachable (it's a legitimate dead-end target)")
+	}
+}

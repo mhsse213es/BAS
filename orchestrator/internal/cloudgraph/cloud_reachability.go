@@ -133,3 +133,46 @@ func hopStates(hops []*CloudHop) []PathState {
 	}
 	return states
 }
+
+// CloudReachable computes the closure of every CanonicalID reachable from
+// held by repeatedly walking edges whose Source is already a legitimate
+// traversal source and whose evaluation is viable, until a pass adds
+// nothing new (fixpoint) or maxHops passes have run. Mirrors
+// adchain.Reachable's exact shape, substituting the reachedAsSource/
+// reachedAsTarget CanonicalID tracking described in spec amendment point 3
+// for capability equality.
+func CloudReachable(edges []*CloudPermission, held []string, evaluator AuthorizationEvaluator, ctx *RequestContext, maxHops int) []string {
+	reached := append([]string{}, held...)
+	reachedAsTarget := make(map[string]bool, len(reached))
+	reachedAsSource := make(map[string]bool, len(reached))
+	for _, id := range reached {
+		reachedAsTarget[id] = true
+		reachedAsSource[id] = true
+	}
+
+	for pass := 0; pass < maxHops; pass++ {
+		added := false
+		for _, edge := range edges {
+			if !reachedAsSource[edge.Source.CanonicalID] {
+				continue
+			}
+			if reachedAsTarget[edge.Target.CanonicalID] {
+				continue
+			}
+			result := evaluator.EvaluatePermission(edge, ctx)
+			if !isViable(result.State) {
+				continue
+			}
+			reached = append(reached, edge.Target.CanonicalID)
+			reachedAsTarget[edge.Target.CanonicalID] = true
+			if assumableIdentityKinds[edge.Target.Kind] {
+				reachedAsSource[edge.Target.CanonicalID] = true
+			}
+			added = true
+		}
+		if !added {
+			break
+		}
+	}
+	return reached
+}
