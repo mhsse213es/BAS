@@ -3,8 +3,10 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
 
 	"github.com/audspect/bas/internal/auth"
+	"github.com/audspect/bas/internal/cloudrun"
 	"github.com/audspect/bas/internal/db"
 )
 
@@ -59,4 +61,23 @@ func (h *Handler) TriggerCloudPlanRun(w http.ResponseWriter, r *http.Request) {
 		"scenarioId": req.ScenarioID, "provider": req.Account.Provider, "status": string(run.Status),
 	}, "ok")
 	respondStatus(w, run, http.StatusCreated)
+}
+
+// GET /api/cloud-runs — lists cloud runs, most recent first. Any
+// authenticated user may read this, matching ListScenarioRuns' own
+// precedent -- only the trigger endpoint is permission-gated.
+func (h *Handler) ListCloudRuns(w http.ResponseWriter, r *http.Request) {
+	limit := 20
+	if l, err := strconv.Atoi(r.URL.Query().Get("limit")); err == nil && l > 0 && l <= 100 {
+		limit = l
+	}
+	runs, err := db.ListCloudRuns(r.Context(), h.db, limit)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if runs == nil {
+		runs = []*cloudrun.CloudRun{}
+	}
+	respond(w, runs)
 }

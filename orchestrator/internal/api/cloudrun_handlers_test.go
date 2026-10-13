@@ -215,3 +215,83 @@ func TestTriggerCloudPlanRun_SuccessAudits(t *testing.T) {
 		}
 	})
 }
+
+func TestListCloudRuns_RoundTripsATriggeredRun(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret)
+		triggerReq, _ := triggerCloudPlanRunReq(t, pool, validCloudPlanRunBody())
+		triggerRec := callAuthed(h.TriggerCloudPlanRun, triggerReq)
+		if triggerRec.Code != http.StatusCreated {
+			t.Fatalf("setup trigger failed: status = %d, body = %s", triggerRec.Code, triggerRec.Body.String())
+		}
+		var triggered cloudrun.CloudRun
+		if err := json.Unmarshal(triggerRec.Body.Bytes(), &triggered); err != nil {
+			t.Fatalf("decode trigger response: %v", err)
+		}
+
+		listReq := authedRequest(t, http.MethodGet, "/api/cloud-runs", nil, auth.RoleAnalyst, "any-authenticated-user")
+		rec := callAuthed(h.ListCloudRuns, listReq)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+		}
+		var runs []*cloudrun.CloudRun
+		if err := json.Unmarshal(rec.Body.Bytes(), &runs); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		found := false
+		for _, r := range runs {
+			if r.ID == triggered.ID {
+				found = true
+			}
+		}
+		if !found {
+			t.Fatalf("triggered run %s not found in list of %d runs", triggered.ID, len(runs))
+		}
+	})
+}
+
+func TestListCloudRuns_LimitBoundaryValues(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret)
+		// Seed 3 rows so the "honored, small limit" case (limit=1) has
+		// something real to clamp against -- a test that never seeds more
+		// rows than the default can't distinguish "honored" from "ignored".
+		for i := 0; i < 3; i++ {
+			triggerReq, _ := triggerCloudPlanRunReq(t, pool, validCloudPlanRunBody())
+			if rec := callAuthed(h.TriggerCloudPlanRun, triggerReq); rec.Code != http.StatusCreated {
+				t.Fatalf("seed trigger %d failed: status = %d, body = %s", i, rec.Code, rec.Body.String())
+			}
+		}
+
+		cases := []struct {
+			name        string
+			limitParam  string
+			wantMaxRows int // 0 means "don't check row count, only status"
+		}{
+			{"malformed", "not-a-number", 0},
+			{"zero", "0", 0},
+			{"negative", "-1", 0},
+			{"justOverMax", "101", 0},
+			{"exactlyMax", "100", 0},
+			{"validSmall", "1", 1},
+		}
+		for _, c := range cases {
+			t.Run(c.name, func(t *testing.T) {
+				listReq := authedRequest(t, http.MethodGet, "/api/cloud-runs?limit="+c.limitParam, nil, auth.RoleAnalyst, "any-authenticated-user")
+				rec := callAuthed(h.ListCloudRuns, listReq)
+				if rec.Code != http.StatusOK {
+					t.Fatalf("status = %d, body = %s (an invalid limit must silently fall back to the default, never 400)", rec.Code, rec.Body.String())
+				}
+				if c.wantMaxRows > 0 {
+					var runs []*cloudrun.CloudRun
+					if err := json.Unmarshal(rec.Body.Bytes(), &runs); err != nil {
+						t.Fatalf("decode: %v", err)
+					}
+					if len(runs) != c.wantMaxRows {
+						t.Fatalf("rows: got %d want exactly %d (limit=%s must be honored, not ignored)", len(runs), c.wantMaxRows, c.limitParam)
+					}
+				}
+			})
+		}
+	})
+}

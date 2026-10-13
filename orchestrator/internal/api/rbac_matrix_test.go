@@ -53,6 +53,7 @@ var routeMatrix = []routeCase{
 	{http.MethodGet, "/api/content-registry/runs/{runId}/drift", tierAny, ""},
 	{http.MethodGet, "/api/content-registry/runs/{runId}/content", tierAny, ""},
 	{http.MethodGet, "/api/scenarios/runs", tierAny, ""},
+	{http.MethodGet, "/api/cloud-runs", tierAny, ""},
 	{http.MethodGet, "/api/scenarios/runs/{runId}/report", tierAny, ""},
 	{http.MethodGet, "/api/scenarios/runs/{runId}/report.json", tierAny, ""},
 	{http.MethodGet, "/api/scenarios/runs/{runId}/attackflow", tierAny, ""},
