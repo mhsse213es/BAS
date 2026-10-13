@@ -221,6 +221,10 @@ const (
 
 	// TCF Phase 2B: change a source instance's trust state (Admin only).
 	CanManageSourceTrust Permission = "intel:manage-source-trust"
+
+	// TCF Phase 2C: link a custom content version to a canonical threat
+	// (Admin only).
+	CanLinkContentThreat Permission = "content:link-threat"
 )
 
 // rolePermissions maps each role to the permissions it holds. Viewer is
@@ -280,6 +284,7 @@ var rolePermissions = map[Role]map[Permission]bool{
 		CanManageBackups:        true,
 		CanResolveActorIdentity: true,
 		CanManageSourceTrust:    true,
+		CanLinkContentThreat:    true,
 	},
 	RoleAnalyst: {
 		CanVerify:            true,
@@ -366,6 +371,7 @@ func Permissions(role Role) []Permission {
 		CanManageBackups,
 		CanResolveActorIdentity,
 		CanManageSourceTrust,
+		CanLinkContentThreat,
 		CanViewContentArtifact, CanTransitionContent, CanViewContentMigrationReport,
 	} {
 		if set[p] {
