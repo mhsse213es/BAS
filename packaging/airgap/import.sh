@@ -2,14 +2,23 @@
 # BAS Platform — Air-Gap Bundle Importer
 #
 # Run on the AIR-GAPPED target server (no internet required).
-# Loads Docker images, then launches the interactive setup wizard.
+# Verifies the bundle (GPG signature, manifest, Compose version), THEN
+# loads Docker images, then launches the setup wizard. No step after
+# verification can run if any check before it failed -- see
+# verify-common.sh for the shared checks with verify.sh.
 #
 # Usage:
 #   sudo bash import.sh <path/to/bas-airgap-<version>.tar.gz>
 #
 # Optional flags (passed through to setup.sh):
-#   --non-interactive   Run setup.sh with default values (no whiptail)
+#   --no-wizard   Run setup.sh with default/config values (no whiptail)
+#   --resume      Resume an install that was previously interrupted
+#   --reinstall   Reinstall over a previously completed install
 set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC1091
+source "${SCRIPT_DIR}/verify-common.sh"
 
 if [ -t 1 ]; then
   GREEN='\033[0;32m'; YELLOW='\033[1;33m'; RED='\033[0;31m'; NC='\033[0m'
@@ -17,10 +26,8 @@ else
   GREEN=''; YELLOW=''; RED=''; NC=''
 fi
 log()  { echo -e "${GREEN}[+]${NC} $*"; }
-warn() { echo -e "${YELLOW}[!]${NC} $*"; }
 err()  { echo -e "${RED}[✗]${NC} $*" >&2; }
 
-# ── Root check ─────────────────────────────────────────────────────────────────
 if [[ $EUID -ne 0 ]]; then
   err "This importer must be run as root."
   echo "  Run: sudo bash $0 <bundle>"
@@ -29,7 +36,7 @@ fi
 
 TARBALL="${1:-}"
 if [[ -z "$TARBALL" ]]; then
-  err "Usage: sudo bash import.sh <bas-airgap-<version>.tar.gz> [--non-interactive]"
+  err "Usage: sudo bash import.sh <bas-airgap-<version>.tar.gz> [--no-wizard]"
   exit 1
 fi
 if [[ ! -f "$TARBALL" ]]; then
@@ -37,14 +44,11 @@ if [[ ! -f "$TARBALL" ]]; then
   exit 1
 fi
 
-# Collect any extra flags to pass to setup.sh (e.g. --non-interactive)
 shift
 SETUP_EXTRA_ARGS=("$@")
 
-# ── Verify Docker ──────────────────────────────────────────────────────────────
 if ! command -v docker &>/dev/null; then
   err "Docker is not installed on this server."
-  echo "  Install Docker: https://docs.docker.com/engine/install/ubuntu/"
   exit 1
 fi
 if ! docker info &>/dev/null; then
@@ -52,30 +56,18 @@ if ! docker info &>/dev/null; then
   exit 1
 fi
 
-# ── Signature verification (if .asc present) ──────────────────────────────────
-SIGFILE="${TARBALL}.asc"
-VERIFY_SIG_SCRIPT="$(dirname "$0")/../signing/verify-sig.sh"
-# Also check same-dir placement (when distributed as part of a bundle-tools package)
-[[ ! -f "$VERIFY_SIG_SCRIPT" ]] && VERIFY_SIG_SCRIPT="$(dirname "$0")/verify-sig.sh"
-
-if [[ -f "$SIGFILE" ]]; then
-  if [[ -f "$VERIFY_SIG_SCRIPT" ]]; then
-    log "GPG signature found — verifying before import..."
-    if ! bash "$VERIFY_SIG_SCRIPT" "$TARBALL"; then
-      err "Signature verification failed. Import aborted."
-      exit 1
-    fi
-  else
-    warn ".asc signature file found but verify-sig.sh not available — skipping GPG check."
-  fi
-else
-  warn "No GPG signature (.asc) found — proceeding without signature verification."
-  warn "For production deployments, always verify signatures. See packaging/signing/."
+# ── 1. GPG signature (mandatory, before anything is extracted for use) ─────────
+PUBKEY="${BAS_VERIFY_PUBKEY:-${SCRIPT_DIR}/pubkey.asc}"
+if ! verify_gpg_signature "$TARBALL" "${TARBALL}.asc" "$PUBKEY"; then
+  err "GPG signature verification FAILED. Import aborted. Zero images loaded, zero state changed."
+  exit 1
 fi
+log "GPG signature verified."
 
-# ── Extract bundle ─────────────────────────────────────────────────────────────
+# ── 2. Extract into a controlled staging directory ──────────────────────────────
 WORK_DIR=$(mktemp -d)
 trap 'rm -rf "$WORK_DIR"' EXIT
+chmod 700 "$WORK_DIR"
 
 log "Extracting bundle..."
 tar -xzf "$TARBALL" -C "$WORK_DIR"
@@ -89,29 +81,24 @@ fi
 VERSION=$(cat "${BUNDLE_DIR}/VERSION" 2>/dev/null || echo "unknown")
 log "Bundle version: ${VERSION}"
 
-# ── Verify manifest (quick check) ─────────────────────────────────────────────
-MANIFEST="${BUNDLE_DIR}/MANIFEST.sha256"
-if [[ -f "$MANIFEST" ]]; then
-  log "Verifying bundle integrity..."
-  FAIL=0
-  while IFS= read -r line; do
-    hash=$(awk '{print $1}' <<<"$line")
-    rel=$(awk '{print $2}' <<<"$line"); rel="${rel#\*}"; rel="${rel#./}"
-    abs="${BUNDLE_DIR}/${rel}"
-    [[ ! -f "$abs" ]] && { err "Missing: $rel"; ((FAIL++)); continue; }
-    actual=$(sha256sum "$abs" | cut -d' ' -f1)
-    [[ "$actual" != "$hash" ]] && { err "Corrupt: $rel"; ((FAIL++)); }
-  done < "$MANIFEST"
-  if [[ $FAIL -gt 0 ]]; then
-    err "${FAIL} file(s) failed verification. Abort."
-    exit 1
-  fi
-  log "Manifest OK."
-else
-  warn "No MANIFEST.sha256 found — skipping integrity check."
+# ── 3. Manifest check against the files as extracted right now ─────────────────
+# This is the TOCTOU guard: everything from here on reads only from
+# $BUNDLE_DIR (resolved once above), never by re-opening $TARBALL or any
+# other mutable path.
+if ! verify_manifest "$BUNDLE_DIR"; then
+  err "Manifest verification FAILED. Import aborted. Zero images loaded, zero state changed."
+  exit 1
 fi
+log "Manifest OK."
 
-# ── Load Docker images ─────────────────────────────────────────────────────────
+# ── 4. Compose version floor ─────────────────────────────────────────────────────
+if ! check_compose_version_floor "2.8.0"; then
+  err "Docker Compose does not meet the required floor (2.8.0). Import aborted. Zero images loaded, zero state changed."
+  exit 1
+fi
+log "Docker Compose version OK."
+
+# ── 5. Load Docker images -- only reached after every check above passed ───────
 log "Loading Docker images..."
 
 ORCHESTRATOR_IMG="${BUNDLE_DIR}/images/bas-orchestrator-${VERSION}.tar.gz"
@@ -136,24 +123,17 @@ fi
 log "Docker images loaded:"
 docker images | grep -E "(bas-orchestrator|postgres)" | awk '{printf "  %-40s %s\n", $1":"$2, $3}'
 
-# ── Tag orchestrator image as expected by docker-compose.yml ──────────────────
-# docker-compose.yml uses bas-orchestrator:${BAS_VERSION:-latest}
-# Ensure the versioned image is also tagged :latest for default installs
 if ! docker image inspect "bas-orchestrator:latest" &>/dev/null; then
   log "  Tagging bas-orchestrator:${VERSION} as bas-orchestrator:latest..."
   docker tag "bas-orchestrator:${VERSION}" "bas-orchestrator:latest"
 fi
 
-# ── Run setup wizard ───────────────────────────────────────────────────────────
-SETUP_SCRIPT="${BUNDLE_DIR}/compose/setup.sh"
+# ── 6. Run setup wizard (flat layout -- setup.sh is at the bundle root) ────────
+SETUP_SCRIPT="${BUNDLE_DIR}/setup.sh"
 if [[ ! -f "$SETUP_SCRIPT" ]]; then
   err "setup.sh not found inside bundle."
   exit 1
 fi
-chmod +x "$SETUP_SCRIPT"
 
-log "Launching BAS setup wizard (offline mode)..."
-echo ""
-
-# Pass --offline so setup.sh skips docker pull
+log "Launching setup wizard..."
 bash "$SETUP_SCRIPT" --offline "${SETUP_EXTRA_ARGS[@]}"
