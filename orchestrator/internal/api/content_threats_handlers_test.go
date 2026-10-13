@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/audspect/bas/internal/auth"
+	"github.com/audspect/bas/internal/tcv"
 	"github.com/audspect/bas/internal/ws"
 )
 
@@ -86,6 +87,44 @@ func TestLinkContentThreat_UnknownVersionIs404(t *testing.T) {
 		h.LinkContentThreat(rec, req)
 		if rec.Code != http.StatusNotFound {
 			t.Fatalf("code=%d, want 404", rec.Code)
+		}
+	})
+}
+
+func TestGetThreatTCV_NoClocksStartedReturnsNoClockForAllFour(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		var threatID string
+		if err := pool.QueryRow(ctx, `INSERT INTO threat_actor_profiles (name, aliases) VALUES ('APT-tcv-handler', '{}') RETURNING id`).Scan(&threatID); err != nil {
+			t.Fatal(err)
+		}
+		if err := pool.QueryRow(ctx, `INSERT INTO threats (id, subject_type, subject_id, actor_id, title)
+			VALUES ('thr-' || gen_random_uuid()::text, 'actor', $1, $1, 'APT-tcv-handler') RETURNING id`, threatID).Scan(&threatID); err != nil {
+			t.Fatal(err)
+		}
+
+		h := New(pool, ws.NewHub(), nil, "")
+		req := httptest.NewRequest(http.MethodGet, "/x", nil)
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("id", threatID)
+		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+		rec := httptest.NewRecorder()
+		h.GetThreatTCV(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("code=%d body=%s", rec.Code, rec.Body.String())
+		}
+		var m tcv.ThreatTCV
+		if err := json.Unmarshal(rec.Body.Bytes(), &m); err != nil {
+			t.Fatal(err)
+		}
+		for name, metric := range map[string]tcv.Metric{
+			"threatToEmulation": m.ThreatToEmulation, "threatToGeneration": m.ThreatToGeneration,
+			"intelligenceToEmulation": m.IntelligenceToEmulation, "intelligenceToGeneration": m.IntelligenceToGeneration,
+		} {
+			if metric.State != tcv.StateNoClock {
+				t.Errorf("%s.State = %q, want no_clock", name, metric.State)
+			}
 		}
 	})
 }

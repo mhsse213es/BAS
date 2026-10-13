@@ -8,6 +8,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/audspect/bas/internal/contentregistry"
+	"github.com/audspect/bas/internal/tcv"
 )
 
 // LinkContentThreat -- POST /api/content/{contentId}/versions/{n}/threats
@@ -46,4 +47,20 @@ func (h *Handler) LinkContentThreat(w http.ResponseWriter, r *http.Request) {
 	h.auditLog(r, "content_registry.link_threat", contentID, map[string]any{
 		"version": version, "threatId": req.ThreatID, "reason": req.Reason}, "ok")
 	respond(w, map[string]any{"contentId": contentID, "version": version, "threatId": req.ThreatID})
+}
+
+// GetThreatTCV -- GET /api/intel/threats/{id}/tcv. Read-only reporting,
+// same access level as the sibling threat-intel summary endpoints (spec
+// §10.4).
+func (h *Handler) GetThreatTCV(w http.ResponseWriter, r *http.Request) {
+	if h.db == nil {
+		jsonError(w, "database unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	m, err := tcv.NewStore(h.db).Metrics(r.Context(), chi.URLParam(r, "id"))
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	respond(w, m)
 }

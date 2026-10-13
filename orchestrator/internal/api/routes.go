@@ -285,6 +285,7 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		// Threat Intel Summary -- fleet-wide posture combining the above
 		// per-actor scoring with KEV exposure, for dashboard consumption.
 		r.Get("/api/analytics/threat-intel-summary", h.GetThreatIntelSummary)
+		r.Get("/api/intel/threats/{id}/tcv", h.GetThreatTCV)
 
 		// Endpoint Posture -- fleet-wide agent health + derived EPP isolation
 		// state, for dashboard consumption. Last of the 7 analytics categories.
