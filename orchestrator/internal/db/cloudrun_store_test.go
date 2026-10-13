@@ -211,3 +211,33 @@ func TestUpdateCloudRunStatus_RunningLeavesCompletedAtNull(t *testing.T) {
 		}
 	})
 }
+
+func TestListCloudRuns_OrderingAndLimit(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		base := time.Now().UTC().Add(-time.Hour)
+		ids := []string{"list-1", "list-2", "list-3", "list-4", "list-5"}
+		for i, id := range ids {
+			run := &cloudrun.CloudRun{
+				ID: id, ScenarioID: "x", Provider: "aws", Status: cloudrun.StatusCompleted,
+				StartedAt: base.Add(time.Duration(i) * time.Minute),
+			}
+			if err := db.InsertCloudRun(ctx, pool, run); err != nil {
+				t.Fatalf("insert %s: %v", id, err)
+			}
+		}
+		got, err := db.ListCloudRuns(ctx, pool, 3)
+		if err != nil {
+			t.Fatalf("list: %v", err)
+		}
+		if len(got) != 3 {
+			t.Fatalf("len: got %d want 3", len(got))
+		}
+		want := []string{"list-5", "list-4", "list-3"}
+		for i, w := range want {
+			if got[i].ID != w {
+				t.Errorf("position %d: got %s want %s", i, got[i].ID, w)
+			}
+		}
+	})
+}

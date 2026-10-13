@@ -105,3 +105,29 @@ func UpdateCloudRunStatus(ctx context.Context, pool *pgxpool.Pool, id string, st
 	}
 	return nil
 }
+
+// ListCloudRuns returns up to limit cloud_runs rows, newest started_at
+// first. No filter parameters -- speculative until a real consumer (a
+// later sub-project's API endpoint) reveals what filtering is actually
+// needed.
+func ListCloudRuns(ctx context.Context, pool *pgxpool.Pool, limit int) ([]*cloudrun.CloudRun, error) {
+	rows, err := pool.Query(ctx, `
+		SELECT id, scenario_id, provider, account_id, tenant_id, region, status, result, error, initiated_by, started_at, completed_at
+		FROM cloud_runs ORDER BY started_at DESC LIMIT $1`, limit)
+	if err != nil {
+		return nil, fmt.Errorf("cloud_runs: list: %w", err)
+	}
+	defer rows.Close()
+	var runs []*cloudrun.CloudRun
+	for rows.Next() {
+		run, err := scanCloudRun(rows)
+		if err != nil {
+			return nil, fmt.Errorf("cloud_runs: list scan: %w", err)
+		}
+		runs = append(runs, run)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("cloud_runs: list rows: %w", err)
+	}
+	return runs, nil
+}
