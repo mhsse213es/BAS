@@ -295,3 +295,44 @@ func TestListCloudRuns_LimitBoundaryValues(t *testing.T) {
 		}
 	})
 }
+
+func TestGetCloudRun_RoundTripsATriggeredRun(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret)
+		triggerReq, _ := triggerCloudPlanRunReq(t, pool, validCloudPlanRunBody())
+		triggerRec := callAuthed(h.TriggerCloudPlanRun, triggerReq)
+		if triggerRec.Code != http.StatusCreated {
+			t.Fatalf("setup trigger failed: status = %d, body = %s", triggerRec.Code, triggerRec.Body.String())
+		}
+		var triggered cloudrun.CloudRun
+		if err := json.Unmarshal(triggerRec.Body.Bytes(), &triggered); err != nil {
+			t.Fatalf("decode trigger response: %v", err)
+		}
+
+		getReq := authedRequest(t, http.MethodGet, "/api/cloud-runs/"+triggered.ID, nil, auth.RoleAnalyst, "any-authenticated-user")
+		getReq = withURLParam(getReq, "id", triggered.ID)
+		rec := callAuthed(h.GetCloudRun, getReq)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+		}
+		var run cloudrun.CloudRun
+		if err := json.Unmarshal(rec.Body.Bytes(), &run); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		if run.ID != triggered.ID {
+			t.Fatalf("ID: got %q want %q", run.ID, triggered.ID)
+		}
+	})
+}
+
+func TestGetCloudRun_NonexistentIDReturns404(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret)
+		getReq := authedRequest(t, http.MethodGet, "/api/cloud-runs/nonexistent-id", nil, auth.RoleAnalyst, "any-authenticated-user")
+		getReq = withURLParam(getReq, "id", "nonexistent-id")
+		rec := callAuthed(h.GetCloudRun, getReq)
+		if rec.Code != http.StatusNotFound {
+			t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+		}
+	})
+}

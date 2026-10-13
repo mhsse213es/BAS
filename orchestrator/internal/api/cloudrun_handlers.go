@@ -2,8 +2,12 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strconv"
+
+	"github.com/go-chi/chi/v5"
+	"github.com/jackc/pgx/v5"
 
 	"github.com/audspect/bas/internal/auth"
 	"github.com/audspect/bas/internal/cloudrun"
@@ -80,4 +84,19 @@ func (h *Handler) ListCloudRuns(w http.ResponseWriter, r *http.Request) {
 		runs = []*cloudrun.CloudRun{}
 	}
 	respond(w, runs)
+}
+
+// GET /api/cloud-runs/{id} — same baseline-only gate as ListCloudRuns.
+func (h *Handler) GetCloudRun(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	run, err := db.GetCloudRun(r.Context(), h.db, id)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			jsonError(w, "cloud run not found", http.StatusNotFound)
+			return
+		}
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	respond(w, run)
 }
