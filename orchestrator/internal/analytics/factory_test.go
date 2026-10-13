@@ -187,6 +187,43 @@ func seedContentVersionWithLifecycle(t *testing.T, pool *pgxpool.Pool, contentID
 	return vid
 }
 
+func TestThreatsProcessedTrend_BelowMinimumReturnsEmpty(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		seedThreatWithActorAt(t, pool, "t-trend-1", "Actor Trend 1", time.Now())
+
+		got, err := threatsProcessedTrend(context.Background(), pool, time.Now().Add(-24*time.Hour))
+		if err != nil {
+			t.Fatalf("threatsProcessedTrend: %v", err)
+		}
+		if len(got) != 0 {
+			t.Fatalf("got %d points, want 0 (1 day of data is below minTrendPoints=%d)", len(got), minTrendPoints)
+		}
+	})
+}
+
+func TestThreatsProcessedTrend_MeetsMinimumReturnsPoints(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		offsets := []time.Duration{-3 * 24 * time.Hour, -2 * 24 * time.Hour, -1 * 24 * time.Hour}
+		for i, offset := range offsets {
+			seedThreatWithActorAt(t, pool, "t-trend-pts-"+string(rune('a'+i)), "Actor Trend Pts "+string(rune('a'+i)), time.Now().Add(offset))
+		}
+
+		got, err := threatsProcessedTrend(context.Background(), pool, time.Now().Add(-7*24*time.Hour))
+		if err != nil {
+			t.Fatalf("threatsProcessedTrend: %v", err)
+		}
+		if len(got) < minTrendPoints {
+			t.Fatalf("got %d points, want >= %d", len(got), minTrendPoints)
+		}
+	})
+}
+
 func TestCoreCounts_ThreatsAndPublishedContent(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping container-backed test in -short mode")
@@ -251,15 +288,22 @@ func TestCoreCounts_SourceToTechniqueCoverage_Measured(t *testing.T) {
 // and actor_id is a hard FK into threat_actor_profiles(id).
 func seedThreatWithActor(t *testing.T, pool *pgxpool.Pool, threatID, actorName string) {
 	t.Helper()
+	seedThreatWithActorAt(t, pool, threatID, actorName, time.Now())
+}
+
+// seedThreatWithActorAt is seedThreatWithActor with an explicit created_at,
+// for trend tests that need threats spread across specific days.
+func seedThreatWithActorAt(t *testing.T, pool *pgxpool.Pool, threatID, actorName string, createdAt time.Time) {
+	t.Helper()
 	ctx := context.Background()
 	var actorID string
 	if err := pool.QueryRow(ctx, `INSERT INTO threat_actor_profiles (name) VALUES ($1) RETURNING id`, actorName).Scan(&actorID); err != nil {
-		t.Fatalf("seedThreatWithActor: insert actor: %v", err)
+		t.Fatalf("seedThreatWithActorAt: insert actor: %v", err)
 	}
 	if _, err := pool.Exec(ctx, `
-		INSERT INTO threats (id, subject_type, subject_id, actor_id, title)
-		VALUES ($1, 'actor', $2, $2, $3)`, threatID, actorID, actorName); err != nil {
-		t.Fatalf("seedThreatWithActor: insert threat: %v", err)
+		INSERT INTO threats (id, subject_type, subject_id, actor_id, title, created_at)
+		VALUES ($1, 'actor', $2, $2, $3, $4)`, threatID, actorID, actorName, createdAt); err != nil {
+		t.Fatalf("seedThreatWithActorAt: insert threat: %v", err)
 	}
 }
 

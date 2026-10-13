@@ -238,3 +238,77 @@ func dataQuality(ctx context.Context, pool *pgxpool.Pool, staleAfter time.Durati
 
 	return DataQuality{StaleSources: staleSources, StaleValidations: staleValidations}, nil
 }
+
+// minTrendPoints is the smallest number of real data points the UI will
+// draw as a trend line. Below this, a line would misleadingly imply more
+// history than exists -- the UI shows an empty state instead (spec).
+const minTrendPoints = 3
+
+type TrendPoint struct {
+	Day   time.Time `json:"day"`
+	Value float64   `json:"value"`
+}
+
+type Trends struct {
+	ThreatsProcessedByDay []TrendPoint `json:"threatsProcessedByDay"`
+	TCVByDay              []TrendPoint `json:"tcvByDay"`
+}
+
+func threatsProcessedTrend(ctx context.Context, pool *pgxpool.Pool, since time.Time) ([]TrendPoint, error) {
+	rows, err := pool.Query(ctx, `
+		SELECT date_trunc('day', created_at), count(*)
+		FROM threats WHERE created_at >= $1
+		GROUP BY 1 ORDER BY 1`, since)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var points []TrendPoint
+	for rows.Next() {
+		var p TrendPoint
+		var n int
+		if err := rows.Scan(&p.Day, &n); err != nil {
+			return nil, err
+		}
+		p.Value = float64(n)
+		points = append(points, p)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if len(points) < minTrendPoints {
+		return nil, nil
+	}
+	return points, nil
+}
+
+// tcvTrend averages threat-to-emulation TCV (seconds) by the day coverage
+// first became executable, scoped to the same ClockThreat/RelationshipEmulates
+// combination as tcv.AggregateMetrics.
+func tcvTrend(ctx context.Context, pool *pgxpool.Pool, since time.Time) ([]TrendPoint, error) {
+	rows, err := pool.Query(ctx, `
+		SELECT date_trunc('day', f.first_executable_at), avg(EXTRACT(EPOCH FROM (f.first_executable_at - s.started_at)))
+		FROM threat_clock_starts s
+		JOIN threat_coverage_firsts f ON f.threat_id = s.threat_id AND f.relationship_kind = 'emulates'
+		WHERE s.clock = 'threat' AND f.first_executable_at >= s.started_at AND f.first_executable_at >= $1
+		GROUP BY 1 ORDER BY 1`, since)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var points []TrendPoint
+	for rows.Next() {
+		var p TrendPoint
+		if err := rows.Scan(&p.Day, &p.Value); err != nil {
+			return nil, err
+		}
+		points = append(points, p)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if len(points) < minTrendPoints {
+		return nil, nil
+	}
+	return points, nil
+}
