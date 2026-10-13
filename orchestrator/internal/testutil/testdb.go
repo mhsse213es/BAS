@@ -123,6 +123,11 @@ func newTestDB(ctx context.Context) (*TestDB, error) {
 		_ = container.Terminate(context.Background())
 		return nil, fmt.Errorf("testutil: EnsureThreatIdentitySchema: %w", err)
 	}
+	if err := db.EnsureCloudRunSchema(ctx, pool); err != nil {
+		pool.Close()
+		_ = container.Terminate(context.Background())
+		return nil, fmt.Errorf("testutil: EnsureCloudRunSchema: %w", err)
+	}
 
 	return &TestDB{
 		Pool:      pool,

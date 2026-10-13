@@ -283,6 +283,9 @@ func main() {
 	if err := db.EnsureThreatIdentitySchema(context.Background(), adminPool); err != nil {
 		log.Fatalf("[FATAL] threat identity schema: %v", err)
 	}
+	if err := db.EnsureCloudRunSchema(context.Background(), adminPool); err != nil {
+		log.Fatalf("[FATAL] cloud run schema: %v", err)
+	}
 	log.Println("[+] Schema verified")
 
 	// ── bas_app provisioning ─────────────────────────────────────────────
