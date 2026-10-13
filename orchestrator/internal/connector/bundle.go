@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/audspect/bas/internal/evidence"
 )
 
 // BundleFileName is the fixed name of the signed threat-intel bundle inside TI_BUNDLE_DIR.
@@ -27,6 +29,8 @@ type BundleSource struct {
 	verify   func(path string) error
 	version  string
 	lastStat SourceStat
+
+	lastCompleteness evidence.SyncReport
 }
 
 // NewBundleSource creates a BundleSource reading <dir>/ti-bundle.json. verify may
@@ -71,8 +75,12 @@ func (b *BundleSource) Fetch() ([]ThreatActor, error) {
 	}
 	b.version = bundle.Version
 	b.lastStat = SourceStat{Name: "bundle", RawCount: len(bundle.Actors), ActorCount: len(bundle.Actors), FetchedAt: time.Now()}
+	b.lastCompleteness = evidence.SyncReport{Completeness: evidence.Complete}
 	return bundle.Actors, nil
 }
 
 // Stats implements StatsSource.
 func (b *BundleSource) Stats() SourceStat { return b.lastStat }
+
+// Completeness implements CompletenessSource.
+func (b *BundleSource) Completeness() evidence.SyncReport { return b.lastCompleteness }

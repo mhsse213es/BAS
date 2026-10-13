@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/audspect/bas/internal/evidence"
 	"github.com/audspect/bas/internal/reporting/attackdata"
 )
 
@@ -30,6 +31,8 @@ type OTXSource struct {
 	httpClient *http.Client
 	baseURL    string // overridden by tests; otxAPIBaseURL in production
 	lastStat   SourceStat
+
+	lastCompleteness evidence.SyncReport
 }
 
 const otxAPIBaseURL = "https://otx.alienvault.com/api/v1"
@@ -87,6 +90,7 @@ func (c *OTXSource) FetchActivity() ([]ActivitySignal, error) {
 
 	accByActor := make(map[string]*otxActivityAccumulator)
 	var totalFetched int
+	var lastPageSize int
 
 	for page := 1; page <= otxMaxPages; page++ {
 		pulses, err := c.fetchPulsesPage(page)
@@ -97,9 +101,12 @@ func (c *OTXSource) FetchActivity() ([]ActivitySignal, error) {
 			}
 			out := otxSignalsFromMap(accByActor)
 			c.lastStat = SourceStat{Name: "otx", RawCount: totalFetched, ActorCount: len(out), Error: err.Error(), FetchedAt: time.Now()}
+			c.lastCompleteness = evidence.SyncReport{Completeness: evidence.Partial,
+				Diagnostic: fmt.Sprintf("page %d fetch failed after %d page(s) succeeded", page, page-1)}
 			return out, fmt.Errorf("otx fetch page %d: %w", page, err)
 		}
 
+		lastPageSize = len(pulses)
 		totalFetched += len(pulses)
 		for _, p := range pulses {
 			if strings.TrimSpace(p.Adversary) == "" {
@@ -135,11 +142,20 @@ func (c *OTXSource) FetchActivity() ([]ActivitySignal, error) {
 
 	out := otxSignalsFromMap(accByActor)
 	c.lastStat = SourceStat{Name: "otx", RawCount: totalFetched, ActorCount: len(out), FetchedAt: time.Now()}
+	if lastPageSize == otxPageLimit {
+		c.lastCompleteness = evidence.SyncReport{Completeness: evidence.Truncated,
+			Diagnostic: fmt.Sprintf("hit the %d-page cap", otxMaxPages)}
+	} else {
+		c.lastCompleteness = evidence.SyncReport{Completeness: evidence.Complete}
+	}
 	return out, nil
 }
 
 // Stats implements StatsSource.
 func (c *OTXSource) Stats() SourceStat { return c.lastStat }
+
+// Completeness implements CompletenessSource.
+func (c *OTXSource) Completeness() evidence.SyncReport { return c.lastCompleteness }
 
 func normalizeAdversary(s string) string {
 	return strings.ToUpper(strings.TrimSpace(s))
