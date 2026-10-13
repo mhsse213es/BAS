@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/audspect/bas/internal/evidence"
 	"github.com/audspect/bas/internal/intelligence"
 )
 
@@ -23,6 +24,9 @@ type MISPClient struct {
 	lastCampaigns []intelligence.Campaign
 	lastMalware   []intelligence.Malware
 	lastTools     []intelligence.Tool
+
+	lastCompleteness evidence.SyncReport
+	lastRawClaims    []evidence.RawClaim
 }
 
 // NewMISPClient creates a MISP client. TLS verification is on by default:
@@ -64,6 +68,8 @@ func (c *MISPClient) Fetch() ([]ThreatActor, error) {
 	var campaigns []intelligence.Campaign
 	var malware []intelligence.Malware
 	var tools []intelligence.Tool
+	c.lastRawClaims = nil
+	detailFetchFailures := 0
 
 	for _, ev := range events {
 		hasMitre := false
@@ -80,10 +86,21 @@ func (c *MISPClient) Fetch() ([]ThreatActor, error) {
 		detail, err := c.getEvent(ev.ID)
 		if err != nil {
 			log.Printf("[connector/misp] fetch event %s: %v", ev.ID, err)
+			detailFetchFailures++
 			continue
 		}
 
 		actor := c.extractActor(ev, detail)
+		if actor != nil {
+			observedAt, _ := parseTimestamp(ev.Timestamp)
+			for _, tech := range actor.Techniques {
+				c.lastRawClaims = append(c.lastRawClaims, evidence.RawClaim{
+					ActorName: actor.Name, TechniqueID: tech.ID, ExternalID: ev.ID,
+					ObservedAt: observedAt, RawConfidence: actor.Confidence,
+					Raw: map[string]any{"event_id": ev.ID, "actor_name": actor.Name, "technique_id": tech.ID},
+				})
+			}
+		}
 		if actor == nil || len(actor.Techniques) < 2 {
 			continue
 		}
@@ -117,11 +134,24 @@ func (c *MISPClient) Fetch() ([]ThreatActor, error) {
 	c.lastCampaigns = campaigns
 	c.lastMalware = malware
 	c.lastTools = tools
+	completeness := evidence.Complete
+	diagnostic := ""
+	if detailFetchFailures > 0 {
+		completeness = evidence.Partial
+		diagnostic = fmt.Sprintf("%d event detail fetch(es) failed", detailFetchFailures)
+	}
+	c.lastCompleteness = evidence.SyncReport{Completeness: completeness, Diagnostic: diagnostic}
 	return out, nil
 }
 
 // Stats implements StatsSource.
 func (c *MISPClient) Stats() SourceStat { return c.lastStat }
+
+// Completeness implements CompletenessSource.
+func (c *MISPClient) Completeness() evidence.SyncReport { return c.lastCompleteness }
+
+// RawClaims implements EvidenceSource.
+func (c *MISPClient) RawClaims() []evidence.RawClaim { return c.lastRawClaims }
 
 // ── MISP API types ────────────────────────────────────────────────────────────
 

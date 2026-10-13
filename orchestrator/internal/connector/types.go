@@ -2,7 +2,11 @@
 // auto-generates BAS scenario YAMLs from them.
 package connector
 
-import "time"
+import (
+	"time"
+
+	"github.com/audspect/bas/internal/evidence"
+)
 
 // ThreatActor is a normalised threat-actor profile extracted from MISP, OpenCTI,
 // or an air-gapped bundle. json tags are explicit so the bundle file format is
@@ -57,6 +61,21 @@ type SourceStat struct {
 // implement it are simply skipped, not an error.
 type StatsSource interface {
 	Stats() SourceStat
+}
+
+// CompletenessSource is implemented by sources that can report their most
+// recent Fetch() call's completeness per the source's own semantics (spec
+// §5.2), read by Scheduler.sync() the same way StatsSource.Stats() is.
+type CompletenessSource interface {
+	Completeness() evidence.SyncReport
+}
+
+// EvidenceSource is implemented by sources that capture raw per-record
+// claims as a side effect of Fetch(), before any actor-merge or
+// technique-count filter (spec §6.2) -- every (actor, technique) assertion
+// the source saw, even one Fetch()'s own filtered return value drops.
+type EvidenceSource interface {
+	RawClaims() []evidence.RawClaim
 }
 
 // ConnectorStatus is the live state of the connector — returned by the API.
