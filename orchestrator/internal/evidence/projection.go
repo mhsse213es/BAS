@@ -89,10 +89,24 @@ func recomputeThreatTechniques(ctx context.Context, q Querier, threatID string) 
 		if isClaim && !trustedNow {
 			st.trustRevoked = true
 		}
-		if isClaim && r.trustStateThen == string(TrustTrusted) {
-			if st.firstSeenAt == nil || r.observedAt.Before(*st.firstSeenAt) {
-				st.firstSeenAt = &r.observedAt
-			}
+	}
+
+	// first_seen_at looks at every claim ever recorded for the technique,
+	// not each instance's latest row -- within a single batch (e.g. two
+	// MISP events for the same actor+technique at different observed_at,
+	// written before any recompute runs between them), the
+	// latest-per-instance dedup above would otherwise discard an earlier,
+	// still-valid first observation.
+	for _, r := range all {
+		if r.kind != string(ClaimAsserted) || r.trustStateThen != string(TrustTrusted) {
+			continue
+		}
+		st := states[r.techniqueID]
+		if st == nil {
+			continue
+		}
+		if st.firstSeenAt == nil || r.observedAt.Before(*st.firstSeenAt) {
+			st.firstSeenAt = &r.observedAt
 		}
 	}
 

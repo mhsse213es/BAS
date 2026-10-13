@@ -185,3 +185,40 @@ func TestRecomputeThreatTechniques_FirstSeenNeverBackdatedByLaterTrust(t *testin
 		t.Fatalf("first_seen_at = %v, must not be backdated to the untrusted claim at %v", firstSeenAt, untrustedTime)
 	}
 }
+
+// TestRecomputeThreatTechniques_FirstSeenWithinSingleBatchUsesEarliestRow
+// pins the 2B final review's first Important finding: within ONE recompute
+// call, the same (instance, technique) pair can have two trusted claim rows
+// at different observed_at (e.g. two MISP events for the same actor in one
+// sync, written before any recompute runs between them). first_seen_at must
+// reflect the earliest of them, not collapse to whichever is "latest" for
+// current-status purposes.
+func TestRecomputeThreatTechniques_FirstSeenWithinSingleBatchUsesEarliestRow(t *testing.T) {
+	ctx := context.Background()
+	store, syncID, instanceID, tvID, mkObs := claimsFixture(t, "misp-proj-batch-test", TrustTrusted, Complete)
+	threatID := seedThreat(t, sharedDB.Pool, "APT-proj-single-batch")
+	earlier := time.Now().Add(-48 * time.Hour)
+	later := time.Now()
+
+	if err := store.RecordClaims(ctx, []Claim{
+		{ObservationID: mkObs(threatID, "hash-batch-early"), SyncID: syncID, InstanceID: instanceID, ThreatID: threatID,
+			TechniqueID: "T1059", Kind: ClaimAsserted, Source: "misp", TrustVersionID: tvID, ObservedAt: earlier, RecordHash: "hash-batch-early"},
+		{ObservationID: mkObs(threatID, "hash-batch-late"), SyncID: syncID, InstanceID: instanceID, ThreatID: threatID,
+			TechniqueID: "T1059", Kind: ClaimAsserted, Source: "misp", TrustVersionID: tvID, ObservedAt: later, RecordHash: "hash-batch-late"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.RecomputeThreatTechniques(ctx, threatID); err != nil {
+		t.Fatal(err)
+	}
+
+	var firstSeenAt time.Time
+	if err := sharedDB.Pool.QueryRow(ctx,
+		`SELECT first_seen_at FROM threat_techniques WHERE threat_id = $1 AND technique_id = 'T1059'`,
+		threatID).Scan(&firstSeenAt); err != nil {
+		t.Fatal(err)
+	}
+	if diff := firstSeenAt.Sub(earlier); diff < -time.Second || diff > time.Second {
+		t.Fatalf("first_seen_at = %v, want the earlier batch row %v (both rows arrived before any recompute ran between them)", firstSeenAt, earlier)
+	}
+}

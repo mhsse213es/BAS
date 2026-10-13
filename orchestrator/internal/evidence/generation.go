@@ -60,12 +60,23 @@ type evidenceSnapshotTechnique struct {
 // active claims (spec §8) -- "why did generation N include T1059 when
 // generation N-1 did not" is answerable from the two rows' snapshots alone.
 func (s *Store) RecordGeneration(ctx context.Context, threatID, contentID, contentVersionID string, generationNumber int, policyVersion string) error {
+	// Only each source instance's CURRENT (latest, non-superseded) row per
+	// technique counts as supporting evidence, matching projection.go's own
+	// "latest wins" semantics (§7.2) -- an instance that has since retracted
+	// a technique must not still appear as supporting it here, even though
+	// the technique stays active via another instance.
 	rows, err := s.pool.Query(ctx, `
-		SELECT c.technique_id, c.id, c.trust_version_id, c.normalized_confidence
-		  FROM technique_claims c
-		 WHERE c.threat_id = $1 AND c.kind = 'claim'
-		   AND c.technique_id IN (SELECT technique_id FROM threat_techniques WHERE threat_id = $1 AND status = 'active')
-		 ORDER BY c.technique_id, c.id`, threatID)
+		SELECT technique_id, id, trust_version_id, normalized_confidence
+		  FROM (
+			SELECT DISTINCT ON (c.technique_id, c.source_instance_id)
+			       c.technique_id, c.id, c.trust_version_id, c.normalized_confidence, c.kind
+			  FROM technique_claims c
+			 WHERE c.threat_id = $1
+			   AND c.technique_id IN (SELECT technique_id FROM threat_techniques WHERE threat_id = $1 AND status = 'active')
+			 ORDER BY c.technique_id, c.source_instance_id, c.observed_at DESC, c.id DESC
+		  ) current_claims
+		 WHERE kind = 'claim'
+		 ORDER BY technique_id, id`, threatID)
 	if err != nil {
 		return fmt.Errorf("evidence: load active claims for generation: %w", err)
 	}
