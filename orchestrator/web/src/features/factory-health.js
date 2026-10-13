@@ -7,6 +7,7 @@ export function loadFactoryHealth() {
   apicall('/api/analytics/factory-health').then(function(r) {
     _loaded = true;
     renderFactoryHealthTiles(r);
+    renderFactoryHealthIngestion(r);
     renderFactoryHealthFunnel(r);
     renderFactoryHealthDataQuality(r);
     renderFactoryHealthTrends(r);
@@ -39,6 +40,24 @@ function renderFactoryHealthTiles(r) {
     metricTile('Static Validation Pass Rate', r.staticValidationPassRate, formatPercent) +
     metricTile('Duplicate Generation Rate', r.duplicateGenerationRate, formatPercent) +
     metricTile('Source→Technique Coverage', r.sourceToTechniqueCoverage, formatPercent);
+}
+
+// renderFactoryHealthIngestion lists per-source sync health so a viewer can
+// see WHY the other metrics might be stale or missing. A source that has
+// never synced successfully is labeled "never synced", never shown as an
+// empty/blank timestamp -- distinct from a source that is merely stale.
+export function renderFactoryHealthIngestion(r) {
+  var el = document.getElementById('factory-health-ingestion');
+  if (!el) return;
+  var ing = r.pipeline.ingestion;
+  var rows = (ing.sources || []).map(function(s) {
+    var lastSuccess = s.lastSuccessAt ? x(s.lastSuccessAt) : 'never synced';
+    var failures = s.failuresInWindow > 0 ?
+      ' &middot; ' + s.failuresInWindow + ' failure(s) in window' + (s.lastDiagnostic ? ': ' + x(s.lastDiagnostic) : '') : '';
+    return '<div class="kpi-sub"><strong>' + x(s.displayName) + '</strong> &middot; last success: ' + lastSuccess + failures + '</div>';
+  }).join('');
+  el.innerHTML = rows +
+    '<div class="kpi-sub">' + ing.unresolvedCandidates + ' unresolved actor candidate(s)</div>';
 }
 
 function renderFactoryHealthFunnel(r) {
