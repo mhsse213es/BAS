@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
@@ -82,4 +83,25 @@ func GetCloudRun(ctx context.Context, pool *pgxpool.Pool, id string) (*cloudrun.
 		return nil, fmt.Errorf("cloud_runs: get %s: %w", id, err)
 	}
 	return run, nil
+}
+
+// UpdateCloudRunStatus transitions a cloud_runs row's status. completed_at
+// is set to NOW() only for the three terminal statuses (completed/failed/
+// partial); a transition to running (or pending) leaves it null. result/
+// errMsg are both optional -- a transition to running typically has
+// neither.
+func UpdateCloudRunStatus(ctx context.Context, pool *pgxpool.Pool, id string, status cloudrun.Status, result json.RawMessage, errMsg string) error {
+	terminal := status == cloudrun.StatusCompleted || status == cloudrun.StatusFailed || status == cloudrun.StatusPartial
+	var err error
+	if terminal {
+		_, err = pool.Exec(ctx, `UPDATE cloud_runs SET status = $1, result = $2, error = $3, completed_at = NOW() WHERE id = $4`,
+			string(status), result, errMsg, id)
+	} else {
+		_, err = pool.Exec(ctx, `UPDATE cloud_runs SET status = $1, result = $2, error = $3 WHERE id = $4`,
+			string(status), result, errMsg, id)
+	}
+	if err != nil {
+		return fmt.Errorf("cloud_runs: update status for %s: %w", id, err)
+	}
+	return nil
 }

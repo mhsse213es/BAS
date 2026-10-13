@@ -161,3 +161,53 @@ func TestGetCloudRun_NotFound(t *testing.T) {
 		}
 	})
 }
+
+func TestUpdateCloudRunStatus_TerminalStatusesSetCompletedAt(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		cases := []cloudrun.Status{cloudrun.StatusCompleted, cloudrun.StatusFailed, cloudrun.StatusPartial}
+		for _, status := range cases {
+			id := "terminal-" + string(status)
+			run := &cloudrun.CloudRun{ID: id, ScenarioID: "x", Provider: "gcp", Status: cloudrun.StatusRunning, StartedAt: time.Now().UTC()}
+			if err := db.InsertCloudRun(ctx, pool, run); err != nil {
+				t.Fatalf("insert %s: %v", id, err)
+			}
+			if err := db.UpdateCloudRunStatus(ctx, pool, id, status, json.RawMessage(`{"ok":true}`), ""); err != nil {
+				t.Fatalf("update %s: %v", id, err)
+			}
+			got, err := db.GetCloudRun(ctx, pool, id)
+			if err != nil {
+				t.Fatalf("get %s: %v", id, err)
+			}
+			if got.Status != status {
+				t.Errorf("status: got %s want %s", got.Status, status)
+			}
+			if got.CompletedAt == nil {
+				t.Errorf("status=%s: completedAt is nil, want set", status)
+			}
+		}
+	})
+}
+
+func TestUpdateCloudRunStatus_RunningLeavesCompletedAtNull(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		run := &cloudrun.CloudRun{ID: "still-running", ScenarioID: "x", Provider: "aws", Status: cloudrun.StatusPending, StartedAt: time.Now().UTC()}
+		if err := db.InsertCloudRun(ctx, pool, run); err != nil {
+			t.Fatalf("insert: %v", err)
+		}
+		if err := db.UpdateCloudRunStatus(ctx, pool, "still-running", cloudrun.StatusRunning, nil, ""); err != nil {
+			t.Fatalf("update: %v", err)
+		}
+		got, err := db.GetCloudRun(ctx, pool, "still-running")
+		if err != nil {
+			t.Fatalf("get: %v", err)
+		}
+		if got.Status != cloudrun.StatusRunning {
+			t.Errorf("status: got %s want running", got.Status)
+		}
+		if got.CompletedAt != nil {
+			t.Errorf("completedAt: got %v want nil", got.CompletedAt)
+		}
+	})
+}
