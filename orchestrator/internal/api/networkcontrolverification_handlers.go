@@ -25,6 +25,30 @@ const (
 	maxIDSEvidencePerVerification      = 2000
 )
 
+// observationEvidenceCorrelationWindow bounds how far a piece of
+// control-product evidence's own timestamp may fall from the
+// NetworkObservation's ObservedAt and still count as evidence for the
+// same test. A single bounded probe and the control's own log/alert
+// for that same flow should be essentially simultaneous; this is
+// generous enough to tolerate log-collection and clock skew in a lab
+// run without being unbounded.
+const observationEvidenceCorrelationWindow = time.Hour
+
+// windowForObservation anchors the evidence-correlation window to when
+// the test actually happened (obs.Provenance.ObservedAt), never to
+// wall-clock time at request-processing time. A recorded-fixture's
+// evidence carries its own historical timestamp near the observation,
+// not near whenever POST /api/network-control-verifications happens to
+// be called -- anchoring to time.Now() instead would silently fail to
+// match genuinely corresponding evidence for any verify call more than
+// observationEvidenceCorrelationWindow after the observation was taken.
+func windowForObservation(obs networkgraph.NetworkObservation) networkefficacy.TimeWindow {
+	return networkefficacy.TimeWindow{
+		Start: obs.Provenance.ObservedAt.Add(-observationEvidenceCorrelationWindow),
+		End:   obs.Provenance.ObservedAt.Add(observationEvidenceCorrelationWindow),
+	}
+}
+
 type networkControlVerificationRequest struct {
 	ExpectationImportID string                             `json:"expectationImportId"`
 	DiscoveryRunID      string                             `json:"discoveryRunId"`
@@ -97,7 +121,6 @@ func (h *Handler) VerifyNetworkControlExpectations(w http.ResponseWriter, r *htt
 
 	firewallProvider := networkefficacy.NewSyntheticFirewallProvider(req.FirewallEvidence)
 	idsProvider := networkefficacy.NewFixtureIDSProvider(req.IDSEvidence)
-	window := networkefficacy.TimeWindow{Start: time.Now().Add(-24 * time.Hour), End: time.Now().Add(24 * time.Hour)}
 
 	results := make([]networkefficacy.EfficacyResult, 0, len(expImport.Expectations))
 	for _, exp := range expImport.Expectations {
@@ -110,6 +133,7 @@ func (h *Handler) VerifyNetworkControlExpectations(w http.ResponseWriter, r *htt
 			})
 			continue
 		}
+		window := windowForObservation(obs)
 
 		var policyEval *networkpolicy.PolicyEvaluation
 		if policyImport != nil {

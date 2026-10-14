@@ -6,14 +6,73 @@ import (
 	"net"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/audspect/bas/internal/auth"
+	"github.com/audspect/bas/internal/cloudgraph"
 	"github.com/audspect/bas/internal/networkefficacy"
+	"github.com/audspect/bas/internal/networkgraph"
 	"github.com/audspect/bas/internal/scenario"
 	"github.com/audspect/bas/internal/ws"
 )
+
+// TestWindowForObservation_AnchorsToObservationTimestampNotWallClock
+// reproduces a reviewer-found High-severity defect: the verify
+// endpoint's evidence time window was computed once from time.Now() at
+// request-processing time, with no relationship to when the
+// NetworkObservation was actually taken. A recorded-fixture evidence
+// timestamp close to the observation's own ObservedAt -- but far from
+// wall-clock "now" -- must still match.
+func TestWindowForObservation_AnchorsToObservationTimestampNotWallClock(t *testing.T) {
+	farFromNow := time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
+	obs := networkgraph.NetworkObservation{
+		Target:     networkgraph.Target{Host: "10.0.2.5", Port: 443},
+		State:      cloudgraph.Observed,
+		Provenance: cloudgraph.Provenance{ObservedAt: farFromNow},
+	}
+	window := windowForObservation(obs)
+
+	evidenceTimestamp := farFromNow.Add(5 * time.Minute)
+	if evidenceTimestamp.Before(window.Start) || evidenceTimestamp.After(window.End) {
+		t.Fatalf("window %+v does not bracket a timestamp 5 minutes after the observation's own ObservedAt (%v) -- the window must anchor to the observation, not to wall-clock time.Now()", window, farFromNow)
+	}
+	if time.Now().After(window.Start) && time.Now().Before(window.End) {
+		t.Fatalf("window %+v brackets the current wall-clock time even though the observation happened in 2020 -- it is still anchored to time.Now(), not to obs.Provenance.ObservedAt", window)
+	}
+}
+
+func observationWithTimestamp(ts time.Time) networkgraph.NetworkObservation {
+	return networkgraph.NetworkObservation{
+		Target:     networkgraph.Target{Host: "10.0.2.5", Port: 443},
+		State:      cloudgraph.Observed,
+		Provenance: cloudgraph.Provenance{ObservedAt: ts},
+	}
+}
+
+// TestSelectMatchingObservation_MultipleMatches_MostRecentWins is a
+// coverage-gap fix (reviewer Medium finding): selectMatchingObservation's
+// "most recent Provenance.ObservedAt wins" tie-break (spec §4.3) had no
+// dedicated test, unlike the parallel evidence-selection tie-break in
+// internal/networkefficacy (TestVerifyControlExpectation_MultipleMatchingRecords_MostRecentWins).
+// No code change accompanies this test -- the existing logic already
+// implements the rule correctly; this closes the coverage gap.
+func TestSelectMatchingObservation_MultipleMatches_MostRecentWins(t *testing.T) {
+	now := time.Now()
+	exp := networkefficacy.ControlExpectation{FlowSourceCIDR: "10.0.1.0/24", FlowDestCIDR: "10.0.2.0/24", FlowPort: 443}
+	observations := []networkgraph.NetworkObservation{
+		observationWithTimestamp(now.Add(-time.Hour)), // older match
+		observationWithTimestamp(now),                 // newer match -- must win
+	}
+	got, found := selectMatchingObservation(exp, observations)
+	if !found {
+		t.Fatal("want a match")
+	}
+	if !got.Provenance.ObservedAt.Equal(now) {
+		t.Fatalf("ObservedAt = %v, want the most recent (%v)", got.Provenance.ObservedAt, now)
+	}
+}
 
 func createTestControlExpectationImport(t *testing.T, h *Handler, pool *pgxpool.Pool, body map[string]any) string {
 	t.Helper()
@@ -72,11 +131,16 @@ func TestVerifyNetworkControlExpectations_BlockExpectationWithMatchingEvidence_M
 			},
 		})
 
+		// Relative to time.Now(), not a hardcoded calendar date -- a
+		// fixed absolute timestamp here would only pass on the day it
+		// was written, since the window is anchored to the
+		// observation's own timestamp (effectively "now" in this
+		// synchronous test), not to wall-clock time at any later date.
 		body := map[string]any{
 			"expectationImportId": expID,
 			"discoveryRunId":      runID,
 			"firewallEvidence": []map[string]any{
-				{"sourceIp": "10.0.1.5", "destIp": "127.0.0.1", "port": openPort, "protocol": "tcp", "action": "block", "timestamp": "2026-10-14T10:00:00Z", "source": "synthetic"},
+				{"sourceIp": "10.0.1.5", "destIp": "127.0.0.1", "port": openPort, "protocol": "tcp", "action": "block", "timestamp": time.Now().Add(-5 * time.Minute).Format(time.RFC3339), "source": "synthetic"},
 			},
 		}
 		b, _ := json.Marshal(body)
