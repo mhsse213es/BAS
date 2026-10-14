@@ -40,6 +40,7 @@ import (
 	"github.com/audspect/bas/internal/jobs"
 	"github.com/audspect/bas/internal/license"
 	"github.com/audspect/bas/internal/models"
+	"github.com/audspect/bas/internal/networkgraph"
 	"github.com/audspect/bas/internal/notifications"
 	"github.com/audspect/bas/internal/observability"
 	"github.com/audspect/bas/internal/openaev"
@@ -265,6 +266,9 @@ func main() {
 	if err := db.EnsureIOCEnrichmentSchema(context.Background(), adminPool); err != nil {
 		log.Fatalf("[FATAL] ioc enrichment schema bootstrap: %v", err)
 	}
+	if err := db.EnsureIngestSchema(context.Background(), adminPool); err != nil {
+		log.Fatalf("[FATAL] ingest schema bootstrap: %v", err)
+	}
 	if err := db.EnsureAgentGroupSchema(context.Background(), adminPool); err != nil {
 		log.Fatalf("[FATAL] agent group schema bootstrap: %v", err)
 	}
@@ -291,6 +295,33 @@ func main() {
 	}
 	if err := db.EnsureTCVSchema(context.Background(), adminPool); err != nil {
 		log.Fatalf("[FATAL] TCV schema: %v", err)
+	}
+	if err := db.EnsureCloudRunSchema(context.Background(), adminPool); err != nil {
+		log.Fatalf("[FATAL] cloud run schema: %v", err)
+	}
+	if err := db.EnsureCloudCampaignSchema(context.Background(), adminPool); err != nil {
+		log.Fatalf("[FATAL] cloud campaign schema: %v", err)
+	}
+	if err := db.EnsureNetworkDiscoverySchema(context.Background(), adminPool); err != nil {
+		log.Fatalf("[FATAL] network discovery schema: %v", err)
+	}
+	if err := db.EnsureNetworkPolicySchema(context.Background(), adminPool); err != nil {
+		log.Fatalf("[FATAL] network policy schema: %v", err)
+	}
+	if err := db.EnsureNetworkTopologySchema(context.Background(), adminPool); err != nil {
+		log.Fatalf("[FATAL] network topology schema: %v", err)
+	}
+	if err := db.EnsureNetworkControlExpectationSchema(context.Background(), adminPool); err != nil {
+		log.Fatalf("[FATAL] network control expectation schema: %v", err)
+	}
+	if err := db.EnsureDNSSecurityCheckSchema(context.Background(), adminPool); err != nil {
+		log.Fatalf("[FATAL] DNS security check schema: %v", err)
+	}
+	if err := db.EnsureTransportSecurityCheckSchema(context.Background(), adminPool); err != nil {
+		log.Fatalf("[FATAL] transport security check schema: %v", err)
+	}
+	if err := db.EnsureCloudTopologySchema(context.Background(), adminPool); err != nil {
+		log.Fatalf("[FATAL] cloud topology schema: %v", err)
 	}
 	log.Println("[+] Schema verified")
 
@@ -786,6 +817,11 @@ func main() {
 		log.Fatalf("[FATAL] load/generate deployment CA: %v", err)
 	}
 
+	networkVP, err := networkgraph.LoadVantagePoint()
+	if err != nil {
+		log.Printf("[WARN] network discovery vantage point not configured: %v -- /api/network-discovery-runs will return 503 until NETWORK_VANTAGE_POINT_ID and NETWORK_VANTAGE_POINT_POSITION are both set", err)
+	}
+
 	handler := api.New(pool, hub, engine, cfg.JWTSecret).
 		WithCaldera(cfg.CalderaURL, cfg.CalderaAPIKey).
 		WithART(artStore).
@@ -793,6 +829,7 @@ func main() {
 		WithContentSeed(cfg.ARTDir, cfg.ARTPayloadDir, cfg.KEVFile, cfg.ARTContentVersion).
 		WithEPSSFile(cfg.EPSSFile).
 		WithAgentSecret(cfg.AgentSecret).
+		WithIngestAPIKey(cfg.IngestAPIKey).
 		WithPKI(ca).
 		WithCommandSigningKey(signingKey).
 		WithMetricsToken(cfg.MetricsToken).
@@ -820,7 +857,8 @@ func main() {
 		WithVexSweep(vexSweepStore, vexSweepDispatcher).
 		WithEMSweep(emSweepStore, emSweepDispatcher).
 		WithTAXII(taxiiStore, taxiiManager).
-		WithIOCProvider(iocProvider)
+		WithIOCProvider(iocProvider).
+		WithNetworkVantagePoint(networkVP)
 
 	// Content registry migration marker: only after a clean scenario load with zero intake
 	// infrastructure failures, so a partial intake never ends custom-file grandfathering. A failure here is
@@ -905,7 +943,7 @@ func main() {
 	if cfg.RateLimitEnabled {
 		rateLimitPerMin = cfg.RateLimitPerMin
 	}
-	router := api.Mount(handler, hub, cfg.JWTSecret, cfg.AgentSecret, StaticHandler(), rateLimitPerMin, cfg.RateLimitBurst, exTracker)
+	router := api.Mount(handler, hub, cfg.JWTSecret, cfg.AgentSecret, StaticHandler(cfg.CSPMode), rateLimitPerMin, cfg.RateLimitBurst, exTracker)
 
 	// ── Agent Staleness Monitor ───────────────────────────────────────────
 	// Marks agents offline if no heartbeat received within 90 seconds and

@@ -9,6 +9,12 @@
 #   sudo bash install.sh --status                        # current state
 #   sudo bash install.sh --uninstall [--purge-images] [--yes]
 #
+# Out-of-band cosign key (optional, for --check/--install/--upgrade):
+#   --cosign-pub <path>   or   BAS_COSIGN_PUB=<path>   (flag wins over env)
+# verifies the orchestrator image with a key you obtained separately instead of
+# the bundle's cosign.pub (a bundled key proves integrity, not origin). With sudo,
+# prefer the flag, or: sudo --preserve-env=BAS_COSIGN_PUB bash install.sh ...
+#
 # If Docker/Docker Compose are missing, --install asks for explicit
 # confirmation before installing Docker CE from Docker's official
 # repository. --yes also grants that consent, for unattended runs.
@@ -48,7 +54,9 @@ readonly MIN_DISK_MB=10240        # 10 GB -images + DB + logs
 readonly MIN_CPU_CORES=2
 readonly COMPOSE_PROJECT="audspect"
 readonly SERVICE_NAME="audspect"
-readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+unset CDPATH
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+readonly SCRIPT_DIR
 
 # Read version from bundle VERSION file (written by windows-build.ps1).
 _ver="$(cat "${SCRIPT_DIR}/VERSION" 2>/dev/null || true)"
@@ -74,6 +82,7 @@ MODE=""
 CONFIG_FILE=""
 PURGE_IMAGES=false
 YES=false
+COSIGN_PUB_FLAG=""
 NEED_DOCKER=false
 NEED_COMPOSE=false
 DOCKER_AUTO_INSTALLED=false
@@ -95,18 +104,22 @@ while [[ $# -gt 0 ]]; do
       RESTORE_ARCHIVE="${1:-}"
       ;;
     --config)       shift; CONFIG_FILE="$1" ;;
+    --cosign-pub=*) COSIGN_PUB_FLAG="${1#--cosign-pub=}"
+                    [[ -n "$COSIGN_PUB_FLAG" ]] || { echo "--cosign-pub requires a path"; exit 1; } ;;
+    --cosign-pub)   shift; COSIGN_PUB_FLAG="${1:-}"
+                    [[ -n "$COSIGN_PUB_FLAG" ]] || { echo "--cosign-pub requires a path"; exit 1; } ;;
     --purge-images) PURGE_IMAGES=true ;;
     --yes|-y)       YES=true ;;
     *)
       echo "Unknown option: $1"
-      echo "Usage: sudo bash install.sh --check | --install --config setup.conf | --upgrade --config setup.conf | --rollback | --status | --uninstall [--purge-images] [--yes]"
+      echo "Usage: sudo bash install.sh --check | --install --config setup.conf | --upgrade --config setup.conf | --rollback | --status | --uninstall [--purge-images] [--yes]   (--check/--install/--upgrade accept: --cosign-pub <key.pub> | --cosign-pub=<key.pub>, or env BAS_COSIGN_PUB)"
       exit 1 ;;
   esac
   shift
 done
 
 if [[ -z "$MODE" ]]; then
-  echo "Usage: sudo bash install.sh --check | --install --config setup.conf | --upgrade --config setup.conf | --rollback | --status | --uninstall [--purge-images] [--yes]"
+  echo "Usage: sudo bash install.sh --check | --install --config setup.conf | --upgrade --config setup.conf | --rollback | --status | --uninstall [--purge-images] [--yes]   (--check/--install/--upgrade accept: --cosign-pub <key.pub> | --cosign-pub=<key.pub>, or env BAS_COSIGN_PUB)"
   exit 1
 fi
 
@@ -149,6 +162,8 @@ BAS_LEGACY_PORT=""
 BAS_DASHBOARD_PORT=""
 DNS_SINK_BIND_IP=""
 BAS_TLS=""
+BAS_SERVER_SANS=""
+BAS_CSP_MODE=""
 TLS_CERT=""
 TLS_KEY=""
 DB_PASSWORD=""
@@ -203,6 +218,8 @@ load_config() {
       BAS_DASHBOARD_PORT)   BAS_DASHBOARD_PORT="$val"   ;;
       DNS_SINK_BIND_IP)     DNS_SINK_BIND_IP="$val"     ;;
       BAS_TLS)              BAS_TLS="$val"              ;;
+      BAS_SERVER_SANS)      BAS_SERVER_SANS="$val"      ;;
+      BAS_CSP_MODE)         BAS_CSP_MODE="$val"         ;;
       TLS_CERT)             TLS_CERT="$val"             ;;
       TLS_KEY)              TLS_KEY="$val"              ;;
       DB_PASSWORD)          DB_PASSWORD="$val"          ;;
@@ -251,6 +268,14 @@ load_config() {
   # setup.conf) without touching the DNS sink's own binding.
   [[ -z "$BAS_SERVER_SANS"    ]] && BAS_SERVER_SANS="$DNS_SINK_BIND_IP"
   [[ -z "$BAS_TLS"            ]] && BAS_TLS="false"
+  # Dashboard Content-Security-Policy (G1d): enforce, or report-only as a
+  # temporary escape hatch. No "off"; the orchestrator refuses anything else
+  # at boot, so refuse it here first rather than install a server that won't start.
+  BAS_CSP_MODE="$(tr '[:upper:]' '[:lower:]' <<<"${BAS_CSP_MODE:-enforce}")"
+  case "$BAS_CSP_MODE" in
+    enforce|report-only) ;;
+    *) err "setup.conf: BAS_CSP_MODE must be enforce or report-only (got: ${BAS_CSP_MODE})."; exit 1 ;;
+  esac
   [[ -z "$LOG_RETENTION_DAYS" ]] && LOG_RETENTION_DAYS="90"
   [[ -z "$BACKUP_RETENTION_DAILY"   ]] && BACKUP_RETENTION_DAILY="7"
   [[ -z "$BACKUP_RETENTION_WEEKLY"  ]] && BACKUP_RETENTION_WEEKLY="4"
@@ -381,14 +406,30 @@ _check_docker() {
   echo "PASS:Docker -${ver}"
 }
 
+# Minimum Docker Compose version: v2.8.0 added `--pull`, which this installer
+# (and setup.sh/import.sh) rely on everywhere images are loaded offline
+# (`--pull never`). An older Compose would silently lack the flag. Numeric
+# major.minor compare only -- never a naive string compare (e.g. "2.9" < "2.10"
+# as strings but not as versions).
+_compose_version_ok() {
+  local ver="$1" major minor
+  IFS='.' read -r major minor _ <<< "${ver#v}"
+  [[ "$major" =~ ^[0-9]+$ && "$minor" =~ ^[0-9]+$ ]] || return 1
+  (( major > 2 || (major == 2 && minor >= 8) ))
+}
+
 _check_compose() {
-  if docker compose version &>/dev/null 2>&1; then
-    local ver
-    ver=$(docker compose version 2>/dev/null | grep -oP '[\d]+\.[\d]+\.[\d]+' | head -1 || echo "?")
-    echo "PASS:Docker Compose -${ver}"
-  else
+  if ! docker compose version &>/dev/null 2>&1; then
     echo "INST:Docker Compose -not installed (installer can install it with your consent)"
+    return
   fi
+  local ver
+  ver=$(docker compose version --short 2>/dev/null | tr -d '[:space:]')
+  if [[ -z "$ver" ]] || ! _compose_version_ok "$ver"; then
+    echo "FAIL:Docker Compose -version ${ver:-unknown} is too old (need >= 2.8.0, which added --pull; this installer depends on it for every offline image load)"
+    return
+  fi
+  echo "PASS:Docker Compose -${ver}"
 }
 
 # The orchestrator release artifact ships cosign-signed (packaging/build.sh,
@@ -413,6 +454,166 @@ _cosign_version_ok() {
   (( major > 3 || (major == 3 && minor >= 1) ))
 }
 
+# Selects the cosign public key verification MUST use. Precedence: --cosign-pub
+# flag, BAS_COSIGN_PUB env, then the bundle's cosign.pub. An external key is
+# used exclusively (never overridden by the bundled one); a missing/unreadable
+# path is fatal. Sets COSIGN_PUB_USED and prints its sha256 fingerprint.
+# (Duplicated from packaging/airgap/cosign-verify-lib.sh on purpose: install.sh
+# ships flat in the release bundle with no lib next to it.)
+
+# Key fingerprint: sha256 of the DER SubjectPublicKeyInfo (stable across PEM
+# re-wrapping; openssl is already required by this installer). Falls back to the
+# plain file sha256, labelled as such, if openssl cannot parse the key.
+_key_fp() {
+  local f="$1"
+  if command -v openssl &>/dev/null && openssl pkey -pubin -in "$f" -noout 2>/dev/null; then
+    openssl pkey -pubin -in "$f" -outform DER 2>/dev/null | sha256sum | cut -d' ' -f1
+  else
+    echo "$(sha256sum "$f" | cut -d' ' -f1) (file sha256; not a parsable public key)"
+  fi
+}
+
+_tar_image_id() {
+  local tar="$1" want="$2" m cfg tags idx d ids
+  m=$(tar -xOf "$tar" --occurrence=1 manifest.json 2>/dev/null) || return 1
+  [[ $(grep -o '"Config"' <<<"$m" | wc -l) -eq 1 ]] || return 1
+  tags=$(sed -n 's/.*"RepoTags":\[\([^]]*\)\].*/\1/p' <<<"$m")
+  [[ "$tags" == "\"${want}\"" ]] || return 1
+  cfg=$(sed -n 's/.*"Config":"\([^"]*\)".*/\1/p' <<<"$m")
+  cfg="${cfg##*/}"; cfg="${cfg%.json}"
+  [[ "$cfg" =~ ^[0-9a-f]{64}$ ]] || return 1
+  # Candidate 1 (classic overlay2 store): the Config digest. Candidate 2
+  # (containerd store, the default on new Docker Engines): `docker image inspect`
+  # reports the top-level manifest/index digest from index.json. Both come from
+  # the cosign-verified tar, so neither can be chosen by an attacker. Older
+  # `docker save` tars have no index.json: Config only.
+  ids="sha256:${cfg}"
+  idx=$(tar -xOf "$tar" --occurrence=1 index.json 2>/dev/null || true)
+  if [[ -n "$idx" ]]; then
+    while read -r d; do
+      ids="${ids} ${d}"
+    done < <(grep -o '"digest"[[:space:]]*:[[:space:]]*"sha256:[0-9a-f]\{64\}"' <<<"$idx" | grep -o 'sha256:[0-9a-f]*')
+  fi
+  echo "$ids"
+}
+
+# <tag>'s ID in the local daemon must equal one of the space-separated candidate
+# IDs recorded from the verified tar (see above); anything else is a mismatch.
+_docker_tag_is() {
+  local got want
+  got=$(docker image inspect -f '{{.Id}}' "$1" 2>/dev/null) || return 1
+  for want in $2; do
+    [[ "$got" == "$want" ]] && return 0
+  done
+  return 1
+}
+
+# ── Bundle image verification + load ─────────────────────────────────────────
+# _expected_image_tag, _verify_all_images and _load_verified_images are
+# BYTE-IDENTICAL in packaging/compose/install.sh and packaging/compose/setup.sh
+# (packaging/airgap/airgap-cosign.test.sh fails if they drift): edit both.
+
+# Image tag each shipped tar must carry (name is pinned to the bundle version).
+# Every bundle type (release ZIP, build.sh bundle, air-gap bundle) ships these
+# four signed; anything else in images/ is refused.
+_expected_image_tag() {
+  case "$1" in
+    "bas-orchestrator-${BAS_VERSION}.tar") echo "bas-orchestrator:${BAS_VERSION}" ;;
+    postgres-16-alpine.tar)                echo "postgres:16-alpine" ;;
+    headless-shell.tar)                    echo "chromedp/headless-shell:151.0.7922.109" ;;
+    "bas-caldera-${BAS_VERSION}.tar")      echo "bas-caldera:${BAS_VERSION}" ;;
+    *) return 1 ;;
+  esac
+}
+
+# _verify_all_images <images_dir> <what>
+# Verifies EVERY image tar (cosign + exact RepoTag) BEFORE any is loaded. A
+# missing images/ directory is FATAL: nothing is ever pulled from a registry,
+# every runtime image must come from this bundle. Fills IMG_TARS/IMG_TAGS/IMG_IDS
+# (everything but the orchestrator) and ORCH_TAR/ORCH_ID. Unsigned, unlisted or
+# legacy .tar.gz files are fatal. <what> ("installation"/"upgrade") words errors.
+_verify_all_images() {
+  local images_dir="$1" what="$2" img base tag id
+  IMG_TARS=(); IMG_TAGS=(); IMG_IDS=(); ORCH_TAR=""; ORCH_ID=""
+  if [[ ! -d "$images_dir" ]]; then
+    err "images/ directory not found at ${images_dir} -- ${what} aborted. Every runtime image must come from this bundle's signed images/ (nothing is pulled from a registry)."
+    exit 1
+  fi
+  for img in "${images_dir}"/*; do
+    [[ -f "$img" ]] || continue
+    base="$(basename "$img")"
+    case "$base" in
+      *.bundle) continue ;;
+      *.tar) ;;
+      *) err "Unexpected file in images/: ${base} -- ${what} aborted (only signed .tar images are allowed)."; exit 1 ;;
+    esac
+    tag=$(_expected_image_tag "$base") || { err "Unlisted image tar in images/: ${base} -- ${what} aborted."; exit 1; }
+    _verify_orchestrator_artifact "$img" || { err "Image ${base} failed verification -- ${what} aborted."; exit 1; }
+    id=$(_tar_image_id "$img" "$tag") || { err "${base}: manifest.json does not carry exactly the tag ${tag} -- ${what} aborted (the verified image must be the one compose runs)."; exit 1; }
+    if [[ "$base" == bas-orchestrator-* ]]; then
+      ORCH_TAR="$img"; ORCH_ID="$id"
+    else
+      IMG_TARS+=("$img"); IMG_TAGS+=("$tag"); IMG_IDS+=("$id")
+    fi
+  done
+  if [[ -z "$ORCH_TAR" ]]; then
+    err "No orchestrator artifact (bas-orchestrator-${BAS_VERSION}.tar) found in ${images_dir} -- ${what} aborted."
+    exit 1
+  fi
+  # ALL runtime images are required (compose starts them with no profile).
+  local req
+  for req in postgres-16-alpine.tar headless-shell.tar "bas-caldera-${BAS_VERSION}.tar"; do
+    [[ -f "${images_dir}/${req}" ]] || { err "Required runtime image ${req} missing from ${images_dir} -- ${what} aborted."; exit 1; }
+  done
+}
+
+# _load_verified_images <what>   (after _verify_all_images)
+# Loads every other image first and the orchestrator LAST. Deliberate: docker
+# load's tag assignment is last-write-wins and tags are embedded in each tar's
+# own manifest, independent of its filename, so nothing loaded after the
+# orchestrator can re-point "bas-orchestrator:<ver>". After EVERY load the tag
+# must resolve to the image ID recorded from the verified tar.
+_load_verified_images() {
+  local what="$1" i
+  for i in "${!IMG_TARS[@]}"; do
+    docker load < "${IMG_TARS[$i]}" || { err "docker load failed for $(basename "${IMG_TARS[$i]}") -- ${what} aborted."; exit 1; }
+    _docker_tag_is "${IMG_TAGS[$i]}" "${IMG_IDS[$i]}" || { err "${IMG_TAGS[$i]} is not the verified image after load -- ${what} aborted."; exit 1; }
+    log "Loaded: $(basename "${IMG_TARS[$i]}")"
+  done
+  docker load < "$ORCH_TAR" || { err "docker load failed for $(basename "$ORCH_TAR") -- ${what} aborted."; exit 1; }
+  _docker_tag_is "bas-orchestrator:${BAS_VERSION}" "$ORCH_ID" || { err "bas-orchestrator:${BAS_VERSION} is not the verified image after load -- ${what} aborted."; exit 1; }
+  log "Loaded: $(basename "$ORCH_TAR")"
+}
+
+COSIGN_PUB_USED="${SCRIPT_DIR}/cosign.pub"
+_resolve_cosign_pub() {
+  local ext="${COSIGN_PUB_FLAG:-${BAS_COSIGN_PUB:-}}" bundled="${SCRIPT_DIR}/cosign.pub" fp
+  if [[ -n "$ext" ]]; then
+    if [[ ! -f "$ext" || ! -r "$ext" ]]; then
+      err "External cosign public key not found or unreadable: ${ext}"
+      return 1
+    fi
+    COSIGN_PUB_USED="$(unset CDPATH; cd -- "$(dirname -- "$ext")" && pwd)/$(basename -- "$ext")"
+    fp=$(_key_fp "$COSIGN_PUB_USED")
+    {
+      echo ""
+      echo "  ============================================================"
+      echo "   Verifying with EXTERNAL key, sha256: ${fp}"
+      echo "   (${COSIGN_PUB_USED}) -- compare with the published Audspect fingerprint"
+      echo "  ============================================================"
+      echo ""
+    } >&2
+    if [[ -f "$bundled" ]] && ! cmp -s "$bundled" "$COSIGN_PUB_USED"; then
+      warn "The bundle's own cosign.pub DIFFERS from the external key (sha256: $(_key_fp "$bundled")). The external key is used."
+    fi
+  else
+    COSIGN_PUB_USED="$bundled"
+    if [[ -f "$bundled" ]]; then
+      info "Verifying with BUNDLED key, sha256: $(_key_fp "$bundled") (use --cosign-pub or BAS_COSIGN_PUB for an out-of-band key)"
+    fi
+  fi
+}
+
 _check_cosign() {
   if ! command -v cosign &>/dev/null; then
     echo "FAIL:Cosign -not installed (required to verify the orchestrator artifact before install; see https://docs.sigstore.dev/cosign/system_config/installation/)"
@@ -424,8 +625,8 @@ _check_cosign() {
     echo "FAIL:Cosign -version ${ver:-unknown} is too old (need >= v3.1.0 to verify the sigstore bundle format this bundle's signature uses)"
     return
   fi
-  if [[ ! -f "${SCRIPT_DIR}/cosign.pub" ]]; then
-    echo "FAIL:Cosign -public key not found in bundle at ${SCRIPT_DIR}/cosign.pub (corrupt or incomplete release bundle)"
+  if [[ ! -f "$COSIGN_PUB_USED" ]]; then
+    echo "FAIL:Cosign -public key not found at ${COSIGN_PUB_USED} (corrupt or incomplete release bundle)"
     return
   fi
   echo "PASS:Cosign -${ver}"
@@ -437,8 +638,8 @@ _check_cosign() {
 # return as fatal (abort the whole install/upgrade), not skip-and-continue.
 _verify_orchestrator_artifact() {
   local tar="$1"
-  if [[ ! -f "${SCRIPT_DIR}/cosign.pub" ]]; then
-    err "cosign.pub not found in bundle -- cannot verify $(basename "$tar"), refusing to proceed"
+  if [[ ! -f "$COSIGN_PUB_USED" ]]; then
+    err "cosign public key not found (${COSIGN_PUB_USED}) -- cannot verify $(basename "$tar"), refusing to proceed"
     return 1
   fi
   if ! command -v cosign &>/dev/null; then
@@ -449,9 +650,10 @@ _verify_orchestrator_artifact() {
     err "Signature bundle not found: $(basename "$tar").bundle -- refusing to install an unsigned orchestrator artifact"
     return 1
   fi
-  local verify_output
-  if ! verify_output=$(cosign verify-blob --key "${SCRIPT_DIR}/cosign.pub" --bundle "${tar}.bundle" --insecure-ignore-tlog "$tar" 2>&1); then
-    err "cosign verification FAILED for $(basename "$tar") -- refusing to install a tampered or unsigned orchestrator artifact"
+  local verify_output kind=BUNDLED
+  [[ -n "${COSIGN_PUB_FLAG:-${BAS_COSIGN_PUB:-}}" ]] && kind=EXTERNAL
+  if ! verify_output=$(cosign verify-blob --key "$COSIGN_PUB_USED" --bundle "${tar}.bundle" --insecure-ignore-tlog "$tar" 2>&1); then
+    err "cosign verification FAILED for $(basename "$tar") using ${kind} key ${COSIGN_PUB_USED} (fingerprint $(_key_fp "$COSIGN_PUB_USED")) -- refusing to install a tampered or unsigned orchestrator artifact"
     echo "$verify_output" >&2
     return 1
   fi
@@ -740,6 +942,9 @@ mode_install() {
   if [[ "$BAS_TLS" == "true" ]]; then results+=( "$(_check_tls_certs "$TLS_CERT" "$TLS_KEY")" ); fi
   results+=( "$(_check_licence "$LIC_PATH")" )
   render_checks "${results[@]}" || exit 1
+  # Verify EVERY bundled image before anything is installed or written: a
+  # missing images/ or any unsigned/unlisted/tampered tar aborts here.
+  _verify_all_images "${SCRIPT_DIR}/images" "installation"
 
   step "2/10  Docker Engine"
   if $NEED_DOCKER || $NEED_COMPOSE; then
@@ -784,40 +989,10 @@ mode_install() {
   log "Created: ${DATA_DIR}"
 
   step "4/10  Loading Docker images (air-gap safe -no pull)"
-  local images_dir="${SCRIPT_DIR}/images"
-  if [[ -d "$images_dir" ]]; then
-    # Load every other image first, then verify+load the orchestrator
-    # artifact LAST. This is deliberate, not cosmetic: singling out the
-    # orchestrator by filename alone would (1) silently skip verification
-    # if no bas-orchestrator-* file exists at all, and (2) let a later tar
-    # in the loop re-point the "bas-orchestrator:<ver>" tag after a
-    # verified load, since docker load's tag assignment is last-write-wins
-    # and tags are embedded in the tar's own manifest, independent of its
-    # filename on disk. Loading the orchestrator last closes both: nothing
-    # can load after it to override its tag, and its absence is now fatal
-    # instead of silent.
-    local orch_tar=""
-    for tar in "${images_dir}"/*.tar; do
-      [[ -f "$tar" ]] || continue
-      if [[ "$(basename "$tar")" == bas-orchestrator-* ]]; then
-        orch_tar="$tar"
-        continue
-      fi
-      info "Loading $(basename "$tar")..."
-      docker load < "$tar"
-      log "Loaded: $(basename "$tar")"
-    done
-    if [[ -z "$orch_tar" ]]; then
-      err "No orchestrator artifact (bas-orchestrator-*.tar) found in ${images_dir} -- refusing to install without it."
-      exit 1
-    fi
-    _verify_orchestrator_artifact "$orch_tar" || { err "Orchestrator artifact failed verification -- installation aborted."; exit 1; }
-    info "Loading $(basename "$orch_tar")..."
-    docker load < "$orch_tar"
-    log "Loaded: $(basename "$orch_tar")"
-  else
-    warn "images/ directory not found -Docker will attempt to pull (requires internet)"
-  fi
+  # Fail closed: every tar was verified after the prerequisite checks (a missing
+  # images/ is fatal, nothing is ever pulled); the orchestrator is loaded last
+  # and every tag is bound to its verified image ID (see _load_verified_images).
+  _load_verified_images "installation"
 
   step "5/10  Staging bundle files"
   # Scenarios
@@ -937,6 +1112,11 @@ mode_upgrade() {
     fi
   fi
 
+  # Verify EVERY bundled image before anything is backed up or replaced: a
+  # missing images/ is FATAL (nothing is pulled, BAS_VERSION is not rewritten).
+  local what="upgrade (the previous version is still running; nothing was replaced)"
+  _verify_all_images "${SCRIPT_DIR}/images" "$what"
+
   step "1/5  Backup current installation"
   local backup_ts backup_dir
   backup_ts=$(date -u '+%Y%m%d-%H%M%S')
@@ -944,32 +1124,17 @@ mode_upgrade() {
   mkdir -p "$backup_dir"
   cp "${DATA_DIR}/docker-compose.yml" "${backup_dir}/docker-compose.yml"
   [[ -f "${DATA_DIR}/.env" ]] && cp "${DATA_DIR}/.env" "${backup_dir}/.env"
+  # Deployment CA keypair (bind-mounted ./pki -> /etc/audspect/pki). It is
+  # generated once and never regenerated, so losing it forces regenerating the
+  # CA and re-enrolling every agent. -a preserves the 0600 mode on ca-key.pem.
+  [[ -d "${DATA_DIR}/pki" ]] && cp -a "${DATA_DIR}/pki" "${backup_dir}/pki"
   echo "$BAS_VERSION" > "${backup_dir}/VERSION"
   log "Backup created: ${backup_dir}"
 
   step "2/5  Loading new images"
-  local images_dir="${SCRIPT_DIR}/images"
-  if [[ -d "$images_dir" ]]; then
-    # Same deliberate ordering as mode_install: load every other image
-    # first, then verify+load the orchestrator artifact LAST, so nothing
-    # loaded after it can override the "bas-orchestrator:<ver>" tag, and
-    # its absence is fatal rather than silently skipped.
-    local orch_tar=""
-    for tar in "${images_dir}"/*.tar; do
-      [[ -f "$tar" ]] || continue
-      if [[ "$(basename "$tar")" == bas-orchestrator-* ]]; then
-        orch_tar="$tar"
-        continue
-      fi
-      docker load < "$tar" && log "Loaded: $(basename "$tar")"
-    done
-    if [[ -z "$orch_tar" ]]; then
-      err "No orchestrator artifact (bas-orchestrator-*.tar) found in ${images_dir} -- upgrade aborted. The previous version is still running; nothing was replaced."
-      exit 1
-    fi
-    _verify_orchestrator_artifact "$orch_tar" || { err "Orchestrator artifact failed verification -- upgrade aborted. The previous version is still running; nothing was replaced."; exit 1; }
-    docker load < "$orch_tar" && log "Loaded: $(basename "$orch_tar")"
-  fi
+  # Same as mode_install: everything was verified above; the orchestrator is
+  # loaded last and every tag is bound to its verified image ID.
+  _load_verified_images "$what"
 
   step "3/5  Updating bundle files"
   [[ -d "${SCRIPT_DIR}/scenarios"   ]] && cp -r "${SCRIPT_DIR}/scenarios/."   "${DATA_DIR}/scenarios/"
@@ -1000,7 +1165,7 @@ mode_upgrade() {
 
   step "4/5  Rolling restart"
   systemctl restart "${SERVICE_NAME}" 2>/dev/null \
-    || (cd "${DATA_DIR}" && docker compose -p "$COMPOSE_PROJECT" up -d --remove-orphans)
+    || (cd "${DATA_DIR}" && docker compose -p "$COMPOSE_PROJECT" up -d --pull never --remove-orphans)
   log "Stack restarted"
   _wait_healthy
 
@@ -1022,6 +1187,7 @@ mode_rollback() {
 
   # Find most recent backup
   local latest
+  # shellcheck disable=SC2012  # glob only matches YYYYMMDD-HHMMSS dirs (no whitespace); ls -t is the mtime sort
   latest=$(ls -1dt "${backup_root}"/[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]-[0-9][0-9][0-9][0-9][0-9][0-9]/ 2>/dev/null | head -1 || true)
   if [[ -z "$latest" ]]; then
     err "No backup found under ${backup_root}. Cannot rollback."
@@ -1048,7 +1214,7 @@ mode_rollback() {
   log "Compose and .env restored (version: ${prev_ver})"
 
   systemctl restart "${SERVICE_NAME}" 2>/dev/null \
-    || (cd "${install_dir}" && docker compose -p "$COMPOSE_PROJECT" up -d --remove-orphans)
+    || (cd "${install_dir}" && docker compose -p "$COMPOSE_PROJECT" up -d --pull never --remove-orphans)
   log "Stack restarted with previous version"
   _wait_healthy
   log "Rollback complete (v${BAS_VERSION} → v${prev_ver})"
@@ -1150,7 +1316,7 @@ mode_uninstall() {
   step "1/5  Stopping systemd service"
   local svc_unit="/etc/systemd/system/${SERVICE_NAME}.service"
   if systemctl is-active --quiet "${SERVICE_NAME}" 2>/dev/null; then
-    systemctl stop "${SERVICE_NAME}" && log "Service stopped" || warn "Stop failed (continuing)"
+    if systemctl stop "${SERVICE_NAME}"; then log "Service stopped"; else warn "Stop failed (continuing)"; fi
   fi
   if systemctl is-enabled --quiet "${SERVICE_NAME}" 2>/dev/null; then
     systemctl disable "${SERVICE_NAME}" && log "Service disabled"
@@ -1161,8 +1327,11 @@ mode_uninstall() {
 
   step "2/5  Removing containers and volumes"
   if [[ -f "${data_dir}/docker-compose.yml" ]]; then
-    (cd "${data_dir}" && docker compose -p "$COMPOSE_PROJECT" down --volumes --remove-orphans 2>&1) \
-      && log "Compose stack removed" || warn "Compose down had errors (continuing)"
+    if (cd "${data_dir}" && docker compose -p "$COMPOSE_PROJECT" down --volumes --remove-orphans 2>&1); then
+      log "Compose stack removed"
+    else
+      warn "Compose down had errors (continuing)"
+    fi
   else
     for ctr in audspect-orchestrator audspect-caldera audspect-postgres audspect-chrome; do
       docker inspect "$ctr" &>/dev/null 2>&1 && docker rm -f "$ctr" && log "Removed: $ctr"
@@ -1206,7 +1375,7 @@ Type=oneshot
 RemainAfterExit=yes
 WorkingDirectory=${DATA_DIR}
 EnvironmentFile=${DATA_DIR}/.env
-ExecStart=/usr/bin/docker compose -p ${COMPOSE_PROJECT} up -d --remove-orphans
+ExecStart=/usr/bin/docker compose -p ${COMPOSE_PROJECT} up -d --pull never --remove-orphans
 ExecStop=/usr/bin/docker compose -p ${COMPOSE_PROJECT} down
 TimeoutStartSec=300
 TimeoutStopSec=120
@@ -1340,6 +1509,7 @@ BAS_DASHBOARD_PORT=${BAS_DASHBOARD_PORT}
 DNS_SINK_BIND_IP=${DNS_SINK_BIND_IP}
 BAS_SERVER_SANS=${BAS_SERVER_SANS}
 BAS_TLS=${BAS_TLS}
+BAS_CSP_MODE=${BAS_CSP_MODE}
 TLS_CERT=${TLS_CERT:-}
 TLS_KEY=${TLS_KEY:-}
 TLS_CERT_CONTAINER_PATH=${tls_cert_container_path}
@@ -1431,7 +1601,8 @@ _prune_backups() {
   monthly_cutoff=$(date -d "-$((BACKUP_RETENTION_MONTHLY * 30)) days" +%s 2>/dev/null || date -v-"$((BACKUP_RETENTION_MONTHLY * 30))"d +%s)
 
   local seen_weeks="" seen_months=""
-  for f in $(ls -1t "${dir}"/audspect-backup-*.tar.enc 2>/dev/null); do
+  # shellcheck disable=SC2012  # names are audspect-backup-<UTC ts>.tar.enc (no whitespace); ls -t is the newest-first mtime sort
+  while IFS= read -r f; do
     local mtime week_key month_key
     mtime=$(stat -c %Y "$f" 2>/dev/null || stat -f %m "$f")
     [[ "$mtime" -ge "$daily_cutoff" ]] && continue
@@ -1444,7 +1615,7 @@ _prune_backups() {
     else
       rm -f "$f"
     fi
-  done
+  done < <(ls -1t "${dir}"/audspect-backup-*.tar.enc 2>/dev/null)
 }
 
 # _run_backup_engine performs one full backup and prints the result as
@@ -1605,7 +1776,7 @@ mode_restore() {
   tar -xf "${work_dir}/config.tar" -C "${DATA_DIR}"
 
   step "7/8  Starting services"
-  (cd "${DATA_DIR}" && docker compose -p "$COMPOSE_PROJECT" up -d --remove-orphans)
+  (cd "${DATA_DIR}" && docker compose -p "$COMPOSE_PROJECT" up -d --pull never --remove-orphans)
   _wait_healthy
 
   step "8/8  Health check"
@@ -1697,7 +1868,7 @@ _diagnose_orchestrator_failure() {
       echo "    clears it, but that briefly stops EVERY container on this"
       echo "    host -- not something to do unattended. To do it manually:"
       echo "      sudo systemctl restart docker"
-      echo "      docker compose -p ${COMPOSE_PROJECT} up -d"
+      echo "      docker compose -p ${COMPOSE_PROJECT} up -d --pull never"
       echo "    If you can't take that downtime right now, temporarily drop"
       echo "    the conflicting port from the orchestrator service's"
       echo "    'ports:' list in ${DATA_DIR}/docker-compose.yml and re-run"
@@ -1781,6 +1952,10 @@ _print_access_info() {
 echo ""
 echo -e "${BOLD}${CYAN}===  ${PRODUCT} v${BAS_VERSION}  ===${NC}"
 echo ""
+
+case "$MODE" in
+  check|install|upgrade) _resolve_cosign_pub || exit 1 ;;
+esac
 
 case "$MODE" in
   check)     mode_check     ;;

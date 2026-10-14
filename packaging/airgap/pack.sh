@@ -2,20 +2,22 @@
 # BAS Platform — Air-Gap Bundle Packer
 #
 # Run this on an INTERNET-CONNECTED build machine.
-# Produces a self-contained bundle that can be transferred to an air-gapped
-# server. Layout matches packaging/build.sh's flat bundle exactly (setup.sh
-# is a direct sibling of images/, VERSION, cosign.pub, and the compose
-# files) because packaging/compose/setup.sh resolves all of those paths
-# relative to its own directory -- this layout is not a style choice, it
-# is what makes setup.sh's existing checks resolve correctly.
+# Produces a self-contained bundle that can be transferred to an air-gapped server.
 #
 # Usage:
 #   bash packaging/airgap/pack.sh [version]
 #
+# Example:
+#   bash packaging/airgap/pack.sh 1.2.0
+#
 # Output:
 #   dist/bas-airgap-<version>.tar.gz      (transfer this to the air-gapped server)
-#   dist/bas-airgap-<version>.tar.gz.asc  (GPG detached signature -- mandatory)
 #   dist/bas-airgap-<version>.tar.gz.sha256
+#
+# Requires cosign + packaging/signing/cosign.key and internet access (builds
+# bas-caldera, pulls postgres and chrome BY DIGEST from packaging/images.pin). Every runtime image tar --
+# orchestrator, postgres, bas-caldera, chromedp/headless-shell -- is signed;
+# import.sh refuses any unsigned one. Any failure to build/pull/save/sign aborts.
 #
 # Run from the repository root.
 set -euo pipefail
@@ -23,14 +25,10 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 readonly REPO_ROOT
 
-# Overridable for testing only -- production runs always use the real
-# packaging/signing/ scripts and dist/ directory.
-SIGNING_DIR="${BAS_PACK_SIGNING_DIR:-${REPO_ROOT}/packaging/signing}"
-DIST_DIR="${BAS_PACK_DIST_DIR:-${REPO_ROOT}/dist}"
-
 VERSION="${1:-$(git -C "$REPO_ROOT" describe --tags --abbrev=0 2>/dev/null | sed 's/^v//' || echo "dev")}"
 readonly VERSION
 
+DIST_DIR="${REPO_ROOT}/dist"
 BUILD_NAME="bas-airgap-${VERSION}"
 BUILD_DIR="${DIST_DIR}/${BUILD_NAME}"
 
@@ -57,18 +55,35 @@ if ! docker info &>/dev/null; then
   exit 1
 fi
 
-# ── 1. Stage bundle directory (flat -- matches packaging/build.sh) ─────────────
+# ── cosign is mandatory (mirrors packaging/build.sh) ──────────────────────────
+# The orchestrator image ships cosign-signed; the air-gapped importer refuses an
+# unsigned one. Checked before the slow pull/save so a missing cosign/key fails fast.
+COSIGN_SCRIPT="${REPO_ROOT}/packaging/signing/cosign.sh"
+COSIGN_KEY="${REPO_ROOT}/packaging/signing/cosign.key"
+COSIGN_PUB="${REPO_ROOT}/packaging/signing/cosign.pub"
+if ! command -v cosign &>/dev/null; then
+  err "cosign is not installed, and cosign signing is mandatory for this air-gap bundle. Install: https://docs.sigstore.dev/cosign/system_config/installation/"
+  exit 1
+fi
+if [[ ! -f "$COSIGN_KEY" ]]; then
+  err "cosign.key not found at ${COSIGN_KEY}, and cosign signing is mandatory for this air-gap bundle. Run: bash packaging/signing/cosign.sh --keygen"
+  exit 1
+fi
+
+# ── 1. Stage bundle directory ──────────────────────────────────────────────────
 log "Staging air-gap bundle v${VERSION}..."
 rm -rf "${BUILD_DIR}"
-mkdir -p "${BUILD_DIR}/images" "${BUILD_DIR}/systemd"
+mkdir -p "${BUILD_DIR}/images" "${BUILD_DIR}/compose/systemd"
 
-# ── 2. Pull Docker images ──────────────────────────────────────────────────────
+# ── 2. Runtime images ──────────────────────────────────────────────────────────
 ORCHESTRATOR_IMAGE="bas-orchestrator:${VERSION}"
-POSTGRES_IMAGE="postgres:16-alpine"
+# Shared release helpers: images.pin parser, pull-by-digest, save + sign.
+# shellcheck source=../signing/release-images.sh
+# shellcheck disable=SC1091  # repo-relative helper; followed with shellcheck -x
+source "${REPO_ROOT}/packaging/signing/release-images.sh"
+rel_read_pin "${REPO_ROOT}/packaging/images.pin"   # fail fast on a bad pin file
 
-log "Pulling ${POSTGRES_IMAGE}..."
-docker pull "${POSTGRES_IMAGE}"
-
+# orchestrator image must already be built locally (run packaging/build.sh first)
 if ! docker image inspect "${ORCHESTRATOR_IMAGE}" &>/dev/null; then
   err "${ORCHESTRATOR_IMAGE} not found locally."
   echo "  Build it first: bash packaging/build.sh ${VERSION}"
@@ -76,47 +91,53 @@ if ! docker image inspect "${ORCHESTRATOR_IMAGE}" &>/dev/null; then
 fi
 log "Found ${ORCHESTRATOR_IMAGE} locally."
 
-# ── 3. Export and cosign-sign the orchestrator image ───────────────────────────
-# Signed the same way packaging/build.sh signs its own orchestrator tarball
-# (sign-blob/verify-blob against the docker-save bytes, no registry needed)
-# so packaging/compose/setup.sh's existing, unmodified cosign verification
-# gate is satisfied by this pipeline too. Mandatory, not optional -- a pack
-# build with no cosign key available fails here, it does not ship unsigned.
+# ── 3. Export images ───────────────────────────────────────────────────────────
 log "Exporting Docker images (this may take a minute)..."
-ORCH_TAR="${BUILD_DIR}/images/bas-orchestrator-${VERSION}.tar.gz"
-docker save "${ORCHESTRATOR_IMAGE}" | gzip > "${ORCH_TAR}"
-log "  Saved: $(basename "${ORCH_TAR}") ($(du -sh "${ORCH_TAR}" | cut -f1))"
 
-COSIGN_SCRIPT="${SIGNING_DIR}/cosign.sh"
+# Orchestrator: UNCOMPRESSED tar so the signature covers the exact shipped bytes
+# (same as packaging/build.sh). Signed with cosign sign-blob, verified at once.
+ORCH_TAR="${BUILD_DIR}/images/bas-orchestrator-${VERSION}.tar"
+docker save "${ORCHESTRATOR_IMAGE}" -o "${ORCH_TAR}"
+log "  Saved: bas-orchestrator-${VERSION}.tar ($(du -sh "${ORCH_TAR}" | cut -f1))"
+
 log "Signing orchestrator image with cosign..."
 if ! bash "${COSIGN_SCRIPT}" --sign "${ORCH_TAR}"; then
-  err "cosign signing failed for ${ORCH_TAR} -- aborting bundle build."
+  err "cosign signing failed for ${ORCH_TAR} -- aborting."
   exit 1
 fi
-log "Verifying the cosign signature we just produced..."
+log "Verifying the signature we just produced..."
 if ! bash "${COSIGN_SCRIPT}" --verify "${ORCH_TAR}"; then
-  err "cosign verification FAILED immediately after signing ${ORCH_TAR} -- aborting; investigate before shipping."
+  err "cosign verification FAILED immediately after signing ${ORCH_TAR} -- this should be structurally impossible; investigate before shipping."
   exit 1
 fi
-COSIGN_PUB="${SIGNING_DIR}/cosign.pub"
 if [[ ! -f "$COSIGN_PUB" ]]; then
-  err "cosign.pub not found at ${COSIGN_PUB} after a successful sign+verify -- cannot ship a bundle the installer can't verify."
+  err "cosign.pub not found at ${COSIGN_PUB} -- cannot ship a bundle the importer can't verify."
   exit 1
 fi
-cp "$COSIGN_PUB" "${BUILD_DIR}/"
+# Top level: used by import.sh / verify.sh. compose/: used by setup.sh --offline.
+cp "$COSIGN_PUB" "${BUILD_DIR}/cosign.pub"
 
-docker save "${POSTGRES_IMAGE}" | gzip > "${BUILD_DIR}/images/postgres-16-alpine.tar.gz"
-log "  Saved: postgres-16-alpine.tar.gz ($(du -sh "${BUILD_DIR}/images/postgres-16-alpine.tar.gz" | cut -f1))"
+# Postgres: pulled BY DIGEST (images.pin), UNCOMPRESSED + cosign-signed with the
+# same helper -- the importer refuses to load ANY image tar that lacks a valid signature.
+rel_ship_postgres "${REPO_ROOT}" "${BUILD_DIR}/images" "${COSIGN_SCRIPT}"
+# Caldera (baked emu library, pinned base) and chrome (pinned version+digest):
+# compose starts both with no profile, so an offline install needs them.
+rel_ship_caldera_chrome "${VERSION}" "${REPO_ROOT}" "${BUILD_DIR}/images" "${COSIGN_SCRIPT}"
 
-# ── 4. Copy compose bundle (flat, matches packaging/build.sh) ─────────────────
+# Every file under images/ must be a .tar whose signature VERIFIES against the
+# bundled cosign.pub (same verify-blob key/flags as the importer); fail closed on
+# anything else. images/ is final from here on.
+rel_verify_all_images "${BUILD_DIR}/images" "${BUILD_DIR}/cosign.pub"
+
+# ── 4. Copy compose bundle ─────────────────────────────────────────────────────
 log "Copying compose bundle..."
-cp "${REPO_ROOT}/packaging/compose/docker-compose.yml"          "${BUILD_DIR}/"
-cp "${REPO_ROOT}/packaging/compose/docker-compose.prod.yml"     "${BUILD_DIR}/"
-cp "${REPO_ROOT}/packaging/compose/.env.example"                "${BUILD_DIR}/"
-cp "${REPO_ROOT}/packaging/compose/setup.sh"                    "${BUILD_DIR}/"
-cp "${REPO_ROOT}/packaging/compose/uninstall.sh"                "${BUILD_DIR}/"
-cp "${REPO_ROOT}/packaging/compose/systemd/bas-compose.service" "${BUILD_DIR}/systemd/"
-chmod +x "${BUILD_DIR}/setup.sh" "${BUILD_DIR}/uninstall.sh"
+cp "${REPO_ROOT}/packaging/compose/docker-compose.yml"          "${BUILD_DIR}/compose/"
+cp "${REPO_ROOT}/packaging/compose/docker-compose.prod.yml"     "${BUILD_DIR}/compose/"
+cp "${REPO_ROOT}/packaging/compose/.env.example"                "${BUILD_DIR}/compose/"
+cp "${REPO_ROOT}/packaging/compose/setup.sh"                    "${BUILD_DIR}/compose/"
+cp "${REPO_ROOT}/packaging/compose/uninstall.sh"                "${BUILD_DIR}/compose/"
+cp "${REPO_ROOT}/packaging/compose/systemd/bas-compose.service" "${BUILD_DIR}/compose/systemd/"
+chmod +x "${BUILD_DIR}/compose/setup.sh" "${BUILD_DIR}/compose/uninstall.sh"
 
 # Release gate: builtin scenario signatures must verify against the compiled key.
 log "Verifying builtin scenario signatures..."
@@ -125,14 +146,21 @@ if ! (cd "${REPO_ROOT}/orchestrator" && env -u GOOS -u GOARCH go run scripts/sig
   exit 1
 fi
 
-cp -r "${REPO_ROOT}/scenarios/."                "${BUILD_DIR}/scenarios/"
-cp -r "${REPO_ROOT}/orchestrator/wwwroot/."       "${BUILD_DIR}/wwwroot/"
+# Copy application assets
+cp -r "${REPO_ROOT}/scenarios/."                "${BUILD_DIR}/compose/scenarios/"
+cp -r "${REPO_ROOT}/orchestrator/wwwroot/."       "${BUILD_DIR}/compose/wwwroot/"
 
-mkdir -p "${BUILD_DIR}/art-payloads"
+# ART external payloads staged on the build host — baked in so the client gets
+# them automatically (compose bind-mounts ./art-payloads to /art-payloads).
+# Only real executables/scripts are bundled (the staging folder may also hold tool
+# source trees, zips, installers and PDBs — none of which an atomic invokes).
+# Flattened with no-clobber so companion files co-locate and duplicate basenames
+# resolve first-wins, matching the server's payload importer.
+mkdir -p "${BUILD_DIR}/compose/art-payloads"
 PAYLOAD_N=0
 if [ -d "${REPO_ROOT}/packaging/art-payloads" ]; then
   while IFS= read -r -d '' f; do
-    if cp -n "$f" "${BUILD_DIR}/art-payloads/" 2>/dev/null; then
+    if cp -n "$f" "${BUILD_DIR}/compose/art-payloads/" 2>/dev/null; then
       PAYLOAD_N=$((PAYLOAD_N + 1))
     fi
   done < <(find "${REPO_ROOT}/packaging/art-payloads" -type f \( \
@@ -143,13 +171,23 @@ if [ -d "${REPO_ROOT}/packaging/art-payloads" ]; then
   log "  ART payloads bundled (binaries only): ${PAYLOAD_N}"
 fi
 
-# ── 5. Copy import helpers ──────────────────────────────────────────────────────
-cp "${REPO_ROOT}/packaging/airgap/import.sh"         "${BUILD_DIR}/"
-cp "${REPO_ROOT}/packaging/airgap/verify.sh"          "${BUILD_DIR}/"
-cp "${REPO_ROOT}/packaging/airgap/verify-common.sh"   "${BUILD_DIR}/"
+# ── 5. Copy import helper ──────────────────────────────────────────────────────
+cp "${REPO_ROOT}/packaging/airgap/import.sh"  "${BUILD_DIR}/"
+cp "${REPO_ROOT}/packaging/airgap/verify.sh"  "${BUILD_DIR}/"
+cp "${REPO_ROOT}/packaging/airgap/cosign-verify-lib.sh" "${BUILD_DIR}/"
 chmod +x "${BUILD_DIR}/import.sh" "${BUILD_DIR}/verify.sh"
 
+# setup.sh --offline (run by import.sh) verifies again from its own directory:
+# it needs cosign.pub and the signed orchestrator artifact under compose/.
+cp "${BUILD_DIR}/cosign.pub" "${BUILD_DIR}/compose/cosign.pub"
+
+# Write version file
 echo "${VERSION}" > "${BUILD_DIR}/VERSION"
+# setup.sh reads ${SCRIPT_DIR}/VERSION (compose/VERSION) to pin BAS_VERSION in
+# .env; without it compose would run bas-orchestrator:latest, not the verified tag.
+echo "${VERSION}" > "${BUILD_DIR}/compose/VERSION"
+# verify-sig.sh ships in the bundle so import.sh can honour a present .asc.
+cp "${REPO_ROOT}/packaging/signing/verify-sig.sh" "${REPO_ROOT}/packaging/signing/pubkey.asc" "${BUILD_DIR}/"
 
 # ── 6. Generate sha256 manifest ───────────────────────────────────────────────
 log "Generating file manifest..."
@@ -174,8 +212,25 @@ sha256sum "${TARBALL}" > "${CHECKSUM}" 2>/dev/null || \
 
 BUNDLE_SIZE=$(du -sh "${TARBALL}" | cut -f1)
 
-# ── 8. Sign the bundle -- mandatory, not optional ───────────────────────────────
-SIGN_SCRIPT="${SIGNING_DIR}/sign.sh"
+# ── 8. Sign the bundle -- mandatory, not optional (TCF Phase 8, ported) ────────
+# An unsigned air-gap bundle must never be produced: GPG is the only mechanism
+# authenticating the compose files, the postgres image, scenarios, and ART
+# payloads -- cosign (step 3 above) covers only the runtime image tars.
+# "Warn and ship unsigned" was the exact fail-open defect this closes.
+SIGN_SCRIPT="${REPO_ROOT}/packaging/signing/sign.sh"
+SIGNING_KEY_EMAIL="releases@audspect.com"
+if ! command -v gpg &>/dev/null; then
+  err "gpg is not installed, and GPG signing is mandatory for this air-gap bundle. An unsigned air-gap bundle must never be produced."
+  rm -f "${TARBALL}" "${CHECKSUM}"
+  exit 1
+fi
+if ! gpg --list-secret-keys "${SIGNING_KEY_EMAIL}" &>/dev/null 2>&1; then
+  err "GPG signing key (${SIGNING_KEY_EMAIL}) not found, and GPG signing is mandatory for this air-gap bundle. An unsigned air-gap bundle must never be produced."
+  echo "  Generate one: bash packaging/signing/keygen.sh" >&2
+  rm -f "${TARBALL}" "${CHECKSUM}"
+  exit 1
+fi
+log "Signing bundle with GPG key ${SIGNING_KEY_EMAIL}..."
 if ! bash "${SIGN_SCRIPT}" "${TARBALL}"; then
   err "GPG signing failed -- aborting. An unsigned air-gap bundle must never be produced."
   rm -f "${TARBALL}" "${CHECKSUM}"
@@ -187,6 +242,13 @@ echo ""
 echo "  Bundle:    ${TARBALL}  (${BUNDLE_SIZE})"
 echo "  Checksum:  ${CHECKSUM}"
 echo ""
-echo "  Transfer bundle + .sha256 + .asc to the air-gapped server, then run:"
+echo "  Transfer bundle + .sha256 + .asc to the air-gapped server."
+echo "  TRUST BOOTSTRAP: verify-sig.sh ships INSIDE the bundle, so with an out-of-band"
+echo "  GPG key do the FIRST check with the host's own gpg BEFORE extracting/running anything"
+echo "  (oob.asc = the Audspect key obtained out of band; canonical text: packaging/airgap/trust-bootstrap.sh):"
+sed -e '/^# shellcheck /d' -e "s/bundle\.tar\.gz/bas-airgap-${VERSION}.tar.gz/g" -e 's/^/    /' "${REPO_ROOT}/packaging/airgap/trust-bootstrap.sh"
+echo "  Then run:"
+echo "  (cosign >= v3.1.0 must already be installed on the air-gapped server)"
+echo "    bash verify-sig.sh bas-airgap-${VERSION}.tar.gz   # if signed"
 echo "    bash verify.sh bas-airgap-${VERSION}.tar.gz"
 echo "    sudo bash import.sh bas-airgap-${VERSION}.tar.gz"

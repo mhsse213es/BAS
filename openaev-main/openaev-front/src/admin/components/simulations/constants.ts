@@ -1,2 +1,0 @@
-export const EXERCISE_NAME_MAX_LENGTH = 255;
-export const EXERCISE_NAME_MIN_LENGTH = 1;

@@ -184,7 +184,58 @@ type Step struct {
 	// are never sent to the agent.
 	DetectionProfiles  []string            `yaml:"detection_profiles,omitempty" json:"detectionProfiles,omitempty"`
 	ExpectedDetections []ExpectedDetection `yaml:"expected_detection,omitempty" json:"expectedDetections,omitempty"`
+
+	// ── Threat-intelligence provenance (optional) ────────────────────────────
+	// ThreatIntelSources cites the source(s) this step's claimed behavior is
+	// based on. A step may be based on several sources, and not every source
+	// need support every claim -- hence a collection, never a single string.
+	// The existing free-text Scenario.Description stays for human narrative;
+	// this is the structured, validated counterpart. Mandatory-for-specific-
+	// content-sets enforcement (e.g. new ransomware family content) lives
+	// outside this package entirely, in whichever test owns that content set.
+	ThreatIntelSources []ThreatIntelSource `yaml:"threat_intel_sources,omitempty" json:"threatIntelSources,omitempty"`
+
+	// LastReviewed is an explicit date (YYYY-MM-DD) this step's claimed
+	// behavior was last checked against current threat intelligence --
+	// distinct from the YAML file's own publication or last-modified time,
+	// which reflect editing activity, not intelligence freshness.
+	LastReviewed string `yaml:"last_reviewed,omitempty" json:"lastReviewed,omitempty"`
+
+	// FamilyAttributionConfidence is how strongly ThreatIntelSources link
+	// THIS SPECIFIC BEHAVIOR to the family this scenario models -- not
+	// confidence that the behavior occurs at all, and not confidence that
+	// some ransomware family exhibits it generally. One of the
+	// FamilyAttribution* constants below.
+	FamilyAttributionConfidence string `yaml:"family_attribution_confidence,omitempty" json:"familyAttributionConfidence,omitempty"`
 }
+
+// ThreatIntelSource is one citation backing a step's claimed behavior: an
+// advisory/report identifier (mandatory) and an optional URL.
+type ThreatIntelSource struct {
+	Reference string `yaml:"reference"     json:"reference"`
+	URL       string `yaml:"url,omitempty" json:"url,omitempty"`
+}
+
+// FamilyAttributionConfidence's closed vocabulary: how strongly evidence
+// links a step's specific behavior to the family a scenario models.
+const (
+	// FamilyAttributionUnsourced: author assertion, no citation.
+	FamilyAttributionUnsourced = "unsourced"
+	// FamilyAttributionInferred: consistent with the family's documented
+	// toolset/TTPs generally, but the cited source(s) don't specifically
+	// tie this behavior to this family.
+	FamilyAttributionInferred = "inferred"
+	// FamilyAttributionReported: at least one credible source specifically
+	// attributes this behavior to this family.
+	FamilyAttributionReported = "reported"
+	// FamilyAttributionConfirmed: multiple sources, or a definitive
+	// government advisory, specifically attribute this behavior to this
+	// family. Structural validation enforces only a minimum citation COUNT
+	// (>=2) as a floor -- it cannot verify sources are genuinely independent
+	// or credible; that judgment belongs to the human authoring/review step
+	// of each family's later content pass.
+	FamilyAttributionConfirmed = "confirmed"
+)
 
 // LivePolicy is the per-scenario guardrail set applied to live (telemetry/lab)
 // execution. Zero values mean "no constraint".

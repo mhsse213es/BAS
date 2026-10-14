@@ -41,7 +41,7 @@ func MountEnrollment(h *Handler) http.Handler {
 }
 
 // Mount builds the full HTTP router and returns it.
-// staticHandler serves the dashboard SPA — pass StaticHandler() in production
+// staticHandler serves the dashboard SPA — pass StaticHandler(cfg.CSPMode) in production
 // (embedded FS) or http.FileServer(http.Dir("./wwwroot")) in tests/dev.
 // rateLimitPerMin <= 0 disables rate limiting entirely (the default —
 // existing installs are never surprise-limited on upgrade).
@@ -75,6 +75,21 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 	r.Get("/login/{tenantSlug}/sso", h.InitiateSSOLogin)
 	r.Get("/api/auth/sso/callback", h.SSOCallback)
 	r.Get("/api/config/ca-root", h.GetCARoot)
+	r.Post("/api/csp-report", h.CSPReport) // CSP violation reports; browsers send them without credentials (G1d)
+
+	// Generic inbound security-event ingestion -- authenticated by its own
+	// shared secret (see validateIngestAuth), not the JWT session auth
+	// this group's name implies; placed here because it is, like the CSP
+	// report endpoint above, called by something other than a logged-in
+	// browser session. IngestEvents itself 404s when unconfigured. Rate
+	// limited like the JWT/SCIM groups below: an externally-reachable
+	// write endpoint is exactly the runaway-client case that guard exists
+	// for.
+	if rateLimit != nil {
+		r.With(rateLimit).Post("/api/ingest/v1/events", h.IngestEvents)
+	} else {
+		r.Post("/api/ingest/v1/events", h.IngestEvents)
+	}
 
 	// Agent endpoints — protected by optional AGENT_SECRET shared token.
 	// When agentSecret is empty these remain open (backward compat).
@@ -211,11 +226,39 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.Get("/api/agents/download/{platform}", h.DownloadAgent)
 		r.Get("/api/scenarios", h.ListScenarios)
 		r.Get("/api/scenarios/{id}", h.GetScenario)
+		r.Get("/api/ad/coverage", h.GetADCoverage)
+		// AD coverage assessment report, from the same admatrix.Report() data as
+		// /api/ad/coverage: PDF (primary), HTML, and JSON (secondary). Read-only.
+		r.Get("/api/ad/assessment.pdf", h.GetADAssessmentPDF)
+		r.Get("/api/ad/assessment.html", h.GetADAssessmentHTML)
+		r.Get("/api/ad/assessment.json", h.GetADAssessmentJSON)
+		// Admin-only: inventories the live ART/Caldera libraries for the AD
+		// primitive set (read-only; reuses the ART content-status permission).
+		r.With(auth.RequirePermission(auth.CanViewARTContentStatus)).Get("/api/ad/content-inventory", h.GetADContentInventory)
 		r.Get("/api/content-registry/content/{id}/versions", h.ListContentVersions)
 		r.Get("/api/content-registry/versions/{vid}", h.GetContentVersion)
 		r.Get("/api/content-registry/runs/{runId}/drift", h.GetRunDrift)
 		r.Get("/api/content-registry/runs/{runId}/content", h.GetRunContent)
 		r.Get("/api/scenarios/runs", h.ListScenarioRuns)
+		r.Get("/api/cloud-runs", h.ListCloudRuns)
+		r.Get("/api/cloud-campaigns", h.ListCloudCampaigns)
+		r.Get("/api/cloud-runs/{id}", h.GetCloudRun)
+		r.Get("/api/cloud-campaigns/{id}", h.GetCloudCampaign)
+		r.Get("/api/network-discovery-runs", h.ListNetworkDiscoveryRuns)
+		r.Get("/api/network-discovery-runs/{id}", h.GetNetworkDiscoveryRun)
+		r.Get("/api/dns-security-checks", h.ListDNSSecurityCheckRuns)
+		r.Get("/api/dns-security-checks/{id}", h.GetDNSSecurityCheckRun)
+		r.Get("/api/transport-security-checks", h.ListTransportSecurityCheckRuns)
+		r.Get("/api/transport-security-checks/{id}", h.GetTransportSecurityCheckRun)
+		r.Get("/api/network-policy-imports", h.ListNetworkPolicyImports)
+		r.Get("/api/network-policy-imports/{id}", h.GetNetworkPolicyImport)
+		r.Get("/api/network-reachability-comparisons", h.GetNetworkReachabilityComparison)
+		r.Get("/api/network-topology-imports", h.ListNetworkTopologyImports)
+		r.Get("/api/network-topology-imports/{id}", h.GetNetworkTopologyImport)
+		r.Get("/api/cloud-topology-imports", h.ListCloudTopologyImports)
+		r.Get("/api/cloud-topology-imports/{id}", h.GetCloudTopologyImport)
+		r.Get("/api/network-control-expectations", h.ListNetworkControlExpectationImports)
+		r.Get("/api/network-control-expectations/{id}", h.GetNetworkControlExpectationImport)
 		r.Get("/api/scenarios/runs/{runId}/report", h.GetRunReport)
 		r.Get("/api/scenarios/runs/{runId}/report.json", h.GetRunReportData)
 		r.Get("/api/scenarios/runs/{runId}/attackflow", h.GetRunAttackFlow)
@@ -226,6 +269,9 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.Get("/api/scenarios/runs/{runId}/pdf", h.GetRunPDF)
 		r.Get("/api/scenarios/runs/{runId}/forensic.csv", h.GetRunForensicCSV)
 		r.Get("/api/scenarios/runs/{runId}/iocs", h.GetRunIOCs)
+		r.Get("/api/scenarios/runs/{runId}/rw-score", h.GetRunRWScore)
+		r.Get("/api/scenarios/runs/{runId}/double-extortion-correlation", h.GetDoubleExtortionCorrelation)
+		r.Get("/api/scenarios/runs/{runId}/detection-response-effectiveness", h.GetDetectionResponseEffectiveness)
 		r.Get("/api/campaigns", h.ListCampaigns)
 		r.Get("/api/campaigns/{id}", h.GetCampaign)
 		r.Get("/api/campaigns/{id}/summary", h.CampaignSummary)
@@ -382,6 +428,21 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.With(auth.RequirePermission(auth.CanRetryAttackPathJob)).Post("/api/attackpath/jobs/{id}/retry", h.RetryAttackPathJob)
 		r.With(auth.RequirePermission(auth.CanSetAttackPathAsset)).Post("/api/attackpath/assets", h.SetAttackPathAsset)
 		r.With(auth.RequirePermission(auth.CanRunScenario)).Post("/api/scenarios/{id}/run", h.RunScenario)
+		r.With(auth.RequirePermission(auth.CanRunScenario)).Post("/api/cloud-runs", h.TriggerCloudPlanRun)
+		r.With(auth.RequirePermission(auth.CanRunScenario)).Post("/api/cloud-campaigns", h.CreateCloudCampaign)
+		r.With(auth.RequirePermission(auth.CanRunScenario)).Post("/api/network-discovery-runs", h.TriggerNetworkDiscoveryRun)
+		r.With(auth.RequirePermission(auth.CanRunScenario)).Post("/api/dns-security-checks", h.TriggerDNSSecurityCheckRun)
+		r.With(auth.RequirePermission(auth.CanRunScenario)).Post("/api/transport-security-checks", h.TriggerTransportSecurityCheckRun)
+		r.With(auth.RequirePermission(auth.CanImportNetworkPolicy)).Post("/api/network-policy-imports", h.CreateNetworkPolicyImport)
+		r.With(auth.RequirePermission(auth.CanImportNetworkPolicy)).Post("/api/network-policy-evaluations", h.EvaluateNetworkPolicy)
+		r.With(auth.RequirePermission(auth.CanImportNetworkTopology)).Post("/api/network-topology-imports", h.CreateNetworkTopologyImport)
+		r.With(auth.RequirePermission(auth.CanImportCloudTopology)).Post("/api/cloud-topology-imports", h.CreateCloudTopologyImport)
+		r.With(auth.RequirePermission(auth.CanImportNetworkControlExpectation)).Post("/api/network-control-expectations", h.CreateNetworkControlExpectationImport)
+		r.With(auth.RequirePermission(auth.CanImportNetworkTopology)).Post("/api/network-paths", h.FindNetworkPaths)
+		r.With(auth.RequirePermission(auth.CanImportCloudTopology)).Post("/api/cloud-paths", h.FindCloudPaths)
+		r.With(auth.RequirePermission(auth.CanImportNetworkControlExpectation)).Post("/api/network-control-verifications", h.VerifyNetworkControlExpectations)
+		r.With(auth.RequirePermission(auth.CanRunScenario)).Post("/api/backup-assurance/assessments", h.TriggerBackupAssuranceAssessment)
+		r.Get("/api/backup-assurance/assessments/{assessmentId}", h.GetBackupAssuranceAssessment)
 		r.With(auth.RequirePermission(auth.CanRunCalderaAdversary)).Post("/api/caldera/adversaries/{adversaryId}/run", h.RunCalderaAdversary)
 		r.With(auth.RequirePermission(auth.CanRunAdversaryTemplate)).Post("/api/adversary-templates/{id}/run", h.RunAdversaryTemplate)
 		r.With(auth.RequirePermission(auth.CanCancelScenarioRun)).Post("/api/scenarios/runs/{runId}/cancel", h.CancelRun)

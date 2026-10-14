@@ -184,6 +184,10 @@ autoinstall:
     - mkdir -p /target/var/tmp
     - "bash -c 'if [ -f /cdrom/bas-airgap.tar.gz ]; then cp /cdrom/bas-airgap.tar.gz /target/var/tmp/bas-airgap.tar.gz; fi'"
 
+    # Pinned, checksum-verified cosign staged on the ISO by build-iso.sh
+    - mkdir -p /target/opt/bas-install/appliance
+    - cp -r /cdrom/autoinstall/appliance/. /target/opt/bas-install/appliance/
+
     # Copy post-install script (completes BAS setup on first boot)
     - mkdir -p /target/opt/bas-install
     - cp /cdrom/autoinstall/scripts/post-install.sh /target/opt/bas-install/

@@ -5,7 +5,7 @@ Source for the dashboard served from `/wwwroot` in the orchestrator image.
 - `index.html` — markup only; the build injects the hashed CSS/JS names.
 - `styles/app.css` — all styles.
 - `src/main.js` — entry: `installGlobals()`, then the load-time `__init_L*` functions in their original order.
-- `src/globals.js` — the only place app names are defined on `window`. Every function called from an inline `on…=` handler must be listed in `HANDLER_FUNCTIONS`; CI (`scripts/g1c-check-globals.py`) fails on missing or stale entries. This list is the G1d (strict CSP) worklist: it shrinks as handlers move to event listeners.
+- `src/globals.js` — the `ACTIONS` registry. Markup attaches behaviour only with `data-on-<event>="name"` (static HTML) or `on('<event>', 'name', ...args)` (templates); `src/core/actions.js` dispatches through `ACTIONS`, never through `window`. `scripts/g1d-check-actions.py` fails on unregistered/unused actions, any inline `on…=` handler or `javascript:` URL, and window writes outside `WINDOW_WRITES`.
 - `src/core/` — escaper (`escape.js`), API helper (`api.js`), shared formatting (`util.js`), shared mutable state (`state.js`).
 - `src/features/` — one module per dashboard area.
 

@@ -5,6 +5,7 @@ import { on } from '../core/actions.js';
 import { fmtDate, showToast } from '../core/util.js';
 import { closeAllRowMenus } from './attack-path.js';
 import { ROLE } from './shell.js';
+import { cssVars } from '../core/css-vars.js';
 
 
 // ── Initiative Layer ─────────────────────────────────────────────────────
@@ -18,7 +19,7 @@ import { ROLE } from './shell.js';
 var INITIATIVES = { list: [], filter: 'active' };
 
 function initiativeStateColor(initState) {
-  return initState === 'active' ? 'var(--success)' : 'var(--muted)';
+  return initState === 'active' ? 'g1-s-f213c12d' : 'g1-s-8297411d';
 }
 export function initiativeStateLabel(initState) {
   if (initState === 'active') return 'Active';
@@ -57,7 +58,7 @@ function renderInitiativesList() {
     var canDelete = it.State === 'archived' && ROLE === 'admin';
     return '<tr' + on('click', 'openInitiativeDrawer', it.ID) + ' class="u-pointer">' +
       '<td>' + x(it.Name) + '</td>' +
-      '<td><span class="badge" style="color:' + col + ';border-color:' + col + '">' + initiativeStateLabel(it.State) + '</span></td>' +
+      '<td><span class="badge ' + col + '">' + initiativeStateLabel(it.State) + '</span></td>' +
       '<td>' + x(it.CreatedBy || '—') + '</td>' +
       '<td>' + x(fmtDate(it.CreatedAt)) + '</td>' +
       '<td' + on('click', 'stopEvent') + '>' +
@@ -110,7 +111,7 @@ function renderInitiativeDrawer(it, progress, jobs) {
   var jobRows = jobs.length
     ? jobs.map(function(j) {
         return '<tr>' +
-          '<td class="tiny muted" style="font-family:var(--font-mono)">' + x(j.id.slice(0, 8)) + '</td>' +
+          '<td class="tiny muted g1-s-82cece3f">' + x(j.id.slice(0, 8)) + '</td>' +
           '<td>' + x(j.type) + '</td>' +
           '<td><span class="badge">' + x(j.state) + '</span></td>' +
           '<td>' + x(fmtDate(j.createdAt)) + '</td>' +
@@ -122,22 +123,22 @@ function renderInitiativeDrawer(it, progress, jobs) {
 
   document.getElementById('init-drawer-body').innerHTML =
     '<div class="u-mb-1">' +
-      '<span class="badge" style="color:' + col + ';border-color:' + col + '">' + initiativeStateLabel(it.State) + '</span> ' +
+      '<span class="badge ' + col + '">' + initiativeStateLabel(it.State) + '</span> ' +
       '<span class="tiny muted">Created by ' + x(it.CreatedBy || '—') + ' · ' + x(fmtDate(it.CreatedAt)) + '</span>' +
     '</div>' +
-    '<div style="display:flex;gap:0.5rem;margin-bottom:1rem">' +
+    '<div class="g1-display-flex g1-s-de98f8b6">' +
       (it.State === 'active' ? '<button class="btn btn-outline btn-sm"' + on('click', 'initiativeCloseAction') + '>Close Initiative</button>' : '') +
       (it.State === 'closed' ? '<button class="btn btn-outline btn-sm"' + on('click', 'initiativeArchiveAction') + '>Archive Initiative</button>' : '') +
     '</div>' +
-    '<div id="init-drawer-error" style="margin-bottom:0.85rem"></div>' +
-    (it.Description ? '<p style="font-size:0.8rem;color:var(--text-dim);margin-bottom:1.1rem;line-height:1.5">' + x(it.Description) + '</p>' : '') +
-    '<div class="bar-row" style="margin-bottom:1.25rem">' +
+    '<div id="init-drawer-error" class="g1-s-6d6ac12c"></div>' +
+    (it.Description ? '<p class="g1-s-691a68f3">' + x(it.Description) + '</p>' : '') +
+    '<div class="bar-row g1-s-20ce54f7">' +
       '<div class="bar-label"><span>Progress</span><span>' + pct + '%</span></div>' +
-      '<div class="bar-track"><div class="bar-fill" style="width:' + pct + '%;background:var(--accent)"></div></div>' +
-      '<div class="tiny muted" style="margin-top:0.3rem">' + x(initiativeProgressCounts(progress)) + '</div>' +
+      '<div class="bar-track"><div class="bar-fill g1-s-6557e7ab"' + cssVars(['g1-v-9b890877', pct]) + '></div></div>' +
+      '<div class="tiny muted g1-s-f10b735a">' + x(initiativeProgressCounts(progress)) + '</div>' +
     '</div>' +
-    '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.5rem">' +
-      '<h4 style="font-size:0.78rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin:0">Jobs</h4>' +
+    '<div class="g1-display-flex g1-s-1bb6b069">' +
+      '<h4 class="g1-s-4e9a1212">Jobs</h4>' +
       (it.State === 'active' ? '<button class="btn btn-outline btn-sm"' + on('click', 'openInitiativeAttachDrawer') + '>+ Attach Job</button>' : '') +
     '</div>' +
     '<div class="tbl-wrap"><table><thead><tr>' +
@@ -243,13 +244,13 @@ export function openInitiativeAttachDrawer() {
   state.INIT_ATTACH_SELECTED = '';
   document.getElementById('init-attach-search').value = '';
   document.getElementById('init-attach-error').innerHTML = '';
-  document.getElementById('init-attach-list').innerHTML = '<div class="tiny muted" style="padding:0.75rem">Loading…</div>';
+  document.getElementById('init-attach-list').innerHTML = '<div class="tiny muted g1-s-d1aafd03">Loading…</div>';
   document.getElementById('init-attach-overlay').classList.add('open');
   apicall('/api/jobs?initiativeId=').then(function(res) {
-    if (res && res.error) { document.getElementById('init-attach-list').innerHTML = '<div class="tiny" style="color:var(--danger);padding:0.75rem">' + x(res.error) + '</div>'; return; }
+    if (res && res.error) { document.getElementById('init-attach-list').innerHTML = '<div class="tiny g1-s-1bf97088">' + x(res.error) + '</div>'; return; }
     INIT_ATTACH_POOL = (res && res.jobs) || [];
     initiativeRenderAttachList();
-  }).catch(function(e) { document.getElementById('init-attach-list').innerHTML = '<div class="tiny" style="color:var(--danger);padding:0.75rem">' + x(e.message) + '</div>'; });
+  }).catch(function(e) { document.getElementById('init-attach-list').innerHTML = '<div class="tiny g1-s-1bf97088">' + x(e.message) + '</div>'; });
 }
 
 export function closeInitiativeAttachDrawer() {
@@ -264,14 +265,14 @@ export function initiativeRenderAttachList() {
   });
   var list = document.getElementById('init-attach-list');
   if (!filtered.length) {
-    list.innerHTML = '<div class="tiny muted" style="padding:0.75rem">No unassigned jobs found.</div>';
+    list.innerHTML = '<div class="tiny muted g1-s-d1aafd03">No unassigned jobs found.</div>';
     return;
   }
   list.innerHTML = filtered.map(function(j) {
     var checked = j.id === state.INIT_ATTACH_SELECTED ? 'checked' : '';
-    return '<label style="display:flex;align-items:center;gap:0.5rem;padding:0.5rem 0.75rem;border-bottom:1px solid var(--border);cursor:pointer;font-size:0.78rem">' +
+    return '<label class="g1-display-flex g1-s-870226af">' +
       '<input type="radio" name="init-attach-radio" value="' + x(j.id) + '" ' + checked + on('change', 'initiativeAttachSelect') + '>' +
-      '<span style="font-family:var(--font-mono);color:var(--muted)">' + x(j.id.slice(0, 8)) + '</span>' +
+      '<span class="g1-s-dbdd527f">' + x(j.id.slice(0, 8)) + '</span>' +
       '<span>' + x(j.type) + '</span>' +
       '<span class="badge">' + x(j.state) + '</span>' +
     '</label>';

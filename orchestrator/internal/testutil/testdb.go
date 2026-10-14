@@ -98,6 +98,11 @@ func newTestDB(ctx context.Context) (*TestDB, error) {
 		_ = container.Terminate(context.Background())
 		return nil, fmt.Errorf("testutil: EnsureIOCEnrichmentSchema: %w", err)
 	}
+	if err := db.EnsureIngestSchema(ctx, pool); err != nil {
+		pool.Close()
+		_ = container.Terminate(context.Background())
+		return nil, fmt.Errorf("testutil: EnsureIngestSchema: %w", err)
+	}
 	if err := db.EnsureAgentGroupSchema(ctx, pool); err != nil {
 		pool.Close()
 		_ = container.Terminate(context.Background())
@@ -137,6 +142,51 @@ func newTestDB(ctx context.Context) (*TestDB, error) {
 		pool.Close()
 		_ = container.Terminate(context.Background())
 		return nil, fmt.Errorf("testutil: EnsureTCVSchema: %w", err)
+	}
+	if err := db.EnsureCloudRunSchema(ctx, pool); err != nil {
+		pool.Close()
+		_ = container.Terminate(context.Background())
+		return nil, fmt.Errorf("testutil: EnsureCloudRunSchema: %w", err)
+	}
+	if err := db.EnsureCloudCampaignSchema(ctx, pool); err != nil {
+		pool.Close()
+		_ = container.Terminate(context.Background())
+		return nil, fmt.Errorf("testutil: EnsureCloudCampaignSchema: %w", err)
+	}
+	if err := db.EnsureNetworkDiscoverySchema(ctx, pool); err != nil {
+		pool.Close()
+		_ = container.Terminate(context.Background())
+		return nil, fmt.Errorf("testutil: EnsureNetworkDiscoverySchema: %w", err)
+	}
+	if err := db.EnsureNetworkPolicySchema(ctx, pool); err != nil {
+		pool.Close()
+		_ = container.Terminate(context.Background())
+		return nil, fmt.Errorf("testutil: EnsureNetworkPolicySchema: %w", err)
+	}
+	if err := db.EnsureNetworkTopologySchema(ctx, pool); err != nil {
+		pool.Close()
+		_ = container.Terminate(context.Background())
+		return nil, fmt.Errorf("testutil: EnsureNetworkTopologySchema: %w", err)
+	}
+	if err := db.EnsureNetworkControlExpectationSchema(ctx, pool); err != nil {
+		pool.Close()
+		_ = container.Terminate(context.Background())
+		return nil, fmt.Errorf("testutil: EnsureNetworkControlExpectationSchema: %w", err)
+	}
+	if err := db.EnsureDNSSecurityCheckSchema(ctx, pool); err != nil {
+		pool.Close()
+		_ = container.Terminate(context.Background())
+		return nil, fmt.Errorf("testutil: EnsureDNSSecurityCheckSchema: %w", err)
+	}
+	if err := db.EnsureTransportSecurityCheckSchema(ctx, pool); err != nil {
+		pool.Close()
+		_ = container.Terminate(context.Background())
+		return nil, fmt.Errorf("testutil: EnsureTransportSecurityCheckSchema: %w", err)
+	}
+	if err := db.EnsureCloudTopologySchema(ctx, pool); err != nil {
+		pool.Close()
+		_ = container.Terminate(context.Background())
+		return nil, fmt.Errorf("testutil: EnsureCloudTopologySchema: %w", err)
 	}
 
 	return &TestDB{

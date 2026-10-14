@@ -13,6 +13,11 @@ DEFAULT_BASELINE = REPO_ROOT / "scripts" / "g1d-inline-baseline.json"
 # excluded because "on" there follows "-".
 INLINE_HANDLER = re.compile(r"""(?<![\w-])on[a-z]{3,}=\\?["']""")
 JS_URL = re.compile(r"javascript:", re.I)
+INLINE_STYLE = re.compile(r"""(?<![\w.-])style=\\?["']""")
+STYLE_TAG = re.compile(r"<style\b", re.I)
+GEN_USE = re.compile(r"\b(g1-[sv]-[0-9a-f]{8}|g1-display-[a-z-]+)\b")
+GEN_RULE = re.compile(r"(?m)^\.(is-hidden|g1-[sv]-[0-9a-f]{8}|g1-display-[a-z-]+)\b")
+RULE_KEY = re.compile(r"""(?m)^\s*['"](g1-v-[0-9a-f]{8})['"]\s*:""")
 DATA_ON = re.compile(r'data-on-([a-z]+)="([^"]*)"')
 ON_CALL = re.compile(r"""(?<![\w$.])on\(\s*['"]([a-z]+)['"]\s*,\s*['"]([A-Za-z_$][\w$]*)['"]""")
 STRING_NAME = re.compile(r"""['"]([A-Za-z_$][\w$]*)['"]""")
@@ -40,6 +45,7 @@ def counts(web_dir):
     return {
         "inline_handlers": sum(len(INLINE_HANDLER.findall(t)) for t in texts),
         "javascript_urls": sum(len(JS_URL.findall(t)) for t in texts),
+        "inline_styles": sum(len(INLINE_STYLE.findall(t)) + len(STYLE_TAG.findall(t)) for t in texts),
     }
 
 
@@ -75,13 +81,50 @@ def check(web_dir, baseline_path=DEFAULT_BASELINE):
     for name in sorted(explicit - used - builtins):
         errors.append(f"unused action: {name}")
 
+    window_writes = set(_block(globals_js, "WINDOW_WRITES")) if "WINDOW_WRITES" in globals_js else set()
+    # Keys of the shared state object used to be mirrored onto window; a
+    # window.<key> read is now silently undefined.
+    state_js = js.get(web_dir / "src" / "core" / "state.js", "")
+    m = re.search(r"export const state = \{(.*?)\n\};", state_js, re.S)
+    state_keys = set(re.findall(r"^\s+([A-Za-z_$][\w$]*):", m.group(1), re.M)) if m else set()
+    for p, text in js.items():
+        if p.name == "globals.js":
+            continue
+        for name in sorted(set(re.findall(r"(?<![\w$.])window\.([A-Za-z_$][\w$]*)", text)) & state_keys):
+            errors.append(f"window read of shared state: {name} in {p.relative_to(web_dir).as_posix()} (use state.{name})")
+        for name in re.findall(r"(?<![\w$.])window\.([A-Za-z_$][\w$]*)\s*=(?!=)", text):
+            if name not in window_writes:
+                errors.append(f"window write not in WINDOW_WRITES: {name}")
+        if re.search(r"(?<![\w$.])window\[", text):
+            errors.append(f"window[...] lookup in {p.relative_to(web_dir).as_posix()}")
+
+    css_path = web_dir / "styles" / "inline-equivalent.css"
+    if css_path.exists():
+        defined = set(GEN_RULE.findall(css_path.read_text(encoding="utf-8")))
+        rules_path = web_dir / "src" / "core" / "css-var-rules.js"
+        registered_rules = set(RULE_KEY.findall(rules_path.read_text(encoding="utf-8"))) if rules_path.exists() else set()
+        used_gen = set()
+        for p, text in [(web_dir / "index.html", html), *js.items()]:
+            found = set(GEN_USE.findall(text))
+            if p != rules_path:
+                for r in {c for c in found if c.startswith("g1-v-")} - registered_rules:
+                    errors.append(f"unregistered css-vars rule: {r}")
+            used_gen |= found
+            if "data-css-vars" in text and p.name != "css-vars.js":
+                errors.append(f"data-css-vars outside core/css-vars.js: {p.relative_to(web_dir).as_posix()}")
+        for c in sorted(used_gen - defined):
+            errors.append(f"undefined generated class: {c}")
+        for c in sorted(defined - used_gen - {"is-hidden"}):
+            errors.append(f"orphan generated rule: {c}")
+
     now = counts(web_dir)
     base = json.loads(Path(baseline_path).read_text(encoding="utf-8"))
-    for key, label in (("inline_handlers", "inline handlers"), ("javascript_urls", "javascript: URLs")):
-        if now[key] > base[key]:
-            errors.append(f"{label}: {now[key]} > baseline {base[key]}")
-        elif now[key] < base[key]:
-            errors.append(f"{label}: {now[key]} < baseline {base[key]} -- run with --update-baseline")
+    for key, label in (("inline_handlers", "inline handlers"), ("javascript_urls", "javascript: URLs"),
+                       ("inline_styles", "inline styles")):
+        if now[key] > base.get(key, 0):
+            errors.append(f"{label}: {now[key]} > baseline {base.get(key, 0)}")
+        elif now[key] < base.get(key, 0):
+            errors.append(f"{label}: {now[key]} < baseline {base.get(key, 0)} -- run with --update-baseline")
     return sorted(set(errors))
 
 

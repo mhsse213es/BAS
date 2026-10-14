@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"time"
 
 	"gopkg.in/yaml.v3"
 
@@ -160,6 +161,7 @@ func structuralCheck(sc *scenario.Scenario, techniqueIDs []string) checkResult {
 	if !hasExecutionMode(sc) {
 		problems = append(problems, "no execution mode")
 	}
+	problems = append(problems, stepProvenanceProblems(sc.Steps)...)
 	out := "PASS"
 	if len(problems) > 0 {
 		out = "FAIL"
@@ -167,6 +169,49 @@ func structuralCheck(sc *scenario.Scenario, techniqueIDs []string) checkResult {
 	return checkResult{outcome: out, detail: map[string]any{
 		"problems": problems, "technique_ids_checked_against_catalog": false,
 	}}
+}
+
+var validFamilyAttributionConfidence = map[string]bool{
+	scenario.FamilyAttributionUnsourced: true,
+	scenario.FamilyAttributionInferred:  true,
+	scenario.FamilyAttributionReported:  true,
+	scenario.FamilyAttributionConfirmed: true,
+}
+
+// stepProvenanceProblems validates each step's optional threat-intel
+// provenance fields. These rules are universal: they apply to any scenario
+// using these fields, regardless of content set, and never reference a
+// specific scenario id or family name. Whether a given content set is
+// REQUIRED to set these fields is enforced by a separate test outside this
+// package, scoped to that content set -- never here.
+func stepProvenanceProblems(steps []scenario.Step) []string {
+	problems := []string{}
+	for _, st := range steps {
+		for _, src := range st.ThreatIntelSources {
+			if strings.TrimSpace(src.Reference) == "" {
+				problems = append(problems, "threat_intel_sources entry missing reference")
+			}
+		}
+		if st.LastReviewed != "" {
+			if _, err := time.Parse("2006-01-02", st.LastReviewed); err != nil {
+				problems = append(problems, "last_reviewed is not a valid date")
+			}
+		}
+		if st.FamilyAttributionConfidence == "" {
+			continue
+		}
+		if !validFamilyAttributionConfidence[st.FamilyAttributionConfidence] {
+			problems = append(problems, "invalid family_attribution_confidence value")
+			continue
+		}
+		if st.FamilyAttributionConfidence != scenario.FamilyAttributionUnsourced && len(st.ThreatIntelSources) == 0 {
+			problems = append(problems, "non-unsourced family_attribution_confidence requires at least one threat_intel_sources entry")
+		}
+		if st.FamilyAttributionConfidence == scenario.FamilyAttributionConfirmed && len(st.ThreatIntelSources) < 2 {
+			problems = append(problems, "confirmed family_attribution_confidence requires at least 2 threat_intel_sources entries")
+		}
+	}
+	return problems
 }
 
 var classRank = map[scenario.ExecutionClass]int{

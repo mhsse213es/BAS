@@ -111,7 +111,11 @@ func TestHasPermission_MatrixIsComplete(t *testing.T) {
 		CanManageSourceTrust:    true,
 		CanLinkContentThreat:    true,
 
+		CanImportNetworkPolicy: true, CanImportNetworkTopology: true,
+		CanImportNetworkControlExpectation: true, CanImportCloudTopology: true,
+
 		CanViewContentArtifact: true, CanTransitionContent: true, CanViewContentMigrationReport: true,
+		CanManageComponents: true,
 	}
 	for _, p := range Permissions(RoleAdmin) {
 		if !tested[p] {
@@ -165,7 +169,8 @@ func TestPermissions_Ordering(t *testing.T) {
 		CanResolveActorIdentity,
 		CanManageSourceTrust,
 		CanLinkContentThreat,
-		CanViewContentArtifact, CanTransitionContent, CanViewContentMigrationReport,
+		CanImportNetworkPolicy, CanImportNetworkTopology, CanImportNetworkControlExpectation, CanImportCloudTopology,
+		CanViewContentArtifact, CanTransitionContent, CanViewContentMigrationReport, CanManageComponents,
 	}
 	if len(got) != len(want) {
 		t.Fatalf("Permissions(RoleAdmin) len = %d, want %d", len(got), len(want))

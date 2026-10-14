@@ -85,3 +85,20 @@ func TestBuildGraphEndToEndAnalyze(t *testing.T) {
 		t.Fatalf("want 2 hosts, got %d", s.Hosts)
 	}
 }
+
+func TestBuildGraph_MergeNode_PreservesUnconstrainedDelegationAcrossCollections(t *testing.T) {
+	// first's node is inserted via mergeNode's "doesn't exist yet" branch,
+	// which copies the whole Node struct for free -- that branch would pass
+	// even without fixing mergeNode's enrichment logic. To actually exercise
+	// the enrichment branch (an ALREADY-EXISTING node merged with a second
+	// collection), the flag must be on the SECOND collection's node instead.
+	first := Collection{Nodes: []Node{{ID: "host1", Kind: KindHost}}}
+	second := Collection{Nodes: []Node{{ID: "host1", Kind: KindHost, Label: "HOST1.CORP.LOCAL", UnconstrainedDelegation: true}}}
+
+	g := BuildGraph(first, second)
+
+	n, ok := g.Node("host1")
+	if !ok || !n.UnconstrainedDelegation {
+		t.Fatalf("expected host1.UnconstrainedDelegation to be set when a second collection reports it for an already-known node, got %+v (ok=%v)", n, ok)
+	}
+}

@@ -1,0 +1,8 @@
+# Pinned cosign release installed into the ISO / Packer appliance at BUILD time
+# (appliance build dependency only; it is NOT part of the Audspect airgap bundle).
+# Version must be >= v3.1.0 (see _cosign_version_ok). Never use "latest".
+# Checksum: official sigstore/cosign release asset, line "cosign-linux-amd64" of
+#   https://github.com/sigstore/cosign/releases/download/<COSIGN_VERSION>/cosign_checksums.txt
+# Bump both values together, from that file.
+COSIGN_VERSION=v3.1.3
+COSIGN_SHA256_LINUX_AMD64=4629c757b7618056f8ddd7e2625ae9fdd94c0372a65049520bc7d9df9efc7f71

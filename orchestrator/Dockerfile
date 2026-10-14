@@ -1,3 +1,16 @@
+# syntax=docker/dockerfile:1
+# The line above must stay the file's first line -- it opts into the
+# BuildKit Dockerfile frontend that understands RUN --mount=type=cache
+# below. Every go mod download/go install/garble build in this file
+# shares the same two cache targets (/go/pkg/mod, /root/.cache/go-build)
+# across every stage and every build: BuildKit keys a cache mount by its
+# target path, not by stage or base image, so golang:1.26-alpine's and
+# golang:1.20.14-alpine's stages below genuinely share one module/build
+# cache. Without this, every stage -- and every fresh `docker build` --
+# re-downloads and re-compiles its whole dependency tree from nothing,
+# which is what made the orchestrator's own garble build (by far the
+# largest single stage) take hours on a cache-less, memory-contended host.
+
 # ── ART Atomics (sparse clone — YAML only, ~10 MB, no binaries) ──────────────
 FROM alpine AS art-fetcher
 RUN apk add --no-cache git curl && \
@@ -27,18 +40,20 @@ FROM golang:1.26-alpine AS agent-builder
 # satisfy under GOTOOLCHAIN=local (see that stage's comment for the full
 # rationale). Each Dockerfile stage is independent, so this stage needs
 # its own install -- it cannot reuse the builder stage's.
-RUN apk add --no-cache git && \
+RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
+    apk add --no-cache git && \
     go install mvdan.cc/garble@v0.17.0
 WORKDIR /agent
 COPY agent/go.mod agent/go.sum ./
-RUN go mod download
+RUN --mount=type=cache,target=/go/pkg/mod go mod download
 COPY agent/ .
 # GOGARBLE scopes obfuscation to our own module only -- golang.org/x/sys,
 # windigo, sspi, and gorilla/websocket stay un-obfuscated, same reasoning
 # as the orchestrator's own GOGARBLE scoping below (a third-party
 # dependency's reflection/assembly code is never garble's business to
 # rewrite). All platform binaries.
-RUN CGO_ENABLED=0 GOOS=linux   GOARCH=amd64 GOGARBLE='audspect/*' garble -literals build -ldflags="-s -w" -o /agents/bas-agent-linux-amd64   . && \
+RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 GOOS=linux   GOARCH=amd64 GOGARBLE='audspect/*' garble -literals build -ldflags="-s -w" -o /agents/bas-agent-linux-amd64   . && \
     CGO_ENABLED=0 GOOS=linux   GOARCH=arm64 GOGARBLE='audspect/*' garble -literals build -ldflags="-s -w" -o /agents/bas-agent-linux-arm64   . && \
     CGO_ENABLED=0 GOOS=windows GOARCH=amd64 GOGARBLE='audspect/*' garble -literals build -ldflags="-s -w" -o /agents/bas-agent-windows-amd64.exe . && \
     CGO_ENABLED=0 GOOS=darwin  GOARCH=amd64 GOGARBLE='audspect/*' garble -literals build -ldflags="-s -w" -o /agents/bas-agent-darwin-amd64  . && \
@@ -53,9 +68,10 @@ RUN CGO_ENABLED=0 GOOS=linux   GOARCH=amd64 GOGARBLE='audspect/*' garble -litera
 # executable to build.
 WORKDIR /installer
 COPY installer/go.mod installer/go.sum ./
-RUN go mod download
+RUN --mount=type=cache,target=/go/pkg/mod go mod download
 COPY installer/ .
-RUN apk add --no-cache zip && \
+RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
+    apk add --no-cache zip && \
     cp /agents/bas-agent-windows-amd64.exe ./bas_agent.exe && \
     CGO_ENABLED=0 GOOS=windows GOARCH=amd64 \
     go build -trimpath -ldflags="-s -w -H windowsgui" \
@@ -77,11 +93,12 @@ RUN apk add --no-cache zip && \
 # that mechanism prints. A native GOROOT install has no such banner.
 # See D2's design doc, Gap 2.
 FROM golang:1.20.14-alpine AS agent-legacy-builder
-RUN apk add --no-cache git zip && \
+RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
+    apk add --no-cache git zip && \
     go install mvdan.cc/garble@v0.10.1
 WORKDIR /agent-legacy
 COPY agent-legacy/go.mod agent-legacy/go.sum ./
-RUN go mod download
+RUN --mount=type=cache,target=/go/pkg/mod go mod download
 COPY agent-legacy/ .
 # Hard assertion: fail the image build outright if the resolved toolchain
 # isn't exactly go1.20.14 -- now asserting the base image itself (a
@@ -98,7 +115,8 @@ RUN GOVERSION=$(go version) && \
 # GOGARBLE scopes obfuscation to our own module only -- golang.org/x/sys
 # (an older version than the modern agent's, v0.15.0) stays un-obfuscated,
 # same reasoning as agent-builder above.
-RUN CGO_ENABLED=0 GOOS=windows GOARCH=amd64 GOGARBLE='audspect/*' \
+RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 GOOS=windows GOARCH=amd64 GOGARBLE='audspect/*' \
     garble -literals build -ldflags="-s -w" -o /agents-legacy/bas-agent-windows-legacy-amd64.exe .
 RUN cd /agents-legacy && zip -q bas-agent-windows-legacy-amd64-setup.zip bas-agent-windows-legacy-amd64.exe
 
@@ -156,7 +174,8 @@ FROM golang:1.26-alpine AS builder
 # outright. v0.17.0 is the newest release whose own go.mod still only
 # requires go 1.26.2. Bump this pin (and the base image, if needed) as a
 # deliberate choice, not a side effect of @latest silently moving forward.
-RUN apk add --no-cache git && \
+RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
+    apk add --no-cache git && \
     go install mvdan.cc/garble@v0.17.0
 # Seed the CA directory with correct nonroot ownership here, in a stage that
 # still has a shell -- gcr.io/distroless/static-debian12 (the final stage)
@@ -173,7 +192,7 @@ RUN apk add --no-cache git && \
 RUN mkdir -p /pki-seed && chown 65532:65532 /pki-seed
 WORKDIR /src
 COPY orchestrator/go.mod orchestrator/go.sum ./
-RUN go mod download
+RUN --mount=type=cache,target=/go/pkg/mod go mod download
 COPY orchestrator/ .
 # SHA-256 of dist/MANIFEST.sha256 from the web stage, compiled into the binary so
 # StaticHandler() verifies the manifest and every listed file at startup.
@@ -182,7 +201,8 @@ COPY --from=web /web-manifest.sha256 /web-manifest.sha256
 # deps (esp. github.com/go-pdf/fpdf) renames their reflection-driven struct
 # fields and breaks PDF font loading ("font has not been set") — and protects no
 # IP, since those libs are public OSS.
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GOGARBLE='github.com/audspect/*' \
+RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GOGARBLE='github.com/audspect/*' \
     garble -literals build \
     -ldflags="-s -w -X main.expectedWWWManifestHash=$(cat /web-manifest.sha256)" \
     -o /bin/orchestrator ./cmd/server

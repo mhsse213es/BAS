@@ -120,6 +120,46 @@ func TestInterpretARTBlockDetection(t *testing.T) {
 	}
 }
 
+// TestInterpret_DomainControllerInterlockAbortIsVetoedNeverFail is the
+// critical regression test for a real scoring defect found 2026-10-09 while
+// proving the AD Mastery E2E Directive's evidence/safety contract (increment
+// 2.1): agent.go's domain-controller safety interlock (both
+// BlockOnDomainController and RequireDCReachable) originally submitted
+// {ExitCode:-1, Blocked:true, BlockedReason:"..."}. scenario.ExecResult (this
+// package's own type) has no Blocked/BlockedReason field by deliberate design
+// (see its doc comment) -- so those two fields were silently dropped at JSON
+// unmarshal, Interpret() never saw any signal that the run was never
+// attempted, and the result fell through to interpretCustom's final default:
+// ResultFail, "Step failed (exit -1)" -- a false "attack succeeded, defenses
+// did not stop it" finding for a run that never executed a single step.
+//
+// The fix submits {Vetoed:true, VetoedActionKey/Class/Source:...} instead --
+// the SAME structured field Interpret() already special-cases before the
+// framework switch for a B5 destructive-action veto, with its own scoring-
+// exclusion already established. This test uses exactly the shape the agent
+// now submits: TaskID is empty (the interlock fires before any step is
+// chosen), so Step is the real fallback {Framework: "custom"} the server
+// builds when a TaskID lookup misses -- proving the fix through the actual
+// top-level Interpret() entry point, not a single framework interpreter.
+func TestInterpret_DomainControllerInterlockAbortIsVetoedNeverFail(t *testing.T) {
+	step := Step{Framework: "custom"} // the real fallback for an unmatched TaskID
+	r := ExecResult{
+		ExitCode:             -1,
+		Vetoed:               true,
+		VetoedActionKey:      "live_ad_execution",
+		VetoedExecutionClass: "environment_safety_policy",
+		VetoedBlockSource:    "domain_controller_interlock",
+	}
+	res := Interpret(step, r)
+
+	if res.Result != models.ResultVetoed {
+		t.Fatalf("Result = %q, want %q -- the interlock abort must never be scored as a real finding", res.Result, models.ResultVetoed)
+	}
+	if res.Result == models.ResultFail || res.Result == models.ResultPass || res.Result == models.ResultBlocked {
+		t.Fatalf("Result = %q -- an unattempted run must never be mistaken for either an attack success (Fail) or a defensive win (Pass/Blocked)", res.Result)
+	}
+}
+
 func TestInterpretART_VetoedMapsToResultVetoedNeverResultPass(t *testing.T) {
 	r := ExecResult{Vetoed: true, VetoedActionKey: "vss_delete", VetoedExecutionClass: "destructive"}
 	result, _ := interpretART(r, "")
@@ -180,6 +220,36 @@ func TestInterpretCustomClassifiesScriptCrash(t *testing.T) {
 		{"structured FAIL stays fail", ExecResult{ExitCode: 0}, "FAIL: UAC DISABLED — silent elevation possible", models.ResultFail},
 		{"structured PASS stays pass", ExecResult{ExitCode: 0}, "PASS: WDigest disabled", models.ResultPass},
 		{"benign nonzero, no parse error", ExecResult{ExitCode: 1}, "value not present", models.ResultFail},
+		{"informational line before FAIL verdict", ExecResult{ExitCode: 0}, "EXEC T1558.003: found 3 kerberoastable accounts\nFAIL: enumeration ran unimpeded", models.ResultFail},
+		{"informational line before PASS verdict", ExecResult{ExitCode: 0}, "EXEC T1558.004: enumerated 0 roastable accounts\nPASS: no AS-REP roastable accounts exposed", models.ResultPass},
+		{"informational line before SKIP verdict", ExecResult{ExitCode: 0}, "INFO: probing domain reachability\nSKIP: host is not domain-joined", models.ResultSkipped},
+
+		// Empty output: no verdict line, no informational text at all. Pre-existing,
+		// unchanged behavior -- pinned so a future change can't silently alter it.
+		{"empty output, exit 0, falls to Pass default", ExecResult{ExitCode: 0}, "", models.ResultPass},
+		{"empty output, exit 1, falls to Fail default", ExecResult{ExitCode: 1}, "", models.ResultFail},
+
+		// Malformed verdicts: close to the real prefix but not an exact match.
+		// Pre-existing, unchanged behavior -- these must keep falling through to
+		// the exit-code default rather than being loosely matched.
+		{"malformed verdict, misspelled word", ExecResult{ExitCode: 0}, "PASSED: looks fine", models.ResultPass},      // exit-0 default, not a Pass match
+		{"malformed verdict, space before colon", ExecResult{ExitCode: 1}, "FAIL : broken", models.ResultFail},        // exit-1 default, not a Fail match
+		{"malformed verdict, no colon at all", ExecResult{ExitCode: 0}, "FAIL something is wrong", models.ResultPass}, // exit-0 default -- "FAIL something" never matches "fail:"
+
+		// Conflicting verdict TYPES in the same output: never produced by any
+		// committed scenario today (every step's branches are mutually
+		// exclusive -- verified against scenarios/kerberoasting-ad-drill.yaml
+		// and the wider corpus), but output can still be malformed or
+		// hand-crafted, and this function must have one explicit, documented
+		// answer rather than an accidental one. Fail-safe policy: FAIL must
+		// never be silently suppressed by a PASS or SKIP line elsewhere in the
+		// same output (mirrors this file's existing bias -- see Vetoed/TimedOut
+		// in Interpret -- toward never overstating a defensive win when there
+		// is ambiguity). Priority: FAIL > SKIP > PASS, independent of which
+		// line appears first.
+		{"conflicting FAIL after PASS: FAIL wins despite position", ExecResult{ExitCode: 0}, "PASS: looked clean at first\nFAIL: actually exploitable", models.ResultFail},
+		{"conflicting PASS after FAIL: FAIL still wins", ExecResult{ExitCode: 0}, "FAIL: exploitable\nPASS: contradicts the above", models.ResultFail},
+		{"conflicting SKIP and PASS (no FAIL): SKIP wins", ExecResult{ExitCode: 0}, "SKIP: not applicable here\nPASS: contradicts the above", models.ResultSkipped},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -188,6 +258,34 @@ func TestInterpretCustomClassifiesScriptCrash(t *testing.T) {
 				t.Errorf("interpretCustom(%q, exit=%d) = %q, want %q (detail=%q)", c.stdout, c.r.ExitCode, got, c.want, detail)
 			}
 		})
+	}
+}
+
+// TestInterpretCustom_VerdictLineNotNecessarilyFirst is a dedicated regression
+// test for a scoring bug found 2026-10-09 while verifying the Kerberoasting
+// scenario end-to-end: interpretCustom previously only read the FIRST
+// non-empty output line for a PASS:/FAIL:/SKIP: prefix. scenarios/
+// kerberoasting-ad-drill.yaml (and ~37 other builtin scenarios) write an
+// informational "EXEC T1558...: <finding>" line BEFORE their verdict line, so
+// the first line never matched a structured prefix, fell through to the
+// exit-code default (0 = Pass), and every one of those findings was scored
+// Pass instead of its intended Fail -- reporting an actual Kerberoast/AS-REP
+// exposure as a passing control. The verdict line can appear anywhere in the
+// output; interpretCustom must find it regardless of position.
+func TestInterpretCustom_VerdictLineNotNecessarilyFirst(t *testing.T) {
+	// Verbatim from scenarios/kerberoasting-ad-drill.yaml Stage 2.
+	stdout := "EXEC T1558.003: requested a TGS-REP service ticket for SPN 'MSSQLSvc/db01.corp.local:1433' " +
+		"(hash NOT extracted or cracked). This is the exact Kerberoast request. DC Security EID 4769 expected. [BAS-SIM-KRB-S2]\n" +
+		"FAIL: A service ticket was granted on demand for a service account SPN. If that account has a weak password " +
+		"and RC4 is allowed, the ticket is offline-crackable. Enforce AES-only, use gMSAs / 25+ char service passwords, " +
+		"and alert on EID 4769 RC4 tickets."
+
+	got, detail := interpretCustom(ExecResult{ExitCode: 0}, stdout)
+	if got != models.ResultFail {
+		t.Fatalf("interpretCustom = %q, want ResultFail — the FAIL: line was not found because it isn't first (detail=%q)", got, detail)
+	}
+	if strings.HasPrefix(detail, "EXEC T1558.003") {
+		t.Fatalf("detail should report the verdict line's own text, not the informational line ahead of it: %q", detail)
 	}
 }
 

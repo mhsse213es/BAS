@@ -206,12 +206,38 @@ The delivery ZIP is self-contained. No internet access is required at any point 
 
 ### 6.1 Image loading
 
-`install.sh --install`/`--upgrade` loads images from `images/*.tar` automatically. If loading manually:
+`install.sh --install`/`--upgrade` (delivery ZIP) and `import.sh` (air-gap bundle) verify and load the images from `images/*.tar` automatically. **Do not `docker load` them by hand**: a manual load skips the signature check, the tag check and the post-load image-ID binding, so nothing proves the image compose then runs is the signed one. Always go through `install.sh` or `import.sh`. A bundle without `images/` is refused (install and upgrade alike); nothing is ever pulled from a registry, and `docker-compose.yml` sets `pull_policy: never` on every runtime service. Registry-based installs (a non-empty `REGISTRY` prefix) are not supported.
+
+**Prerequisite — cosign.** The orchestrator image is cosign-signed and is verified before it is loaded by `install.sh`. **Runtime image set (identical in every bundle type, all four required):** `bas-orchestrator:<version>`, `postgres:16-alpine`, `bas-caldera:<version>` (Caldera built from a base pinned by version and digest, with the emulation library baked in) and `chromedp/headless-shell:<version>` (pinned by version and digest in `packaging/images.pin`, used for styled PDF reports). Compose starts all four with no profile, so a bundle missing any of them is refused. The `golang` image referenced by compose is build/dev-only (profile `audit`) and is intentionally never shipped. A build that cannot build, pull, save or sign any of the four fails; there is no warn-and-continue. `packaging/airgap/offline-acceptance.sh` proves a bundle starts with no registry access (isolated Docker-in-Docker, internal network). **Every image in every bundle type is signed** (release ZIP, `build.sh` tarball and air-gap bundle): `setup.sh` and `install.sh` always require it, with no opt-out. In each bundle **every image tar** (orchestrator, postgres and any other shipped image, as `<name>.tar` + `<name>.tar.bundle`) is cosign-verified, bound to its expected tag (`manifest.json` must carry exactly that RepoTag) and, after loading, to the expected image ID, before anything runs; an unsigned, unlisted or legacy `.tar.gz` image is refused, and compose runs exactly the verified `bas-orchestrator:<version>`. cosign >= v3.1.0 must be pre-installed on the air-gapped host: download the `cosign-linux-amd64` release binary from <https://github.com/sigstore/cosign/releases> on a connected machine, copy it over, and run `sudo install -m 0755 cosign-linux-amd64 /usr/local/bin/cosign`. Without it the install/import aborts (fail closed).
+
+**ISO / Packer appliances** install a pinned cosign for you at build time (`packaging/appliance/cosign.pin`: exact version and SHA-256 of the official release binary; the build fails if the download or checksum fails). The ISO stages the binary on the media, so an offline target needs no download.
+
+**Out-of-band verification key (optional).** By default `verify.sh` and `import.sh` verify with the `cosign.pub` shipped inside the bundle, which proves integrity but trusts the bundle for the key. To pin the key yourself, pass `--cosign-pub <path>` (or set `BAS_COSIGN_PUB=<path>`; the flag wins, then the env var, then the bundled key):
 
 ```bash
-cd /opt/bas-install-<version>/images
-for f in *.tar; do sudo docker load < "$f"; echo "Loaded $f"; done
+bash verify.sh bas-airgap-<version>.tar.gz --cosign-pub /media/usb/audspect-cosign.pub
+sudo bash import.sh bas-airgap-<version>.tar.gz --cosign-pub /media/usb/audspect-cosign.pub
 ```
+
+The key fingerprint (SHA-256 of the DER SubjectPublicKeyInfo; a plain file hash is shown and labelled as such if openssl cannot parse the key) is printed (compare it with the fingerprint Audspect publishes). An external key is never overridden by the bundled one, a missing/unreadable path aborts, and `setup.sh` re-verifies with the same key. A warning is shown if the bundle's own key differs.
+
+**`install.sh` (delivery ZIP).** The same option works for `install.sh --check|--install|--upgrade`: `sudo bash install.sh --install --config setup.conf --cosign-pub /media/usb/audspect-cosign.pub` (or `BAS_COSIGN_PUB`; with sudo use `sudo --preserve-env=BAS_COSIGN_PUB`, or prefer the flag). Same rules: flag, then env, then the bundled `cosign.pub`; the key's SHA-256 is printed; an external key is used exclusively and a bad path aborts. `install.sh` does no GPG `.asc` check, so there is no GPG option there.
+
+**Out-of-band GPG key (optional).** The bundle's `.asc` signature is checked by `verify-sig.sh` (called by `verify.sh` and `import.sh` when an `.asc` is present). The `pubkey.asc` shipped inside the bundle only proves integrity, not origin: whoever replaces the whole bundle can replace that key too. Pass the key you obtained separately with `--gpg-pub <key.asc>` / `--gpg-pub=<key.asc>` (or `BAS_GPG_PUB=<path>`; flag, then env, then bundled) to `verify-sig.sh`, `verify.sh` or `import.sh`; `setup.sh` honours the same key for the agent-binary check. **Prefer the flag: `sudo` strips the environment**, so with env vars use `sudo BAS_COSIGN_PUB=<path> BAS_GPG_PUB=<path> bash import.sh ...`. `import.sh` rejects unknown flags rather than silently dropping a key. The GPG fingerprint is always printed, labelled EXTERNAL or BUNDLED; compare it with the fingerprint Audspect publishes. An external key is used exclusively, a missing/unreadable path aborts, and supplying one for a bundle with no `.asc` is an error. Using the bundled key prints a warning. The key file must contain exactly one primary key, and the signature's VALIDSIG primary fingerprint must equal it (the printed fingerprint is the signer's), so a multi-key file cannot let another key vouch for the bundle. The bundled `pubkey.asc` is still shipped for backward compatibility.
+
+<a id="trust-bootstrap"></a>**Trust bootstrap with an out-of-band GPG key.** `verify-sig.sh` ships inside the bundle it verifies, so do the FIRST check with the host's own gpg, before extracting or running anything from the bundle. Put the key you obtained out of band in `oob.asc`, replace `bundle.tar.gz` with the bundle's file name, and run (this is the canonical text, `packaging/airgap/trust-bootstrap.sh`, which `pack.sh` also prints):
+
+```bash
+H=$(mktemp -d); gpg --homedir "$H" --import oob.asc && gpg --homedir "$H" --status-fd 1 --verify bundle.tar.gz.asc bundle.tar.gz
+# The VALIDSIG fingerprint printed above must equal the one Audspect publishes. Then:
+rm -rf "$H"
+```
+
+Both gpg calls use the same fresh, empty `--homedir`, so only `oob.asc` can vouch for the bundle, never a key already in your own keyring. (A `GNUPGHOME=... gpg ... && gpg ...` prefix would apply only to the first command.) The `[GNUPG:] VALIDSIG` line's last field is the signer's primary-key fingerprint: compare it with the one Audspect publishes. No `VALIDSIG` line means the check failed.
+
+**Temporary space (`import.sh`).** `import.sh` copies the bundle and extracts it under `${TMPDIR:-/tmp}` and refuses to start unless that filesystem has at least 3x the bundle size free. If `/tmp` is small, point it elsewhere: `sudo TMPDIR=/data/tmp bash import.sh bas-airgap-<version>.tar.gz`.
+
+**Agent binaries (`setup.sh`).** `agents/BINARIES.sha256` is verified against `agents/BINARIES.sha256.asc` with the same key rules (external key via `--gpg-pub`/`BAS_GPG_PUB`, single-key, VALIDSIG-bound), then every agent binary is checked against it; a mismatch is fatal. If an `.asc` is present and gpg is not installed, `setup.sh` now aborts (install `gnupg`) instead of skipping the check.
 
 ### 6.2 Content bundle
 

@@ -53,3 +53,26 @@ test('self-hosted @font-face weight ranges match the previous Google Fonts reque
     assert.match(m[0], new RegExp(String.raw`font-weight:\s*${weights}\s*;`), family);
   }
 });
+
+test('app.css is bundled inside @layer app and the generated rules follow it unlayered', () => {
+  execFileSync('node', ['tools/build.mjs'], { cwd: web, stdio: 'pipe' });
+  const name = readdirSync(join(dist, 'assets')).find((f) => /^app\.[A-Z0-9]+\.css$/i.test(f));
+  const css = readFileSync(join(dist, 'assets', name), 'utf8');
+  const start = css.search(/@layer app\s*\{/);
+  assert.ok(start >= 0, 'no @layer app block');
+  let depth = 0, end = -1;
+  for (let i = css.indexOf('{', start); i < css.length; i++) {
+    if (css[i] === '{') depth++;
+    else if (css[i] === '}' && --depth === 0) { end = i; break; }
+  }
+  assert.ok(end > start, 'unterminated @layer app block');
+  const inside = css.slice(start, end);
+  assert.ok(inside.includes(':root'), 'app.css rules are not inside the layer');
+  const after = css.slice(end + 1).replace(/\/\*[\s\S]*?\*\//g, '').trim();
+  assert.ok(after.includes('.is-hidden'), 'generated rules missing after the layer');
+  // esbuild pretty-prints each rule over several lines; compare rule by rule.
+  for (const rule of after.replace(/\s+/g, ' ').split(/(?<=\})\s*/).map((r) => r.trim()).filter(Boolean)) {
+    assert.match(rule, /^(\.is-hidden|\.g1-display-[a-z-]+|\.g1-s-[0-9a-f]{8}|\.g1-v-[0-9a-f]{8}\.g1-v-[0-9a-f]{8}) \{ .* \}$/, `unexpected unlayered css: ${rule}`);
+  }
+  assert.ok(!css.slice(0, start).replace(/\/\*[\s\S]*?\*\//g, '').trim().replace(/^@charset[^;]*;/, '').trim(), 'css before the layer');
+});

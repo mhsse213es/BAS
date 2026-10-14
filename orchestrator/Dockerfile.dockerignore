@@ -6,3 +6,9 @@ orchestrator/web/dist
 orchestrator/web/test-results
 orchestrator/web/playwright-report
 orchestrator/wwwroot
+# tools/visual.sh's own baseline-snapshot directory, bind-mounted into its
+# Docker container -- an abnormally-terminated run can leave a symlink here
+# pointing at the container-internal path (/o/web/...), which is broken on
+# the host and makes BuildKit's context uploader fail outright ("invalid
+# file request"). Never needed in the image regardless.
+orchestrator/web/.visual

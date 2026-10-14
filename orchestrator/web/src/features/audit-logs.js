@@ -3,6 +3,7 @@ import { x } from '../core/escape.js';
 import { on } from '../core/actions.js';
 import { showToast } from '../core/util.js';
 import { buildReportFilename } from './evidence.js';
+import { cssVars } from '../core/css-vars.js';
 
 
 // ── Audit Logs ────────────────────────────────────────────────────────────────
@@ -44,34 +45,34 @@ export function loadAuditLogs() {
 export function loadLicenseInfo() {
   var wrap = document.getElementById('license-card-wrap');
   if (!wrap) return;
-  wrap.innerHTML = '<div class="empty" style="padding:2rem">Loading…</div>';
+  wrap.innerHTML = '<div class="empty g1-s-be6df18e">Loading…</div>';
   apicall('/api/license').then(function(lic) {
-    if (lic.error) { wrap.innerHTML = '<div class="empty" style="padding:2rem;color:var(--danger)">' + x(lic.error) + '</div>'; return; }
+    if (lic.error) { wrap.innerHTML = '<div class="empty g1-s-8e56e4c3">' + x(lic.error) + '</div>'; return; }
     var statusColor = lic.status === 'valid' ? 'var(--success)' : lic.status === 'grace' ? 'var(--warning)' : lic.status === 'locked' ? 'var(--danger)' : 'var(--muted)';
     var statusLabel = lic.status === 'valid' ? 'Active' : lic.status === 'grace' ? 'Grace Period' : lic.status === 'locked' ? 'Locked' : 'Unknown';
     var features = (lic.features || []).map(function(f) {
-      return '<span class="sbadge" style="background:rgba(47,129,247,0.12);color:var(--accent);margin:0.15rem 0.2rem 0.15rem 0;display:inline-block">' + x(f) + '</span>';
+      return '<span class="sbadge g1-display-inline-block g1-s-221fcf42">' + x(f) + '</span>';
     }).join('');
     wrap.innerHTML =
-      '<div class="conn-cfg-card" style="max-width:540px">' +
-        '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">' +
-          '<div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)">Entitlement</div>' +
-          '<span class="sbadge" style="background:' + statusColor + '22;color:' + statusColor + ';border:1px solid ' + statusColor + '44;font-size:0.7rem;font-weight:700">' + statusLabel + '</span>' +
+      '<div class="conn-cfg-card g1-s-ed5b0ac3">' +
+        '<div class="g1-display-flex g1-s-7cd1f313">' +
+          '<div class="g1-s-0c5a3e12">Entitlement</div>' +
+          '<span class="sbadge g1-s-1b1dd8f9"' + cssVars(['g1-v-9a515764', statusColor], ['g1-v-7d75dfc9', statusColor], ['g1-v-d59a9269', statusColor]) + '>' + statusLabel + '</span>' +
         '</div>' +
         _licRow('Customer',    x(lic.customer   || '-')) +
         _licRow('Customer ID', x(lic.customerId || '-')) +
         _licRow('Issued',      x(lic.issuedAt   || '-')) +
-        _licRow('Expires',     '<span style="color:' + statusColor + ';font-weight:600">' + x(lic.expiresAt || '-') + '</span>') +
-        (lic.status === 'grace' ? _licRow('Grace Period', '<span style="color:var(--warning);font-weight:600">' + lic.daysRemaining + ' day(s) remaining — access disabled on ' + x(lic.lockoutAt) + '</span>') : '') +
-        (features ? '<div style="padding:0.55rem 0;border-bottom:1px solid var(--border);display:flex;gap:0.5rem;font-size:0.8rem;align-items:flex-start"><span style="color:var(--muted);min-width:130px;flex-shrink:0">Features</span><div>' + features + '</div></div>' : '') +
+        _licRow('Expires',     '<span class="g1-s-6e8bcfac"' + cssVars(['g1-v-7d75dfc9', statusColor]) + '>' + x(lic.expiresAt || '-') + '</span>') +
+        (lic.status === 'grace' ? _licRow('Grace Period', '<span class="g1-s-adc02b25">' + lic.daysRemaining + ' day(s) remaining — access disabled on ' + x(lic.lockoutAt) + '</span>') : '') +
+        (features ? '<div class="g1-display-flex g1-s-17f7ed50"><span class="g1-s-39e35912">Features</span><div>' + features + '</div></div>' : '') +
       '</div>';
-  }).catch(function(e) { wrap.innerHTML = '<div class="empty" style="padding:2rem;color:var(--danger)">' + x(e.message) + '</div>'; });
+  }).catch(function(e) { wrap.innerHTML = '<div class="empty g1-s-8e56e4c3">' + x(e.message) + '</div>'; });
 }
 
 function _licRow(label, val) {
-  return '<div style="display:flex;gap:0.5rem;padding:0.5rem 0;border-bottom:1px solid var(--border);font-size:0.8rem">' +
-    '<span style="color:var(--muted);min-width:130px;flex-shrink:0">' + label + '</span>' +
-    '<span style="flex:1;color:var(--text)">' + val + '</span>' +
+  return '<div class="g1-display-flex g1-s-96ef72d9">' +
+    '<span class="g1-s-39e35912">' + label + '</span>' +
+    '<span class="g1-s-7f5e108a">' + val + '</span>' +
     '</div>';
 }
 
@@ -89,13 +90,13 @@ export function loadBackups() {
   var wrap = document.getElementById('backup-status-card-wrap');
   apicall('/api/backups').then(function(jobs) {
     if (jobs.error) {
-      if (wrap) wrap.innerHTML = '<div class="empty" style="padding:2rem;color:var(--danger)">' + x(jobs.error) + '</div>';
+      if (wrap) wrap.innerHTML = '<div class="empty g1-s-8e56e4c3">' + x(jobs.error) + '</div>';
       return;
     }
     renderBackupStatusCard(jobs[0] || null);
     renderBackupJobsTable(jobs);
   }).catch(function(e) {
-    if (wrap) wrap.innerHTML = '<div class="empty" style="padding:2rem;color:var(--danger)">' + x(e.message) + '</div>';
+    if (wrap) wrap.innerHTML = '<div class="empty g1-s-8e56e4c3">' + x(e.message) + '</div>';
   });
 }
 
@@ -103,7 +104,7 @@ function renderBackupStatusCard(job) {
   var wrap = document.getElementById('backup-status-card-wrap');
   if (!wrap) return;
   if (!job) {
-    wrap.innerHTML = '<div class="conn-cfg-card"><div class="empty" style="padding:1rem 0">No backups yet. Click "Backup Now" to create one.</div></div>';
+    wrap.innerHTML = '<div class="conn-cfg-card"><div class="empty g1-s-c19e0f28">No backups yet. Click "Backup Now" to create one.</div></div>';
     return;
   }
   var color = BACKUP_STATUS_COLOR[job.status] || 'var(--muted)';
@@ -111,9 +112,9 @@ function renderBackupStatusCard(job) {
   var size = job.archiveSizeBytes ? (job.archiveSizeBytes / 1048576).toFixed(1) + ' MB' : '—';
   wrap.innerHTML =
     '<div class="conn-cfg-card">' +
-      '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.6rem">' +
-        '<div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)">Most recent backup</div>' +
-        '<span class="sbadge" style="background:' + color + '22;color:' + color + ';border:1px solid ' + color + '44;font-size:0.7rem;font-weight:700">' + x(label) + '</span>' +
+      '<div class="g1-display-flex g1-s-c91d8485">' +
+        '<div class="g1-s-0c5a3e12">Most recent backup</div>' +
+        '<span class="sbadge g1-s-1b1dd8f9"' + cssVars(['g1-v-9a515764', color], ['g1-v-7d75dfc9', color], ['g1-v-d59a9269', color]) + '>' + x(label) + '</span>' +
       '</div>' +
       '<div class="conn-cfg-row"><span class="conn-cfg-label">Requested</span><span class="conn-cfg-val">' + x(new Date(job.requestedAt).toLocaleString()) + '</span></div>' +
       '<div class="conn-cfg-row"><span class="conn-cfg-label">Trigger</span><span class="conn-cfg-val">' + x(job.trigger) + '</span></div>' +
@@ -128,20 +129,20 @@ function renderBackupJobsTable(jobs) {
   var tbody = document.getElementById('backup-jobs-body');
   if (!tbody) return;
   if (!jobs.length) {
-    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:1.5rem">No backups yet.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6" class="g1-s-6928ed1e">No backups yet.</td></tr>';
     return;
   }
   tbody.innerHTML = jobs.map(function(j) {
     var color = BACKUP_STATUS_COLOR[j.status] || 'var(--muted)';
     var label = BACKUP_STATUS_LABEL[j.status] || j.status;
     var canRestore = (j.status === 'protected' || j.status === 'local_success');
-    return '<tr style="border-bottom:1px solid var(--border)">' +
-      '<td style="padding:0.4rem 0.5rem">' + x(new Date(j.requestedAt).toLocaleString()) + '</td>' +
-      '<td style="padding:0.4rem 0.5rem">' + x(j.trigger) + '</td>' +
-      '<td style="padding:0.4rem 0.5rem">' + (j.localPath ? '✓' : '—') + '</td>' +
-      '<td style="padding:0.4rem 0.5rem">' + (j.remotePath ? '✓' : '—') + '</td>' +
-      '<td style="padding:0.4rem 0.5rem"><span class="sbadge" style="background:' + color + '22;color:' + color + ';border:1px solid ' + color + '44;font-size:0.7rem">' + x(label) + '</span></td>' +
-      '<td style="padding:0.4rem 0.5rem">' +
+    return '<tr class="g1-s-76497c6f">' +
+      '<td class="g1-s-b86389a4">' + x(new Date(j.requestedAt).toLocaleString()) + '</td>' +
+      '<td class="g1-s-b86389a4">' + x(j.trigger) + '</td>' +
+      '<td class="g1-s-b86389a4">' + (j.localPath ? '✓' : '—') + '</td>' +
+      '<td class="g1-s-b86389a4">' + (j.remotePath ? '✓' : '—') + '</td>' +
+      '<td class="g1-s-b86389a4"><span class="sbadge g1-s-62899a0f"' + cssVars(['g1-v-9a515764', color], ['g1-v-7d75dfc9', color], ['g1-v-d59a9269', color]) + '>' + x(label) + '</span></td>' +
+      '<td class="g1-s-b86389a4">' +
         (canRestore ? '<button class="btn btn-outline btn-sm"' + on('click', 'prepareRestore', j.id) + '>Prepare Restore</button>' : '—') +
       '</td>' +
     '</tr>';
@@ -180,12 +181,12 @@ export function prepareRestore(id) {
   apicall('/api/backups/' + id + '/restore-marker', { method: 'POST' }).then(function(res) {
     var wrap = document.getElementById('restore-command-wrap');
     if (!wrap) return;
-    if (res.error) { wrap.innerHTML = '<div class="empty" style="padding:1rem;color:var(--danger)">' + x(res.error) + '</div>'; return; }
+    if (res.error) { wrap.innerHTML = '<div class="empty g1-s-9b78712f">' + x(res.error) + '</div>'; return; }
     wrap.innerHTML =
-      '<div class="conn-cfg-card" style="margin-top:1rem;border-color:var(--warning)">' +
-        '<div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--warning);margin-bottom:0.5rem">Restore must be run on the host</div>' +
-        '<div style="font-size:0.8rem;color:var(--muted);margin-bottom:0.6rem">This console cannot and will not run this for you. An administrator with root access to the server must run the command below and type <b>RESTORE</b> to confirm.</div>' +
-        '<code style="display:block;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);padding:0.6rem;font-size:0.8rem;word-break:break-all">' + x(res.restoreCommand) + '</code>' +
+      '<div class="conn-cfg-card g1-s-7b0aa428">' +
+        '<div class="g1-s-21b099fc">Restore must be run on the host</div>' +
+        '<div class="g1-s-1236f559">This console cannot and will not run this for you. An administrator with root access to the server must run the command below and type <b>RESTORE</b> to confirm.</div>' +
+        '<code class="g1-display-block g1-s-dca1d235">' + x(res.restoreCommand) + '</code>' +
       '</div>';
   }).catch(function(e) { alert('Failed to prepare restore: ' + e.message); });
 }
@@ -207,15 +208,13 @@ function fetchAuditPage() {
     var tbody = document.getElementById('audit-body');
     if (!tbody) return;
     if (!entries.length) {
-      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:2rem">No audit records found.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="6" class="g1-s-5b31a60f">No audit records found.</td></tr>';
     } else {
       tbody.innerHTML = entries.map(function(e) {
         var ts = new Date(e.ts);
         var tsStr = ts.toLocaleDateString() + ' ' + ts.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'});
         var actionLabel = AUDIT_ACTION_LABELS[e.action] || e.action;
-        var outcomeStyle = e.outcome === 'ok'
-          ? 'background:rgba(35,134,54,.18);color:#3fb950;border:1px solid rgba(35,134,54,.35)'
-          : 'background:rgba(218,54,51,.18);color:#f85149;border:1px solid rgba(218,54,51,.35)';
+        var outcomeClass = e.outcome === 'ok' ? 'g1-display-inline-block g1-s-8e6255cd' : 'g1-display-inline-block g1-s-55cda534';
         var detail = '';
         try {
           var d2 = typeof e.detail === 'string' ? JSON.parse(e.detail) : e.detail;
@@ -247,12 +246,12 @@ function fetchAuditPage() {
           if (!detail && e.resource) detail = e.resource;
         } catch(ex) { detail = e.resource || ''; }
         return '<tr>' +
-          '<td style="font-size:0.77rem;color:var(--muted);white-space:nowrap">' + tsStr + '</td>' +
-          '<td style="font-size:0.8rem;font-weight:500">' + x(e.actorName) + '</td>' +
-          '<td style="font-size:0.8rem">' + x(actionLabel) + '</td>' +
-          '<td style="font-size:0.77rem;color:var(--muted)">' + x(detail) + '</td>' +
-          '<td style="font-size:0.75rem;color:var(--muted);font-family:var(--font-mono)">' + x(e.ip || '') + '</td>' +
-          '<td><span style="display:inline-block;padding:0.18rem 0.55rem;border-radius:10px;font-size:0.72rem;font-weight:600;' + outcomeStyle + '">' + x(e.outcome) + '</span></td>' +
+          '<td class="g1-s-a6cceef3">' + tsStr + '</td>' +
+          '<td class="g1-s-42bb765b">' + x(e.actorName) + '</td>' +
+          '<td class="g1-s-51a7b72a">' + x(actionLabel) + '</td>' +
+          '<td class="g1-s-dc3f58e3">' + x(detail) + '</td>' +
+          '<td class="g1-s-e787dcbc">' + x(e.ip || '') + '</td>' +
+          '<td><span class="' + outcomeClass + '">' + x(e.outcome) + '</span></td>' +
         '</tr>';
       }).join('');
     }
@@ -268,7 +267,7 @@ function fetchAuditPage() {
     if (nextBtn) nextBtn.disabled = entries.length < AUDIT_LIMIT;
   }).catch(function() {
     var tbody = document.getElementById('audit-body');
-    if (tbody) tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--danger);padding:2rem">Failed to load audit logs.</td></tr>';
+    if (tbody) tbody.innerHTML = '<tr><td colspan="6" class="g1-s-6c42391e">Failed to load audit logs.</td></tr>';
   });
 }
 

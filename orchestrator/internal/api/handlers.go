@@ -48,6 +48,7 @@ import (
 	"github.com/audspect/bas/internal/jobs"
 	"github.com/audspect/bas/internal/license"
 	"github.com/audspect/bas/internal/models"
+	"github.com/audspect/bas/internal/networkgraph"
 	"github.com/audspect/bas/internal/notifications"
 	"github.com/audspect/bas/internal/observability"
 	"github.com/audspect/bas/internal/pki"
@@ -92,6 +93,7 @@ type Handler struct {
 	actionVendorClient   func(actions.ConnectorConfig) (actions.VendorClient, error)
 	secret               string
 	agentSecret          string                 // optional shared secret for agent-facing endpoints
+	ingestAPIKey         string                 // shared secret for POST /api/ingest/v1/events; empty disables the endpoint
 	pki                  *pki.CA                // deployment CA for agent mTLS enrollment (B1/B3)
 	signingKey           *cmdsigning.SigningKey // deployment command-signing key (B4) -- separate trust domain from pki above, never chained to it
 	calderaURL           string
@@ -145,6 +147,11 @@ type Handler struct {
 	// metricsRegistry is the observability metrics registry.
 	// nil when not configured.
 	metricsRegistry *observability.MetricsRegistry
+	// networkVantagePoint identifies where Network BAS Phase 1 discovery
+	// probes originate. Zero value until WithNetworkVantagePoint is called
+	// -- Configured() is then false and discovery requests are refused
+	// with 503, never a default/fabricated vantage point.
+	networkVantagePoint networkgraph.VantagePoint
 }
 
 // New creates a Handler.
@@ -162,6 +169,13 @@ func New(db *pgxpool.Pool, hub *ws.Hub, engine *scenario.Engine, secret string) 
 // WithCompliance attaches the compliance mapper.
 func (h *Handler) WithCompliance(m *compliance.Mapper) *Handler {
 	h.complianceMapper = m
+	return h
+}
+
+// WithNetworkVantagePoint attaches the orchestrator's configured network
+// vantage point (see internal/networkgraph.LoadVantagePoint).
+func (h *Handler) WithNetworkVantagePoint(vp networkgraph.VantagePoint) *Handler {
+	h.networkVantagePoint = vp
 	return h
 }
 
@@ -245,6 +259,14 @@ func (h *Handler) WithAgentSecret(s string) *Handler {
 	return h
 }
 
+// WithIngestAPIKey configures the shared secret for the generic inbound
+// ingestion API. Unlike WithAgentSecret, an empty key disables the
+// endpoint rather than leaving it open -- see the ingestAPIKey field doc.
+func (h *Handler) WithIngestAPIKey(s string) *Handler {
+	h.ingestAPIKey = s
+	return h
+}
+
 // WithPKI configures the deployment CA used to issue agent mTLS client
 // certificates (B1/B3). Nil is valid (pre-migration deployments / tests
 // that don't exercise enrollment) -- EnrollCSR returns 503 in that case.
@@ -269,10 +291,13 @@ func (h *Handler) validateAgentAuth(r *http.Request) bool {
 	if h.agentSecret == "" {
 		return true
 	}
+	// Header only (B2): a secret in the URL query string is recorded
+	// verbatim by proxies, load balancers, and access logs along the whole
+	// network path. The agent has sent the header-only form since
+	// agent/protocol/websocket.go's DialAgentWSWithDialer; wsAgentAuthorized
+	// (the /ws/agent path) made the same change already -- this removes the
+	// last query-param fallback, on the non-WS agent endpoints.
 	provided := r.Header.Get("X-Agent-Token")
-	if provided == "" {
-		provided = r.URL.Query().Get("agentSecret")
-	}
 	return subtle.ConstantTimeCompare([]byte(provided), []byte(h.agentSecret)) == 1
 }
 
@@ -2752,6 +2777,23 @@ func (h *Handler) SubmitScenarioResult(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "invalid payload — expected {runId, scenarioId, agentId, results}", http.StatusBadRequest)
 		return
 	}
+	// validateAgentAuth/verifyResultMAC only prove possession of the
+	// fleet-wide shared secret, not which specific agent is submitting --
+	// reject a result that names an agent other than the one this run was
+	// actually dispatched to (mirrors wsAgentAuthorized's equivalent check
+	// for /ws/agent). An unknown RunID is deliberately left to the existing
+	// no-op-accept behavior below (see TestSubmitScenarioResult_UnknownRunID)
+	// rather than rejected here.
+	var dispatchedAgentID string
+	if err := h.db.QueryRow(r.Context(),
+		`SELECT agent_id FROM scenario_runs WHERE id = $1`, raw.RunID,
+	).Scan(&dispatchedAgentID); err == nil {
+		if raw.AgentID != "" && dispatchedAgentID != "" && raw.AgentID != dispatchedAgentID {
+			log.Printf("[!] result for run %s claims agent %q but was dispatched to %q — rejecting", raw.RunID, raw.AgentID, dispatchedAgentID)
+			jsonError(w, "agent mismatch for this run", http.StatusForbidden)
+			return
+		}
+	}
 	// Phase 0A: closes the span opened by dispatch_queued_at/dispatch_sent_at
 	// in dispatchRun. dispatch_sent_at → result_received_at covers agent
 	// execution (all steps, run internally) + the WS round trip -- the
@@ -2838,7 +2880,9 @@ func (h *Handler) SubmitScenarioResult(w http.ResponseWriter, r *http.Request) {
 			if !found {
 				step = scenario.Step{Framework: "custom"}
 			}
-			simResults = append(simResults, scenario.Interpret(step, execResult))
+			sim := scenario.Interpret(step, execResult)
+			simResults = append(simResults, sim)
+			h.recordRWEvidence(r.Context(), raw.RunID, raw.ScenarioID, step, sim)
 		}
 	}
 

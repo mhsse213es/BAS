@@ -35,7 +35,10 @@ func TestQueryAlerts_ReturnsNormalizedAlerts(t *testing.T) {
 				{
 					"id": "alert-1", "title": "Suspicious process", "severity": "high",
 					"createdDateTime": alertTime.Format(time.RFC3339),
-					"techniques":      []string{"T1055"},
+					// The real Graph alerts_v2 field is "mitreTechniques", not
+					// "techniques" -- this fixture mirrors the actual API so the
+					// test can't pass against a typo that happens to match itself.
+					"mitreTechniques": []string{"T1055"},
 					"evidence":        []map[string]any{{"deviceDnsName": "HOST1"}},
 				},
 			},

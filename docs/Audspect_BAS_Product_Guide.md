@@ -352,7 +352,7 @@ Single server deployment using Docker Compose. All components run as Docker cont
 
 ### 6.2 Air-Gapped Deployment
 
-Delivery ZIP contains all Docker image tarballs. No `docker pull` or internet access required on the server. Images are loaded from local files: `docker load < image.tar`.
+Delivery ZIP contains all Docker image tarballs. No `docker pull` or internet access required on the server. `install.sh` (or `import.sh` for the air-gap bundle) verifies every image tar's cosign signature and tag before loading it, then checks the loaded image ID; compose runs with `pull_policy: never` and `--pull never`. Do not `docker load` the tars by hand, because that skips these checks.
 
 The ART atomics YAML library, CISA KEV catalog, and ATT&CK STIX data are all bundled inside the orchestrator image at build time.
 

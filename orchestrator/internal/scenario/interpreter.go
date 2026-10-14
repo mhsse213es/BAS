@@ -250,19 +250,20 @@ func interpretCaldera(r ExecResult, combined string) (models.CheckResult, string
 }
 
 // interpretCustom interprets a custom PowerShell check or local posture check.
-// Checks output "PASS: ...", "FAIL: ...", or "SKIP: ..." as the first line.
-// If no structured prefix: exit 0 = pass, non-zero = fail.
+// Looks for a "PASS: ...", "FAIL: ...", or "SKIP: ..." structured verdict line
+// ANYWHERE in the output, not only the first line (found 2026-10-09: ~38
+// builtin scenarios, including scenarios/kerberoasting-ad-drill.yaml, write an
+// informational line -- e.g. "EXEC T1558.003: found 3 kerberoastable
+// accounts" -- before their verdict line; a first-line-only check never saw
+// the verdict and silently scored every one of those findings Pass via the
+// exit-code default below). If no structured prefix is found anywhere: exit 0
+// = pass, non-zero = fail. If more than one verdict TYPE is present, see
+// dominantVerdict's fail-safe resolution policy.
 func interpretCustom(r ExecResult, combined string) (models.CheckResult, string) {
 	first := strings.TrimSpace(firstLine(combined))
-	lower := strings.ToLower(first)
 
-	switch {
-	case strings.HasPrefix(lower, "pass:"):
-		return models.ResultPass, stripPrefix(first)
-	case strings.HasPrefix(lower, "fail:"):
-		return models.ResultFail, stripPrefix(first)
-	case strings.HasPrefix(lower, "skip:"):
-		return models.ResultSkipped, stripPrefix(first)
+	if verdict, result, ok := dominantVerdict(combined); ok {
+		return result, stripPrefix(verdict)
 	}
 
 	if r.ExitCode == 0 {
@@ -290,6 +291,53 @@ func firstLine(s string) string {
 		}
 	}
 	return s
+}
+
+// dominantVerdict scans every non-empty line of s for Audspect's structured
+// pass:/fail:/skip: verdict prefix -- not just the first line, see
+// interpretCustom's doc comment -- and returns the fail-safe-resolved
+// verdict.
+//
+// No committed scenario today emits more than one verdict TYPE from a single
+// step execution: every step's branches are mutually exclusive (verified
+// against scenarios/kerberoasting-ad-drill.yaml and the wider builtin corpus,
+// 490 verdict lines across 45 files, 2026-10-09). This is a defensive
+// contract for output that is malformed, corrupted, or hand-crafted, not a
+// real authoring pattern -- but it must have one explicit, documented answer
+// rather than an accidental one.
+//
+// Fail-safe policy: FAIL > SKIP > PASS, independent of line order. A FAIL
+// line is never silently suppressed by a PASS or SKIP line found elsewhere in
+// the same output -- mirroring this file's existing bias (see Interpret's
+// Vetoed/TimedOut handling) toward never overstating a defensive win when
+// there is ambiguity. Among multiple lines of the SAME winning type, the
+// first one supplies the returned text.
+func dominantVerdict(s string) (line string, result models.CheckResult, ok bool) {
+	var failLine, skipLine, passLine string
+	for _, l := range strings.Split(s, "\n") {
+		t := strings.TrimSpace(l)
+		if t == "" {
+			continue
+		}
+		lower := strings.ToLower(t)
+		switch {
+		case failLine == "" && strings.HasPrefix(lower, "fail:"):
+			failLine = t
+		case skipLine == "" && strings.HasPrefix(lower, "skip:"):
+			skipLine = t
+		case passLine == "" && strings.HasPrefix(lower, "pass:"):
+			passLine = t
+		}
+	}
+	switch {
+	case failLine != "":
+		return failLine, models.ResultFail, true
+	case skipLine != "":
+		return skipLine, models.ResultSkipped, true
+	case passLine != "":
+		return passLine, models.ResultPass, true
+	}
+	return "", "", false
 }
 
 func stripPrefix(s string) string {

@@ -82,5 +82,8 @@ func (g *Graph) mergeNode(n Node) {
 	if n.HighValue {
 		cur.HighValue = true
 	}
+	if n.UnconstrainedDelegation {
+		cur.UnconstrainedDelegation = true
+	}
 	g.nodes[n.ID] = cur
 }

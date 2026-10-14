@@ -114,6 +114,9 @@ func enrichHost(dst *Node, src Node) {
 	if src.HighValue {
 		dst.HighValue = true
 	}
+	if src.UnconstrainedDelegation {
+		dst.UnconstrainedDelegation = true
+	}
 }
 
 func resolve(id string, remap map[string]string) string {

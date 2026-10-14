@@ -44,6 +44,23 @@ type Node struct {
 	IdentityExposed bool     `json:"identityExposed,omitempty"`
 	Production      bool     `json:"production,omitempty"`
 	ComplianceScope []string `json:"complianceScope,omitempty"`
+
+	// UnconstrainedDelegation marks a principal (computer or user) configured
+	// for unconstrained Kerberos delegation: whoever controls it can harvest
+	// and reuse the TGT of ANY user who authenticates to it. Deliberately a
+	// flag, not an edge -- there is no single fixed target to draw an edge
+	// to. See docs/superpowers/specs/2026-10-07-ad-acl-delegation-graph-model-design.md.
+	UnconstrainedDelegation bool `json:"unconstrainedDelegation,omitempty"`
+
+	// HasSPN and DontRequirePreauth mark a USER account (never set on a
+	// computer/host node, even though SharpHound reports hasspn for
+	// computers too -- every computer carries a default machine-account
+	// SPN, so the signal is only meaningful for users) as Kerberoastable
+	// or AS-REP-roastable respectively. Deliberately flags, not edges,
+	// matching UnconstrainedDelegation above: there is no single fixed
+	// target to draw an edge to.
+	HasSPN             bool `json:"hasSPN,omitempty"`
+	DontRequirePreauth bool `json:"dontRequirePreauth,omitempty"`
 }
 
 // EdgeKind is a traversable relationship an attacker can use.
@@ -57,6 +74,28 @@ const (
 	EdgeHasSession EdgeKind = "has-session" // host has an interactive session for user (creds harvestable)
 	EdgeMemberOf   EdgeKind = "member-of"   // user/group is a member of group
 	EdgeCredential EdgeKind = "credential"  // reusable credential edge (e.g. shared local-admin password)
+
+	// ACL-abuse edges (from SharpHound's Aces arrays). From = the ACE's
+	// PrincipalSID (the grantee, who an attacker must control); To = the
+	// object the Aces array is attached to (whose rights the grantee holds).
+	// See docs/superpowers/specs/2026-10-07-ad-acl-delegation-graph-model-design.md.
+	EdgeGenericAll           EdgeKind = "generic-all"
+	EdgeGenericWrite         EdgeKind = "generic-write"
+	EdgeWriteOwner           EdgeKind = "write-owner"
+	EdgeWriteDacl            EdgeKind = "write-dacl"
+	EdgeOwns                 EdgeKind = "owns"
+	EdgeAllExtendedRights    EdgeKind = "all-extended-rights"
+	EdgeForceChangePassword  EdgeKind = "force-change-password"
+	EdgeAddMember            EdgeKind = "add-member"
+	EdgeAddSelf              EdgeKind = "add-self"
+	EdgeAddKeyCredentialLink EdgeKind = "add-key-credential-link"
+	EdgeReadLAPSPassword     EdgeKind = "read-laps-password"
+
+	// Kerberos delegation-abuse edges. See the spec's direction table --
+	// AllowedToDelegate and AllowedToAct have OPPOSITE grantee positions
+	// relative to "the computer carrying the JSON property".
+	EdgeAllowedToDelegate EdgeKind = "allowed-to-delegate"
+	EdgeAllowedToAct      EdgeKind = "allowed-to-act"
 )
 
 // reachKinds are the edge kinds that represent host-to-host lateral movement

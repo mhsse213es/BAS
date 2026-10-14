@@ -45,6 +45,12 @@ BAS_LEGACY_PORT=9000              # Default: 9000 (temporary, pre-migration agen
 BAS_DASHBOARD_PORT=9543           # Default: 9543 (browser dashboard)
 BAS_TLS=false                     # true | false
 
+# BAS_CSP_MODE sets the dashboard Content-Security-Policy. enforce (default)
+# blocks inline script; report-only only logs violations to the orchestrator
+# log -- use it temporarily while a reported dashboard problem is fixed, then
+# set it back to enforce and re-run --upgrade. There is no "off".
+BAS_CSP_MODE=enforce              # enforce | report-only
+
 # DNS_SINK_BIND_IP is the host IP the DLP DNS-tunneling sink (UDP/53) binds
 # to. Auto-detected (first non-loopback IP via `hostname -I`) if left blank.
 # It is deliberately NOT bound to 0.0.0.0 (all interfaces): on most Linux

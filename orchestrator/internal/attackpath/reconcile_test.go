@@ -92,3 +92,14 @@ func TestReconcileNoSharpHoundIsNoOp(t *testing.T) {
 		t.Fatalf("pure reachability graph should keep 3 hosts, got %d", g.NodeCount())
 	}
 }
+
+func TestEnrichHost_PreservesUnconstrainedDelegation(t *testing.T) {
+	var dst Node
+	src := Node{UnconstrainedDelegation: true}
+
+	enrichHost(&dst, src)
+
+	if !dst.UnconstrainedDelegation {
+		t.Fatalf("expected enrichHost to copy UnconstrainedDelegation, got %+v", dst)
+	}
+}

@@ -60,7 +60,7 @@ err()  { echo -e "${RED}[✗]${NC} $*" >&2; }
 # ── Prerequisites ──────────────────────────────────────────────────────────────
 log "Checking prerequisites..."
 MISSING=()
-for tool in xorriso openssl sha256sum; do
+for tool in xorriso openssl sha256sum curl; do
   command -v "$tool" &>/dev/null || MISSING+=("$tool")
 done
 if [[ ${#MISSING[@]} -gt 0 ]]; then
@@ -158,6 +158,15 @@ fi
 cp "${AUTOINSTALL_SRC}/meta-data" "${AUTOINSTALL_DIR}/meta-data"
 cp "${AUTOINSTALL_SRC}/scripts/post-install.sh" "${AUTOINSTALL_DIR}/scripts/"
 chmod +x "${AUTOINSTALL_DIR}/scripts/post-install.sh"
+
+# ── 5b. Stage pinned cosign (appliance build dependency) ──────────────────────
+# The installed appliance needs cosign >= v3.1.0 to verify the orchestrator
+# image, and an air-gapped target cannot download it, so it is fetched HERE
+# (checksum-pinned; the build fails if download or checksum fails).
+mkdir -p "${AUTOINSTALL_DIR}/appliance"
+bash "${REPO_ROOT}/packaging/appliance/fetch-cosign.sh" "${AUTOINSTALL_DIR}/appliance/cosign-linux-amd64"
+cp "${REPO_ROOT}/packaging/appliance/cosign.pin" "${AUTOINSTALL_DIR}/appliance/cosign.pin"
+cp "${REPO_ROOT}/packaging/appliance/fetch-cosign.sh" "${AUTOINSTALL_DIR}/appliance/fetch-cosign.sh"
 
 # ── 6. Optionally embed airgap bundle ─────────────────────────────────────────
 if [[ -n "$AIRGAP_BUNDLE" ]]; then
