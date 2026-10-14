@@ -288,9 +288,9 @@ func (r *Registry) Transition(ctx context.Context, versionID string, to Lifecycl
 		return err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-	var origin, trust, lc string
-	err = tx.QueryRow(ctx, `SELECT origin, trust_level, lifecycle FROM content_versions WHERE id = $1 FOR UPDATE`,
-		versionID).Scan(&origin, &trust, &lc)
+	var origin, trust, lc, createdBy string
+	err = tx.QueryRow(ctx, `SELECT origin, trust_level, lifecycle, created_by FROM content_versions WHERE id = $1 FOR UPDATE`,
+		versionID).Scan(&origin, &trust, &lc, &createdBy)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ErrVersionNotFound
 	}
@@ -299,6 +299,16 @@ func (r *Registry) Transition(ctx context.Context, versionID string, to Lifecycl
 	}
 	if err := CheckTransition(Origin(origin), Trust(trust), Lifecycle(lc), to, actor); err != nil {
 		return err
+	}
+	// TCF Phase 6: TCF-originated content must pass validation before
+	// publishing. VALIDATED->PUBLISHED_LOCAL (already legal, lifecycle.go:26)
+	// is unaffected -- only this specific from/to pair is newly refused, and
+	// only for content this phase's origin filter matches. RegisterLocalApproved
+	// (intake.go:215-253) never calls Transition at all, so it is unreachable here.
+	if to == LifecyclePublishedLocal && Lifecycle(lc) == LifecycleDraft &&
+		(createdBy == ActorGenerator || createdBy == ActorComposer) {
+		return &ErrIllegalTransition{From: Lifecycle(lc), To: to,
+			Reason: "TCF-originated content must pass validation (VALIDATED) before publishing"}
 	}
 	newTrust := TrustAfter(Origin(origin), Trust(trust), to)
 	if _, err := tx.Exec(ctx, `UPDATE content_versions SET lifecycle = $2, trust_level = $3 WHERE id = $1`,

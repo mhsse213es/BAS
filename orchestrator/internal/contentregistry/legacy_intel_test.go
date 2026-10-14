@@ -34,7 +34,7 @@ func TestLegacyIntelContent_ClassifiesWithoutTouching(t *testing.T) { // accepta
 			t.Fatal(err)
 		}
 		vid, _, err := r.createVersion(ctx, newVersion{contentID: old, origin: OriginLocal, source: SourceIntel,
-			artifact: art, trust: TrustUntrusted, lifecycle: LifecycleDraft, actor: ActorGenerator, analysis: a})
+			artifact: art, trust: TrustUntrusted, lifecycle: LifecycleDraft, actor: ActorMigration, analysis: a})
 		if err != nil {
 			t.Fatal(err)
 		}
