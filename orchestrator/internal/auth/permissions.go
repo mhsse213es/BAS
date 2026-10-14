@@ -224,6 +224,11 @@ const (
 	// alongside CanRunScenario, not admin-only, since this is an
 	// analyst-usable, evidence-producing action.
 	CanImportNetworkPolicy Permission = "network-policy:import"
+
+	// network-topology:import gates importing a declared L3
+	// zone-adjacency topology (Network BAS Phase 3) -- same placement
+	// as CanImportNetworkPolicy, for the same reason.
+	CanImportNetworkTopology Permission = "network-topology:import"
 )
 
 // rolePermissions maps each role to the permissions it holds. Viewer is
@@ -281,8 +286,9 @@ var rolePermissions = map[Role]map[Permission]bool{
 		CanViewSCIMConfig: true, CanManageSCIMConfig: true,
 		CanExecuteRemediation: true, CanApproveRemediation: true,
 		CanManageBackups:        true,
-		CanResolveActorIdentity: true,
-		CanImportNetworkPolicy:  true,
+		CanResolveActorIdentity:  true,
+		CanImportNetworkPolicy:   true,
+		CanImportNetworkTopology: true,
 	},
 	RoleAnalyst: {
 		CanVerify:            true,
@@ -298,7 +304,7 @@ var rolePermissions = map[Role]map[Permission]bool{
 		CanTriggerScan: true, CanCollectAttackPath: true, CanCreateAttackPathJob: true,
 		CanCancelAttackPathJob: true, CanRetryAttackPathJob: true, CanSetAttackPathAsset: true,
 		CanRunScenario: true, CanRunCalderaAdversary: true, CanRunAdversaryTemplate: true,
-		CanImportNetworkPolicy: true,
+		CanImportNetworkPolicy: true, CanImportNetworkTopology: true,
 		CanCancelScenarioRun: true, CanCorrelateSIEM: true, CanViewSIEMCorrelations: true,
 		CanRunDetectionVerification: true, CanCreateCampaign: true, CanStopCampaign: true,
 		CanSetFindingStatus: true, CanPushToITSM: true, CanBulkPushToITSM: true,
