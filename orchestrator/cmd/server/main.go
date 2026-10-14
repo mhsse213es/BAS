@@ -308,6 +308,9 @@ func main() {
 	if err := db.EnsureTransportSecurityCheckSchema(context.Background(), adminPool); err != nil {
 		log.Fatalf("[FATAL] transport security check schema: %v", err)
 	}
+	if err := db.EnsureCloudTopologySchema(context.Background(), adminPool); err != nil {
+		log.Fatalf("[FATAL] cloud topology schema: %v", err)
+	}
 	log.Println("[+] Schema verified")
 
 	// ── bas_app provisioning ─────────────────────────────────────────────
