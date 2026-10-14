@@ -148,6 +148,11 @@ func newTestDB(ctx context.Context) (*TestDB, error) {
 		_ = container.Terminate(context.Background())
 		return nil, fmt.Errorf("testutil: EnsureNetworkTopologySchema: %w", err)
 	}
+	if err := db.EnsureNetworkControlExpectationSchema(ctx, pool); err != nil {
+		pool.Close()
+		_ = container.Terminate(context.Background())
+		return nil, fmt.Errorf("testutil: EnsureNetworkControlExpectationSchema: %w", err)
+	}
 
 	return &TestDB{
 		Pool:      pool,
