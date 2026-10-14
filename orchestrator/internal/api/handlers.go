@@ -4503,6 +4503,33 @@ func (h *Handler) GetThreatExposure(w http.ResponseWriter, r *http.Request) {
 	respond(w, result)
 }
 
+// PromoteComponent handles POST /api/content-registry/components/promote --
+// turns one step of an executable content_version into a reusable internal
+// component (TCF Phase 4, spec
+// docs/superpowers/specs/2026-10-14-tcf-phase4-content-composition-design.md §2.2).
+func (h *Handler) PromoteComponent(w http.ResponseWriter, r *http.Request) {
+	reg, ok := h.engine.Registry().(*contentregistry.Registry)
+	if !ok || reg == nil {
+		jsonError(w, "content registry not available", http.StatusServiceUnavailable)
+		return
+	}
+	var body struct {
+		ContentVersionID string `json:"contentVersionId"`
+		StepIndex        int    `json:"stepIndex"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		jsonError(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+	actor := actorFor(r)
+	componentID, err := reg.PromoteInternalComponent(r.Context(), body.ContentVersionID, body.StepIndex, actor)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusUnprocessableEntity)
+		return
+	}
+	respond(w, map[string]string{"componentId": componentID})
+}
+
 // TechniqueCatalogEntry is one row in the full ATT&CK technique search
 // catalog served to the Scenario Builder's Technique Selector. Built
 // entirely from the embedded attackdata dataset — read-only, no DB access.

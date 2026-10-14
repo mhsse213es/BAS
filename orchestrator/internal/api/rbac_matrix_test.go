@@ -215,6 +215,7 @@ var routeMatrix = []routeCase{
 	{http.MethodPost, "/api/content-registry/versions/{vid}/transition", tierPermission, auth.CanTransitionContent},
 	{http.MethodGet, "/api/content-registry/migration-report", tierPermission, auth.CanViewContentMigrationReport},
 	{http.MethodPost, "/api/content/{contentId}/versions/{n}/threats", tierPermission, auth.CanLinkContentThreat},
+	{http.MethodPost, "/api/content-registry/components/promote", tierPermission, auth.CanManageComponents},
 	{http.MethodPost, "/api/variants/generate", tierPermission, auth.CanGenerateVariants},
 	{http.MethodPost, "/api/variants/run", tierPermission, auth.CanRunVariants},
 	{http.MethodGet, "/api/variants/run/{id}", tierPermission, auth.CanViewVariantRun},
