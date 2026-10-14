@@ -13,6 +13,7 @@ import (
 	"github.com/audspect/bas/internal/networkpath"
 	"github.com/audspect/bas/internal/networkpolicy"
 	"github.com/audspect/bas/internal/networktopology"
+	"github.com/audspect/bas/internal/otsafety"
 )
 
 const maxNetworkPathRequestBytes = 1 << 16
@@ -21,6 +22,7 @@ type networkPathRequest struct {
 	TopologyImportID string `json:"topologyImportId"`
 	PolicyImportID   string `json:"policyImportId,omitempty"`
 	DiscoveryRunID   string `json:"discoveryRunId,omitempty"`
+	OTSafetyImportID string `json:"otSafetyImportId,omitempty"`
 	SourceHost       string `json:"sourceHost"`
 	DestHost         string `json:"destHost"`
 	Port             int    `json:"port"`
@@ -102,6 +104,20 @@ func (h *Handler) FindNetworkPaths(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	var transitViolations []otsafety.TransitViolation
+	if req.OTSafetyImportID != "" {
+		safety, err := db.GetOTSafetyImport(r.Context(), h.db, req.OTSafetyImportID)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				jsonError(w, "ot safety import not found", http.StatusNotFound)
+				return
+			}
+			jsonError(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		transitViolations = otsafety.ValidateRequiredTransits(routes, safety.RequiredTransits)
+	}
+
 	var results []networkpath.PathResult
 	if len(routes) == 0 {
 		// No declared route at all: still evaluate policy directly for
@@ -122,7 +138,7 @@ func (h *Handler) FindNetworkPaths(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	respond(w, networkPathResponse{Results: results, SearchExhausted: exhausted})
+	respond(w, networkPathResponse{Results: results, SearchExhausted: exhausted, TransitViolations: transitViolations})
 }
 
 // networkPathResponse is the body of POST /api/network-paths.
@@ -134,8 +150,9 @@ func (h *Handler) FindNetworkPaths(w http.ResponseWriter, r *http.Request) {
 // space fully explored, no route exists). Omitted when false, since
 // that is the overwhelmingly common case.
 type networkPathResponse struct {
-	Results         []networkpath.PathResult `json:"results"`
-	SearchExhausted bool                      `json:"searchExhausted,omitempty"`
+	Results           []networkpath.PathResult    `json:"results"`
+	SearchExhausted   bool                        `json:"searchExhausted,omitempty"`
+	TransitViolations []otsafety.TransitViolation `json:"transitViolations,omitempty"`
 }
 
 // composeNetworkPathHop evaluates policy for one fromZone->toZone hop

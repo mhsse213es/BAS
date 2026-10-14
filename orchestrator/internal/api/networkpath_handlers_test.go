@@ -31,6 +31,117 @@ func createTestTopologyImport(t *testing.T, h *Handler, pool *pgxpool.Pool, body
 	return created.ID
 }
 
+// TestFindNetworkPaths_BypassRoute_TransitViolationAttached pins
+// Phase 7A's boundary-violation detection: a direct route between two
+// zones that bypasses a declared RequiredTransit's ViaZone must
+// surface as a transitViolation, without altering the path's own
+// State.
+func TestFindNetworkPaths_BypassRoute_TransitViolationAttached(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret)
+		userID := seedUser(t, pool, "netpath-op-bypass", "pw12345678", string(auth.RoleAnalyst), true)
+
+		topoID := createTestTopologyImport(t, h, pool, map[string]any{
+			"sourceType": "manual",
+			"zones": []map[string]any{
+				{"name": "corporate", "cidrs": []string{"10.0.1.0/24"}},
+				{"name": "ot", "cidrs": []string{"10.0.2.0/24"}},
+			},
+			"edges": []map[string]any{
+				{"fromZone": "corporate", "toZone": "ot"},
+			},
+		})
+
+		safetyBody := map[string]any{
+			"sourceType": "manual",
+			"requiredTransits": []map[string]any{
+				{"canonicalId": "rt-1", "fromZone": "corporate", "toZone": "ot", "viaZone": "dmz"},
+			},
+			"limitations": []string{"zone names are not cross-validated against a real network-topology import"},
+		}
+		sb, _ := json.Marshal(safetyBody)
+		sReq := authedRequest(t, http.MethodPost, "/api/ot-safety-imports", bytes.NewReader(sb), auth.RoleAnalyst, userID)
+		sRec := callAuthed(h.CreateOTSafetyImport, sReq)
+		if sRec.Code != http.StatusCreated {
+			t.Fatalf("create ot safety import: status = %d, body = %s", sRec.Code, sRec.Body.String())
+		}
+		var safetyCreated struct {
+			ID string `json:"id"`
+		}
+		if err := json.Unmarshal(sRec.Body.Bytes(), &safetyCreated); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+
+		body := map[string]any{
+			"topologyImportId": topoID,
+			"otSafetyImportId": safetyCreated.ID,
+			"sourceHost":       "10.0.1.5",
+			"destHost":         "10.0.2.5",
+			"port":             443,
+			"protocol":         "tcp",
+		}
+		b, _ := json.Marshal(body)
+		req := authedRequest(t, http.MethodPost, "/api/network-paths", bytes.NewReader(b), auth.RoleAnalyst, userID)
+		rec := callAuthed(h.FindNetworkPaths, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+		}
+		var resp networkPathResponse
+		if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		if len(resp.TransitViolations) != 1 {
+			t.Fatalf("transitViolations = %v, want exactly 1 -- the direct corporate->ot route bypasses the required dmz zone", resp.TransitViolations)
+		}
+		if len(resp.Results) != 1 {
+			t.Fatalf("got %d results, want 1", len(resp.Results))
+		}
+	})
+}
+
+// TestFindNetworkPaths_OmittingOTSafetyImportID_BehaviorUnchanged pins
+// this plan's own Global Constraint: an existing caller that never
+// supplies otSafetyImportId gets exactly the pre-Phase-7A response
+// shape, with no transitViolations field at all.
+func TestFindNetworkPaths_OmittingOTSafetyImportID_BehaviorUnchanged(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret)
+		userID := seedUser(t, pool, "netpath-op-unchanged", "pw12345678", string(auth.RoleAnalyst), true)
+
+		topoID := createTestTopologyImport(t, h, pool, map[string]any{
+			"sourceType": "manual",
+			"zones": []map[string]any{
+				{"name": "corporate", "cidrs": []string{"10.0.1.0/24"}},
+				{"name": "ot", "cidrs": []string{"10.0.2.0/24"}},
+			},
+			"edges": []map[string]any{
+				{"fromZone": "corporate", "toZone": "ot"},
+			},
+		})
+
+		body := map[string]any{
+			"topologyImportId": topoID,
+			"sourceHost":       "10.0.1.5",
+			"destHost":         "10.0.2.5",
+			"port":             443,
+			"protocol":         "tcp",
+		}
+		b, _ := json.Marshal(body)
+		req := authedRequest(t, http.MethodPost, "/api/network-paths", bytes.NewReader(b), auth.RoleAnalyst, userID)
+		rec := callAuthed(h.FindNetworkPaths, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+		}
+		var raw map[string]json.RawMessage
+		if err := json.Unmarshal(rec.Body.Bytes(), &raw); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		if _, present := raw["transitViolations"]; present {
+			t.Fatalf("response unexpectedly contains transitViolations when otSafetyImportId was never supplied: %s", rec.Body.String())
+		}
+	})
+}
+
 func TestFindNetworkPaths_SameZoneQueryReturnsSingleHopResult(t *testing.T) {
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
 		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret)
