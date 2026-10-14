@@ -1859,7 +1859,7 @@ func (h *Handler) dispatchRun(ctx context.Context, sc *scenario.Scenario, agentI
 		sc = ev.Scenario // execute the pinned version's stored bytes, never the disk file
 		contentVersionID = &ev.VersionID
 	}
-	live := o.Mode == "telemetry" || o.Mode == "lab"
+	live := o.Mode == "telemetry" || o.Mode == "lab" || o.Mode == "factory-validation"
 
 	// ── Agent state gate ─────────────────────────────────────────────────────
 	// Only active agents may run scenarios. Quarantined / restricted / retired
@@ -1870,6 +1870,21 @@ func (h *Handler) dispatchRun(ctx context.Context, sc *scenario.Scenario, agentI
 	).Scan(&agentState)
 	if agentState != "" && agentState != string(models.AgentStateActive) {
 		return "", "agent " + agentState, nil
+	}
+
+	// ── Factory-lab ownership gate (TCF Phase 6) ─────────────────────────────
+	// A customer target may never be substituted for the factory-owned lab
+	// agent, and the lab agent may never be dispatched to as if it were a
+	// customer target -- enforced both directions, not just by convention.
+	var isFactoryLab bool
+	h.db.QueryRow(ctx,
+		`SELECT is_factory_lab FROM agents WHERE agent_id = $1`, agentID,
+	).Scan(&isFactoryLab)
+	if o.Mode == "factory-validation" && !isFactoryLab {
+		return "", "factory-validation dispatch requires the factory-owned lab agent", nil
+	}
+	if o.Mode != "factory-validation" && isFactoryLab {
+		return "", "the factory-owned lab agent cannot be dispatched to in mode " + o.Mode, nil
 	}
 
 	// ── OS compatibility check ────────────────────────────────────────────────
