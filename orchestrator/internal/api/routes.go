@@ -440,6 +440,7 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.With(auth.RequirePermission(auth.CanImportNetworkControlExpectation)).Post("/api/network-control-expectations", h.CreateNetworkControlExpectationImport)
 		r.With(auth.RequirePermission(auth.CanImportNetworkTopology)).Post("/api/network-paths", h.FindNetworkPaths)
 		r.With(auth.RequirePermission(auth.CanImportCloudTopology)).Post("/api/cloud-paths", h.FindCloudPaths)
+		r.With(auth.RequirePermission(auth.CanImportRemoteAccessTopology)).Post("/api/remote-access-paths", h.FindRemoteAccessPaths)
 		r.With(auth.RequirePermission(auth.CanImportNetworkControlExpectation)).Post("/api/network-control-verifications", h.VerifyNetworkControlExpectations)
 		r.With(auth.RequirePermission(auth.CanRunScenario)).Post("/api/backup-assurance/assessments", h.TriggerBackupAssuranceAssessment)
 		r.Get("/api/backup-assurance/assessments/{assessmentId}", h.GetBackupAssuranceAssessment)

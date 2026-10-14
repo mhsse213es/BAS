@@ -226,6 +226,7 @@ var routeMatrix = []routeCase{
 	{http.MethodPost, "/api/network-control-expectations", tierPermission, auth.CanImportNetworkControlExpectation},
 	{http.MethodPost, "/api/network-paths", tierPermission, auth.CanImportNetworkTopology},
 	{http.MethodPost, "/api/cloud-paths", tierPermission, auth.CanImportCloudTopology},
+	{http.MethodPost, "/api/remote-access-paths", tierPermission, auth.CanImportRemoteAccessTopology},
 	{http.MethodPost, "/api/network-control-verifications", tierPermission, auth.CanImportNetworkControlExpectation},
 	{http.MethodPost, "/api/backup-assurance/assessments", tierPermission, auth.CanRunScenario},
 	{http.MethodGet, "/api/backup-assurance/assessments/{assessmentId}", tierAny, ""},
