@@ -4530,6 +4530,39 @@ func (h *Handler) PromoteComponent(w http.ResponseWriter, r *http.Request) {
 	respond(w, map[string]string{"componentId": componentID})
 }
 
+// ReferenceComponent handles POST /api/content-registry/components/reference
+// -- registers a reusable external (ART/Caldera) component reference
+// (spec §2.1, §2.2).
+func (h *Handler) ReferenceComponent(w http.ResponseWriter, r *http.Request) {
+	reg, ok := h.engine.Registry().(*contentregistry.Registry)
+	if !ok || reg == nil {
+		jsonError(w, "content registry not available", http.StatusServiceUnavailable)
+		return
+	}
+	var body struct {
+		Framework      string   `json:"framework"`
+		TechniqueID    string   `json:"techniqueId"`
+		Title          string   `json:"title"`
+		AbilityID      string   `json:"abilityId"`
+		ActionKey      string   `json:"actionKey"`
+		TestIndex      int      `json:"testIndex"`
+		LibraryVersion string   `json:"libraryVersion"`
+		SupportedOS    []string `json:"supportedOS"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		jsonError(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+	actor := actorFor(r)
+	componentID, err := reg.RegisterExternalComponent(r.Context(), body.Framework, body.TechniqueID, body.Title,
+		body.AbilityID, body.ActionKey, body.TestIndex, body.LibraryVersion, body.SupportedOS, actor)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusUnprocessableEntity)
+		return
+	}
+	respond(w, map[string]string{"componentId": componentID})
+}
+
 // TechniqueCatalogEntry is one row in the full ATT&CK technique search
 // catalog served to the Scenario Builder's Technique Selector. Built
 // entirely from the embedded attackdata dataset — read-only, no DB access.
