@@ -302,6 +302,9 @@ func main() {
 	if err := db.EnsureNetworkControlExpectationSchema(context.Background(), adminPool); err != nil {
 		log.Fatalf("[FATAL] network control expectation schema: %v", err)
 	}
+	if err := db.EnsureDNSSecurityCheckSchema(context.Background(), adminPool); err != nil {
+		log.Fatalf("[FATAL] DNS security check schema: %v", err)
+	}
 	log.Println("[+] Schema verified")
 
 	// ── bas_app provisioning ─────────────────────────────────────────────

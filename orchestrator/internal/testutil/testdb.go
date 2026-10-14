@@ -153,6 +153,11 @@ func newTestDB(ctx context.Context) (*TestDB, error) {
 		_ = container.Terminate(context.Background())
 		return nil, fmt.Errorf("testutil: EnsureNetworkControlExpectationSchema: %w", err)
 	}
+	if err := db.EnsureDNSSecurityCheckSchema(ctx, pool); err != nil {
+		pool.Close()
+		_ = container.Terminate(context.Background())
+		return nil, fmt.Errorf("testutil: EnsureDNSSecurityCheckSchema: %w", err)
+	}
 
 	return &TestDB{
 		Pool:      pool,
