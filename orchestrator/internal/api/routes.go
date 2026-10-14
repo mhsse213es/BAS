@@ -416,6 +416,7 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.With(auth.RequirePermission(auth.CanLinkContentThreat)).Post("/api/content/{contentId}/versions/{n}/threats", h.LinkContentThreat)
 		r.With(auth.RequirePermission(auth.CanManageComponents)).Post("/api/content-registry/components/promote", h.PromoteComponent)
 		r.With(auth.RequirePermission(auth.CanManageComponents)).Post("/api/content-registry/components/reference", h.ReferenceComponent)
+		r.With(auth.RequirePermission(auth.CanManageComponents)).Post("/api/content-registry/compose", h.ComposeContent)
 
 		// Variant executor — multi-variant technique execution
 		r.With(auth.RequirePermission(auth.CanGenerateVariants)).Post("/api/variants/generate", h.GenerateVariants)

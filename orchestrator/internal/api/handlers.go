@@ -4563,6 +4563,32 @@ func (h *Handler) ReferenceComponent(w http.ResponseWriter, r *http.Request) {
 	respond(w, map[string]string{"componentId": componentID})
 }
 
+// ComposeContent handles POST /api/content-registry/compose -- assembles
+// the given components into a new content_version (TCF Phase 4, spec
+// docs/superpowers/specs/2026-10-14-tcf-phase4-content-composition-design.md §2.3).
+func (h *Handler) ComposeContent(w http.ResponseWriter, r *http.Request) {
+	reg, ok := h.engine.Registry().(*contentregistry.Registry)
+	if !ok || reg == nil {
+		jsonError(w, "content registry not available", http.StatusServiceUnavailable)
+		return
+	}
+	var body struct {
+		ComponentIDs []string `json:"componentIds"`
+		ThreatID     string   `json:"threatId"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		jsonError(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+	actor := actorFor(r)
+	versionID, created, err := reg.Compose(r.Context(), body.ComponentIDs, body.ThreatID, actor)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusUnprocessableEntity)
+		return
+	}
+	respond(w, map[string]any{"versionId": versionID, "created": created})
+}
+
 // TechniqueCatalogEntry is one row in the full ATT&CK technique search
 // catalog served to the Scenario Builder's Technique Selector. Built
 // entirely from the embedded attackdata dataset — read-only, no DB access.
