@@ -7,8 +7,51 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/audspect/bas/internal/reporting/attackdata"
 	"github.com/audspect/bas/internal/scenario"
+	"github.com/audspect/bas/internal/threatidentity"
 )
+
+// resolveEmulatesMetadata resolves a builtin scenario's declared
+// `emulates` references (spec §9.2) against the canonical actor registry
+// -- never free text. A resolved external_id becomes an `emulates` link
+// written inside createVersion's own transaction (nv.emulatesLinks); an
+// external_id that attackdata doesn't recognize at all queues a
+// resolution candidate (acceptance test 26). An external_id that
+// attackdata recognizes but whose name resolution is itself ambiguous
+// against existing actors is handled by ResolveAndPersist's own existing
+// candidate mechanism -- ThreatID comes back empty and this function
+// skips it without creating a second, redundant candidate.
+func (r *Registry) resolveEmulatesMetadata(ctx context.Context, contentID string, refs []scenario.EmulatesRef, nv *newVersion) error {
+	if len(refs) == 0 {
+		return nil
+	}
+	idStore := threatidentity.NewStore(r.pool)
+	for _, ref := range refs {
+		if ref.SubjectType != "actor" {
+			continue
+		}
+		group := attackdata.GroupByID(ref.ExternalID)
+		if group == nil {
+			if _, err := idStore.QueueEmulatesCandidate(ctx, contentID, ref.ExternalID,
+				fmt.Sprintf("builtin scenario %s declares emulates %s, not found in the ATT&CK group catalog", contentID, ref.ExternalID)); err != nil {
+				return err
+			}
+			continue
+		}
+		resolved, err := idStore.ResolveAndPersist(ctx,
+			threatidentity.Incoming{Name: group.Name, CanonicalGroupID: ref.ExternalID},
+			threatidentity.ProfileFields{})
+		if err != nil {
+			return err
+		}
+		if resolved.ThreatID == "" {
+			continue // ambiguous; ResolveAndPersist already queued its own candidate
+		}
+		nv.emulatesLinks = append(nv.emulatesLinks, emulatesLink{threatID: resolved.ThreatID, provenanceRef: ref.ExternalID})
+	}
+	return nil
+}
 
 // MigrationDone reports whether the one-time migration marker exists.
 func (r *Registry) MigrationDone(ctx context.Context) (bool, error) {
@@ -132,6 +175,9 @@ func (r *Registry) Intake(ctx context.Context, f scenario.IntakeFile) (scenario.
 			nv.trust = TrustUntrusted
 		default:
 			return r.refuse(f, a.contentID, "builtin signature not verified"), nil
+		}
+		if err := r.resolveEmulatesMetadata(ctx, a.contentID, a.sc.Emulates, &nv); err != nil {
+			return scenario.IntakeDecision{}, err
 		}
 	case SourceIntel:
 		nv.trust, nv.lifecycle, nv.actor = TrustUntrusted, LifecycleDraft, ActorGenerator
@@ -263,6 +309,9 @@ func (r *Registry) Transition(ctx context.Context, versionID string, to Lifecycl
 		`INSERT INTO content_version_events (content_version_id, from_lifecycle, to_lifecycle, from_trust, to_trust, actor, reason)
 		 VALUES ($1,$2,$3,$4,$5,$6,$7)`,
 		versionID, lc, string(to), trust, string(newTrust), actor, reason); err != nil {
+		return err
+	}
+	if err := r.recordCoverageIfExecutable(ctx, tx, versionID, Origin(origin), newTrust, to); err != nil {
 		return err
 	}
 	return tx.Commit(ctx)

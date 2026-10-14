@@ -546,3 +546,22 @@ func (h *Handler) GetThreatIntelSummary(w http.ResponseWriter, r *http.Request) 
 	}
 	respond(w, result)
 }
+
+// GET /api/analytics/factory-health — read-only TCF pipeline health:
+// content throughput, threat-to-content velocity, validation pass rate,
+// ingestion health, lifecycle funnel, data quality. Viewer+. Optional
+// ?days=N query param sets the lookback window (default 30).
+func (h *Handler) GetFactoryHealth(w http.ResponseWriter, r *http.Request) {
+	days := 30
+	if v := r.URL.Query().Get("days"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			days = n
+		}
+	}
+	result, err := analytics.FactoryHealth(r.Context(), h.db, time.Duration(days)*24*time.Hour)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	respond(w, result)
+}

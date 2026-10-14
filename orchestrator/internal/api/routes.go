@@ -311,6 +311,7 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.Get("/api/caldera/abilities", h.GetCalderaAbilities)
 		r.Get("/api/techniques/unified", h.GetUnifiedTechniques)
 		r.Get("/api/techniques/catalog", h.GetTechniqueCatalog)
+		r.Get("/api/threats/exposure", h.GetThreatExposure)
 
 		// Crypto profile — read-only; useful for customer security reviews.
 		r.Get("/api/crypto/info", h.GetCryptoInfo)
@@ -333,6 +334,8 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		// Threat Intel Summary -- fleet-wide posture combining the above
 		// per-actor scoring with KEV exposure, for dashboard consumption.
 		r.Get("/api/analytics/threat-intel-summary", h.GetThreatIntelSummary)
+		r.Get("/api/analytics/factory-health", h.GetFactoryHealth)
+		r.Get("/api/intel/threats/{id}/tcv", h.GetThreatTCV)
 
 		// Endpoint Posture -- fleet-wide agent health + derived EPP isolation
 		// state, for dashboard consumption. Last of the 7 analytics categories.
@@ -474,6 +477,11 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.With(auth.RequirePermission(auth.CanViewContentMigrationReport)).Get("/api/content-registry/migration-report", h.GetContentMigrationReport)
 		r.With(auth.RequirePermission(auth.CanResolveActorIdentity)).Get("/api/intel/actor-resolutions", h.ListActorResolutions)
 		r.With(auth.RequirePermission(auth.CanResolveActorIdentity)).Post("/api/intel/actor-resolutions/{id}", h.DecideActorResolution)
+		r.With(auth.RequirePermission(auth.CanManageSourceTrust)).Post("/api/intel/sources/{id}/trust", h.SetSourceTrust)
+		r.With(auth.RequirePermission(auth.CanLinkContentThreat)).Post("/api/content/{contentId}/versions/{n}/threats", h.LinkContentThreat)
+		r.With(auth.RequirePermission(auth.CanManageComponents)).Post("/api/content-registry/components/promote", h.PromoteComponent)
+		r.With(auth.RequirePermission(auth.CanManageComponents)).Post("/api/content-registry/components/reference", h.ReferenceComponent)
+		r.With(auth.RequirePermission(auth.CanManageComponents)).Post("/api/content-registry/compose", h.ComposeContent)
 
 		// Variant executor — multi-variant technique execution
 		r.With(auth.RequirePermission(auth.CanGenerateVariants)).Post("/api/variants/generate", h.GenerateVariants)
@@ -618,6 +626,7 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 
 		// Threat-intel connector
 		r.With(auth.RequirePermission(auth.CanViewConnectorStatus)).Get("/api/connector/status", h.GetConnectorStatus)
+		r.With(auth.RequirePermission(auth.CanViewConnectorStatus)).Get("/api/connector/generation-attempts", h.GetGenerationAttempts)
 		r.With(auth.RequirePermission(auth.CanSyncConnector)).Post("/api/connector/sync", h.TriggerConnectorSync)
 		r.With(auth.RequirePermission(auth.CanViewConnectorStatus)).Get("/api/threat-intel/{connector}/config", h.GetThreatIntelConfig)
 		r.With(auth.RequirePermission(auth.CanUpdateConnectorConfig)).Put("/api/threat-intel/{connector}/config", h.PutThreatIntelConfig)

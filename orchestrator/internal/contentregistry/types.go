@@ -57,6 +57,7 @@ const (
 const (
 	ActorIntake     = "intake"
 	ActorGenerator  = "generator:connector"
+	ActorComposer   = "composer:admin"
 	ActorMigration  = "migration:pre-registry"
 	MigrationReason = "historical authorization: authored via operator UI before approval tracking existed; not reviewed during migration"
 )
@@ -69,6 +70,7 @@ var (
 	// owned by a different threat (a hash collision). Generation fails
 	// closed (TCF Phase 2 spec §4.3).
 	ErrThreatCollision = errors.New("intel content id is owned by a different threat")
+	ErrThreatNotFound  = errors.New("threat not found")
 )
 
 // ErrNotExecutable is the runtime gate's denial. Its Error() text is what

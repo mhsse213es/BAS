@@ -145,29 +145,30 @@ cp -- "$TARBALL" "$COPY"
 [[ -f "${TARBALL}.asc" ]] && cp -- "${TARBALL}.asc" "${COPY}.asc"
 [[ -f "${TARBALL}.sha256" ]] && cp -- "${TARBALL}.sha256" "${COPY}.sha256"
 
-# ── Signature verification (if .asc present) ──────────────────────────────────
+# ── Signature verification (mandatory, TCF Phase 8 ported) ────────────────────
+# "Warn and proceed without verification" on a missing .asc was the exact
+# fail-open defect this closes, matching verify.sh's own (now-mandatory) check
+# so the two scripts can never diverge on whether a signature is required.
 SIGFILE="${COPY}.asc"
 VERIFY_SIG_SCRIPT="$(dirname -- "$0")/../signing/verify-sig.sh"
 # Also check same-dir placement (when distributed as part of a bundle-tools package)
 [[ ! -f "$VERIFY_SIG_SCRIPT" ]] && VERIFY_SIG_SCRIPT="$(dirname -- "$0")/verify-sig.sh"
 
-if [[ -f "$SIGFILE" ]]; then
-  if [[ -f "$VERIFY_SIG_SCRIPT" ]]; then
-    log "GPG signature found — verifying before import..."
-    GPG_ARGS=()
-    [[ -n "$GPG_PUB_FLAG" ]] && GPG_ARGS=(--gpg-pub "$GPG_PUB_FLAG")
-    if ! bash "$VERIFY_SIG_SCRIPT" "$COPY" ${GPG_ARGS[@]+"${GPG_ARGS[@]}"}; then
-      err "Signature verification failed. Import aborted."
-      exit 1
-    fi
-  else
-    err ".asc signature file found but verify-sig.sh is not available -- cannot verify it. Import aborted."
-    echo "  Place verify-sig.sh (shipped in the bundle) next to import.sh." >&2
-    exit 1
-  fi
-else
-  warn "No GPG signature (.asc) found — proceeding without signature verification."
-  warn "For production deployments, always verify signatures. See packaging/signing/."
+if [[ ! -f "$SIGFILE" ]]; then
+  err "No GPG signature (.asc) found alongside the bundle. An unsigned air-gap bundle must never be imported. Import aborted."
+  exit 1
+fi
+if [[ ! -f "$VERIFY_SIG_SCRIPT" ]]; then
+  err ".asc signature file found but verify-sig.sh is not available -- cannot verify it. Import aborted."
+  echo "  Place verify-sig.sh (shipped in the bundle) next to import.sh." >&2
+  exit 1
+fi
+log "GPG signature found — verifying before import..."
+GPG_ARGS=()
+[[ -n "$GPG_PUB_FLAG" ]] && GPG_ARGS=(--gpg-pub "$GPG_PUB_FLAG")
+if ! bash "$VERIFY_SIG_SCRIPT" "$COPY" ${GPG_ARGS[@]+"${GPG_ARGS[@]}"}; then
+  err "Signature verification failed. Import aborted."
+  exit 1
 fi
 
 # ── Extract the verified copy ──────────────────────────────────────────────────
@@ -190,19 +191,22 @@ if [[ "$(cat "${BUNDLE_DIR}/compose/VERSION" 2>/dev/null | tr -d '[:space:]')" !
   exit 1
 fi
 
-# ── Verify manifest (quick check) ─────────────────────────────────────────────
+# ── Verify manifest (mandatory, TCF Phase 8 ported) ────────────────────────────
+# Matches verify.sh's own (already-mandatory) check -- skipping this on a
+# missing manifest would let a staging-directory tamper between signature
+# verification and extraction go undetected (the TOCTOU case).
 MANIFEST="${BUNDLE_DIR}/MANIFEST.sha256"
-if [[ -f "$MANIFEST" ]]; then
-  log "Verifying bundle integrity..."
-  if ! mout=$(cd "$BUNDLE_DIR" && sha256sum --check --strict MANIFEST.sha256 2>&1); then
-    grep -v ': OK$' <<<"$mout" | while IFS= read -r l; do err "$l"; done
-    err "Bundle manifest verification failed. Abort."
-    exit 1
-  fi
-  log "Manifest OK."
-else
-  warn "No MANIFEST.sha256 found — skipping integrity check."
+if [[ ! -f "$MANIFEST" ]]; then
+  err "No MANIFEST.sha256 found in the bundle. Import aborted. Zero images loaded, zero state changed."
+  exit 1
 fi
+log "Verifying bundle integrity..."
+if ! mout=$(cd "$BUNDLE_DIR" && sha256sum --check --strict MANIFEST.sha256 2>&1); then
+  grep -v ': OK$' <<<"$mout" | while IFS= read -r l; do err "$l"; done
+  err "Bundle manifest verification failed. Abort."
+  exit 1
+fi
+log "Manifest OK."
 
 # setup.sh re-verifies with compose/cosign.pub; refuse an inconsistent bundle BEFORE
 # anything is loaded (with an external key, compose/cosign.pub is overwritten later).

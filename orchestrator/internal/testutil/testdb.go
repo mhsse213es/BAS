@@ -118,10 +118,30 @@ func newTestDB(ctx context.Context) (*TestDB, error) {
 		_ = container.Terminate(context.Background())
 		return nil, fmt.Errorf("testutil: EnsureContentRegistrySchema: %w", err)
 	}
+	if err := db.EnsureContentComponentsSchema(ctx, pool); err != nil {
+		pool.Close()
+		_ = container.Terminate(context.Background())
+		return nil, fmt.Errorf("testutil: EnsureContentComponentsSchema: %w", err)
+	}
 	if err := db.EnsureThreatIdentitySchema(ctx, pool); err != nil {
 		pool.Close()
 		_ = container.Terminate(context.Background())
 		return nil, fmt.Errorf("testutil: EnsureThreatIdentitySchema: %w", err)
+	}
+	if err := db.EnsureEvidenceSchema(ctx, pool); err != nil {
+		pool.Close()
+		_ = container.Terminate(context.Background())
+		return nil, fmt.Errorf("testutil: EnsureEvidenceSchema: %w", err)
+	}
+	if err := db.EnsureGenerationAttemptsSchema(ctx, pool); err != nil {
+		pool.Close()
+		_ = container.Terminate(context.Background())
+		return nil, fmt.Errorf("testutil: EnsureGenerationAttemptsSchema: %w", err)
+	}
+	if err := db.EnsureTCVSchema(ctx, pool); err != nil {
+		pool.Close()
+		_ = container.Terminate(context.Background())
+		return nil, fmt.Errorf("testutil: EnsureTCVSchema: %w", err)
 	}
 	if err := db.EnsureCloudRunSchema(ctx, pool); err != nil {
 		pool.Close()

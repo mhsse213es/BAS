@@ -28,6 +28,17 @@ readonly MIN_DISK_MB=5120
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly SCRIPT_DIR
 
+# RECONCILE NOTE (TCF Phase 8 x main airgap-r11): FRESH/INTERRUPTED/COMPLETE
+# install-state detection -- ported from TCF Phase 8, which main's independent
+# airgap rework never implemented. Protects the single invariant that a rerun
+# must never silently regenerate secrets in an existing .env. See
+# packaging/compose/setup-install-state.sh (ported unchanged, zero merge
+# conflict with it -- main never touched this file because it never existed
+# there).
+# shellcheck source=setup-install-state.sh
+# shellcheck disable=SC1091
+source "${SCRIPT_DIR}/setup-install-state.sh"
+
 # Version is read from the bundle's VERSION file (written by the packager) so the
 # .env image tag ALWAYS matches the images shipped in THIS bundle — never a
 # hardcoded guess that drifts from the -Version used at build time. Strip a
@@ -54,6 +65,13 @@ CONFIG_FILE=""
 # Set internally when Python wizard spawns setup.sh as subprocess
 # Disables all whiptail; outputs plain log lines captured by Python SSE streamer
 NO_WIZARD=false
+
+# Set by --resume / --reinstall; required to proceed past an INTERRUPTED or
+# COMPLETE install state (see setup-install-state.sh) -- never silently
+# assumed. RESUME_INSTALL reuses the existing .env verbatim; REINSTALL
+# proceeds as if FRESH (new secrets), overwriting a completed install.
+RESUME_INSTALL=false
+REINSTALL=false
 
 # ── Colours (only when stdout is a terminal) ───────────────────────────────────
 if [ -t 1 ]; then
@@ -752,6 +770,52 @@ _load_verified_images() {
 }
 
 _do_install_steps() {
+  # ── Install-state gate (TCF Phase 8, ported) ──────────────────────────────
+  # Detected before any secret generation, image verification, or filesystem
+  # write below -- a rerun must never silently regenerate secrets in an
+  # existing .env (RECONCILE NOTE above). By the time we reach here, both the
+  # wizard path and --no-wizard's load_config() have already generated fresh
+  # DB_PASSWORD/JWT_SECRET/AGENT_SECRET/CALDERA_API_KEY* into shell variables
+  # -- on INTERRUPTED+--resume we must overwrite those in-memory values with
+  # the ones already on disk before the .env heredoc below ever runs, or the
+  # "never regenerate" guarantee is violated despite the state check existing.
+  local _install_state
+  _install_state=$(detect_install_state "$INSTALL_DIR")
+  case "$_install_state" in
+    FRESH)
+      log "$(install_state_message FRESH)"
+      ;;
+    INTERRUPTED)
+      if ! $RESUME_INSTALL; then
+        err "$(install_state_message INTERRUPTED)"
+        exit 1
+      fi
+      log "Resuming interrupted install -- reusing existing .env, not regenerating secrets."
+      local _k _v
+      while IFS='=' read -r _k _v; do
+        [[ "$_k" =~ ^[[:space:]]*# ]] && continue
+        [[ -z "${_k// }" ]] && continue
+        case "$_k" in
+          POSTGRES_PASSWORD)    DB_PASSWORD="$_v" ;;
+          JWT_SECRET)           JWT_SECRET="$_v" ;;
+          AGENT_SECRET)         AGENT_SECRET="$_v" ;;
+          CALDERA_API_KEY)      CALDERA_API_KEY="$_v" ;;
+          CALDERA_API_KEY_BLUE) CALDERA_API_KEY_BLUE="$_v" ;;
+          BAS_ADMIN_EMAIL)      ADMIN_EMAIL="$_v" ;;
+          BAS_ADMIN_PASSWORD)   ADMIN_PASSWORD="$_v" ;;
+          DASHBOARD_PORT)       DASHBOARD_PORT="$_v" ;;
+        esac
+      done < "${INSTALL_DIR}/.env"
+      ;;
+    COMPLETE)
+      if ! $REINSTALL; then
+        err "$(install_state_message COMPLETE)"
+        exit 1
+      fi
+      log "Reinstalling over a completed install (--reinstall) -- generating fresh secrets."
+      ;;
+  esac
+
   # Fail closed: every runtime image comes from this bundle's signed images/
   # (parse_args sets OFFLINE=true whenever it exists). Without it there is
   # nothing verifiable to run, so refuse instead of pulling from a registry.
@@ -847,6 +911,12 @@ EOF
   done
 
   _step 98 "Finalising..."
+  # Written only after every install step above has run to completion --
+  # never speculatively, never as part of any cleanup path (TCF Phase 8,
+  # ported). The health-check loop above does not itself fail/abort on
+  # timeout, so this marker guarantees "the install steps ran to
+  # completion", not "the orchestrator responded healthy".
+  write_install_complete_marker "$INSTALL_DIR"
   _step 100 "Installation complete."
 }
 
@@ -1237,16 +1307,19 @@ Press OK to exit the installer." 28 74
 # ── Flags ──────────────────────────────────────────────────────────────────────
 # Supported: --offline, --no-wizard, --config <file>, --gpg-pub <key.asc>,
 # --cosign-pub <key.pub> (both also as --flag=<path>; the cosign flag overrides
-# BAS_COSIGN_PUB), and the no-ops --non-interactive (passed by import.sh) and
-# --web (the web wizard is already the default without setup.conf). A flag
-# missing its value or any unknown flag is an error (a typo must never silently
-# drop a key), matching import.sh.
+# BAS_COSIGN_PUB), --resume / --reinstall (TCF Phase 8 install-state gate, see
+# setup-install-state.sh), and the no-ops --non-interactive (passed by
+# import.sh) and --web (the web wizard is already the default without
+# setup.conf). A flag missing its value or any unknown flag is an error (a
+# typo must never silently drop a key), matching import.sh.
 parse_args() {
   local v
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --offline)   OFFLINE=true; shift ;;
       --no-wizard) NO_WIZARD=true; shift ;;
+      --resume)    RESUME_INSTALL=true; shift ;;
+      --reinstall) REINSTALL=true; shift ;;
       --non-interactive|--web) shift ;;
       --gpg-pub=*|--cosign-pub=*|--config=*)
         v="${1#*=}"

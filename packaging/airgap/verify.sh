@@ -71,21 +71,23 @@ else
   warn "No .sha256 file found alongside bundle — skipping outer checksum."
 fi
 
-# ── 1b. GPG signature (if .asc present) ────────────────────────────────────────
+# ── 1b. GPG signature (mandatory, TCF Phase 8 ported) ──────────────────────────
+# "Proceed without verification if .asc is simply absent" was the exact
+# fail-open defect this closes: an attacker able to strip the .asc file
+# in transit could otherwise make an unsigned bundle verify as if checked.
 VERIFY_SIG_SCRIPT="$(dirname "$0")/verify-sig.sh"
 [[ -f "$VERIFY_SIG_SCRIPT" ]] || VERIFY_SIG_SCRIPT="$(dirname "$0")/../signing/verify-sig.sh"
-if [[ -f "${TARBALL}.asc" ]]; then
-  if [[ ! -f "$VERIFY_SIG_SCRIPT" ]]; then
-    err ".asc present but verify-sig.sh not found -- cannot verify origin."
-    exit 1
-  fi
-  GPG_ARGS=()
-  [[ -n "$GPG_PUB_FLAG" ]] && GPG_ARGS=(--gpg-pub "$GPG_PUB_FLAG")
-  bash "$VERIFY_SIG_SCRIPT" "$TARBALL" ${GPG_ARGS[@]+"${GPG_ARGS[@]}"} || { err "GPG verification failed -- do NOT import this bundle."; exit 1; }
-elif [[ -n "${GPG_PUB_FLAG:-${BAS_GPG_PUB:-}}" ]]; then
-  err "An external GPG key was supplied but ${TARBALL}.asc does not exist -- cannot verify origin."
+if [[ ! -f "${TARBALL}.asc" ]]; then
+  err "No GPG signature (.asc) found alongside the bundle. An unsigned air-gap bundle must never be imported. Do NOT import this bundle."
   exit 1
 fi
+if [[ ! -f "$VERIFY_SIG_SCRIPT" ]]; then
+  err ".asc present but verify-sig.sh not found -- cannot verify origin."
+  exit 1
+fi
+GPG_ARGS=()
+[[ -n "$GPG_PUB_FLAG" ]] && GPG_ARGS=(--gpg-pub "$GPG_PUB_FLAG")
+bash "$VERIFY_SIG_SCRIPT" "$TARBALL" ${GPG_ARGS[@]+"${GPG_ARGS[@]}"} || { err "GPG verification failed -- do NOT import this bundle."; exit 1; }
 
 # ── 2. Extract and verify inner manifest ──────────────────────────────────────
 WORK_DIR=$(mktemp -d)

@@ -9,8 +9,18 @@ import (
 	"strings"
 	"time"
 
+	"github.com/audspect/bas/internal/evidence"
 	"github.com/audspect/bas/internal/intelligence"
 )
+
+// openCTIPageLimit is the GraphQL "first:" value used on every connection
+// in threatActorsQuery. Until cursor pagination is implemented, hitting it
+// exactly is indistinguishable from truncation (spec §5.2).
+const openCTIPageLimit = 100
+
+func connectionTruncated(conn octiRelationshipConnection) bool {
+	return len(conn.Edges) == openCTIPageLimit
+}
 
 // OpenCTIClient fetches threat-actor TTP profiles from an OpenCTI instance.
 type OpenCTIClient struct {
@@ -34,6 +44,9 @@ type OpenCTIClient struct {
 	lastTools             []intelligence.Tool
 	lastTechniqueEvidence []TechniqueEvidence
 	retryDelay            time.Duration
+
+	lastCompleteness evidence.SyncReport
+	lastRawClaims    []evidence.RawClaim
 }
 
 // NewOpenCTIClient creates an OpenCTI GraphQL client.
@@ -52,7 +65,7 @@ func (c *OpenCTIClient) Name() string { return "opencti" }
 
 // Fetch returns threat actors with their MITRE ATT&CK technique mappings.
 func (c *OpenCTIClient) Fetch() ([]ThreatActor, error) {
-	actorsRaw, err := c.queryThreatActorsWithRetry()
+	actorsRaw, truncated, err := c.queryThreatActorsWithRetry()
 	if err != nil {
 		c.lastStat = SourceStat{Name: "opencti", Error: err.Error(), FetchedAt: time.Now()}
 		return nil, fmt.Errorf("opencti query actors: %w", err)
@@ -63,38 +76,75 @@ func (c *OpenCTIClient) Fetch() ([]ThreatActor, error) {
 	var campaigns []intelligence.Campaign
 	var malware []intelligence.Malware
 	var tools []intelligence.Tool
-	var evidence []TechniqueEvidence
+	var evidenceList []TechniqueEvidence
+	c.lastRawClaims = nil
 	for _, raw := range actorsRaw {
+		if connectionTruncated(raw.AttackPatterns) || connectionTruncated(raw.Campaigns) ||
+			connectionTruncated(raw.Malwares) || connectionTruncated(raw.Tools) {
+			truncated = true
+		}
+		observedAt, parseErr := time.Parse(time.RFC3339, raw.Modified)
+		if parseErr != nil {
+			observedAt = time.Now()
+		}
+		for _, tech := range techniqueRefsFrom(raw.AttackPatterns) {
+			c.lastRawClaims = append(c.lastRawClaims, evidence.RawClaim{
+				ActorName: raw.Name, TechniqueID: tech.ID, ExternalID: raw.ID,
+				ObservedAt: observedAt, RawConfidence: fmt.Sprintf("%d", raw.Confidence),
+				Raw: map[string]any{"actor_id": raw.ID, "actor_name": raw.Name, "technique_id": tech.ID},
+			})
+		}
+
 		actor := c.convertActor(raw)
-		if actor == nil || len(actor.Techniques) < 2 {
+		// Only the generation-threshold (2+) filter moves downstream to
+		// Generator.Write()'s ActiveTechniques check (spec §6.2) -- an actor
+		// with zero techniques has no evidence to preserve either way, and
+		// Fetch() must return every actor with at least one so its captured
+		// RawClaims() has a ThreatID to resolve against once identity
+		// resolution runs.
+		if actor == nil || len(actor.Techniques) == 0 {
 			continue
 		}
 		actors = append(actors, *actor)
-		evidence = append(evidence, techniqueEvidenceFrom(raw.AttackPatterns, actor.Name, "", "")...)
+		evidenceList = append(evidenceList, techniqueEvidenceFrom(raw.AttackPatterns, actor.Name, "", "")...)
 
 		for _, entity := range campaignEntitiesFrom(raw.Campaigns) {
 			campaigns = append(campaigns, c.convertCampaign(entity, actor))
-			evidence = append(evidence, techniqueEvidenceFrom(entity.AttackPatterns, actor.Name, "campaign", entity.Name)...)
+			evidenceList = append(evidenceList, techniqueEvidenceFrom(entity.AttackPatterns, actor.Name, "campaign", entity.Name)...)
 		}
 		for _, entity := range malwareEntitiesFrom(raw.Malwares) {
 			malware = append(malware, c.convertMalware(entity, actor))
-			evidence = append(evidence, techniqueEvidenceFrom(entity.AttackPatterns, actor.Name, "malware", entity.Name)...)
+			evidenceList = append(evidenceList, techniqueEvidenceFrom(entity.AttackPatterns, actor.Name, "malware", entity.Name)...)
 		}
 		for _, entity := range toolEntitiesFrom(raw.Tools) {
 			tools = append(tools, c.convertTool(entity, actor))
-			evidence = append(evidence, techniqueEvidenceFrom(entity.AttackPatterns, actor.Name, "tool", entity.Name)...)
+			evidenceList = append(evidenceList, techniqueEvidenceFrom(entity.AttackPatterns, actor.Name, "tool", entity.Name)...)
 		}
 	}
 	c.lastStat = SourceStat{Name: "opencti", RawCount: len(actorsRaw), ActorCount: len(actors), FetchedAt: time.Now()}
 	c.lastCampaigns = campaigns
 	c.lastMalware = malware
 	c.lastTools = tools
-	c.lastTechniqueEvidence = evidence
+	c.lastTechniqueEvidence = evidenceList
+
+	completeness := evidence.Complete
+	diagnostic := ""
+	if truncated {
+		completeness = evidence.Truncated
+		diagnostic = "a connection returned exactly the first:100 page limit; cursor pagination not yet implemented"
+	}
+	c.lastCompleteness = evidence.SyncReport{Completeness: completeness, Diagnostic: diagnostic}
 	return actors, nil
 }
 
 // Stats implements StatsSource.
 func (c *OpenCTIClient) Stats() SourceStat { return c.lastStat }
+
+// Completeness implements CompletenessSource.
+func (c *OpenCTIClient) Completeness() evidence.SyncReport { return c.lastCompleteness }
+
+// RawClaims implements EvidenceSource.
+func (c *OpenCTIClient) RawClaims() []evidence.RawClaim { return c.lastRawClaims }
 
 // ── GraphQL types ─────────────────────────────────────────────────────────────
 
@@ -425,13 +475,13 @@ query ThreatActorsAndIntrusionSets {
 // timeout or connection error drops every actor for this sync cycle even
 // though the server has data. A single retry absorbs that class of blip
 // without changing Fetch's all-or-nothing contract.
-func (c *OpenCTIClient) queryThreatActorsWithRetry() ([]octiThreatActorNode, error) {
+func (c *OpenCTIClient) queryThreatActorsWithRetry() ([]octiThreatActorNode, bool, error) {
 	const maxAttempts = 2
 	var lastErr error
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
-		nodes, err := c.queryThreatActors()
+		nodes, topLevelTruncated, err := c.queryThreatActors()
 		if err == nil {
-			return nodes, nil
+			return nodes, topLevelTruncated, nil
 		}
 		lastErr = err
 		if attempt < maxAttempts {
@@ -439,18 +489,24 @@ func (c *OpenCTIClient) queryThreatActorsWithRetry() ([]octiThreatActorNode, err
 			time.Sleep(c.retryDelay)
 		}
 	}
-	return nil, lastErr
+	return nil, false, lastErr
 }
 
-func (c *OpenCTIClient) queryThreatActors() ([]octiThreatActorNode, error) {
+// queryThreatActors returns the combined actor nodes and whether either
+// top-level connection (threatActors or intrusionSets) hit openCTIPageLimit
+// -- checked per-connection, since the two connections' edge counts are
+// summed into one slice afterward and a combined-length comparison against
+// the single page limit would miss a truncated connection masked by the
+// other's size (spec §5.2).
+func (c *OpenCTIClient) queryThreatActors() ([]octiThreatActorNode, bool, error) {
 	body, err := json.Marshal(octiGQLRequest{Query: threatActorsQuery})
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
 	req, err := http.NewRequest("POST", c.baseURL+"/graphql", bytes.NewReader(body))
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	req.Header.Set("Authorization", "Bearer "+c.apiKey)
 	req.Header.Set("Content-Type", "application/json")
@@ -458,21 +514,24 @@ func (c *OpenCTIClient) queryThreatActors() ([]octiThreatActorNode, error) {
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("OpenCTI returned HTTP %d", resp.StatusCode)
+		return nil, false, fmt.Errorf("OpenCTI returned HTTP %d", resp.StatusCode)
 	}
 
 	var result octiThreatActorsResp
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, fmt.Errorf("decode response: %w", err)
+		return nil, false, fmt.Errorf("decode response: %w", err)
 	}
 	if len(result.Errors) > 0 {
-		return nil, fmt.Errorf("graphql error: %s", result.Errors[0].Message)
+		return nil, false, fmt.Errorf("graphql error: %s", result.Errors[0].Message)
 	}
+
+	topLevelTruncated := len(result.Data.ThreatActors.Edges) == openCTIPageLimit ||
+		len(result.Data.IntrusionSets.Edges) == openCTIPageLimit
 
 	nodes := make([]octiThreatActorNode, 0, len(result.Data.ThreatActors.Edges)+len(result.Data.IntrusionSets.Edges))
 	for _, e := range result.Data.ThreatActors.Edges {
@@ -481,7 +540,7 @@ func (c *OpenCTIClient) queryThreatActors() ([]octiThreatActorNode, error) {
 	for _, e := range result.Data.IntrusionSets.Edges {
 		nodes = append(nodes, e.Node)
 	}
-	return nodes, nil
+	return nodes, topLevelTruncated, nil
 }
 
 // ── conversion ────────────────────────────────────────────────────────────────

@@ -258,18 +258,23 @@ type LivePolicy struct {
 //  5. art_techniques: [...]      — specific ATT&CK technique IDs run via Invoke-AtomicTest
 //  6. steps: [...]               — static YAML steps (custom / fallback)
 type Scenario struct {
-	ID                 string   `yaml:"id"                             json:"id"`
-	Name               string   `yaml:"name"                           json:"name"`
-	Description        string   `yaml:"description"                    json:"description"`
-	Author             string   `yaml:"author,omitempty"               json:"author,omitempty"`
-	Tags               []string `yaml:"tags"                           json:"tags"`
-	MITREPhases        []string `yaml:"mitre_phases"                   json:"mitrePhases"`
-	Steps              []Step   `yaml:"steps"                          json:"steps"`
-	LocalCheck         bool     `yaml:"local_check,omitempty"          json:"localCheck,omitempty"`
-	CalderaAllWindows  bool     `yaml:"caldera_all_windows,omitempty"  json:"calderaAllWindows,omitempty"`
-	CalderaAbilities   []string `yaml:"caldera_abilities,omitempty"    json:"calderaAbilities,omitempty"`
-	CalderaAdversaryID string   `yaml:"caldera_adversary_id,omitempty" json:"calderaAdversaryId,omitempty"`
-	ARTAllWindows      bool     `yaml:"art_all_windows,omitempty"      json:"artAllWindows,omitempty"`
+	ID          string   `yaml:"id"                             json:"id"`
+	Name        string   `yaml:"name"                           json:"name"`
+	Description string   `yaml:"description"                    json:"description"`
+	Author      string   `yaml:"author,omitempty"               json:"author,omitempty"`
+	Tags        []string `yaml:"tags"                           json:"tags"`
+	MITREPhases []string `yaml:"mitre_phases"                   json:"mitrePhases"`
+	// Emulates declares which real-world threat actors/groups this
+	// scenario emulates (spec §9.2). Signature-covered on builtin
+	// scenarios; resolved at intake via the canonical actor registry
+	// (external_id -> threat_id), never via free-text name matching.
+	Emulates           []EmulatesRef `yaml:"emulates,omitempty"          json:"emulates,omitempty"`
+	Steps              []Step        `yaml:"steps"                          json:"steps"`
+	LocalCheck         bool          `yaml:"local_check,omitempty"          json:"localCheck,omitempty"`
+	CalderaAllWindows  bool          `yaml:"caldera_all_windows,omitempty"  json:"calderaAllWindows,omitempty"`
+	CalderaAbilities   []string      `yaml:"caldera_abilities,omitempty"    json:"calderaAbilities,omitempty"`
+	CalderaAdversaryID string        `yaml:"caldera_adversary_id,omitempty" json:"calderaAdversaryId,omitempty"`
+	ARTAllWindows      bool          `yaml:"art_all_windows,omitempty"      json:"artAllWindows,omitempty"`
 	// ARTAllPlatform runs every ART technique available for the agent's OS.
 	// Used by linux-full / darwin-full sweep scenarios; respects supported_os.
 	ARTAllPlatform bool     `yaml:"art_all_platform,omitempty"     json:"artAllPlatform,omitempty"`
@@ -317,6 +322,14 @@ type Scenario struct {
 	IntelActor       string    `yaml:"intel_actor,omitempty"        json:"intelActor,omitempty"`
 	IntelConfidence  string    `yaml:"intel_confidence,omitempty"   json:"intelConfidence,omitempty"`
 	IntelGeneratedAt time.Time `yaml:"intel_generated_at,omitempty" json:"intelGeneratedAt,omitempty"`
+}
+
+// EmulatesRef is one declared threat-actor emulation target (spec §9.2).
+// SubjectType is "actor" today; ExternalID is a MITRE ATT&CK group id
+// (e.g. "G0016"), resolved via attackdata.GroupByID.
+type EmulatesRef struct {
+	SubjectType string `yaml:"subject_type" json:"subjectType"`
+	ExternalID  string `yaml:"external_id"  json:"externalId"`
 }
 
 // Payload is a file the server stages on the endpoint before a step runs.

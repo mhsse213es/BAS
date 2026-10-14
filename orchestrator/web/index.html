@@ -103,6 +103,12 @@
           </svg>
           Campaigns
         </div>
+        <div class="nav-item" data-tab="factory-health" title="Factory Health" data-on-click="showTab" data-args="[&quot;factory-health&quot;]">
+          <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
+            <path d="M2 14h12M4 14V8M8 14V4M12 14V10"/>
+          </svg>
+          Factory Health
+        </div>
         <div class="nav-item" data-tab="coverage" title="Coverage" data-on-click="showTab" data-args="[&quot;coverage&quot;]">
           <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
             <path d="M2 12a6 6 0 0 1 12 0"/><path d="M8 12L11 7"/><circle cx="8" cy="12" r="1" fill="currentColor" stroke="none"/>
@@ -1480,6 +1486,16 @@
         </div>
       </div>
 
+      <!-- Factory Health -->
+      <div id="tab-factory-health" style="display:none">
+        <div id="factory-health-tiles" class="kpi-row"></div>
+        <div id="factory-health-ingestion"></div>
+        <div id="factory-health-funnel" class="kpi-row"></div>
+        <div id="factory-health-dataquality"></div>
+        <div id="factory-health-threats-trend"></div>
+        <div id="factory-health-tcv-trend"></div>
+      </div>
+
       <!-- Campaigns -->
       <div id="tab-campaigns" class="is-hidden">
         <div id="campaigns-list">
@@ -1626,6 +1642,16 @@
         <div id="cov-toolbar" class="g1-display-flex g1-s-32c4be11"></div>
         <div class="dash-panel"><div class="dash-panel-body g1-s-a477266e" id="cov-matrix"><div class="empty g1-s-be6df18e">Loading matrix…</div></div></div>
         <div class="tiny muted g1-s-3d340acf" id="cov-foot"></div>
+
+        <!-- Live Threat Coverage — assembled from the real threat-intel pipeline, not the static ATT&CK dataset above. -->
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;margin:1.75rem 0 1rem;flex-wrap:wrap">
+          <div>
+            <h1 style="font-family:var(--font-display);font-size:1.5rem;font-weight:700;letter-spacing:-0.02em;margin:0 0 0.3rem;color:var(--text)">Live Threat Coverage</h1>
+            <div style="font-size:0.8rem;color:var(--muted)">Threats currently tracked by your intelligence sources, and whether validated, executable content exists for them.</div>
+          </div>
+        </div>
+        <div class="dash-panel"><div class="dash-panel-body" id="lte-body" style="padding:0.75rem"><div class="empty" style="padding:2rem">Loading…</div></div></div>
+        <div class="tiny muted" id="lte-foot" style="margin-top:0.75rem"></div>
 
         <!-- Unified Technique Library — deduplicated view across all execution sources -->
         <div class="dash-panel g1-s-5012029f">

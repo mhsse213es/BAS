@@ -325,6 +325,48 @@ export function loadCoverage() {
     document.getElementById('cov-matrix').innerHTML = '<div class="empty g1-s-be6df18e">' + x(e.message) + '</div>';
   });
 }
+
+// ── Live Threat Coverage (TCF Phase 10) ──────────────────────────────────────
+export function loadThreatExposure() {
+  apicall('/api/threats/exposure?limit=50').catch(function() { return null; }).then(function(d) {
+    renderThreatExposure(d || []);
+  });
+}
+
+function renderThreatExposure(threats) {
+  var body = document.getElementById('lte-body');
+  var foot = document.getElementById('lte-foot');
+  if (!threats.length) {
+    body.innerHTML = '<div class="empty" style="padding:2rem">No active threats tracked yet.</div>';
+    foot.textContent = '';
+    return;
+  }
+  var row = function(label, v) {
+    return '<div style="display:flex;gap:0.6rem;padding:0.3rem 0;border-bottom:1px solid var(--border);font-size:0.78rem">' +
+      '<span style="color:var(--muted);min-width:110px">' + x(label) + '</span><span class="u-flex1">' + v + '</span></div>';
+  };
+  body.innerHTML = threats.map(function(t) {
+    var techCount = (t.techniques || []).length;
+    var withContent = (t.techniques || []).filter(function(tc) { return tc.hasExecutableContent; }).length;
+    var contentRows = (t.content || []).map(function(c) {
+      var badge = c.isExecutable
+        ? '<span class="sbadge" style="background:transparent;border:1px solid var(--success);color:var(--success)">Executable</span>'
+        : '<span class="sbadge" style="background:transparent;border:1px solid var(--muted);color:var(--muted)">' + x(c.lifecycle) + '</span>';
+      var runInfo = c.runCount > 0 ? c.runCount + ' run(s), last ' + new Date(c.lastRunAt).toLocaleDateString() : 'never run';
+      return '<div style="display:flex;justify-content:space-between;align-items:center;padding:0.3rem 0;font-size:0.76rem">' +
+        '<span>' + x(c.contentId) + ' <span style="color:var(--muted)">(' + x(c.relationshipKind) + ', ' + x(c.validation) + ')</span></span>' +
+        '<span style="display:flex;gap:0.5rem;align-items:center">' + badge + '<span style="color:var(--muted)">' + runInfo + '</span></span></div>';
+    }).join('') || '<div class="empty" style="padding:0.5rem 0;font-size:0.76rem">No content available for this threat yet.</div>';
+    return '<div class="dash-panel" style="margin-bottom:0.75rem;padding:0.75rem">' +
+      '<div style="font-weight:600;margin-bottom:0.3rem">' + x(t.title) + '</div>' +
+      row('Last seen', t.lastSeenAt ? new Date(t.lastSeenAt).toLocaleDateString() : 'unknown') +
+      row('Techniques', techCount + ' tracked, ' + withContent + ' with executable content') +
+      contentRows +
+      '</div>';
+  }).join('');
+  foot.textContent = threats.length + ' active threat(s) shown.';
+}
+
 function renderCovMatrix() {
   var st = state._covSt || {}, view = COV_VIEW;
   document.getElementById('cov-matrix').innerHTML = '<div class="mx">' + (state._covTactics || []).map(function(t) {
@@ -361,7 +403,7 @@ export function openTechnique(id) {
     var list = function(a) { return (a || []).map(x).join(', '); };
     var body = '<div class="g1-s-462c8de6"><span class="sbadge g1-s-e02ce1a7"' + cssVars(['g1-v-97993078', meta[1]], ['g1-v-7d75dfc9', meta[1]]) + '>' + meta[0] + '</span></div>' +
       row('Tactics', list(e.tactics)) + row('Platforms', list(e.platforms)) +
-      row('Known actors', list(e.groups)) + row('Data sources', list(e.dataSources)) +
+      row('Known actors (ATT&CK reference)', list(e.groups)) + row('Data sources', list(e.dataSources)) +
       (e.description ? '<div class="g1-s-34d69e4c">' + x(e.description) + '</div>' : '') +
       (e.url ? '<div class="g1-s-6695a6e2"><a href="' + x(e.url) + '" target="_blank" rel="noopener" class="g1-s-824141a9">View on attack.mitre.org →</a></div>' : '');
     document.getElementById('results-body').innerHTML = body;
