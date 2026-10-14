@@ -237,3 +237,129 @@ func TestCompose_VisibleViaExistingLoadVersion(t *testing.T) {
 		}
 	})
 }
+
+// T1562 (defense-evasion) and T1053 (persistence) are both confirmed
+// ClassNonDestructive under the default "enumerate" action_key in
+// scenario/execclass.go:813-819,204-210 -- so the existing per-step safety
+// check does not refuse this pair on its own; any refusal here is proven to
+// come from the new combinatorial check.
+func TestCompose_RefusesDefenseEvasionPlusPersistence(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		reg := New(pool, testutil.DevVerifier())
+		ctx := context.Background()
+		c1, err := reg.RegisterExternalComponent(ctx, "art", "T1562", "disable-defenses", "", "", 1, "v1", []string{"windows"}, "test")
+		if err != nil {
+			t.Fatal(err)
+		}
+		c2, err := reg.RegisterExternalComponent(ctx, "art", "T1053", "persist", "", "", 2, "v1", []string{"windows"}, "test")
+		if err != nil {
+			t.Fatal(err)
+		}
+		threatID := seedComposeThreat(t, pool, "APT-compose-combo-flagged")
+		var countBefore int
+		pool.QueryRow(ctx, `SELECT count(*) FROM content_versions`).Scan(&countBefore)
+
+		_, _, err = reg.Compose(ctx, []string{c1, c2}, threatID, "admin-test")
+		if err == nil {
+			t.Fatal("expected Compose to refuse a defense-evasion + persistence combination")
+		}
+		var countAfter int
+		pool.QueryRow(ctx, `SELECT count(*) FROM content_versions`).Scan(&countAfter)
+		if countAfter != countBefore {
+			t.Fatalf("expected zero new content_versions rows on combinatorial refusal, got %d new", countAfter-countBefore)
+		}
+	})
+}
+
+func TestCompose_AllowsDefenseEvasionPlusDiscovery(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		reg := New(pool, testutil.DevVerifier())
+		ctx := context.Background()
+		c1, err := reg.RegisterExternalComponent(ctx, "art", "T1562", "disable-defenses", "", "", 1, "v1", []string{"windows"}, "test")
+		if err != nil {
+			t.Fatal(err)
+		}
+		c2, err := reg.RegisterExternalComponent(ctx, "art", "T1087", "discover", "", "", 2, "v1", []string{"windows"}, "test")
+		if err != nil {
+			t.Fatal(err)
+		}
+		threatID := seedComposeThreat(t, pool, "APT-compose-combo-unflagged")
+
+		_, created, err := reg.Compose(ctx, []string{c1, c2}, threatID, "admin-test")
+		if err != nil {
+			t.Fatalf("expected defense-evasion + discovery to succeed (not a flagged combination), got: %v", err)
+		}
+		if !created {
+			t.Fatal("expected created=true")
+		}
+	})
+}
+
+// Every technique_id in execclass.go's 130-entry catalog is confirmed
+// present in attack_enrichment.json (checked directly against both files),
+// so no real technique can pass the existing per-step safety check while
+// still being unresolvable to attackdata.Lookup -- a Compose-level test
+// cannot isolate the new combinatorial check's own unresolvable-technique
+// branch from the pre-existing safety-destructive refusal; that isolated
+// proof is TestCombinatorialRisk_RefusesUnresolvableTechnique instead. This
+// test only confirms the weaker, still-true end-to-end property: Compose
+// refuses an unresolvable technique regardless of which layer causes it.
+func TestCompose_StillRefusesUnresolvableTechniqueEndToEnd(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		reg := New(pool, testutil.DevVerifier())
+		ctx := context.Background()
+		c1, err := reg.RegisterExternalComponent(ctx, "art", "T9999.999", "unresolvable", "", "", 1, "v1", []string{"windows"}, "test")
+		if err != nil {
+			t.Fatal(err)
+		}
+		c2, err := reg.RegisterExternalComponent(ctx, "art", "T1059", "execute", "", "", 2, "v1", []string{"windows"}, "test")
+		if err != nil {
+			t.Fatal(err)
+		}
+		threatID := seedComposeThreat(t, pool, "APT-compose-combo-unresolvable")
+
+		_, _, err = reg.Compose(ctx, []string{c1, c2}, threatID, "admin-test")
+		if err == nil {
+			t.Fatal("expected an unresolvable technique_id to refuse the whole composition")
+		}
+	})
+}
+
+func TestCompose_RecordsCombinatorialVerdictOnSuccess(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		reg := New(pool, testutil.DevVerifier())
+		ctx := context.Background()
+		c1, err := reg.RegisterExternalComponent(ctx, "art", "T1562", "disable-defenses", "", "", 1, "v1", []string{"windows"}, "test")
+		if err != nil {
+			t.Fatal(err)
+		}
+		c2, err := reg.RegisterExternalComponent(ctx, "art", "T1087", "discover", "", "", 2, "v1", []string{"windows"}, "test")
+		if err != nil {
+			t.Fatal(err)
+		}
+		threatID := seedComposeThreat(t, pool, "APT-compose-combo-verdict")
+
+		versionID, _, err := reg.Compose(ctx, []string{c1, c2}, threatID, "admin-test")
+		if err != nil {
+			t.Fatalf("Compose: %v", err)
+		}
+
+		var count int
+		if err := pool.QueryRow(ctx, `SELECT count(*) FROM content_safety_verdicts WHERE content_version_id = $1 AND classifier = 'combinatorial'`,
+			versionID).Scan(&count); err != nil {
+			t.Fatal(err)
+		}
+		if count != 1 {
+			t.Fatalf("expected exactly 1 combinatorial verdict row, got %d", count)
+		}
+
+		var execclassCount int
+		if err := pool.QueryRow(ctx, `SELECT count(*) FROM content_safety_verdicts WHERE content_version_id = $1 AND classifier = 'execclass'`,
+			versionID).Scan(&execclassCount); err != nil {
+			t.Fatal(err)
+		}
+		if execclassCount != 1 {
+			t.Fatalf("expected the existing execclass verdict row to still be written exactly once, got %d", execclassCount)
+		}
+	})
+}

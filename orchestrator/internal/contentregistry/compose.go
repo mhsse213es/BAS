@@ -81,6 +81,10 @@ func (r *Registry) Compose(ctx context.Context, componentIDs []string, threatID,
 	if a.safety.verdict == string(scenario.ClassDestructive) {
 		return "", false, fmt.Errorf("composition refused: assembled steps classify as destructive")
 	}
+	tactics, err := combinatorialRisk(components)
+	if err != nil {
+		return "", false, err
+	}
 
 	versionID, created, err := r.createVersion(ctx, newVersion{
 		contentID: sc.ID, origin: OriginLocal, source: SourceCustom,
@@ -91,6 +95,12 @@ func (r *Registry) Compose(ctx context.Context, componentIDs []string, threatID,
 		return "", false, err
 	}
 	if created {
+		detail, _ := json.Marshal(map[string]any{"tactics": tactics})
+		if _, err := r.pool.Exec(ctx, `INSERT INTO content_safety_verdicts (content_version_id, classifier, classifier_version, verdict, detail)
+			VALUES ($1, $2, $3, 'PASS', $4)`,
+			versionID, combinatorialClassifier, combinatorialClassifierVersion, detail); err != nil {
+			return "", false, err
+		}
 		for i, c := range components {
 			if _, err := r.pool.Exec(ctx, `INSERT INTO content_version_components (content_version_id, component_id, step_order) VALUES ($1, $2, $3)`,
 				versionID, c.id, i); err != nil {
