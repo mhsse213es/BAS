@@ -326,6 +326,9 @@ func main() {
 	if err := db.EnsureRemoteAccessImportSchema(context.Background(), adminPool); err != nil {
 		log.Fatalf("[FATAL] remote access import schema: %v", err)
 	}
+	if err := db.EnsureOTSafetyImportSchema(context.Background(), adminPool); err != nil {
+		log.Fatalf("[FATAL] ot safety schema: %v", err)
+	}
 	log.Println("[+] Schema verified")
 
 	// ── bas_app provisioning ─────────────────────────────────────────────

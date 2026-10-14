@@ -193,6 +193,11 @@ func newTestDB(ctx context.Context) (*TestDB, error) {
 		_ = container.Terminate(context.Background())
 		return nil, fmt.Errorf("testutil: EnsureRemoteAccessImportSchema: %w", err)
 	}
+	if err := db.EnsureOTSafetyImportSchema(ctx, pool); err != nil {
+		pool.Close()
+		_ = container.Terminate(context.Background())
+		return nil, fmt.Errorf("testutil: EnsureOTSafetyImportSchema: %w", err)
+	}
 
 	return &TestDB{
 		Pool:      pool,
