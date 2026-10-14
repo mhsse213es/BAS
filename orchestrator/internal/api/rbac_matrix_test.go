@@ -209,6 +209,7 @@ var routeMatrix = []routeCase{
 	{http.MethodPost, "/api/network-policy-imports", tierPermission, auth.CanImportNetworkPolicy},
 	{http.MethodPost, "/api/network-policy-evaluations", tierPermission, auth.CanImportNetworkPolicy},
 	{http.MethodPost, "/api/network-topology-imports", tierPermission, auth.CanImportNetworkTopology},
+	{http.MethodPost, "/api/network-paths", tierPermission, auth.CanImportNetworkTopology},
 	{http.MethodPost, "/api/backup-assurance/assessments", tierPermission, auth.CanRunScenario},
 	{http.MethodGet, "/api/backup-assurance/assessments/{assessmentId}", tierAny, ""},
 	{http.MethodPost, "/api/caldera/adversaries/{adversaryId}/run", tierPermission, auth.CanRunCalderaAdversary},

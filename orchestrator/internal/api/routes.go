@@ -423,6 +423,7 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.With(auth.RequirePermission(auth.CanImportNetworkPolicy)).Post("/api/network-policy-imports", h.CreateNetworkPolicyImport)
 		r.With(auth.RequirePermission(auth.CanImportNetworkPolicy)).Post("/api/network-policy-evaluations", h.EvaluateNetworkPolicy)
 		r.With(auth.RequirePermission(auth.CanImportNetworkTopology)).Post("/api/network-topology-imports", h.CreateNetworkTopologyImport)
+		r.With(auth.RequirePermission(auth.CanImportNetworkTopology)).Post("/api/network-paths", h.FindNetworkPaths)
 		r.With(auth.RequirePermission(auth.CanRunScenario)).Post("/api/backup-assurance/assessments", h.TriggerBackupAssuranceAssessment)
 		r.Get("/api/backup-assurance/assessments/{assessmentId}", h.GetBackupAssuranceAssessment)
 		r.With(auth.RequirePermission(auth.CanRunCalderaAdversary)).Post("/api/caldera/adversaries/{adversaryId}/run", h.RunCalderaAdversary)
