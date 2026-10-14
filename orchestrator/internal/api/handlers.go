@@ -36,10 +36,10 @@ import (
 	"github.com/audspect/bas/internal/controlhealth"
 	"github.com/audspect/bas/internal/correlation"
 	"github.com/audspect/bas/internal/db"
-	"github.com/audspect/bas/internal/evidence"
 	"github.com/audspect/bas/internal/detectverify"
 	"github.com/audspect/bas/internal/emsweep"
 	"github.com/audspect/bas/internal/endpointrisk"
+	"github.com/audspect/bas/internal/evidence"
 	"github.com/audspect/bas/internal/exercise"
 	"github.com/audspect/bas/internal/initiatives"
 	"github.com/audspect/bas/internal/integrity"
@@ -5094,6 +5094,7 @@ func (h *Handler) GetConnectorStatus(w http.ResponseWriter, r *http.Request) {
 //
 //	cycle_id — every attempt from one scheduler cycle (optional)
 //	threat_id — every attempt for one actor across cycles (optional)
+//	since — RFC3339 timestamp, attempts started at or after it (optional)
 //	limit — max rows, default 50, max 100
 func (h *Handler) GetGenerationAttempts(w http.ResponseWriter, r *http.Request) {
 	if h.evidenceStore == nil {
@@ -5107,6 +5108,9 @@ func (h *Handler) GetGenerationAttempts(w http.ResponseWriter, r *http.Request) 
 	}
 	if l, err := strconv.Atoi(r.URL.Query().Get("limit")); err == nil && l > 0 && l <= 100 {
 		filter.Limit = l
+	}
+	if s, err := time.Parse(time.RFC3339, r.URL.Query().Get("since")); err == nil {
+		filter.Since = s
 	}
 	attempts, err := h.evidenceStore.ListGenerationAttempts(r.Context(), filter)
 	if err != nil {

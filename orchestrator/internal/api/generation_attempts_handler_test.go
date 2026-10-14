@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -59,6 +60,37 @@ func TestGetGenerationAttempts_LimitCapsAt100(t *testing.T) {
 		// just confirms the endpoint doesn't error on an absurd limit, and the
 		// cap itself is exercised directly in Step 3's handler code (max 100,
 		// matching GetCoverageAnalytics's existing convention).
+	})
+}
+
+func TestGetGenerationAttempts_FiltersBySince(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		store := evidence.NewStore(pool)
+		old := time.Now().Add(-48 * time.Hour)
+		if err := store.RecordGenerationAttempt(context.Background(), evidence.GenerationAttempt{
+			CycleID: "cycle-old", Outcome: "created", ReasonCode: "ok", GeneratorVersion: "4", StartedAt: old,
+		}); err != nil {
+			t.Fatalf("seed old: %v", err)
+		}
+		if err := store.RecordGenerationAttempt(context.Background(), evidence.GenerationAttempt{
+			CycleID: "cycle-new", Outcome: "created", ReasonCode: "ok", GeneratorVersion: "4", StartedAt: time.Now(),
+		}); err != nil {
+			t.Fatalf("seed new: %v", err)
+		}
+
+		h := (&Handler{}).WithEvidenceStore(store)
+		since := time.Now().Add(-1 * time.Hour).Format(time.RFC3339)
+		req := httptest.NewRequest(http.MethodGet, "/api/connector/generation-attempts?since="+url.QueryEscape(since), nil)
+		w := httptest.NewRecorder()
+		h.GetGenerationAttempts(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+		}
+		body := w.Body.String()
+		if !strings.Contains(body, "cycle-new") || strings.Contains(body, "cycle-old") {
+			t.Fatalf("expected since= to exclude the 48h-old attempt, got: %s", body)
+		}
 	})
 }
 
