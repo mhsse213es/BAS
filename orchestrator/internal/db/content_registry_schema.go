@@ -168,9 +168,12 @@ func EnsureContentRegistrySchema(ctx context.Context, pool *pgxpool.Pool) error 
 			`CHECK (execution_kind <> 'content' OR content_version_id IS NOT NULL)`),
 		`CREATE INDEX IF NOT EXISTS idx_scenario_runs_content_version ON scenario_runs (content_version_id) WHERE content_version_id IS NOT NULL`,
 		// TCF Phase 6: validationlab writes an in-flight NO_DATA placeholder
-		// at dispatch time and updates it in place on resolution (at most one
-		// in-flight EXECUTION-level attempt per version at a time) -- the
-		// ON CONFLICT target in recordExecutionOutcome needs this index to exist.
+		// at dispatch time and later UPDATEs it in place on resolution
+		// (recordExecutionOutcome does the UPDATE itself, not an ON CONFLICT --
+		// a partial index on outcome='NO_DATA' can never arbitrate a conflict
+		// against a row being inserted with a different outcome). This index
+		// is a DB-level invariant guard: at most one in-flight EXECUTION-level
+		// attempt may ever exist per version at a time.
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_content_validations_inflight
 		   ON content_validations (content_version_id, level) WHERE outcome = 'NO_DATA'`,
 	}

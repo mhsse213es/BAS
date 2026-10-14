@@ -5,6 +5,7 @@ package validationlab
 
 import (
 	"context"
+	"encoding/json"
 	"log"
 	"time"
 
@@ -100,11 +101,158 @@ func (o *Orchestrator) runOnce(ctx context.Context) error {
 	return nil
 }
 
-// dispatchAndResolve is replaced below (Task 6) to actually dispatch via the
-// orchestrator's dispatcher, poll for completion, and resolve the version's
-// lifecycle. Task 5's own tests never reach this -- they construct the
-// Orchestrator with a nil dispatcher, which runOnce checks for above.
+// dispatchAndResolve dispatches a claimed, safety-checked version via the
+// orchestrator's dispatcher and resolves it (immediately, on a dispatch
+// failure, or after polling the dispatched run to completion/timeout).
 func (o *Orchestrator) dispatchAndResolve(ctx context.Context, versionID string, v contentregistry.Version) {
-	_ = v
-	log.Printf("[validationlab] %s claimed and safety-checked, but no dispatcher is wired up", versionID)
+	sc, err := v.Parse()
+	if err != nil {
+		log.Printf("[validationlab] %s failed to parse for dispatch: %v", versionID, err)
+		o.recordExecutionOutcome(ctx, versionID, "", "ERROR", map[string]any{"error": err.Error()})
+		_ = o.reg.Transition(ctx, versionID, contentregistry.LifecycleDraft, contentregistry.ActorValidationLab, "parse failed")
+		return
+	}
+	runID, skipReason, err := o.dispatcher.DispatchFactoryValidation(ctx, sc, o.labAgentID)
+	if err != nil || runID == "" {
+		reason := skipReason
+		if err != nil {
+			reason = err.Error()
+		}
+		o.recordExecutionOutcome(ctx, versionID, "", "ERROR", map[string]any{"dispatch_failure": reason})
+		_ = o.reg.Transition(ctx, versionID, contentregistry.LifecycleDraft, contentregistry.ActorValidationLab, "dispatch failed: "+reason)
+		return
+	}
+	o.recordExecutionOutcome(ctx, versionID, runID, "NO_DATA", map[string]any{"status": "dispatched"})
+	o.pollAndResolve(ctx, versionID, runID)
+}
+
+// recordExecutionOutcome writes the one EXECUTION-level content_validations
+// row for a validation attempt. outcome='NO_DATA' with a non-null run_id is
+// the in-flight placeholder written at dispatch time; a later call with the
+// real PASS/FAIL/ERROR updates that same row in place by UPDATE (an
+// ON CONFLICT on a partial unique index keyed on outcome='NO_DATA' cannot
+// catch this: the new row's own outcome is never 'NO_DATA' at that point,
+// so it would never satisfy the index's predicate and the conflict would
+// never fire). A dispatch failure with no prior placeholder, or the very
+// first placeholder write itself, falls through to a plain INSERT.
+func (o *Orchestrator) recordExecutionOutcome(ctx context.Context, versionID, runID, outcome string, detail map[string]any) {
+	d, _ := json.Marshal(detail)
+	var runIDArg any
+	if runID != "" {
+		runIDArg = runID
+	}
+	tag, err := o.pool.Exec(ctx,
+		`UPDATE content_validations SET outcome = $2, run_id = $3, detail = $4
+		  WHERE content_version_id = $1 AND level = 'EXECUTION' AND outcome = 'NO_DATA'`,
+		versionID, outcome, runIDArg, d)
+	if err != nil {
+		log.Printf("[validationlab] update outcome for %s: %v", versionID, err)
+		return
+	}
+	if tag.RowsAffected() > 0 {
+		return
+	}
+	if _, err := o.pool.Exec(ctx,
+		`INSERT INTO content_validations (content_version_id, level, outcome, run_id, validator, validator_version, detail)
+		 VALUES ($1, 'EXECUTION', $2, $3, 'validationlab', '1', $4)`,
+		versionID, outcome, runIDArg, d); err != nil {
+		log.Printf("[validationlab] insert outcome for %s: %v", versionID, err)
+	}
+}
+
+// pollAndResolve waits (bounded) for a just-dispatched run to complete, then
+// resolves the version. Shares its resolution logic with resolveOrphaned so
+// a crash between dispatch and completion is handled identically to a live
+// wait, not as a special case.
+func (o *Orchestrator) pollAndResolve(ctx context.Context, versionID, runID string) {
+	deadline := time.Now().Add(o.timeout)
+	for time.Now().Before(deadline) {
+		if o.resolveIfComplete(ctx, versionID, runID) {
+			return
+		}
+		time.Sleep(o.pollEvery)
+	}
+	o.recordExecutionOutcome(ctx, versionID, runID, "ERROR", map[string]any{"error": "validation run timed out"})
+	_ = o.reg.Transition(ctx, versionID, contentregistry.LifecycleDraft, contentregistry.ActorValidationLab, "validation timed out")
+}
+
+// resolveIfComplete checks one run's current status and, if terminal,
+// records the outcome and transitions the version. Returns true once
+// resolved (terminal), false if still running.
+func (o *Orchestrator) resolveIfComplete(ctx context.Context, versionID, runID string) bool {
+	var status string
+	if err := o.pool.QueryRow(ctx, `SELECT status FROM scenario_runs WHERE id = $1`, runID).Scan(&status); err != nil {
+		log.Printf("[validationlab] read run %s status: %v", runID, err)
+		return false
+	}
+	switch status {
+	case "running":
+		return false
+	case "completed":
+		o.recordExecutionOutcome(ctx, versionID, runID, "PASS", map[string]any{"run_id": runID, "status": status})
+		_ = o.reg.Transition(ctx, versionID, contentregistry.LifecycleValidated, contentregistry.ActorValidationLab, "validation passed")
+	default: // failed, partial
+		o.recordExecutionOutcome(ctx, versionID, runID, "FAIL", map[string]any{"run_id": runID, "status": status})
+		_ = o.reg.Transition(ctx, versionID, contentregistry.LifecycleDraft, contentregistry.ActorValidationLab, "validation failed")
+	}
+	return true
+}
+
+// Start launches the orchestrator's periodic scan loop in the background.
+func (o *Orchestrator) Start() {
+	go o.run()
+	log.Printf("[validationlab] started (poll interval: %s)", o.pollInterval)
+}
+
+// Stop ends the periodic scan loop.
+func (o *Orchestrator) Stop() {
+	close(o.stopCh)
+}
+
+func (o *Orchestrator) run() {
+	ticker := time.NewTicker(o.pollInterval)
+	defer ticker.Stop()
+	ctx := context.Background()
+	_ = o.resolveOrphaned(ctx) // recover anything left mid-flight by a previous process, before scanning for new work
+	for {
+		select {
+		case <-o.stopCh:
+			return
+		case <-ticker.C:
+			if err := o.runOnce(ctx); err != nil {
+				log.Printf("[validationlab] runOnce: %v", err)
+			}
+			_ = o.resolveOrphaned(ctx)
+		}
+	}
+}
+
+// resolveOrphaned scans every VALIDATING version with an in-flight
+// content_validations row and resolves it from durable state alone --
+// recovers correctly whether this process dispatched it, a now-dead
+// process dispatched it, or it has already completed and simply hasn't
+// been resolved yet.
+func (o *Orchestrator) resolveOrphaned(ctx context.Context) error {
+	rows, err := o.pool.Query(ctx,
+		`SELECT cv.id, v.run_id FROM content_versions cv
+		   JOIN content_validations v ON v.content_version_id = cv.id AND v.level = 'EXECUTION' AND v.outcome = 'NO_DATA'
+		  WHERE cv.lifecycle = 'VALIDATING' AND v.run_id IS NOT NULL`)
+	if err != nil {
+		return err
+	}
+	type pending struct{ versionID, runID string }
+	var work []pending
+	for rows.Next() {
+		var p pending
+		if err := rows.Scan(&p.versionID, &p.runID); err != nil {
+			rows.Close()
+			return err
+		}
+		work = append(work, p)
+	}
+	rows.Close()
+	for _, p := range work {
+		o.resolveIfComplete(ctx, p.versionID, p.runID)
+	}
+	return nil
 }

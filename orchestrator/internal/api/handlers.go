@@ -1835,6 +1835,15 @@ func (h *Handler) markRunFailed(ctx context.Context, runID string, reason string
 	}
 }
 
+// DispatchFactoryValidation is the one exported entry point into dispatchRun
+// for internal/validationlab (TCF Phase 6) -- a separate package cannot call
+// the unexported dispatchRun directly. Mode and Kind are fixed here, not
+// caller-supplied, so a validationlab caller cannot accidentally dispatch in
+// any other mode.
+func (h *Handler) DispatchFactoryValidation(ctx context.Context, sc *scenario.Scenario, agentID string) (runID, skipReason string, err error) {
+	return h.dispatchRun(ctx, sc, agentID, dispatchOpts{Mode: "factory-validation", Kind: contentregistry.KindFactoryValidation})
+}
+
 func (h *Handler) dispatchRun(ctx context.Context, sc *scenario.Scenario, agentID string, o dispatchOpts) (runID string, skipReason string, err error) {
 	if license.Current().State == license.StateLocked {
 		return "", "license_locked", nil

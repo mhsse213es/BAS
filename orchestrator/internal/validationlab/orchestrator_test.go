@@ -4,10 +4,12 @@ import (
 	"context"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/audspect/bas/internal/contentregistry"
+	"github.com/audspect/bas/internal/scenario"
 	"github.com/audspect/bas/internal/testutil"
 )
 
@@ -137,6 +139,165 @@ func TestRunOnce_SafetyRecheckRefusalReturnsToDraft(t *testing.T) {
 		if executionCount != 0 {
 			t.Fatalf("a safety-recheck refusal must not write an EXECUTION-level content_validations row, got %d", executionCount)
 		}
+	})
+}
+
+type fakeDispatcher struct {
+	runID      string
+	skipReason string
+	err        error
+}
+
+func (f *fakeDispatcher) DispatchFactoryValidation(ctx context.Context, sc *scenario.Scenario, agentID string) (string, string, error) {
+	return f.runID, f.skipReason, f.err
+}
+
+func mustInsertAgent(t *testing.T, pool *pgxpool.Pool, agentID string) {
+	t.Helper()
+	if _, err := pool.Exec(context.Background(),
+		`INSERT INTO agents (agent_id, hostname, is_factory_lab) VALUES ($1, 'h', true) ON CONFLICT DO NOTHING`, agentID); err != nil {
+		t.Fatalf("seed agent %s: %v", agentID, err)
+	}
+}
+
+func mustInsertScenarioRun(t *testing.T, pool *pgxpool.Pool, agentID, status string) string {
+	t.Helper()
+	var runID string
+	if err := pool.QueryRow(context.Background(),
+		`INSERT INTO scenario_runs (scenario_id, agent_id, status) VALUES ('vl-scenario', $1, $2) RETURNING id`,
+		agentID, status).Scan(&runID); err != nil {
+		t.Fatalf("seed scenario_run for %s: %v", agentID, err)
+	}
+	return runID
+}
+
+func TestRunOnce_SuccessfulRunTransitionsToValidated(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		reg := newTestRegistry(t, pool)
+		ctx := context.Background()
+
+		draft := mustCreateDraftVersion(t, reg, pool, contentregistry.ActorGenerator, "vl-success", nonDestructiveArtifact("vl-success"))
+		mustInsertAgent(t, pool, "vl-lab-agent-success")
+		runID := mustInsertScenarioRun(t, pool, "vl-lab-agent-success", "completed")
+
+		o := NewOrchestrator(pool, reg, &fakeDispatcher{runID: runID}, "vl-lab-agent-success", 0)
+		if err := o.runOnce(ctx); err != nil {
+			t.Fatalf("runOnce: %v", err)
+		}
+
+		assertLifecycle(t, reg, draft, contentregistry.LifecycleValidated)
+
+		var outcome, gotRunID string
+		if err := pool.QueryRow(ctx,
+			`SELECT outcome, run_id FROM content_validations WHERE content_version_id = $1 AND level = 'EXECUTION'`,
+			draft).Scan(&outcome, &gotRunID); err != nil {
+			t.Fatalf("content_validations row: %v", err)
+		}
+		if outcome != "PASS" || gotRunID != runID {
+			t.Fatalf("got outcome=%s run_id=%s, want PASS/%s", outcome, gotRunID, runID)
+		}
+	})
+}
+
+func TestRunOnce_FailedRunReturnsToDraft(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		reg := newTestRegistry(t, pool)
+		ctx := context.Background()
+
+		draft := mustCreateDraftVersion(t, reg, pool, contentregistry.ActorGenerator, "vl-failed", nonDestructiveArtifact("vl-failed"))
+		mustInsertAgent(t, pool, "vl-lab-agent-failed")
+		runID := mustInsertScenarioRun(t, pool, "vl-lab-agent-failed", "failed")
+
+		o := NewOrchestrator(pool, reg, &fakeDispatcher{runID: runID}, "vl-lab-agent-failed", 0)
+		if err := o.runOnce(ctx); err != nil {
+			t.Fatalf("runOnce: %v", err)
+		}
+
+		assertLifecycle(t, reg, draft, contentregistry.LifecycleDraft)
+		var outcome string
+		pool.QueryRow(ctx, `SELECT outcome FROM content_validations WHERE content_version_id = $1 AND level = 'EXECUTION'`, draft).Scan(&outcome)
+		if outcome != "FAIL" {
+			t.Fatalf("got outcome=%s, want FAIL", outcome)
+		}
+	})
+}
+
+func TestRunOnce_DispatchFailureRecordsErrorWithNullRunID(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		reg := newTestRegistry(t, pool)
+		ctx := context.Background()
+
+		draft := mustCreateDraftVersion(t, reg, pool, contentregistry.ActorGenerator, "vl-dispatchfail", nonDestructiveArtifact("vl-dispatchfail"))
+
+		o := NewOrchestrator(pool, reg, &fakeDispatcher{skipReason: "agent busy"}, "vl-lab-agent-dispatchfail", 0)
+
+		if err := o.runOnce(ctx); err != nil {
+			t.Fatalf("runOnce: %v", err)
+		}
+
+		assertLifecycle(t, reg, draft, contentregistry.LifecycleDraft)
+		var outcome string
+		var runID *string
+		if err := pool.QueryRow(ctx,
+			`SELECT outcome, run_id FROM content_validations WHERE content_version_id = $1 AND level = 'EXECUTION'`,
+			draft).Scan(&outcome, &runID); err != nil {
+			t.Fatalf("content_validations row: %v — a dispatch failure must still be honestly recorded against the real CHECK constraint", err)
+		}
+		if outcome != "ERROR" || runID != nil {
+			t.Fatalf("got outcome=%s run_id=%v, want ERROR/nil", outcome, runID)
+		}
+	})
+}
+
+func TestRunOnce_TimeoutReturnsToDraft(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		reg := newTestRegistry(t, pool)
+		ctx := context.Background()
+
+		draft := mustCreateDraftVersion(t, reg, pool, contentregistry.ActorGenerator, "vl-timeout", nonDestructiveArtifact("vl-timeout"))
+		mustInsertAgent(t, pool, "vl-lab-agent-timeout")
+		runID := mustInsertScenarioRun(t, pool, "vl-lab-agent-timeout", "running") // never completes
+
+		o := NewOrchestrator(pool, reg, &fakeDispatcher{runID: runID}, "vl-lab-agent-timeout", 0)
+		o.timeout = 50 * time.Millisecond
+		o.pollEvery = 10 * time.Millisecond
+		if err := o.runOnce(ctx); err != nil {
+			t.Fatalf("runOnce: %v", err)
+		}
+
+		assertLifecycle(t, reg, draft, contentregistry.LifecycleDraft)
+		var outcome string
+		pool.QueryRow(ctx, `SELECT outcome FROM content_validations WHERE content_version_id = $1 AND level = 'EXECUTION'`, draft).Scan(&outcome)
+		if outcome != "ERROR" {
+			t.Fatalf("got outcome=%s, want ERROR", outcome)
+		}
+	})
+}
+
+func TestResolveOrphaned_RecoversAfterSimulatedRestart(t *testing.T) {
+	// Simulates a crash: a version is already VALIDATING with a real,
+	// already-completed run_id, but no Orchestrator instance in this test
+	// ever called runOnce for it -- proving resolution reads only durable
+	// state (content_versions.lifecycle + content_validations/scenario_runs),
+	// never in-memory tracking of what this process personally dispatched.
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		reg := newTestRegistry(t, pool)
+		ctx := context.Background()
+
+		draft := mustCreateDraftVersion(t, reg, pool, contentregistry.ActorGenerator, "vl-orphan", nonDestructiveArtifact("vl-orphan"))
+		if err := reg.Transition(ctx, draft, contentregistry.LifecycleValidating, contentregistry.ActorValidationLab, "claimed"); err != nil {
+			t.Fatalf("setup transition: %v", err)
+		}
+		mustInsertAgent(t, pool, "vl-lab-agent-orphan")
+		runID := mustInsertScenarioRun(t, pool, "vl-lab-agent-orphan", "completed")
+
+		o := NewOrchestrator(pool, reg, nil, "vl-lab-agent-orphan", 0) // resolveOrphaned never dispatches, so no fake dispatcher is needed here
+		o.recordExecutionOutcome(ctx, draft, runID, "NO_DATA", map[string]any{"status": "dispatched"})
+
+		if err := o.resolveOrphaned(ctx); err != nil {
+			t.Fatalf("resolveOrphaned: %v", err)
+		}
+		assertLifecycle(t, reg, draft, contentregistry.LifecycleValidated)
 	})
 }
 
