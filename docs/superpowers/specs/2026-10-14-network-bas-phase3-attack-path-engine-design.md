@@ -151,7 +151,7 @@ New permission `CanImportNetworkTopology = "network-topology:import"`, granted t
 
 Endpoints:
 - `POST /api/network-topology-imports` (gated by `CanImportNetworkTopology`) / `GET /api/network-topology-imports` + `GET /api/network-topology-imports/{id}` (baseline auth) — import/list/get, same shape as Phase 2A's policy-import trio.
-- `POST /api/network-paths` (gated by `CanImportNetworkTopology` — reusing the import permission for this evaluate-style action, following Phase 2A's own precedent of not minting a permission per verb). Body: `{topologyImportId, policyImportId?, discoveryRunId?, sourceHost, destHost, maxHops}`. Response: candidate routes, each with per-hop evidence (routing/policy/observation/corroboration) plus the path-level aggregated `PathState` and confidence.
+- `POST /api/network-paths` (gated by `CanImportNetworkTopology` — reusing the import permission for this evaluate-style action, following Phase 2A's own precedent of not minting a permission per verb). Body: `{topologyImportId, policyImportId?, discoveryRunId?, sourceHost, destHost, port, protocol?, maxHops?}` (`port` is required — a policy evaluation without one is meaningless, the same requirement Phase 2A's own `PolicyQuery` already enforces). Response: candidate routes, each with per-hop evidence (routing/policy/observation/corroboration) plus the path-level aggregated `PathState` and confidence.
 
 ## Safety Constraints
 
