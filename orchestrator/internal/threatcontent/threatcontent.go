@@ -1,4 +1,4 @@
-// Package threatreadiness assembles the live threat-coverage view (TCF
+// Package threatcontent assembles the live threat-coverage view (TCF
 // Phase 10, spec docs/superpowers/specs/2026-10-14-tcf-phase10-live-threat-coverage-design.md):
 // for each currently-active threat, which content the factory has produced
 // for it, whether that content is actually executable today, and whether
@@ -62,20 +62,20 @@ func ListActiveThreatExposure(ctx context.Context, pool *pgxpool.Pool, reg *cont
 
 	summaries, err := reg.Summaries(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("threatreadiness: registry summaries: %w", err)
+		return nil, fmt.Errorf("threatcontent: registry summaries: %w", err)
 	}
 
 	rows, err := pool.Query(ctx, `SELECT id, title, first_seen_at, last_seen_at FROM threats
 		WHERE status = 'active' ORDER BY last_seen_at DESC NULLS LAST LIMIT $1 OFFSET $2`, limit, offset)
 	if err != nil {
-		return nil, fmt.Errorf("threatreadiness: list threats: %w", err)
+		return nil, fmt.Errorf("threatcontent: list threats: %w", err)
 	}
 	var out []ThreatExposure
 	for rows.Next() {
 		var te ThreatExposure
 		if err := rows.Scan(&te.ThreatID, &te.Title, &te.FirstSeenAt, &te.LastSeenAt); err != nil {
 			rows.Close()
-			return nil, fmt.Errorf("threatreadiness: scan threat: %w", err)
+			return nil, fmt.Errorf("threatcontent: scan threat: %w", err)
 		}
 		out = append(out, te)
 	}
@@ -100,14 +100,14 @@ func loadTechniques(ctx context.Context, pool *pgxpool.Pool, te *ThreatExposure)
 	rows, err := pool.Query(ctx, `SELECT technique_id, last_seen_at FROM threat_techniques
 		WHERE threat_id = $1 AND status = 'active'`, te.ThreatID)
 	if err != nil {
-		return fmt.Errorf("threatreadiness: list techniques for %s: %w", te.ThreatID, err)
+		return fmt.Errorf("threatcontent: list techniques for %s: %w", te.ThreatID, err)
 	}
 	defer rows.Close()
 	te.Techniques = []TechniqueExposure{}
 	for rows.Next() {
 		var t TechniqueExposure
 		if err := rows.Scan(&t.TechniqueID, &t.LastSeenAt); err != nil {
-			return fmt.Errorf("threatreadiness: scan technique: %w", err)
+			return fmt.Errorf("threatcontent: scan technique: %w", err)
 		}
 		te.Techniques = append(te.Techniques, t)
 	}
@@ -115,24 +115,28 @@ func loadTechniques(ctx context.Context, pool *pgxpool.Pool, te *ThreatExposure)
 }
 
 func loadContent(ctx context.Context, pool *pgxpool.Pool, summaries map[string]contentregistry.Summary, te *ThreatExposure) error {
-	rows, err := pool.Query(ctx, `SELECT cv.id, cv.content_id, cvt.relationship_kind, cv.lifecycle, cv.trust_level, cv.technique_ids
+	rows, err := pool.Query(ctx, `SELECT cv.id, cv.content_id, cvt.relationship_kind, cv.lifecycle, cv.trust_level, cv.version, cv.technique_ids
 		FROM content_version_threats cvt JOIN content_versions cv ON cv.id = cvt.content_version_id
 		WHERE cvt.threat_id = $1`, te.ThreatID)
 	if err != nil {
-		return fmt.Errorf("threatreadiness: list content for %s: %w", te.ThreatID, err)
+		return fmt.Errorf("threatcontent: list content for %s: %w", te.ThreatID, err)
 	}
 	te.Content = []ContentExposure{}
 	for rows.Next() {
 		var ce ContentExposure
-		if err := rows.Scan(&ce.ContentVersionID, &ce.ContentID, &ce.RelationshipKind, &ce.Lifecycle, &ce.Trust, &ce.techniqueIDs); err != nil {
+		var version int
+		if err := rows.Scan(&ce.ContentVersionID, &ce.ContentID, &ce.RelationshipKind, &ce.Lifecycle, &ce.Trust, &version, &ce.techniqueIDs); err != nil {
 			rows.Close()
-			return fmt.Errorf("threatreadiness: scan content: %w", err)
+			return fmt.Errorf("threatcontent: scan content: %w", err)
 		}
 		ce.Validation = "structural-only"
-		if s, ok := summaries[ce.ContentID]; ok && s.ExecutableVersion > 0 {
-			// Summaries keys by content_id and names the one version the gate
-			// actually selected; this row is executable only if it IS that version.
-			ce.IsExecutable = s.ExecutableLifecycle == ce.Lifecycle && s.ExecutableTrust == ce.Trust
+		if s, ok := summaries[ce.ContentID]; ok {
+			// Summaries keys by content_id and names only the single version
+			// number the gate actually selected; an older, superseded version of
+			// the same content id (still linked via content_version_threats from
+			// before a re-intake) must not be marked executable just because it
+			// happens to share that version's lifecycle/trust tuple.
+			ce.IsExecutable = version == s.ExecutableVersion
 		}
 		te.Content = append(te.Content, ce)
 	}
@@ -146,7 +150,7 @@ func loadContent(ctx context.Context, pool *pgxpool.Pool, summaries map[string]c
 		var count int
 		if err := pool.QueryRow(ctx, `SELECT MAX(started_at), COUNT(*) FROM scenario_runs WHERE content_version_id = $1`,
 			te.Content[i].ContentVersionID).Scan(&lastRunAt, &count); err != nil {
-			return fmt.Errorf("threatreadiness: run aggregate for %s: %w", te.Content[i].ContentVersionID, err)
+			return fmt.Errorf("threatcontent: run aggregate for %s: %w", te.Content[i].ContentVersionID, err)
 		}
 		te.Content[i].LastRunAt = lastRunAt
 		te.Content[i].RunCount = count

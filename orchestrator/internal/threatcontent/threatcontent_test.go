@@ -216,6 +216,64 @@ func TestListActiveThreatExposure_OnlyCountsRunsWithRealContentVersionID(t *test
 	})
 }
 
+func TestListActiveThreatExposure_SupersededVersionIsNotExecutable(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		threatID := seedThreatWithTechnique(t, pool, "APT-exposure-superseded", "T1059")
+		ctx := context.Background()
+		contentID := "intel-" + t.Name()
+		if _, err := pool.Exec(ctx, `INSERT INTO scenarios (scenario_id, origin) VALUES ($1, 'LOCAL') ON CONFLICT DO NOTHING`, contentID); err != nil {
+			t.Fatal(err)
+		}
+
+		// Version 1: older, PUBLISHED_LOCAL/LOCAL_TRUSTED -- content_version_threats
+		// points at this one (e.g. an "emulates" link added before the content
+		// was re-intaked at a new version).
+		var oldVersionID string
+		if err := pool.QueryRow(ctx, `INSERT INTO content_versions
+			(content_id, origin, version, artifact_sha256, artifact_size, artifact_bytes,
+			 trust_level, lifecycle, intake_source, schema_version, technique_ids, created_by)
+			VALUES ($1, 'LOCAL', 1, 'sha-old', 1, 'x',
+			 'LOCAL_TRUSTED', 'PUBLISHED_LOCAL', 'intel', 1, '{T1059}', 'test')
+			RETURNING id`, contentID).Scan(&oldVersionID); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := pool.Exec(ctx, `INSERT INTO content_version_threats
+			(content_version_id, threat_id, relationship_kind, provenance_type, provenance_ref)
+			VALUES ($1, $2, 'generated_for', 'generator', 'test')`, oldVersionID, threatID); err != nil {
+			t.Fatal(err)
+		}
+
+		// Version 2: newer, same lifecycle/trust tuple -- this is the version the
+		// gate (Registry.Summaries) actually selects as executable.
+		if _, err := pool.Exec(ctx, `INSERT INTO content_versions
+			(content_id, origin, version, artifact_sha256, artifact_size, artifact_bytes,
+			 trust_level, lifecycle, intake_source, schema_version, technique_ids, created_by)
+			VALUES ($1, 'LOCAL', 2, 'sha-new', 1, 'x',
+			 'LOCAL_TRUSTED', 'PUBLISHED_LOCAL', 'intel', 1, '{T1059}', 'test')`, contentID); err != nil {
+			t.Fatal(err)
+		}
+
+		got, err := ListActiveThreatExposure(ctx, pool, newTestRegistry(pool), 20, 0)
+		if err != nil {
+			t.Fatalf("ListActiveThreatExposure: %v", err)
+		}
+		var found *ContentExposure
+		for _, te := range got {
+			for i := range te.Content {
+				if te.Content[i].ContentVersionID == oldVersionID {
+					found = &te.Content[i]
+				}
+			}
+		}
+		if found == nil {
+			t.Fatal("expected the superseded (version 1) content version to appear in the response")
+		}
+		if found.IsExecutable {
+			t.Fatalf("expected the SUPERSEDED version (1) to be isExecutable=false -- the gate actually selected version 2 -- got true: %+v", found)
+		}
+	})
+}
+
 func TestListActiveThreatExposure_ExcludesInactiveThreats(t *testing.T) {
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
 		threatID := seedThreatWithTechnique(t, pool, "APT-exposure-inactive", "T1059")
