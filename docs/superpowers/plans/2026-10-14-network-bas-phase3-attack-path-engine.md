@@ -390,10 +390,10 @@ func TestFindCandidateRoutes_CyclicTopologyTerminates(t *testing.T) {
 	// paths often look like this. The search must still terminate and
 	// find the real route to d.
 	topo := &TopologyImport{Edges: []RouteEdge{
-		{FromZone: "a", ToZone: "b"},
-		{FromZone: "b", ToZone: "c"},
-		{FromZone: "c", ToZone: "a"},
-		{FromZone: "c", ToZone: "d"},
+		{FromZone: "a", ToZone: "b", Directed: true},
+		{FromZone: "b", ToZone: "c", Directed: true},
+		{FromZone: "c", ToZone: "a", Directed: true},
+		{FromZone: "c", ToZone: "d", Directed: true},
 	}}
 	routes, err := FindCandidateRoutes(topo, "a", "d", 10)
 	if err != nil {
