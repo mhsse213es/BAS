@@ -296,6 +296,9 @@ func main() {
 	if err := db.EnsureNetworkPolicySchema(context.Background(), adminPool); err != nil {
 		log.Fatalf("[FATAL] network policy schema: %v", err)
 	}
+	if err := db.EnsureNetworkTopologySchema(context.Background(), adminPool); err != nil {
+		log.Fatalf("[FATAL] network topology schema: %v", err)
+	}
 	log.Println("[+] Schema verified")
 
 	// ── bas_app provisioning ─────────────────────────────────────────────
