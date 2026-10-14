@@ -121,3 +121,39 @@ func TestListAndGetOTSafetyImport_RoundTrip(t *testing.T) {
 		}
 	})
 }
+
+// TestCreateOTSafetyImport_TierClinical_Accepted pins Phase 7B's
+// extension of otsafety's tier validation: TierClinical must be
+// accepted exactly as TierOT already is.
+func TestCreateOTSafetyImport_TierClinical_Accepted(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret)
+		body := validOTSafetyImportBody()
+		body["sensitiveZones"] = []map[string]any{{"zoneName": "clinical", "tier": "clinical"}}
+		b, _ := json.Marshal(body)
+		userID := seedUser(t, pool, "otsafety-op-clinical", "pw12345678", string(auth.RoleAnalyst), true)
+		req := authedRequest(t, http.MethodPost, "/api/ot-safety-imports", bytes.NewReader(b), auth.RoleAnalyst, userID)
+		rec := callAuthed(h.CreateOTSafetyImport, req)
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("status = %d, body = %s, want 201 -- TierClinical must be accepted", rec.Code, rec.Body.String())
+		}
+	})
+}
+
+// TestCreateOTSafetyImport_StillRejectsUnknownTier proves the
+// TierClinical extension is additive, not a loosening of the
+// existing check -- an unrelated unknown tier must still be rejected.
+func TestCreateOTSafetyImport_StillRejectsUnknownTier(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret)
+		body := validOTSafetyImportBody()
+		body["sensitiveZones"] = []map[string]any{{"zoneName": "x", "tier": "unknown-tier"}}
+		b, _ := json.Marshal(body)
+		userID := seedUser(t, pool, "otsafety-op-unknowntier", "pw12345678", string(auth.RoleAnalyst), true)
+		req := authedRequest(t, http.MethodPost, "/api/ot-safety-imports", bytes.NewReader(b), auth.RoleAnalyst, userID)
+		rec := callAuthed(h.CreateOTSafetyImport, req)
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("status = %d, body = %s, want 400 -- an unknown tier must still be rejected", rec.Code, rec.Body.String())
+		}
+	})
+}

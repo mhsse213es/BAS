@@ -63,7 +63,7 @@ func validateOTSafetyImport(imp *otsafety.OTSafetyImport) error {
 		if sz.ZoneName == "" {
 			return fmt.Errorf("sensitiveZones[%d]: zoneName is required", i)
 		}
-		if sz.Tier != otsafety.TierOT {
+		if sz.Tier != otsafety.TierOT && sz.Tier != otsafety.TierClinical {
 			return fmt.Errorf("sensitiveZones[%d]: unknown tier %q", i, sz.Tier)
 		}
 	}

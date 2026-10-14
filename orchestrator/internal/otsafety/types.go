@@ -3,10 +3,14 @@ package otsafety
 import "time"
 
 const (
-	// TierOT is the single sensitivity tier for this increment --
-	// deliberately not a broader taxonomy until a real need for finer
-	// granularity appears.
-	TierOT = "ot"
+	// TierOT and TierClinical are the two sensitivity tiers declarable
+	// on a SensitiveZone -- OT/ICS (Network BAS Phase 7A) and
+	// healthcare patient-care/clinical zones (Phase 7B). Both reuse
+	// CheckActiveTestAuthorization and ValidateRequiredTransits
+	// completely unchanged -- neither function inspects Tier's actual
+	// value, only that a zone is declared sensitive at all.
+	TierOT       = "ot"
+	TierClinical = "clinical"
 
 	MaxSensitiveZonesPerImport   = 500
 	MaxRequiredTransitsPerImport = 500
@@ -16,8 +20,7 @@ const (
 // name only, never cross-validated against a real
 // networktopology.TopologyImport) requires the stricter active-testing
 // safeguards of CheckActiveTestAuthorization (authz.go). Tier is
-// currently always TierOT; the field exists so a future increment can
-// add tiers without a breaking schema change.
+// TierOT or TierClinical.
 type SensitiveZone struct {
 	ZoneName string `json:"zoneName"`
 	Tier     string `json:"tier"` // TierOT
