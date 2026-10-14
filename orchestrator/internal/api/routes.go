@@ -446,6 +446,7 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.With(auth.RequirePermission(auth.CanImportRemoteAccessTopology)).Post("/api/remote-access-imports", h.CreateRemoteAccessImport)
 		r.With(auth.RequirePermission(auth.CanImportOTSafetyConfig)).Post("/api/ot-safety-imports", h.CreateOTSafetyImport)
 		r.With(auth.RequirePermission(auth.CanImportZoneIsolationConfig)).Post("/api/zone-isolation-imports", h.CreateZoneIsolationImport)
+		r.With(auth.RequirePermission(auth.CanImportZoneIsolationConfig)).Post("/api/isolation-checks", h.FindIsolationChecks)
 		r.With(auth.RequirePermission(auth.CanImportNetworkControlExpectation)).Post("/api/network-control-expectations", h.CreateNetworkControlExpectationImport)
 		r.With(auth.RequirePermission(auth.CanImportNetworkTopology)).Post("/api/network-paths", h.FindNetworkPaths)
 		r.With(auth.RequirePermission(auth.CanImportCloudTopology)).Post("/api/cloud-paths", h.FindCloudPaths)

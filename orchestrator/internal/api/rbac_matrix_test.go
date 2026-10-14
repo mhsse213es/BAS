@@ -232,6 +232,7 @@ var routeMatrix = []routeCase{
 	{http.MethodPost, "/api/remote-access-imports", tierPermission, auth.CanImportRemoteAccessTopology},
 	{http.MethodPost, "/api/ot-safety-imports", tierPermission, auth.CanImportOTSafetyConfig},
 	{http.MethodPost, "/api/zone-isolation-imports", tierPermission, auth.CanImportZoneIsolationConfig},
+	{http.MethodPost, "/api/isolation-checks", tierPermission, auth.CanImportZoneIsolationConfig},
 	{http.MethodPost, "/api/network-control-expectations", tierPermission, auth.CanImportNetworkControlExpectation},
 	{http.MethodPost, "/api/network-paths", tierPermission, auth.CanImportNetworkTopology},
 	{http.MethodPost, "/api/cloud-paths", tierPermission, auth.CanImportCloudTopology},
