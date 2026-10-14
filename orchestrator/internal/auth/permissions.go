@@ -241,6 +241,11 @@ const (
 	// peering -- Network BAS Phase 6A) -- same placement as
 	// CanImportNetworkTopology, for the same reason.
 	CanImportCloudTopology Permission = "cloud-topology:import"
+
+	// remote-access:import gates importing on-premises VPN-tunnel and
+	// mandatory-transit (bastion) boundary data (Network BAS Phase 6B)
+	// -- same placement as CanImportCloudTopology, for the same reason.
+	CanImportRemoteAccessTopology Permission = "remote-access:import"
 )
 
 // rolePermissions maps each role to the permissions it holds. Viewer is
@@ -303,6 +308,7 @@ var rolePermissions = map[Role]map[Permission]bool{
 		CanImportNetworkTopology:           true,
 		CanImportNetworkControlExpectation: true,
 		CanImportCloudTopology:             true,
+		CanImportRemoteAccessTopology:      true,
 	},
 	RoleAnalyst: {
 		CanVerify:            true,
@@ -318,7 +324,7 @@ var rolePermissions = map[Role]map[Permission]bool{
 		CanTriggerScan: true, CanCollectAttackPath: true, CanCreateAttackPathJob: true,
 		CanCancelAttackPathJob: true, CanRetryAttackPathJob: true, CanSetAttackPathAsset: true,
 		CanRunScenario: true, CanRunCalderaAdversary: true, CanRunAdversaryTemplate: true,
-		CanImportNetworkPolicy: true, CanImportNetworkTopology: true, CanImportNetworkControlExpectation: true, CanImportCloudTopology: true,
+		CanImportNetworkPolicy: true, CanImportNetworkTopology: true, CanImportNetworkControlExpectation: true, CanImportCloudTopology: true, CanImportRemoteAccessTopology: true,
 		CanCancelScenarioRun: true, CanCorrelateSIEM: true, CanViewSIEMCorrelations: true,
 		CanRunDetectionVerification: true, CanCreateCampaign: true, CanStopCampaign: true,
 		CanSetFindingStatus: true, CanPushToITSM: true, CanBulkPushToITSM: true,
