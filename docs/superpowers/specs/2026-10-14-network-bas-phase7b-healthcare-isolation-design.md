@@ -118,12 +118,14 @@ Classification by `path.State` (the real `cloudgraph.PathState` values reachable
 
 ```go
 type isolationCheckRequest struct {
-	TopologyImportID   string `json:"topologyImportId"`
-	IsolationImportID  string `json:"isolationImportId"`
-	PolicyImportID     string `json:"policyImportId,omitempty"`
-	DiscoveryRunID     string `json:"discoveryRunId,omitempty"`
-	RemoteAccessImportID string `json:"remoteAccessImportId,omitempty"`
-	MaxHops            int    `json:"maxHops,omitempty"`
+	TopologyImportID      string `json:"topologyImportId"`
+	IsolationImportID     string `json:"isolationImportId"`
+	PolicyImportID        string `json:"policyImportId,omitempty"`
+	DiscoveryRunID        string `json:"discoveryRunId,omitempty"`
+	RemoteAccessImportID  string `json:"remoteAccessImportId,omitempty"`
+	Port                  int    `json:"port,omitempty"`
+	Protocol              string `json:"protocol,omitempty"`
+	MaxHops               int    `json:"maxHops,omitempty"`
 }
 
 type isolationCheckResponse struct {
@@ -132,11 +134,16 @@ type isolationCheckResponse struct {
 }
 ```
 
-`TopologyImportID` and `IsolationImportID` are both required (400 if either is missing). For each `ZonePairIsolation` in the loaded `IsolationImport`:
+`TopologyImportID` and `IsolationImportID` are both required (400 if either is missing).
+
+**Why `composeNetworkPathHop` cannot be reused verbatim (found during plan-grounding, folded back into this spec):** `composeNetworkPathHop`/`ComposeHop`/`networkcorrelation.findMatchingObservation` are all fundamentally host-and-port-specific — policy evaluation needs a concrete port to check a rule's port range, and `findMatchingObservation`'s own doc comment states outright that "a zone-named destination has no single host to match against an observation's Target.Host." Zone-pair isolation checking has no host, and (per the locked Option B decision) deliberately no per-pair port either. The fix: resolve the **destination zone's declared CIDRs** from the loaded `topo.Zones` (each `networktopology.Zone` already carries `CIDRs []string`) and evaluate policy/observation correlation against each of the zone's CIDRs in turn, using the request-level `Port`/`Protocol` (applied uniformly across the whole batch — omitted, they default to `0`/`""`, which only matches a policy rule with no port restriction at all; this is a documented, honest limitation, not a defect, consistent with this initiative's "never claim more than the evidence shows" discipline).
+
+For each `ZonePairIsolation` in the loaded `IsolationImport`:
 
 1. Resolve routes: if `RemoteAccessImportID` is supplied, load the `RemoteAccessImport` and call `remoteaccess.FindCandidateRemoteAccessRoutes(topo, remote, pair.ZoneA, pair.ZoneB, maxHops)`; otherwise call `networktopology.FindCandidateRoutes(topo, pair.ZoneA, pair.ZoneB, maxHops)`. `remoteaccess.RoutePath` and `networktopology.RoutePath` are both `[]string` underneath (confirmed by reading both `routes.go` files) — the handler normalizes whichever one it gets into a plain `[]string` before composition, same way `FindNetworkPaths` already treats `networktopology.RoutePath` as an iterable `[]string`.
-2. Compose each candidate route into hops via the same per-hop logic `FindNetworkPaths`'s `composeNetworkPathHop` already uses (policy evaluation via `networkpolicy.EvaluatePolicyMatrix`, observation attachment when the route is a single hop matching `discoveryRunId`'s observations, `networkpath.ComposeHop` per hop), then `networkpath.AggregatePath` across the route's hops. When zero candidate routes exist at all, this produces the same "no declared route" `Unknown` `PathResult` `FindNetworkPaths` already produces for its own zero-route case — reused, not reinvented.
-3. `zoneisolation.ClassifyIsolation(pair, pathResult)` → one `IsolationCheckResult`.
+2. Resolve `pair.ZoneB`'s declared CIDRs by scanning `topo.Zones` for the matching zone name. For each candidate route, and for each of `pair.ZoneB`'s CIDRs, build a `networkpolicy.PolicyQuery{SourceZone: route[i], DestCIDR: <the CIDR>, Port: req.Port, Protocol: req.Protocol}`, evaluate it via `networkpolicy.EvaluatePolicyMatrix` (when `policyImportId` was supplied), and build one `networkpath.HopResult` via `networkpath.ComposeHop(fromZone, toZone, routeDeclared, policyEval, observations)` — reusing `ComposeHop` completely unchanged, just called once per (hop × destination-CIDR) pair instead of once per hop. `observations` is the discovery run's observation list (when `discoveryRunId` was supplied), filtered the same way `composeNetworkPathHop` already filters by port before correlation can match. Feed the *entire* resulting slice of per-CIDR `HopResult`s for a route into `networkpath.AggregatePath` — this reuses `AggregatePathState`'s existing worst-state ranking unchanged to pick the most severe result across however many CIDRs the destination zone declares, with zero new ranking logic. When the destination zone has no declared CIDRs at all, this reduces to exactly one `ComposeHop` call with an empty `DestCIDR`, which already correctly falls through to `Unknown` via `ComposeHop`'s existing `policyEval == nil`/`!routeDeclared` branches.
+3. When zero candidate routes exist at all, this produces the same "no declared route" `Unknown` `PathResult` `FindNetworkPaths` already produces for its own zero-route case — reused, not reinvented.
+4. `zoneisolation.ClassifyIsolation(pair, pathResult)` → one `IsolationCheckResult`.
 
 `SearchExhausted` is true if *any* pair's route search hit its step budget (same "truncated search, absence not proven" meaning `/api/network-paths` already carries, just aggregated across the whole batch rather than per-pair, since a per-pair flag would need its own field on `IsolationCheckResult` that nothing in this phase's acceptance criteria requires yet).
 
