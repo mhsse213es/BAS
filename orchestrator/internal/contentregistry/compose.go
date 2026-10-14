@@ -28,8 +28,18 @@ type loadedComponent struct {
 // supported_os or if the assembled Steps list fails the existing
 // safetyVerdict worst-step-wins check (spec §2.3-§2.4).
 func (r *Registry) Compose(ctx context.Context, componentIDs []string, threatID, actor string) (string, bool, error) {
+	if threatID == "" {
+		return "", false, fmt.Errorf("composition requires a target threat id")
+	}
 	if len(componentIDs) < 2 {
 		return "", false, fmt.Errorf("composition requires at least 2 components, got %d", len(componentIDs))
+	}
+	seen := map[string]bool{}
+	for _, id := range componentIDs {
+		if seen[id] {
+			return "", false, fmt.Errorf("composition refused: duplicate component id %s", id)
+		}
+		seen[id] = true
 	}
 	components, err := r.loadComponents(ctx, componentIDs)
 	if err != nil {

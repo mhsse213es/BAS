@@ -1,6 +1,7 @@
 package contentregistry
 
 import (
+	"bytes"
 	"context"
 	"testing"
 
@@ -115,6 +116,96 @@ func TestCompose_SucceedsAndRecordsProvenance(t *testing.T) {
 		}
 		if componentCount != 2 {
 			t.Fatalf("expected provenance for both components, got %d rows", componentCount)
+		}
+	})
+}
+
+// TestCompose_RequiresThreatID mirrors RegisterGenerated's guard
+// (generated.go:38-40) -- composition must not silently produce an
+// unlinked candidate (final review finding #1).
+func TestCompose_RequiresThreatID(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		reg := New(pool, testutil.DevVerifier())
+		ctx := context.Background()
+		c1, err := reg.RegisterExternalComponent(ctx, "art", "T1059", "c1", "", "", 1, "v1", []string{"windows"}, "test")
+		if err != nil {
+			t.Fatal(err)
+		}
+		c2, err := reg.RegisterExternalComponent(ctx, "art", "T1053", "c2", "", "", 2, "v1", []string{"windows"}, "test")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		_, _, err = reg.Compose(ctx, []string{c1, c2}, "", "admin-test")
+		if err == nil {
+			t.Fatal("expected Compose to refuse an empty threatID")
+		}
+	})
+}
+
+// TestCompose_RefusesDuplicateComponentIDs (final review finding #2): a
+// duplicate id violates content_version_components' PK on the SECOND
+// provenance insert, which happens AFTER createVersion has already
+// committed the DRAFT row -- leaving a half-provisioned candidate behind
+// even though Compose returns an error. The fix rejects duplicates before
+// anything is created.
+func TestCompose_RefusesDuplicateComponentIDs(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		reg := New(pool, testutil.DevVerifier())
+		ctx := context.Background()
+		c1, err := reg.RegisterExternalComponent(ctx, "art", "T1059", "c1", "", "", 1, "v1", []string{"windows"}, "test")
+		if err != nil {
+			t.Fatal(err)
+		}
+		threatID := seedComposeThreat(t, pool, "APT-compose-dup")
+		var countBefore int
+		pool.QueryRow(ctx, `SELECT count(*) FROM content_versions`).Scan(&countBefore)
+
+		_, _, err = reg.Compose(ctx, []string{c1, c1}, threatID, "admin-test")
+		if err == nil {
+			t.Fatal("expected Compose to refuse duplicate component ids")
+		}
+		var countAfter int
+		pool.QueryRow(ctx, `SELECT count(*) FROM content_versions`).Scan(&countAfter)
+		if countAfter != countBefore {
+			t.Fatalf("expected zero new content_versions rows when refusing duplicate ids, got %d new", countAfter-countBefore)
+		}
+	})
+}
+
+// TestCompose_MixesInternalAndExternalComponents (final review finding
+// #3): the mixed-kind path -- an internal component promoted from a
+// previously-published scenario alongside an external ART/Caldera
+// reference -- was never exercised by any Compose() call in the diff.
+func TestCompose_MixesInternalAndExternalComponents(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		reg := New(pool, testutil.DevVerifier())
+		ctx := context.Background()
+		versionID := seedExecutableVersion(t, pool, "intel-compose-mixed-source", "- name: s\n  technique_id: T1059\n  framework: art\n  test_index: 0\n")
+		internalID, err := reg.PromoteInternalComponent(ctx, versionID, 0, "admin-test")
+		if err != nil {
+			t.Fatalf("PromoteInternalComponent: %v", err)
+		}
+		externalID, err := reg.RegisterExternalComponent(ctx, "art", "T1053", "external", "", "", 2, "v1", []string{"windows"}, "test")
+		if err != nil {
+			t.Fatal(err)
+		}
+		threatID := seedComposeThreat(t, pool, "APT-compose-mixed")
+
+		composedID, created, err := reg.Compose(ctx, []string{internalID, externalID}, threatID, "admin-test")
+		if err != nil {
+			t.Fatalf("Compose: %v", err)
+		}
+		if !created {
+			t.Fatal("expected created=true")
+		}
+
+		var artifact []byte
+		if err := pool.QueryRow(ctx, `SELECT artifact_bytes FROM content_versions WHERE id = $1`, composedID).Scan(&artifact); err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Contains(artifact, []byte("T1059")) || !bytes.Contains(artifact, []byte("T1053")) {
+			t.Fatalf("expected the composed artifact to carry both the internal (T1059) and external (T1053) step, got: %s", artifact)
 		}
 	})
 }
