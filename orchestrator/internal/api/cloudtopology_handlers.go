@@ -107,6 +107,12 @@ func validateCloudTopologyImport(imp *cloudtopology.CloudTopologyImport) error {
 			if !hasLimitations {
 				return fmt.Errorf("limitations must be non-empty when any group has unresolved scope")
 			}
+			if g.NetworkID == "" || !networkIDs[g.NetworkID] {
+				return fmt.Errorf("groups[%d]: networkId %q not found in networks", i, g.NetworkID)
+			}
+			if g.SubnetID != "" && !subnetIDs[g.SubnetID] {
+				return fmt.Errorf("groups[%d]: subnetId %q not found in subnets", i, g.SubnetID)
+			}
 		default:
 			return fmt.Errorf("groups[%d]: unknown scope %q", i, g.Scope)
 		}
@@ -158,6 +164,11 @@ func validateCloudTopologyImport(imp *cloudtopology.CloudTopologyImport) error {
 		if _, _, err := net.ParseCIDR(route.DestinationCIDR); err != nil {
 			return fmt.Errorf("routes[%d]: invalid destinationCidr %q", i, route.DestinationCIDR)
 		}
+		switch route.Target {
+		case cloudtopology.TargetLocal, cloudtopology.TargetPeering, cloudtopology.TargetInternetGateway, cloudtopology.TargetNATGateway, cloudtopology.TargetTransitGateway, cloudtopology.TargetUnknown:
+		default:
+			return fmt.Errorf("routes[%d]: unknown target %q", i, route.Target)
+		}
 	}
 	for i, p := range imp.Peerings {
 		if !networkIDs[p.NetworkAID] {
@@ -165,6 +176,11 @@ func validateCloudTopologyImport(imp *cloudtopology.CloudTopologyImport) error {
 		}
 		if !networkIDs[p.NetworkBID] {
 			return fmt.Errorf("peerings[%d]: networkBId %q not found in networks", i, p.NetworkBID)
+		}
+		switch p.State {
+		case cloudtopology.PeeringActive, cloudtopology.PeeringPending, cloudtopology.PeeringRejected, cloudtopology.PeeringUnknown:
+		default:
+			return fmt.Errorf("peerings[%d]: unknown state %q", i, p.State)
 		}
 	}
 	return nil

@@ -23,7 +23,7 @@ func testImport() *CloudTopologyImport {
 
 func TestEvaluateSecurityGroupRules_AllowMatch_PolicySupported(t *testing.T) {
 	imp := testImport()
-	eval, err := EvaluateSecurityGroupRules(imp, "subnet-1", CloudFlow{DestCIDR: "10.0.2.0/24", Protocol: "tcp", Port: 443})
+	eval, err := EvaluateSecurityGroupRules(imp, "subnet-1", DirectionOutbound, CloudFlow{DestCIDR: "10.0.2.0/24", Protocol: "tcp", Port: 443})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -37,7 +37,7 @@ func TestEvaluateSecurityGroupRules_AllowMatch_PolicySupported(t *testing.T) {
 
 func TestEvaluateSecurityGroupRules_NoMatch_ImplicitDeny(t *testing.T) {
 	imp := testImport()
-	eval, err := EvaluateSecurityGroupRules(imp, "subnet-1", CloudFlow{DestCIDR: "10.0.9.0/24", Protocol: "tcp", Port: 22})
+	eval, err := EvaluateSecurityGroupRules(imp, "subnet-1", DirectionOutbound, CloudFlow{DestCIDR: "10.0.9.0/24", Protocol: "tcp", Port: 22})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -56,7 +56,7 @@ func TestEvaluateSecurityGroupRules_OrderDecides(t *testing.T) {
 		{ID: "deny-later", GroupID: "sg-1", Order: 20, Direction: DirectionOutbound, Action: ActionDeny, Protocol: "tcp", PortRange: "443", CIDR: "10.0.2.0/24"},
 		{ID: "allow-first", GroupID: "sg-1", Order: 10, Direction: DirectionOutbound, Action: ActionAllow, Protocol: "tcp", PortRange: "443", CIDR: "10.0.2.0/24"},
 	}
-	eval, err := EvaluateSecurityGroupRules(imp, "subnet-1", CloudFlow{DestCIDR: "10.0.2.0/24", Protocol: "tcp", Port: 443})
+	eval, err := EvaluateSecurityGroupRules(imp, "subnet-1", DirectionOutbound, CloudFlow{DestCIDR: "10.0.2.0/24", Protocol: "tcp", Port: 443})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -76,7 +76,7 @@ func TestEvaluateSecurityGroupRules_OrderDecides(t *testing.T) {
 func TestEvaluateSecurityGroupRules_UnresolvedGroupAttached_ForcesUnknown(t *testing.T) {
 	imp := testImport()
 	imp.Groups = append(imp.Groups, SecurityGroup{CanonicalID: "sg-unresolved", NetworkID: "vpc-1", Scope: ScopeUnresolved, SubnetID: "subnet-1"})
-	eval, err := EvaluateSecurityGroupRules(imp, "subnet-1", CloudFlow{DestCIDR: "10.0.2.0/24", Protocol: "tcp", Port: 443})
+	eval, err := EvaluateSecurityGroupRules(imp, "subnet-1", DirectionOutbound, CloudFlow{DestCIDR: "10.0.2.0/24", Protocol: "tcp", Port: 443})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -88,11 +88,32 @@ func TestEvaluateSecurityGroupRules_UnresolvedGroupAttached_ForcesUnknown(t *tes
 	}
 }
 
+// TestEvaluateSecurityGroupRules_DirectionFiltersOutRulesOfOtherDirection
+// pins the root cause behind the Critical cloudpath finding: an
+// outbound-allow rule on an applicable group must never satisfy an
+// inbound evaluation (and vice versa) just because it matches on
+// CIDR/protocol/port -- real security groups enforce each direction
+// independently, so a rule declared for the other direction is not
+// even a candidate.
+func TestEvaluateSecurityGroupRules_DirectionFiltersOutRulesOfOtherDirection(t *testing.T) {
+	imp := testImport()
+	imp.Rules = []SecurityGroupRule{
+		{ID: "egress-allow", GroupID: "sg-1", Order: 10, Direction: DirectionOutbound, Action: ActionAllow, Protocol: "tcp", PortRange: "443", CIDR: "10.0.2.0/24"},
+	}
+	eval, err := EvaluateSecurityGroupRules(imp, "subnet-1", DirectionInbound, CloudFlow{SourceCIDR: "10.0.2.0/24", Protocol: "tcp", Port: 443})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if eval.State != cloudgraph.Blocked {
+		t.Fatalf("State = %q, want %q -- an outbound-only rule must not satisfy an inbound evaluation, falling through to implicit deny", eval.State, cloudgraph.Blocked)
+	}
+}
+
 func TestEvaluateSecurityGroupRules_NoGroupsAtAll_Unknown(t *testing.T) {
 	imp := testImport()
 	imp.Groups = nil
 	imp.Rules = nil
-	eval, err := EvaluateSecurityGroupRules(imp, "subnet-1", CloudFlow{DestCIDR: "10.0.2.0/24", Protocol: "tcp", Port: 443})
+	eval, err := EvaluateSecurityGroupRules(imp, "subnet-1", DirectionOutbound, CloudFlow{DestCIDR: "10.0.2.0/24", Protocol: "tcp", Port: 443})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -112,7 +133,7 @@ func TestEvaluateSecurityGroupRules_ReferencedGroupRule_MatchesOnPortOnly(t *tes
 	imp.Rules = []SecurityGroupRule{
 		{ID: "sg-ref", GroupID: "sg-1", Order: 10, Direction: DirectionOutbound, Action: ActionUnresolved, Protocol: "tcp", PortRange: "443", ReferencedGroupID: "sg-other", Note: "SG-to-SG reference, group membership not resolvable by this schema"},
 	}
-	eval, err := EvaluateSecurityGroupRules(imp, "subnet-1", CloudFlow{DestCIDR: "10.0.2.0/24", Protocol: "tcp", Port: 443})
+	eval, err := EvaluateSecurityGroupRules(imp, "subnet-1", DirectionOutbound, CloudFlow{DestCIDR: "10.0.2.0/24", Protocol: "tcp", Port: 443})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

@@ -9,6 +9,7 @@
 package cloudpath
 
 import (
+	"fmt"
 	"net"
 
 	"github.com/audspect/bas/internal/cloudgraph"
@@ -17,31 +18,41 @@ import (
 )
 
 // CloudHopResult is one hop's evidence-composed classification.
+// SourceEvaluation is the source subnet's own outbound (egress) rules
+// for this flow; DestEvaluation is the destination subnet's own
+// inbound (ingress) rules -- real cloud security groups enforce both
+// sides independently, so a hop is only permitted when neither side
+// denies it.
 type CloudHopResult struct {
-	FromSubnet              string                                 `json:"fromSubnet"`
-	ToSubnet                string                                 `json:"toSubnet"`
-	State                   cloudgraph.PathState                   `json:"state"`
-	Limitations             string                                 `json:"limitations,omitempty"`
-	Provenance              cloudgraph.Provenance                  `json:"provenance"`
-	Observation             *networkgraph.NetworkObservation       `json:"observation,omitempty"`
-	SecurityGroupEvaluation *cloudtopology.SecurityGroupEvaluation `json:"securityGroupEvaluation,omitempty"`
-	RouteFound              bool                                   `json:"routeFound"`
+	FromSubnet        string                                 `json:"fromSubnet"`
+	ToSubnet          string                                 `json:"toSubnet"`
+	State             cloudgraph.PathState                   `json:"state"`
+	Limitations       string                                 `json:"limitations,omitempty"`
+	Provenance        cloudgraph.Provenance                  `json:"provenance"`
+	Observation       *networkgraph.NetworkObservation       `json:"observation,omitempty"`
+	SourceEvaluation  *cloudtopology.SecurityGroupEvaluation `json:"sourceEvaluation,omitempty"`
+	DestEvaluation    *cloudtopology.SecurityGroupEvaluation `json:"destEvaluation,omitempty"`
+	RouteFound        bool                                   `json:"routeFound"`
 }
 
 // ComposeCloudHop classifies one hop, in priority order -- identical
 // discipline to networkpath.ComposeHop:
 //  1. A real NetworkObservation exists for this hop's flow: it wins
 //     outright, regardless of routing/security-group evidence.
-//  2. No observation, route found: the security-group verdict passes
-//     through as-is.
+//  2. No observation, route found: sourceEval (the source subnet's
+//     outbound rules) and destEval (the destination subnet's inbound
+//     rules) are combined -- either side denying the flow denies the
+//     hop, matching real security-group enforcement, which gates
+//     egress and ingress independently at each end.
 //  3. No observation, route not found (or no security-group
-//     evaluation at all): forced to Unknown, regardless of what the
-//     security-group verdict would otherwise have been.
-func ComposeCloudHop(fromSubnet, toSubnet string, routeFound bool, sgEval *cloudtopology.SecurityGroupEvaluation, observations []networkgraph.NetworkObservation) CloudHopResult {
-	result := CloudHopResult{FromSubnet: fromSubnet, ToSubnet: toSubnet, RouteFound: routeFound, SecurityGroupEvaluation: sgEval}
+//     evaluation available on either side): forced to Unknown,
+//     regardless of what the security-group verdict would otherwise
+//     have been.
+func ComposeCloudHop(fromSubnet, toSubnet string, routeFound bool, sourceEval, destEval *cloudtopology.SecurityGroupEvaluation, observations []networkgraph.NetworkObservation) CloudHopResult {
+	result := CloudHopResult{FromSubnet: fromSubnet, ToSubnet: toSubnet, RouteFound: routeFound, SourceEvaluation: sourceEval, DestEvaluation: destEval}
 
-	if sgEval != nil {
-		if obs := matchingObservation(sgEval.Flow, observations); obs != nil {
+	if flow := flowFrom(sourceEval, destEval); flow != nil {
+		if obs := matchingObservation(*flow, observations); obs != nil {
 			result.Observation = obs
 			result.State = obs.State
 			result.Provenance = obs.Provenance
@@ -52,7 +63,7 @@ func ComposeCloudHop(fromSubnet, toSubnet string, routeFound bool, sgEval *cloud
 		}
 	}
 
-	if sgEval == nil {
+	if sourceEval == nil && destEval == nil {
 		result.State = cloudgraph.Unknown
 		result.Provenance = cloudgraph.Provenance{Confidence: "none"}
 		result.Limitations = "no security-group evaluation available for this hop"
@@ -66,10 +77,79 @@ func ComposeCloudHop(fromSubnet, toSubnet string, routeFound bool, sgEval *cloud
 		return result
 	}
 
-	result.State = sgEval.State
-	result.Provenance = sgEval.Provenance
-	result.Limitations = sgEval.Limitations
+	result.State, result.Provenance, result.Limitations = combineSecurityGroupEvaluations(sourceEval, destEval)
 	return result
+}
+
+// flowFrom returns the flow either evaluation describes -- both
+// describe the same real-world flow (evaluated against two different
+// subnets' rule sets), so either non-nil evaluation's Flow is
+// authoritative.
+func flowFrom(sourceEval, destEval *cloudtopology.SecurityGroupEvaluation) *cloudtopology.CloudFlow {
+	if sourceEval != nil {
+		return &sourceEval.Flow
+	}
+	if destEval != nil {
+		return &destEval.Flow
+	}
+	return nil
+}
+
+// securityGroupGate is one side's (egress or ingress) independent
+// enforcement verdict.
+type securityGroupGate struct {
+	state       cloudgraph.PathState
+	provenance  cloudgraph.Provenance
+	limitations string
+	label       string
+}
+
+func gateFrom(eval *cloudtopology.SecurityGroupEvaluation, label string) securityGroupGate {
+	if eval == nil {
+		return securityGroupGate{
+			state:       cloudgraph.Unknown,
+			provenance:  cloudgraph.Provenance{Confidence: "none"},
+			limitations: fmt.Sprintf("no %s security-group evaluation available", label),
+			label:       label,
+		}
+	}
+	return securityGroupGate{state: eval.State, provenance: eval.Provenance, limitations: eval.Limitations, label: label}
+}
+
+// combineSecurityGroupEvaluations combines the source's outbound
+// (egress) gate and the destination's inbound (ingress) gate into one
+// hop verdict. Blocked on either side wins outright (either gate
+// denying the flow denies the hop); otherwise Unknown beats
+// PolicySupported, matching the same priority
+// AggregateCloudPathState uses across hops, applied here across the
+// two independent gates of a single hop.
+func combineSecurityGroupEvaluations(sourceEval, destEval *cloudtopology.SecurityGroupEvaluation) (cloudgraph.PathState, cloudgraph.Provenance, string) {
+	src := gateFrom(sourceEval, "egress (source)")
+	dst := gateFrom(destEval, "ingress (destination)")
+
+	rank := func(s cloudgraph.PathState) int {
+		switch s {
+		case cloudgraph.Blocked:
+			return 2
+		case cloudgraph.Unknown:
+			return 1
+		default: // PolicySupported
+			return 0
+		}
+	}
+	winner := src
+	if rank(dst.state) > rank(src.state) {
+		winner = dst
+	}
+
+	note := fmt.Sprintf("security-group verdict determined by %s evaluation", winner.label)
+	limitations := winner.limitations
+	if limitations == "" {
+		limitations = note
+	} else {
+		limitations = limitations + "; " + note
+	}
+	return winner.state, winner.provenance, limitations
 }
 
 // matchingObservation finds a real NetworkObservation whose Target

@@ -85,6 +85,73 @@ func TestCreateCloudTopologyImport_SGReferenceRuleWithoutUnresolvedAction_Reject
 	})
 }
 
+// TestCreateCloudTopologyImport_InvalidRouteTarget_Rejected and
+// TestCreateCloudTopologyImport_InvalidPeeringState_Rejected pin the
+// first deferred Minor from the Phase 6A final review: a typo'd
+// RouteTableEntry.Target or PeeringConnection.State must be rejected
+// at import validation, the same way an unknown GroupScope or
+// RuleAction already is, rather than silently degrading to "no edge"
+// inside the route search.
+func TestCreateCloudTopologyImport_InvalidRouteTarget_Rejected(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret)
+		body := validCloudTopologyImportBody()
+		body["routes"] = []map[string]any{
+			{"id": "rt-1", "subnetId": "subnet-1", "destinationCidr": "0.0.0.0/0", "target": "Active"},
+		}
+		b, _ := json.Marshal(body)
+		userID := seedUser(t, pool, "cloudtopo-op-badtarget", "pw12345678", string(auth.RoleAnalyst), true)
+		req := authedRequest(t, http.MethodPost, "/api/cloud-topology-imports", bytes.NewReader(b), auth.RoleAnalyst, userID)
+		rec := callAuthed(h.CreateCloudTopologyImport, req)
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("status = %d, body = %s, want 400 -- an unknown route target must be rejected, not silently degrade to no edge", rec.Code, rec.Body.String())
+		}
+	})
+}
+
+func TestCreateCloudTopologyImport_InvalidPeeringState_Rejected(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret)
+		body := validCloudTopologyImportBody()
+		body["networks"] = []map[string]any{
+			{"canonicalId": "vpc-1", "cidrBlocks": []string{"10.0.0.0/16"}},
+			{"canonicalId": "vpc-2", "cidrBlocks": []string{"10.1.0.0/16"}},
+		}
+		body["peerings"] = []map[string]any{
+			{"canonicalId": "pcx-1", "networkAId": "vpc-1", "networkBId": "vpc-2", "state": "Active"},
+		}
+		b, _ := json.Marshal(body)
+		userID := seedUser(t, pool, "cloudtopo-op-badpeerstate", "pw12345678", string(auth.RoleAnalyst), true)
+		req := authedRequest(t, http.MethodPost, "/api/cloud-topology-imports", bytes.NewReader(b), auth.RoleAnalyst, userID)
+		rec := callAuthed(h.CreateCloudTopologyImport, req)
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("status = %d, body = %s, want 400 -- an unknown peering state must be rejected, not silently degrade to no edge", rec.Code, rec.Body.String())
+		}
+	})
+}
+
+// TestCreateCloudTopologyImport_UnresolvedGroupWithUnknownNetworkID_Rejected
+// pins the second deferred Minor: a ScopeUnresolved group must still
+// reference a real, declared network (or subnet), the same as
+// ScopeNetwork/ScopeSubnet groups already must -- otherwise the
+// "force Unknown" protection ScopeUnresolved exists to guarantee
+// never actually attaches to any subnet.
+func TestCreateCloudTopologyImport_UnresolvedGroupWithUnknownNetworkID_Rejected(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret)
+		body := validCloudTopologyImportBody()
+		body["groups"] = []map[string]any{{"canonicalId": "sg-1", "networkId": "does-not-exist", "scope": "unresolved"}}
+		body["limitations"] = []string{"per-instance security-group attachment not resolvable by this schema"}
+		b, _ := json.Marshal(body)
+		userID := seedUser(t, pool, "cloudtopo-op-unresolvedbadnet", "pw12345678", string(auth.RoleAnalyst), true)
+		req := authedRequest(t, http.MethodPost, "/api/cloud-topology-imports", bytes.NewReader(b), auth.RoleAnalyst, userID)
+		rec := callAuthed(h.CreateCloudTopologyImport, req)
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("status = %d, body = %s, want 400 -- an unresolved group must still reference a real declared network/subnet", rec.Code, rec.Body.String())
+		}
+	})
+}
+
 func TestListAndGetCloudTopologyImport_RoundTrip(t *testing.T) {
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
 		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret)

@@ -42,17 +42,25 @@ func (r SecurityGroupRule) MatchesPort(port int) (bool, error) {
 	return port >= low && port <= high, nil
 }
 
-// EvaluateSecurityGroupRules evaluates every rule from every security
-// group applicable to subnetID against flow, in Order, first match
-// wins. Applicable groups are every ScopeNetwork group on the
-// subnet's network, plus every ScopeSubnet group attached to
-// subnetID. If any ScopeUnresolved group is also attached, the result
-// is forced to Unknown regardless of what the resolved groups' rules
-// would otherwise decide. Zero applicable groups at all is likewise
-// Unknown (missing evidence, never a confirmed deny). No rule matching
-// any applicable group falls through to implicit deny, which is safe
-// to assume uniformly across providers.
-func EvaluateSecurityGroupRules(imp *CloudTopologyImport, subnetID string, flow CloudFlow) (SecurityGroupEvaluation, error) {
+// EvaluateSecurityGroupRules evaluates every rule of the given
+// direction from every security group applicable to subnetID against
+// flow, in Order, first match wins. direction selects which question
+// is being asked: DirectionOutbound evaluates subnetID's own egress
+// rules (is traffic leaving subnetID permitted to reach flow), and
+// DirectionInbound evaluates subnetID's own ingress rules (is traffic
+// from flow permitted to enter subnetID) -- real security groups
+// enforce each direction independently, so a rule of the other
+// direction on the same group is never considered here, even though
+// it is declared on an applicable group. Applicable groups are every
+// ScopeNetwork group on the subnet's network, plus every ScopeSubnet
+// group attached to subnetID. If any ScopeUnresolved group is also
+// attached, the result is forced to Unknown regardless of what the
+// resolved groups' rules would otherwise decide. Zero applicable
+// groups at all is likewise Unknown (missing evidence, never a
+// confirmed deny). No rule matching any applicable group falls
+// through to implicit deny, which is safe to assume uniformly across
+// providers.
+func EvaluateSecurityGroupRules(imp *CloudTopologyImport, subnetID string, direction string, flow CloudFlow) (SecurityGroupEvaluation, error) {
 	result := SecurityGroupEvaluation{Flow: flow}
 
 	var subnet *CloudSubnet
@@ -105,14 +113,14 @@ func EvaluateSecurityGroupRules(imp *CloudTopologyImport, subnetID string, flow 
 	}
 	var rules []SecurityGroupRule
 	for _, r := range imp.Rules {
-		if groupIDs[r.GroupID] {
+		if groupIDs[r.GroupID] && r.Direction == direction {
 			rules = append(rules, r)
 		}
 	}
 	sort.SliceStable(rules, func(i, j int) bool { return rules[i].Order < rules[j].Order })
 
 	for i := range rules {
-		matched, err := matchesFlow(rules[i], flow)
+		matched, err := matchesFlow(rules[i], direction, flow)
 		if err != nil {
 			return result, err
 		}
@@ -143,13 +151,15 @@ func EvaluateSecurityGroupRules(imp *CloudTopologyImport, subnetID string, flow 
 	return result, nil
 }
 
-// matchesFlow reports whether rule applies to flow. A rule with no
-// CIDR (a ReferencedGroupID-only, SG-to-SG rule) matches on
-// protocol/port alone, since this schema cannot resolve group
-// membership -- import validation (Task 7) requires such rules to
-// carry Action == ActionUnresolved, so a match here is never read as
-// a real allow/deny.
-func matchesFlow(rule SecurityGroupRule, flow CloudFlow) (bool, error) {
+// matchesFlow reports whether rule applies to flow, given the
+// direction under evaluation (already filtered to rule.Direction ==
+// direction by the caller). A rule with no CIDR (a
+// ReferencedGroupID-only, SG-to-SG rule) matches on protocol/port
+// alone, since this schema cannot resolve group membership -- import
+// validation (Task 7) requires such rules to carry
+// Action == ActionUnresolved, so a match here is never read as a real
+// allow/deny.
+func matchesFlow(rule SecurityGroupRule, direction string, flow CloudFlow) (bool, error) {
 	if rule.Protocol != "" && flow.Protocol != "" && rule.Protocol != flow.Protocol {
 		return false, nil
 	}
@@ -164,7 +174,7 @@ func matchesFlow(rule SecurityGroupRule, flow CloudFlow) (bool, error) {
 		return true, nil
 	}
 	var targetCIDR string
-	if rule.Direction == DirectionInbound {
+	if direction == DirectionInbound {
 		targetCIDR = flow.SourceCIDR
 	} else {
 		targetCIDR = flow.DestCIDR
