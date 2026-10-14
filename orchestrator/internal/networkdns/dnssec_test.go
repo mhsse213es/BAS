@@ -74,6 +74,8 @@ func TestValidateChain_ValidSignature_Secure(t *testing.T) {
 		switch qtype {
 		case dns.TypeDNSKEY:
 			resp.Answer = dnskeySet
+		case dns.TypeDS:
+			resp.Answer = []dns.RR{anchor.DS} // a non-empty DS answer -- this task's own delegation-insecurity path is covered separately
 		case dns.TypeA:
 			resp.Answer = aRecordSet
 		}
@@ -99,6 +101,8 @@ func TestValidateChain_TamperedSignature_Invalid(t *testing.T) {
 		switch qtype {
 		case dns.TypeDNSKEY:
 			resp.Answer = dnskeySet
+		case dns.TypeDS:
+			resp.Answer = []dns.RR{anchor.DS} // a non-empty DS answer -- this task's own delegation-insecurity path is covered separately
 		case dns.TypeA:
 			resp.Answer = aRecordSet
 		}
@@ -122,3 +126,51 @@ func TestValidateChain_QueryError_Unknown(t *testing.T) {
 }
 
 var errTestQueryFailed = errors.New("simulated query failure")
+
+func TestValidateChain_SignedNSECProvesNoDS_Insecure(t *testing.T) {
+	ksk, priv, dnskeySet, _ := signedTestChain(t, "parent-test.")
+	// A signed NSEC record at the parent, covering the child's name,
+	// with no DS type bit set -- the standard authenticated-denial-of-
+	// existence proof that no DS record exists for this delegation.
+	nsec := &dns.NSEC{
+		Hdr:        dns.RR_Header{Name: dns.Fqdn("child.parent-test."), Rrtype: dns.TypeNSEC, Class: dns.ClassINET, Ttl: 300},
+		NextDomain: dns.Fqdn("zzz.parent-test."),
+		TypeBitMap: []uint16{dns.TypeA, dns.TypeRRSIG, dns.TypeNSEC}, // deliberately no TypeDS
+	}
+	nsecSig := signRRSet(t, ksk, priv, []dns.RR{nsec})
+	nsecSet := []dns.RR{nsec, nsecSig}
+
+	anchor := TrustAnchor{Zone: "parent-test.", DS: ksk.ToDS(dns.SHA256)}
+	query := func(domain string, qtype uint16) (*dns.Msg, error) {
+		resp := new(dns.Msg)
+		switch qtype {
+		case dns.TypeDNSKEY:
+			resp.Answer = dnskeySet
+		case dns.TypeDS:
+			resp.Ns = nsecSet // authority section carries the denial proof
+		}
+		return resp, nil
+	}
+	result := validateChain("child.parent-test.", anchor, query)
+	if result.State != DNSSECInsecure {
+		t.Fatalf("State = %q, want insecure -- a signed NSEC proving no DS exists is a legitimate unsigned delegation, Reason: %s", result.State, result.Reason)
+	}
+}
+
+func TestValidateChain_MissingDSWithNoProof_Unknown(t *testing.T) {
+	ksk, _, dnskeySet, _ := signedTestChain(t, "parent-test.")
+	anchor := TrustAnchor{Zone: "parent-test.", DS: ksk.ToDS(dns.SHA256)}
+	query := func(domain string, qtype uint16) (*dns.Msg, error) {
+		resp := new(dns.Msg)
+		if qtype == dns.TypeDNSKEY {
+			resp.Answer = dnskeySet
+		}
+		// DS query returns nothing at all -- no answer, no NSEC/NSEC3
+		// denial proof either. This must NOT be assumed Insecure.
+		return resp, nil
+	}
+	result := validateChain("child.parent-test.", anchor, query)
+	if result.State != DNSSECUnknown {
+		t.Fatalf("State = %q, want unknown -- a missing DS with no authenticated denial proof is not evidence of anything", result.State)
+	}
+}

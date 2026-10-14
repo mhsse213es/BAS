@@ -2,6 +2,7 @@ package networkdns
 
 import (
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/miekg/dns"
@@ -113,6 +114,23 @@ func validateChain(domain string, anchor TrustAnchor, query dnsQueryFunc) DNSSEC
 		return result
 	}
 
+	dsResp, err := query(domain, dns.TypeDS)
+	if err != nil {
+		result.State = DNSSECUnknown
+		result.Reason = fmt.Sprintf("DS query failed: %v", err)
+		return result
+	}
+	if len(dsResp.Answer) == 0 {
+		if provenInsecureDelegation(domain, dsResp, matchedKey) {
+			result.State = DNSSECInsecure
+			result.Reason = "a signed NSEC/NSEC3 record proves no DS record exists for this delegation (legitimately unsigned)"
+			return result
+		}
+		result.State = DNSSECUnknown
+		result.Reason = "no DS record and no authenticated denial-of-existence proof -- insufficient evidence"
+		return result
+	}
+
 	aResp, err := query(domain, dns.TypeA)
 	if err != nil {
 		result.State = DNSSECUnknown
@@ -141,4 +159,80 @@ func validateChain(domain string, anchor TrustAnchor, query dnsQueryFunc) DNSSEC
 
 	result.State = DNSSECSecure
 	return result
+}
+
+// provenInsecureDelegation reports whether resp's authority section
+// carries a signed NSEC or NSEC3 record that authenticates the absence
+// of a DS record for domain, verified against key. A missing DS record
+// with no such proof is never treated as evidence of anything.
+func provenInsecureDelegation(domain string, resp *dns.Msg, key *dns.DNSKEY) bool {
+	var proofSet []dns.RR
+	var proofSig *dns.RRSIG
+	provesAbsence := false
+	for _, rr := range resp.Ns {
+		if sig, ok := rr.(*dns.RRSIG); ok {
+			proofSig = sig
+			continue
+		}
+		// Verify's rrset parameter must contain only the records the
+		// signature covers -- never the RRSIG itself (see dnskeySet's
+		// own fix above for the same reason).
+		proofSet = append(proofSet, rr)
+		switch denial := rr.(type) {
+		case *dns.NSEC:
+			if denial.Hdr.Name != dns.Fqdn(domain) {
+				continue
+			}
+			if slices.Contains(denial.TypeBitMap, dns.TypeDS) {
+				return false // DS bit IS set -- this proves the opposite
+			}
+			provesAbsence = true
+		case *dns.NSEC3:
+			if !denial.Match(domain) && !denial.Cover(domain) {
+				continue
+			}
+			if slices.Contains(denial.TypeBitMap, dns.TypeDS) {
+				return false
+			}
+			provesAbsence = true
+		}
+	}
+	// The signature is verified only once, after the whole authority
+	// section has been scanned: the RRSIG covering a denial record
+	// can appear anywhere in the section relative to that record, so
+	// checking it mid-loop (tied to one specific record's own
+	// iteration) would miss a signature that comes later in the slice.
+	return provesAbsence && proofSig != nil && proofSig.Verify(key, proofSet) == nil
+}
+
+// defaultDNSResolverAddr is the production default resolver used only
+// to fetch raw wire-format DNS records -- a var, not a const, so a
+// deployment can override it. The specific resolver chosen does not
+// matter for correctness: validateChain independently re-verifies
+// every signature cryptographically from RootTrustAnchor down, never
+// trusting the resolver's own answers or its AD flag. A well-known
+// public resolver is used rather than "127.0.0.1:53" because nothing
+// listens there on most hosts this orchestrator runs on, which would
+// make every real validation silently fail with a connection error.
+var defaultDNSResolverAddr = "1.1.1.1:53"
+
+// ValidateDNSSEC validates domain's DNSSEC chain from the real root
+// trust anchor. The only production caller of validateChain -- tests
+// call validateChain directly with their own injected anchor and query
+// function.
+//
+// The client timeout is a literal 5s here, matching the package's own
+// DefaultCheckTimeout (defined in run.go, added by a later task in
+// this same plan) -- Task 3 runs before that constant exists, so it
+// can't reference it by name yet without breaking the build.
+func ValidateDNSSEC(domain string) DNSSECResult {
+	client := &dns.Client{Timeout: 5 * time.Second}
+	query := func(d string, qtype uint16) (*dns.Msg, error) {
+		m := new(dns.Msg)
+		m.SetQuestion(dns.Fqdn(d), qtype)
+		m.SetEdns0(4096, true) // DO bit -- request DNSSEC records
+		resp, _, err := client.Exchange(m, defaultDNSResolverAddr)
+		return resp, err
+	}
+	return validateChain(domain, RootTrustAnchor, query)
 }
