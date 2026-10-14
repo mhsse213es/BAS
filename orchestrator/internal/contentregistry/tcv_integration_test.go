@@ -22,7 +22,7 @@ func TestIntegration_DraftNeverStopsClockFirstExecutableDoesLaterRevocationDoesN
 		vid, _, err := reg.createVersion(ctx, newVersion{
 			contentID: "cv-acceptance-28", artifact: art,
 			analysis: mustAnalyze(t, string(art)),
-			actor: ActorMigration, source: SourceCustom, origin: OriginLocal,
+			actor:    ActorMigration, source: SourceCustom, origin: OriginLocal,
 			trust: TrustUntrusted, lifecycle: LifecycleDraft, exclusiveLocalSource: true,
 		})
 		if err != nil {
@@ -71,7 +71,7 @@ func TestIntegration_DevOnlyExecutableNeverStopsClock(t *testing.T) {
 		_, _, err := reg.createVersion(ctx, newVersion{
 			contentID: "cv-acceptance-32", artifact: art,
 			analysis: mustAnalyze(t, string(art)),
-			actor: ActorIntake, source: SourceBuiltin, origin: OriginVendor,
+			actor:    ActorIntake, source: SourceBuiltin, origin: OriginVendor,
 			trust: TrustUntrusted, lifecycle: LifecyclePublished, // the dev-only combo
 			emulatesLinks: []emulatesLink{{threatID: threatID, provenanceRef: "G0016"}},
 		})

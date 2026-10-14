@@ -23,10 +23,12 @@ type stubEvidenceSource struct {
 	claims []evidence.RawClaim
 }
 
-func (s *stubEvidenceSource) Name() string                      { return s.name }
-func (s *stubEvidenceSource) Fetch() ([]ThreatActor, error)     { return s.actors, nil }
-func (s *stubEvidenceSource) Completeness() evidence.SyncReport { return evidence.SyncReport{Completeness: evidence.Complete} }
-func (s *stubEvidenceSource) RawClaims() []evidence.RawClaim    { return s.claims }
+func (s *stubEvidenceSource) Name() string                  { return s.name }
+func (s *stubEvidenceSource) Fetch() ([]ThreatActor, error) { return s.actors, nil }
+func (s *stubEvidenceSource) Completeness() evidence.SyncReport {
+	return evidence.SyncReport{Completeness: evidence.Complete}
+}
+func (s *stubEvidenceSource) RawClaims() []evidence.RawClaim { return s.claims }
 
 // scenarioEngineForTest builds a *scenario.Engine the same way the existing
 // sync()-exercising tests in scheduler_test.go do.

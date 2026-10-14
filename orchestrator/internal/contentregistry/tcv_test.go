@@ -60,7 +60,7 @@ func TestTransition_RecordsCoverageFirstWhenLinkedVersionBecomesExecutable(t *te
 		vid, _, err := reg.createVersion(ctx, newVersion{
 			contentID: "cv-transition-coverage", artifact: art,
 			analysis: mustAnalyze(t, string(art)),
-			actor: ActorMigration, source: SourceCustom, origin: OriginLocal,
+			actor:    ActorMigration, source: SourceCustom, origin: OriginLocal,
 			trust: TrustUntrusted, lifecycle: LifecycleDraft, exclusiveLocalSource: true,
 		})
 		if err != nil {
@@ -101,7 +101,7 @@ func TestAttachVendorSignature_RecordsCoverageFirstOnTrustFlipAlone(t *testing.T
 		vid, _, err := reg.createVersion(ctx, newVersion{
 			contentID: "cv-signature-coverage", artifact: art,
 			analysis: mustAnalyze(t, string(art)),
-			actor: ActorIntake, source: SourceBuiltin, origin: OriginVendor,
+			actor:    ActorIntake, source: SourceBuiltin, origin: OriginVendor,
 			trust: TrustUntrusted, lifecycle: LifecyclePublished,
 		})
 		if err != nil {
@@ -143,7 +143,7 @@ func TestCreateVersion_RecordsCoverageFirstWhenAlreadyExecutableAtCreation(t *te
 		vid, _, err := reg.createVersion(ctx, newVersion{
 			contentID: "cv-createversion-coverage", artifact: art, signature: signer.Sign(art),
 			analysis: mustAnalyze(t, string(art)),
-			actor: ActorIntake, source: SourceBuiltin, origin: OriginVendor,
+			actor:    ActorIntake, source: SourceBuiltin, origin: OriginVendor,
 			trust: TrustVendorSigned, lifecycle: LifecyclePublished,
 			emulatesLinks: []emulatesLink{{threatID: threatID, provenanceRef: "G0016"}},
 		})

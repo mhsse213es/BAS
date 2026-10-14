@@ -211,6 +211,7 @@ var routeMatrix = []routeCase{
 	{http.MethodGet, "/api/content-registry/versions/{vid}/artifact", tierPermission, auth.CanViewContentArtifact},
 	{http.MethodGet, "/api/intel/actor-resolutions", tierPermission, auth.CanResolveActorIdentity},
 	{http.MethodPost, "/api/intel/actor-resolutions/{id}", tierPermission, auth.CanResolveActorIdentity},
+	{http.MethodPost, "/api/intel/sources/{id}/trust", tierPermission, auth.CanManageSourceTrust},
 	{http.MethodPost, "/api/content-registry/versions/{vid}/transition", tierPermission, auth.CanTransitionContent},
 	{http.MethodGet, "/api/content-registry/migration-report", tierPermission, auth.CanViewContentMigrationReport},
 	{http.MethodPost, "/api/content/{contentId}/versions/{n}/threats", tierPermission, auth.CanLinkContentThreat},

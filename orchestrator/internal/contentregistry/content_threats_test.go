@@ -24,7 +24,7 @@ func TestLinkThreat_AlreadyExecutableRecordsCoverageFirstImmediately(t *testing.
 		vid, _, err := reg.createVersion(ctx, newVersion{
 			contentID: "cv-link-threat-executable", artifact: art,
 			analysis: mustAnalyze(t, string(art)),
-			actor: ActorMigration, source: SourceCustom, origin: OriginLocal,
+			actor:    ActorMigration, source: SourceCustom, origin: OriginLocal,
 			trust: TrustLocalTrusted, lifecycle: LifecyclePublishedLocal, exclusiveLocalSource: true,
 		})
 		if err != nil {
@@ -63,7 +63,7 @@ func TestLinkThreat_UnknownThreatRefused(t *testing.T) {
 		_, _, err := reg.createVersion(ctx, newVersion{
 			contentID: "cv-link-threat-unknown", artifact: art,
 			analysis: mustAnalyze(t, string(art)),
-			actor: ActorMigration, source: SourceCustom, origin: OriginLocal,
+			actor:    ActorMigration, source: SourceCustom, origin: OriginLocal,
 			trust: TrustUntrusted, lifecycle: LifecycleDraft, exclusiveLocalSource: true,
 		})
 		if err != nil {
