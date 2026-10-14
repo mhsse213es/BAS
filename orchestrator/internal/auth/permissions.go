@@ -229,6 +229,12 @@ const (
 	// zone-adjacency topology (Network BAS Phase 3) -- same placement
 	// as CanImportNetworkPolicy, for the same reason.
 	CanImportNetworkTopology Permission = "network-topology:import"
+
+	// network-control-expectation:import gates importing a declared set
+	// of expected firewall/IDS-IPS control outcomes (Network BAS Phase
+	// 4) -- same placement as CanImportNetworkTopology, for the same
+	// reason.
+	CanImportNetworkControlExpectation Permission = "network-control-expectation:import"
 )
 
 // rolePermissions maps each role to the permissions it holds. Viewer is
@@ -285,10 +291,11 @@ var rolePermissions = map[Role]map[Permission]bool{
 		CanViewSSOConfig: true, CanManageSSOConfig: true,
 		CanViewSCIMConfig: true, CanManageSCIMConfig: true,
 		CanExecuteRemediation: true, CanApproveRemediation: true,
-		CanManageBackups:        true,
-		CanResolveActorIdentity:  true,
-		CanImportNetworkPolicy:   true,
-		CanImportNetworkTopology: true,
+		CanManageBackups:                   true,
+		CanResolveActorIdentity:            true,
+		CanImportNetworkPolicy:             true,
+		CanImportNetworkTopology:           true,
+		CanImportNetworkControlExpectation: true,
 	},
 	RoleAnalyst: {
 		CanVerify:            true,
@@ -304,7 +311,7 @@ var rolePermissions = map[Role]map[Permission]bool{
 		CanTriggerScan: true, CanCollectAttackPath: true, CanCreateAttackPathJob: true,
 		CanCancelAttackPathJob: true, CanRetryAttackPathJob: true, CanSetAttackPathAsset: true,
 		CanRunScenario: true, CanRunCalderaAdversary: true, CanRunAdversaryTemplate: true,
-		CanImportNetworkPolicy: true, CanImportNetworkTopology: true,
+		CanImportNetworkPolicy: true, CanImportNetworkTopology: true, CanImportNetworkControlExpectation: true,
 		CanCancelScenarioRun: true, CanCorrelateSIEM: true, CanViewSIEMCorrelations: true,
 		CanRunDetectionVerification: true, CanCreateCampaign: true, CanStopCampaign: true,
 		CanSetFindingStatus: true, CanPushToITSM: true, CanBulkPushToITSM: true,
