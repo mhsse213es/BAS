@@ -111,6 +111,33 @@ func TestTriggerNetworkDiscoveryRun_TargetInSensitiveZone_Authorized_Permitted(t
 	})
 }
 
+// TestTriggerNetworkDiscoveryRun_PartialSafetyFields_Rejected pins a
+// final-review finding: supplying exactly one of topologyImportId/
+// otSafetyImportId must never silently skip the gate -- a caller who
+// forgot one field must be told, not probed against unguarded.
+func TestTriggerNetworkDiscoveryRun_PartialSafetyFields_Rejected(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret).WithNetworkVantagePoint(testVantagePoint())
+		userID := seedUser(t, pool, "discovery-op-partial", "pw12345678", string(auth.RoleAnalyst), true)
+		topoID := createTestTopologyImport(t, h, pool, map[string]any{
+			"sourceType": "manual",
+			"zones":      []map[string]any{{"name": "ot", "cidrs": []string{"10.0.2.0/24"}}},
+			"edges":      []map[string]any{},
+		})
+
+		body := map[string]any{
+			"targets":          []map[string]any{{"host": "10.0.2.5", "port": 502}},
+			"topologyImportId": topoID,
+		}
+		b, _ := json.Marshal(body)
+		req := authedRequest(t, http.MethodPost, "/api/network-discovery-runs", bytes.NewReader(b), auth.RoleAnalyst, userID)
+		rec := callAuthed(h.TriggerNetworkDiscoveryRun, req)
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("status = %d, body = %s, want 400 -- topologyImportId without otSafetyImportId must be rejected, not silently ungated", rec.Code, rec.Body.String())
+		}
+	})
+}
+
 // TestTriggerNetworkDiscoveryRun_OmittingSafetyFields_BehaviorUnchanged
 // pins this plan's Global Constraint for this handler specifically.
 func TestTriggerNetworkDiscoveryRun_OmittingSafetyFields_BehaviorUnchanged(t *testing.T) {

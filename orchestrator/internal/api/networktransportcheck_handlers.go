@@ -54,6 +54,10 @@ func (h *Handler) TriggerTransportSecurityCheckRun(w http.ResponseWriter, r *htt
 		}
 	}
 
+	if (req.TopologyImportID == "") != (req.OTSafetyImportID == "") {
+		jsonError(w, "topologyImportId and otSafetyImportId must be supplied together", http.StatusBadRequest)
+		return
+	}
 	if req.TopologyImportID != "" && req.OTSafetyImportID != "" {
 		topo, err := db.GetNetworkTopologyImport(r.Context(), h.db, req.TopologyImportID)
 		if err != nil {
