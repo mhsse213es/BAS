@@ -88,6 +88,7 @@ var routeMatrix = []routeCase{
 	{http.MethodGet, "/api/caldera/abilities", tierAny, ""},
 	{http.MethodGet, "/api/techniques/unified", tierAny, ""},
 	{http.MethodGet, "/api/techniques/catalog", tierAny, ""},
+	{http.MethodGet, "/api/threats/exposure", tierAny, ""},
 	{http.MethodGet, "/api/crypto/info", tierAny, ""},
 	{http.MethodGet, "/api/coverage/analytics", tierAny, ""},
 	{http.MethodGet, "/api/coverage/matrix", tierAny, ""},

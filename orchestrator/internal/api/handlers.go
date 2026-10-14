@@ -58,6 +58,7 @@ import (
 	"github.com/audspect/bas/internal/rulelib"
 	"github.com/audspect/bas/internal/scenario"
 	"github.com/audspect/bas/internal/taxii"
+	"github.com/audspect/bas/internal/threatcontent"
 	"github.com/audspect/bas/internal/threatpriority"
 	"github.com/audspect/bas/internal/ticketing"
 	"github.com/audspect/bas/internal/verification"
@@ -4474,6 +4475,32 @@ func (h *Handler) GetUnifiedTechniques(w http.ResponseWriter, r *http.Request) {
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].TechniqueID < out[j].TechniqueID })
 	respond(w, out)
+}
+
+// GetThreatExposure handles GET /api/threats/exposure — live threat
+// coverage: which currently-active threats have validated/executable
+// content, and which don't (TCF Phase 10, spec
+// docs/superpowers/specs/2026-10-14-tcf-phase10-live-threat-coverage-design.md
+// §2.1).
+//
+// Query params:
+//
+//	limit — max threats, default 20, max 100
+//	offset — pagination offset, default 0
+func (h *Handler) GetThreatExposure(w http.ResponseWriter, r *http.Request) {
+	reg, ok := h.engine.Registry().(*contentregistry.Registry)
+	if !ok || reg == nil {
+		jsonError(w, "content registry not available", http.StatusServiceUnavailable)
+		return
+	}
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
+	result, err := threatcontent.ListActiveThreatExposure(r.Context(), h.db, reg, limit, offset)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	respond(w, result)
 }
 
 // TechniqueCatalogEntry is one row in the full ATT&CK technique search
