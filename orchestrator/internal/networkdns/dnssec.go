@@ -220,13 +220,8 @@ var defaultDNSResolverAddr = "1.1.1.1:53"
 // trust anchor. The only production caller of validateChain -- tests
 // call validateChain directly with their own injected anchor and query
 // function.
-//
-// The client timeout is a literal 5s here, matching the package's own
-// DefaultCheckTimeout (defined in run.go, added by a later task in
-// this same plan) -- Task 3 runs before that constant exists, so it
-// can't reference it by name yet without breaking the build.
 func ValidateDNSSEC(domain string) DNSSECResult {
-	client := &dns.Client{Timeout: 5 * time.Second}
+	client := &dns.Client{Timeout: DefaultCheckTimeout}
 	query := func(d string, qtype uint16) (*dns.Msg, error) {
 		m := new(dns.Msg)
 		m.SetQuestion(dns.Fqdn(d), qtype)
