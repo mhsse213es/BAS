@@ -305,6 +305,9 @@ func main() {
 	if err := db.EnsureDNSSecurityCheckSchema(context.Background(), adminPool); err != nil {
 		log.Fatalf("[FATAL] DNS security check schema: %v", err)
 	}
+	if err := db.EnsureTransportSecurityCheckSchema(context.Background(), adminPool); err != nil {
+		log.Fatalf("[FATAL] transport security check schema: %v", err)
+	}
 	log.Println("[+] Schema verified")
 
 	// ── bas_app provisioning ─────────────────────────────────────────────
