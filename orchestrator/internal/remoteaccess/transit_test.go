@@ -43,6 +43,25 @@ func TestValidateMandatoryTransit_NoRouteAtAllForTransitEndpoints_NoViolation(t 
 	}
 }
 
+// TestValidateMandatoryTransit_BypassRoute_ReverseDirection_StillFlagged
+// pins the final whole-branch review's Important finding: a
+// MandatoryTransit declares a boundary between two zones, and the
+// non-Directed tunnels/edges that make a bypass possible are usable in
+// either direction -- so a bypass route found as ToZone->FromZone must
+// be flagged exactly like one found as FromZone->ToZone. Checking only
+// one direction left a real bypass undetected whenever a caller
+// queried the reverse direction.
+func TestValidateMandatoryTransit_BypassRoute_ReverseDirection_StillFlagged(t *testing.T) {
+	routes := []RoutePath{{"production", "corporate"}} // same bypass tunnel, reverse direction
+	transits := []MandatoryTransit{
+		{CanonicalID: "mt-1", FromZone: "corporate", ToZone: "production", ViaZone: "bastion"},
+	}
+	violations := ValidateMandatoryTransit(routes, transits)
+	if len(violations) != 1 {
+		t.Fatalf("violations = %v, want exactly 1 -- the bypass exists regardless of which direction it was queried from", violations)
+	}
+}
+
 func TestValidateMandatoryTransit_UnrelatedTransit_DoesNotInterfere(t *testing.T) {
 	routes := []RoutePath{{"corporate", "production"}}
 	transits := []MandatoryTransit{

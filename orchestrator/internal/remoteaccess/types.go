@@ -38,14 +38,16 @@ type VPNTunnel struct {
 	Note        string `json:"note,omitempty"`
 }
 
-// MandatoryTransit declares that any path between FromZone and ToZone
-// must visit ViaZone -- e.g. "any administrative path from the
-// corporate zone to the production zone must pass through the bastion
-// zone." This is a declared-architecture constraint, validated against
-// whatever the route search actually finds (routes.go, transit.go) --
-// never baked into the routing graph itself, so a real bypass route
-// that skips the bastion is surfaced as a violation instead of
-// silently disappearing from the search.
+// MandatoryTransit declares that any path between FromZone and ToZone,
+// in either direction, must visit ViaZone -- e.g. "any administrative
+// path between the corporate zone and the production zone must pass
+// through the bastion zone," enforced the same way whether the path is
+// queried as corporate->production or production->corporate. This is a
+// declared-architecture constraint, validated against whatever the
+// route search actually finds (routes.go, transit.go) -- never baked
+// into the routing graph itself, so a real bypass route that skips the
+// bastion is surfaced as a violation instead of silently disappearing
+// from the search.
 type MandatoryTransit struct {
 	CanonicalID string `json:"canonicalId"`
 	FromZone    string `json:"fromZone"`
