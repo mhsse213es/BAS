@@ -7,6 +7,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/audspect/bas/internal/cloudgraph"
 	"github.com/audspect/bas/internal/db"
 	"github.com/audspect/bas/internal/networkgraph"
 	"github.com/audspect/bas/internal/networkpath"
@@ -118,28 +119,10 @@ func (h *Handler) FindIsolationChecks(w http.ResponseWriter, r *http.Request) {
 	var results []zoneisolation.IsolationCheckResult
 	var exhausted bool
 	for _, pair := range isolationImport.ZonePairIsolations {
-		var routes [][]string
-		var pairExhausted bool
-		if remote != nil {
-			raRoutes, ex, err := remoteaccess.FindCandidateRemoteAccessRoutes(topo, remote, pair.ZoneA, pair.ZoneB, req.MaxHops)
-			if err != nil {
-				jsonError(w, err.Error(), http.StatusBadRequest)
-				return
-			}
-			pairExhausted = ex
-			for _, route := range raRoutes {
-				routes = append(routes, []string(route))
-			}
-		} else {
-			topoRoutes, ex, err := networktopology.FindCandidateRoutes(topo, pair.ZoneA, pair.ZoneB, req.MaxHops)
-			if err != nil {
-				jsonError(w, err.Error(), http.StatusBadRequest)
-				return
-			}
-			pairExhausted = ex
-			for _, route := range topoRoutes {
-				routes = append(routes, []string(route))
-			}
+		routes, pairExhausted, err := findCandidateRoutesBothDirections(topo, remote, pair.ZoneA, pair.ZoneB, req.MaxHops)
+		if err != nil {
+			jsonError(w, err.Error(), http.StatusBadRequest)
+			return
 		}
 		if pairExhausted {
 			exhausted = true
@@ -161,11 +144,21 @@ func (h *Handler) FindIsolationChecks(w http.ResponseWriter, r *http.Request) {
 				}
 				routeResults = append(routeResults, networkpath.AggregatePath(hops))
 			}
-			// Multiple candidate routes for the same pair: pick the
-			// worst (most severe) one, same ranking AggregatePathState
-			// already implements -- mirrors how a single route's own
-			// hops are aggregated, one level up.
-			worstState := networkpath.AggregatePathState(flattenHops(routeResults))
+			// Multiple candidate routes for the same pair are
+			// INDEPENDENT alternatives, not sequential hops of one
+			// path -- isolation is violated if ANY of them is
+			// reachable, so the most severe alternative must win.
+			// Deliberately NOT networkpath.AggregatePathState here:
+			// that function's Blocked-short-circuit is correct only
+			// for weakest-link aggregation across the sequential hops
+			// of a SINGLE path, and would let an unrelated route's
+			// confirmed denial hide a different route's demonstrated
+			// breach.
+			states := make([]cloudgraph.PathState, len(routeResults))
+			for i, rr := range routeResults {
+				states[i] = rr.State
+			}
+			worstState := worstAcrossAlternatives(states)
 			for _, rr := range routeResults {
 				if rr.State == worstState {
 					pathResult = rr
@@ -180,16 +173,78 @@ func (h *Handler) FindIsolationChecks(w http.ResponseWriter, r *http.Request) {
 	respond(w, isolationCheckResponse{Results: results, SearchExhausted: exhausted})
 }
 
-// flattenHops collects every hop across several already-aggregated
-// PathResults, so their states can be ranked together via the same
-// AggregatePathState worst-state logic multiple candidate routes
-// already use within one route's own hops.
-func flattenHops(results []networkpath.PathResult) []networkpath.HopResult {
-	var hops []networkpath.HopResult
-	for _, r := range results {
-		hops = append(hops, networkpath.HopResult{State: r.State})
+// findCandidateRoutesBothDirections finds candidate routes in both the
+// zoneA->zoneB and zoneB->zoneA orientations and returns their union.
+// ZonePairIsolation's own contract ("no network path between them at
+// all, in either direction") requires this: networktopology.RouteEdge
+// and remoteaccess.Tunnel can both be Directed, so a one-way leak (for
+// example an outbound-only path out of a clinical zone) is only ever
+// visible from one of the two query directions and must never be
+// silently missed by only ever querying one.
+func findCandidateRoutesBothDirections(topo *networktopology.TopologyImport, remote *remoteaccess.RemoteAccessImport, zoneA, zoneB string, maxHops int) ([][]string, bool, error) {
+	var routes [][]string
+	var exhausted bool
+	for _, dir := range [2][2]string{{zoneA, zoneB}, {zoneB, zoneA}} {
+		var oneDir [][]string
+		var ex bool
+		var err error
+		if remote != nil {
+			var raRoutes []remoteaccess.RoutePath
+			raRoutes, ex, err = remoteaccess.FindCandidateRemoteAccessRoutes(topo, remote, dir[0], dir[1], maxHops)
+			for _, route := range raRoutes {
+				oneDir = append(oneDir, []string(route))
+			}
+		} else {
+			var topoRoutes []networktopology.RoutePath
+			topoRoutes, ex, err = networktopology.FindCandidateRoutes(topo, dir[0], dir[1], maxHops)
+			for _, route := range topoRoutes {
+				oneDir = append(oneDir, []string(route))
+			}
+		}
+		if err != nil {
+			return nil, false, err
+		}
+		if ex {
+			exhausted = true
+		}
+		routes = append(routes, oneDir...)
 	}
-	return hops
+	return routes, exhausted, nil
+}
+
+// severityRank orders cloudgraph.PathState by how severe a confirmed
+// isolation violation it would represent, for picking the worst among
+// several independent alternative routes or CIDRs for the same zone
+// pair. Unknown outranks Blocked because an unresolved alternative is
+// not proof of isolation either -- "missing evidence is not evidence
+// of isolation" applies here exactly as it does to a single route.
+func severityRank(state cloudgraph.PathState) int {
+	switch state {
+	case cloudgraph.Observed:
+		return 4
+	case cloudgraph.PolicySupported, cloudgraph.Candidate, cloudgraph.ConditionallyReachable:
+		return 3
+	case cloudgraph.Unknown:
+		return 2
+	case cloudgraph.Blocked:
+		return 1
+	default:
+		return 2
+	}
+}
+
+// worstAcrossAlternatives returns the single most severe state among
+// several independent alternatives, per severityRank.
+func worstAcrossAlternatives(states []cloudgraph.PathState) cloudgraph.PathState {
+	worst := cloudgraph.Unknown
+	worstRank := -1
+	for _, s := range states {
+		if r := severityRank(s); r > worstRank {
+			worstRank = r
+			worst = s
+		}
+	}
+	return worst
 }
 
 // composeIsolationHop composes one hop's evidence for the isolation
@@ -240,7 +295,15 @@ func composeIsolationHop(fromZone, toZone string, routeDeclared, attachObservati
 		}
 		perCIDRHops = append(perCIDRHops, networkpath.ComposeHop(fromZone, toZone, routeDeclared, policyEval, observations))
 	}
-	worstState := networkpath.AggregatePathState(perCIDRHops)
+	// Multiple declared CIDRs for the same destination zone are also
+	// independent alternatives -- same worst-across-alternatives
+	// reasoning as the multi-route picker above, not
+	// networkpath.AggregatePathState's single-path ranking.
+	states := make([]cloudgraph.PathState, len(perCIDRHops))
+	for i, hop := range perCIDRHops {
+		states[i] = hop.State
+	}
+	worstState := worstAcrossAlternatives(states)
 	for _, hop := range perCIDRHops {
 		if hop.State == worstState {
 			return hop

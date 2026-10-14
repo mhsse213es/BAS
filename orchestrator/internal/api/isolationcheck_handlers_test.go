@@ -3,6 +3,7 @@ package api
 import (
 	"bytes"
 	"encoding/json"
+	"net"
 	"net/http"
 	"testing"
 
@@ -459,6 +460,263 @@ func TestFindIsolationChecks_RequiredFieldsMissing_Rejected(t *testing.T) {
 		rec := callAuthed(h.FindIsolationChecks, req)
 		if rec.Code != http.StatusBadRequest {
 			t.Fatalf("status = %d, body = %s, want 400 -- topologyImportId and isolationImportId are both required", rec.Code, rec.Body.String())
+		}
+	})
+}
+
+// TestFindIsolationChecks_RealObservation_ConfirmedViolation proves
+// confirmed-violation is actually reachable through the real
+// composition pipeline (CIDR resolution, single-hop attachObservation
+// gating, ComposeHop's observation-overrides-policy correlation) --
+// not just through the pure zoneisolation.ClassifyIsolation unit test.
+// A real vantage point dials a real listener; the destination zone's
+// policy explicitly denies the flow, so a confirmed-violation result
+// here can only come from the observation genuinely overriding policy.
+func TestFindIsolationChecks_RealObservation_ConfirmedViolation(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		vp := testVantagePoint()
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret).WithNetworkVantagePoint(vp)
+		userID := seedUser(t, pool, "isocheck-op-realobs", "pw12345678", string(auth.RoleAnalyst), true)
+
+		ln, err := net.Listen("tcp", "127.0.0.1:0")
+		if err != nil {
+			t.Fatalf("listen: %v", err)
+		}
+		defer ln.Close()
+		openPort := ln.Addr().(*net.TCPAddr).Port
+
+		discoveryReq := networkDiscoveryReq(t, pool, map[string]any{"targets": []map[string]any{{"host": "127.0.0.1", "port": openPort}}})
+		discoveryRec := callAuthed(h.TriggerNetworkDiscoveryRun, discoveryReq)
+		if discoveryRec.Code != http.StatusCreated {
+			t.Fatalf("trigger discovery: status = %d, body = %s", discoveryRec.Code, discoveryRec.Body.String())
+		}
+		var discoveryResp struct {
+			RunID string `json:"runId"`
+		}
+		if err := json.Unmarshal(discoveryRec.Body.Bytes(), &discoveryResp); err != nil {
+			t.Fatalf("decode discovery: %v", err)
+		}
+
+		topoID := createTestTopologyImport(t, h, pool, map[string]any{
+			"sourceType": "manual",
+			"zones": []map[string]any{
+				{"name": "guest", "cidrs": []string{"10.0.1.0/24"}},
+				{"name": "clinical", "cidrs": []string{"127.0.0.0/24"}},
+			},
+			"edges": []map[string]any{{"fromZone": "guest", "toZone": "clinical"}},
+		})
+		isoID := createTestIsolationImport(t, h, pool, []map[string]any{
+			{"canonicalId": "zp-1", "zoneA": "guest", "zoneB": "clinical"},
+		})
+
+		policyBody := map[string]any{
+			"sourceType": "manual",
+			"zones": []map[string]any{
+				{"name": "guest", "cidrs": []string{"10.0.1.0/24"}},
+				{"name": "clinical", "cidrs": []string{"127.0.0.0/24"}},
+			},
+			"rules":         []map[string]any{{"order": 1, "sourceZone": "guest", "destZone": "clinical", "protocol": "tcp", "action": "deny"}},
+			"defaultPolicy": "deny",
+		}
+		pb, _ := json.Marshal(policyBody)
+		pReq := authedRequest(t, http.MethodPost, "/api/network-policy-imports", bytes.NewReader(pb), auth.RoleAnalyst, userID)
+		pRec := callAuthed(h.CreateNetworkPolicyImport, pReq)
+		if pRec.Code != http.StatusCreated {
+			t.Fatalf("create policy import: status = %d, body = %s", pRec.Code, pRec.Body.String())
+		}
+		var policyCreated struct {
+			ID string `json:"id"`
+		}
+		_ = json.Unmarshal(pRec.Body.Bytes(), &policyCreated)
+
+		body := map[string]any{"topologyImportId": topoID, "isolationImportId": isoID, "policyImportId": policyCreated.ID, "discoveryRunId": discoveryResp.RunID, "port": openPort}
+		b, _ := json.Marshal(body)
+		req := authedRequest(t, http.MethodPost, "/api/isolation-checks", bytes.NewReader(b), auth.RoleAnalyst, userID)
+		rec := callAuthed(h.FindIsolationChecks, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+		}
+		var resp struct {
+			Results []zoneisolation.IsolationCheckResult `json:"results"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		if len(resp.Results) != 1 || resp.Results[0].Severity != zoneisolation.SeverityConfirmedViolation {
+			t.Fatalf("got %+v, want exactly 1 result with severity confirmed-violation -- a real observation must override a policy deny", resp.Results)
+		}
+	})
+}
+
+// TestFindIsolationChecks_MultipleRoutesDivergentStates_WorstWins pins
+// a real bug a code-review subagent found: picking the "worst" result
+// across several INDEPENDENT candidate routes for the same pair must
+// never reuse networkpath.AggregatePathState, whose Blocked
+// short-circuit is correct only for aggregating the SEQUENTIAL hops of
+// one single path. Here one route is a direct, single-hop route with a
+// real matching observation (Observed, i.e. a demonstrated breach);
+// a second, longer route is fully policy-denied (Blocked). Picking by
+// AggregatePathState's own ranking sees the Blocked route and returns
+// Blocked immediately without ever inspecting the Observed route,
+// silently hiding the demonstrated breach behind an unrelated route's
+// denial. The correct picker must select the Observed route instead.
+func TestFindIsolationChecks_MultipleRoutesDivergentStates_WorstWins(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		vp := testVantagePoint()
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret).WithNetworkVantagePoint(vp)
+		userID := seedUser(t, pool, "isocheck-op-divergent", "pw12345678", string(auth.RoleAnalyst), true)
+
+		ln, err := net.Listen("tcp", "127.0.0.1:0")
+		if err != nil {
+			t.Fatalf("listen: %v", err)
+		}
+		defer ln.Close()
+		openPort := ln.Addr().(*net.TCPAddr).Port
+
+		discoveryReq := networkDiscoveryReq(t, pool, map[string]any{"targets": []map[string]any{{"host": "127.0.0.1", "port": openPort}}})
+		discoveryRec := callAuthed(h.TriggerNetworkDiscoveryRun, discoveryReq)
+		if discoveryRec.Code != http.StatusCreated {
+			t.Fatalf("trigger discovery: status = %d, body = %s", discoveryRec.Code, discoveryRec.Body.String())
+		}
+		var discoveryResp struct {
+			RunID string `json:"runId"`
+		}
+		if err := json.Unmarshal(discoveryRec.Body.Bytes(), &discoveryResp); err != nil {
+			t.Fatalf("decode discovery: %v", err)
+		}
+
+		// Two routes between guest and clinical: a direct single-hop
+		// route (eligible for observation correlation) and a longer
+		// guest->dmz->clinical alternate (multi-hop, never eligible for
+		// observation correlation, so it is classified purely by
+		// policy -- and the policy below denies everything by default).
+		topoID := createTestTopologyImport(t, h, pool, map[string]any{
+			"sourceType": "manual",
+			"zones": []map[string]any{
+				{"name": "guest", "cidrs": []string{"10.0.1.0/24"}},
+				{"name": "clinical", "cidrs": []string{"127.0.0.0/24"}},
+				{"name": "dmz", "cidrs": []string{"10.0.5.0/24"}},
+			},
+			"edges": []map[string]any{
+				{"fromZone": "guest", "toZone": "clinical"},
+				{"fromZone": "guest", "toZone": "dmz"},
+				{"fromZone": "dmz", "toZone": "clinical"},
+			},
+		})
+		isoID := createTestIsolationImport(t, h, pool, []map[string]any{
+			{"canonicalId": "zp-1", "zoneA": "guest", "zoneB": "clinical"},
+		})
+
+		policyBody := map[string]any{
+			"sourceType": "manual",
+			"zones": []map[string]any{
+				{"name": "guest", "cidrs": []string{"10.0.1.0/24"}},
+				{"name": "clinical", "cidrs": []string{"127.0.0.0/24"}},
+				{"name": "dmz", "cidrs": []string{"10.0.5.0/24"}},
+			},
+			"rules": []map[string]any{
+				{"order": 1, "sourceZone": "guest", "destZone": "dmz", "protocol": "tcp", "action": "deny"},
+				{"order": 2, "sourceZone": "dmz", "destZone": "clinical", "protocol": "tcp", "action": "deny"},
+			},
+			"defaultPolicy": "deny",
+		}
+		pb, _ := json.Marshal(policyBody)
+		pReq := authedRequest(t, http.MethodPost, "/api/network-policy-imports", bytes.NewReader(pb), auth.RoleAnalyst, userID)
+		pRec := callAuthed(h.CreateNetworkPolicyImport, pReq)
+		if pRec.Code != http.StatusCreated {
+			t.Fatalf("create policy import: status = %d, body = %s", pRec.Code, pRec.Body.String())
+		}
+		var policyCreated struct {
+			ID string `json:"id"`
+		}
+		_ = json.Unmarshal(pRec.Body.Bytes(), &policyCreated)
+
+		body := map[string]any{"topologyImportId": topoID, "isolationImportId": isoID, "policyImportId": policyCreated.ID, "discoveryRunId": discoveryResp.RunID, "port": openPort}
+		b, _ := json.Marshal(body)
+		req := authedRequest(t, http.MethodPost, "/api/isolation-checks", bytes.NewReader(b), auth.RoleAnalyst, userID)
+		rec := callAuthed(h.FindIsolationChecks, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+		}
+		var resp struct {
+			Results []zoneisolation.IsolationCheckResult `json:"results"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		if len(resp.Results) != 1 || resp.Results[0].Severity != zoneisolation.SeverityConfirmedViolation {
+			t.Fatalf("got %+v, want exactly 1 result with severity confirmed-violation -- the direct route's demonstrated breach must never be hidden by the alternate route's unrelated denial", resp.Results)
+		}
+	})
+}
+
+// TestFindIsolationChecks_DirectedEdgeReverseDirection_StillDetected
+// pins a second real bug a code-review subagent found:
+// ZonePairIsolation's own doc comment says isolation is checked "in
+// either direction", but the handler only ever queried
+// zoneA->zoneB. A directed edge/tunnel (a first-class, tested feature
+// of networktopology.RouteEdge/remoteaccess.Tunnel) existing only in
+// the reverse orientation -- exactly the shape of an outbound-only
+// exfiltration path out of a clinical zone -- was therefore completely
+// invisible. Here the only edge is clinical->guest (directed), and the
+// isolation pair is declared zoneA=guest/zoneB=clinical; the check
+// must still find the reverse route and classify it, never silently
+// report no-violation-found just because the forward direction has no
+// edge.
+func TestFindIsolationChecks_DirectedEdgeReverseDirection_StillDetected(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret)
+		userID := seedUser(t, pool, "isocheck-op-reversedir", "pw12345678", string(auth.RoleAnalyst), true)
+
+		topoID := createTestTopologyImport(t, h, pool, map[string]any{
+			"sourceType": "manual",
+			"zones": []map[string]any{
+				{"name": "guest", "cidrs": []string{"10.0.1.0/24"}},
+				{"name": "clinical", "cidrs": []string{"10.0.2.0/24"}},
+			},
+			"edges": []map[string]any{
+				{"fromZone": "clinical", "toZone": "guest", "directed": true},
+			},
+		})
+		isoID := createTestIsolationImport(t, h, pool, []map[string]any{
+			{"canonicalId": "zp-1", "zoneA": "guest", "zoneB": "clinical"},
+		})
+
+		policyBody := map[string]any{
+			"sourceType": "manual",
+			"zones": []map[string]any{
+				{"name": "guest", "cidrs": []string{"10.0.1.0/24"}},
+				{"name": "clinical", "cidrs": []string{"10.0.2.0/24"}},
+			},
+			"rules":         []map[string]any{{"order": 1, "sourceZone": "clinical", "destZone": "guest", "protocol": "tcp", "action": "allow"}},
+			"defaultPolicy": "deny",
+		}
+		pb, _ := json.Marshal(policyBody)
+		pReq := authedRequest(t, http.MethodPost, "/api/network-policy-imports", bytes.NewReader(pb), auth.RoleAnalyst, userID)
+		pRec := callAuthed(h.CreateNetworkPolicyImport, pReq)
+		if pRec.Code != http.StatusCreated {
+			t.Fatalf("create policy import: status = %d, body = %s", pRec.Code, pRec.Body.String())
+		}
+		var policyCreated struct {
+			ID string `json:"id"`
+		}
+		_ = json.Unmarshal(pRec.Body.Bytes(), &policyCreated)
+
+		body := map[string]any{"topologyImportId": topoID, "isolationImportId": isoID, "policyImportId": policyCreated.ID}
+		b, _ := json.Marshal(body)
+		req := authedRequest(t, http.MethodPost, "/api/isolation-checks", bytes.NewReader(b), auth.RoleAnalyst, userID)
+		rec := callAuthed(h.FindIsolationChecks, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+		}
+		var resp struct {
+			Results []zoneisolation.IsolationCheckResult `json:"results"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		if len(resp.Results) != 1 || resp.Results[0].Severity == zoneisolation.SeverityNoViolationFound {
+			t.Fatalf("got %+v, want a severity other than no-violation-found -- the reverse-direction route (clinical->guest) must still be found and classified", resp.Results)
 		}
 	})
 }
