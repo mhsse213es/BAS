@@ -92,8 +92,14 @@ func runOneCheck(ctx context.Context, cleartextProbe CleartextProbe, certProbe C
 	switch check.CheckType {
 	case CheckCert:
 		state, reason = certProbe.Probe(ctx, check.Target, DefaultCheckTimeout)
-	default: // CheckCleartext
+	case CheckCleartext:
 		state, reason = cleartextProbe.Probe(ctx, check.Target, DefaultCheckTimeout)
+	default:
+		// An unrecognized check type must never be silently routed to
+		// a real probe -- the HTTP API already rejects this before it
+		// reaches here, but this layer must not trust that alone.
+		state = networksecurity.Unknown
+		reason = fmt.Sprintf("unrecognized check type %q", check.CheckType)
 	}
 	return networksecurity.SecurityCheckResult{
 		Target:     check.Target,

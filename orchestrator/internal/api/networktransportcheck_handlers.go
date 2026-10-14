@@ -12,7 +12,6 @@ import (
 
 	"github.com/audspect/bas/internal/auth"
 	"github.com/audspect/bas/internal/db"
-	"github.com/audspect/bas/internal/networksecurity"
 	"github.com/audspect/bas/internal/networktransport"
 )
 
@@ -41,6 +40,10 @@ func (h *Handler) TriggerTransportSecurityCheckRun(w http.ResponseWriter, r *htt
 		return
 	}
 	for i, c := range req.Checks {
+		if c.CheckType != networktransport.CheckCleartext && c.CheckType != networktransport.CheckCert {
+			jsonError(w, fmt.Sprintf("checks[%d]: unrecognized checkType %q", i, c.CheckType), http.StatusBadRequest)
+			return
+		}
 		if c.Target.Host == "" || c.Target.Port < 1 || c.Target.Port > 65535 {
 			jsonError(w, fmt.Sprintf("checks[%d]: a valid target host/port is required", i), http.StatusBadRequest)
 			return
@@ -120,7 +123,7 @@ func (h *Handler) GetTransportSecurityCheckRun(w http.ResponseWriter, r *http.Re
 		return
 	}
 	if results == nil {
-		results = []networksecurity.SecurityCheckResult{}
+		results = []db.TransportSecurityCheckResult{}
 	}
 	respond(w, map[string]any{"run": run, "results": results})
 }

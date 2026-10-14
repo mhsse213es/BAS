@@ -50,13 +50,13 @@ func TestInsertTransportSecurityCheckRun_RoundTripsThroughGetAndList(t *testing.
 		for _, r := range gotResults {
 			if r.Target.Port == 80 {
 				sawCleartext = true
-				if r.State != networksecurity.Secure {
+				if r.State != networksecurity.Secure || r.CheckType != networktransport.CheckCleartext {
 					t.Fatalf("cleartext result round-trip mismatch: %+v", r)
 				}
 			}
 			if r.Target.Port == 443 {
 				sawCert = true
-				if r.State != networksecurity.Insecure || r.Reason != "expired" {
+				if r.State != networksecurity.Insecure || r.Reason != "expired" || r.CheckType != networktransport.CheckCert {
 					t.Fatalf("cert result round-trip mismatch: %+v", r)
 				}
 			}

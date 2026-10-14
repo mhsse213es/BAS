@@ -170,6 +170,70 @@ func TestTLSCertProbe_UntrustedChain_Insecure(t *testing.T) {
 	}
 }
 
+// TestTLSCertProbe_ValidChainWithIntermediate_Secure pins a real bug:
+// x509.Certificate.Verify only completes a chain using certs in
+// opts.Intermediates or opts.Roots -- it never automatically consumes
+// the rest of the peer-presented certificate chain as intermediates.
+// Virtually every real-world TLS certificate is issued leaf->
+// intermediate->root, with only the root in any trust store and the
+// intermediate delivered solely by the server during the handshake --
+// so a probe that never populates Intermediates misclassifies this,
+// the overwhelmingly common real-world shape, as Insecure.
+func TestTLSCertProbe_ValidChainWithIntermediate_Secure(t *testing.T) {
+	root := newTestCA(t)
+
+	interKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatalf("generate intermediate key: %v", err)
+	}
+	interTemplate := &x509.Certificate{
+		SerialNumber:          big.NewInt(3),
+		Subject:               pkix.Name{CommonName: "test-intermediate-ca"},
+		NotBefore:             time.Now().Add(-time.Hour),
+		NotAfter:              time.Now().Add(365 * 24 * time.Hour),
+		IsCA:                  true,
+		KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageDigitalSignature,
+		BasicConstraintsValid: true,
+	}
+	interDER, err := x509.CreateCertificate(rand.Reader, interTemplate, root.cert, &interKey.PublicKey, root.key)
+	if err != nil {
+		t.Fatalf("create intermediate cert: %v", err)
+	}
+	interCert, err := x509.ParseCertificate(interDER)
+	if err != nil {
+		t.Fatalf("parse intermediate cert: %v", err)
+	}
+
+	leafKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatalf("generate leaf key: %v", err)
+	}
+	leafTemplate := &x509.Certificate{
+		SerialNumber: big.NewInt(4),
+		Subject:      pkix.Name{CommonName: "127.0.0.1"},
+		NotBefore:    time.Now().Add(-time.Hour),
+		NotAfter:     time.Now().Add(24 * time.Hour),
+		KeyUsage:     x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
+		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		IPAddresses:  []net.IP{net.ParseIP("127.0.0.1")},
+	}
+	leafDER, err := x509.CreateCertificate(rand.Reader, leafTemplate, interCert, &leafKey.PublicKey, interKey)
+	if err != nil {
+		t.Fatalf("create leaf cert: %v", err)
+	}
+
+	// The server presents leaf + intermediate, exactly as every real
+	// HTTPS server does -- the trust pool holds only the root.
+	cert := tls.Certificate{Certificate: [][]byte{leafDER, interDER}, PrivateKey: leafKey}
+	host, port := startTestTLSServer(t, cert)
+
+	p := TLSCertProbe{roots: root.pool}
+	state, reason := p.Probe(context.Background(), networkgraph.Target{Host: host, Port: port}, time.Second)
+	if state != networksecurity.Secure {
+		t.Fatalf("state = %q (reason: %s), want secure -- a leaf signed by an intermediate CA (itself signed by a trusted root) is the default shape of real-world TLS certificates", state, reason)
+	}
+}
+
 func TestTLSCertProbe_HandshakeFails_Unknown(t *testing.T) {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {

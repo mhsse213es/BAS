@@ -60,7 +60,15 @@ func (p TLSCertProbe) Probe(ctx context.Context, target networkgraph.Target, tim
 		return networksecurity.Unknown, "handshake succeeded but no peer certificate was presented"
 	}
 
-	if _, err := peerCerts[0].Verify(x509.VerifyOptions{DNSName: target.Host, Roots: p.roots}); err != nil {
+	// Verify only completes a chain using certs in Intermediates or
+	// Roots -- it never automatically consumes the rest of the peer-
+	// presented chain, which is how every real HTTPS server delivers
+	// its intermediate CA (the root alone lives in any trust store).
+	intermediates := x509.NewCertPool()
+	for _, c := range peerCerts[1:] {
+		intermediates.AddCert(c)
+	}
+	if _, err := peerCerts[0].Verify(x509.VerifyOptions{DNSName: target.Host, Roots: p.roots, Intermediates: intermediates}); err != nil {
 		return networksecurity.Insecure, fmt.Sprintf("certificate is invalid: %v", err)
 	}
 	return networksecurity.Secure, ""

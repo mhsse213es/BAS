@@ -63,6 +63,31 @@ func TestRunChecks_BothCheckTypes_ProduceResults(t *testing.T) {
 	}
 }
 
+// TestRunChecks_UnrecognizedCheckType_Unknown pins a real bug:
+// runOneCheck's switch had a bare `default` branch that silently
+// routed anything not CheckCert to the cleartext probe -- a typo'd or
+// stale CheckType would run the wrong probe against the target and
+// still get persisted under its own (incorrect) check_type, with no
+// way to tell from the result that anything was wrong.
+func TestRunChecks_UnrecognizedCheckType_Unknown(t *testing.T) {
+	checks := []TransportCheckRequest{
+		{CheckType: CheckType("bogus"), Target: networkgraph.Target{Host: "127.0.0.1", Port: 80}},
+	}
+	result, err := RunChecks(context.Background(),
+		stubCleartextProbe{state: networksecurity.Secure}, // must never be reached for an unrecognized type
+		stubCertProbe{},
+		networkgraph.VantagePoint{ID: "vp1", NetworkPosition: "lab"}, checks)
+	if err != nil {
+		t.Fatalf("RunChecks: %v", err)
+	}
+	if len(result.Results) != 1 {
+		t.Fatalf("got %d results, want 1", len(result.Results))
+	}
+	if result.Results[0].State != networksecurity.Unknown {
+		t.Fatalf("State = %q, want unknown -- an unrecognized check type must never be silently routed to a real probe", result.Results[0].State)
+	}
+}
+
 func TestRunChecks_EmptyChecksRejected(t *testing.T) {
 	_, err := RunChecks(context.Background(), stubCleartextProbe{}, stubCertProbe{}, networkgraph.VantagePoint{ID: "vp1", NetworkPosition: "lab"}, nil)
 	if err == nil {

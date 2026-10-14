@@ -151,22 +151,33 @@ func InsertTransportSecurityCheckResults(ctx context.Context, pool *pgxpool.Pool
 	return tx.Commit(ctx)
 }
 
-func ListTransportSecurityCheckResultsByRun(ctx context.Context, pool *pgxpool.Pool, runID string) ([]networksecurity.SecurityCheckResult, error) {
+// TransportSecurityCheckResult pairs a persisted result with the check
+// type it was computed for -- networksecurity.SecurityCheckResult
+// itself carries no such field (it's shared with the DNS check
+// family), but a run can mix cleartext and cert checks, so a caller
+// listing a run's results needs to tell them apart.
+type TransportSecurityCheckResult struct {
+	CheckType networktransport.CheckType `json:"checkType"`
+	networksecurity.SecurityCheckResult
+}
+
+func ListTransportSecurityCheckResultsByRun(ctx context.Context, pool *pgxpool.Pool, runID string) ([]TransportSecurityCheckResult, error) {
 	rows, err := pool.Query(ctx,
-		`SELECT target_host, target_port, state, reason, observed_at
+		`SELECT check_type, target_host, target_port, state, reason, observed_at
 		 FROM transport_security_check_results WHERE run_id = $1 ORDER BY observed_at ASC`, runID)
 	if err != nil {
 		return nil, fmt.Errorf("transport_security_check_results: list for run %s: %w", runID, err)
 	}
 	defer rows.Close()
-	var out []networksecurity.SecurityCheckResult
+	var out []TransportSecurityCheckResult
 	for rows.Next() {
-		var r networksecurity.SecurityCheckResult
+		var r TransportSecurityCheckResult
 		var reason *string
-		var state string
-		if err := rows.Scan(&r.Target.Host, &r.Target.Port, &state, &reason, &r.Provenance.ObservedAt); err != nil {
+		var checkType, state string
+		if err := rows.Scan(&checkType, &r.Target.Host, &r.Target.Port, &state, &reason, &r.Provenance.ObservedAt); err != nil {
 			return nil, fmt.Errorf("transport_security_check_results: scan for run %s: %w", runID, err)
 		}
+		r.CheckType = networktransport.CheckType(checkType)
 		r.State = networksecurity.SecurityState(state)
 		if reason != nil {
 			r.Reason = *reason

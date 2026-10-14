@@ -10,7 +10,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/audspect/bas/internal/auth"
-	"github.com/audspect/bas/internal/networksecurity"
+	"github.com/audspect/bas/internal/db"
+	"github.com/audspect/bas/internal/networktransport"
 	"github.com/audspect/bas/internal/scenario"
 	"github.com/audspect/bas/internal/ws"
 )
@@ -57,6 +58,29 @@ func TestTriggerTransportSecurityCheckRun_ValidChecksPersist(t *testing.T) {
 		}
 		if resp.RunID == "" {
 			t.Fatal("want non-empty runId")
+		}
+	})
+}
+
+// TestTriggerTransportSecurityCheckRun_UnrecognizedCheckTypeRejected
+// pins the fix for a real bug: an unrecognized checkType (a typo, or a
+// stale client sending a since-removed type) must be rejected at the
+// API boundary, not silently accepted and routed to the wrong probe.
+func TestTriggerTransportSecurityCheckRun_UnrecognizedCheckTypeRejected(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		vp := testVantagePoint()
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret).WithNetworkVantagePoint(vp)
+		body := map[string]any{
+			"checks": []map[string]any{
+				{"checkType": "certt", "target": map[string]any{"host": "10.0.1.5", "port": 443}},
+			},
+		}
+		b, _ := json.Marshal(body)
+		userID := seedUser(t, pool, "transport-op-badtype", "pw12345678", string(auth.RoleAnalyst), true)
+		req := authedRequest(t, http.MethodPost, "/api/transport-security-checks", bytes.NewReader(b), auth.RoleAnalyst, userID)
+		rec := callAuthed(h.TriggerTransportSecurityCheckRun, req)
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("status = %d, body = %s, want 400 -- an unrecognized checkType must be rejected, never silently routed to a probe", rec.Code, rec.Body.String())
 		}
 	})
 }
@@ -121,13 +145,16 @@ func TestListAndGetTransportSecurityCheckRun_RoundTrip(t *testing.T) {
 			t.Fatalf("get status = %d, body = %s", getRec.Code, getRec.Body.String())
 		}
 		var getResp struct {
-			Results []networksecurity.SecurityCheckResult `json:"results"`
+			Results []db.TransportSecurityCheckResult `json:"results"`
 		}
 		if err := json.Unmarshal(getRec.Body.Bytes(), &getResp); err != nil {
 			t.Fatalf("decode get: %v", err)
 		}
 		if len(getResp.Results) != 1 {
 			t.Fatalf("got %d results, want 1", len(getResp.Results))
+		}
+		if getResp.Results[0].CheckType != networktransport.CheckCleartext {
+			t.Fatalf("CheckType = %q, want %q -- a caller must be able to tell which check a result belongs to", getResp.Results[0].CheckType, networktransport.CheckCleartext)
 		}
 	})
 }
