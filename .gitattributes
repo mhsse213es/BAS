@@ -16,6 +16,11 @@
 # (.github/workflows/test.yml) comparing content, not line endings.
 security/g1/G1_*.csv   text eol=lf
 security/g1/G1_*.json  text eol=lf
+# testutil.AssertGoldenBytes compares file bytes exactly, so every golden
+# fixture it reads must stay LF on every platform (a Windows checkout would
+# otherwise get CRLF, breaking the comparison with identical-looking text).
+**/testdata/golden/** text eol=lf
+
 # G1c: the generator and split:check compare bytes, so web sources are LF on
 # every platform (Windows checkouts would otherwise get CRLF).
 orchestrator/web/**/*.html text eol=lf
