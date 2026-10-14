@@ -9,9 +9,9 @@ import (
 // PathResult is the full path-level result: an aggregated PathState and
 // confidence, plus the per-hop detail it was derived from.
 type PathResult struct {
-	State      cloudgraph.PathState
-	Confidence string
-	Hops       []HopResult
+	State      cloudgraph.PathState `json:"state"`
+	Confidence string               `json:"confidence"`
+	Hops       []HopResult          `json:"hops"`
 }
 
 // AggregatePathState computes the path-level PathState from an ordered

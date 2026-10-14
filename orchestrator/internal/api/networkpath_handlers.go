@@ -96,7 +96,7 @@ func (h *Handler) FindNetworkPaths(w http.ResponseWriter, r *http.Request) {
 
 	g := attackpath.BuildGraph(h.loadAttackPathCollections(r)...)
 
-	routes, err := networktopology.FindCandidateRoutes(topo, sourceZone, destZone, req.MaxHops)
+	routes, exhausted, err := networktopology.FindCandidateRoutes(topo, sourceZone, destZone, req.MaxHops)
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusBadRequest)
 		return
@@ -122,7 +122,20 @@ func (h *Handler) FindNetworkPaths(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	respond(w, results)
+	respond(w, networkPathResponse{Results: results, SearchExhausted: exhausted})
+}
+
+// networkPathResponse is the body of POST /api/network-paths.
+// SearchExhausted is true when the candidate-route search hit its
+// defensive step budget before it could either find the capped number
+// of routes or exhaustively rule out more -- a zero-route Results with
+// SearchExhausted=true means "truncated search, absence not proven",
+// never the same finding as a zero-route Results with it false (search
+// space fully explored, no route exists). Omitted when false, since
+// that is the overwhelmingly common case.
+type networkPathResponse struct {
+	Results         []networkpath.PathResult `json:"results"`
+	SearchExhausted bool                      `json:"searchExhausted,omitempty"`
 }
 
 // composeNetworkPathHop evaluates policy for one fromZone->toZone hop

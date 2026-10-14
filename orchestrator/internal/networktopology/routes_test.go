@@ -4,7 +4,7 @@ import "testing"
 
 func TestFindCandidateRoutes_SingleHopDirectRoute(t *testing.T) {
 	topo := &TopologyImport{Edges: []RouteEdge{{FromZone: "dmz", ToZone: "internal"}}}
-	routes, err := FindCandidateRoutes(topo, "dmz", "internal", 10)
+	routes, _, err := FindCandidateRoutes(topo, "dmz", "internal", 10)
 	if err != nil {
 		t.Fatalf("FindCandidateRoutes: %v", err)
 	}
@@ -18,7 +18,7 @@ func TestFindCandidateRoutes_MultiHopThroughPivotZone(t *testing.T) {
 		{FromZone: "dmz", ToZone: "core"},
 		{FromZone: "core", ToZone: "internal"},
 	}}
-	routes, err := FindCandidateRoutes(topo, "dmz", "internal", 10)
+	routes, _, err := FindCandidateRoutes(topo, "dmz", "internal", 10)
 	if err != nil {
 		t.Fatalf("FindCandidateRoutes: %v", err)
 	}
@@ -29,7 +29,7 @@ func TestFindCandidateRoutes_MultiHopThroughPivotZone(t *testing.T) {
 
 func TestFindCandidateRoutes_NoRouteReturnsEmptyNotError(t *testing.T) {
 	topo := &TopologyImport{Edges: []RouteEdge{{FromZone: "dmz", ToZone: "core"}}}
-	routes, err := FindCandidateRoutes(topo, "dmz", "isolated-segment", 10)
+	routes, _, err := FindCandidateRoutes(topo, "dmz", "isolated-segment", 10)
 	if err != nil {
 		t.Fatalf("FindCandidateRoutes: want no error for an unreachable destination, got %v", err)
 	}
@@ -40,7 +40,7 @@ func TestFindCandidateRoutes_NoRouteReturnsEmptyNotError(t *testing.T) {
 
 func TestFindCandidateRoutes_DirectedEdgeNotUsableBackwards(t *testing.T) {
 	topo := &TopologyImport{Edges: []RouteEdge{{FromZone: "dmz", ToZone: "internal", Directed: true}}}
-	routes, err := FindCandidateRoutes(topo, "internal", "dmz", 10)
+	routes, _, err := FindCandidateRoutes(topo, "internal", "dmz", 10)
 	if err != nil {
 		t.Fatalf("FindCandidateRoutes: %v", err)
 	}
@@ -51,7 +51,7 @@ func TestFindCandidateRoutes_DirectedEdgeNotUsableBackwards(t *testing.T) {
 
 func TestFindCandidateRoutes_UndirectedEdgeUsableBothWays(t *testing.T) {
 	topo := &TopologyImport{Edges: []RouteEdge{{FromZone: "dmz", ToZone: "internal", Directed: false}}}
-	routes, err := FindCandidateRoutes(topo, "internal", "dmz", 10)
+	routes, _, err := FindCandidateRoutes(topo, "internal", "dmz", 10)
 	if err != nil {
 		t.Fatalf("FindCandidateRoutes: %v", err)
 	}
@@ -65,7 +65,7 @@ func TestFindCandidateRoutes_HopCapEnforced(t *testing.T) {
 		{FromZone: "a", ToZone: "b"},
 		{FromZone: "b", ToZone: "c"},
 	}}
-	routes, err := FindCandidateRoutes(topo, "a", "c", 1)
+	routes, _, err := FindCandidateRoutes(topo, "a", "c", 1)
 	if err != nil {
 		t.Fatalf("FindCandidateRoutes: %v", err)
 	}
@@ -84,7 +84,7 @@ func TestFindCandidateRoutes_MaxHopsClampedToCeiling(t *testing.T) {
 		edges = append(edges, RouteEdge{FromZone: zones[i], ToZone: zones[i+1]})
 	}
 	topo := &TopologyImport{Edges: edges}
-	routes, err := FindCandidateRoutes(topo, "z0", "z11", 999)
+	routes, _, err := FindCandidateRoutes(topo, "z0", "z11", 999)
 	if err != nil {
 		t.Fatalf("FindCandidateRoutes: %v", err)
 	}
@@ -96,7 +96,7 @@ func TestFindCandidateRoutes_MaxHopsClampedToCeiling(t *testing.T) {
 func TestFindCandidateRoutes_ZeroOrNegativeMaxHopsDefaultsToCeiling(t *testing.T) {
 	topo := &TopologyImport{Edges: []RouteEdge{{FromZone: "dmz", ToZone: "internal"}}}
 	for _, mh := range []int{0, -1, -100} {
-		routes, err := FindCandidateRoutes(topo, "dmz", "internal", mh)
+		routes, _, err := FindCandidateRoutes(topo, "dmz", "internal", mh)
 		if err != nil {
 			t.Fatalf("FindCandidateRoutes(maxHops=%d): %v", mh, err)
 		}
@@ -117,7 +117,7 @@ func TestFindCandidateRoutes_CandidateCountCapEnforced(t *testing.T) {
 		edges = append(edges, RouteEdge{FromZone: mid, ToZone: "dest"})
 	}
 	topo := &TopologyImport{Edges: edges}
-	routes, err := FindCandidateRoutes(topo, "hub", "dest", 10)
+	routes, _, err := FindCandidateRoutes(topo, "hub", "dest", 10)
 	if err != nil {
 		t.Fatalf("FindCandidateRoutes: %v", err)
 	}
@@ -136,7 +136,7 @@ func TestFindCandidateRoutes_CyclicTopologyTerminates(t *testing.T) {
 		{FromZone: "c", ToZone: "a", Directed: true},
 		{FromZone: "c", ToZone: "d", Directed: true},
 	}}
-	routes, err := FindCandidateRoutes(topo, "a", "d", 10)
+	routes, _, err := FindCandidateRoutes(topo, "a", "d", 10)
 	if err != nil {
 		t.Fatalf("FindCandidateRoutes: %v", err)
 	}
@@ -150,7 +150,7 @@ func TestFindCandidateRoutes_SameZoneQueryReturnsTrivialSingleElementRoute(t *te
 	// query (two hosts on the same subnet). This must not require any
 	// declared edge and must not be treated as "no route".
 	topo := &TopologyImport{Zones: []Zone{{Name: "dmz", CIDRs: []string{"10.0.1.0/24"}}}}
-	routes, err := FindCandidateRoutes(topo, "dmz", "dmz", 10)
+	routes, _, err := FindCandidateRoutes(topo, "dmz", "dmz", 10)
 	if err != nil {
 		t.Fatalf("FindCandidateRoutes: %v", err)
 	}
@@ -162,7 +162,7 @@ func TestFindCandidateRoutes_SameZoneQueryReturnsTrivialSingleElementRoute(t *te
 func TestFindCandidateRoutes_RejectsImportOverZoneCap(t *testing.T) {
 	zones := make([]Zone, MaxZonesPerTopologyImport+1)
 	topo := &TopologyImport{Zones: zones}
-	if _, err := FindCandidateRoutes(topo, "a", "b", 10); err == nil {
+	if _, _, err := FindCandidateRoutes(topo, "a", "b", 10); err == nil {
 		t.Fatal("want error for a topology with too many zones")
 	}
 }
@@ -170,7 +170,43 @@ func TestFindCandidateRoutes_RejectsImportOverZoneCap(t *testing.T) {
 func TestFindCandidateRoutes_RejectsImportOverEdgeCap(t *testing.T) {
 	edges := make([]RouteEdge, MaxEdgesPerTopologyImport+1)
 	topo := &TopologyImport{Edges: edges}
-	if _, err := FindCandidateRoutes(topo, "a", "b", 10); err == nil {
+	if _, _, err := FindCandidateRoutes(topo, "a", "b", 10); err == nil {
 		t.Fatal("want error for a topology with too many edges")
+	}
+}
+
+func TestFindCandidateRoutes_StepBudgetExhaustionSignaled(t *testing.T) {
+	// A complete directed graph on 12 nodes (132 edges, well under the
+	// 5000-edge cap) gives an astronomically large number of simple
+	// paths up to 10 hops deep. The destination is a genuinely isolated
+	// island with no edges to or from the complete graph, so the DFS
+	// can never short-circuit by finding it -- it must exhaust the
+	// maxRouteSearchSteps budget before it could ever claim to have
+	// exhaustively searched the space. Exhausted must come back true so
+	// a caller can tell "truncated search" apart from "genuinely no
+	// route" -- both currently return zero routes, but they are not the
+	// same finding.
+	var nodes []string
+	for i := 0; i < 12; i++ {
+		nodes = append(nodes, "n"+string(rune('a'+i)))
+	}
+	var edges []RouteEdge
+	for _, from := range nodes {
+		for _, to := range nodes {
+			if from != to {
+				edges = append(edges, RouteEdge{FromZone: from, ToZone: to, Directed: true})
+			}
+		}
+	}
+	topo := &TopologyImport{Edges: edges}
+	routes, exhausted, err := FindCandidateRoutes(topo, "na", "unreachable-island", 10)
+	if err != nil {
+		t.Fatalf("FindCandidateRoutes: %v", err)
+	}
+	if len(routes) != 0 {
+		t.Fatalf("got %d routes, want 0 -- the island is never actually reachable", len(routes))
+	}
+	if !exhausted {
+		t.Fatal("want exhausted=true -- the search space here vastly exceeds the step budget before it could prove the island unreachable by exhaustive search")
 	}
 }

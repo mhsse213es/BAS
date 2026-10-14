@@ -24,14 +24,15 @@ type CorroboratingEvidence struct {
 
 // HopResult is one hop's evidence-composed classification.
 type HopResult struct {
-	FromZone, ToZone string
-	State            cloudgraph.PathState
-	Limitations      string
-	Provenance       cloudgraph.Provenance
-	Observation      *networkgraph.NetworkObservation
-	PolicyEvaluation *networkpolicy.PolicyEvaluation
-	RouteDeclared    bool
-	Corroboration    []CorroboratingEvidence
+	FromZone         string                           `json:"fromZone"`
+	ToZone           string                           `json:"toZone"`
+	State            cloudgraph.PathState             `json:"state"`
+	Limitations      string                           `json:"limitations,omitempty"`
+	Provenance       cloudgraph.Provenance            `json:"provenance"`
+	Observation      *networkgraph.NetworkObservation `json:"observation,omitempty"`
+	PolicyEvaluation *networkpolicy.PolicyEvaluation  `json:"policyEvaluation,omitempty"`
+	RouteDeclared    bool                             `json:"routeDeclared"`
+	Corroboration    []CorroboratingEvidence          `json:"corroboration,omitempty"`
 }
 
 // ComposeHop classifies one hop given its possible evidence inputs, in

@@ -30,15 +30,25 @@ type RoutePath []string
 // sourceZone == destZone always returns exactly one trivial
 // two-element route (a zone can always trivially reach itself,
 // independent of any declared edge).
-func FindCandidateRoutes(topo *TopologyImport, sourceZone, destZone string, maxHops int) ([]RoutePath, error) {
+//
+// exhausted is true when the defensive maxRouteSearchSteps budget was
+// hit before the search could either find MaxCandidateRoutesPerQuery
+// routes or exhaustively rule out more -- a dense/cyclic topology
+// within the zone/edge caps can still cost more exploration than the
+// budget allows. A zero-route result with exhausted=true is NOT the
+// same finding as a zero-route result with exhausted=false: the first
+// means "search was truncated, absence is not proven", the second
+// means "search space was fully explored, no route exists". Callers
+// must not conflate the two.
+func FindCandidateRoutes(topo *TopologyImport, sourceZone, destZone string, maxHops int) ([]RoutePath, bool, error) {
 	if len(topo.Zones) > MaxZonesPerTopologyImport {
-		return nil, fmt.Errorf("networktopology: topology has too many zones -- got %d, max %d", len(topo.Zones), MaxZonesPerTopologyImport)
+		return nil, false, fmt.Errorf("networktopology: topology has too many zones -- got %d, max %d", len(topo.Zones), MaxZonesPerTopologyImport)
 	}
 	if len(topo.Edges) > MaxEdgesPerTopologyImport {
-		return nil, fmt.Errorf("networktopology: topology has too many edges -- got %d, max %d", len(topo.Edges), MaxEdgesPerTopologyImport)
+		return nil, false, fmt.Errorf("networktopology: topology has too many edges -- got %d, max %d", len(topo.Edges), MaxEdgesPerTopologyImport)
 	}
 	if sourceZone == destZone {
-		return []RoutePath{{sourceZone, destZone}}, nil
+		return []RoutePath{{sourceZone, destZone}}, false, nil
 	}
 	if maxHops > MaxHopsPerPathQuery || maxHops <= 0 {
 		maxHops = MaxHopsPerPathQuery
@@ -48,11 +58,16 @@ func FindCandidateRoutes(topo *TopologyImport, sourceZone, destZone string, maxH
 
 	var results []RoutePath
 	steps := 0
+	exhausted := false
 	visited := map[string]bool{sourceZone: true}
 	var dfs func(current string, path RoutePath)
 	dfs = func(current string, path RoutePath) {
 		steps++
-		if steps > maxRouteSearchSteps || len(results) >= MaxCandidateRoutesPerQuery {
+		if steps > maxRouteSearchSteps {
+			exhausted = true
+			return
+		}
+		if len(results) >= MaxCandidateRoutesPerQuery {
 			return
 		}
 		if current == destZone {
@@ -77,7 +92,7 @@ func FindCandidateRoutes(topo *TopologyImport, sourceZone, destZone string, maxH
 		}
 	}
 	dfs(sourceZone, RoutePath{sourceZone})
-	return results, nil
+	return results, exhausted, nil
 }
 
 // buildAdjacency turns edges into an adjacency list. An undirected edge

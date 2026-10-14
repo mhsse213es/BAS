@@ -11,7 +11,6 @@ import (
 
 	"github.com/audspect/bas/internal/auth"
 	"github.com/audspect/bas/internal/cloudgraph"
-	"github.com/audspect/bas/internal/networkpath"
 	"github.com/audspect/bas/internal/scenario"
 	"github.com/audspect/bas/internal/ws"
 )
@@ -49,12 +48,12 @@ func TestFindNetworkPaths_SameZoneQueryReturnsSingleHopResult(t *testing.T) {
 		if rec.Code != http.StatusOK {
 			t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
 		}
-		var results []networkpath.PathResult
-		if err := json.Unmarshal(rec.Body.Bytes(), &results); err != nil {
+		var resp networkPathResponse
+		if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
 			t.Fatalf("decode: %v", err)
 		}
-		if len(results) != 1 || len(results[0].Hops) != 1 {
-			t.Fatalf("got %+v, want exactly one result with one hop -- a same-zone query must still produce a meaningful single hop", results)
+		if len(resp.Results) != 1 || len(resp.Results[0].Hops) != 1 {
+			t.Fatalf("got %+v, want exactly one result with one hop -- a same-zone query must still produce a meaningful single hop", resp.Results)
 		}
 	})
 }
@@ -76,15 +75,15 @@ func TestFindNetworkPaths_NoRouteProducesUnknownNotBlocked(t *testing.T) {
 		if rec.Code != http.StatusOK {
 			t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
 		}
-		var results []networkpath.PathResult
-		if err := json.Unmarshal(rec.Body.Bytes(), &results); err != nil {
+		var resp networkPathResponse
+		if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
 			t.Fatalf("decode: %v", err)
 		}
-		if len(results) != 1 {
-			t.Fatalf("got %d results, want exactly one synthetic result for the no-route case", len(results))
+		if len(resp.Results) != 1 {
+			t.Fatalf("got %d results, want exactly one synthetic result for the no-route case", len(resp.Results))
 		}
-		if results[0].State != cloudgraph.Unknown {
-			t.Fatalf("State = %q, want unknown -- a missing route must never read as blocked", results[0].State)
+		if resp.Results[0].State != cloudgraph.Unknown {
+			t.Fatalf("State = %q, want unknown -- a missing route must never read as blocked", resp.Results[0].State)
 		}
 	})
 }
@@ -121,12 +120,12 @@ func TestFindNetworkPaths_DisjointZoneNamingBetweenTopologyAndPolicyDegradesToUn
 		if rec.Code != http.StatusOK {
 			t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
 		}
-		var results []networkpath.PathResult
-		if err := json.Unmarshal(rec.Body.Bytes(), &results); err != nil {
+		var resp networkPathResponse
+		if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
 			t.Fatalf("decode: %v", err)
 		}
-		if len(results) != 1 || results[0].State != cloudgraph.Unknown {
-			t.Fatalf("got %+v, want one result with state unknown -- disjoint zone-naming schemes must degrade honestly, never crash or misattribute a policy verdict", results)
+		if len(resp.Results) != 1 || resp.Results[0].State != cloudgraph.Unknown {
+			t.Fatalf("got %+v, want one result with state unknown -- disjoint zone-naming schemes must degrade honestly, never crash or misattribute a policy verdict", resp.Results)
 		}
 	})
 }
@@ -169,14 +168,14 @@ func TestFindNetworkPaths_MultiHopWithDiscoveryRunNotesNoObservationOnIntermedia
 		if rec.Code != http.StatusOK {
 			t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
 		}
-		var results []networkpath.PathResult
-		if err := json.Unmarshal(rec.Body.Bytes(), &results); err != nil {
+		var resp networkPathResponse
+		if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
 			t.Fatalf("decode: %v", err)
 		}
-		if len(results) != 1 || len(results[0].Hops) != 2 {
-			t.Fatalf("got %+v, want one result with 2 hops (a->pivot, pivot->b)", results)
+		if len(resp.Results) != 1 || len(resp.Results[0].Hops) != 2 {
+			t.Fatalf("got %+v, want one result with 2 hops (a->pivot, pivot->b)", resp.Results)
 		}
-		firstHop := results[0].Hops[0]
+		firstHop := resp.Results[0].Hops[0]
 		if firstHop.Observation != nil {
 			t.Fatal("want no observation on the intermediate hop a->pivot -- Phase 1 never observes an arbitrary intermediate hop")
 		}
