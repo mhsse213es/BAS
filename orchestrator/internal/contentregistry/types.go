@@ -57,6 +57,7 @@ const (
 const (
 	ActorIntake     = "intake"
 	ActorGenerator  = "generator:connector"
+	ActorComposer   = "composer:admin"
 	ActorMigration  = "migration:pre-registry"
 	MigrationReason = "historical authorization: authored via operator UI before approval tracking existed; not reviewed during migration"
 )
