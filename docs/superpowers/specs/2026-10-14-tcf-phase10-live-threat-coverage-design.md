@@ -87,7 +87,7 @@ One function, `evidence` or a new small package (`internal/exposure` — a singl
 2. For each, `SELECT * FROM threat_techniques WHERE threat_id = $1 AND status = 'active'`.
 3. For each, `SELECT cvt.*, cv.* FROM content_version_threats cvt JOIN content_versions cv ON cv.id = cvt.content_version_id WHERE cvt.threat_id = $1`.
 4. For each content version found, `SELECT MAX(started_at), COUNT(*) FROM scenario_runs WHERE content_version_id = $1`.
-5. Technique-level `hasExecutableContent` is computed in Go by parsing each content version's `artifact_bytes` as a `scenario.Scenario` (the same YAML the engine already parses to run it) and collecting `Steps[].TechniqueID` (`types.go:122-124`), then cross-referencing against the threat's active technique list. `artifact_bytes` is already confirmed-parseable YAML by this point (`createVersion`'s STRUCTURAL check ran at creation, §1.6) — no new SQL table needed for this hop, but it is a real per-content-version parse, not a free lookup.
+5. Technique-level `hasExecutableContent` is computed in Go by cross-referencing each content version's own `content_versions.technique_ids text[]` column (`content_registry_schema.go:69`, populated and validated against the catalog at creation time, `store.go:256,356`) against the threat's active technique list — a plain array read, no YAML parsing needed.
 
 This is N+1-shaped (one query per threat for techniques, content, run-aggregate) rather than one giant join, matching this codebase's existing style in `analytics/factory.go`'s per-metric query functions rather than forcing one mega-query. Acceptable at the data volumes this system operates at (an "active threats" list is not expected to be in the thousands); revisit only if it proves slow in practice.
 
@@ -119,6 +119,6 @@ This is N+1-shaped (one query per threat for techniques, content, run-aggregate)
 
 - A threat with active techniques but zero `content_version_threats` rows — confirm the response is an honest empty `content: []`, not an error, not an omitted threat, not a false "covered" inference.
 - A content version whose `lifecycle` is `DRAFT` (not yet executable) — confirm `isExecutable: false` and that it still appears (drafts are real, relevant information: "we're working on content for this threat"), rather than being filtered out.
-- A technique present in `threat_techniques` that no content version's tags cover — confirm `hasExecutableContent: false`, not an incorrect `true` from a loose/partial tag match.
+- A technique present in `threat_techniques` that no content version's `technique_ids` array contains — confirm `hasExecutableContent: false`, not an incorrect `true` from a loose/partial match.
 - A content version reached only through `remediation_dispatch.go`/`variant_handlers.go` runs (no `content_version_id` set on those rows) — confirm `lastRunAt`/`runCount` correctly show no-run rather than silently including an unrelated run via a fallback string match.
 - Pagination (`?limit=`/`?offset=`) behavior at the boundary (0 active threats, exactly `limit` threats, more than `limit`) — confirm no off-by-one and no unbounded query if `limit` is omitted or garbage.
