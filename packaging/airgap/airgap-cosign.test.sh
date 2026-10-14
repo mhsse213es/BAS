@@ -33,6 +33,11 @@ HOST_SNAP="$(snap)"
 mkdir -p "$T/tools"
 sed 's/\$EUID -ne 0/0 -ne 0/' "$HERE/import.sh" > "$T/tools/import.sh"
 cp "$HERE/verify.sh" "$HERE/cosign-verify-lib.sh" "$T/tools/"
+# verify-sig.sh is shipped in the real bundle, next to import.sh, so import.sh
+# can verify the now-mandatory bundle-level .asc -- every bundle is signed by
+# default (see make_bundle below), so this must be in place from the start,
+# not only inside the dedicated GPG section further down.
+cp "$REPO/packaging/signing/verify-sig.sh" "$T/tools/"
 
 export STUB_LOG="$T/calls.log"
 export DOCKER_STATE="$T/dstate"
@@ -100,6 +105,33 @@ cp "$STUB_CURL_SRC" "$out"
 EOF
 chmod +x "$STUBS/docker" "$STUBS/cosign" "$STUBS/curl"
 
+# ── Real throwaway GPG keys for the bundle-level signature ─────────────────────
+# Generated once, up front, so make_bundle() (below) can sign every bundle it
+# produces by default -- a mandatory bundle-level GPG signature (restored by
+# the airgap reconciliation) is now a precondition for import.sh to proceed
+# past its very first check, not just something the dedicated GPG section
+# further down exercises. That section reuses these same keys/fingerprints
+# rather than regenerating them (regenerating would mint a second, different
+# key under the same test identity and desync it from whatever already signed
+# a bundle).
+GPG_OK=0
+if command -v gpg >/dev/null 2>&1; then
+  GPG_OK=1
+  export GNUPGHOME="$T/gnupg"; mkdir -p "$GNUPGHOME"; chmod 700 "$GNUPGHOME"
+  gpg --batch --pinentry-mode loopback --passphrase '' --quick-gen-key "A <a@test.invalid>" default default never >/dev/null 2>&1
+  gpg --batch --pinentry-mode loopback --passphrase '' --quick-gen-key "B <b@test.invalid>" default default never >/dev/null 2>&1
+  gpg --armor --export a@test.invalid > "$T/gpg-a.asc"; gpg --armor --export b@test.invalid > "$T/gpg-b.asc"
+  cat "$T/gpg-a.asc" "$T/gpg-b.asc" > "$T/gpg-multi.asc"           # [genuine A, attacker B]
+  FPA=$(gpg --with-colons --list-keys a@test.invalid | awk -F: '/^fpr/{print $10; exit}')
+  gsign() { # <signer email> <file>
+    rm -f "$2.asc"; gpg --batch --pinentry-mode loopback --passphrase '' -u "$1" --detach-sign --armor -o "$2.asc" "$2"
+  }
+  # Bundled trust anchor verify-sig.sh falls back to: key A (the default
+  # signer every make_bundle() call uses) next to verify-sig.sh/import.sh,
+  # same as the real shipped bundle's pubkey.asc.
+  cp "$T/gpg-a.asc" "$T/tools/pubkey.asc"
+fi
+
 # Runtime image pin (packaging/images.pin) -- the chrome tag every consumer must agree on.
 CHROME_TAG="chromedp/headless-shell:$(sed -n 's/^CHROME_VERSION=//p' "$REPO/packaging/images.pin")"
 # ── Image / bundle builders ────────────────────────────────────────────────────
@@ -138,6 +170,12 @@ make_bundle() {
   [ -n "${MUTATE:-}" ] && eval "$MUTATE"
   (cd "$b" && find . -type f ! -name MANIFEST.sha256 | sort | xargs sha256sum | sed 's/^\([a-f0-9]*\) \*\(.*\)/\1  \2/') > "$b/MANIFEST.sha256"
   tar -czf "$out" -C "$T/build" bas-airgap-9.9.9
+  # Every bundle is signed by default (key A, the "genuine" signer) now that
+  # import.sh requires a bundle-level GPG signature unconditionally -- tests
+  # that specifically want to exercise an unsigned/mismatched bundle do so by
+  # resigning (gsign) or deleting "$out.asc" afterward, same as any other
+  # tamper scenario.
+  [ "$GPG_OK" = 1 ] && gsign a@test.invalid "$out"
 }
 
 TEST_PATH="$STUBS:$PATH"
@@ -554,7 +592,11 @@ done
 ! grep -Eq 'headless-shell:(latest|[0-9])' "$REPO/packaging/compose/uninstall.sh" && grep -q 'chromedp/headless-shell):' "$REPO/packaging/compose/uninstall.sh" && pass "uninstall.sh matches chromedp/headless-shell:* (no hardcoded chrome tag)" || fail "uninstall.sh hardcodes a chrome tag"
 
 echo "TEST: setup.sh flags + images/ forces the verify path (real parse_args / _do_install_steps)"
-{ extract_fn "$SETUP" parse_args; extract_fn "$SETUP" _do_install_steps; } > "$T/setup-main-fns.sh"
+# _do_install_steps calls detect_install_state/install_state_message (sourced
+# by the real setup.sh from setup-install-state.sh, SCRIPT_DIR-relative) --
+# extract_fn only pulls isolated function bodies, so append the real library
+# itself rather than relying on a source line this stub never reaches.
+{ extract_fn "$SETUP" parse_args; extract_fn "$SETUP" _do_install_steps; cat "$REPO/packaging/compose/setup-install-state.sh"; } > "$T/setup-main-fns.sh"
 NOIMG="$T/noimg"; rm -rf "$NOIMG"; mkdir -p "$NOIMG"; printf 'fake-pub' > "$NOIMG/cosign.pub"
 run_setup_main() { # <script dir> <args...>   parse_args "$@" then _do_install_steps (stops at its first _step)
   local sd="$1"; shift
@@ -564,6 +606,7 @@ run_setup_main() { # <script dir> <args...>   parse_args "$@" then _do_install_s
     err() { echo "ERR: $*" >&2; }; warn() { echo "WARN: $*"; }; log() { echo "$*"; }
     _step() { echo "STEP $1" >> "$STUB_LOG"; exit 42; }
     SCRIPT_DIR="$1"; shift; BAS_VERSION=9.9.9; OFFLINE=false; NO_WIZARD=false; CONFIG_FILE=""; GPG_PUB_FLAG=""
+    INSTALL_DIR="/opt/bas-platform"; RESUME_INSTALL=false
     source "$T_FNS"; source "$T_MAIN"
     parse_args "$@"
     echo "PARSED OFFLINE=$OFFLINE NOWIZ=$NO_WIZARD CONFIG=$CONFIG_FILE GPG=$GPG_PUB_FLAG COSIGN=${BAS_COSIGN_PUB:-}"
@@ -671,20 +714,13 @@ need_kb=$(( ( $(wc -c < "$T/b.tar.gz") + 1023 ) / 1024 * 3 ))
 FAKE_DF_KB=$((need_kb - 1)) expect_abort "import.sh: just under 3x the bundle size -> abort"
 FAKE_DF_KB=$need_kb check_valid "import.sh: exactly 3x the bundle size free -> proceeds"
 echo "TEST: GPG (real throwaway keys): verify-sig.sh, import.sh, verify.sh and setup.sh agent check"
-if ! command -v gpg >/dev/null 2>&1; then
+if [ "$GPG_OK" != 1 ]; then
   echo "SKIP: gpg not available"
 else
-  export GNUPGHOME="$T/gnupg"; mkdir -p "$GNUPGHOME"; chmod 700 "$GNUPGHOME"
-  gpg --batch --pinentry-mode loopback --passphrase '' --quick-gen-key "A <a@test.invalid>" default default never >/dev/null 2>&1
-  gpg --batch --pinentry-mode loopback --passphrase '' --quick-gen-key "B <b@test.invalid>" default default never >/dev/null 2>&1
-  gpg --armor --export a@test.invalid > "$T/gpg-a.asc"; gpg --armor --export b@test.invalid > "$T/gpg-b.asc"
-  cat "$T/gpg-a.asc" "$T/gpg-b.asc" > "$T/gpg-multi.asc"           # [genuine A, attacker B]
-  FPA=$(gpg --with-colons --list-keys a@test.invalid | awk -F: '/^fpr/{print $10; exit}')
-  gsign() { # <signer email> <file>
-    rm -f "$2.asc"; gpg --batch --pinentry-mode loopback --passphrase '' -u "$1" --detach-sign --armor -o "$2.asc" "$2"
-  }
+  # Keys A/B, FPA and gsign() already exist (generated up front, above, so
+  # make_bundle() can sign every bundle by default) -- reused here, not
+  # regenerated, so FPA stays the fingerprint of whatever actually signs.
   MUTATE="" make_bundle "$T/b.tar.gz"
-  gsign a@test.invalid "$T/b.tar.gz"
   cp "$REPO/packaging/signing/verify-sig.sh" "$T/tools/"; cp "$T/gpg-a.asc" "$T/tools/pubkey.asc"   # bundled key = A (signer)
   vs() { PATH="$TEST_PATH" bash "$T/tools/verify-sig.sh" "$T/b.tar.gz" "$@" > "$T/out.txt" 2>&1; }
   gok() { local rc=0; "$@" || rc=$?; [ "$rc" -eq 0 ]; }
@@ -783,6 +819,12 @@ else
   gsign a@test.invalid "$T/b.tar.gz"
   gpgconf --kill all >/dev/null 2>&1 || true
   rm -f "$T/b.tar.gz.asc" "$T/tools/verify-sig.sh" "$T/tools/pubkey.asc"
+
+  # Mandatory bundle-level GPG signature (the core guarantee the airgap
+  # reconciliation restored): a bundle with no .asc at all must never be
+  # imported, regardless of how valid everything else about it is.
+  expect_abort "import.sh: no bundle GPG signature at all -> aborted (mandatory, fail closed)"
+  grep -q "No GPG signature" "$T/out.txt" && pass "no-signature message names the missing .asc" || fail "no-signature message"
 fi
 
 echo "TEST: ISO post-install.sh and Packer install-bas.sh are sandboxed and fail closed"

@@ -39,6 +39,7 @@ import (
 	"github.com/audspect/bas/internal/detectverify"
 	"github.com/audspect/bas/internal/emsweep"
 	"github.com/audspect/bas/internal/endpointrisk"
+	"github.com/audspect/bas/internal/evidence"
 	"github.com/audspect/bas/internal/exercise"
 	"github.com/audspect/bas/internal/initiatives"
 	"github.com/audspect/bas/internal/integrity"
@@ -58,6 +59,7 @@ import (
 	"github.com/audspect/bas/internal/rulelib"
 	"github.com/audspect/bas/internal/scenario"
 	"github.com/audspect/bas/internal/taxii"
+	"github.com/audspect/bas/internal/threatcontent"
 	"github.com/audspect/bas/internal/threatpriority"
 	"github.com/audspect/bas/internal/ticketing"
 	"github.com/audspect/bas/internal/verification"
@@ -113,6 +115,7 @@ type Handler struct {
 	remediationCatalog   *remediation.Catalog   // nil when not loaded
 	reportingEngine      *reporting.Engine      // nil when not loaded
 	scheduler            *connector.Scheduler   // nil when no sources configured
+	evidenceStore        *evidence.Store        // nil when generation-attempt observability isn't wired
 	ticketing            *ticketing.Manager     // nil when no connectors configured
 	licPath              string                 // path to bas.lic for Settings → License display
 	publicBaseURL        string                 // orchestrator's externally-reachable base URL; used for {{SINK_URL}} substitution and exercise tracker links
@@ -209,6 +212,14 @@ func (h *Handler) WithReporting(e *reporting.Engine) *Handler {
 // WithScheduler attaches the threat-intel connector scheduler.
 func (h *Handler) WithScheduler(s *connector.Scheduler) *Handler {
 	h.scheduler = s
+	return h
+}
+
+// WithEvidenceStore attaches the evidence layer for generation-attempt
+// observability (TCF Phase 9, spec 2026-10-13 §2.6). nil (the default)
+// makes GetGenerationAttempts respond 503.
+func (h *Handler) WithEvidenceStore(s *evidence.Store) *Handler {
+	h.evidenceStore = s
 	return h
 }
 
@@ -4510,6 +4521,118 @@ func (h *Handler) GetUnifiedTechniques(w http.ResponseWriter, r *http.Request) {
 	respond(w, out)
 }
 
+// GetThreatExposure handles GET /api/threats/exposure — live threat
+// coverage: which currently-active threats have validated/executable
+// content, and which don't (TCF Phase 10, spec
+// docs/superpowers/specs/2026-10-14-tcf-phase10-live-threat-coverage-design.md
+// §2.1).
+//
+// Query params:
+//
+//	limit — max threats, default 20, max 100
+//	offset — pagination offset, default 0
+func (h *Handler) GetThreatExposure(w http.ResponseWriter, r *http.Request) {
+	reg, ok := h.engine.Registry().(*contentregistry.Registry)
+	if !ok || reg == nil {
+		jsonError(w, "content registry not available", http.StatusServiceUnavailable)
+		return
+	}
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
+	result, err := threatcontent.ListActiveThreatExposure(r.Context(), h.db, reg, limit, offset)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	respond(w, result)
+}
+
+// PromoteComponent handles POST /api/content-registry/components/promote --
+// turns one step of an executable content_version into a reusable internal
+// component (TCF Phase 4, spec
+// docs/superpowers/specs/2026-10-14-tcf-phase4-content-composition-design.md §2.2).
+func (h *Handler) PromoteComponent(w http.ResponseWriter, r *http.Request) {
+	reg, ok := h.engine.Registry().(*contentregistry.Registry)
+	if !ok || reg == nil {
+		jsonError(w, "content registry not available", http.StatusServiceUnavailable)
+		return
+	}
+	var body struct {
+		ContentVersionID string `json:"contentVersionId"`
+		StepIndex        int    `json:"stepIndex"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		jsonError(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+	actor := actorFor(r)
+	componentID, err := reg.PromoteInternalComponent(r.Context(), body.ContentVersionID, body.StepIndex, actor)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusUnprocessableEntity)
+		return
+	}
+	respond(w, map[string]string{"componentId": componentID})
+}
+
+// ReferenceComponent handles POST /api/content-registry/components/reference
+// -- registers a reusable external (ART/Caldera) component reference
+// (spec §2.1, §2.2).
+func (h *Handler) ReferenceComponent(w http.ResponseWriter, r *http.Request) {
+	reg, ok := h.engine.Registry().(*contentregistry.Registry)
+	if !ok || reg == nil {
+		jsonError(w, "content registry not available", http.StatusServiceUnavailable)
+		return
+	}
+	var body struct {
+		Framework      string   `json:"framework"`
+		TechniqueID    string   `json:"techniqueId"`
+		Title          string   `json:"title"`
+		AbilityID      string   `json:"abilityId"`
+		ActionKey      string   `json:"actionKey"`
+		TestIndex      int      `json:"testIndex"`
+		LibraryVersion string   `json:"libraryVersion"`
+		SupportedOS    []string `json:"supportedOS"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		jsonError(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+	actor := actorFor(r)
+	componentID, err := reg.RegisterExternalComponent(r.Context(), body.Framework, body.TechniqueID, body.Title,
+		body.AbilityID, body.ActionKey, body.TestIndex, body.LibraryVersion, body.SupportedOS, actor)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusUnprocessableEntity)
+		return
+	}
+	respond(w, map[string]string{"componentId": componentID})
+}
+
+// ComposeContent handles POST /api/content-registry/compose -- assembles
+// the given components into a new content_version (TCF Phase 4, spec
+// docs/superpowers/specs/2026-10-14-tcf-phase4-content-composition-design.md §2.3).
+func (h *Handler) ComposeContent(w http.ResponseWriter, r *http.Request) {
+	reg, ok := h.engine.Registry().(*contentregistry.Registry)
+	if !ok || reg == nil {
+		jsonError(w, "content registry not available", http.StatusServiceUnavailable)
+		return
+	}
+	var body struct {
+		ComponentIDs []string `json:"componentIds"`
+		ThreatID     string   `json:"threatId"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		jsonError(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+	actor := actorFor(r)
+	versionID, created, err := reg.Compose(r.Context(), body.ComponentIDs, body.ThreatID, actor)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusUnprocessableEntity)
+		return
+	}
+	respond(w, map[string]any{"versionId": versionID, "created": created})
+}
+
 // TechniqueCatalogEntry is one row in the full ATT&CK technique search
 // catalog served to the Scenario Builder's Technique Selector. Built
 // entirely from the embedded attackdata dataset — read-only, no DB access.
@@ -5119,6 +5242,39 @@ func (h *Handler) GetConnectorStatus(w http.ResponseWriter, r *http.Request) {
 		ConnectorStatus: h.scheduler.Status(),
 		OTXEnabled:      h.getIOCProvider() != nil,
 	})
+}
+
+// GET /api/connector/generation-attempts — per-actor generation outcomes
+// from the threat-intel scheduler (TCF Phase 9, spec 2026-10-13 §2.6).
+//
+// Query params:
+//
+//	cycle_id — every attempt from one scheduler cycle (optional)
+//	threat_id — every attempt for one actor across cycles (optional)
+//	since — RFC3339 timestamp, attempts started at or after it (optional)
+//	limit — max rows, default 50, max 100
+func (h *Handler) GetGenerationAttempts(w http.ResponseWriter, r *http.Request) {
+	if h.evidenceStore == nil {
+		jsonError(w, "generation attempts not available", http.StatusServiceUnavailable)
+		return
+	}
+	filter := evidence.GenerationAttemptFilter{
+		CycleID:  r.URL.Query().Get("cycle_id"),
+		ThreatID: r.URL.Query().Get("threat_id"),
+		Limit:    50,
+	}
+	if l, err := strconv.Atoi(r.URL.Query().Get("limit")); err == nil && l > 0 && l <= 100 {
+		filter.Limit = l
+	}
+	if s, err := time.Parse(time.RFC3339, r.URL.Query().Get("since")); err == nil {
+		filter.Since = s
+	}
+	attempts, err := h.evidenceStore.ListGenerationAttempts(r.Context(), filter)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	respond(w, attempts)
 }
 
 // POST /api/connector/sync  — triggers an immediate sync in background

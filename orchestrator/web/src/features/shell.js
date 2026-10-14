@@ -9,7 +9,7 @@ import { closeScenarioOverlay, injectServerURL, loadAgentGroupTree, loadAgents, 
 import { loadAuditLogs } from './audit-logs.js';
 import { closeCampaignDetail } from './campaigns.js';
 import { loadCalderaStatus, refreshDashboardCampaigns } from './compliance.js';
-import { loadCoverage, loadCoverageAnalytics, loadUnifiedTechniques } from './coverage.js';
+import { loadCoverage, loadCoverageAnalytics, loadUnifiedTechniques, loadThreatExposure } from './coverage.js';
 import { loadVerificationTab } from './detection-verification.js';
 import { loadEmTab } from './endpoint-mastery.js';
 import { loadADCoverage } from './ad-coverage.js';
@@ -19,6 +19,7 @@ import { loadInitiatives } from './initiatives.js';
 import { loadIntegrations, loadResponseConnectors, renderResponseConnectorList } from './integrations.js';
 import { loadIOCRegistry } from './iocs.js';
 import { loadExercisesTab } from './openaev.js';
+import { loadFactoryHealth } from './factory-health.js';
 import { loadReports, loadRuns } from './reports.js';
 import { loadScheduledAssessments } from './scheduled.js';
 import { loadARTContentStatus, loadConnectorStatus, loadSimCoverage, loadTAXIIConnectors, loadThreatIntelConfig } from './threat-intel.js';
@@ -535,7 +536,7 @@ export function showTab(name) {
   if (name === 'campaigns') closeCampaignDetail();
   if (name === 'scheduled-assessments') loadScheduledAssessments();
   if (name === 'initiatives') loadInitiatives();
-  if (name === 'coverage') { loadCoverage(); loadUnifiedTechniques(); loadCoverageAnalytics(); }
+  if (name === 'coverage') { loadCoverage(); loadUnifiedTechniques(); loadCoverageAnalytics(); loadThreatExposure(); }
   if (name === 'attack-coverage') { loadCoverageActors(); loadCoverageMatrix(); }
   if (name === 'threat-priority') { showThreatPriorityList(); loadThreatPriorityActors(); }
   if (name === 'findings') loadFindings();
@@ -548,6 +549,7 @@ export function showTab(name) {
   if (name === 'exposure') loadExposureAssets();
   if (name === 'recommendations') loadRecommendations();
   if (name === 'exercises') loadExercisesTab();
+  if (name === 'factory-health') loadFactoryHealth();
   if (name === 'variants') loadVariantTab();
   if (name === 'em') loadEmTab();
   if (name === 'ad-coverage') loadADCoverage();

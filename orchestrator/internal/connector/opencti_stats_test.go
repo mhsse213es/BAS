@@ -10,9 +10,12 @@ import (
 
 // TestOpenCTIClient_Stats_CountsRawNodesAndFilteredActors returns two threat-
 // actor nodes with no attack-pattern edges, so convertActor builds an actor
-// with 0 techniques and Fetch's "2+ techniques" filter drops both — RawCount
-// is 2, ActorCount is 0. A single mocked GraphQL endpoint is enough since
-// OpenCTI's Fetch, unlike MISP's, makes only one HTTP round trip.
+// with 0 techniques and Fetch's zero-technique filter drops both (an actor
+// with no evidence at all has nothing worth returning either way; the
+// separate 2+-technique generation threshold lives downstream in
+// Generator.Write(), spec §6.2) — RawCount is 2, ActorCount is 0. A single
+// mocked GraphQL endpoint is enough since OpenCTI's Fetch, unlike MISP's,
+// makes only one HTTP round trip.
 func TestOpenCTIClient_Stats_CountsRawNodesAndFilteredActors(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/graphql" {

@@ -22,6 +22,38 @@ func ambiguousCandidate(t *testing.T, pool *pgxpool.Pool, s *Store) (string, str
 	return r.CandidateID, a
 }
 
+func TestQueueEmulatesCandidate_CreatesAndDeduplicates(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		s := NewStore(pool)
+
+		id1, err := s.QueueEmulatesCandidate(ctx, "cv-emulates-candidate", "G9998", "not found in catalog")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if id1 == "" {
+			t.Fatal("QueueEmulatesCandidate returned empty id")
+		}
+		// Same (external_id, ref_entity_id) while still unresolved -- no duplicate row.
+		id2, err := s.QueueEmulatesCandidate(ctx, "cv-emulates-candidate", "G9998", "not found in catalog")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if id2 != id1 {
+			t.Fatalf("second call id = %q, want the same %q (dedup while unresolved)", id2, id1)
+		}
+
+		var count int
+		if err := pool.QueryRow(ctx, `SELECT count(*) FROM actor_resolution_candidates WHERE id = $1 AND kind = 'content_emulates_ref'`,
+			id1).Scan(&count); err != nil {
+			t.Fatal(err)
+		}
+		if count != 1 {
+			t.Fatalf("candidate row count = %d, want 1", count)
+		}
+	})
+}
+
 func TestDecide_LinkMapsSourceAndIsTerminal(t *testing.T) { // acceptance 12
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
 		ctx := context.Background()

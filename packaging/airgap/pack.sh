@@ -212,15 +212,29 @@ sha256sum "${TARBALL}" > "${CHECKSUM}" 2>/dev/null || \
 
 BUNDLE_SIZE=$(du -sh "${TARBALL}" | cut -f1)
 
-# ── 8. Sign bundle if signing key is present ───────────────────────────────────
+# ── 8. Sign the bundle -- mandatory, not optional (TCF Phase 8, ported) ────────
+# An unsigned air-gap bundle must never be produced: GPG is the only mechanism
+# authenticating the compose files, the postgres image, scenarios, and ART
+# payloads -- cosign (step 3 above) covers only the runtime image tars.
+# "Warn and ship unsigned" was the exact fail-open defect this closes.
 SIGN_SCRIPT="${REPO_ROOT}/packaging/signing/sign.sh"
 SIGNING_KEY_EMAIL="releases@audspect.com"
-if command -v gpg &>/dev/null && gpg --list-secret-keys "${SIGNING_KEY_EMAIL}" &>/dev/null 2>&1; then
-  log "Signing bundle with GPG key ${SIGNING_KEY_EMAIL}..."
-  bash "${SIGN_SCRIPT}" "${TARBALL}"
-else
-  warn "GPG signing key not found — bundle is unsigned."
-  echo "  To sign: bash packaging/signing/keygen.sh && bash packaging/signing/sign.sh ${TARBALL}"
+if ! command -v gpg &>/dev/null; then
+  err "gpg is not installed, and GPG signing is mandatory for this air-gap bundle. An unsigned air-gap bundle must never be produced."
+  rm -f "${TARBALL}" "${CHECKSUM}"
+  exit 1
+fi
+if ! gpg --list-secret-keys "${SIGNING_KEY_EMAIL}" &>/dev/null 2>&1; then
+  err "GPG signing key (${SIGNING_KEY_EMAIL}) not found, and GPG signing is mandatory for this air-gap bundle. An unsigned air-gap bundle must never be produced."
+  echo "  Generate one: bash packaging/signing/keygen.sh" >&2
+  rm -f "${TARBALL}" "${CHECKSUM}"
+  exit 1
+fi
+log "Signing bundle with GPG key ${SIGNING_KEY_EMAIL}..."
+if ! bash "${SIGN_SCRIPT}" "${TARBALL}"; then
+  err "GPG signing failed -- aborting. An unsigned air-gap bundle must never be produced."
+  rm -f "${TARBALL}" "${CHECKSUM}"
+  exit 1
 fi
 
 log "Done."
@@ -228,7 +242,7 @@ echo ""
 echo "  Bundle:    ${TARBALL}  (${BUNDLE_SIZE})"
 echo "  Checksum:  ${CHECKSUM}"
 echo ""
-echo "  Transfer bundle + .sha256 + .asc (if signed) to the air-gapped server."
+echo "  Transfer bundle + .sha256 + .asc to the air-gapped server."
 echo "  TRUST BOOTSTRAP: verify-sig.sh ships INSIDE the bundle, so with an out-of-band"
 echo "  GPG key do the FIRST check with the host's own gpg BEFORE extracting/running anything"
 echo "  (oob.asc = the Audspect key obtained out of band; canonical text: packaging/airgap/trust-bootstrap.sh):"

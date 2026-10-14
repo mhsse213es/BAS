@@ -65,6 +65,10 @@ const (
 	CanViewContentArtifact        Permission = "content:artifact:view"
 	CanTransitionContent          Permission = "content:transition"
 	CanViewContentMigrationReport Permission = "content:migration:view"
+	// CanManageComponents (TCF Phase 4) gates component promotion/reference
+	// registration and composition -- a distinct capability from lifecycle
+	// transition, though both are Admin-tier.
+	CanManageComponents Permission = "content:manage-components"
 
 	// Variant executor — Analyst+Admin.
 	CanGenerateVariants    Permission = "variants:generate"
@@ -219,6 +223,13 @@ const (
 	// TCF Phase 2A: link/new/dismiss unresolved actor identities (Admin only).
 	CanResolveActorIdentity Permission = "intel:resolve-actor"
 
+	// TCF Phase 2B: change a source instance's trust state (Admin only).
+	CanManageSourceTrust Permission = "intel:manage-source-trust"
+
+	// TCF Phase 2C: link a custom content version to a canonical threat
+	// (Admin only).
+	CanLinkContentThreat Permission = "content:link-threat"
+
 	// network-policy:import gates importing a normalized firewall/
 	// segmentation policy document (Network BAS Phase 2A) -- granted
 	// alongside CanRunScenario, not admin-only, since this is an
@@ -271,7 +282,7 @@ var rolePermissions = map[Role]map[Permission]bool{
 		CanCreateScenario: true, CanUploadScenario: true, CanCloneScenario: true,
 		CanUpdateScenario: true, CanDeleteScenario: true, CanGenerateVariants: true,
 
-		CanViewContentArtifact: true, CanTransitionContent: true, CanViewContentMigrationReport: true,
+		CanViewContentArtifact: true, CanTransitionContent: true, CanViewContentMigrationReport: true, CanManageComponents: true,
 
 		CanRunVariants: true, CanViewVariantRun: true, CanViewVariantCoverage: true,
 		CanViewVariantStats: true, CanListPayloadFamilies: true, CanViewPayloadFamily: true,
@@ -304,6 +315,8 @@ var rolePermissions = map[Role]map[Permission]bool{
 		CanExecuteRemediation: true, CanApproveRemediation: true,
 		CanManageBackups:                   true,
 		CanResolveActorIdentity:            true,
+		CanManageSourceTrust:               true,
+		CanLinkContentThreat:               true,
 		CanImportNetworkPolicy:             true,
 		CanImportNetworkTopology:           true,
 		CanImportNetworkControlExpectation: true,
@@ -395,7 +408,10 @@ func Permissions(role Role) []Permission {
 		CanExecuteRemediation, CanApproveRemediation,
 		CanManageBackups,
 		CanResolveActorIdentity,
-		CanViewContentArtifact, CanTransitionContent, CanViewContentMigrationReport,
+		CanManageSourceTrust,
+		CanLinkContentThreat,
+		CanImportNetworkPolicy, CanImportNetworkTopology, CanImportNetworkControlExpectation, CanImportCloudTopology,
+		CanViewContentArtifact, CanTransitionContent, CanViewContentMigrationReport, CanManageComponents,
 	} {
 		if set[p] {
 			out = append(out, p)

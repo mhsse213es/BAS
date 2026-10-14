@@ -10,6 +10,31 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
+// QueueEmulatesCandidate records a builtin scenario's declared `emulates`
+// reference that attackdata.GroupByID could not resolve to a known MITRE
+// ATT&CK group (spec §9.2, acceptance test 26) -- an admin later resolves
+// it through the same actor_resolution_candidates review flow as any
+// other identity candidate. Deduplicates against an already-queued,
+// still-unresolved candidate for the same (external_id, content version)
+// via the actor_resolution_candidates_open partial unique index.
+func (s *Store) QueueEmulatesCandidate(ctx context.Context, contentVersionID, externalID, reason string) (string, error) {
+	if _, err := s.pool.Exec(ctx, `
+		INSERT INTO actor_resolution_candidates
+		   (kind, source, external_id, raw_name, ref_entity_id, reason, resolver_context, resolver_context_hash)
+		 VALUES ('content_emulates_ref', 'attackdata', $1, $1, $2, $3, '{}'::jsonb, '')
+		 ON CONFLICT (kind, source, external_id, raw_name, ref_entity_id) WHERE status = 'unresolved' DO NOTHING`,
+		externalID, contentVersionID, reason); err != nil {
+		return "", err
+	}
+	var id string
+	err := s.pool.QueryRow(ctx, `
+		SELECT id FROM actor_resolution_candidates
+		 WHERE kind = 'content_emulates_ref' AND source = 'attackdata' AND external_id = $1
+		   AND raw_name = $1 AND ref_entity_id = $2 AND status = 'unresolved'`,
+		externalID, contentVersionID).Scan(&id)
+	return id, err
+}
+
 // Action is an admin's terminal decision on a resolution candidate.
 type Action string
 
