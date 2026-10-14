@@ -557,6 +557,7 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 
 		// Threat-intel connector
 		r.With(auth.RequirePermission(auth.CanViewConnectorStatus)).Get("/api/connector/status", h.GetConnectorStatus)
+		r.With(auth.RequirePermission(auth.CanViewConnectorStatus)).Get("/api/connector/generation-attempts", h.GetGenerationAttempts)
 		r.With(auth.RequirePermission(auth.CanSyncConnector)).Post("/api/connector/sync", h.TriggerConnectorSync)
 		r.With(auth.RequirePermission(auth.CanViewConnectorStatus)).Get("/api/threat-intel/{connector}/config", h.GetThreatIntelConfig)
 		r.With(auth.RequirePermission(auth.CanUpdateConnectorConfig)).Put("/api/threat-intel/{connector}/config", h.PutThreatIntelConfig)

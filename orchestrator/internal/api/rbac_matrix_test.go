@@ -266,6 +266,7 @@ var routeMatrix = []routeCase{
 	{http.MethodPost, "/api/users/{id}/reset-password", tierPermission, auth.CanResetUserPassword},
 	{http.MethodGet, "/api/caldera/status", tierPermission, auth.CanViewCalderaStatus},
 	{http.MethodGet, "/api/connector/status", tierPermission, auth.CanViewConnectorStatus},
+	{http.MethodGet, "/api/connector/generation-attempts", tierPermission, auth.CanViewConnectorStatus},
 	{http.MethodPost, "/api/connector/sync", tierPermission, auth.CanSyncConnector},
 	{http.MethodGet, "/api/threat-intel/{connector}/config", tierPermission, auth.CanViewConnectorStatus},
 	{http.MethodPut, "/api/threat-intel/{connector}/config", tierPermission, auth.CanUpdateConnectorConfig},

@@ -36,6 +36,7 @@ import (
 	"github.com/audspect/bas/internal/controlhealth"
 	"github.com/audspect/bas/internal/correlation"
 	"github.com/audspect/bas/internal/db"
+	"github.com/audspect/bas/internal/evidence"
 	"github.com/audspect/bas/internal/detectverify"
 	"github.com/audspect/bas/internal/emsweep"
 	"github.com/audspect/bas/internal/endpointrisk"
@@ -111,6 +112,7 @@ type Handler struct {
 	remediationCatalog   *remediation.Catalog   // nil when not loaded
 	reportingEngine      *reporting.Engine      // nil when not loaded
 	scheduler            *connector.Scheduler   // nil when no sources configured
+	evidenceStore        *evidence.Store        // nil when generation-attempt observability isn't wired
 	ticketing            *ticketing.Manager     // nil when no connectors configured
 	licPath              string                 // path to bas.lic for Settings → License display
 	publicBaseURL        string                 // orchestrator's externally-reachable base URL; used for {{SINK_URL}} substitution and exercise tracker links
@@ -195,6 +197,14 @@ func (h *Handler) WithReporting(e *reporting.Engine) *Handler {
 // WithScheduler attaches the threat-intel connector scheduler.
 func (h *Handler) WithScheduler(s *connector.Scheduler) *Handler {
 	h.scheduler = s
+	return h
+}
+
+// WithEvidenceStore attaches the evidence layer for generation-attempt
+// observability (TCF Phase 9, spec 2026-10-13 §2.6). nil (the default)
+// makes GetGenerationAttempts respond 503.
+func (h *Handler) WithEvidenceStore(s *evidence.Store) *Handler {
+	h.evidenceStore = s
 	return h
 }
 
@@ -5075,6 +5085,35 @@ func (h *Handler) GetConnectorStatus(w http.ResponseWriter, r *http.Request) {
 		ConnectorStatus: h.scheduler.Status(),
 		OTXEnabled:      h.getIOCProvider() != nil,
 	})
+}
+
+// GET /api/connector/generation-attempts — per-actor generation outcomes
+// from the threat-intel scheduler (TCF Phase 9, spec 2026-10-13 §2.6).
+//
+// Query params:
+//
+//	cycle_id — every attempt from one scheduler cycle (optional)
+//	threat_id — every attempt for one actor across cycles (optional)
+//	limit — max rows, default 50, max 100
+func (h *Handler) GetGenerationAttempts(w http.ResponseWriter, r *http.Request) {
+	if h.evidenceStore == nil {
+		jsonError(w, "generation attempts not available", http.StatusServiceUnavailable)
+		return
+	}
+	filter := evidence.GenerationAttemptFilter{
+		CycleID:  r.URL.Query().Get("cycle_id"),
+		ThreatID: r.URL.Query().Get("threat_id"),
+		Limit:    50,
+	}
+	if l, err := strconv.Atoi(r.URL.Query().Get("limit")); err == nil && l > 0 && l <= 100 {
+		filter.Limit = l
+	}
+	attempts, err := h.evidenceStore.ListGenerationAttempts(r.Context(), filter)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	respond(w, attempts)
 }
 
 // POST /api/connector/sync  — triggers an immediate sync in background
