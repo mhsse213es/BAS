@@ -3,6 +3,8 @@ package contentregistry
 import (
 	"bytes"
 	"context"
+	"encoding/json"
+	"slices"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -351,6 +353,21 @@ func TestCompose_RecordsCombinatorialVerdictOnSuccess(t *testing.T) {
 		}
 		if count != 1 {
 			t.Fatalf("expected exactly 1 combinatorial verdict row, got %d", count)
+		}
+		var detail []byte
+		if err := pool.QueryRow(ctx, `SELECT detail FROM content_safety_verdicts WHERE content_version_id = $1 AND classifier = 'combinatorial'`,
+			versionID).Scan(&detail); err != nil {
+			t.Fatal(err)
+		}
+		var parsed struct {
+			Tactics []string `json:"tactics"`
+		}
+		if err := json.Unmarshal(detail, &parsed); err != nil {
+			t.Fatalf("expected detail to be valid JSON, got: %v (raw: %s)", err, detail)
+		}
+		wantTactics := []string{"defense-evasion", "discovery"}
+		if !slices.Equal(parsed.Tactics, wantTactics) {
+			t.Fatalf("expected recorded detail.tactics to be %v (the actual resolved tactic union for T1562+T1087), got %v", wantTactics, parsed.Tactics)
 		}
 
 		var execclassCount int
