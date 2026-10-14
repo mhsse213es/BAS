@@ -13,8 +13,10 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 	"unicode"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"gopkg.in/yaml.v3"
@@ -74,6 +76,14 @@ type Generator struct {
 	// evidence, when set, makes Write consult the evidence layer's active
 	// technique set instead of actor.Techniques (TCF Phase 2 spec §6.2, §8).
 	evidence *evidence.Store
+
+	// evidenceRecordErr, when set (tests only), substitutes for the real
+	// NextGenerationNumber/RecordGeneration call in the `created` branch below.
+	// Forces the "created but evidence-recording failed" path deterministically;
+	// the real failure mode (a UNIQUE(threat_id, generation_number) collision)
+	// only occurs under a genuine concurrent race, which a single-threaded test
+	// cannot engineer. Always nil in production.
+	evidenceRecordErr error
 }
 
 // WithComponentVersions sets the catalog-version source for generation
@@ -163,12 +173,16 @@ func (g *Generator) Write(actors []ThreatActor) (GenerateResult, error) {
 	}
 
 	var res GenerateResult
+	cycleID := uuid.New().String()
 	for _, actor := range actors {
+		startedAt := time.Now()
 		if actor.ThreatID == "" {
 			// Unresolved identity never yields content (TCF Phase 2 spec §3.2).
 			res.Skipped++
+			g.recordAttempt(cycleID, nil, nil, "skipped", "unresolved_identity", nil, nil, startedAt)
 			continue
 		}
+		threatID := actor.ThreatID
 
 		activeTechniques := dedupedTechniqueIDs(actor.Techniques)
 		if g.evidence != nil {
@@ -176,12 +190,14 @@ func (g *Generator) Write(actors []ThreatActor) (GenerateResult, error) {
 			if err != nil {
 				log.Printf("[connector/gen] active techniques for %s: %v", actor.ThreatID, err)
 				res.Failed++
+				g.recordAttempt(cycleID, &threatID, nil, "failed", "active_techniques_error", strptr(err.Error()), nil, startedAt)
 				continue
 			}
 			activeTechniques = at
 		}
 		if len(activeTechniques) < minTechniques {
 			res.Skipped++
+			g.recordAttempt(cycleID, &threatID, nil, "skipped", "below_min_techniques", nil, nil, startedAt)
 			continue
 		}
 
@@ -194,54 +210,105 @@ func (g *Generator) Write(actors []ThreatActor) (GenerateResult, error) {
 		// hash instead of creating the version without sources. On failure the
 		// file is left unwritten and the next sync retries.
 		created := false
+		versionID := ""
+		key := generationKey(actor)
 		if g.registrar != nil {
 			var err error
-			key := generationKey(actor)
-			_, created, err = g.registrar.RegisterGenerated(context.Background(), contentregistry.GeneratedCandidate{
+			versionID, created, err = g.registrar.RegisterGenerated(context.Background(), contentregistry.GeneratedCandidate{
 				ContentID: id, Artifact: []byte(body), GenerationKey: key, GenerationRef: key, ThreatID: actor.ThreatID,
 				Generation: g.generationMeta(actor, cv, cvErr),
 				Sources: []contentregistry.SourceRef{{EntityType: "actor", EntityID: actor.Name, Provider: actor.Source,
 					ExternalID: actor.SourceID, Role: "primary"}},
 			})
 			if err != nil {
+				reasonCode := "registrar_error"
 				switch {
 				case errors.Is(err, contentregistry.ErrSourceCollision):
 					log.Printf("[connector/gen] %s (%s) collides with a custom scenario of the same id; not written: %v", id, actor.Name, err)
+					reasonCode = "source_collision"
 				case errors.Is(err, contentregistry.ErrOriginCollision):
 					log.Printf("[connector/gen] %s (%s) collides with content of a different origin; not written: %v", id, actor.Name, err)
+					reasonCode = "origin_collision"
 				case errors.Is(err, contentregistry.ErrThreatCollision):
 					log.Printf("[connector/gen] %s (%s) content id owned by a different threat; not written: %v", id, actor.Name, err)
+					reasonCode = "threat_collision"
 				default:
 					log.Printf("[connector/gen] register %s: %v", id, err)
 				}
 				res.Failed++
+				g.recordAttempt(cycleID, &threatID, &id, "failed", reasonCode, strptr(err.Error()), &key, startedAt)
 				continue
 			}
 		}
+		fileChanged := false
 		if old, err := os.ReadFile(fname); err != nil || !bytes.Equal(old, []byte(body)) {
 			if err := os.WriteFile(fname, []byte(body), 0644); err != nil {
 				log.Printf("[connector/gen] write %s: %v", fname, err)
 				res.Failed++
+				g.recordAttempt(cycleID, &threatID, &id, "failed", "write_error", strptr(err.Error()), &key, startedAt)
 				continue
 			}
 			res.Changed++
+			fileChanged = true
 		}
 		if created {
 			log.Printf("[connector/gen] new DRAFT %s (%s, %d active techniques)", id, actor.Name, len(activeTechniques))
 			res.Created++
+			var detail *string
 			if g.evidence != nil {
-				genNum, err := g.evidence.NextGenerationNumber(context.Background(), actor.ThreatID)
+				var err error
+				if g.evidenceRecordErr != nil {
+					// Test-only override (see the field's doc comment) -- the
+					// UNIQUE(threat_id, generation_number) failure this
+					// substitutes for only occurs under a genuine concurrent
+					// race in production, which a single-threaded test cannot
+					// engineer deterministically.
+					err = g.evidenceRecordErr
+				} else {
+					genNum, nErr := g.evidence.NextGenerationNumber(context.Background(), actor.ThreatID)
+					if nErr != nil {
+						err = nErr
+					} else {
+						err = g.evidence.RecordGeneration(context.Background(), actor.ThreatID, id, "", genNum, generationPolicyVersion)
+					}
+				}
 				if err != nil {
-					log.Printf("[connector/gen] next generation number for %s: %v", actor.ThreatID, err)
-				} else if err := g.evidence.RecordGeneration(context.Background(), actor.ThreatID, id, "", genNum, generationPolicyVersion); err != nil {
 					log.Printf("[connector/gen] record generation for %s: %v", actor.ThreatID, err)
+					detail = strptr("generation_number_error: " + err.Error())
 				}
 			}
+			g.recordAttempt(cycleID, &threatID, &id, "created", "ok", detail, &key, startedAt, versionID)
+		} else if fileChanged {
+			g.recordAttempt(cycleID, &threatID, &id, "changed", "ok", nil, &key, startedAt)
 		} else {
 			res.Skipped++
+			g.recordAttempt(cycleID, &threatID, &id, "skipped", "already_registered", nil, &key, startedAt)
 		}
 	}
 	return res, nil
+}
+
+func strptr(s string) *string { return &s }
+
+// recordAttempt is a nil-safe wrapper around evidence.Store.RecordGenerationAttempt,
+// matching the existing g.evidence != nil guard already used by ActiveTechniques,
+// NextGenerationNumber, and RecordGeneration. versionID is optional (variadic so
+// every other call site above doesn't need to pass an empty string explicitly).
+func (g *Generator) recordAttempt(cycleID string, threatID, contentID *string, outcome, reasonCode string, detail, fingerprint *string, startedAt time.Time, versionID ...string) {
+	if g.evidence == nil {
+		return
+	}
+	var versionIDPtr *string
+	if len(versionID) > 0 && versionID[0] != "" {
+		versionIDPtr = &versionID[0]
+	}
+	if err := g.evidence.RecordGenerationAttempt(context.Background(), evidence.GenerationAttempt{
+		CycleID: cycleID, ThreatID: threatID, ContentID: contentID, ContentVersionID: versionIDPtr,
+		Outcome: outcome, ReasonCode: reasonCode, Detail: detail,
+		GeneratorVersion: generatorVersion, Fingerprint: fingerprint, StartedAt: startedAt,
+	}); err != nil {
+		log.Printf("[connector/gen] record generation attempt (cycle=%s, outcome=%s): %v", cycleID, outcome, err)
+	}
 }
 
 // ── YAML builder ──────────────────────────────────────────────────────────────
