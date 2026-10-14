@@ -3,8 +3,11 @@ package networkdns
 import (
 	"context"
 	"errors"
+	"net"
 	"testing"
 	"time"
+
+	"github.com/miekg/dns"
 
 	"github.com/audspect/bas/internal/cloudgraph"
 	"github.com/audspect/bas/internal/networkgraph"
@@ -66,6 +69,46 @@ func TestRunChecks_OneFailingCheckDoesNotBlockOthers(t *testing.T) {
 	}
 	if len(result.Results) != 2 {
 		t.Fatalf("got %d results, want 2 -- one check's failure must not drop the other's result", len(result.Results))
+	}
+}
+
+// TestRunChecks_DNSSECCheck_ProducesDNSSECResult pins Review Focus item
+// 5 (the DNSCheckResult tagged union) for the DNSSEC side: a
+// CheckDNSSEC request must produce a populated DNSSEC field and a nil
+// Observation, end-to-end through RunChecks's real ValidateDNSSEC call
+// -- not merely through validateChain's own lower-level unit tests,
+// which never exercise this call path at all.
+func TestRunChecks_DNSSECCheck_ProducesDNSSECResult(t *testing.T) {
+	pc, err := net.ListenPacket("udp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen udp: %v", err)
+	}
+	srv := &dns.Server{PacketConn: pc, Handler: dns.HandlerFunc(func(w dns.ResponseWriter, r *dns.Msg) {
+		resp := new(dns.Msg)
+		resp.SetReply(r)
+		resp.Rcode = dns.RcodeRefused
+		_ = w.WriteMsg(resp)
+	})}
+	go srv.ActivateAndServe()
+	t.Cleanup(func() { _ = srv.Shutdown() })
+
+	original := defaultDNSResolverAddr
+	defaultDNSResolverAddr = pc.LocalAddr().String()
+	t.Cleanup(func() { defaultDNSResolverAddr = original })
+
+	checks := []DNSCheckRequest{{CheckType: CheckDNSSEC, QueryDomain: "example-test."}}
+	result, err := RunChecks(context.Background(), stubOpenResolverProbe{}, networkgraph.VantagePoint{ID: "vp1", NetworkPosition: "lab"}, checks)
+	if err != nil {
+		t.Fatalf("RunChecks: %v", err)
+	}
+	if len(result.Results) != 1 || result.Results[0].CheckType != CheckDNSSEC {
+		t.Fatalf("got %+v, want one dnssec result", result.Results)
+	}
+	if result.Results[0].DNSSEC == nil {
+		t.Fatal("DNSSEC must be populated for a dnssec check result")
+	}
+	if result.Results[0].Observation != nil {
+		t.Fatal("Observation must be nil for a dnssec check result")
 	}
 }
 

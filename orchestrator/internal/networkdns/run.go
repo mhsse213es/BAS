@@ -100,7 +100,7 @@ func RunChecks(ctx context.Context, probe OpenResolverProbe, vp networkgraph.Van
 func runOneCheck(ctx context.Context, probe OpenResolverProbe, vp networkgraph.VantagePoint, check DNSCheckRequest) DNSCheckResult {
 	switch check.CheckType {
 	case CheckDNSSEC:
-		dnssec := ValidateDNSSEC(check.QueryDomain)
+		dnssec := ValidateDNSSEC(ctx, check.QueryDomain)
 		return DNSCheckResult{CheckType: CheckDNSSEC, DNSSEC: &dnssec}
 	default: // CheckOpenResolver
 		state, probeErr := probe.Probe(ctx, check.Target, check.QueryDomain, DefaultCheckTimeout)

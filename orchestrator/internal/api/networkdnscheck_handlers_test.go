@@ -104,6 +104,82 @@ func TestTriggerDNSSecurityCheckRun_UnconfiguredVantagePointReturns503(t *testin
 	})
 }
 
+// dnssecCheckBody builds a dnssec-check request with no target --
+// DNSSEC validation resolves the chain itself starting from the root
+// trust anchor, so a target has no meaning for this check type.
+func dnssecCheckBody(queryDomain string) map[string]any {
+	return map[string]any{
+		"checks": []map[string]any{
+			{"checkType": "dnssec", "queryDomain": queryDomain},
+		},
+	}
+}
+
+func TestTriggerDNSSecurityCheckRun_DNSSECCheckPersists(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		vp := testVantagePoint()
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret).WithNetworkVantagePoint(vp)
+		b, _ := json.Marshal(dnssecCheckBody("example-test."))
+		userID := seedUser(t, pool, "dns-op-dnssec", "pw12345678", string(auth.RoleAnalyst), true)
+		req := authedRequest(t, http.MethodPost, "/api/dns-security-checks", bytes.NewReader(b), auth.RoleAnalyst, userID)
+		rec := callAuthed(h.TriggerDNSSecurityCheckRun, req)
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+		}
+		var resp struct {
+			RunID string `json:"runId"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		if resp.RunID == "" {
+			t.Fatal("want non-empty runId")
+		}
+
+		getReq := authedRequest(t, http.MethodGet, "/api/dns-security-checks/"+resp.RunID, nil, auth.RoleViewer, "")
+		getReq = withURLParam(getReq, "id", resp.RunID)
+		getRec := callAuthed(h.GetDNSSecurityCheckRun, getReq)
+		if getRec.Code != http.StatusOK {
+			t.Fatalf("get status = %d, body = %s", getRec.Code, getRec.Body.String())
+		}
+		var getResp struct {
+			Results []networkdns.DNSCheckResult `json:"results"`
+		}
+		if err := json.Unmarshal(getRec.Body.Bytes(), &getResp); err != nil {
+			t.Fatalf("decode get: %v", err)
+		}
+		if len(getResp.Results) != 1 || getResp.Results[0].CheckType != networkdns.CheckDNSSEC {
+			t.Fatalf("got %+v, want one dnssec result", getResp.Results)
+		}
+		if getResp.Results[0].DNSSEC == nil {
+			t.Fatal("DNSSEC must be populated for a persisted dnssec check result")
+		}
+	})
+}
+
+// TestTriggerDNSSecurityCheckRun_DNSSECWithTargetRejected pins spec
+// §4.2's explicit requirement: a CheckDNSSEC request carrying a
+// non-zero Target is rejected rather than silently ignored, so a
+// caller can never mistake it for having had any effect.
+func TestTriggerDNSSecurityCheckRun_DNSSECWithTargetRejected(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		vp := testVantagePoint()
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret).WithNetworkVantagePoint(vp)
+		body := map[string]any{
+			"checks": []map[string]any{
+				{"checkType": "dnssec", "queryDomain": "example-test.", "target": map[string]any{"host": "10.0.1.5", "port": 53}},
+			},
+		}
+		b, _ := json.Marshal(body)
+		userID := seedUser(t, pool, "dns-op-dnssec-target", "pw12345678", string(auth.RoleAnalyst), true)
+		req := authedRequest(t, http.MethodPost, "/api/dns-security-checks", bytes.NewReader(b), auth.RoleAnalyst, userID)
+		rec := callAuthed(h.TriggerDNSSecurityCheckRun, req)
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("status = %d, body = %s, want 400 -- a target on a dnssec check must be rejected, never silently ignored", rec.Code, rec.Body.String())
+		}
+	})
+}
+
 func TestListAndGetDNSSecurityCheckRun_RoundTrip(t *testing.T) {
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
 		vp := testVantagePoint()

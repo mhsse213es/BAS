@@ -13,6 +13,7 @@ import (
 	"github.com/audspect/bas/internal/auth"
 	"github.com/audspect/bas/internal/db"
 	"github.com/audspect/bas/internal/networkdns"
+	"github.com/audspect/bas/internal/networkgraph"
 )
 
 const maxDNSSecurityCheckRequestBytes = 1 << 20
@@ -42,6 +43,10 @@ func (h *Handler) TriggerDNSSecurityCheckRun(w http.ResponseWriter, r *http.Requ
 	for i, c := range req.Checks {
 		if c.CheckType == networkdns.CheckOpenResolver && (c.Target.Host == "" || c.Target.Port < 1 || c.Target.Port > 65535) {
 			jsonError(w, fmt.Sprintf("checks[%d]: a valid target host/port is required for an open-resolver check", i), http.StatusBadRequest)
+			return
+		}
+		if c.CheckType == networkdns.CheckDNSSEC && c.Target != (networkgraph.Target{}) {
+			jsonError(w, fmt.Sprintf("checks[%d]: target must be omitted for a dnssec check -- DNSSEC validation resolves the chain itself", i), http.StatusBadRequest)
 			return
 		}
 		if c.QueryDomain == "" {
