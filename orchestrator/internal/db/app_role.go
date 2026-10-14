@@ -106,6 +106,8 @@ func EnsureAppRole(ctx context.Context, pool *pgxpool.Pool, appPassword string) 
 		`REVOKE UPDATE, DELETE ON tool_actors FROM ` + appRole,
 		`REVOKE UPDATE, DELETE ON content_generation_owners FROM ` + appRole,
 		`REVOKE UPDATE, DELETE ON content_version_threats FROM ` + appRole,
+		`REVOKE UPDATE, DELETE ON content_components FROM ` + appRole,
+		`REVOKE UPDATE, DELETE ON content_version_components FROM ` + appRole,
 		`REVOKE DELETE ON threats FROM ` + appRole,
 		`REVOKE UPDATE, DELETE ON actor_resolution_candidates FROM ` + appRole,
 		`GRANT UPDATE (status, decided_actor_id, decided_by, decided_at, decision_reason) ON actor_resolution_candidates TO ` + appRole,

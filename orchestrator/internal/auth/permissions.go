@@ -65,6 +65,10 @@ const (
 	CanViewContentArtifact        Permission = "content:artifact:view"
 	CanTransitionContent          Permission = "content:transition"
 	CanViewContentMigrationReport Permission = "content:migration:view"
+	// CanManageComponents (TCF Phase 4) gates component promotion/reference
+	// registration and composition -- a distinct capability from lifecycle
+	// transition, though both are Admin-tier.
+	CanManageComponents Permission = "content:manage-components"
 
 	// Variant executor — Analyst+Admin.
 	CanGenerateVariants    Permission = "variants:generate"
@@ -250,7 +254,7 @@ var rolePermissions = map[Role]map[Permission]bool{
 		CanCreateScenario: true, CanUploadScenario: true, CanCloneScenario: true,
 		CanUpdateScenario: true, CanDeleteScenario: true, CanGenerateVariants: true,
 
-		CanViewContentArtifact: true, CanTransitionContent: true, CanViewContentMigrationReport: true,
+		CanViewContentArtifact: true, CanTransitionContent: true, CanViewContentMigrationReport: true, CanManageComponents: true,
 
 		CanRunVariants: true, CanViewVariantRun: true, CanViewVariantCoverage: true,
 		CanViewVariantStats: true, CanListPayloadFamilies: true, CanViewPayloadFamily: true,
@@ -372,7 +376,7 @@ func Permissions(role Role) []Permission {
 		CanResolveActorIdentity,
 		CanManageSourceTrust,
 		CanLinkContentThreat,
-		CanViewContentArtifact, CanTransitionContent, CanViewContentMigrationReport,
+		CanViewContentArtifact, CanTransitionContent, CanViewContentMigrationReport, CanManageComponents,
 	} {
 		if set[p] {
 			out = append(out, p)
