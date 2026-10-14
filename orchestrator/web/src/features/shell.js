@@ -9,7 +9,7 @@ import { closeScenarioOverlay, injectServerURL, loadAgentGroupTree, loadAgents, 
 import { loadAuditLogs } from './audit-logs.js';
 import { closeCampaignDetail } from './campaigns.js';
 import { loadCalderaStatus, refreshDashboardCampaigns } from './compliance.js';
-import { loadCoverage, loadCoverageAnalytics, loadUnifiedTechniques } from './coverage.js';
+import { loadCoverage, loadCoverageAnalytics, loadUnifiedTechniques, loadThreatExposure } from './coverage.js';
 import { loadVerificationTab } from './detection-verification.js';
 import { loadEmTab } from './endpoint-mastery.js';
 import { connectWS, loadDashboard, openCmdk } from './evidence.js';
@@ -534,7 +534,7 @@ export function showTab(name) {
   if (name === 'campaigns') closeCampaignDetail();
   if (name === 'scheduled-assessments') loadScheduledAssessments();
   if (name === 'initiatives') loadInitiatives();
-  if (name === 'coverage') { loadCoverage(); loadUnifiedTechniques(); loadCoverageAnalytics(); }
+  if (name === 'coverage') { loadCoverage(); loadUnifiedTechniques(); loadCoverageAnalytics(); loadThreatExposure(); }
   if (name === 'attack-coverage') { loadCoverageActors(); loadCoverageMatrix(); }
   if (name === 'threat-priority') { showThreatPriorityList(); loadThreatPriorityActors(); }
   if (name === 'findings') loadFindings();

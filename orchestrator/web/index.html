@@ -1630,6 +1630,16 @@
         <div class="dash-panel"><div class="dash-panel-body" id="cov-matrix" style="overflow-x:auto;padding:0.75rem"><div class="empty" style="padding:2rem">Loading matrix…</div></div></div>
         <div class="tiny muted" id="cov-foot" style="margin-top:0.75rem"></div>
 
+        <!-- Live Threat Coverage — assembled from the real threat-intel pipeline, not the static ATT&CK dataset above. -->
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;margin:1.75rem 0 1rem;flex-wrap:wrap">
+          <div>
+            <h1 style="font-family:var(--font-display);font-size:1.5rem;font-weight:700;letter-spacing:-0.02em;margin:0 0 0.3rem;color:var(--text)">Live Threat Coverage</h1>
+            <div style="font-size:0.8rem;color:var(--muted)">Threats currently tracked by your intelligence sources, and whether validated, executable content exists for them.</div>
+          </div>
+        </div>
+        <div class="dash-panel"><div class="dash-panel-body" id="lte-body" style="padding:0.75rem"><div class="empty" style="padding:2rem">Loading…</div></div></div>
+        <div class="tiny muted" id="lte-foot" style="margin-top:0.75rem"></div>
+
         <!-- Unified Technique Library — deduplicated view across all execution sources -->
         <div class="dash-panel" style="margin-top:1.25rem">
           <div class="dash-panel-hdr" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0.5rem">
