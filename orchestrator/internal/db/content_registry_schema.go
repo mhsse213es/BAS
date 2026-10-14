@@ -157,11 +157,22 @@ func EnsureContentRegistrySchema(ctx context.Context, pool *pgxpool.Pool) error 
 
 		`ALTER TABLE scenario_runs ADD COLUMN IF NOT EXISTS content_version_id text REFERENCES content_versions(id)`,
 		`ALTER TABLE scenario_runs ADD COLUMN IF NOT EXISTS execution_kind text NOT NULL DEFAULT 'legacy'`,
+		// TCF Phase 6: 'factory_validation' added for validation-lab dispatches.
+		// Dropped and re-added (not just addConstraint'd) because an existing
+		// deployment already has this constraint under its old definition --
+		// addConstraint's IF NOT EXISTS guard would otherwise never widen it.
+		`ALTER TABLE scenario_runs DROP CONSTRAINT IF EXISTS scenario_runs_execution_kind_check`,
 		addConstraint("scenario_runs", "scenario_runs_execution_kind_check",
-			`CHECK (execution_kind IN ('content','remediation','technique_verification','variant','adhoc_adversary','legacy'))`),
+			`CHECK (execution_kind IN ('content','remediation','technique_verification','variant','adhoc_adversary','legacy','factory_validation'))`),
 		addConstraint("scenario_runs", "scenario_runs_content_needs_version_check",
 			`CHECK (execution_kind <> 'content' OR content_version_id IS NOT NULL)`),
 		`CREATE INDEX IF NOT EXISTS idx_scenario_runs_content_version ON scenario_runs (content_version_id) WHERE content_version_id IS NOT NULL`,
+		// TCF Phase 6: validationlab writes an in-flight NO_DATA placeholder
+		// at dispatch time and updates it in place on resolution (at most one
+		// in-flight EXECUTION-level attempt per version at a time) -- the
+		// ON CONFLICT target in recordExecutionOutcome needs this index to exist.
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_content_validations_inflight
+		   ON content_validations (content_version_id, level) WHERE outcome = 'NO_DATA'`,
 	}
 	for _, s := range stmts {
 		if _, err := pool.Exec(ctx, s); err != nil {

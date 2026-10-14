@@ -52,6 +52,12 @@ const (
 	KindVariant               = "variant"
 	KindAdhocAdversary        = "adhoc_adversary"
 	KindLegacy                = "legacy"
+	// KindFactoryValidation: a validation-lab dispatch (TCF Phase 6). Never
+	// carries content_version_id -- the orchestrator's own content_validations
+	// row is the authoritative run<->version link, so these runs stay
+	// structurally invisible to any feature (e.g. live threat coverage) that
+	// counts customer-facing runs by that FK.
+	KindFactoryValidation = "factory_validation"
 )
 
 const (
@@ -60,6 +66,10 @@ const (
 	ActorComposer   = "composer:admin"
 	ActorMigration  = "migration:pre-registry"
 	MigrationReason = "historical authorization: authored via operator UI before approval tracking existed; not reviewed during migration"
+	// ActorValidationLab: the system actor the validation orchestrator uses
+	// for its own DRAFT<->VALIDATING<->VALIDATED/DRAFT transitions. Not a
+	// "user:" prefix, so IsHumanActor treats it as a system actor.
+	ActorValidationLab = "validation:lab"
 )
 
 var (
