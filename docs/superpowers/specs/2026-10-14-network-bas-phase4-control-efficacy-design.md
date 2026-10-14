@@ -96,6 +96,10 @@ type ControlExpectationImport struct {
 
 // FirewallEvidence is one firewall log entry's normalized shape.
 type FirewallEvidence struct {
+	SourceIP  string          `json:"sourceIp"`
+	DestIP    string          `json:"destIp"`
+	Port      int             `json:"port"`
+	Protocol  string          `json:"protocol,omitempty"`
 	Action    string          `json:"action"` // "block" | "permit"
 	Timestamp time.Time       `json:"timestamp"`
 	Source    EvidenceSource  `json:"source"`
@@ -105,6 +109,10 @@ type FirewallEvidence struct {
 // IDSEvidence is one IDS/IPS alert's normalized shape (e.g. parsed
 // from a Suricata EVE JSON "alert" event).
 type IDSEvidence struct {
+	SourceIP  string          `json:"sourceIp"`
+	DestIP    string          `json:"destIp"`
+	Port      int             `json:"port"`
+	Protocol  string          `json:"protocol,omitempty"`
 	AlertName string          `json:"alertName"`
 	Severity  string          `json:"severity,omitempty"`
 	Timestamp time.Time       `json:"timestamp"`
@@ -169,7 +177,7 @@ type IDSEvidenceProvider interface {
 
 **First implementations are deliberately asymmetric, matching the build-order decision in §8:**
 
-- **IDS (Suricata EVE JSON): a real parser, built now.** `ParseSuricataEVE(r io.Reader) ([]eveRecord, error)` reads newline-delimited EVE JSON, keeps only `event_type:"alert"` records, and extracts `src_ip`/`dest_ip`/`src_port`/`dest_port`/`proto`/`timestamp`/`alert.signature`/`alert.severity`. `FixtureIDSProvider` wraps a slice of parsed records and implements `IDSEvidenceFor` by filtering to records whose 5-tuple matches `flow` (dest-CIDR containment via `net.ParseCIDR`/`Contains`, exact port/protocol match — duplicating the small CIDR-containment check already duplicated independently in `networktopology` and `networkpolicy`, per this codebase's established "duplicate small match logic across domain packages, never share it" convention) and whose timestamp falls within `window`. This is real EVE-JSON-shaped parsing logic, tested against recorded fixture files, so the exact same code path will run against a live Suricata EVE JSON output file later — only the `io.Reader` source changes.
+- **IDS (Suricata EVE JSON): a real parser, built now.** `ParseSuricataEVE(r io.Reader) ([]eveRecord, error)` reads newline-delimited EVE JSON, keeps only `event_type:"alert"` records, and extracts `src_ip`/`dest_ip`/`src_port`/`dest_port`/`proto`/`timestamp`/`alert.signature`/`alert.severity` into the normalized `IDSEvidence` shape (§4.1 — `SourceIP`/`DestIP`/`Port`/`Protocol` fields carry the concrete event address so a provider can filter against `flow` without round-tripping through `RawEvent`). `FixtureIDSProvider` wraps a slice of parsed records and implements `IDSEvidenceFor` by filtering to records whose `SourceIP`/`DestIP` fall within `flow.SourceCIDR`/`flow.DestCIDR` (containment via `net.ParseCIDR`/`Contains`, duplicating the small CIDR-containment check already duplicated independently in `networktopology` and `networkpolicy`, per this codebase's established "duplicate small match logic across domain packages, never share it" convention), whose `Port`/`Protocol` match exactly (protocol case-insensitive, below), and whose `Timestamp` falls within `window`. This is real EVE-JSON-shaped parsing logic, tested against recorded fixture files, so the exact same code path will run against a live Suricata EVE JSON output file later — only the `io.Reader` source changes.
 - **Firewall (OPNsense/generic): synthetic only, for now.** `SyntheticFirewallProvider` wraps an in-memory slice of hand-built `FirewallEvidence` values with the same flow/window filtering logic. No real OPNsense log-format parser exists yet; building one is explicitly deferred to §8 until real lab log/API access exists.
 
 Protocol matching in both providers is case-insensitive (`strings.EqualFold`), since real logs and operator-declared `FlowProtocol` values are not guaranteed to agree on case (e.g. `"TCP"` vs `"tcp"`) — same looseness `CorroborateSegmentation` (Phase 3) already applies to its own best-effort string matching.
@@ -188,8 +196,10 @@ func VerifyControlExpectation(
 	firewallProvider FirewallEvidenceProvider,
 	idsProvider IDSEvidenceProvider,
 	window TimeWindow,
-) (EfficacyResult, error)
+) EfficacyResult
 ```
+
+No `error` return: every failure mode in the verdict table below already resolves to `Verdict: VerdictInconclusive` with a `Reason`, so a separate error channel would be vestigial — exactly the same shape `ComposeHop` (Phase 3, `internal/networkpath/compose.go`) already settled on for the same reason. A `FirewallEvidenceProvider`/`IDSEvidenceProvider` implementation's own error is caught inside this function and converted to `Inconclusive`, never propagated.
 
 **Verdict rule — deliberately asymmetric between `block` and `alert` expectations**, because the two evidence sources have different reliability characteristics in practice: a firewall's permitted/default traffic is not guaranteed to be logged at all (a documented OPNsense configuration behavior), whereas a correctly-operating IDS's EVE JSON stream is a comprehensive record of everything it inspected.
 
@@ -203,6 +213,8 @@ A provider error and a clean empty result are never conflated: the first means "
 **Multiple matching evidence records.** A provider may legitimately return more than one record for the same flow and window (retries, duplicate log lines, a state change mid-test). When more than one record matches, the most recent by `Timestamp` is the one used for the verdict table above — a later event reflects the control's final state for that flow more faithfully than an earlier one. Duplicate identical records (same `Action`/`AlertName`) never change the outcome regardless of which one is picked. This is a real scenario the required test coverage (§6) must exercise directly, not infer from a single-record test passing.
 
 **Multiple matching observations.** When an expectation's flow (by dest-CIDR containment, port, protocol) matches more than one `NetworkObservation` from the supplied discovery run, the handler selects the one whose `Target` falls inside the flow's CIDR with the most recent `Provenance.ObservedAt` — same "latest wins" rule as evidence selection, for the same reason.
+
+**Zero matching observations.** `Observation` is a required, non-pointer field on `EfficacyResult` (§4.1) precisely because `VerifyControlExpectation` must never be called without one — there is no meaningful zero value for "a flow we have no corresponding test evidence for at all." When the handler finds no `NetworkObservation` matching an expectation's flow in the supplied discovery run, it does not call `VerifyControlExpectation` for that expectation; it constructs the `EfficacyResult` directly with `Verdict: VerdictInconclusive`, `Reason: "no corresponding Network BAS observation found for this flow in the specified discovery run"`, and a zero-value `Expectation` field populated from the declared expectation (so the caller still knows which expectation this refers to).
 
 **Contradiction detection** is independent of the verdict table above, and never changes `Verdict`. It fires only when `FirewallEvidence` has a match, by comparing the firewall's own claimed action against the independently-observed `networkgraph.NetworkObservation.State` for the same flow:
 
