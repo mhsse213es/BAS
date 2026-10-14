@@ -329,6 +329,9 @@ func main() {
 	if err := db.EnsureOTSafetyImportSchema(context.Background(), adminPool); err != nil {
 		log.Fatalf("[FATAL] ot safety schema: %v", err)
 	}
+	if err := db.EnsureZoneIsolationImportSchema(context.Background(), adminPool); err != nil {
+		log.Fatalf("[FATAL] zone isolation schema: %v", err)
+	}
 	log.Println("[+] Schema verified")
 
 	// ── bas_app provisioning ─────────────────────────────────────────────
