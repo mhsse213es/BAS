@@ -29,6 +29,104 @@ func networkDiscoveryReq(t *testing.T, pool *pgxpool.Pool, body map[string]any) 
 	return authedRequest(t, http.MethodPost, "/api/network-discovery-runs", bytes.NewReader(b), auth.RoleAnalyst, userID)
 }
 
+// TestTriggerNetworkDiscoveryRun_TargetInSensitiveZone_NoAuth_Rejected
+// and its sibling tests below pin Task 6's wiring of
+// otsafety.CheckActiveTestAuthorization into the discovery-run
+// handler -- the exhaustive edge-case matrix itself is Task 2's.
+func TestTriggerNetworkDiscoveryRun_TargetInSensitiveZone_NoAuth_Rejected(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret).WithNetworkVantagePoint(testVantagePoint())
+		userID := seedUser(t, pool, "discovery-op-ot", "pw12345678", string(auth.RoleAnalyst), true)
+
+		topoID := createTestTopologyImport(t, h, pool, map[string]any{
+			"sourceType": "manual",
+			"zones":      []map[string]any{{"name": "ot", "cidrs": []string{"10.0.2.0/24"}}},
+			"edges":      []map[string]any{},
+		})
+		safetyBody := map[string]any{
+			"sourceType":     "manual",
+			"sensitiveZones": []map[string]any{{"zoneName": "ot", "tier": "ot"}},
+			"limitations":    []string{"zone names are not cross-validated against a real network-topology import"},
+		}
+		sb, _ := json.Marshal(safetyBody)
+		sReq := authedRequest(t, http.MethodPost, "/api/ot-safety-imports", bytes.NewReader(sb), auth.RoleAnalyst, userID)
+		sRec := callAuthed(h.CreateOTSafetyImport, sReq)
+		var safetyCreated struct {
+			ID string `json:"id"`
+		}
+		_ = json.Unmarshal(sRec.Body.Bytes(), &safetyCreated)
+
+		body := map[string]any{
+			"targets":          []map[string]any{{"host": "10.0.2.5", "port": 502}},
+			"topologyImportId": topoID,
+			"otSafetyImportId": safetyCreated.ID,
+		}
+		b, _ := json.Marshal(body)
+		req := authedRequest(t, http.MethodPost, "/api/network-discovery-runs", bytes.NewReader(b), auth.RoleAnalyst, userID)
+		rec := callAuthed(h.TriggerNetworkDiscoveryRun, req)
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("status = %d, body = %s, want 400 -- a target in a declared sensitive zone with no authorization must be rejected", rec.Code, rec.Body.String())
+		}
+	})
+}
+
+func TestTriggerNetworkDiscoveryRun_TargetInSensitiveZone_Authorized_Permitted(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret).WithNetworkVantagePoint(testVantagePoint())
+		userID := seedUser(t, pool, "discovery-op-ot-auth", "pw12345678", string(auth.RoleAnalyst), true)
+
+		topoID := createTestTopologyImport(t, h, pool, map[string]any{
+			"sourceType": "manual",
+			"zones":      []map[string]any{{"name": "ot", "cidrs": []string{"10.0.2.0/24"}}},
+			"edges":      []map[string]any{},
+		})
+		safetyBody := map[string]any{
+			"sourceType":     "manual",
+			"sensitiveZones": []map[string]any{{"zoneName": "ot", "tier": "ot"}},
+			"limitations":    []string{"zone names are not cross-validated against a real network-topology import"},
+		}
+		sb, _ := json.Marshal(safetyBody)
+		sReq := authedRequest(t, http.MethodPost, "/api/ot-safety-imports", bytes.NewReader(sb), auth.RoleAnalyst, userID)
+		sRec := callAuthed(h.CreateOTSafetyImport, sReq)
+		var safetyCreated struct {
+			ID string `json:"id"`
+		}
+		_ = json.Unmarshal(sRec.Body.Bytes(), &safetyCreated)
+
+		body := map[string]any{
+			"targets":          []map[string]any{{"host": "10.0.2.5", "port": 502}},
+			"topologyImportId": topoID,
+			"otSafetyImportId": safetyCreated.ID,
+			"activeTestAuthorization": map[string]any{
+				"authorized": true,
+				"signOff":    "approved by J.Singh, CHG-1234",
+			},
+		}
+		b, _ := json.Marshal(body)
+		req := authedRequest(t, http.MethodPost, "/api/network-discovery-runs", bytes.NewReader(b), auth.RoleAnalyst, userID)
+		rec := callAuthed(h.TriggerNetworkDiscoveryRun, req)
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("status = %d, body = %s, want 201 -- a valid authorization must permit the run", rec.Code, rec.Body.String())
+		}
+	})
+}
+
+// TestTriggerNetworkDiscoveryRun_OmittingSafetyFields_BehaviorUnchanged
+// pins this plan's Global Constraint for this handler specifically.
+func TestTriggerNetworkDiscoveryRun_OmittingSafetyFields_BehaviorUnchanged(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret).WithNetworkVantagePoint(testVantagePoint())
+		userID := seedUser(t, pool, "discovery-op-plain", "pw12345678", string(auth.RoleAnalyst), true)
+		body := map[string]any{"targets": []map[string]any{{"host": "127.0.0.1", "port": 1}}}
+		b, _ := json.Marshal(body)
+		req := authedRequest(t, http.MethodPost, "/api/network-discovery-runs", bytes.NewReader(b), auth.RoleAnalyst, userID)
+		rec := callAuthed(h.TriggerNetworkDiscoveryRun, req)
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("status = %d, body = %s, want 201 -- omitting the new safety fields must behave exactly as before this task", rec.Code, rec.Body.String())
+		}
+	})
+}
+
 func TestTriggerNetworkDiscoveryRun_ObservedAndBlockedTargets(t *testing.T) {
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
 		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret).WithNetworkVantagePoint(testVantagePoint())
@@ -223,7 +321,9 @@ func TestTriggerNetworkDiscoveryRun_RequestedByIsServerControlled(t *testing.T) 
 		if rec.Code != http.StatusCreated {
 			t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
 		}
-		var resp struct{ RunID string `json:"runId"` }
+		var resp struct {
+			RunID string `json:"runId"`
+		}
 		if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
 			t.Fatalf("decode: %v", err)
 		}

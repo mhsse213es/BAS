@@ -14,6 +14,7 @@ import (
 	"github.com/audspect/bas/internal/auth"
 	"github.com/audspect/bas/internal/db"
 	"github.com/audspect/bas/internal/networkgraph"
+	"github.com/audspect/bas/internal/otsafety"
 )
 
 // maxNetworkDiscoveryRequestBytes bounds the raw request body before it is
@@ -35,8 +36,11 @@ func (h *Handler) TriggerNetworkDiscoveryRun(w http.ResponseWriter, r *http.Requ
 	}
 
 	var req struct {
-		Targets            []networkgraph.Target `json:"targets"`
-		TimeoutPerTargetMs int                   `json:"timeoutPerTargetMs,omitempty"`
+		Targets                 []networkgraph.Target             `json:"targets"`
+		TimeoutPerTargetMs      int                               `json:"timeoutPerTargetMs,omitempty"`
+		TopologyImportID        string                            `json:"topologyImportId,omitempty"`
+		OTSafetyImportID        string                            `json:"otSafetyImportId,omitempty"`
+		ActiveTestAuthorization *otsafety.ActiveTestAuthorization `json:"activeTestAuthorization,omitempty"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxNetworkDiscoveryRequestBytes)).Decode(&req); err != nil {
 		jsonError(w, "invalid request body: "+err.Error(), http.StatusBadRequest)
@@ -60,6 +64,40 @@ func (h *Handler) TriggerNetworkDiscoveryRun(w http.ResponseWriter, r *http.Requ
 			return
 		}
 	}
+
+	if req.TopologyImportID != "" && req.OTSafetyImportID != "" {
+		topo, err := db.GetNetworkTopologyImport(r.Context(), h.db, req.TopologyImportID)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				jsonError(w, "network topology import not found", http.StatusNotFound)
+				return
+			}
+			jsonError(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		safety, err := db.GetOTSafetyImport(r.Context(), h.db, req.OTSafetyImportID)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				jsonError(w, "ot safety import not found", http.StatusNotFound)
+				return
+			}
+			jsonError(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		hosts := make([]string, 0, len(req.Targets))
+		for _, t := range req.Targets {
+			hosts = append(hosts, t.Host)
+		}
+		matchedZones, err := otsafety.CheckActiveTestAuthorization(hosts, topo, safety, req.ActiveTestAuthorization)
+		if err != nil {
+			jsonError(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		if len(matchedZones) > 0 {
+			h.auditLog(r, "networkdiscovery.activeTestAuthorized", "", map[string]any{"sensitiveZones": matchedZones, "signOff": req.ActiveTestAuthorization.SignOff}, "ok")
+		}
+	}
+
 	opts := networkgraph.DiscoveryOptions{}
 	if req.TimeoutPerTargetMs > 0 {
 		timeout := time.Duration(req.TimeoutPerTargetMs) * time.Millisecond

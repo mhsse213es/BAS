@@ -38,6 +38,43 @@ func transportCheckBody(host string, port int) map[string]any {
 	}
 }
 
+func TestTriggerTransportSecurityCheckRun_TargetInSensitiveZone_NoAuth_Rejected(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		vp := testVantagePoint()
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret).WithNetworkVantagePoint(vp)
+		userID := seedUser(t, pool, "transportcheck-op-ot", "pw12345678", string(auth.RoleAnalyst), true)
+		topoID := createTestTopologyImport(t, h, pool, map[string]any{
+			"sourceType": "manual",
+			"zones":      []map[string]any{{"name": "ot", "cidrs": []string{"10.0.2.0/24"}}},
+			"edges":      []map[string]any{},
+		})
+		safetyBody := map[string]any{
+			"sourceType":     "manual",
+			"sensitiveZones": []map[string]any{{"zoneName": "ot", "tier": "ot"}},
+			"limitations":    []string{"zone names are not cross-validated against a real network-topology import"},
+		}
+		sb, _ := json.Marshal(safetyBody)
+		sReq := authedRequest(t, http.MethodPost, "/api/ot-safety-imports", bytes.NewReader(sb), auth.RoleAnalyst, userID)
+		sRec := callAuthed(h.CreateOTSafetyImport, sReq)
+		var safetyCreated struct {
+			ID string `json:"id"`
+		}
+		_ = json.Unmarshal(sRec.Body.Bytes(), &safetyCreated)
+
+		body := map[string]any{
+			"checks":           []map[string]any{{"checkType": "cleartext", "target": map[string]any{"host": "10.0.2.5", "port": 23}}},
+			"topologyImportId": topoID,
+			"otSafetyImportId": safetyCreated.ID,
+		}
+		b, _ := json.Marshal(body)
+		req := authedRequest(t, http.MethodPost, "/api/transport-security-checks", bytes.NewReader(b), auth.RoleAnalyst, userID)
+		rec := callAuthed(h.TriggerTransportSecurityCheckRun, req)
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("status = %d, body = %s, want 400", rec.Code, rec.Body.String())
+		}
+	})
+}
+
 func TestTriggerTransportSecurityCheckRun_ValidChecksPersist(t *testing.T) {
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
 		vp := testVantagePoint()

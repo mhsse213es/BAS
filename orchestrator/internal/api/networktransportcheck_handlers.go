@@ -13,6 +13,7 @@ import (
 	"github.com/audspect/bas/internal/auth"
 	"github.com/audspect/bas/internal/db"
 	"github.com/audspect/bas/internal/networktransport"
+	"github.com/audspect/bas/internal/otsafety"
 )
 
 const maxTransportSecurityCheckRequestBytes = 1 << 20
@@ -25,7 +26,10 @@ func (h *Handler) TriggerTransportSecurityCheckRun(w http.ResponseWriter, r *htt
 	}
 
 	var req struct {
-		Checks []networktransport.TransportCheckRequest `json:"checks"`
+		Checks                  []networktransport.TransportCheckRequest `json:"checks"`
+		TopologyImportID        string                                   `json:"topologyImportId,omitempty"`
+		OTSafetyImportID        string                                   `json:"otSafetyImportId,omitempty"`
+		ActiveTestAuthorization *otsafety.ActiveTestAuthorization        `json:"activeTestAuthorization,omitempty"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxTransportSecurityCheckRequestBytes)).Decode(&req); err != nil {
 		jsonError(w, "invalid request body: "+err.Error(), http.StatusBadRequest)
@@ -47,6 +51,39 @@ func (h *Handler) TriggerTransportSecurityCheckRun(w http.ResponseWriter, r *htt
 		if c.Target.Host == "" || c.Target.Port < 1 || c.Target.Port > 65535 {
 			jsonError(w, fmt.Sprintf("checks[%d]: a valid target host/port is required", i), http.StatusBadRequest)
 			return
+		}
+	}
+
+	if req.TopologyImportID != "" && req.OTSafetyImportID != "" {
+		topo, err := db.GetNetworkTopologyImport(r.Context(), h.db, req.TopologyImportID)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				jsonError(w, "network topology import not found", http.StatusNotFound)
+				return
+			}
+			jsonError(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		safety, err := db.GetOTSafetyImport(r.Context(), h.db, req.OTSafetyImportID)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				jsonError(w, "ot safety import not found", http.StatusNotFound)
+				return
+			}
+			jsonError(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		hosts := make([]string, 0, len(req.Checks))
+		for _, c := range req.Checks {
+			hosts = append(hosts, c.Target.Host)
+		}
+		matchedZones, err := otsafety.CheckActiveTestAuthorization(hosts, topo, safety, req.ActiveTestAuthorization)
+		if err != nil {
+			jsonError(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		if len(matchedZones) > 0 {
+			h.auditLog(r, "networktransport.run.activeTestAuthorized", "", map[string]any{"sensitiveZones": matchedZones, "signOff": req.ActiveTestAuthorization.SignOff}, "ok")
 		}
 	}
 

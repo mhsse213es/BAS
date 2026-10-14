@@ -14,6 +14,7 @@ import (
 	"github.com/audspect/bas/internal/db"
 	"github.com/audspect/bas/internal/networkdns"
 	"github.com/audspect/bas/internal/networkgraph"
+	"github.com/audspect/bas/internal/otsafety"
 )
 
 const maxDNSSecurityCheckRequestBytes = 1 << 20
@@ -26,7 +27,10 @@ func (h *Handler) TriggerDNSSecurityCheckRun(w http.ResponseWriter, r *http.Requ
 	}
 
 	var req struct {
-		Checks []networkdns.DNSCheckRequest `json:"checks"`
+		Checks                  []networkdns.DNSCheckRequest      `json:"checks"`
+		TopologyImportID        string                            `json:"topologyImportId,omitempty"`
+		OTSafetyImportID        string                            `json:"otSafetyImportId,omitempty"`
+		ActiveTestAuthorization *otsafety.ActiveTestAuthorization `json:"activeTestAuthorization,omitempty"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxDNSSecurityCheckRequestBytes)).Decode(&req); err != nil {
 		jsonError(w, "invalid request body: "+err.Error(), http.StatusBadRequest)
@@ -52,6 +56,41 @@ func (h *Handler) TriggerDNSSecurityCheckRun(w http.ResponseWriter, r *http.Requ
 		if c.QueryDomain == "" {
 			jsonError(w, fmt.Sprintf("checks[%d]: queryDomain is required", i), http.StatusBadRequest)
 			return
+		}
+	}
+
+	if req.TopologyImportID != "" && req.OTSafetyImportID != "" {
+		topo, err := db.GetNetworkTopologyImport(r.Context(), h.db, req.TopologyImportID)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				jsonError(w, "network topology import not found", http.StatusNotFound)
+				return
+			}
+			jsonError(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		safety, err := db.GetOTSafetyImport(r.Context(), h.db, req.OTSafetyImportID)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				jsonError(w, "ot safety import not found", http.StatusNotFound)
+				return
+			}
+			jsonError(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		hosts := make([]string, 0, len(req.Checks))
+		for _, c := range req.Checks {
+			if c.Target.Host != "" {
+				hosts = append(hosts, c.Target.Host)
+			}
+		}
+		matchedZones, err := otsafety.CheckActiveTestAuthorization(hosts, topo, safety, req.ActiveTestAuthorization)
+		if err != nil {
+			jsonError(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		if len(matchedZones) > 0 {
+			h.auditLog(r, "networkdns.run.activeTestAuthorized", "", map[string]any{"sensitiveZones": matchedZones, "signOff": req.ActiveTestAuthorization.SignOff}, "ok")
 		}
 	}
 
