@@ -311,6 +311,9 @@ func main() {
 	if err := db.EnsureCloudTopologySchema(context.Background(), adminPool); err != nil {
 		log.Fatalf("[FATAL] cloud topology schema: %v", err)
 	}
+	if err := db.EnsureRemoteAccessImportSchema(context.Background(), adminPool); err != nil {
+		log.Fatalf("[FATAL] remote access import schema: %v", err)
+	}
 	log.Println("[+] Schema verified")
 
 	// ── bas_app provisioning ─────────────────────────────────────────────

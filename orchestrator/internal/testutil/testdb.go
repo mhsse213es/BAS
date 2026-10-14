@@ -168,6 +168,11 @@ func newTestDB(ctx context.Context) (*TestDB, error) {
 		_ = container.Terminate(context.Background())
 		return nil, fmt.Errorf("testutil: EnsureCloudTopologySchema: %w", err)
 	}
+	if err := db.EnsureRemoteAccessImportSchema(ctx, pool); err != nil {
+		pool.Close()
+		_ = container.Terminate(context.Background())
+		return nil, fmt.Errorf("testutil: EnsureRemoteAccessImportSchema: %w", err)
+	}
 
 	return &TestDB{
 		Pool:      pool,
