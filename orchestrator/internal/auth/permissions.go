@@ -262,6 +262,11 @@ const (
 	// required-transit declarations (Network BAS Phase 7A) -- same
 	// placement as CanImportRemoteAccessTopology, for the same reason.
 	CanImportOTSafetyConfig Permission = "ot-safety:import"
+
+	// zone-isolation:import gates importing declared zone-pair
+	// isolation expectations (Network BAS Phase 7B) -- same placement
+	// as CanImportOTSafetyConfig, for the same reason.
+	CanImportZoneIsolationConfig Permission = "zone-isolation:import"
 )
 
 // rolePermissions maps each role to the permissions it holds. Viewer is
@@ -328,6 +333,7 @@ var rolePermissions = map[Role]map[Permission]bool{
 		CanImportCloudTopology:             true,
 		CanImportRemoteAccessTopology:      true,
 		CanImportOTSafetyConfig:            true,
+		CanImportZoneIsolationConfig:       true,
 	},
 	RoleAnalyst: {
 		CanVerify:            true,
@@ -343,7 +349,7 @@ var rolePermissions = map[Role]map[Permission]bool{
 		CanTriggerScan: true, CanCollectAttackPath: true, CanCreateAttackPathJob: true,
 		CanCancelAttackPathJob: true, CanRetryAttackPathJob: true, CanSetAttackPathAsset: true,
 		CanRunScenario: true, CanRunCalderaAdversary: true, CanRunAdversaryTemplate: true,
-		CanImportNetworkPolicy: true, CanImportNetworkTopology: true, CanImportNetworkControlExpectation: true, CanImportCloudTopology: true, CanImportRemoteAccessTopology: true, CanImportOTSafetyConfig: true,
+		CanImportNetworkPolicy: true, CanImportNetworkTopology: true, CanImportNetworkControlExpectation: true, CanImportCloudTopology: true, CanImportRemoteAccessTopology: true, CanImportOTSafetyConfig: true, CanImportZoneIsolationConfig: true,
 		CanCancelScenarioRun: true, CanCorrelateSIEM: true, CanViewSIEMCorrelations: true,
 		CanRunDetectionVerification: true, CanCreateCampaign: true, CanStopCampaign: true,
 		CanSetFindingStatus: true, CanPushToITSM: true, CanBulkPushToITSM: true,
