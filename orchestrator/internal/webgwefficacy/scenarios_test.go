@@ -1,6 +1,9 @@
 package webgwefficacy
 
 import (
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -155,14 +158,117 @@ func TestCASBScenario_PersonalTenantAllowedThrough(t *testing.T) {
 	}
 }
 
+// TestMalwareFileScenario_EICARTestFileBlocked proves a known-good
+// baseline for domain 04 (malware, exploit delivery and file
+// protection): a download of the industry-standard EICAR test file is
+// declared expected to be blocked by the gateway's own malware/file
+// protection policy, and fixture evidence confirms it was. Per
+// webGW.txt's own domain-04 constraint, this never uses a real
+// malware sample -- only the universally-recognized EICAR synthetic
+// test string, the same discipline domain 03's DLP scenarios already
+// apply to their own synthetic markers.
+func TestMalwareFileScenario_EICARTestFileBlocked(t *testing.T) {
+	now := time.Now()
+	exp := HTTPExpectation{
+		RequestURL:     "https://malware-test.example/eicar-test-file.com",
+		URLCategory:    "eicar-test-file",
+		ExpectedAction: ExpectedBlock,
+		ControlProduct: "cloudflare-gateway",
+		Note:           "industry-standard EICAR synthetic test string, never a real malware sample",
+	}
+	provider := NewFixtureGatewayProvider([]GatewayEvidence{
+		{RequestURL: exp.RequestURL, Action: "block", Category: "eicar-test-file", PolicyRule: "block-malware-file-signature", Timestamp: now, Source: SourceFixture},
+	})
+	window := TimeWindow{Start: now.Add(-time.Minute), End: now.Add(time.Minute)}
+	result := VerifyHTTPExpectation(exp, HTTPObservation{}, provider, window)
+
+	if result.Prevention.Verdict != VerdictPass {
+		t.Errorf("Prevention.Verdict = %q, want %q -- known-good baseline: the EICAR test-file download was blocked", result.Prevention.Verdict, VerdictPass)
+	}
+}
+
+// TestMalwareFileScenario_EICARTestFileMissed is the negative
+// counterpart: the same EICAR test-file download, but fixture
+// evidence shows the gateway allowed it through -- the file-protection
+// gap a domain-04 test exists to surface.
+func TestMalwareFileScenario_EICARTestFileMissed(t *testing.T) {
+	now := time.Now()
+	exp := HTTPExpectation{
+		RequestURL:     "https://malware-test.example/eicar-test-file.com",
+		URLCategory:    "eicar-test-file",
+		ExpectedAction: ExpectedBlock,
+		ControlProduct: "cloudflare-gateway",
+	}
+	provider := NewFixtureGatewayProvider([]GatewayEvidence{
+		{RequestURL: exp.RequestURL, Action: "allow", Category: "eicar-test-file", Timestamp: now, Source: SourceFixture},
+	})
+	window := TimeWindow{Start: now.Add(-time.Minute), End: now.Add(time.Minute)}
+	result := VerifyHTTPExpectation(exp, HTTPObservation{}, provider, window)
+
+	if result.Prevention.Verdict != VerdictFail {
+		t.Errorf("Prevention.Verdict = %q, want %q -- negative case: the EICAR test-file download was missed", result.Prevention.Verdict, VerdictFail)
+	}
+}
+
+// TestDNSPolicyScenario_C2DomainBlocked proves a known-good baseline
+// for domain 07 (DNS, covert channels and C2 protection): a query to a
+// known command-and-control domain is declared expected to be blocked
+// by the gateway's own DNS policy, and fixture evidence confirms it
+// was.
+func TestDNSPolicyScenario_C2DomainBlocked(t *testing.T) {
+	now := time.Now()
+	exp := DNSQueryExpectation{
+		QueryDomain:    "c2-beacon.example",
+		ThreatCategory: "c2-dns",
+		ExpectedAction: ExpectedBlock,
+		ControlProduct: "cloudflare-gateway",
+		Note:           "known command-and-control beacon domain, resolved via the gateway's own DNS policy",
+	}
+	provider := NewFixtureDNSResolutionProvider([]DNSResolutionEvidence{
+		{QueryDomain: exp.QueryDomain, Action: "block", ThreatCategory: "c2-dns", Timestamp: now, Source: SourceFixture},
+	})
+	window := TimeWindow{Start: now.Add(-time.Minute), End: now.Add(time.Minute)}
+	result := VerifyDNSQueryExpectation(exp, provider, window)
+
+	if result.Verdict != VerdictPass {
+		t.Errorf("Verdict = %q, want %q -- known-good baseline: the C2 domain query was blocked", result.Verdict, VerdictPass)
+	}
+}
+
+// TestDNSPolicyScenario_C2DomainMissed is the negative counterpart:
+// the same C2 domain query, but fixture evidence shows the gateway's
+// DNS policy allowed it through -- the policy gap a domain-07 test
+// exists to surface.
+func TestDNSPolicyScenario_C2DomainMissed(t *testing.T) {
+	now := time.Now()
+	exp := DNSQueryExpectation{
+		QueryDomain:    "c2-beacon.example",
+		ThreatCategory: "c2-dns",
+		ExpectedAction: ExpectedBlock,
+		ControlProduct: "cloudflare-gateway",
+	}
+	provider := NewFixtureDNSResolutionProvider([]DNSResolutionEvidence{
+		{QueryDomain: exp.QueryDomain, Action: "allow", ThreatCategory: "c2-dns", Timestamp: now, Source: SourceFixture},
+	})
+	window := TimeWindow{Start: now.Add(-time.Minute), End: now.Add(time.Minute)}
+	result := VerifyDNSQueryExpectation(exp, provider, window)
+
+	if result.Verdict != VerdictFail {
+		t.Errorf("Verdict = %q, want %q -- negative case: the C2 domain query was missed", result.Verdict, VerdictFail)
+	}
+}
+
 // TestCoverageReportingScenario_AudspectWebGWCoverage_CitesDenominatorAndExclusions
 // proves Phase 5's coverage-reporting exit criterion end-to-end
 // against Audspect's real, shipped coverage data -- not a synthetic
 // CoverageReport built only for this test. As of the domain-04/07
-// additions (TestMalwareDownloadScenario_EICARTestFileBlocked,
+// additions (TestMalwareFileScenario_EICARTestFileBlocked,
+// TestDNSPolicyScenario_C2DomainBlocked,
 // TestDNSPolicyScenario_AlternateResolverBlocked), all 12 of the
-// webGW.txt domains have at least one fixture-backed, proven
-// scenario.
+// webGW.txt domains have at least one fixture-backed, proven scenario
+// -- this is explicitly NOT a claim that any domain's full breadth is
+// built out, per CoverageStatus's own documented meaning (01-12 each
+// still have unbuilt sub-capabilities named in the spec's §5 table).
 func TestCoverageReportingScenario_AudspectWebGWCoverage_CitesDenominatorAndExclusions(t *testing.T) {
 	report, err := AudspectWebGWCoverageReport()
 	if err != nil {
@@ -173,7 +279,7 @@ func TestCoverageReportingScenario_AudspectWebGWCoverage_CitesDenominatorAndExcl
 		t.Errorf("Denominator() = %d, want 12 -- webGW.txt defines exactly 12 domains", got)
 	}
 	if got := report.CoveredCount(); got != 12 {
-		t.Errorf("CoveredCount() = %d, want 12", got)
+		t.Errorf("CoveredCount() = %d, want 12 -- all 12 domains now have at least one proven scenario", got)
 	}
 	if got := report.NotCoveredCount(); got != 0 {
 		t.Errorf("NotCoveredCount() = %d, want 0 -- every domain now has at least one proven scenario", got)
@@ -230,55 +336,57 @@ func TestMutationTestingScenario_MalwareCategoryPolicy_CatchesWeakenedPolicyAndC
 	}
 }
 
-// TestMalwareDownloadScenario_EICARTestFileBlocked proves a known-good
-// baseline for domain 04 (malware/exploit delivery/file protection):
-// a download request carrying the industry-standard EICAR antivirus
-// test string (a synthetic, universally-safe test marker, never real
-// malware) is declared expected to be blocked, and fixture evidence
-// confirms the gateway's own file-level scanning caught it -- distinct
-// from domain 01's URL-category reputation block, since EICAR
-// detection requires inspecting the file's own content/signature, not
-// just the URL's category.
-func TestMalwareDownloadScenario_EICARTestFileBlocked(t *testing.T) {
+// TestPolicyCorrectnessScenario_CloudflareRealResponseShape_FlowsThroughExistingPipeline
+// proves Phase 2b's narrowed exit criterion end-to-end: a Cloudflare
+// Gateway rule's real, documented response shape -- built from this
+// package's own CloudflareGatewayPolicyProvider against an httptest
+// server standing in for Cloudflare's live API -- flows correctly
+// through Phase 3's existing, unmodified VerifyPolicyBaselineExpectation
+// pipeline and resolves to a genuine Pass. Per the spec's Phase 2b
+// amendment, per-request attack-resistance evidence remains unavailable
+// on the free tier (Logpush is Enterprise-only; Log Explorer has no free
+// tier), so this is a policy-CONFIGURATION-correctness proof, not a
+// per-request one -- the scope this phase actually ships.
+func TestPolicyCorrectnessScenario_CloudflareRealResponseShape_FlowsThroughExistingPipeline(t *testing.T) {
+	rule := cloudflareGatewayRule{
+		ID:      "block-malware-category",
+		Name:    "Block malware category",
+		Action:  "block",
+		Filters: []string{"http"},
+		Traffic: `http.request.uri.category == "malware"`,
+		Enabled: true,
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]any{
+			"success": true,
+			"errors":  []any{},
+			"result": map[string]any{
+				"id":      rule.ID,
+				"name":    rule.Name,
+				"action":  rule.Action,
+				"filters": rule.Filters,
+				"traffic": rule.Traffic,
+				"enabled": rule.Enabled,
+			},
+		})
+	}))
+	defer server.Close()
+
+	provider := NewCloudflareGatewayPolicyProvider(http.DefaultClient, server.URL, "test-account", "test-token")
 	now := time.Now()
-	exp := HTTPExpectation{
-		RequestURL:     "https://file-scan-test.example/eicar.com.txt",
-		URLCategory:    "malware-file-scan",
-		ExpectedAction: ExpectedBlock,
-		ControlProduct: "cloudflare-gateway",
-		Note:           "EICAR standard antivirus test file -- synthetic, universally safe, never real malware",
-	}
-	provider := NewFixtureGatewayProvider([]GatewayEvidence{
-		{RequestURL: exp.RequestURL, Action: "block", Category: "malware-file-scan", PolicyRule: "block-eicar-signature", Timestamp: now, Source: SourceFixture},
-	})
 	window := TimeWindow{Start: now.Add(-time.Minute), End: now.Add(time.Minute)}
-	result := VerifyHTTPExpectation(exp, HTTPObservation{}, provider, window)
 
-	if result.Prevention.Verdict != VerdictPass {
-		t.Errorf("Prevention.Verdict = %q, want %q -- known-good baseline: the EICAR test file was caught by file-level scanning", result.Prevention.Verdict, VerdictPass)
+	exp := PolicyBaselineExpectation{
+		PolicyRuleID:       rule.ID,
+		ExpectedConfigHash: configHashFor(rule),
+		ControlProduct:     "cloudflare-gateway",
 	}
-}
 
-// TestMalwareDownloadScenario_EICARTestFileMissed is the negative
-// counterpart: the same EICAR test download, but fixture evidence
-// shows the gateway allowed it through -- the file-scanning gap this
-// test exists to surface.
-func TestMalwareDownloadScenario_EICARTestFileMissed(t *testing.T) {
-	now := time.Now()
-	exp := HTTPExpectation{
-		RequestURL:     "https://file-scan-test.example/eicar.com.txt",
-		URLCategory:    "malware-file-scan",
-		ExpectedAction: ExpectedBlock,
-		ControlProduct: "cloudflare-gateway",
-	}
-	provider := NewFixtureGatewayProvider([]GatewayEvidence{
-		{RequestURL: exp.RequestURL, Action: "allow", Category: "malware-file-scan", Timestamp: now, Source: SourceFixture},
-	})
-	window := TimeWindow{Start: now.Add(-time.Minute), End: now.Add(time.Minute)}
-	result := VerifyHTTPExpectation(exp, HTTPObservation{}, provider, window)
+	result := VerifyPolicyBaselineExpectation(exp, provider, window, now)
 
-	if result.Prevention.Verdict != VerdictFail {
-		t.Errorf("Prevention.Verdict = %q, want %q -- negative case: the EICAR test file was missed", result.Prevention.Verdict, VerdictFail)
+	if result.Verdict != VerdictPass {
+		t.Errorf("Verdict = %q, want %q -- Cloudflare's real documented response shape must flow correctly through the existing policy-baseline pipeline", result.Verdict, VerdictPass)
 	}
 }
 
