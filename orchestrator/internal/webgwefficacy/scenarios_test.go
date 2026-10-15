@@ -1,6 +1,9 @@
 package webgwefficacy
 
 import (
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -227,5 +230,59 @@ func TestMutationTestingScenario_MalwareCategoryPolicy_CatchesWeakenedPolicyAndC
 	}
 	if !result.RecoveryConfirmed {
 		t.Errorf("RecoveryConfirmed = false, want true -- reverting the policy must restore the original Pass verdict")
+	}
+}
+
+// TestPolicyCorrectnessScenario_CloudflareRealResponseShape_FlowsThroughExistingPipeline
+// proves Phase 2b's narrowed exit criterion end-to-end: a Cloudflare
+// Gateway rule's real, documented response shape -- built from this
+// package's own CloudflareGatewayPolicyProvider against an httptest
+// server standing in for Cloudflare's live API -- flows correctly
+// through Phase 3's existing, unmodified VerifyPolicyBaselineExpectation
+// pipeline and resolves to a genuine Pass. Per the spec's Phase 2b
+// amendment, per-request attack-resistance evidence remains unavailable
+// on the free tier (Logpush is Enterprise-only; Log Explorer has no free
+// tier), so this is a policy-CONFIGURATION-correctness proof, not a
+// per-request one -- the scope this phase actually ships.
+func TestPolicyCorrectnessScenario_CloudflareRealResponseShape_FlowsThroughExistingPipeline(t *testing.T) {
+	rule := cloudflareGatewayRule{
+		ID:      "block-malware-category",
+		Name:    "Block malware category",
+		Action:  "block",
+		Filters: []string{"http"},
+		Traffic: `http.request.uri.category == "malware"`,
+		Enabled: true,
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]any{
+			"success": true,
+			"errors":  []any{},
+			"result": map[string]any{
+				"id":      rule.ID,
+				"name":    rule.Name,
+				"action":  rule.Action,
+				"filters": rule.Filters,
+				"traffic": rule.Traffic,
+				"enabled": rule.Enabled,
+			},
+		})
+	}))
+	defer server.Close()
+
+	provider := NewCloudflareGatewayPolicyProvider(http.DefaultClient, server.URL, "test-account", "test-token")
+	now := time.Now()
+	window := TimeWindow{Start: now.Add(-time.Minute), End: now.Add(time.Minute)}
+
+	exp := PolicyBaselineExpectation{
+		PolicyRuleID:       rule.ID,
+		ExpectedConfigHash: configHashFor(rule),
+		ControlProduct:     "cloudflare-gateway",
+	}
+
+	result := VerifyPolicyBaselineExpectation(exp, provider, window, now)
+
+	if result.Verdict != VerdictPass {
+		t.Errorf("Verdict = %q, want %q -- Cloudflare's real documented response shape must flow correctly through the existing policy-baseline pipeline", result.Verdict, VerdictPass)
 	}
 }
