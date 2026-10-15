@@ -15,6 +15,7 @@ import (
 	"github.com/audspect/bas/internal/db"
 	"github.com/audspect/bas/internal/networkgraph"
 	"github.com/audspect/bas/internal/otsafety"
+	"github.com/audspect/bas/internal/targetscope"
 )
 
 // maxNetworkDiscoveryRequestBytes bounds the raw request body before it is
@@ -41,6 +42,7 @@ func (h *Handler) TriggerNetworkDiscoveryRun(w http.ResponseWriter, r *http.Requ
 		TopologyImportID        string                            `json:"topologyImportId,omitempty"`
 		OTSafetyImportID        string                            `json:"otSafetyImportId,omitempty"`
 		ActiveTestAuthorization *otsafety.ActiveTestAuthorization `json:"activeTestAuthorization,omitempty"`
+		TargetScopeImportID     string                            `json:"targetScopeImportId,omitempty"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxNetworkDiscoveryRequestBytes)).Decode(&req); err != nil {
 		jsonError(w, "invalid request body: "+err.Error(), http.StatusBadRequest)
@@ -65,15 +67,16 @@ func (h *Handler) TriggerNetworkDiscoveryRun(w http.ResponseWriter, r *http.Requ
 		}
 	}
 
+	hosts := make([]string, 0, len(req.Targets))
+	for _, t := range req.Targets {
+		hosts = append(hosts, t.Host)
+	}
+
 	topo, safety, ok := h.resolveOTSafetyGatingContext(w, r, req.TopologyImportID, req.OTSafetyImportID)
 	if !ok {
 		return
 	}
 	if topo != nil && safety != nil {
-		hosts := make([]string, 0, len(req.Targets))
-		for _, t := range req.Targets {
-			hosts = append(hosts, t.Host)
-		}
 		matchedZones, err := otsafety.CheckActiveTestAuthorization(hosts, topo, safety, req.ActiveTestAuthorization)
 		if err != nil {
 			jsonError(w, err.Error(), http.StatusBadRequest)
@@ -81,6 +84,17 @@ func (h *Handler) TriggerNetworkDiscoveryRun(w http.ResponseWriter, r *http.Requ
 		}
 		if len(matchedZones) > 0 {
 			h.auditLog(r, "networkdiscovery.activeTestAuthorized", "", map[string]any{"sensitiveZones": matchedZones, "signOff": req.ActiveTestAuthorization.SignOff}, "ok")
+		}
+	}
+
+	scope, ok := h.resolveTargetScopeImport(w, r, req.TargetScopeImportID)
+	if !ok {
+		return
+	}
+	if scope != nil {
+		if unauthorized := targetscope.UnauthorizedTargets(hosts, scope); len(unauthorized) > 0 {
+			jsonError(w, fmt.Sprintf("target(s) not in the declared authorized target scope: %v", unauthorized), http.StatusBadRequest)
+			return
 		}
 	}
 

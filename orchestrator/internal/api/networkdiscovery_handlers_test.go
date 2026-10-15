@@ -258,6 +258,77 @@ func TestTriggerNetworkDiscoveryRun_SafetyGatingLookupFailure_FailsClosed(t *tes
 	})
 }
 
+// TestTriggerNetworkDiscoveryRun_TargetOutsideDeclaredScope_Rejected is
+// the regression test for the RBAC-only target authorization gap: once
+// an authorized target-scope import exists, a target outside it must
+// be rejected regardless of the caller's RBAC permission.
+func TestTriggerNetworkDiscoveryRun_TargetOutsideDeclaredScope_Rejected(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret).WithNetworkVantagePoint(testVantagePoint())
+		userID := seedUser(t, pool, "discovery-op-outofscope", "pw12345678", string(auth.RoleAnalyst), true)
+		_ = createTestTargetScopeImport(t, h, pool, map[string]any{
+			"sourceType":        "manual",
+			"authorizedTargets": []map[string]any{{"cidr": "10.0.1.0/24"}},
+			"limitations":       []string{"x"},
+		})
+
+		body := map[string]any{"targets": []map[string]any{{"host": "10.0.9.9", "port": 1}}}
+		b, _ := json.Marshal(body)
+		req := authedRequest(t, http.MethodPost, "/api/network-discovery-runs", bytes.NewReader(b), auth.RoleAnalyst, userID)
+		rec := callAuthed(h.TriggerNetworkDiscoveryRun, req)
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("status = %d, body = %s, want 400 -- a target outside the declared scope must be rejected", rec.Code, rec.Body.String())
+		}
+	})
+}
+
+// TestTriggerNetworkDiscoveryRun_TargetInsideDeclaredScope_Permitted
+// proves the allowlist permits a covered target, not just rejects
+// uncovered ones.
+func TestTriggerNetworkDiscoveryRun_TargetInsideDeclaredScope_Permitted(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret).WithNetworkVantagePoint(testVantagePoint())
+		userID := seedUser(t, pool, "discovery-op-inscope", "pw12345678", string(auth.RoleAnalyst), true)
+		_ = createTestTargetScopeImport(t, h, pool, map[string]any{
+			"sourceType":        "manual",
+			"authorizedTargets": []map[string]any{{"cidr": "127.0.0.0/8"}},
+			"limitations":       []string{"x"},
+		})
+
+		body := map[string]any{"targets": []map[string]any{{"host": "127.0.0.1", "port": 1}}}
+		b, _ := json.Marshal(body)
+		req := authedRequest(t, http.MethodPost, "/api/network-discovery-runs", bytes.NewReader(b), auth.RoleAnalyst, userID)
+		rec := callAuthed(h.TriggerNetworkDiscoveryRun, req)
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("status = %d, body = %s, want 201 -- a target covered by the declared scope must be permitted", rec.Code, rec.Body.String())
+		}
+	})
+}
+
+// TestTriggerNetworkDiscoveryRun_NoScopeEverDeclared_FailsOpen pins the
+// only legitimate skip for target-scope gating: no target-scope
+// import has ever been created.
+func TestTriggerNetworkDiscoveryRun_NoScopeEverDeclared_FailsOpen(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret).WithNetworkVantagePoint(testVantagePoint())
+		userID := seedUser(t, pool, "discovery-op-noscope", "pw12345678", string(auth.RoleAnalyst), true)
+		body := map[string]any{"targets": []map[string]any{{"host": "203.0.113.5", "port": 1}}}
+		b, _ := json.Marshal(body)
+		req := authedRequest(t, http.MethodPost, "/api/network-discovery-runs", bytes.NewReader(b), auth.RoleAnalyst, userID)
+		rec := callAuthed(h.TriggerNetworkDiscoveryRun, req)
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("status = %d, body = %s, want 201 -- with no target-scope import ever declared, gating must fail open", rec.Code, rec.Body.String())
+		}
+	})
+}
+
+// Target-scope resolution's own lookup-failure-fails-closed behavior
+// is unit-tested directly in targetscope_gating_test.go
+// (TestResolveTargetScopeImport_LookupFailure_FailsClosed); a
+// handler-level duplicate here cannot isolate that path from the
+// OT/ICS gate's own identical failure mode, since both share one
+// request context and OT/ICS resolution runs first.
+
 func TestTriggerNetworkDiscoveryRun_ObservedAndBlockedTargets(t *testing.T) {
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
 		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret).WithNetworkVantagePoint(testVantagePoint())

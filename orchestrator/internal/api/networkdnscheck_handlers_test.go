@@ -319,6 +319,63 @@ func TestTriggerDNSSecurityCheckRun_SafetyGatingLookupFailure_FailsClosed(t *tes
 	})
 }
 
+// TestTriggerDNSSecurityCheckRun_TargetOutsideDeclaredScope_Rejected is
+// the regression test for the RBAC-only target authorization gap.
+func TestTriggerDNSSecurityCheckRun_TargetOutsideDeclaredScope_Rejected(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		vp := testVantagePoint()
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret).WithNetworkVantagePoint(vp)
+		host, port := startTestDNSServer(t, dns.RcodeRefused)
+		_ = createTestTargetScopeImport(t, h, pool, map[string]any{
+			"sourceType":        "manual",
+			"authorizedTargets": []map[string]any{{"cidr": "10.0.1.0/24"}},
+			"limitations":       []string{"x"},
+		})
+		b, _ := json.Marshal(validDNSCheckBody(host, port))
+		userID := seedUser(t, pool, "dnscheck-op-outofscope", "pw12345678", string(auth.RoleAnalyst), true)
+		req := authedRequest(t, http.MethodPost, "/api/dns-security-checks", bytes.NewReader(b), auth.RoleAnalyst, userID)
+		rec := callAuthed(h.TriggerDNSSecurityCheckRun, req)
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("status = %d, body = %s, want 400 -- a target outside the declared scope must be rejected", rec.Code, rec.Body.String())
+		}
+	})
+}
+
+func TestTriggerDNSSecurityCheckRun_TargetInsideDeclaredScope_Permitted(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		vp := testVantagePoint()
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret).WithNetworkVantagePoint(vp)
+		host, port := startTestDNSServer(t, dns.RcodeRefused)
+		_ = createTestTargetScopeImport(t, h, pool, map[string]any{
+			"sourceType":        "manual",
+			"authorizedTargets": []map[string]any{{"cidr": "127.0.0.0/8"}},
+			"limitations":       []string{"x"},
+		})
+		b, _ := json.Marshal(validDNSCheckBody(host, port))
+		userID := seedUser(t, pool, "dnscheck-op-inscope", "pw12345678", string(auth.RoleAnalyst), true)
+		req := authedRequest(t, http.MethodPost, "/api/dns-security-checks", bytes.NewReader(b), auth.RoleAnalyst, userID)
+		rec := callAuthed(h.TriggerDNSSecurityCheckRun, req)
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("status = %d, body = %s, want 201 -- a target covered by the declared scope must be permitted", rec.Code, rec.Body.String())
+		}
+	})
+}
+
+func TestTriggerDNSSecurityCheckRun_NoScopeEverDeclared_FailsOpen(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		vp := testVantagePoint()
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret).WithNetworkVantagePoint(vp)
+		host, port := startTestDNSServer(t, dns.RcodeRefused)
+		b, _ := json.Marshal(validDNSCheckBody(host, port))
+		userID := seedUser(t, pool, "dnscheck-op-noscope", "pw12345678", string(auth.RoleAnalyst), true)
+		req := authedRequest(t, http.MethodPost, "/api/dns-security-checks", bytes.NewReader(b), auth.RoleAnalyst, userID)
+		rec := callAuthed(h.TriggerDNSSecurityCheckRun, req)
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("status = %d, body = %s, want 201 -- with no target-scope import ever declared, gating must fail open", rec.Code, rec.Body.String())
+		}
+	})
+}
+
 func TestTriggerDNSSecurityCheckRun_ValidChecksPersist(t *testing.T) {
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
 		vp := testVantagePoint()

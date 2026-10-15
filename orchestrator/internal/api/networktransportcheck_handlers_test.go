@@ -219,6 +219,63 @@ func TestTriggerTransportSecurityCheckRun_SafetyGatingLookupFailure_FailsClosed(
 	})
 }
 
+// TestTriggerTransportSecurityCheckRun_TargetOutsideDeclaredScope_Rejected
+// is the regression test for the RBAC-only target authorization gap.
+func TestTriggerTransportSecurityCheckRun_TargetOutsideDeclaredScope_Rejected(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		vp := testVantagePoint()
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret).WithNetworkVantagePoint(vp)
+		host, port := startRefusingPort(t)
+		_ = createTestTargetScopeImport(t, h, pool, map[string]any{
+			"sourceType":        "manual",
+			"authorizedTargets": []map[string]any{{"cidr": "10.0.1.0/24"}},
+			"limitations":       []string{"x"},
+		})
+		b, _ := json.Marshal(transportCheckBody(host, port))
+		userID := seedUser(t, pool, "transportcheck-op-outofscope", "pw12345678", string(auth.RoleAnalyst), true)
+		req := authedRequest(t, http.MethodPost, "/api/transport-security-checks", bytes.NewReader(b), auth.RoleAnalyst, userID)
+		rec := callAuthed(h.TriggerTransportSecurityCheckRun, req)
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("status = %d, body = %s, want 400 -- a target outside the declared scope must be rejected", rec.Code, rec.Body.String())
+		}
+	})
+}
+
+func TestTriggerTransportSecurityCheckRun_TargetInsideDeclaredScope_Permitted(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		vp := testVantagePoint()
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret).WithNetworkVantagePoint(vp)
+		host, port := startRefusingPort(t)
+		_ = createTestTargetScopeImport(t, h, pool, map[string]any{
+			"sourceType":        "manual",
+			"authorizedTargets": []map[string]any{{"cidr": "127.0.0.0/8"}},
+			"limitations":       []string{"x"},
+		})
+		b, _ := json.Marshal(transportCheckBody(host, port))
+		userID := seedUser(t, pool, "transportcheck-op-inscope", "pw12345678", string(auth.RoleAnalyst), true)
+		req := authedRequest(t, http.MethodPost, "/api/transport-security-checks", bytes.NewReader(b), auth.RoleAnalyst, userID)
+		rec := callAuthed(h.TriggerTransportSecurityCheckRun, req)
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("status = %d, body = %s, want 201 -- a target covered by the declared scope must be permitted", rec.Code, rec.Body.String())
+		}
+	})
+}
+
+func TestTriggerTransportSecurityCheckRun_NoScopeEverDeclared_FailsOpen(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		vp := testVantagePoint()
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret).WithNetworkVantagePoint(vp)
+		host, port := startRefusingPort(t)
+		b, _ := json.Marshal(transportCheckBody(host, port))
+		userID := seedUser(t, pool, "transportcheck-op-noscope", "pw12345678", string(auth.RoleAnalyst), true)
+		req := authedRequest(t, http.MethodPost, "/api/transport-security-checks", bytes.NewReader(b), auth.RoleAnalyst, userID)
+		rec := callAuthed(h.TriggerTransportSecurityCheckRun, req)
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("status = %d, body = %s, want 201 -- with no target-scope import ever declared, gating must fail open", rec.Code, rec.Body.String())
+		}
+	})
+}
+
 // TestTriggerTransportSecurityCheckRun_TargetInSensitiveZone_Authorized_Permitted
 // closes a final-review gap: the plan's own Task 6 prose calls for a
 // permit-with-authorization smoke test on this handler, matching the
