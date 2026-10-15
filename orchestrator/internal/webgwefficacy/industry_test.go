@@ -310,3 +310,42 @@ func TestBFSINBFCProfile_PrioritySummary_AgainstRealCoverageReport(t *testing.T)
 		t.Errorf("PrioritySummary() = %q, want every BFSI/NBFC priority domain present in the real coverage report", summary)
 	}
 }
+
+func TestIndustryProfile_Describe_WithNote_RendersNameAndNote(t *testing.T) {
+	profile, err := NewIndustryProfile("test-profile", nil, nil, nil, "Financial-sector priorities dominate.")
+	if err != nil {
+		t.Fatalf("NewIndustryProfile: %v", err)
+	}
+
+	want := "test-profile: Financial-sector priorities dominate."
+	if got := profile.Describe(); got != want {
+		t.Errorf("Describe() = %q, want %q", got, want)
+	}
+}
+
+func TestIndustryProfile_Describe_WithoutNote_RendersNameAlone(t *testing.T) {
+	profile, err := NewIndustryProfile("test-profile", nil, nil, nil, "")
+	if err != nil {
+		t.Fatalf("NewIndustryProfile: %v", err)
+	}
+
+	want := "test-profile"
+	if got := profile.Describe(); got != want {
+		t.Errorf("Describe() = %q, want %q -- no dangling colon or separator when Note is empty", got, want)
+	}
+}
+
+// TestBFSINBFCProfile_Describe_AgainstRealNote proves Describe has a
+// real caller against real profile data, not just a synthetic Note
+// built only for this test.
+func TestBFSINBFCProfile_Describe_AgainstRealNote(t *testing.T) {
+	profile, err := BFSINBFCProfile()
+	if err != nil {
+		t.Fatalf("BFSINBFCProfile: %v", err)
+	}
+
+	want := profile.Name + ": " + profile.Note
+	if got := profile.Describe(); got != want {
+		t.Errorf("Describe() = %q, want %q", got, want)
+	}
+}
