@@ -3,8 +3,10 @@ package api
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -19,7 +21,7 @@ import (
 // assert on the status code without decoding a body that isn't there.
 func createTestEvidenceSnapshot(t *testing.T, h *Handler, pool *pgxpool.Pool, body map[string]any) (string, int) {
 	t.Helper()
-	userID := seedUser(t, pool, "regevidence-op", "pw12345678", string(auth.RoleAnalyst), true)
+	userID := seedUser(t, pool, fmt.Sprintf("regevidence-op-%d", time.Now().UnixNano()), "pw12345678", string(auth.RoleAnalyst), true)
 	b, _ := json.Marshal(body)
 	req := authedRequest(t, http.MethodPost, "/api/regulatory-evidence-snapshots", bytes.NewReader(b), auth.RoleAnalyst, userID)
 	rec := callAuthed(h.CreateEvidenceSnapshot, req)

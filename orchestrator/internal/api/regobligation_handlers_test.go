@@ -3,8 +3,10 @@ package api
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -36,7 +38,7 @@ func validObligationBody() map[string]any {
 // callAuthed so auth.ClaimsFrom resolves inside the handler.
 func createTestObligation(t *testing.T, h *Handler, pool *pgxpool.Pool, body map[string]any) string {
 	t.Helper()
-	userID := seedUser(t, pool, "regobligation-op", "pw12345678", string(auth.RoleAnalyst), true)
+	userID := seedUser(t, pool, fmt.Sprintf("regobligation-op-%d", time.Now().UnixNano()), "pw12345678", string(auth.RoleAnalyst), true)
 	b, _ := json.Marshal(body)
 	req := authedRequest(t, http.MethodPost, "/api/regulatory-obligations", bytes.NewReader(b), auth.RoleAnalyst, userID)
 	rec := callAuthed(h.CreateRegulatoryObligation, req)
