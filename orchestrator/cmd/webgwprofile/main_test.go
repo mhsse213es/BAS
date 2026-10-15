@@ -79,7 +79,7 @@ func TestRun_EveryKnownProfileName_Resolves(t *testing.T) {
 		t.Fatalf("AudspectWebGWCoverageReport: %v", err)
 	}
 
-	for name := range profileConstructors {
+	for _, name := range webgwefficacy.IndustryProfileNames() {
 		var stdout bytes.Buffer
 		if err := run([]string{name}, report, &stdout); err != nil {
 			t.Errorf("run(%q): %v", name, err)

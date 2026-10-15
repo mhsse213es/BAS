@@ -221,3 +221,40 @@ func (p IndustryProfile) weightLabel(id string) string {
 	}
 	return fmt.Sprintf("weight %.1f", w)
 }
+
+// industryProfileConstructors is the single source of truth mapping
+// each shipped industry profile's lookup key to its constructor -- a
+// CLI, HTTP handler, or report renderer reads this via
+// IndustryProfileNames/BuildIndustryProfile rather than maintaining
+// its own, potentially drifting copy of this list.
+var industryProfileConstructors = map[string]func() (IndustryProfile, error){
+	"bfsi":             BFSINBFCProfile,
+	"healthcare":       HealthcareProfile,
+	"manufacturing-ot": ManufacturingOTProfile,
+	"msp":              MSPSharedTenantProfile,
+}
+
+// IndustryProfileNames returns every shipped industry profile's
+// lookup key, sorted.
+func IndustryProfileNames() []string {
+	names := make([]string, 0, len(industryProfileConstructors))
+	for name := range industryProfileConstructors {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
+}
+
+// BuildIndustryProfile resolves name to its built IndustryProfile.
+// The second return value is false when name isn't one of
+// IndustryProfileNames' keys -- distinct from a genuine construction
+// error (a non-nil err), which none of the 4 shipped profiles produce
+// today but is still surfaced rather than panicking.
+func BuildIndustryProfile(name string) (IndustryProfile, bool, error) {
+	ctor, ok := industryProfileConstructors[name]
+	if !ok {
+		return IndustryProfile{}, false, nil
+	}
+	profile, err := ctor()
+	return profile, true, err
+}

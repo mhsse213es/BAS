@@ -349,3 +349,41 @@ func TestBFSINBFCProfile_Describe_AgainstRealNote(t *testing.T) {
 		t.Errorf("Describe() = %q, want %q", got, want)
 	}
 }
+
+func TestIndustryProfileNames_ReturnsAllFourSorted(t *testing.T) {
+	want := []string{"bfsi", "healthcare", "manufacturing-ot", "msp"}
+	got := IndustryProfileNames()
+	if len(got) != len(want) {
+		t.Fatalf("IndustryProfileNames() = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("IndustryProfileNames()[%d] = %q, want %q (sorted order)", i, got[i], want[i])
+		}
+	}
+}
+
+func TestBuildIndustryProfile_EveryKnownName_Succeeds(t *testing.T) {
+	for _, name := range IndustryProfileNames() {
+		profile, ok, err := BuildIndustryProfile(name)
+		if !ok {
+			t.Errorf("BuildIndustryProfile(%q): ok = false, want true", name)
+		}
+		if err != nil {
+			t.Errorf("BuildIndustryProfile(%q): %v", name, err)
+		}
+		if profile.Name == "" {
+			t.Errorf("BuildIndustryProfile(%q): returned profile has empty Name", name)
+		}
+	}
+}
+
+func TestBuildIndustryProfile_UnknownName_ReturnsFalseNotError(t *testing.T) {
+	_, ok, err := BuildIndustryProfile("not-a-real-profile")
+	if ok {
+		t.Error("BuildIndustryProfile: ok = true for an unknown name, want false")
+	}
+	if err != nil {
+		t.Errorf("BuildIndustryProfile: err = %v for an unknown name, want nil -- unknown name is not a construction error", err)
+	}
+}

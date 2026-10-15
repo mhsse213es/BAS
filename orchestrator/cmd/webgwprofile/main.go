@@ -9,42 +9,28 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"sort"
 	"strings"
 
 	"github.com/audspect/bas/internal/webgwefficacy"
 )
 
-var profileConstructors = map[string]func() (webgwefficacy.IndustryProfile, error){
-	"bfsi":             webgwefficacy.BFSINBFCProfile,
-	"healthcare":       webgwefficacy.HealthcareProfile,
-	"manufacturing-ot": webgwefficacy.ManufacturingOTProfile,
-	"msp":              webgwefficacy.MSPSharedTenantProfile,
-}
-
-func knownProfileNames() []string {
-	names := make([]string, 0, len(profileConstructors))
-	for name := range profileConstructors {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	return names
-}
-
-// run resolves args[0] to a known industry profile, builds it, and
-// writes its Describe() and PrioritySummary(report) output to stdout.
-// report is passed in rather than fetched here so this function stays
-// testable against a synthetic CoverageReport as well as the real
+// run resolves args[0] to a known industry profile via
+// webgwefficacy's own IndustryProfileNames/BuildIndustryProfile --
+// the single source of truth also used by the HTTP handler and
+// report renderer, so this CLI never maintains its own, potentially
+// drifting copy of the profile-name list -- and writes its Describe()
+// and PrioritySummary(report) output to stdout. report is passed in
+// rather than fetched here so this function stays testable against a
+// synthetic CoverageReport as well as the real
 // AudspectWebGWCoverageReport.
 func run(args []string, report webgwefficacy.CoverageReport, stdout io.Writer) error {
 	if len(args) != 1 {
-		return fmt.Errorf("usage: webgwprofile <profile-name>\nknown profiles: %s", strings.Join(knownProfileNames(), ", "))
+		return fmt.Errorf("usage: webgwprofile <profile-name>\nknown profiles: %s", strings.Join(webgwefficacy.IndustryProfileNames(), ", "))
 	}
-	ctor, ok := profileConstructors[args[0]]
+	profile, ok, err := webgwefficacy.BuildIndustryProfile(args[0])
 	if !ok {
-		return fmt.Errorf("unknown profile %q -- known profiles: %s", args[0], strings.Join(knownProfileNames(), ", "))
+		return fmt.Errorf("unknown profile %q -- known profiles: %s", args[0], strings.Join(webgwefficacy.IndustryProfileNames(), ", "))
 	}
-	profile, err := ctor()
 	if err != nil {
 		return fmt.Errorf("building profile %q: %w", args[0], err)
 	}
