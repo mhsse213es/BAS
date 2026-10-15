@@ -31,6 +31,7 @@ import (
 	"github.com/audspect/bas/internal/dnssink"
 	"github.com/audspect/bas/internal/emsweep"
 	"github.com/audspect/bas/internal/endpointrisk"
+	"github.com/audspect/bas/internal/evidence"
 	"github.com/audspect/bas/internal/exercise"
 	exercisetracker "github.com/audspect/bas/internal/exercise/tracker"
 	"github.com/audspect/bas/internal/initiatives"
@@ -570,8 +571,14 @@ func main() {
 	for _, src := range tiSources {
 		log.Printf("[+] %s connector configured", src.Name())
 	}
+	// evStore backs TCF Phase 9 generation-attempt observability (recorded by the
+	// generator, served by the API handler). The active-technique projection
+	// (Phase 2 §6.2/§8) is deliberately NOT opted in here: wiring it records
+	// attempts without changing which techniques generation uses.
+	evStore := evidence.NewStore(pool)
 	gen := connector.NewGenerator(cfg.ScenariosDir, cfg.ThreatIntelSectors, cfg.ThreatIntelRegions, engine.Profiles()).WithRegistrar(contentRegistry).
-		WithComponentVersions(connector.DBComponentVersions(pool))
+		WithComponentVersions(connector.DBComponentVersions(pool)).
+		WithEvidenceStore(evStore)
 	priorityEngine := threatpriority.NewEngine(pool, engine, cfg.ThreatIntelSectors, cfg.ThreatIntelRegions)
 	correlationEngine := correlation.NewEngine(pool, engine)
 	identityStore := threatidentity.NewStore(pool)
@@ -842,6 +849,7 @@ func main() {
 	}
 
 	handler := api.New(pool, hub, engine, cfg.JWTSecret).
+		WithEvidenceStore(evStore).
 		WithCaldera(cfg.CalderaURL, cfg.CalderaAPIKey).
 		WithART(artStore).
 		WithCalderaStore(calderaStore).
