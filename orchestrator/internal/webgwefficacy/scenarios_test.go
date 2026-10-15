@@ -158,6 +158,58 @@ func TestCASBScenario_PersonalTenantAllowedThrough(t *testing.T) {
 	}
 }
 
+// TestMalwareFileScenario_EICARTestFileBlocked proves a known-good
+// baseline for domain 04 (malware, exploit delivery and file
+// protection): a download of the industry-standard EICAR test file is
+// declared expected to be blocked by the gateway's own malware/file
+// protection policy, and fixture evidence confirms it was. Per
+// webGW.txt's own domain-04 constraint, this never uses a real
+// malware sample -- only the universally-recognized EICAR synthetic
+// test string, the same discipline domain 03's DLP scenarios already
+// apply to their own synthetic markers.
+func TestMalwareFileScenario_EICARTestFileBlocked(t *testing.T) {
+	now := time.Now()
+	exp := HTTPExpectation{
+		RequestURL:     "https://malware-test.example/eicar-test-file.com",
+		URLCategory:    "eicar-test-file",
+		ExpectedAction: ExpectedBlock,
+		ControlProduct: "cloudflare-gateway",
+		Note:           "industry-standard EICAR synthetic test string, never a real malware sample",
+	}
+	provider := NewFixtureGatewayProvider([]GatewayEvidence{
+		{RequestURL: exp.RequestURL, Action: "block", Category: "eicar-test-file", PolicyRule: "block-malware-file-signature", Timestamp: now, Source: SourceFixture},
+	})
+	window := TimeWindow{Start: now.Add(-time.Minute), End: now.Add(time.Minute)}
+	result := VerifyHTTPExpectation(exp, HTTPObservation{}, provider, window)
+
+	if result.Prevention.Verdict != VerdictPass {
+		t.Errorf("Prevention.Verdict = %q, want %q -- known-good baseline: the EICAR test-file download was blocked", result.Prevention.Verdict, VerdictPass)
+	}
+}
+
+// TestMalwareFileScenario_EICARTestFileMissed is the negative
+// counterpart: the same EICAR test-file download, but fixture
+// evidence shows the gateway allowed it through -- the file-protection
+// gap a domain-04 test exists to surface.
+func TestMalwareFileScenario_EICARTestFileMissed(t *testing.T) {
+	now := time.Now()
+	exp := HTTPExpectation{
+		RequestURL:     "https://malware-test.example/eicar-test-file.com",
+		URLCategory:    "eicar-test-file",
+		ExpectedAction: ExpectedBlock,
+		ControlProduct: "cloudflare-gateway",
+	}
+	provider := NewFixtureGatewayProvider([]GatewayEvidence{
+		{RequestURL: exp.RequestURL, Action: "allow", Category: "eicar-test-file", Timestamp: now, Source: SourceFixture},
+	})
+	window := TimeWindow{Start: now.Add(-time.Minute), End: now.Add(time.Minute)}
+	result := VerifyHTTPExpectation(exp, HTTPObservation{}, provider, window)
+
+	if result.Prevention.Verdict != VerdictFail {
+		t.Errorf("Prevention.Verdict = %q, want %q -- negative case: the EICAR test-file download was missed", result.Prevention.Verdict, VerdictFail)
+	}
+}
+
 // TestDNSPolicyScenario_C2DomainBlocked proves a known-good baseline
 // for domain 07 (DNS, covert channels and C2 protection): a query to a
 // known command-and-control domain is declared expected to be blocked
