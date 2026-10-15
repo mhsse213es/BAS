@@ -96,6 +96,8 @@ type Handler struct {
 	ingestAPIKey         string                 // shared secret for POST /api/ingest/v1/events; empty disables the endpoint
 	pki                  *pki.CA                // deployment CA for agent mTLS enrollment (B1/B3)
 	signingKey           *cmdsigning.SigningKey // deployment command-signing key (B4) -- separate trust domain from pki above, never chained to it
+	advertisedMTLSPort   int                    // host port agents reach the mTLS listener on (may differ from the in-container port when published ports are remapped); 0 = not advertised
+	advertisedEnrollPort int                    // host port agents reach the enrollment listener on; 0 = not advertised
 	calderaURL           string
 	calderaKey           string
 	iocProvider          ioc.Provider // nil when no OTX connector is configured
@@ -256,6 +258,19 @@ func (h *Handler) WithMetrics(reg *observability.MetricsRegistry) *Handler {
 // WithAgentSecret configures the optional agent shared secret.
 func (h *Handler) WithAgentSecret(s string) *Handler {
 	h.agentSecret = s
+	return h
+}
+
+// WithAdvertisedPorts records the HOST ports agents reach the orchestrator on
+// (mTLS and enrollment). These can differ from the in-container listener ports
+// when the operator remaps the published Docker ports, and the orchestrator
+// cannot otherwise observe that remap -- install.sh supplies them. The
+// dashboard's generated agent-install command uses them so a copy-paste install
+// works on a port-remapped deployment. A zero value means "not advertised" and
+// is omitted from GetConnectionConfig.
+func (h *Handler) WithAdvertisedPorts(mtlsPort, enrollPort int) *Handler {
+	h.advertisedMTLSPort = mtlsPort
+	h.advertisedEnrollPort = enrollPort
 	return h
 }
 
@@ -3567,6 +3582,15 @@ func (h *Handler) GetConnectionConfig(w http.ResponseWriter, r *http.Request) {
 	}
 	if h.pki != nil {
 		resp["caRootPem"] = string(h.pki.RootCertPEM())
+	}
+	// Advertised host ports so the Deploy Agent page can build an install
+	// command that targets the real ports even on a remapped deployment.
+	// Omitted when unset so the frontend never bakes a bogus "0" port.
+	if h.advertisedMTLSPort > 0 {
+		resp["mtlsPort"] = strconv.Itoa(h.advertisedMTLSPort)
+	}
+	if h.advertisedEnrollPort > 0 {
+		resp["enrollPort"] = strconv.Itoa(h.advertisedEnrollPort)
 	}
 	respond(w, resp)
 }

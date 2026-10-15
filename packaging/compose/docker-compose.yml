@@ -164,6 +164,14 @@ services:
       HTTP_PORT_ENROLL: "9444"
       HTTP_PORT_LEGACY: "9000"
       HTTP_PORT_DASHBOARD: "9543"
+      # The HOST ports agents actually reach (the left side of the port
+      # mappings below). They equal the in-container ports unless the operator
+      # remapped the published ports in setup.conf -- a remap the container
+      # itself cannot see. The orchestrator advertises these in the Deploy
+      # Agent install command so a copy-paste install works regardless. See
+      # config.AdvertisedMTLSPort / AdvertisedEnrollPort and GetConnectionConfig.
+      HTTP_ADVERTISED_MTLS_PORT:   "${BAS_PORT:-9443}"
+      HTTP_ADVERTISED_ENROLL_PORT: "${BAS_ENROLL_PORT:-9444}"
       # Comma-separated hostnames/IPs this orchestrator is reachable at --
       # embedded as SANs on the self-signed deployment CA cert (which is
       # presented directly as the TLS server identity on every listener).
