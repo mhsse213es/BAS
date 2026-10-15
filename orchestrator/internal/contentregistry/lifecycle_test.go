@@ -106,6 +106,24 @@ func mustCreateDraftVersion(t *testing.T, reg *Registry, actor, contentID string
 	return vid
 }
 
+// mustCreateGeneratedDraft creates a DRAFT version through the real factory
+// path (RegisterGenerated), so it carries a 'generated_for' provenance
+// relationship. This is genuine TCF-generated content, distinct from plain
+// intel intake which shares ActorGenerator but has no generation provenance.
+func mustCreateGeneratedDraft(t *testing.T, reg *Registry, pool *pgxpool.Pool, contentID string) string {
+	t.Helper()
+	thr := seedThreat(t, pool, contentID)
+	art := "id: " + contentID + "\nname: N\nsteps:\n  - {name: a, technique_id: T1082, framework: custom, command: x}\n"
+	vid, _, err := reg.RegisterGenerated(context.Background(), GeneratedCandidate{
+		ContentID: contentID, Artifact: []byte(art), GenerationKey: "k-" + contentID,
+		GenerationRef: "k-" + contentID, ThreatID: thr,
+	})
+	if err != nil {
+		t.Fatalf("RegisterGenerated(%s): %v", contentID, err)
+	}
+	return vid
+}
+
 func assertLifecycle(t *testing.T, reg *Registry, vid string, want Lifecycle) {
 	t.Helper()
 	v, err := reg.LoadVersion(context.Background(), vid)
@@ -121,11 +139,29 @@ func TestTransition_TCFOriginDraftCannotPublishDirectly(t *testing.T) { // TCF P
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
 		ctx := context.Background()
 		reg := New(pool, testutil.DevVerifier())
-		vid := mustCreateDraftVersion(t, reg, ActorGenerator, "pubgate-generator")
+		vid := mustCreateGeneratedDraft(t, reg, pool, "pubgate-generator")
 
 		if err := reg.Transition(ctx, vid, LifecyclePublishedLocal, "user:admin1", "trying to publish"); err == nil {
-			t.Fatal("DRAFT->PUBLISHED_LOCAL must be refused for generator-created content")
+			t.Fatal("DRAFT->PUBLISHED_LOCAL must be refused for factory-generated content")
 		}
+	})
+}
+
+// TestTransition_IntelIntakeDraftCanPublishDirectly guards the ruling that
+// plain intel intake (ActorGenerator but no generation provenance) is EXEMPT
+// from the validation gate -- it is not factory-generated content.
+func TestTransition_IntelIntakeDraftCanPublishDirectly(t *testing.T) { // TCF Phase 6 regression guard
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		reg := New(pool, testutil.DevVerifier())
+		// Plain createVersion with ActorGenerator and NO generated_for link --
+		// exactly the shape SourceIntel intake produces (intake.go:183).
+		vid := mustCreateDraftVersion(t, reg, ActorGenerator, "pubgate-intel-intake")
+
+		if err := reg.Transition(ctx, vid, LifecyclePublishedLocal, "user:admin1", "operator publish"); err != nil {
+			t.Fatalf("intel-intake DRAFT->PUBLISHED_LOCAL must succeed (no generation provenance): %v", err)
+		}
+		assertLifecycle(t, reg, vid, LifecyclePublishedLocal)
 	})
 }
 
@@ -157,7 +193,7 @@ func TestTransition_ValidatedTCFOriginCanStillPublish(t *testing.T) { // TCF Pha
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
 		ctx := context.Background()
 		reg := New(pool, testutil.DevVerifier())
-		vid := mustCreateDraftVersion(t, reg, ActorGenerator, "pubgate-validated")
+		vid := mustCreateGeneratedDraft(t, reg, pool, "pubgate-validated")
 
 		if err := reg.Transition(ctx, vid, LifecycleValidating, ActorValidationLab, "scanned"); err != nil {
 			t.Fatalf("DRAFT->VALIDATING: %v", err)

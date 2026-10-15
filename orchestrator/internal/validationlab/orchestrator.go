@@ -40,13 +40,21 @@ func NewOrchestrator(pool *pgxpool.Pool, reg *contentregistry.Registry, d dispat
 	}
 }
 
-// selectEligible returns DRAFT content_version ids whose created_by marks
-// them as TCF-originated and that are not already mid-flight.
+// selectEligible returns DRAFT content_version ids that are genuinely
+// factory-originated. ActorComposer is always factory output; ActorGenerator
+// is shared by factory generation (which carries a 'generated_for' provenance
+// link) and plain intel intake (no such link, exempt), so the generator branch
+// requires the provenance link -- the same discriminator the publish gate uses
+// (see contentregistry.hasGenerationProvenance).
 func (o *Orchestrator) selectEligible(ctx context.Context) ([]string, error) {
 	rows, err := o.pool.Query(ctx,
-		`SELECT id FROM content_versions
-		  WHERE lifecycle = 'DRAFT' AND created_by IN ($1, $2)
-		  ORDER BY created_at ASC`,
+		`SELECT cv.id FROM content_versions cv
+		  WHERE cv.lifecycle = 'DRAFT'
+		    AND ( cv.created_by = $2
+		       OR ( cv.created_by = $1 AND EXISTS (
+		              SELECT 1 FROM content_version_threats t
+		               WHERE t.content_version_id = cv.id AND t.relationship_kind = 'generated_for') ) )
+		  ORDER BY cv.created_at ASC`,
 		contentregistry.ActorGenerator, contentregistry.ActorComposer)
 	if err != nil {
 		return nil, err

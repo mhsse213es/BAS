@@ -116,6 +116,44 @@ func TestRunOnce_SelectsOnlyTCFOriginatedDraft(t *testing.T) {
 	})
 }
 
+// mustSeedIntelIntakeDraft inserts a DRAFT with created_by = ActorGenerator but
+// NO 'generated_for' provenance link -- the shape SourceIntel intake produces.
+// Such content is exempt from factory validation and must not be selected.
+func mustSeedIntelIntakeDraft(t *testing.T, pool *pgxpool.Pool, id string, artifact []byte) string {
+	t.Helper()
+	ctx := context.Background()
+	if _, err := pool.Exec(ctx, `INSERT INTO scenarios (scenario_id, origin) VALUES ($1, 'LOCAL') ON CONFLICT DO NOTHING`, id); err != nil {
+		t.Fatalf("seed scenarios row for %s: %v", id, err)
+	}
+	var vid string
+	if err := pool.QueryRow(ctx, `INSERT INTO content_versions
+		(content_id, origin, version, artifact_sha256, artifact_size, artifact_bytes, trust_level, lifecycle, intake_source, schema_version, created_by)
+		VALUES ($1, 'LOCAL', 1, 'n/a-'||$1, octet_length($2::bytea), $2::bytea, 'UNTRUSTED', 'DRAFT', 'intel', 1, $3)
+		RETURNING id`, id, artifact, contentregistry.ActorGenerator).Scan(&vid); err != nil {
+		t.Fatalf("seed intel-intake content_versions row for %s: %v", id, err)
+	}
+	return vid
+}
+
+// TestRunOnce_SkipsIntelIntakeDraftWithoutProvenance guards the ruling that
+// plain intel intake (ActorGenerator, no generation provenance) is exempt from
+// factory validation -- the lab must not pull it in.
+func TestRunOnce_SkipsIntelIntakeDraftWithoutProvenance(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		reg := newTestRegistry(t, pool)
+		ctx := context.Background()
+
+		intelDraft := mustSeedIntelIntakeDraft(t, pool, "vl-intel-intake", nonDestructiveArtifact("vl-intel-intake"))
+
+		o := NewOrchestrator(pool, reg, nil, "lab-agent-1", 0)
+		if err := o.runOnce(ctx); err != nil {
+			t.Fatalf("runOnce: %v", err)
+		}
+
+		assertLifecycle(t, reg, intelDraft, contentregistry.LifecycleDraft) // exempt, untouched
+	})
+}
+
 func TestRunOnce_SafetyRecheckRefusalReturnsToDraft(t *testing.T) {
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
 		reg := newTestRegistry(t, pool)
