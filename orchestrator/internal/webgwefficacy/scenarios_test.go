@@ -261,11 +261,11 @@ func TestDNSPolicyScenario_C2DomainMissed(t *testing.T) {
 // TestCoverageReportingScenario_AudspectWebGWCoverage_CitesDenominatorAndExclusions
 // proves Phase 5's coverage-reporting exit criterion end-to-end
 // against Audspect's real, shipped coverage data -- not a synthetic
-// CoverageReport built only for this test. As of this round, 11 of
-// the 12 webGW.txt domains have at least one fixture-backed, proven
-// scenario (01, 02, 03, 05, 06, 07, 08, 09, 10, 11, 12); only domain 04
-// (malware/file protection) remains not-yet-built, matching the
-// spec's own §5 table.
+// CoverageReport built only for this test. As of this round, all 12
+// webGW.txt domains have at least one fixture-backed, proven scenario
+// -- this is explicitly NOT a claim that any domain's full breadth is
+// built out, per CoverageStatus's own documented meaning (01-12 each
+// still have unbuilt sub-capabilities named in the spec's §5 table).
 func TestCoverageReportingScenario_AudspectWebGWCoverage_CitesDenominatorAndExclusions(t *testing.T) {
 	report, err := AudspectWebGWCoverageReport()
 	if err != nil {
@@ -275,19 +275,19 @@ func TestCoverageReportingScenario_AudspectWebGWCoverage_CitesDenominatorAndExcl
 	if got := report.Denominator(); got != 12 {
 		t.Errorf("Denominator() = %d, want 12 -- webGW.txt defines exactly 12 domains", got)
 	}
-	if got := report.CoveredCount(); got != 11 {
-		t.Errorf("CoveredCount() = %d, want 11", got)
+	if got := report.CoveredCount(); got != 12 {
+		t.Errorf("CoveredCount() = %d, want 12 -- all 12 domains now have at least one proven scenario", got)
 	}
-	if got := report.NotCoveredCount(); got != 1 {
-		t.Errorf("NotCoveredCount() = %d, want 1 -- only domain 04 remains unbuilt", got)
+	if got := report.NotCoveredCount(); got != 0 {
+		t.Errorf("NotCoveredCount() = %d, want 0", got)
 	}
 	if got := report.ExcludedCount(); got != 0 {
 		t.Errorf("ExcludedCount() = %d, want 0 -- no domain has been permanently excluded from this initiative", got)
 	}
 
 	summary := report.Summary()
-	if !strings.Contains(summary, "11/12") {
-		t.Errorf("Summary() = %q, want it to contain the covered count alongside the denominator (\"11/12\"), never a bare percentage", summary)
+	if !strings.Contains(summary, "12/12") {
+		t.Errorf("Summary() = %q, want it to contain the covered count alongside the denominator (\"12/12\"), never a bare percentage", summary)
 	}
 }
 

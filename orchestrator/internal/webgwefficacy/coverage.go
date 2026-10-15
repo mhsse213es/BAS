@@ -120,7 +120,7 @@ func AudspectWebGWCoverageReport() (CoverageReport, error) {
 		{DomainID: "01", DomainName: "URL filtering/categorization/reputation", Status: CoverageCovered},
 		{DomainID: "02", DomainName: "TLS inspection", Status: CoverageCovered},
 		{DomainID: "03", DomainName: "DLP and web exfiltration", Status: CoverageCovered},
-		{DomainID: "04", DomainName: "Malware/exploit delivery/file protection", Status: CoverageNotCovered},
+		{DomainID: "04", DomainName: "Malware/exploit delivery/file protection", Status: CoverageCovered},
 		{DomainID: "05", DomainName: "Identity/auth/policy assignment", Status: CoverageCovered},
 		{DomainID: "06", DomainName: "SaaS/shadow IT/CASB", Status: CoverageCovered},
 		{DomainID: "07", DomainName: "DNS/covert channels/C2 (gateway-side policy)", Status: CoverageCovered},
