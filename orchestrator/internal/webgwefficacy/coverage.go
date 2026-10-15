@@ -107,3 +107,27 @@ func (r CoverageReport) Summary() string {
 	}
 	return s
 }
+
+// AudspectWebGWCoverageReport returns Audspect's current,
+// repository-verified WebGW coverage, mirroring this package's own
+// architecture spec's §5 Coverage Matrix table exactly. Update this
+// function at the end of every future phase that changes a domain's
+// status -- a divergence between this function and §5's own table is
+// a defect in whichever one is stale, never an acceptable permanent
+// inconsistency.
+func AudspectWebGWCoverageReport() (CoverageReport, error) {
+	return NewCoverageReport([]DomainCoverage{
+		{DomainID: "01", DomainName: "URL filtering/categorization/reputation", Status: CoverageCovered},
+		{DomainID: "02", DomainName: "TLS inspection", Status: CoverageCovered},
+		{DomainID: "03", DomainName: "DLP and web exfiltration", Status: CoverageCovered},
+		{DomainID: "04", DomainName: "Malware/exploit delivery/file protection", Status: CoverageNotCovered},
+		{DomainID: "05", DomainName: "Identity/auth/policy assignment", Status: CoverageCovered},
+		{DomainID: "06", DomainName: "SaaS/shadow IT/CASB", Status: CoverageCovered},
+		{DomainID: "07", DomainName: "DNS/covert channels/C2 (gateway-side policy)", Status: CoverageNotCovered},
+		{DomainID: "08", DomainName: "Proxy bypass/egress control", Status: CoverageCovered},
+		{DomainID: "09", DomainName: "Configuration drift/administration", Status: CoverageCovered},
+		{DomainID: "10", DomainName: "Detection/telemetry/SIEM/response", Status: CoverageCovered},
+		{DomainID: "11", DomainName: "Availability/resilience", Status: CoverageCovered},
+		{DomainID: "12", DomainName: "Cross-control attack chains/industry-specific", Status: CoverageCovered},
+	})
+}

@@ -1,6 +1,7 @@
 package webgwefficacy
 
 import (
+	"strings"
 	"testing"
 	"time"
 )
@@ -151,5 +152,38 @@ func TestCASBScenario_PersonalTenantAllowedThrough(t *testing.T) {
 
 	if result.Prevention.Verdict != VerdictFail {
 		t.Errorf("Prevention.Verdict = %q, want %q -- negative case: personal-tenant access was missed", result.Prevention.Verdict, VerdictFail)
+	}
+}
+
+// TestCoverageReportingScenario_AudspectWebGWCoverage_CitesDenominatorAndExclusions
+// proves Phase 5's coverage-reporting exit criterion end-to-end
+// against Audspect's real, shipped coverage data -- not a synthetic
+// CoverageReport built only for this test. As of this phase, 10 of
+// the 12 webGW.txt domains have at least one fixture-backed, proven
+// scenario (01, 02, 03, 05, 06, 08, 09, 10, 11, 12); domains 04
+// (malware/file protection) and 07 (gateway-side DNS policy) remain
+// not-yet-built, matching the spec's own §5 table.
+func TestCoverageReportingScenario_AudspectWebGWCoverage_CitesDenominatorAndExclusions(t *testing.T) {
+	report, err := AudspectWebGWCoverageReport()
+	if err != nil {
+		t.Fatalf("AudspectWebGWCoverageReport: %v", err)
+	}
+
+	if got := report.Denominator(); got != 12 {
+		t.Errorf("Denominator() = %d, want 12 -- webGW.txt defines exactly 12 domains", got)
+	}
+	if got := report.CoveredCount(); got != 10 {
+		t.Errorf("CoveredCount() = %d, want 10", got)
+	}
+	if got := report.NotCoveredCount(); got != 2 {
+		t.Errorf("NotCoveredCount() = %d, want 2 -- domains 04 and 07 remain unbuilt", got)
+	}
+	if got := report.ExcludedCount(); got != 0 {
+		t.Errorf("ExcludedCount() = %d, want 0 -- no domain has been permanently excluded from this initiative", got)
+	}
+
+	summary := report.Summary()
+	if !strings.Contains(summary, "10/12") {
+		t.Errorf("Summary() = %q, want it to contain the covered count alongside the denominator (\"10/12\"), never a bare percentage", summary)
 	}
 }
