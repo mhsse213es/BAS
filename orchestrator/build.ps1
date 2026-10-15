@@ -92,13 +92,23 @@ if ($manifestHash -ne "") {
 $env:CGO_ENABLED = "0"
 garble -literals -tiny build -ldflags $ldflags -o server.exe ./cmd/server
 
-if ($LASTEXITCODE -eq 0) {
-    Write-Host ""
-    Write-Host "=============================================" -ForegroundColor Green
-    Write-Host " BUILD SUCCESSFUL" -ForegroundColor Green
-    Write-Host " Output: .\server.exe" -ForegroundColor Green
-    Write-Host "=============================================" -ForegroundColor Green
-} else {
+if ($LASTEXITCODE -ne 0) {
     Write-Host "[!] Build failed." -ForegroundColor Red
     exit $LASTEXITCODE
 }
+
+# 6. Build WebGW industry-profile CLI (webgwprofile.exe)
+Write-Host "[*] Compiling webgwprofile.exe..." -ForegroundColor Cyan
+garble -literals -tiny build -ldflags "-s -w" -o webgwprofile.exe ./cmd/webgwprofile
+
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "[!] webgwprofile.exe build failed." -ForegroundColor Red
+    exit $LASTEXITCODE
+}
+
+Write-Host ""
+Write-Host "=============================================" -ForegroundColor Green
+Write-Host " BUILD SUCCESSFUL" -ForegroundColor Green
+Write-Host " Output: .\server.exe" -ForegroundColor Green
+Write-Host " Output: .\webgwprofile.exe" -ForegroundColor Green
+Write-Host "=============================================" -ForegroundColor Green
