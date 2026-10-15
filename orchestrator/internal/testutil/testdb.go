@@ -208,6 +208,11 @@ func newTestDB(ctx context.Context) (*TestDB, error) {
 		_ = container.Terminate(context.Background())
 		return nil, fmt.Errorf("testutil: EnsureRegulatoryObligationSchema: %w", err)
 	}
+	if err := db.EnsureEvidenceSnapshotSchema(ctx, pool); err != nil {
+		pool.Close()
+		_ = container.Terminate(context.Background())
+		return nil, fmt.Errorf("testutil: EnsureEvidenceSnapshotSchema: %w", err)
+	}
 
 	return &TestDB{
 		Pool:      pool,
