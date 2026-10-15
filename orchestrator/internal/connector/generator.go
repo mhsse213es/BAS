@@ -73,9 +73,17 @@ type Generator struct {
 	// attackMeta overrides attackdata.DatasetMeta (tests).
 	attackMeta func() attackdata.Meta
 
-	// evidence, when set, makes Write consult the evidence layer's active
-	// technique set instead of actor.Techniques (TCF Phase 2 spec §6.2, §8).
+	// evidence, when set, enables generation-attempt observability (TCF Phase 9):
+	// Write records every attempt/generation. It does NOT by itself change which
+	// techniques generation uses -- that projection switch is opt-in via
+	// useActiveTechniques, kept separate so observability can ship without
+	// altering generation output (the projection's home is TCF Phase 2 §6.2, §8).
 	evidence *evidence.Store
+
+	// useActiveTechniques, when true (and evidence is set), makes Write consult
+	// the evidence layer's active technique set instead of actor.Techniques.
+	// Default false: generation reads actor.Techniques directly.
+	useActiveTechniques bool
 
 	// evidenceRecordErr, when set (tests only), substitutes for the real
 	// NextGenerationNumber/RecordGeneration call in the `created` branch below.
@@ -113,12 +121,23 @@ func (g *Generator) WithRegistrar(r Registrar) *Generator {
 	return g
 }
 
-// WithEvidenceStore wires the evidence layer's active technique set into
-// generation policy (TCF Phase 2 spec §6.2, §8). A nil evidence store (the
-// default) falls back to the pre-2B behavior: policy reads actor.Techniques
-// directly.
+// WithEvidenceStore wires the evidence layer for generation-attempt
+// observability (TCF Phase 9): Write records each attempt and generation.
+// On its own it does NOT change the technique source; call
+// WithActiveTechniqueProjection to also drive generation from the active set.
+// A nil evidence store (the default) records nothing and reads actor.Techniques.
 func (g *Generator) WithEvidenceStore(st *evidence.Store) *Generator {
 	g.evidence = st
+	return g
+}
+
+// WithActiveTechniqueProjection opts generation into the evidence layer's
+// active technique set as its technique source (TCF Phase 2 spec §6.2, §8),
+// instead of reading actor.Techniques directly. Requires WithEvidenceStore;
+// without it this has no effect. Kept separate from WithEvidenceStore so the
+// Phase 9 observability wiring can ship without changing generation output.
+func (g *Generator) WithActiveTechniqueProjection() *Generator {
+	g.useActiveTechniques = true
 	return g
 }
 
@@ -185,7 +204,7 @@ func (g *Generator) Write(actors []ThreatActor) (GenerateResult, error) {
 		threatID := actor.ThreatID
 
 		activeTechniques := dedupedTechniqueIDs(actor.Techniques)
-		if g.evidence != nil {
+		if g.evidence != nil && g.useActiveTechniques {
 			at, err := g.evidence.ActiveTechniques(context.Background(), actor.ThreatID)
 			if err != nil {
 				log.Printf("[connector/gen] active techniques for %s: %v", actor.ThreatID, err)
