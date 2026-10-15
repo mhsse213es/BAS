@@ -154,6 +154,111 @@ func TestRunOnce_SkipsIntelIntakeDraftWithoutProvenance(t *testing.T) {
 	})
 }
 
+// TestRunOnce_SecondEligibleNotStrandedInValidating: with two eligible drafts
+// in one tick, only one is dispatched (single lab slot). The other must be
+// left DRAFT for a later tick -- never claimed-and-abandoned in VALIDATING,
+// where nothing would ever recover it.
+func TestRunOnce_SecondEligibleNotStrandedInValidating(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		reg := newTestRegistry(t, pool)
+		ctx := context.Background()
+
+		// created_at ASC ordering -> "a" is processed first.
+		draftA := mustCreateDraftVersion(t, reg, pool, contentregistry.ActorGenerator, "vl-strand-a", nonDestructiveArtifact("vl-strand-a"))
+		draftB := mustCreateDraftVersion(t, reg, pool, contentregistry.ActorGenerator, "vl-strand-b", nonDestructiveArtifact("vl-strand-b"))
+		mustInsertAgent(t, pool, "vl-lab-agent-strand")
+		runID := mustInsertScenarioRun(t, pool, "vl-lab-agent-strand", "completed")
+
+		o := NewOrchestrator(pool, reg, &fakeDispatcher{runID: runID}, "vl-lab-agent-strand", 0)
+		if err := o.runOnce(ctx); err != nil {
+			t.Fatalf("runOnce: %v", err)
+		}
+
+		assertLifecycle(t, reg, draftA, contentregistry.LifecycleValidated) // dispatched + resolved
+		assertLifecycle(t, reg, draftB, contentregistry.LifecycleDraft)     // left for a later tick, NOT stranded in VALIDATING
+	})
+}
+
+// claimToValidating moves a fresh generated DRAFT to VALIDATING, simulating a
+// claim that a now-dead process made before crashing.
+func claimToValidating(t *testing.T, reg *contentregistry.Registry, pool *pgxpool.Pool, id string) string {
+	t.Helper()
+	vid := mustCreateDraftVersion(t, reg, pool, contentregistry.ActorGenerator, id, nonDestructiveArtifact(id))
+	if err := reg.Transition(context.Background(), vid, contentregistry.LifecycleValidating, contentregistry.ActorValidationLab, "claimed"); err != nil {
+		t.Fatalf("claim %s: %v", id, err)
+	}
+	return vid
+}
+
+// TestResolveOrphaned_TimesOutStuckRunning: a VALIDATING version whose in-flight
+// placeholder is older than the timeout and whose run never left 'running'
+// (agent lost, staleness monitor never fired) must be recovered to DRAFT with
+// ERROR -- otherwise it holds the single lab slot forever.
+func TestResolveOrphaned_TimesOutStuckRunning(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		reg := newTestRegistry(t, pool)
+		ctx := context.Background()
+
+		vid := claimToValidating(t, reg, pool, "vl-orphan-timeout")
+		mustInsertAgent(t, pool, "vl-lab-agent-orphan-to")
+		runID := mustInsertScenarioRun(t, pool, "vl-lab-agent-orphan-to", "running")
+		// In-flight placeholder written an hour ago.
+		if _, err := pool.Exec(ctx,
+			`INSERT INTO content_validations (content_version_id, level, outcome, run_id, validator, validator_version, created_at)
+			 VALUES ($1, 'EXECUTION', 'NO_DATA', $2, 'validationlab', '1', NOW() - interval '1 hour')`, vid, runID); err != nil {
+			t.Fatalf("seed placeholder: %v", err)
+		}
+
+		o := NewOrchestrator(pool, reg, nil, "vl-lab-agent-orphan-to", 0)
+		o.timeout = 1 * time.Minute
+		if err := o.resolveOrphaned(ctx); err != nil {
+			t.Fatalf("resolveOrphaned: %v", err)
+		}
+
+		assertLifecycle(t, reg, vid, contentregistry.LifecycleDraft)
+		var outcome string
+		pool.QueryRow(ctx, `SELECT outcome FROM content_validations WHERE content_version_id=$1 AND level='EXECUTION'`, vid).Scan(&outcome)
+		if outcome != "ERROR" {
+			t.Fatalf("got outcome=%s, want ERROR (timed-out orphan)", outcome)
+		}
+	})
+}
+
+// TestResolveOrphaned_SelfHealsTerminalRow: a VALIDATING version whose EXECUTION
+// outcome is already terminal (the outcome was recorded but the lifecycle
+// transition was lost to a crash/DB error) must be re-transitioned from that
+// durable outcome -- PASS -> VALIDATED.
+func TestResolveOrphaned_SelfHealsTerminalRow(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		reg := newTestRegistry(t, pool)
+		ctx := context.Background()
+
+		vid := claimToValidating(t, reg, pool, "vl-orphan-heal")
+		mustInsertAgent(t, pool, "vl-lab-agent-orphan-heal")
+		runID := mustInsertScenarioRun(t, pool, "vl-lab-agent-orphan-heal", "completed")
+		if _, err := pool.Exec(ctx,
+			`INSERT INTO content_validations (content_version_id, level, outcome, run_id, validator, validator_version)
+			 VALUES ($1, 'EXECUTION', 'PASS', $2, 'validationlab', '1')`, vid, runID); err != nil {
+			t.Fatalf("seed terminal row: %v", err)
+		}
+
+		o := NewOrchestrator(pool, reg, nil, "vl-lab-agent-orphan-heal", 0)
+		if err := o.resolveOrphaned(ctx); err != nil {
+			t.Fatalf("resolveOrphaned: %v", err)
+		}
+
+		assertLifecycle(t, reg, vid, contentregistry.LifecycleValidated) // self-healed from the PASS row
+	})
+}
+
+// TestStop_IdempotentNoPanic: Stop must be safe to call more than once
+// (e.g. a shutdown path plus a deferred Stop) -- a second close of stopCh panics.
+func TestStop_IdempotentNoPanic(t *testing.T) {
+	o := NewOrchestrator(nil, nil, nil, "agent", 0)
+	o.Stop()
+	o.Stop() // must not panic
+}
+
 func TestRunOnce_SafetyRecheckRefusalReturnsToDraft(t *testing.T) {
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
 		reg := newTestRegistry(t, pool)
@@ -198,12 +303,25 @@ func mustInsertAgent(t *testing.T, pool *pgxpool.Pool, agentID string) {
 	}
 }
 
+// executedPassResults is a results snapshot with one step that actually
+// executed (CheckResult "pass") -- the shape a genuine validation run produces.
+func executedPassResults() []byte  { return []byte(`[{"id":"s1","result":"pass"}]`) }
+func allSkippedResults() []byte    { return []byte(`[{"id":"s1","result":"skipped"},{"id":"s2","result":"skipped"}]`) }
+func erroredResults() []byte       { return []byte(`[{"id":"s1","result":"pass"},{"id":"s2","result":"error"}]`) }
+
 func mustInsertScenarioRun(t *testing.T, pool *pgxpool.Pool, agentID, status string) string {
+	t.Helper()
+	// A completed run that actually executed carries executed results; non-
+	// completed statuses don't read results, so the default is harmless there.
+	return mustInsertScenarioRunWithResults(t, pool, agentID, status, executedPassResults())
+}
+
+func mustInsertScenarioRunWithResults(t *testing.T, pool *pgxpool.Pool, agentID, status string, resultsJSON []byte) string {
 	t.Helper()
 	var runID string
 	if err := pool.QueryRow(context.Background(),
-		`INSERT INTO scenario_runs (scenario_id, agent_id, status) VALUES ('vl-scenario', $1, $2) RETURNING id`,
-		agentID, status).Scan(&runID); err != nil {
+		`INSERT INTO scenario_runs (scenario_id, agent_id, status, results) VALUES ('vl-scenario', $1, $2, $3::jsonb) RETURNING id`,
+		agentID, status, resultsJSON).Scan(&runID); err != nil {
 		t.Fatalf("seed scenario_run for %s: %v", agentID, err)
 	}
 	return runID
@@ -283,6 +401,60 @@ func TestRunOnce_DispatchFailureRecordsErrorWithNullRunID(t *testing.T) {
 		}
 		if outcome != "ERROR" || runID != nil {
 			t.Fatalf("got outcome=%s run_id=%v, want ERROR/nil", outcome, runID)
+		}
+	})
+}
+
+// TestRunOnce_AllSkippedRunIsNotValidated guards the core spec rule: a run that
+// completed without executing anything (all steps skipped -- e.g. platform
+// mismatch on the lab agent) must NOT be recorded as a validation PASS.
+func TestRunOnce_AllSkippedRunIsNotValidated(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		reg := newTestRegistry(t, pool)
+		ctx := context.Background()
+
+		draft := mustCreateDraftVersion(t, reg, pool, contentregistry.ActorGenerator, "vl-allskip", nonDestructiveArtifact("vl-allskip"))
+		mustInsertAgent(t, pool, "vl-lab-agent-allskip")
+		runID := mustInsertScenarioRunWithResults(t, pool, "vl-lab-agent-allskip", "completed", allSkippedResults())
+
+		o := NewOrchestrator(pool, reg, &fakeDispatcher{runID: runID}, "vl-lab-agent-allskip", 0)
+		if err := o.runOnce(ctx); err != nil {
+			t.Fatalf("runOnce: %v", err)
+		}
+
+		assertLifecycle(t, reg, draft, contentregistry.LifecycleDraft) // NOT VALIDATED
+		var outcome string
+		pool.QueryRow(ctx, `SELECT outcome FROM content_validations WHERE content_version_id = $1 AND level = 'EXECUTION'`, draft).Scan(&outcome)
+		if outcome == "PASS" {
+			t.Fatalf("an all-skipped run must not be PASS; got %s", outcome)
+		}
+		if outcome != "NO_DATA" {
+			t.Fatalf("got outcome=%s, want NO_DATA (nothing executed)", outcome)
+		}
+	})
+}
+
+// TestRunOnce_ErroredStepFailsValidation: a completed run whose steps errored
+// during execution means the content does not execute correctly -> FAIL.
+func TestRunOnce_ErroredStepFailsValidation(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		reg := newTestRegistry(t, pool)
+		ctx := context.Background()
+
+		draft := mustCreateDraftVersion(t, reg, pool, contentregistry.ActorGenerator, "vl-errstep", nonDestructiveArtifact("vl-errstep"))
+		mustInsertAgent(t, pool, "vl-lab-agent-errstep")
+		runID := mustInsertScenarioRunWithResults(t, pool, "vl-lab-agent-errstep", "completed", erroredResults())
+
+		o := NewOrchestrator(pool, reg, &fakeDispatcher{runID: runID}, "vl-lab-agent-errstep", 0)
+		if err := o.runOnce(ctx); err != nil {
+			t.Fatalf("runOnce: %v", err)
+		}
+
+		assertLifecycle(t, reg, draft, contentregistry.LifecycleDraft)
+		var outcome string
+		pool.QueryRow(ctx, `SELECT outcome FROM content_validations WHERE content_version_id = $1 AND level = 'EXECUTION'`, draft).Scan(&outcome)
+		if outcome != "FAIL" {
+			t.Fatalf("got outcome=%s, want FAIL (a step errored)", outcome)
 		}
 	})
 }

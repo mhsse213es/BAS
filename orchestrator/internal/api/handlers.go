@@ -1886,9 +1886,14 @@ func (h *Handler) dispatchRun(ctx context.Context, sc *scenario.Scenario, agentI
 	// agent, and the lab agent may never be dispatched to as if it were a
 	// customer target -- enforced both directions, not just by convention.
 	var isFactoryLab bool
-	h.db.QueryRow(ctx,
+	if err := h.db.QueryRow(ctx,
 		`SELECT is_factory_lab FROM agents WHERE agent_id = $1`, agentID,
-	).Scan(&isFactoryLab)
+	).Scan(&isFactoryLab); err != nil {
+		// Fail closed: if ownership cannot be determined, surface a genuine error
+		// rather than let a customer mode reach the lab agent (or vice versa) on a
+		// transient failure. A DB failure is an error, not a benign skip.
+		return "", "", fmt.Errorf("verify factory-lab ownership for agent %s: %w", agentID, err)
+	}
 	if o.Mode == "factory-validation" && !isFactoryLab {
 		return "", "factory-validation dispatch requires the factory-owned lab agent", nil
 	}

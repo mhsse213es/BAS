@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"log"
+	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -29,6 +30,7 @@ type Orchestrator struct {
 	labAgentID   string
 	pollInterval time.Duration
 	stopCh       chan struct{}
+	stopOnce     sync.Once
 	timeout      time.Duration
 	pollEvery    time.Duration
 }
@@ -83,6 +85,16 @@ func (o *Orchestrator) runOnce(ctx context.Context) error {
 	}
 	dispatched := false
 	for _, id := range ids {
+		// Only one validation runs per tick (single lab slot). Once this tick
+		// has dispatched one, stop BEFORE claiming any further candidate --
+		// claiming without dispatching would strand it in VALIDATING with no
+		// in-flight row, where no recovery path reaches it. Un-dispatched
+		// candidates stay DRAFT and a later tick takes them. A safety-recheck
+		// refusal below does NOT set dispatched, so the loop continues to the
+		// next candidate after returning the refused one to DRAFT.
+		if dispatched {
+			break
+		}
 		if err := o.reg.Transition(ctx, id, contentregistry.LifecycleValidating, contentregistry.ActorValidationLab, "claimed for validation"); err != nil {
 			continue // already claimed by another tick/instance, or no longer DRAFT -- not an error, just skip
 		}
@@ -97,10 +109,12 @@ func (o *Orchestrator) runOnce(ctx context.Context) error {
 			_ = o.reg.Transition(ctx, id, contentregistry.LifecycleDraft, contentregistry.ActorValidationLab, "dispatch safety re-check refused")
 			continue
 		}
-		if dispatched || o.dispatcher == nil {
-			// Already dispatched one this tick (or no dispatcher wired up yet)
-			// -- leave this candidate claimed in VALIDATING; a later tick's
-			// crash-recovery scan will pick it up.
+		if o.dispatcher == nil {
+			// No dispatcher wired (test/unconfigured): the claim and safety
+			// re-check above have run; leave this one claimed in VALIDATING and
+			// stop. resolveOrphaned recovers a VALIDATING row whose in-flight
+			// placeholder (written only once a real dispatcher runs) ages out or
+			// whose execution row is already terminal.
 			break
 		}
 		dispatched = true
@@ -178,7 +192,11 @@ func (o *Orchestrator) pollAndResolve(ctx context.Context, versionID, runID stri
 		if o.resolveIfComplete(ctx, versionID, runID) {
 			return
 		}
-		time.Sleep(o.pollEvery)
+		select {
+		case <-o.stopCh:
+			return // shutdown interrupts the poll; resolveOrphaned recovers this run later
+		case <-time.After(o.pollEvery):
+		}
 	}
 	o.recordExecutionOutcome(ctx, versionID, runID, "ERROR", map[string]any{"error": "validation run timed out"})
 	_ = o.reg.Transition(ctx, versionID, contentregistry.LifecycleDraft, contentregistry.ActorValidationLab, "validation timed out")
@@ -187,23 +205,69 @@ func (o *Orchestrator) pollAndResolve(ctx context.Context, versionID, runID stri
 // resolveIfComplete checks one run's current status and, if terminal,
 // records the outcome and transitions the version. Returns true once
 // resolved (terminal), false if still running.
+//
+// A run's status alone is not the validation verdict: a run is 'completed'
+// whenever the agent submitted a non-partial snapshot, INCLUDING an
+// all-skipped run that executed nothing (handlers.go completes a len(steps)==0
+// run immediately). A factory validation must prove the content actually
+// EXECUTED correctly, so a completed run is judged from its per-step results:
+// PASS only when at least one step executed (pass/fail) and none errored;
+// nothing executed -> NO_DATA; a step errored -> FAIL; malformed -> ERROR.
 func (o *Orchestrator) resolveIfComplete(ctx context.Context, versionID, runID string) bool {
 	var status string
-	if err := o.pool.QueryRow(ctx, `SELECT status FROM scenario_runs WHERE id = $1`, runID).Scan(&status); err != nil {
+	var resultsJSON []byte
+	if err := o.pool.QueryRow(ctx, `SELECT status, results FROM scenario_runs WHERE id = $1`, runID).Scan(&status, &resultsJSON); err != nil {
 		log.Printf("[validationlab] read run %s status: %v", runID, err)
 		return false
 	}
-	switch status {
-	case "running":
+	if status == "running" {
 		return false
-	case "completed":
-		o.recordExecutionOutcome(ctx, versionID, runID, "PASS", map[string]any{"run_id": runID, "status": status})
-		_ = o.reg.Transition(ctx, versionID, contentregistry.LifecycleValidated, contentregistry.ActorValidationLab, "validation passed")
-	default: // failed, partial
-		o.recordExecutionOutcome(ctx, versionID, runID, "FAIL", map[string]any{"run_id": runID, "status": status})
-		_ = o.reg.Transition(ctx, versionID, contentregistry.LifecycleDraft, contentregistry.ActorValidationLab, "validation failed")
+	}
+	outcome, reason := "FAIL", "validation run status: "+status
+	if status == "completed" {
+		outcome, reason = classifyCompletedRun(resultsJSON)
+	}
+	o.recordExecutionOutcome(ctx, versionID, runID, outcome, map[string]any{"run_id": runID, "status": status, "reason": reason})
+	if outcome == "PASS" {
+		_ = o.reg.Transition(ctx, versionID, contentregistry.LifecycleValidated, contentregistry.ActorValidationLab, reason)
+	} else {
+		_ = o.reg.Transition(ctx, versionID, contentregistry.LifecycleDraft, contentregistry.ActorValidationLab, reason)
 	}
 	return true
+}
+
+// classifyCompletedRun maps a completed run's per-step results to a validation
+// outcome. CheckResult values: pass|fail mean the step executed (fail = the
+// technique succeeded against the control, still a clean execution for the
+// factory's "does it run" question); error means the step itself errored;
+// skipped means it never ran.
+func classifyCompletedRun(resultsJSON []byte) (outcome, reason string) {
+	if len(resultsJSON) == 0 {
+		return "NO_DATA", "run completed with no results recorded"
+	}
+	var rs []struct {
+		Result string `json:"result"`
+	}
+	if err := json.Unmarshal(resultsJSON, &rs); err != nil {
+		return "ERROR", "run results were malformed"
+	}
+	executed, errored := 0, 0
+	for _, r := range rs {
+		switch r.Result {
+		case "pass", "fail":
+			executed++
+		case "error":
+			errored++
+		}
+	}
+	switch {
+	case errored > 0:
+		return "FAIL", "one or more steps errored during execution"
+	case executed == 0:
+		return "NO_DATA", "no steps executed (all skipped); nothing to validate"
+	default:
+		return "PASS", "content executed cleanly"
+	}
 }
 
 // Start launches the orchestrator's periodic scan loop in the background.
@@ -212,9 +276,9 @@ func (o *Orchestrator) Start() {
 	log.Printf("[validationlab] started (poll interval: %s)", o.pollInterval)
 }
 
-// Stop ends the periodic scan loop.
+// Stop ends the periodic scan loop. Safe to call more than once.
 func (o *Orchestrator) Stop() {
-	close(o.stopCh)
+	o.stopOnce.Do(func() { close(o.stopCh) })
 }
 
 func (o *Orchestrator) run() {
@@ -235,32 +299,63 @@ func (o *Orchestrator) run() {
 	}
 }
 
-// resolveOrphaned scans every VALIDATING version with an in-flight
-// content_validations row and resolves it from durable state alone --
-// recovers correctly whether this process dispatched it, a now-dead
-// process dispatched it, or it has already completed and simply hasn't
-// been resolved yet.
+// resolveOrphaned scans every VALIDATING version and resolves it from durable
+// state alone, recovering from any crash window:
+//   - latest EXECUTION row terminal (PASS/FAIL/ERROR): the outcome was recorded
+//     but the lifecycle transition was lost -- re-apply it (self-heal).
+//   - latest EXECUTION row NO_DATA with a run_id: still in flight -- resolve from
+//     the run's status, or, if it never reached a terminal status and the
+//     placeholder is older than the timeout, force it to ERROR/DRAFT so the
+//     single lab slot is never held forever.
 func (o *Orchestrator) resolveOrphaned(ctx context.Context) error {
 	rows, err := o.pool.Query(ctx,
-		`SELECT cv.id, v.run_id FROM content_versions cv
-		   JOIN content_validations v ON v.content_version_id = cv.id AND v.level = 'EXECUTION' AND v.outcome = 'NO_DATA'
-		  WHERE cv.lifecycle = 'VALIDATING' AND v.run_id IS NOT NULL`)
+		`SELECT cv.id, v.run_id, v.outcome, v.created_at
+		   FROM content_versions cv
+		   JOIN LATERAL (
+		     SELECT run_id, outcome, created_at FROM content_validations
+		      WHERE content_version_id = cv.id AND level = 'EXECUTION'
+		      ORDER BY created_at DESC LIMIT 1
+		   ) v ON true
+		  WHERE cv.lifecycle = 'VALIDATING'`)
 	if err != nil {
 		return err
 	}
-	type pending struct{ versionID, runID string }
+	type pending struct {
+		versionID string
+		runID     *string
+		outcome   string
+		createdAt time.Time
+	}
 	var work []pending
 	for rows.Next() {
 		var p pending
-		if err := rows.Scan(&p.versionID, &p.runID); err != nil {
+		if err := rows.Scan(&p.versionID, &p.runID, &p.outcome, &p.createdAt); err != nil {
 			rows.Close()
 			return err
 		}
 		work = append(work, p)
 	}
 	rows.Close()
+
 	for _, p := range work {
-		o.resolveIfComplete(ctx, p.versionID, p.runID)
+		switch p.outcome {
+		case "NO_DATA":
+			if p.runID != nil && o.resolveIfComplete(ctx, p.versionID, *p.runID) {
+				continue // resolved from a now-terminal run status
+			}
+			if time.Since(p.createdAt) > o.timeout {
+				var rid string
+				if p.runID != nil {
+					rid = *p.runID
+				}
+				o.recordExecutionOutcome(ctx, p.versionID, rid, "ERROR", map[string]any{"error": "orphaned validation exceeded timeout"})
+				_ = o.reg.Transition(ctx, p.versionID, contentregistry.LifecycleDraft, contentregistry.ActorValidationLab, "orphaned validation timed out")
+			}
+		case "PASS":
+			_ = o.reg.Transition(ctx, p.versionID, contentregistry.LifecycleValidated, contentregistry.ActorValidationLab, "recovered: execution outcome already PASS")
+		default: // FAIL, ERROR -- outcome recorded, transition lost
+			_ = o.reg.Transition(ctx, p.versionID, contentregistry.LifecycleDraft, contentregistry.ActorValidationLab, "recovered: execution outcome terminal ("+p.outcome+")")
+		}
 	}
 	return nil
 }
