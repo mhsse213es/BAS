@@ -22,12 +22,12 @@ import (
 // PrioritySummary -- it is free-text metadata, not a value meant for
 // a structured summary -- which is exactly why Describe exists as a
 // separate reader for it. Neither method computes a verdict of its
-// own. "Real reader" means each genuinely reads and renders this
-// type's fields, proven end-to-end in industry_test.go -- it does not
-// yet mean any CLI/API/report surface in this repository calls them;
-// no file outside this package imports internal/webgwefficacy at all
-// today. Wiring a production surface to call either is a separate,
-// tracked follow-up, not something this type claims to have done.
+// own. Three production surfaces now call PrioritySummary and
+// Describe through IndustryProfileNames/BuildIndustryProfile below:
+// the cmd/webgwprofile CLI, the GET /api/webgw/industry-profiles JSON
+// endpoint, and the GET /api/webgw/industry-profiles.html report --
+// all three resolve profile names through the same registry, so none
+// can drift from the others.
 type IndustryProfile struct {
 	Name                 string             `json:"name"`
 	PriorityDomainIDs    []string           `json:"priorityDomainIds"`

@@ -44,15 +44,15 @@ This is the single place to check before claiming WebGW Mastery is "done" or mak
 
 **Resolution path, if ever revisited:** would require the user (or Audspect) to go through Zscaler's sales/demo process and obtain a trial tenant with API credentials -- same shape as the Cloudflare blocker in item #1, but via a sales relationship rather than a missing payment method.
 
-### 4. `internal/webgwefficacy` has zero production callers, repo-wide
+### 4. `internal/webgwefficacy` has zero production callers, repo-wide — RESOLVED 2026-10-15
 
-**Status:** Open, deferred by scope choice (not a code defect).
+**Status:** Resolved for `IndustryProfile`/`PrioritySummary`/`Describe`. Every other capability in this package (verification pipeline, mutation testing, coverage reporting, regulatory mapping) still has zero production callers -- this item now tracks only those.
 
-**What's needed:** No CLI command, HTTP handler, or report renderer anywhere in this repository imports `internal/webgwefficacy` yet -- confirmed via `grep -rl "internal/webgwefficacy"` outside the package itself returning nothing. Every capability (verification pipeline, mutation testing, coverage reporting, regulatory mapping, industry profiles' `PrioritySummary`) is proven real and correct by this package's own test suite, but none of it is wired into anything a user or operator actually runs.
+**What was resolved:** Three production surfaces now call `internal/webgwefficacy` directly: the `cmd/webgwprofile` CLI (`webgwprofile <profile-name>`), `GET /api/webgw/industry-profiles` (JSON, same authenticated tier as `/api/ad/coverage`), and `GET /api/webgw/industry-profiles.html` (a new `internal/reporting` renderer, HTML only -- no PDF/Chrome-sidecar, deliberately lightweight). All three resolve profile names through the same single source of truth (`webgwefficacy.IndustryProfileNames`/`BuildIndustryProfile`), so none can drift from the other two. `IndustryProfile`'s own doc comment's "no file outside this package imports internal/webgwefficacy" caveat is now stale and needs updating to reflect this.
 
-**Why it's deferred:** Every phase (1 through 5, plus the later domain-04/07/RBI/industry-profile work) scoped itself to "prove the capability end-to-end against real or fixture data," never to "surface it in the product." This was a deliberate, repeated scope choice, not an oversight -- but it means `IndustryProfile.PrioritySummary`'s own doc comment now explicitly warns that "real reader" means "read by this package's tests," not "called by the product."
+**What's still open:** the coverage-reporting (`coverage.go`), mutation-testing (`mutation.go`), and regulatory-mapping (`regulatory.go`) capabilities remain proven only by this package's own test suite -- no CLI, API, or report renders any of them yet.
 
-**Resolution path:** wire at least one capability (most naturally `PrioritySummary`, or the coverage/mutation-testing reports) into a CLI command or API endpoint, once there's a concrete consumer (a report page, a CLI flag) to design against.
+**Resolution path, for what remains:** same pattern as `IndustryProfile` -- a CLI command or API endpoint reading `AudspectWebGWCoverageReport()`/`RunMutationTest`/`MapObligationToScenarioEvidence` directly, once there's a concrete consumer to design against.
 
 ### 5. `IndustryProfile`/`NewIndustryProfile` — 3 low-risk validation gaps, latent given today's 4 shipped profiles
 
