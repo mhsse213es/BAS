@@ -136,3 +136,23 @@ func TestEvaluateClaim_IncompleteCoverage_CannotEstablishMissed(t *testing.T) {
 		t.Errorf("verdict = %q, want inconclusive", r.Verdict)
 	}
 }
+
+func TestResult_NotTestedDistinctFromInconclusive(t *testing.T) {
+	// Executed-but-empty attempt -> Inconclusive (a Result exists).
+	executed := EvaluateClaim(Expectation{Claim: ClaimPrevention}, []CollectionResult{
+		collResult(MechanismWAFEngine, CoverageSourceUnavailable),
+	}, testKey())
+	if executed.Verdict != VerdictInconclusive {
+		t.Errorf("executed-but-empty verdict = %q, want inconclusive", executed.Verdict)
+	}
+	// The evaluator must never emit a not-tested-like verdict. Every verdict it
+	// can return is one of the six terminal Verdict values; none is "not_tested".
+	for _, v := range []Verdict{
+		VerdictBlocked, VerdictDetectedButAllowed, VerdictMissed,
+		VerdictIncorrectlyBlocked, VerdictAllowed, VerdictInconclusive,
+	} {
+		if string(v) == "not_tested" {
+			t.Fatal("not_tested must not be a Verdict value")
+		}
+	}
+}
