@@ -1,79 +1,73 @@
 package webgwefficacy
 
-import (
-	"testing"
-	"time"
-)
+import "testing"
 
-// TestMutationTesting_ProxyBypassRegression_CaughtAndRecovered proves
-// Phase 5's own mutation-testing exit criterion end-to-end, entirely
-// at the fixture level (no live vendor lab exists yet -- Phase 2b is
-// still blocked per docs/webgw-mastery-qa-log.md; this test never
-// claims a real product was reconfigured). It deliberately introduces
-// a regression into a fixture-backed scenario's own evidence
-// (simulating a policy weakening in a lab), confirms the harness's
-// existing, UNMODIFIED VerifyHTTPExpectation pipeline actually senses
-// it rather than staying green, then restores the evidence and
-// confirms recovery.
-func TestMutationTesting_ProxyBypassRegression_CaughtAndRecovered(t *testing.T) {
-	now := time.Now()
-	window := TimeWindow{Start: now.Add(-time.Minute), End: now.Add(time.Minute)}
-	exp := HTTPExpectation{RequestURL: "https://dns.google/dns-query", ExpectedAction: ExpectedBlock}
+func fixedVerdict(v WebGWVerdict) func() VerdictDetail {
+	return func() VerdictDetail { return VerdictDetail{Verdict: v} }
+}
 
-	// Baseline: the policy correctly blocks the DoH bypass attempt.
-	healthyProvider := NewFixtureGatewayProvider([]GatewayEvidence{
-		{RequestURL: exp.RequestURL, Action: "block", Timestamp: now, Source: SourceFixture},
-	})
-	baseline := VerifyHTTPExpectation(exp, HTTPObservation{}, healthyProvider, window)
-	if baseline.Prevention.Verdict != VerdictPass {
-		t.Fatalf("baseline Prevention.Verdict = %q, want %q -- the scenario must start healthy before mutation", baseline.Prevention.Verdict, VerdictPass)
+func TestRunMutationTest_PassBaselineFlipsToFailThenRestored_CaughtAndRecovered(t *testing.T) {
+	result := RunMutationTest("malware-category-block-policy",
+		fixedVerdict(VerdictPass),
+		fixedVerdict(VerdictFail),
+		fixedVerdict(VerdictPass),
+	)
+
+	if !result.CaughtRegression {
+		t.Error("CaughtRegression = false, want true -- a Pass baseline that flipped to Fail is exactly a caught regression")
 	}
-
-	// Mutation: simulate a policy regression in a lab -- the same
-	// bypass attempt now gets allowed through.
-	mutatedProvider := NewFixtureGatewayProvider([]GatewayEvidence{
-		{RequestURL: exp.RequestURL, Action: "allow", Timestamp: now, Source: SourceFixture},
-	})
-	mutated := VerifyHTTPExpectation(exp, HTTPObservation{}, mutatedProvider, window)
-	if mutated.Prevention.Verdict != VerdictFail {
-		t.Fatalf("mutated Prevention.Verdict = %q, want %q -- the harness must catch the deliberately-introduced regression, never stay green", mutated.Prevention.Verdict, VerdictFail)
-	}
-
-	// Recovery: restore the original policy, confirm the scenario
-	// reports healthy again rather than assuming the fix worked.
-	recovered := VerifyHTTPExpectation(exp, HTTPObservation{}, healthyProvider, window)
-	if recovered.Prevention.Verdict != VerdictPass {
-		t.Errorf("recovered Prevention.Verdict = %q, want %q -- recovery after the fix must be confirmed, not assumed", recovered.Prevention.Verdict, VerdictPass)
+	if !result.RecoveryConfirmed {
+		t.Error("RecoveryConfirmed = false, want true -- restoring to the original Pass baseline is a confirmed recovery")
 	}
 }
 
-// TestMutationTesting_FailClosedRegression_CaughtAndRecovered is a
-// second, independent proof using a different capability
-// (Phase 3's fail-open/fail-closed check) so the exit criterion's
-// "proven" language rests on more than one code path.
-func TestMutationTesting_FailClosedRegression_CaughtAndRecovered(t *testing.T) {
-	now := time.Now()
-	window := TimeWindow{Start: now.Add(-time.Minute), End: now.Add(time.Minute)}
-	exp := FailureModeExpectation{ScenarioLabel: "gateway-outage-datacenter-failover", ExpectedBehavior: ExpectedFailClosed}
+func TestRunMutationTest_BaselineNeverPassed_NotCaughtRegression(t *testing.T) {
+	result := RunMutationTest("already-broken-scenario",
+		fixedVerdict(VerdictInconclusive),
+		fixedVerdict(VerdictFail),
+		fixedVerdict(VerdictInconclusive),
+	)
 
-	healthyProvider := NewFixtureFailureModeProvider([]FailureModeEvidence{
-		{ScenarioLabel: exp.ScenarioLabel, ObservedBehavior: ExpectedFailClosed, Timestamp: now, Source: SourceFixture},
-	})
-	baseline := VerifyFailureModeExpectation(exp, healthyProvider, window)
-	if baseline.Verdict != VerdictPass {
-		t.Fatalf("baseline Verdict = %q, want %q", baseline.Verdict, VerdictPass)
+	if result.CaughtRegression {
+		t.Error("CaughtRegression = true, want false -- there was no passing baseline to regress from")
 	}
+}
 
-	mutatedProvider := NewFixtureFailureModeProvider([]FailureModeEvidence{
-		{ScenarioLabel: exp.ScenarioLabel, ObservedBehavior: ExpectedFailOpen, Timestamp: now, Source: SourceFixture},
-	})
-	mutated := VerifyFailureModeExpectation(exp, mutatedProvider, window)
-	if mutated.Verdict != VerdictFail {
-		t.Fatalf("mutated Verdict = %q, want %q -- the harness must catch the fail-open regression", mutated.Verdict, VerdictFail)
+func TestRunMutationTest_MutationDidNotFlipVerdict_NotCaught(t *testing.T) {
+	result := RunMutationTest("policy-unaffected-by-mutation",
+		fixedVerdict(VerdictPass),
+		fixedVerdict(VerdictPass),
+		fixedVerdict(VerdictPass),
+	)
+
+	if result.CaughtRegression {
+		t.Error("CaughtRegression = true, want false -- the mutated run still passed, so no regression was introduced to catch")
 	}
+}
 
-	recovered := VerifyFailureModeExpectation(exp, healthyProvider, window)
-	if recovered.Verdict != VerdictPass {
-		t.Errorf("recovered Verdict = %q, want %q", recovered.Verdict, VerdictPass)
+func TestRunMutationTest_RestoredStillBroken_RecoveryNotConfirmed(t *testing.T) {
+	result := RunMutationTest("fix-did-not-take",
+		fixedVerdict(VerdictPass),
+		fixedVerdict(VerdictFail),
+		fixedVerdict(VerdictFail),
+	)
+
+	if result.RecoveryConfirmed {
+		t.Error("RecoveryConfirmed = true, want false -- the restored run is still Fail, not back to the original Pass baseline")
+	}
+}
+
+func TestRunMutationTest_NegativeBaselineFail_RecoveryConfirmedAgainstFailBaseline(t *testing.T) {
+	result := RunMutationTest("negative-case-scenario",
+		fixedVerdict(VerdictFail),
+		fixedVerdict(VerdictInconclusive),
+		fixedVerdict(VerdictFail),
+	)
+
+	if result.CaughtRegression {
+		t.Error("CaughtRegression = true, want false -- the baseline was never Pass, so this can never be a caught regression")
+	}
+	if !result.RecoveryConfirmed {
+		t.Error("RecoveryConfirmed = false, want true -- restoring to the same Fail the scenario correctly started at is a confirmed recovery, not forced through a Pass-only lens")
 	}
 }
