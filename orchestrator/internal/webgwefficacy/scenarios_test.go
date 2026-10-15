@@ -59,3 +59,97 @@ func TestIdentityScopedPolicyScenario_DifferentUsersDifferentVerdicts(t *testing
 		t.Errorf("employee Prevention.Verdict = %q, want %q", employeeResult.Prevention.Verdict, VerdictPass)
 	}
 }
+
+// TestProxyBypassScenario_DNSOverHTTPSCaught proves a known-good
+// baseline for domain 08 (proxy bypass): a DNS-over-HTTPS bypass
+// attempt is declared expected to be caught/blocked, and fixture
+// evidence confirms it was.
+func TestProxyBypassScenario_DNSOverHTTPSCaught(t *testing.T) {
+	now := time.Now()
+	exp := HTTPExpectation{
+		RequestURL:     "https://dns.google/dns-query",
+		URLCategory:    "doh-bypass-attempt",
+		ExpectedAction: ExpectedBlock,
+		ControlProduct: "cloudflare-gateway",
+		Note:           "DNS-over-HTTPS bypass of the gateway's own DNS filtering",
+	}
+	provider := NewFixtureGatewayProvider([]GatewayEvidence{
+		{RequestURL: exp.RequestURL, Action: "block", Category: "doh-bypass-attempt", PolicyRule: "block-doh-providers", Timestamp: now, Source: SourceFixture},
+	})
+	window := TimeWindow{Start: now.Add(-time.Minute), End: now.Add(time.Minute)}
+	result := VerifyHTTPExpectation(exp, HTTPObservation{}, provider, window)
+
+	if result.Prevention.Verdict != VerdictPass {
+		t.Errorf("Prevention.Verdict = %q, want %q -- known-good baseline: the bypass attempt was caught", result.Prevention.Verdict, VerdictPass)
+	}
+}
+
+// TestProxyBypassScenario_DNSOverHTTPSMissed is the negative
+// counterpart: the same bypass attempt, but fixture evidence shows
+// the gateway allowed it through -- the policy gap a proxy-bypass
+// test exists to surface.
+func TestProxyBypassScenario_DNSOverHTTPSMissed(t *testing.T) {
+	now := time.Now()
+	exp := HTTPExpectation{
+		RequestURL:     "https://dns.google/dns-query",
+		URLCategory:    "doh-bypass-attempt",
+		ExpectedAction: ExpectedBlock,
+		ControlProduct: "cloudflare-gateway",
+	}
+	provider := NewFixtureGatewayProvider([]GatewayEvidence{
+		{RequestURL: exp.RequestURL, Action: "allow", Category: "doh-bypass-attempt", Timestamp: now, Source: SourceFixture},
+	})
+	window := TimeWindow{Start: now.Add(-time.Minute), End: now.Add(time.Minute)}
+	result := VerifyHTTPExpectation(exp, HTTPObservation{}, provider, window)
+
+	if result.Prevention.Verdict != VerdictFail {
+		t.Errorf("Prevention.Verdict = %q, want %q -- negative case: the bypass attempt was missed", result.Prevention.Verdict, VerdictFail)
+	}
+}
+
+// TestCASBScenario_PersonalTenantBlocked proves a known-good baseline
+// for domain 06 (SaaS/CASB): access to a SaaS application under a
+// personal (non-corporate) tenant is declared expected to be
+// blocked, and fixture evidence confirms it was.
+func TestCASBScenario_PersonalTenantBlocked(t *testing.T) {
+	now := time.Now()
+	exp := HTTPExpectation{
+		RequestURL:     "https://drive.google.com/personal-tenant-upload",
+		URLCategory:    "saas-personal-tenant",
+		ExpectedAction: ExpectedBlock,
+		ControlProduct: "cloudflare-gateway",
+		Note:           "personal Google Drive tenant, distinct from the corporate-managed tenant",
+	}
+	provider := NewFixtureGatewayProvider([]GatewayEvidence{
+		{RequestURL: exp.RequestURL, Action: "block", Category: "saas-personal-tenant", PolicyRule: "casb-block-personal-tenants", Timestamp: now, Source: SourceFixture},
+	})
+	window := TimeWindow{Start: now.Add(-time.Minute), End: now.Add(time.Minute)}
+	result := VerifyHTTPExpectation(exp, HTTPObservation{}, provider, window)
+
+	if result.Prevention.Verdict != VerdictPass {
+		t.Errorf("Prevention.Verdict = %q, want %q -- known-good baseline: personal-tenant access was blocked", result.Prevention.Verdict, VerdictPass)
+	}
+}
+
+// TestCASBScenario_PersonalTenantAllowedThrough is the negative
+// counterpart: the same personal-tenant access, but fixture evidence
+// shows the gateway allowed it through -- the shadow-IT gap a CASB
+// test exists to surface.
+func TestCASBScenario_PersonalTenantAllowedThrough(t *testing.T) {
+	now := time.Now()
+	exp := HTTPExpectation{
+		RequestURL:     "https://drive.google.com/personal-tenant-upload",
+		URLCategory:    "saas-personal-tenant",
+		ExpectedAction: ExpectedBlock,
+		ControlProduct: "cloudflare-gateway",
+	}
+	provider := NewFixtureGatewayProvider([]GatewayEvidence{
+		{RequestURL: exp.RequestURL, Action: "allow", Category: "saas-personal-tenant", Timestamp: now, Source: SourceFixture},
+	})
+	window := TimeWindow{Start: now.Add(-time.Minute), End: now.Add(time.Minute)}
+	result := VerifyHTTPExpectation(exp, HTTPObservation{}, provider, window)
+
+	if result.Prevention.Verdict != VerdictFail {
+		t.Errorf("Prevention.Verdict = %q, want %q -- negative case: personal-tenant access was missed", result.Prevention.Verdict, VerdictFail)
+	}
+}
