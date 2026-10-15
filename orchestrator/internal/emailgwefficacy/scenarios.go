@@ -76,6 +76,81 @@ func DMARCPolicyExpectation(aligned bool) MailExpectation {
 	return exp
 }
 
+// EICARAttachmentExpectation builds the area-C attachment/content-
+// inspection scenario: a message carrying the industry-standard
+// EICAR test string as its attachment -- never a real malware
+// sample, per emailGW.txt §1.C's own named constraint. caught=true is
+// the known-good case (the gateway's attachment inspection catches
+// it); caught=false is the known-bad case (the same attachment
+// delivered uninspected).
+func EICARAttachmentExpectation(caught bool) MailExpectation {
+	exp := MailExpectation{
+		SenderProfile:  "known-bad-malware-attachment",
+		Recipient:      "helpdesk-test@example-lab.test",
+		MessageClass:   "eicar-attachment",
+		ControlProduct: "m365-defender-o365",
+		Note:           "industry-standard EICAR test string as the attachment -- never a real malware sample",
+	}
+	if caught {
+		exp.ExpectedAction = ExpectedQuarantine
+	} else {
+		exp.ExpectedAction = ExpectedDeliver
+	}
+	return exp
+}
+
+// URLRewriteExpectation builds the area-D URL/post-delivery-
+// protection scenario: whether a URL was rewritten for click-time
+// inspection. knownBad=true is a malicious/unknown-reputation URL
+// (known-bad case, expected to be rewritten); knownBad=false is a
+// benign URL (known-good/false-positive case, expected to be
+// delivered unrewritten). Distinct from CredentialHarvestingURLExpectation,
+// which tests whether a social-engineering lure is caught at all, not
+// whether a URL was technically rewritten.
+func URLRewriteExpectation(knownBad bool) MailExpectation {
+	exp := MailExpectation{
+		SenderProfile:  "known-bad-url-reputation",
+		Recipient:      "helpdesk-test@example-lab.test",
+		ControlProduct: "m365-defender-o365",
+	}
+	if knownBad {
+		exp.MessageClass = "url-known-bad-reputation"
+		exp.ExpectedAction = ExpectedRewrite
+		exp.Note = "synthetic URL with an unknown/bad reputation, hosted in the authorized lab -- expected to be rewritten for click-time inspection"
+	} else {
+		exp.MessageClass = "url-benign-reputation"
+		exp.ExpectedAction = ExpectedDeliver
+		exp.Note = "synthetic benign URL -- no rewriting needed, the false-positive/legitimate-mail case"
+	}
+	return exp
+}
+
+// OutboundDLPExpectation builds the area-E outbound-security/DLP
+// scenario: an outbound message to an external recipient, carrying a
+// synthetic data marker -- never real sensitive data, matching
+// internal/cloudsink's own synthetic-marker discipline for DLP
+// scenarios. sensitive=true is the known-bad case (a synthetic
+// sensitive-data marker, expected to be quarantined before it leaves
+// the organization); sensitive=false is the known-good/false-positive
+// case (ordinary outbound mail, expected to be delivered).
+func OutboundDLPExpectation(sensitive bool) MailExpectation {
+	exp := MailExpectation{
+		SenderProfile:  "internal-finance-user",
+		Recipient:      "external-partner-test@external-lab.test",
+		ControlProduct: "m365-defender-o365",
+	}
+	if sensitive {
+		exp.MessageClass = "outbound-dlp-sensitive-marker"
+		exp.ExpectedAction = ExpectedQuarantine
+		exp.Note = "synthetic sensitive-data marker in the message body -- never real sensitive data; expected to be blocked before leaving the organization"
+	} else {
+		exp.MessageClass = "outbound-ordinary-mail"
+		exp.ExpectedAction = ExpectedDeliver
+		exp.Note = "ordinary outbound mail with no sensitive-data marker -- the false-positive/legitimate-mail case"
+	}
+	return exp
+}
+
 // CredentialHarvestingURLExpectation builds the area-B phishing
 // scenario: a message containing a synthetic, non-functional
 // lookalike-login URL. The URL is never a real, working

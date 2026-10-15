@@ -102,6 +102,54 @@ func TestCredentialHarvestingURLScenario_KnownBad_MissedByGateway(t *testing.T) 
 	runScenario(t, exp)
 }
 
+func TestEICARAttachmentScenario_KnownGood_CaughtByGateway(t *testing.T) {
+	exp := EICARAttachmentExpectation(true)
+	if exp.ExpectedAction != ExpectedQuarantine {
+		t.Fatalf("EICARAttachmentExpectation(true).ExpectedAction = %q, want %q", exp.ExpectedAction, ExpectedQuarantine)
+	}
+	runScenario(t, exp)
+}
+
+func TestEICARAttachmentScenario_KnownBad_MissedByGateway(t *testing.T) {
+	exp := EICARAttachmentExpectation(false)
+	if exp.ExpectedAction != ExpectedDeliver {
+		t.Fatalf("EICARAttachmentExpectation(false).ExpectedAction = %q, want %q", exp.ExpectedAction, ExpectedDeliver)
+	}
+	runScenario(t, exp)
+}
+
+func TestURLRewriteScenario_KnownBad_MaliciousURLRewritten(t *testing.T) {
+	exp := URLRewriteExpectation(true)
+	if exp.ExpectedAction != ExpectedRewrite {
+		t.Fatalf("URLRewriteExpectation(true).ExpectedAction = %q, want %q", exp.ExpectedAction, ExpectedRewrite)
+	}
+	runScenario(t, exp)
+}
+
+func TestURLRewriteScenario_KnownGood_BenignURLDeliveredUnrewritten(t *testing.T) {
+	exp := URLRewriteExpectation(false)
+	if exp.ExpectedAction != ExpectedDeliver {
+		t.Fatalf("URLRewriteExpectation(false).ExpectedAction = %q, want %q", exp.ExpectedAction, ExpectedDeliver)
+	}
+	runScenario(t, exp)
+}
+
+func TestOutboundDLPScenario_KnownBad_SensitiveMarkerQuarantined(t *testing.T) {
+	exp := OutboundDLPExpectation(true)
+	if exp.ExpectedAction != ExpectedQuarantine {
+		t.Fatalf("OutboundDLPExpectation(true).ExpectedAction = %q, want %q", exp.ExpectedAction, ExpectedQuarantine)
+	}
+	runScenario(t, exp)
+}
+
+func TestOutboundDLPScenario_KnownGood_OrdinaryMailDelivered(t *testing.T) {
+	exp := OutboundDLPExpectation(false)
+	if exp.ExpectedAction != ExpectedDeliver {
+		t.Fatalf("OutboundDLPExpectation(false).ExpectedAction = %q, want %q", exp.ExpectedAction, ExpectedDeliver)
+	}
+	runScenario(t, exp)
+}
+
 // TestScenarioBuilders_NeverNameARealDomain is a guard against the
 // §2.3 condition #4 constraint drifting silently as scenarios are
 // added: every SenderProfile/Recipient/Note across this file must
@@ -113,6 +161,9 @@ func TestScenarioBuilders_NeverNameARealDomain(t *testing.T) {
 		DKIMAlignmentExpectation(true), DKIMAlignmentExpectation(false),
 		DMARCPolicyExpectation(true), DMARCPolicyExpectation(false),
 		CredentialHarvestingURLExpectation(true), CredentialHarvestingURLExpectation(false),
+		EICARAttachmentExpectation(true), EICARAttachmentExpectation(false),
+		URLRewriteExpectation(true), URLRewriteExpectation(false),
+		OutboundDLPExpectation(true), OutboundDLPExpectation(false),
 	}
 	for _, exp := range all {
 		if exp.Recipient == "" {
