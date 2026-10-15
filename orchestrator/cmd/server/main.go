@@ -335,6 +335,9 @@ func main() {
 	if err := db.EnsureRegulatoryObligationSchema(context.Background(), adminPool); err != nil {
 		log.Fatalf("[FATAL] regulatory obligation schema: %v", err)
 	}
+	if err := db.EnsureTargetScopeImportSchema(context.Background(), adminPool); err != nil {
+		log.Fatalf("[FATAL] target scope schema: %v", err)
+	}
 	if err := db.EnsureEvidenceSnapshotSchema(context.Background(), adminPool); err != nil {
 		log.Fatalf("[FATAL] evidence snapshot schema: %v", err)
 	}
