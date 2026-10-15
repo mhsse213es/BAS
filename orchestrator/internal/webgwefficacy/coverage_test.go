@@ -27,15 +27,21 @@ func TestCoverageReport_Summary_RealWebGWDomainCoverage_NineOfTwelve(t *testing.
 }
 
 // TestCoverageReport_Summary_WithExclusions_CitesEachReason uses the
-// real Zscaler-Unsupported exclusion from Phase 4
-// (docs/webgw-mastery-qa-log.md item #3) as a genuine exclusion
-// example -- proving CoverageExclusion generalizes beyond "domain"
-// to any denominator item this package reports coverage over.
+// real Phase 4 additional-vendor-candidate count and the real
+// Zscaler-Unsupported exclusion (docs/webgw-mastery-qa-log.md item #3)
+// as a genuine example -- not an illustrative round number. Per the
+// architecture spec's §3 Phase 4 and §5 Coverage Matrix, the 6
+// additional vendor candidates beyond Cloudflare (Zscaler, Netskope,
+// Forcepoint, Skyhigh, Broadcom, FortiProxy) have zero live adapters
+// integrated; Zscaler alone carries a documented Unsupported
+// exclusion, the rest remain merely "access unverified." This also
+// proves CoverageExclusion generalizes beyond "domain" to any
+// denominator item this package reports coverage over.
 func TestCoverageReport_Summary_WithExclusions_CitesEachReason(t *testing.T) {
 	exclusions := []CoverageExclusion{
 		{ItemID: "zscaler", Reason: "no self-serve trial/signup; sales-gated"},
 	}
-	report := NewCoverageReport(6, 1, exclusions, time.Date(2026, 10, 15, 0, 0, 0, 0, time.UTC))
+	report := NewCoverageReport(6, 0, exclusions, time.Date(2026, 10, 15, 0, 0, 0, 0, time.UTC))
 	summary := report.Summary()
 
 	if !strings.Contains(summary, "zscaler") {
