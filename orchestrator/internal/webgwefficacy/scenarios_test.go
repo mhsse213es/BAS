@@ -229,3 +229,55 @@ func TestMutationTestingScenario_MalwareCategoryPolicy_CatchesWeakenedPolicyAndC
 		t.Errorf("RecoveryConfirmed = false, want true -- reverting the policy must restore the original Pass verdict")
 	}
 }
+
+// TestMalwareDownloadScenario_EICARTestFileBlocked proves a known-good
+// baseline for domain 04 (malware/exploit delivery/file protection):
+// a download request carrying the industry-standard EICAR antivirus
+// test string (a synthetic, universally-safe test marker, never real
+// malware) is declared expected to be blocked, and fixture evidence
+// confirms the gateway's own file-level scanning caught it -- distinct
+// from domain 01's URL-category reputation block, since EICAR
+// detection requires inspecting the file's own content/signature, not
+// just the URL's category.
+func TestMalwareDownloadScenario_EICARTestFileBlocked(t *testing.T) {
+	now := time.Now()
+	exp := HTTPExpectation{
+		RequestURL:     "https://file-scan-test.example/eicar.com.txt",
+		URLCategory:    "malware-file-scan",
+		ExpectedAction: ExpectedBlock,
+		ControlProduct: "cloudflare-gateway",
+		Note:           "EICAR standard antivirus test file -- synthetic, universally safe, never real malware",
+	}
+	provider := NewFixtureGatewayProvider([]GatewayEvidence{
+		{RequestURL: exp.RequestURL, Action: "block", Category: "malware-file-scan", PolicyRule: "block-eicar-signature", Timestamp: now, Source: SourceFixture},
+	})
+	window := TimeWindow{Start: now.Add(-time.Minute), End: now.Add(time.Minute)}
+	result := VerifyHTTPExpectation(exp, HTTPObservation{}, provider, window)
+
+	if result.Prevention.Verdict != VerdictPass {
+		t.Errorf("Prevention.Verdict = %q, want %q -- known-good baseline: the EICAR test file was caught by file-level scanning", result.Prevention.Verdict, VerdictPass)
+	}
+}
+
+// TestMalwareDownloadScenario_EICARTestFileMissed is the negative
+// counterpart: the same EICAR test download, but fixture evidence
+// shows the gateway allowed it through -- the file-scanning gap this
+// test exists to surface.
+func TestMalwareDownloadScenario_EICARTestFileMissed(t *testing.T) {
+	now := time.Now()
+	exp := HTTPExpectation{
+		RequestURL:     "https://file-scan-test.example/eicar.com.txt",
+		URLCategory:    "malware-file-scan",
+		ExpectedAction: ExpectedBlock,
+		ControlProduct: "cloudflare-gateway",
+	}
+	provider := NewFixtureGatewayProvider([]GatewayEvidence{
+		{RequestURL: exp.RequestURL, Action: "allow", Category: "malware-file-scan", Timestamp: now, Source: SourceFixture},
+	})
+	window := TimeWindow{Start: now.Add(-time.Minute), End: now.Add(time.Minute)}
+	result := VerifyHTTPExpectation(exp, HTTPObservation{}, provider, window)
+
+	if result.Prevention.Verdict != VerdictFail {
+		t.Errorf("Prevention.Verdict = %q, want %q -- negative case: the EICAR test file was missed", result.Prevention.Verdict, VerdictFail)
+	}
+}
