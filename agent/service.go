@@ -137,7 +137,7 @@ func (s *agentSvc) Execute(_ []string, r <-chan svc.ChangeRequest, status chan<-
 
 // ── Service Control ───────────────────────────────────────────────────────────
 
-func svcInstall(serverURL, envLabel, secret string) error {
+func svcInstall(serverURL, envLabel, secret, enrollPort string) error {
 	exePath, err := filepath.Abs(os.Args[0])
 	if err != nil {
 		return err
@@ -169,8 +169,9 @@ func svcInstall(serverURL, envLabel, secret string) error {
 	}
 	defer s.Close()
 
-	// Write URL + env label to registry (plaintext — these are not secrets).
-	if err := writeServiceParams(serverURL, envLabel); err != nil {
+	// Write URL + env label (+ remapped enroll port, if any) to registry
+	// (plaintext — these are not secrets).
+	if err := writeServiceParams(serverURL, envLabel, enrollPort); err != nil {
 		log.Printf("[svc] warning: could not write service params: %v", err)
 	}
 
@@ -259,6 +260,7 @@ func migrateLegacyServiceName() error {
 
 	legacyParamKey := paramKeyFor(svcNameLegacy)
 	serverURL, envLabel := readServiceParamsFrom(svcNameLegacy)
+	enrollPort := readServiceEnrollPortFrom(svcNameLegacy)
 	secret := readEncryptedSecretFrom(legacyParamKey)
 	binaryHash := readBinaryHashFrom(legacyParamKey)
 
@@ -284,7 +286,7 @@ func migrateLegacyServiceName() error {
 	}
 	defer newSvc.Close()
 
-	if err := writeServiceParams(serverURL, envLabel); err != nil {
+	if err := writeServiceParams(serverURL, envLabel, enrollPort); err != nil {
 		log.Printf("[svc] warning: could not restore service params after migration: %v", err)
 	}
 	if secret != "" {
@@ -537,10 +539,11 @@ func readServiceParamsFrom(name string) (serverURL, envLabel string) {
 	return
 }
 
-// writeServiceParams stores BAS_SERVER_URL and BAS_ENV_LABEL under
+// writeServiceParams stores BAS_SERVER_URL, BAS_ENV_LABEL and (when the
+// published enrollment port was remapped) BAS_ENROLL_PORT under
 // HKLM\SYSTEM\CurrentControlSet\Services\BASAgent\Parameters
 // so the service reads them without depending on user env vars.
-func writeServiceParams(serverURL, envLabel string) error {
+func writeServiceParams(serverURL, envLabel, enrollPort string) error {
 	k, _, err := registry.CreateKey(registry.LOCAL_MACHINE,
 		`SYSTEM\CurrentControlSet\Services\`+svcName+`\Parameters`,
 		registry.SET_VALUE)
@@ -551,7 +554,37 @@ func writeServiceParams(serverURL, envLabel string) error {
 	if err := k.SetStringValue("BAS_SERVER_URL", serverURL); err != nil {
 		return err
 	}
-	return k.SetStringValue("BAS_ENV_LABEL", envLabel)
+	if err := k.SetStringValue("BAS_ENV_LABEL", envLabel); err != nil {
+		return err
+	}
+	if enrollPort != "" {
+		if err := k.SetStringValue("BAS_ENROLL_PORT", enrollPort); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// readServiceEnrollPort reads a remapped BAS_ENROLL_PORT from the service's
+// registry Parameters key (empty when not set). loadConfig bridges it into the
+// process environment so bootstrap.go's enrollPort() — which reads
+// os.Getenv("BAS_ENROLL_PORT") — reaches the right enrollment port on Windows,
+// where there is no EnvironmentFile to populate it the way systemd/launchd do.
+func readServiceEnrollPort() string { return readServiceEnrollPortFrom(svcName) }
+
+// readServiceEnrollPortFrom is readServiceEnrollPort generalized to an explicit
+// service name, so migrateLegacyServiceName can preserve a remapped enrollment
+// port when it rewrites params under the new service name.
+func readServiceEnrollPortFrom(name string) string {
+	k, err := registry.OpenKey(registry.LOCAL_MACHINE,
+		`SYSTEM\CurrentControlSet\Services\`+name+`\Parameters`,
+		registry.QUERY_VALUE)
+	if err != nil {
+		return ""
+	}
+	defer k.Close()
+	v, _, _ := k.GetStringValue("BAS_ENROLL_PORT")
+	return v
 }
 
 // platformDisableAutoStart sets the service's start type to Disabled so it

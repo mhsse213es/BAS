@@ -30,6 +30,7 @@ func main() {
 	flagEnv := flag.String("env", "Production", "Override BAS_ENV_LABEL")
 	flagSecret := flag.String("secret", "", "Agent shared secret (encrypted at rest via DPAPI on Windows)")
 	flagCARoot := flag.String("ca-root", "", "Path to the deployment CA root PEM (required for mTLS enrollment; fetch via GET /api/config/connection)")
+	flagEnrollPort := flag.String("enroll-port", "", "Host port of the orchestrator enrollment listener, if the published port was remapped from the 9444 default (persisted as BAS_ENROLL_PORT)")
 
 	registerPlatformFlags()
 	flag.Parse()
@@ -65,7 +66,7 @@ func main() {
 			}
 			fmt.Println("[+] deployment CA root installed")
 		}
-		if err := svcInstall(serverURL, *flagEnv, secret); err != nil {
+		if err := svcInstall(serverURL, *flagEnv, secret, *flagEnrollPort); err != nil {
 			fmt.Fprintf(os.Stderr, "install failed: %v\n", err)
 			os.Exit(1)
 		}

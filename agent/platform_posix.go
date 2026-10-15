@@ -7,6 +7,12 @@ func platformHandleFlags() bool            { return false }
 func platformPreStart()                    {}
 func platformPrintBannerExtras(_ Identity) {}
 
+// readServiceEnrollPort has nothing to bridge on POSIX: systemd/launchd inject
+// BAS_ENROLL_PORT from the service config via EnvironmentFile=, so the running
+// agent already sees it through os.Getenv (bootstrap.go's enrollPort()). The
+// Windows counterpart reads it from the service's registry Parameters key.
+func readServiceEnrollPort() string { return "" }
+
 // posixReadAgentSecret reads BAS_AGENT_SECRET from the installed service config
 // (see readAgentSecret in service_linux.go / service_darwin.go). Indirected so
 // tests can supply a value without touching /etc.

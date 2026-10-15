@@ -205,6 +205,18 @@ type Config struct {
 	DashboardHTTPPort    int    `json:"dashboard_http_port,omitempty"`
 	DashboardTLSCertPath string `json:"dashboard_tls_cert_path,omitempty"`
 	DashboardTLSKeyPath  string `json:"dashboard_tls_key_path,omitempty"`
+
+	// AdvertisedMTLSPort / AdvertisedEnrollPort are the HOST ports agents reach
+	// the orchestrator on, which can differ from the in-container listener
+	// ports (HTTPPort / EnrollHTTPPort) whenever the operator remaps the Docker
+	// published ports (e.g. "9445:9444"). That remap lives in the compose
+	// publish layer, invisible to this process, so install.sh passes the host
+	// ports in via HTTP_ADVERTISED_MTLS_PORT / HTTP_ADVERTISED_ENROLL_PORT.
+	// The dashboard's generated agent-install command uses these so a copy-paste
+	// install works even on a port-remapped deployment. Unset, they default to
+	// the in-container ports (the non-remapped case). See GetConnectionConfig.
+	AdvertisedMTLSPort   int `json:"advertised_mtls_port,omitempty"`
+	AdvertisedEnrollPort int `json:"advertised_enroll_port,omitempty"`
 }
 
 // Load reads config from a JSON file, then overrides with environment variables.
@@ -429,6 +441,21 @@ func Load(path string) (*Config, error) {
 	}
 	if v := os.Getenv("HTTP_PORT_DASHBOARD"); v != "" {
 		fmt.Sscanf(v, "%d", &cfg.DashboardHTTPPort)
+	}
+	if v := os.Getenv("HTTP_ADVERTISED_MTLS_PORT"); v != "" {
+		fmt.Sscanf(v, "%d", &cfg.AdvertisedMTLSPort)
+	}
+	if v := os.Getenv("HTTP_ADVERTISED_ENROLL_PORT"); v != "" {
+		fmt.Sscanf(v, "%d", &cfg.AdvertisedEnrollPort)
+	}
+	// Unset advertised ports fall back to the in-container listener ports: a
+	// deployment that did not remap its published ports advertises exactly what
+	// it listens on.
+	if cfg.AdvertisedMTLSPort == 0 {
+		cfg.AdvertisedMTLSPort = cfg.HTTPPort
+	}
+	if cfg.AdvertisedEnrollPort == 0 {
+		cfg.AdvertisedEnrollPort = cfg.EnrollHTTPPort
 	}
 	if v := os.Getenv("TLS_CERT"); v != "" {
 		cfg.DashboardTLSCertPath = v

@@ -857,6 +857,7 @@ func main() {
 		WithEPSSFile(cfg.EPSSFile).
 		WithAgentSecret(cfg.AgentSecret).
 		WithIngestAPIKey(cfg.IngestAPIKey).
+		WithAdvertisedPorts(cfg.AdvertisedMTLSPort, cfg.AdvertisedEnrollPort).
 		WithPKI(ca).
 		WithCommandSigningKey(signingKey).
 		WithMetricsToken(cfg.MetricsToken).

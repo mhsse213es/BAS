@@ -32,6 +32,63 @@ func TestLoad_PKIDefaults(t *testing.T) {
 	}
 }
 
+func TestLoad_AdvertisedPortsDefaultToContainerPorts(t *testing.T) {
+	os.Setenv("DATABASE_URL", "postgres://test")
+	os.Setenv("DATABASE_ADMIN_URL", "postgres://test-admin")
+	os.Setenv("BAS_APP_DB_PASSWORD", "test-app-password")
+	os.Setenv("JWT_SECRET", "test-secret-32-bytes-long-enough")
+	defer os.Unsetenv("DATABASE_URL")
+	defer os.Unsetenv("DATABASE_ADMIN_URL")
+	defer os.Unsetenv("BAS_APP_DB_PASSWORD")
+	defer os.Unsetenv("JWT_SECRET")
+
+	cfg, err := Load("/nonexistent/config.json")
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	// Unset advertised ports fall back to the in-container listener ports, so
+	// a non-remapped deployment advertises the same ports it listens on.
+	if cfg.AdvertisedMTLSPort != cfg.HTTPPort {
+		t.Errorf("AdvertisedMTLSPort = %d, want %d (HTTPPort)", cfg.AdvertisedMTLSPort, cfg.HTTPPort)
+	}
+	if cfg.AdvertisedEnrollPort != cfg.EnrollHTTPPort {
+		t.Errorf("AdvertisedEnrollPort = %d, want %d (EnrollHTTPPort)", cfg.AdvertisedEnrollPort, cfg.EnrollHTTPPort)
+	}
+}
+
+func TestLoad_AdvertisedPortsOverrideWhenHostPortsRemapped(t *testing.T) {
+	os.Setenv("DATABASE_URL", "postgres://test")
+	os.Setenv("DATABASE_ADMIN_URL", "postgres://test-admin")
+	os.Setenv("BAS_APP_DB_PASSWORD", "test-app-password")
+	os.Setenv("JWT_SECRET", "test-secret-32-bytes-long-enough")
+	// The container still listens on 9444 (HTTP_PORT_ENROLL), but the operator
+	// published it on host port 9445 -- which the orchestrator can only know
+	// because install.sh advertises it. The agent install command must use the
+	// advertised host port, not the in-container one.
+	os.Setenv("HTTP_ADVERTISED_MTLS_PORT", "9443")
+	os.Setenv("HTTP_ADVERTISED_ENROLL_PORT", "9445")
+	defer os.Unsetenv("DATABASE_URL")
+	defer os.Unsetenv("DATABASE_ADMIN_URL")
+	defer os.Unsetenv("BAS_APP_DB_PASSWORD")
+	defer os.Unsetenv("JWT_SECRET")
+	defer os.Unsetenv("HTTP_ADVERTISED_MTLS_PORT")
+	defer os.Unsetenv("HTTP_ADVERTISED_ENROLL_PORT")
+
+	cfg, err := Load("/nonexistent/config.json")
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.AdvertisedMTLSPort != 9443 {
+		t.Errorf("AdvertisedMTLSPort = %d, want 9443", cfg.AdvertisedMTLSPort)
+	}
+	if cfg.AdvertisedEnrollPort != 9445 {
+		t.Errorf("AdvertisedEnrollPort = %d, want 9445", cfg.AdvertisedEnrollPort)
+	}
+	if cfg.AdvertisedEnrollPort == cfg.EnrollHTTPPort {
+		t.Errorf("advertised enroll port must be able to differ from the in-container enroll port %d", cfg.EnrollHTTPPort)
+	}
+}
+
 func TestLoad_PKIEnvOverrides(t *testing.T) {
 	os.Setenv("DATABASE_URL", "postgres://test")
 	os.Setenv("DATABASE_ADMIN_URL", "postgres://test-admin")

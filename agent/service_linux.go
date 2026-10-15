@@ -15,7 +15,7 @@ const (
 	configFile = "/etc/bas-agent/config"
 )
 
-func svcInstall(serverURL, envLabel, secret string) error {
+func svcInstall(serverURL, envLabel, secret, enrollPort string) error {
 	if _, err := os.Stat(unitPath); err == nil {
 		return fmt.Errorf("bas-agent already installed — run --uninstall first")
 	}
@@ -56,8 +56,7 @@ func svcInstall(serverURL, envLabel, secret string) error {
 	// still takes priority when an operator sets BAS_PROXY_PASSWORD
 	// directly (not via this file).
 	proxyPasswordB64 := base64.StdEncoding.EncodeToString([]byte(proxyPassword))
-	cfg := fmt.Sprintf("BAS_SERVER_URL=%s\nBAS_ENV_LABEL=%s\nBAS_AGENT_SECRET=%s\nBAS_PROXY_USER=%s\nBAS_PROXY_PASSWORD_B64=%s\n",
-		serverURL, envLabel, secret, proxyUser, proxyPasswordB64)
+	cfg := renderPosixAgentConfig(serverURL, envLabel, secret, proxyUser, proxyPasswordB64, enrollPort)
 	if err := os.WriteFile(configFile, []byte(cfg), 0600); err != nil {
 		return fmt.Errorf("write config: %w", err)
 	}

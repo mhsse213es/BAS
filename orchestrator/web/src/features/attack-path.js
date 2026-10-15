@@ -1635,21 +1635,59 @@ export function showAgentDownload() {
   w.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
-// injectServerURL builds the copy-paste install commands. Both fetch the
-// deployment CA root first (via the unauthenticated GET /api/config/ca-root
-// -- the target machine has no browser session to call the admin-only
-// /api/config/connection with) and pass it as --ca-root. Omitting this step
-// strands the new agent on legacy transport: it never receives the
-// command-signing trust cert, enrolls but shows no visible error, and every
-// scenario dispatched to it silently fails at the WS command-envelope check.
+// buildAgentInstallCommands returns the copy-paste install one-liners for each
+// OS. It is pure (no DOM, no network) so it can be unit-tested directly.
+//
+//   origin  the dashboard origin the admin is browsing (window.location.origin)
+//           -- the CA root is fetched from here, the one listener a not-yet-
+//           enrolled endpoint can always reach without a client certificate.
+//   host    the hostname agents should reach the orchestrator at
+//           (window.location.hostname).
+//   data    the /api/config/connection response; data.mtlsPort / data.enrollPort
+//           are the advertised HOST ports (see config.AdvertisedMTLSPort). They
+//           default to 9443/9444 for a non-remapped deployment.
+//
+// Each command: (1) fetches the deployment CA root with certificate
+// verification SKIPPED -- the endpoint does not trust the self-signed
+// deployment CA yet, so the bootstrap fetch of that very CA must skip
+// verification (curl -k / curl.exe -k); the agent then verifies the chain for
+// all later traffic. (2) installs against the mTLS listener (host:mtlsPort),
+// NOT the dashboard port. (3) passes --enroll-port so CSR bootstrap reaches the
+// enrollment listener even when its published port was remapped. Omitting any
+// of these strands the agent on legacy transport: it never receives the
+// command-signing trust cert and every dispatched scenario silently fails.
+export function buildAgentInstallCommands(origin, host, data) {
+  data = data || {};
+  var mtlsPort = data.mtlsPort || '9443';
+  var enrollPort = data.enrollPort || '9444';
+  var serverURL = 'https://' + host + ':' + mtlsPort;
+  var caURL = origin + '/api/config/ca-root';
+  var common = ' --install --server ' + serverURL + ' --enroll-port ' + enrollPort;
+  return {
+    serverURL: serverURL,
+    windows: 'curl.exe -fsSk -o deployment-ca.pem ' + caURL + '; ' +
+      '.\\bas-agent-windows-amd64.exe' + common + ' --secret <AGENT_SECRET> --ca-root .\\deployment-ca.pem --env Production',
+    linux: 'chmod +x bas-agent-linux-* && curl -fsSk -o deployment-ca.pem ' + caURL + ' && ' +
+      'sudo ./bas-agent-linux-*' + common + ' --secret <AGENT_SECRET> --ca-root ./deployment-ca.pem --env Production',
+    mac: 'chmod +x bas-agent-darwin-* && curl -fsSk -o deployment-ca.pem ' + caURL + ' && ' +
+      'sudo ./bas-agent-darwin-*' + common + ' --secret <AGENT_SECRET> --ca-root ./deployment-ca.pem --env Production',
+  };
+}
+
+// injectServerURL fetches the advertised connection config and writes the
+// per-OS install commands into the Deploy Agent page. It falls back to
+// browser-derived defaults if the config call fails, so the page is never left
+// showing a placeholder URL.
 export function injectServerURL() {
-  var url = window.location.origin;
-  var winUrl  = document.getElementById('win-server-url');
-  var winCli  = document.getElementById('win-cli-cmd');
-  var macCmd  = document.getElementById('mac-cmd');
-  if (winUrl)  winUrl.textContent = url;
-  if (winCli)  winCli.textContent = 'Invoke-WebRequest -Uri "' + url + '/api/config/ca-root" -OutFile deployment-ca.pem; .\\bas-agent-windows-amd64.exe --install --server ' + url + ' --secret <AGENT_SECRET> --ca-root .\\deployment-ca.pem --env Production';
-  if (macCmd)  macCmd.textContent = 'chmod +x bas-agent-darwin-* && curl -sf -o deployment-ca.pem ' + url + '/api/config/ca-root && sudo ./bas-agent-darwin-* --install --server ' + url + ' --ca-root ./deployment-ca.pem --env Production';
+  var apply = function(data) {
+    var c = buildAgentInstallCommands(window.location.origin, window.location.hostname, data);
+    var set = function(id, v) { var el = document.getElementById(id); if (el) el.textContent = v; };
+    set('win-server-url', c.serverURL);
+    set('win-cli-cmd', c.windows);
+    set('linux-cli-cmd', c.linux);
+    set('mac-cmd', c.mac);
+  };
+  apicall('/api/config/connection').then(apply).catch(function() { apply({}); });
 }
 
 export function loadConnectionConfig() {

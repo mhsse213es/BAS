@@ -34,6 +34,18 @@ func loadConfig() Config {
 			}
 		}
 	}
+	// Bridge a remapped enrollment port from platform storage into the process
+	// environment, so bootstrap.go's enrollPort() (which reads os.Getenv) finds
+	// it. On POSIX this is a no-op -- systemd/launchd already export
+	// BAS_ENROLL_PORT via EnvironmentFile -- but on Windows the port lives in
+	// the service's registry Parameters key and nothing else would set it.
+	// Env var still takes priority so an operator can override without
+	// reinstalling.
+	if os.Getenv("BAS_ENROLL_PORT") == "" {
+		if ep := readServiceEnrollPort(); ep != "" {
+			os.Setenv("BAS_ENROLL_PORT", ep)
+		}
+	}
 	// Fallback: read DPAPI-encrypted secret from registry (Windows service installs).
 	// Env var takes priority so operators can override without reinstalling.
 	if agentSecret == "" {
