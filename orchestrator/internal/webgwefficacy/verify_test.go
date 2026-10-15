@@ -79,6 +79,22 @@ func TestVerifyHTTPExpectation_ActionMatches_PreventionPass(t *testing.T) {
 	}
 }
 
+func TestVerifyHTTPExpectation_AllowActionMatches_PreventionPass(t *testing.T) {
+	now := time.Now()
+	exp := HTTPExpectation{RequestURL: "https://intranet.example/portal", ExpectedAction: ExpectedAllow}
+	provider := NewFixtureGatewayProvider([]GatewayEvidence{
+		{RequestURL: "https://intranet.example/portal", Action: "allow", Timestamp: now, Source: SourceFixture},
+	})
+	result := VerifyHTTPExpectation(exp, HTTPObservation{}, provider, TimeWindow{Start: now.Add(-time.Minute), End: now.Add(time.Minute)})
+
+	if result.Prevention.Verdict != VerdictPass {
+		t.Errorf("Prevention.Verdict = %q, want %q -- the allow case must be proven end-to-end, same as the block case", result.Prevention.Verdict, VerdictPass)
+	}
+	if result.Detection.Verdict != VerdictPass {
+		t.Errorf("Detection.Verdict = %q, want %q -- evidence existing at all is this phase's detection signal", result.Detection.Verdict, VerdictPass)
+	}
+}
+
 func TestVerifyHTTPExpectation_ActionMismatch_PreventionFail(t *testing.T) {
 	now := time.Now()
 	exp := HTTPExpectation{RequestURL: "https://malware.example/payload", ExpectedAction: ExpectedBlock}
