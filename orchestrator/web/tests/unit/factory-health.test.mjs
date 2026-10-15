@@ -1,9 +1,25 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { setupDom, load } from './dom.mjs';
+import { displayOf } from '../../src/core/inline-style.js';
 
 setupDom();
-const { metricTile, renderSparkline, renderFactoryHealthIngestion } = await load(['metricTile', 'renderSparkline', 'renderFactoryHealthIngestion']);
+const { metricTile, renderSparkline, renderFactoryHealthIngestion, activateTab } = await load(['metricTile', 'renderSparkline', 'renderFactoryHealthIngestion', 'activateTab']);
+
+test('activateTab makes the factory-health panel visible when its tab is active, hidden otherwise', () => {
+  // Restore the full dashboard markup: earlier tests overwrite document.body.
+  setupDom();
+  const panel = document.getElementById('tab-factory-health');
+  assert.ok(panel, 'index.html must contain the factory-health panel');
+
+  activateTab('factory-health');
+  assert.notEqual(displayOf(panel), 'none',
+    'factory-health panel must be shown when its own tab is selected (it is omitted from activateTab\'s panel list)');
+
+  activateTab('agents');
+  assert.equal(displayOf(panel), 'none',
+    'factory-health panel must be hidden when a different tab is selected');
+});
 
 test('renderFactoryHealthIngestion shows per-source sync status, never-synced distinctly, and unresolved candidates', () => {
   document.body.innerHTML = '<div id="factory-health-ingestion"></div>';
