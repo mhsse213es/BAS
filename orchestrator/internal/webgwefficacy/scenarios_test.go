@@ -158,6 +158,54 @@ func TestCASBScenario_PersonalTenantAllowedThrough(t *testing.T) {
 	}
 }
 
+// TestDNSPolicyScenario_C2DomainBlocked proves a known-good baseline
+// for domain 07 (DNS, covert channels and C2 protection): a query to a
+// known command-and-control domain is declared expected to be blocked
+// by the gateway's own DNS policy, and fixture evidence confirms it
+// was.
+func TestDNSPolicyScenario_C2DomainBlocked(t *testing.T) {
+	now := time.Now()
+	exp := DNSQueryExpectation{
+		QueryDomain:    "c2-beacon.example",
+		ThreatCategory: "c2-dns",
+		ExpectedAction: ExpectedBlock,
+		ControlProduct: "cloudflare-gateway",
+		Note:           "known command-and-control beacon domain, resolved via the gateway's own DNS policy",
+	}
+	provider := NewFixtureDNSResolutionProvider([]DNSResolutionEvidence{
+		{QueryDomain: exp.QueryDomain, Action: "block", ThreatCategory: "c2-dns", Timestamp: now, Source: SourceFixture},
+	})
+	window := TimeWindow{Start: now.Add(-time.Minute), End: now.Add(time.Minute)}
+	result := VerifyDNSQueryExpectation(exp, provider, window)
+
+	if result.Verdict != VerdictPass {
+		t.Errorf("Verdict = %q, want %q -- known-good baseline: the C2 domain query was blocked", result.Verdict, VerdictPass)
+	}
+}
+
+// TestDNSPolicyScenario_C2DomainMissed is the negative counterpart:
+// the same C2 domain query, but fixture evidence shows the gateway's
+// DNS policy allowed it through -- the policy gap a domain-07 test
+// exists to surface.
+func TestDNSPolicyScenario_C2DomainMissed(t *testing.T) {
+	now := time.Now()
+	exp := DNSQueryExpectation{
+		QueryDomain:    "c2-beacon.example",
+		ThreatCategory: "c2-dns",
+		ExpectedAction: ExpectedBlock,
+		ControlProduct: "cloudflare-gateway",
+	}
+	provider := NewFixtureDNSResolutionProvider([]DNSResolutionEvidence{
+		{QueryDomain: exp.QueryDomain, Action: "allow", ThreatCategory: "c2-dns", Timestamp: now, Source: SourceFixture},
+	})
+	window := TimeWindow{Start: now.Add(-time.Minute), End: now.Add(time.Minute)}
+	result := VerifyDNSQueryExpectation(exp, provider, window)
+
+	if result.Verdict != VerdictFail {
+		t.Errorf("Verdict = %q, want %q -- negative case: the C2 domain query was missed", result.Verdict, VerdictFail)
+	}
+}
+
 // TestCoverageReportingScenario_AudspectWebGWCoverage_CitesDenominatorAndExclusions
 // proves Phase 5's coverage-reporting exit criterion end-to-end
 // against Audspect's real, shipped coverage data -- not a synthetic
