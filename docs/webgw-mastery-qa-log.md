@@ -44,6 +44,16 @@ This is the single place to check before claiming WebGW Mastery is "done" or mak
 
 **Resolution path, if ever revisited:** would require the user (or Audspect) to go through Zscaler's sales/demo process and obtain a trial tenant with API credentials -- same shape as the Cloudflare blocker in item #1, but via a sales relationship rather than a missing payment method.
 
+### 4. `VerifyPolicyBaselineExpectation` never checks `StillActive` outside the exception-expiry path -- a disabled rule can still verdict `Pass`
+
+**Status:** Open, found during Phase 2b's final-review pass (2026-10-15). Pre-existing in Phase 3's `drift.go`, not introduced by Phase 2b -- `CloudflareGatewayPolicyProvider` is simply the first real, live producer of a meaningful `StillActive` value, which is what gives this gap real consequence for the first time.
+
+**What's wrong:** `VerifyPolicyBaselineExpectation` (`drift.go`) only ever reads a record's `StillActive` field inside the expired-exception check (`exp.ExceptionExpiresAt != nil && asOf.After(*exp.ExceptionExpiresAt) && latest.StillActive`). When no exception is declared -- the normal case -- a rule that is fully disabled in the real Cloudflare console (`enabled: true` → `false`) with its `action`/`filters`/`traffic` otherwise untouched produces an *identical* `ObservedConfigHash` (deliberately, since `configHashFor` hashes only the fields that determine enforced behavior) and therefore an unchanged `Pass` verdict -- even though the rule is no longer enforcing anything live.
+
+**Why this matters:** a reasonable user reading a `Pass` on a policy-baseline check would assume the control is actively enforcing. A disabled-but-otherwise-correctly-configured rule would pass that check regardless.
+
+**Resolution path:** `VerifyPolicyBaselineExpectation`'s comparison logic needs its own `Fail` branch for `!latest.StillActive` independent of the exception-expiry check -- a behavioral change to a function every `PolicyConfigEvidenceProvider` caller depends on (fixture and live alike), not scoped to Cloudflare specifically. This deserves its own brainstorm/plan cycle rather than a fix folded into Phase 2b's review pass, since changing shared verdict logic touches domain 09's existing fixture-backed tests too and needs its own regression coverage.
+
 ## Resolved items
 
 *(none yet)*
