@@ -273,6 +273,11 @@ const (
 	// -- same placement as CanImportZoneIsolationConfig, for the same
 	// reason.
 	CanManageRegulatoryObligations Permission = "regulatory-obligation:manage"
+
+	// target-scope:import gates importing a declared authorized
+	// target-scope allowlist for active network probing -- same
+	// placement as CanImportOTSafetyConfig, for the same reason.
+	CanImportTargetScope Permission = "target-scope:import"
 )
 
 // rolePermissions maps each role to the permissions it holds. Viewer is
@@ -341,6 +346,7 @@ var rolePermissions = map[Role]map[Permission]bool{
 		CanImportOTSafetyConfig:            true,
 		CanImportZoneIsolationConfig:       true,
 		CanManageRegulatoryObligations:     true,
+		CanImportTargetScope:               true,
 	},
 	RoleAnalyst: {
 		CanVerify:            true,
@@ -356,7 +362,7 @@ var rolePermissions = map[Role]map[Permission]bool{
 		CanTriggerScan: true, CanCollectAttackPath: true, CanCreateAttackPathJob: true,
 		CanCancelAttackPathJob: true, CanRetryAttackPathJob: true, CanSetAttackPathAsset: true,
 		CanRunScenario: true, CanRunCalderaAdversary: true, CanRunAdversaryTemplate: true,
-		CanImportNetworkPolicy: true, CanImportNetworkTopology: true, CanImportNetworkControlExpectation: true, CanImportCloudTopology: true, CanImportRemoteAccessTopology: true, CanImportOTSafetyConfig: true, CanImportZoneIsolationConfig: true, CanManageRegulatoryObligations: true,
+		CanImportNetworkPolicy: true, CanImportNetworkTopology: true, CanImportNetworkControlExpectation: true, CanImportCloudTopology: true, CanImportRemoteAccessTopology: true, CanImportOTSafetyConfig: true, CanImportZoneIsolationConfig: true, CanManageRegulatoryObligations: true, CanImportTargetScope: true,
 		CanCancelScenarioRun: true, CanCorrelateSIEM: true, CanViewSIEMCorrelations: true,
 		CanRunDetectionVerification: true, CanCreateCampaign: true, CanStopCampaign: true,
 		CanSetFindingStatus: true, CanPushToITSM: true, CanBulkPushToITSM: true,
