@@ -24,6 +24,30 @@ func TestNewCoverageReport_ExcludedWithoutReason_Errors(t *testing.T) {
 	}
 }
 
+func TestNewCoverageReport_InvalidStatus_Errors(t *testing.T) {
+	_, err := NewCoverageReport([]DomainCoverage{
+		{DomainID: "01", DomainName: "typo-status", Status: CoverageStatus("coverd")},
+	})
+	if err == nil {
+		t.Fatal("NewCoverageReport: want error for a Status outside the three known values, got nil")
+	}
+}
+
+func TestCoverageReport_CountsAlwaysSumToDenominator(t *testing.T) {
+	report, err := NewCoverageReport([]DomainCoverage{
+		{DomainID: "01", DomainName: "covered", Status: CoverageCovered},
+		{DomainID: "02", DomainName: "excluded", Status: CoverageExcluded, ExclusionReason: "deferred"},
+		{DomainID: "03", DomainName: "not-covered", Status: CoverageNotCovered},
+	})
+	if err != nil {
+		t.Fatalf("NewCoverageReport: %v", err)
+	}
+	sum := report.CoveredCount() + report.ExcludedCount() + report.NotCoveredCount()
+	if sum != report.Denominator() {
+		t.Errorf("CoveredCount()+ExcludedCount()+NotCoveredCount() = %d, want it to always equal Denominator() = %d -- a domain with an invalid Status must be rejected at construction, never silently uncounted", sum, report.Denominator())
+	}
+}
+
 func TestNewCoverageReport_ValidMix_Succeeds(t *testing.T) {
 	_, err := NewCoverageReport([]DomainCoverage{
 		{DomainID: "01", DomainName: "covered-domain", Status: CoverageCovered},

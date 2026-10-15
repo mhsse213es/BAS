@@ -261,7 +261,10 @@ func TestDNSPolicyScenario_C2DomainMissed(t *testing.T) {
 // TestCoverageReportingScenario_AudspectWebGWCoverage_CitesDenominatorAndExclusions
 // proves Phase 5's coverage-reporting exit criterion end-to-end
 // against Audspect's real, shipped coverage data -- not a synthetic
-// CoverageReport built only for this test. As of this round, all 12
+// CoverageReport built only for this test. As of the domain-04/07
+// additions (TestMalwareFileScenario_EICARTestFileBlocked,
+// TestDNSPolicyScenario_C2DomainBlocked,
+// TestDNSPolicyScenario_AlternateResolverBlocked), all 12 of the
 // webGW.txt domains have at least one fixture-backed, proven scenario
 // -- this is explicitly NOT a claim that any domain's full breadth is
 // built out, per CoverageStatus's own documented meaning (01-12 each
@@ -279,7 +282,7 @@ func TestCoverageReportingScenario_AudspectWebGWCoverage_CitesDenominatorAndExcl
 		t.Errorf("CoveredCount() = %d, want 12 -- all 12 domains now have at least one proven scenario", got)
 	}
 	if got := report.NotCoveredCount(); got != 0 {
-		t.Errorf("NotCoveredCount() = %d, want 0", got)
+		t.Errorf("NotCoveredCount() = %d, want 0 -- every domain now has at least one proven scenario", got)
 	}
 	if got := report.ExcludedCount(); got != 0 {
 		t.Errorf("ExcludedCount() = %d, want 0 -- no domain has been permanently excluded from this initiative", got)
@@ -384,5 +387,59 @@ func TestPolicyCorrectnessScenario_CloudflareRealResponseShape_FlowsThroughExist
 
 	if result.Verdict != VerdictPass {
 		t.Errorf("Verdict = %q, want %q -- Cloudflare's real documented response shape must flow correctly through the existing policy-baseline pipeline", result.Verdict, VerdictPass)
+	}
+}
+
+// TestDNSPolicyScenario_AlternateResolverBlocked proves a known-good
+// baseline for domain 07 (gateway-side DNS policy): a client
+// attempting to resolve DNS via an unauthorized external DoH resolver
+// (Quad9, distinct from domain 08's own dns.google bypass example) is
+// declared expected to be blocked by the gateway's own DNS-policy
+// enforcement -- a DNS-infrastructure control (is any external
+// resolver reachable at all), distinct from domain 08's
+// content-filter-bypass angle (did a specific URL category filter get
+// evaded). Distinct from internal/dnssink, which validates
+// DNS-tunneled data exfiltration (a data-movement-domain capability),
+// never modified by this test.
+func TestDNSPolicyScenario_AlternateResolverBlocked(t *testing.T) {
+	now := time.Now()
+	exp := HTTPExpectation{
+		RequestURL:     "https://dns.quad9.net/dns-query",
+		URLCategory:    "dns-policy-alternate-resolver",
+		ExpectedAction: ExpectedBlock,
+		ControlProduct: "cloudflare-gateway",
+		Note:           "unauthorized external DoH resolver -- gateway-side DNS-infrastructure policy, not a content-filter-bypass case",
+	}
+	provider := NewFixtureGatewayProvider([]GatewayEvidence{
+		{RequestURL: exp.RequestURL, Action: "block", Category: "dns-policy-alternate-resolver", PolicyRule: "block-unauthorized-dns-resolvers", Timestamp: now, Source: SourceFixture},
+	})
+	window := TimeWindow{Start: now.Add(-time.Minute), End: now.Add(time.Minute)}
+	result := VerifyHTTPExpectation(exp, HTTPObservation{}, provider, window)
+
+	if result.Prevention.Verdict != VerdictPass {
+		t.Errorf("Prevention.Verdict = %q, want %q -- known-good baseline: the alternate resolver was blocked", result.Prevention.Verdict, VerdictPass)
+	}
+}
+
+// TestDNSPolicyScenario_AlternateResolverMissed is the negative
+// counterpart: the same alternate-resolver attempt, but fixture
+// evidence shows the gateway allowed it through -- the DNS-policy gap
+// this test exists to surface.
+func TestDNSPolicyScenario_AlternateResolverMissed(t *testing.T) {
+	now := time.Now()
+	exp := HTTPExpectation{
+		RequestURL:     "https://dns.quad9.net/dns-query",
+		URLCategory:    "dns-policy-alternate-resolver",
+		ExpectedAction: ExpectedBlock,
+		ControlProduct: "cloudflare-gateway",
+	}
+	provider := NewFixtureGatewayProvider([]GatewayEvidence{
+		{RequestURL: exp.RequestURL, Action: "allow", Category: "dns-policy-alternate-resolver", Timestamp: now, Source: SourceFixture},
+	})
+	window := TimeWindow{Start: now.Add(-time.Minute), End: now.Add(time.Minute)}
+	result := VerifyHTTPExpectation(exp, HTTPObservation{}, provider, window)
+
+	if result.Prevention.Verdict != VerdictFail {
+		t.Errorf("Prevention.Verdict = %q, want %q -- negative case: the alternate resolver was missed", result.Prevention.Verdict, VerdictFail)
 	}
 }

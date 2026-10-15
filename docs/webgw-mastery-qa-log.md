@@ -56,4 +56,12 @@ This is the single place to check before claiming WebGW Mastery is "done" or mak
 
 ## Resolved items
 
-*(none yet)*
+### 5. Branch reconciliation with `main`'s own parallel WebGW Mastery work — RESOLVED 2026-10-15
+
+**Status:** Resolved. `main` was moved by a different concurrent session independently pursuing this same initiative (see `feedback_concurrent_sessions_main` memory) — its work was never credited toward this branch's own accounting until merged and verified here.
+
+**What main had that this branch didn't:** `industry.go`/`industry_test.go` (BFSI/Healthcare/Manufacturing/MSP industry profiles, §3), an RBI (India) regulatory obligation added alongside the existing CERT-In one (`regulatory_test.go`), and a `NewCoverageReport` validation hardening (rejects any `DomainCoverage` with an unrecognized `Status`, closing a gap found in main's own review pass). All three merged in cleanly — none overlapped code this branch had touched since the fork point (`cc66be67`).
+
+**What this branch had that main didn't:** Phase 2b's live `CloudflareGatewayPolicyProvider` (`cloudflare.go`), and a dedicated `dns.go` type family for domain 07's C2-domain-resolution angle.
+
+**The real collision, and how it was resolved:** both branches independently closed domain 04 with an EICAR-test-file scenario reusing `HTTPExpectation` — genuinely the same claim proven twice with different string literals. Kept this branch's `TestMalwareFileScenario_EICARTestFileBlocked`/`_Missed`; dropped main's `TestMalwareDownloadScenario_EICARTestFileBlocked`/`_Missed` as redundant, not complementary. Domain 07 was closed by both branches via genuinely different angles — this branch's `dns.go`-based C2-domain-resolution-policy test, and main's `HTTPExpectation`-based alternate-DoH-resolver-bypass test — kept **both**, since they prove different sub-capabilities (is a known-bad domain's resolution blocked, vs. is an unauthorized external resolver reachable at all), not the same one twice. §5's coverage-matrix table and `scenarios_test.go`'s coverage-reporting-test doc comment were updated to describe the merged, reconciled state. Full suite green post-merge (`go test ./internal/webgwefficacy/... -v`), zero internal-package dependency confirmed unchanged.
