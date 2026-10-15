@@ -33,10 +33,10 @@ func AudspectWAFEvasionCatalog() ([]EvasionScenario, error) {
 			provenance: "manually authored from waf.txt Phase 4's named content-types category",
 		},
 		{
-			id: "EVADE-004", technique: EvasionHTTPDiscrepancy, attackVectorID: "HTTPPARSE-001",
-			canonicalDesc: "a canonical request carrying a single instance of the targeted header",
-			evasiveDesc:   "the identical request with the targeted header duplicated, where the two instances disagree",
-			originEquivalenceRationale: "the origin's HTTP server resolves duplicate headers by always taking the last occurrence, which carries the same value the canonical single-header request carried",
+			id: "EVADE-004", technique: EvasionHTTPDiscrepancy, attackVectorID: "HTTPPARSE-002",
+			canonicalDesc: "a canonical TRACE request directly targeting the method-restricted administrative route",
+			evasiveDesc:   "the identical administrative operation requested via an X-HTTP-Method-Override: TRACE header on an outer POST request",
+			originEquivalenceRationale: "the origin's HTTP server honors the X-HTTP-Method-Override header and dispatches to the identical TRACE handler regardless of which representation reaches it, so the override-framed request executes the identical administrative action as the canonical direct TRACE request",
 			provenance: "manually authored from waf.txt Phase 4's named HTTP-discrepancies category",
 		},
 		{
@@ -47,7 +47,7 @@ func AudspectWAFEvasionCatalog() ([]EvasionScenario, error) {
 			provenance: "manually authored from waf.txt Phase 4's named multipart-uploads category",
 		},
 		{
-			id: "EVADE-006", technique: EvasionRequestBoundaryAbuse, attackVectorID: "HTTPPARSE-002",
+			id: "EVADE-006", technique: EvasionRequestBoundaryAbuse, attackVectorID: "HTTPPARSE-001",
 			canonicalDesc: "a canonical request framed with a single, consistent Content-Length header",
 			evasiveDesc:   "the identical request body framed with a Transfer-Encoding/Content-Length conflict",
 			originEquivalenceRationale: "the origin's HTTP server resolves the conflicting framing by always preferring Transfer-Encoding, and arrives at the identical body as the canonical Content-Length-framed request",

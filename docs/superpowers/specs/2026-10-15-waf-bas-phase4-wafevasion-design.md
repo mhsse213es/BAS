@@ -130,11 +130,11 @@ A canonical leg that was never reliably blocked to begin with (e.g. the WAF didn
 | EVADE-001 | encoding_obfuscation | SQLI-002 | plain SQLi payload vs. double-URL-encoded equivalent |
 | EVADE-002 | normalization_mismatch | PATHTRAV-001 | plain `../` traversal vs. Unicode/overlong-encoded path segments that normalize to the same traversal |
 | EVADE-003 | content_type_confusion | FILEUP-001 | upload declared with its real executable content-type vs. a mislabeled benign-looking content-type for the same bytes |
-| EVADE-004 | http_discrepancy | HTTPPARSE-001 | canonical single-header request vs. a duplicated/conflicting header variant the origin still resolves to the same value |
+| EVADE-004 | http_discrepancy | HTTPPARSE-002 | canonical direct TRACE request vs. the identical administrative operation via an `X-HTTP-Method-Override: TRACE` header on an outer POST, which the origin resolves to the same handler |
 | EVADE-005 | multipart_boundary_manipulation | FILEUP-002 | canonical multipart boundary vs. a boundary string crafted to be parsed differently by the WAF than by the origin |
-| EVADE-006 | request_boundary_abuse | HTTPPARSE-002 | canonical `Content-Length` request vs. a `Transfer-Encoding`/`Content-Length`-conflicting framing the origin still resolves to the same body |
+| EVADE-006 | request_boundary_abuse | HTTPPARSE-001 | canonical `Content-Length` request vs. a `Transfer-Encoding`/`Content-Length`-conflicting framing the origin still resolves to the same body |
 
-All 6 `AttackVectorID`s are confirmed to exist in `wafcatalog.AudspectWAFAttackCatalog()`'s real 26-entry seed (`SQLI-002`, `PATHTRAV-001`, `FILEUP-001`, `HTTPPARSE-001`, `FILEUP-002`, `HTTPPARSE-002`).
+All 6 `AttackVectorID`s are confirmed to exist in `wafcatalog.AudspectWAFAttackCatalog()`'s real 26-entry seed (`SQLI-002`, `PATHTRAV-001`, `FILEUP-001`, `HTTPPARSE-002`, `FILEUP-002`, `HTTPPARSE-001`). `HTTPPARSE-001`'s real payload is itself a Content-Length/Transfer-Encoding conflict (CL.TE request smuggling), which is exactly `EVADE-006`'s `request_boundary_abuse` story — not a generic header-discrepancy story — so it is bound to `EVADE-006`. `HTTPPARSE-002`'s real payload is HTTP verb tampering, an `http_discrepancy` story, so it is bound to `EVADE-004`. (This corrects an earlier draft of this table that had the two IDs swapped relative to their own narratives — caught in Phase 4's final review and fixed in both the spec and `catalog.go` together.)
 
 ## 8. Acceptance gate
 
