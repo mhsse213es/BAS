@@ -89,6 +89,48 @@ func TestMapObligationToScenarioEvidence_UAEInformationAssurance_BoundaryProtect
 	}
 }
 
+// TestMapObligationToScenarioEvidence_RBICyberSecurityFramework_FirewallPerimeterSecurity
+// maps domain 08 end-to-end for India's second regulator, the RBI
+// Cyber Security Framework (Circular RBI/2015-16/418, "Cyber Security
+// Framework in Banks," dated 2 June 2016 -- independently verified
+// this session against rbi.org.in's own notification page -- control
+// NET-02, "Firewall and perimeter security -- rules reviewed,
+// inbound/outbound filtered," also seeded in
+// internal/compliance/mappings/rbi_csf.yaml). Deliberately mapped to
+// the proxy-bypass scenario (domain 08), distinct from the existing
+// CERT-In obligation's fail-closed mapping (domain 11), so India's
+// two regulators are each independently evidenced rather than both
+// resting on the same proof.
+func TestMapObligationToScenarioEvidence_RBICyberSecurityFramework_FirewallPerimeterSecurity(t *testing.T) {
+	obligation := RegulatoryObligation{
+		ID:              "rbi-csf-net-02",
+		Jurisdiction:    "India",
+		Regulator:       "RBI",
+		Title:           "Firewall and perimeter security -- rules reviewed, inbound/outbound filtered",
+		SourceReference: "RBI Circular RBI/2015-16/418 (DBS.CO/CSITE/BC.11/33.01.001/2015-16), \"Cyber Security Framework in Banks\"",
+		Version:         "2016",
+		EffectiveDate:   time.Date(2016, 6, 2, 0, 0, 0, 0, time.UTC),
+		ControlLabel:    "webgwefficacy.proxybypass",
+	}
+
+	now := time.Now()
+	window := TimeWindow{Start: now.Add(-time.Minute), End: now.Add(time.Minute)}
+	exp := HTTPExpectation{RequestURL: "https://dns.google/dns-query", ExpectedAction: ExpectedBlock}
+	provider := NewFixtureGatewayProvider([]GatewayEvidence{
+		{RequestURL: exp.RequestURL, Action: "block", Timestamp: now, Source: SourceFixture},
+	})
+	result := VerifyHTTPExpectation(exp, HTTPObservation{}, provider, window)
+
+	snapshot := MapObligationToScenarioEvidence(obligation, "doh-bypass-caught", result.Prevention.Verdict, now)
+
+	if snapshot.Status != ObligationSnapshotCaptured {
+		t.Errorf("Status = %q, want %q", snapshot.Status, ObligationSnapshotCaptured)
+	}
+	if snapshot.CapturedVerdict != VerdictPass {
+		t.Errorf("CapturedVerdict = %q, want %q", snapshot.CapturedVerdict, VerdictPass)
+	}
+}
+
 // TestMapObligationToScenarioEvidence_InconclusiveVerdict_StatusIncomplete
 // proves missing evidence is captured as Incomplete, never silently
 // treated as if the obligation had been proven met.
