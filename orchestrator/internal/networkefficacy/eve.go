@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
 	"strconv"
 	"time"
 )
@@ -33,9 +34,11 @@ type eveRecord struct {
 // is an error, not a silently dropped record -- collection/parsing
 // failure must be distinguishable from "no alerts occurred" by the
 // caller (internal/networkefficacy's own VerifyControlExpectation
-// relies on this distinction). Source is always SourceFixture: this
-// parser's only caller in this phase is a recorded fixture file, never
-// a live stream (deferred per the spec §8).
+// relies on this distinction). Every record defaults to Source:
+// SourceFixture; a caller reading a live, still-growing log (see
+// RealSuricataProvider) overrides this on the records it returns --
+// this function itself has no way to know whether its io.Reader came
+// from a frozen fixture or a live file.
 func ParseSuricataEVE(r io.Reader) ([]IDSEvidence, error) {
 	var out []IDSEvidence
 	scanner := bufio.NewScanner(r)
@@ -88,6 +91,50 @@ func NewFixtureIDSProvider(records []IDSEvidence) *FixtureIDSProvider {
 func (p *FixtureIDSProvider) IDSEvidenceFor(flow Flow, window TimeWindow) ([]IDSEvidence, error) {
 	var out []IDSEvidence
 	for _, r := range p.records {
+		if !matchesFlow(r.SourceIP, r.DestIP, r.Port, r.Protocol, flow) {
+			continue
+		}
+		if !inWindow(r.Timestamp, window) {
+			continue
+		}
+		out = append(out, r)
+	}
+	return out, nil
+}
+
+// RealSuricataProvider implements IDSEvidenceProvider by reading a
+// live Suricata EVE JSON log fresh on every call, unlike
+// FixtureIDSProvider, which wraps a pre-parsed, frozen snapshot taken
+// once at construction time. A real Suricata process continuously
+// appends new alerts to this file; re-reading its current contents on
+// every call is what makes this provider genuinely live rather than
+// another fixture wearing a different name.
+type RealSuricataProvider struct {
+	path string
+}
+
+// NewRealSuricataProvider returns a provider reading the live EVE JSON
+// log at path -- e.g. the file a real `suricata -l <dir>` process
+// writes to as -l <dir>/eve.json.
+func NewRealSuricataProvider(path string) *RealSuricataProvider {
+	return &RealSuricataProvider{path: path}
+}
+
+func (p *RealSuricataProvider) IDSEvidenceFor(flow Flow, window TimeWindow) ([]IDSEvidence, error) {
+	f, err := os.Open(p.path)
+	if err != nil {
+		return nil, fmt.Errorf("networkefficacy: open live eve log %s: %w", p.path, err)
+	}
+	defer f.Close()
+
+	records, err := ParseSuricataEVE(f)
+	if err != nil {
+		return nil, err
+	}
+
+	var out []IDSEvidence
+	for _, r := range records {
+		r.Source = SourceLive
 		if !matchesFlow(r.SourceIP, r.DestIP, r.Port, r.Protocol, flow) {
 			continue
 		}
