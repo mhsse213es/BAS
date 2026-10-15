@@ -203,6 +203,11 @@ func newTestDB(ctx context.Context) (*TestDB, error) {
 		_ = container.Terminate(context.Background())
 		return nil, fmt.Errorf("testutil: EnsureZoneIsolationImportSchema: %w", err)
 	}
+	if err := db.EnsureRegulatoryObligationSchema(ctx, pool); err != nil {
+		pool.Close()
+		_ = container.Terminate(context.Background())
+		return nil, fmt.Errorf("testutil: EnsureRegulatoryObligationSchema: %w", err)
+	}
 
 	return &TestDB{
 		Pool:      pool,
