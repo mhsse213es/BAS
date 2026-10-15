@@ -87,6 +87,54 @@ func TestTestConnection_Success(t *testing.T) {
 	}
 }
 
+func TestQueryMailAlerts_EmptyHint_ReturnsAll(t *testing.T) {
+	tokenSrv := tokenMock(t)
+	defer tokenSrv.Close()
+	alertTime := time.Date(2026, 7, 14, 10, 2, 0, 0, time.UTC)
+	graphSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]any{
+			"value": []map[string]any{
+				{"id": "alert-1", "title": "Phish delivered", "severity": "medium", "createdDateTime": alertTime.Format(time.RFC3339)},
+				{"id": "alert-2", "title": "Malware detected", "severity": "high", "createdDateTime": alertTime.Format(time.RFC3339)},
+			},
+		})
+	}))
+	defer graphSrv.Close()
+
+	c := newTestClient(t, tokenSrv.URL, graphSrv.URL)
+	alerts, err := c.QueryMailAlerts(context.Background(), alertTime.Add(-time.Hour), alertTime.Add(time.Hour), "")
+	if err != nil {
+		t.Fatalf("QueryMailAlerts: %v", err)
+	}
+	if len(alerts) != 2 {
+		t.Fatalf("alerts = %+v, want 2 -- an empty correlationHint must return every alert", alerts)
+	}
+}
+
+func TestQueryMailAlerts_FiltersByCorrelationHint(t *testing.T) {
+	tokenSrv := tokenMock(t)
+	defer tokenSrv.Close()
+	alertTime := time.Date(2026, 7, 14, 10, 2, 0, 0, time.UTC)
+	graphSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]any{
+			"value": []map[string]any{
+				{"id": "alert-1", "title": "Phish delivered to cfo-test@example-lab.test", "severity": "medium", "createdDateTime": alertTime.Format(time.RFC3339)},
+				{"id": "alert-2", "title": "Unrelated malware alert", "severity": "high", "createdDateTime": alertTime.Format(time.RFC3339)},
+			},
+		})
+	}))
+	defer graphSrv.Close()
+
+	c := newTestClient(t, tokenSrv.URL, graphSrv.URL)
+	alerts, err := c.QueryMailAlerts(context.Background(), alertTime.Add(-time.Hour), alertTime.Add(time.Hour), "cfo-test@example-lab.test")
+	if err != nil {
+		t.Fatalf("QueryMailAlerts: %v", err)
+	}
+	if len(alerts) != 1 || alerts[0].ID != "alert-1" {
+		t.Fatalf("alerts = %+v, want only alert-1 (the one whose RawJSON contains the correlation hint)", alerts)
+	}
+}
+
 func newTestClientWithActionURLs(t *testing.T, tokenURL, actionTokenURL, actionBaseURL string) *Client {
 	t.Helper()
 	c := New(Config{TenantID: "t1", ClientID: "c1", ClientSecret: "s1"})

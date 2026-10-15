@@ -140,6 +140,33 @@ func (c *Client) QueryAlerts(ctx context.Context, start, end time.Time) ([]Alert
 	return out, nil
 }
 
+// QueryMailAlerts queries the same Graph security/alerts_v2 endpoint
+// QueryAlerts uses, then filters to alerts whose RawJSON contains
+// correlationHint as a substring. This is a provisional correlation
+// heuristic, not a verified mail-evidence field match: the exact
+// Graph alert schema for email-specific evidence (sender/recipient/
+// subject fields, as opposed to QueryAlerts' already-confirmed
+// deviceDnsName shape) is unverified against a real Defender for
+// Office 365 tenant -- see docs/emailgw-mastery-qa-log.md item #1.
+// An empty correlationHint returns every alert in the window,
+// matching QueryAlerts' own behavior.
+func (c *Client) QueryMailAlerts(ctx context.Context, start, end time.Time, correlationHint string) ([]Alert, error) {
+	alerts, err := c.QueryAlerts(ctx, start, end)
+	if err != nil {
+		return nil, err
+	}
+	if correlationHint == "" {
+		return alerts, nil
+	}
+	out := make([]Alert, 0, len(alerts))
+	for _, a := range alerts {
+		if strings.Contains(string(a.RawJSON), correlationHint) {
+			out = append(out, a)
+		}
+	}
+	return out, nil
+}
+
 func (c *Client) TestConnection(ctx context.Context) error {
 	_, err := c.queryRaw(ctx, time.Now().Add(-time.Hour), time.Now())
 	return err
