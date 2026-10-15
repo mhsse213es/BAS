@@ -34,12 +34,33 @@ func TestVerifyPolicyBaselineExpectation_HashMatches_Pass(t *testing.T) {
 	now := time.Now()
 	exp := PolicyBaselineExpectation{PolicyRuleID: "block-malware-category", ExpectedConfigHash: "abc123"}
 	provider := NewFixturePolicyConfigProvider([]PolicyConfigEvidence{
-		{PolicyRuleID: exp.PolicyRuleID, ObservedConfigHash: "abc123", Timestamp: now, Source: SourceFixture},
+		{PolicyRuleID: exp.PolicyRuleID, ObservedConfigHash: "abc123", StillActive: true, Timestamp: now, Source: SourceFixture},
 	})
 	result := VerifyPolicyBaselineExpectation(exp, provider, TimeWindow{Start: now.Add(-time.Minute), End: now.Add(time.Minute)}, now)
 
 	if result.Verdict != VerdictPass {
-		t.Errorf("Verdict = %q, want %q -- known-good baseline: configuration matches", result.Verdict, VerdictPass)
+		t.Errorf("Verdict = %q, want %q -- known-good baseline: configuration matches and the rule is active", result.Verdict, VerdictPass)
+	}
+}
+
+// TestVerifyPolicyBaselineExpectation_DisabledRuleMatchingHash_Fail
+// proves a disabled rule can never verdict Pass just because its
+// config hash still matches -- configHashFor only hashes
+// action/filters/traffic, never the enabled flag, so a rule disabled
+// in the gateway's own console with everything else untouched would
+// otherwise produce an identical hash and a false Pass. No exception
+// is declared here: this path must be checked independently of the
+// exception-expiry branch.
+func TestVerifyPolicyBaselineExpectation_DisabledRuleMatchingHash_Fail(t *testing.T) {
+	now := time.Now()
+	exp := PolicyBaselineExpectation{PolicyRuleID: "block-malware-category", ExpectedConfigHash: "abc123"}
+	provider := NewFixturePolicyConfigProvider([]PolicyConfigEvidence{
+		{PolicyRuleID: exp.PolicyRuleID, ObservedConfigHash: "abc123", StillActive: false, Timestamp: now, Source: SourceFixture},
+	})
+	result := VerifyPolicyBaselineExpectation(exp, provider, TimeWindow{Start: now.Add(-time.Minute), End: now.Add(time.Minute)}, now)
+
+	if result.Verdict != VerdictFail {
+		t.Errorf("Verdict = %q, want %q -- a disabled rule must never Pass regardless of a matching config hash", result.Verdict, VerdictFail)
 	}
 }
 
@@ -47,12 +68,12 @@ func TestVerifyPolicyBaselineExpectation_HashMismatch_Fail(t *testing.T) {
 	now := time.Now()
 	exp := PolicyBaselineExpectation{PolicyRuleID: "block-malware-category", ExpectedConfigHash: "abc123"}
 	provider := NewFixturePolicyConfigProvider([]PolicyConfigEvidence{
-		{PolicyRuleID: exp.PolicyRuleID, ObservedConfigHash: "drifted456", Timestamp: now, Source: SourceFixture},
+		{PolicyRuleID: exp.PolicyRuleID, ObservedConfigHash: "drifted456", StillActive: true, Timestamp: now, Source: SourceFixture},
 	})
 	result := VerifyPolicyBaselineExpectation(exp, provider, TimeWindow{Start: now.Add(-time.Minute), End: now.Add(time.Minute)}, now)
 
 	if result.Verdict != VerdictFail {
-		t.Errorf("Verdict = %q, want %q -- negative case: the observed configuration drifted from baseline", result.Verdict, VerdictFail)
+		t.Errorf("Verdict = %q, want %q -- negative case: the observed configuration drifted from baseline (rule active, so this isolates the hash-mismatch path from the disabled-rule one)", result.Verdict, VerdictFail)
 	}
 }
 
@@ -131,8 +152,8 @@ func TestVerifyPolicyBaselineExpectation_MultipleRecords_MostRecentWins(t *testi
 	newer := time.Now()
 	exp := PolicyBaselineExpectation{PolicyRuleID: "block-malware-category", ExpectedConfigHash: "abc123"}
 	provider := NewFixturePolicyConfigProvider([]PolicyConfigEvidence{
-		{PolicyRuleID: exp.PolicyRuleID, ObservedConfigHash: "drifted456", Timestamp: older, Source: SourceFixture},
-		{PolicyRuleID: exp.PolicyRuleID, ObservedConfigHash: "abc123", Timestamp: newer, Source: SourceFixture},
+		{PolicyRuleID: exp.PolicyRuleID, ObservedConfigHash: "drifted456", StillActive: true, Timestamp: older, Source: SourceFixture},
+		{PolicyRuleID: exp.PolicyRuleID, ObservedConfigHash: "abc123", StillActive: true, Timestamp: newer, Source: SourceFixture},
 	})
 	result := VerifyPolicyBaselineExpectation(exp, provider, TimeWindow{Start: older.Add(-time.Minute), End: newer.Add(time.Minute)}, newer)
 

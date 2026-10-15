@@ -59,14 +59,28 @@ func (p *FixturePolicyConfigProvider) PolicyConfigEvidenceFor(policyRuleID strin
 }
 
 // VerifyPolicyBaselineExpectation checks one declared policy-baseline
-// expectation against evidence, as of asOf. An expired exception
-// (ExceptionExpiresAt before asOf) that is still active in the
-// evidence is configuration drift, flagged as Fail regardless of
-// whether the underlying config hash otherwise matches -- a stale
-// exception left live past its expiry is itself the finding, not
-// something a hash comparison would catch. asOf is an explicit
-// parameter, never time.Now() read internally, so this function
-// stays deterministic and testable.
+// expectation against evidence, as of asOf.
+//
+// A rule whose latest evidence reports StillActive false is Fail,
+// independent of the exception-expiry check below and regardless of
+// whether ObservedConfigHash still matches ExpectedConfigHash --
+// configHashFor only hashes a rule's action/filters/traffic, never
+// its enabled flag, so a rule disabled in the gateway's own console
+// with everything else untouched would otherwise produce an
+// identical hash and a false Pass. A disabled rule enforces nothing,
+// and a matching hash does not change that.
+//
+// An expired exception (ExceptionExpiresAt before asOf) that is still
+// active in the evidence is configuration drift, flagged as Fail
+// regardless of whether the underlying config hash otherwise matches
+// -- a stale exception left live past its expiry is itself the
+// finding, not something a hash comparison would catch. By the time
+// this check runs, StillActive is already known true (the check
+// above returned otherwise), so this condition no longer needs to
+// test it itself.
+//
+// asOf is an explicit parameter, never time.Now() read internally, so
+// this function stays deterministic and testable.
 func VerifyPolicyBaselineExpectation(
 	exp PolicyBaselineExpectation,
 	provider PolicyConfigEvidenceProvider,
@@ -84,7 +98,13 @@ func VerifyPolicyBaselineExpectation(
 		}
 	}
 	latest := latestByTimestamp(records, func(e PolicyConfigEvidence) time.Time { return e.Timestamp })
-	if exp.ExceptionExpiresAt != nil && asOf.After(*exp.ExceptionExpiresAt) && latest.StillActive {
+	if !latest.StillActive {
+		return VerdictDetail{
+			Verdict: VerdictFail,
+			Reason:  fmt.Sprintf("policy rule %q is disabled in the gateway's own configuration -- a matching config hash does not mean it is enforcing", exp.PolicyRuleID),
+		}
+	}
+	if exp.ExceptionExpiresAt != nil && asOf.After(*exp.ExceptionExpiresAt) {
 		return VerdictDetail{
 			Verdict: VerdictFail,
 			Reason:  fmt.Sprintf("exception on policy rule %q expired at %s but is still active in the gateway's own configuration", exp.PolicyRuleID, exp.ExceptionExpiresAt.Format(time.RFC3339)),
