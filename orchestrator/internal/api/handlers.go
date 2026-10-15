@@ -1835,6 +1835,15 @@ func (h *Handler) markRunFailed(ctx context.Context, runID string, reason string
 	}
 }
 
+// DispatchFactoryValidation is the one exported entry point into dispatchRun
+// for internal/validationlab (TCF Phase 6) -- a separate package cannot call
+// the unexported dispatchRun directly. Mode and Kind are fixed here, not
+// caller-supplied, so a validationlab caller cannot accidentally dispatch in
+// any other mode.
+func (h *Handler) DispatchFactoryValidation(ctx context.Context, sc *scenario.Scenario, agentID string) (runID, skipReason string, err error) {
+	return h.dispatchRun(ctx, sc, agentID, dispatchOpts{Mode: "factory-validation", Kind: contentregistry.KindFactoryValidation})
+}
+
 func (h *Handler) dispatchRun(ctx context.Context, sc *scenario.Scenario, agentID string, o dispatchOpts) (runID string, skipReason string, err error) {
 	if license.Current().State == license.StateLocked {
 		return "", "license_locked", nil
@@ -1859,7 +1868,7 @@ func (h *Handler) dispatchRun(ctx context.Context, sc *scenario.Scenario, agentI
 		sc = ev.Scenario // execute the pinned version's stored bytes, never the disk file
 		contentVersionID = &ev.VersionID
 	}
-	live := o.Mode == "telemetry" || o.Mode == "lab"
+	live := o.Mode == "telemetry" || o.Mode == "lab" || o.Mode == "factory-validation"
 
 	// ── Agent state gate ─────────────────────────────────────────────────────
 	// Only active agents may run scenarios. Quarantined / restricted / retired
@@ -1870,6 +1879,26 @@ func (h *Handler) dispatchRun(ctx context.Context, sc *scenario.Scenario, agentI
 	).Scan(&agentState)
 	if agentState != "" && agentState != string(models.AgentStateActive) {
 		return "", "agent " + agentState, nil
+	}
+
+	// ── Factory-lab ownership gate (TCF Phase 6) ─────────────────────────────
+	// A customer target may never be substituted for the factory-owned lab
+	// agent, and the lab agent may never be dispatched to as if it were a
+	// customer target -- enforced both directions, not just by convention.
+	var isFactoryLab bool
+	if err := h.db.QueryRow(ctx,
+		`SELECT is_factory_lab FROM agents WHERE agent_id = $1`, agentID,
+	).Scan(&isFactoryLab); err != nil {
+		// Fail closed: if ownership cannot be determined, surface a genuine error
+		// rather than let a customer mode reach the lab agent (or vice versa) on a
+		// transient failure. A DB failure is an error, not a benign skip.
+		return "", "", fmt.Errorf("verify factory-lab ownership for agent %s: %w", agentID, err)
+	}
+	if o.Mode == "factory-validation" && !isFactoryLab {
+		return "", "factory-validation dispatch requires the factory-owned lab agent", nil
+	}
+	if o.Mode != "factory-validation" && isFactoryLab {
+		return "", "the factory-owned lab agent cannot be dispatched to in mode " + o.Mode, nil
 	}
 
 	// ── OS compatibility check ────────────────────────────────────────────────

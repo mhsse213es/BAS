@@ -534,6 +534,56 @@ func TestApplyGeneratedArtifacts_SubstitutesCuratedTokenAndRegisters(t *testing.
 	})
 }
 
+func TestDispatchRun_FactoryValidationRequiresLabAgent(t *testing.T) { // TCF Phase 6
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		sc, engine := minimalLiveScenario(t, "dr-factoryval-notlab")
+		h := New(pool, ws.NewHub(), engine, "")
+		agentID := "dr-agent-not-lab"
+		seedActiveAgent(t, pool, agentID, "Windows")
+		fake := startFakeAgent(t, h.hub, agentID)
+		defer fake.Disconnect(t)
+
+		runID, skip, err := h.dispatchRun(context.Background(), sc, agentID, dispatchOpts{Mode: "factory-validation"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if runID != "" || skip == "" {
+			t.Fatalf("runID=%q skip=%q, want empty runID and a non-empty refusal reason (agent is not the factory lab agent)", runID, skip)
+		}
+	})
+}
+
+func TestDispatchRun_CustomerModesRefuseLabAgent(t *testing.T) { // TCF Phase 6
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		for _, mode := range []string{"posture", "telemetry", "lab"} {
+			sc, engine := minimalLiveScenario(t, "dr-factoryval-islab-"+mode)
+			h := New(pool, ws.NewHub(), engine, "")
+			agentID := "dr-agent-is-lab-" + mode
+			seedActiveAgent(t, pool, agentID, "Windows")
+			if _, err := pool.Exec(context.Background(),
+				`UPDATE agents SET is_factory_lab = true WHERE agent_id = $1`, agentID); err != nil {
+				t.Fatalf("mark lab agent: %v", err)
+			}
+			fake := startFakeAgent(t, h.hub, agentID)
+
+			runID, skip, err := h.dispatchRun(context.Background(), sc, agentID, dispatchOpts{Mode: mode})
+			if err != nil {
+				t.Fatalf("mode %s: unexpected error: %v", mode, err)
+			}
+			if runID != "" || skip == "" {
+				t.Fatalf("mode %s: runID=%q skip=%q, want empty runID and a non-empty refusal reason (the factory-lab agent cannot be dispatched to in this mode)", mode, runID, skip)
+			}
+			fake.Disconnect(t)
+		}
+	})
+}
+
 func TestApplyGeneratedArtifacts_NoCuratedMatch_LeavesStepsUnchanged(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping container-backed test in -short mode")

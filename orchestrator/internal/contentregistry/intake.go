@@ -280,6 +280,26 @@ func (r *Registry) RetireExecutable(ctx context.Context, contentID, actor, reaso
 	return nil
 }
 
+// rowQuerier is satisfied by both *pgxpool.Pool and pgx.Tx, so the provenance
+// check runs inside Transition's transaction as well as standalone.
+type rowQuerier interface {
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+}
+
+// hasGenerationProvenance reports whether a version carries a 'generated_for'
+// relationship -- the mark of genuine factory generation (RegisterGenerated
+// always writes one from its mandatory ThreatID). Plain intel intake shares
+// ActorGenerator but has no such link, so this is the reliable discriminator
+// between gated factory content and exempt intel intake.
+func hasGenerationProvenance(ctx context.Context, q rowQuerier, versionID string) (bool, error) {
+	var exists bool
+	err := q.QueryRow(ctx,
+		`SELECT EXISTS (SELECT 1 FROM content_version_threats
+		  WHERE content_version_id = $1 AND relationship_kind = 'generated_for')`,
+		versionID).Scan(&exists)
+	return exists, err
+}
+
 // Transition moves one version through the state machine, writing the
 // update and its event in one transaction.
 func (r *Registry) Transition(ctx context.Context, versionID string, to Lifecycle, actor, reason string) error {
@@ -288,9 +308,9 @@ func (r *Registry) Transition(ctx context.Context, versionID string, to Lifecycl
 		return err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-	var origin, trust, lc string
-	err = tx.QueryRow(ctx, `SELECT origin, trust_level, lifecycle FROM content_versions WHERE id = $1 FOR UPDATE`,
-		versionID).Scan(&origin, &trust, &lc)
+	var origin, trust, lc, createdBy string
+	err = tx.QueryRow(ctx, `SELECT origin, trust_level, lifecycle, created_by FROM content_versions WHERE id = $1 FOR UPDATE`,
+		versionID).Scan(&origin, &trust, &lc, &createdBy)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ErrVersionNotFound
 	}
@@ -299,6 +319,32 @@ func (r *Registry) Transition(ctx context.Context, versionID string, to Lifecycl
 	}
 	if err := CheckTransition(Origin(origin), Trust(trust), Lifecycle(lc), to, actor); err != nil {
 		return err
+	}
+	// TCF Phase 6: factory-originated content must pass validation before
+	// publishing. VALIDATED->PUBLISHED_LOCAL (already legal, lifecycle.go:26)
+	// is unaffected -- only this specific from/to pair is newly refused, and
+	// only for genuinely factory-originated content. RegisterLocalApproved
+	// (intake.go:215-253) never calls Transition at all, so it is unreachable here.
+	//
+	// ActorComposer is produced only by composition (always gated). ActorGenerator
+	// is shared by two paths: factory generation (RegisterGenerated, always writes
+	// a 'generated_for' provenance link, gated) and plain intel intake
+	// (SourceIntel at intake.go:183, no provenance, EXEMPT -- it is operator-
+	// reviewed content, not factory output). Only the provenance link distinguishes
+	// them, so the generator branch is gated on that link, not on the actor alone.
+	if to == LifecyclePublishedLocal && Lifecycle(lc) == LifecycleDraft {
+		gated := createdBy == ActorComposer
+		if !gated && createdBy == ActorGenerator {
+			prov, err := hasGenerationProvenance(ctx, tx, versionID)
+			if err != nil {
+				return err
+			}
+			gated = prov
+		}
+		if gated {
+			return &ErrIllegalTransition{From: Lifecycle(lc), To: to,
+				Reason: "TCF-originated content must pass validation (VALIDATED) before publishing"}
+		}
 	}
 	newTrust := TrustAfter(Origin(origin), Trust(trust), to)
 	if _, err := tx.Exec(ctx, `UPDATE content_versions SET lifecycle = $2, trust_level = $3 WHERE id = $1`,

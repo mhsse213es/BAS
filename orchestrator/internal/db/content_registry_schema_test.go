@@ -229,3 +229,37 @@ func TestScenarioRuns_ContentKindRequiresVersion(t *testing.T) { // A8 (DB half)
 		}
 	})
 }
+
+func TestScenarioRuns_FactoryValidationKindAccepted(t *testing.T) { // TCF Phase 6
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		if _, err := pool.Exec(ctx, `INSERT INTO agents (agent_id, hostname) VALUES ('a9','h')`); err != nil {
+			t.Fatalf("agent: %v", err)
+		}
+		if _, err := pool.Exec(ctx,
+			`INSERT INTO scenario_runs (scenario_id, agent_id, execution_kind) VALUES ('x','a9','factory_validation')`); err != nil {
+			t.Fatalf("factory_validation kind must be accepted: %v", err)
+		}
+	})
+}
+
+func TestAgentsSchema_HasFactoryLabColumn(t *testing.T) { // TCF Phase 6
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		if _, err := pool.Exec(ctx, `INSERT INTO agents (agent_id, hostname) VALUES ('a10','h')`); err != nil {
+			t.Fatalf("agent: %v", err)
+		}
+		if _, err := pool.Exec(ctx, `UPDATE agents SET is_factory_lab = true WHERE agent_id = 'a10'`); err != nil {
+			t.Fatalf("is_factory_lab column must exist and accept true: %v", err)
+		}
+		var got bool
+		if err := pool.QueryRow(ctx, `SELECT is_factory_lab FROM agents WHERE agent_id = 'a10'`).Scan(&got); err != nil || !got {
+			t.Fatalf("got is_factory_lab=%v err=%v, want true", got, err)
+		}
+		var defaultVal bool
+		if err := pool.QueryRow(ctx,
+			`INSERT INTO agents (agent_id, hostname) VALUES ('a11','h') RETURNING is_factory_lab`).Scan(&defaultVal); err != nil || defaultVal {
+			t.Fatalf("default is_factory_lab: got %v err=%v, want false", defaultVal, err)
+		}
+	})
+}
