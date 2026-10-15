@@ -129,6 +129,73 @@ func TestIndustryProfile_PrioritySummary_SortsByWeightDescendingAndRendersStatus
 	}
 }
 
+func TestIndustryProfile_PrioritySummary_AppendsDataClassificationsWhenPresent(t *testing.T) {
+	profile, err := NewIndustryProfile(
+		"test-profile",
+		[]string{"01"},
+		[]string{"PHI", "PII", "financial-transaction-data"},
+		map[string]float64{"01": 1.0},
+		"",
+	)
+	if err != nil {
+		t.Fatalf("NewIndustryProfile: %v", err)
+	}
+	report, err := NewCoverageReport([]DomainCoverage{
+		{DomainID: "01", DomainName: "URL filtering", Status: CoverageCovered},
+	})
+	if err != nil {
+		t.Fatalf("NewCoverageReport: %v", err)
+	}
+
+	summary := profile.PrioritySummary(report)
+
+	want := "test-profile priorities: 01 URL filtering (weight 1.0): covered; data classifications: PHI, PII, financial-transaction-data"
+	if summary != want {
+		t.Errorf("PrioritySummary() = %q, want %q -- classifications appended after the domain-priority list, in their configured order, as-is", summary, want)
+	}
+}
+
+func TestIndustryProfile_PrioritySummary_OmitsClassificationSuffixWhenEmpty(t *testing.T) {
+	withNilClassifications, err := NewIndustryProfile("test-profile", []string{"01"}, nil, map[string]float64{"01": 1.0}, "")
+	if err != nil {
+		t.Fatalf("NewIndustryProfile: %v", err)
+	}
+	withEmptyClassifications, err := NewIndustryProfile("test-profile", []string{"01"}, []string{}, map[string]float64{"01": 1.0}, "")
+	if err != nil {
+		t.Fatalf("NewIndustryProfile: %v", err)
+	}
+	report, err := NewCoverageReport([]DomainCoverage{
+		{DomainID: "01", DomainName: "URL filtering", Status: CoverageCovered},
+	})
+	if err != nil {
+		t.Fatalf("NewCoverageReport: %v", err)
+	}
+
+	want := "test-profile priorities: 01 URL filtering (weight 1.0): covered"
+	if got := withNilClassifications.PrioritySummary(report); got != want {
+		t.Errorf("PrioritySummary() with nil DataClassifications = %q, want %q -- output unchanged from before this field was wired in, never a dangling \"data classifications: \" label", got, want)
+	}
+	if got := withEmptyClassifications.PrioritySummary(report); got != want {
+		t.Errorf("PrioritySummary() with empty DataClassifications = %q, want %q", got, want)
+	}
+}
+
+func TestIndustryProfile_PrioritySummary_NoPriorityDomainsStillAppendsClassifications(t *testing.T) {
+	profile, err := NewIndustryProfile("test-profile", nil, []string{"PII"}, nil, "")
+	if err != nil {
+		t.Fatalf("NewIndustryProfile: %v", err)
+	}
+	report, err := AudspectWebGWCoverageReport()
+	if err != nil {
+		t.Fatalf("AudspectWebGWCoverageReport: %v", err)
+	}
+
+	want := "test-profile: no priority domains defined; data classifications: PII"
+	if got := profile.PrioritySummary(report); got != want {
+		t.Errorf("PrioritySummary() = %q, want %q", got, want)
+	}
+}
+
 func TestIndustryProfile_PrioritySummary_MissingDomainIncludesItsAssignedWeight(t *testing.T) {
 	profile, err := NewIndustryProfile("test-profile", []string{"01"}, nil, map[string]float64{"01": 0.7}, "")
 	if err != nil {

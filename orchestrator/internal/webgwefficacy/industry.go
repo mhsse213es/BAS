@@ -14,10 +14,11 @@ import (
 // explicit instruction, an industry profile is never a second scoring
 // system. PrioritySummary is its one real reader today: it filters an
 // existing CoverageReport down to this profile's priorities and
-// renders their already-computed coverage status, never computing a
-// verdict of its own. DataClassifications remains available for a
-// future caller to read when deciding which already-existing
-// scenarios to run first.
+// renders their already-computed coverage status, followed by
+// DataClassifications rendered as-is (never matched against evidence
+// or used to infer data sensitivity), never computing a verdict of
+// its own. Note is deliberately left out of PrioritySummary -- it is
+// free-text metadata, not a value meant for a structured summary.
 type IndustryProfile struct {
 	Name                 string             `json:"name"`
 	PriorityDomainIDs    []string           `json:"priorityDomainIds"`
@@ -133,7 +134,7 @@ func ManufacturingOTProfile() (IndustryProfile, error) {
 // explicitly, never silently dropped.
 func (p IndustryProfile) PrioritySummary(report CoverageReport) string {
 	if len(p.PriorityDomainIDs) == 0 {
-		return fmt.Sprintf("%s: no priority domains defined", p.Name)
+		return fmt.Sprintf("%s: no priority domains defined%s", p.Name, p.dataClassificationSuffix())
 	}
 
 	byID := make(map[string]DomainCoverage, len(report.domains))
@@ -156,7 +157,20 @@ func (p IndustryProfile) PrioritySummary(report CoverageReport) string {
 		}
 		entries = append(entries, fmt.Sprintf("%s %s (%s): %s", d.DomainID, d.DomainName, p.weightLabel(id), d.Status))
 	}
-	return fmt.Sprintf("%s priorities: %s", p.Name, strings.Join(entries, "; "))
+	return fmt.Sprintf("%s priorities: %s%s", p.Name, strings.Join(entries, "; "), p.dataClassificationSuffix())
+}
+
+// dataClassificationSuffix renders this profile's DataClassifications
+// as-is, in their configured order, appended after the domain-priority
+// list -- no classification matching or data-sensitivity inference,
+// just the labels the profile was configured with. Empty when
+// DataClassifications is nil or empty, so PrioritySummary's output is
+// unchanged for any profile that doesn't set it.
+func (p IndustryProfile) dataClassificationSuffix() string {
+	if len(p.DataClassifications) == 0 {
+		return ""
+	}
+	return "; data classifications: " + strings.Join(p.DataClassifications, ", ")
 }
 
 // weightLabel renders a priority domain's assigned BusinessImpactWeight,
