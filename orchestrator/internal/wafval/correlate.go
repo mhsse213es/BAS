@@ -58,20 +58,38 @@ type axisAgg struct {
 func collect(results []CollectionResult, valueOf func(Observation) (string, bool)) axisAgg {
 	agg := axisAgg{perMech: map[Mechanism]map[string]bool{}}
 	for _, r := range results {
+		// A search that did not verifiably complete establishes nothing: its
+		// observations never contribute to axis resolution, so a negative
+		// (e.g. not_matched) carried under incomplete/unavailable coverage can
+		// never assert a value (spec §5, §8). Raw still preserves them.
+		if !r.Coverage.Present() {
+			continue
+		}
 		seenEvent := map[string]bool{}
 		for _, o := range r.Observations {
-			if seenEvent[o.EventID] {
-				continue // dedup: same mechanism, same event -> counted once
+			// Defensive: an observation whose mechanism disagrees with its
+			// carrying result is malformed; do not count it under either.
+			if o.Mechanism != r.Mechanism {
+				continue
 			}
-			seenEvent[o.EventID] = true
+			// Dedup same-mechanism events by EventID so a duplicate is never
+			// independent corroboration. Empty EventIDs are NOT an identity:
+			// distinct empty-id observations stay distinct so they can surface
+			// ambiguity instead of silently collapsing to the first.
+			if o.EventID != "" {
+				if seenEvent[o.EventID] {
+					continue
+				}
+				seenEvent[o.EventID] = true
+			}
 			val, known := valueOf(o)
 			if !known {
 				continue
 			}
-			if agg.perMech[o.Mechanism] == nil {
-				agg.perMech[o.Mechanism] = map[string]bool{}
+			if agg.perMech[r.Mechanism] == nil {
+				agg.perMech[r.Mechanism] = map[string]bool{}
 			}
-			agg.perMech[o.Mechanism][val] = true
+			agg.perMech[r.Mechanism][val] = true
 		}
 	}
 	return agg

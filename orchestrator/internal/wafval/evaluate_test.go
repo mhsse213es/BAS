@@ -137,6 +137,67 @@ func TestEvaluateClaim_IncompleteCoverage_CannotEstablishMissed(t *testing.T) {
 	}
 }
 
+func TestEvaluateClaim_BlockedButOriginReceived_Contradiction(t *testing.T) {
+	// WAF says it blocked, but the origin reports it received the request: the
+	// "block" did not prevent reach. This cross-axis inconsistency must force
+	// Inconclusive with no confidence, never a clean Blocked/High (spec §6).
+	r := EvaluateClaim(
+		Expectation{Claim: ClaimPrevention},
+		[]CollectionResult{
+			collResult(MechanismWAFEngine, CoverageFound, wafEngineObs(EnforcementBlocked, DetectionMatched)),
+			collResult(MechanismOriginApp, CoverageFound, originObs(OriginReceived)),
+		},
+		testKey(),
+	)
+	if r.Verdict != VerdictInconclusive {
+		t.Errorf("verdict = %q, want inconclusive (block contradicted by origin received)", r.Verdict)
+	}
+	if r.Confidence != ConfidenceNone {
+		t.Errorf("confidence = %q, want none (cross-axis contradiction)", r.Confidence)
+	}
+}
+
+func TestEvaluateClaim_UnknownClaim_InconclusiveNoPanic(t *testing.T) {
+	// An unrecognized claim type is caller error, not evidence: return
+	// Inconclusive, never panic.
+	r := EvaluateClaim(
+		Expectation{Claim: ClaimType("bogus")},
+		[]CollectionResult{collResult(MechanismWAFEngine, CoverageFound, wafEngineObs(EnforcementBlocked, DetectionMatched))},
+		testKey(),
+	)
+	if r.Verdict != VerdictInconclusive {
+		t.Errorf("verdict = %q, want inconclusive for unknown claim", r.Verdict)
+	}
+	if r.Confidence != ConfidenceNone {
+		t.Errorf("confidence = %q, want none for unknown claim", r.Confidence)
+	}
+}
+
+func TestEvaluateClaim_AmbiguousAxis_ConfidenceCappedLow(t *testing.T) {
+	// Same-mechanism distinct events disagree on enforcement -> Ambiguous ->
+	// Inconclusive. Even with complete coverage, confidence must not stay High.
+	r := EvaluateClaim(
+		Expectation{Claim: ClaimPrevention},
+		[]CollectionResult{
+			collResult(MechanismWAFEngine, CoverageFound,
+				wafEngineObs(EnforcementBlocked, DetectionMatched, withEventID("e1")),
+				wafEngineObs(EnforcementAllowed, DetectionMatched, withEventID("e2")),
+			),
+			collResult(MechanismOriginApp, CoverageSearchedVerifiedNone, originObs(OriginNotObserved)),
+		},
+		testKey(),
+	)
+	if r.Verdict != VerdictInconclusive {
+		t.Errorf("verdict = %q, want inconclusive (ambiguous enforcement)", r.Verdict)
+	}
+	if r.Confidence == ConfidenceHigh {
+		t.Error("confidence reached High on ambiguous evidence — must be capped")
+	}
+	if r.Confidence != ConfidenceLow {
+		t.Errorf("confidence = %q, want low (ambiguous claim axis)", r.Confidence)
+	}
+}
+
 func TestResult_NotTestedDistinctFromInconclusive(t *testing.T) {
 	// Executed-but-empty attempt -> Inconclusive (a Result exists).
 	executed := EvaluateClaim(Expectation{Claim: ClaimPrevention}, []CollectionResult{

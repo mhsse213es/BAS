@@ -60,6 +60,34 @@ func TestCorrelate_CrossMechanismContradiction(t *testing.T) {
 	}
 }
 
+func TestCorrelate_EmptyEventID_NotDeduped(t *testing.T) {
+	// Two same-mechanism observations with EMPTY EventIDs that disagree must not
+	// be deduped (an empty id is not an identity): the axis must surface Ambiguous.
+	v := Correlate(testKey(), []CollectionResult{
+		collResult(MechanismWAFEngine, CoverageFound,
+			wafEngineObs(EnforcementBlocked, DetectionMatched, withEventID("")),
+			wafEngineObs(EnforcementAllowed, DetectionMatched, withEventID("")),
+		),
+	})
+	if v.EnforcementAx.State != AxisAmbiguous {
+		t.Errorf("enforcement state = %q, want ambiguous (empty EventIDs must not collapse)", v.EnforcementAx.State)
+	}
+}
+
+func TestCorrelate_IncompleteCoverage_NotMatchedNotAsserted(t *testing.T) {
+	// A not_matched observation returned under a search that did not verifiably
+	// complete must NOT establish the detection axis (spec §5, §8).
+	v := Correlate(testKey(), []CollectionResult{
+		collResult(MechanismWAFEngine, CoverageSearchIncomplete, wafEngineObs(EnforcementAllowed, DetectionNotMatched)),
+	})
+	if v.DetectionAx.State != AxisUnknown {
+		t.Errorf("detection state = %q, want unknown (not_matched under incomplete coverage must not assert)", v.DetectionAx.State)
+	}
+	if len(v.Raw) != 1 {
+		t.Errorf("Raw len = %d, want 1 (raw observation still preserved)", len(v.Raw))
+	}
+}
+
 func TestCorrelate_CrossMechanismContradiction_SameAxis(t *testing.T) {
 	wafBlocked := wafEngineObs(EnforcementBlocked, DetectionMatched)
 	sensorAllowed := Observation{

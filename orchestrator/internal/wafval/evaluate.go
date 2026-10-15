@@ -16,11 +16,22 @@ type Result struct {
 // inputs: no I/O, no clock, no hidden state.
 func EvaluateClaim(exp Expectation, results []CollectionResult, key CorrelationKey) Result {
 	view := Correlate(key, results)
+	// An unrecognized claim type is caller/adapter error, not evidence: a pure
+	// domain function fed by adapters must not crash a worker on it.
+	if !knownClaim(exp.Claim) {
+		return Result{
+			Key: key, Expectation: exp, View: view,
+			Completeness: CompletenessInsufficient, Confidence: ConfidenceNone,
+			Verdict: VerdictInconclusive, Reason: "unknown claim type: " + string(exp.Claim),
+		}
+	}
 	comp := deriveCompleteness(exp.Claim, results)
 	conf := deriveConfidence(exp.Claim, comp, view, results)
 	r := Result{Key: key, Expectation: exp, View: view, Completeness: comp, Confidence: conf}
 
 	switch {
+	case crossAxisBypass(exp.Claim, view):
+		r.Verdict, r.Reason = VerdictInconclusive, "WAF reported a block but the origin received the request: enforcement contradicted by origin evidence"
 	case claimAxisContradictory(exp.Claim, view):
 		r.Verdict, r.Reason = VerdictInconclusive, "claim-relevant evidence is contradictory across mechanisms"
 	case comp == CompletenessInsufficient:
@@ -32,6 +43,15 @@ func EvaluateClaim(exp Expectation, results []CollectionResult, key CorrelationK
 		panic("wafval: derived an invalid verdict/claim/completeness: " + err.Error())
 	}
 	return r
+}
+
+func knownClaim(c ClaimType) bool {
+	switch c {
+	case ClaimPrevention, ClaimFalsePositive, ClaimPolicyGap:
+		return true
+	default:
+		return false
+	}
 }
 
 func present(results []CollectionResult, m Mechanism) bool {
@@ -80,8 +100,16 @@ func ceiling(c EvidenceCompleteness) Confidence {
 
 func deriveConfidence(claim ClaimType, c EvidenceCompleteness, view CorrelatedView, results []CollectionResult) Confidence {
 	conf := ceiling(c)
-	if claimAxisContradictory(claim, view) {
+	// Contradicted claim evidence — same-axis across mechanisms, or the
+	// cross-axis block-vs-received bypass — carries no confidence.
+	if claimAxisContradictory(claim, view) || crossAxisBypass(claim, view) {
 		return ConfidenceNone
+	}
+	// Internally ambiguous claim evidence (same mechanism, distinct events
+	// disagree) cannot support a high/medium reading even under complete
+	// coverage; cap it low, by parity with the contradiction rule.
+	if claimAxisAmbiguous(claim, view) && confRank(conf) > confRank(ConfidenceLow) {
+		conf = ConfidenceLow
 	}
 	// Inferred-only minimum evidence caps at Medium.
 	if minimumInferredOnly(results) && confRank(conf) > confRank(ConfidenceMedium) {
@@ -129,6 +157,35 @@ func claimAxisContradictory(claim ClaimType, view CorrelatedView) bool {
 		return true
 	}
 	if claim != ClaimFalsePositive && view.DetectionAx.State == AxisContradictory {
+		return true
+	}
+	return false
+}
+
+// crossAxisBypass reports the block-vs-received contradiction the per-axis model
+// cannot express on a single axis: the WAF agrees it blocked, yet the origin
+// agrees it received the request, so the "block" did not prevent reach. Scoped
+// to prevention-shaped claims (not FalsePositive). Origin not_observed is
+// deliberately NOT a contradiction here: "not_observed" must never be read as
+// "did not happen" (spec §4).
+func crossAxisBypass(claim ClaimType, view CorrelatedView) bool {
+	if claim == ClaimFalsePositive {
+		return false
+	}
+	enf := view.EnforcementAx
+	org := view.OriginAx
+	return enf.State == AxisAgree && enf.Enforcement == EnforcementBlocked &&
+		org.State == AxisAgree && org.Origin == OriginReceived
+}
+
+// claimAxisAmbiguous reports whether a claim-relevant axis resolved to Ambiguous
+// (same mechanism, distinct events disagree). Prevention/PolicyGap depend on
+// enforcement + detection; FalsePositive on enforcement only.
+func claimAxisAmbiguous(claim ClaimType, view CorrelatedView) bool {
+	if view.EnforcementAx.State == AxisAmbiguous {
+		return true
+	}
+	if claim != ClaimFalsePositive && view.DetectionAx.State == AxisAmbiguous {
 		return true
 	}
 	return false
