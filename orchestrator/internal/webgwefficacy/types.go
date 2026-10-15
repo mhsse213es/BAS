@@ -102,10 +102,11 @@ type VerdictDetail struct {
 // gateway "can block an action but fail to alert" and both are
 // material findings.
 type EfficacyResult struct {
-	Expectation HTTPExpectation   `json:"expectation"`
-	Observation HTTPObservation   `json:"observation"`
-	Evidence    []GatewayEvidence `json:"evidence,omitempty"`
-	Prevention  VerdictDetail     `json:"prevention"`
-	Detection   VerdictDetail     `json:"detection"`
-	Response    VerdictDetail     `json:"response"`
+	Expectation  HTTPExpectation   `json:"expectation"`
+	Observation  HTTPObservation   `json:"observation"`
+	Evidence     []GatewayEvidence `json:"evidence,omitempty"`
+	SIEMEvidence []SIEMEvidence    `json:"siemEvidence,omitempty"`
+	Prevention   VerdictDetail     `json:"prevention"`
+	Detection    VerdictDetail     `json:"detection"`
+	Response     VerdictDetail     `json:"response"`
 }
