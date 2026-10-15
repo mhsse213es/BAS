@@ -222,7 +222,7 @@ Implemented / Reusable / Planned / Unsupported, per the repository-verified gap 
 | **Industry profiles** | | |
 | BFSI/NBFC, Healthcare, Manufacturing/OT-adjacent, MSP/shared-tenant | Planned (Phase 4) | Configuration layered on the Phase 1-3 scenario library, never a second scoring system. |
 | **Regulatory** | | |
-| India (CERT-In, RBI) / UAE (Information Assurance Regulation) | Planned (Phase 4) | Follows `regobligation`'s pattern, independent types, India/UAE seeds only (matching Network BAS Phase 7C's own minimal-seed precedent). |
+| India (CERT-In) / UAE (Information Assurance Regulation) | **Mapped end-to-end (Phase 4)** | `regulatory.go`: one obligation per jurisdiction (India CERT-In CI-13; UAE cross-referenced to NIST SC-07) mapped through a real Phase 1/3 scenario to an immutable evidence snapshot. Follows `regobligation`'s pattern, independent types. RBI (India) remains unmapped; one obligation per jurisdiction was this phase's own bar, matching Network BAS Phase 7C's minimal-seed precedent. |
 
 ## 6. Acceptance Criteria Methodology
 
