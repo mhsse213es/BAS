@@ -104,6 +104,10 @@ type Config struct {
 	ThreatIntelSectors   []string `json:"threat_intel_sectors,omitempty"`    // e.g. ["financial-services","banking"]
 	ThreatIntelRegions   []string `json:"threat_intel_regions,omitempty"`    // e.g. ["Asia","India"]
 
+	// TCF Phase 6: validation lab (empty agent ID disables it entirely)
+	ValidationLabAgentID    string `json:"validation_lab_agent_id,omitempty"`
+	ValidationLabPollMinutes int   `json:"validation_lab_poll_minutes,omitempty"` // default 5
+
 	// Air-gapped threat-intel: dir holding a signed ti-bundle.json (bundle floor;
 	// live MISP/OpenCTI above overlay on top when configured).
 	TIBundleDir string `json:"ti_bundle_dir,omitempty"`
@@ -345,6 +349,12 @@ func Load(path string) (*Config, error) {
 	}
 	if v := os.Getenv("THREAT_INTEL_POLL_HOURS"); v != "" {
 		fmt.Sscanf(v, "%d", &cfg.ThreatIntelPollHours)
+	}
+	if v := os.Getenv("VALIDATION_LAB_AGENT_ID"); v != "" {
+		cfg.ValidationLabAgentID = v
+	}
+	if v := os.Getenv("VALIDATION_LAB_POLL_MINUTES"); v != "" {
+		fmt.Sscanf(v, "%d", &cfg.ValidationLabPollMinutes)
 	}
 	if v := os.Getenv("TI_BUNDLE_DIR"); v != "" {
 		cfg.TIBundleDir = v

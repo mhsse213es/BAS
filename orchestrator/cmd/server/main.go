@@ -57,6 +57,7 @@ import (
 	"github.com/audspect/bas/internal/threatidentity"
 	"github.com/audspect/bas/internal/threatpriority"
 	"github.com/audspect/bas/internal/ticketing"
+	"github.com/audspect/bas/internal/validationlab"
 	"github.com/audspect/bas/internal/verification"
 	"github.com/audspect/bas/internal/verifysync"
 	"github.com/audspect/bas/internal/vexsweep"
@@ -890,6 +891,20 @@ func main() {
 		}
 	} else {
 		log.Printf("[contentregistry] migration deferred: %d intake failures (load error: %v)", bootIntakeFailures, scenarioLoadErr)
+	}
+
+	if cfg.ValidationLabAgentID != "" {
+		pollMinutes := cfg.ValidationLabPollMinutes
+		if pollMinutes <= 0 {
+			pollMinutes = 5
+		}
+		validationOrchestrator := validationlab.NewOrchestrator(
+			pool, contentRegistry, handler, cfg.ValidationLabAgentID, time.Duration(pollMinutes)*time.Minute,
+		)
+		validationOrchestrator.Start()
+		log.Printf("[validationlab] enabled, lab agent %s, poll every %dm", cfg.ValidationLabAgentID, pollMinutes)
+	} else {
+		log.Println("[validationlab] disabled (VALIDATION_LAB_AGENT_ID not set)")
 	}
 
 	vexSweepScheduler.Start(func(ctx context.Context) {
