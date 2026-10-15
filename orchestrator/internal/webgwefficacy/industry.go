@@ -20,11 +20,13 @@ type IndustryProfile struct {
 	Note                 string             `json:"note,omitempty"`
 }
 
-// NewIndustryProfile validates at construction time that every
-// domain ID this profile references -- in priorityDomainIDs and as
-// businessImpactWeight keys -- is one of Audspect's real, current
-// WebGW domains per AudspectWebGWCoverageReport's own 12-domain set,
-// never a fictional or stale reference.
+// NewIndustryProfile validates at construction time, never at render
+// time: name must be non-empty; every domain ID this profile
+// references -- in priorityDomainIDs and as businessImpactWeight keys
+// -- must be one of Audspect's real, current WebGW domains per
+// AudspectWebGWCoverageReport's own 12-domain set, never a fictional
+// or stale reference; and every businessImpactWeight value must fall
+// within [0, 1].
 func NewIndustryProfile(
 	name string,
 	priorityDomainIDs []string,
@@ -32,6 +34,9 @@ func NewIndustryProfile(
 	businessImpactWeight map[string]float64,
 	note string,
 ) (IndustryProfile, error) {
+	if name == "" {
+		return IndustryProfile{}, fmt.Errorf("name must not be empty")
+	}
 	report, err := AudspectWebGWCoverageReport()
 	if err != nil {
 		return IndustryProfile{}, fmt.Errorf("loading domain set: %w", err)
@@ -45,9 +50,12 @@ func NewIndustryProfile(
 			return IndustryProfile{}, fmt.Errorf("priority domain ID %q is not one of Audspect's real WebGW domains", id)
 		}
 	}
-	for id := range businessImpactWeight {
+	for id, weight := range businessImpactWeight {
 		if !known[id] {
 			return IndustryProfile{}, fmt.Errorf("business-impact-weight domain ID %q is not one of Audspect's real WebGW domains", id)
+		}
+		if weight < 0 || weight > 1 {
+			return IndustryProfile{}, fmt.Errorf("business-impact weight for domain %q is %v, want a value in [0, 1]", id, weight)
 		}
 	}
 	return IndustryProfile{

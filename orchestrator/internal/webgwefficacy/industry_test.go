@@ -16,6 +16,27 @@ func TestNewIndustryProfile_UnknownBusinessImpactWeightDomainID_Errors(t *testin
 	}
 }
 
+func TestNewIndustryProfile_EmptyName_Errors(t *testing.T) {
+	_, err := NewIndustryProfile("", []string{"01"}, nil, nil, "")
+	if err == nil {
+		t.Fatal("NewIndustryProfile: want error for an empty name, got nil")
+	}
+}
+
+func TestNewIndustryProfile_BusinessImpactWeightBelowZero_Errors(t *testing.T) {
+	_, err := NewIndustryProfile("test", nil, nil, map[string]float64{"01": -0.1}, "")
+	if err == nil {
+		t.Fatal("NewIndustryProfile: want error for a business-impact weight below 0, got nil")
+	}
+}
+
+func TestNewIndustryProfile_BusinessImpactWeightAboveOne_Errors(t *testing.T) {
+	_, err := NewIndustryProfile("test", nil, nil, map[string]float64{"01": 1.1}, "")
+	if err == nil {
+		t.Fatal("NewIndustryProfile: want error for a business-impact weight above 1, got nil")
+	}
+}
+
 func TestNewIndustryProfile_ValidDomainIDs_Succeeds(t *testing.T) {
 	_, err := NewIndustryProfile("test", []string{"01", "02"}, []string{"PII"}, map[string]float64{"01": 1.0}, "note")
 	if err != nil {
