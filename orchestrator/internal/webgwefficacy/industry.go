@@ -1,6 +1,10 @@
 package webgwefficacy
 
-import "fmt"
+import (
+	"fmt"
+	"sort"
+	"strings"
+)
 
 // IndustryProfile is pure configuration -- priorities, data
 // classifications, and business-impact weighting layered onto this
@@ -8,10 +12,12 @@ import "fmt"
 // verifies nothing itself, and never gains a method returning a
 // WebGWVerdict or VerdictDetail -- per the architecture spec's own
 // explicit instruction, an industry profile is never a second scoring
-// system. A caller applies a profile by reading its
-// PriorityDomainIDs and DataClassifications when deciding which
-// already-existing scenarios to run first, and BusinessImpactWeight
-// when weighting an already-computed verdict's business impact.
+// system. PrioritySummary is its one real reader today: it filters an
+// existing CoverageReport down to this profile's priorities and
+// renders their already-computed coverage status, never computing a
+// verdict of its own. DataClassifications remains available for a
+// future caller to read when deciding which already-existing
+// scenarios to run first.
 type IndustryProfile struct {
 	Name                 string             `json:"name"`
 	PriorityDomainIDs    []string           `json:"priorityDomainIds"`
@@ -115,6 +121,42 @@ func ManufacturingOTProfile() (IndustryProfile, error) {
 		map[string]float64{"11": 1.0, "09": 0.7, "08": 0.6},
 		"OT-uptime priorities: availability/resilience dominates over confidentiality.",
 	)
+}
+
+// PrioritySummary filters an existing CoverageReport down to this
+// profile's PriorityDomainIDs and renders each one's real
+// CoverageStatus, ordered by BusinessImpactWeight descending (a
+// priority domain with no assigned weight sorts last, at weight 0).
+// It reads CoverageReport, never computes a verdict of its own --
+// consistent with IndustryProfile never becoming a second scoring
+// system. A priority domain absent from the given report is named
+// explicitly, never silently dropped.
+func (p IndustryProfile) PrioritySummary(report CoverageReport) string {
+	if len(p.PriorityDomainIDs) == 0 {
+		return fmt.Sprintf("%s: no priority domains defined", p.Name)
+	}
+
+	byID := make(map[string]DomainCoverage, len(report.domains))
+	for _, d := range report.domains {
+		byID[d.DomainID] = d
+	}
+
+	ids := make([]string, len(p.PriorityDomainIDs))
+	copy(ids, p.PriorityDomainIDs)
+	sort.SliceStable(ids, func(i, j int) bool {
+		return p.BusinessImpactWeight[ids[i]] > p.BusinessImpactWeight[ids[j]]
+	})
+
+	entries := make([]string, 0, len(ids))
+	for _, id := range ids {
+		d, ok := byID[id]
+		if !ok {
+			entries = append(entries, fmt.Sprintf("%s: not present in this report", id))
+			continue
+		}
+		entries = append(entries, fmt.Sprintf("%s %s (weight %.1f): %s", d.DomainID, d.DomainName, p.BusinessImpactWeight[id], d.Status))
+	}
+	return fmt.Sprintf("%s priorities: %s", p.Name, strings.Join(entries, "; "))
 }
 
 // MSPSharedTenantProfile returns the MSP/shared-tenant industry

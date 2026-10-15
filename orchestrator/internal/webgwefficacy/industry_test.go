@@ -1,6 +1,9 @@
 package webgwefficacy
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestNewIndustryProfile_UnknownPriorityDomainID_Errors(t *testing.T) {
 	_, err := NewIndustryProfile("test", []string{"99"}, nil, nil, "")
@@ -81,5 +84,113 @@ func TestMSPSharedTenantProfile_RealDomainReferences(t *testing.T) {
 	}
 	if len(profile.PriorityDomainIDs) == 0 {
 		t.Error("PriorityDomainIDs is empty, want real domain references")
+	}
+}
+
+func TestIndustryProfile_PrioritySummary_SortsByWeightDescendingAndRendersStatus(t *testing.T) {
+	profile, err := NewIndustryProfile(
+		"test-profile",
+		[]string{"01", "02", "03"},
+		nil,
+		map[string]float64{"01": 0.5, "02": 1.0, "03": 0.8},
+		"",
+	)
+	if err != nil {
+		t.Fatalf("NewIndustryProfile: %v", err)
+	}
+	report, err := NewCoverageReport([]DomainCoverage{
+		{DomainID: "01", DomainName: "URL filtering", Status: CoverageCovered},
+		{DomainID: "02", DomainName: "TLS inspection", Status: CoverageNotCovered},
+		{DomainID: "03", DomainName: "DLP", Status: CoverageExcluded, ExclusionReason: "deferred"},
+	})
+	if err != nil {
+		t.Fatalf("NewCoverageReport: %v", err)
+	}
+
+	summary := profile.PrioritySummary(report)
+
+	idxTLS := strings.Index(summary, "02 TLS inspection")
+	idxDLP := strings.Index(summary, "03 DLP")
+	idxURL := strings.Index(summary, "01 URL filtering")
+	if idxTLS == -1 || idxDLP == -1 || idxURL == -1 {
+		t.Fatalf("PrioritySummary() = %q, want all three priority domains rendered", summary)
+	}
+	if !(idxTLS < idxDLP && idxDLP < idxURL) {
+		t.Errorf("PrioritySummary() = %q, want weight-descending order: 02 (1.0), 03 (0.8), 01 (0.5)", summary)
+	}
+	if !strings.Contains(summary, "covered") {
+		t.Errorf("PrioritySummary() = %q, want domain 01's covered status rendered", summary)
+	}
+	if !strings.Contains(summary, "not-covered") {
+		t.Errorf("PrioritySummary() = %q, want domain 02's not-covered status rendered", summary)
+	}
+	if !strings.Contains(summary, "excluded") {
+		t.Errorf("PrioritySummary() = %q, want domain 03's excluded status rendered", summary)
+	}
+}
+
+func TestIndustryProfile_PrioritySummary_PriorityDomainMissingFromReport_NotSilentlyDropped(t *testing.T) {
+	profile, err := NewIndustryProfile("test-profile", []string{"01"}, nil, nil, "")
+	if err != nil {
+		t.Fatalf("NewIndustryProfile: %v", err)
+	}
+	report, err := NewCoverageReport([]DomainCoverage{
+		{DomainID: "02", DomainName: "TLS inspection", Status: CoverageCovered},
+	})
+	if err != nil {
+		t.Fatalf("NewCoverageReport: %v", err)
+	}
+
+	summary := profile.PrioritySummary(report)
+
+	if !strings.Contains(summary, "01") {
+		t.Errorf("PrioritySummary() = %q, want the missing priority domain ID named, never silently dropped", summary)
+	}
+	if !strings.Contains(summary, "not present in this report") {
+		t.Errorf("PrioritySummary() = %q, want an explicit note that domain 01 is absent from the given report", summary)
+	}
+}
+
+func TestIndustryProfile_PrioritySummary_NoPriorityDomains_ReturnsSensibleMessage(t *testing.T) {
+	profile, err := NewIndustryProfile("test-profile", nil, nil, nil, "")
+	if err != nil {
+		t.Fatalf("NewIndustryProfile: %v", err)
+	}
+	report, err := AudspectWebGWCoverageReport()
+	if err != nil {
+		t.Fatalf("AudspectWebGWCoverageReport: %v", err)
+	}
+
+	summary := profile.PrioritySummary(report)
+
+	if summary == "" {
+		t.Error("PrioritySummary() is empty, want a sensible message for a profile with no priority domains")
+	}
+}
+
+// TestBFSINBFCProfile_PrioritySummary_AgainstRealCoverageReport proves
+// an industry profile actually has a real caller: every one of
+// BFSINBFCProfile's priority domains (03, 09, 11) is covered against
+// Audspect's real, current coverage data, not a synthetic report
+// built only for this test.
+func TestBFSINBFCProfile_PrioritySummary_AgainstRealCoverageReport(t *testing.T) {
+	profile, err := BFSINBFCProfile()
+	if err != nil {
+		t.Fatalf("BFSINBFCProfile: %v", err)
+	}
+	report, err := AudspectWebGWCoverageReport()
+	if err != nil {
+		t.Fatalf("AudspectWebGWCoverageReport: %v", err)
+	}
+
+	summary := profile.PrioritySummary(report)
+
+	for _, id := range profile.PriorityDomainIDs {
+		if !strings.Contains(summary, id) {
+			t.Errorf("PrioritySummary() = %q, want priority domain %q named", summary, id)
+		}
+	}
+	if strings.Contains(summary, "not present in this report") {
+		t.Errorf("PrioritySummary() = %q, want every BFSI/NBFC priority domain present in the real coverage report", summary)
 	}
 }
