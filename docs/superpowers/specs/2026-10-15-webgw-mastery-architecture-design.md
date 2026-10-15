@@ -217,7 +217,8 @@ Implemented / Reusable / Planned / Unsupported, per the repository-verified gap 
 | 12. Cross-control attack chains/industry-specific | **Started (Phase 3)** | `ComposeAttackChain` composition primitive built and proven end-to-end by chaining a real HTTP-policy result with a real failure-mode result (`chain.go`). Industry-specific exposure scenarios and chains spanning 3+ steps remain Phase 4 work. |
 | **Vendors** | | |
 | Cloudflare Gateway | Planned → live by end of Phase 2 | First and only locked live target; see §2.3. |
-| Zscaler / Netskope / Forcepoint / Skyhigh / Broadcom / FortiProxy | Planned candidates, access unverified | No commitment to order; each needs its own access/API/licensing verification before any claim of support (Phase 4). |
+| Zscaler | **Unsupported (Phase 4, documented gap)** | No self-serve trial/signup exists; every path routes through Zscaler's own sales/demo gate. See `docs/webgw-mastery-qa-log.md` item #3. |
+| Netskope / Forcepoint / Skyhigh / Broadcom / FortiProxy | Planned candidates, access unverified | Same sales-gated pattern found for the other 5 vendors during Phase 2 research; no commitment to order. |
 | **Industry profiles** | | |
 | BFSI/NBFC, Healthcare, Manufacturing/OT-adjacent, MSP/shared-tenant | Planned (Phase 4) | Configuration layered on the Phase 1-3 scenario library, never a second scoring system. |
 | **Regulatory** | | |
