@@ -54,29 +54,11 @@ func (h *Handler) TriggerTransportSecurityCheckRun(w http.ResponseWriter, r *htt
 		}
 	}
 
-	if (req.TopologyImportID == "") != (req.OTSafetyImportID == "") {
-		jsonError(w, "topologyImportId and otSafetyImportId must be supplied together", http.StatusBadRequest)
+	topo, safety, ok := h.resolveOTSafetyGatingContext(w, r, req.TopologyImportID, req.OTSafetyImportID)
+	if !ok {
 		return
 	}
-	if req.TopologyImportID != "" && req.OTSafetyImportID != "" {
-		topo, err := db.GetNetworkTopologyImport(r.Context(), h.db, req.TopologyImportID)
-		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
-				jsonError(w, "network topology import not found", http.StatusNotFound)
-				return
-			}
-			jsonError(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		safety, err := db.GetOTSafetyImport(r.Context(), h.db, req.OTSafetyImportID)
-		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
-				jsonError(w, "ot safety import not found", http.StatusNotFound)
-				return
-			}
-			jsonError(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
+	if topo != nil && safety != nil {
 		hosts := make([]string, 0, len(req.Checks))
 		for _, c := range req.Checks {
 			hosts = append(hosts, c.Target.Host)

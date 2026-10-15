@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -27,7 +29,7 @@ func validTopologyImportBody() map[string]any {
 
 func networkTopologyImportReq(t *testing.T, pool *pgxpool.Pool, body map[string]any) *http.Request {
 	t.Helper()
-	userID := seedUser(t, pool, "nettopo-op", "pw12345678", string(auth.RoleAnalyst), true)
+	userID := seedUser(t, pool, fmt.Sprintf("nettopo-op-%d", time.Now().UnixNano()), "pw12345678", string(auth.RoleAnalyst), true)
 	b, _ := json.Marshal(body)
 	return authedRequest(t, http.MethodPost, "/api/network-topology-imports", bytes.NewReader(b), auth.RoleAnalyst, userID)
 }

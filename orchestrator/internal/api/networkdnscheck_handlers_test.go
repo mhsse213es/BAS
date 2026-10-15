@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net"
 	"net/http"
@@ -173,10 +174,11 @@ func TestTriggerDNSSecurityCheckRun_DNSSECCheckWithNoTarget_NeverGated(t *testin
 	})
 }
 
-// TestTriggerDNSSecurityCheckRun_PartialSafetyFields_Rejected pins a
-// final-review finding: supplying exactly one of topologyImportId/
-// otSafetyImportId must never silently skip the gate.
-func TestTriggerDNSSecurityCheckRun_PartialSafetyFields_Rejected(t *testing.T) {
+// TestTriggerDNSSecurityCheckRun_TopologyIDExplicit_OTSafetyIDOmitted_AutoResolvesAndGates
+// replaces the old "must be supplied together" rejection: omitting
+// otSafetyImportId must auto-resolve the latest ot safety import and
+// still gate a target in a declared sensitive zone.
+func TestTriggerDNSSecurityCheckRun_TopologyIDExplicit_OTSafetyIDOmitted_AutoResolvesAndGates(t *testing.T) {
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
 		vp := testVantagePoint()
 		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret).WithNetworkVantagePoint(vp)
@@ -185,6 +187,11 @@ func TestTriggerDNSSecurityCheckRun_PartialSafetyFields_Rejected(t *testing.T) {
 			"sourceType": "manual",
 			"zones":      []map[string]any{{"name": "ot", "cidrs": []string{"10.0.2.0/24"}}},
 			"edges":      []map[string]any{},
+		})
+		_ = createTestOTSafetyImport(t, h, pool, map[string]any{
+			"sourceType":     "manual",
+			"sensitiveZones": []map[string]any{{"zoneName": "ot", "tier": "ot"}},
+			"limitations":    []string{"zone names are not cross-validated against a real network-topology import"},
 		})
 
 		body := map[string]any{
@@ -195,7 +202,119 @@ func TestTriggerDNSSecurityCheckRun_PartialSafetyFields_Rejected(t *testing.T) {
 		req := authedRequest(t, http.MethodPost, "/api/dns-security-checks", bytes.NewReader(b), auth.RoleAnalyst, userID)
 		rec := callAuthed(h.TriggerDNSSecurityCheckRun, req)
 		if rec.Code != http.StatusBadRequest {
-			t.Fatalf("status = %d, body = %s, want 400 -- topologyImportId without otSafetyImportId must be rejected, not silently ungated", rec.Code, rec.Body.String())
+			t.Fatalf("status = %d, body = %s, want 400 -- omitting otSafetyImportId must auto-resolve the latest ot safety import and still gate", rec.Code, rec.Body.String())
+		}
+	})
+}
+
+// TestTriggerDNSSecurityCheckRun_BothOmitted_ImportsExist_AutoResolvesAndGates
+// is the regression test for the fixed gap: a caller supplying
+// neither field must still be gated once topology + ot-safety data
+// has been declared.
+func TestTriggerDNSSecurityCheckRun_BothOmitted_ImportsExist_AutoResolvesAndGates(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		vp := testVantagePoint()
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret).WithNetworkVantagePoint(vp)
+		userID := seedUser(t, pool, "dnscheck-op-autoresolve", "pw12345678", string(auth.RoleAnalyst), true)
+		_ = createTestTopologyImport(t, h, pool, map[string]any{
+			"sourceType": "manual",
+			"zones":      []map[string]any{{"name": "ot", "cidrs": []string{"10.0.2.0/24"}}},
+			"edges":      []map[string]any{},
+		})
+		_ = createTestOTSafetyImport(t, h, pool, map[string]any{
+			"sourceType":     "manual",
+			"sensitiveZones": []map[string]any{{"zoneName": "ot", "tier": "ot"}},
+			"limitations":    []string{"zone names are not cross-validated against a real network-topology import"},
+		})
+
+		body := map[string]any{
+			"checks": []map[string]any{{"checkType": "open-resolver", "target": map[string]any{"host": "10.0.2.5", "port": 53}, "queryDomain": "example.com"}},
+		}
+		b, _ := json.Marshal(body)
+		req := authedRequest(t, http.MethodPost, "/api/dns-security-checks", bytes.NewReader(b), auth.RoleAnalyst, userID)
+		rec := callAuthed(h.TriggerDNSSecurityCheckRun, req)
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("status = %d, body = %s, want 400 -- omitting both fields must not bypass gating once topology+ot-safety data has been declared", rec.Code, rec.Body.String())
+		}
+	})
+}
+
+// TestTriggerDNSSecurityCheckRun_ExplicitHistoricalIDs_PinSpecificImport_NotUpgradedToLatest
+// proves an explicit id always wins over auto-resolution.
+func TestTriggerDNSSecurityCheckRun_ExplicitHistoricalIDs_PinSpecificImport_NotUpgradedToLatest(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		vp := testVantagePoint()
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret).WithNetworkVantagePoint(vp)
+		userID := seedUser(t, pool, "dnscheck-op-pin", "pw12345678", string(auth.RoleAnalyst), true)
+
+		olderTopoID := createTestTopologyImport(t, h, pool, map[string]any{
+			"sourceType": "manual",
+			"zones":      []map[string]any{{"name": "benign", "cidrs": []string{"10.0.2.0/24"}}},
+			"edges":      []map[string]any{},
+		})
+		olderSafetyID := createTestOTSafetyImport(t, h, pool, map[string]any{
+			"sourceType":     "manual",
+			"sensitiveZones": []map[string]any{},
+			"limitations":    []string{"zone names are not cross-validated against a real network-topology import"},
+		})
+		_ = createTestTopologyImport(t, h, pool, map[string]any{
+			"sourceType": "manual",
+			"zones":      []map[string]any{{"name": "ot", "cidrs": []string{"10.0.2.0/24"}}},
+			"edges":      []map[string]any{},
+		})
+		_ = createTestOTSafetyImport(t, h, pool, map[string]any{
+			"sourceType":     "manual",
+			"sensitiveZones": []map[string]any{{"zoneName": "ot", "tier": "ot"}},
+			"limitations":    []string{"zone names are not cross-validated against a real network-topology import"},
+		})
+
+		body := map[string]any{
+			"checks":           []map[string]any{{"checkType": "open-resolver", "target": map[string]any{"host": "10.0.2.5", "port": 53}, "queryDomain": "example.com"}},
+			"topologyImportId": olderTopoID,
+			"otSafetyImportId": olderSafetyID,
+		}
+		b, _ := json.Marshal(body)
+		req := authedRequest(t, http.MethodPost, "/api/dns-security-checks", bytes.NewReader(b), auth.RoleAnalyst, userID)
+		rec := callAuthed(h.TriggerDNSSecurityCheckRun, req)
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("status = %d, body = %s, want 201 -- explicit ids must pin the older pair, not be upgraded to the newer, more-restrictive one", rec.Code, rec.Body.String())
+		}
+	})
+}
+
+// TestTriggerDNSSecurityCheckRun_OmittingSafetyFields_NoImportsExist_FailsOpen
+// pins the only legitimate skip: nothing has ever been imported.
+func TestTriggerDNSSecurityCheckRun_OmittingSafetyFields_NoImportsExist_FailsOpen(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		vp := testVantagePoint()
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret).WithNetworkVantagePoint(vp)
+		host, port := startTestDNSServer(t, dns.RcodeRefused)
+		b, _ := json.Marshal(validDNSCheckBody(host, port))
+		userID := seedUser(t, pool, "dnscheck-op-plain", "pw12345678", string(auth.RoleAnalyst), true)
+		req := authedRequest(t, http.MethodPost, "/api/dns-security-checks", bytes.NewReader(b), auth.RoleAnalyst, userID)
+		rec := callAuthed(h.TriggerDNSSecurityCheckRun, req)
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("status = %d, body = %s, want 201 -- omitting the safety fields with no imports ever declared must fail open", rec.Code, rec.Body.String())
+		}
+	})
+}
+
+// TestTriggerDNSSecurityCheckRun_SafetyGatingLookupFailure_FailsClosed
+// proves a genuine lookup failure during auto-resolution fails closed.
+func TestTriggerDNSSecurityCheckRun_SafetyGatingLookupFailure_FailsClosed(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		vp := testVantagePoint()
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret).WithNetworkVantagePoint(vp)
+		host, port := startTestDNSServer(t, dns.RcodeRefused)
+		b, _ := json.Marshal(validDNSCheckBody(host, port))
+		userID := seedUser(t, pool, "dnscheck-op-lookupfail", "pw12345678", string(auth.RoleAnalyst), true)
+		req := authedRequest(t, http.MethodPost, "/api/dns-security-checks", bytes.NewReader(b), auth.RoleAnalyst, userID)
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		req = req.WithContext(ctx)
+		rec := callAuthed(h.TriggerDNSSecurityCheckRun, req)
+		if rec.Code < 500 {
+			t.Fatalf("status = %d, body = %s, want a 5xx -- a lookup failure must fail closed", rec.Code, rec.Body.String())
 		}
 	})
 }

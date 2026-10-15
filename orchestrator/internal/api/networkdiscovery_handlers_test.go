@@ -111,11 +111,12 @@ func TestTriggerNetworkDiscoveryRun_TargetInSensitiveZone_Authorized_Permitted(t
 	})
 }
 
-// TestTriggerNetworkDiscoveryRun_PartialSafetyFields_Rejected pins a
-// final-review finding: supplying exactly one of topologyImportId/
-// otSafetyImportId must never silently skip the gate -- a caller who
-// forgot one field must be told, not probed against unguarded.
-func TestTriggerNetworkDiscoveryRun_PartialSafetyFields_Rejected(t *testing.T) {
+// TestTriggerNetworkDiscoveryRun_TopologyIDExplicit_OTSafetyIDOmitted_AutoResolvesAndGates
+// replaces the old "must be supplied together" rejection: omitting
+// otSafetyImportId must no longer silently skip the gate -- it must
+// auto-resolve the most recently created OT safety import and still
+// gate a target in a declared sensitive zone.
+func TestTriggerNetworkDiscoveryRun_TopologyIDExplicit_OTSafetyIDOmitted_AutoResolvesAndGates(t *testing.T) {
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
 		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret).WithNetworkVantagePoint(testVantagePoint())
 		userID := seedUser(t, pool, "discovery-op-partial", "pw12345678", string(auth.RoleAnalyst), true)
@@ -123,6 +124,11 @@ func TestTriggerNetworkDiscoveryRun_PartialSafetyFields_Rejected(t *testing.T) {
 			"sourceType": "manual",
 			"zones":      []map[string]any{{"name": "ot", "cidrs": []string{"10.0.2.0/24"}}},
 			"edges":      []map[string]any{},
+		})
+		_ = createTestOTSafetyImport(t, h, pool, map[string]any{
+			"sourceType":     "manual",
+			"sensitiveZones": []map[string]any{{"zoneName": "ot", "tier": "ot"}},
+			"limitations":    []string{"zone names are not cross-validated against a real network-topology import"},
 		})
 
 		body := map[string]any{
@@ -133,14 +139,92 @@ func TestTriggerNetworkDiscoveryRun_PartialSafetyFields_Rejected(t *testing.T) {
 		req := authedRequest(t, http.MethodPost, "/api/network-discovery-runs", bytes.NewReader(b), auth.RoleAnalyst, userID)
 		rec := callAuthed(h.TriggerNetworkDiscoveryRun, req)
 		if rec.Code != http.StatusBadRequest {
-			t.Fatalf("status = %d, body = %s, want 400 -- topologyImportId without otSafetyImportId must be rejected, not silently ungated", rec.Code, rec.Body.String())
+			t.Fatalf("status = %d, body = %s, want 400 -- omitting otSafetyImportId must auto-resolve the latest ot safety import and still gate", rec.Code, rec.Body.String())
 		}
 	})
 }
 
-// TestTriggerNetworkDiscoveryRun_OmittingSafetyFields_BehaviorUnchanged
-// pins this plan's Global Constraint for this handler specifically.
-func TestTriggerNetworkDiscoveryRun_OmittingSafetyFields_BehaviorUnchanged(t *testing.T) {
+// TestTriggerNetworkDiscoveryRun_BothOmitted_ImportsExist_AutoResolvesAndGates
+// is the regression test for the fixed gap itself: a caller who
+// supplies neither field at all must still be gated once an operator
+// has declared topology + ot-safety data, not silently probed
+// unguarded by omission.
+func TestTriggerNetworkDiscoveryRun_BothOmitted_ImportsExist_AutoResolvesAndGates(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret).WithNetworkVantagePoint(testVantagePoint())
+		userID := seedUser(t, pool, "discovery-op-autoresolve", "pw12345678", string(auth.RoleAnalyst), true)
+		_ = createTestTopologyImport(t, h, pool, map[string]any{
+			"sourceType": "manual",
+			"zones":      []map[string]any{{"name": "ot", "cidrs": []string{"10.0.2.0/24"}}},
+			"edges":      []map[string]any{},
+		})
+		_ = createTestOTSafetyImport(t, h, pool, map[string]any{
+			"sourceType":     "manual",
+			"sensitiveZones": []map[string]any{{"zoneName": "ot", "tier": "ot"}},
+			"limitations":    []string{"zone names are not cross-validated against a real network-topology import"},
+		})
+
+		body := map[string]any{"targets": []map[string]any{{"host": "10.0.2.5", "port": 502}}}
+		b, _ := json.Marshal(body)
+		req := authedRequest(t, http.MethodPost, "/api/network-discovery-runs", bytes.NewReader(b), auth.RoleAnalyst, userID)
+		rec := callAuthed(h.TriggerNetworkDiscoveryRun, req)
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("status = %d, body = %s, want 400 -- omitting both fields must not bypass gating once topology+ot-safety data has been declared", rec.Code, rec.Body.String())
+		}
+	})
+}
+
+// TestTriggerNetworkDiscoveryRun_ExplicitHistoricalIDs_PinSpecificImport_NotUpgradedToLatest
+// proves an explicit id always wins over auto-resolution: a caller
+// pinning an older topology/safety pair must not be silently upgraded
+// to a newer, more-restrictive pair that also exists.
+func TestTriggerNetworkDiscoveryRun_ExplicitHistoricalIDs_PinSpecificImport_NotUpgradedToLatest(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret).WithNetworkVantagePoint(testVantagePoint())
+		userID := seedUser(t, pool, "discovery-op-pin", "pw12345678", string(auth.RoleAnalyst), true)
+
+		olderTopoID := createTestTopologyImport(t, h, pool, map[string]any{
+			"sourceType": "manual",
+			"zones":      []map[string]any{{"name": "benign", "cidrs": []string{"10.0.2.0/24"}}},
+			"edges":      []map[string]any{},
+		})
+		olderSafetyID := createTestOTSafetyImport(t, h, pool, map[string]any{
+			"sourceType":     "manual",
+			"sensitiveZones": []map[string]any{},
+			"limitations":    []string{"zone names are not cross-validated against a real network-topology import"},
+		})
+		// A newer pair exists and WOULD gate this exact target, but the
+		// request below explicitly pins the older, non-restrictive pair.
+		_ = createTestTopologyImport(t, h, pool, map[string]any{
+			"sourceType": "manual",
+			"zones":      []map[string]any{{"name": "ot", "cidrs": []string{"10.0.2.0/24"}}},
+			"edges":      []map[string]any{},
+		})
+		_ = createTestOTSafetyImport(t, h, pool, map[string]any{
+			"sourceType":     "manual",
+			"sensitiveZones": []map[string]any{{"zoneName": "ot", "tier": "ot"}},
+			"limitations":    []string{"zone names are not cross-validated against a real network-topology import"},
+		})
+
+		body := map[string]any{
+			"targets":          []map[string]any{{"host": "10.0.2.5", "port": 502}},
+			"topologyImportId": olderTopoID,
+			"otSafetyImportId": olderSafetyID,
+		}
+		b, _ := json.Marshal(body)
+		req := authedRequest(t, http.MethodPost, "/api/network-discovery-runs", bytes.NewReader(b), auth.RoleAnalyst, userID)
+		rec := callAuthed(h.TriggerNetworkDiscoveryRun, req)
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("status = %d, body = %s, want 201 -- explicit ids must pin the older pair, not be upgraded to the newer, more-restrictive one", rec.Code, rec.Body.String())
+		}
+	})
+}
+
+// TestTriggerNetworkDiscoveryRun_OmittingSafetyFields_NoImportsExist_FailsOpen
+// pins the only case where safety gating is legitimately skipped:
+// nothing has ever been imported, so there is nothing to check a
+// target's zone against.
+func TestTriggerNetworkDiscoveryRun_OmittingSafetyFields_NoImportsExist_FailsOpen(t *testing.T) {
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
 		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret).WithNetworkVantagePoint(testVantagePoint())
 		userID := seedUser(t, pool, "discovery-op-plain", "pw12345678", string(auth.RoleAnalyst), true)
@@ -149,7 +233,27 @@ func TestTriggerNetworkDiscoveryRun_OmittingSafetyFields_BehaviorUnchanged(t *te
 		req := authedRequest(t, http.MethodPost, "/api/network-discovery-runs", bytes.NewReader(b), auth.RoleAnalyst, userID)
 		rec := callAuthed(h.TriggerNetworkDiscoveryRun, req)
 		if rec.Code != http.StatusCreated {
-			t.Fatalf("status = %d, body = %s, want 201 -- omitting the new safety fields must behave exactly as before this task", rec.Code, rec.Body.String())
+			t.Fatalf("status = %d, body = %s, want 201 -- omitting the safety fields with no imports ever declared must fail open", rec.Code, rec.Body.String())
+		}
+	})
+}
+
+// TestTriggerNetworkDiscoveryRun_SafetyGatingLookupFailure_FailsClosed
+// proves a genuine lookup failure during auto-resolution is never
+// treated as "nothing was imported" -- the probe must be rejected.
+func TestTriggerNetworkDiscoveryRun_SafetyGatingLookupFailure_FailsClosed(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret).WithNetworkVantagePoint(testVantagePoint())
+		userID := seedUser(t, pool, "discovery-op-lookupfail", "pw12345678", string(auth.RoleAnalyst), true)
+		body := map[string]any{"targets": []map[string]any{{"host": "127.0.0.1", "port": 1}}}
+		b, _ := json.Marshal(body)
+		req := authedRequest(t, http.MethodPost, "/api/network-discovery-runs", bytes.NewReader(b), auth.RoleAnalyst, userID)
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		req = req.WithContext(ctx)
+		rec := callAuthed(h.TriggerNetworkDiscoveryRun, req)
+		if rec.Code < 500 {
+			t.Fatalf("status = %d, body = %s, want a 5xx -- a lookup failure must fail closed, not proceed unguarded", rec.Code, rec.Body.String())
 		}
 	})
 }
