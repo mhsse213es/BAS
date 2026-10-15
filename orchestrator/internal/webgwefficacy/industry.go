@@ -1,0 +1,125 @@
+package webgwefficacy
+
+import "fmt"
+
+// IndustryProfile is pure configuration -- priorities, data
+// classifications, and business-impact weighting layered onto this
+// package's existing scenario library. It computes nothing and
+// verifies nothing itself, and never gains a method returning a
+// WebGWVerdict or VerdictDetail -- per the architecture spec's own
+// explicit instruction, an industry profile is never a second scoring
+// system. A caller applies a profile by reading its
+// PriorityDomainIDs and DataClassifications when deciding which
+// already-existing scenarios to run first, and BusinessImpactWeight
+// when weighting an already-computed verdict's business impact.
+type IndustryProfile struct {
+	Name                 string             `json:"name"`
+	PriorityDomainIDs    []string           `json:"priorityDomainIds"`
+	DataClassifications  []string           `json:"dataClassifications"`
+	BusinessImpactWeight map[string]float64 `json:"businessImpactWeight"`
+	Note                 string             `json:"note,omitempty"`
+}
+
+// NewIndustryProfile validates at construction time that every
+// domain ID this profile references -- in priorityDomainIDs and as
+// businessImpactWeight keys -- is one of Audspect's real, current
+// WebGW domains per AudspectWebGWCoverageReport's own 12-domain set,
+// never a fictional or stale reference.
+func NewIndustryProfile(
+	name string,
+	priorityDomainIDs []string,
+	dataClassifications []string,
+	businessImpactWeight map[string]float64,
+	note string,
+) (IndustryProfile, error) {
+	report, err := AudspectWebGWCoverageReport()
+	if err != nil {
+		return IndustryProfile{}, fmt.Errorf("loading domain set: %w", err)
+	}
+	known := make(map[string]bool, len(report.domains))
+	for _, d := range report.domains {
+		known[d.DomainID] = true
+	}
+	for _, id := range priorityDomainIDs {
+		if !known[id] {
+			return IndustryProfile{}, fmt.Errorf("priority domain ID %q is not one of Audspect's real WebGW domains", id)
+		}
+	}
+	for id := range businessImpactWeight {
+		if !known[id] {
+			return IndustryProfile{}, fmt.Errorf("business-impact-weight domain ID %q is not one of Audspect's real WebGW domains", id)
+		}
+	}
+	return IndustryProfile{
+		Name:                 name,
+		PriorityDomainIDs:    priorityDomainIDs,
+		DataClassifications:  dataClassifications,
+		BusinessImpactWeight: businessImpactWeight,
+		Note:                 note,
+	}, nil
+}
+
+// BFSINBFCProfile returns the BFSI/NBFC industry profile. Financial
+// data protection, strict configuration change control, and
+// availability dominate; DLP (03), configuration drift (09), and
+// availability/resilience (11) are prioritized -- matching
+// RBI/CERT-In's own emphasis on data residency, encryption, and
+// perimeter controls (see the real obligations mapped in
+// regulatory_test.go).
+func BFSINBFCProfile() (IndustryProfile, error) {
+	return NewIndustryProfile(
+		"BFSI/NBFC",
+		[]string{"03", "09", "11"},
+		[]string{"PII", "financial-transaction-data", "payment-card-data"},
+		map[string]float64{"03": 1.0, "09": 0.8, "11": 0.9},
+		"Financial-sector priorities: data loss prevention, configuration-drift control, and availability dominate.",
+	)
+}
+
+// HealthcareProfile returns the Healthcare industry profile.
+// Patient-data protection dominates: TLS inspection of PHI in transit
+// (02), DLP (03), and CASB/shadow-IT detection for unauthorized SaaS
+// carrying patient data (06) are prioritized.
+func HealthcareProfile() (IndustryProfile, error) {
+	return NewIndustryProfile(
+		"Healthcare",
+		[]string{"02", "03", "06"},
+		[]string{"PHI", "PII"},
+		map[string]float64{"02": 0.9, "03": 1.0, "06": 0.8},
+		"Patient-data-protection priorities: TLS inspection of PHI in transit, DLP, and CASB dominate.",
+	)
+}
+
+// ManufacturingOTProfile returns the Manufacturing/OT-adjacent
+// industry profile. OT uptime dominates over confidentiality:
+// availability/resilience (11), configuration drift (09), and
+// egress-bypass control for unusual OT network patterns (08) are
+// prioritized. This profile is configuration only, never a probe --
+// the architecture spec's own safety contract already prohibits any
+// active probing into OT-adjacent deployments without a
+// separately-approved test design, and nothing in this profile
+// initiates one.
+func ManufacturingOTProfile() (IndustryProfile, error) {
+	return NewIndustryProfile(
+		"Manufacturing/OT-adjacent",
+		[]string{"11", "09", "08"},
+		[]string{"OT-telemetry", "industrial-control-data"},
+		map[string]float64{"11": 1.0, "09": 0.7, "08": 0.6},
+		"OT-uptime priorities: availability/resilience dominates over confidentiality.",
+	)
+}
+
+// MSPSharedTenantProfile returns the MSP/shared-tenant industry
+// profile. Tenant isolation dominates: CASB/tenant-isolation (06),
+// identity-scoped per-client policy differentiation (05), and
+// cross-control chains (12, since each client relationship must be
+// proven separately) are prioritized.
+func MSPSharedTenantProfile() (IndustryProfile, error) {
+	return NewIndustryProfile(
+		"MSP/shared-tenant",
+		[]string{"06", "05", "12"},
+		[]string{"multi-tenant-client-data"},
+		map[string]float64{"06": 1.0, "05": 0.9, "12": 0.8},
+		"Multi-tenant priorities: tenant isolation and per-client policy differentiation dominate.",
+	)
+}
