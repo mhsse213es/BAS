@@ -36,6 +36,36 @@ func NewDefenderDetectionProviderFromClient(client *defender.Client) *DefenderDe
 	return &DefenderDetectionProvider{client: client}
 }
 
+// DefenderMailEvidenceProvider composes AnalyzedEmailEvidenceProvider
+// (enforcement, via analyzedEmails) and DefenderDetectionProvider
+// (detection, via alerts_v2) into one full MailEvidenceProvider backed
+// entirely by real Microsoft 365 Defender for Office 365 APIs -- the
+// live adapter Phase 3's own exit criteria describes, now that both
+// halves exist. Both embedded providers share one underlying
+// defender.Client (and therefore one token source), since both Graph
+// calls use the same graph.microsoft.com/.default scope.
+type DefenderMailEvidenceProvider struct {
+	*AnalyzedEmailEvidenceProvider
+	*DefenderDetectionProvider
+}
+
+// NewDefenderMailEvidenceProvider builds the composed provider from
+// tenant credentials, same no-fail-on-empty-credentials behavior as
+// defender.New.
+func NewDefenderMailEvidenceProvider(cfg defender.Config) *DefenderMailEvidenceProvider {
+	return NewDefenderMailEvidenceProviderFromClient(defender.New(cfg))
+}
+
+// NewDefenderMailEvidenceProviderFromClient takes an
+// already-constructed defender.Client, so tests can inject one
+// pointed at an httptest server.
+func NewDefenderMailEvidenceProviderFromClient(client *defender.Client) *DefenderMailEvidenceProvider {
+	return &DefenderMailEvidenceProvider{
+		AnalyzedEmailEvidenceProvider: NewAnalyzedEmailEvidenceProviderFromClient(client),
+		DefenderDetectionProvider:     NewDefenderDetectionProviderFromClient(client),
+	}
+}
+
 // DetectionEvidenceFor queries Graph security alerts in window,
 // correlating by msg.Recipient via QueryMailAlerts' own documented,
 // provisional substring heuristic -- MailEvidenceProvider's interface

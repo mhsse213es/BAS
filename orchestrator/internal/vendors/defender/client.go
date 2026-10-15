@@ -189,7 +189,7 @@ func (c *Client) ResolveDevice(ctx context.Context, hostname string) (string, er
 	if err != nil {
 		return "", err
 	}
-	filter := fmt.Sprintf("computerDnsName eq '%s'", escapeODataString(hostname))
+	filter := fmt.Sprintf("computerDnsName eq '%s'", EscapeODataString(hostname))
 	reqURL := c.ActionBaseURL + "/machines?" + url.Values{"$filter": {filter}}.Encode()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
 	if err != nil {
@@ -331,10 +331,157 @@ func (c *Client) machineAction(ctx context.Context, deviceID, verb string, body 
 	return out.ID, nil
 }
 
-// escapeODataString escapes a value for embedding in an OData $filter
+// EscapeODataString escapes a value for embedding in an OData $filter
 // string literal, per the OData convention of doubling single quotes.
-func escapeODataString(s string) string {
+// Exported so other packages building their own $filter clauses
+// against this same Graph API (e.g. emailgwefficacy's
+// AnalyzedEmailEvidenceProvider) reuse this one escaping rule instead
+// of keeping an independent copy that could silently diverge from it.
+func EscapeODataString(s string) string {
 	return strings.ReplaceAll(s, "'", "''")
+}
+
+// AnalyzedEmail is one normalized record from Microsoft Graph's
+// GET /security/collaboration/analyzedEmails -- a v1.0, stable (not
+// beta) endpoint confirmed against Microsoft's own reference docs
+// (docs/emailgw-mastery-qa-log.md item #1), the REST backing for the
+// Defender portal's Threat Explorer. DeliveryAction/DeliveryLocation
+// are Graph's own enum strings, unmodified -- mapping them into
+// emailgwefficacy's canonical action vocabulary is that package's
+// job, not this client's, matching QueryAlerts' own
+// normalize-nothing-here precedent.
+type AnalyzedEmail struct {
+	ID                       string
+	NetworkMessageID         string
+	InternetMessageID        string
+	RecipientEmailAddress    string
+	Subject                  string
+	LoggedDateTime           time.Time
+	Policy                   string
+	PolicyAction             string
+	LatestDeliveryAction     string // Graph enum: unknown|deliveredToJunk|delivered|blocked|replaced|unknownFutureValue
+	LatestDeliveryLocation   string // Graph enum: unknown|inbox_folder|junkFolder|deletedFolder|quarantine|onprem_external|failed|dropped|others|unknownFutureValue
+	OriginalDeliveryAction   string
+	OriginalDeliveryLocation string
+	SPF                      string
+	DKIM                     string
+	DMARC                    string
+	CompositeAuthentication  string
+	AlertIDs                 []string
+	RawJSON                  json.RawMessage
+}
+
+type graphDeliveryDetail struct {
+	Action   string `json:"action"`
+	Location string `json:"location"`
+}
+
+type graphAuthenticationDetail struct {
+	SPF                     string `json:"senderPolicyFramework"`
+	DKIM                    string `json:"dkim"`
+	DMARC                   string `json:"dmarc"`
+	CompositeAuthentication string `json:"compositeAuthentication"`
+}
+
+type graphAnalyzedEmail struct {
+	ID                    string                     `json:"id"`
+	LoggedDateTime        string                     `json:"loggedDateTime"`
+	NetworkMessageID      string                     `json:"networkMessageId"`
+	InternetMessageID     string                     `json:"internetMessageId"`
+	RecipientEmailAddress string                     `json:"recipientEmailAddress"`
+	Subject               string                     `json:"subject"`
+	Policy                string                     `json:"policy"`
+	PolicyAction          string                     `json:"policyAction"`
+	OriginalDelivery      *graphDeliveryDetail       `json:"originalDelivery"`
+	LatestDelivery        *graphDeliveryDetail       `json:"latestDelivery"`
+	AuthenticationDetails *graphAuthenticationDetail `json:"authenticationDetails"`
+	AlertIds              []string                   `json:"alertIds"`
+}
+
+type graphAnalyzedEmailsResponse struct {
+	Value []json.RawMessage `json:"value"`
+}
+
+// QueryAnalyzedEmails queries GET /security/collaboration/analyzedEmails,
+// bounded by start/end and the given OData $filter (e.g.
+// "recipientEmailAddress eq 'finance-test@example-lab.test'" -- the
+// confirmed-documented correlation pattern). filter may be empty to
+// return every analyzed email in the window. Uses the same alerts
+// token source as QueryAlerts/QueryMailAlerts -- analyzedEmails is
+// under the same graph.microsoft.com/.default scope, no new OAuth
+// scope or credential model required.
+func (c *Client) QueryAnalyzedEmails(ctx context.Context, start, end time.Time, filter string) ([]AnalyzedEmail, error) {
+	token, err := c.tokens.Token(ctx)
+	if err != nil {
+		return nil, err
+	}
+	q := url.Values{
+		"startTime": {start.UTC().Format(time.RFC3339)},
+		"endTime":   {end.UTC().Format(time.RFC3339)},
+	}
+	if filter != "" {
+		q.Set("$filter", filter)
+	}
+	reqURL := c.BaseURL + "/security/collaboration/analyzedEmails?" + q.Encode()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("defender analyzed emails query: %w", err)
+	}
+	defer resp.Body.Close()
+	data, _ := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
+	if resp.StatusCode >= 400 {
+		return nil, fmt.Errorf("defender analyzed emails query: HTTP %d: %s", resp.StatusCode, data)
+	}
+	var out graphAnalyzedEmailsResponse
+	if err := json.Unmarshal(data, &out); err != nil {
+		return nil, fmt.Errorf("defender analyzed emails: parse response: %w", err)
+	}
+
+	emails := make([]AnalyzedEmail, 0, len(out.Value))
+	for _, raw := range out.Value {
+		var ge graphAnalyzedEmail
+		if err := json.Unmarshal(raw, &ge); err != nil {
+			continue
+		}
+		// A record whose timestamp can't be parsed is excluded
+		// entirely rather than kept with a zero-value Timestamp --
+		// callers (e.g. latestByTimestamp) pick the "most recent"
+		// record by comparing Timestamp, and a silently-zeroed one
+		// would almost always lose a tie-break it should have won,
+		// the same silent-wrong-verdict failure mode this package
+		// already guards against for an unmappable delivery action.
+		logged, err := time.Parse(time.RFC3339, ge.LoggedDateTime)
+		if err != nil {
+			continue
+		}
+		ae := AnalyzedEmail{
+			ID: ge.ID, NetworkMessageID: ge.NetworkMessageID, InternetMessageID: ge.InternetMessageID,
+			RecipientEmailAddress: ge.RecipientEmailAddress, Subject: ge.Subject,
+			LoggedDateTime: logged, Policy: ge.Policy, PolicyAction: ge.PolicyAction,
+			AlertIDs: ge.AlertIds, RawJSON: raw,
+		}
+		if ge.OriginalDelivery != nil {
+			ae.OriginalDeliveryAction = ge.OriginalDelivery.Action
+			ae.OriginalDeliveryLocation = ge.OriginalDelivery.Location
+		}
+		if ge.LatestDelivery != nil {
+			ae.LatestDeliveryAction = ge.LatestDelivery.Action
+			ae.LatestDeliveryLocation = ge.LatestDelivery.Location
+		}
+		if ge.AuthenticationDetails != nil {
+			ae.SPF = ge.AuthenticationDetails.SPF
+			ae.DKIM = ge.AuthenticationDetails.DKIM
+			ae.DMARC = ge.AuthenticationDetails.DMARC
+			ae.CompositeAuthentication = ge.AuthenticationDetails.CompositeAuthentication
+		}
+		emails = append(emails, ae)
+	}
+	return emails, nil
 }
 
 func (c *Client) queryRaw(ctx context.Context, start, end time.Time) ([]json.RawMessage, error) {
