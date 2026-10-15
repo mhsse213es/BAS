@@ -30,6 +30,15 @@ type MutationResult struct {
 // correct baseline is itself Fail (a negative-case scenario) can
 // still be mutation-tested and correctly recovers by returning to
 // that same Fail.
+// Proven reports whether this mutation test fully proves Phase 5's
+// own exit criterion -- both that a regression was caught AND that
+// recovery was confirmed after reverting it. Checking CaughtRegression
+// or RecoveryConfirmed alone is a half-proof; Proven is the single
+// field a caller should check to claim "mutation testing passed."
+func (r MutationResult) Proven() bool {
+	return r.CaughtRegression && r.RecoveryConfirmed
+}
+
 func RunMutationTest(
 	scenarioLabel string,
 	runBaseline, runMutated, runRestored func() VerdictDetail,

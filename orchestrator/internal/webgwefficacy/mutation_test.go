@@ -57,6 +57,28 @@ func TestRunMutationTest_RestoredStillBroken_RecoveryNotConfirmed(t *testing.T) 
 	}
 }
 
+func TestMutationResult_Proven_RequiresBothCaughtAndRecovered(t *testing.T) {
+	cases := []struct {
+		name              string
+		caughtRegression  bool
+		recoveryConfirmed bool
+		wantProven        bool
+	}{
+		{"both true", true, true, true},
+		{"caught only", true, false, false},
+		{"recovered only", false, true, false},
+		{"neither", false, false, false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			result := MutationResult{CaughtRegression: c.caughtRegression, RecoveryConfirmed: c.recoveryConfirmed}
+			if got := result.Proven(); got != c.wantProven {
+				t.Errorf("Proven() = %v, want %v -- a half-proof (only one of catch/recovery true) must never report as fully proven", got, c.wantProven)
+			}
+		})
+	}
+}
+
 func TestRunMutationTest_NegativeBaselineFail_RecoveryConfirmedAgainstFailBaseline(t *testing.T) {
 	result := RunMutationTest("negative-case-scenario",
 		fixedVerdict(VerdictFail),

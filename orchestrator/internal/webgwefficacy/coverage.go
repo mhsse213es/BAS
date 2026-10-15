@@ -50,6 +50,11 @@ func NewCoverageReport(domains []DomainCoverage) (CoverageReport, error) {
 			return CoverageReport{}, fmt.Errorf("duplicate domain ID %q", d.DomainID)
 		}
 		seen[d.DomainID] = true
+		switch d.Status {
+		case CoverageCovered, CoverageExcluded, CoverageNotCovered:
+		default:
+			return CoverageReport{}, fmt.Errorf("domain %q has unrecognized status %q", d.DomainID, d.Status)
+		}
 		if d.Status == CoverageExcluded && d.ExclusionReason == "" {
 			return CoverageReport{}, fmt.Errorf("domain %q marked excluded with no documented reason", d.DomainID)
 		}
