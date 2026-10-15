@@ -82,17 +82,17 @@ This is the single place to check before claiming WebGW Mastery is "done" or mak
 
 **Resolution path:** revisit if/when this package gains a production caller (see item #4) that would actually exercise these edges.
 
-### 7. `VerifyPolicyBaselineExpectation` never checks `StillActive` outside the exception-expiry path -- a disabled rule can still verdict `Pass`
-
-**Status:** Open, found during Phase 2b's final-review pass (2026-10-15). Pre-existing in Phase 3's `drift.go`, not introduced by Phase 2b -- `CloudflareGatewayPolicyProvider` is simply the first real, live producer of a meaningful `StillActive` value, which is what gives this gap real consequence for the first time.
-
-**What's wrong:** `VerifyPolicyBaselineExpectation` (`drift.go`) only ever reads a record's `StillActive` field inside the expired-exception check (`exp.ExceptionExpiresAt != nil && asOf.After(*exp.ExceptionExpiresAt) && latest.StillActive`). When no exception is declared -- the normal case -- a rule that is fully disabled in the real Cloudflare console (`enabled: true` → `false`) with its `action`/`filters`/`traffic` otherwise untouched produces an *identical* `ObservedConfigHash` (deliberately, since `configHashFor` hashes only the fields that determine enforced behavior) and therefore an unchanged `Pass` verdict -- even though the rule is no longer enforcing anything live.
-
-**Why this matters:** a reasonable user reading a `Pass` on a policy-baseline check would assume the control is actively enforcing. A disabled-but-otherwise-correctly-configured rule would pass that check regardless.
-
-**Resolution path:** `VerifyPolicyBaselineExpectation`'s comparison logic needs its own `Fail` branch for `!latest.StillActive` independent of the exception-expiry check -- a behavioral change to a function every `PolicyConfigEvidenceProvider` caller depends on (fixture and live alike), not scoped to Cloudflare specifically. This deserves its own brainstorm/plan cycle rather than a fix folded into Phase 2b's review pass, since changing shared verdict logic touches domain 09's existing fixture-backed tests too and needs its own regression coverage.
-
 ## Resolved items
+
+### 7. `VerifyPolicyBaselineExpectation` never checks `StillActive` outside the exception-expiry path -- a disabled rule can still verdict `Pass` — RESOLVED 2026-10-15
+
+**Status:** Resolved. Found during Phase 2b's final-review pass; pre-existing in Phase 3's `drift.go`, not introduced by Phase 2b -- `CloudflareGatewayPolicyProvider` was simply the first real, live producer of a meaningful `StillActive` value, which is what gave this gap real consequence for the first time.
+
+**What was wrong:** `VerifyPolicyBaselineExpectation` (`drift.go`) only ever read a record's `StillActive` field inside the expired-exception check (`exp.ExceptionExpiresAt != nil && asOf.After(*exp.ExceptionExpiresAt) && latest.StillActive`). When no exception was declared -- the normal case -- a rule fully disabled in the real Cloudflare console (`enabled: true` → `false`) with its `action`/`filters`/`traffic` otherwise untouched produced an *identical* `ObservedConfigHash` (deliberately, since `configHashFor` hashes only the fields that determine enforced behavior) and therefore an unchanged `Pass` verdict -- even though the rule was no longer enforcing anything live.
+
+**What changed (`ebae9d1c`):** added an independent `!latest.StillActive` → `Fail` branch before the exception-expiry check; simplified that branch's own condition (dropped the now-redundant `&& latest.StillActive`, since reaching it now guarantees StillActive is true). Fixed 3 pre-existing tests (`HashMatches_Pass`, `HashMismatch_Fail`, `MultipleRecords_MostRecentWins`) that implicitly relied on `StillActive`'s Go zero-value default never mattering outside the exception path -- they now explicitly set `StillActive: true`. Added a dedicated negative test (`DisabledRuleMatchingHash_Fail`) reproducing the exact gap (disabled rule, matching hash, no exception declared), confirmed it failed against the pre-fix code, then confirmed the fix made it pass.
+
+**Independently reviewed 2026-10-15:** a fresh reviewer walked all 2×3×2 `(StillActive) x (exception state) x (hash)` combinations by hand, confirmed none produce an unreasonable verdict, traced `TestPolicyCorrectnessScenario_CloudflareRealResponseShape_FlowsThroughExistingPipeline` field-by-field to confirm it's genuinely unaffected (not just untouched by luck), confirmed the function's only callers are inside this package, and reran the full suite (133/0), `go vet`, `gofmt`, and the zero-cross-package-dependency check. No Critical or Important findings. One deferred Minor: `TestVerifyPolicyBaselineExpectation_ProviderErrorWithRecords_RecordsIgnored`'s `PolicyConfigEvidence` literal still omits `StillActive` (correctly irrelevant -- the error path returns before `latest` is ever read -- but worth a one-line comment for a future reader scanning for every literal that needs it). Not fixed; cosmetic only.
 
 ### 8. Branch reconciliation with `main`'s own parallel WebGW Mastery work — RESOLVED 2026-10-15
 
