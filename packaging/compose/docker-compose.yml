@@ -213,6 +213,14 @@ services:
       OPENCTI_URL:             ${OPENCTI_URL:-}
       OPENCTI_API_KEY:         ${OPENCTI_API_KEY:-}
       THREAT_INTEL_POLL_HOURS: ${THREAT_INTEL_POLL_HOURS:-24}
+      # ── Threat-Content-Factory validation lab (TCF Phase 6, optional) ────────
+      # Blank agent ID keeps the lab disabled ("[validationlab] disabled"). Set
+      # it to the agent_id of an enrolled agent flagged is_factory_lab=true (a
+      # DEDICATED agent -- it is then barred from normal assessment runs) to
+      # advance generated content Candidate -> Validated -> Published. Poll
+      # interval defaults to 5 minutes.
+      VALIDATION_LAB_AGENT_ID:     ${VALIDATION_LAB_AGENT_ID:-}
+      VALIDATION_LAB_POLL_MINUTES: ${VALIDATION_LAB_POLL_MINUTES:-5}
       # ── OTX IOC Enrichment (optional — leave blank to disable) ───────────────
       # Distinct from the MISP/OpenCTI connector above — enriches run_iocs
       # (extracted indicators) against LevelBLUE OTX. See internal/ioc.

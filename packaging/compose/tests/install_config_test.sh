@@ -69,5 +69,17 @@ out="$(run_case '')"
 grep -q '^BAS_ENROLL_PORT=9444$' <<<"$out" && pass "BAS_ENROLL_PORT blank -> install.sh default (9444)" || fail "BAS_ENROLL_PORT default: $out"
 grep -q '^BAS_LEGACY_PORT=9000$' <<<"$out" && pass "BAS_LEGACY_PORT blank -> install.sh default (9000)" || fail "BAS_LEGACY_PORT default: $out"
 
+# TCF Phase 6 validation lab: the agent ID and poll interval must flow from
+# setup.conf through to .env so docker-compose can forward them to the
+# orchestrator (which otherwise logs "[validationlab] disabled").
+out="$(run_case 'VALIDATION_LAB_AGENT_ID=agent-abc-123')"
+grep -q '^VALIDATION_LAB_AGENT_ID=agent-abc-123$' <<<"$out" && pass "VALIDATION_LAB_AGENT_ID reaches .env" || fail "VALIDATION_LAB_AGENT_ID set: $out"
+
+out="$(run_case '')"
+grep -q '^VALIDATION_LAB_AGENT_ID=$' <<<"$out" && pass "VALIDATION_LAB_AGENT_ID blank -> empty (lab stays disabled)" || fail "VALIDATION_LAB_AGENT_ID default: $out"
+
+out="$(run_case 'VALIDATION_LAB_POLL_MINUTES=10')"
+grep -q '^VALIDATION_LAB_POLL_MINUTES=10$' <<<"$out" && pass "VALIDATION_LAB_POLL_MINUTES reaches .env" || fail "poll set: $out"
+
 echo
 [[ $fails -eq 0 ]] && echo "ALL PASS" || { echo "${fails} FAILED"; exit 1; }
