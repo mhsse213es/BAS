@@ -80,12 +80,7 @@ func VerifyTLSInspectionExpectation(
 			Reason:  "no TLS inspection evidence found for this request in the window; absence of evidence is not proof of inspection or bypass",
 		}
 	}
-	latest := records[0]
-	for _, r := range records {
-		if r.Timestamp.After(latest.Timestamp) {
-			latest = r
-		}
-	}
+	latest := latestByTimestamp(records, func(e TLSInspectionEvidence) time.Time { return e.Timestamp })
 	if latest.WasInspected == exp.ExpectedInspected {
 		return VerdictDetail{Verdict: VerdictPass}
 	}

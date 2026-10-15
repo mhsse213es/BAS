@@ -85,12 +85,7 @@ func VerifyFailureModeExpectation(
 			Reason:  "no failure-mode evidence found for this outage scenario in the window",
 		}
 	}
-	latest := records[0]
-	for _, r := range records {
-		if r.Timestamp.After(latest.Timestamp) {
-			latest = r
-		}
-	}
+	latest := latestByTimestamp(records, func(e FailureModeEvidence) time.Time { return e.Timestamp })
 	if latest.ObservedBehavior == exp.ExpectedBehavior {
 		return VerdictDetail{Verdict: VerdictPass}
 	}

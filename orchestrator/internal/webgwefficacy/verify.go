@@ -2,7 +2,7 @@ package webgwefficacy
 
 import (
 	"fmt"
-	"sort"
+	"time"
 )
 
 // unsupportedResponseReason is this phase's constant reason for every
@@ -72,8 +72,5 @@ func VerifyHTTPExpectation(
 // request more faithfully than an earlier one (retries, duplicate log
 // lines, a policy change mid-test).
 func latestGatewayEvidence(records []GatewayEvidence) GatewayEvidence {
-	sorted := make([]GatewayEvidence, len(records))
-	copy(sorted, records)
-	sort.Slice(sorted, func(i, j int) bool { return sorted[i].Timestamp.Before(sorted[j].Timestamp) })
-	return sorted[len(sorted)-1]
+	return latestByTimestamp(records, func(e GatewayEvidence) time.Time { return e.Timestamp })
 }

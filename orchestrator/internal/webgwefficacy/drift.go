@@ -83,12 +83,7 @@ func VerifyPolicyBaselineExpectation(
 			Reason:  "no policy configuration evidence found for this rule in the window",
 		}
 	}
-	latest := records[0]
-	for _, r := range records {
-		if r.Timestamp.After(latest.Timestamp) {
-			latest = r
-		}
-	}
+	latest := latestByTimestamp(records, func(e PolicyConfigEvidence) time.Time { return e.Timestamp })
 	if exp.ExceptionExpiresAt != nil && asOf.After(*exp.ExceptionExpiresAt) && latest.StillActive {
 		return VerdictDetail{
 			Verdict: VerdictFail,

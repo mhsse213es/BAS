@@ -37,6 +37,25 @@ func inWindow(t time.Time, window TimeWindow) bool {
 	return !t.Before(window.Start) && !t.After(window.End)
 }
 
+// latestByTimestamp returns the record with the latest timestamp, as
+// reported by ts. A later event reflects a system's final state more
+// faithfully than an earlier one (retries, duplicate log lines, a
+// state change mid-test) -- every evidence-selection function in this
+// package uses this same tie-break rule: ties keep the first
+// occurrence of the maximum, since a strict After comparison never
+// treats an equal timestamp as later. records must be non-empty;
+// every caller already returns early when its own evidence slice is
+// empty, before this is ever invoked.
+func latestByTimestamp[T any](records []T, ts func(T) time.Time) T {
+	latest := records[0]
+	for _, r := range records {
+		if ts(r).After(ts(latest)) {
+			latest = r
+		}
+	}
+	return latest
+}
+
 // FixtureGatewayProvider wraps an in-memory slice of hand-built
 // GatewayEvidence values -- no real vendor API call happens in this
 // phase; the live Cloudflare Gateway adapter is Phase 2's

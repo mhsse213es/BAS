@@ -208,13 +208,13 @@ Implemented / Reusable / Planned / Unsupported, per the repository-verified gap 
 | 03. DLP and web exfiltration | **Reusable now** | `cloudsink`/`webhooksink`/`dlp_sink.go` plus existing scenario YAMLs; needs a gateway-side policy-verdict layer on top (Phase 2). |
 | 04. Malware/exploit delivery/file protection | Planned (Phase 3+) | Net-new; EICAR-class download testing not yet designed. |
 | 05. Identity/auth/policy assignment | Planned (Phase 2) | Net-new; first vertical includes one identity-scoped policy case. |
-| 06. SaaS/shadow IT/CASB | Partially reusable / Planned (Phase 3) | Upload-destination overlap with domain 03's assets; CASB-specific verdicts net-new. |
+| 06. SaaS/shadow IT/CASB | **Fixture-backed coverage added (Phase 3)** | Personal-vs-corporate-tenant distinction proven end-to-end against Phase 1's `HTTPExpectation` pipeline, unchanged (`scenarios_test.go`). No live vendor adapter; CASB-specific risk scoring beyond the tenant-distinction case remains unbuilt. |
 | 07. DNS/covert channels/C2 | Existing in a different domain, Planned here (Phase 3+) | `dnssink`/`dlp-exfiltration-dns-tunnel.yaml` stay untouched (data-movement domain); gateway-side DNS policy is a distinct, not-yet-built capability. |
-| 08. Proxy bypass/egress control | Planned (Phase 3) | Net-new. |
-| 09. Configuration drift/administration | Planned (Phase 3) | Net-new; may imitate `regobligation`'s snapshot pattern structurally. |
+| 08. Proxy bypass/egress control | **Fixture-backed coverage added (Phase 3)** | DNS-over-HTTPS bypass scenario proven end-to-end against Phase 1's `HTTPExpectation` pipeline, unchanged (`scenarios_test.go`). PAC/WPAD and other alternate-protocol bypass vectors remain unbuilt. |
+| 09. Configuration drift/administration | **Fixture-backed coverage added (Phase 3)** | Policy-baseline config-hash drift and exception-expiry detection (`drift.go`); the `regobligation`-style snapshot pattern was imitated structurally, not imported. No live configuration-management API integration. |
 | 10. Detection/telemetry/SIEM/response | Pattern precedent only, Planned (Phase 2) | `detectverify.Connector`'s shape is proven; zero SWG-specific code exists. |
-| 11. Availability/resilience | Planned (Phase 3+, lowest priority) | Net-new. |
-| 12. Cross-control attack chains/industry-specific | Planned (Phase 3-4) | Depends on domains 01-11 existing first. |
+| 11. Availability/resilience | **Fixture-backed coverage added (Phase 3)** | Fail-open/fail-closed behavior verification (`failuremode.go`), brought forward from its original "Phase 3+, lowest priority" slot because Phase 3's own exit criteria required at least one fail-open scenario end-to-end. Performance-related security claims remain unbuilt. |
+| 12. Cross-control attack chains/industry-specific | **Started (Phase 3)** | `ComposeAttackChain` composition primitive built and proven end-to-end by chaining a real HTTP-policy result with a real failure-mode result (`chain.go`). Industry-specific exposure scenarios and chains spanning 3+ steps remain Phase 4 work. |
 | **Vendors** | | |
 | Cloudflare Gateway | Planned → live by end of Phase 2 | First and only locked live target; see §2.3. |
 | Zscaler / Netskope / Forcepoint / Skyhigh / Broadcom / FortiProxy | Planned candidates, access unverified | No commitment to order; each needs its own access/API/licensing verification before any claim of support (Phase 4). |
