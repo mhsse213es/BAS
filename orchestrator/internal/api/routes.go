@@ -227,6 +227,12 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.Get("/api/scenarios", h.ListScenarios)
 		r.Get("/api/scenarios/{id}", h.GetScenario)
 		r.Get("/api/ad/coverage", h.GetADCoverage)
+		// WebGW industry profiles (internal/webgwefficacy), same read-only
+		// shape as /api/ad/coverage: pure configuration rendered against
+		// Audspect's real, current WebGW coverage data, never a computed
+		// verdict of its own.
+		r.Get("/api/webgw/industry-profiles", h.GetWebGWIndustryProfiles)
+		r.Get("/api/webgw/industry-profiles.html", h.GetWebGWIndustryProfilesHTML)
 		// AD coverage assessment report, from the same admatrix.Report() data as
 		// /api/ad/coverage: PDF (primary), HTML, and JSON (secondary). Read-only.
 		r.Get("/api/ad/assessment.pdf", h.GetADAssessmentPDF)
