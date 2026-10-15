@@ -187,3 +187,45 @@ func TestCoverageReportingScenario_AudspectWebGWCoverage_CitesDenominatorAndExcl
 		t.Errorf("Summary() = %q, want it to contain the covered count alongside the denominator (\"10/12\"), never a bare percentage", summary)
 	}
 }
+
+// TestMutationTestingScenario_MalwareCategoryPolicy_CatchesWeakenedPolicyAndConfirmsRecovery
+// proves Phase 5's mandated mutation-testing exit criterion end-to-end:
+// deliberately weaken the malware-category block policy (domain 01's
+// own known-good baseline, TestURLPolicyScenario_MalwareCategoryBlocked),
+// confirm RunMutationTest catches the regression, restore the policy,
+// confirm recovery -- using real VerifyHTTPExpectation calls against
+// real fixture providers in every one of the three phases, never
+// synthetic VerdictDetail literals.
+func TestMutationTestingScenario_MalwareCategoryPolicy_CatchesWeakenedPolicyAndConfirmsRecovery(t *testing.T) {
+	now := time.Now()
+	window := TimeWindow{Start: now.Add(-time.Minute), End: now.Add(time.Minute)}
+	exp := HTTPExpectation{
+		RequestURL:     "https://malware-distribution.example/payload.exe",
+		URLCategory:    "malware",
+		ExpectedAction: ExpectedBlock,
+		ControlProduct: "cloudflare-gateway",
+	}
+
+	runWithObservedAction := func(action string) func() VerdictDetail {
+		return func() VerdictDetail {
+			provider := NewFixtureGatewayProvider([]GatewayEvidence{
+				{RequestURL: exp.RequestURL, Action: action, Category: "malware", Timestamp: now, Source: SourceFixture},
+			})
+			return VerifyHTTPExpectation(exp, HTTPObservation{}, provider, window).Prevention
+		}
+	}
+
+	result := RunMutationTest(
+		"malware-category-block-policy",
+		runWithObservedAction("block"), // baseline: policy correctly blocks
+		runWithObservedAction("allow"), // mutated: policy deliberately weakened to allow
+		runWithObservedAction("block"), // restored: policy reverted to its original state
+	)
+
+	if !result.CaughtRegression {
+		t.Errorf("CaughtRegression = false, want true -- the weakened malware-category policy must be caught")
+	}
+	if !result.RecoveryConfirmed {
+		t.Errorf("RecoveryConfirmed = false, want true -- reverting the policy must restore the original Pass verdict")
+	}
+}
