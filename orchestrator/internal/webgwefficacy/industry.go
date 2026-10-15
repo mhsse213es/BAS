@@ -19,6 +19,13 @@ import (
 // or used to infer data sensitivity), never computing a verdict of
 // its own. Note is deliberately left out of PrioritySummary -- it is
 // free-text metadata, not a value meant for a structured summary.
+// "Real reader" means PrioritySummary genuinely reads and renders
+// this type's fields against real CoverageReport data, proven
+// end-to-end in industry_test.go -- it does not yet mean any
+// CLI/API/report surface in this repository calls it; no file outside
+// this package imports internal/webgwefficacy at all today. Wiring a
+// production surface to call PrioritySummary is a separate, tracked
+// follow-up, not something this type claims to have done.
 type IndustryProfile struct {
 	Name                 string             `json:"name"`
 	PriorityDomainIDs    []string           `json:"priorityDomainIds"`
@@ -124,6 +131,21 @@ func ManufacturingOTProfile() (IndustryProfile, error) {
 	)
 }
 
+// MSPSharedTenantProfile returns the MSP/shared-tenant industry
+// profile. Tenant isolation dominates: CASB/tenant-isolation (06),
+// identity-scoped per-client policy differentiation (05), and
+// cross-control chains (12, since each client relationship must be
+// proven separately) are prioritized.
+func MSPSharedTenantProfile() (IndustryProfile, error) {
+	return NewIndustryProfile(
+		"MSP/shared-tenant",
+		[]string{"06", "05", "12"},
+		[]string{"multi-tenant-client-data"},
+		map[string]float64{"06": 1.0, "05": 0.9, "12": 0.8},
+		"Multi-tenant priorities: tenant isolation and per-client policy differentiation dominate.",
+	)
+}
+
 // PrioritySummary filters an existing CoverageReport down to this
 // profile's PriorityDomainIDs and renders each one's real
 // CoverageStatus, ordered by BusinessImpactWeight descending (a
@@ -183,19 +205,4 @@ func (p IndustryProfile) weightLabel(id string) string {
 		return "no weight assigned"
 	}
 	return fmt.Sprintf("weight %.1f", w)
-}
-
-// MSPSharedTenantProfile returns the MSP/shared-tenant industry
-// profile. Tenant isolation dominates: CASB/tenant-isolation (06),
-// identity-scoped per-client policy differentiation (05), and
-// cross-control chains (12, since each client relationship must be
-// proven separately) are prioritized.
-func MSPSharedTenantProfile() (IndustryProfile, error) {
-	return NewIndustryProfile(
-		"MSP/shared-tenant",
-		[]string{"06", "05", "12"},
-		[]string{"multi-tenant-client-data"},
-		map[string]float64{"06": 1.0, "05": 0.9, "12": 0.8},
-		"Multi-tenant priorities: tenant isolation and per-client policy differentiation dominate.",
-	)
 }

@@ -278,8 +278,9 @@ func TestIndustryProfile_PrioritySummary_NoPriorityDomains_ReturnsSensibleMessag
 
 	summary := profile.PrioritySummary(report)
 
-	if summary == "" {
-		t.Error("PrioritySummary() is empty, want a sensible message for a profile with no priority domains")
+	want := "test-profile: no priority domains defined"
+	if summary != want {
+		t.Errorf("PrioritySummary() = %q, want %q -- an exact match, not merely non-empty, so a regression in the no-priority-domains branch (e.g. a dangling \"; data classifications: \" suffix) can't slip through", summary, want)
 	}
 }
 
