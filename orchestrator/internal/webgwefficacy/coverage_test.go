@@ -3,76 +3,93 @@ package webgwefficacy
 import (
 	"strings"
 	"testing"
-	"time"
 )
 
-// TestCoverageReport_Summary_RealWebGWDomainCoverage_NineOfTwelve uses
-// this initiative's own real, current domain-coverage count as of
-// Phase 4 -- not an invented example. Per the architecture spec's §5
-// Coverage Matrix: domains 01, 02, 03, 05, 06, 08, 09, 10, 11 are
-// covered (9); domains 04 and 07 remain unbuilt, and domain 12 is
-// marked "Started" (not fully covered), so the honest count is 9 of
-// 12, with zero of the 12 domains individually excluded from this
-// count.
-func TestCoverageReport_Summary_RealWebGWDomainCoverage_NineOfTwelve(t *testing.T) {
-	report := NewCoverageReport(12, 9, nil, time.Date(2026, 10, 15, 0, 0, 0, 0, time.UTC))
-	summary := report.Summary()
-
-	if !strings.Contains(summary, "9") || !strings.Contains(summary, "12") {
-		t.Errorf("Summary() = %q, want it to state both covered (9) and total (12)", summary)
-	}
-	if !strings.Contains(summary, "exclusions: none") {
-		t.Errorf("Summary() = %q, want it to explicitly state there are no exclusions, never omit the clause", summary)
+func TestNewCoverageReport_DuplicateDomainID_Errors(t *testing.T) {
+	_, err := NewCoverageReport([]DomainCoverage{
+		{DomainID: "01", DomainName: "first", Status: CoverageCovered},
+		{DomainID: "01", DomainName: "duplicate", Status: CoverageCovered},
+	})
+	if err == nil {
+		t.Fatal("NewCoverageReport: want error for duplicate DomainID, got nil")
 	}
 }
 
-// TestCoverageReport_Summary_WithExclusions_CitesEachReason uses the
-// real Phase 4 additional-vendor-candidate count and the real
-// Zscaler-Unsupported exclusion (docs/webgw-mastery-qa-log.md item #3)
-// as a genuine example -- not an illustrative round number. Per the
-// architecture spec's §3 Phase 4 and §5 Coverage Matrix, the 6
-// additional vendor candidates beyond Cloudflare (Zscaler, Netskope,
-// Forcepoint, Skyhigh, Broadcom, FortiProxy) have zero live adapters
-// integrated; Zscaler alone carries a documented Unsupported
-// exclusion, the rest remain merely "access unverified." This also
-// proves CoverageExclusion generalizes beyond "domain" to any
-// denominator item this package reports coverage over.
-func TestCoverageReport_Summary_WithExclusions_CitesEachReason(t *testing.T) {
-	exclusions := []CoverageExclusion{
-		{ItemID: "zscaler", Reason: "no self-serve trial/signup; sales-gated"},
-	}
-	report := NewCoverageReport(6, 0, exclusions, time.Date(2026, 10, 15, 0, 0, 0, 0, time.UTC))
-	summary := report.Summary()
-
-	if !strings.Contains(summary, "zscaler") {
-		t.Errorf("Summary() = %q, want it to name the excluded item", summary)
-	}
-	if !strings.Contains(summary, "sales-gated") {
-		t.Errorf("Summary() = %q, want it to cite the exclusion's own reason", summary)
+func TestNewCoverageReport_ExcludedWithoutReason_Errors(t *testing.T) {
+	_, err := NewCoverageReport([]DomainCoverage{
+		{DomainID: "04", DomainName: "malware", Status: CoverageExcluded, ExclusionReason: ""},
+	})
+	if err == nil {
+		t.Fatal("NewCoverageReport: want error for an Excluded domain with no documented reason, got nil")
 	}
 }
 
-// TestCoverageReport_Summary_ZeroTotalItems_NoPanic guards the
-// percentage calculation's division against a zero denominator.
-func TestCoverageReport_Summary_ZeroTotalItems_NoPanic(t *testing.T) {
-	report := NewCoverageReport(0, 0, nil, time.Now())
-
-	defer func() {
-		if r := recover(); r != nil {
-			t.Fatalf("Summary() panicked on zero TotalItems: %v", r)
-		}
-	}()
-	_ = report.Summary()
+func TestNewCoverageReport_ValidMix_Succeeds(t *testing.T) {
+	_, err := NewCoverageReport([]DomainCoverage{
+		{DomainID: "01", DomainName: "covered-domain", Status: CoverageCovered},
+		{DomainID: "02", DomainName: "excluded-domain", Status: CoverageExcluded, ExclusionReason: "out of scope this round"},
+		{DomainID: "03", DomainName: "not-covered-domain", Status: CoverageNotCovered},
+	})
+	if err != nil {
+		t.Fatalf("NewCoverageReport: %v", err)
+	}
 }
 
-// TestCoverageReport_Summary_NeverBarePercentage confirms the
-// rendered string is never JUST a percentage -- it must always carry
-// the raw covered/total counts alongside any percentage figure.
-func TestCoverageReport_Summary_NeverBarePercentage(t *testing.T) {
-	report := NewCoverageReport(4, 2, nil, time.Now())
-	summary := report.Summary()
+func TestCoverageReport_Denominator_CountsNotCoveredDomainsToo(t *testing.T) {
+	report, err := NewCoverageReport([]DomainCoverage{
+		{DomainID: "01", DomainName: "covered", Status: CoverageCovered},
+		{DomainID: "02", DomainName: "not-covered", Status: CoverageNotCovered},
+	})
+	if err != nil {
+		t.Fatalf("NewCoverageReport: %v", err)
+	}
+	if got := report.Denominator(); got != 2 {
+		t.Errorf("Denominator() = %d, want 2 -- the not-covered domain must still count toward the total", got)
+	}
+	if got := report.CoveredCount(); got != 1 {
+		t.Errorf("CoveredCount() = %d, want 1", got)
+	}
+	if got := report.NotCoveredCount(); got != 1 {
+		t.Errorf("NotCoveredCount() = %d, want 1", got)
+	}
+}
 
-	if !strings.Contains(summary, "2") || !strings.Contains(summary, "4") {
-		t.Errorf("Summary() = %q, want the raw covered/total counts present alongside any percentage", summary)
+func TestCoverageReport_Summary_IncludesExclusionReasons(t *testing.T) {
+	report, err := NewCoverageReport([]DomainCoverage{
+		{DomainID: "01", DomainName: "covered", Status: CoverageCovered},
+		{DomainID: "04", DomainName: "malware", Status: CoverageExcluded, ExclusionReason: "EICAR-class testing not yet designed"},
+	})
+	if err != nil {
+		t.Fatalf("NewCoverageReport: %v", err)
+	}
+	summary := report.Summary()
+	if !strings.Contains(summary, "EICAR-class testing not yet designed") {
+		t.Errorf("Summary() = %q, want it to contain the exclusion's documented reason, not just a count", summary)
+	}
+}
+
+func TestCoverageReport_Summary_IncludesDenominatorAlongsidePercentage(t *testing.T) {
+	report, err := NewCoverageReport([]DomainCoverage{
+		{DomainID: "01", DomainName: "covered", Status: CoverageCovered},
+		{DomainID: "02", DomainName: "covered-2", Status: CoverageCovered},
+		{DomainID: "03", DomainName: "not-covered", Status: CoverageNotCovered},
+	})
+	if err != nil {
+		t.Fatalf("NewCoverageReport: %v", err)
+	}
+	summary := report.Summary()
+	if !strings.Contains(summary, "2/3") {
+		t.Errorf("Summary() = %q, want it to contain the covered count alongside the denominator (\"2/3\"), never a bare percentage", summary)
+	}
+}
+
+func TestCoverageReport_Summary_EmptyDomains_NoDivideByZeroPanic(t *testing.T) {
+	report, err := NewCoverageReport(nil)
+	if err != nil {
+		t.Fatalf("NewCoverageReport: %v", err)
+	}
+	summary := report.Summary()
+	if summary == "" {
+		t.Error("Summary() = \"\", want a non-empty message even with zero domains defined")
 	}
 }
