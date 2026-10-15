@@ -51,7 +51,7 @@ func TestGenerator_WriteRecordsExactlyOneRowWhenBothChangedAndCreated(t *testing
 		seedActiveTechnique(t, pool, resolved.ThreatID, "T1053")
 
 		store := evidence.NewStore(pool)
-		g := NewGenerator(t.TempDir(), nil, nil, nil).WithRegistrar(&dedupRegistrar{}).WithEvidenceStore(store)
+		g := NewGenerator(t.TempDir(), nil, nil, nil).WithRegistrar(&dedupRegistrar{}).WithEvidenceStore(store).WithActiveTechniqueProjection()
 		a := ThreatActor{Name: "APT-both", ThreatID: resolved.ThreatID, Source: "misp"}
 
 		// First Write on a fresh actor: the registry has never seen this
@@ -88,7 +88,7 @@ func TestGenerator_WriteRecordsChangedWhenFileRewrittenButNotCreated(t *testing.
 		store := evidence.NewStore(pool)
 		dir := t.TempDir()
 		reg := &dedupRegistrar{}
-		g := NewGenerator(dir, nil, nil, nil).WithRegistrar(reg).WithEvidenceStore(store)
+		g := NewGenerator(dir, nil, nil, nil).WithRegistrar(reg).WithEvidenceStore(store).WithActiveTechniqueProjection()
 		a := ThreatActor{Name: "APT-changed", ThreatID: resolved.ThreatID, Source: "misp"}
 
 		if _, err := g.Write([]ThreatActor{a}); err != nil {
@@ -128,7 +128,7 @@ func TestGenerator_WriteRecordsGenerationNumberErrorOnSameRow(t *testing.T) {
 		seedActiveTechnique(t, pool, resolved.ThreatID, "T1053")
 
 		store := evidence.NewStore(pool)
-		g := NewGenerator(t.TempDir(), nil, nil, nil).WithRegistrar(&dedupRegistrar{}).WithEvidenceStore(store)
+		g := NewGenerator(t.TempDir(), nil, nil, nil).WithRegistrar(&dedupRegistrar{}).WithEvidenceStore(store).WithActiveTechniqueProjection()
 		// evidenceRecordErr is an unexported, test-only override field (Step 3),
 		// the same pattern this file's sibling generator_meta_test.go already
 		// uses for attackMeta -- the UNIQUE(threat_id, generation_number)
@@ -180,7 +180,7 @@ func TestGenerator_WriteRecordsDistinctCollisionReasonCodes(t *testing.T) {
 				seedActiveTechnique(t, pool, resolved.ThreatID, "T1053")
 
 				store := evidence.NewStore(pool)
-				g := NewGenerator(t.TempDir(), nil, nil, nil).WithRegistrar(collisionRegistrar{err: tc.err}).WithEvidenceStore(store)
+				g := NewGenerator(t.TempDir(), nil, nil, nil).WithRegistrar(collisionRegistrar{err: tc.err}).WithEvidenceStore(store).WithActiveTechniqueProjection()
 				a := ThreatActor{Name: "APT-" + tc.reasonCode, ThreatID: resolved.ThreatID, Source: "misp"}
 
 				if _, err := g.Write([]ThreatActor{a}); err != nil {
