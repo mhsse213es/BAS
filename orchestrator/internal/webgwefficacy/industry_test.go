@@ -118,14 +118,62 @@ func TestIndustryProfile_PrioritySummary_SortsByWeightDescendingAndRendersStatus
 	if !(idxTLS < idxDLP && idxDLP < idxURL) {
 		t.Errorf("PrioritySummary() = %q, want weight-descending order: 02 (1.0), 03 (0.8), 01 (0.5)", summary)
 	}
-	if !strings.Contains(summary, "covered") {
-		t.Errorf("PrioritySummary() = %q, want domain 01's covered status rendered", summary)
+	if !strings.Contains(summary, "01 URL filtering (weight 0.5): covered") {
+		t.Errorf("PrioritySummary() = %q, want domain 01's own covered status rendered -- not merely a \"covered\" substring match against domain 02's \"not-covered\"", summary)
 	}
 	if !strings.Contains(summary, "not-covered") {
 		t.Errorf("PrioritySummary() = %q, want domain 02's not-covered status rendered", summary)
 	}
 	if !strings.Contains(summary, "excluded") {
 		t.Errorf("PrioritySummary() = %q, want domain 03's excluded status rendered", summary)
+	}
+}
+
+func TestIndustryProfile_PrioritySummary_MissingDomainIncludesItsAssignedWeight(t *testing.T) {
+	profile, err := NewIndustryProfile("test-profile", []string{"01"}, nil, map[string]float64{"01": 0.7}, "")
+	if err != nil {
+		t.Fatalf("NewIndustryProfile: %v", err)
+	}
+	report, err := NewCoverageReport([]DomainCoverage{
+		{DomainID: "02", DomainName: "TLS inspection", Status: CoverageCovered},
+	})
+	if err != nil {
+		t.Fatalf("NewCoverageReport: %v", err)
+	}
+
+	summary := profile.PrioritySummary(report)
+
+	if !strings.Contains(summary, "01 (weight 0.7): not present in this report") {
+		t.Errorf("PrioritySummary() = %q, want the missing domain's own assigned weight carried into its \"not present\" entry", summary)
+	}
+}
+
+func TestIndustryProfile_PrioritySummary_NoWeightAssigned_DistinctFromZeroWeight(t *testing.T) {
+	profile, err := NewIndustryProfile(
+		"test-profile",
+		[]string{"01", "02"},
+		nil,
+		map[string]float64{"01": 0.0},
+		"",
+	)
+	if err != nil {
+		t.Fatalf("NewIndustryProfile: %v", err)
+	}
+	report, err := NewCoverageReport([]DomainCoverage{
+		{DomainID: "01", DomainName: "URL filtering", Status: CoverageCovered},
+		{DomainID: "02", DomainName: "TLS inspection", Status: CoverageCovered},
+	})
+	if err != nil {
+		t.Fatalf("NewCoverageReport: %v", err)
+	}
+
+	summary := profile.PrioritySummary(report)
+
+	if !strings.Contains(summary, "01 URL filtering (weight 0.0): covered") {
+		t.Errorf("PrioritySummary() = %q, want domain 01's deliberate zero weight rendered as \"weight 0.0\"", summary)
+	}
+	if !strings.Contains(summary, "02 TLS inspection (no weight assigned): covered") {
+		t.Errorf("PrioritySummary() = %q, want domain 02's absent weight rendered as \"no weight assigned\", distinct from a deliberate 0.0", summary)
 	}
 }
 

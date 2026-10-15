@@ -151,12 +151,24 @@ func (p IndustryProfile) PrioritySummary(report CoverageReport) string {
 	for _, id := range ids {
 		d, ok := byID[id]
 		if !ok {
-			entries = append(entries, fmt.Sprintf("%s: not present in this report", id))
+			entries = append(entries, fmt.Sprintf("%s (%s): not present in this report", id, p.weightLabel(id)))
 			continue
 		}
-		entries = append(entries, fmt.Sprintf("%s %s (weight %.1f): %s", d.DomainID, d.DomainName, p.BusinessImpactWeight[id], d.Status))
+		entries = append(entries, fmt.Sprintf("%s %s (%s): %s", d.DomainID, d.DomainName, p.weightLabel(id), d.Status))
 	}
 	return fmt.Sprintf("%s priorities: %s", p.Name, strings.Join(entries, "; "))
+}
+
+// weightLabel renders a priority domain's assigned BusinessImpactWeight,
+// or "no weight assigned" when the domain has no entry -- distinct
+// from a deliberate weight of exactly 0.0, which is itself a valid
+// value per NewIndustryProfile's own [0, 1] bound.
+func (p IndustryProfile) weightLabel(id string) string {
+	w, ok := p.BusinessImpactWeight[id]
+	if !ok {
+		return "no weight assigned"
+	}
+	return fmt.Sprintf("weight %.1f", w)
 }
 
 // MSPSharedTenantProfile returns the MSP/shared-tenant industry
