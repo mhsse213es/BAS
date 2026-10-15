@@ -42,3 +42,29 @@ This is the single place to check before claiming EmailGW Mastery is "done" or m
 **What this means for Phase 3b:** the implementation spec's "Scope Refinement" section is updated accordingly (§ below). The enforcement adapter is buildable now, httptest-backed, with zero new auth model — only real-tenant access (item #1b) gates the live integration test.
 
 **Built, 2026-10-15 (`12d72380`):** `AnalyzedEmailEvidenceProvider` (`orchestrator/internal/emailgwefficacy/analyzedemail.go`), `defender.Client.QueryAnalyzedEmails` (`orchestrator/internal/vendors/defender/client.go`), and `DefenderMailEvidenceProvider` (composes it with `DefenderDetectionProvider` into one full `MailEvidenceProvider`). An httptest-backed end-to-end test (`TestDefenderMailEvidenceProvider_SPFScenario_EndToEnd_BothLegsSourceLive`) proves Phase 3's own exit criterion — both `Enforcement` and `Detection` evidence present and tagged `SourceLive` — for the SPF known-bad scenario. Only the real-tenant integration tests (`TestAnalyzedEmailEvidenceProvider_RealAPI_SkipsWithoutCredentials`, `TestDefenderDetectionProvider_RealAPI_SkipsWithoutCredentials`) remain skipped pending item #1b.
+
+### 2. Additional vendor access (Phase 5) — Proofpoint/Mimecast/Cisco Secure Email/FortiMail all marked `NotTested`, documented gaps
+
+**Status:** Resolved for Phase 5's own exit criterion (the exit criterion only requires marking a gap, not closing it) — remains open if a live adapter for any of these four is ever wanted later.
+
+**What was needed:** Phase 5's exit criterion requires at least one additional vendor adapter (beyond M365 Defender) either integrated end-to-end or explicitly, visibly marked `NotTested`/`not-applicable` with the specific blocking gap documented.
+
+**What was verified (2026-10-15):** none of the four named vendors offer a genuinely reproducible, self-serve trial matching the bar M365's Developer Program met — the same sales-gated pattern WebGW Mastery already found for its own 6 non-Cloudflare SWG candidates.
+- **Proofpoint:** no confirmed self-serve trial or API sandbox in any result found; G-Cloud reseller listings for Proofpoint SaaS explicitly show "API sandbox or test environment: No."
+- **Mimecast:** no free plan; trial appears sales-assisted, with no confirmed self-serve API-credential path. Points to "contact sales" or a reseller.
+- **Cisco Secure Email:** a 45-day free trial exists, but restricted to companies with 100+ employees, and signup is sales-assisted ("a Cisco team member will be in contact soon") — not self-serve. Whether a trial tenant includes API credentials is unconfirmed.
+- **FortiMail:** the closest to self-serve — FortiMail-VM ships a built-in 15-day evaluation-mode trial with no sales contact required to deploy the VM itself — but it is time-boxed (15 days, one source disputes whether it works on KVM at all) and licensing/activation likely needs a FortiCloud account, the same "self-hostable but short-lived and phone-home-dependent" shape WebGW Mastery found for FortiProxy-VM and did not pick as its first live adapter for exactly that reproducibility concern.
+
+**Consequence:** all four remain `NotTested`, access unverified beyond what's documented here — no fixed order among them is locked, matching the architecture spec's own §2.3 condition #1 language.
+
+**Resolution path, if ever revisited:** FortiMail is the most plausible next candidate given its lower access friction, but its reproducibility concern (15-day window, FortiCloud phone-home) would need to be weighed the same way WebGW Mastery weighed it for FortiProxy before committing engineering time to it.
+
+### 3. RBI 2016 Cyber Security Framework circular (RBI/2015-16/418) — reported repealed, cross-cutting staleness finding
+
+**Status:** Resolved for this package's own obligation (built against the current 2026 directions instead) — flagged here as a cross-cutting finding, not fixed in `webgwefficacy`.
+
+**What was found (2026-10-15):** while researching India's seed regulatory obligation for this package's own `regulatory.go`, multiple independent secondary (compliance-vendor) sources converge on: the RBI's 2016 Cyber Security Framework circular (RBI/2015-16/418, DBS.CO/CSITE/BC.11/33.01.001/2015-16) — the same circular `webgwefficacy`'s own `regulatory.go` cites (`rbi-csf-net-02`, built the same day as that package's Phase 4) — was repealed effective 31 July 2026, superseded by the Reserve Bank of India (Commercial Banks — Cybersecurity, Technology: Risk, Resilience and Assurance Framework) Directions, 2026 (RBI/DoS/2026-27/410, DoS.CO.CSITEG.4/31.01.015/2026-27). None of these sources are RBI's own primary text (which is a scanned PDF behind a CAPTCHA gate this session could not OCR), so this is reported, not independently confirmed, but the repeal is consistent across every source found and none contradicted it.
+
+**What this package did:** `IndiaRBISecureMailObligation()` (`regulatory.go`) cites the 2026 directions, not the 2016 circular, and its `Note` field states this staleness finding explicitly.
+
+**What this does NOT do:** fix or flag `webgwefficacy`'s own `rbi-csf-net-02` entry — that is a different package, out of this initiative's scope, and is recorded here only so a future session (on either initiative) doesn't have to rediscover it.
