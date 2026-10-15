@@ -70,7 +70,12 @@ func TestExecStep_NoCleanupNeverSnapshots(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read executor.go: %v", err)
 	}
-	if !strings.Contains(string(src), "if step.Cleanup != \"\" {\n\t\tpreCleanupSnap = captureSnapshotLite") {
+	// Normalize CRLF -> LF before matching: on a Windows checkout with
+	// core.autocrlf (and no .gitattributes pinning *.go to LF) this file is
+	// CRLF on disk, so the literal \n below would never match the on-disk
+	// \r\n. The invariant being asserted is line-ending-agnostic.
+	normalized := strings.ReplaceAll(string(src), "\r\n", "\n")
+	if !strings.Contains(normalized, "if step.Cleanup != \"\" {\n\t\tpreCleanupSnap = captureSnapshotLite") {
 		t.Error("preCleanupSnap must only be captured when step.Cleanup != \"\"")
 	}
 }
