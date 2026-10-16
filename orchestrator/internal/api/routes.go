@@ -240,6 +240,16 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		// deferred industry profiles (its own Phase 5).
 		r.Get("/api/emailgw/coverage", h.GetEmailGWCoverage)
 		r.Get("/api/emailgw/coverage.html", h.GetEmailGWCoverageHTML)
+		// WAF coverage report (internal/wafefficacy), same read-only
+		// shape as /api/emailgw/coverage: Audspect's real, current WAF
+		// BAS Mastery coverage data, never a computed verdict of its
+		// own. Industry/regional profiles (internal/wafprofile) are a
+		// separate surface below, mirroring WebGW's own split between
+		// coverage and industry profiles.
+		r.Get("/api/waf/coverage", h.GetWAFCoverage)
+		r.Get("/api/waf/coverage.html", h.GetWAFCoverageHTML)
+		r.Get("/api/waf/industry-profiles", h.GetWAFIndustryProfiles)
+		r.Get("/api/waf/industry-profiles.html", h.GetWAFIndustryProfilesHTML)
 		// AD coverage assessment report, from the same admatrix.Report() data as
 		// /api/ad/coverage: PDF (primary), HTML, and JSON (secondary). Read-only.
 		r.Get("/api/ad/assessment.pdf", h.GetADAssessmentPDF)
