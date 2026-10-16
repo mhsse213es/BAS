@@ -97,15 +97,32 @@ func staticValidationPassRate(ctx context.Context, pool *pgxpool.Pool, since tim
 	return measured(float64(passed) / float64(total)), nil
 }
 
-// duplicateGenerationRate is always NO_DATA in this phase. Generation
-// attempts happen (Scheduler.sync calls Generator.Write on every poll,
-// idempotent via content_versions' dedup) but their outcomes are only
-// logged to stdout and an in-memory, process-lifetime counter -- never
-// persisted. Persisting a per-attempt log is Phase 9's deliverable, not
-// this phase's; adding it here would be new write-path infrastructure
-// this phase deliberately excludes.
-func duplicateGenerationRate() Metric {
-	return noData("generation-attempt telemetry is not yet persisted (tracked for Phase 9)")
+// duplicateGenerationRate is the share of generation attempts that re-derived
+// content already in the registry (a dedup hit) among attempts that actually
+// produced content to compare. Phase 9's content_generation_attempts telemetry
+// records one row per attempt with an outcome/reason_code pair (see
+// connector/generator.go): created/changed='ok' produced new or updated
+// content, skipped='already_registered' is the duplicate, and
+// skipped='below_min_techniques'/'unresolved_identity' plus every 'failed' row
+// bailed out BEFORE reaching the dedup decision -- those are excluded from both
+// numerator and denominator so the rate is not diluted by inputs that never
+// generated anything. NO_DATA when no attempt reached that decision in the
+// window, never a misleading 0%.
+func duplicateGenerationRate(ctx context.Context, pool *pgxpool.Pool, since time.Time) (Metric, error) {
+	var generated, duplicates int
+	if err := pool.QueryRow(ctx, `
+		SELECT
+			count(*) FILTER (WHERE outcome IN ('created','changed') OR reason_code = 'already_registered'),
+			count(*) FILTER (WHERE reason_code = 'already_registered')
+		FROM content_generation_attempts
+		WHERE started_at >= $1`, since,
+	).Scan(&generated, &duplicates); err != nil {
+		return Metric{}, err
+	}
+	if generated == 0 {
+		return noData("no generative attempts recorded in the selected window"), nil
+	}
+	return measured(float64(duplicates) / float64(generated)), nil
 }
 
 // SourceHealth is one source instance's ingestion health. LastSuccessAt
@@ -377,6 +394,10 @@ func FactoryHealth(ctx context.Context, pool *pgxpool.Pool, window time.Duration
 	if err != nil {
 		return FactoryHealthReport{}, err
 	}
+	dupRate, err := duplicateGenerationRate(ctx, pool, since)
+	if err != nil {
+		return FactoryHealthReport{}, err
+	}
 
 	median := noData("no threats have measured threat-to-emulation TCV yet")
 	p95 := noData("no threats have measured threat-to-emulation TCV yet")
@@ -392,7 +413,7 @@ func FactoryHealth(ctx context.Context, pool *pgxpool.Pool, window time.Duration
 		MedianThreatToContentTCV:  median,
 		P95ThreatToContentTCV:     p95,
 		StaticValidationPassRate:  passRate,
-		DuplicateGenerationRate:   duplicateGenerationRate(),
+		DuplicateGenerationRate:   dupRate,
 		SourceToTechniqueCoverage: counts.SourceToTechniqueCoverage,
 		Pipeline:                  PipelineStatus{Ingestion: ingestion, Funnel: funnel, DataQuality: dq},
 		Trends:                    Trends{ThreatsProcessedByDay: threatsTrend, TCVByDay: tcvTrendPts},

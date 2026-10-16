@@ -50,17 +50,66 @@ func TestStaticValidationPassRate_ExcludesExecutionLevelAndNoDataOutcome(t *test
 	})
 }
 
-func TestDuplicateGenerationRate_AlwaysNoData(t *testing.T) {
-	got := duplicateGenerationRate()
-	if got.State != DataNoData {
-		t.Fatalf("got %+v, want no_data unconditionally -- generation-attempt telemetry is not persisted in this phase", got)
+// insertGenAttempt writes one content_generation_attempts row with a
+// controllable started_at, so the window and outcome/reason filters can be
+// exercised directly.
+func insertGenAttempt(t *testing.T, pool *pgxpool.Pool, cycleID, outcome, reasonCode string, startedAt time.Time) {
+	t.Helper()
+	mustExec(t, pool, `INSERT INTO content_generation_attempts
+		(cycle_id, outcome, reason_code, generator_version, started_at)
+		VALUES ($1,$2,$3,'test-gen',$4)`, cycleID, outcome, reasonCode, startedAt)
+}
+
+func TestDuplicateGenerationRate_NoDataWhenNoGenerativeAttempts(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
 	}
-	if got.Value != nil {
-		t.Fatalf("got Value = %v, want nil for a no_data metric", got.Value)
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		since := time.Now().Add(-24 * time.Hour)
+		now := time.Now()
+		// Pre-generation bailouts and failures never reached the dedup decision,
+		// so the duplicate-rate denominator is zero -> NO_DATA, not a misleading 0%.
+		insertGenAttempt(t, pool, "cyc-none", "skipped", "unresolved_identity", now)
+		insertGenAttempt(t, pool, "cyc-none", "skipped", "below_min_techniques", now)
+		insertGenAttempt(t, pool, "cyc-none", "failed", "write_error", now)
+
+		got, err := duplicateGenerationRate(context.Background(), pool, since)
+		if err != nil {
+			t.Fatalf("duplicateGenerationRate: %v", err)
+		}
+		if got.State != DataNoData {
+			t.Fatalf("got %+v, want no_data when no attempt reached the dedup decision", got)
+		}
+	})
+}
+
+func TestDuplicateGenerationRate_RatioOfAlreadyRegisteredAmongGenerated(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
 	}
-	if got.Reason == "" {
-		t.Fatal("got empty Reason -- the UI needs this to explain why the metric is unavailable")
-	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		since := time.Now().Add(-24 * time.Hour)
+		now := time.Now()
+		// Denominator = attempts that produced a content fingerprint:
+		// created + changed + already_registered = 4; duplicates = 2 -> 0.5.
+		insertGenAttempt(t, pool, "cyc", "created", "ok", now)
+		insertGenAttempt(t, pool, "cyc", "changed", "ok", now)
+		insertGenAttempt(t, pool, "cyc", "skipped", "already_registered", now)
+		insertGenAttempt(t, pool, "cyc", "skipped", "already_registered", now)
+		// Excluded from both numerator and denominator (never reached dedup):
+		insertGenAttempt(t, pool, "cyc", "skipped", "below_min_techniques", now)
+		insertGenAttempt(t, pool, "cyc", "failed", "write_error", now)
+		// Excluded by the window: an old duplicate must not inflate the rate.
+		insertGenAttempt(t, pool, "cyc-old", "skipped", "already_registered", now.Add(-48*time.Hour))
+
+		got, err := duplicateGenerationRate(context.Background(), pool, since)
+		if err != nil {
+			t.Fatalf("duplicateGenerationRate: %v", err)
+		}
+		if got.State != DataMeasured || got.Value == nil || *got.Value != 0.5 {
+			t.Fatalf("got %+v, want measured 0.5 (2 already_registered of 4 generative attempts)", got)
+		}
+	})
 }
 
 func TestIngestionHealth_DistinguishesNeverSyncedFromStale(t *testing.T) {
