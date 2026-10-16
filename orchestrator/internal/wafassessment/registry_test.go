@@ -67,6 +67,19 @@ func TestEvaluateScenarioBySlug_PolicyIntegrity_ReturnsRealFail(t *testing.T) {
 	}
 }
 
+func TestEvaluateScenarioBySlug_RoutingCacheIntegrity_ReturnsRealFail(t *testing.T) {
+	scenario, result, err := EvaluateScenarioBySlug("routing-cache-integrity")
+	if err != nil {
+		t.Fatalf("EvaluateScenarioBySlug: %v", err)
+	}
+	if scenario.ID != "WAFSCENARIO-ROUTING-CACHE-INTEGRITY" {
+		t.Errorf("scenario.ID = %q, want WAFSCENARIO-ROUTING-CACHE-INTEGRITY", scenario.ID)
+	}
+	if result.Outcome != ScenarioFail {
+		t.Errorf("Outcome = %q, want %q", result.Outcome, ScenarioFail)
+	}
+}
+
 func TestEvaluateScenarioBySlug_UnknownSlug_ReturnsError(t *testing.T) {
 	if _, _, err := EvaluateScenarioBySlug("does-not-exist"); err == nil {
 		t.Fatal("want error for unknown slug, got nil")

@@ -110,6 +110,26 @@ func loadPolicyIntegrityScenario() (EnterpriseScenario, ScenarioResult, error) {
 	return scenario, result, nil
 }
 
+func loadRoutingCacheIntegrityScenario() (EnterpriseScenario, ScenarioResult, error) {
+	scenario, err := AudspectRoutingCacheIntegrityScenario()
+	if err != nil {
+		return EnterpriseScenario{}, ScenarioResult{}, err
+	}
+	fixtures, err := AudspectRoutingCacheIntegrityFixtures()
+	if err != nil {
+		return EnterpriseScenario{}, ScenarioResult{}, err
+	}
+	catalog, err := wafcatalog.AudspectWAFAttackCatalog()
+	if err != nil {
+		return EnterpriseScenario{}, ScenarioResult{}, err
+	}
+	result, err := EvaluateScenario(scenario, fixtures, catalog)
+	if err != nil {
+		return EnterpriseScenario{}, ScenarioResult{}, err
+	}
+	return scenario, result, nil
+}
+
 // scenarioRegistry is the slug -> loader lookup every enterprise
 // scenario registers itself in. The slug is the console-facing
 // identifier (used in URLs); it is deliberately distinct from
@@ -120,6 +140,7 @@ var scenarioRegistry = map[string]scenarioLoader{
 	"api-protection":          loadAPIProtectionScenario,
 	"automated-abuse":         loadAutomatedAbuseScenario,
 	"policy-integrity":        loadPolicyIntegrityScenario,
+	"routing-cache-integrity": loadRoutingCacheIntegrityScenario,
 }
 
 // EvaluateScenarioBySlug looks up slug in the registry and returns its
