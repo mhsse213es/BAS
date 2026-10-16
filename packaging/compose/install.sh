@@ -315,6 +315,16 @@ load_config() {
   if [[ "$BAS_TLS" == "true" ]]; then
     [[ -z "$TLS_CERT" ]] && { err "setup.conf: TLS_CERT path required when BAS_TLS=true."; exit 1; }
     [[ -z "$TLS_KEY"  ]] && { err "setup.conf: TLS_KEY path required when BAS_TLS=true.";  exit 1; }
+  else
+    # The dashboard then falls back to the self-signed deployment CA cert. The
+    # orchestrator and agents trust it, but a browser does not: it shows a
+    # security warning and — critically — can silently BLOCK the in-console
+    # agent-binary download (it fails with a generic "check your internet
+    # connection" error even though the server served the bytes fine). Flag it
+    # loudly here so an operator sets a trusted cert before that bites a client.
+    warn "BAS_TLS=false: the dashboard uses a self-signed certificate."
+    info "Browsers will warn and MAY BLOCK the in-console agent download. For production,"
+    info "set BAS_TLS=true with a TLS_CERT/TLS_KEY your users' browsers trust, then --upgrade."
   fi
 
   # JWT/agent secrets — priority order:

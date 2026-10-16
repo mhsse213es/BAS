@@ -35,8 +35,12 @@
 #
 # BAS_TLS enables a properly-trusted certificate on BAS_DASHBOARD_PORT
 # (requires TLS_CERT and TLS_KEY below). Leave false to use the deployment
-# CA's own self-signed certificate -- browsers will show a one-time warning
-# on first visit, which is expected.
+# CA's own self-signed certificate -- browsers will show a security warning,
+# and (because the cert is untrusted) may BLOCK the in-console agent-binary
+# download even after you click through, failing with a generic "check your
+# internet connection" error though the server served the bytes fine. For any
+# deployment whose dashboard is used from a real browser, set BAS_TLS=true
+# with a TLS_CERT/TLS_KEY your users' browsers already trust.
 
 BAS_HOST=                         # ← REQUIRED  e.g. bas.corp.internal
 BAS_PORT=9443                     # Default: 9443 (mTLS agent traffic)
