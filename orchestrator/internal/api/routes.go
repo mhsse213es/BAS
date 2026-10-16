@@ -273,6 +273,10 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		// shape as /api/waf/industry-profiles.
 		r.Get("/api/av/industry-profiles", h.GetAVIndustryProfiles)
 		r.Get("/api/av/industry-profiles.html", h.GetAVIndustryProfilesHTML)
+		// AV/NGAV ransomware-precursor bridge: points at the real, already-
+		// integrated ransomware mastery evidence pipeline (internal/rwevidence,
+		// internal/rwscore) instead of a second, duplicate evaluator.
+		r.Get("/api/av/ransomware-precursor-coverage", h.GetAVRansomwarePrecursorCoverage)
 		// AD coverage assessment report, from the same admatrix.Report() data as
 		// /api/ad/coverage: PDF (primary), HTML, and JSON (secondary). Read-only.
 		r.Get("/api/ad/assessment.pdf", h.GetADAssessmentPDF)
