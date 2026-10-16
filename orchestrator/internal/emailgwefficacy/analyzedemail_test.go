@@ -232,6 +232,57 @@ func TestDefenderMailEvidenceProvider_SPFScenario_EndToEnd_BothLegsSourceLive(t 
 	}
 }
 
+// TestDefenderMailEvidenceProvider_LegitimateMail_EndToEnd_NoFalsePositive
+// is this adapter's Phase 6 false-positive regression test: a
+// correctly-aligned, legitimately-delivered message (SPF pass, no
+// alerts) must resolve to ConfirmedSuccess, never a fabricated
+// ConfirmedFailure -- the same "a delivered message is not
+// automatically proof of a vulnerability" discipline §4 of the
+// architecture spec requires, proven here against the real adapter
+// rather than the fixture provider scenarios_test.go already covers.
+func TestDefenderMailEvidenceProvider_LegitimateMail_EndToEnd_NoFalsePositive(t *testing.T) {
+	tokenSrv := defenderTokenMock(t)
+	defer tokenSrv.Close()
+	now := time.Now()
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/security/collaboration/analyzedEmails", func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]any{
+			"value": []map[string]any{
+				{
+					"id": "email-2", "loggedDateTime": now.Format(time.RFC3339),
+					"recipientEmailAddress": "finance-test@example-lab.test",
+					"policy":                "Default anti-phish policy",
+					"latestDelivery":        map[string]any{"action": "delivered", "location": "inbox_folder"},
+					"authenticationDetails": map[string]any{"senderPolicyFramework": "pass"},
+					"alertIds":              []string{},
+				},
+			},
+		})
+	})
+	mux.HandleFunc("/security/alerts_v2", func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]any{"value": []map[string]any{}})
+	})
+	graphSrv := httptest.NewServer(mux)
+	defer graphSrv.Close()
+
+	client := defender.New(defender.Config{TenantID: "t1", ClientID: "c1", ClientSecret: "s1"})
+	*client.TokenURL() = tokenSrv.URL
+	client.BaseURL = graphSrv.URL
+	provider := NewDefenderMailEvidenceProviderFromClient(client)
+
+	exp := SPFAlignmentExpectation(true) // known-good: aligned sender, expected deliver
+	window := TimeWindow{Start: now.Add(-time.Hour), End: now.Add(time.Hour)}
+	result := VerifyMailExpectation(exp, OriginDeliveryObservation{}, provider, window)
+
+	if result.Prevention.Verdict != VerdictConfirmedSuccess {
+		t.Errorf("Prevention.Verdict = %q, want %q -- legitimate, correctly-delivered mail must never be reported as a gateway failure", result.Prevention.Verdict, VerdictConfirmedSuccess)
+	}
+	if len(result.Enforcement) != 1 || result.Enforcement[0].Source != SourceLive {
+		t.Errorf("Enforcement = %+v, want exactly 1 record tagged SourceLive", result.Enforcement)
+	}
+}
+
 // TestAnalyzedEmailEvidenceProvider_RealAPI_SkipsWithoutCredentials is
 // the live-tenant integration test, gated exactly like
 // DefenderDetectionProvider's own real-API test -- see

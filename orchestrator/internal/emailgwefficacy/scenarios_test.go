@@ -150,6 +150,45 @@ func TestOutboundDLPScenario_KnownGood_OrdinaryMailDelivered(t *testing.T) {
 	runScenario(t, exp)
 }
 
+// runSPFWithObservedAction builds a fixture provider reporting the
+// given enforcement action for SPFAlignmentExpectation(false) (the
+// known-bad spoofed-sender scenario, which expects quarantine) and
+// returns a func() VerdictDetail suitable for RunMutationTest -- the
+// three calls differ only in what action the fixture reports, proving
+// this package's own harness (not a real vendor) catches a weakened
+// policy and recovers once it's reverted.
+func runSPFWithObservedAction(action string) func() VerdictDetail {
+	return func() VerdictDetail {
+		exp := SPFAlignmentExpectation(false)
+		now := time.Now()
+		provider := NewFixtureMailEvidenceProvider(
+			[]EnforcementEvidence{{Message: exp.Ref(), Action: action, Timestamp: now, Source: SourceFixture}},
+			nil,
+		)
+		result := VerifyMailExpectation(exp, OriginDeliveryObservation{}, provider, scenarioWindow())
+		return result.Prevention
+	}
+}
+
+// TestSPFAlignmentScenario_MutationTest_WeakenedPolicyCaughtAndRecovered
+// proves Phase 6's own exit criterion against a real scenario, not
+// just the abstract fixedVerdict cases in mutation_test.go: a
+// correctly-quarantining SPF policy (baseline), deliberately weakened
+// to deliver the spoofed message instead (mutated), then reverted
+// back to quarantine (restored).
+func TestSPFAlignmentScenario_MutationTest_WeakenedPolicyCaughtAndRecovered(t *testing.T) {
+	result := RunMutationTest(
+		"SPFAlignmentExpectation(false)",
+		runSPFWithObservedAction(string(ExpectedQuarantine)), // baseline: policy correctly quarantines
+		runSPFWithObservedAction(string(ExpectedDeliver)),    // mutated: policy deliberately weakened to deliver
+		runSPFWithObservedAction(string(ExpectedQuarantine)), // restored: policy reverted to its original state
+	)
+
+	if !result.Proven() {
+		t.Errorf("Proven() = false (CaughtRegression=%v, RecoveryConfirmed=%v), want true for both", result.CaughtRegression, result.RecoveryConfirmed)
+	}
+}
+
 // TestScenarioBuilders_NeverNameARealDomain is a guard against the
 // §2.3 condition #4 constraint drifting silently as scenarios are
 // added: every SenderProfile/Recipient/Note across this file must
