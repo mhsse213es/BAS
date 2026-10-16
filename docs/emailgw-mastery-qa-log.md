@@ -72,3 +72,17 @@ This is the single place to check before claiming EmailGW Mastery is "done" or m
 - `internal/compliance/mappings/rbi_csf.yaml` (the 25-control catalog consumed by `internal/api`/`internal/compliance`/`internal/reporting`) — `version`/`name`/`published_year` updated; `id: RBI_CSF` deliberately left unchanged (a hardcoded match key elsewhere); the 25 controls themselves were not individually re-verified against the new document's paragraph numbering, flagged as such in the YAML's own header comment.
 
 Full detail of both fixes lives in `docs/webgw-mastery-qa-log.md` item #9, since the work itself is in that package/catalog, not this one — this entry stays here as the index pointer so a reader of only this EmailGW log doesn't have to go looking for whether it was ever addressed.
+
+### 4. Console wiring (not one of the original 6 phases) — `/api/emailgw/coverage[.html]` added, matching WebGW's own production bar
+
+**Status:** Resolved 2026-10-16, at the user's request, after they asked what rebuilding would actually surface in the console and the honest answer was "nothing" -- `internal/emailgwefficacy` had zero production callers anywhere in the repo.
+
+**What was found:** none of Audspect's mastery verticals have a dedicated web UI page. The actual, real precedent for "in production" is WebGW Mastery's own `GET /api/webgw/industry-profiles[.html]` -- a bespoke `internal/api` handler calling the package's exported functions directly, with no generic scenario-run pipeline involved and no link from any `web/src/features/*.js` page. `internal/adefficacy` has no handler at all despite being "done."
+
+**What shipped, matching that same bar exactly:**
+- `emailgwefficacy.CoverageReport.Areas()` (`coverage.go`) -- a new read-only accessor returning a copy of the report's per-area data, mirroring the existing `Exclusions()` method. Needed because `AreaCoverage` already had JSON tags, but nothing exposed the raw slice.
+- `internal/reporting/emailgw_coverage.go` -- `BuildEmailGWCoverageReport()`/`EmailGWCoverageReportHTML()`, mirroring `webgw_industry_profiles.go`'s structure. No industry-profile narrative (emailgwefficacy deliberately deferred those -- see the architecture spec's Phase 5 amendment); renders the 7 taxonomy areas' status directly instead.
+- `internal/api/emailgw_handlers.go` -- `GetEmailGWCoverage` (JSON) / `GetEmailGWCoverageHTML`, mirroring `webgw_industry_profile_handlers.go`.
+- Routes: `GET /api/emailgw/coverage` and `GET /api/emailgw/coverage.html` (`routes.go`).
+
+**What this deliberately does NOT include:** a web UI page/nav entry (no precedent exists for ANY vertical having one; flagged to the user as a materially bigger, separate ask before starting, and they chose the smaller scope), and no live-tenant credential wiring (the M365 Defender adapter still only reads `AUDSPECT_EMAILGW_DEFENDER_*` env vars -- a real multi-tenant credential UI would reuse `web/src/features/integrations.js`'s existing "Respond connector" pattern, which already has a `microsoft_defender` provider for Defender for *Endpoint*, a different product from Defender for *Office 365* -- not attempted here).

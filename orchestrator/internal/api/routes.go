@@ -233,6 +233,13 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		// verdict of its own.
 		r.Get("/api/webgw/industry-profiles", h.GetWebGWIndustryProfiles)
 		r.Get("/api/webgw/industry-profiles.html", h.GetWebGWIndustryProfilesHTML)
+		// EmailGW coverage report (internal/emailgwefficacy), same read-only
+		// shape as /api/webgw/industry-profiles: Audspect's real, current
+		// EmailGW coverage data, never a computed verdict of its own. No
+		// industry-profile narrative here -- emailgwefficacy deliberately
+		// deferred industry profiles (its own Phase 5).
+		r.Get("/api/emailgw/coverage", h.GetEmailGWCoverage)
+		r.Get("/api/emailgw/coverage.html", h.GetEmailGWCoverageHTML)
 		// AD coverage assessment report, from the same admatrix.Report() data as
 		// /api/ad/coverage: PDF (primary), HTML, and JSON (secondary). Read-only.
 		r.Get("/api/ad/assessment.pdf", h.GetADAssessmentPDF)

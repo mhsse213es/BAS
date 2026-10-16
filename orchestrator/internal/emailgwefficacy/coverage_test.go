@@ -118,6 +118,23 @@ func TestCoverageReport_Summary_EmptyAreas_NoDivideByZeroPanic(t *testing.T) {
 	}
 }
 
+func TestCoverageReport_Areas_ReturnsACopyNotTheInternalSlice(t *testing.T) {
+	report, err := NewCoverageReport([]AreaCoverage{
+		{AreaID: "A", AreaName: "covered", Status: CoverageCovered},
+	})
+	if err != nil {
+		t.Fatalf("NewCoverageReport: %v", err)
+	}
+	areas := report.Areas()
+	if len(areas) != 1 || areas[0].AreaID != "A" {
+		t.Fatalf("Areas() = %+v, want exactly the one area this report was built from", areas)
+	}
+	areas[0].AreaID = "mutated"
+	if got := report.Areas()[0].AreaID; got != "A" {
+		t.Errorf("after mutating the returned slice, Areas()[0].AreaID = %q, want %q -- Areas() must return a copy, never the internal slice itself", got, "A")
+	}
+}
+
 // TestAudspectEmailGWCoverageReport_MatchesArchitectureSpecAreaCount
 // guards against this function silently drifting from §5's own
 // Coverage Matrix table -- emailGW.txt's taxonomy has exactly 7 areas
