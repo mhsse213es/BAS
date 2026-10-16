@@ -203,7 +203,7 @@ func TestExecute_UnsupportedTargetType_Fails(t *testing.T) {
 }
 
 func TestNewVendorClient_UnsupportedProvider_ReturnsError(t *testing.T) {
-	if _, err := NewVendorClient(ConnectorConfig{Provider: "sentinelone"}); err == nil {
+	if _, err := NewVendorClient(ConnectorConfig{Provider: "sophos"}); err == nil {
 		t.Fatal("expected an error for a provider not implemented in this feature")
 	}
 }
@@ -214,5 +214,8 @@ func TestNewVendorClient_KnownProviders_Succeed(t *testing.T) {
 	}
 	if _, err := NewVendorClient(ConnectorConfig{Provider: "microsoft_defender", TenantID: "t1"}); err != nil {
 		t.Errorf("microsoft_defender: %v", err)
+	}
+	if _, err := NewVendorClient(ConnectorConfig{Provider: "sentinelone", BaseURL: "https://company.sentinelone.net", APIToken: "tok"}); err != nil {
+		t.Errorf("sentinelone: %v", err)
 	}
 }

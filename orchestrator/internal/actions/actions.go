@@ -15,6 +15,7 @@ import (
 
 	"github.com/audspect/bas/internal/vendors/crowdstrike"
 	"github.com/audspect/bas/internal/vendors/defender"
+	"github.com/audspect/bas/internal/vendors/sentinelone"
 )
 
 // Action types this feature supports.
@@ -98,12 +99,13 @@ type VendorClient interface {
 // response connector — persisted in action_connectors, loaded by
 // internal/api and passed to NewVendorClient.
 type ConnectorConfig struct {
-	Provider              string // "crowdstrike" | "microsoft_defender"
+	Provider              string // "crowdstrike" | "microsoft_defender" | "sentinelone"
 	TenantID              string // Defender only
 	ClientID              string
 	ClientSecret          string
-	BaseURL               string // CrowdStrike only
+	BaseURL               string // CrowdStrike and SentinelOne (SentinelOne: the tenant's own management console URL)
 	KillProcessScriptName string // Defender only
+	APIToken              string // SentinelOne only -- a static, console-generated API token, not an OAuth secret
 }
 
 // NewVendorClient builds the VendorClient for cfg.Provider.
@@ -117,6 +119,10 @@ func NewVendorClient(cfg ConnectorConfig) (VendorClient, error) {
 		return defender.New(defender.Config{
 			TenantID: cfg.TenantID, ClientID: cfg.ClientID, ClientSecret: cfg.ClientSecret,
 			KillProcessScriptName: cfg.KillProcessScriptName,
+		}), nil
+	case "sentinelone":
+		return sentinelone.New(sentinelone.Config{
+			BaseURL: cfg.BaseURL, APIToken: cfg.APIToken,
 		}), nil
 	default:
 		return nil, fmt.Errorf("actions: provider %q not supported", cfg.Provider)
