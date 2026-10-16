@@ -256,7 +256,7 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		// wafcatalog/wafval packages, never a claim about a deployed WAF's
 		// live efficacy. Every new scenario adds one slug here -- no new
 		// handler function.
-		for _, slug := range []string{"exploit-prevention", "http-protocol-integrity", "api-protection"} {
+		for _, slug := range []string{"exploit-prevention", "http-protocol-integrity", "api-protection", "automated-abuse"} {
 			r.Get("/api/waf/scenarios/"+slug, h.wafScenarioJSONHandler(slug))
 			r.Get("/api/waf/scenarios/"+slug+".html", h.wafScenarioHTMLHandler(slug))
 		}

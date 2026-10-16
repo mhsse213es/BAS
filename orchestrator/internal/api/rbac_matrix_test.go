@@ -54,6 +54,8 @@ var routeMatrix = []routeCase{
 	{http.MethodGet, "/api/waf/scenarios/http-protocol-integrity.html", tierAny, ""},
 	{http.MethodGet, "/api/waf/scenarios/api-protection", tierAny, ""},
 	{http.MethodGet, "/api/waf/scenarios/api-protection.html", tierAny, ""},
+	{http.MethodGet, "/api/waf/scenarios/automated-abuse", tierAny, ""},
+	{http.MethodGet, "/api/waf/scenarios/automated-abuse.html", tierAny, ""},
 	{http.MethodGet, "/api/ad/assessment.pdf", tierAny, ""},
 	{http.MethodGet, "/api/ad/assessment.html", tierAny, ""},
 	{http.MethodGet, "/api/ad/assessment.json", tierAny, ""},

@@ -41,6 +41,19 @@ func TestEvaluateScenarioBySlug_APIProtection_ReturnsRealFail(t *testing.T) {
 	}
 }
 
+func TestEvaluateScenarioBySlug_AutomatedAbuse_ReturnsRealFail(t *testing.T) {
+	scenario, result, err := EvaluateScenarioBySlug("automated-abuse")
+	if err != nil {
+		t.Fatalf("EvaluateScenarioBySlug: %v", err)
+	}
+	if scenario.ID != "WAFSCENARIO-AUTOMATED-ABUSE" {
+		t.Errorf("scenario.ID = %q, want WAFSCENARIO-AUTOMATED-ABUSE", scenario.ID)
+	}
+	if result.Outcome != ScenarioFail {
+		t.Errorf("Outcome = %q, want %q", result.Outcome, ScenarioFail)
+	}
+}
+
 func TestEvaluateScenarioBySlug_UnknownSlug_ReturnsError(t *testing.T) {
 	if _, _, err := EvaluateScenarioBySlug("does-not-exist"); err == nil {
 		t.Fatal("want error for unknown slug, got nil")
