@@ -66,14 +66,24 @@ func NewEnterpriseScenario(id, name, objective string, contributingVectorIDs []s
 // ContributingVectorIDs actually exists in catalog, returning an error
 // naming the first one that does not -- catching a typo'd or
 // since-removed vector ID. Mirrors wafprofile.ValidateAgainstCatalog
-// exactly.
+// exactly. A thin wrapper over ValidateAgainstKnownIDs for the common,
+// single-wafcatalog case; scenarios bundling vectors from more than
+// one catalog package call ValidateAgainstKnownIDs directly.
 func ValidateAgainstCatalog(scenario EnterpriseScenario, catalog []wafcatalog.AttackVector) error {
 	known := make(map[string]bool, len(catalog))
 	for _, vector := range catalog {
 		known[vector.ID] = true
 	}
+	return ValidateAgainstKnownIDs(scenario, known)
+}
+
+// ValidateAgainstKnownIDs confirms every one of scenario's
+// ContributingVectorIDs is a key of knownIDs, returning an error
+// naming the first one that is not. Catalog-agnostic: callers build
+// knownIDs from whichever catalog package(s) a given scenario bundles.
+func ValidateAgainstKnownIDs(scenario EnterpriseScenario, knownIDs map[string]bool) error {
 	for _, vectorID := range scenario.ContributingVectorIDs {
-		if !known[vectorID] {
+		if !knownIDs[vectorID] {
 			return fmt.Errorf("scenario %q references attack-vector ID %q, which does not exist in the given catalog", scenario.ID, vectorID)
 		}
 	}

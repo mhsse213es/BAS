@@ -62,6 +62,29 @@ func TestWafScenarioJSONHandler_HTTPProtocolIntegrity_ReturnsRealFailOutcome(t *
 	}
 }
 
+// Review Focus: a THIRD scenario, spanning two real catalogs
+// internally (wafcatalog + wafapiflow), must serve correctly through
+// the same shared closure with no handler changes.
+func TestWafScenarioJSONHandler_APIProtection_ReturnsRealFailOutcome(t *testing.T) {
+	h := &Handler{}
+	rr := httptest.NewRecorder()
+	h.wafScenarioJSONHandler("api-protection")(rr, httptest.NewRequest(http.MethodGet, "/api/waf/scenarios/api-protection", nil))
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rr.Code)
+	}
+	body := rr.Body.String()
+	if !strings.Contains(body, `"outcome":"fail"`) {
+		t.Error(`body missing "outcome":"fail"`)
+	}
+	if !strings.Contains(body, `"vectorId":"APIFLOW-003"`) {
+		t.Error(`body missing "vectorId":"APIFLOW-003"`)
+	}
+	if !strings.Contains(body, `"vectorId":"API-001"`) {
+		t.Error(`body missing "vectorId":"API-001" (confirms both catalogs' vectors are present)`)
+	}
+}
+
 func TestGetWAFExploitPreventionScenarioHTML_RendersFailOutcome(t *testing.T) {
 	h := &Handler{}
 	rr := httptest.NewRecorder()

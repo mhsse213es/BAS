@@ -57,12 +57,27 @@ func failingVerdict(v wafval.Verdict) bool {
 // present) forces ScenarioIncomplete; only every contributing vector
 // both supplied and Blocked reaches ScenarioPass.
 func EvaluateScenario(scenario EnterpriseScenario, fixtures map[string]VectorFixture, catalog []wafcatalog.AttackVector) (ScenarioResult, error) {
-	if err := ValidateAgainstCatalog(scenario, catalog); err != nil {
-		return ScenarioResult{}, fmt.Errorf("evaluating scenario %q: %w", scenario.ID, err)
-	}
 	severityByID := make(map[string]wafcatalog.Severity, len(catalog))
 	for _, v := range catalog {
 		severityByID[v.ID] = v.Severity
+	}
+	return EvaluateScenarioWithSeverities(scenario, fixtures, severityByID)
+}
+
+// EvaluateScenarioWithSeverities is EvaluateScenario's catalog-agnostic
+// core: callers supply a vectorID -> Severity lookup directly, built
+// from however many catalog packages a scenario bundles (wafcatalog,
+// wafapiflow, wafbotabuse, ... -- each package's own Severity type
+// converts losslessly to wafcatalog.Severity since all of them are
+// plain critical/high/medium/low string enums). The non-offsetting
+// precedence rule is identical to EvaluateScenario's.
+func EvaluateScenarioWithSeverities(scenario EnterpriseScenario, fixtures map[string]VectorFixture, severityByID map[string]wafcatalog.Severity) (ScenarioResult, error) {
+	knownIDs := make(map[string]bool, len(severityByID))
+	for id := range severityByID {
+		knownIDs[id] = true
+	}
+	if err := ValidateAgainstKnownIDs(scenario, knownIDs); err != nil {
+		return ScenarioResult{}, fmt.Errorf("evaluating scenario %q: %w", scenario.ID, err)
 	}
 
 	var assertions []VectorAssertion
