@@ -239,4 +239,12 @@ type EfficacyResult struct {
 	Prevention       VerdictDetail             `json:"prevention"`
 	DetectionVerdict VerdictDetail             `json:"detectionVerdict"`
 	ResponseVerdict  VerdictDetail             `json:"responseVerdict"`
+	// SIEMEvidence/TicketEvidence are populated only when
+	// CorrelateWithSIEM/CorrelateWithTicketing (siemcorrelation.go/
+	// ticketcorrelation.go) have actually run against this result --
+	// independent, separately-sourced corroboration of
+	// DetectionVerdict/ResponseVerdict respectively, never derived
+	// from Detection/Response above.
+	SIEMEvidence   []SIEMEvidence   `json:"siemEvidence,omitempty"`
+	TicketEvidence []TicketEvidence `json:"ticketEvidence,omitempty"`
 }

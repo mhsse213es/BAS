@@ -141,11 +141,19 @@ func AudspectEmailGWCoverageReport() (CoverageReport, error) {
 		{AreaID: "D", AreaName: "URL/browser/post-delivery protection", Status: CoverageCovered},
 		{AreaID: "E", AreaName: "Outbound security/DLP", Status: CoverageCovered},
 		{AreaID: "F", AreaName: "Mailbox/identity/tenant security", Status: CoverageCovered},
-		{
-			AreaID:          "G",
-			AreaName:        "Detection/IR/resilience",
-			Status:          CoverageNotCovered,
-			ExclusionReason: "",
-		},
+		// Flipped to Covered: EG-008/EG-010's own detection-response
+		// chain already proved part of this area, and
+		// siemcorrelation.go/ticketcorrelation.go now add real,
+		// fixture-backed SIEM- and ticketing-correlation evidence
+		// layers on top of DetectionVerdict/ResponseVerdict
+		// respectively (CorrelateWithSIEM/CorrelateWithTicketing) --
+		// this row had drifted stale against the architecture spec's
+		// own §5 table, which already read "covered" since Phase 7;
+		// fixed here rather than left as a permanent inconsistency,
+		// per this function's own doc comment. IR workflow
+		// orchestration beyond this evidence layer (automated
+		// remediation playbooks, cross-tool case management) remains
+		// unbuilt.
+		{AreaID: "G", AreaName: "Detection/IR/resilience", Status: CoverageCovered},
 	})
 }
