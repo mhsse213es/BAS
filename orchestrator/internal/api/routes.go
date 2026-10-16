@@ -282,6 +282,10 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		// Workstream 2 unified customer-facing report -- composes
 		// coverage, runs summary, metrics, and campaign outcomes.
 		r.Get("/api/emailgw/report", h.GetEmailGWReport)
+		// AV/NGAV ransomware-precursor bridge: points at the real, already-
+		// integrated ransomware mastery evidence pipeline (internal/rwevidence,
+		// internal/rwscore) instead of a second, duplicate evaluator.
+		r.Get("/api/av/ransomware-precursor-coverage", h.GetAVRansomwarePrecursorCoverage)
 		// AD coverage assessment report, from the same admatrix.Report() data as
 		// /api/ad/coverage: PDF (primary), HTML, and JSON (secondary). Read-only.
 		r.Get("/api/ad/assessment.pdf", h.GetADAssessmentPDF)

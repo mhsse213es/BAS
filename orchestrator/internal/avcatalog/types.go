@@ -20,9 +20,15 @@
 // Vector shape of its own. Group F (ransomware and destructive-impact
 // precursors) is NOT modeled here either: av.txt §8 step 5 explicitly says
 // to integrate with the existing ransomware mastery (internal/rwevidence,
-// which already builds on internal/controlval) rather than duplicate it; a
-// future AV enterprise scenario covering group F should dispatch into
-// rwevidence directly.
+// which already builds on internal/controlval) rather than duplicate it.
+// That bridge is real, not just planned: GET
+// /api/av/ransomware-precursor-coverage (internal/api/av_ransomware_bridge.go)
+// reports, per rwevidence-modeled technique, which real, already-dispatched
+// scenarios exercise it, and points callers at the existing
+// /api/scenarios/runs/{runId}/rw-score endpoint for findings -- this
+// catalog adds no Vector and internal/avefficacy adds no evaluator for
+// group F, because that would duplicate the real pipeline rather than use
+// it.
 package avcatalog
 
 import "github.com/audspect/bas/internal/avval"

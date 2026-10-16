@@ -86,6 +86,7 @@ var routeMatrix = []routeCase{
 	{http.MethodGet, "/api/av/scenarios/cross-control-attribution.html", tierAny, ""},
 	{http.MethodGet, "/api/av/industry-profiles", tierAny, ""},
 	{http.MethodGet, "/api/av/industry-profiles.html", tierAny, ""},
+	{http.MethodGet, "/api/av/ransomware-precursor-coverage", tierAny, ""},
 	{http.MethodGet, "/api/ad/assessment.pdf", tierAny, ""},
 	{http.MethodGet, "/api/ad/assessment.html", tierAny, ""},
 	{http.MethodGet, "/api/ad/assessment.json", tierAny, ""},
