@@ -309,6 +309,9 @@ func main() {
 	if err := db.EnsureEmailGWRunSchema(context.Background(), adminPool); err != nil {
 		log.Fatalf("[FATAL] email gw run schema: %v", err)
 	}
+	if err := db.EnsureEmailGWCampaignSchema(context.Background(), adminPool); err != nil {
+		log.Fatalf("[FATAL] email gw campaign schema: %v", err)
+	}
 	if err := db.EnsureNetworkDiscoverySchema(context.Background(), adminPool); err != nil {
 		log.Fatalf("[FATAL] network discovery schema: %v", err)
 	}
@@ -924,8 +927,16 @@ func main() {
 	// still be waiting out a long response-scenario dwell window.
 	if emailgwProvider != nil {
 		go func() {
-			if err := api.RecoverEmailGWRuns(context.Background(), pool, emailgwProvider); err != nil {
+			if err := api.RecoverEmailGWRuns(context.Background(), pool, emailgwProvider, emailgwInjectionTarget); err != nil {
 				log.Printf("[!] emailgw run recovery: %v", err)
+			}
+			// Closes the narrower restart race RecoverEmailGWRuns
+			// doesn't cover: a campaign stage whose run already
+			// finished before the process died, but whose campaign
+			// was never advanced past it (see RecoverEmailGWCampaigns'
+			// own doc comment).
+			if err := api.RecoverEmailGWCampaigns(context.Background(), pool, emailgwProvider, emailgwInjectionTarget); err != nil {
+				log.Printf("[!] emailgw campaign recovery: %v", err)
 			}
 		}()
 	}

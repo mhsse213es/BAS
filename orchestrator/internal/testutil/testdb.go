@@ -153,6 +153,11 @@ func newTestDB(ctx context.Context) (*TestDB, error) {
 		_ = container.Terminate(context.Background())
 		return nil, fmt.Errorf("testutil: EnsureEmailGWRunSchema: %w", err)
 	}
+	if err := db.EnsureEmailGWCampaignSchema(ctx, pool); err != nil {
+		pool.Close()
+		_ = container.Terminate(context.Background())
+		return nil, fmt.Errorf("testutil: EnsureEmailGWCampaignSchema: %w", err)
+	}
 	if err := db.EnsureCloudCampaignSchema(ctx, pool); err != nil {
 		pool.Close()
 		_ = container.Terminate(context.Background())

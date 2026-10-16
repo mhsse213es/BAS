@@ -165,7 +165,7 @@ func TestFinishEmailGWRunAfterWindow_PastWindow_VerifiesImmediatelyAndWritesComp
 			Provenance: emailgwefficacy.Provenance{Kind: emailgwefficacy.ProvenanceObserved}, Timestamp: now.Add(-30 * time.Second),
 		}})
 
-		finishEmailGWRunAfterWindow(pool, provider, exp, observation, window, run.ID)
+		finishEmailGWRunAfterWindow(pool, provider, emailgwefficacy.InjectionTarget{}, exp, observation, window, run.ID)
 
 		got, err := db.GetEmailGWRun(ctx, pool, run.ID)
 		if err != nil {
@@ -197,7 +197,7 @@ func TestFinishEmailGWRunAfterWindow_NoEvidence_WritesPartial(t *testing.T) {
 		observation := emailgwefficacy.OriginDeliveryObservation{SenderPayloadHash: "abc123", Timestamp: now.Add(-time.Minute)}
 		provider := emailgwefficacy.NewFixtureMailEvidenceProvider(nil, nil) // no evidence at all -> Inconclusive dimensions
 
-		finishEmailGWRunAfterWindow(pool, provider, exp, observation, window, run.ID)
+		finishEmailGWRunAfterWindow(pool, provider, emailgwefficacy.InjectionTarget{}, exp, observation, window, run.ID)
 
 		got, err := db.GetEmailGWRun(ctx, pool, run.ID)
 		if err != nil {
@@ -236,7 +236,7 @@ func TestRecoverEmailGWRuns_RunningRowWithPastWindow_GetsVerifiedAndTerminal(t *
 			Provenance: emailgwefficacy.Provenance{Kind: emailgwefficacy.ProvenanceObserved}, Timestamp: now.Add(-30 * time.Minute),
 		}})
 
-		if err := RecoverEmailGWRuns(ctx, pool, provider); err != nil {
+		if err := RecoverEmailGWRuns(ctx, pool, provider, emailgwefficacy.InjectionTarget{}); err != nil {
 			t.Fatalf("RecoverEmailGWRuns: %v", err)
 		}
 
@@ -272,7 +272,7 @@ func TestRecoverEmailGWRuns_UnknownScenarioID_MarkedFailed(t *testing.T) {
 			t.Fatalf("update injected: %v", err)
 		}
 
-		if err := RecoverEmailGWRuns(ctx, pool, emailgwefficacy.NewFixtureMailEvidenceProvider(nil, nil)); err != nil {
+		if err := RecoverEmailGWRuns(ctx, pool, emailgwefficacy.NewFixtureMailEvidenceProvider(nil, nil), emailgwefficacy.InjectionTarget{}); err != nil {
 			t.Fatalf("RecoverEmailGWRuns: %v", err)
 		}
 
