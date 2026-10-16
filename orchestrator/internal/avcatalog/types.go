@@ -78,6 +78,12 @@ type ExecutionTemplate struct {
 	Command      string
 	ArtifactPath string // where a test file/artifact is placed, if any
 	Description  string
+	// CleanupCommand is an actual executable command, in the same Executor,
+	// that reverses this leg's artifact/change -- distinct from Vector's own
+	// CleanupRequirement, which is human-readable prose describing what
+	// cleanup must verify. Empty means no adapter-executable cleanup command
+	// exists for this leg (e.g. nothing persists); never fabricated.
+	CleanupCommand string
 }
 
 // StandardsMapping ties a vector to external references. ATTACKTechniques is
