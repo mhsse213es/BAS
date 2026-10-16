@@ -39,6 +39,29 @@ func TestGetWAFExploitPreventionScenario_ReturnsRealFailOutcome(t *testing.T) {
 	}
 }
 
+// Review Focus: the generic slug handler must serve a SECOND, different
+// scenario correctly through the shared closure, not just the one it
+// was first built for.
+func TestWafScenarioJSONHandler_HTTPProtocolIntegrity_ReturnsRealFailOutcome(t *testing.T) {
+	h := &Handler{}
+	rr := httptest.NewRecorder()
+	h.wafScenarioJSONHandler("http-protocol-integrity")(rr, httptest.NewRequest(http.MethodGet, "/api/waf/scenarios/http-protocol-integrity", nil))
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rr.Code)
+	}
+	body := rr.Body.String()
+	if !strings.Contains(body, `"outcome":"fail"`) {
+		t.Error(`body missing "outcome":"fail"`)
+	}
+	if !strings.Contains(body, `"vectorId":"HTTPPARSE-001"`) {
+		t.Error(`body missing "vectorId":"HTTPPARSE-001"`)
+	}
+	if !strings.Contains(body, `"scenarioName":"HTTP Protocol Integrity and Parser Consistency"`) {
+		t.Error("body missing scenarioName for the correct scenario")
+	}
+}
+
 func TestGetWAFExploitPreventionScenarioHTML_RendersFailOutcome(t *testing.T) {
 	h := &Handler{}
 	rr := httptest.NewRecorder()

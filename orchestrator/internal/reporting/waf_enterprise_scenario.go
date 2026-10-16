@@ -1,11 +1,11 @@
 package reporting
 
-// WAF exploit-prevention scenario report -- HTML only (no PDF, same
+// WAF enterprise scenario report -- HTML only (no PDF, same
 // deliberately lightweight first wiring pass as the WAF coverage
 // report). This package only formats; it consumes
-// internal/wafassessment's seed scenario, seed fixtures, and
-// EvaluateScenario, and knows nothing about how the aggregation rule
-// itself works.
+// internal/wafassessment's scenario registry (EvaluateScenarioBySlug)
+// and knows nothing about how any scenario's aggregation rule itself
+// works, or which claim shape it evaluates.
 
 import (
 	"fmt"
@@ -14,13 +14,12 @@ import (
 	"time"
 
 	"github.com/audspect/bas/internal/wafassessment"
-	"github.com/audspect/bas/internal/wafcatalog"
 )
 
-// WAFExploitPreventionVectorEntry is one contributing vector's
-// evaluated outcome, carried into the report verbatim from
+// WAFScenarioVectorEntry is one contributing vector's evaluated
+// outcome, carried into the report verbatim from
 // internal/wafassessment.
-type WAFExploitPreventionVectorEntry struct {
+type WAFScenarioVectorEntry struct {
 	VectorID       string
 	Severity       string
 	Verdict        string
@@ -28,43 +27,32 @@ type WAFExploitPreventionVectorEntry struct {
 	Reason         string
 }
 
-// WAFExploitPreventionScenarioReport is the canonical input to
-// WAFExploitPreventionScenarioReportHTML. Build it with
-// BuildExploitPreventionScenarioReport.
-type WAFExploitPreventionScenarioReport struct {
+// WAFScenarioReport is the canonical input to WAFScenarioReportHTML.
+// Build it with BuildScenarioReport.
+type WAFScenarioReport struct {
+	ScenarioID        string
+	ScenarioName      string
 	GeneratedAt       time.Time
 	Objective         string
 	Outcome           string
 	Summary           string
-	Assertions        []WAFExploitPreventionVectorEntry
+	Assertions        []WAFScenarioVectorEntry
 	UntestedVectorIDs []string
 }
 
-// BuildExploitPreventionScenarioReport builds the report from
-// wafassessment's real, current seed scenario, seed fixtures, and the
-// real wafcatalog -- the same data any future JSON endpoint would
-// serve, so the HTML report can never drift from it.
-func BuildExploitPreventionScenarioReport() (WAFExploitPreventionScenarioReport, error) {
-	scenario, err := wafassessment.AudspectExploitPreventionScenario()
+// BuildScenarioReport builds the report for the enterprise scenario
+// registered under slug in internal/wafassessment's scenario registry
+// -- the same data any JSON endpoint for that slug would serve, so the
+// HTML report can never drift from it.
+func BuildScenarioReport(slug string) (WAFScenarioReport, error) {
+	scenario, result, err := wafassessment.EvaluateScenarioBySlug(slug)
 	if err != nil {
-		return WAFExploitPreventionScenarioReport{}, fmt.Errorf("loading exploit-prevention scenario: %w", err)
-	}
-	fixtures, err := wafassessment.AudspectExploitPreventionFixtures()
-	if err != nil {
-		return WAFExploitPreventionScenarioReport{}, fmt.Errorf("loading exploit-prevention fixtures: %w", err)
-	}
-	catalog, err := wafcatalog.AudspectWAFAttackCatalog()
-	if err != nil {
-		return WAFExploitPreventionScenarioReport{}, fmt.Errorf("loading attack catalog: %w", err)
-	}
-	result, err := wafassessment.EvaluateScenario(scenario, fixtures, catalog)
-	if err != nil {
-		return WAFExploitPreventionScenarioReport{}, fmt.Errorf("evaluating exploit-prevention scenario: %w", err)
+		return WAFScenarioReport{}, fmt.Errorf("building report for scenario %q: %w", slug, err)
 	}
 
-	entries := make([]WAFExploitPreventionVectorEntry, 0, len(result.Assertions))
+	entries := make([]WAFScenarioVectorEntry, 0, len(result.Assertions))
 	for _, a := range result.Assertions {
-		entries = append(entries, WAFExploitPreventionVectorEntry{
+		entries = append(entries, WAFScenarioVectorEntry{
 			VectorID:       a.VectorID,
 			Severity:       string(a.Severity),
 			Verdict:        string(a.Verdict),
@@ -73,7 +61,9 @@ func BuildExploitPreventionScenarioReport() (WAFExploitPreventionScenarioReport,
 		})
 	}
 
-	return WAFExploitPreventionScenarioReport{
+	return WAFScenarioReport{
+		ScenarioID:        scenario.ID,
+		ScenarioName:      scenario.Name,
 		GeneratedAt:       time.Now().UTC(),
 		Objective:         scenario.Objective,
 		Outcome:           string(result.Outcome),
@@ -83,12 +73,22 @@ func BuildExploitPreventionScenarioReport() (WAFExploitPreventionScenarioReport,
 	}, nil
 }
 
-var wafExploitPreventionReportTmpl = template.Must(template.New("waf-exploit-prevention").Parse(`<!DOCTYPE html>
+// BuildExploitPreventionScenarioReport is a thin, already-shipped
+// wrapper for the "exploit-prevention" slug, kept so existing callers
+// and tests written against this exact name keep working unchanged.
+// New scenarios register in internal/wafassessment's registry and are
+// served through BuildScenarioReport directly -- no per-scenario
+// wrapper is added for them.
+func BuildExploitPreventionScenarioReport() (WAFScenarioReport, error) {
+	return BuildScenarioReport("exploit-prevention")
+}
+
+var wafScenarioReportTmpl = template.Must(template.New("waf-enterprise-scenario").Parse(`<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>WAF Exploit Prevention Scenario</title>
+<title>{{.ScenarioName}}</title>
 <style>
 body{font-family:"Segoe UI",system-ui,-apple-system,Helvetica,Arial,sans-serif;color:#1a2332;background:#fff;margin:0;padding:32px;line-height:1.6}
 h1{font-size:1.4rem;font-weight:800;margin-bottom:4px}
@@ -105,7 +105,7 @@ h1{font-size:1.4rem;font-weight:800;margin-bottom:4px}
 </style>
 </head>
 <body>
-<h1>Exploit Prevention and Attack-Chain Validation</h1>
+<h1>{{.ScenarioName}}</h1>
 <div class="generated">Generated {{.GeneratedAt.Format "02 Jan 2006 15:04 UTC"}}</div>
 <div class="objective">{{.Objective}}</div>
 <div class="outcome outcome-{{.Outcome}}">{{.Outcome}}</div>
@@ -121,16 +121,22 @@ h1{font-size:1.4rem;font-weight:800;margin-bottom:4px}
 {{end}}
 <div class="limitations">
 Limitations: every assertion above is fixture-validated, not a claim about a deployed WAF's live efficacy.
-This is one of ten planned enterprise assessment scenarios; the other nine, and the enterprise-domain
-grouping above them, are not yet built. Real HTTP execution against a deployed WAF is not yet built.
+This is one of ten planned enterprise assessment scenarios; the enterprise-domain grouping above them is
+not yet built. Real HTTP execution against a deployed WAF is not yet built.
 </div>
 </body>
 </html>
 `))
 
-// WAFExploitPreventionScenarioReportHTML renders the report as a
-// plain styled HTML page. html/template auto-escapes every field, so
-// a reason or vector ID can never inject markup into the page.
-func WAFExploitPreventionScenarioReportHTML(w io.Writer, rep WAFExploitPreventionScenarioReport) error {
-	return wafExploitPreventionReportTmpl.Execute(w, rep)
+// WAFScenarioReportHTML renders rep as a plain styled HTML page.
+// html/template auto-escapes every field, so a reason or vector ID can
+// never inject markup into the page.
+func WAFScenarioReportHTML(w io.Writer, rep WAFScenarioReport) error {
+	return wafScenarioReportTmpl.Execute(w, rep)
+}
+
+// WAFExploitPreventionScenarioReportHTML is a thin, already-shipped
+// wrapper kept for existing callers written against this exact name.
+func WAFExploitPreventionScenarioReportHTML(w io.Writer, rep WAFScenarioReport) error {
+	return WAFScenarioReportHTML(w, rep)
 }
