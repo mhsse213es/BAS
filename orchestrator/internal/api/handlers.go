@@ -37,6 +37,7 @@ import (
 	"github.com/audspect/bas/internal/correlation"
 	"github.com/audspect/bas/internal/db"
 	"github.com/audspect/bas/internal/detectverify"
+	"github.com/audspect/bas/internal/emailgwefficacy"
 	"github.com/audspect/bas/internal/emsweep"
 	"github.com/audspect/bas/internal/endpointrisk"
 	"github.com/audspect/bas/internal/evidence"
@@ -154,6 +155,12 @@ type Handler struct {
 	// -- Configured() is then false and discovery requests are refused
 	// with 503, never a default/fabricated vantage point.
 	networkVantagePoint networkgraph.VantagePoint
+	// emailgwProvider/emailgwInjectionTarget configure real EmailGW run
+	// execution (TriggerEmailGWRun). Nil/zero until WithEmailGWRun is
+	// called -- the trigger endpoint then refuses with 503, same
+	// unconfigured-not-broken posture as networkVantagePoint above.
+	emailgwProvider        emailgwefficacy.MailEvidenceProvider
+	emailgwInjectionTarget emailgwefficacy.InjectionTarget
 }
 
 // New creates a Handler.
@@ -178,6 +185,16 @@ func (h *Handler) WithCompliance(m *compliance.Mapper) *Handler {
 // vantage point (see internal/networkgraph.LoadVantagePoint).
 func (h *Handler) WithNetworkVantagePoint(vp networkgraph.VantagePoint) *Handler {
 	h.networkVantagePoint = vp
+	return h
+}
+
+// WithEmailGWRun attaches the live MailEvidenceProvider and
+// InjectionTarget TriggerEmailGWRun needs to actually send and verify
+// a real EmailGW scenario. Call with a nil provider (the zero value)
+// to leave real-run execution unconfigured.
+func (h *Handler) WithEmailGWRun(provider emailgwefficacy.MailEvidenceProvider, target emailgwefficacy.InjectionTarget) *Handler {
+	h.emailgwProvider = provider
+	h.emailgwInjectionTarget = target
 	return h
 }
 
