@@ -5,25 +5,19 @@ import (
 	"time"
 )
 
-// unsupportedResponseReason is this phase's constant reason for every
-// ResponseVerdict -- no response-evidence integration (quarantine/
-// recall/account-containment completion tracking against a real
-// product) exists yet; this is a structural "capability does not
-// exist," distinct from a run whose evidence happened to be missing
-// (Inconclusive), matching webgwefficacy's own Phase 1 precedent for
-// its then-unbuilt Response dimension.
-const unsupportedResponseReason = "no response-evidence integration exists in this phase"
-
 // VerifyMailExpectation checks one declared expectation against
-// enforcement and detection evidence, scoring Prevention and
-// DetectionVerdict independently from two disjoint evidence calls --
-// by construction, nothing returned by DetectionEvidenceFor can ever
-// change Prevention's verdict, and nothing returned by
-// EnforcementEvidenceFor can ever change DetectionVerdict's. This is
-// the structural implementation of emailGW.txt §3's own instruction:
+// enforcement, detection, and response evidence, scoring Prevention,
+// DetectionVerdict, and ResponseVerdict independently from three
+// disjoint evidence calls -- by construction, nothing returned by
+// DetectionEvidenceFor or ResponseEvidenceFor can ever change
+// Prevention's verdict, and so on for each pair. This is the
+// structural implementation of emailGW.txt §3's own instruction:
 // "Never report missing SIEM telemetry as proof that the gateway
 // failed to block a message. Never claim a finding is false merely
-// because one downstream product did not generate an alert."
+// because one downstream product did not generate an alert." The same
+// discipline applies to Response: a message whose remediation hasn't
+// resolved yet, or whose provider errored, must never be read as a
+// confirmed remediation failure.
 func VerifyMailExpectation(
 	exp MailExpectation,
 	observation OriginDeliveryObservation,
@@ -33,15 +27,12 @@ func VerifyMailExpectation(
 	result := EfficacyResult{
 		Expectation: exp,
 		Observation: observation,
-		ResponseVerdict: VerdictDetail{
-			Verdict: VerdictNotTested,
-			Reason:  unsupportedResponseReason,
-		},
 	}
 	msg := exp.Ref()
 
 	result.Prevention = verifyPrevention(exp, provider, msg, window, &result.Enforcement)
 	result.DetectionVerdict = verifyDetection(provider, msg, window, &result.Detection)
+	result.ResponseVerdict = verifyResponse(provider, msg, window, &result.Response)
 
 	return result
 }
@@ -112,5 +103,41 @@ func verifyDetection(provider MailEvidenceProvider, msg MessageRef, window TimeW
 	return VerdictDetail{
 		Verdict: VerdictConfirmedFailure,
 		Reason:  "detection provider confirmed no alert was generated for this message",
+	}
+}
+
+// verifyResponse computes the ResponseVerdict dimension from response
+// evidence alone. A collection error or an empty result both yield
+// Inconclusive, never ConfirmedFailure -- a remediation that hasn't
+// resolved yet (still in a non-terminal state at a real provider) is
+// expected to surface as no evidence yet, the same "absence is not
+// proof" discipline verifyPrevention and verifyDetection apply to
+// their own dimensions. Only an explicit record asserting
+// Completed == false (the provider reached a terminal, non-success
+// state and reported it) can produce ConfirmedFailure.
+func verifyResponse(provider MailEvidenceProvider, msg MessageRef, window TimeWindow, responseOut *[]ResponseEvidence) VerdictDetail {
+	records, err := provider.ResponseEvidenceFor(msg, window)
+	if err != nil {
+		return VerdictDetail{
+			Verdict: VerdictInconclusive,
+			Reason:  fmt.Sprintf("response evidence collection failed: %v", err),
+		}
+	}
+	if len(records) == 0 {
+		return VerdictDetail{
+			Verdict: VerdictInconclusive,
+			Reason:  "no response evidence found for this message in the window; a remediation action that hasn't resolved yet is never read as a confirmed failure",
+		}
+	}
+
+	*responseOut = records
+	latest := latestByTimestamp(records, func(e ResponseEvidence) time.Time { return e.Timestamp })
+
+	if latest.Completed {
+		return VerdictDetail{Verdict: VerdictConfirmedSuccess}
+	}
+	return VerdictDetail{
+		Verdict: VerdictConfirmedFailure,
+		Reason:  fmt.Sprintf("required response action %q did not complete", latest.ActionRequired),
 	}
 }

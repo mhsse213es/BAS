@@ -60,6 +60,79 @@ func TestQueryAlerts_ReturnsNormalizedAlerts(t *testing.T) {
 	}
 }
 
+func TestQueryAlerts_ParsesInvestigationStateAndResolvedDateTime(t *testing.T) {
+	tokenSrv := tokenMock(t)
+	defer tokenSrv.Close()
+
+	alertTime := time.Date(2026, 7, 14, 10, 2, 0, 0, time.UTC)
+	resolvedTime := alertTime.Add(5 * time.Minute)
+	graphSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]any{
+			"value": []map[string]any{
+				{
+					"id": "alert-1", "title": "Malicious email", "severity": "high",
+					"createdDateTime":    alertTime.Format(time.RFC3339),
+					"investigationState": "successfullyRemediated",
+					"resolvedDateTime":   resolvedTime.Format(time.RFC3339),
+				},
+			},
+		})
+	}))
+	defer graphSrv.Close()
+
+	c := newTestClient(t, tokenSrv.URL, graphSrv.URL)
+	alerts, err := c.QueryAlerts(context.Background(), alertTime.Add(-time.Hour), alertTime.Add(time.Hour))
+	if err != nil {
+		t.Fatalf("QueryAlerts: %v", err)
+	}
+	if len(alerts) != 1 {
+		t.Fatalf("alerts = %+v, want 1", alerts)
+	}
+	if alerts[0].InvestigationState != "successfullyRemediated" {
+		t.Errorf("InvestigationState = %q, want %q", alerts[0].InvestigationState, "successfullyRemediated")
+	}
+	if !alerts[0].ResolvedDateTime.Equal(resolvedTime) {
+		t.Errorf("ResolvedDateTime = %v, want %v", alerts[0].ResolvedDateTime, resolvedTime)
+	}
+}
+
+// TestQueryAlerts_UnresolvedAlert_ResolvedDateTimeIsZero proves an
+// alert with no resolvedDateTime (a non-terminal investigationState,
+// e.g. "running") correctly parses to the zero time.Time, never an
+// error -- unlike QueryAnalyzedEmails' loggedDateTime, an absent
+// resolution timestamp here is a real, valid state (not yet
+// resolved), not a parsing failure to guard against.
+func TestQueryAlerts_UnresolvedAlert_ResolvedDateTimeIsZero(t *testing.T) {
+	tokenSrv := tokenMock(t)
+	defer tokenSrv.Close()
+
+	alertTime := time.Date(2026, 7, 14, 10, 2, 0, 0, time.UTC)
+	graphSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]any{
+			"value": []map[string]any{
+				{
+					"id": "alert-1", "title": "Malicious email", "severity": "high",
+					"createdDateTime":    alertTime.Format(time.RFC3339),
+					"investigationState": "running",
+				},
+			},
+		})
+	}))
+	defer graphSrv.Close()
+
+	c := newTestClient(t, tokenSrv.URL, graphSrv.URL)
+	alerts, err := c.QueryAlerts(context.Background(), alertTime.Add(-time.Hour), alertTime.Add(time.Hour))
+	if err != nil {
+		t.Fatalf("QueryAlerts: %v", err)
+	}
+	if len(alerts) != 1 {
+		t.Fatalf("alerts = %+v, want 1", alerts)
+	}
+	if !alerts[0].ResolvedDateTime.IsZero() {
+		t.Errorf("ResolvedDateTime = %v, want zero value for an unresolved alert", alerts[0].ResolvedDateTime)
+	}
+}
+
 func TestQueryAlerts_GraphHTTPError_ReturnsError(t *testing.T) {
 	tokenSrv := tokenMock(t)
 	defer tokenSrv.Close()

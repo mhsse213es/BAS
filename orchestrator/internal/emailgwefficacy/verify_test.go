@@ -6,15 +6,17 @@ import (
 	"time"
 )
 
-// erroringProvider lets each leg (enforcement/detection) fail or
-// succeed independently -- used to prove VerifyMailExpectation
-// computes Prevention and DetectionVerdict from disjoint evidence
-// calls.
+// erroringProvider lets each leg (enforcement/detection/response)
+// fail or succeed independently -- used to prove VerifyMailExpectation
+// computes Prevention, DetectionVerdict, and ResponseVerdict from
+// disjoint evidence calls.
 type erroringProvider struct {
 	enforcement    []EnforcementEvidence
 	enforcementErr error
 	detection      []DetectionEvidence
 	detectionErr   error
+	response       []ResponseEvidence
+	responseErr    error
 }
 
 func (p erroringProvider) EnforcementEvidenceFor(msg MessageRef, window TimeWindow) ([]EnforcementEvidence, error) {
@@ -25,18 +27,75 @@ func (p erroringProvider) DetectionEvidenceFor(msg MessageRef, window TimeWindow
 	return p.detection, p.detectionErr
 }
 
+func (p erroringProvider) ResponseEvidenceFor(msg MessageRef, window TimeWindow) ([]ResponseEvidence, error) {
+	return p.response, p.responseErr
+}
+
 func fullWindow() TimeWindow {
 	now := time.Now()
 	return TimeWindow{Start: now.Add(-time.Hour), End: now.Add(time.Hour)}
 }
 
-func TestVerifyMailExpectation_ResponseAlwaysNotTestedInThisPhase(t *testing.T) {
+func TestVerifyMailExpectation_NoResponseEvidence_ResponseInconclusiveNeverAssumed(t *testing.T) {
 	exp := MailExpectation{SenderProfile: "spoofed-exec", Recipient: "cfo@example.com", MessageClass: "spf-fail", ExpectedAction: ExpectedQuarantine}
 	provider := NewFixtureMailEvidenceProvider(nil, nil)
 	result := VerifyMailExpectation(exp, OriginDeliveryObservation{}, provider, fullWindow())
 
-	if result.ResponseVerdict.Verdict != VerdictNotTested {
-		t.Errorf("ResponseVerdict.Verdict = %q, want %q -- no response-evidence integration exists until Phase 3+", result.ResponseVerdict.Verdict, VerdictNotTested)
+	if result.ResponseVerdict.Verdict != VerdictInconclusive {
+		t.Errorf("ResponseVerdict.Verdict = %q, want %q -- absence of response evidence must never be read as either a completed or a failed remediation", result.ResponseVerdict.Verdict, VerdictInconclusive)
+	}
+	if result.ResponseVerdict.Reason == "" {
+		t.Error("ResponseVerdict.Reason is empty, want a stated reason since Verdict != ConfirmedSuccess")
+	}
+}
+
+func TestVerifyMailExpectation_ResponseProviderError_ResponseInconclusive_OthersUnaffected(t *testing.T) {
+	now := time.Now()
+	exp := MailExpectation{SenderProfile: "spoofed-exec", Recipient: "cfo@example.com", MessageClass: "spf-fail", ExpectedAction: ExpectedQuarantine}
+	provider := erroringProvider{
+		enforcement: []EnforcementEvidence{{Message: exp.Ref(), Action: "quarantine", Timestamp: now}},
+		detection:   []DetectionEvidence{{Message: exp.Ref(), AlertGenerated: true, Timestamp: now}},
+		responseErr: errors.New("Graph API unreachable"),
+	}
+	result := VerifyMailExpectation(exp, OriginDeliveryObservation{}, provider, fullWindow())
+
+	if result.ResponseVerdict.Verdict != VerdictInconclusive {
+		t.Errorf("ResponseVerdict.Verdict = %q, want %q", result.ResponseVerdict.Verdict, VerdictInconclusive)
+	}
+	if result.Prevention.Verdict != VerdictConfirmedSuccess {
+		t.Errorf("Prevention.Verdict = %q, want %q -- a response-side failure must never affect Prevention (disjoint evidence calls)", result.Prevention.Verdict, VerdictConfirmedSuccess)
+	}
+	if result.DetectionVerdict.Verdict != VerdictConfirmedSuccess {
+		t.Errorf("DetectionVerdict.Verdict = %q, want %q -- a response-side failure must never affect DetectionVerdict (disjoint evidence calls)", result.DetectionVerdict.Verdict, VerdictConfirmedSuccess)
+	}
+}
+
+func TestVerifyMailExpectation_ResponseCompleted_ConfirmedSuccess(t *testing.T) {
+	now := time.Now()
+	exp := MailExpectation{SenderProfile: "spoofed-exec", Recipient: "cfo@example.com", MessageClass: "spf-fail", ExpectedAction: ExpectedQuarantine}
+	provider := NewFixtureMailEvidenceProvider(nil, nil).WithResponse(
+		[]ResponseEvidence{{Message: exp.Ref(), ActionRequired: "successfullyRemediated", Completed: true, Timestamp: now, Source: SourceFixture}},
+	)
+	result := VerifyMailExpectation(exp, OriginDeliveryObservation{}, provider, fullWindow())
+
+	if result.ResponseVerdict.Verdict != VerdictConfirmedSuccess {
+		t.Errorf("ResponseVerdict.Verdict = %q, want %q", result.ResponseVerdict.Verdict, VerdictConfirmedSuccess)
+	}
+	if len(result.Response) != 1 {
+		t.Errorf("Response = %+v, want 1 captured record", result.Response)
+	}
+}
+
+func TestVerifyMailExpectation_ResponseNotCompleted_ConfirmedFailure(t *testing.T) {
+	now := time.Now()
+	exp := MailExpectation{SenderProfile: "spoofed-exec", Recipient: "cfo@example.com", MessageClass: "spf-fail", ExpectedAction: ExpectedQuarantine}
+	provider := NewFixtureMailEvidenceProvider(nil, nil).WithResponse(
+		[]ResponseEvidence{{Message: exp.Ref(), ActionRequired: "benign", Completed: false, Timestamp: now, Source: SourceFixture}},
+	)
+	result := VerifyMailExpectation(exp, OriginDeliveryObservation{}, provider, fullWindow())
+
+	if result.ResponseVerdict.Verdict != VerdictConfirmedFailure {
+		t.Errorf("ResponseVerdict.Verdict = %q, want %q", result.ResponseVerdict.Verdict, VerdictConfirmedFailure)
 	}
 	if result.ResponseVerdict.Reason == "" {
 		t.Error("ResponseVerdict.Reason is empty, want a stated reason since Verdict != ConfirmedSuccess")

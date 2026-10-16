@@ -287,6 +287,65 @@ func TestSPFAlignmentScenario_MutationTest_WeakenedPolicyCaughtAndRecovered(t *t
 // added: every SenderProfile/Recipient/Note across this file must
 // stay inside the synthetic ".test"/"-lab" namespace, never a real
 // brand or customer domain.
+// TestPostDeliveryThreatResponseScenario_PreventionPremise proves this
+// scenario's own stated premise: it is never caught at delivery time,
+// so Prevention always comes back ConfirmedSuccess against delivered
+// evidence -- the scenario's real subject is Response, checked
+// separately below.
+func TestPostDeliveryThreatResponseScenario_PreventionPremise(t *testing.T) {
+	exp := PostDeliveryThreatResponseExpectation()
+	if exp.ExpectedAction != ExpectedDeliver {
+		t.Fatalf("PostDeliveryThreatResponseExpectation().ExpectedAction = %q, want %q", exp.ExpectedAction, ExpectedDeliver)
+	}
+	runScenario(t, exp)
+}
+
+// TestPostDeliveryThreatResponseScenario_KnownGood_RemediationCompleted
+// is EG-008's known-good case: the required post-delivery remediation
+// action completed, so ResponseVerdict is ConfirmedSuccess.
+func TestPostDeliveryThreatResponseScenario_KnownGood_RemediationCompleted(t *testing.T) {
+	exp := PostDeliveryThreatResponseExpectation()
+	now := time.Now()
+	provider := NewFixtureMailEvidenceProvider(nil, nil).WithResponse(
+		[]ResponseEvidence{{Message: exp.Ref(), ActionRequired: "successfullyRemediated", Completed: true, DurationToComplete: 5 * time.Minute, Timestamp: now, Source: SourceFixture}},
+	)
+	result := VerifyMailExpectation(exp, OriginDeliveryObservation{}, provider, scenarioWindow())
+	if result.ResponseVerdict.Verdict != VerdictConfirmedSuccess {
+		t.Errorf("ResponseVerdict.Verdict = %q, want %q", result.ResponseVerdict.Verdict, VerdictConfirmedSuccess)
+	}
+}
+
+// TestPostDeliveryThreatResponseScenario_KnownBad_RemediationNeverCompleted
+// is EG-008's known-bad case: the gateway never actually remediated
+// the message (e.g. an investigation that resolved benign/partial for
+// a message that is, by this scenario's own construction, genuinely
+// malicious) -- ResponseVerdict must be ConfirmedFailure, the finding
+// EG-008 exists to catch.
+func TestPostDeliveryThreatResponseScenario_KnownBad_RemediationNeverCompleted(t *testing.T) {
+	exp := PostDeliveryThreatResponseExpectation()
+	now := time.Now()
+	provider := NewFixtureMailEvidenceProvider(nil, nil).WithResponse(
+		[]ResponseEvidence{{Message: exp.Ref(), ActionRequired: "benign", Completed: false, Timestamp: now, Source: SourceFixture}},
+	)
+	result := VerifyMailExpectation(exp, OriginDeliveryObservation{}, provider, scenarioWindow())
+	if result.ResponseVerdict.Verdict != VerdictConfirmedFailure {
+		t.Errorf("ResponseVerdict.Verdict = %q, want %q", result.ResponseVerdict.Verdict, VerdictConfirmedFailure)
+	}
+}
+
+// TestPostDeliveryThreatResponseScenario_NoEvidence_InconclusiveNeverAssumed
+// is this scenario's own regression proof: a remediation that hasn't
+// resolved yet (no ResponseEvidence at all) must never be read as
+// either a confirmed success or a confirmed failure.
+func TestPostDeliveryThreatResponseScenario_NoEvidence_InconclusiveNeverAssumed(t *testing.T) {
+	exp := PostDeliveryThreatResponseExpectation()
+	provider := NewFixtureMailEvidenceProvider(nil, nil)
+	result := VerifyMailExpectation(exp, OriginDeliveryObservation{}, provider, scenarioWindow())
+	if result.ResponseVerdict.Verdict != VerdictInconclusive {
+		t.Errorf("ResponseVerdict.Verdict = %q, want %q -- absence of evidence must never be read as either outcome", result.ResponseVerdict.Verdict, VerdictInconclusive)
+	}
+}
+
 func TestScenarioBuilders_NeverNameARealDomain(t *testing.T) {
 	all := []MailExpectation{
 		SPFAlignmentExpectation(true), SPFAlignmentExpectation(false),
@@ -299,6 +358,7 @@ func TestScenarioBuilders_NeverNameARealDomain(t *testing.T) {
 		ExecutiveImpersonationExpectation(true), ExecutiveImpersonationExpectation(false),
 		SupplierPaymentDiversionExpectation(true), SupplierPaymentDiversionExpectation(false),
 		AuthenticationExceptionScopeExpectation(true), AuthenticationExceptionScopeExpectation(false),
+		PostDeliveryThreatResponseExpectation(),
 	}
 	for _, exp := range all {
 		if exp.Recipient == "" {

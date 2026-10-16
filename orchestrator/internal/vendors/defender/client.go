@@ -41,7 +41,21 @@ type Alert struct {
 	Severity      string
 	Techniques    []string
 	DeviceDNSName string
-	RawJSON       json.RawMessage
+	// InvestigationState and ResolvedDateTime are the alert's own
+	// remediation/response state -- investigationState's possible
+	// values (confirmed against Microsoft's published v1.0 alert
+	// schema) include successfullyRemediated/partiallyRemediated/
+	// terminated/failed/benign/running/pendingApproval/etc.
+	// ResolvedDateTime is the zero time.Time for an alert that hasn't
+	// resolved yet (a non-terminal investigationState) -- that is the
+	// correct reading of an absent/unparseable value here, not a bug
+	// to guard against the way an unparseable analyzedEmail
+	// loggedDateTime is (client.go's QueryAnalyzedEmails): a message
+	// that is still being investigated genuinely has no resolution
+	// timestamp yet.
+	InvestigationState string
+	ResolvedDateTime   time.Time
+	RawJSON            json.RawMessage
 }
 
 // deviceCacheEntry is one hostname's cached device-ID resolution.
@@ -104,6 +118,12 @@ type graphAlert struct {
 	Title           string `json:"title"`
 	Severity        string `json:"severity"`
 	CreatedDateTime string `json:"createdDateTime"`
+	// InvestigationState and ResolvedDateTime are the alert's own
+	// remediation/response state -- field names confirmed against
+	// Microsoft's published v1.0 alert schema, same source as the
+	// mitreTechniques naming note below.
+	InvestigationState string `json:"investigationState"`
+	ResolvedDateTime   string `json:"resolvedDateTime"`
 	// The Graph alerts_v2 field is "mitreTechniques", not "techniques" --
 	// confirmed against Microsoft's published alert schema.
 	Techniques []string `json:"mitreTechniques"`
@@ -128,9 +148,11 @@ func (c *Client) QueryAlerts(ctx context.Context, start, end time.Time) ([]Alert
 			continue
 		}
 		ts, _ := time.Parse(time.RFC3339, ga.CreatedDateTime)
+		resolved, _ := time.Parse(time.RFC3339, ga.ResolvedDateTime) // zero value when absent/unresolved, which is correct here
 		a := Alert{
 			ID: ga.ID, RuleName: ga.Title, Timestamp: ts, Severity: ga.Severity,
 			Techniques: ga.Techniques, RawJSON: raw,
+			InvestigationState: ga.InvestigationState, ResolvedDateTime: resolved,
 		}
 		if len(ga.Evidence) > 0 {
 			a.DeviceDNSName = ga.Evidence[0].DeviceDNSName
