@@ -60,6 +60,8 @@ var routeMatrix = []routeCase{
 	{http.MethodGet, "/api/waf/scenarios/policy-integrity.html", tierAny, ""},
 	{http.MethodGet, "/api/waf/scenarios/routing-cache-integrity", tierAny, ""},
 	{http.MethodGet, "/api/waf/scenarios/routing-cache-integrity.html", tierAny, ""},
+	{http.MethodGet, "/api/waf/scenarios/file-upload-content-trust", tierAny, ""},
+	{http.MethodGet, "/api/waf/scenarios/file-upload-content-trust.html", tierAny, ""},
 	{http.MethodGet, "/api/ad/assessment.pdf", tierAny, ""},
 	{http.MethodGet, "/api/ad/assessment.html", tierAny, ""},
 	{http.MethodGet, "/api/ad/assessment.json", tierAny, ""},
