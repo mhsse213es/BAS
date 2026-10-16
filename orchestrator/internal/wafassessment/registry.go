@@ -150,6 +150,19 @@ func loadFileUploadContentTrustScenario() (EnterpriseScenario, ScenarioResult, e
 	return scenario, result, nil
 }
 
+func loadDetectionTelemetryScenario() (EnterpriseScenario, ScenarioResult, error) {
+	scenario, err := AudspectDetectionTelemetryScenario()
+	if err != nil {
+		return EnterpriseScenario{}, ScenarioResult{}, err
+	}
+	fixtures := AudspectDetectionTelemetryFixtures()
+	result, err := EvaluateDetectionTelemetryScenario(scenario, fixtures)
+	if err != nil {
+		return EnterpriseScenario{}, ScenarioResult{}, err
+	}
+	return scenario, result, nil
+}
+
 // scenarioRegistry is the slug -> loader lookup every enterprise
 // scenario registers itself in. The slug is the console-facing
 // identifier (used in URLs); it is deliberately distinct from
@@ -162,6 +175,7 @@ var scenarioRegistry = map[string]scenarioLoader{
 	"policy-integrity":          loadPolicyIntegrityScenario,
 	"routing-cache-integrity":   loadRoutingCacheIntegrityScenario,
 	"file-upload-content-trust": loadFileUploadContentTrustScenario,
+	"detection-telemetry":       loadDetectionTelemetryScenario,
 }
 
 // EvaluateScenarioBySlug looks up slug in the registry and returns its

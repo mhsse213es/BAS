@@ -85,6 +85,30 @@ func TestWafScenarioJSONHandler_APIProtection_ReturnsRealFailOutcome(t *testing.
 	}
 }
 
+// Review Focus: scenario 08 (detection-telemetry) has no catalog
+// severity and a non-wafval verdict taxonomy -- the generic handler
+// must still serve it correctly with an empty severity field, not a
+// crash or a fabricated one.
+func TestWafScenarioJSONHandler_DetectionTelemetry_ReturnsRealFailOutcome(t *testing.T) {
+	h := &Handler{}
+	rr := httptest.NewRecorder()
+	h.wafScenarioJSONHandler("detection-telemetry")(rr, httptest.NewRequest(http.MethodGet, "/api/waf/scenarios/detection-telemetry", nil))
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rr.Code)
+	}
+	body := rr.Body.String()
+	if !strings.Contains(body, `"outcome":"fail"`) {
+		t.Error(`body missing "outcome":"fail"`)
+	}
+	if !strings.Contains(body, `"vectorId":"WAFDETECT-002"`) {
+		t.Error(`body missing "vectorId":"WAFDETECT-002"`)
+	}
+	if !strings.Contains(body, `"verdict":"lost"`) {
+		t.Error(`body missing "verdict":"lost" (the real completeness verdict, not a wafval one)`)
+	}
+}
+
 func TestGetWAFExploitPreventionScenarioHTML_RendersFailOutcome(t *testing.T) {
 	h := &Handler{}
 	rr := httptest.NewRecorder()
