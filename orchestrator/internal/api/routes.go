@@ -243,6 +243,9 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		// Workstream 1 time-based metrics (MTTD/MTTR) -- real,
 		// computed-on-read over email_gw_runs, split lab/customer.
 		r.Get("/api/emailgw/metrics", h.GetEmailGWMetrics)
+		// Workstream 3 persisted time-series snapshots -- real history
+		// from StartEmailGWMetricsScheduler, never recomputed here.
+		r.Get("/api/emailgw/metrics/history", h.GetEmailGWMetricsHistory)
 		// Workstream 2 unified customer-facing report -- composes
 		// coverage, runs summary, metrics, and campaign outcomes.
 		r.Get("/api/emailgw/report", h.GetEmailGWReport)

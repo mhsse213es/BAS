@@ -313,6 +313,9 @@ func main() {
 	if err := db.EnsureEmailGWCampaignSchema(context.Background(), adminPool); err != nil {
 		log.Fatalf("[FATAL] email gw campaign schema: %v", err)
 	}
+	if err := db.EnsureEmailGWMetricsSnapshotSchema(context.Background(), adminPool); err != nil {
+		log.Fatalf("[FATAL] email gw metrics snapshot schema: %v", err)
+	}
 	if err := db.EnsureNetworkDiscoverySchema(context.Background(), adminPool); err != nil {
 		log.Fatalf("[FATAL] network discovery schema: %v", err)
 	}
@@ -1072,6 +1075,12 @@ func main() {
 	// dashboard_snapshots once a day, powering the Executive Dashboard tab's
 	// trend charts.
 	api.StartDashboardScheduler(context.Background(), pool)
+
+	// ── EmailGW Metrics Snapshot Scheduler (Workstream 3) ─────────────────
+	// Snapshots real MTTD/MTTR time-based metrics, both environments, into
+	// email_gw_metrics_snapshots once a day -- real history for a future
+	// trend view, same shape as the Dashboard scheduler above.
+	api.StartEmailGWMetricsScheduler(context.Background(), pool)
 
 	// ── Attack-Path Job Monitor ───────────────────────────────────────────
 	// Every 15 s: enforces ack-window (dispatched→delivery_failed if no ACK

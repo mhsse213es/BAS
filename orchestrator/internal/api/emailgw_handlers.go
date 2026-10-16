@@ -82,3 +82,30 @@ func (h *Handler) GetEmailGWMetrics(w http.ResponseWriter, r *http.Request) {
 		Customer: ComputeEmailGWTimeBasedMetrics(runs, emailgwrun.EnvironmentCustomer, minSampleSize, now),
 	})
 }
+
+// GetEmailGWMetricsHistory -- Workstream 3's read side: real persisted
+// daily snapshots (internal/db.EmailGWMetricsSnapshotRow, written by
+// StartEmailGWMetricsScheduler), never recomputed from scratch here.
+// environment defaults to lab (never silently "whichever has more
+// data" -- the caller must ask for customer explicitly). A day with
+// HasData=false is still returned, not filtered out: an
+// insufficient-data day is real history, not noise to hide.
+func (h *Handler) GetEmailGWMetricsHistory(w http.ResponseWriter, r *http.Request) {
+	environment := emailgwrun.EnvironmentLab
+	if q := r.URL.Query().Get("environment"); q == string(emailgwrun.EnvironmentCustomer) {
+		environment = emailgwrun.EnvironmentCustomer
+	}
+	limit := 90
+	if l, err := strconv.Atoi(r.URL.Query().Get("limit")); err == nil && l > 0 && l <= 1000 {
+		limit = l
+	}
+	rows, err := db.ListEmailGWMetricsSnapshots(r.Context(), h.db, environment, limit)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if rows == nil {
+		rows = []*db.EmailGWMetricsSnapshotRow{}
+	}
+	respond(w, rows)
+}
