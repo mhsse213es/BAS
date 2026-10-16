@@ -133,3 +133,25 @@ Presented to the user as an explicit choice between that larger initiative and a
 - Real per-customer run persistence for EmailGW (the actual prerequisite for any live metrics/dashboard) -- not started. Without it, "customer-facing metrics tracked over time" (detection speed, evidence completeness, remediation validation, regression) and a live measurement dashboard cannot exist, regardless of how much more reporting code is added on top of today's static, engineering-proof data.
 
 **Important:** all 10 of EG-001-EG-010 now have real scenario coverage, a computed maturity classification, and a renderable report over that classification. What remains open is a structurally different, larger initiative -- real run persistence and whatever's built on top of it -- not scenario breadth, verification depth, or report formatting.
+
+### 6. Real message injection wired into scenario execution (`injection.go`) -- a real mechanism found already built and never used, plus the real run-pipeline scoping
+
+**What was found:** while scoping "wire EmailGW into the real run pipeline," two research passes ran in parallel.
+
+**Finding A -- a real, complete injection mechanism already existed, unwired.** `internal/exercise/smtp_spoofing.go`'s `SpoofableSMTPInjector` was built specifically for EmailGW Mastery back in Phase 3's own design doc, with full control over envelope-from, header-from, HELO domain, and direct-to-MX or via-relay delivery. Its own `OriginLeg` type doc comment already named the exact connection point ("the sender-side half of `emailgwefficacy.OriginDeliveryObservation`"). But grepping the whole repo showed it was referenced only in its own file and its own test -- `internal/emailgwefficacy` never imported it, nothing called `SendTestMessage` from any scenario path. Built, tested, never integrated -- the same "evidence exists, nothing wires it into a real run" pattern as the rest of this initiative.
+
+**Finding B -- the platform's real non-agent run pattern is smaller and more precedented than assumed.** `internal/cloudrun` is an existing, proven, *synchronous, non-agent* run model (a `cloud_runs` table, a plain Go function that inserts a `running` row, runs the real evaluation in-process, writes the final status+result, no queue, no polling, no agent) -- deliberately distinct from the agent-dispatch `ExecutionAttempt` model, which assumes an endpoint agent and doesn't fit EmailGW at all. This means wiring EmailGW into a real, persisted run pipeline is a genuinely tractable, well-precedented task (mirror `cloudrun`'s shape), not "comparable to Phases 1-7 combined" as first assumed before this research ran.
+
+**Built this pass -- the injection half:**
+- `MailExpectation` gains `EnvelopeFrom`/`HeaderFrom`. Empty `EnvelopeFrom` is a deliberate, checked "not wired for real injection" signal, not an oversight.
+- `InjectScenarioMessage` (`injection.go`) sends the real message via `SpoofableSMTPInjector` and returns `OriginDeliveryObservation`'s sender-side half.
+- **13 of 21 known-good/known-bad scenario directions are genuinely wired**; 8 are explicitly not, with the specific capability gap named in each one's own `Note`, not papered over:
+  - SPF/DMARC's *aligned* case needs a lab domain whose SPF record genuinely authorizes Audspect's sending IP (DNS infrastructure, not code).
+  - DKIM's *aligned* case needs real DKIM signing; the injector has no signing capability.
+  - EICAR (either direction) needs a MIME attachment; the injector only builds a single-part HTML body.
+  - Outbound DLP (either direction) is an authenticated-internal-sender scenario, not an externally-spoofable one -- a structurally different mechanism (e.g. Graph `sendMail`) would be needed.
+  - The auth-exception-scope *genuine-use* case needs to send from infrastructure the exception's own verification condition actually trusts.
+- Proven with an independently-built local `go-smtp` test server (the original helper in `smtp_spoofing_test.go` is unexported) -- a wired scenario's real send is observed on the wire correctly; an unwired scenario's empty-`EnvelopeFrom` check is proven to block the send entirely, never silently.
+- `TestScenarioBuilders_NeverNameARealDomain` extended to also check `EnvelopeFrom`/`HeaderFrom` stay in the synthetic `.test` namespace.
+
+**Still open, not attempted this pass:** persisting a run and polling for evidence after injection -- i.e. an actual end-to-end executable assessment, mirroring `internal/cloudrun`'s own pattern. This closes the "is there a real injection mechanism" question; it does not itself make EmailGW runnable as a persisted customer assessment.
