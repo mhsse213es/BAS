@@ -29,6 +29,7 @@ import (
 	"github.com/audspect/bas/internal/db"
 	"github.com/audspect/bas/internal/detect"
 	"github.com/audspect/bas/internal/dnssink"
+	"github.com/audspect/bas/internal/emailgwefficacy"
 	"github.com/audspect/bas/internal/emsweep"
 	"github.com/audspect/bas/internal/endpointrisk"
 	"github.com/audspect/bas/internal/evidence"
@@ -59,6 +60,7 @@ import (
 	"github.com/audspect/bas/internal/threatpriority"
 	"github.com/audspect/bas/internal/ticketing"
 	"github.com/audspect/bas/internal/validationlab"
+	"github.com/audspect/bas/internal/vendors/defender"
 	"github.com/audspect/bas/internal/verification"
 	"github.com/audspect/bas/internal/verifysync"
 	"github.com/audspect/bas/internal/vexsweep"
@@ -303,6 +305,9 @@ func main() {
 	}
 	if err := db.EnsureCloudCampaignSchema(context.Background(), adminPool); err != nil {
 		log.Fatalf("[FATAL] cloud campaign schema: %v", err)
+	}
+	if err := db.EnsureEmailGWRunSchema(context.Background(), adminPool); err != nil {
+		log.Fatalf("[FATAL] email gw run schema: %v", err)
 	}
 	if err := db.EnsureNetworkDiscoverySchema(context.Background(), adminPool); err != nil {
 		log.Fatalf("[FATAL] network discovery schema: %v", err)
@@ -739,6 +744,30 @@ func main() {
 		}
 	}
 
+	// EmailGW real-run execution -- env-var-only, same posture as the
+	// M365 Defender live adapter's own existing test gating
+	// (AUDSPECT_EMAILGW_DEFENDER_*). No credential-UI exists yet (see
+	// docs/emailgw-mastery-qa-log.md); nil/zero below just leaves
+	// TriggerEmailGWRun refusing with 503, same as CALDERA_URL unset.
+	var emailgwProvider emailgwefficacy.MailEvidenceProvider
+	var emailgwInjectionTarget emailgwefficacy.InjectionTarget
+	emailgwTenantID := os.Getenv("AUDSPECT_EMAILGW_DEFENDER_TENANT_ID")
+	emailgwClientID := os.Getenv("AUDSPECT_EMAILGW_DEFENDER_CLIENT_ID")
+	emailgwClientSecret := os.Getenv("AUDSPECT_EMAILGW_DEFENDER_CLIENT_SECRET")
+	if emailgwTenantID != "" && emailgwClientID != "" && emailgwClientSecret != "" {
+		emailgwProvider = emailgwefficacy.NewDefenderMailEvidenceProvider(defender.Config{
+			TenantID:     emailgwTenantID,
+			ClientID:     emailgwClientID,
+			ClientSecret: emailgwClientSecret,
+		})
+		emailgwInjectionTarget = emailgwefficacy.InjectionTarget{
+			HELODomain: os.Getenv("AUDSPECT_EMAILGW_INJECTION_HELO_DOMAIN"),
+			TargetMX:   os.Getenv("AUDSPECT_EMAILGW_INJECTION_TARGET_MX"),
+			RelayHost:  os.Getenv("AUDSPECT_EMAILGW_INJECTION_RELAY_HOST"),
+		}
+		log.Println("[+] EmailGW real-run execution ready")
+	}
+
 	// Full Variant Sweep — server-owned orchestration (survives reloads/
 	// browser crashes). Ticks every 5s, matching the Exercise engine's own
 	// cadence, since variant runs take real wall-clock time (agent
@@ -886,7 +915,20 @@ func main() {
 		WithEMSweep(emSweepStore, emSweepDispatcher).
 		WithTAXII(taxiiStore, taxiiManager).
 		WithIOCProvider(iocProvider).
-		WithNetworkVantagePoint(networkVP)
+		WithNetworkVantagePoint(networkVP).
+		WithEmailGWRun(emailgwProvider, emailgwInjectionTarget)
+
+	// Resume every EmailGW run a previous process restart abandoned
+	// mid-wait (see internal/api.RecoverEmailGWRuns's own doc comment).
+	// Backgrounded: boot must never block on runs that may legitimately
+	// still be waiting out a long response-scenario dwell window.
+	if emailgwProvider != nil {
+		go func() {
+			if err := api.RecoverEmailGWRuns(context.Background(), pool, emailgwProvider); err != nil {
+				log.Printf("[!] emailgw run recovery: %v", err)
+			}
+		}()
+	}
 
 	// Content registry migration marker: only after a clean scenario load with zero intake
 	// infrastructure failures, so a partial intake never ends custom-file grandfathering. A failure here is
