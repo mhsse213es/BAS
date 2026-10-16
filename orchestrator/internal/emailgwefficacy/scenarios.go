@@ -173,3 +173,106 @@ func CredentialHarvestingURLExpectation(caught bool) MailExpectation {
 	}
 	return exp
 }
+
+// ExecutiveImpersonationExpectation builds the EG-002 area-B scenario:
+// a message sent from a freemail address that itself can legitimately
+// PASS SPF/DKIM/DMARC for its own domain, with its display name
+// forged to impersonate a company executive. This exercises the
+// gateway's impersonation-protection policy specifically --
+// deliberately independent of, and never conflated with,
+// SPFAlignmentExpectation/DKIMAlignmentExpectation/DMARCPolicyExpectation,
+// which test sender-authentication alignment on the message's OWN
+// domain, a different control entirely. caught=true is the known-good
+// case (impersonation protection catches the forged display name);
+// caught=false is the known-bad case (the same message delivered
+// uninspected).
+func ExecutiveImpersonationExpectation(caught bool) MailExpectation {
+	exp := MailExpectation{
+		SenderProfile:  "freemail-exec-display-name-impersonation",
+		Recipient:      "finance-test@example-lab.test",
+		MessageClass:   "executive-impersonation",
+		ControlProduct: "m365-defender-o365",
+		Note:           "synthetic freemail sender, itself SPF/DKIM/DMARC-aligned, with a display name forged to impersonate a company executive -- tests impersonation-protection policy, not sender authentication",
+	}
+	if caught {
+		exp.ExpectedAction = ExpectedQuarantine
+	} else {
+		exp.ExpectedAction = ExpectedDeliver
+	}
+	return exp
+}
+
+// SupplierPaymentDiversionExpectation builds the EG-005 area-B
+// scenario: a message from a lookalike or newly-registered vendor
+// domain (not the real supplier's own domain, and not impersonating
+// an internal executive) requesting a change to bank/payment details
+// against an existing invoice. This exercises domain-reputation and
+// newly-observed-domain heuristics -- distinct from
+// ExecutiveImpersonationExpectation (an internal persona, forged via
+// a freemail display name) and from the SPF/DKIM/DMARC scenarios
+// (which test the message's OWN domain authentication, not its
+// similarity to a known, trusted vendor domain). caught=true is the
+// known-good case (domain-reputation/heuristic protection catches it);
+// caught=false is the known-bad case (the same message delivered
+// uninspected).
+func SupplierPaymentDiversionExpectation(caught bool) MailExpectation {
+	exp := MailExpectation{
+		SenderProfile:  "lookalike-vendor-domain-payment-redirect",
+		Recipient:      "accounts-payable-test@example-lab.test",
+		MessageClass:   "supplier-payment-diversion",
+		ControlProduct: "m365-defender-o365",
+		Note:           "synthetic lookalike/newly-registered vendor domain (not the real supplier's own domain) requesting a bank-detail change against an existing invoice -- tests domain-reputation/newly-observed-domain heuristics, not sender authentication or internal-persona impersonation",
+	}
+	if caught {
+		exp.ExpectedAction = ExpectedQuarantine
+	} else {
+		exp.ExpectedAction = ExpectedDeliver
+	}
+	return exp
+}
+
+// AuthenticationExceptionScopeExpectation builds the EG-009 area-A
+// scenario: a documented mail-flow exception that bypasses normal
+// authentication/spam inspection for messages genuinely verified as
+// originating from a specific trusted source (e.g. a connector keyed
+// on source IP, used for a known partner or internal relay).
+//
+// scoped=true is the known-good case: a message that genuinely
+// originates from the exception's real, verified trusted source (not
+// merely claiming to) -- expected to bypass inspection and deliver,
+// proving the documented exception does not break the legitimate mail
+// flow it exists for.
+//
+// scoped=false is the known-bad case: a message that spoofs ONLY the
+// exception's spoofable trigger condition (e.g. envelope-from
+// claiming the excepted domain) without meeting its real verification
+// condition -- expected to be caught by normal enforcement, exactly
+// like any other unauthenticated spoof. A ConfirmedFailure on this
+// branch is the specific risk EG-009 names: the exception's
+// scope-check keyed on a spoofable attribute alone, creating an
+// unintended trust path.
+//
+// Reuses MailExpectation/EnforcementEvidence/VerifyMailExpectation
+// unchanged, the same Phase-4-established reasoning C/D/E used for
+// EICAR/URL-rewrite/outbound-DLP: this is still "one message, one
+// expected delivery action," so no new type family is needed here,
+// unlike area F's inboxrule.go (a mailbox CONFIGURATION STATE, not a
+// message) -- confirmed before writing this scenario, not assumed.
+func AuthenticationExceptionScopeExpectation(scoped bool) MailExpectation {
+	exp := MailExpectation{
+		Recipient:      "finance-test@example-lab.test",
+		ControlProduct: "m365-defender-o365",
+	}
+	if scoped {
+		exp.SenderProfile = "trusted-relay-exception-genuine-use"
+		exp.MessageClass = "auth-exception-genuine-use"
+		exp.ExpectedAction = ExpectedDeliver
+		exp.Note = "message genuinely originates from the exception's real, verified trusted source -- expected to bypass normal inspection and deliver, proving the documented exception does not break the legitimate mail flow it exists for"
+	} else {
+		exp.SenderProfile = "spoofed-exception-trigger-outside-real-scope"
+		exp.MessageClass = "auth-exception-scope-probe"
+		exp.ExpectedAction = ExpectedQuarantine
+		exp.Note = "message spoofs only the exception's spoofable trigger condition without meeting its real verification condition -- expected to be caught by normal enforcement; a ConfirmedFailure here means the exception's scope-check keys on a spoofable attribute alone, an unintended trust path"
+	}
+	return exp
+}

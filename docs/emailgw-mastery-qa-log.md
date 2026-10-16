@@ -86,3 +86,23 @@ Full detail of both fixes lives in `docs/webgw-mastery-qa-log.md` item #9, since
 - Routes: `GET /api/emailgw/coverage` and `GET /api/emailgw/coverage.html` (`routes.go`).
 
 **What this deliberately does NOT include:** a web UI page/nav entry (no precedent exists for ANY vertical having one; flagged to the user as a materially bigger, separate ask before starting, and they chose the smaller scope), and no live-tenant credential wiring (the M365 Defender adapter still only reads `AUDSPECT_EMAILGW_DEFENDER_*` env vars -- a real multi-tenant credential UI would reuse `web/src/features/integrations.js`'s existing "Respond connector" pattern, which already has a `microsoft_defender` provider for Defender for *Endpoint*, a different product from Defender for *Office 365* -- not attempted here).
+
+### 5. EG-001-EG-010 scenario catalogue gap analysis -- EG-002/EG-005/EG-009 built, 3 larger items explicitly deferred
+
+**Status:** Resolved for the scenarios; the larger deferred items (below) remain open by design, not oversight.
+
+**What was found (2026-10-16):** the client-facing EG-001-EG-010 scenario catalogue, checked directly against what Phase 3a/4 had actually built (not assumed covered). 6 of 10 were already covered (EG-001, EG-003, EG-004, EG-006, EG-007). The other 4 all trace back to one root cause: the Response/remediation evidence dimension (`ResponseVerdict`) has been hardcoded `NotTested` since Phase 2 and was never revisited.
+
+**Built this pass** (`scenarios.go`/`scenarios_test.go`), at the user's explicit direction after reviewing the gap analysis:
+- **EG-002 (executive impersonation)** -- `ExecutiveImpersonationExpectation`, deliberately kept distinct from the SPF/DKIM/DMARC scenarios (a freemail sender that itself passes SPF/DKIM/DMARC, with a forged display name -- a different control than sender-authentication alignment).
+- **EG-005 (supplier payment diversion)** -- `SupplierPaymentDiversionExpectation`, kept distinct from EG-002 (external vendor, not internal persona) and from SPF/DKIM/DMARC (domain-reputation heuristics, not the message's own domain authentication).
+- **EG-009 (authentication exception scope)** -- `AuthenticationExceptionScopeExpectation`. An explicit abstraction check was done before writing any code: does `MailExpectation` represent this outcome? Yes, once correctly split along the file's own existing `true`=benign/false=malicious-probe convention -- no new type family needed. Full reasoning in the architecture spec's Phase 7 amendment.
+- **Regression, done explicitly per the user's own instruction**, not left implicit: all 6 pre-existing scenarios plus the 3 new ones pass; each new scenario has its own explicit "no evidence → `Inconclusive`" test, not just reliance on `VerifyMailExpectation`'s already-generic proof in `verify_test.go`.
+
+**Explicitly deferred, kept as separate roadmap items -- full table in the architecture spec's Phase 7 amendment:**
+- EG-008 (post-delivery remediation evidence) -- blocked on the Response/remediation dimension.
+- EG-010 (full detection→response chain) -- detection half exists, response half is the same blocker as EG-008.
+- Four-state scenario-maturity model (not-implemented / implemented-not-executable / executed-without-evidence / verified) -- not implemented; a different concept from `EmailGWVerdict`.
+- Customer-facing metrics (detection speed, evidence completeness, remediation validation, regression) and a measurement dashboard -- not implemented. `/api/emailgw/coverage[.html]` reports taxonomy-area coverage only, not this metric set.
+
+**Important, carried into the spec verbatim:** this closes a scenario-breadth gap. It does not complete EmailGW Mastery -- the Response/remediation axis and the customer-facing measurement layer are substantial, separate work, not minor cleanup.
