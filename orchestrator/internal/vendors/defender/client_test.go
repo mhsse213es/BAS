@@ -578,3 +578,131 @@ func TestKillProcess_HTTPError_ReturnsError(t *testing.T) {
 		t.Fatal("expected an error when the vendor reports the script isn't found")
 	}
 }
+
+func TestSendMail_Success_PostsToCorrectUserAndIncludesIdempotencyHeader(t *testing.T) {
+	tokenSrv := tokenMock(t)
+	defer tokenSrv.Close()
+
+	var gotPath string
+	var gotBody map[string]any
+	graphSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		json.NewDecoder(r.Body).Decode(&gotBody)
+		w.WriteHeader(http.StatusAccepted)
+	}))
+	defer graphSrv.Close()
+
+	c := newTestClient(t, tokenSrv.URL, graphSrv.URL)
+	err := c.SendMail(context.Background(), "finance-user@example-lab.test", SendMailMessage{
+		ToRecipients:   []string{"external-partner-test@external-lab.test"},
+		Subject:        "test",
+		BodyHTML:       "<p>hi</p>",
+		IdempotencyKey: "key-123",
+	})
+	if err != nil {
+		t.Fatalf("SendMail: %v", err)
+	}
+	if gotPath != "/users/finance-user@example-lab.test/sendMail" {
+		t.Fatalf("path = %q, want /users/finance-user@example-lab.test/sendMail", gotPath)
+	}
+	msg, _ := gotBody["message"].(map[string]any)
+	headers, _ := msg["internetMessageHeaders"].([]any)
+	if len(headers) != 1 {
+		t.Fatalf("internetMessageHeaders = %v, want exactly 1 entry", headers)
+	}
+	h, _ := headers[0].(map[string]any)
+	if h["name"] != "X-Audspect-Idempotency-Key" || h["value"] != "key-123" {
+		t.Errorf("idempotency header = %v, want name=X-Audspect-Idempotency-Key value=key-123", h)
+	}
+}
+
+func TestSendMail_PermissionDenied_ReturnsClearErrorNeverRetried(t *testing.T) {
+	tokenSrv := tokenMock(t)
+	defer tokenSrv.Close()
+
+	attempts := 0
+	graphSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts++
+		w.WriteHeader(http.StatusForbidden)
+		w.Write([]byte(`{"error":{"code":"ErrorAccessDenied","message":"Access is denied"}}`))
+	}))
+	defer graphSrv.Close()
+
+	c := newTestClient(t, tokenSrv.URL, graphSrv.URL)
+	err := c.SendMail(context.Background(), "finance-user@example-lab.test", SendMailMessage{ToRecipients: []string{"x@y.test"}})
+	if err == nil {
+		t.Fatal("expected a permission error")
+	}
+	if attempts != 1 {
+		t.Errorf("attempts = %d, want exactly 1 -- a permission error must never be retried", attempts)
+	}
+}
+
+func TestSendMail_ServerError_NotRetried_AmbiguousFailure(t *testing.T) {
+	tokenSrv := tokenMock(t)
+	defer tokenSrv.Close()
+
+	attempts := 0
+	graphSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts++
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer graphSrv.Close()
+
+	c := newTestClient(t, tokenSrv.URL, graphSrv.URL)
+	err := c.SendMail(context.Background(), "finance-user@example-lab.test", SendMailMessage{ToRecipients: []string{"x@y.test"}})
+	if err == nil {
+		t.Fatal("expected an error")
+	}
+	if attempts != 1 {
+		t.Errorf("attempts = %d, want exactly 1 -- a 5xx is ambiguous (may have been sent) and must never be auto-retried", attempts)
+	}
+}
+
+func TestSendMail_RateLimited_RetriesAndSucceeds(t *testing.T) {
+	tokenSrv := tokenMock(t)
+	defer tokenSrv.Close()
+
+	attempts := 0
+	graphSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts++
+		if attempts < 2 {
+			w.Header().Set("Retry-After", "0")
+			w.WriteHeader(http.StatusTooManyRequests)
+			return
+		}
+		w.WriteHeader(http.StatusAccepted)
+	}))
+	defer graphSrv.Close()
+
+	c := newTestClient(t, tokenSrv.URL, graphSrv.URL)
+	err := c.SendMail(context.Background(), "finance-user@example-lab.test", SendMailMessage{ToRecipients: []string{"x@y.test"}})
+	if err != nil {
+		t.Fatalf("SendMail: %v", err)
+	}
+	if attempts != 2 {
+		t.Errorf("attempts = %d, want 2 (one 429, one success) -- 429 is the one confirmed-not-sent case that's safe to retry", attempts)
+	}
+}
+
+func TestSendMail_RateLimited_ExhaustsRetries_ReturnsErrorNeverSent(t *testing.T) {
+	tokenSrv := tokenMock(t)
+	defer tokenSrv.Close()
+
+	attempts := 0
+	graphSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts++
+		w.Header().Set("Retry-After", "0")
+		w.WriteHeader(http.StatusTooManyRequests)
+	}))
+	defer graphSrv.Close()
+
+	c := newTestClient(t, tokenSrv.URL, graphSrv.URL)
+	err := c.SendMail(context.Background(), "finance-user@example-lab.test", SendMailMessage{ToRecipients: []string{"x@y.test"}})
+	if err == nil {
+		t.Fatal("expected an error after exhausting retries")
+	}
+	if attempts != maxSendMailRateLimitRetries+1 {
+		t.Errorf("attempts = %d, want %d (the bounded retry count)", attempts, maxSendMailRateLimitRetries+1)
+	}
+}

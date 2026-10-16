@@ -162,6 +162,14 @@ type Handler struct {
 	// unconfigured-not-broken posture as networkVantagePoint above.
 	emailgwProvider        emailgwefficacy.MailEvidenceProvider
 	emailgwInjectionTarget emailgwefficacy.InjectionTarget
+	// emailgwOutboundSender configures real sending for a scenario
+	// wired via MailExpectation.OutboundSenderMailbox (authenticated
+	// outbound mail, e.g. OutboundDLPExpectation) rather than
+	// EnvelopeFrom (inbound-spoofed). Nil until WithEmailGWOutboundSender
+	// is called -- a run that needs it refuses with a clear error
+	// rather than silently falling back to the inbound injector, which
+	// is the wrong mechanism for this direction (see outbound.go).
+	emailgwOutboundSender emailgwefficacy.OutboundSender
 	// emailgwEnvironment is an explicit, operator-set, deployment-wide
 	// declaration of whether real EmailGW runs are against a lab/test
 	// tenant or a genuine customer tenant -- see emailgwrun.Environment's
@@ -208,6 +216,20 @@ func (h *Handler) WithEmailGWRun(provider emailgwefficacy.MailEvidenceProvider, 
 	if environment != "" {
 		h.emailgwEnvironment = environment
 	}
+	return h
+}
+
+// WithEmailGWOutboundSender attaches the live OutboundSender a
+// scenario wired via MailExpectation.OutboundSenderMailbox (e.g.
+// OutboundDLPExpectation) needs to actually send real authenticated
+// outbound mail -- deliberately separate from WithEmailGWRun's own
+// provider/target, since this sending mechanism is independent of
+// (and never a replacement for) InjectionTarget's inbound-spoofing
+// one. Call with nil to leave outbound sending unconfigured; a run
+// that needs it then refuses with a clear error rather than silently
+// falling back to the wrong mechanism.
+func (h *Handler) WithEmailGWOutboundSender(sender emailgwefficacy.OutboundSender) *Handler {
+	h.emailgwOutboundSender = sender
 	return h
 }
 

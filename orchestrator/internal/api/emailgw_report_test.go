@@ -25,6 +25,12 @@ func TestEmailGWInjectionGaps_MatchesExecuteEmailGWRunsOwnCheck(t *testing.T) {
 	if slices.Contains(gaps, "EG-002.known-bad") {
 		t.Errorf("gaps = %v, want EG-002.known-bad absent (it is genuinely wired)", gaps)
 	}
+	// EG-006 (OutboundDLPExpectation) is wired via OutboundSenderMailbox,
+	// not EnvelopeFrom -- must never be misreported as a gap just
+	// because its EnvelopeFrom happens to be empty.
+	if slices.Contains(gaps, "EG-006.known-good") || slices.Contains(gaps, "EG-006.known-bad") {
+		t.Errorf("gaps = %v, want EG-006.known-good/known-bad absent (wired via OutboundSenderMailbox)", gaps)
+	}
 	// EG-007's IDs are not a MailExpectation at all (inbox-rule-based) --
 	// must appear as a gap via the !ok branch, not silently skipped.
 	foundEG007 := false
@@ -41,8 +47,8 @@ func TestEmailGWInjectionGaps_MatchesExecuteEmailGWRunsOwnCheck(t *testing.T) {
 	// list that could drift from the real runtime behavior.
 	for _, id := range gaps {
 		exp, ok := emailgwefficacy.ExpectationByID(id)
-		if ok && exp.EnvelopeFrom != "" {
-			t.Errorf("gap id %q actually resolves with a non-empty EnvelopeFrom -- not a real gap", id)
+		if ok && (exp.EnvelopeFrom != "" || exp.OutboundSenderMailbox != "") {
+			t.Errorf("gap id %q actually resolves with a non-empty EnvelopeFrom or OutboundSenderMailbox -- not a real gap", id)
 		}
 	}
 }

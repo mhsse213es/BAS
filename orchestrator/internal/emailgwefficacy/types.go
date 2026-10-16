@@ -70,6 +70,17 @@ type MailExpectation struct {
 	// mirroring SpoofableSMTPInjector's own default.
 	EnvelopeFrom string `json:"envelopeFrom,omitempty"`
 	HeaderFrom   string `json:"headerFrom,omitempty"`
+	// OutboundSenderMailbox is the authenticated-sending counterpart to
+	// EnvelopeFrom, for a scenario whose own direction is outbound mail
+	// leaving the organization (e.g. OutboundDLPExpectation) rather than
+	// inbound mail arriving at it. SendOutboundTestMessage sends via
+	// Microsoft Graph's sendMail action AS this mailbox -- a
+	// structurally different mechanism from SpoofableSMTPInjector's
+	// arbitrary external envelope-from, so this is deliberately a
+	// separate field, never reused from/mixed with EnvelopeFrom. Empty
+	// is the same deliberate, checked "not wired for real injection"
+	// signal EnvelopeFrom's own doc comment describes.
+	OutboundSenderMailbox string `json:"outboundSenderMailbox,omitempty"`
 }
 
 // Ref returns the MessageRef an evidence provider must be queried

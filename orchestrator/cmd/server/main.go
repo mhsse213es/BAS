@@ -758,6 +758,7 @@ func main() {
 	// TriggerEmailGWRun refusing with 503, same as CALDERA_URL unset.
 	var emailgwProvider emailgwefficacy.MailEvidenceProvider
 	var emailgwInjectionTarget emailgwefficacy.InjectionTarget
+	var emailgwOutboundSender emailgwefficacy.OutboundSender
 	// emailgwEnvironment is an explicit, operator-set declaration of
 	// whether real EmailGW runs are against a lab/test tenant or a
 	// genuine customer tenant -- see emailgwrun.Environment's own doc
@@ -772,16 +773,22 @@ func main() {
 	emailgwClientID := os.Getenv("AUDSPECT_EMAILGW_DEFENDER_CLIENT_ID")
 	emailgwClientSecret := os.Getenv("AUDSPECT_EMAILGW_DEFENDER_CLIENT_SECRET")
 	if emailgwTenantID != "" && emailgwClientID != "" && emailgwClientSecret != "" {
-		emailgwProvider = emailgwefficacy.NewDefenderMailEvidenceProvider(defender.Config{
+		emailgwDefenderClient := defender.New(defender.Config{
 			TenantID:     emailgwTenantID,
 			ClientID:     emailgwClientID,
 			ClientSecret: emailgwClientSecret,
 		})
+		emailgwProvider = emailgwefficacy.NewDefenderMailEvidenceProviderFromClient(emailgwDefenderClient)
 		emailgwInjectionTarget = emailgwefficacy.InjectionTarget{
 			HELODomain: os.Getenv("AUDSPECT_EMAILGW_INJECTION_HELO_DOMAIN"),
 			TargetMX:   os.Getenv("AUDSPECT_EMAILGW_INJECTION_TARGET_MX"),
 			RelayHost:  os.Getenv("AUDSPECT_EMAILGW_INJECTION_RELAY_HOST"),
 		}
+		// Outbound DLP scenarios (e.g. OutboundDLPExpectation) send via
+		// Graph sendMail under the same app registration/tenant, so this
+		// reuses emailgwDefenderClient directly rather than constructing
+		// a second one -- same token cache, no new credential env vars.
+		emailgwOutboundSender = emailgwefficacy.NewGraphOutboundSender(emailgwDefenderClient)
 		log.Println("[+] EmailGW real-run execution ready")
 	}
 
@@ -933,7 +940,8 @@ func main() {
 		WithTAXII(taxiiStore, taxiiManager).
 		WithIOCProvider(iocProvider).
 		WithNetworkVantagePoint(networkVP).
-		WithEmailGWRun(emailgwProvider, emailgwInjectionTarget, emailgwEnvironment)
+		WithEmailGWRun(emailgwProvider, emailgwInjectionTarget, emailgwEnvironment).
+		WithEmailGWOutboundSender(emailgwOutboundSender)
 
 	// Resume every EmailGW run a previous process restart abandoned
 	// mid-wait (see internal/api.RecoverEmailGWRuns's own doc comment).
@@ -941,7 +949,7 @@ func main() {
 	// still be waiting out a long response-scenario dwell window.
 	if emailgwProvider != nil {
 		go func() {
-			if err := api.RecoverEmailGWRuns(context.Background(), pool, emailgwProvider, emailgwInjectionTarget, emailgwEnvironment); err != nil {
+			if err := api.RecoverEmailGWRuns(context.Background(), pool, emailgwProvider, emailgwInjectionTarget, emailgwOutboundSender, emailgwEnvironment); err != nil {
 				log.Printf("[!] emailgw run recovery: %v", err)
 			}
 			// Closes the narrower restart race RecoverEmailGWRuns
@@ -949,7 +957,7 @@ func main() {
 			// finished before the process died, but whose campaign
 			// was never advanced past it (see RecoverEmailGWCampaigns'
 			// own doc comment).
-			if err := api.RecoverEmailGWCampaigns(context.Background(), pool, emailgwProvider, emailgwInjectionTarget, emailgwEnvironment); err != nil {
+			if err := api.RecoverEmailGWCampaigns(context.Background(), pool, emailgwProvider, emailgwInjectionTarget, emailgwOutboundSender, emailgwEnvironment); err != nil {
 				log.Printf("[!] emailgw campaign recovery: %v", err)
 			}
 		}()

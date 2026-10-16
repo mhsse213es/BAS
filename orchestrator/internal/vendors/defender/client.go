@@ -322,6 +322,121 @@ func (c *Client) KillProcess(ctx context.Context, deviceID string, pid int) (str
 	return out.ID, nil
 }
 
+// SendMailMessage is one outbound test message to send AS fromUserID
+// (Microsoft Graph's own /users/{id}/sendMail, Mail.Send application
+// permission -- a different scope than the alerts/analyzedEmails
+// token above, same graph.microsoft.com resource, so the existing
+// c.tokens source already covers it, no new token source needed).
+type SendMailMessage struct {
+	ToRecipients []string
+	Subject      string
+	BodyHTML     string
+	// IdempotencyKey is carried as a custom X-Audspect-Idempotency-Key
+	// internet message header on the sent message -- Graph's v1.0
+	// sendMail has no server-side idempotency-key support, so this is
+	// a best-effort structural marker only: it lets a caller that later
+	// reads the Sent Items folder back (a capability this client does
+	// not implement) recognize a message as a specific attempt, rather
+	// than an active duplicate-prevention mechanism. See SendMail's own
+	// doc comment for why a retry is never attempted on an ambiguous
+	// failure in the first place.
+	IdempotencyKey string
+}
+
+// maxSendMailRateLimitRetries bounds the only failure mode SendMail
+// ever retries automatically: HTTP 429. A 429 response is Graph
+// explicitly saying the request was rejected before any mail was
+// queued -- confirmed-not-sent, safe to repeat. Every other failure
+// (a permission error, a 5xx, a transport-level error where the
+// response never arrived) is ambiguous -- the message may or may not
+// have actually been accepted server-side -- and SendMail returns
+// immediately without retrying, rather than risk a silent duplicate
+// send. Fixed, not configurable, same "bounded policy, not a tunable"
+// precedent as maxEmailGWCampaignStageDispatchAttempts.
+const maxSendMailRateLimitRetries = 3
+
+// defaultSendMailRetryAfter is used when a 429 response carries no
+// Retry-After header at all.
+const defaultSendMailRetryAfter = 2 * time.Second
+
+// SendMail sends msg as fromUserID via Microsoft Graph's sendMail
+// action. Returns nil only on a confirmed-accepted response (Graph
+// returns 202 with an empty body on success). See SendMailMessage and
+// maxSendMailRateLimitRetries' own doc comments for the retry/
+// duplicate-send posture.
+func (c *Client) SendMail(ctx context.Context, fromUserID string, msg SendMailMessage) error {
+	token, err := c.tokens.Token(ctx)
+	if err != nil {
+		return fmt.Errorf("defender send mail: %w", err)
+	}
+
+	toRecipients := make([]map[string]any, 0, len(msg.ToRecipients))
+	for _, addr := range msg.ToRecipients {
+		toRecipients = append(toRecipients, map[string]any{"emailAddress": map[string]string{"address": addr}})
+	}
+	payload := map[string]any{
+		"message": map[string]any{
+			"subject":      msg.Subject,
+			"body":         map[string]string{"contentType": "HTML", "content": msg.BodyHTML},
+			"toRecipients": toRecipients,
+			"internetMessageHeaders": []map[string]string{
+				{"name": "X-Audspect-Idempotency-Key", "value": msg.IdempotencyKey},
+			},
+		},
+		"saveToSentItems": true,
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("defender send mail: encode request: %w", err)
+	}
+	reqURL := c.BaseURL + "/users/" + url.PathEscape(fromUserID) + "/sendMail"
+
+	for attempt := 0; ; attempt++ {
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, reqURL, bytes.NewReader(body))
+		if err != nil {
+			return fmt.Errorf("defender send mail: %w", err)
+		}
+		req.Header.Set("Authorization", "Bearer "+token)
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := c.httpClient.Do(req)
+		if err != nil {
+			// Transport-level failure: whether the request ever reached
+			// Graph is genuinely unknown. Never retried automatically.
+			return fmt.Errorf("defender send mail: ambiguous transport failure, not retried (message may or may not have been sent): %w", err)
+		}
+		respData, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+		resp.Body.Close()
+
+		switch resp.StatusCode {
+		case http.StatusAccepted, http.StatusOK:
+			return nil
+		case http.StatusForbidden, http.StatusUnauthorized:
+			return fmt.Errorf("defender send mail: permission denied (HTTP %d, is Mail.Send application permission granted with admin consent for %s?): %s", resp.StatusCode, fromUserID, respData)
+		case http.StatusTooManyRequests:
+			if attempt >= maxSendMailRateLimitRetries {
+				return fmt.Errorf("defender send mail: rate limited (HTTP 429) after %d attempts, never sent: %s", attempt+1, respData)
+			}
+			wait := defaultSendMailRetryAfter
+			if ra := resp.Header.Get("Retry-After"); ra != "" {
+				if secs, err := strconv.Atoi(ra); err == nil && secs >= 0 {
+					wait = time.Duration(secs) * time.Second
+				}
+			}
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(wait):
+			}
+			continue
+		default:
+			// 5xx and anything else: confirmed-not-sent is NOT
+			// guaranteed the way 429 is -- never retried automatically,
+			// same ambiguous-failure posture as a transport error above.
+			return fmt.Errorf("defender send mail: HTTP %d, not retried (ambiguous whether the message was sent): %s", resp.StatusCode, respData)
+		}
+	}
+}
+
 func (c *Client) machineAction(ctx context.Context, deviceID, verb string, body map[string]any) (string, error) {
 	token, err := c.actionTokens.Token(ctx)
 	if err != nil {

@@ -20,11 +20,14 @@ package emailgwefficacy
 //     (Workstream 5): exercise.SpoofableSMTPInjector now builds a
 //     real multipart/mixed message carrying the EICAR test string as
 //     a base64-encoded attachment part, via TestMessage.Attachment.
-//   - OutboundDLPExpectation (either direction) is an authenticated-
-//     internal-sender scenario (mail leaving the org), not an
-//     externally-spoofable one -- a structurally different mechanism
-//     (e.g. Microsoft Graph sendMail under Mail.Send) would be
-//     needed, not this injector.
+//   - OutboundDLPExpectation (both directions) is wired, but NOT
+//     through this injector: it's an authenticated-internal-sender
+//     scenario (mail leaving the org), the wrong fit for this file's
+//     arbitrary-external-envelope-from model. See outbound.go
+//     (Workstream 6) for its real mechanism, Microsoft Graph sendMail
+//     under Mail.Send -- exp.EnvelopeFrom stays empty for this
+//     scenario even though it IS wired; exp.OutboundSenderMailbox is
+//     the field that signals it, a deliberately separate one.
 //   - AuthenticationExceptionScopeExpectation(true) needs to send
 //     from infrastructure the exception's own verification condition
 //     actually trusts (e.g. a real trusted-relay IP).

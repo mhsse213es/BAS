@@ -49,15 +49,18 @@ func buildEmailGWCampaignOutcomeCounts(campaigns []*emailgwcampaign.Campaign) Em
 	return c
 }
 
-// emailGWInjectionGaps derives, directly from the same check
-// ExecuteEmailGWRun itself enforces (exp.EnvelopeFrom == ""), exactly
-// which registered expectation IDs are not yet wired for real
-// injection -- never a separately hand-maintained list that could go
-// stale (this initiative's own Coverage Matrix already went stale
-// twice from exactly that pattern, per maturity.go's own doc comment).
-// An ID absent from emailgwefficacy.ExpectationByID entirely (e.g.
-// EG-007's inbox-rule-based IDs, which are not a MailExpectation at
-// all) counts as a gap too.
+// emailGWInjectionGaps derives, directly from the same two checks
+// ExecuteEmailGWRun/SendOutboundTestMessage themselves enforce
+// (exp.EnvelopeFrom == "" for inbound-spoofed scenarios,
+// exp.OutboundSenderMailbox == "" for authenticated-outbound ones --
+// a scenario is wired if EITHER is set, never both at once by
+// construction), exactly which registered expectation IDs are not yet
+// wired for real injection -- never a separately hand-maintained list
+// that could go stale (this initiative's own Coverage Matrix already
+// went stale twice from exactly that pattern, per maturity.go's own
+// doc comment). An ID absent from emailgwefficacy.ExpectationByID
+// entirely (e.g. EG-007's inbox-rule-based IDs, which are not a
+// MailExpectation at all) counts as a gap too.
 func emailGWInjectionGaps() []string {
 	seen := map[string]bool{}
 	var gaps []string
@@ -68,7 +71,7 @@ func emailGWInjectionGaps() []string {
 			}
 			seen[id] = true
 			exp, ok := emailgwefficacy.ExpectationByID(id)
-			if !ok || exp.EnvelopeFrom == "" {
+			if !ok || (exp.EnvelopeFrom == "" && exp.OutboundSenderMailbox == "") {
 				gaps = append(gaps, id)
 			}
 		}

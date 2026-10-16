@@ -177,7 +177,7 @@ func TestEvaluateGateBlock_MissingEvidence_BlocksWithUndecodableReason(t *testin
 func triggerBECCampaign(t *testing.T, ctx context.Context, pool *pgxpool.Pool, target emailgwefficacy.InjectionTarget) *emailgwcampaign.Campaign {
 	t.Helper()
 	provider := emailgwefficacy.NewFixtureMailEvidenceProvider(nil, nil)
-	campaign, err := TriggerEmailGWCampaign(ctx, pool, provider, target, emailgwrun.EnvironmentLab, emailgwcampaign.BECSupplierFraudCampaignID, "tester")
+	campaign, err := TriggerEmailGWCampaign(ctx, pool, provider, target, nil, emailgwrun.EnvironmentLab, emailgwcampaign.BECSupplierFraudCampaignID, "tester")
 	if err != nil {
 		t.Fatalf("TriggerEmailGWCampaign: %v", err)
 	}
@@ -187,7 +187,7 @@ func triggerBECCampaign(t *testing.T, ctx context.Context, pool *pgxpool.Pool, t
 func TestTriggerEmailGWCampaign_UnknownTemplateID_ReturnsError(t *testing.T) {
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
 		_, err := TriggerEmailGWCampaign(context.Background(), pool, emailgwefficacy.NewFixtureMailEvidenceProvider(nil, nil),
-			emailgwefficacy.InjectionTarget{}, emailgwrun.EnvironmentLab, "no-such-template", "tester")
+			emailgwefficacy.InjectionTarget{}, nil, emailgwrun.EnvironmentLab, "no-such-template", "tester")
 		if err == nil {
 			t.Fatal("want an error for an unknown template id")
 		}
@@ -222,7 +222,7 @@ func TestAdvanceEmailGWCampaign_StageOneDelivered_PermitsStageTwo_DerivedStagesC
 		if err := db.UpdateEmailGWRunStatus(ctx, pool, *stage1.RunID, emailgwrun.StatusCompleted, result1, "", time.Now().UTC()); err != nil {
 			t.Fatalf("update stage1 run: %v", err)
 		}
-		continueEmailGWCampaignFromRun(ctx, pool, provider, target, emailgwrun.EnvironmentLab, *stage1.RunID)
+		continueEmailGWCampaignFromRun(ctx, pool, provider, target, nil, emailgwrun.EnvironmentLab, *stage1.RunID)
 
 		stages, err = db.ListEmailGWCampaignStages(ctx, pool, campaign.ID)
 		if err != nil {
@@ -246,7 +246,7 @@ func TestAdvanceEmailGWCampaign_StageOneDelivered_PermitsStageTwo_DerivedStagesC
 		if err := db.UpdateEmailGWRunStatus(ctx, pool, *stage2.RunID, emailgwrun.StatusPartial, result2, "", time.Now().UTC()); err != nil {
 			t.Fatalf("update stage2 run: %v", err)
 		}
-		continueEmailGWCampaignFromRun(ctx, pool, provider, target, emailgwrun.EnvironmentLab, *stage2.RunID)
+		continueEmailGWCampaignFromRun(ctx, pool, provider, target, nil, emailgwrun.EnvironmentLab, *stage2.RunID)
 
 		stages, err = db.ListEmailGWCampaignStages(ctx, pool, campaign.ID)
 		if err != nil {
@@ -290,7 +290,7 @@ func TestAdvanceEmailGWCampaign_CredentialPhishingURLChain_HappyPath_RealScenari
 		target := emailgwefficacy.InjectionTarget{TargetMX: addr}
 		provider := emailgwefficacy.NewFixtureMailEvidenceProvider(nil, nil)
 
-		campaign, err := TriggerEmailGWCampaign(ctx, pool, provider, target, emailgwrun.EnvironmentLab, emailgwcampaign.CredentialPhishingURLChainCampaignID, "tester")
+		campaign, err := TriggerEmailGWCampaign(ctx, pool, provider, target, nil, emailgwrun.EnvironmentLab, emailgwcampaign.CredentialPhishingURLChainCampaignID, "tester")
 		if err != nil {
 			t.Fatalf("TriggerEmailGWCampaign: %v", err)
 		}
@@ -320,7 +320,7 @@ func TestAdvanceEmailGWCampaign_CredentialPhishingURLChain_HappyPath_RealScenari
 		if err := db.UpdateEmailGWRunStatus(ctx, pool, *stage1.RunID, emailgwrun.StatusCompleted, result1, "", time.Now().UTC()); err != nil {
 			t.Fatalf("update stage1 run: %v", err)
 		}
-		continueEmailGWCampaignFromRun(ctx, pool, provider, target, emailgwrun.EnvironmentLab, *stage1.RunID)
+		continueEmailGWCampaignFromRun(ctx, pool, provider, target, nil, emailgwrun.EnvironmentLab, *stage1.RunID)
 
 		stages, err = db.ListEmailGWCampaignStages(ctx, pool, campaign.ID)
 		if err != nil {
@@ -353,7 +353,7 @@ func TestAdvanceEmailGWCampaign_CredentialPhishingURLChain_HappyPath_RealScenari
 		if err := db.UpdateEmailGWRunStatus(ctx, pool, *stage2.RunID, emailgwrun.StatusCompleted, result2, "", time.Now().UTC()); err != nil {
 			t.Fatalf("update stage2 run: %v", err)
 		}
-		continueEmailGWCampaignFromRun(ctx, pool, provider, target, emailgwrun.EnvironmentLab, *stage2.RunID)
+		continueEmailGWCampaignFromRun(ctx, pool, provider, target, nil, emailgwrun.EnvironmentLab, *stage2.RunID)
 
 		stages, err = db.ListEmailGWCampaignStages(ctx, pool, campaign.ID)
 		if err != nil {
@@ -396,7 +396,7 @@ func TestAdvanceEmailGWCampaign_StageOneBlocked_CascadesBlockThroughAllDownstrea
 		// reached the target.
 		result1 := marshalResult(t, emailgwefficacy.EfficacyResult{Prevention: emailgwefficacy.VerdictDetail{Verdict: emailgwefficacy.VerdictConfirmedSuccess}})
 		db.UpdateEmailGWRunStatus(ctx, pool, *stage1.RunID, emailgwrun.StatusCompleted, result1, "", time.Now().UTC())
-		continueEmailGWCampaignFromRun(ctx, pool, provider, target, emailgwrun.EnvironmentLab, *stage1.RunID)
+		continueEmailGWCampaignFromRun(ctx, pool, provider, target, nil, emailgwrun.EnvironmentLab, *stage1.RunID)
 
 		stages, err := db.ListEmailGWCampaignStages(ctx, pool, campaign.ID)
 		if err != nil {
@@ -441,7 +441,7 @@ func TestAdvanceEmailGWCampaign_StageOneInconclusive_BlocksWithDistinctReasonFro
 
 		result1 := marshalResult(t, emailgwefficacy.EfficacyResult{Prevention: emailgwefficacy.VerdictDetail{Verdict: emailgwefficacy.VerdictInconclusive, Reason: "no enforcement evidence found"}})
 		db.UpdateEmailGWRunStatus(ctx, pool, *stage1.RunID, emailgwrun.StatusPartial, result1, "", time.Now().UTC())
-		continueEmailGWCampaignFromRun(ctx, pool, provider, target, emailgwrun.EnvironmentLab, *stage1.RunID)
+		continueEmailGWCampaignFromRun(ctx, pool, provider, target, nil, emailgwrun.EnvironmentLab, *stage1.RunID)
 
 		stages, _ = db.ListEmailGWCampaignStages(ctx, pool, campaign.ID)
 		fraudStage := stageByKey(t, stages, "fraud-payload")
@@ -474,7 +474,7 @@ func TestAdvanceEmailGWCampaign_Cancellation_StopsBeforeNextDispatchAndCascadesC
 		// retroactive).
 		result1 := marshalResult(t, emailgwefficacy.EfficacyResult{Prevention: emailgwefficacy.VerdictDetail{Verdict: emailgwefficacy.VerdictConfirmedFailure}})
 		db.UpdateEmailGWRunStatus(ctx, pool, *stage1.RunID, emailgwrun.StatusCompleted, result1, "", time.Now().UTC())
-		continueEmailGWCampaignFromRun(ctx, pool, provider, target, emailgwrun.EnvironmentLab, *stage1.RunID)
+		continueEmailGWCampaignFromRun(ctx, pool, provider, target, nil, emailgwrun.EnvironmentLab, *stage1.RunID)
 
 		stages, err := db.ListEmailGWCampaignStages(ctx, pool, campaign.ID)
 		if err != nil {
@@ -524,7 +524,7 @@ func TestRecoverEmailGWCampaigns_StageRunAlreadyTerminalButCampaignNeverAdvanced
 			t.Fatalf("update stage1 run: %v", err)
 		}
 
-		if err := RecoverEmailGWCampaigns(ctx, pool, provider, target, emailgwrun.EnvironmentLab); err != nil {
+		if err := RecoverEmailGWCampaigns(ctx, pool, provider, target, nil, emailgwrun.EnvironmentLab); err != nil {
 			t.Fatalf("RecoverEmailGWCampaigns: %v", err)
 		}
 
@@ -559,7 +559,7 @@ func TestContinueEmailGWCampaignFromRun_CalledTwiceConcurrently_NeverDuplicateDi
 		done := make(chan struct{}, 2)
 		for i := 0; i < 2; i++ {
 			go func() {
-				continueEmailGWCampaignFromRun(ctx, pool, provider, target, emailgwrun.EnvironmentLab, *stage1.RunID)
+				continueEmailGWCampaignFromRun(ctx, pool, provider, target, nil, emailgwrun.EnvironmentLab, *stage1.RunID)
 				done <- struct{}{}
 			}()
 		}
