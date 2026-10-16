@@ -97,6 +97,19 @@ func loadAutomatedAbuseScenario() (EnterpriseScenario, ScenarioResult, error) {
 	return scenario, result, nil
 }
 
+func loadPolicyIntegrityScenario() (EnterpriseScenario, ScenarioResult, error) {
+	scenario, err := AudspectPolicyIntegrityScenario()
+	if err != nil {
+		return EnterpriseScenario{}, ScenarioResult{}, err
+	}
+	fixtures := AudspectPolicyIntegrityFixtures()
+	result, err := EvaluatePolicyIntegrityScenario(scenario, policyIntegrityPolicyBasis, fixtures)
+	if err != nil {
+		return EnterpriseScenario{}, ScenarioResult{}, err
+	}
+	return scenario, result, nil
+}
+
 // scenarioRegistry is the slug -> loader lookup every enterprise
 // scenario registers itself in. The slug is the console-facing
 // identifier (used in URLs); it is deliberately distinct from
@@ -106,6 +119,7 @@ var scenarioRegistry = map[string]scenarioLoader{
 	"http-protocol-integrity": loadHTTPProtocolIntegrityScenario,
 	"api-protection":          loadAPIProtectionScenario,
 	"automated-abuse":         loadAutomatedAbuseScenario,
+	"policy-integrity":        loadPolicyIntegrityScenario,
 }
 
 // EvaluateScenarioBySlug looks up slug in the registry and returns its

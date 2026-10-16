@@ -79,34 +79,54 @@ func EvaluateScenarioWithSeverities(scenario EnterpriseScenario, fixtures map[st
 	if err := ValidateAgainstKnownIDs(scenario, knownIDs); err != nil {
 		return ScenarioResult{}, fmt.Errorf("evaluating scenario %q: %w", scenario.ID, err)
 	}
+	return aggregateByPrecedence(scenario, func(vectorID string) (VectorAssertion, bool, error) {
+		fixture, ok := fixtures[vectorID]
+		if !ok {
+			return VectorAssertion{}, false, nil
+		}
+		result, err := EvaluateContributingVector(vectorID, fixture.Results)
+		if err != nil {
+			return VectorAssertion{}, false, fmt.Errorf("evaluating vector %q: %w", vectorID, err)
+		}
+		return VectorAssertion{
+			VectorID:       vectorID,
+			Severity:       severityByID[vectorID],
+			Verdict:        result.Verdict,
+			EvidenceSource: EvidenceSourceFixture,
+			Reason:         result.Reason,
+		}, true, nil
+	})
+}
 
+// aggregateByPrecedence is the non-offsetting precedence core shared
+// by every scenario evaluator, regardless of what claim/verdict shape
+// its per-vector evaluate callback actually drives underneath
+// (ClaimPrevention via EvaluateContributingVector, or a genuinely
+// different shape like wafpolicygap's paired/coverage-gap dispatch).
+// evaluate returns found=false for a contributing ID with no fixture
+// -- that ID becomes an untested vector, never evaluated, and can
+// never silently count as a pass.
+func aggregateByPrecedence(scenario EnterpriseScenario, evaluate func(vectorID string) (assertion VectorAssertion, found bool, err error)) (ScenarioResult, error) {
 	var assertions []VectorAssertion
 	var untested []string
 	sawFailure := false
 	sawIncomplete := false
 
 	for _, vectorID := range scenario.ContributingVectorIDs {
-		fixture, ok := fixtures[vectorID]
-		if !ok {
+		assertion, found, err := evaluate(vectorID)
+		if err != nil {
+			return ScenarioResult{}, err
+		}
+		if !found {
 			untested = append(untested, vectorID)
 			sawIncomplete = true
 			continue
 		}
-		result, err := EvaluateContributingVector(vectorID, fixture.Results)
-		if err != nil {
-			return ScenarioResult{}, fmt.Errorf("evaluating vector %q: %w", vectorID, err)
-		}
-		assertions = append(assertions, VectorAssertion{
-			VectorID:       vectorID,
-			Severity:       severityByID[vectorID],
-			Verdict:        result.Verdict,
-			EvidenceSource: EvidenceSourceFixture,
-			Reason:         result.Reason,
-		})
-		if failingVerdict(result.Verdict) {
+		assertions = append(assertions, assertion)
+		if failingVerdict(assertion.Verdict) {
 			sawFailure = true
 		}
-		if result.Verdict == wafval.VerdictInconclusive {
+		if assertion.Verdict == wafval.VerdictInconclusive {
 			sawIncomplete = true
 		}
 	}
