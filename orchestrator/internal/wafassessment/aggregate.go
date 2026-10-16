@@ -43,11 +43,13 @@ type ScenarioResult struct {
 	Summary           string
 }
 
-// failingVerdict reports whether v is a prevention-claim failure --
-// the WAF either let the request through after detecting it, or
-// missed it outright.
+// failingVerdict reports whether v is a real failure under either
+// claim shape this package evaluates: for a prevention claim, the WAF
+// either let the request through after detecting it, or missed it
+// outright; for a false-positive claim (see EvaluateLegitimateTrafficScenario),
+// a legitimate request was incorrectly blocked.
 func failingVerdict(v wafval.Verdict) bool {
-	return v == wafval.VerdictDetectedButAllowed || v == wafval.VerdictMissed
+	return v == wafval.VerdictDetectedButAllowed || v == wafval.VerdictMissed || v == wafval.VerdictIncorrectlyBlocked
 }
 
 // EvaluateScenario grades scenario's contributing vectors against
