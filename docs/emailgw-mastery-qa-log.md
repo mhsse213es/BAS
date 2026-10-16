@@ -61,10 +61,14 @@ This is the single place to check before claiming EmailGW Mastery is "done" or m
 
 ### 3. RBI 2016 Cyber Security Framework circular (RBI/2015-16/418) — reported repealed, cross-cutting staleness finding
 
-**Status:** Resolved for this package's own obligation (built against the current 2026 directions instead) — flagged here as a cross-cutting finding, not fixed in `webgwefficacy`.
+**Status:** Fully resolved, including cross-cutting. Originally flagged here as found-but-not-fixed elsewhere; the user asked for the cross-cutting fix too, done 2026-10-16.
 
 **What was found (2026-10-15):** while researching India's seed regulatory obligation for this package's own `regulatory.go`, multiple independent secondary (compliance-vendor) sources converge on: the RBI's 2016 Cyber Security Framework circular (RBI/2015-16/418, DBS.CO/CSITE/BC.11/33.01.001/2015-16) — the same circular `webgwefficacy`'s own `regulatory.go` cites (`rbi-csf-net-02`, built the same day as that package's Phase 4) — was repealed effective 31 July 2026, superseded by the Reserve Bank of India (Commercial Banks — Cybersecurity, Technology: Risk, Resilience and Assurance Framework) Directions, 2026 (RBI/DoS/2026-27/410, DoS.CO.CSITEG.4/31.01.015/2026-27). None of these sources are RBI's own primary text (which is a scanned PDF behind a CAPTCHA gate this session could not OCR), so this is reported, not independently confirmed, but the repeal is consistent across every source found and none contradicted it.
 
 **What this package did:** `IndiaRBISecureMailObligation()` (`regulatory.go`) cites the 2026 directions, not the 2016 circular, and its `Note` field states this staleness finding explicitly.
 
-**What this does NOT do:** fix or flag `webgwefficacy`'s own `rbi-csf-net-02` entry — that is a different package, out of this initiative's scope, and is recorded here only so a future session (on either initiative) doesn't have to rediscover it.
+**Cross-cutting fix, 2026-10-16 (done at the user's request):** both other places in the repo citing the same repealed circular were corrected to cite the 2026 RBI Commercial Banks Cybersecurity Directions instead:
+- `webgwefficacy`'s own `regulatory_test.go` (`rbi-csf-net-02` → `rbi-cybersecurity-directions-2026-net-02`).
+- `internal/compliance/mappings/rbi_csf.yaml` (the 25-control catalog consumed by `internal/api`/`internal/compliance`/`internal/reporting`) — `version`/`name`/`published_year` updated; `id: RBI_CSF` deliberately left unchanged (a hardcoded match key elsewhere); the 25 controls themselves were not individually re-verified against the new document's paragraph numbering, flagged as such in the YAML's own header comment.
+
+Full detail of both fixes lives in `docs/webgw-mastery-qa-log.md` item #9, since the work itself is in that package/catalog, not this one — this entry stays here as the index pointer so a reader of only this EmailGW log doesn't have to go looking for whether it was ever addressed.
