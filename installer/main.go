@@ -11,6 +11,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
+	"strings"
 	"syscall"
 	"unsafe"
 
@@ -125,6 +127,7 @@ const (
 	IDC_CANCEL    = 105
 	IDC_STATUS    = 106
 	IDC_SELECTALL = 107
+	IDC_ENROLL    = 108
 )
 
 // ── Window geometry ───────────────────────────────────────────────────────────
@@ -144,10 +147,12 @@ const (
 )
 
 const (
-	yURLLbl  = HDR + 24
-	yURLEdit = yURLLbl + 22
-	ySecLbl  = yURLEdit + EDTH + 20
-	ySecEdit = ySecLbl + 22
+	yURLLbl     = HDR + 24
+	yURLEdit    = yURLLbl + 22
+	yEnrollLbl  = yURLEdit + EDTH + 20
+	yEnrollEdit = yEnrollLbl + 22
+	ySecLbl     = yEnrollEdit + EDTH + 20
+	ySecEdit    = ySecLbl + 22
 	yEnvLbl  = ySecEdit + EDTH + 20
 	yEnvEdit = yEnvLbl + 22
 	yLogLbl  = yEnvEdit + EDTH + 24
@@ -228,6 +233,7 @@ var (
 	hInst      uintptr
 	hMainWnd   uintptr
 	hURLEdit   uintptr
+	hEnrollEdit uintptr
 	hSecEdit   uintptr
 	hEnvEdit   uintptr
 	hInstBtn   uintptr
@@ -353,7 +359,7 @@ func wndProc(hwnd, msg, wParam, lParam uintptr) uintptr {
 		case IDC_CANCEL:
 			procDestroyWindow.Call(hwnd)
 		case IDC_SELECTALL:
-			if f, _, _ := procGetFocus.Call(); f == hURLEdit || f == hSecEdit || f == hEnvEdit || f == hStatus {
+			if f, _, _ := procGetFocus.Call(); f == hURLEdit || f == hEnrollEdit || f == hSecEdit || f == hEnvEdit || f == hStatus {
 				procSendMessage.Call(f, EM_SETSEL, 0, ^uintptr(0))
 			}
 		}
@@ -414,9 +420,13 @@ func createControls(hwnd uintptr) {
 		return hw
 	}
 
-	mkLabel("Server URL  (e.g. http://10.0.0.5:9000)", LPAD, yURLLbl, FW, 18)
+	mkLabel("Server URL  (from dashboard: Settings -> Connection Config)", LPAD, yURLLbl, FW, 18)
 	hURLEdit = mkEdit(IDC_URL, LPAD, yURLEdit, FW, EDTH, ES_LEFT, true)
-	setWindowText(hURLEdit, "http://")
+	setWindowText(hURLEdit, "https://")
+
+	mkLabel("Enrollment Port  (default 9444; change only if remapped)", LPAD, yEnrollLbl, FW, 18)
+	hEnrollEdit = mkEdit(IDC_ENROLL, LPAD, yEnrollEdit, FW, EDTH, ES_LEFT, true)
+	setWindowText(hEnrollEdit, "9444")
 
 	mkLabel("Agent Secret", LPAD, ySecLbl, FW, 18)
 	hSecEdit = mkEdit(IDC_SECRET, LPAD, ySecEdit, FW, EDTH, ES_PASSWORD, true)
@@ -450,8 +460,9 @@ func runInstall() {
 	serverURL := getWindowText(hURLEdit)
 	secret := getWindowText(hSecEdit)
 	envLabel := getWindowText(hEnvEdit)
+	enrollPort := strings.TrimSpace(getWindowText(hEnrollEdit))
 
-	if serverURL == "" || serverURL == "http://" {
+	if serverURL == "" || serverURL == "http://" || serverURL == "https://" {
 		appendStatus("[ERROR] Server URL is required.")
 		procEnableWindow.Call(hInstBtn, 1)
 		installing = false
@@ -462,6 +473,14 @@ func runInstall() {
 		procEnableWindow.Call(hInstBtn, 1)
 		installing = false
 		return
+	}
+	if enrollPort != "" {
+		if n, err := strconv.Atoi(enrollPort); err != nil || n < 1 || n > 65535 {
+			appendStatus("[ERROR] Enrollment Port must be a number between 1 and 65535 (default 9444).")
+			procEnableWindow.Call(hInstBtn, 1)
+			installing = false
+			return
+		}
 	}
 
 	appendStatus("[1/4] Validating server connectivity and secret...")
@@ -502,13 +521,20 @@ func runInstall() {
 		return
 	}
 	appendStatus("[3/4] Deployment CA saved: " + caPath)
-	cmd := exec.Command(agentPath,
+	args := []string{
 		"--install",
 		"--server", serverURL,
 		"--env", envLabel,
 		"--secret", secret,
 		"--ca-root", caPath,
-	)
+	}
+	// Pass --enroll-port so CSR bootstrap reaches the enrollment listener even
+	// when its published port was remapped from the 9444 default. Validated
+	// numeric above; the agent persists it as BAS_ENROLL_PORT.
+	if enrollPort != "" {
+		args = append(args, "--enroll-port", enrollPort)
+	}
+	cmd := exec.Command(agentPath, args...)
 	cmd.Dir = installDir
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	out, err := cmd.CombinedOutput()
