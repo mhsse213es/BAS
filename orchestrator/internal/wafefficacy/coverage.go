@@ -29,10 +29,10 @@ func validCoverageStatus(s CoverageStatus) bool {
 // ExclusionReason is required whenever Status is CoverageExcluded --
 // enforced by NewCoverageReport, never left to convention.
 type DomainCoverage struct {
-	DomainID        string
-	DomainName      string
-	Status          CoverageStatus
-	ExclusionReason string
+	DomainID        string         `json:"domainId"`
+	DomainName      string         `json:"domainName"`
+	Status          CoverageStatus `json:"status"`
+	ExclusionReason string         `json:"exclusionReason,omitempty"`
 }
 
 // CoverageReport is a validated set of DomainCoverage entries.

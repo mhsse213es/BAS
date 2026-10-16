@@ -118,3 +118,30 @@ func TestGetWAFIndustryProfilesHTML_RendersComplianceDetail(t *testing.T) {
 		t.Error("body missing \"unverified\" status")
 	}
 }
+
+// Final review finding: wafefficacy.DomainCoverage had no json tags,
+// so the wire format was PascalCase instead of this codebase's
+// established camelCase convention (webgwefficacy.DomainCoverage,
+// emailgwefficacy.AreaCoverage, and this plan's own
+// wafIndustryProfileResponse all camelCase). The existing coverage
+// test decodes case-insensitively, which masked this on the round
+// trip -- this test asserts the raw wire bytes instead.
+func TestGetWAFCoverage_JSONKeysAreCamelCase(t *testing.T) {
+	h := &Handler{}
+	rr := httptest.NewRecorder()
+	h.GetWAFCoverage(rr, httptest.NewRequest(http.MethodGet, "/api/waf/coverage", nil))
+
+	body := rr.Body.String()
+	if !strings.Contains(body, `"domainId"`) {
+		t.Error(`body missing "domainId" key (camelCase) -- found PascalCase "DomainID" instead?`)
+	}
+	if !strings.Contains(body, `"domainName"`) {
+		t.Error(`body missing "domainName" key (camelCase)`)
+	}
+	if !strings.Contains(body, `"status"`) {
+		t.Error(`body missing "status" key (camelCase)`)
+	}
+	if strings.Contains(body, `"DomainID"`) {
+		t.Error(`body contains PascalCase "DomainID" -- json tags are missing`)
+	}
+}
