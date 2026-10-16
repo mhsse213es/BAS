@@ -20,16 +20,6 @@ This is the single place to check before claiming WAF Mastery is "done" or makin
 
 **Resolution path:** build a real `wafval.Observation` producer against a specific vendor's API/logs once lab or vendor access exists — mirrors the AV/NGAV Defender-vertical resolution path exactly.
 
-### 2. Retail/e-commerce and Government/critical-infrastructure industry profiles — named in `waf.txt` but not shipped
-
-**Status:** Open, found during this QA-log pass (2026-10-16) by re-reading `waf.txt` §4 directly against what `internal/wafprofile` actually ships — not previously logged anywhere.
-
-**What's needed:** `waf.txt`'s own §4 industry table names 6 sectors: BFSI, NBFC, Manufacturing, Healthcare, **Retail and e-commerce**, and **Government and critical infrastructure** — plus India/UAE regional profiles. `internal/wafprofile/catalog.go`'s `AudspectWAFProfileCatalog()` ships exactly 4 of those 6 (BFSI, NBFC, Manufacturing, Healthcare) plus the 2 regional profiles (India, UAE). Retail/e-commerce and Government/critical-infrastructure have no `Profile` of their own.
-
-**Why it's open rather than resolved by a documented exclusion:** unlike AV/NGAV Mastery's own Government/MSP exclusion (`internal/avprofile`'s package doc comment explicitly states why those two were left out — no vector cleanly represents their distinguishing concern), `internal/wafprofile` has no equivalent doc comment explaining why Retail/e-commerce or Government/critical-infrastructure were skipped. `wafcatalog`'s real vector set (API/auth/rate/cache/bot-abuse families) plausibly covers Retail and e-commerce's own named priorities ("checkout, payment workflows, account abuse, inventory APIs, scraping and bot controls") reasonably well — this looks like an uncaptured gap, not a reasoned exclusion.
-
-**Resolution path:** add `WAFPROFILE-RETAIL` (likely API-001..003, RATE-001..002, bot-abuse vectors) and either add `WAFPROFILE-GOVERNMENT` (if a vector set genuinely maps to its named priorities — availability, exposed endpoints, logging) or document explicitly why it doesn't, the way `avprofile` did for Government/MSP.
-
 ### 3. Three of the 9 new enterprise scenarios wire only 2 vectors each, with no deliberately-untested one
 
 **Status:** Open, deferred as low-risk — found during the final whole-branch review (2026-10-16, fresh Sonnet subagent, 0 Critical/0 Important findings overall).
@@ -52,6 +42,18 @@ This is the single place to check before claiming WAF Mastery is "done" or makin
 
 ## Resolved items
 
+### 0. `TestRBACMatrix_NoDrift` — the pre-existing emailgw/webgw drift referenced throughout this doc is now RESOLVED, by a different concurrent session
+
+**Status:** Resolved, not by this initiative. Confirmed 2026-10-16 (same day this doc was written): `TestRBACMatrix_NoDrift` now passes cleanly. A concurrent session actively working in this same shared checkout appears to have fixed the missing `routeMatrix` entries for `/api/emailgw-*`/`/api/webgw/industry-profiles*` independently. Every other item in this doc that cites that drift as "pre-existing, unrelated" is still accurate as a historical note — it just no longer reproduces as of this date.
+
+### 2. Retail/e-commerce and Government/critical-infrastructure industry profiles — RESOLVED 2026-10-16
+
+**Status:** Resolved, same day it was found.
+
+**What was wrong:** `waf.txt`'s own §4 industry table names 6 sectors: BFSI, NBFC, Manufacturing, Healthcare, **Retail and e-commerce**, and **Government and critical infrastructure** — plus India/UAE regional profiles. `internal/wafprofile/catalog.go`'s `AudspectWAFProfileCatalog()` shipped only 4 of those 6 (BFSI, NBFC, Manufacturing, Healthcare) plus the 2 regional profiles. Unlike AV/NGAV Mastery's own Government/MSP exclusion (which has an explicit doc comment explaining why no vector fits), `wafprofile` had no such comment here — this was a genuine uncaptured gap, not a reasoned exclusion.
+
+**What changed (`60dc56e8`):** added `WAFPROFILE-RETAIL` (API-001 checkout/orders BOLA, API-003 inventory-API data exposure, AUTH-001 account-abuse credential-stuffing, RATE-001 pricing-endpoint scraping/bot burst; PCI-DSS Unverified compliance reference, same disclosure style as BFSI's own) and `WAFPROFILE-GOVERNMENT` (PATHTRAV-001 exposed-endpoint traversal, SSRF-002 cloud-metadata exposure, SQLI-001 sensitive-data exposure, POLICY-002 legacy-compatibility exception; NIST Cybersecurity Framework Unverified reference, explicitly disclosed as a generic placeholder since `waf.txt` names no specific national framework for this row). `waf.txt`'s own named "logging" priority for Government has no corresponding `wafcatalog` vector — the new profile's `Rationale` says so explicitly rather than forcing a weak mapping, pointing at `internal/wafdetection` instead. All 3 places that hardcoded the profile count (`wafprofile`'s own test, `internal/reporting`'s HTML report test, `internal/api`'s JSON handler test) were updated 6→8 total / 4→6 industry. Full `go build`/`go vet`/package test suite green.
+
 ### 5. Final whole-branch review of enterprise scenarios 02-10 — RESOLVED 2026-10-16
 
 **Status:** Resolved — review ran clean.
@@ -60,10 +62,10 @@ This is the single place to check before claiming WAF Mastery is "done" or makin
 
 **Result:** 0 Critical, 0 Important findings — "ready to ship as-is." Specifically confirmed by direct trace: the detection-telemetry and origin-resilience scenarios' own non-`wafval` verdict taxonomies (`detectionOutcomeClass`, `originOutcomeClass`) never leak into `wafval`'s shared `failingVerdict` classifier (each evaluation kind with its own closed taxonomy is classified independently, since the taxonomies share no failing-value strings — reusing `failingVerdict` across them would have silently misclassified every real failure as a pass); `failingVerdict`'s `VerdictIncorrectlyBlocked` addition (needed for scenario 9's `ClaimFalsePositive` vectors) is provably unreachable from any `ClaimPrevention` evaluation, so it's additive and regression-safe; the scenario registry, `routes.go`, and `rbac_matrix_test.go` all list the exact same 10 slugs. Items #3 and #4 above are this review's only deferred minors that weren't fixed in the same pass.
 
-## Test/build summary (as of 2026-10-16, commit `dc983084`)
+## Test/build summary (as of 2026-10-16, commit `60dc56e8`)
 
 - `go build ./...` and `go vet ./...`: clean throughout every phase of this initiative.
-- All 10 phase packages (`wafval`, `wafcatalog`, `wafpolicygap`, `wafapiflow`, `wafbotabuse`, `waforigin`, `wafdetection`, `wafprofile`, `wafverify`) plus `internal/wafassessment` (the 10 enterprise scenarios) pass their own test suites.
+- All 10 phase packages (`wafval`, `wafcatalog`, `wafpolicygap`, `wafapiflow`, `wafbotabuse`, `waforigin`, `wafdetection`, `wafprofile`, `wafverify`) plus `internal/wafassessment` (the 10 enterprise scenarios) pass their own test suites. `wafprofile` now ships 8 profiles (6 industry + 2 regional, see item #2).
 - `internal/wafefficacy` + `internal/reporting/waf_coverage.go`/`waf_industry_profiles.go` + `internal/api/waf_efficacy_handlers.go` console integration: `/api/waf/coverage(.html)`, `/api/waf/industry-profiles(.html)` — all tested.
-- `/api/waf/scenarios/<slug>(.html)` × 10 (slug ≠ catalog `EnterpriseScenario.ID`, resolved through a shared slug-keyed registry): all 10 present in both `routes.go` and `rbac_matrix_test.go`, confirmed not contributing to `TestRBACMatrix_NoDrift`'s failure list (that failure list is pre-existing, unrelated emailgw/webgw drift — see item below).
-- `TestRBACMatrix_NoDrift`: red, but only from the same pre-existing, unrelated `emailgw-mastery` merge drift (`e783e7a2`) on `/api/emailgw-*`/`/api/webgw/industry-profiles*` routes documented in `docs/av-mastery-qa-log.md` — confirmed never caused by this initiative, not fixed here (belongs to a different initiative).
+- `/api/waf/scenarios/<slug>(.html)` × 10 (slug ≠ catalog `EnterpriseScenario.ID`, resolved through a shared slug-keyed registry): all 10 present in both `routes.go` and `rbac_matrix_test.go`.
+- `TestRBACMatrix_NoDrift`: now passes cleanly as of 2026-10-16 — see item #0.
