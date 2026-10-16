@@ -83,6 +83,76 @@ func TestInsertGetEmailGWRun_RoundTrips(t *testing.T) {
 	})
 }
 
+func TestEmailGWRunSchema_EnvironmentCheckConstraint(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		cases := []struct {
+			environment string
+			legal       bool
+		}{
+			{"lab", true},
+			{"customer", true},
+			{"bogus", false},
+			{"", false},
+		}
+		for i, c := range cases {
+			id := fmt.Sprintf("environment-case-%d", i)
+			_, err := pool.Exec(ctx, `INSERT INTO email_gw_runs (id, scenario_id, environment, status) VALUES ($1, 'EG-002.known-bad', $2, 'pending')`, id, c.environment)
+			if got := err == nil; got != c.legal {
+				t.Errorf("environment=%q: accepted=%v want %v (err=%v)", c.environment, got, c.legal, err)
+			}
+		}
+	})
+}
+
+func TestInsertEmailGWRun_EnvironmentDefaultsToLabWhenUnset(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		run := &emailgwrun.EmailGWRun{
+			ID:          "run-env-default",
+			ScenarioID:  "EG-002.known-bad",
+			Status:      emailgwrun.StatusPending,
+			InitiatedBy: "tester",
+			StartedAt:   time.Now().UTC().Truncate(time.Second),
+			// Environment deliberately left unset.
+		}
+		if err := db.InsertEmailGWRun(ctx, pool, run); err != nil {
+			t.Fatalf("insert: %v", err)
+		}
+		got, err := db.GetEmailGWRun(ctx, pool, run.ID)
+		if err != nil {
+			t.Fatalf("get: %v", err)
+		}
+		if got.Environment != emailgwrun.EnvironmentLab {
+			t.Errorf("got environment %q, want %q (never leave this unset)", got.Environment, emailgwrun.EnvironmentLab)
+		}
+	})
+}
+
+func TestInsertGetEmailGWRun_EnvironmentCustomer_RoundTrips(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		run := &emailgwrun.EmailGWRun{
+			ID:          "run-env-customer",
+			ScenarioID:  "EG-002.known-bad",
+			Environment: emailgwrun.EnvironmentCustomer,
+			Status:      emailgwrun.StatusPending,
+			InitiatedBy: "tester",
+			StartedAt:   time.Now().UTC().Truncate(time.Second),
+		}
+		if err := db.InsertEmailGWRun(ctx, pool, run); err != nil {
+			t.Fatalf("insert: %v", err)
+		}
+		got, err := db.GetEmailGWRun(ctx, pool, run.ID)
+		if err != nil {
+			t.Fatalf("get: %v", err)
+		}
+		if got.Environment != emailgwrun.EnvironmentCustomer {
+			t.Errorf("got environment %q, want %q", got.Environment, emailgwrun.EnvironmentCustomer)
+		}
+	})
+}
+
 func TestGetEmailGWRun_NotFound_ReturnsPgxNoRows(t *testing.T) {
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
 		_, err := db.GetEmailGWRun(context.Background(), pool, "no-such-run")

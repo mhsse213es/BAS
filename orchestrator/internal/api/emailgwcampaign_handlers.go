@@ -45,7 +45,7 @@ func (h *Handler) TriggerEmailGWCampaign(w http.ResponseWriter, r *http.Request)
 		initiatedBy = c.UserID
 	}
 
-	campaign, err := TriggerEmailGWCampaign(r.Context(), h.db, h.emailgwProvider, h.emailgwInjectionTarget, req.TemplateID, initiatedBy)
+	campaign, err := TriggerEmailGWCampaign(r.Context(), h.db, h.emailgwProvider, h.emailgwInjectionTarget, h.emailgwEnvironment, req.TemplateID, initiatedBy)
 	if err != nil {
 		h.auditLog(r, "emailgwcampaign.trigger", "", map[string]any{
 			"templateId": req.TemplateID, "error": err.Error(),

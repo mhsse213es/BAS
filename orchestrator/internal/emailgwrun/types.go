@@ -34,6 +34,27 @@ const (
 	StatusPartial   Status = "partial"
 )
 
+// Environment is an email_gw_runs.environment value: an explicit,
+// operator-set declaration of whether a run's evidence came from a
+// lab/test tenant or a genuine customer tenant -- never inferred from
+// an evidence record's own Source (emailgwefficacy.SourceLive means
+// "proven through the real adapter's HTTP/JSON code path", which has
+// always meant httptest-proven in this initiative, never "a genuine
+// customer tenant" -- the two questions are orthogonal). Set once,
+// deployment-wide, from AUDSPECT_EMAILGW_TENANT_ENVIRONMENT (default
+// EnvironmentLab when unset), not per-run: whether a given deployment
+// is pointed at a lab tenant or a real customer's is a fact about the
+// deployment, not about any one scenario. Every email_gw_runs row
+// persists this value at insert time so time-based metrics can keep
+// lab and customer evidence in two separate, never-merged buckets
+// even after the deployment's own setting later changes.
+type Environment string
+
+const (
+	EnvironmentLab      Environment = "lab"
+	EnvironmentCustomer Environment = "customer"
+)
+
 // EmailGWRun is one real execution of one emailgwefficacy scenario
 // expectation. Result is deliberately opaque -- the marshaled
 // emailgwefficacy.EfficacyResult, same "this package owns the
@@ -51,6 +72,7 @@ type EmailGWRun struct {
 	ID                string          `json:"id"`
 	ScenarioID        string          `json:"scenarioId"` // an emailgwefficacy expectation ID, e.g. "EG-002.known-bad" -- not just "EG-002"
 	MessageClass      string          `json:"messageClass,omitempty"`
+	Environment       Environment     `json:"environment"`
 	Status            Status          `json:"status"`
 	Result            json.RawMessage `json:"result,omitempty"`
 	Error             string          `json:"error,omitempty"`

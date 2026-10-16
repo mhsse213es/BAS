@@ -121,7 +121,7 @@ func currentEmailGWRunOrNil(ctx context.Context, pool *pgxpool.Pool, id string) 
 // function: see internal/emailgwrun's own package comment for why
 // real SMTP delivery and real vendor-API evidence can't finish inside
 // one HTTP request the way CloudPlan's zero-I/O graph search does.
-func ExecuteEmailGWRun(ctx context.Context, pool *pgxpool.Pool, provider emailgwefficacy.MailEvidenceProvider, target emailgwefficacy.InjectionTarget, req EmailGWRunRequest) (*emailgwrun.EmailGWRun, error) {
+func ExecuteEmailGWRun(ctx context.Context, pool *pgxpool.Pool, provider emailgwefficacy.MailEvidenceProvider, target emailgwefficacy.InjectionTarget, environment emailgwrun.Environment, req EmailGWRunRequest) (*emailgwrun.EmailGWRun, error) {
 	exp, ok := emailgwefficacy.ExpectationByID(req.ScenarioID)
 	if !ok {
 		return nil, fmt.Errorf("emailgwrun: unknown scenario id %q", req.ScenarioID)
@@ -133,11 +133,15 @@ func ExecuteEmailGWRun(ctx context.Context, pool *pgxpool.Pool, provider emailgw
 	if !ok {
 		return nil, fmt.Errorf("emailgwrun: %q has no registered test content", req.ScenarioID)
 	}
+	if environment == "" {
+		environment = emailgwrun.EnvironmentLab
+	}
 
 	run := &emailgwrun.EmailGWRun{
 		ID:           newID(),
 		ScenarioID:   req.ScenarioID,
 		MessageClass: exp.MessageClass,
+		Environment:  environment,
 		Status:       emailgwrun.StatusPending,
 		InitiatedBy:  req.InitiatedBy,
 		StartedAt:    time.Now().UTC(),
@@ -158,7 +162,7 @@ func ExecuteEmailGWRun(ctx context.Context, pool *pgxpool.Pool, provider emailgw
 		return currentEmailGWRunOrNil(ctx, pool, run.ID), fmt.Errorf("email gw run %s: %w", run.ID, err)
 	}
 
-	go finishEmailGWRunAfterWindow(pool, provider, target, exp, observation, window, run.ID)
+	go finishEmailGWRunAfterWindow(pool, provider, target, environment, exp, observation, window, run.ID)
 
 	return currentEmailGWRunOrNil(ctx, pool, run.ID), nil
 }
@@ -176,7 +180,7 @@ func ExecuteEmailGWRun(ctx context.Context, pool *pgxpool.Pool, provider emailgw
 // this live path and RecoverEmailGWRuns's own recovery sweep -- has
 // what it needs to dispatch a next stage for real, without a second,
 // separate recovery mechanism.
-func finishEmailGWRunAfterWindow(pool *pgxpool.Pool, provider emailgwefficacy.MailEvidenceProvider, target emailgwefficacy.InjectionTarget, exp emailgwefficacy.MailExpectation, observation emailgwefficacy.OriginDeliveryObservation, window emailgwefficacy.TimeWindow, runID string) {
+func finishEmailGWRunAfterWindow(pool *pgxpool.Pool, provider emailgwefficacy.MailEvidenceProvider, target emailgwefficacy.InjectionTarget, environment emailgwrun.Environment, exp emailgwefficacy.MailExpectation, observation emailgwefficacy.OriginDeliveryObservation, window emailgwefficacy.TimeWindow, runID string) {
 	if wait := time.Until(window.End); wait > 0 {
 		time.Sleep(wait)
 	}
@@ -185,12 +189,12 @@ func finishEmailGWRunAfterWindow(pool *pgxpool.Pool, provider emailgwefficacy.Ma
 	resultJSON, err := json.Marshal(result)
 	if err != nil {
 		_ = db.UpdateEmailGWRunStatus(ctx, pool, runID, emailgwrun.StatusFailed, nil, err.Error(), time.Time{})
-		continueEmailGWCampaignFromRun(ctx, pool, provider, target, runID)
+		continueEmailGWCampaignFromRun(ctx, pool, provider, target, environment, runID)
 		return
 	}
 	status := statusForEmailGWResult(result)
 	_ = db.UpdateEmailGWRunStatus(ctx, pool, runID, status, resultJSON, "", time.Now().UTC())
-	continueEmailGWCampaignFromRun(ctx, pool, provider, target, runID)
+	continueEmailGWCampaignFromRun(ctx, pool, provider, target, environment, runID)
 }
 
 // RecoverEmailGWRuns resumes every row still at StatusRunning at
@@ -203,7 +207,7 @@ func finishEmailGWRunAfterWindow(pool *pgxpool.Pool, provider emailgwefficacy.Ma
 // boundaries are reused exactly as persisted, never extended, so the
 // evidence check still reflects the window the run actually promised
 // when it started.
-func RecoverEmailGWRuns(ctx context.Context, pool *pgxpool.Pool, provider emailgwefficacy.MailEvidenceProvider, target emailgwefficacy.InjectionTarget) error {
+func RecoverEmailGWRuns(ctx context.Context, pool *pgxpool.Pool, provider emailgwefficacy.MailEvidenceProvider, target emailgwefficacy.InjectionTarget, environment emailgwrun.Environment) error {
 	runs, err := db.ListRunningEmailGWRuns(ctx, pool)
 	if err != nil {
 		return fmt.Errorf("emailgwrun: recover: %w", err)
@@ -213,7 +217,7 @@ func RecoverEmailGWRuns(ctx context.Context, pool *pgxpool.Pool, provider emailg
 		if !ok || run.WindowEnd == nil {
 			_ = db.UpdateEmailGWRunStatus(ctx, pool, run.ID, emailgwrun.StatusFailed, nil,
 				"emailgwrun: recovery could not resolve this run's scenario id or window", time.Time{})
-			continueEmailGWCampaignFromRun(ctx, pool, provider, target, run.ID)
+			continueEmailGWCampaignFromRun(ctx, pool, provider, target, environment, run.ID)
 			continue
 		}
 		observation := emailgwefficacy.OriginDeliveryObservation{SenderPayloadHash: run.SenderPayloadHash}
@@ -224,7 +228,7 @@ func RecoverEmailGWRuns(ctx context.Context, pool *pgxpool.Pool, provider emailg
 		if run.WindowStart != nil {
 			window.Start = *run.WindowStart
 		}
-		go finishEmailGWRunAfterWindow(pool, provider, target, exp, observation, window, run.ID)
+		go finishEmailGWRunAfterWindow(pool, provider, target, environment, exp, observation, window, run.ID)
 	}
 	return nil
 }

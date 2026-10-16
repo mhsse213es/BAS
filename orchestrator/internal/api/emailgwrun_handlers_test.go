@@ -42,7 +42,7 @@ func TestTriggerEmailGWRun_NotConfigured_Returns503(t *testing.T) {
 func TestTriggerEmailGWRun_MissingScenarioID_Returns400(t *testing.T) {
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
 		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret).
-			WithEmailGWRun(emailgwefficacy.NewFixtureMailEvidenceProvider(nil, nil), emailgwefficacy.InjectionTarget{})
+			WithEmailGWRun(emailgwefficacy.NewFixtureMailEvidenceProvider(nil, nil), emailgwefficacy.InjectionTarget{}, emailgwrun.EnvironmentLab)
 		req := triggerEmailGWRunReq(t, pool, map[string]any{})
 		rec := callAuthed(h.TriggerEmailGWRun, req)
 		if rec.Code != http.StatusBadRequest {
@@ -54,7 +54,7 @@ func TestTriggerEmailGWRun_MissingScenarioID_Returns400(t *testing.T) {
 func TestTriggerEmailGWRun_NotWiredScenario_Returns400(t *testing.T) {
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
 		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret).
-			WithEmailGWRun(emailgwefficacy.NewFixtureMailEvidenceProvider(nil, nil), emailgwefficacy.InjectionTarget{})
+			WithEmailGWRun(emailgwefficacy.NewFixtureMailEvidenceProvider(nil, nil), emailgwefficacy.InjectionTarget{}, emailgwrun.EnvironmentLab)
 		req := triggerEmailGWRunReq(t, pool, map[string]any{"scenarioId": "EG-004.known-good"}) // EICAR, needs a MIME attachment -- not wired
 		rec := callAuthed(h.TriggerEmailGWRun, req)
 		if rec.Code != http.StatusBadRequest {
@@ -67,7 +67,7 @@ func TestTriggerEmailGWRun_Success_Returns201WithRunningStatus(t *testing.T) {
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
 		_, addr := startEmailGWRunTestServer(t)
 		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret).
-			WithEmailGWRun(emailgwefficacy.NewFixtureMailEvidenceProvider(nil, nil), emailgwefficacy.InjectionTarget{TargetMX: addr})
+			WithEmailGWRun(emailgwefficacy.NewFixtureMailEvidenceProvider(nil, nil), emailgwefficacy.InjectionTarget{TargetMX: addr}, emailgwrun.EnvironmentLab)
 		req := triggerEmailGWRunReq(t, pool, map[string]any{"scenarioId": "EG-002.known-bad"})
 		rec := callAuthed(h.TriggerEmailGWRun, req)
 		if rec.Code != http.StatusCreated {
@@ -96,7 +96,7 @@ func TestTriggerEmailGWRun_InitiatedByIsServerControlled(t *testing.T) {
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
 		_, addr := startEmailGWRunTestServer(t)
 		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret).
-			WithEmailGWRun(emailgwefficacy.NewFixtureMailEvidenceProvider(nil, nil), emailgwefficacy.InjectionTarget{TargetMX: addr})
+			WithEmailGWRun(emailgwefficacy.NewFixtureMailEvidenceProvider(nil, nil), emailgwefficacy.InjectionTarget{TargetMX: addr}, emailgwrun.EnvironmentLab)
 		req := triggerEmailGWRunReq(t, pool, map[string]any{"scenarioId": "EG-002.known-bad", "initiatedBy": "spoofed-user"})
 		rec := callAuthed(h.TriggerEmailGWRun, req)
 		if rec.Code != http.StatusCreated {
@@ -114,7 +114,7 @@ func TestListEmailGWRuns_ReturnsInsertedRun(t *testing.T) {
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
 		_, addr := startEmailGWRunTestServer(t)
 		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret).
-			WithEmailGWRun(emailgwefficacy.NewFixtureMailEvidenceProvider(nil, nil), emailgwefficacy.InjectionTarget{TargetMX: addr})
+			WithEmailGWRun(emailgwefficacy.NewFixtureMailEvidenceProvider(nil, nil), emailgwefficacy.InjectionTarget{TargetMX: addr}, emailgwrun.EnvironmentLab)
 		triggerRec := callAuthed(h.TriggerEmailGWRun, triggerEmailGWRunReq(t, pool, map[string]any{"scenarioId": "EG-002.known-bad"}))
 		var triggered emailgwrun.EmailGWRun
 		_ = json.Unmarshal(triggerRec.Body.Bytes(), &triggered)
@@ -156,7 +156,7 @@ func TestGetEmailGWRun_Found_ReturnsRun(t *testing.T) {
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
 		_, addr := startEmailGWRunTestServer(t)
 		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret).
-			WithEmailGWRun(emailgwefficacy.NewFixtureMailEvidenceProvider(nil, nil), emailgwefficacy.InjectionTarget{TargetMX: addr})
+			WithEmailGWRun(emailgwefficacy.NewFixtureMailEvidenceProvider(nil, nil), emailgwefficacy.InjectionTarget{TargetMX: addr}, emailgwrun.EnvironmentLab)
 		triggerRec := callAuthed(h.TriggerEmailGWRun, triggerEmailGWRunReq(t, pool, map[string]any{"scenarioId": "EG-002.known-bad"}))
 		var triggered emailgwrun.EmailGWRun
 		_ = json.Unmarshal(triggerRec.Body.Bytes(), &triggered)

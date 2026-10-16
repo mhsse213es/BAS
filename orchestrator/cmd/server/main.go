@@ -30,6 +30,7 @@ import (
 	"github.com/audspect/bas/internal/detect"
 	"github.com/audspect/bas/internal/dnssink"
 	"github.com/audspect/bas/internal/emailgwefficacy"
+	"github.com/audspect/bas/internal/emailgwrun"
 	"github.com/audspect/bas/internal/emsweep"
 	"github.com/audspect/bas/internal/endpointrisk"
 	"github.com/audspect/bas/internal/evidence"
@@ -754,6 +755,16 @@ func main() {
 	// TriggerEmailGWRun refusing with 503, same as CALDERA_URL unset.
 	var emailgwProvider emailgwefficacy.MailEvidenceProvider
 	var emailgwInjectionTarget emailgwefficacy.InjectionTarget
+	// emailgwEnvironment is an explicit, operator-set declaration of
+	// whether real EmailGW runs are against a lab/test tenant or a
+	// genuine customer tenant -- see emailgwrun.Environment's own doc
+	// comment. Defaults to EnvironmentLab (anything other than the
+	// literal "customer" value is read as lab) so a time-based metric
+	// can never silently count a run as customer evidence by accident.
+	emailgwEnvironment := emailgwrun.EnvironmentLab
+	if os.Getenv("AUDSPECT_EMAILGW_TENANT_ENVIRONMENT") == string(emailgwrun.EnvironmentCustomer) {
+		emailgwEnvironment = emailgwrun.EnvironmentCustomer
+	}
 	emailgwTenantID := os.Getenv("AUDSPECT_EMAILGW_DEFENDER_TENANT_ID")
 	emailgwClientID := os.Getenv("AUDSPECT_EMAILGW_DEFENDER_CLIENT_ID")
 	emailgwClientSecret := os.Getenv("AUDSPECT_EMAILGW_DEFENDER_CLIENT_SECRET")
@@ -919,7 +930,7 @@ func main() {
 		WithTAXII(taxiiStore, taxiiManager).
 		WithIOCProvider(iocProvider).
 		WithNetworkVantagePoint(networkVP).
-		WithEmailGWRun(emailgwProvider, emailgwInjectionTarget)
+		WithEmailGWRun(emailgwProvider, emailgwInjectionTarget, emailgwEnvironment)
 
 	// Resume every EmailGW run a previous process restart abandoned
 	// mid-wait (see internal/api.RecoverEmailGWRuns's own doc comment).
@@ -927,7 +938,7 @@ func main() {
 	// still be waiting out a long response-scenario dwell window.
 	if emailgwProvider != nil {
 		go func() {
-			if err := api.RecoverEmailGWRuns(context.Background(), pool, emailgwProvider, emailgwInjectionTarget); err != nil {
+			if err := api.RecoverEmailGWRuns(context.Background(), pool, emailgwProvider, emailgwInjectionTarget, emailgwEnvironment); err != nil {
 				log.Printf("[!] emailgw run recovery: %v", err)
 			}
 			// Closes the narrower restart race RecoverEmailGWRuns
@@ -935,7 +946,7 @@ func main() {
 			// finished before the process died, but whose campaign
 			// was never advanced past it (see RecoverEmailGWCampaigns'
 			// own doc comment).
-			if err := api.RecoverEmailGWCampaigns(context.Background(), pool, emailgwProvider, emailgwInjectionTarget); err != nil {
+			if err := api.RecoverEmailGWCampaigns(context.Background(), pool, emailgwProvider, emailgwInjectionTarget, emailgwEnvironment); err != nil {
 				log.Printf("[!] emailgw campaign recovery: %v", err)
 			}
 		}()

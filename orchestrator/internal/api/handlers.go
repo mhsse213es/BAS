@@ -38,6 +38,7 @@ import (
 	"github.com/audspect/bas/internal/db"
 	"github.com/audspect/bas/internal/detectverify"
 	"github.com/audspect/bas/internal/emailgwefficacy"
+	"github.com/audspect/bas/internal/emailgwrun"
 	"github.com/audspect/bas/internal/emsweep"
 	"github.com/audspect/bas/internal/endpointrisk"
 	"github.com/audspect/bas/internal/evidence"
@@ -161,6 +162,13 @@ type Handler struct {
 	// unconfigured-not-broken posture as networkVantagePoint above.
 	emailgwProvider        emailgwefficacy.MailEvidenceProvider
 	emailgwInjectionTarget emailgwefficacy.InjectionTarget
+	// emailgwEnvironment is an explicit, operator-set, deployment-wide
+	// declaration of whether real EmailGW runs are against a lab/test
+	// tenant or a genuine customer tenant -- see emailgwrun.Environment's
+	// own doc comment. Defaults to EnvironmentLab in New(), never left
+	// unset: metrics must never silently treat an unlabeled run as
+	// either bucket.
+	emailgwEnvironment emailgwrun.Environment
 }
 
 // New creates a Handler.
@@ -172,7 +180,7 @@ func New(db *pgxpool.Pool, hub *ws.Hub, engine *scenario.Engine, secret string) 
 		_, ok := artifactgen.Lookup(techniqueID, testName, argName)
 		return ok
 	}
-	return &Handler{db: db, hub: hub, engine: engine, secret: secret, cancelGracePeriod: 60 * time.Second}
+	return &Handler{db: db, hub: hub, engine: engine, secret: secret, cancelGracePeriod: 60 * time.Second, emailgwEnvironment: emailgwrun.EnvironmentLab}
 }
 
 // WithCompliance attaches the compliance mapper.
@@ -191,10 +199,15 @@ func (h *Handler) WithNetworkVantagePoint(vp networkgraph.VantagePoint) *Handler
 // WithEmailGWRun attaches the live MailEvidenceProvider and
 // InjectionTarget TriggerEmailGWRun needs to actually send and verify
 // a real EmailGW scenario. Call with a nil provider (the zero value)
-// to leave real-run execution unconfigured.
-func (h *Handler) WithEmailGWRun(provider emailgwefficacy.MailEvidenceProvider, target emailgwefficacy.InjectionTarget) *Handler {
+// to leave real-run execution unconfigured. environment tags every
+// run this deployment creates from here on; pass "" to keep New()'s
+// own EnvironmentLab default.
+func (h *Handler) WithEmailGWRun(provider emailgwefficacy.MailEvidenceProvider, target emailgwefficacy.InjectionTarget, environment emailgwrun.Environment) *Handler {
 	h.emailgwProvider = provider
 	h.emailgwInjectionTarget = target
+	if environment != "" {
+		h.emailgwEnvironment = environment
+	}
 	return h
 }
 
