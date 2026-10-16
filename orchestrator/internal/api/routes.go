@@ -243,6 +243,9 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		// Workstream 1 time-based metrics (MTTD/MTTR) -- real,
 		// computed-on-read over email_gw_runs, split lab/customer.
 		r.Get("/api/emailgw/metrics", h.GetEmailGWMetrics)
+		// Workstream 2 unified customer-facing report -- composes
+		// coverage, runs summary, metrics, and campaign outcomes.
+		r.Get("/api/emailgw/report", h.GetEmailGWReport)
 		// AD coverage assessment report, from the same admatrix.Report() data as
 		// /api/ad/coverage: PDF (primary), HTML, and JSON (secondary). Read-only.
 		r.Get("/api/ad/assessment.pdf", h.GetADAssessmentPDF)
