@@ -240,6 +240,9 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		// deferred industry profiles (its own Phase 5).
 		r.Get("/api/emailgw/coverage", h.GetEmailGWCoverage)
 		r.Get("/api/emailgw/coverage.html", h.GetEmailGWCoverageHTML)
+		// Workstream 1 time-based metrics (MTTD/MTTR) -- real,
+		// computed-on-read over email_gw_runs, split lab/customer.
+		r.Get("/api/emailgw/metrics", h.GetEmailGWMetrics)
 		// AD coverage assessment report, from the same admatrix.Report() data as
 		// /api/ad/coverage: PDF (primary), HTML, and JSON (secondary). Read-only.
 		r.Get("/api/ad/assessment.pdf", h.GetADAssessmentPDF)

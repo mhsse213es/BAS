@@ -61,6 +61,7 @@ var routeMatrix = []routeCase{
 	{http.MethodGet, "/api/webgw/industry-profiles.html", tierAny, ""},
 	{http.MethodGet, "/api/emailgw/coverage", tierAny, ""},
 	{http.MethodGet, "/api/emailgw/coverage.html", tierAny, ""},
+	{http.MethodGet, "/api/emailgw/metrics", tierAny, ""},
 	{http.MethodGet, "/api/emailgw-runs", tierAny, ""},
 	{http.MethodGet, "/api/emailgw-runs/summary", tierAny, ""},
 	{http.MethodGet, "/api/emailgw-runs/{id}", tierAny, ""},
