@@ -102,6 +102,99 @@ func TestCredentialHarvestingURLScenario_KnownBad_MissedByGateway(t *testing.T) 
 	runScenario(t, exp)
 }
 
+func TestExecutiveImpersonationScenario_KnownGood_CaughtByGateway(t *testing.T) {
+	exp := ExecutiveImpersonationExpectation(true)
+	if exp.ExpectedAction != ExpectedQuarantine {
+		t.Fatalf("ExecutiveImpersonationExpectation(true).ExpectedAction = %q, want %q", exp.ExpectedAction, ExpectedQuarantine)
+	}
+	runScenario(t, exp)
+}
+
+func TestExecutiveImpersonationScenario_KnownBad_MissedByGateway(t *testing.T) {
+	exp := ExecutiveImpersonationExpectation(false)
+	if exp.ExpectedAction != ExpectedDeliver {
+		t.Fatalf("ExecutiveImpersonationExpectation(false).ExpectedAction = %q, want %q", exp.ExpectedAction, ExpectedDeliver)
+	}
+	runScenario(t, exp)
+}
+
+// TestExecutiveImpersonationScenario_NoEvidence_InconclusiveNeverAssumed
+// is this scenario's own regression proof, per the EG-002/EG-005/EG-009
+// implementation's explicit regression step: an absent enforcement
+// evidence record must never be reported as either a confirmed success
+// or a confirmed failure for this new scenario, the same structural
+// discipline VerifyMailExpectation already proves generically in
+// verify_test.go.
+func TestExecutiveImpersonationScenario_NoEvidence_InconclusiveNeverAssumed(t *testing.T) {
+	exp := ExecutiveImpersonationExpectation(true)
+	provider := NewFixtureMailEvidenceProvider(nil, nil)
+	result := VerifyMailExpectation(exp, OriginDeliveryObservation{}, provider, scenarioWindow())
+	if result.Prevention.Verdict != VerdictInconclusive {
+		t.Errorf("Prevention.Verdict = %q, want %q -- absence of evidence must never be read as either outcome", result.Prevention.Verdict, VerdictInconclusive)
+	}
+}
+
+func TestSupplierPaymentDiversionScenario_KnownGood_CaughtByGateway(t *testing.T) {
+	exp := SupplierPaymentDiversionExpectation(true)
+	if exp.ExpectedAction != ExpectedQuarantine {
+		t.Fatalf("SupplierPaymentDiversionExpectation(true).ExpectedAction = %q, want %q", exp.ExpectedAction, ExpectedQuarantine)
+	}
+	runScenario(t, exp)
+}
+
+func TestSupplierPaymentDiversionScenario_KnownBad_MissedByGateway(t *testing.T) {
+	exp := SupplierPaymentDiversionExpectation(false)
+	if exp.ExpectedAction != ExpectedDeliver {
+		t.Fatalf("SupplierPaymentDiversionExpectation(false).ExpectedAction = %q, want %q", exp.ExpectedAction, ExpectedDeliver)
+	}
+	runScenario(t, exp)
+}
+
+func TestSupplierPaymentDiversionScenario_NoEvidence_InconclusiveNeverAssumed(t *testing.T) {
+	exp := SupplierPaymentDiversionExpectation(true)
+	provider := NewFixtureMailEvidenceProvider(nil, nil)
+	result := VerifyMailExpectation(exp, OriginDeliveryObservation{}, provider, scenarioWindow())
+	if result.Prevention.Verdict != VerdictInconclusive {
+		t.Errorf("Prevention.Verdict = %q, want %q -- absence of evidence must never be read as either outcome", result.Prevention.Verdict, VerdictInconclusive)
+	}
+}
+
+// TestAuthenticationExceptionScopeScenario_KnownGood_GenuineUseDelivered
+// proves scoped=true's own semantics: a message that genuinely
+// originates from the exception's real, verified trusted source is
+// expected to bypass inspection and deliver -- the exception must not
+// break the legitimate mail flow it exists for.
+func TestAuthenticationExceptionScopeScenario_KnownGood_GenuineUseDelivered(t *testing.T) {
+	exp := AuthenticationExceptionScopeExpectation(true)
+	if exp.ExpectedAction != ExpectedDeliver {
+		t.Fatalf("AuthenticationExceptionScopeExpectation(true).ExpectedAction = %q, want %q", exp.ExpectedAction, ExpectedDeliver)
+	}
+	runScenario(t, exp)
+}
+
+// TestAuthenticationExceptionScopeScenario_KnownBad_SpoofedProbeQuarantined
+// proves scoped=false's own semantics: a probe that spoofs only the
+// exception's spoofable trigger, without meeting its real
+// verification condition, is expected to be caught by normal
+// enforcement -- a ConfirmedFailure here would mean the exception
+// creates exactly the unintended trust path EG-009 names.
+func TestAuthenticationExceptionScopeScenario_KnownBad_SpoofedProbeQuarantined(t *testing.T) {
+	exp := AuthenticationExceptionScopeExpectation(false)
+	if exp.ExpectedAction != ExpectedQuarantine {
+		t.Fatalf("AuthenticationExceptionScopeExpectation(false).ExpectedAction = %q, want %q", exp.ExpectedAction, ExpectedQuarantine)
+	}
+	runScenario(t, exp)
+}
+
+func TestAuthenticationExceptionScopeScenario_NoEvidence_InconclusiveNeverAssumed(t *testing.T) {
+	exp := AuthenticationExceptionScopeExpectation(false)
+	provider := NewFixtureMailEvidenceProvider(nil, nil)
+	result := VerifyMailExpectation(exp, OriginDeliveryObservation{}, provider, scenarioWindow())
+	if result.Prevention.Verdict != VerdictInconclusive {
+		t.Errorf("Prevention.Verdict = %q, want %q -- absence of evidence must never be read as either outcome", result.Prevention.Verdict, VerdictInconclusive)
+	}
+}
+
 func TestEICARAttachmentScenario_KnownGood_CaughtByGateway(t *testing.T) {
 	exp := EICARAttachmentExpectation(true)
 	if exp.ExpectedAction != ExpectedQuarantine {
@@ -203,6 +296,9 @@ func TestScenarioBuilders_NeverNameARealDomain(t *testing.T) {
 		EICARAttachmentExpectation(true), EICARAttachmentExpectation(false),
 		URLRewriteExpectation(true), URLRewriteExpectation(false),
 		OutboundDLPExpectation(true), OutboundDLPExpectation(false),
+		ExecutiveImpersonationExpectation(true), ExecutiveImpersonationExpectation(false),
+		SupplierPaymentDiversionExpectation(true), SupplierPaymentDiversionExpectation(false),
+		AuthenticationExceptionScopeExpectation(true), AuthenticationExceptionScopeExpectation(false),
 	}
 	for _, exp := range all {
 		if exp.Recipient == "" {

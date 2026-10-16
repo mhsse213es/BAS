@@ -286,6 +286,31 @@ Mailbox delegation/OAuth-consent, MFA/conditional-access, legacy-auth/SMTP-AUTH 
 - **Coverage Matrix staleness found and fixed in the same pass:** rows A, B, and the M365 Defender vendor row in §5 below still read "Planned"/"first live adapter target" from this spec's original Phase 1 draft, despite Phase 3a/3b having built and proven all three — exactly the kind of drift this document's own §5 preamble warns against. Fixed here as part of this phase's own coverage-reporting work, not deferred to a future audit.
 - **Deliberately deferred, flagged not silently dropped:** versioned scenarios, evidence-integrity checks, and per-provider regression gates beyond the one false-positive test above are named in this phase's Goal text but not in its binding exit criteria — matching the Goal-text-vs-binding-exit-criteria discipline every prior phase amendment in this document has used. Not built this round.
 
+### Phase 7 — EG-001–EG-010 Scenario Catalogue Alignment (not one of the original 6 phases)
+
+**Goal:** the client-facing EG-001–EG-010 scenario catalogue was checked directly against what Phase 3a/4 had actually built, rather than assumed covered because *some* phishing/attachment/DLP scenario already existed. 6 of 10 were genuinely covered already (EG-001→SPF/DKIM/DMARC; EG-003→credential-harvesting URL + URL rewrite; EG-004→EICAR; EG-006→outbound DLP; EG-007→suspicious auto-forward). The other 4 all trace back to one thing: **the Response/remediation evidence dimension (`ResponseVerdict`) has been hardcoded `NotTested` since Phase 2 and was never revisited** — EG-008 (post-delivery remediation), half of EG-010 (detection→response, not just detection), and the "remediation validation" customer-facing metric all depend on it.
+
+**Locked, 2026-10-16 (at the user's explicit direction, after reviewing the gap analysis):** implement the missing *scenario* coverage now, in the existing `MailExpectation` architecture, without touching Response/remediation or building a measurement/dashboard layer — three separate, explicitly-deferred initiatives, not minor cleanup folded into this one.
+
+- **EG-002, Executive impersonation** (`ExecutiveImpersonationExpectation`, `scenarios.go`) — a freemail sender that can legitimately *pass* SPF/DKIM/DMARC for its own domain, with a forged display name. Deliberately kept distinct from the SPF/DKIM/DMARC scenarios (which test the message's own domain authentication) — conflating the two was flagged explicitly as a risk before writing any code.
+- **EG-005, Supplier payment diversion** (`SupplierPaymentDiversionExpectation`, `scenarios.go`) — a lookalike/newly-registered vendor domain requesting a payment-detail change. Kept distinct from both EG-002 (internal persona vs. external vendor) and SPF/DKIM/DMARC (domain-reputation/similarity heuristics vs. the message's own domain authentication).
+- **EG-009, Authentication exception scope** (`AuthenticationExceptionScopeExpectation`, `scenarios.go`) — an abstraction check was done *before* writing this one, per explicit instruction: does `MailExpectation` represent "does a documented exception create an unintended trust path"? Yes, once split correctly along the same `true`=benign→deliver / `false`=malicious-probe→quarantine convention every other scenario in this file already uses — `scoped=true` is a message genuinely originating from the exception's real, verified trusted source (expected to deliver, proving the exception doesn't break legitimate flow); `scoped=false` is a probe that spoofs only the exception's spoofable trigger condition without meeting its real verification (expected to be quarantined; a `ConfirmedFailure` here is the exact unintended-trust-path risk EG-009 names). No new type family needed, unlike area F's `inboxrule.go`.
+- **Regression step (explicit, per the user's own instruction, not implicit):** all 6 pre-existing scenarios plus these 3 new ones pass unchanged; each new scenario additionally has its own explicit "no evidence → `Inconclusive`, never a fabricated `ConfirmedSuccess`/`ConfirmedFailure`" test (`scenarios_test.go`), not just reliance on `VerifyMailExpectation`'s already-generic proof of the same discipline in `verify_test.go`.
+
+**Explicitly deferred, kept as separate roadmap items (not silently dropped):**
+
+| Item | Status |
+|---|---|
+| EG-002, EG-005 scenario coverage | **Done** (this phase) |
+| EG-009 authentication exception | **Done** (this phase) |
+| EG-008 post-delivery remediation evidence | Deferred — blocked on the Response/remediation dimension, never implemented since Phase 2 |
+| EG-010 full detection→response evidence chain | Partial — detection/alert correlation exists; the response half is the same blocker as EG-008 |
+| Four-state scenario-maturity model (not-implemented / implemented-not-executable / executed-without-evidence / verified) | Not implemented — a different concept from `EmailGWVerdict`, which describes a run's outcome, not a scenario's build maturity |
+| Customer-facing metrics: detection speed, evidence completeness, remediation validation, regression | Not implemented as reportable metrics (mutation testing exists at the engineering/regression-test level, Phase 6, but is not exposed as a customer-facing metric) |
+| Customer-facing EmailGW measurement dashboard | Not implemented — `/api/emailgw/coverage[.html]` (console-wiring work, same day) reports taxonomy-area coverage only, not this metric set |
+
+This table exists so a future session checking "is EmailGW Mastery done" reads the real state, not an inferred one from scenario count alone.
+
 ## 4. Safety and Quality Contract
 
 Carried forward and adapted from `emailGW.txt` §2-3 and §7, binding on every phase above, not aspirational text:
