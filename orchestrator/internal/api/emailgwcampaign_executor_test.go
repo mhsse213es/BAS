@@ -274,6 +274,113 @@ func TestAdvanceEmailGWCampaign_StageOneDelivered_PermitsStageTwo_DerivedStagesC
 	})
 }
 
+// TestAdvanceEmailGWCampaign_CredentialPhishingURLChain_HappyPath_RealScenarioIDsDispatch
+// proves the SECOND real campaign template -- not just BEC -- wires
+// through the real engine end to end: its own ExpectationID strings
+// actually resolve to real EG-003 scenarios (a typo here would surface
+// as StageFailed/retry exhaustion, not a silently-wrong dispatch), its
+// own gate permits progression on the same ConfirmedFailure verdict
+// BEC's gate uses, and its derived stages resolve off the SECOND
+// stage, not the first -- the one detail genuinely specific to this
+// template that the engine's existing BEC-only tests can't catch.
+func TestAdvanceEmailGWCampaign_CredentialPhishingURLChain_HappyPath_RealScenarioIDsDispatch(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		_, addr := startEmailGWRunTestServer(t)
+		target := emailgwefficacy.InjectionTarget{TargetMX: addr}
+		provider := emailgwefficacy.NewFixtureMailEvidenceProvider(nil, nil)
+
+		campaign, err := TriggerEmailGWCampaign(ctx, pool, provider, target, emailgwrun.EnvironmentLab, emailgwcampaign.CredentialPhishingURLChainCampaignID, "tester")
+		if err != nil {
+			t.Fatalf("TriggerEmailGWCampaign: %v", err)
+		}
+
+		stages, err := db.ListEmailGWCampaignStages(ctx, pool, campaign.ID)
+		if err != nil {
+			t.Fatalf("list stages: %v", err)
+		}
+		if len(stages) != 1 {
+			t.Fatalf("len(stages) = %d, want 1 (only initial-lure dispatched so far)", len(stages))
+		}
+		stage1 := stageByKey(t, stages, "initial-lure")
+		if stage1.Status != emailgwcampaign.StageDispatched || stage1.RunID == nil {
+			t.Fatalf("stage1 = %+v, want StageDispatched with a real RunID", stage1)
+		}
+		run1, err := db.GetEmailGWRun(ctx, pool, *stage1.RunID)
+		if err != nil {
+			t.Fatalf("get run1: %v", err)
+		}
+		if run1.ScenarioID != "EG-003.credential-url.known-good" {
+			t.Errorf("run1.ScenarioID = %q, want %q", run1.ScenarioID, "EG-003.credential-url.known-good")
+		}
+
+		// Stage 1: the static lure reached the target uninspected --
+		// the one verdict this template's own gate permits.
+		result1 := marshalResult(t, emailgwefficacy.EfficacyResult{Prevention: emailgwefficacy.VerdictDetail{Verdict: emailgwefficacy.VerdictConfirmedFailure}})
+		if err := db.UpdateEmailGWRunStatus(ctx, pool, *stage1.RunID, emailgwrun.StatusCompleted, result1, "", time.Now().UTC()); err != nil {
+			t.Fatalf("update stage1 run: %v", err)
+		}
+		continueEmailGWCampaignFromRun(ctx, pool, provider, target, emailgwrun.EnvironmentLab, *stage1.RunID)
+
+		stages, err = db.ListEmailGWCampaignStages(ctx, pool, campaign.ID)
+		if err != nil {
+			t.Fatalf("list stages after stage1: %v", err)
+		}
+		if len(stages) != 2 {
+			t.Fatalf("len(stages) = %d, want 2 (click-time-bypass-probe now dispatched)", len(stages))
+		}
+		stage2 := stageByKey(t, stages, "click-time-bypass-probe")
+		if stage2.Status != emailgwcampaign.StageDispatched || stage2.RunID == nil {
+			t.Fatalf("stage2 = %+v, want StageDispatched with a real RunID", stage2)
+		}
+		run2, err := db.GetEmailGWRun(ctx, pool, *stage2.RunID)
+		if err != nil {
+			t.Fatalf("get run2: %v", err)
+		}
+		if run2.ScenarioID != "EG-003.url-rewrite.known-bad" {
+			t.Errorf("run2.ScenarioID = %q, want %q", run2.ScenarioID, "EG-003.url-rewrite.known-bad")
+		}
+
+		// Stage 2: the bad-reputation URL WAS caught by click-time
+		// re-evaluation (confirmed-success), detection and response
+		// both confirmed -- an honest full pass through the second
+		// control layer.
+		result2 := marshalResult(t, emailgwefficacy.EfficacyResult{
+			Prevention:       emailgwefficacy.VerdictDetail{Verdict: emailgwefficacy.VerdictConfirmedSuccess},
+			DetectionVerdict: emailgwefficacy.VerdictDetail{Verdict: emailgwefficacy.VerdictConfirmedSuccess},
+			ResponseVerdict:  emailgwefficacy.VerdictDetail{Verdict: emailgwefficacy.VerdictConfirmedSuccess},
+		})
+		if err := db.UpdateEmailGWRunStatus(ctx, pool, *stage2.RunID, emailgwrun.StatusCompleted, result2, "", time.Now().UTC()); err != nil {
+			t.Fatalf("update stage2 run: %v", err)
+		}
+		continueEmailGWCampaignFromRun(ctx, pool, provider, target, emailgwrun.EnvironmentLab, *stage2.RunID)
+
+		stages, err = db.ListEmailGWCampaignStages(ctx, pool, campaign.ID)
+		if err != nil {
+			t.Fatalf("list stages after stage2: %v", err)
+		}
+		if len(stages) != 4 {
+			t.Fatalf("len(stages) = %d, want 4 (both derived stages now resolved)", len(stages))
+		}
+		detectionStage := stageByKey(t, stages, "detection-check")
+		responseStage := stageByKey(t, stages, "response-check")
+		if detectionStage.Status != emailgwcampaign.StageCompleted || detectionStage.RunID != nil {
+			t.Errorf("detection-check = %+v, want StageCompleted with a nil RunID (derived, reads stage 2, not stage 1)", detectionStage)
+		}
+		if responseStage.Status != emailgwcampaign.StageCompleted || responseStage.RunID != nil {
+			t.Errorf("response-check = %+v, want StageCompleted with a nil RunID", responseStage)
+		}
+
+		final, err := db.GetEmailGWCampaign(ctx, pool, campaign.ID)
+		if err != nil {
+			t.Fatalf("get campaign: %v", err)
+		}
+		if final.Status != emailgwcampaign.CampaignCompleted {
+			t.Errorf("campaign status = %q, want %q", final.Status, emailgwcampaign.CampaignCompleted)
+		}
+	})
+}
+
 func TestAdvanceEmailGWCampaign_StageOneBlocked_CascadesBlockThroughAllDownstream(t *testing.T) {
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
 		ctx := context.Background()
