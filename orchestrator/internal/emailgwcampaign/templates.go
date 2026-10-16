@@ -68,11 +68,81 @@ func BECSupplierFraudTemplate() CampaignTemplate {
 	}
 }
 
+// CredentialPhishingURLChainCampaignID is the second real campaign
+// template -- email.txt's own "credential phishing" campaign family
+// (its coverage-model area C, the second of the six illustrative,
+// not-yet-built families BECSupplierFraudTemplate's design doc §11
+// deferred). Narrative: a static credential-harvesting lure, followed
+// -- only if that lure actually reached the target uninspected -- by
+// a second, independent-layer probe testing whether click-time/
+// post-delivery URL re-evaluation (Safe-Links-style time-of-click
+// protection) catches what the first-line content scan missed. This
+// is deliberately a layered-defense test, not a repeat of the same
+// control: a gateway can fail static URL inspection yet still contain
+// the attack chain through click-time re-evaluation.
+const CredentialPhishingURLChainCampaignID = "credential-phishing-url-chain"
+
+// CredentialPhishingURLChainTemplate chains EG-003's two already-wired
+// scenario halves. Both injected stages use the direction whose
+// VerdictDetail answers "did the relevant control catch this" --
+// CredentialHarvestingURLExpectation(caught=true) and
+// URLRewriteExpectation(knownBad=true) -- matching
+// BECSupplierFraudTemplate's own convention exactly.
+func CredentialPhishingURLChainTemplate() CampaignTemplate {
+	return CampaignTemplate{
+		ID:   CredentialPhishingURLChainCampaignID,
+		Name: "Credential Phishing - Static Lure Then Click-Time Bypass Probe",
+		Stages: []StageTemplate{
+			{
+				Key:           "initial-lure",
+				Label:         "Static credential-harvesting URL lure",
+				Kind:          StageKindInjected,
+				ExpectationID: "EG-003.credential-url.known-good",
+			},
+			{
+				Key:           "click-time-bypass-probe",
+				Label:         "Click-time / post-delivery URL re-evaluation probe",
+				Kind:          StageKindInjected,
+				ExpectationID: "EG-003.url-rewrite.known-bad",
+				Gate: &GateCondition{
+					UpstreamStageKey:  "initial-lure",
+					UpstreamDimension: DimensionPrevention,
+					// Proceed only when the static lure was actually
+					// delivered uninspected (ConfirmedFailure) -- the
+					// one case representing a real attacker who now
+					// believes the pretext landed and sends a second,
+					// bad-reputation URL to see whether a different,
+					// independent control layer still catches it.
+					// ConfirmedSuccess (the first lure was already
+					// blocked) and Inconclusive both block, for
+					// distinct reasons, matching BEC's own gate.
+					PermittedVerdicts: []string{confirmedFailure},
+				},
+			},
+			{
+				Key:               "detection-check",
+				Label:             "Downstream detection / alerting evidence",
+				Kind:              StageKindDerived,
+				ReadsFromStageKey: "click-time-bypass-probe",
+				ReadsDimension:    DimensionDetection,
+			},
+			{
+				Key:               "response-check",
+				Label:             "Response / remediation evidence",
+				Kind:              StageKindDerived,
+				ReadsFromStageKey: "click-time-bypass-probe",
+				ReadsDimension:    DimensionResponse,
+			},
+		},
+	}
+}
+
 // templatesByID is the static campaign-template registry -- same
 // "plain Go function returning a slice/map" convention as
 // emailgwefficacy's own scenario registry; not DB-authored.
 var templatesByID = map[string]func() CampaignTemplate{
-	BECSupplierFraudCampaignID: BECSupplierFraudTemplate,
+	BECSupplierFraudCampaignID:           BECSupplierFraudTemplate,
+	CredentialPhishingURLChainCampaignID: CredentialPhishingURLChainTemplate,
 }
 
 // TemplateByID resolves a campaign template ID, or false if unknown.
