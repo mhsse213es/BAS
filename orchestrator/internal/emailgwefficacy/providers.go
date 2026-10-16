@@ -11,6 +11,7 @@ import "time"
 type MailEvidenceProvider interface {
 	EnforcementEvidenceFor(msg MessageRef, window TimeWindow) ([]EnforcementEvidence, error)
 	DetectionEvidenceFor(msg MessageRef, window TimeWindow) ([]DetectionEvidence, error)
+	ResponseEvidenceFor(msg MessageRef, window TimeWindow) ([]ResponseEvidence, error)
 }
 
 // inWindow reports whether t falls within window. An inverted window
@@ -49,10 +50,23 @@ func latestByTimestamp[T any](records []T, ts func(T) time.Time) T {
 type FixtureMailEvidenceProvider struct {
 	enforcement []EnforcementEvidence
 	detection   []DetectionEvidence
+	response    []ResponseEvidence
 }
 
 func NewFixtureMailEvidenceProvider(enforcement []EnforcementEvidence, detection []DetectionEvidence) *FixtureMailEvidenceProvider {
 	return &FixtureMailEvidenceProvider{enforcement: enforcement, detection: detection}
+}
+
+// WithResponse attaches response/remediation fixture evidence to an
+// already-constructed provider and returns the same pointer, builder
+// style -- added after NewFixtureMailEvidenceProvider's two-argument
+// signature was already in wide use across this package's own tests;
+// a third constructor parameter would have forced every existing call
+// site to add an explicit nil, for no benefit to tests that don't
+// exercise the Response dimension at all.
+func (p *FixtureMailEvidenceProvider) WithResponse(response []ResponseEvidence) *FixtureMailEvidenceProvider {
+	p.response = response
+	return p
 }
 
 func (p *FixtureMailEvidenceProvider) EnforcementEvidenceFor(msg MessageRef, window TimeWindow) ([]EnforcementEvidence, error) {
@@ -72,6 +86,20 @@ func (p *FixtureMailEvidenceProvider) EnforcementEvidenceFor(msg MessageRef, win
 func (p *FixtureMailEvidenceProvider) DetectionEvidenceFor(msg MessageRef, window TimeWindow) ([]DetectionEvidence, error) {
 	var out []DetectionEvidence
 	for _, e := range p.detection {
+		if e.Message != msg {
+			continue
+		}
+		if !inWindow(e.Timestamp, window) {
+			continue
+		}
+		out = append(out, e)
+	}
+	return out, nil
+}
+
+func (p *FixtureMailEvidenceProvider) ResponseEvidenceFor(msg MessageRef, window TimeWindow) ([]ResponseEvidence, error) {
+	var out []ResponseEvidence
+	for _, e := range p.response {
 		if e.Message != msg {
 			continue
 		}

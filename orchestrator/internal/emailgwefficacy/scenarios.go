@@ -276,3 +276,28 @@ func AuthenticationExceptionScopeExpectation(scoped bool) MailExpectation {
 	}
 	return exp
 }
+
+// PostDeliveryThreatResponseExpectation builds the EG-008 scenario: a
+// message that is not caught at delivery time -- ExpectedAction is
+// always ExpectedDeliver here, "post-delivery" is this scenario's own
+// premise, not a toggle -- but is later re-evaluated as malicious
+// (zero-hour auto purge or an analyst-driven remediation in Microsoft
+// 365 Defender for Office 365). What this scenario actually exercises
+// is the Response dimension, not Prevention: did the required
+// remediation action actually complete, and how long did it take.
+// There is deliberately no boolean parameter changing ExpectedAction
+// the way every other scenario builder in this file has one --
+// MailExpectation carries no "expected response outcome" field, and
+// Response is scored independently by VerifyMailExpectation from
+// whatever ResponseEvidence a provider supplies for this same
+// message, exactly like every other dimension.
+func PostDeliveryThreatResponseExpectation() MailExpectation {
+	return MailExpectation{
+		SenderProfile:  "known-bad-post-delivery-threat",
+		Recipient:      "helpdesk-test@example-lab.test",
+		MessageClass:   "post-delivery-threat-response",
+		ControlProduct: "m365-defender-o365",
+		ExpectedAction: ExpectedDeliver,
+		Note:           "synthetic message not caught at delivery time, later re-evaluated as malicious -- tests whether the required remediation action actually completed, and how long it took",
+	}
+}

@@ -283,6 +283,217 @@ func TestDefenderMailEvidenceProvider_LegitimateMail_EndToEnd_NoFalsePositive(t 
 	}
 }
 
+// TestDefenderMailEvidenceProvider_ResponseEvidence_EndToEnd_SuccessfullyRemediated
+// proves ResponseVerdict against the real composed adapter: an alert
+// whose investigationState resolves to successfullyRemediated must
+// produce ConfirmedSuccess with a captured record, the Response
+// dimension's own first live end-to-end proof (the generic model and
+// the fixture-level mapping are covered separately in verify_test.go/
+// defender.go's own unit tests; this is the same "one real adapter
+// call path, not two fixtures" standard the SPF end-to-end test above
+// holds Enforcement/Detection to).
+func TestDefenderMailEvidenceProvider_ResponseEvidence_EndToEnd_SuccessfullyRemediated(t *testing.T) {
+	tokenSrv := defenderTokenMock(t)
+	defer tokenSrv.Close()
+	now := time.Now()
+	resolved := now.Add(10 * time.Minute)
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/security/collaboration/analyzedEmails", func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]any{"value": []map[string]any{}})
+	})
+	mux.HandleFunc("/security/alerts_v2", func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]any{
+			"value": []map[string]any{
+				{
+					"id": "alert-1", "title": "Malicious email delivered to finance-test@example-lab.test",
+					"severity": "high", "createdDateTime": now.Format(time.RFC3339),
+					"investigationState": "successfullyRemediated",
+					"resolvedDateTime":   resolved.Format(time.RFC3339),
+				},
+			},
+		})
+	})
+	graphSrv := httptest.NewServer(mux)
+	defer graphSrv.Close()
+
+	client := defender.New(defender.Config{TenantID: "t1", ClientID: "c1", ClientSecret: "s1"})
+	*client.TokenURL() = tokenSrv.URL
+	client.BaseURL = graphSrv.URL
+	provider := NewDefenderMailEvidenceProviderFromClient(client)
+
+	msg := MessageRef{Recipient: "finance-test@example-lab.test", MessageClass: "post-delivery-threat-response"}
+	window := TimeWindow{Start: now.Add(-time.Hour), End: now.Add(time.Hour)}
+	records, err := provider.ResponseEvidenceFor(msg, window)
+	if err != nil {
+		t.Fatalf("ResponseEvidenceFor: %v", err)
+	}
+	if len(records) != 1 || !records[0].Completed || records[0].Source != SourceLive {
+		t.Fatalf("records = %+v, want exactly 1 Completed record tagged SourceLive", records)
+	}
+	if records[0].DurationToComplete != 10*time.Minute {
+		t.Errorf("DurationToComplete = %v, want 10m", records[0].DurationToComplete)
+	}
+}
+
+// TestDefenderMailEvidenceProvider_ResponseEvidence_EndToEnd_PartiallyRemediatedIsFailure
+// proves the strict mapping end-to-end: partiallyRemediated is not a
+// weaker success -- it is ConfirmedFailure, per the explicit decision
+// that ResponseEvidence.Completed means fully completed.
+func TestDefenderMailEvidenceProvider_ResponseEvidence_EndToEnd_PartiallyRemediatedIsFailure(t *testing.T) {
+	tokenSrv := defenderTokenMock(t)
+	defer tokenSrv.Close()
+	now := time.Now()
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/security/collaboration/analyzedEmails", func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]any{"value": []map[string]any{}})
+	})
+	mux.HandleFunc("/security/alerts_v2", func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]any{
+			"value": []map[string]any{
+				{
+					"id": "alert-1", "title": "Malicious email delivered to finance-test@example-lab.test",
+					"severity": "high", "createdDateTime": now.Format(time.RFC3339),
+					"investigationState": "partiallyRemediated",
+					"resolvedDateTime":   now.Add(time.Minute).Format(time.RFC3339),
+				},
+			},
+		})
+	})
+	graphSrv := httptest.NewServer(mux)
+	defer graphSrv.Close()
+
+	client := defender.New(defender.Config{TenantID: "t1", ClientID: "c1", ClientSecret: "s1"})
+	*client.TokenURL() = tokenSrv.URL
+	client.BaseURL = graphSrv.URL
+	provider := NewDefenderMailEvidenceProviderFromClient(client)
+
+	msg := MessageRef{Recipient: "finance-test@example-lab.test", MessageClass: "post-delivery-threat-response"}
+	window := TimeWindow{Start: now.Add(-time.Hour), End: now.Add(time.Hour)}
+	records, err := provider.ResponseEvidenceFor(msg, window)
+	if err != nil {
+		t.Fatalf("ResponseEvidenceFor: %v", err)
+	}
+	if len(records) != 1 || records[0].Completed {
+		t.Fatalf("records = %+v, want exactly 1 record with Completed=false", records)
+	}
+}
+
+// TestDefenderMailEvidenceProvider_ResponseEvidence_EndToEnd_RunningState_NoEvidenceYet
+// proves a non-terminal investigationState (the remediation hasn't
+// resolved yet) produces no ResponseEvidence at all -- never a
+// placeholder "not completed" record -- so VerifyMailExpectation's
+// own no-evidence-found path reports Inconclusive, not
+// ConfirmedFailure.
+func TestDefenderMailEvidenceProvider_ResponseEvidence_EndToEnd_RunningState_NoEvidenceYet(t *testing.T) {
+	tokenSrv := defenderTokenMock(t)
+	defer tokenSrv.Close()
+	now := time.Now()
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/security/collaboration/analyzedEmails", func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]any{"value": []map[string]any{}})
+	})
+	mux.HandleFunc("/security/alerts_v2", func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]any{
+			"value": []map[string]any{
+				{
+					"id": "alert-1", "title": "Malicious email delivered to finance-test@example-lab.test",
+					"severity": "high", "createdDateTime": now.Format(time.RFC3339),
+					"investigationState": "running",
+				},
+			},
+		})
+	})
+	graphSrv := httptest.NewServer(mux)
+	defer graphSrv.Close()
+
+	client := defender.New(defender.Config{TenantID: "t1", ClientID: "c1", ClientSecret: "s1"})
+	*client.TokenURL() = tokenSrv.URL
+	client.BaseURL = graphSrv.URL
+	provider := NewDefenderMailEvidenceProviderFromClient(client)
+
+	msg := MessageRef{Recipient: "finance-test@example-lab.test", MessageClass: "post-delivery-threat-response"}
+	window := TimeWindow{Start: now.Add(-time.Hour), End: now.Add(time.Hour)}
+	records, err := provider.ResponseEvidenceFor(msg, window)
+	if err != nil {
+		t.Fatalf("ResponseEvidenceFor: %v", err)
+	}
+	if len(records) != 0 {
+		t.Fatalf("records = %+v, want 0 -- a non-terminal investigationState must never produce a placeholder record", records)
+	}
+}
+
+// TestDefenderMailEvidenceProvider_EG010_DetectionToResponseChain_EndToEnd
+// is EG-010's own scenario: a known test event followed through the
+// full chain -- alert generation, then triage/response resolution --
+// proven from ONE real alert record serving as the source for BOTH
+// DetectionVerdict (an alert exists for this message) and
+// ResponseVerdict (that same alert's investigationState resolved to
+// successfullyRemediated), not two independently-fabricated fixtures.
+// This is what closes EG-010: the detection half already existed
+// (DefenderDetectionProvider.DetectionEvidenceFor); only the response
+// half was missing, and it reads from the exact same Graph alert.
+func TestDefenderMailEvidenceProvider_EG010_DetectionToResponseChain_EndToEnd(t *testing.T) {
+	tokenSrv := defenderTokenMock(t)
+	defer tokenSrv.Close()
+	now := time.Now()
+	resolved := now.Add(3 * time.Minute)
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/security/collaboration/analyzedEmails", func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]any{
+			"value": []map[string]any{
+				{
+					"id": "email-1", "loggedDateTime": now.Format(time.RFC3339),
+					"recipientEmailAddress": "helpdesk-test@example-lab.test",
+					"policy":                "Default anti-phish policy",
+					"latestDelivery":        map[string]any{"action": "delivered", "location": "inbox_folder"},
+					"authenticationDetails": map[string]any{"senderPolicyFramework": "pass"},
+					"alertIds":              []string{"alert-1"},
+				},
+			},
+		})
+	})
+	mux.HandleFunc("/security/alerts_v2", func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]any{
+			"value": []map[string]any{
+				{
+					"id": "alert-1", "title": "Malicious email delivered to helpdesk-test@example-lab.test",
+					"severity": "high", "createdDateTime": now.Format(time.RFC3339),
+					"investigationState": "successfullyRemediated",
+					"resolvedDateTime":   resolved.Format(time.RFC3339),
+				},
+			},
+		})
+	})
+	graphSrv := httptest.NewServer(mux)
+	defer graphSrv.Close()
+
+	client := defender.New(defender.Config{TenantID: "t1", ClientID: "c1", ClientSecret: "s1"})
+	*client.TokenURL() = tokenSrv.URL
+	client.BaseURL = graphSrv.URL
+	provider := NewDefenderMailEvidenceProviderFromClient(client)
+
+	exp := PostDeliveryThreatResponseExpectation()
+	window := TimeWindow{Start: now.Add(-time.Hour), End: now.Add(time.Hour)}
+	result := VerifyMailExpectation(exp, OriginDeliveryObservation{}, provider, window)
+
+	if result.DetectionVerdict.Verdict != VerdictConfirmedSuccess {
+		t.Errorf("DetectionVerdict.Verdict = %q, want %q -- the chain's alert-generation half", result.DetectionVerdict.Verdict, VerdictConfirmedSuccess)
+	}
+	if result.ResponseVerdict.Verdict != VerdictConfirmedSuccess {
+		t.Errorf("ResponseVerdict.Verdict = %q, want %q -- the chain's triage/response half", result.ResponseVerdict.Verdict, VerdictConfirmedSuccess)
+	}
+	if len(result.Detection) != 1 || result.Detection[0].CorrelationID != "alert-1" {
+		t.Errorf("Detection = %+v, want exactly 1 record correlated to alert-1", result.Detection)
+	}
+	if len(result.Response) != 1 || result.Response[0].DurationToComplete != 3*time.Minute {
+		t.Errorf("Response = %+v, want exactly 1 record with a 3m remediation duration -- same alert, both dimensions", result.Response)
+	}
+}
+
 // TestAnalyzedEmailEvidenceProvider_RealAPI_SkipsWithoutCredentials is
 // the live-tenant integration test, gated exactly like
 // DefenderDetectionProvider's own real-API test -- see
