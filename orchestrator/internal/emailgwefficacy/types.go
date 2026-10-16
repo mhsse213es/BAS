@@ -178,6 +178,17 @@ type ResponseEvidence struct {
 	Timestamp          time.Time      `json:"timestamp"`
 	Source             EvidenceSource `json:"source"`
 	Provenance         Provenance     `json:"provenance"`
+	// CorrelationID identifies the specific underlying alert/event this
+	// response action belongs to -- mirrors DetectionEvidence's own
+	// CorrelationID exactly, and is the real fix for a real gap: before
+	// this field existed, nothing proved that a "latest response
+	// evidence" record was actually about the SAME alert a "latest
+	// detection evidence" record reported, only that both resolved
+	// within the same message's evidence-collection window. A tenant
+	// with more than one alert correlated to the same message during
+	// that window could otherwise have its response credited to the
+	// wrong detection event. See EfficacyResult.DetectionResponseCorrelated.
+	CorrelationID string `json:"correlationId,omitempty"`
 }
 
 // EmailGWVerdict uses emailGW.txt §3's own naming exactly -- locked,

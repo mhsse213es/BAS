@@ -172,6 +172,7 @@ func (p *DefenderDetectionProvider) ResponseEvidenceFor(msg MessageRef, window T
 			Completed:          completed,
 			DurationToComplete: duration,
 			Timestamp:          ts,
+			CorrelationID:      a.ID,
 			Source:             SourceLive,
 			Provenance: Provenance{
 				Kind:       ProvenanceObserved,
