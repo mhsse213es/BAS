@@ -187,10 +187,13 @@ func TestBuildScenario_UppercaseID_RejectedByRealValidate(t *testing.T) {
 	}
 }
 
-// Review Focus: the real seed catalog's one documented harness-required
-// vector (AV-BEHAV-001) must be rejected the same way a hand-built test
-// vector is -- proving the rejection isn't specific to synthetic fixtures.
-func TestBuildPrimaryStep_RealCatalogHarnessRequiredVector(t *testing.T) {
+// Review Focus: AV-BEHAV-001 now ships a real harness (an Add-Type
+// P/Invoke injection-precursor probe, reusing the same safety pattern
+// already shipped in scenarios/endpoint-mastery/em-03-memory-attacks.yaml)
+// through the standard "powershell" executor -- it must build successfully
+// now, not return ErrHarnessRequired. This replaces the former test that
+// asserted the opposite, from before the harness existed.
+func TestBuildPrimaryStep_RealCatalogAVBEHAV001_NowBuildsSuccessfully(t *testing.T) {
 	catalog, err := avcatalog.AudspectAVAttackCatalog()
 	if err != nil {
 		t.Fatalf("AudspectAVAttackCatalog: %v", err)
@@ -204,9 +207,15 @@ func TestBuildPrimaryStep_RealCatalogHarnessRequiredVector(t *testing.T) {
 	if vector.ID == "" {
 		t.Fatal("AV-BEHAV-001 not found in catalog")
 	}
-	_, err = BuildPrimaryStep(vector)
-	if !errors.Is(err, ErrHarnessRequired) {
-		t.Fatalf("err = %v, want wrapping ErrHarnessRequired", err)
+	step, err := BuildPrimaryStep(vector)
+	if err != nil {
+		t.Fatalf("BuildPrimaryStep(AV-BEHAV-001) = %v, want a real built step", err)
+	}
+	if step.Executor != "powershell" {
+		t.Errorf("step.Executor = %q, want %q", step.Executor, "powershell")
+	}
+	if step.TechniqueID != "T1055" {
+		t.Errorf("step.TechniqueID = %q, want %q", step.TechniqueID, "T1055")
 	}
 }
 

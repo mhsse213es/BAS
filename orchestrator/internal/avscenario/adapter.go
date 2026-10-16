@@ -11,10 +11,14 @@
 // vector whose ExecutionTemplate.Executor is not one of the agent's real
 // supported executors (powershell, cmd, wmi, mshta, rundll32, cscript,
 // wscript, regsvr32, schtasks) needs a dedicated test harness that does not
-// exist yet (e.g. AV-BEHAV-001's process-injection simulator). BuildStep
-// rejects those explicitly with ErrHarnessRequired rather than silently
-// producing an undispatchable step -- this package never fabricates a
-// command the catalog didn't declare.
+// exist yet. Every current real seed vector now ships a real harness this
+// way, including AV-BEHAV-001's process-injection simulator (an in-memory
+// Add-Type P/Invoke probe, not a separate binary artifact -- see
+// catalog_behavioral.go's harness-contract doc comment); this mechanism
+// stays in place for any future vector that genuinely needs a capability
+// no standard executor provides. BuildStep rejects those explicitly with
+// ErrHarnessRequired rather than silently producing an undispatchable step
+// -- this package never fabricates a command the catalog didn't declare.
 package avscenario
 
 import (

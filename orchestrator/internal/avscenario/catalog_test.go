@@ -15,19 +15,29 @@ func TestAudspectAVAssessmentScenario_RealCatalog_BuildsAndValidates(t *testing.
 	}
 	for _, step := range s.Steps {
 		if step.Executor == "binary" {
-			t.Errorf("step %q uses the fictional harness-required 'binary' executor; AV-BEHAV-001 must be excluded from the dispatchable seed set", step.Name)
+			t.Errorf("step %q uses the fictional harness-required 'binary' executor -- every dispatchable vector must use a real agent executor", step.Name)
 		}
 	}
 }
 
-func TestAudspectAVAssessmentScenario_ExcludesHarnessRequiredVector(t *testing.T) {
+// Review Focus: AV-BEHAV-001 now ships a real harness and must appear in
+// the dispatchable assessment scenario -- this replaces the former test
+// that asserted its exclusion, from before the harness existed.
+func TestAudspectAVAssessmentScenario_IncludesAVBEHAV001(t *testing.T) {
 	s, err := AudspectAVAssessmentScenario()
 	if err != nil {
 		t.Fatalf("AudspectAVAssessmentScenario: %v", err)
 	}
+	var found bool
 	for _, step := range s.Steps {
-		if step.Name != "" && step.Name[:12] == "AV-BEHAV-001" {
-			t.Fatalf("AV-BEHAV-001 must not appear in the dispatchable assessment scenario, found step %q", step.Name)
+		if len(step.Name) >= 12 && step.Name[:12] == "AV-BEHAV-001" {
+			found = true
+			if step.Executor != "powershell" {
+				t.Errorf("AV-BEHAV-001 step executor = %q, want %q", step.Executor, "powershell")
+			}
 		}
+	}
+	if !found {
+		t.Fatal("AV-BEHAV-001 not found in the dispatchable assessment scenario")
 	}
 }

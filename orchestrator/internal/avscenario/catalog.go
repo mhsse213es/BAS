@@ -8,13 +8,16 @@ import (
 )
 
 // dispatchableSeedVectorIDs are the real seed catalog vectors that are
-// concretely dispatchable today through a standard agent executor. It
-// deliberately excludes AV-BEHAV-001, whose ExecutionTemplate names a
-// test-harness binary that does not exist yet (see catalog_behavioral.go).
+// concretely dispatchable today through a standard agent executor.
+// AV-BEHAV-001 now ships a real harness (see catalog_behavioral.go's
+// harness-contract doc comment) and is included. AV-CONFIG-001/002/003 and
+// AV-CREDACCESS-001 are deliberately excluded from this generic assessment
+// bundle for unrelated reasons of their own (non-trivial/lab-only
+// preconditions), not a harness gap.
 var dispatchableSeedVectorIDs = map[string]bool{
 	"AV-FILE-001": true, "AV-FILE-002": true,
 	"AV-SCRIPT-001": true, "AV-SCRIPT-002": true,
-	"AV-BEHAV-002":   true,
+	"AV-BEHAV-001": true, "AV-BEHAV-002": true,
 	"AV-NET-001":     true,
 	"AV-PERSIST-001": true, "AV-PERSIST-002": true,
 	"AV-FP-001": true, "AV-FP-002": true,

@@ -28,16 +28,6 @@ This is the single place to check before claiming AV/NGAV Mastery is "done" or m
 
 **Why it's deferred:** User directive from earlier in this initiative explicitly deprioritized this relative to the Defender vertical. Not pursued further.
 
-### 3. `AV-BEHAV-001` (process injection) — excluded from dispatch, needs a dedicated test harness binary
-
-**Status:** Open, documented in code (`internal/avscenario/catalog.go`'s `dispatchableSeedVectorIDs` doc comment and `internal/avscenario/adapter.go:14`).
-
-**What's needed:** `AV-BEHAV-001`'s `ExecutionTemplate` names a test-harness binary (an injection-test executable) that does not exist yet in this codebase. Every other seed vector in `internal/avcatalog` runs through a standard agent executor (powershell/cmd/etc.); this one genuinely cannot without that harness.
-
-**What this means today:** `AV-BEHAV-001` is excluded from `dispatchableSeedVectorIDs` — it exists in the catalog (with real preconditions/limitations documented) but is never dispatched by `AudspectAVAssessmentScenario()` or any other avscenario-built scenario.
-
-**Resolution path:** build the dedicated injection-test harness binary, then add `AV-BEHAV-001` to `dispatchableSeedVectorIDs`.
-
 ### 4. `AV-CONFIG-003` (security tampering) — real, dispatchable PowerShell, explicitly lab-only, never excluded from code review but always excluded from dispatch
 
 **Status:** Open by design — this is a permanent scope boundary, not a gap to close.
@@ -57,6 +47,32 @@ This is the single place to check before claiming AV/NGAV Mastery is "done" or m
 **Resolution path:** only revisit if/when a vector genuinely represents a multi-tenant-management or MSP-auditability technique; mirrors WAF BAS Mastery's own precedent of mapping only 4 of 6 named industries for the same reason.
 
 ## Resolved items
+
+### 8. `AV-BEHAV-001` (process injection) — RESOLVED 2026-10-16: real harness built, dispatch-correlation bridge built, verified locally; real lab-AV/NGAV validation remains separate open work
+
+**Status:** Resolved for the harness and the avval/avefficacy correlation bridge. One new sub-item (below) remains open: validating this against a real, dedicated lab AV/NGAV endpoint.
+
+**What was wrong:** `AV-BEHAV-001`'s `ExecutionTemplate` named a test-harness binary (`avtest-injector.exe`) that never existed, so it was excluded from `dispatchableSeedVectorIDs` and never dispatched by `AudspectAVAssessmentScenario()`.
+
+**Decision on harness delivery (user-confirmed):** rather than building a genuinely new standalone `.exe` — which would require new agent-side binary-delivery, integrity-verification, and execution infrastructure that does not exist anywhere in this codebase — the harness reuses the exact, already-reviewed-and-shipped pattern in `scenarios/endpoint-mastery/em-03-memory-attacks.yaml`'s own "Cross-process memory WRITE (injection precursor)" step: inline PowerShell `Add-Type` compiles a small P/Invoke shim in memory (genuinely building a small, deterministic native-code-backed executable component, just JIT'd at dispatch time instead of shipped pre-built), which performs real `OpenProcess`+`VirtualAllocEx`+`WriteProcessMemory` calls against a disposable, self-spawned `notepad.exe` — no remote thread, no code execution. A standalone-binary delivery mechanism remains a separate, larger project, to be justified only if a future vector genuinely requires it.
+
+**What changed (code):**
+- `internal/avcatalog/catalog_behavioral.go`: `AV-BEHAV-001`'s `ExecutionTemplate` now has a real `Executor: "powershell"` command (the Add-Type injection probe) plus a second, independent, best-effort check of this endpoint's own local Windows Defender operational event log (EIDs 1116/1117) for a correlating detection event — real local telemetry, not the tenant-gated remote Graph API (see item #1), reported `UNAVAILABLE` rather than fabricated when the log can't be queried. A full harness-contract doc comment (invocation, prerequisites, exact behavior, observation/result mapping, timeout, cleanup) sits above the vector definition.
+- `internal/avscenario/catalog.go`/`adapter.go`: `AV-BEHAV-001` added to `dispatchableSeedVectorIDs`; stale doc comments naming it as the harness-required example updated.
+- `internal/avefficacy/dispatch.go` (new): `BuildCollectionResultsFromDispatch` — a real, non-fixture bridge turning one dispatched step's raw outcome (`pass`/`fail`/`skipped`/`error` + the harness's own `detection=DETECTED|NOT_OBSERVED|UNAVAILABLE` stdout token) into the exact `[]avval.CollectionResult` shape `VectorFixture.PreventionEvidence` already consumes — a drop-in replacement for a hand-authored fixture, reusable for any future AV vector dispatched this way, not special-cased to this one.
+- Tests updated in `internal/avscenario/adapter_test.go` and `catalog_test.go` (previously asserted AV-BEHAV-001's exclusion; now assert its inclusion and real build success), plus 10 new tests in `internal/avefficacy/dispatch_test.go` covering every case the user's own directive named: Blocked→VerifiedProtection; **Allowed with no detection evidence→Inconclusive, never a fabricated ConfirmedGap** (the user's specific caveat: execution succeeding alone must never be equated with a detection failure); Allowed+detection genuinely searched-and-not-found→ConfirmedGap (an earned gap); Allowed+detection genuinely found→ConfirmedGap (enforcement gap, distinct reason text); detection source unavailable→`CoverageSourceUnavailable`, not a fabricated verified-negative; Skipped→Inconclusive via `CompletenessInsufficient`; Error→Go error, never a finding; **contradictory evidence** (two different control sources disagreeing)→Inconclusive via avval's real `AxisContradictory` path; **delayed evidence**→`LatencySLABreached`, exercised against the real `AV-BEHAV-001` vector and avefficacy's existing SLA-latency evaluator, not a synthetic stand-in.
+
+**What was verified locally (2026-10-16, this build host, not a lab endpoint):** ran the exact harness script twice directly. Both runs: deterministic (`FAIL` — the injection primitive succeeded unblocked — both times, `detection=NOT_OBSERVED` both times, i.e. the local Defender log was genuinely queryable and genuinely found nothing), and cleanup was verified exact (0 stray hidden-notepad processes before and after, both runs). One real incident during verification, resolved as a false alarm rather than a bug: a lingering `notepad.exe` was found after the first run, initially looking like a cleanup failure — it turned out to be the user's own real, pre-existing, unsaved `*Untitled - Notepad` window, which the cleanup filter (`MainWindowTitle -eq ''`) correctly and deliberately left untouched, proving the filter discriminates real user windows from the harness's own disposable instance rather than killing anything named `notepad`.
+
+**What this local run does NOT establish, and remains open:** this build host is an ordinary dev machine, not a dedicated, intentionally-configured lab endpoint with a real AV/NGAV product under test — per the user's own closing instruction, "then validate its efficacy against a real, appropriately configured lab endpoint" is separate work, not done here. The `FAIL`/`NOT_OBSERVED` result observed locally is one honest, real (if informal and uncontrolled) data point about this machine's own current state, not a statement about any AV/NGAV product's real-world efficacy, and it must never be reported as the latter.
+
+### 9. Real lab-endpoint validation of `AV-BEHAV-001`'s harness — OPEN, new sub-item of item #1
+
+**Status:** Open, same infrastructure gap as item #1 (no dedicated, intentionally-configured lab endpoint with a real AV/NGAV product available).
+
+**What's needed:** dispatch `AV-BEHAV-001` (now real and dispatchable) against an actual enrolled lab endpoint running a real AV/NGAV product with behavioral/injection protection enabled, and confirm the resulting `PASS`/`FAIL` + Detection-axis evidence resolves through `internal/avefficacy`'s real pipeline to a finding that matches the product's actual, known configuration.
+
+**Resolution path:** once a dedicated lab endpoint exists (same resolution path as item #1), register this vector's scenario for live dispatch (note: no avscenario-built scenario, for AV-BEHAV-001 or any of the other 10, is registered in the live `scenario.Engine` today — this is a pre-existing gap shared by the whole initiative, not unique to this vector, and was not in scope to fix here) and run it for real.
 
 ### 6. Ransomware-precursor scenario family (`av.txt` §2.F / §3) — RESOLVED 2026-10-16, via bridge not duplication
 
@@ -78,9 +94,9 @@ This is the single place to check before claiming AV/NGAV Mastery is "done" or m
 
 **What changed:** 9 of these were fixed with real, concretely-runnable PowerShell/cmd commands and real `CleanupCommand` values (e.g. `AV-FILE-002` reframed from "password-protected" to "nested archive" since `Compress-Archive` has no password support; `AV-NET-001` reframed from browser-UI automation to `Invoke-WebRequest`, narrowed to Windows only). The one genuine remaining exception, `AV-BEHAV-001`, is explicitly excluded rather than silently left broken — see item #3.
 
-## Test/build summary (as of 2026-10-16, commit `75778e1a`)
+## Test/build summary (as of 2026-10-16)
 
-- `go build ./...` and `go vet ./...`: clean throughout every phase of this initiative.
-- 124+ tests passing across `internal/avval`, `internal/avcatalog`, `internal/avefficacy`, `internal/avscenario`, `internal/avprofile`, plus green reporting/API-layer tests for every new endpoint (`/api/av/scenarios/*` × 9, `/api/av/industry-profiles`, `/api/av/ransomware-precursor-coverage`).
+- `go build ./...` and `go vet ./...`: clean throughout every phase of this initiative (scoped to the AV packages; the full repo build was noisy with an unrelated concurrent session's in-progress emailgw edits at the time of this update, not this initiative's concern).
+- 134+ tests passing across `internal/avval`, `internal/avcatalog`, `internal/avefficacy`, `internal/avscenario`, `internal/avprofile`, plus green reporting/API-layer tests for every new endpoint (`/api/av/scenarios/*` × 9, `/api/av/industry-profiles`, `/api/av/ransomware-precursor-coverage`), plus the 10 new real-correlation-bridge tests from item #8.
 - `TestRBACMatrix_NoDrift`: every new route in this initiative was added to both `routes.go` and `rbac_matrix_test.go` in the same commit. Remaining failures are pre-existing drift from the unrelated `emailgw-mastery` merge (`e783e7a2`) on `/api/emailgw-*`/`/api/webgw/industry-profiles*` routes — confirmed each time, never caused by this initiative, not fixed here (belongs to a different initiative).
 - `TestRansomwareScenarioIDs_MatchesRealCorpus` and the new `TestGetAVRansomwarePrecursorCoverage_*` tests both load the real, signed `scenarios/` corpus via `scenario.NewEngine` with the default `integrity.CompiledVerifier` — not a fixture or a mock of the engine.
