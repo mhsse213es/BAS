@@ -265,7 +265,7 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		// each slug is a fixture-backed scenario evaluation layered
 		// over the real avcatalog/avval/avefficacy packages, never a
 		// claim about a deployed AV/NGAV product's live efficacy.
-		for _, slug := range []string{"av-assessment"} {
+		for _, slug := range []string{"av-assessment", "recovery-remediation", "multi-stage-execution"} {
 			r.Get("/api/av/scenarios/"+slug, h.avScenarioJSONHandler(slug))
 			r.Get("/api/av/scenarios/"+slug+".html", h.avScenarioHTMLHandler(slug))
 		}

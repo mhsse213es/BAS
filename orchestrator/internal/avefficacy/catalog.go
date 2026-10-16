@@ -90,3 +90,121 @@ func loadAVAssessmentScenario() (EfficacyScenario, ScenarioResult, error) {
 	}
 	return scenario, result, nil
 }
+
+// recoveryRemediationVectorIDs are existing seed-catalog vectors that each
+// leave a real, cleanup-able artifact (av.txt §3 "Recovery and
+// remediation": "Test artifact detection, quarantine and cleanup -- were
+// artifacts removed, and was the endpoint returned to the expected
+// state?"). This scenario deliberately reuses them rather than adding new
+// vectors -- the Response dimension (already built in avval/avefficacy)
+// is exactly what this family measures.
+var recoveryRemediationVectorIDs = []string{
+	"AV-FILE-001", "AV-FILE-002", "AV-SCRIPT-001", "AV-PERSIST-001", "AV-PERSIST-002",
+}
+
+// AudspectRecoveryRemediationScenario builds the real, catalog-validated
+// Recovery and Remediation EfficacyScenario.
+func AudspectRecoveryRemediationScenario() (EfficacyScenario, error) {
+	return NewEfficacyScenario(
+		"AV-RECOVERY-001", "Recovery and Remediation",
+		"establish, with evidence, whether a detected/quarantined artifact was actually removed and the endpoint was returned to its expected state -- not merely flagged",
+		recoveryRemediationVectorIDs,
+		"endpoint has signature and/or behavioral AV/NGAV coverage per each contributing vector's own preconditions, with quarantine/remediation enabled",
+		"product remediation/quarantine telemetry confirming artifact removal and endpoint state restoration",
+		"manually authored from av.txt §3's 'Recovery and remediation' scenario family, reusing existing catalog vectors' real cleanup-able artifacts",
+	)
+}
+
+// AudspectRecoveryRemediationFixtures seeds every contributing vector as
+// correctly blocked (Finding is not this scenario's subject) with
+// Response evidence as the deliberate variable under test.
+// AV-PERSIST-002 is a deliberate remediation failure: blocked at
+// prevention time, but the scheduled task was never actually removed --
+// proving the non-offsetting rule applies to Response exactly as it does
+// to Finding (a clean prevention result never hides a failed cleanup).
+func AudspectRecoveryRemediationFixtures() map[string]VectorFixture {
+	remediated := func(eventID string) []avval.CollectionResult {
+		return []avval.CollectionResult{{ControlSource: avval.ControlSourceAVEngine, Coverage: avval.CoverageFound, Observations: []avval.Observation{
+			{ControlSource: avval.ControlSourceAVEngine, EventID: eventID, Response: avval.ResponseRemediated, EvidenceKind: avval.EvidenceObserved},
+		}}}
+	}
+	failed := func(eventID string) []avval.CollectionResult {
+		return []avval.CollectionResult{{ControlSource: avval.ControlSourceAVEngine, Coverage: avval.CoverageFound, Observations: []avval.Observation{
+			{ControlSource: avval.ControlSourceAVEngine, EventID: eventID, Response: avval.ResponseFailed, EvidenceKind: avval.EvidenceObserved},
+		}}}
+	}
+	return map[string]VectorFixture{
+		"AV-FILE-001":    {PreventionEvidence: []avval.CollectionResult{blockedEvidence("e-rec-file-001")}, ResponseEvidence: remediated("r-rec-file-001")},
+		"AV-FILE-002":    {PreventionEvidence: []avval.CollectionResult{blockedEvidence("e-rec-file-002")}, ResponseEvidence: remediated("r-rec-file-002")},
+		"AV-SCRIPT-001":  {PreventionEvidence: []avval.CollectionResult{blockedEvidence("e-rec-script-001")}, ResponseEvidence: remediated("r-rec-script-001")},
+		"AV-PERSIST-001": {PreventionEvidence: []avval.CollectionResult{blockedEvidence("e-rec-persist-001")}, ResponseEvidence: remediated("r-rec-persist-001")},
+		"AV-PERSIST-002": {PreventionEvidence: []avval.CollectionResult{blockedEvidence("e-rec-persist-002")}, ResponseEvidence: failed("r-rec-persist-002")},
+	}
+}
+
+func loadRecoveryRemediationScenario() (EfficacyScenario, ScenarioResult, error) {
+	scenario, err := AudspectRecoveryRemediationScenario()
+	if err != nil {
+		return EfficacyScenario{}, ScenarioResult{}, err
+	}
+	catalog, err := avcatalog.AudspectAVAttackCatalog()
+	if err != nil {
+		return EfficacyScenario{}, ScenarioResult{}, err
+	}
+	result, err := EvaluateEfficacyScenario(scenario, "baseline-policy", AudspectRecoveryRemediationFixtures(), catalog)
+	if err != nil {
+		return EfficacyScenario{}, ScenarioResult{}, err
+	}
+	return scenario, result, nil
+}
+
+// AudspectMultiStageExecutionScenario builds the real, catalog-validated
+// Multi-stage Execution scenario (av.txt §3: "Document -> script
+// interpreter -> suspicious child process"), composing three existing,
+// independently-validated catalog vectors in declared order. This composes
+// independently-evaluated vectors in sequence -- it does not claim a
+// single continuous process tree spanning all three stages in one real
+// dispatch (that would require new real execution linking not yet built).
+func AudspectMultiStageExecutionScenario() (MultiStageScenario, error) {
+	return NewMultiStageScenario(
+		"AV-MULTISTAGE-001", "Multi-Stage Execution",
+		"establish which stage of a document-to-interpreter-to-child-process chain was stopped, and which stages continued, rather than a single collapsed pass/fail for the whole chain",
+		[]StageVector{
+			{VectorID: "AV-SCRIPT-001", Label: "initial script interpreter execution"},
+			{VectorID: "AV-BEHAV-002", Label: "interpreter spawns a suspicious child process"},
+			{VectorID: "AV-PERSIST-002", Label: "follow-on persistence"},
+		},
+		"endpoint has behavioral/NGAV coverage capable of script-content and parent-child process-chain inspection",
+		"product telemetry establishing, per stage, whether execution was observed and whether it was blocked",
+		"manually authored from av.txt §3's 'Multi-stage execution' scenario family, composing existing independently-validated catalog vectors",
+	)
+}
+
+// AudspectMultiStageExecutionFixtures seeds stage 1 (AV-SCRIPT-001) as a
+// confirmed gap (allowed through) and stage 2 (AV-BEHAV-002) as blocked --
+// demonstrating a layered defense that misses the initial execution but
+// catches the suspicious child-process spawn, while still reporting
+// stage 1's gap honestly (it is never erased by stage 2's block). Stage 3
+// is never evaluated: the chain was interrupted at stage 2.
+func AudspectMultiStageExecutionFixtures() map[string]VectorFixture {
+	return map[string]VectorFixture{
+		"AV-SCRIPT-001": {PreventionEvidence: []avval.CollectionResult{missedEvidence("e-multi-script-001")}},
+		"AV-BEHAV-002":  {PreventionEvidence: []avval.CollectionResult{blockedEvidence("e-multi-behav-002")}},
+	}
+}
+
+func loadMultiStageExecutionScenario() (EfficacyScenario, ScenarioResult, error) {
+	scenario, err := AudspectMultiStageExecutionScenario()
+	if err != nil {
+		return EfficacyScenario{}, ScenarioResult{}, err
+	}
+	catalog, err := avcatalog.AudspectAVAttackCatalog()
+	if err != nil {
+		return EfficacyScenario{}, ScenarioResult{}, err
+	}
+	result, err := EvaluateMultiStageScenario(scenario, "baseline-policy", AudspectMultiStageExecutionFixtures(), catalog)
+	if err != nil {
+		return EfficacyScenario{}, ScenarioResult{}, err
+	}
+	return scenario.EfficacyScenario, result, nil
+}

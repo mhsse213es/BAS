@@ -56,3 +56,60 @@ func TestEvaluateScenarioBySlug_UnknownSlug_Error(t *testing.T) {
 		t.Fatal("want error for an unknown slug, got nil")
 	}
 }
+
+// Review Focus: the recovery-remediation scenario's one deliberate
+// remediation failure (AV-PERSIST-002) must fail the scenario even though
+// its own prevention leg was a clean block -- the non-offsetting rule
+// applied to Response, through the real seed catalog end to end.
+func TestEvaluateScenarioBySlug_RecoveryRemediation_RealFailOutcome(t *testing.T) {
+	scenario, result, err := EvaluateScenarioBySlug("recovery-remediation")
+	if err != nil {
+		t.Fatalf("EvaluateScenarioBySlug: %v", err)
+	}
+	if scenario.ID != "AV-RECOVERY-001" {
+		t.Errorf("scenario.ID = %q, want AV-RECOVERY-001", scenario.ID)
+	}
+	if result.Outcome != ScenarioFail {
+		t.Fatalf("Outcome = %q, want %q", result.Outcome, ScenarioFail)
+	}
+	var sawFailedResponse bool
+	for _, o := range result.VectorOutcomes {
+		if o.VectorID == "AV-PERSIST-002" {
+			if o.Finding != avval.FindingVerifiedProtection {
+				t.Errorf("AV-PERSIST-002 Finding = %q, want %q (prevention itself was clean)", o.Finding, avval.FindingVerifiedProtection)
+			}
+			sawFailedResponse = o.Response == avval.ResponseFailed
+		}
+	}
+	if !sawFailedResponse {
+		t.Error("AV-PERSIST-002 did not resolve to Response=Failed")
+	}
+}
+
+// Review Focus: the multi-stage scenario's real seed must show stage 1
+// as a confirmed gap, stage 2 as the blocking stage, and stage 3 as
+// never reached -- end to end through the real seed catalog.
+func TestEvaluateScenarioBySlug_MultiStageExecution_RealOutcome(t *testing.T) {
+	scenario, result, err := EvaluateScenarioBySlug("multi-stage-execution")
+	if err != nil {
+		t.Fatalf("EvaluateScenarioBySlug: %v", err)
+	}
+	if scenario.ID != "AV-MULTISTAGE-001" {
+		t.Errorf("scenario.ID = %q, want AV-MULTISTAGE-001", scenario.ID)
+	}
+	if result.Outcome != ScenarioFail {
+		t.Fatalf("Outcome = %q, want %q (stage 1's gap)", result.Outcome, ScenarioFail)
+	}
+	if len(result.VectorOutcomes) != 3 {
+		t.Fatalf("len(VectorOutcomes) = %d, want 3", len(result.VectorOutcomes))
+	}
+	if result.VectorOutcomes[0].Finding != avval.FindingConfirmedGap {
+		t.Errorf("stage 1 Finding = %q, want %q", result.VectorOutcomes[0].Finding, avval.FindingConfirmedGap)
+	}
+	if result.VectorOutcomes[1].Finding != avval.FindingVerifiedProtection {
+		t.Errorf("stage 2 Finding = %q, want %q", result.VectorOutcomes[1].Finding, avval.FindingVerifiedProtection)
+	}
+	if !result.VectorOutcomes[2].StageSkipped {
+		t.Error("stage 3 must be marked StageSkipped -- stage 2 interrupted the chain")
+	}
+}

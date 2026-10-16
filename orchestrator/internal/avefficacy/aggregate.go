@@ -39,6 +39,9 @@ type ScenarioResult struct {
 // a prevention failure is never erased by a good cleanup (av.txt §4: "do
 // not collapse everything into a single pass/fail field").
 func failingOutcome(o VectorOutcome) bool {
+	if o.StageSkipped {
+		return false
+	}
 	if o.Finding == avval.FindingConfirmedGap {
 		return true
 	}
@@ -59,6 +62,9 @@ func failingOutcome(o VectorOutcome) bool {
 // deliberately excluded here: an SLA breach is reported, never treated as
 // missing evidence.
 func inconclusiveOutcome(o VectorOutcome) bool {
+	if o.StageSkipped {
+		return false
+	}
 	if o.Finding == avval.FindingInconclusive {
 		return true
 	}

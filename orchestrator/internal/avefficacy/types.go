@@ -97,4 +97,16 @@ type VectorOutcome struct {
 	DetectionLatencyReason string
 
 	EvidenceSource EvidenceSource
+
+	// StageOrder and StageSkipped are only meaningful for a multi-stage
+	// scenario (EvaluateMultiStageScenario). Zero value (0, false) is
+	// correct and requires no change for every non-staged scenario:
+	// StageOrder 0 means "not part of an ordered chain," and
+	// StageSkipped false means "evaluated normally." StageSkipped true
+	// means a preceding stage already blocked or could not be
+	// established, so this stage was never reached -- it is neither a
+	// failure nor inconclusive, the same as an untested vector never
+	// being scored.
+	StageOrder   int
+	StageSkipped bool
 }
