@@ -14,9 +14,14 @@ type scenarioLoader func() (EfficacyScenario, ScenarioResult, error)
 // identifier (used in URLs); it is deliberately distinct from
 // EfficacyScenario.ID, which is the catalog-facing identifier.
 var scenarioRegistry = map[string]scenarioLoader{
-	"av-assessment":         loadAVAssessmentScenario,
-	"recovery-remediation":  loadRecoveryRemediationScenario,
-	"multi-stage-execution": loadMultiStageExecutionScenario,
+	"av-assessment":             loadAVAssessmentScenario,
+	"recovery-remediation":      loadRecoveryRemediationScenario,
+	"multi-stage-execution":     loadMultiStageExecutionScenario,
+	"exclusion-weakness":        loadExclusionWeaknessScenario,
+	"degraded-protection":       loadDegradedProtectionScenario,
+	"security-tampering":        loadSecurityTamperingScenario,
+	"endpoint-health":           loadEndpointHealthScenario,
+	"cross-control-attribution": loadCrossControlAttributionScenario,
 }
 
 // EvaluateScenarioBySlug looks up slug in the registry and returns its

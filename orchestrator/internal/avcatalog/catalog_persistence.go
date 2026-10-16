@@ -4,7 +4,9 @@ import "github.com/audspect/bas/internal/avval"
 
 // credentialPersistenceVectors seeds av.txt §2.G (Credential, persistence
 // and lateral-movement indicators): unauthorized startup/persistence
-// mechanisms, validated without establishing real unauthorized persistence.
+// mechanisms and harmless credential-access-pattern simulations, validated
+// without establishing real unauthorized persistence or extracting real
+// credentials.
 func credentialPersistenceVectors() ([]Vector, error) {
 	var out []Vector
 
@@ -69,6 +71,36 @@ func credentialPersistenceVectors() ([]Vector, error) {
 		return nil, err
 	}
 	out = append(out, v2)
+
+	v3, err := NewVector(
+		"AV-CREDACCESS-001", 1, FamilyCredentialPersistence,
+		"Benign simulation of a credential-store process-access pattern",
+		SeverityHigh,
+		[]Platform{PlatformWindowsWorkstation, PlatformWindowsServer},
+		[]RequiredCapability{CapabilityBehavioralNGAV},
+		"endpoint has a behavioral/NGAV engine capable of process-access-pattern inspection; lsass.exe is present (default on Windows)",
+		avval.ClaimPrevention,
+		ExecutionTemplate{
+			Executor:       "powershell",
+			Command:        `Get-Process -Name lsass | ForEach-Object { $_.Handle } | Out-Null`,
+			Description:    "open a handle to the lsass.exe process without reading any memory or extracting any credential material -- only the minimal process-access pattern behavioral engines look for, never an actual credential dump",
+			CleanupCommand: "",
+		},
+		&ExecutionTemplate{
+			Executor:    "powershell",
+			Command:     `Get-Process -Name explorer | ForEach-Object { $_.Handle } | Out-Null`,
+			Description: "open the identical kind of process handle against an ordinary, non-sensitive process, proving the control is not flagging process-handle access universally",
+		},
+		"",
+		"neither leg leaves a persistent artifact; no cleanup is required",
+		"this vector deliberately never reads process memory or extracts real credential material, to avoid any risk of actual credential exposure -- it measures only whether the access PATTERN (opening a handle to lsass.exe) is itself flagged, not a full LSASS-dump simulation",
+		StandardsMapping{ATTACKTechniques: []string{"T1003.001"}},
+		"manually authored from av.txt §2.G 'harmless simulations of suspicious credential-access behavior'",
+	)
+	if err != nil {
+		return nil, err
+	}
+	out = append(out, v3)
 
 	return out, nil
 }

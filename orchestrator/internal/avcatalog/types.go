@@ -5,31 +5,37 @@
 // execution against a controlled endpoint is a separate, deferred package
 // (av.txt §5, "Scenario adapters").
 //
-// This catalog deliberately covers av.txt §2 groups A, B, C, E, G and H
-// (file-based, script/fileless, behavioral, network-delivered,
-// credential/persistence, and false-positive/operational-resilience
-// threats). Group D (configuration and policy weaknesses) is NOT modeled as
-// catalog vectors here: it is a direct snapshot-vs-baseline comparison
-// (internal/avval's ConfigurationSnapshot/EvaluateConfigurationSnapshot/
-// EvaluateConfigurationDrift), not an attack execution with Observation-based
-// evidence, so it has no Vector shape to seed. Group F (ransomware and
-// destructive-impact precursors) is NOT modeled here either: av.txt §8 step 5
-// explicitly says to integrate with the existing ransomware mastery
-// (internal/rwevidence, which already builds on internal/controlval) rather
-// than duplicate it; a future AV enterprise scenario covering group F should
-// dispatch into rwevidence directly.
+// This catalog covers av.txt §2 groups A, B, C, D, E, G and H (file-based,
+// script/fileless, behavioral, configuration/security-control weaknesses,
+// network-delivered, credential/persistence, and
+// false-positive/operational-resilience threats). Group D is modeled here
+// ONLY for the three scenario families (av.txt §3) that require an actual
+// test execution to demonstrate the weakness -- exclusion weakness,
+// security tampering, and degraded (cloud-lookup-unavailable) protection
+// -- under FamilyConfigurationWeakness. The REST of group D (stale
+// signatures, policy drift, conflicting policies, endpoint health) remains
+// a direct snapshot-vs-baseline comparison (internal/avval's
+// ConfigurationSnapshot/EvaluateConfigurationSnapshot/
+// EvaluateConfigurationDrift), not an attack execution, so it still has no
+// Vector shape of its own. Group F (ransomware and destructive-impact
+// precursors) is NOT modeled here either: av.txt §8 step 5 explicitly says
+// to integrate with the existing ransomware mastery (internal/rwevidence,
+// which already builds on internal/controlval) rather than duplicate it; a
+// future AV enterprise scenario covering group F should dispatch into
+// rwevidence directly.
 package avcatalog
 
 import "github.com/audspect/bas/internal/avval"
 
-// AttackFamily is one of the six vector-bearing av.txt §2 groups this
-// catalog covers.
+// AttackFamily is one of the vector-bearing av.txt §2 groups this catalog
+// covers.
 type AttackFamily string
 
 const (
 	FamilyFileBasedThreat         AttackFamily = "file_based_threat"         // §2.A
 	FamilyScriptFileless          AttackFamily = "script_fileless"           // §2.B
 	FamilyBehavioralExploit       AttackFamily = "behavioral_exploit"        // §2.C
+	FamilyConfigurationWeakness   AttackFamily = "configuration_weakness"    // §2.D (execution-based subset only)
 	FamilyNetworkDelivered        AttackFamily = "network_delivered"         // §2.E
 	FamilyCredentialPersistence   AttackFamily = "credential_persistence"    // §2.G
 	FamilyFalsePositiveResilience AttackFamily = "false_positive_resilience" // §2.H

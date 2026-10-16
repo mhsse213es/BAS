@@ -113,3 +113,95 @@ func TestEvaluateScenarioBySlug_MultiStageExecution_RealOutcome(t *testing.T) {
 		t.Error("stage 3 must be marked StageSkipped -- stage 2 interrupted the chain")
 	}
 }
+
+// Review Focus: an active exclusion is EXPECTED to produce a confirmed
+// gap -- the scenario must still report Fail honestly, never suppress
+// the expected behavior of a working exclusion.
+func TestEvaluateScenarioBySlug_ExclusionWeakness_RealGapOutcome(t *testing.T) {
+	scenario, result, err := EvaluateScenarioBySlug("exclusion-weakness")
+	if err != nil {
+		t.Fatalf("EvaluateScenarioBySlug: %v", err)
+	}
+	if scenario.ID != "AV-EXCLUSION-001" {
+		t.Errorf("scenario.ID = %q, want AV-EXCLUSION-001", scenario.ID)
+	}
+	if result.Outcome != ScenarioFail {
+		t.Fatalf("Outcome = %q, want %q", result.Outcome, ScenarioFail)
+	}
+}
+
+func TestEvaluateScenarioBySlug_DegradedProtection_RealPassOutcome(t *testing.T) {
+	scenario, result, err := EvaluateScenarioBySlug("degraded-protection")
+	if err != nil {
+		t.Fatalf("EvaluateScenarioBySlug: %v", err)
+	}
+	if scenario.ID != "AV-DEGRADED-001" {
+		t.Errorf("scenario.ID = %q, want AV-DEGRADED-001", scenario.ID)
+	}
+	if result.Outcome != ScenarioPass {
+		t.Fatalf("Outcome = %q, want %q", result.Outcome, ScenarioPass)
+	}
+}
+
+func TestEvaluateScenarioBySlug_SecurityTampering_RealPassOutcome(t *testing.T) {
+	scenario, result, err := EvaluateScenarioBySlug("security-tampering")
+	if err != nil {
+		t.Fatalf("EvaluateScenarioBySlug: %v", err)
+	}
+	if scenario.ID != "AV-TAMPER-001" {
+		t.Errorf("scenario.ID = %q, want AV-TAMPER-001", scenario.ID)
+	}
+	if result.Outcome != ScenarioPass {
+		t.Fatalf("Outcome = %q, want %q", result.Outcome, ScenarioPass)
+	}
+}
+
+// Review Focus: a clean prevention result right now must not hide a real,
+// independently-reported stale-signature policy gap -- the non-offsetting
+// rule applied to Configuration, through the real seed catalog.
+func TestEvaluateScenarioBySlug_EndpointHealth_RealPolicyGapOutcome(t *testing.T) {
+	scenario, result, err := EvaluateScenarioBySlug("endpoint-health")
+	if err != nil {
+		t.Fatalf("EvaluateScenarioBySlug: %v", err)
+	}
+	if scenario.ID != "AV-HEALTH-001" {
+		t.Errorf("scenario.ID = %q, want AV-HEALTH-001", scenario.ID)
+	}
+	if result.Outcome != ScenarioFail {
+		t.Fatalf("Outcome = %q, want %q (AV-PERSIST-001's stale signatures)", result.Outcome, ScenarioFail)
+	}
+	var sawPolicyGap bool
+	for _, o := range result.VectorOutcomes {
+		if o.VectorID == "AV-PERSIST-001" && o.Configuration == avval.ConfigurationPolicyGap {
+			sawPolicyGap = true
+		}
+	}
+	if !sawPolicyGap {
+		t.Error("AV-PERSIST-001 did not resolve Configuration=PolicyGap")
+	}
+}
+
+// Review Focus: AV-NET-001's block must resolve VerifiedProtection from
+// network-control evidence alone -- no AV-engine observation is supplied,
+// so the Finding can never have been fabricated as an AV-engine result.
+func TestEvaluateScenarioBySlug_CrossControlAttribution_RealPassOutcome(t *testing.T) {
+	scenario, result, err := EvaluateScenarioBySlug("cross-control-attribution")
+	if err != nil {
+		t.Fatalf("EvaluateScenarioBySlug: %v", err)
+	}
+	if scenario.ID != "AV-CROSSATTR-001" {
+		t.Errorf("scenario.ID = %q, want AV-CROSSATTR-001", scenario.ID)
+	}
+	if result.Outcome != ScenarioPass {
+		t.Fatalf("Outcome = %q, want %q", result.Outcome, ScenarioPass)
+	}
+	var sawNetBlocked bool
+	for _, o := range result.VectorOutcomes {
+		if o.VectorID == "AV-NET-001" && o.Finding == avval.FindingVerifiedProtection {
+			sawNetBlocked = true
+		}
+	}
+	if !sawNetBlocked {
+		t.Error("AV-NET-001 did not resolve FindingVerifiedProtection from network-control-only evidence")
+	}
+}

@@ -13,7 +13,7 @@ var cweIDPattern = regexp.MustCompile(`^CWE-\d+$`)
 func validFamily(f AttackFamily) bool {
 	switch f {
 	case FamilyFileBasedThreat, FamilyScriptFileless, FamilyBehavioralExploit,
-		FamilyNetworkDelivered, FamilyCredentialPersistence, FamilyFalsePositiveResilience:
+		FamilyConfigurationWeakness, FamilyNetworkDelivered, FamilyCredentialPersistence, FamilyFalsePositiveResilience:
 		return true
 	default:
 		return false
