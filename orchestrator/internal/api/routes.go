@@ -260,6 +260,15 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 			r.Get("/api/waf/scenarios/"+slug, h.wafScenarioJSONHandler(slug))
 			r.Get("/api/waf/scenarios/"+slug+".html", h.wafScenarioHTMLHandler(slug))
 		}
+		// AV/NGAV efficacy assessment scenarios (internal/avefficacy),
+		// same read-only, slug-registry shape as /api/waf/scenarios:
+		// each slug is a fixture-backed scenario evaluation layered
+		// over the real avcatalog/avval/avefficacy packages, never a
+		// claim about a deployed AV/NGAV product's live efficacy.
+		for _, slug := range []string{"av-assessment"} {
+			r.Get("/api/av/scenarios/"+slug, h.avScenarioJSONHandler(slug))
+			r.Get("/api/av/scenarios/"+slug+".html", h.avScenarioHTMLHandler(slug))
+		}
 		// AD coverage assessment report, from the same admatrix.Report() data as
 		// /api/ad/coverage: PDF (primary), HTML, and JSON (secondary). Read-only.
 		r.Get("/api/ad/assessment.pdf", h.GetADAssessmentPDF)
