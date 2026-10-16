@@ -22,6 +22,7 @@ func EnsureEmailGWRunSchema(ctx context.Context, pool *pgxpool.Pool) error {
 			id                  text        PRIMARY KEY DEFAULT gen_random_uuid()::text,
 			scenario_id         text        NOT NULL,
 			message_class       text        NOT NULL DEFAULT '',
+			environment         text        NOT NULL DEFAULT 'lab',
 			status              text        NOT NULL DEFAULT 'pending',
 			result              jsonb,
 			error               text,
@@ -38,9 +39,24 @@ func EnsureEmailGWRunSchema(ctx context.Context, pool *pgxpool.Pool) error {
 	if err != nil {
 		return fmt.Errorf("email_gw_runs: ensure schema: %w", err)
 	}
+	// ADD COLUMN IF NOT EXISTS for a table that already existed before
+	// `environment` was added -- CREATE TABLE IF NOT EXISTS alone
+	// would silently skip adding it to a pre-existing table.
+	if _, err := pool.Exec(ctx, `ALTER TABLE email_gw_runs ADD COLUMN IF NOT EXISTS environment text NOT NULL DEFAULT 'lab'`); err != nil {
+		return fmt.Errorf("email_gw_runs: add environment column: %w", err)
+	}
+	if _, err := pool.Exec(ctx, `ALTER TABLE email_gw_runs DROP CONSTRAINT IF EXISTS email_gw_runs_environment_check`); err != nil {
+		return fmt.Errorf("email_gw_runs: drop stale environment check: %w", err)
+	}
+	if _, err := pool.Exec(ctx, `ALTER TABLE email_gw_runs ADD CONSTRAINT email_gw_runs_environment_check CHECK (environment IN ('lab','customer'))`); err != nil {
+		return fmt.Errorf("email_gw_runs: add environment check: %w", err)
+	}
 	_, err = pool.Exec(ctx, `CREATE INDEX IF NOT EXISTS idx_email_gw_runs_status ON email_gw_runs (status)`)
 	if err != nil {
 		return fmt.Errorf("email_gw_runs: create status index: %w", err)
+	}
+	if _, err := pool.Exec(ctx, `CREATE INDEX IF NOT EXISTS idx_email_gw_runs_environment ON email_gw_runs (environment)`); err != nil {
+		return fmt.Errorf("email_gw_runs: create environment index: %w", err)
 	}
 	return nil
 }
@@ -49,10 +65,14 @@ func EnsureEmailGWRunSchema(ctx context.Context, pool *pgxpool.Pool) error {
 // supplies run.ID and run.Status already set, matching
 // InsertCloudRun's own convention.
 func InsertEmailGWRun(ctx context.Context, pool *pgxpool.Pool, run *emailgwrun.EmailGWRun) error {
+	environment := string(run.Environment)
+	if environment == "" {
+		environment = string(emailgwrun.EnvironmentLab) // never leave this unset -- see Environment's own doc comment
+	}
 	_, err := pool.Exec(ctx, `
-		INSERT INTO email_gw_runs (id, scenario_id, message_class, status, result, error, initiated_by, sender_payload_hash, injected_at, window_start, window_end, verified_at, started_at, completed_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
-		run.ID, run.ScenarioID, run.MessageClass, string(run.Status), run.Result, run.Error, run.InitiatedBy,
+		INSERT INTO email_gw_runs (id, scenario_id, message_class, environment, status, result, error, initiated_by, sender_payload_hash, injected_at, window_start, window_end, verified_at, started_at, completed_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
+		run.ID, run.ScenarioID, run.MessageClass, environment, string(run.Status), run.Result, run.Error, run.InitiatedBy,
 		run.SenderPayloadHash, run.InjectedAt, run.WindowStart, run.WindowEnd, run.VerifiedAt, run.StartedAt, run.CompletedAt)
 	if err != nil {
 		return fmt.Errorf("email_gw_runs: insert %s: %w", run.ID, err)
@@ -64,16 +84,17 @@ func InsertEmailGWRun(ctx context.Context, pool *pgxpool.Pool, run *emailgwrun.E
 // below so the column list exists in exactly one place.
 func scanEmailGWRun(row pgx.Row) (*emailgwrun.EmailGWRun, error) {
 	run := &emailgwrun.EmailGWRun{}
-	var status string
-	if err := row.Scan(&run.ID, &run.ScenarioID, &run.MessageClass, &status, &run.Result, &run.Error, &run.InitiatedBy,
+	var status, environment string
+	if err := row.Scan(&run.ID, &run.ScenarioID, &run.MessageClass, &environment, &status, &run.Result, &run.Error, &run.InitiatedBy,
 		&run.SenderPayloadHash, &run.InjectedAt, &run.WindowStart, &run.WindowEnd, &run.VerifiedAt, &run.StartedAt, &run.CompletedAt); err != nil {
 		return nil, err
 	}
 	run.Status = emailgwrun.Status(status)
+	run.Environment = emailgwrun.Environment(environment)
 	return run, nil
 }
 
-const emailGWRunColumns = `id, scenario_id, message_class, status, result, error, initiated_by, sender_payload_hash, injected_at, window_start, window_end, verified_at, started_at, completed_at`
+const emailGWRunColumns = `id, scenario_id, message_class, environment, status, result, error, initiated_by, sender_payload_hash, injected_at, window_start, window_end, verified_at, started_at, completed_at`
 
 // GetEmailGWRun returns one email_gw_runs row by id.
 func GetEmailGWRun(ctx context.Context, pool *pgxpool.Pool, id string) (*emailgwrun.EmailGWRun, error) {

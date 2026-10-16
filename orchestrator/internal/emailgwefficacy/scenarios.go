@@ -94,7 +94,8 @@ func EICARAttachmentExpectation(caught bool) MailExpectation {
 		Recipient:      "helpdesk-test@example-lab.test",
 		MessageClass:   "eicar-attachment",
 		ControlProduct: "m365-defender-o365",
-		Note:           "industry-standard EICAR test string as the attachment -- never a real malware sample. NOT wired for real injection (either branch): a real attachment requires MIME multipart construction; exercise.SpoofableSMTPInjector only builds a single-part HTML body",
+		Note:           "industry-standard EICAR test string as a real MIME attachment -- never a real malware sample. Wired for real injection via exercise.SpoofableSMTPInjector's multipart/mixed support (Workstream 5)",
+		EnvelopeFrom:   "malware-attachment-test-sender@eicar-attachment-lab.test",
 	}
 	if caught {
 		exp.ExpectedAction = ExpectedQuarantine
@@ -146,14 +147,15 @@ func OutboundDLPExpectation(sensitive bool) MailExpectation {
 		Recipient:      "external-partner-test@external-lab.test",
 		ControlProduct: "m365-defender-o365",
 	}
+	exp.OutboundSenderMailbox = "finance-user@example-lab.test"
 	if sensitive {
 		exp.MessageClass = "outbound-dlp-sensitive-marker"
 		exp.ExpectedAction = ExpectedQuarantine
-		exp.Note = "synthetic sensitive-data marker in the message body -- never real sensitive data; expected to be blocked before leaving the organization. NOT wired for real injection: this is an authenticated-internal-sender scenario (mail leaving the org), not an externally-spoofable sender -- exercise.SpoofableSMTPInjector's model (an arbitrary external envelope-from) doesn't fit; sending genuinely AS an internal mailbox would need a different mechanism (e.g. Microsoft Graph sendMail under the Mail.Send permission)"
+		exp.Note = "synthetic sensitive-data marker in the message body -- never real sensitive data; expected to be blocked before leaving the organization. Wired for real outbound sending via Microsoft Graph sendMail (Mail.Send permission), see outbound.go -- not exercise.SpoofableSMTPInjector, which is the wrong tool for authenticated-internal-sender mail (see injection.go's own package comment)"
 	} else {
 		exp.MessageClass = "outbound-ordinary-mail"
 		exp.ExpectedAction = ExpectedDeliver
-		exp.Note = "ordinary outbound mail with no sensitive-data marker -- the false-positive/legitimate-mail case. NOT wired for real injection, same reason as the sensitive-marker case above"
+		exp.Note = "ordinary outbound mail with no sensitive-data marker -- the false-positive/legitimate-mail case. Wired for real outbound sending, same mechanism as the sensitive-marker case above"
 	}
 	return exp
 }

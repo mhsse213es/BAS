@@ -16,14 +16,18 @@ package emailgwefficacy
 //     Audspect's own sending IP -- infrastructure, not code.
 //   - DKIMAlignmentExpectation(true) needs real DKIM signing;
 //     SpoofableSMTPInjector has no signing capability.
-//   - EICARAttachmentExpectation (either direction) needs a MIME
-//     attachment; SpoofableSMTPInjector only builds a single-part
-//     HTML body.
-//   - OutboundDLPExpectation (either direction) is an authenticated-
-//     internal-sender scenario (mail leaving the org), not an
-//     externally-spoofable one -- a structurally different mechanism
-//     (e.g. Microsoft Graph sendMail under Mail.Send) would be
-//     needed, not this injector.
+//   - EICARAttachmentExpectation (both directions) IS wired
+//     (Workstream 5): exercise.SpoofableSMTPInjector now builds a
+//     real multipart/mixed message carrying the EICAR test string as
+//     a base64-encoded attachment part, via TestMessage.Attachment.
+//   - OutboundDLPExpectation (both directions) is wired, but NOT
+//     through this injector: it's an authenticated-internal-sender
+//     scenario (mail leaving the org), the wrong fit for this file's
+//     arbitrary-external-envelope-from model. See outbound.go
+//     (Workstream 6) for its real mechanism, Microsoft Graph sendMail
+//     under Mail.Send -- exp.EnvelopeFrom stays empty for this
+//     scenario even though it IS wired; exp.OutboundSenderMailbox is
+//     the field that signals it, a deliberately separate one.
 //   - AuthenticationExceptionScopeExpectation(true) needs to send
 //     from infrastructure the exception's own verification condition
 //     actually trusts (e.g. a real trusted-relay IP).
@@ -43,9 +47,17 @@ import (
 // carries (EnvelopeFrom/HeaderFrom) -- intentionally minimal, mirrors
 // exercise.TestMessage.
 type InjectableMessage struct {
-	Subject  string
-	BodyHTML string
+	Subject    string
+	BodyHTML   string
+	Attachment *exercise.TestAttachment // nil for every scenario with no attachment
 }
+
+// eicarTestString is the industry-standard, universally-recognized AV
+// test string (https://www.eicar.org/) -- a deliberately harmless
+// string every mainstream AV/content-scanning engine is designed to
+// flag by convention, never functional malware. The one and only
+// attachment content this package sends for real.
+const eicarTestString = `X5O!P%@AP[4\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*`
 
 // InjectionTarget is the gateway-under-test's own delivery target --
 // the same for every scenario in one assessment, supplied once by the
@@ -75,6 +87,15 @@ var scenarioTestContent = map[string]InjectableMessage{
 	"supplier-payment-diversion":    {Subject: "Updated banking details for invoice #4471", BodyHTML: "<p>Please update our banking details before processing the next payment.</p>"},
 	"auth-exception-scope-probe":    {Subject: "Internal notice", BodyHTML: "<p>This message claims the exception's trusted identity without meeting its real verification condition.</p>"},
 	"post-delivery-threat-response": {Subject: "Shared document ready for review", BodyHTML: `<p>Review the shared document at <a href="http://threat-response-lab.test/doc">this link</a>.</p>`},
+	"eicar-attachment": {
+		Subject:  "Please review the attached document",
+		BodyHTML: "<p>Please see the attached file.</p>",
+		Attachment: &exercise.TestAttachment{
+			Filename:    "invoice.txt",
+			ContentType: "application/octet-stream",
+			Content:     []byte(eicarTestString),
+		},
+	},
 }
 
 // ScenarioTestContent returns the InjectableMessage content for exp's
@@ -109,9 +130,10 @@ func InjectScenarioMessage(ctx context.Context, target InjectionTarget, exp Mail
 		RelayHost:    target.RelayHost,
 	}
 	leg, err := injector.SendTestMessage(ctx, exercise.TestMessage{
-		To:       exp.Recipient,
-		Subject:  content.Subject,
-		BodyHTML: content.BodyHTML,
+		To:         exp.Recipient,
+		Subject:    content.Subject,
+		BodyHTML:   content.BodyHTML,
+		Attachment: content.Attachment,
 	})
 	if err != nil {
 		return OriginDeliveryObservation{}, fmt.Errorf("InjectScenarioMessage: %w", err)

@@ -13,6 +13,7 @@ import (
 	"github.com/audspect/bas/internal/auth"
 	"github.com/audspect/bas/internal/emailgwcampaign"
 	"github.com/audspect/bas/internal/emailgwefficacy"
+	"github.com/audspect/bas/internal/emailgwrun"
 	"github.com/audspect/bas/internal/scenario"
 	"github.com/audspect/bas/internal/ws"
 )
@@ -38,7 +39,7 @@ func TestTriggerEmailGWCampaignHandler_NotConfigured_Returns503(t *testing.T) {
 func TestTriggerEmailGWCampaignHandler_MissingTemplateID_Returns400(t *testing.T) {
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
 		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret).
-			WithEmailGWRun(emailgwefficacy.NewFixtureMailEvidenceProvider(nil, nil), emailgwefficacy.InjectionTarget{})
+			WithEmailGWRun(emailgwefficacy.NewFixtureMailEvidenceProvider(nil, nil), emailgwefficacy.InjectionTarget{}, emailgwrun.EnvironmentLab)
 		req := triggerEmailGWCampaignReq(t, pool, map[string]any{})
 		rec := callAuthed(h.TriggerEmailGWCampaign, req)
 		if rec.Code != http.StatusBadRequest {
@@ -50,7 +51,7 @@ func TestTriggerEmailGWCampaignHandler_MissingTemplateID_Returns400(t *testing.T
 func TestTriggerEmailGWCampaignHandler_UnknownTemplateID_Returns400(t *testing.T) {
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
 		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret).
-			WithEmailGWRun(emailgwefficacy.NewFixtureMailEvidenceProvider(nil, nil), emailgwefficacy.InjectionTarget{})
+			WithEmailGWRun(emailgwefficacy.NewFixtureMailEvidenceProvider(nil, nil), emailgwefficacy.InjectionTarget{}, emailgwrun.EnvironmentLab)
 		req := triggerEmailGWCampaignReq(t, pool, map[string]any{"templateId": "no-such-template"})
 		rec := callAuthed(h.TriggerEmailGWCampaign, req)
 		if rec.Code != http.StatusBadRequest {
@@ -63,7 +64,7 @@ func TestTriggerEmailGWCampaignHandler_Success_Returns201AndDispatchesFirstStage
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
 		_, addr := startEmailGWRunTestServer(t)
 		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret).
-			WithEmailGWRun(emailgwefficacy.NewFixtureMailEvidenceProvider(nil, nil), emailgwefficacy.InjectionTarget{TargetMX: addr})
+			WithEmailGWRun(emailgwefficacy.NewFixtureMailEvidenceProvider(nil, nil), emailgwefficacy.InjectionTarget{TargetMX: addr}, emailgwrun.EnvironmentLab)
 		req := triggerEmailGWCampaignReq(t, pool, map[string]any{"templateId": emailgwcampaign.BECSupplierFraudCampaignID})
 		rec := callAuthed(h.TriggerEmailGWCampaign, req)
 		if rec.Code != http.StatusCreated {
@@ -95,7 +96,7 @@ func TestGetEmailGWCampaignHandler_ReturnsStagesAndRollup(t *testing.T) {
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
 		_, addr := startEmailGWRunTestServer(t)
 		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret).
-			WithEmailGWRun(emailgwefficacy.NewFixtureMailEvidenceProvider(nil, nil), emailgwefficacy.InjectionTarget{TargetMX: addr})
+			WithEmailGWRun(emailgwefficacy.NewFixtureMailEvidenceProvider(nil, nil), emailgwefficacy.InjectionTarget{TargetMX: addr}, emailgwrun.EnvironmentLab)
 		req := triggerEmailGWCampaignReq(t, pool, map[string]any{"templateId": emailgwcampaign.BECSupplierFraudCampaignID})
 		rec := callAuthed(h.TriggerEmailGWCampaign, req)
 		var created emailgwcampaign.Campaign
@@ -129,7 +130,7 @@ func TestListEmailGWCampaignsHandler_ReturnsCreatedCampaigns(t *testing.T) {
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
 		_, addr := startEmailGWRunTestServer(t)
 		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret).
-			WithEmailGWRun(emailgwefficacy.NewFixtureMailEvidenceProvider(nil, nil), emailgwefficacy.InjectionTarget{TargetMX: addr})
+			WithEmailGWRun(emailgwefficacy.NewFixtureMailEvidenceProvider(nil, nil), emailgwefficacy.InjectionTarget{TargetMX: addr}, emailgwrun.EnvironmentLab)
 		req := triggerEmailGWCampaignReq(t, pool, map[string]any{"templateId": emailgwcampaign.BECSupplierFraudCampaignID})
 		callAuthed(h.TriggerEmailGWCampaign, req)
 
@@ -165,7 +166,7 @@ func TestCancelEmailGWCampaignHandler_Success_SetsCancelling(t *testing.T) {
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
 		_, addr := startEmailGWRunTestServer(t)
 		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret).
-			WithEmailGWRun(emailgwefficacy.NewFixtureMailEvidenceProvider(nil, nil), emailgwefficacy.InjectionTarget{TargetMX: addr})
+			WithEmailGWRun(emailgwefficacy.NewFixtureMailEvidenceProvider(nil, nil), emailgwefficacy.InjectionTarget{TargetMX: addr}, emailgwrun.EnvironmentLab)
 		createReq := triggerEmailGWCampaignReq(t, pool, map[string]any{"templateId": emailgwcampaign.BECSupplierFraudCampaignID})
 		createRec := callAuthed(h.TriggerEmailGWCampaign, createReq)
 		var created emailgwcampaign.Campaign

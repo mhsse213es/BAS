@@ -70,6 +70,17 @@ type MailExpectation struct {
 	// mirroring SpoofableSMTPInjector's own default.
 	EnvelopeFrom string `json:"envelopeFrom,omitempty"`
 	HeaderFrom   string `json:"headerFrom,omitempty"`
+	// OutboundSenderMailbox is the authenticated-sending counterpart to
+	// EnvelopeFrom, for a scenario whose own direction is outbound mail
+	// leaving the organization (e.g. OutboundDLPExpectation) rather than
+	// inbound mail arriving at it. SendOutboundTestMessage sends via
+	// Microsoft Graph's sendMail action AS this mailbox -- a
+	// structurally different mechanism from SpoofableSMTPInjector's
+	// arbitrary external envelope-from, so this is deliberately a
+	// separate field, never reused from/mixed with EnvelopeFrom. Empty
+	// is the same deliberate, checked "not wired for real injection"
+	// signal EnvelopeFrom's own doc comment describes.
+	OutboundSenderMailbox string `json:"outboundSenderMailbox,omitempty"`
 }
 
 // Ref returns the MessageRef an evidence provider must be queried
@@ -178,6 +189,17 @@ type ResponseEvidence struct {
 	Timestamp          time.Time      `json:"timestamp"`
 	Source             EvidenceSource `json:"source"`
 	Provenance         Provenance     `json:"provenance"`
+	// CorrelationID identifies the specific underlying alert/event this
+	// response action belongs to -- mirrors DetectionEvidence's own
+	// CorrelationID exactly, and is the real fix for a real gap: before
+	// this field existed, nothing proved that a "latest response
+	// evidence" record was actually about the SAME alert a "latest
+	// detection evidence" record reported, only that both resolved
+	// within the same message's evidence-collection window. A tenant
+	// with more than one alert correlated to the same message during
+	// that window could otherwise have its response credited to the
+	// wrong detection event. See EfficacyResult.DetectionResponseCorrelated.
+	CorrelationID string `json:"correlationId,omitempty"`
 }
 
 // EmailGWVerdict uses emailGW.txt §3's own naming exactly -- locked,

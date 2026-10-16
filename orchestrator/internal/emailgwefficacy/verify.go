@@ -37,6 +37,38 @@ func VerifyMailExpectation(
 	return result
 }
 
+// DetectionResponseCorrelated reports whether the latest Detection and
+// latest Response evidence records (the same ones verifyDetection/
+// verifyResponse themselves scored) share a CorrelationID -- i.e.
+// whether the response action being credited is verifiably about the
+// SAME underlying alert the detection evidence reported, not a
+// different alert that happened to resolve in the same window.
+//
+// This is a read-only, informational accessor for a caller that wants
+// that stronger joint claim (e.g. EG-010's own detection-to-response
+// chain) -- it is never consulted by VerifyMailExpectation itself and
+// never feeds back into Prevention/DetectionVerdict/ResponseVerdict.
+// Those three stay computed from three disjoint evidence calls by
+// design (see VerifyMailExpectation's own doc comment); this method
+// exists precisely so a caller needing joint correlation proof doesn't
+// have to compromise that independence to get it.
+//
+// ok is false whenever there is nothing to compare: either side has
+// no evidence at all, or either side's latest record has an empty
+// CorrelationID (an adapter that doesn't report one, e.g. a fixture
+// built without it). correlated is only meaningful when ok is true.
+func (r EfficacyResult) DetectionResponseCorrelated() (correlated bool, ok bool) {
+	if len(r.Detection) == 0 || len(r.Response) == 0 {
+		return false, false
+	}
+	detection := latestByTimestamp(r.Detection, func(e DetectionEvidence) time.Time { return e.Timestamp })
+	response := latestByTimestamp(r.Response, func(e ResponseEvidence) time.Time { return e.Timestamp })
+	if detection.CorrelationID == "" || response.CorrelationID == "" {
+		return false, false
+	}
+	return detection.CorrelationID == response.CorrelationID, true
+}
+
 // verifyPrevention computes the Prevention dimension from enforcement
 // evidence alone. A collection error or an empty result both yield
 // Inconclusive, never an assumed ConfirmedSuccess or

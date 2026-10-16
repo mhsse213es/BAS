@@ -154,3 +154,37 @@ func TestEmailGWRunsSummaryRoute_ResolvesToSummaryNotID(t *testing.T) {
 		}
 	})
 }
+
+func TestGetEmailGWMetrics_ReflectsRealPersistedRunsSplitByEnvironment(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		labRun := &emailgwrun.EmailGWRun{ID: "metrics-lab-1", ScenarioID: "EG-002.known-bad", Environment: emailgwrun.EnvironmentLab, Status: emailgwrun.StatusFailed, StartedAt: time.Now().UTC()}
+		customerRun := &emailgwrun.EmailGWRun{ID: "metrics-customer-1", ScenarioID: "EG-002.known-bad", Environment: emailgwrun.EnvironmentCustomer, Status: emailgwrun.StatusFailed, StartedAt: time.Now().UTC()}
+		for _, r := range []*emailgwrun.EmailGWRun{labRun, customerRun} {
+			if err := db.InsertEmailGWRun(ctx, pool, r); err != nil {
+				t.Fatalf("insert %s: %v", r.ID, err)
+			}
+		}
+
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret)
+		req := authedRequest(t, http.MethodGet, "/api/emailgw/metrics", nil, auth.RoleAnalyst, "any-authenticated-user")
+		rec := callAuthed(h.GetEmailGWMetrics, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+		}
+
+		var got EmailGWMetricsResponse
+		if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		if got.Lab.Detection.Outcomes.Failed < 1 {
+			t.Errorf("lab failed = %d, want at least 1 (the just-inserted lab run)", got.Lab.Detection.Outcomes.Failed)
+		}
+		if got.Customer.Detection.Outcomes.Failed < 1 {
+			t.Errorf("customer failed = %d, want at least 1 (the just-inserted customer run)", got.Customer.Detection.Outcomes.Failed)
+		}
+		if got.Lab.Environment != emailgwrun.EnvironmentLab || got.Customer.Environment != emailgwrun.EnvironmentCustomer {
+			t.Errorf("Lab.Environment=%q Customer.Environment=%q, want each tagged with its own bucket", got.Lab.Environment, got.Customer.Environment)
+		}
+	})
+}

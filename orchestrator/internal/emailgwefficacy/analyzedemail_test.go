@@ -334,6 +334,9 @@ func TestDefenderMailEvidenceProvider_ResponseEvidence_EndToEnd_SuccessfullyReme
 	if records[0].DurationToComplete != 10*time.Minute {
 		t.Errorf("DurationToComplete = %v, want 10m", records[0].DurationToComplete)
 	}
+	if records[0].CorrelationID != "alert-1" {
+		t.Errorf("CorrelationID = %q, want %q -- response evidence must carry the real alert id it was correlated by", records[0].CorrelationID, "alert-1")
+	}
 }
 
 // TestDefenderMailEvidenceProvider_ResponseEvidence_EndToEnd_PartiallyRemediatedIsFailure
@@ -491,6 +494,53 @@ func TestDefenderMailEvidenceProvider_EG010_DetectionToResponseChain_EndToEnd(t 
 	}
 	if len(result.Response) != 1 || result.Response[0].DurationToComplete != 3*time.Minute {
 		t.Errorf("Response = %+v, want exactly 1 record with a 3m remediation duration -- same alert, both dimensions", result.Response)
+	}
+	if result.Response[0].CorrelationID != "alert-1" {
+		t.Errorf("Response[0].CorrelationID = %q, want %q", result.Response[0].CorrelationID, "alert-1")
+	}
+	if correlated, ok := result.DetectionResponseCorrelated(); !ok || !correlated {
+		t.Errorf("DetectionResponseCorrelated() = (%v, %v), want (true, true) -- EG-010's whole claim is that these are the same alert", correlated, ok)
+	}
+}
+
+// TestDetectionResponseCorrelated_DifferentAlerts_ReportsNotCorrelated
+// proves the helper actually catches a mismatch, not just the
+// same-alert happy path above -- a tenant with two unrelated alerts
+// resolving inside the same evidence-collection window must never be
+// silently treated as one correlated chain.
+func TestDetectionResponseCorrelated_DifferentAlerts_ReportsNotCorrelated(t *testing.T) {
+	result := EfficacyResult{
+		Detection: []DetectionEvidence{{CorrelationID: "alert-1", Timestamp: time.Now()}},
+		Response:  []ResponseEvidence{{CorrelationID: "alert-2", Timestamp: time.Now()}},
+	}
+	correlated, ok := result.DetectionResponseCorrelated()
+	if !ok {
+		t.Fatalf("ok = false, want true -- both sides have a non-empty CorrelationID to compare")
+	}
+	if correlated {
+		t.Errorf("correlated = true, want false -- alert-1 != alert-2")
+	}
+}
+
+func TestDetectionResponseCorrelated_MissingEvidenceOnEitherSide_ReportsNotOK(t *testing.T) {
+	cases := []struct {
+		name   string
+		result EfficacyResult
+	}{
+		{"no detection", EfficacyResult{Response: []ResponseEvidence{{CorrelationID: "alert-1", Timestamp: time.Now()}}}},
+		{"no response", EfficacyResult{Detection: []DetectionEvidence{{CorrelationID: "alert-1", Timestamp: time.Now()}}}},
+		{"neither", EfficacyResult{}},
+		{"detection missing id", EfficacyResult{
+			Detection: []DetectionEvidence{{Timestamp: time.Now()}},
+			Response:  []ResponseEvidence{{CorrelationID: "alert-1", Timestamp: time.Now()}},
+		}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if _, ok := c.result.DetectionResponseCorrelated(); ok {
+				t.Errorf("ok = true, want false -- nothing real to compare in this case")
+			}
+		})
 	}
 }
 

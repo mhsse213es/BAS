@@ -90,7 +90,7 @@ func permitsVerdict(permitted []string, verdict emailgwefficacy.EmailGWVerdict) 
 // starts sequencing it. Mirrors TriggerEmailGWRun's own 503-when-
 // unconfigured posture -- callers check h.emailgwProvider == nil
 // before calling this, same as before any email_gw_runs row exists.
-func TriggerEmailGWCampaign(ctx context.Context, pool *pgxpool.Pool, provider emailgwefficacy.MailEvidenceProvider, target emailgwefficacy.InjectionTarget, templateID, initiatedBy string) (*emailgwcampaign.Campaign, error) {
+func TriggerEmailGWCampaign(ctx context.Context, pool *pgxpool.Pool, provider emailgwefficacy.MailEvidenceProvider, target emailgwefficacy.InjectionTarget, outboundSender emailgwefficacy.OutboundSender, environment emailgwrun.Environment, templateID, initiatedBy string) (*emailgwcampaign.Campaign, error) {
 	template, ok := emailgwcampaign.TemplateByID(templateID)
 	if !ok {
 		return nil, fmt.Errorf("emailgwcampaign: unknown template id %q", templateID)
@@ -108,7 +108,7 @@ func TriggerEmailGWCampaign(ctx context.Context, pool *pgxpool.Pool, provider em
 	if err := db.InsertEmailGWCampaign(ctx, pool, c); err != nil {
 		return nil, err
 	}
-	advanceEmailGWCampaign(ctx, pool, provider, target, c.ID)
+	advanceEmailGWCampaign(ctx, pool, provider, target, outboundSender, environment, c.ID)
 	return db.GetEmailGWCampaign(ctx, pool, c.ID)
 }
 
@@ -126,7 +126,7 @@ func CancelEmailGWCampaign(ctx context.Context, pool *pgxpool.Pool, campaignID s
 // on every run completion, campaign-stage or not. The common case (a
 // standalone, non-campaign email_gw_runs row) is a cheap no-op via
 // pgx.ErrNoRows.
-func continueEmailGWCampaignFromRun(ctx context.Context, pool *pgxpool.Pool, provider emailgwefficacy.MailEvidenceProvider, target emailgwefficacy.InjectionTarget, runID string) {
+func continueEmailGWCampaignFromRun(ctx context.Context, pool *pgxpool.Pool, provider emailgwefficacy.MailEvidenceProvider, target emailgwefficacy.InjectionTarget, outboundSender emailgwefficacy.OutboundSender, environment emailgwrun.Environment, runID string) {
 	stage, err := db.GetEmailGWCampaignStageByRunID(ctx, pool, runID)
 	if err != nil {
 		return
@@ -142,7 +142,7 @@ func continueEmailGWCampaignFromRun(ctx context.Context, pool *pgxpool.Pool, pro
 		reason = run.Error
 	}
 	_ = db.UpdateEmailGWCampaignStageTerminal(ctx, pool, stage.ID, status, reason, time.Now().UTC())
-	advanceEmailGWCampaign(ctx, pool, provider, target, stage.CampaignID)
+	advanceEmailGWCampaign(ctx, pool, provider, target, outboundSender, environment, stage.CampaignID)
 }
 
 // RecoverEmailGWCampaigns resumes every campaign whose most recently
@@ -155,7 +155,7 @@ func continueEmailGWCampaignFromRun(ctx context.Context, pool *pgxpool.Pool, pro
 // makes calling it twice for the same campaign -- e.g. this sweep
 // racing a continuation goroutine that was already mid-advance at
 // crash time -- a benign no-op, never a duplicate dispatch.
-func RecoverEmailGWCampaigns(ctx context.Context, pool *pgxpool.Pool, provider emailgwefficacy.MailEvidenceProvider, target emailgwefficacy.InjectionTarget) error {
+func RecoverEmailGWCampaigns(ctx context.Context, pool *pgxpool.Pool, provider emailgwefficacy.MailEvidenceProvider, target emailgwefficacy.InjectionTarget, outboundSender emailgwefficacy.OutboundSender, environment emailgwrun.Environment) error {
 	stuck, err := db.ListDispatchedEmailGWCampaignStagesWithTerminalRuns(ctx, pool)
 	if err != nil {
 		return fmt.Errorf("emailgwcampaign: recover: %w", err)
@@ -167,7 +167,7 @@ func RecoverEmailGWCampaigns(ctx context.Context, pool *pgxpool.Pool, provider e
 		}
 		seen[stage.CampaignID] = true
 		if stage.RunID != nil {
-			continueEmailGWCampaignFromRun(ctx, pool, provider, target, *stage.RunID)
+			continueEmailGWCampaignFromRun(ctx, pool, provider, target, outboundSender, environment, *stage.RunID)
 		}
 	}
 	return nil
@@ -177,7 +177,7 @@ func RecoverEmailGWCampaigns(ctx context.Context, pool *pgxpool.Pool, provider e
 // stage set, resolving derived stages and prerequisite/cancellation
 // cascades synchronously, stopping as soon as it dispatches one real
 // run or reaches the end of the template.
-func advanceEmailGWCampaign(ctx context.Context, pool *pgxpool.Pool, provider emailgwefficacy.MailEvidenceProvider, target emailgwefficacy.InjectionTarget, campaignID string) {
+func advanceEmailGWCampaign(ctx context.Context, pool *pgxpool.Pool, provider emailgwefficacy.MailEvidenceProvider, target emailgwefficacy.InjectionTarget, outboundSender emailgwefficacy.OutboundSender, environment emailgwrun.Environment, campaignID string) {
 	campaign, err := db.GetEmailGWCampaign(ctx, pool, campaignID)
 	if err != nil {
 		return
@@ -222,7 +222,7 @@ func advanceEmailGWCampaign(ctx context.Context, pool *pgxpool.Pool, provider em
 					continue
 				}
 			}
-			dispatched := dispatchInjectedStage(ctx, pool, provider, target, campaignID, ordinal, st)
+			dispatched := dispatchInjectedStage(ctx, pool, provider, target, outboundSender, environment, campaignID, ordinal, st)
 			if dispatched == nil {
 				return // insert collided (already advanced elsewhere) or a hard error -- stop, don't loop forever
 			}
@@ -327,7 +327,7 @@ func insertTerminalStage(ctx context.Context, pool *pgxpool.Pool, campaignID str
 // if the stage row itself could not be inserted (duplicate-ordinal
 // race, or a hard DB error) -- the caller stops advancing rather than
 // looping.
-func dispatchInjectedStage(ctx context.Context, pool *pgxpool.Pool, provider emailgwefficacy.MailEvidenceProvider, target emailgwefficacy.InjectionTarget, campaignID string, ordinal int, st emailgwcampaign.StageTemplate) *emailgwcampaign.CampaignStage {
+func dispatchInjectedStage(ctx context.Context, pool *pgxpool.Pool, provider emailgwefficacy.MailEvidenceProvider, target emailgwefficacy.InjectionTarget, outboundSender emailgwefficacy.OutboundSender, environment emailgwrun.Environment, campaignID string, ordinal int, st emailgwcampaign.StageTemplate) *emailgwcampaign.CampaignStage {
 	now := time.Now().UTC()
 	s := &emailgwcampaign.CampaignStage{
 		ID: newID(), CampaignID: campaignID, Ordinal: ordinal, StageKey: st.Key,
@@ -339,7 +339,7 @@ func dispatchInjectedStage(ctx context.Context, pool *pgxpool.Pool, provider ema
 
 	var lastErr error
 	for attempt := 1; attempt <= maxEmailGWCampaignStageDispatchAttempts; attempt++ {
-		run, err := ExecuteEmailGWRun(ctx, pool, provider, target, EmailGWRunRequest{ScenarioID: st.ExpectationID, InitiatedBy: "emailgwcampaign"})
+		run, err := ExecuteEmailGWRun(ctx, pool, provider, target, outboundSender, environment, EmailGWRunRequest{ScenarioID: st.ExpectationID, InitiatedBy: "emailgwcampaign"})
 		if err == nil {
 			_ = db.UpdateEmailGWCampaignStageDispatched(ctx, pool, s.ID, run.ID)
 			s.RunID = &run.ID

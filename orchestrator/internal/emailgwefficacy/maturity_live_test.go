@@ -225,6 +225,10 @@ func TestEmailGWScenarioMaturity_RealRun_EG010Correlation(t *testing.T) {
 	if result.DetectionVerdict.Verdict != VerdictConfirmedSuccess || result.ResponseVerdict.Verdict != VerdictConfirmedSuccess {
 		t.Fatalf("DetectionVerdict/ResponseVerdict = %q/%q, want %q/%q", result.DetectionVerdict.Verdict, result.ResponseVerdict.Verdict, VerdictConfirmedSuccess, VerdictConfirmedSuccess)
 	}
+	correlated, ok := result.DetectionResponseCorrelated()
+	if !ok || !correlated {
+		t.Fatalf("DetectionResponseCorrelated() = (%v, %v), want (true, true) -- detection and response must provably share the same alert", correlated, ok)
+	}
 	correlationID := result.Detection[len(result.Detection)-1].CorrelationID
 	if correlationID == "" {
 		t.Fatalf("Detection record has no CorrelationID to prove correlation against")
@@ -302,6 +306,9 @@ func allRealExecutionRecords(t *testing.T) []ScenarioExecutionRecord {
 	chainResult := liveScenarioResult(t, expEG008, nil, []map[string]any{
 		{"id": "alert-eg010", "title": "Malicious email delivered to helpdesk-test@example-lab.test", "severity": "high", "createdDateTime": now.Format(time.RFC3339), "investigationState": "successfullyRemediated", "resolvedDateTime": now.Add(3 * time.Minute).Format(time.RFC3339)},
 	})
+	if correlated, ok := chainResult.DetectionResponseCorrelated(); !ok || !correlated {
+		t.Fatalf("DetectionResponseCorrelated() = (%v, %v), want (true, true) -- detection and response must provably share the same alert", correlated, ok)
+	}
 	correlationID := chainResult.Detection[len(chainResult.Detection)-1].CorrelationID
 	records = append(records,
 		ScenarioExecutionRecord{ExpectationID: "EG-010.detection", CorrelationKey: correlationID, Verdict: chainResult.DetectionVerdict, Provenance: chainResult.Detection[len(chainResult.Detection)-1].Provenance, ViaLiveAdapter: true},

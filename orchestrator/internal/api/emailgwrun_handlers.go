@@ -43,7 +43,7 @@ func (h *Handler) TriggerEmailGWRun(w http.ResponseWriter, r *http.Request) {
 		req.InitiatedBy = c.UserID
 	}
 
-	run, err := ExecuteEmailGWRun(r.Context(), h.db, h.emailgwProvider, h.emailgwInjectionTarget, req)
+	run, err := ExecuteEmailGWRun(r.Context(), h.db, h.emailgwProvider, h.emailgwInjectionTarget, h.emailgwOutboundSender, h.emailgwEnvironment, req)
 	if err != nil {
 		failedRunID := ""
 		if run != nil {
