@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"testing"
 	"time"
 )
@@ -84,6 +85,166 @@ func TestTestConnection_Success(t *testing.T) {
 	c := newTestClient(t, tokenSrv.URL, graphSrv.URL)
 	if err := c.TestConnection(context.Background()); err != nil {
 		t.Fatalf("TestConnection: %v", err)
+	}
+}
+
+func TestQueryMailAlerts_EmptyHint_ReturnsAll(t *testing.T) {
+	tokenSrv := tokenMock(t)
+	defer tokenSrv.Close()
+	alertTime := time.Date(2026, 7, 14, 10, 2, 0, 0, time.UTC)
+	graphSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]any{
+			"value": []map[string]any{
+				{"id": "alert-1", "title": "Phish delivered", "severity": "medium", "createdDateTime": alertTime.Format(time.RFC3339)},
+				{"id": "alert-2", "title": "Malware detected", "severity": "high", "createdDateTime": alertTime.Format(time.RFC3339)},
+			},
+		})
+	}))
+	defer graphSrv.Close()
+
+	c := newTestClient(t, tokenSrv.URL, graphSrv.URL)
+	alerts, err := c.QueryMailAlerts(context.Background(), alertTime.Add(-time.Hour), alertTime.Add(time.Hour), "")
+	if err != nil {
+		t.Fatalf("QueryMailAlerts: %v", err)
+	}
+	if len(alerts) != 2 {
+		t.Fatalf("alerts = %+v, want 2 -- an empty correlationHint must return every alert", alerts)
+	}
+}
+
+func TestQueryMailAlerts_FiltersByCorrelationHint(t *testing.T) {
+	tokenSrv := tokenMock(t)
+	defer tokenSrv.Close()
+	alertTime := time.Date(2026, 7, 14, 10, 2, 0, 0, time.UTC)
+	graphSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]any{
+			"value": []map[string]any{
+				{"id": "alert-1", "title": "Phish delivered to cfo-test@example-lab.test", "severity": "medium", "createdDateTime": alertTime.Format(time.RFC3339)},
+				{"id": "alert-2", "title": "Unrelated malware alert", "severity": "high", "createdDateTime": alertTime.Format(time.RFC3339)},
+			},
+		})
+	}))
+	defer graphSrv.Close()
+
+	c := newTestClient(t, tokenSrv.URL, graphSrv.URL)
+	alerts, err := c.QueryMailAlerts(context.Background(), alertTime.Add(-time.Hour), alertTime.Add(time.Hour), "cfo-test@example-lab.test")
+	if err != nil {
+		t.Fatalf("QueryMailAlerts: %v", err)
+	}
+	if len(alerts) != 1 || alerts[0].ID != "alert-1" {
+		t.Fatalf("alerts = %+v, want only alert-1 (the one whose RawJSON contains the correlation hint)", alerts)
+	}
+}
+
+func TestQueryAnalyzedEmails_ParsesDeliveryAndAuthenticationDetails(t *testing.T) {
+	tokenSrv := tokenMock(t)
+	defer tokenSrv.Close()
+	loggedTime := time.Date(2026, 7, 14, 10, 2, 0, 0, time.UTC)
+	var gotQuery url.Values
+	graphSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotQuery = r.URL.Query()
+		json.NewEncoder(w).Encode(map[string]any{
+			"value": []map[string]any{
+				{
+					"id": "email-1", "loggedDateTime": loggedTime.Format(time.RFC3339),
+					"networkMessageId": "nmid-1", "internetMessageId": "<imid-1@example-lab.test>",
+					"recipientEmailAddress": "finance-test@example-lab.test", "subject": "Urgent wire request",
+					"policy": "Anti-phish policy", "policyAction": "Quarantine message",
+					"originalDelivery": map[string]any{"action": "blocked", "location": "quarantine"},
+					"latestDelivery":   map[string]any{"action": "blocked", "location": "quarantine"},
+					"authenticationDetails": map[string]any{
+						"senderPolicyFramework": "fail", "dkim": "fail", "dmarc": "fail", "compositeAuthentication": "fail",
+					},
+					"alertIds": []string{"alert-1"},
+				},
+			},
+		})
+	}))
+	defer graphSrv.Close()
+
+	c := newTestClient(t, tokenSrv.URL, graphSrv.URL)
+	emails, err := c.QueryAnalyzedEmails(context.Background(), loggedTime.Add(-time.Hour), loggedTime.Add(time.Hour), "recipientEmailAddress eq 'finance-test@example-lab.test'")
+	if err != nil {
+		t.Fatalf("QueryAnalyzedEmails: %v", err)
+	}
+	if len(emails) != 1 {
+		t.Fatalf("emails = %+v, want 1", emails)
+	}
+	got := emails[0]
+	if got.LatestDeliveryAction != "blocked" || got.LatestDeliveryLocation != "quarantine" {
+		t.Errorf("LatestDelivery = (%q, %q), want (blocked, quarantine)", got.LatestDeliveryAction, got.LatestDeliveryLocation)
+	}
+	if got.SPF != "fail" || got.DKIM != "fail" || got.DMARC != "fail" {
+		t.Errorf("auth details = (SPF=%q, DKIM=%q, DMARC=%q), want all fail", got.SPF, got.DKIM, got.DMARC)
+	}
+	if got.NetworkMessageID != "nmid-1" {
+		t.Errorf("NetworkMessageID = %q, want %q", got.NetworkMessageID, "nmid-1")
+	}
+	if len(got.AlertIDs) != 1 || got.AlertIDs[0] != "alert-1" {
+		t.Errorf("AlertIDs = %+v, want [alert-1]", got.AlertIDs)
+	}
+	if gotQuery.Get("$filter") != "recipientEmailAddress eq 'finance-test@example-lab.test'" {
+		t.Errorf("$filter sent = %q, want the recipient filter unchanged", gotQuery.Get("$filter"))
+	}
+	if gotQuery.Get("startTime") == "" || gotQuery.Get("endTime") == "" {
+		t.Error("startTime/endTime query params were not sent")
+	}
+}
+
+func TestQueryAnalyzedEmails_EmptyFilter_OmitsFilterParam(t *testing.T) {
+	tokenSrv := tokenMock(t)
+	defer tokenSrv.Close()
+	var gotQuery url.Values
+	graphSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotQuery = r.URL.Query()
+		json.NewEncoder(w).Encode(map[string]any{"value": []map[string]any{}})
+	}))
+	defer graphSrv.Close()
+
+	c := newTestClient(t, tokenSrv.URL, graphSrv.URL)
+	if _, err := c.QueryAnalyzedEmails(context.Background(), time.Now().Add(-time.Hour), time.Now(), ""); err != nil {
+		t.Fatalf("QueryAnalyzedEmails: %v", err)
+	}
+	if _, ok := gotQuery["$filter"]; ok {
+		t.Errorf("$filter was sent as %q, want it omitted entirely for an empty filter", gotQuery.Get("$filter"))
+	}
+}
+
+func TestQueryAnalyzedEmails_UnparseableLoggedDateTime_RecordExcluded(t *testing.T) {
+	tokenSrv := tokenMock(t)
+	defer tokenSrv.Close()
+	validTime := time.Date(2026, 7, 14, 10, 2, 0, 0, time.UTC)
+	graphSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]any{
+			"value": []map[string]any{
+				{"id": "email-bad", "loggedDateTime": "not-a-timestamp", "recipientEmailAddress": "finance-test@example-lab.test"},
+				{"id": "email-good", "loggedDateTime": validTime.Format(time.RFC3339), "recipientEmailAddress": "finance-test@example-lab.test"},
+			},
+		})
+	}))
+	defer graphSrv.Close()
+
+	c := newTestClient(t, tokenSrv.URL, graphSrv.URL)
+	emails, err := c.QueryAnalyzedEmails(context.Background(), validTime.Add(-time.Hour), validTime.Add(time.Hour), "")
+	if err != nil {
+		t.Fatalf("QueryAnalyzedEmails: %v", err)
+	}
+	if len(emails) != 1 || emails[0].ID != "email-good" {
+		t.Fatalf("emails = %+v, want exactly email-good -- a record with an unparseable loggedDateTime must never surface with a zero-value Timestamp", emails)
+	}
+}
+
+func TestQueryAnalyzedEmails_GraphHTTPError_ReturnsError(t *testing.T) {
+	tokenSrv := tokenMock(t)
+	defer tokenSrv.Close()
+	graphSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+	}))
+	defer graphSrv.Close()
+
+	c := newTestClient(t, tokenSrv.URL, graphSrv.URL)
+	if _, err := c.QueryAnalyzedEmails(context.Background(), time.Now().Add(-time.Hour), time.Now(), ""); err == nil {
+		t.Fatal("expected an error from a 403 Graph response")
 	}
 }
 

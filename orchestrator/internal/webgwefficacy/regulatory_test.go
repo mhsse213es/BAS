@@ -90,27 +90,48 @@ func TestMapObligationToScenarioEvidence_UAEInformationAssurance_BoundaryProtect
 }
 
 // TestMapObligationToScenarioEvidence_RBICyberSecurityFramework_FirewallPerimeterSecurity
-// maps domain 08 end-to-end for India's second regulator, the RBI
-// Cyber Security Framework (Circular RBI/2015-16/418, "Cyber Security
-// Framework in Banks," dated 2 June 2016 -- independently verified
-// this session against rbi.org.in's own notification page -- control
-// NET-02, "Firewall and perimeter security -- rules reviewed,
-// inbound/outbound filtered," also seeded in
-// internal/compliance/mappings/rbi_csf.yaml). Deliberately mapped to
-// the proxy-bypass scenario (domain 08), distinct from the existing
-// CERT-In obligation's fail-closed mapping (domain 11), so India's
-// two regulators are each independently evidenced rather than both
-// resting on the same proof.
+// maps domain 08 end-to-end for India's second regulator. Originally
+// cited the RBI Cyber Security Framework (Circular RBI/2015-16/418,
+// "Cyber Security Framework in Banks," dated 2 June 2016 --
+// independently verified that session against rbi.org.in's own
+// notification page) -- control NET-02, "Firewall and perimeter
+// security -- rules reviewed, inbound/outbound filtered," also seeded
+// in internal/compliance/mappings/rbi_csf.yaml.
+//
+// CORRECTED 2026-10-16: emailgwefficacy's own Phase 5 regulatory
+// research (docs/emailgw-mastery-qa-log.md item #3) found multiple
+// convergent secondary sources reporting the 2016 circular repealed
+// effective 31 July 2026, superseded by the Reserve Bank of India
+// (Commercial Banks -- Cybersecurity, Technology: Risk, Resilience
+// and Assurance Framework) Directions, 2026 (RBI/DoS/2026-27/410,
+// DoS.CO.CSITEG.4/31.01.015/2026-27). This obligation now cites that
+// document instead. Unlike emailgwefficacy's own mail-security
+// obligation, this session could not locate the specific paragraph
+// covering firewall/perimeter-security controls under the new
+// directions (only the document's existence, title, reference number,
+// and effective date are corroborated) -- SourceReference says so
+// rather than inventing a paragraph number. internal/compliance/
+// mappings/rbi_csf.yaml still cites the superseded 2016 circular as
+// its own canonical source and was NOT updated as part of this fix --
+// that mapping catalog is consumed by internal/api, internal/compliance,
+// and internal/reporting, a materially larger surface than this test's
+// own fixture obligation, and updating it would need its own review of
+// whether each of its 22 controls still maps correctly under the new
+// document's different structure.
 func TestMapObligationToScenarioEvidence_RBICyberSecurityFramework_FirewallPerimeterSecurity(t *testing.T) {
 	obligation := RegulatoryObligation{
-		ID:              "rbi-csf-net-02",
-		Jurisdiction:    "India",
-		Regulator:       "RBI",
-		Title:           "Firewall and perimeter security -- rules reviewed, inbound/outbound filtered",
-		SourceReference: "RBI Circular RBI/2015-16/418 (DBS.CO/CSITE/BC.11/33.01.001/2015-16), \"Cyber Security Framework in Banks\"",
-		Version:         "2016",
-		EffectiveDate:   time.Date(2016, 6, 2, 0, 0, 0, 0, time.UTC),
-		ControlLabel:    "webgwefficacy.proxybypass",
+		ID:           "rbi-cybersecurity-directions-2026-net-02",
+		Jurisdiction: "India",
+		Regulator:    "RBI",
+		Title:        "Firewall and perimeter security -- rules reviewed, inbound/outbound filtered",
+		SourceReference: "Reserve Bank of India (Commercial Banks -- Cybersecurity, Technology: Risk, Resilience and Assurance Framework) Directions, 2026, " +
+			"RBI/DoS/2026-27/410, DoS.CO.CSITEG.4/31.01.015/2026-27, dated 31 July 2026. Supersedes the 2016 Cyber Security Framework circular " +
+			"(RBI/2015-16/418) this obligation previously cited. The specific paragraph covering firewall/perimeter-security controls under the " +
+			"new directions was not located in this session's research; only the document's own existence, title, reference number, and date are corroborated.",
+		Version:       "2026",
+		EffectiveDate: time.Date(2026, 7, 31, 0, 0, 0, 0, time.UTC),
+		ControlLabel:  "webgwefficacy.proxybypass",
+		Note:          "Citation corrected 2026-10-16 after emailgwefficacy's own regulatory research surfaced the prior circular's repeal -- see docs/emailgw-mastery-qa-log.md item #3.",
 	}
 
 	now := time.Now()

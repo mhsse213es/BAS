@@ -1,8 +1,49 @@
+# CORRECTED 2026-10-16: this catalog was originally built against the
+# 2016 RBI Cyber Security Framework circular (RBI/2015-16/418,
+# DBS.CO/CSITE/BC.11/33.01.001/2015-16, "Cyber Security Framework in
+# Banks"). EmailGW Mastery's own Phase 5 regulatory research
+# (docs/emailgw-mastery-qa-log.md item #3) found multiple convergent
+# secondary (compliance-vendor) sources reporting that circular
+# repealed effective 31 July 2026, superseded by the Reserve Bank of
+# India (Commercial Banks -- Cybersecurity, Technology: Risk,
+# Resilience and Assurance Framework) Directions, 2026
+# (RBI/DoS/2026-27/410, DoS.CO.CSITEG.4/31.01.015/2026-27). None of
+# these sources are RBI's own primary text (a scanned PDF behind a
+# CAPTCHA gate this session could not OCR), so the repeal is reported,
+# not independently re-confirmed here, but it is consistent across
+# every source found.
+#
+# `id` is kept as RBI_CSF unchanged -- it is matched literally in
+# internal/api/handlers.go's complianceShortName and in several tests
+# (internal/api/compliance_api_test.go, internal/compliance/loader_test.go),
+# the same way CERT_IN's own id stays stable across MeitY's revisions.
+#
+# The 22 controls below were NOT individually re-verified against the
+# 2026 directions' own paragraph numbering -- this session located the
+# specific "Secure Mail and Messaging Systems" section for a different
+# package's own research (emailgwefficacy/regulatory.go) but did not
+# attempt the same for every one of these 22 baseline areas (identity,
+# network, endpoint, data, monitoring, incident, continuity,
+# application security). They are carried forward as a reasonable
+# baseline -- these are standard areas near-universally required under
+# any RBI banking cybersecurity framework, old or new -- but that is
+# an inference, not a verified per-control citation; treat any
+# individual control's continued exact wording/numbering as unverified
+# until checked against the primary document.
+#
+# KNOWN GAP, not filled here: secondary sources report the 2026
+# directions add further areas not represented as distinct controls
+# in this catalog -- data governance, cryptography, secure software
+# development, vendor/third-party risk management, source code
+# escrow, cloud security, and teleworking. Adding accurate control
+# entries for these would need the primary document (unavailable this
+# session), not fabricated control text: deferred, flagged here rather
+# than silently left unmentioned.
 id: RBI_CSF
-name: RBI Cyber Security Framework
-version: "2016 (Circular RBI/2015-16/418)"
+name: RBI Cybersecurity, Technology Risk, Resilience and Assurance Framework (Commercial Banks)
+version: "2026 (RBI/DoS/2026-27/410, DoS.CO.CSITEG.4/31.01.015/2026-27)"
 regulator: RBI
-published_year: "2016"
+published_year: "2026"
 controls:
   # ── Identity & Access Management ─────────────────────────────────────────
   - id: IAM-01
