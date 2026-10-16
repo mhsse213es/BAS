@@ -69,3 +69,52 @@ func TestGetWAFCoverageHTML_RendersEveryDomain(t *testing.T) {
 		}
 	}
 }
+
+func TestGetWAFIndustryProfiles_ReturnsSixProfilesWithComplianceDetail(t *testing.T) {
+	h := &Handler{}
+	rr := httptest.NewRecorder()
+	h.GetWAFIndustryProfiles(rr, httptest.NewRequest(http.MethodGet, "/api/waf/industry-profiles", nil))
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rr.Code)
+	}
+	if ct := rr.Header().Get("Content-Type"); ct != "application/json" {
+		t.Fatalf("content-type = %q, want application/json", ct)
+	}
+
+	body := rr.Body.String()
+	if !strings.Contains(body, `"id":"WAFPROFILE-BFSI"`) {
+		t.Error("body missing WAFPROFILE-BFSI")
+	}
+	if !strings.Contains(body, "unverified") {
+		t.Error("body missing \"unverified\" status")
+	}
+	if !strings.Contains(body, "no specific circular number or clause verified against RBI's own text") {
+		t.Error("body missing the real RBI Note text verbatim")
+	}
+
+	var got []map[string]interface{}
+	if err := json.Unmarshal(rr.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(got) != 6 {
+		t.Fatalf("len(profiles) = %d, want 6", len(got))
+	}
+}
+
+func TestGetWAFIndustryProfilesHTML_RendersComplianceDetail(t *testing.T) {
+	h := &Handler{}
+	rr := httptest.NewRecorder()
+	h.GetWAFIndustryProfilesHTML(rr, httptest.NewRequest(http.MethodGet, "/api/waf/industry-profiles.html", nil))
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rr.Code)
+	}
+	body := rr.Body.String()
+	if !strings.Contains(body, "<!DOCTYPE html>") {
+		t.Error("body is not a full HTML document")
+	}
+	if !strings.Contains(body, "unverified") {
+		t.Error("body missing \"unverified\" status")
+	}
+}
