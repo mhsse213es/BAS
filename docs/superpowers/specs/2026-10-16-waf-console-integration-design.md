@@ -50,14 +50,14 @@ func AudspectWAFCoverageReport() (CoverageReport, error)
 ```
 Returns exactly these 10 domains, 1:1 with `waf.txt`'s own phase list, all `CoverageCovered` (honest under the established "at least one fixture-backed, proven scenario exists" definition — confirmed true for all 10, each phase shipped a fresh-reviewer-approved, tested package):
 
-| DomainID | DomainName | Package |
+| DomainID | DomainName (verbatim from `waf.txt`) | Package |
 |---|---|---|
-| 01 | Capability model and evidence contract | `wafval` |
+| 01 | WAF capability and vendor-neutral model | `wafval` |
 | 02 | Core attack-prevention mastery | `wafcatalog` |
-| 03 | Policy-gap detection | `wafpolicygap` |
-| 04 | Evasion-technique validation | `wafevasion` |
-| 05 | API/business-logic flow validation | `wafapiflow` |
-| 06 | Bot/abuse validation | `wafbotabuse` |
+| 03 | Configuration and policy-gap testing | `wafpolicygap` |
+| 04 | Protocol, parser and evasion testing | `wafevasion` |
+| 05 | API and business-flow protection | `wafapiflow` |
+| 06 | Bot, abuse and rate-limit efficacy | `wafbotabuse` |
 | 07 | Origin, deployment and resilience | `waforigin` |
 | 08 | Detection and telemetry validation | `wafdetection` |
 | 09 | Industry and regional profiles | `wafprofile` |
