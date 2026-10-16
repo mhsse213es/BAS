@@ -278,6 +278,7 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.Get("/api/cloud-runs/{id}", h.GetCloudRun)
 		r.Get("/api/cloud-campaigns/{id}", h.GetCloudCampaign)
 		r.Get("/api/emailgw-runs", h.ListEmailGWRuns)
+		r.Get("/api/emailgw-runs/summary", h.GetEmailGWRunsSummary)
 		r.Get("/api/emailgw-runs/{id}", h.GetEmailGWRun)
 		r.Get("/api/network-discovery-runs", h.ListNetworkDiscoveryRuns)
 		r.Get("/api/network-discovery-runs/{id}", h.GetNetworkDiscoveryRun)

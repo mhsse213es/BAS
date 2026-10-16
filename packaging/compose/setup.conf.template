@@ -138,13 +138,13 @@ LIC_PATH=                         # ← REQUIRED  e.g. /home/ubuntu/hdfc-prod-00
 # ── [validation-lab] ─────────────────────────────────────────────────────────────
 # Threat-Content-Factory Phase 6. Leave VALIDATION_LAB_AGENT_ID blank to keep
 # the validation lab disabled (the orchestrator logs "[validationlab] disabled").
-# To enable it, enroll an agent, flag it in the database as the lab, then set its
-# agent_id here and re-run --upgrade:
-#   UPDATE agents SET is_factory_lab = true WHERE agent_id = '<id>';
-# A lab agent is DEDICATED: once flagged is_factory_lab it is barred from normal
-# assessment runs (and normal agents are barred from validation runs), so use a
-# machine you are not also using for regular assessments. With it set, generated
-# content advances Candidate -> Validated -> Published on the Factory Health page.
+# To enable it, enroll an agent, set its agent_id here, and re-run --upgrade.
+# The orchestrator then marks that agent (and only it) as the dedicated lab
+# automatically on startup -- no manual database change is needed.
+# A lab agent is DEDICATED: once set it is barred from normal assessment runs
+# (and normal agents are barred from validation runs), so use a machine you are
+# not also using for regular assessments. With it set, generated content
+# advances Candidate -> Validated -> Published on the Factory Health page.
 
 VALIDATION_LAB_AGENT_ID=          # Blank = lab disabled (default)
 VALIDATION_LAB_POLL_MINUTES=5     # Default: 5
