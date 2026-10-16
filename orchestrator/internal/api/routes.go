@@ -250,6 +250,12 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.Get("/api/waf/coverage.html", h.GetWAFCoverageHTML)
 		r.Get("/api/waf/industry-profiles", h.GetWAFIndustryProfiles)
 		r.Get("/api/waf/industry-profiles.html", h.GetWAFIndustryProfilesHTML)
+		// WAF exploit-prevention enterprise scenario (internal/wafassessment),
+		// same read-only shape as /api/waf/coverage: a fixture-backed scenario
+		// evaluation layered over the real wafcatalog/wafval packages, never a
+		// claim about a deployed WAF's live efficacy.
+		r.Get("/api/waf/scenarios/exploit-prevention", h.GetWAFExploitPreventionScenario)
+		r.Get("/api/waf/scenarios/exploit-prevention.html", h.GetWAFExploitPreventionScenarioHTML)
 		// AD coverage assessment report, from the same admatrix.Report() data as
 		// /api/ad/coverage: PDF (primary), HTML, and JSON (secondary). Read-only.
 		r.Get("/api/ad/assessment.pdf", h.GetADAssessmentPDF)

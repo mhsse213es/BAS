@@ -48,6 +48,8 @@ var routeMatrix = []routeCase{
 	{http.MethodGet, "/api/waf/coverage.html", tierAny, ""},
 	{http.MethodGet, "/api/waf/industry-profiles", tierAny, ""},
 	{http.MethodGet, "/api/waf/industry-profiles.html", tierAny, ""},
+	{http.MethodGet, "/api/waf/scenarios/exploit-prevention", tierAny, ""},
+	{http.MethodGet, "/api/waf/scenarios/exploit-prevention.html", tierAny, ""},
 	{http.MethodGet, "/api/ad/assessment.pdf", tierAny, ""},
 	{http.MethodGet, "/api/ad/assessment.html", tierAny, ""},
 	{http.MethodGet, "/api/ad/assessment.json", tierAny, ""},
