@@ -2,6 +2,7 @@ package exercise
 
 import (
 	"context"
+	"encoding/base64"
 	"io"
 	"net"
 	"strings"
@@ -179,6 +180,115 @@ func TestSpoofableSMTPInjector_SubjectWithCRLF_RejectedBeforeSend(t *testing.T) 
 	})
 	if err == nil {
 		t.Fatal("expected an error for a CRLF-injecting Subject, got nil")
+	}
+
+	backend.mu.Lock()
+	defer backend.mu.Unlock()
+	if len(backend.received) != 0 {
+		t.Fatalf("server received %d messages, want 0 -- a header-injection attempt must never reach the wire", len(backend.received))
+	}
+}
+
+func TestSpoofableSMTPInjector_WithAttachment_DeliversMultipartMIMEWithDecodableContent(t *testing.T) {
+	backend, addr := startSpoofTestServer(t)
+
+	injector := &SpoofableSMTPInjector{EnvelopeFrom: "helpdesk@known-bad-lab.test", TargetMX: addr}
+	eicar := []byte(`X5O!P%@AP[4\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*`)
+	msg := TestMessage{
+		To:       "helpdesk-test@example-lab.test",
+		Subject:  "test attachment",
+		BodyHTML: "<p>see attached</p>",
+		Attachment: &TestAttachment{
+			Filename:    "eicar.txt",
+			ContentType: "application/octet-stream",
+			Content:     eicar,
+		},
+	}
+
+	leg, err := injector.SendTestMessage(context.Background(), msg)
+	if err != nil {
+		t.Fatalf("SendTestMessage: %v", err)
+	}
+	if leg.SenderPayloadHash == "" {
+		t.Error("SenderPayloadHash is empty")
+	}
+
+	backend.mu.Lock()
+	defer backend.mu.Unlock()
+	if len(backend.received) != 1 {
+		t.Fatalf("server received %d messages, want 1", len(backend.received))
+	}
+	raw := string(backend.received[0].Data)
+
+	if !strings.Contains(raw, "Content-Type: multipart/mixed; boundary=") {
+		t.Error("message is not multipart/mixed")
+	}
+	if !strings.Contains(raw, `Content-Disposition: attachment; filename="eicar.txt"`) {
+		t.Error("attachment part is missing its Content-Disposition/filename")
+	}
+	if !strings.Contains(raw, "Content-Transfer-Encoding: base64") {
+		t.Error("attachment part is missing base64 transfer-encoding")
+	}
+	if !strings.Contains(raw, "<p>see attached</p>") {
+		t.Error("html body part is missing from the raw message")
+	}
+
+	wantEncoded := base64.StdEncoding.EncodeToString(eicar)
+	gotEncoded := strings.ReplaceAll(strings.ReplaceAll(raw, "\r\n", ""), "\n", "")
+	if !strings.Contains(gotEncoded, wantEncoded) {
+		t.Errorf("decoded/unwrapped message does not contain the expected base64 attachment payload")
+	}
+}
+
+func TestSpoofableSMTPInjector_NoAttachment_StillSinglePartTextHTML(t *testing.T) {
+	backend, addr := startSpoofTestServer(t)
+
+	injector := &SpoofableSMTPInjector{EnvelopeFrom: "ceo@spoofed-lookalike.test", TargetMX: addr}
+	_, err := injector.SendTestMessage(context.Background(), TestMessage{To: "finance-test@example-lab.test", Subject: "s", BodyHTML: "<p>b</p>"})
+	if err != nil {
+		t.Fatalf("SendTestMessage: %v", err)
+	}
+
+	backend.mu.Lock()
+	defer backend.mu.Unlock()
+	raw := string(backend.received[0].Data)
+	if !strings.Contains(raw, "Content-Type: text/html; charset=UTF-8\r\n") {
+		t.Error("want the original single-part text/html Content-Type unchanged when there is no attachment")
+	}
+	if strings.Contains(raw, "multipart") {
+		t.Error("want no multipart content-type when there is no attachment")
+	}
+}
+
+func TestSpoofableSMTPInjector_AttachmentFilenameWithCRLF_RejectedBeforeSend(t *testing.T) {
+	backend, addr := startSpoofTestServer(t)
+
+	injector := &SpoofableSMTPInjector{EnvelopeFrom: "ceo@spoofed-lookalike.test", TargetMX: addr}
+	_, err := injector.SendTestMessage(context.Background(), TestMessage{
+		To: "finance-test@example-lab.test", Subject: "s", BodyHTML: "b",
+		Attachment: &TestAttachment{Filename: "evil.txt\r\nBcc: attacker@evil.test", ContentType: "text/plain", Content: []byte("x")},
+	})
+	if err == nil {
+		t.Fatal("expected an error for a CRLF-injecting attachment filename, got nil")
+	}
+
+	backend.mu.Lock()
+	defer backend.mu.Unlock()
+	if len(backend.received) != 0 {
+		t.Fatalf("server received %d messages, want 0 -- a header-injection attempt must never reach the wire", len(backend.received))
+	}
+}
+
+func TestSpoofableSMTPInjector_AttachmentContentTypeWithCRLF_RejectedBeforeSend(t *testing.T) {
+	backend, addr := startSpoofTestServer(t)
+
+	injector := &SpoofableSMTPInjector{EnvelopeFrom: "ceo@spoofed-lookalike.test", TargetMX: addr}
+	_, err := injector.SendTestMessage(context.Background(), TestMessage{
+		To: "finance-test@example-lab.test", Subject: "s", BodyHTML: "b",
+		Attachment: &TestAttachment{Filename: "x.txt", ContentType: "text/plain\r\nBcc: attacker@evil.test", Content: []byte("x")},
+	})
+	if err == nil {
+		t.Fatal("expected an error for a CRLF-injecting attachment content-type, got nil")
 	}
 
 	backend.mu.Lock()
