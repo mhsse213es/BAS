@@ -94,7 +94,8 @@ func EICARAttachmentExpectation(caught bool) MailExpectation {
 		Recipient:      "helpdesk-test@example-lab.test",
 		MessageClass:   "eicar-attachment",
 		ControlProduct: "m365-defender-o365",
-		Note:           "industry-standard EICAR test string as the attachment -- never a real malware sample. NOT wired for real injection (either branch): a real attachment requires MIME multipart construction; exercise.SpoofableSMTPInjector only builds a single-part HTML body",
+		Note:           "industry-standard EICAR test string as a real MIME attachment -- never a real malware sample. Wired for real injection via exercise.SpoofableSMTPInjector's multipart/mixed support (Workstream 5)",
+		EnvelopeFrom:   "malware-attachment-test-sender@eicar-attachment-lab.test",
 	}
 	if caught {
 		exp.ExpectedAction = ExpectedQuarantine

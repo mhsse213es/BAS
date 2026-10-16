@@ -119,6 +119,46 @@ func TestInjectScenarioMessage_WiredScenario_SendsRealMessageAndReturnsObservati
 	}
 }
 
+// TestInjectScenarioMessage_EICARAttachment_SendsRealMultipartMessage
+// proves EG-004's own real wiring specifically -- not just that some
+// scenario with EnvelopeFrom set can be injected (already covered
+// above), but that the EICAR scenario's own attachment actually
+// reaches the wire as a real base64-encoded MIME part, through this
+// package's own ScenarioTestContent/InjectScenarioMessage path, not
+// just exercise.SpoofableSMTPInjector in isolation.
+func TestInjectScenarioMessage_EICARAttachment_SendsRealMultipartMessage(t *testing.T) {
+	backend, addr := startInjectionTestServer(t)
+	exp := EICARAttachmentExpectation(true)
+	if exp.EnvelopeFrom == "" {
+		t.Fatal("EICARAttachmentExpectation(true).EnvelopeFrom is empty, want it wired for this test's premise to hold")
+	}
+	content, ok := ScenarioTestContent(exp)
+	if !ok {
+		t.Fatalf("ScenarioTestContent(%q): no content", exp.MessageClass)
+	}
+	if content.Attachment == nil {
+		t.Fatal("content.Attachment is nil, want the EICAR attachment")
+	}
+
+	_, err := InjectScenarioMessage(context.Background(), InjectionTarget{TargetMX: addr}, exp, content)
+	if err != nil {
+		t.Fatalf("InjectScenarioMessage: %v", err)
+	}
+
+	backend.mu.Lock()
+	defer backend.mu.Unlock()
+	if len(backend.received) != 1 {
+		t.Fatalf("server received %d messages, want 1", len(backend.received))
+	}
+	raw := string(backend.received[0].Data)
+	if !strings.Contains(raw, "multipart/mixed") {
+		t.Error("message is not multipart/mixed, want a real attachment part")
+	}
+	if !strings.Contains(raw, `filename="`+content.Attachment.Filename+`"`) {
+		t.Errorf("message is missing the attachment filename %q", content.Attachment.Filename)
+	}
+}
+
 // TestInjectScenarioMessage_NotWiredScenario_ReturnsErrorNeverSends
 // proves the empty-EnvelopeFrom signal is actually checked -- a
 // scenario this package can't genuinely inject yet must never send
@@ -166,6 +206,7 @@ func TestEveryWiredScenario_HasMatchingContent(t *testing.T) {
 		SupplierPaymentDiversionExpectation(true), SupplierPaymentDiversionExpectation(false),
 		AuthenticationExceptionScopeExpectation(false),
 		PostDeliveryThreatResponseExpectation(),
+		EICARAttachmentExpectation(true), EICARAttachmentExpectation(false),
 	}
 	for _, exp := range wired {
 		if exp.EnvelopeFrom == "" {
@@ -187,7 +228,6 @@ func TestNotWiredScenarios_HaveEmptyEnvelopeFrom(t *testing.T) {
 		SPFAlignmentExpectation(true),
 		DKIMAlignmentExpectation(true),
 		DMARCPolicyExpectation(true),
-		EICARAttachmentExpectation(true), EICARAttachmentExpectation(false),
 		OutboundDLPExpectation(true), OutboundDLPExpectation(false),
 		AuthenticationExceptionScopeExpectation(true),
 	}

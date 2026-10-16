@@ -1,12 +1,16 @@
 package exercise
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"fmt"
+	"mime/multipart"
 	"net"
 	"net/smtp"
+	"net/textproto"
 	"strings"
 	"time"
 )
@@ -52,6 +56,23 @@ type TestMessage struct {
 	To       string
 	Subject  string
 	BodyHTML string
+	// Attachment is optional. Nil preserves this type's original
+	// single-part text/html behavior exactly -- every existing caller
+	// is unaffected. Non-nil produces a multipart/mixed message
+	// carrying BodyHTML as one part and Attachment as a second,
+	// base64-encoded part.
+	Attachment *TestAttachment
+}
+
+// TestAttachment is one MIME attachment part. Content is never a real
+// malware sample in this package's own callers (e.g. the industry-
+// standard EICAR test string) -- this type itself places no such
+// restriction; that discipline belongs to the scenario layer that
+// builds the content.
+type TestAttachment struct {
+	Filename    string
+	ContentType string
+	Content     []byte
 }
 
 // OriginLeg is the sender-side half of
@@ -102,7 +123,19 @@ func (s *SpoofableSMTPInjector) SendTestMessage(ctx context.Context, msg TestMes
 	if err := rejectHeaderInjection("Subject", msg.Subject); err != nil {
 		return OriginLeg{}, err
 	}
-	raw := []byte(buildSpoofableMIME(headerFrom, msg.To, msg.Subject, msg.BodyHTML))
+	if msg.Attachment != nil {
+		if err := rejectHeaderInjection("Attachment filename", msg.Attachment.Filename); err != nil {
+			return OriginLeg{}, err
+		}
+		if err := rejectHeaderInjection("Attachment content-type", msg.Attachment.ContentType); err != nil {
+			return OriginLeg{}, err
+		}
+	}
+	rawBody, err := buildSpoofableMIME(headerFrom, msg.To, msg.Subject, msg.BodyHTML, msg.Attachment)
+	if err != nil {
+		return OriginLeg{}, fmt.Errorf("SpoofableSMTPInjector: %w", err)
+	}
+	raw := []byte(rawBody)
 
 	dialer := &net.Dialer{}
 	conn, err := dialer.DialContext(ctx, "tcp", addr)
@@ -158,12 +191,72 @@ func rejectHeaderInjection(headerName, value string) error {
 	return nil
 }
 
-func buildSpoofableMIME(headerFrom, to, subject, bodyHTML string) string {
+// buildSpoofableMIME returns the raw message to write to the wire.
+// attachment == nil preserves the original single-part text/html
+// shape exactly (every pre-existing caller's own assertions about
+// that raw format keep holding). attachment != nil instead builds a
+// multipart/mixed message: BodyHTML as a text/html part, attachment
+// as a second, base64-encoded part -- the shape
+// EICARAttachmentExpectation and any future MIME-attachment scenario
+// need, which this function previously had no way to produce at all.
+func buildSpoofableMIME(headerFrom, to, subject, bodyHTML string, attachment *TestAttachment) (string, error) {
+	if attachment == nil {
+		return "MIME-Version: 1.0\r\n" +
+			"Content-Type: text/html; charset=UTF-8\r\n" +
+			"From: " + headerFrom + "\r\n" +
+			"To: " + to + "\r\n" +
+			"Subject: " + subject + "\r\n" +
+			"\r\n" +
+			bodyHTML, nil
+	}
+
+	var body bytes.Buffer
+	mw := multipart.NewWriter(&body)
+
+	htmlPart, err := mw.CreatePart(textproto.MIMEHeader{"Content-Type": {"text/html; charset=UTF-8"}})
+	if err != nil {
+		return "", fmt.Errorf("create html part: %w", err)
+	}
+	if _, err := htmlPart.Write([]byte(bodyHTML)); err != nil {
+		return "", fmt.Errorf("write html part: %w", err)
+	}
+
+	attachmentPart, err := mw.CreatePart(textproto.MIMEHeader{
+		"Content-Type":              {attachment.ContentType},
+		"Content-Transfer-Encoding": {"base64"},
+		"Content-Disposition":       {fmt.Sprintf(`attachment; filename="%s"`, attachment.Filename)},
+	})
+	if err != nil {
+		return "", fmt.Errorf("create attachment part: %w", err)
+	}
+	if err := writeBase64Wrapped(attachmentPart, attachment.Content); err != nil {
+		return "", fmt.Errorf("write attachment part: %w", err)
+	}
+
+	if err := mw.Close(); err != nil {
+		return "", fmt.Errorf("close multipart writer: %w", err)
+	}
+
 	return "MIME-Version: 1.0\r\n" +
-		"Content-Type: text/html; charset=UTF-8\r\n" +
+		"Content-Type: multipart/mixed; boundary=" + mw.Boundary() + "\r\n" +
 		"From: " + headerFrom + "\r\n" +
 		"To: " + to + "\r\n" +
 		"Subject: " + subject + "\r\n" +
 		"\r\n" +
-		bodyHTML
+		body.String(), nil
+}
+
+// writeBase64Wrapped writes data to w as standard base64, line-
+// wrapped at 76 characters per RFC 2045 §6.8, each line terminated
+// with CRLF.
+func writeBase64Wrapped(w interface{ Write([]byte) (int, error) }, data []byte) error {
+	encoded := base64.StdEncoding.EncodeToString(data)
+	const lineLength = 76
+	for i := 0; i < len(encoded); i += lineLength {
+		end := min(i+lineLength, len(encoded))
+		if _, err := w.Write([]byte(encoded[i:end] + "\r\n")); err != nil {
+			return err
+		}
+	}
+	return nil
 }
