@@ -109,6 +109,29 @@ func TestWafScenarioJSONHandler_DetectionTelemetry_ReturnsRealFailOutcome(t *tes
 	}
 }
 
+// Review Focus: scenario 10 mixes two wafval.Verdict-backed kinds with
+// one that carries waforigin's own ConsistencyVerdict -- the generic
+// handler must serve both without special-casing.
+func TestWafScenarioJSONHandler_OriginResilience_ReturnsRealFailOutcome(t *testing.T) {
+	h := &Handler{}
+	rr := httptest.NewRecorder()
+	h.wafScenarioJSONHandler("origin-resilience")(rr, httptest.NewRequest(http.MethodGet, "/api/waf/scenarios/origin-resilience", nil))
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rr.Code)
+	}
+	body := rr.Body.String()
+	if !strings.Contains(body, `"outcome":"fail"`) {
+		t.Error(`body missing "outcome":"fail"`)
+	}
+	if !strings.Contains(body, `"vectorId":"WAFORIGIN-005"`) {
+		t.Error(`body missing "vectorId":"WAFORIGIN-005"`)
+	}
+	if !strings.Contains(body, `"verdict":"drift_detected"`) {
+		t.Error(`body missing "verdict":"drift_detected" (the real consistency verdict, not a wafval one)`)
+	}
+}
+
 func TestGetWAFExploitPreventionScenarioHTML_RendersFailOutcome(t *testing.T) {
 	h := &Handler{}
 	rr := httptest.NewRecorder()

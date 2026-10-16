@@ -66,6 +66,8 @@ var routeMatrix = []routeCase{
 	{http.MethodGet, "/api/waf/scenarios/detection-telemetry.html", tierAny, ""},
 	{http.MethodGet, "/api/waf/scenarios/legitimate-traffic", tierAny, ""},
 	{http.MethodGet, "/api/waf/scenarios/legitimate-traffic.html", tierAny, ""},
+	{http.MethodGet, "/api/waf/scenarios/origin-resilience", tierAny, ""},
+	{http.MethodGet, "/api/waf/scenarios/origin-resilience.html", tierAny, ""},
 	{http.MethodGet, "/api/ad/assessment.pdf", tierAny, ""},
 	{http.MethodGet, "/api/ad/assessment.html", tierAny, ""},
 	{http.MethodGet, "/api/ad/assessment.json", tierAny, ""},
