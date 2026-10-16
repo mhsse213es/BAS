@@ -19,6 +19,18 @@ mkdir -p /packages
 # steady-state restarts do zero network I/O for this. On failure the partial
 # file is removed so the next restart retries cleanly instead of treating a
 # truncated download as "already fetched".
+#
+# curl uses -k here deliberately: this fetch IS how the machine obtains the
+# trust root, so it runs before any trust exists. On the default self-signed
+# deployment (BAS_TLS=false) the server's cert chains only to the very CA
+# being fetched, so a verifying curl (-sf) can never succeed -- it fails,
+# the '|| rm -f' wipes the file, and the agent is stranded on legacy
+# transport forever. -k skips verification for this one bootstrap GET only;
+# it is safe because /api/config/ca-root is public and returns ONLY the
+# public CA certificate (never a key), enrollment is authenticated by
+# BAS_AGENT_SECRET, and the agent verifies the full chain with this fetched
+# CA for every later connection. Mirrors the dashboard's install command
+# (curl -fsSk) and the docs' health checks (curl -sfk).
 cat > /tmp/bas-agent.service <<'UNIT'
 [Unit]
 Description=BAS Agent (Audspect)
@@ -27,7 +39,7 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-ExecStartPre=-/bin/sh -c 'if [ -n "$BAS_SERVER_URL" ] && [ ! -s /etc/audspect/certs/deployment-ca.pem ]; then mkdir -p /etc/audspect/certs && (curl -sf -o /etc/audspect/certs/deployment-ca.pem "$BAS_SERVER_URL/api/config/ca-root" || rm -f /etc/audspect/certs/deployment-ca.pem); fi'
+ExecStartPre=-/bin/sh -c 'if [ -n "$BAS_SERVER_URL" ] && [ ! -s /etc/audspect/certs/deployment-ca.pem ]; then mkdir -p /etc/audspect/certs && (curl -sfk -o /etc/audspect/certs/deployment-ca.pem "$BAS_SERVER_URL/api/config/ca-root" || rm -f /etc/audspect/certs/deployment-ca.pem); fi'
 ExecStart=/usr/local/bin/bas-agent
 EnvironmentFile=/etc/bas-agent/config
 Restart=on-failure
