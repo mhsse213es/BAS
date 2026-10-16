@@ -70,7 +70,7 @@ func TestGetWAFCoverageHTML_RendersEveryDomain(t *testing.T) {
 	}
 }
 
-func TestGetWAFIndustryProfiles_ReturnsSixProfilesWithComplianceDetail(t *testing.T) {
+func TestGetWAFIndustryProfiles_ReturnsEightProfilesWithComplianceDetail(t *testing.T) {
 	h := &Handler{}
 	rr := httptest.NewRecorder()
 	h.GetWAFIndustryProfiles(rr, httptest.NewRequest(http.MethodGet, "/api/waf/industry-profiles", nil))
@@ -97,8 +97,8 @@ func TestGetWAFIndustryProfiles_ReturnsSixProfilesWithComplianceDetail(t *testin
 	if err := json.Unmarshal(rr.Body.Bytes(), &got); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if len(got) != 6 {
-		t.Fatalf("len(profiles) = %d, want 6", len(got))
+	if len(got) != 8 {
+		t.Fatalf("len(profiles) = %d, want 8", len(got))
 	}
 }
 

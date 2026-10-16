@@ -16,8 +16,8 @@ func TestBuildWAFIndustryProfileReport_PreservesComplianceDetailVerbatim(t *test
 	if err != nil {
 		t.Fatalf("BuildWAFIndustryProfileReport: %v", err)
 	}
-	if len(rep.Profiles) != 6 {
-		t.Fatalf("len(Profiles) = %d, want 6", len(rep.Profiles))
+	if len(rep.Profiles) != 8 {
+		t.Fatalf("len(Profiles) = %d, want 8", len(rep.Profiles))
 	}
 
 	var found bool

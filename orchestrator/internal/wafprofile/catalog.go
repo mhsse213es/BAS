@@ -7,8 +7,13 @@ import (
 )
 
 // AudspectWAFProfileCatalog returns Audspect's real, current seed
-// industry-and-regional-profile set: the 6 named profiles from waf.txt
-// Phase 9, each validated against the real, live wafcatalog output.
+// industry-and-regional-profile set: all 6 industries plus both regions
+// named in waf.txt §4's own table (BFSI, NBFC, Manufacturing, Healthcare,
+// Retail and e-commerce, Government and critical infrastructure, India,
+// UAE), each validated against the real, live wafcatalog output. Retail
+// and Government were added later than the other 6 -- found missing
+// during a QA-log pass that re-read waf.txt §4 directly against this
+// package's own shipped output (see docs/waf-mastery-qa-log.md item #2).
 func AudspectWAFProfileCatalog() ([]Profile, error) {
 	realCatalog, err := wafcatalog.AudspectWAFAttackCatalog()
 	if err != nil {
@@ -114,7 +119,35 @@ func AudspectWAFProfileCatalog() ([]Profile, error) {
 		return nil, fmt.Errorf("loading seed profile catalog: %w", err)
 	}
 
-	profiles := []Profile{bfsi, nbfc, manufacturing, healthcare, india, uae}
+	pciDSSRetail, err := NewComplianceReference("PCI-DSS", Unverified,
+		"framework name only; payment-card-data scope not independently verified in this session -- same disclosure as BFSI's own PCI-DSS reference, cited separately here since retail checkout flows carry the same card-data handling obligation independent of any banking-sector framework", "")
+	if err != nil {
+		return nil, fmt.Errorf("loading seed profile catalog: %w", err)
+	}
+	retail, err := NewProfile("WAFPROFILE-RETAIL", "Retail and e-commerce", ProfileIndustry,
+		[]string{"API-001", "API-003", "AUTH-001", "RATE-001"},
+		[]ComplianceReference{pciDSSRetail},
+		"retail/e-commerce checkout and order flows concentrate on broken-object-level-authorization against orders endpoints, excessive data exposure on inventory/product APIs, credential-stuffing account abuse, and rate-limit-evading scraping/bot bursts against public pricing endpoints",
+		"manually authored from waf.txt §4's named Retail and e-commerce item")
+	if err != nil {
+		return nil, fmt.Errorf("loading seed profile catalog: %w", err)
+	}
+
+	nistCSFGov, err := NewComplianceReference("NIST Cybersecurity Framework", Unverified,
+		"framework name only, cited as a general-purpose critical-infrastructure reference since waf.txt names no specific national framework for this row (unlike BFSI/NBFC's RBI references or the India/UAE regional profiles); no specific subcategory or control verified against NIST's own text, and no sector- or jurisdiction-specific government framework (e.g. FedRAMP, India's own e-governance standards) is asserted here", "")
+	if err != nil {
+		return nil, fmt.Errorf("loading seed profile catalog: %w", err)
+	}
+	government, err := NewProfile("WAFPROFILE-GOVERNMENT", "Government and critical infrastructure", ProfileIndustry,
+		[]string{"PATHTRAV-001", "SSRF-002", "SQLI-001", "POLICY-002"},
+		[]ComplianceReference{nistCSFGov},
+		"public service portals expose directory traversal on file-download endpoints, cloud-metadata SSRF against infrastructure hosted on public cloud, UNION-based SQL injection risking sensitive-data exposure, and policy misconfiguration via overly broad legacy-compatibility exceptions on aging systems -- waf.txt's own named \"logging\" priority for this sector has no corresponding wafcatalog vector and is deliberately not forced into this profile's attack-vector set; it belongs to internal/wafdetection's evidence-pipeline validation instead",
+		"manually authored from waf.txt §4's named Government and critical infrastructure item")
+	if err != nil {
+		return nil, fmt.Errorf("loading seed profile catalog: %w", err)
+	}
+
+	profiles := []Profile{bfsi, nbfc, manufacturing, healthcare, retail, government, india, uae}
 	for _, p := range profiles {
 		if err := ValidateAgainstCatalog(p, realCatalog); err != nil {
 			return nil, fmt.Errorf("loading seed profile catalog: %w", err)

@@ -6,13 +6,13 @@ import (
 	"github.com/audspect/bas/internal/wafcatalog"
 )
 
-func TestAudspectWAFProfileCatalog_ReturnsSixProfiles(t *testing.T) {
+func TestAudspectWAFProfileCatalog_ReturnsEightProfiles(t *testing.T) {
 	profiles, err := AudspectWAFProfileCatalog()
 	if err != nil {
 		t.Fatalf("AudspectWAFProfileCatalog: %v", err)
 	}
-	if len(profiles) != 6 {
-		t.Fatalf("len(profiles) = %d, want 6", len(profiles))
+	if len(profiles) != 8 {
+		t.Fatalf("len(profiles) = %d, want 8", len(profiles))
 	}
 	var industry, regional int
 	for _, p := range profiles {
@@ -23,8 +23,8 @@ func TestAudspectWAFProfileCatalog_ReturnsSixProfiles(t *testing.T) {
 			regional++
 		}
 	}
-	if industry != 4 {
-		t.Errorf("industry profiles = %d, want 4", industry)
+	if industry != 6 {
+		t.Errorf("industry profiles = %d, want 6", industry)
 	}
 	if regional != 2 {
 		t.Errorf("regional profiles = %d, want 2", regional)
