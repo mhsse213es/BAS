@@ -34,6 +34,35 @@ type Profile struct {
 	ComplianceReferences []ComplianceReference
 	Rationale            string
 	Provenance           string
+	// ControlObjectives is the optional requirement-level mapping record
+	// behind VectorIDs: one entry per named risk/control objective this
+	// industry or region cares about, whether a real vector satisfies
+	// it, and an explicit Gap when none does (see ControlObjectiveCoverage).
+	// Empty for profiles authored before this field existed (BFSI, NBFC,
+	// Manufacturing, Healthcare, India, UAE), which carry only the flat
+	// VectorIDs/Rationale shape -- that omission is not itself a defect,
+	// just a coarser-grained profile.
+	ControlObjectives []ControlObjectiveCoverage
+}
+
+// WithControlObjectives is a profile-construction helper, used in place
+// of setting the field directly, so every Profile carrying this richer
+// shape is re-validated the same way NewProfile validates everything
+// else: at construction time, not at render time. It does not duplicate
+// NewProfile's own field checks -- call NewProfile first, then this.
+func WithControlObjectives(profile Profile, objectives []ControlObjectiveCoverage) (Profile, error) {
+	if len(objectives) == 0 {
+		return Profile{}, fmt.Errorf("objectives must not be empty")
+	}
+	seen := make(map[string]bool, len(objectives))
+	for _, o := range objectives {
+		if seen[o.Objective] {
+			return Profile{}, fmt.Errorf("objectives contains a duplicate objective %q", o.Objective)
+		}
+		seen[o.Objective] = true
+	}
+	profile.ControlObjectives = objectives
+	return profile, nil
 }
 
 // NewProfile validates at construction time, never at render time. It
@@ -87,7 +116,8 @@ func NewProfile(id string, name string, kind ProfileKind, vectorIDs []string, co
 
 // ValidateAgainstCatalog confirms every one of profile's VectorIDs
 // actually exists in catalog, returning an error naming the first one
-// that does not.
+// that does not. It also validates profile.ControlObjectives, when
+// present, against the same catalog.
 func ValidateAgainstCatalog(profile Profile, catalog []avcatalog.Vector) error {
 	known := make(map[string]bool, len(catalog))
 	for _, v := range catalog {
@@ -97,6 +127,9 @@ func ValidateAgainstCatalog(profile Profile, catalog []avcatalog.Vector) error {
 		if !known[vectorID] {
 			return fmt.Errorf("profile %q references vector ID %q, which does not exist in the given catalog", profile.ID, vectorID)
 		}
+	}
+	if err := ValidateControlObjectivesAgainstCatalog(profile.ControlObjectives, known); err != nil {
+		return fmt.Errorf("profile %q: %w", profile.ID, err)
 	}
 	return nil
 }

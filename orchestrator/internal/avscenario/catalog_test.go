@@ -1,6 +1,10 @@
 package avscenario
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/audspect/bas/internal/avcatalog"
+)
 
 func TestAudspectAVAssessmentScenario_RealCatalog_BuildsAndValidates(t *testing.T) {
 	s, err := AudspectAVAssessmentScenario()
@@ -39,5 +43,20 @@ func TestAudspectAVAssessmentScenario_IncludesAVBEHAV001(t *testing.T) {
 	}
 	if !found {
 		t.Fatal("AV-BEHAV-001 not found in the dispatchable assessment scenario")
+	}
+}
+
+// Review Focus: this is the structural safeguard that separates a
+// vector's definition (it has a real, concretely runnable command) from
+// its execution eligibility (whether it may ever run outside a dedicated
+// lab endpoint). It must never be possible for dispatchableSeedVectorIDs
+// to silently reintroduce a lab-restricted vector -- this test fails the
+// moment anyone adds one, regardless of where in the file it's added.
+func TestDispatchableSeedVectorIDs_NeverIncludesALabRestrictedVector(t *testing.T) {
+	restricted := avcatalog.LabRestrictedVectorIDs()
+	for id := range dispatchableSeedVectorIDs {
+		if reason, ok := restricted[id]; ok {
+			t.Errorf("dispatchableSeedVectorIDs includes lab-restricted vector %q: %s", id, reason)
+		}
 	}
 }

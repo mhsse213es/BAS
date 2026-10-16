@@ -73,24 +73,89 @@ func configurationWeaknessVectors() ([]Vector, error) {
 	}
 	out = append(out, v2)
 
+	// AV-CONFIG-003 harness contract: a vector can be implemented without
+	// being generally dispatchable. This one is permanently excluded from
+	// every ordinary, general-purpose dispatchable scenario bundle (see
+	// LabRestrictedVectorIDs in eligibility.go, and the cross-package
+	// regression test in internal/avscenario that asserts it never
+	// appears in dispatchableSeedVectorIDs). Its definition is separated
+	// from its execution eligibility by three independent layers, each
+	// of which must pass before any mutating call is even attempted:
+	//
+	//  1. LabRestrictedVectorIDs -- a structural, catalog-level fact that
+	//     no caller can silently bypass by adding this ID to a different
+	//     dispatch list.
+	//  2. BAS_CONFIRM_AV_RTP_DISABLE_ATTEMPT -- an explicit, human-set
+	//     execution gate checked by the command itself (mirroring the
+	//     existing BAS_CONFIRM_VSS_DELETE gate in internal/rwevidence's
+	//     ransomware vertical). Absent the gate, the command SKIPs before
+	//     touching any product setting at all.
+	//  3. A real precondition check (Get-MpComputerStatus's
+	//     IsTamperProtected AND RealTimeProtectionEnabled) run even after
+	//     the gate is confirmed. If either is false, the command SKIPs
+	//     rather than attempting Set-MpPreference -- deliberately never
+	//     disabling protection merely to demonstrate that disabling
+	//     protection creates a gap. This is the "harmless, denied
+	//     configuration-change attempt" the test is designed around: it
+	//     only ever proceeds when a denial is the expected, safe outcome.
+	//
+	// After a genuine attempt, the command unconditionally restores
+	// Set-MpPreference -DisableRealtimeMonitoring $false regardless of
+	// outcome, then re-reads status to report the real resulting state --
+	// never inferring success from the absence of a thrown exception.
+	// Every SKIP path reports "restricted"/"untested" explicitly in its
+	// own stdout text; none of them is ever counted as a passing test by
+	// internal/avefficacy's dispatch bridge (a "skipped" CheckResult
+	// resolves Inconclusive there, never a fabricated success).
 	v3, err := NewVector(
 		"AV-CONFIG-003", 1, FamilyConfigurationWeakness,
 		"Attempt to disable real-time protection via an unauthorized path",
 		SeverityCritical,
 		[]Platform{PlatformWindowsWorkstation, PlatformWindowsServer},
 		[]RequiredCapability{CapabilityBehavioralNGAV},
-		"endpoint has tamper protection enabled; this vector must only run on a dedicated, non-production test endpoint, never a build or production host -- its CleanupCommand unconditionally attempts to restore real-time protection regardless of outcome",
+		"endpoint has tamper protection AND real-time protection both already enabled (re-verified by the command itself immediately before any attempt, never merely assumed); the explicit BAS_CONFIRM_AV_RTP_DISABLE_ATTEMPT execution gate is set; this vector must only run on a dedicated, isolated lab endpoint under its own execution gate, never a build/production host or a routine campaign",
 		avval.ClaimPrevention,
 		ExecutionTemplate{
-			Executor:       "powershell",
-			Command:        `Set-MpPreference -DisableRealtimeMonitoring $true`,
-			Description:    "attempt a permitted, harmless security-setting modification (disabling real-time monitoring) to measure whether tamper protection rejects the change and records the attempt",
-			CleanupCommand: `Set-MpPreference -DisableRealtimeMonitoring $false`,
+			Executor: "powershell",
+			Command: `$ErrorActionPreference = 'SilentlyContinue'
+if (-not $env:BAS_CONFIRM_AV_RTP_DISABLE_ATTEMPT) {
+  Write-Output "SKIP (restricted): BAS_CONFIRM_AV_RTP_DISABLE_ATTEMPT not set -- this vector requires an explicit execution gate and must never run outside a dedicated, isolated lab endpoint. [BAS-SIM-AVCONFIG003]"
+  return
+}
+$status = Get-MpComputerStatus -ErrorAction SilentlyContinue
+if (-not $status) {
+  Write-Output "SKIP (untested): Get-MpComputerStatus unavailable -- cannot verify preconditions. [BAS-SIM-AVCONFIG003]"
+  return
+}
+if (-not $status.IsTamperProtected -or -not $status.RealTimeProtectionEnabled) {
+  Write-Output "SKIP (restricted): preconditions not met (IsTamperProtected=$($status.IsTamperProtected), RealTimeProtectionEnabled=$($status.RealTimeProtectionEnabled)) -- both must already be true before this test attempts a change, so a denial is the expected outcome rather than a real risk. Never disabling protection merely to demonstrate a gap. [BAS-SIM-AVCONFIG003]"
+  return
+}
+$startedAt = Get-Date
+try { Set-MpPreference -DisableRealtimeMonitoring $true -ErrorAction Stop } catch {}
+Start-Sleep -Milliseconds 300
+$after = Get-MpComputerStatus -ErrorAction SilentlyContinue
+$afterRTP = if ($after) { $after.RealTimeProtectionEnabled } else { $null }
+try { Set-MpPreference -DisableRealtimeMonitoring $false -ErrorAction SilentlyContinue } catch {}
+$detection = 'UNAVAILABLE'
+try {
+  $events = Get-WinEvent -LogName 'Microsoft-Windows-Windows Defender/Operational' -ErrorAction Stop | Where-Object { $_.Id -eq 5013 -and $_.TimeCreated -ge $startedAt }
+  if ($events) { $detection = 'DETECTED' } else { $detection = 'NOT_OBSERVED' }
+} catch { $detection = 'UNAVAILABLE' }
+if ($afterRTP -eq $true) {
+  Write-Output "PASS: the unauthorized real-time-protection-disable attempt was denied -- real-time protection remained enabled. detection=$detection [BAS-SIM-AVCONFIG003]"
+} elseif ($afterRTP -eq $false) {
+  Write-Output "FAIL: real-time protection was actually disabled by the attempt despite Tamper Protection reporting enabled beforehand -- restored immediately. detection=$detection [BAS-SIM-AVCONFIG003]"
+} else {
+  Write-Output "SKIP (untested): could not determine the resulting protection state after the attempt. detection=$detection [BAS-SIM-AVCONFIG003]"
+}`,
+			Description:    "require an explicit human-set execution gate and a real pre-attempt Tamper-Protection/RTP status check, then attempt a permitted real-time-monitoring-disable change expecting it to be denied, unconditionally restoring the setting and re-verifying the resulting state afterward -- never attempting the change when a denial is not already the expected, safe outcome",
+			CleanupCommand: `try { Set-MpPreference -DisableRealtimeMonitoring $false -ErrorAction SilentlyContinue } catch {}`,
 		},
 		nil,
 		"a security-tampering attempt has no benign counterpart: the test specifically isolates whether the control resists an unauthorized configuration change, which has no legitimate-activity equivalent",
 		"unconditionally re-enable real-time monitoring via CleanupCommand regardless of whether the attempt succeeded or was rejected; verify via a post-test status read that protection is actually back on before considering the test complete",
-		"this vector must never be dispatched against this build host or any production endpoint; it is authored for a dedicated, isolated test lab only",
+		"this vector must never be dispatched against this build host, any production endpoint, or any routine/general-purpose campaign -- it is permanently excluded from internal/avscenario's dispatchableSeedVectorIDs (enforced by a cross-package regression test) and additionally requires the BAS_CONFIRM_AV_RTP_DISABLE_ATTEMPT execution gate plus a real pre-attempt precondition check, even when dispatched deliberately on an authorized lab endpoint; the EID 5013 detection check is corroborated by third-party Sigma rules and practitioner guides as Defender's Tamper-Protection-blocked-change event, but is NOT independently verified against Microsoft's own official Event ID reference -- other sources report conflicting IDs (3002, 5007, 5012) for adjacent Defender configuration events, so this detection check is best-effort and may under-report on a Defender build where the real EID differs",
 		StandardsMapping{ATTACKTechniques: []string{"T1562.001"}},
 		"manually authored from av.txt §2.D / §3 'Security tampering'",
 	)

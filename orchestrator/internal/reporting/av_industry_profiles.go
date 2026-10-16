@@ -45,7 +45,7 @@ type AVIndustryProfileReport struct {
 }
 
 // BuildAVIndustryProfileReport builds the report from avprofile's real,
-// current 6 industry/regional profiles -- the same data the
+// current 7 industry/regional profiles -- the same data the
 // /api/av/industry-profiles JSON endpoint serves, so the HTML report can
 // never drift from it.
 func BuildAVIndustryProfileReport() (AVIndustryProfileReport, error) {

@@ -30,7 +30,7 @@ type avIndustryProfileResponse struct {
 	Rationale            string                                `json:"rationale"`
 }
 
-// GetAVIndustryProfiles returns Audspect's real, current 6 AV/NGAV
+// GetAVIndustryProfiles returns Audspect's real, current 7 AV/NGAV
 // industry/regional profiles (internal/avprofile's
 // AudspectAVProfileCatalog), unmodified. Every ComplianceReference's
 // VerificationStatus and Note render verbatim -- never summarized or

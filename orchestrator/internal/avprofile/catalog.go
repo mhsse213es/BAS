@@ -8,13 +8,11 @@ import (
 
 // AudspectAVProfileCatalog returns Audspect's real, current seed
 // industry-and-regional-profile set (av.txt §3's industry table), each
-// validated against the real, live avcatalog output. Government/large
-// enterprises and MSPs, also named in av.txt's table, are deliberately
-// not mapped in this seed pass: no current catalog vector cleanly
-// represents their distinguishing concern (centralized multi-tenant
-// policy/auditability architecture, not a technique), and av.txt itself
-// says to "map each requirement to an actual control assertion and
-// evidence artifact" rather than force a weak mapping.
+// validated against the real, live avcatalog output. Government is now
+// mapped as a 7th profile (see below). MSPs remain deliberately
+// unmapped as a Profile -- see MSPControlObjectives's own doc comment
+// for why none of their 5 named priorities can honestly be assigned any
+// avcatalog vector at all.
 func AudspectAVProfileCatalog() ([]Profile, error) {
 	realCatalog, err := avcatalog.AudspectAVAttackCatalog()
 	if err != nil {
@@ -110,7 +108,29 @@ func AudspectAVProfileCatalog() ([]Profile, error) {
 		return nil, fmt.Errorf("loading seed profile catalog: %w", err)
 	}
 
-	profiles := []Profile{bfsi, nbfc, manufacturing, healthcare, india, uae}
+	nistGov, err := NewComplianceReference("NIST Cybersecurity Framework", Unverified,
+		"framework name only, used here because av.txt names no specific national framework for this row; a real government deployment may be bound to a different, jurisdiction-specific standard not asserted here", "")
+	if err != nil {
+		return nil, fmt.Errorf("loading seed profile catalog: %w", err)
+	}
+	govObjectives, err := governmentControlObjectives()
+	if err != nil {
+		return nil, fmt.Errorf("loading seed profile catalog: %w", err)
+	}
+	government, err := NewProfile("AVPROFILE-GOVERNMENT", "Government and Critical Infrastructure", ProfileIndustry,
+		governmentCoveredVectorIDs(govObjectives),
+		[]ComplianceReference{nistGov},
+		"government and critical-infrastructure endpoints concentrate on behavior that matters when a network is restricted or disconnected, on privileged administrator workstations, and on whether unauthorized configuration-tampering attempts are themselves auditable -- av.txt §3's own named Government priorities; three of its six named priorities (legacy/unsupported endpoints, centralized policy enforcement, constrained update delivery) have no honest vector mapping today and are recorded as explicit gaps in ControlObjectives rather than forced onto an unrelated vector",
+		"manually authored from av.txt §3's named Government item")
+	if err != nil {
+		return nil, fmt.Errorf("loading seed profile catalog: %w", err)
+	}
+	government, err = WithControlObjectives(government, govObjectives)
+	if err != nil {
+		return nil, fmt.Errorf("loading seed profile catalog: %w", err)
+	}
+
+	profiles := []Profile{bfsi, nbfc, manufacturing, healthcare, india, uae, government}
 	for _, p := range profiles {
 		if err := ValidateAgainstCatalog(p, realCatalog); err != nil {
 			return nil, fmt.Errorf("loading seed profile catalog: %w", err)

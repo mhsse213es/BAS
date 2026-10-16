@@ -28,25 +28,44 @@ This is the single place to check before claiming AV/NGAV Mastery is "done" or m
 
 **Why it's deferred:** User directive from earlier in this initiative explicitly deprioritized this relative to the Defender vertical. Not pursued further.
 
-### 4. `AV-CONFIG-003` (security tampering) — real, dispatchable PowerShell, explicitly lab-only, never excluded from code review but always excluded from dispatch
+### 4. `AV-CONFIG-003` (security tampering) — permanently restricted from ordinary dispatch by design
 
-**Status:** Open by design — this is a permanent scope boundary, not a gap to close.
+**Status:** Open by design — this is a permanent scope boundary, not a gap to close. Enforcement of the boundary is now structural (resolved 2026-10-16, see Resolved items #10).
 
-**What it is:** `internal/avcatalog/catalog_configweakness.go`'s `AV-CONFIG-003` vector runs `Set-MpPreference -DisableRealtimeMonitoring $true` (with an unconditional `CleanupCommand` restoring it to `$false`). Its `Preconditions`/`Limitations` fields state explicitly that it must only run on a dedicated, non-production test endpoint.
+**What it is:** `internal/avcatalog/catalog_configweakness.go`'s `AV-CONFIG-003` vector attempts a real-time-protection-disable change. It must never enter a general-purpose dispatchable bundle, never run against this build host, and never run against any production endpoint.
 
-**What this means today:** confirmed via direct grep (2026-10-16) that `AV-CONFIG-003` is absent from `dispatchableSeedVectorIDs` — it is never included in the generic AV assessment bundle, and was never executed by Claude against this build host or any real endpoint at any point in this initiative.
+**Resolution path:** only add this to any dispatchable set once there is a genuinely dedicated, disposable lab endpoint to run it against, with its execution gate (#10) deliberately set for that run — never this build host.
 
-**Resolution path:** only add this to any dispatchable set once there is a genuinely dedicated, disposable lab endpoint to run it against — never this build host.
+### 5. MSP industry profile — permanently unmapped by design
 
-### 5. Government/large-enterprise and MSP industry profiles — deliberately not mapped
+**Status:** Open by design, confirmed 2026-10-16 (see Resolved items #11) — not a gap to close, a permanent non-mapping. Government, previously grouped with MSP under this same item, is now partially mapped; see #11.
 
-**Status:** Open by design, not a gap — documented in `internal/avprofile/catalog.go`'s package doc comment.
+**What it is:** none of av.txt §3's 5 named MSP priorities (multi-tenant isolation, customer-specific policy drift, agent health across customer estates, inconsistent product configurations, evidence attribution to the correct tenant) describes a single-endpoint AV/NGAV technique — every one is a multi-tenant fleet/platform-management concern, the wrong axis for anything in `avcatalog`.
 
-**What's needed, if ever revisited:** `av.txt` §3's industry table names Government/large-enterprises and MSPs alongside the 4 industry + 2 regional profiles that were built (BFSI, NBFC, Manufacturing, Healthcare, India, UAE). Their distinguishing concern (multi-tenant/auditability architecture) is architectural, not technique-level — no current `avcatalog.Vector` cleanly represents it, so forcing a mapping would have been a weak one.
-
-**Resolution path:** only revisit if/when a vector genuinely represents a multi-tenant-management or MSP-auditability technique; mirrors WAF BAS Mastery's own precedent of mapping only 4 of 6 named industries for the same reason.
+**Resolution path:** only closes if a future vector genuinely tests a multi-tenant/fleet-management property — none of avcatalog's 15 single-endpoint vectors ever will, by construction.
 
 ## Resolved items
+
+### 10. `AV-CONFIG-003` eligibility, execution gate, and precondition-check — RESOLVED 2026-10-16
+
+**What was wrong:** the vector's permanent restriction (item #4) was documentary only — enforced by `AV-CONFIG-003` simply not appearing in `avscenario`'s `dispatchableSeedVectorIDs`, with no structural guard against it being added there later, and its command unconditionally attempted the real-time-protection-disable change with no execution gate and no real precondition check.
+
+**What changed:**
+- `internal/avcatalog/eligibility.go` (new): `LabRestrictedVectorIDs()` is now the single, authoritative, structural registry of vectors that must never enter a general-purpose dispatchable bundle. `internal/avscenario`'s `TestDispatchableSeedVectorIDs_NeverIncludesALabRestrictedVector` cross-checks the two packages and fails the moment anyone adds a lab-restricted vector to `dispatchableSeedVectorIDs` — a vector's definition (it has a real, runnable command) is now structurally separated from its execution eligibility, not just separated by convention.
+- `internal/avcatalog/catalog_configweakness.go`'s `AV-CONFIG-003` command now has two independent safety layers before it will ever touch `Set-MpPreference`: (1) an explicit `BAS_CONFIRM_AV_RTP_DISABLE_ATTEMPT` execution gate (mirroring `internal/rwevidence`'s existing `BAS_CONFIRM_VSS_DELETE` gate), and (2) a real `Get-MpComputerStatus` precondition check requiring both `IsTamperProtected` and `RealTimeProtectionEnabled` to already be true — i.e. it only ever attempts the change when a denial is the expected, safe outcome, never disabling protection merely to demonstrate that disabling protection creates a gap. Every SKIP path reports itself as `(restricted)` or `(untested)` in its own stdout text; a skipped `CheckResult` resolves `Inconclusive` through `internal/avefficacy`'s dispatch bridge, never a fabricated pass.
+- A best-effort detection check (Defender operational-log EID 5013, the Tamper-Protection-blocked-change event per third-party Sigma rules and practitioner guides, not independently verified against Microsoft's own official Event ID reference) was added to the command, disclosed as best-effort in `Limitations`.
+
+**Verified locally (this build host, read-only, gate never set, mutating call never executed):** confirmed the gate-not-set SKIP path fires correctly, and confirmed the real precondition check correctly reads `IsTamperProtected=False, RealTimeProtectionEnabled=False` on this machine — meaning even if the gate were set, this host's own real state would cause the script to SKIP rather than attempt the change. The mutating `Set-MpPreference` call was never run by Claude on this or any machine.
+
+### 11. Government and MSP industry profiles — Government partially mapped with honest per-requirement gaps, MSP confirmed fully unmappable — RESOLVED 2026-10-16
+
+**What was wrong:** item #5 (prior version) skipped both Government and MSP entirely as an all-or-nothing decision, with no per-requirement record of which of their named priorities might actually map to something real.
+
+**What changed:**
+- `internal/avprofile/objectives.go` (new): `ControlObjectiveCoverage` is a per-requirement mapping record (objective, the real vector that satisfies it if one exists, rationale, required evidence, and an explicit `Covered`/`Gap` status), validated at construction so a `Gap` can never carry a disguised vector mapping and a `Covered` entry can never omit one. `Profile` gained an optional `ControlObjectives` field (`WithControlObjectives`); `ValidateAgainstCatalog` now also validates it.
+- `internal/avprofile/government.go` (new): `AVPROFILE-GOVERNMENT` (7th profile) maps 3 of av.txt §3's 6 named Government priorities to a real vector each — restricted/disconnected networks → `AV-CONFIG-002`, privileged workstations → `AV-CREDACCESS-001`, auditability → `AV-CONFIG-003` — and records the other 3 (legacy/unsupported endpoints, centralized policy enforcement, constrained update delivery) as explicit gaps, each naming the real reason: the closest existing capability for policy-enforcement/update-currency is `avval`'s evaluation-layer snapshot/drift comparison given caller-supplied evidence, not a Vector execution at all.
+- `MSPControlObjectives()` records all 5 of av.txt §3's named MSP priorities as gaps, each with its own real reason (every one is a multi-tenant fleet/platform-management concern, the wrong axis for any single-endpoint `avcatalog` vector). No `AVPROFILE-MSP` is minted — enforced by `TestMSPControlObjectives_AllFiveAreGaps_NoMSPProfileMinted`.
+- Fixed 3 stale hardcoded profile-count assertions found via grep: `internal/avprofile/catalog_test.go` (6→7, renamed to `...ReturnsSevenProfiles`, industry 4→5), `internal/reporting/av_industry_profiles_test.go` (6→7), plus the doc-comment counts in `internal/api/av_industry_profiles_handlers.go` and `internal/reporting/av_industry_profiles.go`.
 
 ### 8. `AV-BEHAV-001` (process injection) — RESOLVED 2026-10-16: real harness built, dispatch-correlation bridge built, verified locally; real lab-AV/NGAV validation remains separate open work
 

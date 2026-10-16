@@ -132,3 +132,62 @@ func TestValidateAgainstCatalog_MissingID_ReturnsErrorNamingIt(t *testing.T) {
 		t.Errorf("error = %q, want it to name the missing ID %q", err.Error(), "NOTAREALID-999")
 	}
 }
+
+func TestWithControlObjectives_Valid_Succeeds(t *testing.T) {
+	base := mustProfile(t, []string{"AV-CONFIG-002"})
+	covered, err := NewControlObjectiveCoverage("restricted or disconnected networks", "AV-CONFIG-002", "rationale", "evidence", CoverageStatusCovered)
+	if err != nil {
+		t.Fatalf("NewControlObjectiveCoverage: %v", err)
+	}
+	p, err := WithControlObjectives(base, []ControlObjectiveCoverage{covered})
+	if err != nil {
+		t.Fatalf("WithControlObjectives: %v", err)
+	}
+	if len(p.ControlObjectives) != 1 {
+		t.Fatalf("ControlObjectives len = %d, want 1", len(p.ControlObjectives))
+	}
+}
+
+func TestWithControlObjectives_Empty_Rejected(t *testing.T) {
+	base := mustProfile(t, []string{"AV-CONFIG-002"})
+	if _, err := WithControlObjectives(base, nil); err == nil {
+		t.Fatal("want error for empty objectives, got nil")
+	}
+}
+
+func TestWithControlObjectives_DuplicateObjective_Rejected(t *testing.T) {
+	base := mustProfile(t, []string{"AV-CONFIG-002"})
+	o1, err := NewControlObjectiveCoverage("same objective", "AV-CONFIG-002", "r", "e", CoverageStatusCovered)
+	if err != nil {
+		t.Fatalf("NewControlObjectiveCoverage: %v", err)
+	}
+	o2, err := NewControlObjectiveCoverage("same objective", "", "a different gap reason", "", CoverageStatusGap)
+	if err != nil {
+		t.Fatalf("NewControlObjectiveCoverage: %v", err)
+	}
+	if _, err := WithControlObjectives(base, []ControlObjectiveCoverage{o1, o2}); err == nil {
+		t.Fatal("want error for a duplicate objective name, got nil")
+	}
+}
+
+// Review Focus: ValidateAgainstCatalog must also catch a stale VectorID
+// inside ControlObjectives, not just the flat VectorIDs list.
+func TestValidateAgainstCatalog_StaleControlObjectiveVectorID_ReturnsErrorNamingIt(t *testing.T) {
+	base := mustProfile(t, []string{"AV-FILE-001"})
+	covered, err := NewControlObjectiveCoverage("some objective", "NOTAREALID-999", "r", "e", CoverageStatusCovered)
+	if err != nil {
+		t.Fatalf("NewControlObjectiveCoverage: %v", err)
+	}
+	profile, err := WithControlObjectives(base, []ControlObjectiveCoverage{covered})
+	if err != nil {
+		t.Fatalf("WithControlObjectives: %v", err)
+	}
+	catalog := []avcatalog.Vector{{ID: "AV-FILE-001"}}
+	err = ValidateAgainstCatalog(profile, catalog)
+	if err == nil {
+		t.Fatal("want error for a stale ControlObjectives vector ID, got nil")
+	}
+	if !strings.Contains(err.Error(), "NOTAREALID-999") {
+		t.Errorf("error = %q, want it to name the stale ID %q", err.Error(), "NOTAREALID-999")
+	}
+}
