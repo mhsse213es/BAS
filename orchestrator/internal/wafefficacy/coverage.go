@@ -77,6 +77,19 @@ func (r CoverageReport) countStatus(status CoverageStatus) int {
 	return n
 }
 
+// DomainsForDisplay returns every domain this report holds, in the
+// order they were given to NewCoverageReport -- the only way a caller
+// outside this package can read domain-level detail (DomainID,
+// DomainName, Status, ExclusionReason) for rendering. It exists
+// because CoverageReport's domains field is unexported by design, so
+// a reporting layer cannot bypass NewCoverageReport's validation by
+// constructing a CoverageReport directly.
+func (r CoverageReport) DomainsForDisplay() []DomainCoverage {
+	out := make([]DomainCoverage, len(r.domains))
+	copy(out, r.domains)
+	return out
+}
+
 // Exclusions renders every excluded domain's own documented reason.
 func (r CoverageReport) Exclusions() []string {
 	var out []string

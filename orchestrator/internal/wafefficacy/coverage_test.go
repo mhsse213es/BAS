@@ -105,6 +105,17 @@ func TestSummary_IncludesCoveredCountAndDenominator(t *testing.T) {
 	}
 }
 
+func TestDomainsForDisplay_ReturnsAllDomainsInOrder(t *testing.T) {
+	r := mustReport(t)
+	got := r.DomainsForDisplay()
+	if len(got) != 3 {
+		t.Fatalf("len(DomainsForDisplay()) = %d, want 3", len(got))
+	}
+	if got[0].DomainID != "01" || got[1].DomainID != "02" || got[2].DomainID != "03" {
+		t.Errorf("DomainsForDisplay() order = %v, want 01,02,03", []string{got[0].DomainID, got[1].DomainID, got[2].DomainID})
+	}
+}
+
 func contains(s, substr string) bool {
 	return len(s) >= len(substr) && (func() bool {
 		for i := 0; i+len(substr) <= len(s); i++ {
