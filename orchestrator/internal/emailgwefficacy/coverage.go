@@ -81,6 +81,16 @@ func (r CoverageReport) countStatus(status CoverageStatus) int {
 	return n
 }
 
+// Areas returns a copy of every area this report was built from --
+// a copy, so a caller (e.g. an API handler rendering this report)
+// can never mutate the report's own internal state by holding this
+// slice.
+func (r CoverageReport) Areas() []AreaCoverage {
+	areas := make([]AreaCoverage, len(r.areas))
+	copy(areas, r.areas)
+	return areas
+}
+
 // Exclusions renders every excluded area's own documented reason -- a
 // reader must never need to query a separate field to learn why an
 // area was excluded.
