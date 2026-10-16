@@ -86,6 +86,14 @@ func TestBuildPrimaryStep_RealCommand_Succeeds(t *testing.T) {
 	if step.Executor != "powershell" {
 		t.Errorf("Executor = %q, want powershell", step.Executor)
 	}
+	// Review Focus: a static-command step with no Framework set reports
+	// with an empty "component" downstream (internal/scenario/builder.go's
+	// BuildStepMeta sets meta.Component = st.Framework directly) -- every
+	// other static-command scenario in this codebase (em-*.yaml, etc.)
+	// sets framework: custom for exactly this reason.
+	if step.Framework != "custom" {
+		t.Errorf("Framework = %q, want %q", step.Framework, "custom")
+	}
 	if step.TechniqueID != "T1059.001" {
 		t.Errorf("TechniqueID = %q, want T1059.001", step.TechniqueID)
 	}

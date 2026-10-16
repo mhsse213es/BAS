@@ -1,0 +1,264 @@
+id: av-ngav-assessment
+name: AV/NGAV Assessment
+description: 'Antivirus and next-gen AV assessment: concretely dispatchable file-based, script/fileless, behavioral, network-delivered, persistence, and false-positive-resilience vectors from internal/avcatalog''s seed catalog. Every step is a harmless, disposable, purpose-built simulation with its own cleanup -- never a real attack payload.'
+author: Audspect Research
+tags:
+    - av-ngav-mastery
+    - antivirus
+    - ngav
+    - endpoint-protection
+mitre_phases:
+    - execution
+    - defense-evasion
+    - persistence
+steps:
+    - name: 'AV-FILE-001: Known test artifact via a user-writable download/temp directory (primary)'
+      technique_id: T1204.002
+      framework: custom
+      command: Set-Content -Path "$env:TEMP\avtest-eicar.txt" -Value 'X5O!P%@AP[4\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*'
+      test_index: 0
+      executor: powershell
+      timeout_sec: 30
+      cleanup: Remove-Item -Path "$env:TEMP\avtest-eicar.txt" -Force -ErrorAction SilentlyContinue
+      blast_radius: write the industry-standard EICAR anti-malware test string to a user-writable temp path, using an approved test artifact rather than live malware
+      reversible: true
+      production_safe: true
+      threat_intel_sources:
+        - reference: manually authored from av.txt §2.A
+    - name: 'AV-FILE-001: Known test artifact via a user-writable download/temp directory (counterpart)'
+      technique_id: T1204.002
+      framework: custom
+      command: Set-Content -Path "$env:TEMP\avtest-benign.txt" -Value 'This is an ordinary harmless test file.'
+      test_index: 0
+      executor: powershell
+      timeout_sec: 30
+      cleanup: Remove-Item -Path "$env:TEMP\avtest-benign.txt" -Force -ErrorAction SilentlyContinue
+      blast_radius: write an ordinary harmless text file to the same directory, proving the AV is not merely blocking by location
+      reversible: true
+      production_safe: true
+      threat_intel_sources:
+        - reference: manually authored from av.txt §2.A
+    - name: 'AV-FILE-002: Nested archive containing a known test artifact (primary)'
+      technique_id: T1027.002
+      framework: custom
+      command: Set-Content -Path "$env:TEMP\avtest-eicar-nested.txt" -Value 'X5O!P%@AP[4\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*'; Compress-Archive -Path "$env:TEMP\avtest-eicar-nested.txt" -DestinationPath "$env:TEMP\avtest-archive.zip" -Force
+      test_index: 0
+      executor: powershell
+      timeout_sec: 30
+      cleanup: Remove-Item -Path "$env:TEMP\avtest-eicar-nested.txt","$env:TEMP\avtest-archive.zip" -Force -ErrorAction SilentlyContinue
+      blast_radius: write the EICAR test string to a temp file, then compress it into a zip archive in a user-writable temp path, to exercise extraction-time (not just at-rest) scanning
+      reversible: true
+      production_safe: true
+      threat_intel_sources:
+        - reference: manually authored from av.txt §2.A
+    - name: 'AV-SCRIPT-001: Encoded PowerShell command execution (primary)'
+      technique_id: T1059.001
+      framework: custom
+      command: $inner = 'Set-Content -Path "$env:TEMP\avtest-script-marker.txt" -Value marker'; $enc = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($inner)); powershell.exe -NoProfile -EncodedCommand $enc
+      test_index: 0
+      executor: powershell
+      timeout_sec: 30
+      cleanup: Remove-Item -Path "$env:TEMP\avtest-script-marker.txt" -Force -ErrorAction SilentlyContinue
+      blast_radius: run a base64-encoded PowerShell one-liner mimicking a common encoded-command evasion pattern, whose actual payload only writes a harmless marker file
+      reversible: true
+      production_safe: true
+      threat_intel_sources:
+        - reference: manually authored from av.txt §2.B
+    - name: 'AV-SCRIPT-001: Encoded PowerShell command execution (counterpart)'
+      technique_id: T1059.001
+      framework: custom
+      command: Set-Content -Path "$env:TEMP\avtest-script-marker.txt" -Value 'marker'
+      test_index: 0
+      executor: powershell
+      timeout_sec: 30
+      cleanup: Remove-Item -Path "$env:TEMP\avtest-script-marker.txt" -Force -ErrorAction SilentlyContinue
+      blast_radius: run the identical marker-file-write action via a plain, unencoded PowerShell command, proving the control is not simply penalizing PowerShell execution generally
+      reversible: true
+      production_safe: true
+      threat_intel_sources:
+        - reference: manually authored from av.txt §2.B
+    - name: 'AV-SCRIPT-002: LOLBin abuse: certutil used for file transfer instead of its intended certificate role (primary)'
+      technique_id: T1105
+      framework: custom
+      command: certutil.exe -urlcache -split -f "http://127.0.0.1:1/avtest-marker" "%TEMP%\avtest-certutil-fetch.tmp"
+      test_index: 0
+      executor: cmd
+      timeout_sec: 30
+      cleanup: del "%TEMP%\avtest-certutil-fetch.tmp" 2>nul
+      blast_radius: invoke certutil.exe's undocumented download capability against an unreachable loopback port (connection refused immediately, nothing ever fetched), mimicking LOLBin-based file retrieval without actually retrieving or executing any payload
+      reversible: true
+      production_safe: true
+      threat_intel_sources:
+        - reference: manually authored from av.txt §2.B
+    - name: 'AV-BEHAV-001: Self-injection into a disposable test process (primary)'
+      technique_id: T1055
+      framework: custom
+      command: |-
+        $ErrorActionPreference = 'SilentlyContinue'
+        $marker = '[BAS-SIM-AVBEHAV001] T1055 injection-precursor marker - no code, no thread'
+        $sig = @'
+        using System;
+        using System.Runtime.InteropServices;
+        public static class BasAvBehav001 {
+          [DllImport("kernel32.dll", SetLastError=true)] public static extern IntPtr OpenProcess(uint a, bool i, int pid);
+          [DllImport("kernel32.dll", SetLastError=true)] public static extern IntPtr VirtualAllocEx(IntPtr h, IntPtr addr, uint size, uint type, uint prot);
+          [DllImport("kernel32.dll", SetLastError=true)] public static extern bool WriteProcessMemory(IntPtr h, IntPtr addr, byte[] buf, uint size, out UIntPtr written);
+          [DllImport("kernel32.dll", SetLastError=true)] public static extern bool VirtualFreeEx(IntPtr h, IntPtr addr, uint size, uint type);
+          [DllImport("kernel32.dll", SetLastError=true)] public static extern bool CloseHandle(IntPtr h);
+        }
+        '@
+        try { Add-Type -TypeDefinition $sig -ErrorAction Stop } catch { Write-Output "SKIP: could not compile P/Invoke probe (no .NET compiler available)."; return }
+        $startedAt = Get-Date
+        $t = Start-Process 'notepad.exe' -WindowStyle Hidden -PassThru
+        Start-Sleep -Milliseconds 300
+        if (-not $t) { Write-Output "SKIP: could not start disposable test process."; return }
+        $h = [BasAvBehav001]::OpenProcess(0x002A, $false, $t.Id)
+        $wrote = $false
+        if ($h -ne [IntPtr]::Zero) {
+          $buf = [System.Text.Encoding]::ASCII.GetBytes($marker)
+          $rem = [BasAvBehav001]::VirtualAllocEx($h, [IntPtr]::Zero, [uint32]$buf.Length, 0x3000, 0x04)
+          if ($rem -ne [IntPtr]::Zero) {
+            $written = [UIntPtr]::Zero
+            $wrote = [BasAvBehav001]::WriteProcessMemory($h, $rem, $buf, [uint32]$buf.Length, [ref]$written)
+            [void][BasAvBehav001]::VirtualFreeEx($h, $rem, 0, 0x8000)
+          }
+          [void][BasAvBehav001]::CloseHandle($h)
+        }
+        Stop-Process -Id $t.Id -Force -ErrorAction SilentlyContinue
+        $detection = 'UNAVAILABLE'
+        try {
+          $events = Get-WinEvent -LogName 'Microsoft-Windows-Windows Defender/Operational' -ErrorAction Stop | Where-Object { ($_.Id -eq 1116 -or $_.Id -eq 1117) -and $_.TimeCreated -ge $startedAt }
+          if ($events) { $detection = 'DETECTED' } else { $detection = 'NOT_OBSERVED' }
+        } catch { $detection = 'UNAVAILABLE' }
+        if ($wrote) { Write-Output "FAIL: VirtualAllocEx + WriteProcessMemory into a disposable process succeeded unblocked -- code-injection primitives are available. detection=$detection [BAS-SIM-AVBEHAV001]" }
+        else { Write-Output "PASS: remote memory allocation/write was denied or prevented. detection=$detection [BAS-SIM-AVBEHAV001]" }
+      test_index: 0
+      executor: powershell
+      timeout_sec: 30
+      cleanup: Get-Process notepad -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowTitle -eq '' } | Stop-Process -Force -ErrorAction SilentlyContinue
+      blast_radius: spawn a disposable notepad.exe and attempt OpenProcess+VirtualAllocEx+WriteProcessMemory of a benign marker into it (the T1055 injection precursor, no remote thread, no code execution), then check this endpoint's own local Windows Defender operational log for a correlating detection event
+      reversible: true
+      production_safe: true
+      threat_intel_sources:
+        - reference: manually authored from av.txt §2.C
+    - name: 'AV-BEHAV-002: Suspicious child-process chain from a simulated document reader (primary)'
+      technique_id: T1566.001
+      framework: custom
+      command: Start-Process -FilePath "powershell.exe" -ArgumentList '-NoProfile','-Command','Set-Content -Path "$env:TEMP\avtest-docreader-marker.txt" -Value marker' -Wait -WindowStyle Hidden
+      test_index: 0
+      executor: powershell
+      timeout_sec: 30
+      cleanup: Remove-Item -Path "$env:TEMP\avtest-docreader-marker.txt" -Force -ErrorAction SilentlyContinue
+      blast_radius: spawn a script interpreter (powershell.exe) as a child process, simulating a document-reader application whose child process's only action is a benign marker write
+      reversible: true
+      production_safe: true
+      threat_intel_sources:
+        - reference: manually authored from av.txt §2.C
+    - name: 'AV-BEHAV-002: Suspicious child-process chain from a simulated document reader (counterpart)'
+      technique_id: T1566.001
+      framework: custom
+      command: Start-Process -FilePath "cmd.exe" -ArgumentList '/c','echo printing' -Wait -WindowStyle Hidden
+      test_index: 0
+      executor: powershell
+      timeout_sec: 30
+      blast_radius: spawn the same simulated document-reader application's normal, expected non-interpreter helper child process, with no persistent side effect
+      reversible: true
+      production_safe: true
+      threat_intel_sources:
+        - reference: manually authored from av.txt §2.C
+    - name: 'AV-NET-001: HTTP download of a known test artifact (primary)'
+      technique_id: T1105
+      framework: custom
+      command: Invoke-WebRequest -Uri "http://avtest-host.local/eicar-test.txt" -OutFile "$env:TEMP\avtest-network-download.txt" -UseBasicParsing
+      test_index: 0
+      executor: powershell
+      timeout_sec: 30
+      cleanup: Remove-Item -Path "$env:TEMP\avtest-network-download.txt" -Force -ErrorAction SilentlyContinue
+      blast_radius: download the EICAR test artifact over plain HTTP to a user-writable temp path, to exercise download-time scanning and any web-gateway/network control that may intercept the request first
+      reversible: true
+      production_safe: true
+      threat_intel_sources:
+        - reference: manually authored from av.txt §2.E
+    - name: 'AV-PERSIST-001: Unauthorized Run-key persistence simulation (primary)'
+      technique_id: T1547.001
+      framework: custom
+      command: New-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' -Name 'AVTestMarker' -Value 'cmd.exe /c exit' -Force
+      test_index: 0
+      executor: powershell
+      timeout_sec: 30
+      cleanup: Remove-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' -Name 'AVTestMarker' -Force -ErrorAction SilentlyContinue
+      blast_radius: add a disposable test value to the current user's Run key, whose command only performs a no-op exit -- never a real malicious payload or a system-wide (HKLM) key
+      reversible: true
+      production_safe: true
+      threat_intel_sources:
+        - reference: manually authored from av.txt §2.G
+    - name: 'AV-PERSIST-001: Unauthorized Run-key persistence simulation (counterpart)'
+      technique_id: T1547.001
+      framework: custom
+      command: New-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' -Name 'AVTestLegitInstaller' -Value 'cmd.exe /c exit' -Force
+      test_index: 0
+      executor: powershell
+      timeout_sec: 30
+      cleanup: Remove-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' -Name 'AVTestLegitInstaller' -Force -ErrorAction SilentlyContinue
+      blast_radius: simulate a legitimate software installer adding its own Run-key entry during a normal install flow, proving the control is not flagging Run-key writes universally
+      reversible: true
+      production_safe: true
+      threat_intel_sources:
+        - reference: manually authored from av.txt §2.G
+    - name: 'AV-PERSIST-002: Suspicious scheduled task creation simulation (primary)'
+      technique_id: T1053.005
+      framework: custom
+      command: schtasks /create /tn "AVTestMarkerTask" /tr "cmd.exe /c exit" /sc onlogon /f
+      test_index: 0
+      executor: cmd
+      timeout_sec: 30
+      cleanup: schtasks /delete /tn "AVTestMarkerTask" /f
+      blast_radius: create a disposable test scheduled task that runs at logon, whose action is a no-op exit
+      reversible: true
+      production_safe: true
+      threat_intel_sources:
+        - reference: manually authored from av.txt §2.G
+    - name: 'AV-PERSIST-002: Suspicious scheduled task creation simulation (counterpart)'
+      technique_id: T1053.005
+      framework: custom
+      command: schtasks /create /tn "AVTestLegitUpdaterTask" /tr "cmd.exe /c exit" /sc onlogon /f
+      test_index: 0
+      executor: cmd
+      timeout_sec: 30
+      cleanup: schtasks /delete /tn "AVTestLegitUpdaterTask" /f
+      blast_radius: simulate a legitimate software updater creating its own scheduled task during a normal update flow
+      reversible: true
+      production_safe: true
+      threat_intel_sources:
+        - reference: manually authored from av.txt §2.G
+    - name: 'AV-FP-001: Legitimate signed business script execution (primary)'
+      technique_id: T1059.001
+      framework: custom
+      command: Set-Content -Path "$env:TEMP\avtest-business-script-marker.txt" -Value 'business script ran'
+      test_index: 0
+      executor: powershell
+      timeout_sec: 30
+      cleanup: Remove-Item -Path "$env:TEMP\avtest-business-script-marker.txt" -Force -ErrorAction SilentlyContinue
+      blast_radius: simulate an approved, digitally signed internal business automation script's normal benign function (a disposable marker write)
+      reversible: true
+      production_safe: true
+      threat_intel_sources:
+        - reference: manually authored from av.txt §2.H
+    - name: 'AV-FP-002: High-I/O legitimate workload during active scanning (primary)'
+      technique_id: T1499.003
+      framework: custom
+      command: $dir = "$env:TEMP\avtest-highio"; New-Item -ItemType Directory -Path $dir -Force | Out-Null; $sw = [Diagnostics.Stopwatch]::StartNew(); while ($sw.Elapsed.TotalSeconds -lt 60) { 1..50 | ForEach-Object { Set-Content -Path "$dir\f$_.tmp" -Value ([guid]::NewGuid().ToString()) }; Get-ChildItem $dir | Remove-Item -Force }
+      test_index: 0
+      executor: powershell
+      timeout_sec: 30
+      cleanup: Remove-Item -Path "$env:TEMP\avtest-highio" -Recurse -Force -ErrorAction SilentlyContinue
+      blast_radius: run a 60-second high-I/O loop writing and deleting many small disposable files in a temp directory while on-access scanning is active, to measure whether the workload is blocked, throttled past an acceptable threshold, or allowed to complete
+      reversible: true
+      production_safe: true
+      threat_intel_sources:
+        - reference: manually authored from av.txt §2.H
+executable: true
+supported_os:
+    - windows
+    - linux
+    - darwin

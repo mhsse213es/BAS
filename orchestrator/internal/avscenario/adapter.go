@@ -98,6 +98,7 @@ func buildStepFromExecution(vector avcatalog.Vector, legLabel string, exec avcat
 	step := scenario.Step{
 		Name:        fmt.Sprintf("%s: %s (%s)", vector.ID, vector.Name, legLabel),
 		TechniqueID: technique,
+		Framework:   "custom",
 		Executor:    exec.Executor,
 		Command:     exec.Command,
 		TimeoutSec:  defaultTimeoutSec,
