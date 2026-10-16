@@ -945,6 +945,14 @@ func main() {
 	}
 
 	if cfg.ValidationLabAgentID != "" {
+		// Make the configured agent the sole factory lab so an operator never
+		// flags it by hand -- is_factory_lab is required for dispatch (see
+		// EnsureSoleFactoryLabAgent). Non-fatal: the agent may just not be
+		// enrolled yet, and the orchestrator below refuses cleanly until the
+		// flag lands on a later restart.
+		if err := validationlab.EnsureSoleFactoryLabAgent(context.Background(), pool, cfg.ValidationLabAgentID); err != nil {
+			log.Printf("[validationlab] WARNING: could not set is_factory_lab for %s: %v", cfg.ValidationLabAgentID, err)
+		}
 		pollMinutes := cfg.ValidationLabPollMinutes
 		if pollMinutes <= 0 {
 			pollMinutes = 5
