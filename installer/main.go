@@ -12,7 +12,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"syscall"
-	"time"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
@@ -492,12 +491,23 @@ func runInstall() {
 	}
 	appendStatus("[2/4] Agent extracted to: " + agentPath)
 
-	appendStatus("[3/4] Installing Audspect Agent service...")
+	appendStatus("[3/4] Fetching deployment CA and installing service...")
+	caPath, err := fetchDeploymentCA(serverURL, installDir)
+	if err != nil {
+		appendStatus("[ERROR] " + err.Error())
+		appendStatus("       Without the deployment CA the agent cannot establish mTLS and")
+		appendStatus("       would be stranded on legacy transport. Check the Server URL.")
+		procEnableWindow.Call(hInstBtn, 1)
+		installing = false
+		return
+	}
+	appendStatus("[3/4] Deployment CA saved: " + caPath)
 	cmd := exec.Command(agentPath,
 		"--install",
 		"--server", serverURL,
 		"--env", envLabel,
 		"--secret", secret,
+		"--ca-root", caPath,
 	)
 	cmd.Dir = installDir
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
@@ -599,12 +609,9 @@ $s.Save()`
 }
 
 func validateEnrollment(serverURL, secret string) error {
-	client := &http.Client{
-		Timeout: 10 * time.Second,
-		CheckRedirect: func(*http.Request, []*http.Request) error {
-			return http.ErrUseLastResponse
-		},
-	}
+	// Pre-trust bootstrap: the default deployment serves a self-signed cert,
+	// so verification must be skipped here exactly as for the CA fetch below.
+	client := bootstrapHTTPClient()
 	req, err := http.NewRequest(http.MethodGet, serverURL+"/health", nil)
 	if err != nil {
 		return fmt.Errorf("invalid URL: %w", err)
