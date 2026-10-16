@@ -4,7 +4,10 @@ import "testing"
 
 // T1562 (Impair Defenses) -> defense-evasion; T1547 (Boot or Logon Autostart
 // Execution) -> persistence, privilege-escalation. T1087 (Account Discovery)
-// -> discovery. All three verified directly against
+// -> discovery. T1048 (Exfiltration Over Alternative Protocol) -> exfiltration;
+// T1021 (Remote Services) -> lateral-movement -- both single-tactic, so the
+// defense-evasion pairs below genuinely fire from two distinct components, not
+// from one dual-tagged technique. All verified directly against
 // internal/reporting/attackdata/attack_enrichment.json before writing this
 // test, not guessed.
 
@@ -27,6 +30,28 @@ func TestCombinatorialRisk_FlagsDefenseEvasionPlusExecution(t *testing.T) {
 	_, err := combinatorialRisk(components)
 	if err == nil {
 		t.Fatal("expected defense-evasion + execution to be flagged as an elevated-risk combination")
+	}
+}
+
+func TestCombinatorialRisk_FlagsDefenseEvasionPlusExfiltration(t *testing.T) {
+	components := []loadedComponent{
+		{techniqueID: "T1562"}, // defense-evasion
+		{techniqueID: "T1048"}, // exfiltration
+	}
+	_, err := combinatorialRisk(components)
+	if err == nil {
+		t.Fatal("expected defense-evasion + exfiltration to be flagged as an elevated-risk combination")
+	}
+}
+
+func TestCombinatorialRisk_FlagsDefenseEvasionPlusLateralMovement(t *testing.T) {
+	components := []loadedComponent{
+		{techniqueID: "T1562"}, // defense-evasion
+		{techniqueID: "T1021"}, // lateral-movement
+	}
+	_, err := combinatorialRisk(components)
+	if err == nil {
+		t.Fatal("expected defense-evasion + lateral-movement to be flagged as an elevated-risk combination")
 	}
 }
 

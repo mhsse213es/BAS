@@ -8,8 +8,12 @@ import (
 )
 
 const (
-	combinatorialClassifier        = "combinatorial"
-	combinatorialClassifierVersion = "1"
+	combinatorialClassifier = "combinatorial"
+	// v2 added the defense-evasion + exfiltration and defense-evasion +
+	// lateral-movement pairs (see combinationRiskCatalog). Bumped so a
+	// content_safety_verdicts PASS row records which rule set it was checked
+	// against -- a v1 PASS did not see these pairs.
+	combinatorialClassifierVersion = "2"
 )
 
 // tacticPairRisk names one unordered pair of MITRE ATT&CK tactics whose
@@ -36,6 +40,24 @@ var combinationRiskCatalog = []tacticPairRisk{
 	{
 		tacticA: "defense-evasion", tacticB: "execution",
 		reason: "disabling defenses then executing removes the observability this execution step's reversibility assumed",
+	},
+	// v2 additions (spec §4 deferred candidates, promoted once the mechanism
+	// was proven). Both pairs have near-zero single-technique tactic
+	// co-occurrence in the embedded ATT&CK dataset (exfiltration: 0 techniques
+	// carry defense-evasion too; lateral-movement: only the T1550 family, which
+	// genuinely is both tactics), so they fire on a real two-part combination
+	// rather than over-refusing a single dual-tagged technique. The
+	// defense-evasion + persistence/privilege-escalation combination was
+	// deliberately NOT added here: 78 single techniques carry both of those,
+	// so a presence-based rule (this check unions tactics, it is not
+	// component-attributed) would refuse most persistence compositions outright.
+	{
+		tacticA: "defense-evasion", tacticB: "exfiltration",
+		reason: "disabling defenses then exfiltrating removes the egress observability this exfiltration step's safe rating assumed",
+	},
+	{
+		tacticA: "defense-evasion", tacticB: "lateral-movement",
+		reason: "disabling defenses then moving laterally removes the observability and blast-radius containment this lateral-movement step's safe rating assumed",
 	},
 }
 
