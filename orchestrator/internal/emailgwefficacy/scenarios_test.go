@@ -368,5 +368,11 @@ func TestScenarioBuilders_NeverNameARealDomain(t *testing.T) {
 		if !strings.HasSuffix(exp.Recipient, ".test") {
 			t.Errorf("message class %q Recipient %q is not in the synthetic .test namespace", exp.MessageClass, exp.Recipient)
 		}
+		if exp.EnvelopeFrom != "" && !strings.HasSuffix(exp.EnvelopeFrom, ".test") {
+			t.Errorf("message class %q EnvelopeFrom %q is not in the synthetic .test namespace", exp.MessageClass, exp.EnvelopeFrom)
+		}
+		if exp.HeaderFrom != "" && !strings.Contains(exp.HeaderFrom, ".test") {
+			t.Errorf("message class %q HeaderFrom %q is not in the synthetic .test namespace", exp.MessageClass, exp.HeaderFrom)
+		}
 	}
 }

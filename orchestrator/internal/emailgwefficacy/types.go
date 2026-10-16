@@ -55,6 +55,21 @@ type MailExpectation struct {
 	ExpectedAction ExpectedMailAction `json:"expectedAction"`
 	ControlProduct string             `json:"controlProduct"`
 	Note           string             `json:"note,omitempty"`
+	// EnvelopeFrom and HeaderFrom are SenderProfile's own concrete,
+	// SMTP-sendable realization -- what InjectScenarioMessage actually
+	// puts on the wire via exercise.SpoofableSMTPInjector. Always a
+	// fabricated, synthetic address, never a real customer, partner,
+	// or brand domain. Empty EnvelopeFrom is a deliberate, checked
+	// signal that this expectation is NOT yet wired for real
+	// injection -- some branches need a capability this package
+	// doesn't have (real DKIM signing for a genuinely DKIM-aligned
+	// message, a MIME attachment, or an authenticated-internal-sender
+	// mechanism for outbound mail) -- see each scenario builder's own
+	// Note for which, and injection.go's own package comment for the
+	// full list. HeaderFrom defaults to EnvelopeFrom when empty,
+	// mirroring SpoofableSMTPInjector's own default.
+	EnvelopeFrom string `json:"envelopeFrom,omitempty"`
+	HeaderFrom   string `json:"headerFrom,omitempty"`
 }
 
 // Ref returns the MessageRef an evidence provider must be queried

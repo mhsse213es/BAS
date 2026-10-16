@@ -21,11 +21,13 @@ func SPFAlignmentExpectation(pass bool) MailExpectation {
 	if pass {
 		exp.MessageClass = "spf-pass"
 		exp.ExpectedAction = ExpectedDeliver
-		exp.Note = "synthetic sender with an SPF record that aligns with the envelope-from domain"
+		exp.Note = "synthetic sender with an SPF record that aligns with the envelope-from domain -- NOT wired for real injection: a genuine SPF pass requires a lab domain whose published SPF record actually authorizes Audspect's own sending IP, infrastructure this package does not provision"
 	} else {
 		exp.MessageClass = "spf-fail"
 		exp.ExpectedAction = ExpectedQuarantine
 		exp.Note = "synthetic sender spoofing an envelope-from domain with no matching SPF record"
+		exp.EnvelopeFrom = "spoofed-exec@no-spf-record-lab.test"
+		exp.HeaderFrom = `"CEO (Finance Approval)" <ceo@no-spf-record-lab.test>`
 	}
 	return exp
 }
@@ -43,11 +45,12 @@ func DKIMAlignmentExpectation(pass bool) MailExpectation {
 	if pass {
 		exp.MessageClass = "dkim-pass"
 		exp.ExpectedAction = ExpectedDeliver
-		exp.Note = "message signed with a DKIM key published in the sending domain's DNS"
+		exp.Note = "message signed with a DKIM key published in the sending domain's DNS -- NOT wired for real injection: a genuine DKIM pass requires actually signing the message with a private key matching a published DNS record; exercise.SpoofableSMTPInjector has no signing capability"
 	} else {
 		exp.MessageClass = "dkim-fail"
 		exp.ExpectedAction = ExpectedQuarantine
 		exp.Note = "unsigned message claiming a sender identity whose domain publishes a DKIM record"
+		exp.EnvelopeFrom = "unsigned-sender@dkim-lab.test"
 	}
 	return exp
 }
@@ -67,11 +70,13 @@ func DMARCPolicyExpectation(aligned bool) MailExpectation {
 	if aligned {
 		exp.MessageClass = "dmarc-aligned"
 		exp.ExpectedAction = ExpectedDeliver
-		exp.Note = "From-header domain aligns with the SPF/DKIM-authenticated domain"
+		exp.Note = "From-header domain aligns with the SPF/DKIM-authenticated domain -- NOT wired for real injection: same lab-DNS/signing prerequisite as SPFAlignmentExpectation(true)/DKIMAlignmentExpectation(true)"
 	} else {
 		exp.MessageClass = "dmarc-misaligned"
 		exp.ExpectedAction = ExpectedReject
 		exp.Note = "From-header domain misaligned against a sending domain publishing DMARC p=reject"
+		exp.EnvelopeFrom = "bounce@unrelated-bounce-domain-lab.test"
+		exp.HeaderFrom = `"Finance" <finance@dmarc-protected-lab.test>`
 	}
 	return exp
 }
@@ -89,7 +94,7 @@ func EICARAttachmentExpectation(caught bool) MailExpectation {
 		Recipient:      "helpdesk-test@example-lab.test",
 		MessageClass:   "eicar-attachment",
 		ControlProduct: "m365-defender-o365",
-		Note:           "industry-standard EICAR test string as the attachment -- never a real malware sample",
+		Note:           "industry-standard EICAR test string as the attachment -- never a real malware sample. NOT wired for real injection (either branch): a real attachment requires MIME multipart construction; exercise.SpoofableSMTPInjector only builds a single-part HTML body",
 	}
 	if caught {
 		exp.ExpectedAction = ExpectedQuarantine
@@ -117,10 +122,12 @@ func URLRewriteExpectation(knownBad bool) MailExpectation {
 		exp.MessageClass = "url-known-bad-reputation"
 		exp.ExpectedAction = ExpectedRewrite
 		exp.Note = "synthetic URL with an unknown/bad reputation, hosted in the authorized lab -- expected to be rewritten for click-time inspection"
+		exp.EnvelopeFrom = "url-test-sender@known-bad-url-lab.test"
 	} else {
 		exp.MessageClass = "url-benign-reputation"
 		exp.ExpectedAction = ExpectedDeliver
 		exp.Note = "synthetic benign URL -- no rewriting needed, the false-positive/legitimate-mail case"
+		exp.EnvelopeFrom = "url-test-sender@known-good-url-lab.test"
 	}
 	return exp
 }
@@ -142,11 +149,11 @@ func OutboundDLPExpectation(sensitive bool) MailExpectation {
 	if sensitive {
 		exp.MessageClass = "outbound-dlp-sensitive-marker"
 		exp.ExpectedAction = ExpectedQuarantine
-		exp.Note = "synthetic sensitive-data marker in the message body -- never real sensitive data; expected to be blocked before leaving the organization"
+		exp.Note = "synthetic sensitive-data marker in the message body -- never real sensitive data; expected to be blocked before leaving the organization. NOT wired for real injection: this is an authenticated-internal-sender scenario (mail leaving the org), not an externally-spoofable sender -- exercise.SpoofableSMTPInjector's model (an arbitrary external envelope-from) doesn't fit; sending genuinely AS an internal mailbox would need a different mechanism (e.g. Microsoft Graph sendMail under the Mail.Send permission)"
 	} else {
 		exp.MessageClass = "outbound-ordinary-mail"
 		exp.ExpectedAction = ExpectedDeliver
-		exp.Note = "ordinary outbound mail with no sensitive-data marker -- the false-positive/legitimate-mail case"
+		exp.Note = "ordinary outbound mail with no sensitive-data marker -- the false-positive/legitimate-mail case. NOT wired for real injection, same reason as the sensitive-marker case above"
 	}
 	return exp
 }
@@ -165,6 +172,7 @@ func CredentialHarvestingURLExpectation(caught bool) MailExpectation {
 		MessageClass:   "credential-harvesting-url",
 		ControlProduct: "m365-defender-o365",
 		Note:           "synthetic, non-functional lookalike login URL hosted in the authorized lab -- never a real credential-capture page",
+		EnvelopeFrom:   "phishing-test-sender@lookalike-login-lab.test",
 	}
 	if caught {
 		exp.ExpectedAction = ExpectedQuarantine
@@ -193,6 +201,8 @@ func ExecutiveImpersonationExpectation(caught bool) MailExpectation {
 		MessageClass:   "executive-impersonation",
 		ControlProduct: "m365-defender-o365",
 		Note:           "synthetic freemail sender, itself SPF/DKIM/DMARC-aligned, with a display name forged to impersonate a company executive -- tests impersonation-protection policy, not sender authentication",
+		EnvelopeFrom:   "exec-impersonation-test@freemail-lookalike-lab.test",
+		HeaderFrom:     `"CEO" <exec-impersonation-test@freemail-lookalike-lab.test>`,
 	}
 	if caught {
 		exp.ExpectedAction = ExpectedQuarantine
@@ -222,6 +232,7 @@ func SupplierPaymentDiversionExpectation(caught bool) MailExpectation {
 		MessageClass:   "supplier-payment-diversion",
 		ControlProduct: "m365-defender-o365",
 		Note:           "synthetic lookalike/newly-registered vendor domain (not the real supplier's own domain) requesting a bank-detail change against an existing invoice -- tests domain-reputation/newly-observed-domain heuristics, not sender authentication or internal-persona impersonation",
+		EnvelopeFrom:   "accounts@lookalike-vendor-domain-lab.test",
 	}
 	if caught {
 		exp.ExpectedAction = ExpectedQuarantine
@@ -267,12 +278,13 @@ func AuthenticationExceptionScopeExpectation(scoped bool) MailExpectation {
 		exp.SenderProfile = "trusted-relay-exception-genuine-use"
 		exp.MessageClass = "auth-exception-genuine-use"
 		exp.ExpectedAction = ExpectedDeliver
-		exp.Note = "message genuinely originates from the exception's real, verified trusted source -- expected to bypass normal inspection and deliver, proving the documented exception does not break the legitimate mail flow it exists for"
+		exp.Note = "message genuinely originates from the exception's real, verified trusted source -- expected to bypass normal inspection and deliver, proving the documented exception does not break the legitimate mail flow it exists for. NOT wired for real injection: genuinely meeting the exception's own verification condition (e.g. a source-IP-keyed connector) requires sending from infrastructure the exception actually trusts, which this package does not provision"
 	} else {
 		exp.SenderProfile = "spoofed-exception-trigger-outside-real-scope"
 		exp.MessageClass = "auth-exception-scope-probe"
 		exp.ExpectedAction = ExpectedQuarantine
 		exp.Note = "message spoofs only the exception's spoofable trigger condition without meeting its real verification condition -- expected to be caught by normal enforcement; a ConfirmedFailure here means the exception's scope-check keys on a spoofable attribute alone, an unintended trust path"
+		exp.EnvelopeFrom = "spoofed-exception-trigger@no-real-verification-lab.test"
 	}
 	return exp
 }
@@ -299,5 +311,6 @@ func PostDeliveryThreatResponseExpectation() MailExpectation {
 		ControlProduct: "m365-defender-o365",
 		ExpectedAction: ExpectedDeliver,
 		Note:           "synthetic message not caught at delivery time, later re-evaluated as malicious -- tests whether the required remediation action actually completed, and how long it took",
+		EnvelopeFrom:   "post-delivery-test-sender@threat-response-lab.test",
 	}
 }
