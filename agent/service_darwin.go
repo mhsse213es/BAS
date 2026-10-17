@@ -14,12 +14,18 @@ const (
 	darwinPlistPath  = "/Library/LaunchDaemons/com.audspect.bas-agent.plist"
 	darwinConfigDir  = "/etc/bas-agent"
 	darwinConfigFile = "/etc/bas-agent/config"
+	darwinBinPath    = "/usr/local/bin/bas-agent"
 )
 
 func svcInstall(serverURL, envLabel, secret, enrollPort string) error {
 	if _, err := os.Stat(darwinPlistPath); err == nil {
 		return fmt.Errorf("bas-agent already installed — run --uninstall first")
 	}
+
+	if err := installSelfBinary(darwinBinPath); err != nil {
+		return fmt.Errorf("install binary: %w", err)
+	}
+	fmt.Printf("[+] binary installed: %s\n", darwinBinPath)
 
 	if err := os.MkdirAll(darwinConfigDir, 0755); err != nil {
 		return fmt.Errorf("create config dir: %w", err)
@@ -51,7 +57,7 @@ func svcInstall(serverURL, envLabel, secret, enrollPort string) error {
     <string>com.audspect.bas-agent</string>
     <key>ProgramArguments</key>
     <array>
-        <string>/usr/local/bin/bas-agent</string>
+        <string>%s</string>
     </array>
     <key>EnvironmentVariables</key>
     <dict>
@@ -70,7 +76,7 @@ func svcInstall(serverURL, envLabel, secret, enrollPort string) error {
     <string>/var/log/bas-agent.log</string>
 </dict>
 </plist>
-`, serverURL, envLabel)
+`, darwinBinPath, serverURL, envLabel)
 
 	if err := os.WriteFile(darwinPlistPath, []byte(plist), 0644); err != nil {
 		return fmt.Errorf("write plist: %w", err)
