@@ -558,6 +558,24 @@ export function downloadFullReportJSON(agentId) {
   });
 }
 
+// downloadBoardScorecard saves the single-page executive/board scorecard (PDF,
+// with a server-side HTML fallback when the Chrome sidecar is unavailable).
+export function downloadBoardScorecard(agentId) {
+  triggerDownload(
+    '/api/report/board?agentId=' + encodeURIComponent(agentId) + '&format=pdf',
+    buildReportFilename('Board_Scorecard', agentId, 'pdf')
+  );
+}
+
+// downloadNavigatorLayer saves the MITRE ATT&CK Navigator layer JSON for this
+// agent's coverage, loadable directly in the official ATT&CK Navigator.
+export function downloadNavigatorLayer(agentId) {
+  triggerDownload(
+    '/api/report/navigator?agentId=' + encodeURIComponent(agentId),
+    buildReportFilename('ATTACK_Navigator', agentId, 'json')
+  );
+}
+
 export function downloadAuditPack(agentId) {
   showToast('Preparing audit pack…', 'ok');
   fetch('/api/report/audit-pack?agentId=' + encodeURIComponent(agentId), {
