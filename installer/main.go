@@ -6,7 +6,6 @@ package main
 
 import (
 	"fmt"
-	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -630,38 +629,6 @@ $s.Save()`
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("%w: %s", err, string(out))
-	}
-	return nil
-}
-
-func validateEnrollment(serverURL, secret string) error {
-	// Pre-trust bootstrap: the default deployment serves a self-signed cert,
-	// so verification must be skipped here exactly as for the CA fetch below.
-	client := bootstrapHTTPClient()
-	req, err := http.NewRequest(http.MethodGet, serverURL+"/health", nil)
-	if err != nil {
-		return fmt.Errorf("invalid URL: %w", err)
-	}
-	resp, err := client.Do(req)
-	if err != nil {
-		return fmt.Errorf("cannot reach server at %s — check URL and firewall", serverURL)
-	}
-	resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("server health check returned HTTP %d", resp.StatusCode)
-	}
-	req2, err := http.NewRequest(http.MethodGet, serverURL+"/ws/agent", nil)
-	if err != nil {
-		return fmt.Errorf("invalid URL: %w", err)
-	}
-	req2.Header.Set("X-Agent-Token", secret)
-	resp2, err := client.Do(req2)
-	if err != nil {
-		return fmt.Errorf("token check failed — cannot reach %s/ws/agent", serverURL)
-	}
-	resp2.Body.Close()
-	if resp2.StatusCode == http.StatusUnauthorized {
-		return fmt.Errorf("agent secret rejected (HTTP 401) — check AGENT_SECRET on the server")
 	}
 	return nil
 }

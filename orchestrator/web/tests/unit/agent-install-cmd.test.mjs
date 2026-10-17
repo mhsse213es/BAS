@@ -31,6 +31,14 @@ test('fetches the CA root from the dashboard origin with verification skipped (b
   for (const cmd of [c.windows, c.linux, c.mac]) assert.match(cmd, /--ca-root /);
 });
 
+test('mac command strips the browser quarantine flag before chmod/install, since Gatekeeper blocks an unsigned binary otherwise', () => {
+  const c = buildAgentInstallCommands('https://h:9543', 'h');
+  assert.match(c.mac, /xattr -d com\.apple\.quarantine bas-agent-darwin-\* &&/);
+  // The quarantine strip must run before chmod/the install itself, or the
+  // binary is still blocked when it's invoked.
+  assert.ok(c.mac.indexOf('xattr -d com.apple.quarantine') < c.mac.indexOf('chmod +x'));
+});
+
 test('treats missing arguments defensively without throwing', () => {
   const c = buildAgentInstallCommands('https://h:9543', 'h');
   assert.equal(c.serverURL, 'https://h:9443');

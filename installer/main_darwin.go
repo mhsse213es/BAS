@@ -1,0 +1,164 @@
+//go:build darwin
+
+package main
+
+import (
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+)
+
+// main dispatches between the two phases of a one-click macOS install:
+//
+//  1. Unprivileged (no args): collect Server URL + Secret via native
+//     dialogs, then re-invoke this same binary as --do-install through
+//     AppleScript's "with administrator privileges" -- the native macOS
+//     admin password prompt. Placing the agent binary at /usr/local/bin and
+//     registering the launchd daemon both require root, but the operator
+//     never touches Terminal.
+//  2. Privileged (--do-install <config-path>): runs as root via that
+//     elevation. Reads the Server URL + Secret back from the private temp
+//     file the unprivileged phase wrote (never passed as literal command-
+//     line text, so the secret never appears in a shell string or a
+//     process listing), validates connectivity, extracts the embedded
+//     agent binary, fetches the deployment CA, and runs --install.
+func main() {
+	args := os.Args[1:]
+	if len(args) >= 1 && args[0] == "--do-install" {
+		runPrivilegedInstall(args[1:])
+		return
+	}
+	runSetupWizard()
+}
+
+func runSetupWizard() {
+	serverURL, secret, ok := promptForServerAndSecret()
+	if !ok {
+		return // cancelled or dismissed -- exit quietly, no error dialog
+	}
+
+	configPath, err := writeInstallConfig(serverURL, secret)
+	if err != nil {
+		showAlert("BAS Agent Setup failed", err.Error())
+		return
+	}
+	defer os.Remove(configPath)
+
+	selfPath, err := os.Executable()
+	if err != nil {
+		showAlert("BAS Agent Setup failed", "could not determine installer path: "+err.Error())
+		return
+	}
+	selfPath, err = filepath.EvalSymlinks(selfPath)
+	if err != nil {
+		showAlert("BAS Agent Setup failed", "could not resolve installer path: "+err.Error())
+		return
+	}
+
+	shellCmd := shQuote(selfPath) + " --do-install " + shQuote(configPath)
+	script := "do shell script " + appleScriptQuote(shellCmd) +
+		` with administrator privileges with prompt "BAS Agent needs administrator access to install."`
+	out, err := exec.Command("osascript", "-e", script).CombinedOutput()
+	if err != nil {
+		if isUserCancelled(out) {
+			return
+		}
+		showAlert("BAS Agent install failed", strings.TrimSpace(string(out)))
+		return
+	}
+	showAlert("BAS Agent installed", "The agent is now running and will appear in the console's Agents tab within about 30 seconds.")
+}
+
+// runPrivilegedInstall is the root-elevated phase. args[0] is the config
+// file path written by writeInstallConfig.
+func runPrivilegedInstall(args []string) {
+	if len(args) < 1 {
+		fmt.Fprintln(os.Stderr, "error: --do-install requires a config file path")
+		os.Exit(1)
+	}
+	configPath := args[0]
+	serverURL, secret, err := readInstallConfig(configPath)
+	os.Remove(configPath) // best-effort cleanup either way -- it holds the secret
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Println("[1/4] Validating server connectivity and secret...")
+	if err := validateEnrollment(serverURL, secret); err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Println("[1/4] Server validated OK.")
+
+	tmpDir, err := os.MkdirTemp("", "bas-agent-install-*")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: create temp dir: %v\n", err)
+		os.Exit(1)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	fmt.Println("[2/4] Extracting agent binary...")
+	agentPath := filepath.Join(tmpDir, "bas-agent")
+	if err := os.WriteFile(agentPath, agentData, 0755); err != nil {
+		fmt.Fprintf(os.Stderr, "error: write agent binary: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Println("[3/4] Fetching deployment CA...")
+	caPath, err := fetchDeploymentCA(serverURL, tmpDir)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Println("[4/4] Installing launchd daemon...")
+	cmd := exec.Command(agentPath, "--install",
+		"--server", serverURL,
+		"--secret", secret,
+		"--env", "Production",
+		"--ca-root", caPath,
+	)
+	out, err := cmd.CombinedOutput()
+	fmt.Print(string(out))
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: install failed: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Println("[+] BAS Agent installed successfully.")
+}
+
+// promptForServerAndSecret shows the only two inputs the operator provides:
+// Server URL and Agent Secret (the Env label is fixed to "Production" and
+// never asked for). Returns ok=false if either dialog was cancelled --
+// callers should exit quietly in that case, not show an error.
+func promptForServerAndSecret() (serverURL, secret string, ok bool) {
+	script := `set serverURL to text returned of (display dialog "Enter the Server URL (from the console's Connection Config):" default answer "https://" with title "BAS Agent Setup" buttons {"Cancel", "Next"} default button "Next" cancel button "Cancel")
+set theSecret to text returned of (display dialog "Enter the Agent Secret:" default answer "" with title "BAS Agent Setup" buttons {"Cancel", "Install"} default button "Install" cancel button "Cancel" with hidden answer)
+serverURL & linefeed & theSecret`
+	out, err := exec.Command("osascript", "-e", script).Output()
+	if err != nil {
+		return "", "", false
+	}
+	lines := strings.SplitN(strings.TrimRight(string(out), "\n"), "\n", 2)
+	if len(lines) != 2 {
+		return "", "", false
+	}
+	return strings.TrimSpace(lines[0]), lines[1], true
+}
+
+func showAlert(title, message string) {
+	script := "display alert " + appleScriptQuote(title) + " message " + appleScriptQuote(message)
+	_ = exec.Command("osascript", "-e", script).Run()
+}
+
+// isUserCancelled reports whether osascript's combined output indicates the
+// operator dismissed the administrator-privileges password prompt, which
+// AppleScript surfaces as error -128 ("User canceled.") -- that is not a
+// failure to report, just an exit.
+func isUserCancelled(out []byte) bool {
+	s := string(out)
+	return strings.Contains(s, "User canceled") || strings.Contains(s, "(-128)")
+}

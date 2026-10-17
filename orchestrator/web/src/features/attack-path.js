@@ -1673,7 +1673,7 @@ export function buildAgentInstallCommands(origin, host, data) {
       '.\\bas-agent-windows-amd64.exe' + common + ' --secret <AGENT_SECRET> --ca-root .\\deployment-ca.pem --env Production',
     linux: 'chmod +x bas-agent-linux-* && curl -fsSk -o deployment-ca.pem ' + caURL + ' && ' +
       'sudo ./bas-agent-linux-*' + common + ' --secret <AGENT_SECRET> --ca-root ./deployment-ca.pem --env Production',
-    mac: 'chmod +x bas-agent-darwin-* && curl -fsSk -o deployment-ca.pem ' + caURL + ' && ' +
+    mac: 'xattr -d com.apple.quarantine bas-agent-darwin-* && chmod +x bas-agent-darwin-* && curl -fsSk -o deployment-ca.pem ' + caURL + ' && ' +
       'sudo ./bas-agent-darwin-*' + common + ' --secret <AGENT_SECRET> --ca-root ./deployment-ca.pem --env Production',
   };
 }

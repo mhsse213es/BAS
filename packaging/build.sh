@@ -120,6 +120,24 @@ CGO_ENABLED=0 GOOS=windows GOARCH=amd64 GOGARBLE='audspect/*' \
 cd "${REPO_ROOT}"
 log "Agent binaries written to ${AGENTS_DIR}/"
 
+# ── 1b2. Build the macOS one-click installers ─────────────────────────────────
+# Each installer embeds its matching darwin agent binary via go:embed, so the
+# agent must be copied into installer/ under the exact name the embed
+# directive expects before the installer itself is compiled.
+log "Building macOS one-click installers..."
+INSTALLER_DIR="${REPO_ROOT}/installer"
+cp "${AGENTS_DIR}/bas-agent-darwin-arm64" "${INSTALLER_DIR}/bas_agent_darwin_arm64"
+cp "${AGENTS_DIR}/bas-agent-darwin-amd64" "${INSTALLER_DIR}/bas_agent_darwin_amd64"
+cd "${INSTALLER_DIR}"
+for ARCH in arm64 amd64; do
+  OUT="${AGENTS_DIR}/bas-agent-installer-darwin-${ARCH}"
+  log "  [installer] GOOS=darwin GOARCH=${ARCH} → ${OUT}"
+  CGO_ENABLED=0 GOOS=darwin GOARCH="${ARCH}" go build -o "${OUT}" .
+done
+rm -f "${INSTALLER_DIR}/bas_agent_darwin_arm64" "${INSTALLER_DIR}/bas_agent_darwin_amd64"
+cd "${REPO_ROOT}"
+log "macOS installers written to ${AGENTS_DIR}/"
+
 # ── 1c. Sign binaries if GPG key is available ─────────────────────────────────
 SIGNING_KEY_EMAIL="releases@audspect.com"
 SIGN_BINS="${REPO_ROOT}/packaging/signing/sign-binaries.sh"

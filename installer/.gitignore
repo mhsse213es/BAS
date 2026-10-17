@@ -1,3 +1,7 @@
 bas_agent.exe
 *.exe
+bas_agent_darwin_arm64
+bas_agent_darwin_amd64
+bas-installer-darwin-arm64
+bas-installer-darwin-amd64
 !.gitignore

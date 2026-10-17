@@ -1,5 +1,3 @@
-//go:build windows
-
 package main
 
 import (
@@ -81,6 +79,61 @@ func TestFetchDeploymentCA_RejectsHTTPError(t *testing.T) {
 
 	if _, err := fetchDeploymentCA(ts.URL, t.TempDir()); err == nil {
 		t.Fatal("expected error for HTTP 500, got nil")
+	}
+}
+
+func TestValidateEnrollment_HealthyServerAcceptedToken(t *testing.T) {
+	ts := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/health":
+			w.WriteHeader(http.StatusOK)
+		case "/ws/agent":
+			if r.Header.Get("X-Agent-Token") != "right-secret" {
+				w.WriteHeader(http.StatusUnauthorized)
+				return
+			}
+			w.WriteHeader(http.StatusOK)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer ts.Close()
+
+	if err := validateEnrollment(ts.URL, "right-secret"); err != nil {
+		t.Fatalf("validateEnrollment: %v", err)
+	}
+}
+
+func TestValidateEnrollment_WrongSecret_Returns401Error(t *testing.T) {
+	ts := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/health":
+			w.WriteHeader(http.StatusOK)
+		case "/ws/agent":
+			w.WriteHeader(http.StatusUnauthorized)
+		}
+	}))
+	defer ts.Close()
+
+	if err := validateEnrollment(ts.URL, "wrong-secret"); err == nil {
+		t.Fatal("expected an error for a rejected secret, got nil")
+	}
+}
+
+func TestValidateEnrollment_UnhealthyServer_ReturnsError(t *testing.T) {
+	ts := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer ts.Close()
+
+	if err := validateEnrollment(ts.URL, "any-secret"); err == nil {
+		t.Fatal("expected an error for an unhealthy server, got nil")
+	}
+}
+
+func TestValidateEnrollment_UnreachableServer_ReturnsError(t *testing.T) {
+	if err := validateEnrollment("https://127.0.0.1:1", "any-secret"); err == nil {
+		t.Fatal("expected an error for an unreachable server, got nil")
 	}
 }
 

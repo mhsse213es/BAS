@@ -1263,10 +1263,15 @@ var agentFiles = map[string]struct {
 	"windows-legacy-amd64":       {"bas-agent-windows-legacy-amd64.exe", "application/octet-stream"},
 	"darwin-amd64":               {"bas-agent-darwin-amd64", "application/octet-stream"},
 	"darwin-arm64":               {"bas-agent-darwin-arm64", "application/octet-stream"},
+	"darwin-amd64-installer":     {"bas-agent-installer-darwin-amd64", "application/octet-stream"},
+	"darwin-arm64-installer":     {"bas-agent-installer-darwin-arm64", "application/octet-stream"},
 }
 
 // GET /api/agents/download/{platform} — serves the pre-built agent binary or package.
 // platform values: linux-amd64, linux-arm64, linux-amd64-deb, linux-arm64-deb,
+//	darwin-amd64-installer, darwin-arm64-installer (one-click GUI installer --
+//	prompts only for Server URL + Secret, no Terminal use required beyond the
+//	one unavoidable Gatekeeper "Open Anyway" since this build isn't notarized),
 //
 //	linux-amd64-rpm, windows-amd64, darwin-amd64, darwin-arm64
 func (h *Handler) DownloadAgent(w http.ResponseWriter, r *http.Request) {
