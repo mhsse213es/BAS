@@ -1,0 +1,265 @@
+package reporting
+
+import (
+	"bytes"
+	"context"
+	"crypto/sha256"
+	"encoding/json"
+	"fmt"
+	"regexp"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/audspect/bas/internal/compliance"
+	"github.com/audspect/bas/internal/models"
+)
+
+// buildTestComplianceReport produces a real ComplianceReport via the actual
+// mapper (embedded framework YAMLs) so the renderer is exercised against the
+// genuine data shape, not a hand-built stub.
+func buildTestComplianceReport(t *testing.T) *compliance.ComplianceReport {
+	t.Helper()
+	m, err := compliance.NewMapper()
+	if err != nil {
+		t.Fatalf("NewMapper: %v", err)
+	}
+	fws := m.Frameworks()
+	if len(fws) == 0 {
+		t.Fatal("no frameworks loaded")
+	}
+	// Feed a mix of pass/fail results so the report has both statuses. The
+	// technique IDs need not all map — the mapper simply records what overlaps.
+	results := []models.SimulationResult{
+		{Technique: models.AttackTechnique{ID: "T1003", Name: "OS Credential Dumping"}, Result: models.ResultFail,
+			ThreatImpact: "Credentials exposed", Remediation: "Enable Credential Guard"},
+		{Technique: models.AttackTechnique{ID: "T1059", Name: "Command and Scripting Interpreter"}, Result: models.ResultPass},
+		{Technique: models.AttackTechnique{ID: "T1071", Name: "Application Layer Protocol"}, Result: models.ResultFail,
+			Remediation: "Inspect egress traffic"},
+		{Technique: models.AttackTechnique{ID: "T1053", Name: "Scheduled Task/Job"}, Result: models.ResultPass},
+	}
+	cr, err := m.GenerateReport(results, fws[0].ID, "WIN-TEST-01", "", "Unit Test Scenario")
+	if err != nil {
+		t.Fatalf("GenerateReport(%s): %v", fws[0].ID, err)
+	}
+	return cr
+}
+
+func TestRenderComplianceHTML(t *testing.T) {
+	cr := buildTestComplianceReport(t)
+
+	var buf bytes.Buffer
+	if err := RenderComplianceHTML(&buf, cr, "analyst@bank.example"); err != nil {
+		t.Fatalf("RenderComplianceHTML: %v", err)
+	}
+	out := buf.String()
+
+	// Structural sanity: it is a complete HTML document.
+	for _, want := range []string{"<!DOCTYPE html>", "</html>", "Regulatory Compliance Report"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("output missing %q", want)
+		}
+	}
+	// The framework name from the real mapper must appear.
+	if cr.Framework.Name != "" && !strings.Contains(out, cr.Framework.Name) {
+		t.Errorf("output missing framework name %q", cr.Framework.Name)
+	}
+	// The per-control detail section and its column headers must render — the
+	// whole point of P0-1 (detail that was previously CSV/JSON-only).
+	for _, want := range []string{"Control Detail", "Domain Breakdown", "Compliance (passing / tested)"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("output missing section %q", want)
+		}
+	}
+	// At least one control ID from the framework must appear.
+	if len(cr.Controls) == 0 {
+		t.Fatal("mapper returned no controls")
+	}
+	if !strings.Contains(out, cr.Controls[0].ID) {
+		t.Errorf("output missing first control id %q", cr.Controls[0].ID)
+	}
+	// A status pill label must be present.
+	if !strings.Contains(out, "PASSING") && !strings.Contains(out, "FAILING") &&
+		!strings.Contains(out, "UNTESTED") && !strings.Contains(out, "MANUAL ATTESTATION") {
+		t.Error("output has no status pill labels")
+	}
+}
+
+func TestRenderComplianceHTML_Nil(t *testing.T) {
+	var buf bytes.Buffer
+	if err := RenderComplianceHTML(&buf, nil, ""); err == nil {
+		t.Error("expected error for nil report, got nil")
+	}
+}
+
+// TestRenderComplianceHTML_Attestation verifies the tamper-evidence block (P0-2)
+// renders and reflects whether signing is enabled.
+func TestRenderComplianceHTML_Attestation(t *testing.T) {
+	cr := buildTestComplianceReport(t)
+
+	// Signed path.
+	SetSigningSecret("unit-test-deployment-secret-key-32bytes!!")
+	t.Cleanup(func() { SetSigningSecret("") })
+	var signed bytes.Buffer
+	if err := RenderComplianceHTML(&signed, cr, "analyst@bank.example"); err != nil {
+		t.Fatal(err)
+	}
+	s := signed.String()
+	if !strings.Contains(s, "HMAC-SHA256") {
+		t.Error("signed report should advertise HMAC-SHA256")
+	}
+	if !strings.Contains(s, "Digest (SHA-256)") {
+		t.Error("report missing SHA-256 digest line")
+	}
+	if !strings.Contains(s, "analyst@bank.example") {
+		t.Error("report missing generator identity")
+	}
+
+	// Unsigned path (no key) still emits a digest, no signature.
+	SetSigningSecret("")
+	var unsigned bytes.Buffer
+	if err := RenderComplianceHTML(&unsigned, cr, ""); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(unsigned.String(), "SHA-256 (unsigned)") {
+		t.Error("unsigned report should say SHA-256 (unsigned)")
+	}
+}
+
+// TestRenderComplianceHTML_AttestationDigest_MatchesFormatJSONExport is the
+// regression test for the report's own documented verification workflow
+// ("request the same report as JSON (format=json) and recompute the SHA-256
+// of its canonical bytes" -- compliance_report.go's html template). The
+// format=json HTTP handler (internal/api/handlers.go) serializes with
+// json.MarshalIndent(report, "", "  "); if the attestation is computed over
+// different bytes (e.g. compact json.Marshal), the documented workflow can
+// never reproduce the stamped digest, and a genuinely untampered report
+// always fails its own verification.
+func TestRenderComplianceHTML_AttestationDigest_MatchesFormatJSONExport(t *testing.T) {
+	cr := buildTestComplianceReport(t)
+
+	var buf bytes.Buffer
+	if err := RenderComplianceHTML(&buf, cr, "analyst@bank.example"); err != nil {
+		t.Fatal(err)
+	}
+	m := regexp.MustCompile(`Digest \(SHA-256\): <span class="mono">([0-9a-f]{64})</span>`).FindStringSubmatch(buf.String())
+	if m == nil {
+		t.Fatal("could not find the rendered digest in the report HTML")
+	}
+	stampedDigest := m[1]
+
+	// This is exactly what internal/api/handlers.go's format=json branch
+	// serializes.
+	exportBytes, err := json.MarshalIndent(cr, "", "  ")
+	if err != nil {
+		t.Fatalf("MarshalIndent: %v", err)
+	}
+	wantDigest := fmt.Sprintf("%x", sha256.Sum256(exportBytes))
+
+	if stampedDigest != wantDigest {
+		t.Errorf("stamped digest %s does not match the digest of the documented format=json export %s -- the report's own verification instructions can never succeed", stampedDigest, wantDigest)
+	}
+}
+
+// TestAttestationSignAndVerify checks the HMAC attestation round-trips and that
+// tampering with the content is detected.
+func TestAttestationSignAndVerify(t *testing.T) {
+	SetSigningSecret("deployment-secret-for-attestation-tests!")
+	t.Cleanup(func() { SetSigningSecret("") })
+
+	att := Attest([]byte("hello report"), "user-123")
+	if att.Algorithm != "HMAC-SHA256" || att.Signature == "" {
+		t.Fatalf("expected signed attestation, got %+v", att)
+	}
+	ok, err := att.Verify()
+	if err != nil || !ok {
+		t.Fatalf("Verify failed: ok=%v err=%v", ok, err)
+	}
+	// Tamper: a different digest must fail verification.
+	tampered := att
+	tampered.ContentSHA256 = strings.Repeat("0", 64)
+	if ok, _ := tampered.Verify(); ok {
+		t.Error("tampered attestation verified as valid")
+	}
+}
+
+// TestBuildManifest checks the manifest is sha256sum-compatible and sorted.
+func TestBuildManifest(t *testing.T) {
+	out := string(BuildManifest([]ManifestEntry{
+		{Path: "z.json", SHA256: "bbb"},
+		{Path: "a.txt", SHA256: "aaa"},
+	}))
+	if !strings.HasPrefix(out, "aaa  a.txt\n") {
+		t.Errorf("manifest not sorted / wrong format:\n%s", out)
+	}
+	if !strings.Contains(out, "bbb  z.json") {
+		t.Errorf("manifest missing entry:\n%s", out)
+	}
+}
+
+// TestRenderCompliancePDF_NoSidecar verifies the PDF path fails cleanly (so the
+// handler can fall back to HTML) when the Chrome sidecar is not configured,
+// rather than panicking.
+func TestRenderCompliancePDF_NoSidecar(t *testing.T) {
+	t.Setenv("CHROME_WS_URL", "")
+	cr := buildTestComplianceReport(t)
+	var buf bytes.Buffer
+	if err := RenderCompliancePDF(context.Background(), &buf, cr, ""); err == nil {
+		t.Error("expected error when chrome sidecar unconfigured, got nil")
+	}
+}
+
+func TestComplianceTrendRendering(t *testing.T) {
+	cr := buildTestComplianceReport(t)
+	now := time.Now()
+	trend := []ComplianceTrendPoint{
+		{Date: now.AddDate(0, 0, -21), CompliancePct: 10},
+		{Date: now.AddDate(0, 0, -14), CompliancePct: 15},
+		{Date: now.AddDate(0, 0, -7), CompliancePct: 18},
+		{Date: now, CompliancePct: 25},
+	}
+	var buf strings.Builder
+	if err := RenderComplianceHTML(&buf, cr, "", trend...); err != nil {
+		t.Fatal(err)
+	}
+	out := buf.String()
+	if !strings.Contains(out, "Compliance trend") {
+		t.Error("trend block not rendered")
+	}
+	if !strings.Contains(out, "<polyline") {
+		t.Error("trend sparkline not rendered")
+	}
+	// +15 pts improvement from 10 → 25.
+	if !strings.Contains(out, "+15.0 pts") {
+		t.Errorf("expected +15.0 pts delta in output")
+	}
+
+	// Fewer than 2 points → no trend block.
+	var buf2 strings.Builder
+	_ = RenderComplianceHTML(&buf2, cr, "", ComplianceTrendPoint{Date: now, CompliancePct: 25})
+	if strings.Contains(buf2.String(), "Compliance trend") {
+		t.Error("single-point trend should be omitted")
+	}
+}
+
+func TestComplianceTrendSparkline(t *testing.T) {
+	if s := complianceTrendSparkline(nil); s != "" {
+		t.Errorf("nil trend should be empty, got %q", s)
+	}
+	s := complianceTrendSparkline([]ComplianceTrendPoint{{CompliancePct: 0}, {CompliancePct: 100}})
+	if !strings.HasPrefix(s, "0.0,36.0") { // first point x=0, y=h (0%)
+		t.Errorf("unexpected sparkline: %q", s)
+	}
+}
+
+func TestComplianceArc(t *testing.T) {
+	// 0% => zero filled; 100% => full circumference filled.
+	if got := complianceArc(0, 52); !strings.HasPrefix(got, "0.00 ") {
+		t.Errorf("arc(0) = %q, want leading 0.00", got)
+	}
+	full := complianceArc(100, 52)
+	parts := strings.Fields(full)
+	if len(parts) != 2 || parts[0] != parts[1] {
+		t.Errorf("arc(100) = %q, want filled==circumference", full)
+	}
+}

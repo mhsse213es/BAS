@@ -879,6 +879,22 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		)`,
 		`CREATE INDEX IF NOT EXISTS compliance_snapshots_agent ON compliance_snapshots (agent_id)`,
 
+		// compliance_history: append-only time series of compliance/coverage per
+		// (agent, framework). Unlike compliance_snapshots (a singleton latest
+		// value), this retains points over time so reports can show a
+		// compliance-over-time trend. Written by refreshComplianceSnapshots,
+		// guarded so identical back-to-back points within an hour are skipped.
+		`CREATE TABLE IF NOT EXISTS compliance_history (
+			id             BIGSERIAL    PRIMARY KEY,
+			agent_id       TEXT         NOT NULL,
+			framework_id   TEXT         NOT NULL,
+			snapshot_at    TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+			compliance_pct NUMERIC(5,2) NOT NULL DEFAULT 0,
+			coverage_pct   NUMERIC(5,2) NOT NULL DEFAULT 0,
+			run_count      INT          NOT NULL DEFAULT 0
+		)`,
+		`CREATE INDEX IF NOT EXISTS compliance_history_lookup ON compliance_history (agent_id, framework_id, snapshot_at)`,
+
 		// ── Ticketing: ITSM connector configs + per-finding ticket refs ───────
 		`CREATE TABLE IF NOT EXISTS ticketing_configs (
 			id          text        PRIMARY KEY DEFAULT gen_random_uuid()::text,
@@ -1125,6 +1141,44 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 			last_sync_status    text        NOT NULL DEFAULT 'never',
 			last_error          text        NOT NULL DEFAULT '',
 			updated_at          timestamptz NOT NULL DEFAULT NOW()
+		)`,
+
+		// report_branding: singleton white-label config for report deliverables
+		// (product/org name, accent color, optional logo data URI, footer note).
+		// Empty fields fall back to the Audspect defaults at render time.
+		`CREATE TABLE IF NOT EXISTS report_branding (
+			id            int         PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+			product_name  text        NOT NULL DEFAULT '',
+			org_name      text        NOT NULL DEFAULT '',
+			accent_color  text        NOT NULL DEFAULT '',
+			logo_data_uri text        NOT NULL DEFAULT '',
+			footer_note   text        NOT NULL DEFAULT '',
+			updated_at    timestamptz NOT NULL DEFAULT NOW()
+		)`,
+
+		// report_schedules: recurring, emailed report deliveries. Each row is one
+		// scheduled report (board/compliance/audit_pack) for one scope, delivered
+		// to a recipient list on a daily/weekly/monthly cadence. See
+		// internal/api/report_schedule_handlers.go.
+		`CREATE TABLE IF NOT EXISTS report_schedules (
+			id            text        PRIMARY KEY DEFAULT gen_random_uuid()::text,
+			name          text        NOT NULL DEFAULT '',
+			report_type   text        NOT NULL DEFAULT 'board',
+			scope_kind    text        NOT NULL DEFAULT 'agent',
+			scope_id      text        NOT NULL DEFAULT '',
+			framework     text        NOT NULL DEFAULT '',
+			format        text        NOT NULL DEFAULT 'pdf',
+			recipients    text        NOT NULL DEFAULT '',
+			frequency     text        NOT NULL DEFAULT 'weekly',
+			hour_utc      int         NOT NULL DEFAULT 6,
+			day_of_week   int         NOT NULL DEFAULT 1,
+			day_of_month  int         NOT NULL DEFAULT 1,
+			enabled       boolean     NOT NULL DEFAULT true,
+			last_run_at   timestamptz,
+			last_status   text        NOT NULL DEFAULT 'never',
+			last_error    text        NOT NULL DEFAULT '',
+			created_by    text        NOT NULL DEFAULT '',
+			created_at    timestamptz NOT NULL DEFAULT NOW()
 		)`,
 
 		// threat_intel_config: one row per MISP/OpenCTI/OTX connector, DB-backed
@@ -1958,6 +2012,63 @@ func UpsertComplianceSnapshot(ctx context.Context, pool *pgxpool.Pool, s Complia
 		s.TotalControls, s.TestableControls, s.TestedControls,
 		s.PassingControls, s.FailingControls, s.ManualControls)
 	return err
+}
+
+// ComplianceHistoryPoint is one time-series point of compliance/coverage.
+type ComplianceHistoryPoint struct {
+	SnapshotAt    time.Time `json:"snapshotAt"`
+	CompliancePct float64   `json:"compliancePct"`
+	CoveragePct   float64   `json:"coveragePct"`
+	RunCount      int       `json:"runCount"`
+}
+
+// AppendComplianceHistory appends a time-series point, but skips it when the most
+// recent point for the same (agent, framework) has an identical compliance_pct
+// AND was recorded within the last hour — so periodic refreshes that change
+// nothing don't flood the timeline with duplicate points.
+func AppendComplianceHistory(ctx context.Context, pool *pgxpool.Pool, agentID, frameworkID string, compliancePct, coveragePct float64, runCount int) error {
+	var lastPct float64
+	var lastAt time.Time
+	err := pool.QueryRow(ctx,
+		`SELECT compliance_pct, snapshot_at FROM compliance_history
+		  WHERE agent_id=$1 AND framework_id=$2 ORDER BY snapshot_at DESC LIMIT 1`,
+		agentID, frameworkID).Scan(&lastPct, &lastAt)
+	if err == nil && lastPct == compliancePct && time.Since(lastAt) < time.Hour {
+		return nil // unchanged and recent — skip
+	}
+	_, err = pool.Exec(ctx,
+		`INSERT INTO compliance_history (agent_id, framework_id, compliance_pct, coverage_pct, run_count)
+		 VALUES ($1,$2,$3,$4,$5)`,
+		agentID, frameworkID, compliancePct, coveragePct, runCount)
+	return err
+}
+
+// GetComplianceHistory returns up to limit most-recent history points for the
+// (agent, framework), ordered oldest→newest (chart-ready).
+func GetComplianceHistory(ctx context.Context, pool *pgxpool.Pool, agentID, frameworkID string, limit int) ([]ComplianceHistoryPoint, error) {
+	if limit <= 0 {
+		limit = 12
+	}
+	rows, err := pool.Query(ctx,
+		`SELECT snapshot_at, compliance_pct, coverage_pct, run_count FROM (
+		   SELECT snapshot_at, compliance_pct, coverage_pct, run_count
+		     FROM compliance_history
+		    WHERE agent_id=$1 AND framework_id=$2
+		    ORDER BY snapshot_at DESC LIMIT $3
+		 ) t ORDER BY snapshot_at ASC`,
+		agentID, frameworkID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []ComplianceHistoryPoint
+	for rows.Next() {
+		var p ComplianceHistoryPoint
+		if err := rows.Scan(&p.SnapshotAt, &p.CompliancePct, &p.CoveragePct, &p.RunCount); err == nil {
+			out = append(out, p)
+		}
+	}
+	return out, nil
 }
 
 // GetComplianceScores returns the latest snapshot for every framework for a

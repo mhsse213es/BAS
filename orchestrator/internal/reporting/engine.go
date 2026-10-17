@@ -1688,6 +1688,17 @@ func (e *Engine) Build(ctx context.Context, agentID string, filter string) (*Ful
 		}
 	}
 
+	// Fallback: recompute the score from results when the run has none stored.
+	// Build's headline Summary is otherwise populated solely from the stored
+	// score column, so a run whose score was never persisted (e.g. imported
+	// results, or a scoring failure at submit time) would render "No Data" in
+	// the executive hero even though the detailed sections — which re-derive
+	// from results — are fully populated. Recomputing here keeps the report
+	// self-consistent, mirroring how BuildFromCampaign/Sweep already score.
+	if latestScore.TotalTechniques == 0 && len(latestResults) > 0 {
+		latestScore = models.ComputeScore(latestResults, nil)
+	}
+
 	// ── 4. Tactic heatmap from latest run ────────────────────────────────
 	report.ScenarioName = latestScenarioName
 	report.TacticHeatmap = buildTacticHeatmap(latestResults)
@@ -2759,13 +2770,26 @@ type DetectionSummary struct {
 func buildDetectionSummary(results []models.SimulationResult) DetectionSummary {
 	var s DetectionSummary
 	for _, r := range results {
-		if len(r.Events) > 0 {
+		// Telemetry is "observed" if the run carries EITHER raw event IDs OR an
+		// explicit purple-team detection verdict — otherwise detection reads as
+		// N/A even when the agent's post-run sweep produced verdicts.
+		if len(r.Events) > 0 || r.DetectionVerdict != "" {
 			s.TelemetryObserved = true
 		}
 		if r.Result != models.ResultFail {
 			continue
 		}
 		s.ExecutedUnprevented++
+		// Prefer the explicit DetectionVerdict (the agent's post-run alert-sweep
+		// result) when present; fall back to event-ID classification otherwise.
+		switch strings.ToLower(r.DetectionVerdict) {
+		case "detected":
+			s.Detected++
+			continue
+		case "undetected":
+			s.Undetected++
+			continue
+		}
 		switch classifyDetection(r.Events).Status {
 		case "Detected":
 			s.Detected++

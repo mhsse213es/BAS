@@ -558,6 +558,24 @@ export function downloadFullReportJSON(agentId) {
   });
 }
 
+// downloadBoardScorecard saves the single-page executive/board scorecard (PDF,
+// with a server-side HTML fallback when the Chrome sidecar is unavailable).
+export function downloadBoardScorecard(agentId) {
+  triggerDownload(
+    '/api/report/board?agentId=' + encodeURIComponent(agentId) + '&format=pdf',
+    buildReportFilename('Board_Scorecard', agentId, 'pdf')
+  );
+}
+
+// downloadNavigatorLayer saves the MITRE ATT&CK Navigator layer JSON for this
+// agent's coverage, loadable directly in the official ATT&CK Navigator.
+export function downloadNavigatorLayer(agentId) {
+  triggerDownload(
+    '/api/report/navigator?agentId=' + encodeURIComponent(agentId),
+    buildReportFilename('ATTACK_Navigator', agentId, 'json')
+  );
+}
+
 export function downloadAuditPack(agentId) {
   showToast('Preparing audit pack…', 'ok');
   fetch('/api/report/audit-pack?agentId=' + encodeURIComponent(agentId), {
@@ -622,7 +640,7 @@ export function loadComplianceReport() {
   document.getElementById('cmp-placeholder').textContent = 'Generating report…';
   setDisplay(document.getElementById('cmp-placeholder'), '');
   setDisplay(document.getElementById('cmp-report'), 'none');
-  ['cmp-export-json','cmp-export-csv'].forEach(function(id) {
+  ['cmp-export-html','cmp-export-pdf','cmp-export-json','cmp-export-csv'].forEach(function(id) {
     setDisplay(document.getElementById(id), 'none');
   });
 
@@ -633,7 +651,7 @@ export function loadComplianceReport() {
       renderComplianceReport(report);
       setDisplay(document.getElementById('cmp-placeholder'), 'none');
       setDisplay(document.getElementById('cmp-report'), '');
-      ['cmp-export-json','cmp-export-csv'].forEach(function(id) {
+      ['cmp-export-html','cmp-export-pdf','cmp-export-json','cmp-export-csv'].forEach(function(id) {
         setDisplay(document.getElementById(id), '');
       });
     })
@@ -783,6 +801,22 @@ export function toggleEvidence(id, btn) {
 export function filterControls(status) {
   _cmpFilter = status;
   if (_cmpReport) renderControlsTable(_cmpReport.controls, status);
+}
+
+// openComplianceDoc opens (HTML) or downloads (PDF) the styled per-control
+// compliance report deliverable — the auditor-facing document, distinct from
+// the JSON/CSV data exports above.
+export function openComplianceDoc(format) {
+  var agentId = document.getElementById('cmp-agent-sel').value;
+  var framework = document.getElementById('cmp-fw-sel').value;
+  if (!agentId || !framework) { showToast('Select an agent and framework first', 'err'); return; }
+  var url = '/api/compliance/report?agentId=' + encodeURIComponent(agentId) +
+    '&framework=' + encodeURIComponent(framework) + '&format=' + format;
+  if (format === 'pdf') {
+    triggerDownload(url, buildReportFilename('Compliance_Report', agentId + '-' + framework, 'pdf'));
+  } else {
+    window.open(url, '_blank');
+  }
 }
 
 export function exportCompliance(format) {

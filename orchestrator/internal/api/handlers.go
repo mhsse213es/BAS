@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"crypto/subtle"
@@ -100,6 +101,7 @@ type Handler struct {
 	signingKey           *cmdsigning.SigningKey // deployment command-signing key (B4) -- separate trust domain from pki above, never chained to it
 	advertisedMTLSPort   int                    // host port agents reach the mTLS listener on (may differ from the in-container port when published ports are remapped); 0 = not advertised
 	advertisedEnrollPort int                    // host port agents reach the enrollment listener on; 0 = not advertised
+	reportSMTP           exercise.SMTPConfig    // SMTP settings for scheduled-report email delivery (empty Host = disabled)
 	calderaURL           string
 	calderaKey           string
 	iocProvider          ioc.Provider // nil when no OTX connector is configured
@@ -292,6 +294,14 @@ func (h *Handler) WithCorrelation(e *correlation.Engine) *Handler {
 // WithTicketing attaches the ITSM ticketing manager.
 func (h *Handler) WithTicketing(m *ticketing.Manager) *Handler {
 	h.ticketing = m
+	return h
+}
+
+// WithReportSMTP configures the SMTP settings used to deliver scheduled reports
+// by email. Empty Host disables scheduled-report delivery (schedules still save
+// and can be run manually, but the tick logs a "no SMTP" error).
+func (h *Handler) WithReportSMTP(cfg exercise.SMTPConfig) *Handler {
+	h.reportSMTP = cfg
 	return h
 }
 
@@ -5420,6 +5430,91 @@ func (h *Handler) GetFullReportHTML(w http.ResponseWriter, r *http.Request) {
 		func(out io.Writer) error { return reporting.GenerateHTML(out, report, compRows) })
 }
 
+// GET /api/report/board?agentId=X  (or ?campaignId=Y)  &format=html|pdf
+// Renders the single-page executive/board security scorecard (P0-3): overall
+// posture, trend, KPIs, per-framework compliance, top risks and priority
+// actions on one A4 page. Reuses the same FullReport the full report builds.
+func (h *Handler) GetBoardOnePager(w http.ResponseWriter, r *http.Request) {
+	if h.reportingEngine == nil {
+		jsonError(w, "reporting engine not loaded", http.StatusServiceUnavailable)
+		return
+	}
+	agentID := r.URL.Query().Get("agentId")
+	campaignID := r.URL.Query().Get("campaignId")
+	format := strings.ToLower(r.URL.Query().Get("format"))
+	if format == "" {
+		format = "html"
+	}
+
+	var report *reporting.FullReport
+	var err error
+	var compRows []reporting.ComplianceSummaryRow
+	var scope string
+	switch {
+	case campaignID != "":
+		report, err = h.reportingEngine.BuildFromCampaign(r.Context(), campaignID, "")
+		scope = campaignID
+	case agentID != "":
+		report, err = h.reportingEngine.Build(r.Context(), agentID, "")
+		compRows = h.complianceRows(r.Context(), agentID, "")
+		scope = agentID
+	default:
+		jsonError(w, "agentId or campaignId required", http.StatusBadRequest)
+		return
+	}
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	genBy := ""
+	if claims, ok := auth.ClaimsFrom(r.Context()); ok {
+		genBy = claims.UserID
+	}
+	h.auditLog(r, "report.export", scope, map[string]any{"format": format, "type": "board"}, "ok")
+
+	if format == "pdf" {
+		var pbuf bytes.Buffer
+		if perr := reporting.RenderBoardOnePagerPDF(r.Context(), &pbuf, report, compRows, genBy); perr != nil {
+			log.Printf("[api] board pdf: %v — serving HTML fallback", perr)
+			writeBufferedReport(w, "text/html; charset=utf-8",
+				fmt.Sprintf(`inline; filename="%s"`, buildReportFilename("Board_Scorecard", scope, "html")),
+				"generate board one-pager",
+				func(out io.Writer) error { return reporting.RenderBoardOnePager(out, report, compRows, genBy) })
+			return
+		}
+		w.Header().Set("Content-Type", "application/pdf")
+		w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, buildReportFilename("Board_Scorecard", scope, "pdf")))
+		w.Header().Set("Content-Length", strconv.Itoa(pbuf.Len()))
+		w.Write(pbuf.Bytes())
+		return
+	}
+
+	writeBufferedReport(w, "text/html; charset=utf-8",
+		fmt.Sprintf(`inline; filename="%s"`, buildReportFilename("Board_Scorecard", scope, "html")),
+		"generate board one-pager",
+		func(out io.Writer) error { return reporting.RenderBoardOnePager(out, report, compRows, genBy) })
+}
+
+// complianceTrend loads the compliance-over-time points for an (agent,
+// framework) pair and maps them to the reporting package's trend type. Empty
+// (nil) for a fleet/run scope or when no history exists yet — the report then
+// simply omits the trend block.
+func (h *Handler) complianceTrend(ctx context.Context, agentID, frameworkID string) []reporting.ComplianceTrendPoint {
+	if agentID == "" || frameworkID == "" {
+		return nil
+	}
+	hist, err := db.GetComplianceHistory(ctx, h.db, agentID, frameworkID, 12)
+	if err != nil || len(hist) == 0 {
+		return nil
+	}
+	out := make([]reporting.ComplianceTrendPoint, 0, len(hist))
+	for _, p := range hist {
+		out = append(out, reporting.ComplianceTrendPoint{Date: p.SnapshotAt, CompliancePct: p.CompliancePct})
+	}
+	return out
+}
+
 // complianceRows builds the per-framework compliance summary rows by aggregating
 // ALL of an agent's completed/partial runs. This gives accurate framework scores
 // because no single scenario exercises every control in a framework.
@@ -5515,6 +5610,9 @@ func (h *Handler) refreshComplianceSnapshots(ctx context.Context, agentID string
 			FailingControls:  s.FailingControls,
 			ManualControls:   s.ManualControls,
 		})
+		// Append a time-series point for the compliance-over-time trend shown in
+		// the compliance report (dedup-guarded inside AppendComplianceHistory).
+		db.AppendComplianceHistory(ctx, h.db, agentID, fw.ID, s.CompliancePercent, s.CoveragePercent, runCount)
 	}
 }
 
@@ -5894,8 +5992,12 @@ func (h *Handler) GetAuditPack(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/zip")
 	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, fname))
 
+	generatedBy := ""
+	if claims, ok := auth.ClaimsFrom(r.Context()); ok {
+		generatedBy = claims.UserID
+	}
 	h.auditLog(r, "report.export", agentID, map[string]any{"format": "zip", "type": "audit_pack"}, "ok")
-	if err := h.reportingEngine.WriteAuditPack(r.Context(), agentID, h.complianceMapper, w); err != nil {
+	if err := h.reportingEngine.WriteAuditPack(r.Context(), agentID, h.complianceMapper, generatedBy, w); err != nil {
 		log.Printf("[api] audit pack: %v", err)
 	}
 }
@@ -6017,6 +6119,45 @@ func (h *Handler) GetComplianceReport(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, buildReportFilename("Compliance_Report", scope, "json")))
 		w.Write(b)
+
+	case "html":
+		// Styled, standalone, per-control compliance deliverable (P0-1): the
+		// same ControlResult/DomainResult/evidence that CSV/JSON expose, but
+		// rendered as an auditor-facing document instead of a spreadsheet.
+		// generatedBy stamps the tamper-evidence attestation (P0-2).
+		genBy := ""
+		if claims, ok := auth.ClaimsFrom(r.Context()); ok {
+			genBy = claims.UserID
+		}
+		trend := h.complianceTrend(r.Context(), resolvedAgentID, frameworkID)
+		writeBufferedReport(w, "text/html; charset=utf-8",
+			fmt.Sprintf(`inline; filename="%s"`, buildReportFilename("Compliance_Report", scope, "html")),
+			"generate compliance HTML report",
+			func(out io.Writer) error { return reporting.RenderComplianceHTML(out, report, genBy, trend...) })
+
+	case "pdf":
+		// Prefer the Chrome-sidecar PDF (pixel-identical to the HTML form). If
+		// the sidecar is unconfigured/unreachable, fall back to serving the
+		// styled HTML inline so the operator always receives a document rather
+		// than a 500 — same resilience posture as the full report's PDF path.
+		genBy := ""
+		if claims, ok := auth.ClaimsFrom(r.Context()); ok {
+			genBy = claims.UserID
+		}
+		trend := h.complianceTrend(r.Context(), resolvedAgentID, frameworkID)
+		var pbuf bytes.Buffer
+		if err := reporting.RenderCompliancePDF(r.Context(), &pbuf, report, genBy, trend...); err != nil {
+			log.Printf("[api] compliance pdf: %v — serving HTML fallback", err)
+			writeBufferedReport(w, "text/html; charset=utf-8",
+				fmt.Sprintf(`inline; filename="%s"`, buildReportFilename("Compliance_Report", scope, "html")),
+				"generate compliance HTML report",
+				func(out io.Writer) error { return reporting.RenderComplianceHTML(out, report, genBy, trend...) })
+			return
+		}
+		w.Header().Set("Content-Type", "application/pdf")
+		w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, buildReportFilename("Compliance_Report", scope, "pdf")))
+		w.Header().Set("Content-Length", strconv.Itoa(pbuf.Len()))
+		w.Write(pbuf.Bytes())
 
 	default:
 		respond(w, report)

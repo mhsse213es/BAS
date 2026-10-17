@@ -4,7 +4,7 @@ import { apicall } from '../core/api.js';
 import { x } from '../core/escape.js';
 import { ago, fmtDate, showToast } from '../core/util.js';
 import { _templates, renderTemplateGrid } from './adversaries.js';
-import { _agtDetailId, downloadAuditPack, downloadFullReportCSV, downloadFullReportJSON, downloadFullReportPDF, loadAgtAttackPath, openAgentDetail, openFullReport, safeScan } from './agent-drawer.js';
+import { _agtDetailId, downloadAuditPack, downloadBoardScorecard, downloadFullReportCSV, downloadFullReportJSON, downloadFullReportPDF, downloadNavigatorLayer, loadAgtAttackPath, openAgentDetail, openFullReport, safeScan } from './agent-drawer.js';
 import { openRemoveAgentModal, openStopAgentModal, openUninstallAgentModal } from './agent-actions.js';
 import { loadAuditLogs, loadBackups, loadLicenseInfo } from './audit-logs.js';
 import { loadCalderaStatus } from './compliance.js';
@@ -1542,6 +1542,8 @@ function renderAgentRows() {
           '<button class="row-menu-item"' + on('click', 'rowMenuReportPdf', a.agentId) + '>&#8595; Report (PDF)</button>' +
           '<button class="row-menu-item"' + on('click', 'rowMenuReportCsv', a.agentId) + '>&#8595; Report (CSV)</button>' +
           '<button class="row-menu-item"' + on('click', 'rowMenuReportJson', a.agentId) + '>&#8595; Report (JSON)</button>' +
+          '<button class="row-menu-item"' + on('click', 'rowMenuBoardScorecard', a.agentId) + '>&#128202; Board scorecard (PDF)</button>' +
+          '<button class="row-menu-item"' + on('click', 'rowMenuNavigator', a.agentId) + '>&#128506; ATT&amp;CK Navigator (JSON)</button>' +
           '<button class="row-menu-item"' + on('click', 'rowMenuAuditPack', a.agentId) + '>&#8659; Download audit pack</button>' +
           (ROLE === 'admin' ?
             '<button class="row-menu-item"' + on('click', 'rowMenuMoveGroup', a.agentId) + '>&#128193; Move to group…</button>' : '') +
@@ -1572,6 +1574,8 @@ export function rowMenuReportPdf(id) { closeAllRowMenus(); downloadFullReportPDF
 export function rowMenuReportCsv(id) { closeAllRowMenus(); downloadFullReportCSV(id); }
 export function rowMenuReportJson(id) { closeAllRowMenus(); downloadFullReportJSON(id); }
 export function rowMenuAuditPack(id) { closeAllRowMenus(); downloadAuditPack(id); }
+export function rowMenuBoardScorecard(id) { closeAllRowMenus(); downloadBoardScorecard(id); }
+export function rowMenuNavigator(id) { closeAllRowMenus(); downloadNavigatorLayer(id); }
 export function rowMenuMoveGroup(id) { closeAllRowMenus(); moveAgentToGroupPrompt(id); }
 export function rowMenuStopAgent(id, hostname) { closeAllRowMenus(); openStopAgentModal(id, hostname); }
 export function rowMenuUninstallAgent(id, hostname) { closeAllRowMenus(); openUninstallAgentModal(id, hostname); }
