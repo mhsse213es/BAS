@@ -1247,28 +1247,41 @@ func (h *Handler) StopAgent(w http.ResponseWriter, r *http.Request) {
 }
 
 // agentFiles is the explicit allowlist of downloadable agent artifacts.
-// key = URL platform param; value = filename and MIME type served.
+// key = URL platform param.
+//   - filename: source file in ./agents/, and the integrity manifest key.
+//   - mimeType: Content-Type served to the browser.
+//   - bundleDefaults: true for the GUI installers only -- the download is
+//     wrapped (or, for the already-zipped Windows setup, re-wrapped) with a
+//     freshly generated bas-agent-defaults.json carrying this deployment's
+//     server URL/enroll port, so the installer never has to ask for them --
+//     only the Secret.
+//   - downloadName: filename served to the browser when bundleDefaults
+//     changes the artifact's shape (bare binary -> zip); empty means serve
+//     under filename as-is.
 var agentFiles = map[string]struct {
-	filename string
-	mimeType string
+	filename       string
+	mimeType       string
+	bundleDefaults bool
+	downloadName   string
 }{
-	"linux-amd64":                {"bas-agent-linux-amd64", "application/octet-stream"},
-	"linux-arm64":                {"bas-agent-linux-arm64", "application/octet-stream"},
-	"linux-amd64-deb":            {"bas-agent-linux-amd64.deb", "application/vnd.debian.binary-package"},
-	"linux-arm64-deb":            {"bas-agent-linux-arm64.deb", "application/vnd.debian.binary-package"},
-	"linux-amd64-rpm":            {"bas-agent-linux-amd64.rpm", "application/x-rpm"},
-	"windows-amd64-setup":        {"bas-agent-windows-amd64-setup.zip", "application/zip"},
-	"windows-amd64":              {"bas-agent-windows-amd64.exe", "application/octet-stream"},
-	"windows-legacy-amd64-setup": {"bas-agent-windows-legacy-amd64-setup.zip", "application/zip"},
-	"windows-legacy-amd64":       {"bas-agent-windows-legacy-amd64.exe", "application/octet-stream"},
-	"darwin-amd64":               {"bas-agent-darwin-amd64", "application/octet-stream"},
-	"darwin-arm64":               {"bas-agent-darwin-arm64", "application/octet-stream"},
-	"darwin-amd64-installer":     {"bas-agent-installer-darwin-amd64", "application/octet-stream"},
-	"darwin-arm64-installer":     {"bas-agent-installer-darwin-arm64", "application/octet-stream"},
+	"linux-amd64":                {"bas-agent-linux-amd64", "application/octet-stream", false, ""},
+	"linux-arm64":                {"bas-agent-linux-arm64", "application/octet-stream", false, ""},
+	"linux-amd64-deb":            {"bas-agent-linux-amd64.deb", "application/vnd.debian.binary-package", false, ""},
+	"linux-arm64-deb":            {"bas-agent-linux-arm64.deb", "application/vnd.debian.binary-package", false, ""},
+	"linux-amd64-rpm":            {"bas-agent-linux-amd64.rpm", "application/x-rpm", false, ""},
+	"windows-amd64-setup":        {"bas-agent-windows-amd64-setup.zip", "application/zip", true, ""},
+	"windows-amd64":              {"bas-agent-windows-amd64.exe", "application/octet-stream", false, ""},
+	"windows-legacy-amd64-setup": {"bas-agent-windows-legacy-amd64-setup.zip", "application/zip", false, ""},
+	"windows-legacy-amd64":       {"bas-agent-windows-legacy-amd64.exe", "application/octet-stream", false, ""},
+	"darwin-amd64":               {"bas-agent-darwin-amd64", "application/octet-stream", false, ""},
+	"darwin-arm64":               {"bas-agent-darwin-arm64", "application/octet-stream", false, ""},
+	"darwin-amd64-installer":     {"bas-agent-installer-darwin-amd64", "application/zip", true, "BASAgent-Setup-mac-intel.zip"},
+	"darwin-arm64-installer":     {"bas-agent-installer-darwin-arm64", "application/zip", true, "BASAgent-Setup-mac-arm64.zip"},
 }
 
 // GET /api/agents/download/{platform} — serves the pre-built agent binary or package.
 // platform values: linux-amd64, linux-arm64, linux-amd64-deb, linux-arm64-deb,
+//
 //	darwin-amd64-installer, darwin-arm64-installer (one-click GUI installer --
 //	prompts only for Server URL + Secret, no Terminal use required beyond the
 //	one unavoidable Gatekeeper "Open Anyway" since this build isn't notarized),
@@ -1335,9 +1348,41 @@ func (h *Handler) DownloadAgent(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	downloadName := entry.filename
+	if entry.downloadName != "" {
+		downloadName = entry.downloadName
+	}
+
+	if entry.bundleDefaults {
+		verifiedBytes, err := io.ReadAll(f)
+		if err != nil {
+			jsonError(w, "could not read agent binary", http.StatusInternalServerError)
+			return
+		}
+		defaults, err := buildAgentDefaultsJSON(requestHost(r), h.advertisedMTLSPort, h.advertisedEnrollPort)
+		if err != nil {
+			jsonError(w, "could not build install defaults", http.StatusInternalServerError)
+			return
+		}
+		var bundled []byte
+		if strings.HasSuffix(entry.filename, ".zip") {
+			bundled, err = addDefaultsToZip(verifiedBytes, defaults)
+		} else {
+			bundled, err = bundleInstallerZip(strings.TrimSuffix(downloadName, ".zip"), verifiedBytes, defaults)
+		}
+		if err != nil {
+			jsonError(w, "could not bundle installer: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/zip")
+		w.Header().Set("Content-Disposition", `attachment; filename="`+downloadName+`"`)
+		http.ServeContent(w, r, downloadName, stat.ModTime(), bytes.NewReader(bundled))
+		return
+	}
+
 	w.Header().Set("Content-Type", entry.mimeType)
-	w.Header().Set("Content-Disposition", `attachment; filename="`+entry.filename+`"`)
-	http.ServeContent(w, r, entry.filename, stat.ModTime(), f)
+	w.Header().Set("Content-Disposition", `attachment; filename="`+downloadName+`"`)
+	http.ServeContent(w, r, downloadName, stat.ModTime(), f)
 }
 
 // POST /api/heartbeat — called by agents.

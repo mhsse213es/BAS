@@ -79,6 +79,20 @@ RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache
     EXE_MB=$(( $(stat -c%s /agents/Audspect_Agent.exe) / 1024 / 1024 )) && \
     if [ "$EXE_MB" -gt 25 ]; then echo "Audspect_Agent.exe is ${EXE_MB}MB, expected ~14MB - something is being embedded that shouldn't be" >&2; exit 1; fi && \
     cd /agents && zip -q bas-agent-windows-amd64-setup.zip Audspect_Agent.exe && rm Audspect_Agent.exe
+# macOS one-click installer -- each embeds its matching darwin agent binary
+# built above via go:embed, same reasoning as the Windows installer: this
+# installer's own source has no Audspect detection/scenario logic (only
+# unpacking and service-install plumbing), so it is as exempt from garble as
+# Audspect_Agent.exe above. Built to an intermediate name (not the
+# bas-agent- prefix) so this stage's own garble-coverage test does not
+# mistake it for one of the actual agent binaries built earlier in it.
+RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
+    cp /agents/bas-agent-darwin-arm64 ./bas_agent_darwin_arm64 && \
+    cp /agents/bas-agent-darwin-amd64 ./bas_agent_darwin_amd64 && \
+    CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -o /agents/installer-darwin-arm64 . && \
+    CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -o /agents/installer-darwin-amd64 . && \
+    mv /agents/installer-darwin-arm64 /agents/bas-agent-installer-darwin-arm64 && \
+    mv /agents/installer-darwin-amd64 /agents/bas-agent-installer-darwin-amd64
 
 # ── Legacy Windows Agent Builder ─────────────────────────────────────────────
 # go1.20.14 is the last Go release supporting Windows 7 SP1/8/8.1/Server
@@ -144,6 +158,7 @@ RUN mkdir /agents
 COPY --from=agent-builder /agents/bas-agent-linux-amd64 /agents/bas-agent-linux-arm64 \
      /agents/bas-agent-windows-amd64.exe /agents/bas-agent-darwin-amd64 /agents/bas-agent-darwin-arm64 \
      /agents/bas-agent-windows-amd64-setup.zip \
+     /agents/bas-agent-installer-darwin-arm64 /agents/bas-agent-installer-darwin-amd64 \
      /agents/
 COPY --from=agent-legacy-builder /agents-legacy/bas-agent-windows-legacy-amd64.exe \
      /agents-legacy/bas-agent-windows-legacy-amd64-setup.zip \
@@ -155,6 +170,7 @@ RUN cd /agents && sha256sum \
       bas-agent-linux-amd64 bas-agent-linux-arm64 bas-agent-windows-amd64.exe \
       bas-agent-darwin-amd64 bas-agent-darwin-arm64 bas-agent-windows-legacy-amd64.exe \
       bas-agent-windows-amd64-setup.zip bas-agent-windows-legacy-amd64-setup.zip \
+      bas-agent-installer-darwin-arm64 bas-agent-installer-darwin-amd64 \
       bas-agent-linux-amd64.deb bas-agent-linux-arm64.deb bas-agent-linux-amd64.rpm \
     > /agents/BINARIES.sha256
 

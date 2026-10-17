@@ -1,8 +1,12 @@
 package api
 
 import (
+	"archive/zip"
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -59,11 +63,29 @@ func writeAllAgentFixturesAndManifest(t *testing.T) *integrity.Manifest {
 	t.Helper()
 	var lines []string
 	for _, entry := range agentFiles {
-		content := "content-of-" + entry.filename
-		if err := os.WriteFile(filepath.Join("agents", entry.filename), []byte(content), 0o755); err != nil {
+		content := []byte("content-of-" + entry.filename)
+		// windows-amd64-setup is re-opened as a real zip by addDefaultsToZip
+		// (it's already a zip in production) -- the fixture must actually be
+		// one, not a plain string, or the bundling step correctly rejects it.
+		if strings.HasSuffix(entry.filename, ".zip") && entry.bundleDefaults {
+			var buf bytes.Buffer
+			zw := zip.NewWriter(&buf)
+			w, err := zw.Create("BASAgent-Setup.exe")
+			if err != nil {
+				t.Fatalf("create zip entry for %s: %v", entry.filename, err)
+			}
+			if _, err := w.Write(content); err != nil {
+				t.Fatalf("write zip entry for %s: %v", entry.filename, err)
+			}
+			if err := zw.Close(); err != nil {
+				t.Fatalf("close zip fixture for %s: %v", entry.filename, err)
+			}
+			content = buf.Bytes()
+		}
+		if err := os.WriteFile(filepath.Join("agents", entry.filename), content, 0o755); err != nil {
 			t.Fatalf("write %s: %v", entry.filename, err)
 		}
-		sum := sha256.Sum256([]byte(content))
+		sum := sha256.Sum256(content)
 		lines = append(lines, hex.EncodeToString(sum[:])+"  "+entry.filename)
 	}
 	mpath := filepath.Join("agents", "BINARIES.sha256")
@@ -179,8 +201,44 @@ func TestDownloadAgent_AllPlatformsServedAndVerified(t *testing.T) {
 				t.Fatalf("platform %q: status = %d, want 200; body=%q", platform, rec.Code, rec.Body.String())
 			}
 			want := "content-of-" + entry.filename
-			if rec.Body.String() != want {
-				t.Errorf("platform %q: body = %q, want %q", platform, rec.Body.String(), want)
+			if !entry.bundleDefaults {
+				if rec.Body.String() != want {
+					t.Errorf("platform %q: body = %q, want %q", platform, rec.Body.String(), want)
+				}
+				return
+			}
+			// A bundled download is a zip carrying the original (verified)
+			// content under some entry, plus a fresh bas-agent-defaults.json
+			// -- not byte-identical to the on-disk fixture by design.
+			body := rec.Body.Bytes()
+			zr, err := zip.NewReader(bytes.NewReader(body), int64(len(body)))
+			if err != nil {
+				t.Fatalf("platform %q: response is not a valid zip: %v", platform, err)
+			}
+			var sawDefaults, sawContent bool
+			for _, f := range zr.File {
+				rc, err := f.Open()
+				if err != nil {
+					t.Fatalf("platform %q: open entry %s: %v", platform, f.Name, err)
+				}
+				data, _ := io.ReadAll(rc)
+				rc.Close()
+				if f.Name == "bas-agent-defaults.json" {
+					sawDefaults = true
+					var d agentInstallDefaults
+					if err := json.Unmarshal(data, &d); err != nil || d.ServerURL == "" {
+						t.Errorf("platform %q: bas-agent-defaults.json invalid: %q", platform, data)
+					}
+				}
+				if string(data) == want {
+					sawContent = true
+				}
+			}
+			if !sawDefaults {
+				t.Errorf("platform %q: zip missing bas-agent-defaults.json", platform)
+			}
+			if !sawContent {
+				t.Errorf("platform %q: zip does not contain the original verified content %q", platform, want)
 			}
 		})
 	}

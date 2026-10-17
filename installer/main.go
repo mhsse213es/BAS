@@ -419,13 +419,29 @@ func createControls(hwnd uintptr) {
 		return hw
 	}
 
+	// bas-agent-defaults.json, when present next to this installer (the
+	// console's download endpoint bundles it in), pre-fills the Server
+	// URL/Enrollment Port so the operator only has to type the Secret --
+	// the fields stay visible and editable rather than hidden, since this
+	// is a plain CreateWindowEx layout with no reflow mechanism to safely
+	// collapse around a hidden control.
+	defaults := loadInstallDefaults()
+	urlDefault := "https://"
+	if defaults.ServerURL != "" {
+		urlDefault = defaults.ServerURL
+	}
+	enrollDefault := "9444"
+	if defaults.EnrollPort != "" {
+		enrollDefault = defaults.EnrollPort
+	}
+
 	mkLabel("Server URL  (from dashboard: Settings -> Connection Config)", LPAD, yURLLbl, FW, 18)
 	hURLEdit = mkEdit(IDC_URL, LPAD, yURLEdit, FW, EDTH, ES_LEFT, true)
-	setWindowText(hURLEdit, "https://")
+	setWindowText(hURLEdit, urlDefault)
 
 	mkLabel("Enrollment Port  (default 9444; change only if remapped)", LPAD, yEnrollLbl, FW, 18)
 	hEnrollEdit = mkEdit(IDC_ENROLL, LPAD, yEnrollEdit, FW, EDTH, ES_LEFT, true)
-	setWindowText(hEnrollEdit, "9444")
+	setWindowText(hEnrollEdit, enrollDefault)
 
 	mkLabel("Agent Secret", LPAD, ySecLbl, FW, 18)
 	hSecEdit = mkEdit(IDC_SECRET, LPAD, ySecEdit, FW, EDTH, ES_PASSWORD, true)

@@ -34,7 +34,7 @@ func main() {
 }
 
 func runSetupWizard() {
-	serverURL, secret, ok := promptForServerAndSecret()
+	serverURL, secret, ok := promptForServerAndSecret(loadInstallDefaults().ServerURL)
 	if !ok {
 		return // cancelled or dismissed -- exit quietly, no error dialog
 	}
@@ -130,15 +130,14 @@ func runPrivilegedInstall(args []string) {
 	fmt.Println("[+] BAS Agent installed successfully.")
 }
 
-// promptForServerAndSecret shows the only two inputs the operator provides:
-// Server URL and Agent Secret (the Env label is fixed to "Production" and
-// never asked for). Returns ok=false if either dialog was cancelled --
-// callers should exit quietly in that case, not show an error.
-func promptForServerAndSecret() (serverURL, secret string, ok bool) {
-	script := `set serverURL to text returned of (display dialog "Enter the Server URL (from the console's Connection Config):" default answer "https://" with title "BAS Agent Setup" buttons {"Cancel", "Next"} default button "Next" cancel button "Cancel")
-set theSecret to text returned of (display dialog "Enter the Agent Secret:" default answer "" with title "BAS Agent Setup" buttons {"Cancel", "Install"} default button "Install" cancel button "Cancel" with hidden answer)
-serverURL & linefeed & theSecret`
-	out, err := exec.Command("osascript", "-e", script).Output()
+// promptForServerAndSecret shows the operator's inputs: the Server URL
+// (skipped, using presetServerURL, when bas-agent-defaults.json supplied
+// one) and the Agent Secret, always asked (the Env label is fixed to
+// "Production" and never asked for). Returns ok=false if either dialog
+// was cancelled -- callers should exit quietly in that case, not show an
+// error.
+func promptForServerAndSecret(presetServerURL string) (serverURL, secret string, ok bool) {
+	out, err := exec.Command("osascript", "-e", buildPromptScript(presetServerURL)).Output()
 	if err != nil {
 		return "", "", false
 	}
