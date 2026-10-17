@@ -66,23 +66,24 @@ func (h *Handler) CreateResponseConnector(w http.ResponseWriter, r *http.Request
 		ClientSecret          string `json:"clientSecret"`
 		BaseURL               string `json:"baseUrl"`
 		KillProcessScriptName string `json:"killProcessScriptName"`
+		APIToken              string `json:"apiToken"`
 	}
 	if json.NewDecoder(r.Body).Decode(&req) != nil || req.Name == "" || req.Provider == "" {
 		jsonError(w, "name and provider are required", http.StatusBadRequest)
 		return
 	}
-	validProviders := map[string]bool{"crowdstrike": true, "microsoft_defender": true}
+	validProviders := map[string]bool{"crowdstrike": true, "microsoft_defender": true, "sentinelone": true}
 	if !validProviders[req.Provider] {
-		jsonError(w, "provider must be crowdstrike | microsoft_defender", http.StatusBadRequest)
+		jsonError(w, "provider must be crowdstrike | microsoft_defender | sentinelone", http.StatusBadRequest)
 		return
 	}
 	var id string
 	err := h.db.QueryRow(r.Context(),
 		`INSERT INTO action_connectors
-		 (name, provider, enabled, tenant_id, client_id, client_secret, base_url, kill_process_script_name)
-		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`,
+		 (name, provider, enabled, tenant_id, client_id, client_secret, base_url, kill_process_script_name, api_token)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id`,
 		req.Name, req.Provider, req.Enabled, req.TenantID, req.ClientID, req.ClientSecret,
-		req.BaseURL, req.KillProcessScriptName,
+		req.BaseURL, req.KillProcessScriptName, req.APIToken,
 	).Scan(&id)
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
@@ -104,23 +105,27 @@ func (h *Handler) UpdateResponseConnector(w http.ResponseWriter, r *http.Request
 		ClientSecret          string `json:"clientSecret"`
 		BaseURL               string `json:"baseUrl"`
 		KillProcessScriptName string `json:"killProcessScriptName"`
+		APIToken              string `json:"apiToken"`
 	}
 	if json.NewDecoder(r.Body).Decode(&req) != nil {
 		jsonError(w, "invalid body", http.StatusBadRequest)
 		return
 	}
 	// Preserve masked sensitive values (UI returns "***" for secrets it can't show).
-	var existingSecret string
-	h.db.QueryRow(r.Context(), `SELECT client_secret FROM action_connectors WHERE id=$1`, id).Scan(&existingSecret)
+	var existingSecret, existingAPIToken string
+	h.db.QueryRow(r.Context(), `SELECT client_secret, api_token FROM action_connectors WHERE id=$1`, id).Scan(&existingSecret, &existingAPIToken)
 	if req.ClientSecret == "***" {
 		req.ClientSecret = existingSecret
 	}
+	if req.APIToken == "***" {
+		req.APIToken = existingAPIToken
+	}
 	ct, err := h.db.Exec(r.Context(),
 		`UPDATE action_connectors SET name=$1, enabled=$2, tenant_id=$3, client_id=$4,
-		        client_secret=$5, base_url=$6, kill_process_script_name=$7, updated_at=NOW()
-		  WHERE id=$8`,
+		        client_secret=$5, base_url=$6, kill_process_script_name=$7, api_token=$8, updated_at=NOW()
+		  WHERE id=$9`,
 		req.Name, req.Enabled, req.TenantID, req.ClientID, req.ClientSecret,
-		req.BaseURL, req.KillProcessScriptName, id)
+		req.BaseURL, req.KillProcessScriptName, req.APIToken, id)
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -187,10 +192,10 @@ func (h *Handler) loadResponseConnector(ctx context.Context, id string) (*action
 	var cfg actions.ConnectorConfig
 	var enabled bool
 	err := h.db.QueryRow(ctx,
-		`SELECT provider, enabled, tenant_id, client_id, client_secret, base_url, kill_process_script_name
+		`SELECT provider, enabled, tenant_id, client_id, client_secret, base_url, kill_process_script_name, api_token
 		   FROM action_connectors WHERE id=$1`, id,
 	).Scan(&cfg.Provider, &enabled, &cfg.TenantID, &cfg.ClientID, &cfg.ClientSecret,
-		&cfg.BaseURL, &cfg.KillProcessScriptName)
+		&cfg.BaseURL, &cfg.KillProcessScriptName, &cfg.APIToken)
 	if err != nil {
 		return nil, false, err
 	}

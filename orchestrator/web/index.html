@@ -133,6 +133,12 @@
           </svg>
           AD Coverage
         </div>
+        <div class="nav-item" data-tab="email" title="Email" data-on-click="showTab" data-args="[&quot;email&quot;]">
+          <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
+            <rect x="1.5" y="3" width="13" height="10" rx="1.2"/><path d="M2 4l6 5 6-5"/>
+          </svg>
+          Email
+        </div>
       </div>
       <div class="nav-group">
         <div class="nav-group-label">Visibility</div>
@@ -2378,6 +2384,7 @@
                 <select id="rc-provider" class="inp-sm u-w100" data-on-change="renderResponseConnectorFields">
                   <option value="crowdstrike">CrowdStrike Falcon</option>
                   <option value="microsoft_defender">Microsoft Defender for Endpoint</option>
+                  <option value="sentinelone">SentinelOne</option>
                 </select>
               </div>
             </div>
@@ -2398,7 +2405,20 @@
               </div>
               <div class="g1-s-b5ca88cc">⚠ Kill Process requires this script to already exist in the tenant's Defender Live Response script library — Defender has no built-in kill-process action.</div>
             </div>
-            <div class="g1-display-grid g1-s-0b1c784a">
+            <div id="rc-sentinelone-fields" class="is-hidden g1-s-2fc766d7">
+              <div class="g1-display-grid g1-s-2d31823f">
+                <div>
+                  <div class="conn-cfg-label g1-s-9f42fc4f">Management Console URL</div>
+                  <input id="rc-s1-base-url" type="text" placeholder="https://your-company.sentinelone.net" class="inp-sm u-w100">
+                </div>
+                <div>
+                  <div class="conn-cfg-label g1-s-9f42fc4f">API Token</div>
+                  <input id="rc-s1-api-token" type="password" placeholder="••••••" class="inp-sm u-w100">
+                </div>
+              </div>
+              <div class="g1-s-b5ca88cc">⚠ Kill Process is not supported for SentinelOne — its mitigation API operates on an already-identified threat ID, not an arbitrary live process ID.</div>
+            </div>
+            <div id="rc-oauth-fields" class="g1-display-grid g1-s-0b1c784a">
               <div>
                 <div class="conn-cfg-label g1-s-9f42fc4f">Client ID</div>
                 <input id="rc-client-id" type="text" placeholder="API client ID" class="inp-sm u-w100">
@@ -2826,6 +2846,72 @@
           <div class="empty g1-s-04fbe8f9">Loading Endpoint Mastery layers…</div>
         </div>
       </div>
+
+      <div id="tab-email" class="is-hidden">
+        <div class="sec-hdr">
+          <div>
+            <h2>Email</h2>
+            <div class="tiny muted">Email security-effectiveness validation — SPF/DKIM/DMARC, phishing, attachments, outbound DLP, mailbox/identity security</div>
+          </div>
+          <div class="email-launch-buttons">
+            <button class="btn btn-outline btn-sm" data-on-click="loadEmailTab">&#x21bb; Refresh</button>
+          </div>
+        </div>
+
+        <!-- Coverage -->
+        <div class="dash-panel u-mb-1">
+          <div class="dash-panel-hdr"><span>Coverage</span></div>
+          <div class="dash-panel-body" id="email-coverage">
+            <div class="empty">Loading coverage…</div>
+          </div>
+        </div>
+
+        <!-- Metrics (MTTD/MTTR) -->
+        <div class="dash-panel u-mb-1">
+          <div class="dash-panel-hdr"><span>Time-Based Metrics</span></div>
+          <div class="dash-panel-body" id="email-metrics">
+            <div class="empty">Loading metrics…</div>
+          </div>
+        </div>
+
+        <!-- Scenario catalog -->
+        <div class="dash-panel u-mb-1">
+          <div class="dash-panel-hdr"><span>Scenarios</span></div>
+          <div class="dash-panel-body email-catalog-grid" id="email-catalog-grid">
+            <div class="empty">Loading scenarios…</div>
+          </div>
+        </div>
+
+        <!-- Campaigns -->
+        <div class="dash-panel u-mb-1">
+          <div class="dash-panel-hdr email-hdr-row">
+            <span>Campaigns</span>
+            <div id="email-campaigns-toolbar"></div>
+            <div class="u-flex1"></div>
+            <div id="email-campaign-launch-buttons" class="email-launch-buttons"></div>
+          </div>
+          <div class="tbl-wrap">
+            <table>
+              <thead><tr><th>Campaign</th><th>Status</th><th>Created</th><th>Completed</th><th></th></tr></thead>
+              <tbody id="email-campaigns-body"><tr><td colspan="5" class="empty">Loading…</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Runs -->
+        <div class="dash-panel">
+          <div class="dash-panel-hdr email-hdr-row">
+            <span>Runs</span>
+            <div id="email-runs-toolbar"></div>
+          </div>
+          <div class="tbl-wrap">
+            <table>
+              <thead><tr><th>Scenario</th><th>Status</th><th>Environment</th><th>Started</th><th>Error</th></tr></thead>
+              <tbody id="email-runs-body"><tr><td colspan="5" class="empty">Loading…</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
     </main>
   </div>
 </div>
@@ -3099,6 +3185,7 @@
       <label class="modal-lbl" id="respond-extra-label"></label>
       <input type="text" id="respond-extra-value" placeholder=""
              class="g1-s-99573e36">
+      <div id="respond-extra-warning" class="is-hidden g1-s-b5ca88cc"></div>
     </div>
 
     <label class="modal-lbl u-mt-06">Reason <span class="tiny muted">(required)</span></label>

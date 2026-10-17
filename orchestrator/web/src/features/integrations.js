@@ -378,7 +378,7 @@ export function renderResponseConnectorList(list) {
       '<div class="tiny">Add a CrowdStrike or Defender connector to enable Respond actions from Findings.</div></div>';
     return;
   }
-  var providerLabels = { crowdstrike: 'CrowdStrike Falcon', microsoft_defender: 'Microsoft Defender for Endpoint' };
+  var providerLabels = { crowdstrike: 'CrowdStrike Falcon', microsoft_defender: 'Microsoft Defender for Endpoint', sentinelone: 'SentinelOne' };
   el.innerHTML = list.map(function(c) {
     var statusColor = c.enabled ? 'var(--success)' : 'var(--muted)';
     var statusLabel = c.enabled ? 'Enabled' : 'Disabled';
@@ -402,6 +402,10 @@ export function renderResponseConnectorFields() {
   var prov = document.getElementById('rc-provider').value;
   setDisplay(document.getElementById('rc-crowdstrike-fields'), (prov === 'crowdstrike') ? '' : 'none');
   setDisplay(document.getElementById('rc-defender-fields'), (prov === 'microsoft_defender') ? '' : 'none');
+  setDisplay(document.getElementById('rc-sentinelone-fields'), (prov === 'sentinelone') ? '' : 'none');
+  // SentinelOne authenticates with a single static API token -- it has no
+  // OAuth client_id/client_secret pair, so the generic fields are irrelevant.
+  setDisplay(document.getElementById('rc-oauth-fields'), (prov === 'sentinelone') ? 'none' : '');
 }
 
 export function openAddResponseConnector() {
@@ -413,6 +417,8 @@ export function openAddResponseConnector() {
   document.getElementById('rc-kill-script').value = '';
   document.getElementById('rc-client-id').value = '';
   document.getElementById('rc-client-secret').value = '';
+  document.getElementById('rc-s1-base-url').value = '';
+  document.getElementById('rc-s1-api-token').value = '';
   document.getElementById('rc-enabled').checked = true;
   document.getElementById('response-connector-form-title').textContent = 'Add Connector';
   renderResponseConnectorFields();
@@ -431,6 +437,8 @@ export function openEditResponseConnector(id) {
   document.getElementById('rc-kill-script').value = c.killProcessScriptName || '';
   document.getElementById('rc-client-id').value = c.clientId || '';
   document.getElementById('rc-client-secret').value = '***';
+  document.getElementById('rc-s1-base-url').value = c.baseUrl || '';
+  document.getElementById('rc-s1-api-token').value = '***';
   document.getElementById('rc-enabled').checked = !!c.enabled;
   document.getElementById('response-connector-form-title').textContent = 'Edit Connector';
   renderResponseConnectorFields();
@@ -444,15 +452,20 @@ export function closeResponseConnectorForm() {
 
 export function saveResponseConnectorForm() {
   var id = document.getElementById('rc-id').value;
+  var provider = document.getElementById('rc-provider').value;
+  var baseUrl = (provider === 'sentinelone')
+    ? document.getElementById('rc-s1-base-url').value
+    : document.getElementById('rc-base-url').value;
   var body = {
     name:                  document.getElementById('rc-name').value,
-    provider:              document.getElementById('rc-provider').value,
+    provider:              provider,
     enabled:               document.getElementById('rc-enabled').checked,
-    baseUrl:               document.getElementById('rc-base-url').value,
+    baseUrl:               baseUrl,
     tenantId:              document.getElementById('rc-tenant-id').value,
     killProcessScriptName: document.getElementById('rc-kill-script').value,
     clientId:              document.getElementById('rc-client-id').value,
-    clientSecret:          document.getElementById('rc-client-secret').value
+    clientSecret:          document.getElementById('rc-client-secret').value,
+    apiToken:              document.getElementById('rc-s1-api-token').value
   };
   if (!body.name || !body.provider) { showToast('Name and provider are required', 'err'); return; }
   var url = id ? '/api/actions/configs/' + encodeURIComponent(id) : '/api/actions/configs';
@@ -532,16 +545,28 @@ export function renderRespondFields() {
   var wrap = document.getElementById('respond-extra-field');
   var label = document.getElementById('respond-extra-label');
   var input = document.getElementById('respond-extra-value');
+  var warning = document.getElementById('respond-extra-warning');
+  setDisplay(warning, 'none');
+  warning.textContent = '';
 
   if (action === 'endpoint.kill_process') {
     setDisplay(wrap, '');
     label.textContent = 'Process ID (PID)';
     input.placeholder = 'e.g. 4821';
+    if (provider === 'sentinelone') {
+      warning.textContent = '⚠ Not supported for SentinelOne — its mitigation API operates on an already-identified threat ID, not an arbitrary live process ID. This will fail.';
+      setDisplay(warning, '');
+    }
   } else if (action === 'endpoint.quarantine_file') {
     setDisplay(wrap, '');
     if (provider === 'microsoft_defender') {
       label.textContent = 'File SHA1 hash';
       input.placeholder = 'e.g. aabbccddeeff00112233445566778899aabbccdd';
+    } else if (provider === 'sentinelone') {
+      label.textContent = 'SentinelOne Threat ID';
+      input.placeholder = 'e.g. 1234567890123456789';
+      warning.textContent = 'SentinelOne mitigates an already-identified threat by its own ID, not a file path or hash.';
+      setDisplay(warning, '');
     } else {
       label.textContent = 'File path';
       input.placeholder = 'e.g. C:\\Users\\victim\\evil.exe';

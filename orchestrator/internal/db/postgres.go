@@ -1083,6 +1083,10 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 			created_at                timestamptz NOT NULL DEFAULT NOW(),
 			updated_at                timestamptz NOT NULL DEFAULT NOW()
 		)`,
+		// api_token: SentinelOne's static console-generated API token --
+		// unlike CrowdStrike/Defender's OAuth client_id/client_secret, there
+		// is no separate secret pair to rotate.
+		`ALTER TABLE action_connectors ADD COLUMN IF NOT EXISTS api_token text NOT NULL DEFAULT ''`,
 
 		// action_requests IS the audit trail for every executed response
 		// action — every field of internal/actions.Action is a column here,

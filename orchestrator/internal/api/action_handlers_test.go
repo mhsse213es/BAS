@@ -70,7 +70,7 @@ func TestCreateResponseConnector_ValidationErrors(t *testing.T) {
 		}{
 			{"missing name", map[string]any{"provider": "crowdstrike"}},
 			{"missing provider", map[string]any{"name": "x"}},
-			{"invalid provider", map[string]any{"name": "x", "provider": "sentinelone"}},
+			{"invalid provider", map[string]any{"name": "x", "provider": "sophos"}},
 		}
 		for _, c := range cases {
 			rec := httptest.NewRecorder()
@@ -114,6 +114,71 @@ func TestUpdateResponseConnector_PreservesMaskedSecret(t *testing.T) {
 		}
 		if secret != "real-secret" {
 			t.Errorf("client_secret = %q, want the original secret preserved", secret)
+		}
+	})
+}
+
+func TestCreateResponseConnector_SentinelOne_Succeeds(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := actionsHandler(t, pool)
+		createRec := httptest.NewRecorder()
+		h.CreateResponseConnector(createRec, actionsConfigReq(map[string]any{
+			"name": "Prod SentinelOne", "provider": "sentinelone",
+			"baseUrl": "https://company.sentinelone.net", "apiToken": "s1-real-token",
+		}))
+		if createRec.Code != http.StatusOK {
+			t.Fatalf("create: status = %d, want 200, body = %s", createRec.Code, createRec.Body.String())
+		}
+		var created struct {
+			ID string `json:"id"`
+		}
+		json.Unmarshal(createRec.Body.Bytes(), &created)
+
+		var provider, baseURL, apiToken string
+		pool.QueryRow(context.Background(),
+			`SELECT provider, base_url, api_token FROM action_connectors WHERE id=$1`, created.ID,
+		).Scan(&provider, &baseURL, &apiToken)
+		if provider != "sentinelone" || baseURL != "https://company.sentinelone.net" || apiToken != "s1-real-token" {
+			t.Fatalf("provider=%q baseURL=%q apiToken=%q, want sentinelone/https://company.sentinelone.net/s1-real-token", provider, baseURL, apiToken)
+		}
+	})
+}
+
+func TestUpdateResponseConnector_PreservesMaskedAPIToken(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := actionsHandler(t, pool)
+		createRec := httptest.NewRecorder()
+		h.CreateResponseConnector(createRec, actionsConfigReq(map[string]any{
+			"name": "x", "provider": "sentinelone", "apiToken": "real-token",
+		}))
+		var created struct {
+			ID string `json:"id"`
+		}
+		json.Unmarshal(createRec.Body.Bytes(), &created)
+
+		b, _ := json.Marshal(map[string]any{"name": "x-renamed", "apiToken": "***"})
+		req := withURLParam(httptest.NewRequest(http.MethodPut, "/x", bytes.NewReader(b)), "id", created.ID)
+		rec := httptest.NewRecorder()
+		h.UpdateResponseConnector(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200, body = %s", rec.Code, rec.Body.String())
+		}
+
+		var name, token string
+		pool.QueryRow(context.Background(),
+			`SELECT name, api_token FROM action_connectors WHERE id=$1`, created.ID,
+		).Scan(&name, &token)
+		if name != "x-renamed" {
+			t.Errorf("name = %q, want x-renamed", name)
+		}
+		if token != "real-token" {
+			t.Errorf("api_token = %q, want the original token preserved", token)
 		}
 	})
 }
