@@ -13,17 +13,25 @@ import "fmt"
 // combined, and IT/SaaS/BPO/Telecom combined -- not AV's 6-way split,
 // which doesn't match how this blueprint groups its industries.
 //
-// BFSI and the India regional baseline are the only two profiles whose
-// real payload (fabricated PAN/Aadhaar/SWIFT/UPI/credit-card) matches
-// what every scenario actually tests today, so they get a flat,
-// ungapped VectorIDs-only shape. Every other profile -- Healthcare,
-// Manufacturing, Government, IT/SaaS, and UAE -- gets the same
-// channel-level VectorIDs (channel delivery mechanics are
-// industry/region-agnostic) plus exactly one ControlObjectiveCoverage
-// Gap recording that its sector/region-specific sensitive-data type was
-// never actually exercised by any scenario payload. This asymmetry was
-// found and resolved during this package's own builder-check review
-// (2026-10-16): see the design spec for the full reasoning.
+// BFSI and the India regional baseline are the two profiles whose real
+// payload (fabricated PAN/Aadhaar/SWIFT/UPI/credit-card) matches what
+// every scenario's base step tests, so they get a flat, ungapped
+// VectorIDs-only shape. UAE gets the same channel-level VectorIDs plus
+// exactly one ControlObjectiveCoverage Gap, since no scenario anywhere
+// tests Emirates ID/IBAN-format content (confirmed by grep across every
+// scenario file during the 2026-10-17 final review). Healthcare,
+// Manufacturing, Government, and IT/SaaS each get the same channel-level
+// VectorIDs plus BOTH a real Covered entry and a narrower Gap: the
+// scenarios cited by these profiles carry genuine "content-diversity"
+// steps beyond the base payload (e.g. dlp-exfiltration-smtp's Medical
+// Record step, dlp-exfiltration-coderepo's PHP/Perl source-code and
+// Azure/DB2-credential steps) that the original builder-check review
+// (2026-10-16) missed by reading only each scenario's top-level
+// description, not its actual steps -- the 2026-10-17 final review caught
+// this and this catalog now records both the real coverage that exists
+// and the narrower slice that genuinely doesn't. See the design spec for
+// the original reasoning and this file's own NewControlObjectiveCoverage
+// calls for exactly what was corrected and why.
 func AudspectDLPProfileCatalog() ([]Profile, error) {
 	realScenarioIDs := RealDLPScenarioIDs()
 
@@ -46,8 +54,15 @@ func AudspectDLPProfileCatalog() ([]Profile, error) {
 	if err != nil {
 		return nil, fmt.Errorf("loading seed profile catalog: %w", err)
 	}
-	healthcareGap, err := NewControlObjectiveCoverage("patient/clinical record data-type fidelity", "",
-		"no real scenario payload is shaped as a patient identifier, clinical record, lab report, or insurance claim -- every scenario today tests the same fabricated PAN/Aadhaar/SWIFT/UPI/credit-card record regardless of channel, so a healthcare deployment's actual sensitive-data type has never been exercised",
+	healthcareCovered, err := NewControlObjectiveCoverage("patient/clinical record data-type fidelity", "dlp-exfiltration-smtp",
+		"dlp-exfiltration-smtp's own \"SMTP Exfiltration of Medical Record\" step carries a real Patient/MRN/Diagnosis-shaped payload -- confirmed by reading the scenario's steps directly (2026-10-17 final review), not just its top-level description. This is real coverage, not the generic BFSI-shaped record every channel's first step carries.",
+		"sink-receipt evidence from internal/smtpsink for the Medical Record step's fabricated Patient/MRN/Diagnosis payload",
+		CoverageStatusCovered)
+	if err != nil {
+		return nil, fmt.Errorf("loading seed profile catalog: %w", err)
+	}
+	healthcareGap, err := NewControlObjectiveCoverage("lab-report/imaging-report/insurance-claim data-type fidelity", "",
+		"no real scenario payload is shaped as a lab report, imaging report, or insurance claim -- only a generic Patient/MRN/Diagnosis medical record exists (via dlp-exfiltration-smtp, recorded as Covered above), so this narrower slice of healthcare data remains genuinely untested",
 		"", CoverageStatusGap)
 	if err != nil {
 		return nil, fmt.Errorf("loading seed profile catalog: %w", err)
@@ -55,12 +70,12 @@ func AudspectDLPProfileCatalog() ([]Profile, error) {
 	healthcare, err := NewProfile("DLPPROFILE-HEALTHCARE", "Healthcare, Hospitals and Insurance", ProfileIndustry,
 		[]string{"dlp-exfiltration-cloud-storage", "dlp-exfiltration-smtp", "dlp-exfiltration-sftp"},
 		[]ComplianceReference{healthData},
-		"Healthcare patient exports, lab/imaging reports, and insurance claims realistically leave through cloud storage, email, and SFTP to diagnostic centers/billing vendors -- dlp.txt §4's own named Healthcare channels. Channel-level delivery mechanics are industry-agnostic so these scenarios genuinely apply, but the payload-fidelity gap below is recorded honestly rather than claiming full coverage.",
-		"manually authored from dlp.txt §4's named Healthcare item, scenario IDs selected from RealDLPScenarioIDs()")
+		"Healthcare patient exports, lab/imaging reports, and insurance claims realistically leave through cloud storage, email, and SFTP to diagnostic centers/billing vendors -- dlp.txt §4's own named Healthcare channels. dlp-exfiltration-smtp carries a real Medical Record step, so patient-record fidelity is genuinely Covered; the narrower lab-report/imaging/insurance-claim slice remains an honest Gap.",
+		"manually authored from dlp.txt §4's named Healthcare item, scenario IDs selected from RealDLPScenarioIDs(), content-diversity steps verified directly 2026-10-17")
 	if err != nil {
 		return nil, fmt.Errorf("loading seed profile catalog: %w", err)
 	}
-	healthcare, err = WithControlObjectives(healthcare, []ControlObjectiveCoverage{healthcareGap})
+	healthcare, err = WithControlObjectives(healthcare, []ControlObjectiveCoverage{healthcareCovered, healthcareGap})
 	if err != nil {
 		return nil, fmt.Errorf("loading seed profile catalog: %w", err)
 	}
@@ -70,8 +85,15 @@ func AudspectDLPProfileCatalog() ([]Profile, error) {
 	if err != nil {
 		return nil, fmt.Errorf("loading seed profile catalog: %w", err)
 	}
-	manufacturingGap, err := NewControlObjectiveCoverage("CAD/engineering-design/source-code data-type fidelity", "",
-		"no real scenario payload is shaped as a CAD drawing, BOM, engineering export, or proprietary source file -- the coderepo channel tests the same fabricated PAN/Aadhaar/SWIFT/UPI/credit-card record as every other channel, not CAD or source-code-shaped content, despite coderepo's own GitHub Gist/GitLab Snippet delivery mechanism being a realistic path for this data",
+	manufacturingCovered, err := NewControlObjectiveCoverage("proprietary source-code data-type fidelity", "dlp-exfiltration-coderepo",
+		"dlp-exfiltration-coderepo carries dedicated \"Exfiltration of PHP Source Code\" and \"...of Perl Source Code\" steps (plus Azure Cloud Credentials/DB2 Connection String steps) -- confirmed by reading the scenario's steps directly (2026-10-17 final review), not just its top-level description. Generic enterprise source code is genuinely covered via this channel, independent of whether it originated from engineering tooling specifically.",
+		"sink-receipt evidence from the coderepo sink for the PHP/Perl Source Code steps",
+		CoverageStatusCovered)
+	if err != nil {
+		return nil, fmt.Errorf("loading seed profile catalog: %w", err)
+	}
+	manufacturingGap, err := NewControlObjectiveCoverage("CAD drawing/BOM/schematic/engineering-design-file data-type fidelity", "",
+		"no real scenario payload is shaped as a CAD drawing, bill of materials, schematic, or other CAD-native engineering export -- generic source code is Covered above via dlp-exfiltration-coderepo, but no scenario tests CAD-specific file formats or content",
 		"", CoverageStatusGap)
 	if err != nil {
 		return nil, fmt.Errorf("loading seed profile catalog: %w", err)
@@ -79,12 +101,12 @@ func AudspectDLPProfileCatalog() ([]Profile, error) {
 	manufacturing, err := NewProfile("DLPPROFILE-MANUFACTURING", "Manufacturing, Engineering and Industrial", ProfileIndustry,
 		[]string{"dlp-exfiltration-coderepo", "dlp-exfiltration-cloud-storage", "dlp-exfiltration-sftp"},
 		[]ComplianceReference{certInManuf},
-		"Manufacturing CAD drawings, engineering exports, and supplier designs realistically leave through developer/repository uploads, cloud storage, and SFTP to contractors/suppliers -- dlp.txt §4's own named Manufacturing channels.",
-		"manually authored from dlp.txt §4's named Manufacturing item, scenario IDs selected from RealDLPScenarioIDs()")
+		"Manufacturing CAD drawings, engineering exports, and supplier designs realistically leave through developer/repository uploads, cloud storage, and SFTP to contractors/suppliers -- dlp.txt §4's own named Manufacturing channels. dlp-exfiltration-coderepo carries real source-code content-diversity steps, so generic source-code fidelity is genuinely Covered; the narrower CAD-native-format slice remains an honest Gap.",
+		"manually authored from dlp.txt §4's named Manufacturing item, scenario IDs selected from RealDLPScenarioIDs(), content-diversity steps verified directly 2026-10-17")
 	if err != nil {
 		return nil, fmt.Errorf("loading seed profile catalog: %w", err)
 	}
-	manufacturing, err = WithControlObjectives(manufacturing, []ControlObjectiveCoverage{manufacturingGap})
+	manufacturing, err = WithControlObjectives(manufacturing, []ControlObjectiveCoverage{manufacturingCovered, manufacturingGap})
 	if err != nil {
 		return nil, fmt.Errorf("loading seed profile catalog: %w", err)
 	}
@@ -94,8 +116,15 @@ func AudspectDLPProfileCatalog() ([]Profile, error) {
 	if err != nil {
 		return nil, fmt.Errorf("loading seed profile catalog: %w", err)
 	}
-	governmentGap, err := NewControlObjectiveCoverage("citizen-record/case-file/legal-privilege data-type fidelity", "",
-		"no real scenario payload is shaped as a government identity record, case file, or privileged legal document -- every scenario today tests the same fabricated PAN/Aadhaar/SWIFT/UPI/credit-card record regardless of channel",
+	governmentCovered, err := NewControlObjectiveCoverage("employment-record/client-contract data-type fidelity", "dlp-exfiltration-smtp",
+		"dlp-exfiltration-smtp carries a real \"Exfiltration of Employment Contract\" step, and dlp-exfiltration-cloud-storage (this profile's other cited channel) carries a real \"Exfiltration of Partnership Agreement\" step -- confirmed by reading both scenarios' steps directly (2026-10-17 final review), not just their top-level descriptions. Employee-record and client-contract fidelity is genuinely covered, matching dlp.txt §4's own named Government/Legal/HR priorities for this data type.",
+		"sink-receipt evidence from internal/smtpsink for the Employment Contract step",
+		CoverageStatusCovered)
+	if err != nil {
+		return nil, fmt.Errorf("loading seed profile catalog: %w", err)
+	}
+	governmentGap, err := NewControlObjectiveCoverage("citizen-identity-record/case-file data-type fidelity", "",
+		"no real scenario payload is shaped as a government citizen-identity record (e.g. an Indian-government-issued ID or case file) -- other countries' identity formats exist (Israeli ID, UK National Insurance Number, US SSN) but none is government-case-file-shaped, and employment/contract content is Covered above, not citizen-identity content",
 		"", CoverageStatusGap)
 	if err != nil {
 		return nil, fmt.Errorf("loading seed profile catalog: %w", err)
@@ -103,12 +132,12 @@ func AudspectDLPProfileCatalog() ([]Profile, error) {
 	government, err := NewProfile("DLPPROFILE-GOVERNMENT", "Government, Legal, Professional Services and HR", ProfileIndustry,
 		[]string{"dlp-exfiltration-sftp", "dlp-exfiltration-smtp", "dlp-exfiltration-cloud-storage"},
 		[]ComplianceReference{govBaseline},
-		"Government case files, employee records, and client contracts realistically leave through SFTP to outsourced teams, email, and cloud storage -- dlp.txt §4's own named Government/Legal/HR channels.",
-		"manually authored from dlp.txt §4's named Government/Legal/HR item, scenario IDs selected from RealDLPScenarioIDs()")
+		"Government case files, employee records, and client contracts realistically leave through SFTP to outsourced teams, email, and cloud storage -- dlp.txt §4's own named Government/Legal/HR channels. Employment-record/client-contract fidelity is genuinely Covered via real content-diversity steps; citizen-identity-record/case-file fidelity remains an honest Gap.",
+		"manually authored from dlp.txt §4's named Government/Legal/HR item, scenario IDs selected from RealDLPScenarioIDs(), content-diversity steps verified directly 2026-10-17")
 	if err != nil {
 		return nil, fmt.Errorf("loading seed profile catalog: %w", err)
 	}
-	government, err = WithControlObjectives(government, []ControlObjectiveCoverage{governmentGap})
+	government, err = WithControlObjectives(government, []ControlObjectiveCoverage{governmentCovered, governmentGap})
 	if err != nil {
 		return nil, fmt.Errorf("loading seed profile catalog: %w", err)
 	}
@@ -118,8 +147,15 @@ func AudspectDLPProfileCatalog() ([]Profile, error) {
 	if err != nil {
 		return nil, fmt.Errorf("loading seed profile catalog: %w", err)
 	}
-	itSaasGap, err := NewControlObjectiveCoverage("source-code/API-credential data-type fidelity", "",
-		"the coderepo and webhook channels exercise a realistic developer-tooling delivery mechanism (GitHub Gist/GitLab Snippet, Slack/Teams), but their payload is still the same fabricated PAN/Aadhaar/SWIFT/UPI/credit-card record, not source code, API credentials, or signing keys -- the data type this sector actually cares about has never been exercised",
+	itSaasCovered, err := NewControlObjectiveCoverage("source-code/API-credential data-type fidelity", "dlp-exfiltration-coderepo",
+		"dlp-exfiltration-coderepo carries real PHP/Perl source-code steps plus Azure Cloud Credentials/DB2 Connection String steps, and dlp-exfiltration-webhook (this profile's other cited channel) carries real AWS Cloud Credentials/PostgreSQL Connection String steps -- confirmed by reading both scenarios' steps directly (2026-10-17 final review), not just their top-level descriptions. The data type this sector cares about is genuinely exercised.",
+		"sink-receipt evidence from the coderepo sink for the PHP/Perl Source Code and Azure Cloud Credentials/DB2 Connection String steps",
+		CoverageStatusCovered)
+	if err != nil {
+		return nil, fmt.Errorf("loading seed profile catalog: %w", err)
+	}
+	itSaasGap, err := NewControlObjectiveCoverage("customer-interaction-transcript/call-center-record data-type fidelity", "",
+		"no real scenario payload is shaped as a customer-support transcript, call-center recording metadata, or large-volume support export -- source code and API credentials are Covered above, but this large-volume BPO/support data type remains genuinely untested",
 		"", CoverageStatusGap)
 	if err != nil {
 		return nil, fmt.Errorf("loading seed profile catalog: %w", err)
@@ -127,12 +163,12 @@ func AudspectDLPProfileCatalog() ([]Profile, error) {
 	itSaas, err := NewProfile("DLPPROFILE-ITSAAS", "IT, SaaS, BPO, Telecom and Technology", ProfileIndustry,
 		[]string{"dlp-exfiltration-coderepo", "dlp-exfiltration-webhook", "dlp-exfiltration-cloud-storage"},
 		[]ComplianceReference{itSaasBaseline},
-		"IT/SaaS source code, API credentials, and customer exports realistically leave through developer-repository uploads, Slack/Teams-style webhook integrations, and cloud storage -- dlp.txt §4's own named IT/SaaS/BPO/Telecom channels.",
-		"manually authored from dlp.txt §4's named IT/SaaS/BPO/Telecom item, scenario IDs selected from RealDLPScenarioIDs()")
+		"IT/SaaS source code, API credentials, and customer exports realistically leave through developer-repository uploads, Slack/Teams-style webhook integrations, and cloud storage -- dlp.txt §4's own named IT/SaaS/BPO/Telecom channels. Source-code/API-credential fidelity is genuinely Covered via real content-diversity steps; the call-center/support-transcript data volume this sector also names remains an honest Gap.",
+		"manually authored from dlp.txt §4's named IT/SaaS/BPO/Telecom item, scenario IDs selected from RealDLPScenarioIDs(), content-diversity steps verified directly 2026-10-17")
 	if err != nil {
 		return nil, fmt.Errorf("loading seed profile catalog: %w", err)
 	}
-	itSaas, err = WithControlObjectives(itSaas, []ControlObjectiveCoverage{itSaasGap})
+	itSaas, err = WithControlObjectives(itSaas, []ControlObjectiveCoverage{itSaasCovered, itSaasGap})
 	if err != nil {
 		return nil, fmt.Errorf("loading seed profile catalog: %w", err)
 	}

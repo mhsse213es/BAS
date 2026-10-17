@@ -98,27 +98,75 @@ func TestAudspectDLPProfileCatalog_BFSIAndIndiaHaveNoControlObjectives(t *testin
 	}
 }
 
-// Review Focus: the direct regression test for the builder-check finding
-// this plan exists to fix -- Healthcare/Manufacturing/Government/ITSAAS/UAE
-// must each honestly record their payload-fidelity gap, never silently
-// claim full coverage via a flat VectorIDs list alone.
-func TestAudspectDLPProfileCatalog_NonBFSIProfilesRecordPayloadFidelityGap(t *testing.T) {
+// Review Focus: UAE has no content-diversity step anywhere testing
+// Emirates ID/IBAN formats (final review independently confirmed this via
+// grep across every scenario file) -- it must record a pure Gap, never a
+// disguised Covered entry.
+func TestAudspectDLPProfileCatalog_UAERecordsPayloadFidelityGapOnly(t *testing.T) {
 	profiles, err := AudspectDLPProfileCatalog()
 	if err != nil {
 		t.Fatalf("AudspectDLPProfileCatalog: %v", err)
 	}
-	for _, id := range []string{"DLPPROFILE-HEALTHCARE", "DLPPROFILE-MANUFACTURING", "DLPPROFILE-GOVERNMENT", "DLPPROFILE-ITSAAS", "DLPPROFILE-UAE"} {
+	for _, p := range profiles {
+		if p.ID != "DLPPROFILE-UAE" {
+			continue
+		}
+		if len(p.ControlObjectives) != 1 {
+			t.Fatalf("DLPPROFILE-UAE has %d ControlObjectives, want exactly 1 payload-fidelity gap", len(p.ControlObjectives))
+		}
+		if p.ControlObjectives[0].Status != CoverageStatusGap {
+			t.Errorf("DLPPROFILE-UAE ControlObjectives[0].Status = %v, want Gap", p.ControlObjectives[0].Status)
+		}
+		return
+	}
+	t.Fatal("DLPPROFILE-UAE not found in catalog")
+}
+
+// Review Focus: the direct regression test for the final-review finding
+// (2026-10-17) that the original single-Gap-per-profile model overclaimed
+// a gap that real scenario content-diversity steps already disprove --
+// confirmed by reading scenarios/dlp-exfiltration-{smtp,coderepo,cloud-storage}.yaml
+// directly (Medical Record / Patient,MRN,Diagnosis in smtp; PHP/Perl
+// source code + Azure/DB2 credentials in coderepo; AWS credentials/C#
+// source code in cloud-storage; Employment Contract in smtp; Partnership
+// Agreement in cloud-storage). Each of these four profiles must now
+// record BOTH a real Covered entry (citing the scenario ID and step that
+// actually exists) AND a narrower, still-genuinely-untested Gap --
+// neither a disguised full-Gap (the bug this test catches) nor a
+// disguised full-Covered (which would overclaim the opposite direction).
+func TestAudspectDLPProfileCatalog_FourProfilesRecordBothCoveredAndNarrowedGap(t *testing.T) {
+	profiles, err := AudspectDLPProfileCatalog()
+	if err != nil {
+		t.Fatalf("AudspectDLPProfileCatalog: %v", err)
+	}
+	for _, id := range []string{"DLPPROFILE-HEALTHCARE", "DLPPROFILE-MANUFACTURING", "DLPPROFILE-GOVERNMENT", "DLPPROFILE-ITSAAS"} {
 		found := false
 		for _, p := range profiles {
-			if p.ID == id {
-				found = true
-				if len(p.ControlObjectives) != 1 {
-					t.Errorf("profile %q has %d ControlObjectives, want exactly 1 payload-fidelity gap", id, len(p.ControlObjectives))
-					continue
+			if p.ID != id {
+				continue
+			}
+			found = true
+			if len(p.ControlObjectives) != 2 {
+				t.Errorf("profile %q has %d ControlObjectives, want exactly 2 (one real Covered, one narrowed Gap)", id, len(p.ControlObjectives))
+				continue
+			}
+			var covered, gap int
+			for _, o := range p.ControlObjectives {
+				switch o.Status {
+				case CoverageStatusCovered:
+					covered++
+					if o.VectorID == "" {
+						t.Errorf("profile %q Covered entry has an empty VectorID", id)
+					}
+				case CoverageStatusGap:
+					gap++
 				}
-				if p.ControlObjectives[0].Status != CoverageStatusGap {
-					t.Errorf("profile %q ControlObjectives[0].Status = %v, want Gap", id, p.ControlObjectives[0].Status)
-				}
+			}
+			if covered != 1 {
+				t.Errorf("profile %q has %d Covered entries, want exactly 1", id, covered)
+			}
+			if gap != 1 {
+				t.Errorf("profile %q has %d Gap entries, want exactly 1", id, gap)
 			}
 		}
 		if !found {
