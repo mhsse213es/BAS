@@ -52,6 +52,18 @@ func main() {
 		if secret == "" {
 			secret = os.Getenv("BAS_AGENT_SECRET")
 		}
+		if secret == "" {
+			if !stdinIsTerminal() {
+				fmt.Fprintln(os.Stderr, "error: provide --secret <secret> or set BAS_AGENT_SECRET")
+				os.Exit(1)
+			}
+			s, err := promptSecret(os.Stdin, os.Stdout)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "error: %v\n", err)
+				os.Exit(1)
+			}
+			secret = s
+		}
 		if *flagCARoot != "" {
 			pemBytes, err := os.ReadFile(*flagCARoot)
 			if err != nil {

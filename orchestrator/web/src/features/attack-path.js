@@ -1669,12 +1669,17 @@ export function buildAgentInstallCommands(origin, host, data) {
   var common = ' --install --server ' + serverURL + ' --enroll-port ' + enrollPort;
   return {
     serverURL: serverURL,
+    // No --secret here: the agent now prompts for it interactively when
+    // omitted (promptSecret in agent/promptsecret.go), so pasting this
+    // command and running it is the only step -- the secret is typed once,
+    // live, never baked into the command text, shell history, or a process
+    // listing.
     windows: 'curl.exe -fsSk -o deployment-ca.pem ' + caURL + '; ' +
-      '.\\bas-agent-windows-amd64.exe' + common + ' --secret <AGENT_SECRET> --ca-root .\\deployment-ca.pem --env Production',
+      '.\\bas-agent-windows-amd64.exe' + common + ' --ca-root .\\deployment-ca.pem --env Production',
     linux: 'chmod +x bas-agent-linux-* && curl -fsSk -o deployment-ca.pem ' + caURL + ' && ' +
-      'sudo ./bas-agent-linux-*' + common + ' --secret <AGENT_SECRET> --ca-root ./deployment-ca.pem --env Production',
+      'sudo ./bas-agent-linux-*' + common + ' --ca-root ./deployment-ca.pem --env Production',
     mac: 'xattr -d com.apple.quarantine bas-agent-darwin-* && chmod +x bas-agent-darwin-* && curl -fsSk -o deployment-ca.pem ' + caURL + ' && ' +
-      'sudo ./bas-agent-darwin-*' + common + ' --secret <AGENT_SECRET> --ca-root ./deployment-ca.pem --env Production',
+      'sudo ./bas-agent-darwin-*' + common + ' --ca-root ./deployment-ca.pem --env Production',
   };
 }
 

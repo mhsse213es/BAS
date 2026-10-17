@@ -39,6 +39,13 @@ test('mac command strips the browser quarantine flag before chmod/install, since
   assert.ok(c.mac.indexOf('xattr -d com.apple.quarantine') < c.mac.indexOf('chmod +x'));
 });
 
+test('install commands omit --secret entirely, since the agent now prompts for it interactively', () => {
+  const c = buildAgentInstallCommands('https://h:9543', 'h');
+  for (const cmd of [c.windows, c.linux, c.mac]) {
+    assert.doesNotMatch(cmd, /--secret\b/);
+  }
+});
+
 test('treats missing arguments defensively without throwing', () => {
   const c = buildAgentInstallCommands('https://h:9543', 'h');
   assert.equal(c.serverURL, 'https://h:9443');

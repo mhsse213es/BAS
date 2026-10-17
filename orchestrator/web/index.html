@@ -628,7 +628,7 @@
           <div class="g1-display-flex g1-s-89b169c7">
             <span class="g1-s-007f626a">Advanced / scripted deployment:</span>
             <a class="btn btn-sm btn-outline" href="/api/agents/download/windows-amd64" download="bas-agent-windows-amd64.exe">&#8659; CLI Binary</a>
-            <code id="win-cli-cmd" class="g1-s-48722403">.\bas-agent-windows-amd64.exe --install --server &lt;URL&gt; --secret &lt;SECRET&gt; --env Production</code>
+            <code id="win-cli-cmd" class="g1-s-48722403">.\bas-agent-windows-amd64.exe --install --server &lt;URL&gt; --env Production</code>
           </div>
         </div>
 
@@ -656,23 +656,25 @@
               Linux
             </div>
             <div class="agent-dl-btns">
-              <a class="btn btn-sm btn-outline" href="/api/agents/download/linux-amd64-deb" download data-on-click="updateLinuxDownloadCmd" data-args="[&quot;amd64&quot;,&quot;deb&quot;]">.deb x86_64</a>
-              <a class="btn btn-sm btn-outline" href="/api/agents/download/linux-arm64-deb" download data-on-click="updateLinuxDownloadCmd" data-args="[&quot;arm64&quot;,&quot;deb&quot;]">.deb ARM64</a>
-              <a class="btn btn-sm btn-outline" href="/api/agents/download/linux-amd64-rpm" download data-on-click="updateLinuxDownloadCmd" data-args="[&quot;amd64&quot;,&quot;rpm&quot;]">.rpm x86_64</a>
+              <a class="btn btn-sm btn-primary" href="/api/agents/download/linux-amd64" download="bas-agent-linux-amd64">CLI Binary (x86_64)</a>
+              <a class="btn btn-sm btn-primary" href="/api/agents/download/linux-arm64" download="bas-agent-linux-arm64">CLI Binary (ARM64)</a>
             </div>
-            <div class="agent-dl-hint">Ubuntu 20.04+, Debian 10+, RHEL/Rocky 8+</div>
+            <div class="agent-dl-hint">Ubuntu 20.04+, Debian 10+, RHEL/Rocky 8+ &mdash; the command below already has your server URL baked in; it only asks for the Agent Secret</div>
             <div class="agent-dl-usage g1-s-fa769ae0">
-              <strong>Install (.deb):</strong>
-              <code id="linux-deb-cmd">sudo dpkg -i bas-agent-linux-amd64.deb &amp;&amp; sudo systemctl start bas-agent</code>
-              <strong class="g1-display-block g1-s-acd4d170">Install (.rpm):</strong>
-              <code id="linux-rpm-cmd">sudo rpm -i bas-agent-linux-amd64.rpm &amp;&amp; sudo systemctl start bas-agent</code>
-              <strong class="g1-display-block g1-s-acd4d170">Install (CLI binary — fetches the CA, enrolls, no config edit):</strong>
+              <strong>Install:</strong>
+              <code id="linux-cli-cmd">chmod +x bas-agent-linux-* &amp;&amp; sudo ./bas-agent-linux-* --install --server &lt;URL&gt; --ca-root ./deployment-ca.pem --env Production</code>
+              <div class="g1-s-b3aebb78">Running it prompts <code class="g1-s-eac76940">Agent Secret:</code> interactively &mdash; nothing else to fill in, and the secret never ends up in shell history.</div>
               <div class="g1-display-flex g1-s-89b169c7">
-                <a class="btn btn-sm btn-outline" href="/api/agents/download/linux-amd64" download="bas-agent-linux-amd64">&#8659; CLI Binary (x86_64)</a>
-                <a class="btn btn-sm btn-outline" href="/api/agents/download/linux-arm64" download="bas-agent-linux-arm64">&#8659; CLI Binary (ARM64)</a>
+                <span class="g1-s-007f626a">Advanced / scripted deployment (distro package, manual config edit):</span>
               </div>
-              <code id="linux-cli-cmd">chmod +x bas-agent-linux-* &amp;&amp; sudo ./bas-agent-linux-* --install --server &lt;URL&gt; --secret &lt;SECRET&gt; --env Production</code>
-              <div class="g1-s-b3aebb78">The CLI command above auto-populates with your server URL, ports, and CA fetch. The <code class="g1-s-eac76940">.deb</code>/<code class="g1-s-eac76940">.rpm</code> packages instead need <code class="g1-s-eac76940">/etc/bas-agent/config</code> edited to set <code class="g1-s-eac76940">BAS_SERVER_URL</code> and <code class="g1-s-eac76940">BAS_AGENT_SECRET</code>.</div>
+              <div class="g1-display-flex g1-s-89b169c7">
+                <a class="btn btn-sm btn-outline" href="/api/agents/download/linux-amd64-deb" download data-on-click="updateLinuxDownloadCmd" data-args="[&quot;amd64&quot;,&quot;deb&quot;]">.deb x86_64</a>
+                <a class="btn btn-sm btn-outline" href="/api/agents/download/linux-arm64-deb" download data-on-click="updateLinuxDownloadCmd" data-args="[&quot;arm64&quot;,&quot;deb&quot;]">.deb ARM64</a>
+                <a class="btn btn-sm btn-outline" href="/api/agents/download/linux-amd64-rpm" download data-on-click="updateLinuxDownloadCmd" data-args="[&quot;amd64&quot;,&quot;rpm&quot;]">.rpm x86_64</a>
+              </div>
+              <code id="linux-deb-cmd">sudo dpkg -i bas-agent-linux-amd64.deb &amp;&amp; sudo systemctl start bas-agent</code>
+              <code id="linux-rpm-cmd">sudo rpm -i bas-agent-linux-amd64.rpm &amp;&amp; sudo systemctl start bas-agent</code>
+              <div class="g1-s-b3aebb78">The <code class="g1-s-eac76940">.deb</code>/<code class="g1-s-eac76940">.rpm</code> packages need <code class="g1-s-eac76940">/etc/bas-agent/config</code> edited by hand to set <code class="g1-s-eac76940">BAS_SERVER_URL</code> and <code class="g1-s-eac76940">BAS_AGENT_SECRET</code> &mdash; use the CLI binary above unless you specifically need a distro package for fleet management (Ansible/Puppet/apt-mirror).</div>
             </div>
           </div>
           <div class="agent-dl-card">
@@ -692,7 +694,7 @@
                 <a class="btn btn-sm btn-outline" href="/api/agents/download/darwin-amd64" download>CLI Binary (Intel)</a>
                 <a class="btn btn-sm btn-outline" href="/api/agents/download/darwin-arm64" download>CLI Binary (Apple Silicon)</a>
               </div>
-              <code id="mac-cmd">xattr -d com.apple.quarantine bas-agent-darwin-* &amp;&amp; chmod +x bas-agent-darwin-* &amp;&amp; sudo ./bas-agent-darwin-* --install --server &lt;URL&gt; --secret &lt;AGENT_SECRET&gt; --env Production</code>
+              <code id="mac-cmd">xattr -d com.apple.quarantine bas-agent-darwin-* &amp;&amp; chmod +x bas-agent-darwin-* &amp;&amp; sudo ./bas-agent-darwin-* --install --server &lt;URL&gt; --env Production</code>
             </div>
           </div>
         </div>
