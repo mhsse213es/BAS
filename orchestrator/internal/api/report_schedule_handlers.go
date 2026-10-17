@@ -352,12 +352,12 @@ func buildReportMIME(from, fromName string, to []string, subject, body, attachNa
 	boundary := "bas_" + randToken()
 	fromHdr := from
 	if fromName != "" {
-		fromHdr = fmt.Sprintf("%s <%s>", fromName, from)
+		fromHdr = fmt.Sprintf("%s <%s>", sanitizeHeaderValue(fromName), from)
 	}
 	var b strings.Builder
 	fmt.Fprintf(&b, "From: %s\r\n", fromHdr)
 	fmt.Fprintf(&b, "To: %s\r\n", strings.Join(to, ", "))
-	fmt.Fprintf(&b, "Subject: %s\r\n", subject)
+	fmt.Fprintf(&b, "Subject: %s\r\n", sanitizeHeaderValue(subject))
 	b.WriteString("MIME-Version: 1.0\r\n")
 	fmt.Fprintf(&b, "Content-Type: multipart/mixed; boundary=%s\r\n\r\n", boundary)
 
@@ -384,6 +384,17 @@ func buildReportMIME(from, fromName string, to []string, subject, body, attachNa
 	}
 	fmt.Fprintf(&b, "--%s--\r\n", boundary)
 	return b.String()
+}
+
+// sanitizeHeaderValue strips CR and LF from a value interpolated directly
+// into a raw RFC 5322 header line (Subject, From display name), closing an
+// SMTP header-injection path: net/smtp.SendMail validates only the envelope
+// from/to, never the message body/headers, so an unsanitized value
+// containing "\r\n" could inject an arbitrary extra header (e.g. Bcc).
+func sanitizeHeaderValue(v string) string {
+	v = strings.ReplaceAll(v, "\r", "")
+	v = strings.ReplaceAll(v, "\n", "")
+	return v
 }
 
 func randToken() string {
@@ -417,11 +428,30 @@ func validateSchedule(s *ReportSchedule) string {
 	if s.HourUTC < 0 || s.HourUTC > 23 {
 		return "hourUtc must be 0-23"
 	}
+	// scheduleDue() matches DayOfWeek/DayOfMonth by exact equality with no
+	// range check of its own -- an out-of-range or unset (JSON zero-value)
+	// value would pass validation, save as enabled, and then silently never
+	// fire, since now.Weekday()/now.Day() can never equal it.
+	if s.Frequency == "weekly" && (s.DayOfWeek < 0 || s.DayOfWeek > 6) {
+		return "dayOfWeek must be 0-6 for a weekly schedule"
+	}
+	if s.Frequency == "monthly" && (s.DayOfMonth < 1 || s.DayOfMonth > 28) {
+		return "dayOfMonth must be 1-28 for a monthly schedule"
+	}
 	if s.Format == "" {
 		s.Format = "pdf"
 	}
 	if s.ScopeKind == "" {
 		s.ScopeKind = "agent"
+	}
+	// generateScheduledReport's "compliance" and "audit_pack" cases always
+	// treat ScopeID as an agent ID -- only "board" has a campaign-aware code
+	// path (BuildFromCampaign). Without this check, a campaign-scoped
+	// compliance/audit_pack schedule would silently match zero results
+	// every tick and keep emailing a blank "all controls untested" report
+	// with last_status left healthy.
+	if s.ScopeKind == "campaign" && s.ReportType != "board" {
+		return "scopeKind \"campaign\" is only supported for reportType \"board\""
 	}
 	return ""
 }

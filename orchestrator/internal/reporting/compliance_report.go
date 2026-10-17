@@ -43,8 +43,11 @@ func RenderComplianceHTML(w io.Writer, cr *compliance.ComplianceReport, generate
 	// Tamper-evidence (P0-2): attest over the report's canonical JSON — the
 	// stable underlying data, not the rendered HTML (which embeds the digest
 	// and would otherwise be self-referential). A verifier can fetch the same
-	// report as format=json and recompute this digest.
-	canonical, _ := json.Marshal(cr)
+	// report as format=json and recompute this digest -- MarshalIndent with
+	// this exact prefix/indent must match internal/api/handlers.go's
+	// format=json branch byte-for-byte, or that documented workflow can
+	// never reproduce the stamped digest.
+	canonical, _ := json.MarshalIndent(cr, "", "  ")
 	att := Attest(canonical, generatedBy)
 
 	// Controls are grouped by domain in template order; the mapper already

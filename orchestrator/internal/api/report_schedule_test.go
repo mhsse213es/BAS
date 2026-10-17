@@ -40,6 +40,12 @@ func TestValidateSchedule(t *testing.T) {
 		{ReportType: "board", ScopeID: "a", Frequency: "daily"},                             // no recipients
 		{ReportType: "board", ScopeID: "a", Recipients: "x@y.com", Frequency: "hourly"},     // bad freq
 		{ReportType: "board", ScopeID: "a", Recipients: "x@y.com", Frequency: "daily", HourUTC: 25},
+		{ReportType: "board", ScopeID: "a", Recipients: "x@y.com", Frequency: "weekly", DayOfWeek: 7},   // out of 0-6 range
+		{ReportType: "board", ScopeID: "a", Recipients: "x@y.com", Frequency: "weekly", DayOfWeek: -1},  // out of 0-6 range
+		{ReportType: "board", ScopeID: "a", Recipients: "x@y.com", Frequency: "monthly", DayOfMonth: 0}, // unset -> never matches scheduleDue
+		{ReportType: "board", ScopeID: "a", Recipients: "x@y.com", Frequency: "monthly", DayOfMonth: 31}, // out of 1-28 range
+		{ReportType: "compliance", ScopeID: "a", Framework: "fw", ScopeKind: "campaign", Recipients: "x@y.com", Frequency: "daily"},
+		{ReportType: "audit_pack", ScopeID: "a", ScopeKind: "campaign", Recipients: "x@y.com", Frequency: "daily"},
 	}
 	for i, s := range bad {
 		s := s
@@ -53,6 +59,13 @@ func TestValidateSchedule(t *testing.T) {
 	}
 	if ok.Format != "pdf" || ok.ScopeKind != "agent" {
 		t.Errorf("defaults not applied: %+v", ok)
+	}
+
+	// board is the only report type with a campaign-aware code path
+	// (BuildFromCampaign) -- it must stay accepted.
+	okCampaign := ReportSchedule{ReportType: "board", ScopeID: "camp-1", ScopeKind: "campaign", Recipients: "a@b.com", Frequency: "weekly", DayOfWeek: 0}
+	if msg := validateSchedule(&okCampaign); msg != "" {
+		t.Errorf("valid board+campaign schedule rejected: %s", msg)
 	}
 }
 
@@ -96,5 +109,26 @@ func TestBuildReportMIME(t *testing.T) {
 	}
 	if !strings.Contains(msg, "--\r\n") {
 		t.Error("missing closing boundary")
+	}
+}
+
+// TestBuildReportMIME_SubjectInjection_StripsCRLF is the regression test for
+// a real SMTP header injection: a schedule Name containing CRLF reaches
+// Subject verbatim, letting an attacker inject an arbitrary extra header
+// (e.g. Bcc) into every scheduled-report email net/smtp.SendMail sends --
+// smtp.SendMail validates only the envelope from/to, never message headers.
+func TestBuildReportMIME_SubjectInjection_StripsCRLF(t *testing.T) {
+	malicious := "Weekly Report\r\nBcc: attacker@evil.example"
+	msg := buildReportMIME("bas@corp.example", "Audspect", []string{"ciso@bank.example"},
+		malicious, "body", "report.pdf", "application/pdf", []byte("x"))
+
+	// A real injection would land "Bcc:" as its OWN header line -- check
+	// for that, not mere substring presence (sanitized text may still
+	// contain the words, just not as a separate CRLF-delimited header).
+	if strings.Contains(msg, "\r\nBcc:") || strings.HasPrefix(msg, "Bcc:") {
+		t.Fatal("injected Bcc reached the message as its own header line -- subject is not sanitized against CRLF")
+	}
+	if !strings.Contains(msg, "Subject: Weekly ReportBcc: attacker@evil.example\r\n") {
+		t.Errorf("expected the CRLF-stripped subject merged onto one line, got message:\n%s", msg)
 	}
 }

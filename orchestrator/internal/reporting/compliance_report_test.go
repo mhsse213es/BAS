@@ -3,6 +3,10 @@ package reporting
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/json"
+	"fmt"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -119,6 +123,41 @@ func TestRenderComplianceHTML_Attestation(t *testing.T) {
 	}
 	if !strings.Contains(unsigned.String(), "SHA-256 (unsigned)") {
 		t.Error("unsigned report should say SHA-256 (unsigned)")
+	}
+}
+
+// TestRenderComplianceHTML_AttestationDigest_MatchesFormatJSONExport is the
+// regression test for the report's own documented verification workflow
+// ("request the same report as JSON (format=json) and recompute the SHA-256
+// of its canonical bytes" -- compliance_report.go's html template). The
+// format=json HTTP handler (internal/api/handlers.go) serializes with
+// json.MarshalIndent(report, "", "  "); if the attestation is computed over
+// different bytes (e.g. compact json.Marshal), the documented workflow can
+// never reproduce the stamped digest, and a genuinely untampered report
+// always fails its own verification.
+func TestRenderComplianceHTML_AttestationDigest_MatchesFormatJSONExport(t *testing.T) {
+	cr := buildTestComplianceReport(t)
+
+	var buf bytes.Buffer
+	if err := RenderComplianceHTML(&buf, cr, "analyst@bank.example"); err != nil {
+		t.Fatal(err)
+	}
+	m := regexp.MustCompile(`Digest \(SHA-256\): <span class="mono">([0-9a-f]{64})</span>`).FindStringSubmatch(buf.String())
+	if m == nil {
+		t.Fatal("could not find the rendered digest in the report HTML")
+	}
+	stampedDigest := m[1]
+
+	// This is exactly what internal/api/handlers.go's format=json branch
+	// serializes.
+	exportBytes, err := json.MarshalIndent(cr, "", "  ")
+	if err != nil {
+		t.Fatalf("MarshalIndent: %v", err)
+	}
+	wantDigest := fmt.Sprintf("%x", sha256.Sum256(exportBytes))
+
+	if stampedDigest != wantDigest {
+		t.Errorf("stamped digest %s does not match the digest of the documented format=json export %s -- the report's own verification instructions can never succeed", stampedDigest, wantDigest)
 	}
 }
 

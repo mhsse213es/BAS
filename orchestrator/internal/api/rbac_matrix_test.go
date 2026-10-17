@@ -267,7 +267,7 @@ var routeMatrix = []routeCase{
 	{http.MethodPost, "/api/report/verify", tierAny, ""},
 	{http.MethodGet, "/api/report/branding", tierAny, ""},
 	{http.MethodPut, "/api/report/branding", tierPermission, auth.CanUpdateConnectorConfig},
-	{http.MethodGet, "/api/report/schedules", tierAny, ""},
+	{http.MethodGet, "/api/report/schedules", tierPermission, auth.CanUpdateConnectorConfig},
 	{http.MethodPost, "/api/report/schedules", tierPermission, auth.CanUpdateConnectorConfig},
 	{http.MethodPut, "/api/report/schedules/{id}", tierPermission, auth.CanUpdateConnectorConfig},
 	{http.MethodDelete, "/api/report/schedules/{id}", tierPermission, auth.CanUpdateConnectorConfig},

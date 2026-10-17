@@ -641,7 +641,7 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.Get("/api/report/branding", h.GetReportBranding)
 		r.With(auth.RequirePermission(auth.CanUpdateConnectorConfig)).Put("/api/report/branding", h.UpdateReportBranding)
 		// Scheduled + emailed reports (admin-managed via CanUpdateConnectorConfig).
-		r.Get("/api/report/schedules", h.ListReportSchedules)
+		r.With(auth.RequirePermission(auth.CanUpdateConnectorConfig)).Get("/api/report/schedules", h.ListReportSchedules)
 		r.With(auth.RequirePermission(auth.CanUpdateConnectorConfig)).Post("/api/report/schedules", h.CreateReportSchedule)
 		r.With(auth.RequirePermission(auth.CanUpdateConnectorConfig)).Put("/api/report/schedules/{id}", h.UpdateReportSchedule)
 		r.With(auth.RequirePermission(auth.CanUpdateConnectorConfig)).Delete("/api/report/schedules/{id}", h.DeleteReportSchedule)
