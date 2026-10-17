@@ -3,6 +3,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"os"
@@ -80,8 +81,38 @@ func (s *agentSvc) Execute(_ []string, r <-chan svc.ChangeRequest, status chan<-
 
 	cfg := loadConfig()
 	id := collectIdentity()
+
+	// Certificate bootstrap/renewal MUST run before newAgent, exactly as
+	// main()'s console path does (agent/main.go): newAgent builds the
+	// long-lived HTTP client and the WS dialer from cfg, so cfg must already
+	// carry the resolved mTLS ServerURL and the MTLS flag. Omitting this was
+	// why the service could never enroll over mTLS -- cfg.MTLS stayed false,
+	// agentTLSConfig returned nil, and every connection fell back to default
+	// TLS (the system root store), which cannot trust the self-signed
+	// deployment CA, producing "x509: certificate signed by unknown
+	// authority" on enroll/heartbeat/WS forever with no bootstrap ever
+	// attempted. The console path worked; the service path did not.
+	cfg, outcome := resolveOperationalConfig(context.Background(), cfg, id.AgentID)
+	for attempt := 0; outcome == outcomeBlocked; attempt++ {
+		// An already-enrolled identity whose mTLS path is currently unusable
+		// NEVER operates over legacy transport (bootstrap.go's invariant) --
+		// keep retrying mTLS only. Report StartPending with a WaitHint each
+		// iteration so the SCM does not kill the service mid-retry.
+		delay := bootstrapRetryBackoff(attempt)
+		status <- svc.Status{State: svc.StartPending, WaitHint: uint32((delay + 5*time.Second) / time.Millisecond)}
+		log.Printf("[!] mTLS unusable for this enrolled identity, retrying in %s (refusing legacy fallback)", delay.Round(time.Second))
+		time.Sleep(delay)
+		cfg, outcome = resolveOperationalConfig(context.Background(), cfg, id.AgentID)
+	}
 	agent := newAgent(cfg, id)
 	agent.enrollWithServer()
+	if outcome == outcomeLegacyPending {
+		// Never-enrolled, initial bootstrap failed: operate on legacy
+		// transport now while retryBootstrapUntilEnrolled retries bootstrap in
+		// the background and upgrades the running agent permanently to mTLS
+		// the moment it succeeds.
+		go agent.retryBootstrapUntilEnrolled(context.Background())
+	}
 
 	go agent.connectWS()
 	go agent.startLocalAPI()
