@@ -26,6 +26,11 @@ func installSelfBinary(destPath string) error {
 	if err != nil {
 		return fmt.Errorf("read binary: %w", err)
 	}
+	// /usr/local/bin is not guaranteed to exist on a clean macOS install --
+	// mkdir -p it first rather than assuming it's already there.
+	if err := os.MkdirAll(filepath.Dir(destPath), 0755); err != nil {
+		return fmt.Errorf("create destination dir: %w", err)
+	}
 	if err := os.WriteFile(destPath, data, 0755); err != nil {
 		return fmt.Errorf("write binary to %s: %w", destPath, err)
 	}
