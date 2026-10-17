@@ -7,6 +7,7 @@ import (
 	"crypto/x509"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"net/http"
@@ -23,8 +24,9 @@ import (
 // override them for non-default deployments, mirroring how BAS_SERVER_URL
 // itself is already overridable.
 const (
-	defaultMTLSPort   = "9443"
-	defaultEnrollPort = "9444"
+	defaultMTLSPort      = "9443"
+	defaultEnrollPort    = "9444"
+	defaultDashboardPort = "9543"
 )
 
 // errBlocked wraps an ensureCertificate error to signal "an already-enrolled
@@ -285,6 +287,68 @@ func enrollmentURL(serverURL string) (string, error) {
 		return "", err
 	}
 	return "https://" + net.JoinHostPort(host, enrollPort()), nil
+}
+
+// dashboardURL returns the browser/dashboard listener URL for serverURL's
+// host -- always https://, on BAS_DASHBOARD_PORT or the 9543 default. The
+// public deployment CA root (GET /api/config/ca-root) is reachable WITHOUT a
+// client certificate only on this listener (and the legacy one): the mTLS
+// listener (:9443) requires a client cert the agent does not yet have at
+// install time, and the enrollment listener (:9444) mounts only enrollment +
+// /health, never the full router. See orchestrator/cmd/server/main.go's
+// listener wiring.
+func dashboardURL(serverURL string) (string, error) {
+	host, _, _, err := splitServerURL(serverURL)
+	if err != nil {
+		return "", err
+	}
+	port := defaultDashboardPort
+	if p := os.Getenv("BAS_DASHBOARD_PORT"); p != "" {
+		port = p
+	}
+	return "https://" + net.JoinHostPort(host, port), nil
+}
+
+// fetchDeploymentCARoot downloads the public deployment CA root from the
+// orchestrator's dashboard listener and returns its PEM bytes, so the agent's
+// --install path can place the trust anchor itself instead of requiring the
+// operator to fetch it by hand and pass --ca-root. The TLS connection is
+// deliberately unverified (InsecureSkipVerify): at install time the agent has
+// no trust anchor yet, and this endpoint serves exactly that anchor -- a
+// trust-on-first-use fetch of a PUBLIC certificate, identical to what the
+// Windows GUI installer (installer/ca_fetch.go) and the dashboard's own `-k`
+// install command already do. Every connection AFTER install verifies the
+// full chain against this root (bootstrapHTTPClient / mtlsTLSConfig), so this
+// one unverified GET only decides which self-signed CA to pin, never whether
+// to verify at all.
+func fetchDeploymentCARoot(serverURL string) ([]byte, error) {
+	dashURL, err := dashboardURL(serverURL)
+	if err != nil {
+		return nil, err
+	}
+	client := &http.Client{
+		Timeout: 20 * time.Second,
+		Transport: &http.Transport{
+			Proxy:           http.ProxyFromEnvironment,
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		},
+	}
+	resp, err := client.Get(dashURL + "/api/config/ca-root")
+	if err != nil {
+		return nil, fmt.Errorf("GET %s/api/config/ca-root: %w", dashURL, err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("server returned %d from %s/api/config/ca-root", resp.StatusCode, dashURL)
+	}
+	pemBytes, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if err != nil {
+		return nil, fmt.Errorf("read ca-root response: %w", err)
+	}
+	if !strings.Contains(string(pemBytes), "BEGIN CERTIFICATE") {
+		return nil, fmt.Errorf("ca-root response from %s is not a PEM certificate (%d bytes)", dashURL, len(pemBytes))
+	}
+	return pemBytes, nil
 }
 
 // operationalURL returns the mTLS listener URL for serverURL's host, always

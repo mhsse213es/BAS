@@ -64,6 +64,24 @@ func main() {
 				os.Exit(1)
 			}
 			fmt.Println("[+] deployment CA root installed")
+		} else {
+			// No --ca-root supplied: fetch the public deployment CA root from
+			// the server automatically so a bare `--install --server ...
+			// --secret ...` is self-sufficient -- no hand curl, no manual
+			// file. The agent cannot complete mTLS enrollment without this
+			// trust anchor on disk (bootstrapHTTPClient aborts if it is
+			// absent), which is the single most common "agent stuck on legacy
+			// transport / unknown authority / never shows in console" cause.
+			// A fetch failure is a warning, not fatal: the operator can still
+			// place the file and the agent retries bootstrap on every start.
+			if pemBytes, err := fetchDeploymentCARoot(serverURL); err != nil {
+				fmt.Fprintf(os.Stderr, "warning: could not auto-fetch deployment CA root (%v)\n", err)
+				fmt.Fprintln(os.Stderr, "         the agent will start on legacy transport and retry; re-run with --ca-root <file> to place it explicitly.")
+			} else if err := saveDeploymentCARoot(pemBytes); err != nil {
+				fmt.Fprintf(os.Stderr, "warning: fetched deployment CA root but could not store it: %v\n", err)
+			} else {
+				fmt.Println("[+] deployment CA root fetched from server and installed")
+			}
 		}
 		if err := svcInstall(serverURL, *flagEnv, secret); err != nil {
 			fmt.Fprintf(os.Stderr, "install failed: %v\n", err)
