@@ -88,7 +88,7 @@ func EvaluateChannelConsistency(results []ChannelResult) (ChannelConsistencyResu
 	}
 
 	return ChannelConsistencyResult{
-		ChannelResults: results,
+		ChannelResults: append([]ChannelResult{}, results...),
 		Verdict:        verdict,
 		Reason:         reason,
 	}, nil
