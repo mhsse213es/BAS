@@ -33,7 +33,7 @@ func (h *Handler) TriggerPhishingRun(w http.ResponseWriter, r *http.Request) {
 		req.InitiatedBy = c.UserID
 	}
 
-	env := PhishingRunExecutorEnv{ReportTicketProvider: h.phishingReportTicketProvider}
+	env := PhishingRunExecutorEnv{ReportTicketProvider: h.phishingReportTicketProvider, Pool: h.db}
 	run, err := ExecutePhishingRun(r.Context(), h.db, env, req)
 	if err != nil {
 		failedRunID := ""

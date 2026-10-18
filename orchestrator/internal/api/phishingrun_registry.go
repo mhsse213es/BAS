@@ -18,7 +18,10 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
+
 	"github.com/audspect/bas/internal/emailgwefficacy"
+	"github.com/audspect/bas/internal/exercise"
 	"github.com/audspect/bas/internal/phishbridge"
 	"github.com/audspect/bas/internal/phishcatalog"
 	"github.com/audspect/bas/internal/phishval"
@@ -31,6 +34,13 @@ import (
 // registry itself.
 type PhishingRunExecutorEnv struct {
 	ReportTicketProvider phishbridge.ReportTicketEvidenceProvider
+	// Pool is the same database pool ExecutePhishingRun itself already
+	// has -- threaded through here for scenarios (like PH-ID-001) that
+	// need to read real exercise evidence rather than an external
+	// vendor provider. Always populated by TriggerPhishingRun from
+	// h.db; unlike ReportTicketProvider, there is no "unconfigured
+	// deployment" case for it.
+	Pool *pgxpool.Pool
 }
 
 // PhishingRunExecutor runs one registered scenario for real and
@@ -49,6 +59,7 @@ type PhishingRunExecutor func(ctx context.Context, env PhishingRunExecutorEnv, r
 // future work, not something to add speculatively here.
 var phishingRunExecutors = map[string]PhishingRunExecutor{
 	"PH-DET-002": executePHDET002,
+	"PH-ID-001":  executePHID001,
 }
 
 // LookupPhishingRunExecutor returns scenarioID's registered executor,
@@ -97,6 +108,50 @@ func executePHDET002(ctx context.Context, env PhishingRunExecutorEnv, runID stri
 	obs := phishbridge.FromSingleDimensionResponseVerdict(verdict, "phishingrun-PH-DET-002")
 
 	catalogExp, err := lookupPhishingCatalogExpectation("PH-DET-002")
+	if err != nil {
+		return phishval.Outcome{}, err
+	}
+	return phishval.Evaluate(runID, "", catalogExp, obs), nil
+}
+
+// executePHID001 runs PH-ID-001 (credential-harvesting simulation):
+// reads the real interaction evidence already recorded for the named
+// exercise execution (exercise_evidence, FK-chained through
+// exercise_executions/exercise_plans) and grades it against the
+// catalog's own fixed Expectation.
+//
+// FromExerciseInteractionEvidence's own contract is that ListEvidence
+// is authoritative for an execution that exists: zero evidence rows
+// for a REAL execution is a genuine, evidenced InteractionNone (the
+// target was tracked and nothing happened), not an unknown/NotTested
+// case. That makes verifying the execution actually exists first
+// load-bearing, not optional -- without it, a typo'd or stale
+// executionId would silently produce a confident FAIL (expectation
+// Clicked, observed None) for an execution that never ran, which is
+// exactly the kind of fabricated verdict this initiative never
+// allows. GetExecution's own not-found error surfaces as this run's
+// error/StatusFailed instead.
+func executePHID001(ctx context.Context, env PhishingRunExecutorEnv, runID string, params map[string]any) (phishval.Outcome, error) {
+	executionID, _ := params["executionId"].(string)
+	if executionID == "" {
+		return phishval.Outcome{}, fmt.Errorf("phishingrun: PH-ID-001 requires a non-empty executionId parameter")
+	}
+	if env.Pool == nil {
+		return phishval.Outcome{}, fmt.Errorf("phishingrun: PH-ID-001 requires a database pool (deployment misconfiguration)")
+	}
+
+	store := exercise.NewStore(env.Pool)
+	if _, err := store.GetExecution(ctx, executionID); err != nil {
+		return phishval.Outcome{}, fmt.Errorf("phishingrun: PH-ID-001 execution %q not found: %w", executionID, err)
+	}
+
+	events, err := store.ListEvidence(ctx, executionID)
+	if err != nil {
+		return phishval.Outcome{}, fmt.Errorf("phishingrun: PH-ID-001 list evidence for %q: %w", executionID, err)
+	}
+	obs := phishbridge.FromExerciseInteractionEvidence(events)
+
+	catalogExp, err := lookupPhishingCatalogExpectation("PH-ID-001")
 	if err != nil {
 		return phishval.Outcome{}, err
 	}
