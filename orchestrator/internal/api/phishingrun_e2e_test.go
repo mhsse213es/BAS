@@ -126,6 +126,51 @@ func TestPhishingRunPipeline_NoEvidence_ReportShowsNotTestedNeverPass(t *testing
 	})
 }
 
+// TestPhishingRunPipeline_UnconfiguredProvider_CompletesNotTestedNoStuckRow
+// proves the configuration that actually ships today -- a Handler
+// built with New(...) and no WithPhishingRun call, exactly what
+// cmd/server/main.go does right now -- never panics and never leaves
+// a run stranded at pending: it reaches StatusCompleted with
+// Response.Verdict == NotTested, the same as a configured provider
+// that found no evidence.
+func TestPhishingRunPipeline_UnconfiguredProvider_CompletesNotTestedNoStuckRow(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret) // no WithPhishingRun
+
+		triggerRec := callAuthed(h.TriggerPhishingRun, triggerPhishingRunReq(t, pool, map[string]any{
+			"scenarioId": "PH-DET-002", "parameters": map[string]any{"executionId": "exec-1", "targetId": "target-1"},
+		}))
+		if triggerRec.Code != http.StatusCreated {
+			t.Fatalf("trigger status = %d, body = %s, want 201", triggerRec.Code, triggerRec.Body.String())
+		}
+		var triggered phishingrun.PhishingRun
+		if err := json.Unmarshal(triggerRec.Body.Bytes(), &triggered); err != nil {
+			t.Fatalf("decode trigger response: %v", err)
+		}
+
+		getReq := authedRequest(t, http.MethodGet, "/api/phishing-runs/"+triggered.ID, nil, auth.RoleAnalyst, "")
+		getReq = withURLParam(getReq, "id", triggered.ID)
+		getRec := callAuthed(h.GetPhishingRun, getReq)
+		if getRec.Code != http.StatusOK {
+			t.Fatalf("GET status = %d, body = %s, want 200", getRec.Code, getRec.Body.String())
+		}
+		var fetched phishingrun.PhishingRun
+		if err := json.Unmarshal(getRec.Body.Bytes(), &fetched); err != nil {
+			t.Fatalf("decode GET: %v", err)
+		}
+		if fetched.Status != phishingrun.StatusCompleted {
+			t.Fatalf("Status = %q, want completed (an unconfigured provider must never leave the run stuck at pending)", fetched.Status)
+		}
+		var outcome phishval.Outcome
+		if err := json.Unmarshal(fetched.Result, &outcome); err != nil {
+			t.Fatalf("unmarshal Result: %v", err)
+		}
+		if outcome.Response.Verdict != phishval.VerdictNotTested {
+			t.Fatalf("Response.Verdict = %q, want not_tested", outcome.Response.Verdict)
+		}
+	})
+}
+
 // TestPhishingRunPipeline_Unauthorized_401Then403 proves the denial
 // happens before ExecutePhishingRun ever runs, in both failure modes
 // -- no rows created in either case, not just the right status code.

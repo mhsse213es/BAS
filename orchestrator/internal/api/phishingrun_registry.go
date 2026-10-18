@@ -75,13 +75,25 @@ func executePHDET002(ctx context.Context, env PhishingRunExecutorEnv, runID stri
 	exp := phishbridge.ReportTicketExpectation{
 		ExecutionID: executionID, TargetID: targetID, ExpectedTicketCreated: true,
 	}
-	// PH-DET-002 has no real dwell window to wait out (unlike an
-	// SMTP-dispatch scenario) -- it looks back over the last 24 hours
-	// for whatever ticketing evidence already exists rather than
-	// waiting for new evidence to arrive.
-	now := time.Now()
-	window := emailgwefficacy.TimeWindow{Start: now.Add(-24 * time.Hour), End: now}
-	verdict := phishbridge.VerifyReportTicketExpectation(exp, env.ReportTicketProvider, window)
+
+	var verdict emailgwefficacy.VerdictDetail
+	if env.ReportTicketProvider == nil {
+		// No real ITSM connector is wired on this deployment
+		// (Handler.WithPhishingRun was never called) -- this is not
+		// "ran and found no evidence," it's "not configured yet," but
+		// both degrade identically to NotTested per this initiative's
+		// own rule: never fabricate a verdict from absent evidence, and
+		// never panic on a nil-interface method call either.
+		verdict = emailgwefficacy.VerdictDetail{Verdict: emailgwefficacy.VerdictInconclusive, Reason: "phishingrun: no ReportTicketEvidenceProvider configured on this deployment"}
+	} else {
+		// PH-DET-002 has no real dwell window to wait out (unlike an
+		// SMTP-dispatch scenario) -- it looks back over the last 24
+		// hours for whatever ticketing evidence already exists rather
+		// than waiting for new evidence to arrive.
+		now := time.Now()
+		window := emailgwefficacy.TimeWindow{Start: now.Add(-24 * time.Hour), End: now}
+		verdict = phishbridge.VerifyReportTicketExpectation(exp, env.ReportTicketProvider, window)
+	}
 	obs := phishbridge.FromSingleDimensionResponseVerdict(verdict, "phishingrun-PH-DET-002")
 
 	catalogExp, err := lookupPhishingCatalogExpectation("PH-DET-002")

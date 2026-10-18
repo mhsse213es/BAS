@@ -50,6 +50,23 @@ func TestExecutePHDET002_NoEvidence_NotTested(t *testing.T) {
 	}
 }
 
+// TestExecutePHDET002_NilProvider_NotTestedNeverPanics proves the
+// as-shipped, unconfigured-by-default production path (Handler.New
+// without a WithPhishingRun call -- confirmed via grep that
+// cmd/server/main.go never calls it) degrades to NotTested exactly
+// like "provider configured but found no evidence," never a panic on
+// a nil-interface method call.
+func TestExecutePHDET002_NilProvider_NotTestedNeverPanics(t *testing.T) {
+	env := PhishingRunExecutorEnv{ReportTicketProvider: nil}
+	outcome, err := executePHDET002(context.Background(), env, "run-1", map[string]any{"executionId": "exec-1", "targetId": "target-1"})
+	if err != nil {
+		t.Fatalf("executePHDET002: %v", err)
+	}
+	if outcome.Response.Verdict != phishval.VerdictNotTested {
+		t.Errorf("Response.Verdict = %q, want %q (an unconfigured provider must never panic or fabricate a verdict)", outcome.Response.Verdict, phishval.VerdictNotTested)
+	}
+}
+
 func TestExecutePHDET002_TicketNotCreated_Fail(t *testing.T) {
 	env := PhishingRunExecutorEnv{ReportTicketProvider: phishbridge.NewFixtureReportTicketProvider([]phishbridge.ReportTicketEvidence{{
 		ExecutionID: "exec-1", TargetID: "target-1", TicketCreated: false, Timestamp: time.Now(),
