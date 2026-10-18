@@ -123,6 +123,21 @@ func TestIndustryProfile_FilterScenarios_ReturnsOnlyPrioritiesInWeightOrder(t *t
 			t.Errorf("FilterScenarios() returned scenario %q, which is not one of this profile's priorities", s.ID)
 		}
 	}
+
+	// The explicit negative: FilterScenarios must actually SELECT a
+	// subset, not just annotate the full catalog. PH-ATT-002 is a real
+	// catalog scenario (confirmed via AudspectPhishingCatalog above)
+	// that is not one of BFSINBFCProfile's priorities -- it must be
+	// absent from the filtered result, proving this is real selection
+	// behavior a caller could dispatch against, not display metadata.
+	for _, s := range filtered {
+		if s.ID == "PH-ATT-002" {
+			t.Error("FilterScenarios() included PH-ATT-002, which is not a BFSI/NBFC priority -- this proves FilterScenarios is not actually filtering")
+		}
+	}
+	if len(filtered) >= len(scenarios) {
+		t.Errorf("FilterScenarios() returned %d scenarios, the full catalog has %d -- a profile with only 3 priorities must select a strict subset", len(filtered), len(scenarios))
+	}
 }
 
 func TestIndustryProfile_FilterScenarios_SkipsUnresolvedIDsSilently(t *testing.T) {

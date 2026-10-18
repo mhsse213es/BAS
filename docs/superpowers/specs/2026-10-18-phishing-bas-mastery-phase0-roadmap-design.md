@@ -725,6 +725,83 @@ conflated the two and should be read as 44 scenarios + 8 variants, not
 Zero changes to emailgwefficacy/emailgwcampaign/exercise/rwevidence/
 webgwefficacy/vendors throughout this gap-closure pass.
 
+## 16. Gap-closure verification record (requested, not a fresh code audit by the requester)
+
+Per request, here is the exact evidence for each of the five items,
+verified against the real code in this repo (not re-described from
+memory):
+
+**1. The 8 phishing.txt-named sector identifiers and their scenario mapping**
+(`internal/phishcatalog/industry.go`'s `industryProfileConstructors`
+map, confirmed via direct read):
+
+| Lookup key | Priority scenarios (weight) |
+|---|---|
+| `government` | PH-AUTH-004 (1.0), PH-BEC-001 (0.8), PH-ID-002 (0.6) |
+| `insurance` | PH-BEC-002 (1.0), PH-URL-001 (0.8), PH-AUTH-008 (0.5) |
+| `telecom` | PH-ID-002 (1.0), PH-AUTH-004 (0.8), PH-CHN-001 (0.6) |
+| `retail` | PH-BEC-002 (1.0), PH-URL-001 (0.8), PH-ATT-001 (0.6) |
+| `education` | PH-URL-001 (1.0), PH-BEC-001 (0.7), PH-CHN-004 (0.5) |
+| `logistics` | PH-BEC-002 (1.0), PH-AUTH-004 (0.7), PH-CHN-002 (0.6) |
+| `professional-services` | PH-AUTH-008 (1.0), PH-BEC-001 (0.8), PH-URL-005 (0.6) |
+| `technology` | PH-ID-002 (1.0), PH-CHN-003 (0.8), PH-AUTH-004 (0.6) |
+
+Plus the 3 Phase-7 additions not in phishing.txt's own named list:
+`bfsi` (PH-BEC-002 1.0, PH-AUTH-004 0.8, PH-ID-002 0.7), `healthcare`
+(PH-URL-001 1.0, PH-ATT-001 0.9, PH-AUTH-008 0.7), `manufacturing-ot`
+(PH-BEC-002 1.0, PH-AUTH-004 0.8, PH-CHN-001 0.5). All 11 are validated
+at construction time against the real catalog (`NewIndustryProfile`
+rejects any ID that isn't a real `AudspectPhishingCatalog` entry).
+
+**2. FilterScenarios proves selection, not metadata.** Strengthened
+`TestIndustryProfile_FilterScenarios_ReturnsOnlyPrioritiesInWeightOrder`
+with an explicit negative assertion: PH-ATT-002 (a real catalog
+scenario, confirmed not one of BFSI/NBFC's 3 priorities) must be
+absent from the filtered result, and the filtered length must be a
+strict subset of the full 44-scenario catalog -- proving this is real
+selection a caller could dispatch against, not a rendered string.
+
+**3. Graph adapter authorization/scoping/cleanup**, now each with its
+own dedicated test:
+- `CreateSharingInvite`: rejects empty `driveID`/`itemID`
+  (`TestCreateSharingInvite_UnscopedDriveOrItem_Rejected`) and empty
+  recipients (`TestCreateSharingInvite_NoRecipients_Rejected`);
+  Authorization header asserted in
+  `TestCreateSharingInvite_HTTPTestServer_RealOAuthAndHTTPPath`;
+  cleanup proven in `TestDeleteSharingInvite_HTTPTestServer_RealDelete`.
+- `CreateCalendarEventLure`: rejects empty attendees
+  (`TestCreateCalendarEventLure_NoAttendees_Rejected`) -- and, closing a
+  real gap this verification pass found, now also rejects an empty
+  `userID` (`TestCreateCalendarEventLure_EmptyUserID_Rejected`, added
+  here; the rejection code already existed, it simply had no test
+  pinning it). Cleanup proven in
+  `TestDeleteCalendarEvent_HTTPTestServer_RealDelete`.
+
+**4. The 3 session-revocation outcomes + propagation-timeout behavior**:
+`RevocationVerified` (immediate advance, plus -- closing the other real
+gap this pass found --
+`TestRevokeAndVerifySignInSessions_PropagationDelay_VerifiedOnSecondPoll`,
+new: the marker stays stale on the first post-revocation poll and only
+advances on the second, proving the retry loop actually retries within
+its budget rather than concluding from one read), `RevocationNotVerified`
+(marker never advances, confirmed negative), `RevocationUnknown` (3
+distinct sub-cases: dispatch rejected, baseline read fails, every
+post-revocation read fails) -- 7 tests total, all passing.
+
+**5. Remaining gaps**, unchanged from §15: mailbox-purge (deferred,
+beta/preview eDiscovery API), locale/i18n (no real i18n/RTL rendering
+anywhere), voice/vishing (zero telephony infrastructure, separate
+build-vs-defer decision). PH-CHN-002/004/003/005/006/007/008's own
+remaining depth limitations are documented individually in their own
+catalog entries' `Limitations` field.
+
+The two test-coverage gaps this verification pass found and closed
+(empty-userID rejection untested; propagation-delay retry untested)
+were both pre-existing code paths with no regression test pinning
+them -- found by deliberately checking "is there a dedicated test for
+this claim" rather than trusting the earlier summary. Full suite green
+after both fixes.
+
 **All 8 phases of Phishing BAS Mastery are now complete.** 69 PH-*
 scenario entries (61 base + 8 variants) across 6 areas, a 7-dimension
 outcome model independent of controlval (corrected from this doc's own

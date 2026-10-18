@@ -152,6 +152,46 @@ func TestRevokeAndVerifySignInSessions_MarkerAdvances_Verified(t *testing.T) {
 	}
 }
 
+// TestRevokeAndVerifySignInSessions_PropagationDelay_VerifiedOnSecondPoll
+// exercises the actual retry path: the marker does NOT advance on the
+// first post-revocation read (simulating real propagation delay), only
+// on the second -- proving the poll loop keeps trying within its
+// budget instead of concluding NotVerified from one read alone.
+func TestRevokeAndVerifySignInSessions_PropagationDelay_VerifiedOnSecondPoll(t *testing.T) {
+	tokenSrv := tokenMock(t)
+	defer tokenSrv.Close()
+	baseline := time.Now().UTC().Truncate(time.Second)
+	current := baseline
+	getsAfterRevoke := 0
+	graphSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/revokeSignInSessions"):
+			w.WriteHeader(http.StatusNoContent)
+		case r.Method == http.MethodGet:
+			if getsAfterRevoke == 2 { // GET #1 is the baseline read, GET #2 is the first (stale) poll, GET #3 advances
+				current = current.Add(1 * time.Hour)
+			}
+			getsAfterRevoke++
+			json.NewEncoder(w).Encode(map[string]any{"signInSessionsValidFromDateTime": current.Format(time.RFC3339)})
+		}
+	}))
+	defer graphSrv.Close()
+
+	client := New(Config{TenantID: "t1", ClientID: "c1", ClientSecret: "s1"})
+	*client.TokenURL() = tokenSrv.URL
+	client.BaseURL = graphSrv.URL
+	client.VerificationPollAttempts = 3
+	client.VerificationPollInterval = time.Millisecond
+
+	result := client.RevokeAndVerifySignInSessions(t.Context(), "user-123")
+	if result.Verification != RevocationVerified {
+		t.Fatalf("Verification = %q (%s), want %q (the retry loop must keep polling until the marker advances, within its budget)", result.Verification, result.Detail, RevocationVerified)
+	}
+	if getsAfterRevoke < 3 { // baseline + first (stale) poll + second (advanced) poll
+		t.Errorf("getsAfterRevoke = %d, want at least 3 (baseline read, one stale poll, one successful poll)", getsAfterRevoke)
+	}
+}
+
 func TestRevokeAndVerifySignInSessions_MarkerNeverAdvances_NotVerified(t *testing.T) {
 	tokenSrv := tokenMock(t)
 	defer tokenSrv.Close()

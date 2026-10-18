@@ -162,6 +162,13 @@ func TestCreateCalendarEventLure_NoAttendees_Rejected(t *testing.T) {
 	}
 }
 
+func TestCreateCalendarEventLure_EmptyUserID_Rejected(t *testing.T) {
+	client := New(Config{TenantID: "t1", ClientID: "c1", ClientSecret: "s1"})
+	if _, err := client.CreateCalendarEventLure(t.Context(), "", "subj", "body", []string{"a@b.test"}); err == nil {
+		t.Error("CreateCalendarEventLure() with an empty userID = nil error, want an error (never an unscoped organizer mailbox)")
+	}
+}
+
 func TestVerifyCalendarEventExists_ConfirmedAndMissing(t *testing.T) {
 	tokenSrv := tokenMock(t)
 	defer tokenSrv.Close()
