@@ -4,7 +4,9 @@ package main
 
 import (
 	"context"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -199,6 +201,20 @@ func TestCanReachDomainController_CompletesWithinItsTimeout(t *testing.T) {
 	}
 }
 
+// waitForFile polls for path to exist, returning false if it does not appear
+// within d. It waits on an observable effect of the command under test, not on
+// elapsed time.
+func waitForFile(path string, d time.Duration) bool {
+	deadline := time.Now().Add(d)
+	for time.Now().Before(deadline) {
+		if _, err := os.Stat(path); err == nil {
+			return true
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	return false
+}
+
 // The next two tests close increment 2.2's property-3 gap (cleanup on
 // cancellation): runCleanup has direct unit tests in isolation, but nothing
 // proved cleanup still runs, through the real execStep path, when the main
@@ -214,25 +230,27 @@ func TestCanReachDomainController_CompletesWithinItsTimeout(t *testing.T) {
 // skip the step's cleanup command.
 func TestExecStepCleanupRunsAfterOperatorCancel(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
+	started := filepath.Join(t.TempDir(), "started")
 	step := ScenarioStep{
 		TaskID:   "cleanup-cancel",
 		Executor: "powershell",
-		Command:  "Start-Sleep -Seconds 30",
-		Cleanup:  "exit 0",
-		Timeout:  &sched.TimeoutProfile{ExecuteSec: 600, GraceSec: 2},
+		// The first action writes a sentinel, so the test knows the main
+		// command is running before it cancels. The wait below is on that
+		// file, not on a fixed sleep.
+		Command: "Set-Content -LiteralPath '" + started + "' -Value started; Start-Sleep -Seconds 30",
+		Cleanup: "exit 0",
+		Timeout: &sched.TimeoutProfile{ExecuteSec: 600, GraceSec: 2},
 	}
 	out := make(chan protocol.ExecResult, 1)
 	go func() { out <- execStep(ctx, step, nil) }()
 
-	// Found while writing this test (2026-10-09): when step.Cleanup is set,
-	// execStep captures a pre-cleanup snapshot (captureSnapshotLite) BEFORE
-	// starting the main command, and that capture alone took >1s on this
-	// host. A short delay here would fire cancel() before cmd.Start() even
-	// runs, hitting the "never started" early-return path instead of
-	// actually killing a running process -- a different, already-correct
-	// case, not the one this test means to exercise. 2s gives Start() room
-	// to be reached first, so cancel() lands on a genuinely running step.
-	time.Sleep(2 * time.Second)
+	// Wait until the main command has written its sentinel, which proves it
+	// is running. Cancelling before that would exercise the "never started"
+	// path instead of killing a live process.
+	if !waitForFile(started, 30*time.Second) {
+		cancel()
+		t.Fatal("main command never reported started within 30s")
+	}
 	cancel() // operator cancel, not a timeout
 
 	select {
@@ -252,17 +270,17 @@ func TestExecStepCleanupRunsAfterOperatorCancel(t *testing.T) {
 // (the step's own ExecuteSec deadline, not an external cancel) also does not
 // skip the step's cleanup command.
 func TestExecStepCleanupRunsAfterExecuteTimeout(t *testing.T) {
+	started := filepath.Join(t.TempDir(), "started")
 	step := ScenarioStep{
 		TaskID:   "cleanup-timeout",
 		Executor: "powershell",
-		Command:  "Start-Sleep -Seconds 30",
-		Cleanup:  "exit 0",
-		// ExecuteSec must leave room for step.Cleanup's pre-cleanup snapshot
-		// capture (captureSnapshotLite), which runs BEFORE cmd.Start() and
-		// took >1s on this host -- too tight a deadline fires before the
-		// main command ever starts, hitting the "never started" early-return
-		// path instead of actually timing out a running command.
-		Timeout: &sched.TimeoutProfile{ExecuteSec: 5, GraceSec: 2},
+		// The sentinel proves the command started before the deadline could
+		// fire. Without it, a run that never starts would be a false pass.
+		Command: "Set-Content -LiteralPath '" + started + "' -Value started; Start-Sleep -Seconds 30",
+		Cleanup: "exit 0",
+		// The execute deadline no longer includes the pre-cleanup snapshot
+		// (see execStep), so this budget covers only the command.
+		Timeout: &sched.TimeoutProfile{ExecuteSec: 10, GraceSec: 2},
 	}
 
 	out := make(chan protocol.ExecResult, 1)
@@ -270,13 +288,16 @@ func TestExecStepCleanupRunsAfterExecuteTimeout(t *testing.T) {
 
 	select {
 	case r := <-out:
+		if _, err := os.Stat(started); err != nil {
+			t.Fatalf("main command never started, so the timeout did not test a running command: %v", err)
+		}
 		if !r.TimedOut {
 			t.Fatalf("TimedOut = false, want true")
 		}
 		if r.CleanupVerdict != "reverted" {
 			t.Fatalf("CleanupVerdict = %q, want %q -- cleanup must still run and succeed after an execute-timeout kill", r.CleanupVerdict, "reverted")
 		}
-	case <-time.After(15 * time.Second):
-		t.Fatal("execStep did not return within 15s of its 1s timeout -- cleanup may be blocking indefinitely")
+	case <-time.After(60 * time.Second):
+		t.Fatal("execStep did not return within 60s of a 10s execute timeout -- cleanup may be blocking indefinitely")
 	}
 }
