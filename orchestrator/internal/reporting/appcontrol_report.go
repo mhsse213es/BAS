@@ -52,18 +52,19 @@ const (
 // family can take in a report.
 var appCtlFamilyOrder = []string{
 	"indirect_execution", "alternate_binary", "script_host_proxy",
-	"alternate_ps_host", "parent_child_asr",
+	"alternate_ps_host", "parent_child_asr", "inprocess_hosting",
 }
 
 // appCtlStepFamilies maps a step name prefix to its family. It is the fallback
 // when a step produced no APPCTL_FAMILY line, so a step that ran with missing
 // output still appears in the report as unverified.
 var appCtlStepFamilies = map[string]string{
-	"Application control indirect execution":   "indirect_execution",
-	"Application control alternate binary":     "alternate_binary",
-	"Application control script host proxy":    "script_host_proxy",
-	"Application control alternate PowerShell": "alternate_ps_host",
-	"Application control parent-child ASR":     "parent_child_asr",
+	"Application control indirect execution":    "indirect_execution",
+	"Application control alternate binary":      "alternate_binary",
+	"Application control script host proxy":     "script_host_proxy",
+	"Application control alternate PowerShell":  "alternate_ps_host",
+	"Application control parent-child ASR":      "parent_child_asr",
+	"Application control in-process PowerShell": "inprocess_hosting",
 }
 
 // appCtlLimitations is stated in every section that has data. These are

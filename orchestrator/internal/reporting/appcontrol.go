@@ -109,7 +109,7 @@ func NewAppControlEvidence(method, correlationID, fixtureID, policySnapshot, cap
 var appCtlFamilies = map[string]bool{
 	"indirect_execution": true, "alternate_binary": true,
 	"script_host_proxy": true, "alternate_ps_host": true,
-	"parent_child_asr": true,
+	"parent_child_asr": true, "inprocess_hosting": true,
 }
 
 // Telemetry visibility values reported under APPCTL_DETECTION. Visibility is

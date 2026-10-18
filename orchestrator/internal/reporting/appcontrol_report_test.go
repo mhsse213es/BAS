@@ -75,7 +75,7 @@ func TestBuildAppControlSection_AllFamiliesListedInOrder(t *testing.T) {
 		appCtlResult("Application control indirect execution", "T1202", appCtlIndirectOut),
 	}
 	sec := buildAppControlSection("run-A", results)
-	want := []string{"indirect_execution", "alternate_binary", "script_host_proxy", "alternate_ps_host", "parent_child_asr"}
+	want := []string{"indirect_execution", "alternate_binary", "script_host_proxy", "alternate_ps_host", "parent_child_asr", "inprocess_hosting"}
 	if len(sec.Families) != len(want) {
 		t.Fatalf("families = %d, want %d", len(sec.Families), len(want))
 	}

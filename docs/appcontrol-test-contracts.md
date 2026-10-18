@@ -75,6 +75,19 @@ Every contract has the same fields: family, control under test, prerequisites, e
 - **Unsupported conditions.** Defender preferences unavailable; event log unreadable.
 - **Known blind spots.** The parent is a copy of `cmd.exe` named `winword.exe`, not a real Office application. The test shows whether the rule matches on image name. It does not show whether a real Office child is blocked.
 
+## inprocess_hosting
+
+- **Control under test.** The language restriction a custom PowerShell host runs under. The host is `tools/inprocess-host/bas-pshost.exe`, built from source and hosting `System.Management.Automation` in its own process rather than `powershell.exe`. The test asks whether that host runs under Constrained Language Mode and blocks `Add-Type`.
+- **Technique.** T1059.001.
+- **Prerequisites.** `BAS_INPROC_HOST` set to a built `bas-pshost.exe`. Build from source with `tools/inprocess-host/build.ps1`, which uses the .NET Framework compiler already on Windows and downloads nothing. The PowerShell automation assembly must be present in the GAC.
+- **Expected-result source.** The host's own report of its runspace language mode, read from `HOST_LANGUAGE_MODE`. The expectation that this host should be restricted is part of the contract. It is not assumed from policy.
+- **Expected outcome.** `blocked_as_expected` when the host reports ConstrainedLanguage and blocks `Add-Type`. `allowed_unexpectedly` when `Add-Type` succeeds under any language mode, because no restriction applies. `not_applicable` when no host is configured.
+- **Evidence requirements.** `APPCTL_EVIDENCE` with the test ID, `ran` (the host echoed this test's marker), `exit`, and the host's `Add-Type` result. There is no event-log attribution: the host is the only observer, and its own report is the evidence.
+- **Attribution rule.** An `Add-Type` block counts as language-mode enforcement only when the host also reports ConstrainedLanguage. A block under FullLanguage is `inconclusive`, because something other than the language restriction caused it.
+- **Cleanup.** Removes the temp output file.
+- **Unsupported conditions.** No host configured or present (`not_applicable`). The host printed no structured result, or did not echo the marker (`inconclusive`).
+- **Known blind spots.** Telemetry visibility is `unknown`: no sensor is configured for this path. The host is a custom one, so this does not measure `powershell.exe` or any product's host. It does not measure AMSI or ScriptBlock logging. A ConstrainedLanguage result on this host is a property of this host, not of the endpoint's policy.
+
 ## Known blind spots shared by all families
 
 - Every result holds only for the tested Windows build, policy version, and execution path.
