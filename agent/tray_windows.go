@@ -48,15 +48,15 @@ var (
 // ── Constants ────────────────────────────────────────────────────────────────
 
 const (
-	tWM_APP          = 0x8000
-	tWM_TRAYNOTIFY   = tWM_APP + 2
-	tWM_COMMAND      = 0x0111
-	tWM_LBUTTONUP    = 0x0202
+	tWM_APP           = 0x8000
+	tWM_TRAYNOTIFY    = tWM_APP + 2
+	tWM_COMMAND       = 0x0111
+	tWM_LBUTTONUP     = 0x0202
 	tWM_LBUTTONDBLCLK = 0x0203
-	tWM_RBUTTONUP    = 0x0205
+	tWM_RBUTTONUP     = 0x0205
 
-	tNIM_ADD    = 0
-	tNIM_DELETE = 2
+	tNIM_ADD     = 0
+	tNIM_DELETE  = 2
 	tNIF_MESSAGE = 0x0001
 	tNIF_ICON    = 0x0002
 	tNIF_TIP     = 0x0004
@@ -66,20 +66,22 @@ const (
 	tLR_SHARED  = 0x8000
 	tIDC_ARROW  = 32512
 
-	tMF_STRING    = 0x0000
-	tMF_SEPARATOR = 0x0800
-	tTPM_RETURNCMD = 0x0100
-	tTPM_RIGHTALIGN = 0x0008
+	tMF_STRING       = 0x0000
+	tMF_SEPARATOR    = 0x0800
+	tTPM_RETURNCMD   = 0x0100
+	tTPM_RIGHTALIGN  = 0x0008
 	tTPM_BOTTOMALIGN = 0x0020
-	tTPM_NONOTIFY = 0x0080
+	tTPM_NONOTIFY    = 0x0080
 
 	tWS_OVERLAPPED = 0x00000000
 	tSW_RESTORE    = 9
 
-	tIDM_OPEN    = 0x2001
-	tIDM_EXPORT  = 0x2002
-	tIDM_LOGS    = 0x2003
-	tIDM_EXIT    = 0x2009
+	tIDM_OPEN         = 0x2001
+	tIDM_EXPORT       = 0x2002
+	tIDM_LOGS         = 0x2003
+	tIDM_SETTINGS     = 0x2004
+	tIDM_TROUBLESHOOT = 0x2005
+	tIDM_EXIT         = 0x2009
 )
 
 // ── Structs ──────────────────────────────────────────────────────────────────
@@ -134,11 +136,11 @@ type trayPoint struct{ X, Y int32 }
 // ── State ────────────────────────────────────────────────────────────────────
 
 var (
-	trayHInst  uintptr
-	trayWnd    uintptr
-	trayIcon   uintptr
+	trayHInst      uintptr
+	trayWnd        uintptr
+	trayIcon       uintptr
 	trayTaskbarMsg uint32
-	trayProcCB = windows.NewCallback(trayWndProc)
+	trayProcCB     = windows.NewCallback(trayWndProc)
 
 	// persistent UTF16 pointers (avoid GC of buffers Win32 still references)
 	trayClsName  = windows.StringToUTF16Ptr("BASAgentTrayWnd")
@@ -150,6 +152,13 @@ var (
 	// class) since this file has no reference to that window's real
 	// windigo-generated class name -- title alone is enough to identify it.
 	statusWndTitle = windows.StringToUTF16Ptr("Audspect BAS Agent")
+
+	// settingsWndTitle/troubleshootWndTitle match the titles
+	// settingswindow_windows.go/troubleshootwindow_windows.go set via
+	// .Title(...) on their own windigo windows (Tasks 6/7) -- same
+	// FindWindowW-by-title pattern as statusWndTitle above.
+	settingsWndTitle     = windows.StringToUTF16Ptr("Audspect BAS Agent — Settings")
+	troubleshootWndTitle = windows.StringToUTF16Ptr("Audspect BAS Agent — Troubleshoot")
 )
 
 // runTray shows the persistent system-tray icon. Left-click / double-click opens
@@ -266,6 +275,10 @@ func trayWndProc(hwnd, msg, wParam, lParam uintptr) uintptr {
 		switch wParam & 0xFFFF {
 		case tIDM_OPEN:
 			openStatusWindow()
+		case tIDM_SETTINGS:
+			openSettingsWindow()
+		case tIDM_TROUBLESHOOT:
+			openTroubleshootWindow()
 		case tIDM_EXPORT:
 			if path, err := exportDiagnosticBundle(); err == nil {
 				revealInExplorer(path)
@@ -288,6 +301,31 @@ func trayWndProc(hwnd, msg, wParam, lParam uintptr) uintptr {
 	return r
 }
 
+// trayMenuEntry is one row of the tray's popup menu, in display order.
+// Label == "" marks a separator (ID is unused for those rows).
+type trayMenuEntry struct {
+	ID    uintptr
+	Label string
+}
+
+// buildTrayMenuItems is trayShowMenu's item list, extracted so its exact
+// order and label set are testable without a live Win32 menu handle.
+// No user-facing "Exit" entry -- the client must not be able to quit the
+// tray from its own menu. tIDM_EXIT / trayWndProc's handler for it still
+// exist and are still reachable, but only programmatically, via
+// closeTrayWindow() (uninstall_windows.go) posting the WM_COMMAND
+// directly -- that's the only remaining way the tray now exits.
+func buildTrayMenuItems() []trayMenuEntry {
+	return []trayMenuEntry{
+		{tIDM_OPEN, "Open Status Console"},
+		{tIDM_SETTINGS, "Settings..."},
+		{tIDM_TROUBLESHOOT, "Troubleshoot..."},
+		{0, ""},
+		{tIDM_EXPORT, "Export Diagnostic Bundle"},
+		{tIDM_LOGS, "Open Logs Folder"},
+	}
+}
+
 func trayShowMenu() {
 	menu, _, _ := trayCreatePopupMenu.Call()
 	if menu == 0 {
@@ -295,15 +333,13 @@ func trayShowMenu() {
 	}
 	defer trayDestroyMenu.Call(menu)
 
-	trayMenuItem(menu, tIDM_OPEN, "Open Status Console")
-	trayMenuSep(menu)
-	trayMenuItem(menu, tIDM_EXPORT, "Export Diagnostic Bundle")
-	trayMenuItem(menu, tIDM_LOGS, "Open Logs Folder")
-	// No user-facing "Exit" entry -- the client must not be able to quit the
-	// tray from its own menu. tIDM_EXIT / trayWndProc's handler for it still
-	// exist and are still reachable, but only programmatically, via
-	// closeTrayWindow() (uninstall_windows.go) posting the WM_COMMAND
-	// directly -- that's the only remaining way the tray now exits.
+	for _, item := range buildTrayMenuItems() {
+		if item.Label == "" {
+			trayMenuSep(menu)
+			continue
+		}
+		trayMenuItem(menu, item.ID, item.Label)
+	}
 
 	var pt trayPoint
 	trayGetCursorPos.Call(uintptr(unsafe.Pointer(&pt)))
@@ -350,6 +386,57 @@ func openStatusWindow() {
 	}
 	if err := cmd.Start(); err != nil {
 		log.Printf("[tray] open status console: %v", err)
+	}
+}
+
+// openSettingsWindow mirrors openStatusWindow exactly: bring an already-open
+// Settings window to the front instead of spawning a duplicate, otherwise
+// launch `exe --settings-window` as a separate process.
+func openSettingsWindow() {
+	if hwnd, _, _ := trayFindWindow.Call(0, uintptr(unsafe.Pointer(settingsWndTitle))); hwnd != 0 {
+		if iconic, _, _ := trayIsIconic.Call(hwnd); iconic != 0 {
+			trayShowWindow.Call(hwnd, tSW_RESTORE)
+		}
+		traySetForeground.Call(hwnd)
+		return
+	}
+
+	exe, err := os.Executable()
+	if err != nil {
+		return
+	}
+	cmd := exec.Command(exe, "--settings-window")
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		CreationFlags: createNoWindow,
+	}
+	if err := cmd.Start(); err != nil {
+		log.Printf("[tray] open settings: %v", err)
+	}
+}
+
+// openTroubleshootWindow mirrors openStatusWindow exactly: bring an
+// already-open Troubleshoot window to the front instead of spawning a
+// duplicate, otherwise launch `exe --troubleshoot-window` as a separate
+// process.
+func openTroubleshootWindow() {
+	if hwnd, _, _ := trayFindWindow.Call(0, uintptr(unsafe.Pointer(troubleshootWndTitle))); hwnd != 0 {
+		if iconic, _, _ := trayIsIconic.Call(hwnd); iconic != 0 {
+			trayShowWindow.Call(hwnd, tSW_RESTORE)
+		}
+		traySetForeground.Call(hwnd)
+		return
+	}
+
+	exe, err := os.Executable()
+	if err != nil {
+		return
+	}
+	cmd := exec.Command(exe, "--troubleshoot-window")
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		CreationFlags: createNoWindow,
+	}
+	if err := cmd.Start(); err != nil {
+		log.Printf("[tray] open troubleshoot: %v", err)
 	}
 }
 
