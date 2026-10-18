@@ -435,24 +435,69 @@ func phID002() Scenario {
 // adapter pattern (EntraTokenSource + httptest-overridable BaseURL +
 // real OAuth/HTTP/JSON) each of these would reuse -- the remaining work
 // is a new Graph endpoint per scenario, not a new pattern.
+// phID003 wraps phishbridge.FromDeviceCodeEnforcement, reading
+// phishidentity.SignInsByAuthenticationProtocol's own real per-sign-in
+// enforcement evidence (Graph's documented
+// appliedConditionalAccessPolicy.result field: success/failure/
+// notApplied/notEnabled/unknown). Deliberately never reads
+// ConditionalAccessPolicies' own configuration list as if it were
+// proof of enforcement -- the two are separate Graph calls against
+// separate endpoints, exactly the distinction the user's own research
+// directive required kept.
 func phID003() Scenario {
-	return Scenario{ID: "PH-ID-003", Version: 1, Area: AreaURLCredentialIdentity, Name: "Device-code phishing defense",
-		PrimaryObjective: "Validate identity-side protections and relevant alerts",
-		Limitations:      "genuine gap: no Graph call against /identity/conditionalAccess/policies or sign-in logs for device-code grant-type usage exists yet; phishidentity.Client proves the reusable adapter pattern",
-		Coverage:         CoverageCatalogOnly}
+	return Scenario{
+		ID: "PH-ID-003", Version: 1, Area: AreaURLCredentialIdentity, Name: "Device-code phishing defense",
+		PrimaryObjective:     "Validate identity-side protections and relevant alerts",
+		Limitations:          "reads appliedConditionalAccessPolicies on the specific deviceCode sign-in event, never the separate conditionalAccess/policies configuration list, per-sign-in evidence only; proven against httptest fixtures, no live tenant audit-log call made; AppliedConditionalAccessPolicies itself requires elevated Conditional-Access-read permission per Microsoft's own documentation -- an empty result can mean either outcome without that grant",
+		Expectation:          phishval.Expectation{ScenarioID: "PH-ID-003", Enforcement: ptrEnforcement(phishval.EnforcementBlocked)},
+		Standards:            StandardsMapping{ATTACKTechniques: []string{"T1528"}},
+		MappedImplementation: "phishidentity.SignInsByAuthenticationProtocol",
+		Coverage:             CoverageAdapterTested,
+	}
 }
 
+// phID004/phID005 stay genuine, confirmed gaps -- researched
+// 2026-10-18 per the user's own directive to research before
+// implementing, not re-described from an earlier, vaguer note.
+//
+// PH-ID-004 (MFA fatigue): no Microsoft Graph riskDetections
+// riskEventType value corresponds to repeated-push/MFA-fatigue
+// activity (the documented enum has no such member; non-premium
+// detections are named individually, premium detections collapse to
+// a single generic value with no way to isolate this one). Number
+// matching (the real anti-fatigue control) is tenant-wide
+// configuration readable via
+// GET /policies/authenticationMethodsPolicy, but that is
+// CONFIGURATION, not a per-attempt enforcement signal -- building this
+// scenario from configuration alone would be exactly the "infer
+// enforcement from configuration" the user's directive explicitly
+// ruled out. No confirmed per-event enforcement evidence source
+// exists; building a custom heuristic (e.g. counting rapid sign-in
+// attempts) would be an invented detection claim this codebase has no
+// Microsoft-documented basis for, not a real signal.
+//
+// PH-ID-005 (session-theft/CAE): a sign-in's own CAE-token-issuance
+// state IS checkable (Microsoft Entra sign-in logs expose an "Is CAE
+// Token" filter/field, confirmed via the beta
+// authenticationProcessingDetails key), but that only proves a
+// CAE-protected token was issued, never that a theft was detected AND
+// the token was actually revoked in response. No Microsoft-documented
+// sign-in log field records a revocation-rejection event itself for
+// user identities (confirmed only for workload identities, a
+// different object class). The scenario's own objective --
+// "validate... session protections using controlled test signals" --
+// needs exactly the revocation-on-theft signal that doesn't exist.
 func phID004() Scenario {
 	return Scenario{ID: "PH-ID-004", Version: 1, Area: AreaURLCredentialIdentity, Name: "MFA fatigue defense",
 		PrimaryObjective: "Test relevant identity detections and conditional access",
-		Limitations:      "genuine gap: no Graph call against /identity/conditionalAccess/policies or authentication-methods/sign-in-log endpoints exists yet; phishidentity.Client proves the reusable adapter pattern",
+		Limitations:      "genuine gap, confirmed by research: no Graph riskDetections riskEventType value exists for MFA-fatigue/push-spam activity; authenticationMethodsPolicy's number-matching setting is configuration only, not a per-attempt enforcement signal -- building from that alone would infer enforcement from configuration, which this initiative does not do",
 		Coverage:         CoverageCatalogOnly}
 }
 
 func phID005() Scenario {
 	return Scenario{ID: "PH-ID-005", Version: 1, Area: AreaURLCredentialIdentity, Name: "Session-theft defense",
 		PrimaryObjective: "Validate token/session protections using controlled test signals",
-		Limitations:      "genuine gap: no Graph call against sign-in-risk or Continuous Access Evaluation endpoints exists yet; phishidentity.Client proves the reusable adapter pattern",
+		Limitations:      "genuine gap, confirmed by research: a sign-in's CAE-token-issuance state is checkable (Entra's \"Is CAE Token\" signal), but no Microsoft-documented sign-in log field records an actual revocation-on-theft event for user identities (only for workload identities, a different object class) -- the specific signal this scenario's objective needs does not exist",
 		Coverage:         CoverageCatalogOnly}
 }
 

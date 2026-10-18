@@ -13,17 +13,27 @@ Every package has real, deterministic test coverage — no `TODO`/skipped tests 
 - **`internal/phishbridge`** — one-way translation tests from `emailgwefficacy`/`emailgwcampaign`/`exercise`/`phishidentity`/`internal/actions` into `phishval.Observation`, each with an explicit known-good and known-bad end-to-end case (e.g. `TestPHBEC002_...`, `TestPHDET001_...`, `TestPHIR002_...`, `TestPHCHN002_...`, `TestPHID001_...`, `TestPHIR003_...`).
 - **`internal/phishidentity`** — real Microsoft Graph v1.0 adapter, every call proven against `httptest` (OAuth-consent listing, `RevokeAndVerifySignInSessions`'s 3-outcome retry logic including a genuine propagation-delay case, `CreateSharingInvite`/`CreateCalendarEventLure` + read-back verify + delete, all scoping/authorization rejections individually tested).
 
-**Current catalog coverage snapshot** (`AudspectPhishingCoverageReport()`, re-measured 2026-10-18 after the attachment-depth closure): 44 scenarios total — 18 catalog-only, 2 fixture-tested, 24 adapter-tested, 0 live-validated. ("Adapter-tested" = real code path, proven against `httptest`/deterministic fixtures or a real local SMTP server, never contacted a live vendor tenant. "Live-validated" = proven against a real tenant — zero scenarios have reached this tier yet, for any vendor, in this initiative.)
+**Current catalog coverage snapshot** (`AudspectPhishingCoverageReport()`, re-measured 2026-10-18 after the identity-depth research/closure): 44 scenarios total — 17 catalog-only, 2 fixture-tested, 25 adapter-tested, 0 live-validated. ("Adapter-tested" = real code path, proven against `httptest`/deterministic fixtures or a real local SMTP server, never contacted a live vendor tenant. "Live-validated" = proven against a real tenant — zero scenarios have reached this tier yet, for any vendor, in this initiative.)
 
 ## Open items — blocked on live tenant/vendor access, not an engineering gap
 
 ### 1. Every Microsoft Graph-backed scenario — adapter code built and tested (httptest only); zero live-tenant verification
 
-**Scenarios affected:** PH-IR-002 (session revocation), PH-CHN-002/004 (SharePoint sharing invite / calendar lure), PH-ID-002 (OAuth consent listing), PH-ID-003/004/005 (device-code/MFA-fatigue/session-theft — still catalog-only, no Graph call built at all yet).
+**Scenarios affected:** PH-IR-002 (session revocation), PH-CHN-002/004 (SharePoint sharing invite / calendar lure), PH-ID-002 (OAuth consent listing), PH-ID-003 (device-code — now built, see Resolved items below).
 
 **What's unverified:** the real `signInSessionsValidFromDateTime` propagation timing in production (this session's tests simulate a 2-poll delay; real Entra ID propagation delay is undocumented and could exceed the 3-attempt/2s default budget), real Graph throttling behavior under `RevokeAndVerifySignInSessions`'s retry loop, and whether `CreateSharingInvite`/`CreateCalendarEventLure`'s read-back verification races against real Graph eventual consistency the way the fixture tests assume it doesn't.
 
-**Resolution path:** a Microsoft 365 tenant with admin-consented Graph permissions (`User.ReadWrite.All` for session revocation, `Files.ReadWrite.All` for sharing invites, `Calendars.ReadWrite` for calendar lures, `Policy.Read.All`/sign-in-log read access for PH-ID-003/004/005, not yet built).
+**Resolution path:** a Microsoft 365 tenant with admin-consented Graph permissions (`User.ReadWrite.All` for session revocation, `Files.ReadWrite.All` for sharing invites, `Calendars.ReadWrite` for calendar lures, `Policy.Read.All` + elevated Conditional-Access-read scope for PH-ID-003's `appliedConditionalAccessPolicies` field).
+
+### 6. PH-ID-004/PH-ID-005 (MFA fatigue / session-theft) — confirmed genuine gaps, not a missing adapter
+
+**Status:** Researched 2026-10-18 (Microsoft Graph `riskDetections`, `authenticationMethodsPolicy`, and Entra sign-in log / Continuous Access Evaluation documentation). Neither is a "code not written yet" gap — no reliable per-event Graph signal exists for either claim at all.
+
+**PH-ID-004 (MFA fatigue):** `riskDetections`' `riskEventType` enum has no member for repeated-push/MFA-fatigue activity; non-premium types are individually named, premium detections collapse into one generic value with no way to isolate this one. Number matching (the real control) is tenant-wide configuration (`GET /policies/authenticationMethodsPolicy`), not a per-attempt enforcement signal — building from that alone would be exactly the "infer enforcement from configuration" the user's own directive ruled out.
+
+**PH-ID-005 (session-theft/CAE):** a sign-in's CAE-token-issuance state is checkable (Entra's "Is CAE Token" signal, confirmed via the beta `authenticationProcessingDetails` key), but that only proves a CAE-protected token was issued, never that a theft was detected and the token revoked in response. No Microsoft-documented sign-in log field records a revocation-rejection event for user identities (only for workload identities, a different object class) — the specific signal this scenario's own objective needs does not exist.
+
+**Resolution path:** re-open only if Microsoft ships a documented per-event signal for either (a risk-detection type for MFA fatigue, or a revocation-rejection field in user sign-in logs) — not something to build around today.
 
 ### 2. PH-IR-003 (endpoint follow-through) — dispatch-level evidence only, no independent postcondition verification exists anywhere in this codebase
 
@@ -84,6 +94,10 @@ Per explicit instruction, audited PH-AUTH-010 and PH-BEC-004/005/006/008 against
 **PH-BEC-006 (reply-chain hijacking) — corrected to a partial overlap, genuine remaining gap named explicitly.** The account-compromise precondition is the identical evidence PH-AUTH-010 now covers. What stays a real, separate, unbuilt gap: detecting that a reply injected into an existing thread is anomalous relative to that thread's own history — no email-threading/content-anomaly capability exists anywhere in this codebase to test that independently. Correctly left catalog-only rather than faked by reusing the compromise signal alone.
 
 Net result of this slice: 1 real build (PH-AUTH-010), 4 honest bookkeeping corrections (no new code, no duplicated engine), 0 scope creep into the still-genuine PH-BEC-006 reply-chain-anomaly gap.
+
+### PH-ID-003 (device-code phishing defense) — RESOLVED 2026-10-18
+
+Researched the real Microsoft Graph fields first (per explicit instruction): `signIn.authenticationProtocol` includes a documented `deviceCode` value (v1.0); `appliedConditionalAccessPolicies[].result` (success/failure/notApplied/notEnabled/unknown) is the real per-sign-in enforcement outcome, documented separately from `GET /identity/conditionalAccess/policies`' own pure configuration list. Built both as genuinely distinct Graph calls in `phishidentity/conditionalaccess.go` (`ConditionalAccessPolicies` for configuration, `SignInsByAuthenticationProtocol` for per-event enforcement evidence, with a defensive client-side re-filter since server-side `$filter` support for `authenticationProtocol` specifically isn't confirmed in Microsoft's own filterable-properties list — mirrors the SentinelOne adapter's own precedent for an unconfirmed server-side filter). `EvaluateDeviceCodeEnforcement` grades strictly from the per-event evidence; it never reads the configuration list, so a caller cannot accidentally treat "a blocking policy exists" as "it blocked this attempt." 9 tests across `phishidentity`/`phishbridge`, including an explicit proof that the client-side re-filter works even when the server ignores `$filter` entirely.
 
 ### PH-ATT-002/PH-ATT-003 (PDF/Office attachment depth) — RESOLVED 2026-10-18
 
