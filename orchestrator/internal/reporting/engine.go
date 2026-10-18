@@ -172,7 +172,10 @@ type FullReport struct {
 	// Built from this run's own results before any report filter, and
 	// hidden (HasData false) for a run with no application-control steps.
 	AppControl    AppControlSection `json:"appControl"`
-	TrendAnalysis TrendSummary      `json:"trendAnalysis"`
+	// AppControlRuns holds one section per child run of a campaign, each mapped
+	// to the run that produced it. Campaign reports leave AppControl empty.
+	AppControlRuns []AppControlSection `json:"appControlRuns,omitempty"`
+	TrendAnalysis  TrendSummary        `json:"trendAnalysis"`
 	AttackPath          AttackPath                 `json:"attackPath"`
 	AttackFlow          []AttackFlowNode           `json:"attackFlow,omitempty"`
 	AttackFlowSummary   AttackFlowSummary          `json:"attackFlowSummary"`
@@ -2181,6 +2184,15 @@ func (e *Engine) BuildFromCampaign(ctx context.Context, campaignID string, filte
 		var results []models.SimulationResult
 		if len(resultsRaw) > 0 {
 			if json.Unmarshal(resultsRaw, &results) == nil {
+				// Each child run keeps its own section. Runs are never merged,
+				// so every row maps to the run that produced it.
+				if sec := buildAppControlSection(rid, results); sec.HasData {
+					sec.Hostname = hostname
+					if sec.Hostname == "" {
+						sec.Hostname = agentID
+					}
+					report.AppControlRuns = append(report.AppControlRuns, sec)
+				}
 				results = FilterResults(results, filter)
 				allResults = append(allResults, results...)
 			}

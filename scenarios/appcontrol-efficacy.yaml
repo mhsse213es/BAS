@@ -63,8 +63,13 @@ steps:
 
       function Get-AppCtlModes {
         $modes = @{}
+        # __readable is False when the AppLocker policy cannot be read at all,
+        # as on editions without AppLocker. That is not the same as a policy
+        # with no collections.
+        $modes['__readable'] = $false
         try {
           $pol = Get-AppLockerPolicy -Effective -ErrorAction Stop
+          $modes['__readable'] = $true
           foreach ($rc in @($pol.RuleCollections)) { $modes[[string]$rc.RuleCollectionType] = [string]$rc.EnforcementMode }
         } catch {}
         foreach ($t in 'Exe','Script','Dll','Msi','Appx') { if (-not $modes.ContainsKey($t)) { $modes[$t] = 'NotConfigured' } }
@@ -91,7 +96,7 @@ steps:
 
       $modes = Get-AppCtlModes
       $coverage = $modes['Exe']
-      $control = ((Get-Service -Name AppIDSvc -ErrorAction SilentlyContinue).Status -eq 'Running')
+      $control = ((Get-Service -Name AppIDSvc -ErrorAction SilentlyContinue).Status -eq 'Running') -and $modes['__readable']
       $start = Get-Date
       $p = Start-Process -FilePath cmd.exe -ArgumentList "/d /s /c `"`"$exe`" -NoProfile -NonInteractive -Command Write-Output $marker`"" -WindowStyle Hidden -PassThru -Wait -RedirectStandardOutput $tmp
       $exit = $p.ExitCode
@@ -153,8 +158,13 @@ steps:
 
       function Get-AppCtlModes {
         $modes = @{}
+        # __readable is False when the AppLocker policy cannot be read at all,
+        # as on editions without AppLocker. That is not the same as a policy
+        # with no collections.
+        $modes['__readable'] = $false
         try {
           $pol = Get-AppLockerPolicy -Effective -ErrorAction Stop
+          $modes['__readable'] = $true
           foreach ($rc in @($pol.RuleCollections)) { $modes[[string]$rc.RuleCollectionType] = [string]$rc.EnforcementMode }
         } catch {}
         foreach ($t in 'Exe','Script','Dll','Msi','Appx') { if (-not $modes.ContainsKey($t)) { $modes[$t] = 'NotConfigured' } }
@@ -180,7 +190,7 @@ steps:
 
       $modes = Get-AppCtlModes
       $coverage = $modes['Exe']
-      $control = ((Get-Service -Name AppIDSvc -ErrorAction SilentlyContinue).Status -eq 'Running')
+      $control = ((Get-Service -Name AppIDSvc -ErrorAction SilentlyContinue).Status -eq 'Running') -and $modes['__readable']
       $needle = Split-Path $exe -Leaf
       Copy-Item -Path $src -Destination $exe -Force
       $start = Get-Date
@@ -245,8 +255,13 @@ steps:
 
       function Get-AppCtlModes {
         $modes = @{}
+        # __readable is False when the AppLocker policy cannot be read at all,
+        # as on editions without AppLocker. That is not the same as a policy
+        # with no collections.
+        $modes['__readable'] = $false
         try {
           $pol = Get-AppLockerPolicy -Effective -ErrorAction Stop
+          $modes['__readable'] = $true
           foreach ($rc in @($pol.RuleCollections)) { $modes[[string]$rc.RuleCollectionType] = [string]$rc.EnforcementMode }
         } catch {}
         foreach ($t in 'Exe','Script','Dll','Msi','Appx') { if (-not $modes.ContainsKey($t)) { $modes[$t] = 'NotConfigured' } }
@@ -272,7 +287,7 @@ steps:
 
       $modes = Get-AppCtlModes
       $coverage = $modes['Script']
-      $control = ((Get-Service -Name AppIDSvc -ErrorAction SilentlyContinue).Status -eq 'Running')
+      $control = ((Get-Service -Name AppIDSvc -ErrorAction SilentlyContinue).Status -eq 'Running') -and $modes['__readable']
       $needle = Split-Path $vbs -Leaf
       Set-Content -Path $vbs -Value "WScript.Echo `"$marker`""
       $start = Get-Date
@@ -336,8 +351,13 @@ steps:
 
       function Get-AppCtlModes {
         $modes = @{}
+        # __readable is False when the AppLocker policy cannot be read at all,
+        # as on editions without AppLocker. That is not the same as a policy
+        # with no collections.
+        $modes['__readable'] = $false
         try {
           $pol = Get-AppLockerPolicy -Effective -ErrorAction Stop
+          $modes['__readable'] = $true
           foreach ($rc in @($pol.RuleCollections)) { $modes[[string]$rc.RuleCollectionType] = [string]$rc.EnforcementMode }
         } catch {}
         foreach ($t in 'Exe','Script','Dll','Msi','Appx') { if (-not $modes.ContainsKey($t)) { $modes[$t] = 'NotConfigured' } }
@@ -364,7 +384,7 @@ steps:
       $pwsh = (Get-Command pwsh.exe -ErrorAction SilentlyContinue).Source
       $modes = Get-AppCtlModes
       $coverage = $modes['Exe']
-      $control = [bool]$pwsh -and ((Get-Service -Name AppIDSvc -ErrorAction SilentlyContinue).Status -eq 'Running')
+      $control = [bool]$pwsh -and ((Get-Service -Name AppIDSvc -ErrorAction SilentlyContinue).Status -eq 'Running') -and $modes['__readable']
       $ran = $false
       $exit = -1
       $attr = 0

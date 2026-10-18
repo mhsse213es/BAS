@@ -14,8 +14,11 @@ import (
 // row. Families that were not run, were not applicable, or produced no
 // structured evidence are listed as such and are never shown as passing.
 type AppControlSection struct {
-	HasData     bool                     `json:"hasData"`
-	RunID       string                   `json:"runId"`
+	HasData bool   `json:"hasData"`
+	RunID   string `json:"runId"`
+	// Hostname labels the section in a campaign report, where several runs
+	// appear. It is empty for a single-run report.
+	Hostname    string                   `json:"hostname,omitempty"`
 	Rows        []AppControlRow          `json:"rows"`
 	Families    []AppControlFamilyStatus `json:"families"`
 	Limitations []string                 `json:"limitations"`

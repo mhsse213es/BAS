@@ -13,22 +13,23 @@ import (
 // Defender, services, the event log, the file system, and processes are
 // stubbed, so nothing real is launched and no policy is changed.
 type familyFixture struct {
-	name           string
-	step           string // step name prefix
-	rcType         string // AppLocker collection the step reads
-	mode           string // enforcement mode of that collection
-	appIDState     string // Running or Stopped (AppLocker control)
-	logOK          bool   // event log readable
-	attr           int    // matching block events
-	ran            bool   // marker reached stdout
-	sysmon         bool   // Sysmon recorded the attempt
-	pwsh           string // pwsh.exe path, or "" when not installed
-	noDefender     bool   // Get-MpPreference unavailable
-	asrAction      int    // ASR rule action (1 block, 2 audit); 0 = not configured
-	wantFamily     string // APPCTL_FAMILY value
-	wantOutcome    string // APPCTL_OUTCOME value
-	wantPrefix     string // PASS:, FAIL:, or SKIP:
-	wantVisibility string // APPCTL_DETECTION result
+	name             string
+	step             string // step name prefix
+	rcType           string // AppLocker collection the step reads
+	mode             string // enforcement mode of that collection
+	appIDState       string // Running or Stopped (AppLocker control)
+	logOK            bool   // event log readable
+	attr             int    // matching block events
+	ran              bool   // marker reached stdout
+	sysmon           bool   // Sysmon recorded the attempt
+	pwsh             string // pwsh.exe path, or "" when not installed
+	noDefender       bool   // Get-MpPreference unavailable
+	policyUnreadable bool   // Get-AppLockerPolicy throws (edition without AppLocker)
+	asrAction        int    // ASR rule action (1 block, 2 audit); 0 = not configured
+	wantFamily       string // APPCTL_FAMILY value
+	wantOutcome      string // APPCTL_OUTCOME value
+	wantPrefix       string // PASS:, FAIL:, or SKIP:
+	wantVisibility   string // APPCTL_DETECTION result
 }
 
 const asrOfficeChildRule = "D4F940AB-401B-4EFC-AADC-AD5F3C50688A"
@@ -53,6 +54,13 @@ var familyFixtures = []familyFixture{
 	{name: "script host: event log unreadable", step: "Application control script host proxy",
 		rcType: "Script", mode: "Enabled", appIDState: "Running", logOK: false,
 		wantFamily: "script_host_proxy", wantOutcome: "inconclusive", wantPrefix: "SKIP:", wantVisibility: "not_visible"},
+
+	{name: "script host: AppLocker not available on this edition", step: "Application control script host proxy",
+		rcType: "Script", mode: "Enabled", appIDState: "Running", logOK: true, policyUnreadable: true,
+		wantFamily: "script_host_proxy", wantOutcome: "not_applicable", wantPrefix: "SKIP:", wantVisibility: "not_visible"},
+	{name: "indirect: AppLocker not available on this edition", step: "Application control indirect execution",
+		rcType: "Exe", mode: "Enabled", appIDState: "Running", logOK: true, policyUnreadable: true,
+		wantFamily: "indirect_execution", wantOutcome: "not_applicable", wantPrefix: "SKIP:", wantVisibility: "not_visible"},
 
 	// alternate_ps_host
 	{name: "pwsh: not installed on this host", step: "Application control alternate PowerShell host",
@@ -103,6 +111,10 @@ func familyPrelude(fx familyFixture) string {
 		fmt.Fprintf(&s, "$global:BasAsrId = '%s'; $global:BasAsrAct = %d\n", asrOfficeChildRule, fx.asrAction)
 	}
 	s.WriteString(familyStubs)
+	if fx.policyUnreadable {
+		// Defined after familyStubs so this definition replaces the readable stub.
+		s.WriteString("function Get-AppLockerPolicy { throw 'AppLocker is not available on this edition' }\n")
+	}
 	return s.String()
 }
 
