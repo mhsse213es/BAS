@@ -104,4 +104,12 @@ type Scenario struct {
 	MappedImplementation string
 	Coverage             CoverageState
 	Variants             []Variant
+	// FalsePositiveRisk documents, where genuinely applicable, how this
+	// scenario's own control could over-trigger against legitimate
+	// business traffic, and names the paired business-continuity proof
+	// (if one has been wired) that the control does not do so. Empty
+	// for the great majority of scenarios -- it is never populated
+	// speculatively, only when a real known-good/false-positive pair
+	// exists or has been identified upstream.
+	FalsePositiveRisk string
 }

@@ -602,3 +602,69 @@ phishing-mastery code, resolved on its own, not touched here.)
 
 Next: Phase 8 (coverage analytics and release qualification) -- the
 final phase.
+
+## 14. Phase 8 status: DONE -- all 8 phases complete
+
+**Coverage-drift dashboard + regression gate**: added
+`phishcatalog.CoverageReport`/`AudspectPhishingCoverageReport()`,
+mirroring `internal/emailgwefficacy.CoverageReport`'s own structural
+discipline exactly ("never an unqualified percentage" -- `Summary()` is
+the only rendering surface and always names all four tiers alongside
+their shared denominator), one level finer-grained: per scenario ID
+rather than per taxonomy area, since phishcatalog's own 4-level maturity
+ladder (catalog-only/fixture-tested/adapter-tested/live-validated) is
+already a per-scenario property. Built directly from
+`AudspectPhishingCatalog()`'s live scenarios, so it can never drift from
+the catalog it describes.
+
+`RequireNoCoverageRegression(baseline, current)` is the actual release-
+qualification gate: compares two snapshots and errors naming every
+scenario whose coverage rank dropped (e.g. adapter-tested ->
+catalog-only) or that disappeared from the catalog entirely -- a newly
+added scenario is never penalized. This gives "no scenario marked
+complete on catalogue existence... alone" real teeth: a future PR that
+silently weakens a scenario's evidence now has something to fail
+against, not just a convention to remember.
+
+**False-positive/business-continuity pairing**: found, rather than
+built from scratch, that this capability already exists as a first-
+class upstream convention in `emailgwefficacy` -- multiple expectation
+builders (`URLRewriteExpectation`, `OutboundDLPExpectation`,
+`AuthenticationExceptionScopeExpectation`) already ship an explicit
+known-good/false-positive boolean parameter, each with its own doc
+comment naming the business-continuity property it proves. What Phase 8
+actually added: two of these pairs had a bridged "attack" half but an
+**unwired** "legitimate traffic" half --
+`AuthenticationExceptionScopeExpectation(scoped=true)` for PH-AUTH-008
+and `URLRewriteExpectation(checked=false)` for PH-URL-005. Wired both as
+explicit business-continuity proofs
+(`TestPHAUTH008_BusinessContinuity_LegitimateTrustedSenderNotBlocked`,
+`TestPHURL005_BusinessContinuity_BenignURLNotRewritten`,
+`phishbridge/phase8_test.go`), each graded against a LOCAL, opposite-
+polarity `Expectation` rather than the scenario's own attack-framed
+catalog `Expectation` -- business-continuity pairing is inherently a
+second expectation layered onto the same control, not a restatement of
+the first. New `Scenario.FalsePositiveRisk` field (pure metadata,
+mirrors `Limitations`) documents this on both scenarios' catalog
+entries; left empty everywhere else rather than populated
+speculatively. Did not attempt to pair every scenario -- most have no
+known-good/false-positive counterpart anywhere upstream to wire, and
+inventing one would be fabricated evidence, not coverage.
+
+Zero changes to emailgwefficacy/emailgwcampaign/exercise/rwevidence/
+webgwefficacy/vendors -- confirmed via git status.
+
+**All 8 phases of Phishing BAS Mastery are now complete.** 69 PH-*
+scenario entries (61 base + 8 variants) across 6 areas, a 7-dimension
+outcome model independent of controlval (corrected from this doc's own
+Phase 0 proposal), multi-stage chain orchestration reusing
+emailgwcampaign's real gate semantics, a real Microsoft Graph identity
+adapter, 3 industry profiles, cross-channel coverage for the channels
+that actually have adapters, and a coverage-drift regression gate --
+built throughout as a unified validation layer wrapping and extending
+emailgwefficacy/emailgwcampaign/exercise, never a competing engine, per
+the user's own binding architecture directive. Every genuine gap
+(PH-CHN-002/004/007, locale, 5 of 8 named sectors, the unbridged SIEM/
+ticketing connectors, the mailbox-purge eDiscovery API, etc.) is named
+explicitly in its own catalog entry's Limitations field or in this
+doc's phase sections, never silently implied as done.

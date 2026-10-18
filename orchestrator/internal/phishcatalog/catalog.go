@@ -186,6 +186,7 @@ func phAUTH008() Scenario {
 		Standards:            StandardsMapping{ATTACKTechniques: []string{"T1566"}},
 		MappedImplementation: "emailgwefficacy.AuthenticationExceptionScopeExpectation",
 		Coverage:             CoverageAdapterTested,
+		FalsePositiveRisk:    "the same exception control, if over-broad, risks blocking legitimate trusted-source mail. Phase 8's business-continuity pairing proof: TestPHAUTH008_BusinessContinuity_LegitimateTrustedSenderNotBlocked (phishbridge/phase8_test.go) wires AuthenticationExceptionScopeExpectation(scoped=true), the half of this control's own known-good/false-positive pair that had never been bridged before Phase 8.",
 	}
 }
 
@@ -278,6 +279,7 @@ func phURL005() Scenario {
 		Standards:            StandardsMapping{ATTACKTechniques: []string{"T1566.002"}},
 		MappedImplementation: "emailgwefficacy.URLRewriteExpectation",
 		Coverage:             CoverageAdapterTested,
+		FalsePositiveRisk:    "over-aggressive time-of-click re-evaluation risks treating a benign URL as malicious. Phase 8's business-continuity pairing proof: TestPHURL005_BusinessContinuity_BenignURLNotRewritten (phishbridge/phase8_test.go) wires URLRewriteExpectation(false), dispatch.go's own \"known-good\" half of this control's pair, never bridged before Phase 8.",
 	}
 }
 
