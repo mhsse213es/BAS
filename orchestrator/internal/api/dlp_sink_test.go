@@ -577,6 +577,34 @@ func TestIssueSinkTokensAndSubstitute_CoderepoDoesNotIssueOrphanedSecondToken(t 
 	})
 }
 
+func TestIssueSinkTokensAndSubstitute_AIDoesNotIssueOrphanedSecondToken(t *testing.T) {
+	// Same regression as the cloud storage / webhook / telnet channels:
+	// a step whose command contains both {{SINK_TOKEN}} and the
+	// channel-specific {{SINK_AI_HOST}}/{{SINK_AI_PORT}} placeholders
+	// must only ever get one token issued.
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "")
+		steps := []scenario.ScenarioStep{
+			{TechniqueID: "T1567", Command: "$uri = 'https://{{SINK_AI_HOST}}:{{SINK_AI_PORT}}/aisink/v1/chat/completions'; $token = '{{SINK_TOKEN}}'"},
+		}
+		if _, err := h.issueSinkTokensAndSubstitute(context.Background(), "run-ai-orphan-1", "https://orchestrator.example:9443", steps); err != nil {
+			t.Fatalf("issueSinkTokensAndSubstitute: %v", err)
+		}
+		var count int
+		if err := pool.QueryRow(context.Background(),
+			`SELECT count(*) FROM dlp_sink_tokens WHERE run_id = 'run-ai-orphan-1' AND technique_id = 'T1567'`,
+		).Scan(&count); err != nil {
+			t.Fatalf("query dlp_sink_tokens: %v", err)
+		}
+		if count != 1 {
+			t.Fatalf("dlp_sink_tokens rows = %d, want exactly 1 (no orphaned second token from the AI block)", count)
+		}
+	})
+}
+
 func TestWebhookSinkPort_DerivesFromPublicBaseURL(t *testing.T) {
 	cases := []struct{ in, want string }{
 		{"https://orchestrator.example:9443", "9443"},
@@ -607,6 +635,40 @@ func TestWebhookSinkHost_HonorsExplicitOverride(t *testing.T) {
 		}
 		if !strings.Contains(out[0].Command, "webhook-external.example.net") {
 			t.Fatalf("expected the SINK_WEBHOOK_HOST override to win over the derived publicBaseURL host: %s", out[0].Command)
+		}
+	})
+}
+
+func TestAISinkPort_DerivesFromPublicBaseURL(t *testing.T) {
+	cases := []struct{ in, want string }{
+		{"https://orchestrator.example:9443", "9443"},
+		{"https://10.0.0.5:8443", "8443"},
+		{"https://orchestrator.example", "443"}, // no explicit port -- assume default HTTPS
+	}
+	for _, c := range cases {
+		got := aiSinkPort(c.in)
+		if got != c.want {
+			t.Errorf("aiSinkPort(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}
+
+func TestAISinkHost_HonorsExplicitOverride(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	t.Setenv("SINK_AI_HOST", "ai-external.example.net")
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "")
+		steps := []scenario.ScenarioStep{
+			{TechniqueID: "T1567", Command: "target={{SINK_AI_HOST}}"},
+		}
+		out, err := h.issueSinkTokensAndSubstitute(context.Background(), "run-ai-2", "https://orchestrator.example:9443", steps)
+		if err != nil {
+			t.Fatalf("issueSinkTokensAndSubstitute: %v", err)
+		}
+		if !strings.Contains(out[0].Command, "ai-external.example.net") {
+			t.Fatalf("expected the SINK_AI_HOST override to win over the derived publicBaseURL host: %s", out[0].Command)
 		}
 	})
 }

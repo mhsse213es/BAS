@@ -6,6 +6,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 
+	"github.com/audspect/bas/internal/aisink"
 	"github.com/audspect/bas/internal/auth"
 	"github.com/audspect/bas/internal/cloudsink"
 	exercisetracker "github.com/audspect/bas/internal/exercise/tracker"
@@ -212,6 +213,15 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 	// posture and same mounted-on-the-existing-server reasoning as
 	// /cloudsink and /webhooksink above.
 	r.Mount("/telnet", telnetsink.Routes(h.db))
+
+	// Generative-AI exfiltration channel (internal/aisink) -- an
+	// OpenAI-compatible chat-completion shape and a Microsoft Graph
+	// connector content-ingestion shape (both T1567, parent technique --
+	// no existing ATT&CK sub-technique fits a chat-completion or
+	// connector-ingestion API). Never contacts a real AI vendor; same
+	// unauthenticated posture and same mounted-on-the-existing-server
+	// reasoning as /cloudsink and /webhooksink above.
+	r.Mount("/aisink", aisink.Routes(h.db))
 
 	// ── Authenticated endpoints (JWT required) ────────────────────────────
 	r.Group(func(r chi.Router) {
