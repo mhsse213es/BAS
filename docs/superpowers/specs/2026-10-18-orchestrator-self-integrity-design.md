@@ -196,3 +196,19 @@ doesn't fit a manifest-anchored check).
   pipeline** produces an image that expects a manifest it will never have,
   and will show critical on first run. Correct for an unofficial build;
   noted so it isn't mistaken for a bug if anyone ever does this.
+
+## Post-implementation release-gate finding (fixed)
+
+A release-gate review after the initial implementation found that
+`integrity.DispatchBlocked` — set on every critical tamper event across
+the *whole* watcher subsystem, not just self-integrity (`bas.lic`,
+`BINARIES.sha256`, `wwwroot` tamper included) — was never actually read
+anywhere. `dispatchRun` and all seven of its callers proceeded regardless
+of its value; "Run dispatch SUSPENDED" was a log line, not an enforced
+state, for every tamper type this design builds on, predating this
+change. Fixed in commit `06aa9ec5` with a single check at the top of
+`dispatchRun` (its one choke point for every caller), TDD'd against a new
+`TestDispatchRun_SkipsWhenDispatchBlocked`. Everything else in this
+document's "State transitions" section was already correct — the flag
+*was* being set and cleared exactly as designed; it just had no effect
+until this fix.
