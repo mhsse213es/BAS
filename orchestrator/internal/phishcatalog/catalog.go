@@ -564,10 +564,42 @@ func phDET001() Scenario {
 // PH-DET-002 needs -- but nothing today wires the report event INTO a
 // ticketing correlation call. Corrected from an earlier, less precise
 // "no SOC ingestion path" note: the pattern exists, the wiring does not.
+// phDET002 is a confirmed, structural non-fit for
+// emailgwefficacy.CorrelateWithTicketing -- investigated explicitly
+// (not just noted as "different evidence shape") per the user's own
+// directive to resolve the execution-key-vs-ticket-correlation
+// mismatch, not force it.
+//
+// CorrelateWithTicketing's TicketEvidenceProvider is keyed by
+// MessageRef{SenderProfile, Recipient, MessageClass} -- one specific
+// campaign message's own delivery identity. exercise's own
+// Execution/StepExecution types (types.go) carry no typed field that
+// recovers that identity: an Execution can target many recipients
+// across many steps from one PlanID, and StepExecution.Result is an
+// untyped map with no MessageClass/SenderProfile field anywhere.
+// There is no lossless execution-or-step -> MessageRef mapping to
+// reconstruct, not merely one that hasn't been wired yet.
+//
+// Even setting that aside, the ticket semantics themselves differ: a
+// real SOC ticketing system, when a user reports a phishing email,
+// opens a ticket keyed to the REPORT ACTION itself (reporter,
+// timestamp, description) -- not a lookup against the original
+// campaign message's own delivery identity the way
+// CorrelateWithTicketing's provider interface models for an
+// EmailGW-detected finding. Inventing a synthetic MessageRef just to
+// satisfy the function signature would correlate against a key no
+// real ticketing system actually indexes by -- exactly the unsound
+// evidence linkage the user's directive warned against forcing.
+//
+// Closing this for real would need a different, purpose-built
+// ticketing-correlation mechanism keyed on the report event itself
+// (reporter/timestamp), not a reuse of CorrelateWithTicketing -- new
+// scope, not a translation of something that already exists like
+// every other closure in this session.
 func phDET002() Scenario {
 	return Scenario{ID: "PH-DET-002", Version: 1, Area: AreaEvasionDetectionIR, Name: "User-reported phishing",
 		PrimaryObjective: "Validate report ingestion and triage",
-		Limitations:      "event capture is real (exercise/tracker's handleReport); SOC-side triage/ticket creation from that event is not wired, though emailgwefficacy.CorrelateWithTicketing (PH-IR-004) proves the exact pattern it would reuse",
+		Limitations:      "structural non-fit, confirmed by investigation: CorrelateWithTicketing is keyed by MessageRef (one campaign message's delivery identity), but exercise's Execution/StepExecution types carry no field that recovers that identity, and a real SOC ticket for a user report is keyed to the report action itself, not the original message -- forcing a synthetic MessageRef would correlate against a key no real ticketing system indexes by. Closing this needs a separate, report-keyed ticketing mechanism, not a reuse of CorrelateWithTicketing",
 		Coverage:         CoverageCatalogOnly}
 }
 

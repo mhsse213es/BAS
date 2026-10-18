@@ -25,7 +25,17 @@ Every package has real, deterministic test coverage — no `TODO`/skipped tests 
 
 **Resolution path:** a Microsoft 365 tenant with admin-consented Graph permissions (`User.ReadWrite.All` for session revocation, `Files.ReadWrite.All` for sharing invites, `Calendars.ReadWrite` for calendar lures, `Policy.Read.All` + elevated Conditional-Access-read scope for PH-ID-003's `appliedConditionalAccessPolicies` field).
 
-### 6. PH-ID-004/PH-ID-005 (MFA fatigue / session-theft) — confirmed genuine gaps, not a missing adapter
+### 2. PH-DET-002 (user-reported phishing / SOC triage) — confirmed structural non-fit, resolution written up explicitly
+
+**Status:** Investigated 2026-10-18, per explicit instruction to resolve the execution-key-vs-ticket-correlation mismatch rather than leave it as "different evidence shape."
+
+**The mismatch, confirmed structurally, not just noted:** `emailgwefficacy.CorrelateWithTicketing`'s `TicketEvidenceProvider` is keyed by `MessageRef{SenderProfile, Recipient, MessageClass}` — one specific campaign message's own delivery identity. `exercise`'s own `Execution`/`StepExecution` types carry no field that recovers that identity: one `Execution` can target many recipients across many steps from a single `PlanID`, and `StepExecution.Result` is an untyped `map[string]interface{}` with no `MessageClass`/`SenderProfile` field anywhere. There is no lossless execution-or-step → `MessageRef` mapping to reconstruct — confirmed by reading both types in full, not inferred.
+
+**Even setting the typing gap aside, the semantics differ:** a real SOC ticketing system, when a user reports a phishing email, opens a ticket keyed to the report action itself (reporter, timestamp, description) — not a lookup against the original campaign message's delivery identity, which is what `CorrelateWithTicketing`'s provider interface actually models (built for an EmailGW-detected finding like a quarantine action, not a self-report). Inventing a synthetic `MessageRef` to satisfy the function signature would correlate against a key no real ticketing system indexes by — exactly the unsound evidence linkage the instruction warned against forcing.
+
+**Resolution:** stays catalog-only. Closing this for real needs a separate, report-keyed ticketing-correlation mechanism (keyed on reporter/timestamp, not `MessageRef`) — new scope, not a translation of something that already exists like every other closure this session. Not built without further direction.
+
+### 3. PH-ID-004/PH-ID-005 (MFA fatigue / session-theft) — confirmed genuine gaps, not a missing adapter
 
 **Status:** Researched 2026-10-18 (Microsoft Graph `riskDetections`, `authenticationMethodsPolicy`, and Entra sign-in log / Continuous Access Evaluation documentation). Neither is a "code not written yet" gap — no reliable per-event Graph signal exists for either claim at all.
 
@@ -35,7 +45,7 @@ Every package has real, deterministic test coverage — no `TODO`/skipped tests 
 
 **Resolution path:** re-open only if Microsoft ships a documented per-event signal for either (a risk-detection type for MFA fatigue, or a revocation-rejection field in user sign-in logs) — not something to build around today.
 
-### 2. PH-IR-003 (endpoint follow-through) — dispatch-level evidence only, no independent postcondition verification exists anywhere in this codebase
+### 4. PH-IR-003 (endpoint follow-through) — dispatch-level evidence only, no independent postcondition verification exists anywhere in this codebase
 
 **Status:** Built and tested this session (`phishbridge.FromEPPResponseAction`, wrapping the already-real `internal/actions.Execute` against CrowdStrike/Defender/SentinelOne). `actions.StatusCompleted` proves the EPP vendor accepted and completed the dispatched isolate/kill-process/quarantine request — it does **not** prove the host is independently confirmed isolated or the process independently confirmed dead.
 
@@ -43,19 +53,19 @@ Every package has real, deterministic test coverage — no `TODO`/skipped tests 
 
 **Resolution path:** (a) a live EPP tenant to verify the dispatch call itself against, and (b) a decision to build a real independent postcondition verifier for endpoint actions (new work, not yet scoped).
 
-### 3. Mailbox search-and-purge (PH-IR-001's remaining half) — deferred by explicit decision, not partially built
+### 5. Mailbox search-and-purge (PH-IR-001's remaining half) — deferred by explicit decision, not partially built
 
 **Status:** Deliberately not built. Research (2026-10-18) confirmed the real API shape (`POST /security/cases/ediscoveryCases/{caseId}/searches/{searchId}/purgeData`) is beta/preview, licensing-gated (E5/G5, `eDiscovery.ReadWrite.All`), multi-step (create case → create search → estimate → purge), with community-reported reliability issues (202 success but nothing actually deleted).
 
 **Resolution path:** only build this once Microsoft's eDiscovery purge API exits preview, or the user explicitly asks for a beta-caveated implementation anyway.
 
-### 4. Voice/vishing (PH-CHN-007) — deferred by explicit decision, zero telephony infrastructure
+### 6. Voice/vishing (PH-CHN-007) — deferred by explicit decision, zero telephony infrastructure
 
 **Status:** Deliberately not built — no Twilio/SIP integration exists anywhere in this codebase, and building one solely to fill a scenario-count gap was explicitly rejected by the user.
 
 **Resolution path:** a standalone build-vs-defer decision, not a QA gap.
 
-### 5. Locale/i18n — deferred by explicit decision, no real rendering capability exists
+### 7. Locale/i18n — deferred by explicit decision, no real rendering capability exists
 
 **Status:** Deliberately not built — no i18n/RTL rendering infrastructure exists anywhere in this codebase; tag-only locale metadata was explicitly rejected as fake completeness.
 
