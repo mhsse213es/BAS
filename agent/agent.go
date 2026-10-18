@@ -766,15 +766,7 @@ func (a *Agent) runScenario(ctx context.Context, cmd protocol.ScenarioCommand) {
 	a.localSt.StartOperation(cmd.ScenarioID, cmd.Name, cmd.ScenarioID, cmd.SweepLabel, len(cmd.Steps))
 
 	// Policy variables exposed to every step command as environment variables.
-	policyEnv := map[string]string{"BAS_RUN_MODE": cmd.Mode}
-	if cmd.Policy != nil {
-		if cmd.Policy.MaxSprayAttempts > 0 {
-			policyEnv["BAS_MAX_SPRAY_ATTEMPTS"] = fmt.Sprintf("%d", cmd.Policy.MaxSprayAttempts)
-		}
-		if len(cmd.Policy.SprayAccountAllowlist) > 0 {
-			policyEnv["BAS_SPRAY_ALLOWLIST"] = strings.Join(cmd.Policy.SprayAccountAllowlist, ",")
-		}
-	}
+	policyEnv := buildPolicyEnv(cmd)
 
 	snap := captureSnapshot(cmd.RunID)
 	log.Printf("[*] snapshot taken: run=%s", cmd.RunID)

@@ -609,7 +609,7 @@ steps:
           $outcome = 'inconclusive'; $reason = "the custom host blocked Add-Type under $mode, which is stricter than the stated policy; this is not a finding"
         }
       } else {
-        $outcome = 'inconclusive'; $reason = "UNVERIFIED: the intended policy for custom PowerShell hosts is not stated (set BAS_INPROC_POLICY to restricted or unrestricted); observed $mode with Add-Type $add"
+        $outcome = 'inconclusive'; $reason = "UNVERIFIED: the intended policy for custom PowerShell hosts is not stated (state the policy in the run request as executionPolicy.inProcessPolicy: restricted or unrestricted); observed $mode with Add-Type $add"
       }
 
       Write-Output "APPCTL_COVERAGE: HostLanguageMode=$mode"

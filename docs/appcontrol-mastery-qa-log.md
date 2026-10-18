@@ -29,7 +29,9 @@ Everything buildable without a live Windows lab or vendor tenant is complete, in
 - **AMSI limitation.** The report states that the in-process host test does not establish AMSI coverage.
 - **ScriptBlock visibility for the in-process host.** The host's script text carries the run's marker. Visibility is `visible` when event 4104 contains the marker, `not_visible` only when ScriptBlock logging is enabled by policy and no such event exists, and `unknown` otherwise. The host validates its marker, so no argument can inject script.
 - **Windows build gating and recording.** Every path records its build (`APPCTL_HOST`). The AppLocker, ASR, and in-process paths report `not_applicable` below build 17763. The build appears in the report's observed state.
-- **No default policy.** `BAS_INPROC_POLICY` is not defaulted anywhere. An unstated policy stays UNVERIFIED.
+- **Policy is set per run.** The run-start request accepts `executionPolicy.inProcessPolicy` (`restricted`, `unrestricted`, or omitted). The orchestrator rejects any other value. The agent exports the value as `BAS_INPROC_POLICY` for every step of that run, even when it is empty. A machine-wide `BAS_INPROC_POLICY` therefore cannot set a verdict for a run that did not state one.
+- **Policy is not carried by campaign, sweep, or scheduled dispatch.** Those paths send no policy, so their in-process verdict stays UNVERIFIED. Carrying it through them is a follow-up.
+- **No default policy.** Nothing defaults the policy. An unstated policy stays UNVERIFIED.
 - **Signatures.** `appcontrol-efficacy.yaml.sig` re-signed.
 
 ## Real run on this machine
@@ -102,7 +104,7 @@ These need a lab, a tenant, or a decision that only you can make. Nothing here c
 3. **Not-applicable control.** Run on an edition without AppLocker (or with the policy unavailable). Expected: `not_applicable` on the AppLocker steps, never a pass.
 4. **Confirm event formats on the lab host.** Check that AppLocker 8004 and 8006, Defender 1121, and Sysmon EID 1 appear with the fields the attribution rule depends on. Record any difference in this log.
 5. **alternate_ps_host.** Install PowerShell 7 on the lab host. Without it this path is only `not_applicable`.
-6. **inprocess_hosting: state the policy.** The verdict needs your intended policy for custom PowerShell hosts. Set `BAS_INPROC_POLICY` to `restricted` if custom hosts must run ConstrainedLanguage and block `Add-Type`. Set it to `unrestricted` if FullLanguage is permitted, and the exposure is documented as a PASS. Leave it unset and the result stays UNVERIFIED. This is a decision about your endpoints, and the step does not make it for you.
+6. **inprocess_hosting: state the policy.** The verdict needs your intended policy for custom PowerShell hosts. Send `"executionPolicy": {"inProcessPolicy": "restricted"}` in the run-start request if custom hosts must run ConstrainedLanguage and block `Add-Type`. Use `"unrestricted"` if FullLanguage is permitted, and the exposure is documented as a PASS. Leave it unset and the result stays UNVERIFIED. This is a decision about your endpoints, and the step does not make it for you.
    - Where a restriction is required, find a supported way to constrain the custom host, and verify the effective behaviour on the endpoint. Setting a language-mode flag alone is not a security boundary, and Constrained Language Mode is not a substitute for AppLocker or WDAC. The right control depends on the execution path.
    - Language-mode results say nothing about AMSI. Visibility uses ScriptBlock logging (event 4104) and is `unknown` wherever that logging is not enabled by policy. Turn it on in the lab to get a real visibility result for this path.
 7. **Vendor correlation (deferred by you).** Defender and SentinelOne correlation needs tenant access and the integration. When you have both, the open work is to wire the `avval` mapping to those sources and confirm their field paths against a live tenant.

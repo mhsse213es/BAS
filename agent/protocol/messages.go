@@ -60,6 +60,10 @@ type ScenarioCommand struct {
 	SweepName            string         `json:"sweepName,omitempty"`
 	SweepLabel           string         `json:"sweepLabel,omitempty"`
 	SweepFinal           bool           `json:"sweepFinal,omitempty"`
+	// InProcessPolicy is the operator's stated language-mode policy for custom
+	// PowerShell hosts. Optional: an older orchestrator omits it, and the agent
+	// then exports an empty value, which leaves that verdict UNVERIFIED.
+	InProcessPolicy string `json:"inProcessPolicy,omitempty"`
 }
 
 // ScenarioStep's Resource/Timeout fields reference internal scheduling types

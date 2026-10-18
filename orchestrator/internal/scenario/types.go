@@ -109,6 +109,11 @@ func PrivilegeExceeds(stepTier, maxTier string) bool {
 // wire-format change.
 type ExecutionPolicy struct {
 	MaxPrivilege string `json:"maxPrivilege,omitempty"`
+	// InProcessPolicy is the intended language-mode policy for custom
+	// PowerShell hosts: "restricted" | "unrestricted" | "" (not stated). It is
+	// the customer's stated requirement, never a default. Empty leaves the
+	// in-process verdict UNVERIFIED. See ValidInProcessPolicy.
+	InProcessPolicy string `json:"inProcessPolicy,omitempty"`
 }
 
 // YAMLPayload defines a file the server should stage on the endpoint before a step runs.
@@ -416,6 +421,10 @@ type ScenarioCommand struct {
 	// hold a display/system wake lock for the run. Only set when the scenario author
 	// has explicitly opted in; never injected by the dispatcher.
 	PreventScreenTimeout bool `json:"preventScreenTimeout,omitempty"`
+	// InProcessPolicy is the operator's stated language-mode policy for custom
+	// PowerShell hosts ("restricted" | "unrestricted" | ""). The agent exports it
+	// as BAS_INPROC_POLICY to every step, including "" when unstated.
+	InProcessPolicy string `json:"inProcessPolicy,omitempty"`
 	// SweepID, SweepName, SweepLabel and SweepFinal are set only when this
 	// run is one layer of an EM Full Sweep or Variant Full Sweep, letting
 	// the agent's local console show which layer a result belongs to
