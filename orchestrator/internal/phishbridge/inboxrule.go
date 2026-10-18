@@ -1,6 +1,8 @@
 package phishbridge
 
 import (
+	"time"
+
 	"github.com/audspect/bas/internal/emailgwefficacy"
 	"github.com/audspect/bas/internal/phishval"
 )
@@ -44,5 +46,32 @@ func FromSingleDimensionDetectionVerdict(v emailgwefficacy.VerdictDetail, source
 			Evidence: phishval.EvidenceMissing, Confidence: phishval.ConfidenceInsufficient,
 			Detail: v.Reason,
 		}}
+	}
+}
+
+// FromSingleDimensionResponseVerdict is FromSingleDimensionDetectionVerdict's
+// own sibling for checks whose real-world claim is a response/process
+// outcome (was a ticket created, was an action completed) rather than
+// a detection outcome -- e.g. VerifyReportTicketExpectation for
+// PH-DET-002. Reuses emailgwefficacy.VerdictDetail's existing simple
+// success/failure/inconclusive vocabulary rather than inventing a
+// third parallel verdict taxonomy for what is structurally the same
+// kind of single-dimensional configuration/process-state check.
+func FromSingleDimensionResponseVerdict(v emailgwefficacy.VerdictDetail, source string) phishval.Observation {
+	switch v.Verdict {
+	case emailgwefficacy.VerdictConfirmedSuccess:
+		return phishval.Observation{Response: &phishval.ResponseObservation{
+			Outcome: phishval.ResponseRemediated, Timestamp: time.Now(), Source: source,
+			Evidence: phishval.EvidenceVerifiedTelemetry, Confidence: phishval.ConfidenceHigh,
+			Detail: "single-dimensional response check matched the declared expectation",
+		}}
+	case emailgwefficacy.VerdictConfirmedFailure:
+		return phishval.Observation{Response: &phishval.ResponseObservation{
+			Outcome: phishval.ResponseFailed, Timestamp: time.Now(), Source: source,
+			Evidence: phishval.EvidenceVerifiedTelemetry, Confidence: phishval.ConfidenceHigh,
+			Detail: v.Reason,
+		}}
+	default: // VerdictInconclusive
+		return phishval.Observation{} // NotTested: never fabricates Remediated or Failed from an inconclusive search
 	}
 }

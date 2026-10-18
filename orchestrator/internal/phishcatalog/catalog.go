@@ -596,11 +596,27 @@ func phDET001() Scenario {
 // (reporter/timestamp), not a reuse of CorrelateWithTicketing -- new
 // scope, not a translation of something that already exists like
 // every other closure in this session.
+// phDET002 wraps phishbridge.ReportedPhishingTicketExpectation/
+// VerifyReportTicketExpectation -- the separate, report-keyed
+// ticketing mechanism the investigated resolution above called for,
+// not a reuse of CorrelateWithTicketing's own MessageRef-keyed
+// provider. Keyed on exercise's own ExecutionID/TargetID, reading the
+// real "phishing_reported" event exercise/tracker.HandleReport
+// already produces (the same event FromExerciseInteractionEvidence
+// reads for PH-ID-001's UserInteraction dimension) and correlating it
+// against fixture-only ticketing evidence -- no real ITSM
+// (ServiceNow/Jira) connector exists yet, the same maturity gap
+// PH-IR-004's own CorrelateWithTicketing carries.
 func phDET002() Scenario {
-	return Scenario{ID: "PH-DET-002", Version: 1, Area: AreaEvasionDetectionIR, Name: "User-reported phishing",
-		PrimaryObjective: "Validate report ingestion and triage",
-		Limitations:      "structural non-fit, confirmed by investigation: CorrelateWithTicketing is keyed by MessageRef (one campaign message's delivery identity), but exercise's Execution/StepExecution types carry no field that recovers that identity, and a real SOC ticket for a user report is keyed to the report action itself, not the original message -- forcing a synthetic MessageRef would correlate against a key no real ticketing system indexes by. Closing this needs a separate, report-keyed ticketing mechanism, not a reuse of CorrelateWithTicketing",
-		Coverage:         CoverageCatalogOnly}
+	return Scenario{
+		ID: "PH-DET-002", Version: 1, Area: AreaEvasionDetectionIR, Name: "User-reported phishing",
+		PrimaryObjective:     "Validate report ingestion and triage",
+		Limitations:          "ticketing evidence is fixture-only; no real ITSM connector wired. Correlation is keyed on ExecutionID/TargetID (the report action itself), deliberately not MessageRef -- see this package's own investigated resolution for why CorrelateWithTicketing's MessageRef-keyed provider does not fit this claim",
+		Expectation:          phishval.Expectation{ScenarioID: "PH-DET-002", Response: ptrResponse(phishval.ResponseRemediated)},
+		Standards:            StandardsMapping{ATTACKTechniques: []string{"T1566"}},
+		MappedImplementation: "phishbridge.VerifyReportTicketExpectation",
+		Coverage:             CoverageFixtureTested,
+	}
 }
 
 // phIR001 is an overlap decision: "retroactive mailbox search and purge"

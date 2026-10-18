@@ -13,7 +13,7 @@ Every package has real, deterministic test coverage — no `TODO`/skipped tests 
 - **`internal/phishbridge`** — one-way translation tests from `emailgwefficacy`/`emailgwcampaign`/`exercise`/`phishidentity`/`internal/actions` into `phishval.Observation`, each with an explicit known-good and known-bad end-to-end case (e.g. `TestPHBEC002_...`, `TestPHDET001_...`, `TestPHIR002_...`, `TestPHCHN002_...`, `TestPHID001_...`, `TestPHIR003_...`).
 - **`internal/phishidentity`** — real Microsoft Graph v1.0 adapter, every call proven against `httptest` (OAuth-consent listing, `RevokeAndVerifySignInSessions`'s 3-outcome retry logic including a genuine propagation-delay case, `CreateSharingInvite`/`CreateCalendarEventLure` + read-back verify + delete, all scoping/authorization rejections individually tested).
 
-**Current catalog coverage snapshot** (`AudspectPhishingCoverageReport()`, re-measured 2026-10-18 after the identity-depth research/closure): 44 scenarios total — 17 catalog-only, 2 fixture-tested, 25 adapter-tested, 0 live-validated. ("Adapter-tested" = real code path, proven against `httptest`/deterministic fixtures or a real local SMTP server, never contacted a live vendor tenant. "Live-validated" = proven against a real tenant — zero scenarios have reached this tier yet, for any vendor, in this initiative.)
+**Current catalog coverage snapshot** (`AudspectPhishingCoverageReport()`, re-measured 2026-10-18 after PH-DET-002's closure): 44 scenarios total — 16 catalog-only, 3 fixture-tested, 25 adapter-tested, 0 live-validated. ("Adapter-tested" = real code path, proven against `httptest`/deterministic fixtures or a real local SMTP server, never contacted a live vendor tenant. "Live-validated" = proven against a real tenant — zero scenarios have reached this tier yet, for any vendor, in this initiative.)
 
 ## Open items — blocked on live tenant/vendor access, not an engineering gap
 
@@ -25,17 +25,7 @@ Every package has real, deterministic test coverage — no `TODO`/skipped tests 
 
 **Resolution path:** a Microsoft 365 tenant with admin-consented Graph permissions (`User.ReadWrite.All` for session revocation, `Files.ReadWrite.All` for sharing invites, `Calendars.ReadWrite` for calendar lures, `Policy.Read.All` + elevated Conditional-Access-read scope for PH-ID-003's `appliedConditionalAccessPolicies` field).
 
-### 2. PH-DET-002 (user-reported phishing / SOC triage) — confirmed structural non-fit, resolution written up explicitly
-
-**Status:** Investigated 2026-10-18, per explicit instruction to resolve the execution-key-vs-ticket-correlation mismatch rather than leave it as "different evidence shape."
-
-**The mismatch, confirmed structurally, not just noted:** `emailgwefficacy.CorrelateWithTicketing`'s `TicketEvidenceProvider` is keyed by `MessageRef{SenderProfile, Recipient, MessageClass}` — one specific campaign message's own delivery identity. `exercise`'s own `Execution`/`StepExecution` types carry no field that recovers that identity: one `Execution` can target many recipients across many steps from a single `PlanID`, and `StepExecution.Result` is an untyped `map[string]interface{}` with no `MessageClass`/`SenderProfile` field anywhere. There is no lossless execution-or-step → `MessageRef` mapping to reconstruct — confirmed by reading both types in full, not inferred.
-
-**Even setting the typing gap aside, the semantics differ:** a real SOC ticketing system, when a user reports a phishing email, opens a ticket keyed to the report action itself (reporter, timestamp, description) — not a lookup against the original campaign message's delivery identity, which is what `CorrelateWithTicketing`'s provider interface actually models (built for an EmailGW-detected finding like a quarantine action, not a self-report). Inventing a synthetic `MessageRef` to satisfy the function signature would correlate against a key no real ticketing system indexes by — exactly the unsound evidence linkage the instruction warned against forcing.
-
-**Resolution:** stays catalog-only. Closing this for real needs a separate, report-keyed ticketing-correlation mechanism (keyed on reporter/timestamp, not `MessageRef`) — new scope, not a translation of something that already exists like every other closure this session. Not built without further direction.
-
-### 3. PH-ID-004/PH-ID-005 (MFA fatigue / session-theft) — confirmed genuine gaps, not a missing adapter
+### 2. PH-ID-004/PH-ID-005 (MFA fatigue / session-theft) — confirmed genuine gaps, not a missing adapter
 
 **Status:** Researched 2026-10-18 (Microsoft Graph `riskDetections`, `authenticationMethodsPolicy`, and Entra sign-in log / Continuous Access Evaluation documentation). Neither is a "code not written yet" gap — no reliable per-event Graph signal exists for either claim at all.
 
@@ -45,7 +35,7 @@ Every package has real, deterministic test coverage — no `TODO`/skipped tests 
 
 **Resolution path:** re-open only if Microsoft ships a documented per-event signal for either (a risk-detection type for MFA fatigue, or a revocation-rejection field in user sign-in logs) — not something to build around today.
 
-### 4. PH-IR-003 (endpoint follow-through) — dispatch-level evidence only, no independent postcondition verification exists anywhere in this codebase
+### 3. PH-IR-003 (endpoint follow-through) — dispatch-level evidence only, no independent postcondition verification exists anywhere in this codebase
 
 **Status:** Built and tested this session (`phishbridge.FromEPPResponseAction`, wrapping the already-real `internal/actions.Execute` against CrowdStrike/Defender/SentinelOne). `actions.StatusCompleted` proves the EPP vendor accepted and completed the dispatched isolate/kill-process/quarantine request — it does **not** prove the host is independently confirmed isolated or the process independently confirmed dead.
 
@@ -53,19 +43,19 @@ Every package has real, deterministic test coverage — no `TODO`/skipped tests 
 
 **Resolution path:** (a) a live EPP tenant to verify the dispatch call itself against, and (b) a decision to build a real independent postcondition verifier for endpoint actions (new work, not yet scoped).
 
-### 5. Mailbox search-and-purge (PH-IR-001's remaining half) — deferred by explicit decision, not partially built
+### 4. Mailbox search-and-purge (PH-IR-001's remaining half) — deferred by explicit decision, not partially built
 
 **Status:** Deliberately not built. Research (2026-10-18) confirmed the real API shape (`POST /security/cases/ediscoveryCases/{caseId}/searches/{searchId}/purgeData`) is beta/preview, licensing-gated (E5/G5, `eDiscovery.ReadWrite.All`), multi-step (create case → create search → estimate → purge), with community-reported reliability issues (202 success but nothing actually deleted).
 
 **Resolution path:** only build this once Microsoft's eDiscovery purge API exits preview, or the user explicitly asks for a beta-caveated implementation anyway.
 
-### 6. Voice/vishing (PH-CHN-007) — deferred by explicit decision, zero telephony infrastructure
+### 5. Voice/vishing (PH-CHN-007) — deferred by explicit decision, zero telephony infrastructure
 
 **Status:** Deliberately not built — no Twilio/SIP integration exists anywhere in this codebase, and building one solely to fill a scenario-count gap was explicitly rejected by the user.
 
 **Resolution path:** a standalone build-vs-defer decision, not a QA gap.
 
-### 7. Locale/i18n — deferred by explicit decision, no real rendering capability exists
+### 6. Locale/i18n — deferred by explicit decision, no real rendering capability exists
 
 **Status:** Deliberately not built — no i18n/RTL rendering infrastructure exists anywhere in this codebase; tag-only locale metadata was explicitly rejected as fake completeness.
 
@@ -104,6 +94,12 @@ Per explicit instruction, audited PH-AUTH-010 and PH-BEC-004/005/006/008 against
 **PH-BEC-006 (reply-chain hijacking) — corrected to a partial overlap, genuine remaining gap named explicitly.** The account-compromise precondition is the identical evidence PH-AUTH-010 now covers. What stays a real, separate, unbuilt gap: detecting that a reply injected into an existing thread is anomalous relative to that thread's own history — no email-threading/content-anomaly capability exists anywhere in this codebase to test that independently. Correctly left catalog-only rather than faked by reusing the compromise signal alone.
 
 Net result of this slice: 1 real build (PH-AUTH-010), 4 honest bookkeeping corrections (no new code, no duplicated engine), 0 scope creep into the still-genuine PH-BEC-006 reply-chain-anomaly gap.
+
+### PH-DET-002 (user-reported phishing / SOC triage) — RESOLVED 2026-10-18
+
+Investigated before building, per instruction not to force `CorrelateWithTicketing` into the exercise flow until the evidence linkage was sound. Confirmed structurally: `CorrelateWithTicketing`'s `TicketEvidenceProvider` is keyed by `MessageRef` (one campaign message's delivery identity); `exercise`'s `Execution`/`StepExecution` types carry no field that recovers that identity (one `Execution` can target many recipients across many steps from a single `PlanID`); and a real SOC ticket for a self-report is keyed to the report action itself, not the original message — a different correlation key than `CorrelateWithTicketing`'s provider interface models.
+
+Built the separate, report-keyed mechanism this called for: `phishbridge.ReportTicketExpectation`/`VerifyReportTicketExpectation`, keyed on `ExecutionID`/`TargetID`, reading exercise's own real `phishing_reported` event (the same one `FromExerciseInteractionEvidence` already reads for PH-ID-001) and correlating it against fixture-only ticketing evidence. Reused `emailgwefficacy.VerdictDetail`'s existing success/failure/inconclusive vocabulary (added `FromSingleDimensionResponseVerdict` as a sibling to the existing Detection-dimension translator) rather than inventing a third parallel verdict taxonomy. `CoverageFixtureTested`, matching `PH-IR-004`'s own `CorrelateWithTicketing` maturity exactly — no real ITSM connector exists for either. 4 tests, including an explicit proof that evidence for the wrong target is never matched.
 
 ### PH-ID-003 (device-code phishing defense) — RESOLVED 2026-10-18
 
