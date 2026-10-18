@@ -48,6 +48,37 @@ This is the single place to check before claiming either DLP vendor connector is
 
 **Resolution path:** build a mobile agent (Android/iOS) or an MDM/EMM API integration (e.g. Microsoft Intune, Google Workspace Endpoint Management) first — a separate, substantial engineering effort, not a follow-up to this initiative's existing scenario-authoring work. Until then, DLP-MOB stays at zero coverage, honestly.
 
+### 4. Forcepoint DLP license, API credentials, and the exact incident schema — open
+
+**Status:** Open, blocked on vendor account/licensing access, not purely an engineering gap — the exact incident response schema and token-cache lifetime are also genuinely unconfirmed by documentation research (see below).
+
+**What's needed:** a Forcepoint DLP Manager account with a local **Application-type** administrator user (Network-type accounts cannot be used for API access) and DLP incident-query licensing/role.
+
+**What's still unverified, independent of account access:**
+- The exact JSON field names in an incident response record from `POST /dlp/rest/v1/incidents` — research (2026-10-18) confirmed the endpoint path, the filters-mode (vs. ID-list) request shape, the 10,000-row response cap, and the single-type-per-call (`INCIDENTS`/`DISCOVERY`) constraint, but the REST API Guide pages found (dated Dec 2021/Mar 2022, versioned for DLP 9.0/10) document endpoints and parameters, not a field-level incident schema. `forcepointdlp.Incident`'s fields (`ID`/`Timestamp`/`Policy`/`Department`/`RiskLevel`/`Severity`/`Action`/`Status`) are this package's best-effort mapping, not a confirmed schema.
+- The access token's real cache lifetime — this client caches for a fixed 15 minutes as a conservative default; no documented token lifetime was found for the 2-step refresh-token/access-token exchange.
+- The exact date-range filter parameter name inside the `filters` object — confirmed that `policy`/`department`/`riskLevel` are valid filter fields, but not confirmed whether `dateRange.start`/`dateRange.end` (this client's best-effort guess) matches the real parameter names.
+
+**What this means for Priority 5:** `internal/vendors/forcepointdlp`'s request-building/response-mapping (`QueryDLPIncidents`) is built and proven against `httptest` now, matching the same best-effort-but-explicit-about-the-gap posture as items 1-2 above. See the package's own doc comment in `client.go`.
+
+**Resolution path:** get a Forcepoint DLP Manager test account with an Application-type administrator user and DLP incident licensing, and the current (not 2021/2022-dated) REST API Guide for the installed version; correct `Incident`'s field mapping, the token cache lifetime, and the date-range filter parameter name against what the real account's API responses show.
+
+### 5. Symantec (Broadcom) DLP license, API generation, and the exact incident schema — open
+
+**Status:** Open, blocked on vendor account/licensing access, not purely an engineering gap — which of 2 documented API generations applies, and the exact incident response schema, are also genuinely unconfirmed by documentation research (see below).
+
+**What's needed:** a Symantec/Broadcom DLP Enforce server account (a service account with DLP incident-query role) and confirmation of which API generation the license covers.
+
+**What's still unverified, independent of account access:**
+- Which of Symantec's two documented API generations a given license maps to: the 15.7+ REST API or the 16+ "Incident Reporting and Update API" web service — both exist in the documentation found, and this client's best-effort implementation cannot determine which a real account uses.
+- The exact login endpoint path and incident-list endpoint path — research (2026-10-18) confirmed the auth *mechanism* (forms-based username/password, not OAuth — the Cortex XSOAR `symantec-data-loss-prevention-v2` integration's own config fields are exactly Enforce server URL + username + password) and the incident filter vocabulary (earliest time, status, severity, incident type, default page size 50), but not official endpoint paths. `LoginURL`'s/`IncidentsURL`'s defaults (`/ProtectManager/webservices/v2/authenticate` and `.../incidents`) are this package's best-effort guess, not confirmed paths.
+- The post-login session mechanics — this client's best-effort guess is a `sessionToken` query parameter on the incidents request; no documented convention (cookie vs. header vs. query param) was found for what happens after a successful forms login.
+- The exact JSON field names in an incident response record — `symantecdlp.Incident`'s fields (`ID`/`DetectionDate`/`Status`/`Severity`/`IncidentType`) are this package's best-effort mapping aligned to the confirmed filter vocabulary, not a confirmed response schema.
+
+**What this means for Priority 5:** `internal/vendors/symantecdlp`'s request-building/response-mapping (`QueryDLPIncidents`) is built and proven against `httptest` now. Its login step deliberately never retries a rejected attempt internally, since a documented account-lockout risk (default 6 failed attempts, 60-minute lockout) makes an automatic retry actively dangerous against a real account — this is a correctness decision, not a gap. See the package's own doc comment in `client.go`.
+
+**Resolution path:** get a Symantec/Broadcom DLP Enforce test account, confirm which API generation (15.7+ REST vs. 16+ Incident Reporting) the license covers, and the current official API reference for that generation; correct the endpoint paths, session mechanics, and `Incident`'s field mapping against what the real account's API responses show.
+
 ## Resolved items
 
 (none yet)
