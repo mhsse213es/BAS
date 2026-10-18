@@ -13,20 +13,20 @@ import (
 // and in-scope for this evaluation context -- never independently
 // re-derived from DLPPolicyScopeDeclaration matching logic.
 type DLPPolicyRuleRef struct {
-	RuleID         string
-	Priority       *int
-	ExpectedAction string
-	Eligible       bool
+	RuleID         string `json:"ruleId"`
+	Priority       *int   `json:"priority,omitempty"`
+	ExpectedAction string `json:"expectedAction"`
+	Eligible       bool   `json:"eligible"`
 }
 
 // DLPPolicyEvaluationContext is the hypothetical data-access attempt
 // precedence is evaluated against -- a synthetic identity/location/
 // data-type combination, never a real user or real sensitive content.
 type DLPPolicyEvaluationContext struct {
-	UserOrGroup string
-	Location    string
-	DataType    string
-	Note        string
+	UserOrGroup string `json:"userOrGroup"`
+	Location    string `json:"location"`
+	DataType    string `json:"dataType"`
+	Note        string `json:"note,omitempty"`
 }
 
 // DLPPolicyPrecedenceExpectation is one declared "across these

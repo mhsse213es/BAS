@@ -1,6 +1,7 @@
 package dlppolicy
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 	"time"
@@ -269,6 +270,28 @@ func TestVerifyDLPPolicyPrecedenceExpectation_NoEvidence_ReturnsInconclusive(t *
 	got := VerifyDLPPolicyPrecedenceExpectation(exp, NewFixtureDLPPolicyPrecedenceProvider(nil), precedenceTestWindow)
 	if got.Verdict != VerdictInconclusive {
 		t.Fatalf("Verdict = %q, want %q", got.Verdict, VerdictInconclusive)
+	}
+}
+
+func TestDLPPolicyPrecedenceExpectation_JSONUsesCamelCaseKeysThroughoutNestedStructs(t *testing.T) {
+	exp := baselinePrecedenceExpectation()
+	data, err := json.Marshal(exp)
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+	s := string(data)
+	for _, want := range []string{
+		`"ruleId"`, `"priority"`, `"expectedAction"`, `"eligible"`,
+		`"userOrGroup"`, `"location"`, `"dataType"`,
+	} {
+		if !strings.Contains(s, want) {
+			t.Errorf("marshaled JSON = %s, want it to contain %s (camelCase, matching every other type in this package)", s, want)
+		}
+	}
+	for _, unwanted := range []string{`"RuleID"`, `"Priority"`, `"ExpectedAction"`, `"Eligible"`, `"UserOrGroup"`, `"Location"`, `"DataType"`} {
+		if strings.Contains(s, unwanted) {
+			t.Errorf("marshaled JSON = %s, must not contain PascalCase key %s", s, unwanted)
+		}
 	}
 }
 
