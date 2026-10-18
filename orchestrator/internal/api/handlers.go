@@ -54,6 +54,7 @@ import (
 	"github.com/audspect/bas/internal/networkgraph"
 	"github.com/audspect/bas/internal/notifications"
 	"github.com/audspect/bas/internal/observability"
+	"github.com/audspect/bas/internal/phishbridge"
 	"github.com/audspect/bas/internal/pki"
 	"github.com/audspect/bas/internal/relationships"
 	"github.com/audspect/bas/internal/remediation"
@@ -179,6 +180,11 @@ type Handler struct {
 	// unset: metrics must never silently treat an unlabeled run as
 	// either bucket.
 	emailgwEnvironment emailgwrun.Environment
+	// phishingReportTicketProvider configures real PH-DET-002 run
+	// execution (TriggerPhishingRun). Nil until WithPhishingRun is
+	// called -- a run then fails with a clear "no evidence" NotTested
+	// result (see executePHDET002), never a fabricated Pass/Fail.
+	phishingReportTicketProvider phishbridge.ReportTicketEvidenceProvider
 }
 
 // New creates a Handler.
@@ -230,6 +236,15 @@ func (h *Handler) WithEmailGWRun(provider emailgwefficacy.MailEvidenceProvider, 
 // one. Call with nil to leave outbound sending unconfigured; a run
 // that needs it then refuses with a clear error rather than silently
 // falling back to the wrong mechanism.
+// WithPhishingRun attaches the live ReportTicketEvidenceProvider
+// PH-DET-002's executor needs. Call with nil (the zero value) to
+// leave it unconfigured -- a run then completes with Response.Verdict
+// == NotTested (no evidence found), never a fabricated Pass/Fail.
+func (h *Handler) WithPhishingRun(provider phishbridge.ReportTicketEvidenceProvider) *Handler {
+	h.phishingReportTicketProvider = provider
+	return h
+}
+
 func (h *Handler) WithEmailGWOutboundSender(sender emailgwefficacy.OutboundSender) *Handler {
 	h.emailgwOutboundSender = sender
 	return h

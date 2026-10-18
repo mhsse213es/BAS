@@ -310,6 +310,9 @@ func main() {
 	if err := db.EnsureEmailGWRunSchema(context.Background(), adminPool); err != nil {
 		log.Fatalf("[FATAL] email gw run schema: %v", err)
 	}
+	if err := db.EnsurePhishingRunSchema(context.Background(), adminPool); err != nil {
+		log.Fatalf("[FATAL] phishing run schema: %v", err)
+	}
 	if err := db.EnsureEmailGWCampaignSchema(context.Background(), adminPool); err != nil {
 		log.Fatalf("[FATAL] email gw campaign schema: %v", err)
 	}
