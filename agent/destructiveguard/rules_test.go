@@ -121,6 +121,69 @@ func TestClassify_NarrationPrefixDoesNotHideChainedRealCommand(t *testing.T) {
 	}
 }
 
+// TestClassify_DefenderRTPDisableWithoutReenable_IsDestructive closes the
+// gap found auditing the platform for real (non-simulated) impair-
+// defenses actions: Set-MpPreference -DisableRealtimeMonitoring $true is
+// a REAL Windows Defender API call, and until this fix destructiveguard
+// had no rule for it at all -- a compromised orchestrator (exactly this
+// package's threat model, see destructiveguard_gate.go's doc comment)
+// could send a bare disable with no accompanying re-enable, and nothing
+// in this independent local backstop would catch it; only the signed
+// catalog classification stood between that and execution.
+func TestClassify_DefenderRTPDisableWithoutReenable_IsDestructive(t *testing.T) {
+	for _, cmd := range []string{
+		`Set-MpPreference -DisableRealtimeMonitoring $true`,
+		`Set-MpPreference -DisableRealtimeMonitoring $true -ErrorAction SilentlyContinue`,
+		`& "Set-MpPreference" -DisableRealtimeMonitoring $true`, // case/quoting variation
+	} {
+		if got := Classify(cmd); got != ClassDestructive {
+			t.Errorf("Classify(%q) = %q, want %q (a Defender RTP disable with no re-enable anywhere in the same command must be caught)", cmd, got, ClassDestructive)
+		}
+	}
+}
+
+// TestClassify_DefenderRTPDisableWithImmediateReenable_IsNonDestructive is
+// the regression guard for the fix above: the three real, shipped
+// scenarios that intentionally and safely perform this exact disable
+// (blackcat-kill-chain.yaml, play-kill-chain.yaml, ransomware-drill.yaml,
+// technique T1562.001) all re-enable RTP inline, in the same Command
+// string, with a verified-restoration check and a forced-retry fallback
+// -- that self-healing design must keep passing the local backstop, or
+// this fix would silently break three already-reviewed, safety-netted
+// BAS techniques instead of closing a gap.
+func TestClassify_DefenderRTPDisableWithImmediateReenable_IsNonDestructive(t *testing.T) {
+	// Exact text of blackcat-kill-chain.yaml's Stage 4 Command (and,
+	// character-for-character identical in substance, play-kill-chain.yaml
+	// and ransomware-drill.yaml's equivalent steps).
+	cmd := `
+      $ErrorActionPreference = 'SilentlyContinue'
+      $before = (Get-MpComputerStatus -ErrorAction SilentlyContinue).RealTimeProtectionEnabled
+      Set-MpPreference -DisableRealtimeMonitoring $true -ErrorAction SilentlyContinue
+      $disabled = -not (Get-MpComputerStatus -ErrorAction SilentlyContinue).RealTimeProtectionEnabled
+      Set-MpPreference -DisableRealtimeMonitoring $false -ErrorAction SilentlyContinue
+      $restored = (Get-MpComputerStatus -ErrorAction SilentlyContinue).RealTimeProtectionEnabled
+      $tamperBlocked = (Get-MpComputerStatus -ErrorAction SilentlyContinue).IsTamperProtected
+      if (-not $disabled) {
+        Write-Output "PASS: Defender RTP disable attempt failed - Tamper Protection or EDR blocked the change (tamperProtected=$tamperBlocked). [BAS-SIM-BLACKCAT-S4]"
+      } elseif ($restored) {
+        Write-Output "FAIL: Defender RTP was disabled then re-enabled (restoration verified=true). [BAS-SIM-BLACKCAT-S4]"
+      } else {
+        Set-MpPreference -DisableRealtimeMonitoring $false -Force -ErrorAction SilentlyContinue
+        Write-Output "CRITICAL: Defender RTP disabled and re-enable failed - manual restoration required. [BAS-SIM-BLACKCAT-S4]"
+      }`
+	if got := Classify(cmd); got != ClassNonDestructive {
+		t.Errorf("Classify(real blackcat/play Stage 4 command) = %q, want %q (inline immediate re-enable must not be flagged destructive)", got, ClassNonDestructive)
+	}
+
+	// The matching Cleanup block (a benign re-enable with no disable of
+	// its own) must also stay non-destructive -- it never contained a
+	// disable to begin with.
+	cleanup := `Set-MpPreference -DisableRealtimeMonitoring $false -ErrorAction SilentlyContinue`
+	if got := Classify(cleanup); got != ClassNonDestructive {
+		t.Errorf("Classify(reenable-only cleanup) = %q, want %q", got, ClassNonDestructive)
+	}
+}
+
 // The tightened `format` pattern (I2 fix) requires the drive letter/`/fs`
 // switch immediately after "format", but a real invocation commonly has
 // flags (e.g. the quick-format `/q`) in between -- the OLD broad regex

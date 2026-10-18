@@ -74,6 +74,30 @@ var rules = []rule{
 	{regexp.MustCompile(`\bwmic\b.*\bshadowcopy\b.*\bdelete\b`), ClassDestructive},
 }
 
+// defenderDisableTrue/defenderReenableFalse jointly cover a REAL impair-
+// defenses command this package had no rule for at all until audited:
+// Set-MpPreference -DisableRealtimeMonitoring $true genuinely disables
+// Windows Defender's real-time protection (unlike almost everything else
+// this codebase's "defense evasion" content does, which is narrated/
+// simulated with no real state change -- see docs/av-mastery-qa-log.md's
+// companion audit). Three real, shipped scenarios (blackcat-kill-chain,
+// play-kill-chain, ransomware-drill.yaml, all T1562.001) intentionally
+// run this disable for real, but each re-enables RTP inline, in the same
+// Command string, with a verified-restoration check and a forced-retry
+// fallback -- that self-healing design must keep passing this backstop.
+// What must NOT pass is a bare disable with no accompanying re-enable
+// anywhere in the same Command/Cleanup/payload text: exactly what a
+// compromised orchestrator (this package's threat model, see
+// destructiveguard_gate.go) could send disguised as a benign step, since
+// nothing else in this rule set would have caught it.
+//
+// This can't be one regexp.MustCompile entry in `rules` above: RE2 (Go's
+// regexp engine) has no lookahead/lookbehind, so "$true present, $false
+// absent" isn't expressible as a single pattern. Checked as its own step
+// inside Classify instead, before the generic rule loop.
+var defenderDisableTrue = regexp.MustCompile(`\bset-mppreference\b.*\bdisablerealtimemonitoring\b.*\$true\b`)
+var defenderReenableFalse = regexp.MustCompile(`\bdisablerealtimemonitoring\b.*\$false\b`)
+
 // narrationPrefix matches a line that only PRINTS text -- Write-Output,
 // Write-Host, Write-Verbose, or a bare echo -- rather than executing
 // anything. A narration line describing what a real attacker WOULD run
@@ -152,6 +176,9 @@ func normalize(command string) string {
 // itself.
 func Classify(command string) Class {
 	n := normalize(stripNarrationLines(command))
+	if defenderDisableTrue.MatchString(n) && !defenderReenableFalse.MatchString(n) {
+		return ClassDestructive
+	}
 	for _, r := range rules {
 		if r.pattern.MatchString(n) {
 			return r.class
