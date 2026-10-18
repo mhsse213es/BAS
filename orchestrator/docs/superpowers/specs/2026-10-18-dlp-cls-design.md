@@ -305,11 +305,23 @@ type CorpusMetrics struct {
 	ConfusionMatrix   map[SensitivityClass]map[SensitivityClass]int `json:"confusionMatrix"`   // [intended][observed] -> count, Evaluated samples only
 }
 
-// AggregateCorpusMetrics rolls per-sample verdicts into corpus-level
+// SampleResult pairs one sample's verdict with the observed class its
+// evidence actually carried -- a bare DLPCLSVerdict never carries
+// ObservedClass (only ClassificationEvidence does), so the caller who
+// ran VerifyClassificationSample passes both along here, rather than
+// AggregateCorpusMetrics trying to recover ObservedClass by parsing
+// Verdict.Reason.
+type SampleResult struct {
+	SampleID      string           `json:"sampleId"`
+	Verdict       DLPCLSVerdict    `json:"verdict"`
+	ObservedClass SensitivityClass `json:"observedClass,omitempty"`
+}
+
+// AggregateCorpusMetrics rolls per-sample results into corpus-level
 // metrics. Only Evaluated outcomes enter Precision/Recall/the
 // confusion matrix's denominators; Inconclusive/Unsupported/NotTested
 // are always counted and reported, never silently dropped.
-func AggregateCorpusMetrics(verdicts map[string]DLPCLSVerdict, truths map[string]GroundTruth) CorpusMetrics
+func AggregateCorpusMetrics(samples []SampleResult, truths map[string]GroundTruth) CorpusMetrics
 ```
 
 `Misclassified` samples count toward `Evaluated` and populate the confusion matrix's off-diagonal cell, but are deliberately excluded from the binary `TruePositives`/`FalsePositives`/`FalseNegatives`/`TrueNegatives` counters and from `Precision`/`Recall` — a product that detects sensitivity but names the wrong class is neither a clean true positive nor a false negative; the confusion matrix is where that finding lives, never silently absorbed into either binary bucket.
