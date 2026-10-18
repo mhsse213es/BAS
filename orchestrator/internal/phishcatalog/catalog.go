@@ -761,16 +761,44 @@ func phATT001() Scenario {
 	}
 }
 
+// phATT002 wraps phishbridge.PDFEmbeddedLinkExpectation/
+// DispatchPDFEmbeddedLink: a real, valid, minimal PDF (correct
+// xref table, a genuine /Link annotation with a /URI action) is
+// generated, attached, and dispatched via
+// exercise.SpoofableSMTPInjector's existing multipart-attachment
+// path (the same mechanism EICARAttachmentExpectation uses), then
+// evaluated through the unmodified VerifyMailExpectation. Closes the
+// prior "genuine gap: no PDF-specific scenario builder exists" note
+// -- the builder now exists, built entirely in phishbridge with zero
+// changes to emailgwefficacy.
 func phATT002() Scenario {
-	return Scenario{ID: "PH-ATT-002", Version: 1, Area: AreaAttachment, Name: "PDF with embedded link",
-		PrimaryObjective: "Test content and URL inspection",
-		Limitations:      "genuine gap: no PDF-specific scenario builder exists", Coverage: CoverageCatalogOnly}
+	return Scenario{
+		ID: "PH-ATT-002", Version: 1, Area: AreaAttachment, Name: "PDF with embedded link",
+		PrimaryObjective:     "Test content and URL inspection",
+		Limitations:          "proven: the generated PDF is parsed back out of the real SMTP wire payload and confirmed to be a valid PDF carrying the expected link (not just a filename string in the raw MIME); evaluation proven against fixture evidence, no live gateway tenant has run this scenario",
+		Expectation:          phishval.Expectation{ScenarioID: "PH-ATT-002", Delivery: ptrDelivery(phishval.DeliveryQuarantined), Enforcement: ptrEnforcement(phishval.EnforcementBlocked)},
+		Standards:            StandardsMapping{ATTACKTechniques: []string{"T1566.001"}},
+		MappedImplementation: "phishbridge.PDFEmbeddedLinkExpectation",
+		Coverage:             CoverageAdapterTested,
+	}
 }
 
+// phATT003 wraps phishbridge.OfficeExternalLinkExpectation/
+// DispatchOfficeExternalLink: a real, valid, minimal OOXML Word
+// document (a genuine ZIP archive with a real external-hyperlink
+// relationship part) is generated, attached, and dispatched the same
+// way as phATT002. Closes the prior "genuine gap: no Office-document-
+// specific scenario builder exists" note.
 func phATT003() Scenario {
-	return Scenario{ID: "PH-ATT-003", Version: 1, Area: AreaAttachment, Name: "Office document with external link",
-		PrimaryObjective: "Validate document and link controls",
-		Limitations:      "genuine gap: no Office-document-specific scenario builder exists", Coverage: CoverageCatalogOnly}
+	return Scenario{
+		ID: "PH-ATT-003", Version: 1, Area: AreaAttachment, Name: "Office document with external link",
+		PrimaryObjective:     "Validate document and link controls",
+		Limitations:          "proven: the generated DOCX is parsed back out of the real SMTP wire payload, opened as a zip archive, and its own relationship XML confirmed to declare the expected external hyperlink; evaluation proven against fixture evidence, no live gateway tenant has run this scenario",
+		Expectation:          phishval.Expectation{ScenarioID: "PH-ATT-003", Delivery: ptrDelivery(phishval.DeliveryQuarantined), Enforcement: ptrEnforcement(phishval.EnforcementBlocked)},
+		Standards:            StandardsMapping{ATTACKTechniques: []string{"T1566.001"}},
+		MappedImplementation: "phishbridge.OfficeExternalLinkExpectation",
+		Coverage:             CoverageAdapterTested,
+	}
 }
 
 // phATT010 wraps emailgwefficacy.PostDeliveryThreatResponseExpectation
