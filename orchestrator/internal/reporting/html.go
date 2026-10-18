@@ -3382,10 +3382,10 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 {{if $ac.rows}}
 <h3 style="margin-top:12px;margin-bottom:6px">Evaluated paths</h3>
 <table style="width:100%;border-collapse:collapse;margin-bottom:14px;font-size:0.85rem">
-<thead><tr><th style="text-align:left;border-bottom:1px solid #d0d7de;padding:6px">Family</th><th style="text-align:left;border-bottom:1px solid #d0d7de;padding:6px">Technique</th><th style="text-align:left;border-bottom:1px solid #d0d7de;padding:6px">Prevention outcome</th><th style="text-align:left;border-bottom:1px solid #d0d7de;padding:6px">Telemetry visibility</th></tr></thead>
+<thead><tr><th style="text-align:left;border-bottom:1px solid #d0d7de;padding:6px">Family</th><th style="text-align:left;border-bottom:1px solid #d0d7de;padding:6px">Technique</th><th style="text-align:left;border-bottom:1px solid #d0d7de;padding:6px">Observed state</th><th style="text-align:left;border-bottom:1px solid #d0d7de;padding:6px">Intended policy</th><th style="text-align:left;border-bottom:1px solid #d0d7de;padding:6px">Prevention outcome</th><th style="text-align:left;border-bottom:1px solid #d0d7de;padding:6px">Telemetry visibility</th></tr></thead>
 <tbody>
 {{range $ac.rows}}
-<tr><td style="padding:6px;border-bottom:1px solid #eef1f4;font-family:monospace">{{.family}}</td><td style="padding:6px;border-bottom:1px solid #eef1f4">{{.technique}}</td><td style="padding:6px;border-bottom:1px solid #eef1f4"><strong>{{.outcome}}</strong></td><td style="padding:6px;border-bottom:1px solid #eef1f4">{{.visibility}}</td></tr>
+<tr><td style="padding:6px;border-bottom:1px solid #eef1f4;font-family:monospace">{{.family}}</td><td style="padding:6px;border-bottom:1px solid #eef1f4">{{.technique}}</td><td style="padding:6px;border-bottom:1px solid #eef1f4">{{if .observed}}{{.observed}}{{else}}&mdash;{{end}}</td><td style="padding:6px;border-bottom:1px solid #eef1f4">{{if .policy}}{{.policy}}{{else}}&mdash;{{end}}</td><td style="padding:6px;border-bottom:1px solid #eef1f4"><strong>{{.outcome}}</strong></td><td style="padding:6px;border-bottom:1px solid #eef1f4">{{.visibility}}</td></tr>
 {{end}}
 </tbody>
 </table>

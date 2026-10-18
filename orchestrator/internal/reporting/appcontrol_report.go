@@ -27,9 +27,16 @@ type AppControlSection struct {
 // AppControlRow is one evaluated path: prevention outcome and telemetry
 // visibility as independent facts.
 type AppControlRow struct {
-	StepName   string `json:"stepName"`
-	Family     string `json:"family"`
-	Technique  string `json:"technique"`
+	StepName  string `json:"stepName"`
+	Family    string `json:"family"`
+	Technique string `json:"technique"`
+	// Observed is what the step measured: the controlling collection's mode,
+	// or for the in-process host, its language mode and Add-Type result.
+	Observed string `json:"observed"`
+	// Policy is the intended policy the verdict was judged against. Empty when
+	// the family has no policy input. "not stated" when the family takes one and
+	// none was given, which makes the verdict UNVERIFIED.
+	Policy     string `json:"policy"`
 	Outcome    string `json:"outcome"`
 	Visibility string `json:"visibility"`
 }
@@ -72,6 +79,7 @@ var appCtlStepFamilies = map[string]string{
 // never evidence that a live control enforces.
 var appCtlLimitations = []string{
 	"Live AppLocker and ASR enforcement is verified only where this run executed on a host with those controls configured and enforced. Fixture tests that validate the report code are not evidence of enforcement.",
+	"The in-process PowerShell host test measures only the language mode and Add-Type result of a custom host. It does not establish AMSI or ScriptBlock logging coverage, which remains unverified.",
 	"Telemetry visibility records whether Sysmon process-creation telemetry saw the attempt. It is not a prevention verdict and not a security-product detection verdict. Not visible does not mean the attempt did not happen.",
 	"Vendor-specific correlation (Microsoft Defender, SentinelOne) is not included and remains unverified until tested against a configured tenant.",
 	"Results hold only for the tested Windows build, policy version, and execution path. Families not run, not applicable, or unverified are not reported as passing.",
@@ -103,6 +111,8 @@ func buildAppControlSection(runID string, results []models.SimulationResult) App
 			StepName:   r.StepName,
 			Family:     family,
 			Technique:  r.Technique.ID,
+			Observed:   ParseAppControlObserved(r.RawOutput),
+			Policy:     appCtlPolicyFor(family, r.RawOutput),
 			Outcome:    outcome,
 			Visibility: vis,
 		})

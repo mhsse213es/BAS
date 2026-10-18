@@ -25,6 +25,9 @@ Everything buildable without a live Windows lab or vendor tenant is complete, in
 - **AppLocker edition gating.** Where AppLocker cannot be read at all, the AppLocker steps report `not_applicable`, not `inconclusive`. A readable policy with no collections is still a valid "not enforced" reading.
 - **Test contracts.** `docs/appcontrol-test-contracts.md` has one contract per family, including `inprocess_hosting`. `TestAppControlContracts_EveryFamilyHasContract` reads the families from the scenario, so a family without a contract fails the build. It was checked by breaking one heading in a copy of the doc.
 - **Campaign reports.** One section per child run, built from that run's own results before any filter, labelled with its host. Runs are never merged.
+- **Evidence shown in the report.** Section 18a now shows, for each evaluated path, the observed state (for the in-process host: its language mode and Add-Type result), the intended policy the verdict was judged against, the prevention outcome, and the telemetry visibility. The intended policy is shown as "not stated" when none was given, and as "not recorded" when the step never reached a verdict. It is never shown as a default.
+- **AMSI and ScriptBlock limitation.** The report states that the in-process host test does not establish AMSI or ScriptBlock logging coverage.
+- **No default policy.** `BAS_INPROC_POLICY` is not defaulted anywhere. An unstated policy stays UNVERIFIED.
 - **Signatures.** `appcontrol-efficacy.yaml.sig` re-signed.
 
 ## Real run on this machine
