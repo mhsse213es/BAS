@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
+	"time"
 )
 
 func tokenMock(t *testing.T) *httptest.Server {
@@ -103,6 +105,146 @@ func TestRevokeSignInSessions_NonSuccessStatus_ReturnsError(t *testing.T) {
 
 	if err := client.RevokeSignInSessions(t.Context(), "user-123"); err == nil {
 		t.Error("RevokeSignInSessions() with a 403 response = nil error, want an error")
+	}
+}
+
+// sessionGraphMock serves /users/{id} (?$select=signInSessionsValidFromDateTime)
+// and /users/{id}/revokeSignInSessions from an in-memory, mutable
+// timestamp -- revoke sets it forward, each GET returns whatever it
+// currently is. advanceOnRevoke=false simulates a revoke that Graph
+// accepted but that never actually changed the marker (the
+// RevocationNotVerified case).
+func sessionGraphMock(t *testing.T, initial time.Time, advanceOnRevoke bool) *httptest.Server {
+	t.Helper()
+	current := initial
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/revokeSignInSessions"):
+			if advanceOnRevoke {
+				current = current.Add(1 * time.Hour)
+			}
+			w.WriteHeader(http.StatusNoContent)
+		case r.Method == http.MethodGet:
+			json.NewEncoder(w).Encode(map[string]any{"signInSessionsValidFromDateTime": current.Format(time.RFC3339)})
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+}
+
+func TestRevokeAndVerifySignInSessions_MarkerAdvances_Verified(t *testing.T) {
+	tokenSrv := tokenMock(t)
+	defer tokenSrv.Close()
+	baseline := time.Now().UTC().Truncate(time.Second)
+	graphSrv := sessionGraphMock(t, baseline, true)
+	defer graphSrv.Close()
+
+	client := New(Config{TenantID: "t1", ClientID: "c1", ClientSecret: "s1"})
+	*client.TokenURL() = tokenSrv.URL
+	client.BaseURL = graphSrv.URL
+
+	result := client.RevokeAndVerifySignInSessions(t.Context(), "user-123")
+	if result.Verification != RevocationVerified {
+		t.Fatalf("Verification = %q (%s), want %q", result.Verification, result.Detail, RevocationVerified)
+	}
+	if !result.After.After(result.Baseline) {
+		t.Errorf("After (%s) did not advance past Baseline (%s)", result.After, result.Baseline)
+	}
+}
+
+func TestRevokeAndVerifySignInSessions_MarkerNeverAdvances_NotVerified(t *testing.T) {
+	tokenSrv := tokenMock(t)
+	defer tokenSrv.Close()
+	baseline := time.Now().UTC().Truncate(time.Second)
+	graphSrv := sessionGraphMock(t, baseline, false) // revoke accepted, marker never moves
+	defer graphSrv.Close()
+
+	client := New(Config{TenantID: "t1", ClientID: "c1", ClientSecret: "s1"})
+	*client.TokenURL() = tokenSrv.URL
+	client.BaseURL = graphSrv.URL
+	client.VerificationPollAttempts = 2
+	client.VerificationPollInterval = time.Millisecond // avoid a real sleep in tests
+
+	result := client.RevokeAndVerifySignInSessions(t.Context(), "user-123")
+	if result.Verification != RevocationNotVerified {
+		t.Errorf("Verification = %q, want %q (a successful POST alone must never grade as verified)", result.Verification, RevocationNotVerified)
+	}
+}
+
+func TestRevokeAndVerifySignInSessions_DispatchRejected_Unknown(t *testing.T) {
+	tokenSrv := tokenMock(t)
+	defer tokenSrv.Close()
+	graphSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			json.NewEncoder(w).Encode(map[string]any{"signInSessionsValidFromDateTime": time.Now().UTC().Format(time.RFC3339)})
+			return
+		}
+		w.WriteHeader(http.StatusForbidden) // revoke rejected
+	}))
+	defer graphSrv.Close()
+
+	client := New(Config{TenantID: "t1", ClientID: "c1", ClientSecret: "s1"})
+	*client.TokenURL() = tokenSrv.URL
+	client.BaseURL = graphSrv.URL
+
+	result := client.RevokeAndVerifySignInSessions(t.Context(), "user-123")
+	if result.Verification != RevocationUnknown {
+		t.Errorf("Verification = %q, want %q", result.Verification, RevocationUnknown)
+	}
+	if result.DispatchErr == nil {
+		t.Error("DispatchErr = nil, want the 403 surfaced")
+	}
+}
+
+func TestRevokeAndVerifySignInSessions_PostRevocationReadAlwaysErrors_Unknown(t *testing.T) {
+	tokenSrv := tokenMock(t)
+	defer tokenSrv.Close()
+	reads := 0
+	graphSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPost:
+			w.WriteHeader(http.StatusNoContent)
+		case r.Method == http.MethodGet:
+			reads++
+			if reads == 1 { // the baseline read succeeds
+				json.NewEncoder(w).Encode(map[string]any{"signInSessionsValidFromDateTime": time.Now().UTC().Format(time.RFC3339)})
+				return
+			}
+			w.WriteHeader(http.StatusServiceUnavailable) // every post-revocation read throttled/fails
+		}
+	}))
+	defer graphSrv.Close()
+
+	client := New(Config{TenantID: "t1", ClientID: "c1", ClientSecret: "s1"})
+	*client.TokenURL() = tokenSrv.URL
+	client.BaseURL = graphSrv.URL
+	client.VerificationPollAttempts = 2
+	client.VerificationPollInterval = time.Millisecond
+
+	result := client.RevokeAndVerifySignInSessions(t.Context(), "user-123")
+	if result.Verification != RevocationUnknown {
+		t.Errorf("Verification = %q, want %q (a failed re-read must never be read as either success or failure)", result.Verification, RevocationUnknown)
+	}
+}
+
+func TestRevokeAndVerifySignInSessions_BaselineReadFails_Unknown(t *testing.T) {
+	tokenSrv := tokenMock(t)
+	defer tokenSrv.Close()
+	graphSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer graphSrv.Close()
+
+	client := New(Config{TenantID: "t1", ClientID: "c1", ClientSecret: "s1"})
+	*client.TokenURL() = tokenSrv.URL
+	client.BaseURL = graphSrv.URL
+
+	result := client.RevokeAndVerifySignInSessions(t.Context(), "user-123")
+	if result.Verification != RevocationUnknown {
+		t.Errorf("Verification = %q, want %q", result.Verification, RevocationUnknown)
+	}
+	if result.DispatchErr != nil {
+		t.Error("DispatchErr should be nil -- the dispatch was never attempted because the baseline read failed first")
 	}
 }
 

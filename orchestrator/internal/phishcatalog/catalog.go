@@ -426,20 +426,23 @@ func phIR001() Scenario {
 		Coverage:         CoverageCatalogOnly}
 }
 
-// phIR002 wraps the Phase 6 phishidentity.Client.RevokeSignInSessions
-// (a real, stable Graph v1.0 action, httptest-proven) plus
-// phishbridge.FromIdentityContainment's verified-postcondition
-// discipline, mirroring internal/rwevidence.ContainmentObserver's own
-// precedent exactly: dispatch acceptance and confirmed containment are
-// never conflated. CoverageAdapterTested for the dispatch call itself;
-// no real verification observer ships (same reason rwevidence's own
-// doesn't -- verifying a session is truly revoked needs a real tenant,
-// not a lab this phase has).
+// phIR002 wraps phishidentity.Client.RevokeAndVerifySignInSessions --
+// a real, stable Graph v1.0 dispatch (RevokeSignInSessions) PLUS a
+// real independent postcondition check (re-reading
+// signInSessionsValidFromDateTime and comparing against a captured
+// baseline, with bounded retry for propagation delay), both httptest-
+// proven. This closes the verification gap this entry's own earlier
+// note carried (rwevidence.ContainmentObserver's same limitation,
+// fake-backed only): the verification here is real, not fake. The one
+// remaining caveat, preserved explicitly in
+// phishbridge.FromIdentityContainment's own Detail text: a verified
+// marker advance proves the revocation marker changed server-side, not
+// that every already-issued access token became unusable immediately.
 func phIR002() Scenario {
 	return Scenario{
 		ID: "PH-IR-002", Version: 1, Area: AreaEvasionDetectionIR, Name: "Identity containment",
 		PrimaryObjective:     "Validate authorized account/session containment workflows",
-		Limitations:          "dispatch (RevokeSignInSessions) is real and adapter-tested; independent verification that revocation took effect has no real observer, same gap rwevidence's own endpoint-containment observer carries",
+		Limitations:          "verification confirms the signInSessionsValidFromDateTime marker advanced server-side -- not that every already-issued access token became unusable immediately (short-lived tokens already held by a client can remain valid until their own natural expiry)",
 		Expectation:          phishval.Expectation{ScenarioID: "PH-IR-002", Response: ptrResponse(phishval.ResponseContained)},
 		Standards:            StandardsMapping{ATTACKTechniques: []string{"T1098"}}, // Account Manipulation
 		MappedImplementation: "phishidentity.Client.RevokeSignInSessions",
@@ -499,11 +502,23 @@ func phCHN001() Scenario {
 
 // phCHN002: genuine gap -- no SharePoint/OneDrive sharing-link simulation
 // or sharing-invitation adapter exists anywhere in this codebase.
+// phCHN002 wraps phishidentity.Client.CreateSharingInvite +
+// VerifySharingInviteExists -- real, stable Graph v1.0 calls,
+// httptest-proven, scoped to one explicit drive item and one explicit
+// recipient list (never a tenant-wide share), with real cleanup
+// (DeleteSharingInvite). Delivery-only: creation, independently
+// confirmed via a separate read-back, proves the lure reached the
+// sharing API -- never that the recipient saw, opened, or acted on it.
 func phCHN002() Scenario {
-	return Scenario{ID: "PH-CHN-002", Version: 1, Area: AreaCrossChannel, Name: "Malicious cloud-sharing invitation",
-		PrimaryObjective: "Test sharing-link inspection",
-		Limitations:      "genuine gap: no SharePoint/OneDrive sharing-invitation adapter exists",
-		Coverage:         CoverageCatalogOnly}
+	return Scenario{
+		ID: "PH-CHN-002", Version: 1, Area: AreaCrossChannel, Name: "Malicious cloud-sharing invitation",
+		PrimaryObjective:     "Test sharing-link inspection",
+		Limitations:          "Delivery-only: independently-verified creation proves the invite reached the sharing API, never that the recipient saw or acted on it",
+		Expectation:          phishval.Expectation{ScenarioID: "PH-CHN-002", Delivery: ptrDelivery(phishval.DeliveryDelivered)},
+		Standards:            StandardsMapping{ATTACKTechniques: []string{"T1566.004"}},
+		MappedImplementation: "phishidentity.Client.CreateSharingInvite",
+		Coverage:             CoverageAdapterTested,
+	}
 }
 
 // phCHN003 is an overlap decision, not new code: an "OAuth application
@@ -520,11 +535,20 @@ func phCHN003() Scenario {
 
 // phCHN004: genuine gap -- no calendar-invite (.ics/Graph event) lure
 // adapter exists.
+// phCHN004 wraps phishidentity.Client.CreateCalendarEventLure +
+// VerifyCalendarEventExists -- same real/httptest-proven/independently-
+// verified/cleaned-up discipline as phCHN002, for a Graph calendar
+// event lure instead of a sharing invite.
 func phCHN004() Scenario {
-	return Scenario{ID: "PH-CHN-004", Version: 1, Area: AreaCrossChannel, Name: "Calendar invitation lure",
-		PrimaryObjective: "Test supported calendar and mail controls",
-		Limitations:      "genuine gap: no calendar-invite (.ics / Graph calendar event) lure adapter exists",
-		Coverage:         CoverageCatalogOnly}
+	return Scenario{
+		ID: "PH-CHN-004", Version: 1, Area: AreaCrossChannel, Name: "Calendar invitation lure",
+		PrimaryObjective:     "Test supported calendar and mail controls",
+		Limitations:          "Delivery-only: independently-verified creation proves the lure reached the calendaring API, never that the invited user saw, accepted, or clicked anything inside it",
+		Expectation:          phishval.Expectation{ScenarioID: "PH-CHN-004", Delivery: ptrDelivery(phishval.DeliveryDelivered)},
+		Standards:            StandardsMapping{ATTACKTechniques: []string{"T1566.004"}},
+		MappedImplementation: "phishidentity.Client.CreateCalendarEventLure",
+		Coverage:             CoverageAdapterTested,
+	}
 }
 
 // phCHN005: partial overlap. A QR code is, at the protocol level, just

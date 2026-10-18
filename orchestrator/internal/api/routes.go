@@ -233,6 +233,10 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		// verdict of its own.
 		r.Get("/api/webgw/industry-profiles", h.GetWebGWIndustryProfiles)
 		r.Get("/api/webgw/industry-profiles.html", h.GetWebGWIndustryProfilesHTML)
+		// Phishing BAS Mastery industry profiles (internal/phishcatalog),
+		// same read-only shape as /api/webgw/industry-profiles.
+		r.Get("/api/phishing/industry-profiles", h.GetPhishingIndustryProfiles)
+		r.Get("/api/phishing/industry-profiles.html", h.GetPhishingIndustryProfilesHTML)
 		// EmailGW coverage report (internal/emailgwefficacy), same read-only
 		// shape as /api/webgw/industry-profiles: Audspect's real, current
 		// EmailGW coverage data, never a computed verdict of its own. No

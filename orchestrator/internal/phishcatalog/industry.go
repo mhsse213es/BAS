@@ -109,6 +109,142 @@ func ManufacturingOTProfile() (IndustryProfile, error) {
 	)
 }
 
+// GovernmentProfile returns the Government and public services
+// phishing profile -- one of phishing.txt's own 8 explicitly-named
+// sectors (line 234). Domain-spoofing defense and executive/official
+// impersonation dominate, alongside OAuth-consent risk from
+// third-party civic-tech SaaS integrations.
+func GovernmentProfile() (IndustryProfile, error) {
+	return NewIndustryProfile(
+		"Government and public services",
+		[]string{"PH-AUTH-004", "PH-BEC-001", "PH-ID-002"},
+		[]string{"PII", "citizen-services-data"},
+		map[string]float64{"PH-AUTH-004": 1.0, "PH-BEC-001": 0.8, "PH-ID-002": 0.6},
+		"Public-sector priorities: domain-spoofing (DMARC) defense and official/executive impersonation dominate, alongside third-party SaaS OAuth-consent risk.",
+	)
+}
+
+// InsuranceProfile returns the Insurance phishing profile --
+// phishing.txt's own named sector. Claims/payment fraud and
+// policyholder-portal credential harvesting dominate.
+func InsuranceProfile() (IndustryProfile, error) {
+	return NewIndustryProfile(
+		"Insurance",
+		[]string{"PH-BEC-002", "PH-URL-001", "PH-AUTH-008"},
+		[]string{"PII", "financial-transaction-data", "claims-data"},
+		map[string]float64{"PH-BEC-002": 1.0, "PH-URL-001": 0.8, "PH-AUTH-008": 0.5},
+		"Claims/payment-fraud priorities: invoice-diversion-style fraud and policyholder-portal credential harvesting dominate.",
+	)
+}
+
+// TelecomProfile returns the Telecom phishing profile --
+// phishing.txt's own named sector. OAuth-consent abuse against
+// carrier/partner API integrations and domain-spoofing dominate.
+func TelecomProfile() (IndustryProfile, error) {
+	return NewIndustryProfile(
+		"Telecom",
+		[]string{"PH-ID-002", "PH-CHN-001", "PH-AUTH-004"},
+		[]string{"subscriber-data", "network-telemetry"},
+		map[string]float64{"PH-ID-002": 1.0, "PH-CHN-001": 0.6, "PH-AUTH-004": 0.8},
+		"Carrier/partner-integration priorities: OAuth-consent abuse against API-heavy SaaS integrations and domain-spoofing dominate.",
+	)
+}
+
+// RetailProfile returns the Retail phishing profile -- phishing.txt's
+// own named sector. Supplier/vendor invoice fraud and customer-account
+// credential harvesting dominate.
+func RetailProfile() (IndustryProfile, error) {
+	return NewIndustryProfile(
+		"Retail",
+		[]string{"PH-BEC-002", "PH-ATT-001", "PH-URL-001"},
+		[]string{"PII", "payment-card-data"},
+		map[string]float64{"PH-BEC-002": 1.0, "PH-ATT-001": 0.6, "PH-URL-001": 0.8},
+		"Supply-chain and customer-account priorities: supplier/vendor invoice fraud and credential harvesting dominate.",
+	)
+}
+
+// EducationProfile returns the Education phishing profile --
+// phishing.txt's own named sector. Student/faculty credential
+// harvesting, financial-aid/bursar executive impersonation, and
+// calendar-based campus lures dominate.
+func EducationProfile() (IndustryProfile, error) {
+	return NewIndustryProfile(
+		"Education",
+		[]string{"PH-URL-001", "PH-BEC-001", "PH-CHN-004"},
+		[]string{"PII", "student-records"},
+		map[string]float64{"PH-URL-001": 1.0, "PH-BEC-001": 0.7, "PH-CHN-004": 0.5},
+		"Campus priorities: student/faculty credential harvesting and bursar/financial-aid executive impersonation dominate.",
+	)
+}
+
+// LogisticsProfile returns the Logistics phishing profile --
+// phishing.txt's own named sector (also named directly at line 219:
+// "shipping and logistics impersonation"). Shipment-document fraud and
+// carrier-domain spoofing dominate.
+func LogisticsProfile() (IndustryProfile, error) {
+	return NewIndustryProfile(
+		"Logistics",
+		[]string{"PH-BEC-002", "PH-CHN-002", "PH-AUTH-004"},
+		[]string{"shipment-data", "supplier-contract-data"},
+		map[string]float64{"PH-BEC-002": 1.0, "PH-CHN-002": 0.6, "PH-AUTH-004": 0.7},
+		"Shipping/carrier priorities: invoice and shipment-document fraud, and carrier-domain spoofing, dominate.",
+	)
+}
+
+// ProfessionalServicesProfile returns the Professional Services
+// phishing profile -- phishing.txt's own named sector. Trusted-client-
+// relationship exception abuse and executive impersonation dominate.
+func ProfessionalServicesProfile() (IndustryProfile, error) {
+	return NewIndustryProfile(
+		"Professional services",
+		[]string{"PH-AUTH-008", "PH-BEC-001", "PH-URL-005"},
+		[]string{"PII", "client-confidential-data"},
+		map[string]float64{"PH-AUTH-008": 1.0, "PH-BEC-001": 0.8, "PH-URL-005": 0.6},
+		"Client-relationship priorities: trusted-sender exception abuse and executive impersonation dominate.",
+	)
+}
+
+// TechnologyProfile returns the Technology phishing profile --
+// phishing.txt's own named sector. OAuth-consent abuse against
+// SaaS-heavy environments dominates.
+func TechnologyProfile() (IndustryProfile, error) {
+	return NewIndustryProfile(
+		"Technology",
+		[]string{"PH-ID-002", "PH-CHN-003", "PH-AUTH-004"},
+		[]string{"source-code", "customer-data"},
+		map[string]float64{"PH-ID-002": 1.0, "PH-CHN-003": 0.8, "PH-AUTH-004": 0.6},
+		"SaaS-heavy priorities: OAuth-consent abuse dominates, reflecting the high number of third-party app integrations typical of a technology company.",
+	)
+}
+
+// FilterScenarios returns the subset of scenarios whose ID is one of
+// p's PriorityScenarioIDs, ordered by BusinessImpactWeight descending
+// (same ordering PrioritySummary uses) -- a real scenario-selection
+// behavior, not just a rendered summary: a caller assembling a
+// sector-specific assessment run can use this directly to choose which
+// scenarios to dispatch, rather than reading PrioritySummary's text and
+// re-deriving the same list by hand. A PriorityScenarioID absent from
+// scenarios is silently skipped here (PrioritySummary is the reader
+// that names an absent ID explicitly).
+func (p IndustryProfile) FilterScenarios(scenarios []Scenario) []Scenario {
+	byID := make(map[string]Scenario, len(scenarios))
+	for _, s := range scenarios {
+		byID[s.ID] = s
+	}
+	ids := make([]string, len(p.PriorityScenarioIDs))
+	copy(ids, p.PriorityScenarioIDs)
+	sort.SliceStable(ids, func(i, j int) bool {
+		return p.BusinessImpactWeight[ids[i]] > p.BusinessImpactWeight[ids[j]]
+	})
+	out := make([]Scenario, 0, len(ids))
+	for _, id := range ids {
+		if s, ok := byID[id]; ok {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
 // PrioritySummary filters AudspectPhishingCatalog's own real scenarios
 // down to this profile's PriorityScenarioIDs and renders each one's
 // already-computed Coverage, ordered by BusinessImpactWeight
@@ -172,9 +308,17 @@ func (p IndustryProfile) weightLabel(id string) string {
 // each shipped phishing industry profile's lookup key to its
 // constructor.
 var industryProfileConstructors = map[string]func() (IndustryProfile, error){
-	"bfsi":             BFSINBFCProfile,
-	"healthcare":       HealthcareProfile,
-	"manufacturing-ot": ManufacturingOTProfile,
+	"bfsi":                  BFSINBFCProfile,
+	"healthcare":            HealthcareProfile,
+	"manufacturing-ot":      ManufacturingOTProfile,
+	"government":            GovernmentProfile,
+	"insurance":             InsuranceProfile,
+	"telecom":               TelecomProfile,
+	"retail":                RetailProfile,
+	"education":             EducationProfile,
+	"logistics":             LogisticsProfile,
+	"professional-services": ProfessionalServicesProfile,
+	"technology":            TechnologyProfile,
 }
 
 // IndustryProfileNames returns every shipped phishing industry

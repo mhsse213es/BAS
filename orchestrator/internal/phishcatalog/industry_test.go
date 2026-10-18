@@ -52,16 +52,87 @@ func TestBFSINBFCProfile_RealScenarioReferences(t *testing.T) {
 	}
 }
 
-func TestIndustryProfileNames_IncludesAllThreeShippedProfiles(t *testing.T) {
+func TestIndustryProfileNames_IncludesAllElevenShippedProfiles(t *testing.T) {
 	names := IndustryProfileNames()
-	want := map[string]bool{"bfsi": true, "healthcare": true, "manufacturing-ot": true}
+	want := map[string]bool{
+		"bfsi": true, "healthcare": true, "manufacturing-ot": true,
+		"government": true, "insurance": true, "telecom": true, "retail": true,
+		"education": true, "logistics": true, "professional-services": true, "technology": true,
+	}
 	if len(names) != len(want) {
-		t.Fatalf("IndustryProfileNames() = %v, want exactly %v", names, want)
+		t.Fatalf("IndustryProfileNames() = %v (%d), want exactly %d names", names, len(names), len(want))
 	}
 	for _, n := range names {
 		if !want[n] {
 			t.Errorf("IndustryProfileNames() contains unexpected name %q", n)
 		}
+	}
+}
+
+// TestAllShippedProfiles_PriorityScenariosAllResolveAndCompleteness is
+// the profile-completeness check the item-3 acceptance criteria asked
+// for: every shipped profile must build without error (NewIndustryProfile
+// already validates every ID against the real catalog at construction
+// time, so a stale or fictional scenario ID fails here, not silently).
+func TestAllShippedProfiles_PriorityScenariosAllResolveAndCompleteness(t *testing.T) {
+	scenarios, err := AudspectPhishingCatalog()
+	if err != nil {
+		t.Fatalf("AudspectPhishingCatalog() error = %v", err)
+	}
+	for _, name := range IndustryProfileNames() {
+		profile, ok, err := BuildIndustryProfile(name)
+		if !ok {
+			t.Fatalf("BuildIndustryProfile(%q) ok = false, want true", name)
+		}
+		if err != nil {
+			t.Fatalf("BuildIndustryProfile(%q) error = %v", name, err)
+		}
+		if len(profile.PriorityScenarioIDs) == 0 {
+			t.Errorf("profile %q has no PriorityScenarioIDs -- every shipped profile must name real priorities", name)
+		}
+		if got := profile.PrioritySummary(scenarios); got == "" {
+			t.Errorf("profile %q PrioritySummary() = \"\", want a non-empty summary", name)
+		}
+	}
+}
+
+func TestIndustryProfile_FilterScenarios_ReturnsOnlyPrioritiesInWeightOrder(t *testing.T) {
+	p, err := BFSINBFCProfile()
+	if err != nil {
+		t.Fatalf("BFSINBFCProfile() error = %v", err)
+	}
+	scenarios, err := AudspectPhishingCatalog()
+	if err != nil {
+		t.Fatalf("AudspectPhishingCatalog() error = %v", err)
+	}
+	filtered := p.FilterScenarios(scenarios)
+	if len(filtered) != len(p.PriorityScenarioIDs) {
+		t.Fatalf("FilterScenarios() returned %d scenarios, want %d (one per PriorityScenarioID)", len(filtered), len(p.PriorityScenarioIDs))
+	}
+	if filtered[0].ID != "PH-BEC-002" { // BFSINBFCProfile's own highest-weighted priority
+		t.Errorf("FilterScenarios()[0].ID = %q, want %q (highest BusinessImpactWeight first)", filtered[0].ID, "PH-BEC-002")
+	}
+	for _, s := range filtered {
+		found := false
+		for _, id := range p.PriorityScenarioIDs {
+			if s.ID == id {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("FilterScenarios() returned scenario %q, which is not one of this profile's priorities", s.ID)
+		}
+	}
+}
+
+func TestIndustryProfile_FilterScenarios_SkipsUnresolvedIDsSilently(t *testing.T) {
+	p, err := NewIndustryProfile("x", []string{"PH-BEC-002"}, nil, nil, "")
+	if err != nil {
+		t.Fatalf("NewIndustryProfile() error = %v", err)
+	}
+	filtered := p.FilterScenarios(nil) // no scenarios at all -- PH-BEC-002 cannot resolve
+	if len(filtered) != 0 {
+		t.Errorf("FilterScenarios(nil) = %v, want an empty slice", filtered)
 	}
 }
 

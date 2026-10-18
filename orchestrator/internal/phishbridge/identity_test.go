@@ -21,8 +21,12 @@ func TestPHID002_EndToEnd_KnownGood_NoRiskyTenantWideGrant(t *testing.T) {
 }
 
 func TestPHIR002_EndToEnd_KnownGood_ContainmentDispatchedAndVerified(t *testing.T) {
-	verified := ContainmentVerificationConfirmed
-	obs := FromIdentityContainment(nil, &verified, time.Now())
+	now := time.Now()
+	result := phishidentity.RevocationResult{
+		Baseline: now, After: now.Add(time.Hour), Verification: phishidentity.RevocationVerified,
+		Detail: "signInSessionsValidFromDateTime advanced",
+	}
+	obs := FromIdentityContainment(result, time.Now())
 	outcome := phishval.Evaluate("run-ph-ir-002", "known-good", catalogExpectation(t, "PH-IR-002"), obs)
 	if outcome.Response.Verdict != phishval.VerdictPass {
 		t.Errorf("Response.Verdict = %q (%s), want %q", outcome.Response.Verdict, outcome.Response.Reason, phishval.VerdictPass)
@@ -30,21 +34,40 @@ func TestPHIR002_EndToEnd_KnownGood_ContainmentDispatchedAndVerified(t *testing.
 }
 
 func TestPHIR002_EndToEnd_KnownBad_DispatchRejected(t *testing.T) {
-	obs := FromIdentityContainment(errors.New("graph: 403 forbidden"), nil, time.Now())
+	result := phishidentity.RevocationResult{DispatchErr: errors.New("graph: 403 forbidden")}
+	obs := FromIdentityContainment(result, time.Now())
 	outcome := phishval.Evaluate("run-ph-ir-002", "known-bad", catalogExpectation(t, "PH-IR-002"), obs)
 	if outcome.Response.Verdict != phishval.VerdictFail {
 		t.Errorf("Response.Verdict = %q, want %q", outcome.Response.Verdict, phishval.VerdictFail)
 	}
 }
 
-// TestPHIR002_DispatchAcceptedButUnverified_NeverFabricatesContained is
-// the core non-negotiable this bridge exists to enforce: a successful
-// Graph 2xx alone must never be read as confirmed containment.
-func TestPHIR002_DispatchAcceptedButUnverified_NeverFabricatesContained(t *testing.T) {
-	obs := FromIdentityContainment(nil, nil, time.Now())
+// TestPHIR002_EndToEnd_KnownBad_MarkerNeverAdvanced is the confirmed-
+// negative case: Graph accepted the dispatch, but the independent
+// re-read proves the revocation never actually took effect.
+func TestPHIR002_EndToEnd_KnownBad_MarkerNeverAdvanced(t *testing.T) {
+	now := time.Now()
+	result := phishidentity.RevocationResult{
+		Baseline: now, After: now, Verification: phishidentity.RevocationNotVerified,
+		Detail: "signInSessionsValidFromDateTime did not advance",
+	}
+	obs := FromIdentityContainment(result, time.Now())
+	outcome := phishval.Evaluate("run-ph-ir-002", "known-bad", catalogExpectation(t, "PH-IR-002"), obs)
+	if outcome.Response.Verdict != phishval.VerdictFail {
+		t.Errorf("Response.Verdict = %q, want %q (a confirmed non-advance must grade as a failure, not a softer verdict)", outcome.Response.Verdict, phishval.VerdictFail)
+	}
+}
+
+// TestPHIR002_InconclusiveRead_NeverFabricatesContainedOrFailed is the
+// core non-negotiable this bridge exists to enforce: an inconclusive
+// verification read (never a successful dispatch alone) must never be
+// read as either confirmed containment or confirmed failure.
+func TestPHIR002_InconclusiveRead_NeverFabricatesContainedOrFailed(t *testing.T) {
+	result := phishidentity.RevocationResult{Verification: phishidentity.RevocationUnknown, Detail: "could not read post-revocation marker"}
+	obs := FromIdentityContainment(result, time.Now())
 	outcome := phishval.Evaluate("run-ph-ir-002", "unverified", catalogExpectation(t, "PH-IR-002"), obs)
 	if outcome.Response.Verdict != phishval.VerdictNotTested {
-		t.Errorf("Response.Verdict = %q, want %q (dispatch acceptance alone must never grade as Contained)", outcome.Response.Verdict, phishval.VerdictNotTested)
+		t.Errorf("Response.Verdict = %q, want %q (an inconclusive read must never grade as Contained or Failed)", outcome.Response.Verdict, phishval.VerdictNotTested)
 	}
 }
 

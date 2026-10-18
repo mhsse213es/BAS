@@ -7,57 +7,48 @@ import (
 	"github.com/audspect/bas/internal/phishval"
 )
 
-// ContainmentVerification is whether a dispatched identity-containment
-// action (RevokeSignInSessions) was independently confirmed to have
-// taken effect -- mirrors internal/rwevidence.ContainmentObserver's own
-// shape and reasoning exactly, one layer up for identity rather than
-// endpoint isolation: "dispatching an isolate command proves only the
-// vendor API accepted the request, not that containment happened." No
-// real observer ships here either, for the same reason rwevidence's own
-// doesn't: verifying a session is truly revoked needs a real tenant
-// sign-in attempt or audit-log check this package cannot simulate.
-type ContainmentVerification string
-
-const (
-	ContainmentVerificationConfirmed     ContainmentVerification = "confirmed"
-	ContainmentVerificationFailed        ContainmentVerification = "failed"
-	ContainmentVerificationIndeterminate ContainmentVerification = "indeterminate"
-)
-
-// FromIdentityContainment translates a RevokeSignInSessions dispatch
-// outcome plus an optional independent verification into phishval's
-// Response dimension for PH-IR-002. dispatchErr non-nil (Graph rejected
-// or never accepted the call) grades ResponseFailed outright. A nil
-// verification (dispatch succeeded, but nothing independently confirmed
-// it) returns a nil Observation -- NEVER fabricated as Contained merely
-// because Graph returned 2xx, the exact gap this function exists to
-// close. Only an explicit ContainmentVerificationConfirmed/Failed value
-// produces a graded Response.
-func FromIdentityContainment(dispatchErr error, verification *ContainmentVerification, observedAt time.Time) phishval.Observation {
-	if dispatchErr != nil {
+// FromIdentityContainment translates a real
+// phishidentity.RevocationResult -- RevokeAndVerifySignInSessions' own
+// dispatch-then-independently-verify evidence (closing this bridge's
+// own previously-documented gap: there used to be no real verification
+// observer here, mirroring internal/rwevidence.ContainmentObserver's
+// same limitation) -- into phishval's Response dimension for PH-IR-002.
+//
+// result.DispatchErr non-nil (Graph rejected the revoke call outright)
+// grades ResponseFailed. RevocationNotVerified -- the re-read(s)
+// succeeded but the marker never advanced -- is itself a confirmed
+// negative finding and also grades ResponseFailed, never a softer
+// verdict. RevocationUnknown with no DispatchErr (the baseline or every
+// post-revocation read itself failed -- permissions, throttling, a
+// transient fault) returns a nil Observation: genuinely inconclusive,
+// never fabricated as either Contained or Failed. Only
+// RevocationVerified grades ResponseContained -- and even then, the
+// Detail text preserves the exact caveat RevocationVerified's own doc
+// comment names: a verified marker advance is strong evidence the
+// revocation took effect, never proof every already-issued access
+// token became unusable immediately.
+func FromIdentityContainment(result phishidentity.RevocationResult, observedAt time.Time) phishval.Observation {
+	if result.DispatchErr != nil {
 		return phishval.Observation{Response: &phishval.ResponseObservation{
 			Outcome: phishval.ResponseFailed, ActionRequired: "revoke-sign-in-sessions", Timestamp: observedAt,
 			Source: "entra-id", Evidence: phishval.EvidenceControlReceipt, Confidence: phishval.ConfidenceHigh,
-			Detail: "dispatch rejected: " + dispatchErr.Error(),
+			Detail: "dispatch rejected: " + result.DispatchErr.Error(),
 		}}
 	}
-	if verification == nil {
-		return phishval.Observation{}
-	}
-	switch *verification {
-	case ContainmentVerificationConfirmed:
+	switch result.Verification {
+	case phishidentity.RevocationVerified:
 		return phishval.Observation{Response: &phishval.ResponseObservation{
 			Outcome: phishval.ResponseContained, ActionRequired: "revoke-sign-in-sessions", Timestamp: observedAt,
 			Source: "entra-id", Evidence: phishval.EvidenceVerifiedTelemetry, Confidence: phishval.ConfidenceHigh,
-			Detail: "independently verified: session revocation took effect",
+			Detail: result.Detail + " -- confirms the revocation marker changed, not that every already-issued access token is immediately unusable",
 		}}
-	case ContainmentVerificationFailed:
+	case phishidentity.RevocationNotVerified:
 		return phishval.Observation{Response: &phishval.ResponseObservation{
 			Outcome: phishval.ResponseFailed, ActionRequired: "revoke-sign-in-sessions", Timestamp: observedAt,
 			Source: "entra-id", Evidence: phishval.EvidenceVerifiedTelemetry, Confidence: phishval.ConfidenceHigh,
-			Detail: "independently verified: session revocation did NOT take effect -- blast radius unconstrained",
+			Detail: result.Detail,
 		}}
-	default: // ContainmentVerificationIndeterminate or any unrecognized value
+	default: // phishidentity.RevocationUnknown
 		return phishval.Observation{}
 	}
 }

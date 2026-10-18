@@ -654,6 +654,77 @@ inventing one would be fabricated evidence, not coverage.
 Zero changes to emailgwefficacy/emailgwcampaign/exercise/rwevidence/
 webgwefficacy/vendors -- confirmed via git status.
 
+## 15. Post-completion gap closure (user-directed, prioritized, verified before coding)
+
+After all 8 phases, the user reviewed the honest-gaps list and set an
+explicit priority order, with an instruction to verify feasibility
+against real code/docs before writing anything. That verification pass
+corrected two things immediately: the Graph mailbox-purge API turned
+out to be a real but beta/preview, multi-step, licensing-gated
+eDiscovery workflow (`POST .../searches/{searchId}/purgeData`) with
+community-reported reliability issues -- too uncertain to claim
+adapter-tested from a mocked test, so it stayed deferred, correctly.
+Four items were then built:
+
+1. **Verified session revocation (closes PH-IR-002's real gap)**:
+   `phishidentity.Client.RevokeAndVerifySignInSessions` captures a
+   pre-revocation baseline (`signInSessionsValidFromDateTime`),
+   dispatches `RevokeSignInSessions`, then independently re-reads and
+   compares -- with bounded retry for propagation delay. Three distinct
+   outcomes (`RevocationVerified`/`NotVerified`/`Unknown`), never
+   collapsed into a boolean: a successful POST alone is never read as
+   containment, a confirmed non-advance is a real negative, and a
+   failed re-read (permissions/throttling/transient fault) is
+   inconclusive, never fabricated either way.
+   `phishbridge.FromIdentityContainment` was rewired to consume this
+   real result instead of the old synthetic placeholder from Phase 6.
+   One caveat preserved explicitly everywhere this surfaces: a verified
+   marker advance proves the revocation marker changed, never that
+   every already-issued access token became unusable immediately.
+2. **PH-CHN-002 (sharing invite) + PH-CHN-004 (calendar lure)**: new
+   `phishidentity.Client.CreateSharingInvite`/`CreateCalendarEventLure`,
+   both real, stable Graph v1.0 calls, explicitly scoped (named drive
+   item / named organizer mailbox, named recipients -- never a
+   tenant-wide share or broadcast), each paired with an independent
+   `VerifySharingInviteExists`/`VerifyCalendarEventExists` read-back
+   (never trusting the creation call's own response alone) and a real
+   `Delete*` cleanup method. `phishbridge.FromCreatedLure` grades
+   Delivery only -- explicitly never Enforcement/Detection/
+   UserInteraction, since nothing here observes whether a recipient
+   saw, opened, or acted on the lure.
+3. **Sector profiles, corrected and completed**: audited against
+   phishing.txt's own line 234 sector list (Government, Insurance,
+   Telecom, Retail, Education, Logistics, Professional Services,
+   Technology) and found the 3 Phase-7 profiles (BFSI/NBFC, Healthcare,
+   Manufacturing-OT) were reasonable additions but didn't actually
+   cover any of those 8 named sectors -- the earlier "5 of 8 missing"
+   bookkeeping in this doc's own self-audit was wrong; it should have
+   been "0 of 8 named sectors built." Built all 8 named profiles now
+   (11 total), each citing real catalog scenarios. Also added
+   `IndustryProfile.FilterScenarios` -- a genuine scenario-selection
+   behavior (not just a rendered summary) -- and wired every profile
+   into a real reporting/API surface
+   (`/api/phishing/industry-profiles[.html]`, mirroring
+   `webgwefficacy`'s own handler/report pattern exactly), closing the
+   "not just display metadata" requirement: before this, phishcatalog's
+   IndustryProfile had zero callers anywhere, unlike webgwefficacy's own.
+4. **Locale/i18n**: deliberately left untouched, per explicit
+   instruction -- recorded here, not built: genuine Hindi/Arabic/RTL
+   localization needs user-facing rendering support that does not
+   exist anywhere in this codebase, and tag-only metadata would not be
+   real locale support.
+
+Current coverage snapshot (`AudspectPhishingCoverageReport().Summary()`):
+44 scenarios total, 25 catalog-only, 2 fixture-tested, 17 adapter-tested,
+0 live-validated. (Note: 44 is the top-level Scenario count; Variants
+are a field on their base Scenario, not separate catalog rows -- an
+earlier "69 PH-* entries" figure in this initiative's own memory
+conflated the two and should be read as 44 scenarios + 8 variants, not
+69 independent entries.)
+
+Zero changes to emailgwefficacy/emailgwcampaign/exercise/rwevidence/
+webgwefficacy/vendors throughout this gap-closure pass.
+
 **All 8 phases of Phishing BAS Mastery are now complete.** 69 PH-*
 scenario entries (61 base + 8 variants) across 6 areas, a 7-dimension
 outcome model independent of controlval (corrected from this doc's own

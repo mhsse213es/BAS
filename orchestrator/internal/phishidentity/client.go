@@ -1,8 +1,11 @@
 // Package phishidentity is Phishing BAS Mastery's own Microsoft Graph
-// identity adapter, for PH-ID-002 (OAuth consent abuse) today and
-// PH-ID-003/004/005 (device-code phishing, MFA fatigue, session-theft
-// defense) once their own Graph endpoints are wired. It is a standalone
-// client -- deliberately NOT internal/cloudgraph's AzureDiscoveryClient,
+// adapter -- identity-security checks (PH-ID-002 OAuth consent abuse
+// today; PH-ID-003/004/005 once their own endpoints are wired) and
+// collaboration-lure delivery (PH-CHN-002 sharing invitations,
+// PH-CHN-004 calendar invites), sharing one Client/token source because
+// both are real Graph v1.0 calls against the same tenant, not because
+// they are conceptually one capability. It is a standalone client --
+// deliberately NOT internal/cloudgraph's AzureDiscoveryClient,
 // which belongs to the separately-held Cloud BAS initiative and whose
 // resource/role-assignment discovery has no overlap with these
 // identity-security checks. Reuses internal/platform/msauth.EntraTokenSource,
@@ -42,6 +45,13 @@ type Config struct {
 // internal/vendors/defender.Client's own precedent exactly.
 type Client struct {
 	BaseURL string // defaults to https://graph.microsoft.com/v1.0
+
+	// VerificationPollAttempts/VerificationPollInterval govern
+	// RevokeAndVerifySignInSessions' post-revocation re-read loop --
+	// exported so tests can shrink the interval to avoid real sleeps.
+	// Zero means "use the default" (3 attempts, 2s apart).
+	VerificationPollAttempts int
+	VerificationPollInterval time.Duration
 
 	tokens     *msauth.EntraTokenSource
 	httpClient *http.Client
@@ -192,4 +202,144 @@ func (c *Client) RevokeSignInSessions(ctx context.Context, userID string) error 
 		return fmt.Errorf("phishidentity: revokeSignInSessions returned status %d", resp.StatusCode)
 	}
 	return nil
+}
+
+// SignInSessionsValidFromDateTime calls the real, stable Graph v1.0
+// GET {BaseURL}/users/{userID}?$select=signInSessionsValidFromDateTime
+// -- the independent postcondition check RevokeAndVerifySignInSessions
+// uses to confirm a revocation actually took effect, rather than
+// trusting RevokeSignInSessions' own 2xx response.
+func (c *Client) SignInSessionsValidFromDateTime(ctx context.Context, userID string) (time.Time, error) {
+	token, err := c.tokens.Token(ctx)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("phishidentity: acquiring token: %w", err)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
+		c.BaseURL+"/users/"+userID+"?$select=signInSessionsValidFromDateTime", nil)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("phishidentity: building request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("phishidentity: request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	var body struct {
+		SignInSessionsValidFromDateTime string `json:"signInSessionsValidFromDateTime"`
+	}
+	decodeErr := json.NewDecoder(resp.Body).Decode(&body)
+	if resp.StatusCode != http.StatusOK {
+		return time.Time{}, fmt.Errorf("phishidentity: reading signInSessionsValidFromDateTime returned status %d", resp.StatusCode)
+	}
+	if decodeErr != nil {
+		return time.Time{}, fmt.Errorf("phishidentity: decoding response: %w", decodeErr)
+	}
+	if body.SignInSessionsValidFromDateTime == "" {
+		return time.Time{}, fmt.Errorf("phishidentity: signInSessionsValidFromDateTime missing from response")
+	}
+	t, err := time.Parse(time.RFC3339, body.SignInSessionsValidFromDateTime)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("phishidentity: parsing signInSessionsValidFromDateTime %q: %w", body.SignInSessionsValidFromDateTime, err)
+	}
+	return t, nil
+}
+
+// RevocationVerification is the outcome of independently confirming a
+// RevokeSignInSessions dispatch -- never collapsed into a boolean,
+// because "the re-read failed" and "the re-read succeeded but nothing
+// changed" are different findings with different remediation.
+type RevocationVerification string
+
+const (
+	// RevocationVerified means signInSessionsValidFromDateTime
+	// independently advanced past the pre-revocation baseline. This is
+	// strong evidence the revocation marker changed server-side -- it
+	// does NOT prove every already-issued access token became
+	// unusable immediately (short-lived access tokens already in a
+	// client's possession can remain valid until their own natural
+	// expiry; only refresh-token-based reauthentication is guaranteed
+	// blocked). That distinction must be preserved wherever this
+	// verdict is surfaced, never flattened into "fully contained."
+	RevocationVerified RevocationVerification = "verified"
+	// RevocationNotVerified means the re-read(s) succeeded but the
+	// marker never advanced within the poll budget -- a real negative
+	// finding, not an error.
+	RevocationNotVerified RevocationVerification = "not_verified"
+	// RevocationUnknown means the dispatch itself failed, the baseline
+	// could not be read, or every post-revocation re-read errored
+	// (permissions, throttling, a transient fault) -- inconclusive,
+	// and never read as success.
+	RevocationUnknown RevocationVerification = "unknown"
+)
+
+// RevocationResult is RevokeAndVerifySignInSessions' own evidence
+// record: the pre/post timestamps it actually observed, plus the
+// verification verdict derived from comparing them -- never just the
+// dispatch's own 2xx/non-2xx status.
+type RevocationResult struct {
+	DispatchErr  error
+	Baseline     time.Time
+	After        time.Time
+	Verification RevocationVerification
+	Detail       string
+}
+
+// RevokeAndVerifySignInSessions closes PH-IR-002's own documented gap
+// (phishbridge.FromIdentityContainment previously had no real
+// verification observer, mirroring rwevidence.ContainmentObserver's own
+// same limitation): it captures a pre-revocation baseline, dispatches
+// RevokeSignInSessions, then independently re-reads
+// signInSessionsValidFromDateTime and compares -- a successful POST
+// alone is never read as containment. Propagation delay is handled by
+// polling up to VerificationPollAttempts times (default 3, 2s apart)
+// until the marker advances; a read that keeps failing throughout
+// (permissions, throttling, a transient fault) grades Unknown, never a
+// false positive OR a false negative.
+func (c *Client) RevokeAndVerifySignInSessions(ctx context.Context, userID string) RevocationResult {
+	baseline, err := c.SignInSessionsValidFromDateTime(ctx, userID)
+	if err != nil {
+		return RevocationResult{Verification: RevocationUnknown, Detail: "could not read pre-revocation baseline: " + err.Error()}
+	}
+
+	if err := c.RevokeSignInSessions(ctx, userID); err != nil {
+		return RevocationResult{DispatchErr: err, Baseline: baseline, Verification: RevocationUnknown, Detail: "dispatch rejected: " + err.Error()}
+	}
+
+	attempts := c.VerificationPollAttempts
+	if attempts <= 0 {
+		attempts = 3
+	}
+	interval := c.VerificationPollInterval
+	if interval <= 0 {
+		interval = 2 * time.Second
+	}
+
+	var after time.Time
+	var readErr error
+	for i := 0; i < attempts; i++ {
+		after, readErr = c.SignInSessionsValidFromDateTime(ctx, userID)
+		if readErr == nil && after.After(baseline) {
+			return RevocationResult{
+				Baseline: baseline, After: after, Verification: RevocationVerified,
+				Detail: fmt.Sprintf("signInSessionsValidFromDateTime advanced from %s to %s", baseline.Format(time.RFC3339), after.Format(time.RFC3339)),
+			}
+		}
+		if i < attempts-1 {
+			select {
+			case <-ctx.Done():
+				return RevocationResult{Baseline: baseline, Verification: RevocationUnknown, Detail: "context canceled while polling for verification"}
+			case <-time.After(interval):
+			}
+		}
+	}
+	if readErr != nil {
+		return RevocationResult{Baseline: baseline, Verification: RevocationUnknown, Detail: "could not read post-revocation marker: " + readErr.Error()}
+	}
+	return RevocationResult{
+		Baseline: baseline, After: after, Verification: RevocationNotVerified,
+		Detail: fmt.Sprintf("signInSessionsValidFromDateTime did not advance after %d read(s) -- revocation not independently confirmed", attempts),
+	}
 }
