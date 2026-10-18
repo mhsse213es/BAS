@@ -90,11 +90,12 @@ Every contract has the same fields: family, control under test, prerequisites, e
   - Policy `unrestricted`: `allowed_by_policy` when `Add-Type` succeeds, with the host's language mode recorded as the documented exposure. A block is `inconclusive`, since it is stricter than the stated policy and not a finding.
   - Policy unset: `inconclusive`, reported as UNVERIFIED.
   - No host configured: `not_applicable`.
-- **Evidence requirements.** `APPCTL_EVIDENCE` with the test ID, `ran` (the host echoed this test's marker), `exit`, and the host's `Add-Type` result. There is no event-log attribution: the host is the only observer, and its own report is the evidence.
+- **Evidence requirements.** `APPCTL_EVIDENCE` with the test ID, the intended policy, `ran` (the host echoed this test's marker), `exit`, the host's `Add-Type` result, and whether ScriptBlock logging is enabled. The host's own report is the primary evidence.
+- **Visibility rule.** The host's script text carries this run's marker as a comment. Visibility is `visible` when event 4104 in `Microsoft-Windows-PowerShell/Operational`, since the step started, contains the marker. It is `not_visible` only when ScriptBlock logging is enabled by policy and the log is readable with no such event. In every other case it is `unknown`.
 - **Attribution rule.** An `Add-Type` block counts as language-mode enforcement only when the host also reports ConstrainedLanguage. A block under FullLanguage is `inconclusive`, because something other than the language restriction caused it.
 - **Cleanup.** Removes the temp output file.
 - **Unsupported conditions.** No host configured or present (`not_applicable`). The host printed no structured result, or did not echo the marker (`inconclusive`).
-- **Known blind spots.** Telemetry visibility is `unknown`: no sensor is configured for this path. The host is a custom one, so this does not measure `powershell.exe` or any product's host. It does not measure AMSI or ScriptBlock logging. A ConstrainedLanguage result on this host is a property of this host, not of the endpoint's policy.
+- **Known blind spots.** The host is a custom one, so this does not measure `powershell.exe` or any product's host. Visibility comes only from ScriptBlock logging, and it is `unknown` wherever that logging is not enabled by policy. The test does not measure AMSI coverage. A ConstrainedLanguage result on this host is a property of this host, not of the endpoint's policy.
 
 ## Known blind spots shared by all families
 

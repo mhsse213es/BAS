@@ -535,9 +535,9 @@ steps:
     reversible: true
     blast_radius: "Runs one benign custom PowerShell host (tools/inprocess-host/bas-pshost.exe, built from source) that reports its language mode and whether Add-Type succeeds. Writes one temp output file, deleted in cleanup. Changes no policy."
     telemetry:
-      - "No sensor is configured for this path. Visibility is reported as unknown."
+      - "PowerShell ScriptBlock logging (event 4104, Microsoft-Windows-PowerShell/Operational) records this host's script text when logging is enabled by policy."
     detection:
-      - "Not measured in this version. The step records the host's language mode and Add-Type result only."
+      - "Visibility is visible or not_visible only when ScriptBlock logging is enabled by policy and the event log is readable. Otherwise it is unknown. AMSI coverage is not measured."
     command: |
       $ErrorActionPreference = 'SilentlyContinue'
       # Test contract: the verdict depends on the customer's intended policy for
@@ -550,6 +550,7 @@ steps:
       $expected = switch ($policy) { 'restricted' { 'blocked' } 'unrestricted' { 'allowed' } default { 'unknown' } }
       $tid = [guid]::NewGuid().ToString('N')
       $marker = "BAS-SIM-INPROC-$tid"
+      $det = 'unknown'
       $helper = $env:BAS_INPROC_HOST
       $tmp = Join-Path $env:TEMP "bas-inproc-$tid.txt"
 
@@ -557,12 +558,13 @@ steps:
       if ([string]::IsNullOrEmpty($helper) -or -not (Test-Path -LiteralPath $helper)) {
         Write-Output "APPCTL_COVERAGE: HostLanguageMode=unknown"
         Write-Output "APPCTL_EVIDENCE: test_id=$tid expected=$expected helper_present=false"
-        Write-Output "APPCTL_DETECTION: source=none result=unknown"
+        Write-Output "APPCTL_DETECTION: source=powershell_scriptblock_4104 result=unknown"
         Write-Output "APPCTL_OUTCOME: not_applicable"
         Write-Output "SKIP: no custom PowerShell host configured (set BAS_INPROC_HOST to a bas-pshost.exe built from tools/inprocess-host). [BAS-SIM]"
         return
       }
 
+      $start = Get-Date
       $p = Start-Process -FilePath $helper -ArgumentList $marker -WindowStyle Hidden -PassThru -Wait -RedirectStandardOutput $tmp
       $exit = $p.ExitCode
       $text = (Get-Content -Path $tmp -ErrorAction SilentlyContinue) -join "`n"
@@ -571,6 +573,18 @@ steps:
       $mode = if ($text -match 'HOST_LANGUAGE_MODE: (\S+)') { $Matches[1] } else { 'unknown' }
       $add = if ($text -match 'HOST_ADDTYPE: (\S+)') { $Matches[1] } else { 'unknown' }
       $ran = $text -like "*$marker*"
+
+      # Visibility: did ScriptBlock logging (event 4104) record this host's
+      # script text? Only meaningful when logging is enabled by policy. When it
+      # is not enabled, the result stays unknown, never not_visible.
+      $sbPolicy = (Get-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\PowerShell\ScriptBlockLogging' -Name EnableScriptBlockLogging -ErrorAction SilentlyContinue).EnableScriptBlockLogging
+      $sbState = if ($sbPolicy -eq 1) { 'enabled' } else { 'not_enabled' }
+      if ($sbPolicy -eq 1) {
+        try {
+          $sb = @(Get-WinEvent -FilterHashtable @{ LogName = 'Microsoft-Windows-PowerShell/Operational'; Id = 4104; StartTime = $start } -ErrorAction Stop)
+          $det = if (@($sb | Where-Object { $_.Message -like "*$marker*" }).Count -gt 0) { 'visible' } else { 'not_visible' }
+        } catch { $det = 'unknown' }
+      }
 
       if (-not $ran -or $mode -eq 'unknown' -or $add -eq 'unknown') {
         $outcome = 'inconclusive'; $reason = 'the custom host did not report a complete result; nothing can be concluded'
@@ -593,8 +607,8 @@ steps:
       }
 
       Write-Output "APPCTL_COVERAGE: HostLanguageMode=$mode"
-      Write-Output "APPCTL_EVIDENCE: test_id=$tid policy=$policy expected=$expected ran=$ran exit=$exit host_addtype=$add capture=$((Get-Date).ToString('o'))"
-      Write-Output "APPCTL_DETECTION: source=none result=unknown"
+      Write-Output "APPCTL_EVIDENCE: test_id=$tid policy=$policy expected=$expected ran=$ran exit=$exit host_addtype=$add scriptblock_logging=$sbState capture=$((Get-Date).ToString('o'))"
+      Write-Output "APPCTL_DETECTION: source=powershell_scriptblock_4104 result=$det"
       Write-Output "APPCTL_OUTCOME: $outcome"
       switch ($outcome) {
         'blocked_as_expected'  { Write-Output "PASS: $reason. [BAS-SIM]" }

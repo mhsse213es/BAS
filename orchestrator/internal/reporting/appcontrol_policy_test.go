@@ -73,7 +73,7 @@ func TestGenerateHTML_InProcessEvidenceAndAMSILimitRendered(t *testing.T) {
 		t.Fatalf("GenerateHTML: %v", err)
 	}
 	html := buf.String()
-	for _, want := range []string{"Observed state", "Intended policy", "HostLanguageMode=FullLanguage", "not stated", "AMSI or ScriptBlock logging"} {
+	for _, want := range []string{"Observed state", "Intended policy", "HostLanguageMode=FullLanguage", "not stated", "does not establish AMSI coverage"} {
 		if !strings.Contains(html, want) {
 			t.Errorf("report missing %q", want)
 		}

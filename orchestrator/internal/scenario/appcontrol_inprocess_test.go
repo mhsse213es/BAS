@@ -108,8 +108,10 @@ func TestInProcessHosting_OutcomeFromHostOutput(t *testing.T) {
 			if !strings.Contains(out, fx.wantPrefix) {
 				t.Errorf("want verdict prefix %s\n%s", fx.wantPrefix, out)
 			}
-			if !strings.Contains(out, "APPCTL_DETECTION: source=none result=unknown") {
-				t.Errorf("visibility must be reported as unknown\n%s", out)
+			// No ScriptBlock logging is enabled in these fixtures, so visibility
+			// is unknown, never not_visible. See the visibility tests.
+			if !strings.Contains(out, "APPCTL_DETECTION: source=powershell_scriptblock_4104 result=unknown") {
+				t.Errorf("visibility must be unknown when ScriptBlock logging is not enabled\n%s", out)
 			}
 			if fx.policy == "" && fx.helper && !strings.Contains(out, "UNVERIFIED") {
 				t.Errorf("an unstated policy must be reported as UNVERIFIED\n%s", out)

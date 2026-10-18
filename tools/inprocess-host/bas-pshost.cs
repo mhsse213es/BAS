@@ -33,6 +33,14 @@ internal static class BasPshost
         {
             if (!a.StartsWith("--", StringComparison.Ordinal)) { marker = a; }
         }
+        // The marker is placed in script text, so it is validated first. Only a
+        // BAS-SIM-INPROC-<hex or dash> token is accepted, so no argument can
+        // inject script.
+        if (!System.Text.RegularExpressions.Regex.IsMatch(marker, "^BAS-SIM-INPROC[-0-9a-fA-F]*$"))
+        {
+            Console.Out.WriteLine("HOST_ERROR: InvalidMarker");
+            return 2;
+        }
         try
         {
             InitialSessionState iss = InitialSessionState.CreateDefault();
@@ -44,10 +52,13 @@ internal static class BasPshost
             {
                 rs.Open();
 
-                string mode = Invoke(rs, "$ExecutionContext.SessionState.LanguageMode.ToString()");
+                // The marker is a comment in the script text. ScriptBlock logging
+                // (event 4104) records that text, so the step can look for the
+                // marker in the log. A comment has no effect on the result.
+                string mode = Invoke(rs, "# " + marker + "\n$ExecutionContext.SessionState.LanguageMode.ToString()");
                 // Add-Type is the probe: it creates a type, which Constrained
                 // Language Mode forbids. Success means the restriction is absent.
-                string addType = Invoke(rs,
+                string addType = Invoke(rs, "# " + marker + "\n" +
                     "try { Add-Type -TypeDefinition 'public class BasProbe { }' -ErrorAction Stop | Out-Null; 'allowed' } " +
                     "catch { 'blocked' }");
 

@@ -79,7 +79,7 @@ var appCtlStepFamilies = map[string]string{
 // never evidence that a live control enforces.
 var appCtlLimitations = []string{
 	"Live AppLocker and ASR enforcement is verified only where this run executed on a host with those controls configured and enforced. Fixture tests that validate the report code are not evidence of enforcement.",
-	"The in-process PowerShell host test measures only the language mode and Add-Type result of a custom host. It does not establish AMSI or ScriptBlock logging coverage, which remains unverified.",
+	"The in-process PowerShell host test measures the language mode and Add-Type result of a custom host. Its telemetry visibility is recorded from ScriptBlock logging (event 4104) only where that logging is enabled by policy; otherwise visibility is unknown. The test does not establish AMSI coverage.",
 	"Telemetry visibility records whether Sysmon process-creation telemetry saw the attempt. It is not a prevention verdict and not a security-product detection verdict. Not visible does not mean the attempt did not happen.",
 	"Vendor-specific correlation (Microsoft Defender, SentinelOne) is not included and remains unverified until tested against a configured tenant.",
 	"Results hold only for the tested Windows build, policy version, and execution path. Families not run, not applicable, or unverified are not reported as passing.",
