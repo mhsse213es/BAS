@@ -16,6 +16,7 @@ require (
 	github.com/miekg/dns v1.1.73
 	github.com/pkg/sftp v1.13.11
 	github.com/prometheus/client_golang v1.24.1
+	github.com/snykk/qr-generator v0.13.0
 	github.com/testcontainers/testcontainers-go v0.43.0
 	github.com/testcontainers/testcontainers-go/modules/postgres v0.43.0
 	go.opentelemetry.io/otel v1.46.0

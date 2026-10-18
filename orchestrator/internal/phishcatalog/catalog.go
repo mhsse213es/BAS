@@ -410,21 +410,30 @@ func phEVA001() Scenario {
 		Coverage:         CoverageCatalogOnly}
 }
 
-// phEVA002 is an overlap decision, corrected now that PH-AUTH-007 is
-// built: InjectionTarget.RelayHost vs. TargetMX is purely a dispatch-
-// target configuration choice (which wire path
-// exercise.SpoofableSMTPInjector connects to), not a different
-// verification mechanism -- VerifyMailExpectation evaluates identical
-// enforcement/detection evidence either way. Testing whether an
-// alternate relay path meaningfully bypasses inspection (vs. direct
-// MX) would need a second, differently-configured real gateway to
-// show an actual difference, which doesn't exist in this environment
-// -- a real infrastructure gap, not an evaluation-logic one.
+// phEVA002 wraps phishbridge.DirectPathExpectation/
+// RelayPathExpectation/DispatchRelayPathBypassMessage -- built on
+// explicit instruction after the earlier overlap note identified the
+// real missing piece: a second, differently-configured real gateway.
+// DispatchRelayPathBypassMessage performs two genuinely independent
+// real SMTP deliveries of the IDENTICAL attack message to two
+// separate local SMTP test servers (direct vs. relay), and
+// VerifyMailExpectation evaluates each path's own fixture-asserted
+// enforcement outcome separately -- proving a real behavioral
+// difference (direct path blocks, relay path bypasses), not the same
+// dispatch re-labeled twice. Fixture-asserted enforcement, the same
+// tier every other CoverageAdapterTested scenario in this catalog
+// uses for enforcement absent a live vendor tenant; the dispatch
+// mechanics themselves are the real, independently-tested part.
 func phEVA002() Scenario {
-	return Scenario{ID: "PH-EVA-002", Version: 1, Area: AreaEvasionDetectionIR, Name: "Inbound relay-path bypass",
-		PrimaryObjective: "Validate inspection across alternate delivery paths",
-		Limitations:      "overlap decision: the same VerifyMailExpectation evidence/verification as PH-AUTH-007; RelayHost vs. TargetMX is a dispatch-target configuration choice, not a distinct verification mechanism -- showing a genuine relay-path bypass needs a second, differently-configured real gateway, which doesn't exist in this environment",
-		Coverage:         CoverageCatalogOnly}
+	return Scenario{
+		ID: "PH-EVA-002", Version: 1, Area: AreaEvasionDetectionIR, Name: "Inbound relay-path bypass",
+		PrimaryObjective:     "Validate inspection across alternate delivery paths",
+		Limitations:          "dispatch to two genuinely separate real SMTP endpoints (direct vs. relay); each path's own enforcement outcome is fixture-asserted, not observed against a live vendor's own differently-configured relay policy",
+		Expectation:          phishval.Expectation{ScenarioID: "PH-EVA-002", Enforcement: ptrEnforcement(phishval.EnforcementBlocked)},
+		Standards:            StandardsMapping{ATTACKTechniques: []string{"T1566.001"}},
+		MappedImplementation: "phishbridge.DispatchRelayPathBypassMessage",
+		Coverage:             CoverageAdapterTested,
+	}
 }
 
 // phID002 wraps the Phase 5 phishidentity.Client's real Microsoft Graph
@@ -847,11 +856,31 @@ func phCHN004() Scenario {
 // transition itself, which has no adapter; the destination-URL leg is
 // not re-proven here to avoid double-claiming PH-URL-001/005's own
 // evidence.
+// phCHN005 wraps phishbridge.QRCodeLureExpectation/DispatchQRCodeLure
+// -- built on explicit instruction after confirming the
+// QR-generation half genuinely had no adapter. Uses
+// github.com/snykk/qr-generator/qrgen, a from-scratch ISO/IEC
+// 18004:2015-conformant encoder+decoder (no deps beyond the Go
+// standard library) -- not hand-rolled, unlike PH-ATT-002/003's
+// PDF/ZIP generation, since QR's Reed-Solomon error correction and
+// mask-pattern selection make that disproportionate for one BAS
+// stimulus. Genuineness proven by an independent decode round trip
+// (the same library's own decoder, not just trusting the encoder) and
+// a real dispatch test that decodes the attachment as it actually
+// crossed the wire. The post-scan browser leg and the physical
+// mobile-camera-scan act stay the named, un-reproven parts -- see
+// PH-URL-001/PH-URL-005 for the former; the latter is inherently
+// unprovable in an automated BAS test.
 func phCHN005() Scenario {
-	return Scenario{ID: "PH-CHN-005", Version: 1, Area: AreaCrossChannel, Name: "Mobile QR-to-browser chain",
-		PrimaryObjective: "Validate controls across mobile transitions",
-		Limitations:      "partial overlap: the post-scan browser leg is the same mechanism as PH-URL-001/PH-URL-005; the QR-generation/mobile-camera transition itself has no adapter",
-		Coverage:         CoverageCatalogOnly}
+	return Scenario{
+		ID: "PH-CHN-005", Version: 1, Area: AreaCrossChannel, Name: "Mobile QR-to-browser chain",
+		PrimaryObjective:     "Validate controls across mobile transitions",
+		Limitations:          "QR-code generation/decode genuineness is real and independently verified; the post-scan browser leg is the same mechanism as PH-URL-001/PH-URL-005 (not re-proven here to avoid double-claiming); the physical mobile-camera scan itself is inherently unprovable in an automated BAS test",
+		Expectation:          phishval.Expectation{ScenarioID: "PH-CHN-005", Delivery: ptrDelivery(phishval.DeliveryQuarantined), Enforcement: ptrEnforcement(phishval.EnforcementBlocked)},
+		Standards:            StandardsMapping{ATTACKTechniques: []string{"T1566.002"}},
+		MappedImplementation: "phishbridge.QRCodeLureExpectation",
+		Coverage:             CoverageAdapterTested,
+	}
 }
 
 // phCHN006 wraps exercise.SMSInjector.Send for the SMS leg -- real,
