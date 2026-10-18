@@ -229,7 +229,7 @@ func phAUTH008() Scenario {
 // not a MailExpectation/EfficacyResult phishbridge's current
 // FromEmailGWEfficacyResult can translate. A second bridge function is
 // needed, deferred.
-// phAUTH009 wraps phishbridge.FromInboxRuleVerdict, translating
+// phAUTH009 wraps phishbridge.FromSingleDimensionDetectionVerdict, translating
 // emailgwefficacy.VerifyInboxRuleExpectation's own real
 // SuspiciousAutoForwardExpectation (EG-007) -- a mailbox-
 // configuration-state claim, not a MailExpectation/EfficacyResult --
@@ -249,11 +249,29 @@ func phAUTH009() Scenario {
 	}
 }
 
+// phAUTH010 wraps phishbridge.FromSingleDimensionDetectionVerdict,
+// translating emailgwefficacy.VerifyDelegatedMailboxAccessExpectation's
+// own real SuspiciousDelegatedMailboxAccessExpectation
+// (mailboxcompromise.go) -- a synthetic Full Access delegation grant
+// with no legitimate business need, which tenant security telemetry
+// should detect. The prior "no scenario builder exists" note was
+// wrong: this capability already existed, built for a different area
+// (F: "mailbox persistence") and never mapped to any PH-* ID.
+// emailgwefficacy.SuspiciousOAuthConsentGrantExpectation is an
+// equally-real sibling (also in mailboxcompromise.go) for a future
+// scenario that specifically needs the OAuth-consent angle rather
+// than delegated access -- not mapped here, to avoid stretching one
+// scenario's Expectation to cover two independently-gradable signals.
 func phAUTH010() Scenario {
-	return Scenario{ID: "PH-AUTH-010", Version: 1, Area: AreaAuth, Name: "Compromised legitimate sender",
-		PrimaryObjective: "Detect suspicious content from an authenticated sender",
-		Limitations:      "genuine gap: no scenario builder exists; shares unbuilt plumbing with PH-BEC-006 (reply-chain hijacking)",
-		Coverage:         CoverageCatalogOnly}
+	return Scenario{
+		ID: "PH-AUTH-010", Version: 1, Area: AreaAuth, Name: "Compromised legitimate sender",
+		PrimaryObjective:     "Detect suspicious content from an authenticated sender",
+		Limitations:          "detects the compromise mechanism (suspicious mailbox delegation), not content-based anomaly in the sender's subsequent messages -- single-dimensional (Detection only), proven against fixture evidence, no live tenant audit-log/alert API called",
+		Expectation:          phishval.Expectation{ScenarioID: "PH-AUTH-010", Detection: ptrDetection(phishval.DetectionDetected)},
+		Standards:            StandardsMapping{ATTACKTechniques: []string{"T1098.002"}},
+		MappedImplementation: "emailgwefficacy.SuspiciousDelegatedMailboxAccessExpectation",
+		Coverage:             CoverageAdapterTested,
+	}
 }
 
 // phBEC001 wraps emailgwefficacy.ExecutiveImpersonationExpectation (EG-002).
@@ -274,29 +292,57 @@ func phBEC001() Scenario {
 
 // phBEC004/005/006/008: genuine, unbuilt gaps confirmed by Phase 0
 // research.
+// phBEC004 is an overlap decision, corrected from "genuine gap: no
+// scenario builder exists," which was wrong the same way PH-AUTH-006's
+// note was: payroll/HR impersonation (a request to redirect
+// direct-deposit/payroll details) is a narrative retextualization of
+// PH-BEC-002's own SupplierPaymentDiversionExpectation -- the
+// identical domain-reputation/newly-observed-domain heuristic catches
+// a financial-redirect request regardless of whether its pretext is
+// "supplier," "payroll," or anything else. phishing.txt's own
+// capability #3 acceptance bar ("variants share a common scenario
+// definition... without duplicating the entire implementation")
+// governs this exactly like it already governs PH-BEC-002's own
+// declared PH-BEC-003/PH-BEC-007 variants -- authoring new narrative
+// content here would be exactly the duplication that bar warns
+// against, not a genuine new capability.
 func phBEC004() Scenario {
 	return Scenario{ID: "PH-BEC-004", Version: 1, Area: AreaBEC, Name: "Payroll and HR impersonation",
 		PrimaryObjective: "Validate sensitive-data request controls",
-		Limitations:      "genuine gap: no scenario builder exists", Coverage: CoverageCatalogOnly}
+		Limitations:      "overlap decision: the same control evidence as PH-BEC-002 (SupplierPaymentDiversionExpectation's domain-reputation heuristic); a narrative retextualization, not a second independent implementation",
+		Coverage:         CoverageCatalogOnly}
 }
 
 func phBEC005() Scenario {
 	return Scenario{ID: "PH-BEC-005", Version: 1, Area: AreaBEC, Name: "Procurement and purchase-order fraud",
 		PrimaryObjective: "Test supplier and purchasing workflows",
-		Limitations:      "genuine gap: no scenario builder exists", Coverage: CoverageCatalogOnly}
+		Limitations:      "overlap decision: the same control evidence as PH-BEC-002 (SupplierPaymentDiversionExpectation's domain-reputation heuristic); a narrative retextualization, not a second independent implementation",
+		Coverage:         CoverageCatalogOnly}
 }
 
+// phBEC006 is a partial-overlap decision: reply-chain hijacking's
+// prerequisite -- the attacker controlling the legitimate mailbox --
+// is the identical compromise-detection evidence PH-AUTH-010 now
+// covers (SuspiciousDelegatedMailboxAccessExpectation). What stays a
+// genuine, separate gap is the reply-chain-SPECIFIC part: detecting
+// that a reply injected into an existing thread is anomalous relative
+// to that thread's own history. No email-threading/content-anomaly
+// capability exists anywhere in this codebase to test that
+// independently -- building one would be new scope, not a translation
+// of something that already exists, so it stays named here rather
+// than faked by reusing the compromise signal alone.
 func phBEC006() Scenario {
 	return Scenario{ID: "PH-BEC-006", Version: 1, Area: AreaBEC, Name: "Reply-chain hijacking",
 		PrimaryObjective: "Detect suspicious activity in an existing conversation",
-		Limitations:      "genuine gap: no scenario builder exists; shares unbuilt plumbing with PH-AUTH-010",
+		Limitations:      "partial overlap: the account-compromise precondition is the same evidence as PH-AUTH-010; detecting an anomalous reply within an existing thread (the reply-chain-specific part) is a genuine, separate gap -- no email-threading/content-anomaly capability exists anywhere in this codebase",
 		Coverage:         CoverageCatalogOnly}
 }
 
 func phBEC008() Scenario {
 	return Scenario{ID: "PH-BEC-008", Version: 1, Area: AreaBEC, Name: "Customer or partner impersonation",
 		PrimaryObjective: "Test trusted external relationship abuse",
-		Limitations:      "genuine gap: no scenario builder exists", Coverage: CoverageCatalogOnly}
+		Limitations:      "overlap decision: the same control evidence as PH-BEC-002 (SupplierPaymentDiversionExpectation's domain-reputation heuristic); a narrative retextualization (customer/partner pretext rather than supplier), not a second independent implementation",
+		Coverage:         CoverageCatalogOnly}
 }
 
 // phURL001 wraps emailgwefficacy.CredentialHarvestingURLExpectation.

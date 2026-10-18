@@ -17,7 +17,7 @@ func TestPHAUTH009_EndToEnd_KnownGood_AutoForwardDetected(t *testing.T) {
 	}})
 
 	verdict := emailgwefficacy.VerifyInboxRuleExpectation(exp, provider, scenarioWindow())
-	obs := FromInboxRuleVerdict(verdict)
+	obs := FromSingleDimensionDetectionVerdict(verdict, "emailgwefficacy-inboxrule")
 	outcome := phishval.Evaluate("run-ph-auth-009", "known-good", catalogExpectation(t, "PH-AUTH-009"), obs)
 
 	if outcome.Detection.Verdict != phishval.VerdictPass {
@@ -34,7 +34,7 @@ func TestPHAUTH009_EndToEnd_KnownBad_AutoForwardUndetected(t *testing.T) {
 	}})
 
 	verdict := emailgwefficacy.VerifyInboxRuleExpectation(exp, provider, scenarioWindow())
-	obs := FromInboxRuleVerdict(verdict)
+	obs := FromSingleDimensionDetectionVerdict(verdict, "emailgwefficacy-inboxrule")
 	outcome := phishval.Evaluate("run-ph-auth-009", "known-bad", catalogExpectation(t, "PH-AUTH-009"), obs)
 
 	if outcome.Detection.Verdict != phishval.VerdictFail {
@@ -42,12 +42,12 @@ func TestPHAUTH009_EndToEnd_KnownBad_AutoForwardUndetected(t *testing.T) {
 	}
 }
 
-func TestFromInboxRuleVerdict_NoEvidenceInconclusive_NeverFabricatesDetectedOrUndetected(t *testing.T) {
+func TestFromSingleDimensionDetectionVerdict_NoEvidenceInconclusive_NeverFabricatesDetectedOrUndetected(t *testing.T) {
 	exp := emailgwefficacy.SuspiciousAutoForwardExpectation(true)
 	provider := emailgwefficacy.NewFixtureInboxRuleProvider(nil)
 
 	verdict := emailgwefficacy.VerifyInboxRuleExpectation(exp, provider, scenarioWindow())
-	obs := FromInboxRuleVerdict(verdict)
+	obs := FromSingleDimensionDetectionVerdict(verdict, "emailgwefficacy-inboxrule")
 	outcome := phishval.Evaluate("run-ph-auth-009", "no-evidence", catalogExpectation(t, "PH-AUTH-009"), obs)
 
 	if outcome.Detection.Verdict != phishval.VerdictInconclusive {
