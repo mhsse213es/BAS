@@ -30,28 +30,58 @@ type settingsMutateClient interface {
 // never a persistent session, matching Task/Save being discrete clicks.
 type mutateClient struct{}
 
-func (mutateClient) call(op, host string) (string, string, error) {
+// callDeadline bounds the whole request/response round trip, not just
+// the dial -- without it, a stuck server-side handler (or a connection
+// that dies after the handshake) blocks this call, and therefore the UI
+// thread that invokes it synchronously, forever. set-server's own
+// internal reconnect wait (reconnectTimeout, configmutate_windows.go) is
+// the longest real operation this pipe performs, so every call uses that
+// bound plus margin rather than guessing a shorter one per op.
+const callDeadline = reconnectTimeout + 10*time.Second
+
+// callFull is call's real implementation, additionally returning the
+// response's ServerTime field -- used directly by TestServerWithServerTime
+// (Troubleshoot's clock-skew check). call itself just discards it, since
+// Settings has no use for a server timestamp.
+func (mutateClient) callFull(op, host string) (string, string, time.Time, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	conn, err := winio.DialPipeContext(ctx, mutatePipeName)
 	if err != nil {
-		return "", "", fmt.Errorf("connect to agent: %w", err)
+		return "", "", time.Time{}, fmt.Errorf("connect to agent: %w", err)
 	}
 	defer conn.Close()
+	_ = conn.SetDeadline(time.Now().Add(callDeadline))
 
 	if err := json.NewEncoder(conn).Encode(mutateRequest{Op: op, Host: host}); err != nil {
-		return "", "", fmt.Errorf("send request: %w", err)
+		return "", "", time.Time{}, fmt.Errorf("send request: %w", err)
 	}
 	var resp mutateResponse
 	if err := json.NewDecoder(conn).Decode(&resp); err != nil {
-		return "", "", fmt.Errorf("read response: %w", err)
+		return "", "", time.Time{}, fmt.Errorf("read response: %w", err)
 	}
-	return resp.Outcome, resp.Detail, nil
+	return resp.Outcome, resp.Detail, resp.ServerTime, nil
+}
+
+func (c mutateClient) call(op, host string) (string, string, error) {
+	outcome, detail, _, err := c.callFull(op, host)
+	return outcome, detail, err
 }
 
 func (c mutateClient) TestServer(host string) (TestOutcome, string, error) {
 	outcome, detail, err := c.call("test-server", host)
 	return TestOutcome(outcome), detail, err
+}
+
+// TestServerWithServerTime is TestServer's counterpart carrying the
+// server's clock from the SAME authenticated call -- Troubleshoot's
+// clock-skew check (checkClockSkew) uses this instead of a second,
+// separately-authenticated, unauthenticated-TLS request against the
+// mTLS-only port (which could never succeed there; see testConnectionReal's
+// doc comment for why that was wrong).
+func (c mutateClient) TestServerWithServerTime(host string) (TestOutcome, string, time.Time, error) {
+	outcome, detail, serverTime, err := c.callFull("test-server", host)
+	return TestOutcome(outcome), detail, serverTime, err
 }
 
 func (c mutateClient) SetServer(host string) (bool, string, error) {
@@ -109,10 +139,18 @@ func (c *SettingsController) RequestSave(candidateHost string) (needsConfirm boo
 	return true, "Saving will restart the agent service and may briefly interrupt connectivity. Continue?"
 }
 
-// ConfirmSave commits the host RequestSave recorded.
-func (c *SettingsController) ConfirmSave() (ok bool, detail string) {
+// ConfirmSave commits the host RequestSave recorded -- but only if
+// currentHost (what the window says is on screen right now) still matches
+// it. Without this check, a user who edits the field after clicking Save
+// (RequestSave only warns, it doesn't commit) and then clicks Save again
+// to confirm would have the OLD, pre-edit host silently persisted instead
+// of what they're now looking at.
+func (c *SettingsController) ConfirmSave(currentHost string) (ok bool, detail string) {
 	host := c.pendingHost
 	c.pendingHost = ""
+	if currentHost != host {
+		return false, "the host field changed since you clicked Save -- click Save again to confirm the new value"
+	}
 	ok, detail, err := c.client.SetServer(host)
 	if err != nil {
 		return false, err.Error()
@@ -180,9 +218,22 @@ func showSettingsWindow(currentHost string, controller *SettingsController) erro
 		Position(sx, sy).
 		Width(bw).Height(bh))
 
+	// Both handlers run the real pipe call (which can legitimately take up
+	// to callDeadline) on a background goroutine and marshal the result
+	// back via wnd.UiThread -- the pattern windigo's own docs prescribe
+	// for exactly this situation (see Main.UiThread's doc comment).
+	// Calling controller.Test/ConfirmSave directly on the click handler
+	// would block this window's message loop for the call's whole
+	// duration, freezing the window.
 	testBtn.On().BnClicked(func() {
-		outcome, detail := controller.Test(hostEdit.Text())
-		resultLbl.SetTextAndResize(string(outcome) + ": " + detail)
+		host := hostEdit.Text()
+		resultLbl.SetTextAndResize("Testing...")
+		go func() {
+			outcome, detail := controller.Test(host)
+			wnd.UiThread(func() {
+				resultLbl.SetTextAndResize(string(outcome) + ": " + detail)
+			})
+		}()
 	})
 
 	confirmed := false
@@ -194,12 +245,18 @@ func showSettingsWindow(currentHost string, controller *SettingsController) erro
 			return
 		}
 		confirmed = false
-		ok, detail := controller.ConfirmSave()
-		if ok {
-			resultLbl.SetTextAndResize("Saved: " + detail)
-		} else {
-			resultLbl.SetTextAndResize("Not saved: " + detail)
-		}
+		host := hostEdit.Text()
+		resultLbl.SetTextAndResize("Saving...")
+		go func() {
+			ok, detail := controller.ConfirmSave(host)
+			wnd.UiThread(func() {
+				if ok {
+					resultLbl.SetTextAndResize("Saved: " + detail)
+				} else {
+					resultLbl.SetTextAndResize("Not saved: " + detail)
+				}
+			})
+		}()
 	})
 
 	wnd.RunAsMain()

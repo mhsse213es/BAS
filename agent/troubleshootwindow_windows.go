@@ -4,11 +4,8 @@ package main
 
 import (
 	"context"
-	"crypto/tls"
 	"fmt"
 	"log"
-	"net/http"
-	"net/url"
 	"os/exec"
 	"runtime"
 	"time"
@@ -215,48 +212,29 @@ func checkCategorizedCause(deps diagnosticsDeps) DiagnosticCheck {
 	}
 }
 
-// captureServerTime makes an unauthenticated request to host purely to
-// read the standard Date response header for clock-skew measurement. TLS
-// verification is intentionally skipped here: this request never sends a
-// secret and never trusts the response body or the peer's identity --
-// only a timestamp header -- so it doesn't weaken checkConnection's real
-// test, which goes through the pipe and performs full certificate
-// validation.
-func captureServerTime(host string) time.Time {
-	u, err := url.Parse(host)
-	if err != nil {
-		return time.Time{}
-	}
-	client := &http.Client{
-		Timeout:   10 * time.Second,
-		Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}},
-	}
-	resp, err := client.Get(u.Scheme + "://" + u.Host + "/")
-	if err != nil {
-		return time.Time{}
-	}
-	defer resp.Body.Close()
-	t, err := http.ParseTime(resp.Header.Get("Date"))
-	if err != nil {
-		return time.Time{}
-	}
-	return t
-}
-
 // testConnectionReal is diagnosticsDeps.testConnection's production
-// implementation: the real outcome/detail come from the same named-pipe
-// "test-server" call Settings uses (mutateClient, settingswindow_windows.go)
-// against the currently configured host, never a candidate; the server
-// timestamp comes from a separate, unauthenticated request purely for the
-// clock-skew signal.
+// implementation: outcome/detail/serverTime all come from the same
+// named-pipe "test-server" round trip Settings uses (mutateClient,
+// settingswindow_windows.go) against the currently configured host, never
+// a candidate.
+//
+// An earlier version of this function measured clock skew via a SEPARATE
+// unauthenticated HTTPS request straight to host with InsecureSkipVerify,
+// reading only the Date header. That cannot work against this agent's
+// real deployment: the orchestrator's listener at the configured port
+// requires a verified client certificate (tls.RequireAndVerifyClientCert,
+// orchestrator/cmd/server/main.go) and refuses the TLS handshake itself
+// before ever sending response headers -- including Date -- to a
+// connection presenting no client cert. The authenticated test-server
+// call already completes a real client-cert handshake and reads the
+// server's Date header from that success (authCheck,
+// configmutate_windows.go); reusing it here is not just an optimization,
+// it's the only request in this whole flow that can ever receive that
+// header at all.
 func testConnectionReal(host string) (TestOutcome, string, time.Time, error) {
-	outcome, detail, err := (mutateClient{}).TestServer(host)
+	outcome, detail, serverTime, err := (mutateClient{}).TestServerWithServerTime(host)
 	if err != nil {
 		return TestOutcomeHostUnreachable, err.Error(), time.Time{}, err
-	}
-	var serverTime time.Time
-	if outcome == TestOutcomeConnected {
-		serverTime = captureServerTime(host)
 	}
 	return outcome, detail, serverTime, nil
 }
@@ -336,8 +314,10 @@ func showTroubleshootWindow(deps diagnosticsDeps) error {
 		rows[i] = &row{result: resultLbl, retry: retryBtn, action: actionBtn}
 	}
 
-	render := func(n int) {
-		check := RunDiagnosticCheck(n+1, deps)
+	// applyCheck writes one already-computed check's result into row n's
+	// controls -- split from running the check itself so Retry can run
+	// the check off the UI thread and apply only this part back on it.
+	applyCheck := func(n int, check DiagnosticCheck) {
 		rows[n].current = &check
 		text := fmt.Sprintf("%s: %s", check.Name, check.Status)
 		if check.Cause != "" {
@@ -354,9 +334,31 @@ func showTroubleshootWindow(deps diagnosticsDeps) error {
 		}
 	}
 
+	// render runs a check and applies it synchronously -- only used for
+	// the initial population below, which happens before RunAsMain starts
+	// this window's message loop, so there's nothing to freeze yet.
+	render := func(n int) {
+		applyCheck(n, RunDiagnosticCheck(n+1, deps))
+	}
+
 	for i := range rows {
 		n := i
-		rows[n].retry.On().BnClicked(func() { render(n) })
+		// Retry runs the check on a background goroutine and marshals the
+		// UI update back via wnd.UiThread (same pattern as Settings'
+		// Test/Save, windigo's own prescribed idiom for Main.UiThread) --
+		// checks 3/4 make a real pipe round trip that can legitimately
+		// take up to callDeadline; calling render directly here would
+		// freeze this window's message loop for that whole duration. The
+		// initial population below (before RunAsMain starts the message
+		// loop) stays synchronous: there's no running message loop to
+		// freeze yet.
+		rows[n].retry.On().BnClicked(func() {
+			rows[n].result.SetTextAndResize("Retrying...")
+			go func() {
+				check := RunDiagnosticCheck(n+1, deps)
+				wnd.UiThread(func() { applyCheck(n, check) })
+			}()
+		})
 		rows[n].action.On().BnClicked(func() {
 			if rows[n].current != nil && rows[n].current.ActionButton != nil {
 				rows[n].current.ActionButton.Action()

@@ -8,6 +8,8 @@ import (
 	"net"
 	"os"
 	"sync/atomic"
+	"time"
+	"unsafe"
 
 	"github.com/Microsoft/go-winio"
 	"golang.org/x/sys/windows"
@@ -64,6 +66,31 @@ func clientPIDOf(conn net.Conn) (uint32, error) {
 	return pid, nil
 }
 
+// parentPIDOf walks a Toolhelp32 process snapshot to find pid's parent.
+// There is no direct Win32 "get parent of this PID" call; enumerating the
+// snapshot is the standard technique.
+func parentPIDOf(pid uint32) (uint32, error) {
+	snap, err := windows.CreateToolhelp32Snapshot(windows.TH32CS_SNAPPROCESS, 0)
+	if err != nil {
+		return 0, err
+	}
+	defer windows.CloseHandle(snap)
+
+	var entry windows.ProcessEntry32
+	entry.Size = uint32(unsafe.Sizeof(entry))
+	if err := windows.Process32First(snap, &entry); err != nil {
+		return 0, err
+	}
+	for {
+		if entry.ProcessID == pid {
+			return entry.ParentProcessID, nil
+		}
+		if err := windows.Process32Next(snap, &entry); err != nil {
+			return 0, fmt.Errorf("process %d not found in snapshot", pid)
+		}
+	}
+}
+
 // mutateRequest/mutateResponse are the pipe's wire protocol: one JSON
 // request per connection, one JSON response, then the connection closes
 // (matching the Settings window's Test/Save being discrete button clicks,
@@ -76,6 +103,11 @@ type mutateRequest struct {
 type mutateResponse struct {
 	Outcome string `json:"outcome"`
 	Detail  string `json:"detail"`
+	// ServerTime is set only for a successful test-server call, carrying
+	// the server's own clock from that call's authenticated response --
+	// lets Troubleshoot's clock-skew check reuse this exact round trip
+	// instead of a second, separately-authenticated request.
+	ServerTime time.Time `json:"serverTime,omitempty"`
 }
 
 // startLocalMutateAPI creates the SID-scoped named pipe and serves it for
@@ -85,7 +117,7 @@ type mutateResponse struct {
 // (the connecting process's own exe must match this agent's own exe path
 // -- the tray is always "<this exe> --tray"); a connection failing either
 // check is closed with no response, never reaching handler.
-func startLocalMutateAPI(a *Agent, expectedClientPID func() int32, handler func(op, host string) (outcome, detail string)) error {
+func startLocalMutateAPI(a *Agent, expectedClientPID func() int32, handler func(op, host string) (outcome, detail string, serverTime time.Time)) error {
 	return startMutatePipeListener(mutatePipeName, expectedClientPID, handler)
 }
 
@@ -95,7 +127,7 @@ func startLocalMutateAPI(a *Agent, expectedClientPID func() int32, handler func(
 // closes (it runs for the agent's whole lifetime), so a shared path across
 // tests in the same process would let an earlier test's listener
 // intercept a later test's dial.
-func startMutatePipeListener(pipePath string, expectedClientPID func() int32, handler func(op, host string) (outcome, detail string)) error {
+func startMutatePipeListener(pipePath string, expectedClientPID func() int32, handler func(op, host string) (outcome, detail string, serverTime time.Time)) error {
 	sddl, err := resolvePipeSDDL()
 	if err != nil {
 		return fmt.Errorf("resolve user SID for mutate pipe ACL: %w", err)
@@ -124,14 +156,26 @@ func startMutatePipeListener(pipePath string, expectedClientPID func() int32, ha
 	return nil
 }
 
-func serveMutateConn(conn net.Conn, wantPID int32, wantImagePath string, handler func(op, host string) (outcome, detail string)) {
+// serveMutateConn's identity check is against the connecting process's
+// PARENT, not the connecting process itself: Settings and Troubleshoot
+// are spawned by the tray as their own child processes ("<exe>
+// --settings-window" / "--troubleshoot-window", tray_windows.go), so the
+// process that actually dials this pipe is never the tray process whose
+// PID expectedClientPID() returns -- it's a direct child of it. The
+// image-path check still applies to the connecting process itself (both
+// the tray and its spawned windows are the same bas_agent.exe binary).
+func serveMutateConn(conn net.Conn, wantParentPID int32, wantImagePath string, handler func(op, host string) (outcome, detail string, serverTime time.Time)) {
 	defer conn.Close()
 
-	if wantPID <= 0 {
+	if wantParentPID <= 0 {
 		return
 	}
 	pid, err := clientPIDOf(conn)
-	if err != nil || pid != uint32(wantPID) {
+	if err != nil {
+		return
+	}
+	parentPID, err := parentPIDOf(pid)
+	if err != nil || parentPID != uint32(wantParentPID) {
 		return
 	}
 	imgPath, err := imagePathForPID(pid)
@@ -143,8 +187,8 @@ func serveMutateConn(conn net.Conn, wantPID int32, wantImagePath string, handler
 	if err := json.NewDecoder(conn).Decode(&req); err != nil {
 		return
 	}
-	outcome, detail := handler(req.Op, req.Host)
-	_ = json.NewEncoder(conn).Encode(mutateResponse{Outcome: outcome, Detail: detail})
+	outcome, detail, serverTime := handler(req.Op, req.Host)
+	_ = json.NewEncoder(conn).Encode(mutateResponse{Outcome: outcome, Detail: detail, ServerTime: serverTime})
 }
 
 // resolvePipeSDDL is the real production SID source for the mutate pipe's

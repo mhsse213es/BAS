@@ -51,7 +51,9 @@ func TestHandleTestServer_DialFails_HostUnreachable(t *testing.T) {
 func TestHandleTestServer_TLSOK_AuthRejected_ServerRejected(t *testing.T) {
 	origDial, origAuth := dialTLSCheck, authCheck
 	dialTLSCheck = func(addr string, cfg Config) error { return nil }
-	authCheck = func(cfg Config) error { return errors.New("server 401 on /api/heartbeat") }
+	authCheck = func(a *Agent, cfg Config) (error, time.Time) {
+		return errors.New("server 401 on /api/heartbeat"), time.Time{}
+	}
 	defer func() { dialTLSCheck, authCheck = origDial, origAuth }()
 
 	a := newTestAgentForMutate(t)
@@ -61,7 +63,24 @@ func TestHandleTestServer_TLSOK_AuthRejected_ServerRejected(t *testing.T) {
 	}
 }
 
-// callLog records persist/restart calls in order, under its own mutex, so
+func TestHandleTestServer_Connected_ReturnsServerTime(t *testing.T) {
+	origDial, origAuth := dialTLSCheck, authCheck
+	wantTime := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	dialTLSCheck = func(addr string, cfg Config) error { return nil }
+	authCheck = func(a *Agent, cfg Config) (error, time.Time) { return nil, wantTime }
+	defer func() { dialTLSCheck, authCheck = origDial, origAuth }()
+
+	a := newTestAgentForMutate(t)
+	outcome, _, serverTime := a.testServerWithServerTime("https://10.0.0.5:9443")
+	if outcome != TestOutcomeConnected {
+		t.Fatalf("outcome = %q, want %q", outcome, TestOutcomeConnected)
+	}
+	if !serverTime.Equal(wantTime) {
+		t.Fatalf("serverTime = %v, want %v", serverTime, wantTime)
+	}
+}
+
+// callLog records persist/apply calls in order, under its own mutex, so
 // TestHandleSetServer_ConcurrentCalls_Serialized can assert on ordering
 // without racing the fakes themselves.
 type callLog struct {
@@ -81,12 +100,29 @@ func (c *callLog) snapshot() []string {
 	return append([]string(nil), c.calls...)
 }
 
+// fakeSetServerSeams swaps setServerPersist/setServerApply/
+// setServerVerifyReconnect/setServerReadPrevious and returns a restore
+// func -- every handleSetServer test needs all four now that "previous"
+// is read via its own seam instead of a.cfg().ServerURL (which no longer
+// matches what setServerPersist actually persists; see the ledger).
+func fakeSetServerSeams(t *testing.T, prevURL string, persist func(string) error, apply func(*Agent, Config) error, verify func(*Agent, string) bool) {
+	t.Helper()
+	origPersist, origApply, origVerify, origPrev := setServerPersist, setServerApply, setServerVerifyReconnect, setServerReadPrevious
+	setServerPersist = persist
+	setServerApply = apply
+	setServerVerifyReconnect = verify
+	setServerReadPrevious = func() string { return prevURL }
+	t.Cleanup(func() {
+		setServerPersist, setServerApply, setServerVerifyReconnect, setServerReadPrevious = origPersist, origApply, origVerify, origPrev
+	})
+}
+
 func TestHandleSetServer_ReconnectSucceeds_ReturnsOK(t *testing.T) {
-	origPersist, origRestart, origVerify := setServerPersist, setServerRestart, setServerVerifyReconnect
-	setServerPersist = func(serverURL string) error { return nil }
-	setServerRestart = func() error { return nil }
-	setServerVerifyReconnect = func(a *Agent, host string) bool { return true }
-	defer func() { setServerPersist, setServerRestart, setServerVerifyReconnect = origPersist, origRestart, origVerify }()
+	fakeSetServerSeams(t, "https://old:9443",
+		func(serverURL string) error { return nil },
+		func(a *Agent, cfg Config) error { return nil },
+		func(a *Agent, host string) bool { return true },
+	)
 
 	a := newTestAgentForMutate(t)
 	ok, _ := a.handleSetServerWithTimeout("https://10.0.0.5:9443", 200*time.Millisecond, 5*time.Millisecond)
@@ -96,18 +132,18 @@ func TestHandleSetServer_ReconnectSucceeds_ReturnsOK(t *testing.T) {
 }
 
 func TestHandleSetServer_ReconnectTimesOut_RollsBackAndReportsFailure(t *testing.T) {
-	origPersist, origRestart, origVerify := setServerPersist, setServerRestart, setServerVerifyReconnect
 	log := &callLog{}
-	setServerPersist = func(serverURL string) error {
-		log.add("persist:" + serverURL)
-		return nil
-	}
-	setServerRestart = func() error { return nil }
-	setServerVerifyReconnect = func(a *Agent, host string) bool { return false }
-	defer func() { setServerPersist, setServerRestart, setServerVerifyReconnect = origPersist, origRestart, origVerify }()
+	prevURL := "https://old:9443"
+	fakeSetServerSeams(t, prevURL,
+		func(serverURL string) error {
+			log.add("persist:" + serverURL)
+			return nil
+		},
+		func(a *Agent, cfg Config) error { return nil },
+		func(a *Agent, host string) bool { return false },
+	)
 
 	a := newTestAgentForMutate(t)
-	prevURL := a.cfg().ServerURL
 	ok, detail := a.handleSetServerWithTimeout("https://10.0.0.5:9443", 50*time.Millisecond, 5*time.Millisecond)
 	if ok {
 		t.Fatal("expected ok == false when reconnect never succeeds")
@@ -121,43 +157,43 @@ func TestHandleSetServer_ReconnectTimesOut_RollsBackAndReportsFailure(t *testing
 	}
 }
 
-func TestHandleSetServer_PersistFails_NeverAttemptsRestart(t *testing.T) {
-	origPersist, origRestart, origVerify := setServerPersist, setServerRestart, setServerVerifyReconnect
-	restartCalled := false
-	setServerPersist = func(serverURL string) error { return errors.New("registry write denied") }
-	setServerRestart = func() error {
-		restartCalled = true
-		return nil
-	}
-	setServerVerifyReconnect = func(a *Agent, host string) bool { return true }
-	defer func() { setServerPersist, setServerRestart, setServerVerifyReconnect = origPersist, origRestart, origVerify }()
+func TestHandleSetServer_PersistFails_NeverAttemptsApply(t *testing.T) {
+	applyCalled := false
+	fakeSetServerSeams(t, "https://old:9443",
+		func(serverURL string) error { return errors.New("registry write denied") },
+		func(a *Agent, cfg Config) error {
+			applyCalled = true
+			return nil
+		},
+		func(a *Agent, host string) bool { return true },
+	)
 
 	a := newTestAgentForMutate(t)
 	ok, _ := a.handleSetServerWithTimeout("https://10.0.0.5:9443", 200*time.Millisecond, 5*time.Millisecond)
 	if ok {
 		t.Fatal("expected ok == false when persist fails")
 	}
-	if restartCalled {
-		t.Fatal("restart must never be attempted when persist fails")
+	if applyCalled {
+		t.Fatal("apply must never be attempted when persist fails")
 	}
 }
 
-func TestHandleSetServer_RestartLaunchFails_RollsBack(t *testing.T) {
-	origPersist, origRestart, origVerify := setServerPersist, setServerRestart, setServerVerifyReconnect
+func TestHandleSetServer_ApplyFails_RollsBack(t *testing.T) {
 	log := &callLog{}
-	setServerPersist = func(serverURL string) error {
-		log.add("persist:" + serverURL)
-		return nil
-	}
-	setServerRestart = func() error { return errors.New("SCM StartService failed") }
-	setServerVerifyReconnect = func(a *Agent, host string) bool { return true }
-	defer func() { setServerPersist, setServerRestart, setServerVerifyReconnect = origPersist, origRestart, origVerify }()
+	prevURL := "https://old:9443"
+	fakeSetServerSeams(t, prevURL,
+		func(serverURL string) error {
+			log.add("persist:" + serverURL)
+			return nil
+		},
+		func(a *Agent, cfg Config) error { return errors.New("apply failed") },
+		func(a *Agent, host string) bool { return true },
+	)
 
 	a := newTestAgentForMutate(t)
-	prevURL := a.cfg().ServerURL
 	ok, _ := a.handleSetServerWithTimeout("https://10.0.0.5:9443", 200*time.Millisecond, 5*time.Millisecond)
 	if ok {
-		t.Fatal("expected ok == false when the restart trigger itself fails to launch")
+		t.Fatal("expected ok == false when apply itself fails")
 	}
 	calls := log.snapshot()
 	if len(calls) < 2 || calls[len(calls)-1] != "persist:"+prevURL {
@@ -165,18 +201,57 @@ func TestHandleSetServer_RestartLaunchFails_RollsBack(t *testing.T) {
 	}
 }
 
-func TestHandleSetServer_ConcurrentCalls_Serialized(t *testing.T) {
-	origPersist, origRestart, origVerify := setServerPersist, setServerRestart, setServerVerifyReconnect
-	log := &callLog{}
-	setServerPersist = func(serverURL string) error {
-		log.add("persist-start:" + serverURL)
-		time.Sleep(20 * time.Millisecond) // widen the window a race would need to land in
-		log.add("persist-end:" + serverURL)
-		return nil
+func TestHandleSetServer_RollbackPersistFails_ReportsRevertFailureHonestly(t *testing.T) {
+	// Review Focus-adjacent: a rollback that itself fails must never be
+	// reported as "reverted" -- the reviewer's finding #6.
+	rollbackAttempts := 0
+	fakeSetServerSeams(t, "https://old:9443",
+		func(serverURL string) error {
+			rollbackAttempts++
+			if rollbackAttempts == 1 {
+				return nil // the forward persist succeeds
+			}
+			return errors.New("registry busy") // the rollback persist fails
+		},
+		func(a *Agent, cfg Config) error { return errors.New("apply failed") },
+		func(a *Agent, host string) bool { return true },
+	)
+
+	a := newTestAgentForMutate(t)
+	ok, detail := a.handleSetServerWithTimeout("https://10.0.0.5:9443", 200*time.Millisecond, 5*time.Millisecond)
+	if ok {
+		t.Fatal("expected ok == false")
 	}
-	setServerRestart = func() error { return nil }
-	setServerVerifyReconnect = func(a *Agent, host string) bool { return true }
-	defer func() { setServerPersist, setServerRestart, setServerVerifyReconnect = origPersist, origRestart, origVerify }()
+	if detail == "" {
+		t.Fatal("expected a detail message")
+	}
+	wantSubstr := "also failed"
+	if !containsSubstr(detail, wantSubstr) {
+		t.Fatalf("detail = %q, want it to mention the rollback itself failing (%q)", detail, wantSubstr)
+	}
+}
+
+func containsSubstr(s, substr string) bool {
+	for i := 0; i+len(substr) <= len(s); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
+}
+
+func TestHandleSetServer_ConcurrentCalls_Serialized(t *testing.T) {
+	log := &callLog{}
+	fakeSetServerSeams(t, "https://old:9443",
+		func(serverURL string) error {
+			log.add("persist-start:" + serverURL)
+			time.Sleep(20 * time.Millisecond) // widen the window a race would need to land in
+			log.add("persist-end:" + serverURL)
+			return nil
+		},
+		func(a *Agent, cfg Config) error { return nil },
+		func(a *Agent, host string) bool { return true },
+	)
 
 	a := newTestAgentForMutate(t)
 	var wg sync.WaitGroup

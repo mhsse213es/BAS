@@ -51,11 +51,35 @@ func TestSettingsController_Save_WarnsBeforeCommitting(t *testing.T) {
 		t.Fatal("SetServer must not be called by RequestSave alone")
 	}
 
-	ok, _ := c.ConfirmSave()
+	ok, _ := c.ConfirmSave("https://10.0.0.5:9443")
 	if !ok {
 		t.Fatal("expected ConfirmSave to succeed with the fake's setOK=true")
 	}
 	if !fake.setServerCalled {
 		t.Fatal("expected ConfirmSave to call SetServer")
+	}
+}
+
+// TestSettingsController_ConfirmSave_HostChangedSinceRequest_DoesNotCommitStaleValue
+// pins Important finding #5/#10 from the review: if the user edits the
+// host field after clicking Save (which only warns, per RequestSave) but
+// before clicking it again to confirm, ConfirmSave must never commit the
+// host that was displayed at RequestSave time -- it must re-check against
+// what the caller says is on screen right now.
+func TestSettingsController_ConfirmSave_HostChangedSinceRequest_DoesNotCommitStaleValue(t *testing.T) {
+	fake := &fakeSettingsMutateClient{setOK: true, setDetail: "Saved and reconnected"}
+	c := NewSettingsController(fake)
+
+	c.RequestSave("https://10.0.0.5:9443")
+
+	ok, detail := c.ConfirmSave("https://10.0.0.6:9443") // user edited the field after RequestSave
+	if ok {
+		t.Fatal("expected ConfirmSave to refuse committing when the field changed since RequestSave")
+	}
+	if fake.setServerCalled {
+		t.Fatal("SetServer must not be called when the displayed host no longer matches what was confirmed")
+	}
+	if detail == "" {
+		t.Fatal("expected a non-empty detail explaining why nothing was saved")
 	}
 }

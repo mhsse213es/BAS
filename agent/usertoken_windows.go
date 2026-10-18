@@ -241,7 +241,45 @@ func buildUserEnv(tok windows.Token, step ScenarioStep) ([]string, error) {
 // is a harmless no-op — the tray's own session-local singleton mutex
 // (trayAlreadyRunning in tray_windows.go) makes the second instance exit
 // immediately without disturbing the first icon.
+// trayProcessAlive reports whether pid still names a running process -- a
+// package-level var (same injection pattern as imagePathForPID in
+// localmutate_windows.go) so shouldSkipTrayLaunch's logic is testable
+// without a real process.
+var trayProcessAlive = func(pid int32) bool {
+	if pid <= 0 {
+		return false
+	}
+	h, err := windows.OpenProcess(windows.PROCESS_QUERY_LIMITED_INFORMATION, false, uint32(pid))
+	if err != nil {
+		return false
+	}
+	defer windows.CloseHandle(h)
+	var code uint32
+	if err := windows.GetExitCodeProcess(h, &code); err != nil {
+		return false
+	}
+	const stillActive = 259 // STILL_ACTIVE, per the Win32 GetExitCodeProcess contract
+	return code == stillActive
+}
+
+// shouldSkipTrayLaunch reports whether launchTrayForActiveSession should
+// skip spawning a new tray process because the one already recorded in
+// trayPID is still running. Without this guard, every redundant launch
+// (service startup, every subsequent session logon/connect event) stored
+// the NEW process's PID into trayPID even though that new process was
+// itself about to self-exit via its own singleton check
+// (trayAlreadyRunning, tray_windows.go) -- racing the still-running real
+// tray's PID out of trayPID and breaking the named pipe's parent-PID
+// check (Important finding #7) for every Settings/Troubleshoot window
+// that real tray spawns afterward.
+func shouldSkipTrayLaunch() bool {
+	return trayProcessAlive(trayPID.Load())
+}
+
 func launchTrayForActiveSession() {
+	if shouldSkipTrayLaunch() {
+		return
+	}
 	tok, ok := activeUserToken()
 	if !ok {
 		return

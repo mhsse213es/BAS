@@ -37,10 +37,11 @@ type Agent struct {
 	mu        sync.Mutex
 	clientPtr atomic.Pointer[http.Client]
 	// lastConnErrPtr records the most recent classified connection-attempt
-	// failure (read by the local status API and the Troubleshoot window),
+	// outcome (read by the local status API and the Troubleshoot window),
 	// same atomic-pointer rationale as cfgPtr: written from the background
-	// bootstrap-retry goroutine, read from the local API's HTTP handler
-	// goroutine, no torn read.
+	// bootstrap-retry/WS-reconnect goroutines, read from the local API's
+	// HTTP handler goroutine, no torn read. recordConnError/clearConnError
+	// below are the only two things that touch it.
 	lastConnErrPtr atomic.Pointer[LastConnError]
 	// setServerMu guards handleSetServer's whole read-previous -> persist ->
 	// restart -> verify-or-rollback sequence so two overlapping Settings
@@ -199,18 +200,54 @@ func (a *Agent) httpClient() *http.Client { return a.clientPtr.Load() }
 // bootstrap compatibility mechanism, never something an already-enrolled
 // identity returns to.
 func (a *Agent) upgradeToMTLS(newCfg Config) {
+	a.swapLiveConfig(newCfg)
+	log.Printf("[+] certificate obtained -- switched permanently to mTLS (%s); legacy transport disabled for this process", newCfg.ServerURL)
+	a.logger.Op("info", "connectivity", fmt.Sprintf("upgraded to mTLS transport: %s", newCfg.ServerURL))
+}
+
+// swapLiveConfig replaces this already-running process's live config and
+// HTTP client, then force-closes any active WS connection so connectWS's
+// reconnect loop rebuilds its dialer from the just-swapped cfg() and
+// reconnects immediately -- the mechanics upgradeToMTLS uses for a
+// bootstrap-driven transport upgrade, and setServerApply
+// (configmutate_windows.go) reuses verbatim for a user-driven Settings
+// Save: both are "change cfg, rebuild client, force reconnect" with zero
+// Windows-service restart, just for different reasons, so this one
+// mechanic carries no reason-specific logging of its own -- each caller
+// logs in its own words.
+func (a *Agent) swapLiveConfig(newCfg Config) {
 	transport := &http.Transport{DialContext: proxyAwareNetDialContext(newCfg), Proxy: nil}
 	transport.TLSClientConfig = agentTLSConfig(newCfg)
 	a.cfgPtr.Store(&newCfg)
 	a.clientPtr.Store(&http.Client{Timeout: 30 * time.Second, Transport: transport})
-	log.Printf("[+] certificate obtained -- switched permanently to mTLS (%s); legacy transport disabled for this process", newCfg.ServerURL)
-	a.logger.Op("info", "connectivity", fmt.Sprintf("upgraded to mTLS transport: %s", newCfg.ServerURL))
 
 	a.wsConnMu.Lock()
 	if a.wsConn != nil {
 		a.wsConn.Close()
 	}
 	a.wsConnMu.Unlock()
+}
+
+// recordConnError classifies err and stores it as the most recent
+// connection-attempt outcome, readable via getLastConnError for
+// Troubleshoot checks 5/6. Called from every real connection-attempt
+// failure path: retryBootstrapUntilEnrolled's legacy-retry loop (a
+// never-enrolled agent) and connectWS's dial loop (an already-enrolled
+// agent that lost connectivity -- the common real-world case; previously
+// only the legacy-retry path ever recorded anything here, leaving
+// Troubleshoot's cause/evidence checks blank for the scenario they exist
+// to diagnose).
+func (a *Agent) recordConnError(err error) {
+	classified := ClassifyConnError(err)
+	a.lastConnErrPtr.Store(&classified)
+}
+
+// clearConnError marks the connection as currently healthy. Called once a
+// connection attempt actually succeeds, so a failure recorded during a
+// prior outage doesn't linger in Troubleshoot after the agent has already
+// recovered.
+func (a *Agent) clearConnError() {
+	a.lastConnErrPtr.Store(&LastConnError{Category: ConnErrorNone, At: time.Now()})
 }
 
 // retryBootstrapUntilEnrolled runs only when the agent started on the
@@ -230,8 +267,7 @@ func (a *Agent) retryBootstrapUntilEnrolled(ctx context.Context) {
 			a.upgradeToMTLS(newCfg)
 			return
 		}
-		classified := ClassifyConnError(err)
-		a.lastConnErrPtr.Store(&classified)
+		a.recordConnError(err)
 		delay := bootstrapRetryBackoff(attempt)
 		log.Printf("[!] still on legacy transport, retrying enrollment in %s (attempt %d)", delay.Round(time.Second), attempt+1)
 		attempt++
@@ -305,7 +341,13 @@ func (a *Agent) enrollWithServer() {
 	}
 }
 
-func (a *Agent) sendHeartbeat(status string) {
+// buildHeartbeat constructs the real heartbeat payload for status --
+// extracted from sendHeartbeat so authCheck (configmutate_windows.go) can
+// send a genuine, full heartbeat to a candidate/configured host during
+// Settings Test and Troubleshoot's connection check, instead of a bogus
+// partial payload that would corrupt the server's record of this agent
+// (blank hostname/IP/username, status="test", binary_trusted=false).
+func (a *Agent) buildHeartbeat(status string) protocol.Heartbeat {
 	a.mu.Lock()
 	products := a.secProducts
 	jobID := a.currentJobID
@@ -345,6 +387,11 @@ func (a *Agent) sendHeartbeat(status string) {
 			ProgressPercent:  jobPercent,
 		}
 	}
+	return hb
+}
+
+func (a *Agent) sendHeartbeat(status string) {
+	hb := a.buildHeartbeat(status)
 	t0 := time.Now()
 	resp, err := protocol.SendHeartbeat(context.Background(), a.httpClient(), a.cfg().ServerURL, a.cfg().AgentSecret, hb)
 	if err != nil {
@@ -1402,6 +1449,7 @@ func (a *Agent) connectWS() {
 
 		conn, err := protocol.DialAgentWSWithDialer(cfg.ServerURL, a.id.AgentID, cfg.AgentSecret, dialer)
 		if err != nil {
+			a.recordConnError(err)
 			delay := wsReconnectBackoff(attempt)
 			if errors.Is(err, ErrProxyCredentialsRejected) {
 				delay = wsProxyAuthReconnectBackoff(attempt)
@@ -1413,6 +1461,7 @@ func (a *Agent) connectWS() {
 			continue
 		}
 		log.Printf("[+] WS connected: %s (after %d attempt(s))", cfg.ServerURL, attempt+1)
+		a.clearConnError()
 		a.logger.Op("info", "connectivity", fmt.Sprintf("WebSocket connected to %s (after %d attempt(s))", cfg.ServerURL, attempt+1))
 		a.logger.Metric("ws_reconnect_attempts", float64(attempt), "count")
 		// Flush events buffered while the connection was down.

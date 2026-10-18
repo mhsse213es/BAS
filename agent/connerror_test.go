@@ -69,3 +69,24 @@ func TestAgent_RecordsLastConnErrorOnFailedAttempt(t *testing.T) {
 	}
 	t.Fatal("lastConnErrPtr was never set within the deadline")
 }
+
+// TestAgent_RecordAndClearConnError pins the two helpers connectWS now
+// calls directly (unlike retryBootstrapUntilEnrolled's rare legacy-retry
+// path, connectWS is the path an already-enrolled agent that merely lost
+// connectivity actually exercises -- the common real-world case the
+// review found never updated lastConnErrPtr at all).
+func TestAgent_RecordAndClearConnError(t *testing.T) {
+	a := newAgent(Config{ServerURL: "https://orchestrator.local:9443", AgentSecret: "secret"}, Identity{AgentID: "abc123deadbeef01"})
+
+	a.recordConnError(errors.New("connection refused"))
+	lce := a.lastConnErrPtr.Load()
+	if lce == nil || lce.Category == ConnErrorNone || lce.Category == "" {
+		t.Fatalf("after recordConnError: lastConnErrPtr = %+v, want a real failure category", lce)
+	}
+
+	a.clearConnError()
+	lce = a.lastConnErrPtr.Load()
+	if lce == nil || lce.Category != ConnErrorNone {
+		t.Fatalf("after clearConnError: lastConnErrPtr = %+v, want Category == ConnErrorNone", lce)
+	}
+}
