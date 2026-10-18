@@ -439,3 +439,43 @@ Next: Phase 5 (identity and session attacks) -- expect the same
 tenant-permission blocker the Azure Real Discovery Integration project
 already hit; code-ready-pending-tenant-access is the honest ceiling, not
 live-validated.
+
+## 11. Phase 5 status: DONE (PH-ID-002 built; PH-ID-003/004/005 pattern proven, endpoints deferred)
+
+Built a new standalone adapter package, `internal/phishidentity` --
+deliberately not an extension of `internal/cloudgraph`'s
+`AzureDiscoveryClient` (that belongs to the separately-held Cloud BAS
+initiative; zero functional overlap). Mirrors `vendors/defender.Client`'s
+exact idiom: `EntraTokenSource` + an exported, test-overridable `BaseURL`
++ `TokenURL()`.
+
+- **PH-ID-002 (OAuth consent abuse)**: `Client.ListOAuthConsentGrants`
+  makes a real GET against Graph's `oauth2PermissionGrants`, proven via
+  an httptest-backed test confirming the real OAuth token exchange
+  actually flows into the `Authorization` header (not just that the code
+  compiles). `OAuthConsentGrant.IsTenantWideAndRisky()` flags a grant
+  that is both `AllPrincipals` (tenant-wide) and carries a scope from a
+  conservative, reviewable risky-scope list (Mail.Read, Files.ReadWrite.All,
+  Directory.ReadWrite.All, etc.) -- phishing.txt's own objective:
+  "Validate consent restrictions and risky application detection."
+  `phishbridge.FromOAuthConsentGrants` bridges it into phishval's
+  Enforcement dimension; proven known-good (no risky grant → Pass) and
+  known-bad (risky tenant-wide grant → Fail) end to end.
+  CoverageAdapterTested, same real-code-path discipline as Phase 3 --
+  never claimed live-validated, since per the Azure Real Discovery
+  Integration project's own precedent a real tenant call would likely
+  hit the same tenant-permission blocker (no subscription, no
+  admin-consented app role), not a code blocker.
+- **PH-ID-003/004/005** (device-code phishing, MFA fatigue, session-theft
+  defense): stay `CoverageCatalogOnly`, honestly. The adapter PATTERN is
+  now proven and reusable (same `EntraTokenSource`/`BaseURL` shape); what
+  each still needs is its own Graph endpoint
+  (`/identity/conditionalAccess/policies`, authentication-methods/sign-in
+  logs, sign-in-risk or Continuous Access Evaluation respectively) --
+  deliberately not rushed to preserve "no premature breadth": one
+  well-proven adapter beats three thin, unverified ones.
+
+Zero changes to `emailgwefficacy`/`emailgwcampaign`/`exercise`/`cloudgraph`/
+`vendors` again.
+
+Next: Phase 6 (SOC, incident response, and containment proof).

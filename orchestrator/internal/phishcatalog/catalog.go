@@ -309,6 +309,52 @@ func phEVA002() Scenario {
 		Coverage:         CoverageCatalogOnly}
 }
 
+// phID002 wraps the Phase 5 phishidentity.Client's real Microsoft Graph
+// oauth2PermissionGrants listing -- an httptest-proven real OAuth+HTTP+
+// JSON code path (phishidentity/client_test.go), the same adapter-tested
+// discipline as the Phase 3 email scenarios. CoverageAdapterTested, not
+// CoverageLiveValidated: no real tenant has run this, and per the Azure
+// Real Discovery Integration project's own precedent, a real call would
+// likely hit the same tenant-permission blocker (no subscription, no
+// admin-consented app role) rather than a code blocker.
+func phID002() Scenario {
+	return Scenario{
+		ID: "PH-ID-002", Version: 1, Area: AreaURLCredentialIdentity, Name: "OAuth consent abuse",
+		PrimaryObjective:     "Validate consent restrictions and risky application detection",
+		Expectation:          phishval.Expectation{ScenarioID: "PH-ID-002", Enforcement: ptrEnforcement(phishval.EnforcementBlocked)},
+		Standards:            StandardsMapping{ATTACKTechniques: []string{"T1528"}}, // Steal Application Access Token
+		MappedImplementation: "phishidentity.Client.ListOAuthConsentGrants",
+		Coverage:             CoverageAdapterTested,
+	}
+}
+
+// phID003/004/005: genuine, unbuilt gaps -- no Graph call against
+// conditional-access, authentication-methods, or sign-in-log endpoints
+// exists yet. phishidentity.Client (Phase 5) now proves the exact
+// adapter pattern (EntraTokenSource + httptest-overridable BaseURL +
+// real OAuth/HTTP/JSON) each of these would reuse -- the remaining work
+// is a new Graph endpoint per scenario, not a new pattern.
+func phID003() Scenario {
+	return Scenario{ID: "PH-ID-003", Version: 1, Area: AreaURLCredentialIdentity, Name: "Device-code phishing defense",
+		PrimaryObjective: "Validate identity-side protections and relevant alerts",
+		Limitations:      "genuine gap: no Graph call against /identity/conditionalAccess/policies or sign-in logs for device-code grant-type usage exists yet; phishidentity.Client proves the reusable adapter pattern",
+		Coverage:         CoverageCatalogOnly}
+}
+
+func phID004() Scenario {
+	return Scenario{ID: "PH-ID-004", Version: 1, Area: AreaURLCredentialIdentity, Name: "MFA fatigue defense",
+		PrimaryObjective: "Test relevant identity detections and conditional access",
+		Limitations:      "genuine gap: no Graph call against /identity/conditionalAccess/policies or authentication-methods/sign-in-log endpoints exists yet; phishidentity.Client proves the reusable adapter pattern",
+		Coverage:         CoverageCatalogOnly}
+}
+
+func phID005() Scenario {
+	return Scenario{ID: "PH-ID-005", Version: 1, Area: AreaURLCredentialIdentity, Name: "Session-theft defense",
+		PrimaryObjective: "Validate token/session protections using controlled test signals",
+		Limitations:      "genuine gap: no Graph call against sign-in-risk or Continuous Access Evaluation endpoints exists yet; phishidentity.Client proves the reusable adapter pattern",
+		Coverage:         CoverageCatalogOnly}
+}
+
 // phID001 is a genuine gap AT THIS BRIDGE LAYER only: exercise/tracker's
 // HandleCredSubmit/HandleReport genuinely capture this evidence today
 // (real, DB-backed), but as write-only DB events via the Recorder
@@ -388,7 +434,7 @@ func AudspectPhishingCatalog() ([]Scenario, error) {
 		phAUTH001(), phAUTH002(), phAUTH003(), phAUTH004(), phAUTH005(),
 		phAUTH006(), phAUTH007(), phAUTH008(), phAUTH009(), phAUTH010(),
 		phBEC001(), phBEC004(), phBEC005(), phBEC006(), phBEC008(),
-		phURL001(), phURL005(), phID001(),
+		phURL001(), phURL005(), phID001(), phID002(), phID003(), phID004(), phID005(),
 		phEVA001(), phEVA002(), phEVA005(),
 		phATT001(), phATT002(), phATT003(), phATT010(),
 	}
