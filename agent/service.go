@@ -132,6 +132,7 @@ func (s *agentSvc) Execute(_ []string, r <-chan svc.ChangeRequest, status chan<-
 	// restarted, e.g. via svcUpdate) — SessionChange notifications only fire for
 	// transitions that happen after we start accepting them, not retroactively.
 	launchTrayForActiveSession()
+	startMutateAPIOnce(agent)
 
 	for {
 		select {
@@ -158,6 +159,7 @@ func (s *agentSvc) Execute(_ []string, r <-chan svc.ChangeRequest, status chan<-
 				// (covers fast user switching / RDP reconnect to console).
 				if c.EventType == windows.WTS_SESSION_LOGON || c.EventType == windows.WTS_CONSOLE_CONNECT {
 					launchTrayForActiveSession()
+					startMutateAPIOnce(agent)
 				}
 			case svc.Interrogate:
 				status <- c.CurrentStatus

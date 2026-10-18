@@ -19,3 +19,7 @@ func (s *LocalAgentState) RecordActivity(_ string)                              
 
 // startLocalAPI is a no-op on non-Windows platforms.
 func (a *Agent) startLocalAPI() {}
+
+// startMutateAPI is a no-op on non-Windows platforms -- the Settings/
+// Troubleshoot tray feature is Windows-only this phase.
+func (a *Agent) startMutateAPI() error { return nil }

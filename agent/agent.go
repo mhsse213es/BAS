@@ -42,6 +42,11 @@ type Agent struct {
 	// bootstrap-retry goroutine, read from the local API's HTTP handler
 	// goroutine, no torn read.
 	lastConnErrPtr atomic.Pointer[LastConnError]
+	// setServerMu guards handleSetServer's whole read-previous -> persist ->
+	// restart -> verify-or-rollback sequence so two overlapping Settings
+	// Save calls can never interleave (one call's rollback racing another's
+	// in-flight persist).
+	setServerMu sync.Mutex
 	// wsConn/wsConnMu track the currently active WebSocket connection so
 	// upgradeToMTLS can force it closed from another goroutine: closing it
 	// unblocks connectWS's in-flight ReadMessage, which sends it back to the
