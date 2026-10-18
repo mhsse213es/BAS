@@ -322,3 +322,32 @@ Shipped:
 
 Next: Phase 2 (email ingress and BEC integration) -- populate the rest of
 areas A/B/C's catalog rows per §2's matrix.
+
+## 8. Phase 2 status: DONE
+
+Phase 2 added 26 more catalog entries (27 total with PH-BEC-002):
+
+- **7 CoverageFixtureTested** wraps, each proven end to end (known-good
+  Pass + known-bad Fail) through the SAME Phase 1 bridge with zero new
+  bridge code: PH-AUTH-002 (SPF), PH-AUTH-003 (DKIM), PH-AUTH-004 (DMARC),
+  PH-BEC-001 (executive impersonation), PH-URL-001 (known malicious URL),
+  PH-URL-005 (time-of-click/URL-rewrite), PH-ATT-001 (generic malicious
+  attachment -- EICAR, not literally HTML-specific, noted honestly).
+  `internal/phishbridge/area_ab_test.go`'s table-driven test confirms
+  `FromEmailGWEfficacyResult` generalizes across every
+  `MailExpectation`-shaped scenario, not just PH-BEC-002.
+- **5 explicit overlap decisions** (CoverageCatalogOnly, cross-referencing
+  the ID that owns the real evidence, never duplicated):
+  PH-AUTH-001→PH-AUTH-004, PH-AUTH-005→PH-BEC-001, PH-BEC-003/007→PH-BEC-002
+  (deferred to Phase 4's variant engine), PH-EVA-001→PH-AUTH-008,
+  PH-EVA-002→PH-AUTH-007, PH-EVA-005→PH-URL-005.
+- **14 genuine, unbuilt gaps**, each named plainly rather than
+  force-mapped: PH-AUTH-006/007/008/009/010, PH-BEC-004/005/006/008,
+  PH-ATT-002/003, PH-ID-001 (real DB-backed capture exists in
+  `exercise/tracker`, but no typed read-side accessor exists yet for an
+  I/O-free bridge to consume -- a named plumbing gap, not a missing
+  capability).
+
+Zero changes to `emailgwefficacy`/`emailgwcampaign`/`exercise` again.
+
+Next: Phase 3 (provider-specific validation).
