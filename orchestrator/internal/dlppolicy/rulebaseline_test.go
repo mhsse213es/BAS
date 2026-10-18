@@ -1,6 +1,7 @@
 package dlppolicy
 
 import (
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -90,6 +91,23 @@ func TestVerifyDLPPolicyRuleExpectation_NoEvidence_ReturnsInconclusive(t *testin
 	}
 }
 
+type erroringRuleProvider struct{ err error }
+
+func (p erroringRuleProvider) DLPPolicyRuleEvidenceFor(ruleID string, scope ScopeID, window TimeWindow) ([]DLPPolicyRuleEvidence, error) {
+	return nil, p.err
+}
+
+func TestVerifyDLPPolicyRuleExpectation_ProviderError_ReturnsInconclusive(t *testing.T) {
+	provider := erroringRuleProvider{err: errors.New("evidence backend unavailable")}
+	got := VerifyDLPPolicyRuleExpectation(baselineExpectation(), provider, verifyTestWindow, verifyTestBase)
+	if got.Verdict != VerdictInconclusive {
+		t.Fatalf("Verdict = %q, want %q", got.Verdict, VerdictInconclusive)
+	}
+	if !strings.Contains(got.Reason, "evidence backend unavailable") {
+		t.Errorf("Reason = %q, want it to include the provider's own error", got.Reason)
+	}
+}
+
 func TestVerifyDLPPolicyRuleExpectation_Disabled_ReturnsConfirmedFailure(t *testing.T) {
 	ev := baselineEvidence()
 	ev.Enabled = false
@@ -99,6 +117,28 @@ func TestVerifyDLPPolicyRuleExpectation_Disabled_ReturnsConfirmedFailure(t *test
 	}
 	if !strings.Contains(got.Reason, "disabled") {
 		t.Errorf("Reason = %q, want it to mention \"disabled\"", got.Reason)
+	}
+}
+
+func TestVerifyDLPPolicyRuleExpectation_UnexpectedlyReenabled_ReturnsConfirmedFailure(t *testing.T) {
+	exp := baselineExpectation()
+	exp.ExpectedEnabled = false // this rule is supposed to stay disabled/retired
+	ev := baselineEvidence()
+	ev.Enabled = true // but it came back online
+	got := verify(exp, ev)
+	if got.Verdict != VerdictConfirmedFailure {
+		t.Fatalf("Verdict = %q, want %q -- a rule expected disabled but observed enabled must fail, not silently pass", got.Verdict, VerdictConfirmedFailure)
+	}
+}
+
+func TestVerifyDLPPolicyRuleExpectation_UnexpectedlyRepublished_ReturnsConfirmedFailure(t *testing.T) {
+	exp := baselineExpectation()
+	exp.ExpectedPublished = false // this rule is supposed to stay unpublished/withdrawn
+	ev := baselineEvidence()
+	ev.Published = true // but it is live again
+	got := verify(exp, ev)
+	if got.Verdict != VerdictConfirmedFailure {
+		t.Fatalf("Verdict = %q, want %q -- a rule expected unpublished but observed published must fail, not silently pass", got.Verdict, VerdictConfirmedFailure)
 	}
 }
 
@@ -133,6 +173,15 @@ func TestVerifyDLPPolicyRuleExpectation_RuleExpiresAtNil_SkipsExpiryCheck(t *tes
 	got := verify(exp, baselineEvidence())
 	if got.Verdict != VerdictConfirmedSuccess {
 		t.Fatalf("Verdict = %q, want %q -- nil RuleExpiresAt must skip the expiry branch entirely", got.Verdict, VerdictConfirmedSuccess)
+	}
+}
+
+func TestVerifyDLPPolicyRuleExpectation_ExceptionExpiresAtNil_SkipsExpiryCheck(t *testing.T) {
+	// exp.ExceptionExpiresAt left nil by baselineExpectation(); naming
+	// parity with TestVerifyDLPPolicyRuleExpectation_RuleExpiresAtNil_SkipsExpiryCheck.
+	got := verify(baselineExpectation(), baselineEvidence())
+	if got.Verdict != VerdictConfirmedSuccess {
+		t.Fatalf("Verdict = %q, want %q -- nil ExceptionExpiresAt (no exception active) must skip the expiry branch entirely", got.Verdict, VerdictConfirmedSuccess)
 	}
 }
 

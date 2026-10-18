@@ -11,34 +11,34 @@ import (
 // single rule's configuration state in a single declared scope,
 // never about a real exfiltration attempt's fate.
 type DLPPolicyRuleExpectation struct {
-	RuleID              string
-	ScopeID             ScopeID
-	Scope               DLPPolicyScopeDeclaration
-	ExpectedMode        DLPPolicyMode
-	ExpectedEnabled     bool
-	ExpectedPublished   bool
-	RuleExpiresAt       *time.Time
-	ExceptionExpiresAt  *time.Time
-	MaxPropagationDelay time.Duration
-	ControlProduct      string
-	Note                string
+	RuleID              string                    `json:"ruleId"`
+	ScopeID             ScopeID                   `json:"scopeId"`
+	Scope               DLPPolicyScopeDeclaration `json:"scope"`
+	ExpectedMode        DLPPolicyMode             `json:"expectedMode"`
+	ExpectedEnabled     bool                      `json:"expectedEnabled"`
+	ExpectedPublished   bool                      `json:"expectedPublished"`
+	RuleExpiresAt       *time.Time                `json:"ruleExpiresAt,omitempty"`
+	ExceptionExpiresAt  *time.Time                `json:"exceptionExpiresAt,omitempty"`
+	MaxPropagationDelay time.Duration             `json:"maxPropagationDelay,omitempty"`
+	ControlProduct      string                    `json:"controlProduct"`
+	Note                string                    `json:"note,omitempty"`
 }
 
 // DLPPolicyRuleEvidence is one normalized record of a rule's
 // actually-observed configuration state in one scope.
 type DLPPolicyRuleEvidence struct {
-	RuleID          string
-	ScopeID         ScopeID
-	ObservedScope   DLPPolicyScopeDeclaration
-	ObservedMode    DLPPolicyMode
-	Enabled         bool
-	Published       bool
-	ExceptionActive bool
-	ConfigChangedAt time.Time
-	LastSyncedAt    time.Time
-	Timestamp       time.Time
-	Source          EvidenceSource
-	Provenance      Provenance
+	RuleID          string                    `json:"ruleId"`
+	ScopeID         ScopeID                   `json:"scopeId"`
+	ObservedScope   DLPPolicyScopeDeclaration `json:"observedScope"`
+	ObservedMode    DLPPolicyMode             `json:"observedMode"`
+	Enabled         bool                      `json:"enabled"`
+	Published       bool                      `json:"published"`
+	ExceptionActive bool                      `json:"exceptionActive"`
+	ConfigChangedAt time.Time                 `json:"configChangedAt"`
+	LastSyncedAt    time.Time                 `json:"lastSyncedAt"`
+	Timestamp       time.Time                 `json:"timestamp"`
+	Source          EvidenceSource            `json:"source"`
+	Provenance      Provenance                `json:"provenance"`
 }
 
 // DLPPolicyRuleEvidenceProvider supplies policy-configuration
@@ -89,11 +89,17 @@ func VerifyDLPPolicyRuleExpectation(exp DLPPolicyRuleExpectation, provider DLPPo
 	}
 	latest := latestRuleEvidenceByTimestamp(records)
 
-	if exp.ExpectedEnabled && !latest.Enabled {
-		return VerdictDetail{Verdict: VerdictConfirmedFailure, Reason: "rule is disabled"}
+	if latest.Enabled != exp.ExpectedEnabled {
+		if exp.ExpectedEnabled {
+			return VerdictDetail{Verdict: VerdictConfirmedFailure, Reason: "rule is disabled"}
+		}
+		return VerdictDetail{Verdict: VerdictConfirmedFailure, Reason: "rule is unexpectedly enabled; expected it to stay disabled"}
 	}
-	if exp.ExpectedPublished && !latest.Published {
-		return VerdictDetail{Verdict: VerdictConfirmedFailure, Reason: "rule not published/deployed to this scope"}
+	if latest.Published != exp.ExpectedPublished {
+		if exp.ExpectedPublished {
+			return VerdictDetail{Verdict: VerdictConfirmedFailure, Reason: "rule not published/deployed to this scope"}
+		}
+		return VerdictDetail{Verdict: VerdictConfirmedFailure, Reason: "rule is unexpectedly published; expected it to stay unpublished"}
 	}
 	if exp.RuleExpiresAt != nil && asOf.After(*exp.RuleExpiresAt) {
 		return VerdictDetail{Verdict: VerdictConfirmedFailure, Reason: "rule expired but still active"}
