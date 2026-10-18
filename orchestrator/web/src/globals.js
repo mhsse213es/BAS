@@ -10,6 +10,7 @@ import { closeChangePassword, closeChangePasswordOnBackdrop, closeConfirmDiffMod
 import { loadCoverageAnalytics, openTechnique, renderUTL, setCovView, setUTLFilter } from './features/coverage.js';
 import { loadADCoverage, setADFilter, exportADReportPDF, exportADReportJSON } from './features/ad-coverage.js';
 import { vfCloseDetail, vfDeleteEvidence, vfLoadQueue, vfPickResult, vfSelect, vfSetDomain, vfSubmit, vfToggleHistory, vfUploadEvidence } from './features/detection-verification.js';
+import { egCancelCampaignClick, egLaunchCampaign, egRunExpectation, egToggleCampaign, egToggleRunDetail, loadEmailTab, setEmailCampaignsTab, setEmailRunsTab } from './features/email.js';
 import { _toggleEMExtraScenario, _toggleEMPreviewRow, _toggleVexPreviewRow, _toggleVexPreviewSection, cancelEMSweep, closeEMSweepModal, closeEMSweepModalOnBackdrop, closeEMSweepProgress, closeEMSweepProgressOnBackdrop, closeSweepPreview, closeSweepPreviewOnBackdrop, emGroupSelChange, emRunLayer, emSweepDispatch, loadEmTab, openEMSweepModal, openEMSweepProgress, openEMSweepReport, setEMExtraSearchFromInput, setEMSweepTargetMode, setVexPreviewSearchFromInput, setVexPreviewTacticFromSelect, startSweepFromPreview, stopEMSweep, stopEMSweepCurrent } from './features/endpoint-mastery.js';
 import { closeCreateUser, closeCreateUserOnBackdrop, closeDownloadOptions, closeEditUser, closeEditUserOnBackdrop, closeEvidence, closeEvidenceOnBackdrop, confirmRun, copyRaw, doResetPassword, downloadCampaignCSV, downloadCampaignReport, downloadEMSweepReport, downloadRunCSV, downloadRunReport, downloadSweepReport, exportRunJSON, openCampaignReport, openCmdk, openCreateUser, openEditUser, openEvidence, openFindingFromDashboard, openRunReport, pauseRun, resumeRun, stopRun, submitCreateUser, submitEditUser, toggleUserActive } from './features/evidence.js';
 import { bulkPushSelectedFindings, loadFindings, loadSLAReport, openFinding, openRemediation, pushFindingToITSM, quickTriageFinding, remBulkTicket, remSingleTicket, revalidateRemediation, setFindingStatus, setFindingTab, toggleAllFindingChecksFromChecked, toggleFindingCheck } from './features/findings.js';
@@ -154,6 +155,14 @@ export const ACTIONS = {
   downloadRunCSV,
   downloadRunReport,
   downloadSweepReport,
+  egCancelCampaignClick,
+  egLaunchCampaign,
+  egRunExpectation,
+  egToggleCampaign,
+  egToggleRunDetail,
+  loadEmailTab,
+  setEmailCampaignsTab,
+  setEmailRunsTab,
   emGroupSelChange,
   emRunLayer,
   emSweepDispatch,

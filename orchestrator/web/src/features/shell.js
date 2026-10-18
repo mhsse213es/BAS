@@ -13,6 +13,7 @@ import { loadCoverage, loadCoverageAnalytics, loadUnifiedTechniques, loadThreatE
 import { loadVerificationTab } from './detection-verification.js';
 import { loadEmTab } from './endpoint-mastery.js';
 import { loadADCoverage } from './ad-coverage.js';
+import { loadEmailTab } from './email.js';
 import { connectWS, loadDashboard, openCmdk } from './evidence.js';
 import { loadFindings, loadRemediations, loadSLAReport } from './findings.js';
 import { loadInitiatives } from './initiatives.js';
@@ -47,7 +48,7 @@ export function toggleSidebarCollapsed() {
   try { localStorage.setItem('bas_sidebar_collapsed', collapsed ? '1' : '0'); } catch (e) {}
   document.getElementById('sidebar-collapse-btn').title = collapsed ? 'Expand sidebar' : 'Collapse sidebar';
 }
-var TAB_TITLES = { dashboard:'Dashboard', agents:'Agents', scenarios:'Scenarios', runs:'Live Runs', 'scheduled-assessments':'Scheduled Assessments', initiatives:'Initiatives', campaigns:'Campaigns', coverage:'ATT&CK Coverage', findings:'Findings', remediation:'Remediation', reports:'Reports', verification:'Detection Verification', users:'Users', compliance:'Compliance', settings:'Settings', variants:'Variant Executor', em:'Endpoint Mastery', 'ad-coverage':'AD Coverage', exposure:'Exposure Explorer', recommendations:'Recommendations', exercises:'Exercises', 'attack-coverage':'Technique Coverage', 'threat-priority':'Threat Prioritization', iocs:'IOC Registry', profile:'My Profile', 'sla-report':'SLA Compliance' };
+var TAB_TITLES = { dashboard:'Dashboard', agents:'Agents', scenarios:'Scenarios', runs:'Live Runs', 'scheduled-assessments':'Scheduled Assessments', initiatives:'Initiatives', campaigns:'Campaigns', coverage:'ATT&CK Coverage', findings:'Findings', remediation:'Remediation', reports:'Reports', verification:'Detection Verification', users:'Users', compliance:'Compliance', settings:'Settings', variants:'Variant Executor', em:'Endpoint Mastery', 'ad-coverage':'AD Coverage', email:'Email', exposure:'Exposure Explorer', recommendations:'Recommendations', exercises:'Exercises', 'attack-coverage':'Technique Coverage', 'threat-priority':'Threat Prioritization', iocs:'IOC Registry', profile:'My Profile', 'sla-report':'SLA Compliance' };
 export var STRIPE_COLORS = ['#2f81f7','#da3633','#d29922','#e0609e','#8957e5','#2fd8c3'];
 
 var TOKEN    = ''; // kept in memory only — never persisted to localStorage
@@ -420,7 +421,7 @@ export function doLogoutFromMenu() { closeUserMenu(); doLogout(); }
 // data loaders — so callers like openCampaignDetail can switch to a tab and then
 // render their own sub-view without the tab's loader resetting it.
 export function activateTab(name) {
-  ['dashboard','agents','scenarios','runs','scheduled-assessments','initiatives','campaigns','factory-health','coverage','findings','remediation','reports','verification','compliance','settings','variants','em','ad-coverage','attackpath','exposure','recommendations','integrations','exercises','attack-coverage','threat-priority','iocs','profile','sla-report'].forEach(function(t) {
+  ['dashboard','agents','scenarios','runs','scheduled-assessments','initiatives','campaigns','factory-health','coverage','findings','remediation','reports','verification','compliance','settings','variants','em','ad-coverage','email','attackpath','exposure','recommendations','integrations','exercises','attack-coverage','threat-priority','iocs','profile','sla-report'].forEach(function(t) {
     var el = document.getElementById('tab-' + t);
     if (el) setDisplay(el, t === name ? '' : 'none');
     var nav = document.querySelector('[data-tab="' + t + '"]');
@@ -553,6 +554,7 @@ export function showTab(name) {
   if (name === 'variants') loadVariantTab();
   if (name === 'em') loadEmTab();
   if (name === 'ad-coverage') loadADCoverage();
+  if (name === 'email') loadEmailTab();
   if (name === 'scenarios') { state.scenarioView = 'landing'; closeScenarioOverlay(); if (state.scenarios.length) renderScenarios(); }
   if (name === 'dashboard') {
     setDashView(resolveDashView());
