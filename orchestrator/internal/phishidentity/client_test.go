@@ -60,6 +60,52 @@ func TestListOAuthConsentGrants_HTTPTestServer_RealOAuthAndHTTPPath(t *testing.T
 	}
 }
 
+func TestRevokeSignInSessions_HTTPTestServer_RealOAuthAndHTTPPath(t *testing.T) {
+	tokenSrv := tokenMock(t)
+	defer tokenSrv.Close()
+
+	var gotMethod, gotPath, gotAuthHeader string
+	graphSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod, gotPath, gotAuthHeader = r.Method, r.URL.Path, r.Header.Get("Authorization")
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer graphSrv.Close()
+
+	client := New(Config{TenantID: "t1", ClientID: "c1", ClientSecret: "s1"})
+	*client.TokenURL() = tokenSrv.URL
+	client.BaseURL = graphSrv.URL
+
+	if err := client.RevokeSignInSessions(t.Context(), "user-123"); err != nil {
+		t.Fatalf("RevokeSignInSessions() error = %v", err)
+	}
+	if gotMethod != http.MethodPost {
+		t.Errorf("method = %q, want %q", gotMethod, http.MethodPost)
+	}
+	if gotPath != "/users/user-123/revokeSignInSessions" {
+		t.Errorf("path = %q, want %q", gotPath, "/users/user-123/revokeSignInSessions")
+	}
+	if gotAuthHeader != "Bearer tok" {
+		t.Errorf("Authorization header = %q, want %q", gotAuthHeader, "Bearer tok")
+	}
+}
+
+func TestRevokeSignInSessions_NonSuccessStatus_ReturnsError(t *testing.T) {
+	tokenSrv := tokenMock(t)
+	defer tokenSrv.Close()
+	graphSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+	}))
+	defer graphSrv.Close()
+
+	client := New(Config{TenantID: "t1", ClientID: "c1", ClientSecret: "s1"})
+	*client.TokenURL() = tokenSrv.URL
+	client.BaseURL = graphSrv.URL
+
+	if err := client.RevokeSignInSessions(t.Context(), "user-123"); err == nil {
+		t.Error("RevokeSignInSessions() with a 403 response = nil error, want an error")
+	}
+}
+
 func TestOAuthConsentGrant_RiskyScopes_FiltersAgainstConservativeList(t *testing.T) {
 	g := OAuthConsentGrant{Scope: "User.Read Mail.ReadWrite openid profile"}
 	risky := g.RiskyScopes()

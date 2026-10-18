@@ -369,6 +369,111 @@ func phID001() Scenario {
 		Coverage:         CoverageCatalogOnly}
 }
 
+// --- Phase 6: SOC, incident response, and containment proof -------------
+
+// phDET001 wraps emailgwefficacy.CorrelateWithSIEM, strengthening or
+// weakening an already-computed EfficacyResult's DetectionVerdict using
+// independent SIEM telemetry -- never treating the email product's own
+// alert as sufficient proof it reached the SOC's detection surface.
+// CoverageFixtureTested: no real SIEM connector call happens in
+// emailgwefficacy's own siemcorrelation.go yet (FixtureSIEMProvider
+// only); internal/detectverify has 7 real vendor connectors but is not
+// yet bridged to this correlation function (Phase 0's own flagged
+// reconciliation, deferred).
+func phDET001() Scenario {
+	return Scenario{
+		ID: "PH-DET-001", Version: 1, Area: AreaEvasionDetectionIR, Name: "SIEM ingestion and correlation",
+		PrimaryObjective:     "Verify normalized alerts reach the SOC",
+		Limitations:          "emailgwefficacy.CorrelateWithSIEM is fixture-only (FixtureSIEMProvider); internal/detectverify's 7 real connectors are not yet bridged to it",
+		Expectation:          phishval.Expectation{ScenarioID: "PH-DET-001", Detection: ptrDetection(phishval.DetectionDetected)},
+		Standards:            StandardsMapping{ATTACKTechniques: []string{"T1566"}},
+		MappedImplementation: "emailgwefficacy.CorrelateWithSIEM",
+		Coverage:             CoverageFixtureTested,
+	}
+}
+
+// phDET002: the "phishing_reported" event is real (exercise/tracker's
+// handleReport, per PH-ID-001's own gap note) and ticketcorrelation.go's
+// CorrelateWithTicketing proves the exact SOC-side escalation PATTERN
+// PH-DET-002 needs -- but nothing today wires the report event INTO a
+// ticketing correlation call. Corrected from an earlier, less precise
+// "no SOC ingestion path" note: the pattern exists, the wiring does not.
+func phDET002() Scenario {
+	return Scenario{ID: "PH-DET-002", Version: 1, Area: AreaEvasionDetectionIR, Name: "User-reported phishing",
+		PrimaryObjective: "Validate report ingestion and triage",
+		Limitations:      "event capture is real (exercise/tracker's handleReport); SOC-side triage/ticket creation from that event is not wired, though emailgwefficacy.CorrelateWithTicketing (PH-IR-004) proves the exact pattern it would reuse",
+		Coverage:         CoverageCatalogOnly}
+}
+
+// phIR001 is an overlap decision: "retroactive mailbox search and purge"
+// is the identical mechanism PH-ATT-010 already proves
+// (PostDeliveryThreatResponseExpectation's ResponseEvidence with
+// ActionRequired="purge"), just catalogued under the incident-response
+// lens instead of the attachment lens. Deliberately NOT a new Defender
+// client method: Microsoft's real mailbox search-and-purge action lives
+// in the Security & Compliance eDiscovery/Content-Search API, a
+// materially different and more complex surface (compliance-search
+// creation, then a separate purge action) this phase does not have
+// verified access to confirm the exact request/response shape for --
+// fabricating an unverified endpoint would be worse than naming the
+// honest overlap.
+func phIR001() Scenario {
+	return Scenario{ID: "PH-IR-001", Version: 1, Area: AreaEvasionDetectionIR, Name: "Retroactive mailbox search and purge",
+		PrimaryObjective: "Verify remediation of delivered test messages",
+		Limitations:      "overlap decision: the same ResponseEvidence/ActionRequired=\"purge\" mechanism as PH-ATT-010 (PostDeliveryThreatResponseExpectation); the real Security & Compliance eDiscovery purge API is a separate, more complex surface not yet verified against",
+		Coverage:         CoverageCatalogOnly}
+}
+
+// phIR002 wraps the Phase 6 phishidentity.Client.RevokeSignInSessions
+// (a real, stable Graph v1.0 action, httptest-proven) plus
+// phishbridge.FromIdentityContainment's verified-postcondition
+// discipline, mirroring internal/rwevidence.ContainmentObserver's own
+// precedent exactly: dispatch acceptance and confirmed containment are
+// never conflated. CoverageAdapterTested for the dispatch call itself;
+// no real verification observer ships (same reason rwevidence's own
+// doesn't -- verifying a session is truly revoked needs a real tenant,
+// not a lab this phase has).
+func phIR002() Scenario {
+	return Scenario{
+		ID: "PH-IR-002", Version: 1, Area: AreaEvasionDetectionIR, Name: "Identity containment",
+		PrimaryObjective:     "Validate authorized account/session containment workflows",
+		Limitations:          "dispatch (RevokeSignInSessions) is real and adapter-tested; independent verification that revocation took effect has no real observer, same gap rwevidence's own endpoint-containment observer carries",
+		Expectation:          phishval.Expectation{ScenarioID: "PH-IR-002", Response: ptrResponse(phishval.ResponseContained)},
+		Standards:            StandardsMapping{ATTACKTechniques: []string{"T1098"}}, // Account Manipulation
+		MappedImplementation: "phishidentity.Client.RevokeSignInSessions",
+		Coverage:             CoverageAdapterTested,
+	}
+}
+
+// phIR003: the least-gapped IR scenario per Phase 0 research -- real,
+// live-call-capable EPP Response Actions connectors (CrowdStrike/
+// Defender/SentinelOne) plus internal/rwevidence's own verified-
+// postcondition containment layer already exist and are tested
+// elsewhere. Catalog-only here specifically because neither is yet
+// bridged into phishval's own Outcome model -- an integration task, not
+// a missing capability.
+func phIR003() Scenario {
+	return Scenario{ID: "PH-IR-003", Version: 1, Area: AreaEvasionDetectionIR, Name: "Endpoint follow-through",
+		PrimaryObjective: "Verify downstream endpoint alerts and investigation",
+		Limitations:      "real, live-call-capable EPP Response Actions connectors and internal/rwevidence's verified-postcondition layer already exist and are tested elsewhere in this codebase; not yet bridged into phishval's Outcome model",
+		Coverage:         CoverageCatalogOnly}
+}
+
+// phIR004 wraps emailgwefficacy.CorrelateWithTicketing, mirroring
+// phDET001/CorrelateWithSIEM's own structure and maturity exactly, for
+// Response/escalation instead of Detection.
+func phIR004() Scenario {
+	return Scenario{
+		ID: "PH-IR-004", Version: 1, Area: AreaEvasionDetectionIR, Name: "Incident escalation",
+		PrimaryObjective:     "Validate ownership, severity, routing and escalation",
+		Limitations:          "emailgwefficacy.CorrelateWithTicketing is fixture-only (FixtureTicketProvider); no real ITSM connector wired",
+		Expectation:          phishval.Expectation{ScenarioID: "PH-IR-004", Response: ptrResponse(phishval.ResponseRemediated)},
+		Standards:            StandardsMapping{ATTACKTechniques: []string{"T1566"}},
+		MappedImplementation: "emailgwefficacy.CorrelateWithTicketing",
+		Coverage:             CoverageFixtureTested,
+	}
+}
+
 // phATT001 wraps emailgwefficacy.EICARAttachmentExpectation -- a generic
 // malicious-attachment test (an industry-standard EICAR string as a real
 // MIME attachment), not HTML-specific. PH-ATT-002/003 (PDF/Office-doc
@@ -436,6 +541,7 @@ func AudspectPhishingCatalog() ([]Scenario, error) {
 		phBEC001(), phBEC004(), phBEC005(), phBEC006(), phBEC008(),
 		phURL001(), phURL005(), phID001(), phID002(), phID003(), phID004(), phID005(),
 		phEVA001(), phEVA002(), phEVA005(),
+		phDET001(), phDET002(), phIR001(), phIR002(), phIR003(), phIR004(),
 		phATT001(), phATT002(), phATT003(), phATT010(),
 	}
 	if err := ValidateCatalog(all); err != nil {

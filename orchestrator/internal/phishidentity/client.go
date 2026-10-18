@@ -160,3 +160,36 @@ func (c *Client) ListOAuthConsentGrants(ctx context.Context) ([]OAuthConsentGran
 	}
 	return grants, nil
 }
+
+// RevokeSignInSessions calls the real, stable Graph v1.0 action
+// POST {BaseURL}/users/{userID}/revokeSignInSessions -- PH-ID-002's own
+// containment counterpart (PH-IR-002, identity containment): invalidates
+// every refresh token currently issued to the user, forcing
+// re-authentication everywhere. A 2xx response proves only that Graph
+// ACCEPTED the request, never that containment is independently
+// confirmed -- same discipline internal/rwevidence.ContainmentObserver
+// already establishes for endpoint isolation: dispatch acceptance and
+// verified postcondition are never conflated. Callers that need the
+// verified claim use a separate observer (see phishbridge's own identity
+// containment bridge), not this method's return value alone.
+func (c *Client) RevokeSignInSessions(ctx context.Context, userID string) error {
+	token, err := c.tokens.Token(ctx)
+	if err != nil {
+		return fmt.Errorf("phishidentity: acquiring token: %w", err)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.BaseURL+"/users/"+userID+"/revokeSignInSessions", nil)
+	if err != nil {
+		return fmt.Errorf("phishidentity: building request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("phishidentity: request: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("phishidentity: revokeSignInSessions returned status %d", resp.StatusCode)
+	}
+	return nil
+}

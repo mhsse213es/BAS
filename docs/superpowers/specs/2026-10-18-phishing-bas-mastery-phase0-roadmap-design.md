@@ -479,3 +479,56 @@ Zero changes to `emailgwefficacy`/`emailgwcampaign`/`exercise`/`cloudgraph`/
 `vendors` again.
 
 Next: Phase 6 (SOC, incident response, and containment proof).
+
+## 12. Phase 6 status: DONE (SOC/IR/containment -- reuse-heavy, one genuine new capability)
+
+Six PH-* IDs, split cleanly by how much was genuinely new:
+
+- **PH-DET-001 (SIEM ingestion/correlation)** and **PH-IR-004 (incident
+  escalation)**: pure reuse -- wrap `emailgwefficacy.CorrelateWithSIEM`/
+  `CorrelateWithTicketing` respectively. Zero new bridge code: these
+  functions mutate the `EfficacyResult` the existing
+  `FromEmailGWEfficacyResult` bridge already reads, so running a
+  scenario's result through correlation BEFORE bridging is sufficient.
+  Proven both ways: SIEM/ticket corroborates → Pass, and the actual
+  differentiator -- Defender/remediation alone claims success but no
+  independent SIEM/ticket record corroborates it → the bridge reports
+  NotTested, never a fabricated Pass. CoverageFixtureTested (both
+  correlation functions are fixture-provider-only upstream).
+- **PH-IR-002 (identity containment)**: the one genuine new capability.
+  Added `phishidentity.Client.RevokeSignInSessions` -- a real, stable
+  Graph v1.0 POST, httptest-proven (method/path/Authorization header all
+  asserted). `phishbridge.FromIdentityContainment` mirrors
+  `internal/rwevidence.ContainmentObserver`'s own precedent exactly:
+  dispatch acceptance (a 2xx) is never conflated with verified
+  containment. A nil verification returns a nil Observation -- NotTested,
+  never fabricated Contained -- proven as its own explicit test
+  (`TestPHIR002_DispatchAcceptedButUnverified_NeverFabricatesContained`).
+  No real verification observer ships, for the same reason rwevidence's
+  own doesn't (needs a real tenant). CoverageAdapterTested.
+- **PH-IR-001 (mailbox search/purge)**: overlap decision, not new code --
+  identical mechanism to PH-ATT-010 (`PostDeliveryThreatResponseExpectation`,
+  ActionRequired="purge"). Deliberately did NOT build a new Defender
+  client method against Microsoft's real eDiscovery/Content-Search purge
+  API: that surface (compliance-search creation, then a separate purge
+  action) is materially more complex than a single REST call, and this
+  phase has no verified way to confirm its exact request/response shape
+  -- fabricating an unverified endpoint would be worse than naming the
+  honest overlap.
+- **PH-DET-002 (user-reported phishing)** and **PH-IR-003 (endpoint
+  follow-through)**: stay CoverageCatalogOnly, with corrected/sharper
+  limitations text. PH-DET-002: event capture is real
+  (`exercise/tracker`'s `handleReport`), and `CorrelateWithTicketing`
+  (just proven for PH-IR-004) is the exact pattern the SOC-triage wiring
+  would reuse -- not built, but no longer a vague gap. PH-IR-003: real,
+  live-call-capable EPP Response Actions connectors and
+  `rwevidence`'s verified-postcondition layer already exist and are
+  tested elsewhere in this codebase; the gap is integration into
+  phishval's Outcome model, not a missing capability.
+
+Zero changes to emailgwefficacy/emailgwcampaign/exercise/rwevidence/
+cloudgraph/vendors again -- confirmed via git status.
+
+Next: Phase 7 (cross-channel and sector-specific coverage) -- the
+largest pure-greenfield block (all 8 PH-CHN-* have zero existing
+adapters).
