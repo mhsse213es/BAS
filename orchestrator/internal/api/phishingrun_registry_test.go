@@ -7,6 +7,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/audspect/bas/internal/actions"
 	"github.com/audspect/bas/internal/exercise"
 	"github.com/audspect/bas/internal/phishbridge"
 	"github.com/audspect/bas/internal/phishval"
@@ -120,6 +121,84 @@ func TestExecutePHID001_UnknownExecutionID_ErrorNeverFabricatesFail(t *testing.T
 			t.Fatal("want an error for an unknown executionId, not a silently-graded verdict")
 		}
 	})
+}
+
+func TestLookupPhishingRunExecutor_PHIR003Registered(t *testing.T) {
+	_, ok := LookupPhishingRunExecutor("PH-IR-003")
+	if !ok {
+		t.Fatal("PH-IR-003 must be registered as executable")
+	}
+}
+
+func TestExecutePHIR003_CompletedAction_Pass(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := &Handler{db: pool}
+		completedAt := time.Now()
+		if _, err := h.persistActionRequest(context.Background(), actions.Action{
+			Type: "isolate_device", Target: actions.Target{Type: "hostname", Identifier: "host-1"},
+			Status: actions.StatusCompleted, RunID: "run-abc", RequestedAt: time.Now(), CompletedAt: &completedAt,
+		}); err != nil {
+			t.Fatalf("persistActionRequest: %v", err)
+		}
+
+		env := PhishingRunExecutorEnv{Pool: pool}
+		outcome, err := executePHIR003(context.Background(), env, "run-1", map[string]any{"runId": "run-abc"})
+		if err != nil {
+			t.Fatalf("executePHIR003: %v", err)
+		}
+		if outcome.Response.Verdict != phishval.VerdictPass {
+			t.Errorf("Response.Verdict = %q, want %q", outcome.Response.Verdict, phishval.VerdictPass)
+		}
+	})
+}
+
+func TestExecutePHIR003_FailedAction_Fail(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := &Handler{db: pool}
+		completedAt := time.Now()
+		if _, err := h.persistActionRequest(context.Background(), actions.Action{
+			Type: "isolate_device", Target: actions.Target{Type: "hostname", Identifier: "host-1"},
+			Status: actions.StatusFailed, Error: "vendor rejected request", RunID: "run-def", RequestedAt: time.Now(), CompletedAt: &completedAt,
+		}); err != nil {
+			t.Fatalf("persistActionRequest: %v", err)
+		}
+
+		env := PhishingRunExecutorEnv{Pool: pool}
+		outcome, err := executePHIR003(context.Background(), env, "run-1", map[string]any{"runId": "run-def"})
+		if err != nil {
+			t.Fatalf("executePHIR003: %v", err)
+		}
+		if outcome.Response.Verdict != phishval.VerdictFail {
+			t.Errorf("Response.Verdict = %q, want %q", outcome.Response.Verdict, phishval.VerdictFail)
+		}
+	})
+}
+
+// TestExecutePHIR003_NoMatchingAction_NotTested proves that, unlike
+// PH-ID-001's exercise-evidence case, there is no "run exists but
+// nothing happened" distinction possible here -- action_requests.run_id
+// is a free-text correlation tag with no parent table to check
+// existence against, so zero matching rows is honestly NotTested, never
+// a fabricated Fail.
+func TestExecutePHIR003_NoMatchingAction_NotTested(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		env := PhishingRunExecutorEnv{Pool: pool}
+		outcome, err := executePHIR003(context.Background(), env, "run-1", map[string]any{"runId": "no-such-run"})
+		if err != nil {
+			t.Fatalf("executePHIR003: %v", err)
+		}
+		if outcome.Response.Verdict != phishval.VerdictNotTested {
+			t.Errorf("Response.Verdict = %q, want %q", outcome.Response.Verdict, phishval.VerdictNotTested)
+		}
+	})
+}
+
+func TestExecutePHIR003_MissingRunIdParam_Error(t *testing.T) {
+	env := PhishingRunExecutorEnv{Pool: nil}
+	_, err := executePHIR003(context.Background(), env, "run-1", map[string]any{})
+	if err == nil {
+		t.Fatal("want an error for a missing runId parameter")
+	}
 }
 
 func TestExecutePHDET002_TicketCreated_Pass(t *testing.T) {

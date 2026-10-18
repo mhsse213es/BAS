@@ -15,11 +15,14 @@ package api
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/audspect/bas/internal/actions"
 	"github.com/audspect/bas/internal/emailgwefficacy"
 	"github.com/audspect/bas/internal/exercise"
 	"github.com/audspect/bas/internal/phishbridge"
@@ -60,6 +63,7 @@ type PhishingRunExecutor func(ctx context.Context, env PhishingRunExecutorEnv, r
 var phishingRunExecutors = map[string]PhishingRunExecutor{
 	"PH-DET-002": executePHDET002,
 	"PH-ID-001":  executePHID001,
+	"PH-IR-003":  executePHIR003,
 }
 
 // LookupPhishingRunExecutor returns scenarioID's registered executor,
@@ -156,6 +160,64 @@ func executePHID001(ctx context.Context, env PhishingRunExecutorEnv, runID strin
 		return phishval.Outcome{}, err
 	}
 	return phishval.Evaluate(runID, "", catalogExp, obs), nil
+}
+
+// executePHIR003 runs PH-IR-003 (endpoint follow-through): grades the
+// most recently dispatched EPP response action tagged with
+// params["runId"] against the catalog's own fixed Expectation
+// (Response: ResponseRemediated). action_requests.run_id is a
+// free-text correlation tag (ListResponseActions' own `?runId=`
+// query param uses the exact same column) -- unlike PH-ID-001's
+// exercise_executions, there is no parent table to check existence
+// against, so zero matching rows has only one honest reading: no
+// response action evidence exists for this run, which
+// phishbridge.FromEPPResponseAction's own empty Observation already
+// degrades to NotTested, never a fabricated Fail.
+func executePHIR003(ctx context.Context, env PhishingRunExecutorEnv, runID string, params map[string]any) (phishval.Outcome, error) {
+	actionRunID, _ := params["runId"].(string)
+	if actionRunID == "" {
+		return phishval.Outcome{}, fmt.Errorf("phishingrun: PH-IR-003 requires a non-empty runId parameter")
+	}
+	if env.Pool == nil {
+		return phishval.Outcome{}, fmt.Errorf("phishingrun: PH-IR-003 requires a database pool (deployment misconfiguration)")
+	}
+
+	action, found, err := loadLatestActionRequest(ctx, env.Pool, actionRunID)
+	if err != nil {
+		return phishval.Outcome{}, fmt.Errorf("phishingrun: PH-IR-003 load action request for runId %q: %w", actionRunID, err)
+	}
+	var obs phishval.Observation
+	if found {
+		obs = phishbridge.FromEPPResponseAction(action)
+	}
+
+	catalogExp, err := lookupPhishingCatalogExpectation("PH-IR-003")
+	if err != nil {
+		return phishval.Outcome{}, err
+	}
+	return phishval.Evaluate(runID, "", catalogExp, obs), nil
+}
+
+// loadLatestActionRequest returns the most recently requested
+// action_requests row tagged with actionRunID, mirroring
+// ListResponseActions' own query and column set.
+func loadLatestActionRequest(ctx context.Context, pool *pgxpool.Pool, actionRunID string) (actions.Action, bool, error) {
+	var a actions.Action
+	err := pool.QueryRow(ctx,
+		`SELECT type, target_type, target_identifier, connector_id, status,
+		        resolved_device_id, vendor_request_id, error, requested_by, reason, ticket_ref, run_id,
+		        requested_at, dispatched_at, completed_at
+		 FROM action_requests WHERE run_id=$1 ORDER BY requested_at DESC LIMIT 1`, actionRunID,
+	).Scan(&a.Type, &a.Target.Type, &a.Target.Identifier, &a.ConnectorID, &a.Status,
+		&a.ResolvedDeviceID, &a.VendorRequestID, &a.Error, &a.RequestedBy, &a.Reason, &a.TicketRef, &a.RunID,
+		&a.RequestedAt, &a.DispatchedAt, &a.CompletedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return actions.Action{}, false, nil
+	}
+	if err != nil {
+		return actions.Action{}, false, err
+	}
+	return a, true, nil
 }
 
 // lookupPhishingCatalogExpectation returns scenarioID's own
