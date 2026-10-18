@@ -1129,6 +1129,28 @@ func main() {
 	// within 30 s) and expires_at (running/queued→timed_out).
 	handler.StartAPJobMonitor(context.Background())
 
+	// ── Orchestrator Self-Integrity ────────────────────────────────────────
+	// Verified synchronously, HERE, before any of the listeners started
+	// below accept a connection — so there is no window where protected
+	// endpoints are reachable on an unverified binary. A critical outcome
+	// does not exit the process (an admin must still be able to log in and
+	// see/acknowledge the alert) -- it sets DispatchBlocked via the same
+	// tamper_events/broadcast path every other tamper type already uses.
+	// Re-verified on every watcher tick thereafter (see
+	// RegisterSelfIntegrityManifest below and watcher.go's StartWatcher).
+	// See docs/superpowers/specs/2026-10-18-orchestrator-self-integrity-design.md.
+	integrity.RegisterSelfIntegrityManifest(integrity.DefaultManifestPath)
+	switch integrity.CheckSelfIntegrity(pool, hub, integrity.DefaultManifestPath) {
+	case integrity.SelfIntegrityCritical:
+		log.Println("[!!] Orchestrator self-integrity check FAILED at startup — dispatch suspended until an admin acknowledges")
+	case integrity.SelfIntegrityOK:
+		log.Println("[+] Orchestrator self-integrity verified")
+	case integrity.SelfIntegrityDisabled:
+		log.Println("[integrity] self-integrity check disabled for this build (not built via the release pipeline)")
+	case integrity.SelfIntegrityInspectionError:
+		log.Println("[integrity] self-integrity check inconclusive at startup — will retry on the next watcher tick")
+	}
+
 	// ── Filesystem Integrity Watcher ──────────────────────────────────────
 	// Polls protected on-disk paths every 15 seconds. Any unexpected
 	// modification, deletion, or creation is logged, persisted to

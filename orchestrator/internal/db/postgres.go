@@ -541,13 +541,18 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 			id            text        PRIMARY KEY DEFAULT gen_random_uuid()::text,
 			detected_at   timestamptz NOT NULL DEFAULT NOW(),
 			path          text        NOT NULL,
-			event_type    text        NOT NULL,   -- 'write' | 'remove' | 'create'
+			event_type    text        NOT NULL,   -- 'write' | 'remove' | 'create' | 'hash_mismatch'
 			severity      text        NOT NULL,   -- 'critical' | 'warning'
 			acknowledged  boolean     NOT NULL DEFAULT false,
 			acked_by      text        REFERENCES users(id) ON DELETE SET NULL,
 			acked_at      timestamptz
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_tamper_events_ack ON tamper_events (acknowledged, detected_at DESC)`,
+		// detail: structured forensic evidence for events the bare path/event_type
+		// doesn't capture -- e.g. the orchestrator self-integrity check's
+		// {"expected_hash","observed_hash","outcome"} (see internal/integrity/selfintegrity.go).
+		// Never holds secrets, only hashes/component names/outcomes.
+		`ALTER TABLE tamper_events ADD COLUMN IF NOT EXISTS detail jsonb`,
 
 		// audit_logs: immutable, append-only record of every significant operator
 		// action. actor_id references users(id) but is stored as plain text so

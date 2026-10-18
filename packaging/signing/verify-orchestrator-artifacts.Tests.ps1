@@ -49,7 +49,14 @@ function New-FixtureOrchestratorImage {
     # defines neither CMD nor ENTRYPOINT. The binary path never has to
     # exist -- docker only validates it at `docker start`, which this
     # fixture never calls.
-    Set-Content -Path "$ctx\Dockerfile" -Value "FROM scratch`nCOPY agents /agents`nCMD [`"/nonexistent`"]`n"
+    # Self-integrity's extraction step (docker cp "${cid}:/orchestrator")
+    # needs this path to exist in the fixture image too -- content is
+    # irrelevant here (this suite doesn't exercise self-integrity's own
+    # hash correctness, only that patching BINARIES.sha256 still works
+    # once that extraction is also happening). See
+    # docs/superpowers/specs/2026-10-18-orchestrator-self-integrity-design.md.
+    Set-Content -Path "$ctx\orchestrator" -Value "placeholder-orchestrator-binary"
+    Set-Content -Path "$ctx\Dockerfile" -Value "FROM scratch`nCOPY agents /agents`nCOPY orchestrator /orchestrator`nCMD [`"/nonexistent`"]`n"
     docker build -q -t $Tag $ctx | Out-Null
     Remove-Item $ctx -Recurse -Force -ErrorAction SilentlyContinue
 }

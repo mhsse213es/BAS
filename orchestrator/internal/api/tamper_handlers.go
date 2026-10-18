@@ -124,6 +124,15 @@ func (h *Handler) AcknowledgeTamperEvent(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	// Revalidate self-integrity BEFORE checking whether to clear
+	// DispatchBlocked, not after: acknowledging a tamper event must never
+	// restore access on the strength of an admin's click alone. If the
+	// orchestrator binary is STILL mismatched, this inserts a fresh
+	// unacknowledged critical row via the same recordTamperDetail path —
+	// which the count query below then finds, so the clear is correctly
+	// refused with no separate special-casing.
+	integrity.CheckSelfIntegrity(h.db, h.hub, integrity.DefaultManifestPath)
+
 	// Re-enable dispatch if no unacknowledged critical events remain.
 	var count int
 	_ = h.db.QueryRow(r.Context(), `
@@ -154,6 +163,10 @@ func (h *Handler) AcknowledgeAllTamperEvents(w http.ResponseWriter, r *http.Requ
 		http.Error(w, "db error", http.StatusInternalServerError)
 		return
 	}
+
+	// Same revalidate-before-clear as AcknowledgeTamperEvent -- see its
+	// comment for why this must run before the count query below.
+	integrity.CheckSelfIntegrity(h.db, h.hub, integrity.DefaultManifestPath)
 
 	// Re-enable dispatch if no unacknowledged critical events remain — same
 	// guard as AcknowledgeTamperEvent, so "Acknowledge All" doesn't leave

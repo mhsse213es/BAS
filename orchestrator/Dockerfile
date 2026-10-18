@@ -220,7 +220,7 @@ COPY --from=web /web-manifest.sha256 /web-manifest.sha256
 RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
     CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GOGARBLE='github.com/audspect/*' \
     garble -literals build \
-    -ldflags="-s -w -X main.expectedWWWManifestHash=$(cat /web-manifest.sha256)" \
+    -ldflags="-s -w -X main.expectedWWWManifestHash=$(cat /web-manifest.sha256) -X github.com/audspect/bas/internal/integrity.orchestratorManifestExpected=true" \
     -o /bin/orchestrator ./cmd/server
 
 FROM gcr.io/distroless/static-debian12

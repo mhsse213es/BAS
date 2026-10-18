@@ -16,6 +16,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"io"
 	"log"
 	"os"
@@ -129,6 +130,10 @@ func snapshotFile(wf *watchedFile) {
 
 // StartWatcher begins the polling loop. It blocks forever; run in a goroutine.
 // pool is used to persist tamper events. broadcaster delivers real-time alerts.
+// Also re-runs the orchestrator self-integrity check (see selfintegrity.go)
+// on the same 15s cadence, when RegisterSelfIntegrityManifest was called —
+// one ticker, not two, since that interval was already judged acceptable
+// for files that change far more often than a binary should.
 func StartWatcher(ctx context.Context, pool *pgxpool.Pool, broadcaster TamperBroadcaster) {
 	ticker := time.NewTicker(15 * time.Second)
 	defer ticker.Stop()
@@ -140,6 +145,7 @@ func StartWatcher(ctx context.Context, pool *pgxpool.Pool, broadcaster TamperBro
 			return
 		case <-ticker.C:
 			checkAll(pool, broadcaster)
+			checkSelfIntegrityTick(pool, broadcaster)
 		}
 	}
 }
@@ -182,6 +188,15 @@ func checkAll(pool *pgxpool.Pool, broadcaster TamperBroadcaster) {
 }
 
 func recordTamper(pool *pgxpool.Pool, broadcaster TamperBroadcaster, path, eventType, severity string) {
+	recordTamperDetail(pool, broadcaster, path, eventType, severity, nil)
+}
+
+// recordTamperDetail is recordTamper plus optional structured forensic
+// evidence (e.g. {"expected_hash","observed_hash","outcome"} for the
+// self-integrity check, see selfintegrity.go) persisted in tamper_events'
+// detail column. detail must never contain secrets — hashes and component
+// names only.
+func recordTamperDetail(pool *pgxpool.Pool, broadcaster TamperBroadcaster, path, eventType, severity string, detail map[string]string) {
 	log.Printf("[!!] TAMPER ALERT [%s] %s — %s", severity, eventType, path)
 
 	if severity == "critical" {
@@ -191,10 +206,14 @@ func recordTamper(pool *pgxpool.Pool, broadcaster TamperBroadcaster, path, event
 
 	// Persist to DB (best-effort — never crash the watcher on DB failure).
 	if pool != nil {
+		var detailJSON []byte
+		if detail != nil {
+			detailJSON, _ = json.Marshal(detail)
+		}
 		_, err := pool.Exec(context.Background(), `
-			INSERT INTO tamper_events (id, path, event_type, severity)
-			VALUES (gen_random_uuid()::text, $1, $2, $3)
-		`, path, eventType, severity)
+			INSERT INTO tamper_events (id, path, event_type, severity, detail)
+			VALUES (gen_random_uuid()::text, $1, $2, $3, $4)
+		`, path, eventType, severity, detailJSON)
 		if err != nil {
 			log.Printf("[integrity] tamper_events insert: %v", err)
 		}

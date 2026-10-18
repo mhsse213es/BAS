@@ -128,11 +128,30 @@ function Update-OrchestratorAgentArtifacts {
         $manifestPath = Join-Path $patchCtx "BINARIES.sha256"
         $cpOutput = (docker cp "${tmpCID}:/agents/BINARIES.sha256" $manifestPath 2>&1 | Out-String).Trim()
         $cpExit = $LASTEXITCODE
-        $null = (docker rm $tmpCID 2>&1 | Out-String)
         if ($cpExit -ne 0 -or -not (Test-Path $manifestPath)) {
+            $null = (docker rm $tmpCID 2>&1 | Out-String)
             Write-Error "Update-OrchestratorAgentArtifacts: could not extract BINARIES.sha256 from $OrchestratorTag`: $cpOutput" -ErrorAction Continue
             return $false
         }
+
+        # Self-integrity (see
+        # docs/superpowers/specs/2026-10-18-orchestrator-self-integrity-design.md):
+        # hash the orchestrator binary actually baked into THIS image --
+        # not a locally-built copy, which could differ -- and sign it with
+        # the same trusted-host private_key.pem, mirroring BINARIES.sha256
+        # exactly. Still the same container ($tmpCID); removed once both
+        # extractions are done.
+        $selfBinaryPath = Join-Path $patchCtx "orchestrator-binary"
+        $selfCpOutput = (docker cp "${tmpCID}:/orchestrator" $selfBinaryPath 2>&1 | Out-String).Trim()
+        $selfCpExit = $LASTEXITCODE
+        $null = (docker rm $tmpCID 2>&1 | Out-String)
+        if ($selfCpExit -ne 0 -or -not (Test-Path $selfBinaryPath)) {
+            Write-Error "Update-OrchestratorAgentArtifacts: could not extract /orchestrator from $OrchestratorTag`: $selfCpOutput" -ErrorAction Continue
+            return $false
+        }
+        $selfHash = (Get-FileHash -Path $selfBinaryPath -Algorithm SHA256).Hash.ToLower()
+        $selfManifestPath = Join-Path $patchCtx "SELFINTEGRITY.sha256"
+        [System.IO.File]::WriteAllText($selfManifestPath, "$selfHash  orchestrator`n")
 
         $replacements = @{
             "bas-agent-windows-amd64.exe"              = (Get-FileHash -Path $artifacts["bas-agent-windows-amd64.exe"] -Algorithm SHA256).Hash.ToLower()
@@ -169,6 +188,18 @@ function Update-OrchestratorAgentArtifacts {
             return $false
         }
 
+        Push-Location $OrchestratorDir
+        try {
+            $selfSignOutput = (go run scripts/signer.go sign private_key.pem $selfManifestPath 2>&1 | Out-String).Trim()
+            $selfSignExit = $LASTEXITCODE
+        } finally {
+            Pop-Location
+        }
+        if ($selfSignExit -ne 0 -or -not (Test-Path "$selfManifestPath.sig")) {
+            Write-Error "Update-OrchestratorAgentArtifacts: RSA signing of SELFINTEGRITY.sha256 failed: $selfSignOutput" -ErrorAction Continue
+            return $false
+        }
+
         [System.IO.File]::WriteAllText(
             (Join-Path $patchCtx "Dockerfile"),
             "FROM $OrchestratorTag`n" +
@@ -177,7 +208,9 @@ function Update-OrchestratorAgentArtifacts {
             "COPY bas-agent-windows-legacy-amd64-setup.zip /agents/bas-agent-windows-legacy-amd64-setup.zip`n" +
             "COPY bas-agent-windows-amd64-setup.zip /agents/bas-agent-windows-amd64-setup.zip`n" +
             "COPY BINARIES.sha256 /agents/BINARIES.sha256`n" +
-            "COPY BINARIES.sha256.sig /agents/BINARIES.sha256.sig`n"
+            "COPY BINARIES.sha256.sig /agents/BINARIES.sha256.sig`n" +
+            "COPY SELFINTEGRITY.sha256 /SELFINTEGRITY.sha256`n" +
+            "COPY SELFINTEGRITY.sha256.sig /SELFINTEGRITY.sha256.sig`n"
         )
 
         $buildOutput = (docker build -q -t $OrchestratorTag $patchCtx 2>&1 | Out-String).Trim()

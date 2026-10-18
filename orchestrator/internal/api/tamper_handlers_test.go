@@ -179,6 +179,52 @@ func TestAcknowledgeTamperEvent_ClearsDispatchBlockedWhenLastCritical(t *testing
 	})
 }
 
+// TestAcknowledgeTamperEvent_SelfIntegrityStillFailing_KeepsDispatchBlocked
+// is the "revalidate before clearing" requirement: acknowledging the LAST
+// unrelated critical event must not restore access while the orchestrator
+// self-integrity check ALSO still fails. With SetExpectedForTest(true),
+// integrity.DefaultManifestPath ("/SELFINTEGRITY.sha256") is guaranteed
+// absent in this test environment, so CheckSelfIntegrity deterministically
+// returns critical and records a fresh unacknowledged row — no real
+// signing key needed to prove the ack is correctly refused.
+func TestAcknowledgeTamperEvent_SelfIntegrityStillFailing_KeepsDispatchBlocked(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		restore := integrity.SetExpectedForTest(true)
+		defer restore()
+
+		t0 := time.Date(2026, 7, 1, 12, 0, 0, 0, time.UTC)
+		seedTamperEvent(t, pool, "adb-si-1", "/opt/bas/binary", "write", "critical", false, t0)
+		uid := seedUser(t, pool, "adb-si-user", "pw-Password1!", "admin", true)
+		h := tamperHandler(t, pool)
+		integrity.DispatchBlocked.Store(true)
+		t.Cleanup(func() { integrity.DispatchBlocked.Store(false) })
+
+		req := authedRequest(t, http.MethodPost, "/api/tamper-events/adb-si-1/ack", nil, auth.RoleAdmin, uid)
+		req = withURLParam(req, "id", "adb-si-1")
+		if rec := callAuthed(h.AcknowledgeTamperEvent, req); rec.Code != http.StatusOK {
+			t.Fatalf("ack: status = %d", rec.Code)
+		}
+
+		if integrity.DispatchBlocked.Load() != true {
+			t.Fatal("DispatchBlocked was cleared even though the self-integrity check still fails — acknowledging an unrelated event must not restore access")
+		}
+
+		var count int
+		if err := pool.QueryRow(context.Background(),
+			`SELECT COUNT(*) FROM tamper_events WHERE acknowledged = false AND severity = 'critical' AND path = $1`,
+			integrity.SelfIntegrityComponent,
+		).Scan(&count); err != nil {
+			t.Fatalf("query: %v", err)
+		}
+		if count == 0 {
+			t.Fatal("expected a fresh unacknowledged critical self-integrity event from the revalidation, found none")
+		}
+	})
+}
+
 func TestAcknowledgeAllTamperEvents_MarksAllAcknowledged(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping container-backed test in -short mode")
