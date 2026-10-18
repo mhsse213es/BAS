@@ -102,6 +102,8 @@ var routeMatrix = []routeCase{
 	{http.MethodGet, "/api/cloud-campaigns/{id}", tierAny, ""},
 	{http.MethodGet, "/api/webgw/industry-profiles", tierAny, ""},
 	{http.MethodGet, "/api/webgw/industry-profiles.html", tierAny, ""},
+	{http.MethodGet, "/api/phishing/industry-profiles", tierAny, ""},
+	{http.MethodGet, "/api/phishing/industry-profiles.html", tierAny, ""},
 	{http.MethodGet, "/api/emailgw/coverage", tierAny, ""},
 	{http.MethodGet, "/api/emailgw/coverage.html", tierAny, ""},
 	{http.MethodGet, "/api/emailgw/metrics", tierAny, ""},
@@ -599,6 +601,10 @@ var publicRoutes = map[string]bool{
 	// Telnet exfiltration channel (internal/telnetsink)
 	// -- same unauthenticated posture as /cloudsink and /webhooksink above.
 	"POST /telnet/session": true,
+	// Generative-AI exfiltration channel (internal/aisink)
+	// -- same unauthenticated posture as /cloudsink/webhooksink/telnet above.
+	"POST /aisink/v1/chat/completions":                                     true,
+	"POST /aisink/v1.0/external/connections/{connectionId}/items/{itemId}": true,
 }
 
 func tierAllows(tier authTier, perm auth.Permission, role auth.Role) bool {
