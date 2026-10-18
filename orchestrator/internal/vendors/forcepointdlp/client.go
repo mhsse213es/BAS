@@ -153,6 +153,9 @@ func (c *Client) QueryDLPIncidents(ctx context.Context, start, end time.Time) ([
 	}
 
 	reqBody, _ := json.Marshal(map[string]any{
+		// Always INCIDENTS, never DISCOVERY -- this method's own name
+		// (QueryDLPIncidents) is the contract; a Discovery-incidents query
+		// is a different method this package does not offer today.
 		"type": "INCIDENTS",
 		"filters": map[string]any{
 			"dateRange": map[string]string{
