@@ -90,6 +90,9 @@ func VerifyClassificationSample(truth GroundTruth, channel string, provider Clas
 	if truth.IntendedClass == SensitivityClassAmbiguous {
 		return DLPCLSVerdict{Outcome: OutcomeInconclusive, Reason: fmt.Sprintf("sample is ambiguous by design: %s", truth.AdjudicationPolicy)}
 	}
+	if latest.Decision != DecisionExplicitBenign && latest.Decision != DecisionExplicitSensitive {
+		return DLPCLSVerdict{Outcome: OutcomeInconclusive, Reason: fmt.Sprintf("unrecognized classification decision: %q", latest.Decision)}
+	}
 
 	if truth.IntendedClass == SensitivityClassNone {
 		if latest.Decision == DecisionExplicitBenign {

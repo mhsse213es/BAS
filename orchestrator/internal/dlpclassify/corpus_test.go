@@ -2,14 +2,6 @@ package dlpclassify
 
 import "testing"
 
-func validTruth(t *testing.T) GroundTruth {
-	gt, err := NewGroundTruth("sample-pci-001", "hash-001", SensitivityClass("pci"), "contains a synthetic valid-format credit card number", "csv", "", "", "")
-	if err != nil {
-		t.Fatalf("NewGroundTruth: %v", err)
-	}
-	return gt
-}
-
 func TestNewGroundTruth_ValidInput_Succeeds(t *testing.T) {
 	if _, err := NewGroundTruth("sample-001", "hash-001", SensitivityClass("pci"), "rationale", "csv", "", "", ""); err != nil {
 		t.Fatalf("NewGroundTruth: %v", err)

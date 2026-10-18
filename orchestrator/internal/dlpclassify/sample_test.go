@@ -128,6 +128,30 @@ func TestVerifyClassificationSample_SensitiveWrongClass_ReturnsMisclassified(t *
 	}
 }
 
+func TestVerifyClassificationSample_UnrecognizedDecisionOnSensitiveTruth_ReturnsInconclusive(t *testing.T) {
+	truth, _ := NewGroundTruth("sample-A", "hash-A", SensitivityClass("pci"), "r", "csv", "", "", "")
+	got := verify(truth, "web-upload", evidence("sample-A", "web-upload", ClassificationDecision("some-future-vendor-state"), ""))
+	if got.Outcome != OutcomeInconclusive {
+		t.Fatalf("Outcome = %q, want %q -- an unrecognized decision must never be silently treated as DecisionExplicitSensitive", got.Outcome, OutcomeInconclusive)
+	}
+}
+
+func TestVerifyClassificationSample_UnrecognizedDecisionOnBenignTruth_ReturnsInconclusive(t *testing.T) {
+	truth, _ := NewGroundTruth("sample-A", "hash-A", SensitivityClassNone, "r", "csv", "", "", "")
+	got := verify(truth, "web-upload", evidence("sample-A", "web-upload", ClassificationDecision("some-future-vendor-state"), ""))
+	if got.Outcome != OutcomeInconclusive {
+		t.Fatalf("Outcome = %q, want %q -- an unrecognized decision must never be silently treated as DecisionExplicitSensitive", got.Outcome, OutcomeInconclusive)
+	}
+}
+
+func TestVerifyClassificationSample_ZeroValueDecision_ReturnsInconclusive(t *testing.T) {
+	truth, _ := NewGroundTruth("sample-A", "hash-A", SensitivityClass("pci"), "r", "csv", "", "", "")
+	got := verify(truth, "web-upload", evidence("sample-A", "web-upload", ClassificationDecision(""), ""))
+	if got.Outcome != OutcomeInconclusive {
+		t.Fatalf("Outcome = %q, want %q -- a zero-value Decision must never be silently treated as DecisionExplicitSensitive", got.Outcome, OutcomeInconclusive)
+	}
+}
+
 func TestVerifyClassificationSample_MultipleRecords_PicksLatestByTimestampNotOrder(t *testing.T) {
 	truth, _ := NewGroundTruth("sample-A", "hash-A", SensitivityClass("pci"), "r", "csv", "", "", "")
 	older := evidence("sample-A", "web-upload", DecisionExplicitSensitive, SensitivityClass("pci")) // TruePositive-shaped
