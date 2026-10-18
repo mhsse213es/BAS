@@ -673,12 +673,20 @@ func evidenceByTechnique(results []models.SimulationResult) map[string]StepEvide
 	out := map[string]StepEvidence{}
 	for _, r := range results {
 		ev := StepEvidence{
-			TechniqueID:       r.ID,
-			DetectionVerdict:  r.DetectionVerdict,
-			Events:            r.Events,
-			RawOutput:         r.RawOutput,
-			SinkTokenObserved: r.SinkTokenObserved,
-			StepName:          r.StepName,
+			TechniqueID:               r.ID,
+			DetectionVerdict:          r.DetectionVerdict,
+			Events:                    r.Events,
+			RawOutput:                 r.RawOutput,
+			SinkTokenObserved:         r.SinkTokenObserved,
+			StepName:                  r.StepName,
+			Channel:                   r.Channel,
+			OverrideOccurred:          r.OverrideOccurred,
+			OverrideAuthorizedBy:      r.OverrideAuthorizedBy,
+			OverrideReason:            r.OverrideReason,
+			OverrideAuditRecordID:     r.OverrideAuditRecordID,
+			ConnectivityOnline:        r.ConnectivityOnline,
+			ConnectivityPolicyVersion: r.ConnectivityPolicyVersion,
+			ConnectivityLastSyncedAt:  r.ConnectivityLastSyncedAt,
 		}
 		if r.DetectionAlert != nil {
 			ev.AlertProvider = r.DetectionAlert.Provider

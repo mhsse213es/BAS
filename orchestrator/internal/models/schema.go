@@ -130,6 +130,28 @@ type SimulationResult struct {
 	// later be derived by querying, instead of by parsing a sentence. Nil for a
 	// step that exited on its own and for any agent predating the field.
 	Termination *StepTermination `json:"termination,omitempty"`
+
+	// Channel names which operation path this step used -- "browser" |
+	// "native-app" | "sync-client" | "api" | "" (unknown). An open
+	// string, not a closed enum.
+	Channel string `json:"channel,omitempty"`
+	// OverrideOccurred/OverrideAuthorizedBy/OverrideReason/
+	// OverrideAuditRecordID carry an observed DLP-policy override
+	// (e.g. "override and send anyway") -- an end user's action, never
+	// to be confused with this tool's own analyst review-workflow
+	// override (internal/reporting's StoredVerification).
+	OverrideOccurred      bool   `json:"overrideOccurred,omitempty"`
+	OverrideAuthorizedBy  string `json:"overrideAuthorizedBy,omitempty"`
+	OverrideReason        string `json:"overrideReason,omitempty"`
+	OverrideAuditRecordID string `json:"overrideAuditRecordId,omitempty"`
+	// ConnectivityOnline/ConnectivityPolicyVersion/
+	// ConnectivityLastSyncedAt carry the endpoint's observed
+	// connectivity and policy-sync state at the time of the
+	// enforcement action. ConnectivityOnline nil means connectivity
+	// state could not be established, never defaulted to true or false.
+	ConnectivityOnline        *bool     `json:"connectivityOnline,omitempty"`
+	ConnectivityPolicyVersion string    `json:"connectivityPolicyVersion,omitempty"`
+	ConnectivityLastSyncedAt  time.Time `json:"connectivityLastSyncedAt,omitempty"`
 }
 
 // Termination reasons reported by the agent (agent/protocol/messages.go).
