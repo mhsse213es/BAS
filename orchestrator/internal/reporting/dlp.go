@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/audspect/bas/internal/dlpfixture"
 	"github.com/audspect/bas/internal/scenario"
@@ -54,6 +55,46 @@ type DLPEvidence struct {
 	// contradicts, or leaves unresolved for this specific verdict. Always
 	// populated.
 	Limitations string
+
+	// Channel names which operation path produced this evidence --
+	// "browser" | "native-app" | "sync-client" | "api" | "" (unknown).
+	// An open string, not a closed enum, mirroring
+	// dlpclassify.ClassificationEvidence.Channel's own discipline.
+	Channel string
+	// Override carries an observed override/justification record, or
+	// nil when no override evidence exists (never a struct of all
+	// zero values, which would misrepresent "we have nothing to say"
+	// as "an override we know nothing about").
+	Override *OverrideEvidence
+	// Connectivity carries observed endpoint online/offline and
+	// policy-sync state, or nil when unavailable.
+	Connectivity *ConnectivityEvidence
+}
+
+// OverrideEvidence is what was actually observed about an end user's
+// override of a DLP action (e.g. "override and send anyway") --
+// never inferred from a bare operation success. This is unrelated to
+// this file's own applyOverride/StoredVerification, which is an
+// analyst's manual review-workflow override of this tool's own
+// verdict, not a DLP end user's override of a policy action.
+type OverrideEvidence struct {
+	Occurred      bool
+	AuthorizedBy  string // user/role/service identity that approved the override; empty if unknown
+	Reason        string // the stated justification text, verbatim
+	AuditRecordID string // empty when no corresponding audit-trail record was found
+}
+
+// ConnectivityEvidence is what was actually observed about the
+// endpoint's connectivity and policy currency at the time of the
+// enforcement action -- never inferred from the action's outcome
+// alone (an endpoint can enforce correctly while offline, using a
+// cached policy).
+type ConnectivityEvidence struct {
+	// Online is nil when connectivity state could not be established
+	// (never defaulted to true or false).
+	Online                 *bool
+	EffectivePolicyVersion string
+	LastSyncedAt           time.Time // zero value = unknown, never "now"
 }
 
 // Primitive observations a local verifier can honestly report.
@@ -169,10 +210,32 @@ func (dlpVerifier) Verify(exp scenario.ExpectedDetection, ev StepEvidence) Verif
 			fixtureID = id
 		}
 	}
+
+	var override *OverrideEvidence
+	if ev.OverrideOccurred || ev.OverrideAuthorizedBy != "" || ev.OverrideReason != "" || ev.OverrideAuditRecordID != "" {
+		override = &OverrideEvidence{
+			Occurred:      ev.OverrideOccurred,
+			AuthorizedBy:  ev.OverrideAuthorizedBy,
+			Reason:        ev.OverrideReason,
+			AuditRecordID: ev.OverrideAuditRecordID,
+		}
+	}
+	var connectivity *ConnectivityEvidence
+	if ev.ConnectivityOnline != nil || ev.ConnectivityPolicyVersion != "" || !ev.ConnectivityLastSyncedAt.IsZero() {
+		connectivity = &ConnectivityEvidence{
+			Online:                 ev.ConnectivityOnline,
+			EffectivePolicyVersion: ev.ConnectivityPolicyVersion,
+			LastSyncedAt:           ev.ConnectivityLastSyncedAt,
+		}
+	}
+
 	r.DLPEvidence = &DLPEvidence{
 		CollectionMethod: collectionMethod,
 		FixtureID:        fixtureID,
-		Limitations:      limitationsFor(r.ExpectedOutcome, r.ObservedOutcome, r.Comparison, wasSkip),
+		Limitations:      limitationsFor(r.ExpectedOutcome, r.ObservedOutcome, r.Comparison, wasSkip, connectivity),
+		Channel:          ev.Channel,
+		Override:         override,
+		Connectivity:     connectivity,
 	}
 	return r
 }
@@ -183,7 +246,15 @@ func (dlpVerifier) Verify(exp scenario.ExpectedDetection, ev StepEvidence) Verif
 // evidence proves: a MissingEvidence verdict is always phrased as
 // inconclusive, never as a failure. See
 // docs/superpowers/plans/2026-10-18-dlpevidence.md.
-func limitationsFor(expected, observed string, comparison ComparisonResult, wasSkip bool) string {
+func limitationsFor(expected, observed string, comparison ComparisonResult, wasSkip bool, connectivity *ConnectivityEvidence) string {
+	base := limitationsForComparison(expected, observed, comparison, wasSkip)
+	if connectivity != nil && connectivity.Online != nil && !*connectivity.Online {
+		return base + " The endpoint was offline at observation time."
+	}
+	return base
+}
+
+func limitationsForComparison(expected, observed string, comparison ComparisonResult, wasSkip bool) string {
 	switch comparison {
 	case Match:
 		return fmt.Sprintf("Observed outcome %q matches the expected %q outcome.", observed, expected)

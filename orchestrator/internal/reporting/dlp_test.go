@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/audspect/bas/internal/models"
 	"github.com/audspect/bas/internal/scenario"
@@ -98,6 +99,106 @@ func TestDLPVerifier(t *testing.T) {
 }
 
 func boolPtr(b bool) *bool { return &b }
+
+func TestDLPEvidence_ChannelPassesThroughDirectly(t *testing.T) {
+	exp := scenario.ExpectedDetection{ExpectedOutcome: "Block"}
+	r := dlpVerifier{}.Verify(exp, StepEvidence{RawOutput: "DLP_OBSERVATION: OperationBlocked", Channel: "browser"})
+	if r.DLPEvidence.Channel != "browser" {
+		t.Errorf("Channel = %q, want %q", r.DLPEvidence.Channel, "browser")
+	}
+}
+
+func TestDLPEvidence_ChannelEmptyStaysEmpty(t *testing.T) {
+	exp := scenario.ExpectedDetection{ExpectedOutcome: "Block"}
+	r := dlpVerifier{}.Verify(exp, StepEvidence{RawOutput: "DLP_OBSERVATION: OperationBlocked"})
+	if r.DLPEvidence.Channel != "" {
+		t.Errorf("Channel = %q, want empty", r.DLPEvidence.Channel)
+	}
+}
+
+func TestDLPEvidence_OverrideNilWhenNoSignal(t *testing.T) {
+	exp := scenario.ExpectedDetection{ExpectedOutcome: "Block"}
+	r := dlpVerifier{}.Verify(exp, StepEvidence{RawOutput: "DLP_OBSERVATION: OperationBlocked"})
+	if r.DLPEvidence.Override != nil {
+		t.Errorf("Override = %+v, want nil", r.DLPEvidence.Override)
+	}
+}
+
+func TestDLPEvidence_OverridePopulatedWhenOccurred(t *testing.T) {
+	exp := scenario.ExpectedDetection{ExpectedOutcome: "Block"}
+	r := dlpVerifier{}.Verify(exp, StepEvidence{
+		RawOutput:             "DLP_OBSERVATION: OperationSucceeded",
+		OverrideOccurred:      true,
+		OverrideAuthorizedBy:  "jdoe",
+		OverrideReason:        "business need",
+		OverrideAuditRecordID: "aud-1",
+	})
+	if r.DLPEvidence.Override == nil {
+		t.Fatal("Override = nil, want populated")
+	}
+	if r.DLPEvidence.Override.Occurred != true || r.DLPEvidence.Override.AuthorizedBy != "jdoe" || r.DLPEvidence.Override.Reason != "business need" || r.DLPEvidence.Override.AuditRecordID != "aud-1" {
+		t.Errorf("Override = %+v, fields don't match input", r.DLPEvidence.Override)
+	}
+}
+
+func TestDLPEvidence_OverridePopulatedWhenOnlyReasonPresent(t *testing.T) {
+	exp := scenario.ExpectedDetection{ExpectedOutcome: "Block"}
+	r := dlpVerifier{}.Verify(exp, StepEvidence{RawOutput: "DLP_OBSERVATION: OperationBlocked", OverrideReason: "attempted override, no audit record found"})
+	if r.DLPEvidence.Override == nil {
+		t.Fatal("Override = nil, want populated -- a non-empty Reason alone is a signal")
+	}
+}
+
+func TestDLPEvidence_ConnectivityNilWhenNoSignal(t *testing.T) {
+	exp := scenario.ExpectedDetection{ExpectedOutcome: "Block"}
+	r := dlpVerifier{}.Verify(exp, StepEvidence{RawOutput: "DLP_OBSERVATION: OperationBlocked"})
+	if r.DLPEvidence.Connectivity != nil {
+		t.Errorf("Connectivity = %+v, want nil", r.DLPEvidence.Connectivity)
+	}
+}
+
+func TestDLPEvidence_ConnectivityPopulatedWhenOnlineSet(t *testing.T) {
+	exp := scenario.ExpectedDetection{ExpectedOutcome: "Block"}
+	ts := time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)
+	r := dlpVerifier{}.Verify(exp, StepEvidence{
+		RawOutput:                 "DLP_OBSERVATION: OperationBlocked",
+		ConnectivityOnline:        boolPtr(false),
+		ConnectivityPolicyVersion: "v12",
+		ConnectivityLastSyncedAt:  ts,
+	})
+	if r.DLPEvidence.Connectivity == nil {
+		t.Fatal("Connectivity = nil, want populated")
+	}
+	if r.DLPEvidence.Connectivity.Online == nil || *r.DLPEvidence.Connectivity.Online != false {
+		t.Errorf("Connectivity.Online = %v, want pointer to false", r.DLPEvidence.Connectivity.Online)
+	}
+	if r.DLPEvidence.Connectivity.EffectivePolicyVersion != "v12" || !r.DLPEvidence.Connectivity.LastSyncedAt.Equal(ts) {
+		t.Errorf("Connectivity = %+v, fields don't match input", r.DLPEvidence.Connectivity)
+	}
+}
+
+func TestLimitationsFor_OfflineCaveatAppendedWhenOffline(t *testing.T) {
+	conn := &ConnectivityEvidence{Online: boolPtr(false)}
+	got := limitationsFor("Block", ObservationBlocked, Match, false, conn)
+	if !strings.Contains(got, "offline") {
+		t.Errorf("limitationsFor result %q, want it to mention the endpoint was offline", got)
+	}
+}
+
+func TestLimitationsFor_NoCaveatWhenConnectivityNil(t *testing.T) {
+	got := limitationsFor("Block", ObservationBlocked, Match, false, nil)
+	if strings.Contains(got, "offline") {
+		t.Errorf("limitationsFor result %q, want no offline caveat when Connectivity is nil", got)
+	}
+}
+
+func TestLimitationsFor_NoCaveatWhenOnlineUnknown(t *testing.T) {
+	conn := &ConnectivityEvidence{} // Online is nil -- unknown, not offline
+	got := limitationsFor("Block", ObservationBlocked, Match, false, conn)
+	if strings.Contains(got, "offline") {
+		t.Errorf("limitationsFor result %q, want no offline caveat when Online is nil (unknown)", got)
+	}
+}
 
 func TestDLPVerifier_SinkPrimary_TokenReceived(t *testing.T) {
 	exp := dlpExp("dlp-https-block", "Block")
