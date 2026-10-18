@@ -23,6 +23,37 @@ import (
 // Encrypt/Redact) against one of three primitive observations, not against
 // itself.
 
+// DLPEvidence carries the three evidence-model dimensions Audspect can
+// honestly populate today without a vendor connector or new telemetry
+// correlation -- see dlp.txt §6 and
+// docs/superpowers/plans/2026-10-18-dlpevidence.md. Classification/
+// telemetry/response outcomes are deliberately absent, not empty
+// placeholders: they require evidence sources that don't exist yet.
+type DLPEvidence struct {
+	// CollectionMethod names how ObservedOutcome was actually established:
+	// "sink-receipt" (destination-side ground truth) or "local-marker" (the
+	// step's own self-reported DLP_OBSERVATION line). Empty when neither
+	// produced a usable observation (ObservationUnknown, including a skip).
+	CollectionMethod string
+	// CorrelationID ties this evidence to a specific collection event. Always
+	// empty today -- no part of the current pipeline threads a real
+	// correlation token (e.g. the sink service's own token value) into
+	// StepEvidence yet. Left unavailable rather than inventing one; the field
+	// exists so a later, real correlation-ID change populates it without
+	// another struct change.
+	CorrelationID string
+	// FixtureID is the dlpfixture.Fixture.ID this step's synthetic payload
+	// actually matches, resolved by exact step-name lookup
+	// (dlpfixture.FixtureIDForStep) -- never inferred from the scenario's own
+	// ID or description. Empty when the step name doesn't resolve to exactly
+	// one catalogued fixture.
+	FixtureID string
+	// Limitations explains, in words, what Comparison actually proves,
+	// contradicts, or leaves unresolved for this specific verdict. Always
+	// populated.
+	Limitations string
+}
+
 // Primitive observations a local verifier can honestly report.
 const (
 	ObservationSucceeded = "OperationSucceeded"

@@ -50,6 +50,14 @@ type StepEvidence struct {
 	// SinkTokenObserved mirrors models.SimulationResult's field of the same
 	// name -- see its doc comment.
 	SinkTokenObserved *bool
+	// StepName mirrors models.SimulationResult.StepName -- the specific
+	// dispatched step's own real name, as opposed to TechniqueID's generic
+	// ATT&CK catalog identifier. Carried through the same TechniqueID-keyed
+	// collapse as every other field here (see evidenceByTechnique): when
+	// several steps share a technique, this is the name of whichever one's
+	// record won that collapse, consistent with its RawOutput/Events/etc.
+	// Used by dlpVerifier for exact (never inferred) dlpfixture lookup.
+	StepName string
 }
 
 // VerificationResult is the outcome of checking one expected detection.
@@ -72,6 +80,12 @@ type VerificationResult struct {
 	ExpectedOutcome string
 	ObservedOutcome string
 	Comparison      ComparisonResult
+
+	// DLPEvidence carries dlp-family-specific evidence provenance, confidence/
+	// limitations and synthetic-data-manifest detail (see dlp.go's DLPEvidence
+	// type). Nil for every verifier outside the "dlp" outcome family -- never
+	// surfaced in any non-DLP report JSON, so this is purely additive.
+	DLPEvidence *DLPEvidence
 
 	// RuleIDs links this verdict to Detection Rule Library entries
 	// (internal/rulelib.Rule.ID), carried through from the live
@@ -634,6 +648,7 @@ func evidenceByTechnique(results []models.SimulationResult) map[string]StepEvide
 			Events:            r.Events,
 			RawOutput:         r.RawOutput,
 			SinkTokenObserved: r.SinkTokenObserved,
+			StepName:          r.StepName,
 		}
 		if r.DetectionAlert != nil {
 			ev.AlertProvider = r.DetectionAlert.Provider

@@ -3,6 +3,7 @@ package reporting
 import (
 	"testing"
 
+	"github.com/audspect/bas/internal/models"
 	"github.com/audspect/bas/internal/scenario"
 )
 
@@ -167,6 +168,21 @@ func TestDLPVerifier_SkipMarker_CaseInsensitiveAndWhitespaceTolerant(t *testing.
 	})
 	if r.Status != StatusUnknown {
 		t.Errorf("Status = %s, want %s", r.Status, StatusUnknown)
+	}
+}
+
+// Review Focus (Task 2): evidenceByTechnique must carry the real step's own
+// StepName alongside its other per-step fields through the existing
+// TechniqueID-collapse -- a one-field, additive change that changes no
+// existing field's value.
+func TestEvidenceByTechnique_PopulatesStepName(t *testing.T) {
+	results := []models.SimulationResult{
+		{ID: "T1567", StepName: "DLP Validation — HTTPS Exfiltration of Visa Card Record (T1567)", RawOutput: "x"},
+	}
+	ev := evidenceByTechnique(results)
+	got := ev["T1567"]
+	if got.StepName != "DLP Validation — HTTPS Exfiltration of Visa Card Record (T1567)" {
+		t.Errorf("StepName = %q, want the real step name carried through", got.StepName)
 	}
 }
 
