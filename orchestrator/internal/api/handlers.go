@@ -1983,6 +1983,13 @@ func (h *Handler) dispatchRun(ctx context.Context, sc *scenario.Scenario, agentI
 	if license.Current().State.Blocked() {
 		return "", "license_locked", nil
 	}
+	// Single choke point for every caller of dispatchRun: a critical tamper
+	// event (orchestrator binary, bas.lic, BINARIES.sha256, wwwroot) sets
+	// this via internal/integrity's watcher, and must actually suspend
+	// dispatch, not just log that it did.
+	if integrity.DispatchBlocked.Load() {
+		return "", "tamper_detected", nil
+	}
 	kind := o.Kind
 	if kind == "" {
 		kind = contentregistry.KindContent

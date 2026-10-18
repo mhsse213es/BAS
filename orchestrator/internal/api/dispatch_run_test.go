@@ -8,12 +8,47 @@ import (
 	"time"
 
 	"github.com/audspect/bas/internal/artifactgen"
+	"github.com/audspect/bas/internal/integrity"
 	"github.com/audspect/bas/internal/iocregistry"
 	"github.com/audspect/bas/internal/license"
 	"github.com/audspect/bas/internal/scenario"
 	"github.com/audspect/bas/internal/ws"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+// TestDispatchRun_SkipsWhenDispatchBlocked pins the enforcement gap found
+// during the self-integrity release-gate review: integrity.DispatchBlocked
+// was set on every critical tamper event (self-integrity, bas.lic,
+// BINARIES.sha256, wwwroot) but never actually consulted anywhere in the
+// dispatch path, so a "SUSPENDED" tamper alert never suspended anything.
+// This is dispatchRun's single choke point for all of its callers.
+func TestDispatchRun_SkipsWhenDispatchBlocked(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		sc, engine := minimalPostureScenario(t, "dr-dispatch-blocked")
+		h := New(pool, ws.NewHub(), engine, "")
+		agentID := "dr-agent-dispatch-blocked"
+		seedActiveAgent(t, pool, agentID, "Windows")
+
+		integrity.DispatchBlocked.Store(true)
+		defer integrity.DispatchBlocked.Store(false)
+
+		runID, skip, err := h.dispatchRun(context.Background(), sc, agentID, dispatchOpts{Mode: "posture"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if runID != "" || skip != "tamper_detected" {
+			t.Fatalf("runID=%q skip=%q, want empty runID and skip=%q", runID, skip, "tamper_detected")
+		}
+		var count int
+		pool.QueryRow(context.Background(), `SELECT COUNT(*) FROM scenario_runs WHERE agent_id=$1`, agentID).Scan(&count)
+		if count != 0 {
+			t.Fatalf("run row created despite DispatchBlocked gate")
+		}
+	})
+}
 
 func TestDispatchRun_SkipsWhenLicenseLocked(t *testing.T) {
 	if testing.Short() {
