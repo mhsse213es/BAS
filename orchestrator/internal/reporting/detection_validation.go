@@ -85,7 +85,7 @@ type VerificationResult struct {
 	// limitations and synthetic-data-manifest detail (see dlp.go's DLPEvidence
 	// type). Nil for every verifier outside the "dlp" outcome family -- never
 	// surfaced in any non-DLP report JSON, so this is purely additive.
-	DLPEvidence *DLPEvidence
+	DLPEvidence *DLPEvidence `json:",omitempty"`
 
 	// RuleIDs links this verdict to Detection Rule Library entries
 	// (internal/rulelib.Rule.ID), carried through from the live
