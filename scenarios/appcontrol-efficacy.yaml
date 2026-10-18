@@ -1,19 +1,27 @@
 id: appcontrol-efficacy
-name: "Application Control Efficacy — Behavioral Validation (V1)"
+name: "Application Control Efficacy — Behavioral Validation"
 description: >
   Controlled, benign behavioral tests of whether application control blocks
   execution along the paths it claims to cover. Each step captures the
-  effective AppLocker coverage immediately before its attempt, runs one
-  benign [BAS-SIM] marker through the path under test, and resolves the
-  result with an enforcement oracle that requires BOTH a process-level
-  observation AND a correlated AppLocker block event naming the attempted
-  binary. Outcomes are structured (APPCTL_OUTCOME), never a bare pass/fail
-  inferred from exit code alone.
+  effective enforcement coverage immediately before its attempt, runs one
+  benign [BAS-SIM] marker through the path under test, and resolves the result
+  with an enforcement oracle. blocked_as_expected requires BOTH the marker to
+  be absent AND exactly one correlated control block event naming the attempted
+  binary, file, or parent, with the controlling collection enforced. Anything
+  unreadable, ambiguous, or unattributable is inconclusive, never a pass.
 
-  V1 scope: indirect execution (cmd.exe parent) and alternate binary
-  (renamed copy of powershell.exe). Not covered in V1: script-host proxies,
-  parent-child ASR, alternate PowerShell hosts, in-process hosting. Results
-  hold only for the tested Windows build and policy version.
+  Families: indirect_execution (cmd.exe parent), alternate_binary (renamed
+  powershell.exe), script_host_proxy (cscript running a benign .vbs),
+  alternate_ps_host (pwsh.exe, only where installed), parent_child_asr (a
+  renamed cmd.exe spoofing an Office parent, against the Office child-process
+  ASR rule).
+
+  Each step also reports telemetry visibility separately (APPCTL_DETECTION):
+  whether Sysmon process-creation telemetry recorded the attempt. Visibility is
+  not an EDR verdict and does not change the prevention outcome.
+
+  Results hold only for the tested Windows build and policy version. In-process
+  PowerShell hosting is not included; see the feasibility record.
 
   Run only in an authorized test context. Each step is self-cleaning.
 author: Audspect Research
@@ -46,13 +54,11 @@ steps:
       - "AppLocker block event correlated to this test's window and binary"
     command: |
       $ErrorActionPreference = 'SilentlyContinue'
-      # Test contract: the Exe collection is expected to block powershell.exe
-      # when launched through cmd.exe.
       $expected = 'blocked'
       $tid = [guid]::NewGuid().ToString('N')
       $marker = "BAS-SIM-APPCTL-$tid"
       $exe = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
-      $leaf = Split-Path $exe -Leaf
+      $needle = Split-Path $exe -Leaf
       $tmp = Join-Path $env:TEMP "bas-appctl-$tid.txt"
 
       function Get-AppCtlModes {
@@ -67,25 +73,25 @@ steps:
 
       # Pure decision: no I/O. Every input is observed by the caller.
       function Resolve-AppCtlOutcome {
-        param([string]$Expected, [string]$Coverage, [bool]$Ran, [int]$AttrCount, [bool]$LogReadable, [bool]$AppIdRunning)
-        if (-not $AppIdRunning) { return @{ Outcome = 'not_applicable'; Reason = 'AppIDSvc is not running, so AppLocker cannot enforce' } }
-        if (-not $LogReadable) { return @{ Outcome = 'inconclusive'; Reason = 'AppLocker EXE and DLL log is unreadable; execution cannot be attributed' } }
+        param([string]$Expected, [string]$Coverage, [bool]$Ran, [int]$AttrCount, [bool]$LogReadable, [bool]$ControlAvailable)
+        if (-not $ControlAvailable) { return @{ Outcome = 'not_applicable'; Reason = 'the tested mechanism or its enforcement control is unavailable on this host (service not running, not installed, or not readable)' } }
+        if (-not $LogReadable) { return @{ Outcome = 'inconclusive'; Reason = 'the enforcement event log is unreadable; execution cannot be attributed' } }
         if ($Ran) {
           if ($Expected -eq 'blocked') {
-            if ($Coverage -eq 'Enabled') { return @{ Outcome = 'allowed_unexpectedly'; Reason = 'executed although the Exe collection is Enabled' } }
-            return @{ Outcome = 'not_enforced'; Reason = "executed; Exe collection mode is $Coverage" }
+            if ($Coverage -eq 'Enabled') { return @{ Outcome = 'allowed_unexpectedly'; Reason = 'executed although the controlling collection is Enabled' } }
+            return @{ Outcome = 'not_enforced'; Reason = "executed; controlling collection mode is $Coverage" }
           }
           return @{ Outcome = 'allowed_by_policy'; Reason = 'executed; the contract expects this path to be allowed' }
         }
-        if ($Expected -eq 'allowed') { return @{ Outcome = 'inconclusive'; Reason = 'not executed although the contract expects it to be allowed' } }
+        if ($Expected -eq 'allowed') { return @{ Outcome = 'inconclusive'; Reason = 'not executed although the contract expects it allowed' } }
         if ($AttrCount -ne 1) { return @{ Outcome = 'inconclusive'; Reason = "not executed; $AttrCount matching block events (exactly 1 required for attribution)" } }
-        if ($Coverage -ne 'Enabled') { return @{ Outcome = 'inconclusive'; Reason = "block event present but Exe collection mode is $Coverage" } }
-        return @{ Outcome = 'blocked_as_expected'; Reason = 'not executed; one matching AppLocker block event for this binary' }
+        if ($Coverage -ne 'Enabled') { return @{ Outcome = 'inconclusive'; Reason = "block event present but controlling collection mode is $Coverage" } }
+        return @{ Outcome = 'blocked_as_expected'; Reason = 'not executed; one matching control block event for this binary' }
       }
 
       $modes = Get-AppCtlModes
       $coverage = $modes['Exe']
-      $appId = ((Get-Service -Name AppIDSvc -ErrorAction SilentlyContinue).Status -eq 'Running')
+      $control = ((Get-Service -Name AppIDSvc -ErrorAction SilentlyContinue).Status -eq 'Running')
       $start = Get-Date
       $p = Start-Process -FilePath cmd.exe -ArgumentList "/d /s /c `"`"$exe`" -NoProfile -NonInteractive -Command Write-Output $marker`"" -WindowStyle Hidden -PassThru -Wait -RedirectStandardOutput $tmp
       $exit = $p.ExitCode
@@ -95,13 +101,20 @@ steps:
       $attr = 0
       try {
         $ev = @(Get-WinEvent -FilterHashtable @{ LogName = 'Microsoft-Windows-AppLocker/EXE and DLL'; Id = 8004; StartTime = $start } -ErrorAction Stop)
-        $attr = @($ev | Where-Object { $_.Message -like "*$leaf*" }).Count
+        $attr = @($ev | Where-Object { $_.Message -like "*$needle*" }).Count
       } catch { $logReadable = $false }
-      $r = Resolve-AppCtlOutcome -Expected $expected -Coverage $coverage -Ran $ran -AttrCount $attr -LogReadable $logReadable -AppIdRunning $appId
+      $r = Resolve-AppCtlOutcome -Expected $expected -Coverage $coverage -Ran $ran -AttrCount $attr -LogReadable $logReadable -ControlAvailable $control
       Remove-Item $tmp -Force -ErrorAction SilentlyContinue
 
+      Write-Output "APPCTL_FAMILY: indirect_execution"
       Write-Output "APPCTL_COVERAGE: Exe=$coverage"
-      Write-Output "APPCTL_EVIDENCE: test_id=$tid expected=$expected ran=$ran exit=$exit attributed=$attr log_readable=$logReadable"
+      Write-Output "APPCTL_EVIDENCE: test_id=$tid expected=$expected ran=$ran exit=$exit attributed=$attr log_readable=$logReadable capture=$((Get-Date).ToString('o'))"
+      $det = 'unknown'
+      try {
+        $sy = @(Get-WinEvent -FilterHashtable @{ LogName = 'Microsoft-Windows-Sysmon/Operational'; Id = 1; StartTime = $start } -ErrorAction Stop)
+        $det = if (@($sy | Where-Object { $_.Message -like "*$tid*" }).Count -gt 0) { 'visible' } else { 'not_visible' }
+      } catch {}
+      Write-Output "APPCTL_DETECTION: source=sysmon_process_create result=$det"
       Write-Output "APPCTL_OUTCOME: $($r.Outcome)"
       switch ($r.Outcome) {
         'blocked_as_expected' { Write-Output "PASS: $($r.Reason). [BAS-SIM]" }
@@ -131,9 +144,6 @@ steps:
       - "AppLocker block event for a renamed copy of a Microsoft binary"
     command: |
       $ErrorActionPreference = 'SilentlyContinue'
-      # Test contract: a hash- or publisher-scoped Exe rule is expected to block a
-      # renamed copy of powershell.exe. A path-only allow rule would not, and
-      # that gap is what this test reports.
       $expected = 'blocked'
       $tid = [guid]::NewGuid().ToString('N')
       $marker = "BAS-SIM-APPCTL-$tid"
@@ -152,9 +162,9 @@ steps:
       }
 
       function Resolve-AppCtlOutcome {
-        param([string]$Expected, [string]$Coverage, [bool]$Ran, [int]$AttrCount, [bool]$LogReadable, [bool]$AppIdRunning)
-        if (-not $AppIdRunning) { return @{ Outcome = 'not_applicable'; Reason = 'AppIDSvc is not running, so AppLocker cannot enforce' } }
-        if (-not $LogReadable) { return @{ Outcome = 'inconclusive'; Reason = 'AppLocker EXE and DLL log is unreadable; execution cannot be attributed' } }
+        param([string]$Expected, [string]$Coverage, [bool]$Ran, [int]$AttrCount, [bool]$LogReadable, [bool]$ControlAvailable)
+        if (-not $ControlAvailable) { return @{ Outcome = 'not_applicable'; Reason = 'the tested mechanism or its enforcement control is unavailable on this host (service not running, not installed, or not readable)' } }
+        if (-not $LogReadable) { return @{ Outcome = 'inconclusive'; Reason = 'the enforcement event log is unreadable; execution cannot be attributed' } }
         if ($Ran) {
           if ($Expected -eq 'blocked') {
             if ($Coverage -eq 'Enabled') { return @{ Outcome = 'allowed_unexpectedly'; Reason = 'renamed copy executed although the Exe collection is Enabled' } }
@@ -170,8 +180,8 @@ steps:
 
       $modes = Get-AppCtlModes
       $coverage = $modes['Exe']
-      $appId = ((Get-Service -Name AppIDSvc -ErrorAction SilentlyContinue).Status -eq 'Running')
-      $leaf = Split-Path $exe -Leaf
+      $control = ((Get-Service -Name AppIDSvc -ErrorAction SilentlyContinue).Status -eq 'Running')
+      $needle = Split-Path $exe -Leaf
       Copy-Item -Path $src -Destination $exe -Force
       $start = Get-Date
       $p = Start-Process -FilePath cmd.exe -ArgumentList "/d /s /c `"`"$exe`" -NoProfile -NonInteractive -Command Write-Output $marker`"" -WindowStyle Hidden -PassThru -Wait -RedirectStandardOutput $tmp
@@ -182,14 +192,21 @@ steps:
       $attr = 0
       try {
         $ev = @(Get-WinEvent -FilterHashtable @{ LogName = 'Microsoft-Windows-AppLocker/EXE and DLL'; Id = 8004; StartTime = $start } -ErrorAction Stop)
-        $attr = @($ev | Where-Object { $_.Message -like "*$leaf*" }).Count
+        $attr = @($ev | Where-Object { $_.Message -like "*$needle*" }).Count
       } catch { $logReadable = $false }
-      $r = Resolve-AppCtlOutcome -Expected $expected -Coverage $coverage -Ran $ran -AttrCount $attr -LogReadable $logReadable -AppIdRunning $appId
+      $r = Resolve-AppCtlOutcome -Expected $expected -Coverage $coverage -Ran $ran -AttrCount $attr -LogReadable $logReadable -ControlAvailable $control
       Remove-Item $tmp -Force -ErrorAction SilentlyContinue
       Remove-Item $exe -Force -ErrorAction SilentlyContinue
 
+      Write-Output "APPCTL_FAMILY: alternate_binary"
       Write-Output "APPCTL_COVERAGE: Exe=$coverage"
-      Write-Output "APPCTL_EVIDENCE: test_id=$tid expected=$expected ran=$ran exit=$exit attributed=$attr log_readable=$logReadable"
+      Write-Output "APPCTL_EVIDENCE: test_id=$tid expected=$expected ran=$ran exit=$exit attributed=$attr log_readable=$logReadable capture=$((Get-Date).ToString('o'))"
+      $det = 'unknown'
+      try {
+        $sy = @(Get-WinEvent -FilterHashtable @{ LogName = 'Microsoft-Windows-Sysmon/Operational'; Id = 1; StartTime = $start } -ErrorAction Stop)
+        $det = if (@($sy | Where-Object { $_.Message -like "*$tid*" }).Count -gt 0) { 'visible' } else { 'not_visible' }
+      } catch {}
+      Write-Output "APPCTL_DETECTION: source=sysmon_process_create result=$det"
       Write-Output "APPCTL_OUTCOME: $($r.Outcome)"
       switch ($r.Outcome) {
         'blocked_as_expected' { Write-Output "PASS: $($r.Reason). [BAS-SIM]" }
@@ -201,3 +218,287 @@ steps:
     cleanup: |
       Remove-Item (Join-Path $env:TEMP 'bas-appctl-*.exe') -Force -ErrorAction SilentlyContinue
       Remove-Item (Join-Path $env:TEMP 'bas-appctl-*.txt') -Force -ErrorAction SilentlyContinue
+
+  - name: "Application control script host proxy: cscript runs a benign .vbs (T1059.005)"
+    technique_id: T1059.005
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: false
+    risk: medium
+    reversible: true
+    blast_radius: "Writes one benign .vbs that echoes a marker, runs it under cscript.exe, deletes it. Changes no policy."
+    telemetry:
+      - "AppLocker MSI and Script event 8006 (block) naming the unique .vbs, if enforced"
+      - "Sysmon EID 1: cscript.exe with the unique .vbs argument"
+    detection:
+      - "AppLocker script block event for this test's unique .vbs file"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $expected = 'blocked'
+      $tid = [guid]::NewGuid().ToString('N')
+      $marker = "BAS-SIM-APPCTL-$tid"
+      $vbs = Join-Path $env:TEMP "bas-appctl-$tid.vbs"
+      $tmp = Join-Path $env:TEMP "bas-appctl-$tid.txt"
+
+      function Get-AppCtlModes {
+        $modes = @{}
+        try {
+          $pol = Get-AppLockerPolicy -Effective -ErrorAction Stop
+          foreach ($rc in @($pol.RuleCollections)) { $modes[[string]$rc.RuleCollectionType] = [string]$rc.EnforcementMode }
+        } catch {}
+        foreach ($t in 'Exe','Script','Dll','Msi','Appx') { if (-not $modes.ContainsKey($t)) { $modes[$t] = 'NotConfigured' } }
+        return $modes
+      }
+
+      function Resolve-AppCtlOutcome {
+        param([string]$Expected, [string]$Coverage, [bool]$Ran, [int]$AttrCount, [bool]$LogReadable, [bool]$ControlAvailable)
+        if (-not $ControlAvailable) { return @{ Outcome = 'not_applicable'; Reason = 'the tested mechanism or its enforcement control is unavailable on this host (service not running, not installed, or not readable)' } }
+        if (-not $LogReadable) { return @{ Outcome = 'inconclusive'; Reason = 'the enforcement event log is unreadable; execution cannot be attributed' } }
+        if ($Ran) {
+          if ($Expected -eq 'blocked') {
+            if ($Coverage -eq 'Enabled') { return @{ Outcome = 'allowed_unexpectedly'; Reason = 'script executed although the Script collection is Enabled' } }
+            return @{ Outcome = 'not_enforced'; Reason = "script executed; Script collection mode is $Coverage" }
+          }
+          return @{ Outcome = 'allowed_by_policy'; Reason = 'script executed; the contract expects it allowed' }
+        }
+        if ($Expected -eq 'allowed') { return @{ Outcome = 'inconclusive'; Reason = 'not executed although the contract expects it allowed' } }
+        if ($AttrCount -ne 1) { return @{ Outcome = 'inconclusive'; Reason = "not executed; $AttrCount matching script block events (exactly 1 required for attribution)" } }
+        if ($Coverage -ne 'Enabled') { return @{ Outcome = 'inconclusive'; Reason = "block event present but Script collection mode is $Coverage" } }
+        return @{ Outcome = 'blocked_as_expected'; Reason = 'script not executed; one matching AppLocker script block event' }
+      }
+
+      $modes = Get-AppCtlModes
+      $coverage = $modes['Script']
+      $control = ((Get-Service -Name AppIDSvc -ErrorAction SilentlyContinue).Status -eq 'Running')
+      $needle = Split-Path $vbs -Leaf
+      Set-Content -Path $vbs -Value "WScript.Echo `"$marker`""
+      $start = Get-Date
+      $p = Start-Process -FilePath cscript.exe -ArgumentList "//nologo `"$vbs`"" -WindowStyle Hidden -PassThru -Wait -RedirectStandardOutput $tmp
+      $exit = $p.ExitCode
+      $out = Get-Content -Path $tmp -ErrorAction SilentlyContinue
+      $ran = [bool](($out -join "`n") -like "*$marker*")
+      $logReadable = $true
+      $attr = 0
+      try {
+        $ev = @(Get-WinEvent -FilterHashtable @{ LogName = 'Microsoft-Windows-AppLocker/MSI and Script'; Id = 8006; StartTime = $start } -ErrorAction Stop)
+        $attr = @($ev | Where-Object { $_.Message -like "*$needle*" }).Count
+      } catch { $logReadable = $false }
+      $r = Resolve-AppCtlOutcome -Expected $expected -Coverage $coverage -Ran $ran -AttrCount $attr -LogReadable $logReadable -ControlAvailable $control
+      Remove-Item $tmp -Force -ErrorAction SilentlyContinue
+      Remove-Item $vbs -Force -ErrorAction SilentlyContinue
+
+      Write-Output "APPCTL_FAMILY: script_host_proxy"
+      Write-Output "APPCTL_COVERAGE: Script=$coverage"
+      Write-Output "APPCTL_EVIDENCE: test_id=$tid expected=$expected ran=$ran exit=$exit attributed=$attr log_readable=$logReadable capture=$((Get-Date).ToString('o'))"
+      $det = 'unknown'
+      try {
+        $sy = @(Get-WinEvent -FilterHashtable @{ LogName = 'Microsoft-Windows-Sysmon/Operational'; Id = 1; StartTime = $start } -ErrorAction Stop)
+        $det = if (@($sy | Where-Object { $_.Message -like "*$tid*" }).Count -gt 0) { 'visible' } else { 'not_visible' }
+      } catch {}
+      Write-Output "APPCTL_DETECTION: source=sysmon_process_create result=$det"
+      Write-Output "APPCTL_OUTCOME: $($r.Outcome)"
+      switch ($r.Outcome) {
+        'blocked_as_expected' { Write-Output "PASS: $($r.Reason). [BAS-SIM]" }
+        'allowed_by_policy'   { Write-Output "PASS: $($r.Reason). [BAS-SIM]" }
+        'allowed_unexpectedly' { Write-Output "FAIL: $($r.Reason). [BAS-SIM]" }
+        'not_enforced'        { Write-Output "FAIL: $($r.Reason). [BAS-SIM]" }
+        default               { Write-Output "SKIP: $($r.Reason). [BAS-SIM]" }
+      }
+    cleanup: |
+      Remove-Item (Join-Path $env:TEMP 'bas-appctl-*.vbs') -Force -ErrorAction SilentlyContinue
+      Remove-Item (Join-Path $env:TEMP 'bas-appctl-*.txt') -Force -ErrorAction SilentlyContinue
+
+  - name: "Application control alternate PowerShell host: pwsh.exe where installed (T1059.001)"
+    technique_id: T1059.001
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: false
+    risk: medium
+    reversible: true
+    blast_radius: "Runs one benign marker through PowerShell 7 (pwsh.exe) if installed. Not applicable otherwise. Changes no policy."
+    telemetry:
+      - "AppLocker EXE and DLL event 8004 (block) naming pwsh.exe, if enforced"
+      - "Sysmon EID 1: cmd.exe launching pwsh.exe"
+    detection:
+      - "AppLocker block event for PowerShell 7, which Desktop-edition rules do not cover"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $expected = 'blocked'
+      $tid = [guid]::NewGuid().ToString('N')
+      $marker = "BAS-SIM-APPCTL-$tid"
+      $tmp = Join-Path $env:TEMP "bas-appctl-$tid.txt"
+
+      function Get-AppCtlModes {
+        $modes = @{}
+        try {
+          $pol = Get-AppLockerPolicy -Effective -ErrorAction Stop
+          foreach ($rc in @($pol.RuleCollections)) { $modes[[string]$rc.RuleCollectionType] = [string]$rc.EnforcementMode }
+        } catch {}
+        foreach ($t in 'Exe','Script','Dll','Msi','Appx') { if (-not $modes.ContainsKey($t)) { $modes[$t] = 'NotConfigured' } }
+        return $modes
+      }
+
+      function Resolve-AppCtlOutcome {
+        param([string]$Expected, [string]$Coverage, [bool]$Ran, [int]$AttrCount, [bool]$LogReadable, [bool]$ControlAvailable)
+        if (-not $ControlAvailable) { return @{ Outcome = 'not_applicable'; Reason = 'PowerShell 7 (pwsh.exe) is not installed, so this host cannot test this path' } }
+        if (-not $LogReadable) { return @{ Outcome = 'inconclusive'; Reason = 'the enforcement event log is unreadable; execution cannot be attributed' } }
+        if ($Ran) {
+          if ($Expected -eq 'blocked') {
+            if ($Coverage -eq 'Enabled') { return @{ Outcome = 'allowed_unexpectedly'; Reason = 'pwsh.exe executed although the Exe collection is Enabled' } }
+            return @{ Outcome = 'not_enforced'; Reason = "pwsh.exe executed; Exe collection mode is $Coverage" }
+          }
+          return @{ Outcome = 'allowed_by_policy'; Reason = 'pwsh.exe executed; the contract expects it allowed' }
+        }
+        if ($Expected -eq 'allowed') { return @{ Outcome = 'inconclusive'; Reason = 'not executed although the contract expects it allowed' } }
+        if ($AttrCount -ne 1) { return @{ Outcome = 'inconclusive'; Reason = "not executed; $AttrCount matching block events (exactly 1 required for attribution)" } }
+        if ($Coverage -ne 'Enabled') { return @{ Outcome = 'inconclusive'; Reason = "block event present but Exe collection mode is $Coverage" } }
+        return @{ Outcome = 'blocked_as_expected'; Reason = 'pwsh.exe not executed; one matching AppLocker block event' }
+      }
+
+      $pwsh = (Get-Command pwsh.exe -ErrorAction SilentlyContinue).Source
+      $modes = Get-AppCtlModes
+      $coverage = $modes['Exe']
+      $control = [bool]$pwsh -and ((Get-Service -Name AppIDSvc -ErrorAction SilentlyContinue).Status -eq 'Running')
+      $ran = $false
+      $exit = -1
+      $attr = 0
+      $logReadable = $true
+      $start = Get-Date
+      if ($control) {
+        $needle = Split-Path $pwsh -Leaf
+        $p = Start-Process -FilePath cmd.exe -ArgumentList "/d /s /c `"`"$pwsh`" -NoProfile -NonInteractive -Command Write-Output $marker`"" -WindowStyle Hidden -PassThru -Wait -RedirectStandardOutput $tmp
+        $exit = $p.ExitCode
+        $out = Get-Content -Path $tmp -ErrorAction SilentlyContinue
+        $ran = [bool](($out -join "`n") -like "*$marker*")
+        try {
+          $ev = @(Get-WinEvent -FilterHashtable @{ LogName = 'Microsoft-Windows-AppLocker/EXE and DLL'; Id = 8004; StartTime = $start } -ErrorAction Stop)
+          $attr = @($ev | Where-Object { $_.Message -like "*$needle*" }).Count
+        } catch { $logReadable = $false }
+      }
+      $r = Resolve-AppCtlOutcome -Expected $expected -Coverage $coverage -Ran $ran -AttrCount $attr -LogReadable $logReadable -ControlAvailable $control
+      Remove-Item $tmp -Force -ErrorAction SilentlyContinue
+
+      Write-Output "APPCTL_FAMILY: alternate_ps_host"
+      Write-Output "APPCTL_COVERAGE: Exe=$coverage"
+      Write-Output "APPCTL_EVIDENCE: test_id=$tid expected=$expected ran=$ran exit=$exit attributed=$attr log_readable=$logReadable pwsh_present=$([bool]$pwsh) capture=$((Get-Date).ToString('o'))"
+      $det = 'unknown'
+      if ($control) {
+        try {
+          $sy = @(Get-WinEvent -FilterHashtable @{ LogName = 'Microsoft-Windows-Sysmon/Operational'; Id = 1; StartTime = $start } -ErrorAction Stop)
+          $det = if (@($sy | Where-Object { $_.Message -like "*$tid*" }).Count -gt 0) { 'visible' } else { 'not_visible' }
+        } catch {}
+      }
+      Write-Output "APPCTL_DETECTION: source=sysmon_process_create result=$det"
+      Write-Output "APPCTL_OUTCOME: $($r.Outcome)"
+      switch ($r.Outcome) {
+        'blocked_as_expected' { Write-Output "PASS: $($r.Reason). [BAS-SIM]" }
+        'allowed_by_policy'   { Write-Output "PASS: $($r.Reason). [BAS-SIM]" }
+        'allowed_unexpectedly' { Write-Output "FAIL: $($r.Reason). [BAS-SIM]" }
+        'not_enforced'        { Write-Output "FAIL: $($r.Reason). [BAS-SIM]" }
+        default               { Write-Output "SKIP: $($r.Reason). [BAS-SIM]" }
+      }
+    cleanup: |
+      Remove-Item (Join-Path $env:TEMP 'bas-appctl-*.txt') -Force -ErrorAction SilentlyContinue
+
+  - name: "Application control parent-child ASR: spoofed Office parent (T1204.002)"
+    technique_id: T1204.002
+    framework: custom
+    executor: powershell
+    requires_priv: admin
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: false
+    risk: medium
+    reversible: true
+    blast_radius: "Copies cmd.exe into a uniquely named temp directory as winword.exe, runs one benign marker child, deletes the copy. Changes no policy."
+    telemetry:
+      - "Defender Operational event 1121 (ASR block) naming the spoofed parent, if enforced"
+      - "Sysmon EID 1: powershell.exe with the spoofed parent image"
+    detection:
+      - "ASR block event for an Office child-process rule violation"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $expected = 'blocked'
+      $tid = [guid]::NewGuid().ToString('N')
+      $marker = "BAS-SIM-APPCTL-$tid"
+      $asrRule = 'D4F940AB-401B-4EFC-AADC-AD5F3C50688A'
+      $dir = Join-Path $env:TEMP "bas-appctl-$tid"
+      $wordExe = Join-Path $dir 'winword.exe'
+      $tmp = Join-Path $env:TEMP "bas-appctl-$tid.txt"
+
+      # Pure decision: no I/O. Every input is observed by the caller.
+      function Resolve-AppCtlOutcome {
+        param([string]$Expected, [string]$Coverage, [bool]$Ran, [int]$AttrCount, [bool]$LogReadable, [bool]$ControlAvailable)
+        if (-not $ControlAvailable) { return @{ Outcome = 'not_applicable'; Reason = 'Defender preferences are unavailable, so the ASR rule state cannot be established' } }
+        if (-not $LogReadable) { return @{ Outcome = 'inconclusive'; Reason = 'the Defender Operational log is unreadable; execution cannot be attributed' } }
+        if ($Ran) {
+          if ($Expected -eq 'blocked') {
+            if ($Coverage -eq 'Enabled') { return @{ Outcome = 'allowed_unexpectedly'; Reason = 'spoofed-parent child executed although the ASR rule is in Block mode' } }
+            return @{ Outcome = 'not_enforced'; Reason = "spoofed-parent child executed; ASR rule mode is $Coverage" }
+          }
+          return @{ Outcome = 'allowed_by_policy'; Reason = 'spoofed-parent child executed; the contract expects it allowed' }
+        }
+        if ($Expected -eq 'allowed') { return @{ Outcome = 'inconclusive'; Reason = 'not executed although the contract expects it allowed' } }
+        if ($AttrCount -ne 1) { return @{ Outcome = 'inconclusive'; Reason = "not executed; $AttrCount matching ASR block events (exactly 1 required for attribution)" } }
+        if ($Coverage -ne 'Enabled') { return @{ Outcome = 'inconclusive'; Reason = "ASR block event present but rule mode is $Coverage" } }
+        return @{ Outcome = 'blocked_as_expected'; Reason = 'spoofed-parent child not executed; one matching ASR block event for this parent' }
+      }
+
+      $pref = Get-MpPreference -ErrorAction SilentlyContinue
+      $control = ($null -ne $pref)
+      $ids = @()
+      $acts = @()
+      if ($control) {
+        $ids = @($pref.AttackSurfaceReductionRules_Ids | ForEach-Object { ([string]$_).ToUpper() })
+        $acts = @($pref.AttackSurfaceReductionRules_Actions)
+      }
+      $i = [array]::IndexOf($ids, $asrRule)
+      $coverage = if ($i -lt 0) { 'NotConfigured' } elseif ($acts[$i] -eq 1) { 'Enabled' } else { 'AuditOnly' }
+
+      $ran = $false
+      $exit = -1
+      $attr = 0
+      $logReadable = $true
+      $start = Get-Date
+      if ($control) {
+        New-Item -ItemType Directory -Path $dir -Force | Out-Null
+        Copy-Item -Path (Join-Path $env:SystemRoot 'System32\cmd.exe') -Destination $wordExe -Force
+        $p = Start-Process -FilePath $wordExe -ArgumentList "/d /s /c `"powershell -NoProfile -NonInteractive -Command Write-Output $marker`"" -WindowStyle Hidden -PassThru -Wait -RedirectStandardOutput $tmp
+        $exit = $p.ExitCode
+        $out = Get-Content -Path $tmp -ErrorAction SilentlyContinue
+        $ran = [bool](($out -join "`n") -like "*$marker*")
+        try {
+          $ev = @(Get-WinEvent -FilterHashtable @{ LogName = 'Microsoft-Windows-Windows Defender/Operational'; Id = 1121; StartTime = $start } -ErrorAction Stop)
+          $attr = @($ev | Where-Object { $_.Message -like "*$tid*" }).Count
+        } catch { $logReadable = $false }
+      }
+      $r = Resolve-AppCtlOutcome -Expected $expected -Coverage $coverage -Ran $ran -AttrCount $attr -LogReadable $logReadable -ControlAvailable $control
+      Remove-Item $tmp -Force -ErrorAction SilentlyContinue
+
+      Write-Output "APPCTL_FAMILY: parent_child_asr"
+      Write-Output "APPCTL_COVERAGE: AsrOfficeChild=$coverage"
+      Write-Output "APPCTL_EVIDENCE: test_id=$tid expected=$expected ran=$ran exit=$exit attributed=$attr log_readable=$logReadable capture=$((Get-Date).ToString('o'))"
+      $det = 'unknown'
+      if ($control) {
+        try {
+          $sy = @(Get-WinEvent -FilterHashtable @{ LogName = 'Microsoft-Windows-Sysmon/Operational'; Id = 1; StartTime = $start } -ErrorAction Stop)
+          $det = if (@($sy | Where-Object { $_.Message -like "*$tid*" }).Count -gt 0) { 'visible' } else { 'not_visible' }
+        } catch {}
+      }
+      Write-Output "APPCTL_DETECTION: source=sysmon_process_create result=$det"
+      Write-Output "APPCTL_OUTCOME: $($r.Outcome)"
+      switch ($r.Outcome) {
+        'blocked_as_expected' { Write-Output "PASS: $($r.Reason). [BAS-SIM]" }
+        'allowed_by_policy'   { Write-Output "PASS: $($r.Reason). [BAS-SIM]" }
+        'allowed_unexpectedly' { Write-Output "FAIL: $($r.Reason). [BAS-SIM]" }
+        'not_enforced'        { Write-Output "FAIL: $($r.Reason). [BAS-SIM]" }
+        default               { Write-Output "SKIP: $($r.Reason). [BAS-SIM]" }
+      }
+    cleanup: |
+      Remove-Item (Join-Path $env:TEMP 'bas-appctl-*') -Recurse -Force -ErrorAction SilentlyContinue

@@ -1,6 +1,10 @@
 package reporting
 
-import "regexp"
+import (
+	"fmt"
+	"regexp"
+	"strings"
+)
 
 // Observed outcomes emitted by an application-control behavioral step as an
 // APPCTL_OUTCOME line. Expected intents come from the test contract.
@@ -103,4 +107,71 @@ func NewAppControlEvidence(method, correlationID, fixtureID, policySnapshot, cap
 		PolicyEvaluated:         evaluated,
 		Limitations:             appControlDefaultLimitations,
 	}
+}
+
+// Path families an application-control step can report under APPCTL_FAMILY.
+var appCtlFamilies = map[string]bool{
+	"indirect_execution": true, "alternate_binary": true,
+	"script_host_proxy": true, "alternate_ps_host": true,
+	"parent_child_asr": true,
+}
+
+// Telemetry visibility values reported under APPCTL_DETECTION. Visibility is
+// a separate fact from prevention: it says whether the attempt reached
+// telemetry, not whether it was blocked.
+var appCtlVisibilityValues = map[string]bool{
+	"visible": true, "not_visible": true, "unknown": true,
+}
+
+var (
+	appCtlFamilyRe    = regexp.MustCompile(`(?m)^APPCTL_FAMILY:\s*(\S+)\s*$`)
+	appCtlDetectionRe = regexp.MustCompile(`(?m)^APPCTL_DETECTION:.*\bresult=(\S+)\s*$`)
+)
+
+// ParseAppControlFamily returns the path family a step declared.
+func ParseAppControlFamily(output string) (string, bool) {
+	m := appCtlFamilyRe.FindStringSubmatch(output)
+	if m == nil || !appCtlFamilies[m[1]] {
+		return "", false
+	}
+	return m[1], true
+}
+
+// ParseAppControlVisibility returns the telemetry visibility a step reported.
+func ParseAppControlVisibility(output string) (string, bool) {
+	m := appCtlDetectionRe.FindStringSubmatch(output)
+	if m == nil || !appCtlVisibilityValues[m[1]] {
+		return "", false
+	}
+	return m[1], true
+}
+
+// AppControlPathResult is one evaluated path in the coverage matrix.
+// Prevention (Outcome) and telemetry (Visibility) are kept as separate facts.
+type AppControlPathResult struct {
+	Family     string
+	Technique  string
+	Outcome    string
+	Visibility string
+}
+
+// RenderAppControlMatrix renders the per-path coverage matrix as Markdown.
+// Prevention and telemetry visibility are separate columns, and the
+// limitations statement is always present, including for an empty matrix.
+func RenderAppControlMatrix(rows []AppControlPathResult) string {
+	var b strings.Builder
+	b.WriteString("## Application control efficacy\n\n")
+	if len(rows) == 0 {
+		b.WriteString("No application-control paths were evaluated.\n\n")
+	} else {
+		b.WriteString("| Family | Technique | Prevention outcome | Telemetry visibility |\n")
+		b.WriteString("| --- | --- | --- | --- |\n")
+		for _, r := range rows {
+			fmt.Fprintf(&b, "| %s | %s | %s | %s |\n", r.Family, r.Technique, r.Outcome, r.Visibility)
+		}
+		b.WriteString("\n")
+	}
+	b.WriteString("Telemetry visibility is not a prevention verdict: a path can be blocked and still unseen by telemetry, or allowed and visible.\n\n")
+	b.WriteString(appControlDefaultLimitations + "\n")
+	return b.String()
 }
