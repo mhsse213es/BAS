@@ -1,9 +1,11 @@
 package reporting
 
 import (
+	"fmt"
 	"regexp"
 	"strings"
 
+	"github.com/audspect/bas/internal/dlpfixture"
 	"github.com/audspect/bas/internal/scenario"
 )
 
@@ -112,38 +114,83 @@ func (dlpVerifier) Verify(exp scenario.ExpectedDetection, ev StepEvidence) Verif
 	r.ExpectedOutcome = scenario.ResolveExpectedOutcome(exp)
 
 	observed := ObservationUnknown
-	if isSkipMarker(ev.RawOutput) {
+	collectionMethod := ""
+	switch {
+	case isSkipMarker(ev.RawOutput):
 		// A step that never ran (client tool absent, technique not
 		// applicable, etc.) produced no attempt at all -- SinkTokenObserved
 		// being false here is the absence of an attempt, not evidence the
 		// attempt was blocked. Checked BEFORE SinkTokenObserved so a skip
 		// can never resolve to ObservationBlocked. See
 		// docs/superpowers/specs/2026-09-01-sftp-exfiltration-channel-design.md.
-		r.ObservedOutcome = observed // ObservationUnknown
-		r.Comparison = comparatorFor("dlp").Compare(r.ExpectedOutcome, r.ObservedOutcome)
-		r.Status = collapseToStatus(r.Comparison)
-		return r
-	}
-	if ev.SinkTokenObserved != nil {
+		// observed stays ObservationUnknown, collectionMethod stays "".
+	case ev.SinkTokenObserved != nil:
 		// Sink-primary: destination-side receipt is authoritative ground
 		// truth for whether the data actually left, superseding the local
 		// marker for this step -- see
 		// docs/superpowers/specs/2026-08-19-dlp-exfiltration-sink-service-design.md.
+		collectionMethod = "sink-receipt"
 		if *ev.SinkTokenObserved {
 			observed = ObservationSucceeded
 		} else {
 			observed = ObservationBlocked
 		}
-	} else if m := dlpMarkerRe.FindStringSubmatch(ev.RawOutput); m != nil {
-		switch m[1] {
-		case ObservationSucceeded, ObservationBlocked:
-			observed = m[1]
+	default:
+		if m := dlpMarkerRe.FindStringSubmatch(ev.RawOutput); m != nil {
+			switch m[1] {
+			case ObservationSucceeded, ObservationBlocked:
+				observed = m[1]
+				collectionMethod = "local-marker"
+			}
+			// An unrecognized token is a marker that didn't produce a usable
+			// observation -- collectionMethod stays "", observed stays
+			// ObservationUnknown, same as no marker at all.
 		}
 	}
+
 	r.ObservedOutcome = observed
 	r.Comparison = comparatorFor("dlp").Compare(r.ExpectedOutcome, r.ObservedOutcome)
 	r.Status = collapseToStatus(r.Comparison)
+
+	fixtureID := ""
+	if ev.StepName != "" {
+		if id, ok := dlpfixture.FixtureIDForStep(ev.StepName); ok {
+			fixtureID = id
+		}
+	}
+	r.DLPEvidence = &DLPEvidence{
+		CollectionMethod: collectionMethod,
+		FixtureID:        fixtureID,
+		Limitations:      limitationsFor(r.ExpectedOutcome, r.ObservedOutcome, r.Comparison),
+	}
 	return r
+}
+
+// limitationsFor explains, in plain language, what comparison actually
+// establishes for this specific expected/observed pair -- the "confidence
+// and limitations" evidence-model dimension. Never implies more than the
+// evidence proves: a MissingEvidence verdict is always phrased as
+// inconclusive, never as a failure. See
+// docs/superpowers/plans/2026-10-18-dlpevidence.md.
+func limitationsFor(expected, observed string, comparison ComparisonResult) string {
+	switch comparison {
+	case Match:
+		return fmt.Sprintf("Observed outcome %q matches the expected %q outcome.", observed, expected)
+	case Mismatch:
+		if observed == ObservationBlocked {
+			return fmt.Sprintf("The operation was blocked even though %q was expected -- a confirmed policy deviation, not missing evidence.", expected)
+		}
+		return fmt.Sprintf("The operation succeeded despite an expected %q outcome -- a confirmed enforcement failure for this path.", expected)
+	default: // MissingEvidence
+		if observed == ObservationUnknown {
+			return "No usable observation was collected for this step (it may have been skipped, or produced no recognizable completion marker) -- this is not evidence of either enforcement or a failure."
+		}
+		// observed == ObservationSucceeded against a softer expected outcome
+		// (Warn/Justify/Audit/Quarantine/Encrypt/Redact): the step only
+		// confirmed its own completion, which cannot confirm or rule out
+		// whether that outcome actually fired.
+		return fmt.Sprintf("The step only confirmed that its operation completed; this is not evidence that the expected %q behavior occurred or did not occur -- it remains unverified.", expected)
+	}
 }
 
 // isSkipMarker reports whether raw's first line matches the "skip:"

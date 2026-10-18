@@ -1,6 +1,8 @@
 package reporting
 
 import (
+	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/audspect/bas/internal/models"
@@ -183,6 +185,154 @@ func TestEvidenceByTechnique_PopulatesStepName(t *testing.T) {
 	got := ev["T1567"]
 	if got.StepName != "DLP Validation — HTTPS Exfiltration of Visa Card Record (T1567)" {
 		t.Errorf("StepName = %q, want the real step name carried through", got.StepName)
+	}
+}
+
+// --- Task 3: DLPEvidence wiring ---
+
+func TestDLPVerifier_DLPEvidence_AlwaysPopulated(t *testing.T) {
+	exp := dlpExp("dlp-usb-block", "Block")
+	r := dlpVerifier{}.Verify(exp, StepEvidence{RawOutput: "DLP_OBSERVATION: OperationBlocked"})
+	if r.DLPEvidence == nil {
+		t.Fatal("DLPEvidence must always be populated by dlpVerifier, got nil")
+	}
+	if r.DLPEvidence.Limitations == "" {
+		t.Error("Limitations must always be explained, got empty string")
+	}
+}
+
+func TestDLPVerifier_DLPEvidence_CollectionMethod_SinkReceipt(t *testing.T) {
+	exp := dlpExp("dlp-https-block", "Block")
+	r := dlpVerifier{}.Verify(exp, StepEvidence{SinkTokenObserved: boolPtr(true)})
+	if r.DLPEvidence.CollectionMethod != "sink-receipt" {
+		t.Errorf("CollectionMethod = %q, want %q", r.DLPEvidence.CollectionMethod, "sink-receipt")
+	}
+}
+
+func TestDLPVerifier_DLPEvidence_CollectionMethod_LocalMarker(t *testing.T) {
+	exp := dlpExp("dlp-usb-block", "Block")
+	r := dlpVerifier{}.Verify(exp, StepEvidence{RawOutput: "DLP_OBSERVATION: OperationBlocked"})
+	if r.DLPEvidence.CollectionMethod != "local-marker" {
+		t.Errorf("CollectionMethod = %q, want %q", r.DLPEvidence.CollectionMethod, "local-marker")
+	}
+}
+
+// Review Focus: missing provenance (no sink token, no marker, or a skip) must
+// never be papered over -- CollectionMethod and CorrelationID stay empty, not
+// a guessed or invented value.
+func TestDLPVerifier_DLPEvidence_MissingProvenance_SkipPath(t *testing.T) {
+	exp := dlpExp("dlp-sftp-block", "Block")
+	r := dlpVerifier{}.Verify(exp, StepEvidence{RawOutput: "skip: sftp.exe not found"})
+	if r.DLPEvidence.CollectionMethod != "" {
+		t.Errorf("CollectionMethod = %q, want empty for a skipped step", r.DLPEvidence.CollectionMethod)
+	}
+	if r.DLPEvidence.CorrelationID != "" {
+		t.Errorf("CorrelationID = %q, want empty (never invented)", r.DLPEvidence.CorrelationID)
+	}
+}
+
+func TestDLPVerifier_DLPEvidence_MissingProvenance_NoMarkerNoSinkToken(t *testing.T) {
+	exp := dlpExp("dlp-usb-block", "Block")
+	r := dlpVerifier{}.Verify(exp, StepEvidence{RawOutput: "no marker here at all"})
+	if r.DLPEvidence.CollectionMethod != "" {
+		t.Errorf("CollectionMethod = %q, want empty when nothing usable was collected", r.DLPEvidence.CollectionMethod)
+	}
+	if r.DLPEvidence.CorrelationID != "" {
+		t.Errorf("CorrelationID = %q, want empty (never invented)", r.DLPEvidence.CorrelationID)
+	}
+}
+
+// Review Focus: an unknown/missing-evidence outcome's Limitations must say
+// it's inconclusive, never imply a confirmed failure.
+func TestDLPVerifier_DLPEvidence_Limitations_UnknownOutcome(t *testing.T) {
+	exp := dlpExp("dlp-usb-block", "Block")
+	r := dlpVerifier{}.Verify(exp, StepEvidence{RawOutput: "no marker here at all"})
+	lim := strings.ToLower(r.DLPEvidence.Limitations)
+	if !strings.Contains(lim, "no usable observation") && !strings.Contains(lim, "not evidence") {
+		t.Errorf("Limitations = %q, want it to say the outcome is inconclusive, not a failure", r.DLPEvidence.Limitations)
+	}
+}
+
+// Review Focus: this is the user's own example -- a Warn was expected, the
+// step only confirmed completion. Limitations must say that is unverified,
+// never that the warning failed to appear.
+func TestDLPVerifier_DLPEvidence_Limitations_SoftOutcomeUnverifiedBySuccessAlone(t *testing.T) {
+	exp := dlpExp("dlp-usb-warn", "Warn")
+	r := dlpVerifier{}.Verify(exp, StepEvidence{RawOutput: "DLP_OBSERVATION: OperationSucceeded"})
+	if r.Comparison != MissingEvidence {
+		t.Fatalf("Comparison = %v, want MissingEvidence", r.Comparison)
+	}
+	lim := strings.ToLower(r.DLPEvidence.Limitations)
+	if !strings.Contains(lim, "warn") || !strings.Contains(lim, "unverif") {
+		t.Errorf("Limitations = %q, want it to name Warn as unverified by bare completion", r.DLPEvidence.Limitations)
+	}
+}
+
+func TestDLPVerifier_DLPEvidence_Limitations_ConfirmedMismatch(t *testing.T) {
+	exp := dlpExp("dlp-https-block", "Block")
+	r := dlpVerifier{}.Verify(exp, StepEvidence{SinkTokenObserved: boolPtr(true)})
+	if r.Comparison != Mismatch {
+		t.Fatalf("Comparison = %v, want Mismatch", r.Comparison)
+	}
+	lim := strings.ToLower(r.DLPEvidence.Limitations)
+	if !strings.Contains(lim, "fail") && !strings.Contains(lim, "deviat") {
+		t.Errorf("Limitations = %q, want it to state a confirmed enforcement failure/deviation", r.DLPEvidence.Limitations)
+	}
+}
+
+// Review Focus: fixture linkage must be an exact match on the real step
+// name, never a guess -- a real catalogued dlpfixture entry resolves, an
+// unknown step name does not.
+func TestDLPVerifier_DLPEvidence_FixtureID_ResolvesFromRealStepName(t *testing.T) {
+	exp := dlpExp("dlp-https-block", "Block")
+	r := dlpVerifier{}.Verify(exp, StepEvidence{
+		StepName:  "DLP Validation — HTTPS Exfiltration of Visa Card Record (T1567)",
+		RawOutput: "DLP_OBSERVATION: OperationBlocked",
+	})
+	if r.DLPEvidence.FixtureID != "visa-card-record" {
+		t.Errorf("FixtureID = %q, want %q", r.DLPEvidence.FixtureID, "visa-card-record")
+	}
+}
+
+func TestDLPVerifier_DLPEvidence_FixtureID_EmptyWhenStepNameUnknown(t *testing.T) {
+	exp := dlpExp("dlp-usb-block", "Block")
+	r := dlpVerifier{}.Verify(exp, StepEvidence{
+		StepName:  "this step name is not in the catalog",
+		RawOutput: "DLP_OBSERVATION: OperationBlocked",
+	})
+	if r.DLPEvidence.FixtureID != "" {
+		t.Errorf("FixtureID = %q, want empty for an uncatalogued step name", r.DLPEvidence.FixtureID)
+	}
+}
+
+func TestDLPVerifier_DLPEvidence_FixtureID_EmptyWhenStepNameAbsent(t *testing.T) {
+	exp := dlpExp("dlp-usb-block", "Block")
+	r := dlpVerifier{}.Verify(exp, StepEvidence{RawOutput: "DLP_OBSERVATION: OperationBlocked"})
+	if r.DLPEvidence.FixtureID != "" {
+		t.Errorf("FixtureID = %q, want empty when StepEvidence carries no step name at all", r.DLPEvidence.FixtureID)
+	}
+}
+
+// Review Focus: backward compatibility -- a VerificationResult serialized
+// before this change (DLPEvidence absent) must still deserialize cleanly to
+// nil, and a new one must round-trip and omit the field when nil so old
+// consumers never see it.
+func TestVerificationResult_DLPEvidence_JSONBackwardCompatible(t *testing.T) {
+	oldShape := `{"ExpectedID":"e1","Status":"Detected"}`
+	var r VerificationResult
+	if err := json.Unmarshal([]byte(oldShape), &r); err != nil {
+		t.Fatalf("Unmarshal old-shape JSON: %v", err)
+	}
+	if r.DLPEvidence != nil {
+		t.Errorf("DLPEvidence = %+v, want nil when the stored JSON predates this field", r.DLPEvidence)
+	}
+
+	b, err := json.Marshal(VerificationResult{ExpectedID: "e2"})
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+	if strings.Contains(string(b), "DLPEvidence") {
+		t.Errorf("marshaled JSON %s should omit DLPEvidence when nil", b)
 	}
 }
 
