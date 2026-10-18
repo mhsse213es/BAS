@@ -474,6 +474,117 @@ func phIR004() Scenario {
 	}
 }
 
+// --- Phase 7: cross-channel and sector-specific coverage ---------------
+
+// phCHN001 wraps exercise.TeamsInjector.Send -- a real incoming-webhook
+// POST, httptest-proven in both exercise/injectors_test.go and
+// phishbridge/crosschannel_test.go. Delivery-only per
+// FromChannelInjectorResult's own documented boundary: dispatch success
+// proves the lure reached Teams, never that the tenant's own Teams
+// DLP/Safe-Links-for-Teams policy then caught it -- that read-back
+// evidence source does not exist.
+func phCHN001() Scenario {
+	return Scenario{
+		ID: "PH-CHN-001", Version: 1, Area: AreaCrossChannel, Name: "Teams collaboration lure",
+		PrimaryObjective:     "Validate supported collaboration protections",
+		Limitations:          "Delivery-only: exercise.TeamsInjector proves real webhook dispatch; no read-back of the tenant's own Teams-side DLP/Safe Links enforcement exists",
+		Expectation:          phishval.Expectation{ScenarioID: "PH-CHN-001", Delivery: ptrDelivery(phishval.DeliveryDelivered)},
+		Standards:            StandardsMapping{ATTACKTechniques: []string{"T1566.004"}}, // Spearphishing Voice/cross-channel services (closest covered sub-technique)
+		MappedImplementation: "exercise.TeamsInjector.Send",
+		Coverage:             CoverageAdapterTested,
+	}
+}
+
+// phCHN002: genuine gap -- no SharePoint/OneDrive sharing-link simulation
+// or sharing-invitation adapter exists anywhere in this codebase.
+func phCHN002() Scenario {
+	return Scenario{ID: "PH-CHN-002", Version: 1, Area: AreaCrossChannel, Name: "Malicious cloud-sharing invitation",
+		PrimaryObjective: "Test sharing-link inspection",
+		Limitations:      "genuine gap: no SharePoint/OneDrive sharing-invitation adapter exists",
+		Coverage:         CoverageCatalogOnly}
+}
+
+// phCHN003 is an overlap decision, not new code: an "OAuth application
+// invitation" lure and PH-ID-002's own "OAuth consent abuse" validate
+// the identical control (phishidentity.Client.ListOAuthConsentGrants /
+// IsTenantWideAndRisky) from two different simulation angles -- this
+// entry is the lure-delivery framing, PH-ID-002 the audit framing.
+func phCHN003() Scenario {
+	return Scenario{ID: "PH-CHN-003", Version: 1, Area: AreaCrossChannel, Name: "OAuth application invitation",
+		PrimaryObjective: "Validate application-consent controls",
+		Limitations:      "overlap decision: validates the identical control as PH-ID-002 (phishidentity.Client.ListOAuthConsentGrants/IsTenantWideAndRisky), just framed as a lure-delivery scenario rather than a tenant audit",
+		Coverage:         CoverageCatalogOnly}
+}
+
+// phCHN004: genuine gap -- no calendar-invite (.ics/Graph event) lure
+// adapter exists.
+func phCHN004() Scenario {
+	return Scenario{ID: "PH-CHN-004", Version: 1, Area: AreaCrossChannel, Name: "Calendar invitation lure",
+		PrimaryObjective: "Test supported calendar and mail controls",
+		Limitations:      "genuine gap: no calendar-invite (.ics / Graph calendar event) lure adapter exists",
+		Coverage:         CoverageCatalogOnly}
+}
+
+// phCHN005: partial overlap. A QR code is, at the protocol level, just
+// an encoded URL -- once a victim's phone resolves it, the resulting
+// browser-side chain is identical to PH-URL-001/PH-URL-005's own proven
+// mechanism. The genuine gap is the QR-generation and mobile-camera
+// transition itself, which has no adapter; the destination-URL leg is
+// not re-proven here to avoid double-claiming PH-URL-001/005's own
+// evidence.
+func phCHN005() Scenario {
+	return Scenario{ID: "PH-CHN-005", Version: 1, Area: AreaCrossChannel, Name: "Mobile QR-to-browser chain",
+		PrimaryObjective: "Validate controls across mobile transitions",
+		Limitations:      "partial overlap: the post-scan browser leg is the same mechanism as PH-URL-001/PH-URL-005; the QR-generation/mobile-camera transition itself has no adapter",
+		Coverage:         CoverageCatalogOnly}
+}
+
+// phCHN006 wraps exercise.SMSInjector.Send for the SMS leg -- real,
+// httptest-proven dispatch (per-recipient HTTP POST to a Twilio-
+// compatible gateway). "Chain" in this scenario's own name means a
+// full email<->SMS handoff: only the SMS leg is adapter-tested today:
+// phishval.Chain (Phase 4) is EmailGW-stage-shaped
+// (BuildCampaignChain reads emailgwcampaign.CampaignTemplate
+// specifically), not yet generalized to compose an email stage with an
+// SMS stage, so the two-stage claim itself stays deferred rather than
+// forced.
+func phCHN006() Scenario {
+	return Scenario{
+		ID: "PH-CHN-006", Version: 1, Area: AreaCrossChannel, Name: "SMS-to-email or email-to-SMS chain",
+		PrimaryObjective:     "Validate cross-channel reporting and handoff",
+		Limitations:          "the SMS leg (exercise.SMSInjector.Send) is real and adapter-tested; the full two-stage email<->SMS chain composition is deferred -- phishval.Chain is not yet generalized beyond emailgwcampaign.CampaignTemplate's own stage shape",
+		Expectation:          phishval.Expectation{ScenarioID: "PH-CHN-006", Delivery: ptrDelivery(phishval.DeliveryDelivered)},
+		Standards:            StandardsMapping{ATTACKTechniques: []string{"T1566.004"}},
+		MappedImplementation: "exercise.SMSInjector.Send",
+		Coverage:             CoverageAdapterTested,
+	}
+}
+
+// phCHN007: genuine gap -- no voice/vishing adapter (call placement,
+// IVR, or callback-fraud simulation) exists anywhere in this codebase.
+func phCHN007() Scenario {
+	return Scenario{ID: "PH-CHN-007", Version: 1, Area: AreaCrossChannel, Name: "Voice callback fraud",
+		PrimaryObjective: "Test reporting and response workflows for vishing",
+		Limitations:      "genuine gap: no voice/vishing adapter exists",
+		Coverage:         CoverageCatalogOnly}
+}
+
+// phCHN008 wraps exercise.SlackInjector.Send -- real, httptest-proven
+// incoming-webhook dispatch, the same mechanism and the same
+// Delivery-only boundary as PH-CHN-001's Teams lure, applied to Slack
+// as the representative "messaging platform."
+func phCHN008() Scenario {
+	return Scenario{
+		ID: "PH-CHN-008", Version: 1, Area: AreaCrossChannel, Name: "Messaging-platform impersonation",
+		PrimaryObjective:     "Test supported messaging integrations",
+		Limitations:          "Delivery-only, same boundary as PH-CHN-001: exercise.SlackInjector proves real webhook dispatch to Slack as the representative messaging platform; no read-back of the destination platform's own enforcement exists",
+		Expectation:          phishval.Expectation{ScenarioID: "PH-CHN-008", Delivery: ptrDelivery(phishval.DeliveryDelivered)},
+		Standards:            StandardsMapping{ATTACKTechniques: []string{"T1566.004"}},
+		MappedImplementation: "exercise.SlackInjector.Send",
+		Coverage:             CoverageAdapterTested,
+	}
+}
+
 // phATT001 wraps emailgwefficacy.EICARAttachmentExpectation -- a generic
 // malicious-attachment test (an industry-standard EICAR string as a real
 // MIME attachment), not HTML-specific. PH-ATT-002/003 (PDF/Office-doc
@@ -542,6 +653,7 @@ func AudspectPhishingCatalog() ([]Scenario, error) {
 		phURL001(), phURL005(), phID001(), phID002(), phID003(), phID004(), phID005(),
 		phEVA001(), phEVA002(), phEVA005(),
 		phDET001(), phDET002(), phIR001(), phIR002(), phIR003(), phIR004(),
+		phCHN001(), phCHN002(), phCHN003(), phCHN004(), phCHN005(), phCHN006(), phCHN007(), phCHN008(),
 		phATT001(), phATT002(), phATT003(), phATT010(),
 	}
 	if err := ValidateCatalog(all); err != nil {

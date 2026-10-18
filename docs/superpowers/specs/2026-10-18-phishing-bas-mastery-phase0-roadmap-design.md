@@ -532,3 +532,73 @@ cloudgraph/vendors again -- confirmed via git status.
 Next: Phase 7 (cross-channel and sector-specific coverage) -- the
 largest pure-greenfield block (all 8 PH-CHN-* have zero existing
 adapters).
+
+## 13. Phase 7 status: DONE (cross-channel -- 3 of 8 genuinely adapter-tested; 3 sector profiles)
+
+Phase 0's own research said all 8 PH-CHN-* had zero adapters anywhere.
+Re-verifying before writing catalog entries found that claim was wrong
+for 2 of the 8: `internal/exercise`'s `SMSInjector`/`SlackInjector`/
+`TeamsInjector` (real, httptest-proven HTTP dispatch, already tested in
+`exercise/injectors_test.go`) were missed in the original sweep.
+Corrected rather than silently building on the stale finding:
+
+- **PH-CHN-001 (Teams collaboration lure)** and **PH-CHN-008
+  (Messaging-platform impersonation)**: wrap `exercise.TeamsInjector.Send`/
+  `SlackInjector.Send` directly. New `phishbridge.FromChannelInjectorResult`
+  bridges the injector's own result map into phishval's Delivery
+  dimension ONLY -- Enforcement/Detection are deliberately left
+  ungraded, since nothing reads back whether the destination platform's
+  own DLP/Safe-Links then caught the lure. Proven end to end against the
+  real injectors via httptest (known-good: configured webhook delivers;
+  known-bad: unconfigured webhook's real error rejects). CoverageAdapterTested.
+- **PH-CHN-006 (SMS-to-email or email-to-SMS chain)**: the SMS leg wraps
+  `exercise.SMSInjector.Send` the same way, CoverageAdapterTested -- but
+  the scenario's own name promises a two-stage chain, and
+  `phishval.Chain`/`BuildCampaignChain` (Phase 4) is shaped specifically
+  around `emailgwcampaign.CampaignTemplate`'s stages, not yet
+  generalized to compose an email stage with an SMS stage. Documented
+  honestly as SMS-leg-only rather than claiming the full chain.
+- **PH-CHN-003 (OAuth application invitation)**: overlap decision, not
+  new code -- validates the identical control as PH-ID-002
+  (`phishidentity.Client.ListOAuthConsentGrants`/`IsTenantWideAndRisky`),
+  just framed as lure-delivery rather than tenant audit.
+- **PH-CHN-005 (Mobile QR-to-browser chain)**: partial-overlap note --
+  the post-scan browser leg is PH-URL-001/005's own proven mechanism (a
+  QR code is just an encoded URL); the QR-generation/mobile-camera
+  transition itself has no adapter. CoverageCatalogOnly, not re-claiming
+  PH-URL-001/005's evidence as its own.
+- **PH-CHN-002 (cloud-sharing invitation), PH-CHN-004 (calendar
+  invitation lure), PH-CHN-007 (voice callback fraud)**: genuine,
+  confirmed-by-grep zero-adapter gaps (no SharePoint/OneDrive sharing
+  link, calendar-invite, or voice/vishing adapter exists anywhere).
+  CoverageCatalogOnly.
+
+**Sector profiles**: added `phishcatalog.IndustryProfile`, mirroring
+`internal/webgwefficacy.IndustryProfile`'s own pattern exactly one layer
+over PH-* scenario IDs instead of WebGW domain IDs -- pure
+configuration, validated at construction against
+`AudspectPhishingCatalog`'s real IDs, never a second scoring system.
+Shipped three profiles (BFSI/NBFC, Healthcare, Manufacturing/OT-adjacent),
+each citing real PH-* scenarios phishing.txt's own sector language
+names (financial fraud, clinical-staff credential harvesting, supplier
+invoice diversion respectively). Did not build all 8 sectors phishing.txt
+names (government, insurance, telecom, retail, education, logistics,
+professional services, tech) -- 3 well-differentiated profiles is the
+right-sized scope per "no premature breadth"; a profile with no real
+distinguishing priorities would just be padding.
+
+India/UAE locale (Hindi/Arabic, RTL): not touched this phase --
+genuinely no i18n/locale plumbing exists anywhere in this codebase
+(confirmed via grep), and bolting a `Locale` string field onto `Scenario`
+with no renderer that reads it would be exactly the kind of schema-
+without-capability padding the standing conditions forbid. Left as an
+honestly-named gap, not attempted.
+
+Zero changes to emailgwefficacy/emailgwcampaign/exercise/rwevidence/
+webgwefficacy/vendors -- confirmed via git status. (A concurrent
+session's unrelated in-progress edit to internal/integrity/watcher.go
+transiently broke the full-module build during this phase; unrelated to
+phishing-mastery code, resolved on its own, not touched here.)
+
+Next: Phase 8 (coverage analytics and release qualification) -- the
+final phase.
