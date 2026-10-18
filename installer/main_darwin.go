@@ -3,6 +3,7 @@
 package main
 
 import (
+	"crypto/x509"
 	"fmt"
 	"os"
 	"os/exec"
@@ -24,7 +25,22 @@ import (
 //     line text, so the secret never appears in a shell string or a
 //     process listing), validates connectivity, extracts the embedded
 //     agent binary, fetches the deployment CA, and runs --install.
+//
+// parsedEmbeddedConfig is resolved once, in main(), before either phase
+// runs -- see main.go's identical var for the Windows installer and
+// embedconfig.go for extraction/validation. Both phases of this binary
+// (the re-exec through --do-install still runs the same executable) see
+// the same parsed value.
+var parsedEmbeddedConfig embeddedConfig
+
 func main() {
+	cfg, err := extractEmbeddedConfig([]byte(embeddedConfigSlot))
+	if err != nil {
+		showAlert("BAS Agent Setup failed", "This installer's embedded configuration is invalid or corrupted: "+err.Error()+". Re-download the installer from the console. Do not run this copy.")
+		return
+	}
+	parsedEmbeddedConfig = cfg
+
 	args := os.Args[1:]
 	if len(args) >= 1 && args[0] == "--do-install" {
 		runPrivilegedInstall(args[1:])
@@ -34,7 +50,7 @@ func main() {
 }
 
 func runSetupWizard() {
-	serverURL, secret, ok := promptForServerAndSecret(loadInstallDefaults().ServerURL)
+	serverURL, secret, ok := promptForServerAndSecret(parsedEmbeddedConfig.ServerURL)
 	if !ok {
 		return // cancelled or dismissed -- exit quietly, no error dialog
 	}
@@ -86,8 +102,22 @@ func runPrivilegedInstall(args []string) {
 		os.Exit(1)
 	}
 
+	// An embedded CA root (patched into this exact binary by the
+	// orchestrator's download handler, after it verified the base
+	// artifact against the signed manifest) lets validateEnrollment
+	// actually verify the server's certificate chain instead of skipping
+	// verification -- see trustingHTTPClient's doc comment in ca_fetch.go.
+	var caPool *x509.CertPool
+	if parsedEmbeddedConfig.CARootPEM != "" {
+		caPool = x509.NewCertPool()
+		if !caPool.AppendCertsFromPEM([]byte(parsedEmbeddedConfig.CARootPEM)) {
+			fmt.Fprintln(os.Stderr, "error: embedded CA root could not be loaded")
+			os.Exit(1)
+		}
+	}
+
 	fmt.Println("[1/4] Validating server connectivity and secret...")
-	if err := validateEnrollment(serverURL, secret); err != nil {
+	if err := validateEnrollment(serverURL, secret, caPool); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
 	}
@@ -107,8 +137,13 @@ func runPrivilegedInstall(args []string) {
 		os.Exit(1)
 	}
 
-	fmt.Println("[3/4] Fetching deployment CA...")
-	caPath, err := fetchDeploymentCA(serverURL, tmpDir)
+	fmt.Println("[3/4] Placing deployment CA...")
+	var caPath string
+	if parsedEmbeddedConfig.CARootPEM != "" {
+		caPath, err = writeEmbeddedCA([]byte(parsedEmbeddedConfig.CARootPEM), tmpDir)
+	} else {
+		caPath, err = fetchDeploymentCA(serverURL, tmpDir)
+	}
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)

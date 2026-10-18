@@ -54,19 +54,33 @@ func writeAgentAndManifest(t *testing.T, onDisk, manifestContent string) *integr
 	return integrity.LoadManifest(mpath)
 }
 
+// fixtureEmbedSlot returns a real, unpatched embed-config slot -- begin
+// marker, fill bytes, end marker -- matching installer/embedconfig.go's
+// shape, so a bundleDefaults fixture is something patchEmbeddedConfig can
+// actually find and patch, not a placeholder string.
+func fixtureEmbedSlot() []byte {
+	fill := strings.Repeat(string(embeddedConfigFillByte), embeddedConfigSlotSize)
+	return []byte(embeddedConfigBeginMarker + fill + embeddedConfigEndMarker)
+}
+
 // writeAllAgentFixturesAndManifest writes a real fixture file for every
 // agentFiles entry and a manifest that correctly lists all of them -- the
 // shape production's BINARIES.sha256 has once all 11 download-endpoint
-// artifacts are covered. Content is "content-of-<filename>" per file, so
-// a test can assert on exactly which file it got back.
+// artifacts are covered. Content is "content-of-<filename>" per file
+// (bundleDefaults entries also carry a real embed slot after that prefix),
+// so a test can assert on exactly which file it got back.
 func writeAllAgentFixturesAndManifest(t *testing.T) *integrity.Manifest {
 	t.Helper()
 	var lines []string
 	for _, entry := range agentFiles {
 		content := []byte("content-of-" + entry.filename)
-		// windows-amd64-setup is re-opened as a real zip by addDefaultsToZip
-		// (it's already a zip in production) -- the fixture must actually be
-		// one, not a plain string, or the bundling step correctly rejects it.
+		if entry.bundleDefaults {
+			content = append(content, fixtureEmbedSlot()...)
+		}
+		// windows-amd64-setup is re-opened as a real zip by
+		// patchEmbeddedConfigInZip (it's already a zip in production) --
+		// the fixture must actually be one, not a plain string, or the
+		// patch step correctly rejects it.
 		if strings.HasSuffix(entry.filename, ".zip") && entry.bundleDefaults {
 			var buf bytes.Buffer
 			zw := zip.NewWriter(&buf)
@@ -200,45 +214,51 @@ func TestDownloadAgent_AllPlatformsServedAndVerified(t *testing.T) {
 			if rec.Code != http.StatusOK {
 				t.Fatalf("platform %q: status = %d, want 200; body=%q", platform, rec.Code, rec.Body.String())
 			}
-			want := "content-of-" + entry.filename
+			wantPrefix := "content-of-" + entry.filename
 			if !entry.bundleDefaults {
-				if rec.Body.String() != want {
-					t.Errorf("platform %q: body = %q, want %q", platform, rec.Body.String(), want)
+				if rec.Body.String() != wantPrefix {
+					t.Errorf("platform %q: body = %q, want %q", platform, rec.Body.String(), wantPrefix)
 				}
 				return
 			}
-			// A bundled download is a zip carrying the original (verified)
-			// content under some entry, plus a fresh bas-agent-defaults.json
-			// -- not byte-identical to the on-disk fixture by design.
+			// A bundled download has the original (verified) content and
+			// a patched embed slot, same total length as the fixture --
+			// never byte-identical to it, since the slot's content changed.
 			body := rec.Body.Bytes()
-			zr, err := zip.NewReader(bytes.NewReader(body), int64(len(body)))
-			if err != nil {
-				t.Fatalf("platform %q: response is not a valid zip: %v", platform, err)
-			}
-			var sawDefaults, sawContent bool
-			for _, f := range zr.File {
-				rc, err := f.Open()
+			var binary []byte
+			if strings.HasSuffix(entry.filename, ".zip") {
+				zr, err := zip.NewReader(bytes.NewReader(body), int64(len(body)))
 				if err != nil {
-					t.Fatalf("platform %q: open entry %s: %v", platform, f.Name, err)
+					t.Fatalf("platform %q: response is not a valid zip: %v", platform, err)
 				}
-				data, _ := io.ReadAll(rc)
+				if len(zr.File) != 1 {
+					t.Fatalf("platform %q: patched zip has %d entries, want 1", platform, len(zr.File))
+				}
+				rc, err := zr.File[0].Open()
+				if err != nil {
+					t.Fatalf("platform %q: open entry: %v", platform, err)
+				}
+				binary, _ = io.ReadAll(rc)
 				rc.Close()
-				if f.Name == "bas-agent-defaults.json" {
-					sawDefaults = true
-					var d agentInstallDefaults
-					if err := json.Unmarshal(data, &d); err != nil || d.ServerURL == "" {
-						t.Errorf("platform %q: bas-agent-defaults.json invalid: %q", platform, data)
-					}
-				}
-				if string(data) == want {
-					sawContent = true
-				}
+			} else {
+				binary = body
 			}
-			if !sawDefaults {
-				t.Errorf("platform %q: zip missing bas-agent-defaults.json", platform)
+			if !bytes.HasPrefix(binary, []byte(wantPrefix)) {
+				t.Errorf("platform %q: patched artifact lost the original verified content prefix %q", platform, wantPrefix)
 			}
-			if !sawContent {
-				t.Errorf("platform %q: zip does not contain the original verified content %q", platform, want)
+			beginIdx := bytes.Index(binary, []byte(embeddedConfigBeginMarker))
+			endIdx := bytes.Index(binary, []byte(embeddedConfigEndMarker))
+			if beginIdx == -1 || endIdx == -1 {
+				t.Fatalf("platform %q: patched artifact lost its embed-config markers", platform)
+			}
+			contentStart := beginIdx + len(embeddedConfigBeginMarker)
+			if endIdx-contentStart != embeddedConfigSlotSize {
+				t.Fatalf("platform %q: patched slot is %d bytes, want %d", platform, endIdx-contentStart, embeddedConfigSlotSize)
+			}
+			cfgRaw := bytes.TrimRight(binary[contentStart:endIdx], string(embeddedConfigFillByte))
+			var cfg agentInstallConfig
+			if err := json.Unmarshal(cfgRaw, &cfg); err != nil || cfg.ServerURL == "" {
+				t.Errorf("platform %q: patched embed-config invalid: %q (err=%v)", platform, cfgRaw, err)
 			}
 		})
 	}

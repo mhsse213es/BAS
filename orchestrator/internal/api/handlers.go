@@ -1250,33 +1250,33 @@ func (h *Handler) StopAgent(w http.ResponseWriter, r *http.Request) {
 // key = URL platform param.
 //   - filename: source file in ./agents/, and the integrity manifest key.
 //   - mimeType: Content-Type served to the browser.
-//   - bundleDefaults: true for the GUI installers only -- the download is
-//     wrapped (or, for the already-zipped Windows setup, re-wrapped) with a
-//     freshly generated bas-agent-defaults.json carrying this deployment's
-//     server URL/enroll port, so the installer never has to ask for them --
-//     only the Secret.
-//   - downloadName: filename served to the browser when bundleDefaults
-//     changes the artifact's shape (bare binary -> zip); empty means serve
-//     under filename as-is.
+//   - bundleDefaults: true for the GUI installers only -- the signed,
+//     manifest-verified artifact is patched in place (see
+//     agent_install_bundle.go) with this deployment's server URL/enroll
+//     port/CA root, embedded inside the binary itself (never a sidecar
+//     file), so the installer never has to ask for them, or fetch the CA
+//     over an unauthenticated connection -- only the Secret remains.
+//     Patching never changes the artifact's length or shape (bare binary
+//     stays a bare binary; the pre-built zip stays a zip with the same
+//     one entry), so no separate downloadName is needed.
 var agentFiles = map[string]struct {
 	filename       string
 	mimeType       string
 	bundleDefaults bool
-	downloadName   string
 }{
-	"linux-amd64":                {"bas-agent-linux-amd64", "application/octet-stream", false, ""},
-	"linux-arm64":                {"bas-agent-linux-arm64", "application/octet-stream", false, ""},
-	"linux-amd64-deb":            {"bas-agent-linux-amd64.deb", "application/vnd.debian.binary-package", false, ""},
-	"linux-arm64-deb":            {"bas-agent-linux-arm64.deb", "application/vnd.debian.binary-package", false, ""},
-	"linux-amd64-rpm":            {"bas-agent-linux-amd64.rpm", "application/x-rpm", false, ""},
-	"windows-amd64-setup":        {"bas-agent-windows-amd64-setup.zip", "application/zip", true, ""},
-	"windows-amd64":              {"bas-agent-windows-amd64.exe", "application/octet-stream", false, ""},
-	"windows-legacy-amd64-setup": {"bas-agent-windows-legacy-amd64-setup.zip", "application/zip", false, ""},
-	"windows-legacy-amd64":       {"bas-agent-windows-legacy-amd64.exe", "application/octet-stream", false, ""},
-	"darwin-amd64":               {"bas-agent-darwin-amd64", "application/octet-stream", false, ""},
-	"darwin-arm64":               {"bas-agent-darwin-arm64", "application/octet-stream", false, ""},
-	"darwin-amd64-installer":     {"bas-agent-installer-darwin-amd64", "application/zip", true, "BASAgent-Setup-mac-intel.zip"},
-	"darwin-arm64-installer":     {"bas-agent-installer-darwin-arm64", "application/zip", true, "BASAgent-Setup-mac-arm64.zip"},
+	"linux-amd64":                {"bas-agent-linux-amd64", "application/octet-stream", false},
+	"linux-arm64":                {"bas-agent-linux-arm64", "application/octet-stream", false},
+	"linux-amd64-deb":            {"bas-agent-linux-amd64.deb", "application/vnd.debian.binary-package", false},
+	"linux-arm64-deb":            {"bas-agent-linux-arm64.deb", "application/vnd.debian.binary-package", false},
+	"linux-amd64-rpm":            {"bas-agent-linux-amd64.rpm", "application/x-rpm", false},
+	"windows-amd64-setup":        {"bas-agent-windows-amd64-setup.zip", "application/zip", true},
+	"windows-amd64":              {"bas-agent-windows-amd64.exe", "application/octet-stream", false},
+	"windows-legacy-amd64-setup": {"bas-agent-windows-legacy-amd64-setup.zip", "application/zip", false},
+	"windows-legacy-amd64":       {"bas-agent-windows-legacy-amd64.exe", "application/octet-stream", false},
+	"darwin-amd64":               {"bas-agent-darwin-amd64", "application/octet-stream", false},
+	"darwin-arm64":               {"bas-agent-darwin-arm64", "application/octet-stream", false},
+	"darwin-amd64-installer":     {"bas-agent-installer-darwin-amd64", "application/octet-stream", true},
+	"darwin-arm64-installer":     {"bas-agent-installer-darwin-arm64", "application/octet-stream", true},
 }
 
 // GET /api/agents/download/{platform} — serves the pre-built agent binary or package.
@@ -1348,41 +1348,46 @@ func (h *Handler) DownloadAgent(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	downloadName := entry.filename
-	if entry.downloadName != "" {
-		downloadName = entry.downloadName
-	}
-
 	if entry.bundleDefaults {
+		// verifiedBytes are exactly what the manifest check above just
+		// verified -- patchEmbeddedConfig/patchEmbeddedConfigInZip below
+		// return a NEW, per-request artifact built from these bytes; see
+		// their doc comments for why that final artifact is not itself
+		// re-verified against a signature, and what its trustworthiness
+		// rests on instead.
 		verifiedBytes, err := io.ReadAll(f)
 		if err != nil {
 			jsonError(w, "could not read agent binary", http.StatusInternalServerError)
 			return
 		}
-		defaults, err := buildAgentDefaultsJSON(requestHost(r), h.advertisedMTLSPort, h.advertisedEnrollPort)
+		var caRootPEM string
+		if h.pki != nil {
+			caRootPEM = string(h.pki.RootCertPEM())
+		}
+		cfgJSON, err := buildAgentInstallConfigJSON(requestHost(r), h.advertisedMTLSPort, h.advertisedEnrollPort, caRootPEM)
 		if err != nil {
-			jsonError(w, "could not build install defaults", http.StatusInternalServerError)
+			jsonError(w, "could not build install config", http.StatusInternalServerError)
 			return
 		}
-		var bundled []byte
+		var patched []byte
 		if strings.HasSuffix(entry.filename, ".zip") {
-			bundled, err = addDefaultsToZip(verifiedBytes, defaults)
+			patched, err = patchEmbeddedConfigInZip(verifiedBytes, cfgJSON)
 		} else {
-			bundled, err = bundleInstallerZip(strings.TrimSuffix(downloadName, ".zip"), verifiedBytes, defaults)
+			patched, err = patchEmbeddedConfig(verifiedBytes, cfgJSON)
 		}
 		if err != nil {
-			jsonError(w, "could not bundle installer: "+err.Error(), http.StatusInternalServerError)
+			jsonError(w, "could not patch installer config: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
-		w.Header().Set("Content-Type", "application/zip")
-		w.Header().Set("Content-Disposition", `attachment; filename="`+downloadName+`"`)
-		http.ServeContent(w, r, downloadName, stat.ModTime(), bytes.NewReader(bundled))
+		w.Header().Set("Content-Type", entry.mimeType)
+		w.Header().Set("Content-Disposition", `attachment; filename="`+entry.filename+`"`)
+		http.ServeContent(w, r, entry.filename, stat.ModTime(), bytes.NewReader(patched))
 		return
 	}
 
 	w.Header().Set("Content-Type", entry.mimeType)
-	w.Header().Set("Content-Disposition", `attachment; filename="`+downloadName+`"`)
-	http.ServeContent(w, r, downloadName, stat.ModTime(), f)
+	w.Header().Set("Content-Disposition", `attachment; filename="`+entry.filename+`"`)
+	http.ServeContent(w, r, entry.filename, stat.ModTime(), f)
 }
 
 // POST /api/heartbeat — called by agents.

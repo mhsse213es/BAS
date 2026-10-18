@@ -3,11 +3,20 @@ package api
 import (
 	"archive/zip"
 	"bytes"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/x509"
+	"crypto/x509/pkix"
 	"encoding/json"
+	"encoding/pem"
 	"io"
+	"math/big"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
+	"time"
 )
 
 func TestRequestHost_StripsPort(t *testing.T) {
@@ -26,143 +35,220 @@ func TestRequestHost_NoPort_ReturnsAsIs(t *testing.T) {
 	}
 }
 
-func TestBuildAgentDefaultsJSON_UsesAdvertisedPorts(t *testing.T) {
-	data, err := buildAgentDefaultsJSON("192.168.10.78", 9443, 9445)
+func testCARootPEM(t *testing.T) string {
+	t.Helper()
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
-		t.Fatalf("buildAgentDefaultsJSON: %v", err)
+		t.Fatalf("generate key: %v", err)
 	}
-	var d agentInstallDefaults
-	if err := json.Unmarshal(data, &d); err != nil {
+	tmpl := &x509.Certificate{
+		SerialNumber:          big.NewInt(1),
+		Subject:               pkix.Name{CommonName: "BAS Test Deployment CA"},
+		NotBefore:             time.Now().Add(-time.Hour),
+		NotAfter:              time.Now().Add(24 * time.Hour),
+		IsCA:                  true,
+		BasicConstraintsValid: true,
+		KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageDigitalSignature,
+	}
+	der, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &key.PublicKey, key)
+	if err != nil {
+		t.Fatalf("create certificate: %v", err)
+	}
+	return string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}))
+}
+
+func TestBuildAgentInstallConfigJSON_UsesAdvertisedPortsAndCARoot(t *testing.T) {
+	pem := testCARootPEM(t)
+	data, err := buildAgentInstallConfigJSON("192.168.10.78", 9443, 9445, pem)
+	if err != nil {
+		t.Fatalf("buildAgentInstallConfigJSON: %v", err)
+	}
+	var cfg agentInstallConfig
+	if err := json.Unmarshal(data, &cfg); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	if d.ServerURL != "https://192.168.10.78:9443" {
-		t.Fatalf("ServerURL = %q, want %q", d.ServerURL, "https://192.168.10.78:9443")
+	if cfg.ServerURL != "https://192.168.10.78:9443" {
+		t.Errorf("ServerURL = %q", cfg.ServerURL)
 	}
-	if d.EnrollPort != "9445" {
-		t.Fatalf("EnrollPort = %q, want %q", d.EnrollPort, "9445")
+	if cfg.EnrollPort != "9445" {
+		t.Errorf("EnrollPort = %q", cfg.EnrollPort)
+	}
+	if cfg.CARootPEM != pem {
+		t.Errorf("CARootPEM mismatch")
 	}
 }
 
-func TestBuildAgentDefaultsJSON_ZeroPorts_FallsBackToDefaults(t *testing.T) {
-	data, err := buildAgentDefaultsJSON("h", 0, 0)
+func TestBuildAgentInstallConfigJSON_ZeroPorts_FallsBackToDefaults(t *testing.T) {
+	data, err := buildAgentInstallConfigJSON("h", 0, 0, "")
 	if err != nil {
-		t.Fatalf("buildAgentDefaultsJSON: %v", err)
+		t.Fatalf("buildAgentInstallConfigJSON: %v", err)
 	}
-	var d agentInstallDefaults
-	if err := json.Unmarshal(data, &d); err != nil {
+	var cfg agentInstallConfig
+	if err := json.Unmarshal(data, &cfg); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	if d.ServerURL != "https://h:9443" || d.EnrollPort != "9444" {
-		t.Fatalf("got %+v, want default ports 9443/9444", d)
+	if cfg.ServerURL != "https://h:9443" || cfg.EnrollPort != "9444" {
+		t.Fatalf("got %+v, want default ports 9443/9444", cfg)
 	}
 }
 
-func TestBundleInstallerZip_ContainsExecutableAndDefaults(t *testing.T) {
-	execBytes := []byte("fake mach-o bytes")
-	defaults := []byte(`{"serverURL":"https://h:9443"}`)
+// buildTestSlot constructs raw bytes shaped like a real (unpatched)
+// installer binary carrying the embed slot -- same markers/size as
+// installer/embedconfig.go. prefix/suffix model the surrounding binary
+// content (and, realistically, the bare marker text appearing elsewhere
+// in it -- see patchEmbeddedConfig's own doc comment).
+func buildTestSlot(prefix, suffix string) []byte {
+	fill := strings.Repeat(string(embeddedConfigFillByte), embeddedConfigSlotSize)
+	return []byte(prefix + embeddedConfigBeginMarker + fill + embeddedConfigEndMarker + suffix)
+}
 
-	out, err := bundleInstallerZip("BASAgent-Setup-mac", execBytes, defaults)
-	if err != nil {
-		t.Fatalf("bundleInstallerZip: %v", err)
-	}
+func TestPatchEmbeddedConfig_RoundTrips(t *testing.T) {
+	binary := buildTestSlot("some pe/macho header bytes ", " more trailing bytes")
+	cfgJSON := []byte(`{"serverURL":"https://192.168.10.78:9443","enrollPort":"9444"}`)
 
-	zr, err := zip.NewReader(bytes.NewReader(out), int64(len(out)))
+	patched, err := patchEmbeddedConfig(binary, cfgJSON)
 	if err != nil {
-		t.Fatalf("not a valid zip: %v", err)
+		t.Fatalf("patchEmbeddedConfig: %v", err)
 	}
-	files := map[string]*zip.File{}
-	for _, f := range zr.File {
-		files[f.Name] = f
-	}
-
-	exe, ok := files["BASAgent-Setup-mac"]
-	if !ok {
-		t.Fatal("missing BASAgent-Setup-mac entry")
-	}
-	if exe.Mode()&0111 == 0 {
-		t.Fatalf("executable entry mode = %v, want executable bits set", exe.Mode())
-	}
-	rc, err := exe.Open()
-	if err != nil {
-		t.Fatalf("open exe entry: %v", err)
-	}
-	got, _ := io.ReadAll(rc)
-	rc.Close()
-	if !bytes.Equal(got, execBytes) {
-		t.Fatal("executable entry content does not match the original bytes")
+	if len(patched) != len(binary) {
+		t.Fatalf("patched length = %d, want unchanged length %d", len(patched), len(binary))
 	}
 
-	defEntry, ok := files["bas-agent-defaults.json"]
-	if !ok {
-		t.Fatal("missing bas-agent-defaults.json entry")
+	beginIdx := strings.Index(string(patched), embeddedConfigBeginMarker) + len(embeddedConfigBeginMarker)
+	endIdx := strings.Index(string(patched), embeddedConfigEndMarker)
+	if endIdx-beginIdx != embeddedConfigSlotSize {
+		t.Fatalf("slot size after patch = %d, want %d", endIdx-beginIdx, embeddedConfigSlotSize)
 	}
-	rc2, err := defEntry.Open()
-	if err != nil {
-		t.Fatalf("open defaults entry: %v", err)
-	}
-	gotDefaults, _ := io.ReadAll(rc2)
-	rc2.Close()
-	if !bytes.Equal(gotDefaults, defaults) {
-		t.Fatal("defaults entry content does not match")
+	gotContent := strings.TrimRight(string(patched[beginIdx:endIdx]), string(embeddedConfigFillByte))
+	if gotContent != string(cfgJSON) {
+		t.Fatalf("patched content = %q, want %q", gotContent, cfgJSON)
 	}
 }
 
-func TestAddDefaultsToZip_PreservesExistingEntriesAndAddsDefaults(t *testing.T) {
+func TestPatchEmbeddedConfig_DoesNotMutateOriginalSlice(t *testing.T) {
+	binary := buildTestSlot("", "")
+	original := append([]byte(nil), binary...)
+	if _, err := patchEmbeddedConfig(binary, []byte(`{"serverURL":"https://h:9443"}`)); err != nil {
+		t.Fatalf("patchEmbeddedConfig: %v", err)
+	}
+	if !bytes.Equal(binary, original) {
+		t.Fatal("patchEmbeddedConfig mutated its input slice in place")
+	}
+}
+
+func TestPatchEmbeddedConfig_MissingSlot_FailsClosed(t *testing.T) {
+	if _, err := patchEmbeddedConfig([]byte("no markers here at all"), []byte(`{}`)); err == nil {
+		t.Fatal("expected an error when the binary has no embed slot at all")
+	}
+}
+
+func TestPatchEmbeddedConfig_DuplicatedSlot_FailsClosed(t *testing.T) {
+	slot := buildTestSlot("", "")
+	doubled := append(append([]byte{}, slot...), slot...)
+	if _, err := patchEmbeddedConfig(doubled, []byte(`{}`)); err == nil {
+		t.Fatal("expected an error when the slot pattern occurs more than once")
+	}
+}
+
+func TestPatchEmbeddedConfig_ConfigTooLargeForSlot_FailsClosed(t *testing.T) {
+	binary := buildTestSlot("", "")
+	tooBig := make([]byte, embeddedConfigSlotSize+1)
+	for i := range tooBig {
+		tooBig[i] = 'a'
+	}
+	if _, err := patchEmbeddedConfig(binary, tooBig); err == nil {
+		t.Fatal("expected an error when the config does not fit in the slot")
+	}
+}
+
+func TestPatchEmbeddedConfig_BareMarkerElsewhereDoesNotConfuseRealSlot(t *testing.T) {
+	binary := buildTestSlot("prefix with a bare "+embeddedConfigBeginMarker+" sitting unrelated here ", "")
+	patched, err := patchEmbeddedConfig(binary, []byte(`{"serverURL":"https://h:9443"}`))
+	if err != nil {
+		t.Fatalf("a bare, unrelated marker occurrence must not fail the real slot: %v", err)
+	}
+	if len(patched) != len(binary) {
+		t.Fatalf("patched length changed: %d vs %d", len(patched), len(binary))
+	}
+}
+
+// buildTestZip wraps binary (the installer executable's content) as the
+// single entry of a zip, matching the shape of the real pre-built
+// bas-agent-windows-amd64-setup.zip.
+func buildTestZip(t *testing.T, entryName string, content []byte) []byte {
+	t.Helper()
 	var buf bytes.Buffer
 	zw := zip.NewWriter(&buf)
-	w, err := zw.Create("BASAgent-Setup.exe")
+	w, err := zw.Create(entryName)
 	if err != nil {
-		t.Fatalf("create entry: %v", err)
+		t.Fatalf("create zip entry: %v", err)
 	}
-	if _, err := w.Write([]byte("fake pe bytes")); err != nil {
-		t.Fatalf("write entry: %v", err)
+	if _, err := w.Write(content); err != nil {
+		t.Fatalf("write zip entry: %v", err)
 	}
 	if err := zw.Close(); err != nil {
 		t.Fatalf("close zip: %v", err)
 	}
-	original := buf.Bytes()
+	return buf.Bytes()
+}
 
-	defaults := []byte(`{"serverURL":"https://h:9443"}`)
-	out, err := addDefaultsToZip(original, defaults)
+func TestPatchEmbeddedConfigInZip_RoundTrips(t *testing.T) {
+	exe := buildTestSlot("MZ fake PE header ", "")
+	zipBytes := buildTestZip(t, "Audspect_Agent.exe", exe)
+	cfgJSON := []byte(`{"serverURL":"https://192.168.10.78:9443","enrollPort":"9444"}`)
+
+	patchedZip, err := patchEmbeddedConfigInZip(zipBytes, cfgJSON)
 	if err != nil {
-		t.Fatalf("addDefaultsToZip: %v", err)
+		t.Fatalf("patchEmbeddedConfigInZip: %v", err)
 	}
 
-	zr, err := zip.NewReader(bytes.NewReader(out), int64(len(out)))
+	zr, err := zip.NewReader(bytes.NewReader(patchedZip), int64(len(patchedZip)))
 	if err != nil {
-		t.Fatalf("not a valid zip: %v", err)
+		t.Fatalf("patched zip is not a valid zip: %v", err)
 	}
-	var sawExe, sawDefaults bool
-	for _, f := range zr.File {
-		rc, err := f.Open()
-		if err != nil {
-			t.Fatalf("open %s: %v", f.Name, err)
-		}
-		data, _ := io.ReadAll(rc)
-		rc.Close()
-		switch f.Name {
-		case "BASAgent-Setup.exe":
-			sawExe = true
-			if string(data) != "fake pe bytes" {
-				t.Fatalf("exe content changed: %q", data)
-			}
-		case "bas-agent-defaults.json":
-			sawDefaults = true
-			if !bytes.Equal(data, defaults) {
-				t.Fatal("defaults content mismatch")
-			}
-		}
+	if len(zr.File) != 1 {
+		t.Fatalf("patched zip has %d entries, want 1", len(zr.File))
 	}
-	if !sawExe {
-		t.Fatal("original entry was lost during re-zip")
+	if zr.File[0].Name != "Audspect_Agent.exe" {
+		t.Fatalf("entry name = %q, want Audspect_Agent.exe", zr.File[0].Name)
 	}
-	if !sawDefaults {
-		t.Fatal("defaults entry was not added")
+	rc, err := zr.File[0].Open()
+	if err != nil {
+		t.Fatalf("open patched entry: %v", err)
+	}
+	patchedExe, _ := io.ReadAll(rc)
+	rc.Close()
+	if len(patchedExe) != len(exe) {
+		t.Fatalf("patched entry length = %d, want unchanged %d", len(patchedExe), len(exe))
+	}
+	if !bytes.Contains(patchedExe, cfgJSON) {
+		t.Fatal("patched entry does not contain the config JSON")
 	}
 }
 
-func TestAddDefaultsToZip_RejectsInvalidZip(t *testing.T) {
-	if _, err := addDefaultsToZip([]byte("not a zip"), []byte("{}")); err == nil {
-		t.Fatal("expected an error for invalid zip input, got nil")
+func TestPatchEmbeddedConfigInZip_InvalidZip_FailsClosed(t *testing.T) {
+	if _, err := patchEmbeddedConfigInZip([]byte("not a zip"), []byte(`{}`)); err == nil {
+		t.Fatal("expected an error for invalid zip input")
+	}
+}
+
+func TestPatchEmbeddedConfigInZip_MultipleEntries_FailsClosed(t *testing.T) {
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	w1, _ := zw.Create("a.exe")
+	w1.Write([]byte("a"))
+	w2, _ := zw.Create("b.exe")
+	w2.Write([]byte("b"))
+	zw.Close()
+
+	if _, err := patchEmbeddedConfigInZip(buf.Bytes(), []byte(`{}`)); err == nil {
+		t.Fatal("expected an error for a zip with more than one entry")
+	}
+}
+
+func TestPatchEmbeddedConfigInZip_EntryMissingSlot_FailsClosed(t *testing.T) {
+	zipBytes := buildTestZip(t, "Audspect_Agent.exe", []byte("no markers in here"))
+	if _, err := patchEmbeddedConfigInZip(zipBytes, []byte(`{}`)); err == nil {
+		t.Fatal("expected an error when the zip entry has no embed slot")
 	}
 }

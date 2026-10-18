@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/x509"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -99,7 +100,7 @@ func TestValidateEnrollment_HealthyServerAcceptedToken(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	if err := validateEnrollment(ts.URL, "right-secret"); err != nil {
+	if err := validateEnrollment(ts.URL, "right-secret", nil); err != nil {
 		t.Fatalf("validateEnrollment: %v", err)
 	}
 }
@@ -115,7 +116,7 @@ func TestValidateEnrollment_WrongSecret_Returns401Error(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	if err := validateEnrollment(ts.URL, "wrong-secret"); err == nil {
+	if err := validateEnrollment(ts.URL, "wrong-secret", nil); err == nil {
 		t.Fatal("expected an error for a rejected secret, got nil")
 	}
 }
@@ -126,14 +127,61 @@ func TestValidateEnrollment_UnhealthyServer_ReturnsError(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	if err := validateEnrollment(ts.URL, "any-secret"); err == nil {
+	if err := validateEnrollment(ts.URL, "any-secret", nil); err == nil {
 		t.Fatal("expected an error for an unhealthy server, got nil")
 	}
 }
 
 func TestValidateEnrollment_UnreachableServer_ReturnsError(t *testing.T) {
-	if err := validateEnrollment("https://127.0.0.1:1", "any-secret"); err == nil {
+	if err := validateEnrollment("https://127.0.0.1:1", "any-secret", nil); err == nil {
 		t.Fatal("expected an error for an unreachable server, got nil")
+	}
+}
+
+// TestValidateEnrollment_WithCAPool_RejectsServerNotSignedByIt is the
+// actual trust-chain protection this whole mechanism exists for: once an
+// embedded CA pool is available, validateEnrollment must verify against
+// it instead of skipping verification -- so a serverURL that was somehow
+// redirected to a host NOT trusted by that pool (the rogue-collector
+// scenario) is rejected before the agent secret is ever sent to it.
+func TestValidateEnrollment_WithCAPool_RejectsServerNotSignedByIt(t *testing.T) {
+	ts := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer ts.Close()
+
+	// An empty pool trusts nothing, including this server's own self-signed
+	// cert -- models a caPool that came from the REAL deployment while ts
+	// models a ROGUE server the request got redirected to.
+	emptyPool := x509.NewCertPool()
+	err := validateEnrollment(ts.URL, "any-secret", emptyPool)
+	if err == nil {
+		t.Fatal("expected an error: a caPool must verify the chain, not skip verification")
+	}
+}
+
+// TestValidateEnrollment_WithCAPool_AcceptsServerSignedByIt is the
+// matching positive case: the real deployment's own server, whose cert
+// IS trusted by the pool, must still work once verification is enforced.
+func TestValidateEnrollment_WithCAPool_AcceptsServerSignedByIt(t *testing.T) {
+	ts := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/health":
+			w.WriteHeader(http.StatusOK)
+		case "/ws/agent":
+			if r.Header.Get("X-Agent-Token") != "right-secret" {
+				w.WriteHeader(http.StatusUnauthorized)
+				return
+			}
+			w.WriteHeader(http.StatusOK)
+		}
+	}))
+	defer ts.Close()
+
+	pool := x509.NewCertPool()
+	pool.AddCert(ts.Certificate())
+	if err := validateEnrollment(ts.URL, "right-secret", pool); err != nil {
+		t.Fatalf("validateEnrollment with the server's own cert trusted: %v", err)
 	}
 }
 

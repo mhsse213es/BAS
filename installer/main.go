@@ -5,6 +5,7 @@
 package main
 
 import (
+	"crypto/x509"
 	"fmt"
 	"os"
 	"os/exec"
@@ -152,13 +153,13 @@ const (
 	yEnrollEdit = yEnrollLbl + 22
 	ySecLbl     = yEnrollEdit + EDTH + 20
 	ySecEdit    = ySecLbl + 22
-	yEnvLbl  = ySecEdit + EDTH + 20
-	yEnvEdit = yEnvLbl + 22
-	yLogLbl  = yEnvEdit + EDTH + 24
-	yLog     = yLogLbl + 22
-	logH     = 160
-	yBtns    = yLog + logH + 18
-	btnH     = 34
+	yEnvLbl     = ySecEdit + EDTH + 20
+	yEnvEdit    = yEnvLbl + 22
+	yLogLbl     = yEnvEdit + EDTH + 24
+	yLog        = yLogLbl + 22
+	logH        = 160
+	yBtns       = yLog + logH + 18
+	btnH        = 34
 	// WINCLIENTH is the CLIENT area height the layout above needs — buttons'
 	// bottom edge plus a bottom margin. Must be turned into an outer window
 	// size via AdjustWindowRectEx (see main()), not passed to CreateWindowEx
@@ -229,15 +230,15 @@ type ACCEL struct {
 // ── Global handles ────────────────────────────────────────────────────────────
 
 var (
-	hInst      uintptr
-	hMainWnd   uintptr
-	hURLEdit   uintptr
+	hInst       uintptr
+	hMainWnd    uintptr
+	hURLEdit    uintptr
 	hEnrollEdit uintptr
-	hSecEdit   uintptr
-	hEnvEdit   uintptr
-	hInstBtn   uintptr
-	hCancelBtn uintptr
-	hStatus    uintptr
+	hSecEdit    uintptr
+	hEnvEdit    uintptr
+	hInstBtn    uintptr
+	hCancelBtn  uintptr
+	hStatus     uintptr
 
 	hdrBrush uintptr // header banner fill — created once in WM_CREATE
 
@@ -419,20 +420,21 @@ func createControls(hwnd uintptr) {
 		return hw
 	}
 
-	// bas-agent-defaults.json, when present next to this installer (the
-	// console's download endpoint bundles it in), pre-fills the Server
-	// URL/Enrollment Port so the operator only has to type the Secret --
-	// the fields stay visible and editable rather than hidden, since this
-	// is a plain CreateWindowEx layout with no reflow mechanism to safely
-	// collapse around a hidden control.
-	defaults := loadInstallDefaults()
+	// Config embedded by the orchestrator's download handler (see
+	// embedconfig.go) pre-fills the Server URL/Enrollment Port so the
+	// operator only has to type the Secret -- the fields stay visible and
+	// editable rather than hidden, since this is a plain CreateWindowEx
+	// layout with no reflow mechanism to safely collapse around a hidden
+	// control. parsedEmbeddedConfig is resolved once in main(), which
+	// refuses to even open this window if it was tampered with -- by the
+	// time createControls runs, any error case has already exited.
 	urlDefault := "https://"
-	if defaults.ServerURL != "" {
-		urlDefault = defaults.ServerURL
+	if parsedEmbeddedConfig.ServerURL != "" {
+		urlDefault = parsedEmbeddedConfig.ServerURL
 	}
 	enrollDefault := "9444"
-	if defaults.EnrollPort != "" {
-		enrollDefault = defaults.EnrollPort
+	if parsedEmbeddedConfig.EnrollPort != "" {
+		enrollDefault = parsedEmbeddedConfig.EnrollPort
 	}
 
 	mkLabel("Server URL  (from dashboard: Settings -> Connection Config)", LPAD, yURLLbl, FW, 18)
@@ -498,8 +500,26 @@ func runInstall() {
 		}
 	}
 
+	// An embedded CA root (patched into this exact binary by the
+	// orchestrator's download handler, after it verified the base
+	// artifact against the signed manifest) lets validateEnrollment
+	// actually verify the server's certificate chain instead of skipping
+	// verification -- see trustingHTTPClient's doc comment. caPool stays
+	// nil (the pre-existing insecure-bootstrap fallback) when no embedded
+	// CA was supplied, e.g. PKI not configured server-side.
+	var caPool *x509.CertPool
+	if parsedEmbeddedConfig.CARootPEM != "" {
+		caPool = x509.NewCertPool()
+		if !caPool.AppendCertsFromPEM([]byte(parsedEmbeddedConfig.CARootPEM)) {
+			appendStatus("[ERROR] Embedded CA root could not be loaded.")
+			procEnableWindow.Call(hInstBtn, 1)
+			installing = false
+			return
+		}
+	}
+
 	appendStatus("[1/4] Validating server connectivity and secret...")
-	if err := validateEnrollment(serverURL, secret); err != nil {
+	if err := validateEnrollment(serverURL, secret, caPool); err != nil {
 		appendStatus("[ERROR] " + err.Error())
 		appendStatus("       Check the Server URL and Agent Secret, then try again.")
 		procEnableWindow.Call(hInstBtn, 1)
@@ -525,8 +545,14 @@ func runInstall() {
 	}
 	appendStatus("[2/4] Agent extracted to: " + agentPath)
 
-	appendStatus("[3/4] Fetching deployment CA and installing service...")
-	caPath, err := fetchDeploymentCA(serverURL, installDir)
+	appendStatus("[3/4] Placing deployment CA and installing service...")
+	var caPath string
+	var err error
+	if parsedEmbeddedConfig.CARootPEM != "" {
+		caPath, err = writeEmbeddedCA([]byte(parsedEmbeddedConfig.CARootPEM), installDir)
+	} else {
+		caPath, err = fetchDeploymentCA(serverURL, installDir)
+	}
 	if err != nil {
 		appendStatus("[ERROR] " + err.Error())
 		appendStatus("       Without the deployment CA the agent cannot establish mTLS and")
@@ -668,6 +694,16 @@ func splitLines(s string) []string {
 
 // ── Entry point ───────────────────────────────────────────────────────────────
 
+// parsedEmbeddedConfig is resolved once, in main(), before any window is
+// created -- createControls (pre-fills Server URL/Enrollment Port) and
+// runInstall (picks the CA-verifying client + embedded CA write instead
+// of the insecure-bootstrap fallback) both read it afterward. An error
+// here means the embedded config slot is structurally present but
+// corrupted or tampered -- main() fails closed on that before this var
+// is ever read, so a non-nil error is never silently treated as "no
+// config supplied."
+var parsedEmbeddedConfig embeddedConfig
+
 func main() {
 	runtime.LockOSThread()
 
@@ -678,6 +714,16 @@ func main() {
 			0x10 /*MB_ICONERROR*/)
 		return
 	}
+
+	cfg, err := extractEmbeddedConfig([]byte(embeddedConfigSlot))
+	if err != nil {
+		procMessageBox.Call(0,
+			uintptr(unsafe.Pointer(utf16("This installer's embedded configuration is invalid or corrupted:\n\n"+err.Error()+"\n\nRe-download the installer from the console. Do not run this copy."))),
+			uintptr(unsafe.Pointer(utf16("Audspect BAS — Agent Setup"))),
+			0x10 /*MB_ICONERROR*/)
+		return
+	}
+	parsedEmbeddedConfig = cfg
 
 	hInst, _, _ = procGetModuleHandle.Call(0)
 

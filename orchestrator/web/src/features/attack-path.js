@@ -1643,23 +1643,35 @@ export function showAgentDownload() {
 // OS. It is pure (no DOM, no network) so it can be unit-tested directly.
 //
 //   origin  the dashboard origin the admin is browsing (window.location.origin)
-//           -- the CA root is fetched from here, the one listener a not-yet-
-//           enrolled endpoint can always reach without a client certificate.
+//           -- used only as the fallback CA-fetch URL when data.caRootPem is
+//           unavailable (see below).
 //   host    the hostname agents should reach the orchestrator at
 //           (window.location.hostname).
 //   data    the /api/config/connection response; data.mtlsPort / data.enrollPort
-//           are the advertised HOST ports (see config.AdvertisedMTLSPort). They
-//           default to 9443/9444 for a non-remapped deployment.
+//           are the advertised HOST ports (see config.AdvertisedMTLSPort),
+//           defaulting to 9443/9444 for a non-remapped deployment.
+//           data.caRootPem, when present, is written directly into the
+//           generated command (see below) instead of being fetched again.
 //
-// Each command: (1) fetches the deployment CA root with certificate
-// verification SKIPPED -- the endpoint does not trust the self-signed
-// deployment CA yet, so the bootstrap fetch of that very CA must skip
-// verification (curl -k / curl.exe -k); the agent then verifies the chain for
-// all later traffic. (2) installs against the mTLS listener (host:mtlsPort),
-// NOT the dashboard port. (3) passes --enroll-port so CSR bootstrap reaches the
-// enrollment listener even when its published port was remapped. Omitting any
-// of these strands the agent on legacy transport: it never receives the
-// command-signing trust cert and every dispatched scenario silently fails.
+// Writing the CA root bytes directly into the command, rather than having
+// the command fetch them itself, closes a real gap: data.caRootPem already
+// arrived over THIS admin's own authenticated dashboard session
+// (/api/config/connection is RBAC-gated), so embedding it here means the
+// generated command never asks serverURL for a CA root at all -- if
+// serverURL were ever wrong (a tampered clipboard, a copy-paste mistake, a
+// compromised intermediary), it can no longer hand back its OWN rogue CA
+// to be trusted. This falls back to the old unauthenticated curl -k fetch
+// only when caRootPem is unavailable (PKI not configured server-side, or
+// an older orchestrator build) -- the same residual bootstrap-TOFU
+// exposure that existed before this existed, never worse, and still
+// honestly present in that one fallback case.
+//
+// Each command still: (1) installs against the mTLS listener
+// (host:mtlsPort), NOT the dashboard port; (2) passes --enroll-port so CSR
+// bootstrap reaches the enrollment listener even when its published port
+// was remapped. Omitting either strands the agent on legacy transport: it
+// never receives the command-signing trust cert and every dispatched
+// scenario silently fails.
 export function buildAgentInstallCommands(origin, host, data) {
   data = data || {};
   var mtlsPort = data.mtlsPort || '9443';
@@ -1667,6 +1679,15 @@ export function buildAgentInstallCommands(origin, host, data) {
   var serverURL = 'https://' + host + ':' + mtlsPort;
   var caURL = origin + '/api/config/ca-root';
   var common = ' --install --server ' + serverURL + ' --enroll-port ' + enrollPort;
+  var caRootPem = (data.caRootPem || '').trim();
+
+  var posixCaCmd = caRootPem
+    ? "cat > deployment-ca.pem <<'BASCAEOF'\n" + caRootPem + "\nBASCAEOF"
+    : 'curl -fsSk -o deployment-ca.pem ' + caURL;
+  var winCaCmd = caRootPem
+    ? "@'\n" + caRootPem + "\n'@ | Out-File -Encoding ascii deployment-ca.pem"
+    : 'curl.exe -fsSk -o deployment-ca.pem ' + caURL;
+
   return {
     serverURL: serverURL,
     // No --secret here: the agent now prompts for it interactively when
@@ -1674,11 +1695,11 @@ export function buildAgentInstallCommands(origin, host, data) {
     // command and running it is the only step -- the secret is typed once,
     // live, never baked into the command text, shell history, or a process
     // listing.
-    windows: 'curl.exe -fsSk -o deployment-ca.pem ' + caURL + '; ' +
+    windows: winCaCmd + '\n' +
       '.\\bas-agent-windows-amd64.exe' + common + ' --ca-root .\\deployment-ca.pem --env Production',
-    linux: 'chmod +x bas-agent-linux-* && curl -fsSk -o deployment-ca.pem ' + caURL + ' && ' +
+    linux: 'chmod +x bas-agent-linux-*\n' + posixCaCmd + '\n' +
       'sudo ./bas-agent-linux-*' + common + ' --ca-root ./deployment-ca.pem --env Production',
-    mac: 'xattr -d com.apple.quarantine bas-agent-darwin-* && chmod +x bas-agent-darwin-* && curl -fsSk -o deployment-ca.pem ' + caURL + ' && ' +
+    mac: 'xattr -d com.apple.quarantine bas-agent-darwin-* && chmod +x bas-agent-darwin-*\n' + posixCaCmd + '\n' +
       'sudo ./bas-agent-darwin-*' + common + ' --ca-root ./deployment-ca.pem --env Production',
   };
 }
