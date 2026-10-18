@@ -166,14 +166,26 @@ steps:
       - "Config assurance: allowlisting is the strongest execution control"
     command: |
       $ErrorActionPreference = 'SilentlyContinue'
-      $hasAppLocker = $false
-      try { $pol = Get-AppLockerPolicy -Effective -ErrorAction Stop; if ($pol.RuleCollections | Where-Object { $_.Count -gt 0 }) { $hasAppLocker = $true } } catch {}
+      # Effective coverage, not presence: a rule collection enforces only when its
+      # EnforcementMode is Enabled. AuditOnly observes and NotConfigured covers nothing.
+      $modes = @{}
+      try {
+        $pol = Get-AppLockerPolicy -Effective -ErrorAction Stop
+        foreach ($rc in @($pol.RuleCollections)) { $modes[[string]$rc.RuleCollectionType] = [string]$rc.EnforcementMode }
+      } catch {}
+      $types = 'Exe','Script','Dll','Msi','Appx'
+      foreach ($t in $types) { if (-not $modes.ContainsKey($t)) { $modes[$t] = 'NotConfigured' } }
+      $detail = ($types | ForEach-Object { "$_=$($modes[$_])" }) -join ' '
+      Write-Output "APPCTL_COVERAGE: $detail"
       $wdac = $false
       try { $ci = Get-CimInstance -ClassName Win32_DeviceGuard -Namespace 'root\Microsoft\Windows\DeviceGuard' -ErrorAction Stop; if ($ci.CodeIntegrityPolicyEnforcementStatus -ge 1) { $wdac = $true } } catch {}
-      if ($hasAppLocker -and $wdac) { Write-Output "PASS: Both AppLocker rules and WDAC code-integrity enforcement are active. [BAS-SIM]"; return }
-      if ($hasAppLocker) { Write-Output "PASS: AppLocker policy with active rule collections is enforced. [BAS-SIM]"; return }
-      if ($wdac) { Write-Output "PASS: WDAC code-integrity policy is enforced. [BAS-SIM]"; return }
-      Write-Output "FAIL: No application control (AppLocker/WDAC) detected — any binary or script is allowed to execute."
+      if ($modes['Exe'] -eq 'Enabled' -and $modes['Script'] -eq 'Enabled') {
+        Write-Output "PASS: AppLocker enforces executables and scripts ($detail). Coverage is limited to the collections listed. [BAS-SIM]"
+      } elseif ($wdac) {
+        Write-Output "SKIP: WDAC code-integrity is enforced but its policy scope is not evaluated by this check; AppLocker coverage is incomplete ($detail). [BAS-SIM]"
+      } else {
+        Write-Output "FAIL: AppLocker does not enforce both executables and scripts ($detail). Audit-only or unconfigured collections observe or cover nothing. [BAS-SIM]"
+      }
     cleanup: ""
 
   - name: "BitLocker drive encryption on the system volume"
