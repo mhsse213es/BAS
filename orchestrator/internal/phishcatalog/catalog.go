@@ -229,11 +229,24 @@ func phAUTH008() Scenario {
 // not a MailExpectation/EfficacyResult phishbridge's current
 // FromEmailGWEfficacyResult can translate. A second bridge function is
 // needed, deferred.
+// phAUTH009 wraps phishbridge.FromInboxRuleVerdict, translating
+// emailgwefficacy.VerifyInboxRuleExpectation's own real
+// SuspiciousAutoForwardExpectation (EG-007) -- a mailbox-
+// configuration-state claim, not a MailExpectation/EfficacyResult --
+// into phishval's Detection dimension. The "needs its own phishbridge
+// translation, deferred" note was accurate about what was missing (a
+// translation, not a new scenario builder, unlike PH-AUTH-006/007's
+// corrected notes); that translation is now built.
 func phAUTH009() Scenario {
-	return Scenario{ID: "PH-AUTH-009", Version: 1, Area: AreaAuth, Name: "Forwarding and mailing-list behavior",
-		PrimaryObjective: "Verify authentication and policy behavior after forwarding",
-		Limitations:      "emailgwefficacy.InboxRuleExpectation/VerifyInboxRuleExpectation (EG-007) exists and covers external auto-forwarding detection, but is a different evidence shape (mailbox configuration state, not MailExpectation/EfficacyResult) -- needs its own phishbridge translation, deferred",
-		Coverage:         CoverageCatalogOnly}
+	return Scenario{
+		ID: "PH-AUTH-009", Version: 1, Area: AreaAuth, Name: "Forwarding and mailing-list behavior",
+		PrimaryObjective:     "Verify authentication and policy behavior after forwarding",
+		Limitations:          "single-dimensional (Detection only): VerifyInboxRuleExpectation checks whether a suspicious rule was detected, nothing about the forwarded message's own delivery/enforcement; proven against fixture evidence, no live tenant audit-log/alert API called",
+		Expectation:          phishval.Expectation{ScenarioID: "PH-AUTH-009", Detection: ptrDetection(phishval.DetectionDetected)},
+		Standards:            StandardsMapping{ATTACKTechniques: []string{"T1114.003"}},
+		MappedImplementation: "emailgwefficacy.SuspiciousAutoForwardExpectation",
+		Coverage:             CoverageAdapterTested,
+	}
 }
 
 func phAUTH010() Scenario {
