@@ -168,16 +168,24 @@ Verify order (first match wins, each independently reasoned — mirrors `VerifyE
 
 ### Slice 2a — `DLPPolicyPrecedenceExpectation` (`dlppolicy/precedence.go`)
 
+**Revised after Slice 1's final review** (2026-10-18): Slice 1's own Critical finding — checking each field against its *own* declared expectation in isolation missed a scenario that only shows up when you reason about the *combined* effect (a rule expected to stay disabled that silently came back online) — applies even more directly to precedence. The original draft of this section only compared a declared `ExpectedWinningRuleID` against whatever a vendor's evidence reported, with **zero internal reasoning over the candidate rule-set itself**. That makes it impossible to tell a genuinely wrong vendor resolution apart from a self-contradictory *test*. This revision adds that reasoning as a first pass, before any evidence is even consulted — Slice 2a now evaluates the **effective combined configuration** the declared candidate set implies, not just whether one declared fact matches one observed fact.
+
 ```go
-// DLPPolicyRuleRef is one member rule's role in a precedence
-// evaluation -- its priority and own action only. It never
-// re-declares that rule's scope/mode/state; this is purely "how this
-// rule interacts with its siblings," not a substitute for its own
-// DLPPolicyRuleExpectation.
+// DLPPolicyRuleRef is one member rule's full standing within a
+// precedence evaluation: its priority, its own action if it wins,
+// and whether it is currently eligible to be considered at all.
+// Eligible is reported as a plain fact here -- enabled, published,
+// and in-scope for this evaluation context -- never independently
+// re-derived from DLPPolicyScopeDeclaration matching logic. Re-
+// implementing location/user/device/group scope-matching generically
+// is explicitly out of scope for this evaluator (see "What this
+// evaluator can and cannot assess" below); a fixture author (or,
+// later, a real connector) states eligibility directly.
 type DLPPolicyRuleRef struct {
     RuleID         string
-    Priority       int    // lower = evaluated first; the vendor's own reported ordering, never assumed
+    Priority       *int   // nil = no priority declared; a nil Priority on an eligible candidate makes the whole resolution indeterminate (see Verify step 1) -- an explicit pointer, not a bare int defaulting to 0, for the exact reason Slice 1's ExpectedEnabled/ExpectedPublished bug existed: a legitimate "highest priority" value of 0 must never collapse with "nobody set this field."
     ExpectedAction string // this rule's declared action if it is the one that applies
+    Eligible       bool   // false = disabled/unpublished/out-of-scope for this context; excluded from precedence resolution entirely
 }
 
 // DLPPolicyEvaluationContext is the hypothetical data-access attempt
@@ -189,23 +197,32 @@ type DLPPolicyEvaluationContext struct {
 }
 
 type DLPPolicyPrecedenceExpectation struct {
-    ScopeID                  ScopeID
-    Context                  DLPPolicyEvaluationContext
-    CandidateRules           []DLPPolicyRuleRef // every rule declared in scope for this context
-    ExpectedWinningRuleID    string
-    ExpectedEffectiveAction  string
-    ControlProduct           string
-    Note                     string
+    ScopeID                 ScopeID
+    Context                 DLPPolicyEvaluationContext
+    CandidateRules          []DLPPolicyRuleRef // every rule declared in scope for this context, eligible or not
+    ExpectedWinningRuleID   string
+    ExpectedEffectiveAction string
+    // OverrideJustification, when non-empty, declares that
+    // ExpectedWinningRuleID is known NOT to follow from plain
+    // lowest-Priority-number resolution over CandidateRules, and
+    // states why (e.g. "explicit admin-override rule always applies
+    // regardless of priority"). Required to bypass the self-
+    // consistency check in Verify step 3 -- this is the mechanism
+    // that distinguishes a genuine, intentional precedence override
+    // from a contradictory/malformed expectation.
+    OverrideJustification string
+    ControlProduct         string
+    Note                   string
 }
 
 type DLPPolicyPrecedenceEvidence struct {
-    ScopeID                  ScopeID
-    Context                  DLPPolicyEvaluationContext
-    ObservedWinningRuleID    string
-    ObservedEffectiveAction  string
-    Timestamp                time.Time
-    Source                   EvidenceSource
-    Provenance               Provenance
+    ScopeID                 ScopeID
+    Context                 DLPPolicyEvaluationContext
+    ObservedWinningRuleID   string
+    ObservedEffectiveAction string
+    Timestamp               time.Time
+    Source                  EvidenceSource
+    Provenance              Provenance
 }
 
 type DLPPolicyPrecedenceEvidenceProvider interface {
@@ -215,11 +232,30 @@ type DLPPolicyPrecedenceEvidenceProvider interface {
 func VerifyDLPPolicyPrecedenceExpectation(exp DLPPolicyPrecedenceExpectation, provider DLPPolicyPrecedenceEvidenceProvider, window TimeWindow) VerdictDetail
 ```
 
-`CandidateRules`/`Priority` are load-bearing, not decorative **(Builder's call, added after builder-check review — the original draft left this ambiguous)**: a constructor `NewDLPPolicyPrecedenceExpectation(exp DLPPolicyPrecedenceExpectation) (DLPPolicyPrecedenceExpectation, error)` validates at construction time (mirroring `dlpfixture.NewFixture`'s own construction-time validation) that `ExpectedWinningRuleID` is actually a member of `CandidateRules` — a test declaring an expected winner that isn't even a candidate is a malformed expectation, caught before any evidence is ever collected.
+**The conflict model.** A candidate is in play for resolution only if `Eligible`. Among eligible candidates, the one with the lowest `Priority` value wins *unless* two or more eligible candidates share the lowest `Priority` — that is a **genuine conflict** (an ambiguous tie: no declared tie-break exists for it) — or `OverrideJustification` says the declared winner is an **intentional precedence relationship** that the raw priority ordering doesn't capture (e.g. an override rule). Both cases are real, testable DLP-POL scenarios, not implementation gaps — the fixture matrix below exercises each by name.
 
-Verify order: no evidence → `Inconclusive`. `latest.ObservedWinningRuleID` is not a member of `exp.CandidateRules` → `Inconclusive`, "the vendor reported a winning rule that was not among the declared candidates; the candidate list may be incomplete" **(Builder's call — this is evidence the test's own setup may be incomplete, not proof the product misbehaved, so it is deliberately `Inconclusive` rather than `ConfirmedFailure`)**. Else if `latest.ObservedWinningRuleID != exp.ExpectedWinningRuleID` → `ConfirmedFailure`, naming both rule IDs ("expected rule X to take precedence for this context, Y won instead"). Else if `latest.ObservedEffectiveAction != exp.ExpectedEffectiveAction` → `ConfirmedFailure` ("the expected rule won, but its own effective action did not match" — deliberately a distinct, separately-named failure mode from the wrong-rule-won case). Else `ConfirmedSuccess`.
+**`resolveExpectedWinner(candidates []DLPPolicyRuleRef) (winnerID string, ambiguous bool, indeterminate bool)`** is this file's own self-consistency helper, computing what the *declared* candidate set alone implies:
+1. Filter to `Eligible == true`. Zero eligible candidates → `indeterminate = true` (no one can win).
+2. If any eligible candidate has `Priority == nil` → `indeterminate = true` (a missing priority makes the whole set unorderable — this is the direct fixture-level analog of dlp.txt's "incomplete rule inventories"/the user's explicitly named "missing priorities" failure mode: never silently guess an order).
+3. Otherwise find the eligible candidates at the minimum `*Priority`. Exactly one → that's `winnerID`, `ambiguous = false`. More than one → `ambiguous = true`, `winnerID` is unset (there is no derivable winner; **genuine conflict**, regardless of whether their `ExpectedAction`s happen to agree — which specific rule's audit trail fires is still indeterminate even when the net effect looks the same).
+
+**Verify order:**
+
+1. `exp.ExpectedWinningRuleID` is not a member of `exp.CandidateRules` → `Inconclusive`, "expected winning rule is not among the declared candidates" (a malformed expectation, caught before any evidence is collected).
+2. The candidate named by `exp.ExpectedWinningRuleID` has `Eligible == false` → `Inconclusive`, "expected winner is marked ineligible (disabled/unpublished/out of scope); an ineligible rule cannot win" — directly covers the user's "disabled higher-priority rule" fixture category: if the fixture correctly marks the normally-higher-priority rule ineligible, `ExpectedWinningRuleID` should already name the next eligible rule down, not the disabled one.
+3. Run `resolveExpectedWinner`. `indeterminate` → `Inconclusive`, "one or more eligible candidates have no declared priority (or none are eligible); precedence cannot be determined." **Never falls through to evidence** — this is the "missing priorities must not silently produce a pass" requirement, enforced before evidence is even consulted.
+4. `!ambiguous && exp.OverrideJustification == "" && winnerID != exp.ExpectedWinningRuleID` → `Inconclusive`, "declared expected winner contradicts the candidate rules' own priorities; set OverrideJustification if this is an intentional override, or correct the expectation" — the **contradictory-expectation** check: a test author's own data disagrees with their own claim, and nothing in it says why on purpose.
+5. Fetch evidence for `(exp.ScopeID, exp.Context, window)`. No evidence → `Inconclusive`, "no precedence evidence found for this context in the window."
+6. `latest.ObservedWinningRuleID` is not a member of `exp.CandidateRules` → `Inconclusive`, "the vendor reported a winning rule that was not among the declared candidates; the candidate list may be incomplete" (unchanged from the original draft — this is evidence the test's own setup may be incomplete, not proof the product misbehaved).
+7. `latest.ObservedWinningRuleID != exp.ExpectedWinningRuleID` → `ConfirmedFailure`, naming both rule IDs.
+8. `latest.ObservedEffectiveAction != exp.ExpectedEffectiveAction` → `ConfirmedFailure` (a distinct, separately-named failure mode from step 7's wrong-rule-won case: the right rule won, but its own effective action didn't match).
+9. Otherwise → `ConfirmedSuccess`. When step 3's `ambiguous` was `true` (a genuine tie the test still chose to assert a hypothesis about), the verdict — whichever it is — carries an explanatory suffix noting the candidate set was tied and the expected winner reflects an assumed, not derivable, tie-break, so a report reader never mistakes a declared assumption for a mathematically forced conclusion.
 
 **Honesty note, stated directly in this file's doc comment, not just here:** `ObservedWinningRuleID`/`ObservedEffectiveAction` must be sourced from the vendor's *own* policy-resolution reporting — a "matched policy/rule" field in its audit log, or a genuine policy-simulation/dry-run API — never from independently running a real exfiltration attempt and inferring the winner from whether data was blocked, which would double-count DLP-ENF's evidence as DLP-POL's. Where the only available signal is a controlled single-match audit event (e.g. Purview's `DLP.All` records already carry `PolicyName`/`RuleName`/`Actions` per match — see `internal/vendors/purview.DLPEvent`), that event is the acceptable minimum evidence source, but `Provenance.Kind` must be `ProvenanceInferred` with `Basis` naming exactly this ("inferred from a single controlled policy-match audit event, not a dedicated policy-simulation API") so a reader can see precisely how thin the evidence gets when a vendor has no pure simulation surface.
+
+**What this evaluator can and cannot assess (locked scope boundary).** It can: resolve a *declared* candidate set's own priority/eligibility logic deterministically, detect a self-contradictory test, detect a genuine priority tie, and compare a vendor's reported resolution against a validated expectation. It explicitly **cannot**: derive `Eligible` itself from raw location/user/device/group scope declarations (that is a materially different, generic scope-overlap-resolution engine, not built here — ambiguous real-world scope overlap is the fixture author's or a future vendor-specific connector's job to resolve into a plain `Eligible` fact before this evaluator ever sees it); independently predict what a *real* vendor's tie-break mechanism does in a genuine conflict (step 9 surfaces the tie, it never resolves it on the vendor's behalf); or normalize differing vendors' own precedence semantics (e.g. "first rule wins" vs. "most specific rule wins" vs. "explicit priority field") into one universal model — `Priority` here assumes a numeric, lower-wins ordering, which is this evaluator's modeling choice, not a claim that every real DLP product works this way.
+
+**Fixture matrix this slice's tests must cover** (each a distinct, independently-reasoned case, not incidental coverage): a clean positive case (distinct priorities, no ties, evidence matches); a genuine conflict (tied priority, differing actions, no override — `ambiguous=true`, no derivable winner); an expected/intentional override (`OverrideJustification` set, declared winner contradicts raw priority order, still verified correctly against evidence); reversed priority / candidate-slice order independence (the winner by value, not by list position); a disabled higher-priority rule correctly yielding to the next eligible candidate; equal-priority ambiguity where both candidates happen to share the same `ExpectedAction` (still flagged ambiguous, since *which rule* fired is still indeterminate even when the net effect looks identical); an incomplete rule inventory (vendor's observed winner isn't in `CandidateRules` at all); a missing-priority candidate (`Priority == nil` on an eligible candidate, forcing `Inconclusive` before evidence); and a contradictory expectation with no `OverrideJustification` (caught at step 4, never reaching evidence).
 
 ### Slice 2b — `DLPPolicyVarianceExpectation` (`dlppolicy/variance.go`)
 
