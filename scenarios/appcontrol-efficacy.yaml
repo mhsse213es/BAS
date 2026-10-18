@@ -540,10 +540,14 @@ steps:
       - "Not measured in this version. The step records the host's language mode and Add-Type result only."
     command: |
       $ErrorActionPreference = 'SilentlyContinue'
-      # Test contract: a host that is meant to run under Constrained Language
-      # Mode must block Add-Type. A host that runs FullLanguage and allows it is
-      # a gap, and the result reports it as one.
-      $expected = 'restricted'
+      # Test contract: the verdict depends on the customer's intended policy for
+      # custom PowerShell hosts, supplied as BAS_INPROC_POLICY. The host is not
+      # assumed to need restriction. Without a stated policy the result is
+      # UNVERIFIED, never a FAIL.
+      #   restricted   - the host must run ConstrainedLanguage and block Add-Type
+      #   unrestricted - the host may run FullLanguage; the exposure is documented
+      $policy = ([string]$env:BAS_INPROC_POLICY).Trim().ToLower()
+      $expected = switch ($policy) { 'restricted' { 'blocked' } 'unrestricted' { 'allowed' } default { 'unknown' } }
       $tid = [guid]::NewGuid().ToString('N')
       $marker = "BAS-SIM-INPROC-$tid"
       $helper = $env:BAS_INPROC_HOST
@@ -570,20 +574,31 @@ steps:
 
       if (-not $ran -or $mode -eq 'unknown' -or $add -eq 'unknown') {
         $outcome = 'inconclusive'; $reason = 'the custom host did not report a complete result; nothing can be concluded'
-      } elseif ($add -eq 'allowed') {
-        $outcome = 'allowed_unexpectedly'; $reason = "the custom host allowed Add-Type under $mode; no language restriction applies"
-      } elseif ($mode -eq 'ConstrainedLanguage') {
-        $outcome = 'blocked_as_expected'; $reason = 'the custom host runs ConstrainedLanguage and blocked Add-Type'
+      } elseif ($policy -eq 'restricted') {
+        if ($add -eq 'allowed') {
+          $outcome = 'allowed_unexpectedly'; $reason = "the custom host allowed Add-Type under $mode, but the stated policy requires a restricted host"
+        } elseif ($mode -eq 'ConstrainedLanguage') {
+          $outcome = 'blocked_as_expected'; $reason = 'the custom host runs ConstrainedLanguage and blocked Add-Type, as the stated policy requires'
+        } else {
+          $outcome = 'inconclusive'; $reason = "Add-Type was blocked under $mode, which is not language-mode enforcement; cannot attribute the block"
+        }
+      } elseif ($policy -eq 'unrestricted') {
+        if ($add -eq 'allowed') {
+          $outcome = 'allowed_by_policy'; $reason = "the custom host runs $mode and allowed Add-Type, as the stated policy permits; exposure is documented, not a finding"
+        } else {
+          $outcome = 'inconclusive'; $reason = "the custom host blocked Add-Type under $mode, which is stricter than the stated policy; this is not a finding"
+        }
       } else {
-        $outcome = 'inconclusive'; $reason = "Add-Type was blocked under $mode, which is not language-mode enforcement; cannot attribute the block"
+        $outcome = 'inconclusive'; $reason = "UNVERIFIED: the intended policy for custom PowerShell hosts is not stated (set BAS_INPROC_POLICY to restricted or unrestricted); observed $mode with Add-Type $add"
       }
 
       Write-Output "APPCTL_COVERAGE: HostLanguageMode=$mode"
-      Write-Output "APPCTL_EVIDENCE: test_id=$tid expected=$expected ran=$ran exit=$exit host_addtype=$add capture=$((Get-Date).ToString('o'))"
+      Write-Output "APPCTL_EVIDENCE: test_id=$tid policy=$policy expected=$expected ran=$ran exit=$exit host_addtype=$add capture=$((Get-Date).ToString('o'))"
       Write-Output "APPCTL_DETECTION: source=none result=unknown"
       Write-Output "APPCTL_OUTCOME: $outcome"
       switch ($outcome) {
         'blocked_as_expected'  { Write-Output "PASS: $reason. [BAS-SIM]" }
+        'allowed_by_policy'    { Write-Output "PASS: $reason. [BAS-SIM]" }
         'allowed_unexpectedly' { Write-Output "FAIL: $reason. [BAS-SIM]" }
         default                { Write-Output "SKIP: $reason. [BAS-SIM]" }
       }

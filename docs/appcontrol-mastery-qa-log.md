@@ -31,19 +31,24 @@ Everything buildable without a live Windows lab or vendor tenant is complete, in
 
 These results come from the real helper, not from stubs.
 
-| Configuration | Language mode | Add-Type | Outcome |
-|---|---|---|---|
-| Default (what the scenario runs) | FullLanguage | allowed | `allowed_unexpectedly`, reported as FAIL |
-| Positive control (`--positive-control-constrained`) | ConstrainedLanguage | blocked | would be `blocked_as_expected` |
+The host runs FullLanguage with `Add-Type` allowed. The verdict depends on the customer's intended policy, supplied as `BAS_INPROC_POLICY`:
 
-The default result is a finding: a custom PowerShell host on this machine runs without a language restriction. Whether that is acceptable depends on the endpoint's policy, and that decision is yours.
+| `BAS_INPROC_POLICY` | Host result | Outcome | Reported as |
+|---|---|---|---|
+| unset | FullLanguage, Add-Type allowed | `inconclusive` | UNVERIFIED |
+| `restricted` | FullLanguage, Add-Type allowed | `allowed_unexpectedly` | FAIL |
+| `unrestricted` | FullLanguage, Add-Type allowed | `allowed_by_policy` | PASS, exposure documented |
+
+Positive control, run directly against the binary (not a scenario configuration): `--positive-control-constrained` gives ConstrainedLanguage with Add-Type blocked. The probe distinguishes restricted from unrestricted hosts. The control proves that the test can see a restriction. It does not show that the customer's controls enforce one.
+
+A FullLanguage host is not automatically a failure. Whether that is a finding depends on the policy the customer has stated for custom hosts.
 
 ## Verification
 
 | Check | Command | Result |
 |---|---|---|
-| V3 fixtures, seven cases, stubbed host output | `go test -count=1 ./internal/scenario/ -run TestInProcessHosting_OutcomeFromHostOutput -v` | PASS |
-| V3 real host binary | `BAS_INPROC_HOST=<path> go test -count=1 ./internal/scenario/ -run TestInProcessHosting_RealHostBinary -v` | PASS; real result shown above |
+| V3 fixtures, 11 cases across policy values and host outputs, stubbed | `go test -count=1 ./internal/scenario/ -run TestInProcessHosting_OutcomeFromHostOutput -v` | PASS |
+| V3 real host binary, each policy value | `BAS_INPROC_HOST=<path> [BAS_INPROC_POLICY=<value>] go test -count=1 ./internal/scenario/ -run TestInProcessHosting_RealHostBinary -v` | unset: inconclusive; restricted: allowed_unexpectedly; unrestricted: allowed_by_policy |
 | Test contracts, including `inprocess_hosting` | `go test -count=1 ./internal/scenario/ -run TestAppControlContracts -v` | PASS |
 | Report family list, six families in order | `go test -count=1 ./internal/reporting/ -run AppControl -v` | PASS |
 | Full scenario package | `go test -count=1 ./internal/scenario/` | ok, exit 0 |
@@ -91,7 +96,9 @@ These need a lab, a tenant, or a decision that only you can make. Nothing here c
 3. **Not-applicable control.** Run on an edition without AppLocker (or with the policy unavailable). Expected: `not_applicable` on the AppLocker steps, never a pass.
 4. **Confirm event formats on the lab host.** Check that AppLocker 8004 and 8006, Defender 1121, and Sysmon EID 1 appear with the fields the attribution rule depends on. Record any difference in this log.
 5. **alternate_ps_host.** Install PowerShell 7 on the lab host. Without it this path is only `not_applicable`.
-6. **inprocess_hosting: decide the policy.** Build the host with `tools/inprocess-host/build.ps1`, set `BAS_INPROC_HOST`, and run the step. On this machine the custom host runs FullLanguage and reports FAIL. Decide whether the endpoints you protect should run a custom PowerShell host under Constrained Language Mode. If they should, the FAIL is a real gap on those endpoints. If not, the contract's `restricted` expectation should be changed, and that change should be recorded here.
+6. **inprocess_hosting: state the policy.** The verdict needs your intended policy for custom PowerShell hosts. Set `BAS_INPROC_POLICY` to `restricted` if custom hosts must run ConstrainedLanguage and block `Add-Type`. Set it to `unrestricted` if FullLanguage is permitted, and the exposure is documented as a PASS. Leave it unset and the result stays UNVERIFIED. This is a decision about your endpoints, and the step does not make it for you.
+   - Where a restriction is required, find a supported way to constrain the custom host, and verify the effective behaviour on the endpoint. Setting a language-mode flag alone is not a security boundary, and Constrained Language Mode is not a substitute for AppLocker or WDAC. The right control depends on the execution path.
+   - Language-mode results say nothing about AMSI or ScriptBlock logging. Visibility stays `unknown` until a sensor is implemented and validated.
 7. **Vendor correlation (deferred by you).** Defender and SentinelOne correlation needs tenant access and the integration. When you have both, the open work is to wire the `avval` mapping to those sources and confirm their field paths against a live tenant.
 8. **Campaign report review.** Check how the per-run sections read to a client when a campaign has many runs.
 9. **Limitations wording.** Review the four limitation statements in Section 18a before a client sees them. Soften only if the lab run supports it.

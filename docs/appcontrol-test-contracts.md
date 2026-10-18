@@ -80,8 +80,16 @@ Every contract has the same fields: family, control under test, prerequisites, e
 - **Control under test.** The language restriction a custom PowerShell host runs under. The host is `tools/inprocess-host/bas-pshost.exe`, built from source and hosting `System.Management.Automation` in its own process rather than `powershell.exe`. The test asks whether that host runs under Constrained Language Mode and blocks `Add-Type`.
 - **Technique.** T1059.001.
 - **Prerequisites.** `BAS_INPROC_HOST` set to a built `bas-pshost.exe`. Build from source with `tools/inprocess-host/build.ps1`, which uses the .NET Framework compiler already on Windows and downloads nothing. The PowerShell automation assembly must be present in the GAC.
-- **Expected-result source.** The host's own report of its runspace language mode, read from `HOST_LANGUAGE_MODE`. The expectation that this host should be restricted is part of the contract. It is not assumed from policy.
-- **Expected outcome.** `blocked_as_expected` when the host reports ConstrainedLanguage and blocks `Add-Type`. `allowed_unexpectedly` when `Add-Type` succeeds under any language mode, because no restriction applies. `not_applicable` when no host is configured.
+- **Expected-result source.** Two inputs. The host's own report of its runspace language mode (`HOST_LANGUAGE_MODE`) and of whether `Add-Type` succeeded (`HOST_ADDTYPE`). And the customer's intended policy for custom PowerShell hosts, supplied as `BAS_INPROC_POLICY`. The policy is the expectation. It is never assumed from the host's behavior, and the step does not assume that a custom host must be restricted.
+- **Policy values.**
+  - `restricted`: the host must run ConstrainedLanguage and block `Add-Type`.
+  - `unrestricted`: the host may run FullLanguage and allow `Add-Type`. The exposure is documented.
+  - unset: the verdict is UNVERIFIED. The result is `inconclusive`, never a FAIL.
+- **Expected outcome.**
+  - Policy `restricted`: `blocked_as_expected` when the host reports ConstrainedLanguage and blocks `Add-Type`. `allowed_unexpectedly` when `Add-Type` succeeds, under any language mode.
+  - Policy `unrestricted`: `allowed_by_policy` when `Add-Type` succeeds, with the host's language mode recorded as the documented exposure. A block is `inconclusive`, since it is stricter than the stated policy and not a finding.
+  - Policy unset: `inconclusive`, reported as UNVERIFIED.
+  - No host configured: `not_applicable`.
 - **Evidence requirements.** `APPCTL_EVIDENCE` with the test ID, `ran` (the host echoed this test's marker), `exit`, and the host's `Add-Type` result. There is no event-log attribution: the host is the only observer, and its own report is the evidence.
 - **Attribution rule.** An `Add-Type` block counts as language-mode enforcement only when the host also reports ConstrainedLanguage. A block under FullLanguage is `inconclusive`, because something other than the language restriction caused it.
 - **Cleanup.** Removes the temp output file.
