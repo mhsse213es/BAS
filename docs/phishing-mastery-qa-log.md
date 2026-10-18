@@ -13,7 +13,7 @@ Every package has real, deterministic test coverage — no `TODO`/skipped tests 
 - **`internal/phishbridge`** — one-way translation tests from `emailgwefficacy`/`emailgwcampaign`/`exercise`/`phishidentity`/`internal/actions` into `phishval.Observation`, each with an explicit known-good and known-bad end-to-end case (e.g. `TestPHBEC002_...`, `TestPHDET001_...`, `TestPHIR002_...`, `TestPHCHN002_...`, `TestPHID001_...`, `TestPHIR003_...`).
 - **`internal/phishidentity`** — real Microsoft Graph v1.0 adapter, every call proven against `httptest` (OAuth-consent listing, `RevokeAndVerifySignInSessions`'s 3-outcome retry logic including a genuine propagation-delay case, `CreateSharingInvite`/`CreateCalendarEventLure` + read-back verify + delete, all scoping/authorization rejections individually tested).
 
-**Current catalog coverage snapshot** (`AudspectPhishingCoverageReport()`, re-measured 2026-10-18 after PH-BEC-006's closure): 44 scenarios total — 15 catalog-only, 3 fixture-tested, 26 adapter-tested, 0 live-validated. ("Adapter-tested" = real code path, proven against `httptest`/deterministic fixtures or a real local SMTP server, never contacted a live vendor tenant. "Live-validated" = proven against a real tenant — zero scenarios have reached this tier yet, for any vendor, in this initiative.)
+**Current catalog coverage snapshot** (`AudspectPhishingCoverageReport()`, re-measured 2026-10-18 after PH-ID-004/PH-ID-005's closure): 44 scenarios total — 13 catalog-only, 3 fixture-tested, 28 adapter-tested, 0 live-validated. Of the 28 adapter-tested, 2 (PH-ID-004/PH-ID-005) are EXPERIMENTAL heuristics, not Microsoft-verified detections — see their own resolved-item entries below and `EvidenceInferred` in their Observations. ("Adapter-tested" = real code path, proven against `httptest`/deterministic fixtures or a real local SMTP server, never contacted a live vendor tenant. "Live-validated" = proven against a real tenant — zero scenarios have reached this tier yet, for any vendor, in this initiative.)
 
 ## Open items — blocked on live tenant/vendor access, not an engineering gap
 
@@ -25,17 +25,7 @@ Every package has real, deterministic test coverage — no `TODO`/skipped tests 
 
 **Resolution path:** a Microsoft 365 tenant with admin-consented Graph permissions (`User.ReadWrite.All` for session revocation, `Files.ReadWrite.All` for sharing invites, `Calendars.ReadWrite` for calendar lures, `Policy.Read.All` + elevated Conditional-Access-read scope for PH-ID-003's `appliedConditionalAccessPolicies` field).
 
-### 2. PH-ID-004/PH-ID-005 (MFA fatigue / session-theft) — confirmed genuine gaps, not a missing adapter
-
-**Status:** Researched 2026-10-18 (Microsoft Graph `riskDetections`, `authenticationMethodsPolicy`, and Entra sign-in log / Continuous Access Evaluation documentation). Neither is a "code not written yet" gap — no reliable per-event Graph signal exists for either claim at all.
-
-**PH-ID-004 (MFA fatigue):** `riskDetections`' `riskEventType` enum has no member for repeated-push/MFA-fatigue activity; non-premium types are individually named, premium detections collapse into one generic value with no way to isolate this one. Number matching (the real control) is tenant-wide configuration (`GET /policies/authenticationMethodsPolicy`), not a per-attempt enforcement signal — building from that alone would be exactly the "infer enforcement from configuration" the user's own directive ruled out.
-
-**PH-ID-005 (session-theft/CAE):** a sign-in's CAE-token-issuance state is checkable (Entra's "Is CAE Token" signal, confirmed via the beta `authenticationProcessingDetails` key), but that only proves a CAE-protected token was issued, never that a theft was detected and the token revoked in response. No Microsoft-documented sign-in log field records a revocation-rejection event for user identities (only for workload identities, a different object class) — the specific signal this scenario's own objective needs does not exist.
-
-**Resolution path:** re-open only if Microsoft ships a documented per-event signal for either (a risk-detection type for MFA fatigue, or a revocation-rejection field in user sign-in logs) — not something to build around today.
-
-### 3. PH-IR-003 (endpoint follow-through) — dispatch-level evidence only, no independent postcondition verification exists anywhere in this codebase
+### 2. PH-IR-003 (endpoint follow-through) — dispatch-level evidence only, no independent postcondition verification exists anywhere in this codebase
 
 **Status:** Built and tested this session (`phishbridge.FromEPPResponseAction`, wrapping the already-real `internal/actions.Execute` against CrowdStrike/Defender/SentinelOne). `actions.StatusCompleted` proves the EPP vendor accepted and completed the dispatched isolate/kill-process/quarantine request — it does **not** prove the host is independently confirmed isolated or the process independently confirmed dead.
 
@@ -43,19 +33,19 @@ Every package has real, deterministic test coverage — no `TODO`/skipped tests 
 
 **Resolution path:** (a) a live EPP tenant to verify the dispatch call itself against, and (b) a decision to build a real independent postcondition verifier for endpoint actions (new work, not yet scoped).
 
-### 4. Mailbox search-and-purge (PH-IR-001's remaining half) — deferred by explicit decision, not partially built
+### 3. Mailbox search-and-purge (PH-IR-001's remaining half) — deferred by explicit decision, not partially built
 
 **Status:** Deliberately not built. Research (2026-10-18) confirmed the real API shape (`POST /security/cases/ediscoveryCases/{caseId}/searches/{searchId}/purgeData`) is beta/preview, licensing-gated (E5/G5, `eDiscovery.ReadWrite.All`), multi-step (create case → create search → estimate → purge), with community-reported reliability issues (202 success but nothing actually deleted).
 
 **Resolution path:** only build this once Microsoft's eDiscovery purge API exits preview, or the user explicitly asks for a beta-caveated implementation anyway.
 
-### 5. Voice/vishing (PH-CHN-007) — deferred by explicit decision, zero telephony infrastructure
+### 4. Voice/vishing (PH-CHN-007) — deferred by explicit decision, zero telephony infrastructure
 
 **Status:** Deliberately not built — no Twilio/SIP integration exists anywhere in this codebase, and building one solely to fill a scenario-count gap was explicitly rejected by the user.
 
 **Resolution path:** a standalone build-vs-defer decision, not a QA gap.
 
-### 6. Locale/i18n — deferred by explicit decision, no real rendering capability exists
+### 5. Locale/i18n — deferred by explicit decision, no real rendering capability exists
 
 **Status:** Deliberately not built — no i18n/RTL rendering infrastructure exists anywhere in this codebase; tag-only locale metadata was explicitly rejected as fake completeness.
 
@@ -94,6 +84,18 @@ Per explicit instruction, audited PH-AUTH-010 and PH-BEC-004/005/006/008 against
 **PH-BEC-006 (reply-chain hijacking) — initially corrected to a partial overlap, later built on explicit instruction (RESOLVED 2026-10-18, see its own entry below).** The account-compromise precondition is the identical evidence PH-AUTH-010 covers; what was built is a reply-chain-framed dispatch test of that same control, with the thread-history-anomaly limitation named rather than faked.
 
 Net result of this slice as first closed: 1 real build (PH-AUTH-010), 4 honest bookkeeping corrections (no new code, no duplicated engine), 0 scope creep into the then-still-open PH-BEC-006 reply-chain-anomaly gap. PH-BEC-006 itself was built in a later pass (see below).
+
+### PH-ID-004/PH-ID-005 (MFA fatigue / session-theft) — RESOLVED 2026-10-18, EXPERIMENTAL heuristics built on explicit instruction
+
+Researched first (Microsoft Graph `riskDetections`, `authenticationMethodsPolicy`, Entra sign-in logs, Continuous Access Evaluation docs, plus public vendor/community MFA-fatigue detection write-ups from Datadog, ManageEngine, and Northwave) before writing any code. Confirmed neither claim has a Microsoft-documented per-event detection: `riskDetections.riskEventType` has no member for repeated-push/MFA-fatigue activity, and no sign-in log field records a revocation-on-theft event for user identities.
+
+User directed building labeled best-effort heuristics anyway rather than leaving both permanently gated, with the explicit instruction that they be marked non-Microsoft-documented/experimental rather than presented as vendor-verified.
+
+**PH-ID-004:** `phishidentity.MFADenialEventsForUser` reads real, documented fields (`status.errorCode == 500121`, `status.additionalDetails`) — the same fields the public vendor/community detections key on. `DetectMFAFatigueHeuristic` applies their published burst-counting approach (N denials within a sliding window; threshold/window are caller-supplied, since no official Microsoft number exists). `FromMFAFatigueHeuristic` bridges into phishval's Detection dimension using `EvidenceInferred`/`ConfidenceLow` (never `EvidenceVerifiedTelemetry`/`ConfidenceHigh`), with "EXPERIMENTAL, not a Microsoft-documented detection" baked into the Source string itself so the caveat survives into any rendered report.
+
+**PH-ID-005:** `phishidentity.RiskySignInsForUser` reads the real, documented `riskState` property (`atRisk`/`confirmedCompromised`), filtering out `remediated`/`dismissed` sign-ins that Entra's own workflow already handled. `DetectSessionTheftResponseHeuristic` checks whether `signInSessionsValidFromDateTime` (the same real field `RevokeAndVerifySignInSessions` already reads) advanced to after a risky sign-in within a bounded window — suggestive of a response, explicitly never claimed as a Microsoft-documented causal link. `FromSessionTheftResponseHeuristic` bridges into the Response dimension (`ResponseContained`, the same outcome PH-IR-002's own admin-triggered revocation uses) with the same `EvidenceInferred`/`ConfidenceLow` labeling.
+
+`CoverageAdapterTested` for both — real Graph adapter code, httptest-proven — but the catalog's own `Limitations` field and the Source string both carry the EXPERIMENTAL caveat forward so this is never mistaken for a vendor-verified signal in a client-facing report. 6 tests between the two heuristic functions, 2 httptest adapter tests, 6 bridge tests.
 
 ### PH-BEC-006 (reply-chain hijacking) — RESOLVED 2026-10-18
 
