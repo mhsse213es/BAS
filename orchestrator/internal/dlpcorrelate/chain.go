@@ -132,9 +132,11 @@ func EvaluateCorrelationChain(chain CorrelationChain, reached []StageResult) (Ch
 			StageOrder:   i + 1,
 			Label:        def.Label,
 			Dimension:    def.Dimension,
+			Outcome:      StageNotTested,
 			StageSkipped: true,
 			Reason:       reason,
 		})
+		result.AnyNotTested = true
 	}
 
 	if len(reached) < len(chain.Stages) && len(reached) > 0 {
