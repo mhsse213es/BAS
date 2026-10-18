@@ -144,6 +144,19 @@ func (h *Handler) issueSinkTokensAndSubstitute(ctx context.Context, runID, publi
 			steps[i].Command = strings.ReplaceAll(steps[i].Command, "{{SINK_TELNET_HOST}}", telnetSinkHost(publicBaseURL))
 			steps[i].Command = strings.ReplaceAll(steps[i].Command, "{{SINK_TELNET_PORT}}", telnetSinkPort(publicBaseURL))
 		}
+		if strings.Contains(steps[i].Command, "{{SINK_AI_HOST}}") || strings.Contains(steps[i].Command, "{{SINK_AI_PORT}}") {
+			// Same reasoning as the cloud storage, webhook and telnet
+			// blocks above: does NOT issue its own token. Both routes in
+			// this channel -- the OpenAI-compatible chat-completion shape
+			// and the Microsoft Graph connector-ingestion shape -- reuse
+			// the existing 32-byte {{SINK_TOKEN}} placeholder directly,
+			// each embedding it in its own provider-natural location (the
+			// first message's "content" field, the item's "content.value"
+			// field). The unconditional block above already issues and
+			// substitutes it whenever present.
+			steps[i].Command = strings.ReplaceAll(steps[i].Command, "{{SINK_AI_HOST}}", aiSinkHost(publicBaseURL))
+			steps[i].Command = strings.ReplaceAll(steps[i].Command, "{{SINK_AI_PORT}}", aiSinkPort(publicBaseURL))
+		}
 	}
 	return steps, nil
 }
@@ -291,6 +304,34 @@ func telnetSinkHost(publicBaseURL string) string {
 // externally-published port than the rest of the API.
 func telnetSinkPort(publicBaseURL string) string {
 	if v := os.Getenv("SINK_TELNET_PORT"); v != "" {
+		return v
+	}
+	if u, err := url.Parse(publicBaseURL); err == nil && u.Port() != "" {
+		return u.Port()
+	}
+	return "443" // publicBaseURL has no explicit port -- assume default HTTPS
+}
+
+// aiSinkHost resolves the {{SINK_AI_HOST}} placeholder: an explicit
+// SINK_AI_HOST environment override if set, otherwise the same derivation
+// dnsServerHost/sftpSinkHost/smtpSinkHost/cloudSinkHost/webhookSinkHost/
+// telnetSinkHost already use.
+func aiSinkHost(publicBaseURL string) string {
+	if v := os.Getenv("SINK_AI_HOST"); v != "" {
+		return v
+	}
+	return dnsServerHost(publicBaseURL)
+}
+
+// aiSinkPort resolves the {{SINK_AI_PORT}} placeholder, following
+// cloudSinkPort's reasoning exactly: internal/aisink's two routes are
+// mounted on the main API server rather than binding an independent
+// listener, so the port comes from publicBaseURL itself. SINK_AI_PORT
+// remains available as an explicit override for the rare case where
+// these routes are deliberately reachable on a different
+// externally-published port than the rest of the API.
+func aiSinkPort(publicBaseURL string) string {
+	if v := os.Getenv("SINK_AI_PORT"); v != "" {
 		return v
 	}
 	if u, err := url.Parse(publicBaseURL); err == nil && u.Port() != "" {

