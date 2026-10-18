@@ -38,6 +38,16 @@ This is the single place to check before claiming either DLP vendor connector is
 
 **Resolution path:** get Trellix DLP API documentation/sandbox access (the Trellix Developer Portal at developer.manage.trellix.com, or a support-provided DLP incident API reference) and a licensed test account; correct `Incident`'s field mapping and the token/events endpoint defaults against whatever the real account's IAM Client Credentials page and the real incident API reference show.
 
+### 3. DLP-MOB (mobile DLP channel) — open, blocked on missing mobile agent, not a configuration or licensing gap
+
+**Status:** Open, blocked on infrastructure Audspect does not have — a genuine engineering gap, not deferred for the same reason as items 1-2 above.
+
+**What's needed:** `dlp.txt` §3B names `DLP-MOB` ("Supported mobile DLP controls, managed versus unmanaged applications, copy/paste restrictions and document sharing") as one of 10 exfiltration-channel scenario families. Audspect's agent runs on Windows/macOS/Linux endpoints only (confirmed by repo audit 2026-10-18: zero references to a mobile/Android/iOS agent anywhere in `internal/agent*` or `internal/models/schema.go`). Testing a real mobile DLP control (an MDM-enrolled device, a managed-app copy/paste restriction, a mobile DLP agent's own policy enforcement) requires a mobile execution surface — an actual Android/iOS agent, or at minimum an MDM/EMM API integration — that does not exist in this codebase at all.
+
+**What this means:** per `dlp.txt`'s own non-negotiable engineering rule 1 ("Capability-aware execution: fail closed when required preconditions or authorization are absent; report NOT_TESTED rather than inventing a result") and §10's acceptance criterion ("Unsupported channels and unlicensed capabilities remain explicitly untested"), DLP-MOB is recorded here as an explicit, named, unsupported capability rather than a fabricated scenario that doesn't actually exercise a mobile environment. No `dlp-exfiltration-mobile.yaml` scenario exists, and none should be written until a real mobile execution surface exists to run it against — a scenario whose steps run on the existing Windows/macOS/Linux agent cannot genuinely test a mobile DLP control, regardless of how the payload is shaped.
+
+**Resolution path:** build a mobile agent (Android/iOS) or an MDM/EMM API integration (e.g. Microsoft Intune, Google Workspace Endpoint Management) first — a separate, substantial engineering effort, not a follow-up to this initiative's existing scenario-authoring work. Until then, DLP-MOB stays at zero coverage, honestly.
+
 ## Resolved items
 
 (none yet)
