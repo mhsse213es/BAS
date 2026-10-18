@@ -168,7 +168,11 @@ type FullReport struct {
 	// Validation Pack). HasData is false — and the section renders as before —
 	// for any run whose scenario declares no expected_detection.
 	DetectionValidation DetectionValidationSection `json:"detectionValidation"`
-	TrendAnalysis       TrendSummary               `json:"trendAnalysis"`
+	// AppControl is the Application Control Efficacy section (Section 18a).
+	// Built from this run's own results before any report filter, and
+	// hidden (HasData false) for a run with no application-control steps.
+	AppControl    AppControlSection `json:"appControl"`
+	TrendAnalysis TrendSummary      `json:"trendAnalysis"`
 	AttackPath          AttackPath                 `json:"attackPath"`
 	AttackFlow          []AttackFlowNode           `json:"attackFlow,omitempty"`
 	AttackFlowSummary   AttackFlowSummary          `json:"attackFlowSummary"`
@@ -1937,6 +1941,7 @@ func (e *Engine) BuildFromRun(ctx context.Context, runID string, filter string) 
 	json.Unmarshal(resultsRaw, &results)
 	json.Unmarshal(scoreRaw, &score)
 	json.Unmarshal(revertedRaw, &report.Reverted)
+	report.AppControl = buildAppControlSection(runID, results)
 	if filter != "" && filter != "all" {
 		report.ActiveFilter = filter
 		report.FilterTotalCount = len(results)

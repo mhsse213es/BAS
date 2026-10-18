@@ -1,10 +1,6 @@
 package reporting
 
-import (
-	"fmt"
-	"regexp"
-	"strings"
-)
+import "regexp"
 
 // Observed outcomes emitted by an application-control behavioral step as an
 // APPCTL_OUTCOME line. Expected intents come from the test contract.
@@ -153,25 +149,4 @@ type AppControlPathResult struct {
 	Technique  string
 	Outcome    string
 	Visibility string
-}
-
-// RenderAppControlMatrix renders the per-path coverage matrix as Markdown.
-// Prevention and telemetry visibility are separate columns, and the
-// limitations statement is always present, including for an empty matrix.
-func RenderAppControlMatrix(rows []AppControlPathResult) string {
-	var b strings.Builder
-	b.WriteString("## Application control efficacy\n\n")
-	if len(rows) == 0 {
-		b.WriteString("No application-control paths were evaluated.\n\n")
-	} else {
-		b.WriteString("| Family | Technique | Prevention outcome | Telemetry visibility |\n")
-		b.WriteString("| --- | --- | --- | --- |\n")
-		for _, r := range rows {
-			fmt.Fprintf(&b, "| %s | %s | %s | %s |\n", r.Family, r.Technique, r.Outcome, r.Visibility)
-		}
-		b.WriteString("\n")
-	}
-	b.WriteString("Telemetry visibility is not a prevention verdict: a path can be blocked and still unseen by telemetry, or allowed and visible.\n\n")
-	b.WriteString(appControlDefaultLimitations + "\n")
-	return b.String()
 }

@@ -1,7 +1,6 @@
 package reporting
 
 import (
-	"strings"
 	"testing"
 )
 
@@ -106,34 +105,3 @@ func TestParseAppControlVisibility(t *testing.T) {
 
 // Prevention and telemetry visibility are separate columns. A path that was
 // blocked but not visible in telemetry must show both facts, never one
-// folded into the other.
-func TestRenderAppControlMatrix_SeparatesPreventionFromVisibility(t *testing.T) {
-	rows := []AppControlPathResult{
-		{Family: "indirect_execution", Technique: "T1202", Outcome: AppCtlBlockedAsExpected, Visibility: "visible"},
-		{Family: "script_host_proxy", Technique: "T1059.005", Outcome: AppCtlAllowedUnexpected, Visibility: "not_visible"},
-		{Family: "alternate_ps_host", Technique: "T1059.001", Outcome: AppCtlNotApplicable, Visibility: "unknown"},
-	}
-	md := RenderAppControlMatrix(rows)
-	for _, want := range []string{
-		"| Family | Technique | Prevention outcome | Telemetry visibility |",
-		"| indirect_execution | T1202 | blocked_as_expected | visible |",
-		"| script_host_proxy | T1059.005 | allowed_unexpectedly | not_visible |",
-		"| alternate_ps_host | T1059.001 | not_applicable | unknown |",
-		"Telemetry visibility is not a prevention verdict",
-		"Results hold only for the tested Windows build",
-	} {
-		if !strings.Contains(md, want) {
-			t.Errorf("matrix missing %q\n%s", want, md)
-		}
-	}
-}
-
-func TestRenderAppControlMatrix_EmptyStillStatesLimitations(t *testing.T) {
-	md := RenderAppControlMatrix(nil)
-	if !strings.Contains(md, "No application-control paths were evaluated") {
-		t.Errorf("empty matrix must say nothing was evaluated, got:\n%s", md)
-	}
-	if !strings.Contains(md, "Results hold only for the tested Windows build") {
-		t.Error("empty matrix must still carry the limitations statement")
-	}
-}

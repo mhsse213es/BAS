@@ -3341,6 +3341,62 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 </div>
 </div>
 
+<!-- ═══ 18a. APPLICATION CONTROL EFFICACY ═══════════════════════════════ -->
+{{if .appControl.hasData}}
+<div class="page">
+<div class="inner">
+<div class="ph">
+  <div class="ph-left">
+    <div class="ph-logo">Aud<span>spect</span> BAS</div>
+    <div class="ph-sep"></div>
+    <div class="ph-title">{{if .scope}}{{.scope.title}}{{else}}{{.summary.lastScenarioName}}{{end}}</div>
+  </div>
+  <div class="ph-right">
+    <div class="ph-endpoint">{{if .scope}}Campaign{{else}}{{.agent.hostname}}{{end}}</div>
+    <div class="ph-class">CONFIDENTIAL</div>
+  </div>
+</div>
+<div class="stag">Section 18a</div>
+<div class="stitle" role="heading" aria-level="1">Application Control Efficacy</div>
+
+<p style="color:#6e7681;margin-bottom:14px">Behavioral tests of whether application control blocks execution along each path family, for this run only. <strong>Prevention</strong> is the enforcement outcome of each attempt. <strong>Telemetry</strong> is whether Sysmon process-creation telemetry recorded the attempt. The two are reported separately: a blocked attempt can be unseen by telemetry, and a visible attempt can have been allowed. Neither field proves the other. Families that were not run, were not applicable, or produced no structured evidence are shown as such and are never reported as passing.</p>
+
+<h3 style="margin-top:12px;margin-bottom:6px">Coverage by path family</h3>
+<table style="width:100%;border-collapse:collapse;margin-bottom:14px;font-size:0.85rem">
+<thead><tr><th style="text-align:left;border-bottom:1px solid #d0d7de;padding:6px">Family</th><th style="text-align:left;border-bottom:1px solid #d0d7de;padding:6px">Status</th><th style="text-align:left;border-bottom:1px solid #d0d7de;padding:6px">Note</th></tr></thead>
+<tbody>
+{{range .appControl.families}}
+<tr><td style="padding:6px;border-bottom:1px solid #eef1f4;font-family:monospace">{{.family}}</td><td style="padding:6px;border-bottom:1px solid #eef1f4"><strong>{{.status}}</strong></td><td style="padding:6px;border-bottom:1px solid #eef1f4;color:#6e7681">{{.note}}</td></tr>
+{{end}}
+</tbody>
+</table>
+
+{{if .appControl.rows}}
+<h3 style="margin-top:12px;margin-bottom:6px">Evaluated paths</h3>
+<table style="width:100%;border-collapse:collapse;margin-bottom:14px;font-size:0.85rem">
+<thead><tr><th style="text-align:left;border-bottom:1px solid #d0d7de;padding:6px">Family</th><th style="text-align:left;border-bottom:1px solid #d0d7de;padding:6px">Technique</th><th style="text-align:left;border-bottom:1px solid #d0d7de;padding:6px">Prevention outcome</th><th style="text-align:left;border-bottom:1px solid #d0d7de;padding:6px">Telemetry visibility</th></tr></thead>
+<tbody>
+{{range .appControl.rows}}
+<tr><td style="padding:6px;border-bottom:1px solid #eef1f4;font-family:monospace">{{.family}}</td><td style="padding:6px;border-bottom:1px solid #eef1f4">{{.technique}}</td><td style="padding:6px;border-bottom:1px solid #eef1f4"><strong>{{.outcome}}</strong></td><td style="padding:6px;border-bottom:1px solid #eef1f4">{{.visibility}}</td></tr>
+{{end}}
+</tbody>
+</table>
+{{end}}
+
+<h3 style="margin-top:12px;margin-bottom:6px">Limitations</h3>
+<ul style="font-size:0.85rem;color:#3a4656;line-height:1.6;padding-left:20px">
+{{range .appControl.limitations}}<li style="margin-bottom:4px">{{.}}</li>
+{{end}}
+</ul>
+
+<div class="pf">
+  <span>{{.agent.hostname}} — Application Control Efficacy</span>
+  {{template "pf-right" .}}
+</div>
+</div>
+</div>
+{{end}}
+
 <!-- ═══ 19. COVERAGE ANALYTICS ══════════════════════════════════════════ -->
 <div class="page">
 <div class="inner">
