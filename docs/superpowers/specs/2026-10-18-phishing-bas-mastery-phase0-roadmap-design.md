@@ -388,3 +388,54 @@ Zero changes to `emailgwefficacy`/`emailgwcampaign`/`exercise` again --
 Phase 3 only read their existing, already-passing test suite as evidence.
 
 Next: Phase 4 (multi-stage campaigns and adversarial variants).
+
+## 10. Phase 4 status: DONE
+
+Phase 4's acceptance gate: "at least one chain spans email→URL→detection→
+response using exercise/templates.go's existing orchestration mechanism
+wrapped in PH-* IDs; variant matrix shares one scenario definition
+without duplicating the implementation."
+
+1. **`phishval.Chain`/`ChainStage`** -- an ordered, gated sequence of
+   per-stage results sharing one RunID, answering phishing.txt
+   capability #1's own acceptance bar ("identify the exact stage and
+   control where the attack was stopped") via `Chain.StoppedAtStage()`.
+   A blocked stage carries no Outcome, ever (mirrors
+   `emailgwcampaign.StageBlockedByPrerequisite`'s "RunID is nil, always"
+   guarantee one level down).
+2. **`phishbridge.BuildCampaignChain`** replays `emailgwcampaign.CampaignTemplate`'s
+   own real gate-condition logic (`GateCondition.PermittedVerdicts`) --
+   no new orchestration engine, confirming my own Phase 0 prediction that
+   this phase would be "a PH-* ID wrapper, not a new engine." A real bug
+   surfaced and was fixed during TDD: the first draft derived a stage's
+   *expected* outcome from its own *observed* result, making every stage
+   trivially pass -- fixed to read the real declared
+   `MailExpectation.ExpectedAction` the result already carries.
+3. **Two chains proven end to end**, confirming the mechanism
+   generalizes rather than being special-cased to one template:
+   - `BECSupplierFraudTemplate` -- known-bad (identity-probe delivered →
+     gate permits fraud-payload → caught downstream, `StoppedAtStage()`
+     == "fraud-payload") and known-good (identity-probe blocked →
+     fraud-payload and both derived stages `ChainStageBlocked`, never
+     fabricated, `StoppedAtStage()` == "identity-probe").
+   - `CredentialPhishingURLChainTemplate` -- the literal
+     email→URL→detection→response chain phishing.txt's own acceptance
+     text describes: a static lure missed at the email layer, caught by
+     the independent click-time-rewrite layer.
+4. **Variant matrix**: added `phishcatalog.Variant`/`VariantAxis` +
+   `ValidateCatalog` checks (a variant's `BaseScenarioID` must resolve to
+   its owning scenario; a variant ID can never also exist as a
+   standalone `Scenario`). PH-BEC-003/PH-BEC-007, previously orphan
+   `CoverageCatalogOnly` stubs, are now declared `VariantAxisNarrative`
+   variants of PH-BEC-002 -- sharing its implementation per phishing.txt
+   capability #3's own acceptance bar, rather than two disconnected IDs
+   pointing at identical, unlinked evidence. Their narrative content
+   still needs authoring before they are anything more than a declared
+   variant -- not claimed otherwise.
+
+Zero changes to `emailgwefficacy`/`emailgwcampaign`/`exercise` again.
+
+Next: Phase 5 (identity and session attacks) -- expect the same
+tenant-permission blocker the Azure Real Discovery Integration project
+already hit; code-ready-pending-tenant-access is the honest ceiling, not
+live-validated.

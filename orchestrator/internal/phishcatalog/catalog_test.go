@@ -52,6 +52,39 @@ func TestValidateCatalog_RejectsUnrecognizedCoverage(t *testing.T) {
 	}
 }
 
+func TestAudspectPhishingCatalog_PHBEC003And007AreVariantsOfPHBEC002(t *testing.T) {
+	catalog, err := AudspectPhishingCatalog()
+	if err != nil {
+		t.Fatalf("AudspectPhishingCatalog() error = %v", err)
+	}
+	for _, id := range []string{"PH-BEC-003", "PH-BEC-007"} {
+		v, ok := VariantByID(catalog, id)
+		if !ok {
+			t.Fatalf("%s not found as a variant", id)
+		}
+		if v.BaseScenarioID != "PH-BEC-002" {
+			t.Errorf("%s.BaseScenarioID = %q, want %q", id, v.BaseScenarioID, "PH-BEC-002")
+		}
+		if v.Axis != VariantAxisNarrative {
+			t.Errorf("%s.Axis = %q, want %q", id, v.Axis, VariantAxisNarrative)
+		}
+		// A variant ID must never also exist as its own standalone
+		// Scenario -- that would be exactly the silent duplication
+		// phishing.txt capability #3 forbids.
+		if _, isAlsoScenario := ByID(catalog, id); isAlsoScenario {
+			t.Errorf("%s exists as both a Variant and a standalone Scenario -- duplicated, not shared", id)
+		}
+	}
+}
+
+func TestValidateCatalog_RejectsVariantWithMismatchedBaseScenarioID(t *testing.T) {
+	s := phBEC002()
+	s.Variants = []Variant{{ID: "PH-BEC-999", BaseScenarioID: "PH-BEC-999-WRONG"}}
+	if err := ValidateCatalog([]Scenario{s}); err == nil {
+		t.Error("ValidateCatalog() with a variant's BaseScenarioID not matching its owning scenario = nil error, want an error")
+	}
+}
+
 func TestPHBEC002_ExpectationLeavesUserInteractionNil(t *testing.T) {
 	s := phBEC002()
 	if s.Expectation.UserInteraction != nil {

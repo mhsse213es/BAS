@@ -41,7 +41,7 @@ func phBEC002() Scenario {
 		Name:             "Supplier Payment-Change Validation",
 		PrimaryObjective: "Detect payment-detail manipulation via a forged-executive identity probe followed by a supplier bank-account-change fraud payload",
 		Preconditions:    "test mailbox, approved supplier persona, applicable mail policies, telemetry availability -- see emailgwcampaign.BECSupplierFraudTemplate",
-		Limitations:      "business-workflow verification challenge and incident-assignment/audit-trail (phishing.txt §4 steps 5-6) are not modeled; fixture-tested only, no live tenant has run this scenario",
+		Limitations:      "business-workflow verification challenge and incident-assignment/audit-trail (phishing.txt §4 steps 5-6) are not modeled; proven through the real adapter code path, no live tenant has run this scenario",
 		Provenance:       "phishing.txt §4 worked example, mapped onto the real emailgwcampaign.BECSupplierFraudTemplate narrative",
 		Standards:        StandardsMapping{ATTACKTechniques: []string{"T1566", "T1534"}}, // Phishing; Internal Spearphishing (reply-chain/compromised-persona pretext)
 		Expectation: phishval.Expectation{
@@ -53,6 +53,23 @@ func phBEC002() Scenario {
 		},
 		MappedImplementation: "emailgwcampaign.BECSupplierFraudTemplate",
 		Coverage:             CoverageAdapterTested,
+		// Variants: phishing.txt §3's PH-BEC-003 (invoice and payment
+		// diversion) and PH-BEC-007 (urgent wire-transfer request) are
+		// narrative framings of this identical control test
+		// (SupplierPaymentDiversionExpectation's domain-reputation/
+		// newly-observed-domain heuristic) -- phishing.txt capability #3's
+		// own "Adversarial variant engine" acceptance bar: "Variants
+		// share a common scenario definition... without duplicating the
+		// entire implementation." Each still needs its own narrative
+		// content authored before it is anything more than a declared
+		// variant -- not yet built, tracked here rather than as an
+		// orphan CatalogOnly stub.
+		Variants: []Variant{
+			{ID: "PH-BEC-003", BaseScenarioID: "PH-BEC-002", Axis: VariantAxisNarrative, Value: "invoice-diversion-framing",
+				Name: "Invoice and payment diversion", PrimaryObjective: "Test financial-fraud detection"},
+			{ID: "PH-BEC-007", BaseScenarioID: "PH-BEC-002", Axis: VariantAxisNarrative, Value: "urgent-wire-transfer-framing",
+				Name: "Urgent wire-transfer request", PrimaryObjective: "Validate payment-fraud signals and escalation"},
+		},
 	}
 }
 
@@ -207,27 +224,9 @@ func phBEC001() Scenario {
 	}
 }
 
-// phBEC003/phBEC007 are overlap decisions: phishing.txt's own narrative
-// framing for invoice/payment diversion and urgent wire-transfer requests
-// both exercise the identical control evidence PH-BEC-002 already proves
-// (SupplierPaymentDiversionExpectation's domain-reputation/newly-observed-
-// domain heuristic). phishing.txt's own "Adversarial variant engine"
-// capability (#3, P0) is the correct home for distinguishing these by
-// narrative/urgency framing without duplicating the implementation --
-// deferred to Phase 4, not built here.
-func phBEC003() Scenario {
-	return Scenario{ID: "PH-BEC-003", Version: 1, Area: AreaBEC, Name: "Invoice and payment diversion",
-		PrimaryObjective: "Test financial-fraud detection",
-		Limitations:      "overlap decision: narrative variant of PH-BEC-002's underlying control test; a dedicated variant-matrix implementation is deferred to Phase 4, not yet a verified independent scenario",
-		Coverage:         CoverageCatalogOnly}
-}
-
-func phBEC007() Scenario {
-	return Scenario{ID: "PH-BEC-007", Version: 1, Area: AreaBEC, Name: "Urgent wire-transfer request",
-		PrimaryObjective: "Validate payment-fraud signals and escalation",
-		Limitations:      "overlap decision: narrative variant of PH-BEC-002's underlying control test; a dedicated variant-matrix implementation is deferred to Phase 4, not yet a verified independent scenario",
-		Coverage:         CoverageCatalogOnly}
-}
+// PH-BEC-003 and PH-BEC-007 moved to phBEC002's own Variants (Phase 4):
+// they are declared narrative variants of its control test, not
+// standalone scenarios -- see phBEC002's own doc comment.
 
 // phBEC004/005/006/008: genuine, unbuilt gaps confirmed by Phase 0
 // research.
@@ -388,7 +387,7 @@ func AudspectPhishingCatalog() ([]Scenario, error) {
 		phBEC002(),
 		phAUTH001(), phAUTH002(), phAUTH003(), phAUTH004(), phAUTH005(),
 		phAUTH006(), phAUTH007(), phAUTH008(), phAUTH009(), phAUTH010(),
-		phBEC001(), phBEC003(), phBEC004(), phBEC005(), phBEC006(), phBEC007(), phBEC008(),
+		phBEC001(), phBEC004(), phBEC005(), phBEC006(), phBEC008(),
 		phURL001(), phURL005(), phID001(),
 		phEVA001(), phEVA002(), phEVA005(),
 		phATT001(), phATT002(), phATT003(), phATT010(),

@@ -49,6 +49,41 @@ type StandardsMapping struct {
 	ATTACKTechniques []string
 }
 
+// VariantAxis is one dimension phishing.txt's "Adversarial variant
+// engine" capability (#3, P0) varies a base Scenario along: "external
+// versus internal sender, authenticated versus spoofed identity, first
+// delivery versus post-delivery verdict change, different supported
+// languages." VariantAxisNarrative is this catalog's own addition,
+// needed for PH-BEC-003/007: phishing.txt's own narrative framing
+// (invoice-diversion vs. urgent-wire-transfer) that exercises the
+// identical underlying control test as its base scenario, distinguished
+// only by pretext content, not by a control-relevant condition.
+type VariantAxis string
+
+const (
+	VariantAxisSenderOrigin VariantAxis = "sender_origin" // external vs internal
+	VariantAxisIdentity     VariantAxis = "identity"      // authenticated vs spoofed
+	VariantAxisTiming       VariantAxis = "timing"        // pre-delivery vs post-delivery verdict change
+	VariantAxisLanguage     VariantAxis = "language"      // supported language
+	VariantAxisNarrative    VariantAxis = "narrative"     // pretext framing only
+)
+
+// Variant is a stable PH-* ID that shares its BaseScenarioID's
+// implementation rather than duplicating it -- phishing.txt capability
+// #3's own acceptance bar: "Variants share a common scenario definition
+// and produce comparable results without duplicating the entire
+// implementation." A Variant carries no Coverage/MappedImplementation of
+// its own; it inherits its base Scenario's, by construction (see
+// ValidateCatalog).
+type Variant struct {
+	ID               string
+	BaseScenarioID   string
+	Axis             VariantAxis
+	Value            string
+	Name             string
+	PrimaryObjective string
+}
+
 // Scenario is one versioned PH-* catalog entry.
 type Scenario struct {
 	ID               string
@@ -68,4 +103,5 @@ type Scenario struct {
 	// package's own doc comment.
 	MappedImplementation string
 	Coverage             CoverageState
+	Variants             []Variant
 }
