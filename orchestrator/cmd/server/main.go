@@ -229,7 +229,7 @@ func main() {
 		// rather than fatal on a file that was never meant to be there.
 		license.SetInitial(license.Info{State: license.StateValid})
 	} else {
-		lic, licErr := license.Get(cfg.LicensePath)
+		lic, licErr := license.VerifiedRead(cfg.LicensePath)
 		if licErr != nil {
 			log.Fatalf("[FATAL] %v", licErr) // Check() just verified this file parses; only reachable on a race with file deletion
 		}

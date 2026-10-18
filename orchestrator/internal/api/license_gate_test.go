@@ -74,6 +74,28 @@ func TestLicenseGate_BlocksAPIRoutesWhenLocked(t *testing.T) {
 	}
 }
 
+func TestLicenseGate_BlocksAPIRoutesWhenInvalid(t *testing.T) {
+	license.SetInitial(license.Info{State: license.StateInvalid})
+	defer license.SetInitial(license.Info{})
+
+	blocked := []string{"/api/auth/login", "/api/agents", "/ws/agent", "/scim/v2/Users"}
+	for _, path := range blocked {
+		called := false
+		gated := LicenseGate(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			called = true
+		}))
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		rec := httptest.NewRecorder()
+		gated.ServeHTTP(rec, req)
+		if called {
+			t.Errorf("path %q: handler was called, want it blocked when invalid (unverifiable license)", path)
+		}
+		if rec.Code != http.StatusPaymentRequired {
+			t.Errorf("path %q: status = %d, want %d", path, rec.Code, http.StatusPaymentRequired)
+		}
+	}
+}
+
 func TestLicenseGate_PassesThroughWhenValidOrGrace(t *testing.T) {
 	for _, state := range []license.State{license.StateValid, license.StateGrace} {
 		license.SetInitial(license.Info{State: state})
@@ -105,6 +127,27 @@ func TestWSUpgrade_RejectedWhenLocked(t *testing.T) {
 		router.ServeHTTP(rec, req)
 		if rec.Code != http.StatusPaymentRequired {
 			t.Errorf("/ws/agent when locked: status = %d, want %d", rec.Code, http.StatusPaymentRequired)
+		}
+	})
+}
+
+// TestWSUpgrade_RejectedWhenInvalid covers routes.go's own inline
+// State-check on /ws/agent (separate from LicenseGate's middleware wrap)
+// for the new StateInvalid case -- an unverifiable license must reject
+// agent connections exactly like a genuinely locked one.
+func TestWSUpgrade_RejectedWhenInvalid(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret)
+		router := Mount(h, ws.NewHub(), testJWTSecret, "", http.NotFoundHandler(), 0, 0)
+
+		license.SetInitial(license.Info{State: license.StateInvalid})
+		defer license.SetInitial(license.Info{})
+
+		req := httptest.NewRequest(http.MethodGet, "/ws/agent?agentId=test-agent", nil)
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+		if rec.Code != http.StatusPaymentRequired {
+			t.Errorf("/ws/agent when invalid: status = %d, want %d", rec.Code, http.StatusPaymentRequired)
 		}
 	})
 }

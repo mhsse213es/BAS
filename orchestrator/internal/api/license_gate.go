@@ -15,7 +15,7 @@ import (
 // docs/superpowers/specs/2026-08-14-license-grace-period-design.md.
 func LicenseGate(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if license.Current().State != license.StateLocked {
+		if !license.Current().State.Blocked() {
 			next.ServeHTTP(w, r)
 			return
 		}

@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -18,13 +19,19 @@ import (
 
 func TestGetLicenseInfo_ReturnsRealStateAndGraceFields(t *testing.T) {
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		priv, pubPEM := license.GenerateTestKeypair()
+		origKey := license.PublicKeyPEM
+		license.PublicKeyPEM = pubPEM
+		defer func() { license.PublicKeyPEM = origKey }()
+
 		licPath := filepath.Join(t.TempDir(), "bas.lic")
-		data, _ := json.Marshal(license.License{
+		lic := license.SignForTest(priv, license.License{
 			Customer:   "Acme Corp",
 			CustomerID: "acme-1",
 			IssuedAt:   "2026-01-01",
 			ExpiresAt:  "2026-08-14",
 		})
+		data, _ := json.Marshal(lic)
 		if err := os.WriteFile(licPath, data, 0644); err != nil {
 			t.Fatalf("write license: %v", err)
 		}
@@ -54,6 +61,63 @@ func TestGetLicenseInfo_ReturnsRealStateAndGraceFields(t *testing.T) {
 		}
 		if body["lockoutAt"] == nil {
 			t.Error("lockoutAt missing from response")
+		}
+	})
+}
+
+// TestGetLicenseInfo_TamperedFile_ReportsVerificationFailure_NeverDisplaysForgedFields
+// is the Settings -> License panel side of the signature-verification
+// fix: it must never show a tampered file's fields (customer, expiry,
+// features) as if they were authentic, even if license.Current()'s
+// cached state has not yet caught up with the tampering (e.g. the monitor
+// hasn't ticked yet) -- GetLicenseInfo does its own fresh VerifiedRead on
+// every call, independent of the monitor's cadence.
+func TestGetLicenseInfo_TamperedFile_ReportsVerificationFailure_NeverDisplaysForgedFields(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		priv, pubPEM := license.GenerateTestKeypair()
+		origKey := license.PublicKeyPEM
+		license.PublicKeyPEM = pubPEM
+		defer func() { license.PublicKeyPEM = origKey }()
+
+		licPath := filepath.Join(t.TempDir(), "bas.lic")
+		lic := license.SignForTest(priv, license.License{
+			Customer:   "Acme Corp",
+			CustomerID: "acme-1",
+			IssuedAt:   "2026-01-01",
+			ExpiresAt:  "2026-08-14",
+		})
+		data, _ := json.Marshal(lic)
+
+		var raw map[string]any
+		if err := json.Unmarshal(data, &raw); err != nil {
+			t.Fatalf("unmarshal: %v", err)
+		}
+		raw["expires_at"] = "2099-12-31" // tampered, signature untouched
+		tampered, _ := json.Marshal(raw)
+		if err := os.WriteFile(licPath, tampered, 0644); err != nil {
+			t.Fatalf("write tampered license: %v", err)
+		}
+
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret).WithLicensePath(licPath)
+
+		// Deliberately stale cached state -- Valid, as if the monitor
+		// has not ticked since the file was tampered with. GetLicenseInfo
+		// must not rely on this being accurate.
+		license.SetInitial(license.Info{State: license.StateValid})
+		defer license.SetInitial(license.Info{})
+
+		req := httptest.NewRequest(http.MethodGet, "/api/license", nil)
+		rec := httptest.NewRecorder()
+		h.GetLicenseInfo(rec, req)
+
+		if rec.Code == http.StatusOK {
+			t.Fatalf("GetLicenseInfo returned 200 for a tampered license file, want an error status")
+		}
+		if !strings.Contains(rec.Body.String(), "verification failed") {
+			t.Errorf("response body = %q, want it to explicitly report verification failure", rec.Body.String())
+		}
+		if strings.Contains(rec.Body.String(), "2099-12-31") {
+			t.Error("response body echoes the tampered expires_at — a forged field must never be displayed as authentic")
 		}
 	})
 }

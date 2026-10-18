@@ -648,9 +648,12 @@ func (h *Handler) GetCryptoInfo(w http.ResponseWriter, r *http.Request) {
 // GetLicenseInfo returns parsed licence details for the Settings → License panel.
 // GET /api/license
 func (h *Handler) GetLicenseInfo(w http.ResponseWriter, r *http.Request) {
-	lic, err := license.Get(h.licPath)
+	// VerifiedRead, not a bare parse — this panel must never display a
+	// tampered file's fields as if they were authentic (customer, expiry,
+	// features all come from the signed payload, or not at all).
+	lic, err := license.VerifiedRead(h.licPath)
 	if err != nil {
-		jsonError(w, err.Error(), http.StatusNotFound)
+		jsonError(w, "license verification failed: "+err.Error(), http.StatusNotFound)
 		return
 	}
 	info := license.Current()
@@ -1977,7 +1980,7 @@ func (h *Handler) DispatchFactoryValidation(ctx context.Context, sc *scenario.Sc
 }
 
 func (h *Handler) dispatchRun(ctx context.Context, sc *scenario.Scenario, agentID string, o dispatchOpts) (runID string, skipReason string, err error) {
-	if license.Current().State == license.StateLocked {
+	if license.Current().State.Blocked() {
 		return "", "license_locked", nil
 	}
 	kind := o.Kind

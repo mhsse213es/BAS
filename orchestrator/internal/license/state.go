@@ -9,10 +9,31 @@ import (
 type State string
 
 const (
-	StateValid  State = "valid"
-	StateGrace  State = "grace"
+	StateValid State = "valid"
+	StateGrace State = "grace"
+	// StateLocked is a correctly-signed, genuinely-verified license whose
+	// grace period has elapsed -- produced only by Evaluate.
 	StateLocked State = "locked"
+	// StateInvalid means the license file could not be verified at all:
+	// missing, unreadable, malformed, or signed incorrectly (including a
+	// well-formed file whose fields were edited after signing). It is
+	// never produced by Evaluate -- only VerifiedRead's callers (Check,
+	// StartMonitor) assign it directly, on verification failure. Enforced
+	// identically to StateLocked (see State.Blocked), but tracked
+	// separately so diagnostics/support can tell "tampered or unreadable"
+	// apart from "a real license's grace period ran out".
+	StateInvalid State = "invalid"
 )
+
+// Blocked reports whether s should block protected operations. StateLocked
+// and StateInvalid both mean "no access"; StateValid and StateGrace both
+// mean normal access (grace only warns, see monitor.go/main.go's log
+// lines). Every enforcement point in this codebase should gate on this
+// method rather than comparing against StateLocked directly, so a new
+// blocking state never requires hunting down every call site again.
+func (s State) Blocked() bool {
+	return s == StateLocked || s == StateInvalid
+}
 
 // GracePeriodDays is fixed, not per-license-configurable — see
 // docs/superpowers/specs/2026-08-14-license-grace-period-design.md.

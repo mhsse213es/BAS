@@ -110,7 +110,7 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 	// WebSocket — agents connect here. See wsAgentAuthorized (mtls_context.go)
 	// for the identity-check logic this delegates to.
 	r.Get("/ws/agent", func(w http.ResponseWriter, req *http.Request) {
-		if license.Current().State == license.StateLocked {
+		if license.Current().State.Blocked() {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
@@ -124,7 +124,7 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 	// WebSocket — browser dashboard.
 	// Requires a valid JWT from the bas_token cookie or Authorization header.
 	r.Get("/ws/browser", func(w http.ResponseWriter, req *http.Request) {
-		if license.Current().State == license.StateLocked {
+		if license.Current().State.Blocked() {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}

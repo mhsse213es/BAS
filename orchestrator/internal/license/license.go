@@ -35,7 +35,7 @@ func (l *License) payload() string {
 	)
 }
 
-// Check validates the license at licPath.
+// Check performs the one-time startup verification gate.
 //   - If PublicKeyPEM is the placeholder (keygen.sh not yet run), skips — dev only.
 //   - Otherwise defaults to /etc/bas/bas.lic when licPath is empty.
 //   - Missing file, bad signature, or a malformed expiry date are fatal errors.
@@ -43,63 +43,73 @@ func (l *License) payload() string {
 //     lockout enforcement is Evaluate()'s and the runtime monitor's job (see
 //     state.go, monitor.go), not Check()'s. Check() only verifies the file is
 //     genuine and parseable.
+//
+// Check is not the only place this verification runs: VerifiedRead (below)
+// is also called by StartMonitor on every tick for as long as the process
+// runs, and by the license-info API, so a license is never trusted more
+// strongly at any later moment than it is right here at startup.
 func Check(licPath string) error {
 	if PublicKeyPEM == "KEYGEN_REQUIRED" {
 		log.Println("[license] WARNING: signing key not initialised — enforcement disabled (run packaging/licensing/keygen.sh)")
 		return nil
 	}
-
-	if licPath == "" {
-		licPath = "/etc/bas/bas.lic"
-	}
-
-	data, err := os.ReadFile(licPath)
+	lic, err := VerifiedRead(licPath)
 	if err != nil {
-		return fmt.Errorf("license: file not found at %s — place your bas.lic file there or set BAS_LICENSE_PATH. Contact support@audspect.com", licPath)
+		return err
 	}
-
-	var lic License
-	if err := json.Unmarshal(data, &lic); err != nil {
-		return fmt.Errorf("license: invalid format: %w", err)
-	}
-
-	pub, err := parsePublicKey(PublicKeyPEM)
-	if err != nil {
-		return fmt.Errorf("license: key error: %w", err)
-	}
-
-	sigBytes, err := base64.StdEncoding.DecodeString(lic.Signature)
-	if err != nil {
-		return errors.New("license: invalid signature encoding")
-	}
-
-	hash := sha256.Sum256([]byte(lic.payload()))
-	if err := rsa.VerifyPKCS1v15(pub, crypto.SHA256, hash[:], sigBytes); err != nil {
-		return errors.New("license: signature verification failed — file may be tampered")
-	}
-
-	if _, err := time.Parse("2006-01-02", lic.ExpiresAt); err != nil {
-		return fmt.Errorf("license: invalid expiry date: %w", err)
-	}
-
 	log.Printf("[license] Valid — customer: %s, expires: %s", lic.Customer, lic.ExpiresAt)
 	return nil
 }
 
-// Get parses and returns the licence for display purposes.
-// Signature verification already happened at startup — this is read-only info.
-func Get(licPath string) (*License, error) {
+// VerifiedRead reads licPath and returns its contents ONLY if the RSA
+// signature over the canonical payload verifies against PublicKeyPEM.
+// Defaults to /etc/bas/bas.lic when licPath is empty. This is the single
+// source of truth for "is this license file genuine" — every caller that
+// needs to trust a bas.lic's fields (Check at startup, StartMonitor on
+// every tick, the Settings → License API) goes through this, never a
+// bare file-read-and-parse, so an on-disk edit after the process started
+// can never be trusted on the strength of an earlier, now-stale check.
+func VerifiedRead(licPath string) (*License, error) {
 	if licPath == "" {
 		licPath = "/etc/bas/bas.lic"
 	}
 	data, err := os.ReadFile(licPath)
 	if err != nil {
-		return nil, fmt.Errorf("license file not found at %s", licPath)
+		return nil, fmt.Errorf("license: file not found at %s — place your bas.lic file there or set BAS_LICENSE_PATH. Contact support@audspect.com", licPath)
 	}
+	return verify(data)
+}
+
+// verify parses data as a License and checks its RSA signature over the
+// canonical payload (lic.payload()) against PublicKeyPEM. Any field edited
+// after signing changes the payload, so the signature no longer verifies —
+// there is no way to change ExpiresAt, CustomerID, or Features without
+// invalidating the whole license.
+func verify(data []byte) (*License, error) {
 	var lic License
 	if err := json.Unmarshal(data, &lic); err != nil {
-		return nil, fmt.Errorf("invalid license format: %w", err)
+		return nil, fmt.Errorf("license: invalid format: %w", err)
 	}
+
+	pub, err := parsePublicKey(PublicKeyPEM)
+	if err != nil {
+		return nil, fmt.Errorf("license: key error: %w", err)
+	}
+
+	sigBytes, err := base64.StdEncoding.DecodeString(lic.Signature)
+	if err != nil {
+		return nil, errors.New("license: invalid signature encoding")
+	}
+
+	hash := sha256.Sum256([]byte(lic.payload()))
+	if err := rsa.VerifyPKCS1v15(pub, crypto.SHA256, hash[:], sigBytes); err != nil {
+		return nil, errors.New("license: signature verification failed — file may be tampered")
+	}
+
+	if _, err := time.Parse("2006-01-02", lic.ExpiresAt); err != nil {
+		return nil, fmt.Errorf("license: invalid expiry date: %w", err)
+	}
+
 	return &lic, nil
 }
 
