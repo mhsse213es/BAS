@@ -11,11 +11,12 @@ import (
 )
 
 var (
-	flagUpdate         *bool
-	flagConsole        *bool
-	flagTray           *bool
-	flagStatusWindow   *bool
-	flagSettingsWindow *bool
+	flagUpdate             *bool
+	flagConsole            *bool
+	flagTray               *bool
+	flagStatusWindow       *bool
+	flagSettingsWindow     *bool
+	flagTroubleshootWindow *bool
 
 	// Console allocation procs — used when the agent is launched without an
 	// attached console (e.g. via ShellExecuteW during self-elevation from Explorer).
@@ -49,6 +50,7 @@ func registerPlatformFlags() {
 	flagTray = flag.Bool("tray", false, "Run the system-tray status monitor (user session)")
 	flagStatusWindow = flag.Bool("status-window", false, "Open the native status console (user session)")
 	flagSettingsWindow = flag.Bool("settings-window", false, "Open the Settings window to change the server host (user session)")
+	flagTroubleshootWindow = flag.Bool("troubleshoot-window", false, "Open the Troubleshoot window (user session)")
 }
 
 func platformHandleFlags() bool {
@@ -60,6 +62,10 @@ func platformHandleFlags() bool {
 	}
 	if *flagSettingsWindow {
 		runSettingsWindow()
+		return true
+	}
+	if *flagTroubleshootWindow {
+		runTroubleshootWindow()
 		return true
 	}
 	if *flagTray {
