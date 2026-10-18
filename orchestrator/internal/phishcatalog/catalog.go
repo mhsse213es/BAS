@@ -18,15 +18,21 @@ func ptrResponse(o phishval.ResponseOutcome) *phishval.ResponseOutcome          
 // implementation already does, under a different name. See Phase 0's
 // reuse-and-gap matrix, table B, row PH-BEC-002.
 //
-// CoverageFixtureTested, not CoverageLiveValidated: the underlying
-// injection (exercise.SpoofableSMTPInjector) is real SMTP, but every
-// existing test runs it against emailgwefficacy's
-// FixtureMailEvidenceProvider, never a live tenant. Business-workflow
-// challenge (phishing.txt §4 step 5) and incident-assignment/audit-trail
-// (step 6) are NOT yet mapped -- genuine gaps, deferred to Phase 6
-// (SOC/IR/containment); this scenario's Expectation therefore covers
-// only Delivery/Enforcement/Detection/Response, UserInteraction left nil
-// (not applicable to this email-gateway+SOC narrative).
+// CoverageAdapterTested (Phase 3 upgrade from CoverageFixtureTested), not
+// CoverageLiveValidated: emailgwefficacy's own
+// TestEmailGWScenarioMaturity_RealRun_EG008Response/_AllPreventionScenarios
+// (maturity_live_test.go) already runs SupplierPaymentDiversionExpectation
+// (EG-005) through the real, httptest-backed DefenderMailEvidenceProvider
+// -- actual OAuth token exchange, HTTP request, and JSON parsing, not a
+// bare in-memory fixture -- and classifies it MaturityVerifiedThroughExecution.
+// That is proof through the real adapter code path, never a live customer
+// tenant, which stays separately tracked and is never implied here.
+// Business-workflow challenge (phishing.txt §4 step 5) and
+// incident-assignment/audit-trail (step 6) are NOT yet mapped -- genuine
+// gaps, deferred to Phase 6 (SOC/IR/containment); this scenario's
+// Expectation therefore covers only Delivery/Enforcement/Detection/
+// Response, UserInteraction left nil (not applicable to this
+// email-gateway+SOC narrative).
 func phBEC002() Scenario {
 	return Scenario{
 		ID:               "PH-BEC-002",
@@ -46,7 +52,7 @@ func phBEC002() Scenario {
 			Response:    ptrResponse(phishval.ResponseRemediated),
 		},
 		MappedImplementation: "emailgwcampaign.BECSupplierFraudTemplate",
-		Coverage:             CoverageFixtureTested,
+		Coverage:             CoverageAdapterTested,
 	}
 }
 
@@ -70,7 +76,7 @@ func phAUTH002() Scenario {
 		Expectation:          phishval.Expectation{ScenarioID: "PH-AUTH-002", Enforcement: ptrEnforcement(phishval.EnforcementBlocked), Delivery: ptrDelivery(phishval.DeliveryQuarantined)},
 		Standards:            StandardsMapping{ATTACKTechniques: []string{"T1566"}},
 		MappedImplementation: "emailgwefficacy.SPFAlignmentExpectation",
-		Coverage:             CoverageFixtureTested,
+		Coverage:             CoverageAdapterTested,
 	}
 }
 
@@ -82,7 +88,7 @@ func phAUTH003() Scenario {
 		Expectation:          phishval.Expectation{ScenarioID: "PH-AUTH-003", Enforcement: ptrEnforcement(phishval.EnforcementBlocked), Delivery: ptrDelivery(phishval.DeliveryQuarantined)},
 		Standards:            StandardsMapping{ATTACKTechniques: []string{"T1566"}},
 		MappedImplementation: "emailgwefficacy.DKIMAlignmentExpectation",
-		Coverage:             CoverageFixtureTested,
+		Coverage:             CoverageAdapterTested,
 	}
 }
 
@@ -94,7 +100,7 @@ func phAUTH004() Scenario {
 		Expectation:          phishval.Expectation{ScenarioID: "PH-AUTH-004", Enforcement: ptrEnforcement(phishval.EnforcementBlocked), Delivery: ptrDelivery(phishval.DeliveryRejected)},
 		Standards:            StandardsMapping{ATTACKTechniques: []string{"T1566"}},
 		MappedImplementation: "emailgwefficacy.DMARCPolicyExpectation",
-		Coverage:             CoverageFixtureTested,
+		Coverage:             CoverageAdapterTested,
 	}
 }
 
@@ -146,17 +152,40 @@ func phAUTH007() Scenario {
 		Coverage:         CoverageCatalogOnly}
 }
 
+// phAUTH008 wraps emailgwefficacy.AuthenticationExceptionScopeExpectation
+// (EG-009) -- corrected from an earlier Phase 2 pass, which mistakenly
+// pointed this ID at EmailPolicyBaselineExpectation's config-drift shape.
+// AuthenticationExceptionScopeExpectation is a real, already-dispatchable
+// MailExpectation: a documented mail-flow exception bypassing inspection
+// for a genuinely verified trusted source (scoped=true, known-good) vs. a
+// message that spoofs only the exception's trigger condition without
+// meeting its real verification (scoped=false, known-bad) -- exactly "do
+// allowlists override required inspection."
 func phAUTH008() Scenario {
-	return Scenario{ID: "PH-AUTH-008", Version: 1, Area: AreaAuth, Name: "Trusted-sender exception abuse",
-		PrimaryObjective: "Test whether allowlists override required inspection",
-		Limitations:      "emailgwefficacy.EmailPolicyBaselineExpectation/VerifyPolicyBaselineExpectation exists and covers policy-exception config-drift, but is a different evidence shape (a policy rule's own configuration state, not a MailExpectation/EfficacyResult) -- needs its own phishbridge translation, deferred",
-		Coverage:         CoverageCatalogOnly}
+	return Scenario{
+		ID: "PH-AUTH-008", Version: 1, Area: AreaAuth, Name: "Trusted-sender exception abuse",
+		PrimaryObjective:     "Test whether allowlists override required inspection",
+		Expectation:          phishval.Expectation{ScenarioID: "PH-AUTH-008", Enforcement: ptrEnforcement(phishval.EnforcementBlocked), Delivery: ptrDelivery(phishval.DeliveryQuarantined)},
+		Standards:            StandardsMapping{ATTACKTechniques: []string{"T1566"}},
+		MappedImplementation: "emailgwefficacy.AuthenticationExceptionScopeExpectation",
+		Coverage:             CoverageAdapterTested,
+	}
 }
 
+// phAUTH009 wraps emailgwefficacy.InboxRuleExpectation (EG-007, external
+// auto-forwarding) conceptually -- correcting an earlier Phase 2 claim
+// that no scenario builder exists at all. InboxRuleExpectation/
+// VerifyInboxRuleExpectation IS a real, dispatchable scenario, but (like
+// EmailPolicyBaselineExpectation) a different evidence shape: a mailbox
+// CONFIGURATION STATE claim (was a suspicious forwarding rule detected),
+// not a MailExpectation/EfficacyResult phishbridge's current
+// FromEmailGWEfficacyResult can translate. A second bridge function is
+// needed, deferred.
 func phAUTH009() Scenario {
 	return Scenario{ID: "PH-AUTH-009", Version: 1, Area: AreaAuth, Name: "Forwarding and mailing-list behavior",
 		PrimaryObjective: "Verify authentication and policy behavior after forwarding",
-		Limitations:      "genuine gap: no scenario builder exists", Coverage: CoverageCatalogOnly}
+		Limitations:      "emailgwefficacy.InboxRuleExpectation/VerifyInboxRuleExpectation (EG-007) exists and covers external auto-forwarding detection, but is a different evidence shape (mailbox configuration state, not MailExpectation/EfficacyResult) -- needs its own phishbridge translation, deferred",
+		Coverage:         CoverageCatalogOnly}
 }
 
 func phAUTH010() Scenario {
@@ -174,7 +203,7 @@ func phBEC001() Scenario {
 		Expectation:          phishval.Expectation{ScenarioID: "PH-BEC-001", Enforcement: ptrEnforcement(phishval.EnforcementBlocked), Delivery: ptrDelivery(phishval.DeliveryQuarantined)},
 		Standards:            StandardsMapping{ATTACKTechniques: []string{"T1566", "T1534"}},
 		MappedImplementation: "emailgwefficacy.ExecutiveImpersonationExpectation",
-		Coverage:             CoverageFixtureTested,
+		Coverage:             CoverageAdapterTested,
 	}
 }
 
@@ -235,7 +264,7 @@ func phURL001() Scenario {
 		Expectation:          phishval.Expectation{ScenarioID: "PH-URL-001", Enforcement: ptrEnforcement(phishval.EnforcementBlocked), Delivery: ptrDelivery(phishval.DeliveryQuarantined)},
 		Standards:            StandardsMapping{ATTACKTechniques: []string{"T1566.002"}},
 		MappedImplementation: "emailgwefficacy.CredentialHarvestingURLExpectation",
-		Coverage:             CoverageFixtureTested,
+		Coverage:             CoverageAdapterTested,
 	}
 }
 
@@ -249,7 +278,7 @@ func phURL005() Scenario {
 		Expectation:          phishval.Expectation{ScenarioID: "PH-URL-005", Enforcement: ptrEnforcement(phishval.EnforcementChallenged), Delivery: ptrDelivery(phishval.DeliveryDelivered)},
 		Standards:            StandardsMapping{ATTACKTechniques: []string{"T1566.002"}},
 		MappedImplementation: "emailgwefficacy.URLRewriteExpectation",
-		Coverage:             CoverageFixtureTested,
+		Coverage:             CoverageAdapterTested,
 	}
 }
 
@@ -263,13 +292,14 @@ func phEVA005() Scenario {
 }
 
 // phEVA001/phEVA002 are, respectively, an overlap decision and a genuine
-// gap. PH-EVA-001 (allowlist bypass) is the same config-drift evidence
-// shape PH-AUTH-008 already names as unbridged; PH-EVA-002 (inbound
-// relay-path bypass) shares PH-AUTH-007's unbuilt internal-relay gap.
+// gap. PH-EVA-001 (allowlist bypass) is the same real evidence PH-AUTH-008
+// already proves (AuthenticationExceptionScopeExpectation); PH-EVA-002
+// (inbound relay-path bypass) shares PH-AUTH-007's unbuilt internal-relay
+// gap.
 func phEVA001() Scenario {
 	return Scenario{ID: "PH-EVA-001", Version: 1, Area: AreaEvasionDetectionIR, Name: "Allowlist policy bypass",
 		PrimaryObjective: "Find overly broad trusted-sender exceptions",
-		Limitations:      "overlap decision: same unbridged evidence shape as PH-AUTH-008 (EmailPolicyBaselineExpectation); not a second independent implementation",
+		Limitations:      "overlap decision: the same control evidence as PH-AUTH-008 (AuthenticationExceptionScopeExpectation); not a second independent implementation",
 		Coverage:         CoverageCatalogOnly}
 }
 
@@ -307,7 +337,7 @@ func phATT001() Scenario {
 		Expectation:          phishval.Expectation{ScenarioID: "PH-ATT-001", Enforcement: ptrEnforcement(phishval.EnforcementBlocked), Delivery: ptrDelivery(phishval.DeliveryQuarantined)},
 		Standards:            StandardsMapping{ATTACKTechniques: []string{"T1566.001"}},
 		MappedImplementation: "emailgwefficacy.EICARAttachmentExpectation",
-		Coverage:             CoverageFixtureTested,
+		Coverage:             CoverageAdapterTested,
 	}
 }
 
@@ -321,6 +351,30 @@ func phATT003() Scenario {
 	return Scenario{ID: "PH-ATT-003", Version: 1, Area: AreaAttachment, Name: "Office document with external link",
 		PrimaryObjective: "Validate document and link controls",
 		Limitations:      "genuine gap: no Office-document-specific scenario builder exists", Coverage: CoverageCatalogOnly}
+}
+
+// phATT010 wraps emailgwefficacy.PostDeliveryThreatResponseExpectation
+// (EG-008): a message not caught at delivery time, later re-evaluated as
+// malicious, testing whether the required remediation action actually
+// completed. The underlying fixture is content-generic (not literally an
+// attachment), noted honestly -- same judgment call already made for
+// PH-ATT-001/EICAR -- mapped here because it is the closest existing
+// coverage for "retroactive remediation," phishing.txt's own objective
+// for this ID. UserInteraction/Delivery/Enforcement are left nil: this
+// scenario exercises Response only, exactly like emailgwefficacy's own
+// EfficacyResult for it (VerifyMailExpectation always scores Prevention
+// too, but this builder's own doc comment says Prevention is not the
+// point here, so this catalog entry's Expectation does not assert it).
+func phATT010() Scenario {
+	return Scenario{
+		ID: "PH-ATT-010", Version: 1, Area: AreaAttachment, Name: "Post-delivery attachment verdict change",
+		PrimaryObjective:     "Verify retroactive remediation",
+		Limitations:          "underlying fixture (PostDeliveryThreatResponseExpectation) is content-generic, not literally attachment-specific -- mapped as the closest existing coverage for this objective",
+		Expectation:          phishval.Expectation{ScenarioID: "PH-ATT-010", Response: ptrResponse(phishval.ResponseRemediated)},
+		Standards:            StandardsMapping{ATTACKTechniques: []string{"T1566.001"}},
+		MappedImplementation: "emailgwefficacy.PostDeliveryThreatResponseExpectation",
+		Coverage:             CoverageAdapterTested,
+	}
 }
 
 // AudspectPhishingCatalog returns Audspect's current Phishing BAS Mastery
@@ -337,7 +391,7 @@ func AudspectPhishingCatalog() ([]Scenario, error) {
 		phBEC001(), phBEC003(), phBEC004(), phBEC005(), phBEC006(), phBEC007(), phBEC008(),
 		phURL001(), phURL005(), phID001(),
 		phEVA001(), phEVA002(), phEVA005(),
-		phATT001(), phATT002(), phATT003(),
+		phATT001(), phATT002(), phATT003(), phATT010(),
 	}
 	if err := ValidateCatalog(all); err != nil {
 		return nil, err

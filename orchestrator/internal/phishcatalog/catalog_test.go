@@ -18,8 +18,8 @@ func TestAudspectPhishingCatalog_ContainsPHBEC002(t *testing.T) {
 	if s.MappedImplementation == "" {
 		t.Error("PH-BEC-002.MappedImplementation is empty, want a named implementation")
 	}
-	if s.Coverage != CoverageFixtureTested {
-		t.Errorf("PH-BEC-002.Coverage = %q, want %q", s.Coverage, CoverageFixtureTested)
+	if s.Coverage != CoverageAdapterTested {
+		t.Errorf("PH-BEC-002.Coverage = %q, want %q", s.Coverage, CoverageAdapterTested)
 	}
 }
 

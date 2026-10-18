@@ -351,3 +351,40 @@ Phase 2 added 26 more catalog entries (27 total with PH-BEC-002):
 Zero changes to `emailgwefficacy`/`emailgwcampaign`/`exercise` again.
 
 Next: Phase 3 (provider-specific validation).
+
+## 9. Phase 3 status: DONE
+
+Phase 3's acceptance gate names exactly two assertions: policy-exception
+and impersonation, proven against a real adapter. Both land clean:
+
+1. **Corrected a Phase 2 mapping error.** PH-AUTH-008 (trusted-sender
+   exception abuse) was wrongly pointed at `EmailPolicyBaselineExpectation`
+   (a config-drift shape, deferred). It actually has real, dispatchable
+   coverage: `emailgwefficacy.AuthenticationExceptionScopeExpectation`
+   (EG-009) tests exactly this -- a documented mail-flow exception
+   bypassing inspection for a genuinely verified source vs. one that only
+   spoofs the trigger condition. Re-pointed, proven known-good/known-bad
+   through the existing bridge, no new code needed. PH-EVA-001's
+   cross-reference corrected to match. PH-AUTH-009's limitations text was
+   also corrected: `InboxRuleExpectation` (EG-007) does exist for external
+   auto-forwarding, just as a different evidence shape (mailbox config
+   state) -- it was wrongly described as "no scenario builder exists."
+2. **Added PH-ATT-010** (post-delivery retroactive remediation), wrapping
+   `PostDeliveryThreatResponseExpectation` (EG-008) -- a Response-only
+   scenario (Delivery/Enforcement correctly grade NotApplicable, proven by
+   its own test).
+3. **Upgraded Coverage from fixture-tested to adapter-tested for all 10
+   real wraps** (PH-BEC-002, PH-AUTH-002/003/004/008, PH-BEC-001,
+   PH-URL-001/005, PH-ATT-001/010): `emailgwefficacy`'s own
+   `TestEmailGWScenarioMaturity_RealRun_AllPreventionScenarios`/
+   `_EG008Response` already run every one of their underlying EG-IDs
+   through the real, httptest-backed `DefenderMailEvidenceProvider` --
+   actual OAuth token exchange, HTTP request, and JSON parsing -- and
+   classify them `MaturityVerifiedThroughExecution`. This is proof through
+   the real adapter code path, explicitly never a live customer tenant
+   (phishcatalog's own CoverageLiveValidated stays unclaimed).
+
+Zero changes to `emailgwefficacy`/`emailgwcampaign`/`exercise` again --
+Phase 3 only read their existing, already-passing test suite as evidence.
+
+Next: Phase 4 (multi-stage campaigns and adversarial variants).
