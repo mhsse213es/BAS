@@ -63,6 +63,18 @@ const (
 	OutcomeInconclusive  DLPCLSOutcome = "inconclusive"
 	OutcomeUnsupported   DLPCLSOutcome = "unsupported"
 	OutcomeNotTested     DLPCLSOutcome = "not-tested"
+
+	// The five outcomes below belong to the label-lifecycle evaluator
+	// (VerifyLabelExpectation), a separate measurement dimension from
+	// classification accuracy. None of them is added to evaluated()'s
+	// switch, so a label-lifecycle verdict can never enter
+	// AggregateCorpusMetrics's Evaluated/Precision/Recall/confusion-matrix
+	// counters.
+	OutcomeLabelMissing          DLPCLSOutcome = "label-missing"
+	OutcomeLabelIncorrect        DLPCLSOutcome = "label-incorrect"
+	OutcomeLabelWrongInheritance DLPCLSOutcome = "label-wrong-inheritance"
+	OutcomeLabelStale            DLPCLSOutcome = "label-stale"
+	OutcomeLabelCurrent          DLPCLSOutcome = "label-current"
 )
 
 // evaluated reports whether outcome counts toward the accuracy
