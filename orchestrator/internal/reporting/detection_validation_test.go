@@ -416,3 +416,41 @@ func TestVerifyExpectationDispatchesByOutcomeFamily(t *testing.T) {
 		t.Errorf("detection-family expectation: got status=%s comparison=%v — Phase A dispatch must be unaffected", r.Status, r.Comparison)
 	}
 }
+
+func TestEvidenceByTechnique_PassesThroughChannelOverrideConnectivity(t *testing.T) {
+	ts := time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)
+	results := []models.SimulationResult{{
+		ID: "T1048", Channel: "sync-client",
+		OverrideOccurred: true, OverrideAuthorizedBy: "jdoe", OverrideReason: "business need", OverrideAuditRecordID: "aud-1",
+		ConnectivityOnline: boolPtr(false), ConnectivityPolicyVersion: "v12", ConnectivityLastSyncedAt: ts,
+	}}
+	got := evidenceByTechnique(results)
+	ev, ok := got["T1048"]
+	if !ok {
+		t.Fatal("no evidence for T1048")
+	}
+	if ev.Channel != "sync-client" {
+		t.Errorf("Channel = %q, want %q", ev.Channel, "sync-client")
+	}
+	if !ev.OverrideOccurred || ev.OverrideAuthorizedBy != "jdoe" || ev.OverrideReason != "business need" || ev.OverrideAuditRecordID != "aud-1" {
+		t.Errorf("override fields did not pass through: %+v", ev)
+	}
+	if ev.ConnectivityOnline == nil || *ev.ConnectivityOnline != false || ev.ConnectivityPolicyVersion != "v12" || !ev.ConnectivityLastSyncedAt.Equal(ts) {
+		t.Errorf("connectivity fields did not pass through: %+v", ev)
+	}
+}
+
+func TestEvidenceByTechnique_DedupDropsNonWinningStepsNewFields(t *testing.T) {
+	results := []models.SimulationResult{
+		{ID: "T1048", StepName: "step-a", Channel: "api", DetectionVerdict: ""},
+		{ID: "T1048", StepName: "step-b", Channel: "browser", DetectionVerdict: "prevented"},
+	}
+	got := evidenceByTechnique(results)
+	ev, ok := got["T1048"]
+	if !ok {
+		t.Fatal("no evidence for T1048")
+	}
+	if ev.Channel != "browser" {
+		t.Errorf("Channel = %q, want %q (the detected/prevented step's own value) -- dedup must apply to the new fields exactly as it already does to StepName/SinkTokenObserved", ev.Channel, "browser")
+	}
+}

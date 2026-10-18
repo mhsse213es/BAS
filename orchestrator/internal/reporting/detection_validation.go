@@ -64,6 +64,30 @@ type StepEvidence struct {
 	// record won that collapse, consistent with its RawOutput/Events/etc.
 	// Used by dlpVerifier for exact (never inferred) dlpfixture lookup.
 	StepName string
+
+	// Channel mirrors models.SimulationResult.Channel -- which
+	// operation path this step used (e.g. "browser", "native-app",
+	// "sync-client", "api"). Empty means unknown, never a default.
+	Channel string
+	// OverrideOccurred/OverrideAuthorizedBy/OverrideReason/
+	// OverrideAuditRecordID mirror models.SimulationResult's fields of
+	// the same name -- an observed DLP-policy override (e.g. "override
+	// and send anyway"), never to be confused with this file's
+	// unrelated applyOverride/StoredVerification (an analyst's manual
+	// review-workflow override of this tool's own verdict).
+	OverrideOccurred      bool
+	OverrideAuthorizedBy  string
+	OverrideReason        string
+	OverrideAuditRecordID string
+	// ConnectivityOnline/ConnectivityPolicyVersion/
+	// ConnectivityLastSyncedAt mirror models.SimulationResult's fields
+	// of the same name -- the endpoint's observed connectivity and
+	// policy-sync state at the time of the enforcement action.
+	// ConnectivityOnline nil means connectivity state could not be
+	// established, never defaulted to true or false.
+	ConnectivityOnline        *bool
+	ConnectivityPolicyVersion string
+	ConnectivityLastSyncedAt  time.Time
 }
 
 // VerificationResult is the outcome of checking one expected detection.
@@ -649,12 +673,20 @@ func evidenceByTechnique(results []models.SimulationResult) map[string]StepEvide
 	out := map[string]StepEvidence{}
 	for _, r := range results {
 		ev := StepEvidence{
-			TechniqueID:       r.ID,
-			DetectionVerdict:  r.DetectionVerdict,
-			Events:            r.Events,
-			RawOutput:         r.RawOutput,
-			SinkTokenObserved: r.SinkTokenObserved,
-			StepName:          r.StepName,
+			TechniqueID:               r.ID,
+			DetectionVerdict:          r.DetectionVerdict,
+			Events:                    r.Events,
+			RawOutput:                 r.RawOutput,
+			SinkTokenObserved:         r.SinkTokenObserved,
+			StepName:                  r.StepName,
+			Channel:                   r.Channel,
+			OverrideOccurred:          r.OverrideOccurred,
+			OverrideAuthorizedBy:      r.OverrideAuthorizedBy,
+			OverrideReason:            r.OverrideReason,
+			OverrideAuditRecordID:     r.OverrideAuditRecordID,
+			ConnectivityOnline:        r.ConnectivityOnline,
+			ConnectivityPolicyVersion: r.ConnectivityPolicyVersion,
+			ConnectivityLastSyncedAt:  r.ConnectivityLastSyncedAt,
 		}
 		if r.DetectionAlert != nil {
 			ev.AlertProvider = r.DetectionAlert.Provider
