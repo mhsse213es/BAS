@@ -81,6 +81,16 @@ This is the single place to check before claiming either DLP vendor connector is
 
 **Resolution path:** get a Symantec/Broadcom DLP Enforce test account, confirm which API generation (15.7+ REST vs. 16+ Incident Reporting) the license covers, and the current official API reference for that generation; correct the endpoint paths, session mechanics, and `Incident`'s field mapping against what the real account's API responses show.
 
+### 6. `internal/dlpcorrelate` campaigns — "telemetry"/security-event correlation stays permanently out of scope, not a configuration gap
+
+**Status:** Open by design, not blocked on access — no DLP-specific telemetry, security-event, or case-correlation evidence source exists anywhere in this repo today, for any campaign.
+
+**What's needed:** `dlp.txt` §3C's own text asks Campaign 01 to "verify the security event and case evidence" and Campaign 02 to "compare enforcement and telemetry." Both campaigns, as built in `internal/dlpcorrelate` (`campaign01.go`'s permanently-`StageNotTested` stage 4; `channelconsistency.go`'s enforcement-only `Campaign02EndpointToCloudLeakage`), close only the enforcement-comparison half of their own text. Closing the telemetry/security-event half would require a real SIEM/SOAR ingestion-and-case-tracking integration (see `dlp.txt` §5's "Monitoring and response: Splunk, Microsoft Sentinel and other SIEM/SOAR platforms" adjacent-control item) — no such integration exists in this codebase.
+
+**What this means:** per the same capability-aware-honesty discipline already applied to DLP-MOB (item 3) and the vendor connectors (items 1-2, 4-5), this gap is named here rather than silently claimed closed by either campaign's own doc comment. Every `dlpcorrelate` campaign that touches this half of its own `dlp.txt` text stays permanently gapped until a real telemetry/case-correlation evaluator exists — this is not specific to Campaign 01 or 02 and should be re-read before building Campaigns 03-06, several of which (04's "correlate identity, data, channel and alerts", 05's entire premise) depend on exactly this missing evidence source even more directly.
+
+**Resolution path:** build a SIEM/SOAR-adjacent evidence client (e.g. Splunk/Sentinel event-query + case/incident-tracking API) first — a separate, substantial engineering effort, matching the same scope as a vendor-adapter build, not a follow-up to `dlpcorrelate`'s existing evaluator-translation work. Until then, this stays an explicit, named, unsupported evidence dimension.
+
 ## Resolved items
 
 (none yet)
