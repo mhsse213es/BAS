@@ -57,6 +57,130 @@ live_policy:
 
 # Lab chains (Portion 4) to follow.
 steps:
+  # -- Posture tier (read-only, safe anywhere) --------------------------------
+
+  - name: "LOLBin exposure: script interpreters covered by AppLocker Script rules (T1059)"
+    technique_id: T1059
+    framework: custom
+    executor: powershell
+    requires_priv: admin
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Read-only: AppLocker effective policy query. No change."
+    telemetry:
+      - "No attack telemetry - posture query only"
+    detection:
+      - "Config assurance: Script rules restrict .ps1/.js/.vbs/.bat execution"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $modes = @{}
+      try {
+        $pol = Get-AppLockerPolicy -Effective -ErrorAction Stop
+        foreach ($rc in @($pol.RuleCollections)) { $modes[[string]$rc.RuleCollectionType] = [string]$rc.EnforcementMode }
+      } catch {}
+      $s = if ($modes.ContainsKey('Script')) { [string]$modes['Script'] } else { 'NotConfigured' }
+      Write-Output "APPCTL_COVERAGE: Script=$s"
+      if ($s -eq 'Enabled') { Write-Output "PASS: AppLocker Script rules are enforced for .ps1/.js/.vbs/.bat. [BAS-SIM]" }
+      else { Write-Output "FAIL: AppLocker Script collection is $s; script interpreters are not restricted by AppLocker. [BAS-SIM]" }
+    cleanup: ""
+
+  - name: "Logging & detection: PowerShell ScriptBlock logging enabled (T1059.001)"
+    technique_id: T1059.001
+    framework: custom
+    executor: powershell
+    requires_priv: admin
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Read-only: registry value query. No change."
+    telemetry:
+      - "No attack telemetry - configuration query only"
+    detection:
+      - "Config assurance: EID 4104 ScriptBlock logging is required to see decoded PowerShell"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $v = (Get-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\PowerShell\ScriptBlockLogging' -Name EnableScriptBlockLogging -ErrorAction SilentlyContinue).EnableScriptBlockLogging
+      if ($v -eq 1) { Write-Output "PASS: PowerShell ScriptBlock logging is enabled (EID 4104). [BAS-SIM]" }
+      else { Write-Output "FAIL: PowerShell ScriptBlock logging is not enabled; decoded PowerShell will not appear in EID 4104. [BAS-SIM]" }
+    cleanup: ""
+
+  - name: "Execution surface: remote and service execution not running (WinRM, PSEXESVC) (T1021.006)"
+    technique_id: T1021.006
+    framework: custom
+    executor: powershell
+    requires_priv: admin
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Read-only: service state query. No change."
+    telemetry:
+      - "No attack telemetry - service state query only"
+    detection:
+      - "Config assurance: running remote-execution services widen the LOLBin surface"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $w = (Get-Service -Name WinRM -ErrorAction SilentlyContinue).Status
+      $p = (Get-Service -Name PSEXESVC -ErrorAction SilentlyContinue).Status
+      if ($w -eq 'Running' -or $p -eq 'Running') { Write-Output "FAIL: remote execution service running (WinRM=$w, PSEXESVC=$p). [BAS-SIM]" }
+      else { Write-Output "PASS: no remote execution service running (WinRM=$w, PSEXESVC=$p). [BAS-SIM]" }
+    cleanup: ""
+
+  - name: "LOLBin integrity: Windows Script Host disabled (T1059.005)"
+    technique_id: T1059.005
+    framework: custom
+    executor: powershell
+    requires_priv: admin
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Read-only: registry value query. No change."
+    telemetry:
+      - "No attack telemetry - configuration query only"
+    detection:
+      - "Config assurance: WSH disabled removes cscript/wscript as a proxy execution path"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $e = (Get-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Windows Script Host\Settings' -Name Enabled -ErrorAction SilentlyContinue).Enabled
+      if ($e -eq 0) { Write-Output "PASS: Windows Script Host is disabled (cscript/wscript proxy path closed). [BAS-SIM]" }
+      else { Write-Output "FAIL: Windows Script Host is enabled (Enabled=$e); cscript/wscript remain a proxy execution path. [BAS-SIM]" }
+    cleanup: ""
+
+  - name: "Parent-child protection: Office child-process ASR rule in Block mode (T1204.002)"
+    technique_id: T1204.002
+    framework: custom
+    executor: powershell
+    requires_priv: admin
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Read-only: Defender ASR preference query. No change."
+    telemetry:
+      - "No attack telemetry - configuration query only"
+    detection:
+      - "Config assurance: ASR rule D4F940AB-401B-4EFC-AADC-AD5F3C50688A blocks Office child processes"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $pref = Get-MpPreference -ErrorAction SilentlyContinue
+      if ($null -eq $pref) { Write-Output "SKIP: Defender preferences unavailable; ASR state cannot be assessed. [BAS-SIM]"; return }
+      $ids = @($pref.AttackSurfaceReductionRules_Ids | ForEach-Object { ([string]$_).ToUpper() })
+      $acts = @($pref.AttackSurfaceReductionRules_Actions)
+      $i = [array]::IndexOf($ids, 'D4F940AB-401B-4EFC-AADC-AD5F3C50688A')
+      if ($i -lt 0) { Write-Output "FAIL: Office child-process ASR rule is not configured. [BAS-SIM]" }
+      elseif ($acts[$i] -eq 1) { Write-Output "PASS: Office child-process ASR rule is in Block mode. [BAS-SIM]" }
+      else { Write-Output "FAIL: Office child-process ASR rule is present but not in Block mode (action=$($acts[$i])). [BAS-SIM]" }
+    cleanup: ""
+
   # -- Telemetry LOLBins 1-6 (Portion 2) --------------------------------------
 
   - name: "PowerShell LOLBin (T1059.001  -  winword->PS chain)"
