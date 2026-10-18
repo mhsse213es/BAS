@@ -1,6 +1,10 @@
 package dlppolicy
 
-import "time"
+import (
+	"fmt"
+	"strings"
+	"time"
+)
 
 // DLPPolicyRuleRef is one member rule's full standing within a
 // precedence evaluation: its priority, its own action if it wins,
@@ -123,4 +127,82 @@ func resolveExpectedWinner(candidates []DLPPolicyRuleRef) (winnerID string, ambi
 		return atMin[0].RuleID, false, false
 	}
 	return "", true, false
+}
+
+// VerifyDLPPolicyPrecedenceExpectation checks one declared precedence
+// expectation against evidence. Unlike VerifyDLPPolicyRuleExpectation,
+// it has no asOf parameter -- precedence has no time-based expiry
+// concept of its own; only window bounds evidence relevance.
+func VerifyDLPPolicyPrecedenceExpectation(exp DLPPolicyPrecedenceExpectation, provider DLPPolicyPrecedenceEvidenceProvider, window TimeWindow) VerdictDetail {
+	expectedCandidate, found := findRuleRef(exp.CandidateRules, exp.ExpectedWinningRuleID)
+	if !found {
+		return VerdictDetail{Verdict: VerdictInconclusive, Reason: "expected winning rule is not among the declared candidates"}
+	}
+	if !expectedCandidate.Eligible {
+		return VerdictDetail{Verdict: VerdictInconclusive, Reason: "expected winner is marked ineligible (disabled/unpublished/out of scope); an ineligible rule cannot win"}
+	}
+
+	winnerID, ambiguous, indeterminate := resolveExpectedWinner(exp.CandidateRules)
+	if indeterminate {
+		return VerdictDetail{Verdict: VerdictInconclusive, Reason: "one or more eligible candidates have no declared priority (or none are eligible); precedence cannot be determined"}
+	}
+	if !ambiguous && strings.TrimSpace(exp.OverrideJustification) == "" && winnerID != exp.ExpectedWinningRuleID {
+		return VerdictDetail{Verdict: VerdictInconclusive, Reason: "declared expected winner contradicts the candidate rules' own priorities; set OverrideJustification if this is an intentional override, or correct the expectation"}
+	}
+
+	records, err := provider.DLPPolicyPrecedenceEvidenceFor(exp.ScopeID, exp.Context, window)
+	if err != nil {
+		return withTieNote(ambiguous, VerdictDetail{Verdict: VerdictInconclusive, Reason: fmt.Sprintf("precedence evidence collection failed: %v", err)})
+	}
+	if len(records) == 0 {
+		return withTieNote(ambiguous, VerdictDetail{Verdict: VerdictInconclusive, Reason: "no precedence evidence found for this context in the window"})
+	}
+	latest := latestPrecedenceEvidenceByTimestamp(records)
+
+	if _, ok := findRuleRef(exp.CandidateRules, latest.ObservedWinningRuleID); !ok {
+		return withTieNote(ambiguous, VerdictDetail{Verdict: VerdictInconclusive, Reason: "the vendor reported a winning rule that was not among the declared candidates; the candidate list may be incomplete"})
+	}
+	if latest.ObservedWinningRuleID != exp.ExpectedWinningRuleID {
+		return withTieNote(ambiguous, VerdictDetail{Verdict: VerdictConfirmedFailure, Reason: fmt.Sprintf("expected rule %q to take precedence for this context, %q won instead", exp.ExpectedWinningRuleID, latest.ObservedWinningRuleID)})
+	}
+	if latest.ObservedEffectiveAction != exp.ExpectedEffectiveAction {
+		return withTieNote(ambiguous, VerdictDetail{Verdict: VerdictConfirmedFailure, Reason: "the expected rule won, but its own effective action did not match"})
+	}
+	return withTieNote(ambiguous, VerdictDetail{Verdict: VerdictConfirmedSuccess})
+}
+
+func findRuleRef(candidates []DLPPolicyRuleRef, ruleID string) (DLPPolicyRuleRef, bool) {
+	for _, c := range candidates {
+		if c.RuleID == ruleID {
+			return c, true
+		}
+	}
+	return DLPPolicyRuleRef{}, false
+}
+
+func latestPrecedenceEvidenceByTimestamp(records []DLPPolicyPrecedenceEvidence) DLPPolicyPrecedenceEvidence {
+	latest := records[0]
+	for _, r := range records[1:] {
+		if r.Timestamp.After(latest.Timestamp) {
+			latest = r
+		}
+	}
+	return latest
+}
+
+// withTieNote appends an informational suffix to v.Reason when
+// ambiguous is true -- a genuine priority tie means the expected
+// winner reflects an assumed, not derivable, tie-break, regardless of
+// which verdict is ultimately reached.
+func withTieNote(ambiguous bool, v VerdictDetail) VerdictDetail {
+	if !ambiguous {
+		return v
+	}
+	note := "candidate rules declare a genuine priority tie; the expected winner reflects an assumed, not derivable, tie-break"
+	if v.Reason == "" {
+		v.Reason = fmt.Sprintf("(note: %s)", note)
+	} else {
+		v.Reason = fmt.Sprintf("%s (note: %s)", v.Reason, note)
+	}
+	return v
 }
