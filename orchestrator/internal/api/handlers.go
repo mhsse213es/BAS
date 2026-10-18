@@ -1808,6 +1808,10 @@ type dispatchOpts struct {
 	// "user" | "admin" | "system". Steps whose RequiresPriv exceeds this tier are
 	// filtered out before dispatch — see dispatchRun's policy filter.
 	MaxPrivilege string
+	// InProcessPolicy is the operator's stated language-mode policy for
+	// custom PowerShell hosts ("restricted" | "unrestricted" | ""). It is
+	// forwarded to the agent verbatim. Empty leaves that verdict UNVERIFIED.
+	InProcessPolicy string
 	// SweepID/SweepName/SweepLabel/SweepFinal are forwarded verbatim onto the
 	// outgoing ScenarioCommand -- see that type's doc comment. Set only by EM
 	// Full Sweep's dispatch path (em_dispatch.go); empty/false for every
@@ -2410,6 +2414,7 @@ func (h *Handler) dispatchRun(ctx context.Context, sc *scenario.Scenario, agentI
 		Mode:                 o.Mode,
 		Policy:               sc.LivePolicy,
 		PreventScreenTimeout: sc.PreventScreenTimeout,
+		InProcessPolicy:      o.InProcessPolicy,
 		SweepID:              o.SweepID,
 		SweepName:            o.SweepName,
 		SweepLabel:           o.SweepLabel,
@@ -2453,6 +2458,10 @@ func (h *Handler) RunScenario(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.AgentID == "" {
 		jsonError(w, "agentId required", http.StatusBadRequest)
+		return
+	}
+	if !scenario.ValidInProcessPolicy(req.ExecutionPolicy.InProcessPolicy) {
+		jsonError(w, "executionPolicy.inProcessPolicy must be restricted, unrestricted, or omitted", http.StatusBadRequest)
 		return
 	}
 
@@ -2597,8 +2606,9 @@ func (h *Handler) RunScenario(w http.ResponseWriter, r *http.Request) {
 		Mode: mode, ConfirmLive: req.ConfirmLive, ConfirmLab: req.ConfirmLab, Reason: req.Reason,
 		Techniques: req.Techniques, Abilities: req.Abilities, Steps: req.Steps, Checks: req.Checks,
 		InitiatedBy: initiatedBy, VariantDepth: req.VariantDepth, RunLabel: req.RunLabel,
-		MaxPrivilege: req.ExecutionPolicy.MaxPrivilege,
-		Resolved:     &ev, // same version the step indices were validated against
+		MaxPrivilege:    req.ExecutionPolicy.MaxPrivilege,
+		InProcessPolicy: req.ExecutionPolicy.InProcessPolicy,
+		Resolved:        &ev, // same version the step indices were validated against
 	})
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
