@@ -138,6 +138,18 @@ func (a *Agent) handleLocalStatus(w http.ResponseWriter, _ *http.Request) {
 	disconnectedSec := int(a.disconnectedFor().Seconds())
 	paused := !connected && status != "" && status != "idle"
 
+	// Omit the key entirely when no failure has been recorded yet, matching
+	// statusclient.StatusResponse.LastConnError's `omitempty` so the client
+	// sees it as absent rather than a zero-value category.
+	var lastConnErrField interface{}
+	if lce := a.lastConnErrPtr.Load(); lce != nil && lce.Category != ConnErrorNone {
+		lastConnErrField = map[string]interface{}{
+			"category": string(lce.Category),
+			"detail":   lce.Detail,
+			"at":       lce.At,
+		}
+	}
+
 	localJSON(w, map[string]interface{}{
 		"agentVersion":    version,
 		"agentId":         a.id.AgentID,
@@ -155,6 +167,7 @@ func (a *Agent) handleLocalStatus(w http.ResponseWriter, _ *http.Request) {
 		"paused":          paused,
 		"disconnectedSec": disconnectedSec,
 		"graceSec":        int(disconnectGracePeriod.Seconds()),
+		"lastConnError":   lastConnErrField,
 	})
 }
 

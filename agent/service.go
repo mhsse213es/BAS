@@ -92,7 +92,7 @@ func (s *agentSvc) Execute(_ []string, r <-chan svc.ChangeRequest, status chan<-
 	// deployment CA, producing "x509: certificate signed by unknown
 	// authority" on enroll/heartbeat/WS forever with no bootstrap ever
 	// attempted. The console path worked; the service path did not.
-	cfg, outcome := resolveOperationalConfig(context.Background(), cfg, id.AgentID)
+	cfg, outcome, _ := resolveOperationalConfig(context.Background(), cfg, id.AgentID)
 	for attempt := 0; outcome == outcomeBlocked; attempt++ {
 		// An already-enrolled identity whose mTLS path is currently unusable
 		// NEVER operates over legacy transport (bootstrap.go's invariant) --
@@ -102,7 +102,7 @@ func (s *agentSvc) Execute(_ []string, r <-chan svc.ChangeRequest, status chan<-
 		status <- svc.Status{State: svc.StartPending, WaitHint: uint32((delay + 5*time.Second) / time.Millisecond)}
 		log.Printf("[!] mTLS unusable for this enrolled identity, retrying in %s (refusing legacy fallback)", delay.Round(time.Second))
 		time.Sleep(delay)
-		cfg, outcome = resolveOperationalConfig(context.Background(), cfg, id.AgentID)
+		cfg, outcome, _ = resolveOperationalConfig(context.Background(), cfg, id.AgentID)
 	}
 	agent := newAgent(cfg, id)
 	agent.enrollWithServer()

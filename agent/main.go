@@ -121,7 +121,7 @@ func main() {
 	// dialer from cfg, so cfg must already carry the resolved mTLS
 	// ServerURL and MTLS flag -- building them first is what left a
 	// freshly bootstrapped agent with a non-mTLS client until restart.
-	cfg, outcome := resolveOperationalConfig(context.Background(), cfg, id.AgentID)
+	cfg, outcome, _ := resolveOperationalConfig(context.Background(), cfg, id.AgentID)
 	if outcome == outcomeBlocked {
 		// An already-enrolled identity whose mTLS path is currently
 		// unusable NEVER operates over legacy transport -- block here,
@@ -135,7 +135,7 @@ func main() {
 			log.Printf("[!] blocked pending mTLS recovery -- retrying in %s (attempt %d)", delay.Round(time.Second), attempt+1)
 			time.Sleep(delay)
 			attempt++
-			cfg, outcome = resolveOperationalConfig(context.Background(), cfg, id.AgentID)
+			cfg, outcome, _ = resolveOperationalConfig(context.Background(), cfg, id.AgentID)
 		}
 	}
 	agent := newAgent(cfg, id)

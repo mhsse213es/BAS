@@ -118,6 +118,18 @@ type StatusResponse struct {
 	Paused          bool       `json:"paused"`
 	DisconnectedSec int        `json:"disconnectedSec"`
 	GraceSec        int        `json:"graceSec"`
+	LastConnError   *LastConnError `json:"lastConnError,omitempty"`
+}
+
+// LastConnError mirrors agent/connerror.go's LastConnError for
+// serialization -- a separate, plain-string-category copy rather than
+// importing package main's type directly, since package main already
+// imports this package (statusclient.New is called from the status
+// window) and a reverse import would cycle.
+type LastConnError struct {
+	Category string    `json:"category"`
+	Detail   string    `json:"detail"`
+	At       time.Time `json:"at"`
 }
 
 type Operation struct {

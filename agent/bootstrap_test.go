@@ -530,7 +530,7 @@ func TestResolveOperationalConfig_UsesMTLSURLAfterBootstrap(t *testing.T) {
 	t.Setenv("BAS_MTLS_PORT", "")
 
 	configured := Config{ServerURL: "http://127.0.0.1:9000", AgentSecret: "secret"}
-	got, outcome := resolveOperationalConfig(context.Background(), configured, "abc123deadbeef01")
+	got, outcome, _ := resolveOperationalConfig(context.Background(), configured, "abc123deadbeef01")
 	if outcome != outcomeMTLSReady {
 		t.Fatalf("outcome = %v, want outcomeMTLSReady", outcome)
 	}
@@ -556,7 +556,7 @@ func TestResolveOperationalConfig_UsesMTLSURLAfterBootstrap(t *testing.T) {
 func TestResolveOperationalConfig_NeverEnrolledBootstrapFailureIsLegacyPending(t *testing.T) {
 	t.Setenv("BAS_CERT_DIR", t.TempDir()) // no CA root installed -> bootstrap cannot run
 	configured := Config{ServerURL: "http://orchestrator.local:9000", AgentSecret: "secret"}
-	got, outcome := resolveOperationalConfig(context.Background(), configured, "abc123deadbeef01")
+	got, outcome, _ := resolveOperationalConfig(context.Background(), configured, "abc123deadbeef01")
 	if outcome != outcomeLegacyPending {
 		t.Fatalf("outcome = %v, want outcomeLegacyPending", outcome)
 	}
@@ -591,7 +591,7 @@ func TestResolveOperationalConfig_EnrolledCheckMTLSUsableFailureIsBlocked(t *tes
 	}
 
 	configured := Config{ServerURL: "http://orchestrator.local:9000", AgentSecret: "secret"}
-	got, outcome := resolveOperationalConfig(context.Background(), configured, "abc123deadbeef01")
+	got, outcome, _ := resolveOperationalConfig(context.Background(), configured, "abc123deadbeef01")
 	if outcome != outcomeBlocked {
 		t.Fatalf("outcome = %v, want outcomeBlocked", outcome)
 	}
@@ -624,7 +624,7 @@ func TestResolveOperationalConfig_EnrolledExpiredCertIsBlocked(t *testing.T) {
 	t.Setenv("BAS_ENROLL_PORT", portOf(t, srv.URL))
 
 	configured := Config{ServerURL: "http://orchestrator.local:9000", AgentSecret: "secret"}
-	got, outcome := resolveOperationalConfig(context.Background(), configured, "abc123deadbeef01")
+	got, outcome, _ := resolveOperationalConfig(context.Background(), configured, "abc123deadbeef01")
 	if outcome != outcomeBlocked {
 		t.Fatalf("outcome = %v, want outcomeBlocked", outcome)
 	}

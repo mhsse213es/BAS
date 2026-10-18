@@ -73,7 +73,7 @@ const (
 // Nothing is written back to the service configuration: the mTLS URL is a
 // pure function of the configured URL plus the on-disk certificate, so it
 // is re-derived identically on every call.
-func resolveOperationalConfig(ctx context.Context, cfg Config, agentID string) (Config, bootstrapOutcome) {
+func resolveOperationalConfig(ctx context.Context, cfg Config, agentID string) (Config, bootstrapOutcome, error) {
 	opURL, err := ensureCertificate(ctx, cfg, agentID)
 	if err == nil {
 		if opURL != cfg.ServerURL {
@@ -81,15 +81,15 @@ func resolveOperationalConfig(ctx context.Context, cfg Config, agentID string) (
 		}
 		cfg.ServerURL = opURL
 		cfg.MTLS = true
-		return cfg, outcomeMTLSReady
+		return cfg, outcomeMTLSReady, nil
 	}
 	var blocked *errBlocked
 	if errors.As(err, &blocked) {
 		log.Printf("[!] mTLS unusable for this already-enrolled agent identity -- refusing legacy fallback, will retry mTLS only: %v", blocked)
-		return cfg, outcomeBlocked
+		return cfg, outcomeBlocked, err
 	}
 	log.Printf("[!] certificate bootstrap failed, operating on legacy transport temporarily while retrying: %v", err)
-	return cfg, outcomeLegacyPending
+	return cfg, outcomeLegacyPending, err
 }
 
 // ensureCertificate guarantees the agent holds a valid, unexpired mTLS

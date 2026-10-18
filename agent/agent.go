@@ -36,6 +36,12 @@ type Agent struct {
 	state     string // server-assigned lifecycle state: active|restricted|quarantined|retired
 	mu        sync.Mutex
 	clientPtr atomic.Pointer[http.Client]
+	// lastConnErrPtr records the most recent classified connection-attempt
+	// failure (read by the local status API and the Troubleshoot window),
+	// same atomic-pointer rationale as cfgPtr: written from the background
+	// bootstrap-retry goroutine, read from the local API's HTTP handler
+	// goroutine, no torn read.
+	lastConnErrPtr atomic.Pointer[LastConnError]
 	// wsConn/wsConnMu track the currently active WebSocket connection so
 	// upgradeToMTLS can force it closed from another goroutine: closing it
 	// unblocks connectWS's in-flight ReadMessage, which sends it back to the
@@ -214,11 +220,13 @@ func (a *Agent) upgradeToMTLS(newCfg Config) {
 func (a *Agent) retryBootstrapUntilEnrolled(ctx context.Context) {
 	attempt := 0
 	for {
-		newCfg, outcome := resolveOperationalConfig(ctx, a.cfg(), a.id.AgentID)
+		newCfg, outcome, err := resolveOperationalConfig(ctx, a.cfg(), a.id.AgentID)
 		if outcome == outcomeMTLSReady {
 			a.upgradeToMTLS(newCfg)
 			return
 		}
+		classified := ClassifyConnError(err)
+		a.lastConnErrPtr.Store(&classified)
 		delay := bootstrapRetryBackoff(attempt)
 		log.Printf("[!] still on legacy transport, retrying enrollment in %s (attempt %d)", delay.Round(time.Second), attempt+1)
 		attempt++
