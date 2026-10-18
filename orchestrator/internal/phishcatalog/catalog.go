@@ -2,10 +2,11 @@ package phishcatalog
 
 import "github.com/audspect/bas/internal/phishval"
 
-func ptrDelivery(o phishval.DeliveryOutcome) *phishval.DeliveryOutcome          { return &o }
-func ptrEnforcement(o phishval.EnforcementOutcome) *phishval.EnforcementOutcome { return &o }
-func ptrDetection(o phishval.DetectionOutcome) *phishval.DetectionOutcome       { return &o }
-func ptrResponse(o phishval.ResponseOutcome) *phishval.ResponseOutcome          { return &o }
+func ptrDelivery(o phishval.DeliveryOutcome) *phishval.DeliveryOutcome                  { return &o }
+func ptrEnforcement(o phishval.EnforcementOutcome) *phishval.EnforcementOutcome         { return &o }
+func ptrDetection(o phishval.DetectionOutcome) *phishval.DetectionOutcome               { return &o }
+func ptrResponse(o phishval.ResponseOutcome) *phishval.ResponseOutcome                  { return &o }
+func ptrInteraction(o phishval.UserInteractionOutcome) *phishval.UserInteractionOutcome { return &o }
 
 // phBEC002 builds PH-BEC-002 -- phishing.txt §4's own worked example
 // ("Supplier Payment-Change Validation"). It maps onto
@@ -364,11 +365,31 @@ func phID005() Scenario {
 // I/O-free design can read back. A read-side query (e.g. an
 // exercise.Store accessor returning typed evidence for an execution ID)
 // does not exist yet -- a real, named gap, not a silent omission.
+// phID001 wraps phishbridge.FromExerciseInteractionEvidence reading
+// exercise.Store.ListEvidence -- corrected from an earlier pass's own
+// note ("no typed read-side accessor yet"), which was stale:
+// ListEvidence already exists and already returns everything needed
+// (EvidenceType, Payload, CreatedAt per execution); the actual gap was
+// the missing phishval translation, not new exercise.Store plumbing.
+// exercise/tracker/credential.go records only the fact of submission,
+// never credential values, matching this scenario's own objective
+// exactly. Expectation deliberately targets InteractionClicked, not
+// InteractionNone: this scenario's pass/fail boundary is specifically
+// submission vs. non-submission AFTER the target reaches the
+// credential-harvest page, not whether they clicked at all (that is
+// PH-URL-*'s own concern) -- phishval's dimension evaluator is a
+// strict equality match with no severity ordering, so the single
+// expected value must be the exact terminal state this scenario's own
+// objective cares about.
 func phID001() Scenario {
-	return Scenario{ID: "PH-ID-001", Version: 1, Area: AreaURLCredentialIdentity, Name: "Credential-harvesting simulation",
-		PrimaryObjective: "Measure controls without collecting real credentials",
-		Limitations:      "exercise/tracker/credential.go already records only the fact of submission, never credential values, matching this objective -- but as a write-only DB event with no typed read-side accessor yet, phishbridge cannot translate it into phishval.Observation without new plumbing in exercise.Store. Deferred.",
-		Coverage:         CoverageCatalogOnly}
+	return Scenario{
+		ID: "PH-ID-001", Version: 1, Area: AreaURLCredentialIdentity, Name: "Credential-harvesting simulation",
+		PrimaryObjective:     "Measure controls without collecting real credentials",
+		Expectation:          phishval.Expectation{ScenarioID: "PH-ID-001", UserInteraction: ptrInteraction(phishval.InteractionClicked)},
+		Standards:            StandardsMapping{ATTACKTechniques: []string{"T1566.002"}},
+		MappedImplementation: "phishbridge.FromExerciseInteractionEvidence",
+		Coverage:             CoverageAdapterTested,
+	}
 }
 
 // --- Phase 6: SOC, incident response, and containment proof -------------
@@ -457,11 +478,25 @@ func phIR002() Scenario {
 // elsewhere. Catalog-only here specifically because neither is yet
 // bridged into phishval's own Outcome model -- an integration task, not
 // a missing capability.
+// phIR003 wraps phishbridge.FromEPPResponseAction, translating a real,
+// already-dispatched internal/actions.Action (CrowdStrike/Defender/
+// SentinelOne) into phishval's Response dimension. Dispatch-level
+// evidence only, the same tier FromIdentityContainment started at in
+// Phase 6: actions.StatusCompleted proves the EPP vendor accepted and
+// completed the request, never that the host is independently
+// confirmed isolated -- internal/rwevidence.ContainmentObserver (this
+// codebase's one independent-verification layer) is itself fake-
+// backed only, so there is no real postcondition verifier to call yet.
 func phIR003() Scenario {
-	return Scenario{ID: "PH-IR-003", Version: 1, Area: AreaEvasionDetectionIR, Name: "Endpoint follow-through",
-		PrimaryObjective: "Verify downstream endpoint alerts and investigation",
-		Limitations:      "real, live-call-capable EPP Response Actions connectors and internal/rwevidence's verified-postcondition layer already exist and are tested elsewhere in this codebase; not yet bridged into phishval's Outcome model",
-		Coverage:         CoverageCatalogOnly}
+	return Scenario{
+		ID: "PH-IR-003", Version: 1, Area: AreaEvasionDetectionIR, Name: "Endpoint follow-through",
+		PrimaryObjective:     "Verify downstream endpoint alerts and investigation",
+		Limitations:          "dispatch-level evidence only: actions.StatusCompleted proves the EPP vendor accepted and completed the request, not that the host is independently confirmed isolated -- rwevidence.ContainmentObserver, this codebase's one independent-verification layer, is itself fake-backed only",
+		Expectation:          phishval.Expectation{ScenarioID: "PH-IR-003", Response: ptrResponse(phishval.ResponseRemediated)},
+		Standards:            StandardsMapping{ATTACKTechniques: []string{"T1566.001"}},
+		MappedImplementation: "phishbridge.FromEPPResponseAction",
+		Coverage:             CoverageAdapterTested,
+	}
 }
 
 // phIR004 wraps emailgwefficacy.CorrelateWithTicketing, mirroring
