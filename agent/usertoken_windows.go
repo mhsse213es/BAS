@@ -279,6 +279,10 @@ func launchTrayForActiveSession() {
 		log.Printf("[svc] launch tray: %v", err)
 		return
 	}
+	// Recorded before Release() so startMutatePipeListener's PID check
+	// always compares against the tray process actually spawned here,
+	// never a stale or attacker-supplied value.
+	trayPID.Store(int32(cmd.Process.Pid))
 	_ = cmd.Process.Release() // tray runs independently; we don't wait on it
 }
 
