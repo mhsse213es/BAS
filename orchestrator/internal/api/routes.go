@@ -312,6 +312,7 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.Get("/api/emailgw-runs/{id}", h.GetEmailGWRun)
 		r.Get("/api/phishing-runs", h.ListPhishingRuns)
 		r.Get("/api/phishing-runs/{id}", h.GetPhishingRun)
+		r.Get("/api/phishing-runs/{id}/report", h.GetPhishingRunReport)
 		r.Get("/api/emailgw-campaigns", h.ListEmailGWCampaigns)
 		r.Get("/api/emailgw-campaigns/{id}", h.GetEmailGWCampaign)
 		r.Get("/api/network-discovery-runs", h.ListNetworkDiscoveryRuns)

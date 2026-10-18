@@ -112,6 +112,7 @@ var routeMatrix = []routeCase{
 	{http.MethodGet, "/api/emailgw-runs/{id}", tierAny, ""},
 	{http.MethodGet, "/api/phishing-runs", tierAny, ""},
 	{http.MethodGet, "/api/phishing-runs/{id}", tierAny, ""},
+	{http.MethodGet, "/api/phishing-runs/{id}/report", tierAny, ""},
 	{http.MethodGet, "/api/emailgw-campaigns", tierAny, ""},
 	{http.MethodGet, "/api/emailgw-campaigns/{id}", tierAny, ""},
 	{http.MethodGet, "/api/network-discovery-runs", tierAny, ""},
