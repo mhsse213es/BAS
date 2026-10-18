@@ -728,11 +728,24 @@ func phIR002() Scenario {
 // confirmed isolated -- internal/rwevidence.ContainmentObserver (this
 // codebase's one independent-verification layer) is itself fake-
 // backed only, so there is no real postcondition verifier to call yet.
+// phIR003 wraps phishbridge.FromEPPResponseAction (dispatch-level, all
+// 3 EPP vendors) and, for Defender only,
+// phishbridge.FromIndependentlyVerifiedEndpointIsolation -- a real
+// independent postcondition re-read via defender.GetMachineAction/
+// PollMachineActionUntilTerminal (learn.microsoft.com's documented
+// MachineAction resource, confirmed status enum). Built on explicit
+// instruction after the earlier Limitations note; CrowdStrike's and
+// SentinelOne's own equivalent containment-status fields are not
+// confirmed against an authoritative API source (only third-party
+// integration docs found), the same evidence bar
+// internal/vendors/sentinelone's own Agent type already holds itself
+// to -- so this upgrade stays Defender-only, named rather than
+// silently generalized to all 3 vendors.
 func phIR003() Scenario {
 	return Scenario{
 		ID: "PH-IR-003", Version: 1, Area: AreaEvasionDetectionIR, Name: "Endpoint follow-through",
 		PrimaryObjective:     "Verify downstream endpoint alerts and investigation",
-		Limitations:          "dispatch-level evidence only: actions.StatusCompleted proves the EPP vendor accepted and completed the request, not that the host is independently confirmed isolated -- rwevidence.ContainmentObserver, this codebase's one independent-verification layer, is itself fake-backed only",
+		Limitations:          "dispatch-level evidence (actions.StatusCompleted, all 3 EPP vendors) by default. Defender only: a real independent postcondition re-read is now available (phishbridge.FromIndependentlyVerifiedEndpointIsolation, via defender.GetMachineAction's own documented MachineAction resource) -- CrowdStrike's and SentinelOne's own containment-status fields remain unconfirmed against an authoritative API source, so they stay at dispatch-level evidence only",
 		Expectation:          phishval.Expectation{ScenarioID: "PH-IR-003", Response: ptrResponse(phishval.ResponseRemediated)},
 		Standards:            StandardsMapping{ATTACKTechniques: []string{"T1566.001"}},
 		MappedImplementation: "phishbridge.FromEPPResponseAction",

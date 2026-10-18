@@ -73,8 +73,8 @@ func TestListMachines_FollowsODataNextLink(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/machines", func(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]any{
-			"value":            []map[string]any{{"id": "machine-1", "computerDnsName": "HOST1"}},
-			"@odata.nextLink":  page2URL,
+			"value":           []map[string]any{{"id": "machine-1", "computerDnsName": "HOST1"}},
+			"@odata.nextLink": page2URL,
 		})
 	})
 	mux.HandleFunc("/machines/page2", func(w http.ResponseWriter, r *http.Request) {
