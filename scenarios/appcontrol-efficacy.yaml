@@ -79,7 +79,7 @@ steps:
       # Pure decision: no I/O. Every input is observed by the caller.
       function Resolve-AppCtlOutcome {
         param([string]$Expected, [string]$Coverage, [bool]$Ran, [int]$AttrCount, [bool]$LogReadable, [bool]$ControlAvailable)
-        if (-not $ControlAvailable) { return @{ Outcome = 'not_applicable'; Reason = 'the tested mechanism or its enforcement control is unavailable on this host (service not running, not installed, or not readable)' } }
+        if (-not $ControlAvailable) { return @{ Outcome = 'not_applicable'; Reason = 'the tested mechanism or its enforcement control is unavailable on this host (service not running, not installed, not readable, or Windows build below 17763)' } }
         if (-not $LogReadable) { return @{ Outcome = 'inconclusive'; Reason = 'the enforcement event log is unreadable; execution cannot be attributed' } }
         if ($Ran) {
           if ($Expected -eq 'blocked') {
@@ -96,7 +96,7 @@ steps:
 
       $modes = Get-AppCtlModes
       $coverage = $modes['Exe']
-      $control = ((Get-Service -Name AppIDSvc -ErrorAction SilentlyContinue).Status -eq 'Running') -and $modes['__readable']
+      $control = ((Get-Service -Name AppIDSvc -ErrorAction SilentlyContinue).Status -eq 'Running') -and $modes['__readable'] -and ([Environment]::OSVersion.Version.Build -ge 17763)
       $start = Get-Date
       $p = Start-Process -FilePath cmd.exe -ArgumentList "/d /s /c `"`"$exe`" -NoProfile -NonInteractive -Command Write-Output $marker`"" -WindowStyle Hidden -PassThru -Wait -RedirectStandardOutput $tmp
       $exit = $p.ExitCode
@@ -112,6 +112,7 @@ steps:
       Remove-Item $tmp -Force -ErrorAction SilentlyContinue
 
       Write-Output "APPCTL_FAMILY: indirect_execution"
+      Write-Output "APPCTL_HOST: os_build=$([Environment]::OSVersion.Version.Build)"
       Write-Output "APPCTL_COVERAGE: Exe=$coverage"
       Write-Output "APPCTL_EVIDENCE: test_id=$tid expected=$expected ran=$ran exit=$exit attributed=$attr log_readable=$logReadable capture=$((Get-Date).ToString('o'))"
       $det = 'unknown'
@@ -173,7 +174,7 @@ steps:
 
       function Resolve-AppCtlOutcome {
         param([string]$Expected, [string]$Coverage, [bool]$Ran, [int]$AttrCount, [bool]$LogReadable, [bool]$ControlAvailable)
-        if (-not $ControlAvailable) { return @{ Outcome = 'not_applicable'; Reason = 'the tested mechanism or its enforcement control is unavailable on this host (service not running, not installed, or not readable)' } }
+        if (-not $ControlAvailable) { return @{ Outcome = 'not_applicable'; Reason = 'the tested mechanism or its enforcement control is unavailable on this host (service not running, not installed, not readable, or Windows build below 17763)' } }
         if (-not $LogReadable) { return @{ Outcome = 'inconclusive'; Reason = 'the enforcement event log is unreadable; execution cannot be attributed' } }
         if ($Ran) {
           if ($Expected -eq 'blocked') {
@@ -190,7 +191,7 @@ steps:
 
       $modes = Get-AppCtlModes
       $coverage = $modes['Exe']
-      $control = ((Get-Service -Name AppIDSvc -ErrorAction SilentlyContinue).Status -eq 'Running') -and $modes['__readable']
+      $control = ((Get-Service -Name AppIDSvc -ErrorAction SilentlyContinue).Status -eq 'Running') -and $modes['__readable'] -and ([Environment]::OSVersion.Version.Build -ge 17763)
       $needle = Split-Path $exe -Leaf
       Copy-Item -Path $src -Destination $exe -Force
       $start = Get-Date
@@ -209,6 +210,7 @@ steps:
       Remove-Item $exe -Force -ErrorAction SilentlyContinue
 
       Write-Output "APPCTL_FAMILY: alternate_binary"
+      Write-Output "APPCTL_HOST: os_build=$([Environment]::OSVersion.Version.Build)"
       Write-Output "APPCTL_COVERAGE: Exe=$coverage"
       Write-Output "APPCTL_EVIDENCE: test_id=$tid expected=$expected ran=$ran exit=$exit attributed=$attr log_readable=$logReadable capture=$((Get-Date).ToString('o'))"
       $det = 'unknown'
@@ -270,7 +272,7 @@ steps:
 
       function Resolve-AppCtlOutcome {
         param([string]$Expected, [string]$Coverage, [bool]$Ran, [int]$AttrCount, [bool]$LogReadable, [bool]$ControlAvailable)
-        if (-not $ControlAvailable) { return @{ Outcome = 'not_applicable'; Reason = 'the tested mechanism or its enforcement control is unavailable on this host (service not running, not installed, or not readable)' } }
+        if (-not $ControlAvailable) { return @{ Outcome = 'not_applicable'; Reason = 'the tested mechanism or its enforcement control is unavailable on this host (service not running, not installed, not readable, or Windows build below 17763)' } }
         if (-not $LogReadable) { return @{ Outcome = 'inconclusive'; Reason = 'the enforcement event log is unreadable; execution cannot be attributed' } }
         if ($Ran) {
           if ($Expected -eq 'blocked') {
@@ -287,7 +289,7 @@ steps:
 
       $modes = Get-AppCtlModes
       $coverage = $modes['Script']
-      $control = ((Get-Service -Name AppIDSvc -ErrorAction SilentlyContinue).Status -eq 'Running') -and $modes['__readable']
+      $control = ((Get-Service -Name AppIDSvc -ErrorAction SilentlyContinue).Status -eq 'Running') -and $modes['__readable'] -and ([Environment]::OSVersion.Version.Build -ge 17763)
       $needle = Split-Path $vbs -Leaf
       Set-Content -Path $vbs -Value "WScript.Echo `"$marker`""
       $start = Get-Date
@@ -306,6 +308,7 @@ steps:
       Remove-Item $vbs -Force -ErrorAction SilentlyContinue
 
       Write-Output "APPCTL_FAMILY: script_host_proxy"
+      Write-Output "APPCTL_HOST: os_build=$([Environment]::OSVersion.Version.Build)"
       Write-Output "APPCTL_COVERAGE: Script=$coverage"
       Write-Output "APPCTL_EVIDENCE: test_id=$tid expected=$expected ran=$ran exit=$exit attributed=$attr log_readable=$logReadable capture=$((Get-Date).ToString('o'))"
       $det = 'unknown'
@@ -384,7 +387,7 @@ steps:
       $pwsh = (Get-Command pwsh.exe -ErrorAction SilentlyContinue).Source
       $modes = Get-AppCtlModes
       $coverage = $modes['Exe']
-      $control = [bool]$pwsh -and ((Get-Service -Name AppIDSvc -ErrorAction SilentlyContinue).Status -eq 'Running') -and $modes['__readable']
+      $control = [bool]$pwsh -and ((Get-Service -Name AppIDSvc -ErrorAction SilentlyContinue).Status -eq 'Running') -and $modes['__readable'] -and ([Environment]::OSVersion.Version.Build -ge 17763)
       $ran = $false
       $exit = -1
       $attr = 0
@@ -405,6 +408,7 @@ steps:
       Remove-Item $tmp -Force -ErrorAction SilentlyContinue
 
       Write-Output "APPCTL_FAMILY: alternate_ps_host"
+      Write-Output "APPCTL_HOST: os_build=$([Environment]::OSVersion.Version.Build)"
       Write-Output "APPCTL_COVERAGE: Exe=$coverage"
       Write-Output "APPCTL_EVIDENCE: test_id=$tid expected=$expected ran=$ran exit=$exit attributed=$attr log_readable=$logReadable pwsh_present=$([bool]$pwsh) capture=$((Get-Date).ToString('o'))"
       $det = 'unknown'
@@ -455,7 +459,7 @@ steps:
       # Pure decision: no I/O. Every input is observed by the caller.
       function Resolve-AppCtlOutcome {
         param([string]$Expected, [string]$Coverage, [bool]$Ran, [int]$AttrCount, [bool]$LogReadable, [bool]$ControlAvailable)
-        if (-not $ControlAvailable) { return @{ Outcome = 'not_applicable'; Reason = 'Defender preferences are unavailable, so the ASR rule state cannot be established' } }
+        if (-not $ControlAvailable) { return @{ Outcome = 'not_applicable'; Reason = 'Defender preferences are unavailable or the Windows build is below 17763, so the ASR rule state cannot be established' } }
         if (-not $LogReadable) { return @{ Outcome = 'inconclusive'; Reason = 'the Defender Operational log is unreadable; execution cannot be attributed' } }
         if ($Ran) {
           if ($Expected -eq 'blocked') {
@@ -471,7 +475,7 @@ steps:
       }
 
       $pref = Get-MpPreference -ErrorAction SilentlyContinue
-      $control = ($null -ne $pref)
+      $control = ($null -ne $pref) -and ([Environment]::OSVersion.Version.Build -ge 17763)
       $ids = @()
       $acts = @()
       if ($control) {
@@ -502,6 +506,7 @@ steps:
       Remove-Item $tmp -Force -ErrorAction SilentlyContinue
 
       Write-Output "APPCTL_FAMILY: parent_child_asr"
+      Write-Output "APPCTL_HOST: os_build=$([Environment]::OSVersion.Version.Build)"
       Write-Output "APPCTL_COVERAGE: AsrOfficeChild=$coverage"
       Write-Output "APPCTL_EVIDENCE: test_id=$tid expected=$expected ran=$ran exit=$exit attributed=$attr log_readable=$logReadable capture=$((Get-Date).ToString('o'))"
       $det = 'unknown'
@@ -555,12 +560,13 @@ steps:
       $tmp = Join-Path $env:TEMP "bas-inproc-$tid.txt"
 
       Write-Output "APPCTL_FAMILY: inprocess_hosting"
-      if ([string]::IsNullOrEmpty($helper) -or -not (Test-Path -LiteralPath $helper)) {
+      Write-Output "APPCTL_HOST: os_build=$([Environment]::OSVersion.Version.Build)"
+      if ([Environment]::OSVersion.Version.Build -lt 17763 -or [string]::IsNullOrEmpty($helper) -or -not (Test-Path -LiteralPath $helper)) {
         Write-Output "APPCTL_COVERAGE: HostLanguageMode=unknown"
         Write-Output "APPCTL_EVIDENCE: test_id=$tid expected=$expected helper_present=false"
         Write-Output "APPCTL_DETECTION: source=powershell_scriptblock_4104 result=unknown"
         Write-Output "APPCTL_OUTCOME: not_applicable"
-        Write-Output "SKIP: no custom PowerShell host configured (set BAS_INPROC_HOST to a bas-pshost.exe built from tools/inprocess-host). [BAS-SIM]"
+        Write-Output "SKIP: not applicable here: no custom PowerShell host is configured (set BAS_INPROC_HOST to a bas-pshost.exe built from tools/inprocess-host), or the Windows build is below 17763. [BAS-SIM]"
         return
       }
 

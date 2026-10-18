@@ -6,6 +6,7 @@ var (
 	appCtlCoverageRe = regexp.MustCompile(`(?m)^APPCTL_COVERAGE:\s*(\S+)`)
 	appCtlAddTypeRe  = regexp.MustCompile(`\bhost_addtype=(\S+)`)
 	appCtlPolicyRe   = regexp.MustCompile(`\bpolicy=(\S*)`)
+	appCtlBuildRe    = regexp.MustCompile(`(?m)^APPCTL_HOST:.*\bos_build=(\d+)`)
 )
 
 // ParseAppControlObserved returns what the step measured, from its
@@ -19,6 +20,11 @@ func ParseAppControlObserved(output string) string {
 	observed := m[1]
 	if a := appCtlAddTypeRe.FindStringSubmatch(output); a != nil {
 		observed += "; Add-Type " + a[1]
+	}
+	// The Windows build the path ran on. Results hold only for the builds that
+	// were tested, so the build is part of what the report must show.
+	if b := appCtlBuildRe.FindStringSubmatch(output); b != nil {
+		observed += "; build " + b[1]
 	}
 	return observed
 }
