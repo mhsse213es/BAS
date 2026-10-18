@@ -331,11 +331,28 @@ func phBEC005() Scenario {
 // independently -- building one would be new scope, not a translation
 // of something that already exists, so it stays named here rather
 // than faked by reusing the compromise signal alone.
+// phBEC006 wraps phishbridge.ReplyChainHijackExpectation/
+// DispatchReplyChainHijack. Built on explicit instruction after the
+// prior partial-overlap note; the honest scope limit stays named in
+// the Expectation/Limitations below rather than silently upgraded:
+// this proves the SAME domain-reputation/compromise-detection control
+// PH-AUTH-010/PH-BEC-002 already prove, under a reply-chain narrative
+// (Subject starting with "Re:", quoted prior content) -- it does NOT
+// prove genuine thread-history-aware content anomaly detection
+// (comparing this reply against the real prior thread), since no such
+// capability exists anywhere in this codebase, and real RFC 5322
+// In-Reply-To/References headers are not set (would need a new field
+// on exercise's own, locked TestMessage type).
 func phBEC006() Scenario {
-	return Scenario{ID: "PH-BEC-006", Version: 1, Area: AreaBEC, Name: "Reply-chain hijacking",
-		PrimaryObjective: "Detect suspicious activity in an existing conversation",
-		Limitations:      "partial overlap: the account-compromise precondition is the same evidence as PH-AUTH-010; detecting an anomalous reply within an existing thread (the reply-chain-specific part) is a genuine, separate gap -- no email-threading/content-anomaly capability exists anywhere in this codebase",
-		Coverage:         CoverageCatalogOnly}
+	return Scenario{
+		ID: "PH-BEC-006", Version: 1, Area: AreaBEC, Name: "Reply-chain hijacking",
+		PrimaryObjective:     "Detect suspicious activity in an existing conversation",
+		Limitations:          "tests the same domain-reputation/compromise-detection control as PH-AUTH-010/PH-BEC-002 under a reply-chain narrative, not genuine thread-history-aware content anomaly detection (no such capability exists in this codebase); no real RFC 5322 In-Reply-To/References threading headers are set",
+		Expectation:          phishval.Expectation{ScenarioID: "PH-BEC-006", Delivery: ptrDelivery(phishval.DeliveryQuarantined), Enforcement: ptrEnforcement(phishval.EnforcementBlocked)},
+		Standards:            StandardsMapping{ATTACKTechniques: []string{"T1534"}},
+		MappedImplementation: "phishbridge.ReplyChainHijackExpectation",
+		Coverage:             CoverageAdapterTested,
+	}
 }
 
 func phBEC008() Scenario {
