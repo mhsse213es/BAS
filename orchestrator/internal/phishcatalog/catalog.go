@@ -150,24 +150,53 @@ func phAUTH005() Scenario {
 	}
 }
 
-// phAUTH006 through phAUTH010: genuine, unbuilt gaps confirmed by Phase 0
-// research -- no scenario builder of any kind exists for lookalike-domain
-// detection, internal sender spoofing, trusted-sender exception abuse (a
-// different evidence shape -- emailgwefficacy.EmailPolicyBaselineExpectation
-// exists but is a config-drift claim, not a MailExpectation, and needs its
-// own bridge function, not this one), forwarding/mailing-list behavior, or
+// phAUTH007, phAUTH009, phAUTH010: genuine, unbuilt gaps confirmed by
+// Phase 0 research -- no scenario builder of any kind exists for internal
+// sender spoofing, trusted-sender exception abuse (a different evidence
+// shape -- emailgwefficacy.EmailPolicyBaselineExpectation exists but is a
+// config-drift claim, not a MailExpectation, and needs its own bridge
+// function, not this one), forwarding/mailing-list behavior, or
 // compromised-legitimate-sender detection.
+//
+// phAUTH006 is corrected from that same earlier Phase 0 note ("genuine
+// gap: no scenario builder exists"), which was wrong: PH-BEC-002's own
+// mapped implementation (emailgwcampaign.BECSupplierFraudTemplate's
+// second-stage payload, SupplierPaymentDiversionExpectation/EG-005)
+// IS a lookalike-domain detection control -- its own doc comment says so
+// explicitly ("domain-reputation/newly-observed-domain heuristics...
+// distinct from... the message's OWN domain authentication"). The only
+// difference between the two scenario IDs is narrative framing (BEC
+// payment-fraud vs. generic sender-trust), exactly the same
+// control-evidence-vs-narrative distinction already recorded as an
+// overlap decision for PH-AUTH-001/PH-AUTH-005 above.
 func phAUTH006() Scenario {
 	return Scenario{ID: "PH-AUTH-006", Version: 1, Area: AreaAuth, Name: "Lookalike-domain detection",
 		PrimaryObjective: "Test similarity and impersonation controls",
-		Limitations:      "genuine gap: no scenario builder exists", Coverage: CoverageCatalogOnly}
+		Limitations:      "overlap decision: the same control evidence as PH-BEC-002 (SupplierPaymentDiversionExpectation's domain-reputation/newly-observed-domain heuristic); not a second independent implementation",
+		Coverage:         CoverageCatalogOnly}
 }
 
+// phAUTH007 wraps phishbridge.InternalSenderSpoofExpectation +
+// emailgwefficacy.InjectScenarioMessage/VerifyMailExpectation.
+// Corrected from the earlier note ("no emailgwefficacy scenario
+// builder wires it into a MailExpectation yet"): no new builder
+// needed to be added to that package at all -- MailExpectation is a
+// plain exported struct and InjectScenarioMessage/VerifyMailExpectation
+// are already generic exported entry points that take their own
+// content as a parameter, never consulting emailgwefficacy's private
+// scenarioTestContent map. phishbridge supplies its own MailExpectation
+// and InjectableMessage content directly. Zero changes to
+// emailgwefficacy itself.
 func phAUTH007() Scenario {
-	return Scenario{ID: "PH-AUTH-007", Version: 1, Area: AreaAuth, Name: "Internal sender spoofing",
-		PrimaryObjective: "Validate protection against forged internal identities",
-		Limitations:      "exercise.SpoofableSMTPInjector supports relay/HELO control for this, but no emailgwefficacy scenario builder wires it into a MailExpectation yet -- a real implementation gap, not a missing underlying capability",
-		Coverage:         CoverageCatalogOnly}
+	return Scenario{
+		ID: "PH-AUTH-007", Version: 1, Area: AreaAuth, Name: "Internal sender spoofing",
+		PrimaryObjective:     "Validate protection against forged internal identities",
+		Limitations:          "proven via exercise.SpoofableSMTPInjector's own real SMTP dispatch (HELO/relay control) against a real local SMTP server in tests; evaluation proven via emailgwefficacy.VerifyMailExpectation against fixture evidence -- no live gateway tenant has run this scenario",
+		Expectation:          phishval.Expectation{ScenarioID: "PH-AUTH-007", Delivery: ptrDelivery(phishval.DeliveryQuarantined), Enforcement: ptrEnforcement(phishval.EnforcementBlocked), Detection: ptrDetection(phishval.DetectionDetected)},
+		Standards:            StandardsMapping{ATTACKTechniques: []string{"T1566"}},
+		MappedImplementation: "phishbridge.InternalSenderSpoofExpectation",
+		Coverage:             CoverageAdapterTested,
+	}
 }
 
 // phAUTH008 wraps emailgwefficacy.AuthenticationExceptionScopeExpectation
@@ -305,10 +334,20 @@ func phEVA001() Scenario {
 		Coverage:         CoverageCatalogOnly}
 }
 
+// phEVA002 is an overlap decision, corrected now that PH-AUTH-007 is
+// built: InjectionTarget.RelayHost vs. TargetMX is purely a dispatch-
+// target configuration choice (which wire path
+// exercise.SpoofableSMTPInjector connects to), not a different
+// verification mechanism -- VerifyMailExpectation evaluates identical
+// enforcement/detection evidence either way. Testing whether an
+// alternate relay path meaningfully bypasses inspection (vs. direct
+// MX) would need a second, differently-configured real gateway to
+// show an actual difference, which doesn't exist in this environment
+// -- a real infrastructure gap, not an evaluation-logic one.
 func phEVA002() Scenario {
 	return Scenario{ID: "PH-EVA-002", Version: 1, Area: AreaEvasionDetectionIR, Name: "Inbound relay-path bypass",
 		PrimaryObjective: "Validate inspection across alternate delivery paths",
-		Limitations:      "shares PH-AUTH-007's unbuilt internal-relay/HELO scenario-builder gap",
+		Limitations:      "overlap decision: the same VerifyMailExpectation evidence/verification as PH-AUTH-007; RelayHost vs. TargetMX is a dispatch-target configuration choice, not a distinct verification mechanism -- showing a genuine relay-path bypass needs a second, differently-configured real gateway, which doesn't exist in this environment",
 		Coverage:         CoverageCatalogOnly}
 }
 
