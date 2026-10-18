@@ -174,15 +174,18 @@ func execStep(parentCtx context.Context, step ScenarioStep, pool *HostPool) prot
 	timeout := executeSeconds(step)
 	grace := graceSeconds(step)
 
-	ctx, cancel := context.WithTimeout(parentCtx, time.Duration(timeout)*time.Second)
-	defer cancel()
-
-	before := time.Now()
-
+	// The pre-cleanup snapshot is taken before the execute deadline starts, so
+	// the execute budget covers only the command. A slow snapshot must not
+	// consume it, or a step can time out before its command has started.
 	var preCleanupSnap *SystemSnapshot
 	if step.Cleanup != "" {
 		preCleanupSnap = captureSnapshotLite(step.TaskID)
 	}
+
+	ctx, cancel := context.WithTimeout(parentCtx, time.Duration(timeout)*time.Second)
+	defer cancel()
+
+	before := time.Now()
 
 	// Fast path: read-only PowerShell discovery steps run on a warm pooled host,
 	// skipping per-step process cold start. Each runs in a fresh runspace, so it is
