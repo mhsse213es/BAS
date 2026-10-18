@@ -28,6 +28,12 @@ const (
 	StatusNotApplicable = "NotApplicable" // expectation does not apply to this run
 	StatusUnknown       = "Unknown"       // could not be auto-verified on-host (SP1)
 	StatusPending       = "Pending"       // awaits manual (SP2) or API (SP3) verification
+	// StatusNotTested means a required capability/precondition was confirmed
+	// absent -- the step never ran (e.g. dlpVerifier's recognized skip:
+	// marker), as opposed to StatusUnknown (it ran, but produced no
+	// recognizable evidence either way). Set today only by dlpVerifier; see
+	// docs/superpowers/plans/2026-10-18-dlp-nottested.md.
+	StatusNotTested = "NotTested"
 )
 
 // Unexpected-detection severities (a product alerted with no matching expectation).

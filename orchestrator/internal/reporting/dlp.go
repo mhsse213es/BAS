@@ -115,8 +115,9 @@ func (dlpVerifier) Verify(exp scenario.ExpectedDetection, ev StepEvidence) Verif
 
 	observed := ObservationUnknown
 	collectionMethod := ""
+	wasSkip := isSkipMarker(ev.RawOutput)
 	switch {
-	case isSkipMarker(ev.RawOutput):
+	case wasSkip:
 		// A step that never ran (client tool absent, technique not
 		// applicable, etc.) produced no attempt at all -- SinkTokenObserved
 		// being false here is the absence of an attempt, not evidence the
@@ -151,6 +152,16 @@ func (dlpVerifier) Verify(exp scenario.ExpectedDetection, ev StepEvidence) Verif
 	r.ObservedOutcome = observed
 	r.Comparison = comparatorFor("dlp").Compare(r.ExpectedOutcome, r.ObservedOutcome)
 	r.Status = collapseToStatus(r.Comparison)
+	if wasSkip {
+		// collapseToStatus (shared by every verifier in this package) has no
+		// concept of "confirmed absent precondition" -- it resolves
+		// MissingEvidence to the generic StatusUnknown. Override locally,
+		// only for dlp's own recognized skip: path, without touching
+		// collapseToStatus itself or any other verifier's behavior.
+		// Comparison stays MissingEvidence; only the legacy Status field
+		// gains this more specific value.
+		r.Status = StatusNotTested
+	}
 
 	fixtureID := ""
 	if ev.StepName != "" {
@@ -161,7 +172,7 @@ func (dlpVerifier) Verify(exp scenario.ExpectedDetection, ev StepEvidence) Verif
 	r.DLPEvidence = &DLPEvidence{
 		CollectionMethod: collectionMethod,
 		FixtureID:        fixtureID,
-		Limitations:      limitationsFor(r.ExpectedOutcome, r.ObservedOutcome, r.Comparison),
+		Limitations:      limitationsFor(r.ExpectedOutcome, r.ObservedOutcome, r.Comparison, wasSkip),
 	}
 	return r
 }
@@ -172,7 +183,7 @@ func (dlpVerifier) Verify(exp scenario.ExpectedDetection, ev StepEvidence) Verif
 // evidence proves: a MissingEvidence verdict is always phrased as
 // inconclusive, never as a failure. See
 // docs/superpowers/plans/2026-10-18-dlpevidence.md.
-func limitationsFor(expected, observed string, comparison ComparisonResult) string {
+func limitationsFor(expected, observed string, comparison ComparisonResult, wasSkip bool) string {
 	switch comparison {
 	case Match:
 		return fmt.Sprintf("Observed outcome %q matches the expected %q outcome.", observed, expected)
@@ -183,7 +194,15 @@ func limitationsFor(expected, observed string, comparison ComparisonResult) stri
 		return fmt.Sprintf("The operation succeeded despite an expected %q outcome -- a confirmed enforcement failure for this path.", expected)
 	default: // MissingEvidence
 		if observed == ObservationUnknown {
-			return "No usable observation was collected for this step (it may have been skipped, or produced no recognizable completion marker) -- this is not evidence of either enforcement or a failure."
+			if wasSkip {
+				// StatusNotTested: a recognized skip: marker means a required
+				// precondition/capability was confirmed absent -- this step
+				// did not run at all, a stronger and more specific claim than
+				// "no usable observation", never hedged as "may have been
+				// skipped" now that Status itself distinguishes the two cases.
+				return "This step did not run -- a required precondition or capability (client tool, applicable technique, etc.) was confirmed absent. This is not evidence of either enforcement or a failure; it was never tested."
+			}
+			return "No usable observation was collected for this step (it produced no recognizable completion marker) -- this is not evidence of either enforcement or a failure."
 		}
 		// observed == ObservationSucceeded against a softer expected outcome
 		// (Warn/Justify/Audit/Quarantine/Encrypt/Redact): the step only

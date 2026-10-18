@@ -154,8 +154,12 @@ func TestDLPVerifier_SkipMarker_TakesPrecedenceOverSinkTokenObserved(t *testing.
 		RawOutput:         "skip: sftp.exe (OpenSSH Client) not found on this endpoint",
 		SinkTokenObserved: boolPtr(false),
 	})
-	if r.Status != StatusUnknown {
-		t.Errorf("Status = %s, want %s (a skip: marker must never resolve to Blocked)", r.Status, StatusUnknown)
+	// Priority 4: a recognized skip: marker now resolves the more specific
+	// StatusNotTested rather than the generic StatusUnknown -- Comparison
+	// stays MissingEvidence either way (see dlpComparator's own unchanged
+	// truth table).
+	if r.Status != StatusNotTested {
+		t.Errorf("Status = %s, want %s (a skip: marker must never resolve to Blocked)", r.Status, StatusNotTested)
 	}
 	if r.Comparison != MissingEvidence {
 		t.Errorf("Comparison = %v, want MissingEvidence", r.Comparison)
@@ -168,8 +172,8 @@ func TestDLPVerifier_SkipMarker_CaseInsensitiveAndWhitespaceTolerant(t *testing.
 		RawOutput:         "  SKIP: sftp.exe not found\nDLP_OBSERVATION: OperationBlocked",
 		SinkTokenObserved: boolPtr(true), // even a true receipt must not override a genuine skip
 	})
-	if r.Status != StatusUnknown {
-		t.Errorf("Status = %s, want %s", r.Status, StatusUnknown)
+	if r.Status != StatusNotTested {
+		t.Errorf("Status = %s, want %s", r.Status, StatusNotTested)
 	}
 }
 
@@ -346,5 +350,116 @@ func TestDLPVerifier_NoSkipMarker_SinkPrimaryStillWorks(t *testing.T) {
 	})
 	if r.Status != StatusDetected || r.Comparison != Match {
 		t.Errorf("Status=%s Comparison=%v, want StatusDetected/Match (unaffected by the new skip: check)", r.Status, r.Comparison)
+	}
+}
+
+// --- Priority 4: capability-aware NOT_TESTED resolver (narrow scope) ---
+
+func TestDLPVerifier_NotTested_ClientToolAbsent(t *testing.T) {
+	exp := dlpExp("dlp-sftp-block", "Block")
+	r := dlpVerifier{}.Verify(exp, StepEvidence{
+		RawOutput: "skip: sftp.exe (OpenSSH Client) not found on this endpoint",
+	})
+	if r.Status != StatusNotTested {
+		t.Errorf("Status = %s, want %s", r.Status, StatusNotTested)
+	}
+	if r.Comparison != MissingEvidence {
+		t.Errorf("Comparison = %v, want MissingEvidence (unchanged)", r.Comparison)
+	}
+}
+
+func TestDLPVerifier_NotTested_TechniqueInapplicable(t *testing.T) {
+	exp := dlpExp("dlp-usb-block", "Block")
+	r := dlpVerifier{}.Verify(exp, StepEvidence{
+		RawOutput: "skip: no removable drive letter available on this endpoint",
+	})
+	if r.Status != StatusNotTested {
+		t.Errorf("Status = %s, want %s", r.Status, StatusNotTested)
+	}
+	if r.Comparison != MissingEvidence {
+		t.Errorf("Comparison = %v, want MissingEvidence (unchanged)", r.Comparison)
+	}
+}
+
+// Review Focus: a skip MUST still take precedence over SinkTokenObserved,
+// exactly as before -- this is a regression guard on top of the pre-existing
+// TestDLPVerifier_SkipMarker_TakesPrecedenceOverSinkTokenObserved, now also
+// checking the new, more specific status.
+func TestDLPVerifier_NotTested_TakesPrecedenceOverSinkTokenObserved(t *testing.T) {
+	exp := dlpExp("dlp-sftp-block", "Block")
+	r := dlpVerifier{}.Verify(exp, StepEvidence{
+		RawOutput:         "skip: sftp.exe (OpenSSH Client) not found on this endpoint",
+		SinkTokenObserved: boolPtr(false),
+	})
+	if r.Status != StatusNotTested {
+		t.Errorf("Status = %s, want %s (a skip: marker must never resolve via the sink-token path)", r.Status, StatusNotTested)
+	}
+}
+
+// Review Focus: StatusUnknown must stay exactly as before for genuinely
+// ambiguous evidence -- no marker, or an unrecognized marker that is NOT a
+// skip -- never promoted to StatusNotTested.
+func TestDLPVerifier_StatusUnknown_UnaffectedByNotTestedChange_NoMarker(t *testing.T) {
+	exp := dlpExp("dlp-usb-block", "Block")
+	r := dlpVerifier{}.Verify(exp, StepEvidence{RawOutput: "some output with no marker at all"})
+	if r.Status != StatusUnknown {
+		t.Errorf("Status = %s, want %s", r.Status, StatusUnknown)
+	}
+}
+
+func TestDLPVerifier_StatusUnknown_UnaffectedByNotTestedChange_GarbageMarker(t *testing.T) {
+	exp := dlpExp("dlp-usb-block", "Block")
+	r := dlpVerifier{}.Verify(exp, StepEvidence{RawOutput: "DLP_OBSERVATION: SomeGarbageToken"})
+	if r.Status != StatusUnknown {
+		t.Errorf("Status = %s, want %s (an unrecognized marker is not a skip)", r.Status, StatusUnknown)
+	}
+}
+
+// Review Focus: the marker convention itself is untouched -- arbitrary
+// output that merely CONTAINS the word "skip" without matching the real
+// "skip:" first-line convention must never resolve to StatusNotTested.
+func TestDLPVerifier_NotTested_DoesNotFireOnLooseSkipMention(t *testing.T) {
+	exp := dlpExp("dlp-usb-block", "Block")
+	r := dlpVerifier{}.Verify(exp, StepEvidence{
+		RawOutput: "the script decided not to skip this step\nDLP_OBSERVATION: OperationBlocked",
+	})
+	if r.Status == StatusNotTested {
+		t.Errorf("Status = %s, a loose mention of \"skip\" must never trigger StatusNotTested", r.Status)
+	}
+}
+
+func TestDLPVerifier_NotTested_LimitationsStatePreconditionAbsent(t *testing.T) {
+	exp := dlpExp("dlp-sftp-block", "Block")
+	r := dlpVerifier{}.Verify(exp, StepEvidence{
+		RawOutput: "skip: sftp.exe (OpenSSH Client) not found on this endpoint",
+	})
+	lim := strings.ToLower(r.DLPEvidence.Limitations)
+	if strings.Contains(lim, "may have been skipped") {
+		t.Errorf("Limitations = %q, must not hedge once Status distinguishes NotTested from Unknown", r.DLPEvidence.Limitations)
+	}
+	if !strings.Contains(lim, "did not run") && !strings.Contains(lim, "not run") {
+		t.Errorf("Limitations = %q, want it to state plainly that this step did not run", r.DLPEvidence.Limitations)
+	}
+}
+
+func TestDLPVerifier_StatusUnknown_LimitationsStayInconclusive(t *testing.T) {
+	exp := dlpExp("dlp-usb-block", "Block")
+	r := dlpVerifier{}.Verify(exp, StepEvidence{RawOutput: "some output with no marker at all"})
+	lim := strings.ToLower(r.DLPEvidence.Limitations)
+	if !strings.Contains(lim, "no usable observation") {
+		t.Errorf("Limitations = %q, want the inconclusive phrasing unchanged for the non-skip ambiguous case", r.DLPEvidence.Limitations)
+	}
+}
+
+// Review Focus: a result stored before this change (Status="Unknown", no
+// awareness of StatusNotTested) must still deserialize and behave the same.
+func TestVerificationResult_NotTested_LegacyResultUnaffected(t *testing.T) {
+	oldShape := `{"ExpectedID":"e1","Status":"Unknown"}`
+	var r VerificationResult
+	if err := json.Unmarshal([]byte(oldShape), &r); err != nil {
+		t.Fatalf("Unmarshal old-shape JSON: %v", err)
+	}
+	if r.Status != StatusUnknown {
+		t.Errorf("Status = %q, want %q unchanged for a legacy stored result", r.Status, StatusUnknown)
 	}
 }
