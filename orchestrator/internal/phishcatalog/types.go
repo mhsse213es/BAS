@@ -112,4 +112,8 @@ type Scenario struct {
 	// speculatively, only when a real known-good/false-positive pair
 	// exists or has been identified upstream.
 	FalsePositiveRisk string
+
+	// Experimental marks a best-effort heuristic that is not a documented
+	// detection. The library shows it as experimental even when the registry runs it.
+	Experimental bool
 }

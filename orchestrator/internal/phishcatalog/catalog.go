@@ -529,6 +529,7 @@ func phID003() Scenario {
 func phID004() Scenario {
 	return Scenario{
 		ID: "PH-ID-004", Version: 1, Area: AreaURLCredentialIdentity, Name: "MFA fatigue defense",
+		Experimental:         true,
 		PrimaryObjective:     "Test relevant identity detections and conditional access",
 		Limitations:          "EXPERIMENTAL heuristic, not a Microsoft-documented detection: no Graph riskDetections.riskEventType value exists for MFA-fatigue/push-spam activity. Burst-counting over real status.errorCode==500121 MFA-denial events, the same technique independent vendor/community detections (Datadog, ManageEngine, Northwave) publish for this gap, with no official Microsoft-verified threshold -- never presented as a vendor-verified signal (see EvidenceInferred in the Observation)",
 		Expectation:          phishval.Expectation{ScenarioID: "PH-ID-004", Detection: ptrDetection(phishval.DetectionDetected)},
@@ -551,6 +552,7 @@ func phID004() Scenario {
 func phID005() Scenario {
 	return Scenario{
 		ID: "PH-ID-005", Version: 1, Area: AreaURLCredentialIdentity, Name: "Session-theft defense",
+		Experimental:         true,
 		PrimaryObjective:     "Validate token/session protections using controlled test signals",
 		Limitations:          "EXPERIMENTAL heuristic, not a Microsoft-documented causal signal: a sign-in's CAE-token-issuance state is checkable (Entra's \"Is CAE Token\" signal), but no Microsoft field records an actual revocation-on-theft event for user identities (only workload identities). This checks whether signInSessionsValidFromDateTime advanced after a real riskState=atRisk/confirmedCompromised sign-in within a window -- suggestive, never a verified causal link (see EvidenceInferred in the Observation)",
 		Expectation:          phishval.Expectation{ScenarioID: "PH-ID-005", Response: ptrResponse(phishval.ResponseContained)},

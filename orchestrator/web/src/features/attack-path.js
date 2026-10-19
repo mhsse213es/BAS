@@ -12,6 +12,7 @@ import { loadUsers } from './evidence.js';
 import { loadOpenAEVConfig, renderAttackPath } from './openaev.js';
 import { loadRuns, loadSIEMCorrelationPanel, openModal } from './reports.js';
 import { SCHED, renderScheduledAssessmentsList } from './scheduled.js';
+import { LIBRARY_TYPE_PHISHING, libraryEntryRoute } from './scenario-library-route.js';
 import { ROLE, STRIPE_COLORS, scenarioSrcCollapsed, setAgentsView, showTab } from './shell.js';
 import { loadARTContentStatus, loadConnectorStatus, loadTAXIIConnectors, loadThreatIntelConfig } from './threat-intel.js';
 import { displayOf, setCssText, setDisplay } from '../core/inline-style.js';
@@ -2080,6 +2081,7 @@ export function renderScenarios() {
   var landingEl = document.getElementById('sc-landing');
   var catEl = document.getElementById('sc-category-view');
   if (!landingEl || !catEl) return;
+  loadScenarioLibrary();
 
   if (!state.scenarios.length) {
     setDisplay(catEl, 'none');
@@ -2476,4 +2478,75 @@ function scenarioDetailHTML(s) {
             '<button class="btn btn-outline-green btn-sm"' + on('click', 'openModalForScenario', s.id) + '>&#9654; Run</button>' +
           '</div>' +
         '</div>';
+}
+// ── Scenario Library: phishing entries from GET /api/scenarios/library ──
+// Phishing entries are listed beside the agent scenarios. A phishing entry gets
+// a run control only when its server status is executable or experimental, and
+// that control posts to /api/phishing-runs. It never calls the agent path. The
+// entry is read from memory by index, not from DOM attributes. The server still
+// enforces CanRunScenario on the POST.
+var _libraryEntries = [];
+
+const LIBRARY_STATUS_LABEL = {
+  executable: 'Executable',
+  experimental: 'Experimental',
+  available: 'Catalog only (not runnable)',
+};
+
+export function loadScenarioLibrary() {
+  return apicall('/api/scenarios/library').then(function(entries) {
+    _libraryEntries = Array.isArray(entries) ? entries : [];
+    renderPhishingLibrary();
+  }).catch(function() {
+    _libraryEntries = [];
+    renderPhishingLibrary();
+  });
+}
+
+function phishingLibraryContainer() {
+  var existing = document.getElementById('sc-phishing-library');
+  if (existing) return existing;
+  var landing = document.getElementById('sc-landing');
+  if (!landing || !landing.parentNode) return null;
+  var el = document.createElement('div');
+  el.id = 'sc-phishing-library';
+  landing.parentNode.insertBefore(el, landing.nextSibling);
+  el.addEventListener('click', onPhishingLibraryClick);
+  return el;
+}
+
+function phishingLibraryTileHTML(entry, index) {
+  var runnable = libraryEntryRoute(entry).kind === LIBRARY_TYPE_PHISHING;
+  var label = LIBRARY_STATUS_LABEL[entry.status] || 'Not runnable';
+  return '<button type="button" class="sc-tile" data-entry-index="' + index + '"' +
+    (runnable ? '' : ' disabled') + '>' +
+    '<div class="sc-tile-name">' + x(entry.name) + '</div>' +
+    '<div class="sc-tile-badges">' + x(entry.id) + ' · ' + x(label) + '</div>' +
+    '</button>';
+}
+
+function renderPhishingLibrary() {
+  var el = phishingLibraryContainer();
+  if (!el) return;
+  var tiles = [];
+  _libraryEntries.forEach(function(entry, index) {
+    if (!entry || entry.type !== LIBRARY_TYPE_PHISHING) return;
+    tiles.push(phishingLibraryTileHTML(entry, index));
+  });
+  el.innerHTML = tiles.length
+    ? '<h3>Phishing scenarios</h3><div class="sc-tile-grid">' + tiles.join('') + '</div>'
+    : '';
+}
+
+function onPhishingLibraryClick(event) {
+  var btn = event.target.closest && event.target.closest('[data-entry-index]');
+  if (!btn || btn.disabled) return;
+  var entry = _libraryEntries[Number(btn.getAttribute('data-entry-index'))];
+  var route = libraryEntryRoute(entry);
+  if (route.kind !== LIBRARY_TYPE_PHISHING) return;
+  apicall('/api/phishing-runs', { method: 'POST', body: JSON.stringify({ scenarioId: route.id }) })
+    .then(function() { showToast('Phishing run started: ' + route.id, 'ok'); })
+    .catch(function(err) {
+      showToast('Phishing run failed: ' + (err && err.message ? err.message : String(err)), 'err');
+    });
 }

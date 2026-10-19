@@ -42,6 +42,7 @@ var routeMatrix = []routeCase{
 	{http.MethodGet, "/api/agents/legacy-migration-status", tierAny, ""},
 	{http.MethodGet, "/api/agents/download/{platform}", tierAny, ""},
 	{http.MethodGet, "/api/scenarios", tierAny, ""},
+	{http.MethodGet, "/api/scenarios/library", tierAny, ""},
 	{http.MethodGet, "/api/scenarios/{id}", tierAny, ""},
 	{http.MethodGet, "/api/ad/coverage", tierAny, ""},
 	{http.MethodGet, "/api/waf/coverage", tierAny, ""},
