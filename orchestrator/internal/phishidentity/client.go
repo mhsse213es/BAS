@@ -165,37 +165,25 @@ func (c *Client) ListOAuthConsentGrantsForClients(ctx context.Context, clientIDs
 
 var clientGUIDRe = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
 
+// listOAuthConsentGrants reads every page of the listing. A partial first page is
+// never returned as the whole answer, and a listing that runs past maxGraphPages
+// is an error.
 func (c *Client) listOAuthConsentGrants(ctx context.Context, reqURL string) ([]OAuthConsentGrant, error) {
-	token, err := c.tokens.Token(ctx)
+	grants := []OAuthConsentGrant{}
+	err := c.getGraphPages(ctx, reqURL, func(body []byte) error {
+		var page oauthConsentGrantPage
+		if err := json.Unmarshal(body, &page); err != nil {
+			return fmt.Errorf("phishidentity: decoding response: %w", err)
+		}
+		for _, v := range page.Value {
+			grants = append(grants, OAuthConsentGrant{
+				ID: v.ID, ClientID: v.ClientID, ConsentType: v.ConsentType, Scope: v.Scope, PrincipalID: v.PrincipalID,
+			})
+		}
+		return nil
+	})
 	if err != nil {
-		return nil, fmt.Errorf("phishidentity: acquiring token: %w", err)
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
-	if err != nil {
-		return nil, fmt.Errorf("phishidentity: building request: %w", err)
-	}
-	req.Header.Set("Authorization", "Bearer "+token)
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("phishidentity: request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	var page oauthConsentGrantPage
-	decodeErr := json.NewDecoder(resp.Body).Decode(&page)
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("phishidentity: oauth2PermissionGrants returned status %d", resp.StatusCode)
-	}
-	if decodeErr != nil {
-		return nil, fmt.Errorf("phishidentity: decoding response: %w", decodeErr)
-	}
-
-	grants := make([]OAuthConsentGrant, 0, len(page.Value))
-	for _, v := range page.Value {
-		grants = append(grants, OAuthConsentGrant{
-			ID: v.ID, ClientID: v.ClientID, ConsentType: v.ConsentType, Scope: v.Scope, PrincipalID: v.PrincipalID,
-		})
+		return nil, err
 	}
 	return grants, nil
 }

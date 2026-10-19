@@ -160,50 +160,37 @@ func (c *Client) SignInsForUsersByProtocol(ctx context.Context, protocol string,
 	return out, nil
 }
 
+// signInsByFilter reads every page of the filtered listing, so a sign-in on a later
+// page is never missing from the evidence. Pagination is bounded by getGraphPages.
 func (c *Client) signInsByFilter(ctx context.Context, filter, protocol string) ([]SignInEvent, error) {
-	token, err := c.tokens.Token(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("phishidentity: acquiring token: %w", err)
-	}
 	reqURL := c.BaseURL + "/auditLogs/signIns?$filter=" + url.QueryEscape(filter)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
-	if err != nil {
-		return nil, fmt.Errorf("phishidentity: building request: %w", err)
-	}
-	req.Header.Set("Authorization", "Bearer "+token)
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("phishidentity: request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	var page signInEventPage
-	decodeErr := json.NewDecoder(resp.Body).Decode(&page)
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("phishidentity: auditLogs/signIns returned status %d", resp.StatusCode)
-	}
-	if decodeErr != nil {
-		return nil, fmt.Errorf("phishidentity: decoding response: %w", decodeErr)
-	}
-
-	events := make([]SignInEvent, 0, len(page.Value))
-	for _, v := range page.Value {
-		if v.AuthenticationProtocol != protocol {
-			continue // defensive client-side re-filter, see doc comment above
+	events := []SignInEvent{}
+	err := c.getGraphPages(ctx, reqURL, func(body []byte) error {
+		var page signInEventPage
+		if err := json.Unmarshal(body, &page); err != nil {
+			return fmt.Errorf("phishidentity: decoding response: %w", err)
 		}
-		var applied []AppliedConditionalAccessPolicy
-		evidence := v.AppliedConditionalAccessPolicies != nil
-		if evidence {
-			for _, p := range *v.AppliedConditionalAccessPolicies {
-				applied = append(applied, AppliedConditionalAccessPolicy{DisplayName: p.DisplayName, Result: p.Result})
+		for _, v := range page.Value {
+			if v.AuthenticationProtocol != protocol {
+				continue // defensive client-side re-filter, see doc comment above
 			}
+			var applied []AppliedConditionalAccessPolicy
+			evidence := v.AppliedConditionalAccessPolicies != nil
+			if evidence {
+				for _, p := range *v.AppliedConditionalAccessPolicies {
+					applied = append(applied, AppliedConditionalAccessPolicy{DisplayName: p.DisplayName, Result: p.Result})
+				}
+			}
+			events = append(events, SignInEvent{
+				ID: v.ID, AuthenticationProtocol: v.AuthenticationProtocol,
+				CreatedDateTime: v.CreatedDateTime, AppliedConditionalAccessPolicies: applied,
+				ConditionalAccessEvidence: evidence,
+			})
 		}
-		events = append(events, SignInEvent{
-			ID: v.ID, AuthenticationProtocol: v.AuthenticationProtocol,
-			CreatedDateTime: v.CreatedDateTime, AppliedConditionalAccessPolicies: applied,
-			ConditionalAccessEvidence: evidence,
-		})
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 	return events, nil
 }

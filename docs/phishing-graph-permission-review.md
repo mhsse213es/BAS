@@ -138,3 +138,19 @@ grant. It has **not** been added. Approval is the approver's decision.
 - **Side-effecting scenarios:** remain unregistered. Calendar writes, session
   revocation, sharing invitations, and Conditional Access changes are not approved.
 - **Availability gate:** crafted triggers create no run, and that gate stays in place.
+
+## Gate progress: pagination and filter enforcement (offline only)
+
+Implemented and covered by httptest tests. These are code-level results, not live
+validation.
+
+- Consent-grant and sign-in reads now follow `@odata.nextLink` through one pager
+  (`internal/phishidentity/paging.go`). A partial first page is no longer returned
+  as the whole answer.
+- A next link must keep the first request's origin, path, and `$filter`. A foreign
+  or filter-changing link is refused and never followed. This is the "no unfiltered
+  fallback" rule for pagination.
+- A listing longer than 100 pages is an error, never a truncated success.
+- Still open, and needing the test tenant: whether Graph's real `nextLink` keeps the
+  `$filter`. If it does not, the pager refuses it. That fails closed, but PH-ID-002
+  then cannot read a second page live.
