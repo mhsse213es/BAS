@@ -49,12 +49,22 @@ type PhishingRunExecutorEnv struct {
 	// identity connector configured; PH-ID-002 then degrades to NotTested,
 	// never a fabricated verdict. *phishidentity.Client satisfies it.
 	OAuthConsentLister OAuthConsentGrantLister
+	// DeviceCodeSignIns is nil on a deployment with no Microsoft Graph
+	// identity connector configured; PH-ID-003 then degrades to NotTested.
+	// *phishidentity.Client satisfies it.
+	DeviceCodeSignIns DeviceCodeSignInLister
 }
 
 // OAuthConsentGrantLister is the read-only Graph listing PH-ID-002 needs,
 // narrowed to one method so tests can inject a fixture.
 type OAuthConsentGrantLister interface {
 	ListOAuthConsentGrants(ctx context.Context) ([]phishidentity.OAuthConsentGrant, error)
+}
+
+// DeviceCodeSignInLister is the read-only Graph sign-in read PH-ID-003 needs,
+// narrowed to one method so tests can inject a fixture.
+type DeviceCodeSignInLister interface {
+	SignInsByAuthenticationProtocol(ctx context.Context, protocol string) ([]phishidentity.SignInEvent, error)
 }
 
 // PhishingRunExecutor runs one registered scenario for real and
@@ -76,6 +86,7 @@ var phishingRunExecutors = map[string]PhishingRunExecutor{
 	"PH-ID-001":  executePHID001,
 	"PH-IR-003":  executePHIR003,
 	"PH-ID-002":  executePHID002,
+	"PH-ID-003":  executePHID003,
 }
 
 // LookupPhishingRunExecutor returns scenarioID's registered executor,
@@ -189,6 +200,29 @@ func executePHID002(ctx context.Context, env PhishingRunExecutorEnv, runID strin
 	}
 
 	catalogExp, err := lookupPhishingCatalogExpectation("PH-ID-002")
+	if err != nil {
+		return phishval.Outcome{}, err
+	}
+	return phishval.Evaluate(runID, "", catalogExp, obs), nil
+}
+
+// executePHID003 runs PH-ID-003 (device-code phishing defense): reads the
+// tenant's deviceCode sign-in attempts and grades whether a conditional-access
+// policy on those attempts actually blocked one. It reads only the sign-in
+// log's own per-attempt policy results, never the policy configuration list,
+// so a policy that merely exists is never read as enforcement. A failed read
+// or no connector is NotTested, never a fabricated verdict.
+func executePHID003(ctx context.Context, env PhishingRunExecutorEnv, runID string, params map[string]any) (phishval.Outcome, error) {
+	var obs phishval.Observation
+	if env.DeviceCodeSignIns != nil {
+		signIns, err := env.DeviceCodeSignIns.SignInsByAuthenticationProtocol(ctx, "deviceCode")
+		if err == nil {
+			outcome, detail := phishidentity.EvaluateDeviceCodeEnforcement(signIns)
+			obs = phishbridge.FromDeviceCodeEnforcement(outcome, detail)
+		}
+	}
+
+	catalogExp, err := lookupPhishingCatalogExpectation("PH-ID-003")
 	if err != nil {
 		return phishval.Outcome{}, err
 	}
