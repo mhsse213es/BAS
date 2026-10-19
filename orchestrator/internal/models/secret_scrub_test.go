@@ -66,3 +66,28 @@ func TestWithholdSecrets_AssignmentRuleNarrowed_LongValueStillScrubbed(t *testin
 		t.Errorf("WithholdSecrets(%q) = %q, a 20-character api key must be withheld", in, got)
 	}
 }
+
+// Password values are scrubbed from 8 characters, but only when they contain a
+// digit or a symbol. A short all-letter word is far more likely to be prose
+// than a password, so it is left alone.
+func TestWithholdSecrets_PasswordShortValueRule(t *testing.T) {
+	scrubbed := []string{
+		"password=hunter2!",   // 8 characters with a symbol
+		"passwd: Sup3rSecret", // 9 characters with a digit
+	}
+	for _, in := range scrubbed {
+		if got := WithholdSecrets(in); !strings.Contains(got, SecretWithheld) {
+			t.Errorf("WithholdSecrets(%q) = %q, want the password value withheld", in, got)
+		}
+	}
+	kept := []string{
+		"password=hunter2",   // 7 characters: below the floor
+		"password=abcdefgh",  // 8 letters, no digit or symbol: treated as prose
+		"password: disabled", // prose
+	}
+	for _, in := range kept {
+		if got := WithholdSecrets(in); got != in {
+			t.Errorf("WithholdSecrets(%q) = %q, want it unchanged", in, got)
+		}
+	}
+}

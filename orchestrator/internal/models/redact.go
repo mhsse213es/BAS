@@ -3,6 +3,7 @@ package models
 import (
 	"regexp"
 	"strings"
+	"unicode"
 )
 
 const (
@@ -65,7 +66,23 @@ var secretPatterns = []*regexp.Regexp{
 	// A keyword at a word boundary, then a value of 16+ non-space characters.
 	// The boundary stops suffix matches such as max_token_count=..., and the
 	// length floor stops prose such as "token: pending approval" from matching.
-	regexp.MustCompile(`(?i)\b((?:password|passwd|secret|api[_-]?key|token)\s*[:=]\s*)\S{16,}`),
+	regexp.MustCompile(`(?i)\b((?:secret|api[_-]?key|token)\s*[:=]\s*)\S{16,}`),
+}
+
+// passwordAssignment matches a password keyword and an 8+ character value.
+// Passwords get a lower floor than other secrets, but only a value with a digit
+// or a symbol is withheld (see passwordValueLooksSecret).
+var passwordAssignment = regexp.MustCompile(`(?i)\b((?:password|passwd)\s*[:=]\s*)(\S{8,})`)
+
+// passwordValueLooksSecret reports whether a password value has a digit or a
+// symbol. A letters-only word is far more likely to be prose than a password.
+func passwordValueLooksSecret(v string) bool {
+	for _, r := range v {
+		if !unicode.IsLetter(r) {
+			return true
+		}
+	}
+	return false
 }
 
 // WithholdSecrets replaces the secret-shaped parts of a value. A credential
@@ -78,5 +95,11 @@ func WithholdSecrets(s string) string {
 		}
 		s = re.ReplaceAllString(s, SecretWithheld)
 	}
-	return s
+	return passwordAssignment.ReplaceAllStringFunc(s, func(m string) string {
+		parts := passwordAssignment.FindStringSubmatch(m)
+		if passwordValueLooksSecret(parts[2]) {
+			return parts[1] + SecretWithheld
+		}
+		return m
+	})
 }
