@@ -77,13 +77,17 @@ func VerifyRun(ctx context.Context, p VerifyRunParams) VerifyRunSummary {
 		return summary
 	}
 
-	resultByTech := map[string]models.SimulationResult{}
+	// Results carry their step's TaskID as ID. Keying by technique collapsed
+	// steps that share a technique onto one result (the last one wins), so a
+	// failing step could be skipped because a passing sibling came later.
+	resultByTask := make(map[string]models.SimulationResult, len(p.Results))
 	for _, r := range p.Results {
-		resultByTech[r.Technique.ID] = r
+		resultByTask[r.ID] = r
 	}
+	taskIDs := scenario.ResolvedTaskIDs(sc.Steps)
 
-	for _, step := range sc.Steps {
-		res, ok := resultByTech[step.TechniqueID]
+	for i, step := range sc.Steps {
+		res, ok := resultByTask[taskIDs[i]]
 		if !ok || res.Result != models.ResultFail {
 			continue
 		}

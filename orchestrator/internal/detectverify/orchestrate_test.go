@@ -69,11 +69,44 @@ func baseParams(exp scenario.ExpectedDetection, conn Connector, store *fakeStore
 	return VerifyRunParams{
 		RunID: "run-1", ScenarioID: "sc-1", HostName: "HOST1", HostIP: "10.0.0.5",
 		Results: []models.SimulationResult{
-			{Technique: models.AttackTechnique{ID: "T1059.001"}, Result: result, ExecutedAt: time.Now(), DurationMs: 1000},
+			{ID: scenario.TaskID("T1059.001", "step1"), Technique: models.AttackTechnique{ID: "T1059.001"}, Result: result, ExecutedAt: time.Now(), DurationMs: 1000},
 		},
 		Scenarios:  &fakeScenarios{sc: testScenario(exp)},
 		Store:      store,
 		Connectors: map[string]Connector{"microsoft_sentinel": conn},
+	}
+}
+
+// Two steps share T1059.001. The first passes and the second fails. Results
+// arrive with the passing step last, so technique-keyed lookup would pick the
+// pass for both steps and skip the failing one. Keyed by task ID, the failing
+// step is checked and attested with its own result.
+func TestVerifyRun_SharedTechnique_ChecksFailingStepNotPassingSibling(t *testing.T) {
+	exp := apiExpectation()
+	sc := &scenario.Scenario{ID: "sc-1", Steps: []scenario.Step{
+		{Name: "fails", TechniqueID: "T1059.001", ExpectedDetections: []scenario.ExpectedDetection{exp}},
+		{Name: "passes", TechniqueID: "T1059.001", ExpectedDetections: []scenario.ExpectedDetection{exp}},
+	}}
+	ids := scenario.ResolvedTaskIDs(sc.Steps)
+	conn := &fakeConnector{result: VerifyResult{Verdict: VerdictNotDetected}}
+	store := &fakeStore{}
+	p := VerifyRunParams{
+		RunID: "run-1", ScenarioID: "sc-1", HostName: "HOST1", HostIP: "10.0.0.5",
+		Results: []models.SimulationResult{
+			{ID: ids[1], Technique: models.AttackTechnique{ID: "T1059.001"}, Result: models.ResultPass, ExecutedAt: time.Now(), DurationMs: 1000},
+			{ID: ids[0], Technique: models.AttackTechnique{ID: "T1059.001"}, Result: models.ResultFail, ExecutedAt: time.Now(), DurationMs: 1000},
+		},
+		Scenarios:  &fakeScenarios{sc: sc},
+		Store:      store,
+		Connectors: map[string]Connector{"microsoft_sentinel": conn},
+	}
+	summary := VerifyRun(context.Background(), p)
+
+	if summary.Checked != 1 || conn.calls != 1 {
+		t.Fatalf("Checked=%d connector calls=%d, want exactly the failing step checked once", summary.Checked, conn.calls)
+	}
+	if len(store.attested) != 1 || store.attested[0].ExpectationID != "exp-1" {
+		t.Fatalf("attested = %+v, want one attestation for the failing step", store.attested)
 	}
 }
 
