@@ -1,151 +1,127 @@
-# Run and Evidence Authorization — Design (revised)
+# Run and Evidence Authorization — Design (Tier A)
 
-Status: REVISED DRAFT for review. No schema or handler changes made yet.
+Status: DECISIONS RECORDED; read-only audit complete. No code changed yet.
 Date: 2026-10-19
-Supersedes: the earlier draft of this file (multi-tenant coordinated isolation).
-Blocks: Phishing BAS existing-run grading and new dispatch
-(`docs/phishing-mastery-qa-log.md`).
+Scope: current single-installation model (one customer, one database).
+Tier B (shared-database multi-tenancy, 47-table ownership migration, RLS
+activation) is deferred and out of scope here.
+Blocks: Phishing BAS existing-run grading and new dispatch.
 
-## 0. Two separate problems
+## 1. Decisions (settled)
 
-The earlier draft treated two different problems as one. They are split here.
+**D1 — Viewer access.** Viewers may read reports. Raw evidence download and run
+JSON export are allowed for runs the viewer can read, limited to documented run
+data and evidence references. Secrets, credentials and internal-only data are
+excluded from every export. Sensitivity and scope, not download-versus-display,
+decide.
 
-**Tier A — Installation security (current scope).** One Audspect installation
-equals one customer equals one database. Users inside that installation have
-roles: `admin`, `analyst` (views all reports), `viewer` (read-only, views reports
-and agents) (`internal/auth/jwt.go:14-16`). The question is whether those roles
-are enforced on every read, report, export and download path, and whether
-ownership fields mislead anyone about what is authorized.
+**D2 — Export permission. REVISED from the original decision.** The original
+decision said to reuse `CanExport`. The audit found that premise does not hold:
 
-**Tier B — Shared-database multi-tenancy (future, deferred).** Several customers
-on one database, or the planned MSSP mode. Deferred until it is an actual
-requirement. Nothing in Tier A should introduce tenant columns, tenant scoping
-or `audspect_tenant_id` for this purpose.
+- `CanExport` is defined as `verification:export` (`internal/auth/permissions.go:16`),
+  is granted to `admin` and `analyst` only, and is referenced by **no handler**.
+- The `viewer` role is granted **no permissions** (`RoleViewer: {}`).
 
-Separate databases isolate customers from each other. They do not stop an
-unauthorized user inside one installation from reading runs, reports or
-evidence. Tier A exists for that second problem.
+So gating exports on `CanExport` would deny viewers export, which contradicts D1.
+Recorded resolution: exports and raw-evidence downloads use **the same gate as
+reading the parent run** (any authenticated role, `tierAny`, matching the current
+route matrix). Authorization is the parent-run check, which inside one
+installation means the caller is an authenticated member. No new permission is
+added. A dedicated sensitive-artifact permission remains a later option if an
+installation needs to restrict raw evidence to security administrators.
 
-## 1. Current state (verified in code)
+Decision needed to confirm: approve D2 as revised (no `CanExport` gate; parent-run
+gate only), or instead restrict viewer export by introducing a permission.
 
-**Role model is intentional.** `viewer` and `analyst` may read reports and
-runs; `admin` manages users and config. Permission constants in
-`internal/auth/permissions.go` gate most mutations (`CanRunScenario`,
-`CanInjectExerciseEvidence`, `CanDeleteEvidence`, `CanExport`,
-`CanViewVariantRun`, ...).
+## 2. Read-only audit
 
-**Read paths and their gates are inconsistent.** Mutations are generally
-permission-gated; many read paths are baseline-authenticated only. Confirmed
-baseline-only reads, from `internal/api/routes.go`:
+Source: `internal/api/routes.go` (route registration) and
+`internal/api/rbac_matrix_test.go` (declared tiers). Every route below is inside
+the JWT-authenticated group unless noted.
 
-| Surface | Routes | Permission gate |
-|---|---|---|
-| Scenario runs | `GET /api/scenarios/runs`, `/{runId}/report`, `/report.json`, `/attackflow`, `/variant-coverage`, `/export` | baseline only |
-| EmailGW runs | `GET /api/emailgw-runs`, `/summary`, `/{id}`; `GET /api/emailgw/metrics` | baseline only |
-| Phishing runs | `GET /api/phishing-runs`, `/{id}`, `/{id}/report` | baseline only |
-| Cloud runs | `GET /api/cloud-runs`, `/{id}` | baseline only |
-| Exercise executions | `GET /api/exercises/executions`, `/{id}`, `/{id}/evidence`, `/evidence/verify`, `/events`, `/report.json` | baseline only |
-| Evidence download | `GET /api/evidence/{id}/download` | baseline only |
+| Surface | Route | Declared tier | Mutation? | Sensitivity | Required negative test |
+|---|---|---|---|---|---|
+| Scenario runs | `GET /api/scenarios/runs` | any | no | run list | unauthenticated → 401 |
+| Scenario runs | `/{runId}`, `/report`, `/report.json`, `/attackflow`, `/variant-coverage[/{tech}]`, `/pdf`, `/forensic.csv`, `/iocs`, `/rw-score`, `/double-extortion-correlation`, `/detection-response-effectiveness`, `/verifications[/...]`, `/events` | any | no | report / evidence | unauthenticated → 401 on each |
+| Scenario runs | `GET /api/scenarios/runs/{runId}/export` | any | no | **raw run JSON** | secret-exclusion test (see §4) |
+| Scenario runs | `POST /cancel`, `/pause`, `/resume` | permission `CanCancelScenarioRun` | **yes** | state change | viewer → 403 |
+| EmailGW runs | `GET /api/emailgw-runs`, `/summary`, `/{id}`; `GET /api/emailgw/metrics` | any | no | run data | unauthenticated → 401 |
+| EmailGW runs | `POST /api/emailgw-runs`, `/api/emailgw-campaigns*` | permission `CanRunScenario` | **yes** | dispatches email | viewer → 403 |
+| Phishing runs | `GET /api/phishing-runs`, `/{id}`, `/{id}/report` | any | no | run data / report | unauthenticated → 401 |
+| Phishing runs | `POST /api/phishing-runs` | permission `CanRunScenario` | **yes** | dispatch | viewer → 403 |
+| Cloud runs | `GET /api/cloud-runs`, `/{id}` | any | no | run data | unauthenticated → 401 |
+| Cloud runs | `POST /api/cloud-runs` | permission `CanRunScenario` | **yes** | dispatch | viewer → 403 |
+| Exercises | `GET /api/exercises/executions`, `/{id}`, `/{id}/events`, `/{id}/evidence`, `/{id}/evidence/verify`, `/report.json|html|pdf|csv` | any | no | exercise evidence / report | unauthenticated → 401 |
+| Exercises | `POST /launch`, `/abort`, `/steps/{id}/approve`, `/evidence` | permission per action | **yes** | state / evidence injection | viewer → 403 |
+| Exercises | `POST /api/exercises/executions` (create) | any | **yes** | creates execution | **gap — see §3** |
+| Evidence | `GET /api/evidence/{id}/download` | any | no | **raw evidence bytes** | parent-run check — **gap, see §3** |
+| Evidence | `GET /api/verifications/{id}/evidence` | any | no | evidence list | unauthenticated → 401 |
+| Evidence | `POST /api/verifications/{id}/evidence`, `DELETE /api/evidence/{id}` | permission `CanUploadEvidence` / `CanDeleteEvidence` | **yes** | state | viewer → 403 |
+| Reports | `GET /api/report/full/{html,pdf,csv,json}`, `/audit-pack`, `/board`, `/navigator` | any | no | consolidated report | unauthenticated → 401 |
+| Reports | `POST /api/report/verify` | any | no (verification only) | — | unauthenticated → 401 |
+| Reports | `PUT /api/report/branding`; `/api/report/schedules*` | permission `CanUpdateConnectorConfig` | **yes** | config / scheduled output | viewer → 403 |
+| Relationships | `GET /api/relationships/{id}/evidence` | any | no | threat-intel evidence | unauthenticated → 401 |
+| Direct artifacts | No static file serving of run/evidence/report output found (`routes.go:46` is a doc comment; the only `FileServer` is the web UI) | — | — | — | confirm with the §3 gap test |
 
-**Open question for the Tier A audit:** whether `viewer` should be able to
-download raw evidence and export run JSON, or only view rendered reports. The
-existing `CanExport` permission suggests export is meant to be gated; the audit
-must confirm the intent before tightening, and the answer decides whether the
-change is a read-gate fix or no change at all.
+## 3. Gaps the audit found
 
-**Ownership columns are misleading.** Tables with `tenant_id NOT NULL DEFAULT
-'default'` (47 tables, `internal/db/postgres.go`) contain a value that no code
-path uses for authorization. It is not proof of anything. Under Tier A the
-correct treatment is to stop treating it as ownership, not to enforce it:
-- Do not add tenant scoping predicates using it.
-- Do not convert it to NULL or reassign it. In a single-tenant installation a
-  `'default'` value is simply the installation, and converting it would hide
-  historical runs from non-admin users with no security benefit.
-- Document it as installation-scoped and leave the values in place.
+1. **Evidence download has no parent-run check.** `DownloadEvidence`
+   (`internal/api/verification_handlers.go:361`) looks up evidence by ID and streams
+   it, with no permission and no check that the caller may read the
+   verification's run. Inside one installation every authenticated role can read
+   every run, so the current model does not produce a cross-user leak. The gap is
+   that the rule is absent: a future permission change on runs would silently
+   leave evidence open. Fix: resolve evidence → verification → run and apply the
+   run's read gate, returning 404 on failure.
+2. **Exercise-execution create is `tierAny`.** `POST /api/exercises/executions`
+   creates an execution for any authenticated role, while launch and abort require
+   permissions. This is a mutation without a permission gate. Whether creating a
+   plan-run is meant to be viewer-level is unconfirmed. Recommendation: gate it on
+   the existing exercise permission family, after confirming intent.
+3. **Secret exclusion is not verified.** Handler bodies contain no secret-related
+   fields, but stored `result` JSON and evidence payloads come from connectors and
+   were not inspected. The export and report paths need a redaction review before
+   D1's "no secrets in exports" promise can be stated as true.
 
-**Row-level security is not active.** The only policy is on `users`, and it is
-commented out pending a role-hardening follow-up (`internal/db/postgres.go:~1361`).
-No database-level enforcement exists. Authorization is application-level only.
+## 4. Tests required (Tier A)
 
-## 2. Tier A goals
+1. Unauthenticated requests to every route in §2 return 401 (route-matrix drift
+   test already covers declared tiers; add behavioral checks for the new gates).
+2. Viewer: allowed on rendered reports and permitted exports; denied (403) on each
+   mutation listed in §2.
+3. Child-to-parent: `GET /api/evidence/{id}/download` for evidence belonging to an
+   unreadable run returns the same denial as the parent run (fails until gap 1 is
+   fixed).
+4. Export content: run JSON and report JSON contain no fields matching a secret
+   allowlist (`secret`, `password`, `token`, `credential`, `api_key`), using a run
+   seeded with connector credentials.
+5. Regression: analyst and admin report access unchanged.
 
-1. Every read, report, export and download path enforces an explicit permission
-   consistent with the role model. No route serves run or evidence data on
-   baseline authentication alone if the data is sensitive.
-2. Permission decisions are made from authenticated claims, never from
-   request-supplied identifiers.
-3. Child records (events, evidence, step executions, report artifacts,
-   downloads) are authorized through their parent run's gate. Authorizing a
-   parent must not leave a child endpoint open.
-4. No new fabricated ownership. Existing `'default'` values remain as
-   historical, installation-scoped data.
-5. Each route in §1 has a negative test: a `viewer` can read reports but gets a
-   denial for any route the audit classifies as mutation or raw-evidence access.
+## 5. Open decisions
 
-## 3. Tier A design
+1. Approve D2 as revised: parent-run gate only, no `CanExport` (§1).
+2. Gap 2: should creating exercise executions require an exercise permission?
+3. Gap 3: should the redaction review be a blocking gate for the export change, or
+   a follow-up with the export shipped on current data?
 
-- Permission per surface, decided by the audit in §4 and recorded in the
-  route matrix (`internal/api/rbac_matrix_test.go`), so `TestRBACMatrix_NoDrift`
-  enforces it.
-- Rendered report routes: `viewer` and up, matching the existing "viewer can
-  view reports" role contract.
-- Raw evidence download and run JSON export: gated by `CanExport` or a new
-  dedicated permission, pending the §1 open question.
-- Parent-derived gating for child endpoints: the child handler resolves the
-  parent run and applies the same permission check. No child endpoint is
-  reachable with a permission the parent does not require.
-- No `tenant_id` predicates, no migration, no NULL conversion in Tier A.
+## 6. Tier B (deferred, not in this change)
 
-## 4. Tier A audit (next step, read-only)
+- Shared-database multi-tenancy: `tenant_id` ownership across the run family,
+  creation-time assignment, system-initiated run inheritance.
+- RLS activation, which needs the `bas_user` NOSUPERUSER/NOBYPASSRLS hardening
+  first (`internal/db/postgres.go:~1361`). RLS is not active anywhere, so no
+  database-level defense is claimed.
+- The `'default'` tenant columns (47 tables) stay as installation-scoped data and
+  are not converted, reassigned or enforced in Tier A.
 
-Before any change, classify every route under `/api/scenarios/runs`,
-`/api/emailgw-runs`, `/api/phishing-runs`, `/api/cloud-runs`,
-`/api/exercises/executions`, `/api/evidence`, and every report and export route,
-as one of: rendered report, raw data, raw evidence, mutation, child record. Record
-the intended permission for each and whether it is currently enforced. The
-audit output becomes the implementation checklist.
+## 7. Sequencing
 
-## 5. Tier B (deferred, not in this change)
-
-Recorded here so it is not forgotten, not built now:
-- Shared-database multi-tenancy requires `tenant_id` ownership across the run
-  family, creation-time assignment from claims, system-initiated run inheritance
-  from verified triggering records, and database-level enforcement.
-- Activating RLS needs the bas_user to NOSUPERUSER/NOBYPASSRLS role-hardening
-  first (`internal/db/postgres.go:~1361`). Until then, RLS must not be described
-  as defense in depth.
-- The earlier draft's 47-table migration belongs here, not in Tier A.
-
-## 6. Test plan (Tier A)
-
-1. RBAC matrix: every route in §4's classification has an explicit tier; drift
-   test passes.
-2. Negative: `viewer` denied on each mutation and each raw-evidence/export route
-   the audit classifies as gated; allowed on rendered reports.
-3. Child records: a child endpoint returns the same denial as its parent for the
-   same caller.
-4. Claims: a request-supplied `tenantId` or similar field has no effect on the
-   decision.
-5. Regression: existing report and run list behavior for `analyst` and `admin`
-   is unchanged.
-
-## 7. Open decisions
-
-1. Should `viewer` be able to download raw evidence and export run JSON? (§1)
-2. Should a new dedicated permission (e.g. `CanViewRawEvidence`) be introduced
-   for evidence download, or should `CanExport` cover it?
-3. Confirm the Tier A / Tier B split: Tier A proceeds now, Tier B is deferred
-   until an MSSP or shared-database requirement exists.
-
-## 8. Sequencing
-
-1. Approve this revised spec (§7).
-2. Tier A audit (§4), read-only, written as a checklist in this spec.
-3. Implement permission gates and route-matrix entries per surface, each with
+1. Confirm the open decisions in §5.
+2. Implement gap 1 (evidence parent check) and gap 2 (if confirmed), each with
    negative tests.
-4. Verify with the full phishing-run suite and RBAC drift test.
-5. Only then resume the phishing existing-run grader and new dispatch, which
-   then sit on a consistently authorized foundation.
+3. Run the redaction review (gap 3) and fix any leaked field.
+4. Verify with the RBAC drift test and the phishing-run suite.
+5. Only then resume the phishing existing-run grader and new dispatch.
 
-Until then, phishing grading and dispatch stay unregistered, and the eight
+Phishing grading and dispatch stay unregistered until steps 1–4 pass. The eight
 verified PH→EmailGW mappings remain groundwork.
