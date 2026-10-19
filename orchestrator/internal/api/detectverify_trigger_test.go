@@ -77,7 +77,7 @@ func TestTriggerDetectionVerification_EndToEnd(t *testing.T) {
 
 		runStart := time.Now()
 		results := []models.SimulationResult{
-			{Technique: models.AttackTechnique{ID: "T1059.001"}, Result: models.ResultFail, ExecutedAt: runStart, DurationMs: 1000},
+			{ID: scenario.TaskID("T1059.001", "step1"), Technique: models.AttackTechnique{ID: "T1059.001"}, Result: models.ResultFail, ExecutedAt: runStart, DurationMs: 1000},
 		}
 		seedRunForVerification(t, pool, "run-trigger-1", "sc-trigger-1", "agent-trigger-1", "HOST1", results)
 
@@ -153,7 +153,7 @@ func TestAutoVerifyDetection_OnlyDispatchesAutoVerifyConnectors(t *testing.T) {
 		mustCreateConnector("disabled", false, true) // disabled — skipped
 
 		results := []models.SimulationResult{
-			{Technique: models.AttackTechnique{ID: "T1059.001"}, Result: models.ResultFail, ExecutedAt: time.Now(), DurationMs: 1000},
+			{ID: scenario.TaskID("T1059.001", "step1"), Technique: models.AttackTechnique{ID: "T1059.001"}, Result: models.ResultFail, ExecutedAt: time.Now(), DurationMs: 1000},
 		}
 		seedRunForVerification(t, pool, "run-auto-1", "sc-auto-1", "agent-auto-1", "HOST1", results)
 
