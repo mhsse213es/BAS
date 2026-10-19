@@ -29,20 +29,7 @@ import (
 // what it fakes is the connection's own origin (HELO identity),
 // which SPF/DKIM/DMARC alignment checks don't evaluate at all.
 func InternalSenderSpoofExpectation(caught bool) emailgwefficacy.MailExpectation {
-	exp := emailgwefficacy.MailExpectation{
-		SenderProfile:  "internal-sender-helo-spoof",
-		Recipient:      "helpdesk-test@example-lab.test",
-		MessageClass:   "internal-sender-helo-spoof",
-		ControlProduct: "m365-defender-o365",
-		Note:           "synthetic internal-looking envelope/header-from claim delivered over an externally-originated HELO/relay connection -- tests internal-sender-spoofing (anti-spoofing policy on HELO/connecting-IP vs. claimed domain), distinct from external domain spoofing (SPF/DKIM/DMARC alignment) and from display-name impersonation",
-		EnvelopeFrom:   "it-helpdesk@internal-corp-lab.test",
-	}
-	if caught {
-		exp.ExpectedAction = emailgwefficacy.ExpectedQuarantine
-	} else {
-		exp.ExpectedAction = emailgwefficacy.ExpectedDeliver
-	}
-	return exp
+	return emailgwefficacy.InternalSenderSpoofExpectation(caught)
 }
 
 // internalSenderSpoofContent is this scenario's own test message --
@@ -61,4 +48,10 @@ var internalSenderSpoofContent = emailgwefficacy.InjectableMessage{
 // is the internal-looking address the message claims to be from.
 func DispatchInternalSenderSpoof(ctx context.Context, target emailgwefficacy.InjectionTarget, exp emailgwefficacy.MailExpectation) (emailgwefficacy.OriginDeliveryObservation, error) {
 	return emailgwefficacy.InjectScenarioMessage(ctx, target, exp, internalSenderSpoofContent)
+}
+
+// Registers PH-AUTH-007's test message for the EmailGW executor. The message
+// has no attachment, so nothing can fail to build here.
+func init() {
+	emailgwefficacy.RegisterScenarioTestContent("internal-sender-helo-spoof", internalSenderSpoofContent)
 }

@@ -244,3 +244,42 @@ func TestExecutePHEmailGWReadback_ATT003_CompletedDOCXRun_Pass(t *testing.T) {
 		}
 	})
 }
+
+// PH-AUTH-007 maps to the internal-sender-spoof expectation EG-014, which the
+// EmailGW dispatch table carries. Its read-back is graded on a completed run.
+func TestExecutePHEmailGWReadback_AUTH007_CompletedSpoofRun_Pass(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		exp, ok := emailgwefficacy.ExpectationByID("EG-014.internal-sender-spoof.known-good")
+		if !ok {
+			t.Fatal("EG-014.internal-sender-spoof.known-good missing from the dispatch table")
+		}
+		now := time.Now()
+		provider := emailgwefficacy.NewFixtureMailEvidenceProvider(
+			[]emailgwefficacy.EnforcementEvidence{{
+				Message: exp.Ref(), Action: "quarantine", ControlProduct: exp.ControlProduct,
+				Timestamp: now, Source: emailgwefficacy.SourceFixture,
+				Provenance: emailgwefficacy.Provenance{Kind: emailgwefficacy.ProvenanceObserved, Confidence: emailgwefficacy.ConfidenceHigh},
+			}},
+			nil,
+		)
+		result := emailgwefficacy.VerifyMailExpectation(exp, emailgwefficacy.OriginDeliveryObservation{}, provider, readbackScenarioWindow())
+		raw, err := json.Marshal(result)
+		if err != nil {
+			t.Fatalf("marshal efficacy result: %v", err)
+		}
+		seedEmailGWRun(t, pool, "eg-spoof-known-good", "EG-014.internal-sender-spoof.known-good", raw)
+
+		exec, ok := LookupPhishingRunExecutor("PH-AUTH-007")
+		if !ok {
+			t.Fatal("PH-AUTH-007 must be registered as executable")
+		}
+		outcome, err := exec(context.Background(), PhishingRunExecutorEnv{Pool: pool}, "run-1",
+			map[string]any{"emailGwRunId": "eg-spoof-known-good"})
+		if err != nil {
+			t.Fatalf("executor: %v", err)
+		}
+		if outcome.Enforcement.Verdict != phishval.VerdictPass {
+			t.Errorf("Enforcement.Verdict = %q, want %q for a spoof the gateway quarantined", outcome.Enforcement.Verdict, phishval.VerdictPass)
+		}
+	})
+}

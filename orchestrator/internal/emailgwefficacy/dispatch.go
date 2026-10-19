@@ -64,6 +64,9 @@ var expectationByID = map[string]MailExpectation{
 
 	"EG-013.office-external-link.known-good": OfficeExternalLinkExpectation(true),
 	"EG-013.office-external-link.known-bad":  OfficeExternalLinkExpectation(false),
+
+	"EG-014.internal-sender-spoof.known-good": InternalSenderSpoofExpectation(true),
+	"EG-014.internal-sender-spoof.known-bad":  InternalSenderSpoofExpectation(false),
 }
 
 // ExpectationByID returns the MailExpectation expectationID resolves
