@@ -139,8 +139,10 @@ func scopedEnv(env PhishingRunExecutorEnv, scenarioID string) PhishingRunExecuto
 // calendar clients are not wired here yet, so those scenarios report unavailable.
 func (h *Handler) phishingRunEnv() PhishingRunExecutorEnv {
 	env := PhishingRunExecutorEnv{ReportTicketProvider: h.phishingReportTicketProvider, Pool: h.db}
-	// Read per request, not cached at startup, so a changed allowlist takes effect
-	// on the next library load and trigger. A malformed value fails closed.
+	// The allowlist comes from the container environment, which changes only when
+	// the container is recreated (install or upgrade), not on a live config edit.
+	// A malformed value fails closed. The startup audit record is in
+	// phishing_scope_audit.go.
 	scope, err := phishscope.ParseScope(
 		os.Getenv(EnvPhishIdentityTargetUsers), os.Getenv(EnvPhishOAuthClientIDs))
 	env.IdentityScope = scope

@@ -176,9 +176,9 @@ func TestExecutePHID003_InScopeUsesOnlyTheScopedQuery(t *testing.T) {
 	}
 }
 
-// The allowlist is read per request. A change to the setup configuration is
-// reflected on the next read, with no restart and no cached authorization.
-func TestPhishingRunEnv_AllowlistChangeTakesEffectOnNextRead(t *testing.T) {
+// The allowlist is read from the environment on each call. A change takes effect
+// only when the container is recreated; this test checks the read, not a restart.
+func TestPhishingRunEnv_ReadsEnvironmentOnEachCall(t *testing.T) {
 	h := &Handler{}
 
 	t.Setenv(EnvPhishOAuthClientIDs, goodClientGUID)

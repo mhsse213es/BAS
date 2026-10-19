@@ -83,14 +83,14 @@ they are not wired by this phase:
 
 - Done since the decisions above: the install-wide allowlists
   (`AUDSPECT_PHISH_IDENTITY_TARGET_USERS`, `AUDSPECT_PHISH_OAUTH_CLIENT_IDS`) are
-  parsed per request with fail-closed validation. PH-ID-002 and PH-ID-003 refuse
+  parsed with fail-closed validation. The container reads them at start, so a change takes effect when the container is recreated (install or upgrade). PH-ID-002 and PH-ID-003 refuse
   out-of-scope, missing, or wildcard targets before any Graph call. Their
   queries are narrowed in Graph itself (`$filter` on clientId, one query per
   user). Capability reports unavailable with a specific reason, and
   `graph_permission_review_pending` keeps both unavailable until the Graph
   permission review is recorded. Covered by fake-client tests and
   httptest request-URL assertions. Not done: an audit trail for allowlist
-  changes (the value is read per request, but nothing records who changed it),
+  changes beyond the startup record (the record shows what changed and when, not who changed it),
   and the `$filter` syntax against live Graph.
 - PH-ID-005 `$select` permission (conflicting sources) needs a live test
   with a real token.

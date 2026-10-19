@@ -1319,6 +1319,11 @@ func main() {
 			log.Fatalf("[FATAL] mTLS listen: %v", err)
 		}
 	}()
+	// Record the phishing identity allowlist to the audit log. A write failure is
+	// logged, not fatal: the identity scenarios fail closed without an allowlist.
+	if err := handler.RecordPhishingScopeAtStartup(context.Background()); err != nil {
+		log.Printf("[phish] identity allowlist audit: %v", err)
+	}
 	go func() {
 		log.Printf("[*] BAS Orchestrator enrollment listener on :%d", cfg.EnrollHTTPPort)
 		if err := enrollSrv.ListenAndServeTLS("", ""); err != nil && err != http.ErrServerClosed {
