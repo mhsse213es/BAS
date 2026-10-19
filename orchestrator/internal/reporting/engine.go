@@ -1942,6 +1942,7 @@ func (e *Engine) BuildFromRun(ctx context.Context, runID string, filter string) 
 	var results []models.SimulationResult
 	var score models.Score
 	json.Unmarshal(resultsRaw, &results)
+	models.RedactCredentialOutput(results)
 	json.Unmarshal(scoreRaw, &score)
 	json.Unmarshal(revertedRaw, &report.Reverted)
 	report.AppControl = buildAppControlSection(runID, results)
@@ -2184,6 +2185,7 @@ func (e *Engine) BuildFromCampaign(ctx context.Context, campaignID string, filte
 		var results []models.SimulationResult
 		if len(resultsRaw) > 0 {
 			if json.Unmarshal(resultsRaw, &results) == nil {
+				models.RedactCredentialOutput(results)
 				// Each child run keeps its own section. Runs are never merged,
 				// so every row maps to the run that produced it.
 				if sec := buildAppControlSection(rid, results); sec.HasData {
@@ -2398,6 +2400,7 @@ func (e *Engine) BuildFromSweep(ctx context.Context, sweepID string, filter stri
 		var results []models.SimulationResult
 		if len(resultsRaw) > 0 {
 			if json.Unmarshal(resultsRaw, &results) == nil {
+				models.RedactCredentialOutput(results)
 				results = FilterResults(results, filter)
 				for _, r := range results {
 					resultsByID[r.ID] = r
@@ -2521,6 +2524,7 @@ func (e *Engine) BuildFromEMSweep(ctx context.Context, sweepID string, filter st
 		if len(resultsRaw) > 0 {
 			var results []models.SimulationResult
 			if json.Unmarshal(resultsRaw, &results) == nil {
+				models.RedactCredentialOutput(results)
 				allResults = append(allResults, FilterResults(results, filter)...)
 			}
 		}

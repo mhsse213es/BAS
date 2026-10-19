@@ -4,8 +4,16 @@ import (
 	"slices"
 	"time"
 
+	"github.com/audspect/bas/internal/models"
 	"github.com/audspect/bas/internal/scenario"
 )
+
+// isCredentialAccess reports whether a technique's output may carry dumped
+// credential material. Hash-shaped values from such output are credentials,
+// not indicators, and are withheld from stored run IOCs.
+func isCredentialAccess(techniqueID string) bool {
+	return models.LookupTactic(techniqueID) == "credential-access"
+}
 
 // RunIndicator is one distinct indicator found anywhere in a run, aggregated
 // across every step/technique that produced it. Reused as both the in-memory
@@ -65,15 +73,26 @@ func BuildRunIndicators(
 
 	for _, er := range execResults {
 		techniqueID := stepMap[er.TaskID].TechniqueID
+		credential := isCredentialAccess(techniqueID)
 		for _, ind := range ExtractIndicators(er.Stdout) {
+			if credential && ind.Type == "hash" {
+				continue
+			}
 			add(ind, "stdout", techniqueID, er.TaskID)
 		}
 		for _, ind := range ExtractIndicators(er.Stderr) {
+			if credential && ind.Type == "hash" {
+				continue
+			}
 			add(ind, "stderr", techniqueID, er.TaskID)
 		}
 	}
 	for _, ch := range checks {
+		credential := isCredentialAccess(ch.TechniqueID)
 		for _, ind := range ExtractIndicators(ch.Details) {
+			if credential && ind.Type == "hash" {
+				continue
+			}
 			add(ind, "details", ch.TechniqueID, ch.ID)
 		}
 	}

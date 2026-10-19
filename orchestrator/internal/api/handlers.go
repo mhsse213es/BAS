@@ -5943,6 +5943,7 @@ func (h *Handler) GetFullReportPDF(w http.ResponseWriter, r *http.Request) {
 		scenPart = "report"
 	}
 	filterSuffix := ""
+	models.RedactCredentialOutput(results)
 	if filter != "" && filter != "all" {
 		filterSuffix = "-" + filter
 	}
@@ -6002,6 +6003,7 @@ func (h *Handler) GetFullReportJSON(w http.ResponseWriter, r *http.Request) {
 		scenPart = "report"
 	}
 	filterSuffix := ""
+	models.RedactCredentialOutput(results)
 	if filter != "" && filter != "all" {
 		filterSuffix = "-" + filter
 	}
@@ -6061,6 +6063,7 @@ func (h *Handler) GetFullReportCSV(w http.ResponseWriter, r *http.Request) {
 	}
 	filterSuffix := ""
 	if filter != "" && filter != "all" {
+	models.RedactCredentialOutput(results)
 		filterSuffix = "-" + filter
 	}
 	fname := buildReportFilename("BAS_Forensic", scenPart+"-"+hostname+filterSuffix, "csv")
@@ -6174,6 +6177,7 @@ func (h *Handler) GetComplianceReport(w http.ResponseWriter, r *http.Request) {
 		}
 		defer rows.Close()
 		var n int
+		models.RedactCredentialOutput(results)
 		for rows.Next() {
 			var rj []byte
 			if rows.Scan(&rj) != nil {
@@ -6311,6 +6315,7 @@ func (h *Handler) GetRunPDF(w http.ResponseWriter, r *http.Request) {
 	if scenPart == "" {
 		scenPart = sanitizeFilename(runName)
 	}
+	models.RedactCredentialOutput(results)
 	filterSuffix := ""
 	if filter != "" && filter != "all" {
 		filterSuffix = "-" + filter
@@ -6355,6 +6360,7 @@ func (h *Handler) GetRunForensicCSV(w http.ResponseWriter, r *http.Request) {
 	}
 	fname := buildReportFilename("BAS_Forensic", name+"-"+hostname+filterSuffix, "csv")
 	h.auditLog(r, "report.export", runID, map[string]any{"format": "csv", "type": "run", "filter": filter}, "ok")
+	models.RedactCredentialOutput(results)
 	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
 	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, fname))
 	reporting.WriteForensicCSV(w, name, results, filter, totalCount)
@@ -6496,6 +6502,7 @@ func (h *Handler) GetRunAttackFlow(w http.ResponseWriter, r *http.Request) {
 		case "detected":
 			detected++
 		case "logged":
+	models.RedactCredentialOutput(results)
 			logged++
 		case "bypassed":
 			bypassed++
@@ -6555,6 +6562,7 @@ func (h *Handler) ExportRunJSON(w http.ResponseWriter, r *http.Request) {
 	enc.Encode(map[string]interface{}{
 		"id":           runID,
 		"scenarioName": runName,
+	models.RedactCredentialOutput(results)
 		"agentId":      agentID,
 		"status":       status,
 		"startedAt":    startedAt,

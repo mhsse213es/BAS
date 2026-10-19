@@ -140,3 +140,25 @@ verified PH→EmailGW mappings remain groundwork.
   `TestCreateExerciseExecution_AnalystPassesGate`, and the RBAC matrix suite.
 - **Gap 3 (secret-exclusion review of stored payloads): OPEN**, not started.
 - **D2 as revised:** exports and evidence use the parent-run gate; `CanExport` unchanged.
+
+## 9. Status — gap 3 (secret exclusion), partial (2026-10-19)
+
+- **Credential-access output withheld from exports and reports.** Steps whose
+  persisted ATT&CK tactic is `credential-access` have `RawOutput` and `Details`
+  replaced by `models.CredentialOutputWithheld` at every results load that feeds a
+  response or artifact: run export JSON, run PDF, attack flow, compliance report,
+  full-report PDF/JSON/CSV, forensic CSV, campaign/sweep/EM-sweep reports, and the
+  audit pack. Tests: `TestRedactCredentialOutput_WithholdsCredentialAccessOutput`,
+  `TestExportRunJSON_CredentialAccessOutputWithheld`.
+- **Credential hashes not stored as run IOCs.** Hash-type indicators extracted from
+  credential-access steps are dropped in `ioc.BuildRunIndicators`, so they are
+  never served by `GET /api/scenarios/runs/{runId}/iocs`. Non-credential hashes
+  are still extracted. Test: `TestBuildRunIndicators_CredentialAccessHashNotStored`.
+- **Still open:**
+  1. Cross-run `GET /api/iocs` is populated from `DetectionAlert` command lines.
+     A pass-the-hash command line can carry an NTLM hash. Not yet checked or fixed.
+  2. Other results loaders (findings, SIEM correlation, detection verification,
+     posture, detection handlers) were not audited for whether they expose
+     `RawOutput` to a response. Each needs a classification.
+  3. Secret types outside credential-access output (API keys or tokens printed by
+     other steps) have no redaction rule. Coverage is tactic-based only.

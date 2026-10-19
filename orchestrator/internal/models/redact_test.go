@@ -1,0 +1,29 @@
+package models
+
+import (
+	"strings"
+	"testing"
+)
+
+const testNTLMHash = "aad3b435b51404eeaad3b435b51404ee"
+
+func TestRedactCredentialOutput_WithholdsCredentialAccessOutput(t *testing.T) {
+	results := []SimulationResult{
+		{ID: "cred", Technique: AttackTechnique{ID: "T1003.001", Tactic: "credential-access"},
+			RawOutput: "Administrator:500:" + testNTLMHash + ":::", Details: "dumped NTLM " + testNTLMHash},
+		{ID: "exec", Technique: AttackTechnique{ID: "T1059.001", Tactic: "execution"},
+			RawOutput: "hello", Details: "ran"},
+	}
+	RedactCredentialOutput(results)
+
+	cred := results[0]
+	if strings.Contains(cred.RawOutput, testNTLMHash) || strings.Contains(cred.Details, testNTLMHash) {
+		t.Fatalf("credential-access output still contains the hash: raw=%q details=%q", cred.RawOutput, cred.Details)
+	}
+	if cred.RawOutput != CredentialOutputWithheld {
+		t.Fatalf("RawOutput = %q, want the withheld marker", cred.RawOutput)
+	}
+	if results[1].RawOutput != "hello" {
+		t.Fatalf("non-credential RawOutput changed to %q; only credential-access output may be withheld", results[1].RawOutput)
+	}
+}

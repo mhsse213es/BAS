@@ -196,6 +196,7 @@ func (e *Engine) WriteAuditPack(ctx context.Context, agentID string, mapper *com
 				var results []models.SimulationResult
 				var score models.Score
 				json.Unmarshal(resultsRaw, &results)
+				models.RedactCredentialOutput(results)
 				json.Unmarshal(scoreRaw, &score)
 				enc := json.NewEncoder(out)
 				enc.SetIndent("", "  ")
