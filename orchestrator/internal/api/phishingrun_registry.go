@@ -82,11 +82,19 @@ type PhishingRunExecutor func(ctx context.Context, env PhishingRunExecutorEnv, r
 // slice; expanding to the other adapter-tested scenarios is deliberate
 // future work, not something to add speculatively here.
 var phishingRunExecutors = map[string]PhishingRunExecutor{
-	"PH-DET-002": executePHDET002,
-	"PH-ID-001":  executePHID001,
-	"PH-IR-003":  executePHIR003,
-	"PH-ID-002":  executePHID002,
-	"PH-ID-003":  executePHID003,
+	"PH-DET-002":  executePHDET002,
+	"PH-ID-001":   executePHID001,
+	"PH-IR-003":   executePHIR003,
+	"PH-ID-002":   executePHID002,
+	"PH-ID-003":   executePHID003,
+	"PH-AUTH-002": emailGWReadbackExecutor("PH-AUTH-002"),
+	"PH-AUTH-003": emailGWReadbackExecutor("PH-AUTH-003"),
+	"PH-AUTH-004": emailGWReadbackExecutor("PH-AUTH-004"),
+	"PH-AUTH-008": emailGWReadbackExecutor("PH-AUTH-008"),
+	"PH-BEC-001":  emailGWReadbackExecutor("PH-BEC-001"),
+	"PH-URL-001":  emailGWReadbackExecutor("PH-URL-001"),
+	"PH-ATT-001":  emailGWReadbackExecutor("PH-ATT-001"),
+	"PH-ATT-010":  emailGWReadbackExecutor("PH-ATT-010"),
 }
 
 // LookupPhishingRunExecutor returns scenarioID's registered executor,

@@ -201,3 +201,22 @@ Fifth scenario registered: PH-ID-003 (device-code phishing defense). It grades `
 The lister is injected through the new `DeviceCodeSignInLister` interface on `PhishingRunExecutorEnv`, the same pattern as PH-ID-002. No deployment wires the Graph identity connector into this path yet, so PH-ID-003 yields NotTested on every current deployment. A nil lister or a read error also yields NotTested. Tests: 5 (registered; an observed policy failure is Pass; an allowed deviceCode sign-in is Fail; nil lister is NotTested; read error is NotTested). The 4 executor tests pass; the related phishing registry suite passes (45 tests).
 
 **Scope note:** this is a read of tenant sign-in data, with no dispatch and no state change. It follows the PH-ID-002 precedent. It has not been verified against a live tenant.
+
+## EmailGW read-back grader: 8 mapped scenarios registered — 2026-10-19
+
+Approved by the user: an email read-back grader for the email-dispatch scenarios. It grades an EXISTING email gateway run named by `params["emailGwRunId"]`. It never dispatches mail.
+
+Scope: the 8 scenarios that already have a verified PH→EG mapping: PH-AUTH-002/003/004/008, PH-BEC-001, PH-URL-001, PH-ATT-001, PH-ATT-010. PH-URL-005 stays excluded by decision.
+
+Guards:
+- A missing `emailGwRunId`, an unknown run, or a run whose `email_gw_runs.scenario_id` differs from the scenario's mapped expectation is an error, never a verdict. A scenario is never graded on another expectation's message.
+- A run with no efficacy result yet is NotTested.
+- A completed run grades through `phishbridge.FromEmailGWEfficacyResult`, then `phishval.Evaluate` against the catalog expectation.
+
+Tests: registration of all 8 mapped IDs, PH-URL-005 not registered, missing ID error, wrong-expectation refusal, unknown-run error, incomplete run NotTested, and a completed EG-002.known-good run graded Pass for PH-BEC-001.
+
+Isolation note: the read is installation-wide, as with other run reads in the single-installation model (Tier A). Triggering it requires the same permission as launching a phishing run.
+
+**Still unregistered, and why:** the other email-dispatch scenarios (PH-AUTH-007, PH-BEC-002/006, PH-EVA-002, PH-ATT-002/003, PH-CHN-004/005) have no verified PH→EG mapping. They need a mapping established from evidence first, not from catalog comments. Registering them would be the "mapping exists" shortcut the initiative rejects.
+
+**Not yet verified:** the full `internal/api` suite, held for memory (see the open items above).
