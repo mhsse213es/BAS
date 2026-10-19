@@ -61,7 +61,7 @@ func TestPhishingRunParams_RequiredFieldsPerScenario(t *testing.T) {
 // server's definition and never hardcodes one.
 func TestPhishingLibraryEntries_CarryParameterSchema(t *testing.T) {
 	cat := []phishcatalog.Scenario{{ID: "PH-DET-002", Name: "d"}}
-	entries := phishingLibraryEntries(cat, func(string) bool { return true })
+	entries := phishingLibraryEntries(cat, poolOnly())
 	if len(entries) != 1 || len(entries[0].Parameters) != 2 {
 		t.Fatalf("entries = %+v, want PH-DET-002 with 2 parameters", entries)
 	}

@@ -5,7 +5,8 @@
 export const LIBRARY_TYPE_AGENT = 'agent';
 export const LIBRARY_TYPE_PHISHING = 'phishing';
 
-const RUNNABLE_STATUSES = ['executable', 'experimental'];
+// Only these two server statuses are runnable. unavailable and catalog_only never route.
+const RUNNABLE_STATUSES = ['available', 'experimental'];
 
 export function libraryEntryRoute(entry) {
   if (!entry || typeof entry !== 'object') return { kind: 'none' };

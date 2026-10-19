@@ -2487,10 +2487,12 @@ function scenarioDetailHTML(s) {
 // enforces CanRunScenario on the POST.
 var _libraryEntries = [];
 
+// Labels for the server's status. The server decides the status and reason. The
+// browser only words them, and never infers availability from an ID or a schema.
 const LIBRARY_STATUS_LABEL = {
-  executable: 'Executable',
-  experimental: 'Experimental',
-  available: 'Catalog only (not runnable)',
+  available: 'Available on this installation',
+  experimental: 'Experimental (runnable here)',
+  catalog_only: 'Catalogued only',
 };
 
 export function loadScenarioLibrary() {
@@ -2519,11 +2521,15 @@ function phishingLibraryContainer() {
 
 function phishingLibraryTileHTML(entry, index) {
   var runnable = libraryEntryRoute(entry).kind === LIBRARY_TYPE_PHISHING;
-  var label = LIBRARY_STATUS_LABEL[entry.status] || 'Not runnable';
+  var label = entry.status === 'unavailable'
+    ? 'Unavailable: ' + String(entry.reason || 'not configured').split('_').join(' ')
+    : (LIBRARY_STATUS_LABEL[entry.status] || 'Not runnable');
+  // Experimental stays visible in every state, not only when runnable.
+  var tag = entry.experimental && entry.status !== 'experimental' ? ' · Experimental' : '';
   return '<button type="button" class="sc-tile" data-entry-index="' + index + '"' +
     (runnable ? '' : ' disabled') + '>' +
     '<div class="sc-tile-name">' + x(entry.name) + '</div>' +
-    '<div class="sc-tile-badges">' + x(entry.id) + ' · ' + x(label) + '</div>' +
+    '<div class="sc-tile-badges">' + x(entry.id) + ' · ' + x(label) + x(tag) + '</div>' +
     '</button>';
 }
 

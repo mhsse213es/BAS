@@ -6,49 +6,45 @@ import (
 	"github.com/audspect/bas/internal/phishcatalog"
 )
 
-// Library entry types. The type is set by the server from the source the entry
-// came from, never inferred from a name or an ID. A client routes on this field
-// alone, so an entry with a missing or unknown type has no execution path.
+// Library entry types. The server sets the type from the source the entry came
+// from, never from a name or an ID. A client routes on this field alone.
 const (
 	LibraryTypeAgent    = "agent"
 	LibraryTypePhishing = "phishing"
 )
 
-// Library entry statuses. "executable" means the server can run it right now.
-// "experimental" means runnable but flagged as a best-effort heuristic.
-// "available" means catalog-only: it is listed, and the server cannot run it.
-const (
-	LibraryStatusExecutable   = "executable"
-	LibraryStatusExperimental = "experimental"
-	LibraryStatusAvailable    = "available"
-)
-
-// ScenarioLibraryEntry is one row of the Scenario Library.
+// ScenarioLibraryEntry is one row of the Scenario Library. Three facts are kept
+// apart. Status is what this installation can run now (with a Reason when it
+// cannot). Experimental is a property of the scenario and stays set in every
+// state. LiveValidated is set only when a live integration has exercised the
+// scenario, and no scenario is marked that way yet.
 type ScenarioLibraryEntry struct {
-	Type   string `json:"type"`
-	ID     string `json:"id"`
-	Name   string `json:"name"`
-	Status string `json:"status"`
-	// Parameters is the run-parameter schema of a phishing entry. Agent entries have none.
-	Parameters []ParamSpec `json:"parameters,omitempty"`
+	Type          string      `json:"type"`
+	ID            string      `json:"id"`
+	Name          string      `json:"name"`
+	Status        string      `json:"status"`
+	Reason        string      `json:"reason,omitempty"`
+	Experimental  bool        `json:"experimental"`
+	LiveValidated bool        `json:"liveValidated"`
+	Parameters    []ParamSpec `json:"parameters,omitempty"`
 }
 
-// phishingLibraryEntries turns the phishing catalog into library rows. The
-// status comes from the registry (executable), never from the catalog alone:
-// an entry the registry cannot run is "available" whatever the catalog says.
-func phishingLibraryEntries(catalog []phishcatalog.Scenario, executable func(id string) bool) []ScenarioLibraryEntry {
+// phishingLibraryEntries turns the catalog into library rows. Each row's status
+// comes from phishingCapabilityFor, which reads the same environment the trigger
+// uses, so a row can never report runnable when the trigger would refuse it.
+func phishingLibraryEntries(catalog []phishcatalog.Scenario, env PhishingRunExecutorEnv) []ScenarioLibraryEntry {
 	out := make([]ScenarioLibraryEntry, 0, len(catalog))
 	for _, sc := range catalog {
-		status := LibraryStatusAvailable
-		if executable(sc.ID) {
-			status = LibraryStatusExecutable
-			if sc.Experimental {
-				status = LibraryStatusExperimental
-			}
-		}
+		c := phishingCapabilityFor(env, sc.ID, sc.Experimental)
 		out = append(out, ScenarioLibraryEntry{
-			Type: LibraryTypePhishing, ID: sc.ID, Name: sc.Name, Status: status,
-			Parameters: phishingRunParams[sc.ID],
+			Type:          LibraryTypePhishing,
+			ID:            sc.ID,
+			Name:          sc.Name,
+			Status:        c.Status,
+			Reason:        c.Reason,
+			Experimental:  sc.Experimental,
+			LiveValidated: sc.Coverage == phishcatalog.CoverageLiveValidated,
+			Parameters:    phishingRunParams[sc.ID],
 		})
 	}
 	return out
@@ -61,7 +57,7 @@ func (h *Handler) ListScenarioLibrary(w http.ResponseWriter, r *http.Request) {
 	entries := make([]ScenarioLibraryEntry, 0)
 	for _, sc := range h.engine.List() {
 		entries = append(entries, ScenarioLibraryEntry{
-			Type: LibraryTypeAgent, ID: sc.ID, Name: sc.Name, Status: LibraryStatusExecutable,
+			Type: LibraryTypeAgent, ID: sc.ID, Name: sc.Name, Status: CapAvailable,
 		})
 	}
 	catalog, err := phishcatalog.AudspectPhishingCatalog()
@@ -69,9 +65,6 @@ func (h *Handler) ListScenarioLibrary(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "phishing catalog unavailable", http.StatusInternalServerError)
 		return
 	}
-	entries = append(entries, phishingLibraryEntries(catalog, func(id string) bool {
-		_, ok := LookupPhishingRunExecutor(id)
-		return ok
-	})...)
+	entries = append(entries, phishingLibraryEntries(catalog, h.phishingRunEnv())...)
 	respond(w, entries)
 }

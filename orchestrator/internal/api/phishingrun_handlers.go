@@ -28,12 +28,24 @@ func (h *Handler) TriggerPhishingRun(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "scenarioId required", http.StatusBadRequest)
 		return
 	}
+	// Refuse before any run row exists. A stale or crafted request cannot start a
+	// scenario whose dependency is not wired here, whatever the library showed.
+	capability, err := h.phishingScenarioCapability(req.ScenarioID)
+	if err != nil {
+		jsonError(w, "phishing catalog unavailable", http.StatusInternalServerError)
+		return
+	}
+	// Unregistered scenarios keep the existing 400 from ExecutePhishingRun.
+	if capability.Status != CapAvailable && capability.Status != CapExperimental && capability.Status != CapCatalogOnly {
+		jsonError(w, "scenario unavailable on this installation: "+capability.Reason, http.StatusConflict)
+		return
+	}
 
 	if c, ok := auth.ClaimsFrom(r.Context()); ok && c != nil {
 		req.InitiatedBy = c.UserID
 	}
 
-	env := PhishingRunExecutorEnv{ReportTicketProvider: h.phishingReportTicketProvider, Pool: h.db}
+	env := h.phishingRunEnv()
 	run, err := ExecutePhishingRun(r.Context(), h.db, env, req)
 	if err != nil {
 		failedRunID := ""

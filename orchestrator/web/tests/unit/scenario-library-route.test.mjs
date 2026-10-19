@@ -3,11 +3,11 @@ import assert from 'node:assert/strict';
 import { buildPhishingRunRequest, libraryEntryRoute } from '../../src/features/scenario-library-route.js';
 
 test('an executable agent entry routes to the agent path only', () => {
-  assert.deepEqual(libraryEntryRoute({ type: 'agent', id: 'sc-1', status: 'executable' }), { kind: 'agent', id: 'sc-1' });
+  assert.deepEqual(libraryEntryRoute({ type: 'agent', id: 'sc-1', status: 'available' }), { kind: 'agent', id: 'sc-1' });
 });
 
 test('an executable phishing entry routes to the phishing path only', () => {
-  assert.deepEqual(libraryEntryRoute({ type: 'phishing', id: 'PH-DET-002', status: 'executable' }), { kind: 'phishing', id: 'PH-DET-002' });
+  assert.deepEqual(libraryEntryRoute({ type: 'phishing', id: 'PH-DET-002', status: 'available' }), { kind: 'phishing', id: 'PH-DET-002' });
 });
 
 test('an experimental phishing entry is runnable and routes to phishing', () => {
@@ -15,16 +15,16 @@ test('an experimental phishing entry is runnable and routes to phishing', () => 
 });
 
 test('an available (catalog-only) phishing entry has no execution path', () => {
-  assert.deepEqual(libraryEntryRoute({ type: 'phishing', id: 'PH-CHN-001', status: 'available' }), { kind: 'none' });
+  assert.deepEqual(libraryEntryRoute({ type: 'phishing', id: 'PH-CHN-001', status: 'catalog_only' }), { kind: 'none' });
 });
 
 test('a phishing-looking ID with no type is not inferred as phishing', () => {
-  assert.deepEqual(libraryEntryRoute({ id: 'PH-DET-002', status: 'executable' }), { kind: 'none' });
+  assert.deepEqual(libraryEntryRoute({ id: 'PH-DET-002', status: 'available' }), { kind: 'none' });
 });
 
 test('a missing, unknown, or differently-cased type has no execution path', () => {
   for (const type of [undefined, null, '', 'Phishing', 'AGENT', 'agent ', 'email', 'phish']) {
-    assert.deepEqual(libraryEntryRoute({ type, id: 'x', status: 'executable' }), { kind: 'none' }, `type=${JSON.stringify(type)}`);
+    assert.deepEqual(libraryEntryRoute({ type, id: 'x', status: 'available' }), { kind: 'none' }, `type=${JSON.stringify(type)}`);
   }
 });
 
@@ -35,7 +35,7 @@ test('a non-object or empty entry has no execution path', () => {
 });
 
 test('an unknown status never routes, whatever the type', () => {
-  for (const status of [undefined, 'available', 'pending', 'EXECUTABLE']) {
+  for (const status of [undefined, 'catalog_only', 'unavailable', 'pending', 'EXECUTABLE']) {
     assert.deepEqual(libraryEntryRoute({ type: 'phishing', id: 'PH-DET-002', status }), { kind: 'none' });
     assert.deepEqual(libraryEntryRoute({ type: 'agent', id: 'sc-1', status }), { kind: 'none' });
   }
@@ -56,7 +56,7 @@ test('agent and phishing paths are mutually exclusive for every input', () => {
 
 
 const detEntry = {
-  type: 'phishing', id: 'PH-DET-002', status: 'executable',
+  type: 'phishing', id: 'PH-DET-002', status: 'available',
   parameters: [
     { name: 'executionId', label: 'Execution ID', kind: 'text', required: true },
     { name: 'targetId', label: 'Target ID', kind: 'text', required: true },
@@ -87,7 +87,7 @@ test('a number field must be a positive integer and is sent as a number', () => 
 });
 
 test('an email field needs an address shape', () => {
-  const entry = { type: 'phishing', id: 'PH-CHN-004', status: 'executable', parameters: [
+  const entry = { type: 'phishing', id: 'PH-CHN-004', status: 'available', parameters: [
     { name: 'attendeeEmail', kind: 'email', required: true },
   ] };
   assert.equal(buildPhishingRunRequest(entry, { attendeeEmail: 'not-an-address' }).ok, false);
@@ -101,12 +101,25 @@ test('only schema fields are sent; extra values from the form are dropped', () =
 });
 
 test('a scenario with no schema builds a body with empty parameters', () => {
-  const r = buildPhishingRunRequest({ type: 'phishing', id: 'PH-ID-003', status: 'executable' }, {});
+  const r = buildPhishingRunRequest({ type: 'phishing', id: 'PH-ID-003', status: 'available' }, {});
   assert.deepEqual(r, { ok: true, body: { scenarioId: 'PH-ID-003', parameters: {} } });
 });
 
 test('a non-runnable or non-phishing entry never builds a phishing request', () => {
-  assert.equal(buildPhishingRunRequest({ type: 'phishing', id: 'PH-CHN-001', status: 'available', parameters: [] }, {}).ok, false);
-  assert.equal(buildPhishingRunRequest({ type: 'agent', id: 'sc-1', status: 'executable', parameters: [] }, {}).ok, false);
+  assert.equal(buildPhishingRunRequest({ type: 'phishing', id: 'PH-CHN-001', status: 'catalog_only', parameters: [] }, {}).ok, false);
+  assert.equal(buildPhishingRunRequest({ type: 'agent', id: 'sc-1', status: 'available', parameters: [] }, {}).ok, false);
   assert.equal(buildPhishingRunRequest(null, {}).ok, false);
+});
+
+test('an unavailable entry never routes, even when its type and ID are valid', () => {
+  assert.deepEqual(libraryEntryRoute({ type: 'phishing', id: 'PH-ID-004', status: 'unavailable', reason: 'identity_connector_not_configured' }), { kind: 'none' });
+  assert.deepEqual(libraryEntryRoute({ type: 'phishing', id: 'PH-CHN-004', status: 'unavailable', reason: 'calendar_connector_not_configured' }), { kind: 'none' });
+});
+
+test('a catalog-only entry never routes', () => {
+  assert.deepEqual(libraryEntryRoute({ type: 'phishing', id: 'PH-CHN-001', status: 'catalog_only', reason: 'not_registered' }), { kind: 'none' });
+});
+
+test('the old executable status is no longer runnable', () => {
+  assert.deepEqual(libraryEntryRoute({ type: 'phishing', id: 'PH-DET-002', status: 'executable' }), { kind: 'none' });
 });
