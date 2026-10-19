@@ -71,11 +71,11 @@ const (
 // EvidenceProvenance is §6's "Evidence provenance" dimension: "Timestamp,
 // source system, correlation ID, integrity hash and collection method."
 type EvidenceProvenance struct {
-	Timestamp        time.Time
-	SourceSystem     string
-	CorrelationID    string
-	IntegrityHash    string
-	CollectionMethod string
+	Timestamp        time.Time `json:"timestamp"`
+	SourceSystem     string    `json:"sourceSystem"`
+	CorrelationID    string    `json:"correlationId"`
+	IntegrityHash    string    `json:"integrityHash"`
+	CollectionMethod string    `json:"collectionMethod"`
 }
 
 // Record is dlp.txt §6's unified, structured, independently reviewable
@@ -83,22 +83,22 @@ type EvidenceProvenance struct {
 // dimension kept separate rather than collapsed into one green/red
 // status.
 type Record struct {
-	ScenarioID            string
-	ScenarioVersion       string
-	ControlObjective      string
-	Preconditions         string
-	SyntheticDataManifest string
-	ActionAttempted       string
+	ScenarioID            string `json:"scenarioId"`
+	ScenarioVersion       string `json:"scenarioVersion"`
+	ControlObjective      string `json:"controlObjective"`
+	Preconditions         string `json:"preconditions"`
+	SyntheticDataManifest string `json:"syntheticDataManifest"`
+	ActionAttempted       string `json:"actionAttempted"`
 
-	Enforcement    EnforcementOutcome
-	Classification ClassificationOutcome
-	Telemetry      TelemetryOutcome
-	Response       ResponseOutcome
+	Enforcement    EnforcementOutcome    `json:"enforcement"`
+	Classification ClassificationOutcome `json:"classification"`
+	Telemetry      TelemetryOutcome      `json:"telemetry"`
+	Response       ResponseOutcome       `json:"response"`
 
-	Provenance EvidenceProvenance
+	Provenance EvidenceProvenance `json:"provenance"`
 
-	Confidence  string
-	Limitations string
+	Confidence  string `json:"confidence"`
+	Limitations string `json:"limitations"`
 }
 
 // ClassificationOutcomeFromDLPCLS is the one safe translation helper this

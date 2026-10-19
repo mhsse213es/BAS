@@ -118,6 +118,12 @@ func (j *Job) processRun(ctx context.Context, runID, scenarioID string, resultsR
 		return nil // nothing declared any expectation
 	}
 	verdicts := reporting.ComputeAutomaticVerifications(specs, results)
+	// Records are written before attestation. A failure here returns an error,
+	// so the run stays auto_verified=false and the retry inserts only the rows
+	// still missing (ON CONFLICT DO NOTHING).
+	if err := persistDLPRecords(ctx, j.db, runID, dlpEntriesFromVerdicts(scenarioID, verdicts)); err != nil {
+		return err
+	}
 
 	existing, err := j.store.CurrentForRun(ctx, runID)
 	if err != nil {
