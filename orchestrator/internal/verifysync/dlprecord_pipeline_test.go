@@ -140,6 +140,25 @@ func TestDLPRecords_ThroughTickSeam(t *testing.T) {
 		if n != 4 {
 			t.Fatalf("after retry: %d rows, want 4 (no duplicates)", n)
 		}
+
+		// The read path returns the same four entries, in expectation order.
+		read, err := DLPRecordsForRun(ctx, pool, runID)
+		if err != nil {
+			t.Fatalf("DLPRecordsForRun: %v", err)
+		}
+		if len(read) != 4 {
+			t.Fatalf("DLPRecordsForRun returned %d entries, want 4", len(read))
+		}
+		for i := 1; i < len(read); i++ {
+			prev, cur := read[i-1], read[i]
+			if prev.TaskID > cur.TaskID || (prev.TaskID == cur.TaskID && prev.ExpectationID >= cur.ExpectationID) {
+				t.Fatalf("entries not in (task, expectation) order: %s/%s before %s/%s", prev.TaskID, prev.ExpectationID, cur.TaskID, cur.ExpectationID)
+			}
+		}
+		none, err := DLPRecordsForRun(ctx, pool, "run-dlprec-unknown")
+		if err != nil || len(none) != 0 {
+			t.Fatalf("unknown run: got %d entries, err=%v, want empty and nil", len(none), err)
+		}
 	})
 }
 
@@ -156,6 +175,57 @@ func seedRun(t *testing.T, ctx context.Context, pool *pgxpool.Pool, runID, scID 
 		 VALUES ($1, $2, $3, 'n', 'completed', $4, NOW())`, runID, agent, scID, string(results)); err != nil {
 		t.Fatalf("seed scenario_runs: %v", err)
 	}
+}
+
+// TestDLPRecords_SharedExpectationAcrossSteps_KeepsEveryStep covers the real
+// DLP profile shape: one profile applied to several steps gives every step
+// the same expectation ID. Each step is a separate evaluation and must keep
+// its own record. Keying by (run, expectation) silently dropped all but one.
+func TestDLPRecords_SharedExpectationAcrossSteps_KeepsEveryStep(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		const runID, scID = "run-dlprec-shared", "sc-dlprec-shared"
+
+		steps := []scenario.Step{
+			{Name: "Upload one", TechniqueID: "T1567.002"},
+			{Name: "Upload two", TechniqueID: "T1567.002"},
+		}
+		ids := scenario.ResolvedTaskIDs(steps)
+		shared := dlpExp("dlp-usb-block", "Block")
+		resolver := fakeResolver{
+			sc:  &scenario.Scenario{ID: scID, Steps: steps},
+			exp: map[string][]scenario.ExpectedDetection{"T1567.002": {shared}},
+		}
+		results := []map[string]any{
+			{"id": ids[0], "stepName": steps[0].Name, "rawOutput": "DLP_OBSERVATION: OperationBlocked"},
+			{"id": ids[1], "stepName": steps[1].Name, "rawOutput": "DLP_OBSERVATION: OperationSucceeded"},
+		}
+		raw, err := json.Marshal(results)
+		if err != nil {
+			t.Fatal(err)
+		}
+		seedRun(t, ctx, pool, runID, scID, raw)
+
+		NewJob(pool, verification.NewStore(pool), resolver).Tick(ctx)
+
+		read, err := DLPRecordsForRun(ctx, pool, runID)
+		if err != nil {
+			t.Fatalf("DLPRecordsForRun: %v", err)
+		}
+		if len(read) != 2 {
+			t.Fatalf("got %d records for two steps sharing one expectation, want 2: a step's record was dropped", len(read))
+		}
+		seen := map[string]bool{}
+		for _, e := range read {
+			seen[e.TaskID] = true
+		}
+		if !seen[ids[0]] || !seen[ids[1]] {
+			t.Fatalf("records not attributed to each step: %+v", read)
+		}
+	})
 }
 
 func keysOf(m map[string]DLPRecordEntry) []string {

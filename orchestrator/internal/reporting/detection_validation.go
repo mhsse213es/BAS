@@ -102,6 +102,10 @@ type VerificationResult struct {
 	Timestamp   time.Time
 	Finding     scenario.ExpectedFinding
 	TechniqueID string
+	// TaskID is the dispatch identity of the step this verdict was evaluated
+	// for. An ExpectedID can recur across steps, so (step, expectation) is the
+	// unit of evaluation.
+	TaskID string
 
 	// ExpectedOutcome/ObservedOutcome/Comparison are the Outcome Validation
 	// Framework's richer internal computation — not surfaced in any report
@@ -312,7 +316,11 @@ func ComputeAutomaticVerifications(specs []StepDetectionSpec, results []models.S
 		ev := evByTask[spec.TaskID]
 		ev.TechniqueID = spec.TechniqueID
 		for _, exp := range spec.Expected {
-			out = append(out, verifyExpectation(exp, ev))
+			vr := verifyExpectation(exp, ev)
+			// The same expectation ID can appear on several steps (one profile
+			// applied to many steps), so the step identity travels with the verdict.
+			vr.TaskID = spec.TaskID
+			out = append(out, vr)
 		}
 	}
 	return out

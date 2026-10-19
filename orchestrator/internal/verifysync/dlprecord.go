@@ -16,6 +16,7 @@ import (
 // Record, not folded into a Record dimension, so Match, Mismatch and
 // MissingEvidence stay distinct without bending Classification to carry them.
 type DLPRecordEntry struct {
+	TaskID          string           `json:"taskId"`
 	ExpectationID   string           `json:"expectationId"`
 	TechniqueID     string           `json:"techniqueId"`
 	ExpectedOutcome string           `json:"expectedOutcome"`
@@ -61,6 +62,7 @@ func dlpEntryFromVerdict(scenarioID string, vr reporting.VerificationResult) DLP
 	)
 
 	return DLPRecordEntry{
+		TaskID:          vr.TaskID,
 		ExpectationID:   vr.ExpectedID,
 		TechniqueID:     vr.TechniqueID,
 		ExpectedOutcome: vr.ExpectedOutcome,
@@ -125,13 +127,38 @@ func persistDLPRecords(ctx context.Context, db *pgxpool.Pool, runID string, entr
 			return err
 		}
 		if _, err := db.Exec(ctx,
-			`INSERT INTO dlp_evidence_records (run_id, expectation_id, technique_id, scenario_id, record, created_at)
-			 VALUES ($1, $2, $3, $4, $5, NOW())
-			 ON CONFLICT (run_id, expectation_id) DO NOTHING`,
-			runID, e.ExpectationID, e.TechniqueID, e.Record.ScenarioID, string(raw),
+			`INSERT INTO dlp_evidence_records (run_id, task_id, expectation_id, technique_id, scenario_id, record, created_at)
+			 VALUES ($1, $2, $3, $4, $5, $6, NOW())
+			 ON CONFLICT (run_id, task_id, expectation_id) DO NOTHING`,
+			runID, e.TaskID, e.ExpectationID, e.TechniqueID, e.Record.ScenarioID, string(raw),
 		); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// DLPRecordsForRun reads back the entries persisted for a run, ordered by
+// expectation ID. It is the read side of persistDLPRecords: nothing else
+// derives records, and a missing run returns an empty slice, not an error.
+func DLPRecordsForRun(ctx context.Context, db *pgxpool.Pool, runID string) ([]DLPRecordEntry, error) {
+	rows, err := db.Query(ctx,
+		`SELECT record FROM dlp_evidence_records WHERE run_id = $1 ORDER BY task_id, expectation_id`, runID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []DLPRecordEntry{}
+	for rows.Next() {
+		var raw string
+		if err := rows.Scan(&raw); err != nil {
+			return nil, err
+		}
+		var e DLPRecordEntry
+		if err := json.Unmarshal([]byte(raw), &e); err != nil {
+			return nil, err
+		}
+		out = append(out, e)
+	}
+	return out, rows.Err()
 }

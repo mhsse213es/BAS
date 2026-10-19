@@ -1707,18 +1707,20 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		// several steps share a technique. Pre-existing rows keep '' and are
 		// never matched, which is no worse than before.
 		`ALTER TABLE dlp_sink_tokens ADD COLUMN IF NOT EXISTS step_task_id text NOT NULL DEFAULT ''`,
-		// dlp_evidence_records holds one dlpreport-shaped evaluation per DLP
-		// expectation the verification pipeline evaluated. Keyed by
-		// (run_id, expectation_id) so a retried verification pass inserts
+		// dlp_evidence_records holds one dlpreport-shaped evaluation per
+		// (step, DLP expectation) the verification pipeline evaluated. The
+		// step (task_id) is part of the key because one profile's expectation
+		// IDs recur across every step that applies it. A retried pass inserts
 		// only the rows it has not written; first evaluation wins.
 		`CREATE TABLE IF NOT EXISTS dlp_evidence_records (
 			run_id text NOT NULL,
+			task_id text NOT NULL,
 			expectation_id text NOT NULL,
 			technique_id text NOT NULL DEFAULT '',
 			scenario_id text NOT NULL DEFAULT '',
 			record jsonb NOT NULL,
 			created_at timestamptz NOT NULL DEFAULT NOW(),
-			PRIMARY KEY (run_id, expectation_id)
+			PRIMARY KEY (run_id, task_id, expectation_id)
 		)`,
 		`CREATE TABLE IF NOT EXISTS dlp_sink_receipts (
 			id bigserial PRIMARY KEY,
