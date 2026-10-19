@@ -93,3 +93,13 @@ These decisions are recorded here. They are not approval to enable live executio
 - **PH-ID-003 Conditional Access:** granted only if the scenario's declared objective requires it. Missing `appliedConditionalAccessPolicies` yields inconclusive, never pass.
 - **PH-ID-005:** unavailable until its `$select` permission is validated against a test tenant. Gated in code by `graph_permission_review_pending`.
 - **Live registration and execution:** remain blocked until the checks above pass.
+
+## Finding for the approver: PH-ID-003 Conditional Access objective
+
+The catalog defines PH-ID-003's expectation as `Enforcement: Blocked`, and its
+limitation reads `appliedConditionalAccessPolicies` on the device-code sign-in.
+The scenario therefore claims that a Conditional Access policy blocked the sign-in.
+That claim cannot be made without the policy result, so Conditional Access
+evaluation is essential to the stated objective. Under the approver's rule,
+`Policy.Read.ConditionalAccess` is a candidate for a documented, tenant-admin-consented
+grant. It has **not** been added. Approval is the approver's decision.
