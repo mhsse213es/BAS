@@ -26,20 +26,7 @@ import (
 // initiative never modifies. caught=true is the known-good case;
 // caught=false is the known-bad case.
 func ReplyChainHijackExpectation(caught bool) emailgwefficacy.MailExpectation {
-	exp := emailgwefficacy.MailExpectation{
-		SenderProfile:  "reply-chain-hijack",
-		Recipient:      "finance-test@example-lab.test",
-		MessageClass:   "reply-chain-hijack",
-		ControlProduct: "m365-defender-o365",
-		Note:           "message framed as a reply within an existing thread (Subject starting with Re:, quoted prior content), envelope-from an account presented as compromised -- tests the same domain-reputation/compromise-detection control PH-AUTH-010 proves, under a reply-chain narrative; does not test genuine thread-history-aware content anomaly detection, which no capability in this codebase provides",
-		EnvelopeFrom:   "accounts@reply-chain-hijack-lab.test",
-	}
-	if caught {
-		exp.ExpectedAction = emailgwefficacy.ExpectedQuarantine
-	} else {
-		exp.ExpectedAction = emailgwefficacy.ExpectedDeliver
-	}
-	return exp
+	return emailgwefficacy.ReplyChainHijackExpectation(caught)
 }
 
 // replyChainHijackContent is this scenario's own test message content.
@@ -57,4 +44,10 @@ var replyChainHijackContent = emailgwefficacy.InjectableMessage{
 // emailgwefficacy.InjectScenarioMessage.
 func DispatchReplyChainHijack(ctx context.Context, target emailgwefficacy.InjectionTarget, exp emailgwefficacy.MailExpectation) (emailgwefficacy.OriginDeliveryObservation, error) {
 	return emailgwefficacy.InjectScenarioMessage(ctx, target, exp, replyChainHijackContent)
+}
+
+// Registers PH-BEC-006's reply-chain message for the EmailGW executor. The
+// message has no attachment, so nothing can fail to build here.
+func init() {
+	emailgwefficacy.RegisterScenarioTestContent("reply-chain-hijack", replyChainHijackContent)
 }

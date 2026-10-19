@@ -99,6 +99,7 @@ var phishingRunExecutors = map[string]PhishingRunExecutor{
 	"PH-ATT-002":  emailGWReadbackExecutor("PH-ATT-002"),
 	"PH-ATT-003":  emailGWReadbackExecutor("PH-ATT-003"),
 	"PH-AUTH-007": emailGWReadbackExecutor("PH-AUTH-007"),
+	"PH-BEC-006":  emailGWReadbackExecutor("PH-BEC-006"),
 }
 
 // LookupPhishingRunExecutor returns scenarioID's registered executor,

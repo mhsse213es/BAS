@@ -67,6 +67,9 @@ var expectationByID = map[string]MailExpectation{
 
 	"EG-014.internal-sender-spoof.known-good": InternalSenderSpoofExpectation(true),
 	"EG-014.internal-sender-spoof.known-bad":  InternalSenderSpoofExpectation(false),
+
+	"EG-015.reply-chain-hijack.known-good": ReplyChainHijackExpectation(true),
+	"EG-015.reply-chain-hijack.known-bad":  ReplyChainHijackExpectation(false),
 }
 
 // ExpectationByID returns the MailExpectation expectationID resolves

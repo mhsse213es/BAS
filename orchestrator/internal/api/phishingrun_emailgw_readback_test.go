@@ -283,3 +283,43 @@ func TestExecutePHEmailGWReadback_AUTH007_CompletedSpoofRun_Pass(t *testing.T) {
 		}
 	})
 }
+
+// PH-BEC-006 maps to the reply-chain-hijack expectation EG-015, which the
+// EmailGW dispatch table carries. Its read-back is graded on a completed run.
+func TestExecutePHEmailGWReadback_BEC006_CompletedReplyChainRun_Pass(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		exp, ok := emailgwefficacy.ExpectationByID("EG-015.reply-chain-hijack.known-good")
+		if !ok {
+			t.Fatal("EG-015.reply-chain-hijack.known-good missing from the dispatch table")
+		}
+		now := time.Now()
+		provider := emailgwefficacy.NewFixtureMailEvidenceProvider(
+			[]emailgwefficacy.EnforcementEvidence{{
+				Message: exp.Ref(), Action: "quarantine", ControlProduct: exp.ControlProduct,
+				Timestamp: now, Source: emailgwefficacy.SourceFixture,
+				Provenance: emailgwefficacy.Provenance{Kind: emailgwefficacy.ProvenanceObserved, Confidence: emailgwefficacy.ConfidenceHigh},
+			}},
+			nil,
+		)
+		result := emailgwefficacy.VerifyMailExpectation(exp, emailgwefficacy.OriginDeliveryObservation{}, provider, readbackScenarioWindow())
+		raw, err := json.Marshal(result)
+		if err != nil {
+			t.Fatalf("marshal efficacy result: %v", err)
+		}
+		seedEmailGWRun(t, pool, "eg-replychain-known-good", "EG-015.reply-chain-hijack.known-good", raw)
+
+		exec, ok := LookupPhishingRunExecutor("PH-BEC-006")
+		if !ok {
+			t.Fatal("PH-BEC-006 must be registered as executable")
+		}
+		outcome, err := exec(context.Background(), PhishingRunExecutorEnv{Pool: pool}, "run-1",
+			map[string]any{"emailGwRunId": "eg-replychain-known-good"})
+		if err != nil {
+			t.Fatalf("executor: %v", err)
+		}
+		if outcome.Enforcement.Verdict != phishval.VerdictPass {
+			t.Errorf("Enforcement.Verdict = %q, want %q for a reply-chain message the gateway quarantined", outcome.Enforcement.Verdict, phishval.VerdictPass)
+		}
+	})
+}
+
