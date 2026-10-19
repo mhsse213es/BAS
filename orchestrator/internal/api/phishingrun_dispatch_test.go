@@ -21,7 +21,34 @@ func dispatchEnv(pool *pgxpool.Pool) PhishingRunExecutorEnv {
 }
 
 func dispatchParams(key string, recipients ...string) map[string]any {
-	return map[string]any{"idempotencyKey": key, "recipients": recipients}
+	end := time.Now().UTC().Add(time.Hour).Format(time.RFC3339)
+	return map[string]any{"idempotencyKey": key, "recipients": recipients, "testWindowEnd": end}
+}
+
+// The operator's test window is an explicit instant inside the EmailGW dwell bounds.
+// Anything outside is refused, never clamped, and a missing window is refused.
+func TestDispatchTestWindow_Bounds(t *testing.T) {
+	now := time.Date(2026, 10, 19, 12, 0, 0, 0, time.UTC)
+	at := func(d time.Duration) string { return now.Add(d).Format(time.RFC3339) }
+	ok := []time.Duration{MinEmailGWDwellWindow, time.Hour, MaxEmailGWDwellWindow}
+	for _, d := range ok {
+		dwell, _, err := dispatchTestWindow(map[string]any{"testWindowEnd": at(d)}, now)
+		if err != nil || dwell != d {
+			t.Errorf("window %s: dwell=%s err=%v, want %s accepted", d, dwell, err, d)
+		}
+	}
+	refused := map[string]map[string]any{
+		"missing":      map[string]any{},
+		"too short":    map[string]any{"testWindowEnd": at(MinEmailGWDwellWindow - time.Second)},
+		"too long":     map[string]any{"testWindowEnd": at(MaxEmailGWDwellWindow + time.Second)},
+		"in the past":  map[string]any{"testWindowEnd": at(-time.Minute)},
+		"not RFC 3339": map[string]any{"testWindowEnd": "tomorrow"},
+	}
+	for name, params := range refused {
+		if _, _, err := dispatchTestWindow(params, now); err == nil {
+			t.Errorf("%s: accepted; it must be refused", name)
+		}
+	}
 }
 
 func countPhishingRuns(t *testing.T, pool *pgxpool.Pool) int {
@@ -207,4 +234,174 @@ func loadRunForTest(t *testing.T, pool *pgxpool.Pool, id string) *phishingrun.Ph
 	run.Status = phishingrun.Status(status)
 	run.Result = result
 	return &run
+}
+
+// When the EmailGW dispatch itself fails, the phishing run fails with that reason. It is
+// never left running, and no EmailGW run is claimed as correlated. A zero injection
+// target cannot send, so the inbound path refuses here without touching the network.
+func TestDispatch_SendFailureFailsPhishingRun(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		if err := db.EnsurePhishingRunSchema(ctx, pool); err != nil {
+			t.Fatalf("schema: %v", err)
+		}
+		exp, _ := emailgwefficacy.ExpectationByID(phishEmailGWExpectation["PH-BEC-001"])
+		env := dispatchEnv(pool)
+		run, err := startPhishingDispatch(ctx, pool, env, PhishingRunRequest{
+			ScenarioID: "PH-BEC-001", Parameters: dispatchParams("send-fail-key", exp.Recipient), InitiatedBy: "u1",
+		})
+		if err == nil {
+			t.Fatalf("a dispatch with no usable injection target was accepted")
+		}
+		if run == nil || run.Status != phishingrun.StatusFailed {
+			t.Fatalf("run = %+v, want a failed phishing run", run)
+		}
+		if run.Error == "" {
+			t.Errorf("failed run carries no reason")
+		}
+		reloaded := loadRunForTest(t, pool, run.ID)
+		if reloaded.Status != phishingrun.StatusFailed {
+			t.Errorf("stored status %q, want failed", reloaded.Status)
+		}
+	})
+}
+
+// A successful dispatch sends exactly once. A retry with the same key returns the same
+// phishing run and does not send again. The phishing run stores the EmailGW run it
+// created, so the correlation can be followed.
+func TestDispatch_SuccessSendsOnceAndCorrelates(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		if err := db.EnsurePhishingRunSchema(ctx, pool); err != nil {
+			t.Fatalf("schema: %v", err)
+		}
+		sends := 0
+		orig := injectScenarioMessageFn
+		injectScenarioMessageFn = func(_ context.Context, _ emailgwefficacy.InjectionTarget, _ emailgwefficacy.MailExpectation, _ emailgwefficacy.InjectableMessage) (emailgwefficacy.OriginDeliveryObservation, error) {
+			sends++
+			return emailgwefficacy.OriginDeliveryObservation{Timestamp: time.Now().UTC(), SenderPayloadHash: "hash-1"}, nil
+		}
+		t.Cleanup(func() {
+			injectScenarioMessageFn = orig
+			StopEmailGWWaiters()
+		})
+
+		exp, _ := emailgwefficacy.ExpectationByID(phishEmailGWExpectation["PH-BEC-001"])
+		env := dispatchEnv(pool)
+		env.EmailGWTarget = emailgwefficacy.InjectionTarget{HELODomain: "h.test", TargetMX: "mx.test", RelayHost: "relay.test"}
+		params := dispatchParams("success-key", exp.Recipient)
+		params["campaignId"] = "camp-7"
+		req := PhishingRunRequest{ScenarioID: "PH-BEC-001", Parameters: params, InitiatedBy: "u1"}
+
+		first, err := startPhishingDispatch(ctx, pool, env, req)
+		if err != nil {
+			t.Fatalf("first dispatch: %v", err)
+		}
+		if sends != 1 {
+			t.Fatalf("sends = %d after first dispatch, want 1", sends)
+		}
+		if first.Status != phishingrun.StatusRunning {
+			t.Errorf("status %q, want running while the EmailGW run is open", first.Status)
+		}
+		var env2 dispatchResultEnvelope
+		if err := json.Unmarshal(first.Result, &env2); err != nil || env2.Dispatch.EmailGWRunID == "" {
+			t.Fatalf("result carries no EmailGW run ID: %s (err %v)", first.Result, err)
+		}
+		if env2.Dispatch.CampaignID != "camp-7" || env2.Dispatch.TestWindowEnd.IsZero() {
+			t.Errorf("correlation lost the campaign or test window: %+v", env2.Dispatch)
+		}
+
+		var egStatus string
+		if err := pool.QueryRow(ctx, `SELECT status FROM email_gw_runs WHERE id = $1`, env2.Dispatch.EmailGWRunID).Scan(&egStatus); err != nil {
+			t.Fatalf("correlated EmailGW run %s not found: %v", env2.Dispatch.EmailGWRunID, err)
+		}
+
+		second, err := startPhishingDispatch(ctx, pool, env, req)
+		if err != nil {
+			t.Fatalf("retry with the same key: %v", err)
+		}
+		if second.ID != first.ID {
+			t.Errorf("retry returned run %q, want the original %q", second.ID, first.ID)
+		}
+		if sends != 1 {
+			t.Errorf("sends = %d after a retry, want still 1: a duplicate key must not send again", sends)
+		}
+	})
+}
+
+// A dispatched run whose EmailGW run completed is graded through the read-back, and it
+// settles as completed with provenance that names that EmailGW run.
+func TestDispatch_CompletedEmailGWRunIsGraded(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		seedDispatchedRun(t, pool, "graded-run", "eg-graded", "completed", time.Now().UTC())
+		exp, _ := emailgwefficacy.ExpectationByID("EG-002.known-good")
+		result := emailgwefficacy.VerifyMailExpectation(exp, emailgwefficacy.OriginDeliveryObservation{},
+			emailgwefficacy.NewFixtureMailEvidenceProvider(nil, nil), readbackScenarioWindow())
+		raw, err := json.Marshal(result)
+		if err != nil {
+			t.Fatalf("marshal: %v", err)
+		}
+		if _, err := pool.Exec(ctx, `UPDATE email_gw_runs SET result = $2 WHERE id = $1`, "eg-graded", raw); err != nil {
+			t.Fatalf("attach result: %v", err)
+		}
+
+		got, err := refreshPhishingDispatch(ctx, pool, PhishingRunExecutorEnv{Pool: pool}, loadRunForTest(t, pool, "graded-run"))
+		if err != nil {
+			t.Fatalf("refresh: %v", err)
+		}
+		if got.Status != phishingrun.StatusCompleted {
+			t.Fatalf("status %q, want completed", got.Status)
+		}
+		outcome, err := dispatchOutcomeFrom(got.Result)
+		if err != nil {
+			t.Fatalf("decode outcome: %v", err)
+		}
+		if outcome.Provenance == nil || outcome.Provenance.EmailGWRunID != "eg-graded" {
+			t.Errorf("provenance = %+v, want the graded EmailGW run eg-graded", outcome.Provenance)
+		}
+	})
+}
+
+// The poller settles a dispatched run whose EmailGW run completed, with nobody reading
+// the run. It also writes one settlement audit entry for it.
+func TestDispatch_PollerSettlesUnreadRun(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		seedDispatchedRun(t, pool, "unread-run", "eg-unread", "completed", time.Now().UTC())
+		exp, _ := emailgwefficacy.ExpectationByID("EG-002.known-good")
+		result := emailgwefficacy.VerifyMailExpectation(exp, emailgwefficacy.OriginDeliveryObservation{},
+			emailgwefficacy.NewFixtureMailEvidenceProvider(nil, nil), readbackScenarioWindow())
+		raw, _ := json.Marshal(result)
+		if _, err := pool.Exec(ctx, `UPDATE email_gw_runs SET result = $2 WHERE id = $1`, "eg-unread", raw); err != nil {
+			t.Fatalf("attach result: %v", err)
+		}
+
+		if err := RefreshPhishingDispatches(ctx, pool, PhishingRunExecutorEnv{Pool: pool}); err != nil {
+			t.Fatalf("poller refresh: %v", err)
+		}
+		got := loadRunForTest(t, pool, "unread-run")
+		if got.Status != phishingrun.StatusCompleted {
+			t.Errorf("unread dispatch: status %q after the poller, want completed", got.Status)
+		}
+		countAudits := func() int {
+			var n int
+			if err := pool.QueryRow(ctx,
+				`SELECT COUNT(*) FROM audit_logs WHERE action = 'phishingrun.dispatch.settled' AND resource = 'unread-run'`,
+			).Scan(&n); err != nil {
+				t.Fatalf("count audit rows: %v", err)
+			}
+			return n
+		}
+		if n := countAudits(); n != 1 {
+			t.Errorf("settlement audit rows = %d, want 1", n)
+		}
+		// A second pass finds nothing running, so it writes no second audit row.
+		if err := RefreshPhishingDispatches(ctx, pool, PhishingRunExecutorEnv{Pool: pool}); err != nil {
+			t.Fatalf("second poller pass: %v", err)
+		}
+		if n := countAudits(); n != 1 {
+			t.Errorf("after a second pass, settlement audit rows = %d, want still 1", n)
+		}
+	})
 }

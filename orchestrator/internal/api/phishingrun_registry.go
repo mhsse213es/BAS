@@ -162,9 +162,15 @@ func executePHID002(ctx context.Context, env PhishingRunExecutorEnv, runID strin
 		return phishval.Outcome{}, err
 	}
 	var obs phishval.Observation
-	if env.OAuthConsentLister != nil {
+	// unavailable names why no consent evidence was read, so the result says what is missing.
+	var unavailable string
+	if env.OAuthConsentLister == nil {
+		unavailable = "unavailable: the identity connector is not configured, so no consent grants were read"
+	} else {
 		grants, err := env.OAuthConsentLister.ListOAuthConsentGrantsForClients(ctx, clientIDs)
-		if err == nil {
+		if err != nil {
+			unavailable = fmt.Sprintf("unavailable: consent grants could not be read (missing Directory.Read.All consent or a Graph error), so no control outcome is recorded: %v", err)
+		} else {
 			obs = phishbridge.FromOAuthConsentGrants(grants, time.Now())
 		}
 	}
@@ -173,7 +179,11 @@ func executePHID002(ctx context.Context, env PhishingRunExecutorEnv, runID strin
 	if err != nil {
 		return phishval.Outcome{}, err
 	}
-	return phishval.Evaluate(runID, "", catalogExp, obs), nil
+	outcome := phishval.Evaluate(runID, "", catalogExp, obs)
+	if unavailable != "" {
+		outcome.Enforcement.Reason = unavailable
+	}
+	return outcome, nil
 }
 
 // executePHID003 runs PH-ID-003 (device-code phishing defense): reads the
@@ -189,9 +199,16 @@ func executePHID003(ctx context.Context, env PhishingRunExecutorEnv, runID strin
 		return phishval.Outcome{}, err
 	}
 	var obs phishval.Observation
-	if env.DeviceCodeSignIns != nil {
+	// unavailable names why no control outcome exists. It is set only when no evidence was
+	// read, so the result says what is missing rather than a generic "no observation".
+	var unavailable string
+	if env.DeviceCodeSignIns == nil {
+		unavailable = "unavailable: the identity connector is not configured, so no sign-in evidence was read"
+	} else {
 		signIns, err := env.DeviceCodeSignIns.SignInsForUsersByProtocol(ctx, "deviceCode", users)
-		if err == nil {
+		if err != nil {
+			unavailable = fmt.Sprintf("unavailable: sign-in evidence could not be read (missing consent or a Graph error), so no control outcome is recorded: %v", err)
+		} else {
 			outcome, detail := phishidentity.EvaluateDeviceCodeEnforcement(signIns)
 			obs = phishbridge.FromDeviceCodeEnforcement(outcome, detail)
 		}
@@ -201,7 +218,11 @@ func executePHID003(ctx context.Context, env PhishingRunExecutorEnv, runID strin
 	if err != nil {
 		return phishval.Outcome{}, err
 	}
-	return phishval.Evaluate(runID, "", catalogExp, obs), nil
+	outcome := phishval.Evaluate(runID, "", catalogExp, obs)
+	if unavailable != "" {
+		outcome.Enforcement.Reason = unavailable
+	}
+	return outcome, nil
 }
 
 // executePHIR003 runs PH-IR-003 (endpoint follow-through): grades the

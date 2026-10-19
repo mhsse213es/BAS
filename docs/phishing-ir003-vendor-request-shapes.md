@@ -52,3 +52,14 @@ Source: `internal/vendors/crowdstrike/client.go` (`deviceAction`) and
 - Read the official SentinelOne management API reference for
   `agents/actions/disconnect` and confirm the `filter.ids` body.
 - Live call against a test tenant. Until then PH-IR-003 is not live-validated.
+
+## Official-doc check — 2026-10-19
+
+**CrowdStrike Falcon — confirmed from the official Hosts API reference** (developer.crowdstrike.com, Hosts collection, PerformActionV2):
+- Method and path: `POST /devices/entities/devices-actions/v2`. Scope: Hosts: WRITE.
+- Query parameter `action_name` (string). Values include `contain` and `lift_containment`.
+- Request body field `ids` (array of AID strings). Also `action_parameters`, `note`, and `body`.
+- Our `deviceAction` sends `POST` with `?action_name=<contain|lift_containment>` and body `{"ids":[deviceID]}`. This matches the official reference.
+- The official page gives no formal JSON schema, only the parameter table and an example. The types above are as stated there.
+
+**SentinelOne — NOT confirmed from an official source.** The official Management API reference was not reachable (the developer host did not resolve, and search returned only third-party integrations). Third-party sources agree on `POST /web/api/v2.1/agents/actions/disconnect` with a `filter` containing `ids`. The official request schema and response shape are still unverified. Verify in the SentinelOne console API docs (Agents, v2.1) before any use. Tracked in docs/phishing-open-items-for-user.md.

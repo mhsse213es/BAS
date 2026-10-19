@@ -53,9 +53,14 @@ func executePHID004(ctx context.Context, env PhishingRunExecutorEnv, runID strin
 	}
 
 	var obs phishval.Observation
-	if env.IdentityReader != nil {
+	var unavailable string
+	if env.IdentityReader == nil {
+		unavailable = identityUnavailable("the identity connector is not configured", nil, "MFA denial events")
+	} else {
 		events, err := env.IdentityReader.MFADenialEventsForUser(ctx, userID)
-		if err == nil {
+		if err != nil {
+			unavailable = identityUnavailable("", err, "MFA denial events")
+		} else {
 			verdict, detail := phishidentity.DetectMFAFatigueHeuristic(events, threshold, time.Duration(windowSeconds)*time.Second)
 			obs = phishbridge.FromMFAFatigueHeuristic(verdict, detail)
 		}
@@ -65,7 +70,11 @@ func executePHID004(ctx context.Context, env PhishingRunExecutorEnv, runID strin
 	if err != nil {
 		return phishval.Outcome{}, err
 	}
-	return phishval.Evaluate(runID, "", catalogExp, obs), nil
+	outcome := phishval.Evaluate(runID, "", catalogExp, obs)
+	if unavailable != "" {
+		explainUnavailable(&outcome, unavailable)
+	}
+	return outcome, nil
 }
 
 // executePHID005 runs PH-ID-005 (session theft response), an EXPERIMENTAL
@@ -87,11 +96,18 @@ func executePHID005(ctx context.Context, env PhishingRunExecutorEnv, runID strin
 	}
 
 	var obs phishval.Observation
-	if env.IdentityReader != nil {
+	var unavailable string
+	if env.IdentityReader == nil {
+		unavailable = identityUnavailable("the identity connector is not configured", nil, "sign-in risk and session evidence")
+	} else {
 		risky, err := env.IdentityReader.RiskySignInsForUser(ctx, userID)
-		if err == nil {
+		if err != nil {
+			unavailable = identityUnavailable("", err, "risky sign-in evidence")
+		} else {
 			validFrom, err := env.IdentityReader.SignInSessionsValidFromDateTime(ctx, userID)
-			if err == nil {
+			if err != nil {
+				unavailable = identityUnavailable("", err, "the session revocation time (the $select permission is unconfirmed)")
+			} else {
 				verdict, detail := phishidentity.DetectSessionTheftResponseHeuristic(risky, validFrom, time.Duration(windowSeconds)*time.Second)
 				obs = phishbridge.FromSessionTheftResponseHeuristic(verdict, detail)
 			}
@@ -102,5 +118,29 @@ func executePHID005(ctx context.Context, env PhishingRunExecutorEnv, runID strin
 	if err != nil {
 		return phishval.Outcome{}, err
 	}
-	return phishval.Evaluate(runID, "", catalogExp, obs), nil
+	outcome := phishval.Evaluate(runID, "", catalogExp, obs)
+	if unavailable != "" {
+		explainUnavailable(&outcome, unavailable)
+	}
+	return outcome, nil
+}
+
+// identityUnavailable states why identity evidence is missing. With no reader, the
+// connector is not configured. With an error, the read was refused or failed, which
+// usually means a missing consent. Neither is a control outcome.
+func identityUnavailable(reason string, err error, what string) string {
+	if err == nil {
+		return "unavailable: " + reason + ", so " + what + " was not read"
+	}
+	return fmt.Sprintf("unavailable: %s could not be read (missing consent or a Graph error), so no control outcome is recorded: %v", what, err)
+}
+
+// explainUnavailable states the cause on every dimension that has no result. The
+// verdicts are unchanged. Only the reason says what is missing.
+func explainUnavailable(o *phishval.Outcome, cause string) {
+	for _, d := range []*phishval.DimensionResult{&o.Delivery, &o.Enforcement, &o.Detection, &o.UserInteraction, &o.Response} {
+		if d.Verdict == phishval.VerdictNotTested {
+			d.Reason = cause
+		}
+	}
 }

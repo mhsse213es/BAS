@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
@@ -16,6 +17,7 @@ import (
 	"github.com/audspect/bas/internal/emailgwefficacy"
 	"github.com/audspect/bas/internal/emailgwrun"
 	"github.com/audspect/bas/internal/phishingrun"
+	"github.com/audspect/bas/internal/phishval"
 )
 
 // phishDispatchTimeout bounds how long a dispatched EmailGW run may stay open. A run
@@ -31,11 +33,34 @@ type dispatchRecord struct {
 	EmailGWScenarioID string    `json:"emailGwScenarioId"`
 	Environment       string    `json:"environment"`
 	Recipient         string    `json:"recipient"`
+	CampaignID        string    `json:"campaignId,omitempty"`
+	TestWindowEnd     time.Time `json:"testWindowEnd,omitempty"`
 	DispatchedAt      time.Time `json:"dispatchedAt,omitempty"`
 }
 
 type dispatchResultEnvelope struct {
 	Dispatch dispatchRecord `json:"dispatch"`
+}
+
+// dispatchTestWindow reads the operator's test window: the time the EmailGW run's
+// observation should end. It is an explicit RFC 3339 instant. The length from now must
+// fall inside the EmailGW dwell bounds. An out-of-bounds window is refused, never clamped
+// silently, so the operator sees the window they actually get.
+func dispatchTestWindow(params map[string]any, now time.Time) (time.Duration, time.Time, error) {
+	raw, _ := params["testWindowEnd"].(string)
+	if raw == "" {
+		return 0, time.Time{}, errors.New("phishingrun: dispatch requires testWindowEnd (RFC 3339) for the test window")
+	}
+	end, err := time.Parse(time.RFC3339, raw)
+	if err != nil {
+		return 0, time.Time{}, fmt.Errorf("phishingrun: testWindowEnd must be RFC 3339: %w", err)
+	}
+	dwell := end.Sub(now)
+	if dwell < MinEmailGWDwellWindow || dwell > MaxEmailGWDwellWindow {
+		return 0, time.Time{}, fmt.Errorf("phishingrun: test window of %s is outside the EmailGW bounds of %s to %s",
+			dwell.Round(time.Second), MinEmailGWDwellWindow, MaxEmailGWDwellWindow)
+	}
+	return dwell, end.UTC(), nil
 }
 
 // preflightDispatch checks an operator's dispatch request before anything is sent. It
@@ -85,6 +110,12 @@ func startPhishingDispatch(ctx context.Context, pool *pgxpool.Pool, env Phishing
 	if err != nil {
 		return nil, err
 	}
+	now := time.Now().UTC()
+	dwell, testEnd, err := dispatchTestWindow(req.Parameters, now)
+	if err != nil {
+		return nil, err
+	}
+	campaignID, _ := req.Parameters["campaignId"].(string)
 	environment := env.EmailGWEnvironment
 	if environment == "" {
 		environment = emailgwrun.EnvironmentLab
@@ -92,6 +123,7 @@ func startPhishingDispatch(ctx context.Context, pool *pgxpool.Pool, env Phishing
 
 	pending, err := json.Marshal(dispatchResultEnvelope{Dispatch: dispatchRecord{
 		IdempotencyKey: key, EmailGWScenarioID: egID, Environment: string(environment), Recipient: recipients[0],
+		CampaignID: campaignID, TestWindowEnd: testEnd,
 	}})
 	if err != nil {
 		return nil, fmt.Errorf("phishingrun: marshal dispatch record: %w", err)
@@ -109,7 +141,7 @@ func startPhishingDispatch(ctx context.Context, pool *pgxpool.Pool, env Phishing
 	}
 
 	egRun, err := ExecuteEmailGWRun(ctx, pool, env.EmailGWProvider, env.EmailGWTarget, env.EmailGWOutbound,
-		environment, EmailGWRunRequest{ScenarioID: egID, InitiatedBy: req.InitiatedBy})
+		environment, EmailGWRunRequest{ScenarioID: egID, InitiatedBy: req.InitiatedBy, DwellWindowSeconds: int(dwell.Seconds())})
 	if err != nil || egRun == nil {
 		msg := "EmailGW dispatch returned no run"
 		if err != nil {
@@ -123,7 +155,8 @@ func startPhishingDispatch(ctx context.Context, pool *pgxpool.Pool, env Phishing
 
 	record := dispatchRecord{
 		IdempotencyKey: key, EmailGWRunID: egRun.ID, EmailGWScenarioID: egID,
-		Environment: string(environment), Recipient: recipients[0], DispatchedAt: time.Now().UTC(),
+		Environment: string(environment), Recipient: recipients[0], CampaignID: campaignID, TestWindowEnd: testEnd,
+		DispatchedAt: time.Now().UTC(),
 	}
 	result, err := json.Marshal(dispatchResultEnvelope{Dispatch: record})
 	if err != nil {
@@ -163,11 +196,12 @@ func refreshPhishingDispatch(ctx context.Context, pool *pgxpool.Pool, env Phishi
 		return run, nil
 	}
 	egRunID := env2.Dispatch.EmailGWRunID
+	rec := env2.Dispatch
 
 	var egStatus string
 	if err := pool.QueryRow(ctx, `SELECT status FROM email_gw_runs WHERE id = $1`, egRunID).Scan(&egStatus); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return finishDispatch(ctx, pool, run, run.Result, phishingrun.StatusFailed,
+			return settleDispatch(ctx, pool, run, rec, run.Result, phishingrun.StatusFailed,
 				fmt.Sprintf("the dispatched EmailGW run %s no longer exists", egRunID))
 		}
 		return run, fmt.Errorf("phishingrun: read EmailGW run %s: %w", egRunID, err)
@@ -177,24 +211,24 @@ func refreshPhishingDispatch(ctx context.Context, pool *pgxpool.Pool, env Phishi
 	case "completed":
 		exec, ok := LookupPhishingRunExecutor(run.ScenarioID)
 		if !ok {
-			return finishDispatch(ctx, pool, run, run.Result, phishingrun.StatusFailed, "scenario is no longer executable")
+			return settleDispatch(ctx, pool, run, rec, run.Result, phishingrun.StatusFailed, "scenario is no longer executable")
 		}
 		outcome, err := exec(ctx, env, run.ID, map[string]any{"emailGwRunId": egRunID})
 		if err != nil {
-			return finishDispatch(ctx, pool, run, run.Result, phishingrun.StatusFailed, err.Error())
+			return settleDispatch(ctx, pool, run, rec, run.Result, phishingrun.StatusFailed, err.Error())
 		}
 		raw, err := json.Marshal(outcome)
 		if err != nil {
 			return run, fmt.Errorf("phishingrun: marshal outcome: %w", err)
 		}
-		return finishDispatch(ctx, pool, run, raw, phishingrun.StatusCompleted, "")
+		return settleDispatch(ctx, pool, run, rec, raw, phishingrun.StatusCompleted, "")
 	case "failed", "partial":
-		return finishDispatch(ctx, pool, run, run.Result, phishingrun.StatusFailed,
+		return settleDispatch(ctx, pool, run, rec, run.Result, phishingrun.StatusFailed,
 			fmt.Sprintf("the dispatched EmailGW run ended as %s, so there is no complete evidence to grade", egStatus))
 	}
 
 	if time.Since(env2.Dispatch.DispatchedAt) > phishDispatchTimeout {
-		return finishDispatch(ctx, pool, run, run.Result, phishingrun.StatusFailed,
+		return settleDispatch(ctx, pool, run, rec, run.Result, phishingrun.StatusFailed,
 			fmt.Sprintf("timed out after %s waiting for EmailGW run %s", phishDispatchTimeout, egRunID))
 	}
 	return run, nil
@@ -210,4 +244,81 @@ func finishDispatch(ctx context.Context, pool *pgxpool.Pool, run *phishingrun.Ph
 	now := time.Now().UTC()
 	run.CompletedAt = &now
 	return run, nil
+}
+
+// dispatchOutcomeFrom decodes a settled dispatch's stored outcome.
+func dispatchOutcomeFrom(raw []byte) (phishval.Outcome, error) {
+	var o phishval.Outcome
+	err := json.Unmarshal(raw, &o)
+	return o, err
+}
+
+// settleDispatch moves a dispatched run to its final state and records one audit entry
+// for the settlement. The entry names the EmailGW run, the campaign context, and the
+// test window, so the settlement can be traced to the operator's request.
+func settleDispatch(ctx context.Context, pool *pgxpool.Pool, run *phishingrun.PhishingRun, rec dispatchRecord, result []byte, status phishingrun.Status, errMsg string) (*phishingrun.PhishingRun, error) {
+	out, err := finishDispatch(ctx, pool, run, result, status, errMsg)
+	if err != nil {
+		return out, err
+	}
+	detail, _ := json.Marshal(map[string]any{
+		"status":        string(status),
+		"emailGwRunId":  rec.EmailGWRunID,
+		"campaignId":    rec.CampaignID,
+		"testWindowEnd": rec.TestWindowEnd,
+		"error":         errMsg,
+	})
+	_, _ = pool.Exec(ctx,
+		`INSERT INTO audit_logs (actor_id, action, resource, detail, ip, outcome)
+		 VALUES ($1, 'phishingrun.dispatch.settled', $2, $3, '', $4)`,
+		run.InitiatedBy, run.ID, detail, map[bool]string{true: "ok", false: "error"}[status == phishingrun.StatusCompleted])
+	return out, nil
+}
+
+// RunPhishingDispatchPoller settles dispatched runs on a timer, so a dispatch finishes
+// even when nobody reads it. It stops when ctx is cancelled. Startup runs it beside
+// EmailGW recovery.
+func RunPhishingDispatchPoller(ctx context.Context, pool *pgxpool.Pool, every time.Duration) {
+	t := time.NewTicker(every)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			if err := RefreshPhishingDispatches(ctx, pool, PhishingRunExecutorEnv{Pool: pool}); err != nil {
+				log.Printf("[!] phishing dispatch refresh: %v", err)
+			}
+		}
+	}
+}
+
+// RefreshPhishingDispatches settles every running dispatch once. It is the poller's
+// unit of work, and tests call it directly.
+func RefreshPhishingDispatches(ctx context.Context, pool *pgxpool.Pool, env PhishingRunExecutorEnv) error {
+	rows, err := pool.Query(ctx,
+		`SELECT id FROM phishing_runs WHERE status = 'running' AND result->'dispatch' IS NOT NULL`)
+	if err != nil {
+		return fmt.Errorf("phishingrun: list dispatched runs: %w", err)
+	}
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return fmt.Errorf("phishingrun: scan dispatched run: %w", err)
+		}
+		ids = append(ids, id)
+	}
+	rows.Close()
+	for _, id := range ids {
+		run, err := db.GetPhishingRun(ctx, pool, id)
+		if err != nil {
+			return fmt.Errorf("phishingrun: load dispatched run %s: %w", id, err)
+		}
+		if _, err := refreshPhishingDispatch(ctx, pool, env, run); err != nil {
+			return fmt.Errorf("phishingrun: refresh dispatched run %s: %w", id, err)
+		}
+	}
+	return nil
 }

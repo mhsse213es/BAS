@@ -982,6 +982,9 @@ func main() {
 				log.Printf("[!] emailgw campaign recovery: %v", err)
 			}
 		}()
+		// Settles phishing dispatches whose EmailGW run finished while nobody was reading
+		// them. A dispatch that is never read would otherwise stay running.
+		go api.RunPhishingDispatchPoller(context.Background(), pool, time.Minute)
 	}
 
 	// Content registry migration marker: only after a clean scenario load with zero intake

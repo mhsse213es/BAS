@@ -12,7 +12,8 @@ import { loadUsers } from './evidence.js';
 import { loadOpenAEVConfig, renderAttackPath } from './openaev.js';
 import { loadRuns, loadSIEMCorrelationPanel, openModal } from './reports.js';
 import { SCHED, renderScheduledAssessmentsList } from './scheduled.js';
-import { LIBRARY_TYPE_PHISHING, buildPhishingRunRequest, libraryEntryRoute, phishingLibraryCounts, showNoScenariosMessage } from './scenario-library-route.js';
+import { describePhishingRun } from './phishing-run-view.js';
+import { LIBRARY_TYPE_PHISHING, buildDispatchFields, buildPhishingRunRequest, libraryEntryRoute, phishingLibraryCounts, showNoScenariosMessage } from './scenario-library-route.js';
 import { ROLE, STRIPE_COLORS, scenarioSrcCollapsed, setAgentsView, showTab } from './shell.js';
 import { loadARTContentStatus, loadConnectorStatus, loadTAXIIConnectors, loadThreatIntelConfig } from './threat-intel.js';
 import { displayOf, setCssText, setDisplay } from '../core/inline-style.js';
@@ -2593,6 +2594,32 @@ function renderPhishingLibrary() {
   grid.innerHTML = tiles.length
     ? '<div class="sc-fade"><div class="sc-tile-grid">' + tiles.join('') + '</div>' + form + '</div>'
     : '<p class="empty">No phishing scenarios are catalogued.</p>';
+  renderPhishingRunResults(grid);
+}
+
+// Recent phishing runs, below the library. Each run is described by
+// phishing-run-view.js, so PH-ID-001 behavior and Inconclusive results are worded there.
+function renderPhishingRunResults(grid) {
+  var box = document.getElementById('phishing-run-results');
+  if (!box) {
+    box = document.createElement('div');
+    box.id = 'phishing-run-results';
+    grid.parentNode.insertBefore(box, grid.nextSibling);
+  }
+  apicall('/api/phishing-runs').then(function(runs) {
+    var rows = (runs || []).map(function(run) {
+      var view = describePhishingRun(run);
+      var cells = view.rows.map(function(r) {
+        return '<li class="phish-row phish-' + x(r.tone) + '"><strong>' + x(r.label) + ':</strong> ' + x(r.text) + '</li>';
+      }).join('');
+      var note = view.note ? '<p class="phish-note">' + x(view.note) + '</p>' : '';
+      return '<div class="phish-run"><h4>' + x(view.scenarioId) + ' <span class="phish-status">' + x(view.status) + '</span></h4>' +
+        note + (cells ? '<ul>' + cells + '</ul>' : '') + '</div>';
+    });
+    box.innerHTML = rows.length ? '<h3>Recent phishing runs</h3>' + rows.join('') : '';
+  }).catch(function() {
+    box.innerHTML = '<p class="empty">Recent phishing runs could not be loaded.</p>';
+  });
 }
 
 // Index of the phishing entry whose parameter form is open, or null.
@@ -2607,14 +2634,31 @@ function phishingFormHTML(entry) {
       '<input type="' + type + '" data-param="' + x(spec.name) + '"' +
       (type === 'number' ? ' min="1" step="1"' : '') + '></label>';
   }).join('');
-  return '<div class="sc-phishing-form" data-form-for="' + x(entry.id) + '">' + fields +
+  // Dispatch is opt-in. Ticking it sends a real test email to the scenario's fixed test
+  // recipient through EmailGW, so the wording says so.
+  var dispatch = '<fieldset class="sc-dispatch"><legend>Real EmailGW dispatch</legend>' +
+    '<label class="sc-param"><input type="checkbox" data-dispatch="toggle"> Send a real test email through EmailGW (sends mail to the scenario\'s fixed test recipient)</label>' +
+    '<label class="sc-param">Test window ends<input type="datetime-local" data-dispatch="testWindowEnd"></label>' +
+    '<label class="sc-param">Campaign (optional)<input type="text" data-dispatch="campaignId"></label>' +
+    '</fieldset>';
+  return '<div class="sc-phishing-form" data-form-for="' + x(entry.id) + '">' + fields + dispatch +
     '<button type="button" data-library-submit>Run</button> ' +
     '<button type="button" data-library-cancel>Cancel</button></div>';
+}
+
+// One idempotency key per open form. A retry after a failed request reuses it, so a
+// dispatch can never be sent twice. It is cleared only after a successful submit.
+var _dispatchKey = null;
+
+function newDispatchKey() {
+  if (window.crypto && window.crypto.randomUUID) return window.crypto.randomUUID();
+  return 'k-' + Date.now() + '-' + Math.random().toString(36).slice(2);
 }
 
 function onPhishingLibraryClick(event) {
   var target = event.target;
   if (target.closest && target.closest('[data-library-cancel]')) {
+    _dispatchKey = null;
     _phishingFormIndex = null;
     renderPhishingLibrary();
     return;
@@ -2644,9 +2688,23 @@ function submitPhishingForm() {
     showToast('Check these fields: ' + built.errors.join(', '), 'err');
     return;
   }
+  var dispatchValues = {};
+  el.querySelectorAll('[data-dispatch]').forEach(function(input) {
+    var key = input.getAttribute('data-dispatch');
+    dispatchValues[key] = input.type === 'checkbox' ? input.checked : input.value;
+  });
+  dispatchValues.dispatch = dispatchValues.toggle === true;
+  if (dispatchValues.dispatch && !_dispatchKey) _dispatchKey = newDispatchKey();
+  var fields = buildDispatchFields(dispatchValues, Date.now(), _dispatchKey);
+  if (!fields.ok) {
+    showToast('Check the dispatch fields: ' + fields.errors.join(', '), 'err');
+    return;
+  }
+  Object.assign(built.body.parameters, fields.fields);
   apicall('/api/phishing-runs', { method: 'POST', body: JSON.stringify(built.body) })
     .then(function() {
       showToast('Phishing run started: ' + built.body.scenarioId, 'ok');
+      _dispatchKey = null;
       _phishingFormIndex = null;
       renderPhishingLibrary();
     })

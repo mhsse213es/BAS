@@ -66,3 +66,34 @@ export function phishingLibraryCounts(entries) {
 export function showNoScenariosMessage(agentCount, entries) {
   return agentCount === 0 && phishingLibraryCounts(entries).total === 0;
 }
+
+// Dispatch bounds, mirroring the server's EmailGW dwell window (30 seconds to 2 hours).
+// The server is the authority and refuses anything outside them. This check is for the form.
+export const DISPATCH_MIN_MS = 30 * 1000;
+export const DISPATCH_MAX_MS = 2 * 60 * 60 * 1000;
+
+// Builds the dispatch fields for a phishing run. Dispatch is opt-in: with the box
+// unticked, nothing is added and the run is a normal run. With it ticked, the test
+// window and an idempotency key are required, and the campaign is optional.
+export function buildDispatchFields(values, nowMs, idempotencyKey) {
+  if (!values || values.dispatch !== true) return { ok: true, fields: {} };
+  const errors = [];
+  const local = typeof values.testWindowEnd === 'string' ? values.testWindowEnd.trim() : '';
+  const endMs = local ? new Date(local).getTime() : NaN;
+  if (Number.isNaN(endMs)) {
+    errors.push('testWindowEnd');
+  } else {
+    const dwell = endMs - nowMs;
+    if (dwell < DISPATCH_MIN_MS || dwell > DISPATCH_MAX_MS) errors.push('testWindowEnd');
+  }
+  if (!idempotencyKey) errors.push('idempotencyKey');
+  if (errors.length) return { ok: false, errors };
+  const fields = {
+    dispatch: true,
+    idempotencyKey,
+    testWindowEnd: new Date(endMs).toISOString().replace(/\.\d{3}Z$/, 'Z'),
+  };
+  const campaign = typeof values.campaignId === 'string' ? values.campaignId.trim() : '';
+  if (campaign) fields.campaignId = campaign;
+  return { ok: true, fields };
+}

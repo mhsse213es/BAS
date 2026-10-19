@@ -155,6 +155,10 @@ func ExecuteEmailGWRun(ctx context.Context, pool *pgxpool.Pool, provider emailgw
 	}
 }
 
+// injectScenarioMessageFn is the real SMTP injection call. Tests replace it so the
+// inbound send path can run without a mail server. Production never reassigns it.
+var injectScenarioMessageFn = emailgwefficacy.InjectScenarioMessage
+
 func executeEmailGWRunInbound(ctx context.Context, pool *pgxpool.Pool, provider emailgwefficacy.MailEvidenceProvider, target emailgwefficacy.InjectionTarget, outboundSender emailgwefficacy.OutboundSender, environment emailgwrun.Environment, req EmailGWRunRequest, exp emailgwefficacy.MailExpectation, content emailgwefficacy.InjectableMessage) (*emailgwrun.EmailGWRun, error) {
 	if environment == "" {
 		environment = emailgwrun.EnvironmentLab
@@ -173,7 +177,7 @@ func executeEmailGWRunInbound(ctx context.Context, pool *pgxpool.Pool, provider 
 		return nil, err
 	}
 
-	observation, err := emailgwefficacy.InjectScenarioMessage(ctx, target, exp, content)
+	observation, err := injectScenarioMessageFn(ctx, target, exp, content)
 	if err != nil {
 		_ = db.UpdateEmailGWRunStatus(ctx, pool, run.ID, emailgwrun.StatusFailed, nil, err.Error(), time.Time{})
 		return currentEmailGWRunOrNil(ctx, pool, run.ID), fmt.Errorf("email gw run %s: %w", run.ID, err)
