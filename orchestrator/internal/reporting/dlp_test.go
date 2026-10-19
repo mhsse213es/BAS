@@ -286,7 +286,7 @@ func TestEvidenceByTechnique_PopulatesStepName(t *testing.T) {
 	results := []models.SimulationResult{
 		{ID: "T1567", StepName: "DLP Validation — HTTPS Exfiltration of Visa Card Record (T1567)", RawOutput: "x"},
 	}
-	ev := evidenceByTechnique(results)
+	ev := evidenceByTaskID(results)
 	got := ev["T1567"]
 	if got.StepName != "DLP Validation — HTTPS Exfiltration of Visa Card Record (T1567)" {
 		t.Errorf("StepName = %q, want the real step name carried through", got.StepName)

@@ -159,10 +159,10 @@ func (j *Job) processRun(ctx context.Context, runID, scenarioID string, resultsR
 // database -- internal/reporting stays a pure function throughout.
 func (j *Job) annotateSinkReceipts(ctx context.Context, runID string, results []models.SimulationResult) error {
 	rows, err := j.db.Query(ctx,
-		`SELECT t.technique_id, EXISTS (
+		`SELECT t.step_task_id, EXISTS (
 		   SELECT 1 FROM dlp_sink_receipts r WHERE r.token = t.token
 		 ) AS received
-		 FROM dlp_sink_tokens t WHERE t.run_id = $1`,
+		 FROM dlp_sink_tokens t WHERE t.run_id = $1 AND t.step_task_id <> ''`,
 		runID,
 	)
 	if err != nil {
@@ -170,13 +170,13 @@ func (j *Job) annotateSinkReceipts(ctx context.Context, runID string, results []
 	}
 	observed := map[string]bool{}
 	for rows.Next() {
-		var techniqueID string
+		var stepTaskID string
 		var received bool
-		if err := rows.Scan(&techniqueID, &received); err != nil {
+		if err := rows.Scan(&stepTaskID, &received); err != nil {
 			rows.Close()
 			return err
 		}
-		observed[techniqueID] = received
+		observed[stepTaskID] = observed[stepTaskID] || received
 	}
 	rows.Close()
 	if err := rows.Err(); err != nil {

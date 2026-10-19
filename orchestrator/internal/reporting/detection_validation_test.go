@@ -101,6 +101,7 @@ func TestAutomaticVerifier_ThreadsRuleIDs(t *testing.T) {
 func TestComputeAutomaticVerifications(t *testing.T) {
 	specs := []StepDetectionSpec{
 		{
+			TaskID:      "T1055",
 			TechniqueID: "T1055",
 			Expected:    []scenario.ExpectedDetection{endpointExp("e1", "microsoft_defender", scenario.ConfidenceRequired)},
 		},
@@ -163,6 +164,7 @@ func TestResolveStepDetectionSpecs(t *testing.T) {
 func TestBuildDetectionValidationScoring(t *testing.T) {
 	specs := []StepDetectionSpec{
 		{
+			TaskID:      "T1003.002",
 			TechniqueID: "T1003.002",
 			Telemetry:   []string{"Security EID 4688: reg.exe", "Sysmon EID 13: registry write"},
 			Expected: []scenario.ExpectedDetection{
@@ -170,6 +172,7 @@ func TestBuildDetectionValidationScoring(t *testing.T) {
 			},
 		},
 		{
+			TaskID:      "T1090.001",
 			TechniqueID: "T1090.001",
 			Telemetry:   []string{"Sysmon EID 1: netsh.exe"},
 			Expected: []scenario.ExpectedDetection{
@@ -251,6 +254,7 @@ func siemExp(id string) scenario.ExpectedDetection {
 
 func TestBuildDetectionValidationStoreOverlay(t *testing.T) {
 	specs := []StepDetectionSpec{{
+		TaskID:      "T1078",
 		TechniqueID: "T1078",
 		Expected:    []scenario.ExpectedDetection{siemExp("siem-signin")},
 	}}
@@ -300,6 +304,7 @@ func TestBuildDetectionValidationStoreOverlay(t *testing.T) {
 
 func TestUnexpectedDetection(t *testing.T) {
 	specs := []StepDetectionSpec{{
+		TaskID:      "T1059.001",
 		TechniqueID: "T1059.001",
 		Expected:    []scenario.ExpectedDetection{endpointExp("req", "microsoft_defender", scenario.ConfidenceRequired)},
 	}}
@@ -326,6 +331,7 @@ func TestUnexpectedDetection(t *testing.T) {
 func TestBuildDetectionValidationGoldenOutput(t *testing.T) {
 	specs := []StepDetectionSpec{
 		{
+			TaskID:      "T1003.002",
 			TechniqueID: "T1003.002",
 			ProfileRefs: []scenario.ProfileRef{{Profile: "windows_credential_access", Version: 2}},
 			Expected: []scenario.ExpectedDetection{
@@ -333,18 +339,21 @@ func TestBuildDetectionValidationGoldenOutput(t *testing.T) {
 			},
 		},
 		{
+			TaskID:      "T1562.001",
 			TechniqueID: "T1562.001",
 			Expected: []scenario.ExpectedDetection{
 				endpointExp("ep-mismatch", "microsoft_defender", scenario.ConfidenceRequired),
 			},
 		},
 		{
+			TaskID:      "T1090.001",
 			TechniqueID: "T1090.001",
 			Expected: []scenario.ExpectedDetection{
 				{ID: "net-unknown", Provider: "microsoft_sentinel", Type: scenario.DomainNetwork, Verification: scenario.VerificationAutomatic, Confidence: scenario.ConfidenceRequired, Finding: scenario.ExpectedFinding{Title: "t", Severity: "High"}},
 			},
 		},
 		{
+			TaskID:      "T1055",
 			TechniqueID: "T1055",
 			Expected: []scenario.ExpectedDetection{
 				endpointExp("ep-optional", "crowdstrike", scenario.ConfidenceOptional),
@@ -424,7 +433,7 @@ func TestEvidenceByTechnique_PassesThroughChannelOverrideConnectivity(t *testing
 		OverrideOccurred: true, OverrideAuthorizedBy: "jdoe", OverrideReason: "business need", OverrideAuditRecordID: "aud-1",
 		ConnectivityOnline: boolPtr(false), ConnectivityPolicyVersion: "v12", ConnectivityLastSyncedAt: ts,
 	}}
-	got := evidenceByTechnique(results)
+	got := evidenceByTaskID(results)
 	ev, ok := got["T1048"]
 	if !ok {
 		t.Fatal("no evidence for T1048")
@@ -445,7 +454,7 @@ func TestEvidenceByTechnique_DedupDropsNonWinningStepsNewFields(t *testing.T) {
 		{ID: "T1048", StepName: "step-a", Channel: "api", DetectionVerdict: ""},
 		{ID: "T1048", StepName: "step-b", Channel: "browser", DetectionVerdict: "prevented"},
 	}
-	got := evidenceByTechnique(results)
+	got := evidenceByTaskID(results)
 	ev, ok := got["T1048"]
 	if !ok {
 		t.Fatal("no evidence for T1048")

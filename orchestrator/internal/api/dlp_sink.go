@@ -57,8 +57,8 @@ func (h *Handler) issueSinkTokensAndSubstitute(ctx context.Context, runID, publi
 			}
 			expiresAt := time.Now().Add(sinkTokenTTL)
 			if _, err := h.db.Exec(ctx,
-				`INSERT INTO dlp_sink_tokens (token, run_id, technique_id, expires_at) VALUES ($1, $2, $3, $4)`,
-				token, runID, steps[i].TechniqueID, expiresAt,
+				`INSERT INTO dlp_sink_tokens (token, run_id, technique_id, step_task_id, expires_at) VALUES ($1, $2, $3, $4, $5)`,
+				token, runID, steps[i].TechniqueID, steps[i].TaskID, expiresAt,
 			); err != nil {
 				return nil, fmt.Errorf("persist sink token: %w", err)
 			}
@@ -73,8 +73,8 @@ func (h *Handler) issueSinkTokensAndSubstitute(ctx context.Context, runID, publi
 			}
 			expiresAt := time.Now().Add(sinkTokenTTL)
 			if _, err := h.db.Exec(ctx,
-				`INSERT INTO dlp_sink_tokens (token, run_id, technique_id, expires_at) VALUES ($1, $2, $3, $4)`,
-				campaignID, runID, steps[i].TechniqueID, expiresAt,
+				`INSERT INTO dlp_sink_tokens (token, run_id, technique_id, step_task_id, expires_at) VALUES ($1, $2, $3, $4, $5)`,
+				campaignID, runID, steps[i].TechniqueID, steps[i].TaskID, expiresAt,
 			); err != nil {
 				return nil, fmt.Errorf("persist dns sink token: %w", err)
 			}

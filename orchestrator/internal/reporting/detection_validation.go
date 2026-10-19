@@ -59,7 +59,7 @@ type StepEvidence struct {
 	// StepName mirrors models.SimulationResult.StepName -- the specific
 	// dispatched step's own real name, as opposed to TechniqueID's generic
 	// ATT&CK catalog identifier. Carried through the same TechniqueID-keyed
-	// collapse as every other field here (see evidenceByTechnique): when
+	// collapse as every other field here (see evidenceByTaskID): when
 	// several steps share a technique, this is the name of whichever one's
 	// record won that collapse, consistent with its RawOutput/Events/etc.
 	// Used by dlpVerifier for exact (never inferred) dlpfixture lookup.
@@ -284,6 +284,10 @@ func providerMatches(expKey, observed string) bool {
 // its expected telemetry, as authored/resolved from detection profiles. The
 // caller correlates these to run results by TechniqueID.
 type StepDetectionSpec struct {
+	// TaskID is the step's dispatch identity (scenario.TaskID after dedupe).
+	// Evidence is matched on it, never on TechniqueID: several steps may share
+	// a technique, and results carry the task ID as their ID.
+	TaskID      string
 	TechniqueID string
 	Expected    []scenario.ExpectedDetection
 	Telemetry   []string
@@ -302,10 +306,10 @@ type StepDetectionSpec struct {
 // the byte-identical-report guarantee TestBuildDetectionValidationGoldenOutput
 // protects.
 func ComputeAutomaticVerifications(specs []StepDetectionSpec, results []models.SimulationResult) []VerificationResult {
-	evByTech := evidenceByTechnique(results)
+	evByTask := evidenceByTaskID(results)
 	var out []VerificationResult
 	for _, spec := range specs {
-		ev := evByTech[spec.TechniqueID]
+		ev := evByTask[spec.TaskID]
 		ev.TechniqueID = spec.TechniqueID
 		for _, exp := range spec.Expected {
 			out = append(out, verifyExpectation(exp, ev))
@@ -324,12 +328,14 @@ func ResolveStepDetectionSpecs(scenarios ScenarioResolver, scenarioID string) []
 		return nil
 	}
 	var specs []StepDetectionSpec
-	for _, step := range sc.Steps {
+	taskIDs := scenario.ResolvedTaskIDs(sc.Steps)
+	for i, step := range sc.Steps {
 		exp, refs := scenarios.ResolveStepExpectations(step)
 		if len(exp) == 0 {
 			continue
 		}
 		specs = append(specs, StepDetectionSpec{
+			TaskID:      taskIDs[i],
 			TechniqueID: step.TechniqueID,
 			Expected:    exp,
 			Telemetry:   step.Telemetry,
@@ -506,7 +512,7 @@ func BuildDetectionValidationWithStore(specs []StepDetectionSpec, results []mode
 	}
 	sec.HasData = true
 
-	evByTech := evidenceByTechnique(results)
+	evByTask := evidenceByTaskID(results)
 	domAgg := map[string]*domainAcc{}
 	profSet := map[string]int{}
 
@@ -514,7 +520,7 @@ func BuildDetectionValidationWithStore(specs []StepDetectionSpec, results []mode
 	var telExpected, telPresent int
 
 	for _, spec := range specs {
-		ev := evByTech[spec.TechniqueID]
+		ev := evByTask[spec.TaskID]
 		ev.TechniqueID = spec.TechniqueID
 		ev.ExpectedTelemetry = spec.Telemetry
 
@@ -669,11 +675,14 @@ type domainAcc struct {
 	covNum, covDen float64
 }
 
-func evidenceByTechnique(results []models.SimulationResult) map[string]StepEvidence {
+// evidenceByTaskID keys each step's evidence by its result ID, which is the
+// step's dispatch TaskID. Keying by technique collapsed same-technique steps
+// onto one result and missed every real result, whose ID is never a technique.
+func evidenceByTaskID(results []models.SimulationResult) map[string]StepEvidence {
 	out := map[string]StepEvidence{}
 	for _, r := range results {
 		ev := StepEvidence{
-			TechniqueID:               r.ID,
+			TechniqueID:               r.Technique.ID,
 			DetectionVerdict:          r.DetectionVerdict,
 			Events:                    r.Events,
 			RawOutput:                 r.RawOutput,

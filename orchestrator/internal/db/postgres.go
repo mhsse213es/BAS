@@ -1702,6 +1702,11 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 			expires_at timestamptz NOT NULL
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_dlp_sink_tokens_run_id ON dlp_sink_tokens (run_id)`,
+		// step_task_id is the step's dispatch TaskID, the key results carry.
+		// technique_id alone cannot attribute a receipt to one step when
+		// several steps share a technique. Pre-existing rows keep '' and are
+		// never matched, which is no worse than before.
+		`ALTER TABLE dlp_sink_tokens ADD COLUMN IF NOT EXISTS step_task_id text NOT NULL DEFAULT ''`,
 		`CREATE TABLE IF NOT EXISTS dlp_sink_receipts (
 			id bigserial PRIMARY KEY,
 			token text NOT NULL,

@@ -56,6 +56,25 @@ func dedupeStepIdentity(steps []ScenarioStep) {
 	}
 }
 
+// ResolvedTaskIDs returns the TaskID each declared step will carry after
+// dispatch, in input order. It applies the same rule as dedupeStepIdentity,
+// so a reporting-side spec can recover the identity of the result that step
+// produces without access to the dispatched steps.
+func ResolvedTaskIDs(steps []Step) []string {
+	seen := make(map[string]int, len(steps))
+	out := make([]string, len(steps))
+	for i, s := range steps {
+		key := s.TechniqueID + "|" + s.Name
+		seen[key]++
+		name := s.Name
+		if n := seen[key]; n > 1 {
+			name = fmt.Sprintf("%s (#%d)", s.Name, n)
+		}
+		out[i] = TaskID(s.TechniqueID, name)
+	}
+	return out
+}
+
 // StepMeta is the per-task metadata the server retains after dispatch so it can
 // interpret results from dynamically-built steps (ART/Caldera modes), whose
 // definitions are NOT stored in the scenario's static Steps. Persisted with the
