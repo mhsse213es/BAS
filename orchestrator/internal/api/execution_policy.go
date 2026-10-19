@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 
@@ -72,4 +73,13 @@ func (h *Handler) PutExecutionPolicyDefault(w http.ResponseWriter, r *http.Reque
 	}
 	h.auditLog(r, "execution-policy.default.update", "in-process", map[string]any{"inProcessPolicy": body.InProcessPolicy}, "ok")
 	jsonOK(w, map[string]any{"inProcessPolicy": body.InProcessPolicy})
+}
+
+// databaseNow returns the database server's current time. Use it when a
+// timestamp must be comparable with timestamps the database wrote, such as the
+// snapshot a paginated listing filters on.
+func (h *Handler) databaseNow(ctx context.Context) (time.Time, error) {
+	var now time.Time
+	err := h.db.QueryRow(ctx, `SELECT NOW()`).Scan(&now)
+	return now, err
 }

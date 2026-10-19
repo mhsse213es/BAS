@@ -1062,7 +1062,7 @@ func (h *Handler) getAgentsPaginated(w http.ResponseWriter, r *http.Request, lim
 		limit = 500
 	}
 
-	snapshot := time.Now()
+	var snapshot time.Time
 	var cursor agentCursor
 	if cursorParam != "" {
 		c, err := decodeAgentCursor(cursorParam)
@@ -1072,6 +1072,17 @@ func (h *Handler) getAgentsPaginated(w http.ResponseWriter, r *http.Request, lim
 		}
 		cursor = c
 		snapshot = cursor.Snapshot
+	} else {
+		// The first page takes its snapshot from the database clock, the same
+		// clock that stamps last_update. Taking it from this host's clock lets
+		// two clocks disagree: a freshly stamped agent can fall after the
+		// snapshot and disappear from the page.
+		var err error
+		snapshot, err = h.databaseNow(r.Context())
+		if err != nil {
+			jsonError(w, "read database time: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
 	}
 
 	var hasGroup bool

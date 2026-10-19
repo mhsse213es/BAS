@@ -17,6 +17,36 @@ Everything buildable without a live Windows lab or vendor tenant is complete, in
 | 3 | Security-product correlation | Local part done. Vendor correlation open | Sysmon telemetry is a separate fact mapped to the `avval` model (`appcontrol_avval.go`). Defender and SentinelOne correlation are open: they need tenant access. The `avval` mapping is intentionally not rendered yet; it is the seam for vendor correlation. |
 | 4 | Coverage matrix and reporting | Done for run reports and campaign reports | Section 18a in the run report (HTML and PDF). Campaign reports carry one section per child run, labelled with its host. |
 
+## Policy resolution and snapshot behaviour (2026-10-19)
+
+**When the policy is resolved.** Every dispatch resolves the in-process policy once, at dispatch time, and nowhere else. The order is:
+
+1. The policy given for that dispatch: the run-start request, or the campaign's execution policy.
+2. The installation default, set through `PUT /api/execution-policy/default` (admin only).
+3. Not stated, if neither is set. The in-process verdict then stays UNVERIFIED.
+
+**What is recorded.** The resolved value is sent to the agent and stored on the run (`scenario_runs.inprocess_policy`). That stored value is the run's snapshot.
+
+**What a change does.** Changing the installation default affects runs dispatched after the change. It never rewrites a finished run, whose verdict and snapshot stay as they were. Historical results are not recomputed from the current default.
+
+**Scheduled assessments.** A schedule has no policy of its own. Each time it fires, it dispatches a run that resolves the installation default at that moment, and records the value on that run. A schedule therefore does not preserve the policy it was created under. If a schedule must keep a fixed policy, that needs a schedule-level override, which is deferred.
+
+**Administration.** An admin can set the default from the Intel tab, in the "Execution policy (installation default)" card. The card uses `GET` and `PUT /api/execution-policy/default`. It is covered by four web unit tests, and by container-backed API tests for the default and for each dispatch's snapshot.
+
+**Investigation: `TestGetAgents_Paginated_SearchMatchesHostnameAgentIDAndGroupName`.** This test failed once in a full API-suite run. Both searches returned nothing. It passed alone, both before and after the change below, and ten repeated runs of the `TestGetAgents_` group passed. The cause is not fully proven.
+
+- *Confirmed in code.* The first page's snapshot was taken from the API host's clock (`time.Now()`). Rows are stamped by the database clock (`last_update DEFAULT NOW()`). The two clocks can disagree, so a freshly stamped agent can fall after the snapshot and vanish from the page.
+- *Measured.* Skew on this host is about ±2 ms. Seeding and then searching 60 agents excluded none of them. That does not reproduce the failure.
+- *Shared state checked.* No API tests run in parallel. Each test truncates every table when it finishes. Each test binary starts its own database container. No test overrides the clock.
+- *Change.* The first page now takes its snapshot from the database clock (`SELECT NOW()`). Cursor pages keep the snapshot they were issued with. This removes the dependency on the two clocks agreeing, whatever their skew. It does not prove the failing run was caused by skew.
+
+**Test stability.** Ten repeated runs of the agent-listing group passed after the change. The full `internal/api` suite has NOT passed. Four full runs (2026-10-19) each hung in test cleanup: the `TRUNCATE` in `testutil.truncateAll` never returned, at a different test each time, with no test failure before the hang. Investigation so far:
+
+- The first hypothesis, a leaked transaction holding a lock, was not supported. The hung goroutine was running in the pgx client in one run and waiting on the socket in another, and the context timeout on the `TRUNCATE` did not end the call.
+- A watchdog now stops waiting for a stuck `TRUNCATE` after 35 seconds and fails that test. In the fourth run the watchdog did not fire before the 50-minute limit, so the cause is not isolated.
+
+Until the cleanup hang is fixed, the full API suite is unverified. Do not treat it as stable.
+
 ## Closure status
 
 Each open item is one of three things: **Verified complete** (implementation and automated acceptance tests pass in this repo), **Blocked on environment or access** (the work is defined and the required real system is not available), or **Deferred by decision** (intentionally out of this release, with the impact stated).

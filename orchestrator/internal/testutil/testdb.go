@@ -331,9 +331,7 @@ func truncateAll(t *testing.T, pool *pgxpool.Pool) {
 	}
 	rows.Close()
 	for _, name := range tables {
-		if _, err := pool.Exec(ctx, `TRUNCATE TABLE "`+name+`" CASCADE`); err != nil {
-			t.Fatalf("testutil: truncate %s: %v", name, err)
-		}
+		truncateTable(t, pool, name)
 	}
 	// Truncation wiped the tenants bootstrap row. Restore the invariant
 	// EnsureSchema establishes ("a 'default' tenant always exists") so
