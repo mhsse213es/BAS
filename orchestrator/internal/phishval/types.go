@@ -261,4 +261,17 @@ type Outcome struct {
 	Detection       DimensionResult
 	UserInteraction DimensionResult
 	Response        DimensionResult
+	// Provenance links the grade to the exact EmailGW run it was read from. It is set
+	// only for a read-back grade, and it is nil otherwise.
+	Provenance *Provenance `json:"provenance,omitempty"`
+}
+
+// Provenance names the completed EmailGW run a read-back grade came from. The
+// operator supplies the run ID explicitly. Nothing picks "the latest run", so the
+// evidence being graded is unambiguous and auditable.
+type Provenance struct {
+	EmailGWRunID       string     `json:"emailGwRunId"`
+	EmailGWScenarioID  string     `json:"emailGwScenarioId"`
+	EmailGWEnvironment string     `json:"emailGwEnvironment"`
+	EmailGWCompletedAt *time.Time `json:"emailGwCompletedAt,omitempty"`
 }

@@ -71,17 +71,32 @@ func TestExecutePHEmailGWReadback_UnknownRun_Error(t *testing.T) {
 	})
 }
 
-func TestExecutePHEmailGWReadback_IncompleteRun_NotTested(t *testing.T) {
+// A completed run with no efficacy result has no evidence. It is refused, not graded
+// as NotTested, and nothing falls back to another run.
+func TestExecutePHEmailGWReadback_CompletedButNoResult_Refused(t *testing.T) {
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
-		seedEmailGWRun(t, pool, "eg-incomplete", "EG-002.known-good", nil)
+		seedEmailGWRun(t, pool, "eg-no-result", "EG-002.known-good", nil)
 		exec, _ := LookupPhishingRunExecutor("PH-BEC-001")
-		outcome, err := exec(context.Background(), PhishingRunExecutorEnv{Pool: pool}, "run-1",
-			map[string]any{"emailGwRunId": "eg-incomplete"})
-		if err != nil {
-			t.Fatalf("executor: %v", err)
+		_, err := exec(context.Background(), PhishingRunExecutorEnv{Pool: pool}, "run-1",
+			map[string]any{"emailGwRunId": "eg-no-result"})
+		if err == nil || !strings.Contains(err.Error(), "no efficacy result") {
+			t.Fatalf("a completed run without a result must be refused, got err=%v", err)
 		}
-		if outcome.Enforcement.Verdict != phishval.VerdictNotTested {
-			t.Errorf("Enforcement.Verdict = %q, want %q (no efficacy result is no evidence)", outcome.Enforcement.Verdict, phishval.VerdictNotTested)
+	})
+}
+
+// A run that has not completed is refused, whatever its scenario.
+func TestExecutePHEmailGWReadback_NotCompletedRun_Refused(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		if _, err := pool.Exec(context.Background(),
+			`INSERT INTO email_gw_runs (id, scenario_id, status) VALUES ('eg-running', 'EG-002.known-good', 'running')`); err != nil {
+			t.Fatalf("seed running run: %v", err)
+		}
+		exec, _ := LookupPhishingRunExecutor("PH-BEC-001")
+		_, err := exec(context.Background(), PhishingRunExecutorEnv{Pool: pool}, "run-1",
+			map[string]any{"emailGwRunId": "eg-running"})
+		if err == nil || !strings.Contains(err.Error(), "only a completed run") {
+			t.Fatalf("a running run must be refused, got err=%v", err)
 		}
 	})
 }
@@ -124,6 +139,10 @@ func TestExecutePHEmailGWReadback_CompletedKnownGoodRun_Pass(t *testing.T) {
 		}
 		if outcome.Enforcement.Verdict != phishval.VerdictPass {
 			t.Errorf("Enforcement.Verdict = %q, want %q for a control that quarantined a known-good run", outcome.Enforcement.Verdict, phishval.VerdictPass)
+		}
+		// The grade must name the exact run it came from.
+		if outcome.Provenance == nil || outcome.Provenance.EmailGWRunID != "eg-known-good" {
+			t.Errorf("Provenance = %+v, want the graded run eg-known-good", outcome.Provenance)
 		}
 	})
 }
