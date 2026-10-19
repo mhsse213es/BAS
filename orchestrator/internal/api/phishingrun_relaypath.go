@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -20,16 +21,18 @@ var (
 	relayPathRelayIDs  = []string{"EG-016.relay-path.relay.known-good", "EG-016.relay-path.relay.known-bad"}
 )
 
-// loadRelayPathLeg loads one leg's EmailGW run and decodes its observation.
-// graded is false when the run has no efficacy result yet, and the observation
-// is then empty, which Evaluate reports as NotTested.
-func loadRelayPathLeg(ctx context.Context, pool *pgxpool.Pool, egRunID string, allowed []string) (obs phishval.Observation, graded bool, err error) {
-	var gotEG string
+// loadRelayPathLeg loads one leg's EmailGW run and decodes its observation. The leg
+// is refused, with no grade, unless the run is completed, has an efficacy result,
+// and is for one of the leg's allowed expectations. It returns the provenance of
+// the exact run it read.
+func loadRelayPathLeg(ctx context.Context, pool *pgxpool.Pool, egRunID string, allowed []string) (phishval.Observation, *phishval.Provenance, error) {
+	var gotEG, status, environment string
 	var resultRaw []byte
+	var completedAt *time.Time
 	if err := pool.QueryRow(ctx,
-		`SELECT scenario_id, result FROM email_gw_runs WHERE id = $1`, egRunID,
-	).Scan(&gotEG, &resultRaw); err != nil {
-		return phishval.Observation{}, false, fmt.Errorf("phishingrun: PH-EVA-002 load email gateway run %q: %w", egRunID, err)
+		`SELECT scenario_id, status, environment, result, completed_at FROM email_gw_runs WHERE id = $1`, egRunID,
+	).Scan(&gotEG, &status, &environment, &resultRaw, &completedAt); err != nil {
+		return phishval.Observation{}, nil, fmt.Errorf("phishingrun: PH-EVA-002 load email gateway run %q: %w", egRunID, err)
 	}
 	legOK := false
 	for _, id := range allowed {
@@ -39,23 +42,33 @@ func loadRelayPathLeg(ctx context.Context, pool *pgxpool.Pool, egRunID string, a
 		}
 	}
 	if !legOK {
-		return phishval.Observation{}, false, fmt.Errorf("phishingrun: email gateway run %q is for %s, which is not a valid leg for this slot", egRunID, gotEG)
+		return phishval.Observation{}, nil, fmt.Errorf("phishingrun: email gateway run %q is for %s, which is not a valid leg for this slot", egRunID, gotEG)
+	}
+	if status != "completed" {
+		return phishval.Observation{}, nil, fmt.Errorf("phishingrun: PH-EVA-002 refused: email gateway run %q is %s; only a completed run can be graded", egRunID, status)
 	}
 	if len(resultRaw) == 0 || string(resultRaw) == "null" {
-		return phishval.Observation{}, false, nil
+		return phishval.Observation{}, nil, fmt.Errorf("phishingrun: PH-EVA-002 refused: email gateway run %q has no efficacy result, so there is no evidence to grade", egRunID)
 	}
 	var r emailgwefficacy.EfficacyResult
 	if err := json.Unmarshal(resultRaw, &r); err != nil {
-		return phishval.Observation{}, false, fmt.Errorf("phishingrun: PH-EVA-002 decode efficacy result of %q: %w", egRunID, err)
+		return phishval.Observation{}, nil, fmt.Errorf("phishingrun: PH-EVA-002 decode efficacy result of %q: %w", egRunID, err)
 	}
-	return phishbridge.FromEmailGWEfficacyResult(r), true, nil
+	prov := &phishval.Provenance{
+		EmailGWRunID:       egRunID,
+		EmailGWScenarioID:  gotEG,
+		EmailGWEnvironment: environment,
+		EmailGWCompletedAt: completedAt,
+	}
+	return phishbridge.FromEmailGWEfficacyResult(r), prov, nil
 }
 
 // executePHEVA002 grades PH-EVA-002 on two EmailGW runs, one per delivery path.
 // The verdict is the direct path's enforcement against the catalog expectation.
 // The relay leg never sets a verdict. If the relay path did not block the same
-// spoof, the outcome's enforcement reason records a bypass finding. A missing
-// result on either leg is NotTested for that leg, never a verdict.
+// spoof, the outcome's enforcement reason records a bypass finding. Either leg
+// that is not completed, or has no result, refuses the whole grade. Each leg's run
+// is recorded: Provenance for the direct leg, RelayProvenance for the relay leg.
 func executePHEVA002(ctx context.Context, env PhishingRunExecutorEnv, runID string, params map[string]any) (phishval.Outcome, error) {
 	directRunID, _ := params["emailGwRunId"].(string)
 	relayRunID, _ := params["relayEmailGwRunId"].(string)
@@ -66,11 +79,11 @@ func executePHEVA002(ctx context.Context, env PhishingRunExecutorEnv, runID stri
 		return phishval.Outcome{}, fmt.Errorf("phishingrun: PH-EVA-002 requires a database pool (deployment misconfiguration)")
 	}
 
-	directObs, _, err := loadRelayPathLeg(ctx, env.Pool, directRunID, relayPathDirectIDs)
+	directObs, directProv, err := loadRelayPathLeg(ctx, env.Pool, directRunID, relayPathDirectIDs)
 	if err != nil {
 		return phishval.Outcome{}, err
 	}
-	relayObs, relayGraded, err := loadRelayPathLeg(ctx, env.Pool, relayRunID, relayPathRelayIDs)
+	relayObs, relayProv, err := loadRelayPathLeg(ctx, env.Pool, relayRunID, relayPathRelayIDs)
 	if err != nil {
 		return phishval.Outcome{}, err
 	}
@@ -80,19 +93,19 @@ func executePHEVA002(ctx context.Context, env PhishingRunExecutorEnv, runID stri
 		return phishval.Outcome{}, err
 	}
 	outcome := phishval.Evaluate(runID, "", catalogExp, directObs)
-	outcome.Enforcement.Reason = appendRelayLegNote(outcome.Enforcement.Reason, relayObs, relayGraded)
+	outcome.Enforcement.Reason = appendRelayLegNote(outcome.Enforcement.Reason, relayObs)
+	outcome.Provenance = directProv
+	outcome.RelayProvenance = relayProv
 	return outcome, nil
 }
 
 // appendRelayLegNote adds the relay leg's finding to the enforcement reason. It
 // never changes the verdict. A bypass is recorded as a labeled finding.
-func appendRelayLegNote(reason string, relayObs phishval.Observation, relayGraded bool) string {
+func appendRelayLegNote(reason string, relayObs phishval.Observation) string {
 	var note string
 	switch {
-	case !relayGraded:
-		note = "relay leg not graded: no efficacy result yet"
 	case relayObs.Enforcement == nil:
-		note = "relay leg not graded: no enforcement evidence"
+		note = "relay leg: no enforcement evidence"
 	case relayObs.Enforcement.Outcome == phishval.EnforcementBlocked:
 		note = "relay leg: relay path also blocked the spoof; no bypass observed"
 	default:

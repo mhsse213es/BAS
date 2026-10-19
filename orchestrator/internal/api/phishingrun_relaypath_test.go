@@ -118,3 +118,52 @@ func TestExecutePHEVA002_MissingRelayRun_Error(t *testing.T) {
 		}
 	})
 }
+
+// An incomplete direct leg refuses the whole grade. Nothing is graded from it.
+func TestExecutePHEVA002_IncompleteDirectLeg_Refused(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		if _, err := pool.Exec(context.Background(),
+			`INSERT INTO email_gw_runs (id, scenario_id, status) VALUES ('eva-direct-running', 'EG-016.relay-path.direct.known-good', 'running')`); err != nil {
+			t.Fatalf("seed running direct leg: %v", err)
+		}
+		relayLegRun(t, pool, "eva-relay-ok", "EG-016.relay-path.relay.known-good", emailgwefficacy.RelayPathBypassRelayExpectation(true), "quarantine")
+
+		_, err := runRelayPath(t, pool, "eva-direct-running", "eva-relay-ok")
+		if err == nil || !strings.Contains(err.Error(), "only a completed run") {
+			t.Fatalf("an incomplete direct leg must refuse the grade, got err=%v", err)
+		}
+	})
+}
+
+// A completed relay leg with no efficacy result refuses the grade. It is not
+// graded as NotTested, and the direct leg is not graded alone.
+func TestExecutePHEVA002_CompletedRelayWithoutResult_Refused(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		relayLegRun(t, pool, "eva-direct-ok", "EG-016.relay-path.direct.known-good", emailgwefficacy.RelayPathBypassDirectExpectation(true), "quarantine")
+		seedEmailGWRun(t, pool, "eva-relay-no-result", "EG-016.relay-path.relay.known-good", nil)
+
+		_, err := runRelayPath(t, pool, "eva-direct-ok", "eva-relay-no-result")
+		if err == nil || !strings.Contains(err.Error(), "no efficacy result") {
+			t.Fatalf("a completed relay leg without a result must refuse the grade, got err=%v", err)
+		}
+	})
+}
+
+// A graded pair names both runs it was read from.
+func TestExecutePHEVA002_RecordsProvenanceForBothLegs(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		relayLegRun(t, pool, "eva-prov-direct", "EG-016.relay-path.direct.known-good", emailgwefficacy.RelayPathBypassDirectExpectation(true), "quarantine")
+		relayLegRun(t, pool, "eva-prov-relay", "EG-016.relay-path.relay.known-good", emailgwefficacy.RelayPathBypassRelayExpectation(true), "quarantine")
+
+		outcome, err := runRelayPath(t, pool, "eva-prov-direct", "eva-prov-relay")
+		if err != nil {
+			t.Fatalf("executor: %v", err)
+		}
+		if outcome.Provenance == nil || outcome.Provenance.EmailGWRunID != "eva-prov-direct" {
+			t.Errorf("Provenance = %+v, want the direct run eva-prov-direct", outcome.Provenance)
+		}
+		if outcome.RelayProvenance == nil || outcome.RelayProvenance.EmailGWRunID != "eva-prov-relay" {
+			t.Errorf("RelayProvenance = %+v, want the relay run eva-prov-relay", outcome.RelayProvenance)
+		}
+	})
+}

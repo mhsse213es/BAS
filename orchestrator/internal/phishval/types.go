@@ -264,6 +264,9 @@ type Outcome struct {
 	// Provenance links the grade to the exact EmailGW run it was read from. It is set
 	// only for a read-back grade, and it is nil otherwise.
 	Provenance *Provenance `json:"provenance,omitempty"`
+	// RelayProvenance is set only for a two-leg grade (PH-EVA-002). It names the
+	// relay-path run. The direct run is in Provenance.
+	RelayProvenance *Provenance `json:"relayProvenance,omitempty"`
 }
 
 // Provenance names the completed EmailGW run a read-back grade came from. The
