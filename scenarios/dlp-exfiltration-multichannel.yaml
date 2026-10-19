@@ -1,7 +1,9 @@
 id: dlp-exfiltration-multichannel
 name: DLP Exfiltration Validation — All Channels
 description: >
-  Combines every DLP exfiltration channel built so far into one scenario:
+  Combines nine DLP exfiltration channels into one scenario. It does not cover
+  every channel built so far: the cloud-storage, webhook, coderepo, telnet and
+  AI-prompt channels remain separate scenarios. The nine included channels are:
   the five agent-native, local-marker-observed channels from
   dlp-exfiltration-validation.yaml (USB-mounted-drive copy, clipboard,
   print spool, archive staging, local staging to a shared path) plus the
