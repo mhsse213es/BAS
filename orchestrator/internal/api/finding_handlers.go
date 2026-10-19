@@ -319,6 +319,7 @@ func (h *Handler) variantBreakdownForFinding(ctx context.Context, runID, techID,
 	}
 	var results []models.SimulationResult
 	_ = json.Unmarshal(resultsRaw, &results)
+	models.RedactCredentialOutput(results)
 	if len(results) == 0 {
 		return nil
 	}

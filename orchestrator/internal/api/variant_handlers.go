@@ -209,6 +209,7 @@ func (h *Handler) GetVariantRun(w http.ResponseWriter, r *http.Request) {
 
 	var simResults []models.SimulationResult
 	json.Unmarshal(resultsRaw, &simResults)
+	models.RedactCredentialOutput(simResults)
 	srMap := make(map[string]models.SimulationResult, len(simResults))
 	for _, sr := range simResults {
 		srMap[sr.ID] = sr
@@ -349,6 +350,7 @@ func (h *Handler) GetVariantCoverage(w http.ResponseWriter, r *http.Request) {
 
 		var simResults []models.SimulationResult
 		json.Unmarshal(resultsRaw, &simResults)
+		models.RedactCredentialOutput(simResults)
 
 		row := variant.CoverageRow{
 			TechniqueID: rr.techniqueID,

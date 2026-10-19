@@ -1,0 +1,84 @@
+package api
+
+import (
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/audspect/bas/internal/auth"
+	"github.com/audspect/bas/internal/models"
+)
+
+// A variant run's per-step detail is read from the underlying scenario run's
+// results. A credential-access step's details must not reach the variant-run
+// response, same as the run export and run list.
+func TestGetVariantRun_CredentialAccessDetailWithheld(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		agentID := "vr-redact-agent"
+		seedActiveAgent(t, pool, agentID, "Windows")
+		h := variantHandler(t, pool)
+		fake := startFakeAgent(t, h.hub, agentID)
+		defer fake.Disconnect(t)
+
+		rec := httptest.NewRecorder()
+		h.RunVariants(rec, variantsRunReq(map[string]any{
+			"agentId": agentID, "techniqueId": "T1003.001", "command": "mimikatz", "executor": "powershell",
+		}))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("RunVariants status = %d, body = %s", rec.Code, rec.Body.String())
+		}
+		var out struct {
+			VariantRunID  string `json:"variantRunId"`
+			ScenarioRunID string `json:"scenarioRunId"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		var taskID string
+		if err := pool.QueryRow(t.Context(),
+			`SELECT task_id FROM variant_run_steps WHERE variant_run_id = $1 ORDER BY id LIMIT 1`, out.VariantRunID,
+		).Scan(&taskID); err != nil {
+			t.Fatalf("read variant step: %v", err)
+		}
+
+		results := []models.SimulationResult{{
+			ID:        taskID,
+			Technique: models.AttackTechnique{ID: "T1003.001", Tactic: "credential-access"},
+			Result:    models.CheckResult("fail"),
+			Details:   "dumped NTLM " + exportTestNTLMHash,
+		}}
+		raw, err := json.Marshal(results)
+		if err != nil {
+			t.Fatalf("marshal: %v", err)
+		}
+		if _, err := pool.Exec(t.Context(),
+			`UPDATE scenario_runs SET results = $1, status = 'completed' WHERE id = $2`, raw, out.ScenarioRunID); err != nil {
+			t.Fatalf("seed results: %v", err)
+		}
+
+		router := mountTestRouter(t)
+		tenantID := "default"
+		tok, err := auth.GenerateTenantToken("vr-admin", auth.RoleAdmin, &tenantID, false, testJWTSecret, time.Hour)
+		if err != nil {
+			t.Fatalf("mint token: %v", err)
+		}
+		req := httptest.NewRequest(http.MethodGet, "/api/variants/run/"+out.VariantRunID, nil)
+		req.Header.Set("Authorization", "Bearer "+tok)
+		rec = httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("GET variant run status = %d, body = %s", rec.Code, rec.Body.String())
+		}
+		if strings.Contains(rec.Body.String(), exportTestNTLMHash) {
+			t.Fatal("variant run response leaked a credential-access hash")
+		}
+	})
+}

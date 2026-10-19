@@ -3349,6 +3349,7 @@ func scanRunRows(rows pgx.Rows) ([]runRow, error) {
 			continue
 		}
 		json.Unmarshal(resultsJSON, &run.Results)
+		models.RedactCredentialOutput(run.Results)
 		if len(scoreRaw) > 0 {
 			json.Unmarshal(scoreRaw, &run.Score)
 		}
@@ -3360,7 +3361,6 @@ func scanRunRows(rows pgx.Rows) ([]runRow, error) {
 		}
 		if failReason != nil {
 			run.FailReason = *failReason
-		models.RedactCredentialOutput(run.Results)
 		}
 		if d := reporting.DetectedTechniques(detRaw, run.Results); len(d) > 0 {
 			run.DetectedTechs = d
