@@ -68,6 +68,9 @@ AUDSPECT_PHISH_IDENTITY_TARGET_USERS=
 # Enterprise applications, against the value shown):
 #   az ad sp show --id <APPLICATION_ID> --query id -o tsv
 # or:  GET https://graph.microsoft.com/v1.0/servicePrincipals?$filter=appId eq '<APPLICATION_ID>'
+# Exposure: PH-ID-002 uses Directory.Read.All, which is broad. This allowlist
+# limits what Audspect intends to query. It does not narrow the permission Microsoft
+# grants the app, so the app credentials can read every grant that permission covers.
 # The installer checks the format only. It cannot check that the ID belongs to
 # this tenant, so verify it before use. PH-ID-002 stays unavailable regardless
 # until its Graph permission is approved.

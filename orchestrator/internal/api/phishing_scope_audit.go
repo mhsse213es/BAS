@@ -2,6 +2,8 @@ package api
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
@@ -52,6 +54,13 @@ func (h *Handler) RecordPhishingScopeAtStartup(ctx context.Context) error {
 			"clientIds":   d.ClientIDs,
 		}
 	}
+
+	// The fingerprint covers the declared Graph permissions too, so a change to
+	// what the scenarios may request is recorded alongside an allowlist change.
+	combined := sha256.Sum256([]byte(fingerprint + "|" + phishingGraphPermissionsFingerprint()))
+	fingerprint = hex.EncodeToString(combined[:])
+	detail["fingerprint"] = fingerprint
+	detail["graphPermissions"] = phishingGraphPermissions
 
 	var previous string
 	err := h.db.QueryRow(ctx,

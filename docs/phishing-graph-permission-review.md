@@ -115,3 +115,26 @@ grant. It has **not** been added. Approval is the approver's decision.
   test-tenant validation passes, as the approval boundary requires.
 - **Not decided:** the PH-ID-002 permission (`Directory.Read.All`) and the PH-ID-002
   identifier conflict. Both remain open.
+
+## Recorded approval (round 2): permissions and accepted exposure
+
+- **PH-ID-003:** `Policy.Read.ConditionalAccess` approved as a documented,
+  tenant-admin-consented permission, recorded in the connector audit trail (the
+  startup record carries the declared permissions). Missing Conditional Access
+  evidence stays inconclusive. It never yields PASS.
+- **PH-ID-002:** `Directory.Read.All` approved for the reviewed, read-only
+  consent-grant list only. Not approved for any other directory read or write.
+  **Accepted exposure:** the permission is tenant-wide read on directory data. The
+  installation allowlist limits what Audspect intends to query. It does not narrow
+  the permission Microsoft grants the application. Anyone holding the application's
+  credentials could read the grants the permission covers.
+- **PH-ID-002 still unavailable** until the filtered query, target enforcement, and
+  pagination and error behavior are verified, and until live-tenant permission
+  behavior is confirmed.
+- **Identifier:** service principal object IDs, per Microsoft's documented
+  `clientId` semantics. A live check in the test tenant still verifies the actual
+  request and response.
+- **PH-ID-005:** not registered and not enabled.
+- **Side-effecting scenarios:** remain unregistered. Calendar writes, session
+  revocation, sharing invitations, and Conditional Access changes are not approved.
+- **Availability gate:** crafted triggers create no run, and that gate stays in place.
