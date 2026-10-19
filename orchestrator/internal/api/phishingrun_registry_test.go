@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -10,6 +11,7 @@ import (
 	"github.com/audspect/bas/internal/actions"
 	"github.com/audspect/bas/internal/exercise"
 	"github.com/audspect/bas/internal/phishbridge"
+	"github.com/audspect/bas/internal/phishidentity"
 	"github.com/audspect/bas/internal/phishval"
 )
 
@@ -198,6 +200,70 @@ func TestExecutePHIR003_MissingRunIdParam_Error(t *testing.T) {
 	_, err := executePHIR003(context.Background(), env, "run-1", map[string]any{})
 	if err == nil {
 		t.Fatal("want an error for a missing runId parameter")
+	}
+}
+
+type fakeOAuthConsentLister struct {
+	grants []phishidentity.OAuthConsentGrant
+	err    error
+}
+
+func (f fakeOAuthConsentLister) ListOAuthConsentGrants(context.Context) ([]phishidentity.OAuthConsentGrant, error) {
+	return f.grants, f.err
+}
+
+func TestLookupPhishingRunExecutor_PHID002Registered(t *testing.T) {
+	_, ok := LookupPhishingRunExecutor("PH-ID-002")
+	if !ok {
+		t.Fatal("PH-ID-002 must be registered as executable")
+	}
+}
+
+func TestExecutePHID002_NoRiskyTenantWideGrant_Pass(t *testing.T) {
+	env := PhishingRunExecutorEnv{OAuthConsentLister: fakeOAuthConsentLister{grants: []phishidentity.OAuthConsentGrant{
+		{ID: "g1", ClientID: "app-1", ConsentType: "Principal", Scope: "Mail.Read"},
+	}}}
+	outcome, err := executePHID002(context.Background(), env, "run-1", map[string]any{})
+	if err != nil {
+		t.Fatalf("executePHID002: %v", err)
+	}
+	if outcome.Enforcement.Verdict != phishval.VerdictPass {
+		t.Errorf("Enforcement.Verdict = %q, want %q", outcome.Enforcement.Verdict, phishval.VerdictPass)
+	}
+}
+
+func TestExecutePHID002_RiskyTenantWideGrant_Fail(t *testing.T) {
+	env := PhishingRunExecutorEnv{OAuthConsentLister: fakeOAuthConsentLister{grants: []phishidentity.OAuthConsentGrant{
+		{ID: "g2", ClientID: "app-evil", ConsentType: "AllPrincipals", Scope: "Mail.Read Files.ReadWrite.All"},
+	}}}
+	outcome, err := executePHID002(context.Background(), env, "run-1", map[string]any{})
+	if err != nil {
+		t.Fatalf("executePHID002: %v", err)
+	}
+	if outcome.Enforcement.Verdict != phishval.VerdictFail {
+		t.Errorf("Enforcement.Verdict = %q, want %q (a risky tenant-wide grant must not pass the consent restriction)", outcome.Enforcement.Verdict, phishval.VerdictFail)
+	}
+}
+
+func TestExecutePHID002_NilLister_NotTestedNeverPanics(t *testing.T) {
+	env := PhishingRunExecutorEnv{OAuthConsentLister: nil}
+	outcome, err := executePHID002(context.Background(), env, "run-1", map[string]any{})
+	if err != nil {
+		t.Fatalf("executePHID002: %v", err)
+	}
+	if outcome.Enforcement.Verdict != phishval.VerdictNotTested {
+		t.Errorf("Enforcement.Verdict = %q, want %q (no configured identity connector must never fabricate a verdict)", outcome.Enforcement.Verdict, phishval.VerdictNotTested)
+	}
+}
+
+func TestExecutePHID002_ListerError_NotTestedNeverPass(t *testing.T) {
+	env := PhishingRunExecutorEnv{OAuthConsentLister: fakeOAuthConsentLister{err: errors.New("graph 403")}}
+	outcome, err := executePHID002(context.Background(), env, "run-1", map[string]any{})
+	if err != nil {
+		t.Fatalf("executePHID002: %v", err)
+	}
+	if outcome.Enforcement.Verdict != phishval.VerdictNotTested {
+		t.Errorf("Enforcement.Verdict = %q, want %q (a failed Graph read is not evidence of either outcome)", outcome.Enforcement.Verdict, phishval.VerdictNotTested)
 	}
 }
 

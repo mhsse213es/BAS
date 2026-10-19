@@ -27,6 +27,7 @@ import (
 	"github.com/audspect/bas/internal/exercise"
 	"github.com/audspect/bas/internal/phishbridge"
 	"github.com/audspect/bas/internal/phishcatalog"
+	"github.com/audspect/bas/internal/phishidentity"
 	"github.com/audspect/bas/internal/phishval"
 )
 
@@ -44,6 +45,16 @@ type PhishingRunExecutorEnv struct {
 	// h.db; unlike ReportTicketProvider, there is no "unconfigured
 	// deployment" case for it.
 	Pool *pgxpool.Pool
+	// OAuthConsentLister is nil on a deployment with no Microsoft Graph
+	// identity connector configured; PH-ID-002 then degrades to NotTested,
+	// never a fabricated verdict. *phishidentity.Client satisfies it.
+	OAuthConsentLister OAuthConsentGrantLister
+}
+
+// OAuthConsentGrantLister is the read-only Graph listing PH-ID-002 needs,
+// narrowed to one method so tests can inject a fixture.
+type OAuthConsentGrantLister interface {
+	ListOAuthConsentGrants(ctx context.Context) ([]phishidentity.OAuthConsentGrant, error)
 }
 
 // PhishingRunExecutor runs one registered scenario for real and
@@ -64,6 +75,7 @@ var phishingRunExecutors = map[string]PhishingRunExecutor{
 	"PH-DET-002": executePHDET002,
 	"PH-ID-001":  executePHID001,
 	"PH-IR-003":  executePHIR003,
+	"PH-ID-002":  executePHID002,
 }
 
 // LookupPhishingRunExecutor returns scenarioID's registered executor,
@@ -156,6 +168,27 @@ func executePHID001(ctx context.Context, env PhishingRunExecutorEnv, runID strin
 	obs := phishbridge.FromExerciseInteractionEvidence(events)
 
 	catalogExp, err := lookupPhishingCatalogExpectation("PH-ID-001")
+	if err != nil {
+		return phishval.Outcome{}, err
+	}
+	return phishval.Evaluate(runID, "", catalogExp, obs), nil
+}
+
+// executePHID002 runs PH-ID-002 (OAuth consent abuse): reads the tenant's
+// current oauth2PermissionGrants via the injected lister and grades
+// phishbridge.FromOAuthConsentGrants against the catalog's Enforcement=Blocked
+// expectation. A lister error is not evidence either way, so it yields an
+// empty Observation (NotTested), never a Pass from a failed read.
+func executePHID002(ctx context.Context, env PhishingRunExecutorEnv, runID string, params map[string]any) (phishval.Outcome, error) {
+	var obs phishval.Observation
+	if env.OAuthConsentLister != nil {
+		grants, err := env.OAuthConsentLister.ListOAuthConsentGrants(ctx)
+		if err == nil {
+			obs = phishbridge.FromOAuthConsentGrants(grants, time.Now())
+		}
+	}
+
+	catalogExp, err := lookupPhishingCatalogExpectation("PH-ID-002")
 	if err != nil {
 		return phishval.Outcome{}, err
 	}
