@@ -220,3 +220,22 @@ Isolation note: the read is installation-wide, as with other run reads in the si
 **Still unregistered, and why:** the other email-dispatch scenarios (PH-AUTH-007, PH-BEC-002/006, PH-EVA-002, PH-ATT-002/003, PH-CHN-004/005) have no verified PH→EG mapping. They need a mapping established from evidence first, not from catalog comments. Registering them would be the "mapping exists" shortcut the initiative rejects.
 
 **Not yet verified:** the full `internal/api` suite, held for memory (see the open items above).
+
+## PH→EG mapping audit for the unmapped email scenarios — 2026-10-19
+
+Method: for each unmapped scenario, read its catalog builder and the expectation it actually constructs, then check whether that expectation exists in the EmailGW dispatch table (`emailgwefficacy` `expectationByID`). A read-back grader can only grade an EmailGW run whose `scenario_id` is a table ID, so a mapping needs such an ID. The existing consistency test (`TestEmailGWMapping_ConsistentWithPhishCatalogExpectation`) also requires a scenario with a Response expectation to map only to EG-008.
+
+**Result: 0 new verified mappings.** Nothing was added to `phishEmailGWExpectation`.
+
+| Scenario | Expectation it constructs | Where defined | Verdict |
+|---|---|---|---|
+| PH-AUTH-007 | `InternalSenderSpoofExpectation` (`internal-sender-helo-spoof`) | `phishbridge` | Not in the EG table. No EG run can carry it. Needs a new EmailGW expectation. |
+| PH-BEC-002 | `BECSupplierFraudTemplate` (sends EG-005's diversion narrative) | `emailgwcampaign` | Scenario expects Response=Remediated. Only EG-008 may map a Response expectation, so EG-005 can't cover it. Partial mapping would leave Response unverified. Rejected. |
+| PH-BEC-006 | `ReplyChainHijackExpectation` | `phishbridge` | Not in the EG table. Needs a new EmailGW expectation. |
+| PH-EVA-002 | `DispatchRelayPathBypassMessage` | `phishbridge` | Not in the EG table. Needs a new EmailGW expectation. |
+| PH-ATT-002 | `PDFEmbeddedLinkExpectation`, `OfficeExternalLinkExpectation` | `phishbridge` | Not in the EG table. Needs a new EmailGW expectation. |
+| PH-ATT-003 | `OfficeExternalLinkExpectation` (plus an EG-008 reference) | `phishbridge` | Not in the EG table. Mixed; needs a new EmailGW expectation. |
+| PH-CHN-004 (email leg) | `QRCodeLureExpectation` | `phishbridge` | Not in the EG table. Needs a new EmailGW expectation. |
+| PH-CHN-005 | `QRCodeLureExpectation` | `phishbridge` | Not in the EG table. Needs a new EmailGW expectation. |
+
+**What would unblock these:** adding EmailGW expectations for them (new `emailgwefficacy` entries and their dispatch). That is new email-gateway build work, not a mapping. The alternative is relaxing the Response-to-EG-008 rule for PH-BEC-002. That is a design decision, not a fix.
