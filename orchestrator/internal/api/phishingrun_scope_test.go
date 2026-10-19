@@ -181,17 +181,17 @@ func TestExecutePHID003_InScopeUsesOnlyTheScopedQuery(t *testing.T) {
 func TestPhishingRunEnv_ReadsEnvironmentOnEachCall(t *testing.T) {
 	h := &Handler{}
 
-	t.Setenv(EnvPhishOAuthClientIDs, goodClientGUID)
+	t.Setenv(EnvPhishOAuthSPObjectIDs, goodClientGUID)
 	if env := h.phishingRunEnv(); env.IdentityScopeErr != "" || !env.IdentityScope.ConfiguredClients() {
 		t.Fatalf("valid allowlist not read: err=%q configured=%v", env.IdentityScopeErr, env.IdentityScope.ConfiguredClients())
 	}
 
-	t.Setenv(EnvPhishOAuthClientIDs, "*")
+	t.Setenv(EnvPhishOAuthSPObjectIDs, "*")
 	if env := h.phishingRunEnv(); env.IdentityScopeErr == "" {
 		t.Error("a malformed allowlist must be reported on the next read, not silently treated as valid")
 	}
 
-	t.Setenv(EnvPhishOAuthClientIDs, "")
+	t.Setenv(EnvPhishOAuthSPObjectIDs, "")
 	if env := h.phishingRunEnv(); env.IdentityScope.ConfiguredClients() {
 		t.Error("a cleared allowlist must no longer be configured on the next read")
 	}
@@ -247,5 +247,17 @@ func TestIdentityHeuristics_InScopeUserReadsOnlyThatUser(t *testing.T) {
 	}
 	if fake.calls == 0 {
 		t.Error("in-scope user made no identity reads")
+	}
+}
+
+// PH-ID-005 stays unavailable until its user-lookup permission is validated against
+// a test tenant, however complete the allowlist and wiring are.
+func TestPhishingCapability_PH_ID_005_UnavailableUntilPermissionValidated(t *testing.T) {
+	env := poolOnly()
+	env.IdentityReader = fakeIdentityReader{}
+	env.IdentityScope = phishscope.Scope{Users: []string{"alice@contoso.example"}}
+	c := phishingCapabilityFor(env, "PH-ID-005", true)
+	if c.Status != CapUnavailable || c.Reason != reasonGraphPermissionReviewPending {
+		t.Errorf("PH-ID-005: status=%q reason=%q, want unavailable/%s", c.Status, c.Reason, reasonGraphPermissionReviewPending)
 	}
 }

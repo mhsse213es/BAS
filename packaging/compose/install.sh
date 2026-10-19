@@ -165,7 +165,7 @@ BAS_TLS=""
 BAS_SERVER_SANS=""
 BAS_CSP_MODE=""
 AUDSPECT_PHISH_IDENTITY_TARGET_USERS=""
-AUDSPECT_PHISH_OAUTH_CLIENT_IDS=""
+AUDSPECT_PHISH_OAUTH_SP_OBJECT_IDS=""
 TLS_CERT=""
 TLS_KEY=""
 DB_PASSWORD=""
@@ -218,9 +218,9 @@ validate_phish_scope() {
     item="${item#"${item%%[![:space:]]*}"}"; item="${item%"${item##*[![:space:]]}"}"
     [[ -z "$item" ]] && continue
     if ! [[ $item =~ $guid_re ]]; then
-      err "setup.conf: AUDSPECT_PHISH_OAUTH_CLIENT_IDS entry '${item}' is not an application (client) ID."; exit 1
+      err "setup.conf: AUDSPECT_PHISH_OAUTH_SP_OBJECT_IDS entry '${item}' is not a service principal object ID."; exit 1
     fi
-  done < <(tr ',' '\n' <<<"${AUDSPECT_PHISH_OAUTH_CLIENT_IDS}")
+  done < <(tr ',' '\n' <<<"${AUDSPECT_PHISH_OAUTH_SP_OBJECT_IDS}")
 }
 
 load_config() {
@@ -249,7 +249,7 @@ load_config() {
       BAS_SERVER_SANS)      BAS_SERVER_SANS="$val"      ;;
       BAS_CSP_MODE)         BAS_CSP_MODE="$val"         ;;
       AUDSPECT_PHISH_IDENTITY_TARGET_USERS) AUDSPECT_PHISH_IDENTITY_TARGET_USERS="$val" ;;
-      AUDSPECT_PHISH_OAUTH_CLIENT_IDS)      AUDSPECT_PHISH_OAUTH_CLIENT_IDS="$val"      ;;
+      AUDSPECT_PHISH_OAUTH_SP_OBJECT_IDS)      AUDSPECT_PHISH_OAUTH_SP_OBJECT_IDS="$val"      ;;
       TLS_CERT)             TLS_CERT="$val"             ;;
       TLS_KEY)              TLS_KEY="$val"              ;;
       DB_PASSWORD)          DB_PASSWORD="$val"          ;;
@@ -1554,7 +1554,7 @@ BAS_SERVER_SANS=${BAS_SERVER_SANS}
 BAS_TLS=${BAS_TLS}
 BAS_CSP_MODE=${BAS_CSP_MODE}
 AUDSPECT_PHISH_IDENTITY_TARGET_USERS=${AUDSPECT_PHISH_IDENTITY_TARGET_USERS}
-AUDSPECT_PHISH_OAUTH_CLIENT_IDS=${AUDSPECT_PHISH_OAUTH_CLIENT_IDS}
+AUDSPECT_PHISH_OAUTH_SP_OBJECT_IDS=${AUDSPECT_PHISH_OAUTH_SP_OBJECT_IDS}
 TLS_CERT=${TLS_CERT:-}
 TLS_KEY=${TLS_KEY:-}
 TLS_CERT_CONTAINER_PATH=${tls_cert_container_path}

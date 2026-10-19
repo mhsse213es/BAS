@@ -262,7 +262,7 @@ services:
       # Install-wide phishing target allowlists (orchestrator phishscope). Blank
       # means unconfigured, so PH-ID-002 and PH-ID-003 stay unavailable.
       AUDSPECT_PHISH_IDENTITY_TARGET_USERS: ${AUDSPECT_PHISH_IDENTITY_TARGET_USERS:-}
-      AUDSPECT_PHISH_OAUTH_CLIENT_IDS: ${AUDSPECT_PHISH_OAUTH_CLIENT_IDS:-}
+      AUDSPECT_PHISH_OAUTH_SP_OBJECT_IDS: ${AUDSPECT_PHISH_OAUTH_SP_OBJECT_IDS:-}
       # How long a signed command envelope remains valid after issuance
       # (internal/ws/hub.go's commandEnvelopeTTLFromEnv); defaults to 60s if unset.
       COMMAND_ENVELOPE_TTL_SECONDS: ${COMMAND_ENVELOPE_TTL_SECONDS:-}

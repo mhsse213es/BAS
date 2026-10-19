@@ -82,7 +82,7 @@ they are not wired by this phase:
 ## Not yet done (later steps)
 
 - Done since the decisions above: the install-wide allowlists
-  (`AUDSPECT_PHISH_IDENTITY_TARGET_USERS`, `AUDSPECT_PHISH_OAUTH_CLIENT_IDS`) are
+  (`AUDSPECT_PHISH_IDENTITY_TARGET_USERS`, `AUDSPECT_PHISH_OAUTH_SP_OBJECT_IDS`) are
   parsed with fail-closed validation. The container reads them at start, so a change takes effect when the container is recreated (install or upgrade). PH-ID-002 and PH-ID-003 refuse
   out-of-scope, missing, or wildcard targets before any Graph call. Their
   queries are narrowed in Graph itself (`$filter` on clientId, one query per

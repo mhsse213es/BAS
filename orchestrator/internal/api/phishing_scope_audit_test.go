@@ -52,7 +52,7 @@ func TestRecordPhishingScope_WritesOnlyOnChange(t *testing.T) {
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
 		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret)
 		t.Setenv(EnvPhishIdentityTargetUsers, "")
-		t.Setenv(EnvPhishOAuthClientIDs, goodClientGUID)
+		t.Setenv(EnvPhishOAuthSPObjectIDs, goodClientGUID)
 
 		if err := h.RecordPhishingScopeAtStartup(context.Background()); err != nil {
 			t.Fatalf("first record: %v", err)
@@ -64,7 +64,7 @@ func TestRecordPhishingScope_WritesOnlyOnChange(t *testing.T) {
 			t.Fatalf("rows after two identical startups = %d, want 1", n)
 		}
 
-		t.Setenv(EnvPhishOAuthClientIDs, goodClientGUID+","+otherClientGUID)
+		t.Setenv(EnvPhishOAuthSPObjectIDs, goodClientGUID+","+otherClientGUID)
 		if err := h.RecordPhishingScopeAtStartup(context.Background()); err != nil {
 			t.Fatalf("changed record: %v", err)
 		}
@@ -84,7 +84,7 @@ func TestRecordPhishingScope_MalformedRecordedWithoutRawValue(t *testing.T) {
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
 		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret)
 		t.Setenv(EnvPhishIdentityTargetUsers, "jane.doe-personal-name")
-		t.Setenv(EnvPhishOAuthClientIDs, "")
+		t.Setenv(EnvPhishOAuthSPObjectIDs, "")
 
 		if err := h.RecordPhishingScopeAtStartup(context.Background()); err != nil {
 			t.Fatalf("record: %v", err)

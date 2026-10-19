@@ -82,3 +82,14 @@ No permission has been added. The app registration is unchanged.
 - [Get user (User.Read.All least privileged)](https://learn.microsoft.com/en-us/graph/api/user-get?view=graph-rest-1.0)
 - [Microsoft Graph permissions reference](https://learn.microsoft.com/en-us/graph/permissions-reference)
 - Community, 2023, unverified: [Microsoft Q&A on SignInSessionsValidFromDateTime permissions](https://learn.microsoft.com/en-us/answers/questions/1349928/using-powershell-for-microsoft-graphs-to-view-the)
+
+## Recorded decisions (approver)
+
+These decisions are recorded here. They are not approval to enable live execution.
+
+- **PH-ID-002 allowlist identifier:** service principal object IDs. The setup key is `AUDSPECT_PHISH_OAUTH_SP_OBJECT_IDS`, renamed from the application-ID key. How to find and check an ID is in `setup.conf.template`.
+- **PH-ID-002 permission:** not approved. Pending confirmation of the least-privileged permission for the exact list operation, and of whether the query restricts results to the allowlisted service principals. If `Directory.Read.All` is needed, it becomes an explicit permission decision with its residual exposure documented.
+- **PH-ID-003 `AuditLog.Read.All`:** accepted as the least-privileged sign-in-list permission, subject to tenant validation. Still gated by `graph_permission_review_pending`.
+- **PH-ID-003 Conditional Access:** granted only if the scenario's declared objective requires it. Missing `appliedConditionalAccessPolicies` yields inconclusive, never pass.
+- **PH-ID-005:** unavailable until its `$select` permission is validated against a test tenant. Gated in code by `graph_permission_review_pending`.
+- **Live registration and execution:** remain blocked until the checks above pass.

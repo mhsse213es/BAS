@@ -28,7 +28,7 @@ const ActionPhishingScopeRecorded = "phishing.identity_scope.recorded"
 // The write is synchronous, so a failed write is returned rather than lost.
 func (h *Handler) RecordPhishingScopeAtStartup(ctx context.Context) error {
 	scope, parseErr := phishscope.ParseScope(
-		os.Getenv(EnvPhishIdentityTargetUsers), os.Getenv(EnvPhishOAuthClientIDs))
+		os.Getenv(EnvPhishIdentityTargetUsers), os.Getenv(EnvPhishOAuthSPObjectIDs))
 
 	var fingerprint string
 	var detail map[string]any

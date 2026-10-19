@@ -144,7 +144,7 @@ func (h *Handler) phishingRunEnv() PhishingRunExecutorEnv {
 	// A malformed value fails closed. The startup audit record is in
 	// phishing_scope_audit.go.
 	scope, err := phishscope.ParseScope(
-		os.Getenv(EnvPhishIdentityTargetUsers), os.Getenv(EnvPhishOAuthClientIDs))
+		os.Getenv(EnvPhishIdentityTargetUsers), os.Getenv(EnvPhishOAuthSPObjectIDs))
 	env.IdentityScope = scope
 	if err != nil {
 		env.IdentityScopeErr = err.Error()
@@ -155,7 +155,7 @@ func (h *Handler) phishingRunEnv() PhishingRunExecutorEnv {
 // Install-wide target allowlists, set by the admin in the setup configuration.
 const (
 	EnvPhishIdentityTargetUsers = "AUDSPECT_PHISH_IDENTITY_TARGET_USERS"
-	EnvPhishOAuthClientIDs      = "AUDSPECT_PHISH_OAUTH_CLIENT_IDS"
+	EnvPhishOAuthSPObjectIDs    = "AUDSPECT_PHISH_OAUTH_SP_OBJECT_IDS"
 )
 
 // graphReviewPending lists scenarios whose Graph permission or filtered query has
@@ -164,6 +164,9 @@ const (
 var graphReviewPending = map[string]bool{
 	"PH-ID-002": true,
 	"PH-ID-003": true,
+	// PH-ID-005 reads a user property whose permission conflicts across sources.
+	// It stays unavailable until a test-tenant token confirms the exact $select.
+	"PH-ID-005": true,
 }
 
 // phishingScenarioCapability derives a catalog scenario's state from the same
