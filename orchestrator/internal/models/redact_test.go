@@ -46,3 +46,23 @@ func TestRedactCredentialOutput_WithholdsAlertCommandLineHash(t *testing.T) {
 		t.Fatalf("non-credential alert command line changed to %q", got)
 	}
 }
+
+// A secret printed by an ordinary (non-credential) step is withheld too.
+// Other output on the same step is unchanged.
+func TestRedactCredentialOutput_ScrubsSecretsFromOrdinarySteps(t *testing.T) {
+	const token = "eyJhbGciOiJIUzI1NiJ9.payload.sig"
+	results := []SimulationResult{
+		{ID: "exec", Technique: AttackTechnique{ID: "T1059.001", Tactic: "execution"},
+			RawOutput: "Authorization: Bearer " + token + " status=ok",
+			Details:   "api_key=sk_live_4f9a8b7c6d5e4f3a"},
+	}
+	RedactCredentialOutput(results)
+
+	r := results[0]
+	if strings.Contains(r.RawOutput, token) || strings.Contains(r.Details, "sk_live_4f9a8b7c6d5e4f3a") {
+		t.Fatalf("ordinary step leaked a secret: raw=%q details=%q", r.RawOutput, r.Details)
+	}
+	if !strings.Contains(r.RawOutput, "status=ok") {
+		t.Fatalf("non-secret text lost: %q", r.RawOutput)
+	}
+}
