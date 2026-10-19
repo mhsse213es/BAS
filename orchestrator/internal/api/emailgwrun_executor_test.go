@@ -33,7 +33,7 @@ func (b *emailgwrunTestBackend) NewSession(c *gosmtp.Conn) (gosmtp.Session, erro
 type emailgwrunTestSession struct{ backend *emailgwrunTestBackend }
 
 func (s *emailgwrunTestSession) Mail(from string, opts *gosmtp.MailOptions) error { return nil }
-func (s *emailgwrunTestSession) Rcpt(to string, opts *gosmtp.RcptOptions) error    { return nil }
+func (s *emailgwrunTestSession) Rcpt(to string, opts *gosmtp.RcptOptions) error   { return nil }
 func (s *emailgwrunTestSession) Data(r io.Reader) error {
 	if _, err := io.ReadAll(r); err != nil {
 		return err
@@ -65,6 +65,7 @@ func startEmailGWRunTestServer(t *testing.T) (*emailgwrunTestBackend, string) {
 }
 
 func TestExecuteEmailGWRun_UnknownScenarioID_ReturnsErrorNoRow(t *testing.T) {
+	t.Cleanup(StopEmailGWWaiters)
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
 		_, err := ExecuteEmailGWRun(context.Background(), pool, emailgwefficacy.NewFixtureMailEvidenceProvider(nil, nil),
 			emailgwefficacy.InjectionTarget{}, nil, emailgwrun.EnvironmentLab, EmailGWRunRequest{ScenarioID: "EG-999.no-such-scenario"})
@@ -75,6 +76,7 @@ func TestExecuteEmailGWRun_UnknownScenarioID_ReturnsErrorNoRow(t *testing.T) {
 }
 
 func TestExecuteEmailGWRun_NotWiredScenario_ReturnsErrorNoRow(t *testing.T) {
+	t.Cleanup(StopEmailGWWaiters)
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
 		// EG-001.spf.known-good is deliberately not wired for real injection
 		// (needs a lab domain with a real SPF record) -- see scenarios.go.
@@ -87,6 +89,7 @@ func TestExecuteEmailGWRun_NotWiredScenario_ReturnsErrorNoRow(t *testing.T) {
 }
 
 func TestExecuteEmailGWRun_WiredScenario_InjectsRealMessageAndReturnsRunning(t *testing.T) {
+	t.Cleanup(StopEmailGWWaiters)
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
 		backend, addr := startEmailGWRunTestServer(t)
 		run, err := ExecuteEmailGWRun(context.Background(), pool, emailgwefficacy.NewFixtureMailEvidenceProvider(nil, nil),
@@ -125,6 +128,7 @@ func TestExecuteEmailGWRun_WiredScenario_InjectsRealMessageAndReturnsRunning(t *
 }
 
 func TestExecuteEmailGWRun_ResponseScenario_UsesLongerDwellWindow(t *testing.T) {
+	t.Cleanup(StopEmailGWWaiters)
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
 		_, addr := startEmailGWRunTestServer(t)
 		run, err := ExecuteEmailGWRun(context.Background(), pool, emailgwefficacy.NewFixtureMailEvidenceProvider(nil, nil),
@@ -157,6 +161,7 @@ func (f *fakeExecutorOutboundSender) SendOutboundMessage(ctx context.Context, fr
 }
 
 func TestExecuteEmailGWRun_OutboundWiredScenario_SendsViaOutboundSenderAndReturnsRunning(t *testing.T) {
+	t.Cleanup(StopEmailGWWaiters)
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
 		sender := &fakeExecutorOutboundSender{}
 		run, err := ExecuteEmailGWRun(context.Background(), pool, emailgwefficacy.NewFixtureMailEvidenceProvider(nil, nil),
@@ -178,6 +183,7 @@ func TestExecuteEmailGWRun_OutboundWiredScenario_SendsViaOutboundSenderAndReturn
 }
 
 func TestExecuteEmailGWRun_OutboundScenario_NoSenderConfigured_ReturnsErrorNoCrash(t *testing.T) {
+	t.Cleanup(StopEmailGWWaiters)
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
 		_, err := ExecuteEmailGWRun(context.Background(), pool, emailgwefficacy.NewFixtureMailEvidenceProvider(nil, nil),
 			emailgwefficacy.InjectionTarget{}, nil, emailgwrun.EnvironmentLab, EmailGWRunRequest{ScenarioID: "EG-006.known-good"})
@@ -188,6 +194,7 @@ func TestExecuteEmailGWRun_OutboundScenario_NoSenderConfigured_ReturnsErrorNoCra
 }
 
 func TestFinishEmailGWRunAfterWindow_PastWindow_VerifiesImmediatelyAndWritesCompleted(t *testing.T) {
+	t.Cleanup(StopEmailGWWaiters)
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
 		ctx := context.Background()
 		exp := emailgwefficacy.ExecutiveImpersonationExpectation(false)
@@ -214,7 +221,7 @@ func TestFinishEmailGWRunAfterWindow_PastWindow_VerifiesImmediatelyAndWritesComp
 			Provenance: emailgwefficacy.Provenance{Kind: emailgwefficacy.ProvenanceObserved}, Timestamp: now.Add(-30 * time.Second),
 		}})
 
-		finishEmailGWRunAfterWindow(pool, provider, emailgwefficacy.InjectionTarget{}, nil, emailgwrun.EnvironmentLab, exp, observation, window, run.ID)
+		finishEmailGWRunAfterWindow(pool, provider, emailgwefficacy.InjectionTarget{}, nil, emailgwrun.EnvironmentLab, exp, observation, window, run.ID, emailGWWaiterStopChan())
 
 		got, err := db.GetEmailGWRun(ctx, pool, run.ID)
 		if err != nil {
@@ -233,6 +240,7 @@ func TestFinishEmailGWRunAfterWindow_PastWindow_VerifiesImmediatelyAndWritesComp
 }
 
 func TestFinishEmailGWRunAfterWindow_NoEvidence_WritesPartial(t *testing.T) {
+	t.Cleanup(StopEmailGWWaiters)
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
 		ctx := context.Background()
 		exp := emailgwefficacy.ExecutiveImpersonationExpectation(false)
@@ -246,7 +254,7 @@ func TestFinishEmailGWRunAfterWindow_NoEvidence_WritesPartial(t *testing.T) {
 		observation := emailgwefficacy.OriginDeliveryObservation{SenderPayloadHash: "abc123", Timestamp: now.Add(-time.Minute)}
 		provider := emailgwefficacy.NewFixtureMailEvidenceProvider(nil, nil) // no evidence at all -> Inconclusive dimensions
 
-		finishEmailGWRunAfterWindow(pool, provider, emailgwefficacy.InjectionTarget{}, nil, emailgwrun.EnvironmentLab, exp, observation, window, run.ID)
+		finishEmailGWRunAfterWindow(pool, provider, emailgwefficacy.InjectionTarget{}, nil, emailgwrun.EnvironmentLab, exp, observation, window, run.ID, emailGWWaiterStopChan())
 
 		got, err := db.GetEmailGWRun(ctx, pool, run.ID)
 		if err != nil {

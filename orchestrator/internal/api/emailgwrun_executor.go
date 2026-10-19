@@ -20,6 +20,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -184,7 +185,7 @@ func executeEmailGWRunInbound(ctx context.Context, pool *pgxpool.Pool, provider 
 		return currentEmailGWRunOrNil(ctx, pool, run.ID), fmt.Errorf("email gw run %s: %w", run.ID, err)
 	}
 
-	go finishEmailGWRunAfterWindow(pool, provider, target, outboundSender, environment, exp, observation, window, run.ID)
+	go finishEmailGWRunAfterWindow(pool, provider, target, outboundSender, environment, exp, observation, window, run.ID, emailGWWaiterStopChan())
 
 	return currentEmailGWRunOrNil(ctx, pool, run.ID), nil
 }
@@ -224,7 +225,7 @@ func executeEmailGWRunOutbound(ctx context.Context, pool *pgxpool.Pool, provider
 		return currentEmailGWRunOrNil(ctx, pool, run.ID), fmt.Errorf("email gw run %s: %w", run.ID, err)
 	}
 
-	go finishEmailGWRunAfterWindow(pool, provider, target, outboundSender, environment, exp, observation, window, run.ID)
+	go finishEmailGWRunAfterWindow(pool, provider, target, outboundSender, environment, exp, observation, window, run.ID, emailGWWaiterStopChan())
 
 	return currentEmailGWRunOrNil(ctx, pool, run.ID), nil
 }
@@ -242,9 +243,51 @@ func executeEmailGWRunOutbound(ctx context.Context, pool *pgxpool.Pool, provider
 // this live path and RecoverEmailGWRuns's own recovery sweep -- has
 // what it needs to dispatch a next stage for real, without a second,
 // separate recovery mechanism.
-func finishEmailGWRunAfterWindow(pool *pgxpool.Pool, provider emailgwefficacy.MailEvidenceProvider, target emailgwefficacy.InjectionTarget, outboundSender emailgwefficacy.OutboundSender, environment emailgwrun.Environment, exp emailgwefficacy.MailExpectation, observation emailgwefficacy.OriginDeliveryObservation, window emailgwefficacy.TimeWindow, runID string) {
-	if wait := time.Until(window.End); wait > 0 {
-		time.Sleep(wait)
+// emailGWWaiterMu guards emailGWWaiterStop. Each generation of waiters shares
+// one stop channel; StopEmailGWWaiters closes the current generation and starts
+// a new one, so later waiters are not affected.
+var (
+	emailGWWaiterMu   sync.Mutex
+	emailGWWaiterStop = make(chan struct{})
+)
+
+// emailGWWaiterStopChan returns the stop channel for the current generation.
+func emailGWWaiterStopChan() <-chan struct{} {
+	emailGWWaiterMu.Lock()
+	defer emailGWWaiterMu.Unlock()
+	return emailGWWaiterStop
+}
+
+// StopEmailGWWaiters cancels every waiter started before this call. A waiter
+// that is cancelled returns without writing, and its run stays StatusRunning
+// for RecoverEmailGWRuns. Production never calls this. Tests call it on cleanup
+// so a leaked run cannot write into a later test's database.
+func StopEmailGWWaiters() {
+	emailGWWaiterMu.Lock()
+	defer emailGWWaiterMu.Unlock()
+	close(emailGWWaiterStop)
+	emailGWWaiterStop = make(chan struct{})
+}
+
+// waitForEmailGWWindow sleeps until end, or returns false early if stop closes.
+func waitForEmailGWWindow(end time.Time, stop <-chan struct{}) bool {
+	wait := time.Until(end)
+	if wait <= 0 {
+		return true
+	}
+	timer := time.NewTimer(wait)
+	defer timer.Stop()
+	select {
+	case <-timer.C:
+		return true
+	case <-stop:
+		return false
+	}
+}
+
+func finishEmailGWRunAfterWindow(pool *pgxpool.Pool, provider emailgwefficacy.MailEvidenceProvider, target emailgwefficacy.InjectionTarget, outboundSender emailgwefficacy.OutboundSender, environment emailgwrun.Environment, exp emailgwefficacy.MailExpectation, observation emailgwefficacy.OriginDeliveryObservation, window emailgwefficacy.TimeWindow, runID string, stop <-chan struct{}) {
+	if !waitForEmailGWWindow(window.End, stop) {
+		return
 	}
 	ctx := context.Background()
 	result := emailgwefficacy.VerifyMailExpectation(exp, observation, provider, window)
@@ -290,7 +333,7 @@ func RecoverEmailGWRuns(ctx context.Context, pool *pgxpool.Pool, provider emailg
 		if run.WindowStart != nil {
 			window.Start = *run.WindowStart
 		}
-		go finishEmailGWRunAfterWindow(pool, provider, target, outboundSender, environment, exp, observation, window, run.ID)
+		go finishEmailGWRunAfterWindow(pool, provider, target, outboundSender, environment, exp, observation, window, run.ID, emailGWWaiterStopChan())
 	}
 	return nil
 }

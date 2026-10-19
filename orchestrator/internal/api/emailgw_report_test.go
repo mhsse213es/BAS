@@ -91,6 +91,7 @@ func TestLatestStartedAt_PicksMostRecentNotListOrder(t *testing.T) {
 }
 
 func TestGetEmailGWReport_ComposesRealDataEndToEnd(t *testing.T) {
+	t.Cleanup(StopEmailGWWaiters)
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
 		_, addr := startEmailGWRunTestServer(t)
 		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret).

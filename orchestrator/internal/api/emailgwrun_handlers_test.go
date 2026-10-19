@@ -29,6 +29,7 @@ func triggerEmailGWRunReq(t *testing.T, pool *pgxpool.Pool, body map[string]any)
 // same posture as GetCalderaAdversaries when CALDERA_URL is empty --
 // never a 500, never a silent no-op injection.
 func TestTriggerEmailGWRun_NotConfigured_Returns503(t *testing.T) {
+	t.Cleanup(StopEmailGWWaiters)
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
 		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret)
 		req := triggerEmailGWRunReq(t, pool, map[string]any{"scenarioId": "EG-002.known-bad"})
@@ -40,6 +41,7 @@ func TestTriggerEmailGWRun_NotConfigured_Returns503(t *testing.T) {
 }
 
 func TestTriggerEmailGWRun_MissingScenarioID_Returns400(t *testing.T) {
+	t.Cleanup(StopEmailGWWaiters)
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
 		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret).
 			WithEmailGWRun(emailgwefficacy.NewFixtureMailEvidenceProvider(nil, nil), emailgwefficacy.InjectionTarget{}, emailgwrun.EnvironmentLab)
@@ -52,6 +54,7 @@ func TestTriggerEmailGWRun_MissingScenarioID_Returns400(t *testing.T) {
 }
 
 func TestTriggerEmailGWRun_NotWiredScenario_Returns400(t *testing.T) {
+	t.Cleanup(StopEmailGWWaiters)
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
 		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret).
 			WithEmailGWRun(emailgwefficacy.NewFixtureMailEvidenceProvider(nil, nil), emailgwefficacy.InjectionTarget{}, emailgwrun.EnvironmentLab)
@@ -64,6 +67,7 @@ func TestTriggerEmailGWRun_NotWiredScenario_Returns400(t *testing.T) {
 }
 
 func TestTriggerEmailGWRun_Success_Returns201WithRunningStatus(t *testing.T) {
+	t.Cleanup(StopEmailGWWaiters)
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
 		_, addr := startEmailGWRunTestServer(t)
 		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret).
@@ -93,6 +97,7 @@ func TestTriggerEmailGWRun_Success_Returns201WithRunningStatus(t *testing.T) {
 // can't spoof InitiatedBy through the request body -- same discipline
 // TriggerCloudPlanRun's own InitiatedBy field enforces.
 func TestTriggerEmailGWRun_InitiatedByIsServerControlled(t *testing.T) {
+	t.Cleanup(StopEmailGWWaiters)
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
 		_, addr := startEmailGWRunTestServer(t)
 		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret).
@@ -111,6 +116,7 @@ func TestTriggerEmailGWRun_InitiatedByIsServerControlled(t *testing.T) {
 }
 
 func TestListEmailGWRuns_ReturnsInsertedRun(t *testing.T) {
+	t.Cleanup(StopEmailGWWaiters)
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
 		_, addr := startEmailGWRunTestServer(t)
 		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret).
@@ -153,6 +159,7 @@ func TestGetEmailGWRun_NotFound_Returns404(t *testing.T) {
 }
 
 func TestGetEmailGWRun_Found_ReturnsRun(t *testing.T) {
+	t.Cleanup(StopEmailGWWaiters)
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
 		_, addr := startEmailGWRunTestServer(t)
 		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret).
