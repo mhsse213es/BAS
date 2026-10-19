@@ -160,8 +160,20 @@ verified PH→EmailGW mappings remain groundwork.
      withheld from the detection alert command line on exported results.
      Test: `TestExtractFromDetectionAlert_CredentialAccessCommandLineWithheld`,
      `TestRedactCredentialOutput_WithholdsAlertCommandLineHash`.
-  2. Other results loaders (findings, SIEM correlation, detection verification,
-     posture, detection handlers) were not audited for whether they expose
-     `RawOutput` to a response. Each needs a classification.
-  3. Secret types outside credential-access output (API keys or tokens printed by
-     other steps) have no redaction rule. Coverage is tactic-based only.
+  2. Closed: results loaders that feed a response were classified. Run list (all
+     three list endpoints), variant run detail, variant coverage and the finding
+     variant breakdown now withhold credential-access output. Tests:
+     `TestListScenarioRuns_CredentialAccessOutputWithheld`,
+     `TestGetVariantRun_CredentialAccessDetailWithheld`,
+     `TestVariantBreakdownForFinding_CredentialAccessDetailWithheld`,
+     `TestGetVariantCoverage_CredentialAccessBypassDetailWithheld` (passes after
+     the fix; not yet seen failing before it). Campaign child runs, RW-evidence
+     dispatch and the detection-verification and posture loaders were checked and
+     do not return raw output to a response.
+  3. Partly done (pending verification): secret-shaped values (PEM private-key
+     headers, bearer tokens, AWS access key IDs, password/token/API-key
+     assignments) are withheld from every step's output on the export, report and
+     list paths. Test: `TestWithholdSecrets_*`, `TestExportRunJSON_OrdinaryStepSecretWithheld`.
+     Not yet verified: the full `internal/api` suite, which was stopped for memory
+     on a clean export of b245fe97. Open decision: the `token` and `password`
+     assignment rules may over-match ordinary lines; narrow or drop them if noisy.
