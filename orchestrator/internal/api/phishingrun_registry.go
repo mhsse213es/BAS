@@ -28,6 +28,7 @@ import (
 	"github.com/audspect/bas/internal/phishbridge"
 	"github.com/audspect/bas/internal/phishcatalog"
 	"github.com/audspect/bas/internal/phishidentity"
+	"github.com/audspect/bas/internal/phishscope"
 	"github.com/audspect/bas/internal/phishval"
 )
 
@@ -62,12 +63,20 @@ type PhishingRunExecutorEnv struct {
 	// no Graph call. The allow-list names the only mailboxes it may use.
 	CalendarEventLure  CalendarEventLureClient
 	CalendarEventAllow CalendarEventAllowlist
+	// IdentityScope is the installation's target allowlist for the identity
+	// scenarios. IdentityScopeErr is set when the configured allowlist is malformed;
+	// the scenarios then fail closed. A run may select targets only from IdentityScope.
+	IdentityScope    phishscope.Scope
+	IdentityScopeErr string
 }
 
 // OAuthConsentGrantLister is the read-only Graph listing PH-ID-002 needs,
 // narrowed to one method so tests can inject a fixture.
 type OAuthConsentGrantLister interface {
 	ListOAuthConsentGrants(ctx context.Context) ([]phishidentity.OAuthConsentGrant, error)
+	// ListOAuthConsentGrantsForClients is the same listing narrowed server-side to
+	// the given application IDs with an OData $filter. PH-ID-002 uses only this.
+	ListOAuthConsentGrantsForClients(ctx context.Context, clientIDs []string) ([]phishidentity.OAuthConsentGrant, error)
 }
 
 // DeviceCodeSignInLister is the read-only Graph sign-in read PH-ID-003 needs,
@@ -82,6 +91,9 @@ type IdentityHeuristicReader interface {
 
 type DeviceCodeSignInLister interface {
 	SignInsByAuthenticationProtocol(ctx context.Context, protocol string) ([]phishidentity.SignInEvent, error)
+	// SignInsForUsersByProtocol is the same read narrowed server-side to the given
+	// users, one filtered query per user. PH-ID-003 uses only this.
+	SignInsForUsersByProtocol(ctx context.Context, protocol string, users []string) ([]phishidentity.SignInEvent, error)
 }
 
 // PhishingRunExecutor runs one registered scenario for real and
@@ -225,9 +237,14 @@ func executePHID001(ctx context.Context, env PhishingRunExecutorEnv, runID strin
 // expectation. A lister error is not evidence either way, so it yields an
 // empty Observation (NotTested), never a Pass from a failed read.
 func executePHID002(ctx context.Context, env PhishingRunExecutorEnv, runID string, params map[string]any) (phishval.Outcome, error) {
+	// Targets are checked against the installation's allowlist before any Graph call.
+	clientIDs := requestedTargets(params, "clientIds")
+	if err := refuseUnlessScoped(env.IdentityScope.ClientIDs, clientIDs); err != nil {
+		return phishval.Outcome{}, err
+	}
 	var obs phishval.Observation
 	if env.OAuthConsentLister != nil {
-		grants, err := env.OAuthConsentLister.ListOAuthConsentGrants(ctx)
+		grants, err := env.OAuthConsentLister.ListOAuthConsentGrantsForClients(ctx, clientIDs)
 		if err == nil {
 			obs = phishbridge.FromOAuthConsentGrants(grants, time.Now())
 		}
@@ -247,9 +264,14 @@ func executePHID002(ctx context.Context, env PhishingRunExecutorEnv, runID strin
 // so a policy that merely exists is never read as enforcement. A failed read
 // or no connector is NotTested, never a fabricated verdict.
 func executePHID003(ctx context.Context, env PhishingRunExecutorEnv, runID string, params map[string]any) (phishval.Outcome, error) {
+	// Targets are checked against the installation's allowlist before any Graph call.
+	users := requestedTargets(params, "userIds")
+	if err := refuseUnlessScoped(env.IdentityScope.Users, users); err != nil {
+		return phishval.Outcome{}, err
+	}
 	var obs phishval.Observation
 	if env.DeviceCodeSignIns != nil {
-		signIns, err := env.DeviceCodeSignIns.SignInsByAuthenticationProtocol(ctx, "deviceCode")
+		signIns, err := env.DeviceCodeSignIns.SignInsForUsersByProtocol(ctx, "deviceCode", users)
 		if err == nil {
 			outcome, detail := phishidentity.EvaluateDeviceCodeEnforcement(signIns)
 			obs = phishbridge.FromDeviceCodeEnforcement(outcome, detail)

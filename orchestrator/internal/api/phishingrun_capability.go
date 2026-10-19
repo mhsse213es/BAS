@@ -2,8 +2,10 @@ package api
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/audspect/bas/internal/phishcatalog"
+	"github.com/audspect/bas/internal/phishscope"
 )
 
 // Capability says whether a phishing scenario can run on this installation, and
@@ -21,11 +23,15 @@ const (
 )
 
 const (
-	reasonDatabaseNotConfigured  = "database_not_configured"
-	reasonITSMConnectorNotConfig = "itsm_connector_not_configured"
-	reasonIdentityNotConfigured  = "identity_connector_not_configured"
-	reasonCalendarNotConfigured  = "calendar_connector_not_configured"
-	reasonNotRegistered          = "not_registered"
+	reasonDatabaseNotConfigured             = "database_not_configured"
+	reasonITSMConnectorNotConfig            = "itsm_connector_not_configured"
+	reasonIdentityNotConfigured             = "identity_connector_not_configured"
+	reasonCalendarNotConfigured             = "calendar_connector_not_configured"
+	reasonNotRegistered                     = "not_registered"
+	reasonIdentityAllowlistInvalid          = "identity_allowlist_invalid"
+	reasonOAuthClientAllowlistNotConfigured = "oauth_client_allowlist_not_configured"
+	reasonUserAllowlistNotConfigured        = "user_allowlist_not_configured"
+	reasonGraphPermissionReviewPending      = "graph_permission_review_pending"
 )
 
 // PhishingCapability is one scenario's runtime state on this installation.
@@ -46,7 +52,10 @@ var (
 	depIdentity = phishingDependency{reasonIdentityNotConfigured, func(e PhishingRunExecutorEnv) bool {
 		return e.OAuthConsentLister != nil || e.DeviceCodeSignIns != nil || e.IdentityReader != nil
 	}}
-	depCalendar = phishingDependency{reasonCalendarNotConfigured, func(e PhishingRunExecutorEnv) bool {
+	depIdentityAllowlist = phishingDependency{reasonIdentityAllowlistInvalid, func(e PhishingRunExecutorEnv) bool { return e.IdentityScopeErr == "" }}
+	depOAuthScope        = phishingDependency{reasonOAuthClientAllowlistNotConfigured, func(e PhishingRunExecutorEnv) bool { return e.IdentityScope.ConfiguredClients() }}
+	depUserScope         = phishingDependency{reasonUserAllowlistNotConfigured, func(e PhishingRunExecutorEnv) bool { return e.IdentityScope.ConfiguredUsers() }}
+	depCalendar          = phishingDependency{reasonCalendarNotConfigured, func(e PhishingRunExecutorEnv) bool {
 		return e.CalendarEventLure != nil && e.CalendarEventAllow.configured()
 	}}
 )
@@ -58,10 +67,10 @@ var (
 var phishingScenarioDeps = map[string][]phishingDependency{
 	"PH-DET-002":  {depDatabase, depITSM},
 	"PH-ID-001":   {depDatabase},
-	"PH-ID-002":   {depDatabase, depIdentity},
-	"PH-ID-003":   {depDatabase, depIdentity},
-	"PH-ID-004":   {depDatabase, depIdentity},
-	"PH-ID-005":   {depDatabase, depIdentity},
+	"PH-ID-002":   {depDatabase, depIdentity, depIdentityAllowlist, depOAuthScope},
+	"PH-ID-003":   {depDatabase, depIdentity, depIdentityAllowlist, depUserScope},
+	"PH-ID-004":   {depDatabase, depIdentity, depIdentityAllowlist, depUserScope},
+	"PH-ID-005":   {depDatabase, depIdentity, depIdentityAllowlist, depUserScope},
 	"PH-IR-003":   {depDatabase},
 	"PH-EVA-002":  {depDatabase},
 	"PH-CHN-004":  {depDatabase, depCalendar},
@@ -93,6 +102,12 @@ func phishingCapabilityFor(env PhishingRunExecutorEnv, scenarioID string, experi
 			return PhishingCapability{Status: CapUnavailable, Reason: dep.reason}
 		}
 	}
+	// Configuration never enables a scenario by itself. These scenarios also need
+	// their Graph permission and filtered query reviewed. Until that review is
+	// recorded here, they stay unavailable whatever is configured.
+	if graphReviewPending[scenarioID] {
+		return PhishingCapability{Status: CapUnavailable, Reason: reasonGraphPermissionReviewPending}
+	}
 	if experimental {
 		return PhishingCapability{Status: CapExperimental}
 	}
@@ -102,7 +117,7 @@ func phishingCapabilityFor(env PhishingRunExecutorEnv, scenarioID string, experi
 // scopedEnv keeps only the client a scenario actually reads. An identity client
 // wired for PH-ID-004 must not make PH-ID-002 runnable.
 func scopedEnv(env PhishingRunExecutorEnv, scenarioID string) PhishingRunExecutorEnv {
-	out := PhishingRunExecutorEnv{Pool: env.Pool}
+	out := PhishingRunExecutorEnv{Pool: env.Pool, IdentityScope: env.IdentityScope, IdentityScopeErr: env.IdentityScopeErr}
 	switch scenarioID {
 	case "PH-DET-002":
 		out.ReportTicketProvider = env.ReportTicketProvider
@@ -123,7 +138,30 @@ func scopedEnv(env PhishingRunExecutorEnv, scenarioID string) PhishingRunExecuto
 // use. It holds only what this Handler actually wires. Identity, device-code, and
 // calendar clients are not wired here yet, so those scenarios report unavailable.
 func (h *Handler) phishingRunEnv() PhishingRunExecutorEnv {
-	return PhishingRunExecutorEnv{ReportTicketProvider: h.phishingReportTicketProvider, Pool: h.db}
+	env := PhishingRunExecutorEnv{ReportTicketProvider: h.phishingReportTicketProvider, Pool: h.db}
+	// Read per request, not cached at startup, so a changed allowlist takes effect
+	// on the next library load and trigger. A malformed value fails closed.
+	scope, err := phishscope.ParseScope(
+		os.Getenv(EnvPhishIdentityTargetUsers), os.Getenv(EnvPhishOAuthClientIDs))
+	env.IdentityScope = scope
+	if err != nil {
+		env.IdentityScopeErr = err.Error()
+	}
+	return env
+}
+
+// Install-wide target allowlists, set by the admin in the setup configuration.
+const (
+	EnvPhishIdentityTargetUsers = "AUDSPECT_PHISH_IDENTITY_TARGET_USERS"
+	EnvPhishOAuthClientIDs      = "AUDSPECT_PHISH_OAUTH_CLIENT_IDS"
+)
+
+// graphReviewPending lists scenarios whose Graph permission or filtered query has
+// not been reviewed against Microsoft's reference. They stay unavailable until it
+// is recorded here.
+var graphReviewPending = map[string]bool{
+	"PH-ID-002": true,
+	"PH-ID-003": true,
 }
 
 // phishingScenarioCapability derives a catalog scenario's state from the same

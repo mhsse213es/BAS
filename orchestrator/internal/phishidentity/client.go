@@ -25,8 +25,11 @@ package phishidentity
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
+	"regexp"
 	"strings"
 	"time"
 
@@ -137,11 +140,37 @@ type oauthConsentGrantPage struct {
 // enough for a BAS test run; a tenant with enough grants to paginate is a
 // known limitation, not yet handled.
 func (c *Client) ListOAuthConsentGrants(ctx context.Context) ([]OAuthConsentGrant, error) {
+	return c.listOAuthConsentGrants(ctx, c.BaseURL+"/oauth2PermissionGrants")
+}
+
+// ListOAuthConsentGrantsForClients lists only the grants whose clientId is one of
+// clientIDs. The narrowing happens in the Graph query itself, via $filter. An
+// empty or malformed client list is refused, so this never becomes a
+// tenant-wide listing by accident. Scope is still bounded by Graph permissions.
+// Those are reviewed separately, and PH-ID-002 stays unavailable until they are.
+func (c *Client) ListOAuthConsentGrantsForClients(ctx context.Context, clientIDs []string) ([]OAuthConsentGrant, error) {
+	if len(clientIDs) == 0 {
+		return nil, errors.New("phishidentity: no client IDs given; refusing an unscoped grant listing")
+	}
+	clauses := make([]string, 0, len(clientIDs))
+	for _, id := range clientIDs {
+		if !clientGUIDRe.MatchString(id) {
+			return nil, fmt.Errorf("phishidentity: %q is not an application (client) ID", id)
+		}
+		clauses = append(clauses, "clientId eq '"+id+"'")
+	}
+	filter := strings.Join(clauses, " or ")
+	return c.listOAuthConsentGrants(ctx, c.BaseURL+"/oauth2PermissionGrants?$filter="+url.QueryEscape(filter))
+}
+
+var clientGUIDRe = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
+
+func (c *Client) listOAuthConsentGrants(ctx context.Context, reqURL string) ([]OAuthConsentGrant, error) {
 	token, err := c.tokens.Token(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("phishidentity: acquiring token: %w", err)
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.BaseURL+"/oauth2PermissionGrants", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("phishidentity: building request: %w", err)
 	}

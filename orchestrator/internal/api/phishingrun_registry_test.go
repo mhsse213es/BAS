@@ -12,6 +12,7 @@ import (
 	"github.com/audspect/bas/internal/exercise"
 	"github.com/audspect/bas/internal/phishbridge"
 	"github.com/audspect/bas/internal/phishidentity"
+	"github.com/audspect/bas/internal/phishscope"
 	"github.com/audspect/bas/internal/phishval"
 )
 
@@ -220,10 +221,10 @@ func TestLookupPhishingRunExecutor_PHID002Registered(t *testing.T) {
 }
 
 func TestExecutePHID002_NoRiskyTenantWideGrant_Pass(t *testing.T) {
-	env := PhishingRunExecutorEnv{OAuthConsentLister: fakeOAuthConsentLister{grants: []phishidentity.OAuthConsentGrant{
+	env := PhishingRunExecutorEnv{IdentityScope: phishscope.Scope{ClientIDs: []string{goodClientGUID}}, OAuthConsentLister: fakeOAuthConsentLister{grants: []phishidentity.OAuthConsentGrant{
 		{ID: "g1", ClientID: "app-1", ConsentType: "Principal", Scope: "Mail.Read"},
 	}}}
-	outcome, err := executePHID002(context.Background(), env, "run-1", map[string]any{})
+	outcome, err := executePHID002(context.Background(), env, "run-1", map[string]any{"clientIds": []any{goodClientGUID}})
 	if err != nil {
 		t.Fatalf("executePHID002: %v", err)
 	}
@@ -233,10 +234,10 @@ func TestExecutePHID002_NoRiskyTenantWideGrant_Pass(t *testing.T) {
 }
 
 func TestExecutePHID002_RiskyTenantWideGrant_Fail(t *testing.T) {
-	env := PhishingRunExecutorEnv{OAuthConsentLister: fakeOAuthConsentLister{grants: []phishidentity.OAuthConsentGrant{
+	env := PhishingRunExecutorEnv{IdentityScope: phishscope.Scope{ClientIDs: []string{goodClientGUID}}, OAuthConsentLister: fakeOAuthConsentLister{grants: []phishidentity.OAuthConsentGrant{
 		{ID: "g2", ClientID: "app-evil", ConsentType: "AllPrincipals", Scope: "Mail.Read Files.ReadWrite.All"},
 	}}}
-	outcome, err := executePHID002(context.Background(), env, "run-1", map[string]any{})
+	outcome, err := executePHID002(context.Background(), env, "run-1", map[string]any{"clientIds": []any{goodClientGUID}})
 	if err != nil {
 		t.Fatalf("executePHID002: %v", err)
 	}
@@ -246,8 +247,8 @@ func TestExecutePHID002_RiskyTenantWideGrant_Fail(t *testing.T) {
 }
 
 func TestExecutePHID002_NilLister_NotTestedNeverPanics(t *testing.T) {
-	env := PhishingRunExecutorEnv{OAuthConsentLister: nil}
-	outcome, err := executePHID002(context.Background(), env, "run-1", map[string]any{})
+	env := PhishingRunExecutorEnv{IdentityScope: phishscope.Scope{ClientIDs: []string{goodClientGUID}}, OAuthConsentLister: nil}
+	outcome, err := executePHID002(context.Background(), env, "run-1", map[string]any{"clientIds": []any{goodClientGUID}})
 	if err != nil {
 		t.Fatalf("executePHID002: %v", err)
 	}
@@ -257,8 +258,8 @@ func TestExecutePHID002_NilLister_NotTestedNeverPanics(t *testing.T) {
 }
 
 func TestExecutePHID002_ListerError_NotTestedNeverPass(t *testing.T) {
-	env := PhishingRunExecutorEnv{OAuthConsentLister: fakeOAuthConsentLister{err: errors.New("graph 403")}}
-	outcome, err := executePHID002(context.Background(), env, "run-1", map[string]any{})
+	env := PhishingRunExecutorEnv{IdentityScope: phishscope.Scope{ClientIDs: []string{goodClientGUID}}, OAuthConsentLister: fakeOAuthConsentLister{err: errors.New("graph 403")}}
+	outcome, err := executePHID002(context.Background(), env, "run-1", map[string]any{"clientIds": []any{goodClientGUID}})
 	if err != nil {
 		t.Fatalf("executePHID002: %v", err)
 	}
@@ -319,4 +320,9 @@ func TestExecutePHDET002_TicketNotCreated_Fail(t *testing.T) {
 	if outcome.Response.Verdict != phishval.VerdictFail {
 		t.Errorf("Response.Verdict = %q, want %q", outcome.Response.Verdict, phishval.VerdictFail)
 	}
+}
+
+// ListOAuthConsentGrantsForClients returns the same fixture grants.
+func (f fakeOAuthConsentLister) ListOAuthConsentGrantsForClients(context.Context, []string) ([]phishidentity.OAuthConsentGrant, error) {
+	return f.grants, f.err
 }

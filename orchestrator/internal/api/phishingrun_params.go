@@ -22,9 +22,14 @@ var phishingRunParams = map[string][]ParamSpec{
 		{Name: "targetId", Label: "Target ID", Kind: "text", Required: true},
 	},
 	"PH-ID-001": {{Name: "executionId", Label: "Execution ID", Kind: "text", Required: true}},
-	"PH-ID-002": {{Name: "runId", Label: "Action run ID", Kind: "text", Required: true}},
+	"PH-ID-002": {
+		{Name: "runId", Label: "Action run ID", Kind: "text", Required: true},
+		{Name: "clientIds", Label: "Application (client) IDs, comma-separated", Kind: "text", Required: true},
+	},
 	"PH-IR-003": {{Name: "runId", Label: "Action run ID", Kind: "text", Required: true}},
-	"PH-ID-003": {},
+	"PH-ID-003": {
+		{Name: "userIds", Label: "User principal names or object IDs, comma-separated", Kind: "text", Required: true},
+	},
 	"PH-ID-004": {
 		{Name: "userId", Label: "User ID", Kind: "text", Required: true},
 		{Name: "threshold", Label: "Denial threshold", Kind: "number", Required: true},

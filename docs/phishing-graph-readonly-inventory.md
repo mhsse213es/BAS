@@ -81,10 +81,17 @@ they are not wired by this phase:
 
 ## Not yet done (later steps)
 
-- Capability reporting does not yet account for target restrictions or
-  evidence completeness. Today it reflects only wired dependencies. No client
-  is wired, so no scenario here can report available. Required before any
-  enablement.
+- Done since the decisions above: the install-wide allowlists
+  (`AUDSPECT_PHISH_IDENTITY_TARGET_USERS`, `AUDSPECT_PHISH_OAUTH_CLIENT_IDS`) are
+  parsed per request with fail-closed validation. PH-ID-002 and PH-ID-003 refuse
+  out-of-scope, missing, or wildcard targets before any Graph call. Their
+  queries are narrowed in Graph itself (`$filter` on clientId, one query per
+  user). Capability reports unavailable with a specific reason, and
+  `graph_permission_review_pending` keeps both unavailable until the Graph
+  permission review is recorded. Covered by fake-client tests and
+  httptest request-URL assertions. Not done: an audit trail for allowlist
+  changes (the value is read per request, but nothing records who changed it),
+  and the `$filter` syntax against live Graph.
 - PH-ID-005 `$select` permission (conflicting sources) needs a live test
   with a real token.
 - PH-ID-002 list-operation permission is unconfirmed.

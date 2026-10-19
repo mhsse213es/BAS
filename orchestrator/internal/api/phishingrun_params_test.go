@@ -27,9 +27,9 @@ func TestPhishingRunParams_RequiredFieldsPerScenario(t *testing.T) {
 	cases := map[string][]string{
 		"PH-DET-002":  {"executionId", "targetId"},
 		"PH-ID-001":   {"executionId"},
-		"PH-ID-002":   {"runId"},
+		"PH-ID-002":   {"runId", "clientIds"},
 		"PH-IR-003":   {"runId"},
-		"PH-ID-003":   nil,
+		"PH-ID-003":   {"userIds"},
 		"PH-ID-004":   {"userId", "threshold", "windowSeconds"},
 		"PH-ID-005":   {"userId", "windowSeconds"},
 		"PH-EVA-002":  {"emailGwRunId", "relayEmailGwRunId"},

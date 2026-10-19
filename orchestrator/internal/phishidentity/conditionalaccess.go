@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 )
 
@@ -134,11 +135,36 @@ type signInEventPage struct {
 // the server-side filter parameter never silently returns the wrong
 // protocol's events.
 func (c *Client) SignInsByAuthenticationProtocol(ctx context.Context, protocol string) ([]SignInEvent, error) {
+	return c.signInsByFilter(ctx, fmt.Sprintf("authenticationProtocol eq '%s'", protocol), protocol)
+}
+
+// SignInsForUsersByProtocol reads the same records, but only for the named users,
+// with one Graph query per user. Each query's $filter names one userId, so Graph
+// itself narrows the result. An empty user list is refused, with no request made.
+func (c *Client) SignInsForUsersByProtocol(ctx context.Context, protocol string, users []string) ([]SignInEvent, error) {
+	if len(users) == 0 {
+		return nil, fmt.Errorf("phishidentity: no users given; refusing an unscoped sign-in listing")
+	}
+	var out []SignInEvent
+	for _, u := range users {
+		if strings.ContainsAny(u, "'\\") {
+			return nil, fmt.Errorf("phishidentity: user %q contains a character that cannot appear in a filter", u)
+		}
+		events, err := c.signInsByFilter(ctx,
+			fmt.Sprintf("authenticationProtocol eq '%s' and userId eq '%s'", protocol, u), protocol)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, events...)
+	}
+	return out, nil
+}
+
+func (c *Client) signInsByFilter(ctx context.Context, filter, protocol string) ([]SignInEvent, error) {
 	token, err := c.tokens.Token(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("phishidentity: acquiring token: %w", err)
 	}
-	filter := fmt.Sprintf("authenticationProtocol eq '%s'", protocol)
 	reqURL := c.BaseURL + "/auditLogs/signIns?$filter=" + url.QueryEscape(filter)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
 	if err != nil {

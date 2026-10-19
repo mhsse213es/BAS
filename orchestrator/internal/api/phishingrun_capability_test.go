@@ -9,6 +9,8 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/audspect/bas/internal/phishscope"
+
 	"github.com/audspect/bas/internal/phishcatalog"
 )
 
@@ -53,7 +55,8 @@ func TestPhishingCapability_NotRegisteredIsCatalogOnly(t *testing.T) {
 // An experimental scenario stays experimental. Wiring its dependency does not
 // make it reliable, and a missing dependency must not hide that it is experimental.
 func TestPhishingCapability_ExperimentalStaysExperimental(t *testing.T) {
-	wired := PhishingRunExecutorEnv{Pool: &pgxpool.Pool{}, IdentityReader: fakeIdentityReader{}}
+	wired := PhishingRunExecutorEnv{Pool: &pgxpool.Pool{}, IdentityReader: fakeIdentityReader{},
+		IdentityScope: phishscope.Scope{Users: []string{"alice@contoso.example"}}}
 	if c := phishingCapabilityFor(wired, "PH-ID-004", true); c.Status != CapExperimental {
 		t.Errorf("wired experimental: status=%q, want experimental", c.Status)
 	}
