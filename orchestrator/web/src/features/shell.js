@@ -24,6 +24,7 @@ import { loadFactoryHealth } from './factory-health.js';
 import { loadReports, loadRuns } from './reports.js';
 import { loadScheduledAssessments } from './scheduled.js';
 import { loadARTContentStatus, loadConnectorStatus, loadSimCoverage, loadTAXIIConnectors, loadThreatIntelConfig } from './threat-intel.js';
+import { loadExecutionPolicyDefault } from './execution-policy.js';
 import { loadVariantTab } from './variant-executor.js';
 import { displayOf, replaceClasses, setCssText, setDisplay } from '../core/inline-style.js';
 import { cssVars } from '../core/css-vars.js';
@@ -303,7 +304,7 @@ function bootApp() {
   loadAdversaries();
   loadAdversaryTemplates();
   loadRuns();
-  if (ROLE === 'admin') { loadConnectionConfig(); loadCalderaStatus(); loadConnectorStatus(); loadThreatIntelConfig('misp'); loadThreatIntelConfig('opencti'); loadThreatIntelConfig('otx'); loadTAXIIConnectors(); loadARTContentStatus(); }
+  if (ROLE === 'admin') { loadConnectionConfig(); loadExecutionPolicyDefault(); loadCalderaStatus(); loadConnectorStatus(); loadThreatIntelConfig('misp'); loadThreatIntelConfig('opencti'); loadThreatIntelConfig('otx'); loadTAXIIConnectors(); loadARTContentStatus(); }
   injectServerURL();
   // Restore the last active tab so a reload returns the user to where they were.
   // If there's a pending attack-path job in localStorage, go straight to that tab
