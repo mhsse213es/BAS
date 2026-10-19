@@ -58,6 +58,9 @@ var expectationByID = map[string]MailExpectation{
 
 	"EG-011.qr-code-lure.known-good": QRCodeLureExpectation(true),
 	"EG-011.qr-code-lure.known-bad":  QRCodeLureExpectation(false),
+
+	"EG-012.pdf-embedded-link.known-good": PDFEmbeddedLinkExpectation(true),
+	"EG-012.pdf-embedded-link.known-bad":  PDFEmbeddedLinkExpectation(false),
 }
 
 // ExpectationByID returns the MailExpectation expectationID resolves

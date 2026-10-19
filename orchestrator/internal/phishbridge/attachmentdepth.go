@@ -108,20 +108,7 @@ func buildMinimalDOCXWithExternalLink(uri string) ([]byte, error) {
 // URL inspection catches the embedded link); caught=false is the
 // known-bad case (the same attachment delivered uninspected).
 func PDFEmbeddedLinkExpectation(caught bool) emailgwefficacy.MailExpectation {
-	exp := emailgwefficacy.MailExpectation{
-		SenderProfile:  "pdf-embedded-link",
-		Recipient:      "finance-test@example-lab.test",
-		MessageClass:   "pdf-embedded-link",
-		ControlProduct: "m365-defender-o365",
-		Note:           "real, valid, minimal PDF attachment carrying a /Link annotation to a synthetic lab URL -- tests content/URL inspection reaching inside a PDF attachment, distinct from EICARAttachmentExpectation's generic malicious-MIME-content test",
-		EnvelopeFrom:   "billing@pdf-attachment-lab.test",
-	}
-	if caught {
-		exp.ExpectedAction = emailgwefficacy.ExpectedQuarantine
-	} else {
-		exp.ExpectedAction = emailgwefficacy.ExpectedDeliver
-	}
-	return exp
+	return emailgwefficacy.PDFEmbeddedLinkExpectation(caught)
 }
 
 // OfficeExternalLinkExpectation builds PH-ATT-003's MailExpectation:
@@ -178,4 +165,19 @@ func DispatchOfficeExternalLink(ctx context.Context, target emailgwefficacy.Inje
 		},
 	}
 	return emailgwefficacy.InjectScenarioMessage(ctx, target, exp, content)
+}
+
+// The EmailGW executor grades the PDF from registered test content. Registering
+// it here, where the PDF is built, keeps the byte-accurate PDF builder in this
+// package. The api package links phishbridge, so the registration always runs.
+func init() {
+	emailgwefficacy.RegisterScenarioTestContent("pdf-embedded-link", emailgwefficacy.InjectableMessage{
+		Subject:  "Q3 invoice attached",
+		BodyHTML: "<p>Please see the attached invoice.</p>",
+		Attachment: &exercise.TestAttachment{
+			Filename:    "invoice.pdf",
+			ContentType: "application/pdf",
+			Content:     buildMinimalPDFWithLink(pdfEmbeddedLinkURI),
+		},
+	})
 }

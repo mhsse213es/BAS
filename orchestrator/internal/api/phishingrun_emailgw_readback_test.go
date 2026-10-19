@@ -166,3 +166,42 @@ func TestExecutePHEmailGWReadback_CHN005_CompletedQRRun_Pass(t *testing.T) {
 		}
 	})
 }
+
+// PH-ATT-002 maps to the PDF-embedded-link expectation EG-012, which the
+// EmailGW dispatch table carries. Its read-back is graded on a completed run.
+func TestExecutePHEmailGWReadback_ATT002_CompletedPDFRun_Pass(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		exp, ok := emailgwefficacy.ExpectationByID("EG-012.pdf-embedded-link.known-good")
+		if !ok {
+			t.Fatal("EG-012.pdf-embedded-link.known-good missing from the dispatch table")
+		}
+		now := time.Now()
+		provider := emailgwefficacy.NewFixtureMailEvidenceProvider(
+			[]emailgwefficacy.EnforcementEvidence{{
+				Message: exp.Ref(), Action: "quarantine", ControlProduct: exp.ControlProduct,
+				Timestamp: now, Source: emailgwefficacy.SourceFixture,
+				Provenance: emailgwefficacy.Provenance{Kind: emailgwefficacy.ProvenanceObserved, Confidence: emailgwefficacy.ConfidenceHigh},
+			}},
+			nil,
+		)
+		result := emailgwefficacy.VerifyMailExpectation(exp, emailgwefficacy.OriginDeliveryObservation{}, provider, readbackScenarioWindow())
+		raw, err := json.Marshal(result)
+		if err != nil {
+			t.Fatalf("marshal efficacy result: %v", err)
+		}
+		seedEmailGWRun(t, pool, "eg-pdf-known-good", "EG-012.pdf-embedded-link.known-good", raw)
+
+		exec, ok := LookupPhishingRunExecutor("PH-ATT-002")
+		if !ok {
+			t.Fatal("PH-ATT-002 must be registered as executable")
+		}
+		outcome, err := exec(context.Background(), PhishingRunExecutorEnv{Pool: pool}, "run-1",
+			map[string]any{"emailGwRunId": "eg-pdf-known-good"})
+		if err != nil {
+			t.Fatalf("executor: %v", err)
+		}
+		if outcome.Enforcement.Verdict != phishval.VerdictPass {
+			t.Errorf("Enforcement.Verdict = %q, want %q for a PDF the gateway quarantined", outcome.Enforcement.Verdict, phishval.VerdictPass)
+		}
+	})
+}
