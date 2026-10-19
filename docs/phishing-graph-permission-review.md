@@ -103,3 +103,15 @@ That claim cannot be made without the policy result, so Conditional Access
 evaluation is essential to the stated objective. Under the approver's rule,
 `Policy.Read.ConditionalAccess` is a candidate for a documented, tenant-admin-consented
 grant. It has **not** been added. Approval is the approver's decision.
+
+## Recorded approval: PH-ID-003 Conditional Access permission
+
+- **Approved:** `Policy.Read.ConditionalAccess`, as a documented, tenant-admin-consented
+  application permission for PH-ID-003. The reason is the scenario's `Enforcement: Blocked`
+  objective, recorded in the finding above.
+- **Not yet done:** the grant has not been made in any Entra tenant. It is made by a
+  tenant administrator when the dedicated test tenant exists. The code does not grant it.
+- **Still gated:** PH-ID-003 stays unavailable (`graph_permission_review_pending`) until the
+  test-tenant validation passes, as the approval boundary requires.
+- **Not decided:** the PH-ID-002 permission (`Directory.Read.All`) and the PH-ID-002
+  identifier conflict. Both remain open.
