@@ -62,7 +62,17 @@ func newTestDB(ctx context.Context) (*TestDB, error) {
 		return nil, fmt.Errorf("testutil: get connection string: %w", err)
 	}
 
-	pool, err := pgxpool.New(ctx, dsn)
+	// lock_timeout makes the server abandon any statement that waits on a lock
+	// longer than truncateWaitLimit. A TRUNCATE stuck behind a leaked session
+	// then returns an error, and truncateTable reports the blocking sessions,
+	// without depending on a client-side timer.
+	poolCfg, err := pgxpool.ParseConfig(dsn)
+	if err != nil {
+		_ = container.Terminate(context.Background())
+		return nil, fmt.Errorf("testutil: parse pool config: %w", err)
+	}
+	poolCfg.ConnConfig.RuntimeParams["lock_timeout"] = "30s"
+	pool, err := pgxpool.NewWithConfig(ctx, poolCfg)
 	if err != nil {
 		_ = container.Terminate(context.Background())
 		return nil, fmt.Errorf("testutil: connect pool: %w", err)
