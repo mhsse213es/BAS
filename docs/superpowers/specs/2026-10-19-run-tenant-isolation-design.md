@@ -177,3 +177,33 @@ Each test uses the real `sharedDB.RunWithPool` harness and real routes through
 
 Until then, phishing grading and dispatch stay unregistered, and the eight
 verified PH→EmailGW mappings remain groundwork only.
+
+## 9. Scope finding (recorded before the migration slice)
+
+- Every installation is its own database (confirmed 2026-10-19), so no currently
+  shared database serves multiple customers. No emergency read restriction is
+  required; the coordinated fix proceeds on its normal path. Tenant isolation
+  remains required within one database for the planned MSSP mode.
+- The `'default'` tenant column is not limited to the five tables in §7.1.
+  `internal/db/postgres.go` adds `tenant_id text NOT NULL DEFAULT 'default'` to
+  **47 operational tables**, including `agents`, `audit_logs`, `findings`,
+  `campaigns`, `siem_configs`, `ticketing_configs`, and the `exercise_*` and
+  `scenario_*` families. Converting all 47 to NULL would hide agents, audit
+  logs and findings from every non-platform-admin user on every installation.
+  **Decision needed:** convert only the run, evidence, report-artifact and
+  child-record family, and classify the rest explicitly as a follow-up.
+- Dropping the default changes behavior for every run-creating insert: a run
+  created without an explicit tenant becomes NULL-owned and visible only to
+  platform administrators. Insert sites to update, each assigning the tenant
+  from authenticated claims: `scenario_runs` (`handlers.go`,
+  `remediation_dispatch.go`, `variant_handlers.go`), `run_events`
+  (`event_handlers.go`), `report_log` (`report_handlers.go`), `payload_families`
+  (`variant_handlers.go`, `db/postgres.go`), `openaev_config`
+  (`openaev_handlers.go`), `email_gw_runs` (`emailgwrun_store.go`),
+  `phishing_runs` (`phishingrun_store.go`), `cloud_runs` (`cloudrun_store.go`),
+  `exercise_executions` (`exercise/store.go`).
+- **Operational impact on upgrade:** existing non-platform-admin users of an
+  installation currently own their runs via the `'default'` tenant. After the
+  NULL conversion, those users stop seeing their own historical runs until an
+  operator reassigns them. The reassignment action must ship in the same change
+  and be documented in upgrade notes.
