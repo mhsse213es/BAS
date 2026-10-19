@@ -138,7 +138,11 @@ func scopedEnv(env PhishingRunExecutorEnv, scenarioID string) PhishingRunExecuto
 // use. It holds only what this Handler actually wires. Identity, device-code, and
 // calendar clients are not wired here yet, so those scenarios report unavailable.
 func (h *Handler) phishingRunEnv() PhishingRunExecutorEnv {
-	env := PhishingRunExecutorEnv{ReportTicketProvider: h.phishingReportTicketProvider, Pool: h.db}
+	env := PhishingRunExecutorEnv{
+		ReportTicketProvider: h.phishingReportTicketProvider, Pool: h.db,
+		EmailGWProvider: h.emailgwProvider, EmailGWTarget: h.emailgwInjectionTarget,
+		EmailGWOutbound: h.emailgwOutboundSender, EmailGWEnvironment: h.emailgwEnvironment,
+	}
 	// The allowlist comes from the container environment, which changes only when
 	// the container is recreated (install or upgrade), not on a live config edit.
 	// A malformed value fails closed. The startup audit record is in

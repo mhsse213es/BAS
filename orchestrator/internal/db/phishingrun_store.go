@@ -41,6 +41,12 @@ func EnsurePhishingRunSchema(ctx context.Context, pool *pgxpool.Pool) error {
 	if _, err := pool.Exec(ctx, `CREATE INDEX IF NOT EXISTS idx_phishing_runs_status ON phishing_runs (status)`); err != nil {
 		return fmt.Errorf("phishing_runs: create status index: %w", err)
 	}
+	// One dispatch per idempotency key. Ordinary runs carry no key and are not indexed.
+	if _, err := pool.Exec(ctx, `CREATE UNIQUE INDEX IF NOT EXISTS idx_phishing_runs_dispatch_key
+		ON phishing_runs ((result->'dispatch'->>'idempotencyKey'))
+		WHERE result->'dispatch'->>'idempotencyKey' IS NOT NULL`); err != nil {
+		return fmt.Errorf("phishing_runs: create dispatch key index: %w", err)
+	}
 	return nil
 }
 

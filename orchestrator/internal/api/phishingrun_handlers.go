@@ -46,7 +46,16 @@ func (h *Handler) TriggerPhishingRun(w http.ResponseWriter, r *http.Request) {
 	}
 
 	env := h.phishingRunEnv()
-	run, err := ExecutePhishingRun(r.Context(), h.db, env, req)
+	// A real EmailGW dispatch happens only when the operator asks for it in the request.
+	// It is never implied by a trigger alone. The dispatch path checks scope, recipients,
+	// and the idempotency key before anything is sent.
+	dispatch, _ := req.Parameters["dispatch"].(bool)
+	var run *phishingrun.PhishingRun
+	if dispatch {
+		run, err = startPhishingDispatch(r.Context(), h.db, env, req)
+	} else {
+		run, err = ExecutePhishingRun(r.Context(), h.db, env, req)
+	}
 	if err != nil {
 		failedRunID := ""
 		if run != nil {
@@ -92,6 +101,13 @@ func (h *Handler) GetPhishingRun(w http.ResponseWriter, r *http.Request) {
 			jsonError(w, "phishing run not found", http.StatusNotFound)
 			return
 		}
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	// A dispatched run settles when its EmailGW run finishes. Refresh it on read, so a
+	// running dispatch never shows as stuck once its evidence is in.
+	run, err = refreshPhishingDispatch(r.Context(), h.db, h.phishingRunEnv(), run)
+	if err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
 		return
 	}

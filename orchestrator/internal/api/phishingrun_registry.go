@@ -23,6 +23,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/audspect/bas/internal/actions"
+	"github.com/audspect/bas/internal/emailgwefficacy"
+	"github.com/audspect/bas/internal/emailgwrun"
 	"github.com/audspect/bas/internal/phishbridge"
 	"github.com/audspect/bas/internal/phishcatalog"
 	"github.com/audspect/bas/internal/phishidentity"
@@ -52,6 +54,12 @@ type PhishingRunExecutorEnv struct {
 	// identity connector configured; PH-ID-003 then degrades to NotTested.
 	// *phishidentity.Client satisfies it.
 	DeviceCodeSignIns DeviceCodeSignInLister
+	// EmailGW dispatch connectors. All nil on a deployment without the EmailGW
+	// real-run connector, and dispatch then refuses before sending anything.
+	EmailGWProvider    emailgwefficacy.MailEvidenceProvider
+	EmailGWTarget      emailgwefficacy.InjectionTarget
+	EmailGWOutbound    emailgwefficacy.OutboundSender
+	EmailGWEnvironment emailgwrun.Environment
 	// IdentityReader is nil on a deployment with no Microsoft Graph identity
 	// connector configured; PH-ID-004 and PH-ID-005 then degrade to NotTested.
 	// *phishidentity.Client satisfies it. Both heuristics are EXPERIMENTAL.

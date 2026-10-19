@@ -268,3 +268,21 @@ Verified by fake-client tests only: the 8 PH-CHN-004 tests, which cover refusal 
 **Still open:** PH-CHN-001/002/006/008 and PH-IR-002 remain unregistered. They are side-effect scenarios and need the same guardrail design as PH-CHN-004, with explicit approval before each is registered. PH-BEC-002 is still rejected by the Response rule.
 
 **Not yet verified:** the full `internal/api` suite, held for memory.
+
+## Approved gaps 1–4: evidence snapshot, completeness, PH-ID-001 window, EmailGW dispatch — 2026-10-19
+
+Scope was the approved delivery order. Live validation claims are unchanged. No scenario gained a maturity level. PH-ID-002, PH-ID-003, and PH-ID-005 stay unavailable. Side-effecting scenarios stay unregistered.
+
+**1. PH-DET-002 evidence snapshot — built.** Each search is retained on the outcome as `Collection`: source, window start and end, collection time, completeness, distinct ticket references, and a reason. Grading goes through `VerifyReportTicketSnapshot`. Regrade test: the first run keeps its verdict and record IDs after a later run sees different connector data.
+
+**2. ITSM completeness contract — built.** Completeness is complete, partial, truncated, or failed. Only a complete search with no records can produce a missed-triage finding. A record that contradicts the expectation fails only from a complete search. A connector outage is Inconclusive. A legacy provider with no completeness signal is treated as partial. Its empty result is never a finding. Tests cover each state, the inclusive window boundaries (1 ns outside fails), duplicate records, and the regrade guarantee.
+
+**3. PH-ID-001 observation window — built.** Start is the execution's persisted creation time. End is the earlier of the optional `expiresAt` and start+72h. An expiry at or before the start, or beyond 72h, is refused. While the window is open, "no interaction" is Inconclusive and marked provisional. Once it closes, "no interaction" is a final NotApplicable observation. Missing telemetry is Inconclusive. The window is recorded on the outcome and does not move on regrade. The UI wording (behavioral observation, visibly different Inconclusive) is not yet verified in a browser. See open items.
+
+**4. Phishing-to-EmailGW dispatch — built, with limits.** Opt-in per request with `dispatch: true`. Preflight refuses before any row or mail, on: a scenario not backed by an EmailGW expectation; a missing `idempotencyKey`; no named recipients; any recipient other than the expectation's defined test recipient; no EmailGW connector. A unique partial index on the idempotency key makes the pending-row insert the duplicate check. A retry returns the existing run and sends nothing. The EmailGW run ID is stored on the phishing run. Refresh on read: completed → graded through the existing read-back; failed or partial → phishing run failed with the reason; still open → stays running; past 24h → failed with a timeout reason; missing EmailGW row → failed. Tests (six, all passing): each refusal writes no row, duplicate key returns the existing run, open run left alone, failed and partial fail the run, timeout fails with reason, missing EmailGW row fails the run.
+
+**Not yet proven:** the successful send path (a real `ExecuteEmailGWRun` call through the dispatch function) has no test, because it needs a fake injection target. The completed-grade path after refresh is also untested. Both need a test before any live use.
+
+**Read-back gate — passed for 13 scenarios.** The mapping has 13 EmailGW-backed scenarios, not 14. The 14th, PH-EVA-002, is a two-leg grade and is covered separately. `TestReadbackGate_NoEvidenceNeverPasses_AllMappedScenarios` seeds a completed run with an empty efficacy result for each mapped scenario and asserts that no delivery, enforcement, or detection dimension grades as a pass. `TestReadbackGate_IncompleteRunRefusedForEveryMappedScenario` asserts that a running EmailGW run is refused for each. This proves the no-false-pass property. It does not prove each verdict is correct for every real EmailGW result.
+
+**Open items (not claimed):** UI wording in the browser; the dispatch success path and completed-grade path tests; a live run against a real EmailGW lab; the EmailGW dispatch's operator authorization was not changed (it reuses the existing trigger permission).

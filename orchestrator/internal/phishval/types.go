@@ -267,6 +267,32 @@ type Outcome struct {
 	// RelayProvenance is set only for a two-leg grade (PH-EVA-002). It names the
 	// relay-path run. The direct run is in Provenance.
 	RelayProvenance *Provenance `json:"relayProvenance,omitempty"`
+	// Collection records what a live evidence search established: its window, when
+	// it ran, which records it returned, and whether it completed. It is stored with
+	// the run, so a later regrade cannot rewrite it.
+	Collection *CollectionRecord `json:"collection,omitempty"`
+}
+
+// CollectionCompleteness states whether an evidence search covered everything it
+// was asked for. Only Complete allows a missing record to count as absence.
+type CollectionCompleteness string
+
+const (
+	CollectionComplete  CollectionCompleteness = "complete"
+	CollectionPartial   CollectionCompleteness = "partial"
+	CollectionTruncated CollectionCompleteness = "truncated"
+	CollectionFailed    CollectionCompleteness = "failed"
+)
+
+// CollectionRecord is the retained result of one evidence search.
+type CollectionRecord struct {
+	Source       string                 `json:"source"`
+	WindowStart  time.Time              `json:"windowStart"`
+	WindowEnd    time.Time              `json:"windowEnd"`
+	CollectedAt  time.Time              `json:"collectedAt"`
+	Completeness CollectionCompleteness `json:"completeness"`
+	RecordIDs    []string               `json:"recordIds"`
+	Reason       string                 `json:"reason,omitempty"`
 }
 
 // Provenance names the completed EmailGW run a read-back grade came from. The
