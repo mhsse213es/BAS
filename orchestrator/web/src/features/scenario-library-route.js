@@ -45,3 +45,24 @@ export function buildPhishingRunRequest(entry, values) {
   if (errors.length) return { ok: false, errors };
   return { ok: true, body: { scenarioId: route.id, parameters } };
 }
+
+// Counts phishing entries for the landing card. Each count reads only the
+// server's status field, so the browser never decides availability itself.
+export function phishingLibraryCounts(entries) {
+  const counts = { total: 0, runnable: 0, unavailable: 0, catalogOnly: 0 };
+  if (!Array.isArray(entries)) return counts;
+  for (const entry of entries) {
+    if (!entry || entry.type !== LIBRARY_TYPE_PHISHING) continue;
+    counts.total += 1;
+    if (entry.status === 'available' || entry.status === 'experimental') counts.runnable += 1;
+    else if (entry.status === 'unavailable') counts.unavailable += 1;
+    else if (entry.status === 'catalog_only') counts.catalogOnly += 1;
+  }
+  return counts;
+}
+
+// True when the page has nothing at all to show: no agent scenarios and no
+// phishing entries. Phishing entries keep the page reachable on their own.
+export function showNoScenariosMessage(agentCount, entries) {
+  return agentCount === 0 && phishingLibraryCounts(entries).total === 0;
+}

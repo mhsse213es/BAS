@@ -12,7 +12,7 @@ import { loadUsers } from './evidence.js';
 import { loadOpenAEVConfig, renderAttackPath } from './openaev.js';
 import { loadRuns, loadSIEMCorrelationPanel, openModal } from './reports.js';
 import { SCHED, renderScheduledAssessmentsList } from './scheduled.js';
-import { LIBRARY_TYPE_PHISHING, buildPhishingRunRequest, libraryEntryRoute } from './scenario-library-route.js';
+import { LIBRARY_TYPE_PHISHING, buildPhishingRunRequest, libraryEntryRoute, phishingLibraryCounts, showNoScenariosMessage } from './scenario-library-route.js';
 import { ROLE, STRIPE_COLORS, scenarioSrcCollapsed, setAgentsView, showTab } from './shell.js';
 import { loadARTContentStatus, loadConnectorStatus, loadTAXIIConnectors, loadThreatIntelConfig } from './threat-intel.js';
 import { displayOf, setCssText, setDisplay } from '../core/inline-style.js';
@@ -1971,6 +1971,8 @@ var SCENARIO_CATEGORIES = {
            icon: '<svg style="width:18px;height:18px;stroke:var(--accent)" viewBox="0 0 24 24" fill="none"><path d="M12 2L4 5v6c0 5 3.5 9 8 11 4.5-2 8-6 8-11V5l-8-3z" stroke-width="2" fill="none"/></svg>' },
   intel: { label: 'Threat-Intel',
            icon: '<svg style="width:18px;height:18px;stroke:var(--accent)" viewBox="0 0 24 24" fill="none"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" stroke-width="2"/><path d="M9 12l2 2 4-4" stroke-width="2"/></svg>' },
+  phishing: { label: 'Phishing',
+           icon: '<svg style="width:18px;height:18px;stroke:var(--accent)" viewBox="0 0 24 24" fill="none"><rect x="3" y="5" width="18" height="14" rx="2" stroke-width="2"/><path d="M3 7l9 6 9-6" stroke-width="2"/></svg>' },
   other: { label: 'Standard & Custom',
            icon: '<svg style="width:18px;height:18px;stroke:var(--muted)" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="18" height="18" rx="2" stroke-width="2"/><path d="M3 9h18M9 21V9" stroke-width="2"/></svg>' }
 };
@@ -1997,9 +1999,29 @@ function scenarioCategoryCounts(list, key) {
 
 var TMPL_ICON = '<svg style="width:18px;height:18px;stroke:var(--accent)" viewBox="0 0 24 24" fill="none"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" stroke-width="2" stroke-linejoin="round"/></svg>';
 
+// The landing's last inputs, so a library that loads after the landing can
+// re-draw the Phishing card without re-running the agent filters.
+var _lastLanding = null;
+
+function phishingLandingCardHTML() {
+  var c = phishingLibraryCounts(_libraryEntries);
+  if (c.total === 0) return '';
+  var breakdown = [c.runnable ? c.runnable + ' runnable here' : '',
+    c.unavailable ? c.unavailable + ' need a connector' : '',
+    c.catalogOnly ? c.catalogOnly + ' catalogued only' : '']
+    .filter(Boolean).join(' · ');
+  return '<div class="sc-cat-card sc-fade" tabindex="0" role="button" ' +
+    on('click', 'openScenarioCategory', 'phishing') + on('keydown', 'scenarioCategoryKeydown', 'phishing') + '>' +
+    '<h3>' + SCENARIO_CATEGORIES.phishing.icon + x(SCENARIO_CATEGORIES.phishing.label) + '</h3>' +
+    '<div class="sc-cat-count">' + c.total + ' scenario' + (c.total === 1 ? '' : 's') + '</div>' +
+    '<div class="sc-cat-breakdown">' + x(breakdown) + '</div>' +
+  '</div>';
+}
+
 function renderScenarioLanding(list, src) {
   var el = document.getElementById('sc-landing');
   if (!el) return;
+  _lastLanding = { list: list, src: src };
   var html = ['em', 'intel', 'other'].map(function(key) {
     var cat = SCENARIO_CATEGORIES[key];
     var c = scenarioCategoryCounts(list, key);
@@ -2028,6 +2050,7 @@ function renderScenarioLanding(list, src) {
     var emptySrcLabel = { builtin: 'Built-in', custom: 'Custom', intel: 'Threat Intel' }[src] || src;
     html = '<div class="tiny muted" style="width:100%;padding:0.5rem 0.1rem">There is no Scenarios for ' + x(emptySrcLabel) + ' yet</div>' + html;
   }
+  html += phishingLandingCardHTML();
   if (_templates.length) {
     html += '<div class="sc-cat-card sc-fade" tabindex="0" role="button" ' +
       on('click', 'openScenarioCategory', 'templates') + on('keydown', 'scenarioCategoryKeydown', 'templates') + '>' +
@@ -2083,7 +2106,7 @@ export function renderScenarios() {
   if (!landingEl || !catEl) return;
   loadScenarioLibrary();
 
-  if (!state.scenarios.length) {
+  if (showNoScenariosMessage(state.scenarios.length, _libraryEntries)) {
     setDisplay(catEl, 'none');
     setDisplay(landingEl, 'block');
     landingEl.innerHTML = '<p class="empty">No scenarios loaded.</p>';
@@ -2119,6 +2142,19 @@ export function renderScenarios() {
   setDisplay(document.getElementById('sc-filter-os'), '');
 
   if (q) { state.scenarioView = 'search'; }
+
+  // The agent source and OS filters apply to agent scenarios only, so they are
+  // hidden while the Phishing category is open.
+  if (state.scenarioView === 'phishing') {
+    setDisplay(srcEl, 'none');
+    setDisplay(osEl, 'none');
+    setDisplay(landingEl, 'none');
+    setDisplay(catEl, 'block');
+    document.getElementById('sc-backbar-title').textContent =
+      SCENARIO_CATEGORIES.phishing.label + ' (' + phishingLibraryCounts(_libraryEntries).total + ')';
+    renderPhishingLibrary();
+    return;
+  }
 
   if (state.scenarioView === 'search') {
     setDisplay(landingEl, 'none');
@@ -2499,24 +2535,33 @@ export function loadScenarioLibrary() {
   return apicall('/api/scenarios/library').then(function(entries) {
     _libraryEntries = Array.isArray(entries) ? entries : [];
     _phishingFormIndex = null; // an index from the old list could point at another entry now
-    renderPhishingLibrary();
+    refreshLibraryViews();
   }).catch(function() {
     _libraryEntries = [];
     _phishingFormIndex = null;
-    renderPhishingLibrary();
+    refreshLibraryViews();
   });
 }
 
-function phishingLibraryContainer() {
-  var existing = document.getElementById('sc-phishing-library');
-  if (existing) return existing;
-  var landing = document.getElementById('sc-landing');
-  if (!landing || !landing.parentNode) return null;
-  var el = document.createElement('div');
-  el.id = 'sc-phishing-library';
-  landing.parentNode.insertBefore(el, landing.nextSibling);
-  el.addEventListener('click', onPhishingLibraryClick);
-  return el;
+// Redraws whichever view shows phishing entries. Never calls renderScenarios,
+// which itself loads the library, so this cannot loop.
+function refreshLibraryViews() {
+  if (state.scenarioView === 'phishing') { renderPhishingLibrary(); return; }
+  if (state.scenarioView === 'landing') {
+    // With no agent scenarios the landing was never drawn, so fall back to an
+    // empty list. The landing then shows only the Phishing card, if any.
+    renderScenarioLanding(_lastLanding ? _lastLanding.list : [], _lastLanding ? _lastLanding.src : 'all');
+  }
+}
+
+// The phishing category grid is the shared sc-tile-grid. Clicks on its tiles
+// and parameter form go to onPhishingLibraryClick, bound once.
+function bindPhishingGrid() {
+  var grid = document.getElementById('sc-tile-grid');
+  if (grid && !grid._phishingBound) {
+    grid.addEventListener('click', onPhishingLibraryClick);
+    grid._phishingBound = true;
+  }
 }
 
 function phishingLibraryTileHTML(entry, index) {
@@ -2534,8 +2579,10 @@ function phishingLibraryTileHTML(entry, index) {
 }
 
 function renderPhishingLibrary() {
-  var el = phishingLibraryContainer();
-  if (!el) return;
+  if (state.scenarioView !== 'phishing') return;
+  var grid = document.getElementById('sc-tile-grid');
+  if (!grid) return;
+  bindPhishingGrid();
   var tiles = [];
   _libraryEntries.forEach(function(entry, index) {
     if (!entry || entry.type !== LIBRARY_TYPE_PHISHING) return;
@@ -2543,9 +2590,9 @@ function renderPhishingLibrary() {
   });
   var open = _libraryEntries[_phishingFormIndex];
   var form = open && libraryEntryRoute(open).kind === LIBRARY_TYPE_PHISHING ? phishingFormHTML(open) : '';
-  el.innerHTML = tiles.length
-    ? '<h3>Phishing scenarios</h3><div class="sc-tile-grid">' + tiles.join('') + '</div>' + form
-    : '';
+  grid.innerHTML = tiles.length
+    ? '<div class="sc-fade"><div class="sc-tile-grid">' + tiles.join('') + '</div>' + form + '</div>'
+    : '<p class="empty">No phishing scenarios are catalogued.</p>';
 }
 
 // Index of the phishing entry whose parameter form is open, or null.
@@ -2586,7 +2633,7 @@ function onPhishingLibraryClick(event) {
 
 function submitPhishingForm() {
   var entry = _libraryEntries[_phishingFormIndex];
-  var el = document.getElementById('sc-phishing-library');
+  var el = document.getElementById('sc-tile-grid');
   if (!entry || !el) return;
   var values = {};
   el.querySelectorAll('[data-param]').forEach(function(input) {

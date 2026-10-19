@@ -123,3 +123,26 @@ test('a catalog-only entry never routes', () => {
 test('the old executable status is no longer runnable', () => {
   assert.deepEqual(libraryEntryRoute({ type: 'phishing', id: 'PH-DET-002', status: 'executable' }), { kind: 'none' });
 });
+
+test('phishingLibraryCounts counts only phishing entries and splits runnable from unavailable by server status', async () => {
+  const { phishingLibraryCounts } = await import('../../src/features/scenario-library-route.js');
+  const entries = [
+    { type: 'agent', id: 'A-1', status: 'available' },
+    { type: 'phishing', id: 'PH-ID-001', status: 'available' },
+    { type: 'phishing', id: 'PH-ID-004', status: 'experimental' },
+    { type: 'phishing', id: 'PH-DET-002', status: 'unavailable', reason: 'itsm_connector_not_configured' },
+    { type: 'phishing', id: 'PH-CHN-001', status: 'catalog_only' },
+  ];
+  assert.deepEqual(phishingLibraryCounts(entries), { total: 4, runnable: 2, unavailable: 1, catalogOnly: 1 });
+  assert.deepEqual(phishingLibraryCounts([]), { total: 0, runnable: 0, unavailable: 0, catalogOnly: 0 });
+  assert.deepEqual(phishingLibraryCounts(null), { total: 0, runnable: 0, unavailable: 0, catalogOnly: 0 });
+});
+
+test('the empty-scenarios message shows only when there are no agent scenarios and no phishing entries', async () => {
+  const { showNoScenariosMessage } = await import('../../src/features/scenario-library-route.js');
+  const phishing = [{ type: 'phishing', id: 'PH-ID-001', status: 'available' }];
+  assert.equal(showNoScenariosMessage(0, []), true);
+  assert.equal(showNoScenariosMessage(0, null), true);
+  assert.equal(showNoScenariosMessage(0, phishing), false, 'phishing entries must keep the page reachable with zero agent scenarios');
+  assert.equal(showNoScenariosMessage(3, []), false);
+});
