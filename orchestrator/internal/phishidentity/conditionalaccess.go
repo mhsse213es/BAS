@@ -99,14 +99,22 @@ type SignInEvent struct {
 	AuthenticationProtocol           string
 	CreatedDateTime                  time.Time
 	AppliedConditionalAccessPolicies []AppliedConditionalAccessPolicy
+	// ConditionalAccessEvidence is true only when Graph actually returned the
+	// appliedConditionalAccessPolicies property, even as an empty list. When it
+	// is false, the property was omitted (typically because the app lacks
+	// Conditional Access read permission), so the record says nothing about
+	// whether a policy blocked it. Never read false as "no policy blocked".
+	ConditionalAccessEvidence bool
 }
 
 type signInEventPage struct {
 	Value []struct {
-		ID                               string    `json:"id"`
-		AuthenticationProtocol           string    `json:"authenticationProtocol"`
-		CreatedDateTime                  time.Time `json:"createdDateTime"`
-		AppliedConditionalAccessPolicies []struct {
+		ID                     string    `json:"id"`
+		AuthenticationProtocol string    `json:"authenticationProtocol"`
+		CreatedDateTime        time.Time `json:"createdDateTime"`
+		// A pointer distinguishes an omitted or null property (nil) from an
+		// explicit empty list (non-nil, zero length).
+		AppliedConditionalAccessPolicies *[]struct {
 			DisplayName string `json:"displayName"`
 			Result      string `json:"result"`
 		} `json:"appliedConditionalAccessPolicies"`
@@ -159,12 +167,16 @@ func (c *Client) SignInsByAuthenticationProtocol(ctx context.Context, protocol s
 			continue // defensive client-side re-filter, see doc comment above
 		}
 		var applied []AppliedConditionalAccessPolicy
-		for _, p := range v.AppliedConditionalAccessPolicies {
-			applied = append(applied, AppliedConditionalAccessPolicy{DisplayName: p.DisplayName, Result: p.Result})
+		evidence := v.AppliedConditionalAccessPolicies != nil
+		if evidence {
+			for _, p := range *v.AppliedConditionalAccessPolicies {
+				applied = append(applied, AppliedConditionalAccessPolicy{DisplayName: p.DisplayName, Result: p.Result})
+			}
 		}
 		events = append(events, SignInEvent{
 			ID: v.ID, AuthenticationProtocol: v.AuthenticationProtocol,
 			CreatedDateTime: v.CreatedDateTime, AppliedConditionalAccessPolicies: applied,
+			ConditionalAccessEvidence: evidence,
 		})
 	}
 	return events, nil
@@ -207,11 +219,19 @@ func EvaluateDeviceCodeEnforcement(signIns []SignInEvent) (DeviceCodeEnforcement
 	if len(signIns) == 0 {
 		return DeviceCodeUnknown, "no deviceCode sign-in attempts observed in this window"
 	}
+	// A reported failure is positive evidence and wins regardless of the rest.
 	for _, s := range signIns {
 		for _, p := range s.AppliedConditionalAccessPolicies {
 			if p.Result == "failure" {
 				return DeviceCodeBlocked, fmt.Sprintf("sign-in %s: policy %q reported result=failure", s.ID, p.DisplayName)
 			}
+		}
+	}
+	// No failure, but a sign-in whose CA property was omitted cannot be read as
+	// "no policy blocked". The window is incomplete, so the outcome is Unknown.
+	for _, s := range signIns {
+		if !s.ConditionalAccessEvidence {
+			return DeviceCodeUnknown, fmt.Sprintf("sign-in %s: appliedConditionalAccessPolicies was omitted by Graph (the app may lack Conditional Access read permission); whether a policy blocked it cannot be established", s.ID)
 		}
 	}
 	return DeviceCodeAllowed, fmt.Sprintf("%d deviceCode sign-in(s) observed, none blocked by an applied Conditional Access policy", len(signIns))

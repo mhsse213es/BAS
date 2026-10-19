@@ -20,7 +20,7 @@ func (f fakeDeviceCodeSignIns) SignInsByAuthenticationProtocol(context.Context, 
 
 func deviceCodeSignIn(result string) phishidentity.SignInEvent {
 	return phishidentity.SignInEvent{
-		ID: "s1", AuthenticationProtocol: "deviceCode",
+		ID: "s1", AuthenticationProtocol: "deviceCode", ConditionalAccessEvidence: true,
 		AppliedConditionalAccessPolicies: []phishidentity.AppliedConditionalAccessPolicy{
 			{DisplayName: "Block device code", Result: result},
 		},
