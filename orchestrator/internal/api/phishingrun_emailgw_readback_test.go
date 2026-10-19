@@ -205,3 +205,42 @@ func TestExecutePHEmailGWReadback_ATT002_CompletedPDFRun_Pass(t *testing.T) {
 		}
 	})
 }
+
+// PH-ATT-003 maps to the Office-external-link expectation EG-013, which the
+// EmailGW dispatch table carries. Its read-back is graded on a completed run.
+func TestExecutePHEmailGWReadback_ATT003_CompletedDOCXRun_Pass(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		exp, ok := emailgwefficacy.ExpectationByID("EG-013.office-external-link.known-good")
+		if !ok {
+			t.Fatal("EG-013.office-external-link.known-good missing from the dispatch table")
+		}
+		now := time.Now()
+		provider := emailgwefficacy.NewFixtureMailEvidenceProvider(
+			[]emailgwefficacy.EnforcementEvidence{{
+				Message: exp.Ref(), Action: "quarantine", ControlProduct: exp.ControlProduct,
+				Timestamp: now, Source: emailgwefficacy.SourceFixture,
+				Provenance: emailgwefficacy.Provenance{Kind: emailgwefficacy.ProvenanceObserved, Confidence: emailgwefficacy.ConfidenceHigh},
+			}},
+			nil,
+		)
+		result := emailgwefficacy.VerifyMailExpectation(exp, emailgwefficacy.OriginDeliveryObservation{}, provider, readbackScenarioWindow())
+		raw, err := json.Marshal(result)
+		if err != nil {
+			t.Fatalf("marshal efficacy result: %v", err)
+		}
+		seedEmailGWRun(t, pool, "eg-docx-known-good", "EG-013.office-external-link.known-good", raw)
+
+		exec, ok := LookupPhishingRunExecutor("PH-ATT-003")
+		if !ok {
+			t.Fatal("PH-ATT-003 must be registered as executable")
+		}
+		outcome, err := exec(context.Background(), PhishingRunExecutorEnv{Pool: pool}, "run-1",
+			map[string]any{"emailGwRunId": "eg-docx-known-good"})
+		if err != nil {
+			t.Fatalf("executor: %v", err)
+		}
+		if outcome.Enforcement.Verdict != phishval.VerdictPass {
+			t.Errorf("Enforcement.Verdict = %q, want %q for a DOCX the gateway quarantined", outcome.Enforcement.Verdict, phishval.VerdictPass)
+		}
+	})
+}

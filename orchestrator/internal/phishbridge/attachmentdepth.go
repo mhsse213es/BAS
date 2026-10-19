@@ -116,20 +116,7 @@ func PDFEmbeddedLinkExpectation(caught bool) emailgwefficacy.MailExpectation {
 // external hyperlink relationship to a synthetic lab URL. caught=true
 // is the known-good case; caught=false is the known-bad case.
 func OfficeExternalLinkExpectation(caught bool) emailgwefficacy.MailExpectation {
-	exp := emailgwefficacy.MailExpectation{
-		SenderProfile:  "office-external-link",
-		Recipient:      "finance-test@example-lab.test",
-		MessageClass:   "office-external-link",
-		ControlProduct: "m365-defender-o365",
-		Note:           "real, valid, minimal OOXML Word document attachment carrying an external hyperlink relationship to a synthetic lab URL -- tests content/URL inspection reaching inside an Office document's own relationship part, distinct from EICARAttachmentExpectation's generic malicious-MIME-content test",
-		EnvelopeFrom:   "documents@office-attachment-lab.test",
-	}
-	if caught {
-		exp.ExpectedAction = emailgwefficacy.ExpectedQuarantine
-	} else {
-		exp.ExpectedAction = emailgwefficacy.ExpectedDeliver
-	}
-	return exp
+	return emailgwefficacy.OfficeExternalLinkExpectation(caught)
 }
 
 // DispatchPDFEmbeddedLink sends PH-ATT-002's real test message, PDF
@@ -178,6 +165,25 @@ func init() {
 			Filename:    "invoice.pdf",
 			ContentType: "application/pdf",
 			Content:     buildMinimalPDFWithLink(pdfEmbeddedLinkURI),
+		},
+	})
+}
+
+// Registers PH-ATT-003's DOCX test content for the EmailGW executor. If the
+// DOCX does not build, nothing is registered, and the executor reports the
+// missing content rather than sending.
+func init() {
+	docx, err := buildMinimalDOCXWithExternalLink(officeExternalLinkURI)
+	if err != nil {
+		return
+	}
+	emailgwefficacy.RegisterScenarioTestContent("office-external-link", emailgwefficacy.InjectableMessage{
+		Subject:  "Updated vendor agreement attached",
+		BodyHTML: "<p>Please review the attached document.</p>",
+		Attachment: &exercise.TestAttachment{
+			Filename:    "agreement.docx",
+			ContentType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+			Content:     docx,
 		},
 	})
 }

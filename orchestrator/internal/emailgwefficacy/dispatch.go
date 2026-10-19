@@ -61,6 +61,9 @@ var expectationByID = map[string]MailExpectation{
 
 	"EG-012.pdf-embedded-link.known-good": PDFEmbeddedLinkExpectation(true),
 	"EG-012.pdf-embedded-link.known-bad":  PDFEmbeddedLinkExpectation(false),
+
+	"EG-013.office-external-link.known-good": OfficeExternalLinkExpectation(true),
+	"EG-013.office-external-link.known-bad":  OfficeExternalLinkExpectation(false),
 }
 
 // ExpectationByID returns the MailExpectation expectationID resolves
