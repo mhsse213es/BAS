@@ -55,6 +55,9 @@ var expectationByID = map[string]MailExpectation{
 
 	"EG-010.detection": PostDeliveryThreatResponseExpectation(),
 	"EG-010.response":  PostDeliveryThreatResponseExpectation(),
+
+	"EG-011.qr-code-lure.known-good": QRCodeLureExpectation(true),
+	"EG-011.qr-code-lure.known-bad":  QRCodeLureExpectation(false),
 }
 
 // ExpectationByID returns the MailExpectation expectationID resolves

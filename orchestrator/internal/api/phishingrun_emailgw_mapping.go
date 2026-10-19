@@ -16,6 +16,7 @@ var phishEmailGWExpectation = map[string]string{
 	"PH-URL-001":  "EG-003.credential-url.known-good",
 	"PH-ATT-001":  "EG-004.known-good",
 	"PH-ATT-010":  "EG-008.known-good",
+	"PH-CHN-005":  "EG-011.qr-code-lure.known-good",
 }
 
 func emailGWExpectationFor(scenarioID string) (string, bool) {

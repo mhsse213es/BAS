@@ -3,8 +3,6 @@ package phishbridge
 import (
 	"context"
 
-	"github.com/snykk/qr-generator/qrgen"
-
 	"github.com/audspect/bas/internal/emailgwefficacy"
 	"github.com/audspect/bas/internal/exercise"
 )
@@ -17,7 +15,7 @@ import (
 // decodes back to exactly this URI, the same genuineness bar
 // buildMinimalPDFWithLink/buildMinimalDOCXWithExternalLink hold
 // themselves to for PH-ATT-002/003.
-const qrCodeLureURI = "http://lookalike-login-lab.test/qr-scan"
+const qrCodeLureURI = emailgwefficacy.QRCodeLureURI
 
 // buildQRCodeLureImage generates a real PNG-encoded QR code for uri
 // using github.com/snykk/qr-generator/qrgen -- a from-scratch,
@@ -27,40 +25,19 @@ const qrCodeLureURI = "http://lookalike-login-lab.test/qr-scan"
 // disproportionate for one BAS stimulus, unlike the simpler PDF/ZIP
 // formats PH-ATT-002/003 construct directly).
 func buildQRCodeLureImage(uri string) ([]byte, error) {
-	return qrgen.Encode(uri, qrgen.WithECLevel(qrgen.ECLevelM))
+	return emailgwefficacy.BuildQRCodeLureImage(uri)
 }
 
-// QRCodeLureExpectation builds PH-CHN-005's MailExpectation: an
-// email whose attachment is a real QR code encoding a lookalike-login
-// URL, the mobile-QR-to-browser attack's own first leg. The browser
-// leg after a (real or simulated) scan is deliberately NOT re-proven
-// here -- that's PH-URL-001/PH-URL-005's own evidence, per this
-// scenario's existing partial-overlap note; this expectation and its
-// dispatch close only the QR-generation half that previously had no
-// adapter at all. caught=true is the known-good case (the attachment
-// itself gets quarantined/flagged before any scan can happen);
-// caught=false is the known-bad case.
+// QRCodeLureExpectation is PH-CHN-005's MailExpectation. The definition lives in
+// emailgwefficacy, so the EmailGW dispatch table and this bridge share one
+// expectation. See emailgwefficacy.QRCodeLureExpectation for its contract.
 func QRCodeLureExpectation(caught bool) emailgwefficacy.MailExpectation {
-	exp := emailgwefficacy.MailExpectation{
-		SenderProfile:  "qr-code-lure",
-		Recipient:      "mobile-user-test@example-lab.test",
-		MessageClass:   "qr-code-lure",
-		ControlProduct: "m365-defender-o365",
-		Note:           "attachment is a real, spec-conformant QR code image encoding a lookalike-login URL; proves QR generation/decode genuineness, not the mobile-camera scan itself or the post-scan browser leg (see PH-URL-001/PH-URL-005 for that)",
-		EnvelopeFrom:   "notices@qr-code-lure-lab.test",
-	}
-	if caught {
-		exp.ExpectedAction = emailgwefficacy.ExpectedQuarantine
-	} else {
-		exp.ExpectedAction = emailgwefficacy.ExpectedDeliver
-	}
-	return exp
+	return emailgwefficacy.QRCodeLureExpectation(caught)
 }
 
-var qrCodeLureContent = emailgwefficacy.InjectableMessage{
-	Subject:  "Scan to verify your account",
-	BodyHTML: "<p>Please scan the attached QR code with your phone camera to verify your account before it is suspended.</p>",
-}
+// qrCodeLureContent is the QR lure's message text; DispatchQRCodeLure attaches
+// the generated QR image to it.
+var qrCodeLureContent = emailgwefficacy.QRCodeLureText
 
 // DispatchQRCodeLure generates a fresh real QR code encoding
 // qrCodeLureURI, attaches it, and sends PH-CHN-005's real test message

@@ -127,3 +127,42 @@ func TestExecutePHEmailGWReadback_CompletedKnownGoodRun_Pass(t *testing.T) {
 		}
 	})
 }
+
+// PH-CHN-005 maps to the QR-lure expectation EG-011, which the EmailGW
+// dispatch table now carries. Its read-back is graded on a completed run.
+func TestExecutePHEmailGWReadback_CHN005_CompletedQRRun_Pass(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		exp, ok := emailgwefficacy.ExpectationByID("EG-011.qr-code-lure.known-good")
+		if !ok {
+			t.Fatal("EG-011.qr-code-lure.known-good missing from the dispatch table")
+		}
+		now := time.Now()
+		provider := emailgwefficacy.NewFixtureMailEvidenceProvider(
+			[]emailgwefficacy.EnforcementEvidence{{
+				Message: exp.Ref(), Action: "quarantine", ControlProduct: exp.ControlProduct,
+				Timestamp: now, Source: emailgwefficacy.SourceFixture,
+				Provenance: emailgwefficacy.Provenance{Kind: emailgwefficacy.ProvenanceObserved, Confidence: emailgwefficacy.ConfidenceHigh},
+			}},
+			nil,
+		)
+		result := emailgwefficacy.VerifyMailExpectation(exp, emailgwefficacy.OriginDeliveryObservation{}, provider, readbackScenarioWindow())
+		raw, err := json.Marshal(result)
+		if err != nil {
+			t.Fatalf("marshal efficacy result: %v", err)
+		}
+		seedEmailGWRun(t, pool, "eg-qr-known-good", "EG-011.qr-code-lure.known-good", raw)
+
+		exec, ok := LookupPhishingRunExecutor("PH-CHN-005")
+		if !ok {
+			t.Fatal("PH-CHN-005 must be registered as executable")
+		}
+		outcome, err := exec(context.Background(), PhishingRunExecutorEnv{Pool: pool}, "run-1",
+			map[string]any{"emailGwRunId": "eg-qr-known-good"})
+		if err != nil {
+			t.Fatalf("executor: %v", err)
+		}
+		if outcome.Enforcement.Verdict != phishval.VerdictPass {
+			t.Errorf("Enforcement.Verdict = %q, want %q for a QR lure the gateway quarantined", outcome.Enforcement.Verdict, phishval.VerdictPass)
+		}
+	})
+}
