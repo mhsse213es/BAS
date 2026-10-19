@@ -239,3 +239,32 @@ Method: for each unmapped scenario, read its catalog builder and the expectation
 | PH-CHN-005 | `QRCodeLureExpectation` | `phishbridge` | Not in the EG table. Needs a new EmailGW expectation. |
 
 **What would unblock these:** adding EmailGW expectations for them (new `emailgwefficacy` entries and their dispatch). That is new email-gateway build work, not a mapping. The alternative is relaxing the Response-to-EG-008 rule for PH-BEC-002. That is a design decision, not a fix.
+
+## Follow-up to the mapping audit: new EmailGW expectations and registrations — 2026-10-19
+
+The audit above recorded 0 verified mappings. The entries below supersede it: each scenario now has its own EmailGW expectation, registered as a read-back. Every read-back grades an existing run and sends no mail.
+
+| Scenario | Expectation (dispatch ID) | Grade | Commit |
+|---|---|---|---|
+| PH-CHN-005 | `EG-011.qr-code-lure` | Read-back, known-good = quarantine | `a168e5ea` |
+| PH-ATT-002 | `EG-012.pdf-embedded-link` | Read-back, known-good = quarantine | `e64ab8f0` |
+| PH-ATT-003 | `EG-013.office-external-link` | Read-back, known-good = quarantine | `613799c1` |
+| PH-AUTH-007 | `EG-014.internal-sender-spoof` | Read-back, known-good = quarantine | `334d54ef` |
+| PH-BEC-006 | `EG-015.reply-chain-hijack` | Read-back, known-good = quarantine | `dce41817` |
+| PH-EVA-002 | `EG-016.relay-path.{direct,relay}` | **Two-run**: direct leg graded; relay leg is a finding | `f35ae331` |
+
+**PH-EVA-002, Option A (decided by the user).** The grader takes two EmailGW runs, `emailGwRunId` for the direct path and `relayEmailGwRunId` for the relay path. Each run must be for its own leg, so the legs cannot be swapped. The verdict is the direct path's enforcement, graded against the catalog expectation (Blocked). The relay leg never sets a verdict. If the relay path did not block the same spoof, the enforcement reason records `BYPASS observed`. A relay gap therefore stays visible and is never scored as a PASS.
+
+**PH-ID-004 and PH-ID-005, EXPERIMENTAL, now registered (commit `6784127a`).** Both are read-only. PH-ID-004 reads MFA denial events, and PH-ID-005 reads risky sign-ins and the session-revocation time. Neither revokes anything. The threshold and window are required parameters with no defaults. Without a Graph identity connector, or on a failed read, both return NotTested. The sources keep their EXPERIMENTAL caveat.
+
+**PH-CHN-004, the first side-effecting registration (commit `672035cc`).** It creates a real Graph calendar event, so it is guarded:
+- **Off by default.** With no client or no allow-list it returns NotTested and makes no Graph call.
+- **Allow-list.** The organizer mailbox and the single attendee must each match an operator-configured entry exactly (case-insensitive). Anything else is refused before any call.
+- **Sequence.** Create one event, confirm it with an independent read-back, then always attempt cleanup. The subject carries the run ID.
+- **Verdict.** Delivered only on a confirmed read-back, with verified-telemetry evidence. A failed creation or an unconfirmed read is NotTested, never inferred. A cleanup failure is reported in the reason and leaves the verdict unchanged.
+
+Verified by fake-client tests only: the 8 PH-CHN-004 tests, which cover refusal before any call, ordering, and the cleanup-failure case. It has **not** been run against a live tenant.
+
+**Still open:** PH-CHN-001/002/006/008 and PH-IR-002 remain unregistered. They are side-effect scenarios and need the same guardrail design as PH-CHN-004, with explicit approval before each is registered. PH-BEC-002 is still rejected by the Response rule.
+
+**Not yet verified:** the full `internal/api` suite, held for memory.
