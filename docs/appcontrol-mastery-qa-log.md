@@ -45,7 +45,7 @@ Everything buildable without a live Windows lab or vendor tenant is complete, in
 - The first hypothesis, a leaked transaction holding a lock, was not supported. The hung goroutine was running in the pgx client in one run and waiting on the socket in another, and the context timeout on the `TRUNCATE` did not end the call.
 - A watchdog now stops waiting for a stuck `TRUNCATE` after 35 seconds and fails that test. In the fourth run the watchdog did not fire before the 50-minute limit, so the cause is not isolated.
 
-A fifth full run on 2026-10-20 with `GOMAXPROCS=1` and a 30-second server-side `lock_timeout` on test connections passed: `ok internal/api 1683.8s`, no failures, no truncate errors. The default setting (all CPUs) was not re-run after that change, and the cause of the hang is still not known. Treat the suite as passing only under `GOMAXPROCS=1` until a default-setting run also passes.
+A fifth full run on 2026-10-20 with `GOMAXPROCS=1` and a 30-second server-side `lock_timeout` on test connections passed: `ok internal/api 1683.8s`, no failures, no truncate errors. A run with the default setting (all CPUs) on the same code also passed: `ok internal/api 1681.9s`, no failures, no truncate errors. The cause of the earlier hang is still not isolated; the server-side `lock_timeout` is the change that let the suite finish, and it has passed both settings in one run each.
 
 ## Closure status
 
