@@ -3360,6 +3360,7 @@ func scanRunRows(rows pgx.Rows) ([]runRow, error) {
 		}
 		if failReason != nil {
 			run.FailReason = *failReason
+		models.RedactCredentialOutput(run.Results)
 		}
 		if d := reporting.DetectedTechniques(detRaw, run.Results); len(d) > 0 {
 			run.DetectedTechs = d
