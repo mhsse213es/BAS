@@ -29,6 +29,8 @@ type ScenarioLibraryEntry struct {
 	ID     string `json:"id"`
 	Name   string `json:"name"`
 	Status string `json:"status"`
+	// Parameters is the run-parameter schema of a phishing entry. Agent entries have none.
+	Parameters []ParamSpec `json:"parameters,omitempty"`
 }
 
 // phishingLibraryEntries turns the phishing catalog into library rows. The
@@ -46,6 +48,7 @@ func phishingLibraryEntries(catalog []phishcatalog.Scenario, executable func(id 
 		}
 		out = append(out, ScenarioLibraryEntry{
 			Type: LibraryTypePhishing, ID: sc.ID, Name: sc.Name, Status: status,
+			Parameters: phishingRunParams[sc.ID],
 		})
 	}
 	return out

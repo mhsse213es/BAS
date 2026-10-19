@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { libraryEntryRoute } from '../../src/features/scenario-library-route.js';
+import { buildPhishingRunRequest, libraryEntryRoute } from '../../src/features/scenario-library-route.js';
 
 test('an executable agent entry routes to the agent path only', () => {
   assert.deepEqual(libraryEntryRoute({ type: 'agent', id: 'sc-1', status: 'executable' }), { kind: 'agent', id: 'sc-1' });
@@ -52,4 +52,61 @@ test('agent and phishing paths are mutually exclusive for every input', () => {
       assert.ok(['agent', 'phishing', 'none'].includes(r.kind));
     }
   }
+});
+
+
+const detEntry = {
+  type: 'phishing', id: 'PH-DET-002', status: 'executable',
+  parameters: [
+    { name: 'executionId', label: 'Execution ID', kind: 'text', required: true },
+    { name: 'targetId', label: 'Target ID', kind: 'text', required: true },
+  ],
+};
+
+test('a complete phishing form builds the request body with its parameters', () => {
+  const r = buildPhishingRunRequest(detEntry, { executionId: ' exec-1 ', targetId: 'tgt-2' });
+  assert.deepEqual(r, { ok: true, body: { scenarioId: 'PH-DET-002', parameters: { executionId: 'exec-1', targetId: 'tgt-2' } } });
+});
+
+test('a missing required field is reported and no body is built', () => {
+  const r = buildPhishingRunRequest(detEntry, { executionId: 'exec-1', targetId: '   ' });
+  assert.equal(r.ok, false);
+  assert.deepEqual(r.errors, ['targetId']);
+  assert.equal(r.body, undefined);
+});
+
+test('a number field must be a positive integer and is sent as a number', () => {
+  const entry = { type: 'phishing', id: 'PH-ID-004', status: 'experimental', parameters: [
+    { name: 'userId', kind: 'text', required: true },
+    { name: 'threshold', kind: 'number', required: true },
+  ] };
+  assert.equal(buildPhishingRunRequest(entry, { userId: 'u', threshold: '5' }).body.parameters.threshold, 5);
+  for (const bad of ['0', '-3', '2.5', 'abc']) {
+    assert.equal(buildPhishingRunRequest(entry, { userId: 'u', threshold: bad }).ok, false, `threshold=${bad}`);
+  }
+});
+
+test('an email field needs an address shape', () => {
+  const entry = { type: 'phishing', id: 'PH-CHN-004', status: 'executable', parameters: [
+    { name: 'attendeeEmail', kind: 'email', required: true },
+  ] };
+  assert.equal(buildPhishingRunRequest(entry, { attendeeEmail: 'not-an-address' }).ok, false);
+  assert.equal(buildPhishingRunRequest(entry, { attendeeEmail: 'lab@example-lab.test' }).ok, true);
+});
+
+test('only schema fields are sent; extra values from the form are dropped', () => {
+  const r = buildPhishingRunRequest(detEntry, { executionId: 'e', targetId: 't', scenarioId: 'PH-OTHER', evil: 'x' });
+  assert.deepEqual(r.body.parameters, { executionId: 'e', targetId: 't' });
+  assert.equal(r.body.scenarioId, 'PH-DET-002');
+});
+
+test('a scenario with no schema builds a body with empty parameters', () => {
+  const r = buildPhishingRunRequest({ type: 'phishing', id: 'PH-ID-003', status: 'executable' }, {});
+  assert.deepEqual(r, { ok: true, body: { scenarioId: 'PH-ID-003', parameters: {} } });
+});
+
+test('a non-runnable or non-phishing entry never builds a phishing request', () => {
+  assert.equal(buildPhishingRunRequest({ type: 'phishing', id: 'PH-CHN-001', status: 'available', parameters: [] }, {}).ok, false);
+  assert.equal(buildPhishingRunRequest({ type: 'agent', id: 'sc-1', status: 'executable', parameters: [] }, {}).ok, false);
+  assert.equal(buildPhishingRunRequest(null, {}).ok, false);
 });

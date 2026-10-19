@@ -12,7 +12,7 @@ import { loadUsers } from './evidence.js';
 import { loadOpenAEVConfig, renderAttackPath } from './openaev.js';
 import { loadRuns, loadSIEMCorrelationPanel, openModal } from './reports.js';
 import { SCHED, renderScheduledAssessmentsList } from './scheduled.js';
-import { LIBRARY_TYPE_PHISHING, libraryEntryRoute } from './scenario-library-route.js';
+import { LIBRARY_TYPE_PHISHING, buildPhishingRunRequest, libraryEntryRoute } from './scenario-library-route.js';
 import { ROLE, STRIPE_COLORS, scenarioSrcCollapsed, setAgentsView, showTab } from './shell.js';
 import { loadARTContentStatus, loadConnectorStatus, loadTAXIIConnectors, loadThreatIntelConfig } from './threat-intel.js';
 import { displayOf, setCssText, setDisplay } from '../core/inline-style.js';
@@ -2496,9 +2496,11 @@ const LIBRARY_STATUS_LABEL = {
 export function loadScenarioLibrary() {
   return apicall('/api/scenarios/library').then(function(entries) {
     _libraryEntries = Array.isArray(entries) ? entries : [];
+    _phishingFormIndex = null; // an index from the old list could point at another entry now
     renderPhishingLibrary();
   }).catch(function() {
     _libraryEntries = [];
+    _phishingFormIndex = null;
     renderPhishingLibrary();
   });
 }
@@ -2533,19 +2535,68 @@ function renderPhishingLibrary() {
     if (!entry || entry.type !== LIBRARY_TYPE_PHISHING) return;
     tiles.push(phishingLibraryTileHTML(entry, index));
   });
+  var open = _libraryEntries[_phishingFormIndex];
+  var form = open && libraryEntryRoute(open).kind === LIBRARY_TYPE_PHISHING ? phishingFormHTML(open) : '';
   el.innerHTML = tiles.length
-    ? '<h3>Phishing scenarios</h3><div class="sc-tile-grid">' + tiles.join('') + '</div>'
+    ? '<h3>Phishing scenarios</h3><div class="sc-tile-grid">' + tiles.join('') + '</div>' + form
     : '';
 }
 
+// Index of the phishing entry whose parameter form is open, or null.
+var _phishingFormIndex = null;
+
+function phishingFormHTML(entry) {
+  var specs = Array.isArray(entry.parameters) ? entry.parameters : [];
+  var fields = specs.map(function(spec) {
+    var type = spec.kind === 'number' ? 'number' : (spec.kind === 'email' ? 'email' : 'text');
+    return '<label class="sc-param">' + x(spec.label || spec.name) +
+      (spec.required ? ' *' : '') +
+      '<input type="' + type + '" data-param="' + x(spec.name) + '"' +
+      (type === 'number' ? ' min="1" step="1"' : '') + '></label>';
+  }).join('');
+  return '<div class="sc-phishing-form" data-form-for="' + x(entry.id) + '">' + fields +
+    '<button type="button" data-library-submit>Run</button> ' +
+    '<button type="button" data-library-cancel>Cancel</button></div>';
+}
+
 function onPhishingLibraryClick(event) {
-  var btn = event.target.closest && event.target.closest('[data-entry-index]');
+  var target = event.target;
+  if (target.closest && target.closest('[data-library-cancel]')) {
+    _phishingFormIndex = null;
+    renderPhishingLibrary();
+    return;
+  }
+  if (target.closest && target.closest('[data-library-submit]')) {
+    submitPhishingForm();
+    return;
+  }
+  var btn = target.closest && target.closest('[data-entry-index]');
   if (!btn || btn.disabled) return;
-  var entry = _libraryEntries[Number(btn.getAttribute('data-entry-index'))];
-  var route = libraryEntryRoute(entry);
-  if (route.kind !== LIBRARY_TYPE_PHISHING) return;
-  apicall('/api/phishing-runs', { method: 'POST', body: JSON.stringify({ scenarioId: route.id }) })
-    .then(function() { showToast('Phishing run started: ' + route.id, 'ok'); })
+  var index = Number(btn.getAttribute('data-entry-index'));
+  if (libraryEntryRoute(_libraryEntries[index]).kind !== LIBRARY_TYPE_PHISHING) return;
+  _phishingFormIndex = index;
+  renderPhishingLibrary();
+}
+
+function submitPhishingForm() {
+  var entry = _libraryEntries[_phishingFormIndex];
+  var el = document.getElementById('sc-phishing-library');
+  if (!entry || !el) return;
+  var values = {};
+  el.querySelectorAll('[data-param]').forEach(function(input) {
+    values[input.getAttribute('data-param')] = input.value;
+  });
+  var built = buildPhishingRunRequest(entry, values);
+  if (!built.ok) {
+    showToast('Check these fields: ' + built.errors.join(', '), 'err');
+    return;
+  }
+  apicall('/api/phishing-runs', { method: 'POST', body: JSON.stringify(built.body) })
+    .then(function() {
+      showToast('Phishing run started: ' + built.body.scenarioId, 'ok');
+      _phishingFormIndex = null;
+      renderPhishingLibrary();
+    })
     .catch(function(err) {
       showToast('Phishing run failed: ' + (err && err.message ? err.message : String(err)), 'err');
     });
