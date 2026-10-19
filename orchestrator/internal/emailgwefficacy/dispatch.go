@@ -70,6 +70,11 @@ var expectationByID = map[string]MailExpectation{
 
 	"EG-015.reply-chain-hijack.known-good": ReplyChainHijackExpectation(true),
 	"EG-015.reply-chain-hijack.known-bad":  ReplyChainHijackExpectation(false),
+
+	"EG-016.relay-path.direct.known-good": RelayPathBypassDirectExpectation(true),
+	"EG-016.relay-path.direct.known-bad":  RelayPathBypassDirectExpectation(false),
+	"EG-016.relay-path.relay.known-good":  RelayPathBypassRelayExpectation(true),
+	"EG-016.relay-path.relay.known-bad":   RelayPathBypassRelayExpectation(false),
 }
 
 // ExpectationByID returns the MailExpectation expectationID resolves

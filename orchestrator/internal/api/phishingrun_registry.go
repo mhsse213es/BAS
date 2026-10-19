@@ -101,6 +101,7 @@ var phishingRunExecutors = map[string]PhishingRunExecutor{
 	"PH-ID-003":   executePHID003,
 	"PH-ID-004":   executePHID004,
 	"PH-ID-005":   executePHID005,
+	"PH-EVA-002":  executePHEVA002,
 	"PH-AUTH-002": emailGWReadbackExecutor("PH-AUTH-002"),
 	"PH-AUTH-003": emailGWReadbackExecutor("PH-AUTH-003"),
 	"PH-AUTH-004": emailGWReadbackExecutor("PH-AUTH-004"),
