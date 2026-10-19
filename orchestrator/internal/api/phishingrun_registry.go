@@ -57,6 +57,11 @@ type PhishingRunExecutorEnv struct {
 	// connector configured; PH-ID-004 and PH-ID-005 then degrade to NotTested.
 	// *phishidentity.Client satisfies it. Both heuristics are EXPERIMENTAL.
 	IdentityReader IdentityHeuristicReader
+	// CalendarEventLure and CalendarEventAllow gate PH-CHN-004, the only
+	// side-effecting scenario here. Both must be set, or it returns NotTested with
+	// no Graph call. The allow-list names the only mailboxes it may use.
+	CalendarEventLure  CalendarEventLureClient
+	CalendarEventAllow CalendarEventAllowlist
 }
 
 // OAuthConsentGrantLister is the read-only Graph listing PH-ID-002 needs,
@@ -102,6 +107,7 @@ var phishingRunExecutors = map[string]PhishingRunExecutor{
 	"PH-ID-004":   executePHID004,
 	"PH-ID-005":   executePHID005,
 	"PH-EVA-002":  executePHEVA002,
+	"PH-CHN-004":  executePHCHN004,
 	"PH-AUTH-002": emailGWReadbackExecutor("PH-AUTH-002"),
 	"PH-AUTH-003": emailGWReadbackExecutor("PH-AUTH-003"),
 	"PH-AUTH-004": emailGWReadbackExecutor("PH-AUTH-004"),
