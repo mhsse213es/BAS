@@ -27,3 +27,22 @@ func TestRedactCredentialOutput_WithholdsCredentialAccessOutput(t *testing.T) {
 		t.Fatalf("non-credential RawOutput changed to %q; only credential-access output may be withheld", results[1].RawOutput)
 	}
 }
+
+// The detection alert's command line is serialized on the result, so an
+// export would return a pass-the-hash hash that RawOutput redaction misses.
+func TestRedactCredentialOutput_WithholdsAlertCommandLineHash(t *testing.T) {
+	results := []SimulationResult{
+		{ID: "cred", Technique: AttackTechnique{ID: "T1003.001", Tactic: "credential-access"},
+			DetectionAlert: &DetectionAlert{CommandLine: "mimikatz.exe sekurlsa::pth /ntlm:" + testNTLMHash}},
+		{ID: "exec", Technique: AttackTechnique{ID: "T1059.001", Tactic: "execution"},
+			DetectionAlert: &DetectionAlert{CommandLine: "certutil -hashfile x " + testNTLMHash}},
+	}
+	RedactCredentialOutput(results)
+
+	if got := results[0].DetectionAlert.CommandLine; strings.Contains(got, testNTLMHash) || !strings.Contains(got, "sekurlsa::pth") {
+		t.Fatalf("credential-access alert command line = %q; want hash withheld, command kept", got)
+	}
+	if got := results[1].DetectionAlert.CommandLine; got != "certutil -hashfile x "+testNTLMHash {
+		t.Fatalf("non-credential alert command line changed to %q", got)
+	}
+}

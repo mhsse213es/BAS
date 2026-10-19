@@ -3,6 +3,7 @@ package iocregistry
 import (
 	"context"
 	"encoding/json"
+	"strings"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -26,7 +27,13 @@ func ExtractFromDetectionAlert(ctx context.Context, pool *pgxpool.Pool, scenario
 		if alert.ThreatName != "" {
 			meta["threatName"] = alert.ThreatName
 		}
-		id, err := upsertIOC(ctx, pool, TypeCommandLine, alert.CommandLine, SourceDetectionAlert, meta)
+		cmd := alert.CommandLine
+		if strings.EqualFold(res.Technique.Tactic, "credential-access") {
+			// The command line can carry the credential the step used. Keep
+			// the command, withhold the hash-shaped material from the registry.
+			cmd = models.WithholdCredentialHex(cmd)
+		}
+		id, err := upsertIOC(ctx, pool, TypeCommandLine, cmd, SourceDetectionAlert, meta)
 		if err != nil {
 			return err
 		}

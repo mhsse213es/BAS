@@ -155,8 +155,11 @@ verified PH→EmailGW mappings remain groundwork.
   never served by `GET /api/scenarios/runs/{runId}/iocs`. Non-credential hashes
   are still extracted. Test: `TestBuildRunIndicators_CredentialAccessHashNotStored`.
 - **Still open:**
-  1. Cross-run `GET /api/iocs` is populated from `DetectionAlert` command lines.
-     A pass-the-hash command line can carry an NTLM hash. Not yet checked or fixed.
+  1. Closed: cross-run `GET /api/iocs` command-line rows from credential-access
+     results have hash-shaped hex withheld before storage, and the same hex is
+     withheld from the detection alert command line on exported results.
+     Test: `TestExtractFromDetectionAlert_CredentialAccessCommandLineWithheld`,
+     `TestRedactCredentialOutput_WithholdsAlertCommandLineHash`.
   2. Other results loaders (findings, SIEM correlation, detection verification,
      posture, detection handlers) were not audited for whether they expose
      `RawOutput` to a response. Each needs a classification.

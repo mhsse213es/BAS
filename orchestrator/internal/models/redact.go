@@ -1,6 +1,9 @@
 package models
 
-import "strings"
+import (
+	"regexp"
+	"strings"
+)
 
 const (
 	// CredentialOutputWithheld replaces raw output of credential-access steps
@@ -20,5 +23,23 @@ func RedactCredentialOutput(results []SimulationResult) {
 		}
 		results[i].RawOutput = CredentialOutputWithheld
 		results[i].Details = CredentialOutputWithheld
+		if a := results[i].DetectionAlert; a != nil && a.CommandLine != "" {
+			// Copy rather than edit in place: the alert may be shared.
+			alert := *a
+			alert.CommandLine = WithholdCredentialHex(alert.CommandLine)
+			results[i].DetectionAlert = &alert
+		}
 	}
+}
+
+// CredentialHexWithheld replaces hex runs long enough to be a hash or key
+// (MD5 and longer) inside a value that is otherwise kept.
+const CredentialHexWithheld = "[withheld-hex]"
+
+var credentialHexRe = regexp.MustCompile(`[a-fA-F0-9]{32,}`)
+
+// WithholdCredentialHex removes hash-shaped hex from a value, such as an NTLM
+// hash passed on a command line, and returns the rest unchanged.
+func WithholdCredentialHex(s string) string {
+	return credentialHexRe.ReplaceAllString(s, CredentialHexWithheld)
 }
