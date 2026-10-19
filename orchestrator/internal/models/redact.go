@@ -97,6 +97,10 @@ func WithholdSecrets(s string) string {
 	}
 	return passwordAssignment.ReplaceAllStringFunc(s, func(m string) string {
 		parts := passwordAssignment.FindStringSubmatch(m)
+		// An already-withheld value is left as it is, so a repeat pass is a no-op.
+		if strings.HasPrefix(parts[2], "[withheld") {
+			return m
+		}
 		if passwordValueLooksSecret(parts[2]) {
 			return parts[1] + SecretWithheld
 		}

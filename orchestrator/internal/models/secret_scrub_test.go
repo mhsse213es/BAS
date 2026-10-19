@@ -91,3 +91,17 @@ func TestWithholdSecrets_PasswordShortValueRule(t *testing.T) {
 		}
 	}
 }
+
+// A value that is already withheld must not be withheld again. Otherwise every
+// read of a scrubbed row appends another marker.
+func TestWithholdSecrets_AlreadyWithheldIsStable(t *testing.T) {
+	for _, in := range []string{
+		"password=" + SecretWithheld,
+		"passwd: " + SecretWithheld,
+	} {
+		once := WithholdSecrets(in)
+		if twice := WithholdSecrets(once); twice != once {
+			t.Errorf("second pass changed %q to %q; want stable", once, twice)
+		}
+	}
+}
