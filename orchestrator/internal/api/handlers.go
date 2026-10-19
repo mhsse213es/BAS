@@ -566,9 +566,10 @@ func (h *Handler) WithExercise(store *exercise.Store, exec *exercise.Executor, c
 			techniques = []string{techniqueID}
 		}
 		opts := dispatchOpts{
-			Mode:         "posture",
-			Techniques:   techniques,
-			MaxPrivilege: policy.MaxPrivilege,
+			Mode:            "posture",
+			Techniques:      techniques,
+			MaxPrivilege:    policy.MaxPrivilege,
+			InProcessPolicy: policy.InProcessPolicy,
 		}
 		sc, ok := h.engine.Get(scenarioID)
 		if !ok {
@@ -2124,14 +2125,18 @@ func (h *Handler) dispatchRun(ctx context.Context, sc *scenario.Scenario, agentI
 	if mode == "" {
 		mode = "posture"
 	}
+	inProcessPolicy, err := h.resolveInProcessPolicy(ctx, o.InProcessPolicy)
+	if err != nil {
+		return "", "", err
+	}
 	subsetJSON, err := json.Marshal(dispatchSubsetFromOpts(o))
 	if err != nil {
 		return "", "", err
 	}
 	_, err = h.db.Exec(ctx,
-		`INSERT INTO scenario_runs (id, scenario_id, agent_id, name, status, initiated_by, started_at, campaign_id, variant_depth, mode, max_privilege, dispatch_subset, execution_kind, content_version_id)
-		 VALUES ($1, $2, $3, $4, 'running', $5, NOW(), $6, $7, $8, $9, $10, $11, $12)`,
-		runID, sc.ID, agentID, runName, o.InitiatedBy, nullIfEmpty(o.CampaignID), vdepth, mode, o.MaxPrivilege, subsetJSON, kind, contentVersionID,
+		`INSERT INTO scenario_runs (id, scenario_id, agent_id, name, status, initiated_by, started_at, campaign_id, variant_depth, mode, max_privilege, dispatch_subset, execution_kind, content_version_id, inprocess_policy)
+		 VALUES ($1, $2, $3, $4, 'running', $5, NOW(), $6, $7, $8, $9, $10, $11, $12, $13)`,
+		runID, sc.ID, agentID, runName, o.InitiatedBy, nullIfEmpty(o.CampaignID), vdepth, mode, o.MaxPrivilege, subsetJSON, kind, contentVersionID, inProcessPolicy,
 	)
 	if err != nil {
 		if isUniqueViolation(err) {
@@ -2414,7 +2419,7 @@ func (h *Handler) dispatchRun(ctx context.Context, sc *scenario.Scenario, agentI
 		Mode:                 o.Mode,
 		Policy:               sc.LivePolicy,
 		PreventScreenTimeout: sc.PreventScreenTimeout,
-		InProcessPolicy:      o.InProcessPolicy,
+		InProcessPolicy:      inProcessPolicy,
 		SweepID:              o.SweepID,
 		SweepName:            o.SweepName,
 		SweepLabel:           o.SweepLabel,
@@ -4484,6 +4489,11 @@ func (h *Handler) RunAdversaryTemplate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if !scenario.ValidInProcessPolicy(req.ExecutionPolicy.InProcessPolicy) {
+		jsonError(w, "executionPolicy.inProcessPolicy must be restricted, unrestricted, or omitted", http.StatusBadRequest)
+		return
+	}
+
 	targetIDs := append([]string{}, req.AgentIDs...)
 	if req.AgentID != "" {
 		targetIDs = append(targetIDs, req.AgentID)
@@ -4529,7 +4539,7 @@ func (h *Handler) RunAdversaryTemplate(w http.ResponseWriter, r *http.Request) {
 
 	base := dispatchOpts{
 		Mode: req.Mode, ConfirmLive: req.ConfirmLive, ConfirmLab: req.ConfirmLab,
-		Reason: req.Reason, InitiatedBy: uid, MaxPrivilege: req.ExecutionPolicy.MaxPrivilege,
+		Reason: req.Reason, InitiatedBy: uid, MaxPrivilege: req.ExecutionPolicy.MaxPrivilege, InProcessPolicy: req.ExecutionPolicy.InProcessPolicy,
 	}
 
 	for _, agentID := range targets {
@@ -5359,6 +5369,10 @@ func (h *Handler) RunCalderaAdversary(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "agentId required", http.StatusBadRequest)
 		return
 	}
+	if !scenario.ValidInProcessPolicy(req.ExecutionPolicy.InProcessPolicy) {
+		jsonError(w, "executionPolicy.inProcessPolicy must be restricted, unrestricted, or omitted", http.StatusBadRequest)
+		return
+	}
 
 	mode := req.Mode
 	if mode == "" {
@@ -5392,7 +5406,7 @@ func (h *Handler) RunCalderaAdversary(w http.ResponseWriter, r *http.Request) {
 
 	runID, skipReason, err := h.dispatchRun(r.Context(), synthSc, req.AgentID, dispatchOpts{
 		Mode: mode, ConfirmLive: req.ConfirmLive, ConfirmLab: req.ConfirmLab,
-		Reason: req.Reason, InitiatedBy: initiatedBy, MaxPrivilege: req.ExecutionPolicy.MaxPrivilege,
+		Reason: req.Reason, InitiatedBy: initiatedBy, MaxPrivilege: req.ExecutionPolicy.MaxPrivilege, InProcessPolicy: req.ExecutionPolicy.InProcessPolicy,
 		Kind: contentregistry.KindAdhocAdversary,
 	})
 	if err != nil {

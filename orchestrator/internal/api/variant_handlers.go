@@ -708,6 +708,10 @@ func (h *Handler) dispatchVariantRun(
 	// sweep_id has a REFERENCES vex_sweeps(id) constraint -- an empty string
 	// would violate it for every non-sweep dispatch, so "" must become a true
 	// SQL NULL, not the literal empty string, via a nil *string.
+	inProcessPolicy, err := h.resolveInProcessPolicy(ctx, "")
+	if err != nil {
+		return "", "", fmt.Errorf("resolve in-process policy: %w", err)
+	}
 	var sweepIDArg *string
 	if sweepID != "" {
 		sweepIDArg = &sweepID
@@ -715,10 +719,10 @@ func (h *Handler) dispatchVariantRun(
 
 	err = h.db.QueryRow(ctx,
 		`INSERT INTO scenario_runs
-			(scenario_id, agent_id, name, status, results, steps_total, initiated_by, sweep_id, execution_kind)
-		 VALUES ($1, $2, $3, 'running', '[]', $4, 'variant-executor', $5, 'variant')
+			(scenario_id, agent_id, name, status, results, steps_total, initiated_by, sweep_id, execution_kind, inprocess_policy)
+		 VALUES ($1, $2, $3, 'running', '[]', $4, 'variant-executor', $5, 'variant', $6)
 		 RETURNING id`,
-		syntheticScenarioID, agentID, runName, len(templates), sweepIDArg,
+		syntheticScenarioID, agentID, runName, len(templates), sweepIDArg, inProcessPolicy,
 	).Scan(&scenarioRunID)
 	if err != nil {
 		return "", "", fmt.Errorf("create scenario_run: %w", err)
@@ -762,15 +766,16 @@ func (h *Handler) dispatchVariantRun(
 		Type:    models.MsgCommandScenario,
 		AgentID: agentID,
 		Data: scenario.ScenarioCommand{
-			RunID:      scenarioRunID,
-			ScenarioID: syntheticScenarioID,
-			Name:       runName,
-			Steps:      steps,
-			Mode:       "posture",
-			SweepID:    sweepID,
-			SweepName:  sweepName,
-			SweepLabel: sweepLabel,
-			SweepFinal: sweepFinal,
+			RunID:           scenarioRunID,
+			ScenarioID:      syntheticScenarioID,
+			InProcessPolicy: inProcessPolicy,
+			Name:            runName,
+			Steps:           steps,
+			Mode:            "posture",
+			SweepID:         sweepID,
+			SweepName:       sweepName,
+			SweepLabel:      sweepLabel,
+			SweepFinal:      sweepFinal,
 		},
 	})
 	if !sent {

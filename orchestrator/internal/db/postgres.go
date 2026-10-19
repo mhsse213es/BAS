@@ -165,6 +165,20 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		// insert, surfaced read-only via scanRunRows for the Results/Live views.
 		`ALTER TABLE scenario_runs ADD COLUMN IF NOT EXISTS mode text NOT NULL DEFAULT ''`,
 		`ALTER TABLE scenario_runs ADD COLUMN IF NOT EXISTS max_privilege text NOT NULL DEFAULT ''`,
+		// inprocess_policy: the in-process language-mode policy this run was judged
+		// against, resolved once at dispatch (request > campaign > installation
+		// default). It is a snapshot: a later change to the installation default
+		// never rewrites what a historical run was checked against. '' means not
+		// stated, so that run's in-process verdict is UNVERIFIED.
+		`ALTER TABLE scenario_runs ADD COLUMN IF NOT EXISTS inprocess_policy text NOT NULL DEFAULT ''`,
+		// Installation-wide default for the in-process policy. One row only (id = 1).
+		// No row, or '', means not stated. The value is never assumed.
+		`CREATE TABLE IF NOT EXISTS execution_policy_default (
+			id                smallint    PRIMARY KEY CHECK (id = 1),
+			in_process_policy text        NOT NULL DEFAULT '' CHECK (in_process_policy IN ('', 'restricted', 'unrestricted')),
+			updated_at        timestamptz NOT NULL DEFAULT NOW(),
+			updated_by        text        NOT NULL DEFAULT ''
+		)`,
 		// paused: true while an operator has paused this run's step scheduler.
 		// status stays 'running' throughout a pause (see docs/superpowers/specs/
 		// 2026-08-16-pause-resume-live-runs-design.md) -- every existing

@@ -17,6 +17,28 @@ Everything buildable without a live Windows lab or vendor tenant is complete, in
 | 3 | Security-product correlation | Local part done. Vendor correlation open | Sysmon telemetry is a separate fact mapped to the `avval` model (`appcontrol_avval.go`). Defender and SentinelOne correlation are open: they need tenant access. The `avval` mapping is intentionally not rendered yet; it is the seam for vendor correlation. |
 | 4 | Coverage matrix and reporting | Done for run reports and campaign reports | Section 18a in the run report (HTML and PDF). Campaign reports carry one section per child run, labelled with its host. |
 
+## Closure status
+
+Each open item is one of three things: **Verified complete** (implementation and automated acceptance tests pass in this repo), **Blocked on environment or access** (the work is defined and the required real system is not available), or **Deferred by decision** (intentionally out of this release, with the impact stated).
+
+**Verified complete**
+
+- **Flaky cleanup tests** (`TestExecStepCleanupRunsAfterOperatorCancel`, `...ExecuteTimeout`). The root cause was in production code: the pre-cleanup snapshot ran inside the execute budget, so a slow snapshot could expire the budget before the command started. The snapshot is now taken first. The tests wait for a sentinel the command writes, not for elapsed time, and the timeout test fails if the command never started. Commit `70e20ff1`.
+- **Policy propagation.** The in-process policy is resolved once per dispatch: explicit request or campaign value, then the installation default, then not stated. The result is sent to the agent and stored on the run as a snapshot. A later default change does not rewrite a finished run. Every dispatch path that carries an execution policy now carries the in-process policy too: run start, campaigns, sweeps and exercise, scheduled and remediation runs, and variant sweeps. Tests check the command the agent receives and the stored snapshot, and that an invalid value writes nothing.
+- **Build floor (below 17763).** The shipped step text runs with the build expression replaced by `17000`, for all five gated families and the in-process host. Each must report `not_applicable`, with no verdict and the build recorded. This tests the real gate decision on this host. Older Windows builds were not run.
+
+**Blocked on environment or access**
+
+- **AppLocker/ASR lab sign-off.** Needs a Windows lab host with enforced policy. See "What you need to do".
+- **ScriptBlock visibility with real event evidence.** Needs a host where you may enable ScriptBlock logging. The procedure is in `appcontrol-scriptblock-visibility-procedure.md`. Visibility stays `unknown` until it has been run and recorded.
+- **Windows below 17763 on a real older image.** Needs an older VM. The gate itself is tested above.
+- **Defender and SentinelOne correlation.** Needs tenant access. The adapters are not built. Building fixture-based adapters without a verified vendor event schema would mean guessing field names, so I have not done it. If you provide representative exported events from each product, the adapters and fixture tests can be built from them. Until a real tenant confirms the event, correlation is reported as unverified.
+
+**Deferred by decision**
+
+- **Management UI for the installation default.** The API exists: `GET` and `PUT /api/execution-policy/default`, restricted to `execution-policy:manage`, which only the admin role holds. The UI is not built.
+- **Policy scope.** The default is installation-wide, because the product is on-prem with no tenants. Per-assessment overrides exist through the campaign's execution policy. Scheduled assessments inherit the installation default and have no separate override. Approve this scope, or ask for per-schedule overrides.
+
 ## What was done in this pass
 
 - **V3 in-process hosting (`inprocess_hosting`).** The custom PowerShell host is `tools/inprocess-host/bas-pshost.cs`. It hosts `System.Management.Automation` in its own process, not `powershell.exe`, and reports its language mode and whether `Add-Type` succeeds. `tools/inprocess-host/build.ps1` builds it with the .NET Framework compiler already on Windows, and downloads nothing. The scenario step runs the host only when `BAS_INPROC_HOST` points at a built binary, and reports `not_applicable` otherwise.

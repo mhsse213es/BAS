@@ -71,17 +71,21 @@ func (h *Handler) dispatchRemediationStep(ctx context.Context, agentID, scenario
 	}
 	resolved := scenario.ResolvedHashes(steps)
 
+	inProcessPolicy, err := h.resolveInProcessPolicy(ctx, "")
+	if err != nil {
+		return "", false, err
+	}
 	runID = newID()
 	if _, err = h.db.Exec(ctx,
-		`INSERT INTO scenario_runs (id, scenario_id, agent_id, name, status, started_at, execution_kind)
-		 VALUES ($1, $2, $3, $4, 'running', NOW(), 'remediation')`,
-		runID, sc.ID, agentID, sc.Name,
+		`INSERT INTO scenario_runs (id, scenario_id, agent_id, name, status, started_at, execution_kind, inprocess_policy)
+		 VALUES ($1, $2, $3, $4, 'running', NOW(), 'remediation', $5)`,
+		runID, sc.ID, agentID, sc.Name, inProcessPolicy,
 	); err != nil {
 		return "", false, err
 	}
 	h.persistStepMeta(ctx, runID, steps, resolved)
 
-	cmd := scenario.ScenarioCommand{RunID: runID, ScenarioID: sc.ID, Name: sc.Name, Steps: steps}
+	cmd := scenario.ScenarioCommand{RunID: runID, ScenarioID: sc.ID, Name: sc.Name, Steps: steps, InProcessPolicy: inProcessPolicy}
 	sent = h.hub.SendToAgent(agentID, models.WSMessage{Type: models.MsgCommandScenario, AgentID: agentID, Data: cmd})
 	if !sent {
 		h.db.Exec(context.Background(), `UPDATE scenario_runs SET status='failed', completed_at=NOW() WHERE id=$1`, runID)
@@ -119,17 +123,21 @@ func (h *Handler) dispatchTechniqueVerification(ctx context.Context, agentID, te
 	}
 	resolved := scenario.ResolvedHashes(steps)
 
+	inProcessPolicy, err := h.resolveInProcessPolicy(ctx, "")
+	if err != nil {
+		return "", false, err
+	}
 	runID = newID()
 	if _, err = h.db.Exec(ctx,
-		`INSERT INTO scenario_runs (id, scenario_id, agent_id, name, status, started_at, execution_kind)
-		 VALUES ($1, $2, $3, $4, 'running', NOW(), 'technique_verification')`,
-		runID, sc.ID, agentID, sc.Name,
+		`INSERT INTO scenario_runs (id, scenario_id, agent_id, name, status, started_at, execution_kind, inprocess_policy)
+		 VALUES ($1, $2, $3, $4, 'running', NOW(), 'technique_verification', $5)`,
+		runID, sc.ID, agentID, sc.Name, inProcessPolicy,
 	); err != nil {
 		return "", false, err
 	}
 	h.persistStepMeta(ctx, runID, steps, resolved)
 
-	cmd := scenario.ScenarioCommand{RunID: runID, ScenarioID: sc.ID, Name: sc.Name, Steps: steps}
+	cmd := scenario.ScenarioCommand{RunID: runID, ScenarioID: sc.ID, Name: sc.Name, Steps: steps, InProcessPolicy: inProcessPolicy}
 	sent = h.hub.SendToAgent(agentID, models.WSMessage{Type: models.MsgCommandScenario, AgentID: agentID, Data: cmd})
 	if !sent {
 		h.db.Exec(context.Background(), `UPDATE scenario_runs SET status='failed', completed_at=NOW() WHERE id=$1`, runID)

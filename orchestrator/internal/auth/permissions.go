@@ -114,7 +114,12 @@ const (
 	// and CanSyncConnector's existing tier -- it gates writing MISP/OpenCTI/
 	// OTX connection settings (URL, API key), not just viewing or triggering
 	// a sync of whatever's already configured.
-	CanUpdateConnectorConfig   Permission = "connector:config:update"
+	CanUpdateConnectorConfig Permission = "connector:config:update"
+	// CanManageExecutionPolicy sets the installation-wide default for execution
+	// policies that have no safe built-in value, such as the in-process host
+	// language-mode requirement. Admin only: the default changes what every
+	// later run is judged against.
+	CanManageExecutionPolicy   Permission = "execution-policy:manage"
 	CanDeleteConnectorScenario Permission = "connector:scenarios:delete"
 
 	// Admin-only: attack-path schedule, ART content management.
@@ -284,6 +289,8 @@ const (
 // read-only and holds none of the verification permissions.
 var rolePermissions = map[Role]map[Permission]bool{
 	RoleAdmin: {
+		CanManageExecutionPolicy: true,
+
 		CanVerify:            true,
 		CanUploadEvidence:    true,
 		CanDeleteEvidence:    true,

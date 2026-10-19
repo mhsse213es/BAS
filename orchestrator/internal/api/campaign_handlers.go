@@ -47,6 +47,10 @@ func (h *Handler) CreateCampaign(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "name and scenarioId are required", http.StatusBadRequest)
 		return
 	}
+	if !scenario.ValidInProcessPolicy(req.ExecutionPolicy.InProcessPolicy) {
+		jsonError(w, "executionPolicy.inProcessPolicy must be restricted, unrestricted, or omitted", http.StatusBadRequest)
+		return
+	}
 	// targetType defaults to "agents" -- every campaign created before this
 	// field existed was, in fact, an explicit agent list, so an absent
 	// targetType must behave exactly as it always has.
@@ -217,7 +221,7 @@ func (h *Handler) CreateCampaign(w http.ResponseWriter, r *http.Request) {
 	opts := dispatchOpts{
 		Mode: mode, ConfirmLive: req.ConfirmLive, ConfirmLab: req.ConfirmLab, Reason: req.Reason,
 		Techniques: req.Techniques, Abilities: req.Abilities, Steps: req.Steps, Checks: req.Checks,
-		CampaignID: id, InitiatedBy: initiatedBy, MaxPrivilege: req.ExecutionPolicy.MaxPrivilege,
+		CampaignID: id, InitiatedBy: initiatedBy, MaxPrivilege: req.ExecutionPolicy.MaxPrivilege, InProcessPolicy: req.ExecutionPolicy.InProcessPolicy,
 		// Without this, a campaign-dispatched run's name defaults to the
 		// bare scenario name (dispatchRun's own fallback) -- indistinguishable
 		// in Live Runs from a manually-triggered run. Mirrors the "Scheduled: "
