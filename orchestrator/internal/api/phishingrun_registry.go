@@ -119,7 +119,9 @@ var phishingRunExecutors = map[string]PhishingRunExecutor{
 	"PH-ID-004":   executePHID004,
 	"PH-ID-005":   executePHID005,
 	"PH-EVA-002":  executePHEVA002,
-	"PH-CHN-004":  executePHCHN004,
+	// PH-CHN-004 is deliberately NOT registered. It creates and deletes a real
+	// calendar event, so it stays out of executable discovery until its side-effect
+	// review is complete. executePHCHN004 is kept, with its evidence, for that review.
 	"PH-AUTH-002": emailGWReadbackExecutor("PH-AUTH-002"),
 	"PH-AUTH-003": emailGWReadbackExecutor("PH-AUTH-003"),
 	"PH-AUTH-004": emailGWReadbackExecutor("PH-AUTH-004"),

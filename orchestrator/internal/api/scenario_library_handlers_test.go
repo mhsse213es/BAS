@@ -54,7 +54,8 @@ func TestPhishingLibraryEntries_RealCatalogNeverOverclaims(t *testing.T) {
 		"PH-CHN-004": true, "PH-DET-002": true,
 	}
 	for _, e := range phishingLibraryEntries(cat, poolOnly()) {
-		if unwired[e.ID] && e.Status != CapUnavailable {
+		// PH-CHN-004 is catalog-only by decision (unregistered), which is also not runnable.
+		if unwired[e.ID] && e.Status != CapUnavailable && !(e.ID == "PH-CHN-004" && e.Status == CapCatalogOnly) {
 			t.Errorf("%s: status=%q, want unavailable on an installation without its connector", e.ID, e.Status)
 		}
 		if e.Status == CapAvailable && e.Experimental {

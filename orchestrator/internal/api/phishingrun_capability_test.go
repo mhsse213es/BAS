@@ -26,7 +26,6 @@ func TestPhishingCapability_MissingDependencyIsUnavailableWithReason(t *testing.
 		"PH-ID-003":  "identity_connector_not_configured",
 		"PH-ID-004":  "identity_connector_not_configured",
 		"PH-ID-005":  "identity_connector_not_configured",
-		"PH-CHN-004": "calendar_connector_not_configured",
 		"PH-DET-002": "itsm_connector_not_configured",
 	}
 	for id, reason := range cases {

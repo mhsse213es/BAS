@@ -46,9 +46,10 @@ var testCalendarAllow = CalendarEventAllowlist{
 
 func runCalendarLure(t *testing.T, env PhishingRunExecutorEnv, params map[string]any) (phishval.Outcome, error) {
 	t.Helper()
-	exec, ok := LookupPhishingRunExecutor("PH-CHN-004")
+	// Tests call the preserved executor directly. Registration is deliberately absent.
+	exec, ok := PhishingRunExecutor(executePHCHN004), true
 	if !ok {
-		t.Fatal("PH-CHN-004 must be registered as executable")
+		t.Fatal("unreachable")
 	}
 	return exec(context.Background(), env, "run-cal-1", params)
 }
