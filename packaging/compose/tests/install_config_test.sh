@@ -28,7 +28,8 @@ run_case() {
     eval "$(extract load_config)"
     eval "$(extract _write_env)"
     eval "$(extract validate_phish_scope)"
-    load_config "$tmp/setup.conf" && validate_phish_scope && _write_env && cat "$tmp/.env"
+    eval "$(extract validate_emailgw_config)"
+    load_config "$tmp/setup.conf" && validate_phish_scope && validate_emailgw_config && _write_env && cat "$tmp/.env"
   ) 2>&1
   echo "rc=$?"
   rm -rf "$tmp"
@@ -104,6 +105,49 @@ grep -q 'rc=1' <<<"$out" && pass "wildcard user allowlist refuses the install" |
 
 out="$(run_case '')"
 grep -q 'AUDSPECT_PHISH_OAUTH_SP_OBJECT_IDS: ${AUDSPECT_PHISH_OAUTH_SP_OBJECT_IDS:-}' "${here}/../docker-compose.yml" && pass "compose passes the client allowlist to the orchestrator" || fail "compose passthrough missing"
+
+# ── EmailGW real-run connector ──────────────────────────────────────────────────
+EG_SECRET='emailgw-secret-test-only'
+EG_TENANT='11111111-2222-4333-8444-555555555555'
+EG_CLIENT='66666666-7777-4888-8999-aaaaaaaaaaaa'
+
+out="$(run_case '')"
+grep -q '^AUDSPECT_EMAILGW_TENANT_ENVIRONMENT=lab$' <<<"$out" && grep -q 'rc=0' <<<"$out" && pass "EmailGW blank -> disabled, environment defaults to lab" || fail "EmailGW blank: $out"
+
+out="$(run_case 'AUDSPECT_EMAILGW_TENANT_ENVIRONMENT=production')"
+grep -q 'rc=1' <<<"$out" && pass "EmailGW environment outside lab|customer refuses the install" || fail "EmailGW bad environment accepted: $out"
+
+out="$(run_case "AUDSPECT_EMAILGW_DEFENDER_TENANT_ID=${EG_TENANT}")"
+grep -q 'rc=1' <<<"$out" && grep -q 'together, or none' <<<"$out" && pass "EmailGW partial Defender set refused, not silently disabled" || fail "EmailGW partial set accepted: $out"
+
+out="$(run_case "AUDSPECT_EMAILGW_DEFENDER_TENANT_ID=${EG_TENANT}
+AUDSPECT_EMAILGW_DEFENDER_CLIENT_ID=${EG_CLIENT}
+AUDSPECT_EMAILGW_DEFENDER_CLIENT_SECRET=${EG_SECRET}")"
+grep -q 'rc=0' <<<"$out" && grep -q "^AUDSPECT_EMAILGW_DEFENDER_CLIENT_SECRET=${EG_SECRET}$" <<<"$out" && grep -q "^AUDSPECT_EMAILGW_DEFENDER_CLIENT_ID=${EG_CLIENT}$" <<<"$out" && pass "EmailGW complete Defender set written to .env" || fail "EmailGW complete set: $out"
+
+out="$(run_case "AUDSPECT_EMAILGW_DEFENDER_TENANT_ID=not-a-guid
+AUDSPECT_EMAILGW_DEFENDER_CLIENT_ID=${EG_CLIENT}
+AUDSPECT_EMAILGW_DEFENDER_CLIENT_SECRET=${EG_SECRET}")"
+grep -q 'rc=1' <<<"$out" && grep -q 'TENANT_ID is not a GUID' <<<"$out" && pass "EmailGW non-GUID tenant ID refused" || fail "EmailGW bad tenant ID accepted: $out"
+
+out="$(run_case "AUDSPECT_EMAILGW_DEFENDER_TENANT_ID=${EG_TENANT}
+AUDSPECT_EMAILGW_DEFENDER_CLIENT_ID=${EG_CLIENT}
+AUDSPECT_EMAILGW_DEFENDER_CLIENT_SECRET=bad secret-with-space")"
+grep -q 'rc=1' <<<"$out" && ! grep -q 'bad secret' <<<"$out" && pass "EmailGW secret with whitespace refused, value not echoed" || fail "EmailGW secret with space accepted or echoed: $out"
+
+out="$(run_case "AUDSPECT_EMAILGW_DEFENDER_TENANT_ID=${EG_TENANT}
+AUDSPECT_EMAILGW_DEFENDER_CLIENT_ID=${EG_CLIENT}
+AUDSPECT_EMAILGW_DEFENDER_CLIENT_SECRET=abc\$def")"
+grep -q 'rc=1' <<<"$out" && pass "EmailGW secret with a dollar sign refused (compose would interpolate it)" || fail "EmailGW secret with \$ accepted: $out"
+
+out="$(run_case 'AUDSPECT_EMAILGW_INJECTION_TARGET_MX=mx!bad.example.com')"
+grep -q 'rc=1' <<<"$out" && pass "EmailGW invalid injection hostname refused" || fail "EmailGW bad hostname accepted: $out"
+
+out="$(run_case 'AUDSPECT_EMAILGW_INJECTION_TARGET_MX=mx.example.com')"
+grep -q 'rc=0' <<<"$out" && pass "EmailGW valid injection hostname accepted" || fail "EmailGW good hostname refused: $out"
+
+out="$(run_case '')"
+grep -q 'AUDSPECT_EMAILGW_DEFENDER_CLIENT_SECRET: ${AUDSPECT_EMAILGW_DEFENDER_CLIENT_SECRET:-}' "${here}/../docker-compose.yml" && pass "compose passes the EmailGW secret through from .env" || fail "compose does not pass the EmailGW secret"
 
 echo
 [[ $fails -eq 0 ]] && echo "ALL PASS" || { echo "${fails} FAILED"; exit 1; }

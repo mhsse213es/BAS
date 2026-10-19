@@ -166,6 +166,14 @@ BAS_SERVER_SANS=""
 BAS_CSP_MODE=""
 AUDSPECT_PHISH_IDENTITY_TARGET_USERS=""
 AUDSPECT_PHISH_OAUTH_SP_OBJECT_IDS=""
+# EmailGW real-run connector (optional). Empty Defender fields keep it disabled.
+AUDSPECT_EMAILGW_TENANT_ENVIRONMENT=""
+AUDSPECT_EMAILGW_DEFENDER_TENANT_ID=""
+AUDSPECT_EMAILGW_DEFENDER_CLIENT_ID=""
+AUDSPECT_EMAILGW_DEFENDER_CLIENT_SECRET=""
+AUDSPECT_EMAILGW_INJECTION_HELO_DOMAIN=""
+AUDSPECT_EMAILGW_INJECTION_TARGET_MX=""
+AUDSPECT_EMAILGW_INJECTION_RELAY_HOST=""
 TLS_CERT=""
 TLS_KEY=""
 DB_PASSWORD=""
@@ -223,6 +231,45 @@ validate_phish_scope() {
   done < <(tr ',' '\n' <<<"${AUDSPECT_PHISH_OAUTH_SP_OBJECT_IDS}")
 }
 
+# Validates the EmailGW real-run connector. It must match what the orchestrator reads
+# (cmd/server/main.go). The three Defender values are all-or-none: the orchestrator
+# enables EmailGW only when all three are set, so a partial set is refused here,
+# not silently left disabled. The client secret is never echoed in an error.
+validate_emailgw_config() {
+  local guid_re='^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+  local host_re='^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$'
+  case "${AUDSPECT_EMAILGW_TENANT_ENVIRONMENT:-lab}" in
+    lab|customer) ;;
+    *) err "setup.conf: AUDSPECT_EMAILGW_TENANT_ENVIRONMENT must be lab or customer."; exit 1 ;;
+  esac
+  local set_count=0
+  [[ -n "$AUDSPECT_EMAILGW_DEFENDER_TENANT_ID" ]] && set_count=$((set_count+1))
+  [[ -n "$AUDSPECT_EMAILGW_DEFENDER_CLIENT_ID" ]] && set_count=$((set_count+1))
+  [[ -n "$AUDSPECT_EMAILGW_DEFENDER_CLIENT_SECRET" ]] && set_count=$((set_count+1))
+  if (( set_count != 0 && set_count != 3 )); then
+    err "setup.conf: EmailGW needs AUDSPECT_EMAILGW_DEFENDER_TENANT_ID, _CLIENT_ID and _CLIENT_SECRET together, or none of them."; exit 1
+  fi
+  if [[ -n "$AUDSPECT_EMAILGW_DEFENDER_TENANT_ID" ]] && ! [[ $AUDSPECT_EMAILGW_DEFENDER_TENANT_ID =~ $guid_re ]]; then
+    err "setup.conf: AUDSPECT_EMAILGW_DEFENDER_TENANT_ID is not a GUID."; exit 1
+  fi
+  if [[ -n "$AUDSPECT_EMAILGW_DEFENDER_CLIENT_ID" ]] && ! [[ $AUDSPECT_EMAILGW_DEFENDER_CLIENT_ID =~ $guid_re ]]; then
+    err "setup.conf: AUDSPECT_EMAILGW_DEFENDER_CLIENT_ID is not a GUID."; exit 1
+  fi
+  # The secret is written unquoted to .env and interpolated by compose, so reject
+  # any character that would break that or leak into a shell. The value is not echoed.
+  case "$AUDSPECT_EMAILGW_DEFENDER_CLIENT_SECRET" in
+    *[[:space:]\'\"\\\$#]*)
+      err "setup.conf: AUDSPECT_EMAILGW_DEFENDER_CLIENT_SECRET contains a character that is not allowed (whitespace, quotes, backslash, \$ or #)."; exit 1 ;;
+  esac
+  local name value
+  for name in AUDSPECT_EMAILGW_INJECTION_HELO_DOMAIN AUDSPECT_EMAILGW_INJECTION_TARGET_MX AUDSPECT_EMAILGW_INJECTION_RELAY_HOST; do
+    value="${!name}"
+    if [[ -n "$value" ]] && ! [[ $value =~ $host_re ]]; then
+      err "setup.conf: ${name} must be a hostname (letters, digits, dots, hyphens)."; exit 1
+    fi
+  done
+}
+
 load_config() {
   local cfg="$1"
   [[ -f "$cfg" ]] || { err "Config file not found: $cfg"; exit 1; }
@@ -250,6 +297,13 @@ load_config() {
       BAS_CSP_MODE)         BAS_CSP_MODE="$val"         ;;
       AUDSPECT_PHISH_IDENTITY_TARGET_USERS) AUDSPECT_PHISH_IDENTITY_TARGET_USERS="$val" ;;
       AUDSPECT_PHISH_OAUTH_SP_OBJECT_IDS)      AUDSPECT_PHISH_OAUTH_SP_OBJECT_IDS="$val"      ;;
+      AUDSPECT_EMAILGW_TENANT_ENVIRONMENT)     AUDSPECT_EMAILGW_TENANT_ENVIRONMENT="$val"     ;;
+      AUDSPECT_EMAILGW_DEFENDER_TENANT_ID)     AUDSPECT_EMAILGW_DEFENDER_TENANT_ID="$val"     ;;
+      AUDSPECT_EMAILGW_DEFENDER_CLIENT_ID)     AUDSPECT_EMAILGW_DEFENDER_CLIENT_ID="$val"     ;;
+      AUDSPECT_EMAILGW_DEFENDER_CLIENT_SECRET) AUDSPECT_EMAILGW_DEFENDER_CLIENT_SECRET="$val" ;;
+      AUDSPECT_EMAILGW_INJECTION_HELO_DOMAIN)  AUDSPECT_EMAILGW_INJECTION_HELO_DOMAIN="$val"  ;;
+      AUDSPECT_EMAILGW_INJECTION_TARGET_MX)    AUDSPECT_EMAILGW_INJECTION_TARGET_MX="$val"    ;;
+      AUDSPECT_EMAILGW_INJECTION_RELAY_HOST)   AUDSPECT_EMAILGW_INJECTION_RELAY_HOST="$val"   ;;
       TLS_CERT)             TLS_CERT="$val"             ;;
       TLS_KEY)              TLS_KEY="$val"              ;;
       DB_PASSWORD)          DB_PASSWORD="$val"          ;;
@@ -309,6 +363,7 @@ load_config() {
     *) err "setup.conf: BAS_CSP_MODE must be enforce or report-only (got: ${BAS_CSP_MODE})."; exit 1 ;;
   esac
   validate_phish_scope
+  validate_emailgw_config
   [[ -z "$LOG_RETENTION_DAYS" ]] && LOG_RETENTION_DAYS="90"
   [[ -z "$BACKUP_RETENTION_DAILY"   ]] && BACKUP_RETENTION_DAILY="7"
   [[ -z "$BACKUP_RETENTION_WEEKLY"  ]] && BACKUP_RETENTION_WEEKLY="4"
@@ -1555,6 +1610,13 @@ BAS_TLS=${BAS_TLS}
 BAS_CSP_MODE=${BAS_CSP_MODE}
 AUDSPECT_PHISH_IDENTITY_TARGET_USERS=${AUDSPECT_PHISH_IDENTITY_TARGET_USERS}
 AUDSPECT_PHISH_OAUTH_SP_OBJECT_IDS=${AUDSPECT_PHISH_OAUTH_SP_OBJECT_IDS}
+AUDSPECT_EMAILGW_TENANT_ENVIRONMENT=${AUDSPECT_EMAILGW_TENANT_ENVIRONMENT:-lab}
+AUDSPECT_EMAILGW_DEFENDER_TENANT_ID=${AUDSPECT_EMAILGW_DEFENDER_TENANT_ID}
+AUDSPECT_EMAILGW_DEFENDER_CLIENT_ID=${AUDSPECT_EMAILGW_DEFENDER_CLIENT_ID}
+AUDSPECT_EMAILGW_DEFENDER_CLIENT_SECRET=${AUDSPECT_EMAILGW_DEFENDER_CLIENT_SECRET}
+AUDSPECT_EMAILGW_INJECTION_HELO_DOMAIN=${AUDSPECT_EMAILGW_INJECTION_HELO_DOMAIN}
+AUDSPECT_EMAILGW_INJECTION_TARGET_MX=${AUDSPECT_EMAILGW_INJECTION_TARGET_MX}
+AUDSPECT_EMAILGW_INJECTION_RELAY_HOST=${AUDSPECT_EMAILGW_INJECTION_RELAY_HOST}
 TLS_CERT=${TLS_CERT:-}
 TLS_KEY=${TLS_KEY:-}
 TLS_CERT_CONTAINER_PATH=${tls_cert_container_path}

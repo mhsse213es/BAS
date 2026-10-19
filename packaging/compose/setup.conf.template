@@ -76,6 +76,22 @@ AUDSPECT_PHISH_IDENTITY_TARGET_USERS=
 # until its Graph permission is approved.
 AUDSPECT_PHISH_OAUTH_SP_OBJECT_IDS=
 
+# ── EmailGW real-run connector (optional) ───────────────────────────────────────
+# Leave the three Defender values blank to keep real EmailGW runs disabled. A
+# partial set is refused, because the orchestrator would otherwise stay disabled
+# without saying so. The client secret is stored in ${DATA_DIR}/.env (chmod 600).
+# Do not use whitespace, quotes, backslash, $ or # in the secret.
+# TENANT_ENVIRONMENT: lab (default) or customer. Set customer only for a genuine
+# customer tenant, because it changes how run evidence is counted.
+AUDSPECT_EMAILGW_TENANT_ENVIRONMENT=lab
+AUDSPECT_EMAILGW_DEFENDER_TENANT_ID=
+AUDSPECT_EMAILGW_DEFENDER_CLIENT_ID=
+AUDSPECT_EMAILGW_DEFENDER_CLIENT_SECRET=
+# Injection target for real runs. Optional hostnames.
+AUDSPECT_EMAILGW_INJECTION_HELO_DOMAIN=
+AUDSPECT_EMAILGW_INJECTION_TARGET_MX=
+AUDSPECT_EMAILGW_INJECTION_RELAY_HOST=
+
 # DNS_SINK_BIND_IP is the host IP the DLP DNS-tunneling sink (UDP/53) binds
 # to. Auto-detected (first non-loopback IP via `hostname -I`) if left blank.
 # It is deliberately NOT bound to 0.0.0.0 (all interfaces): on most Linux
