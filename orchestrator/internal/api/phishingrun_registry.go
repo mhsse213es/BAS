@@ -53,6 +53,10 @@ type PhishingRunExecutorEnv struct {
 	// identity connector configured; PH-ID-003 then degrades to NotTested.
 	// *phishidentity.Client satisfies it.
 	DeviceCodeSignIns DeviceCodeSignInLister
+	// IdentityReader is nil on a deployment with no Microsoft Graph identity
+	// connector configured; PH-ID-004 and PH-ID-005 then degrade to NotTested.
+	// *phishidentity.Client satisfies it. Both heuristics are EXPERIMENTAL.
+	IdentityReader IdentityHeuristicReader
 }
 
 // OAuthConsentGrantLister is the read-only Graph listing PH-ID-002 needs,
@@ -63,6 +67,14 @@ type OAuthConsentGrantLister interface {
 
 // DeviceCodeSignInLister is the read-only Graph sign-in read PH-ID-003 needs,
 // narrowed to one method so tests can inject a fixture.
+// IdentityHeuristicReader is the read-only Graph access PH-ID-004 and PH-ID-005
+// need, narrowed so tests can inject a fixture. It has no write methods.
+type IdentityHeuristicReader interface {
+	MFADenialEventsForUser(ctx context.Context, userID string) ([]phishidentity.MFADenialEvent, error)
+	RiskySignInsForUser(ctx context.Context, userID string) ([]phishidentity.RiskySignInEvent, error)
+	SignInSessionsValidFromDateTime(ctx context.Context, userID string) (time.Time, error)
+}
+
 type DeviceCodeSignInLister interface {
 	SignInsByAuthenticationProtocol(ctx context.Context, protocol string) ([]phishidentity.SignInEvent, error)
 }
@@ -87,6 +99,8 @@ var phishingRunExecutors = map[string]PhishingRunExecutor{
 	"PH-IR-003":   executePHIR003,
 	"PH-ID-002":   executePHID002,
 	"PH-ID-003":   executePHID003,
+	"PH-ID-004":   executePHID004,
+	"PH-ID-005":   executePHID005,
 	"PH-AUTH-002": emailGWReadbackExecutor("PH-AUTH-002"),
 	"PH-AUTH-003": emailGWReadbackExecutor("PH-AUTH-003"),
 	"PH-AUTH-004": emailGWReadbackExecutor("PH-AUTH-004"),
