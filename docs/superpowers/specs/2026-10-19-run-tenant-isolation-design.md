@@ -166,8 +166,8 @@ verified PH→EmailGW mappings remain groundwork.
      `TestListScenarioRuns_CredentialAccessOutputWithheld`,
      `TestGetVariantRun_CredentialAccessDetailWithheld`,
      `TestVariantBreakdownForFinding_CredentialAccessDetailWithheld`,
-     `TestGetVariantCoverage_CredentialAccessBypassDetailWithheld` (passes after
-     the fix; not yet seen failing before it). Campaign child runs, RW-evidence
+     `TestGetVariantCoverage_CredentialAccessBypassDetailWithheld` (fails without
+     the fix, verified by temporarily removing it; passes with it). Campaign child runs, RW-evidence
      dispatch and the detection-verification and posture loaders were checked and
      do not return raw output to a response.
   3. Partly done (pending verification): secret-shaped values (PEM private-key
