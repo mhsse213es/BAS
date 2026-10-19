@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/audspect/bas/internal/phishidentity"
+	"github.com/audspect/bas/internal/phishscope"
 	"github.com/audspect/bas/internal/phishval"
 )
 
@@ -58,7 +59,7 @@ func runIdentity(t *testing.T, id string, env PhishingRunExecutorEnv, params map
 }
 
 func TestExecutePHID004_MFAFatigueSuspected_Pass(t *testing.T) {
-	env := PhishingRunExecutorEnv{IdentityReader: fakeIdentityReader{mfa: burstOfMFADenials(5, time.Now().Add(-time.Minute))}}
+	env := PhishingRunExecutorEnv{IdentityScope: phishscope.Scope{Users: []string{"user-1"}}, IdentityReader: fakeIdentityReader{mfa: burstOfMFADenials(5, time.Now().Add(-time.Minute))}}
 	outcome, err := runIdentity(t, "PH-ID-004", env, map[string]any{"userId": "user-1", "threshold": 3, "windowSeconds": 600})
 	if err != nil {
 		t.Fatalf("executor: %v", err)
@@ -69,14 +70,14 @@ func TestExecutePHID004_MFAFatigueSuspected_Pass(t *testing.T) {
 }
 
 func TestExecutePHID004_MissingThreshold_Error(t *testing.T) {
-	env := PhishingRunExecutorEnv{IdentityReader: fakeIdentityReader{}}
+	env := PhishingRunExecutorEnv{IdentityScope: phishscope.Scope{Users: []string{"user-1"}}, IdentityReader: fakeIdentityReader{}}
 	if _, err := runIdentity(t, "PH-ID-004", env, map[string]any{"userId": "user-1", "windowSeconds": 600}); err == nil {
 		t.Fatal("a missing threshold must be an error, never an invented default")
 	}
 }
 
 func TestExecutePHID004_NilReader_NotTested(t *testing.T) {
-	outcome, err := runIdentity(t, "PH-ID-004", PhishingRunExecutorEnv{}, map[string]any{"userId": "user-1", "threshold": 3, "windowSeconds": 600})
+	outcome, err := runIdentity(t, "PH-ID-004", PhishingRunExecutorEnv{IdentityScope: phishscope.Scope{Users: []string{"user-1"}}}, map[string]any{"userId": "user-1", "threshold": 3, "windowSeconds": 600})
 	if err != nil {
 		t.Fatalf("executor: %v", err)
 	}
@@ -87,7 +88,7 @@ func TestExecutePHID004_NilReader_NotTested(t *testing.T) {
 
 func TestExecutePHID005_SessionsRevokedAfterRiskyEvent_Pass(t *testing.T) {
 	riskyAt := time.Now().Add(-10 * time.Minute)
-	env := PhishingRunExecutorEnv{IdentityReader: fakeIdentityReader{
+	env := PhishingRunExecutorEnv{IdentityScope: phishscope.Scope{Users: []string{"user-1"}}, IdentityReader: fakeIdentityReader{
 		risky:     []phishidentity.RiskySignInEvent{{ID: "r1", CreatedDateTime: riskyAt, RiskState: "atRisk"}},
 		validFrom: riskyAt.Add(time.Minute),
 	}}
@@ -102,7 +103,7 @@ func TestExecutePHID005_SessionsRevokedAfterRiskyEvent_Pass(t *testing.T) {
 
 func TestExecutePHID005_SessionsNotRevoked_Fail(t *testing.T) {
 	riskyAt := time.Now().Add(-10 * time.Minute)
-	env := PhishingRunExecutorEnv{IdentityReader: fakeIdentityReader{
+	env := PhishingRunExecutorEnv{IdentityScope: phishscope.Scope{Users: []string{"user-1"}}, IdentityReader: fakeIdentityReader{
 		risky:     []phishidentity.RiskySignInEvent{{ID: "r1", CreatedDateTime: riskyAt, RiskState: "atRisk"}},
 		validFrom: riskyAt.Add(-time.Hour),
 	}}
@@ -116,7 +117,7 @@ func TestExecutePHID005_SessionsNotRevoked_Fail(t *testing.T) {
 }
 
 func TestExecutePHID005_NilReader_NotTested(t *testing.T) {
-	outcome, err := runIdentity(t, "PH-ID-005", PhishingRunExecutorEnv{}, map[string]any{"userId": "user-1", "windowSeconds": 3600})
+	outcome, err := runIdentity(t, "PH-ID-005", PhishingRunExecutorEnv{IdentityScope: phishscope.Scope{Users: []string{"user-1"}}}, map[string]any{"userId": "user-1", "windowSeconds": 3600})
 	if err != nil {
 		t.Fatalf("executor: %v", err)
 	}

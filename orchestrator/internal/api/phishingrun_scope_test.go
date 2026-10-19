@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/audspect/bas/internal/phishidentity"
 	"github.com/audspect/bas/internal/phishscope"
@@ -193,5 +194,58 @@ func TestPhishingRunEnv_AllowlistChangeTakesEffectOnNextRead(t *testing.T) {
 	t.Setenv(EnvPhishOAuthClientIDs, "")
 	if env := h.phishingRunEnv(); env.IdentityScope.ConfiguredClients() {
 		t.Error("a cleared allowlist must no longer be configured on the next read")
+	}
+}
+
+// countingIdentityFake records every identity read, for PH-ID-004 and PH-ID-005.
+type countingIdentityFake struct{ calls int }
+
+func (f *countingIdentityFake) MFADenialEventsForUser(context.Context, string) ([]phishidentity.MFADenialEvent, error) {
+	f.calls++
+	return nil, nil
+}
+func (f *countingIdentityFake) RiskySignInsForUser(context.Context, string) ([]phishidentity.RiskySignInEvent, error) {
+	f.calls++
+	return nil, nil
+}
+func (f *countingIdentityFake) SignInSessionsValidFromDateTime(context.Context, string) (time.Time, error) {
+	f.calls++
+	return time.Time{}, nil
+}
+
+// PH-ID-004 and PH-ID-005: a user outside the allowlist is refused with zero reads.
+func TestIdentityHeuristics_OutOfScopeUserRefusedBeforeAnyRead(t *testing.T) {
+	params := map[string]any{"userId": "bob@contoso.example", "threshold": 5.0, "windowSeconds": 600.0}
+	for name, run := range map[string]func(PhishingRunExecutorEnv) error{
+		"PH-ID-004": func(env PhishingRunExecutorEnv) error {
+			_, err := executePHID004(context.Background(), env, "run-1", params)
+			return err
+		},
+		"PH-ID-005": func(env PhishingRunExecutorEnv) error {
+			_, err := executePHID005(context.Background(), env, "run-1", params)
+			return err
+		},
+	} {
+		fake := &countingIdentityFake{}
+		env := PhishingRunExecutorEnv{IdentityReader: fake, IdentityScope: phishscope.Scope{Users: []string{"alice@contoso.example"}}}
+		if err := run(env); err == nil {
+			t.Errorf("%s: out-of-scope user accepted", name)
+		}
+		if fake.calls != 0 {
+			t.Errorf("%s: %d identity read(s) made for an out-of-scope user; want 0", name, fake.calls)
+		}
+	}
+}
+
+// PH-ID-005 reads only for an in-scope user.
+func TestIdentityHeuristics_InScopeUserReadsOnlyThatUser(t *testing.T) {
+	fake := &countingIdentityFake{}
+	env := PhishingRunExecutorEnv{IdentityReader: fake, IdentityScope: phishscope.Scope{Users: []string{"alice@contoso.example"}}}
+	params := map[string]any{"userId": "alice@contoso.example", "windowSeconds": 600.0}
+	if _, err := executePHID005(context.Background(), env, "run-1", params); err != nil {
+		t.Fatalf("executePHID005: %v", err)
+	}
+	if fake.calls == 0 {
+		t.Error("in-scope user made no identity reads")
 	}
 }

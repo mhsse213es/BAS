@@ -40,6 +40,9 @@ func executePHID004(ctx context.Context, env PhishingRunExecutorEnv, runID strin
 	if userID == "" {
 		return phishval.Outcome{}, fmt.Errorf("phishingrun: PH-ID-004 requires a non-empty userId parameter")
 	}
+	if err := refuseUnlessScoped(env.IdentityScope.Users, []string{userID}); err != nil {
+		return phishval.Outcome{}, err
+	}
 	threshold, err := paramPositiveInt(params, "threshold")
 	if err != nil {
 		return phishval.Outcome{}, err
@@ -74,6 +77,9 @@ func executePHID005(ctx context.Context, env PhishingRunExecutorEnv, runID strin
 	userID, _ := params["userId"].(string)
 	if userID == "" {
 		return phishval.Outcome{}, fmt.Errorf("phishingrun: PH-ID-005 requires a non-empty userId parameter")
+	}
+	if err := refuseUnlessScoped(env.IdentityScope.Users, []string{userID}); err != nil {
+		return phishval.Outcome{}, err
 	}
 	windowSeconds, err := paramPositiveInt(params, "windowSeconds")
 	if err != nil {
