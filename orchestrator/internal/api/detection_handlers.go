@@ -30,6 +30,12 @@ func (h *Handler) SubmitRunDetections(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "invalid detections payload", http.StatusBadRequest)
 		return
 	}
+	// Scrub secret-shaped values from alert command lines before anything is
+	// stored: detections_raw, the results' DetectionAlert, and IOC extraction.
+	// Reads already scrub, so this closes the stored-copy gap.
+	for i := range body.Alerts {
+		body.Alerts[i].CommandLine = models.WithholdSecrets(body.Alerts[i].CommandLine)
+	}
 
 	// Load the run's executed results to correlate against. scenarioID/agentID
 	// are also needed for IOC-sighting ownership below.

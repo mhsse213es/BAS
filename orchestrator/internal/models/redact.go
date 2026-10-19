@@ -62,7 +62,10 @@ var secretPatterns = []*regexp.Regexp{
 	regexp.MustCompile(`-----BEGIN [A-Z ]*PRIVATE KEY-----`),
 	regexp.MustCompile(`(?i)bearer\s+[A-Za-z0-9\-._~+/]{16,}=*`),
 	regexp.MustCompile(`\b(?:AKIA|ASIA)[0-9A-Z]{16}\b`),
-	regexp.MustCompile(`(?i)((?:password|passwd|secret|api[_-]?key|token)\s*[:=]\s*)\S{6,}`),
+	// A keyword at a word boundary, then a value of 16+ non-space characters.
+	// The boundary stops suffix matches such as max_token_count=..., and the
+	// length floor stops prose such as "token: pending approval" from matching.
+	regexp.MustCompile(`(?i)\b((?:password|passwd|secret|api[_-]?key|token)\s*[:=]\s*)\S{16,}`),
 }
 
 // WithholdSecrets replaces the secret-shaped parts of a value. A credential
