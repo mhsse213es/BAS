@@ -373,6 +373,15 @@ func (h *Handler) DownloadEvidence(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "evidence not found", http.StatusNotFound)
 		return
 	}
+	_, parentOK, err := h.verification.Get(r.Context(), ev.VerificationID)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if !parentOK {
+		jsonError(w, "evidence not found", http.StatusNotFound)
+		return
+	}
 	data, err := h.verification.EvidenceBytes(r.Context(), ev)
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)

@@ -642,7 +642,7 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.Get("/api/exercises/executions/{id}/report.html", h.GetExerciseReportHTML)
 		r.Get("/api/exercises/executions/{id}/report.pdf", h.GetExerciseReportPDF)
 		r.Get("/api/exercises/executions/{id}/report.csv", h.GetExerciseReportCSV)
-		r.Post("/api/exercises/executions", h.CreateExerciseExecution)
+		r.With(auth.RequirePermission(auth.CanLaunchExerciseExecution)).Post("/api/exercises/executions", h.CreateExerciseExecution)
 
 		// Any authenticated user — self-service password change
 		r.Post("/api/auth/change-password", h.ChangePassword)

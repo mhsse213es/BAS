@@ -125,3 +125,18 @@ the JWT-authenticated group unless noted.
 
 Phishing grading and dispatch stay unregistered until steps 1–4 pass. The eight
 verified PH→EmailGW mappings remain groundwork.
+
+## 8. Status — gaps 1 and 2 (2026-10-19)
+
+- **Gap 1 (evidence download parent check): DONE.** `DownloadEvidence` now resolves
+  the parent verification and returns 404 when it is missing. Tests:
+  `TestDownloadEvidence_OrphanedEvidence_NotFound` (RED→GREEN),
+  `TestDownloadEvidence_AuthorizedParent_Served`,
+  `TestDownloadEvidence_Unauthenticated_401`.
+- **Gap 2 (exercise-execution create gate): DONE.** `POST /api/exercises/executions`
+  now requires `CanLaunchExerciseExecution`, the closest existing permission to
+  creating an execution (held by admin and analyst, not viewer). Tests:
+  `TestCreateExerciseExecution_ViewerForbidden_NoRowCreated` (RED→GREEN),
+  `TestCreateExerciseExecution_AnalystPassesGate`, and the RBAC matrix suite.
+- **Gap 3 (secret-exclusion review of stored payloads): OPEN**, not started.
+- **D2 as revised:** exports and evidence use the parent-run gate; `CanExport` unchanged.

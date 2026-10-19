@@ -258,7 +258,7 @@ var routeMatrix = []routeCase{
 	{http.MethodGet, "/api/exercises/executions/{id}/report.html", tierAny, ""},
 	{http.MethodGet, "/api/exercises/executions/{id}/report.pdf", tierAny, ""},
 	{http.MethodGet, "/api/exercises/executions/{id}/report.csv", tierAny, ""},
-	{http.MethodPost, "/api/exercises/executions", tierAny, ""},
+	{http.MethodPost, "/api/exercises/executions", tierPermission, auth.CanLaunchExerciseExecution},
 	{http.MethodPost, "/api/auth/change-password", tierAny, ""},
 	{http.MethodGet, "/api/report/full/html", tierAny, ""},
 	{http.MethodGet, "/api/report/full/pdf", tierAny, ""},
