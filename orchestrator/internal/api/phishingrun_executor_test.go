@@ -54,11 +54,14 @@ func TestExecutePhishingRun_PHDET002_EndToEnd_Completed(t *testing.T) {
 		if err := db.EnsurePhishingRunSchema(ctx, pool); err != nil {
 			t.Fatalf("ensure schema: %v", err)
 		}
-		env := PhishingRunExecutorEnv{ReportTicketProvider: phishbridge.NewFixtureReportTicketProvider([]phishbridge.ReportTicketEvidence{{
-			ExecutionID: "exec-1", TargetID: "target-1", TicketCreated: true, Timestamp: time.Now(),
+		// The ticket must fall in the window anchored to the real execution.
+		execID := seedPhishingRunExecution(t, pool)
+		anchor := executionCreatedAt(t, pool, execID)
+		env := PhishingRunExecutorEnv{Pool: pool, ReportTicketProvider: phishbridge.NewFixtureReportTicketProvider([]phishbridge.ReportTicketEvidence{{
+			ExecutionID: execID, TargetID: "target-1", TicketCreated: true, Timestamp: anchor.Add(time.Hour),
 		}})}
 		run, err := ExecutePhishingRun(ctx, pool, env, PhishingRunRequest{
-			ScenarioID: "PH-DET-002", Parameters: map[string]any{"executionId": "exec-1", "targetId": "target-1"}, InitiatedBy: "user-1",
+			ScenarioID: "PH-DET-002", Parameters: map[string]any{"executionId": execID, "targetId": "target-1"}, InitiatedBy: "user-1",
 		})
 		if err != nil {
 			t.Fatalf("ExecutePhishingRun: %v", err)

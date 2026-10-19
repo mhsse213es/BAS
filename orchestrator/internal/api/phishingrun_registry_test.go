@@ -60,47 +60,6 @@ func TestLookupPhishingRunExecutor_PHID001Registered(t *testing.T) {
 	}
 }
 
-func TestExecutePHID001_ClickEvidenceRecorded_Pass(t *testing.T) {
-	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
-		execID := seedPhishingRunExecution(t, pool)
-		chain := exercise.NewEvidenceChain(exercise.NewStore(pool))
-		if _, err := chain.Append(context.Background(), execID, "", "link_clicked", "target-1", "test", nil); err != nil {
-			t.Fatalf("Append evidence: %v", err)
-		}
-
-		env := PhishingRunExecutorEnv{Pool: pool}
-		outcome, err := executePHID001(context.Background(), env, "run-1", map[string]any{"executionId": execID})
-		if err != nil {
-			t.Fatalf("executePHID001: %v", err)
-		}
-		if outcome.UserInteraction.Verdict != phishval.VerdictPass {
-			t.Errorf("UserInteraction.Verdict = %q, want %q", outcome.UserInteraction.Verdict, phishval.VerdictPass)
-		}
-	})
-}
-
-// TestExecutePHID001_RealExecutionNoEvidence_Fail proves the
-// deliberate, documented semantics of FromExerciseInteractionEvidence:
-// for an execution that genuinely exists, ListEvidence is
-// authoritative, so zero evidence rows is a real, evidenced
-// InteractionNone -- the target was tracked and never clicked -- not
-// an "unknown" NotTested case. Expectation is InteractionClicked, so
-// an evidenced None correctly contradicts it (Fail), never Pass.
-func TestExecutePHID001_RealExecutionNoEvidence_Fail(t *testing.T) {
-	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
-		execID := seedPhishingRunExecution(t, pool)
-
-		env := PhishingRunExecutorEnv{Pool: pool}
-		outcome, err := executePHID001(context.Background(), env, "run-1", map[string]any{"executionId": execID})
-		if err != nil {
-			t.Fatalf("executePHID001: %v", err)
-		}
-		if outcome.UserInteraction.Verdict != phishval.VerdictFail {
-			t.Errorf("UserInteraction.Verdict = %q, want %q (a real execution's own authoritative absence of evidence is a genuine negative, not NotTested)", outcome.UserInteraction.Verdict, phishval.VerdictFail)
-		}
-	})
-}
-
 func TestExecutePHID001_MissingExecutionID_Error(t *testing.T) {
 	env := PhishingRunExecutorEnv{Pool: nil}
 	_, err := executePHID001(context.Background(), env, "run-1", map[string]any{})
@@ -268,19 +227,6 @@ func TestExecutePHID002_ListerError_NotTestedNeverPass(t *testing.T) {
 	}
 }
 
-func TestExecutePHDET002_TicketCreated_Pass(t *testing.T) {
-	env := PhishingRunExecutorEnv{ReportTicketProvider: phishbridge.NewFixtureReportTicketProvider([]phishbridge.ReportTicketEvidence{{
-		ExecutionID: "exec-1", TargetID: "target-1", TicketCreated: true, Timestamp: time.Now(),
-	}})}
-	outcome, err := executePHDET002(context.Background(), env, "run-1", map[string]any{"executionId": "exec-1", "targetId": "target-1"})
-	if err != nil {
-		t.Fatalf("executePHDET002: %v", err)
-	}
-	if outcome.Response.Verdict != phishval.VerdictPass {
-		t.Errorf("Response.Verdict = %q, want %q", outcome.Response.Verdict, phishval.VerdictPass)
-	}
-}
-
 func TestExecutePHDET002_NoEvidence_NotTested(t *testing.T) {
 	env := PhishingRunExecutorEnv{ReportTicketProvider: phishbridge.NewFixtureReportTicketProvider(nil)}
 	outcome, err := executePHDET002(context.Background(), env, "run-1", map[string]any{"executionId": "exec-1", "targetId": "target-1"})
@@ -306,19 +252,6 @@ func TestExecutePHDET002_NilProvider_NotTestedNeverPanics(t *testing.T) {
 	}
 	if outcome.Response.Verdict != phishval.VerdictNotTested {
 		t.Errorf("Response.Verdict = %q, want %q (an unconfigured provider must never panic or fabricate a verdict)", outcome.Response.Verdict, phishval.VerdictNotTested)
-	}
-}
-
-func TestExecutePHDET002_TicketNotCreated_Fail(t *testing.T) {
-	env := PhishingRunExecutorEnv{ReportTicketProvider: phishbridge.NewFixtureReportTicketProvider([]phishbridge.ReportTicketEvidence{{
-		ExecutionID: "exec-1", TargetID: "target-1", TicketCreated: false, Timestamp: time.Now(),
-	}})}
-	outcome, err := executePHDET002(context.Background(), env, "run-1", map[string]any{"executionId": "exec-1", "targetId": "target-1"})
-	if err != nil {
-		t.Fatalf("executePHDET002: %v", err)
-	}
-	if outcome.Response.Verdict != phishval.VerdictFail {
-		t.Errorf("Response.Verdict = %q, want %q", outcome.Response.Verdict, phishval.VerdictFail)
 	}
 }
 

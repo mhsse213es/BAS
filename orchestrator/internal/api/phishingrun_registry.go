@@ -23,8 +23,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/audspect/bas/internal/actions"
-	"github.com/audspect/bas/internal/emailgwefficacy"
-	"github.com/audspect/bas/internal/exercise"
 	"github.com/audspect/bas/internal/phishbridge"
 	"github.com/audspect/bas/internal/phishcatalog"
 	"github.com/audspect/bas/internal/phishidentity"
@@ -111,14 +109,14 @@ type PhishingRunExecutor func(ctx context.Context, env PhishingRunExecutorEnv, r
 // slice; expanding to the other adapter-tested scenarios is deliberate
 // future work, not something to add speculatively here.
 var phishingRunExecutors = map[string]PhishingRunExecutor{
-	"PH-DET-002":  executePHDET002,
-	"PH-ID-001":   executePHID001,
-	"PH-IR-003":   executePHIR003,
-	"PH-ID-002":   executePHID002,
-	"PH-ID-003":   executePHID003,
-	"PH-ID-004":   executePHID004,
-	"PH-ID-005":   executePHID005,
-	"PH-EVA-002":  executePHEVA002,
+	"PH-DET-002": executePHDET002,
+	"PH-ID-001":  executePHID001,
+	"PH-IR-003":  executePHIR003,
+	"PH-ID-002":  executePHID002,
+	"PH-ID-003":  executePHID003,
+	"PH-ID-004":  executePHID004,
+	"PH-ID-005":  executePHID005,
+	"PH-EVA-002": executePHEVA002,
 	// PH-CHN-004 is deliberately NOT registered. It creates and deletes a real
 	// calendar event, so it stays out of executable discovery until its side-effect
 	// review is complete. executePHCHN004 is kept, with its evidence, for that review.
@@ -142,95 +140,6 @@ var phishingRunExecutors = map[string]PhishingRunExecutor{
 func LookupPhishingRunExecutor(scenarioID string) (PhishingRunExecutor, bool) {
 	e, ok := phishingRunExecutors[scenarioID]
 	return e, ok
-}
-
-// executePHDET002 runs PH-DET-002 (user-reported phishing / SOC
-// triage) for real: checks whether a ticket was created for the
-// report event named by params["executionId"]/params["targetId"].
-// ExpectedTicketCreated is always true -- this is the catalog's own
-// fixed Expectation (a ticket SHOULD be created), never a caller-
-// selectable "known-good/known-bad" choice; that distinction only
-// ever existed in this initiative's own tests.
-func executePHDET002(ctx context.Context, env PhishingRunExecutorEnv, runID string, params map[string]any) (phishval.Outcome, error) {
-	executionID, _ := params["executionId"].(string)
-	targetID, _ := params["targetId"].(string)
-	if executionID == "" || targetID == "" {
-		return phishval.Outcome{}, fmt.Errorf("phishingrun: PH-DET-002 requires non-empty executionId and targetId parameters")
-	}
-
-	exp := phishbridge.ReportTicketExpectation{
-		ExecutionID: executionID, TargetID: targetID, ExpectedTicketCreated: true,
-	}
-
-	var verdict emailgwefficacy.VerdictDetail
-	if env.ReportTicketProvider == nil {
-		// No real ITSM connector is wired on this deployment
-		// (Handler.WithPhishingRun was never called) -- this is not
-		// "ran and found no evidence," it's "not configured yet," but
-		// both degrade identically to NotTested per this initiative's
-		// own rule: never fabricate a verdict from absent evidence, and
-		// never panic on a nil-interface method call either.
-		verdict = emailgwefficacy.VerdictDetail{Verdict: emailgwefficacy.VerdictInconclusive, Reason: "phishingrun: no ReportTicketEvidenceProvider configured on this deployment"}
-	} else {
-		// PH-DET-002 has no real dwell window to wait out (unlike an
-		// SMTP-dispatch scenario) -- it looks back over the last 24
-		// hours for whatever ticketing evidence already exists rather
-		// than waiting for new evidence to arrive.
-		now := time.Now()
-		window := emailgwefficacy.TimeWindow{Start: now.Add(-24 * time.Hour), End: now}
-		verdict = phishbridge.VerifyReportTicketExpectation(exp, env.ReportTicketProvider, window)
-	}
-	obs := phishbridge.FromSingleDimensionResponseVerdict(verdict, "phishingrun-PH-DET-002")
-
-	catalogExp, err := lookupPhishingCatalogExpectation("PH-DET-002")
-	if err != nil {
-		return phishval.Outcome{}, err
-	}
-	return phishval.Evaluate(runID, "", catalogExp, obs), nil
-}
-
-// executePHID001 runs PH-ID-001 (credential-harvesting simulation):
-// reads the real interaction evidence already recorded for the named
-// exercise execution (exercise_evidence, FK-chained through
-// exercise_executions/exercise_plans) and grades it against the
-// catalog's own fixed Expectation.
-//
-// FromExerciseInteractionEvidence's own contract is that ListEvidence
-// is authoritative for an execution that exists: zero evidence rows
-// for a REAL execution is a genuine, evidenced InteractionNone (the
-// target was tracked and nothing happened), not an unknown/NotTested
-// case. That makes verifying the execution actually exists first
-// load-bearing, not optional -- without it, a typo'd or stale
-// executionId would silently produce a confident FAIL (expectation
-// Clicked, observed None) for an execution that never ran, which is
-// exactly the kind of fabricated verdict this initiative never
-// allows. GetExecution's own not-found error surfaces as this run's
-// error/StatusFailed instead.
-func executePHID001(ctx context.Context, env PhishingRunExecutorEnv, runID string, params map[string]any) (phishval.Outcome, error) {
-	executionID, _ := params["executionId"].(string)
-	if executionID == "" {
-		return phishval.Outcome{}, fmt.Errorf("phishingrun: PH-ID-001 requires a non-empty executionId parameter")
-	}
-	if env.Pool == nil {
-		return phishval.Outcome{}, fmt.Errorf("phishingrun: PH-ID-001 requires a database pool (deployment misconfiguration)")
-	}
-
-	store := exercise.NewStore(env.Pool)
-	if _, err := store.GetExecution(ctx, executionID); err != nil {
-		return phishval.Outcome{}, fmt.Errorf("phishingrun: PH-ID-001 execution %q not found: %w", executionID, err)
-	}
-
-	events, err := store.ListEvidence(ctx, executionID)
-	if err != nil {
-		return phishval.Outcome{}, fmt.Errorf("phishingrun: PH-ID-001 list evidence for %q: %w", executionID, err)
-	}
-	obs := phishbridge.FromExerciseInteractionEvidence(events)
-
-	catalogExp, err := lookupPhishingCatalogExpectation("PH-ID-001")
-	if err != nil {
-		return phishval.Outcome{}, err
-	}
-	return phishval.Evaluate(runID, "", catalogExp, obs), nil
 }
 
 // executePHID002 runs PH-ID-002 (OAuth consent abuse): reads the tenant's

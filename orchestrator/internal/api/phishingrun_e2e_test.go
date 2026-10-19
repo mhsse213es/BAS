@@ -27,13 +27,15 @@ import (
 // never three independently-plausible but disconnected pieces.
 func TestPhishingRunPipeline_EndToEnd(t *testing.T) {
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		execID := seedPhishingRunExecution(t, pool)
+		anchor := executionCreatedAt(t, pool, execID)
 		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret).
 			WithPhishingRun(phishbridge.NewFixtureReportTicketProvider([]phishbridge.ReportTicketEvidence{{
-				ExecutionID: "exec-1", TargetID: "target-1", TicketCreated: true, Timestamp: time.Now(),
+				ExecutionID: execID, TargetID: "target-1", TicketCreated: true, Timestamp: anchor.Add(time.Hour),
 			}}))
 
 		triggerRec := callAuthed(h.TriggerPhishingRun, triggerPhishingRunReq(t, pool, map[string]any{
-			"scenarioId": "PH-DET-002", "parameters": map[string]any{"executionId": "exec-1", "targetId": "target-1"},
+			"scenarioId": "PH-DET-002", "parameters": map[string]any{"executionId": execID, "targetId": "target-1"},
 		}))
 		if triggerRec.Code != http.StatusCreated {
 			t.Fatalf("trigger status = %d, body = %s, want 201", triggerRec.Code, triggerRec.Body.String())
