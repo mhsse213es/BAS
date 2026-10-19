@@ -164,6 +164,8 @@ DNS_SINK_BIND_IP=""
 BAS_TLS=""
 BAS_SERVER_SANS=""
 BAS_CSP_MODE=""
+AUDSPECT_PHISH_IDENTITY_TARGET_USERS=""
+AUDSPECT_PHISH_OAUTH_CLIENT_IDS=""
 TLS_CERT=""
 TLS_KEY=""
 DB_PASSWORD=""
@@ -198,6 +200,29 @@ VALIDATION_LAB_AGENT_ID=""
 VALIDATION_LAB_POLL_MINUTES=""
 
 # ── Config loader -safe key=value parser (no source / eval) ─────────────────
+# Validates the install-wide phishing target allowlists. They must match the
+# orchestrator's phishscope parser exactly, so a malformed value fails here
+# rather than leaving the scenarios silently unconfigured. Empty is valid.
+validate_phish_scope() {
+  local guid_re='^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+  local upn_re='^[^[:space:]@*]+@[^[:space:]@*]+\.[^[:space:]@*]+$'
+  local item
+  while IFS= read -r item; do
+    item="${item#"${item%%[![:space:]]*}"}"; item="${item%"${item##*[![:space:]]}"}"
+    [[ -z "$item" ]] && continue
+    if ! [[ $item =~ $guid_re || $item =~ $upn_re ]]; then
+      err "setup.conf: AUDSPECT_PHISH_IDENTITY_TARGET_USERS entry '${item}' is not a user principal name or object ID."; exit 1
+    fi
+  done < <(tr ',' '\n' <<<"${AUDSPECT_PHISH_IDENTITY_TARGET_USERS}")
+  while IFS= read -r item; do
+    item="${item#"${item%%[![:space:]]*}"}"; item="${item%"${item##*[![:space:]]}"}"
+    [[ -z "$item" ]] && continue
+    if ! [[ $item =~ $guid_re ]]; then
+      err "setup.conf: AUDSPECT_PHISH_OAUTH_CLIENT_IDS entry '${item}' is not an application (client) ID."; exit 1
+    fi
+  done < <(tr ',' '\n' <<<"${AUDSPECT_PHISH_OAUTH_CLIENT_IDS}")
+}
+
 load_config() {
   local cfg="$1"
   [[ -f "$cfg" ]] || { err "Config file not found: $cfg"; exit 1; }
@@ -223,6 +248,8 @@ load_config() {
       BAS_TLS)              BAS_TLS="$val"              ;;
       BAS_SERVER_SANS)      BAS_SERVER_SANS="$val"      ;;
       BAS_CSP_MODE)         BAS_CSP_MODE="$val"         ;;
+      AUDSPECT_PHISH_IDENTITY_TARGET_USERS) AUDSPECT_PHISH_IDENTITY_TARGET_USERS="$val" ;;
+      AUDSPECT_PHISH_OAUTH_CLIENT_IDS)      AUDSPECT_PHISH_OAUTH_CLIENT_IDS="$val"      ;;
       TLS_CERT)             TLS_CERT="$val"             ;;
       TLS_KEY)              TLS_KEY="$val"              ;;
       DB_PASSWORD)          DB_PASSWORD="$val"          ;;
@@ -281,6 +308,7 @@ load_config() {
     enforce|report-only) ;;
     *) err "setup.conf: BAS_CSP_MODE must be enforce or report-only (got: ${BAS_CSP_MODE})."; exit 1 ;;
   esac
+  validate_phish_scope
   [[ -z "$LOG_RETENTION_DAYS" ]] && LOG_RETENTION_DAYS="90"
   [[ -z "$BACKUP_RETENTION_DAILY"   ]] && BACKUP_RETENTION_DAILY="7"
   [[ -z "$BACKUP_RETENTION_WEEKLY"  ]] && BACKUP_RETENTION_WEEKLY="4"
@@ -1525,6 +1553,8 @@ DNS_SINK_BIND_IP=${DNS_SINK_BIND_IP}
 BAS_SERVER_SANS=${BAS_SERVER_SANS}
 BAS_TLS=${BAS_TLS}
 BAS_CSP_MODE=${BAS_CSP_MODE}
+AUDSPECT_PHISH_IDENTITY_TARGET_USERS=${AUDSPECT_PHISH_IDENTITY_TARGET_USERS}
+AUDSPECT_PHISH_OAUTH_CLIENT_IDS=${AUDSPECT_PHISH_OAUTH_CLIENT_IDS}
 TLS_CERT=${TLS_CERT:-}
 TLS_KEY=${TLS_KEY:-}
 TLS_CERT_CONTAINER_PATH=${tls_cert_container_path}

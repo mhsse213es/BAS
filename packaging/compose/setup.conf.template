@@ -55,6 +55,15 @@ BAS_TLS=false                     # true | false
 # set it back to enforce and re-run --upgrade. There is no "off".
 BAS_CSP_MODE=enforce              # enforce | report-only
 
+# ── Phishing identity scenarios: install-wide target allowlists ───────────────
+# PH-ID-002 (OAuth consent) and PH-ID-003 (device-code) may read only these
+# targets. A run chooses targets from inside this list, never outside it. Leave
+# blank to keep both scenarios unavailable. A malformed value refuses the install.
+# Users: comma-separated user principal names or object IDs.
+AUDSPECT_PHISH_IDENTITY_TARGET_USERS=
+# Clients: comma-separated application (client) IDs, for PH-ID-002.
+AUDSPECT_PHISH_OAUTH_CLIENT_IDS=
+
 # DNS_SINK_BIND_IP is the host IP the DLP DNS-tunneling sink (UDP/53) binds
 # to. Auto-detected (first non-loopback IP via `hostname -I`) if left blank.
 # It is deliberately NOT bound to 0.0.0.0 (all interfaces): on most Linux

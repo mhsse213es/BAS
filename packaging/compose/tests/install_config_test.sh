@@ -27,7 +27,8 @@ run_case() {
     eval "$(grep -E '^[A-Z_][A-Z0-9_]*=""$' "$install_sh")"
     eval "$(extract load_config)"
     eval "$(extract _write_env)"
-    load_config "$tmp/setup.conf" && _write_env && cat "$tmp/.env"
+    eval "$(extract validate_phish_scope)"
+    load_config "$tmp/setup.conf" && validate_phish_scope && _write_env && cat "$tmp/.env"
   ) 2>&1
   echo "rc=$?"
   rm -rf "$tmp"
@@ -80,6 +81,29 @@ grep -q '^VALIDATION_LAB_AGENT_ID=$' <<<"$out" && pass "VALIDATION_LAB_AGENT_ID 
 
 out="$(run_case 'VALIDATION_LAB_POLL_MINUTES=10')"
 grep -q '^VALIDATION_LAB_POLL_MINUTES=10$' <<<"$out" && pass "VALIDATION_LAB_POLL_MINUTES reaches .env" || fail "poll set: $out"
+
+# Installation-wide phishing target allowlists (see orchestrator phishscope).
+# Empty means unconfigured. A malformed value refuses the install.
+out="$(run_case '')"
+grep -q '^AUDSPECT_PHISH_IDENTITY_TARGET_USERS=$' <<<"$out" && grep -q '^AUDSPECT_PHISH_OAUTH_CLIENT_IDS=$' <<<"$out" && pass "phish allowlists blank -> empty (unconfigured)" || fail "phish allowlists default: $out"
+
+out="$(run_case 'AUDSPECT_PHISH_IDENTITY_TARGET_USERS=alice@contoso.example, bob@contoso.example')"
+grep -q '^AUDSPECT_PHISH_IDENTITY_TARGET_USERS=alice@contoso.example, bob@contoso.example$' <<<"$out" && pass "phish user allowlist reaches .env" || fail "phish user allowlist: $out"
+
+out="$(run_case 'AUDSPECT_PHISH_OAUTH_CLIENT_IDS=8f1c2a3b-4d5e-4f60-8a7b-9c0d1e2f3a4b')"
+grep -q '^AUDSPECT_PHISH_OAUTH_CLIENT_IDS=8f1c2a3b-4d5e-4f60-8a7b-9c0d1e2f3a4b$' <<<"$out" && pass "phish client allowlist reaches .env" || fail "phish client allowlist: $out"
+
+out="$(run_case 'AUDSPECT_PHISH_OAUTH_CLIENT_IDS=*')"
+grep -q 'rc=1' <<<"$out" && grep -q 'AUDSPECT_PHISH_OAUTH_CLIENT_IDS' <<<"$out" && pass "wildcard client allowlist refuses the install" || fail "wildcard client accepted: $out"
+
+out="$(run_case 'AUDSPECT_PHISH_IDENTITY_TARGET_USERS=alice')"
+grep -q 'rc=1' <<<"$out" && pass "user allowlist without a domain refuses the install" || fail "bad user accepted: $out"
+
+out="$(run_case 'AUDSPECT_PHISH_IDENTITY_TARGET_USERS=*')"
+grep -q 'rc=1' <<<"$out" && pass "wildcard user allowlist refuses the install" || fail "wildcard user accepted: $out"
+
+out="$(run_case '')"
+grep -q 'AUDSPECT_PHISH_OAUTH_CLIENT_IDS: ${AUDSPECT_PHISH_OAUTH_CLIENT_IDS:-}' "${here}/../docker-compose.yml" && pass "compose passes the client allowlist to the orchestrator" || fail "compose passthrough missing"
 
 echo
 [[ $fails -eq 0 ]] && echo "ALL PASS" || { echo "${fails} FAILED"; exit 1; }

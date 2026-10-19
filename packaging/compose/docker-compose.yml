@@ -259,6 +259,10 @@ services:
       # violations (POST /api/csp-report -> orchestrator log) -- a temporary
       # escape hatch if a client hits a violation. No "off" value exists.
       BAS_CSP_MODE: ${BAS_CSP_MODE:-enforce}
+      # Install-wide phishing target allowlists (orchestrator phishscope). Blank
+      # means unconfigured, so PH-ID-002 and PH-ID-003 stay unavailable.
+      AUDSPECT_PHISH_IDENTITY_TARGET_USERS: ${AUDSPECT_PHISH_IDENTITY_TARGET_USERS:-}
+      AUDSPECT_PHISH_OAUTH_CLIENT_IDS: ${AUDSPECT_PHISH_OAUTH_CLIENT_IDS:-}
       # How long a signed command envelope remains valid after issuance
       # (internal/ws/hub.go's commandEnvelopeTTLFromEnv); defaults to 60s if unset.
       COMMAND_ENVELOPE_TTL_SECONDS: ${COMMAND_ENVELOPE_TTL_SECONDS:-}
