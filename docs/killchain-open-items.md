@@ -49,3 +49,38 @@ example Security 4688 and 4624/4648, or Sysmon event 1). Adding that is an
 agent change. It can only be verified on a Windows host with those logs
 enabled, so it is blocked on staging. Decision needed before it is built:
 which channel to add first, and whether the agent should ship it.
+
+## Host execution evidence: Security 4688 and 4624/4648 (built in part)
+
+Built and tested:
+- `orchestrator/internal/killchain/hostevents.go`: evaluates a step's host
+  events. Process creation proves execution only with the step's marker,
+  on the right host, inside the window. Duplicates count once. Records with the
+  same id and different content are a conflict and are not trusted. Logons are
+  reported as supporting evidence and never prove execution. Absence is a named
+  gap and never a "no". Fixture tests cover present, missing, duplicated,
+  delayed, contradictory, and other-host events.
+- `agent/hostevents_windows.go`: collects only 4688, 4624 (logon types 3 and 10)
+  and 4648 in the window, reading named EventData fields. It reads the audit
+  state for both subcategories. Parser tests cover named fields, empty output,
+  garbage output, and unreadable audit output (unknown, never disabled).
+- Live check on this Windows 10 build (agent test with
+  `AUDSPECT_LIVE_HOSTEVENTS=1`): the collector and audit probe run and read the
+  current state. Named EventData fields were confirmed for 4688, 4624 and 4648.
+
+Found on this host and handled as a gap, not a setting:
+- `auditpol` reports Process Creation as "No Auditing", yet 4688 records exist
+  in the Security log. The evaluator names this inconsistency and trusts neither
+  signal alone.
+
+Not built yet (each needs staging or a design step):
+- The orchestrator endpoint that receives `RunHostEvents`, its storage, and the
+  step that maps a matching finding into a ground-truth record. The mapping
+  function exists (`GroundTruthFromFinding`), but nothing calls it yet.
+- The agent does not submit host events after a run. The submission call is
+  not wired, because the endpoint does not exist yet.
+- Verification on staging: whether the marker reaches the 4688 command line
+  (command-line capture needs its own policy), event volume and collection
+  cost on real hosts, the 4648 semantics for lateral steps, and behaviour
+  when audit policy is enabled by GPO.
+- Live validation is not claimed.
