@@ -9,6 +9,8 @@
 // has been exploited, and it does not replace the vendor's own advisory.
 package panosexposure
 
+import "time"
+
 // Product is the only product this package handles.
 const Product = "pan-os"
 
@@ -79,7 +81,10 @@ type Conditions struct {
 // the advisory URL or identifier, so every verdict can cite where its ranges
 // came from.
 type Advisory struct {
-	CVE        string         `json:"cve"`
+	CVE string `json:"cve"`
+	// Version identifies this advisory record, so verdicts can say which
+	// version of the data they used. Empty for caller-supplied advisories.
+	Version    string         `json:"version,omitempty"`
 	Source     string         `json:"source"`
 	Affected   []VersionRange `json:"affected"`
 	Conditions Conditions     `json:"conditions"`
@@ -97,10 +102,46 @@ type Advisory struct {
 
 // Result is the verdict plus the evidence and limits behind it.
 type Result struct {
-	AssetID     string   `json:"assetId"`
-	CVE         string   `json:"cve"`
-	Verdict     Verdict  `json:"verdict"`
-	Reason      string   `json:"reason"`
-	Evidence    []string `json:"evidence"`
-	Limitations []string `json:"limitations,omitempty"`
+	AssetID string  `json:"assetId"`
+	CVE     string  `json:"cve"`
+	Verdict Verdict `json:"verdict"`
+	Reason  string  `json:"reason"`
+	// ReasonCodes are stable, machine-readable explanations. Reason is prose
+	// for people; codes are for filtering, reporting and tests.
+	ReasonCodes []string `json:"reasonCodes"`
+	// MissingEvidence names each fact that could not be established. It is
+	// populated for every unknown verdict, so the gap is always visible.
+	MissingEvidence []string `json:"missingEvidence"`
+	Evidence        []string `json:"evidence"`
+	Limitations     []string `json:"limitations,omitempty"`
+	// AdvisoryVersion is the version of the advisory record used, empty for
+	// caller-supplied advisories that carry none.
+	AdvisoryVersion string `json:"advisoryVersion,omitempty"`
+	// AssessedAt is the timestamp supplied by the caller (UTC).
+	AssessedAt time.Time `json:"assessedAt"`
 }
+
+// Reason codes. These strings are part of the API, so do not rename them.
+const (
+	CodeNotPANOS              = "NOT_PAN_OS"
+	CodeVersionUnparseable    = "VERSION_UNPARSEABLE"
+	CodeNoAffectedRanges      = "NO_AFFECTED_RANGES"
+	CodeRangeNoFixedRelease   = "RANGE_NO_FIXED_RELEASE"
+	CodeRangeInvalid          = "RANGE_INVALID"
+	CodeReleaseUnresolved     = "RELEASE_UNRESOLVED"
+	CodeInAffectedRange       = "IN_AFFECTED_RANGE"
+	CodeOutsideAffectedRanges = "OUTSIDE_AFFECTED_RANGES"
+	CodeBranchNotCovered      = "BRANCH_NOT_COVERED"
+	CodeConditionAbsent       = "CONDITION_ABSENT"
+	CodeConditionUnknown      = "CONDITION_UNKNOWN"
+	CodeConditionPresent      = "CONDITION_PRESENT"
+	CodeNoConditionsNamed     = "NO_CONDITIONS_NAMED"
+)
+
+// Missing-evidence names. These identify which input fact was not established.
+const (
+	EvidenceVersion        = "version"
+	EvidenceGlobalProtect  = "globalProtect"
+	EvidenceAuthOverride   = "authOverride"
+	EvidenceSharedOverride = "sharedOverrideCert"
+)
