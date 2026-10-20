@@ -2,8 +2,10 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
+	"time"
 
 	"github.com/audspect/bas/internal/panosexposure"
 )
@@ -12,12 +14,44 @@ import (
 // allocate an unbounded result set.
 const maxPANOSAssets = 500
 
-// panosAssessRequest is one advisory and the PAN-OS assets to assess against it.
-// The advisory is supplied by the caller. Nothing about the vendor's affected
-// versions is embedded in the server.
+// panosAssessRequest names the advisory to assess against in one of two ways:
+//   - "advisory": a caller-supplied advisory (kept for compatibility), or
+//   - "advisoryCve" (optionally "advisoryRevision"): a revision from the
+//     built-in registry. Without a revision, the latest verified one is used.
+//
+// Exactly one of the two forms must be given.
 type panosAssessRequest struct {
-	Advisory panosexposure.Advisory `json:"advisory"`
-	Assets   []panosexposure.Asset  `json:"assets"`
+	Advisory         *panosexposure.Advisory `json:"advisory,omitempty"`
+	AdvisoryCVE      string                  `json:"advisoryCve,omitempty"`
+	AdvisoryRevision int                     `json:"advisoryRevision,omitempty"`
+	Assets           []panosexposure.Asset   `json:"assets"`
+}
+
+// resolveAdvisory returns the advisory the request names and whether it came
+// from the registry. A registry miss is an error, never a fallback to guessing.
+func resolveAdvisory(req panosAssessRequest) (panosexposure.Advisory, string, error) {
+	switch {
+	case req.Advisory != nil && req.AdvisoryCVE != "":
+		return panosexposure.Advisory{}, "", fmt.Errorf("give either advisory or advisoryCve, not both")
+	case req.Advisory != nil:
+		return *req.Advisory, "caller-supplied", nil
+	case req.AdvisoryCVE == "":
+		return panosexposure.Advisory{}, "", fmt.Errorf("an advisory is required: advisory or advisoryCve")
+	}
+	reg, err := panosexposure.BuiltinRegistry()
+	if err != nil {
+		return panosexposure.Advisory{}, "", fmt.Errorf("built-in advisory registry is unavailable: %w", err)
+	}
+	var rec panosexposure.AdvisoryRecord
+	if req.AdvisoryRevision > 0 {
+		rec, err = reg.Get(req.AdvisoryCVE, req.AdvisoryRevision)
+	} else {
+		rec, err = reg.Latest(req.AdvisoryCVE)
+	}
+	if err != nil {
+		return panosexposure.Advisory{}, "", err
+	}
+	return rec.Advisory, rec.VerificationStatus, nil
 }
 
 // AssessPANOSExposure returns an exposure verdict per asset for one advisory.
@@ -33,7 +67,7 @@ func (h *Handler) AssessPANOSExposure(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "invalid JSON body: "+err.Error(), http.StatusBadRequest)
 		return
 	}
-	if err := dec.Decode(&struct{}{}); err != io.EOF {
+	if _, err := dec.Token(); err != io.EOF {
 		jsonError(w, "invalid JSON body: unexpected data after the object", http.StatusBadRequest)
 		return
 	}
@@ -46,17 +80,33 @@ func (h *Handler) AssessPANOSExposure(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	adv, status, err := resolveAdvisory(req)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	at := time.Now().UTC()
 	results := make([]panosexposure.Result, 0, len(req.Assets))
 	counts := map[panosexposure.Verdict]int{}
 	for _, a := range req.Assets {
-		res := panosexposure.Assess(a, req.Advisory)
+		res := panosexposure.AssessAt(a, adv, at)
+		switch status {
+		case panosexposure.StatusVerified:
+		case "caller-supplied":
+			res.Limitations = append(res.Limitations, "advisory supplied by the caller; Audspect has not verified it")
+		default:
+			res.Limitations = append(res.Limitations, "advisory revision is "+status+"; its data is not verified")
+		}
 		results = append(results, res)
 		counts[res.Verdict]++
 	}
 	jsonOK(w, map[string]any{
-		"cve":     req.Advisory.CVE,
-		"source":  req.Advisory.Source,
-		"results": results,
-		"counts":  counts,
+		"cve":             adv.CVE,
+		"advisoryVersion": adv.Version,
+		"advisoryStatus":  status,
+		"source":          adv.Source,
+		"results":         results,
+		"counts":          counts,
 	})
 }

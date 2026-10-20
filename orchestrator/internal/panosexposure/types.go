@@ -67,6 +67,8 @@ type Asset struct {
 type VersionRange struct {
 	Introduced string `json:"introduced"`
 	FixedIn    string `json:"fixedIn"`
+	// Note records the advisory wording behind a range that needs context.
+	Note string `json:"note,omitempty"`
 }
 
 // Conditions lists which exposure conditions the advisory names. A condition
