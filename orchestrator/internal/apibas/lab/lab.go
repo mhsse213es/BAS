@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"github.com/audspect/bas/internal/apibas/fixture"
+	"math"
 )
 
 // Mode selects which variant of the contract the lab serves.
@@ -192,6 +193,27 @@ func Flaws() []Flaw {
 				"Fixed: the request without the internal-service credential returns 401 and no record.",
 		},
 		{
+			ID:          "LAB-AUTHZ-EXPORT-001",
+			ScenarioID:  "API-BAS-AUTHZ-012",
+			Description: "GET /api/exports/{id} returns an export job without checking that the caller owns its order.",
+			Oracle: "Vulnerable: another customer's export returns that order's protected values (exposed). " +
+				"Fixed: the export is not found for a non-owner and the request returns 404.",
+		},
+		{
+			ID:          "LAB-BIZ-QTY-001",
+			ScenarioID:  "API-BAS-BIZ-002",
+			Description: "PATCH /api/orders/{id} stores any quantity, including negative values.",
+			Oracle: "Vulnerable: the owner sets a negative quantity and it is stored (state change). " +
+				"Fixed: a quantity that is not a whole number of at least 1 returns 400 and changes nothing.",
+		},
+		{
+			ID:          "LAB-INTEG-WHSEC-001",
+			ScenarioID:  "API-BAS-INTEG-008",
+			Description: "GET /api/orders/{id}/integration returns the webhook secret to any authenticated caller.",
+			Oracle: "Vulnerable: a non-owner reads the owner's webhook secret (exposed). " +
+				"Fixed: a non-owner receives 403 and no secret.",
+		},
+		{
 			ID:          "LAB-AUTHZ-MASS-001",
 			ScenarioID:  "API-BAS-AUTHZ-003",
 			Description: "PATCH /api/orders/{id} binds every submitted field, including owner_id, from the request body.",
@@ -215,10 +237,11 @@ type Order struct {
 // OrderState is the admin-visible snapshot used as ground truth. It carries no
 // protected values, so the state endpoint itself does not become a leak path.
 type OrderState struct {
-	ID      string `json:"id"`
-	OwnerID string `json:"owner_id"`
-	Status  string `json:"status"`
-	Tag     string `json:"tag"`
+	ID       string `json:"id"`
+	OwnerID  string `json:"owner_id"`
+	Status   string `json:"status"`
+	Tag      string `json:"tag"`
+	Quantity string `json:"quantity"`
 }
 
 // AuditEntry records every admin and mutating action. Cleanup and reset never
@@ -309,6 +332,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/webhooks/test", s.testWebhook)
 	mux.HandleFunc("GET /internal/orders/{id}", s.internalOrder)
 	mux.HandleFunc("GET /api/orders/{id}/items/{itemId}", s.getItem)
+	mux.HandleFunc("GET /api/exports/{id}", s.getExport)
+	mux.HandleFunc("GET /api/orders/{id}/integration", s.getIntegration)
 	if s.cfg.Mode == ModeVulnerable {
 		// LAB-DISC-DEPRECATED-001: the retired v0 route is still served, without auth.
 		mux.HandleFunc("GET /api/v0/orders/{id}", s.getOrderV0)
@@ -455,6 +480,14 @@ func (s *Server) patchOrder(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
 		return
 	}
+	if q, ok := fields["quantity"]; ok && !vulnerable {
+		// LAB-BIZ-QTY-001: the fixed build accepts only a whole number of at least 1.
+		n, isNum := q.(float64)
+		if !isNum || n < 1 || n != math.Trunc(n) {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "quantity must be a whole number of at least 1"})
+			return
+		}
+	}
 	if !vulnerable {
 		if order.OwnerID != caller {
 			writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
@@ -469,6 +502,9 @@ func (s *Server) patchOrder(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	if q, ok := fields["quantity"]; ok {
+		order.Public["quantity"] = fmt.Sprint(q)
+	}
 	if v, ok := fields["owner_id"].(string); ok && vulnerable {
 		order.OwnerID = v
 	}
@@ -476,7 +512,9 @@ func (s *Server) patchOrder(w http.ResponseWriter, r *http.Request) {
 		order.Status = v
 	}
 	s.record("update", order.Tag, fmt.Sprintf("order %s patched by %s", order.ID, caller))
-	writeJSON(w, http.StatusOK, orderBody(order))
+	// The response carries public fields only, so an owner's own update is never
+	// counted as disclosure; the state diff is what grades a write.
+	writeJSON(w, http.StatusOK, publicBody(order))
 }
 
 // adminSetStatus sets an order's status through the admin route. Authentication
@@ -517,7 +555,7 @@ func (s *Server) getState(w http.ResponseWriter, _ *http.Request) {
 	s.mu.Lock()
 	states := make([]OrderState, 0, len(s.orders))
 	for _, o := range s.orders {
-		states = append(states, OrderState{ID: o.ID, OwnerID: o.OwnerID, Status: o.Status, Tag: o.Tag})
+		states = append(states, OrderState{ID: o.ID, OwnerID: o.OwnerID, Status: o.Status, Tag: o.Tag, Quantity: o.Public["quantity"]})
 	}
 	s.mu.Unlock()
 	sort.Slice(states, func(i, j int) bool { return states[i].ID < states[j].ID })
@@ -927,6 +965,57 @@ func (s *Server) getItem(w http.ResponseWriter, r *http.Request) {
 		"order_id":      itemParent,
 		"sku":           s.itemSKU[itemID],
 		"payer_account": owner.Protected["account_ref"],
+	})
+}
+
+// getExport returns an export job. Each export is for one order and carries that
+// order's protected values. The vulnerable build does not check ownership
+// (LAB-AUTHZ-EXPORT-001); the fixed build answers 404 to anyone but the owner.
+func (s *Server) getExport(w http.ResponseWriter, r *http.Request) {
+	caller, st := s.identify(r)
+	if st != authOK {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthenticated"})
+		return
+	}
+	exportID := r.PathValue("id")
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	order, found := s.orders["ORD-"+strings.TrimPrefix(exportID, "EXP-")]
+	if !strings.HasPrefix(exportID, "EXP-") || !found || (s.cfg.Mode == ModeFixed && order.OwnerID != caller) {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"id":       exportID,
+		"order_id": order.ID,
+		"status":   "ready",
+		"order":    orderBody(order),
+	})
+}
+
+// getIntegration returns the webhook secret of an order. The secret is protected
+// and belongs to the owner. The vulnerable build returns it to any caller
+// (LAB-INTEG-WHSEC-001); the fixed build answers 403 to anyone but the owner.
+func (s *Server) getIntegration(w http.ResponseWriter, r *http.Request) {
+	caller, st := s.identify(r)
+	if st != authOK {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthenticated"})
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	order, found := s.orders[r.PathValue("id")]
+	if !found {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+		return
+	}
+	if s.cfg.Mode == ModeFixed && order.OwnerID != caller {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"order_id":       order.ID,
+		"webhook_secret": order.Protected["webhook_secret"],
 	})
 }
 

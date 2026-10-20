@@ -1,0 +1,55 @@
+id: API-BAS-BIZ-002
+name: Negative order quantity accepted by the update endpoint
+category: BIZ
+claim: property_level
+attack_objective: >
+  The owner of an order sets a negative quantity, which the business logic should
+  never accept, to reverse charges or create phantom credit.
+threat_model:
+  attacker: authenticated customer who owns the order
+  identity: customer-b
+  access_level: standard customer, valid token, owner of the order
+  objective: store a business-invalid quantity that downstream billing trusts
+preconditions:
+  fixture: orders-two-tenant
+  identities: [customer-b]
+  object: ORD-2001
+steps:
+  - id: baseline-owner-read
+    role: baseline
+    identity: customer-b
+    auth: valid
+    method: GET
+    path: /api/orders/{object}
+    hypothesis: The owner can read their order. If this fails, the scenario is not testable.
+  - id: attack-negative-quantity
+    role: attack
+    identity: customer-b
+    auth: valid
+    method: PATCH
+    path: /api/orders/{object}
+    body: '{"quantity": -5}'
+    hypothesis: The update validates quantity as a whole number of at least 1, so a negative value is refused with 400.
+denied_statuses: [400]
+expected_control: >
+  A quantity that is not a whole number of at least 1 is refused with 400 and
+  the order is unchanged.
+ground_truth:
+  adapters: [state, response]
+  check: >
+    The stored quantity is identical before and after the attack.
+detection_assertion:
+  status: not_evaluated
+  reason: Detection validation is Phase 4; this scenario makes no detection claim.
+evidence:
+  - sanitized_request
+  - sanitized_response
+  - state_diff
+side_effect_class: STATE_CHANGE_SANDBOX
+cleanup:
+  - reset the lab to its fixture seed after the run
+industry_mapping:
+  - "BFSI: business-logic validation of order quantities"
+regulatory_mapping: []
+negative_tests:
+  - API-BAS-BIZ-002 against the fixed build must PASS

@@ -40,10 +40,11 @@ type SecretResolver interface {
 // StateRecord is one object as seen by the ground-truth state adapter.
 // It deliberately excludes protected values.
 type StateRecord struct {
-	ID      string
-	OwnerID string
-	Status  string
-	Tag     string
+	ID       string
+	OwnerID  string
+	Status   string
+	Tag      string
+	Quantity string
 }
 
 // StateReader is the ground-truth state adapter. A nil StateReader means the

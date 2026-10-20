@@ -79,8 +79,9 @@ func OrdersTwoTenant() Fixture {
 				Status:  "shipped",
 				Public:  map[string]string{"sku": "SKU-1001", "quantity": "2"},
 				Protected: map[string]string{
-					"card_last4":  "BAS-SIM-1001",
-					"account_ref": "BAS-SIM-ACC-A",
+					"card_last4":     "BAS-SIM-1001",
+					"account_ref":    "BAS-SIM-ACC-A",
+					"webhook_secret": "BAS-SIM-WHSEC-1001",
 				},
 				Items: []Item{{ID: "ITM-1001-1", SKU: "SKU-1001-A"}},
 			},
@@ -90,8 +91,9 @@ func OrdersTwoTenant() Fixture {
 				Status:  "pending",
 				Public:  map[string]string{"sku": "SKU-2001", "quantity": "1"},
 				Protected: map[string]string{
-					"card_last4":  "BAS-SIM-2001",
-					"account_ref": "BAS-SIM-ACC-B",
+					"card_last4":     "BAS-SIM-2001",
+					"account_ref":    "BAS-SIM-ACC-B",
+					"webhook_secret": "BAS-SIM-WHSEC-2001",
 				},
 				Items: []Item{{ID: "ITM-2001-1", SKU: "SKU-2001-A"}},
 			},
