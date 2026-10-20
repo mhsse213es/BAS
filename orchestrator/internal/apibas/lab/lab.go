@@ -86,6 +86,27 @@ func Flaws() []Flaw {
 				"Fixed: the same request returns 403 and the status is unchanged.",
 		},
 		{
+			ID:          "LAB-AUTHZ-VERSION-001",
+			ScenarioID:  "API-BAS-AUTHZ-010",
+			Description: "The legacy /api/v1/orders/{id} route does not check ownership; /api/orders/{id} does.",
+			Oracle: "Vulnerable: a non-owner GET on the v1 route returns the owner's protected values (exploited). " +
+				"Fixed: the v1 route returns 403 and no protected values.",
+		},
+		{
+			ID:          "LAB-DATA-PROJ-001",
+			ScenarioID:  "API-BAS-DATA-001",
+			Description: "GET /api/orders/{id}/summary returns the full record, including protected fields, to the owner.",
+			Oracle: "Vulnerable: the owner's summary contains protected values (exposed). " +
+				"Fixed: the summary contains only public fields and returns 200 with no protected values.",
+		},
+		{
+			ID:          "LAB-DISC-DEBUG-001",
+			ScenarioID:  "API-BAS-DISC-003",
+			Description: "A debug route is reachable by any authenticated customer and returns full records.",
+			Oracle: "Vulnerable: a customer token on /debug/orders/{id} returns the owner's protected values (exposed). " +
+				"Fixed: the route is not mounted and returns 404.",
+		},
+		{
 			ID:          "LAB-AUTHZ-MASS-001",
 			ScenarioID:  "API-BAS-AUTHZ-003",
 			Description: "PATCH /api/orders/{id} binds every submitted field, including owner_id, from the request body.",
@@ -181,6 +202,12 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/orders/{id}", s.getOrder)
 	mux.HandleFunc("PATCH /api/orders/{id}", s.patchOrder)
 	mux.HandleFunc("PATCH /api/admin/orders/{id}/status", s.adminSetStatus)
+	mux.HandleFunc("GET /api/v1/orders/{id}", s.getOrderV1)
+	mux.HandleFunc("GET /api/orders/{id}/summary", s.getSummary)
+	if s.cfg.Mode == ModeVulnerable {
+		// The debug route exists only in the vulnerable build (LAB-DISC-DEBUG-001).
+		mux.HandleFunc("GET /debug/orders/{id}", s.debugOrder)
+	}
 	mux.HandleFunc("GET /lab/state", s.adminOnly(s.getState))
 	mux.HandleFunc("POST /lab/orders", s.adminOnly(s.createTagged))
 	mux.HandleFunc("DELETE /lab/runs/{tag}", s.adminOnly(s.cleanupRun))
@@ -419,6 +446,89 @@ func (s *Server) adminOnly(next http.HandlerFunc) http.HandlerFunc {
 		}
 		next(w, r)
 	}
+}
+
+// getOrderV1 is the legacy route. It keeps the old contract and, in the
+// vulnerable build, skips the ownership check that /api/orders/{id} performs.
+func (s *Server) getOrderV1(w http.ResponseWriter, r *http.Request) {
+	caller, st := s.identify(r)
+	if st != authOK {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthenticated"})
+		return
+	}
+	s.mu.Lock()
+	order, found := s.orders[r.PathValue("id")]
+	var body map[string]any
+	if found && (s.cfg.Mode == ModeVulnerable || order.OwnerID == caller) {
+		body = orderBody(order)
+	}
+	s.mu.Unlock()
+	respondOrder(w, found, body)
+}
+
+// getSummary returns a projection for the owner. The fixed build returns only
+// public fields; the vulnerable build returns the full record (LAB-DATA-PROJ-001).
+func (s *Server) getSummary(w http.ResponseWriter, r *http.Request) {
+	caller, st := s.identify(r)
+	if st != authOK {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthenticated"})
+		return
+	}
+	s.mu.Lock()
+	order, found := s.orders[r.PathValue("id")]
+	var body map[string]any
+	if found && order.OwnerID == caller {
+		if s.cfg.Mode == ModeVulnerable {
+			body = orderBody(order)
+		} else {
+			body = publicBody(order)
+		}
+	}
+	s.mu.Unlock()
+	if found && body == nil {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
+		return
+	}
+	respondOrder(w, found, body)
+}
+
+// debugOrder is a diagnostic route that returns full records. It is mounted
+// only in the vulnerable build (LAB-DISC-DEBUG-001).
+func (s *Server) debugOrder(w http.ResponseWriter, r *http.Request) {
+	_, st := s.identify(r)
+	if st != authOK {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthenticated"})
+		return
+	}
+	s.mu.Lock()
+	order, found := s.orders[r.PathValue("id")]
+	var body map[string]any
+	if found {
+		body = orderBody(order)
+	}
+	s.mu.Unlock()
+	respondOrder(w, found, body)
+}
+
+func respondOrder(w http.ResponseWriter, found bool, body map[string]any) {
+	switch {
+	case !found:
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+	case body == nil:
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
+	default:
+		writeJSON(w, http.StatusOK, body)
+	}
+}
+
+// publicBody is the projection a summary may return: identifiers and public
+// fields only.
+func publicBody(o *Order) map[string]any {
+	body := map[string]any{"id": o.ID, "owner_id": o.OwnerID, "status": o.Status}
+	for k, v := range o.Public {
+		body[k] = v
+	}
+	return body
 }
 
 func orderBody(o *Order) map[string]any {

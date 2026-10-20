@@ -10,6 +10,7 @@ package contract
 import (
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -60,6 +61,7 @@ type Scenario struct {
 	Preconditions     Preconditions      `yaml:"preconditions"`
 	Steps             []Step             `yaml:"steps"`
 	DeniedStatuses    []int              `yaml:"denied_statuses"`
+	CleanIsEnforced   bool               `yaml:"clean_is_enforcement"`
 	ExpectedControl   string             `yaml:"expected_control"`
 	GroundTruth       GroundTruth        `yaml:"ground_truth"`
 	DetectionAssert   DetectionAssertion `yaml:"detection_assertion"`
@@ -184,6 +186,9 @@ func (s Scenario) Validate() error {
 	}
 	if !hasState {
 		return fmt.Errorf("contract: %s: ground_truth must include the state adapter", s.ID)
+	}
+	if s.CleanIsEnforced && !slices.Contains(s.GroundTruth.Adapters, "response") {
+		return fmt.Errorf("contract: %s: clean_is_enforcement needs the response adapter to prove no leak", s.ID)
 	}
 	if s.DetectionAssert.Status != "not_evaluated" || strings.TrimSpace(s.DetectionAssert.Reason) == "" {
 		return fmt.Errorf("contract: %s: detection_assertion must be status not_evaluated with a reason", s.ID)

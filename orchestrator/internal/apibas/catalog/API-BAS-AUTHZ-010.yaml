@@ -1,0 +1,55 @@
+id: API-BAS-AUTHZ-010
+name: Authorization bypass through a legacy API version
+category: AUTHZ
+claim: cross_identity
+attack_objective: >
+  A customer reads another customer's order through the legacy v1 route, which
+  still serves the order but does not apply the ownership check of the current
+  route.
+threat_model:
+  attacker: authenticated customer in tenant A
+  identity: customer-a
+  access_level: standard customer, valid token, no elevated role
+  objective: read customer-b's order by using the legacy API version
+preconditions:
+  fixture: orders-two-tenant
+  identities: [customer-b, customer-a]
+  object: ORD-2001
+steps:
+  - id: baseline-owner-read-current-version
+    role: baseline
+    identity: customer-b
+    auth: valid
+    method: GET
+    path: /api/orders/{object}
+    hypothesis: The owner can read their order on the current version. If this fails, the scenario is not testable.
+  - id: attack-legacy-version-read
+    role: attack
+    identity: customer-a
+    auth: valid
+    method: GET
+    path: /api/v1/orders/{object}
+    hypothesis: The legacy route applies the same ownership check as the current route, so a non-owner is refused.
+denied_statuses: [403, 404]
+expected_control: >
+  The legacy route returns 403 to a non-owner and discloses no protected values.
+ground_truth:
+  adapters: [state, response]
+  check: >
+    The state is unchanged by the attack and the attack response contains none
+    of the owner's protected values.
+detection_assertion:
+  status: not_evaluated
+  reason: Detection validation is Phase 4; this scenario makes no detection claim.
+evidence:
+  - sanitized_request
+  - sanitized_response
+  - state_diff
+side_effect_class: READ_ONLY
+cleanup:
+  - none; the scenario creates no records
+industry_mapping:
+  - "BFSI: cross-customer access through deprecated API versions"
+regulatory_mapping: []
+negative_tests:
+  - API-BAS-AUTHZ-010 against the fixed build must PASS

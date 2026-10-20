@@ -176,6 +176,7 @@ func (r *Runner) Run(ctx context.Context, s contract.Scenario) (Report, error) {
 
 	var ev grade.Evidence
 	ev.Denied = s.DeniedStatuses
+	ev.CleanIsEnforcement = s.CleanIsEnforced
 
 	// Baseline: the owner's legitimate request. Redacted like everything else,
 	// but its leak count is not used for grading.

@@ -1,0 +1,55 @@
+id: API-BAS-DISC-003
+name: Diagnostic endpoint returns full records to customers
+category: DISC
+claim: function_level
+attack_objective: >
+  An ordinary customer finds and calls a debug route that was left reachable,
+  and receives another customer's full order record.
+threat_model:
+  attacker: authenticated customer who discovers a diagnostic route
+  identity: customer-a
+  access_level: standard customer, valid token
+  objective: read full order records through a debug endpoint not meant for customers
+preconditions:
+  fixture: orders-two-tenant
+  identities: [customer-b, customer-a]
+  object: ORD-2001
+steps:
+  - id: baseline-owner-read
+    role: baseline
+    identity: customer-b
+    auth: valid
+    method: GET
+    path: /api/orders/{object}
+    hypothesis: The owner can read their order through the product API. If this fails, the scenario is not testable.
+  - id: attack-debug-route
+    role: attack
+    identity: customer-a
+    auth: valid
+    method: GET
+    path: /debug/orders/{object}
+    hypothesis: No diagnostic route is reachable by a customer token; a request for it is refused or not found.
+denied_statuses: [403, 404]
+expected_control: >
+  The diagnostic route is not reachable by customer tokens (403 or 404) and
+  discloses no protected values.
+ground_truth:
+  adapters: [state, response]
+  check: >
+    The state is unchanged by the attack and the attack response contains none
+    of the owner's protected values.
+detection_assertion:
+  status: not_evaluated
+  reason: Detection validation is Phase 4; this scenario makes no detection claim.
+evidence:
+  - sanitized_request
+  - sanitized_response
+  - state_diff
+side_effect_class: READ_ONLY
+cleanup:
+  - none; the scenario creates no records
+industry_mapping:
+  - "BFSI: exposed diagnostic interfaces in customer-facing deployments"
+regulatory_mapping: []
+negative_tests:
+  - API-BAS-DISC-003 against the fixed build must PASS

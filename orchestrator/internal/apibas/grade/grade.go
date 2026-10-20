@@ -80,6 +80,12 @@ type Evidence struct {
 	// StateChanged is the state adapter's diff between the snapshot taken after
 	// the baseline and the snapshot taken after the attack.
 	StateChanged bool
+	// CleanIsEnforcement marks a scenario where a 2xx response with no leak and
+	// no state change is the correct behaviour, because the control is a
+	// projection (for example, the field is removed) rather than a refusal.
+	// The runner sets it only for scenarios whose contract declares it, and
+	// only when the response adapter is part of the ground truth.
+	CleanIsEnforcement bool
 }
 
 // Outcome is the graded result with every axis reported separately.
@@ -124,8 +130,9 @@ func Error(reason string) Outcome {
 //  3. Baseline not 200                                -> SKIPPED (precondition not met)
 //  4. State changed by the attack                     -> FAIL, exploited
 //  5. Protected values in the attack body             -> FAIL, exploited
-//  6. Attack status in the scenario's Denied list     -> PASS, control enforced
-//  7. Anything else (2xx without leak, other 4xx)     -> SKIPPED, inconclusive
+//  6. Attack 2xx with no leak, when CleanIsEnforcement -> PASS, control enforced
+//  7. Attack status in the scenario's Denied list     -> PASS, control enforced
+//  8. Anything else (2xx without leak, other 4xx)     -> SKIPPED, inconclusive
 func Assess(ev Evidence) Outcome {
 	if ev.Transport {
 		return Error(ReasonTargetUnreachable)
@@ -141,6 +148,15 @@ func Assess(ev Evidence) Outcome {
 			Result:         FAIL,
 			Exploitability: Exploited,
 			Control:        Failed,
+			Detection:      "not_evaluated",
+			Confidence:     ConfidenceEvidenceBacked,
+		}
+	}
+	if ev.CleanIsEnforcement && ev.Attack.Status/100 == 2 {
+		return Outcome{
+			Result:         PASS,
+			Exploitability: NotExploited,
+			Control:        Enforced,
 			Detection:      "not_evaluated",
 			Confidence:     ConfidenceEvidenceBacked,
 		}

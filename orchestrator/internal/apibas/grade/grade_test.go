@@ -106,3 +106,28 @@ func TestAssess_InconclusiveNeverPassesOrFails(t *testing.T) {
 		}
 	}
 }
+
+// A projection control: a 2xx with no leak is enforcement only when the
+// scenario declares it. Without the declaration the same evidence is
+// inconclusive.
+func TestAssess_CleanIsEnforcement(t *testing.T) {
+	ev := Evidence{Baseline: Exchange{Status: 200}, Attack: Exchange{Status: 200}, Denied: defaultDenied}
+	if out := Assess(ev); out.Result != SKIPPED {
+		t.Errorf("without declaration: Result = %s, want SKIPPED", out.Result)
+	}
+	ev.CleanIsEnforcement = true
+	if out := Assess(ev); out.Result != PASS || out.Control != Enforced {
+		t.Errorf("with declaration: Result = %s control %s, want PASS enforced", out.Result, out.Control)
+	}
+	// A leak must still FAIL even when the scenario declares a clean projection.
+	ev.Attack.LeakedProtected = 1
+	if out := Assess(ev); out.Result != FAIL {
+		t.Errorf("leak with declaration: Result = %s, want FAIL", out.Result)
+	}
+	// A state change must still FAIL too.
+	ev.Attack.LeakedProtected = 0
+	ev.StateChanged = true
+	if out := Assess(ev); out.Result != FAIL {
+		t.Errorf("state change with declaration: Result = %s, want FAIL", out.Result)
+	}
+}

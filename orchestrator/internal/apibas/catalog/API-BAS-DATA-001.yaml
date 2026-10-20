@@ -1,0 +1,57 @@
+id: API-BAS-DATA-001
+name: Summary projection exposes hidden protected fields to the owner
+category: DATA
+claim: property_level
+clean_is_enforcement: true
+attack_objective: >
+  A customer requests a summary of their own order and receives fields the
+  projection should not contain: protected card and account references.
+threat_model:
+  attacker: authenticated customer who owns the order
+  identity: customer-a
+  access_level: standard customer, valid token, owner of the object
+  objective: read protected fields that a summary projection should omit
+preconditions:
+  fixture: orders-two-tenant
+  identities: [customer-a]
+  object: ORD-1001
+steps:
+  - id: baseline-owner-read
+    role: baseline
+    identity: customer-a
+    auth: valid
+    method: GET
+    path: /api/orders/{object}
+    hypothesis: The owner can read their order. If this fails, the scenario is not testable.
+  - id: attack-summary-projection
+    role: attack
+    identity: customer-a
+    auth: valid
+    method: GET
+    path: /api/orders/{object}/summary
+    hypothesis: The summary projection contains only public fields, so no protected value appears in it.
+denied_statuses: [403]
+expected_control: >
+  The summary returns 200 with public fields only; no protected value appears
+  in the response and the order is unchanged.
+ground_truth:
+  adapters: [state, response]
+  check: >
+    The state is unchanged by the attack, and the attack response contains none
+    of the owner's protected values. A 200 with none of them is the correct
+    behaviour for this projection control.
+detection_assertion:
+  status: not_evaluated
+  reason: Detection validation is Phase 4; this scenario makes no detection claim.
+evidence:
+  - sanitized_request
+  - sanitized_response
+  - state_diff
+side_effect_class: READ_ONLY
+cleanup:
+  - none; the scenario creates no records
+industry_mapping:
+  - "BFSI: over-disclosure of card and account references in order summaries"
+regulatory_mapping: []
+negative_tests:
+  - API-BAS-DATA-001 against the fixed build must PASS
