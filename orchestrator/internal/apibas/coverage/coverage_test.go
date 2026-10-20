@@ -51,8 +51,8 @@ func TestUnsupportedCountsOnlyInCatalogue(t *testing.T) {
 	if r.Catalogued != len(all) {
 		t.Fatalf("catalogued = %d, want %d", r.Catalogued, len(all))
 	}
-	if r.Unsupported < 7 {
-		t.Fatalf("unsupported = %d, want at least the 7 protocol entries", r.Unsupported)
+	if r.Unsupported < 5 {
+		t.Fatalf("unsupported = %d, want at least the 5 protocol entries without an adapter", r.Unsupported)
 	}
 	if r.Evaluated != 0 || r.Validated != 0 {
 		t.Fatalf("no results were supplied, but evaluated=%d validated=%d", r.Evaluated, r.Validated)
@@ -60,8 +60,8 @@ func TestUnsupportedCountsOnlyInCatalogue(t *testing.T) {
 	if !r.Consistent() {
 		t.Fatalf("classes do not sum to the catalog size: %+v", r)
 	}
-	if got := entry(r, "API-BAS-INJ-007"); got.Status != Unsupported || got.Reason != grade.ReasonUnsupportedProtocol {
-		t.Fatalf("GraphQL entry = %+v, want unsupported with UNSUPPORTED_PROTOCOL", got)
+	if got := entry(r, "API-BAS-DISC-009"); got.Status != Unsupported || got.Reason != grade.ReasonUnsupportedProtocol {
+		t.Fatalf("gRPC entry = %+v, want unsupported with UNSUPPORTED_PROTOCOL", got)
 	}
 }
 
@@ -69,10 +69,10 @@ func TestUnsupportedCountsOnlyInCatalogue(t *testing.T) {
 func TestUnsupportedIgnoresResults(t *testing.T) {
 	all := loadCatalog(t)
 	results := map[string]Verdicts{
-		"API-BAS-INJ-007": {Vulnerable: ptr(validFail()), Fixed: ptr(validPass())},
+		"API-BAS-DISC-009": {Vulnerable: ptr(validFail()), Fixed: ptr(validPass())},
 	}
 	r := Build(all, contract.ProtocolSupported, results)
-	if got := entry(r, "API-BAS-INJ-007"); got.Status != Unsupported {
+	if got := entry(r, "API-BAS-DISC-009"); got.Status != Unsupported {
 		t.Fatalf("unsupported scenario with results = %s, want unsupported", got.Status)
 	}
 }
@@ -81,22 +81,23 @@ func TestUnsupportedIgnoresResults(t *testing.T) {
 // makes the scenario implemented and unevaluated, not evaluated.
 func TestAdapterLaterIncreasesCoverageOnlyAfterValidEvaluation(t *testing.T) {
 	all := loadCatalog(t)
-	graphql := func(p string) bool { return p == "" || p == "http" || p == "graphql" }
+	// The "later" adapter is gRPC: the test adds it to the supported set and nothing else.
+	withGRPC := func(p string) bool { return contract.ProtocolSupported(p) || p == "grpc" }
 
 	before := Build(all, contract.ProtocolSupported, nil)
-	after := Build(all, graphql, nil)
+	after := Build(all, withGRPC, nil)
 	if after.Implemented <= before.Implemented {
 		t.Fatalf("implemented did not rise when the GraphQL adapter was added: %d -> %d", before.Implemented, after.Implemented)
 	}
 	if after.Evaluated != before.Evaluated {
 		t.Fatalf("evaluated rose without any verdict: %d -> %d", before.Evaluated, after.Evaluated)
 	}
-	if got := entry(after, "API-BAS-INJ-007"); got.Status != Unevaluated {
-		t.Fatalf("implemented GraphQL scenario with no verdict = %s, want unevaluated", got.Status)
+	if got := entry(after, "API-BAS-DISC-009"); got.Status != Unevaluated {
+		t.Fatalf("implemented gRPC scenario with no verdict = %s, want unevaluated", got.Status)
 	}
 
-	withVerdict := Build(all, graphql, map[string]Verdicts{
-		"API-BAS-INJ-007": {Vulnerable: ptr(validFail()), Fixed: ptr(validPass())},
+	withVerdict := Build(all, withGRPC, map[string]Verdicts{
+		"API-BAS-DISC-009": {Vulnerable: ptr(validFail()), Fixed: ptr(validPass())},
 	})
 	if withVerdict.Evaluated != after.Evaluated+1 || withVerdict.Validated != 1 {
 		t.Fatalf("valid pair did not raise evaluated and validated: evaluated %d -> %d, validated %d",
@@ -107,8 +108,7 @@ func TestAdapterLaterIncreasesCoverageOnlyAfterValidEvaluation(t *testing.T) {
 // Validated needs both builds. A vulnerable FAIL alone is evaluated, not validated.
 func TestValidatedNeedsBothBuilds(t *testing.T) {
 	all := loadCatalog(t)
-	graphql := func(p string) bool { return p == "" || p == "http" || p == "graphql" }
-	r := Build(all, graphql, map[string]Verdicts{
+	r := Build(all, contract.ProtocolSupported, map[string]Verdicts{
 		"API-BAS-INJ-007": {Vulnerable: ptr(validFail())},
 	})
 	if got := entry(r, "API-BAS-INJ-007"); got.Status != Evaluated {

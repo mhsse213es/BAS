@@ -1529,3 +1529,75 @@ suite already asserts, so the HTTP regression is unchanged.
   added to `supportedProtocols`.
 - The Windows `build.ps1` run.
 - `TestABUSE002Repeatability` without `-short` (pre-existing, see Phase 22).
+
+
+## Phase 29 - protocol adapters: GraphQL (first of five)
+
+Scope: the first protocol adapter, one at a time, as agreed. GraphQL is supported because its
+adapter is registered in `internal/apibas/protocol`, not because its scenarios exist. gRPC, SOAP,
+WebSocket and async remain UNSUPPORTED.
+
+### What was built
+
+- `protocol.GraphQL`: validates a JSON body with a `query` string and parses the query. The parser
+  accepts field selections and arguments, and refuses fragments, aliases and malformed input before
+  anything is sent. It reports selection depth, which the lab's fixed build uses.
+- Lab route `POST /graphql` (`lab/graphql.go`). It resolves `order(id)`. The vulnerable build
+  returns the full record to any authenticated caller (`LAB-GQL-RESOLVER-001`). The fixed build
+  returns the public view to the owner only, and refuses queries deeper than 3 with 400.
+- `contract.ProtocolSupported` now delegates to the adapter registry. There is one source of truth.
+
+### Acceptance
+
+- `protocol` unit tests: parsing, depth, malformed queries refused, body validation, registry.
+- `TestPhase28_GraphQLINJ007VulnerableFailsFixedPasses`: vulnerable FAIL exploited, fixed PASS
+  enforced.
+- `TestPhase28_GraphQLABUSE004FixedEnforcesDepthLimit`: fixed PASS enforced. The vulnerable build is
+  asserted to not be graded enforced.
+- `TestPhase28_GraphQLCatalogBodiesValidate`: every GraphQL step body in the catalog passes the
+  adapter, so a catalog entry cannot ship a body the adapter refuses.
+- Tests that assumed GraphQL was unsupported now use gRPC, which still is (`phase15`, `phase27`,
+  `phase28`, `coverage`). The count of unsupported protocols is now five scenarios, not seven.
+
+### Measured result (complete, all 69 catalogued)
+
+```
+Catalogued:   69
+Implemented:  64/69 (92.8%)
+Evaluated:    64/69 (92.8%)
+Validated:    63/69 (91.3%)
+Exclusions (denominator still includes them):
+  unsupported (no adapter):       5   (DISC-009 grpc, INJ-005 soap, AUTHN-011 websocket,
+                                       ABUSE-010 async, INTEG-010 async)
+  errored (execution/environment): 0
+  unevaluated (implemented, no valid verdict): 0
+```
+
+64 + 5 = 69. The earlier measurement was truncated, so the validated count and the exclusion
+breakdown could not be confirmed then. They are confirmed now.
+
+### Gap found and recorded, not hidden
+
+ABUSE-004 counts as **evaluated but not validated**. The fixed build PASSes (the deep query is refused
+with 400). The vulnerable build accepts the deep query, but the grader has no depth oracle, so
+nothing grades that acceptance as exploitation. The coverage rule counts a single valid verdict as
+evaluated, so ABUSE-004 is in the 64, and it is not in the 63. A depth or node-count oracle is
+needed before this scenario can prove it detects the flaw. Changing the grader is a separate
+decision, so it is not made here.
+
+### Decision applied: API-BAS-AUTHN-011
+
+Kept under AUTHN as WebSocket handshake authentication. The objective is now exact: an
+unauthenticated client on a foreign origin completes a handshake to the order event stream and
+receives events. The expected control is a 403 refusal when the Origin is not allowed or no valid
+bearer token is presented, with no event frame delivered. The "proposed" note is replaced by the
+decision.
+
+### Still open
+
+- SOAP, gRPC, WebSocket and async adapters. Each needs its adapter, a lab route and acceptance tests
+  before it is added to the registry.
+- The depth oracle for ABUSE-004 (above).
+- Protocol objectives for the four remaining entries (INJ-005, DISC-009, ABUSE-010, INTEG-010) are
+  written, but their tests check only that they are unsupported. Their acceptance tests come with
+  each adapter.

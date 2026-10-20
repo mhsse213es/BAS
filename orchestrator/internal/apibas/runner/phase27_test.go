@@ -11,7 +11,8 @@ import (
 // Blueprint section 2: a protocol without an executable adapter is UNSUPPORTED, never counted
 // as covered. The verdict stays SKIPPED, the exploitability and control say unsupported, the
 // reason is UNSUPPORTED_PROTOCOL, and no request reaches the target.
-var unsupportedProtocols = []string{"graphql", "grpc", "soap", "websocket", "async"}
+// GraphQL has an adapter since Phase 28, so it is not listed here.
+var unsupportedProtocols = []string{"grpc", "soap", "websocket", "async"}
 
 func TestPhase27_UnsupportedProtocolsAreReportedUnsupported(t *testing.T) {
 	for _, p := range unsupportedProtocols {

@@ -8,6 +8,7 @@
 package contract
 
 import (
+	protocolpkg "github.com/audspect/bas/internal/apibas/protocol"
 	"fmt"
 	"regexp"
 	"slices"
@@ -35,15 +36,11 @@ var knownProtocols = map[string]bool{
 	"": true, "http": true, "graphql": true, "grpc": true, "soap": true, "websocket": true, "async": true,
 }
 
-// supportedProtocols are the protocols with an executable adapter and an acceptance test. A
-// protocol is added here only when its adapter exists. Having scenarios for a protocol in the
-// catalog does not add it.
-var supportedProtocols = map[string]bool{"": true, "http": true}
-
-// ProtocolSupported reports whether a protocol has an executable adapter. Anything else is
-// UNSUPPORTED (blueprint section 2).
+// ProtocolSupported reports whether a protocol can be executed: HTTP, or a protocol whose adapter
+// is registered in the protocol package. Anything else is UNSUPPORTED (blueprint section 2).
+// Having a scenario for a protocol in the catalog does not add support.
 func ProtocolSupported(protocol string) bool {
-	return supportedProtocols[protocol]
+	return protocolpkg.Supported(protocol)
 }
 
 // Claim types decide which identity relationship the scenario depends on.

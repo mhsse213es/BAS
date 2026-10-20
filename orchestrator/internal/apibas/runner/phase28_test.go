@@ -43,7 +43,7 @@ func TestPhase28_EveryNonHTTPCatalogScenarioIsUnsupportedWithZeroTraffic(t *test
 			}
 		})
 	}
-	if checked < 7 {
-		t.Fatalf("only %d non-HTTP scenarios in the catalog, want at least the 7 protocol entries", checked)
+	if checked < 5 {
+		t.Fatalf("only %d unsupported scenarios in the catalog, want at least the 5 protocols without an adapter", checked)
 	}
 }

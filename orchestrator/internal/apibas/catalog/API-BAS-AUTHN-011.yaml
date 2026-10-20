@@ -6,15 +6,15 @@ protocol: websocket
 prerequisites:
   - WebSocket handshake and frame adapter, not yet implemented
   - lab WebSocket endpoint that checks the Origin header and the bearer token at the handshake
-  - "this ID is a proposed taxonomy addition (API-BAS-AUTHN-011): the blueprint taxonomy has no WebSocket sub-technique yet and needs an owner decision before this entry is final"
+  - "owner decision recorded: kept under AUTHN as WebSocket handshake authentication (not session validation or a generic bypass)"
 attack_objective: >
-  A page on another origin opens a WebSocket to the API with the victim's browser, and the handshake
-  is accepted without a valid credential or an allowed origin (cross-site WebSocket hijacking).
+  An unauthenticated client on a foreign origin completes a WebSocket handshake to the order event
+  stream and receives order events, so authentication at the handshake is bypassed.
 threat_model:
-  attacker: unauthenticated page on a foreign origin that a victim visits
+  attacker: unauthenticated client on a foreign origin, able to make a victim's browser open a WebSocket
   identity: anonymous
   access_level: no credential; can make the victim's browser open a WebSocket
-  objective: open an authenticated order event stream on the victim's session
+  objective: receive the order events of the victim's session by bypassing handshake authentication
 preconditions:
   fixture: orders-two-tenant
   identities: [customer-b, anonymous]
@@ -44,8 +44,8 @@ steps:
     hypothesis: The handshake checks the origin and requires a credential, so a foreign origin with no credential is refused.
 denied_statuses: [403]
 expected_control: >
-  The WebSocket handshake refuses a foreign origin, and a handshake with no credential, with 403, and
-  opens no order stream.
+  The handshake is refused with 403 when the Origin is not allowed or when no valid bearer token is
+  presented. No order event frame is delivered to the client.
 ground_truth:
   adapters: [state, response]
   check: >
