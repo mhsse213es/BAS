@@ -171,6 +171,14 @@ This is the single place to check before claiming either DLP vendor connector is
 
 **Resolution path:** one run against the lab sink to confirm each step records a receipt. Then decide whether git-protocol pushes and developer package managers are worth a sink of their own.
 
+### 17. Email recipient variants (dlp-exfiltration-email-recipients) — not run; attachments and encrypted mail not built — open
+
+**Status:** Open. Two sink-verified steps: external business recipient and personal mail address (commit f0e87052). Signed and catalogued. Not run end to end.
+
+**Limits, stated in the scenario:** the SMTP listener accepts one recipient and rejects multipart content, so attachment variants and multi-recipient variants cannot produce a receipt. Encrypted-mail and mail-exception cases need a policy to test against.
+
+**Resolution path:** one run against the lab SMTP sink to confirm each step records a receipt. Attachments need a listener change that is a product decision, not a scenario change.
+
 ## Resolved items
 
 - Item 11: the eight unclaimed AI-prompt and DB-export steps are catalogued (commit 226b1f40). Values come from each step's own command; no payload changed. Both drift checks pass.
