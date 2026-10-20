@@ -8,6 +8,16 @@ package detect
 import (
 	"fmt"
 	"sort"
+	"strings"
+)
+
+// Detection results. A result is detected only when a rule fired from delivered events. It is
+// not_detected when the events were complete and no rule fired, and inconclusive when the telemetry
+// was incomplete, so absence cannot be read as evidence.
+const (
+	Detected     = "detected"
+	NotDetected  = "not_detected"
+	Inconclusive = "inconclusive"
 )
 
 // Provenance labels every detection result from this package.
@@ -25,6 +35,9 @@ type Event struct {
 	Outcome       string `json:"outcome"`
 	Identity      string `json:"identity"`
 	Status        int    `json:"status"`
+	// Signature lists the injection-pattern classes the request carried (see Signature* below). It holds
+	// classes only, never the text that matched, so a body is never stored through this field.
+	Signature []string `json:"signature,omitempty"`
 }
 
 var validOutcomes = map[string]bool{"success": true, "failure": true, "throttled": true, "error": true}
@@ -112,6 +125,81 @@ var ElasticRules = []Rule{
 		ID: "APIBAS-REL-004", Name: "Access to an object owned by another identity", Severity: SeverityHigh, Threshold: 1,
 		Match: func(e Event) bool { return e.ObjectOwner != "" && e.ObjectOwner != e.Identity },
 	},
+	{
+		// REL-005 counts every request of one run. A burst of ten requests is a counted-request abuse
+		// pattern whatever their outcome, because the SIEM sees the volume, not the result.
+		ID: "APIBAS-REL-005", Name: "Counted-request burst in one run", Severity: SeverityMedium, Threshold: BurstThreshold,
+		Match: func(e Event) bool { return true },
+	},
+	{
+		// REL-006 fires on a request whose target or body carries an injection pattern class.
+		ID: "APIBAS-REL-006", Name: "Injection-shaped request", Severity: SeverityHigh, Threshold: 1,
+		Match: func(e Event) bool { return hasInjectionSignature(e.Signature) },
+	},
+	{
+		// REL-007 fires on a call to a function the fixture classes as privileged, by any identity. The list
+		// is fixed here and does not depend on the lab's responses.
+		ID: "APIBAS-REL-007", Name: "Privileged function invoked", Severity: SeverityHigh, Threshold: 1,
+		Match: func(e Event) bool { return privilegedFunction(e.Action) },
+	},
+	{
+		// REL-008 fires on access to a sensitive projection (a statement, card, audit or view) of an object
+		// owned by another identity. It is keyed on the projection, not only on the owner.
+		ID: "APIBAS-REL-008", Name: "Sensitive projection of another identity's object", Severity: SeverityHigh, Threshold: 1,
+		Match: func(e Event) bool {
+			return sensitiveProjection(e.Action) && e.ObjectOwner != "" && e.ObjectOwner != e.Identity
+		},
+	},
+}
+
+// BurstThreshold is the number of requests in one run that REL-005 treats as a counted-request burst.
+const BurstThreshold = 10
+
+// Injection pattern classes. Each is a class name only; the matched text is never kept.
+const (
+	SignatureSQL      = "sql_tautology"
+	SignatureTraverse = "traversal"
+	SignatureLDAP     = "ldap_wildcard"
+	SignatureTemplate = "template"
+)
+
+func hasInjectionSignature(classes []string) bool {
+	for _, c := range classes {
+		switch c {
+		case SignatureSQL, SignatureTraverse, SignatureLDAP, SignatureTemplate:
+			return true
+		}
+	}
+	return false
+}
+
+// privilegedFunction reports whether a request action (METHOD path) names a function the fixture classes
+// as privileged: deleting an order, reading its audit trail, rotating a key, or changing a key's status.
+func privilegedFunction(action string) bool {
+	switch {
+	case strings.HasPrefix(action, "DELETE /api/authz/orders/"):
+		return true
+	case strings.HasPrefix(action, "GET /api/authz/orders/") && strings.HasSuffix(action, "/audit"):
+		return true
+	case action == "POST /api/keys/rotate":
+		return true
+	case strings.HasPrefix(action, "PATCH /api/keys/orders/") && strings.HasSuffix(action, "/status"):
+		return true
+	}
+	return false
+}
+
+// sensitiveProjection reports whether a request action reads a sensitive projection of an object.
+func sensitiveProjection(action string) bool {
+	if !strings.HasPrefix(action, "GET ") {
+		return false
+	}
+	for _, suffix := range []string{"/statement", "/card", "/audit", "/view"} {
+		if strings.HasSuffix(action, suffix) {
+			return true
+		}
+	}
+	return false
 }
 
 // Adapter is the vendor-neutral surface. Microsoft Sentinel, Splunk and QRadar
@@ -198,8 +286,8 @@ func evaluate(events []Event, rules []Rule, correlationID, source string) []Aler
 func Grade(alerts []Alert, expectRule string, minSeverity Severity, correlationID string) string {
 	for _, a := range alerts {
 		if a.RuleID == expectRule && a.CorrelationID == correlationID && a.Severity >= minSeverity {
-			return "detected"
+			return Detected
 		}
 	}
-	return "not_detected"
+	return NotDetected
 }

@@ -58,6 +58,9 @@ type Config struct {
 	// Faults names dependency faults to hold active for the life of the lab, for example
 	// "authz-store-down". A scenario that needs one declares it as a lab_faults precondition.
 	Faults []string
+	// ExtractBodyIDs turns on selective extraction of known order IDs from request bodies, for detection of
+	// body-carried object references (see extract.go). It is off by default: bodies are not read.
+	ExtractBodyIDs bool
 }
 
 // Flaw describes one planted vulnerability and the oracle that proves it.
@@ -437,9 +440,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /lab/faults", s.adminOnly(s.listFaults))
 	if s.cfg.Mode == ModeVulnerable {
 		// LAB-GWAY-OVERRIDE-001: the vulnerable build honours a method-override header.
-		return s.logAccess(s.gateway(methodOverride(mux)))
+		return s.extractBodyOwner(s.logAccess(s.gateway(methodOverride(mux))))
 	}
-	return s.logAccess(s.gateway(mux))
+	return s.extractBodyOwner(s.logAccess(s.gateway(mux)))
 }
 
 // listFaults returns the faults the lab was started with, sorted.

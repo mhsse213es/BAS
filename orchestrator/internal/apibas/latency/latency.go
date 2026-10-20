@@ -109,8 +109,10 @@ func Assess(rounds []Round, p Policy) Verdict {
 			return verdictError("attack", grade.ReasonAttackMeasurementInvalid, sums)
 		}
 	}
+	// The baseline must be stable for the environment check and the ratio to mean anything. This gate
+	// applies to every verdict.
 	for _, s := range sums {
-		if noisy(s.CV, s.StdevMs, p) || noisy(s.BaselineCV, s.BaselineStdevMs, p) {
+		if noisy(s.BaselineCV, s.BaselineStdevMs, p) {
 			return inconclusive("variance", grade.ReasonExcessiveVariance, sums)
 		}
 	}
@@ -118,6 +120,13 @@ func Assess(rounds []Round, p Policy) Verdict {
 	for _, s := range sums {
 		switch {
 		case s.MedianAttackMs >= p.CeilingMs && s.P95AttackMs >= p.CeilingMs:
+			// A FAIL rests on the ratio, so the attack's own spread must be stable before it counts.
+			// A PASS does not rest on the spread: it needs only that every round stays under the
+			// ceiling, and one outlier cannot move a sub-millisecond request above it. So the attack
+			// spread gates FAIL only.
+			if noisy(s.CV, s.StdevMs, p) {
+				return inconclusive("variance", grade.ReasonExcessiveVariance, sums)
+			}
 			if s.Ratio < p.MinRatio {
 				return inconclusive("effect", grade.ReasonBelowEffectSize, sums)
 			}

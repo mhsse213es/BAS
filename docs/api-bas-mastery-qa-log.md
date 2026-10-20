@@ -1792,3 +1792,96 @@ Validated:    69/69 (this run; ABUSE-002 is intermittent, see Phase 33)
 ```
 
 Exploitability and control verdicts are unchanged by the detection work.
+
+
+## Phase 35: ABUSE-002 stability, dedicated detection rules, telemetry states
+
+Exploitability and detection are reported separately below. The 69/69 validated figure is the exploitability
+metric. It is not detection coverage.
+
+### Exploitability validation (unchanged metric)
+
+```
+Catalogued:   69
+Implemented:  69/69
+Evaluated:    69/69
+Validated:    69/69 (vulnerable FAIL exploited, fixed PASS enforced)
+Exclusions:   unsupported 0, errored 0, unevaluated 0
+```
+
+### Detection validation (separate metric)
+
+```
+vulnerable  detected=14  not_detected=16  inconclusive=0  error=0
+fixed       detected=16  not_detected=14  inconclusive=0  error=0
+not_evaluated (no detection block) = 39 of 69 scenarios
+```
+
+Thirty scenarios declare a detection block. This does not mean comprehensive detection coverage. The
+`not_detected` results are real: they are misses, and most of them are the recorded findings below.
+
+### ABUSE-002 timing flake: root cause and fix
+
+- **Root cause.** The latency grader applied the attack-spread gate to every verdict. A PASS on a sub-millisecond
+  request could be pushed to inconclusive by one scheduler outlier, because the outlier raised the CV. A PASS
+  does not rest on spread: it needs every round under the ceiling. Only a FAIL rests on the ratio, so only a FAIL
+  needs a stable attack spread.
+- **Fix.** The baseline-variance gate applies to every verdict, because the environment check depends on it. The
+  attack-spread gate moved into the FAIL (crossed) path only.
+- **Deterministic tests** (`latency/flake_test.go`): sub-millisecond PASS survives an outlier; stable crossing is
+  FAIL; unstable crossing is inconclusive; unstable baseline gates a PASS. All four pass.
+- **Repeatability** (`runner/abuse002_test.go`, five runs per build, verdicts stated before the run). Vulnerable:
+  FAIL/exploited on 5 of 5. Fixed: PASS/not_exploited on 5 of 5. The earlier fixed-build flake was 2 of 5 runs
+  with EXCESSIVE_VARIANCE. It is now stated as five clean runs, not as proof.
+
+### Dedicated detection rules (REL-001 to REL-004 unchanged)
+
+- `APIBAS-REL-005` counted-request burst: ten or more requests in one run.
+- `APIBAS-REL-006` injection-shaped request: an injection class in the request target, or in the body when
+  body extraction is on. The event carries class names only, never the matched text.
+- `APIBAS-REL-007` privileged function invoked (delete order, read audit, rotate key, change key status).
+- `APIBAS-REL-008` sensitive projection (statement, card, audit, view) of an object owned by another identity.
+
+Each rule has an expectation written in `runner/phase34_detection_test.go` from the rule's definition and the
+scenario's payload, before any run. The table test runs every declared scenario in both builds, with body
+extraction off and on, twice each. Result: 30 of 30 scenarios match their expectations on both passes.
+
+### Body-identifier extraction: privacy control
+
+- Off by default (`lab.Config.ExtractBodyIDs`). With it off, no request body is read.
+- When on, the lab reads at most 64 KiB, keeps the owner of a known order whose ID appears in the body, and
+  keeps injection class names. The body is discarded and is never logged or stored on an event.
+
+### Telemetry states (DET-009 equivalent, AUTHZ-001)
+
+No catalogued DET-009 scenario exists. The telemetry states are tested on AUTHZ-001 instead.
+
+| Telemetry | Window | Expected detection | Observed |
+|---|---|---|---|
+| normal | default | detected | as expected |
+| missing (`telemetry-missing`) | default | inconclusive, reason "telemetry incomplete" | as expected |
+| delayed beyond window (`telemetry-delayed`, 3s) | 1s | inconclusive | as expected |
+| delayed inside window | 6s | detected | as expected |
+
+Exploitability is identical in all four cases. Telemetry changes only the detection axis.
+
+### Findings (kept, not hidden)
+
+- **Forged identity headers are a blind spot in the vulnerable build.** The access log records the identity the
+  product accepted. A forged `X-Customer-Id` or `X-Gateway-Identity` makes the request look like the claimed
+  identity's own access. The expectation models this, and it is not changed to pass.
+- **AUTHZ-007 body names two owners; the lab keeps one.** The body names `ORD-1001` (owned by the attacker,
+  `cust-a`) before `ORD-2001` (owned by `cust-b`). The lab keeps the first named owner only, so the foreign object
+  is dropped and the event is attributed to the attacker's own order. The rule's definition expects `detected`
+  with extraction on. The observed result is `not_detected`. It is recorded as a named finding
+  (`knownAttributionGap`), and the test fails if the observation changes. Decision needed: have the event carry
+  every named owner (changes the event contract), or narrow the scenario's claim.
+- **Catalog claim to revisit.** AUTHZ-007 is still `fixture_validated` in the catalog. That overstates the
+  extraction-on case. It should be narrowed or the gap closed before it counts as validated.
+
+### Not done
+
+- 39 scenarios remain `not_evaluated` (no detection block). Detection coverage is not claimed for them.
+- The repeatability gate is applied per test run (two consecutive passes). It is not yet a standing gate on every
+  scenario's catalog status.
+- Windows `build.ps1` run and the staging ABUSE-002 item remain carry-overs.

@@ -92,6 +92,9 @@ type Config struct {
 	// that name lab_faults in their preconditions.
 	Faults FaultReader
 	HTTP   *http.Client
+	// DetectionWindow is how long the detection stage waits for the SIEM to deliver the run's events.
+	// Zero means defaultDetectionWindow. Events delivered after the window are not seen.
+	DetectionWindow time.Duration
 	// Machine is the operator's label for this hardware. Calibration records are bound to it.
 	Machine string
 }
@@ -138,6 +141,10 @@ type Exchange struct {
 type Report struct {
 	// DetectionProvenance labels every detection result from the fixture.
 	DetectionProvenance string `json:"detection_provenance,omitempty"`
+	// DetectionResults holds the result of each additional rule, keyed by rule ID. The primary rule is in Outcome.
+	DetectionResults map[string]string `json:"detection_results,omitempty"`
+	// DetectionReason says why a detection result is inconclusive, when it is.
+	DetectionReason string `json:"detection_reason,omitempty"`
 	// TimingVerdict is the timing grade, reported even when a resource limit decides the outcome.
 	TimingVerdict string `json:"timing_verdict,omitempty"`
 	// Latency holds the per-round timing statistics for timing scenarios.

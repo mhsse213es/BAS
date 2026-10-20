@@ -46,8 +46,8 @@ ground_truth:
     The order status is identical before and after the attack, and the response discloses no
     protected values.
 detection_assertion:
-  status: not_evaluated
-  reason: Detection validation is Phase 4; this scenario makes no detection claim.
+  status: fixture_validated
+  reason: Access events feed the elastic-security fixture. The result is fixture-validated, not live-SIEM-validated.
 evidence:
   - sanitized_request
   - sanitized_response
@@ -60,3 +60,7 @@ industry_mapping:
 regulatory_mapping: []
 negative_tests:
   - API-BAS-AUTHN-006 with the current token after rotation against the fixed build must change the order
+detection:
+  source: elastic-security
+  expect_rule: APIBAS-REL-007
+  min_severity: high

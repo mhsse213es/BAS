@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"time"
 )
 
 // accessEvent is one request as the lab observed it. It carries the run tag, the
@@ -19,6 +20,12 @@ type accessEvent struct {
 	Identity      string `json:"identity"`
 	Status        int    `json:"status"`
 	ObjectOwner   string `json:"object_owner,omitempty"`
+	// At is when the lab recorded the event. It is not part of the event contract: telemetry faults use
+	// it to decide when the SIEM is allowed to receive the event.
+	At time.Time `json:"-"`
+	// Signature holds the injection-pattern classes of the request target and, when body extraction is on,
+	// of the body. Classes only; no text is kept.
+	Signature []string `json:"signature,omitempty"`
 }
 
 // statusRecorder keeps the status the handler wrote.
@@ -115,6 +122,9 @@ func (s *Server) logAccess(next http.Handler) http.Handler {
 			identity = "unknown"
 		}
 		owner := s.ownerOfRequest(r)
+		if owner == "" {
+			owner = bodyOwnerFromContext(r.Context())
+		}
 		s.evMu.Lock()
 		s.eventSeq++
 		s.events = append(s.events, accessEvent{
@@ -125,6 +135,8 @@ func (s *Server) logAccess(next http.Handler) http.Handler {
 			Identity:      identity,
 			Status:        rec.status,
 			ObjectOwner:   owner,
+			At:            time.Now(),
+			Signature:     append(injectionClasses(requestTargetText(r.URL.Path, r.URL.Query())), bodySignatureFromContext(r.Context())...),
 		})
 		s.evMu.Unlock()
 	})
@@ -137,10 +149,28 @@ func (s *Server) getAccessEvents(w http.ResponseWriter, r *http.Request) {
 	s.evMu.Lock()
 	defer s.evMu.Unlock()
 	out := []accessEvent{}
+	if s.faultOn("telemetry-missing") {
+		writeJSON(w, http.StatusOK, out)
+		return
+	}
 	for _, e := range s.events {
-		if corr != "" && e.CorrelationID == corr {
+		if corr != "" && e.CorrelationID == corr && s.delivered(e) {
 			out = append(out, e)
 		}
 	}
 	writeJSON(w, http.StatusOK, out)
+}
+
+// telemetryDelayed is how long the lab holds each access event back from the SIEM when the
+// telemetry-delayed fault is active.
+const telemetryDelayed = 3 * time.Second
+
+// delivered reports whether an access event has reached the SIEM by now. Without the telemetry-delayed
+// fault every event is delivered at once. With it, an event is delivered only once it is telemetryDelayed
+// old, so a SIEM that reads inside a shorter window does not see it.
+func (s *Server) delivered(e accessEvent) bool {
+	if !s.faultOn("telemetry-delayed") {
+		return true
+	}
+	return time.Since(e.At) >= telemetryDelayed
 }

@@ -56,3 +56,7 @@ detection:
   source: elastic-security
   expect_rule: APIBAS-REL-004
   min_severity: high
+additional_detections:
+  - source: elastic-security
+    expect_rule: APIBAS-REL-007
+    min_severity: high

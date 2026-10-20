@@ -3,6 +3,8 @@ package runner
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"time"
 
 	"github.com/audspect/bas/internal/apibas/contract"
 	"github.com/audspect/bas/internal/apibas/detect"
@@ -17,35 +19,82 @@ type EventSource interface {
 	AccessEvents(ctx context.Context, correlationID string) ([]detect.Event, error)
 }
 
-// detectionStage grades the detection axis after a run. It never changes the
-// exploitability result. The scenario's declared source picks the fixture; every
-// result carries that fixture's provenance label.
+// detectionStage grades the detection axis after a run. It never changes the exploitability result.
+// Every declared rule is graded against the same delivered events. The primary rule sets the outcome's
+// Detection; the additional rules are recorded per rule in DetectionResults. Every result carries the
+// provenance of the fixture that produced it.
 func (r *Runner) detectionStage(ctx context.Context, s contract.Scenario, tag string, rep Report) Report {
 	if s.Detection == nil {
 		return rep
 	}
+	policies := append([]contract.DetectionPolicy{*s.Detection}, s.AdditionalDetections...)
 	rep.DetectionProvenance = detect.ProvenanceFor(s.Detection.Source)
-	minSev, ok := detect.ParseSeverity(s.Detection.MinSeverity)
-	if !ok {
-		rep.Outcome.Detection = "error:INVALID_SEVERITY"
-		return rep
-	}
 	if r.cfg.Events == nil {
 		rep.Outcome.Detection = "error:ADAPTER_UNAVAILABLE"
 		return rep
 	}
-	events, err := r.cfg.Events.AccessEvents(ctx, tag)
+	expected := len(rep.Exchanges)
+	events, err := r.collectEvents(ctx, tag, expected)
 	if err != nil {
 		rep.Outcome.Detection = "error:EVENTS_UNAVAILABLE"
 		return rep
 	}
-	alerts, err := detectAlerts(s.Detection.Source, events, tag)
-	if err != nil {
-		rep.Outcome.Detection = "error:INVALID_EVENT"
-		return rep
+	for i, p := range policies {
+		minSev, ok := detect.ParseSeverity(p.MinSeverity)
+		if !ok {
+			rep.Outcome.Detection = "error:INVALID_SEVERITY"
+			return rep
+		}
+		alerts, err := detectAlerts(p.Source, events, tag)
+		if err != nil {
+			rep.Outcome.Detection = "error:INVALID_EVENT"
+			return rep
+		}
+		result := detect.Grade(alerts, p.ExpectRule, minSev, tag)
+		// Absence is evidence only when the telemetry was complete. If the SIEM delivered fewer events
+		// than the run sent, a missing alert may be a missing event, so the result is inconclusive, never
+		// not_detected. A detection from delivered events stands.
+		if result == detect.NotDetected && len(events) < expected {
+			result = detect.Inconclusive
+			rep.DetectionReason = fmt.Sprintf("telemetry incomplete: %d of %d run events delivered", len(events), expected)
+		}
+		if i == 0 {
+			rep.Outcome.Detection = result
+			continue
+		}
+		if rep.DetectionResults == nil {
+			rep.DetectionResults = map[string]string{}
+		}
+		rep.DetectionResults[p.ExpectRule] = result
 	}
-	rep.Outcome.Detection = detect.Grade(alerts, s.Detection.ExpectRule, minSev, tag)
 	return rep
+}
+
+// defaultDetectionWindow is how long the detection stage waits for delivery when the config sets none.
+const defaultDetectionWindow = 2 * time.Second
+
+// collectEvents polls the SIEM until it has delivered the run's expected events, or the window closes.
+// Events that arrive after the window are not seen by the detection stage.
+func (r *Runner) collectEvents(ctx context.Context, tag string, expected int) ([]detect.Event, error) {
+	window := r.cfg.DetectionWindow
+	if window <= 0 {
+		window = defaultDetectionWindow
+	}
+	deadline := time.Now().Add(window)
+	for {
+		events, err := r.cfg.Events.AccessEvents(ctx, tag)
+		if err != nil {
+			return nil, err
+		}
+		if len(events) >= expected || !time.Now().Before(deadline) {
+			return events, nil
+		}
+		select {
+		case <-ctx.Done():
+			return events, ctx.Err()
+		case <-time.After(100 * time.Millisecond):
+		}
+	}
 }
 
 // detectAlerts feeds one run's events to the fixture the scenario names. The Sentinel

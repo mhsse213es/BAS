@@ -112,6 +112,9 @@ type Scenario struct {
 	Prerequisites []string `yaml:"prerequisites"`
 	// Detection, when set, grades the detection axis against the access-event fixture.
 	Detection *DetectionPolicy `yaml:"detection"`
+	// AdditionalDetections are further rules the same run is graded against, each with its own independently
+	// stated expected result in the test table. The primary Detection sets the outcome.
+	AdditionalDetections []DetectionPolicy `yaml:"additional_detections"`
 	// Calibration declares the conditions the timing threshold was measured under.
 	Calibration       *CalibrationPolicy `yaml:"calibration"`
 	ExpectedControl   string             `yaml:"expected_control"`
@@ -290,6 +293,19 @@ func (s Scenario) Validate() error {
 		case s.DetectionAssert.Status != "fixture_validated" || strings.TrimSpace(s.DetectionAssert.Reason) == "":
 			return fmt.Errorf("contract: %s: a scenario with detection must set detection_assertion status fixture_validated with a reason", s.ID)
 		}
+		for _, a := range s.AdditionalDetections {
+			switch {
+			case a.Source != "elastic-security" && a.Source != "microsoft-sentinel":
+				return fmt.Errorf("contract: %s: additional detection source %q is not supported", s.ID, a.Source)
+			case a.ExpectRule == "":
+				return fmt.Errorf("contract: %s: additional detection needs expect_rule", s.ID)
+			case !slices.Contains([]string{"low", "medium", "high", "critical"}, a.MinSeverity):
+				return fmt.Errorf("contract: %s: additional detection min_severity %q is not a severity", s.ID, a.MinSeverity)
+			}
+		}
+	}
+	if len(s.AdditionalDetections) > 0 && s.Detection == nil {
+		return fmt.Errorf("contract: %s: additional_detections needs a primary detection", s.ID)
 	}
 	if len(s.RegulatoryMapping) > 0 {
 		return fmt.Errorf("contract: %s: regulatory_mapping must stay empty until sources are verified", s.ID)

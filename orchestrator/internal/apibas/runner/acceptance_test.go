@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/audspect/bas/internal/apibas/catalog"
 	"github.com/audspect/bas/internal/apibas/contract"
@@ -33,6 +34,8 @@ type env struct {
 	fx      fixture.Fixture
 	scen    contract.Scenario
 	state   runner.StateReader // nil disables the ground-truth adapter
+	// window is the detection window for this environment. Zero means the runner default.
+	window time.Duration
 }
 
 // newEnv starts a lab in the given mode and wires a runner to it. Tokens are
@@ -43,6 +46,12 @@ func newEnv(t *testing.T, mode lab.Mode, fx fixture.Fixture) *env {
 
 // newEnvFaults starts a lab with the named dependency faults active.
 func newEnvFaults(t *testing.T, mode lab.Mode, fx fixture.Fixture, faults []string) *env {
+	return newEnvWith(t, mode, fx, faults, false)
+}
+
+// newEnvWith builds the environment with the body-identifier extraction setting given by the caller.
+// Extraction is off unless a test turns it on, because it is a privacy trade-off.
+func newEnvWith(t *testing.T, mode lab.Mode, fx fixture.Fixture, faults []string, extract bool) *env {
 	t.Helper()
 	tokA, tokB, adminTok := randomToken(t), randomToken(t), randomToken(t)
 	revokedA := randomToken(t) // issued to customer-a, then revoked in the lab
@@ -52,9 +61,10 @@ func newEnvFaults(t *testing.T, mode lab.Mode, fx fixture.Fixture, faults []stri
 		Tokens: map[string]string{
 			tokA: "cust-a", tokB: "cust-b", revokedA: "cust-a",
 		},
-		Revoked:    []string{revokedA},
-		AdminToken: adminTok,
-		Faults:     faults,
+		Revoked:        []string{revokedA},
+		AdminToken:     adminTok,
+		Faults:         faults,
+		ExtractBodyIDs: extract,
 	})
 	if err != nil {
 		t.Fatalf("lab.New: %v", err)
@@ -100,13 +110,14 @@ func loadScenario(t *testing.T) contract.Scenario {
 func (e *env) run(t *testing.T, s contract.Scenario, state runner.StateReader) runner.Report {
 	t.Helper()
 	r, err := runner.New(runner.Config{
-		BaseURL: e.url,
-		Fixture: e.fx,
-		Secrets: e.secrets,
-		State:   state,
-		Reset:   e.admin,
-		Events:  e.admin,
-		Faults:  e.admin,
+		BaseURL:         e.url,
+		Fixture:         e.fx,
+		Secrets:         e.secrets,
+		State:           state,
+		Reset:           e.admin,
+		Events:          e.admin,
+		Faults:          e.admin,
+		DetectionWindow: e.window,
 	})
 	if err != nil {
 		t.Fatalf("runner.New: %v", err)
