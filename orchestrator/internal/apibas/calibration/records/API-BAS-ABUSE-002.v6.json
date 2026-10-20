@@ -1,0 +1,220 @@
+{
+  "scenario_id": "API-BAS-ABUSE-002",
+  "version": 6,
+  "supersedes": 5,
+  "profile": {
+    "label": "linux-container-debian-2vcpu-6gb",
+    "fingerprint": {
+      "attributes": {
+        "cpu_model": "Intel(R) Core(TM) i5-8250U CPU @ 1.60GHz",
+        "go_version": "go1.26.8",
+        "goarch": "amd64",
+        "goos": "linux",
+        "memory_total_bytes": "6069896 kB",
+        "num_cpu": "2",
+        "os_version": "Debian GNU/Linux 12 (bookworm)"
+      },
+      "sources": {
+        "cpu_model": "/proc/cpuinfo:model name",
+        "go_version": "runtime",
+        "goarch": "runtime",
+        "goos": "runtime",
+        "memory_total_bytes": "/proc/meminfo:MemTotal",
+        "num_cpu": "runtime",
+        "os_version": "/etc/os-release:PRETTY_NAME"
+      },
+      "unavailable": null,
+      "digest": "9a7cc486c4de4c824403d7a702d292d9b6719af3236c02c2a46a7428f9da0198"
+    }
+  },
+  "workload": "API-BAS-ABUSE-002: 3 rounds, 10 interleaved trials per round, baseline = 50-request batch, attack = one request per build, 3 warm-up requests per build per round",
+  "thresholds": {
+    "declared_baseline_ms": 0.27,
+    "tolerance": 4,
+    "ceiling_ms": 250,
+    "min_ratio": 5,
+    "max_cv": 0.5,
+    "attack_max_ms": 5000,
+    "noise_floor_ms": 1,
+    "alpha": 0.01,
+    "min_separation_ratio": 5,
+    "min_pooled_samples": 20,
+    "warmup": 3,
+    "trials": 10,
+    "rounds": 3
+  },
+  "vulnerable": {
+    "rounds": [
+      {
+        "baseline_ms": [
+          0.272737,
+          0.275203,
+          0.346367,
+          0.275069,
+          0.15204,
+          0.819611,
+          0.254762,
+          0.199137,
+          0.222155,
+          0.16611
+        ],
+        "attack_ms": [
+          1415.192307,
+          1418.063052,
+          1501.280355,
+          1422.604039,
+          2033.465966,
+          1786.318523,
+          1381.530887,
+          1357.594285,
+          1357.398068,
+          1390.68369
+        ]
+      },
+      {
+        "baseline_ms": [
+          0.284132,
+          0.323505,
+          0.20119,
+          0.331114,
+          0.260059,
+          0.314505,
+          0.184402,
+          0.213681,
+          0.404605,
+          0.243538
+        ],
+        "attack_ms": [
+          1383.542572,
+          1348.865697,
+          1357.677176,
+          1388.249805,
+          1380.326225,
+          1359.443967,
+          1342.781825,
+          1404.264384,
+          1357.411185,
+          1336.203796
+        ]
+      },
+      {
+        "baseline_ms": [
+          0.17193,
+          0.226675,
+          0.445846,
+          0.282175,
+          0.182774,
+          0.333545,
+          0.16696,
+          0.178852,
+          0.147846,
+          0.368314
+        ],
+        "attack_ms": [
+          1350.675545,
+          1372.363835,
+          1300.319642,
+          1362.880155,
+          1379.175616,
+          1381.99767,
+          1363.370198,
+          1361.794221,
+          1520.862553,
+          1363.424179
+        ]
+      }
+    ],
+    "work_units_max": 400000
+  },
+  "fixed": {
+    "rounds": [
+      {
+        "baseline_ms": [
+          0.304484,
+          0.303987,
+          0.223571,
+          0.265908,
+          1.226705,
+          0.618996,
+          0.221795,
+          0.330194,
+          0.288955,
+          0.383935
+        ],
+        "attack_ms": [
+          0.172415,
+          0.439938,
+          0.195317,
+          0.260822,
+          0.656658,
+          0.516145,
+          0.433138,
+          0.169315,
+          0.251922,
+          0.190517
+        ]
+      },
+      {
+        "baseline_ms": [
+          0.243906,
+          0.279807,
+          0.26595,
+          0.171478,
+          0.220739,
+          0.208644,
+          0.23249,
+          0.30686,
+          0.424793,
+          0.210661
+        ],
+        "attack_ms": [
+          0.121511,
+          0.209819,
+          0.119012,
+          0.131713,
+          0.196519,
+          0.172617,
+          0.170317,
+          0.218022,
+          0.268825,
+          0.203119
+        ]
+      },
+      {
+        "baseline_ms": [
+          0.313843,
+          0.175302,
+          0.227334,
+          0.311509,
+          0.2755,
+          0.280197,
+          0.190995,
+          0.376809,
+          0.252334,
+          0.218355
+        ],
+        "attack_ms": [
+          0.259824,
+          0.32093,
+          0.164114,
+          0.162415,
+          0.179617,
+          0.260024,
+          0.140313,
+          0.282225,
+          0.399035,
+          0.153914
+        ]
+      }
+    ],
+    "work_units_max": 0
+  },
+  "qualified": true,
+  "qualification_reasons": null,
+  "separation": {
+    "p_value": 2.8719490663203428e-11,
+    "ratio": 1375.7697255,
+    "vulnerable_median_ms": 1375.7697255,
+    "fixed_median_ms": 0.199819
+  }
+}

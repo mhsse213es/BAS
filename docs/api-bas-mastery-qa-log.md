@@ -990,3 +990,73 @@ Only a passing gate reaches the attack. Then the baseline, attack, variance and 
 ### Not yet done
 
 - ABUSE-002 is not yet acceptance-validated on a second qualified environment. Its scenario claim should remain provisional until that passes.
+
+
+## Phase 21 - second-environment run of the ABUSE-002 runbook (acceptance NOT met)
+
+Environment: a Debian bookworm Linux container (Docker Desktop VM, 2 vCPU, about 6 GB)
+on the same physical host as the first calibration. It is a second OS, kernel and runtime
+with different CPU count and memory, but it is NOT a second physical machine. Cross-machine
+validation stays pending on a physical host.
+
+Code: `main` at `58ba0a80`. Linux binaries cross-compiled from it. For the adopted runs the
+catalog was set to v6 for the build only and then restored. The committed catalog still
+points at v5.
+
+### Steps
+
+1. **Original calibration rejected.** v5 run in the container: `ERROR/REQUALIFICATION_REQUIRED`.
+2. **Explicit calibration.** Both labs, interleaved. Written as v6 with the container's
+   fingerprint. `qualified: true`, no reasons. Vulnerable median 1375.8 ms. Fixed median
+   0.1998 ms (a real measurement, not the timer floor seen on Windows). Ratio 1375.8 on
+   the 1 ms noise floor. Separation p = 2.87e-11. Baseline 0.27 ms.
+3. **Adopted** in a build-only copy: catalog at v6, baseline 0.27 ms.
+4. **Acceptance runs.** Three separate container starts per variant.
+
+| Run | Vulnerable | Fixed |
+|---|---|---|
+| 1 | decision:FAIL (attack median 1380.7 ms) | decision:PASS (median 0.253 ms) |
+| 2 | decision:FAIL (1372.2 ms) | decision:PASS (median 0.169 ms) |
+| 3 | decision:FAIL (1351.0 ms) | variance:SKIPPED / EXCESSIVE_VARIANCE |
+
+### Why the fixed run 3 is inconclusive
+
+Round 2 of fixed run 3 is the only round where the variance gate fired on the attack side.
+Its attack median is 0.21 ms, but its p95 is 2.71 ms and its stdev 0.75 ms. In round 1 the
+p95 reaches 9.41 ms and the stdev 2.87 ms. Those are tail spikes on a 2-vCPU container
+where the lab and the runner share the CPUs. The gate reports noise as noise and returns
+INCONCLUSIVE. It does not return PASS. That is the designed behaviour.
+
+### Acceptance
+
+The runbook requires the fixed build to PASS on every repeat. That is not met: 2 of 3
+repeats PASS and 1 is INCONCLUSIVE. Per the runbook, the run is recorded as it is and not
+repeated until it passes. Thresholds, the noise floor and the sample counts were not changed.
+
+### Refusal reasons recorded
+
+- Step 1: `REQUALIFICATION_REQUIRED` (v5 fingerprint does not match the container).
+- Step 4 run 3 (fixed): `EXCESSIVE_VARIANCE` in rounds 0-2 (attack-side tail latency).
+
+### What this does and does not show
+
+- It shows the vulnerable build reproducibly FAILs in this environment (3 of 3), and the
+  fixed build PASSes in 2 of 3. Separation in the calibration is large, p about 3e-11.
+- It shows the fingerprint detects a different environment and that an unqualified
+  environment is refused.
+- It does NOT pass the acceptance criterion. ABUSE-002 is not validated on a second
+  environment.
+
+### Options, for a decision (not applied)
+
+- Measure in a quieter environment: more vCPUs, or the lab and runner pinned to separate
+  CPUs. That changes the measurement method, so it needs a new calibration and a
+  documented reason. It is not a threshold change.
+- Accept a noisy-environment result as INCONCLUSIVE and treat the environment as not
+  qualified for ABUSE-002 security verdicts. That is consistent with the rules.
+- Stay with one-machine provisional validation until a physical second machine is available.
+
+### Records
+
+- Calibration v6 (container fingerprint) is committed as history. The catalog still points
+  at v5, so the Windows host's runs are unaffected.
