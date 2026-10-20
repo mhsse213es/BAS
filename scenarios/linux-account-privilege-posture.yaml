@@ -1,0 +1,77 @@
+id: linux-account-privilege-posture
+name: Linux Account and Privilege Exposure Posture
+description: >
+  Read-only posture audit of local account and privilege exposure: UID 0 accounts other
+  than root, accounts with an empty password hash, and sudo rules that skip
+  authentication. Nothing is changed and no password is tested. A FAIL is a review
+  trigger against the approved account list.
+local_check: true
+executable: false
+supported_os: [linux]
+tags:
+  - privilege
+  - credential-access
+  - posture
+  - linux
+  - read-only
+contract:
+  objective: Confirm no unapproved account holds root-equivalent identity, an empty password, or passwordless sudo.
+  prerequisites:
+    os: Ubuntu 22.04 or later, RHEL 8 or later
+    product: local account database and sudoers
+    permissions: root for reading /etc/shadow and /etc/sudoers; other checks run as any user
+    telemetry: none required for the posture result
+  variants:
+    baseline: current accounts and sudo rules compared against the approved list
+    variation: not applicable; single-state read
+    negative_controls: unreadable /etc/shadow is SKIP, so a non-root run does not report a false PASS
+  expected_prevention:
+    control: only root has UID 0; no account has an empty hash; sudo requires authentication
+    authoritative_proof: the account names and rule counts found in each step
+  expected_detection:
+    observables: not applicable; this scenario reads configuration
+    telemetry_sources: none
+  response_validation:
+    alert_to_incident: not evaluated by this scenario
+    containment_check: not evaluated
+  evidence_contract:
+    required: account names and sudo rule count found, whether /etc/shadow was readable, host identifier, timestamp
+    identifiers: account name, sudoers file path
+    missing_data_is: an unreadable file is SKIP for that check, never PASS
+  cleanup_recovery:
+    artifacts_removed: none; the scenario writes nothing
+    access_revocation_verified: not applicable
+  remediation_retest:
+    change: client removes the extra UID 0 account, sets a password or locks the account, or removes NOPASSWD rules
+    retest: the same scenario must return PASS
+  limitations:
+    - does not test whether any password is weak; it checks only for empty hashes
+    - NOPASSWD rules that are intended for approved automation are still reported and need baseline review
+    - group-based sudo membership is not expanded
+steps:
+  - name: "Root is the only UID 0 account"
+    check_id: linux-acct-extra-uid0
+    technique_id: T1078.003
+    framework: custom
+    executor: local
+    command: >-
+      extra=$(awk -F: '$3==0 && $1!="root"{print $1}' /etc/passwd | tr '\n' ' '); if [ -z "$extra" ]; then echo "PASS: root is the only UID 0 account"; else echo "FAIL: additional UID 0 accounts need review: $extra"; fi
+    timeout_sec: 15
+
+  - name: "No accounts with an empty password hash"
+    check_id: linux-acct-empty-hash
+    technique_id: T1110
+    framework: custom
+    executor: local
+    command: >-
+      if [ ! -r /etc/shadow ]; then echo "SKIP: /etc/shadow is not readable (run as root)"; else e=$(awk -F: '$2==""{print $1}' /etc/shadow | tr '\n' ' '); if [ -z "$e" ]; then echo "PASS: no accounts with an empty password hash"; else echo "FAIL: accounts with an empty password hash: $e"; fi; fi
+    timeout_sec: 15
+
+  - name: "No NOPASSWD sudo rules"
+    check_id: linux-acct-sudo-nopasswd
+    technique_id: T1548.003
+    framework: custom
+    executor: local
+    command: >-
+      if [ ! -r /etc/sudoers ]; then echo "SKIP: /etc/sudoers is not readable"; else n=$(grep -rhs 'NOPASSWD' /etc/sudoers /etc/sudoers.d/ 2>/dev/null | grep -v '^[[:space:]]*#' | wc -l); if [ "$n" -eq 0 ]; then echo "PASS: no NOPASSWD sudo rules"; else echo "FAIL: $n NOPASSWD sudo rule(s) need baseline review"; fi; fi
+    timeout_sec: 15

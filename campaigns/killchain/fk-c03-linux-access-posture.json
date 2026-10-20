@@ -1,0 +1,4 @@
+{"id":"fk-c03-linux-access-posture","name":"Campaign 03 - Linux account and remote access posture (posture-only)","version":1,"stages":[
+{"key":"account-privilege","scenarioId":"linux-account-privilege-posture","policy":{"shouldBlock":true,"containmentRequired":false,"source":"fullkillchain.txt Campaign 03: privileged identity exposure on Linux hosts"}},
+{"key":"ssh-authentication","scenarioId":"linux-ssh-hardening-posture","requires":["account-privilege"],"policy":{"shouldBlock":true,"containmentRequired":false,"source":"fullkillchain.txt Campaign 03: remote access authentication"}}
+]}

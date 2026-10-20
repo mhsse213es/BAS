@@ -1,0 +1,86 @@
+id: linux-ssh-hardening-posture
+name: Linux SSH Hardening Posture
+description: >
+  Read-only posture audit of the effective OpenSSH server configuration: root login,
+  password authentication, empty passwords and the authentication attempt limit, taken
+  from sshd -T so included files and defaults are counted. Nothing is changed. A host
+  without sshd reports SKIP for each check.
+local_check: true
+executable: false
+supported_os: [linux]
+tags:
+  - remote-access
+  - hardening
+  - posture
+  - linux
+  - read-only
+contract:
+  objective: Confirm the SSH server does not accept the authentication methods that enable remote credential attacks.
+  prerequisites:
+    os: Ubuntu 22.04 or later, RHEL 8 or later, Debian 11 or later
+    product: OpenSSH server
+    permissions: root, because sshd -T reads the full effective configuration
+    telemetry: none required for the posture result
+  variants:
+    baseline: effective configuration as sshd would load it now
+    variation: not applicable; single-state read
+    negative_controls: a host without sshd reports SKIP, never PASS
+  expected_prevention:
+    control: root login, password authentication and empty passwords are disabled; the attempt limit is four or fewer
+    authoritative_proof: the effective values from sshd -T for each key
+  expected_detection:
+    observables: not applicable; this scenario reads configuration
+    telemetry_sources: none
+  response_validation:
+    alert_to_incident: not evaluated by this scenario
+    containment_check: not evaluated
+  evidence_contract:
+    required: effective sshd value for each key, host identifier, timestamp
+    identifiers: configuration key name
+    missing_data_is: an unreadable effective configuration is SKIP, never PASS
+  cleanup_recovery:
+    artifacts_removed: none; the scenario writes nothing
+    access_revocation_verified: not applicable
+  remediation_retest:
+    change: client sets the directive in sshd_config or a drop-in and reloads sshd
+    retest: the same scenario must return PASS for the changed directive
+  limitations:
+    - reads the effective configuration only; it does not test whether keys or certificates are weak
+    - a host that uses SSH certificates for password-free access still needs the password directive off to pass
+    - does not check Match blocks beyond what sshd -T reports for the current user context
+steps:
+  - name: "SSH root login disabled"
+    check_id: linux-ssh-permitrootlogin
+    technique_id: T1021.004
+    framework: custom
+    executor: local
+    command: >-
+      if ! command -v sshd >/dev/null 2>&1; then echo "SKIP: sshd is not installed"; else v=$(sshd -T 2>/dev/null | awk '$1=="permitrootlogin"{print $2}'); if [ -z "$v" ]; then echo "SKIP: sshd effective configuration is not readable"; elif [ "$v" = "no" ]; then echo "PASS: root SSH login is disabled"; else echo "FAIL: PermitRootLogin is $v"; fi; fi
+    timeout_sec: 30
+
+  - name: "SSH password authentication disabled"
+    check_id: linux-ssh-passwordauthentication
+    technique_id: T1110
+    framework: custom
+    executor: local
+    command: >-
+      if ! command -v sshd >/dev/null 2>&1; then echo "SKIP: sshd is not installed"; else v=$(sshd -T 2>/dev/null | awk '$1=="passwordauthentication"{print $2}'); if [ -z "$v" ]; then echo "SKIP: sshd effective configuration is not readable"; elif [ "$v" = "no" ]; then echo "PASS: SSH password authentication is disabled"; else echo "FAIL: PasswordAuthentication is $v"; fi; fi
+    timeout_sec: 30
+
+  - name: "SSH empty passwords refused"
+    check_id: linux-ssh-permitemptypasswords
+    technique_id: T1110
+    framework: custom
+    executor: local
+    command: >-
+      if ! command -v sshd >/dev/null 2>&1; then echo "SKIP: sshd is not installed"; else v=$(sshd -T 2>/dev/null | awk '$1=="permitemptypasswords"{print $2}'); if [ -z "$v" ]; then echo "SKIP: sshd effective configuration is not readable"; elif [ "$v" = "no" ]; then echo "PASS: SSH refuses empty passwords"; else echo "FAIL: PermitEmptyPasswords is $v"; fi; fi
+    timeout_sec: 30
+
+  - name: "SSH authentication attempt limit four or fewer"
+    check_id: linux-ssh-maxauthtries
+    technique_id: T1110
+    framework: custom
+    executor: local
+    command: >-
+      if ! command -v sshd >/dev/null 2>&1; then echo "SKIP: sshd is not installed"; else v=$(sshd -T 2>/dev/null | awk '$1=="maxauthtries"{print $2}'); if [ -z "$v" ]; then echo "SKIP: sshd effective configuration is not readable"; elif [ "$v" -le 4 ]; then echo "PASS: MaxAuthTries is $v"; else echo "FAIL: MaxAuthTries is $v, expected 4 or fewer"; fi; fi
+    timeout_sec: 30

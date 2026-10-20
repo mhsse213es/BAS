@@ -1,0 +1,3 @@
+{"id":"fk-c13-linux-audit-prerequisites","name":"Campaign 13 - Linux audit source prerequisites (posture-only; the SOC pipeline test itself is not built)","version":1,"stages":[
+{"key":"audit-sources","scenarioId":"linux-audit-logging-posture","policy":{"shouldBlock":false,"containmentRequired":false,"source":"fullkillchain.txt Campaign 13: source of ingestible events, prerequisite only"}}
+]}

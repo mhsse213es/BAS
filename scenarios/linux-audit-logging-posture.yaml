@@ -1,0 +1,68 @@
+id: linux-audit-logging-posture
+name: Linux Audit and Authentication Logging Posture
+description: >
+  Read-only posture audit of whether the host keeps the records that investigation and
+  execution evidence depend on: auditd installed with rules loaded, and authentication
+  events persisted to disk. Nothing is changed. A PASS shows the records can be kept; it
+  does not show they are forwarded to a SIEM.
+local_check: true
+executable: false
+supported_os: [linux]
+tags:
+  - audit
+  - detection
+  - posture
+  - linux
+  - read-only
+contract:
+  objective: Confirm the host records security-relevant activity locally so it can be investigated and forwarded.
+  prerequisites:
+    os: Ubuntu 22.04 or later, RHEL 8 or later
+    product: auditd, systemd-journald or rsyslog
+    permissions: root for auditctl -l; read access to log locations
+    telemetry: none required for the posture result
+  variants:
+    baseline: auditd state and rule count; authentication log persistence
+    variation: not applicable; single-state read
+    negative_controls: an auditctl call that fails for permission reasons is SKIP, not FAIL
+  expected_prevention:
+    control: not applicable; this scenario measures recording, not prevention
+    authoritative_proof: not applicable
+  expected_detection:
+    observables: the presence of audit rules and persisted authentication records
+    telemetry_sources: this scenario's own output
+  response_validation:
+    alert_to_incident: not evaluated by this scenario
+    containment_check: not evaluated
+  evidence_contract:
+    required: auditctl exit status and rule count, persistence location found, host identifier, timestamp
+    identifiers: audit rule list, log file path
+    missing_data_is: a permission failure is SKIP; no audit tool installed is FAIL, because no audit record is produced
+  cleanup_recovery:
+    artifacts_removed: none; the scenario writes nothing
+    access_revocation_verified: not applicable
+  remediation_retest:
+    change: client installs auditd, loads rules, or enables persistent journal storage
+    retest: the same scenario must return PASS
+  limitations:
+    - loaded rules are not checked for coverage of specific syscalls
+    - does not confirm events reach a SIEM
+    - containers and hosts without systemd may keep logs elsewhere; the persistence check looks only at the standard locations
+steps:
+  - name: "auditd installed with rules loaded"
+    check_id: linux-audit-rules-loaded
+    technique_id: T1562.012
+    framework: custom
+    executor: local
+    command: >-
+      if ! command -v auditctl >/dev/null 2>&1; then echo "FAIL: auditd is not installed, so no kernel audit records are produced"; else out=$(auditctl -l 2>&1); rc=$?; if [ $rc -ne 0 ]; then echo "SKIP: audit rules are not readable (auditctl exit $rc; run as root)"; elif echo "$out" | grep -q 'No rules'; then echo "FAIL: auditd is installed but no audit rules are loaded"; else n=$(echo "$out" | grep -c .); echo "PASS: $n audit rules loaded"; fi; fi
+    timeout_sec: 30
+
+  - name: "Authentication events persisted to disk"
+    check_id: linux-auth-log-persistence
+    technique_id: T1562.006
+    framework: custom
+    executor: local
+    command: >-
+      if [ -d /var/log/journal ] || [ -s /var/log/auth.log ] || [ -s /var/log/secure ]; then echo "PASS: authentication events are persisted to a standard location"; else echo "FAIL: no persistent authentication log found in /var/log/journal, /var/log/auth.log or /var/log/secure"; fi
+    timeout_sec: 15

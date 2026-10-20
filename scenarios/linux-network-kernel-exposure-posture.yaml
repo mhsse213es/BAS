@@ -1,0 +1,86 @@
+id: linux-network-kernel-exposure-posture
+name: Linux Network Exposure and Kernel Protection Posture
+description: >
+  Read-only posture audit of three exposure points: TCP listeners bound to all
+  interfaces, address space layout randomisation, the noexec mount option on /tmp, and
+  the Yama ptrace restriction. Nothing is changed. A FAIL on listeners is a review
+  trigger, not a finding that a service is insecure.
+local_check: true
+executable: false
+supported_os: [linux]
+tags:
+  - exposure
+  - exploit-mitigation
+  - posture
+  - linux
+  - read-only
+contract:
+  objective: Identify services exposed on every interface and the kernel and mount protections that limit exploitation of local code.
+  prerequisites:
+    os: Ubuntu 22.04 or later, RHEL 8 or later
+    product: iproute2 (ss), util-linux (findmnt), kernel procfs
+    permissions: any user for listeners and sysctl values; root may be needed for full process names
+    telemetry: none required for the posture result
+  variants:
+    baseline: current listeners, ASLR, /tmp mount options and ptrace scope
+    variation: not applicable; single-state read
+    negative_controls: a missing ss or ptrace setting is SKIP, not PASS
+  expected_prevention:
+    control: ASLR is full (2), /tmp is noexec, ptrace is restricted (1 or higher)
+    authoritative_proof: the procfs value or mount option read in each step
+  expected_detection:
+    observables: not applicable; this scenario reads state
+    telemetry_sources: none
+  response_validation:
+    alert_to_incident: not evaluated by this scenario
+    containment_check: not evaluated
+  evidence_contract:
+    required: listener addresses and ports, sysctl values, /tmp mount options, host identifier, timestamp
+    identifiers: listening address and port, sysctl key
+    missing_data_is: an unreadable value or absent tool is SKIP, never PASS
+  cleanup_recovery:
+    artifacts_removed: none; the scenario writes nothing
+    access_revocation_verified: not applicable
+  remediation_retest:
+    change: client restricts listeners to required interfaces, sets randomize_va_space to 2, mounts /tmp noexec, or sets ptrace_scope
+    retest: the same scenario must return PASS for the changed step
+  limitations:
+    - a listener on all interfaces is reported even when it is intended; the baseline decides
+    - does not test exploit mitigations on individual binaries
+    - /tmp is checked only as a mount; a noexec bind mount elsewhere is not counted
+steps:
+  - name: "Address space layout randomisation is full"
+    check_id: linux-kernel-aslr
+    technique_id: T1068
+    framework: custom
+    executor: local
+    command: >-
+      v=$(cat /proc/sys/kernel/randomize_va_space 2>/dev/null); if [ "$v" = "2" ]; then echo "PASS: full address space layout randomisation (2)"; elif [ -z "$v" ]; then echo "SKIP: kernel ASLR setting is not readable"; else echo "FAIL: randomize_va_space is $v, expected 2"; fi
+    timeout_sec: 15
+
+  - name: "/tmp mounted noexec"
+    check_id: linux-tmp-noexec
+    technique_id: T1564
+    framework: custom
+    executor: local
+    command: >-
+      if ! command -v findmnt >/dev/null 2>&1; then echo "SKIP: findmnt is not installed"; elif findmnt -no OPTIONS /tmp 2>/dev/null | grep -q noexec; then echo "PASS: /tmp is mounted noexec"; else echo "FAIL: /tmp is not mounted noexec"; fi
+    timeout_sec: 15
+
+  - name: "TCP listeners bound to all interfaces"
+    check_id: linux-listeners-all-interfaces
+    technique_id: T1049
+    framework: custom
+    executor: local
+    command: >-
+      if ! command -v ss >/dev/null 2>&1; then echo "SKIP: ss is not installed"; else l=$(ss -tlnH 2>/dev/null | awk '$4 ~ /^(0\.0\.0\.0|\*|\[::\]):/ {print $4}' | tr '\n' ' '); if [ -z "$l" ]; then echo "PASS: no TCP listener bound to all interfaces"; else echo "FAIL: TCP listeners bound to all interfaces need baseline review: $l"; fi; fi
+    timeout_sec: 15
+
+  - name: "Yama ptrace restriction"
+    check_id: linux-ptrace-scope
+    technique_id: T1055.008
+    framework: custom
+    executor: local
+    command: >-
+      v=$(cat /proc/sys/kernel/yama/ptrace_scope 2>/dev/null); if [ -z "$v" ]; then echo "SKIP: Yama ptrace scope is not present on this kernel"; elif [ "$v" -ge 1 ]; then echo "PASS: ptrace_scope is $v"; else echo "FAIL: ptrace_scope is 0; unrestricted ptrace is allowed"; fi
+    timeout_sec: 15

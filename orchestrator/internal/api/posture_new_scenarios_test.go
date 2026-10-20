@@ -15,7 +15,7 @@ func TestPostureScenarios_LoadAndDeclareSteps(t *testing.T) {
 	if err := eng.Load(); err != nil {
 		t.Fatalf("engine load: %v", err)
 	}
-	for _, id := range []string{"windows-persistence-posture", "windows-east-west-host-firewall-posture", "windows-backup-posture", "windows-detection-prerequisites-posture", "windows-credential-protection-posture", "windows-execution-control-posture"} {
+	for _, id := range []string{"windows-persistence-posture", "windows-east-west-host-firewall-posture", "windows-backup-posture", "windows-detection-prerequisites-posture", "windows-credential-protection-posture", "windows-execution-control-posture", "linux-ssh-hardening-posture", "linux-audit-logging-posture", "linux-account-privilege-posture", "linux-network-kernel-exposure-posture"} {
 		sc, ok := eng.Get(id)
 		if !ok {
 			t.Fatalf("%s did not load (signature or parse)", id)
