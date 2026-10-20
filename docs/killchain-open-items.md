@@ -16,7 +16,7 @@ moment. Items that need them are listed as blocked, not planned.
 | 3 | Lab validation of the vertical slice (identity, endpoint, lateral) | Any `lab-validated` claim. Nothing is lab-validated today. | A representative lab with ground-truth capture. |
 | 4 | Live validation | Any `live-validated` claim. | Authorised run against the supported product in a test environment. |
 | 5 | Ground-truth source per scenario | Prevention and execution verdicts. Without it, stages stop at INCONCLUSIVE. | For each scenario, an independent record of what executed (host process record, file hash, network log). Design work, then staging to confirm. |
-| 6 | Detection telemetry for each stage | Detection verdicts. | Connected SIEM or EDR telemetry on staging, with health confirmed. |
+| 6 | Detection telemetry for each stage | Detection verdicts. Built: a vendor check reduces to an observation, and a stage aggregates them so that not-detected is scored only when every provider shows healthy telemetry and a complete window. Not yet wired into stage collection. | Connected SIEM or EDR telemetry on staging, with health confirmed. |
 
 ## Not blocked, tracked here
 
