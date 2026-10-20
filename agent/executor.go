@@ -268,6 +268,12 @@ func execStep(parentCtx context.Context, step ScenarioStep, pool *HostPool) prot
 		}
 		cmd.Env = env
 	}
+	// Expose the step TaskID so a payload can tie its marker lines to this
+	// step. Set after every user-context env above, so it is never dropped.
+	if cmd.Env == nil {
+		cmd.Env = os.Environ()
+	}
+	cmd.Env = append(cmd.Env, "BAS_TASK_ID="+step.TaskID)
 
 	// Use Start + Wait (instead of Run) so we can assign the process to a Job
 	// Object between spawn and wait.  exec.CommandContext's own context-kill
