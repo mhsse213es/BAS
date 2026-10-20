@@ -133,6 +133,7 @@ var routeMatrix = []routeCase{
 	{http.MethodGet, "/api/cloud-topology-imports/{id}", tierAny, ""},
 	{http.MethodGet, "/api/remote-access-imports", tierAny, ""},
 	{http.MethodGet, "/api/remote-access-imports/{id}", tierAny, ""},
+	{http.MethodPost, "/api/panos-exposure/assess", tierAny, ""},
 	{http.MethodGet, "/api/ot-safety-imports", tierAny, ""},
 	{http.MethodGet, "/api/ot-safety-imports/{id}", tierAny, ""},
 	{http.MethodGet, "/api/zone-isolation-imports", tierAny, ""},

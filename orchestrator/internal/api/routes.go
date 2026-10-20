@@ -341,6 +341,7 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.Get("/api/cloud-topology-imports/{id}", h.GetCloudTopologyImport)
 		r.Get("/api/remote-access-imports", h.ListRemoteAccessImports)
 		r.Get("/api/remote-access-imports/{id}", h.GetRemoteAccessImport)
+		r.Post("/api/panos-exposure/assess", h.AssessPANOSExposure)
 		r.Get("/api/ot-safety-imports", h.ListOTSafetyImports)
 		r.Get("/api/ot-safety-imports/{id}", h.GetOTSafetyImport)
 		r.Get("/api/zone-isolation-imports", h.ListZoneIsolationImports)
