@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/backup"
 	"github.com/aws/aws-sdk-go-v2/service/iam"
 	"github.com/aws/aws-sdk-go-v2/service/iam/types"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
@@ -26,6 +27,12 @@ type AWSSTSAPI interface {
 	GetCallerIdentity(ctx context.Context, params *sts.GetCallerIdentityInput, optFns ...func(*sts.Options)) (*sts.GetCallerIdentityOutput, error)
 }
 
+// AWSBackupAPI lists backup vaults, the targets of recovery-destruction
+// scenarios. *backup.Client satisfies it.
+type AWSBackupAPI interface {
+	ListBackupVaults(ctx context.Context, params *backup.ListBackupVaultsInput, optFns ...func(*backup.Options)) (*backup.ListBackupVaultsOutput, error)
+}
+
 // AWSS3API lists buckets so they become resources that policies can target.
 type AWSS3API interface {
 	ListBuckets(ctx context.Context, params *s3.ListBucketsInput, optFns ...func(*s3.Options)) (*s3.ListBucketsOutput, error)
@@ -40,6 +47,9 @@ type AWSDiscoveryClient struct {
 	iam AWSIAMAPI
 	sts AWSSTSAPI
 	s3  AWSS3API
+	// backup is optional. Without it, vault inventory is reported as skipped
+	// rather than guessed, and backup-assurance scenarios stay not-attempted.
+	backup AWSBackupAPI
 
 	region    string
 	accountID string
@@ -54,6 +64,7 @@ func NewAWSDiscoveryClient(cfg aws.Config) *AWSDiscoveryClient {
 		iam:      iam.NewFromConfig(cfg),
 		sts:      sts.NewFromConfig(cfg),
 		s3:       s3.NewFromConfig(cfg),
+		backup:   backup.NewFromConfig(cfg),
 		region:   cfg.Region,
 		maxPages: maxDiscoveryPages,
 	}
@@ -63,6 +74,12 @@ func NewAWSDiscoveryClient(cfg aws.Config) *AWSDiscoveryClient {
 // and by any caller that needs to decorate the SDK clients.
 func NewAWSDiscoveryClientWith(iamAPI AWSIAMAPI, stsAPI AWSSTSAPI, s3API AWSS3API, region string) *AWSDiscoveryClient {
 	return &AWSDiscoveryClient{iam: iamAPI, sts: stsAPI, s3: s3API, region: region, maxPages: maxDiscoveryPages}
+}
+
+// WithBackup attaches a backup vault inventory source to the client.
+func (c *AWSDiscoveryClient) WithBackup(b AWSBackupAPI) *AWSDiscoveryClient {
+	c.backup = b
+	return c
 }
 
 // DiscoverAccount resolves the account ID for the active credentials. Every
@@ -227,11 +244,13 @@ func awsActionMatches(pattern, action string) bool {
 // the evaluator cannot model, so none of them are silently dropped.
 type AWSDiscoveryStats struct {
 	DiscoveryStats
-	NotActionStatements  int // NotAction statements; not expanded, so no edges emitted
-	ConditionalAllows    int // Allow statements with Condition; edges emitted, conditions unevaluated
-	WildcardTrustSkipped int // trust statements with Principal "*"; no attributable identity
-	UnresolvedTrust      int // trust principals (account roots, deleted-role IDs) not in inventory
-	SkippedDocuments     int // identity policies that failed to decode
+	NotActionStatements  int  // NotAction statements; not expanded, so no edges emitted
+	ConditionalAllows    int  // Allow statements with Condition; edges emitted, conditions unevaluated
+	WildcardTrustSkipped int  // trust statements with Principal "*"; no attributable identity
+	UnresolvedTrust      int  // trust principals (account roots, deleted-role IDs) not in inventory
+	SkippedDocuments     int  // identity policies that failed to decode
+	BackupVaults         int  // backup vaults discovered
+	BackupVaultsSkipped  bool // no backup inventory source attached
 }
 
 // Discover performs a full AWS discovery pass: account, identities, resources,
@@ -363,6 +382,18 @@ func (c *AWSDiscoveryClient) Discover(ctx context.Context) (*DiscoveredGraph, *A
 	}
 	for _, name := range buckets {
 		addResource("arn:aws:s3:::"+name, "s3-bucket")
+	}
+	if c.backup == nil {
+		stats.BackupVaultsSkipped = true
+	} else {
+		vaults, err := c.listBackupVaults(ctx)
+		if err != nil {
+			return nil, nil, err
+		}
+		for _, arn := range vaults {
+			addResource(arn, "backup-vault")
+		}
+		stats.BackupVaults = len(vaults)
 	}
 
 	seen := map[string]bool{}
@@ -514,5 +545,28 @@ func (c *AWSDiscoveryClient) listBuckets(ctx context.Context) ([]string, error) 
 			return names, nil
 		}
 		token = out.ContinuationToken
+	}
+}
+
+// listBackupVaults returns the ARNs of the account's backup vaults, following
+// NextToken under the shared page cap.
+func (c *AWSDiscoveryClient) listBackupVaults(ctx context.Context) ([]string, error) {
+	var arns []string
+	var token *string
+	for pages := 0; ; pages++ {
+		if pages >= c.maxPages {
+			return nil, fmt.Errorf("aws discovery: more than %d pages of backup vaults; refusing to continue", c.maxPages)
+		}
+		out, err := c.backup.ListBackupVaults(ctx, &backup.ListBackupVaultsInput{NextToken: token})
+		if err != nil {
+			return nil, fmt.Errorf("aws discovery: listing backup vaults: %w", err)
+		}
+		for _, v := range out.BackupVaultList {
+			arns = append(arns, aws.ToString(v.BackupVaultArn))
+		}
+		if out.NextToken == nil || *out.NextToken == "" {
+			return arns, nil
+		}
+		token = out.NextToken
 	}
 }

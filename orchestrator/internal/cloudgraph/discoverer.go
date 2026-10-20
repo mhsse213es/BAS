@@ -32,6 +32,7 @@ func (s *AWSDiscoveryStats) report() DiscoveryReport {
 		"wildcard_trust_skipped": s.WildcardTrustSkipped,
 		"unresolved_trust":       s.UnresolvedTrust,
 		"skipped_documents":      s.SkippedDocuments,
+		"backup_vaults":          s.BackupVaults,
 	}
 }
 

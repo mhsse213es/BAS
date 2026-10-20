@@ -43,7 +43,10 @@ func (c *SyntheticEventCorrelator) FindEvents(principal, action, resource string
 			matchScore++
 		}
 
-		if matchScore == 0 {
+		// Evidence must name the same principal and the same action. A match on
+		// principal and resource alone is a different action's event, and
+		// counting it would let an unobserved step inherit another step's trail.
+		if event.Principal != principal || event.Action != action {
 			continue
 		}
 

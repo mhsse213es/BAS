@@ -7,7 +7,9 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/cloudtrail"
 	"google.golang.org/api/option"
 
 	"github.com/audspect/bas/internal/cloudgraph"
@@ -45,7 +47,8 @@ func cloudDiscovererFor(ctx context.Context, account cloudgraph.AccountScope) (c
 	}
 }
 
-func awsDiscovererFor(ctx context.Context, account cloudgraph.AccountScope) (cloudgraph.Discoverer, error) {
+// awsConfigFor loads the SDK default credential chain for the account's region.
+func awsConfigFor(ctx context.Context, account cloudgraph.AccountScope) (aws.Config, error) {
 	region := account.Region
 	if region == "" {
 		region = os.Getenv("AWS_REGION")
@@ -55,7 +58,15 @@ func awsDiscovererFor(ctx context.Context, account cloudgraph.AccountScope) (clo
 	}
 	cfg, err := config.LoadDefaultConfig(ctx, config.WithRegion(region))
 	if err != nil {
-		return nil, fmt.Errorf("%w: aws: %v", errCloudDiscoveryNotConfigured, err)
+		return aws.Config{}, fmt.Errorf("%w: aws: %v", errCloudDiscoveryNotConfigured, err)
+	}
+	return cfg, nil
+}
+
+func awsDiscovererFor(ctx context.Context, account cloudgraph.AccountScope) (cloudgraph.Discoverer, error) {
+	cfg, err := awsConfigFor(ctx, account)
+	if err != nil {
+		return nil, err
 	}
 	client := cloudgraph.NewAWSDiscoveryClient(cfg)
 	return accountChecked(account.AccountID, nil, cloudgraph.AWSDiscoverer(client), func(ctx context.Context) (string, error) {
@@ -69,7 +80,9 @@ func awsDiscovererFor(ctx context.Context, account cloudgraph.AccountScope) (clo
 
 // azureDiscovererFor reads the service principal from the environment. The
 // subscription in the environment must be the one the run names.
-func azureDiscovererFor(account cloudgraph.AccountScope) (cloudgraph.Discoverer, error) {
+// azureConfigFor reads the service principal from the environment and checks
+// that its subscription is the one the run names.
+func azureConfigFor(account cloudgraph.AccountScope) (cloudgraph.AzureDiscoveryConfig, error) {
 	cfg := cloudgraph.AzureDiscoveryConfig{
 		TenantID:       os.Getenv("AZURE_TENANT_ID"),
 		ClientID:       os.Getenv("AZURE_CLIENT_ID"),
@@ -82,11 +95,19 @@ func azureDiscovererFor(account cloudgraph.AccountScope) (cloudgraph.Discoverer,
 	} {
 		if v == "" {
 			// Names the variable, never its value.
-			return nil, fmt.Errorf("%w: azure: %s is not set", errCloudDiscoveryNotConfigured, name)
+			return cloudgraph.AzureDiscoveryConfig{}, fmt.Errorf("%w: azure: %s is not set", errCloudDiscoveryNotConfigured, name)
 		}
 	}
 	if account.AccountID != cfg.SubscriptionID {
-		return nil, fmt.Errorf("azure: server credentials are for subscription %s, run names %s", cfg.SubscriptionID, account.AccountID)
+		return cloudgraph.AzureDiscoveryConfig{}, fmt.Errorf("azure: server credentials are for subscription %s, run names %s", cfg.SubscriptionID, account.AccountID)
+	}
+	return cfg, nil
+}
+
+func azureDiscovererFor(account cloudgraph.AccountScope) (cloudgraph.Discoverer, error) {
+	cfg, err := azureConfigFor(account)
+	if err != nil {
+		return nil, err
 	}
 	client := cloudgraph.NewAzureDiscoveryClient(cfg)
 	return accountChecked(account.AccountID, []string{cfg.ClientSecret}, cloudgraph.AzureDiscoverer(client), func(context.Context) (string, error) {
@@ -136,4 +157,32 @@ func discoveryStatusCode(err error) int {
 		return http.StatusServiceUnavailable
 	}
 	return http.StatusBadRequest
+}
+
+// cloudEventSourceFor returns the provider's live audit-log source for the
+// account, using the same server-side credentials as discovery.
+func cloudEventSourceFor(ctx context.Context, account cloudgraph.AccountScope) (cloudgraph.EventSource, error) {
+	switch account.Provider {
+	case "aws":
+		cfg, err := awsConfigFor(ctx, account)
+		if err != nil {
+			return nil, err
+		}
+		return &cloudgraph.CloudTrailSource{API: cloudtrail.NewFromConfig(cfg)}, nil
+	case "azure":
+		cfg, err := azureConfigFor(account)
+		if err != nil {
+			return nil, err
+		}
+		return cloudgraph.NewActivityLogSource(cloudgraph.NewAzureDiscoveryClient(cfg)), nil
+	case "gcp":
+		src, err := cloudgraph.NewGCPAuditLogSource(ctx, account.AccountID,
+			option.WithScopes("https://www.googleapis.com/auth/cloud-platform.read-only"))
+		if err != nil {
+			return nil, fmt.Errorf("%w: gcp: %v", errCloudDiscoveryNotConfigured, err)
+		}
+		return src, nil
+	default:
+		return nil, fmt.Errorf("unknown provider %q", account.Provider)
+	}
 }

@@ -42,6 +42,10 @@ type AzureDiscoveryClient struct {
 	retry   RetryPolicy
 	limiter *rate.Limiter
 
+	// secret is held only so error text can be redacted; it is never logged
+	// or returned.
+	secret string
+
 	subscriptionID string
 }
 
@@ -56,6 +60,7 @@ func NewAzureDiscoveryClient(cfg AzureDiscoveryConfig) *AzureDiscoveryClient {
 		httpClient:     &http.Client{Timeout: 30 * time.Second},
 		retry:          DefaultRetryPolicy,
 		limiter:        DefaultRateLimiter(),
+		secret:         cfg.ClientSecret,
 		subscriptionID: cfg.SubscriptionID,
 	}
 }
@@ -64,18 +69,7 @@ func NewAzureDiscoveryClient(cfg AzureDiscoveryConfig) *AzureDiscoveryClient {
 // retry. The bearer token is re-acquired on every attempt so a long backoff
 // cannot send an expired token.
 func (c *AzureDiscoveryClient) get(ctx context.Context, url string, tokens *msauth.EntraTokenSource) (*http.Response, error) {
-	return doWithRetry(ctx, c.httpClient, c.limiter, c.retry, func(ctx context.Context) (*http.Request, error) {
-		token, err := tokens.Token(ctx)
-		if err != nil {
-			return nil, fmt.Errorf("azure discovery: acquiring token: %w", err)
-		}
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-		if err != nil {
-			return nil, fmt.Errorf("azure discovery: building request for %s: %w", url, err)
-		}
-		req.Header.Set("Authorization", "Bearer "+token)
-		return req, nil
-	})
+	return c.getWith(ctx, url, tokens)
 }
 
 // maxDiscoveryPages bounds pagination so a misbehaving endpoint that keeps
