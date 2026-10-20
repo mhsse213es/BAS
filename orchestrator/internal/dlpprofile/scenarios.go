@@ -31,5 +31,6 @@ func RealDLPScenarioIDs() []string {
 		"dlp-exfiltration-web-upload",
 		"dlp-exfiltration-network-share",
 		"dlp-exfiltration-device-control",
+		"dlp-exfiltration-lateral-movement",
 	}
 }

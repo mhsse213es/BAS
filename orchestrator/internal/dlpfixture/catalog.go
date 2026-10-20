@@ -23,6 +23,7 @@ const (
 	scenarioWebUpload = "dlp-exfiltration-web-upload"
 	scenarioNetworkShare = "dlp-exfiltration-network-share"
 	scenarioDeviceControl = "dlp-exfiltration-device-control"
+	scenarioLateralMovement = "dlp-exfiltration-lateral-movement"
 )
 
 // AllFixtures returns Audspect's real, current seed catalog of every
@@ -374,6 +375,16 @@ func AllFixtures() ([]Fixture, error) {
 			{scenarioDeviceControl, "DLP Validation — Removable Media Write Under Recorded Device Policy (T1052.001)"},
 		},
 		"same synthetic record as the BFSI anchor; device policy read only, never changed")); err != nil {
+		return nil, fmt.Errorf("loading seed fixture catalog: %w", err)
+	}
+
+	if err := add(NewFixture("lateral-movement-multitype-record", "Synthetic multi-type record copied to an internal server and a peer workstation",
+		[]string{"[BAS-SIM-DLP]", "ABCDE1234F", "123456789012", "SBININBBXXX", "fake.user@upi", "4111111111111111"},
+		[]Occurrence{
+			{scenarioLateralMovement, "DLP Validation — Lateral Copy to Internal File Server Share (T1039)"},
+			{scenarioLateralMovement, "DLP Validation — Lateral Copy to Peer Workstation Share (T1039)"},
+		},
+		"same synthetic record as the BFSI anchor, written to operator-configured internal destinations only")); err != nil {
 		return nil, fmt.Errorf("loading seed fixture catalog: %w", err)
 	}
 

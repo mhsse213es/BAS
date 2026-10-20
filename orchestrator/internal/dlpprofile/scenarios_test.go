@@ -23,6 +23,7 @@ func TestRealDLPScenarioIDs_ReturnsExactlyTheRealIDs(t *testing.T) {
 		"dlp-exfiltration-web-upload",
 		"dlp-exfiltration-network-share",
 		"dlp-exfiltration-device-control",
+		"dlp-exfiltration-lateral-movement",
 	}
 	if len(ids) != len(want) {
 		t.Fatalf("len(ids) = %d, want %d", len(ids), len(want))
