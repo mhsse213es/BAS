@@ -1,0 +1,54 @@
+id: API-BAS-AUTHZ-009
+name: Delete is not restricted to the owner, although reads are
+category: AUTHZ
+claim: cross_identity
+attack_objective: >
+  A customer who cannot read another customer's order deletes it, because the delete
+  operation does not check ownership the way the read operation does.
+threat_model:
+  attacker: authenticated customer in tenant A
+  identity: customer-a
+  access_level: standard customer, valid token
+  objective: delete another customer's order through a write operation the read policy would refuse
+preconditions:
+  fixture: orders-two-tenant
+  identities: [customer-b, customer-a]
+  object: ORD-2001
+steps:
+  - id: baseline-owner-read
+    role: baseline
+    identity: customer-b
+    auth: valid
+    method: GET
+    path: /api/orders/{object}
+    hypothesis: The owner can read their own order. If this fails, the scenario is not testable.
+  - id: attack-delete-other-order
+    role: attack
+    identity: customer-a
+    auth: valid
+    method: DELETE
+    path: /api/authz/orders/{object}
+    hypothesis: Deletion is restricted to the owner, as reads are, so a non-owner is refused.
+denied_statuses: [403]
+expected_control: >
+  The delete refuses a caller who is not the owner with 403, and the order status is unchanged.
+ground_truth:
+  adapters: [state, response]
+  check: >
+    The order status is identical before and after the attack, and the response
+    discloses no protected values.
+detection_assertion:
+  status: not_evaluated
+  reason: Detection validation is Phase 4; this scenario makes no detection claim.
+evidence:
+  - sanitized_request
+  - sanitized_response
+  - state_diff
+side_effect_class: STATE_CHANGE_SANDBOX
+cleanup:
+  - reset the lab to its fixture seed after the run
+industry_mapping:
+  - "BFSI: delete operations that skip the ownership check the read operation enforces"
+regulatory_mapping: []
+negative_tests:
+  - API-BAS-AUTHZ-009 with the owner deleting their own order against the fixed build must PASS on the legitimate delete

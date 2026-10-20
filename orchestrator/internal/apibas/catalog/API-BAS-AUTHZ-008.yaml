@@ -1,0 +1,55 @@
+id: API-BAS-AUTHZ-008
+name: Support group membership is honoured as the audit scope, exposing protected values
+category: AUTHZ
+claim: function_level
+attack_objective: >
+  A customer whose group grants only order reads uses the audit view, which the group-name
+  check accepts as if the customer held the audit scope.
+threat_model:
+  attacker: authenticated customer in the support group, without the audit scope
+  identity: customer-a
+  access_level: standard customer, valid token, support group membership
+  objective: read the audit view of an order through an inconsistent role or group check
+preconditions:
+  fixture: orders-two-tenant
+  identities: [customer-b, customer-a]
+  object: ORD-2001
+steps:
+  - id: baseline-owner-read
+    role: baseline
+    identity: customer-b
+    auth: valid
+    method: GET
+    path: /api/orders/{object}
+    hypothesis: The owner can read their own order. If this fails, the scenario is not testable.
+  - id: attack-group-as-scope
+    role: attack
+    identity: customer-a
+    auth: valid
+    method: GET
+    path: /api/authz/orders/{object}/audit
+    hypothesis: The audit view requires the audit:read scope, and a group name grants no scope.
+denied_statuses: [403]
+expected_control: >
+  The audit view requires the audit:read scope or the admin credential. A support group
+  member without that scope is refused with 403.
+ground_truth:
+  adapters: [state, response]
+  check: >
+    The attack response contains none of the owner's protected values, and the state is
+    unchanged by the attack.
+detection_assertion:
+  status: not_evaluated
+  reason: Detection validation is Phase 4; this scenario makes no detection claim.
+evidence:
+  - sanitized_request
+  - sanitized_response
+  - state_diff
+side_effect_class: READ_ONLY
+cleanup:
+  - no cleanup required for a read-only scenario
+industry_mapping:
+  - "BFSI: role and group checks that accept a group name where a scope is required"
+regulatory_mapping: []
+negative_tests:
+  - API-BAS-AUTHZ-008 with the audit:read scope held by the caller against the fixed build must be allowed

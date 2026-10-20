@@ -336,7 +336,7 @@ func (s Scenario) validateSteps() error {
 		if auth != "alg_none" && st.ForgeAs != "" {
 			return fmt.Errorf("contract: %s: step %s sets forge_as but auth is %s", s.ID, st.ID, auth)
 		}
-		if st.Method != "GET" && st.Method != "PATCH" && st.Method != "POST" {
+		if st.Method != "GET" && st.Method != "PATCH" && st.Method != "POST" && st.Method != "DELETE" {
 			return fmt.Errorf("contract: %s: step %s method %s is not supported", s.ID, st.ID, st.Method)
 		}
 		if (st.Method == "PATCH" || st.Method == "POST") && strings.TrimSpace(st.Body) == "" {

@@ -1,0 +1,55 @@
+id: API-BAS-AUTHZ-005
+name: Branch order listing returns another branch's full records to a caller of a different branch
+category: AUTHZ
+claim: cross_identity
+attack_objective: >
+  A customer of one branch lists the orders of another branch, and receives full records
+  with protected values, because the listing does not check the caller's branch.
+threat_model:
+  attacker: authenticated customer of branch A
+  identity: customer-a
+  access_level: standard customer, valid token, branch A
+  objective: read another branch's customer records through the branch listing
+preconditions:
+  fixture: orders-two-tenant
+  identities: [customer-b, customer-a]
+  object: ORD-2001
+steps:
+  - id: baseline-branch-listing
+    role: baseline
+    identity: customer-b
+    auth: valid
+    method: GET
+    path: /api/authz/branches/BR-B/orders
+    hypothesis: A customer can list the orders of their own branch. If this fails, the scenario is not testable.
+  - id: attack-other-branch-listing
+    role: attack
+    identity: customer-a
+    auth: valid
+    method: GET
+    path: /api/authz/branches/BR-B/orders
+    hypothesis: The listing checks that the caller belongs to the requested branch, so another branch is refused.
+denied_statuses: [403]
+expected_control: >
+  The listing refuses a branch the caller does not belong to with 403, and returns no
+  protected values.
+ground_truth:
+  adapters: [state, response]
+  check: >
+    The attack response contains none of the owner's protected values, and the state is
+    unchanged by the attack.
+detection_assertion:
+  status: not_evaluated
+  reason: Detection validation is Phase 4; this scenario makes no detection claim.
+evidence:
+  - sanitized_request
+  - sanitized_response
+  - state_diff
+side_effect_class: READ_ONLY
+cleanup:
+  - no cleanup required for a read-only scenario
+industry_mapping:
+  - "BFSI: branch-scoped listings that do not enforce the caller's branch"
+regulatory_mapping: []
+negative_tests:
+  - API-BAS-AUTHZ-005 with the caller's own branch against the fixed build must return the branch's public view

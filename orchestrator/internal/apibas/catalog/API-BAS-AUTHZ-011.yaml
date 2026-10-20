@@ -1,0 +1,56 @@
+id: API-BAS-AUTHZ-011
+name: Owner's authorized response is cached and served to another customer
+category: AUTHZ
+claim: cross_identity
+attack_objective: >
+  The owner's response to a view request is stored in a cache shared by all callers, keyed by
+  path only, so another customer requesting the same path receives the owner's protected
+  values from the cache.
+threat_model:
+  attacker: authenticated customer in tenant A who shares a cache with the owner's traffic
+  identity: customer-a
+  access_level: standard customer, valid token
+  objective: read the owner's protected values from a response cached by an authorized request
+preconditions:
+  fixture: orders-two-tenant
+  identities: [customer-b, customer-a]
+  object: ORD-2001
+steps:
+  - id: baseline-owner-view
+    role: baseline
+    identity: customer-b
+    auth: valid
+    method: GET
+    path: /api/authz/orders/{object}/view
+    hypothesis: The owner can read their own view, and the response is stored where other callers may be served it. If this fails, the scenario is not testable.
+  - id: attack-cached-view
+    role: attack
+    identity: customer-a
+    auth: valid
+    method: GET
+    path: /api/authz/orders/{object}/view
+    hypothesis: A cached response is keyed by caller and is never served to another customer.
+denied_statuses: [404]
+expected_control: >
+  The view is answered for the owner only, and it is not served from a cache shared with other
+  callers. A non-owner receives 404 and no protected values.
+ground_truth:
+  adapters: [state, response]
+  check: >
+    The attack response contains none of the owner's protected values, and the state is
+    unchanged by the attack.
+detection_assertion:
+  status: not_evaluated
+  reason: Detection validation is Phase 4; this scenario makes no detection claim.
+evidence:
+  - sanitized_request
+  - sanitized_response
+  - state_diff
+side_effect_class: READ_ONLY
+cleanup:
+  - no cleanup required for a read-only scenario
+industry_mapping:
+  - "BFSI: shared caches that serve one customer's authorized response to another"
+regulatory_mapping: []
+negative_tests:
+  - API-BAS-AUTHZ-011 with the owner's request against the fixed build must return the owner's public view

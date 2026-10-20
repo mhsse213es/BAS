@@ -1231,3 +1231,51 @@ scenario says so in its description.
 
 - The Windows build (`build.ps1`) has not been run on this tranche.
 - Running GWAY-011 in a real lab needs the operator to start the lab with `-fault`.
+
+
+## Phase 24 - authorization tranche (API-BAS-AUTHZ 005, 008, 009, 011)
+
+Branch: `feature/api-bas-phase24`. Scope: the four remaining Phase 2 AUTHZ IDs. AUTHZ-001,
+002, 003, 004, 006, 007, 010 were already covered.
+
+### Scenarios
+
+| ID | Sub-technique | Claim | Vulnerable flaw | Fixed control | Denied |
+|---|---|---|---|---|---|
+| AUTHZ-005 | Cross-branch access | cross_identity | branch listing returns another branch's full records | caller's branch must match | 403 |
+| AUTHZ-008 | Group and scope inconsistency | function_level | group name "support" honoured as the audit:read scope | scope required | 403 |
+| AUTHZ-009 | Read vs delete permission | cross_identity | DELETE skips the owner check that the read route performs | owner required | 403 |
+| AUTHZ-011 | Cache-based leakage | cross_identity | owner's view cached in a cache shared by every caller, keyed by path | per-owner, not shared | 404 |
+
+Routes live under `/api/authz/` and do not change the routes of other scenarios. Each route
+carries a `LAB-AUTHZ-*` flaw. The shared cache is cleared on reseed.
+
+### Contract change, for review
+
+- The contract allowed only GET, PATCH and POST. AUTHZ-009 needs DELETE, because the
+  read-versus-delete difference is the point of the scenario. I allowed DELETE with no
+  body requirement, the same as GET. Mutating is still determined by the method, so a DELETE
+  step must be in a STATE_CHANGE_SANDBOX scenario, which the existing side-effect rule
+  enforces.
+
+### Verification
+
+- `go vet` and `go test ./internal/apibas/... -short` pass.
+- `TestPhase24_AuthzVulnerableFailsFixedPasses`: all four FAIL with exploitation against the
+  vulnerable build and PASS with control enforced against the fixed build.
+- `TestPhase24_AuthzFlawsAreRegistered`: each scenario has a planted flaw.
+
+### Limitations
+
+- AUTHZ-011 models a shared cache inside the lab process. It does not test a real CDN or
+  proxy cache, which would need a separate cache layer.
+- AUTHZ-008's "support" group is a lab convention. The real policy source is not modelled.
+
+### Coverage after this tranche
+
+- Phase 2 scope now covers 48 of 58 sub-techniques. Remaining 10: DISC 001, 004, 007, 008;
+  DATA 002, 008; ABUSE 008, 009; AUTHN 006; INTEG 004.
+
+### Still open
+
+- The Windows build (`build.ps1`) has not been run on this tranche.

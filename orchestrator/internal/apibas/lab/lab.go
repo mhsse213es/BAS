@@ -332,6 +332,8 @@ type Server struct {
 	// gwMu guards gwCounts, the gateway rate-limit counters (see gateway.go).
 	gwMu     sync.Mutex
 	gwCounts map[string]int
+	// sharedCache is the response cache of the vulnerable build (LAB-AUTHZ-CACHE-001), keyed by path.
+	sharedCache map[string]map[string]any
 }
 
 // New validates the configuration, seeds the store from the fixture and
@@ -355,6 +357,7 @@ func New(cfg Config) (*Server, error) {
 // reseed restores the store to the fixture's seed state. Callers must hold
 // s.mu, except during New where the server is not yet shared.
 func (s *Server) reseed() {
+	s.sharedCache = nil
 	s.roles = make(map[string]string)
 	s.otpFailures = make(map[string]int)
 	s.itemParent = make(map[string]string)
@@ -417,6 +420,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /lab/access-events", s.adminOnly(s.getAccessEvents))
 	s.registerInjection(mux)
 	s.registerGateway(mux)
+	s.registerAuthz(mux)
 	mux.HandleFunc("GET /lab/faults", s.adminOnly(s.listFaults))
 	if s.cfg.Mode == ModeVulnerable {
 		// LAB-GWAY-OVERRIDE-001: the vulnerable build honours a method-override header.
