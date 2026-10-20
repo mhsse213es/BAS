@@ -1,0 +1,59 @@
+id: API-BAS-DET-009
+name: Detection under delayed telemetry (cross-identity read)
+category: DET
+claim: cross_identity
+attack_objective: >
+  An authenticated customer reads another customer's order by substituting the order identifier, while the
+  SIEM receives access events late. Exploitability is the same as AUTHZ-001. The detection question is whether
+  the rule still reaches a verdict when the events arrive after its window closes.
+threat_model:
+  attacker: authenticated customer in tenant A
+  identity: customer-a
+  access_level: standard customer, valid token, no elevated role
+  objective: read customer-b's order while the telemetry pipeline is delayed
+preconditions:
+  fixture: orders-two-tenant
+  identities: [customer-a, customer-b]
+  object: ORD-2001
+  lab_faults: [telemetry-delayed]
+steps:
+  - id: baseline-owner-read
+    role: baseline
+    identity: customer-b
+    method: GET
+    path: /api/orders/{object}
+    hypothesis: The owner can read their own order. If this fails, the scenario is not testable.
+  - id: attack-cross-identity-read
+    role: attack
+    identity: customer-a
+    method: GET
+    path: /api/orders/{object}
+    hypothesis: The order-detail endpoint verifies that the caller owns the order before returning it.
+denied_statuses: [401, 403, 404]
+expected_control: >
+  The endpoint returns 403 (or 404) to a non-owner and discloses no protected values of the owner's order.
+ground_truth:
+  adapters: [state, response]
+  check: >
+    The state snapshot is identical before and after the attack, and the attack response contains none of the
+    owner's protected values.
+detection_assertion:
+  status: fixture_validated
+  reason: "Access events feed the elastic-security fixture with telemetry delayed three seconds. The runner's default detection window is two seconds, so the rule cannot see the attack event in time and the expected result is inconclusive, never not_detected. This is not a pass for DET-009: the blueprint requirement that detection holds under delay is not met at the default window. Detection holds only when the window covers the delay (tested separately). Fixture-validated, not live-SIEM-validated."
+evidence:
+  - sanitized_request
+  - sanitized_response
+  - state_diff
+side_effect_class: READ_ONLY
+cleanup:
+  - none; the scenario creates no records. Run-tagged cleanup is still available for runs that seed data.
+industry_mapping:
+  - "BFSI: detection of cross-customer access when log pipelines lag"
+regulatory_mapping: []
+negative_tests:
+  - API-BAS-DET-009 against the fixed build must PASS
+  - API-BAS-DET-009 without the telemetry-delayed fault must grade detected at the default window
+detection:
+  source: elastic-security
+  expect_rule: APIBAS-REL-004
+  min_severity: high

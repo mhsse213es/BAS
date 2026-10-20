@@ -8,6 +8,7 @@ import (
 
 	"github.com/audspect/bas/internal/apibas/contract"
 	"github.com/audspect/bas/internal/apibas/detect"
+	"github.com/audspect/bas/internal/apibas/grade"
 )
 
 // runTagKey carries the run tag on the context, so every request in a run is sent
@@ -25,6 +26,17 @@ type EventSource interface {
 // provenance of the fixture that produced it.
 func (r *Runner) detectionStage(ctx context.Context, s contract.Scenario, tag string, rep Report) Report {
 	if s.Detection == nil {
+		return rep
+	}
+	// A run that did not execute has no traffic to judge. Grading it not_detected would count a skipped
+	// scenario as a miss, so detection makes no claim and says why.
+	if rep.Outcome.Result == grade.SKIPPED || rep.Outcome.Result == grade.ERROR || len(rep.Exchanges) == 0 {
+		rep.DetectionProvenance = detect.ProvenanceFor(s.Detection.Source)
+		rep.Outcome.Detection = detect.NotEvaluated
+		rep.DetectionReason = "run did not execute: " + string(rep.Outcome.Result)
+		if rep.Detail != "" {
+			rep.DetectionReason += " (" + rep.Detail + ")"
+		}
 		return rep
 	}
 	policies := append([]contract.DetectionPolicy{*s.Detection}, s.AdditionalDetections...)
@@ -70,15 +82,15 @@ func (r *Runner) detectionStage(ctx context.Context, s contract.Scenario, tag st
 	return rep
 }
 
-// defaultDetectionWindow is how long the detection stage waits for delivery when the config sets none.
-const defaultDetectionWindow = 2 * time.Second
+// DefaultDetectionWindow is how long the detection stage waits for delivery when the config sets none.
+const DefaultDetectionWindow = 2 * time.Second
 
 // collectEvents polls the SIEM until it has delivered the run's expected events, or the window closes.
 // Events that arrive after the window are not seen by the detection stage.
 func (r *Runner) collectEvents(ctx context.Context, tag string, expected int) ([]detect.Event, error) {
 	window := r.cfg.DetectionWindow
 	if window <= 0 {
-		window = defaultDetectionWindow
+		window = DefaultDetectionWindow
 	}
 	deadline := time.Now().Add(window)
 	for {

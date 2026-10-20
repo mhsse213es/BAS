@@ -56,7 +56,9 @@ type Config struct {
 	// internal route. When empty, the fixed build refuses every internal call.
 	InternalToken string
 	// Faults names dependency faults to hold active for the life of the lab, for example
-	// "authz-store-down". A scenario that needs one declares it as a lab_faults precondition.
+	// "authz-store-down", "telemetry-missing" (access events are never delivered) or "telemetry-delayed"
+	// (events reach the SIEM only after a three-second hold). A scenario that needs one declares it as a
+	// lab_faults precondition.
 	Faults []string
 	// ExtractBodyIDs turns on selective extraction of known order IDs from request bodies, for detection of
 	// body-carried object references (see extract.go). It is off by default: bodies are not read.

@@ -1927,3 +1927,62 @@ Exploitability is identical in all four cases. Telemetry changes only the detect
 - Repeatability is checked per test run (two consecutive passes), not as a standing catalog gate.
 - Five runs on this machine do not prove stability across machines or workloads.
 - Windows `build.ps1` run and the staging ABUSE-002 item remain carry-overs.
+
+
+## Phase 35 addendum 2: API-BAS-DET-009 (telemetry delay)
+
+Blueprint DET-009: detection holds when telemetry is delayed or partly missing.
+
+### Scenario
+
+- `API-BAS-DET-009` (`catalog/API-BAS-DET-009.yaml`), category DET, claim cross_identity. The attack is the
+  AUTHZ-001 cross-identity read, so exploitability is the same. Its precondition is `lab_faults: [telemetry-delayed]`.
+- The lab holds each access event for 3 seconds. The runner's default detection window is 2 seconds, so at the
+  default window the rule cannot see the attack event in time.
+
+### Expectations (written before the run)
+
+| Configuration | Window | Expected detection |
+|---|---|---|
+| declared: telemetry-delayed | default (2s) | inconclusive, reason "telemetry incomplete" |
+| telemetry-delayed | 6s | detected |
+| telemetry-delayed + telemetry-missing | default | inconclusive |
+| no delay fault | default | the run is SKIPPED (precondition); detection not_evaluated |
+
+### Result
+
+- The declared configuration grades `inconclusive`, never `not_detected`. The blueprint requirement that detection
+  holds under delay is **not met at the default window**. The scenario records this as the observed result. It is
+  not a pass.
+- Detection holds only when the window covers the hold, and the 6s configuration shows that. Whether a production SIEM
+  window covers real delays is a deployment question this fixture does not answer.
+- The DET-009 table entry is `fixture_validated` for the stated expectation, which is repeatable across two passes in
+  both builds (`TestPhase34_DetectionMatchesDeclaredExpectations`, `TestDET009DetectionUnderTelemetryStates`).
+
+### Defect found and fixed while testing DET-009
+
+- **Skipped runs were graded `not_detected`.** The runner refuses a scenario whose required lab fault is absent, and
+  returns a SKIPPED report with no traffic. The detection stage still ran and treated zero events as a miss. That counts
+  an unexecuted scenario as a false negative.
+- **Fix.** A run that is SKIPPED or ERROR, or has no exchanges, now gets detection `not_evaluated` with a reason
+  naming the outcome. `detect.NotEvaluated` is distinct from `NotDetected`.
+- **Impact on earlier numbers.** None. Every scenario declaring a detection block executed in earlier measured runs,
+  so no recorded count changes.
+
+### Counts after this addendum
+
+```
+Catalogued:    70
+Exploitability: 70/70 validated
+Detection declared: 31 (vulnerable: detected 14, not_detected 16, inconclusive 1;
+                        fixed: detected 16, not_detected 14, inconclusive 1)
+Not evaluated (no detection block): 39 of 70
+```
+
+### Still open
+
+- Detection coverage is not claimed for the 39 not-evaluated scenarios.
+- DET-009's window result depends on the fixture's 2s window, not on any production SIEM setting.
+- Repeatability is per test run, not a standing catalog gate.
+- AUTHZ-007 is `fixture_validated` on `main` (commit a89ccc96). Its reason states both configurations and the
+  multiple-owner contract. The earlier recommendation to narrow it is superseded unless you ask for that change.

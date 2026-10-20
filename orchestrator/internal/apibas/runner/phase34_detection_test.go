@@ -3,15 +3,22 @@ package runner_test
 import (
 	"fmt"
 	"net/url"
+	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/audspect/bas/internal/apibas/catalog"
 	"github.com/audspect/bas/internal/apibas/contract"
 	"github.com/audspect/bas/internal/apibas/detect"
 	"github.com/audspect/bas/internal/apibas/fixture"
 	"github.com/audspect/bas/internal/apibas/lab"
+	"github.com/audspect/bas/internal/apibas/runner"
 )
+
+// labTelemetryDelay is the hold the lab applies under the telemetry-delayed fault (lab/access.go). The lab
+// constant is unexported, so the test states it and TestDET009 checks it against the lab's behaviour.
+const labTelemetryDelay = 3 * time.Second
 
 // forgedIdentityHeaders are the request headers the vulnerable build trusts as the caller's identity. The
 // access log records the identity the product accepted, so a forged header makes an event look like the
@@ -98,6 +105,12 @@ func additionalRules(s contract.Scenario) []string {
 // expectedDetection is the expectation for one rule in one build, with extraction set as given.
 func expectedDetection(t *testing.T, fx fixture.Fixture, s contract.Scenario, rule string, mode lab.Mode, extract bool) string {
 	t.Helper()
+	// Delayed telemetry: the lab holds events for labTelemetryDelay. If that delay exceeds the runner's
+	// detection window, the rule cannot see the attack event in time, so the result is inconclusive for every
+	// rule. This follows from the two constants, not from observed output.
+	if slices.Contains(s.Preconditions.LabFaults, "telemetry-delayed") && labTelemetryDelay > runner.DefaultDetectionWindow {
+		return detect.Inconclusive
+	}
 	switch rule {
 	case "APIBAS-REL-004":
 		return ownershipDetection(t, fx, s, mode, extract)

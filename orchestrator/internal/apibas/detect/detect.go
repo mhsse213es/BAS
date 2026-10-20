@@ -18,6 +18,9 @@ const (
 	Detected     = "detected"
 	NotDetected  = "not_detected"
 	Inconclusive = "inconclusive"
+	// NotEvaluated means detection made no claim: the run did not execute, so there was no traffic to judge.
+	// It is distinct from NotDetected, which is a judgement on executed traffic.
+	NotEvaluated = "not_evaluated"
 )
 
 // Provenance labels every detection result from this package.

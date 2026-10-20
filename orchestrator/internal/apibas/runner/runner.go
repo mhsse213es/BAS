@@ -93,7 +93,7 @@ type Config struct {
 	Faults FaultReader
 	HTTP   *http.Client
 	// DetectionWindow is how long the detection stage waits for the SIEM to deliver the run's events.
-	// Zero means defaultDetectionWindow. Events delivered after the window are not seen.
+	// Zero means DefaultDetectionWindow. Events delivered after the window are not seen.
 	DetectionWindow time.Duration
 	// Machine is the operator's label for this hardware. Calibration records are bound to it.
 	Machine string
