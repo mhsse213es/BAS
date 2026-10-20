@@ -470,3 +470,25 @@ func RequirePermission(perm Permission) func(http.Handler) http.Handler {
 		})
 	}
 }
+
+// RequireAnyPermission admits a caller holding at least one of the permissions. A route that serves
+// several approval kinds uses it at the door; the handler then checks the exact permission for the
+// kind it is acting on.
+func RequireAnyPermission(perms ...Permission) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			claims, ok := ClaimsFrom(r.Context())
+			if !ok {
+				http.Error(w, `{"error":"forbidden"}`, http.StatusForbidden)
+				return
+			}
+			for _, p := range perms {
+				if HasPermission(claims.Role, p) {
+					next.ServeHTTP(w, r)
+					return
+				}
+			}
+			http.Error(w, `{"error":"forbidden"}`, http.StatusForbidden)
+		})
+	}
+}

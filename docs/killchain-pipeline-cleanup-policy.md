@@ -86,5 +86,12 @@ Built and tested:
 
 Not built, by decision:
 - Live injection. The gate exists, but no provider writes, and no campaign path reaches it.
-- Deletion. There is no delete function, and no route for one.
+- Deletion, now built behind approval: a cleanup request previews the run's tagged records on the
+  server and binds the exact candidate set; execution re-checks that set, refuses without spending
+  the approval if it changed, then deletes only those records by identifier, marker and tag.
+  Verified against the lab: exact matches deleted, near-miss records (other run, untagged) kept.
+- Cleanup second-person rule: enforced for customer deployments at approval time; lab may self-approve.
+- Not yet built for cleanup: the 30-day retention window is not applied, so a preview lists every
+  tagged record of the run regardless of age. This must be added before cleanup is used on a customer
+  system.
 - Connectors other than Elastic. They report unsupported.

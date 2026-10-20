@@ -322,10 +322,11 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.Get("/api/cloud-campaigns/{id}", h.GetCloudCampaign)
 		// Pipeline injection approvals. Every route needs CanApprovePipelineInjection; the handlers
 		// enforce the permission for each approval kind again.
-		r.With(auth.RequirePermission(auth.CanApprovePipelineInjection)).Post("/api/pipeline-approvals", h.CreatePipelineApproval)
-		r.With(auth.RequirePermission(auth.CanApprovePipelineInjection)).Get("/api/pipeline-approvals/{id}", h.GetPipelineApproval)
-		r.With(auth.RequirePermission(auth.CanApprovePipelineInjection)).Post("/api/pipeline-approvals/{id}/approve", h.ApprovePipelineApproval)
-		r.With(auth.RequirePermission(auth.CanApprovePipelineInjection)).Post("/api/pipeline-approvals/{id}/refuse", h.RefusePipelineApproval)
+		r.With(auth.RequireAnyPermission(auth.CanApprovePipelineInjection, auth.CanApprovePipelineCleanup)).Post("/api/pipeline-approvals", h.CreatePipelineApproval)
+		r.With(auth.RequireAnyPermission(auth.CanApprovePipelineInjection, auth.CanApprovePipelineCleanup)).Get("/api/pipeline-approvals/{id}", h.GetPipelineApproval)
+		r.With(auth.RequireAnyPermission(auth.CanApprovePipelineInjection, auth.CanApprovePipelineCleanup)).Post("/api/pipeline-approvals/{id}/approve", h.ApprovePipelineApproval)
+		r.With(auth.RequireAnyPermission(auth.CanApprovePipelineInjection, auth.CanApprovePipelineCleanup)).Post("/api/pipeline-approvals/{id}/refuse", h.RefusePipelineApproval)
+		r.With(auth.RequirePermission(auth.CanApprovePipelineCleanup)).Post("/api/pipeline-approvals/{id}/execute-cleanup", h.ExecuteCleanupApproval)
 		r.Get("/api/emailgw-runs", h.ListEmailGWRuns)
 		r.Get("/api/emailgw-runs/summary", h.GetEmailGWRunsSummary)
 		r.Get("/api/emailgw-runs/{id}", h.GetEmailGWRun)
