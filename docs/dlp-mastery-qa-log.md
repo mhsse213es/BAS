@@ -219,6 +219,38 @@ This is the single place to check before claiming either DLP vendor connector is
 
 **Limits:** L1 only, with no sink. A refusal cannot be attributed to a specific control. The authorized versus unauthorized split is a label the operator records in run notes, not something the scenario decides. Remote execution, credential use and non-SMB protocols are not covered.
 
+### 23. PnP scenario (dlp-exfiltration-pnp) — not run; needs an operator-connected peripheral — open
+
+**Status:** Open (commit fdf47df5). Signed and catalogued. Not run.
+
+**Lab requirement:** a removable peripheral, connected for the run, and its drive letter in `BAS_DLP_PNP_DRIVE_LETTER`. Until it is set, the step grades Untested.
+
+**Limits:** the PnP authorization decision itself is not tested. Hardware-ID allow lists and device-class exceptions need a device policy.
+
+### 24. Bluetooth scenario (dlp-exfiltration-bluetooth) — not run; OBEX file sending not tested — open
+
+**Status:** Open (commit fdf47df5). Signed and catalogued. Not run.
+
+**Lab requirement:** a Bluetooth storage peripheral mounted as a folder, with the path in `BAS_DLP_BT_STORAGE_PATH`.
+
+**Limits:** OBEX file sending to a paired device is not tested. Windows has no scripted path for it from PowerShell. Any result from this scenario is about storage peripherals only.
+
+### 25. MTP scenario (dlp-exfiltration-mtp) — not run; asynchronous, so no block is ever recorded — open
+
+**Status:** Open (commit fdf47df5). Signed and catalogued. Not run.
+
+**Lab requirement:** a phone connected over USB with MTP enabled, and its name shown in Explorer, in `BAS_DLP_MTP_DEVICE_NAME`.
+
+**Limits:** Shell copies to MTP devices are asynchronous, and the Shell does not say why a transfer fails. A missing file is recorded as unknown. A file left on the device is reported as a cleanup gap. DLP-MOB remains unbuilt (item 3).
+
+### 26. Application file access scenario (dlp-exfiltration-app-file-access) — not run; approved-application policy is an operator decision — open
+
+**Status:** Open (commit fdf47df5). Signed and catalogued. The happy path was run locally in temporary folders and works. Not run against a protected folder under an access policy.
+
+**Lab requirement:** a folder the access policy under test protects, set in `BAS_DLP_RESTRICTED_DIR`. Whether PowerShell is an approved application is an operator decision recorded in the run notes.
+
+**Limits:** only PowerShell is the test application. Other named applications, such as a browser or a sync client, are not covered.
+
 ## Resolved items
 
 - Item 11: the eight unclaimed AI-prompt and DB-export steps are catalogued (commit 226b1f40). Values come from each step's own command; no payload changed. Both drift checks pass.
