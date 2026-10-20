@@ -4,6 +4,44 @@ Status: **proposed, for review.** No record-path code changes until this plan
 is approved. Parent contract:
 `docs/superpowers/specs/2026-10-20-dlp-metrics-definitions-draft.md` §5–6.
 
+## 0. Blockers (must be resolved before implementation)
+
+**B1. Destination-side block evidence contract — APPROVED, with conditions.**
+
+Classification of each scored decision (approved 2026-10-20):
+
+- **Confirmed blocked:** a DLP or SIEM event explicitly reports `action = block`,
+  and its sink token or correlation ID matches the relevant test step.
+- **Inconclusive:** the sink receipt is absent; a local marker exists without a
+  matching authoritative event; the correlation fails; or the event does not
+  establish a block.
+- **Not blocked:** a correlated event explicitly establishes that the action was
+  allowed or otherwise not blocked. Never inferred from missing evidence.
+- **Conflicting evidence:** if correlated sources disagree, the conflict is
+  preserved and the result is Inconclusive until resolved.
+
+Each evidence record retains: source, event ID, correlation identifier, event
+timestamp, reported action, and verification status.
+
+**Adapter conformance — UNVERIFIED.** This approves the contract, not the claim
+that `internal/vendors/*` implements it correctly. None of the adapters has been
+verified against a live tenant. Conformance is labelled unverified until tested,
+and no metric may rely on a block from an adapter until then.
+
+**B2. `test_event_timestamp` semantics — VERIFIED, field stays unpopulated.**
+Checked in `agent/executor.go`:
+- `StartedAt` is captured before the command launches (line 188). It is the
+  closest candidate for the start of the controlled test event, but it is the
+  agent's pre-launch time, not an independently verified test-event start.
+- `ExecutedAt` is set when the result is built, after the process exits
+  (lines 292 and 448). It marks completion. It must not be used as the
+  test-event start.
+- Neither field is a verified controlled-event timestamp. `test_event_timestamp`
+  remains unset. Latency stays undefined until a test-event start is defined and
+  verified at the agent boundary.
+
+Implementation does not start while B1 and B2 are open.
+
 ## 1. Why
 
 `dlp_evidence_records` (migration in `internal/db/postgres.go`) stores one
@@ -32,23 +70,25 @@ the evidence the verifier already uses.
 
 | Expected | Observed (evidence) | decision_class |
 |---|---|---|
-| Block | Blocked, **sink-receipt absent** | Inconclusive (not a confirmed block) |
-| Block | Succeeded, sink-receipt present | FN |
-| Allow | Succeeded, sink-receipt present | TN |
-| Allow | Succeeded, local-marker only | Inconclusive |
+| Block | Correlated authoritative event, `action = block` (confirmed blocked) | TP |
+| Block | Correlated event establishes not blocked | FN |
+| Block | Sink receipt absent, local marker only, correlation fails, or no establishing event | Inconclusive |
+| Block | Correlated sources conflict | Inconclusive (conflict preserved) |
+| Allow | Correlated event establishes not blocked, or sink receipt present for an allowed transfer | TN |
+| Allow | Correlated event reports `action = block` | FP |
+| Allow | Local marker only, or no establishing event | Inconclusive |
 | Any | Unknown / no observation | Untested |
 | Any | Channel unsupported in environment | Unsupported |
 
 Consequences to review explicitly:
 
-- **Under these rules, today's DLP data yields only TN and FN, and only from
-  sink-confirmed successes.** A block never produces TP or FP, because a block
-  is evidenced only by an absent sink receipt or a local marker, and both are
-  Inconclusive. Precision and recall therefore cannot be computed from DLP
-  records until a destination-side block signal exists. This is a limit of the
-  evidence, not a bug in the rules.
-- FP (control acted where it should have allowed) would need a confirmed
-  block of an allowed action, which also needs destination-side evidence.
+- **A block counts as TP or FP only from a correlated authoritative event.**
+  Today's sink receipts confirm transfers that succeeded, not blocks, so they
+  support TN and FN, not TP or FP. Until a DLP or SIEM adapter is verified
+  against a live tenant, no adapter-sourced block may be counted.
+- **Rows written before any adapter exists cannot yield TP or FP.** Precision
+  and recall stay uncomputable for DLP records until then. This is a limit of
+  the evidence, not a bug in the rules.
 
 **evidence_source** is taken directly from the existing `collection_method`
 (`sink-receipt` or `local-marker`), or `none` when no observation was made.
@@ -89,18 +129,37 @@ against the agent code before it is used. Until then it is not populated.
 ## 7. Test plan (for implementation, after approval)
 
 - Derivation table: every row above has a unit test.
+- Block contract (B1), one test per class:
+  - correlated authoritative event, action = block, token matches → TP
+  - correlated event establishes not blocked → FN (expected Block) / TN (expected Allow)
+  - correlated event, action = block, expected Allow → FP
+  - sink receipt absent → Inconclusive
+  - local marker only, no matching authoritative event → Inconclusive
+  - correlation identifier fails to match → Inconclusive
+  - correlated sources disagree → Inconclusive, both sources preserved
+  - no evidence of a block from missing data alone → never TP
+- Evidence record retains source, event ID, correlation identifier, event
+  timestamp, reported action and verification status; each has a presence test.
+- Adapter conformance: every adapter-sourced test is labelled
+  `conformance=unverified` in its output until a live-tenant test exists.
 - Seam test through `Tick`: a sink-confirmed Allow produces TN; a local-marker
   block produces Inconclusive, not TP; a missing receipt produces Inconclusive.
 - Migration test: a row written by the current code has `NULL` for every new
   field after the migration, and its existing fields are unchanged.
 - Endpoint test: existing response fields unchanged.
 
-## 8. Open questions for review
+## 8. Status of open questions
 
-1. Is `SimulationResult.ExecutedAt` the controlled test-event start? Needs
-   agent-side verification before `test_event_timestamp` is populated.
-2. Should `rule_version` be added in this change or a follow-up? Proposed: in
-   this change, since it is needed to keep historical derivations honest.
-3. Confirm the consequence in §3: DLP precision and recall are not computable
-   until a destination-side block signal exists. Approve that as the expected
-   state, or direct where the block signal should come from.
+1. **B2 — OPEN.** `ExecutedAt` is the completion time and `StartedAt` the
+   pre-launch time (verified in `agent/executor.go`). Neither is a trustworthy
+   controlled test-event start. `test_event_timestamp` stays unset, latency stays
+   undefined, and implementation does not begin until a test-event start is
+   defined and verified at the agent boundary.
+2. **`rule_version` — proposed for this change**, so historical derivations stay
+   honest. Pending approval with the rest of the plan.
+3. **B1 — RESOLVED.** The contract in §0 is approved, with the four-class
+   distinction and the adapter-conformance label. Precision and recall remain
+   uncomputable until an adapter is verified against a live tenant.
+
+**Gate:** implementation and any push remain blocked until B2 is resolved and
+this plan is reviewed again.
