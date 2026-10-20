@@ -55,6 +55,7 @@ const (
 	ReasonTargetUnreachable    = "TARGET_UNREACHABLE"
 	ReasonTargetFault          = "TARGET_FAULT"
 	ReasonAdapterReadFailed    = "ADAPTER_READ_FAILED"
+	ReasonLabConfigMismatch    = "LAB_CONFIG_MISMATCH"
 )
 
 // Exchange is one captured request/response pair, after redaction.

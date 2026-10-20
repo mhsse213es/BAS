@@ -45,7 +45,8 @@ var claims = map[string]bool{
 // Ground-truth adapters defined so far. Every scenario requires "state".
 var groundTruthAdapters = map[string]bool{"state": true, "response": true}
 
-var authModes = map[string]bool{"valid": true, "none": true, "revoked": true}
+// alg_none sends an unsigned JWT whose subject is the forge_as identity.
+var authModes = map[string]bool{"valid": true, "none": true, "revoked": true, "alg_none": true}
 
 var idPattern = regexp.MustCompile(`^API-BAS-([A-Z]+)-(\d{3})$`)
 
@@ -93,13 +94,17 @@ type Preconditions struct {
 // Auth selects the credential: "valid" (the identity's token), "none" (no
 // credential) or "revoked" (the identity's revoked token). Empty means valid.
 type Step struct {
-	ID         string `yaml:"id"`
-	Role       string `yaml:"role"`
-	Identity   string `yaml:"identity"`
-	Auth       string `yaml:"auth"`
-	Method     string `yaml:"method"`
-	Path       string `yaml:"path"`
-	Body       string `yaml:"body"`
+	ID       string `yaml:"id"`
+	Role     string `yaml:"role"`
+	Identity string `yaml:"identity"`
+	Auth     string `yaml:"auth"`
+	Method   string `yaml:"method"`
+	Path     string `yaml:"path"`
+	Body     string `yaml:"body"`
+	// Headers are extra request headers, for example a method-override header.
+	Headers map[string]string `yaml:"headers"`
+	// ForgeAs names the identity whose subject an alg_none token carries.
+	ForgeAs    string `yaml:"forge_as"`
 	Hypothesis string `yaml:"hypothesis"`
 }
 
@@ -229,11 +234,17 @@ func (s Scenario) validateSteps() error {
 		case auth != "none" && st.Identity == "":
 			return fmt.Errorf("contract: %s: step %s has no identity", s.ID, st.ID)
 		}
-		if st.Method != "GET" && st.Method != "PATCH" {
+		if auth == "alg_none" && (st.ForgeAs == "" || st.Identity == "anonymous") {
+			return fmt.Errorf("contract: %s: step %s uses alg_none and needs forge_as", s.ID, st.ID)
+		}
+		if auth != "alg_none" && st.ForgeAs != "" {
+			return fmt.Errorf("contract: %s: step %s sets forge_as but auth is %s", s.ID, st.ID, auth)
+		}
+		if st.Method != "GET" && st.Method != "PATCH" && st.Method != "POST" {
 			return fmt.Errorf("contract: %s: step %s method %s is not supported", s.ID, st.ID, st.Method)
 		}
-		if st.Method == "PATCH" && strings.TrimSpace(st.Body) == "" {
-			return fmt.Errorf("contract: %s: step %s is PATCH and needs a body", s.ID, st.ID)
+		if (st.Method == "PATCH" || st.Method == "POST") && strings.TrimSpace(st.Body) == "" {
+			return fmt.Errorf("contract: %s: step %s is %s and needs a body", s.ID, st.ID, st.Method)
 		}
 		if st.Method == "GET" && st.Body != "" {
 			return fmt.Errorf("contract: %s: step %s is GET and must not carry a body", s.ID, st.ID)

@@ -124,3 +124,16 @@ func (a LabAdmin) send(ctx context.Context, method, path string, body any, out a
 	}
 	return json.NewDecoder(resp.Body).Decode(out)
 }
+
+// TokenStatus reports whether the lab knows a token and whether it is revoked.
+// It implements RevocationChecker. The token is sent only to the lab admin API.
+func (a LabAdmin) TokenStatus(ctx context.Context, token string) (bool, bool, error) {
+	var res struct {
+		Known   bool `json:"known"`
+		Revoked bool `json:"revoked"`
+	}
+	if err := a.send(ctx, http.MethodPost, "/lab/token-status", map[string]string{"token": token}, &res); err != nil {
+		return false, false, err
+	}
+	return res.Known, res.Revoked, nil
+}

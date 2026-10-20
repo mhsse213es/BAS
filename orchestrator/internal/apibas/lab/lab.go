@@ -14,6 +14,7 @@
 package lab
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -105,6 +106,27 @@ func Flaws() []Flaw {
 			Description: "A debug route is reachable by any authenticated customer and returns full records.",
 			Oracle: "Vulnerable: a customer token on /debug/orders/{id} returns the owner's protected values (exposed). " +
 				"Fixed: the route is not mounted and returns 404.",
+		},
+		{
+			ID:          "LAB-AUTHN-ALG-001",
+			ScenarioID:  "API-BAS-AUTHN-003",
+			Description: "The token verifier accepts an unsigned JWT (alg none) and trusts its subject claim.",
+			Oracle: "Vulnerable: an unsigned token whose subject is customer-b reads customer-b's order (exploited). " +
+				"Fixed: the same token returns 401.",
+		},
+		{
+			ID:          "LAB-DATA-LIST-001",
+			ScenarioID:  "API-BAS-DATA-004",
+			Description: "GET /api/orders returns every customer's full record, with no owner filter and no limit.",
+			Oracle: "Vulnerable: a customer's list call returns another customer's protected values (exposed). " +
+				"Fixed: the list returns only the caller's public projection, capped, with no protected values.",
+		},
+		{
+			ID:          "LAB-GWAY-OVERRIDE-001",
+			ScenarioID:  "API-BAS-GWAY-003",
+			Description: "A POST with X-HTTP-Method-Override: PATCH reaches the PATCH admin route, bypassing the method policy.",
+			Oracle: "Vulnerable: a customer's POST with the override header changes the order status (state change). " +
+				"Fixed: the POST is refused with 405 and the status is unchanged.",
 		},
 		{
 			ID:          "LAB-AUTHZ-MASS-001",
@@ -203,6 +225,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("PATCH /api/orders/{id}", s.patchOrder)
 	mux.HandleFunc("PATCH /api/admin/orders/{id}/status", s.adminSetStatus)
 	mux.HandleFunc("GET /api/v1/orders/{id}", s.getOrderV1)
+	mux.HandleFunc("GET /api/orders", s.listOrders)
+	mux.HandleFunc("POST /lab/token-status", s.adminOnly(s.tokenStatus))
 	mux.HandleFunc("GET /api/orders/{id}/summary", s.getSummary)
 	if s.cfg.Mode == ModeVulnerable {
 		// The debug route exists only in the vulnerable build (LAB-DISC-DEBUG-001).
@@ -213,7 +237,23 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("DELETE /lab/runs/{tag}", s.adminOnly(s.cleanupRun))
 	mux.HandleFunc("POST /lab/reset", s.adminOnly(s.resetFixture))
 	mux.HandleFunc("GET /lab/audit", s.adminOnly(s.getAudit))
+	if s.cfg.Mode == ModeVulnerable {
+		// LAB-GWAY-OVERRIDE-001: the vulnerable build honours a method-override header.
+		return methodOverride(mux)
+	}
 	return mux
+}
+
+// methodOverride rewrites a POST carrying X-HTTP-Method-Override: PATCH into a
+// PATCH before routing. Only the vulnerable build wraps the mux (LAB-GWAY-OVERRIDE-001),
+// so the fixed build routes the POST by its real method and returns 405.
+func methodOverride(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost && r.Header.Get("X-HTTP-Method-Override") == http.MethodPatch {
+			r.Method = http.MethodPatch
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 // identify reads the bearer credential. It returns the customer the token
@@ -229,6 +269,13 @@ func (s *Server) identify(r *http.Request) (string, authState) {
 		return "", authInvalid
 	}
 	tok := strings.TrimPrefix(h, prefix)
+	if s.cfg.Mode == ModeVulnerable {
+		// LAB-AUTHN-ALG-001: the vulnerable verifier accepts an unsigned token and
+		// trusts its subject claim without checking any signature.
+		if sub, ok := unsignedSubject(tok); ok {
+			return sub, authOK
+		}
+	}
 	customer, ok := s.cfg.Tokens[tok]
 	if !ok {
 		return "", authInvalid
@@ -529,6 +576,82 @@ func publicBody(o *Order) map[string]any {
 		body[k] = v
 	}
 	return body
+}
+
+// listOrders is the collection endpoint. The vulnerable build returns every
+// record in full with no limit; the fixed build returns the caller's own records
+// as a public projection, capped (LAB-DATA-LIST-001).
+func (s *Server) listOrders(w http.ResponseWriter, r *http.Request) {
+	caller, st := s.identify(r)
+	if st != authOK {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthenticated"})
+		return
+	}
+	const fixedCap = 50
+	s.mu.Lock()
+	ids := make([]string, 0, len(s.orders))
+	for id := range s.orders {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	rows := make([]map[string]any, 0, len(ids))
+	for _, id := range ids {
+		o := s.orders[id]
+		if s.cfg.Mode == ModeVulnerable {
+			rows = append(rows, orderBody(o))
+			continue
+		}
+		if o.OwnerID == caller && len(rows) < fixedCap {
+			rows = append(rows, publicBody(o))
+		}
+	}
+	s.mu.Unlock()
+	writeJSON(w, http.StatusOK, rows)
+}
+
+// tokenStatus reports to the admin caller whether the lab knows a token and
+// whether it is revoked. The runner uses it as a guard before grading a
+// revoked-token scenario.
+func (s *Server) tokenStatus(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Token string `json:"token"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Token == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "token is required"})
+		return
+	}
+	_, known := s.cfg.Tokens[req.Token]
+	writeJSON(w, http.StatusOK, map[string]bool{"known": known, "revoked": s.revoked[req.Token]})
+}
+
+// unsignedSubject returns the subject of an unsigned JWT (alg none, empty
+// signature). It is used only by the vulnerable build.
+func unsignedSubject(tok string) (string, bool) {
+	parts := strings.Split(tok, ".")
+	if len(parts) != 3 || parts[2] != "" {
+		return "", false
+	}
+	hdr, err := base64.RawURLEncoding.DecodeString(parts[0])
+	if err != nil {
+		return "", false
+	}
+	var h struct {
+		Alg string `json:"alg"`
+	}
+	if json.Unmarshal(hdr, &h) != nil || !strings.EqualFold(h.Alg, "none") {
+		return "", false
+	}
+	pl, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		return "", false
+	}
+	var c struct {
+		Sub string `json:"sub"`
+	}
+	if json.Unmarshal(pl, &c) != nil || c.Sub == "" {
+		return "", false
+	}
+	return c.Sub, true
 }
 
 func orderBody(o *Order) map[string]any {

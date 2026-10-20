@@ -1,0 +1,58 @@
+id: API-BAS-GWAY-003
+name: HTTP method override bypasses the method policy
+category: GWAY
+claim: function_level
+attack_objective: >
+  A customer sends a POST with a method-override header to reach an administrative
+  PATCH route that the gateway's method policy is meant to keep from customers.
+threat_model:
+  attacker: authenticated customer with no admin role
+  identity: customer-a
+  access_level: standard customer, valid token, can set request headers
+  objective: change an order status through a PATCH-only admin route by overriding the method
+preconditions:
+  fixture: orders-two-tenant
+  identities: [customer-b, customer-a]
+  object: ORD-2001
+steps:
+  - id: baseline-owner-read
+    role: baseline
+    identity: customer-b
+    auth: valid
+    method: GET
+    path: /api/orders/{object}
+    hypothesis: The owner can read their order. If this fails, the scenario is not testable.
+  - id: attack-method-override
+    role: attack
+    identity: customer-a
+    auth: valid
+    method: POST
+    path: /api/admin/orders/{object}/status
+    headers:
+      X-HTTP-Method-Override: PATCH
+    body: '{"status": "refunded"}'
+    hypothesis: The method policy routes the POST by its real method, so the override is ignored and the request is refused.
+denied_statuses: [403, 405]
+expected_control: >
+  The POST is refused (405 or 403) even with the override header, and the order
+  status is unchanged.
+ground_truth:
+  adapters: [state, response]
+  check: >
+    The order status is identical before and after the attack; the attack
+    response discloses no protected values.
+detection_assertion:
+  status: not_evaluated
+  reason: Detection validation is Phase 4; this scenario makes no detection claim.
+evidence:
+  - sanitized_request
+  - sanitized_response
+  - state_diff
+side_effect_class: STATE_CHANGE_SANDBOX
+cleanup:
+  - reset the lab to its fixture seed after the run
+industry_mapping:
+  - "BFSI: method-policy bypass on privileged order-status operations"
+regulatory_mapping: []
+negative_tests:
+  - API-BAS-GWAY-003 against the fixed build must PASS

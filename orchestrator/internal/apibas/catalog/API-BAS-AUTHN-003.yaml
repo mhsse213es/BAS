@@ -1,0 +1,55 @@
+id: API-BAS-AUTHN-003
+name: Unsigned JWT (alg none) accepted as another customer
+category: AUTHN
+claim: authentication
+attack_objective: >
+  An attacker forges an unsigned JWT that names another customer as its subject,
+  and the API accepts it because the token signature is never verified.
+threat_model:
+  attacker: authenticated customer in tenant A who can edit token contents
+  identity: customer-a
+  access_level: holds only their own valid token; no key material
+  objective: read customer-b's order by forging an unsigned token for customer-b
+preconditions:
+  fixture: orders-two-tenant
+  identities: [customer-b, customer-a]
+  object: ORD-2001
+steps:
+  - id: baseline-owner-read
+    role: baseline
+    identity: customer-b
+    auth: valid
+    method: GET
+    path: /api/orders/{object}
+    hypothesis: The owner can read their order with a valid token. If this fails, the scenario is not testable.
+  - id: attack-forged-alg-none-token
+    role: attack
+    identity: customer-a
+    auth: alg_none
+    forge_as: customer-b
+    method: GET
+    path: /api/orders/{object}
+    hypothesis: The verifier checks the signature, so an unsigned token is refused as invalid.
+denied_statuses: [401]
+expected_control: >
+  The endpoint returns 401 for an unsigned token and discloses no protected values.
+ground_truth:
+  adapters: [state, response]
+  check: >
+    The state is unchanged by the attack and the attack response contains none
+    of the owner's protected values.
+detection_assertion:
+  status: not_evaluated
+  reason: Detection validation is Phase 4; this scenario makes no detection claim.
+evidence:
+  - sanitized_request
+  - sanitized_response
+  - state_diff
+side_effect_class: READ_ONLY
+cleanup:
+  - none; the scenario creates no records
+industry_mapping:
+  - "BFSI: token forgery against customer and account APIs"
+regulatory_mapping: []
+negative_tests:
+  - API-BAS-AUTHN-003 against the fixed build must PASS

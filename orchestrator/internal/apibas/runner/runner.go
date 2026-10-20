@@ -16,6 +16,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"encoding/base64"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -56,8 +57,19 @@ type Resetter interface {
 	Reset(ctx context.Context) error
 }
 
+// RevocationChecker asks the lab whether a token is known and revoked. The
+// revoked-token scenario uses it as a guard: if the lab does not report the
+// credential as revoked, the lab is misconfigured and the result would be a
+// false pass, so the run is an ERROR instead.
+type RevocationChecker interface {
+	TokenStatus(ctx context.Context, token string) (known, revoked bool, err error)
+}
+
 // Reason added in Phase 2: cleanup of a sandbox run did not succeed.
 const ReasonCleanupFailed = "CLEANUP_FAILED"
+
+// Reason added in Phase 3: the lab does not match the scenario's expectations.
+const ReasonLabConfigMismatch = "LAB_CONFIG_MISMATCH"
 
 const maxEvidenceBody = 2048
 
@@ -167,6 +179,20 @@ func (r *Runner) Run(ctx context.Context, s contract.Scenario) (Report, error) {
 	if err != nil {
 		return r.skip(rep, grade.ReasonPreconditionMissing, err.Error()), nil
 	}
+	if attackAuth(attack) == "revoked" {
+		checker, ok := r.cfg.State.(RevocationChecker)
+		if !ok {
+			return r.skip(rep, grade.ReasonAdapterUnavailable, "revoked-token scenario needs the lab revocation check"), nil
+		}
+		known, revoked, err := checker.TokenStatus(ctx, attackToken)
+		if err != nil {
+			return r.errorOut(rep, stateErrorReason(err), "revocation check failed"), nil
+		}
+		if !known || !revoked {
+			return r.errorOut(rep, grade.ReasonLabConfigMismatch,
+				"lab does not report the attack credential as revoked; a pass here would be false"), nil
+		}
+	}
 
 	if sandbox {
 		if err := r.cfg.Reset.Reset(ctx); err != nil {
@@ -238,6 +264,12 @@ func (r *Runner) attackCredential(attack contract.Step, attacker fixture.Identit
 	switch attackAuth(attack) {
 	case "none":
 		return "", nil
+	case "alg_none":
+		forged, ok := r.cfg.Fixture.Identity(attack.ForgeAs)
+		if !ok {
+			return "", errors.New("forge_as identity not in fixture")
+		}
+		return unsignedJWT(forged.CustomerID), nil
 	case "revoked":
 		if attacker.RevokedTokenRef == "" {
 			return "", errors.New("identity has no revoked credential")
@@ -280,6 +312,9 @@ func (r *Runner) do(ctx context.Context, step contract.Step, token string, obj f
 	}
 	if step.Body != "" {
 		req.Header.Set("Content-Type", "application/json")
+	}
+	for k, v := range step.Headers {
+		req.Header.Set(k, v)
 	}
 	if token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
@@ -343,6 +378,15 @@ func sameState(a, b map[string]StateRecord) bool {
 		}
 	}
 	return true
+}
+
+// unsignedJWT builds a token with alg "none" and an empty signature. It is
+// only ever sent to the lab, to test whether the lab verifies signatures.
+func unsignedJWT(sub string) string {
+	enc := base64.RawURLEncoding
+	header := enc.EncodeToString([]byte(`{"alg":"none","typ":"JWT"}`))
+	payload := enc.EncodeToString([]byte(fmt.Sprintf(`{"sub":%q,"iat":0}`, sub)))
+	return header + "." + payload + "."
 }
 
 func newRunTag() string {

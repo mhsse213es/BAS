@@ -204,3 +204,47 @@ Vulnerable: all eight FAIL, exploited. Fixed: all eight PASS, not exploited. Tok
 - Not started: injection (INJ), gateway (GWAY), abuse (ABUSE, which needs multi-request steps), integrations (INTEG), and most of AUTHN and AUTHZ.
 - The configuration hazard from Phase 2 still stands: nothing enforces that the lab knows the revoked token.
 - The orchestrator still does not schedule runs or persist results, and the production secret store is still not built.
+
+
+## Phase 3 tranche — third tranche
+
+Branch: `feature/api-bas-phase3` (from `main` after the Phase 2b merge). Three more scenarios, bringing the total to eleven.
+
+| ID | Sub-technique | Claim | Vulnerable | Fixed | Side effect |
+|---|---|---|---|---|---|
+| API-BAS-AUTHN-003 | Unsigned JWT (alg none) accepted | authentication, forged subject | FAIL, exploited | PASS (401) | READ_ONLY |
+| API-BAS-DATA-004 | Unbounded collection returns other customers' records | cross_identity, clean_is_enforcement | FAIL, exposed | PASS (200, own projection, capped) | READ_ONLY |
+| API-BAS-GWAY-003 | HTTP method override bypasses method policy | function_level | FAIL, state changed | PASS (405) | STATE_CHANGE_SANDBOX |
+
+New flaws: `LAB-AUTHN-ALG-001`, `LAB-DATA-LIST-001`, `LAB-GWAY-OVERRIDE-001`.
+
+### Framework additions
+
+- **Forged tokens** (`auth: alg_none`, `forge_as`): the runner builds an unsigned JWT for the named identity and sends it only to the lab. The contract refuses `alg_none` without `forge_as`, and refuses `forge_as` with any other auth mode.
+- **Per-step headers** (`headers`): used for the method-override header.
+- **POST steps**: supported, with a required body.
+- **Revocation guard**: before a revoked-token scenario runs, the runner asks the lab, through the admin-only `POST /lab/token-status`, whether the attack credential is known and revoked. If it is not, the run is an ERROR (`LAB_CONFIG_MISMATCH`) with no attack traffic. This closes the hazard recorded in the Phase 2 log, where a lab missing the revoked token would have made AUTHN-002 pass for the wrong reason.
+
+### Tests
+
+`go test ./internal/apibas/... -count=1`: all packages pass, zero failures. New in `phase3_test.go`:
+- `TestPhase3_VulnerableFailsFixedPasses` (six subtests)
+- `TestPhase3_ForgedTokenIsSentAndRefused`: the attack really carries an alg none token, and the fixed build refuses it with 401.
+- `TestPhase3_FixedCollectionIsServedAndClean`: the fixed list holds the caller's order and not the other customer's.
+- `TestPhase3_FixedBuildIgnoresMethodOverride`: the fixed build answers the POST with 405.
+- `TestPhase3_RevokedGuardRefusesMisconfiguredLab`: a lab that knows the token but does not revoke it gives ERROR with zero API traffic.
+
+### CLI smoke test (both modes, all eleven scenarios)
+
+Vulnerable: all eleven FAIL, exploited. Fixed: all eleven PASS, not exploited. Token check against the lab logs: zero matches.
+
+### Build check
+
+- `go list -deps ./cmd/server` contains no `apibas` package, so the lab is not in the orchestrator server binary.
+- `go build ./cmd/server` succeeds on this Windows host. The Windows build script compiles only `./cmd/server`, and signs only the repo-root `scenarios/` tree. The embedded API BAS catalog is outside that tree, so it needs no signature.
+
+### Still open
+
+- Eleven scenarios of roughly 50 Phase 2 sub-techniques.
+- Not started: injection (INJ), most of gateway (GWAY), abuse (ABUSE, which needs multi-request steps), integrations (INTEG), and most of the remaining AUTHN and AUTHZ items.
+- The orchestrator still does not schedule runs or persist results, and the production secret store is still not built.
