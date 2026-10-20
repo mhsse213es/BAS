@@ -348,3 +348,31 @@ Ransomware and backup assurance, email compromise to finance workflow, cloud ide
 - It does not claim any campaign is implemented or validated.
 - It does not claim any scenario in `scenarios/` executes as a campaign stage.
 - Lab and live validation are not available to this repository today.
+
+## 13. Implementation status (2026-10-20)
+
+Built, on `main`, from the decisions in section 8 (recommendations adopted):
+
+| Phase | Status | Evidence |
+|---|---|---|
+| 1 Pure model and verdict engine | Built, fixture-tested | `internal/killchain` model, evidence, verdict, rollup, mapping; table tests for all eight verdicts and precedence |
+| 2 Persistence and orchestration | Built, container-tested | `internal/db/killchain_store.go`, `internal/killchain/orchestrator.go`, `internal/api/killchain_handlers.go`; RBAC drift and boundary tests pass |
+| 3 Evidence correlation | Built, fixture-tested | `correlate.go`; causal links must be upstream; timeline built from stored records |
+| 4 Coverage reporting | Built, fixture-tested | `coverage.go`; five maturity levels derived from proof; per-dimension tables; no combined percentage |
+| 5 Vertical slice | Fixture-tested only | `campaigns/identity-endpoint-lateral.json`, `vertical_test.go`. Lab validation is **not** done and is blocked on a lab |
+
+### 13.1 Deviations from the design, and why
+
+- **Edges and evidence tables.** Section 6.2 named `killchain_edges` and `killchain_stage_evidence`. Edges live in the stored definition, and evidence is a column on `killchain_stages`. Reason: one authored document is one place to drift, not two. Cost if wrong: a later normalisation.
+- **Coverage regression.** Section 5 said to reuse `phishcatalog.RequireNoCoverageRegression`. `internal/killchain` is pure and does not import `phishcatalog`, so it has its own rank-based check with the same meaning.
+- **Interrupted runs are partial.** An interrupted stage has a verdict (`INCONCLUSIVE`), but the campaign is still reported `partial`, because the run never finished.
+- **DETECTED_NOT_CONTAINED does not mark a campaign failed.** Only `ALLOWED` and `ERROR` do, as section 4.4 specifies. The uncontained stage is counted and visible, but the campaign status alone does not show it. This is a ruling. Cost if wrong: a reader may miss an uncontained detection that the status line says is fine.
+- **Continue-on default.** `INCONCLUSIVE` upstream lets downstream run, because the attack may have progressed. `BLOCKED`, `ERROR` and `NOT_TESTED` close the path. A definition may override this per stage.
+
+### 13.2 Still open
+
+1. **No scenario adapter is wired.** `UnwiredExecutor` refuses every stage, so a real campaign run ends in `ERROR`. Connecting stages to the existing execution path is the next real step, and it needs one scenario proven end to end first.
+2. **Campaign definitions are not signed.** Decision 5 said signed, like scenarios. Definitions are validated, but no signature is checked yet.
+3. **Lateral scenario ID.** The vertical slice's lateral stage references `caldera-lateral-movement`, whose YAML has no `id:` field. Its ID must be confirmed before that stage can execute.
+4. **Lab and live validation.** No lab exists in this repository. Nothing in the vertical slice is lab-validated, and no proof record for lab or live runs has been created.
+5. **Campaign rollup only sees stored state.** Stages that finish outside the orchestrator are not picked up until `Advance` is called again.

@@ -1,0 +1,36 @@
+{
+  "id": "identity-endpoint-lateral",
+  "name": "Identity to endpoint to lateral movement",
+  "version": 1,
+  "stages": [
+    {
+      "key": "identity",
+      "scenarioId": "credential-access",
+      "policy": {
+        "shouldBlock": true,
+        "containmentRequired": false,
+        "source": "identity baseline: credential-access must be prevented by the authentication policy"
+      }
+    },
+    {
+      "key": "endpoint",
+      "scenarioId": "lolbin-execution",
+      "requires": ["identity"],
+      "policy": {
+        "shouldBlock": true,
+        "containmentRequired": false,
+        "source": "endpoint baseline: living-off-the-land execution must be prevented by application control"
+      }
+    },
+    {
+      "key": "lateral",
+      "scenarioId": "caldera-lateral-movement",
+      "requires": ["endpoint"],
+      "policy": {
+        "shouldBlock": true,
+        "containmentRequired": true,
+        "source": "network baseline: lateral movement must be prevented and contained"
+      }
+    }
+  ]
+}

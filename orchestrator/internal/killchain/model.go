@@ -5,7 +5,10 @@
 package killchain
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
+	"io"
 	"regexp"
 	"sort"
 )
@@ -199,4 +202,23 @@ func isVerdict(v Verdict) bool {
 		}
 	}
 	return false
+}
+
+// ParseCampaignDef decodes and validates one campaign definition. Unknown
+// fields are refused, so a misspelt policy field can never silently become a
+// default. Trailing data is refused too.
+func ParseCampaignDef(data []byte) (CampaignDef, error) {
+	var def CampaignDef
+	dec := json.NewDecoder(bytes.NewReader(data))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&def); err != nil {
+		return CampaignDef{}, fmt.Errorf("killchain: invalid campaign JSON: %w", err)
+	}
+	if _, err := dec.Token(); err != io.EOF {
+		return CampaignDef{}, fmt.Errorf("killchain: unexpected data after the campaign object")
+	}
+	if _, err := def.Validate(); err != nil {
+		return CampaignDef{}, err
+	}
+	return def, nil
 }
