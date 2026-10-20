@@ -42,8 +42,8 @@ ground_truth:
     The stored order is unchanged by the attack, and the attack responses disclose
     none of the owner's protected values.
 detection_assertion:
-  status: not_evaluated
-  reason: Detection validation is Phase 4; this scenario makes no detection claim.
+  status: fixture_validated
+  reason: Access events feed the elastic-security fixture. The result is fixture-validated, not live-SIEM-validated.
 evidence:
   - sanitized_request
   - sanitized_response
@@ -57,3 +57,7 @@ industry_mapping:
 regulatory_mapping: []
 negative_tests:
   - API-BAS-ABUSE-001 against the fixed build must PASS
+detection:
+  source: elastic-security
+  expect_rule: APIBAS-REL-001
+  min_severity: high

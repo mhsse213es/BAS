@@ -49,6 +49,7 @@ func fixtures() map[string]fixture.Fixture {
 	return map[string]fixture.Fixture{
 		"orders-two-tenant":   fixture.OrdersTwoTenant(),
 		"orders-no-protected": fixture.OrdersNoProtected(),
+		"orders-paged":        fixture.OrdersPaged(),
 	}
 }
 

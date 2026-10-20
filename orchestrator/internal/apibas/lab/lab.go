@@ -316,6 +316,10 @@ type Server struct {
 	roles   map[string]string // customer -> role; absent means "customer"
 	// otpFailures counts failed verification attempts per caller and order.
 	otpFailures map[string]int
+	// events is the access log the detection fixture reads. evMu guards it and eventSeq.
+	events   []accessEvent
+	eventSeq int
+	evMu     sync.Mutex
 	// itemParent maps an item ID to its parent order. Items are fixed by the
 	// fixture, so cleanup and reset never change them.
 	itemParent map[string]string
@@ -403,11 +407,12 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("DELETE /lab/runs/{tag}", s.adminOnly(s.cleanupRun))
 	mux.HandleFunc("POST /lab/reset", s.adminOnly(s.resetFixture))
 	mux.HandleFunc("GET /lab/audit", s.adminOnly(s.getAudit))
+	mux.HandleFunc("GET /lab/access-events", s.adminOnly(s.getAccessEvents))
 	if s.cfg.Mode == ModeVulnerable {
 		// LAB-GWAY-OVERRIDE-001: the vulnerable build honours a method-override header.
-		return methodOverride(mux)
+		return s.logAccess(methodOverride(mux))
 	}
-	return mux
+	return s.logAccess(mux)
 }
 
 // methodOverride rewrites a POST carrying X-HTTP-Method-Override: PATCH into a

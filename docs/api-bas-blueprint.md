@@ -1,6 +1,6 @@
 # API BAS Mastery — Engineering Blueprint
 
-Source brief: `api.txt` (repo root). Step 0 audit: `docs/api-bas-audit.md` (2026-10-20). Status: **Phases 1–13 merged to `main` (27 scenarios). Phase 14 tranche (28 scenarios total, ABUSE-002 timing harness) on branch `feature/api-bas-phase14`.**
+Source brief: `api.txt` (repo root). Step 0 audit: `docs/api-bas-audit.md` (2026-10-20). Status: **Phases 1–14 merged to `main` (28 scenarios). Phase 15 tranche (detection fixture, item-count pagination, unsupported-protocol manifest) on branch `feature/api-bas-phase15`.**
 
 Goal (api.txt): the deepest defensible validation of whether an enterprise API's security controls work under realistic attack, with independent evidence for every result. Not the largest scenario catalog.
 

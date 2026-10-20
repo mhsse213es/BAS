@@ -1,5 +1,5 @@
 id: API-BAS-ABUSE-003
-name: Page endpoint grants an excessive page size
+name: Page endpoint grants an excessive page size and returns more items than allowed
 category: ABUSE
 claim: property_level
 attack_objective: >
@@ -8,12 +8,12 @@ attack_objective: >
 threat_model:
   attacker: authenticated customer who owns orders and can request pages
   identity: customer-b
-  access_level: standard customer, valid token, owner of the order
+  access_level: standard customer, valid token, owner of the orders
   objective: obtain an oversized page in one request, to enable bulk extraction
 preconditions:
-  fixture: orders-two-tenant
+  fixture: orders-paged
   identities: [customer-b]
-  object: ORD-2001
+  object: ORD-P001
 steps:
   - id: baseline-owner-read
     role: baseline
@@ -31,14 +31,15 @@ steps:
     hypothesis: Page sizes above 100 are refused, so the request is answered 400 and no oversized page is granted.
 denied_statuses: [400]
 max_granted_page_size: 100
+max_items_returned: 100
 expected_control: >
   A page request above the maximum page size of 100 is refused with 400, and no
-  response grants a larger page.
+  response grants a larger page or returns more than 100 items.
 ground_truth:
   adapters: [state, response]
   check: >
-    The state is unchanged by the attack, and the response grants no page larger
-    than 100.
+    The state is unchanged by the attack, the response grants no page larger than 100,
+    and the response returns no more than 100 items.
 detection_assertion:
   status: not_evaluated
   reason: Detection validation is Phase 4; this scenario makes no detection claim.
@@ -46,6 +47,7 @@ evidence:
   - sanitized_request
   - sanitized_response
   - granted_page_size
+  - returned_item_count
   - state_diff
 side_effect_class: READ_ONLY
 cleanup:

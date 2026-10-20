@@ -80,7 +80,14 @@ type Scenario struct {
 	Latency *LatencyPolicy `yaml:"latency"`
 	// MaxWorkUnits bounds the work_units an attack response may report. It is a
 	// resource limit, graded independently of timing.
-	MaxWorkUnits      int                `yaml:"max_work_units"`
+	MaxWorkUnits int `yaml:"max_work_units"`
+	// MaxItemsReturned is the largest items array an attack response may return.
+	MaxItemsReturned int `yaml:"max_items_returned"`
+	// Protocol names the protocol the scenario drives. Empty and "http" run; other
+	// known protocols are declared but reported UNSUPPORTED until an adapter exists.
+	Protocol string `yaml:"protocol"`
+	// Detection, when set, grades the detection axis against the access-event fixture.
+	Detection         *DetectionPolicy   `yaml:"detection"`
 	ExpectedControl   string             `yaml:"expected_control"`
 	GroundTruth       GroundTruth        `yaml:"ground_truth"`
 	DetectionAssert   DetectionAssertion `yaml:"detection_assertion"`
@@ -229,8 +236,22 @@ func (s Scenario) Validate() error {
 	if s.CleanIsEnforced && !slices.Contains(s.GroundTruth.Adapters, "response") {
 		return fmt.Errorf("contract: %s: clean_is_enforcement needs the response adapter to prove no leak", s.ID)
 	}
-	if s.DetectionAssert.Status != "not_evaluated" || strings.TrimSpace(s.DetectionAssert.Reason) == "" {
-		return fmt.Errorf("contract: %s: detection_assertion must be status not_evaluated with a reason", s.ID)
+	if s.Detection == nil {
+		if s.DetectionAssert.Status != "not_evaluated" || strings.TrimSpace(s.DetectionAssert.Reason) == "" {
+			return fmt.Errorf("contract: %s: detection_assertion must be status not_evaluated with a reason", s.ID)
+		}
+	} else {
+		d := s.Detection
+		switch {
+		case d.Source != "elastic-security":
+			return fmt.Errorf("contract: %s: detection source %q is not supported", s.ID, d.Source)
+		case d.ExpectRule == "":
+			return fmt.Errorf("contract: %s: detection needs expect_rule", s.ID)
+		case !slices.Contains([]string{"low", "medium", "high", "critical"}, d.MinSeverity):
+			return fmt.Errorf("contract: %s: detection min_severity %q is not a severity", s.ID, d.MinSeverity)
+		case s.DetectionAssert.Status != "fixture_validated" || strings.TrimSpace(s.DetectionAssert.Reason) == "":
+			return fmt.Errorf("contract: %s: a scenario with detection must set detection_assertion status fixture_validated with a reason", s.ID)
+		}
 	}
 	if len(s.RegulatoryMapping) > 0 {
 		return fmt.Errorf("contract: %s: regulatory_mapping must stay empty until sources are verified", s.ID)
@@ -333,6 +354,14 @@ func (s Scenario) validateSteps() error {
 			return fmt.Errorf("contract: %s: a timing scenario must be READ_ONLY with a single attack request", s.ID)
 		}
 	}
+	if s.MaxItemsReturned < 0 {
+		return fmt.Errorf("contract: %s: max_items_returned cannot be negative", s.ID)
+	}
+	switch s.Protocol {
+	case "", "http", "graphql", "grpc", "soap", "websocket", "async":
+	default:
+		return fmt.Errorf("contract: %s: protocol %q is not a known protocol", s.ID, s.Protocol)
+	}
 	if s.MaxWorkUnits < 0 {
 		return fmt.Errorf("contract: %s: max_work_units cannot be negative", s.ID)
 	}
@@ -391,4 +420,11 @@ type LatencyPolicy struct {
 	Warmup    int     `yaml:"warmup"`
 	Trials    int     `yaml:"trials"`
 	Rounds    int     `yaml:"rounds"`
+}
+
+// DetectionPolicy names the detection the scenario expects from the fixture.
+type DetectionPolicy struct {
+	Source      string `yaml:"source"`
+	ExpectRule  string `yaml:"expect_rule"`
+	MinSeverity string `yaml:"min_severity"`
 }

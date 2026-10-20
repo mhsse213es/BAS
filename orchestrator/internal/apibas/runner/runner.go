@@ -84,7 +84,8 @@ type Config struct {
 	Fixture fixture.Fixture
 	Secrets SecretResolver
 	State   StateReader
-	Reset   Resetter // required for STATE_CHANGE_SANDBOX scenarios
+	Reset   Resetter    // required for STATE_CHANGE_SANDBOX scenarios
+	Events  EventSource // access events for detection scenarios
 	HTTP    *http.Client
 }
 
@@ -104,6 +105,8 @@ type Exchange struct {
 
 // Report is the complete output of one scenario execution.
 type Report struct {
+	// DetectionProvenance labels every detection result from the fixture.
+	DetectionProvenance string `json:"detection_provenance,omitempty"`
 	// TimingVerdict is the timing grade, reported even when a resource limit decides the outcome.
 	TimingVerdict string `json:"timing_verdict,omitempty"`
 	// Latency holds the per-round timing statistics for timing scenarios.
@@ -141,7 +144,21 @@ func New(cfg Config) (*Runner, error) {
 // means the runner itself could not run; target and evidence problems are
 // graded into the report instead.
 func (r *Runner) Run(ctx context.Context, s contract.Scenario) (Report, error) {
-	rep := Report{ScenarioID: s.ID, RunTag: newRunTag()}
+	tag := newRunTag()
+	ctx = context.WithValue(ctx, runTagKey{}, tag)
+	rep, err := r.run(ctx, s, tag)
+	if err != nil {
+		return rep, err
+	}
+	return r.detectionStage(ctx, s, tag, rep), nil
+}
+
+func (r *Runner) run(ctx context.Context, s contract.Scenario, tag string) (Report, error) {
+	rep := Report{ScenarioID: s.ID, RunTag: tag}
+	// Protocols without an adapter are reported, never counted as covered.
+	if s.Protocol != "" && s.Protocol != "http" {
+		return r.skip(rep, grade.ReasonUnsupportedProtocol, "protocol "+s.Protocol+" has no adapter yet"), nil
+	}
 
 	// Preflight: every check below happens before any traffic is sent.
 	if s.Preconditions.Fixture != r.cfg.Fixture.Name {
@@ -355,6 +372,9 @@ func (r *Runner) do(ctx context.Context, step contract.Step, token string, obj f
 	for k, v := range step.Headers {
 		req.Header.Set(k, v)
 	}
+	if tag, ok := ctx.Value(runTagKey{}).(string); ok && tag != "" {
+		req.Header.Set("X-BAS-Run", tag)
+	}
 	if token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
@@ -441,6 +461,9 @@ func (r *Runner) runAttack(ctx context.Context, rep *Report, step contract.Step,
 			agg.Oversized++
 		}
 		if s.MaxAcceptedBytes > 0 && reportedField(exch.raw, "accepted_bytes") > s.MaxAcceptedBytes {
+			agg.Oversized++
+		}
+		if s.MaxItemsReturned > 0 && reportedArrayLen(exch.raw, "items") > s.MaxItemsReturned {
 			agg.Oversized++
 		}
 		if exch.Status < 500 && !slices.Contains(s.DeniedStatuses, exch.Status) {

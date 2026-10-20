@@ -99,6 +99,7 @@ func (e *env) run(t *testing.T, s contract.Scenario, state runner.StateReader) r
 		Secrets: e.secrets,
 		State:   state,
 		Reset:   e.admin,
+		Events:  e.admin,
 	})
 	if err != nil {
 		t.Fatalf("runner.New: %v", err)

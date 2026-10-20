@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/audspect/bas/internal/apibas/detect"
 	"io"
 	"net/http"
 	"net/url"
@@ -137,4 +138,14 @@ func (a LabAdmin) TokenStatus(ctx context.Context, token string) (bool, bool, er
 		return false, false, err
 	}
 	return res.Known, res.Revoked, nil
+}
+
+// AccessEvents returns the lab's access events for one run tag. The lab filters by
+// tag, so one run never reads another run's events.
+func (a LabAdmin) AccessEvents(ctx context.Context, correlationID string) ([]detect.Event, error) {
+	var events []detect.Event
+	if err := a.do(ctx, http.MethodGet, "/lab/access-events?correlation_id="+url.QueryEscape(correlationID), &events); err != nil {
+		return nil, err
+	}
+	return events, nil
 }

@@ -44,6 +44,7 @@ func main() {
 	fx, ok := map[string]fixture.Fixture{
 		"orders-two-tenant":   fixture.OrdersTwoTenant(),
 		"orders-no-protected": fixture.OrdersNoProtected(),
+		"orders-paged":        fixture.OrdersPaged(),
 	}[*fixtureName]
 	if !ok {
 		log.Fatalf("unknown fixture %q", *fixtureName)
@@ -65,6 +66,7 @@ func main() {
 		Secrets: secrets,
 		State:   admin,
 		Reset:   admin,
+		Events:  admin,
 		HTTP:    &http.Client{Timeout: 10 * time.Second},
 	})
 	if err != nil {
