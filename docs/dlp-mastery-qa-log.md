@@ -134,7 +134,7 @@ This is the single place to check before claiming either DLP vendor connector is
 
 **Resolution path:** run one step per channel on a lab host that supports it, and confirm each marker appears once per step. Multiple markers make the parser return `ambiguous`, which drops the start time.
 
-### 11. Pre-existing `dlpfixture` drift failure (AI-prompt and DB-export) — open, decision needed
+### 11. Pre-existing `dlpfixture` drift failure (AI-prompt and DB-export) — resolved, see Resolved items
 
 **Status:** Open. The drift test fails on unregistered fixture values in `dlp-exfiltration-ai-prompt` and `dlp-exfiltration-db-export`. It predates the start-marker work; the YAML diff there is additive.
 
@@ -163,6 +163,15 @@ This is the single place to check before claiming either DLP vendor connector is
 **Decision needed:** whether a later receipt should update the record, and how that interacts with the no-duplicate-record rule.
 
 
+### 16. DLP-DEV developer-tooling scenario (dlp-exfiltration-devtools) — not run; scope limited — open
+
+**Status:** Open. Added as three sink-verified HTTPS uploads (CI/CD artifact, package publish with a placeholder credential, internal design document). Signed and catalogued (commit 4c03d378). Not run end to end.
+
+**Scope limit:** these imitate developer tooling over HTTPS. They do not drive git, npm, pip, docker or a CI runner, so they say nothing about any vendor's developer-tool control. Git-protocol repository pushes are not covered.
+
+**Resolution path:** one run against the lab sink to confirm each step records a receipt. Then decide whether git-protocol pushes and developer package managers are worth a sink of their own.
+
 ## Resolved items
 
-(none yet)
+- Item 11: the eight unclaimed AI-prompt and DB-export steps are catalogued (commit 226b1f40). Values come from each step's own command; no payload changed. Both drift checks pass.
+
