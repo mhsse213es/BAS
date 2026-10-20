@@ -51,7 +51,7 @@ func TestUnsupportedCountsOnlyInCatalogue(t *testing.T) {
 	if r.Catalogued != len(all) {
 		t.Fatalf("catalogued = %d, want %d", r.Catalogued, len(all))
 	}
-	if r.Unsupported < 5 {
+	if r.Unsupported < 4 {
 		t.Fatalf("unsupported = %d, want at least the 5 protocol entries without an adapter", r.Unsupported)
 	}
 	if r.Evaluated != 0 || r.Validated != 0 {

@@ -1601,3 +1601,17 @@ decision.
 - Protocol objectives for the four remaining entries (INJ-005, DISC-009, ABUSE-010, INTEG-010) are
   written, but their tests check only that they are unsupported. Their acceptance tests come with
   each adapter.
+
+
+## Phase 30 - protocol adapter: SOAP (second of five)
+
+- `protocol.SOAP` parses the request strictly. Entity declarations are read from the DOCTYPE first, and
+  each external SYSTEM identifier must name a loopback lab host over http or https. Remote hosts,
+  `file:` and `ftp:` are refused, so the adapter enforces the INJ-005 prerequisite.
+- Lab route `POST /soap/orders` (`lab/soap.go`). The vulnerable build expands an external entity that
+  names `.../internal/orders/{id}` to that internal record, protected values included
+  (`LAB-INJ-XXE-001`). The fixed build refuses any document declaring an external entity with 400.
+- Acceptance: parser and adapter unit tests (loopback accepted, remote/file/ftp refused, malformed and
+  undeclared entities refused); `TestPhase28_SOAPINJ005VulnerableFailsFixedPasses` (FAIL exploited
+  vulnerable, PASS enforced fixed); `TestPhase28_SOAPCatalogBodiesValidate`.
+- Coverage: unsupported protocols now gRPC, WebSocket, async (4 scenarios); SOAP is implemented.
