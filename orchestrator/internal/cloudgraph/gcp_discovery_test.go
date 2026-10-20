@@ -121,19 +121,6 @@ func TestGCPDiscover_BindingsBecomeEvaluableEdges(t *testing.T) {
 	}
 }
 
-func TestGCPDiscover_ConditionalBindingProducesNoEdges(t *testing.T) {
-	client, _ := newTestGCPClient(t, &gcpFakeAPI{routes: gcpStandardRoutes()})
-	graph, _, err := client.Discover(context.Background())
-	if err != nil {
-		t.Fatalf("Discover: %v", err)
-	}
-	for _, p := range graph.Permissions {
-		if p.Source.CanonicalID == "gcp:group:ops@example.com" {
-			t.Fatalf("conditional owner binding leaked an edge: %s", p.Action)
-		}
-	}
-}
-
 func TestGCPDiscover_DenyRuleBlocksMatchingEdge(t *testing.T) {
 	client, _ := newTestGCPClient(t, &gcpFakeAPI{routes: gcpStandardRoutes()})
 

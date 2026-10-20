@@ -13,7 +13,7 @@ bash scripts/cloud-qa.sh <group>    # one group
 |---|---|---|---|
 | `retry` | cloudgraph | throttling/backoff, redaction, bounded retries | none |
 | `aws` | cloudgraph | AWS discovery, policy matching, trust, backup vaults, permission boundaries, SCPs, S3 bucket policies, identity-policy conditions, preflight | none |
-| `gcp` | cloudgraph | GCP bindings, roles, deny rules, folder and organization inheritance, retry transport, preflight | none |
+| `gcp` | cloudgraph | GCP bindings, roles, deny rules, folder and organization inheritance, retry transport, preflight, conditional bindings | none |
 | `azure` | cloudgraph | Azure discovery, wildcard roles, deny assignments, management group inheritance, preflight | none |
 | `audit` | cloudgraph | CloudTrail, Activity Log and GCP audit parsing and matching | none |
 | `scenario` | cloudgraph | scenario verdicts, gates, observation, wildcard grants | none |
@@ -102,15 +102,16 @@ bash scripts/cloud-qa.sh <group>    # one group
 - `TestSessionPolicy_AllowingActionKeepsGrant`
 - `TestSessionPolicy_LimitsGrantToItsActions`
 
-### `gcp`  (15 tests)
+### `gcp`  (16 tests)
 
 - `TestGCPAncestors_FolderGrantReachesProjectWithProvenance`
 - `TestGCPAncestors_OrganizationDenyBlocksFolderGrant`
 - `TestGCPAncestors_UnrecognizedAncestorTypeFailsClosed`
+- `TestGCPConditionalBinding_ProducesConditionalEdge`
+- `TestGCPConditionalBinding_UnconditionalGrantStaysClean`
 - `TestGCPDenyPermissionNormalised`
 - `TestGCPDenyPrincipalMapping`
 - `TestGCPDiscover_BindingsBecomeEvaluableEdges`
-- `TestGCPDiscover_ConditionalBindingProducesNoEdges`
 - `TestGCPDiscover_DenyRuleBlocksMatchingEdge`
 - `TestGCPDiscover_TransientFailureIsRetried`
 - `TestGCPDiscover_UnreadableRoleFailsPass`

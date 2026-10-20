@@ -18,6 +18,9 @@ import "strings"
 // TestGCPEvaluator_FolderScopeInheritsToProjectUnderIt.
 type GCPEvaluator struct{}
 
+// gcpBindingCondition names the unresolved IAM condition on a conditional binding.
+const gcpBindingCondition = "gcp-binding-condition"
+
 // EvaluatePermission determines if a permission edge is allowed, denied, or
 // conditional under GCP IAM. Evaluation order: a matching Deny policy always
 // wins, then a binding whose scope covers the target and whose actions
@@ -32,6 +35,16 @@ func (e *GCPEvaluator) EvaluatePermission(edge *CloudPermission, ctx *RequestCon
 	}
 
 	if isGCPBindingMatch(edge) {
+		// A conditional binding grants access only when its IAM condition holds,
+		// which is not evaluated here.
+		if edge.Attributes["binding_condition"] == "true" {
+			return &EvaluationResult{
+				State:            ConditionallyReachable,
+				AllowedBy:        edge.SourceType,
+				UnresolvedConds:  []string{gcpBindingCondition},
+				EvaluationMethod: "hand-coded-rules",
+			}
+		}
 		return &EvaluationResult{
 			State:            PolicySupported,
 			AllowedBy:        edge.SourceType,

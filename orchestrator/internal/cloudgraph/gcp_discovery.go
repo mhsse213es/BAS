@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -23,7 +24,7 @@ import (
 // silently dropped: each counter is a case the GCPEvaluator cannot decide.
 type GCPDiscoveryStats struct {
 	DiscoveryStats
-	ConditionalBindings    int // IAM Conditions; GCPEvaluator has no condition evaluation, so these are skipped
+	ConditionalBindings    int // IAM Conditions; emitted as conditional edges, the condition is not evaluated
 	UnmappedMembers        int // allUsers, allAuthenticatedUsers, domain:, deleted principals; no single identity
 	UnmappedDenyPrincipals int // deny principals whose form is not recognised
 	DenyRules              int // deny rules read from project-level deny policies
@@ -310,9 +311,9 @@ func (c *GCPDiscoveryClient) Discover(ctx context.Context) (*DiscoveredGraph, *G
 	seen := map[string]bool{}
 	for _, sc := range scopes {
 		for _, b := range sc.bindings {
-			if b.Condition != nil {
+			conditional := b.Condition != nil
+			if conditional {
 				stats.ConditionalBindings++
-				continue
 			}
 			perms, ok := rolePerms[b.Role]
 			if !ok {
@@ -331,7 +332,7 @@ func (c *GCPDiscoveryClient) Discover(ctx context.Context) (*DiscoveredGraph, *G
 				}
 				source := addIdentity(canonical, gcpIdentityKind(member))
 				for _, action := range perms {
-					key := canonical + "|" + action + "|" + sc.resource.CanonicalID
+					key := canonical + "|" + action + "|" + sc.resource.CanonicalID + "|" + strconv.FormatBool(conditional)
 					if seen[key] {
 						continue
 					}
@@ -339,6 +340,9 @@ func (c *GCPDiscoveryClient) Discover(ctx context.Context) (*DiscoveredGraph, *G
 					attrs := map[string]string{
 						"binding_scope":   sc.resource.CanonicalID,
 						"binding_actions": joined,
+					}
+					if conditional {
+						attrs["binding_condition"] = "true"
 					}
 					if sc.inheritedFrom != "" {
 						attrs["inherited_from"] = sc.inheritedFrom
