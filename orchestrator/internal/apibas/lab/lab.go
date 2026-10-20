@@ -30,6 +30,7 @@ import (
 
 	"github.com/audspect/bas/internal/apibas/fixture"
 	"math"
+	"strconv"
 )
 
 // Mode selects which variant of the contract the lab serves.
@@ -235,6 +236,13 @@ func Flaws() []Flaw {
 				"Fixed: the response carries private, no-store, so a shared cache does not keep it.",
 		},
 		{
+			ID:          "LAB-ABUSE-PAGE-001",
+			ScenarioID:  "API-BAS-ABUSE-003",
+			Description: "GET /api/orders/page grants any requested page size.",
+			Oracle: "Vulnerable: a page request for 100000 items is granted and reported as page_size 100000 (exposed). " +
+				"Fixed: a page size above 100 is refused with 400.",
+		},
+		{
 			ID:          "LAB-AUTHZ-MASS-001",
 			ScenarioID:  "API-BAS-AUTHZ-003",
 			Description: "PATCH /api/orders/{id} binds every submitted field, including owner_id, from the request body.",
@@ -367,6 +375,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /lab/token-status", s.adminOnly(s.tokenStatus))
 	mux.HandleFunc("GET /api/orders/{id}/summary", s.getSummary)
 	mux.HandleFunc("GET /api/orders/{id}/status", s.getStatus)
+	mux.HandleFunc("GET /api/orders/page", s.listPage)
 	if s.cfg.Mode == ModeVulnerable {
 		// The debug route exists only in the vulnerable build (LAB-DISC-DEBUG-001).
 		mux.HandleFunc("GET /debug/orders/{id}", s.debugOrder)
@@ -1125,6 +1134,48 @@ func (s *Server) verifyCode(w http.ResponseWriter, r *http.Request) {
 	}
 	s.otpFailures[key]++
 	writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid code"})
+}
+
+// listPage returns the caller's own orders, up to a page size the caller requests.
+// The vulnerable build grants any requested size (LAB-ABUSE-PAGE-001); the fixed
+// build refuses sizes above 100. The granted size is reported as page_size, so the
+// grader compares what the server allowed with the scenario's declared maximum.
+func (s *Server) listPage(w http.ResponseWriter, r *http.Request) {
+	caller, st := s.identify(r)
+	if st != authOK {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthenticated"})
+		return
+	}
+	limit := 20
+	if raw := r.URL.Query().Get("limit"); raw != "" {
+		n, err := strconv.Atoi(raw)
+		if err != nil || n < 1 {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "limit must be a positive integer"})
+			return
+		}
+		limit = n
+	}
+	if s.cfg.Mode == ModeFixed && limit > 100 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "limit must be 100 or less"})
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	ids := make([]string, 0, len(s.orders))
+	for id := range s.orders {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	items := []map[string]any{}
+	for _, id := range ids {
+		if len(items) == limit {
+			break
+		}
+		if o := s.orders[id]; o.OwnerID == caller {
+			items = append(items, publicBody(o))
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"page_size": limit, "items": items})
 }
 
 // getOrderV0 is the retired route (LAB-DISC-DEPRECATED-001). It is mounted only in

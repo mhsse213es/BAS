@@ -26,6 +26,7 @@ import (
 	"strings"
 	"time"
 
+	"encoding/json"
 	"github.com/audspect/bas/internal/apibas/contract"
 	"github.com/audspect/bas/internal/apibas/fixture"
 	"github.com/audspect/bas/internal/apibas/grade"
@@ -96,6 +97,7 @@ type Exchange struct {
 	Body     string // truncated and with leaked protected values replaced
 	Leaked   int
 	headers  http.Header
+	raw      []byte
 }
 
 // Report is the complete output of one scenario execution.
@@ -357,6 +359,7 @@ func (r *Runner) do(ctx context.Context, step contract.Step, token string, obj f
 	}
 	ex.Status = resp.StatusCode
 	ex.headers = resp.Header.Clone()
+	ex.raw = raw
 
 	text := string(raw)
 	if protect != nil {
@@ -424,6 +427,9 @@ func (r *Runner) runAttack(ctx context.Context, rep *Report, step contract.Step,
 		}
 		agg.LeakedProtected += exch.Leaked
 		agg.ForbiddenHeaders += forbiddenHeaderHits(exch, s.ForbiddenResponseHeaders)
+		if s.MaxGrantedPageSize > 0 && grantedPageSize(exch.raw) > s.MaxGrantedPageSize {
+			agg.Oversized++
+		}
 		if exch.Status < 500 && !slices.Contains(s.DeniedStatuses, exch.Status) {
 			agg.Accepted++
 		}
@@ -446,6 +452,18 @@ func forbiddenHeaderHits(ex Exchange, rules []contract.HeaderRule) int {
 		}
 	}
 	return n
+}
+
+// grantedPageSize reads the page_size a response reports. Anything that is not
+// a JSON object with an integer page_size counts as zero.
+func grantedPageSize(raw []byte) int {
+	var page struct {
+		PageSize int `json:"page_size"`
+	}
+	if json.Unmarshal(raw, &page) != nil {
+		return 0
+	}
+	return page.PageSize
 }
 
 // headerMatches reports whether one header value matches a rule, exactly or as a

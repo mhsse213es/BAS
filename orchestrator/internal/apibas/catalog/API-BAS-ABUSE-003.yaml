@@ -1,0 +1,57 @@
+id: API-BAS-ABUSE-003
+name: Page endpoint grants an excessive page size
+category: ABUSE
+claim: property_level
+attack_objective: >
+  The owner of orders requests a page of an extreme size, to pull far more records
+  in one call than the API should ever return.
+threat_model:
+  attacker: authenticated customer who owns orders and can request pages
+  identity: customer-b
+  access_level: standard customer, valid token, owner of the order
+  objective: obtain an oversized page in one request, to enable bulk extraction
+preconditions:
+  fixture: orders-two-tenant
+  identities: [customer-b]
+  object: ORD-2001
+steps:
+  - id: baseline-owner-read
+    role: baseline
+    identity: customer-b
+    auth: valid
+    method: GET
+    path: /api/orders/{object}
+    hypothesis: The owner can read their order. If this fails, the scenario is not testable.
+  - id: attack-oversized-page
+    role: attack
+    identity: customer-b
+    auth: valid
+    method: GET
+    path: /api/orders/page?limit=100000
+    hypothesis: Page sizes above 100 are refused, so the request is answered 400 and no oversized page is granted.
+denied_statuses: [400]
+max_granted_page_size: 100
+expected_control: >
+  A page request above the maximum page size of 100 is refused with 400, and no
+  response grants a larger page.
+ground_truth:
+  adapters: [state, response]
+  check: >
+    The state is unchanged by the attack, and the response grants no page larger
+    than 100.
+detection_assertion:
+  status: not_evaluated
+  reason: Detection validation is Phase 4; this scenario makes no detection claim.
+evidence:
+  - sanitized_request
+  - sanitized_response
+  - granted_page_size
+  - state_diff
+side_effect_class: READ_ONLY
+cleanup:
+  - none; the scenario creates no records
+industry_mapping:
+  - "BFSI: unbounded result sets enabling bulk extraction of account records"
+regulatory_mapping: []
+negative_tests:
+  - API-BAS-ABUSE-003 against the fixed build must PASS

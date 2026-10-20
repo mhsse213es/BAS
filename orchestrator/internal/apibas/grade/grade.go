@@ -69,6 +69,9 @@ type Exchange struct {
 	ForbiddenHeaders int
 	// Accepted counts attack responses that were neither denied nor a server fault.
 	Accepted int
+	// Oversized counts attack responses that granted a page larger than the
+	// scenario allows.
+	Oversized int
 }
 
 // Evidence is everything the grader is allowed to look at. It is assembled by
@@ -153,7 +156,7 @@ func Assess(ev Evidence) Outcome {
 		return Skip(ReasonPreconditionMissing)
 	}
 	if ev.StateChanged || ev.Attack.LeakedProtected > 0 || ev.Attack.ForbiddenHeaders > 0 ||
-		(ev.MaxAccepted > 0 && ev.Attack.Accepted > ev.MaxAccepted) {
+		(ev.MaxAccepted > 0 && ev.Attack.Accepted > ev.MaxAccepted) || ev.Attack.Oversized > 0 {
 		return Outcome{
 			Result:         FAIL,
 			Exploitability: Exploited,

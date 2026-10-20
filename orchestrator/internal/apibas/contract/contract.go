@@ -68,16 +68,19 @@ type Scenario struct {
 	ForbiddenResponseHeaders []HeaderRule `yaml:"forbidden_response_headers"`
 	// MaxAcceptedAttempts is how many attack responses may be accepted (neither a
 	// declared denial nor a server fault) before the control counts as failed.
-	MaxAcceptedAttempts int                `yaml:"max_accepted_attempts"`
-	ExpectedControl     string             `yaml:"expected_control"`
-	GroundTruth         GroundTruth        `yaml:"ground_truth"`
-	DetectionAssert     DetectionAssertion `yaml:"detection_assertion"`
-	Evidence            []string           `yaml:"evidence"`
-	SideEffectClass     string             `yaml:"side_effect_class"`
-	Cleanup             []string           `yaml:"cleanup"`
-	IndustryMapping     []string           `yaml:"industry_mapping"`
-	RegulatoryMapping   []string           `yaml:"regulatory_mapping"`
-	NegativeTests       []string           `yaml:"negative_tests"`
+	MaxAcceptedAttempts int `yaml:"max_accepted_attempts"`
+	// MaxGrantedPageSize is the largest page size the attack response may report in
+	// its page_size field. Larger grants are exploitation.
+	MaxGrantedPageSize int                `yaml:"max_granted_page_size"`
+	ExpectedControl    string             `yaml:"expected_control"`
+	GroundTruth        GroundTruth        `yaml:"ground_truth"`
+	DetectionAssert    DetectionAssertion `yaml:"detection_assertion"`
+	Evidence           []string           `yaml:"evidence"`
+	SideEffectClass    string             `yaml:"side_effect_class"`
+	Cleanup            []string           `yaml:"cleanup"`
+	IndustryMapping    []string           `yaml:"industry_mapping"`
+	RegulatoryMapping  []string           `yaml:"regulatory_mapping"`
+	NegativeTests      []string           `yaml:"negative_tests"`
 }
 
 // ThreatModel is the simulated attacker (api.txt section 7, item 1).
@@ -166,6 +169,9 @@ func (s Scenario) Validate() error {
 		if strings.TrimSpace(v) == "" {
 			return fmt.Errorf("contract: %s: %s is required", s.ID, field)
 		}
+	}
+	if s.MaxGrantedPageSize < 0 {
+		return fmt.Errorf("contract: %s: max_granted_page_size cannot be negative", s.ID)
 	}
 	if len(s.DeniedStatuses) == 0 && !s.CleanIsEnforced {
 		return fmt.Errorf("contract: %s: denied_statuses must list the enforcement codes, or set clean_is_enforcement", s.ID)
