@@ -331,7 +331,10 @@ func truncateAll(t *testing.T, pool *pgxpool.Pool) {
 	}
 	rows.Close()
 	for _, name := range tables {
-		if _, err := pool.Exec(ctx, `TRUNCATE TABLE "`+name+`" CASCADE`); err != nil {
+		// lock_timeout turns a lock held by another connection into a fast,
+		// named failure. Without it a TRUNCATE waits forever and the whole
+		// test binary stalls until the package timeout (seen in the api suite).
+		if _, err := pool.Exec(ctx, `SET lock_timeout = '15s'; TRUNCATE TABLE "`+name+`" CASCADE`); err != nil {
 			t.Fatalf("testutil: truncate %s: %v", name, err)
 		}
 	}
