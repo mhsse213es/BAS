@@ -45,3 +45,21 @@ only.
 1. Who sets the ceiling for each expensive-request scenario?
 2. Is staging the reference machine, or the developer machine, for qualifying records?
 3. Should ABUSE-002 be re-graded on work units in its own change, leaving its timing record in place?
+
+## Execution status
+
+Gated on the three decisions below. No new timing scenario and no new timing-based validation claim until they are recorded.
+
+| Step | State | Finding |
+|---|---|---|
+| 1. Requirement owner and ABUSE-002 ceiling rationale | **Blocked** | No requirement owner is named. The 250 ms ceiling is documented in the QA log as chosen between the vulnerable median (about 1,340 ms) and the fixed refusal (under 1 ms). That is derived from observed measurements, which decision 1 rules out. The ceiling is provisional until an owner documents a requirement-based rationale. |
+| 2. Qualify a staging reference machine | **Blocked** | No staging machine is qualified or recorded as controlled. The only calibration record was taken on `lab-i5-8250u-win10-go1.26.8`, a developer workstation. It does not qualify any other machine. |
+| 3. Work-unit metric for ABUSE-002 | **Exists, with a caveat** | The lab reports `work_units` as periods multiplied by a constant (`lab.go`, `reportWorkPerPeriod`), and the grader enforces `max_work_units: 24000`. The count is self-reported by the product handler. It reflects the declared cost of the request and is not an independent measurement of work done. |
+| 4. Implement scenario changes | **Not started** | Waits on steps 1 to 3. |
+| 5. Five-run repeatability on qualified machine | **Not possible yet** | Waits on step 2. The five-run result for ABUSE-002 is local evidence on the developer workstation. |
+
+### Decisions needed
+
+1. Name the requirement owner for expensive-request ceilings. Until then, mark ABUSE-002's timing-based validation provisional, or leave the scenario ungraded on timing.
+2. Confirm whether a controlled staging machine can be the reference. If not, defer qualification.
+3. Decide whether ABUSE-002 is graded on work units, with timing kept as historical corroboration. The work-unit count is self-reported, so the decision should weigh that.
