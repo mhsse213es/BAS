@@ -23,6 +23,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -54,6 +55,9 @@ type Config struct {
 	// InternalToken is the credential an internal service presents to the
 	// internal route. When empty, the fixed build refuses every internal call.
 	InternalToken string
+	// Faults names dependency faults to hold active for the life of the lab, for example
+	// "authz-store-down". A scenario that needs one declares it as a lab_faults precondition.
+	Faults []string
 }
 
 // Flaw describes one planted vulnerability and the oracle that proves it.
@@ -325,6 +329,9 @@ type Server struct {
 	itemParent map[string]string
 	itemSKU    map[string]string
 	audit      []AuditEntry
+	// gwMu guards gwCounts, the gateway rate-limit counters (see gateway.go).
+	gwMu     sync.Mutex
+	gwCounts map[string]int
 }
 
 // New validates the configuration, seeds the store from the fixture and
@@ -409,11 +416,20 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /lab/audit", s.adminOnly(s.getAudit))
 	mux.HandleFunc("GET /lab/access-events", s.adminOnly(s.getAccessEvents))
 	s.registerInjection(mux)
+	s.registerGateway(mux)
+	mux.HandleFunc("GET /lab/faults", s.adminOnly(s.listFaults))
 	if s.cfg.Mode == ModeVulnerable {
 		// LAB-GWAY-OVERRIDE-001: the vulnerable build honours a method-override header.
-		return s.logAccess(methodOverride(mux))
+		return s.logAccess(s.gateway(methodOverride(mux)))
 	}
-	return s.logAccess(mux)
+	return s.logAccess(s.gateway(mux))
+}
+
+// listFaults returns the faults the lab was started with, sorted.
+func (s *Server) listFaults(w http.ResponseWriter, _ *http.Request) {
+	faults := slices.Clone(s.cfg.Faults)
+	slices.Sort(faults)
+	writeJSON(w, http.StatusOK, faults)
 }
 
 // methodOverride rewrites a POST carrying X-HTTP-Method-Override: PATCH into a

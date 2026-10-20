@@ -36,6 +36,15 @@ func NewLabAdmin(baseURL, adminToken string) LabAdmin {
 
 // Snapshot returns the current state of every object, keyed by ID.
 // It implements StateReader.
+// ActiveFaults returns the faults the lab was started with (see lab -fault).
+func (a LabAdmin) ActiveFaults(ctx context.Context) ([]string, error) {
+	var faults []string
+	if err := a.do(ctx, http.MethodGet, "/lab/faults", &faults); err != nil {
+		return nil, err
+	}
+	return faults, nil
+}
+
 func (a LabAdmin) Snapshot(ctx context.Context) (map[string]StateRecord, error) {
 	var rows []struct {
 		ID       string `json:"id"`

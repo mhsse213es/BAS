@@ -1,0 +1,56 @@
+id: API-BAS-GWAY-010
+name: Legacy region node serves order records without the credential the other regions require
+category: GWAY
+claim: authentication
+attack_objective: >
+  A client sends the legacy region header, and the node for that region serves an order record
+  with no credential, unlike the other regions.
+threat_model:
+  attacker: unauthenticated client that can set the region header
+  identity: customer-a
+  access_level: no credential
+  objective: read another customer's order through the region node whose policy was not updated
+preconditions:
+  fixture: orders-two-tenant
+  identities: [customer-b, anonymous]
+  object: ORD-2001
+steps:
+  - id: baseline-owner-read
+    role: baseline
+    identity: customer-b
+    auth: valid
+    method: GET
+    path: /api/gw/orders/{object}
+    hypothesis: The owner can read their own order through the gateway. If this fails, the scenario is not testable.
+  - id: attack-legacy-region-no-credential
+    role: attack
+    identity: anonymous
+    auth: none
+    method: GET
+    path: /api/gw/orders/{object}
+    headers:
+      X-Gateway-Region: legacy
+    hypothesis: Every region requires a credential, so the legacy header does not remove the requirement.
+denied_statuses: [401]
+expected_control: >
+  Every region refuses a request with no credential with 401, and no order data is returned.
+ground_truth:
+  adapters: [state, response]
+  check: >
+    The attack response contains none of the owner's protected values, and the state is
+    unchanged by the attack.
+detection_assertion:
+  status: not_evaluated
+  reason: Detection validation is Phase 4; this scenario makes no detection claim.
+evidence:
+  - sanitized_request
+  - sanitized_response
+  - state_diff
+side_effect_class: READ_ONLY
+cleanup:
+  - no cleanup required for a read-only scenario
+industry_mapping:
+  - "BFSI: legacy regional gateway nodes with weaker authentication policy"
+regulatory_mapping: []
+negative_tests:
+  - API-BAS-GWAY-010 with the owner's bearer token against the fixed build must return the owner's public view

@@ -1,0 +1,56 @@
+id: API-BAS-GWAY-011
+name: Gateway fails open when the authorization store is down and discloses another customer's order
+category: GWAY
+claim: cross_identity
+attack_objective: >
+  While the authorization store is unavailable, a customer requests another customer's order
+  through the gateway, and the gateway allows the read instead of failing closed.
+threat_model:
+  attacker: authenticated customer in tenant A who can time a request during a dependency outage
+  identity: customer-a
+  access_level: standard customer, valid token
+  objective: read another customer's protected order values while the authorization decision is unavailable
+preconditions:
+  fixture: orders-two-tenant
+  identities: [customer-b, customer-a]
+  object: ORD-2001
+  lab_faults: [authz-store-down]
+steps:
+  - id: baseline-owner-read
+    role: baseline
+    identity: customer-b
+    auth: valid
+    method: GET
+    path: /api/orders/{object}
+    hypothesis: The owner can read their own order on the direct route, which does not consult the gateway's authorization store. If this fails, the scenario is not testable.
+  - id: attack-read-during-outage
+    role: attack
+    identity: customer-a
+    auth: valid
+    method: GET
+    path: /api/gw/orders/{object}
+    hypothesis: With the authorization store unavailable, the gateway fails closed and refuses the read.
+denied_statuses: [403]
+expected_control: >
+  While the authorization store is unavailable, the gateway refuses the read with 403, and no
+  protected value of another customer is returned.
+ground_truth:
+  adapters: [state, response]
+  check: >
+    The attack response contains none of the owner's protected values, and the state is
+    unchanged by the attack.
+detection_assertion:
+  status: not_evaluated
+  reason: Detection validation is Phase 4; this scenario makes no detection claim.
+evidence:
+  - sanitized_request
+  - sanitized_response
+  - state_diff
+side_effect_class: READ_ONLY
+cleanup:
+  - no cleanup required for a read-only scenario
+industry_mapping:
+  - "BFSI: gateways that fail open when the authorization dependency is unavailable"
+regulatory_mapping: []
+negative_tests:
+  - API-BAS-GWAY-011 with the store available against the fixed build must return the owner's public view to the owner

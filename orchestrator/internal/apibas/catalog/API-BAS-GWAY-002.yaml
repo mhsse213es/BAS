@@ -1,0 +1,55 @@
+id: API-BAS-GWAY-002
+name: Undocumented legacy route served without gateway policy discloses order records
+category: GWAY
+claim: authentication
+attack_objective: >
+  A client finds an undocumented route that the gateway does not publish, and reads a full
+  order record with no credential.
+threat_model:
+  attacker: unauthenticated client that can probe routes
+  identity: customer-a
+  access_level: no credential
+  objective: read order records through a route the gateway does not publish or police
+preconditions:
+  fixture: orders-two-tenant
+  identities: [customer-b, anonymous]
+  object: ORD-2001
+steps:
+  - id: baseline-owner-read
+    role: baseline
+    identity: customer-b
+    auth: valid
+    method: GET
+    path: /api/gw/orders/{object}
+    hypothesis: The owner can read their own order through the published route. If this fails, the scenario is not testable.
+  - id: attack-unpublished-legacy-route
+    role: attack
+    identity: anonymous
+    auth: none
+    method: GET
+    path: /api/gw/orders/{object}/legacy
+    hypothesis: Routes the gateway does not publish are not served, or they require a credential.
+denied_statuses: [404]
+expected_control: >
+  The unpublished route does not exist in the fixed build, so the request returns 404 and
+  discloses nothing.
+ground_truth:
+  adapters: [state, response]
+  check: >
+    The attack response contains none of the owner's protected values, and the state is
+    unchanged by the attack.
+detection_assertion:
+  status: not_evaluated
+  reason: Detection validation is Phase 4; this scenario makes no detection claim.
+evidence:
+  - sanitized_request
+  - sanitized_response
+  - state_diff
+side_effect_class: READ_ONLY
+cleanup:
+  - no cleanup required for a read-only scenario
+industry_mapping:
+  - "BFSI: legacy or debug routes that bypass the gateway's policy and disclose records"
+regulatory_mapping: []
+negative_tests:
+  - API-BAS-GWAY-002 with the published route and a valid token against the fixed build must return the owner's public view

@@ -1,0 +1,57 @@
+id: API-BAS-GWAY-001
+name: Gateway identity header trusted from a direct client reads another customer's order
+category: GWAY
+claim: cross_identity
+attack_objective: >
+  A client that reaches the route without passing the gateway's authentication sends the
+  gateway's identity header naming another customer, and the route returns that order.
+threat_model:
+  attacker: unauthenticated client that can reach the backend route directly
+  identity: customer-a
+  access_level: no credential; can send arbitrary headers
+  objective: read another customer's order by presenting the gateway's identity header
+preconditions:
+  fixture: orders-two-tenant
+  identities: [customer-b, customer-a]
+  object: ORD-2001
+steps:
+  - id: baseline-owner-read
+    role: baseline
+    identity: customer-b
+    auth: valid
+    method: GET
+    path: /api/gw/orders/{object}
+    hypothesis: The owner can read their own order through the gateway. If this fails, the scenario is not testable.
+  - id: attack-forged-identity-header
+    role: attack
+    identity: customer-a
+    auth: valid
+    method: GET
+    path: /api/gw/orders/{object}
+    headers:
+      X-Gateway-Identity: cust-b
+    hypothesis: The gateway identity is set by the gateway only, so a client-supplied header is ignored and the caller's own credential decides.
+denied_statuses: [404]
+expected_control: >
+  The identity header is ignored, so the caller's own credential decides. The caller does not
+  own the order, so the request returns 404 and discloses nothing.
+ground_truth:
+  adapters: [state, response]
+  check: >
+    The attack response contains none of the owner's protected values, and the state is
+    unchanged by the attack.
+detection_assertion:
+  status: not_evaluated
+  reason: Detection validation is Phase 4; this scenario makes no detection claim.
+evidence:
+  - sanitized_request
+  - sanitized_response
+  - state_diff
+side_effect_class: READ_ONLY
+cleanup:
+  - no cleanup required for a read-only scenario
+industry_mapping:
+  - "BFSI: gateways that trust identity headers from clients that bypass the gateway"
+regulatory_mapping: []
+negative_tests:
+  - API-BAS-GWAY-001 with the owner's own bearer token against the fixed build must return the owner's public view

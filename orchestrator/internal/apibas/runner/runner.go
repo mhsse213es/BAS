@@ -88,9 +88,36 @@ type Config struct {
 	State   StateReader
 	Reset   Resetter    // required for STATE_CHANGE_SANDBOX scenarios
 	Events  EventSource // access events for detection scenarios
-	HTTP    *http.Client
+	// Faults reports the faults the lab was started with. Required only by scenarios
+	// that name lab_faults in their preconditions.
+	Faults FaultReader
+	HTTP   *http.Client
 	// Machine is the operator's label for this hardware. Calibration records are bound to it.
 	Machine string
+}
+
+// FaultReader reports the faults a lab was started with.
+type FaultReader interface {
+	ActiveFaults(ctx context.Context) ([]string, error)
+}
+
+// missingFaults returns the required faults that the lab does not have active. Without a
+// fault reader, every required fault is reported missing.
+func (r *Runner) missingFaults(ctx context.Context, required []string) ([]string, error) {
+	if r.cfg.Faults == nil {
+		return required, nil
+	}
+	active, err := r.cfg.Faults.ActiveFaults(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var missing []string
+	for _, f := range required {
+		if !slices.Contains(active, f) {
+			missing = append(missing, f)
+		}
+	}
+	return missing, nil
 }
 
 // Exchange is one request/response pair in evidence, after redaction.
@@ -171,6 +198,16 @@ func (r *Runner) run(ctx context.Context, s contract.Scenario, tag string) (Repo
 	obj, ok := r.cfg.Fixture.Object(s.Preconditions.Object)
 	if !ok {
 		return r.skip(rep, grade.ReasonPreconditionMissing, "object "+s.Preconditions.Object+" not in fixture"), nil
+	}
+	if len(s.Preconditions.LabFaults) > 0 {
+		missing, err := r.missingFaults(ctx, s.Preconditions.LabFaults)
+		if err != nil {
+			return r.skip(rep, grade.ReasonPreconditionMissing, "lab faults could not be read: "+err.Error()), nil
+		}
+		if len(missing) > 0 {
+			return r.skip(rep, grade.ReasonPreconditionMissing,
+				"lab fault not active: "+strings.Join(missing, ",")+" (start the lab with -fault)"), nil
+		}
 	}
 	baseline, attack := s.Steps[0], s.Steps[len(s.Steps)-1]
 	owner, ok := r.cfg.Fixture.Identity(baseline.Identity)
@@ -376,6 +413,9 @@ func (r *Runner) do(ctx context.Context, step contract.Step, token string, obj f
 	for k, v := range step.Headers {
 		req.Header.Set(k, v)
 	}
+	for _, h := range step.ExtraHeaders {
+		req.Header.Add(h.Name, h.Value)
+	}
 	if tag, ok := ctx.Value(runTagKey{}).(string); ok && tag != "" {
 		req.Header.Set("X-BAS-Run", tag)
 	}
@@ -445,13 +485,32 @@ func sameState(a, b map[string]StateRecord) bool {
 	return true
 }
 
+// attemptStep returns the step with each "{n}" in its header values replaced by the attempt
+// number, so repeated attempts can carry a different header value (for example a source IP).
+func attemptStep(step contract.Step, n int) contract.Step {
+	if len(step.Headers) == 0 && len(step.ExtraHeaders) == 0 {
+		return step
+	}
+	num := strconv.Itoa(n)
+	out := step
+	out.Headers = make(map[string]string, len(step.Headers))
+	for k, v := range step.Headers {
+		out.Headers[k] = strings.ReplaceAll(v, "{n}", num)
+	}
+	out.ExtraHeaders = make([]contract.HeaderPair, len(step.ExtraHeaders))
+	for i, h := range step.ExtraHeaders {
+		out.ExtraHeaders[i] = contract.HeaderPair{Name: h.Name, Value: strings.ReplaceAll(h.Value, "{n}", num)}
+	}
+	return out
+}
+
 // runAttack sends the final step Repeat times and folds the exchanges into one
 // attack record. It counts accepted attempts and stops early on a server fault.
 func (r *Runner) runAttack(ctx context.Context, rep *Report, step contract.Step, s contract.Scenario, token string, obj fixture.Object) (grade.Exchange, bool) {
 	reps := max(step.Repeat, 1)
 	var agg grade.Exchange
 	for k := 0; k < reps; k++ {
-		exch, transport := r.do(ctx, step, token, obj, &obj)
+		exch, transport := r.do(ctx, attemptStep(step, k+1), token, obj, &obj)
 		rep.Exchanges = append(rep.Exchanges, exch)
 		if transport {
 			return agg, true

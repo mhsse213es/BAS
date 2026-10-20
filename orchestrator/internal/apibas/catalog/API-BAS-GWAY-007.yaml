@@ -1,0 +1,55 @@
+id: API-BAS-GWAY-007
+name: Percent-encoded search predicate evades the WAF rule and discloses another customer's order
+category: GWAY
+claim: cross_identity
+attack_objective: >
+  A customer sends an injected search predicate with an encoded space, so the WAF rule that
+  matches the raw query does not fire and the predicate reaches the search.
+threat_model:
+  attacker: authenticated customer in tenant A
+  identity: customer-a
+  access_level: standard customer, valid token
+  objective: read another customer's protected order values by evading the perimeter filter
+preconditions:
+  fixture: orders-two-tenant
+  identities: [customer-b, customer-a]
+  object: ORD-2001
+steps:
+  - id: baseline-owner-search
+    role: baseline
+    identity: customer-b
+    auth: valid
+    method: GET
+    path: /api/gw/search?q=ORD-2001
+    hypothesis: The owner can find their own order by exact ID through the gateway. If this fails, the scenario is not testable.
+  - id: attack-encoded-predicate
+    role: attack
+    identity: customer-a
+    auth: valid
+    method: GET
+    path: /api/gw/search?q=%27%20OR%201%3D1
+    hypothesis: The WAF rule matches the decoded query, so the injected predicate is blocked before it reaches the search.
+denied_statuses: [403]
+expected_control: >
+  The WAF refuses the injected predicate with 403, and no protected value of another
+  customer is returned.
+ground_truth:
+  adapters: [state, response]
+  check: >
+    The attack response contains none of the owner's protected values, and the state is
+    unchanged by the attack.
+detection_assertion:
+  status: not_evaluated
+  reason: Detection validation is Phase 4; this scenario makes no detection claim.
+evidence:
+  - sanitized_request
+  - sanitized_response
+  - state_diff
+side_effect_class: READ_ONLY
+cleanup:
+  - no cleanup required for a read-only scenario
+industry_mapping:
+  - "BFSI: WAF rules that match raw input and miss percent-encoded variants"
+regulatory_mapping: []
+negative_tests:
+  - API-BAS-GWAY-007 with the owner's exact order ID against the fixed build must return the owner's order

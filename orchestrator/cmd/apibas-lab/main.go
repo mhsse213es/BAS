@@ -15,6 +15,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 
 	"github.com/audspect/bas/internal/apibas/fixture"
 	"github.com/audspect/bas/internal/apibas/lab"
@@ -24,6 +25,7 @@ func main() {
 	addr := flag.String("addr", "127.0.0.1:8099", "listen address (loopback by default)")
 	mode := flag.String("mode", "vulnerable", "vulnerable | fixed")
 	fixtureName := flag.String("fixture", "orders-two-tenant", "fixture to seed")
+	faults := flag.String("fault", "", "comma-separated dependency faults to hold active, for example authz-store-down")
 	flag.Parse()
 
 	fx, ok := fixtures()[*fixtureName]
@@ -33,6 +35,11 @@ func main() {
 	cfg, err := configFromEnv(lab.Mode(*mode), fx)
 	if err != nil {
 		log.Fatal(err)
+	}
+	for f := range strings.SplitSeq(*faults, ",") {
+		if f = strings.TrimSpace(f); f != "" {
+			cfg.Faults = append(cfg.Faults, f)
+		}
 	}
 	l, err := lab.New(cfg)
 	if err != nil {

@@ -114,6 +114,16 @@ type Preconditions struct {
 	Fixture    string   `yaml:"fixture"`
 	Identities []string `yaml:"identities"`
 	Object     string   `yaml:"object"`
+	// LabFaults names faults the lab must have active (started with -fault). The
+	// scenario is skipped as a precondition failure when a fault is not active.
+	LabFaults []string `yaml:"lab_faults"`
+}
+
+// HeaderPair is one request header. Unlike Step.Headers it is appended, so the same
+// name can be sent more than once.
+type HeaderPair struct {
+	Name  string `yaml:"name"`
+	Value string `yaml:"value"`
 }
 
 // Step is one request in a campaign. Role is "baseline" for the owner's
@@ -130,6 +140,8 @@ type Step struct {
 	Body     string `yaml:"body"`
 	// Headers are extra request headers, for example a method-override header.
 	Headers map[string]string `yaml:"headers"`
+	// ExtraHeaders are appended after Headers. Use it for a duplicate header name.
+	ExtraHeaders []HeaderPair `yaml:"extra_headers"`
 	// Repeat sends the step this many times. Only the attack step may repeat.
 	Repeat int `yaml:"repeat"`
 	// ForgeAs names the identity whose subject an alg_none token carries.

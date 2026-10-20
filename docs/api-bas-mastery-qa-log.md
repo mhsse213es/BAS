@@ -1136,3 +1136,98 @@ timing expectation, and changing it needs a decision.
 - The Windows build (`build.ps1`) has not been run on this tranche.
 - The gateway tranche needs a front proxy and raw HTTP client for smuggling and
   request-target tests (GWAY-004, 005). That is an architecture change before the scenarios.
+
+
+## Phase 23 - gateway tranche (API-BAS-GWAY, Phase 2 P2 IDs)
+
+Branch: `feature/api-bas-phase23`. Scope: GWAY-001, 002, 004, 005, 006, 007, 008, 009, 010,
+011. GWAY-003 was already covered. GWAY-012 is Phase 3 and is not included.
+
+### Architecture
+
+The lab is a single listener, so there is no separate gateway process or network hop. The
+gateway is a policy layer (`lab/gateway.go`) in front of the routes. Its rules apply only
+under `/api/gw/`, so every existing scenario's route is unchanged. Each rule has a
+vulnerable branch (carrying a `LAB-GWAY-*` flaw) and a fixed branch.
+
+"Direct backend access" (GWAY-001) is therefore modelled, not network-tested: a request that
+reaches a route with the gateway's identity header and skips the gateway's checks. The
+scenario says so in its description.
+
+### Scenarios
+
+| ID | Sub-technique | Claim | Vulnerable flaw | Fixed control | Denied |
+|---|---|---|---|---|---|
+| GWAY-001 | Direct access through a forged identity header | cross_identity | identity header replaces the caller's credential | header ignored | 404 |
+| GWAY-002 | Undocumented route without gateway policy | authentication | `/api/gw/orders/{id}/legacy` served | route absent | 404 |
+| GWAY-004 | Encoded path bypasses the ops policy | function_level | rule matches the escaped path; `%6fps` reaches ops | rule matches the decoded path | 403 |
+| GWAY-005 | Duplicate Content-Type | property_level | two Content-Type headers; handler reads the last as a form | refused (400) | 400 |
+| GWAY-006 | Forwarded host trusted | function_level | `X-Forwarded-Host: ops.internal` skips the ops rule | header ignored | 403 |
+| GWAY-007 | Encoded space evades the WAF | cross_identity | WAF matches the raw query | WAF matches the decoded query | 403 |
+| GWAY-008 | No request schema | property_level | unexpected `status` field applied | unknown field refused | 400 |
+| GWAY-009 | Rate limit keyed on a client header | function_level | counter keyed on `X-Forwarded-For` | counter keyed on run and caller | 429 |
+| GWAY-010 | Legacy region node without credential | authentication | `X-Gateway-Region: legacy` skips the credential | credential required everywhere | 401 |
+| GWAY-011 | Fail-open on authz store outage | cross_identity | store down: request allowed | store down: refused | 403 |
+
+### Runner and contract changes
+
+- `contract.Step.ExtraHeaders` appends a header (a duplicate name). It is needed for GWAY-005.
+- `{n}` in a header value is replaced by the attempt number on each attack repeat. GWAY-009
+  rotates `X-Forwarded-For` this way. Only the attack step repeats, so only the attack's
+  headers are expanded.
+- `Preconditions.LabFaults` requires named faults to be active. If a fault is missing, the
+  scenario is skipped as PRECONDITION_MISSING before any traffic is sent.
+  `LabAdmin.ActiveFaults` reads them from `GET /lab/faults`. The lab takes them from the
+  `-fault` flag. A scenario cannot set a fault itself, because setup steps use the attacker's
+  credential and the lab's admin credential is not available to them.
+
+### Decisions to review
+
+- **GWAY-011 needs the lab started with `-fault authz-store-down`.** Without it the scenario
+  is SKIPPED, never counted. The owner's read in the baseline uses the direct route
+  `/api/orders/{id}`, because the gateway route fails closed for everyone while the fault is
+  active.
+- **Fail-closed returns 403, not 503.** The contract accepts only 4xx codes as denials. A
+  denied decision is a refusal, so 403 with the reason "authorization decision unavailable".
+- **Gateway ID lookup uses the path.** The gateway runs before the mux, so the order ID is
+  read from the request path. This was a real defect found by the tests: the owner's baseline
+  returned 404 and the scenario was skipped.
+- **Anonymous steps.** A step with `auth: none` must name the identity `anonymous`
+  (contract rule). GWAY-001, 002 and 010 use it.
+- **GWAY-001's attack uses the attacker's own valid token.** The vulnerable identity header
+  replaces the credential, so the attacker's token is not what decides the caller. The fixed
+  build ignores the header, and the attacker's own token does not own the order (404).
+
+### Verification
+
+- `go vet` on `internal/apibas/...` and both commands passes. The tests pass with `-short`.
+- `TestPhase23_GatewayVulnerableFailsFixedPasses`: nine scenarios FAIL with exploitation
+  against the vulnerable build and PASS with control enforced against the fixed build.
+- `TestPhase23_FailOpenNeedsTheFault`: without the fault GWAY-011 is SKIPPED with
+  PRECONDITION_MISSING.
+- `TestPhase23_FailOpenVulnerableFailsFixedPasses`: GWAY-011 FAILs under the fault in the
+  vulnerable build and PASSes in the fixed build.
+- `TestPhase23_GatewayFlawsAreRegistered`: each scenario has a planted flaw.
+- The existing scenarios pass unchanged. The gateway does not touch their routes.
+
+### Limitations
+
+- The lab has one listener, so GWAY-001 does not test a network-level bypass. A deployed
+  gateway would need a second-listener test.
+- The rate-limit counters grow for the life of the lab (keyed per run). This is acceptable
+  for a lab and is noted here so it is not copied into a production design.
+- GWAY-005's duplicate header is a lab-specific ambiguity: the handler reads the last header.
+  Real request-smuggling (`Content-Length` versus `Transfer-Encoding`) needs a raw HTTP client
+  and is not covered here.
+- `TestABUSE002Repeatability` still fails when run without `-short`. It was already failing
+  (see Phase 22). This tranche does not change it.
+
+### Coverage after this tranche
+
+- Phase 2 scope now covers 44 of 58 sub-techniques. Remaining 14: AUTHZ 005, 008, 009, 011;
+  DISC 001, 004, 007, 008; DATA 002, 008; ABUSE 008, 009; AUTHN 006; INTEG 004.
+
+### Still open
+
+- The Windows build (`build.ps1`) has not been run on this tranche.
+- Running GWAY-011 in a real lab needs the operator to start the lab with `-fault`.

@@ -1,0 +1,56 @@
+id: API-BAS-GWAY-004
+name: Percent-encoded path segment bypasses the gateway's ops policy and cancels an order
+category: GWAY
+claim: function_level
+attack_objective: >
+  A customer encodes one character of an ops route, so the gateway's path rule does not
+  match it but the router still resolves it, and the customer cancels an order.
+threat_model:
+  attacker: authenticated customer, not an administrator
+  identity: customer-a
+  access_level: standard customer, valid token
+  objective: call an administrative ops action through a path the gateway does not police
+preconditions:
+  fixture: orders-two-tenant
+  identities: [customer-b, customer-a]
+  object: ORD-2001
+steps:
+  - id: baseline-owner-read
+    role: baseline
+    identity: customer-b
+    auth: valid
+    method: GET
+    path: /api/gw/orders/{object}
+    hypothesis: The owner can read their own order through the gateway. If this fails, the scenario is not testable.
+  - id: attack-encoded-ops-path
+    role: attack
+    identity: customer-a
+    auth: valid
+    method: POST
+    path: /api/gw/%6fps/orders/{object}/cancel
+    body: '{"reason": "ops"}'
+    hypothesis: The gateway matches the decoded, cleaned path, so the encoded ops path is refused like the plain one.
+denied_statuses: [403]
+expected_control: >
+  The gateway refuses the ops route for a non-admin caller with 403, whatever the path
+  encoding, and the order status is unchanged.
+ground_truth:
+  adapters: [state, response]
+  check: >
+    The order status is identical before and after the attack, and the response
+    discloses no protected values.
+detection_assertion:
+  status: not_evaluated
+  reason: Detection validation is Phase 4; this scenario makes no detection claim.
+evidence:
+  - sanitized_request
+  - sanitized_response
+  - state_diff
+side_effect_class: STATE_CHANGE_SANDBOX
+cleanup:
+  - reset the lab to its fixture seed after the run
+industry_mapping:
+  - "BFSI: gateway path policies that do not normalise encoded segments"
+regulatory_mapping: []
+negative_tests:
+  - API-BAS-GWAY-004 with the plain ops path from an administrator credential against the fixed build must be allowed

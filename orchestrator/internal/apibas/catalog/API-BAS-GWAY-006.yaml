@@ -1,0 +1,58 @@
+id: API-BAS-GWAY-006
+name: Forwarded host header is trusted as an internal caller on an ops route
+category: GWAY
+claim: function_level
+attack_objective: >
+  A customer sends a forwarded host header naming an internal host, and the gateway treats the
+  request as internal and lets it reach an ops route.
+threat_model:
+  attacker: authenticated customer, not an administrator, that can set request headers
+  identity: customer-a
+  access_level: standard customer, valid token
+  objective: reach an internal ops route by spoofing the forwarded host
+preconditions:
+  fixture: orders-two-tenant
+  identities: [customer-b, customer-a]
+  object: ORD-2001
+steps:
+  - id: baseline-owner-read
+    role: baseline
+    identity: customer-b
+    auth: valid
+    method: GET
+    path: /api/gw/orders/{object}
+    hypothesis: The owner can read their own order through the gateway. If this fails, the scenario is not testable.
+  - id: attack-forwarded-host-spoof
+    role: attack
+    identity: customer-a
+    auth: valid
+    method: POST
+    path: /api/gw/ops/orders/{object}/cancel
+    body: '{"reason": "ops"}'
+    headers:
+      X-Forwarded-Host: ops.internal
+    hypothesis: Routing decisions use the connection's host, not a client-supplied forwarded host, so the spoofed header is ignored.
+denied_statuses: [403]
+expected_control: >
+  The gateway refuses the ops route for a non-admin caller with 403, whatever forwarded host
+  header is sent, and the order status is unchanged.
+ground_truth:
+  adapters: [state, response]
+  check: >
+    The order status is identical before and after the attack, and the response
+    discloses no protected values.
+detection_assertion:
+  status: not_evaluated
+  reason: Detection validation is Phase 4; this scenario makes no detection claim.
+evidence:
+  - sanitized_request
+  - sanitized_response
+  - state_diff
+side_effect_class: STATE_CHANGE_SANDBOX
+cleanup:
+  - reset the lab to its fixture seed after the run
+industry_mapping:
+  - "BFSI: internal-only routes that trust client-supplied forwarded headers"
+regulatory_mapping: []
+negative_tests:
+  - API-BAS-GWAY-006 with no forwarded header from an administrator credential against the fixed build must be allowed

@@ -38,6 +38,11 @@ type env struct {
 // newEnv starts a lab in the given mode and wires a runner to it. Tokens are
 // random per test: short-lived by construction, never committed.
 func newEnv(t *testing.T, mode lab.Mode, fx fixture.Fixture) *env {
+	return newEnvFaults(t, mode, fx, nil)
+}
+
+// newEnvFaults starts a lab with the named dependency faults active.
+func newEnvFaults(t *testing.T, mode lab.Mode, fx fixture.Fixture, faults []string) *env {
 	t.Helper()
 	tokA, tokB, adminTok := randomToken(t), randomToken(t), randomToken(t)
 	revokedA := randomToken(t) // issued to customer-a, then revoked in the lab
@@ -49,6 +54,7 @@ func newEnv(t *testing.T, mode lab.Mode, fx fixture.Fixture) *env {
 		},
 		Revoked:    []string{revokedA},
 		AdminToken: adminTok,
+		Faults:     faults,
 	})
 	if err != nil {
 		t.Fatalf("lab.New: %v", err)
@@ -100,6 +106,7 @@ func (e *env) run(t *testing.T, s contract.Scenario, state runner.StateReader) r
 		State:   state,
 		Reset:   e.admin,
 		Events:  e.admin,
+		Faults:  e.admin,
 	})
 	if err != nil {
 		t.Fatalf("runner.New: %v", err)
