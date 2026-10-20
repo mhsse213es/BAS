@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 )
 
 // CleanupDeleteResult reports a deletion. Status is "deleted" (every requested record was removed),
@@ -26,7 +27,7 @@ type CleanupDeleteResult struct {
 // carries this run's identifier and the marker tag. It never deletes by time window or wildcard.
 // conflicts=abort stops the delete on a version conflict rather than skipping silently. The marker
 // mapping is checked first, as the preview does.
-func DeleteElasticCandidates(ctx context.Context, client *http.Client, cfg ElasticConfig, index, runID string, ids []string) (CleanupDeleteResult, error) {
+func DeleteElasticCandidates(ctx context.Context, client *http.Client, cfg ElasticConfig, index, runID string, ids []string, cutoff time.Time) (CleanupDeleteResult, error) {
 	res := CleanupDeleteResult{Requested: len(ids)}
 	if !ValidTestRunID(runID) {
 		return res, fmt.Errorf("refused: test run identifier is not in the server-generated form")
@@ -49,6 +50,9 @@ func DeleteElasticCandidates(ctx context.Context, client *http.Client, cfg Elast
 			map[string]any{"ids": map[string]any{"values": ids}},
 			map[string]any{"match_phrase": map[string]any{MarkerField: runID}},
 			map[string]any{"match_phrase": map[string]any{"tags": MarkerTag}},
+			// The server enforces retention again at deletion time, so a record whose event time
+			// changed to fall inside the window is never removed.
+			map[string]any{"range": map[string]any{EventTimeField: map[string]any{"lte": cutoff.UTC().Format(time.RFC3339Nano)}}},
 		}}},
 	})
 	if err != nil {

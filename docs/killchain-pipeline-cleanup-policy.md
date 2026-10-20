@@ -91,7 +91,13 @@ Not built, by decision:
   the approval if it changed, then deletes only those records by identifier, marker and tag.
   Verified against the lab: exact matches deleted, near-miss records (other run, untagged) kept.
 - Cleanup second-person rule: enforced for customer deployments at approval time; lab may self-approve.
-- Not yet built for cleanup: the 30-day retention window is not applied, so a preview lists every
-  tagged record of the run regardless of age. This must be added before cleanup is used on a customer
-  system.
+- Retention, enforced server-side in preview and execution: a record is eligible only if its
+  @timestamp (a date field, required in the index mapping) is at least 30 days before server time.
+  Exactly 30 days old is eligible. Missing, null, malformed, non-date-mapped and future event times
+  are held. The eligible set, with each record's identity and event time, is bound to the approval;
+  execution re-previews and refuses if either changed. The delete query repeats the cutoff. Judgement
+  call to confirm: "older than the window" is read as eligible, not "kept for the window".
+- A partial or failed deletion is recorded as failed and the approval is spent; a retry needs a new
+  approval. Execution is not restricted to the approver; any holder of pipeline:cleanup:approve can
+  execute an approved request. Decide whether that should be the approver only.
 - Connectors other than Elastic. They report unsupported.

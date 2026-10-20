@@ -9,7 +9,11 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 )
+
+// testCutoff is the retention cutoff the delete tests pass: records older than the window.
+var testCutoff = time.Now().UTC().Add(-RetentionWindow)
 
 // deleteServer answers the mapping request as mapped, records the delete body, and returns deleteBody.
 func deleteServer(t *testing.T, deleteBody string, sent *string, calls *atomic.Int32) *httptest.Server {
@@ -34,7 +38,7 @@ func TestDeleteCandidates_QueryIsExactAndBounded(t *testing.T) {
 	srv := deleteServer(t, `{"deleted":2,"version_conflicts":0,"failures":[]}`, &sent, &calls)
 	defer srv.Close()
 	res, err := DeleteElasticCandidates(context.Background(), srv.Client(), ElasticConfig{BaseURL: srv.URL},
-		"logs-bas", previewRunID, []string{"doc-1", "doc-2"})
+		"logs-bas", previewRunID, []string{"doc-1", "doc-2"}, testCutoff)
 	if err != nil || res.Status != "deleted" {
 		t.Fatalf("delete: res=%+v err=%v", res, err)
 	}
@@ -58,7 +62,7 @@ func TestDeleteCandidates_ConflictIsPartialNotComplete(t *testing.T) {
 	srv := deleteServer(t, `{"deleted":1,"version_conflicts":1,"failures":[]}`, &sent, &calls)
 	defer srv.Close()
 	res, _ := DeleteElasticCandidates(context.Background(), srv.Client(), ElasticConfig{BaseURL: srv.URL},
-		"logs-bas", previewRunID, []string{"doc-1", "doc-2"})
+		"logs-bas", previewRunID, []string{"doc-1", "doc-2"}, testCutoff)
 	if res.Status != "partial" || res.Deleted != 1 || res.Conflicts != 1 {
 		t.Fatalf("conflict: res=%+v, want partial with one deleted and one conflict", res)
 	}
@@ -71,7 +75,7 @@ func TestDeleteCandidates_FailuresAreError(t *testing.T) {
 	srv := deleteServer(t, `{"deleted":0,"version_conflicts":0,"failures":[{"cause":"x"}]}`, &sent, &calls)
 	defer srv.Close()
 	res, _ := DeleteElasticCandidates(context.Background(), srv.Client(), ElasticConfig{BaseURL: srv.URL},
-		"logs-bas", previewRunID, []string{"doc-1"})
+		"logs-bas", previewRunID, []string{"doc-1"}, testCutoff)
 	if res.Status != "error" {
 		t.Fatalf("failures: res=%+v, want error", res)
 	}
@@ -85,14 +89,14 @@ func TestDeleteCandidates_RefusedBeforeRequest(t *testing.T) {
 	defer srv.Close()
 	cfg := ElasticConfig{BaseURL: srv.URL}
 	ids := []string{"doc-1"}
-	if _, err := DeleteElasticCandidates(context.Background(), srv.Client(), cfg, "logs-bas", "bas-*", ids); err == nil {
+	if _, err := DeleteElasticCandidates(context.Background(), srv.Client(), cfg, "logs-bas", "bas-*", ids, testCutoff); err == nil {
 		t.Fatal("malformed run identifier accepted")
 	}
-	if _, err := DeleteElasticCandidates(context.Background(), srv.Client(), cfg, "logs-*", previewRunID, ids); err == nil {
+	if _, err := DeleteElasticCandidates(context.Background(), srv.Client(), cfg, "logs-*", previewRunID, ids, testCutoff); err == nil {
 		t.Fatal("pattern index accepted")
 	}
 	big := make([]string, cleanupPreviewLimit+1)
-	if _, err := DeleteElasticCandidates(context.Background(), srv.Client(), cfg, "logs-bas", previewRunID, big); err == nil {
+	if _, err := DeleteElasticCandidates(context.Background(), srv.Client(), cfg, "logs-bas", previewRunID, big, testCutoff); err == nil {
 		t.Fatal("oversized set accepted")
 	}
 	if calls.Load() != 0 {
@@ -106,7 +110,7 @@ func TestDeleteCandidates_EmptySetDeletesNothing(t *testing.T) {
 	var calls atomic.Int32
 	srv := deleteServer(t, `{}`, &sent, &calls)
 	defer srv.Close()
-	res, err := DeleteElasticCandidates(context.Background(), srv.Client(), ElasticConfig{BaseURL: srv.URL}, "logs-bas", previewRunID, nil)
+	res, err := DeleteElasticCandidates(context.Background(), srv.Client(), ElasticConfig{BaseURL: srv.URL}, "logs-bas", previewRunID, nil, testCutoff)
 	if err != nil || res.Status != "deleted" || calls.Load() != 0 {
 		t.Fatalf("empty set: res=%+v err=%v calls=%d", res, err, calls.Load())
 	}

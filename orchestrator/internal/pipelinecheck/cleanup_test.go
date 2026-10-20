@@ -35,7 +35,7 @@ func previewServer(t *testing.T, status int, body string, seen *atomic.Int32, bo
 
 // hit builds one search hit with the stored marker fields a real record would carry.
 func hit(id, runID, tags string) string {
-	return `{"_id":"` + id + `","_source":{"audspect":{"test_run":"` + runID + `"},"tags":` + tags + `}}`
+	return `{"_id":"` + id + `","_source":{"audspect":{"test_run":"` + runID + `"},"@timestamp":"2026-01-01T00:00:00Z","tags":` + tags + `}}`
 }
 
 func searchResult(total int, hits ...string) string {
@@ -99,7 +99,7 @@ func TestCleanupPreview_QueryRequiresRunIDAndTag(t *testing.T) {
 		}
 	}
 	src, _ := json.Marshal(body["_source"])
-	if string(src) != `["audspect.test_run","tags"]` {
+	if string(src) != `["audspect.test_run","tags","@timestamp"]` {
 		t.Fatalf("_source = %s, want only the marker fields", src)
 	}
 }

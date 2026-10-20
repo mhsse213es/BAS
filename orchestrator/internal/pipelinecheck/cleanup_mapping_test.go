@@ -10,7 +10,22 @@ import (
 )
 
 // mappedFixture is a mapping in which both marker fields exist.
-const mappedFixture = `{"logs-bas":{"mappings":{"audspect.test_run":{"full_name":"audspect.test_run"},"tags":{"full_name":"tags"}}}}`
+const mappedFixture = `{"logs-bas":{"mappings":{"audspect.test_run":{"full_name":"audspect.test_run"},"tags":{"full_name":"tags"},"@timestamp":{"full_name":"@timestamp","mapping":{"@timestamp":{"type":"date"}}}}}}`
+
+// keywordTimestampFixture maps the marker fields but types the event time as a keyword. Retention
+// comparisons on it would be lexical, so the preview must refuse.
+const keywordTimestampFixture = `{"logs-bas":{"mappings":{"audspect.test_run":{"full_name":"audspect.test_run"},"tags":{"full_name":"tags"},"@timestamp":{"full_name":"@timestamp","mapping":{"@timestamp":{"type":"keyword"}}}}}}`
+
+// A keyword event time is refused before any search, so retention is never judged lexically.
+func TestCleanupPreview_KeywordEventTimeRefused(t *testing.T) {
+	var searches atomic.Int32
+	srv := mappingServer(t, http.StatusOK, keywordTimestampFixture, searchResult(0), &searches)
+	defer srv.Close()
+	p := PreviewElasticCleanup(context.Background(), srv.Client(), ElasticConfig{BaseURL: srv.URL}, "logs-bas", previewRunID)
+	if p.Status != "error" || !strings.Contains(p.Reason, "not mapped as a date") || searches.Load() != 0 {
+		t.Fatalf("keyword event time: preview = %+v searches=%d, want refusal before any search", p, searches.Load())
+	}
+}
 
 // unmappedFixture is a mapping with no marker fields. It is what a search on a field that was
 // never indexed sees.
@@ -89,7 +104,7 @@ func TestCleanupPreview_AmbiguousMarkerRetained(t *testing.T) {
 func TestCleanupPreview_ExtraTagsDoNotBlockConfirmation(t *testing.T) {
 	var searches atomic.Int32
 	body := `{"hits":{"total":{"value":1,"relation":"eq"},"hits":[{"_id":"extra","_source":{"audspect":{"test_run":"` +
-		previewRunID + `"},"tags":["team-a","audspect-bas-test"]}}]}}`
+		previewRunID + `"},"@timestamp":"2026-01-01T00:00:00Z","tags":["team-a","audspect-bas-test"]}}]}}`
 	srv := mappingServer(t, http.StatusOK, mappedFixture, body, &searches)
 	defer srv.Close()
 	p := PreviewElasticCleanup(context.Background(), srv.Client(), ElasticConfig{BaseURL: srv.URL}, "logs-bas", previewRunID)

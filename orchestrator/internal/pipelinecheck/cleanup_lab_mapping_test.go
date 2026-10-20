@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 )
 
 func labCfg(t *testing.T) ElasticConfig {
@@ -21,6 +22,8 @@ func labCfg(t *testing.T) ElasticConfig {
 // exact check confirms it.
 func TestCleanupPreview_LabKeywordMapping(t *testing.T) {
 	cfg := labCfg(t)
+	old := time.Now().UTC().Add(-RetentionWindow - 24*time.Hour).Format(time.RFC3339Nano)
+	seedLab(t, cfg, "lab-keyword-probe", "keyword-run", `{"audspect":{"test_run":"`+previewRunID+`"},"@timestamp":"`+old+`","tags":["audspect-bas-test"]}`)
 	p := PreviewElasticCleanup(context.Background(), http.DefaultClient, cfg, "lab-keyword-probe", previewRunID)
 	if p.Status != "previewed" || len(p.Candidates) != 1 || p.Candidates[0] != "keyword-run" {
 		t.Fatalf("keyword mapping: preview = %+v, want exactly [keyword-run]", p)

@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 )
 
 // seedLab writes one document into the lab index, replacing any existing copy, so the test does not
@@ -34,13 +35,13 @@ func seedLab(t *testing.T, cfg ElasticConfig, index, id, body string) {
 func TestDeleteCandidates_LabDeletesOnlyExactMatches(t *testing.T) {
 	cfg := labCfg(t)
 	const index = "lab-delete-probe"
-	seedLab(t, cfg, index, "mine-1", `{"audspect":{"test_run":"`+previewRunID+`"},"tags":["audspect-bas-test"]}`)
-	seedLab(t, cfg, index, "mine-2", `{"audspect":{"test_run":"`+previewRunID+`"},"tags":["audspect-bas-test"]}`)
-	seedLab(t, cfg, index, "other-run", `{"audspect":{"test_run":"bas-ffffffffffffffffffffffffffffffff"},"tags":["audspect-bas-test"]}`)
-	seedLab(t, cfg, index, "untagged", `{"audspect":{"test_run":"`+previewRunID+`"},"tags":["team-a"]}`)
+	seedLab(t, cfg, index, "mine-1", `{"audspect":{"test_run":"`+previewRunID+`"},"@timestamp":"`+oldEvent()+`","tags":["audspect-bas-test"]}`)
+	seedLab(t, cfg, index, "mine-2", `{"audspect":{"test_run":"`+previewRunID+`"},"@timestamp":"`+oldEvent()+`","tags":["audspect-bas-test"]}`)
+	seedLab(t, cfg, index, "other-run", `{"audspect":{"test_run":"bas-ffffffffffffffffffffffffffffffff"},"@timestamp":"`+oldEvent()+`","tags":["audspect-bas-test"]}`)
+	seedLab(t, cfg, index, "untagged", `{"audspect":{"test_run":"`+previewRunID+`"},"@timestamp":"`+oldEvent()+`","tags":["team-a"]}`)
 
 	ids := []string{"mine-1", "mine-2", "other-run", "untagged"}
-	res, err := DeleteElasticCandidates(context.Background(), http.DefaultClient, cfg, index, previewRunID, ids)
+	res, err := DeleteElasticCandidates(context.Background(), http.DefaultClient, cfg, index, previewRunID, ids, testCutoff)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -51,4 +52,9 @@ func TestDeleteCandidates_LabDeletesOnlyExactMatches(t *testing.T) {
 	if p.Status != "previewed" || len(p.Candidates) != 0 {
 		t.Fatalf("after delete, preview = %+v, want no candidates left", p)
 	}
+}
+
+// oldEvent is an event time well outside the retention window, so the seeded records are eligible.
+func oldEvent() string {
+	return time.Now().UTC().Add(-RetentionWindow - 24*time.Hour).Format(time.RFC3339Nano)
 }

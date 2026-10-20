@@ -18,19 +18,25 @@ import (
 	"github.com/audspect/bas/internal/pipelinecheck"
 )
 
-// cleanupPayload is the exact candidate set a cleanup approval covers. The candidates are sorted, so
-// the same set always encodes to the same bytes and the same hash.
+// cleanupPayload is the exact set a cleanup approval covers: each eligible record's identity and the
+// event time it was judged on, plus the run and index. Records are sorted by identity, so the same
+// set always encodes to the same bytes and the same hash.
 type cleanupPayload struct {
-	RunID      string   `json:"runId"`
-	Index      string   `json:"index"`
-	Candidates []string `json:"candidates"`
+	RunID          string                        `json:"runId"`
+	Index          string                        `json:"index"`
+	RetentionHours int64                         `json:"retentionHours"`
+	Records        []pipelinecheck.CleanupRecord `json:"records"`
 }
 
-func buildCleanupPayload(runID, index string, candidates []string) (string, string, error) {
-	sorted := make([]string, len(candidates))
-	copy(sorted, candidates)
-	sort.Strings(sorted)
-	b, err := json.Marshal(cleanupPayload{RunID: runID, Index: index, Candidates: sorted})
+func buildCleanupPayload(runID, index string, records []pipelinecheck.CleanupRecord) (string, string, error) {
+	sorted := make([]pipelinecheck.CleanupRecord, len(records))
+	copy(sorted, records)
+	sort.Slice(sorted, func(i, j int) bool { return sorted[i].ID < sorted[j].ID })
+	b, err := json.Marshal(cleanupPayload{
+		RunID: runID, Index: index,
+		RetentionHours: int64(pipelinecheck.RetentionWindow / time.Hour),
+		Records:        sorted,
+	})
 	if err != nil {
 		return "", "", err
 	}
@@ -54,8 +60,9 @@ func (h *Handler) elasticFor(ctx context.Context, connectorID string) (pipelinec
 	return pipelinecheck.ElasticConfig{BaseURL: cfg.BaseURL, APIKey: cfg.APIToken}, client, nil
 }
 
-// requestCleanupApproval previews the cleanup on the server and binds the exact candidate set into
-// the approval. The caller names the run and the index; the server decides which records match.
+// requestCleanupApproval previews the cleanup at server time and binds the eligible set, with each
+// record's event time, into the approval. The caller names the run and the index; the server decides
+// which records are eligible.
 func (h *Handler) requestCleanupApproval(w http.ResponseWriter, r *http.Request, userID string, body createApprovalBody) {
 	if len(body.Document) != 0 {
 		jsonError(w, "a cleanup request takes no document", http.StatusBadRequest)
@@ -74,12 +81,13 @@ func (h *Handler) requestCleanupApproval(w http.ResponseWriter, r *http.Request,
 		jsonError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	p := pipelinecheck.PreviewElasticCleanup(r.Context(), client, cfg, body.Index, body.RunID)
+	now := time.Now().UTC()
+	p := pipelinecheck.PreviewElasticCleanupAt(r.Context(), client, cfg, body.Index, body.RunID, now)
 	if p.Status != "previewed" {
 		jsonError(w, "cleanup cannot be previewed: "+p.Reason, http.StatusConflict)
 		return
 	}
-	payloadJSON, hash, err := buildCleanupPayload(body.RunID, body.Index, p.Candidates)
+	payloadJSON, hash, err := buildCleanupPayload(body.RunID, body.Index, p.Records)
 	if err != nil {
 		jsonError(w, "could not encode the candidate set", http.StatusInternalServerError)
 		return
@@ -87,7 +95,7 @@ func (h *Handler) requestCleanupApproval(w http.ResponseWriter, r *http.Request,
 	scope := injectionapproval.Scope{
 		Kind: injectionapproval.KindCleanup, ConnectorID: body.ConnectorID, Target: body.Index,
 		PayloadHash: hash, TestScope: "test run " + body.RunID,
-		ExpectedChange: fmt.Sprintf("%d tagged test records deleted", len(p.Candidates)),
+		ExpectedChange: fmt.Sprintf("%d tagged test records older than %d hours deleted", len(p.Records), int64(pipelinecheck.RetentionWindow/time.Hour)),
 		Payload:        payloadJSON,
 	}
 	id, err := newApprovalID()
@@ -96,22 +104,26 @@ func (h *Handler) requestCleanupApproval(w http.ResponseWriter, r *http.Request,
 		return
 	}
 	store := db.KillChainStore{Pool: h.db}
-	if err := store.RequestApproval(r.Context(), id, userID, scope, time.Now()); err != nil {
+	if err := store.RequestApproval(r.Context(), id, userID, scope, now); err != nil {
 		jsonError(w, "could not record the request", http.StatusInternalServerError)
 		return
 	}
 	h.auditLog(r, "pipeline.cleanup.requested", id, map[string]any{
-		"runId": body.RunID, "target": body.Index, "candidates": len(p.Candidates), "scopeHash": scope.Hash(),
+		"runId": body.RunID, "target": body.Index, "eligible": len(p.Records),
+		"heldByRetention": len(p.RetentionHeld), "scopeHash": scope.Hash(),
 	}, "ok")
 	respond(w, map[string]any{
-		"approvalId": id, "runId": body.RunID, "candidates": p.Candidates, "retained": p.Retained,
+		"approvalId": id, "runId": body.RunID, "records": p.Records,
+		"retentionHeld": p.RetentionHeld, "retained": p.Retained,
 		"scopeHash": scope.Hash(), "status": "pending",
 	})
 }
 
-// ExecuteCleanupApproval deletes the approved candidate set. It re-runs the preview first. If the set
-// has changed since approval, it refuses and does not consume the approval. Otherwise it consumes the
-// approval, deletes only those records, and records the outcome.
+// ExecuteCleanupApproval deletes the approved set. At execution it re-runs the preview at server time
+// and compares the eligible records, identities and event times with what was approved. If they differ,
+// it refuses and does not consume the approval. Otherwise it consumes the approval, deletes only those
+// records with the retention cutoff in the delete query, and records the outcome. A partial or failed
+// deletion is recorded as failed. Retrying needs a new approval.
 // POST /api/pipeline-approvals/{id}/execute-cleanup
 func (h *Handler) ExecuteCleanupApproval(w http.ResponseWriter, r *http.Request) {
 	claims, ok := auth.ClaimsFrom(r.Context())
@@ -143,24 +155,28 @@ func (h *Handler) ExecuteCleanupApproval(w http.ResponseWriter, r *http.Request)
 		jsonError(w, err.Error(), http.StatusConflict)
 		return
 	}
-	// Re-verify the candidates before anything is consumed. The preview is read-only.
-	p := pipelinecheck.PreviewElasticCleanup(r.Context(), client, cfg, pl.Index, pl.RunID)
+	now := time.Now().UTC()
+	p := pipelinecheck.PreviewElasticCleanupAt(r.Context(), client, cfg, pl.Index, pl.RunID, now)
 	if p.Status != "previewed" {
 		jsonError(w, "candidates cannot be verified now; nothing was deleted: "+p.Reason, http.StatusConflict)
 		return
 	}
-	_, hash, err := buildCleanupPayload(pl.RunID, pl.Index, p.Candidates)
+	_, hash, err := buildCleanupPayload(pl.RunID, pl.Index, p.Records)
 	if err != nil || hash != v.Scope.PayloadHash {
-		h.auditLog(r, "pipeline.cleanup.refused", id, map[string]any{"reason": "candidate set changed"}, "refused")
-		jsonError(w, "the candidate set changed since approval; nothing was deleted; request a new approval", http.StatusConflict)
+		h.auditLog(r, "pipeline.cleanup.refused", id, map[string]any{"reason": "eligible set or event times changed"}, "refused")
+		jsonError(w, "the eligible records or their event times changed since approval; nothing was deleted; request a new approval", http.StatusConflict)
 		return
 	}
-	now := time.Now()
 	if err := store.ConsumeApproval(r.Context(), id, claims.UserID, v.Scope, h.approvalClassification(), now); err != nil {
 		writeApprovalError(w, err)
 		return
 	}
-	res, derr := pipelinecheck.DeleteElasticCandidates(r.Context(), client, cfg, pl.Index, pl.RunID, p.Candidates)
+	ids := make([]string, 0, len(p.Records))
+	for _, rec := range p.Records {
+		ids = append(ids, rec.ID)
+	}
+	cutoff := now.Add(-pipelinecheck.RetentionWindow)
+	res, derr := pipelinecheck.DeleteElasticCandidates(r.Context(), client, cfg, pl.Index, pl.RunID, ids, cutoff)
 	reason := res.Reason
 	outcome := "executed"
 	if derr != nil {
@@ -169,7 +185,7 @@ func (h *Handler) ExecuteCleanupApproval(w http.ResponseWriter, r *http.Request)
 	if derr != nil || res.Status != "deleted" {
 		outcome = "failed"
 	}
-	if err := store.RecordExecutionOutcome(r.Context(), id, claims.UserID, outcome, time.Now()); err != nil {
+	if err := store.RecordExecutionOutcome(r.Context(), id, claims.UserID, outcome, time.Now().UTC()); err != nil {
 		jsonError(w, "the cleanup ran but its outcome could not be recorded; check the audit trail before retrying: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -180,5 +196,6 @@ func (h *Handler) ExecuteCleanupApproval(w http.ResponseWriter, r *http.Request)
 	respond(w, map[string]any{
 		"approvalId": id, "status": res.Status, "reason": reason, "requested": res.Requested,
 		"deleted": res.Deleted, "conflicts": res.Conflicts, "outcome": outcome, "retained": p.Retained,
+		"retentionHeld": p.RetentionHeld,
 	})
 }

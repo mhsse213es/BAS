@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -22,20 +23,32 @@ import (
 
 const cleanupRun = "bas-0123456789abcdef0123456789abcdef"
 
-var runIDPattern = regexp.MustCompile(`bas-[0-9a-f]{32}`)
+var (
+	runIDPattern = regexp.MustCompile(`bas-[0-9a-f]{32}`)
+	ltePattern   = regexp.MustCompile(`"lte":"([^"]+)"`)
+)
+
+// oldEventTime is an event time well outside the 30-day window. recentEventTime is well inside it.
+func oldEventTime() string {
+	return time.Now().UTC().Add(-45 * 24 * time.Hour).Format(time.RFC3339Nano)
+}
+func recentEventTime() string { return time.Now().UTC().Add(-24 * time.Hour).Format(time.RFC3339Nano) }
 
 // fakeES is a small Elasticsearch stand-in. It answers the mapping, search and delete_by_query calls
-// the cleanup path makes, and keeps documents in memory. It matches the marker by run identifier and
-// tag, as the real query does.
+// the cleanup path makes, and keeps documents in memory. Search matches the run identifier and tag.
+// Delete applies the run, tag, identity and retention cutoff, as the real query does. When conflict is
+// set, delete removes only the first requested record and reports the rest as version conflicts.
 type fakeES struct {
 	mu       sync.Mutex
 	docs     map[string]fakeDoc
 	unmapped bool
+	conflict bool
 }
 
 type fakeDoc struct {
 	run    string
 	tagged bool
+	ts     string
 }
 
 func (f *fakeES) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -49,7 +62,7 @@ func (f *fakeES) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			_, _ = w.Write([]byte(`{"logs-bas":{"mappings":{}}}`))
 			return
 		}
-		_, _ = w.Write([]byte(`{"logs-bas":{"mappings":{"audspect.test_run":{},"tags":{}}}}`))
+		_, _ = w.Write([]byte(`{"logs-bas":{"mappings":{"audspect.test_run":{},"tags":{},"@timestamp":{"mapping":{"@timestamp":{"type":"date"}}}}}}`))
 	case strings.HasSuffix(r.URL.Path, "/_search"):
 		run := runIDPattern.FindString(string(body))
 		var ids []string
@@ -61,11 +74,21 @@ func (f *fakeES) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		sort.Strings(ids)
 		hits := make([]string, 0, len(ids))
 		for _, id := range ids {
-			hits = append(hits, `{"_id":"`+id+`","_source":{"audspect":{"test_run":"`+run+`"},"tags":["audspect-bas-test"]}}`)
+			d := f.docs[id]
+			src := `{"audspect":{"test_run":"` + run + `"},"tags":["audspect-bas-test"]`
+			if d.ts != "" {
+				src += `,"@timestamp":"` + d.ts + `"`
+			}
+			hits = append(hits, `{"_id":"`+id+`","_source":`+src+`}}`)
 		}
 		_, _ = w.Write([]byte(`{"hits":{"total":{"value":` + strconv.Itoa(len(ids)) + `,"relation":"eq"},"hits":[` + strings.Join(hits, ",") + `]}}`))
 	case strings.HasSuffix(r.URL.Path, "/_delete_by_query"):
 		run := runIDPattern.FindString(string(body))
+		cutoff := ""
+		if m := ltePattern.FindStringSubmatch(string(body)); m != nil {
+			cutoff = m[1]
+		}
+		cutoffT, _ := time.Parse(time.RFC3339Nano, cutoff)
 		var q struct {
 			Query struct {
 				Bool struct {
@@ -84,23 +107,33 @@ func (f *fakeES) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				ids = v.Values
 			}
 		}
-		deleted := 0
-		for _, id := range ids {
-			if d, ok := f.docs[id]; ok && d.run == run && d.tagged {
-				delete(f.docs, id)
-				deleted++
+		deleted, conflicts := 0, 0
+		for i, id := range ids {
+			d, ok := f.docs[id]
+			if !ok || d.run != run || !d.tagged {
+				continue
 			}
+			ts, err := time.Parse(time.RFC3339Nano, d.ts)
+			if err != nil || ts.After(cutoffT) {
+				continue
+			}
+			if f.conflict && i > 0 {
+				conflicts++
+				continue
+			}
+			delete(f.docs, id)
+			deleted++
 		}
-		_, _ = w.Write([]byte(`{"deleted":` + strconv.Itoa(deleted) + `,"version_conflicts":0,"failures":[]}`))
+		_, _ = w.Write([]byte(`{"deleted":` + strconv.Itoa(deleted) + `,"version_conflicts":` + strconv.Itoa(conflicts) + `,"failures":[]}`))
 	default:
 		w.WriteHeader(http.StatusNotFound)
 	}
 }
 
-func (f *fakeES) put(id, run string, tagged bool) {
+func (f *fakeES) put(id, run string, tagged bool, ts string) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.docs[id] = fakeDoc{run: run, tagged: tagged}
+	f.docs[id] = fakeDoc{run: run, tagged: tagged, ts: ts}
 }
 
 func (f *fakeES) remaining() []string {
@@ -127,15 +160,17 @@ func insertCleanupConnector(t *testing.T, pool *pgxpool.Pool, baseURL string) st
 	return id
 }
 
-// cleanupFixture starts the fake Elasticsearch with two tagged records of this run, a record of
-// another run, and a record of this run that lacks the tag. It returns the router and the connector.
+// cleanupFixture starts the fake Elasticsearch with two old tagged records of this run, a recent tagged
+// record of this run (held by retention), a record of another run, and an old record of this run without
+// the tag. It returns the router, the store and the connector.
 func cleanupFixture(t *testing.T, pool *pgxpool.Pool) (http.Handler, *fakeES, string) {
 	t.Helper()
 	es := &fakeES{docs: map[string]fakeDoc{
-		"mine-1":   {run: cleanupRun, tagged: true},
-		"mine-2":   {run: cleanupRun, tagged: true},
-		"other":    {run: "bas-ffffffffffffffffffffffffffffffff", tagged: true},
-		"untagged": {run: cleanupRun, tagged: false},
+		"mine-1":   {run: cleanupRun, tagged: true, ts: oldEventTime()},
+		"mine-2":   {run: cleanupRun, tagged: true, ts: oldEventTime()},
+		"recent":   {run: cleanupRun, tagged: true, ts: recentEventTime()},
+		"other":    {run: "bas-ffffffffffffffffffffffffffffffff", tagged: true, ts: oldEventTime()},
+		"untagged": {run: cleanupRun, tagged: false, ts: oldEventTime()},
 	}}
 	srv := httptest.NewServer(es)
 	t.Cleanup(srv.Close)
@@ -159,8 +194,13 @@ func executeCleanup(t *testing.T, router http.Handler, id, user string) (int, ma
 	return rec.Code, out
 }
 
-// The approved candidates are exactly the tagged records of this run. A second person approves,
-// then the executor deletes exactly those. The record of another run and the untagged record survive.
+func approveAs(t *testing.T, router http.Handler, id, user string) int {
+	t.Helper()
+	return doRoute(t, router, http.MethodPost, "/api/pipeline-approvals/"+id+"/approve", "", auth.RoleAdmin, user).Code
+}
+
+// The approved set is the old tagged records of this run. A second person approves, then the executor
+// deletes exactly those. The recent record, the other-run record and the untagged record survive.
 func TestCleanupApproval_DeletesOnlyApprovedCandidates(t *testing.T) {
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
 		router, es, connID := cleanupFixture(t, pool)
@@ -169,8 +209,11 @@ func TestCleanupApproval_DeletesOnlyApprovedCandidates(t *testing.T) {
 			t.Fatalf("request: %d %v", code, out)
 		}
 		id := out["approvalId"].(string)
-		if cands, _ := out["candidates"].([]any); len(cands) != 2 {
-			t.Fatalf("candidates = %v, want the two tagged records of this run", out["candidates"])
+		if recs, _ := out["records"].([]any); len(recs) != 2 {
+			t.Fatalf("records = %v, want the two old tagged records of this run", out["records"])
+		}
+		if held, _ := out["retentionHeld"].([]any); len(held) != 1 {
+			t.Fatalf("retentionHeld = %v, want the recent record", out["retentionHeld"])
 		}
 		if code := approveAs(t, router, id, "admin-2"); code != http.StatusOK {
 			t.Fatalf("approve by second person: %d", code)
@@ -179,8 +222,8 @@ func TestCleanupApproval_DeletesOnlyApprovedCandidates(t *testing.T) {
 		if code != http.StatusOK || res["outcome"] != "executed" || res["deleted"].(float64) != 2 {
 			t.Fatalf("execute: %d %v", code, res)
 		}
-		if got := strings.Join(es.remaining(), ","); got != "other,untagged" {
-			t.Fatalf("remaining = %s, want other,untagged", got)
+		if got := strings.Join(es.remaining(), ","); got != "other,recent,untagged" {
+			t.Fatalf("remaining = %s, want other,recent,untagged", got)
 		}
 		store := db.KillChainStore{Pool: pool}
 		if got := historyOf(t, store, id); got != "requested,approved,consumed,executed" {
@@ -189,8 +232,8 @@ func TestCleanupApproval_DeletesOnlyApprovedCandidates(t *testing.T) {
 	})
 }
 
-// If the candidate set changes after approval, nothing is deleted and the approval is not spent.
-// Restoring the set lets the same approval run.
+// If a candidate is added after approval, nothing is deleted and the approval is not spent. Restoring
+// the set lets the same approval run.
 func TestCleanupApproval_ChangedSetRefusedAndNotSpent(t *testing.T) {
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
 		router, es, connID := cleanupFixture(t, pool)
@@ -198,12 +241,12 @@ func TestCleanupApproval_ChangedSetRefusedAndNotSpent(t *testing.T) {
 		id := out["approvalId"].(string)
 		approveAs(t, router, id, "admin-2")
 
-		es.put("mine-3", cleanupRun, true)
+		es.put("mine-3", cleanupRun, true, oldEventTime())
 		code, res := executeCleanup(t, router, id, "admin-3")
 		if code != http.StatusConflict || !strings.Contains(res["error"].(string), "changed since approval") {
 			t.Fatalf("changed set: %d %v, want 409 refusal", code, res)
 		}
-		if got := strings.Join(es.remaining(), ","); got != "mine-1,mine-2,mine-3,other,untagged" {
+		if got := strings.Join(es.remaining(), ","); !strings.Contains(got, "mine-3") || !strings.Contains(got, "mine-1") {
 			t.Fatalf("a refused cleanup deleted records: %s", got)
 		}
 		store := db.KillChainStore{Pool: pool}
@@ -216,6 +259,73 @@ func TestCleanupApproval_ChangedSetRefusedAndNotSpent(t *testing.T) {
 		es.mu.Unlock()
 		if code, res := executeCleanup(t, router, id, "admin-3"); code != http.StatusOK || res["outcome"] != "executed" {
 			t.Fatalf("restored set should run the same approval: %d %v", code, res)
+		}
+	})
+}
+
+// An approved record whose event time changes after approval, while it stays eligible, is refused.
+// Nothing is deleted and the approval is not spent. The event time is part of what was approved.
+func TestCleanupApproval_EventTimeChangeRefused(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		router, es, connID := cleanupFixture(t, pool)
+		_, out := requestCleanup(t, router, connID, "admin-1")
+		id := out["approvalId"].(string)
+		approveAs(t, router, id, "admin-2")
+
+		// Still older than the window, but a different instant than the one approved.
+		es.put("mine-1", cleanupRun, true, time.Now().UTC().Add(-60*24*time.Hour).Format(time.RFC3339Nano))
+		if code, res := executeCleanup(t, router, id, "admin-3"); code != http.StatusConflict {
+			t.Fatalf("event time changed but still eligible: %d %v, want 409", code, res)
+		}
+		store := db.KillChainStore{Pool: pool}
+		if got := historyOf(t, store, id); got != "requested,approved" {
+			t.Fatalf("approval spent: %s", got)
+		}
+		if got := strings.Join(es.remaining(), ","); !strings.Contains(got, "mine-1") {
+			t.Fatalf("record deleted after event time changed: %s", got)
+		}
+	})
+}
+
+// A record whose event time moves into the window after approval is no longer eligible. The eligible
+// set changes, so execution is refused.
+func TestCleanupApproval_EventTimeMovedIntoWindowRefused(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		router, es, connID := cleanupFixture(t, pool)
+		_, out := requestCleanup(t, router, connID, "admin-1")
+		id := out["approvalId"].(string)
+		approveAs(t, router, id, "admin-2")
+		es.put("mine-2", cleanupRun, true, recentEventTime())
+		if code, _ := executeCleanup(t, router, id, "admin-3"); code != http.StatusConflict {
+			t.Fatalf("record moved into the window: %d, want 409", code)
+		}
+	})
+}
+
+// A partial deletion is recorded as failed and the approval is spent. A retry needs a new approval.
+func TestCleanupApproval_PartialDeletionRecordedAndNotRetried(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		router, es, connID := cleanupFixture(t, pool)
+		_, out := requestCleanup(t, router, connID, "admin-1")
+		id := out["approvalId"].(string)
+		approveAs(t, router, id, "admin-2")
+
+		es.mu.Lock()
+		es.conflict = true
+		es.mu.Unlock()
+		code, res := executeCleanup(t, router, id, "admin-3")
+		if code != http.StatusOK || res["outcome"] != "failed" || res["status"] != "partial" {
+			t.Fatalf("partial deletion: %d %v, want outcome failed with status partial", code, res)
+		}
+		store := db.KillChainStore{Pool: pool}
+		if got := historyOf(t, store, id); got != "requested,approved,consumed,failed" {
+			t.Fatalf("history = %s", got)
+		}
+		es.mu.Lock()
+		es.conflict = false
+		es.mu.Unlock()
+		if code, _ := executeCleanup(t, router, id, "admin-3"); code != http.StatusConflict {
+			t.Fatalf("retry on the same approval: %d, want 409", code)
 		}
 	})
 }
@@ -294,9 +404,4 @@ func TestCleanupApproval_ExecuteNeedsCleanupPermission(t *testing.T) {
 			t.Fatalf("analyst execute: %d, want 403", rec.Code)
 		}
 	})
-}
-
-func approveAs(t *testing.T, router http.Handler, id, user string) int {
-	t.Helper()
-	return doRoute(t, router, http.MethodPost, "/api/pipeline-approvals/"+id+"/approve", "", auth.RoleAdmin, user).Code
 }
