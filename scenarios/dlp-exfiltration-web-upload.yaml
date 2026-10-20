@@ -1,0 +1,109 @@
+id: dlp-exfiltration-web-upload
+name: DLP Exfiltration Validation — Web Upload and Form Submission (Browser-Shaped Requests)
+description: >
+  Sends the synthetic multi-type sensitive record in two shapes a browser
+  would produce when a user uploads a file to a file-sharing site or submits a
+  web form: a browser User-Agent with Origin and Referer headers on a file
+  upload, and a form-style text field carrying the record. Each request goes to
+  this platform's own HTTPS sink, which is sink-verified by token exactly like
+  dlp-exfiltration-sink-https.yaml.
+
+  Important limit: this does not drive a browser. The sink accepts only JSON
+  bodies. A real browser form posts multipart/form-data or urlencoded content,
+  which the sink cannot decode, so it could never produce a receipt. These steps
+  therefore test the request shape and headers a web DLP control inspects, not
+  browser-side behaviour, and not a web-form product control. A genuine
+  multipart form test needs a sink change, which is recorded as a follow-up in
+  the QA log.
+
+  A receipt proves the content left the endpoint over HTTPS. It does not prove
+  a web DLP or CASB product should have blocked it.
+
+  Safety: all synthetic data is fabricated and tagged [BAS-SIM-DLP]. The sink
+  stores only a hash of the payload. Windows only.
+author: Audspect Research
+executable: true
+supported_os: [windows]
+tags:
+  - dlp
+  - data-protection-validation
+  - exfiltration
+  - web
+  - windows
+  - mitre-attack
+mitre_phases:
+  - collection
+  - exfiltration
+
+steps:
+  - name: "DLP Validation — Browser-Shaped File-Sharing Upload over HTTPS Sink (T1567)"
+    technique_id: T1567
+    detection_profiles:
+      - windows_dlp_exfiltration
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Sends one JSON request shaped like a browser file upload to the platform's own sink over HTTPS. No real site, no external destination."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 3: network connection to the orchestrator's own HTTPS port"
+    detection:
+      - "Web DLP/CASB: outbound upload request to a file-sharing destination carrying regulated-data patterns"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $csvContent = "[BAS-SIM-DLP] CustomerID,PAN,Aadhaar,SWIFT,UPI,CreditCard`nBAS-SIM-SINK,ABCDE1234F,123456789012,SBININBBXXX,fake.user@upi,4111111111111111"
+      $payload = "file=bas-sim-record.csv`n$csvContent"
+      $headers = @{
+        'User-Agent' = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36'
+        'Origin'     = '{{SINK_URL}}'
+        'Referer'    = '{{SINK_URL}}'
+      }
+      try {
+        if ($env:BAS_TASK_ID) { Write-Output "DLP_EVENT_START: $env:BAS_TASK_ID $((Get-Date).ToUniversalTime().ToString('o'))" }
+        Invoke-RestMethod -Uri '{{SINK_URL}}' -Method Post -Headers $headers -Body (@{token='{{SINK_TOKEN}}'; payload=$payload; channel='web-filesharing-upload'} | ConvertTo-Json) -ContentType 'application/json' -TimeoutSec 10 | Out-Null
+        Write-Output "EXEC T1567: browser-shaped file upload POSTed over HTTPS. [BAS-SIM-DLP-WEB-UPLOAD]"
+      } catch {
+        Write-Output "EXEC T1567: browser-shaped file upload to sink was blocked or failed before completing. [BAS-SIM-DLP-WEB-UPLOAD]"
+      }
+      # No local DLP_OBSERVATION marker: the verdict comes from the sink receipt.
+    cleanup: ""
+
+  - name: "DLP Validation — Browser Web Form Submission With Sensitive Text (T1567)"
+    technique_id: T1567
+    detection_profiles:
+      - windows_dlp_exfiltration
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Sends one JSON request shaped like a browser form submission, with the record in a free-text field, to the platform's own sink over HTTPS. No real form, no external destination."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 3: network connection to the orchestrator's own HTTPS port"
+    detection:
+      - "Web DLP: form submission whose free-text field carries regulated-data patterns"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $csvContent = "[BAS-SIM-DLP] CustomerID,PAN,Aadhaar,SWIFT,UPI,CreditCard`nBAS-SIM-SINK,ABCDE1234F,123456789012,SBININBBXXX,fake.user@upi,4111111111111111"
+      $payload = "form=support-request`ncomment=$csvContent"
+      $headers = @{
+        'User-Agent' = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36'
+        'Origin'     = '{{SINK_URL}}'
+        'Referer'    = '{{SINK_URL}}'
+      }
+      try {
+        if ($env:BAS_TASK_ID) { Write-Output "DLP_EVENT_START: $env:BAS_TASK_ID $((Get-Date).ToUniversalTime().ToString('o'))" }
+        Invoke-RestMethod -Uri '{{SINK_URL}}' -Method Post -Headers $headers -Body (@{token='{{SINK_TOKEN}}'; payload=$payload; channel='web-form-submit'} | ConvertTo-Json) -ContentType 'application/json' -TimeoutSec 10 | Out-Null
+        Write-Output "EXEC T1567: browser-shaped form submission POSTed over HTTPS. [BAS-SIM-DLP-WEB-FORM]"
+      } catch {
+        Write-Output "EXEC T1567: browser-shaped form submission to sink was blocked or failed before completing. [BAS-SIM-DLP-WEB-FORM]"
+      }
+      # No local DLP_OBSERVATION marker: the verdict comes from the sink receipt.
+    cleanup: ""

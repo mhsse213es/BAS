@@ -20,6 +20,7 @@ const (
 	scenarioDBExport     = "dlp-exfiltration-db-export"
 	scenarioEmailRecipients = "dlp-exfiltration-email-recipients"
 	scenarioArchiveTransfer = "dlp-exfiltration-archive-transfer"
+	scenarioWebUpload = "dlp-exfiltration-web-upload"
 )
 
 // AllFixtures returns Audspect's real, current seed catalog of every
@@ -343,6 +344,16 @@ func AllFixtures() ([]Fixture, error) {
 			{scenarioArchiveTransfer, "DLP Validation — Nested ZIP Archive Upload over HTTPS Sink (T1560.001)"},
 		},
 		"same synthetic record as the BFSI anchor, transferred as base64 archive bytes")); err != nil {
+		return nil, fmt.Errorf("loading seed fixture catalog: %w", err)
+	}
+
+	if err := add(NewFixture("web-upload-multitype-record", "Synthetic multi-type record in a browser-shaped file upload and form submission",
+		[]string{"[BAS-SIM-DLP]", "ABCDE1234F", "123456789012", "SBININBBXXX", "fake.user@upi", "4111111111111111"},
+		[]Occurrence{
+			{scenarioWebUpload, "DLP Validation — Browser-Shaped File-Sharing Upload over HTTPS Sink (T1567)"},
+			{scenarioWebUpload, "DLP Validation — Browser Web Form Submission With Sensitive Text (T1567)"},
+		},
+		"same synthetic record as the BFSI anchor; JSON request shape only, not a real browser form")); err != nil {
 		return nil, fmt.Errorf("loading seed fixture catalog: %w", err)
 	}
 
