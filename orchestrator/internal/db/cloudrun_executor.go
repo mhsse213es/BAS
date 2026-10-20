@@ -23,11 +23,40 @@ type CloudPlanRunRequest struct {
 	ScenarioID  string                        `json:"scenarioId"`
 	Account     cloudgraph.AccountScope       `json:"account"`
 	Edges       []*cloudgraph.CloudPermission `json:"edges"`
+	// Discover asks the server to build Edges from a live discovery pass.
+	// Mutually exclusive with Edges; the API layer attaches the discoverer.
+	Discover bool `json:"discover,omitempty"`
 	Held        []string                      `json:"held"`
 	Target      string                        `json:"target"`
 	MaxHops     int                           `json:"maxHops"`
 	InitiatedBy string                        `json:"-"`
 	CampaignID  string                        `json:"-"`
+
+	// Discoverer, when set, supplies the permission graph from a live
+	// discovery pass instead of Edges. The API layer sets it from server-side
+	// configuration only; it is never decoded from a request body.
+	Discoverer cloudgraph.Discoverer `json:"-"`
+}
+
+// discoveryTimeout bounds one live discovery pass. Enumerating a large
+// tenant is slow by nature; a pass that exceeds this is failed rather than
+// left running against the control plane indefinitely.
+const discoveryTimeout = 10 * time.Minute
+
+// discoveredRunResult is the stored result of a run whose graph came from
+// live discovery: the path plus what the graph was built from, so a reader
+// can tell a clean "no path" apart from "discovery saw nothing to traverse".
+type discoveredRunResult struct {
+	Path       *cloudgraph.CloudPath      `json:"path"`
+	Discovered bool                       `json:"discovered"`
+	Counts     discoveredGraphCounts      `json:"counts"`
+	Report     cloudgraph.DiscoveryReport `json:"report"`
+}
+
+type discoveredGraphCounts struct {
+	Identities  int `json:"identities"`
+	Resources   int `json:"resources"`
+	Permissions int `json:"permissions"`
 }
 
 // evaluatorFor maps a cloud_runs.provider value to the concrete evaluator
@@ -124,14 +153,44 @@ func ExecuteCloudPlanRun(ctx context.Context, pool *pgxpool.Pool, req CloudPlanR
 		_ = UpdateCloudRunStatus(ctx, pool, run.ID, cloudrun.StatusFailed, nil, err.Error())
 		return currentRunOrNil(ctx, pool, run.ID), fmt.Errorf("cloud run %s: %w", run.ID, err)
 	}
-	if err := validateEdgesMatchProvider(req.Edges, req.Account.Provider); err != nil {
+	edges := req.Edges
+	var discovered *cloudgraph.DiscoveredGraph
+	var report cloudgraph.DiscoveryReport
+	if req.Discoverer != nil {
+		dctx, cancel := context.WithTimeout(ctx, discoveryTimeout)
+		discovered, report, err = req.Discoverer.Discover(dctx)
+		cancel()
+		if err == nil && discovered == nil {
+			err = fmt.Errorf("discovery returned no graph")
+		}
+		if err != nil {
+			_ = UpdateCloudRunStatus(ctx, pool, run.ID, cloudrun.StatusFailed, nil, err.Error())
+			return currentRunOrNil(ctx, pool, run.ID), fmt.Errorf("cloud run %s: discovery: %w", run.ID, err)
+		}
+		edges = discovered.Permissions
+	}
+
+	if err := validateEdgesMatchProvider(edges, req.Account.Provider); err != nil {
 		_ = UpdateCloudRunStatus(ctx, pool, run.ID, cloudrun.StatusFailed, nil, err.Error())
 		return currentRunOrNil(ctx, pool, run.ID), fmt.Errorf("cloud run %s: %w", run.ID, err)
 	}
 
-	path, ok := cloudgraph.CloudPlan(req.Edges, req.Held, req.Target, evaluator, &cloudgraph.RequestContext{}, req.MaxHops)
+	path, ok := cloudgraph.CloudPlan(edges, req.Held, req.Target, evaluator, &cloudgraph.RequestContext{}, req.MaxHops)
 
-	resultJSON, marshalErr := json.Marshal(path)
+	var resultValue any = path
+	if discovered != nil {
+		resultValue = discoveredRunResult{
+			Path:       path,
+			Discovered: true,
+			Counts: discoveredGraphCounts{
+				Identities:  len(discovered.Identities),
+				Resources:   len(discovered.Resources),
+				Permissions: len(discovered.Permissions),
+			},
+			Report: report,
+		}
+	}
+	resultJSON, marshalErr := json.Marshal(resultValue)
 	if marshalErr != nil {
 		_ = UpdateCloudRunStatus(ctx, pool, run.ID, cloudrun.StatusFailed, nil, marshalErr.Error())
 		return currentRunOrNil(ctx, pool, run.ID), fmt.Errorf("cloud run %s: %w", run.ID, marshalErr)

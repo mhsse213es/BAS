@@ -27,6 +27,9 @@ func validateCloudPlanRunRequest(req db.CloudPlanRunRequest) error {
 	if req.Target == "" {
 		return errors.New("target required")
 	}
+	if req.Discover && len(req.Edges) > 0 {
+		return errors.New("discover and edges are mutually exclusive")
+	}
 	switch req.Account.Provider {
 	case "aws", "azure", "gcp":
 		return nil
@@ -53,6 +56,18 @@ func (h *Handler) TriggerCloudPlanRun(w http.ResponseWriter, r *http.Request) {
 	// authenticated caller, matching RunScenario's own convention.
 	if c, ok := auth.ClaimsFrom(r.Context()); ok && c != nil {
 		req.InitiatedBy = c.UserID
+	}
+
+	if req.Discover {
+		d, err := cloudDiscovererFor(r.Context(), req.Account)
+		if err != nil {
+			h.auditLog(r, "cloudrun.plan.run", "", map[string]any{
+				"scenarioId": req.ScenarioID, "provider": req.Account.Provider, "error": err.Error(),
+			}, "error")
+			jsonError(w, err.Error(), discoveryStatusCode(err))
+			return
+		}
+		req.Discoverer = d
 	}
 
 	run, err := db.ExecuteCloudPlanRun(r.Context(), h.db, req)
@@ -210,7 +225,14 @@ func (h *Handler) CreateCloudCampaign(w http.ResponseWriter, r *http.Request) {
 	for i, subReq := range req.Runs {
 		subReq.InitiatedBy = initiatedBy
 		subReq.CampaignID = campaign.ID
-		run, err := db.ExecuteCloudPlanRun(r.Context(), h.db, subReq)
+		var run *cloudrun.CloudRun
+		var err error
+		if subReq.Discover {
+			subReq.Discoverer, err = cloudDiscovererFor(r.Context(), subReq.Account)
+		}
+		if err == nil {
+			run, err = db.ExecuteCloudPlanRun(r.Context(), h.db, subReq)
+		}
 
 		res := cloudCampaignAccountResult{Account: subReq.Account}
 		if run != nil {
