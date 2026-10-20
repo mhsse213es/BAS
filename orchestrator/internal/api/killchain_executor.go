@@ -48,6 +48,9 @@ type scenarioRunReader interface {
 type EngineStageExecutor struct {
 	Resolver scenarioResolver
 	Runs     scenarioRunReader
+	// Attestations supplies the per-expectation results the verification path wrote
+	// for a run. Nil leaves detection missing, which the verdict reports as a gap.
+	Attestations attestationReader
 	// AgentID is the agent a campaign runs on. Empty means no binding.
 	AgentID string
 	// Dispatcher starts a run through the existing run path. Nil means no dispatch.
@@ -112,7 +115,16 @@ func (x EngineStageExecutor) Collect(ctx context.Context, executionID string) (k
 	case "running", "dispatched", "pending":
 		return killchain.StageEvidence{}, false, false, nil
 	case "completed":
-		return evidenceFromRun(snap), true, false, nil
+		ev := evidenceFromRun(snap)
+		if x.Attestations != nil {
+			// A read error is returned, not recorded, so the stage stays dispatched and is retried.
+			recs, err := x.Attestations.CurrentForRun(ctx, executionID)
+			if err != nil {
+				return killchain.StageEvidence{}, false, false, err
+			}
+			ev.Detection = detectionFromRecords(recs)
+		}
+		return ev, true, false, nil
 	case "failed", "error", "partial":
 		// partial means not every step ran, so the stage is not a clean run.
 		return killchain.StageEvidence{}, true, true, nil

@@ -15,6 +15,7 @@ import (
 	"github.com/audspect/bas/internal/integrity"
 	"github.com/audspect/bas/internal/killchain"
 	"github.com/audspect/bas/internal/scenario"
+	"github.com/audspect/bas/internal/verification"
 )
 
 // killChainVerifier verifies campaign definition signatures. Tests may replace
@@ -163,6 +164,9 @@ func (h *Handler) AdvanceKillChainCampaign(w http.ResponseWriter, r *http.Reques
 		Runs:    poolRunReader{pool: h.db},
 		Options: stageDispatchOptions{Mode: "posture", InitiatedBy: initiatedBy},
 	}
+	if h.verification != nil {
+		exec.Attestations = h.verification
+	}
 	if h.engine != nil {
 		exec.Resolver = h.engine
 	}
@@ -190,7 +194,7 @@ func RecoverKillChainCampaigns(ctx context.Context, pool *pgxpool.Pool) error {
 	if err != nil {
 		return err
 	}
-	exec := EngineStageExecutor{Runs: poolRunReader{pool: pool}}
+	exec := EngineStageExecutor{Runs: poolRunReader{pool: pool}, Attestations: verification.NewStore(pool)}
 	orch := killchain.Orchestrator{Store: store, Executor: exec}
 	for _, c := range list {
 		if _, err := orch.Recover(ctx, c.ID); err != nil {
