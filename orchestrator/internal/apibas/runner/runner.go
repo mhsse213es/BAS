@@ -30,6 +30,7 @@ import (
 	"github.com/audspect/bas/internal/apibas/contract"
 	"github.com/audspect/bas/internal/apibas/fixture"
 	"github.com/audspect/bas/internal/apibas/grade"
+	"github.com/audspect/bas/internal/apibas/latency"
 	"strconv"
 )
 
@@ -103,6 +104,10 @@ type Exchange struct {
 
 // Report is the complete output of one scenario execution.
 type Report struct {
+	// TimingVerdict is the timing grade, reported even when a resource limit decides the outcome.
+	TimingVerdict string `json:"timing_verdict,omitempty"`
+	// Latency holds the per-round timing statistics for timing scenarios.
+	Latency    []latency.Summary `json:"latency,omitempty"`
 	ScenarioID string
 	RunTag     string
 	Outcome    grade.Outcome
@@ -184,6 +189,9 @@ func (r *Runner) Run(ctx context.Context, s contract.Scenario) (Report, error) {
 	attackToken, err := r.attackCredential(attack, attacker)
 	if err != nil {
 		return r.skip(rep, grade.ReasonPreconditionMissing, err.Error()), nil
+	}
+	if s.Latency != nil {
+		return r.runLatency(ctx, rep, s, obj, ownerToken, attackToken), nil
 	}
 	if attackAuth(attack) == "revoked" {
 		checker, ok := r.cfg.State.(RevocationChecker)
@@ -443,6 +451,90 @@ func (r *Runner) runAttack(ctx context.Context, rep *Report, step contract.Step,
 		}
 	}
 	return agg, false
+}
+
+// latencyBaselineBatch is how many baseline requests are sent back to back per
+// trial. A single cheap request is below the timer's resolution on Windows, so the
+// baseline sample is the mean of a batch.
+const latencyBaselineBatch = 50
+
+// runLatency runs a timing scenario. Each round sends warm-up requests, then paired
+// baseline and attack samples. Resource limits are checked on every attack response
+// and decide the outcome when they fail; the timing verdict is recorded either way.
+// A majority of denied attack responses means the control refused the work, so the
+// timing comparison does not apply.
+func (r *Runner) runLatency(ctx context.Context, rep Report, s contract.Scenario, obj fixture.Object, ownerToken, attackToken string) Report {
+	baseline, attack := s.Steps[0], s.Steps[len(s.Steps)-1]
+	pol := s.Latency
+	var rounds []latency.Round
+	total, denied, faults, resource := 0, 0, 0, 0
+	for round := 0; round < pol.Rounds; round++ {
+		for i := 0; i < pol.Warmup; i++ {
+			if _, transport := r.do(ctx, attack, attackToken, obj, &obj); transport {
+				return r.errorOut(rep, grade.ReasonTargetUnreachable, "warm-up request failed")
+			}
+		}
+		var rd latency.Round
+		for i := 0; i < pol.Trials; i++ {
+			start := time.Now()
+			for k := 0; k < latencyBaselineBatch; k++ {
+				if _, transport := r.do(ctx, baseline, ownerToken, obj, &obj); transport {
+					return r.errorOut(rep, grade.ReasonTargetUnreachable, "baseline request failed")
+				}
+			}
+			rd.Baseline = append(rd.Baseline, time.Since(start)/latencyBaselineBatch)
+			start = time.Now()
+			aex, transport := r.do(ctx, attack, attackToken, obj, &obj)
+			rd.Attack = append(rd.Attack, time.Since(start))
+			if transport {
+				return r.errorOut(rep, grade.ReasonTargetUnreachable, "attack request failed")
+			}
+			total++
+			if slices.Contains(s.DeniedStatuses, aex.Status) {
+				denied++
+			}
+			if aex.Status >= 500 {
+				faults++
+			}
+			if s.MaxWorkUnits > 0 && reportedField(aex.raw, "work_units") > s.MaxWorkUnits {
+				resource++
+			}
+		}
+		rounds = append(rounds, rd)
+	}
+	rep.Latency = nil
+	for _, rd := range rounds {
+		rep.Latency = append(rep.Latency, latency.Summarize(rd))
+	}
+	if faults > 0 {
+		return r.errorOut(rep, grade.ReasonTargetFault, "attack returned a server fault")
+	}
+
+	refused := denied*2 > total
+	var timing grade.Outcome
+	if refused {
+		rep.TimingVerdict = "not_applicable: control refused the work"
+	} else {
+		ceiling := time.Duration(pol.CeilingMs) * time.Millisecond
+		var sums []latency.Summary
+		timing, sums = latency.Grade(rounds, ceiling, pol.MinRatio, pol.MaxCV)
+		rep.Latency = sums
+		if timing.Result == grade.ERROR {
+			rep.TimingVerdict = fmt.Sprintf("ERROR/%s", timing.Reason)
+		} else {
+			rep.TimingVerdict = fmt.Sprintf("%s/%s", timing.Result, timing.Exploitability)
+		}
+	}
+
+	switch {
+	case resource > 0:
+		rep.Outcome = grade.Outcome{Result: grade.FAIL, Exploitability: grade.Exploited, Control: grade.Failed, Detection: "not_evaluated", Confidence: grade.ConfidenceEvidenceBacked}
+	case refused:
+		rep.Outcome = grade.Outcome{Result: grade.PASS, Exploitability: grade.NotExploited, Control: grade.Enforced, Detection: "not_evaluated", Confidence: grade.ConfidenceEvidenceBacked}
+	default:
+		rep.Outcome = timing
+	}
+	return rep
 }
 
 // forbiddenHeaderHits counts the response headers of an exchange that match a

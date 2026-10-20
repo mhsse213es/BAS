@@ -75,7 +75,12 @@ type Scenario struct {
 	MaxGrantedPageSize int `yaml:"max_granted_page_size"`
 	// MaxAcceptedBytes is the largest body size the attack response may report in its
 	// accepted_bytes field. Larger accepted bodies are exploitation.
-	MaxAcceptedBytes  int                `yaml:"max_accepted_bytes"`
+	MaxAcceptedBytes int `yaml:"max_accepted_bytes"`
+	// Latency, when set, makes this a timing scenario graded over repeated rounds.
+	Latency *LatencyPolicy `yaml:"latency"`
+	// MaxWorkUnits bounds the work_units an attack response may report. It is a
+	// resource limit, graded independently of timing.
+	MaxWorkUnits      int                `yaml:"max_work_units"`
 	ExpectedControl   string             `yaml:"expected_control"`
 	GroundTruth       GroundTruth        `yaml:"ground_truth"`
 	DetectionAssert   DetectionAssertion `yaml:"detection_assertion"`
@@ -313,6 +318,24 @@ func (s Scenario) validateSteps() error {
 	} else if s.MaxAcceptedAttempts != 0 {
 		return fmt.Errorf("contract: %s: max_accepted_attempts needs a repeated attack step", s.ID)
 	}
+	if s.Latency != nil {
+		p := s.Latency
+		switch {
+		case p.CeilingMs <= 0:
+			return fmt.Errorf("contract: %s: latency ceiling_ms must be set", s.ID)
+		case p.MinRatio < 1:
+			return fmt.Errorf("contract: %s: latency min_ratio must be at least 1", s.ID)
+		case p.MaxCV <= 0:
+			return fmt.Errorf("contract: %s: latency max_cv must be set", s.ID)
+		case p.Trials < 5 || p.Rounds < 2 || p.Warmup < 0:
+			return fmt.Errorf("contract: %s: latency needs at least 5 trials, 2 rounds and a non-negative warm-up", s.ID)
+		case final.Repeat > 1 || s.SideEffectClass != "READ_ONLY":
+			return fmt.Errorf("contract: %s: a timing scenario must be READ_ONLY with a single attack request", s.ID)
+		}
+	}
+	if s.MaxWorkUnits < 0 {
+		return fmt.Errorf("contract: %s: max_work_units cannot be negative", s.ID)
+	}
 	return nil
 }
 
@@ -358,3 +381,14 @@ var FillerToken = regexp.MustCompile(`\{filler:(\d+)\}`)
 
 // MaxFillerBytes bounds one filler placeholder.
 const MaxFillerBytes = 5 << 20
+
+// LatencyPolicy is the frozen timing configuration for a scenario. Every value is
+// declared in the scenario file and is never tuned at run time.
+type LatencyPolicy struct {
+	CeilingMs int     `yaml:"ceiling_ms"`
+	MinRatio  float64 `yaml:"min_ratio"`
+	MaxCV     float64 `yaml:"max_cv"`
+	Warmup    int     `yaml:"warmup"`
+	Trials    int     `yaml:"trials"`
+	Rounds    int     `yaml:"rounds"`
+}

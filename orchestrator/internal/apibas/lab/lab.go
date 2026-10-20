@@ -28,6 +28,8 @@ import (
 	"sync"
 	"time"
 
+	"crypto/sha256"
+	"encoding/hex"
 	"github.com/audspect/bas/internal/apibas/fixture"
 	"math"
 	"strconv"
@@ -250,6 +252,13 @@ func Flaws() []Flaw {
 				"Fixed: a body above 1 MiB is refused with 413.",
 		},
 		{
+			ID:          "LAB-ABUSE-REPORT-001",
+			ScenarioID:  "API-BAS-ABUSE-002",
+			Description: "GET /api/orders/report accepts any number of periods and does the work for each.",
+			Oracle: "Vulnerable: a 200-period report is computed in full and reports work_units far above the limit (exposed). " +
+				"Fixed: more than 12 periods is refused with 400 before any work is done.",
+		},
+		{
 			ID:          "LAB-AUTHZ-MASS-001",
 			ScenarioID:  "API-BAS-AUTHZ-003",
 			Description: "PATCH /api/orders/{id} binds every submitted field, including owner_id, from the request body.",
@@ -384,6 +393,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/orders/{id}/status", s.getStatus)
 	mux.HandleFunc("GET /api/orders/page", s.listPage)
 	mux.HandleFunc("POST /api/orders/{id}/attachments", s.uploadAttachment)
+	mux.HandleFunc("GET /api/orders/report", s.report)
 	if s.cfg.Mode == ModeVulnerable {
 		// The debug route exists only in the vulnerable build (LAB-DISC-DEBUG-001).
 		mux.HandleFunc("GET /debug/orders/{id}", s.debugOrder)
@@ -1221,6 +1231,48 @@ func (s *Server) uploadAttachment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusCreated, map[string]any{"order_id": order.ID, "accepted_bytes": n})
+}
+
+// reportPeriodLimit is the most periods the fixed build computes. reportWorkPerPeriod
+// is the number of hash rounds per period; the work is real, so its cost is measured.
+const (
+	reportPeriodLimit   = 12
+	reportWorkPerPeriod = 2000
+)
+
+// report computes a summary over a number of periods. Each period is a chain of
+// SHA-256 rounds over a 1 KiB buffer, so the cost is the work actually done. The
+// vulnerable build computes any number of periods (LAB-ABUSE-REPORT-001); the fixed
+// build refuses more than reportPeriodLimit before doing any work.
+func (s *Server) report(w http.ResponseWriter, r *http.Request) {
+	if _, st := s.identify(r); st != authOK {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthenticated"})
+		return
+	}
+	periods := 1
+	if raw := r.URL.Query().Get("periods"); raw != "" {
+		n, err := strconv.Atoi(raw)
+		if err != nil || n < 1 {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "periods must be a positive integer"})
+			return
+		}
+		periods = n
+	}
+	if s.cfg.Mode == ModeFixed && periods > reportPeriodLimit {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "periods must be 12 or fewer"})
+		return
+	}
+	buf := make([]byte, 1024)
+	var digest [32]byte
+	for i := 0; i < periods*reportWorkPerPeriod; i++ {
+		digest = sha256.Sum256(buf)
+		copy(buf, digest[:])
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"periods":    periods,
+		"work_units": periods * reportWorkPerPeriod,
+		"digest":     hex.EncodeToString(digest[:8]),
+	})
 }
 
 // getOrderV0 is the retired route (LAB-DISC-DEPRECATED-001). It is mounted only in

@@ -636,3 +636,81 @@ Vulnerable: 27 of 27 FAIL, exploited. Fixed: 27 of 27 PASS, not exploited. Token
 - Protocol adapters for GraphQL, gRPC, SOAP, WebSocket and async. Blueprint section 2 requires these to be reported as `UNSUPPORTED` until they exist.
 - Orchestrator scheduling and persistence, and the production secret store. These belong outside the lab and need their own design.
 - The Windows build (`build.ps1`) has not been run on these tranches. You said you will build it later.
+
+
+## Phase 14 tranche — ABUSE-002 timing harness (step 1 of the detection and timing plan)
+
+Branch: `feature/api-bas-phase14` (from `main`). Scenario count is twenty-eight. This tranche covers the measurement harness and ABUSE-002. The Elastic fixture and the pagination fixture are not started (see Still open).
+
+| ID | Sub-technique | Claim | Vulnerable | Fixed | Side effect |
+|---|---|---|---|---|---|
+| API-BAS-ABUSE-002 | Expensive report request without a period limit | property_level | FAIL, exploited (timing and resource) | PASS (400, refused before work) | READ_ONLY |
+
+New flaw: `LAB-ABUSE-REPORT-001`.
+
+### Measurement environment
+
+- CPU: Intel Core i5-8250U, 1.60 GHz, 4 cores, 8 logical processors
+- Memory: 8 GB
+- OS: Windows 10 Pro 10.0.19045
+- Go: go1.26.8 windows/amd64
+- Lab: in-process `httptest` server, loopback only, same process as the test. Warm-up and measured requests share the process.
+- Workload: `GET /api/orders/report?periods=200` (attack) against `GET /api/orders/{id}/status` (baseline, owner token).
+
+### The work is real
+
+Each period is a chain of SHA-256 rounds over a 1 KiB buffer, 2,000 rounds per period. The cost is measured from the work done, not declared. The response reports `work_units` (periods × 2,000) for the resource check.
+
+### Frozen policy (declared in the scenario file)
+
+| Setting | Value | Reason |
+|---|---|---|
+| `ceiling_ms` | 250 | Vulnerable attack medians sit near 1,340 ms, about 5× the ceiling, so a machine twice as slow still crosses. A fixed request is refused in under 1 ms. The ceiling sits between those two cases. |
+| `min_ratio` | 5 | Attack median must be at least five times the baseline median. The observed ratio is about 8,000. |
+| `max_cv` | 0.5 | A round whose coefficient of variation exceeds this is noisy and is ERROR, never PASS. Observed CV is 0.006 to 0.061. |
+| `warmup` | 3 | Requests discarded before each round. |
+| `trials` | 10 | Paired samples per round. |
+| `rounds` | 3 | Every round must agree. |
+| `max_work_units` | 24000 | Resource limit, graded independently of timing. |
+
+### Repeatability (three full runs of each variant)
+
+Vulnerable, all nine rounds:
+
+- Median attack latency: 1,320 to 1,357 ms
+- p95 attack latency: 1,333 to 1,623 ms
+- Median baseline: 0.15 to 0.19 ms (batch of 50 per trial)
+- Ratio: 7,105 to 8,989
+- CV: 0.006 to 0.061
+- Timing verdict: FAIL/exploited in all three runs
+
+Fixed, all three runs: attack refused with 400 in every trial, so the timing comparison does not apply. Outcome PASS/not_exploited in all three runs.
+
+### Harness findings that changed the design
+
+1. **Timer quantization.** On this machine, single requests under about 0.5 ms are quantized. The first measurement put the cheap baseline at 0.00 ms, which made the ratio meaningless. Baseline samples are now the mean of 50 back-to-back requests per trial.
+2. **Resource limit masked timing.** The first vulnerable run was decided by the work-unit check before the timing grader ran. The report now records the timing verdict separately (`timing_verdict`), so both results are visible. The outcome still follows the resource check, as the independence rule requires.
+3. **Fail closed.** A noisy round (CV above `max_cv`) grades as ERROR with reason `NOISY_MEASUREMENT`. Rounds that disagree grade as ERROR with `INCONSISTENT_ACROSS_ROUNDS`. Neither can be a PASS.
+
+### Tests
+
+- `go test ./internal/apibas/latency/`: statistics (median, nearest-rank p95) and grading (every round crosses, every round within, disagreeing rounds, noisy rounds, no rounds).
+- `go test ./internal/apibas/runner/ -run TestABUSE002Repeatability`: three runs of each variant. About 160 seconds, skipped under `-short`. The vulnerable timing verdict is asserted to be FAIL/exploited on every run.
+
+### CLI smoke test (both modes, all twenty-eight scenarios)
+
+Vulnerable: 28 of 28 FAIL, exploited. Fixed: 28 of 28 PASS, not exploited. Token check against the lab logs: zero matches.
+
+### Limitations
+
+- The fixed build's timing is only measured as a refusal. The within-budget path (a report of 12 periods or fewer, which is allowed and should finish under the ceiling) is not yet measured. It is the next measurement to add.
+- All measurements are in-process on one machine. The threshold is frozen for this declared environment only. Another machine needs its own baseline measurement before the threshold is trusted there.
+
+### Still open
+
+- Detection (Phase 4): the Elastic-emulating fixture and detection grading contract. Not started.
+- Pagination fixture with more records than the cap, for item-count evidence. Not started.
+- ABUSE-004 and ABUSE-006 to ABUSE-010: need protocol adapters or a second service. Left unimplemented until those exist.
+- Unsupported protocol adapters (GraphQL, gRPC, SOAP, WebSocket, async): must be reported as UNSUPPORTED. Not yet wired into the report.
+- Orchestrator scheduling and persistence, and the production secret store.
+- The Windows build (`build.ps1`) has not been run on these tranches.
