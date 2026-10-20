@@ -50,10 +50,10 @@ Audit sources read what the provider logs. Some scenario steps are logged only i
 - Previously a subscription Owner's `*` edge never matched a concrete action, so Owner looked like no access. Fixed in R-9.
 - **Still to verify live:** on a real subscription, an Owner's scenario steps should read as granted, and the `role_not_actions` carve-outs should match what the portal shows for a custom role.
 
-### O-7 — Enforcement layers: closed except cross-account resource grants (MODEL)
+### O-7 — Enforcement layers: closed; expansion limits remain (MODEL)
 SCPs, permission boundaries, S3 bucket policies, management-group inheritance, and folder and organization inheritance are now read and applied (R-10 to R-13). What remains:
 - **AWS session policies:** IAM does not store them; each AssumeRole call carries its own. Discovery therefore reports a role's maximal grant, which is an upper bound for any session. An operator can supply the session policy a run will use (`sessionPolicy` on `POST /api/cloud-scenario-runs`, R-14). Without one, a scenario result is an upper bound for that role.
-- **AWS cross-account resource policies:** an Allow in a bucket policy that grants another account is not discovered (under-report). Only Deny statements in bucket policies are applied.
+- **Bucket policy Allows that are counted, not expanded:** `NotPrincipal` allows and `NotAction`/`NotResource` allows cannot be turned into a finite set of identities, so they are counted (`not_principal_allows`, `not_action_statements`) and produce no edge (under-report). Service principals (for example `cloudtrail.amazonaws.com` writing to a bucket) are not modelled.
 - **Verify:** run one scenario as a role with a session policy that allows only part of the role's grants, and confirm the blocked steps match the session. Then pick one identity with an S3 bucket policy that denies its action, and confirm the verdict.
 
 ### O-8 — Conditions (MODEL)
@@ -129,6 +129,11 @@ SCPs, permission boundaries, S3 bucket policies, management-group inheritance, a
 ### R-14 — Enforcement gates ignored the resource; session policies could not be applied (over-reporting) — RESOLVED (this commit)
 - **What was wrong:** a boundary, SCP, or session policy that allowed an action on a different resource still counted as covering the target. Separately, there was no way to evaluate a scenario as a role session that carries a session policy.
 - **What changed:** every gate now requires a matching Resource or NotResource as well as Action. A `sessionPolicy` on a scenario run (AWS scenarios, role principals only) is checked, normalized, and applied to each step the way a boundary is. Session policies are limited to 2,048 characters, and an unreadable or empty policy is refused, not partly applied. Covered by `aws_session_test.go` and `cloudscenario_session_test.go`.
+
+### R-15 — Bucket policy Allows were not discovered (under-reporting) — RESOLVED (this commit)
+- **What was wrong:** a bucket policy that allowed another account, anyone, or a same-account principal directly, granted access the identity policies never showed. None of those grants appeared in discovery.
+- **What changed:** each Allow in a bucket policy now produces an edge with source type `resource-policy`. Same-account principals (and this account's root, which expands to every identity in the account) get a clean grant. A principal in another account, and the account root of another account, is conditional on `cross-account-identity-policy`, since the other account's identity policy is not readable. A `"*"` grant is public and conditional on `public-access`. Denies in the same policy still apply. Covered by `aws_crossaccount_test.go`.
+- **Limits:** service principals are not modelled. `NotPrincipal` and `NotAction` allows are counted, not expanded.
 
 ### R-8 — Credentials never come from a request — RESOLVED `28304ead`, `7ae44b57`
 - AWS uses the SDK default chain, GCP uses Application Default Credentials, Azure reads service-principal variables. Each discoverer proves the credentials resolve to the account the run names before it reads inventory. Error text names a missing variable, never its value.

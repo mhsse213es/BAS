@@ -17,6 +17,9 @@ func (e *AWSEvaluator) EvaluatePermission(edge *CloudPermission, ctx *RequestCon
 	if gate != nil {
 		return gate
 	}
+	if edge.SourceType == "resource-policy" {
+		return e.resourcePolicyVerdict(edge, gateState)
+	}
 	result := e.identityVerdict(edge, ctx)
 	if result.State == PolicySupported && gateState == ConditionallyReachable {
 		result.State = ConditionallyReachable

@@ -34,7 +34,7 @@ bash scripts/cloud-qa.sh <group>    # one group
 - `TestParseRetryAfter`
 - `TestRedact`
 
-### `aws`  (44 tests)
+### `aws`  (50 tests)
 
 - `TestAWSBucketARN`
 - `TestAWSDecodePolicy_CompactsAndRejectsGarbage`
@@ -67,6 +67,12 @@ bash scripts/cloud-qa.sh <group>    # one group
 - `TestAWSEvaluator_ServiceWildcardSatisfiesConcreteAction`
 - `TestAWSGate_ActionNotActionAndConditions`
 - `TestAWSResourcePolicyGate_ResourceAndNotClauses`
+- `TestCrossAccount_DenyInSamePolicyBlocksPartner`
+- `TestCrossAccount_NotPrincipalAllowCountedNotExpanded`
+- `TestCrossAccount_OwnAccountRootReachesEveryIdentity`
+- `TestCrossAccount_PartnerGrantIsConditional`
+- `TestCrossAccount_PublicGrantIsMarkedPublic`
+- `TestCrossAccount_SameAccountGrantFromBucketPolicyAlone`
 - `TestExecuteCloudScenarioInSession_SessionPolicyBlocksStep`
 - `TestNormalizeAWSSessionPolicy`
 - `TestPermissionsBoundary_AllowOnOtherResourceDoesNotCover`

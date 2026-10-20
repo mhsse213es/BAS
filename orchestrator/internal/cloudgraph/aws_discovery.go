@@ -266,6 +266,10 @@ type AWSDiscoveryStats struct {
 	BoundaryUnresolved       int  // identities whose boundary policy was not in the snapshot; edges are Unknown
 	BucketPolicies           int  // buckets that have a resource policy
 	BucketPoliciesUnreadable int  // buckets whose resource policy could not be decoded; edges are Unknown
+	CrossAccountIdentities   int  // external principals named in bucket policies
+	PublicGrants             int  // bucket policy Allows to \"*\"
+	ResourcePolicyEdges      int  // edges granted by bucket policies
+	NotPrincipalAllows       int  // bucket policy Allows with NotPrincipal; not expanded
 }
 
 // Discover performs a full AWS discovery pass: account, identities, resources,
@@ -543,6 +547,7 @@ func (c *AWSDiscoveryClient) Discover(ctx context.Context) (*DiscoveredGraph, *A
 	if err != nil {
 		return nil, nil, err
 	}
+	c.crossAccountGrants(graph, bucketDocs, stats)
 	levels, inOrg, err := c.scpLevels(ctx)
 	if err != nil {
 		return nil, nil, err
@@ -564,7 +569,7 @@ func (c *AWSDiscoveryClient) Discover(ctx context.Context) (*DiscoveredGraph, *A
 		if unresolvedByID[id] {
 			p.Attributes["boundary_unresolved"] = "true"
 		}
-		if inOrg {
+		if inOrg && p.SourceType != "resource-policy" {
 			p.Attributes["scp_levels"] = levelsJSON
 		}
 		if arn := awsBucketARN(p.Target.CanonicalID); arn != "" {
