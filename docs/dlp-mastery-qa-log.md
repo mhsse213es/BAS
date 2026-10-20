@@ -179,6 +179,14 @@ This is the single place to check before claiming either DLP vendor connector is
 
 **Resolution path:** one run against the lab SMTP sink to confirm each step records a receipt. Attachments need a listener change that is a product decision, not a scenario change.
 
+### 18. Archive transfer scenario (dlp-exfiltration-archive-transfer) — sink step not run; encrypted and OCR variants not built — open
+
+**Status:** Open. Three sink-verified steps: plain ZIP, renamed-extension ZIP, nested ZIP (commit 90ece92d). Signed and catalogued. The packaging logic was run locally and works. The HTTPS sink step has not been run against the lab sink.
+
+**Limits, stated in the scenario:** the sink never sees a filename. The renamed variant tests bytes plus a `filename=` line, not a real file-type inspection engine. Encrypted, password-protected and OCR variants are not built; they need an inspection engine and a policy to test against.
+
+**Resolution path:** one run against the lab HTTPS sink to confirm each step records a receipt. Then decide whether the DLP product under test should be expected to unpack nested archives, which is a policy decision, not a scenario one.
+
 ## Resolved items
 
 - Item 11: the eight unclaimed AI-prompt and DB-export steps are catalogued (commit 226b1f40). Values come from each step's own command; no payload changed. Both drift checks pass.
