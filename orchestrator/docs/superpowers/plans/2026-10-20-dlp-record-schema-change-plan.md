@@ -232,3 +232,26 @@ against the agent code before it is used. Until then it is not populated.
 
 **Gate:** implementation and any push remain blocked until B2 is resolved and
 this plan is reviewed again.
+
+## 9. Implementation status (2026-10-20)
+
+- Done: `DLP_EVENT_START` parser (`reporting/dlp_event_start.go`); columns
+  `test_event_timestamp`, `test_event_source`, `decision_class`,
+  `evidence_source`, `rule_version`; B1 derivation (`verifysync/dlprecord_decision.go`);
+  per-process and pooled `BAS_TASK_ID`; markers in 12 DLP scenarios (re-signed,
+  verify-all 126/126). Migration additive, no backfill.
+- **Not done: end-to-end run.** The USB marker fires only with removable media.
+  Needs a lab host with a removable drive; a single step run confirms the marker
+  reaches `dlp_evidence_records`.
+- **Clock-skew measurement: not established.** One host reading, `w32tm /query
+  /status`: source `time.windows.com`, stratum 5, root dispersion 7.89 s. This is
+  the host's own error estimate against its time source, not skew against the
+  detection source. It says a bound from this host would be seconds wide, so
+  latency stays undefined. Next step: measure against the detection source's
+  clock and state the bound.
+- **Not all DLP steps emit the marker.** Multichannel's archive step and the
+  validation archive step are local ZIP writes, not outbound attempts, so they get
+  none by design.
+- **Pre-existing failure:** `dlpfixture` drift test reports unregistered fixture
+  values in the AI-prompt and DB-export steps. The payload values are unchanged by
+  this work (YAML diff is additive), so the failure predates it.
