@@ -371,8 +371,8 @@ Built, on `main`, from the decisions in section 8 (recommendations adopted):
 
 ### 13.2 Still open
 
-1. **No scenario adapter is wired.** `UnwiredExecutor` refuses every stage, so a real campaign run ends in `ERROR`. Connecting stages to the existing execution path is the next real step, and it needs one scenario proven end to end first.
-2. **Campaign definitions are not signed.** Decision 5 said signed, like scenarios. Definitions are validated, but no signature is checked yet.
-3. **Lateral scenario ID.** The vertical slice's lateral stage references `caldera-lateral-movement`, whose YAML has no `id:` field. Its ID must be confirmed before that stage can execute.
+1. **Stage execution: partly wired.** `EngineStageExecutor` checks every stage through the scenario engine's executable gate. A refused scenario is named as not executable. An executable scenario with no agent bound ends in ERROR with the reason `ErrNoAgentBinding`. Dispatch to an agent is not wired, because it needs an agent ID and the operator confirmations that a campaign cannot supply on its own.
+2. **Campaign definition signing: done for the shipped campaign.** `identity-endpoint-lateral.json.sig` was produced with `scripts/signer.go sign` using the project key, and verifies with the same integrity verifier as scenarios. Tampered and unsigned definitions are refused by `LoadSignedCampaign`. Definitions created through the API are not signed and are not yet refused. That gap is open.
+3. **Lateral scenario ID: resolved.** `caldera-lateral-movement` loads under its filename-derived ID. Checked with the engine loader on 2026-10-20 (all three campaign scenarios load, `intake failures: 0`). The YAML has no `id:` field, so the ID is inferred from the filename and should be made explicit.
 4. **Lab and live validation.** No lab exists in this repository. Nothing in the vertical slice is lab-validated, and no proof record for lab or live runs has been created.
 5. **Campaign rollup only sees stored state.** Stages that finish outside the orchestrator are not picked up until `Advance` is called again.

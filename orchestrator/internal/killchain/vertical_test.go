@@ -3,6 +3,8 @@ package killchain
 import (
 	"context"
 	"os"
+
+	"github.com/audspect/bas/internal/integrity"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -19,7 +21,11 @@ func loadVerticalSlice(t *testing.T) CampaignDef {
 	if err != nil {
 		t.Fatal(err)
 	}
-	def, err := ParseCampaignDef(data)
+	sig, err := os.ReadFile(filepath.Join("campaigns", "identity-endpoint-lateral.json.sig"))
+	if err != nil {
+		t.Fatalf("the shipped campaign must be signed: %v", err)
+	}
+	def, err := LoadSignedCampaign(data, sig, integrity.CompiledVerifier{})
 	if err != nil {
 		t.Fatalf("the shipped campaign must parse and validate: %v", err)
 	}

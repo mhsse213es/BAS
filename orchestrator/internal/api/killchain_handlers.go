@@ -103,7 +103,11 @@ func (h *Handler) AdvanceKillChainCampaign(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	id := chi.URLParam(r, "id")
-	orch := killchain.Orchestrator{Store: store, Executor: killchain.UnwiredExecutor{}}
+	exec := EngineStageExecutor{}
+	if h.engine != nil {
+		exec.Resolver = h.engine
+	}
+	orch := killchain.Orchestrator{Store: store, Executor: exec}
 	if _, err := orch.Advance(r.Context(), id); err != nil {
 		writeKillChainError(w, err)
 		return

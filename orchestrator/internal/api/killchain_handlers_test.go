@@ -93,7 +93,7 @@ func TestKillChainAPI_CreateValidateAdvanceAndRead(t *testing.T) {
 		if len(view.Stages) != 2 || view.Stages[0].Key != "initial" {
 			t.Fatalf("stages not in topological order: %+v", view.Stages)
 		}
-		if view.Stages[0].Verdict != "ERROR" || !strings.Contains(strings.Join(view.Stages[0].Reasons, " "), "no execution adapter") {
+		if view.Stages[0].Verdict != "ERROR" || !strings.Contains(strings.Join(view.Stages[0].Reasons, " "), "not executable") {
 			t.Fatalf("unwired stage must be ERROR with a reason, got %+v", view.Stages[0])
 		}
 		if view.Stages[1].Verdict != "NOT_TESTED" {
