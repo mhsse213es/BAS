@@ -51,7 +51,7 @@ func TestUnsupportedCountsOnlyInCatalogue(t *testing.T) {
 	if r.Catalogued != len(all) {
 		t.Fatalf("catalogued = %d, want %d", r.Catalogued, len(all))
 	}
-	if r.Unsupported < 4 {
+	if r.Unsupported < 3 {
 		t.Fatalf("unsupported = %d, want at least the 5 protocol entries without an adapter", r.Unsupported)
 	}
 	if r.Evaluated != 0 || r.Validated != 0 {
@@ -60,8 +60,8 @@ func TestUnsupportedCountsOnlyInCatalogue(t *testing.T) {
 	if !r.Consistent() {
 		t.Fatalf("classes do not sum to the catalog size: %+v", r)
 	}
-	if got := entry(r, "API-BAS-DISC-009"); got.Status != Unsupported || got.Reason != grade.ReasonUnsupportedProtocol {
-		t.Fatalf("gRPC entry = %+v, want unsupported with UNSUPPORTED_PROTOCOL", got)
+	if got := entry(r, "API-BAS-AUTHN-011"); got.Status != Unsupported || got.Reason != grade.ReasonUnsupportedProtocol {
+		t.Fatalf("WebSocket entry = %+v, want unsupported with UNSUPPORTED_PROTOCOL", got)
 	}
 }
 
@@ -69,10 +69,10 @@ func TestUnsupportedCountsOnlyInCatalogue(t *testing.T) {
 func TestUnsupportedIgnoresResults(t *testing.T) {
 	all := loadCatalog(t)
 	results := map[string]Verdicts{
-		"API-BAS-DISC-009": {Vulnerable: ptr(validFail()), Fixed: ptr(validPass())},
+		"API-BAS-AUTHN-011": {Vulnerable: ptr(validFail()), Fixed: ptr(validPass())},
 	}
 	r := Build(all, contract.ProtocolSupported, results)
-	if got := entry(r, "API-BAS-DISC-009"); got.Status != Unsupported {
+	if got := entry(r, "API-BAS-AUTHN-011"); got.Status != Unsupported {
 		t.Fatalf("unsupported scenario with results = %s, want unsupported", got.Status)
 	}
 }
@@ -81,23 +81,23 @@ func TestUnsupportedIgnoresResults(t *testing.T) {
 // makes the scenario implemented and unevaluated, not evaluated.
 func TestAdapterLaterIncreasesCoverageOnlyAfterValidEvaluation(t *testing.T) {
 	all := loadCatalog(t)
-	// The "later" adapter is gRPC: the test adds it to the supported set and nothing else.
-	withGRPC := func(p string) bool { return contract.ProtocolSupported(p) || p == "grpc" }
+	// The "later" adapter is WebSocket: the test adds it to the supported set and nothing else.
+	withWS := func(p string) bool { return contract.ProtocolSupported(p) || p == "websocket" }
 
 	before := Build(all, contract.ProtocolSupported, nil)
-	after := Build(all, withGRPC, nil)
+	after := Build(all, withWS, nil)
 	if after.Implemented <= before.Implemented {
 		t.Fatalf("implemented did not rise when the GraphQL adapter was added: %d -> %d", before.Implemented, after.Implemented)
 	}
 	if after.Evaluated != before.Evaluated {
 		t.Fatalf("evaluated rose without any verdict: %d -> %d", before.Evaluated, after.Evaluated)
 	}
-	if got := entry(after, "API-BAS-DISC-009"); got.Status != Unevaluated {
-		t.Fatalf("implemented gRPC scenario with no verdict = %s, want unevaluated", got.Status)
+	if got := entry(after, "API-BAS-AUTHN-011"); got.Status != Unevaluated {
+		t.Fatalf("implemented WebSocket scenario with no verdict = %s, want unevaluated", got.Status)
 	}
 
-	withVerdict := Build(all, withGRPC, map[string]Verdicts{
-		"API-BAS-DISC-009": {Vulnerable: ptr(validFail()), Fixed: ptr(validPass())},
+	withVerdict := Build(all, withWS, map[string]Verdicts{
+		"API-BAS-AUTHN-011": {Vulnerable: ptr(validFail()), Fixed: ptr(validPass())},
 	})
 	if withVerdict.Evaluated != after.Evaluated+1 || withVerdict.Validated != 1 {
 		t.Fatalf("valid pair did not raise evaluated and validated: evaluated %d -> %d, validated %d",

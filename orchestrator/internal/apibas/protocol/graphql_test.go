@@ -84,7 +84,7 @@ func TestGraphQLIsRegisteredAndOthersAreNot(t *testing.T) {
 	if !Supported("graphql") {
 		t.Fatal("graphql has an adapter but Supported reports false")
 	}
-	for _, p := range []string{"grpc", "websocket", "async"} {
+	for _, p := range []string{"websocket", "async"} {
 		if Supported(p) {
 			t.Fatalf("%s reported supported with no adapter", p)
 		}

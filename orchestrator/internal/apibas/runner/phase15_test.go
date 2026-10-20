@@ -56,10 +56,10 @@ func TestPhase15_FixedAbuseStillDetected(t *testing.T) {
 // A protocol with no adapter is reported UNSUPPORTED, never counted as covered.
 func TestPhase15_UnsupportedProtocolIsSkipped(t *testing.T) {
 	e := newEnv(t, lab.ModeVulnerable, fixture.OrdersTwoTenant())
-	s := contract.Scenario{ID: "API-BAS-DISC-009", Protocol: "grpc"}
+	s := contract.Scenario{ID: "API-BAS-AUTHN-011", Protocol: "websocket"}
 	rep := e.run(t, s, e.state)
 	if rep.Outcome.Result != grade.SKIPPED || rep.Outcome.Reason != grade.ReasonUnsupportedProtocol {
-		t.Fatalf("grpc scenario = %s / %s, want SKIPPED / UNSUPPORTED_PROTOCOL", rep.Outcome.Result, rep.Outcome.Reason)
+		t.Fatalf("websocket scenario = %s / %s, want SKIPPED / UNSUPPORTED_PROTOCOL", rep.Outcome.Result, rep.Outcome.Reason)
 	}
 }
 

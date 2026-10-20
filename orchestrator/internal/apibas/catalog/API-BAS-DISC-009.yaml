@@ -4,9 +4,8 @@ category: DISC
 claim: cross_identity
 protocol: grpc
 prerequisites:
-  - gRPC client with descriptor import (protobuf), not yet implemented
-  - lab gRPC service exposing OrderService/GetOrder, with descriptors checked into the lab fixture
-  - gRPC PERMISSION_DENIED is recorded as the HTTP-equivalent 403 in evidence
+  - "gRPC adapter in JSON transcoding form: a gRPC method is POSTed to /package.Service/Method with a JSON body; native gRPC framing over HTTP/2 is not supported by the runner"
+  - lab serves OrderService/GetOrder in the same transcoded form; PERMISSION_DENIED is returned as 403
   - adapter must send only to the loopback lab target
 attack_objective: >
   A customer calls the gRPC order lookup for another customer's order. The REST route refuses this,

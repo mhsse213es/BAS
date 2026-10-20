@@ -1615,3 +1615,20 @@ decision.
   undeclared entities refused); `TestPhase28_SOAPINJ005VulnerableFailsFixedPasses` (FAIL exploited
   vulnerable, PASS enforced fixed); `TestPhase28_SOAPCatalogBodiesValidate`.
 - Coverage: unsupported protocols now gRPC, WebSocket, async (4 scenarios); SOAP is implemented.
+
+
+## Phase 31 - protocol adapter: gRPC, JSON transcoding form (third of five)
+
+- Scope limit, stated plainly: this is gRPC-JSON transcoding over HTTP/1.1. A gRPC method is POSTed to
+  `/{package.Service}/{Method}` with a JSON object body. It is not native gRPC framing over HTTP/2,
+  because the runner's client speaks HTTP/1.1. Protobuf descriptors are not used. DISC-009's
+  prerequisites say this.
+- `protocol.GRPC` validates the JSON object body. `protocol.ValidateMethodPath` refuses any path that is
+  not a method (the package may be empty).
+- Lab route `POST /pkg.orders.v1.OrderService/GetOrder` (`lab/grpc.go`). The vulnerable build returns the
+  full record to any caller (`LAB-DISC-GRPC-001`). The fixed build returns `PERMISSION_DENIED` as 403 to a
+  non-owner.
+- Acceptance: adapter unit tests (path shape, body shape, registration);
+  `TestPhase28_GRPCDISC009VulnerableFailsFixedPasses` (FAIL exploited vulnerable, PASS enforced fixed);
+  `TestPhase28_GRPCCatalogStepsValidate`.
+- Unsupported now: WebSocket and async (3 scenarios).

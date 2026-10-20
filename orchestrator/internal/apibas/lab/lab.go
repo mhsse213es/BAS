@@ -428,6 +428,7 @@ func (s *Server) Handler() http.Handler {
 	s.registerRemaining(mux)
 	s.registerGraphQL(mux)
 	s.registerSOAP(mux)
+	s.registerGRPC(mux)
 	mux.HandleFunc("GET /lab/faults", s.adminOnly(s.listFaults))
 	if s.cfg.Mode == ModeVulnerable {
 		// LAB-GWAY-OVERRIDE-001: the vulnerable build honours a method-override header.
