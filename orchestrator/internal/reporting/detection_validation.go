@@ -320,6 +320,10 @@ func ComputeAutomaticVerifications(specs []StepDetectionSpec, results []models.S
 			// The same expectation ID can appear on several steps (one profile
 			// applied to many steps), so the step identity travels with the verdict.
 			vr.TaskID = spec.TaskID
+			if vr.DLPEvidence != nil {
+				// Correlate the payload start marker to this step by its task id.
+				vr.DLPEvidence.TestEventStart, vr.DLPEvidence.TestEventStartReason = ParseDLPEventStart(ev.RawOutput, spec.TaskID)
+			}
 			out = append(out, vr)
 		}
 	}

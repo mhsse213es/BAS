@@ -55,6 +55,11 @@ type DLPEvidence struct {
 	// contradicts, or leaves unresolved for this specific verdict. Always
 	// populated.
 	Limitations string
+	// TestEventStart is the controlled test-event start the payload recorded
+	// with a DLP_EVENT_START marker for this step (see ParseDLPEventStart).
+	// Zero when no usable marker exists; TestEventStartReason then says why.
+	TestEventStart       time.Time
+	TestEventStartReason string
 
 	// Channel names which operation path produced this evidence --
 	// "browser" | "native-app" | "sync-client" | "api" | "" (unknown).

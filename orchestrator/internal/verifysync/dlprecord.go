@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -24,6 +25,11 @@ type DLPRecordEntry struct {
 	Comparison      string           `json:"comparison"`
 	Status          string           `json:"status"`
 	Record          dlpreport.Record `json:"record"`
+	// TestEventStart and TestEventSource are stored in their own nullable
+	// columns, not in the record JSON (json:"-"), so the record shape is
+	// unchanged. Both are nil when no usable payload marker exists.
+	TestEventStart  *time.Time `json:"-"`
+	TestEventSource *string    `json:"-"`
 }
 
 const dlpRecordSourceSystem = "dlp-verifier"
@@ -87,7 +93,30 @@ func dlpEntryFromVerdict(scenarioID string, vr reporting.VerificationResult) DLP
 			},
 			Limitations: strings.Join(limits, " "),
 		},
+		TestEventStart:  testEventStartOf(ev),
+		TestEventSource: testEventSourceOf(ev),
 	}
+}
+
+// testEventStartOf returns the payload-recorded test-event start, or nil when
+// the step produced no usable marker. A zero time is never stored: it would
+// read back as a real timestamp.
+func testEventStartOf(ev *reporting.DLPEvidence) *time.Time {
+	if ev.TestEventStart.IsZero() {
+		return nil
+	}
+	at := ev.TestEventStart
+	return &at
+}
+
+// testEventSourceOf names how the start was obtained. It is set exactly when a
+// start time is set, so a stored timestamp always has a source.
+func testEventSourceOf(ev *reporting.DLPEvidence) *string {
+	if ev.TestEventStart.IsZero() {
+		return nil
+	}
+	src := "payload-marker"
+	return &src
 }
 
 // deriveDLPEnforcement maps the observed evidence onto the Enforcement
@@ -127,10 +156,11 @@ func persistDLPRecords(ctx context.Context, db *pgxpool.Pool, runID string, entr
 			return err
 		}
 		if _, err := db.Exec(ctx,
-			`INSERT INTO dlp_evidence_records (run_id, task_id, expectation_id, technique_id, scenario_id, record, created_at)
-			 VALUES ($1, $2, $3, $4, $5, $6, NOW())
+			`INSERT INTO dlp_evidence_records (run_id, task_id, expectation_id, technique_id, scenario_id, record, created_at, test_event_timestamp, test_event_source)
+			 VALUES ($1, $2, $3, $4, $5, $6, NOW(), $7, $8)
 			 ON CONFLICT (run_id, task_id, expectation_id) DO NOTHING`,
 			runID, e.TaskID, e.ExpectationID, e.TechniqueID, e.Record.ScenarioID, string(raw),
+			e.TestEventStart, e.TestEventSource,
 		); err != nil {
 			return err
 		}

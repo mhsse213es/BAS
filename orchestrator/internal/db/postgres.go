@@ -1722,6 +1722,10 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 			created_at timestamptz NOT NULL DEFAULT NOW(),
 			PRIMARY KEY (run_id, task_id, expectation_id)
 		)`,
+		// Test-event start (B2, payload marker). Nullable, no default: a row written
+		// before this column existed stays NULL, meaning unknown, never backfilled.
+		`ALTER TABLE dlp_evidence_records ADD COLUMN IF NOT EXISTS test_event_timestamp timestamptz`,
+		`ALTER TABLE dlp_evidence_records ADD COLUMN IF NOT EXISTS test_event_source text`,
 		`CREATE TABLE IF NOT EXISTS dlp_sink_receipts (
 			id bigserial PRIMARY KEY,
 			token text NOT NULL,
