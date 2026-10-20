@@ -47,7 +47,9 @@ func (r SentinelRecord) Normalize() (Event, error) {
 	return e, e.Validate()
 }
 
-// ToSentinelRecord is the inverse mapping, used when a shared event must be fed to the
+// ToSentinelRecord is the inverse mapping. Sentinel's record has one owner column, so only the first owner
+// (ObjectOwner) is written. An event naming a second foreign owner is not fully represented here. No scenario
+// routes through Sentinel today; widening the record needs its own change., used when a shared event must be fed to the
 // Sentinel fixture. It keeps every column the rules read.
 func ToSentinelRecord(e Event) SentinelRecord {
 	return SentinelRecord{

@@ -28,13 +28,19 @@ const SourceElastic = "elastic-security"
 
 // Event is the normalised shape every adapter ingests. The lab emits events in this shape.
 type Event struct {
-	ObjectOwner   string `json:"object_owner,omitempty"`
-	Seq           int    `json:"seq"`
-	CorrelationID string `json:"correlation_id"`
-	Action        string `json:"action"`
-	Outcome       string `json:"outcome"`
-	Identity      string `json:"identity"`
-	Status        int    `json:"status"`
+	// ObjectOwner is the first owner the request named (ObjectOwners[0] when that is set). It is kept
+	// for single-owner consumers. Rules that ask about foreign ownership read ObjectOwners, so a
+	// request that names a second owner is not judged by the first alone.
+	ObjectOwner string `json:"object_owner,omitempty"`
+	// ObjectOwners is every distinct owner the request named, in the order the lab found them. Owners
+	// are the lab's own identifiers, never text taken from the request. The lab bounds the list.
+	ObjectOwners  []string `json:"object_owners,omitempty"`
+	Seq           int      `json:"seq"`
+	CorrelationID string   `json:"correlation_id"`
+	Action        string   `json:"action"`
+	Outcome       string   `json:"outcome"`
+	Identity      string   `json:"identity"`
+	Status        int      `json:"status"`
 	// Signature lists the injection-pattern classes the request carried (see Signature* below). It holds
 	// classes only, never the text that matched, so a body is never stored through this field.
 	Signature []string `json:"signature,omitempty"`
@@ -55,6 +61,12 @@ func (e Event) Validate() error {
 		return fmt.Errorf("event %d has unknown outcome %q", e.Seq, e.Outcome)
 	case e.Identity == "":
 		return fmt.Errorf("event %d has no identity", e.Seq)
+	case len(e.ObjectOwners) > maxEventOwners:
+		return fmt.Errorf("event %d names %d owners, more than the %d the contract allows", e.Seq, len(e.ObjectOwners), maxEventOwners)
+	case hasEmptyOwner(e.ObjectOwners):
+		return fmt.Errorf("event %d has an empty owner", e.Seq)
+	case len(e.ObjectOwners) > 0 && e.ObjectOwner != e.ObjectOwners[0]:
+		return fmt.Errorf("event %d: object_owner %q must equal object_owners[0] %q", e.Seq, e.ObjectOwner, e.ObjectOwners[0])
 	case e.Status < 100 || e.Status > 599:
 		return fmt.Errorf("event %d has invalid status %d", e.Seq, e.Status)
 	}
@@ -97,6 +109,42 @@ type Alert struct {
 	Source        string
 }
 
+// maxEventOwners bounds the owners one event may name. It matches the lab's cap.
+const maxEventOwners = 16
+
+func hasEmptyOwner(owners []string) bool {
+	for _, o := range owners {
+		if o == "" {
+			return true
+		}
+	}
+	return false
+}
+
+// owners returns the owners an event names. An event from a consumer that sets only ObjectOwner is
+// read as one owner, so single-owner events keep their meaning.
+func (e Event) owners() []string {
+	if len(e.ObjectOwners) > 0 {
+		return e.ObjectOwners
+	}
+	if e.ObjectOwner != "" {
+		return []string{e.ObjectOwner}
+	}
+	return nil
+}
+
+// foreignOwned reports whether the event names an object owned by someone other than the identity that
+// made the request. Any named owner that differs counts, so a second foreign owner is not hidden by a
+// first owner that is the caller's own.
+func foreignOwned(e Event) bool {
+	for _, o := range e.owners() {
+		if o != "" && o != e.Identity {
+			return true
+		}
+	}
+	return false
+}
+
 // Rule is a threshold rule: it fires once, on the Threshold-th matching event for a
 // correlation ID.
 type Rule struct {
@@ -123,7 +171,7 @@ var ElasticRules = []Rule{
 	},
 	{
 		ID: "APIBAS-REL-004", Name: "Access to an object owned by another identity", Severity: SeverityHigh, Threshold: 1,
-		Match: func(e Event) bool { return e.ObjectOwner != "" && e.ObjectOwner != e.Identity },
+		Match: foreignOwned,
 	},
 	{
 		// REL-005 counts every request of one run. A burst of ten requests is a counted-request abuse
@@ -147,7 +195,7 @@ var ElasticRules = []Rule{
 		// owned by another identity. It is keyed on the projection, not only on the owner.
 		ID: "APIBAS-REL-008", Name: "Sensitive projection of another identity's object", Severity: SeverityHigh, Threshold: 1,
 		Match: func(e Event) bool {
-			return sensitiveProjection(e.Action) && e.ObjectOwner != "" && e.ObjectOwner != e.Identity
+			return sensitiveProjection(e.Action) && foreignOwned(e)
 		},
 	},
 }

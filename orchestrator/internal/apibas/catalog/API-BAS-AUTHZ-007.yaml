@@ -41,7 +41,7 @@ ground_truth:
     changed, and the attack response discloses no protected values.
 detection_assertion:
   status: fixture_validated
-  reason: Access events feed the elastic-security fixture. The result is fixture-validated, not live-SIEM-validated.
+  reason: "Access events feed the elastic-security fixture. Exploitability validated. Detection validated in both configurations: with body extraction disabled the rule's expected not_detected matches, and with extraction enabled the access event carries every named owner (ORD-1001 cust-a, ORD-2001 cust-b), so REL-004 is detected in both builds on two consecutive runs. Fixture-validated, not live-SIEM-validated."
 evidence:
   - sanitized_request
   - sanitized_response

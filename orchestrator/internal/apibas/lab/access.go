@@ -19,7 +19,11 @@ type accessEvent struct {
 	Outcome       string `json:"outcome"`
 	Identity      string `json:"identity"`
 	Status        int    `json:"status"`
-	ObjectOwner   string `json:"object_owner,omitempty"`
+	// ObjectOwner is the first owner the request named. It is kept for consumers that read one owner;
+	// ObjectOwners carries every distinct owner named by the path, the query and (with extraction on)
+	// the body, in that order. ObjectOwner is always ObjectOwners[0] when the latter is set.
+	ObjectOwner  string   `json:"object_owner,omitempty"`
+	ObjectOwners []string `json:"object_owners,omitempty"`
 	// At is when the lab recorded the event. It is not part of the event contract: telemetry faults use
 	// it to decide when the SIEM is allowed to receive the event.
 	At time.Time `json:"-"`
@@ -71,26 +75,24 @@ func outcomeFor(status int) string {
 	return "success"
 }
 
-// ownerOfPath returns the owner of the first order a request path names, in any route, or "" when the
-// path names no order. Owner attribution follows the object ID wherever it sits in the path, so the
-// fixture sees object access on every route whose path carries the ID.
-func (s *Server) ownerOfPath(path string) string {
+// ownersOfPath returns the owners of every order a request path names, in path order, without repeats.
+// The owners come from the lab's own order records, never from the request text.
+func (s *Server) ownersOfPath(path string) []string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	var out []string
 	for _, seg := range strings.Split(path, "/") {
 		if o, ok := s.orders[seg]; ok {
-			return o.OwnerID
+			out = appendOwner(out, o.OwnerID)
 		}
 	}
-	return ""
+	return out
 }
 
-// ownerOfRequest attributes the object a request names: first from its path, then from its query
-// values, decoded. A traversal parameter that names an order is therefore still attributed.
-func (s *Server) ownerOfRequest(r *http.Request) string {
-	if o := s.ownerOfPath(r.URL.Path); o != "" {
-		return o
-	}
+// ownersOfRequest attributes every object a request names: first from its path, then from its decoded
+// query values, in order-ID order. Each owner appears once.
+func (s *Server) ownersOfRequest(r *http.Request) []string {
+	out := s.ownersOfPath(r.URL.Path)
 	q := r.URL.Query()
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -98,12 +100,29 @@ func (s *Server) ownerOfRequest(r *http.Request) string {
 		for _, vals := range q {
 			for _, v := range vals {
 				if strings.Contains(v, o.ID) {
-					return o.OwnerID
+					out = appendOwner(out, o.OwnerID)
 				}
 			}
 		}
 	}
-	return ""
+	return out
+}
+
+// maxObjectOwners bounds the owners one event carries. The fixture has few owners, so the bound is a
+// defensive cap on the event's size, not a limit a real run reaches.
+const maxObjectOwners = 16
+
+// appendOwner adds an owner once, keeping the order of first appearance and the cap.
+func appendOwner(list []string, owner string) []string {
+	if owner == "" || len(list) >= maxObjectOwners {
+		return list
+	}
+	for _, o := range list {
+		if o == owner {
+			return list
+		}
+	}
+	return append(list, owner)
 }
 
 // logAccess records one event per product request. Lab administration routes are not
@@ -121,9 +140,13 @@ func (s *Server) logAccess(next http.Handler) http.Handler {
 		} else if st != authMissing {
 			identity = "unknown"
 		}
-		owner := s.ownerOfRequest(r)
-		if owner == "" {
-			owner = bodyOwnerFromContext(r.Context())
+		owners := s.ownersOfRequest(r)
+		for _, o := range bodyOwnersFromContext(r.Context()) {
+			owners = appendOwner(owners, o)
+		}
+		owner := ""
+		if len(owners) > 0 {
+			owner = owners[0]
 		}
 		s.evMu.Lock()
 		s.eventSeq++
@@ -135,6 +158,7 @@ func (s *Server) logAccess(next http.Handler) http.Handler {
 			Identity:      identity,
 			Status:        rec.status,
 			ObjectOwner:   owner,
+			ObjectOwners:  owners,
 			At:            time.Now(),
 			Signature:     append(injectionClasses(requestTargetText(r.URL.Path, r.URL.Query())), bodySignatureFromContext(r.Context())...),
 		})

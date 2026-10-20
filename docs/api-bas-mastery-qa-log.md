@@ -1885,3 +1885,45 @@ Exploitability is identical in all four cases. Telemetry changes only the detect
 - The repeatability gate is applied per test run (two consecutive passes). It is not yet a standing gate on every
   scenario's catalog status.
 - Windows `build.ps1` run and the staging ABUSE-002 item remain carry-overs.
+
+
+## Phase 35 addendum: AUTHZ-007 status narrowed, multiple-owner event contract
+
+### Decisions applied
+
+- **AUTHZ-007 was narrowed, then restored.** While the gap was open, its detection assertion was `not_evaluated` and
+  its detection block was removed, because the contract allows `not_evaluated` only without a block. Once the gap was
+  closed and both configurations passed, it returned to `fixture_validated`. The reason states both configurations.
+- **Event-contract change (explicit).** Access events now carry `object_owners`: every distinct owner the path, the
+  decoded query and (with extraction on) the body name, in that order. `object_owner` stays as the first owner, so it
+  equals `object_owners[0]`. Owners are the lab's own identifiers, never request text.
+- **Bounds and validation.** Both the lab and `detect.Event.Validate` cap owners at 16 and reject empty owners and a
+  mismatched `object_owner`.
+- **Downstream impact checked before the change.** Consumers of the owner field were all inside
+  `orchestrator/internal/apibas`: REL-004 and REL-008 (now read every owner), the Sentinel mapping (single owner
+  column), the admin client (decodes by JSON tag) and the lab. No consumer outside the package reads it.
+- **Sentinel limit recorded.** `ToSentinelRecord` writes only the first owner, because Sentinel's record has one owner
+  column. No scenario routes through Sentinel, so this has no effect on current results.
+- **Privacy unchanged.** Extraction is still off by default, and only owner identifiers and injection class names are
+  kept. No matched text is stored.
+
+### Verification
+
+- Unit tests (`detect/owners_contract_test.go`): a second foreign owner counts as foreign; single-owner meaning is
+  unchanged; a mismatched `object_owner` is refused.
+- Regression (`runner/authz007_test.go`): extraction off gives not_detected, extraction on gives detected, in both
+  builds, with exploitability unchanged.
+- Table (`TestPhase34_DetectionMatchesDeclaredExpectations`): 30 of 30 declared scenarios match on two consecutive
+  passes, in both builds, with extraction off and on.
+- Measured run: exploitability 69/69 validated. Detection (extraction off, the measured configuration): vulnerable
+  14 detected / 16 not detected; fixed 16 / 14; 39 of 69 not evaluated. These counts are unchanged, as expected:
+  the measured run does not enable extraction.
+
+### Still open
+
+- **DET-009 is not defined.** The telemetry states were tested on AUTHZ-001. A DET-009 scenario still has to be
+  defined in the catalog with its own expectation and tested.
+- 39 scenarios remain not evaluated. Detection coverage is not claimed for them.
+- Repeatability is checked per test run (two consecutive passes), not as a standing catalog gate.
+- Five runs on this machine do not prove stability across machines or workloads.
+- Windows `build.ps1` run and the staging ABUSE-002 item remain carry-overs.

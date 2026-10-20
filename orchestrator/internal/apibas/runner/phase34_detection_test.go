@@ -64,14 +64,6 @@ func TestPhase34_DetectionMatchesDeclaredExpectations(t *testing.T) {
 						if i > 0 {
 							got = rep.DetectionResults[rule]
 						}
-						if gap, ok := knownAttributionGap(s.ID, rule, extract); ok && got == gap.observed {
-							// A recorded finding: the rule's definition expects want, the lab observes gap.observed.
-							// The test passes only while the observed result is the recorded one, so a change in
-							// either direction is noticed.
-							t.Logf("KNOWN FINDING %s %s %s extract=%t: expected %q, observed %q: %s",
-								s.ID, rule, modeName(mode), extract, want, got, gap.reason)
-							got = want
-						}
 						if got != want {
 							matched = false
 							failures = append(failures, fmt.Sprintf("%s %s %s extract=%t pass=%d: %q, expected %q",
@@ -92,26 +84,6 @@ func TestPhase34_DetectionMatchesDeclaredExpectations(t *testing.T) {
 	if len(failures) > 0 {
 		t.Fatalf("%d detection results differ from the declared expectations:\n%s", len(failures), strings.Join(failures, "\n"))
 	}
-}
-
-// attributionGap is a recorded finding. The rule's definition expects one result, the lab observes another,
-// and the mismatch is kept as a finding rather than hidden by changing the expectation.
-type attributionGap struct {
-	observed string
-	reason   string
-}
-
-// knownAttributionGaps lists the findings the detection run has recorded. An entry matches only the observed
-// result, so if the lab's behaviour changes the test fails and the finding must be reviewed.
-func knownAttributionGap(scenario, rule string, extract bool) (attributionGap, bool) {
-	if scenario == "API-BAS-AUTHZ-007" && rule == "APIBAS-REL-004" && extract {
-		return attributionGap{
-			observed: detect.NotDetected,
-			reason: "body names ORD-1001 (owned by the attacker) before ORD-2001 (owned by another identity); " +
-				"the lab keeps only the first named owner, so the foreign object is not attributed to the event",
-		}, true
-	}
-	return attributionGap{}, false
 }
 
 // additionalRules lists the rule IDs a scenario declares beyond its primary rule.

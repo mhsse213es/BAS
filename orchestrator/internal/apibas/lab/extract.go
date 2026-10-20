@@ -17,7 +17,7 @@ import (
 
 const bodyExtractLimit = 64 << 10
 
-type bodyOwnerKey struct{}
+type bodyOwnersKey struct{}
 
 type bodySignatureKey struct{}
 
@@ -27,10 +27,10 @@ func bodySignatureFromContext(ctx context.Context) []string {
 	return v
 }
 
-// bodyOwnerFromContext returns the owner of an order named in the request body, when extraction is on
-// and the body named one. The empty string means extraction is off or the body named no known order.
-func bodyOwnerFromContext(ctx context.Context) string {
-	v, _ := ctx.Value(bodyOwnerKey{}).(string)
+// bodyOwnersFromContext returns the owners of every order named in the request body, in order-ID order,
+// when extraction is on. Nil means extraction is off or the body named no known order.
+func bodyOwnersFromContext(ctx context.Context) []string {
+	v, _ := ctx.Value(bodyOwnersKey{}).([]string)
 	return v
 }
 
@@ -51,10 +51,10 @@ func (s *Server) extractBodyOwner(next http.Handler) http.Handler {
 			raw = nil
 		}
 		r.Body = io.NopCloser(bytes.NewReader(raw))
-		owner := s.ownerInBody(raw)
+		owners := s.ownersInBody(raw)
 		ctx := r.Context()
-		if owner != "" {
-			ctx = context.WithValue(ctx, bodyOwnerKey{}, owner)
+		if len(owners) > 0 {
+			ctx = context.WithValue(ctx, bodyOwnersKey{}, owners)
 		}
 		if classes := injectionClasses(string(raw)); len(classes) > 0 {
 			ctx = context.WithValue(ctx, bodySignatureKey{}, classes)
@@ -64,18 +64,19 @@ func (s *Server) extractBodyOwner(next http.Handler) http.Handler {
 	})
 }
 
-// ownerInBody returns the owner of the first known order whose ID appears in the body, in a
-// deterministic order. Only the owner is returned; the matched text is not kept.
-func (s *Server) ownerInBody(raw []byte) string {
+// ownersInBody returns the owner of every known order whose ID appears in the body, in order-ID order,
+// without repeats. Only owners are returned; the matched text is not kept.
+func (s *Server) ownersInBody(raw []byte) []string {
 	if len(raw) == 0 {
-		return ""
+		return nil
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	var out []string
 	for _, o := range sortedOrders(s.orders) {
 		if bytes.Contains(raw, []byte(o.ID)) {
-			return o.OwnerID
+			out = appendOwner(out, o.OwnerID)
 		}
 	}
-	return ""
+	return out
 }
