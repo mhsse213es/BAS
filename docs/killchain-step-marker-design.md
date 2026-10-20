@@ -1,6 +1,6 @@
 # Kill chain step marker: design
 
-Status: proposed, not built. Decision needed before implementation.
+Status: approved (Option A). Built: marker field, load validation, the two marked scenarios, re-signed, host-evidence wiring. Not verified on a host: whether the marker reaches 4688 under each executor.
 
 ## Problem
 

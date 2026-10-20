@@ -105,3 +105,32 @@ Still open, and the next blocker is a design decision:
 - Ground-truth mapping is not yet called from stage collection, for the same reason.
 - Staging: collection cost on real hosts, and whether the marker reaches the
   4688 command line under the enabled policy.
+
+### Update: step markers and host evidence wiring
+
+Built (Option A, approved):
+- `Step.Marker`: validated on load. Format `[a-z0-9-]{8,40}`, must appear
+  literally in the command, unique within a scenario and across scenarios.
+  A scenario that fails is skipped with a log line.
+- Marked steps: `credential-access` (`bas-cred-ident-01`, LSA secrets step) and
+  `caldera-lateral-movement` (`bas-lat-svc-create-01`, remote service creation
+  step). Each is re-signed; the verifier reports ok=2 fail=0.
+- Stage collection reads host events when the scenario has markers, its source
+  policy accepts event logs, and every marker is proven in the window. A manual
+  ground-truth record takes precedence. Reference is kept on ground truth.
+- Command-line capture is a separate audit state. The agent probes the value
+  `ProcessCreationIncludeCmdLine_Enabled`. Unset means unknown, not disabled.
+  The evaluator names a capture gap when a marker cannot be seen.
+
+Not verified, and needs staging:
+- Whether each marker reaches the 4688 command line under its executor. The
+  `powershell` executor passes the text as a `-Command` argument, so it should.
+  The `caldera` steps may be run by Caldera, not the agent, which changes the
+  command line. Check which path runs them.
+- The value name `ProcessCreationIncludeCmdLine_Enabled` is not confirmed, since
+  it is unset on the build host.
+- Gaps from host evidence are not yet shown as stage reasons. A stage with no
+  host proof reports the missing ground truth, not the specific host gap.
+- `TestRBACMatrix_NoDrift` fails on cloud routes that another session staged in
+  `routes.go` (`/api/cloud-scenarios`, `/api/cloud-scenario-runs`). This work
+  does not touch them.
