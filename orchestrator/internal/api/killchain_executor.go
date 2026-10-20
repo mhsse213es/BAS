@@ -146,10 +146,11 @@ func (x EngineStageExecutor) Collect(ctx context.Context, executionID string) (k
 			}
 		}
 		if x.HostEvents != nil && x.Hosts != nil && x.Scenarios != nil {
-			rec, ok, err := x.hostGroundTruth(ctx, snap)
+			rec, ok, gaps, err := x.hostGroundTruth(ctx, snap)
 			if err != nil {
 				return killchain.StageEvidence{}, false, false, err
 			}
+			ev.SourceGaps = gaps
 			if ok {
 				ev.GroundTruth.Source = rec.Source
 				ev.GroundTruth.Executed = rec.Executed

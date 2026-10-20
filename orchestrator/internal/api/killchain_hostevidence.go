@@ -42,13 +42,13 @@ func (p poolRunReader) AgentHostname(ctx context.Context, agentID string) (strin
 // used only when the scenario has markers, its source policy accepts event logs,
 // and every marker is proven by a process creation record in the window. Otherwise
 // it returns nothing, so the stage keeps the gap.
-func (x EngineStageExecutor) hostGroundTruth(ctx context.Context, snap runSnapshot) (killchain.GroundTruthRecordFor, bool, error) {
+func (x EngineStageExecutor) hostGroundTruth(ctx context.Context, snap runSnapshot) (killchain.GroundTruthRecordFor, bool, []string, error) {
 	if !killchain.SourceClassAllowed(snap.ScenarioID, killchain.SourceEventLog) {
-		return killchain.GroundTruthRecordFor{}, false, nil
+		return killchain.GroundTruthRecordFor{}, false, nil, nil
 	}
 	sc, ok := x.Scenarios.Get(snap.ScenarioID)
 	if !ok {
-		return killchain.GroundTruthRecordFor{}, false, nil
+		return killchain.GroundTruthRecordFor{}, false, nil, nil
 	}
 	var markers []string
 	for _, st := range sc.Steps {
@@ -57,34 +57,42 @@ func (x EngineStageExecutor) hostGroundTruth(ctx context.Context, snap runSnapsh
 		}
 	}
 	if len(markers) == 0 {
-		return killchain.GroundTruthRecordFor{}, false, nil
+		return killchain.GroundTruthRecordFor{}, false, nil, nil
 	}
 	events, audit, win, found, err := x.HostEvents.HostEventsForRun(ctx, snap.ExecutionID)
 	if err != nil {
-		return killchain.GroundTruthRecordFor{}, false, err
+		return killchain.GroundTruthRecordFor{}, false, nil, err
 	}
 	if !found {
-		return killchain.GroundTruthRecordFor{}, false, nil
+		return killchain.GroundTruthRecordFor{}, false, nil, nil
 	}
 	host, err := x.Hosts.AgentHostname(ctx, snap.AgentID)
 	if err != nil {
-		return killchain.GroundTruthRecordFor{}, false, err
+		return killchain.GroundTruthRecordFor{}, false, nil, err
 	}
 	if host == "" {
-		return killchain.GroundTruthRecordFor{}, false, nil
+		return killchain.GroundTruthRecordFor{}, false, nil, nil
 	}
 	var first killchain.HostFinding
+	var gaps []string
+	proven := true
 	for i, m := range markers {
 		f := killchain.EvaluateHostEvents(killchain.ExecutionMatch{
 			Marker: m, Host: host, WindowStart: win.From, WindowEnd: win.To,
 		}, events, audit)
 		if f.Executed != killchain.TriYes {
-			return killchain.GroundTruthRecordFor{}, false, nil
+			// Keep every marker's gap, so the reason names each step that is unproven.
+			gaps = append(gaps, f.Gaps...)
+			proven = false
+			continue
 		}
 		if i == 0 {
 			first = f
 		}
 	}
+	if !proven {
+		return killchain.GroundTruthRecordFor{}, false, gaps, nil
+	}
 	rec, ok := killchain.GroundTruthFromFinding(first)
-	return rec, ok, nil
+	return rec, ok, nil, nil
 }

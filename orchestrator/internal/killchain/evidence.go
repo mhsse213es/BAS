@@ -117,6 +117,10 @@ type StageEvidence struct {
 	// MissingEvidence is written by the engine, not by the source. It names every
 	// required field that could not be established.
 	MissingEvidence []string `json:"missingEvidence,omitempty"`
+	// SourceGaps are the reasons a source could not prove a field, such as disabled
+	// audit policy. They are reported beside the missing fields, so the verdict says
+	// why, not only what.
+	SourceGaps []string `json:"sourceGaps,omitempty"`
 }
 
 // Missing returns the required fields that were not established, in a fixed

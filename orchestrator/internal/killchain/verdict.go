@@ -53,7 +53,9 @@ func Evaluate(in StageInput) StageVerdict {
 
 	e := in.Evidence
 	if missing := e.Missing(); len(missing) > 0 {
-		return verdict(VerdictInconclusive, "missing evidence: "+strings.Join(missing, ", "))
+		reasons := []string{"missing evidence: " + strings.Join(missing, ", ")}
+		reasons = append(reasons, e.SourceGaps...)
+		return StageVerdict{Verdict: VerdictInconclusive, Reasons: reasons}
 	}
 
 	var reasons []string

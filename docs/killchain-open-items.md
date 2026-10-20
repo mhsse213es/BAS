@@ -134,3 +134,23 @@ Not verified, and needs staging:
 - `TestRBACMatrix_NoDrift` fails on cloud routes that another session staged in
   `routes.go` (`/api/cloud-scenarios`, `/api/cloud-scenario-runs`). This work
   does not touch them.
+
+### Update: host gaps now reach the verdict
+
+Built: a stage whose host evidence cannot prove execution now reports the
+specific gap as a reason, beside the missing-field name. For example, a
+disabled process-creation audit is named, instead of only "missing evidence:
+ground truth executed". Every unproven marker contributes its own gap.
+
+### Parked for staging (no staging or test machine available now)
+
+These cannot be closed here, so they are recorded and not planned:
+1. Marker reaches the 4688 command line under each executor (`powershell`,
+   `cmd`, `wmi`, `mshta`). The `powershell` path should work. The rest is untested.
+2. Caldera versus agent: the lateral steps have `ability_id`s. Find out which
+   path actually runs them, because that changes the command line.
+3. Value name `ProcessCreationIncludeCmdLine_Enabled` is unconfirmed, because
+   it is unset on the build host. Confirm the name the policy writes.
+4. Collection cost and event volume on a real host.
+5. Behaviour under audit policy set by group policy.
+6. A live or lab claim for any stage. None is made.

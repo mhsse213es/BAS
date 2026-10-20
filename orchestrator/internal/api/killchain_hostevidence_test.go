@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -116,7 +117,7 @@ func TestHostEvidence_NoBatchIsNotAssumed(t *testing.T) {
 // A read failure is retryable. It is not recorded as no evidence.
 func TestHostEvidence_ReadErrorIsRetryable(t *testing.T) {
 	x := EngineStageExecutor{
-		Runs: fakeRuns{snap: runSnapshot{ExecutionID: "run-h", ScenarioID: "credential-access", AgentID: "a1", Status: "completed"}},
+		Runs:       fakeRuns{snap: runSnapshot{ExecutionID: "run-h", ScenarioID: "credential-access", AgentID: "a1", Status: "completed"}},
 		HostEvents: fakeHostEvents{err: errors.New("db down")},
 		Hosts:      fakeHostNames{name: "WS-01"},
 		Scenarios:  fakeScenarios{"credential-access": markedScenario("credential-access", "bas-cred-ident-01")},
@@ -130,11 +131,11 @@ func TestHostEvidence_ReadErrorIsRetryable(t *testing.T) {
 // A manual ground-truth record takes precedence over host evidence.
 func TestHostEvidence_ManualRecordWins(t *testing.T) {
 	x := EngineStageExecutor{
-		Runs: fakeRuns{snap: runSnapshot{ExecutionID: "run-h", ScenarioID: "credential-access", AgentID: "a1", Status: "completed"}},
+		Runs:        fakeRuns{snap: runSnapshot{ExecutionID: "run-h", ScenarioID: "credential-access", AgentID: "a1", Status: "completed"}},
 		GroundTruth: fakeGT{found: true, rec: db.GroundTruthRecord{Source: "operator-recorded", Executed: killchain.TriNo, Reference: "ticket-1"}},
-		HostEvents: fakeHostEvents{events: []killchain.HostEvent{markerEvent(7, "run bas-cred-ident-01")}, found: true, win: hostWin},
-		Hosts:      fakeHostNames{name: "WS-01"},
-		Scenarios:  fakeScenarios{"credential-access": markedScenario("credential-access", "bas-cred-ident-01")},
+		HostEvents:  fakeHostEvents{events: []killchain.HostEvent{markerEvent(7, "run bas-cred-ident-01")}, found: true, win: hostWin},
+		Hosts:       fakeHostNames{name: "WS-01"},
+		Scenarios:   fakeScenarios{"credential-access": markedScenario("credential-access", "bas-cred-ident-01")},
 	}
 	ev, _, _, err := x.Collect(context.Background(), "run-h")
 	if err != nil {
@@ -142,5 +143,29 @@ func TestHostEvidence_ManualRecordWins(t *testing.T) {
 	}
 	if ev.GroundTruth.Source != "operator-recorded" || ev.GroundTruth.Executed != killchain.TriNo {
 		t.Fatalf("manual record lost to host evidence: %+v", ev.GroundTruth)
+	}
+}
+
+// When host evidence cannot prove execution, the reason reaches the stage evidence,
+// so the verdict can say why. Here process creation auditing is disabled.
+func TestHostEvidence_GapsReachTheEvidence(t *testing.T) {
+	ev, err := collectWithHost("credential-access",
+		fakeHostEvents{events: nil, found: true, win: hostWin,
+			audit: killchain.AuditState{ProcessCreation: killchain.AuditDisabled, Logon: killchain.AuditEnabled}},
+		fakeScenarios{"credential-access": markedScenario("credential-access", "bas-cred-ident-01")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, g := range ev.SourceGaps {
+		if strings.Contains(g, "process creation auditing is disabled") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("source gaps = %v, want the disabled audit policy", ev.SourceGaps)
+	}
+	if ev.GroundTruth.Executed == killchain.TriYes {
+		t.Fatalf("no evidence must not prove execution")
 	}
 }
