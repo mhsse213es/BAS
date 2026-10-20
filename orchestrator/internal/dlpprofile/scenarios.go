@@ -36,5 +36,6 @@ func RealDLPScenarioIDs() []string {
 		"dlp-exfiltration-bluetooth",
 		"dlp-exfiltration-mtp",
 		"dlp-exfiltration-app-file-access",
+		"dlp-exfiltration-archive-encrypted",
 	}
 }

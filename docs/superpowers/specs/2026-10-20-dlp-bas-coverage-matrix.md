@@ -128,3 +128,45 @@ Today nothing reaches L3. Every "verified" claim is gated on item 9 in the QA lo
 
 Items 3 and 4 are buildable without new infrastructure. Items 1 and 2 need
 a lab SMB share and a second host, so they wait on those.
+
+## 7. Status update, 2026-10-20 (supersedes the gap cells above where they conflict)
+
+Sections 3.1 to 3.5 are the proposal as it was written. The rows below record what is now built, and what is still open and why. A built scenario is coded and signed, but has not been run. Its QA item is in `docs/dlp-mastery-qa-log.md`.
+
+### 7.1 Built since the proposal
+
+| Row | Scenario | Evidence | Operator input |
+|---|---|---|---|
+| PnP | `dlp-exfiltration-pnp` | L1 | `BAS_DLP_PNP_DRIVE_LETTER` |
+| Bluetooth (storage only) | `dlp-exfiltration-bluetooth` | L1 | `BAS_DLP_BT_STORAGE_PATH` |
+| Device control | `dlp-exfiltration-device-control` | L1 | `BAS_DLP_DEVICE_CLASS_GUID` (read only) |
+| MTP | `dlp-exfiltration-mtp` | L1 (no block possible) | `BAS_DLP_MTP_DEVICE_NAME` |
+| Application file access | `dlp-exfiltration-app-file-access` | L1 | `BAS_DLP_RESTRICTED_DIR` |
+| Network shares (writable and read-only) | `dlp-exfiltration-network-share` | L1 | `BAS_DLP_SMB_SHARE`, `BAS_DLP_SMB_RO_SHARE` |
+| Lateral data movement | `dlp-exfiltration-lateral-movement` | L1 | `BAS_DLP_LATERAL_SERVER_SHARE`, `BAS_DLP_LATERAL_PEER_SHARE` |
+| Web upload and form (request shape) | `dlp-exfiltration-web-upload` | L2 | none (sink) |
+| Email external and personal recipients | `dlp-exfiltration-email-recipients` | L2 | none (sink) |
+| Archive: encrypted blob | `dlp-exfiltration-archive-encrypted` | L2 | none (sink) |
+
+Section 3.1 "Application file access" and 3.4 "Network shares" are now covered at L1 by the operator-gated scenarios above. Section 3.4 "Lateral data movement" is no longer the largest gap, because a scenario exists. It is still unrun.
+
+### 7.2 Still open, and why each is not built
+
+| Row | Why it is not built here |
+|---|---|
+| Print-to-PDF | Microsoft Print to PDF opens a Save As dialog. That blocks a non-interactive agent. It needs a headless PDF printer, or a GUI run that is outside this repository. |
+| Virtual printers and print-server routing | Needs a print server. None is provisioned. |
+| Remote session and virtual desktop copy | Needs an RDP or VDI session. Not provisioned. |
+| Raw TCP and WebSocket | The HTTPS sink decodes JSON only. A raw TCP or WebSocket receiver is a listener change and a product decision. |
+| Browser-driven forms, multipart or urlencoded | Same sink limit as the web-upload row. Recorded as QA item 19. |
+| Email attachments, encrypted mail, multiple recipients | The SMTP listener rejects multipart and multi-recipient messages. A receipt cannot be produced for these. |
+| Password-protected ZIP | PowerShell cannot create one. It needs 7-Zip, which the repository does not provision. |
+| OCR | Needs an image rendering path that the scenarios do not have. |
+| Restricted-ACL share, real NFS or NAS | Needs lab shares. The operator-gated scenarios cover the path once those are set. |
+| Device exceptions, user and group variants | Need a device policy and several accounts. |
+| Mobile agent (DLP-MOB) | No mobile agent exists (QA item 3). |
+| Network discovery | Out of DLP scope by section 4. Keep it in a separate access-control scope. |
+
+### 7.3 Remaining real work, once the lab is available
+
+Run each QA item from the open list. The scenarios cannot be verified until they run against the lab sink or lab hardware.

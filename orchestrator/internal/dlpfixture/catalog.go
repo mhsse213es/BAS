@@ -28,6 +28,7 @@ const (
 	scenarioBluetooth = "dlp-exfiltration-bluetooth"
 	scenarioMTP = "dlp-exfiltration-mtp"
 	scenarioAppFileAccess = "dlp-exfiltration-app-file-access"
+	scenarioArchiveEncrypted = "dlp-exfiltration-archive-encrypted"
 )
 
 // AllFixtures returns Audspect's real, current seed catalog of every
@@ -414,6 +415,13 @@ func AllFixtures() ([]Fixture, error) {
 		[]string{"[BAS-SIM-DLP]", "ABCDE1234F", "123456789012", "SBININBBXXX", "fake.user@upi", "4111111111111111"},
 		[]Occurrence{{scenarioAppFileAccess, "DLP Validation — Unapproved Application Reads and Stages Protected File (T1005)"}},
 		"same synthetic record as the BFSI anchor, in an operator-designated protected folder")); err != nil {
+		return nil, fmt.Errorf("loading seed fixture catalog: %w", err)
+	}
+
+	if err := add(NewFixture("archive-encrypted-multitype-record", "Synthetic multi-type record in an AES-encrypted ZIP sent to the sink",
+		[]string{"[BAS-SIM-DLP]", "ABCDE1234F", "123456789012", "SBININBBXXX", "fake.user@upi", "4111111111111111"},
+		[]Occurrence{{scenarioArchiveEncrypted, "DLP Validation — AES-Encrypted ZIP Archive Upload over HTTPS Sink (T1027)"}},
+		"same synthetic record as the BFSI anchor; the payload is ciphertext, the key is discarded")); err != nil {
 		return nil, fmt.Errorf("loading seed fixture catalog: %w", err)
 	}
 
