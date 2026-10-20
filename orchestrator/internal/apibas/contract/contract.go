@@ -77,6 +77,9 @@ type Scenario struct {
 	Steps           []Step        `yaml:"steps"`
 	DeniedStatuses  []int         `yaml:"denied_statuses"`
 	CleanIsEnforced bool          `yaml:"clean_is_enforcement"`
+	// BaselineStatus is the status a legitimate baseline returns: 200 by default, or 101 for a
+	// WebSocket handshake. Only a websocket scenario may declare 101.
+	BaselineStatus int `yaml:"baseline_status"`
 	// ForbiddenResponseHeaders lists response headers that, with the given value,
 	// count as exposure on the attack response (for example a reflected origin).
 	ForbiddenResponseHeaders []HeaderRule `yaml:"forbidden_response_headers"`
@@ -413,6 +416,15 @@ func (s Scenario) validateSteps() error {
 	}
 	if !knownProtocols[s.Protocol] {
 		return fmt.Errorf("contract: %s: protocol %q is not a known protocol", s.ID, s.Protocol)
+	}
+	switch s.BaselineStatus {
+	case 0, 200:
+	case 101:
+		if s.Protocol != "websocket" {
+			return fmt.Errorf("contract: %s: baseline_status 101 is only valid for protocol websocket", s.ID)
+		}
+	default:
+		return fmt.Errorf("contract: %s: baseline_status must be 200 or 101", s.ID)
 	}
 	if s.Protocol != "" && s.Protocol != "http" && len(s.Prerequisites) == 0 {
 		return fmt.Errorf("contract: %s: protocol %s needs prerequisites (adapter, fixture and environment) before it can run", s.ID, s.Protocol)

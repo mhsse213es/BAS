@@ -278,6 +278,7 @@ func (r *Runner) run(ctx context.Context, s contract.Scenario, tag string) (Repo
 	ev.Denied = s.DeniedStatuses
 	ev.MaxAccepted = s.MaxAcceptedAttempts
 	ev.CleanIsEnforcement = s.CleanIsEnforced
+	ev.BaselineStatus = s.BaselineStatus
 
 	// Baseline: the owner's legitimate request. Redacted like everything else,
 	// but its leak count is not used for grading.

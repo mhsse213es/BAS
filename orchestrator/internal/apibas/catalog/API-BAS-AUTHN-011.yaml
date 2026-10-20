@@ -3,6 +3,7 @@ name: WebSocket handshake accepts a foreign origin and no credential
 category: AUTHN
 claim: authentication
 protocol: websocket
+baseline_status: 101
 prerequisites:
   - WebSocket handshake and frame adapter, not yet implemented
   - lab WebSocket endpoint that checks the Origin header and the bearer token at the handshake
@@ -29,6 +30,8 @@ steps:
     headers:
       Upgrade: websocket
       Connection: Upgrade
+      Sec-WebSocket-Version: "13"
+      Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==
       Origin: https://app.audspect.example
     hypothesis: The owner can open the order stream from an allowed origin with a valid token. If this fails, the scenario is not testable.
   - id: attack-foreign-origin-handshake
@@ -40,6 +43,8 @@ steps:
     headers:
       Upgrade: websocket
       Connection: Upgrade
+      Sec-WebSocket-Version: "13"
+      Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==
       Origin: https://attacker.example
     hypothesis: The handshake checks the origin and requires a credential, so a foreign origin with no credential is refused.
 denied_statuses: [403]

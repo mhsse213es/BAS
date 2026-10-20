@@ -1632,3 +1632,28 @@ decision.
   `TestPhase28_GRPCDISC009VulnerableFailsFixedPasses` (FAIL exploited vulnerable, PASS enforced fixed);
   `TestPhase28_GRPCCatalogStepsValidate`.
 - Unsupported now: WebSocket and async (3 scenarios).
+
+
+## Phase 32 - protocol adapter: WebSocket handshake (fourth of five)
+
+- Scope, decided in the review: API-BAS-AUTHN-011 stays under AUTHN as WebSocket handshake
+  authentication. Objective: an unauthenticated client on a foreign origin completes a handshake and
+  receives the order event. Expected control: 403 before the upgrade when the Origin is not allowed or no
+  valid credential is presented, with no frame delivered.
+- Grader change, stated plainly: the baseline of a WebSocket scenario is a successful handshake (101),
+  not 200. The grader required 200, so every handshake scenario would have been skipped. A scenario now
+  declares `baseline_status`. It defaults to 200 and may be 101 only for `protocol: websocket`. HTTP
+  scenarios are unchanged.
+- `protocol.WebSocket` validates the RFC 6455 opening handshake: GET, Upgrade, Connection token,
+  Sec-WebSocket-Version 13, a 16-byte base64 key, and an Origin. It also refuses a handshake that carries
+  a body.
+- Lab route `GET /ws/orders` (`lab/websocket.go`). It performs a real handshake over a hijacked
+  connection, with the RFC accept key, and sends one unmasked text frame carrying the order event, then
+  closes. The vulnerable build accepts any Origin and any credential and streams the full record
+  (`LAB-AUTHN-WS-001`). The fixed build requires the allowed Origin, a valid token and ownership, and
+  refuses with 403 before the upgrade.
+- The access-log wrapper now passes Hijack through to the connection and records 101.
+- Acceptance: `TestWebSocketRefusesMalformedHandshake` and related unit tests;
+  `TestPhase28_WebSocketAUTHN011VulnerableFailsFixedPasses` (FAIL exploited vulnerable, PASS enforced
+  fixed); `TestPhase28_WebSocketCatalogHandshakesValidate`.
+- Unsupported now: async only (2 scenarios: ABUSE-010, INTEG-010).

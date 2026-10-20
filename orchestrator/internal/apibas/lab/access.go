@@ -1,6 +1,9 @@
 package lab
 
 import (
+	"bufio"
+	"errors"
+	"net"
 	"net/http"
 	"strings"
 )
@@ -31,6 +34,17 @@ func (r *statusRecorder) WriteHeader(code int) {
 		r.wrote = true
 	}
 	r.ResponseWriter.WriteHeader(code)
+}
+
+// Hijack passes an upgrade through to the connection. A WebSocket handshake needs it, and the
+// access log records the 101 it switches to.
+func (r *statusRecorder) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	hj, ok := r.ResponseWriter.(http.Hijacker)
+	if !ok {
+		return nil, nil, errors.New("response writer cannot hijack the connection")
+	}
+	r.status = http.StatusSwitchingProtocols
+	return hj.Hijack()
 }
 
 func (r *statusRecorder) Write(b []byte) (int, error) {

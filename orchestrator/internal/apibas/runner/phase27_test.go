@@ -12,7 +12,7 @@ import (
 // as covered. The verdict stays SKIPPED, the exploitability and control say unsupported, the
 // reason is UNSUPPORTED_PROTOCOL, and no request reaches the target.
 // GraphQL has an adapter since Phase 28, so it is not listed here.
-var unsupportedProtocols = []string{"websocket", "async"}
+var unsupportedProtocols = []string{"async"}
 
 func TestPhase27_UnsupportedProtocolsAreReportedUnsupported(t *testing.T) {
 	for _, p := range unsupportedProtocols {

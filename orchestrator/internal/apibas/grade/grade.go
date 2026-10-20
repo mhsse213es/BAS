@@ -102,6 +102,10 @@ type Evidence struct {
 	// The runner sets it only for scenarios whose contract declares it, and
 	// only when the response adapter is part of the ground truth.
 	CleanIsEnforcement bool
+	// BaselineStatus is the status a legitimate baseline must return. Zero means 200. A
+	// WebSocket handshake that succeeds returns 101 Switching Protocols, so the protocol
+	// scenario declares 101 for its baseline.
+	BaselineStatus int
 }
 
 // Outcome is the graded result with every axis reported separately.
@@ -171,7 +175,11 @@ func Assess(ev Evidence) Outcome {
 	if ev.Baseline.Status >= 500 || ev.Attack.Status >= 500 {
 		return Error(ReasonTargetFault)
 	}
-	if ev.Baseline.Status != 200 {
+	want := ev.BaselineStatus
+	if want == 0 {
+		want = 200
+	}
+	if ev.Baseline.Status != want {
 		return Skip(ReasonPreconditionMissing)
 	}
 	if ev.StateChanged || ev.Attack.LeakedProtected > 0 || ev.Attack.ForbiddenHeaders > 0 ||
