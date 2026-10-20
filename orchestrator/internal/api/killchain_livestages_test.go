@@ -24,8 +24,14 @@ func stageIn(mode string) killchain.StageDef {
 }
 
 func liveExec(opts stageDispatchOptions, d *fakeDispatch) EngineStageExecutor {
-	return EngineStageExecutor{Resolver: liveResolver{}, AgentID: "agent-1", Dispatcher: d, Options: opts}
+	return EngineStageExecutor{Resolver: liveResolver{}, AgentID: "agent-1", Dispatcher: d, Options: opts,
+		OSes: fakeOSReader{os: "windows"}}
 }
+
+// fakeOSReader reports one fixed OS for any agent.
+type fakeOSReader struct{ os string }
+
+func (f fakeOSReader) AgentOS(context.Context, string) (string, error) { return f.os, nil }
 
 func withLiveFlag(t *testing.T, on bool) {
 	t.Helper()

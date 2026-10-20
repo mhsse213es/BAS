@@ -66,6 +66,13 @@ type EngineStageExecutor struct {
 	Dispatcher stageDispatcher
 	// Options are the operator-approved settings for every stage of the campaign.
 	Options stageDispatchOptions
+	// OSes reads the agent's OS for the live stage OS check. Nil refuses live stages,
+	// because the check cannot run.
+	OSes agentOSReader
+	// Audit records live stage decisions. Nil records nothing.
+	Audit stageAuditFunc
+	// Now is the clock for the execution window. Nil uses the wall clock.
+	Now func() time.Time
 }
 
 // stageDispatchOptions are the settings a campaign run is approved with.
@@ -106,16 +113,63 @@ func (x EngineStageExecutor) Start(ctx context.Context, campaignID string, st ki
 	opts := x.Options
 	opts.Mode = mode
 	if mode != killchain.ModePosture {
-		approved := opts.ConfirmLive && (mode != killchain.ModeLab || opts.ConfirmLab)
-		if err := checkLiveStageStart(mode, approved); err != nil {
-			return "", fmt.Errorf("stage %s: %w", st.Key, err)
-		}
-		// The OS check is left to dispatchRun, which knows the agent's OS.
-		if _, err := checkLiveGates(ev.Scenario, mode, opts.ConfirmLive, opts.ConfirmLab, "", time.Now()); err != nil {
-			return "", fmt.Errorf("stage %s: %w", st.Key, err)
-		}
+		return x.startLive(ctx, campaignID, st, ev.Scenario, opts)
 	}
-	runID, skip, err := x.Dispatcher.DispatchStage(ctx, ev.Scenario, x.AgentID, opts)
+	return x.dispatch(ctx, ev.Scenario, opts, st)
+}
+
+// startLive gates one live stage at start, audits the decision, and dispatches only when
+// every gate passes. Gates are re-checked here because the approval may be hours old and
+// the execution window may have closed since.
+func (x EngineStageExecutor) startLive(ctx context.Context, campaignID string, st killchain.StageDef, sc *scenario.Scenario, opts stageDispatchOptions) (string, error) {
+	detail := map[string]any{
+		"stage": st.Key, "scenarioId": st.ScenarioID, "agentId": x.AgentID, "mode": opts.Mode,
+		"approvedBy": derefString(opts.InitiatedBy), "reason": opts.Reason,
+	}
+	if err := x.gateLiveStage(ctx, sc, opts); err != nil {
+		detail["gate"] = err.Error()
+		x.audit(ctx, "killchain.stage.refused", campaignID, detail, "denied")
+		return "", fmt.Errorf("stage %s: %w", st.Key, err)
+	}
+	runID, err := x.dispatch(ctx, sc, opts, st)
+	if err != nil {
+		detail["gate"] = err.Error()
+		x.audit(ctx, "killchain.stage.refused", campaignID, detail, "error")
+		return "", err
+	}
+	detail["runId"] = runID
+	x.audit(ctx, "killchain.stage.start", campaignID, detail, "success")
+	return runID, nil
+}
+
+// gateLiveStage runs every gate for a live stage. Approval and the flag come first,
+// then the agent's OS must be known and must match, then the scenario and window rules.
+func (x EngineStageExecutor) gateLiveStage(ctx context.Context, sc *scenario.Scenario, opts stageDispatchOptions) error {
+	approved := opts.ConfirmLive && (opts.Mode != killchain.ModeLab || opts.ConfirmLab)
+	if err := checkLiveStageStart(opts.Mode, approved); err != nil {
+		return err
+	}
+	if x.OSes == nil {
+		return errors.New("cannot read the agent's OS, so the live stage OS check cannot run")
+	}
+	agentOS, err := x.OSes.AgentOS(ctx, x.AgentID)
+	if err != nil {
+		return fmt.Errorf("read agent OS: %w", err)
+	}
+	if agentOS == "" {
+		return errors.New("agent OS is unknown, so the live stage OS check cannot run")
+	}
+	clock := x.Now
+	if clock == nil {
+		clock = time.Now
+	}
+	_, err = checkLiveGates(sc, opts.Mode, opts.ConfirmLive, opts.ConfirmLab, agentOS, clock())
+	return err
+}
+
+// dispatch hands a stage to the run path and returns the run id.
+func (x EngineStageExecutor) dispatch(ctx context.Context, sc *scenario.Scenario, opts stageDispatchOptions, st killchain.StageDef) (string, error) {
+	runID, skip, err := x.Dispatcher.DispatchStage(ctx, sc, x.AgentID, opts)
 	if err != nil {
 		return "", fmt.Errorf("scenario %s could not be dispatched: %w", st.ScenarioID, err)
 	}
@@ -126,6 +180,20 @@ func (x EngineStageExecutor) Start(ctx context.Context, campaignID string, st ki
 		return "", fmt.Errorf("scenario %s: dispatch returned no run id", st.ScenarioID)
 	}
 	return runID, nil
+}
+
+// audit records a live-stage decision when an auditor is wired. Nil means none.
+func (x EngineStageExecutor) audit(ctx context.Context, action, resource string, detail map[string]any, outcome string) {
+	if x.Audit != nil {
+		x.Audit(ctx, action, resource, detail, outcome)
+	}
+}
+
+func derefString(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
 }
 
 // Collect reads a dispatched run and maps it to stage evidence.
@@ -226,3 +294,11 @@ func (p poolRunReader) ScenarioRun(ctx context.Context, executionID string) (run
 	}
 	return s, nil
 }
+
+// agentOSReader returns the classified OS of an agent. Empty means unknown.
+type agentOSReader interface {
+	AgentOS(ctx context.Context, agentID string) (string, error)
+}
+
+// stageAuditFunc records one audit event.
+type stageAuditFunc func(ctx context.Context, action, resource string, detail map[string]any, outcome string)

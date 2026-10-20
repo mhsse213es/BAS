@@ -96,3 +96,17 @@ func (x EngineStageExecutor) hostGroundTruth(ctx context.Context, snap runSnapsh
 	rec, ok := killchain.GroundTruthFromFinding(first)
 	return rec, ok, nil, nil
 }
+
+// AgentOS returns the agent's classified OS. Unknown agents and unclassified versions
+// return "", which the live stage gate refuses.
+func (p poolRunReader) AgentOS(ctx context.Context, agentID string) (string, error) {
+	var version string
+	err := p.pool.QueryRow(ctx, `SELECT COALESCE(os_version, '') FROM agents WHERE agent_id = $1`, agentID).Scan(&version)
+	if err == pgx.ErrNoRows {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	return classifyAgentOS(version), nil
+}

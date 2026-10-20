@@ -198,6 +198,10 @@ func (h *Handler) AdvanceKillChainCampaign(w http.ResponseWriter, r *http.Reques
 		exec.Scenarios = h.engine
 	}
 	exec.Dispatcher = handlerStageDispatcher{h: h}
+	exec.OSes = poolRunReader{pool: h.db}
+	exec.Audit = func(ctx context.Context, action, resource string, detail map[string]any, outcome string) {
+		h.auditLog(r, action, resource, detail, outcome)
+	}
 	orch := killchain.Orchestrator{Store: store, Executor: exec}
 	if _, err := orch.Advance(r.Context(), id); err != nil {
 		writeKillChainError(w, err)

@@ -220,3 +220,20 @@ Decided, on the recommendations:
 
 Open, for you to reverse if wanted: whether a single-person lab team should be
 allowed to self-approve. The current rule refuses it.
+
+### Update: per-stage audit, start-time OS check, gate tests (built)
+
+Built:
+- Each live stage start and refusal is audited (`killchain.stage.start` /
+  `killchain.stage.refused`) with the approver, reason, gate result and run id.
+- Live stages read the agent's OS at start. Unknown OS, or no reader wired,
+  refuses the stage.
+- Tests: refusal and start audit, posture not audited, OS mismatch and unknown OS
+  refused at start, window closed at start refused, injected clock, and a guard
+  that both callers reach `checkLiveGates`.
+
+Not built, and needs a decision first:
+- The factory-lab rule in the design (a lab-bound campaign may not run
+  customer-mode stages). `dispatchRun` only enforces that a factory-validation
+  run needs the factory lab agent. The code has no "customer-mode" concept, so
+  there is nothing to test until the rule is defined.
