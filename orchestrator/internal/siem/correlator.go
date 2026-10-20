@@ -2,6 +2,7 @@ package siem
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -131,11 +132,15 @@ func queryAlerts(ctx context.Context, cfg Config, agentIP string, start, end tim
 }
 
 // TestConnectivity verifies that the SIEM config can reach the console.
+// ErrProviderNotSupported is returned when no connectivity test exists for a provider in
+// this build. Callers must report it as "cannot test", never as a pass.
+var ErrProviderNotSupported = errors.New("siem: provider not supported in this build")
+
 func TestConnectivity(ctx context.Context, cfg Config) error {
 	switch cfg.Provider {
 	case ProviderQRadar:
 		return newQRadarClient(cfg).Ping(ctx)
 	default:
-		return fmt.Errorf("siem: provider %q not yet supported", cfg.Provider)
+		return fmt.Errorf("%w: %q", ErrProviderNotSupported, cfg.Provider)
 	}
 }

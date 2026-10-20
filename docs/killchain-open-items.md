@@ -276,3 +276,31 @@ Decisions for you, not staging:
   scenarios (`fidelity: lab-only`, e.g. the akira stage 8 in `scenarios/`)
   should be blocked outside an approved lab unless policy authorizes it. No code
   enforces `fidelity` today. Decide the policy and where the check sits before building it.
+
+### SOC pipeline: posture core built, the rest open
+
+Built (`orchestrator/internal/pipelinecheck`, 8 tests):
+- Connectivity probe for SIEM and ticketing targets, through the existing connectivity
+  functions. No second client.
+- Verdict mapping: all targets reachable gives INCONCLUSIVE, never a pass, with every
+  unverified stage listed. Any failed or untestable target gives ERROR, named. No targets gives ERROR.
+- `siem.ErrProviderNotSupported`. Providers without a connectivity test are reported
+  as not tested, not as failures.
+
+Found while building: the SIEM connectivity test supports QRadar only. Every other
+provider reports "not supported". The detection-verification connectors (Elastic,
+Splunk, QRadar, Sentinel and others) have their own test and are a separate config
+path. Two configuration paths exist and are not unified.
+
+Not built, still open:
+1. Wiring into a campaign stage type. The checker is not yet a stage the orchestrator advances.
+2. Read-only ingestion. The connector interface cannot count raw events, so ingestion,
+   normalisation and correlation stay NOT_TESTED until a per-connector event query exists.
+3. Explicit per-test injection. Needs target SIEM, payload, expected change, scope and
+   a recorded approval per run. Nothing runs from a campaign start.
+4. Separate outcomes for ingestion, normalisation, correlation, alert, case and routing.
+5. Human-dependent steps. Acknowledgement and escalation are NOT_TESTED unless an
+   authorised integration or a recorded human confirmation exists.
+6. Cleanup and tagging. Test events and cases need a tag so they can be found and removed
+   without deleting legitimate audit records. The rule is not defined yet.
+7. Permissions. The connector interface has no permission check. Reported as not verified.
