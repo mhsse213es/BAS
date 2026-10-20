@@ -2,13 +2,13 @@ package dlpfixture
 
 import "testing"
 
-func TestAllFixtures_ReturnsThirtyThreeFixtures(t *testing.T) {
+func TestAllFixtures_ReturnsThirtyFourFixtures(t *testing.T) {
 	fixtures, err := AllFixtures()
 	if err != nil {
 		t.Fatalf("AllFixtures: %v", err)
 	}
-	if len(fixtures) != 33 {
-		t.Fatalf("len(fixtures) = %d, want 33", len(fixtures))
+	if len(fixtures) != 34 {
+		t.Fatalf("len(fixtures) = %d, want 34", len(fixtures))
 	}
 }
 
@@ -23,7 +23,7 @@ func TestAllFixtures_ValidatesCleanAgainstItself(t *testing.T) {
 }
 
 // Review Focus: the catalog's total occurrence count must equal the real
-// step count across every scenarios/dlp-exfiltration-*.yaml file (75 steps across 14 scenario files,
+// step count across every scenarios/dlp-exfiltration-*.yaml file (78 steps across 15 scenario files,
 // confirmed by direct enumeration 2026-10-20) -- too few means a real
 // step is uncatalogued (an "unregistered fixture value"), too many means
 // a duplicate or a stale reference slipped in.
@@ -36,7 +36,7 @@ func TestAllFixtures_TotalOccurrenceCountMatchesRealStepCount(t *testing.T) {
 	for _, f := range fixtures {
 		total += len(f.Occurrences)
 	}
-	const wantTotalRealSteps = 75
+	const wantTotalRealSteps = 78
 	if total != wantTotalRealSteps {
 		t.Errorf("total occurrences = %d, want %d", total, wantTotalRealSteps)
 	}

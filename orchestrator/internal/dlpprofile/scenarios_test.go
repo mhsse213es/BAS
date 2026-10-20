@@ -19,6 +19,7 @@ func TestRealDLPScenarioIDs_ReturnsExactlyTheRealIDs(t *testing.T) {
 		"dlp-exfiltration-db-export",
 		"dlp-exfiltration-devtools",
 		"dlp-exfiltration-email-recipients",
+		"dlp-exfiltration-archive-transfer",
 	}
 	if len(ids) != len(want) {
 		t.Fatalf("len(ids) = %d, want %d", len(ids), len(want))

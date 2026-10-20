@@ -1,0 +1,166 @@
+id: dlp-exfiltration-archive-transfer
+name: DLP Exfiltration Validation — Archive Transfer (ZIP, Renamed, Nested)
+description: >
+  Packages the synthetic multi-type sensitive record into an archive on the
+  endpoint, then sends the archive's bytes to this platform's own HTTPS sink.
+  Three variants: a plain ZIP; a ZIP renamed to a .txt extension on disk
+  before transfer; and a ZIP nested inside another ZIP. Archive creation
+  alone was already covered by dlp-exfiltration-validation.yaml and
+  dlp-exfiltration-multichannel.yaml, which create a ZIP but never move it
+  outward. This scenario tests the transfer.
+
+  The archive is sent base64-encoded inside the sink's JSON payload, so the
+  DLP inspection under test has to recognise a file transformation, not just
+  plain text. The sink stores only a hash of the payload, never the raw bytes.
+
+  Verdict comes from the sink receipt (see dlp-exfiltration-sink-https.yaml).
+  A receipt proves the archive left the endpoint. It does not prove a DLP
+  product should have inspected or stopped it.
+
+  Limits: the renamed variant changes the extension on disk, but the sink
+  never sees a filename, only the bytes and a filename= line this script
+  writes into the payload. It does not test a real file-type inspection
+  engine. Encrypted archives, OCR and password-protected ZIPs are not built;
+  they need a policy and an inspection engine to test against.
+
+  Safety: all synthetic data is fabricated and tagged [BAS-SIM-DLP]. Temporary
+  files are removed in a finally block. Windows only.
+author: Audspect Research
+executable: true
+supported_os: [windows]
+tags:
+  - dlp
+  - data-protection-validation
+  - exfiltration
+  - archive
+  - windows
+  - mitre-attack
+mitre_phases:
+  - collection
+  - exfiltration
+
+steps:
+  - name: "DLP Validation — ZIP Archive Upload over HTTPS Sink (T1567)"
+    technique_id: T1567
+    detection_profiles:
+      - windows_dlp_exfiltration
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Creates a small ZIP in a private temp folder, POSTs its base64 bytes to the platform's own sink over HTTPS, then deletes the folder. No real data, no external destination."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 1: powershell.exe Compress-Archive activity"
+      - "Sysmon EID 3: network connection to the orchestrator's own HTTPS port"
+    detection:
+      - "DLP: outbound HTTPS POST whose body is a base64-encoded archive containing regulated-data patterns"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $csvContent = "[BAS-SIM-DLP] CustomerID,PAN,Aadhaar,SWIFT,UPI,CreditCard`nBAS-SIM-SINK,ABCDE1234F,123456789012,SBININBBXXX,fake.user@upi,4111111111111111"
+      $work = Join-Path $env:TEMP ("bas_sim_archive_" + [guid]::NewGuid().ToString('N'))
+      try {
+        New-Item -ItemType Directory -Path $work -Force | Out-Null
+        $src = Join-Path $work "bas-sim-record.csv"
+        $zip = Join-Path $work "bas-sim-record.zip"
+        Set-Content -Path $src -Value $csvContent -Encoding utf8
+        Compress-Archive -Path $src -DestinationPath $zip -Force
+        $b64 = [Convert]::ToBase64String([IO.File]::ReadAllBytes($zip))
+        if ($env:BAS_TASK_ID) { Write-Output "DLP_EVENT_START: $env:BAS_TASK_ID $((Get-Date).ToUniversalTime().ToString('o'))" }
+        Invoke-RestMethod -Uri '{{SINK_URL}}' -Method Post -Body (@{token='{{SINK_TOKEN}}'; payload=$b64; channel='archive-zip'} | ConvertTo-Json) -ContentType 'application/json' -TimeoutSec 10 | Out-Null
+        Write-Output "EXEC T1567: ZIP archive of the sensitive record POSTed over HTTPS. [BAS-SIM-DLP-ARCHIVE-ZIP]"
+      } catch {
+        Write-Output "EXEC T1567: archive transfer to sink was blocked or failed before completing. [BAS-SIM-DLP-ARCHIVE-ZIP]"
+      } finally {
+        Remove-Item -Path $work -Recurse -Force -ErrorAction SilentlyContinue
+      }
+      # No local DLP_OBSERVATION marker: the verdict comes from the sink receipt.
+    cleanup: ""
+
+  - name: "DLP Validation — Renamed-Extension Archive Upload over HTTPS Sink (T1036.008)"
+    technique_id: T1036.008
+    detection_profiles:
+      - windows_dlp_exfiltration
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Creates a small ZIP, renames it to a .txt extension in a private temp folder, POSTs its base64 bytes to the platform's own sink over HTTPS, then deletes the folder. No real data, no external destination."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 1: powershell.exe Compress-Archive and Rename-Item activity"
+      - "Sysmon EID 3: network connection to the orchestrator's own HTTPS port"
+    detection:
+      - "DLP: outbound HTTPS POST whose body is a base64 archive with a mismatched file extension"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $csvContent = "[BAS-SIM-DLP] CustomerID,PAN,Aadhaar,SWIFT,UPI,CreditCard`nBAS-SIM-SINK,ABCDE1234F,123456789012,SBININBBXXX,fake.user@upi,4111111111111111"
+      $work = Join-Path $env:TEMP ("bas_sim_archive_" + [guid]::NewGuid().ToString('N'))
+      try {
+        New-Item -ItemType Directory -Path $work -Force | Out-Null
+        $src = Join-Path $work "bas-sim-record.csv"
+        $zip = Join-Path $work "bas-sim-record.zip"
+        $renamed = Join-Path $work "bas-sim-record.txt"
+        Set-Content -Path $src -Value $csvContent -Encoding utf8
+        Compress-Archive -Path $src -DestinationPath $zip -Force
+        Rename-Item -Path $zip -NewName "bas-sim-record.txt"
+        $b64 = [Convert]::ToBase64String([IO.File]::ReadAllBytes($renamed))
+        $payload = "filename=bas-sim-record.txt`n$b64"
+        if ($env:BAS_TASK_ID) { Write-Output "DLP_EVENT_START: $env:BAS_TASK_ID $((Get-Date).ToUniversalTime().ToString('o'))" }
+        Invoke-RestMethod -Uri '{{SINK_URL}}' -Method Post -Body (@{token='{{SINK_TOKEN}}'; payload=$payload; channel='archive-renamed'} | ConvertTo-Json) -ContentType 'application/json' -TimeoutSec 10 | Out-Null
+        Write-Output "EXEC T1036.008: ZIP archive with a .txt extension POSTed over HTTPS. [BAS-SIM-DLP-ARCHIVE-RENAMED]"
+      } catch {
+        Write-Output "EXEC T1036.008: renamed-archive transfer to sink was blocked or failed before completing. [BAS-SIM-DLP-ARCHIVE-RENAMED]"
+      } finally {
+        Remove-Item -Path $work -Recurse -Force -ErrorAction SilentlyContinue
+      }
+      # No local DLP_OBSERVATION marker: the verdict comes from the sink receipt.
+    cleanup: ""
+
+  - name: "DLP Validation — Nested ZIP Archive Upload over HTTPS Sink (T1560.001)"
+    technique_id: T1560.001
+    detection_profiles:
+      - windows_dlp_exfiltration
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Creates a ZIP inside another ZIP in a private temp folder, POSTs the outer archive's base64 bytes to the platform's own sink over HTTPS, then deletes the folder. No real data, no external destination."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 1: powershell.exe Compress-Archive activity"
+      - "Sysmon EID 3: network connection to the orchestrator's own HTTPS port"
+    detection:
+      - "DLP: outbound HTTPS POST whose body is a base64 archive nested inside another archive"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $csvContent = "[BAS-SIM-DLP] CustomerID,PAN,Aadhaar,SWIFT,UPI,CreditCard`nBAS-SIM-SINK,ABCDE1234F,123456789012,SBININBBXXX,fake.user@upi,4111111111111111"
+      $work = Join-Path $env:TEMP ("bas_sim_archive_" + [guid]::NewGuid().ToString('N'))
+      try {
+        New-Item -ItemType Directory -Path $work -Force | Out-Null
+        $src = Join-Path $work "bas-sim-record.csv"
+        $inner = Join-Path $work "bas-sim-inner.zip"
+        $outer = Join-Path $work "bas-sim-outer.zip"
+        Set-Content -Path $src -Value $csvContent -Encoding utf8
+        Compress-Archive -Path $src -DestinationPath $inner -Force
+        Compress-Archive -Path $inner -DestinationPath $outer -Force
+        $b64 = [Convert]::ToBase64String([IO.File]::ReadAllBytes($outer))
+        if ($env:BAS_TASK_ID) { Write-Output "DLP_EVENT_START: $env:BAS_TASK_ID $((Get-Date).ToUniversalTime().ToString('o'))" }
+        Invoke-RestMethod -Uri '{{SINK_URL}}' -Method Post -Body (@{token='{{SINK_TOKEN}}'; payload=$b64; channel='archive-nested'} | ConvertTo-Json) -ContentType 'application/json' -TimeoutSec 10 | Out-Null
+        Write-Output "EXEC T1560.001: nested ZIP archive POSTed over HTTPS. [BAS-SIM-DLP-ARCHIVE-NESTED]"
+      } catch {
+        Write-Output "EXEC T1560.001: nested-archive transfer to sink was blocked or failed before completing. [BAS-SIM-DLP-ARCHIVE-NESTED]"
+      } finally {
+        Remove-Item -Path $work -Recurse -Force -ErrorAction SilentlyContinue
+      }
+      # No local DLP_OBSERVATION marker: the verdict comes from the sink receipt.
+    cleanup: ""
