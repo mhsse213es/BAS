@@ -51,6 +51,15 @@ func (c *AzureDiscoveryClient) Preflight(ctx context.Context) []PreflightCheck {
 		checks = append(checks, PreflightCheck{Name: "deny-assignments-readable", Status: "SKIPPED", Detail: "ARM token did not issue"})
 	}
 
+	if armTokenOK {
+		mgURL := fmt.Sprintf("%s/providers/Microsoft.Management/managementGroups/%s?api-version=2020-05-01&$expand=children&$recurse=true", c.ARMBaseURL, c.tenantID)
+		checks = append(checks, c.preflightGET(ctx, "mg-hierarchy-readable", mgURL, c.armTokens,
+			"management group hierarchy is readable",
+			"management group hierarchy not readable: the principal needs Reader on the tenant root management group, or inherited grants cannot be checked"))
+	} else {
+		checks = append(checks, PreflightCheck{Name: "mg-hierarchy-readable", Status: "SKIPPED", Detail: "ARM token did not issue"})
+	}
+
 	if graphTokenOK {
 		checks = append(checks, c.preflightGET(ctx, "graph-users-readable", c.GraphBaseURL+"/users?$top=1", c.graphTokens,
 			"Graph users are readable (User.Read.All consented)",

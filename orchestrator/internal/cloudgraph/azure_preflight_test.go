@@ -17,6 +17,9 @@ func preflightARM(subCode, rbacCode int) *httptest.Server {
 			strings.Contains(r.URL.Path, "/providers/Microsoft.Authorization/denyAssignments"):
 			w.WriteHeader(rbacCode)
 			io.WriteString(w, `{}`)
+		case strings.HasPrefix(r.URL.Path, "/providers/Microsoft.Management/managementGroups/"):
+			w.WriteHeader(http.StatusOK)
+			io.WriteString(w, `{}`)
 		case strings.HasPrefix(r.URL.Path, "/subscriptions/"):
 			w.WriteHeader(subCode)
 			io.WriteString(w, `{}`)
@@ -66,8 +69,8 @@ func TestAzurePreflight_AllGapsClosedPasses(t *testing.T) {
 			t.Errorf("%s = %s (%s), want PASS", c.Name, c.Status, c.Detail)
 		}
 	}
-	if len(checks) != 7 {
-		t.Errorf("checks = %d, want 7", len(checks))
+	if len(checks) != 8 {
+		t.Errorf("checks = %d, want 8", len(checks))
 	}
 }
 

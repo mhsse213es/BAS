@@ -47,6 +47,7 @@ type AzureDiscoveryClient struct {
 	secret string
 
 	subscriptionID string
+	tenantID       string // root management group ID for hierarchy reads
 }
 
 func NewAzureDiscoveryClient(cfg AzureDiscoveryConfig) *AzureDiscoveryClient {
@@ -60,6 +61,7 @@ func NewAzureDiscoveryClient(cfg AzureDiscoveryConfig) *AzureDiscoveryClient {
 		httpClient:     &http.Client{Timeout: 30 * time.Second},
 		retry:          DefaultRetryPolicy,
 		limiter:        DefaultRateLimiter(),
+		tenantID:       cfg.TenantID,
 		secret:         cfg.ClientSecret,
 		subscriptionID: cfg.SubscriptionID,
 	}
@@ -235,6 +237,22 @@ type armRoleAssignment struct {
 		Scope            string `json:"scope"`
 		RoleDefinitionID string `json:"roleDefinitionId"`
 	} `json:"properties"`
+	// InheritedFrom names the management group a grant was made at, when it
+	// reaches this subscription from above. Empty for a direct assignment.
+	InheritedFrom string `json:"-"`
+}
+
+// parseRoleAssignmentPages decodes raw ARM role assignment pages.
+func parseRoleAssignmentPages(pages []json.RawMessage) ([]armRoleAssignment, error) {
+	out := make([]armRoleAssignment, 0, len(pages))
+	for _, raw := range pages {
+		var a armRoleAssignment
+		if err := json.Unmarshal(raw, &a); err != nil {
+			return nil, fmt.Errorf("azure discovery: parsing role assignment: %w", err)
+		}
+		out = append(out, a)
+	}
+	return out, nil
 }
 
 type armRoleDefinition struct {
@@ -371,6 +389,12 @@ func (c *AzureDiscoveryClient) fetchOne(ctx context.Context, url string, tokens 
 // actionListContains would reject for any role whose actions aren't
 // literally "*").
 func (c *AzureDiscoveryClient) DiscoverPermissions(ctx context.Context, identities []*CloudIdentity, resources []*CloudResource) ([]*CloudPermission, *DiscoveryStats, error) {
+	return c.discoverPermissionsFrom(ctx, identities, resources, nil)
+}
+
+// discoverPermissionsFrom turns subscription role assignments, plus any extra
+// assignments (inherited from management groups), into permission edges.
+func (c *AzureDiscoveryClient) discoverPermissionsFrom(ctx context.Context, identities []*CloudIdentity, resources []*CloudResource, extra []armRoleAssignment) ([]*CloudPermission, *DiscoveryStats, error) {
 	identityByObjectID := make(map[string]*CloudIdentity, len(identities))
 	for _, id := range identities {
 		switch {
@@ -396,11 +420,12 @@ func (c *AzureDiscoveryClient) DiscoverPermissions(ctx context.Context, identiti
 	stats := &DiscoveryStats{}
 	var permissions []*CloudPermission
 
-	for _, raw := range assignPages {
-		var a armRoleAssignment
-		if err := json.Unmarshal(raw, &a); err != nil {
-			return nil, nil, fmt.Errorf("azure discovery: parsing role assignment: %w", err)
-		}
+	assignments, err := parseRoleAssignmentPages(assignPages)
+	if err != nil {
+		return nil, nil, err
+	}
+	assignments = append(assignments, extra...)
+	for _, a := range assignments {
 
 		identity, ok := identityByObjectID[a.Properties.PrincipalID]
 		if !ok {
@@ -437,6 +462,9 @@ func (c *AzureDiscoveryClient) DiscoverPermissions(ctx context.Context, identiti
 			}
 			if spec.roleNotActions != "" {
 				attrs["role_not_actions"] = spec.roleNotActions
+			}
+			if a.InheritedFrom != "" {
+				attrs["inherited_from"] = a.InheritedFrom
 			}
 			permissions = append(permissions, &CloudPermission{
 				Source:     identity,

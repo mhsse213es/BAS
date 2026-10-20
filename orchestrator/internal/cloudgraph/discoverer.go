@@ -91,11 +91,11 @@ func (d azureDiscoverer) Discover(ctx context.Context) (*DiscoveredGraph, Discov
 	if err != nil {
 		return nil, nil, fmt.Errorf("azure discovery: resources: %w", err)
 	}
-	permissions, permStats, err := d.client.DiscoverPermissions(ctx, identities, resources)
+	permissions, permStats, err := d.client.DiscoverPermissionsWithInheritance(ctx, identities, resources)
 	if err != nil {
 		return nil, nil, fmt.Errorf("azure discovery: permissions: %w", err)
 	}
-	denials, denyStats, err := d.client.DiscoverDenyAssignments(ctx)
+	denials, denyStats, err := d.client.DiscoverDenyAssignmentsWithInheritance(ctx)
 	if err != nil {
 		return nil, nil, fmt.Errorf("azure discovery: deny assignments: %w", err)
 	}

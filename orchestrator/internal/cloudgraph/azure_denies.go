@@ -60,11 +60,18 @@ type AzureDenyStats struct {
 // as unmodelled rather than guessed. Ignoring them would hide a block;
 // applying them to children would invent one.
 func (c *AzureDiscoveryClient) DiscoverDenyAssignments(ctx context.Context) ([]*ScopeDenial, *AzureDenyStats, error) {
+	return c.discoverDenyAssignmentsFrom(ctx, nil)
+}
+
+// discoverDenyAssignmentsFrom reads the subscription's deny assignments and
+// appends extra pages (denies inherited from management groups).
+func (c *AzureDiscoveryClient) discoverDenyAssignmentsFrom(ctx context.Context, extra []json.RawMessage) ([]*ScopeDenial, *AzureDenyStats, error) {
 	url := fmt.Sprintf("%s/subscriptions/%s/providers/Microsoft.Authorization/denyAssignments?api-version=2022-04-01", c.ARMBaseURL, c.subscriptionID)
 	pages, err := c.fetchAllPages(ctx, url, c.armTokens)
 	if err != nil {
 		return nil, nil, fmt.Errorf("azure discovery: listing deny assignments: %w", err)
 	}
+	pages = append(pages, extra...)
 
 	var denials []*ScopeDenial
 	stats := &AzureDenyStats{}
