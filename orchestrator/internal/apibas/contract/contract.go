@@ -94,6 +94,10 @@ type Scenario struct {
 	MaxAcceptedBytes int `yaml:"max_accepted_bytes"`
 	// Latency, when set, makes this a timing scenario graded over repeated rounds.
 	Latency *LatencyPolicy `yaml:"latency"`
+	// TimingClaim is "provisional" when the timing threshold has no approved requirement owner and rationale.
+	// A provisional scenario is evaluated but not counted as validated. Only timing scenarios may carry it.
+	TimingClaim       string `yaml:"timing_claim"`
+	TimingClaimReason string `yaml:"timing_claim_reason"`
 	// MaxWorkUnits bounds the work_units an attack response may report. It is a
 	// resource limit, graded independently of timing.
 	MaxWorkUnits int `yaml:"max_work_units"`
@@ -450,6 +454,17 @@ func (s Scenario) validateSteps() error {
 	}
 	if s.Protocol != "" && s.Protocol != "http" && len(s.Prerequisites) == 0 {
 		return fmt.Errorf("contract: %s: protocol %s needs prerequisites (adapter, fixture and environment) before it can run", s.ID, s.Protocol)
+	}
+	if s.TimingClaim != "" {
+		if s.TimingClaim != "provisional" {
+			return fmt.Errorf("contract: %s: timing_claim %q is not a claim status", s.ID, s.TimingClaim)
+		}
+		if s.Latency == nil {
+			return fmt.Errorf("contract: %s: timing_claim applies only to a timing scenario", s.ID)
+		}
+		if strings.TrimSpace(s.TimingClaimReason) == "" {
+			return fmt.Errorf("contract: %s: a provisional timing_claim needs a reason", s.ID)
+		}
 	}
 	if s.MaxWorkUnits < 0 {
 		return fmt.Errorf("contract: %s: max_work_units cannot be negative", s.ID)

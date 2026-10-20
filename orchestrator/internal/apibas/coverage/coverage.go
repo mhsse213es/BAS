@@ -37,6 +37,9 @@ type Status string
 
 const (
 	Validated   Status = "validated"
+	// Provisional: exploitability verdicts are valid, but the timing claim is not approved (contract TimingClaim).
+	// It is evaluated and never validated.
+	Provisional Status = "provisional"
 	Evaluated   Status = "evaluated"
 	Unsupported Status = "unsupported"
 	Errored     Status = "error"
@@ -57,6 +60,7 @@ type Report struct {
 	Implemented int
 	Evaluated   int // includes Validated
 	Validated   int
+	Provisional int // evaluated, held out of Validated by an unapproved timing claim
 	Unsupported int
 	Errored     int
 	Unevaluated int
@@ -104,6 +108,11 @@ func Build(catalog []contract.Scenario, supported func(protocol string) bool, re
 		r.Implemented++
 		v := results[s.ID]
 		switch {
+		case validated(v) && s.TimingClaim == "provisional":
+			e.Status = Provisional
+			e.Reason = s.TimingClaimReason
+			r.Provisional++
+			r.Evaluated++
 		case validated(v):
 			e.Status = Validated
 			r.Validated++
@@ -177,6 +186,7 @@ func Format(r Report) string {
 		r.Evaluated, r.Catalogued, pct(r.Evaluated, r.Catalogued))
 	fmt.Fprintf(&b, "Validated:    %d/%d (%s)  <- vulnerable FAILs as exploited and fixed PASSes enforced\n",
 		r.Validated, r.Catalogued, pct(r.Validated, r.Catalogued))
+	fmt.Fprintf(&b, "Provisional (evaluated, not validated; timing claim not approved): %d\n", r.Provisional)
 	fmt.Fprintf(&b, "Exclusions (denominator still includes them):\n")
 	fmt.Fprintf(&b, "  unsupported (no adapter):       %d\n", r.Unsupported)
 	fmt.Fprintf(&b, "  errored (execution/environment): %d\n", r.Errored)

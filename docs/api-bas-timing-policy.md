@@ -63,3 +63,29 @@ Gated on the three decisions below. No new timing scenario and no new timing-bas
 1. Name the requirement owner for expensive-request ceilings. Until then, mark ABUSE-002's timing-based validation provisional, or leave the scenario ungraded on timing.
 2. Confirm whether a controlled staging machine can be the reference. If not, defer qualification.
 3. Decide whether ABUSE-002 is graded on work units, with timing kept as historical corroboration. The work-unit count is self-reported, so the decision should weigh that.
+
+## Decisions recorded
+
+1. **Ceiling.** No timing-based validation claim until the ceiling has a requirement-based rationale approved by a
+   product or security requirement owner. No owner is formally assigned yet. That is an unresolved ownership decision,
+   not an assumption that engineering measurements establish the requirement. The 250 ms ceiling is **provisional**.
+   The observed 1,340 ms vulnerable result and sub-1 ms fixed refusal are not justification for it. Where no defensible
+   requirement exists, the scenario is left ungraded on timing.
+2. **Reference machine.** A controlled staging machine may be the reference. It needs a documented, reproducible
+   configuration, a recorded fingerprint and load conditions, a qualified calibration record, the approved threshold,
+   and five-run repeatability. Until a qualified machine exists, timing-based validation is blocked. The developer
+   workstation's record is diagnostic evidence only.
+3. **Work units.** The current `work_units` value is a declared request-cost input bound. It is not a measure of
+   actual work performed, so it is not the primary grade. The 24,000 limit stays as a clearly labelled request-cost
+   assertion. Timing stays as historical corroboration. Replacing timing with work-unit grading needs a metric of
+   deterministic work performed, or independently verified resource consumption, as a separate design and
+   implementation change.
+
+## Enforcement
+
+- ABUSE-002 carries `timing_claim: provisional` with the reason. The contract accepts the flag only on a timing
+  scenario with a reason. Coverage evaluates the scenario but does not count it as validated. The measured report
+  shows it under "Provisional", with the reason.
+- Validated is 71 of 72 on the measured run. Exploitability validity of ABUSE-002 is unchanged. Only the validated
+  claim is withheld.
+- No new timing scenario is started, and no timing-based validation claim is made, until decisions 1 and 2 are met.

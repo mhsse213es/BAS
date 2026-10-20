@@ -37,6 +37,8 @@ latency:
   warmup: 3
   trials: 10
   rounds: 3
+timing_claim: provisional
+timing_claim_reason: "The 250 ms ceiling has no approved requirement owner or rationale (timing policy decision 1). Observed vulnerable and fixed results are historical corroboration, not justification. The max_work_units 24000 bound is a declared request-cost assertion, not a measure of work performed. Not validated until both are resolved."
 max_work_units: 24000
 calibration:
   version: 5
