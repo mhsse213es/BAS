@@ -73,6 +73,10 @@ type stageDispatchOptions struct {
 	Mode        string
 	Reason      string
 	InitiatedBy *string
+	// ConfirmLive and ConfirmLab are the campaign approval. They are checked per stage,
+	// against the stage's own mode.
+	ConfirmLive bool
+	ConfirmLab  bool
 }
 
 // stageDispatcher is the existing run path, reached through a narrow seam.
@@ -82,9 +86,6 @@ type stageDispatcher interface {
 
 // Start checks the scenario through the executable gate, then dispatches it.
 func (x EngineStageExecutor) Start(ctx context.Context, campaignID string, st killchain.StageDef) (string, error) {
-	if err := checkLiveStageStart(x.Options.Mode); err != nil {
-		return "", fmt.Errorf("stage %s: %w", st.Key, err)
-	}
 	if x.Resolver == nil {
 		return "", fmt.Errorf("scenario %s: %w", st.ScenarioID, killchain.ErrNoExecutor)
 	}
@@ -101,7 +102,20 @@ func (x EngineStageExecutor) Start(ctx context.Context, campaignID string, st ki
 	if err != nil {
 		return "", fmt.Errorf("scenario %s is not executable: %w", st.ScenarioID, err)
 	}
-	runID, skip, err := x.Dispatcher.DispatchStage(ctx, ev.Scenario, x.AgentID, x.Options)
+	mode := st.EffectiveMode()
+	opts := x.Options
+	opts.Mode = mode
+	if mode != killchain.ModePosture {
+		approved := opts.ConfirmLive && (mode != killchain.ModeLab || opts.ConfirmLab)
+		if err := checkLiveStageStart(mode, approved); err != nil {
+			return "", fmt.Errorf("stage %s: %w", st.Key, err)
+		}
+		// The OS check is left to dispatchRun, which knows the agent's OS.
+		if _, err := checkLiveGates(ev.Scenario, mode, opts.ConfirmLive, opts.ConfirmLab, "", time.Now()); err != nil {
+			return "", fmt.Errorf("stage %s: %w", st.Key, err)
+		}
+	}
+	runID, skip, err := x.Dispatcher.DispatchStage(ctx, ev.Scenario, x.AgentID, opts)
 	if err != nil {
 		return "", fmt.Errorf("scenario %s could not be dispatched: %w", st.ScenarioID, err)
 	}

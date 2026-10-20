@@ -6,11 +6,25 @@ import (
 	"testing"
 
 	"github.com/audspect/bas/internal/killchain"
+	"github.com/audspect/bas/internal/scenario"
 )
 
-func liveStageExec(mode string, d *fakeDispatch) EngineStageExecutor {
-	return EngineStageExecutor{Resolver: resolverOK{}, AgentID: "agent-1", Dispatcher: d,
-		Options: stageDispatchOptions{Mode: mode}}
+// liveResolver makes every scenario executable and Windows-supported, so the live
+// checks reach the dispatch step.
+type liveResolver struct{}
+
+func (liveResolver) ResolveExecutable(context.Context, string) (scenario.ExecutableVersion, error) {
+	return scenario.ExecutableVersion{Scenario: &scenario.Scenario{
+		ID: "s", Name: "s", Executable: true, SupportedOS: []string{"windows"},
+	}}, nil
+}
+
+func stageIn(mode string) killchain.StageDef {
+	return killchain.StageDef{Key: "identity", ScenarioID: "credential-access", Mode: mode}
+}
+
+func liveExec(opts stageDispatchOptions, d *fakeDispatch) EngineStageExecutor {
+	return EngineStageExecutor{Resolver: liveResolver{}, AgentID: "agent-1", Dispatcher: d, Options: opts}
 }
 
 func withLiveFlag(t *testing.T, on bool) {
@@ -20,42 +34,80 @@ func withLiveFlag(t *testing.T, on bool) {
 	t.Cleanup(func() { liveStagesEnabled = prev })
 }
 
-// The flag is off by default. A live stage is refused with the flag named as the
-// cause, and nothing is dispatched.
-func TestLiveStages_FlagOffRefusesLiveStage(t *testing.T) {
+// Flag off refuses a live stage even when approved, and nothing is dispatched.
+func TestLiveStages_FlagOffRefusesApprovedLiveStage(t *testing.T) {
 	withLiveFlag(t, false)
 	d := &fakeDispatch{runID: "run-1"}
-	_, err := liveStageExec("telemetry", d).Start(context.Background(), "c", dispatchStage())
-	if err == nil || !strings.Contains(err.Error(), "disabled on this server") {
-		t.Fatalf("err = %v, want the disabled refusal", err)
-	}
-	if d.calls != 0 {
-		t.Fatalf("a refused live stage was dispatched")
+	_, err := liveExec(stageDispatchOptions{ConfirmLive: true}, d).Start(context.Background(), "c", stageIn("telemetry"))
+	if err == nil || !strings.Contains(err.Error(), "disabled on this server") || d.calls != 0 {
+		t.Fatalf("err = %v calls = %d, want the disabled refusal and no dispatch", err, d.calls)
 	}
 }
 
-// Turning the flag on does not let a live stage through yet. Approval is not
-// built, so there is no confirmation to check, and dispatch must not run.
-func TestLiveStages_FlagOnStillRefusesUntilApprovalExists(t *testing.T) {
+// Flag on with no approval refuses the stage. Nothing is dispatched.
+func TestLiveStages_UnapprovedLiveStageRefused(t *testing.T) {
 	withLiveFlag(t, true)
 	d := &fakeDispatch{runID: "run-1"}
-	_, err := liveStageExec("lab", d).Start(context.Background(), "c", dispatchStage())
-	if err == nil || !strings.Contains(err.Error(), "approval") {
-		t.Fatalf("err = %v, want the approval refusal", err)
-	}
-	if d.calls != 0 {
-		t.Fatalf("a live stage with no approval was dispatched")
+	_, err := liveExec(stageDispatchOptions{}, d).Start(context.Background(), "c", stageIn("telemetry"))
+	if err == nil || !strings.Contains(err.Error(), "campaign approval") || d.calls != 0 {
+		t.Fatalf("err = %v calls = %d, want the approval refusal", err, d.calls)
 	}
 }
 
-// Posture is unaffected by the flag.
-func TestLiveStages_PostureUnaffectedByFlag(t *testing.T) {
+// A telemetry stage with the flag on and approval runs, in telemetry mode, with its
+// confirmations passed to the run path.
+func TestLiveStages_ApprovedTelemetryStageDispatches(t *testing.T) {
+	withLiveFlag(t, true)
+	d := &fakeDispatch{runID: "run-t"}
+	id, err := liveExec(stageDispatchOptions{ConfirmLive: true}, d).Start(context.Background(), "c", stageIn("telemetry"))
+	if err != nil || id != "run-t" {
+		t.Fatalf("id=%q err=%v", id, err)
+	}
+	if d.gotMode != "telemetry" {
+		t.Fatalf("dispatched mode = %q, want telemetry", d.gotMode)
+	}
+}
+
+// A lab stage needs confirmLab as well as confirmLive.
+func TestLiveStages_LabNeedsBothApprovals(t *testing.T) {
+	withLiveFlag(t, true)
+	d := &fakeDispatch{runID: "run-l"}
+	_, err := liveExec(stageDispatchOptions{ConfirmLive: true}, d).Start(context.Background(), "c", stageIn("lab"))
+	if err == nil || d.calls != 0 {
+		t.Fatalf("lab with only confirmLive: err=%v calls=%d, want refused", err, d.calls)
+	}
+	_, err = liveExec(stageDispatchOptions{ConfirmLive: true, ConfirmLab: true}, d).Start(context.Background(), "c", stageIn("lab"))
+	if err != nil || d.gotMode != "lab" {
+		t.Fatalf("lab with both approvals: err=%v mode=%q", err, d.gotMode)
+	}
+}
+
+// The gate uses the stage's mode, not the executor's. A posture stage runs as posture even
+// when the executor carries live approval.
+func TestLiveStages_StageModeIsUsedNotExecutorMode(t *testing.T) {
 	withLiveFlag(t, false)
-	d := &fakeDispatch{runID: "run-9"}
-	id, err := liveStageExec("posture", d).Start(context.Background(), "c", dispatchStage())
-	if err != nil || id != "run-9" || d.calls != 1 {
-		t.Fatalf("id=%q err=%v calls=%d", id, err, d.calls)
+	d := &fakeDispatch{runID: "run-p"}
+	_, err := liveExec(stageDispatchOptions{Mode: "telemetry", ConfirmLive: true}, d).Start(context.Background(), "c", stageIn("posture"))
+	if err != nil || d.gotMode != "posture" {
+		t.Fatalf("err=%v mode=%q, want a posture dispatch", err, d.gotMode)
 	}
 }
 
-var _ = killchain.VerdictInconclusive
+// Approval does not override the scenario's own rules. A non-executable scenario is
+// refused even when approved and enabled.
+func TestLiveStages_ApprovalDoesNotOverrideScenarioRules(t *testing.T) {
+	withLiveFlag(t, true)
+	d := &fakeDispatch{runID: "run-x"}
+	x := liveExec(stageDispatchOptions{ConfirmLive: true}, d)
+	x.Resolver = fakeResolverNotExecutable{}
+	_, err := x.Start(context.Background(), "c", stageIn("telemetry"))
+	if err == nil || !strings.Contains(err.Error(), "does not support live execution") || d.calls != 0 {
+		t.Fatalf("err=%v calls=%d, want the scenario refusal and no dispatch", err, d.calls)
+	}
+}
+
+type fakeResolverNotExecutable struct{}
+
+func (fakeResolverNotExecutable) ResolveExecutable(context.Context, string) (scenario.ExecutableVersion, error) {
+	return scenario.ExecutableVersion{Scenario: &scenario.Scenario{ID: "s", Name: "s", SupportedOS: []string{"windows"}}}, nil
+}

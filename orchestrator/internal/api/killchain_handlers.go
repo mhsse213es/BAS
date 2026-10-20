@@ -43,6 +43,8 @@ func (d handlerStageDispatcher) DispatchStage(ctx context.Context, sc *scenario.
 		Mode:        o.Mode,
 		Reason:      o.Reason,
 		InitiatedBy: o.InitiatedBy,
+		ConfirmLive: o.ConfirmLive,
+		ConfirmLab:  o.ConfirmLab,
 	})
 }
 
@@ -154,16 +156,31 @@ func (h *Handler) AdvanceKillChainCampaign(w http.ResponseWriter, r *http.Reques
 		writeKillChainError(w, err)
 		return
 	}
+	approval, err := readAdvanceApproval(r)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if err := checkCampaignApproval(bound.Def, approval); err != nil {
+		jsonError(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 	var initiatedBy *string
 	if c, ok := auth.ClaimsFrom(r.Context()); ok && c != nil && c.UserID != "" {
 		uid := c.UserID
 		initiatedBy = &uid
 	}
+	if live, lab := bound.Def.LiveAndLabStages(); len(live) > 0 {
+		h.auditLog(r, "killchain.campaign.approve", id, map[string]any{
+			"liveStages": live, "labStages": lab, "reason": approval.Reason,
+		}, "success")
+	}
 	exec := EngineStageExecutor{
 		AgentID:     bound.AgentID,
 		Runs:        poolRunReader{pool: h.db},
 		GroundTruth: store,
-		Options:     stageDispatchOptions{Mode: "posture", InitiatedBy: initiatedBy},
+		Options: stageDispatchOptions{InitiatedBy: initiatedBy,
+			ConfirmLive: approval.ConfirmLive, ConfirmLab: approval.ConfirmLab, Reason: approval.Reason},
 	}
 	if h.verification != nil {
 		exec.Attestations = h.verification

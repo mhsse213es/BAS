@@ -85,6 +85,9 @@ type StageDef struct {
 	Requires   []string    `json:"requires,omitempty"`
 	ContinueOn []Verdict   `json:"continueOn,omitempty"`
 	Policy     StagePolicy `json:"policy"`
+	// Mode is how the stage runs: posture (default), telemetry or lab. It is part of
+	// the signed definition, so approval of live stages is fixed at signing.
+	Mode string `json:"mode,omitempty"`
 }
 
 // CampaignDef is an authored, versioned campaign graph.
@@ -104,6 +107,13 @@ var keyPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9-]*$`)
 func (c CampaignDef) Validate() ([]string, error) {
 	if c.ID == "" {
 		return nil, fmt.Errorf("killchain: campaign id is required")
+	}
+	for _, st := range c.Stages {
+		switch st.Mode {
+		case "", ModePosture, ModeTelemetry, ModeLab:
+		default:
+			return nil, fmt.Errorf("killchain: campaign %s stage %s has unknown mode %q", c.ID, st.Key, st.Mode)
+		}
 	}
 	if c.Version < 1 {
 		return nil, fmt.Errorf("killchain: campaign %s version must be at least 1", c.ID)

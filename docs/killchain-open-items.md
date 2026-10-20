@@ -183,3 +183,27 @@ separation-of-duties decision.
 
 Note: `TestRBACMatrix_NoDrift` still fails on cloud routes staged by another
 session. This work does not touch them.
+
+### Update: stage modes and approval (built, flag off)
+
+Built:
+- Each stage has a `mode` (posture by default, telemetry, lab) in the signed
+  definition. Unknown modes are refused at validation. The shipped campaign
+  without modes still verifies, because its bytes did not change.
+- The advance request takes an optional approval body: `confirmLive`,
+  `confirmLab`, `reason`. A campaign with live stages needs `confirmLive` and a
+  reason. A campaign with lab stages also needs `confirmLab`. Unknown fields are refused.
+- Approval is audited (`killchain.campaign.approve`) with the live and lab stages,
+  and the reason, before the advance runs.
+- Each stage checks its own mode against the approval, the flag, and the
+  scenario's live rules (`checkLiveGates`). Dispatch then passes the
+  confirmations to the run path.
+
+Not built, and recorded as gaps:
+- Per-stage audit when a live stage starts. The approval is audited at advance,
+  but a stage's own start is not audited separately.
+- The OS check for a live stage relies on dispatchRun, which knows the agent's OS.
+  `checkLiveGates` is called with no OS in the stage path.
+- Separation of duties for lab approval is still undecided. Currently the
+  campaign's creator can confirm lab stages.
+- The flag stays off. Turning it on is a decision that waits for staging.

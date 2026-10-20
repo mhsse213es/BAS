@@ -1,6 +1,6 @@
 # Kill chain live and lab gate: design
 
-Status: steps 1 and 5 built (refactor, flag off). Steps 2 to 4 and 6 are not built. Nothing live is enabled. Verification needs staging,
+Status: steps 1, 2, 3 and 4 built (refactor, stage modes, advance approval, per-stage start check). Flag still off. Separation of duties (step 6) still a decision. Nothing live is enabled. Verification needs staging,
 which is not available. Live and lab claims are not made.
 
 ## Problem
