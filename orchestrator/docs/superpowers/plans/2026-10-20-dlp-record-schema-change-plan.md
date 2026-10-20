@@ -28,17 +28,44 @@ that `internal/vendors/*` implements it correctly. None of the adapters has been
 verified against a live tenant. Conformance is labelled unverified until tested,
 and no metric may rely on a block from an adapter until then.
 
-**B2. `test_event_timestamp` semantics — VERIFIED, field stays unpopulated.**
-Checked in `agent/executor.go`:
-- `StartedAt` is captured before the command launches (line 188). It is the
-  closest candidate for the start of the controlled test event, but it is the
-  agent's pre-launch time, not an independently verified test-event start.
-- `ExecutedAt` is set when the result is built, after the process exits
-  (lines 292 and 448). It marks completion. It must not be used as the
-  test-event start.
-- Neither field is a verified controlled-event timestamp. `test_event_timestamp`
-  remains unset. Latency stays undefined until a test-event start is defined and
-  verified at the agent boundary.
+**B2. `test_event_timestamp` semantics — OPEN. Field stays unpopulated.**
+
+Verified at the agent boundary (`agent/executor.go`, `agent/pool_windows.go`):
+
+| Timestamp | Set where | Meaning | Usable as test-event start? |
+|---|---|---|---|
+| `before` (executor.go:188) | per-process path, before token/env setup and `cmd.Start()` (line 277) | pre-launch dispatch time for the step | No. Includes setup, and is not the moment the test action happens. |
+| `StartedAt` (executor.go:443) | copies `before` into the per-process result | same as above | No, same reason. |
+| `ExecutedAt` (executor.go:292, 448; pool_windows.go:238) | when the result is built, after the process or host responds | completion time | No. |
+| pooled path `StartedAt` | **not set**. The pooled `ExecResult` (pool_windows.go:230-240) omits it, so the field is zero | none | No. Pooled PowerShell discovery steps have no start time at all. |
+
+Consequence: no existing agent timestamp marks when the controlled test action
+happens. For DLP steps that action is a transfer performed inside the command, so
+the agent cannot observe it from outside the process.
+
+**Definition options for B2 (for approval, none chosen):**
+
+- **Option A (recommended): test-payload timestamp.** The test payload records its
+  own clock reading at the moment it attempts the transfer, in the same way it
+  already writes `DLP_OBSERVATION:` markers, and that reading becomes the start.
+  Requires scenario and payload changes (and re-signing), a defined clock source,
+  and a documented skew bound against the detection source. This is the only option
+  that marks the event itself.
+- **Option B: agent dispatch time.** `before`, recorded for every step including
+  pooled ones. Cheap, but it is a dispatch time. It must be named that way, and it
+  cannot back an "event start" claim. Its use would also need the pooled path
+  changed to record a time.
+
+**Acceptance criteria before `test_event_timestamp` is populated:**
+1. The start event, stop event, clock source and comparability requirement are
+   written in the metrics spec (§3.4).
+2. The start timestamp is recorded by the step that performs the action, or is
+   clearly labelled as dispatch time (Option B), never silently substituted.
+3. Pooled and per-process steps both record it, or the affected steps are
+   excluded from latency and the exclusion is counted.
+4. Each stored value carries its source, so a dispatch time and an event time are
+   never mixed in one report.
+5. Historical rows stay NULL. No backfill from `ExecutedAt`, `StartedAt` or `before`.
 
 Implementation does not start while B1 and B2 are open.
 
