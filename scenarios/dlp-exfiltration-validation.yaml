@@ -129,6 +129,7 @@ steps:
       $csvContent = "[BAS-SIM-DLP] CustomerID,PAN,Aadhaar,SWIFT,UPI,CreditCard`nBAS-SIM-$runId,ABCDE1234F,123456789012,SBININBBXXX,fake.user@upi,4111111111111111"
       $originalClip = $null
       try { $originalClip = Get-Clipboard -Raw -ErrorAction SilentlyContinue } catch {}
+      if ($env:BAS_TASK_ID) { Write-Output "DLP_EVENT_START: $env:BAS_TASK_ID $((Get-Date).ToUniversalTime().ToString('o'))" }
       Set-Clipboard -Value $csvContent -ErrorAction SilentlyContinue
       Start-Sleep -Milliseconds 300
       $nowClip = $null
@@ -175,6 +176,7 @@ steps:
         $srcFile = Join-Path $env:TEMP "bas_sim_dlp_print_$runId.txt"
         Set-Content -Path $srcFile -Value $csvContent -Encoding utf8
         try {
+          if ($env:BAS_TASK_ID) { Write-Output "DLP_EVENT_START: $env:BAS_TASK_ID $((Get-Date).ToUniversalTime().ToString('o'))" }
           Get-Content -Path $srcFile | Out-Printer -Name $printer.Name -ErrorAction Stop
           Start-Sleep -Milliseconds 500
           $job = Get-PrintJob -PrinterName $printer.Name -ErrorAction SilentlyContinue | Where-Object { $_.DocumentName -match 'bas_sim_dlp_print' -or $_.JobStatus -match 'Printing|Spooling|Normal' } | Select-Object -First 1
@@ -264,6 +266,7 @@ steps:
       $dest = Join-Path $stagingDir "records_$runId.csv"
       try {
         New-Item -Path $stagingDir -ItemType Directory -Force -ErrorAction Stop | Out-Null
+        if ($env:BAS_TASK_ID) { Write-Output "DLP_EVENT_START: $env:BAS_TASK_ID $((Get-Date).ToUniversalTime().ToString('o'))" }
         Set-Content -Path $dest -Value $csvContent -Encoding utf8 -ErrorAction Stop
       } catch {}
       if (Test-Path $dest) {

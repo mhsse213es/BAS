@@ -74,6 +74,7 @@ steps:
       $batchFile = New-TemporaryFile
       "put `"$($tempFile.FullName)`" `"$remoteFile`"" | Set-Content -Path $batchFile
       try {
+        if ($env:BAS_TASK_ID) { Write-Output "DLP_EVENT_START: $env:BAS_TASK_ID $((Get-Date).ToUniversalTime().ToString('o'))" }
         $output = & sftp.exe -oBatchMode=yes -oStrictHostKeyChecking=no -oUserKnownHostsFile=NUL -P {{SINK_SFTP_PORT}} -b $batchFile dlptest@{{SINK_SFTP_HOST}} 2>&1
         $exitCode = $LASTEXITCODE
         Write-Output "DLP_OBSERVATION: sftp_exit_code=$exitCode"
@@ -124,6 +125,7 @@ steps:
       $batchFile = New-TemporaryFile
       "put `"$($tempFile.FullName)`" `"$remoteFile`"" | Set-Content -Path $batchFile
       try {
+        if ($env:BAS_TASK_ID) { Write-Output "DLP_EVENT_START: $env:BAS_TASK_ID $((Get-Date).ToUniversalTime().ToString('o'))" }
         $output = & sftp.exe -oBatchMode=yes -oStrictHostKeyChecking=no -oUserKnownHostsFile=NUL -P {{SINK_SFTP_PORT}} -b $batchFile dlptest@{{SINK_SFTP_HOST}} 2>&1
         $exitCode = $LASTEXITCODE
         Write-Output "DLP_OBSERVATION: sftp_exit_code=$exitCode"
@@ -174,6 +176,7 @@ steps:
       $batchFile = New-TemporaryFile
       "put `"$($tempFile.FullName)`" `"$remoteFile`"" | Set-Content -Path $batchFile
       try {
+        if ($env:BAS_TASK_ID) { Write-Output "DLP_EVENT_START: $env:BAS_TASK_ID $((Get-Date).ToUniversalTime().ToString('o'))" }
         $output = & sftp.exe -oBatchMode=yes -oStrictHostKeyChecking=no -oUserKnownHostsFile=NUL -P {{SINK_SFTP_PORT}} -b $batchFile dlptest@{{SINK_SFTP_HOST}} 2>&1
         $exitCode = $LASTEXITCODE
         Write-Output "DLP_OBSERVATION: sftp_exit_code=$exitCode"
@@ -224,6 +227,7 @@ steps:
       $batchFile = New-TemporaryFile
       "put `"$($tempFile.FullName)`" `"$remoteFile`"" | Set-Content -Path $batchFile
       try {
+        if ($env:BAS_TASK_ID) { Write-Output "DLP_EVENT_START: $env:BAS_TASK_ID $((Get-Date).ToUniversalTime().ToString('o'))" }
         $output = & sftp.exe -oBatchMode=yes -oStrictHostKeyChecking=no -oUserKnownHostsFile=NUL -P {{SINK_SFTP_PORT}} -b $batchFile dlptest@{{SINK_SFTP_HOST}} 2>&1
         $exitCode = $LASTEXITCODE
         Write-Output "DLP_OBSERVATION: sftp_exit_code=$exitCode"
@@ -274,6 +278,7 @@ steps:
       $batchFile = New-TemporaryFile
       "put `"$($tempFile.FullName)`" `"$remoteFile`"" | Set-Content -Path $batchFile
       try {
+        if ($env:BAS_TASK_ID) { Write-Output "DLP_EVENT_START: $env:BAS_TASK_ID $((Get-Date).ToUniversalTime().ToString('o'))" }
         $output = & sftp.exe -oBatchMode=yes -oStrictHostKeyChecking=no -oUserKnownHostsFile=NUL -P {{SINK_SFTP_PORT}} -b $batchFile dlptest@{{SINK_SFTP_HOST}} 2>&1
         $exitCode = $LASTEXITCODE
         Write-Output "DLP_OBSERVATION: sftp_exit_code=$exitCode"
@@ -324,6 +329,7 @@ steps:
       $batchFile = New-TemporaryFile
       "put `"$($tempFile.FullName)`" `"$remoteFile`"" | Set-Content -Path $batchFile
       try {
+        if ($env:BAS_TASK_ID) { Write-Output "DLP_EVENT_START: $env:BAS_TASK_ID $((Get-Date).ToUniversalTime().ToString('o'))" }
         $output = & sftp.exe -oBatchMode=yes -oStrictHostKeyChecking=no -oUserKnownHostsFile=NUL -P {{SINK_SFTP_PORT}} -b $batchFile dlptest@{{SINK_SFTP_HOST}} 2>&1
         $exitCode = $LASTEXITCODE
         Write-Output "DLP_OBSERVATION: sftp_exit_code=$exitCode"

