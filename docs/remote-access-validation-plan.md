@@ -80,8 +80,11 @@ Every answer carries evidence, a source, and an explicit unknown when the eviden
 - No real vendor values in tests until the advisory is supplied and checked against the vendor page.
 - Phase 4 and 5 run on staging only.
 
-## Open decisions for you
+## Decisions (recorded 2026-10-20)
 
-1. Confirm PAN-OS as the first and only vendor for the next phases.
-2. Confirm the advisory source to use (vendor page only, or a third-party summary as a cross-check).
-3. Confirm whether Phase 3 log ingestion should use the existing SIEM connectors or a new GlobalProtect log parser.
+1. **Advisory source:** the Palo Alto advisory is the source of truth. Ranges in `orchestrator/internal/panosexposure/advisories/CVE-2026-0257.json` were checked against it on 2026-10-20. Unlisted or conflicting facts stay unknown.
+2. **Lab access:** a sanitised configuration export is enough to start. A staging appliance is used for end-to-end validation when available. No invented production facts.
+3. **Vendor scope:** PAN-OS only through Phase 5. Prisma Access, Cloud NGFW and Panorama are not in scope. Panorama and Cloud NGFW are not affected per the advisory. Do not submit a Panorama device as product `pan-os`.
+4. **Log ingestion:** use existing SIEM connectors if they expose the required GlobalProtect events and fields. Otherwise build a dedicated parser behind a common ingestion interface.
+
+Known advisory conflict: PAN-OS 10.2.18 base release. The product-status threshold makes it affected, and the solution table lists it as an upgrade target. It returns unknown until Palo Alto clarifies.

@@ -37,6 +37,15 @@ func Assess(a Asset, adv Advisory) Result {
 	}
 	r.Evidence = append(r.Evidence, "reported version: "+a.Version)
 
+	for _, u := range adv.Unresolved {
+		if u == a.Version {
+			r.Verdict = VerdictUnknown
+			r.Reason = fmt.Sprintf("the advisory's own statements conflict for %s; confirm with the vendor", a.Version)
+			r.Evidence = append(r.Evidence, "advisory: unresolved for this release")
+			return r
+		}
+	}
+
 	if len(adv.Affected) == 0 {
 		r.Verdict = VerdictUnknown
 		r.Reason = "advisory supplies no affected version ranges"
@@ -68,6 +77,12 @@ func Assess(a Asset, adv Advisory) Result {
 		}
 	}
 	if !affected {
+		branch := fmt.Sprintf("%d.%d", v.major, v.minor)
+		if len(adv.Coverage) > 0 && !contains(adv.Coverage, branch) {
+			r.Verdict = VerdictUnknown
+			r.Reason = fmt.Sprintf("release branch %s is not covered by the advisory, so absence from its ranges proves nothing", branch)
+			return r
+		}
 		r.Verdict = VerdictNotAffected
 		r.Reason = fmt.Sprintf("version %s is outside every affected range in the advisory", a.Version)
 		return r
@@ -128,4 +143,13 @@ func normalise(t Tri) Tri {
 	default:
 		return TriUnknown
 	}
+}
+
+func contains(list []string, s string) bool {
+	for _, x := range list {
+		if x == s {
+			return true
+		}
+	}
+	return false
 }

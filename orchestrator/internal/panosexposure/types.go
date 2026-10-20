@@ -83,6 +83,16 @@ type Advisory struct {
 	Source     string         `json:"source"`
 	Affected   []VersionRange `json:"affected"`
 	Conditions Conditions     `json:"conditions"`
+	// Coverage lists the "major.minor" release branches the advisory addresses.
+	// A release on a branch that is neither covered nor inside an affected range
+	// is unknown, never not-affected. Empty means no coverage check is made.
+	Coverage []string `json:"coverage,omitempty"`
+	// Unresolved lists exact release strings whose advisory statements conflict.
+	// They return unknown until the vendor clarifies.
+	Unresolved []string `json:"unresolved,omitempty"`
+	// VerifiedFrom records how and when the ranges were checked against the
+	// vendor page, so the data's provenance is visible to anyone reading it.
+	VerifiedFrom string `json:"verifiedFrom,omitempty"`
 }
 
 // Result is the verdict plus the evidence and limits behind it.
