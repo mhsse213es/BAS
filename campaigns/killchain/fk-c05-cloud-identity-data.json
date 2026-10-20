@@ -1,0 +1,4 @@
+{"id":"fk-c05-cloud-identity-data","name":"Campaign 05 - Cloud identity to sensitive-data exposure","version":1,"stages":[
+{"key":"workload-identity","scenarioId":"cloud-vm-attack","policy":{"shouldBlock":true,"containmentRequired":true,"source":"fullkillchain.txt Campaign 05: workload identity and permission enumeration"}},
+{"key":"storage-egress","scenarioId":"dlp-exfiltration-cloud-storage","requires":["workload-identity"],"policy":{"shouldBlock":true,"containmentRequired":true,"source":"fullkillchain.txt Campaign 05: synthetic storage access and permitted egress test"}}
+]}

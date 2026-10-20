@@ -1,0 +1,5 @@
+{"id":"fk-c04-ransomware-recovery","name":"Campaign 04 - Ransomware progression and recovery failure","version":1,"stages":[
+{"key":"endpoint-prevention","scenarioId":"evasion-testing","policy":{"shouldBlock":true,"containmentRequired":false,"source":"fullkillchain.txt Campaign 04: endpoint prevention evaluation"}},
+{"key":"ransomware-impact-windows","scenarioId":"ransomware-drill","requires":["endpoint-prevention"],"policy":{"shouldBlock":true,"containmentRequired":true,"source":"fullkillchain.txt Campaign 04: synthetic file-impact and recovery drill"}},
+{"key":"ransomware-impact-linux","scenarioId":"linux-ransomware-drill","requires":["endpoint-prevention"],"policy":{"shouldBlock":true,"containmentRequired":true,"source":"fullkillchain.txt Campaign 04: synthetic file-impact simulation (Linux)"}}
+]}

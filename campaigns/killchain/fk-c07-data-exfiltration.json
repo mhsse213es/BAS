@@ -1,0 +1,4 @@
+{"id":"fk-c07-data-exfiltration","name":"Campaign 07 - Sensitive data access to unauthorized transfer","version":1,"stages":[
+{"key":"collection-staging","scenarioId":"collection-staging-exfil","policy":{"shouldBlock":true,"containmentRequired":false,"source":"fullkillchain.txt Campaign 07: collection and staging simulation"}},
+{"key":"multichannel-egress","scenarioId":"dlp-exfiltration-multichannel","requires":["collection-staging"],"policy":{"shouldBlock":true,"containmentRequired":true,"source":"fullkillchain.txt Campaign 07: controlled outbound transfer and DLP correlation"}}
+]}

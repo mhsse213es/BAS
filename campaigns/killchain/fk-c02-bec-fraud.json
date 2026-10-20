@@ -1,0 +1,5 @@
+{"id":"fk-c02-bec-fraud","name":"Campaign 02 - Business email compromise to financial fraud exposure","version":1,"stages":[
+{"key":"mailbox-rules","scenarioId":"outlook-rules-bec","policy":{"shouldBlock":true,"containmentRequired":true,"source":"fullkillchain.txt Campaign 02: mailbox access and forwarding"}},
+{"key":"consent-and-token","scenarioId":"entra-hybrid-identity-attack","requires":["mailbox-rules"],"policy":{"shouldBlock":true,"containmentRequired":true,"source":"fullkillchain.txt Campaign 02: OAuth consent test"}},
+{"key":"payment-change-fraud","scenarioId":"upi-fraud-killchain","requires":["consent-and-token"],"policy":{"shouldBlock":true,"containmentRequired":true,"source":"fullkillchain.txt Campaign 02: payment-change fraud control test"}}
+]}

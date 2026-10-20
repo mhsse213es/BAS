@@ -1,0 +1,4 @@
+{"id":"fk-c06-segmentation-lateral","name":"Campaign 06 - Segmentation bypass and lateral access (partial: no firewall or NAC scenario yet)","version":1,"stages":[
+{"key":"linux-lateral","scenarioId":"linux-lateral-movement","policy":{"shouldBlock":true,"containmentRequired":true,"source":"fullkillchain.txt Campaign 06: permitted and prohibited destination tests (Linux source)"}},
+{"key":"ad-lateral","scenarioId":"caldera-lateral-movement","requires":["linux-lateral"],"policy":{"shouldBlock":true,"containmentRequired":true,"source":"fullkillchain.txt Campaign 06: administrative service access test"}}
+]}

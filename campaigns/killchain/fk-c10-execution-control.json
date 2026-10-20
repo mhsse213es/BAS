@@ -1,0 +1,6 @@
+{"id":"fk-c10-execution-control","name":"Campaign 10 - Execution control and defense evasion resilience","version":1,"stages":[
+{"key":"app-control","scenarioId":"appcontrol-efficacy","policy":{"shouldBlock":true,"containmentRequired":false,"source":"fullkillchain.txt Campaign 10: application-control policy gaps"}},
+{"key":"evasion","scenarioId":"evasion-testing","requires":["app-control"],"policy":{"shouldBlock":true,"containmentRequired":false,"source":"fullkillchain.txt Campaign 10: script and process behaviour"}},
+{"key":"dll-hijack","scenarioId":"dll-hijack-execution","requires":["app-control"],"policy":{"shouldBlock":true,"containmentRequired":false,"source":"fullkillchain.txt Campaign 10: trusted-binary misuse"}},
+{"key":"lolbin","scenarioId":"lolbin-execution-coverage","requires":["evasion"],"policy":{"shouldBlock":true,"containmentRequired":false,"source":"fullkillchain.txt Campaign 10: trusted-binary misuse coverage"}}
+]}

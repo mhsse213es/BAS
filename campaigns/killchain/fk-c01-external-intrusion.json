@@ -1,0 +1,7 @@
+{"id":"fk-c01-external-intrusion","name":"Campaign 01 - External intrusion to enterprise compromise","version":1,"stages":[
+{"key":"execution","scenarioId":"lolbin-execution","policy":{"shouldBlock":true,"containmentRequired":false,"source":"fullkillchain.txt Campaign 01: execution attempt"}},
+{"key":"identity-discovery","scenarioId":"windows-discovery","requires":["execution"],"policy":{"shouldBlock":false,"containmentRequired":false,"source":"fullkillchain.txt Campaign 01: identity discovery"}},
+{"key":"privilege-boundary","scenarioId":"acl-privilege-exposure-audit","requires":["identity-discovery"],"policy":{"shouldBlock":true,"containmentRequired":false,"source":"fullkillchain.txt Campaign 01: privilege boundary testing"}},
+{"key":"lateral-movement","scenarioId":"caldera-lateral-movement","requires":["privilege-boundary"],"policy":{"shouldBlock":true,"containmentRequired":true,"source":"fullkillchain.txt Campaign 01: lateral movement attempt"}},
+{"key":"sensitive-resource","scenarioId":"collection-staging-exfil","requires":["lateral-movement"],"policy":{"shouldBlock":true,"containmentRequired":true,"source":"fullkillchain.txt Campaign 01: sensitive-resource access"}}
+]}
