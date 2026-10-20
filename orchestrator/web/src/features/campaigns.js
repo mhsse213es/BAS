@@ -9,15 +9,16 @@ import { findingSevBadge } from './findings.js';
 import { viewRunResults } from './reports.js';
 import { ROLE, _riskScoreColor, activateTab, showTab } from './shell.js';
 import { setDisplay } from '../core/inline-style.js';
+import { cssVars } from '../core/css-vars.js';
 
 
 // ── Campaigns ────────────────────────────────────────────────────────────────
 function campaignMixBar(s) {
-  var seg = function(v, c) { return v > 0 ? '<i style="flex:' + v + ';background:' + c + '"></i>' : ''; };
+  var seg = function(v, c) { return v > 0 ? '<i' + cssVars(['g1-v-764cd56d', v], ['g1-v-9ffd39ba', c]) + '></i>' : ''; };
   var total = (s.prevented || 0) + (s.detected || 0) + (s.missed || 0);
   if (!total) return '<span class="tiny muted">—</span>';
-  return '<div class="seg-bar" title="Prevented ' + (s.prevented || 0) + ' · Detected ' + (s.detected || 0) + ' · Missed ' + (s.missed || 0) +
-    (s.skipped ? ' · Skipped ' + s.skipped + ' agents' : '') + '" style="display:flex;height:8px;border-radius:5px;overflow:hidden;background:var(--elevated);min-width:120px">' +
+  return '<div class="seg-bar g1-display-flex g1-s-d1b7291f" title="Prevented ' + (s.prevented || 0) + ' · Detected ' + (s.detected || 0) + ' · Missed ' + (s.missed || 0) +
+    (s.skipped ? ' · Skipped ' + s.skipped + ' agents' : '') + '">' +
     seg(s.prevented, 'var(--success)') + seg(s.detected, 'var(--warning)') + seg(s.missed, 'var(--danger)') + '</div>';
 }
 // campaignDisplayStatus folds the paused overlay into a single badge state.
@@ -58,15 +59,15 @@ function renderCampaignRows() {
     var cds = campaignDisplayStatus(s);
     var status = '<span class="sbadge s-' + cds.cls + '">' + x(cds.label) + '</span>';
     if (s.status === 'running') {
-      status += '<div class="prog" style="width:90px;margin-top:5px"><i style="width:' + (s.progress || 0) + '%"></i></div>' +
+      status += '<div class="prog g1-s-434cdbc4"><i' + cssVars(['g1-v-9b890877', s.progress || 0]) + '></i></div>' +
         '<span class="tiny muted">' + (s.progress || 0) + '%</span>';
     }
     var targetLabel = c.targetType === 'group'
       ? (CMP.groupsById[c.targetGroupId] || ('Group #' + c.targetGroupId))
       : c.targetType === 'all' ? 'All Agents' : 'Agents';
     return '<tr class="u-pointer"' + on('click', 'openCampaignDetail', c.id) + '>' +
-      '<td><div class="cell-main">' + x(c.name) + '</div><div class="tiny muted" style="font-family:var(--font-mono);font-size:0.6rem">' + x(c.id) + (c.createdBy ? ' · ' + x(c.createdBy) : '') + '</div></td>' +
-      '<td class="tiny muted">' + x(c.scenarioName) + '<div class="tiny muted" style="opacity:0.75">' + x(targetLabel) + '</div></td>' +
+      '<td><div class="cell-main">' + x(c.name) + '</div><div class="tiny muted g1-s-1b0e39c1">' + x(c.id) + (c.createdBy ? ' · ' + x(c.createdBy) : '') + '</div></td>' +
+      '<td class="tiny muted">' + x(c.scenarioName) + '<div class="tiny muted g1-s-8f1b8bcc">' + x(targetLabel) + '</div></td>' +
       '<td class="tiny">' + (s.dispatched || 0) + '/' + (s.targets || 0) + (s.skipped ? ' <span class="tiny muted">(' + s.skipped + ' skipped)</span>' : '') + '</td>' +
       '<td>' + status + '</td>' +
       '<td>' + campaignMixBar(s) + '</td>' +
@@ -89,44 +90,44 @@ export function openCampaignDetail(id) {
     var tile = function(lbl, val, col, foot) {
       return '<div class="kpi-card stat-tile"><div class="stat-top"><div>' +
         '<div class="kpi-label">' + lbl + '</div>' +
-        '<div class="kpi-value" style="color:' + (col || 'var(--text)') + '">' + val + '</div></div></div>' +
+        '<div class="kpi-value"' + cssVars(['g1-v-7d75dfc9', col || 'var(--text)']) + '>' + val + '</div></div></div>' +
         (foot ? '<div class="kpi-sub">' + foot + '</div>' : '') + '</div>';
     };
     var mt = (s.prevented || 0) + (s.detected || 0) + (s.missed || 0);
     var eff = mt ? Math.round(((s.prevented || 0) * 100 + (s.detected || 0) * 50) / mt) : 0;
     var effCol = eff >= 60 ? 'var(--success)' : eff >= 40 ? 'var(--warning)' : 'var(--danger)';
-    var tiles = '<div class="kpi-row" style="margin-bottom:1.25rem">' +
+    var tiles = '<div class="kpi-row g1-s-20ce54f7">' +
       tile('Effectiveness', mt ? eff : '—', mt ? effCol : 'var(--muted)', 'weighted result') +
       tile('Prevented', s.prevented || 0, 'var(--success)', 'blocked') +
       tile('Detected only', s.detected || 0, 'var(--warning)', 'alerted, not blocked') +
       tile('Missed', s.missed || 0, (s.missed ? 'var(--danger)' : 'var(--muted)'), 'no control response') + '</div>';
     // ── running banner ──
     var banner = (s.status === 'running')
-      ? '<div class="dash-panel" style="margin-bottom:1.25rem;border-color:' + (s.paused ? 'var(--warning)' : 'var(--accent)') + '"><div class="dash-panel-body" style="display:flex;align-items:center;gap:1rem">' +
-        (cds.live ? '<span class="dot-live"></span>' : '<span class="sbadge s-paused" style="flex-shrink:0">paused</span>') +
+      ? '<div class="dash-panel g1-s-20ce54f7"' + cssVars(['g1-v-161b49bb', s.paused ? 'var(--warning)' : 'var(--accent)']) + '><div class="dash-panel-body g1-display-flex g1-s-f769ee49">' +
+        (cds.live ? '<span class="dot-live"></span>' : '<span class="sbadge s-paused g1-s-867764b6">paused</span>') +
         '<div class="u-flex1"><div class="u-fw600">' + (s.paused ? 'Campaign paused — ' : 'Campaign in progress — ') + (s.dispatched || 0) + '/' + (s.targets || 0) + ' agents dispatched</div>' +
-        '<div class="prog" style="margin-top:0.5rem"><i style="width:' + (s.progress || 0) + '%"></i></div></div>' +
-        '<div style="font-family:var(--font-display);font-size:1.4rem;font-weight:700">' + (s.progress || 0) + '%</div></div></div>'
+        '<div class="prog g1-s-acd4d170"><i' + cssVars(['g1-v-9b890877', s.progress || 0]) + '></i></div></div>' +
+        '<div class="g1-s-86814ed3">' + (s.progress || 0) + '%</div></div></div>'
       : '';
     // ── per-agent results table (our fan-out equivalent of the mockup step table) ──
     var rows = (c.runs || []).map(function(rn) {
       var col = rn.status === 'completed' ? 'var(--success)' : rn.status === 'failed' ? 'var(--danger)' : 'var(--muted)';
       var rnPaused = rn.status === 'running' && rn.paused;
       return '<tr><td><span class="sbadge ' + (rnPaused ? 's-paused' : 's-' + x(rn.status)) + '">' + (rnPaused ? 'paused' : x(rn.status)) + '</span></td>' +
-        '<td style="font-family:var(--font-mono);font-size:0.72rem">' + x(rn.agentId) + '</td>' +
-        '<td style="font-weight:600;color:' + col + '">' + (rn.preventionScore ? Math.round(rn.preventionScore) + '%' : '—') + '</td>' +
+        '<td class="g1-s-97a09173">' + x(rn.agentId) + '</td>' +
+        '<td class="g1-s-6e8bcfac"' + cssVars(['g1-v-7d75dfc9', col]) + '>' + (rn.preventionScore ? Math.round(rn.preventionScore) + '%' : '—') + '</td>' +
         '<td class="td-r"><button class="btn btn-outline btn-sm"' + on('click', 'openRunFromCampaign', rn.runId) + '>Results &rarr;</button></td></tr>';
     }).join('') || '<tr><td colspan="4" class="empty">No child runs dispatched.</td></tr>';
-    var perAgent = '<div class="dash-panel" style="margin-bottom:1.25rem"><div class="dash-panel-hdr">Per-agent results</div>' +
-      '<div class="dash-panel-body" style="padding:0"><div class="tbl-wrap"><table>' +
+    var perAgent = '<div class="dash-panel g1-s-20ce54f7"><div class="dash-panel-hdr">Per-agent results</div>' +
+      '<div class="dash-panel-body g1-s-35eecf3e"><div class="tbl-wrap"><table>' +
       '<thead><tr><th>Status</th><th>Agent</th><th>Prevention</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div></div></div>';
     // ── skipped targets ──
     var skips = (c.skips || []).length
-      ? '<div class="dash-panel" style="margin-bottom:1.25rem"><div class="dash-panel-hdr">Skipped targets (' + c.skips.length + ')</div><div class="dash-panel-body">' +
-        c.skips.map(function(k) { return '<div style="display:flex;gap:0.6rem;padding:0.3rem 0;border-bottom:1px solid var(--border);font-size:0.8rem"><code>' + x(k.agentId) + '</code><span class="tiny muted" style="margin-left:auto">' + x(k.reason) + '</span></div>'; }).join('') + '</div></div>'
+      ? '<div class="dash-panel g1-s-20ce54f7"><div class="dash-panel-hdr">Skipped targets (' + c.skips.length + ')</div><div class="dash-panel-body">' +
+        c.skips.map(function(k) { return '<div class="g1-display-flex g1-s-0402a75a"><code>' + x(k.agentId) + '</code><span class="tiny muted g1-s-ca6fc035">' + x(k.reason) + '</span></div>'; }).join('') + '</div></div>'
       : '';
     // ── run summary ──
-    var kv = function(k, v) { return '<div style="display:flex;gap:0.6rem;padding:0.35rem 0;border-bottom:1px solid var(--border);font-size:0.8rem"><span style="color:var(--muted);min-width:120px">' + k + '</span><span class="u-flex1">' + v + '</span></div>'; };
+    var kv = function(k, v) { return '<div class="g1-display-flex g1-s-b60b87ad"><span class="g1-s-485ffd37">' + k + '</span><span class="u-flex1">' + v + '</span></div>'; };
     var targetKv = c.targetType === 'group'
       ? 'Agent Group — ' + x(CMP.groupsById[c.targetGroupId] || ('Group #' + c.targetGroupId))
       : c.targetType === 'all' ? 'All Agents' : (s.targets || 0) + ' agents selected';
@@ -147,19 +148,19 @@ export function openCampaignDetail(id) {
         ' <button class="btn btn-outline btn-sm"' + on('click', 'downloadCampaignCSV', c.id) + ' title="Download the fleet forensic CSV (one row per technique across all agents)">&#8595; CSV</button>' +
         ' ' + ((ROLE === 'admin' || ROLE === 'analyst')
           ? '<button class="btn btn-outline btn-sm"' + on('click', 'openCampaignRerunReview', c) + ' title="Review and re-run this exact campaign configuration">Re-run</button>'
-          : '<button class="btn btn-outline btn-sm" disabled style="opacity:0.5;cursor:not-allowed" title="Re-run requires the Analyst or Admin role">Re-run</button>');
+          : '<button class="btn btn-outline btn-sm g1-s-ddf6ed84" disabled title="Re-run requires the Analyst or Admin role">Re-run</button>');
 
     document.getElementById('campaigns-detail').innerHTML =
-      '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;margin-bottom:1rem;flex-wrap:wrap">' +
-        '<div><a class="tiny" style="color:var(--accent);cursor:pointer"' + on('click', 'closeCampaignDetail') + '>&larr; Campaigns</a>' +
-        '<h1 style="font-family:var(--font-display);font-size:1.5rem;font-weight:700;letter-spacing:-0.02em;margin:0.3rem 0;color:var(--text)">' + x(c.name) + ' <span class="sbadge s-' + cds.cls + '" style="font-size:0.7rem;vertical-align:middle">' + liveDot + status + '</span></h1>' +
-        '<div style="font-size:0.8rem;color:var(--muted)">' + x(c.scenarioName) + ' · ' + (s.dispatched || 0) + '/' + (s.targets || 0) + ' agents · started ' + fmtDate(c.startedAt) + (c.createdBy ? ' by ' + x(c.createdBy) : '') + '</div></div>' +
-        '<div style="display:flex;gap:0.5rem;flex-shrink:0">' + actions + '</div>' +
+      '<div class="g1-display-flex g1-s-21cf47f4">' +
+        '<div><a class="tiny g1-s-ad7942c3"' + on('click', 'closeCampaignDetail') + '>&larr; Campaigns</a>' +
+        '<h1 class="g1-s-661a80eb">' + x(c.name) + ' <span class="sbadge s-' + cds.cls + ' g1-s-06e2033f">' + liveDot + status + '</span></h1>' +
+        '<div class="g1-s-2134bc46">' + x(c.scenarioName) + ' · ' + (s.dispatched || 0) + '/' + (s.targets || 0) + ' agents · started ' + fmtDate(c.startedAt) + (c.createdBy ? ' by ' + x(c.createdBy) : '') + '</div></div>' +
+        '<div class="g1-display-flex g1-s-993532d2">' + actions + '</div>' +
       '</div>' +
       banner + tiles +
-      '<div class="dash-grid" style="grid-template-columns:1.5fr 1fr;align-items:start">' +
+      '<div class="dash-grid g1-s-45aaba5d">' +
         '<div>' + perAgent + skips + '</div>' +
-        '<div>' + summary + '<div id="cmp-recs" style="margin-top:1.25rem"></div></div>' +
+        '<div>' + summary + '<div id="cmp-recs" class="g1-s-5012029f"></div></div>' +
       '</div>';
     activateTab('campaigns'); // in case opened from the dashboard
     setDisplay(document.getElementById('campaigns-list'), 'none');
@@ -176,7 +177,7 @@ function renderCampaignRecs(campaignId) {
     var mine = (fs || []).filter(function(f) { return f.lastCampaignId === campaignId; });
     var open = mine.filter(function(f) { return f.status === 'open'; }).slice(0, 5);
     var regr = mine.filter(function(f) { return f.reopenedCount > 0 && f.status === 'open'; }).slice(0, 3);
-    var hdr = function(t) { return '<div style="font-size:0.6rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:0.5rem 0 0.3rem">' + t + '</div>'; };
+    var hdr = function(t) { return '<div class="g1-s-88664075">' + t + '</div>'; };
     var rowf = function(f) {
       return '<div class="lrow u-pointer"' + on('click', 'openFindingFromDashboard', f.id) + '>' +
         '<div class="lmain"><div class="lt">' + x(f.techniqueName || f.techniqueId) + '</div>' +
@@ -307,9 +308,9 @@ function renderCampaignGroupPreview(list) {
     '<div>' + list.length + ' agents — ' + osLine + '</div>' +
     '<div>' + online + ' online · ' + offline + ' offline</div>';
   document.getElementById('cmp-exclusions').innerHTML = list.map(function(a) {
-    return '<label style="display:flex;align-items:center;gap:0.5rem;padding:0.25rem 0.3rem;cursor:pointer">' +
+    return '<label class="g1-display-flex g1-s-28328479">' +
       '<input type="checkbox"' + on('change', 'cmpToggleExclusionFromChecked', a.agentId) + '>' +
-      '<code style="font-size:0.72rem">' + x(a.agentId) + '</code><span class="tiny muted">' + x(a.hostname) + '</span></label>';
+      '<code class="g1-s-8f55e862">' + x(a.agentId) + '</code><span class="tiny muted">' + x(a.hostname) + '</span></label>';
   }).join('');
   cmpUpdateExclusionCount();
 }
@@ -417,7 +418,7 @@ export function selectTIPack(type) {
     var kevNote = pack.totalKevCves > 0 ? ' &middot; ' + pack.totalKevCves + ' KEV CVEs' : '';
     info.innerHTML = (_tiPackIcons[type] || '') + ' <strong>' + x(pack.packName) + '</strong><br>' +
       '<span class="u-muted">' + x(pack.description) + '</span><br>' +
-      '<span style="font-size:0.75rem;margin-top:4px;display:inline-block"><strong>' + pack.techniqueCount + '</strong> techniques &middot; <strong>' + tacticCount + '</strong> tactics' + kevNote + ransomNote + '</span>';
+      '<span class="g1-display-inline-block g1-s-ee12b4c2"><strong>' + pack.techniqueCount + '</strong> techniques &middot; <strong>' + tacticCount + '</strong> tactics' + kevNote + ransomNote + '</span>';
     setDisplay(preview, '');
     // Pre-fill campaign name
     var nameEl = document.getElementById('cmp-name');
@@ -505,7 +506,7 @@ export function cmpOnExistingScenarioChange() {
   if (!sc) { el.innerHTML = ''; return; }
   var desc = (sc.description || '').trim();
   if (desc.length > 160) desc = desc.substring(0, 157).replace(/\s+\S*$/, '') + '…';
-  var tagsLine = (sc.tags || []).length ? '<br><span style="font-size:0.7rem">' + sc.tags.map(x).join(' &middot; ') + '</span>' : '';
+  var tagsLine = (sc.tags || []).length ? '<br><span class="g1-s-62899a0f">' + sc.tags.map(x).join(' &middot; ') + '</span>' : '';
   el.innerHTML = x(desc) + tagsLine;
 }
 
@@ -528,11 +529,11 @@ export function loadKEVWidget() {
     tiles.innerHTML = hasKev ?
       '<div class="kpi-card stat-tile" title="Techniques with CISA KEV CVEs — create a pack to validate them">' +
       '<div class="stat-top"><div><div class="kpi-label">KEV-Linked Techniques</div><div class="kpi-value u-danger">' + pack.techniqueCount + '</div></div>' +
-      '<div class="stat-icon" style="background:rgba(218,54,51,0.10);color:var(--danger)">&#9760;</div></div>' +
+      '<div class="stat-icon g1-s-cddc6d2d">&#9760;</div></div>' +
       '<div class="kpi-sub">' + (pack.totalKevCves||0) + ' CVEs · ' + (pack.ransomwareCount||0) + ' ransomware-linked</div></div>' +
       '<div class="kpi-card stat-tile" title="CISA Known Exploited Vulnerabilities under active real-world exploitation">' +
       '<div class="stat-top"><div><div class="kpi-label">Total KEV CVEs</div><div class="kpi-value u-warning">' + (pack.totalKevCves||0) + '</div></div>' +
-      '<div class="stat-icon" style="background:rgba(210,153,34,0.10);color:var(--warning)"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M8 2l1.5 3.5H13l-2.75 2 1 3.5L8 9 4.75 11l1-3.5L3 5.5h3.5z"/></svg></div></div>' +
+      '<div class="stat-icon g1-s-4fdfbee4"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M8 2l1.5 3.5H13l-2.75 2 1 3.5L8 9 4.75 11l1-3.5L3 5.5h3.5z"/></svg></div></div>' +
       '<div class="kpi-sub">from CISA KEV catalog</div></div>' : '';
     renderTIActors(actors);
   });
@@ -547,11 +548,11 @@ function renderTIActors(actors) {
   if (!el) return;
   if (!actors.length) { el.innerHTML = ''; return; }
   el.innerHTML =
-    '<div style="font-size:0.68rem;font-weight:600;letter-spacing:0.05em;color:var(--muted);text-transform:uppercase;margin:0.75rem 0 0.4rem">Top Threat Actors</div>' +
+    '<div class="g1-s-d3efda58">Top Threat Actors</div>' +
     actors.map(function(a) {
-      return '<div style="display:flex;justify-content:space-between;align-items:center;padding:0.35rem 0;border-bottom:1px solid var(--border)">' +
-        '<span style="font-weight:600;cursor:pointer"' + on('click', 'openThreatPriorityActor', a.actorName) + '>' + x(a.actorName) + '</span>' +
-        '<span style="display:flex;align-items:center;gap:0.5rem">' + tpTierBadge(a.tier) + '<strong>' + x(a.score) + '</strong></span>' +
+      return '<div class="g1-display-flex g1-s-6bd9a151">' +
+        '<span class="g1-s-4d395312"' + on('click', 'openThreatPriorityActor', a.actorName) + '>' + x(a.actorName) + '</span>' +
+        '<span class="g1-display-flex g1-s-c6d87a64">' + tpTierBadge(a.tier) + '<strong>' + x(a.score) + '</strong></span>' +
         '</div>';
     }).join('');
 }
@@ -571,7 +572,7 @@ export function loadEndpointPostureWidget() {
     var html =
       '<div class="kpi-card stat-tile u-pointer"' + on('click', 'showTab', 'agents') + ' title="Agents currently reachable vs. past the 90s heartbeat window">' +
       '<div class="stat-top"><div><div class="kpi-label">Online / Offline</div><div class="kpi-value">' + p.onlineAgents + ' <span class="tiny muted">/ ' + p.offlineAgents + '</span></div></div>' +
-      '<div class="stat-icon" style="background:rgba(35,134,54,0.10);color:var(--success)">&#9679;</div></div>' +
+      '<div class="stat-icon g1-s-58719659">&#9679;</div></div>' +
       '<div class="kpi-sub">' + p.totalAgents + ' total agents</div></div>' +
       '<div class="kpi-card stat-tile u-pointer"' + on('click', 'showTab', 'agents') + ' title="Agent lifecycle state breakdown">' +
       '<div class="stat-top"><div><div class="kpi-label">Lifecycle</div><div class="kpi-value">' + p.activeAgents + ' <span class="tiny muted">active</span></div></div></div>' +
@@ -580,14 +581,14 @@ export function loadEndpointPostureWidget() {
       html +=
         '<div class="kpi-card stat-tile u-pointer"' + on('click', 'showTab', 'agents') + ' title="Agents whose binary hash failed trust verification">' +
         '<div class="stat-top"><div><div class="kpi-label">Untrusted Binaries</div><div class="kpi-value u-danger">' + p.untrustedBinaryCount + '</div></div>' +
-        '<div class="stat-icon" style="background:rgba(218,54,51,0.10);color:var(--danger)">&#9888;</div></div>' +
+        '<div class="stat-icon g1-s-cddc6d2d">&#9888;</div></div>' +
         '<div class="kpi-sub">binary hash failed trust verification</div></div>';
     }
     if (p.currentlyIsolated > 0) {
       html +=
         '<div class="kpi-card stat-tile u-pointer"' + on('click', 'showTab', 'agents') + ' title="Endpoints currently isolated via an EPP response action">' +
         '<div class="stat-top"><div><div class="kpi-label">Currently Isolated</div><div class="kpi-value u-warning">' + p.currentlyIsolated + '</div></div>' +
-        '<div class="stat-icon" style="background:rgba(210,153,34,0.10);color:var(--warning)">&#128274;</div></div>' +
+        '<div class="stat-icon g1-s-4fdfbee4">&#128274;</div></div>' +
         '<div class="kpi-sub">via EPP response action</div></div>';
     }
     tiles.innerHTML = html;
@@ -614,24 +615,24 @@ export function loadReadinessTrends() {
     var summary = document.getElementById('dash-trends-kpis');
     if (summary) {
       summary.innerHTML =
-        '<span style="margin-right:1rem"><strong class="u-success">' + improved + '</strong> improved</span>' +
-        '<span style="margin-right:1rem"><strong class="u-danger">' + regressed + '</strong> regressed</span>' +
+        '<span class="g1-s-485ebdca"><strong class="u-success">' + improved + '</strong> improved</span>' +
+        '<span class="g1-s-485ebdca"><strong class="u-danger">' + regressed + '</strong> regressed</span>' +
         '<span><strong>' + data.total + '</strong> actors tracked</span>';
     }
     // Trend table — show top 10 by most recent prevention, sorted worst-first
     var rows = data.trends.slice().sort(function(a,b) { return a.latestPrevention - b.latestPrevention; }).slice(0, 10);
     el.innerHTML = rows.map(function(t) {
       var arrow = t.direction === 'up'
-        ? '<span style="color:var(--success);font-weight:700">&#8679; +' + t.preventionDelta.toFixed(1) + '%</span>'
+        ? '<span class="g1-s-771559a5">&#8679; +' + t.preventionDelta.toFixed(1) + '%</span>'
         : t.direction === 'down'
-        ? '<span style="color:var(--danger);font-weight:700">&#8681; ' + t.preventionDelta.toFixed(1) + '%</span>'
+        ? '<span class="g1-s-03fae856">&#8681; ' + t.preventionDelta.toFixed(1) + '%</span>'
         : '<span class="u-muted">&#8213;</span>';
       var prevColor = _riskScoreColor(t.latestPrevention);
       return '<tr>' +
-        '<td style="font-size:0.8rem;font-weight:600">' + x(t.actorName) + '</td>' +
-        '<td style="text-align:right;font-weight:700;color:' + prevColor + '">' + t.latestPrevention.toFixed(0) + '%</td>' +
-        '<td style="text-align:right">' + arrow + '</td>' +
-        '<td style="text-align:right;font-size:0.75rem;color:var(--muted)">' + t.dataPoints + ' runs</td>' +
+        '<td class="g1-s-13c364ba">' + x(t.actorName) + '</td>' +
+        '<td class="g1-s-e78287d6"' + cssVars(['g1-v-7d75dfc9', prevColor]) + '>' + t.latestPrevention.toFixed(0) + '%</td>' +
+        '<td class="g1-s-5f326564">' + arrow + '</td>' +
+        '<td class="g1-s-18f637a7">' + t.dataPoints + ' runs</td>' +
         '</tr>';
     }).join('');
   }).catch(function() {});
@@ -649,9 +650,9 @@ function cmpFiltered() {
 export function renderCampaignTargets() {
   var list = cmpFiltered();
   document.getElementById('cmp-targets').innerHTML = list.length ? list.map(function(a) {
-    return '<label style="display:flex;align-items:center;gap:0.5rem;padding:0.25rem 0.3rem;cursor:pointer">' +
+    return '<label class="g1-display-flex g1-s-28328479">' +
       '<input type="checkbox" ' + (state._cmpSel[a.agentId] ? 'checked' : '') + ' ' + on('change', 'cmpSelChange', a.agentId) + '>' +
-      '<code style="font-size:0.72rem">' + x(a.agentId) + '</code><span class="tiny muted">' + x(a.hostname) + ' · ' + cmpAgentOS(a) + '</span></label>';
+      '<code class="g1-s-8f55e862">' + x(a.agentId) + '</code><span class="tiny muted">' + x(a.hostname) + ' · ' + cmpAgentOS(a) + '</span></label>';
   }).join('') : '<div class="empty tiny">No online agents match the filter.</div>';
   cmpUpdateCount();
 }
