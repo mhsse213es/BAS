@@ -82,9 +82,9 @@ func TestCreateCloudCampaign_ThreeAccountsAllComplete(t *testing.T) {
 			t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
 		}
 		var resp struct {
-			CampaignID string                                            `json:"campaignId"`
-			Summary    struct{ Total, Completed, Partial, Failed int }   `json:"summary"`
-			Results    []map[string]any                                 `json:"results"`
+			CampaignID string                                          `json:"campaignId"`
+			Summary    struct{ Total, Completed, Partial, Failed int } `json:"summary"`
+			Results    []map[string]any                                `json:"results"`
 		}
 		if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
 			t.Fatalf("decode: %v", err)
@@ -270,8 +270,10 @@ func TestCreateCloudCampaign_InitiatedByAndCampaignIDAreServerControlled(t *test
 			t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
 		}
 		var resp struct {
-			CampaignID string                      `json:"campaignId"`
-			Results    []struct{ RunID string `json:"runId"` } `json:"results"`
+			CampaignID string `json:"campaignId"`
+			Results    []struct {
+				RunID string `json:"runId"`
+			} `json:"results"`
 		}
 		if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
 			t.Fatalf("decode: %v", err)
@@ -319,7 +321,9 @@ func TestCreateCloudCampaign_AuditsOkEvenWhenSomeAccountsFail(t *testing.T) {
 		if rec.Code != http.StatusCreated {
 			t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
 		}
-		var resp struct{ CampaignID string `json:"campaignId"` }
+		var resp struct {
+			CampaignID string `json:"campaignId"`
+		}
 		_ = json.Unmarshal(rec.Body.Bytes(), &resp)
 
 		ctx := context.Background()
@@ -353,7 +357,9 @@ func TestGetCloudCampaign_RoundTripsARealCampaign(t *testing.T) {
 		if createRec.Code != http.StatusCreated {
 			t.Fatalf("setup create failed: status = %d, body = %s", createRec.Code, createRec.Body.String())
 		}
-		var created struct{ CampaignID string `json:"campaignId"` }
+		var created struct {
+			CampaignID string `json:"campaignId"`
+		}
 		_ = json.Unmarshal(createRec.Body.Bytes(), &created)
 
 		getReq := authedRequest(t, http.MethodGet, "/api/cloud-campaigns/"+created.CampaignID, nil, auth.RoleAnalyst, "any-authenticated-user")
@@ -407,15 +413,17 @@ func TestGetCloudCampaign_RollupIsRecomputedIndependentlyOfPostTime(t *testing.T
 		createReq, _ := createCloudCampaignReq(t, pool, body)
 		createRec := callAuthed(h.CreateCloudCampaign, createReq)
 		var created struct {
-			CampaignID string                             `json:"campaignId"`
-			Summary    struct{ Total, Completed int }     `json:"summary"`
+			CampaignID string                         `json:"campaignId"`
+			Summary    struct{ Total, Completed int } `json:"summary"`
 		}
 		_ = json.Unmarshal(createRec.Body.Bytes(), &created)
 
 		getReq := authedRequest(t, http.MethodGet, "/api/cloud-campaigns/"+created.CampaignID, nil, auth.RoleAnalyst, "any-authenticated-user")
 		getReq = withURLParam(getReq, "id", created.CampaignID)
 		rec := callAuthed(h.GetCloudCampaign, getReq)
-		var resp struct{ Summary struct{ Total, Completed int } `json:"summary"` }
+		var resp struct {
+			Summary struct{ Total, Completed int } `json:"summary"`
+		}
 		_ = json.Unmarshal(rec.Body.Bytes(), &resp)
 		if resp.Summary.Total != created.Summary.Total || resp.Summary.Completed != created.Summary.Completed {
 			t.Fatalf("GET summary %+v should match POST summary %+v when nothing failed to persist", resp.Summary, created.Summary)
