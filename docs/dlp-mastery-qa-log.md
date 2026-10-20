@@ -251,6 +251,14 @@ This is the single place to check before claiming either DLP vendor connector is
 
 **Limits:** only PowerShell is the test application. Other named applications, such as a browser or a sync client, are not covered.
 
+### 27. Encrypted archive scenario (dlp-exfiltration-archive-encrypted) — not run — open
+
+**Status:** Open (commit 6e892f9c). Signed and catalogued. The AES round trip was checked locally. Not run against the lab sink.
+
+**Lab requirement:** the HTTPS sink running, with the step's receipt checked against channel `archive-encrypted`.
+
+**Limits:** the DLP product cannot read the plaintext, so a receipt shows only that encrypted content was not stopped. It does not show that the content was inspected. Password-protected ZIP and OCR variants are not built (see the coverage matrix, section 7.2).
+
 ## Resolved items
 
 - Item 11: the eight unclaimed AI-prompt and DB-export steps are catalogued (commit 226b1f40). Values come from each step's own command; no payload changed. Both drift checks pass.
