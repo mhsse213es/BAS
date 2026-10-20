@@ -67,6 +67,8 @@ type Exchange struct {
 	// ForbiddenHeaders counts response headers the scenario declares as exposure
 	// (for example a reflected untrusted origin). Computed by the runner.
 	ForbiddenHeaders int
+	// Accepted counts attack responses that were neither denied nor a server fault.
+	Accepted int
 }
 
 // Evidence is everything the grader is allowed to look at. It is assembled by
@@ -84,6 +86,9 @@ type Evidence struct {
 	// StateChanged is the state adapter's diff between the snapshot taken after
 	// the baseline and the snapshot taken after the attack.
 	StateChanged bool
+	// MaxAccepted is the number of accepted attack responses the control tolerates.
+	// Zero means the scenario does not count attempts.
+	MaxAccepted int
 	// CleanIsEnforcement marks a scenario where a 2xx response with no leak and
 	// no state change is the correct behaviour, because the control is a
 	// projection (for example, the field is removed) rather than a refusal.
@@ -147,7 +152,8 @@ func Assess(ev Evidence) Outcome {
 	if ev.Baseline.Status != 200 {
 		return Skip(ReasonPreconditionMissing)
 	}
-	if ev.StateChanged || ev.Attack.LeakedProtected > 0 || ev.Attack.ForbiddenHeaders > 0 {
+	if ev.StateChanged || ev.Attack.LeakedProtected > 0 || ev.Attack.ForbiddenHeaders > 0 ||
+		(ev.MaxAccepted > 0 && ev.Attack.Accepted > ev.MaxAccepted) {
 		return Outcome{
 			Result:         FAIL,
 			Exploitability: Exploited,

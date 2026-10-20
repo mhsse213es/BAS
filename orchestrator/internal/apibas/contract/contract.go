@@ -65,16 +65,19 @@ type Scenario struct {
 	CleanIsEnforced bool          `yaml:"clean_is_enforcement"`
 	// ForbiddenResponseHeaders lists response headers that, with the given value,
 	// count as exposure on the attack response (for example a reflected origin).
-	ForbiddenResponseHeaders []HeaderRule       `yaml:"forbidden_response_headers"`
-	ExpectedControl          string             `yaml:"expected_control"`
-	GroundTruth              GroundTruth        `yaml:"ground_truth"`
-	DetectionAssert          DetectionAssertion `yaml:"detection_assertion"`
-	Evidence                 []string           `yaml:"evidence"`
-	SideEffectClass          string             `yaml:"side_effect_class"`
-	Cleanup                  []string           `yaml:"cleanup"`
-	IndustryMapping          []string           `yaml:"industry_mapping"`
-	RegulatoryMapping        []string           `yaml:"regulatory_mapping"`
-	NegativeTests            []string           `yaml:"negative_tests"`
+	ForbiddenResponseHeaders []HeaderRule `yaml:"forbidden_response_headers"`
+	// MaxAcceptedAttempts is how many attack responses may be accepted (neither a
+	// declared denial nor a server fault) before the control counts as failed.
+	MaxAcceptedAttempts int                `yaml:"max_accepted_attempts"`
+	ExpectedControl     string             `yaml:"expected_control"`
+	GroundTruth         GroundTruth        `yaml:"ground_truth"`
+	DetectionAssert     DetectionAssertion `yaml:"detection_assertion"`
+	Evidence            []string           `yaml:"evidence"`
+	SideEffectClass     string             `yaml:"side_effect_class"`
+	Cleanup             []string           `yaml:"cleanup"`
+	IndustryMapping     []string           `yaml:"industry_mapping"`
+	RegulatoryMapping   []string           `yaml:"regulatory_mapping"`
+	NegativeTests       []string           `yaml:"negative_tests"`
 }
 
 // ThreatModel is the simulated attacker (api.txt section 7, item 1).
@@ -106,6 +109,8 @@ type Step struct {
 	Body     string `yaml:"body"`
 	// Headers are extra request headers, for example a method-override header.
 	Headers map[string]string `yaml:"headers"`
+	// Repeat sends the step this many times. Only the attack step may repeat.
+	Repeat int `yaml:"repeat"`
 	// ForgeAs names the identity whose subject an alg_none token carries.
 	ForgeAs    string `yaml:"forge_as"`
 	Hypothesis string `yaml:"hypothesis"`
@@ -234,6 +239,12 @@ func (s Scenario) validateSteps() error {
 		if st.Role != want {
 			return fmt.Errorf("contract: %s: step %d role must be %q, got %q", s.ID, i, want, st.Role)
 		}
+		if st.Repeat < 0 || st.Repeat > maxRepeat {
+			return fmt.Errorf("contract: %s: step %s repeat must be between 0 and %d", s.ID, st.ID, maxRepeat)
+		}
+		if st.Repeat > 1 && want != "attack" {
+			return fmt.Errorf("contract: %s: step %s repeats, but repeat is only supported on the attack step", s.ID, st.ID)
+		}
 		if strings.TrimSpace(st.Hypothesis) == "" {
 			return fmt.Errorf("contract: %s: step %s has no hypothesis; every step must test one", s.ID, st.ID)
 		}
@@ -274,8 +285,18 @@ func (s Scenario) validateSteps() error {
 			return fmt.Errorf("contract: %s: step %s is GET and must not carry a body", s.ID, st.ID)
 		}
 	}
+	if final.Repeat > 1 {
+		if s.MaxAcceptedAttempts < 1 || s.MaxAcceptedAttempts >= final.Repeat {
+			return fmt.Errorf("contract: %s: a repeated attack needs max_accepted_attempts between 1 and %d", s.ID, final.Repeat-1)
+		}
+	} else if s.MaxAcceptedAttempts != 0 {
+		return fmt.Errorf("contract: %s: max_accepted_attempts needs a repeated attack step", s.ID)
+	}
 	return nil
 }
+
+// maxRepeat bounds how many times one step may be sent in a run.
+const maxRepeat = 50
 
 // validateSideEffects ties the declared class to what the steps actually do,
 // so a READ_ONLY label cannot hide a mutating attack.

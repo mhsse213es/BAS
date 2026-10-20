@@ -1,0 +1,59 @@
+id: API-BAS-ABUSE-001
+name: Verification endpoint accepts unlimited failed attempts
+category: ABUSE
+claim: property_level
+attack_objective: >
+  The owner of an order repeatedly submits wrong verification codes, trying to
+  guess a one-time code without any limit on attempts.
+threat_model:
+  attacker: authenticated customer who owns the order and can call the verification route
+  identity: customer-b
+  access_level: standard customer, valid token, owner of the order
+  objective: guess a one-time code by sending many attempts
+preconditions:
+  fixture: orders-two-tenant
+  identities: [customer-b]
+  object: ORD-2001
+steps:
+  - id: baseline-owner-read
+    role: baseline
+    identity: customer-b
+    auth: valid
+    method: GET
+    path: /api/orders/{object}
+    hypothesis: The owner can read their order. If this fails, the scenario is not testable.
+  - id: attack-repeated-wrong-codes
+    role: attack
+    identity: customer-b
+    auth: valid
+    method: POST
+    path: /api/orders/{object}/verify
+    body: '{"code": "000000"}'
+    repeat: 5
+    hypothesis: After a small number of failed attempts the route answers 429, so at most three attempts are accepted.
+denied_statuses: [429]
+max_accepted_attempts: 3
+expected_control: >
+  Failed verification attempts are limited per caller and order. Once the limit is
+  reached the route answers 429 and processes no further attempts.
+ground_truth:
+  adapters: [state, response]
+  check: >
+    The stored order is unchanged by the attack, and the attack responses disclose
+    none of the owner's protected values.
+detection_assertion:
+  status: not_evaluated
+  reason: Detection validation is Phase 4; this scenario makes no detection claim.
+evidence:
+  - sanitized_request
+  - sanitized_response
+  - attempt_counts
+  - state_diff
+side_effect_class: STATE_CHANGE_SANDBOX
+cleanup:
+  - reset the lab to its fixture seed after the run, which also clears attempt counters
+industry_mapping:
+  - "BFSI: unlimited authentication attempts on one-time verification codes"
+regulatory_mapping: []
+negative_tests:
+  - API-BAS-ABUSE-001 against the fixed build must PASS

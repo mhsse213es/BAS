@@ -205,6 +205,7 @@ func (r *Runner) Run(ctx context.Context, s contract.Scenario) (Report, error) {
 
 	var ev grade.Evidence
 	ev.Denied = s.DeniedStatuses
+	ev.MaxAccepted = s.MaxAcceptedAttempts
 	ev.CleanIsEnforcement = s.CleanIsEnforced
 
 	// Baseline: the owner's legitimate request. Redacted like everything else,
@@ -227,18 +228,25 @@ func (r *Runner) Run(ctx context.Context, s contract.Scenario) (Report, error) {
 		}
 		// Setup steps run in order. A denial stops the chain and that denial is
 		// the attack result, because the control held there. A 2xx lets the chain
-		// continue. The final step is always the attack.
+		// continue. The final step is the attack, sent Repeat times.
 		for i := 1; i < len(s.Steps); i++ {
 			step := s.Steps[i]
+			if i == len(s.Steps)-1 {
+				agg, transport := r.runAttack(ctx, &rep, step, s, attackToken, obj)
+				if transport {
+					ev.Transport = true
+				} else {
+					ev.Attack = agg
+				}
+				break
+			}
 			exch, transport := r.do(ctx, step, attackToken, obj, &obj)
 			rep.Exchanges = append(rep.Exchanges, exch)
 			if transport {
 				ev.Transport = true
 				break
 			}
-			last := i == len(s.Steps)-1
-			stopped := last || slices.Contains(s.DeniedStatuses, exch.Status) || exch.Status/100 != 2
-			if stopped {
+			if slices.Contains(s.DeniedStatuses, exch.Status) || exch.Status/100 != 2 {
 				ev.Attack = grade.Exchange{
 					Status:           exch.Status,
 					LeakedProtected:  exch.Leaked,
@@ -248,7 +256,6 @@ func (r *Runner) Run(ctx context.Context, s contract.Scenario) (Report, error) {
 			}
 		}
 	}
-
 	after, err := r.cfg.State.Snapshot(ctx)
 	if err != nil {
 		return r.finish(ctx, sandbox, r.errorOut(rep, stateErrorReason(err), "state snapshot failed after execution")), nil
@@ -399,6 +406,32 @@ func sameState(a, b map[string]StateRecord) bool {
 		}
 	}
 	return true
+}
+
+// runAttack sends the final step Repeat times and folds the exchanges into one
+// attack record. It counts accepted attempts and stops early on a server fault.
+func (r *Runner) runAttack(ctx context.Context, rep *Report, step contract.Step, s contract.Scenario, token string, obj fixture.Object) (grade.Exchange, bool) {
+	reps := max(step.Repeat, 1)
+	var agg grade.Exchange
+	for k := 0; k < reps; k++ {
+		exch, transport := r.do(ctx, step, token, obj, &obj)
+		rep.Exchanges = append(rep.Exchanges, exch)
+		if transport {
+			return agg, true
+		}
+		if agg.Status < 500 {
+			agg.Status = exch.Status
+		}
+		agg.LeakedProtected += exch.Leaked
+		agg.ForbiddenHeaders += forbiddenHeaderHits(exch, s.ForbiddenResponseHeaders)
+		if exch.Status < 500 && !slices.Contains(s.DeniedStatuses, exch.Status) {
+			agg.Accepted++
+		}
+		if exch.Status >= 500 {
+			break
+		}
+	}
+	return agg, false
 }
 
 // forbiddenHeaderHits counts the response headers of an exchange that match a

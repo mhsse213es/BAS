@@ -221,6 +221,13 @@ func Flaws() []Flaw {
 				"Fixed: no CORS header is sent, so no origin is granted cross-origin reads.",
 		},
 		{
+			ID:          "LAB-ABUSE-OTP-001",
+			ScenarioID:  "API-BAS-ABUSE-001",
+			Description: "POST /api/orders/{id}/verify has no limit on failed verification attempts.",
+			Oracle: "Vulnerable: every wrong code is answered 401 with no limit, so repeated guesses are all accepted (exploited). " +
+				"Fixed: after the attempt limit the request is answered 429 and no further attempts are processed.",
+		},
+		{
 			ID:          "LAB-AUTHZ-MASS-001",
 			ScenarioID:  "API-BAS-AUTHZ-003",
 			Description: "PATCH /api/orders/{id} binds every submitted field, including owner_id, from the request body.",
@@ -276,6 +283,8 @@ type Server struct {
 	mu      sync.Mutex
 	orders  map[string]*Order
 	roles   map[string]string // customer -> role; absent means "customer"
+	// otpFailures counts failed verification attempts per caller and order.
+	otpFailures map[string]int
 	// itemParent maps an item ID to its parent order. Items are fixed by the
 	// fixture, so cleanup and reset never change them.
 	itemParent map[string]string
@@ -305,6 +314,7 @@ func New(cfg Config) (*Server, error) {
 // s.mu, except during New where the server is not yet shared.
 func (s *Server) reseed() {
 	s.roles = make(map[string]string)
+	s.otpFailures = make(map[string]int)
 	s.itemParent = make(map[string]string)
 	s.itemSKU = make(map[string]string)
 	s.orders = make(map[string]*Order, len(s.cfg.Fixture.Objects))
@@ -341,6 +351,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/orders/{id}/items/{itemId}", s.getItem)
 	mux.HandleFunc("GET /api/exports/{id}", s.getExport)
 	mux.HandleFunc("GET /api/public/status", s.publicStatus)
+	mux.HandleFunc("POST /api/orders/{id}/verify", s.verifyCode)
 	mux.HandleFunc("GET /api/orders/{id}/integration", s.getIntegration)
 	if s.cfg.Mode == ModeVulnerable {
 		// LAB-DISC-DEPRECATED-001: the retired v0 route is still served, without auth.
@@ -1044,6 +1055,39 @@ func (s *Server) publicStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// otpAttemptLimit is how many failed verification attempts the fixed build accepts
+// per caller and order before it answers 429.
+const otpAttemptLimit = 3
+
+// verifyCode checks a one-time code for an order. Every code the lab is sent is
+// wrong, so each call is a failed attempt. The vulnerable build sets no limit
+// (LAB-ABUSE-OTP-001); the fixed build answers 429 after otpAttemptLimit failures.
+func (s *Server) verifyCode(w http.ResponseWriter, r *http.Request) {
+	caller, st := s.identify(r)
+	if st != authOK {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthenticated"})
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	order, found := s.orders[r.PathValue("id")]
+	if !found {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+		return
+	}
+	if s.cfg.Mode == ModeFixed && order.OwnerID != caller {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
+		return
+	}
+	key := caller + "|" + order.ID
+	if s.cfg.Mode == ModeFixed && s.otpFailures[key] >= otpAttemptLimit {
+		writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": "too many attempts"})
+		return
+	}
+	s.otpFailures[key]++
+	writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid code"})
 }
 
 // getOrderV0 is the retired route (LAB-DISC-DEPRECATED-001). It is mounted only in

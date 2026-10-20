@@ -471,3 +471,48 @@ Vulnerable: all twenty-three FAIL, exploited. Fixed: all twenty-three PASS, not 
 - Not started, and still needing framework work: counted-request abuse scenarios (ABUSE), a fixture SIEM for detection (Phase 4), and GraphQL, gRPC, SOAP, WebSocket and async adapters.
 - The orchestrator still does not schedule runs or persist results, and the production secret store is still not built.
 - The Windows build (`build.ps1`) has not been run on these tranches. You said you will build it later.
+
+
+## Phase 10 tranche — counted attack requests
+
+Branch: `feature/api-bas-phase10` (from `main`). This tranche adds counted-request support, then one scenario that uses it, bringing the total to twenty-four.
+
+| ID | Sub-technique | Claim | Vulnerable | Fixed | Side effect |
+|---|---|---|---|---|---|
+| API-BAS-ABUSE-001 | Missing rate limit on failed verification attempts | property_level | FAIL, exploited (five accepted) | PASS (three accepted, then 429) | STATE_CHANGE_SANDBOX |
+
+New flaw: `LAB-ABUSE-OTP-001`.
+
+### Framework addition: counted attack requests
+
+- A step may declare `repeat` (0 to 50). Only the attack step may repeat. A repeat on any other step is refused when the scenario loads.
+- A repeated attack declares `max_accepted_attempts`, which must be at least 1 and less than the repeat count. Without a repeat, it is refused.
+- An **accepted** attempt is any response that is neither in `denied_statuses` nor a server fault (5xx). Accepted attempts above the maximum grade as FAIL / exploited.
+- A server fault stops the repeats early and is graded as ERROR, the same as a single request.
+- The leak and forbidden-header checks run over every repeat. A leak in any response counts, not only the last.
+
+### Notes
+
+- The lab's counter is per caller and order. It is not in the state diff: the grade depends on the number of accepted attempts, not on a stored value. Reset clears the counter.
+- The vulnerable build accepts every guess. The fixed build accepts three and then answers 429.
+- The scenario's claim is property_level, because the owner runs the attempts against their own order.
+
+### Bug found during the tranche
+
+The first run of the framework edit stopped partway through. The script wrote two files and then failed on a third, leaving them half-applied. The files were restored to their committed state and the script rerun in full. All edits are in one step, and the build and tests were rerun from a clean state.
+
+### Tests
+
+`go test ./internal/apibas/... -count=1`: all packages pass. New tests: `grade/counted_test.go` (over-limit is exploitation; within-limit passes), `contract/repeat_test.go` (limit required; repeat only on the attack step; a valid repeat parses), `runner/phase10_test.go` (vulnerable FAIL, fixed PASS; the fixed build's exchange sequence is exactly 200, 401, 401, 401, 429, 429).
+
+### CLI smoke test (both modes, all twenty-four scenarios)
+
+Vulnerable: all twenty-four FAIL, exploited. Fixed: all twenty-four PASS, not exploited. Token check against the lab logs: zero matches.
+
+### Still open
+
+- Twenty-four scenarios of roughly 50 Phase 2 sub-techniques.
+- ABUSE-002 through ABUSE-010 need more than repeat counting: expensive-request timing, pagination and batch sizes, upload bounds, and others each need their own evidence. Not written.
+- Not started: a fixture SIEM for detection (Phase 4), protocol adapters for GraphQL, gRPC, SOAP, WebSocket and async, and a response-caching model for DATA-006.
+- The orchestrator still does not schedule runs or persist results, and the production secret store is still not built.
+- The Windows build (`build.ps1`) has not been run on these tranches. You said you will build it later.
