@@ -57,6 +57,9 @@ type Scope struct {
 	PayloadHash    string `json:"payloadHash"`
 	TestScope      string `json:"testScope"`
 	ExpectedChange string `json:"expectedChange"`
+	// Payload is the canonical JSON of the tagged document, so an approver sees exactly what is
+	// being approved. It is part of the scope hash.
+	Payload string `json:"payload,omitempty"`
 }
 
 // Hash is a stable digest of the scope. Fields are encoded in struct order, so the same scope

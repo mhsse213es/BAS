@@ -19,6 +19,9 @@ var ErrApprovalNotFound = errors.New("pipeline approval not found")
 // consumers can succeed.
 var ErrApprovalConsumed = errors.New("pipeline approval already used")
 
+// ErrApprovalDecided means the request was already approved, or refused. It cannot be decided again.
+var ErrApprovalDecided = errors.New("pipeline approval already decided")
+
 // RequestApproval records a new approval request for one exact scope. The scope is stored
 // with its hash, so later checks compare against what was requested.
 func (s KillChainStore) RequestApproval(ctx context.Context, id, requestedBy string, scope injectionapproval.Scope, now time.Time) error {
@@ -56,6 +59,9 @@ func (s KillChainStore) ApproveRequest(ctx context.Context, id, approver string,
 	if err != nil {
 		return err
 	}
+	if rec.ApprovedBy != "" {
+		return ErrApprovalDecided
+	}
 	if err := injectionapproval.Approve(&rec, approver, now, c); err != nil {
 		if aerr := appendApprovalEvent(ctx, tx, id, "refused", approver, map[string]any{"reason": err.Error()}, now); aerr != nil {
 			return aerr
@@ -66,12 +72,12 @@ func (s KillChainStore) ApproveRequest(ctx context.Context, id, approver string,
 		return err
 	}
 	tag, err := tx.Exec(ctx, `UPDATE pipeline_approvals SET approved_by=$2, approved_at=$3, expires_at=$4
-		WHERE id=$1 AND approved_by='' AND consumed_at IS NULL`, id, rec.ApprovedBy, rec.ApprovedAt.UTC(), rec.ExpiresAt.UTC())
+		WHERE id=$1 AND approved_by='' AND consumed_at IS NULL AND refused_at IS NULL`, id, rec.ApprovedBy, rec.ApprovedAt.UTC(), rec.ExpiresAt.UTC())
 	if err != nil {
 		return err
 	}
 	if tag.RowsAffected() != 1 {
-		return injectionapproval.ErrConsumed
+		return ErrApprovalDecided
 	}
 	if err := appendApprovalEvent(ctx, tx, id, "approved", approver, map[string]any{"expiresAt": rec.ExpiresAt}, now); err != nil {
 		return err
@@ -169,4 +175,123 @@ func appendApprovalEvent(ctx context.Context, tx pgx.Tx, approvalID, event, acto
 	_, err = tx.Exec(ctx, `INSERT INTO pipeline_approval_events (approval_id, event, actor, at, detail)
 		VALUES ($1, $2, $3, $4, $5)`, approvalID, event, actor, at.UTC(), body)
 	return err
+}
+
+// ApprovalView is one approval as an approver sees it, with its full history.
+type ApprovalView struct {
+	ID          string
+	Kind        string
+	Scope       injectionapproval.Scope
+	ScopeHash   string
+	RequestedBy string
+	ApprovedBy  string
+	ApprovedAt  time.Time
+	ExpiresAt   time.Time
+	ConsumedAt  time.Time
+	ConsumedBy  string
+	History     []ApprovalEvent
+}
+
+// ApprovalEvent is one entry in an approval's append-only history.
+type ApprovalEvent struct {
+	Event  string
+	Actor  string
+	At     time.Time
+	Detail map[string]any
+}
+
+// GetApproval reads one approval and its history.
+func (s KillChainStore) GetApproval(ctx context.Context, id string) (ApprovalView, error) {
+	var v ApprovalView
+	var body []byte
+	var approvedAt, expiresAt, consumedAt *time.Time
+	err := s.Pool.QueryRow(ctx, `SELECT id, kind, scope, scope_hash, requested_by, approved_by, approved_at, expires_at,
+		consumed_at, consumed_by FROM pipeline_approvals WHERE id=$1`, id).
+		Scan(&v.ID, &v.Kind, &body, &v.ScopeHash, &v.RequestedBy, &v.ApprovedBy, &approvedAt, &expiresAt, &consumedAt, &v.ConsumedBy)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ApprovalView{}, ErrApprovalNotFound
+	}
+	if err != nil {
+		return ApprovalView{}, err
+	}
+	if err := json.Unmarshal(body, &v.Scope); err != nil {
+		return ApprovalView{}, fmt.Errorf("stored approval scope is unreadable: %w", err)
+	}
+	if approvedAt != nil {
+		v.ApprovedAt = *approvedAt
+	}
+	if expiresAt != nil {
+		v.ExpiresAt = *expiresAt
+	}
+	if consumedAt != nil {
+		v.ConsumedAt = *consumedAt
+	}
+	rows, err := s.Pool.Query(ctx, `SELECT event, actor, at, detail FROM pipeline_approval_events WHERE approval_id=$1 ORDER BY id`, id)
+	if err != nil {
+		return ApprovalView{}, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var e ApprovalEvent
+		var raw []byte
+		if err := rows.Scan(&e.Event, &e.Actor, &e.At, &raw); err != nil {
+			return ApprovalView{}, err
+		}
+		if err := json.Unmarshal(raw, &e.Detail); err != nil {
+			return ApprovalView{}, fmt.Errorf("stored approval event is unreadable: %w", err)
+		}
+		v.History = append(v.History, e)
+	}
+	return v, rows.Err()
+}
+
+// RefuseApproval records a refusal of a pending request. It does not change the approval, so
+// a refused request simply stays unapproved and cannot be used.
+func (s KillChainStore) RefuseApproval(ctx context.Context, id, actor, reason string, now time.Time) error {
+	tx, err := s.Pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if _, err := loadApproval(ctx, tx, id); err != nil {
+		return err
+	}
+	tag, err := tx.Exec(ctx, `UPDATE pipeline_approvals SET refused_at=$2
+		WHERE id=$1 AND approved_by='' AND consumed_at IS NULL AND refused_at IS NULL`, id, now.UTC())
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() != 1 {
+		return ErrApprovalDecided
+	}
+	if err := appendApprovalEvent(ctx, tx, id, "refused", actor, map[string]any{"reason": reason}, now); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
+
+// RecordExecutionOutcome appends the result of a consumed approval's action: "executed" or
+// "failed". An approval that was consumed but has no outcome in its history was interrupted, for
+// example by a crash, and its outcome is unknown. Such an approval is never reused. Recovery means
+// a new request and a new approval.
+func (s KillChainStore) RecordExecutionOutcome(ctx context.Context, id, actor, outcome string, now time.Time) error {
+	if outcome != "executed" && outcome != "failed" {
+		return fmt.Errorf("outcome must be executed or failed")
+	}
+	tx, err := s.Pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	rec, err := loadApproval(ctx, tx, id)
+	if err != nil {
+		return err
+	}
+	if rec.ConsumedAt.IsZero() {
+		return fmt.Errorf("approval %s was not consumed; it has no execution to record", id)
+	}
+	if err := appendApprovalEvent(ctx, tx, id, outcome, actor, map[string]any{}, now); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }

@@ -53,7 +53,7 @@ func TestPipelineStage_CampaignRules(t *testing.T) {
 	}
 
 	neither := pipelineCampaign(StageDef{Key: "x"})
-	if _, err := neither.Validate(); err == nil || !strings.Contains(err.Error(), "needs a scenarioId or a pipeline") {
+	if _, err := neither.Validate(); err == nil || !strings.Contains(err.Error(), "needs a scenarioId, a pipeline or an injection") {
 		t.Fatalf("stage with neither scenario nor pipeline: %v", err)
 	}
 }

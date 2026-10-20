@@ -2,6 +2,7 @@ package killchain
 
 import (
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -83,4 +84,19 @@ func PipelineVerdict(results []PipelineStageResult) (Verdict, []string) {
 		return VerdictInconclusive, reasons
 	}
 	return VerdictNotTested, reasons
+}
+
+// InjectSpec describes a live-injection stage. It names the index a test record would be written to.
+// It carries no payload and no credentials: the payload comes from a consumed approval, and the
+// credentials from a stored connector.
+type InjectSpec struct {
+	Index string `json:"index"`
+}
+
+// Validate checks the target. The index must be one explicit name, not a pattern or a list.
+func (s InjectSpec) Validate(stageKey string) error {
+	if s.Index == "" || strings.ContainsAny(s.Index, "*,? ") || s.Index == "_all" {
+		return fmt.Errorf("killchain: stage %s injection needs one explicit index name", stageKey)
+	}
+	return nil
 }

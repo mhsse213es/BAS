@@ -64,7 +64,15 @@ func runGatedInjection(ctx context.Context, store db.KillChainStore, approvalID,
 	req.Document = tagged
 	outcome, err := inj.Inject(ctx, req)
 	if err != nil {
+		if rerr := store.RecordExecutionOutcome(ctx, approvalID, consumer, "failed", now); rerr != nil {
+			res.Status, res.Reason = "ERROR", "the write failed and the failure could not be recorded: "+err.Error()
+			return res
+		}
 		res.Status, res.Reason = "ERROR", "the approval was used and the write failed: "+err.Error()
+		return res
+	}
+	if rerr := store.RecordExecutionOutcome(ctx, approvalID, consumer, "executed", now); rerr != nil {
+		res.Status, res.Reason = "ERROR", "the write completed but its outcome could not be recorded: "+rerr.Error()
 		return res
 	}
 	res.Status, res.Reason = outcome.Status, outcome.Reason

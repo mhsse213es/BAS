@@ -11,7 +11,10 @@ import (
 
 	"github.com/audspect/bas/internal/db"
 	"github.com/audspect/bas/internal/injectionapproval"
+	"github.com/audspect/bas/internal/killchain"
 	"github.com/audspect/bas/internal/pipelinecheck"
+	"github.com/audspect/bas/internal/scenario"
+	"github.com/audspect/bas/internal/ws"
 )
 
 // fakeInjector writes nothing. It counts calls and remembers the last document it was given.
@@ -255,4 +258,46 @@ func TestInjectionGate_WriteFailureIsErrorAndApprovalStaysSpent(t *testing.T) {
 			t.Fatalf("approval after a failed write: %+v, want refused as already used", again)
 		}
 	})
+}
+
+// A campaign with an injection stage reports NOT_TESTED, writes nothing, and consumes no approval,
+// even when an approval for the same target exists. Retrying the campaign does not change that.
+func TestInjectStage_CampaignNotTestedAndNeverConsumesApproval(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		store := db.KillChainStore{Pool: pool}
+		scope := injScope(t, "logs-bas")
+		requestApproved(t, store, "inj-campaign", scope, injectionapproval.Customer)
+
+		def := injectCampaignDef("inj-campaign-1", "logs-bas")
+		if err := store.CreateCampaign(context.Background(), def, "owner-1", ""); err != nil {
+			t.Fatal(err)
+		}
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret)
+		advance(h, def.ID, "")
+		advance(h, def.ID, "")
+
+		rec, err := store.Campaign(context.Background(), def.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		st := rec.Stages["inject"]
+		if st.Verdict != killchain.VerdictNotTested || !strings.Contains(strings.Join(st.Reasons, " "), "disabled") {
+			t.Fatalf("injection stage verdict=%s reasons=%v, want NOT_TESTED with the disabled reason", st.Verdict, st.Reasons)
+		}
+		if got := historyOf(t, store, "inj-campaign"); got != "requested,approved" {
+			t.Fatalf("campaign changed the approval history: %s", got)
+		}
+		// The approval is still usable by its owner, because the campaign never touched it.
+		inj := &fakeInjector{supported: true}
+		if res := runGatedInjection(context.Background(), store, "inj-campaign", "runner", scope,
+			injectionapproval.Customer, injT0.Add(2*time.Minute), inj, injRequest("logs-bas")); res.Status != "EXECUTED" {
+			t.Fatalf("approval unusable after the campaign: %+v", res)
+		}
+	})
+}
+
+func injectCampaignDef(id, index string) killchain.CampaignDef {
+	return killchain.CampaignDef{ID: id, Name: id, Version: 1, Stages: []killchain.StageDef{
+		{Key: "inject", Inject: &killchain.InjectSpec{Index: index}},
+	}}
 }

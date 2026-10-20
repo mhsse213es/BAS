@@ -64,7 +64,7 @@ func (p *pipelineStageRunner) start(ctx context.Context, campaignID string, st k
 		return "", fmt.Errorf("pipeline run could not be read: %w", err)
 	}
 	if err := p.runs.BeginPipelineRun(ctx, db.PipelineRun{ExecutionID: execID, CampaignID: campaignID,
-		StageKey: st.Key, ConnectorID: st.Pipeline.ConnectorID, StartedAt: p.now()}); err != nil {
+		StageKey: st.Key, ConnectorID: stageConnectorLabel(st), StartedAt: p.now()}); err != nil {
 		return "", fmt.Errorf("pipeline run could not be recorded: %w", err)
 	}
 	res := p.run(ctx, st)
@@ -101,6 +101,9 @@ func (p *pipelineStageRunner) collect(ctx context.Context, executionID string) (
 
 // run performs the read-only checks for one pipeline stage and returns every stage's result.
 func (p *pipelineStageRunner) run(ctx context.Context, st killchain.StageDef) []killchain.PipelineStageResult {
+	if st.Inject != nil {
+		return injectionNotTestedResults(p.now())
+	}
 	spec := *st.Pipeline
 	now := p.now()
 	to := now
@@ -202,4 +205,24 @@ func pipelineTransport(insecure bool) http.RoundTripper {
 		t.TLSClientConfig = &tls.Config{InsecureSkipVerify: true} // #nosec G402 -- explicit per-connector setting
 	}
 	return t
+}
+
+// stageConnectorLabel names the target a pipeline or injection stage works against, for the run record.
+func stageConnectorLabel(st killchain.StageDef) string {
+	if st.Pipeline != nil {
+		return st.Pipeline.ConnectorID
+	}
+	return "injection:" + st.Inject.Index
+}
+
+// injectionNotTestedResults is the result of an injection stage in this build. Nothing is written
+// and no approval is consumed. Every stage is NOT_TESTED, and the injection stage gives the reason.
+func injectionNotTestedResults(now time.Time) []killchain.PipelineStageResult {
+	out := make([]killchain.PipelineStageResult, 0, len(pipelinecheck.PipelineStages))
+	for _, s := range pipelinecheck.PipelineStages {
+		r := killchain.PipelineStageResult{Stage: string(s), Status: "NOT_TESTED", CheckedAt: now,
+			Reason: "not checked: live injection is disabled in this build; nothing was written"}
+		out = append(out, r)
+	}
+	return out
 }

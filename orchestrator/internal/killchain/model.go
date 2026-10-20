@@ -91,6 +91,9 @@ type StageDef struct {
 	// Pipeline, when set, makes this a read-only detection-pipeline check. It names no
 	// agent scenario and cannot run live.
 	Pipeline *PipelineSpec `json:"pipeline,omitempty"`
+	// Inject, when set, makes this a live-injection stage. In this build it never writes: the stage
+	// reports NOT_TESTED and consumes no approval. It names no scenario and no pipeline.
+	Inject *InjectSpec `json:"inject,omitempty"`
 }
 
 // CampaignDef is an authored, versioned campaign graph.
@@ -117,6 +120,9 @@ func (c CampaignDef) Validate() ([]string, error) {
 		default:
 			return nil, fmt.Errorf("killchain: campaign %s stage %s has unknown mode %q", c.ID, st.Key, st.Mode)
 		}
+		if st.Pipeline != nil && st.Inject != nil {
+			return nil, fmt.Errorf("killchain: campaign %s stage %s cannot be both a pipeline check and an injection", c.ID, st.Key)
+		}
 		if st.Pipeline != nil {
 			if err := st.Pipeline.Validate(st.Key); err != nil {
 				return nil, err
@@ -127,8 +133,18 @@ func (c CampaignDef) Validate() ([]string, error) {
 			if st.EffectiveMode() != ModePosture {
 				return nil, fmt.Errorf("killchain: campaign %s stage %s is a pipeline check and is read-only; mode must be posture", c.ID, st.Key)
 			}
+		} else if st.Inject != nil {
+			if err := st.Inject.Validate(st.Key); err != nil {
+				return nil, err
+			}
+			if st.ScenarioID != "" {
+				return nil, fmt.Errorf("killchain: campaign %s stage %s is an injection and must not name a scenario", c.ID, st.Key)
+			}
+			if st.EffectiveMode() != ModePosture {
+				return nil, fmt.Errorf("killchain: campaign %s stage %s is an injection stage; mode must be posture", c.ID, st.Key)
+			}
 		} else if st.ScenarioID == "" {
-			return nil, fmt.Errorf("killchain: campaign %s stage %s needs a scenarioId or a pipeline", c.ID, st.Key)
+			return nil, fmt.Errorf("killchain: campaign %s stage %s needs a scenarioId, a pipeline or an injection", c.ID, st.Key)
 		}
 	}
 	if c.Version < 1 {
@@ -145,7 +161,7 @@ func (c CampaignDef) Validate() ([]string, error) {
 		if _, dup := byKey[s.Key]; dup {
 			return nil, fmt.Errorf("killchain: stage key %q appears twice", s.Key)
 		}
-		if s.ScenarioID == "" && s.Pipeline == nil {
+		if s.ScenarioID == "" && s.Pipeline == nil && s.Inject == nil {
 			return nil, fmt.Errorf("killchain: stage %q has no scenario id", s.Key)
 		}
 		for _, v := range s.ContinueOn {

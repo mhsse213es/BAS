@@ -189,7 +189,7 @@ func (o Orchestrator) finalize(ctx context.Context, campaignID string, def Campa
 	ev.CampaignID = campaignID
 	ev.StageKey = st.Key
 	ev.ExecutionID = execID
-	if st.Pipeline != nil {
+	if st.Pipeline != nil || st.Inject != nil {
 		pv, reasons := PipelineVerdict(ev.Pipeline)
 		rec := StageRecord{Key: st.Key, State: StateCompleted, Verdict: pv, Reasons: reasons, ExecutionID: execID, Evidence: &ev}
 		return rec, o.Store.PutStage(ctx, campaignID, rec)

@@ -17,6 +17,11 @@ const previewRunID = "bas-0123456789abcdef0123456789abcdef"
 func previewServer(t *testing.T, status int, body string, seen *atomic.Int32, bodyOut *string) *httptest.Server {
 	t.Helper()
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/_mapping") {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(mappedFixture))
+			return
+		}
 		seen.Add(1)
 		b, _ := io.ReadAll(r.Body)
 		if bodyOut != nil {

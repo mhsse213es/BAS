@@ -918,6 +918,7 @@ func main() {
 	}
 
 	handler := api.New(pool, hub, engine, cfg.JWTSecret).
+		WithDeploymentClass(cfg.Classification()).
 		WithEvidenceStore(evStore).
 		WithCaldera(cfg.CalderaURL, cfg.CalderaAPIKey).
 		WithART(artStore).

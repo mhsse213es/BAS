@@ -66,3 +66,25 @@ routing stay NOT_TESTED until each has its own observable evidence.
 3. Injection behind the approval gate.
 4. Tests for: missing, expired, reused, modified-scope and self-approved customer requests
    (all rejected); cleanup against unrelated events and cases (only tagged records eligible).
+
+## Implementation status
+
+Built and tested:
+- Approval records with 15-minute expiry, scope binding, single use and an append-only history.
+- HTTP routes for request, read, approve and refuse. Each route requires
+  `pipeline:injection:approve`, and each decision checks the permission for the approval's kind.
+- Deployment classification from `BAS_DEPLOYMENT_CLASS`, read at startup. Unset, empty or
+  unrecognised values are customer. A config file cannot set it, and no request can.
+- A refused request cannot be approved. An approved request cannot be refused.
+- Consumed approvals record `executed` or `failed`. An approval consumed with no outcome is
+  shown as unknown and is never reused. Recovery is a new request and a new approval.
+- Cleanup preview: refuses malformed run identifiers and pattern indexes; checks that the marker
+  fields are mapped before searching, so an unmapped index is an error and never an empty result;
+  lists a record only if its stored marker matches exactly.
+- Injection stage in campaigns: validates, reports NOT_TESTED, consumes no approval, and writes
+  nothing. Retrying the campaign does not change that.
+
+Not built, by decision:
+- Live injection. The gate exists, but no provider writes, and no campaign path reaches it.
+- Deletion. There is no delete function, and no route for one.
+- Connectors other than Elastic. They report unsupported.

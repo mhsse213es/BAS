@@ -46,6 +46,10 @@ func PreviewElasticCleanup(ctx context.Context, client *http.Client, cfg Elastic
 		return fail("refused: cleanup must name one explicit index, with no wildcard or list")
 	}
 
+	if reason := checkMarkerMapped(ctx, client, cfg, index); reason != "" {
+		return fail(reason)
+	}
+
 	body, err := json.Marshal(map[string]any{
 		"size":    cleanupPreviewLimit + 1,
 		"_source": []string{MarkerField, "tags"},
@@ -151,4 +155,64 @@ func confirmsMarker(source map[string]any, runID string) bool {
 		}
 	}
 	return false
+}
+
+// checkMarkerMapped confirms the marker fields exist in the index mapping before any search. In
+// Elasticsearch a search on an unmapped field returns zero hits without an error. Without this
+// check, a mapping mismatch would look exactly like "nothing to clean up". It returns "" when both
+// fields are mapped, or the reason the preview must fail.
+func checkMarkerMapped(ctx context.Context, client *http.Client, cfg ElasticConfig, index string) string {
+	endpoint := strings.TrimRight(cfg.BaseURL, "/") + "/" + url.PathEscape(index) +
+		"/_mapping/field/" + MarkerField + ",tags?allow_no_indices=false"
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return "could not build mapping request: " + err.Error()
+	}
+	switch {
+	case cfg.APIKey != "":
+		req.Header.Set("Authorization", "ApiKey "+cfg.APIKey)
+	case cfg.Username != "":
+		req.SetBasicAuth(cfg.Username, cfg.Password)
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "connector not reachable: " + err.Error()
+	}
+	defer resp.Body.Close()
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if err != nil {
+		return "could not read mapping: " + err.Error()
+	}
+	if reason := statusReason(resp.StatusCode); reason != "" {
+		return reason
+	}
+	var mapping map[string]struct {
+		Mappings map[string]json.RawMessage `json:"mappings"`
+	}
+	if err := json.Unmarshal(raw, &mapping); err != nil {
+		return "mapping response is unreadable: " + err.Error()
+	}
+	for _, idx := range mapping {
+		_, hasRun := idx.Mappings[MarkerField]
+		_, hasTags := idx.Mappings["tags"]
+		if hasRun && hasTags {
+			return ""
+		}
+	}
+	return "refused: the marker fields are not mapped in this index, so nothing can be verified; not reported as empty"
+}
+
+// statusReason maps a non-success HTTP status to the reason a preview reports. It returns "" for 200.
+func statusReason(status int) string {
+	switch status {
+	case http.StatusOK:
+		return ""
+	case http.StatusUnauthorized:
+		return "authentication failed (HTTP 401)"
+	case http.StatusForbidden:
+		return "permission denied reading the index (HTTP 403); cleanup not verified"
+	case http.StatusNotFound:
+		return "index not found (HTTP 404)"
+	}
+	return fmt.Sprintf("unexpected response (HTTP %d)", status)
 }

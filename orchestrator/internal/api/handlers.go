@@ -1,6 +1,7 @@
 package api
 
 import (
+	"github.com/audspect/bas/internal/injectionapproval"
 	"bytes"
 	"context"
 	"crypto/sha256"
@@ -85,6 +86,9 @@ func isUniqueViolation(err error) bool {
 
 // Handler holds shared dependencies for all API handlers.
 type Handler struct {
+	// approvalClass is the deployment class for pipeline approvals, set once from startup
+	// configuration. Empty means customer.
+	approvalClass injectionapproval.Classification
 	// cloudProber builds the read-only probe executor for one provider account.
 	// nil in production (built from server configuration); tests override it.
 	cloudProber func(ctx context.Context, provider, accountID string) (cloudgraph.Prober, error)

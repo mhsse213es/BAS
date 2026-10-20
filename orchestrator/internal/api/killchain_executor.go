@@ -96,7 +96,7 @@ type stageDispatcher interface {
 
 // Start checks the scenario through the executable gate, then dispatches it.
 func (x EngineStageExecutor) Start(ctx context.Context, campaignID string, st killchain.StageDef) (string, error) {
-	if st.Pipeline != nil {
+	if st.Pipeline != nil || st.Inject != nil {
 		if x.Pipelines == nil {
 			return "", fmt.Errorf("stage %s: %w", st.Key, killchain.ErrNoExecutor)
 		}

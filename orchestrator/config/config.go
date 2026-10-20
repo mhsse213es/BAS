@@ -7,6 +7,8 @@ import (
 	"os"
 	"strconv"
 	"strings"
+
+	"github.com/audspect/bas/internal/injectionapproval"
 )
 
 // minJWTSecretBytes is the floor HS256 needs for meaningful forgery
@@ -105,8 +107,8 @@ type Config struct {
 	ThreatIntelRegions   []string `json:"threat_intel_regions,omitempty"`    // e.g. ["Asia","India"]
 
 	// TCF Phase 6: validation lab (empty agent ID disables it entirely)
-	ValidationLabAgentID    string `json:"validation_lab_agent_id,omitempty"`
-	ValidationLabPollMinutes int   `json:"validation_lab_poll_minutes,omitempty"` // default 5
+	ValidationLabAgentID     string `json:"validation_lab_agent_id,omitempty"`
+	ValidationLabPollMinutes int    `json:"validation_lab_poll_minutes,omitempty"` // default 5
 
 	// Air-gapped threat-intel: dir holding a signed ti-bundle.json (bundle floor;
 	// live MISP/OpenCTI above overlay on top when configured).
@@ -185,6 +187,11 @@ type Config struct {
 	// Reversible: setting it back to true (or unsetting it) and restarting
 	// re-enables the listener.
 	LegacyListenerEnabled bool `json:"legacy_listener_enabled,omitempty"`
+
+	// DeploymentClass (BAS_DEPLOYMENT_CLASS) is read only from the environment at startup. It is
+	// not a JSON field, so no config file can set it. Only the exact value "lab" is lab; anything
+	// else, including unset, is customer.
+	DeploymentClass string `json:"-"`
 
 	// CSPMode (BAS_CSP_MODE) selects how the dashboard Content-Security-Policy
 	// is sent (G1d): "enforce" (default) or "report-only" -- the escape hatch
@@ -418,6 +425,7 @@ func Load(path string) (*Config, error) {
 	if v := os.Getenv("BAS_SERVER_SANS"); v != "" {
 		cfg.ServerSANs = v
 	}
+	cfg.DeploymentClass = parseDeploymentClass(os.Getenv("BAS_DEPLOYMENT_CLASS"))
 	if v := os.Getenv("BAS_LEGACY_LISTENER_ENABLED"); v != "" {
 		if b, err := strconv.ParseBool(v); err == nil {
 			cfg.LegacyListenerEnabled = b
@@ -519,4 +527,18 @@ func Load(path string) (*Config, error) {
 	}
 
 	return cfg, nil
+}
+
+// parseDeploymentClass returns "lab" only for the exact value "lab" (after trimming space).
+// Everything else, including unset and misspelled values, is "customer".
+func parseDeploymentClass(v string) string {
+	if strings.TrimSpace(v) == "lab" {
+		return "lab"
+	}
+	return "customer"
+}
+
+// Classification returns the deployment class used by pipeline approvals.
+func (c *Config) Classification() injectionapproval.Classification {
+	return injectionapproval.ParseClassification(c.DeploymentClass)
 }

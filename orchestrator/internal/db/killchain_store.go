@@ -78,6 +78,7 @@ func EnsureKillChainSchema(ctx context.Context, pool *pgxpool.Pool) error {
 			consumed_by  text        NOT NULL DEFAULT '',
 			created_at   timestamptz NOT NULL DEFAULT NOW()
 		);
+		ALTER TABLE pipeline_approvals ADD COLUMN IF NOT EXISTS refused_at timestamptz;
 		CREATE TABLE IF NOT EXISTS pipeline_approval_events (
 			id          bigserial   PRIMARY KEY,
 			approval_id text        NOT NULL,
