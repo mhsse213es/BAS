@@ -31,6 +31,7 @@ func EnsureKillChainSchema(ctx context.Context, pool *pgxpool.Pool) error {
 			created_by  text        NOT NULL DEFAULT '',
 			created_at  timestamptz NOT NULL DEFAULT NOW()
 		);
+		ALTER TABLE killchain_campaigns ADD COLUMN IF NOT EXISTS agent_id text NOT NULL DEFAULT '';
 		CREATE TABLE IF NOT EXISTS killchain_stages (
 			campaign_id  text        NOT NULL REFERENCES killchain_campaigns(id),
 			stage_key    text        NOT NULL,
@@ -56,7 +57,7 @@ type KillChainStore struct {
 
 // CreateCampaign stores a validated definition and one pending row per stage.
 // The definition must already pass Validate.
-func (s KillChainStore) CreateCampaign(ctx context.Context, def killchain.CampaignDef, createdBy string) error {
+func (s KillChainStore) CreateCampaign(ctx context.Context, def killchain.CampaignDef, createdBy, agentID string) error {
 	raw, err := json.Marshal(def)
 	if err != nil {
 		return fmt.Errorf("marshal campaign: %w", err)
@@ -66,8 +67,8 @@ func (s KillChainStore) CreateCampaign(ctx context.Context, def killchain.Campai
 		return err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-	if _, err := tx.Exec(ctx, `INSERT INTO killchain_campaigns (id, name, version, definition, created_by)
-		VALUES ($1, $2, $3, $4, $5)`, def.ID, def.Name, def.Version, raw, createdBy); err != nil {
+	if _, err := tx.Exec(ctx, `INSERT INTO killchain_campaigns (id, name, version, definition, created_by, agent_id)
+		VALUES ($1, $2, $3, $4, $5, $6)`, def.ID, def.Name, def.Version, raw, createdBy, agentID); err != nil {
 		return fmt.Errorf("insert campaign: %w", err)
 	}
 	for _, st := range def.Stages {
@@ -82,7 +83,8 @@ func (s KillChainStore) CreateCampaign(ctx context.Context, def killchain.Campai
 // Campaign loads a campaign's definition and every stage record.
 func (s KillChainStore) Campaign(ctx context.Context, id string) (killchain.CampaignRecord, error) {
 	var raw []byte
-	err := s.Pool.QueryRow(ctx, `SELECT definition FROM killchain_campaigns WHERE id = $1`, id).Scan(&raw)
+	var agentID string
+	err := s.Pool.QueryRow(ctx, `SELECT definition, agent_id FROM killchain_campaigns WHERE id = $1`, id).Scan(&raw, &agentID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return killchain.CampaignRecord{}, ErrKillChainNotFound
 	}
@@ -131,7 +133,7 @@ func (s KillChainStore) Campaign(ctx context.Context, id string) (killchain.Camp
 	if err := rows.Err(); err != nil {
 		return killchain.CampaignRecord{}, err
 	}
-	return killchain.CampaignRecord{ID: id, Def: def, Stages: stages}, nil
+	return killchain.CampaignRecord{ID: id, Def: def, AgentID: agentID, Stages: stages}, nil
 }
 
 // PutStage writes one stage record in full. It is idempotent for the same record.

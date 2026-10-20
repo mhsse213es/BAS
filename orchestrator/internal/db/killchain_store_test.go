@@ -35,12 +35,15 @@ func TestKillChainStore_CreateAndLoadRoundTrip(t *testing.T) {
 		ctx := context.Background()
 		s := db.KillChainStore{Pool: pool}
 		def := killChainDef("kc-roundtrip")
-		if err := s.CreateCampaign(ctx, def, "user-1"); err != nil {
+		if err := s.CreateCampaign(ctx, def, "user-1", "agent-7"); err != nil {
 			t.Fatal(err)
 		}
 		rec, err := s.Campaign(ctx, "kc-roundtrip")
 		if err != nil {
 			t.Fatal(err)
+		}
+		if rec.AgentID != "agent-7" {
+			t.Fatalf("agent binding did not round-trip: %q", rec.AgentID)
 		}
 		if !reflect.DeepEqual(rec.Def, def) {
 			t.Fatalf("definition changed in storage:\n got %+v\nwant %+v", rec.Def, def)
@@ -57,7 +60,7 @@ func TestKillChainStore_StageEvidenceRoundTrip(t *testing.T) {
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
 		ctx := context.Background()
 		s := db.KillChainStore{Pool: pool}
-		if err := s.CreateCampaign(ctx, killChainDef("kc-evidence"), ""); err != nil {
+		if err := s.CreateCampaign(ctx, killChainDef("kc-evidence"), "", ""); err != nil {
 			t.Fatal(err)
 		}
 		ev := killchain.StageEvidence{
@@ -100,10 +103,10 @@ func TestKillChainStore_DuplicateCampaignIsRefused(t *testing.T) {
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
 		ctx := context.Background()
 		s := db.KillChainStore{Pool: pool}
-		if err := s.CreateCampaign(ctx, killChainDef("kc-dup"), ""); err != nil {
+		if err := s.CreateCampaign(ctx, killChainDef("kc-dup"), "", ""); err != nil {
 			t.Fatal(err)
 		}
-		if err := s.CreateCampaign(ctx, killChainDef("kc-dup"), ""); err == nil {
+		if err := s.CreateCampaign(ctx, killChainDef("kc-dup"), "", ""); err == nil {
 			t.Fatalf("a second campaign with the same id must be refused")
 		}
 	})

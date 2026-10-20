@@ -24,9 +24,10 @@ type StageRecord struct {
 
 // CampaignRecord is a stored campaign: its definition and every stage record.
 type CampaignRecord struct {
-	ID     string
-	Def    CampaignDef
-	Stages map[string]StageRecord
+	ID      string
+	Def     CampaignDef
+	AgentID string // the agent a campaign runs on; empty means no binding
+	Stages  map[string]StageRecord
 }
 
 // Store persists campaign state. Implementations must make PutStage durable

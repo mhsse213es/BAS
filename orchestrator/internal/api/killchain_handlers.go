@@ -31,10 +31,13 @@ func (h *Handler) CreateKillChainCampaign(w http.ResponseWriter, r *http.Request
 		return
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
-	var def killchain.CampaignDef
+	var req struct {
+		killchain.CampaignDef
+		AgentID string `json:"agentId,omitempty"`
+	}
 	dec := json.NewDecoder(r.Body)
 	dec.DisallowUnknownFields()
-	if err := dec.Decode(&def); err != nil {
+	if err := dec.Decode(&req); err != nil {
 		jsonError(w, "invalid JSON body: "+err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -42,6 +45,7 @@ func (h *Handler) CreateKillChainCampaign(w http.ResponseWriter, r *http.Request
 		jsonError(w, "invalid JSON body: unexpected data after the object", http.StatusBadRequest)
 		return
 	}
+	def := req.CampaignDef
 	order, err := def.Validate()
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusBadRequest)
@@ -51,7 +55,7 @@ func (h *Handler) CreateKillChainCampaign(w http.ResponseWriter, r *http.Request
 	if c, ok := auth.ClaimsFrom(r.Context()); ok && c != nil {
 		createdBy = c.UserID
 	}
-	if err := store.CreateCampaign(r.Context(), def, createdBy); err != nil {
+	if err := store.CreateCampaign(r.Context(), def, createdBy, req.AgentID); err != nil {
 		jsonError(w, "could not store campaign: "+err.Error(), http.StatusConflict)
 		return
 	}
@@ -103,7 +107,12 @@ func (h *Handler) AdvanceKillChainCampaign(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	id := chi.URLParam(r, "id")
-	exec := EngineStageExecutor{}
+	bound, err := store.Campaign(r.Context(), id)
+	if err != nil {
+		writeKillChainError(w, err)
+		return
+	}
+	exec := EngineStageExecutor{AgentID: bound.AgentID, Runs: poolRunReader{pool: h.db}}
 	if h.engine != nil {
 		exec.Resolver = h.engine
 	}
