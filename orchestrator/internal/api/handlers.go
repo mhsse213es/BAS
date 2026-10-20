@@ -2562,51 +2562,17 @@ func (h *Handler) RunScenario(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "invalid mode — use posture | telemetry | lab", http.StatusBadRequest)
 		return
 	}
-	live := mode == "telemetry" || mode == "lab"
 
-	if live && !sc.Executable {
-		jsonError(w, "scenario does not support live execution — run it in posture mode", http.StatusBadRequest)
-		return
-	}
-	if live && !req.ConfirmLive {
-		jsonError(w, "live execution requires explicit acknowledgement (confirmLive=true) — it runs real techniques", http.StatusBadRequest)
-		return
-	}
-	if mode == "lab" && !req.ConfirmLab {
-		jsonError(w, "lab mode is a second approval gate (confirmLab=true) — it allows full-fidelity emulation and must target an isolated AD range only", http.StatusBadRequest)
-		return
-	}
-	// OS compatibility guardrail — live mode hard-blocks on mismatch.
-	var osWarning string
-	if len(sc.SupportedOS) > 0 && agentOS != "" {
-		supported := false
-		for _, o := range sc.SupportedOS {
-			if strings.EqualFold(o, agentOS) {
-				supported = true
-				break
-			}
-		}
-		if !supported {
-			if live {
-				jsonError(w, fmt.Sprintf("OS mismatch: scenario '%s' supports %v but agent OS is %s — run this scenario against a matching endpoint",
-					sc.Name, sc.SupportedOS, agentOS), http.StatusBadRequest)
-				return
-			}
-			osWarning = fmt.Sprintf("scenario targets %v but agent OS is %s — posture checks will return 'not applicable'", sc.SupportedOS, agentOS)
-		}
-	}
-
-	// Execution-window guardrail (server-enforced) applies to live runs only.
-	if live && sc.LivePolicy != nil && sc.LivePolicy.ExecutionWindow != "" {
-		ok, werr := withinWindow(sc.LivePolicy.ExecutionWindow, time.Now())
-		if werr != nil {
-			jsonError(w, "invalid execution_window in scenario policy: "+werr.Error(), http.StatusInternalServerError)
+	// Request-level guardrails are shared with the campaign stage path (checkLiveGates).
+	osWarning, gerr := checkLiveGates(sc, mode, req.ConfirmLive, req.ConfirmLab, agentOS, time.Now())
+	if gerr != nil {
+		var ge *liveGateError
+		if errors.As(gerr, &ge) {
+			jsonError(w, ge.Msg, ge.Status)
 			return
 		}
-		if !ok {
-			jsonError(w, "outside the approved execution window ("+sc.LivePolicy.ExecutionWindow+") for live execution", http.StatusBadRequest)
-			return
-		}
+		jsonError(w, gerr.Error(), http.StatusInternalServerError)
+		return
 	}
 
 	// The per-agent dispatch core (concurrency guard, run-row insert, step build,

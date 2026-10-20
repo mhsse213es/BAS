@@ -164,3 +164,22 @@ today, so the gap in shared gate checks is latent. Decisions open:
 3. Separation of duties for lab approval: yes or no.
 4. One advance-time approval for all live stages, or one per stage.
 Verification of any live stage needs staging.
+
+### Update: shared live gate and flag (built, flag off)
+
+Built:
+- `checkLiveGates` (`orchestrator/internal/api/livegates.go`) is the single
+  home for the request-level live gates. `RunScenario` calls it, with the same
+  status codes and messages. Tests cover each refusal, the posture warning, and
+  the window boundaries.
+- `KILLCHAIN_LIVE_STAGES_ENABLED` is off by default. The server logs its state at
+  startup. With the flag off, a live campaign stage is refused with the flag
+  named. With it on, a live stage is still refused, because campaign approval is
+  not built yet. The flag therefore has no effect on what runs until approval is built.
+
+Not built: campaign stage modes in the signed definition, the advance-time
+approval and its audit event, the per-stage gate call in `Start`, and the
+separation-of-duties decision.
+
+Note: `TestRBACMatrix_NoDrift` still fails on cloud routes staged by another
+session. This work does not touch them.

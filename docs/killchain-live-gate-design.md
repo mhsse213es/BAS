@@ -1,6 +1,6 @@
 # Kill chain live and lab gate: design
 
-Status: proposed. Nothing here is built or enabled. Verification needs staging,
+Status: steps 1 and 5 built (refactor, flag off). Steps 2 to 4 and 6 are not built. Nothing live is enabled. Verification needs staging,
 which is not available. Live and lab claims are not made.
 
 ## Problem

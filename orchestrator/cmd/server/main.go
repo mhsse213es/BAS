@@ -987,6 +987,7 @@ func main() {
 		}()
 		// Settles phishing dispatches whose EmailGW run finished while nobody was reading
 		// them. A dispatch that is never read would otherwise stay running.
+		log.Printf("[killchain] live campaign stages enabled=%v (KILLCHAIN_LIVE_STAGES_ENABLED)", api.LiveCampaignStagesEnabled())
 		// Resolves kill-chain stages dispatched before the last shutdown. It only
 		// collects finished runs and marks the rest interrupted. It never starts one.
 		if err := api.RecoverKillChainCampaigns(context.Background(), pool, engine); err != nil {
