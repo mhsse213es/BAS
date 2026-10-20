@@ -798,3 +798,63 @@ Vulnerable: 28 of 28 FAIL, exploited. Fixed: 28 of 28 PASS, not exploited. Detec
 - ABUSE-004, ABUSE-006 to ABUSE-010 and the protocol adapters: not implemented. See `docs/api-bas-coverage.md`.
 - Timing: calibration covers the baseline only. The threshold is frozen for the measured machine and will report ERROR elsewhere until recalibrated.
 - Orchestrator scheduling and persistence, the production secret store, and the Windows build (`build.ps1`) on these tranches.
+
+
+## Phase 18 tranche — ABUSE-002 hardware-robust grading and reproducible calibration
+
+Branch: `feature/api-bas-phase18` (from `main`). Scenario count stays at twenty-eight.
+
+### Grading order (latency.Assess)
+
+1. Sample sufficiency: fewer than the declared trials per round is INCONCLUSIVE (`INSUFFICIENT_SAMPLES`).
+2. Baseline band: each round's baseline median must lie in `[baseline_ms/tolerance, baseline_ms*tolerance]`. Outside it is ERROR (`ENVIRONMENT_MISMATCH`).
+3. Attack measurement band: each round's attack median and p95 must be at or below `attack_max_ms`. Above it is ERROR (`ATTACK_MEASUREMENT_INVALID`).
+4. Variance: a round is noisy only when its CV exceeds `max_cv` **and** its spread exceeds `noise_floor_ms`. Noise is INCONCLUSIVE (`EXCESSIVE_VARIANCE`).
+5. Effect size and consistency: a crossing round must reach `min_ratio` (`BELOW_EFFECT_SIZE`), and all rounds must agree (`INCONSISTENT_ACROSS_ROUNDS`).
+6. Decision: all rounds at or above the ceiling is FAIL. All rounds below it is PASS.
+
+INCONCLUSIVE is reported as SKIPPED with inconclusive exploitability. It is never a pass.
+
+### Never a security PASS on a failed validity check
+
+- The calibration check runs before any traffic. A missing record or a declared value that differs from the record is ERROR (`CALIBRATION_MISSING` / `CALIBRATION_MISMATCH`).
+- The old code skipped the baseline check when the control refused the attack. That path is gone. Refusal now goes through the same grading.
+- `timingOutcome` is the only place a timing PASS is produced. ERROR is never overridden. A work-unit breach is a FAIL, unless the timing verdict is ERROR.
+- `timing_test.go` checks that no non-PASS verdict can become PASS.
+
+### Versioned calibration records
+
+- `internal/apibas/calibration/records/API-BAS-ABUSE-002.v<N>.json`, embedded in the binary.
+- Each record stores the operator's machine label, GOOS/GOARCH, CPU count, Go version, workload, sample count, measured baseline median/p95/CV, and every threshold the grade depends on.
+- Records are write-once. `calibration.Write` uses an exclusive create and requires the next version and a `supersedes` link. v1 is kept on disk.
+- Recalibration is explicit: `apibas-runner -calibrate -scenario API-BAS-ABUSE-002 -machine <label>`. It writes a record and prints the catalog values to change. It runs no scenario and widens nothing.
+- The catalog's declared values must match the record exactly. Changing a threshold without a new record fails closed.
+
+### Decision for review: absolute noise floor
+
+- The first v1 run showed the fixed build as INCONCLUSIVE (`EXCESSIVE_VARIANCE`). The fixed build answers in sub-millisecond time, so its CV reflects Windows timer quantization, not real spread.
+- Fix: a CV breach only counts above a declared 1 ms absolute spread. The ceiling is not changed. Noisy vulnerable measurements are still INCONCLUSIVE.
+- Recorded in v2 with `noise_floor_ms: 1`. v1 is retained.
+- This is a judgment call. If the reviewer rejects it, the fixed build reports INCONCLUSIVE, and the scenario's negative test fails rather than passing.
+
+### Calibration measurements (this machine)
+
+- v1 measured baseline median 0.1448 ms, p95 0.1984 ms, CV 0.149, 30 samples.
+- v2 declares baseline 0.14 ms with tolerance 4x, ceiling 250 ms, min ratio 5, max CV 0.5, attack band 5000 ms, noise floor 1 ms.
+- Vulnerable build: `decision:FAIL`. Fixed build: `decision:PASS`.
+
+### Tests
+
+- `latency/assess_test.go`: deterministic, no network. Covers baseline drift (whole set and one round), attack drift (median and p95), noisy attack and baseline, insufficient samples (per-round and no rounds), boundaries (ceiling, attack band, baseline band), effect size, mixed rounds, timer-jitter below the floor, vulnerable and fixed variants, a never-PASS-on-invalid table, and determinism.
+- `calibration/calibration_test.go`: first version, supersession, refusal of wrong versions, machine label required, exclusive write, missing record.
+- `runner/timing_test.go`: the outcome mapping invariant, and calibration gate against the shipped record (accept, drifted threshold, unknown version).
+
+### Smoke run
+
+Vulnerable 28 of 28 FAIL, exploited. Fixed 28 of 28 PASS, not exploited. Detection unchanged. Token check: zero.
+
+### Still open
+
+- Calibration measures the baseline only. The attack-side ceiling is not proven on other hardware.
+- A calibration is valid only for the machine it was measured on. Other machines fail closed until they run `-calibrate` and the reviewer updates the catalog.
+- The noise floor is fixture-specific, as the spec asks.

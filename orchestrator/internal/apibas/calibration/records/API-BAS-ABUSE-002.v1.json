@@ -1,0 +1,30 @@
+{
+  "scenario_id": "API-BAS-ABUSE-002",
+  "version": 1,
+  "supersedes": 0,
+  "profile": {
+    "machine": "lab-i5-8250u-win10-go1.26.8",
+    "goos": "windows",
+    "goarch": "amd64",
+    "num_cpu": 8,
+    "go_version": "go1.26.8"
+  },
+  "workload": "API-BAS-ABUSE-002: baseline request, 50-request batch per trial, 3 warm-up trials per round",
+  "sample_count": 30,
+  "measured": {
+    "baseline_median_ms": 0.144758,
+    "baseline_p95_ms": 0.19837,
+    "baseline_cv": 0.14853971350145231
+  },
+  "thresholds": {
+    "declared_baseline_ms": 0.14,
+    "tolerance": 4,
+    "ceiling_ms": 250,
+    "min_ratio": 5,
+    "max_cv": 0.5,
+    "attack_max_ms": 5000,
+    "warmup": 3,
+    "trials": 10,
+    "rounds": 3
+  }
+}

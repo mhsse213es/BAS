@@ -21,12 +21,15 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
+	"runtime"
 	"slices"
 	"strings"
 	"time"
 
 	"encoding/json"
+	"github.com/audspect/bas/internal/apibas/calibration"
 	"github.com/audspect/bas/internal/apibas/contract"
 	"github.com/audspect/bas/internal/apibas/fixture"
 	"github.com/audspect/bas/internal/apibas/grade"
@@ -481,16 +484,18 @@ func (r *Runner) runAttack(ctx context.Context, rep *Report, step contract.Step,
 // baseline sample is the mean of a batch.
 const latencyBaselineBatch = 50
 
-// runLatency runs a timing scenario. Each round sends warm-up requests, then paired
-// baseline and attack samples. Resource limits are checked on every attack response
-// and decide the outcome when they fail; the timing verdict is recorded either way.
-// A majority of denied attack responses means the control refused the work, so the
-// timing comparison does not apply.
+// runLatency runs a timing scenario. The calibration record is checked before any
+// traffic is sent. Each round sends warm-up requests, then paired baseline and attack
+// samples. Grading is latency.Assess, and the resource limit is applied by timingOutcome.
 func (r *Runner) runLatency(ctx context.Context, rep Report, s contract.Scenario, obj fixture.Object, ownerToken, attackToken string) Report {
+	if reason, detail := calibrationCheck(s); reason != "" {
+		rep.TimingVerdict = "ERROR/" + reason
+		return r.errorOut(rep, reason, detail)
+	}
 	baseline, attack := s.Steps[0], s.Steps[len(s.Steps)-1]
 	pol := s.Latency
 	var rounds []latency.Round
-	total, denied, faults, resource := 0, 0, 0, 0
+	total, faults, resource := 0, 0, 0
 	for round := 0; round < pol.Rounds; round++ {
 		for i := 0; i < pol.Warmup; i++ {
 			if _, transport := r.do(ctx, attack, attackToken, obj, &obj); transport {
@@ -513,9 +518,6 @@ func (r *Runner) runLatency(ctx context.Context, rep Report, s contract.Scenario
 				return r.errorOut(rep, grade.ReasonTargetUnreachable, "attack request failed")
 			}
 			total++
-			if slices.Contains(s.DeniedStatuses, aex.Status) {
-				denied++
-			}
 			if aex.Status >= 500 {
 				faults++
 			}
@@ -525,43 +527,142 @@ func (r *Runner) runLatency(ctx context.Context, rep Report, s contract.Scenario
 		}
 		rounds = append(rounds, rd)
 	}
-	rep.Latency = nil
-	for _, rd := range rounds {
-		rep.Latency = append(rep.Latency, latency.Summarize(rd))
-	}
 	if faults > 0 {
 		return r.errorOut(rep, grade.ReasonTargetFault, "attack returned a server fault")
 	}
 
-	refused := denied*2 > total
-	var timing grade.Outcome
-	if refused {
-		rep.TimingVerdict = "not_applicable: control refused the work"
-	} else {
-		if s.Calibration != nil && !latency.CalibrationOK(rounds, s.Calibration.BaselineMs, s.Calibration.Tolerance) {
-			rep.TimingVerdict = "ERROR/" + grade.ReasonEnvironmentMismatch
-			return r.errorOut(rep, grade.ReasonEnvironmentMismatch, "measured baseline is outside the declared calibration; the frozen threshold does not apply here")
-		}
-		ceiling := time.Duration(pol.CeilingMs) * time.Millisecond
-		var sums []latency.Summary
-		timing, sums = latency.Grade(rounds, ceiling, pol.MinRatio, pol.MaxCV)
-		rep.Latency = sums
-		if timing.Result == grade.ERROR {
-			rep.TimingVerdict = fmt.Sprintf("ERROR/%s", timing.Reason)
-		} else {
-			rep.TimingVerdict = fmt.Sprintf("%s/%s", timing.Result, timing.Exploitability)
-		}
-	}
-
-	switch {
-	case resource > 0:
-		rep.Outcome = grade.Outcome{Result: grade.FAIL, Exploitability: grade.Exploited, Control: grade.Failed, Detection: "not_evaluated", Confidence: grade.ConfidenceEvidenceBacked}
-	case refused:
-		rep.Outcome = grade.Outcome{Result: grade.PASS, Exploitability: grade.NotExploited, Control: grade.Enforced, Detection: "not_evaluated", Confidence: grade.ConfidenceEvidenceBacked}
-	default:
-		rep.Outcome = timing
-	}
+	verdict := latency.Assess(rounds, timingPolicy(s))
+	rep.Latency = verdict.Rounds
+	rep.TimingVerdict = fmt.Sprintf("%s:%s/%s", verdict.Stage, verdict.Outcome.Result, verdict.Outcome.Reason)
+	rep.Outcome = timingOutcome(verdict.Outcome, resource > 0)
 	return rep
+}
+
+// timingPolicy builds the grading policy from the scenario's declared values.
+func timingPolicy(s contract.Scenario) latency.Policy {
+	return latency.Policy{
+		CeilingMs:    float64(s.Latency.CeilingMs),
+		MinRatio:     s.Latency.MinRatio,
+		MaxCV:        s.Latency.MaxCV,
+		MinSamples:   s.Latency.Trials,
+		BaselineMs:   s.Calibration.BaselineMs,
+		Tolerance:    s.Calibration.Tolerance,
+		AttackMaxMs:  s.Calibration.AttackMaxMs,
+		NoiseFloorMs: s.Calibration.NoiseFloorMs,
+	}
+}
+
+// calibrationCheck returns a reason when the scenario may not be graded under its
+// declared calibration: no record for the version, or declared values that differ from
+// the record. Both are ERROR. Nothing widens a threshold to make a check pass.
+func calibrationCheck(s contract.Scenario) (string, string) {
+	if s.Calibration == nil {
+		return grade.ReasonCalibrationMissing, "a timing scenario declares no calibration"
+	}
+	rec, err := calibration.Get(s.ID, s.Calibration.Version)
+	if err != nil {
+		return grade.ReasonCalibrationMissing, err.Error()
+	}
+	declared := calibration.Thresholds{
+		DeclaredBaselineMs: s.Calibration.BaselineMs,
+		Tolerance:          s.Calibration.Tolerance,
+		CeilingMs:          float64(s.Latency.CeilingMs),
+		MinRatio:           s.Latency.MinRatio,
+		MaxCV:              s.Latency.MaxCV,
+		AttackMaxMs:        s.Calibration.AttackMaxMs,
+		NoiseFloorMs:       s.Calibration.NoiseFloorMs,
+		Warmup:             s.Latency.Warmup,
+		Trials:             s.Latency.Trials,
+		Rounds:             s.Latency.Rounds,
+	}
+	if rec.Thresholds != declared {
+		return grade.ReasonCalibrationMismatch, fmt.Sprintf("declared values differ from calibration version %d", rec.Version)
+	}
+	return "", ""
+}
+
+// timingOutcome maps a graded timing verdict and the resource check to the scenario
+// outcome. A security PASS is reachable only from a PASS verdict with no resource
+// breach. A work-unit breach is a deterministic fact counted by the lab, so it is a
+// FAIL whenever the timing verdict is not ERROR. An ERROR is never overridden.
+func timingOutcome(v grade.Outcome, resourceBreach bool) grade.Outcome {
+	if v.Result == grade.ERROR {
+		return v
+	}
+	if resourceBreach {
+		return grade.Outcome{Result: grade.FAIL, Exploitability: grade.Exploited, Control: grade.Failed, Detection: "not_evaluated", Confidence: grade.ConfidenceEvidenceBacked}
+	}
+	return v
+}
+
+// Calibrate measures the baseline of a timing scenario and returns the next calibration
+// record. It writes nothing. The caller stores the record with calibration.Write and
+// updates the scenario's version and baseline to match, so a calibration is always an
+// explicit, reviewable act.
+func (r *Runner) Calibrate(ctx context.Context, s contract.Scenario, machine, dir string) (calibration.Record, error) {
+	if s.Latency == nil || s.Calibration == nil {
+		return calibration.Record{}, fmt.Errorf("%s is not a timing scenario with a calibration block", s.ID)
+	}
+	if s.Preconditions.Fixture != r.cfg.Fixture.Name {
+		return calibration.Record{}, fmt.Errorf("scenario fixture %s is not loaded", s.Preconditions.Fixture)
+	}
+	obj, ok := r.cfg.Fixture.Object(s.Preconditions.Object)
+	if !ok {
+		return calibration.Record{}, fmt.Errorf("object %s not in fixture", s.Preconditions.Object)
+	}
+	baseline := s.Steps[0]
+	owner, ok := r.cfg.Fixture.Identity(baseline.Identity)
+	if !ok || owner.CustomerID != obj.OwnerID {
+		return calibration.Record{}, fmt.Errorf("baseline identity is not the object owner")
+	}
+	ownerToken, err := r.cfg.Secrets.Resolve(owner.TokenRef)
+	if err != nil {
+		return calibration.Record{}, fmt.Errorf("owner credential unavailable")
+	}
+	pol := s.Latency
+	var rounds []latency.Round
+	for round := 0; round < pol.Rounds; round++ {
+		var rd latency.Round
+		for i := 0; i < pol.Warmup+pol.Trials; i++ {
+			start := time.Now()
+			for k := 0; k < latencyBaselineBatch; k++ {
+				if _, transport := r.do(ctx, baseline, ownerToken, obj, &obj); transport {
+					return calibration.Record{}, fmt.Errorf("baseline request failed during calibration")
+				}
+			}
+			d := time.Since(start) / latencyBaselineBatch
+			if i >= pol.Warmup {
+				rd.Baseline = append(rd.Baseline, d)
+			}
+		}
+		rounds = append(rounds, rd)
+	}
+	medianMs, p95Ms, cv := latency.Pooled(rounds)
+	version, err := calibration.NextVersion(dir, s.ID)
+	if err != nil {
+		return calibration.Record{}, err
+	}
+	return calibration.Record{
+		ScenarioID:  s.ID,
+		Version:     version,
+		Supersedes:  version - 1,
+		Profile:     calibration.Profile{Machine: machine, GOOS: runtime.GOOS, GOARCH: runtime.GOARCH, NumCPU: runtime.NumCPU(), GoVersion: runtime.Version()},
+		Workload:    fmt.Sprintf("%s: baseline request, %d-request batch per trial, %d warm-up trials per round", s.ID, latencyBaselineBatch, pol.Warmup),
+		SampleCount: pol.Rounds * pol.Trials,
+		Measured:    calibration.Measured{BaselineMedianMs: medianMs, BaselineP95Ms: p95Ms, BaselineCV: cv},
+		Thresholds: calibration.Thresholds{
+			DeclaredBaselineMs: math.Round(medianMs*100) / 100,
+			Tolerance:          s.Calibration.Tolerance,
+			CeilingMs:          float64(pol.CeilingMs),
+			MinRatio:           pol.MinRatio,
+			MaxCV:              pol.MaxCV,
+			AttackMaxMs:        s.Calibration.AttackMaxMs,
+			NoiseFloorMs:       s.Calibration.NoiseFloorMs,
+			Warmup:             pol.Warmup,
+			Trials:             pol.Trials,
+			Rounds:             pol.Rounds,
+		},
+	}, nil
 }
 
 // forbiddenHeaderHits counts the response headers of an exchange that match a

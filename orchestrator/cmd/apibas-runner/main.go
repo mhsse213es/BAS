@@ -25,6 +25,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/audspect/bas/internal/apibas/calibration"
 	"github.com/audspect/bas/internal/apibas/catalog"
 	"github.com/audspect/bas/internal/apibas/contract"
 	"github.com/audspect/bas/internal/apibas/fixture"
@@ -36,6 +37,9 @@ func main() {
 	scenarioID := flag.String("scenario", "API-BAS-AUTHZ-001", "scenario ID from the catalog")
 	fixtureName := flag.String("fixture", "orders-two-tenant", "fixture the target was seeded with")
 	allow := flag.String("allow", "", "comma-separated extra hosts the runner may reach (lab only)")
+	calibrate := flag.Bool("calibrate", false, "measure the baseline and write a new calibration record; runs no scenario")
+	machine := flag.String("machine", "", "label for the hardware being calibrated (required with -calibrate)")
+	calDir := flag.String("calibration-dir", "internal/apibas/calibration/records", "directory the calibration record is written to")
 	flag.Parse()
 
 	if err := checkTarget(*target, *allow); err != nil {
@@ -72,6 +76,10 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	if *calibrate {
+		runCalibration(r, scen, *machine, *calDir)
+		return
+	}
 	rep, err := r.Run(context.Background(), scen)
 	if err != nil {
 		log.Fatal(err)
@@ -82,6 +90,25 @@ func main() {
 	if err := enc.Encode(rep); err != nil {
 		log.Fatal(err)
 	}
+}
+
+// runCalibration is the explicit recalibration operation. It writes the next record
+// and prints the catalog values to update. It does not change the catalog itself.
+func runCalibration(r *runner.Runner, scen contract.Scenario, machine, dir string) {
+	if machine == "" {
+		log.Fatal("calibrate needs -machine, a label for the hardware this run measures")
+	}
+	rec, err := r.Calibrate(context.Background(), scen, machine, dir)
+	if err != nil {
+		log.Fatal(err)
+	}
+	path, err := calibration.Write(dir, rec)
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Fprintf(os.Stderr, "wrote %s\n", path)
+	fmt.Fprintf(os.Stderr, "set in %s:\n  calibration.version: %d\n  calibration.baseline_ms: %v\n",
+		scen.ID, rec.Version, rec.Thresholds.DeclaredBaselineMs)
 }
 
 // checkTarget refuses any host that is not loopback or explicitly allowed.

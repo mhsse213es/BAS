@@ -364,6 +364,12 @@ func (s Scenario) validateSteps() error {
 			return fmt.Errorf("contract: %s: calibration baseline_ms must be set", s.ID)
 		case s.Calibration.Tolerance <= 1:
 			return fmt.Errorf("contract: %s: calibration tolerance must be greater than 1", s.ID)
+		case s.Calibration.Version < 1:
+			return fmt.Errorf("contract: %s: calibration version must be at least 1", s.ID)
+		case s.Calibration.NoiseFloorMs <= 0:
+			return fmt.Errorf("contract: %s: calibration noise_floor_ms must be positive", s.ID)
+		case s.Calibration.AttackMaxMs <= float64(s.Latency.CeilingMs):
+			return fmt.Errorf("contract: %s: calibration attack_max_ms must exceed the ceiling", s.ID)
 		}
 	}
 	if s.MaxItemsReturned < 0 {
@@ -441,10 +447,13 @@ type DetectionPolicy struct {
 	MinSeverity string `yaml:"min_severity"`
 }
 
-// CalibrationPolicy records the baseline the frozen timing threshold was measured
-// against. A run whose measured baseline falls outside [BaselineMs/Tolerance,
-// BaselineMs*Tolerance] is ERROR, never a timing pass or fail.
+// CalibrationPolicy names the calibration record the timing grade runs under. The
+// record holds the declared baseline, tolerance, ceiling and attack band. A scenario
+// whose declared values differ from its record is ERROR, never graded.
 type CalibrationPolicy struct {
-	BaselineMs float64 `yaml:"baseline_ms"`
-	Tolerance  float64 `yaml:"tolerance"`
+	Version      int     `yaml:"version"`
+	BaselineMs   float64 `yaml:"baseline_ms"`
+	Tolerance    float64 `yaml:"tolerance"`
+	AttackMaxMs  float64 `yaml:"attack_max_ms"`
+	NoiseFloorMs float64 `yaml:"noise_floor_ms"`
 }
