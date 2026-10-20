@@ -129,8 +129,8 @@ func (s KillChainStore) CreateCampaign(ctx context.Context, def killchain.Campai
 // Campaign loads a campaign's definition and every stage record.
 func (s KillChainStore) Campaign(ctx context.Context, id string) (killchain.CampaignRecord, error) {
 	var raw []byte
-	var agentID string
-	err := s.Pool.QueryRow(ctx, `SELECT definition, agent_id FROM killchain_campaigns WHERE id = $1`, id).Scan(&raw, &agentID)
+	var agentID, createdBy string
+	err := s.Pool.QueryRow(ctx, `SELECT definition, agent_id, created_by FROM killchain_campaigns WHERE id = $1`, id).Scan(&raw, &agentID, &createdBy)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return killchain.CampaignRecord{}, ErrKillChainNotFound
 	}
@@ -179,7 +179,7 @@ func (s KillChainStore) Campaign(ctx context.Context, id string) (killchain.Camp
 	if err := rows.Err(); err != nil {
 		return killchain.CampaignRecord{}, err
 	}
-	return killchain.CampaignRecord{ID: id, Def: def, AgentID: agentID, Stages: stages}, nil
+	return killchain.CampaignRecord{ID: id, Def: def, AgentID: agentID, CreatedBy: createdBy, Stages: stages}, nil
 }
 
 // PutStage writes one stage record in full. It is idempotent for the same record.

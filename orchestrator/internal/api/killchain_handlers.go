@@ -161,7 +161,11 @@ func (h *Handler) AdvanceKillChainCampaign(w http.ResponseWriter, r *http.Reques
 		jsonError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	if err := checkCampaignApproval(bound.Def, approval); err != nil {
+	var approver string
+	if c, ok := auth.ClaimsFrom(r.Context()); ok && c != nil {
+		approver = c.UserID
+	}
+	if err := checkCampaignApproval(bound.Def, approval, approver, bound.CreatedBy); err != nil {
 		jsonError(w, err.Error(), http.StatusBadRequest)
 		return
 	}

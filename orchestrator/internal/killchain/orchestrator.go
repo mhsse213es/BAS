@@ -27,7 +27,9 @@ type CampaignRecord struct {
 	ID      string
 	Def     CampaignDef
 	AgentID string // the agent a campaign runs on; empty means no binding
-	Stages  map[string]StageRecord
+	// CreatedBy is the user who created the campaign. Lab approval must come from another user.
+	CreatedBy string
+	Stages    map[string]StageRecord
 }
 
 // Store persists campaign state. Implementations must make PutStage durable

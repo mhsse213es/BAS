@@ -207,3 +207,16 @@ Not built, and recorded as gaps:
 - Separation of duties for lab approval is still undecided. Currently the
   campaign's creator can confirm lab stages.
 - The flag stays off. Turning it on is a decision that waits for staging.
+
+### Update: separation of duties and approval scope (decided, built)
+
+Decided, on the recommendations:
+- Lab stages need an approver who is not the campaign's creator. The creator
+  comes from `killchain_campaigns.created_by` and is loaded with the campaign
+  record. An approver who cannot be identified is refused, because the check
+  cannot run. Telemetry stages are not affected.
+- One advance-time approval covers all live stages, bounded by the signed
+  definition. Each stage still re-checks its own gates at start.
+
+Open, for you to reverse if wanted: whether a single-person lab team should be
+allowed to self-approve. The current rule refuses it.

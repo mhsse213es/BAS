@@ -48,7 +48,7 @@ func readAdvanceApproval(r *http.Request) (advanceApproval, error) {
 // checkCampaignApproval refuses an advance that would run live stages without approval.
 // It only inspects the signed definition, so approval covers exactly the stages the
 // definition declares.
-func checkCampaignApproval(def killchain.CampaignDef, a advanceApproval) error {
+func checkCampaignApproval(def killchain.CampaignDef, a advanceApproval, approver, creator string) error {
 	live, lab := def.LiveAndLabStages()
 	if len(live) == 0 {
 		return nil
@@ -61,6 +61,16 @@ func checkCampaignApproval(def killchain.CampaignDef, a advanceApproval) error {
 	}
 	if len(lab) > 0 && !a.ConfirmLab {
 		return fmt.Errorf("campaign has lab stages %v: confirmLab=true is required", lab)
+	}
+	// Separation of duties: lab stages need an approver who is not the creator. An approver
+	// that cannot be identified is refused, because the check cannot be made.
+	if len(lab) > 0 {
+		if approver == "" {
+			return errors.New("cannot identify the approver for lab stages, so the separation-of-duties check cannot run")
+		}
+		if approver == creator {
+			return errors.New("lab stages must be approved by a different user from the one who created the campaign")
+		}
 	}
 	return nil
 }
