@@ -166,13 +166,81 @@ SCPs, permission boundaries, S3 bucket policies, management-group inheritance, a
 ### R-8 — Credentials never come from a request — RESOLVED `28304ead`, `7ae44b57`
 - AWS uses the SDK default chain, GCP uses Application Default Credentials, Azure reads service-principal variables. Each discoverer proves the credentials resolve to the account the run names before it reads inventory. Error text names a missing variable, never its value.
 
-## Test and build summary
+## Validation record
 
-Commands and what they covered at each commit:
+**Verified at HEAD `8b254bf2`, 2026-10-20.** Re-run to close this record: `bash scripts/cloud-qa.sh all` (Docker required for the `db` group).
 
-- `go test ./internal/cloudgraph/` — **passes** at the final state of this commit. Covers callguard, AWS, GCP, Azure (including preflight and deny), audit sources, scenarios, glob matching, the existing evaluators and reachability.
-- `go test ./internal/db/ -run 'ExecuteCloudPlanRun|ExecuteCloudScenarioRun'` — **passes** against Postgres via Testcontainers (Docker required).
-- `go test ./internal/api/ -run 'Cloud|ValidateCloud|AccountChecked'` — **passes**. This includes the existing cloud-run and campaign handler tests, which still pass after the `discover` change.
-- Full `go build ./...` in the main tree is **not green at the time of writing**. An untracked, in-progress killchain change in another session references symbols that do not exist at HEAD (`killchain_hostevidence.go`, `killchain_executor.go`). None of the failing files are part of this initiative. Cloud packages build and test cleanly.
+| Check | Command | Result |
+|---|---|---|
+| Whole-module build | `cd orchestrator && go build ./...` | exit 0 |
+| Cloud QA, all groups | `bash scripts/cloud-qa.sh all` | `cloudgraph`, `db`, `api` and `probe-api` all **ok**; 255 test results, 0 failures |
+| Probe group | `bash scripts/cloud-qa.sh probe` | `cloudgraph` (probe, probe_aws) and `api` (CloudProbe) **ok** |
+| RBAC matrix | `go test ./internal/api/ -run 'TestRBACMatrix'` | **ok**; new routes `/api/cloud-preflight` and `/api/cloud-probes` covered |
 
-Dependencies added: `aws-sdk-go-v2` (config, iam, sts, s3, cloudtrail, backup), `google.golang.org/api` v0.264.0 (cloud resource manager, iam v1 and v2, storage, logging, transport). `go mod tidy` moved the Google API module from v0.200.0 to v0.264.0 as a side effect; the cloud tests pass on it.
+What the groups cover (see `docs/cloud-qa-test-runbook.md` for the full list of test names):
+- `retry`, `aws`, `gcp`, `azure`, `audit`, `scenario`: discovery, evaluators, enforcement layers, preflight, conditions, denies, event sources, scenario verdicts.
+- `probe`: registry, allow-list, dry-run, target and action validation, AWS prober gates, simulated-decision labelling.
+- `db`: cloud run lifecycle, preflight gate before discovery, unpreflightable sources refused.
+- `api`: discover and scenario validation, credential refusal, preflight account-match and redaction, probe handler (unknown fields, actor check, allow-list, fail-closed audit in both directions, dry-run).
+
+**Not validated by any run above:** live cloud accounts or tenants (O-1 to O-5), a sandbox provider run of the probes (R-19), and the console UI (O-10).
+
+Dependencies: `aws-sdk-go-v2` (config, iam, sts, s3, cloudtrail, backup, organizations), `google.golang.org/api` v0.264.0 (cloud resource manager v1 and v2, iam v1 and v2, storage, logging, transport). `go mod tidy` moved Google API from v0.200.0 to v0.264.0.
+
+## Open items register (consolidated)
+
+Every item here is open, unbuilt, or a documented limit. Nothing is hidden in a closed entry.
+
+| ID | Item | Type | Blocked on |
+|---|---|---|---|
+| O-1 | Azure tenant readiness: subscription activation and Graph admin consent | Open | A person with tenant rights |
+| O-2 | Live AWS discovery | Open | A least-privilege read role in a test account |
+| O-3 | Live GCP discovery | Open | A project with a read-only service account |
+| O-4 | Live audit evidence coverage (CloudTrail data events, Azure blob reads, GCP Data Access logs off by default) | Open | Live accounts with logging configured |
+| O-5 | Live scenario HTTP path | Open | Live credentials and one run per provider |
+| O-8 | Conditions are not evaluated on AWS or GCP | Model limit | A decision to evaluate conditions (not planned) |
+| O-9 | Metrics and tracing; per-tenant quotas; RBAC on which account a server may target; Azure secret policy check | Open | Operational design and a secret-policy decision |
+| O-10 | Console UI | Open | UI build, not started |
+| O-11 | State-changing cloud actions are not executed | Deferred by decision | Approval, rollback, verification and recovery design (R-19) |
+| R-19a | Sandbox provider integration test for read-only probes | Open | A dedicated sandbox account |
+| R-19b | Probes for GCP and Azure are not registered | Open | Decision on which probes to add |
+| R-19c | `CLOUD_PROBE_ALLOWED_ACCOUNTS` is unset, so no probe can run against a real account | Operational | Sandbox test passing first |
+| R-19d | Least-privilege setup of the server's AWS credential chain | Operator task | Operator configuration; code does not enforce it |
+
+## Known limits (consolidated)
+
+These are limits of the current model. Each is documented, not fixed, and each is outside the buildable scope.
+
+- Conditions on AWS identity and bucket policies, and on GCP bindings and deny rules, are reported as conditional with the condition named. They are not evaluated (O-8, R-18).
+- `NotPrincipal`, `NotAction` and `NotResource` allows are counted, not expanded (O-7).
+- Service principals in bucket policies are not modelled (O-7).
+- Azure denies with `doNotApplyToChildScopes` are dropped at a group, by design (R-11).
+- AWS session policies on resource-policy grants to a role session: intersection behaviour not verified (R-14).
+- Probes contact the provider with the server's credential chain. The code does not check that the chain is least-privilege (R-19d).
+
+## Decisions and where they are recorded
+
+| Decision | Made by | Recorded in |
+|---|---|---|
+| Conditional AWS Allow is `ConditionallyReachable`, not a clean grant | Recommendation accepted by the owner ("go ahead") | O-8 |
+| Conditional GCP bindings and deny rules are conditional, not blocked or clean | Owner: "yes, handle conditional denies the same way" | R-18 |
+| Preflight failures block a run; SKIPPED does not | Recommendation accepted | R-17 |
+| `POST /api/cloud-preflight` needs `CanRunScenario` | Matches discovery's existing permission | R-17 |
+| Read-only probes only; server allow-list; no per-step approval for reads; dry-run default; state-changing deferred | Owner, in the R-19 decision note | R-19 |
+| `SimulatePrincipalPolicy` used instead of `SimulateCustomPolicy` | Recommendation: it tests a real principal | R-19 |
+| `StepGate` not reused for probes | Checked against its code: it only tests Blocked/Unknown state | R-19 |
+
+## Commit trail (this build)
+
+Most recent first, all on `origin/main`:
+
+- `8b254bf2` read-only probes, allow-list, dry-run default, fail-closed audit (R-19)
+- `ecdd8b10` corrects a stale R-16 limit now that preflight is wired
+- `1e83ebed` GCP conditional deny rules (R-18, deny side)
+- `d4106cdc` GCP conditional bindings (R-18, binding side)
+- `ac68e2cf` preflight gates runs; `POST /api/cloud-preflight` (R-17)
+- `9f8232e0` AWS and GCP preflight (R-16)
+- `eac473f9` AWS identity-policy conditions (O-8)
+- `0d5a70d2` bucket policy grants: cross-account, public, same-account (R-15)
+- `f46c5b6e` session policies; resource-aware gates (R-14)
+- `b222b80e` S3 bucket policies narrow discovered grants (R-13)
