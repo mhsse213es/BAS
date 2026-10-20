@@ -102,13 +102,15 @@ bash scripts/cloud-qa.sh <group>    # one group
 - `TestSessionPolicy_AllowingActionKeepsGrant`
 - `TestSessionPolicy_LimitsGrantToItsActions`
 
-### `gcp`  (16 tests)
+### `gcp`  (18 tests)
 
 - `TestGCPAncestors_FolderGrantReachesProjectWithProvenance`
 - `TestGCPAncestors_OrganizationDenyBlocksFolderGrant`
 - `TestGCPAncestors_UnrecognizedAncestorTypeFailsClosed`
 - `TestGCPConditionalBinding_ProducesConditionalEdge`
 - `TestGCPConditionalBinding_UnconditionalGrantStaysClean`
+- `TestGCPConditionalDeny_IsConditionalNotBlocked`
+- `TestGCPConditionalDeny_StacksWithConditionalBinding`
 - `TestGCPDenyPermissionNormalised`
 - `TestGCPDenyPrincipalMapping`
 - `TestGCPDiscover_BindingsBecomeEvaluableEdges`

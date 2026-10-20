@@ -27,6 +27,7 @@ type GCPDiscoveryStats struct {
 	ConditionalBindings    int // IAM Conditions; emitted as conditional edges, the condition is not evaluated
 	UnmappedMembers        int // allUsers, allAuthenticatedUsers, domain:, deleted principals; no single identity
 	UnmappedDenyPrincipals int // deny principals whose form is not recognised
+	ConditionalDenyRules   int // deny rules with a condition; emitted as conditional, the condition is not evaluated
 	DenyRules              int // deny rules read from project-level deny policies
 }
 
@@ -347,10 +348,16 @@ func (c *GCPDiscoveryClient) Discover(ctx context.Context) (*DiscoveredGraph, *G
 					if sc.inheritedFrom != "" {
 						attrs["inherited_from"] = sc.inheritedFrom
 					}
-					if deniedActions := denies.actionsFor(canonical); len(deniedActions) > 0 {
+					unconditionalDenies, conditionalDenies := denies.actionsFor(canonical)
+					if len(unconditionalDenies) > 0 {
 						attrs["deny_policy"] = "true"
 						attrs["deny_scope"] = projectCanonical
-						attrs["deny_actions"] = strings.Join(deniedActions, ",")
+						attrs["deny_actions"] = strings.Join(unconditionalDenies, ",")
+					}
+					if len(conditionalDenies) > 0 {
+						attrs["deny_policy"] = "true"
+						attrs["deny_scope"] = projectCanonical
+						attrs["deny_conditional_actions"] = strings.Join(conditionalDenies, ",")
 					}
 					graph.Permissions = append(graph.Permissions, &CloudPermission{
 						Source:     source,
@@ -367,6 +374,7 @@ func (c *GCPDiscoveryClient) Discover(ctx context.Context) (*DiscoveredGraph, *G
 	}
 
 	stats.DenyRules = denies.count
+	stats.ConditionalDenyRules = denies.conditional
 	stats.UnmappedDenyPrincipals = denies.unmapped
 	return graph, stats, nil
 }
@@ -375,23 +383,40 @@ func (c *GCPDiscoveryClient) Discover(ctx context.Context) (*DiscoveredGraph, *G
 // exceptions are members named in a rule's exception list for that permission
 // and are never denied by that rule.
 type gcpDenyIndex struct {
-	denied   map[string][]string
-	count    int
-	unmapped int
+	denied      map[string][]gcpDeniedAction
+	count       int
+	unmapped    int
+	conditional int
 }
 
-func (d *gcpDenyIndex) actionsFor(canonical string) []string {
+// gcpDeniedAction is one permission denied to a member, and whether the deny
+// rule that denies it carries a condition.
+type gcpDeniedAction struct {
+	action      string
+	conditional bool
+}
+
+// actionsFor returns the permissions denied to a member unconditionally, and
+// those denied only when a condition holds.
+func (d *gcpDenyIndex) actionsFor(canonical string) (unconditional, conditional []string) {
 	if d == nil {
-		return nil
+		return nil, nil
 	}
-	return d.denied[canonical]
+	for _, da := range d.denied[canonical] {
+		if da.conditional {
+			conditional = append(conditional, da.action)
+		} else {
+			unconditional = append(unconditional, da.action)
+		}
+	}
+	return unconditional, conditional
 }
 
 // listDenyRules reads project-level deny policies and indexes them by
 // principal. Deny rules attached above the project are not visible to a
 // project-scoped pass.
 func (c *GCPDiscoveryClient) listDenyRules(ctx context.Context, attachments []string) (*gcpDenyIndex, error) {
-	idx := &gcpDenyIndex{denied: map[string][]string{}}
+	idx := &gcpDenyIndex{denied: map[string][]gcpDeniedAction{}}
 	for _, attachment := range attachments {
 		if err := c.collectDenyRules(ctx, "policies/"+attachment+"/denypolicies", idx); err != nil {
 			return nil, err
@@ -421,6 +446,10 @@ func (c *GCPDiscoveryClient) collectDenyRules(ctx context.Context, parent string
 					continue
 				}
 				idx.count++
+				conditional := rule.DenyRule.DenialCondition != nil
+				if conditional {
+					idx.conditional++
+				}
 				exempt := map[string]bool{}
 				for _, ex := range rule.DenyRule.ExceptionPrincipals {
 					if m, ok := gcpDenyPrincipal(ex); ok {
@@ -438,7 +467,10 @@ func (c *GCPDiscoveryClient) collectDenyRules(ctx context.Context, parent string
 						continue
 					}
 					for _, perm := range rule.DenyRule.DeniedPermissions {
-						idx.denied[canonical] = append(idx.denied[canonical], gcpDenyPermission(perm))
+						idx.denied[canonical] = append(idx.denied[canonical], gcpDeniedAction{
+							action:      gcpDenyPermission(perm),
+							conditional: conditional,
+						})
 					}
 				}
 			}

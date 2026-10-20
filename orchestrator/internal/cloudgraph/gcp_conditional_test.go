@@ -79,3 +79,69 @@ func TestGCPConditionalBinding_UnconditionalGrantStaysClean(t *testing.T) {
 		t.Errorf("edges: clean=%d conditional=%d, want 1 each", clean, conditional)
 	}
 }
+
+const gcpConditionalDenyRoute = `{"policies":[{"name":"cond-deny","rules":[` +
+	`{"denyRule":{"deniedPrincipals":["principal://goog/subject/alice@example.com"],"deniedPermissions":["storage.googleapis.com/objects.get"],` +
+	`"denialCondition":{"expression":"request.time < timestamp(\"2030-01-01T00:00:00Z\")"}}},` +
+	`{"denyRule":{"deniedPrincipals":["principalSet://goog/group/ops@example.com"],"deniedPermissions":["resourcemanager.googleapis.com/projects.delete"],` +
+	`"denialCondition":{"expression":"request.time < timestamp(\"2030-01-01T00:00:00Z\")"}}}` +
+	`]}]}`
+
+// conditionalDenyRoutes serves the conditional deny rules in place of the
+// standard unconditional deny rule (routes match in order).
+func conditionalDenyRoutes() []gcpRoute {
+	return append([]gcpRoute{{
+		needle: "cloudresourcemanager.googleapis.com%2Fprojects%2Fproj-1/denypolicies",
+		body:   gcpConditionalDenyRoute,
+	}}, gcpStandardRoutes()...)
+}
+
+// A conditional deny rule does not block outright. It makes the grant conditional,
+// with the deny's condition named.
+func TestGCPConditionalDeny_IsConditionalNotBlocked(t *testing.T) {
+	client, _ := newTestGCPClient(t, &gcpFakeAPI{routes: conditionalDenyRoutes()})
+	graph, stats, err := client.Discover(context.Background())
+	if err != nil {
+		t.Fatalf("Discover: %v", err)
+	}
+	if stats.ConditionalDenyRules != 2 {
+		t.Errorf("ConditionalDenyRules = %d, want 2", stats.ConditionalDenyRules)
+	}
+
+	alice := gcpPerm(graph, "gcp:user:alice@example.com", "storage.objects.get", "projects/"+gcpProject)
+	if alice == nil {
+		t.Fatal("expected alice storage.objects.get edge")
+	}
+	got := (&GCPEvaluator{}).EvaluatePermission(alice, &RequestContext{})
+	if got.State != ConditionallyReachable {
+		t.Fatalf("state = %s, want conditionally_reachable (not blocked)", got.State)
+	}
+	if len(got.UnresolvedConds) != 1 || got.UnresolvedConds[0] != gcpDenyCondition {
+		t.Errorf("UnresolvedConds = %v, want [%s]", got.UnresolvedConds, gcpDenyCondition)
+	}
+}
+
+// A conditional binding and a conditional deny on the same grant name both
+// conditions, so the reader sees every condition that could stop it.
+func TestGCPConditionalDeny_StacksWithConditionalBinding(t *testing.T) {
+	client, _ := newTestGCPClient(t, &gcpFakeAPI{routes: conditionalDenyRoutes()})
+	graph, _, err := client.Discover(context.Background())
+	if err != nil {
+		t.Fatalf("Discover: %v", err)
+	}
+	edges := opsOwnerEdges(graph)
+	if len(edges) != 1 {
+		t.Fatalf("ops owner edges = %d, want 1", len(edges))
+	}
+	got := (&GCPEvaluator{}).EvaluatePermission(edges[0], &RequestContext{})
+	if got.State != ConditionallyReachable {
+		t.Fatalf("state = %s, want conditionally_reachable", got.State)
+	}
+	want := map[string]bool{gcpBindingCondition: true, gcpDenyCondition: true}
+	for _, c := range got.UnresolvedConds {
+		delete(want, c)
+	}
+	if len(want) != 0 {
+		t.Errorf("UnresolvedConds = %v, missing %v", got.UnresolvedConds, want)
+	}
+}

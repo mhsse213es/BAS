@@ -43,6 +43,7 @@ func (s *GCPDiscoveryStats) report() DiscoveryReport {
 		"unmapped_members":         s.UnmappedMembers,
 		"unmapped_deny_principals": s.UnmappedDenyPrincipals,
 		"deny_rules":               s.DenyRules,
+		"conditional_deny_rules":   s.ConditionalDenyRules,
 	}
 }
 

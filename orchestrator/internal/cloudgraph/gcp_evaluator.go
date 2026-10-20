@@ -21,11 +21,15 @@ type GCPEvaluator struct{}
 // gcpBindingCondition names the unresolved IAM condition on a conditional binding.
 const gcpBindingCondition = "gcp-binding-condition"
 
+// gcpDenyCondition names the unresolved condition on a deny rule.
+const gcpDenyCondition = "gcp-deny-condition"
+
 // EvaluatePermission determines if a permission edge is allowed, denied, or
 // conditional under GCP IAM. Evaluation order: a matching Deny policy always
 // wins, then a binding whose scope covers the target and whose actions
 // include the requested action, else implicit deny.
 func (e *GCPEvaluator) EvaluatePermission(edge *CloudPermission, ctx *RequestContext) *EvaluationResult {
+	// An unconditional deny blocks outright.
 	if isGCPDenyPolicyMatch(edge) {
 		return &EvaluationResult{
 			State:            Blocked,
@@ -35,13 +39,21 @@ func (e *GCPEvaluator) EvaluatePermission(edge *CloudPermission, ctx *RequestCon
 	}
 
 	if isGCPBindingMatch(edge) {
-		// A conditional binding grants access only when its IAM condition holds,
-		// which is not evaluated here.
+		// Each condition that may stop the grant is named. Conditions are not
+		// evaluated: a conditional binding may not grant, and a conditional deny
+		// may not apply.
+		var conds []string
 		if edge.Attributes["binding_condition"] == "true" {
+			conds = append(conds, gcpBindingCondition)
+		}
+		if isGCPConditionalDenyMatch(edge) {
+			conds = append(conds, gcpDenyCondition)
+		}
+		if len(conds) > 0 {
 			return &EvaluationResult{
 				State:            ConditionallyReachable,
 				AllowedBy:        edge.SourceType,
-				UnresolvedConds:  []string{gcpBindingCondition},
+				UnresolvedConds:  conds,
 				EvaluationMethod: "hand-coded-rules",
 			}
 		}
@@ -66,6 +78,17 @@ func isGCPDenyPolicyMatch(edge *CloudPermission) bool {
 	denyScope := edge.Attributes["deny_scope"]
 	denyActions := edge.Attributes["deny_actions"]
 	return gcpScopeCovers(denyScope, edge.Target.CanonicalID) && actionListContains(denyActions, edge.Action)
+}
+
+// isGCPConditionalDenyMatch reports whether a conditional deny rule applies to the
+// edge's action on its target. The rule may not apply, since its condition is not
+// evaluated.
+func isGCPConditionalDenyMatch(edge *CloudPermission) bool {
+	if edge.Attributes["deny_policy"] != "true" {
+		return false
+	}
+	denyScope := edge.Attributes["deny_scope"]
+	return gcpScopeCovers(denyScope, edge.Target.CanonicalID) && actionListContains(edge.Attributes["deny_conditional_actions"], edge.Action)
 }
 
 func isGCPBindingMatch(edge *CloudPermission) bool {
