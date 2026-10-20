@@ -347,6 +347,13 @@ func TestRoll_NotTestedExcludedFromReached(t *testing.T) {
 	}
 }
 
+func TestRoll_InterruptedIsPartialEvenWithVerdict(t *testing.T) {
+	r := Roll([]StageResult{{Key: "a", State: StateInterrupted, Verdict: VerdictInconclusive}})
+	if r.Status != "partial" {
+		t.Fatalf("status = %s, want partial", r.Status)
+	}
+}
+
 func TestRoll_NeverSaysPassed(t *testing.T) {
 	r := Roll([]StageResult{{Key: "a", Verdict: VerdictBlocked}})
 	if strings.Contains(r.Status, "pass") {

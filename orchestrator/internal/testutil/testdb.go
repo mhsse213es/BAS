@@ -163,6 +163,11 @@ func newTestDB(ctx context.Context) (*TestDB, error) {
 		_ = container.Terminate(context.Background())
 		return nil, fmt.Errorf("testutil: EnsureEmailGWRunSchema: %w", err)
 	}
+	if err := db.EnsureKillChainSchema(ctx, pool); err != nil {
+		pool.Close()
+		_ = container.Terminate(context.Background())
+		return nil, fmt.Errorf("testutil: EnsureKillChainSchema: %w", err)
+	}
 	if err := db.EnsurePhishingRunSchema(ctx, pool); err != nil {
 		pool.Close()
 		_ = container.Terminate(context.Background())

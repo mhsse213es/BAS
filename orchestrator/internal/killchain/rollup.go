@@ -28,6 +28,10 @@ func Roll(results []StageResult) Rollup {
 	r := Rollup{Counts: map[Verdict]int{}, Total: len(results)}
 	partial := false
 	for _, s := range results {
+		if s.State == StateInterrupted {
+			// An interrupted run is never settled, even when it has a verdict.
+			partial = true
+		}
 		if s.Verdict == "" {
 			partial = true
 			continue
