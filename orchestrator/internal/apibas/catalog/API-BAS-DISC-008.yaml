@@ -1,0 +1,56 @@
+id: API-BAS-DISC-008
+name: Not-found response reveals the internal backend host
+category: DISC
+claim: authentication
+attack_objective: >
+  A request for a missing order gets a response that names the internal database host in a header.
+threat_model:
+  attacker: authenticated customer in tenant A
+  identity: customer-a
+  access_level: standard customer, valid token
+  objective: learn the internal backend host from an error response
+preconditions:
+  fixture: orders-two-tenant
+  identities: [customer-b, customer-a]
+  object: ORD-2001
+steps:
+  - id: baseline-owner-read
+    role: baseline
+    identity: customer-b
+    auth: valid
+    method: GET
+    path: /api/disc/orders/{object}
+    hypothesis: The owner can read their own order on this route. If this fails, the scenario is not testable.
+  - id: attack-disc-008
+    role: attack
+    identity: customer-a
+    auth: valid
+    method: GET
+    path: /api/disc/orders/ORD-9999
+    hypothesis: Error responses are generic and do not identify internal infrastructure.
+denied_statuses: [404]
+forbidden_response_headers:
+  - name: X-Backend-Host
+    value: orders-db-03.internal
+    match: contains
+expected_control: >
+  A not-found response is generic and carries no internal host.
+ground_truth:
+  adapters: [state, response]
+  check: >
+    The attack response carries no internal backend host header.
+detection_assertion:
+  status: not_evaluated
+  reason: Detection validation is Phase 4; this scenario makes no detection claim.
+evidence:
+  - sanitized_request
+  - sanitized_response
+  - state_diff
+side_effect_class: READ_ONLY
+cleanup:
+  - no cleanup required for a read-only scenario
+industry_mapping:
+  - "BFSI: error responses that expose internal infrastructure"
+regulatory_mapping: []
+negative_tests:
+  - API-BAS-DISC-008 with the owner's own order against the fixed build must return the owner's public view

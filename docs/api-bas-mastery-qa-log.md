@@ -1279,3 +1279,51 @@ carries a `LAB-AUTHZ-*` flaw. The shared cache is cleared on reseed.
 ### Still open
 
 - The Windows build (`build.ps1`) has not been run on this tranche.
+
+
+## Phase 25 - discovery tranche (API-BAS-DISC 001, 004, 007, 008)
+
+Branch: `feature/api-bas-phase25`. Scope: the four remaining Phase 2 DISC IDs. DISC-002, 003
+and 005 were already covered.
+
+### Scenarios
+
+| ID | Sub-technique | Claim | Vulnerable flaw | Fixed control | Denied |
+|---|---|---|---|---|---|
+| DISC-001 | Orphaned route absent from the spec | cross_identity | `/api/orphan/orders/{id}` served without an ownership check | route absent | 404 |
+| DISC-004 | Spec versus deployed behaviour drift | authentication | `/api/drift/orders/{id}` declared bearer-protected, served with no credential | bearer and owner required | 401 |
+| DISC-007 | Exposed documentation | authentication | `/docs` served publicly with a real record as its example | route absent | 404 |
+| DISC-008 | Improper error handling | authentication | not-found response carries `X-Backend-Host` | generic not-found | 404 |
+
+The OpenAPI document is served in both builds. Publishing a spec is normal, so it is not a
+finding. The drift in DISC-004 is between the spec's declared security and the deployed route.
+
+### Contract gaps found while writing
+
+- Every ground truth must include the state adapter. DISC-008 first omitted it and was
+  corrected.
+
+### Verification
+
+- `go vet` and `go test ./internal/apibas/... -short` pass.
+- `TestPhase25_DiscoveryVulnerableFailsFixedPasses`: all four FAIL with exploitation against
+  the vulnerable build and PASS with control enforced against the fixed build.
+- `TestPhase25_DiscoveryFlawsAreRegistered`: each scenario has a planted flaw.
+
+### Limitations
+
+- DISC-001 uses the same undocumented-route mechanism as GWAY-002. It differs by being a
+  retired route that needs a token, not a gateway-policy gap.
+- DISC-007 detects exposure through a protected value in the example. A real docs site may
+  leak data in other ways, which the grader would not see.
+- DISC-008 is graded by a header signal only. Error bodies that leak other internals are not
+  covered by a separate check.
+
+### Coverage after this tranche
+
+- Phase 2 scope now covers 52 of 58 sub-techniques. Remaining 6: DATA 002, 008; ABUSE 008,
+  009; AUTHN 006; INTEG 004.
+
+### Still open
+
+- The Windows build (`build.ps1`) has not been run on this tranche.

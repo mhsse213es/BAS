@@ -1,0 +1,52 @@
+id: API-BAS-DISC-004
+name: Deployed route serves the full record with no credential although the specification requires one
+category: DISC
+claim: authentication
+attack_objective: >
+  The specification declares a route as requiring a bearer token. The deployed route serves the full record to an anonymous client.
+threat_model:
+  attacker: unauthenticated client that has read the published specification
+  identity: anonymous
+  access_level: no credential; has read the specification
+  objective: read a full order record on a route the specification says requires authentication
+preconditions:
+  fixture: orders-two-tenant
+  identities: [customer-b, anonymous]
+  object: ORD-2001
+steps:
+  - id: baseline-owner-read
+    role: baseline
+    identity: customer-b
+    auth: valid
+    method: GET
+    path: /api/drift/orders/{object}
+    hypothesis: The owner can read their own order on this route. If this fails, the scenario is not testable.
+  - id: attack-disc-004
+    role: attack
+    identity: anonymous
+    auth: none
+    method: GET
+    path: /api/drift/orders/{object}
+    hypothesis: The deployed route enforces the bearer token the specification declares.
+denied_statuses: [401]
+expected_control: >
+  The deployed route requires the declared bearer token and returns 401 with no order data.
+ground_truth:
+  adapters: [state, response]
+  check: >
+    The attack response contains none of the owner's protected values, and the state is unchanged by the attack.
+detection_assertion:
+  status: not_evaluated
+  reason: Detection validation is Phase 4; this scenario makes no detection claim.
+evidence:
+  - sanitized_request
+  - sanitized_response
+  - state_diff
+side_effect_class: READ_ONLY
+cleanup:
+  - no cleanup required for a read-only scenario
+industry_mapping:
+  - "BFSI: API specifications that drift from the deployed authentication requirements"
+regulatory_mapping: []
+negative_tests:
+  - API-BAS-DISC-004 with the owner's bearer token against the fixed build must return the owner's public view

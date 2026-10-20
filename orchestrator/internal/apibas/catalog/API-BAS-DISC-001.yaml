@@ -1,0 +1,52 @@
+id: API-BAS-DISC-001
+name: Orphaned route that is not in the specification discloses another customer's order
+category: DISC
+claim: cross_identity
+attack_objective: >
+  A customer finds a retired route that the specification does not describe. The route still serves orders and does not check ownership.
+threat_model:
+  attacker: authenticated customer in tenant A
+  identity: customer-a
+  access_level: standard customer, valid token
+  objective: read another customer's order through a route that is absent from the specification
+preconditions:
+  fixture: orders-two-tenant
+  identities: [customer-b, customer-a]
+  object: ORD-2001
+steps:
+  - id: baseline-owner-read
+    role: baseline
+    identity: customer-b
+    auth: valid
+    method: GET
+    path: /api/orders/{object}
+    hypothesis: The owner can read their own order on this route. If this fails, the scenario is not testable.
+  - id: attack-disc-001
+    role: attack
+    identity: customer-a
+    auth: valid
+    method: GET
+    path: /api/orphan/orders/{object}
+    hypothesis: The retired route is not deployed, or it applies the same ownership check as the published route.
+denied_statuses: [404]
+expected_control: >
+  A route absent from the specification is not served, so the request returns 404 and discloses nothing.
+ground_truth:
+  adapters: [state, response]
+  check: >
+    The attack response contains none of the owner's protected values, and the state is unchanged by the attack.
+detection_assertion:
+  status: not_evaluated
+  reason: Detection validation is Phase 4; this scenario makes no detection claim.
+evidence:
+  - sanitized_request
+  - sanitized_response
+  - state_diff
+side_effect_class: READ_ONLY
+cleanup:
+  - no cleanup required for a read-only scenario
+industry_mapping:
+  - "BFSI: retired API routes that remain deployed outside the published specification"
+regulatory_mapping: []
+negative_tests:
+  - API-BAS-DISC-001 with the published route and the owner's token against the fixed build must return the owner's public view

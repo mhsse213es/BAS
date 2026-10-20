@@ -1,0 +1,52 @@
+id: API-BAS-DISC-007
+name: Public interactive documentation shows a real customer record as its example
+category: DISC
+claim: authentication
+attack_objective: >
+  Interactive API documentation is served to anyone, and its example response is a real customer record with protected values.
+threat_model:
+  attacker: unauthenticated client
+  identity: anonymous
+  access_level: no credential
+  objective: read a real customer record from the public API documentation
+preconditions:
+  fixture: orders-two-tenant
+  identities: [customer-b, anonymous]
+  object: ORD-2001
+steps:
+  - id: baseline-owner-read
+    role: baseline
+    identity: customer-b
+    auth: valid
+    method: GET
+    path: /api/orders/{object}
+    hypothesis: The owner can read their own order on this route. If this fails, the scenario is not testable.
+  - id: attack-disc-007
+    role: attack
+    identity: anonymous
+    auth: none
+    method: GET
+    path: /docs
+    hypothesis: The documentation is not served to unauthenticated clients, or its examples contain no real data.
+denied_statuses: [404]
+expected_control: >
+  The documentation is not served publicly, so the request returns 404 and discloses nothing.
+ground_truth:
+  adapters: [state, response]
+  check: >
+    The attack response contains none of the owner's protected values, and the state is unchanged by the attack.
+detection_assertion:
+  status: not_evaluated
+  reason: Detection validation is Phase 4; this scenario makes no detection claim.
+evidence:
+  - sanitized_request
+  - sanitized_response
+  - state_diff
+side_effect_class: READ_ONLY
+cleanup:
+  - no cleanup required for a read-only scenario
+industry_mapping:
+  - "BFSI: public API documentation whose examples carry production data"
+regulatory_mapping: []
+negative_tests:
+  - API-BAS-DISC-007 with the documentation absent from the fixed build must PASS with no record disclosed
