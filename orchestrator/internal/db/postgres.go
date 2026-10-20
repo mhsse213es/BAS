@@ -1726,6 +1726,11 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		// before this column existed stays NULL, meaning unknown, never backfilled.
 		`ALTER TABLE dlp_evidence_records ADD COLUMN IF NOT EXISTS test_event_timestamp timestamptz`,
 		`ALTER TABLE dlp_evidence_records ADD COLUMN IF NOT EXISTS test_event_source text`,
+		// Decision and evidence provenance (plan §2-3). Nullable, no default; rows
+		// written before these columns existed stay NULL, meaning unknown.
+		`ALTER TABLE dlp_evidence_records ADD COLUMN IF NOT EXISTS decision_class text`,
+		`ALTER TABLE dlp_evidence_records ADD COLUMN IF NOT EXISTS evidence_source text`,
+		`ALTER TABLE dlp_evidence_records ADD COLUMN IF NOT EXISTS rule_version text`,
 		`CREATE TABLE IF NOT EXISTS dlp_sink_receipts (
 			id bigserial PRIMARY KEY,
 			token text NOT NULL,

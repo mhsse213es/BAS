@@ -30,6 +30,11 @@ type DLPRecordEntry struct {
 	// unchanged. Both are nil when no usable payload marker exists.
 	TestEventStart  *time.Time `json:"-"`
 	TestEventSource *string    `json:"-"`
+	// DecisionClass, EvidenceSource and RuleVersion are also column-only. Nil
+	// DecisionClass means the expectation is outside the approved table.
+	DecisionClass  *string `json:"-"`
+	EvidenceSource *string `json:"-"`
+	RuleVersion    *string `json:"-"`
 }
 
 const dlpRecordSourceSystem = "dlp-verifier"
@@ -95,8 +100,13 @@ func dlpEntryFromVerdict(scenarioID string, vr reporting.VerificationResult) DLP
 		},
 		TestEventStart:  testEventStartOf(ev),
 		TestEventSource: testEventSourceOf(ev),
+		DecisionClass:   deriveDecisionClass(vr.ExpectedOutcome, ev.CollectionMethod, vr.ObservedOutcome),
+		EvidenceSource:  stringPtr(evidenceSourceFor(ev.CollectionMethod)),
+		RuleVersion:     stringPtr(dlpDecisionRuleVersion),
 	}
 }
+
+func stringPtr(s string) *string { return &s }
 
 // testEventStartOf returns the payload-recorded test-event start, or nil when
 // the step produced no usable marker. A zero time is never stored: it would
@@ -156,11 +166,12 @@ func persistDLPRecords(ctx context.Context, db *pgxpool.Pool, runID string, entr
 			return err
 		}
 		if _, err := db.Exec(ctx,
-			`INSERT INTO dlp_evidence_records (run_id, task_id, expectation_id, technique_id, scenario_id, record, created_at, test_event_timestamp, test_event_source)
-			 VALUES ($1, $2, $3, $4, $5, $6, NOW(), $7, $8)
+			`INSERT INTO dlp_evidence_records (run_id, task_id, expectation_id, technique_id, scenario_id, record, created_at,
+			   test_event_timestamp, test_event_source, decision_class, evidence_source, rule_version)
+			 VALUES ($1, $2, $3, $4, $5, $6, NOW(), $7, $8, $9, $10, $11)
 			 ON CONFLICT (run_id, task_id, expectation_id) DO NOTHING`,
 			runID, e.TaskID, e.ExpectationID, e.TechniqueID, e.Record.ScenarioID, string(raw),
-			e.TestEventStart, e.TestEventSource,
+			e.TestEventStart, e.TestEventSource, e.DecisionClass, e.EvidenceSource, e.RuleVersion,
 		); err != nil {
 			return err
 		}
