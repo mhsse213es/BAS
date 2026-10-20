@@ -88,6 +88,7 @@ steps:
         $csvContent = "[BAS-SIM-DLP] CustomerID,PAN,Aadhaar,SWIFT,UPI,CreditCard`nBAS-SIM-$runId,ABCDE1234F,123456789012,SBININBBXXX,fake.user@upi,4111111111111111"
         Set-Content -Path $srcFile -Value $csvContent -Encoding utf8
         $dest = "$($usbDrive.DriveLetter):\bas_sim_dlp_records_$runId.csv"
+        if ($env:BAS_TASK_ID) { Write-Output "DLP_EVENT_START: $env:BAS_TASK_ID $((Get-Date).ToUniversalTime().ToString('o'))" }
         Copy-Item -Path $srcFile -Destination $dest -ErrorAction SilentlyContinue
         if (Test-Path $dest) {
           Write-Output "EXEC T1052.001: multi-type sensitive record file copied to removable drive $($usbDrive.DriveLetter): unimpeded. [BAS-SIM-DLP-USB]"
