@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"gopkg.in/yaml.v3"
+	"strconv"
 )
 
 // Category codes match the blueprint taxonomy (section 1).
@@ -71,16 +72,19 @@ type Scenario struct {
 	MaxAcceptedAttempts int `yaml:"max_accepted_attempts"`
 	// MaxGrantedPageSize is the largest page size the attack response may report in
 	// its page_size field. Larger grants are exploitation.
-	MaxGrantedPageSize int                `yaml:"max_granted_page_size"`
-	ExpectedControl    string             `yaml:"expected_control"`
-	GroundTruth        GroundTruth        `yaml:"ground_truth"`
-	DetectionAssert    DetectionAssertion `yaml:"detection_assertion"`
-	Evidence           []string           `yaml:"evidence"`
-	SideEffectClass    string             `yaml:"side_effect_class"`
-	Cleanup            []string           `yaml:"cleanup"`
-	IndustryMapping    []string           `yaml:"industry_mapping"`
-	RegulatoryMapping  []string           `yaml:"regulatory_mapping"`
-	NegativeTests      []string           `yaml:"negative_tests"`
+	MaxGrantedPageSize int `yaml:"max_granted_page_size"`
+	// MaxAcceptedBytes is the largest body size the attack response may report in its
+	// accepted_bytes field. Larger accepted bodies are exploitation.
+	MaxAcceptedBytes  int                `yaml:"max_accepted_bytes"`
+	ExpectedControl   string             `yaml:"expected_control"`
+	GroundTruth       GroundTruth        `yaml:"ground_truth"`
+	DetectionAssert   DetectionAssertion `yaml:"detection_assertion"`
+	Evidence          []string           `yaml:"evidence"`
+	SideEffectClass   string             `yaml:"side_effect_class"`
+	Cleanup           []string           `yaml:"cleanup"`
+	IndustryMapping   []string           `yaml:"industry_mapping"`
+	RegulatoryMapping []string           `yaml:"regulatory_mapping"`
+	NegativeTests     []string           `yaml:"negative_tests"`
 }
 
 // ThreatModel is the simulated attacker (api.txt section 7, item 1).
@@ -170,6 +174,9 @@ func (s Scenario) Validate() error {
 			return fmt.Errorf("contract: %s: %s is required", s.ID, field)
 		}
 	}
+	if s.MaxAcceptedBytes < 0 {
+		return fmt.Errorf("contract: %s: max_accepted_bytes cannot be negative", s.ID)
+	}
 	if s.MaxGrantedPageSize < 0 {
 		return fmt.Errorf("contract: %s: max_granted_page_size cannot be negative", s.ID)
 	}
@@ -247,6 +254,11 @@ func (s Scenario) validateSteps() error {
 		}
 		if st.Role != want {
 			return fmt.Errorf("contract: %s: step %d role must be %q, got %q", s.ID, i, want, st.Role)
+		}
+		for _, m := range FillerToken.FindAllStringSubmatch(st.Body, -1) {
+			if n, err := strconv.Atoi(m[1]); err != nil || n > MaxFillerBytes {
+				return fmt.Errorf("contract: %s: step %s filler %s must be at most %d bytes", s.ID, st.ID, m[0], MaxFillerBytes)
+			}
 		}
 		if st.Repeat < 0 || st.Repeat > maxRepeat {
 			return fmt.Errorf("contract: %s: step %s repeat must be between 0 and %d", s.ID, st.ID, maxRepeat)
@@ -339,3 +351,10 @@ type HeaderRule struct {
 	// Match is "exact" (the default) or "contains" (case-insensitive substring).
 	Match string `yaml:"match"`
 }
+
+// FillerToken is a body placeholder that expands to N bytes of filler, so a
+// scenario can send a large body without storing it in the YAML.
+var FillerToken = regexp.MustCompile(`\{filler:(\d+)\}`)
+
+// MaxFillerBytes bounds one filler placeholder.
+const MaxFillerBytes = 5 << 20

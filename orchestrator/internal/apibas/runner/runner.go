@@ -30,6 +30,7 @@ import (
 	"github.com/audspect/bas/internal/apibas/contract"
 	"github.com/audspect/bas/internal/apibas/fixture"
 	"github.com/audspect/bas/internal/apibas/grade"
+	"strconv"
 )
 
 // SecretResolver returns the secret behind a reference. Implementations must
@@ -331,6 +332,7 @@ func (r *Runner) do(ctx context.Context, step contract.Step, token string, obj f
 
 	// {lab_url} lets a body name the target itself, for the SSRF scenario.
 	payload := strings.ReplaceAll(step.Body, "{lab_url}", r.cfg.BaseURL)
+	payload = expandFiller(payload)
 	var body io.Reader
 	if payload != "" {
 		body = bytes.NewReader([]byte(payload))
@@ -427,7 +429,10 @@ func (r *Runner) runAttack(ctx context.Context, rep *Report, step contract.Step,
 		}
 		agg.LeakedProtected += exch.Leaked
 		agg.ForbiddenHeaders += forbiddenHeaderHits(exch, s.ForbiddenResponseHeaders)
-		if s.MaxGrantedPageSize > 0 && grantedPageSize(exch.raw) > s.MaxGrantedPageSize {
+		if s.MaxGrantedPageSize > 0 && reportedField(exch.raw, "page_size") > s.MaxGrantedPageSize {
+			agg.Oversized++
+		}
+		if s.MaxAcceptedBytes > 0 && reportedField(exch.raw, "accepted_bytes") > s.MaxAcceptedBytes {
 			agg.Oversized++
 		}
 		if exch.Status < 500 && !slices.Contains(s.DeniedStatuses, exch.Status) {
@@ -454,16 +459,30 @@ func forbiddenHeaderHits(ex Exchange, rules []contract.HeaderRule) int {
 	return n
 }
 
-// grantedPageSize reads the page_size a response reports. Anything that is not
-// a JSON object with an integer page_size counts as zero.
-func grantedPageSize(raw []byte) int {
-	var page struct {
-		PageSize int `json:"page_size"`
-	}
-	if json.Unmarshal(raw, &page) != nil {
+// reportedField reads an integer field a response reports. Anything that is not a
+// JSON object with an integer under key counts as zero.
+func reportedField(raw []byte, key string) int {
+	var fields map[string]any
+	if json.Unmarshal(raw, &fields) != nil {
 		return 0
 	}
-	return page.PageSize
+	n, ok := fields[key].(float64)
+	if !ok {
+		return 0
+	}
+	return int(n)
+}
+
+// expandFiller replaces each filler placeholder with that many bytes.
+func expandFiller(body string) string {
+	return contract.FillerToken.ReplaceAllStringFunc(body, func(tok string) string {
+		m := contract.FillerToken.FindStringSubmatch(tok)
+		n, err := strconv.Atoi(m[1])
+		if err != nil || n > contract.MaxFillerBytes {
+			return tok
+		}
+		return strings.Repeat("A", n)
+	})
 }
 
 // headerMatches reports whether one header value matches a rule, exactly or as a

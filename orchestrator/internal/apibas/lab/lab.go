@@ -243,6 +243,13 @@ func Flaws() []Flaw {
 				"Fixed: a page size above 100 is refused with 400.",
 		},
 		{
+			ID:          "LAB-ABUSE-UPLOAD-001",
+			ScenarioID:  "API-BAS-ABUSE-005",
+			Description: "POST /api/orders/{id}/attachments reads the body without a size bound.",
+			Oracle: "Vulnerable: a 2 MiB attachment is accepted and reported as accepted_bytes 2097152 (exposed). " +
+				"Fixed: a body above 1 MiB is refused with 413.",
+		},
+		{
 			ID:          "LAB-AUTHZ-MASS-001",
 			ScenarioID:  "API-BAS-AUTHZ-003",
 			Description: "PATCH /api/orders/{id} binds every submitted field, including owner_id, from the request body.",
@@ -376,6 +383,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/orders/{id}/summary", s.getSummary)
 	mux.HandleFunc("GET /api/orders/{id}/status", s.getStatus)
 	mux.HandleFunc("GET /api/orders/page", s.listPage)
+	mux.HandleFunc("POST /api/orders/{id}/attachments", s.uploadAttachment)
 	if s.cfg.Mode == ModeVulnerable {
 		// The debug route exists only in the vulnerable build (LAB-DISC-DEBUG-001).
 		mux.HandleFunc("GET /debug/orders/{id}", s.debugOrder)
@@ -1176,6 +1184,43 @@ func (s *Server) listPage(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"page_size": limit, "items": items})
+}
+
+// maxAttachmentBytes is the largest attachment the fixed build accepts.
+const maxAttachmentBytes = 1 << 20
+
+// uploadAttachment accepts an attachment for an order the caller owns and reports
+// how many bytes it accepted. The vulnerable build reads the body without a bound
+// (LAB-ABUSE-UPLOAD-001); the fixed build refuses bodies above 1 MiB with 413. The
+// lab keeps no attachment: the accepted size is reported, not stored.
+func (s *Server) uploadAttachment(w http.ResponseWriter, r *http.Request) {
+	caller, st := s.identify(r)
+	if st != authOK {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthenticated"})
+		return
+	}
+	s.mu.Lock()
+	order, found := s.orders[r.PathValue("id")]
+	owned := found && order.OwnerID == caller
+	s.mu.Unlock()
+	if !found {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+		return
+	}
+	if !owned {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
+		return
+	}
+	var body io.Reader = r.Body
+	if s.cfg.Mode == ModeFixed {
+		body = http.MaxBytesReader(w, r.Body, maxAttachmentBytes)
+	}
+	n, err := io.Copy(io.Discard, body)
+	if err != nil {
+		writeJSON(w, http.StatusRequestEntityTooLarge, map[string]string{"error": "attachment too large"})
+		return
+	}
+	writeJSON(w, http.StatusCreated, map[string]any{"order_id": order.ID, "accepted_bytes": n})
 }
 
 // getOrderV0 is the retired route (LAB-DISC-DEPRECATED-001). It is mounted only in
