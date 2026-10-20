@@ -52,6 +52,26 @@ func EnsureKillChainSchema(ctx context.Context, pool *pgxpool.Pool) error {
 			recorded_at timestamptz NOT NULL DEFAULT NOW()
 		);
 		ALTER TABLE killchain_ground_truth ADD COLUMN IF NOT EXISTS source_class text NOT NULL DEFAULT '';
+		CREATE TABLE IF NOT EXISTS killchain_host_events (
+			run_id       text        NOT NULL,
+			record_id    bigint      NOT NULL,
+			event_id     int         NOT NULL,
+			host         text        NOT NULL,
+			ts           timestamptz NOT NULL,
+			subject      text        NOT NULL DEFAULT '',
+			new_process  text        NOT NULL DEFAULT '',
+			command_line text        NOT NULL DEFAULT '',
+			logon_type   int         NOT NULL DEFAULT 0,
+			target_user  text        NOT NULL DEFAULT '',
+			received_at  timestamptz NOT NULL DEFAULT NOW()
+		);
+		CREATE INDEX IF NOT EXISTS killchain_host_events_run ON killchain_host_events (run_id);
+		CREATE TABLE IF NOT EXISTS killchain_run_audit (
+			run_id           text        PRIMARY KEY,
+			process_creation text        NOT NULL,
+			logon            text        NOT NULL,
+			received_at      timestamptz NOT NULL DEFAULT NOW()
+		);
 		CREATE TABLE IF NOT EXISTS killchain_coverage_proofs (
 			scenario_id     text        PRIMARY KEY,
 			domain          text        NOT NULL DEFAULT '',

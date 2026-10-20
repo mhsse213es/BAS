@@ -110,6 +110,7 @@ var legacyProtocolRoutes = map[string]bool{
 	"/api/scenarios/result":                  true,
 	"/api/scenarios/events":                  true,
 	"/api/scenarios/runs/{runId}/detections": true,
+	"/api/scenarios/runs/{runId}/host-events": true,
 	"/api/attackpath/collect":                true,
 	"/api/attackpath/sharphound":             true,
 	"/api/attackpath/jobs/{id}/ack":          true,

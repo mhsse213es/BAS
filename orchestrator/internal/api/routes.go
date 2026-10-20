@@ -104,6 +104,7 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 	r.Post("/api/scenarios/result", h.SubmitScenarioResult)
 	r.Post("/api/scenarios/events", h.SubmitRunEvents)
 	r.Post("/api/scenarios/runs/{runId}/detections", h.SubmitRunDetections)
+	r.Post("/api/scenarios/runs/{runId}/host-events", h.SubmitRunHostEvents)
 	r.Post("/api/attackpath/collect", h.SubmitAttackPathCollection)
 	r.Post("/api/attackpath/sharphound", h.SubmitAttackPathSharpHound)
 	r.Post("/api/attackpath/jobs/{id}/ack", h.AckAttackPathJob)

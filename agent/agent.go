@@ -1198,6 +1198,9 @@ func (a *Agent) collectAndSubmitDetections(runID string, runStart time.Time) {
 	const maxBytes = 512 * 1024
 
 	time.Sleep(graceWait)
+	// Execution evidence is submitted on its own path, so a detection failure
+	// cannot block it, and the reverse.
+	a.submitHostEvents(runID, runStart)
 	from := runStart.Add(-5 * time.Second)
 	to := time.Now()
 	if posixDetectionGatedOff() {

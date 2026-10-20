@@ -583,6 +583,7 @@ var publicRoutes = map[string]bool{
 	"POST /api/scenarios/result":                  true,
 	"POST /api/scenarios/events":                  true,
 	"POST /api/scenarios/runs/{runId}/detections": true,
+	"POST /api/scenarios/runs/{runId}/host-events": true,
 	"POST /api/attackpath/collect":                true,
 	"POST /api/attackpath/sharphound":             true,
 	"POST /api/attackpath/jobs/{id}/ack":          true,

@@ -84,3 +84,24 @@ Not built yet (each needs staging or a design step):
   cost on real hosts, the 4648 semantics for lateral steps, and behaviour
   when audit policy is enabled by GPO.
 - Live validation is not claimed.
+
+### Update: receiving path built
+
+Built and tested since the entry above:
+- `POST /api/scenarios/runs/{runId}/host-events`: agent-authed. It refuses any
+  event id outside 4688, 4624 and 4648, and a batch from an agent that did not
+  run the scenario. Re-delivery replaces the run's events. Duplicates within a
+  batch are kept, so the evaluator counts them.
+- Storage: `killchain_host_events` and `killchain_run_audit`.
+- Agent: after each run it collects and posts the events and audit state. On
+  non-Windows builds it sends no events, and reports audit as unknown.
+
+Still open, and the next blocker is a design decision:
+- **Step marker.** A process-creation match needs a token that the step puts
+  in its command line. No such field exists in the scenario schema. Adding one
+  changes scenario YAML, so the scenario `.sig` must be re-signed. Until then
+  the evaluator can find no evidence and every stage stays a named gap. No
+  stage will be scored from host events.
+- Ground-truth mapping is not yet called from stage collection, for the same reason.
+- Staging: collection cost on real hosts, and whether the marker reaches the
+  4688 command line under the enabled policy.
