@@ -2073,3 +2073,14 @@ claimed for them.
 - **Current state:** ABUSE-002 carries `timing_claim: provisional`. It is evaluated but not validated. The developer
   workstation's five stable runs are diagnostic evidence only.
 - **Source:** `docs/api-bas-timing-policy.md` (decisions recorded, execution status).
+
+### Production gaps (owner: user to decide, engineering to build)
+
+- **Result persistence.** API BAS run results are written to stdout only (`cmd/apibas-runner`). Nothing stores
+  them. Decision needed: database and schema. Default assumed: the orchestrator's existing Postgres, with a
+  migration.
+- **Scheduling.** Nothing in the orchestrator runs API BAS. The `internal/jobs` package has no API BAS references.
+  Decision needed: reuse `internal/jobs`, or add a new trigger.
+- **Production secret store.** `runner.MapSecrets` is for tests and the local lab only. `apibas-runner` reads
+  credentials from environment variables. Decision needed: which secret store backs production. The adapter sits
+  behind the existing `SecretResolver` interface.
