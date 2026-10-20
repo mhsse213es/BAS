@@ -188,7 +188,9 @@ func (r *Runner) run(ctx context.Context, s contract.Scenario, tag string) (Repo
 	rep := Report{ScenarioID: s.ID, RunTag: tag}
 	// Protocols without an adapter are reported, never counted as covered.
 	if s.Protocol != "" && s.Protocol != "http" {
-		return r.skip(rep, grade.ReasonUnsupportedProtocol, "protocol "+s.Protocol+" has no adapter yet"), nil
+		rep.Outcome = grade.Unsupported(grade.ReasonUnsupportedProtocol)
+		rep.Detail = "protocol " + s.Protocol + " has no adapter yet; reported UNSUPPORTED, no traffic sent"
+		return rep, nil
 	}
 
 	// Preflight: every check below happens before any traffic is sent.

@@ -26,6 +26,8 @@ const (
 	NotExploited         Exploitability = "not_exploited"
 	ExploitInconclusive  Exploitability = "inconclusive"
 	ExploitNotApplicable Exploitability = "not_applicable" // skipped before any traffic
+	// ExploitUnsupported marks a scenario whose protocol has no adapter (blueprint section 2).
+	ExploitUnsupported Exploitability = "unsupported"
 )
 
 // Control is whether the preventive control held.
@@ -36,6 +38,8 @@ const (
 	Failed               Control = "failed"
 	ControlInconclusive  Control = "inconclusive"
 	ControlNotApplicable Control = "not_applicable"
+	// ControlUnsupported marks a scenario whose protocol has no adapter (blueprint section 2).
+	ControlUnsupported Control = "unsupported"
 )
 
 // Confidence is the evidence strength behind the outcome.
@@ -116,6 +120,21 @@ func Skip(reason string) Outcome {
 		Result:         SKIPPED,
 		Exploitability: ExploitNotApplicable,
 		Control:        ControlNotApplicable,
+		Detection:      "not_evaluated",
+		Confidence:     ConfidenceInconclusive,
+		Reason:         reason,
+	}
+}
+
+// Unsupported returns the outcome for a scenario whose protocol has no executable adapter.
+// The result stays SKIPPED, because the verdict set is shared across the product. The
+// exploitability and control fields say UNSUPPORTED, and the reason is UNSUPPORTED_PROTOCOL.
+// Nothing is counted as covered, and no traffic is sent.
+func Unsupported(reason string) Outcome {
+	return Outcome{
+		Result:         SKIPPED,
+		Exploitability: ExploitUnsupported,
+		Control:        ControlUnsupported,
 		Detection:      "not_evaluated",
 		Confidence:     ConfidenceInconclusive,
 		Reason:         reason,

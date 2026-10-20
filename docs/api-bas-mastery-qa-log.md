@@ -1387,3 +1387,42 @@ lines of blueprint section 10. Each has a vulnerable route and a fixed control.
 - INTEG-004 DNS-resolution half (needs a resolver the lab controls).
 - The Windows build (`build.ps1`) has not been run on any Phase 2 tranche.
 - `TestABUSE002Repeatability` still fails without `-short` (see Phase 22).
+
+
+## Phase 27 - unsupported protocols reported as UNSUPPORTED (blueprint section 2)
+
+Scope: GraphQL, gRPC, SOAP, WebSocket and async. These are declared protocols in the contract,
+but no executable adapter exists. Blueprint section 2 says each must be reported as
+UNSUPPORTED until its adapter exists.
+
+### What changed
+
+- `grade.Unsupported(reason)` returns an outcome with Result SKIPPED, exploitability
+  `unsupported`, control `unsupported`, detection `not_evaluated`, and reason
+  `UNSUPPORTED_PROTOCOL`.
+- The runner uses it for any scenario whose protocol is not HTTP. The check runs before the
+  fixture and precondition checks, and before any request is sent.
+
+### Decision to review
+
+- **The result stays SKIPPED, not a new UNSUPPORTED verdict.** The result set PASS, FAIL,
+  ERROR and SKIPPED is shared across the product's scoring. Adding a fifth verdict would change
+  scoring everywhere. The word UNSUPPORTED appears in the exploitability, control and reason
+  fields, so a reader sees it in the report. If the team wants it as a top-level verdict, that
+  is a scoring-model change and needs its own decision.
+
+### Verification
+
+- `TestPhase27_UnsupportedProtocolsAreReportedUnsupported`: for each of the five protocols,
+  the result is SKIPPED, exploitability and control are unsupported, the reason is
+  UNSUPPORTED_PROTOCOL, and zero API requests reach the lab.
+- `TestPhase27_HTTPScenarioIsNotReportedUnsupported`: an HTTP scenario is not affected.
+- `go vet` and `go test ./internal/apibas/... -short` pass.
+
+### Not in place yet
+
+- The Phase 3 acceptance line "UNSUPPORTED is not in the covered count" depends on a covered
+  count. No coverage metric is computed in the code yet (blueprint section 9). The count of
+  scenarios is therefore a document figure, not a report field.
+- No catalog scenario currently declares a non-HTTP protocol. The gate is tested with a copy of
+  an HTTP scenario that declares one.
