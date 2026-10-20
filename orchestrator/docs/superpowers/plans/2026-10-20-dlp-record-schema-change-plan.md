@@ -28,7 +28,38 @@ that `internal/vendors/*` implements it correctly. None of the adapters has been
 verified against a live tenant. Conformance is labelled unverified until tested,
 and no metric may rely on a block from an adapter until then.
 
-**B2. `test_event_timestamp` semantics — OPEN. Field stays unpopulated.**
+**B2. `test_event_timestamp` semantics — DECIDED (Option A, approved 2026-10-20). Contract below; not yet implemented. Field stays unpopulated until the payload marker exists.**
+
+**Decision:** the controlled test-event start is the timestamp the test payload
+records itself immediately before it attempts the transfer. Dispatch time
+(Option B) is not used as an event start.
+
+**Contract (Option A):**
+- **Marker:** a stdout line `DLP_EVENT_START: <task_id> <rfc3339nano_utc>`,
+  written by the payload immediately before the transfer attempt. `<task_id>` is
+  the step's `TaskID` as given to the payload, so the marker correlates to one
+  step. It parallels the existing `DLP_OBSERVATION:` marker, which is a
+  stdout-line regex in `internal/reporting/dlp.go`.
+- **Clock source:** the test host's wall clock, UTC. The payload reads the clock
+  on the same host where the transfer is attempted.
+- **Parsing:** a separate regex and parser, not shared with `DLP_OBSERVATION`.
+  Exactly one matching marker for the step's `task_id` gives a value. Zero
+  markers, two or more markers, or an unparseable timestamp gives NULL, with the
+  reason recorded (`no_marker`, `ambiguous`, `unparseable`).
+- **Both execution paths:** the marker is stdout, so it is captured the same way
+  on the pooled path and the per-process path. Both are covered.
+- **Source column:** a new `test_event_source` field records how the value was
+  obtained (`payload-marker`, or NULL). It is added alongside
+  `test_event_timestamp`, so a dispatch time can never be mixed into an
+  event-time column.
+- **Latency gate:** latency still requires a measured clock-skew bound between
+  the test host and the detection source (§3.4 of the metrics spec). Until it is
+  measured, latency is undefined, even when the marker exists.
+- **Implementation scope (not started):** scenario payloads that perform
+  transfers gain the marker line, the parser and the column are added, and every
+  edited scenario is re-signed (`.sig`) and verified. Historical rows stay NULL.
+
+**Options considered:**
 
 Verified at the agent boundary (`agent/executor.go`, `agent/pool_windows.go`):
 
@@ -45,7 +76,7 @@ the agent cannot observe it from outside the process.
 
 **Definition options for B2 (for approval, none chosen):**
 
-- **Option A (recommended): test-payload timestamp.** The test payload records its
+- **Option A (chosen): test-payload timestamp.** The test payload records its
   own clock reading at the moment it attempts the transfer, in the same way it
   already writes `DLP_OBSERVATION:` markers, and that reading becomes the start.
   Requires scenario and payload changes (and re-signing), a defined clock source,
@@ -83,7 +114,8 @@ cannot be computed from stored data, and latency cannot be computed at all.
 |---|---|---|---|---|
 | `decision_class` | text | `TP` `TN` `FP` `FN` `Unsupported` `Untested` `Inconclusive` | Yes | Classification of one scored decision, per the approved exclusion rules |
 | `evidence_source` | text | `sink-receipt` `local-marker` `none` | Yes | How the actual outcome was established |
-| `test_event_timestamp` | timestamptz | — | Yes | Start of the controlled test event, for latency |
+| `test_event_timestamp` | timestamptz | — | Yes | Start of the controlled test event (payload marker, §0 B2), for latency |
+| `test_event_source` | text | `payload-marker` | Yes | How `test_event_timestamp` was obtained; NULL when no value. Dispatch times never appear here. |
 
 Nullability is deliberate. `NULL` means *unknown*, never a default value.
 
