@@ -11,7 +11,7 @@ case "${1:-all}" in
   retry)    run retry ./internal/cloudgraph/ -run 'DoWithRetry|ParseRetryAfter|Backoff|Redact' -v ;;
   aws)      run aws ./internal/cloudgraph/ -run 'AWS' -v ;;
   gcp)      run gcp ./internal/cloudgraph/ -run 'GCP' -v ;;
-  azure)    run azure ./internal/cloudgraph/ -run 'Azure|Preflight|Deny' -v ;;
+  azure)    run azure ./internal/cloudgraph/ -run 'Azure|Preflight|Deny|Inherited|Ancestor|MgPath' -v ;;
   audit)    run audit ./internal/cloudgraph/ -run 'CloudTrail|ParseCloudTrail|LiveCorrelator|ActivityLog|GCPAudit|GCPCanonical|GCPEmail|EventCorrelator' -v ;;
   scenario) run scenario ./internal/cloudgraph/ -run 'Scenario|ObserveCloud|BuiltinCloud|GlobMatch' -v ;;
   db)       run db ./internal/db/ -run 'CloudPlan|CloudScenario|DiscoveredGraph|DiscoveryFailure' -v ;;
