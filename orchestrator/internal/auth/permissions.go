@@ -218,6 +218,10 @@ const (
 	// permission in this file).
 	CanExecuteRemediation Permission = "remediation:execute"
 	CanApproveRemediation Permission = "remediation:approve"
+	// Pipeline injection and cleanup approvals. Admin-only. Self-approval is governed by
+	// the deployment classification, not by this permission.
+	CanApprovePipelineInjection Permission = "pipeline:injection:approve"
+	CanApprovePipelineCleanup   Permission = "pipeline:cleanup:approve"
 
 	// Backup & Recovery — Admin-only. The console never performs the backup
 	// itself (see docs/superpowers/specs/2026-08-17-backup-recovery-design.md);
@@ -341,6 +345,7 @@ var rolePermissions = map[Role]map[Permission]bool{
 		CanViewSSOConfig: true, CanManageSSOConfig: true,
 		CanViewSCIMConfig: true, CanManageSCIMConfig: true,
 		CanExecuteRemediation: true, CanApproveRemediation: true,
+		CanApprovePipelineInjection: true, CanApprovePipelineCleanup: true,
 		CanManageBackups:                   true,
 		CanResolveActorIdentity:            true,
 		CanManageSourceTrust:               true,

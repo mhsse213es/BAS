@@ -65,6 +65,33 @@ func EnsureKillChainSchema(ctx context.Context, pool *pgxpool.Pool) error {
 			target_user  text        NOT NULL DEFAULT '',
 			received_at  timestamptz NOT NULL DEFAULT NOW()
 		);
+		CREATE TABLE IF NOT EXISTS pipeline_approvals (
+			id           text        PRIMARY KEY,
+			kind         text        NOT NULL CHECK (kind IN ('injection', 'cleanup')),
+			scope        jsonb       NOT NULL,
+			scope_hash   text        NOT NULL,
+			requested_by text        NOT NULL,
+			approved_by  text        NOT NULL DEFAULT '',
+			approved_at  timestamptz,
+			expires_at   timestamptz,
+			consumed_at  timestamptz,
+			consumed_by  text        NOT NULL DEFAULT '',
+			created_at   timestamptz NOT NULL DEFAULT NOW()
+		);
+		CREATE TABLE IF NOT EXISTS pipeline_approval_events (
+			id          bigserial   PRIMARY KEY,
+			approval_id text        NOT NULL,
+			event       text        NOT NULL,
+			actor       text        NOT NULL,
+			at          timestamptz NOT NULL DEFAULT NOW(),
+			detail      jsonb       NOT NULL DEFAULT '{}'
+		);
+		CREATE OR REPLACE FUNCTION pipeline_approval_events_append_only() RETURNS trigger AS $$
+		BEGIN RAISE EXCEPTION 'pipeline_approval_events is append-only'; END;
+		$$ LANGUAGE plpgsql;
+		DROP TRIGGER IF EXISTS pipeline_approval_events_no_mutation ON pipeline_approval_events;
+		CREATE TRIGGER pipeline_approval_events_no_mutation BEFORE UPDATE OR DELETE ON pipeline_approval_events
+			FOR EACH ROW EXECUTE FUNCTION pipeline_approval_events_append_only();
 		CREATE TABLE IF NOT EXISTS killchain_pipeline_runs (
 			execution_id text        PRIMARY KEY,
 			campaign_id  text        NOT NULL,
