@@ -12,8 +12,8 @@ bash scripts/cloud-qa.sh <group>    # one group
 | Group | Package | What it proves | Accounts needed |
 |---|---|---|---|
 | `retry` | cloudgraph | throttling/backoff, redaction, bounded retries | none |
-| `aws` | cloudgraph | AWS discovery, policy matching, trust, backup vaults, permission boundaries, SCPs, S3 bucket policies | none |
-| `gcp` | cloudgraph | GCP bindings, roles, deny rules, folder and organization inheritance, retry transport | none |
+| `aws` | cloudgraph | AWS discovery, policy matching, trust, backup vaults, permission boundaries, SCPs, S3 bucket policies, identity-policy conditions, preflight | none |
+| `gcp` | cloudgraph | GCP bindings, roles, deny rules, folder and organization inheritance, retry transport, preflight | none |
 | `azure` | cloudgraph | Azure discovery, wildcard roles, deny assignments, management group inheritance, preflight | none |
 | `audit` | cloudgraph | CloudTrail, Activity Log and GCP audit parsing and matching | none |
 | `scenario` | cloudgraph | scenario verdicts, gates, observation, wildcard grants | none |
@@ -34,7 +34,7 @@ bash scripts/cloud-qa.sh <group>    # one group
 - `TestParseRetryAfter`
 - `TestRedact`
 
-### `aws`  (50 tests)
+### `aws`  (65 tests)
 
 - `TestAWSBucketARN`
 - `TestAWSDecodePolicy_CompactsAndRejectsGarbage`
@@ -66,6 +66,16 @@ bash scripts/cloud-qa.sh <group>    # one group
 - `TestAWSEvaluator_RoleTrustAllowsAssumeRole`
 - `TestAWSEvaluator_ServiceWildcardSatisfiesConcreteAction`
 - `TestAWSGate_ActionNotActionAndConditions`
+- `TestAWSPreflight_AllPass`
+- `TestAWSPreflight_BackupDeniedIsFail`
+- `TestAWSPreflight_BucketPolicyDeniedIsFail`
+- `TestAWSPreflight_IAMFailureDoesNotHideOthers`
+- `TestAWSPreflight_NoBucketIsSkippedNotPassed`
+- `TestAWSPreflight_NoBucketPolicyPasses`
+- `TestAWSPreflight_NotInOrganizationPasses`
+- `TestAWSPreflight_OptionalClientsSkipped`
+- `TestAWSPreflight_OrganizationDeniedIsFail`
+- `TestAWSPreflight_STSFailureIsNamed`
 - `TestAWSResourcePolicyGate_ResourceAndNotClauses`
 - `TestCrossAccount_DenyInSamePolicyBlocksPartner`
 - `TestCrossAccount_NotPrincipalAllowCountedNotExpanded`
@@ -74,6 +84,11 @@ bash scripts/cloud-qa.sh <group>    # one group
 - `TestCrossAccount_PublicGrantIsMarkedPublic`
 - `TestCrossAccount_SameAccountGrantFromBucketPolicyAlone`
 - `TestExecuteCloudScenarioInSession_SessionPolicyBlocksStep`
+- `TestIdentityCondition_ConditionalAllowIsConditional`
+- `TestIdentityCondition_ConditionalDenyDoesNotBlockOutright`
+- `TestIdentityCondition_DenyInAnotherDocumentBlocks`
+- `TestIdentityCondition_DenyOnOtherBucketDoesNotBlock`
+- `TestIdentityCondition_UnconditionalGrantStaysClean`
 - `TestNormalizeAWSSessionPolicy`
 - `TestPermissionsBoundary_AllowOnOtherResourceDoesNotCover`
 - `TestS3Policy_ConditionalDenyIsConditional`
@@ -87,7 +102,7 @@ bash scripts/cloud-qa.sh <group>    # one group
 - `TestSessionPolicy_AllowingActionKeepsGrant`
 - `TestSessionPolicy_LimitsGrantToItsActions`
 
-### `gcp`  (10 tests)
+### `gcp`  (15 tests)
 
 - `TestGCPAncestors_FolderGrantReachesProjectWithProvenance`
 - `TestGCPAncestors_OrganizationDenyBlocksFolderGrant`
@@ -99,6 +114,11 @@ bash scripts/cloud-qa.sh <group>    # one group
 - `TestGCPDiscover_DenyRuleBlocksMatchingEdge`
 - `TestGCPDiscover_TransientFailureIsRetried`
 - `TestGCPDiscover_UnreadableRoleFailsPass`
+- `TestGCPPreflight_AllPassIncludingAncestors`
+- `TestGCPPreflight_AncestryForbiddenSkipsAncestors`
+- `TestGCPPreflight_DenyForbiddenIsNamedAndOthersRun`
+- `TestGCPPreflight_ForbiddenFolderIsNamed`
+- `TestGCPPreflight_UnexpectedStatusReportedWithCode`
 
 ### `azure`  (37 tests)
 
