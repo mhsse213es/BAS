@@ -55,6 +55,16 @@ records itself immediately before it attempts the transfer. Dispatch time
 - **Latency gate:** latency still requires a measured clock-skew bound between
   the test host and the detection source (§3.4 of the metrics spec). Until it is
   measured, latency is undefined, even when the marker exists.
+- **Prerequisite found (blocks the payload change):** the payload cannot learn
+  its own `task_id`. The agent exports no task identifier to step processes.
+  The only `BAS_*` variables set in `agent/*.go` are config-file values, and
+  `BAS_RUN_ID` is read by 21 scenarios but set by no agent code, so those
+  scenarios always fall back to a random ID. The marker's correlation key
+  therefore needs a new agent-side step variable (for example `BAS_TASK_ID`),
+  set in both `executor.go` (per-process) and the pooled host path
+  (`pool_windows.go`). The pooled host is a persistent PowerShell process, so
+  per-step env propagation there is unverified. Until the variable is delivered
+  on both paths, no marker can be correlated, and no payload change should land.
 - **Implementation scope (not started):** scenario payloads that perform
   transfers gain the marker line, the parser and the column are added, and every
   edited scenario is re-signed (`.sig`) and verified. Historical rows stay NULL.
