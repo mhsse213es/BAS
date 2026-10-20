@@ -195,6 +195,22 @@ This is the single place to check before claiming either DLP vendor connector is
 
 **Resolution path:** a true form test needs a sink endpoint that accepts multipart and urlencoded bodies. That is a listener change and a product decision. Until then, leave this item open and do not describe the steps as form tests.
 
+### 20. Network share scenario (dlp-exfiltration-network-share) — not run; needs an operator-configured SMB share — open
+
+**Status:** Open. Two steps, writable share and read-only share (commit 12764913). Signed and catalogued. The copy logic was run locally against a temporary folder and works. The steps have not run against an SMB share.
+
+**Lab requirement:** set `BAS_DLP_SMB_SHARE` and `BAS_DLP_SMB_RO_SHARE` on the agent host to a writable share and a share that should refuse writes. Until they are set, both steps grade Untested.
+
+**Limits:** L1 only, with no sink. A refusal cannot be attributed to a specific control (NTFS, share permission, or endpoint DLP). Lateral movement, mapped drives and per-user exceptions are not built.
+
+### 21. Device control scenario (dlp-exfiltration-device-control) — not run; device policy and exceptions not built — open
+
+**Status:** Open. One removable-media write step that also reads the Deny_Write value for an operator-supplied class GUID (commit 12764913). Signed and catalogued. Not run against removable media.
+
+**Lab requirement:** a removable volume on the agent host, and the correct class GUID for that device, confirmed against Microsoft's documentation. Public sources conflict on the GUID, so the scenario does not hard-code one. Until a GUID is supplied, the policy state is recorded as not supplied.
+
+**Limits:** device exceptions, allow and deny lists by hardware ID, user and group exceptions, and read-only versus blocked distinctions are recorded as Unsupported in this environment. They need a device policy and several accounts.
+
 ## Resolved items
 
 - Item 11: the eight unclaimed AI-prompt and DB-export steps are catalogued (commit 226b1f40). Values come from each step's own command; no payload changed. Both drift checks pass.
