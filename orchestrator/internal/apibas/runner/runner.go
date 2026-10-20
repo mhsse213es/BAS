@@ -485,14 +485,15 @@ func sameState(a, b map[string]StateRecord) bool {
 	return true
 }
 
-// attemptStep returns the step with each "{n}" in its header values replaced by the attempt
-// number, so repeated attempts can carry a different header value (for example a source IP).
+// attemptStep returns the step with each "{n}" in its header values and body replaced by the
+// attempt number, so repeated attempts can carry a different value (a source IP, a new email).
 func attemptStep(step contract.Step, n int) contract.Step {
-	if len(step.Headers) == 0 && len(step.ExtraHeaders) == 0 {
+	if len(step.Headers) == 0 && len(step.ExtraHeaders) == 0 && !strings.Contains(step.Body, "{n}") {
 		return step
 	}
 	num := strconv.Itoa(n)
 	out := step
+	out.Body = strings.ReplaceAll(step.Body, "{n}", num)
 	out.Headers = make(map[string]string, len(step.Headers))
 	for k, v := range step.Headers {
 		out.Headers[k] = strings.ReplaceAll(v, "{n}", num)

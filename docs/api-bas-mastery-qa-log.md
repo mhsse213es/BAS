@@ -1327,3 +1327,63 @@ finding. The drift in DISC-004 is between the spec's declared security and the d
 ### Still open
 
 - The Windows build (`build.ps1`) has not been run on this tranche.
+
+
+## Phase 26 - remaining Phase 2 scenarios (DATA-002, DATA-008, ABUSE-008, ABUSE-009, AUTHN-006, INTEG-004)
+
+Branch: `feature/api-bas-phase26`. These are the last six Phase 2 sub-techniques in the scope
+lines of blueprint section 10. Each has a vulnerable route and a fixed control.
+
+### Scenarios
+
+| ID | Sub-technique | Claim | Vulnerable flaw | Fixed control | Denied |
+|---|---|---|---|---|---|
+| DATA-002 | Financial and account fields in statements | cross_identity | statement returns the full record to any caller | owner only, public view | 404 |
+| DATA-008 | Weak field-level masking | property_level | masked card, plus the same value unmasked in card_display | masked in every field | clean (2xx, no leak) |
+| ABUSE-008 | Automated account creation | function_level | no limit on sign-up | five per run, then 429 | 429 |
+| ABUSE-009 | Per-identity throttling gap | function_level | limit keyed on a client-supplied session header | limit keyed on the authenticated caller | 429 |
+| AUTHN-006 | Retired API token | authentication | token still accepted after rotation | refused after rotation | 401 |
+| INTEG-004 | Unsafe redirect | authentication | any `next` target is sent in a Refresh header | relative paths only | 400 |
+
+### Contract changes
+
+- `{n}` is now also replaced in the request body, not only in headers. ABUSE-008 needs a
+  distinct email for each attempt.
+- AUTHN-006 uses a setup step (role `setup`) to call `POST /api/keys/rotate`. The fixed build
+  records the retired token in a lab-side set, reset with the fixture.
+
+### Verification
+
+- `TestPhase26_RemainingVulnerableFailsFixedPasses`: all six FAIL with exploitation against the
+  vulnerable build and PASS with control enforced against the fixed build.
+- `TestPhase26_RemainingFlawsAreRegistered`: each scenario has a planted flaw.
+- `go vet` and `go test ./internal/apibas/... -short` pass.
+
+### Limitations, which bound what "covered" means
+
+- **INTEG-004 is covered for the redirect half only.** The sub-technique also covers DNS
+  resolution changes. Nothing in the lab changes DNS, so DNS rebinding is not tested. The
+  Refresh header models an open redirect. It does not exercise a real browser redirect.
+- **ABUSE-009 is a single-identity variant.** The sub-technique describes distributed low-rate
+  abuse across identities. A scenario has one attacker identity, so this tests the
+  per-identity gap (keying on a client header), not a multi-identity campaign.
+- **ABUSE-009 uses the same mechanism as GWAY-009** (a counter keyed on a client-supplied
+  value). The scope is different: this is a route-level throttle.
+- **ABUSE-008 counts sign-ups but stores no accounts.** The limit is what is measured.
+- **DATA-008's unmasked field is the owner's own value.** The masking is tested against the
+  owner, not against another customer. Masking that holds only for other callers would not be
+  caught.
+- **AUTHN-006's rotation issues no replacement key.** It tests that the retired token stops
+  working. It does not test the new token.
+
+### Coverage after this tranche
+
+- All 58 Phase 2 sub-techniques in the blueprint scope have a scenario. INTEG-004 is partial, as
+  stated above, and is not counted as fully covered. That leaves 57 full and 1 partial.
+- The remaining gaps are the ones named in the limitations, and the Windows build.
+
+### Still open
+
+- INTEG-004 DNS-resolution half (needs a resolver the lab controls).
+- The Windows build (`build.ps1`) has not been run on any Phase 2 tranche.
+- `TestABUSE002Repeatability` still fails without `-short` (see Phase 22).

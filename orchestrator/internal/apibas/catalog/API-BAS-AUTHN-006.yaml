@@ -1,0 +1,62 @@
+id: API-BAS-AUTHN-006
+name: Retired API token still changes orders after rotation
+category: AUTHN
+claim: authentication
+attack_objective: >
+  A customer rotates their API token, then keeps using the retired token to change an order.
+threat_model:
+  attacker: authenticated customer whose token was rotated out
+  identity: customer-b
+  access_level: standard customer, token rotated out after the setup step
+  objective: change an order with a credential that rotation was meant to retire
+preconditions:
+  fixture: orders-two-tenant
+  identities: [customer-b]
+  object: ORD-2001
+steps:
+  - id: baseline-owner-read
+    role: baseline
+    identity: customer-b
+    auth: valid
+    method: GET
+    path: /api/orders/{object}
+    hypothesis: The owner can read their own order before rotation. If this fails, the scenario is not testable.
+  - id: setup-rotate-token
+    role: setup
+    identity: customer-b
+    auth: valid
+    method: POST
+    path: /api/keys/rotate
+    body: '{}'
+    hypothesis: Rotation retires the current token. The setup must succeed so the attack is meaningful.
+  - id: attack-retired-token
+    role: attack
+    identity: customer-b
+    auth: valid
+    method: PATCH
+    path: /api/keys/orders/{object}/status
+    body: '{"status": "cancelled"}'
+    hypothesis: A retired token is refused, so the status change is not applied.
+denied_statuses: [401]
+expected_control: >
+  A token rotated out is refused with 401, and the order status is unchanged.
+ground_truth:
+  adapters: [state, response]
+  check: >
+    The order status is identical before and after the attack, and the response discloses no
+    protected values.
+detection_assertion:
+  status: not_evaluated
+  reason: Detection validation is Phase 4; this scenario makes no detection claim.
+evidence:
+  - sanitized_request
+  - sanitized_response
+  - state_diff
+side_effect_class: STATE_CHANGE_SANDBOX
+cleanup:
+  - reset the lab to its fixture seed after the run
+industry_mapping:
+  - "BFSI: API token rotation that leaves the retired token valid"
+regulatory_mapping: []
+negative_tests:
+  - API-BAS-AUTHN-006 with the current token after rotation against the fixed build must change the order

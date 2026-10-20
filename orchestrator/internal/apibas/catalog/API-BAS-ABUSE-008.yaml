@@ -1,0 +1,57 @@
+id: API-BAS-ABUSE-008
+name: Account creation has no limit and can be automated without authentication
+category: ABUSE
+claim: function_level
+attack_objective: >
+  An unauthenticated client creates accounts in a loop, because account creation has no limit.
+threat_model:
+  attacker: unauthenticated client that automates sign-up
+  identity: anonymous
+  access_level: no credential
+  objective: create large numbers of accounts automatically
+preconditions:
+  fixture: orders-two-tenant
+  identities: [customer-b, anonymous]
+  object: ORD-2001
+steps:
+  - id: baseline-owner-read
+    role: baseline
+    identity: customer-b
+    auth: valid
+    method: GET
+    path: /api/orders/{object}
+    hypothesis: The owner can read their own order. If this fails, the scenario is not testable.
+  - id: attack-automated-signup
+    role: attack
+    identity: anonymous
+    auth: none
+    method: POST
+    path: /api/abuse/signup
+    body: '{"email": "bot{n}@example.test"}'
+    repeat: 10
+    hypothesis: Account creation is limited per run, so the requests beyond the limit are refused.
+max_accepted_attempts: 5
+denied_statuses: [429]
+expected_control: >
+  Account creation beyond the declared limit returns 429, and accepted creations stay within the
+  limit.
+ground_truth:
+  adapters: [state, response]
+  check: >
+    The number of accepted creations stays within the declared limit, and the state is
+    unchanged by the attack beyond the sandbox reset.
+detection_assertion:
+  status: not_evaluated
+  reason: Detection validation is Phase 4; this scenario makes no detection claim.
+evidence:
+  - sanitized_request
+  - sanitized_response
+  - state_diff
+side_effect_class: STATE_CHANGE_SANDBOX
+cleanup:
+  - reset the lab to its fixture seed after the run
+industry_mapping:
+  - "BFSI: account creation endpoints that can be automated without limit"
+regulatory_mapping: []
+negative_tests:
+  - API-BAS-ABUSE-008 with a single legitimate sign-up against the fixed build must return 201

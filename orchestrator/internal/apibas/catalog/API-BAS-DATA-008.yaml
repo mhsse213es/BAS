@@ -1,0 +1,55 @@
+id: API-BAS-DATA-008
+name: Card masking is bypassed by an unmasked display field
+category: DATA
+claim: property_level
+attack_objective: >
+  The owner's card view is masked, but the same value is also returned unmasked in a second
+  field, so the masking does not hold.
+threat_model:
+  attacker: authenticated customer who owns the order
+  identity: customer-b
+  access_level: standard customer, valid token, owner of the object
+  objective: read the unmasked card value from a masked view
+preconditions:
+  fixture: orders-two-tenant
+  identities: [customer-b]
+  object: ORD-2001
+steps:
+  - id: baseline-owner-card
+    role: baseline
+    identity: customer-b
+    auth: valid
+    method: GET
+    path: /api/data/orders/{object}/card
+    hypothesis: The owner can read the masked card. If this fails, the scenario is not testable.
+  - id: attack-card-view
+    role: attack
+    identity: customer-b
+    auth: valid
+    method: GET
+    path: /api/data/orders/{object}/card
+    hypothesis: Masking holds in every field of the card view, for the owner too.
+clean_is_enforcement: true
+expected_control: >
+  The card view returns only the masked value in every field, and the unmasked card value
+  appears nowhere in the response.
+ground_truth:
+  adapters: [state, response]
+  check: >
+    The attack response contains none of the owner's protected values, and the state is
+    unchanged by the attack.
+detection_assertion:
+  status: not_evaluated
+  reason: Detection validation is Phase 4; this scenario makes no detection claim.
+evidence:
+  - sanitized_request
+  - sanitized_response
+  - state_diff
+side_effect_class: READ_ONLY
+cleanup:
+  - no cleanup required for a read-only scenario
+industry_mapping:
+  - "BFSI: masked display fields that repeat the unmasked value in another field"
+regulatory_mapping: []
+negative_tests:
+  - API-BAS-DATA-008 with the masked view only against the fixed build must PASS with masking enforced

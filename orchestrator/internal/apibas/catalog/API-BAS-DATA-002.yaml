@@ -1,0 +1,55 @@
+id: API-BAS-DATA-002
+name: Order statement returns financial and account fields to another customer
+category: DATA
+claim: cross_identity
+attack_objective: >
+  A customer requests another customer's statement, and receives financial and account fields
+  that the statement should hide from non-owners.
+threat_model:
+  attacker: authenticated customer in tenant A
+  identity: customer-a
+  access_level: standard customer, valid token
+  objective: read another customer's financial and account fields through the statement route
+preconditions:
+  fixture: orders-two-tenant
+  identities: [customer-b, customer-a]
+  object: ORD-2001
+steps:
+  - id: baseline-owner-statement
+    role: baseline
+    identity: customer-b
+    auth: valid
+    method: GET
+    path: /api/data/orders/{object}/statement
+    hypothesis: The owner can read their own statement. If this fails, the scenario is not testable.
+  - id: attack-other-statement
+    role: attack
+    identity: customer-a
+    auth: valid
+    method: GET
+    path: /api/data/orders/{object}/statement
+    hypothesis: Statements are restricted to the owner, so another customer's statement is refused.
+denied_statuses: [404]
+expected_control: >
+  A statement for an order the caller does not own returns 404, with no financial or account
+  fields.
+ground_truth:
+  adapters: [state, response]
+  check: >
+    The attack response contains none of the owner's protected values, and the state is
+    unchanged by the attack.
+detection_assertion:
+  status: not_evaluated
+  reason: Detection validation is Phase 4; this scenario makes no detection claim.
+evidence:
+  - sanitized_request
+  - sanitized_response
+  - state_diff
+side_effect_class: READ_ONLY
+cleanup:
+  - no cleanup required for a read-only scenario
+industry_mapping:
+  - "BFSI: statements that expose financial and account fields to non-owners"
+regulatory_mapping: []
+negative_tests:
+  - API-BAS-DATA-002 with the owner's own statement against the fixed build must return the public view
