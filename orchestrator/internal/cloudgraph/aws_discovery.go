@@ -12,6 +12,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/backup"
 	"github.com/aws/aws-sdk-go-v2/service/iam"
 	"github.com/aws/aws-sdk-go-v2/service/iam/types"
+	"github.com/aws/aws-sdk-go-v2/service/organizations"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 )
@@ -47,6 +48,9 @@ type AWSDiscoveryClient struct {
 	iam AWSIAMAPI
 	sts AWSSTSAPI
 	s3  AWSS3API
+	// org reads SCPs. Required: without it an organization's deny layers
+	// would be invisible and grants would be over-reported.
+	org AWSOrgAPI
 	// backup is optional. Without it, vault inventory is reported as skipped
 	// rather than guessed, and backup-assurance scenarios stay not-attempted.
 	backup AWSBackupAPI
@@ -64,6 +68,7 @@ func NewAWSDiscoveryClient(cfg aws.Config) *AWSDiscoveryClient {
 		iam:      iam.NewFromConfig(cfg),
 		sts:      sts.NewFromConfig(cfg),
 		s3:       s3.NewFromConfig(cfg),
+		org:      organizations.NewFromConfig(cfg),
 		backup:   backup.NewFromConfig(cfg),
 		region:   cfg.Region,
 		maxPages: maxDiscoveryPages,
@@ -74,6 +79,12 @@ func NewAWSDiscoveryClient(cfg aws.Config) *AWSDiscoveryClient {
 // and by any caller that needs to decorate the SDK clients.
 func NewAWSDiscoveryClientWith(iamAPI AWSIAMAPI, stsAPI AWSSTSAPI, s3API AWSS3API, region string) *AWSDiscoveryClient {
 	return &AWSDiscoveryClient{iam: iamAPI, sts: stsAPI, s3: s3API, region: region, maxPages: maxDiscoveryPages}
+}
+
+// WithOrganizations attaches the Organizations source used to read SCPs.
+func (c *AWSDiscoveryClient) WithOrganizations(o AWSOrgAPI) *AWSDiscoveryClient {
+	c.org = o
+	return c
 }
 
 // WithBackup attaches a backup vault inventory source to the client.
@@ -245,6 +256,10 @@ type AWSDiscoveryStats struct {
 	SkippedDocuments     int  // identity policies that failed to decode
 	BackupVaults         int  // backup vaults discovered
 	BackupVaultsSkipped  bool // no backup inventory source attached
+	SCPLevels            int  // organization levels read (account, OUs, root)
+	SCPNotInUse          bool // account is not in an organization; SCPs do not apply
+	BoundaryAttached     int  // identities with a permissions boundary attached to their edges
+	BoundaryUnresolved   int  // identities whose boundary policy was not in the snapshot; edges are Unknown
 }
 
 // Discover performs a full AWS discovery pass: account, identities, resources,
@@ -304,12 +319,13 @@ func (c *AWSDiscoveryClient) Discover(ctx context.Context) (*DiscoveredGraph, *A
 		identity *CloudIdentity
 		docs     []string
 		trust    string // role trust document, roles only
+		boundary string // permissions boundary policy ARN, if any
 	}
 	var holders []*policyHolder
 
 	for _, u := range snap.users {
 		id := addIdentity(aws.ToString(u.Arn), "iam-user")
-		h := &policyHolder{identity: id}
+		h := &policyHolder{identity: id, boundary: awsBoundaryARN(u.PermissionsBoundary)}
 		for _, pd := range u.UserPolicyList {
 			h.docs = append(h.docs, aws.ToString(pd.PolicyDocument))
 		}
@@ -337,7 +353,7 @@ func (c *AWSDiscoveryClient) Discover(ctx context.Context) (*DiscoveredGraph, *A
 
 	for _, r := range snap.roles {
 		id := addIdentity(aws.ToString(r.Arn), "iam-role")
-		h := &policyHolder{identity: id}
+		h := &policyHolder{identity: id, boundary: awsBoundaryARN(r.PermissionsBoundary)}
 		for _, pd := range r.RolePolicyList {
 			h.docs = append(h.docs, aws.ToString(pd.PolicyDocument))
 		}
@@ -499,7 +515,59 @@ func (c *AWSDiscoveryClient) Discover(ctx context.Context) (*DiscoveredGraph, *A
 		}
 	}
 
+	// Enforcement layers. A boundary is per identity; SCPs are per account and
+	// shared by every edge. Both are attached to the edges they constrain so the
+	// evaluator can apply them with the edge alone.
+	boundaryByID := map[string]string{}
+	unresolvedByID := map[string]bool{}
+	for _, h := range holders {
+		if h.boundary == "" {
+			continue
+		}
+		doc, ok := managedDoc[h.boundary]
+		if !ok {
+			unresolvedByID[h.identity.CanonicalID] = true
+			stats.BoundaryUnresolved++
+			continue
+		}
+		boundaryByID[h.identity.CanonicalID] = doc
+		stats.BoundaryAttached++
+	}
+	levels, inOrg, err := c.scpLevels(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	levelsJSON := ""
+	if inOrg {
+		stats.SCPLevels = len(levels)
+		if levelsJSON, err = awsLevelsJSON(levels); err != nil {
+			return nil, nil, err
+		}
+	} else {
+		stats.SCPNotInUse = true
+	}
+	for _, p := range graph.Permissions {
+		id := p.Source.CanonicalID
+		if doc, ok := boundaryByID[id]; ok {
+			p.Attributes["boundary_document"] = doc
+		}
+		if unresolvedByID[id] {
+			p.Attributes["boundary_unresolved"] = "true"
+		}
+		if inOrg {
+			p.Attributes["scp_levels"] = levelsJSON
+		}
+	}
+
 	return graph, stats, nil
+}
+
+// awsBoundaryARN returns the permissions boundary policy ARN, or "" if none.
+func awsBoundaryARN(b *types.AttachedPermissionsBoundary) string {
+	if b == nil {
+		return ""
+	}
+	return aws.ToString(b.PermissionsBoundaryArn)
 }
 
 // awsIdentityAllowsAssume reports whether any already-emitted identity-policy

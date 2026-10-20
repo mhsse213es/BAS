@@ -113,7 +113,8 @@ func baseSnapshot(t *testing.T) *iam.GetAccountAuthorizationDetailsOutput {
 }
 
 func newTestAWSClient(iamAPI AWSIAMAPI, buckets ...string) *AWSDiscoveryClient {
-	return NewAWSDiscoveryClientWith(iamAPI, &fakeSTS{account: testAcct}, &fakeS3{names: buckets}, "us-east-1")
+	return NewAWSDiscoveryClientWith(iamAPI, &fakeSTS{account: testAcct}, &fakeS3{names: buckets}, "us-east-1").
+		WithOrganizations(&fakeOrg{})
 }
 
 func findPerm(g *DiscoveredGraph, source, action, target string) *CloudPermission {

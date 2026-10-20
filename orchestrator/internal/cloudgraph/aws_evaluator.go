@@ -10,6 +10,24 @@ type AWSEvaluator struct{}
 // EvaluatePermission determines if a permission edge is allowed, denied, or conditional.
 // AWS evaluation order: explicit Deny always wins, then explicit Allow, else implicit deny.
 func (e *AWSEvaluator) EvaluatePermission(edge *CloudPermission, ctx *RequestContext) *EvaluationResult {
+	// Permissions boundary and SCPs narrow the identity policy. A blocked or
+	// unreadable layer decides the result; a conditional layer caps a grant at
+	// ConditionallyReachable.
+	gate, gateState := awsEnforcementVerdict(edge)
+	if gate != nil {
+		return gate
+	}
+	result := e.identityVerdict(edge, ctx)
+	if result.State == PolicySupported && gateState == ConditionallyReachable {
+		result.State = ConditionallyReachable
+		result.UnresolvedConds = []string{awsGateCondition}
+	}
+	return result
+}
+
+// identityVerdict evaluates the identity policy attached to an edge, without
+// the enforcement layers.
+func (e *AWSEvaluator) identityVerdict(edge *CloudPermission, ctx *RequestContext) *EvaluationResult {
 	policyDoc, hasPolicy := edge.Attributes["policy_document"]
 
 	if hasPolicy && hasDenyStatement(policyDoc, edge.Action) {
