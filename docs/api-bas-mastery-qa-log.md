@@ -432,3 +432,42 @@ Vulnerable: all twenty-two FAIL, exploited. Fixed: all twenty-two PASS, not expl
 - Not started, and needing framework work: counted-request abuse scenarios (ABUSE), header evidence for CORS and caching (DISC-005, DATA-006), a fixture SIEM for detection (Phase 4), and GraphQL, gRPC, SOAP, WebSocket and async adapters.
 - The orchestrator still does not schedule runs or persist results, and the production secret store is still not built.
 - The Windows build (`build.ps1`) has not been run on these tranches. You said you will build it later.
+
+
+## Phase 9 tranche — response-header evidence
+
+Branch: `feature/api-bas-phase9` (from `main`). This tranche adds framework support for response-header evidence, then one scenario that uses it, bringing the total to twenty-three.
+
+| ID | Sub-technique | Claim | Vulnerable | Fixed | Side effect |
+|---|---|---|---|---|---|
+| API-BAS-DISC-005 | Permissive CORS reflects an untrusted origin | authentication | FAIL, exploited (reflected origin) | PASS (403 for untrusted origin) | READ_ONLY |
+
+New flaw: `LAB-DISC-CORS-001`.
+
+### Framework addition: forbidden response headers
+
+- A scenario may declare `forbidden_response_headers`: a list of `{name, value}` pairs. Both are required.
+- The runner captures the attack response's headers. Each header whose name and exact value match a rule counts as exposure.
+- Any exposure is graded FAIL / exploited, the same way a leaked protected value or a state change is. A clean 2xx passes only when the scenario declares `clean_is_enforcement`. Otherwise the scenario must declare a denial status.
+- Headers are not written to the report. Only the grading outcome is recorded, so no header values leave the runner beyond what the report already holds.
+
+### Design notes
+
+- The fixed build refuses requests with an untrusted Origin with 403. The contract requires an explicit denial status, so a 200 clean pass isn't available in this scenario. That is the same design as the other scenarios.
+- The vulnerable build reflects any Origin in `Access-Control-Allow-Origin`, which is the usual CORS misconfiguration.
+
+### Tests
+
+`go test ./internal/apibas/... -count=1`: all packages pass. New tests: `grade/headers_test.go` (exposure is exploitation; clean headers pass when enforced) and `runner/phase9_test.go` (vulnerable FAIL, fixed PASS with enforced control).
+
+### CLI smoke test (both modes, all twenty-three scenarios)
+
+Vulnerable: all twenty-three FAIL, exploited. Fixed: all twenty-three PASS, not exploited. Token check against the lab logs: zero matches.
+
+### Still open
+
+- Twenty-three scenarios of roughly 50 Phase 2 sub-techniques.
+- API-BAS-DATA-006 (cache poisoning and private-response caching) is partly unblocked: the header evidence exists now, but it also needs a response-caching model in the lab. It is not written yet.
+- Not started, and still needing framework work: counted-request abuse scenarios (ABUSE), a fixture SIEM for detection (Phase 4), and GraphQL, gRPC, SOAP, WebSocket and async adapters.
+- The orchestrator still does not schedule runs or persist results, and the production secret store is still not built.
+- The Windows build (`build.ps1`) has not been run on these tranches. You said you will build it later.

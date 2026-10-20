@@ -53,25 +53,28 @@ var idPattern = regexp.MustCompile(`^API-BAS-([A-Z]+)-(\d{3})$`)
 // Scenario is one API BAS scenario: a campaign of ordered steps with an
 // explicit hypothesis, expected control and ground truth.
 type Scenario struct {
-	ID                string             `yaml:"id"`
-	Name              string             `yaml:"name"`
-	Category          string             `yaml:"category"`
-	Claim             string             `yaml:"claim"`
-	AttackObjective   string             `yaml:"attack_objective"`
-	ThreatModel       ThreatModel        `yaml:"threat_model"`
-	Preconditions     Preconditions      `yaml:"preconditions"`
-	Steps             []Step             `yaml:"steps"`
-	DeniedStatuses    []int              `yaml:"denied_statuses"`
-	CleanIsEnforced   bool               `yaml:"clean_is_enforcement"`
-	ExpectedControl   string             `yaml:"expected_control"`
-	GroundTruth       GroundTruth        `yaml:"ground_truth"`
-	DetectionAssert   DetectionAssertion `yaml:"detection_assertion"`
-	Evidence          []string           `yaml:"evidence"`
-	SideEffectClass   string             `yaml:"side_effect_class"`
-	Cleanup           []string           `yaml:"cleanup"`
-	IndustryMapping   []string           `yaml:"industry_mapping"`
-	RegulatoryMapping []string           `yaml:"regulatory_mapping"`
-	NegativeTests     []string           `yaml:"negative_tests"`
+	ID              string        `yaml:"id"`
+	Name            string        `yaml:"name"`
+	Category        string        `yaml:"category"`
+	Claim           string        `yaml:"claim"`
+	AttackObjective string        `yaml:"attack_objective"`
+	ThreatModel     ThreatModel   `yaml:"threat_model"`
+	Preconditions   Preconditions `yaml:"preconditions"`
+	Steps           []Step        `yaml:"steps"`
+	DeniedStatuses  []int         `yaml:"denied_statuses"`
+	CleanIsEnforced bool          `yaml:"clean_is_enforcement"`
+	// ForbiddenResponseHeaders lists response headers that, with the given value,
+	// count as exposure on the attack response (for example a reflected origin).
+	ForbiddenResponseHeaders []HeaderRule       `yaml:"forbidden_response_headers"`
+	ExpectedControl          string             `yaml:"expected_control"`
+	GroundTruth              GroundTruth        `yaml:"ground_truth"`
+	DetectionAssert          DetectionAssertion `yaml:"detection_assertion"`
+	Evidence                 []string           `yaml:"evidence"`
+	SideEffectClass          string             `yaml:"side_effect_class"`
+	Cleanup                  []string           `yaml:"cleanup"`
+	IndustryMapping          []string           `yaml:"industry_mapping"`
+	RegulatoryMapping        []string           `yaml:"regulatory_mapping"`
+	NegativeTests            []string           `yaml:"negative_tests"`
 }
 
 // ThreatModel is the simulated attacker (api.txt section 7, item 1).
@@ -192,6 +195,11 @@ func (s Scenario) Validate() error {
 	if !hasState {
 		return fmt.Errorf("contract: %s: ground_truth must include the state adapter", s.ID)
 	}
+	for _, h := range s.ForbiddenResponseHeaders {
+		if strings.TrimSpace(h.Name) == "" || h.Value == "" {
+			return fmt.Errorf("contract: %s: forbidden_response_headers entries need a name and a value", s.ID)
+		}
+	}
 	if s.CleanIsEnforced && !slices.Contains(s.GroundTruth.Adapters, "response") {
 		return fmt.Errorf("contract: %s: clean_is_enforcement needs the response adapter to prove no leak", s.ID)
 	}
@@ -292,4 +300,10 @@ func (s Scenario) validateSideEffects() error {
 		}
 	}
 	return nil
+}
+
+// HeaderRule names a response header and the value that counts as exposure.
+type HeaderRule struct {
+	Name  string `yaml:"name"`
+	Value string `yaml:"value"`
 }

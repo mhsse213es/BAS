@@ -214,6 +214,13 @@ func Flaws() []Flaw {
 				"Fixed: a non-owner receives 403 and no secret.",
 		},
 		{
+			ID:          "LAB-DISC-CORS-001",
+			ScenarioID:  "API-BAS-DISC-005",
+			Description: "GET /api/public/status reflects any request Origin in Access-Control-Allow-Origin.",
+			Oracle: "Vulnerable: a request from an untrusted origin receives that origin in Access-Control-Allow-Origin (exposed). " +
+				"Fixed: no CORS header is sent, so no origin is granted cross-origin reads.",
+		},
+		{
 			ID:          "LAB-AUTHZ-MASS-001",
 			ScenarioID:  "API-BAS-AUTHZ-003",
 			Description: "PATCH /api/orders/{id} binds every submitted field, including owner_id, from the request body.",
@@ -333,6 +340,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /internal/orders/{id}", s.internalOrder)
 	mux.HandleFunc("GET /api/orders/{id}/items/{itemId}", s.getItem)
 	mux.HandleFunc("GET /api/exports/{id}", s.getExport)
+	mux.HandleFunc("GET /api/public/status", s.publicStatus)
 	mux.HandleFunc("GET /api/orders/{id}/integration", s.getIntegration)
 	if s.cfg.Mode == ModeVulnerable {
 		// LAB-DISC-DEPRECATED-001: the retired v0 route is still served, without auth.
@@ -1017,6 +1025,25 @@ func (s *Server) getIntegration(w http.ResponseWriter, r *http.Request) {
 		"order_id":       order.ID,
 		"webhook_secret": order.Protected["webhook_secret"],
 	})
+}
+
+// publicStatus is an unauthenticated status route. The vulnerable build reflects
+// any request's Origin in Access-Control-Allow-Origin (LAB-DISC-CORS-001), which
+// lets a page on any site read the response. The fixed build refuses untrusted origins.
+func (s *Server) publicStatus(w http.ResponseWriter, r *http.Request) {
+	origin := r.Header.Get("Origin")
+	if s.cfg.Mode == ModeVulnerable {
+		if origin != "" {
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+			w.Header().Set("Vary", "Origin")
+		}
+	} else if origin != "" {
+		// The fixed build refuses cross-origin requests from any origin it does not
+		// trust. This lab has no trusted origins, so every Origin header is refused.
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "origin not permitted"})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
 // getOrderV0 is the retired route (LAB-DISC-DEPRECATED-001). It is mounted only in

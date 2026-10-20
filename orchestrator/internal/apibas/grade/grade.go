@@ -64,6 +64,9 @@ type Exchange struct {
 	// LeakedProtected counts how many of the owner's protected values appear
 	// in the response body. Computed by the runner, which holds the fixture.
 	LeakedProtected int
+	// ForbiddenHeaders counts response headers the scenario declares as exposure
+	// (for example a reflected untrusted origin). Computed by the runner.
+	ForbiddenHeaders int
 }
 
 // Evidence is everything the grader is allowed to look at. It is assembled by
@@ -144,7 +147,7 @@ func Assess(ev Evidence) Outcome {
 	if ev.Baseline.Status != 200 {
 		return Skip(ReasonPreconditionMissing)
 	}
-	if ev.StateChanged || ev.Attack.LeakedProtected > 0 {
+	if ev.StateChanged || ev.Attack.LeakedProtected > 0 || ev.Attack.ForbiddenHeaders > 0 {
 		return Outcome{
 			Result:         FAIL,
 			Exploitability: Exploited,

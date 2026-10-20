@@ -95,6 +95,7 @@ type Exchange struct {
 	Status   int
 	Body     string // truncated and with leaked protected values replaced
 	Leaked   int
+	headers  http.Header
 }
 
 // Report is the complete output of one scenario execution.
@@ -238,7 +239,11 @@ func (r *Runner) Run(ctx context.Context, s contract.Scenario) (Report, error) {
 			last := i == len(s.Steps)-1
 			stopped := last || slices.Contains(s.DeniedStatuses, exch.Status) || exch.Status/100 != 2
 			if stopped {
-				ev.Attack = grade.Exchange{Status: exch.Status, LeakedProtected: exch.Leaked}
+				ev.Attack = grade.Exchange{
+					Status:           exch.Status,
+					LeakedProtected:  exch.Leaked,
+					ForbiddenHeaders: forbiddenHeaderHits(exch, s.ForbiddenResponseHeaders),
+				}
 				break
 			}
 		}
@@ -344,6 +349,7 @@ func (r *Runner) do(ctx context.Context, step contract.Step, token string, obj f
 		return ex, true
 	}
 	ex.Status = resp.StatusCode
+	ex.headers = resp.Header.Clone()
 
 	text := string(raw)
 	if protect != nil {
@@ -393,6 +399,20 @@ func sameState(a, b map[string]StateRecord) bool {
 		}
 	}
 	return true
+}
+
+// forbiddenHeaderHits counts the response headers of an exchange that match a
+// scenario's forbidden name and value.
+func forbiddenHeaderHits(ex Exchange, rules []contract.HeaderRule) int {
+	n := 0
+	for _, rule := range rules {
+		for _, v := range ex.headers.Values(rule.Name) {
+			if v == rule.Value {
+				n++
+			}
+		}
+	}
+	return n
 }
 
 // unsignedJWT builds a token with alg "none" and an empty signature. It is
