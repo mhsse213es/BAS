@@ -245,7 +245,7 @@ func (s Scenario) Validate() error {
 	} else {
 		d := s.Detection
 		switch {
-		case d.Source != "elastic-security":
+		case d.Source != "elastic-security" && d.Source != "microsoft-sentinel":
 			return fmt.Errorf("contract: %s: detection source %q is not supported", s.ID, d.Source)
 		case d.ExpectRule == "":
 			return fmt.Errorf("contract: %s: detection needs expect_rule", s.ID)

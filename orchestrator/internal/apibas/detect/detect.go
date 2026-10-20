@@ -138,8 +138,15 @@ func (f *ElasticFixture) Name() string { return SourceElastic }
 // Ingest validates every event before storing any of them. Sequence numbers must be
 // unique, and events are kept in sequence order, so results do not depend on input order.
 func (f *ElasticFixture) Ingest(events []Event) error {
-	seen := make(map[int]bool, len(f.events)+len(events))
-	for _, e := range f.events {
+	return ingestInto(&f.events, events)
+}
+
+// ingestInto validates every event before storing any of them, rejects duplicate
+// sequence numbers, and keeps the store in sequence order. Results therefore do not
+// depend on the order events arrive in.
+func ingestInto(store *[]Event, events []Event) error {
+	seen := make(map[int]bool, len(*store)+len(events))
+	for _, e := range *store {
 		seen[e.Seq] = true
 	}
 	for _, e := range events {
@@ -151,8 +158,8 @@ func (f *ElasticFixture) Ingest(events []Event) error {
 		}
 		seen[e.Seq] = true
 	}
-	f.events = append(f.events, events...)
-	sort.Slice(f.events, func(i, j int) bool { return f.events[i].Seq < f.events[j].Seq })
+	*store = append(*store, events...)
+	sort.Slice(*store, func(i, j int) bool { return (*store)[i].Seq < (*store)[j].Seq })
 	return nil
 }
 
@@ -160,10 +167,17 @@ func (f *ElasticFixture) Ingest(events []Event) error {
 // once, on its Threshold-th matching event. Events under other correlation IDs never
 // count.
 func (f *ElasticFixture) Alerts(correlationID string) []Alert {
+	return evaluate(f.events, ElasticRules, correlationID, SourceElastic)
+}
+
+// evaluate applies a rule set to the events for one correlation ID. A rule fires once,
+// on its Threshold-th matching event. The rules are vendor-neutral; an adapter supplies
+// only its events and its source label.
+func evaluate(events []Event, rules []Rule, correlationID, source string) []Alert {
 	var out []Alert
-	for _, rule := range ElasticRules {
+	for _, rule := range rules {
 		count := 0
-		for _, e := range f.events {
+		for _, e := range events {
 			if e.CorrelationID != correlationID || !rule.Match(e) {
 				continue
 			}
@@ -171,7 +185,7 @@ func (f *ElasticFixture) Alerts(correlationID string) []Alert {
 			if count == rule.Threshold {
 				out = append(out, Alert{
 					RuleID: rule.ID, RuleName: rule.Name, Severity: rule.Severity,
-					CorrelationID: correlationID, TriggerSeq: e.Seq, Source: SourceElastic,
+					CorrelationID: correlationID, TriggerSeq: e.Seq, Source: source,
 				})
 			}
 		}

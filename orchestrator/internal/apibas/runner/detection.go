@@ -18,13 +18,13 @@ type EventSource interface {
 }
 
 // detectionStage grades the detection axis after a run. It never changes the
-// exploitability result. Every detection result is labelled with the fixture
-// provenance, so it cannot be read as a live-SIEM result.
+// exploitability result. The scenario's declared source picks the fixture; every
+// result carries that fixture's provenance label.
 func (r *Runner) detectionStage(ctx context.Context, s contract.Scenario, tag string, rep Report) Report {
 	if s.Detection == nil {
 		return rep
 	}
-	rep.DetectionProvenance = detect.Provenance
+	rep.DetectionProvenance = detect.ProvenanceFor(s.Detection.Source)
 	minSev, ok := detect.ParseSeverity(s.Detection.MinSeverity)
 	if !ok {
 		rep.Outcome.Detection = "error:INVALID_SEVERITY"
@@ -39,13 +39,34 @@ func (r *Runner) detectionStage(ctx context.Context, s contract.Scenario, tag st
 		rep.Outcome.Detection = "error:EVENTS_UNAVAILABLE"
 		return rep
 	}
-	siem := detect.NewElasticFixture()
-	if err := siem.Ingest(events); err != nil {
+	alerts, err := detectAlerts(s.Detection.Source, events, tag)
+	if err != nil {
 		rep.Outcome.Detection = "error:INVALID_EVENT"
 		return rep
 	}
-	rep.Outcome.Detection = detect.Grade(siem.Alerts(tag), s.Detection.ExpectRule, minSev, tag)
+	rep.Outcome.Detection = detect.Grade(alerts, s.Detection.ExpectRule, minSev, tag)
 	return rep
+}
+
+// detectAlerts feeds one run's events to the fixture the scenario names. The Sentinel
+// path goes through row normalisation, so the mapping is exercised on every run.
+func detectAlerts(source string, events []detect.Event, tag string) ([]detect.Alert, error) {
+	if source == detect.SourceSentinel {
+		f := detect.NewSentinelFixture()
+		rows := make([]detect.SentinelRecord, 0, len(events))
+		for _, e := range events {
+			rows = append(rows, detect.ToSentinelRecord(e))
+		}
+		if err := f.IngestRecords(rows); err != nil {
+			return nil, err
+		}
+		return f.Alerts(tag), nil
+	}
+	f := detect.NewElasticFixture()
+	if err := f.Ingest(events); err != nil {
+		return nil, err
+	}
+	return f.Alerts(tag), nil
 }
 
 // reportedArrayLen counts the elements of a JSON array field a response reports.
