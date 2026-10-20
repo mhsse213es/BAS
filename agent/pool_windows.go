@@ -190,6 +190,8 @@ func (h *psHost) exec(ctx context.Context, step ScenarioStep) (res protocol.Exec
 		env["BAS_PAYLOAD_DIR"] = step.PayloadDir
 	}
 	maps.Copy(env, step.Env)
+	// Set after the step env so a step cannot override its own TaskID.
+	env["BAS_TASK_ID"] = step.TaskID
 	req := hostReq{ID: id, Command: step.Command, Env: env}
 	b, _ := json.Marshal(req)
 	b = append(b, '\n')
