@@ -30,6 +30,7 @@ import (
 	"github.com/audspect/bas/internal/apibas/contract"
 	"github.com/audspect/bas/internal/apibas/fixture"
 	"github.com/audspect/bas/internal/apibas/runner"
+	"github.com/audspect/bas/internal/db"
 )
 
 func main() {
@@ -41,6 +42,7 @@ func main() {
 	machine := flag.String("machine", "", "display label for the record; identity comes from the environment fingerprint, not this label")
 	fixedTarget := flag.String("fixed-target", "", "lab base URL of the fixed build; required with -calibrate")
 	calDir := flag.String("calibration-dir", "internal/apibas/calibration/records", "directory the calibration record is written to")
+	buildLabel := flag.String("build", "", "which build the target is: vulnerable or fixed; required when APIBAS_DB_DSN is set")
 	flag.Parse()
 
 	if err := checkTarget(*target, *allow); err != nil {
@@ -89,9 +91,16 @@ func main() {
 		runCalibration(r, fixed, scen, *machine, *calDir)
 		return
 	}
+	dsn := os.Getenv("APIBAS_DB_DSN")
+	if dsn != "" && *buildLabel != "vulnerable" && *buildLabel != "fixed" {
+		log.Fatal("-build must be vulnerable or fixed when APIBAS_DB_DSN is set")
+	}
 	rep, err := r.Run(context.Background(), scen)
 	if err != nil {
 		log.Fatal(err)
+	}
+	if dsn != "" {
+		persistRun(dsn, rep, *buildLabel)
 	}
 
 	enc := json.NewEncoder(os.Stdout)
@@ -191,4 +200,32 @@ func secretsFromEnv() (runner.SecretResolver, string, error) {
 		return nil, "", fmt.Errorf("set APIBAS_LAB_ADMIN_TOKEN")
 	}
 	return m, admin, nil
+}
+
+// persistRun stores one run in apibas_runs. The report is the same JSON printed to stdout. The database is
+// reached only through APIBAS_DB_DSN, so the credential never appears on the command line.
+func persistRun(dsn string, rep runner.Report, build string) {
+	ctx := context.Background()
+	pool, err := db.Connect(ctx, dsn)
+	if err != nil {
+		log.Fatalf("persist: %v", err)
+	}
+	defer pool.Close()
+	if err := db.EnsureAPIBASRunSchema(ctx, pool); err != nil {
+		log.Fatalf("persist schema: %v", err)
+	}
+	raw, err := json.Marshal(rep)
+	if err != nil {
+		log.Fatalf("persist encode: %v", err)
+	}
+	id, err := db.SaveAPIBASRun(ctx, pool, db.APIBASRun{
+		RunTag: rep.RunTag, ScenarioID: rep.ScenarioID, Build: build,
+		Result: string(rep.Outcome.Result), Exploitability: string(rep.Outcome.Exploitability),
+		Control: string(rep.Outcome.Control), Detection: rep.Outcome.Detection,
+		Reason: string(rep.Outcome.Reason), Report: raw,
+	})
+	if err != nil {
+		log.Fatalf("persist: %v", err)
+	}
+	log.Printf("stored apibas run %s (%s, %s)", id, rep.ScenarioID, build)
 }

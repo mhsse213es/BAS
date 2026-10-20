@@ -2084,3 +2084,30 @@ claimed for them.
 - **Production secret store.** `runner.MapSecrets` is for tests and the local lab only. `apibas-runner` reads
   credentials from environment variables. Decision needed: which secret store backs production. The adapter sits
   behind the existing `SecretResolver` interface.
+
+## Phase 38: result persistence (open item 1 of production gaps)
+
+### Built
+
+- `internal/db/apibas_schema.go`: `apibas_runs`, one row per scenario run per build (`UNIQUE (run_tag, build)`), with
+  the full report as `jsonb`. Outcome columns are copied out so they can be queried without parsing the report.
+- `internal/db/apibas_store.go`: `SaveAPIBASRun` validates the record (build, result, JSON) before it reaches the
+  database, and refuses a second save of the same tag and build. `ListAPIBASRuns` lists a scenario's runs newest first.
+- `cmd/apibas-runner`: optional persistence. Set `APIBAS_DB_DSN` and `-build vulnerable|fixed`. The DSN comes from the
+  environment, so the password never appears on the command line. JSON output to stdout is unchanged.
+
+### Tests
+
+- `TestAPIBASRunSchemaIdempotent`, `TestAPIBASRunSaveAndList`, `TestAPIBASRunDuplicateTagAndBuildRefused`,
+  `TestAPIBASRunInvalidInputRefused`. All pass against the Docker test database.
+- End to end: the vulnerable lab and `apibas-runner` ran `API-BAS-AUTHZ-001` with persistence on. The stored row matched
+  the stdout outcome (FAIL, exploited, detected). The stored report contains no credential values. The only match for
+  credential-like text is the field name `webhook_secret`, whose value is `[REDACTED]`.
+
+### Open items remaining
+
+- **Scheduling.** Not built. Nothing in the orchestrator triggers API BAS runs. `internal/jobs` has no API BAS references.
+- **Production secret store.** Not built. `apibas-runner` still reads credentials from environment variables.
+- **Database choice.** Persistence uses the orchestrator's existing Postgres (`pgxpool`, `EnsureSchema`-style
+  idempotent creation). That was the stated default, and it needs confirming.
+- Results are not yet visible in any UI or API. Reads are only through `ListAPIBASRuns`.
