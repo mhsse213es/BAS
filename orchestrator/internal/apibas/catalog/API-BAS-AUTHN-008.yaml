@@ -1,0 +1,57 @@
+id: API-BAS-AUTHN-008
+name: Caller-supplied customer header overrides the authenticated identity
+category: AUTHN
+claim: cross_identity
+attack_objective: >
+  A customer sends their own valid token together with a header naming another
+  customer, and the API acts as the named customer instead of the token holder.
+threat_model:
+  attacker: authenticated customer in tenant A who can set request headers
+  identity: customer-a
+  access_level: standard customer, valid token, can set arbitrary headers
+  objective: act as another customer by naming them in a header
+preconditions:
+  fixture: orders-two-tenant
+  identities: [customer-b, customer-a]
+  object: ORD-2001
+steps:
+  - id: baseline-owner-read
+    role: baseline
+    identity: customer-b
+    auth: valid
+    method: GET
+    path: /api/orders/{object}
+    hypothesis: The owner can read their order with their own token. If this fails, the scenario is not testable.
+  - id: attack-identity-header
+    role: attack
+    identity: customer-a
+    auth: valid
+    method: GET
+    path: /api/orders/{object}
+    headers:
+      X-Customer-Id: cust-b
+    hypothesis: Identity comes only from the verified token, so the header is ignored and the request is refused as a non-owner.
+denied_statuses: [403]
+expected_control: >
+  The identity is taken from the token alone; the request returns 403 for a
+  non-owner and discloses no protected values.
+ground_truth:
+  adapters: [state, response]
+  check: >
+    The state is unchanged by the attack and the attack response contains none
+    of the owner's protected values.
+detection_assertion:
+  status: not_evaluated
+  reason: Detection validation is Phase 4; this scenario makes no detection claim.
+evidence:
+  - sanitized_request
+  - sanitized_response
+  - state_diff
+side_effect_class: READ_ONLY
+cleanup:
+  - none; the scenario creates no records
+industry_mapping:
+  - "BFSI: identity confusion between customer sessions"
+regulatory_mapping: []
+negative_tests:
+  - API-BAS-AUTHN-008 against the fixed build must PASS

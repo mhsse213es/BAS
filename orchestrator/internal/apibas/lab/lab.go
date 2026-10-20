@@ -154,6 +154,20 @@ func Flaws() []Flaw {
 				"Fixed: the error is a generic 400 with no record.",
 		},
 		{
+			ID:          "LAB-AUTHN-SESSION-001",
+			ScenarioID:  "API-BAS-AUTHN-008",
+			Description: "A caller-supplied X-Customer-Id header overrides the identity the token proves.",
+			Oracle: "Vulnerable: a customer token with X-Customer-Id set to another customer reads that customer's order (exploited). " +
+				"Fixed: the header is ignored and the request returns 403.",
+		},
+		{
+			ID:          "LAB-AUTHZ-BULK-001",
+			ScenarioID:  "API-BAS-AUTHZ-007",
+			Description: "PATCH /api/orders/bulk applies a status change to every listed order, without an ownership check.",
+			Oracle: "Vulnerable: a bulk update naming another customer's order changes it (state change). " +
+				"Fixed: a bulk update naming any order the caller does not own returns 403 and changes nothing.",
+		},
+		{
 			ID:          "LAB-AUTHZ-MASS-001",
 			ScenarioID:  "API-BAS-AUTHZ-003",
 			Description: "PATCH /api/orders/{id} binds every submitted field, including owner_id, from the request body.",
@@ -248,6 +262,7 @@ func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/orders/{id}", s.getOrder)
 	mux.HandleFunc("PATCH /api/orders/{id}", s.patchOrder)
+	mux.HandleFunc("PATCH /api/orders/bulk", s.bulkUpdate)
 	mux.HandleFunc("PATCH /api/admin/orders/{id}/status", s.adminSetStatus)
 	mux.HandleFunc("GET /api/v1/orders/{id}", s.getOrderV1)
 	mux.HandleFunc("GET /api/orders", s.listOrders)
@@ -310,6 +325,13 @@ func (s *Server) identify(r *http.Request) (string, authState) {
 	customer, ok := s.cfg.Tokens[tok]
 	if !ok {
 		return "", authInvalid
+	}
+	if s.cfg.Mode == ModeVulnerable {
+		// LAB-AUTHN-SESSION-001: the vulnerable build trusts a caller-supplied
+		// customer header over the identity the token proves.
+		if claimed := r.Header.Get("X-Customer-Id"); claimed != "" {
+			return claimed, authOK
+		}
 	}
 	if s.revoked[tok] {
 		return customer, authRevoked
@@ -621,6 +643,49 @@ func publicBody(o *Order) map[string]any {
 		body[k] = v
 	}
 	return body
+}
+
+// bulkUpdate sets one status on many orders in a single request. The vulnerable
+// build checks nothing per order (LAB-AUTHZ-BULK-001). The fixed build refuses the
+// whole request if any listed order is not owned by the caller.
+func (s *Server) bulkUpdate(w http.ResponseWriter, r *http.Request) {
+	caller, st := s.identify(r)
+	if st != authOK {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthenticated"})
+		return
+	}
+	var req struct {
+		IDs    []string `json:"ids"`
+		Status string   `json:"status"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || len(req.IDs) == 0 || req.Status == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "ids and status are required"})
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.cfg.Mode == ModeFixed {
+		for _, id := range req.IDs {
+			order, found := s.orders[id]
+			if !found {
+				writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+				return
+			}
+			if order.OwnerID != caller {
+				writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
+				return
+			}
+		}
+	}
+	updated := []string{}
+	for _, id := range req.IDs {
+		if order, found := s.orders[id]; found {
+			order.Status = req.Status
+			updated = append(updated, id)
+		}
+	}
+	s.record("bulk_update", "", fmt.Sprintf("%d orders set by %s", len(updated), caller))
+	writeJSON(w, http.StatusOK, map[string]any{"updated": updated})
 }
 
 // listOrders is the collection endpoint. The vulnerable build returns every

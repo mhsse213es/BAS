@@ -1,0 +1,56 @@
+id: API-BAS-AUTHZ-007
+name: Bulk update changes another customer's order
+category: AUTHZ
+claim: cross_identity
+attack_objective: >
+  A customer submits a bulk status update that mixes their own order with another
+  customer's order, and the bulk endpoint applies the change to both.
+threat_model:
+  attacker: authenticated customer in tenant A
+  identity: customer-a
+  access_level: standard customer, valid token, can call the bulk endpoint
+  objective: change another customer's order by including it in a bulk operation
+preconditions:
+  fixture: orders-two-tenant
+  identities: [customer-b, customer-a]
+  object: ORD-2001
+steps:
+  - id: baseline-owner-read
+    role: baseline
+    identity: customer-b
+    auth: valid
+    method: GET
+    path: /api/orders/{object}
+    hypothesis: The owner can read their order. If this fails, the scenario is not testable.
+  - id: attack-bulk-mixed-ownership
+    role: attack
+    identity: customer-a
+    auth: valid
+    method: PATCH
+    path: /api/orders/bulk
+    body: '{"ids": ["ORD-1001", "ORD-2001"], "status": "cancelled"}'
+    hypothesis: The bulk endpoint checks ownership of every listed order, so the request naming a foreign order is refused.
+denied_statuses: [403]
+expected_control: >
+  A bulk update naming any order the caller does not own returns 403 and changes
+  no order, including the caller's own.
+ground_truth:
+  adapters: [state, response]
+  check: >
+    The state is identical before and after the attack, so no order in the batch
+    changed, and the attack response discloses no protected values.
+detection_assertion:
+  status: not_evaluated
+  reason: Detection validation is Phase 4; this scenario makes no detection claim.
+evidence:
+  - sanitized_request
+  - sanitized_response
+  - state_diff
+side_effect_class: STATE_CHANGE_SANDBOX
+cleanup:
+  - reset the lab to its fixture seed after the run
+industry_mapping:
+  - "BFSI: mass modification of account and order records across owners"
+regulatory_mapping: []
+negative_tests:
+  - API-BAS-AUTHZ-007 against the fixed build must PASS
