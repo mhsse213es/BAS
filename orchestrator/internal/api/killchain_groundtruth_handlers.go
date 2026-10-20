@@ -24,9 +24,10 @@ func (h *Handler) RecordKillChainGroundTruth(w http.ResponseWriter, r *http.Requ
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<16)
 	var req struct {
-		Source    string `json:"source"`
-		Executed  string `json:"executed"`
-		Reference string `json:"reference"`
+		Source      string `json:"source"`
+		SourceClass string `json:"sourceClass"`
+		Executed    string `json:"executed"`
+		Reference   string `json:"reference"`
 	}
 	dec := json.NewDecoder(r.Body)
 	dec.DisallowUnknownFields()
@@ -44,11 +45,12 @@ func (h *Handler) RecordKillChainGroundTruth(w http.ResponseWriter, r *http.Requ
 	}
 	runID := chi.URLParam(r, "runId")
 	rec := db.GroundTruthRecord{
-		RunID:      runID,
-		Source:     req.Source,
-		Executed:   killchain.Tri(req.Executed),
-		Reference:  req.Reference,
-		RecordedBy: recordedBy,
+		RunID:       runID,
+		Source:      req.Source,
+		SourceClass: killchain.SourceClass(req.SourceClass),
+		Executed:    killchain.Tri(req.Executed),
+		Reference:   req.Reference,
+		RecordedBy:  recordedBy,
 	}
 	if err := store.PutGroundTruth(r.Context(), rec); err != nil {
 		jsonError(w, "ground truth refused: "+err.Error(), http.StatusBadRequest)

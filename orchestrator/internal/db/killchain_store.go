@@ -51,6 +51,7 @@ func EnsureKillChainSchema(ctx context.Context, pool *pgxpool.Pool) error {
 			recorded_by text        NOT NULL DEFAULT '',
 			recorded_at timestamptz NOT NULL DEFAULT NOW()
 		);
+		ALTER TABLE killchain_ground_truth ADD COLUMN IF NOT EXISTS source_class text NOT NULL DEFAULT '';
 		CREATE TABLE IF NOT EXISTS killchain_coverage_proofs (
 			scenario_id     text        PRIMARY KEY,
 			domain          text        NOT NULL DEFAULT '',
