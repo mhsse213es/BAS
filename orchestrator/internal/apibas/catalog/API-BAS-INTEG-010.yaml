@@ -1,0 +1,65 @@
+id: API-BAS-INTEG-010
+name: Event payload altered after signing is accepted by the consumer
+category: INTEG
+claim: authentication
+protocol: async
+prerequisites:
+  - async broker adapter with message headers, not yet implemented
+  - lab consumer that verifies an HMAC signature over the event payload, using a fixture key
+  - the signing key is supplied by the lab; the scenario never embeds or logs it
+attack_objective: >
+  A party with publish rights alters the payload of a signed event and keeps the original signature,
+  and the consumer accepts the altered event.
+threat_model:
+  attacker: authenticated publisher on the event topic, not the signer of the event
+  identity: customer-a
+  access_level: standard customer, valid token, publish right on the topic
+  objective: change the meaning of a signed event, such as the order it refers to, without the signing key
+preconditions:
+  fixture: orders-two-tenant
+  identities: [customer-b, customer-a]
+  object: ORD-2001
+steps:
+  - id: baseline-signed-event
+    role: baseline
+    identity: customer-b
+    auth: valid
+    method: POST
+    path: /broker/topics/orders.events/publish
+    headers:
+      X-Event-Signature: sha256=baseline-signature-for-ORD-2001
+    body: '{"event": "order.created", "order_id": "ORD-2001"}'
+    hypothesis: A correctly signed event is accepted by the consumer. If this fails, the scenario is not testable.
+  - id: attack-altered-payload
+    role: attack
+    identity: customer-a
+    auth: valid
+    method: POST
+    path: /broker/topics/orders.events/publish
+    headers:
+      X-Event-Signature: sha256=baseline-signature-for-ORD-2001
+    body: '{"event": "order.created", "order_id": "ORD-1001"}'
+    hypothesis: The signature no longer matches the altered payload, so the consumer refuses the event.
+denied_statuses: [403]
+expected_control: >
+  The consumer rejects an event whose payload does not match its signature with 403, and the
+  altered event is not processed.
+ground_truth:
+  adapters: [state, response]
+  check: >
+    The altered event is not processed, and the state is unchanged by the attack.
+detection_assertion:
+  status: not_evaluated
+  reason: Detection validation is Phase 4; this scenario makes no detection claim.
+evidence:
+  - sanitized_request
+  - sanitized_response
+  - state_diff
+side_effect_class: STATE_CHANGE_SANDBOX
+cleanup:
+  - drain and delete the lab topic messages after the run, then reset the lab to its fixture seed
+industry_mapping:
+  - "BFSI: event consumers that do not verify payload signatures"
+regulatory_mapping: []
+negative_tests:
+  - API-BAS-INTEG-010 with the correctly signed baseline event against the fixed build must be accepted

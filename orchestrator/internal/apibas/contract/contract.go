@@ -30,6 +30,22 @@ var sideEffectClasses = map[string]bool{
 	"EXTERNAL_CONSEQUENTIAL": true, "RESOURCE_INTENSIVE": true,
 }
 
+// knownProtocols are the protocol names a scenario may declare.
+var knownProtocols = map[string]bool{
+	"": true, "http": true, "graphql": true, "grpc": true, "soap": true, "websocket": true, "async": true,
+}
+
+// supportedProtocols are the protocols with an executable adapter and an acceptance test. A
+// protocol is added here only when its adapter exists. Having scenarios for a protocol in the
+// catalog does not add it.
+var supportedProtocols = map[string]bool{"": true, "http": true}
+
+// ProtocolSupported reports whether a protocol has an executable adapter. Anything else is
+// UNSUPPORTED (blueprint section 2).
+func ProtocolSupported(protocol string) bool {
+	return supportedProtocols[protocol]
+}
+
 // Claim types decide which identity relationship the scenario depends on.
 //   - cross_identity: the attacker must be a different customer from the owner.
 //   - property_level: the attacker must be the owner, and the claim concerns a
@@ -86,6 +102,11 @@ type Scenario struct {
 	// Protocol names the protocol the scenario drives. Empty and "http" run; other
 	// known protocols are declared but reported UNSUPPORTED until an adapter exists.
 	Protocol string `yaml:"protocol"`
+	// Prerequisites are what a non-HTTP scenario needs before it can run: the adapter, the lab
+	// fixture, and the environment. They are required for every non-HTTP protocol. Steps of a
+	// non-HTTP scenario describe the protocol operation (method, path, body); no adapter sends
+	// them until it exists.
+	Prerequisites []string `yaml:"prerequisites"`
 	// Detection, when set, grades the detection axis against the access-event fixture.
 	Detection *DetectionPolicy `yaml:"detection"`
 	// Calibration declares the conditions the timing threshold was measured under.
@@ -393,10 +414,11 @@ func (s Scenario) validateSteps() error {
 	if s.MaxItemsReturned < 0 {
 		return fmt.Errorf("contract: %s: max_items_returned cannot be negative", s.ID)
 	}
-	switch s.Protocol {
-	case "", "http", "graphql", "grpc", "soap", "websocket", "async":
-	default:
+	if !knownProtocols[s.Protocol] {
 		return fmt.Errorf("contract: %s: protocol %q is not a known protocol", s.ID, s.Protocol)
+	}
+	if s.Protocol != "" && s.Protocol != "http" && len(s.Prerequisites) == 0 {
+		return fmt.Errorf("contract: %s: protocol %s needs prerequisites (adapter, fixture and environment) before it can run", s.ID, s.Protocol)
 	}
 	if s.MaxWorkUnits < 0 {
 		return fmt.Errorf("contract: %s: max_work_units cannot be negative", s.ID)

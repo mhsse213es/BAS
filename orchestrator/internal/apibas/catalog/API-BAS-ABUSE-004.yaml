@@ -1,0 +1,60 @@
+id: API-BAS-ABUSE-004
+name: Deeply nested GraphQL query is executed without a depth or complexity limit
+category: ABUSE
+claim: function_level
+protocol: graphql
+prerequisites:
+  - GraphQL HTTP adapter with a query builder that controls depth and breadth, not yet implemented
+  - lab GraphQL schema with a recursive relation (order to items to order), so depth is meaningful
+  - adapter must send only to the loopback lab target and must cap its own request size
+attack_objective: >
+  A customer sends a deeply nested GraphQL query that the server should refuse, and the server
+  executes it at full depth.
+threat_model:
+  attacker: authenticated customer
+  identity: customer-b
+  access_level: standard customer, valid token
+  objective: consume server resources through an unbounded GraphQL query
+preconditions:
+  fixture: orders-two-tenant
+  identities: [customer-b]
+  object: ORD-2001
+steps:
+  - id: baseline-shallow-query
+    role: baseline
+    identity: customer-b
+    auth: valid
+    method: POST
+    path: /graphql
+    body: '{"query": "{ order(id: \"ORD-2001\") { id status } }"}'
+    hypothesis: A shallow query is within the limits. If this fails, the scenario is not testable.
+  - id: attack-deep-nested-query
+    role: attack
+    identity: customer-b
+    auth: valid
+    method: POST
+    path: /graphql
+    body: '{"query": "{ order(id: \"ORD-2001\") { items { order { items { order { items { order { items { id } } } } } } } } }"}'
+    hypothesis: The server limits query depth, so the nested query is refused before it runs.
+denied_statuses: [400]
+expected_control: >
+  A query beyond the depth limit is refused with 400 before any resolver runs.
+ground_truth:
+  adapters: [state, response]
+  check: >
+    The state is unchanged by the attack, and the response discloses no protected values.
+detection_assertion:
+  status: not_evaluated
+  reason: Detection validation is Phase 4; this scenario makes no detection claim.
+evidence:
+  - sanitized_request
+  - sanitized_response
+  - state_diff
+side_effect_class: STATE_CHANGE_SANDBOX
+cleanup:
+  - reset the lab to its fixture seed after the run
+industry_mapping:
+  - "BFSI: GraphQL endpoints without depth or complexity limits"
+regulatory_mapping: []
+negative_tests:
+  - API-BAS-ABUSE-004 with the shallow baseline query against the fixed build must PASS on the legitimate query

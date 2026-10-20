@@ -1,0 +1,62 @@
+id: API-BAS-INJ-007
+name: GraphQL query reads another customer's order field through an unguarded resolver
+category: INJ
+claim: cross_identity
+protocol: graphql
+prerequisites:
+  - GraphQL HTTP adapter with a query builder (alias, batch, depth), not yet implemented
+  - lab GraphQL schema over the orders fixture, with an order(id) field and protected fields exposed by resolver
+  - adapter must send only to the loopback lab target
+attack_objective: >
+  A customer queries another customer's order by ID through the GraphQL endpoint, and the
+  resolver returns protected fields that the REST route would refuse.
+threat_model:
+  attacker: authenticated customer in tenant A
+  identity: customer-a
+  access_level: standard customer, valid token
+  objective: read another customer's protected fields through a GraphQL resolver that skips the owner check
+preconditions:
+  fixture: orders-two-tenant
+  identities: [customer-b, customer-a]
+  object: ORD-2001
+steps:
+  - id: baseline-owner-query
+    role: baseline
+    identity: customer-b
+    auth: valid
+    method: POST
+    path: /graphql
+    body: '{"query": "{ order(id: \"ORD-2001\") { id status } }"}'
+    hypothesis: The owner can query their own order through GraphQL. If this fails, the scenario is not testable.
+  - id: attack-other-order-query
+    role: attack
+    identity: customer-a
+    auth: valid
+    method: POST
+    path: /graphql
+    body: '{"query": "{ order(id: \"ORD-2001\") { id card_last4 account_ref webhook_secret } }"}'
+    hypothesis: The resolver applies the same owner check as the REST route, so protected fields are not returned to another customer.
+clean_is_enforcement: true
+expected_control: >
+  The resolver returns no protected field of an order the caller does not own. The response may
+  carry a GraphQL error, but it carries no protected value.
+ground_truth:
+  adapters: [state, response]
+  check: >
+    The GraphQL response contains none of the owner's protected values, and the state is
+    unchanged by the attack.
+detection_assertion:
+  status: not_evaluated
+  reason: Detection validation is Phase 4; this scenario makes no detection claim.
+evidence:
+  - sanitized_request
+  - sanitized_response
+  - state_diff
+side_effect_class: STATE_CHANGE_SANDBOX
+cleanup:
+  - reset the lab to its fixture seed after the run
+industry_mapping:
+  - "BFSI: GraphQL resolvers that skip the authorization applied on REST routes"
+regulatory_mapping: []
+negative_tests:
+  - API-BAS-INJ-007 with the owner's own order against the fixed build must return the owner's public fields

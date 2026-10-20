@@ -1,0 +1,67 @@
+id: API-BAS-DISC-009
+name: gRPC order lookup skips the owner check that the REST route enforces
+category: DISC
+claim: cross_identity
+protocol: grpc
+prerequisites:
+  - gRPC client with descriptor import (protobuf), not yet implemented
+  - lab gRPC service exposing OrderService/GetOrder, with descriptors checked into the lab fixture
+  - gRPC PERMISSION_DENIED is recorded as the HTTP-equivalent 403 in evidence
+  - adapter must send only to the loopback lab target
+attack_objective: >
+  A customer calls the gRPC order lookup for another customer's order. The REST route refuses this,
+  but the gRPC method does not apply the same authorization.
+threat_model:
+  attacker: authenticated customer in tenant A with access to the gRPC port
+  identity: customer-a
+  access_level: standard customer, valid token
+  objective: read another customer's order through a protocol whose controls were not kept consistent with REST
+preconditions:
+  fixture: orders-two-tenant
+  identities: [customer-b, customer-a]
+  object: ORD-2001
+steps:
+  - id: baseline-owner-getorder
+    role: baseline
+    identity: customer-b
+    auth: valid
+    method: POST
+    path: /pkg.orders.v1.OrderService/GetOrder
+    headers:
+      Content-Type: application/grpc+json
+    body: '{"order_id": "ORD-2001"}'
+    hypothesis: The owner can look up their own order over gRPC. If this fails, the scenario is not testable.
+  - id: attack-other-getorder
+    role: attack
+    identity: customer-a
+    auth: valid
+    method: POST
+    path: /pkg.orders.v1.OrderService/GetOrder
+    headers:
+      Content-Type: application/grpc+json
+    body: '{"order_id": "ORD-2001"}'
+    hypothesis: GetOrder applies the same ownership check as the REST route, so another customer's order returns PERMISSION_DENIED.
+denied_statuses: [403]
+expected_control: >
+  GetOrder returns PERMISSION_DENIED (recorded as 403) for an order the caller does not own, and no
+  protected value is returned.
+ground_truth:
+  adapters: [state, response]
+  check: >
+    The response contains none of the owner's protected values, and the state is unchanged by the
+    attack.
+detection_assertion:
+  status: not_evaluated
+  reason: Detection validation is Phase 4; this scenario makes no detection claim.
+evidence:
+  - sanitized_request
+  - sanitized_response
+  - state_diff
+side_effect_class: STATE_CHANGE_SANDBOX
+cleanup:
+  - reset the lab to its fixture seed after the run
+industry_mapping:
+  - "BFSI: internal gRPC services whose authorization differs from the public REST API"
+regulatory_mapping: []
+negative_tests:
+  - API-BAS-DISC-009 with the owner's own order over gRPC against the fixed build must return the owner's public fields

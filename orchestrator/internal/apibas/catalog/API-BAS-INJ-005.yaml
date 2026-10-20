@@ -1,0 +1,66 @@
+id: API-BAS-INJ-005
+name: SOAP request with an external entity discloses an internal order record
+category: INJ
+claim: cross_identity
+protocol: soap
+prerequisites:
+  - SOAP adapter over HTTP with an XML body and a text/xml content type, not yet implemented
+  - lab SOAP endpoint that parses DOCTYPE and resolves external entities, in the vulnerable build only
+  - external entity targets must be the loopback lab host only; the adapter must refuse any other host
+attack_objective: >
+  A customer sends a SOAP request whose DOCTYPE declares an external entity that points at an
+  internal record, and the parser resolves it into the response.
+threat_model:
+  attacker: authenticated customer in tenant A who can send SOAP requests
+  identity: customer-a
+  access_level: standard customer, valid token
+  objective: read an internal record through XML external entity resolution
+preconditions:
+  fixture: orders-two-tenant
+  identities: [customer-b, customer-a]
+  object: ORD-2001
+steps:
+  - id: baseline-soap-order-read
+    role: baseline
+    identity: customer-b
+    auth: valid
+    method: POST
+    path: /soap/orders
+    headers:
+      Content-Type: text/xml
+    body: '<?xml version="1.0"?><request><order>ORD-2001</order></request>'
+    hypothesis: The owner can read their own order over SOAP. If this fails, the scenario is not testable.
+  - id: attack-external-entity
+    role: attack
+    identity: customer-a
+    auth: valid
+    method: POST
+    path: /soap/orders
+    headers:
+      Content-Type: text/xml
+    body: '<?xml version="1.0"?><!DOCTYPE request [<!ENTITY x SYSTEM "http://127.0.0.1:8099/internal/orders/ORD-2001">]><request><order>&x;</order></request>'
+    hypothesis: The parser refuses external entities, so the referenced record is never resolved into the response.
+denied_statuses: [400]
+expected_control: >
+  The SOAP parser refuses a DOCTYPE with an external entity with 400, and no internal record
+  appears in the response.
+ground_truth:
+  adapters: [state, response]
+  check: >
+    The response contains none of the owner's protected values, and the state is unchanged by
+    the attack.
+detection_assertion:
+  status: not_evaluated
+  reason: Detection validation is Phase 4; this scenario makes no detection claim.
+evidence:
+  - sanitized_request
+  - sanitized_response
+  - state_diff
+side_effect_class: STATE_CHANGE_SANDBOX
+cleanup:
+  - reset the lab to its fixture seed after the run
+industry_mapping:
+  - "BFSI: SOAP services that resolve external entities from client XML"
+regulatory_mapping: []
+negative_tests:
+  - API-BAS-INJ-005 with the baseline order read against the fixed build must return the owner's public view

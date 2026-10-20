@@ -1426,3 +1426,106 @@ UNSUPPORTED until its adapter exists.
   scenarios is therefore a document figure, not a report field.
 - No catalog scenario currently declares a non-HTTP protocol. The gate is tested with a copy of
   an HTTP scenario that declares one.
+
+
+## Phase 28 - coverage accounting and protocol catalog entries
+
+Scope: the two items from the review of Phase 27. (1) Coverage counted separately so that
+unsupported protocols cannot inflate it. (2) Protocol-specific catalog entries for GraphQL,
+gRPC, SOAP, WebSocket and async. No protocol adapter is built. Every protocol remains UNSUPPORTED.
+
+### 1. Coverage accounting (`internal/apibas/coverage`)
+
+Five measures, each with an explicit numerator and the catalog size as denominator:
+
+- Catalogued: scenarios in the catalog. The denominator of every ratio.
+- Implemented: scenarios whose protocol has an executable adapter.
+- Evaluated: scenarios with a valid verdict (PASS or FAIL with an exploitability value). Never
+  SKIPPED or ERROR.
+- Validated: valid verdicts in both builds. The vulnerable build FAILs as exploited, and the fixed
+  build PASSes with control enforced.
+- Excluded: Unsupported (no adapter), Errored (execution or environment failure), Unevaluated
+  (implemented, no valid verdict).
+
+The classes partition the catalog. `Consistent()` checks this. An unsupported scenario is in the
+catalogue and nowhere else, and a verdict supplied for it is ignored.
+
+Protocol support is decided in one place, `contract.ProtocolSupported`. Scenarios existing in the
+catalog do not add support. The runner uses the same check.
+
+### 2. Protocol catalog entries
+
+| ID | Sub-technique | Protocol | Notes |
+|---|---|---|---|
+| API-BAS-INJ-007 | GraphQL query manipulation | graphql | resolver skips the owner check |
+| API-BAS-ABUSE-004 | GraphQL depth and complexity | graphql | nested query should be refused with 400 |
+| API-BAS-INJ-005 | XML external entity | soap | DOCTYPE external entity; loopback target only |
+| API-BAS-DISC-009 | Inconsistent controls across protocols | grpc | GetOrder skips the REST owner check |
+| API-BAS-ABUSE-010 | Queue growth and retry storms | async | repeated publishes, bounded by a limit |
+| API-BAS-INTEG-010 | Event tampering | async | altered payload with the original signature |
+| API-BAS-AUTHN-011 | WebSocket handshake origin and credential | websocket | **proposed taxonomy addition** |
+
+Contract changes:
+- `prerequisites` is required for every non-HTTP scenario, so each one names its adapter,
+  fixture and environment before it can run.
+- Steps of a non-HTTP scenario describe the protocol operation (method, path, body). No adapter
+  sends them until it exists.
+
+### Decision for you: API-BAS-AUTHN-011
+
+The blueprint taxonomy has no WebSocket sub-technique. I added AUTHN-011 so the WebSocket
+protocol has a scenario. The entry is marked as a proposed addition in its prerequisites. It
+needs an owner decision on the ID and on whether it belongs under AUTHN. If you reject it, the
+entry is deleted and the WebSocket protocol has no scenario yet.
+
+### Verification
+
+- `TestPhase28_EveryNonHTTPCatalogScenarioIsUnsupportedWithZeroTraffic`: walks the catalog. For
+  each non-HTTP scenario, the result is SKIPPED, the exploitability and control are unsupported,
+  the reason is UNSUPPORTED_PROTOCOL, and zero requests reach the lab. A new protocol entry is
+  covered without editing the test.
+- Coverage tests (`coverage_test.go`):
+  - unsupported counts only in the catalogue, and a verdict supplied for it is ignored;
+  - adding an adapter raises Implemented, but Evaluated stays the same until a valid verdict
+    arrives;
+  - Validated needs both builds;
+  - an ERROR is excluded and reported separately;
+  - the report shows numerators, denominators and exclusions.
+- `TestPhase28_MeasuredCoverage` (skipped under `-short`): runs every implemented scenario in both
+  builds, using each scenario's fixture and lab faults, and reports coverage from those verdicts.
+
+### Measured result (this host, lab against lab)
+
+```
+Catalogued:   69
+Implemented:  62/69 (89.9%)
+Evaluated:    62/69 (89.9%)
+Validated:    62/69 (89.9%)
+Exclusions (denominator still includes them):
+  unsupported (no adapter):       7
+  errored (execution/environment): 0
+  unevaluated (implemented, no valid verdict): 0
+```
+
+The seven unsupported entries are listed by ID. The 62 implemented scenarios are the HTTP ones,
+and all of them are evaluated and validated in both builds. That is the same result the HTTP
+suite already asserts, so the HTTP regression is unchanged.
+
+### What this does not establish
+
+- The measured numbers are lab-against-lab. They show the implemented scenarios agree with the
+  lab's own vulnerable and fixed builds. They do not show that the lab matches a real product.
+- Coverage is over the catalog as it stands. The taxonomy has 110 sub-techniques (section 1) and
+  69 catalogued scenarios, so about 41 sub-techniques have no scenario at all. This report does not
+  count those as gaps, and it should not be read as covering the taxonomy.
+- The unsupported entries have no adapter, so no protocol coverage is gained from them.
+- The adapter-later behaviour is tested with a supplied support function, not a real adapter.
+  No real GraphQL, gRPC, SOAP, WebSocket or async adapter exists.
+
+### Still open
+
+- The owner decision on API-BAS-AUTHN-011 (above).
+- Protocol adapters, one protocol at a time, each with its own acceptance tests before support is
+  added to `supportedProtocols`.
+- The Windows `build.ps1` run.
+- `TestABUSE002Repeatability` without `-short` (pre-existing, see Phase 22).

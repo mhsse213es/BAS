@@ -1,0 +1,67 @@
+id: API-BAS-AUTHN-011
+name: WebSocket handshake accepts a foreign origin and no credential
+category: AUTHN
+claim: authentication
+protocol: websocket
+prerequisites:
+  - WebSocket handshake and frame adapter, not yet implemented
+  - lab WebSocket endpoint that checks the Origin header and the bearer token at the handshake
+  - "this ID is a proposed taxonomy addition (API-BAS-AUTHN-011): the blueprint taxonomy has no WebSocket sub-technique yet and needs an owner decision before this entry is final"
+attack_objective: >
+  A page on another origin opens a WebSocket to the API with the victim's browser, and the handshake
+  is accepted without a valid credential or an allowed origin (cross-site WebSocket hijacking).
+threat_model:
+  attacker: unauthenticated page on a foreign origin that a victim visits
+  identity: anonymous
+  access_level: no credential; can make the victim's browser open a WebSocket
+  objective: open an authenticated order event stream on the victim's session
+preconditions:
+  fixture: orders-two-tenant
+  identities: [customer-b, anonymous]
+  object: ORD-2001
+steps:
+  - id: baseline-owner-handshake
+    role: baseline
+    identity: customer-b
+    auth: valid
+    method: GET
+    path: /ws/orders
+    headers:
+      Upgrade: websocket
+      Connection: Upgrade
+      Origin: https://app.audspect.example
+    hypothesis: The owner can open the order stream from an allowed origin with a valid token. If this fails, the scenario is not testable.
+  - id: attack-foreign-origin-handshake
+    role: attack
+    identity: anonymous
+    auth: none
+    method: GET
+    path: /ws/orders
+    headers:
+      Upgrade: websocket
+      Connection: Upgrade
+      Origin: https://attacker.example
+    hypothesis: The handshake checks the origin and requires a credential, so a foreign origin with no credential is refused.
+denied_statuses: [403]
+expected_control: >
+  The WebSocket handshake refuses a foreign origin, and a handshake with no credential, with 403, and
+  opens no order stream.
+ground_truth:
+  adapters: [state, response]
+  check: >
+    The handshake opens no order stream for the attacker, and the state is unchanged by the attack.
+detection_assertion:
+  status: not_evaluated
+  reason: Detection validation is Phase 4; this scenario makes no detection claim.
+evidence:
+  - sanitized_request
+  - sanitized_response
+  - state_diff
+side_effect_class: READ_ONLY
+cleanup:
+  - no cleanup required for a read-only scenario
+industry_mapping:
+  - "BFSI: real-time order streams that accept cross-origin handshakes without authentication"
+regulatory_mapping: []
+negative_tests:
+  - API-BAS-AUTHN-011 with the owner's handshake from the allowed origin against the fixed build must be accepted

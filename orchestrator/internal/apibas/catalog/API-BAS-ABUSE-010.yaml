@@ -1,0 +1,64 @@
+id: API-BAS-ABUSE-010
+name: Retry storm on the order events topic grows the queue without bound
+category: ABUSE
+claim: function_level
+protocol: async
+prerequisites:
+  - async broker adapter (publish and queue depth observation), not yet implemented
+  - lab broker with a bounded retry policy, and a queue depth reading exposed to the adapter
+  - the adapter must publish only to lab-owned topics and must drain them after the run
+attack_objective: >
+  A customer publishes retried events to the order topic faster than the consumers drain it, and the
+  broker accepts every one, so the queue grows without limit.
+threat_model:
+  attacker: authenticated customer who can publish to the order event topic
+  identity: customer-b
+  access_level: standard customer, valid token, publish right on the topic
+  objective: grow the queue and its consumers' backlog through unlimited publishes
+preconditions:
+  fixture: orders-two-tenant
+  identities: [customer-b]
+  object: ORD-2001
+steps:
+  - id: baseline-publish-event
+    role: baseline
+    identity: customer-b
+    auth: valid
+    method: POST
+    path: /broker/topics/orders.events/publish
+    body: '{"event": "order.created", "order_id": "ORD-2001"}'
+    hypothesis: A single event publish is accepted. If this fails, the scenario is not testable.
+  - id: attack-retry-storm
+    role: attack
+    identity: customer-b
+    auth: valid
+    method: POST
+    path: /broker/topics/orders.events/publish
+    body: '{"event": "retry", "seq": {n}}'
+    repeat: 10
+    hypothesis: Publishes beyond the topic's rate limit are refused, so the queue cannot grow without bound.
+max_accepted_attempts: 5
+denied_statuses: [429]
+expected_control: >
+  Publishes beyond the per-publisher limit return 429, and the accepted publishes stay within the
+  declared limit.
+ground_truth:
+  adapters: [state, response]
+  check: >
+    The number of accepted publishes stays within the declared limit, and the state is unchanged
+    by the attack beyond the sandbox reset.
+detection_assertion:
+  status: not_evaluated
+  reason: Detection validation is Phase 4; this scenario makes no detection claim.
+evidence:
+  - sanitized_request
+  - sanitized_response
+  - state_diff
+side_effect_class: STATE_CHANGE_SANDBOX
+cleanup:
+  - drain and delete the lab topic messages after the run, then reset the lab to its fixture seed
+industry_mapping:
+  - "BFSI: event topics without publisher rate limits or queue-depth bounds"
+regulatory_mapping: []
+negative_tests:
+  - API-BAS-ABUSE-010 with the baseline single publish against the fixed build must be accepted
