@@ -13,6 +13,9 @@ type Identity struct {
 	Name       string // e.g. "customer-a"
 	CustomerID string // e.g. "cust-a"
 	TokenRef   string // secret reference resolved by the runner at execution time
+	// RevokedTokenRef names a credential that the lab has revoked. It exists
+	// so authentication scenarios can prove a revoked credential is refused.
+	RevokedTokenRef string
 }
 
 // Object is a synthetic resource owned by one identity. Public fields may be
@@ -59,7 +62,7 @@ func OrdersTwoTenant() Fixture {
 	return Fixture{
 		Name: "orders-two-tenant",
 		Identities: []Identity{
-			{Name: "customer-a", CustomerID: "cust-a", TokenRef: "apibas/lab/customer-a"},
+			{Name: "customer-a", CustomerID: "cust-a", TokenRef: "apibas/lab/customer-a", RevokedTokenRef: "apibas/lab/customer-a-revoked"},
 			{Name: "customer-b", CustomerID: "cust-b", TokenRef: "apibas/lab/customer-b"},
 		},
 		Objects: []Object{

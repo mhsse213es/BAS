@@ -1,6 +1,7 @@
 id: API-BAS-AUTHZ-001
 name: BOLA on an order-detail endpoint
 category: AUTHZ
+claim: cross_identity
 attack_objective: >
   An authenticated customer reads another customer's order by substituting the
   order identifier into their own request.
@@ -26,6 +27,7 @@ steps:
     method: GET
     path: /api/orders/{object}
     hypothesis: The order-detail endpoint verifies that the caller owns the order before returning it.
+denied_statuses: [401, 403, 404]
 expected_control: >
   The endpoint returns 403 (or 404) to a non-owner and discloses no protected
   values of the owner's order.

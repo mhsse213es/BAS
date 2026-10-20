@@ -1,0 +1,55 @@
+id: API-BAS-AUTHN-001
+name: Unauthenticated read of an order detail
+category: AUTHN
+claim: authentication
+attack_objective: >
+  A request with no credential reads a customer's order, so the endpoint does
+  not require authentication.
+threat_model:
+  attacker: unauthenticated internet client
+  identity: anonymous
+  access_level: none; no token of any kind
+  objective: read a customer's order without any credential
+preconditions:
+  fixture: orders-two-tenant
+  identities: [customer-b]
+  object: ORD-2001
+steps:
+  - id: baseline-owner-read
+    role: baseline
+    identity: customer-b
+    auth: valid
+    method: GET
+    path: /api/orders/{object}
+    hypothesis: The owner can read their own order with a valid token. If this fails, the scenario is not testable.
+  - id: attack-anonymous-read
+    role: attack
+    identity: anonymous
+    auth: none
+    method: GET
+    path: /api/orders/{object}
+    hypothesis: The order-detail endpoint rejects a request that carries no credential.
+denied_statuses: [401]
+expected_control: >
+  The endpoint returns 401 to a request with no credential and discloses no
+  order data.
+ground_truth:
+  adapters: [state, response]
+  check: >
+    The state is unchanged by the attack and the attack response contains none
+    of the owner's protected values.
+detection_assertion:
+  status: not_evaluated
+  reason: Detection validation is Phase 4; this scenario makes no detection claim.
+evidence:
+  - sanitized_request
+  - sanitized_response
+  - state_diff
+side_effect_class: READ_ONLY
+cleanup:
+  - none; the scenario creates no records
+industry_mapping:
+  - "BFSI: unauthenticated access to customer orders and statements"
+regulatory_mapping: []
+negative_tests:
+  - API-BAS-AUTHN-001 against the fixed build must PASS

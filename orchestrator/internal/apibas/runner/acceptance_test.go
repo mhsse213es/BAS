@@ -40,10 +40,14 @@ type env struct {
 func newEnv(t *testing.T, mode lab.Mode, fx fixture.Fixture) *env {
 	t.Helper()
 	tokA, tokB, adminTok := randomToken(t), randomToken(t), randomToken(t)
+	revokedA := randomToken(t) // issued to customer-a, then revoked in the lab
 	l, err := lab.New(lab.Config{
-		Mode:       mode,
-		Fixture:    fx,
-		Tokens:     map[string]string{tokA: "cust-a", tokB: "cust-b"},
+		Mode:    mode,
+		Fixture: fx,
+		Tokens: map[string]string{
+			tokA: "cust-a", tokB: "cust-b", revokedA: "cust-a",
+		},
+		Revoked:    []string{revokedA},
 		AdminToken: adminTok,
 	})
 	if err != nil {
@@ -61,8 +65,9 @@ func newEnv(t *testing.T, mode lab.Mode, fx fixture.Fixture) *env {
 
 	admin := runner.NewLabAdmin(srv.URL, adminTok)
 	secrets := runner.MapSecrets{
-		"apibas/lab/customer-a": tokA,
-		"apibas/lab/customer-b": tokB,
+		"apibas/lab/customer-a":         tokA,
+		"apibas/lab/customer-b":         tokB,
+		"apibas/lab/customer-a-revoked": revokedA,
 	}
 	return &env{
 		url: srv.URL, apiHits: hits, srv: srv, admin: admin, secrets: secrets, fx: fx,
@@ -93,6 +98,7 @@ func (e *env) run(t *testing.T, s contract.Scenario, state runner.StateReader) r
 		Fixture: e.fx,
 		Secrets: e.secrets,
 		State:   state,
+		Reset:   e.admin,
 	})
 	if err != nil {
 		t.Fatalf("runner.New: %v", err)

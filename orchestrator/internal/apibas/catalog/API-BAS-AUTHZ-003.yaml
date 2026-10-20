@@ -1,0 +1,56 @@
+id: API-BAS-AUTHZ-003
+name: Mass assignment of owner_id on an own order (property level)
+category: AUTHZ
+claim: property_level
+attack_objective: >
+  A customer updates their own order and sets owner_id to another customer,
+  because the update binds every submitted field.
+threat_model:
+  attacker: authenticated customer who owns the order
+  identity: customer-a
+  access_level: standard customer, valid token, owner of the object
+  objective: reassign ownership of their own order to another customer
+preconditions:
+  fixture: orders-two-tenant
+  identities: [customer-a]
+  object: ORD-1001
+steps:
+  - id: baseline-owner-read
+    role: baseline
+    identity: customer-a
+    auth: valid
+    method: GET
+    path: /api/orders/{object}
+    hypothesis: The owner can read their own order. If this fails, the scenario is not testable.
+  - id: attack-owner-id-mass-assignment
+    role: attack
+    identity: customer-a
+    auth: valid
+    method: PATCH
+    path: /api/orders/{object}
+    body: '{"owner_id": "cust-b"}'
+    hypothesis: The update binds only permitted fields, so owner_id is refused for a customer.
+denied_statuses: [403]
+expected_control: >
+  The update returns 403 for a customer changing owner_id and the owner of the
+  order is unchanged.
+ground_truth:
+  adapters: [state, response]
+  check: >
+    The owner of the order is identical before and after the attack; the attack
+    response discloses no protected values.
+detection_assertion:
+  status: not_evaluated
+  reason: Detection validation is Phase 4; this scenario makes no detection claim.
+evidence:
+  - sanitized_request
+  - sanitized_response
+  - state_diff
+side_effect_class: STATE_CHANGE_SANDBOX
+cleanup:
+  - reset the lab to its fixture seed after the run
+industry_mapping:
+  - "BFSI: customer-controlled ownership of account and order records"
+regulatory_mapping: []
+negative_tests:
+  - API-BAS-AUTHZ-003 with a legitimate status-only update against the fixed build must not be counted as a finding

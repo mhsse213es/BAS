@@ -3,8 +3,10 @@
 //
 // Three axes are kept separate (blueprint section 5): exploitability, control
 // and detection. Result follows the existing PASS / FAIL / ERROR / SKIPPED
-// layer. Detection is not evaluated in Phase 1 and is reported that way.
+// layer. Detection is not evaluated yet and is reported that way.
 package grade
+
+import "slices"
 
 // Result is the scenario outcome in the existing Audspect vocabulary.
 type Result string
@@ -71,7 +73,12 @@ type Evidence struct {
 	Transport bool
 	Baseline  Exchange
 	Attack    Exchange
-	// StateChanged is the state adapter's before/after diff for the object.
+	// Denied lists the status codes the scenario declares as enforcement.
+	// Each scenario sets its own list, so a 400 can count as a block for
+	// property validation but not for authentication.
+	Denied []int
+	// StateChanged is the state adapter's diff between the snapshot taken after
+	// the baseline and the snapshot taken after the attack.
 	StateChanged bool
 }
 
@@ -80,7 +87,7 @@ type Outcome struct {
 	Result         Result
 	Exploitability Exploitability
 	Control        Control
-	Detection      string // always "not_evaluated" in Phase 1
+	Detection      string // always "not_evaluated" for now
 	Confidence     Confidence
 	Reason         string // machine-readable reason, empty for PASS and FAIL
 }
@@ -97,6 +104,19 @@ func Skip(reason string) Outcome {
 	}
 }
 
+// Error returns an ERROR outcome for an infrastructure fault. An ERROR is never
+// a block and never a pass.
+func Error(reason string) Outcome {
+	return Outcome{
+		Result:         ERROR,
+		Exploitability: ExploitInconclusive,
+		Control:        ControlInconclusive,
+		Detection:      "not_evaluated",
+		Confidence:     ConfidenceInconclusive,
+		Reason:         reason,
+	}
+}
+
 // Assess applies the grading rules in order. The first matching rule decides.
 //
 //  1. Transport failure                               -> ERROR   (never a block)
@@ -104,8 +124,8 @@ func Skip(reason string) Outcome {
 //  3. Baseline not 200                                -> SKIPPED (precondition not met)
 //  4. State changed by the attack                     -> FAIL, exploited
 //  5. Protected values in the attack body             -> FAIL, exploited
-//  6. Attack 401/403/404 and no leak or change        -> PASS, control enforced
-//  7. Anything else (2xx without leak, 400, 405, ...) -> SKIPPED, inconclusive
+//  6. Attack status in the scenario's Denied list     -> PASS, control enforced
+//  7. Anything else (2xx without leak, other 4xx)     -> SKIPPED, inconclusive
 func Assess(ev Evidence) Outcome {
 	if ev.Transport {
 		return Error(ReasonTargetUnreachable)
@@ -125,8 +145,7 @@ func Assess(ev Evidence) Outcome {
 			Confidence:     ConfidenceEvidenceBacked,
 		}
 	}
-	switch ev.Attack.Status {
-	case 401, 403, 404:
+	if slices.Contains(ev.Denied, ev.Attack.Status) {
 		return Outcome{
 			Result:         PASS,
 			Exploitability: NotExploited,
@@ -135,8 +154,8 @@ func Assess(ev Evidence) Outcome {
 			Confidence:     ConfidenceEvidenceBacked,
 		}
 	}
-	// A 2xx with no disclosure, or a 400/405, proves neither that the control
-	// held nor that it failed. It is reported as inconclusive, never PASS.
+	// A status outside the denial list proves neither that the control held
+	// nor that it failed. It is reported as inconclusive, never PASS.
 	return Outcome{
 		Result:         SKIPPED,
 		Exploitability: ExploitInconclusive,
@@ -144,18 +163,5 @@ func Assess(ev Evidence) Outcome {
 		Detection:      "not_evaluated",
 		Confidence:     ConfidenceInconclusive,
 		Reason:         ReasonEvidenceInconclusive,
-	}
-}
-
-// Error returns an ERROR outcome for an infrastructure fault. An ERROR is never
-// a block and never a pass.
-func Error(reason string) Outcome {
-	return Outcome{
-		Result:         ERROR,
-		Exploitability: ExploitInconclusive,
-		Control:        ControlInconclusive,
-		Detection:      "not_evaluated",
-		Confidence:     ConfidenceInconclusive,
-		Reason:         reason,
 	}
 }

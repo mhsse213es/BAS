@@ -54,6 +54,8 @@ func main() {
 	}
 
 	secrets, adminTok, err := secretsFromEnv()
+	// One lab-admin client serves both the state adapter and the reset adapter.
+	admin := runner.NewLabAdmin(*target, adminTok)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -61,7 +63,8 @@ func main() {
 		BaseURL: *target,
 		Fixture: fx,
 		Secrets: secrets,
-		State:   runner.NewLabAdmin(*target, adminTok),
+		State:   admin,
+		Reset:   admin,
 		HTTP:    &http.Client{Timeout: 10 * time.Second},
 	})
 	if err != nil {
@@ -136,6 +139,11 @@ func secretsFromEnv() (runner.SecretResolver, string, error) {
 			return nil, "", fmt.Errorf("set %s", env)
 		}
 		m[ref] = v
+	}
+	// Optional: without it, scenarios that need the revoked credential are
+	// precondition skips rather than runs.
+	if rev := os.Getenv("APIBAS_CUSTOMER_A_REVOKED_TOKEN"); rev != "" {
+		m["apibas/lab/customer-a-revoked"] = rev
 	}
 	admin := os.Getenv("APIBAS_LAB_ADMIN_TOKEN")
 	if admin == "" {

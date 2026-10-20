@@ -2,9 +2,9 @@
 //
 // The same HTTP contract is served in two modes:
 //
-//   - vulnerable: contains known, planted flaws (see Flaws). Scenarios must
+//   - vulnerable: contains the planted flaws listed by Flaws. Scenarios must
 //     FAIL against it.
-//   - fixed:      implements the correct control for the same workflow.
+//   - fixed:      implements the correct control for the same workflows.
 //     Scenarios must PASS against it.
 //
 // Both modes seed from the same deterministic fixture and expose an admin
@@ -40,6 +40,7 @@ type Config struct {
 	Mode       Mode
 	Fixture    fixture.Fixture
 	Tokens     map[string]string // bearer token -> customer ID
+	Revoked    []string          // tokens that are in Tokens but must be refused
 	AdminToken string
 }
 
@@ -57,11 +58,39 @@ type Flaw struct {
 func Flaws() []Flaw {
 	return []Flaw{
 		{
+			ID:          "LAB-AUTHN-ANON-001",
+			ScenarioID:  "API-BAS-AUTHN-001",
+			Description: "GET /api/orders/{id} serves a request with no credential as an anonymous caller.",
+			Oracle: "Vulnerable: a GET with no Authorization header returns the order and its protected values (exploited). " +
+				"Fixed: the same request returns 401 and no protected values.",
+		},
+		{
+			ID:          "LAB-AUTHN-REVOKE-001",
+			ScenarioID:  "API-BAS-AUTHN-002",
+			Description: "GET /api/orders/{id} accepts a revoked bearer token.",
+			Oracle: "Vulnerable: a revoked token of the owner returns the owner's order and protected values (exploited). " +
+				"Fixed: the same request returns 401.",
+		},
+		{
 			ID:          "LAB-AUTHZ-BOLA-001",
 			ScenarioID:  "API-BAS-AUTHZ-001",
 			Description: "GET /api/orders/{id} does not check that the caller owns the order.",
 			Oracle: "Vulnerable: a non-owner GET returns the owner's protected values (exploited). " +
 				"Fixed: the same request returns 403 and no protected values.",
+		},
+		{
+			ID:          "LAB-AUTHZ-BFLA-001",
+			ScenarioID:  "API-BAS-AUTHZ-002",
+			Description: "PATCH /api/admin/orders/{id}/status checks authentication but not the admin role.",
+			Oracle: "Vulnerable: a customer token changes the order status (state change). " +
+				"Fixed: the same request returns 403 and the status is unchanged.",
+		},
+		{
+			ID:          "LAB-AUTHZ-MASS-001",
+			ScenarioID:  "API-BAS-AUTHZ-003",
+			Description: "PATCH /api/orders/{id} binds every submitted field, including owner_id, from the request body.",
+			Oracle: "Vulnerable: an owner PATCHes owner_id on their own order and the owner changes (state change). " +
+				"Fixed: the same request returns 403 and the owner is unchanged.",
 		},
 	}
 }
@@ -86,7 +115,8 @@ type OrderState struct {
 	Tag     string `json:"tag"`
 }
 
-// AuditEntry records every admin action. Cleanup never removes audit entries.
+// AuditEntry records every admin and mutating action. Cleanup and reset never
+// remove audit entries.
 type AuditEntry struct {
 	Seq    int    `json:"seq"`
 	Action string `json:"action"`
@@ -94,12 +124,22 @@ type AuditEntry struct {
 	Detail string `json:"detail"`
 }
 
+type authState int
+
+const (
+	authOK authState = iota
+	authMissing
+	authInvalid
+	authRevoked
+)
+
 // Server is an in-memory lab instance. It is safe for concurrent use.
 type Server struct {
-	cfg    Config
-	mu     sync.Mutex
-	orders map[string]*Order
-	audit  []AuditEntry
+	cfg     Config
+	revoked map[string]bool
+	mu      sync.Mutex
+	orders  map[string]*Order
+	audit   []AuditEntry
 }
 
 // New validates the configuration, seeds the store from the fixture and
@@ -111,8 +151,20 @@ func New(cfg Config) (*Server, error) {
 	if cfg.AdminToken == "" {
 		return nil, errors.New("lab: admin token is required")
 	}
-	s := &Server{cfg: cfg, orders: make(map[string]*Order)}
-	for _, o := range cfg.Fixture.Objects {
+	s := &Server{cfg: cfg, revoked: make(map[string]bool, len(cfg.Revoked))}
+	for _, t := range cfg.Revoked {
+		s.revoked[t] = true
+	}
+	s.reseed()
+	s.record("seed", "", fmt.Sprintf("fixture %s, %d objects", cfg.Fixture.Name, len(cfg.Fixture.Objects)))
+	return s, nil
+}
+
+// reseed restores the store to the fixture's seed state. Callers must hold
+// s.mu, except during New where the server is not yet shared.
+func (s *Server) reseed() {
+	s.orders = make(map[string]*Order, len(s.cfg.Fixture.Objects))
+	for _, o := range s.cfg.Fixture.Objects {
 		s.orders[o.ID] = &Order{
 			ID:        o.ID,
 			OwnerID:   o.OwnerID,
@@ -121,33 +173,70 @@ func New(cfg Config) (*Server, error) {
 			Protected: copyMap(o.Protected),
 		}
 	}
-	s.record("seed", "", fmt.Sprintf("fixture %s, %d objects", cfg.Fixture.Name, len(cfg.Fixture.Objects)))
-	return s, nil
 }
 
 // Handler returns the HTTP handler for the lab's contract and admin routes.
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/orders/{id}", s.getOrder)
+	mux.HandleFunc("PATCH /api/orders/{id}", s.patchOrder)
+	mux.HandleFunc("PATCH /api/admin/orders/{id}/status", s.adminSetStatus)
 	mux.HandleFunc("GET /lab/state", s.adminOnly(s.getState))
 	mux.HandleFunc("POST /lab/orders", s.adminOnly(s.createTagged))
 	mux.HandleFunc("DELETE /lab/runs/{tag}", s.adminOnly(s.cleanupRun))
+	mux.HandleFunc("POST /lab/reset", s.adminOnly(s.resetFixture))
 	mux.HandleFunc("GET /lab/audit", s.adminOnly(s.getAudit))
 	return mux
 }
 
-func (s *Server) getOrder(w http.ResponseWriter, r *http.Request) {
-	caller, ok := s.authenticate(r)
+// identify reads the bearer credential. It returns the customer the token
+// belongs to, even when the token is revoked, so the caller can decide how to
+// treat a revoked token.
+func (s *Server) identify(r *http.Request) (string, authState) {
+	h := r.Header.Get("Authorization")
+	if h == "" {
+		return "", authMissing
+	}
+	const prefix = "Bearer "
+	if !strings.HasPrefix(h, prefix) {
+		return "", authInvalid
+	}
+	tok := strings.TrimPrefix(h, prefix)
+	customer, ok := s.cfg.Tokens[tok]
 	if !ok {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthenticated"})
+		return "", authInvalid
+	}
+	if s.revoked[tok] {
+		return customer, authRevoked
+	}
+	return customer, authOK
+}
+
+func (s *Server) getOrder(w http.ResponseWriter, r *http.Request) {
+	caller, st := s.identify(r)
+	vulnerable := s.cfg.Mode == ModeVulnerable
+	switch st {
+	case authMissing:
+		if !vulnerable {
+			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthenticated"})
+			return
+		}
+		caller = "" // LAB-AUTHN-ANON-001: no credential is served as anonymous
+	case authRevoked:
+		if !vulnerable {
+			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "token revoked"})
+			return
+		}
+		// LAB-AUTHN-REVOKE-001: the revoked token is still honoured.
+	case authInvalid:
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid token"})
 		return
 	}
-	id := r.PathValue("id")
 
 	s.mu.Lock()
-	order, found := s.orders[id]
+	order, found := s.orders[r.PathValue("id")]
 	var body map[string]any
-	if found && (s.cfg.Mode == ModeVulnerable || order.OwnerID == caller) {
+	if found && (vulnerable || order.OwnerID == caller) {
 		body = orderBody(order)
 	}
 	s.mu.Unlock()
@@ -156,11 +245,90 @@ func (s *Server) getOrder(w http.ResponseWriter, r *http.Request) {
 	case !found:
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
 	case body == nil:
-		// Fixed mode: the caller is authenticated but not the owner.
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
 	default:
 		writeJSON(w, http.StatusOK, body)
 	}
+}
+
+// patchOrder updates an order. Authentication is strict in both modes; the
+// planted flaw is the field binding (LAB-AUTHZ-MASS-001).
+func (s *Server) patchOrder(w http.ResponseWriter, r *http.Request) {
+	caller, st := s.identify(r)
+	if st != authOK {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthenticated"})
+		return
+	}
+	var fields map[string]any
+	if err := json.NewDecoder(r.Body).Decode(&fields); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
+		return
+	}
+	vulnerable := s.cfg.Mode == ModeVulnerable
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	order, found := s.orders[r.PathValue("id")]
+	if !found {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+		return
+	}
+	if !vulnerable {
+		if order.OwnerID != caller {
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
+			return
+		}
+		if _, ownerField := fields["owner_id"]; ownerField {
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": "field not permitted"})
+			return
+		}
+		if _, statusField := fields["status"]; statusField {
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": "field not permitted"})
+			return
+		}
+	}
+	if v, ok := fields["owner_id"].(string); ok && vulnerable {
+		order.OwnerID = v
+	}
+	if v, ok := fields["status"].(string); ok && vulnerable {
+		order.Status = v
+	}
+	s.record("update", order.Tag, fmt.Sprintf("order %s patched by %s", order.ID, caller))
+	writeJSON(w, http.StatusOK, orderBody(order))
+}
+
+// adminSetStatus sets an order's status through the admin route. Authentication
+// is required in both modes; the role check is the planted flaw
+// (LAB-AUTHZ-BFLA-001).
+func (s *Server) adminSetStatus(w http.ResponseWriter, r *http.Request) {
+	_, st := s.identify(r)
+	if st != authOK {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthenticated"})
+		return
+	}
+	if s.cfg.Mode == ModeFixed {
+		// No customer token carries the admin role, so the fixed build refuses.
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "admin role required"})
+		return
+	}
+	var req struct {
+		Status string `json:"status"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Status == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "status is required"})
+		return
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	order, found := s.orders[r.PathValue("id")]
+	if !found {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+		return
+	}
+	order.Status = req.Status
+	s.record("admin_status", order.Tag, fmt.Sprintf("order %s status set", order.ID))
+	writeJSON(w, http.StatusOK, map[string]string{"id": order.ID, "status": order.Status})
 }
 
 func (s *Server) getState(w http.ResponseWriter, _ *http.Request) {
@@ -219,6 +387,16 @@ func (s *Server) cleanupRun(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]int{"removed": removed})
 }
 
+// resetFixture restores the seed state. It is the sandbox cleanup for
+// scenarios that change state. The audit log is kept.
+func (s *Server) resetFixture(w http.ResponseWriter, _ *http.Request) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.reseed()
+	s.record("reset", "", "store restored to fixture "+s.cfg.Fixture.Name)
+	writeJSON(w, http.StatusOK, map[string]string{"status": "reset"})
+}
+
 func (s *Server) getAudit(w http.ResponseWriter, _ *http.Request) {
 	s.mu.Lock()
 	entries := make([]AuditEntry, len(s.audit))
@@ -231,16 +409,6 @@ func (s *Server) getAudit(w http.ResponseWriter, _ *http.Request) {
 // where the server is not yet shared.
 func (s *Server) record(action, tag, detail string) {
 	s.audit = append(s.audit, AuditEntry{Seq: len(s.audit) + 1, Action: action, Tag: tag, Detail: detail})
-}
-
-func (s *Server) authenticate(r *http.Request) (string, bool) {
-	const prefix = "Bearer "
-	h := r.Header.Get("Authorization")
-	if !strings.HasPrefix(h, prefix) {
-		return "", false
-	}
-	customer, ok := s.cfg.Tokens[strings.TrimPrefix(h, prefix)]
-	return customer, ok
 }
 
 func (s *Server) adminOnly(next http.HandlerFunc) http.HandlerFunc {

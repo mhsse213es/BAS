@@ -59,10 +59,19 @@ func configFromEnv(mode lab.Mode, fx fixture.Fixture) (lab.Config, error) {
 	if a == "" || b == "" || admin == "" {
 		return lab.Config{}, fmt.Errorf("set APIBAS_CUSTOMER_A_TOKEN, APIBAS_CUSTOMER_B_TOKEN and APIBAS_LAB_ADMIN_TOKEN")
 	}
+	tokens := map[string]string{a: "cust-a", b: "cust-b"}
+	var revoked []string
+	// The revoked token must be known to the lab, or the vulnerable build would
+	// refuse it as invalid and AUTHN-002 would pass for the wrong reason.
+	if rev := os.Getenv("APIBAS_CUSTOMER_A_REVOKED_TOKEN"); rev != "" {
+		tokens[rev] = "cust-a"
+		revoked = append(revoked, rev)
+	}
 	return lab.Config{
 		Mode:       mode,
 		Fixture:    fx,
-		Tokens:     map[string]string{a: "cust-a", b: "cust-b"},
+		Tokens:     tokens,
+		Revoked:    revoked,
 		AdminToken: admin,
 	}, nil
 }

@@ -1,0 +1,56 @@
+id: API-BAS-AUTHZ-002
+name: Customer invokes an admin status change (BFLA)
+category: AUTHZ
+claim: function_level
+attack_objective: >
+  An ordinary authenticated customer calls the administrative status-change
+  function, which should be restricted to admin staff.
+threat_model:
+  attacker: authenticated customer with no admin role
+  identity: customer-a
+  access_level: standard customer, valid token, no admin role
+  objective: change an order's status through a function reserved for admins
+preconditions:
+  fixture: orders-two-tenant
+  identities: [customer-b, customer-a]
+  object: ORD-2001
+steps:
+  - id: baseline-owner-read
+    role: baseline
+    identity: customer-b
+    auth: valid
+    method: GET
+    path: /api/orders/{object}
+    hypothesis: The owner can read their own order. If this fails, the scenario is not testable.
+  - id: attack-customer-admin-status
+    role: attack
+    identity: customer-a
+    auth: valid
+    method: PATCH
+    path: /api/admin/orders/{object}/status
+    body: '{"status": "refunded"}'
+    hypothesis: The admin status endpoint checks the admin role, so a customer token is refused.
+denied_statuses: [403]
+expected_control: >
+  The admin status endpoint returns 403 to a customer token and the order
+  status is unchanged.
+ground_truth:
+  adapters: [state, response]
+  check: >
+    The order status is identical before and after the attack; the attack
+    response discloses no protected values.
+detection_assertion:
+  status: not_evaluated
+  reason: Detection validation is Phase 4; this scenario makes no detection claim.
+evidence:
+  - sanitized_request
+  - sanitized_response
+  - state_diff
+side_effect_class: STATE_CHANGE_SANDBOX
+cleanup:
+  - reset the lab to its fixture seed after the run
+industry_mapping:
+  - "BFSI: customer access to privileged order-status operations"
+regulatory_mapping: []
+negative_tests:
+  - API-BAS-AUTHZ-002 with an admin token against the fixed build is out of scope for Phase 2 and must not be claimed

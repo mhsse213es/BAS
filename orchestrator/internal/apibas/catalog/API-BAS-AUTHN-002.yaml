@@ -1,0 +1,54 @@
+id: API-BAS-AUTHN-002
+name: Revoked bearer token still accepted
+category: AUTHN
+claim: authentication
+attack_objective: >
+  A customer whose token has been revoked keeps reading their own order, so
+  revocation does not take effect.
+threat_model:
+  attacker: former or compromised customer whose token was revoked
+  identity: customer-a
+  access_level: revoked bearer token
+  objective: keep reading a customer's order after the credential was revoked
+preconditions:
+  fixture: orders-two-tenant
+  identities: [customer-a]
+  object: ORD-1001
+steps:
+  - id: baseline-valid-token-read
+    role: baseline
+    identity: customer-a
+    auth: valid
+    method: GET
+    path: /api/orders/{object}
+    hypothesis: The owner can read their order with a valid token. If this fails, the scenario is not testable.
+  - id: attack-revoked-token-read
+    role: attack
+    identity: customer-a
+    auth: revoked
+    method: GET
+    path: /api/orders/{object}
+    hypothesis: Revocation is enforced, so the revoked token is refused at the order endpoint.
+denied_statuses: [401]
+expected_control: >
+  The endpoint returns 401 for a revoked token and discloses no order data.
+ground_truth:
+  adapters: [state, response]
+  check: >
+    The state is unchanged by the attack and the attack response contains none
+    of the owner's protected values.
+detection_assertion:
+  status: not_evaluated
+  reason: Detection validation is Phase 4; this scenario makes no detection claim.
+evidence:
+  - sanitized_request
+  - sanitized_response
+  - state_diff
+side_effect_class: READ_ONLY
+cleanup:
+  - none; the scenario creates no records
+industry_mapping:
+  - "BFSI: continued access after a customer credential is revoked"
+regulatory_mapping: []
+negative_tests:
+  - API-BAS-AUTHN-002 against the fixed build must PASS

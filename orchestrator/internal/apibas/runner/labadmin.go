@@ -67,6 +67,12 @@ func (a LabAdmin) Cleanup(ctx context.Context, runTag string) (int, error) {
 	return res.Removed, nil
 }
 
+// Reset restores the lab to its fixture seed. The audit log is kept. It
+// implements Resetter.
+func (a LabAdmin) Reset(ctx context.Context) error {
+	return a.send(ctx, http.MethodPost, "/lab/reset", nil, nil)
+}
+
 // CreateTagged seeds one run-tagged record. Used by tests to prove cleanup
 // touches only tagged records.
 func (a LabAdmin) CreateTagged(ctx context.Context, id, ownerID, status, runTag string) error {

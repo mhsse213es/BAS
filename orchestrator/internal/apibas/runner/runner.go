@@ -13,6 +13,7 @@
 package runner
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
@@ -49,6 +50,15 @@ type StateReader interface {
 	Snapshot(ctx context.Context) (map[string]StateRecord, error)
 }
 
+// Resetter restores the target to its seed state. Scenarios that change state
+// need it, both before the run (known starting point) and after (cleanup).
+type Resetter interface {
+	Reset(ctx context.Context) error
+}
+
+// Reason added in Phase 2: cleanup of a sandbox run did not succeed.
+const ReasonCleanupFailed = "CLEANUP_FAILED"
+
 const maxEvidenceBody = 2048
 
 // Config holds the runner's dependencies for one target.
@@ -57,6 +67,7 @@ type Config struct {
 	Fixture fixture.Fixture
 	Secrets SecretResolver
 	State   StateReader
+	Reset   Resetter // required for STATE_CHANGE_SANDBOX scenarios
 	HTTP    *http.Client
 }
 
@@ -64,6 +75,7 @@ type Config struct {
 type Exchange struct {
 	StepID   string
 	Identity string
+	Auth     string
 	Method   string
 	Path     string
 	Status   int
@@ -77,8 +89,10 @@ type Report struct {
 	RunTag     string
 	Outcome    grade.Outcome
 	Exchanges  []Exchange
-	// Skipped is the human-readable detail behind a SKIPPED or ERROR outcome.
-	Skipped string
+	// Detail is the human-readable reason behind a SKIPPED or ERROR outcome.
+	Detail string
+	// Reset records whether a sandbox scenario's cleanup reset succeeded.
+	Reset string
 }
 
 // Runner executes scenarios against one target.
@@ -119,36 +133,52 @@ func (r *Runner) Run(ctx context.Context, s contract.Scenario) (Report, error) {
 	if !ok || owner.CustomerID != obj.OwnerID {
 		return r.skip(rep, grade.ReasonPreconditionMissing, "baseline identity is not the object owner"), nil
 	}
-	attacker, ok := r.cfg.Fixture.Identity(attack.Identity)
-	if !ok {
-		return r.skip(rep, grade.ReasonPreconditionMissing, "attack identity "+attack.Identity+" not in fixture"), nil
+
+	attacker, attackerKnown := fixture.Identity{}, false
+	if attackAuth(attack) != "none" {
+		attacker, attackerKnown = r.cfg.Fixture.Identity(attack.Identity)
+		if !attackerKnown {
+			return r.skip(rep, grade.ReasonPreconditionMissing, "attack identity "+attack.Identity+" not in fixture"), nil
+		}
 	}
-	if attacker.CustomerID == obj.OwnerID {
-		return r.skip(rep, grade.ReasonNotCrossIdentity, "attacker is the object owner; no cross-identity claim exists"), nil
+	switch s.Claim {
+	case "cross_identity":
+		if !attackerKnown || attacker.CustomerID == obj.OwnerID {
+			return r.skip(rep, grade.ReasonNotCrossIdentity, "attacker is the object owner; no cross-identity claim exists"), nil
+		}
+	case "property_level":
+		if !attackerKnown || attacker.CustomerID != obj.OwnerID {
+			return r.skip(rep, grade.ReasonPreconditionMissing, "property-level claim requires the attacker to own the object"), nil
+		}
 	}
 	if r.cfg.State == nil {
 		return r.skip(rep, grade.ReasonAdapterUnavailable, "state adapter is not configured"), nil
 	}
+	sandbox := s.SideEffectClass == "STATE_CHANGE_SANDBOX"
+	if sandbox && r.cfg.Reset == nil {
+		return r.skip(rep, grade.ReasonAdapterUnavailable, "sandbox scenario needs a reset adapter"), nil
+	}
+
 	ownerToken, err := r.cfg.Secrets.Resolve(owner.TokenRef)
 	if err != nil {
 		return r.skip(rep, grade.ReasonPreconditionMissing, "owner credential unavailable"), nil
 	}
-	attackerToken, err := r.cfg.Secrets.Resolve(attacker.TokenRef)
+	attackToken, err := r.attackCredential(attack, attacker)
 	if err != nil {
-		return r.skip(rep, grade.ReasonPreconditionMissing, "attacker credential unavailable"), nil
+		return r.skip(rep, grade.ReasonPreconditionMissing, err.Error()), nil
 	}
 
-	// A failing state read is an infrastructure fault, not a skip: the adapter
-	// was configured, so its failure must not look like a missing control.
-	before, err := r.cfg.State.Snapshot(ctx)
-	if err != nil {
-		return r.errorOut(rep, stateErrorReason(err), "state snapshot failed before execution"), nil
+	if sandbox {
+		if err := r.cfg.Reset.Reset(ctx); err != nil {
+			return r.errorOut(rep, stateErrorReason(err), "reset before execution failed"), nil
+		}
 	}
 
-	// Execute: baseline (owner) then attack (attacker).
 	var ev grade.Evidence
-	// The baseline is also redacted: evidence never holds raw protected values,
-	// even the owner's own. Its leak count is ignored for grading.
+	ev.Denied = s.DeniedStatuses
+
+	// Baseline: the owner's legitimate request. Redacted like everything else,
+	// but its leak count is not used for grading.
 	baseExch, transport := r.do(ctx, baseline, ownerToken, obj, &obj)
 	rep.Exchanges = append(rep.Exchanges, baseExch)
 	if transport {
@@ -157,9 +187,15 @@ func (r *Runner) Run(ctx context.Context, s contract.Scenario) (Report, error) {
 		ev.Baseline = grade.Exchange{Status: baseExch.Status}
 	}
 
-	attackExch := Exchange{}
+	// The state is read between baseline and attack, so a baseline write is
+	// never blamed on the attacker.
+	var mid map[string]StateRecord
 	if !ev.Transport {
-		attackExch, transport = r.do(ctx, attack, attackerToken, obj, &obj)
+		mid, err = r.cfg.State.Snapshot(ctx)
+		if err != nil {
+			return r.finish(ctx, sandbox, r.errorOut(rep, stateErrorReason(err), "state snapshot failed after baseline")), nil
+		}
+		attackExch, transport := r.do(ctx, attack, attackToken, obj, &obj)
 		rep.Exchanges = append(rep.Exchanges, attackExch)
 		if transport {
 			ev.Transport = true
@@ -170,28 +206,60 @@ func (r *Runner) Run(ctx context.Context, s contract.Scenario) (Report, error) {
 
 	after, err := r.cfg.State.Snapshot(ctx)
 	if err != nil {
-		// Without the after-state, the attack's effect is unknown. Report the
-		// fault rather than grading on partial ground truth.
-		return r.errorOut(rep, stateErrorReason(err), "state snapshot failed after execution"), nil
+		return r.finish(ctx, sandbox, r.errorOut(rep, stateErrorReason(err), "state snapshot failed after execution")), nil
 	}
-	ev.StateChanged = !sameState(before, after)
-
+	if mid != nil {
+		ev.StateChanged = !sameState(mid, after)
+	}
 	rep.Outcome = grade.Assess(ev)
-	return rep, nil
+	return r.finish(ctx, sandbox, rep), nil
 }
 
-func (r *Runner) errorOut(rep Report, reason, detail string) Report {
-	rep.Outcome = grade.Error(reason)
-	rep.Skipped = detail
-	return rep
-}
-
-// stateErrorReason maps a state-adapter failure to a machine-readable reason.
-func stateErrorReason(err error) string {
-	if errors.Is(err, ErrUnreachable) {
-		return grade.ReasonTargetUnreachable
+// finish runs sandbox cleanup and folds a cleanup failure into the outcome. A
+// lab left dirty after a run is a failed test, so it is never reported as a
+// clean PASS.
+func (r *Runner) finish(ctx context.Context, sandbox bool, graded Report) Report {
+	if !sandbox {
+		return graded
 	}
-	return grade.ReasonAdapterReadFailed
+	if err := r.cfg.Reset.Reset(ctx); err != nil {
+		graded.Reset = "failed"
+		graded.Outcome = grade.Error(ReasonCleanupFailed)
+		graded.Detail = "reset after execution failed; target state is unknown"
+		return graded
+	}
+	graded.Reset = "ok"
+	return graded
+}
+
+// attackCredential resolves the token for the attack step's declared auth mode.
+func (r *Runner) attackCredential(attack contract.Step, attacker fixture.Identity) (string, error) {
+	switch attackAuth(attack) {
+	case "none":
+		return "", nil
+	case "revoked":
+		if attacker.RevokedTokenRef == "" {
+			return "", errors.New("identity has no revoked credential")
+		}
+		tok, err := r.cfg.Secrets.Resolve(attacker.RevokedTokenRef)
+		if err != nil {
+			return "", errors.New("revoked credential unavailable")
+		}
+		return tok, nil
+	default:
+		tok, err := r.cfg.Secrets.Resolve(attacker.TokenRef)
+		if err != nil {
+			return "", errors.New("attacker credential unavailable")
+		}
+		return tok, nil
+	}
+}
+
+func attackAuth(st contract.Step) string {
+	if st.Auth == "" {
+		return "valid"
+	}
+	return st.Auth
 }
 
 // do sends one step's request. When protect is non-nil the response body is
@@ -199,13 +267,22 @@ func stateErrorReason(err error) string {
 // evidence. The second return value is true on transport failure.
 func (r *Runner) do(ctx context.Context, step contract.Step, token string, obj fixture.Object, protect *fixture.Object) (Exchange, bool) {
 	path := strings.ReplaceAll(step.Path, "{object}", obj.ID)
-	ex := Exchange{StepID: step.ID, Identity: step.Identity, Method: step.Method, Path: path}
+	ex := Exchange{StepID: step.ID, Identity: step.Identity, Auth: attackAuth(step), Method: step.Method, Path: path}
 
-	req, err := http.NewRequestWithContext(ctx, step.Method, r.cfg.BaseURL+path, nil)
+	var body io.Reader
+	if step.Body != "" {
+		body = bytes.NewReader([]byte(step.Body))
+	}
+	req, err := http.NewRequestWithContext(ctx, step.Method, r.cfg.BaseURL+path, body)
 	if err != nil {
 		return ex, true
 	}
-	req.Header.Set("Authorization", "Bearer "+token)
+	if step.Body != "" {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
 	resp, err := r.cfg.HTTP.Do(req)
 	if err != nil {
 		return ex, true
@@ -217,26 +294,40 @@ func (r *Runner) do(ctx context.Context, step contract.Step, token string, obj f
 	}
 	ex.Status = resp.StatusCode
 
-	body := string(raw)
+	text := string(raw)
 	if protect != nil {
 		for _, v := range protect.Protected {
-			if v != "" && strings.Contains(body, v) {
+			if v != "" && strings.Contains(text, v) {
 				ex.Leaked++
-				body = strings.ReplaceAll(body, v, "[REDACTED]")
+				text = strings.ReplaceAll(text, v, "[REDACTED]")
 			}
 		}
 	}
-	if len(body) > maxEvidenceBody {
-		body = body[:maxEvidenceBody] + "...[truncated]"
+	if len(text) > maxEvidenceBody {
+		text = text[:maxEvidenceBody] + "...[truncated]"
 	}
-	ex.Body = body
+	ex.Body = text
 	return ex, false
 }
 
 func (r *Runner) skip(rep Report, reason, detail string) Report {
 	rep.Outcome = grade.Skip(reason)
-	rep.Skipped = detail
+	rep.Detail = detail
 	return rep
+}
+
+func (r *Runner) errorOut(rep Report, reason, detail string) Report {
+	rep.Outcome = grade.Error(reason)
+	rep.Detail = detail
+	return rep
+}
+
+// stateErrorReason maps a state-adapter failure to a machine-readable reason.
+func stateErrorReason(err error) string {
+	if errors.Is(err, ErrUnreachable) {
+		return grade.ReasonTargetUnreachable
+	}
+	return grade.ReasonAdapterReadFailed
 }
 
 // sameState reports whether two snapshots are identical. Any added, removed or

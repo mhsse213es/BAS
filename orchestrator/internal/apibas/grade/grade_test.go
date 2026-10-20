@@ -2,6 +2,8 @@ package grade
 
 import "testing"
 
+var defaultDenied = []int{401, 403, 404}
+
 func TestAssess_Rules(t *testing.T) {
 	ok := Exchange{Status: 200}
 	cases := []struct {
@@ -14,55 +16,61 @@ func TestAssess_Rules(t *testing.T) {
 	}{
 		{
 			name:       "transport failure is ERROR, never a block",
-			ev:         Evidence{Transport: true},
+			ev:         Evidence{Transport: true, Denied: defaultDenied},
 			wantResult: ERROR, wantReason: ReasonTargetUnreachable,
 			wantExploit: ExploitInconclusive, wantControl: ControlInconclusive,
 		},
 		{
 			name:       "attack 5xx is a target fault",
-			ev:         Evidence{Baseline: ok, Attack: Exchange{Status: 503}},
+			ev:         Evidence{Baseline: ok, Attack: Exchange{Status: 503}, Denied: defaultDenied},
 			wantResult: ERROR, wantReason: ReasonTargetFault,
 			wantExploit: ExploitInconclusive, wantControl: ControlInconclusive,
 		},
 		{
 			name:       "baseline not 200 is a precondition skip",
-			ev:         Evidence{Baseline: Exchange{Status: 404}, Attack: Exchange{Status: 403}},
+			ev:         Evidence{Baseline: Exchange{Status: 404}, Attack: Exchange{Status: 403}, Denied: defaultDenied},
 			wantResult: SKIPPED, wantReason: ReasonPreconditionMissing,
 			wantExploit: ExploitNotApplicable, wantControl: ControlNotApplicable,
 		},
 		{
 			name:        "state changed by attack is an exploit even on a 403",
-			ev:          Evidence{Baseline: ok, Attack: Exchange{Status: 403}, StateChanged: true},
+			ev:          Evidence{Baseline: ok, Attack: Exchange{Status: 403}, StateChanged: true, Denied: defaultDenied},
 			wantResult:  FAIL,
 			wantExploit: Exploited, wantControl: Failed,
 		},
 		{
 			name:        "protected values disclosed is an exploit",
-			ev:          Evidence{Baseline: ok, Attack: Exchange{Status: 200, LeakedProtected: 2}},
+			ev:          Evidence{Baseline: ok, Attack: Exchange{Status: 200, LeakedProtected: 2}, Denied: defaultDenied},
 			wantResult:  FAIL,
 			wantExploit: Exploited, wantControl: Failed,
 		},
 		{
 			name:        "403 with no leak and no change is enforced",
-			ev:          Evidence{Baseline: ok, Attack: Exchange{Status: 403}},
+			ev:          Evidence{Baseline: ok, Attack: Exchange{Status: 403}, Denied: defaultDenied},
 			wantResult:  PASS,
 			wantExploit: NotExploited, wantControl: Enforced,
 		},
 		{
 			name:        "404 with no leak is enforced",
-			ev:          Evidence{Baseline: ok, Attack: Exchange{Status: 404}},
+			ev:          Evidence{Baseline: ok, Attack: Exchange{Status: 404}, Denied: defaultDenied},
 			wantResult:  PASS,
 			wantExploit: NotExploited, wantControl: Enforced,
 		},
 		{
-			name:       "2xx with no leak is inconclusive, not a pass",
-			ev:         Evidence{Baseline: ok, Attack: Exchange{Status: 200}},
+			name:        "400 counts as enforced only when the scenario declares it",
+			ev:          Evidence{Baseline: ok, Attack: Exchange{Status: 400}, Denied: []int{400, 403}},
+			wantResult:  PASS,
+			wantExploit: NotExploited, wantControl: Enforced,
+		},
+		{
+			name:       "400 is inconclusive when the scenario does not declare it",
+			ev:         Evidence{Baseline: ok, Attack: Exchange{Status: 400}, Denied: defaultDenied},
 			wantResult: SKIPPED, wantReason: ReasonEvidenceInconclusive,
 			wantExploit: ExploitInconclusive, wantControl: ControlInconclusive,
 		},
 		{
-			name:       "400 is inconclusive, not a pass",
-			ev:         Evidence{Baseline: ok, Attack: Exchange{Status: 400}},
+			name:       "2xx with no leak is inconclusive, not a pass",
+			ev:         Evidence{Baseline: ok, Attack: Exchange{Status: 200}, Denied: defaultDenied},
 			wantResult: SKIPPED, wantReason: ReasonEvidenceInconclusive,
 			wantExploit: ExploitInconclusive, wantControl: ControlInconclusive,
 		},
@@ -83,17 +91,16 @@ func TestAssess_Rules(t *testing.T) {
 				t.Errorf("Control = %s, want %s", got.Control, tc.wantControl)
 			}
 			if got.Detection != "not_evaluated" {
-				t.Errorf("Detection = %s; Phase 1 must not claim a detection result", got.Detection)
+				t.Errorf("Detection = %s; no detection claim may be made yet", got.Detection)
 			}
 		})
 	}
 }
 
-// A PASS must always carry evidence-backed confidence, and nothing that is
-// inconclusive may be graded PASS or FAIL.
+// Nothing inconclusive may grade PASS or FAIL.
 func TestAssess_InconclusiveNeverPassesOrFails(t *testing.T) {
-	for _, status := range []int{200, 204, 400, 405, 409} {
-		out := Assess(Evidence{Baseline: Exchange{Status: 200}, Attack: Exchange{Status: status}})
+	for _, status := range []int{200, 204, 405, 409} {
+		out := Assess(Evidence{Baseline: Exchange{Status: 200}, Attack: Exchange{Status: status}, Denied: defaultDenied})
 		if out.Result == PASS || out.Result == FAIL {
 			t.Errorf("attack status %d graded %s; expected SKIPPED", status, out.Result)
 		}
