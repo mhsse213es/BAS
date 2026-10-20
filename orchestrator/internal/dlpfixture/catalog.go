@@ -24,6 +24,10 @@ const (
 	scenarioNetworkShare = "dlp-exfiltration-network-share"
 	scenarioDeviceControl = "dlp-exfiltration-device-control"
 	scenarioLateralMovement = "dlp-exfiltration-lateral-movement"
+	scenarioPnP = "dlp-exfiltration-pnp"
+	scenarioBluetooth = "dlp-exfiltration-bluetooth"
+	scenarioMTP = "dlp-exfiltration-mtp"
+	scenarioAppFileAccess = "dlp-exfiltration-app-file-access"
 )
 
 // AllFixtures returns Audspect's real, current seed catalog of every
@@ -385,6 +389,31 @@ func AllFixtures() ([]Fixture, error) {
 			{scenarioLateralMovement, "DLP Validation — Lateral Copy to Peer Workstation Share (T1039)"},
 		},
 		"same synthetic record as the BFSI anchor, written to operator-configured internal destinations only")); err != nil {
+		return nil, fmt.Errorf("loading seed fixture catalog: %w", err)
+	}
+
+	if err := add(NewFixture("pnp-multitype-record", "Synthetic multi-type record written to a newly connected peripheral",
+		[]string{"[BAS-SIM-DLP]", "ABCDE1234F", "123456789012", "SBININBBXXX", "fake.user@upi", "4111111111111111"},
+		[]Occurrence{{scenarioPnP, "DLP Validation — Write to Newly Connected Peripheral After PnP Enumeration (T1052.001)"}},
+		"same synthetic record as the BFSI anchor, written to an operator-connected volume only")); err != nil {
+		return nil, fmt.Errorf("loading seed fixture catalog: %w", err)
+	}
+	if err := add(NewFixture("bluetooth-multitype-record", "Synthetic multi-type record written to a Bluetooth storage folder",
+		[]string{"[BAS-SIM-DLP]", "ABCDE1234F", "123456789012", "SBININBBXXX", "fake.user@upi", "4111111111111111"},
+		[]Occurrence{{scenarioBluetooth, "DLP Validation — Write to Bluetooth Storage Peripheral (T1052)"}},
+		"same synthetic record as the BFSI anchor; storage peripheral only, not OBEX file sending")); err != nil {
+		return nil, fmt.Errorf("loading seed fixture catalog: %w", err)
+	}
+	if err := add(NewFixture("mtp-multitype-record", "Synthetic multi-type record copied to a connected phone over MTP",
+		[]string{"[BAS-SIM-DLP]", "ABCDE1234F", "123456789012", "SBININBBXXX", "fake.user@upi", "4111111111111111"},
+		[]Occurrence{{scenarioMTP, "DLP Validation — Copy to Connected Phone Over MTP (T1052)"}},
+		"same synthetic record as the BFSI anchor; one file, removed afterwards")); err != nil {
+		return nil, fmt.Errorf("loading seed fixture catalog: %w", err)
+	}
+	if err := add(NewFixture("app-file-access-multitype-record", "Synthetic multi-type record read and staged by an unapproved application",
+		[]string{"[BAS-SIM-DLP]", "ABCDE1234F", "123456789012", "SBININBBXXX", "fake.user@upi", "4111111111111111"},
+		[]Occurrence{{scenarioAppFileAccess, "DLP Validation — Unapproved Application Reads and Stages Protected File (T1005)"}},
+		"same synthetic record as the BFSI anchor, in an operator-designated protected folder")); err != nil {
 		return nil, fmt.Errorf("loading seed fixture catalog: %w", err)
 	}
 

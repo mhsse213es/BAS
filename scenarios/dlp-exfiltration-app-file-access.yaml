@@ -1,0 +1,108 @@
+id: dlp-exfiltration-app-file-access
+name: DLP Exfiltration Validation — Unauthorized Application File Access
+description: >
+  Tests whether an application that is not on an approved list can open,
+  read and stage a file from a folder an application-control or DLP policy
+  protects. The test application is PowerShell, which is the process this
+  scenario runs as. The scenario writes the synthetic multi-type sensitive
+  record into an operator-designated protected folder, reads it back, and
+  copies it to a staging folder outside the protected area.
+
+  The protected folder is operator-supplied:
+
+    BAS_DLP_RESTRICTED_DIR   a folder that the access policy under test protects
+
+  If the variable is not set, or the folder is not writable for the setup
+  write, the step records no observation and grades Untested. The setup write
+  is not treated as a block.
+
+  Verdicts, decided by what happened to the read:
+    - read refused with an access error: Blocked
+    - read succeeded and the copy to staging succeeded: Succeeded
+    - read succeeded but the copy failed for another reason: Unknown
+
+  Evidence level: L1. A refusal cannot be attributed to application control,
+  file permissions, or an endpoint DLP product. Only product evidence can
+  attribute it. Whether PowerShell is on the approved list is the operator's
+  policy decision and is recorded in the run notes, not decided here.
+
+  Not covered: a second, named application such as a browser or a sync client,
+  and attempts to open the file through a renamed or copied executable.
+
+  Safety: all synthetic data is fabricated and tagged [BAS-SIM-DLP]. The file
+  written to the protected folder and the staging copy are removed afterwards.
+  Windows only.
+author: Audspect Research
+executable: true
+supported_os: [windows]
+tags:
+  - dlp
+  - data-protection-validation
+  - exfiltration
+  - application-control
+  - windows
+  - mitre-attack
+mitre_phases:
+  - collection
+  - exfiltration
+
+steps:
+  - name: "DLP Validation — Unapproved Application Reads and Stages Protected File (T1005)"
+    technique_id: T1005
+    detection_profiles:
+      - windows_dlp_exfiltration
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Writes one small synthetic file into an operator-designated protected folder, reads it back with PowerShell, copies it to a private staging folder, and removes both copies. Nothing is written if BAS_DLP_RESTRICTED_DIR is not set."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 11: file created in a protected folder"
+      - "Application control audit: read or copy of a protected file by an unapproved process"
+    detection:
+      - "App control/DLP endpoint: unapproved application reads or copies regulated data from a protected folder"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $protected = $env:BAS_DLP_RESTRICTED_DIR
+      if (-not $protected) {
+        Write-Output "SKIP: BAS_DLP_RESTRICTED_DIR is not set on this agent -- application file access validation requires an operator-designated protected folder."
+      } elseif (-not (Test-Path -LiteralPath $protected)) {
+        Write-Output "SKIP: protected folder is not reachable from this agent ($protected)."
+      } else {
+        $csvContent = "[BAS-SIM-DLP] CustomerID,PAN,Aadhaar,SWIFT,UPI,CreditCard`nBAS-SIM-SINK,ABCDE1234F,123456789012,SBININBBXXX,fake.user@upi,4111111111111111"
+        $name = "bas_sim_appaccess_" + [guid]::NewGuid().ToString('N') + ".csv"
+        $protectedFile = Join-Path $protected $name
+        $staging = Join-Path $env:TEMP ("bas_sim_staging_" + [guid]::NewGuid().ToString('N'))
+        $stagedFile = Join-Path $staging $name
+        Set-Content -LiteralPath $protectedFile -Value $csvContent -Encoding utf8
+        if (-not (Test-Path -LiteralPath $protectedFile)) {
+          Write-Output "SKIP: could not place the synthetic file in the protected folder, so no read was attempted."
+        } else {
+          New-Item -ItemType Directory -Path $staging -Force | Out-Null
+          if ($env:BAS_TASK_ID) { Write-Output "DLP_EVENT_START: $env:BAS_TASK_ID $((Get-Date).ToUniversalTime().ToString('o'))" }
+          $content = Get-Content -LiteralPath $protectedFile -Raw -ErrorAction SilentlyContinue
+          $readErr = if ($Error.Count -gt 0) { $Error[0].Exception.Message } else { '' }
+          if ($null -eq $content -or $content -eq '') {
+            Write-Output "EXEC T1005: read of the protected file by an unapproved application was refused ($readErr). [BAS-SIM-DLP-APPACCESS]"
+            if ($readErr -match 'Access|denied|Unauthorized|refused') { Write-Output "DLP_OBSERVATION: OperationBlocked" } else { Write-Output "DLP_OBSERVATION: OperationUnknown" }
+          } else {
+            Copy-Item -LiteralPath $protectedFile -Destination $stagedFile -ErrorAction SilentlyContinue
+            if (Test-Path -LiteralPath $stagedFile) {
+              Write-Output "EXEC T1005: protected file read and staged outside the protected folder by an unapproved application unimpeded. [BAS-SIM-DLP-APPACCESS]"
+              Write-Output "FAIL: sensitive record read from a protected folder and staged without being blocked."
+              Write-Output "DLP_OBSERVATION: OperationSucceeded"
+            } else {
+              $copyErr = if ($Error.Count -gt 0) { $Error[0].Exception.Message } else { '' }
+              Write-Output "EXEC T1005: protected file was read but the copy to staging failed ($copyErr). [BAS-SIM-DLP-APPACCESS]"
+              Write-Output "DLP_OBSERVATION: OperationUnknown"
+            }
+          }
+          Remove-Item -LiteralPath $protectedFile -Force -ErrorAction SilentlyContinue
+          Remove-Item -LiteralPath $staging -Recurse -Force -ErrorAction SilentlyContinue
+        }
+      }
+    cleanup: ""

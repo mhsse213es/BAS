@@ -32,5 +32,9 @@ func RealDLPScenarioIDs() []string {
 		"dlp-exfiltration-network-share",
 		"dlp-exfiltration-device-control",
 		"dlp-exfiltration-lateral-movement",
+		"dlp-exfiltration-pnp",
+		"dlp-exfiltration-bluetooth",
+		"dlp-exfiltration-mtp",
+		"dlp-exfiltration-app-file-access",
 	}
 }

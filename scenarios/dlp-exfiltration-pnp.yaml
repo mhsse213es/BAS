@@ -1,0 +1,92 @@
+id: dlp-exfiltration-pnp
+name: DLP Exfiltration Validation — Plug and Play (Newly Connected Peripheral)
+description: >
+  Records the Plug and Play state of a newly connected removable peripheral,
+  then writes the synthetic multi-type sensitive record to its volume. Plug and
+  Play covers devices that appear, enumerate and get authorized automatically
+  when they are connected. A DLP control tied to PnP events should act at
+  enumeration or on the first write, so both are recorded.
+
+  The peripheral is operator-supplied. This repository does not attach devices:
+
+    BAS_DLP_PNP_DRIVE_LETTER   drive letter of the newly connected volume (for example E)
+
+  The step records the PnP status of the disk drives that back that volume
+  before the write, read only. If the drive letter is not set, or the volume is
+  not present, the step records no observation and grades Untested.
+
+  Evidence level: L1. The verdict comes from the endpoint's own check of the
+  write. A refusal cannot be attributed to PnP authorization, device control, or
+  an endpoint DLP product. Only product evidence can attribute it.
+
+  Not covered: the PnP authorization decision itself (whether the device was
+  allowed to enumerate), hardware-ID allow lists, and device-class exceptions.
+  Those need a device policy and a device to test against.
+
+  Safety: all synthetic data is fabricated and tagged [BAS-SIM-DLP]. Device
+  state is read with Get-PnpDevice and never changed. The written file is
+  removed when the copy succeeds. Windows only.
+author: Audspect Research
+executable: true
+supported_os: [windows]
+tags:
+  - dlp
+  - data-protection-validation
+  - exfiltration
+  - plug-and-play
+  - windows
+  - mitre-attack
+mitre_phases:
+  - collection
+  - exfiltration
+
+steps:
+  - name: "DLP Validation — Write to Newly Connected Peripheral After PnP Enumeration (T1052.001)"
+    technique_id: T1052.001
+    detection_profiles:
+      - windows_dlp_exfiltration
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Reads PnP status for one disk drive (read only), then writes one small synthetic CSV to the operator-designated peripheral and removes it. Nothing is written if BAS_DLP_PNP_DRIVE_LETTER is not set."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 11: file created on a removable volume"
+      - "Windows PnP event: device arrival and enumeration"
+    detection:
+      - "Device control/PnP: regulated data written to a newly connected removable device"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $letter = $env:BAS_DLP_PNP_DRIVE_LETTER
+      if (-not $letter) {
+        Write-Output "SKIP: BAS_DLP_PNP_DRIVE_LETTER is not set on this agent -- PnP validation requires an operator-connected peripheral."
+      } else {
+        $vol = Get-Volume -DriveLetter $letter -ErrorAction SilentlyContinue
+        if (-not $vol) {
+          Write-Output "SKIP: no volume present at drive letter $letter -- the peripheral is not connected."
+        } else {
+          $disks = Get-PnpDevice -Class DiskDrive -ErrorAction SilentlyContinue | Select-Object -First 20
+          foreach ($d in $disks) { Write-Output "PNP: $($d.FriendlyName) status=$($d.Status) (read only, not changed)" }
+          $csvContent = "[BAS-SIM-DLP] CustomerID,PAN,Aadhaar,SWIFT,UPI,CreditCard`nBAS-SIM-SINK,ABCDE1234F,123456789012,SBININBBXXX,fake.user@upi,4111111111111111"
+          $srcFile = Join-Path $env:TEMP ("bas_sim_pnp_" + [guid]::NewGuid().ToString('N') + ".csv")
+          $dest = "$($letter):\bas_sim_pnp_" + [guid]::NewGuid().ToString('N') + ".csv"
+          Set-Content -Path $srcFile -Value $csvContent -Encoding utf8
+          if ($env:BAS_TASK_ID) { Write-Output "DLP_EVENT_START: $env:BAS_TASK_ID $((Get-Date).ToUniversalTime().ToString('o'))" }
+          Copy-Item -Path $srcFile -Destination $dest -ErrorAction SilentlyContinue
+          if (Test-Path -LiteralPath $dest) {
+            Write-Output "EXEC T1052.001: sensitive record file written to newly connected volume $($letter): unimpeded. [BAS-SIM-DLP-PNP]"
+            Write-Output "DLP_OBSERVATION: OperationSucceeded"
+            Remove-Item -LiteralPath $dest -Force -ErrorAction SilentlyContinue
+          } else {
+            $reason = if ($Error.Count -gt 0) { $Error[0].Exception.Message } else { '' }
+            Write-Output "EXEC T1052.001: write to newly connected volume $($letter): failed ($reason). [BAS-SIM-DLP-PNP]"
+            if ($reason -match 'Access|denied|Unauthorized|read-only|refused') { Write-Output "DLP_OBSERVATION: OperationBlocked" } else { Write-Output "DLP_OBSERVATION: OperationUnknown" }
+          }
+          Remove-Item -LiteralPath $srcFile -Force -ErrorAction SilentlyContinue
+        }
+      }
+    cleanup: ""
