@@ -91,6 +91,7 @@ func (h *Handler) AssessPANOSExposure(w http.ResponseWriter, r *http.Request) {
 	counts := map[panosexposure.Verdict]int{}
 	for _, a := range req.Assets {
 		res := panosexposure.AssessAt(a, adv, at)
+		res.AdvisoryStatus = status
 		switch status {
 		case panosexposure.StatusVerified:
 		case "caller-supplied":

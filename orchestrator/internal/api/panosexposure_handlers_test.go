@@ -155,3 +155,14 @@ func TestAssessPANOSExposure_CallerSuppliedIsLabelled(t *testing.T) {
 		t.Fatalf("caller-supplied advisory must say it is not verified by Audspect: %s", rec.Body.String())
 	}
 }
+
+func TestAssessPANOSExposure_EachResultCarriesAdvisoryStatus(t *testing.T) {
+	reg := postPANOSAssess(t, `{"advisoryCve":"CVE-2026-0257","assets":[{"id":"a","product":"pan-os","version":"11.2.8"}]}`)
+	if !strings.Contains(reg.Body.String(), `"advisoryStatus":"verified"`) {
+		t.Fatalf("registry result must state verified: %s", reg.Body.String())
+	}
+	legacy := postPANOSAssess(t, panosTestBody)
+	if !strings.Contains(legacy.Body.String(), `"advisoryStatus":"caller-supplied"`) {
+		t.Fatalf("legacy result must state caller-supplied: %s", legacy.Body.String())
+	}
+}

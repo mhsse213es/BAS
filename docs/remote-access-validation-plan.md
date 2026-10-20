@@ -88,3 +88,37 @@ Every answer carries evidence, a source, and an explicit unknown when the eviden
 4. **Log ingestion:** use existing SIEM connectors if they expose the required GlobalProtect events and fields. Otherwise build a dedicated parser behind a common ingestion interface.
 
 Known advisory conflict: PAN-OS 10.2.18 base release. The product-status threshold makes it affected, and the solution table lists it as an upgrade target. It returns unknown until Palo Alto clarifies.
+
+## Phase 2A: configuration-import contract (design only, no parser)
+
+No parser exists yet. PAN-OS field names are not written here because they must come from a sanitised export, not from memory or guesswork.
+
+**Normalised asset facts** (what the import must produce, all already modelled in `panosexposure.Asset`):
+- `product`, `version`, `hostname`, `id`
+- `globalProtect`, `authOverride`, `sharedOverrideCert`: each `yes`, `no` or `unknown`
+
+**Required provenance for each fact:** source file name and hash, parser version, the exact configuration path it was read from, and whether it was **observed** in the export or **absent**. Absent is never recorded as `no`. It stays `unknown`.
+
+**Import errors:** an unparseable file, an unrecognised field value, a missing path, or two conflicting values for one fact. Each one makes the affected fact `unknown` and is listed in the import report.
+
+**Unknown states:** any fact not observed, and any certificate relationship the export does not state explicitly. The advisory's certificate-use wording ("a dedicated certificate for authentication override cookies", "do not reuse the portal or gateway certificate") must be matched to a stated field value, never inferred from the presence of a certificate.
+
+**Required evidence for CVE-2026-0257** (to be mapped to fields once the export is available):
+1. GlobalProtect portal or gateway is configured. The advisory says "configured", so it is not the same as "enabled". Record both if the export distinguishes them.
+2. Authentication override cookie generation or acceptance is enabled, on the portal or the gateway.
+3. The override cookie uses the portal or gateway certificate (shared), or a dedicated certificate.
+
+**Repeatable imports:** the same input must give the same assets. A change in a fact is reported against the previous import, with provenance for both values.
+
+## Phase 3: event contract (design only, no ingestion)
+
+**Event fields:** timestamp (with source timezone), gateway, source address, session identity, user identity, authentication outcome, and the authentication method evidence the event actually carries.
+
+**Correlation rules:**
+- B1 (action = block) stays **open** until a matching DLP or SIEM event explicitly states the action is block. A missing action field is not a block.
+- B2 (test-event timestamp) stays **open** until the actual timestamp of the test event is verified against the source log.
+- Missing event evidence never counts as a confirmed block. It is reported as missing evidence.
+
+**Existing connectors:** reuse them if they supply the fields above. A dedicated GlobalProtect parser is built only if they cannot.
+
+**Status:** not built. Nothing in this section has been validated against a live SIEM tenant.

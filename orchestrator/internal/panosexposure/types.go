@@ -119,6 +119,11 @@ type Result struct {
 	// AdvisoryVersion is the version of the advisory record used, empty for
 	// caller-supplied advisories that carry none.
 	AdvisoryVersion string `json:"advisoryVersion,omitempty"`
+	// AdvisoryStatus is the verification status of the advisory data used:
+	// "verified", "unverified", or "caller-supplied" (Audspect did not check it).
+	// It is kept separate from the verdict: a correct verdict from unverified
+	// data is still a verdict on unverified data.
+	AdvisoryStatus string `json:"advisoryStatus,omitempty"`
 	// AssessedAt is the timestamp supplied by the caller (UTC).
 	AssessedAt time.Time `json:"assessedAt"`
 }
