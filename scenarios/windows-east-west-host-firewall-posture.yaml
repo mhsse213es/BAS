@@ -1,0 +1,65 @@
+id: windows-east-west-host-firewall-posture
+name: Windows Host Firewall Exposure Posture (Lateral Management Ports)
+description: >
+  Read-only posture audit of enabled inbound allow rules that expose lateral-movement
+  ports (SMB 445, RDP 3389, WinRM 5985) to any remote address. Nothing is changed. This
+  is the host-level half of east-west segmentation; the network-level zone test needs
+  the client's zone matrix and a connector, and is not covered here.
+local_check: true
+executable: false
+supported_os: [windows]
+tags:
+  - segmentation
+  - lateral-movement
+  - posture
+  - windows
+  - read-only
+contract:
+  objective: Identify host firewall allow rules that let any remote address reach lateral-movement management ports.
+  prerequisites:
+    os: Windows Server 2019 or later, Windows 10 or later
+    product: Windows Defender Firewall with Advanced Security
+    permissions: local administrator read access to firewall rules
+    telemetry: none required for the posture result
+  variants:
+    baseline: current inbound allow rules on the host
+    variation: not applicable; single-state read
+    negative_controls: rules restricted to a specific remote address do not raise findings
+  expected_prevention:
+    control: no enabled inbound allow rule exposes SMB, RDP or WinRM to any remote address
+    authoritative_proof: the rule listing in the FAIL output, or the PASS statement from the same query
+  expected_detection:
+    observables: not applicable; this scenario reads configuration
+    telemetry_sources: none
+  response_validation:
+    alert_to_incident: not evaluated by this scenario
+    containment_check: not evaluated; restriction is a manual change
+  evidence_contract:
+    required: rule display names, port filters, remote address filter, host identifier, timestamp
+    identifiers: rule display name
+    missing_data_is: a rule that cannot be read is reported as SKIP for the check, never PASS
+  cleanup_recovery:
+    artifacts_removed: none; the scenario writes nothing
+    access_revocation_verified: not applicable
+  remediation_retest:
+    change: client restricts the listed rules to the approved management subnet
+    retest: the same scenario must return PASS
+  limitations:
+    - checks only the three named ports on the host, not every lateral path
+    - a rule scoped to a broad but non-Any subnet is not flagged
+    - network firewall and NAC enforcement are not evaluated here
+steps:
+  - name: "Enabled inbound allow rules exposing lateral-movement ports to any address"
+    check_id: windows-east-west-risky-inbound
+    technique_id: T1021
+    framework: custom
+    executor: local
+    command: >-
+      $rules = Get-NetFirewallRule -Direction Inbound -Enabled True -Action Allow -ErrorAction Stop;
+      $risky = foreach ($r in $rules) {
+        $pf = $r | Get-NetFirewallPortFilter; $af = $r | Get-NetFirewallAddressFilter;
+        if ($af.RemoteAddress -eq 'Any' -and ($pf.LocalPort -contains '445' -or $pf.LocalPort -contains '3389' -or $pf.LocalPort -contains '5985')) { $r.DisplayName }
+      };
+      if (@($risky).Count -eq 0) { Write-Output 'PASS: no enabled inbound allow rule exposes SMB, RDP or WinRM to any address' }
+      else { Write-Output ('FAIL: ' + @($risky).Count + ' inbound allow rules expose lateral-movement ports to any address: ' + (@($risky) -join '; ')) }
+    timeout_sec: 60

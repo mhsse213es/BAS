@@ -1,5 +1,6 @@
-{"id":"fk-c11-server-persistence","name":"Campaign 11 - Server compromise and persistence exposure","version":1,"stages":[
+{"id":"fk-c11-server-persistence","name":"Campaign 11 - Server compromise and persistence exposure","version":2,"stages":[
 {"key":"baseline-config","scenarioId":"windows-security-config","policy":{"shouldBlock":false,"containmentRequired":false,"source":"fullkillchain.txt Campaign 11: audit settings and configuration state"}},
 {"key":"gpo-exposure","scenarioId":"gpo-writable-linked-exposure-audit","requires":["baseline-config"],"policy":{"shouldBlock":true,"containmentRequired":false,"source":"fullkillchain.txt Campaign 11: service configuration and administrative boundaries"}},
-{"key":"persistence","scenarioId":"linux-persistence","requires":["gpo-exposure"],"policy":{"shouldBlock":true,"containmentRequired":true,"source":"fullkillchain.txt Campaign 11: persistence indicators (Linux scenario; Windows persistence is a gap)"}}
+{"key":"windows-persistence","scenarioId":"windows-persistence-posture","requires":["gpo-exposure"],"policy":{"shouldBlock":true,"containmentRequired":true,"source":"fullkillchain.txt Campaign 11: persistence indicators (posture-only, Windows)"}},
+{"key":"linux-persistence","scenarioId":"linux-persistence","requires":["gpo-exposure"],"policy":{"shouldBlock":true,"containmentRequired":true,"source":"fullkillchain.txt Campaign 11: persistence indicators (Linux)"}}
 ]}

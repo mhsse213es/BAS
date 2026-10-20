@@ -1,0 +1,44 @@
+id: cat-c03-conditional-access-mfa
+name: Conditional access and MFA enforcement under a controlled credential exposure
+campaign: fk-c03-identity-controls
+status: cataloged
+executable: false
+mitre: [T1078, T1556]
+contract:
+  objective: >
+    Test whether a valid password obtained in a controlled exposure can be used to
+    authenticate to a privileged application when conditional access and MFA are
+    configured as the organisation states. The test is the policy decision, not
+    the password.
+  prerequisites:
+    os: not applicable (identity platform)
+    product: Entra ID or on-premises AD FS with conditional access, or an equivalent IdP
+    permissions: read-only policy inspection on the identity platform; a test account owned by the client
+    telemetry: sign-in logs with conditional access evaluation results, retained at least 24 hours
+  variants:
+    baseline: test account, compliant device, MFA required by policy
+    variation: test account, non-compliant device, MFA required and device compliance required
+    negative_controls: same account from a trusted network location where policy allows bypass, to confirm the policy is evaluated and not assumed
+  expected_prevention:
+    control: conditional access policy blocks or challenges sign-in for the privileged application
+    authoritative_proof: sign-in log entry with the policy name and grant or block result, plus the policy export at the time of the test
+  expected_detection:
+    observables: risky sign-in, sign-in from unfamiliar location or device, repeated MFA prompt failures
+    telemetry_sources: identity provider sign-in logs, SIEM ingestion of those logs
+  response_validation:
+    alert_to_incident: a risky sign-in alert creates an incident in the client's ticketing system within the agreed time
+    containment_check: the test account session is revoked and the account is disabled by the response playbook, verified in the identity provider
+  evidence_contract:
+    required: policy export, sign-in log record, MFA challenge record, alert identifier, incident identifier
+    identifiers: user principal name of the test account, correlation ID of the sign-in, policy object ID
+    missing_data_is: sign-in log absent or not retained becomes NOT_TESTED for detection and INCONCLUSIVE for prevention, never a pass
+  cleanup_recovery:
+    artifacts_removed: test account sessions and any registered test device
+    access_revocation_verified: sign-in with the test account fails after cleanup
+  remediation_retest:
+    change: client updates the conditional access policy scope or MFA method
+    retest: same three variants re-run; the result must change for the variant that failed
+  limitations:
+    - does not test phishing-resistant MFA bypass methods such as adversary-in-the-middle token theft
+    - depends on the client exposing sign-in logs; without them detection is not measurable
+    - policy evaluation is tested for the named application only

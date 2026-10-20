@@ -1,0 +1,44 @@
+id: cat-c05-cloud-iam-boundary-audit
+name: Cloud IAM boundary and storage permission audit for a workload identity
+campaign: fk-c05-cloud-identity-controls
+status: cataloged
+executable: false
+mitre: [T1078.004, T1530]
+contract:
+  objective: >
+    Determine whether the permissions granted to a workload identity exceed the least
+    privilege the workload needs, and whether storage access and egress are restricted
+    as the policy says. This is a static and read-only evaluation of granted permissions
+    plus a permitted-egress check to a sink the client controls.
+  prerequisites:
+    os: not applicable (cloud control plane)
+    product: AWS IAM, Azure RBAC or Google Cloud IAM in the client's account or subscription
+    permissions: read-only IAM and storage policy inspection; a test workload identity created for the test
+    telemetry: cloud audit trail (CloudTrail, Azure Activity Log or Cloud Audit Logs) retained for the test window
+  variants:
+    baseline: test workload identity with the permissions the client documents as intended
+    variation: test workload identity with one additional storage permission outside its documented scope
+    negative_controls: identity with no storage permission, to confirm denial is recorded and not assumed
+  expected_prevention:
+    control: storage access outside the documented scope is denied by the cloud policy engine
+    authoritative_proof: denied API call in the audit trail with the policy decision reason, and the effective policy export
+  expected_detection:
+    observables: enumeration of IAM policies by the test identity, access to a storage bucket outside its scope
+    telemetry_sources: cloud audit trail, cloud-native threat detection service, SIEM
+  response_validation:
+    alert_to_incident: a permission-anomaly alert creates an incident in the client's ticketing system
+    containment_check: the test identity's keys or role assumption are revoked and verified as unusable
+  evidence_contract:
+    required: effective policy export, audit event records for every API call, denial reason, alert identifier
+    identifiers: principal ARN or object ID, request ID, storage resource identifier
+    missing_data_is: audit trail absent for the window becomes INCONCLUSIVE; a missing denial record is never recorded as a pass
+  cleanup_recovery:
+    artifacts_removed: test workload identity, its keys, and any test objects created in storage
+    access_revocation_verified: API calls with the identity fail after deletion
+  remediation_retest:
+    change: client narrows the role or policy attachment
+    retest: the variant that succeeded before the change must now be denied
+  limitations:
+    - tests only the identities and resources named in the test plan
+    - does not evaluate cross-account trust chains beyond the first hop
+    - egress is tested only to the client-controlled sink, not to general internet destinations

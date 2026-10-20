@@ -1,0 +1,4 @@
+{"id":"fk-c14-backup-recovery","name":"Campaign 14 - Backup readiness and recovery (posture-only, host level)","version":1,"stages":[
+{"key":"backup-prerequisites","scenarioId":"windows-backup-posture","policy":{"shouldBlock":false,"containmentRequired":true,"source":"fullkillchain.txt Campaign 14: recovery-point availability"}},
+{"key":"recovery-readiness","scenarioId":"ransomware-drill","requires":["backup-prerequisites"],"policy":{"shouldBlock":true,"containmentRequired":true,"source":"fullkillchain.txt Campaign 14: restoration integrity (posture drill only)"}}
+]}

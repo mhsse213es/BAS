@@ -1,0 +1,44 @@
+id: cat-c06-east-west-segmentation
+name: East-west segmentation policy verification between tiered zones
+campaign: fk-c06-segmentation-controls
+status: cataloged
+executable: false
+mitre: [T1021, T1046]
+contract:
+  objective: >
+    Verify that the firewall and host-level policy permit exactly the flows the zone
+    model allows and deny every prohibited flow between tiers. Permitted and prohibited
+    destinations are tested from a controlled source host, and the results are compared
+    with the documented zone matrix.
+  prerequisites:
+    os: Windows Server 2019 or later and Ubuntu 22.04 or later as the source host
+    product: client firewall (any vendor) and host firewall policy; zone matrix supplied by the client
+    permissions: a controlled source host in the test zone; network policy export access
+    telemetry: firewall deny logs and flow logs covering the test window
+  variants:
+    baseline: permitted flow from the application tier to the database tier on the documented port
+    variation: prohibited flow from the user tier to the database tier on the same port
+    negative_controls: prohibited flow to an unused port in a permitted zone, to confirm the default deny applies
+  expected_prevention:
+    control: prohibited flows are dropped at the firewall or the destination host
+    authoritative_proof: connection attempt result from the source host plus the matching firewall deny record
+  expected_detection:
+    observables: denied connection attempts from a user-tier host to a database port
+    telemetry_sources: firewall logs, network flow records, SIEM
+  response_validation:
+    alert_to_incident: repeated denied flows create an incident or are routed to the network team
+    containment_check: the source host is isolated by the response playbook and the isolation is verified
+  evidence_contract:
+    required: zone matrix version, firewall rule identifiers, connection results, deny records, flow records
+    identifiers: rule ID, source and destination address, timestamp with timezone, flow ID
+    missing_data_is: missing deny record makes detection NOT_TESTED; a connection that succeeds is ALLOWED, not inferred from policy text
+  cleanup_recovery:
+    artifacts_removed: temporary listener or test process on the destination host
+    access_revocation_verified: prohibited flow is denied again after cleanup
+  remediation_retest:
+    change: client corrects the rule that allowed the prohibited flow
+    retest: the prohibited variant must now be denied and the deny record must appear
+  limitations:
+    - tests only the zones and ports named in the zone matrix
+    - does not test encrypted tunnels that carry flows inside permitted ports
+    - host firewall state is sampled at test time, not continuously

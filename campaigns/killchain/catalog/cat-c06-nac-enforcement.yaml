@@ -1,0 +1,43 @@
+id: cat-c06-nac-enforcement
+name: Network access control enforcement for an unmanaged device
+campaign: fk-c06-segmentation-controls
+status: cataloged
+executable: false
+mitre: [T1200, T1133]
+contract:
+  objective: >
+    Verify that a device that is not registered and not compliant is placed in the
+    quarantine segment and cannot reach production zones, and that the NAC decision is
+    logged with the device identity.
+  prerequisites:
+    os: not applicable (network infrastructure); test device may be any supported OS
+    product: client NAC platform (802.1X or equivalent) with a quarantine VLAN or segment
+    permissions: an unregistered test device the client provides; read access to NAC logs
+    telemetry: NAC authentication and posture logs, switch port logs
+  variants:
+    baseline: registered compliant device on a production port
+    variation: unregistered device on a production port
+    negative_controls: registered but non-compliant device, to confirm posture failure triggers quarantine
+  expected_prevention:
+    control: unregistered device is isolated to the quarantine segment and cannot reach production addresses
+    authoritative_proof: NAC decision record for the device plus a failed connection attempt to a production address from the device
+  expected_detection:
+    observables: unknown device authentication failure, quarantine assignment
+    telemetry_sources: NAC logs, switch logs, SIEM
+  response_validation:
+    alert_to_incident: unknown device creates an incident for the endpoint team
+    containment_check: the switch port is disabled or the device is removed from the network, verified at the switch
+  evidence_contract:
+    required: NAC decision record, switch port state, connection result, device MAC address, alert identifier
+    identifiers: MAC address, switch port identifier, NAC session ID
+    missing_data_is: no NAC record becomes NOT_TESTED; an assumed quarantine without a record is never recorded as enforced
+  cleanup_recovery:
+    artifacts_removed: test device registration if one was created, port state restored
+    access_revocation_verified: the test device is again placed in quarantine after cleanup
+  remediation_retest:
+    change: client corrects the authentication or quarantine policy
+    retest: unregistered device must be quarantined and denied production access
+  limitations:
+    - tests wired and wireless access only where the client NAC covers both
+    - does not test device spoofing of a registered MAC address
+    - quarantine effectiveness depends on the client's routing and firewall design

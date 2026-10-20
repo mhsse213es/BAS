@@ -1,0 +1,3 @@
+{"id":"fk-c06-host-segmentation-posture","name":"Campaign 06 - Host-level segmentation posture (posture-only)","version":1,"stages":[
+{"key":"host-firewall-lateral-ports","scenarioId":"windows-east-west-host-firewall-posture","policy":{"shouldBlock":true,"containmentRequired":true,"source":"fullkillchain.txt Campaign 06: east-west segmentation, host-level half"}}
+]}
