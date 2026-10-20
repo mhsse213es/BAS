@@ -237,3 +237,30 @@ Not built, and needs a decision first:
   customer-mode stages). `dispatchRun` only enforces that a factory-validation
   run needs the factory lab agent. The code has no "customer-mode" concept, so
   there is nothing to test until the rule is defined.
+
+### Staging items from the live gate work
+
+Built and unit-tested here. None is verified against a real agent, and none
+makes a live or lab claim. Each needs staging before the flag can be turned on.
+1. Turn `KILLCHAIN_LIVE_STAGES_ENABLED` on in staging only, after the items
+   below pass. It stays off everywhere else.
+2. One telemetry campaign stage, end to end, with a real approval: advance with
+   `confirmLive` and a reason, the stage dispatches, and the run completes.
+3. The approval and each live stage start appear in `audit_logs`. The audit
+   write is fire-and-forget, so confirm rows arrive and none are lost.
+4. A refusal is audited as `killchain.stage.refused` for each gate: flag off,
+   no approval, OS mismatch, unknown OS, window closed.
+5. The agent OS classification matches the real `os_version` of a Windows agent.
+   The live gate refuses unknown OS, so a misclassified host blocks every live stage.
+6. Separation of duties with two real users: the creator's lab approval is refused,
+   and a second user's approval goes through.
+7. The start-time OS check and the dispatch-time OS check give the same result on
+   the same agent.
+8. Window closing between approval and stage start, on a real clock, refuses the
+   stage and the stage is recorded as an error, not a pass.
+9. The factory-lab rule (a lab-bound campaign may not run customer-mode stages).
+   Decision first, then a staging test. The code has no such concept yet.
+
+Decisions for you, not staging:
+- Whether a single-person lab team may self-approve lab stages. The current rule refuses it.
+- The factory-lab rule above, including what "customer-mode" means.
