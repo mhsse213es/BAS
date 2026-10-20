@@ -137,15 +137,19 @@ type Step struct {
 	// MaxOutputBytes overrides the default 3000-byte RawOutput truncation
 	// limit for checks whose evidence is legitimately large (e.g. a full
 	// installed-software inventory). 0 means "use the default".
-	MaxOutputBytes int           `yaml:"max_output_bytes,omitempty" json:"maxOutputBytes,omitempty"`
-	Framework      string        `yaml:"framework"             json:"framework"`
-	Command        string        `yaml:"command,omitempty"     json:"command,omitempty"`
-	AbilityID      string        `yaml:"ability_id,omitempty"  json:"abilityId,omitempty"`
-	TestIndex      int           `yaml:"test_index"            json:"testIndex"`
-	Executor       string        `yaml:"executor,omitempty"    json:"executor,omitempty"`
-	TimeoutSec     int           `yaml:"timeout_sec,omitempty" json:"timeoutSec,omitempty"`
-	Payloads       []YAMLPayload `yaml:"payloads,omitempty"   json:"payloads,omitempty"`
-	Cleanup        string        `yaml:"cleanup,omitempty"    json:"cleanup,omitempty"`
+	MaxOutputBytes int    `yaml:"max_output_bytes,omitempty" json:"maxOutputBytes,omitempty"`
+	Framework      string `yaml:"framework"             json:"framework"`
+	Command        string `yaml:"command,omitempty"     json:"command,omitempty"`
+	// Marker is a token the step puts literally in its command. Host event
+	// evidence matches it in the process command line. Format and placement are
+	// checked by ValidateMarkers. Empty means the step produces no execution evidence.
+	Marker     string        `yaml:"marker,omitempty"     json:"marker,omitempty"`
+	AbilityID  string        `yaml:"ability_id,omitempty"  json:"abilityId,omitempty"`
+	TestIndex  int           `yaml:"test_index"            json:"testIndex"`
+	Executor   string        `yaml:"executor,omitempty"    json:"executor,omitempty"`
+	TimeoutSec int           `yaml:"timeout_sec,omitempty" json:"timeoutSec,omitempty"`
+	Payloads   []YAMLPayload `yaml:"payloads,omitempty"   json:"payloads,omitempty"`
+	Cleanup    string        `yaml:"cleanup,omitempty"    json:"cleanup,omitempty"`
 
 	// ── Hybrid/live-mode safety & telemetry metadata (optional) ──────────────
 	// These document the risk and expected detection signal of a live step so

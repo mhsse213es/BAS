@@ -84,6 +84,7 @@ func probeAudit() protocol.AuditSnapshot {
 	return protocol.AuditSnapshot{
 		ProcessCreation: readAudit(auditProcessCreationGUID),
 		Logon:           readAudit(auditLogonGUID),
+		CommandLine:     readCommandLineCapture(),
 	}
 }
 
@@ -108,4 +109,32 @@ func collectHostEvents(from, to time.Time, maxEvents int) ([]protocol.HostEventR
 		return nil, false, err
 	}
 	return recs, len(recs) >= maxEvents, nil
+}
+
+// parseCommandLineCapture reads `reg query` output for the command-line value. Only
+// an explicit 0x1 or 0x0 is a setting. Anything else, including a missing value,
+// is unknown.
+func parseCommandLineCapture(regOut string, err error) string {
+	if err != nil {
+		return "unknown"
+	}
+	for _, line := range strings.Split(regOut, "\n") {
+		if !strings.Contains(line, "ProcessCreationIncludeCmdLine_Enabled") {
+			continue
+		}
+		switch {
+		case strings.Contains(line, "0x1"):
+			return "enabled"
+		case strings.Contains(line, "0x0"):
+			return "disabled"
+		}
+	}
+	return "unknown"
+}
+
+const commandLineCaptureKey = `HKLM\Software\Microsoft\Windows\CurrentVersion\Policies\System\Audit`
+
+func readCommandLineCapture() string {
+	out, err := exec.Command("reg", "query", commandLineCaptureKey, "/v", "ProcessCreationIncludeCmdLine_Enabled").Output()
+	return parseCommandLineCapture(string(out), err)
 }

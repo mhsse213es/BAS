@@ -47,7 +47,9 @@ steps:
     technique_id: T1543.003
     framework: caldera
     ability_id: 6469befa-748a-4b9c-aaa8-a5b0bd9b8104
+    marker: bas-lat-svc-create-01
     command: |
+      # bas-marker: bas-lat-svc-create-01
       sc.exe query type= all state= all 2>&1 | Select-String -Pattern "RUNNING" | Measure-Object | Select-Object -ExpandProperty Count
     executor: psh
     requires_priv: admin

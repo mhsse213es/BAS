@@ -171,6 +171,11 @@ func (h *Handler) AdvanceKillChainCampaign(w http.ResponseWriter, r *http.Reques
 	if h.engine != nil {
 		exec.Resolver = h.engine
 	}
+	exec.HostEvents = store
+	exec.Hosts = poolRunReader{pool: h.db}
+	if h.engine != nil {
+		exec.Scenarios = h.engine
+	}
 	exec.Dispatcher = handlerStageDispatcher{h: h}
 	orch := killchain.Orchestrator{Store: store, Executor: exec}
 	if _, err := orch.Advance(r.Context(), id); err != nil {
@@ -189,13 +194,20 @@ func (h *Handler) AdvanceKillChainCampaign(w http.ResponseWriter, r *http.Reques
 // RecoverKillChainCampaigns resolves stages dispatched before a restart. It
 // collects finished runs and marks unfinished ones interrupted. It never starts
 // a stage. Call it once at boot.
-func RecoverKillChainCampaigns(ctx context.Context, pool *pgxpool.Pool) error {
+func RecoverKillChainCampaigns(ctx context.Context, pool *pgxpool.Pool, engine *scenario.Engine) error {
 	store := &db.KillChainStore{Pool: pool}
+	// A nil engine is passed as a nil interface, so host evidence is skipped rather
+	// than calling into a nil pointer.
+	var scenarios scenarioLookup
+	if engine != nil {
+		scenarios = engine
+	}
 	list, err := store.ListCampaigns(ctx)
 	if err != nil {
 		return err
 	}
-	exec := EngineStageExecutor{Runs: poolRunReader{pool: pool}, Attestations: verification.NewStore(pool), GroundTruth: store}
+	exec := EngineStageExecutor{Runs: poolRunReader{pool: pool}, Attestations: verification.NewStore(pool), GroundTruth: store,
+		HostEvents: store, Hosts: poolRunReader{pool: pool}, Scenarios: scenarios}
 	orch := killchain.Orchestrator{Store: store, Executor: exec}
 	for _, c := range list {
 		if _, err := orch.Recover(ctx, c.ID); err != nil {

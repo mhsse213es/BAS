@@ -165,3 +165,24 @@ func TestHostEvents_AuditDisabledButRecordsPresentIsNamedAsInconsistent(t *testi
 		t.Fatalf("an unrelated record must not prove execution")
 	}
 }
+
+// A marker can only be seen when command-line capture is on. With capture not
+// confirmed, a missing match is named as that cause, not as a missing step.
+func TestHostEvents_CommandLineCaptureOffIsNamed(t *testing.T) {
+	audit := AuditState{ProcessCreation: AuditEnabled, Logon: AuditEnabled, CommandLine: AuditDisabled}
+	f := EvaluateHostEvents(match(), []HostEvent{procEvent(101, "notepad.exe", evStart.Add(time.Minute))}, audit)
+	if !containsReason(f.Gaps, "command-line capture is not enabled") {
+		t.Fatalf("gaps = %v, want command-line capture named", f.Gaps)
+	}
+	if f.Executed == TriYes {
+		t.Fatalf("no match must not prove execution")
+	}
+}
+
+func TestHostEvents_CommandLineCaptureUnknownIsNamed(t *testing.T) {
+	audit := AuditState{ProcessCreation: AuditEnabled, Logon: AuditEnabled}
+	f := EvaluateHostEvents(match(), nil, audit)
+	if !containsReason(f.Gaps, "command-line capture is not confirmed") {
+		t.Fatalf("gaps = %v, want command-line capture named as unconfirmed", f.Gaps)
+	}
+}

@@ -57,6 +57,8 @@ type GroundTruth struct {
 	Source    string `json:"source"`
 	Attempted Tri    `json:"attempted"`
 	Executed  Tri    `json:"executed"`
+	// Reference points to the record that proved the verdict, such as a host:recordID:eventID.
+	Reference string `json:"reference,omitempty"`
 }
 
 // PreventionEvidence records the verified control that acted, if any.

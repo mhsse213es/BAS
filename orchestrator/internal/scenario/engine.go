@@ -149,6 +149,10 @@ func (e *Engine) Load() error {
 			log.Printf("[!] scenario: %s missing required field 'id' — skipping", path)
 			return nil
 		}
+		if err := s.ValidateMarkers(); err != nil {
+			log.Printf("[!] scenario: %s has an invalid step marker: %v — skipping", path, err)
+			return nil
+		}
 		s.Source = source
 		if source == "builtin" {
 			reserved[s.ID] = struct{}{}
@@ -215,6 +219,21 @@ func (e *Engine) Load() error {
 			continue
 		}
 		scenarios[f.sc.ID] = f.sc
+	}
+	// Markers must be unique across scenarios. Scenarios are visited in ID order, so
+	// the same file wins on every load. A later reuse is dropped with a log line.
+	ids := make([]string, 0, len(scenarios))
+	for id := range scenarios {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	ordered := make([]*Scenario, 0, len(ids))
+	for _, id := range ids {
+		ordered = append(ordered, scenarios[id])
+	}
+	for _, r := range CheckMarkerUniqueness(ordered) {
+		log.Printf("[!] scenario: %s refused: %s", r.ID, r.Reason)
+		delete(scenarios, r.ID)
 	}
 	e.mu.Lock()
 	e.scenarios, e.profiles, e.reservedBuiltin = scenarios, profiles, reserved

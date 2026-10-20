@@ -79,7 +79,7 @@ func TestHostEvents_AcceptsOwnAgentAndStores(t *testing.T) {
 		if rec.Code != http.StatusCreated {
 			t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
 		}
-		events, audit, found, err := db.KillChainStore{Pool: pool}.HostEventsForRun(context.Background(), "he-run2")
+		events, audit, _, found, err := db.KillChainStore{Pool: pool}.HostEventsForRun(context.Background(), "he-run2")
 		if err != nil || !found || len(events) != 1 || string(audit.ProcessCreation) != "disabled" {
 			t.Fatalf("stored: events=%d audit=%+v found=%v err=%v", len(events), audit, found, err)
 		}

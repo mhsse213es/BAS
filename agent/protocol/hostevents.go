@@ -21,6 +21,7 @@ type HostEventRecord struct {
 type AuditSnapshot struct {
 	ProcessCreation string `json:"processCreation"`
 	Logon           string `json:"logon"`
+	CommandLine     string `json:"commandLine"`
 }
 
 // RunHostEvents is the host-event payload for one run. It is kept apart from

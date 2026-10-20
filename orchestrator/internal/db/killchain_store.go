@@ -72,6 +72,9 @@ func EnsureKillChainSchema(ctx context.Context, pool *pgxpool.Pool) error {
 			logon            text        NOT NULL,
 			received_at      timestamptz NOT NULL DEFAULT NOW()
 		);
+		ALTER TABLE killchain_run_audit ADD COLUMN IF NOT EXISTS command_line text NOT NULL DEFAULT '';
+		ALTER TABLE killchain_run_audit ADD COLUMN IF NOT EXISTS window_from timestamptz NOT NULL DEFAULT '1970-01-01T00:00:00Z';
+		ALTER TABLE killchain_run_audit ADD COLUMN IF NOT EXISTS window_to timestamptz NOT NULL DEFAULT '1970-01-01T00:00:00Z';
 		CREATE TABLE IF NOT EXISTS killchain_coverage_proofs (
 			scenario_id     text        PRIMARY KEY,
 			domain          text        NOT NULL DEFAULT '',

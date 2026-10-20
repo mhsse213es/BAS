@@ -20,6 +20,9 @@ const (
 type AuditState struct {
 	ProcessCreation AuditSetting // Security 4688
 	Logon           AuditSetting // Security 4624 and 4648
+	// CommandLine is the registry-backed command-line capture for 4688. A step
+	// marker is visible only when this is enabled.
+	CommandLine AuditSetting
 }
 
 // HostEvent is one Windows Security event from a host. Only the fields the
@@ -86,6 +89,15 @@ func EvaluateHostEvents(m ExecutionMatch, events []HostEvent, audit AuditState) 
 	}
 	if hasProcessCreationInWindow(unique, m) && audit.ProcessCreation == AuditDisabled {
 		f.Gaps = append(f.Gaps, "inconsistent audit state: process creation auditing reports disabled on "+m.Host+" but process creation records exist; neither is trusted alone")
+	}
+	if len(f.Evidence) == 0 {
+		switch audit.CommandLine {
+		case AuditDisabled:
+			f.Gaps = append(f.Gaps, "command-line capture is not enabled on "+m.Host+"; a step marker cannot be seen in process creation records")
+		case AuditEnabled:
+		default:
+			f.Gaps = append(f.Gaps, "command-line capture is not confirmed on "+m.Host+"; a missing marker may be a capture gap, not a missing step")
+		}
 	}
 	if len(f.Evidence) > 0 {
 		f.Executed = TriYes

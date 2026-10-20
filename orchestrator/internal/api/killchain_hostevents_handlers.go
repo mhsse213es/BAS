@@ -8,6 +8,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/audspect/bas/internal/db"
 	"github.com/audspect/bas/internal/killchain"
 )
 
@@ -50,7 +51,10 @@ func (h *Handler) SubmitRunHostEvents(w http.ResponseWriter, r *http.Request) {
 		Audit struct {
 			ProcessCreation string `json:"processCreation"`
 			Logon           string `json:"logon"`
+			CommandLine     string `json:"commandLine"`
 		} `json:"audit"`
+		WindowFrom time.Time `json:"windowFrom"`
+		WindowTo   time.Time `json:"windowTo"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		jsonError(w, "invalid host events payload", http.StatusBadRequest)
@@ -87,8 +91,10 @@ func (h *Handler) SubmitRunHostEvents(w http.ResponseWriter, r *http.Request) {
 	audit := killchain.AuditState{
 		ProcessCreation: normalizeAuditSetting(body.Audit.ProcessCreation),
 		Logon:           normalizeAuditSetting(body.Audit.Logon),
+		CommandLine:     normalizeAuditSetting(body.Audit.CommandLine),
 	}
-	if err := store.PutHostEvents(r.Context(), runID, events, audit); err != nil {
+	win := db.HostEventWindow{From: body.WindowFrom, To: body.WindowTo}
+	if err := store.PutHostEvents(r.Context(), runID, events, audit, win); err != nil {
 		jsonError(w, "could not store host events", http.StatusInternalServerError)
 		return
 	}

@@ -55,6 +55,11 @@ type EngineStageExecutor struct {
 	// GroundTruth supplies the independent ground-truth record for a run. Nil or
 	// no record leaves execution missing, which the verdict reports as a gap.
 	GroundTruth groundTruthReader
+	// HostEvents supplies the run's Security events and audit state. Nil leaves host
+	// evidence unread. Hosts and Scenarios are needed to match it.
+	HostEvents hostEventReader
+	Hosts      agentHostReader
+	Scenarios  scenarioLookup
 	// AgentID is the agent a campaign runs on. Empty means no binding.
 	AgentID string
 	// Dispatcher starts a run through the existing run path. Nil means no dispatch.
@@ -136,6 +141,19 @@ func (x EngineStageExecutor) Collect(ctx context.Context, executionID string) (k
 			if ok {
 				ev.GroundTruth.Source = rec.Source
 				ev.GroundTruth.Executed = rec.Executed
+				ev.GroundTruth.Reference = rec.Reference
+				return ev, true, false, nil
+			}
+		}
+		if x.HostEvents != nil && x.Hosts != nil && x.Scenarios != nil {
+			rec, ok, err := x.hostGroundTruth(ctx, snap)
+			if err != nil {
+				return killchain.StageEvidence{}, false, false, err
+			}
+			if ok {
+				ev.GroundTruth.Source = rec.Source
+				ev.GroundTruth.Executed = rec.Executed
+				ev.GroundTruth.Reference = rec.Reference
 			}
 		}
 		return ev, true, false, nil

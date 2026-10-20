@@ -22,6 +22,8 @@ func seedHostRun(t *testing.T, pool *pgxpool.Pool) {
 	}
 }
 
+var testWin = db.HostEventWindow{From: time.Date(2026, 10, 20, 8, 0, 0, 0, time.UTC), To: time.Date(2026, 10, 20, 10, 0, 0, 0, time.UTC)}
+
 func hostEv(id uint64, cmd string) killchain.HostEvent {
 	return killchain.HostEvent{RecordID: id, EventID: 4688, Host: "WS-01",
 		Time: time.Date(2026, 10, 20, 9, 1, 0, 0, time.UTC), Subject: "svc", NewProcess: "rundll32.exe", CommandLine: cmd}
@@ -34,15 +36,18 @@ func TestHostEvents_RoundTripKeepsDuplicatesAndAudit(t *testing.T) {
 		s := db.KillChainStore{Pool: pool}
 		audit := killchain.AuditState{ProcessCreation: killchain.AuditDisabled, Logon: killchain.AuditEnabled}
 		dup := hostEv(101, "marker-x")
-		if err := s.PutHostEvents(ctx, "host-run", []killchain.HostEvent{dup, dup}, audit); err != nil {
+		if err := s.PutHostEvents(ctx, "host-run", []killchain.HostEvent{dup, dup}, audit, testWin); err != nil {
 			t.Fatal(err)
 		}
-		got, gotAudit, found, err := s.HostEventsForRun(ctx, "host-run")
+		got, gotAudit, gotWin, found, err := s.HostEventsForRun(ctx, "host-run")
 		if err != nil || !found {
 			t.Fatalf("found=%v err=%v", found, err)
 		}
 		if len(got) != 2 {
 			t.Fatalf("duplicates were collapsed at storage (%d rows); the evaluator must see them", len(got))
+		}
+		if !gotWin.From.Equal(testWin.From) || !gotWin.To.Equal(testWin.To) {
+			t.Fatalf("window = %+v, want %+v", gotWin, testWin)
 		}
 		if gotAudit != audit {
 			t.Fatalf("audit = %+v, want %+v", gotAudit, audit)
@@ -60,9 +65,9 @@ func TestHostEvents_RedeliveryReplacesRatherThanAccumulates(t *testing.T) {
 		ctx := context.Background()
 		s := db.KillChainStore{Pool: pool}
 		audit := killchain.AuditState{ProcessCreation: killchain.AuditEnabled, Logon: killchain.AuditEnabled}
-		_ = s.PutHostEvents(ctx, "host-run", []killchain.HostEvent{hostEv(1, "a"), hostEv(2, "b")}, audit)
-		_ = s.PutHostEvents(ctx, "host-run", []killchain.HostEvent{hostEv(1, "a"), hostEv(2, "b")}, audit)
-		got, _, _, _ := s.HostEventsForRun(ctx, "host-run")
+		_ = s.PutHostEvents(ctx, "host-run", []killchain.HostEvent{hostEv(1, "a"), hostEv(2, "b")}, audit, testWin)
+		_ = s.PutHostEvents(ctx, "host-run", []killchain.HostEvent{hostEv(1, "a"), hostEv(2, "b")}, audit, testWin)
+		got, _, _, _, _ := s.HostEventsForRun(ctx, "host-run")
 		if len(got) != 2 {
 			t.Fatalf("re-delivery left %d rows, want 2", len(got))
 		}
@@ -74,7 +79,7 @@ func TestHostEvents_RedeliveryReplacesRatherThanAccumulates(t *testing.T) {
 func TestHostEvents_NoBatchIsNotFound(t *testing.T) {
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
 		s := db.KillChainStore{Pool: pool}
-		_, _, found, err := s.HostEventsForRun(context.Background(), "never")
+		_, _, _, found, err := s.HostEventsForRun(context.Background(), "never")
 		if err != nil || found {
 			t.Fatalf("found=%v err=%v", found, err)
 		}

@@ -77,3 +77,23 @@ func TestParseAuditSetting_UnreadableIsUnknownNotDisabled(t *testing.T) {
 		t.Fatalf("empty output: got %q, want unknown", got)
 	}
 }
+
+// reg query output for the command-line value. An absent value is unknown, never
+// disabled, because the value name is not yet confirmed.
+func TestParseCommandLineCapture_ReadsDwordAndTreatsAbsentAsUnknown(t *testing.T) {
+	enabled := "\r\n    ProcessCreationIncludeCmdLine_Enabled    REG_DWORD    0x1\r\n"
+	disabled := "\r\n    ProcessCreationIncludeCmdLine_Enabled    REG_DWORD    0x0\r\n"
+	if got := parseCommandLineCapture(enabled, nil); got != "enabled" {
+		t.Errorf("0x1: got %q, want enabled", got)
+	}
+	if got := parseCommandLineCapture(disabled, nil); got != "disabled" {
+		t.Errorf("0x0: got %q, want disabled", got)
+	}
+	if got := parseCommandLineCapture("ERROR: unable to find the specified registry key or value.", regExitErr{}); got != "unknown" {
+		t.Errorf("absent: got %q, want unknown", got)
+	}
+}
+
+type regExitErr struct{}
+
+func (regExitErr) Error() string { return "exit status 1" }

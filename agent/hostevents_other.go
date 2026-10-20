@@ -16,5 +16,5 @@ func collectHostEvents(from, to time.Time, maxEvents int) ([]protocol.HostEventR
 }
 
 func probeAudit() protocol.AuditSnapshot {
-	return protocol.AuditSnapshot{ProcessCreation: "unknown", Logon: "unknown"}
+	return protocol.AuditSnapshot{ProcessCreation: "unknown", Logon: "unknown", CommandLine: "unknown"}
 }
