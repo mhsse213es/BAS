@@ -1,0 +1,342 @@
+#!/bin/bash
+# tip-install: installs MISP, OpenCTI and OpenAEV from the offline bundle and
+# prints the values needed to wire them into BAS.
+#
+# Usage: sudo tip-install --host <ip-or-hostname> --port <base-port>
+#
+# Ports used (base = --port):
+#   base      MISP HTTP            base+1  MISP HTTPS
+#   base+2    OpenCTI              base+3  OpenCTI XTM One
+#   base+4    OpenAEV              base+5  OpenAEV XTM One
+#
+# Secrets are generated on this host and written to
+# /etc/threat-intelligence-package/credentials.txt (mode 0600, root only).
+set -euo pipefail
+
+PKG_SHARE=/usr/share/threat-intelligence-package
+STACK_DIR=/opt/threat-intelligence
+SECRET_DIR=/etc/threat-intelligence-package
+CREDS_FILE="${SECRET_DIR}/credentials.txt"
+MIN_RAM_MB=14000
+MIN_FREE_GB=150
+
+die()  { echo "tip-install: error: $*" >&2; exit 1; }
+info() { echo "==> $*"; }
+
+HOST=""
+BASE_PORT=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --host) HOST="${2:-}"; shift 2 ;;
+    --port) BASE_PORT="${2:-}"; shift 2 ;;
+    -h|--help)
+      sed -n '2,15p' "$0"; exit 0 ;;
+    *) die "unknown argument: $1 (usage: --host <ip> --port <base-port>)" ;;
+  esac
+done
+
+[ "$(id -u)" -eq 0 ] || die "run as root (sudo tip-install ...)"
+[ -n "$HOST" ] || die "--host is required (the IP or hostname other machines use to reach this server)"
+[ -n "$BASE_PORT" ] || die "--port is required (base port; uses base..base+5)"
+case "$BASE_PORT" in ''|*[!0-9]*) die "--port must be a number" ;; esac
+[ "$BASE_PORT" -ge 1024 ] && [ "$BASE_PORT" -le 65530 ] || die "--port must be between 1024 and 65530"
+
+# ---- platform checks --------------------------------------------------------
+[ -r /etc/os-release ] || die "cannot read /etc/os-release"
+. /etc/os-release
+case "${ID:-}:${VERSION_ID:-}" in
+  ubuntu:22.04|ubuntu:24.04) ;;
+  *) die "unsupported OS ${PRETTY_NAME:-unknown}; this package supports Ubuntu 22.04 and 24.04" ;;
+esac
+[ "$(uname -m)" = "x86_64" ] || die "unsupported architecture $(uname -m); x86_64 required"
+
+RAM_MB=$(awk '/MemTotal/ {print int($2/1024)}' /proc/meminfo)
+[ "$RAM_MB" -ge "$MIN_RAM_MB" ] || die "need at least ${MIN_RAM_MB} MB RAM, found ${RAM_MB} MB"
+
+FREE_GB=$(df -BG --output=avail /var/lib | tail -1 | tr -dc '0-9')
+[ "$FREE_GB" -ge "$MIN_FREE_GB" ] || die "need at least ${MIN_FREE_GB} GB free under /var/lib, found ${FREE_GB} GB"
+
+command -v docker >/dev/null 2>&1 || die "docker is not installed (install docker.io or Docker Engine first)"
+docker compose version >/dev/null 2>&1 || die "docker compose plugin is missing (install docker-compose-v2)"
+command -v openssl >/dev/null 2>&1 || die "openssl is missing"
+command -v curl >/dev/null 2>&1 || die "curl is missing"
+systemctl is-active --quiet docker || die "docker service is not running (systemctl start docker)"
+
+# ---- port checks ------------------------------------------------------------
+PORTS="$BASE_PORT $((BASE_PORT+1)) $((BASE_PORT+2)) $((BASE_PORT+3)) $((BASE_PORT+4)) $((BASE_PORT+5))"
+for p in $PORTS; do
+  if ss -ltn "( sport = :$p )" | grep -q LISTEN; then
+    die "port $p is already in use on this host; choose another --port"
+  fi
+done
+
+[ -d "${PKG_SHARE}/images" ] || die "bundle images not found at ${PKG_SHARE}/images"
+[ -d "${PKG_SHARE}/stacks" ] || die "bundle stacks not found at ${PKG_SHARE}/stacks"
+
+MISP_HTTP=$BASE_PORT
+MISP_HTTPS=$((BASE_PORT+1))
+OPENCTI_PORT=$((BASE_PORT+2))
+OPENCTI_XTM_PORT=$((BASE_PORT+3))
+OPENAEV_PORT=$((BASE_PORT+4))
+OPENAEV_XTM_PORT=$((BASE_PORT+5))
+
+# ---- secret generation ------------------------------------------------------
+rand()  { openssl rand -hex "${1:-24}"; }
+uuid()  { cat /proc/sys/kernel/random/uuid; }
+
+install -d -m 0700 "$SECRET_DIR"
+install -d -m 0755 "$STACK_DIR"
+
+if [ -f "$CREDS_FILE" ]; then
+  die "credentials already exist at $CREDS_FILE; this host was already installed. Use tip-show-credentials, or uninstall first."
+fi
+
+MISP_ADMIN_EMAIL="admin@misp.local"
+MISP_ADMIN_PASSWORD="$(rand 16)"
+MISP_ADMIN_KEY="$(rand 20)"
+MISP_DB_ROOT_PASSWORD="$(rand 16)"
+MISP_DB_PASSWORD="$(rand 16)"
+MISP_ENCRYPTION_KEY="$(rand 24)"
+
+OPENCTI_ADMIN_EMAIL="admin@opencti.local"
+OPENCTI_ADMIN_PASSWORD="$(rand 16)"
+OPENCTI_ADMIN_TOKEN="$(uuid)"
+OPENCTI_ENCRYPTION_KEY="$(rand 32)"
+OPENCTI_HEALTHCHECK_KEY="$(rand 16)"
+OPENCTI_PLATFORM_REGISTRATION="$(rand 16)"
+OPENCTI_MINIO_USER="opencti"
+OPENCTI_MINIO_PASSWORD="$(rand 16)"
+OPENCTI_RABBIT_PASSWORD="$(rand 16)"
+OPENCTI_XTM_PASSWORD="$(rand 16)"
+OPENCTI_XTM_SECRET="$(rand 32)"
+OPENCTI_XTM_ADMIN_PASSWORD="$(rand 16)"
+
+OPENAEV_ADMIN_EMAIL="admin@openaev.local"
+OPENAEV_ADMIN_PASSWORD="$(rand 16)"
+OPENAEV_ADMIN_TOKEN="$(uuid)"
+OPENAEV_ENCRYPTION_KEY="$(rand 32)"
+OPENAEV_ENCRYPTION_SALT="$(rand 16)"
+OPENAEV_HEALTHCHECK_KEY="$(rand 16)"
+OPENAEV_PLATFORM_REGISTRATION="$(rand 16)"
+OPENAEV_MINIO_USER="openaev"
+OPENAEV_MINIO_PASSWORD="$(rand 16)"
+OPENAEV_RABBIT_PASSWORD="$(rand 16)"
+OPENAEV_POSTGRES_PASSWORD="$(rand 16)"
+OPENAEV_XTM_POSTGRES_PASSWORD="$(rand 16)"
+OPENAEV_XTM_SECRET="$(rand 32)"
+OPENAEV_XTM_ADMIN_PASSWORD="$(rand 16)"
+
+# ---- write per-stack env files (0600) ---------------------------------------
+write_env() { # file, then KEY=VALUE lines on stdin
+  umask 077
+  cat > "$1"
+  chmod 0600 "$1"
+}
+
+write_env "${STACK_DIR}/misp.env" <<EOF
+COMPOSE_PROJECT_NAME=misp
+BASE_URL=http://${HOST}:${MISP_HTTP}
+NGINX_HTTP_PORT=${MISP_HTTP}
+NGINX_HTTPS_PORT=${MISP_HTTPS}
+ADMIN_EMAIL=${MISP_ADMIN_EMAIL}
+ADMIN_PASSWORD=${MISP_ADMIN_PASSWORD}
+ADMIN_KEY=${MISP_ADMIN_KEY}
+DISABLE_PRINTING_PLAINTEXT_CREDENTIALS=true
+MYSQL_ROOT_PASSWORD=${MISP_DB_ROOT_PASSWORD}
+MYSQL_PASSWORD=${MISP_DB_PASSWORD}
+ENCRYPTION_KEY=${MISP_ENCRYPTION_KEY}
+EOF
+
+write_env "${STACK_DIR}/opencti.env" <<EOF
+COMPOSE_PROJECT_NAME=opencti
+OPENCTI_HOST=${HOST}
+OPENCTI_PORT=${OPENCTI_PORT}
+OPENCTI_EXTERNAL_SCHEME=http
+OPENCTI_ADMIN_EMAIL=${OPENCTI_ADMIN_EMAIL}
+OPENCTI_ADMIN_PASSWORD=${OPENCTI_ADMIN_PASSWORD}
+OPENCTI_ADMIN_TOKEN=${OPENCTI_ADMIN_TOKEN}
+OPENCTI_ENCRYPTION_KEY=${OPENCTI_ENCRYPTION_KEY}
+OPENCTI_HEALTHCHECK_ACCESS_KEY=${OPENCTI_HEALTHCHECK_KEY}
+PLATFORM_REGISTRATION_TOKEN=${OPENCTI_PLATFORM_REGISTRATION}
+MINIO_ROOT_USER=${OPENCTI_MINIO_USER}
+MINIO_ROOT_PASSWORD=${OPENCTI_MINIO_PASSWORD}
+RABBITMQ_DEFAULT_USER=opencti
+RABBITMQ_DEFAULT_PASS=${OPENCTI_RABBIT_PASSWORD}
+ELASTIC_MEMORY_SIZE=4G
+SMTP_HOSTNAME=localhost
+XTM_COMPOSER_ID=$(uuid)
+XTM_ONE_HOST=${HOST}
+XTM_ONE_PORT=${OPENCTI_XTM_PORT}
+XTM_ONE_EXTERNAL_SCHEME=http
+XTM_ONE_ADMIN_EMAIL=admin@xtm-one.local
+XTM_ONE_ADMIN_PASSWORD=${OPENCTI_XTM_ADMIN_PASSWORD}
+XTM_ONE_POSTGRES_USER=xtmone
+XTM_ONE_POSTGRES_PASSWORD=${OPENCTI_XTM_PASSWORD}
+XTM_ONE_SECRET_KEY=${OPENCTI_XTM_SECRET}
+CONNECTOR_OPENCTI_ID=$(uuid)
+CONNECTOR_MITRE_ID=$(uuid)
+CONNECTOR_EXPORT_FILE_CSV_ID=$(uuid)
+CONNECTOR_EXPORT_FILE_STIX_ID=$(uuid)
+CONNECTOR_EXPORT_FILE_TXT_ID=$(uuid)
+CONNECTOR_IMPORT_DOCUMENT_ID=$(uuid)
+CONNECTOR_IMPORT_EXTERNAL_REFERENCE_ID=$(uuid)
+CONNECTOR_IMPORT_FILE_STIX_ID=$(uuid)
+CONNECTOR_IMPORT_FILE_YARA_ID=$(uuid)
+CONNECTOR_ANALYSIS_ID=$(uuid)
+EOF
+
+write_env "${STACK_DIR}/openaev.env" <<EOF
+COMPOSE_PROJECT_NAME=openaev
+OPENAEV_HOST=${HOST}
+OPENAEV_PORT=${OPENAEV_PORT}
+OPENAEV_EXTERNAL_SCHEME=http
+OPENAEV_ADMIN_EMAIL=${OPENAEV_ADMIN_EMAIL}
+OPENAEV_ADMIN_PASSWORD=${OPENAEV_ADMIN_PASSWORD}
+OPENAEV_ADMIN_TOKEN=${OPENAEV_ADMIN_TOKEN}
+OPENAEV_ADMIN_ENCRYPTION_KEY=${OPENAEV_ENCRYPTION_KEY}
+OPENAEV_ADMIN_ENCRYPTION_SALT=${OPENAEV_ENCRYPTION_SALT}
+OPENAEV_HEALTHCHECK_KEY=${OPENAEV_HEALTHCHECK_KEY}
+OPENAEV_WITH_PROXY=false
+OPENAEV_MAIL_IMAP_ENABLED=false
+IMAP_ENABLED=false
+IMAP_HOST=localhost
+IMAP_PORT=143
+IMAP_AUTH=false
+IMAP_USERNAME=
+IMAP_PASSWORD=
+IMAP_SSL_ENABLE=false
+IMAP_SSL_TRUST=false
+IMAP_STARTTLS_ENABLE=false
+PLATFORM_REGISTRATION_TOKEN=${OPENAEV_PLATFORM_REGISTRATION}
+MINIO_ROOT_USER=${OPENAEV_MINIO_USER}
+MINIO_ROOT_PASSWORD=${OPENAEV_MINIO_PASSWORD}
+RABBITMQ_DEFAULT_USER=openaev
+RABBITMQ_DEFAULT_PASS=${OPENAEV_RABBIT_PASSWORD}
+POSTGRES_USER=openaev
+POSTGRES_PASSWORD=${OPENAEV_POSTGRES_PASSWORD}
+ELASTIC_MEMORY_SIZE=4G
+SMTP_HOST=localhost
+SMTP_PORT=25
+SMTP_AUTH=false
+SMTP_SSL_ENABLE=false
+SMTP_STARTTLS_ENABLE=false
+XTM_COMPOSER_ID=$(uuid)
+XTM_ONE_HOST=${HOST}
+XTM_ONE_PORT=${OPENAEV_XTM_PORT}
+XTM_ONE_EXTERNAL_SCHEME=http
+XTM_ONE_ADMIN_EMAIL=admin@xtm-one.local
+XTM_ONE_ADMIN_PASSWORD=${OPENAEV_XTM_ADMIN_PASSWORD}
+XTM_ONE_POSTGRES_USER=xtmone
+XTM_ONE_POSTGRES_PASSWORD=${OPENAEV_XTM_POSTGRES_PASSWORD}
+XTM_ONE_SECRET_KEY=${OPENAEV_XTM_SECRET}
+COLLECTOR_OPENAEV_ID=$(uuid)
+COLLECTOR_MITRE_ATTACK_ID=$(uuid)
+COLLECTOR_ATOMIC_RED_TEAM_ID=$(uuid)
+COLLECTOR_NVD_NIST_CVE_ID=$(uuid)
+INJECTOR_NMAP_ID=$(uuid)
+INJECTOR_NUCLEI_ID=$(uuid)
+EOF
+
+# ---- kernel setting Elasticsearch needs ------------------------------------
+cat > /etc/sysctl.d/99-threat-intel-package.conf <<EOF
+vm.max_map_count=262144
+EOF
+sysctl -q -p /etc/sysctl.d/99-threat-intel-package.conf || true
+
+# ---- copy stacks into place ------------------------------------------------
+for s in misp opencti openaev; do
+  install -d -m 0755 "${STACK_DIR}/${s}"
+  cp -r "${PKG_SHARE}/stacks/${s}/." "${STACK_DIR}/${s}/"
+done
+
+# ---- load the offline image bundle -----------------------------------------
+info "Loading offline images (this takes several minutes)"
+for img in "${PKG_SHARE}"/images/*.tar.gz; do
+  [ -f "$img" ] || die "no images found in ${PKG_SHARE}/images"
+  gzip -dc "$img" | docker load >/dev/null
+done
+
+# ---- start stacks one at a time (RAM) --------------------------------------
+start_stack() { # name
+  info "Starting $1"
+  (cd "${STACK_DIR}/$1" && docker compose --env-file "${STACK_DIR}/$1.env" -f docker-compose.yml up -d)
+}
+start_stack misp
+start_stack opencti
+start_stack openaev
+
+# ---- wait for the web interfaces -------------------------------------------
+wait_http() { # label url
+  local label="$1" url="$2"
+  info "Waiting for ${label} at ${url}"
+  for _ in $(seq 1 180); do
+    if curl -fsS -o /dev/null --max-time 5 "$url" 2>/dev/null; then
+      echo "    ${label} is up"; return 0
+    fi
+    sleep 10
+  done
+  die "${label} did not answer at ${url} within 30 minutes. Check: docker compose -p <stack> logs (in ${STACK_DIR})"
+}
+wait_http "MISP" "http://${HOST}:${MISP_HTTP}/users/login"
+wait_http "OpenCTI" "http://${HOST}:${OPENCTI_PORT}/health"
+wait_http "OpenAEV" "http://${HOST}:${OPENAEV_PORT}/api/health"
+
+# ---- verify the generated API credentials actually work ---------------------
+MISP_KEY_CHECK="unverified"
+if curl -fsS --max-time 15 -H "Authorization: ${MISP_ADMIN_KEY}" -H "Accept: application/json" \
+     "http://127.0.0.1:${MISP_HTTP}/users/view/me" >/dev/null 2>&1; then
+  MISP_KEY_CHECK="verified"
+fi
+
+OPENCTI_TOKEN_CHECK="unverified"
+if curl -fsS --max-time 15 -H "Authorization: Bearer ${OPENCTI_ADMIN_TOKEN}" \
+     -H "Content-Type: application/json" -d '{"query":"{ me { id } }"}' \
+     "http://127.0.0.1:${OPENCTI_PORT}/graphql" 2>/dev/null | grep -q '"id"'; then
+  OPENCTI_TOKEN_CHECK="verified"
+fi
+
+# ---- write the credentials file (root only) --------------------------------
+umask 077
+cat > "$CREDS_FILE" <<EOF
+Threat Intelligence Package: credentials for host ${HOST}
+Generated: $(date -u +%Y-%m-%dT%H:%M:%SZ)
+Keep this file secret. Mode 0600, root only.
+
+== MISP ==
+Dashboard URL      : http://${HOST}:${MISP_HTTP}
+Login email        : ${MISP_ADMIN_EMAIL}
+Login password     : ${MISP_ADMIN_PASSWORD}
+API key (for BAS)  : ${MISP_ADMIN_KEY}
+API key check      : ${MISP_KEY_CHECK}
+
+== OpenCTI ==
+Dashboard URL      : http://${HOST}:${OPENCTI_PORT}
+Login email        : ${OPENCTI_ADMIN_EMAIL}
+Login password     : ${OPENCTI_ADMIN_PASSWORD}
+API token (for BAS): ${OPENCTI_ADMIN_TOKEN}
+Token check        : ${OPENCTI_TOKEN_CHECK}
+
+== OpenAEV ==
+Dashboard URL      : http://${HOST}:${OPENAEV_PORT}
+Login email        : ${OPENAEV_ADMIN_EMAIL}
+Login password     : ${OPENAEV_ADMIN_PASSWORD}
+API token (for BAS): ${OPENAEV_ADMIN_TOKEN}
+Token check        : not automated (verify in the OpenAEV dashboard)
+
+== Enter these in BAS (Intel tab for MISP/OpenCTI, OpenAEV card for OpenAEV) ==
+MISP base URL      : http://${HOST}:${MISP_HTTP}
+MISP API key       : ${MISP_ADMIN_KEY}
+OpenCTI base URL   : http://${HOST}:${OPENCTI_PORT}
+OpenCTI API key    : ${OPENCTI_ADMIN_TOKEN}
+OpenAEV base URL   : http://${HOST}:${OPENAEV_PORT}
+OpenAEV API token  : ${OPENAEV_ADMIN_TOKEN}
+EOF
+chmod 0600 "$CREDS_FILE"
+
+# ---- print once -------------------------------------------------------------
+echo
+info "Installation finished. These values are printed once here and saved in ${CREDS_FILE}."
+echo
+cat "$CREDS_FILE"
+echo
+echo "To view them again later: sudo tip-show-credentials"

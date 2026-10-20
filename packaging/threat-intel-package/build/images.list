@@ -1,0 +1,47 @@
+# Images bundled into "Threat Intelligence Package.deb".
+# One reference per line. Sources: opencti/docker/docker-compose.yml,
+# openaev/docker/docker-compose.yml, and MISP's upstream misp-docker
+# docker-compose.yml (fetched from github.com/MISP/misp-docker).
+# Profile-only images (misp-guard) are intentionally excluded.
+
+# --- MISP (misp-docker) ---
+ghcr.io/egos-tech/smtp:1.1.3
+valkey/valkey:7.2
+mariadb:10.11
+ghcr.io/misp/misp-docker/misp-core:latest
+ghcr.io/misp/misp-docker/misp-nginx:latest
+ghcr.io/misp/misp-docker/misp-modules:latest
+
+# --- OpenCTI ---
+alpine/openssl:latest
+docker.elastic.co/elasticsearch/elasticsearch:8.19.16
+filigran/xtm-composer:latest
+minio/minio:latest
+opencti/connector-export-file-csv:latest
+opencti/connector-export-file-stix:latest
+opencti/connector-export-file-txt:latest
+opencti/connector-import-document:latest
+opencti/connector-import-external-reference:latest
+opencti/connector-import-file-stix:latest
+opencti/connector-import-file-yara:latest
+opencti/connector-mitre:latest
+opencti/connector-opencti:latest
+opencti/platform:latest
+opencti/worker:latest
+pgvector/pgvector:pg17
+rabbitmq:4.3-management
+redis:8.8.0
+xtmone/platform:latest
+xtmone/worker:latest
+
+# --- OpenAEV ---
+docker.elastic.co/elasticsearch/elasticsearch:8.19.19
+openaev/collector-atomic-red-team:latest
+openaev/collector-mitre-attack:latest
+openaev/collector-nvd-nist-cve:latest
+openaev/collector-openaev:latest
+openaev/injector-nmap:latest
+openaev/injector-nuclei:latest
+openaev/platform:latest
+postgres:17-alpine
+redis:8.8.1
