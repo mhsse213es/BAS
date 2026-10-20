@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/time/rate"
+
 	"github.com/audspect/bas/internal/platform/msauth"
 )
 
@@ -35,6 +37,11 @@ type AzureDiscoveryClient struct {
 	armTokens   *msauth.EntraTokenSource
 	httpClient  *http.Client
 
+	// retry and limiter are zero-value safe: a client built as a struct
+	// literal makes one attempt with no rate limiting.
+	retry   RetryPolicy
+	limiter *rate.Limiter
+
 	subscriptionID string
 }
 
@@ -47,9 +54,33 @@ func NewAzureDiscoveryClient(cfg AzureDiscoveryConfig) *AzureDiscoveryClient {
 		armTokens: msauth.NewEntraTokenSource(cfg.TenantID, cfg.ClientID, cfg.ClientSecret,
 			"https://management.azure.com/.default"),
 		httpClient:     &http.Client{Timeout: 30 * time.Second},
+		retry:          DefaultRetryPolicy,
+		limiter:        DefaultRateLimiter(),
 		subscriptionID: cfg.SubscriptionID,
 	}
 }
+
+// get performs an authenticated GET with throttling and transient-failure
+// retry. The bearer token is re-acquired on every attempt so a long backoff
+// cannot send an expired token.
+func (c *AzureDiscoveryClient) get(ctx context.Context, url string, tokens *msauth.EntraTokenSource) (*http.Response, error) {
+	return doWithRetry(ctx, c.httpClient, c.limiter, c.retry, func(ctx context.Context) (*http.Request, error) {
+		token, err := tokens.Token(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("azure discovery: acquiring token: %w", err)
+		}
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+		if err != nil {
+			return nil, fmt.Errorf("azure discovery: building request for %s: %w", url, err)
+		}
+		req.Header.Set("Authorization", "Bearer "+token)
+		return req, nil
+	})
+}
+
+// maxDiscoveryPages bounds pagination so a misbehaving endpoint that keeps
+// returning fresh nextLinks cannot run a discovery pass indefinitely.
+const maxDiscoveryPages = 5000
 
 // GraphTokenURL exposes the Graph token source's overridable URL for tests.
 func (c *AzureDiscoveryClient) GraphTokenURL() *string { return &c.graphTokens.TokenURL }
@@ -83,18 +114,11 @@ type azurePage struct {
 func (c *AzureDiscoveryClient) fetchAllPages(ctx context.Context, startURL string, tokens *msauth.EntraTokenSource) ([]json.RawMessage, error) {
 	var all []json.RawMessage
 	url := startURL
-	for url != "" {
-		token, err := tokens.Token(ctx)
-		if err != nil {
-			return nil, fmt.Errorf("azure discovery: acquiring token: %w", err)
+	for pages := 0; url != ""; pages++ {
+		if pages >= maxDiscoveryPages {
+			return nil, fmt.Errorf("azure discovery: more than %d pages from %s; refusing to continue", maxDiscoveryPages, startURL)
 		}
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-		if err != nil {
-			return nil, fmt.Errorf("azure discovery: building request for %s: %w", url, err)
-		}
-		req.Header.Set("Authorization", "Bearer "+token)
-
-		resp, err := c.httpClient.Do(req)
+		resp, err := c.get(ctx, url, tokens)
 		if err != nil {
 			return nil, fmt.Errorf("azure discovery: request to %s: %w", url, err)
 		}
@@ -289,17 +313,7 @@ func scopeKind(scope string) string {
 // ARM GETs (e.g. one role definition), which are not wrapped in a "value"
 // array.
 func (c *AzureDiscoveryClient) fetchOne(ctx context.Context, url string, tokens *msauth.EntraTokenSource, out any) error {
-	token, err := tokens.Token(ctx)
-	if err != nil {
-		return fmt.Errorf("azure discovery: acquiring token: %w", err)
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return fmt.Errorf("azure discovery: building request for %s: %w", url, err)
-	}
-	req.Header.Set("Authorization", "Bearer "+token)
-
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.get(ctx, url, tokens)
 	if err != nil {
 		return fmt.Errorf("azure discovery: request to %s: %w", url, err)
 	}

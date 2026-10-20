@@ -125,15 +125,20 @@ func tryAdvance(edge *CloudPermission, reachedAsTarget, reachedAsSource map[stri
 func CloudPlan(edges []*CloudPermission, held []string, target string, evaluator AuthorizationEvaluator, ctx *RequestContext, maxHops int) (*CloudPath, bool) {
 	reachedAsTarget := make(map[string]bool, len(held))
 	reachedAsSource := make(map[string]bool, len(held))
+	heldSet := make(map[string]bool, len(held))
 	for _, id := range held {
 		reachedAsTarget[id] = true
 		reachedAsSource[id] = true
+		heldSet[id] = true
 	}
 	if reachedAsTarget[target] {
 		return &CloudPath{Hops: nil, OverallState: PolicySupported}, true
 	}
 
-	var hops []*CloudHop
+	// parent records the hop that first reached each node. Sibling branches
+	// reached in the same pass are advanced too, but only the chain back from
+	// target is reported as the path.
+	parent := make(map[string]*CloudHop)
 	for pass := 0; pass < maxHops; pass++ {
 		added := false
 		for _, edge := range edges {
@@ -141,10 +146,11 @@ func CloudPlan(edges []*CloudPermission, held []string, target string, evaluator
 			if !ok {
 				continue
 			}
-			hops = append(hops, &CloudHop{Edge: edge, Result: result})
+			parent[edge.Target.CanonicalID] = &CloudHop{Edge: edge, Result: result}
 			added = true
 			if edge.Target.CanonicalID == target {
-				return &CloudPath{Hops: hops, OverallState: worstState(hopStates(hops))}, true
+				chain := pathChain(parent, heldSet, target)
+				return &CloudPath{Hops: chain, OverallState: worstState(hopStates(chain))}, true
 			}
 		}
 		if !added {
@@ -152,6 +158,23 @@ func CloudPlan(edges []*CloudPermission, held []string, target string, evaluator
 		}
 	}
 	return nil, false
+}
+
+// pathChain walks parent links from target back to a held identity and
+// returns the hops in traversal order. Every node on the walk was reached
+// strictly earlier than its child, so the walk terminates.
+func pathChain(parent map[string]*CloudHop, held map[string]bool, target string) []*CloudHop {
+	var reversed []*CloudHop
+	for node := target; !held[node]; {
+		hop := parent[node]
+		reversed = append(reversed, hop)
+		node = hop.Edge.Source.CanonicalID
+	}
+	chain := make([]*CloudHop, len(reversed))
+	for i, hop := range reversed {
+		chain[len(reversed)-1-i] = hop
+	}
+	return chain
 }
 
 // hopStates extracts the per-hop PathState values from an ordered hop list,
