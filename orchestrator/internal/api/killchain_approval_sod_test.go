@@ -27,43 +27,35 @@ func fullApproval() advanceApproval {
 	return advanceApproval{ConfirmLive: true, ConfirmLab: true, Reason: "CHG-1"}
 }
 
-// The creator cannot also approve lab stages.
-func TestSeparationOfDuties_CreatorCannotApproveLab(t *testing.T) {
-	err := checkCampaignApproval(labCampaignDef(), fullApproval(), "alice", "alice")
-	if err == nil || !strings.Contains(err.Error(), "different user") {
-		t.Fatalf("err = %v, want a refusal naming the separation of duties", err)
+// A single-person lab team may approve its own lab stages. The audit records both.
+func TestLabSelfApproval_CreatorMayApproveLab(t *testing.T) {
+	if err := checkCampaignApproval(labCampaignDef(), fullApproval(), "alice"); err != nil {
+		t.Fatalf("creator self-approval refused: %v", err)
 	}
 }
 
-// A second user may approve the lab stages.
-func TestSeparationOfDuties_OtherUserCanApproveLab(t *testing.T) {
-	if err := checkCampaignApproval(labCampaignDef(), fullApproval(), "bob", "alice"); err != nil {
-		t.Fatalf("a different approver was refused: %v", err)
-	}
-}
-
-// If the approver cannot be identified, the lab approval is refused. It is not allowed by default.
-func TestSeparationOfDuties_UnidentifiedApproverRefused(t *testing.T) {
-	err := checkCampaignApproval(labCampaignDef(), fullApproval(), "", "alice")
+// Lab stages still need an identified approver.
+func TestLabSelfApproval_UnidentifiedApproverRefused(t *testing.T) {
+	err := checkCampaignApproval(labCampaignDef(), fullApproval(), "")
 	if err == nil || !strings.Contains(err.Error(), "identify") {
 		t.Fatalf("err = %v, want a refusal because the approver is unknown", err)
 	}
 }
 
-// The rule applies to lab stages only. A live (telemetry) campaign is approved by the creator.
-func TestSeparationOfDuties_TelemetryNotAffected(t *testing.T) {
+// Telemetry approval is not affected by the lab rule.
+func TestLabSelfApproval_TelemetryNotAffected(t *testing.T) {
 	def := killchain.CampaignDef{ID: "tel", Version: 1, Stages: []killchain.StageDef{
 		{Key: "x", ScenarioID: "credential-access", Mode: killchain.ModeTelemetry},
 	}}
-	if err := checkCampaignApproval(def, advanceApproval{ConfirmLive: true, Reason: "CHG-2"}, "alice", "alice"); err != nil {
-		t.Fatalf("telemetry approved by its creator was refused: %v", err)
+	if err := checkCampaignApproval(def, advanceApproval{ConfirmLive: true, Reason: "CHG-2"}, "alice"); err != nil {
+		t.Fatalf("telemetry approval refused: %v", err)
 	}
 }
 
 // Posture campaigns need no approver at all.
-func TestSeparationOfDuties_PostureNeedsNoApprover(t *testing.T) {
+func TestLabSelfApproval_PostureNeedsNoApprover(t *testing.T) {
 	def := killchain.CampaignDef{ID: "p", Version: 1, Stages: []killchain.StageDef{{Key: "x", ScenarioID: "s"}}}
-	if err := checkCampaignApproval(def, advanceApproval{}, "", "alice"); err != nil {
+	if err := checkCampaignApproval(def, advanceApproval{}, ""); err != nil {
 		t.Fatalf("posture refused: %v", err)
 	}
 }
@@ -81,9 +73,8 @@ func advanceAs(h *Handler, id, body, userID string) *httptest.ResponseRecorder {
 	return rec
 }
 
-// Through the handler: the campaign's creator is refused for a lab campaign, and a
-// different user passes the approval check.
-func TestSeparationOfDuties_HandlerRefusesCreator(t *testing.T) {
+// Through the handler: the creator's lab approval is not refused by the approval check.
+func TestLabSelfApproval_HandlerAllowsCreator(t *testing.T) {
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
 		def := labCampaignDef()
 		def.ID = "sod-handler-1"
@@ -91,15 +82,9 @@ func TestSeparationOfDuties_HandlerRefusesCreator(t *testing.T) {
 			t.Fatal(err)
 		}
 		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret)
-		body := `{"confirmLive":true,"confirmLab":true,"reason":"CHG-9"}`
-
-		rec := advanceAs(h, def.ID, body, "owner-1")
-		if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "different user") {
-			t.Fatalf("creator approval: status=%d body=%s", rec.Code, rec.Body.String())
-		}
-		rec = advanceAs(h, def.ID, body, "approver-2")
+		rec := advanceAs(h, def.ID, `{"confirmLive":true,"confirmLab":true,"reason":"CHG-9"}`, "owner-1")
 		if rec.Code == http.StatusBadRequest {
-			t.Fatalf("a different approver was refused at the approval check: %s", rec.Body.String())
+			t.Fatalf("creator self-approval refused at the approval check: %s", rec.Body.String())
 		}
 	})
 }

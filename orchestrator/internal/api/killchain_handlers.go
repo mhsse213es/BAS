@@ -165,7 +165,7 @@ func (h *Handler) AdvanceKillChainCampaign(w http.ResponseWriter, r *http.Reques
 	if c, ok := auth.ClaimsFrom(r.Context()); ok && c != nil {
 		approver = c.UserID
 	}
-	if err := checkCampaignApproval(bound.Def, approval, approver, bound.CreatedBy); err != nil {
+	if err := checkCampaignApproval(bound.Def, approval, approver); err != nil {
 		jsonError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -177,6 +177,7 @@ func (h *Handler) AdvanceKillChainCampaign(w http.ResponseWriter, r *http.Reques
 	if live, lab := bound.Def.LiveAndLabStages(); len(live) > 0 {
 		h.auditLog(r, "killchain.campaign.approve", id, map[string]any{
 			"liveStages": live, "labStages": lab, "reason": approval.Reason,
+			"approver": approver, "createdBy": bound.CreatedBy,
 		}, "success")
 	}
 	exec := EngineStageExecutor{

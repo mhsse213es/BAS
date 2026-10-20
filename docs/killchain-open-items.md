@@ -258,9 +258,21 @@ makes a live or lab claim. Each needs staging before the flag can be turned on.
    the same agent.
 8. Window closing between approval and stage start, on a real clock, refuses the
    stage and the stage is recorded as an error, not a pass.
-9. The factory-lab rule (a lab-bound campaign may not run customer-mode stages).
-   Decision first, then a staging test. The code has no such concept yet.
+9. Factory-lab gate on a real factory-lab agent: a campaign stage is refused (the
+   `is_factory_lab` gate in dispatchRun). Unit-tested here against the database; confirm on staging.
 
 Decisions for you, not staging:
-- Whether a single-person lab team may self-approve lab stages. The current rule refuses it.
-- The factory-lab rule above, including what "customer-mode" means.
+- Resolved: a single-person lab team may self-approve lab stages. The audit records creator and approver.
+
+### Update: factory-lab gate and self-approval decision
+
+- The factory-lab gate exists and is server-side. `dispatchRun` refuses any
+  mode other than factory-validation on the agent whose `is_factory_lab` is set,
+  and refuses factory-validation on any other agent. A campaign stage on the
+  factory-lab agent is refused by the same gate. Tested against the database.
+  An earlier note in this doc said the gate was missing. That was wrong.
+- Decided: a single-person lab team may self-approve lab stages.
+- Still not built, and needs a decision: the pasted policy says lab-only
+  scenarios (`fidelity: lab-only`, e.g. the akira stage 8 in `scenarios/`)
+  should be blocked outside an approved lab unless policy authorizes it. No code
+  enforces `fidelity` today. Decide the policy and where the check sits before building it.
