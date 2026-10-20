@@ -80,7 +80,7 @@ func (o Orchestrator) Advance(ctx context.Context, campaignID string) (Rollup, e
 		}
 
 		if sr.State == StateDispatched {
-			done, err := o.collect(ctx, campaignID, st, &sr)
+			done, err := o.collect(ctx, campaignID, rec.Def, st, &sr)
 			if err != nil {
 				return Rollup{}, err
 			}
@@ -120,7 +120,7 @@ func (o Orchestrator) Advance(ctx context.Context, campaignID string) (Rollup, e
 			return Rollup{}, err
 		}
 		stages[key] = sr
-		done, err := o.collect(ctx, campaignID, st, &sr)
+		done, err := o.collect(ctx, campaignID, rec.Def, st, &sr)
 		if err != nil {
 			return Rollup{}, err
 		}
@@ -157,7 +157,7 @@ func (o Orchestrator) Reconcile(ctx context.Context, campaignID string) error {
 
 // collect asks the executor for the result of a dispatched stage. It reports
 // whether the stage reached a terminal verdict.
-func (o Orchestrator) collect(ctx context.Context, campaignID string, st StageDef, sr *StageRecord) (bool, error) {
+func (o Orchestrator) collect(ctx context.Context, campaignID string, def CampaignDef, st StageDef, sr *StageRecord) (bool, error) {
 	ev, done, failed, err := o.Executor.Collect(ctx, sr.ExecutionID)
 	if err != nil {
 		*sr = errorRecord(st.Key, fmt.Sprintf("could not collect result: %v", err))
@@ -178,6 +178,10 @@ func (o Orchestrator) collect(ctx context.Context, campaignID string, st StageDe
 	ev.MissingEvidence = missing
 	state := StateCompleted
 	v := Evaluate(StageInput{State: state, Policy: st.Policy, Evidence: &ev})
+	if err := CheckCausedBy(def, st.Key, ev.CausedBy); err != nil {
+		// Evidence that cites a non-upstream cause cannot be trusted to order a timeline.
+		v = StageVerdict{Verdict: VerdictInconclusive, Reasons: []string{err.Error()}}
+	}
 	*sr = StageRecord{Key: st.Key, State: state, Verdict: v.Verdict, Reasons: v.Reasons,
 		ExecutionID: sr.ExecutionID, Evidence: &ev}
 	return true, o.Store.PutStage(ctx, campaignID, *sr)
