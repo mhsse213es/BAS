@@ -1,0 +1,90 @@
+id: windows-execution-control-posture
+name: Windows Execution Control Posture (Application Control, Tamper Protection, ASR)
+description: >
+  Read-only posture audit of the execution controls on a Windows host: whether an
+  AppLocker or WDAC policy is in force, whether Defender tamper protection is on, and
+  whether attack surface reduction rules are configured. Nothing is executed or changed.
+  The controls' behaviour under a real execution attempt is measured by the
+  appcontrol-efficacy and evasion scenarios, not here.
+local_check: true
+executable: false
+supported_os: [windows]
+tags:
+  - execution-control
+  - defense-evasion
+  - posture
+  - windows
+  - read-only
+contract:
+  objective: Confirm that an application control policy, tamper protection and attack surface reduction are configured on the host.
+  prerequisites:
+    os: Windows 10 or later, Windows Server 2019 or later
+    product: AppLocker, Windows Defender Application Control, Microsoft Defender Antivirus preferences
+    permissions: local administrator read access
+    telemetry: none required for the posture result
+  variants:
+    baseline: current application control, tamper protection and ASR configuration
+    variation: not applicable; single-state read
+    negative_controls: a host without Defender preference access reports SKIP for tamper protection and ASR
+  expected_prevention:
+    control: an application control policy restricts unapproved executables; tamper protection prevents disabling Defender; ASR rules block known abuse behaviours
+    authoritative_proof: the policy presence, preference values read in each step
+  expected_detection:
+    observables: not applicable; this scenario reads configuration
+    telemetry_sources: none
+  response_validation:
+    alert_to_incident: not evaluated by this scenario
+    containment_check: not evaluated
+  evidence_contract:
+    required: AppLocker effective rule count, WDAC policy file presence, tamper protection value, ASR rule count, host identifier, timestamp
+    identifiers: WDAC policy file path, ASR rule GUIDs
+    missing_data_is: an unreadable preference is SKIP for that check; a policy that cannot be determined is never recorded as enforced
+  cleanup_recovery:
+    artifacts_removed: none; the scenario writes nothing
+    access_revocation_verified: not applicable
+  remediation_retest:
+    change: client deploys an AppLocker or WDAC policy, enables tamper protection, or configures ASR rules
+    retest: the same scenario must return PASS for the changed check
+  limitations:
+    - presence of a policy is not proof that it blocks anything; the efficacy scenarios measure that
+    - WDAC is detected by the policy file only; a policy that is deployed but not yet active may read as present
+    - ASR rule count does not show whether rules are in block or audit mode
+steps:
+  - name: "Application control policy in force (AppLocker or WDAC)"
+    check_id: windows-execctrl-applocker-wdac
+    technique_id: T1562.001
+    framework: custom
+    executor: local
+    command: >-
+      $al = @(Get-AppLockerPolicy -Effective -ErrorAction SilentlyContinue | ForEach-Object { $_.RuleCollections }).Count;
+      $wd = Test-Path 'C:\Windows\System32\CodeIntegrity\SIPolicy.p7b';
+      if ($al -gt 0 -or $wd) { Write-Output ('PASS: application control in force (AppLocker rule collections=' + $al + ', WDAC policy file=' + $wd + ')') }
+      else { Write-Output 'FAIL: no AppLocker policy and no WDAC policy file found' }
+    timeout_sec: 60
+
+  - name: "Defender tamper protection enabled"
+    check_id: windows-execctrl-tamper-protection
+    technique_id: T1562.001
+    framework: custom
+    executor: local
+    command: >-
+      $p = Get-MpPreference -ErrorAction SilentlyContinue;
+      if ($null -eq $p) { Write-Output 'SKIP: Defender preferences are not readable on this host' }
+      elseif ($p.DisableTamperProtection -eq $false) { Write-Output 'PASS: Defender tamper protection is on' }
+      else { Write-Output 'FAIL: Defender tamper protection is off' }
+    timeout_sec: 30
+
+  - name: "Attack surface reduction rules configured"
+    check_id: windows-execctrl-asr-rules
+    technique_id: T1562.001
+    framework: custom
+    executor: local
+    command: >-
+      $p = Get-MpPreference -ErrorAction SilentlyContinue;
+      if ($null -eq $p) { Write-Output 'SKIP: Defender preferences are not readable on this host' }
+      else {
+        $n = @($p.AttackSurfaceReductionRules_Ids).Count;
+        if ($n -gt 0) { Write-Output ('PASS: ' + $n + ' attack surface reduction rules configured') }
+        else { Write-Output 'FAIL: no attack surface reduction rules configured' }
+      }
+    timeout_sec: 30

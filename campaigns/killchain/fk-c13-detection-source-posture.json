@@ -1,0 +1,3 @@
+{"id":"fk-c13-detection-source-posture","name":"Campaign 13 - Detection source prerequisites (posture-only; the SOC pipeline test itself is not built)","version":1,"stages":[
+{"key":"detection-sources","scenarioId":"windows-detection-prerequisites-posture","policy":{"shouldBlock":false,"containmentRequired":false,"source":"fullkillchain.txt Campaign 13: source of ingestible events, prerequisite only"}}
+]}

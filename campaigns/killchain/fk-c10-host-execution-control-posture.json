@@ -1,0 +1,3 @@
+{"id":"fk-c10-host-execution-control-posture","name":"Campaign 10 - Host execution control posture (posture-only)","version":1,"stages":[
+{"key":"execution-controls","scenarioId":"windows-execution-control-posture","policy":{"shouldBlock":true,"containmentRequired":false,"source":"fullkillchain.txt Campaign 10: application-control policy and agent tamper protection"}}
+]}
