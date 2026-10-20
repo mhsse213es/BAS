@@ -1,0 +1,55 @@
+id: API-BAS-AUTHZ-006
+name: Item fetched through a parent the caller owns, but belonging to another order
+category: AUTHZ
+claim: cross_identity
+attack_objective: >
+  A customer requests a child item through their own parent order, while naming
+  an item that actually belongs to another customer's order.
+threat_model:
+  attacker: authenticated customer who owns a parent order
+  identity: customer-a
+  access_level: standard customer, valid token, owner of the parent only
+  objective: read another customer's item and its payer account via a parent the attacker owns
+preconditions:
+  fixture: orders-two-tenant
+  identities: [customer-b, customer-a]
+  object: ORD-2001
+steps:
+  - id: baseline-owner-item-read
+    role: baseline
+    identity: customer-b
+    auth: valid
+    method: GET
+    path: /api/orders/{object}/items/ITM-2001-1
+    hypothesis: The owner can read an item of their own order. If this fails, the scenario is not testable.
+  - id: attack-foreign-item-via-own-parent
+    role: attack
+    identity: customer-a
+    auth: valid
+    method: GET
+    path: /api/orders/ORD-1001/items/ITM-2001-1
+    hypothesis: The item lookup checks that the item belongs to the parent, so a foreign item is not found under the caller's parent.
+denied_statuses: [404]
+expected_control: >
+  The foreign item is not found under the caller's parent (404) and discloses no
+  protected values of the other customer's order.
+ground_truth:
+  adapters: [state, response]
+  check: >
+    The state is unchanged by the attack and the attack response contains none
+    of the other customer's protected values.
+detection_assertion:
+  status: not_evaluated
+  reason: Detection validation is Phase 4; this scenario makes no detection claim.
+evidence:
+  - sanitized_request
+  - sanitized_response
+  - state_diff
+side_effect_class: READ_ONLY
+cleanup:
+  - none; the scenario creates no records
+industry_mapping:
+  - "BFSI: parent-child authorization on account line items"
+regulatory_mapping: []
+negative_tests:
+  - API-BAS-AUTHZ-006 against the fixed build must PASS

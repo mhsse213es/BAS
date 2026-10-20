@@ -1,0 +1,55 @@
+id: API-BAS-INTEG-005
+name: Internal route reachable with a customer token
+category: INTEG
+claim: authentication
+attack_objective: >
+  A customer calls an internal-only service route directly, without any internal
+  service credential, and reads a record meant only for other internal services.
+threat_model:
+  attacker: authenticated customer who can reach the internal service address
+  identity: customer-a
+  access_level: standard customer, valid token, no internal-service credential
+  objective: read internal records by calling a service-to-service route directly
+preconditions:
+  fixture: orders-two-tenant
+  identities: [customer-b, customer-a]
+  object: ORD-2001
+steps:
+  - id: baseline-owner-read
+    role: baseline
+    identity: customer-b
+    auth: valid
+    method: GET
+    path: /api/orders/{object}
+    hypothesis: The owner can read their order through the product API. If this fails, the scenario is not testable.
+  - id: attack-internal-route-with-customer-token
+    role: attack
+    identity: customer-a
+    auth: valid
+    method: GET
+    path: /internal/orders/{object}
+    hypothesis: The internal route requires the internal-service credential, so a customer token is refused.
+denied_statuses: [401, 403]
+expected_control: >
+  The internal route refuses a request that lacks the internal-service credential
+  and discloses no protected values.
+ground_truth:
+  adapters: [state, response]
+  check: >
+    The state is unchanged by the attack and the attack response contains none
+    of the owner's protected values.
+detection_assertion:
+  status: not_evaluated
+  reason: Detection validation is Phase 4; this scenario makes no detection claim.
+evidence:
+  - sanitized_request
+  - sanitized_response
+  - state_diff
+side_effect_class: READ_ONLY
+cleanup:
+  - none; the scenario creates no records
+industry_mapping:
+  - "BFSI: unauthenticated service-to-service exposure of customer records"
+regulatory_mapping: []
+negative_tests:
+  - API-BAS-INTEG-005 against the fixed build must PASS

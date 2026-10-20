@@ -361,3 +361,35 @@ Vulnerable: all seventeen FAIL, exploited. Fixed: all seventeen PASS, not exploi
 - Not started: injection (INJ), most of gateway (GWAY), abuse (ABUSE, which needs repeated requests and a count-based grader), most of integrations and discovery, and most of the remaining AUTHN and AUTHZ items.
 - The orchestrator still does not schedule runs or persist results, and the production secret store is still not built.
 - The Windows build (`build.ps1`) has not been run on this tranche. You said you will build it later.
+
+
+## Phase 7 tranche — seventh tranche
+
+Branch: `feature/api-bas-phase7` (from `main`). Two more scenarios, bringing the total to nineteen.
+
+| ID | Sub-technique | Claim | Vulnerable | Fixed | Side effect |
+|---|---|---|---|---|---|
+| API-BAS-AUTHZ-006 | Parent-child authorization (item of another order via own parent) | cross_identity | FAIL, exposed | PASS (404) | READ_ONLY |
+| API-BAS-INTEG-005 | Internal service authentication gap (customer token on internal route) | authentication | FAIL, exposed | PASS (401, no record) | READ_ONLY |
+
+New flaws: `LAB-AUTHZ-PARENT-001`, `LAB-INTEG-INTERNAL-001`.
+
+### Notes
+
+- Fixture objects now carry child items. Each item belongs to exactly one order.
+- The fixed internal route requires an internal-service credential (`Config.InternalToken`). When none is configured, the fixed build refuses every internal call. The SSRF scenario is unaffected, because the fixed build refuses its loopback destination before fetching.
+
+### Tests
+
+`go test ./internal/apibas/... -count=1`: all packages pass. New in `phase7_test.go`: `TestPhase7_VulnerableFailsFixedPasses` (four subtests), `TestPhase7_ForeignItemReturnedOnlyWhenVulnerable`, `TestPhase7_FixedInternalRouteRefusesCustomerToken`.
+
+### CLI smoke test (both modes, all nineteen scenarios)
+
+Vulnerable: all nineteen FAIL, exploited. Fixed: all nineteen PASS, not exploited. Token check against the lab logs: zero matches.
+
+### Still open
+
+- Nineteen scenarios of roughly 50 Phase 2 sub-techniques.
+- Still open, and needing framework work: counted-request abuse scenarios (ABUSE), header-level evidence for CORS and caching (DISC-005, DATA-006), a fixture SIEM for detection (Phase 4), and GraphQL, gRPC, SOAP, WebSocket, and async adapters.
+- The orchestrator still does not schedule runs or persist results, and the production secret store is still not built.
+- The Windows build (`build.ps1`) has not been run on these tranches. You said you will build it later.

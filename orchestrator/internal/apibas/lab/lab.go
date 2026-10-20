@@ -47,6 +47,9 @@ type Config struct {
 	Tokens     map[string]string // bearer token -> customer ID
 	Revoked    []string          // tokens that are in Tokens but must be refused
 	AdminToken string
+	// InternalToken is the credential an internal service presents to the
+	// internal route. When empty, the fixed build refuses every internal call.
+	InternalToken string
 }
 
 // Flaw describes one planted vulnerability and the oracle that proves it.
@@ -175,6 +178,20 @@ func Flaws() []Flaw {
 				"Fixed: the role change is refused with 403, so the admin route refuses the customer too.",
 		},
 		{
+			ID:          "LAB-AUTHZ-PARENT-001",
+			ScenarioID:  "API-BAS-AUTHZ-006",
+			Description: "GET /api/orders/{id}/items/{itemId} checks the parent order but not that the item belongs to it.",
+			Oracle: "Vulnerable: an item of another customer's order, requested through the caller's own parent, returns that order's protected values (exposed). " +
+				"Fixed: the item is not found under the parent and the request returns 404.",
+		},
+		{
+			ID:          "LAB-INTEG-INTERNAL-001",
+			ScenarioID:  "API-BAS-INTEG-005",
+			Description: "The internal route accepts any caller and does not require the internal-service credential.",
+			Oracle: "Vulnerable: a customer token reads an internal record and gets its protected values (exposed). " +
+				"Fixed: the request without the internal-service credential returns 401 and no record.",
+		},
+		{
 			ID:          "LAB-AUTHZ-MASS-001",
 			ScenarioID:  "API-BAS-AUTHZ-003",
 			Description: "PATCH /api/orders/{id} binds every submitted field, including owner_id, from the request body.",
@@ -229,7 +246,11 @@ type Server struct {
 	mu      sync.Mutex
 	orders  map[string]*Order
 	roles   map[string]string // customer -> role; absent means "customer"
-	audit   []AuditEntry
+	// itemParent maps an item ID to its parent order. Items are fixed by the
+	// fixture, so cleanup and reset never change them.
+	itemParent map[string]string
+	itemSKU    map[string]string
+	audit      []AuditEntry
 }
 
 // New validates the configuration, seeds the store from the fixture and
@@ -254,7 +275,15 @@ func New(cfg Config) (*Server, error) {
 // s.mu, except during New where the server is not yet shared.
 func (s *Server) reseed() {
 	s.roles = make(map[string]string)
+	s.itemParent = make(map[string]string)
+	s.itemSKU = make(map[string]string)
 	s.orders = make(map[string]*Order, len(s.cfg.Fixture.Objects))
+	for _, o := range s.cfg.Fixture.Objects {
+		for _, it := range o.Items {
+			s.itemParent[it.ID] = o.ID
+			s.itemSKU[it.ID] = it.SKU
+		}
+	}
 	for _, o := range s.cfg.Fixture.Objects {
 		s.orders[o.ID] = &Order{
 			ID:        o.ID,
@@ -279,6 +308,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/orders", s.listOrders)
 	mux.HandleFunc("POST /api/webhooks/test", s.testWebhook)
 	mux.HandleFunc("GET /internal/orders/{id}", s.internalOrder)
+	mux.HandleFunc("GET /api/orders/{id}/items/{itemId}", s.getItem)
 	if s.cfg.Mode == ModeVulnerable {
 		// LAB-DISC-DEPRECATED-001: the retired v0 route is still served, without auth.
 		mux.HandleFunc("GET /api/v0/orders/{id}", s.getOrderV0)
@@ -864,6 +894,42 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	_ = json.NewEncoder(w).Encode(v)
 }
 
+// getItem returns one item under a parent order. The caller must own the parent.
+// The vulnerable build does not check that the item belongs to the parent
+// (LAB-AUTHZ-PARENT-001); the fixed build does.
+func (s *Server) getItem(w http.ResponseWriter, r *http.Request) {
+	caller, st := s.identify(r)
+	if st != authOK {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthenticated"})
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	parent, found := s.orders[r.PathValue("id")]
+	if !found {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+		return
+	}
+	if parent.OwnerID != caller {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
+		return
+	}
+	itemID := r.PathValue("itemId")
+	itemParent, found := s.itemParent[itemID]
+	if !found || (s.cfg.Mode == ModeFixed && itemParent != parent.ID) {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+		return
+	}
+	// The item body carries its real parent's payer account, which is protected.
+	owner := s.orders[itemParent]
+	writeJSON(w, http.StatusOK, map[string]any{
+		"id":            itemID,
+		"order_id":      itemParent,
+		"sku":           s.itemSKU[itemID],
+		"payer_account": owner.Protected["account_ref"],
+	})
+}
+
 // getOrderV0 is the retired route (LAB-DISC-DEPRECATED-001). It is mounted only in
 // the vulnerable build and serves the full record with no credential.
 func (s *Server) getOrderV0(w http.ResponseWriter, r *http.Request) {
@@ -877,10 +943,16 @@ func (s *Server) getOrderV0(w http.ResponseWriter, r *http.Request) {
 	respondOrder(w, found, body)
 }
 
-// internalOrder is an internal-only record route. It has no credential check,
-// because it assumes callers are on the internal network. It exists so the SSRF
-// scenario has a real internal target.
+// internalOrder is an internal-only record route. The vulnerable build serves it
+// to any caller (LAB-INTEG-INTERNAL-001), which is also the target the SSRF
+// scenario reaches. The fixed build requires the internal-service credential.
 func (s *Server) internalOrder(w http.ResponseWriter, r *http.Request) {
+	if s.cfg.Mode == ModeFixed {
+		if s.cfg.InternalToken == "" || r.Header.Get("X-Internal-Token") != s.cfg.InternalToken {
+			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "internal credential required"})
+			return
+		}
+	}
 	s.mu.Lock()
 	order, found := s.orders[r.PathValue("id")]
 	var body map[string]any

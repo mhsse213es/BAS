@@ -27,6 +27,13 @@ type Object struct {
 	Status    string
 	Public    map[string]string
 	Protected map[string]string
+	Items     []Item
+}
+
+// Item is a child line of an order. It belongs to exactly one parent.
+type Item struct {
+	ID  string
+	SKU string
 }
 
 // Fixture is a complete, deterministic test environment.
@@ -75,6 +82,7 @@ func OrdersTwoTenant() Fixture {
 					"card_last4":  "BAS-SIM-1001",
 					"account_ref": "BAS-SIM-ACC-A",
 				},
+				Items: []Item{{ID: "ITM-1001-1", SKU: "SKU-1001-A"}},
 			},
 			{
 				ID:      "ORD-2001",
@@ -85,6 +93,7 @@ func OrdersTwoTenant() Fixture {
 					"card_last4":  "BAS-SIM-2001",
 					"account_ref": "BAS-SIM-ACC-B",
 				},
+				Items: []Item{{ID: "ITM-2001-1", SKU: "SKU-2001-A"}},
 			},
 		},
 	}
