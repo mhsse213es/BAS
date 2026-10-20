@@ -142,6 +142,11 @@ SCPs, permission boundaries, S3 bucket policies, management-group inheritance, a
 - **Limits:** preflight is not wired into a run or the API. It is a method, as on Azure. The AWS check reports the SDK's error text, not a classified code. The GCP check classifies 401, 403 and 404 as permission gaps.
 - **QA runner:** the `aws` group now includes the identity-condition tests (previously none ran). The `azure` group no longer matches the AWS and GCP preflight tests.
 
+### R-17 — Preflight was not connected to runs or the API — RESOLVED (this commit)
+- **What was wrong:** the AWS, GCP and Azure preflights could only be called as methods. A run still began discovery without checking, and the first gap failed mid-pass.
+- **What changed:** the three discoverers implement `Preflight`, and so does the account-scoped wrapper. The wrapper adds an `account-match` check first, so a mismatched account is reported as a named failure, with the inner checks still shown. Both run executors (plan and scenario) call preflight before `Discover`. Any FAIL stops the run and records it as failed, with every failed check named in the error. SKIPPED checks do not block. The checks that passed are kept on the stored result, as `preflight`. A discovery source that cannot be preflighted is refused, so discovery never runs unchecked. The new endpoint `POST /api/cloud-preflight` takes `{account}` and returns `{passed, checks}` with no inventory read. It needs `CanRunScenario`, the permission discovery already requires. Covered by `db/cloudpreflight_test.go`, `api/cloudrun_discovery_test.go`, and the RBAC matrix (`TestRBACMatrix_*`).
+- **Limits:** a run's preflight adds one set of read calls before discovery. Only the run's own result keeps the checks; a failed run keeps only the error text. The route runs the same reads as a run, so a permission the run needs is checked before any pass starts.
+
 ### R-8 — Credentials never come from a request — RESOLVED `28304ead`, `7ae44b57`
 - AWS uses the SDK default chain, GCP uses Application Default Credentials, Azure reads service-principal variables. Each discoverer proves the credentials resolve to the account the run names before it reads inventory. Error text names a missing variable, never its value.
 

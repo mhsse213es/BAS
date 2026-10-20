@@ -305,6 +305,7 @@ var routeMatrix = []routeCase{
 	{http.MethodPost, "/api/cloud-runs", tierPermission, auth.CanRunScenario},
 	{http.MethodPost, "/api/cloud-campaigns", tierPermission, auth.CanRunScenario},
 	{http.MethodPost, "/api/cloud-scenario-runs", tierPermission, auth.CanRunScenario},
+	{http.MethodPost, "/api/cloud-preflight", tierPermission, auth.CanRunScenario},
 	{http.MethodPost, "/api/network-discovery-runs", tierPermission, auth.CanRunScenario},
 	{http.MethodPost, "/api/dns-security-checks", tierPermission, auth.CanRunScenario},
 	{http.MethodPost, "/api/transport-security-checks", tierPermission, auth.CanRunScenario},

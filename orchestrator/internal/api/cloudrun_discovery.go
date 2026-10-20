@@ -145,6 +145,37 @@ func (d accountCheckedDiscoverer) Discover(ctx context.Context) (*cloudgraph.Dis
 	return graph, report, nil
 }
 
+// Preflight checks that the credentials resolve to the named account, then runs
+// the inner source's checks. The account check comes first and is reported
+// alongside the inner checks, not instead of them, so one run shows every gap.
+// Inner details are scrubbed of secrets just as discovery errors are.
+func (d accountCheckedDiscoverer) Preflight(ctx context.Context) []cloudgraph.PreflightCheck {
+	var checks []cloudgraph.PreflightCheck
+	got, err := d.account(ctx)
+	switch {
+	case err != nil:
+		checks = append(checks, cloudgraph.PreflightCheck{Name: "account-match", Status: "FAIL",
+			Detail: "account could not be resolved: " + cloudgraph.Redact(err.Error(), d.secrets...)})
+	case got != d.want:
+		checks = append(checks, cloudgraph.PreflightCheck{Name: "account-match", Status: "FAIL",
+			Detail: fmt.Sprintf("credentials resolve to account %s, run names %s", got, d.want)})
+	default:
+		checks = append(checks, cloudgraph.PreflightCheck{Name: "account-match", Status: "PASS",
+			Detail: "credentials resolve to the named account"})
+	}
+
+	inner, ok := d.inner.(cloudgraph.Preflighter)
+	if !ok {
+		return append(checks, cloudgraph.PreflightCheck{Name: "discovery-source", Status: "FAIL",
+			Detail: "this discovery source cannot be preflighted"})
+	}
+	for _, c := range inner.Preflight(ctx) {
+		c.Detail = cloudgraph.Redact(c.Detail, d.secrets...)
+		checks = append(checks, c)
+	}
+	return checks
+}
+
 func (d accountCheckedDiscoverer) scrub(err error) error {
 	return errors.New(cloudgraph.Redact(err.Error(), d.secrets...))
 }

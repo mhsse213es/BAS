@@ -20,17 +20,17 @@ import (
 // both the cloudrun types AND db's own store functions -- cannot live in
 // cloudrun without db importing back into it.
 type CloudPlanRunRequest struct {
-	ScenarioID  string                        `json:"scenarioId"`
-	Account     cloudgraph.AccountScope       `json:"account"`
-	Edges       []*cloudgraph.CloudPermission `json:"edges"`
+	ScenarioID string                        `json:"scenarioId"`
+	Account    cloudgraph.AccountScope       `json:"account"`
+	Edges      []*cloudgraph.CloudPermission `json:"edges"`
 	// Discover asks the server to build Edges from a live discovery pass.
 	// Mutually exclusive with Edges; the API layer attaches the discoverer.
-	Discover bool `json:"discover,omitempty"`
-	Held        []string                      `json:"held"`
-	Target      string                        `json:"target"`
-	MaxHops     int                           `json:"maxHops"`
-	InitiatedBy string                        `json:"-"`
-	CampaignID  string                        `json:"-"`
+	Discover    bool     `json:"discover,omitempty"`
+	Held        []string `json:"held"`
+	Target      string   `json:"target"`
+	MaxHops     int      `json:"maxHops"`
+	InitiatedBy string   `json:"-"`
+	CampaignID  string   `json:"-"`
 
 	// Discoverer, when set, supplies the permission graph from a live
 	// discovery pass instead of Edges. The API layer sets it from server-side
@@ -47,10 +47,11 @@ const discoveryTimeout = 10 * time.Minute
 // live discovery: the path plus what the graph was built from, so a reader
 // can tell a clean "no path" apart from "discovery saw nothing to traverse".
 type discoveredRunResult struct {
-	Path       *cloudgraph.CloudPath      `json:"path"`
-	Discovered bool                       `json:"discovered"`
-	Counts     discoveredGraphCounts      `json:"counts"`
-	Report     cloudgraph.DiscoveryReport `json:"report"`
+	Path       *cloudgraph.CloudPath       `json:"path"`
+	Discovered bool                        `json:"discovered"`
+	Counts     discoveredGraphCounts       `json:"counts"`
+	Report     cloudgraph.DiscoveryReport  `json:"report"`
+	Preflight  []cloudgraph.PreflightCheck `json:"preflight"`
 }
 
 type discoveredGraphCounts struct {
@@ -156,7 +157,15 @@ func ExecuteCloudPlanRun(ctx context.Context, pool *pgxpool.Pool, req CloudPlanR
 	edges := req.Edges
 	var discovered *cloudgraph.DiscoveredGraph
 	var report cloudgraph.DiscoveryReport
+	var preflight []cloudgraph.PreflightCheck
 	if req.Discoverer != nil {
+		pctx, pcancel := context.WithTimeout(ctx, discoveryTimeout)
+		preflight, err = runPreflight(pctx, req.Discoverer)
+		pcancel()
+		if err != nil {
+			_ = UpdateCloudRunStatus(ctx, pool, run.ID, cloudrun.StatusFailed, nil, err.Error())
+			return currentRunOrNil(ctx, pool, run.ID), fmt.Errorf("cloud run %s: %w", run.ID, err)
+		}
 		dctx, cancel := context.WithTimeout(ctx, discoveryTimeout)
 		discovered, report, err = req.Discoverer.Discover(dctx)
 		cancel()
@@ -187,7 +196,8 @@ func ExecuteCloudPlanRun(ctx context.Context, pool *pgxpool.Pool, req CloudPlanR
 				Resources:   len(discovered.Resources),
 				Permissions: len(discovered.Permissions),
 			},
-			Report: report,
+			Report:    report,
+			Preflight: preflight,
 		}
 	}
 	resultJSON, marshalErr := json.Marshal(resultValue)

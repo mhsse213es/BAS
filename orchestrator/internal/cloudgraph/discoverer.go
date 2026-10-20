@@ -60,6 +60,11 @@ func (d awsDiscoverer) Discover(ctx context.Context) (*DiscoveredGraph, Discover
 	return graph, stats.report(), nil
 }
 
+// Preflight runs the AWS prerequisite checks.
+func (d awsDiscoverer) Preflight(ctx context.Context) []PreflightCheck {
+	return d.client.Preflight(ctx)
+}
+
 // gcpDiscoverer adapts GCPDiscoveryClient to the Discoverer contract.
 type gcpDiscoverer struct{ client *GCPDiscoveryClient }
 
@@ -72,6 +77,11 @@ func (d gcpDiscoverer) Discover(ctx context.Context) (*DiscoveredGraph, Discover
 		return nil, nil, err
 	}
 	return graph, stats.report(), nil
+}
+
+// Preflight runs the GCP prerequisite checks.
+func (d gcpDiscoverer) Preflight(ctx context.Context) []PreflightCheck {
+	return d.client.Preflight(ctx)
 }
 
 // azureDiscoverer runs the three Azure passes -- identities, resources, and
@@ -119,4 +129,9 @@ func (d azureDiscoverer) Discover(ctx context.Context) (*DiscoveredGraph, Discov
 		"deny_edges_marked":     marked,
 	}
 	return graph, report, nil
+}
+
+// Preflight runs the Azure prerequisite checks.
+func (d azureDiscoverer) Preflight(ctx context.Context) []PreflightCheck {
+	return d.client.Preflight(ctx)
 }

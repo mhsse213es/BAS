@@ -17,7 +17,7 @@ bash scripts/cloud-qa.sh <group>    # one group
 | `azure` | cloudgraph | Azure discovery, wildcard roles, deny assignments, management group inheritance, preflight | none |
 | `audit` | cloudgraph | CloudTrail, Activity Log and GCP audit parsing and matching | none |
 | `scenario` | cloudgraph | scenario verdicts, gates, observation, wildcard grants | none |
-| `db` | db | cloud_runs lifecycle for plan and scenario runs | Docker |
+| `db` | db | cloud_runs lifecycle for plan and scenario runs, preflight gate before discovery | Docker |
 | `api` | api | discover and scenario validation, credential refusal, account mismatch | none |
 | `live` | cloudgraph | **LIVE** Azure integration (build tag `integration`) | live tenant and env vars |
 
@@ -200,22 +200,31 @@ bash scripts/cloud-qa.sh <group>    # one group
 - `TestObserveCloudScenario_EvidenceDecidesOutcome`
 - `TestObserveCloudScenario_FailureEvidenceReadsAsBlocked`
 
-### `db`  (6 tests)
+### `db`  (10 tests)
 
 - `TestExecuteCloudPlanRun_DiscoveredGraphDrivesPath`
 - `TestExecuteCloudPlanRun_DiscoveryFailureMarksRowFailed`
+- `TestExecuteCloudPlanRun_PreflightFailureBlocksDiscovery`
+- `TestExecuteCloudPlanRun_SkippedCheckDoesNotBlockAndIsRecorded`
+- `TestExecuteCloudPlanRun_UnpreflightableSourceRefused`
 - `TestExecuteCloudScenarioRun_DiscoveryErrorFailsRow`
 - `TestExecuteCloudScenarioRun_LiveDiscoveryGivesPartialVerdict`
 - `TestExecuteCloudScenarioRun_ObservedMissingEvidenceIsUnknown`
+- `TestExecuteCloudScenarioRun_PreflightFailureBlocksDiscovery`
 - `TestExecuteCloudScenarioRun_ProviderMismatchFailsRow`
 
-### `api`  (8 tests)
+### `api`  (13 tests)
 
 - `TestAccountChecked_InnerErrorIsRedacted`
 - `TestAccountChecked_MismatchFailsBeforeInventory`
+- `TestAccountChecked_PreflightDetailIsRedacted`
+- `TestAccountChecked_PreflightMatchPasses`
+- `TestAccountChecked_PreflightMismatchFailsAndInnerStillRuns`
+- `TestAccountChecked_PreflightUnpreflightableInnerFails`
 - `TestCloudDiscovererFor_AzureNamesMissingVariableNotValue`
 - `TestCloudDiscovererFor_AzureRejectsSubscriptionMismatch`
 - `TestCloudDiscovererFor_UnknownProviderRejected`
+- `TestTriggerCloudPreflight_RequiresAccount`
 - `TestValidateCloudPlanRunRequest_DiscoverAndEdgesMutuallyExclusive`
 - `TestValidateCloudScenarioRunBody`
 - `TestValidateCloudScenarioRunBody_SessionPolicy`

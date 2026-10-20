@@ -44,6 +44,7 @@ type cloudScenarioRunResult struct {
 	Steps         []*cloudgraph.CloudControlOutcome `json:"steps"`
 	Observed      bool                              `json:"observed"`
 	Report        cloudgraph.DiscoveryReport        `json:"report"`
+	Preflight     []cloudgraph.PreflightCheck       `json:"preflight"`
 }
 
 // ExecuteCloudScenarioRun records a cloud_runs row for one scenario run. The
@@ -85,6 +86,13 @@ func ExecuteCloudScenarioRun(ctx context.Context, pool *pgxpool.Pool, req CloudS
 		return fail(fmt.Errorf("scenario runs require a discovery source"))
 	}
 
+	pctx, pcancel := context.WithTimeout(ctx, discoveryTimeout)
+	preflight, perr := runPreflight(pctx, req.Discoverer)
+	pcancel()
+	if perr != nil {
+		return fail(perr)
+	}
+
 	dctx, cancel := context.WithTimeout(ctx, discoveryTimeout)
 	graph, report, err := req.Discoverer.Discover(dctx)
 	cancel()
@@ -116,6 +124,7 @@ func ExecuteCloudScenarioRun(ctx context.Context, pool *pgxpool.Pool, req CloudS
 		Steps:         result.Steps,
 		Observed:      req.Observe != nil && req.Observe.Events != nil,
 		Report:        report,
+		Preflight:     preflight,
 	}
 	resultJSON, err := json.Marshal(stored)
 	if err != nil {

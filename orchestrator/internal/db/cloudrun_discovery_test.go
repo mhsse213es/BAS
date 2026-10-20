@@ -19,6 +19,15 @@ type fakeDiscoverer struct {
 	graph  *cloudgraph.DiscoveredGraph
 	err    error
 	called bool
+	// preflight, when set, is returned by Preflight. Nil means every check passes.
+	preflight []cloudgraph.PreflightCheck
+}
+
+func (f *fakeDiscoverer) Preflight(context.Context) []cloudgraph.PreflightCheck {
+	if f.preflight != nil {
+		return f.preflight
+	}
+	return []cloudgraph.PreflightCheck{{Name: "fake", Status: "PASS", Detail: "ok"}}
 }
 
 func (f *fakeDiscoverer) Discover(context.Context) (*cloudgraph.DiscoveredGraph, cloudgraph.DiscoveryReport, error) {
