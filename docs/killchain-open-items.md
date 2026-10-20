@@ -154,3 +154,13 @@ These cannot be closed here, so they are recorded and not planned:
 4. Collection cost and event volume on a real host.
 5. Behaviour under audit policy set by group policy.
 6. A live or lab claim for any stage. None is made.
+
+### Live and lab gate for campaign stages: designed, not built
+
+See `docs/killchain-live-gate-design.md`. Campaign stages are posture-only
+today, so the gap in shared gate checks is latent. Decisions open:
+1. Approve the shared `checkLiveGates` refactor (no behaviour change, closes the bypass).
+2. Keep `KILLCHAIN_LIVE_STAGES_ENABLED` off until staging evidence exists.
+3. Separation of duties for lab approval: yes or no.
+4. One advance-time approval for all live stages, or one per stage.
+Verification of any live stage needs staging.
