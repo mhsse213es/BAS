@@ -345,9 +345,7 @@ func truncateAll(t *testing.T, pool *pgxpool.Pool) {
 		tables = append(tables, name)
 	}
 	rows.Close()
-	for _, name := range tables {
-		truncateTable(t, pool, name)
-	}
+	truncateTables(t, pool, tables)
 	// Truncation wiped the tenants bootstrap row. Restore the invariant
 	// EnsureSchema establishes ("a 'default' tenant always exists") so
 	// users.tenant_id's FK and its DEFAULT 'default' keep working for every

@@ -3,6 +3,7 @@ package testutil
 import (
 	"context"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -27,22 +28,30 @@ const truncateWaitLimit = 30 * time.Second
 // therefore runs in its own goroutine, and this test stops waiting for it after
 // truncateWaitLimit. A stuck goroutine is left behind for the rest of the
 // binary; the failure names the table so the test that hit it is visible.
-func truncateTable(t *testing.T, pool *pgxpool.Pool, name string) {
+func truncateTables(t *testing.T, pool *pgxpool.Pool, names []string) {
 	t.Helper()
+	if len(names) == 0 {
+		return
+	}
+	quoted := make([]string, len(names))
+	for i, n := range names {
+		quoted[i] = `"` + n + `"`
+	}
+	list := strings.Join(quoted, ", ")
 	ctx, cancel := context.WithTimeout(context.Background(), truncateWaitLimit)
 	defer cancel()
 	done := make(chan error, 1)
 	go func() {
-		_, err := pool.Exec(ctx, `TRUNCATE TABLE "`+name+`" CASCADE`)
+		_, err := pool.Exec(ctx, `TRUNCATE TABLE `+list+` CASCADE`)
 		done <- err
 	}()
 	select {
 	case err := <-done:
 		if err != nil {
-			t.Fatalf("testutil: truncate %s: %v\n%s", name, err, sessionReport(pool))
+			t.Fatalf("testutil: truncate %s: %v\n%s", list, err, sessionReport(pool))
 		}
 	case <-time.After(truncateWaitLimit + 5*time.Second):
-		t.Fatalf("testutil: truncate %s did not return within %s; the TRUNCATE is stuck in the driver, not waiting on a lock", name, truncateWaitLimit)
+		t.Fatalf("testutil: truncate %s did not return within %s; the TRUNCATE is stuck in the driver, not waiting on a lock", list, truncateWaitLimit)
 	}
 }
 
@@ -74,4 +83,3 @@ func sessionReport(pool *pgxpool.Pool) string {
 	}
 	return out
 }
-
