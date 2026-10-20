@@ -11,6 +11,7 @@ import (
 
 	"golang.org/x/time/rate"
 	crm "google.golang.org/api/cloudresourcemanager/v1"
+	crmv2 "google.golang.org/api/cloudresourcemanager/v2"
 	iamv1 "google.golang.org/api/iam/v1"
 	iamv2 "google.golang.org/api/iam/v2"
 	"google.golang.org/api/option"
@@ -94,6 +95,7 @@ func (t *retryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 type GCPDiscoveryClient struct {
 	projectID string
 	crm       *crm.Service
+	crm2      *crmv2.Service // folders are read through v2
 	iam       *iamv1.Service
 	iamDeny   *iamv2.Service
 	storage   *storage.Service
@@ -122,6 +124,10 @@ func NewGCPDiscoveryClient(ctx context.Context, projectID string, opts ...option
 	if err != nil {
 		return nil, fmt.Errorf("gcp discovery: cloud resource manager client: %w", err)
 	}
+	crm2, err := crmv2.NewService(ctx, clientOpts...)
+	if err != nil {
+		return nil, fmt.Errorf("gcp discovery: cloud resource manager v2 client: %w", err)
+	}
 	iamSvc, err := iamv1.NewService(ctx, clientOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("gcp discovery: iam client: %w", err)
@@ -137,6 +143,7 @@ func NewGCPDiscoveryClient(ctx context.Context, projectID string, opts ...option
 	return &GCPDiscoveryClient{
 		projectID: projectID,
 		crm:       crm,
+		crm2:      crm2,
 		iam:       iamSvc,
 		iamDeny:   denySvc,
 		storage:   st,
@@ -235,14 +242,28 @@ func (c *GCPDiscoveryClient) Discover(ctx context.Context) (*DiscoveredGraph, *G
 	// bucket. Bindings at folder or organization level are not reachable from
 	// a project-scoped pass and are not modelled; see the QA log.
 	type scope struct {
-		resource *CloudResource
-		bindings []*crm.Binding
+		resource      *CloudResource
+		bindings      []*crm.Binding
+		inheritedFrom string // folder or organization the bindings were set on; empty for the project
 	}
 	projPolicy, err := c.crm.Projects.GetIamPolicy(projectCanonical, &crm.GetIamPolicyRequest{}).Context(ctx).Do()
 	if err != nil {
 		return nil, nil, fmt.Errorf("gcp discovery: reading project IAM policy: %w", err)
 	}
 	scopes := []scope{{resource: project, bindings: projPolicy.Bindings}}
+
+	ancestors, err := c.projectAncestors(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	for _, anc := range ancestors {
+		bindings, err := c.ancestorBindings(ctx, anc)
+		if err != nil {
+			return nil, nil, err
+		}
+		// Bindings above the project grant access to the project itself.
+		scopes = append(scopes, scope{resource: project, bindings: bindings, inheritedFrom: anc.canonical})
+	}
 
 	bucketNames, err := c.listBuckets(ctx)
 	if err != nil {
@@ -276,7 +297,11 @@ func (c *GCPDiscoveryClient) Discover(ctx context.Context) (*DiscoveredGraph, *G
 		addIdentity("gcp:serviceAccount:"+sa, "gcp-service-account")
 	}
 
-	denies, err := c.listDenyRules(ctx)
+	attachments := []string{"cloudresourcemanager.googleapis.com%2Fprojects%2F" + c.projectID}
+	for _, anc := range ancestors {
+		attachments = append(attachments, anc.attachment)
+	}
+	denies, err := c.listDenyRules(ctx, attachments)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -314,6 +339,9 @@ func (c *GCPDiscoveryClient) Discover(ctx context.Context) (*DiscoveredGraph, *G
 					attrs := map[string]string{
 						"binding_scope":   sc.resource.CanonicalID,
 						"binding_actions": joined,
+					}
+					if sc.inheritedFrom != "" {
+						attrs["inherited_from"] = sc.inheritedFrom
 					}
 					if deniedActions := denies.actionsFor(canonical); len(deniedActions) > 0 {
 						attrs["deny_policy"] = "true"
@@ -358,13 +386,22 @@ func (d *gcpDenyIndex) actionsFor(canonical string) []string {
 // listDenyRules reads project-level deny policies and indexes them by
 // principal. Deny rules attached above the project are not visible to a
 // project-scoped pass.
-func (c *GCPDiscoveryClient) listDenyRules(ctx context.Context) (*gcpDenyIndex, error) {
+func (c *GCPDiscoveryClient) listDenyRules(ctx context.Context, attachments []string) (*gcpDenyIndex, error) {
 	idx := &gcpDenyIndex{denied: map[string][]string{}}
-	parent := "policies/crm.googleapis.com%2Fprojects%2F" + c.projectID + "/denypolicies"
+	for _, attachment := range attachments {
+		if err := c.collectDenyRules(ctx, "policies/"+attachment+"/denypolicies", idx); err != nil {
+			return nil, err
+		}
+	}
+	return idx, nil
+}
+
+// collectDenyRules reads every page of one attachment point's deny policies into idx.
+func (c *GCPDiscoveryClient) collectDenyRules(ctx context.Context, parent string, idx *gcpDenyIndex) error {
 	token := ""
 	for pages := 0; ; pages++ {
 		if pages >= c.maxPages {
-			return nil, fmt.Errorf("gcp discovery: more than %d pages of deny policies; refusing to continue", c.maxPages)
+			return fmt.Errorf("gcp discovery: more than %d pages of deny policies; refusing to continue", c.maxPages)
 		}
 		call := c.iamDeny.Policies.ListPolicies(parent).Context(ctx)
 		if token != "" {
@@ -372,7 +409,7 @@ func (c *GCPDiscoveryClient) listDenyRules(ctx context.Context) (*gcpDenyIndex, 
 		}
 		resp, err := call.Do()
 		if err != nil {
-			return nil, fmt.Errorf("gcp discovery: listing deny policies: %w", err)
+			return fmt.Errorf("gcp discovery: listing deny policies: %w", err)
 		}
 		for _, pol := range resp.Policies {
 			for _, rule := range pol.Rules {
@@ -403,7 +440,7 @@ func (c *GCPDiscoveryClient) listDenyRules(ctx context.Context) (*gcpDenyIndex, 
 			}
 		}
 		if resp.NextPageToken == "" {
-			return idx, nil
+			return nil
 		}
 		token = resp.NextPageToken
 	}

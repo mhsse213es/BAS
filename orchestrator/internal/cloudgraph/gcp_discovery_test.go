@@ -59,7 +59,8 @@ func gcpStandardRoutes() []gcpRoute {
 		{needle: "/roles/storage.admin", body: `{"name":"roles/storage.admin","includedPermissions":["storage.objects.delete","storage.buckets.update"]}`},
 		{needle: "/roles/owner", body: `{"name":"roles/owner","includedPermissions":["resourcemanager.projects.delete"]}`},
 		{needle: "serviceAccounts", body: `{"accounts":[{"email":"backup@proj-1.iam.gserviceaccount.com"}]}`},
-		{needle: "denypolicies", body: `{"policies":[{"name":"deny-alice","rules":[{"denyRule":{"deniedPrincipals":["principal://goog/subject/alice@example.com"],"deniedPermissions":["storage.googleapis.com/objects.get"]}}]}]}`},
+		{needle: ":getAncestry", body: `{"ancestor":[{"resourceId":{"type":"project","id":"proj-1"}}]}`},
+		{needle: "cloudresourcemanager.googleapis.com%2Fprojects%2Fproj-1/denypolicies", body: `{"policies":[{"name":"deny-alice","rules":[{"denyRule":{"deniedPrincipals":["principal://goog/subject/alice@example.com"],"deniedPermissions":["storage.googleapis.com/objects.get"]}}]}]}`},
 		{needle: "/b", suffix: true, body: `{"items":[{"name":"corp-backups"}]}`},
 	}
 }
