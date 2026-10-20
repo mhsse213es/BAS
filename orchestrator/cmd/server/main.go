@@ -987,6 +987,11 @@ func main() {
 		}()
 		// Settles phishing dispatches whose EmailGW run finished while nobody was reading
 		// them. A dispatch that is never read would otherwise stay running.
+		// Resolves kill-chain stages dispatched before the last shutdown. It only
+		// collects finished runs and marks the rest interrupted. It never starts one.
+		if err := api.RecoverKillChainCampaigns(context.Background(), pool); err != nil {
+			log.Printf("[!] killchain recovery: %v", err)
+		}
 		go api.RunPhishingDispatchPoller(context.Background(), pool, time.Minute)
 	}
 

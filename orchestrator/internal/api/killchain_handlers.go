@@ -1,17 +1,25 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/audspect/bas/internal/auth"
 	"github.com/audspect/bas/internal/db"
+	"github.com/audspect/bas/internal/integrity"
 	"github.com/audspect/bas/internal/killchain"
+	"github.com/audspect/bas/internal/scenario"
 )
+
+// killChainVerifier verifies campaign definition signatures. Tests may replace
+// it with a key they control. Production uses the same trust root as scenarios.
+var killChainVerifier integrity.Verifier = integrity.CompiledVerifier{}
 
 // killChainStore returns the store for this handler, or nil when no database is
 // configured. Handlers answer 503 in that case rather than pretending to work.
@@ -22,18 +30,33 @@ func (h *Handler) killChainStore() *db.KillChainStore {
 	return &db.KillChainStore{Pool: h.db}
 }
 
-// CreateKillChainCampaign stores a validated campaign definition.
+// handlerStageDispatcher sends campaign stages through the same run path that
+// single scenario runs use, so every existing guard applies.
+type handlerStageDispatcher struct {
+	h *Handler
+}
+
+// DispatchStage starts one posture run and returns its run ID.
+func (d handlerStageDispatcher) DispatchStage(ctx context.Context, sc *scenario.Scenario, agentID string, o stageDispatchOptions) (string, string, error) {
+	return d.h.dispatchRun(ctx, sc, agentID, dispatchOpts{
+		Mode:        o.Mode,
+		Reason:      o.Reason,
+		InitiatedBy: o.InitiatedBy,
+	})
+}
+
+// CreateKillChainCampaign stores a campaign definition that carries a valid
+// signature. Unsigned or tampered definitions are refused.
 // POST /api/killchain/campaigns (scenarios:run)
+//
+// Body: {"definition": <campaign JSON>, "signature": "<base64 .sig>", "agentId": "<optional>"}.
+// The signature covers the exact definition bytes sent.
 func (h *Handler) CreateKillChainCampaign(w http.ResponseWriter, r *http.Request) {
-	store := h.killChainStore()
-	if store == nil {
-		jsonError(w, "database not configured", http.StatusServiceUnavailable)
-		return
-	}
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 	var req struct {
-		killchain.CampaignDef
-		AgentID string `json:"agentId,omitempty"`
+		Definition json.RawMessage `json:"definition"`
+		Signature  string          `json:"signature"`
+		AgentID    string          `json:"agentId,omitempty"`
 	}
 	dec := json.NewDecoder(r.Body)
 	dec.DisallowUnknownFields()
@@ -45,10 +68,27 @@ func (h *Handler) CreateKillChainCampaign(w http.ResponseWriter, r *http.Request
 		jsonError(w, "invalid JSON body: unexpected data after the object", http.StatusBadRequest)
 		return
 	}
-	def := req.CampaignDef
+	if len(req.Definition) == 0 {
+		jsonError(w, "definition is required", http.StatusBadRequest)
+		return
+	}
+	def, err := killchain.LoadSignedCampaign(req.Definition, []byte(req.Signature), killChainVerifier)
+	if errors.Is(err, killchain.ErrUnsignedCampaign) {
+		jsonError(w, "campaign definition is not signed by an accepted key", http.StatusForbidden)
+		return
+	}
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 	order, err := def.Validate()
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	store := h.killChainStore()
+	if store == nil {
+		jsonError(w, "database not configured", http.StatusServiceUnavailable)
 		return
 	}
 	createdBy := ""
@@ -59,7 +99,7 @@ func (h *Handler) CreateKillChainCampaign(w http.ResponseWriter, r *http.Request
 		jsonError(w, "could not store campaign: "+err.Error(), http.StatusConflict)
 		return
 	}
-	h.auditLog(r, "killchain.campaign.create", def.ID, map[string]any{"stages": len(def.Stages)}, "success")
+	h.auditLog(r, "killchain.campaign.create", def.ID, map[string]any{"stages": len(def.Stages), "agentBound": req.AgentID != ""}, "success")
 	w.WriteHeader(http.StatusCreated)
 	jsonOK(w, map[string]any{"id": def.ID, "version": def.Version, "order": order})
 }
@@ -97,8 +137,9 @@ func (h *Handler) GetKillChainCampaign(w http.ResponseWriter, r *http.Request) {
 	jsonOK(w, killChainView(rec))
 }
 
-// AdvanceKillChainCampaign moves a campaign as far as the wired executor allows.
-// With no scenario adapter wired, stages end in ERROR; nothing is faked.
+// AdvanceKillChainCampaign moves a campaign as far as it can. Each stage is
+// dispatched as a posture run on the campaign's bound agent. The request names
+// who approved it, and that is audited.
 // POST /api/killchain/campaigns/{id}/advance (scenarios:run)
 func (h *Handler) AdvanceKillChainCampaign(w http.ResponseWriter, r *http.Request) {
 	store := h.killChainStore()
@@ -112,10 +153,20 @@ func (h *Handler) AdvanceKillChainCampaign(w http.ResponseWriter, r *http.Reques
 		writeKillChainError(w, err)
 		return
 	}
-	exec := EngineStageExecutor{AgentID: bound.AgentID, Runs: poolRunReader{pool: h.db}}
+	var initiatedBy *string
+	if c, ok := auth.ClaimsFrom(r.Context()); ok && c != nil && c.UserID != "" {
+		uid := c.UserID
+		initiatedBy = &uid
+	}
+	exec := EngineStageExecutor{
+		AgentID: bound.AgentID,
+		Runs:    poolRunReader{pool: h.db},
+		Options: stageDispatchOptions{Mode: "posture", InitiatedBy: initiatedBy},
+	}
 	if h.engine != nil {
 		exec.Resolver = h.engine
 	}
+	exec.Dispatcher = handlerStageDispatcher{h: h}
 	orch := killchain.Orchestrator{Store: store, Executor: exec}
 	if _, err := orch.Advance(r.Context(), id); err != nil {
 		writeKillChainError(w, err)
@@ -126,8 +177,27 @@ func (h *Handler) AdvanceKillChainCampaign(w http.ResponseWriter, r *http.Reques
 		writeKillChainError(w, err)
 		return
 	}
-	h.auditLog(r, "killchain.campaign.advance", id, nil, "success")
+	h.auditLog(r, "killchain.campaign.advance", id, map[string]any{"agentBound": bound.AgentID != ""}, "success")
 	jsonOK(w, killChainView(rec))
+}
+
+// RecoverKillChainCampaigns resolves stages dispatched before a restart. It
+// collects finished runs and marks unfinished ones interrupted. It never starts
+// a stage. Call it once at boot.
+func RecoverKillChainCampaigns(ctx context.Context, pool *pgxpool.Pool) error {
+	store := &db.KillChainStore{Pool: pool}
+	list, err := store.ListCampaigns(ctx)
+	if err != nil {
+		return err
+	}
+	exec := EngineStageExecutor{Runs: poolRunReader{pool: pool}}
+	orch := killchain.Orchestrator{Store: store, Executor: exec}
+	for _, c := range list {
+		if _, err := orch.Recover(ctx, c.ID); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func writeKillChainError(w http.ResponseWriter, err error) {
@@ -170,6 +240,7 @@ func killChainView(rec killchain.CampaignRecord) map[string]any {
 		"id":      rec.ID,
 		"name":    rec.Def.Name,
 		"version": rec.Def.Version,
+		"agentId": rec.AgentID,
 		"stages":  stages,
 		"rollup":  killchain.Roll(results),
 	}

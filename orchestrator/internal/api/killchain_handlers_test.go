@@ -22,6 +22,9 @@ const killChainTestDef = `{"id":"kc-api-1","name":"API chain","version":1,"stage
 // killChainCall runs one handler with the chi route parameter set, the same way
 // the router would. id is empty for routes without one.
 func killChainCall(h *Handler, method, path, id, body string) *httptest.ResponseRecorder {
+	if method == http.MethodPost && !strings.HasSuffix(path, "/advance") {
+		body = signedEnvelope(body)
+	}
 	req := httptest.NewRequest(method, path, strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	rctx := chi.NewRouteContext()

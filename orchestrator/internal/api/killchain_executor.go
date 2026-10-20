@@ -42,18 +42,33 @@ type scenarioRunReader interface {
 // executable gate. It never runs a scenario the gate refuses, and it never
 // fabricates evidence.
 //
-// Start is still refusing: dispatching a run needs an agent and operator
-// confirmations that this path does not yet supply. Collect is written and
-// tested against a reader, so it is ready once Start can dispatch.
+// Start checks the gate, then dispatches through the existing run path. The run
+// path enforces agent state and busy checks. Campaign stages are posture-only,
+// so no live-run confirmations apply.
 type EngineStageExecutor struct {
 	Resolver scenarioResolver
 	Runs     scenarioRunReader
 	// AgentID is the agent a campaign runs on. Empty means no binding.
 	AgentID string
+	// Dispatcher starts a run through the existing run path. Nil means no dispatch.
+	Dispatcher stageDispatcher
+	// Options are the operator-approved settings for every stage of the campaign.
+	Options stageDispatchOptions
 }
 
-// Start checks the scenario through the executable gate, then refuses to
-// dispatch.
+// stageDispatchOptions are the settings a campaign run is approved with.
+type stageDispatchOptions struct {
+	Mode        string
+	Reason      string
+	InitiatedBy *string
+}
+
+// stageDispatcher is the existing run path, reached through a narrow seam.
+type stageDispatcher interface {
+	DispatchStage(ctx context.Context, sc *scenario.Scenario, agentID string, o stageDispatchOptions) (runID string, skipReason string, err error)
+}
+
+// Start checks the scenario through the executable gate, then dispatches it.
 func (x EngineStageExecutor) Start(ctx context.Context, campaignID string, st killchain.StageDef) (string, error) {
 	if x.Resolver == nil {
 		return "", fmt.Errorf("scenario %s: %w", st.ScenarioID, killchain.ErrNoExecutor)
@@ -64,7 +79,24 @@ func (x EngineStageExecutor) Start(ctx context.Context, campaignID string, st ki
 	if x.AgentID == "" {
 		return "", fmt.Errorf("scenario %s resolves as executable, but campaign %s: %w", st.ScenarioID, campaignID, ErrNoAgentBinding)
 	}
-	return "", fmt.Errorf("scenario %s: %w", st.ScenarioID, killchain.ErrNoExecutor)
+	if x.Dispatcher == nil {
+		return "", fmt.Errorf("scenario %s: %w", st.ScenarioID, killchain.ErrNoExecutor)
+	}
+	ev, err := x.Resolver.ResolveExecutable(ctx, st.ScenarioID)
+	if err != nil {
+		return "", fmt.Errorf("scenario %s is not executable: %w", st.ScenarioID, err)
+	}
+	runID, skip, err := x.Dispatcher.DispatchStage(ctx, ev.Scenario, x.AgentID, x.Options)
+	if err != nil {
+		return "", fmt.Errorf("scenario %s could not be dispatched: %w", st.ScenarioID, err)
+	}
+	if skip != "" {
+		return "", fmt.Errorf("scenario %s was not dispatched: %s", st.ScenarioID, skip)
+	}
+	if runID == "" {
+		return "", fmt.Errorf("scenario %s: dispatch returned no run id", st.ScenarioID)
+	}
+	return runID, nil
 }
 
 // Collect reads a dispatched run and maps it to stage evidence.

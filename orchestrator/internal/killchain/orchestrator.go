@@ -172,20 +172,80 @@ func (o Orchestrator) collect(ctx context.Context, campaignID string, def Campai
 		sr.ExecutionID = ev.ExecutionID
 		return true, o.Store.PutStage(ctx, campaignID, *sr)
 	}
+	rec, err := o.finalize(ctx, campaignID, def, st, sr.ExecutionID, ev)
+	if err != nil {
+		return false, err
+	}
+	*sr = rec
+	return true, nil
+}
+
+// finalize turns a finished execution's evidence into the stored stage record.
+// It is shared by normal collection and boot-time recovery, so both apply the
+// same causal check and the same evaluation.
+func (o Orchestrator) finalize(ctx context.Context, campaignID string, def CampaignDef, st StageDef, execID string, ev StageEvidence) (StageRecord, error) {
 	ev.CampaignID = campaignID
 	ev.StageKey = st.Key
-	ev.ExecutionID = sr.ExecutionID
-	missing := ev.Missing()
-	ev.MissingEvidence = missing
+	ev.ExecutionID = execID
+	ev.MissingEvidence = ev.Missing()
 	state := StateCompleted
 	v := Evaluate(StageInput{State: state, Policy: st.Policy, Evidence: &ev})
 	if err := CheckCausedBy(def, st.Key, ev.CausedBy); err != nil {
 		// Evidence that cites a non-upstream cause cannot be trusted to order a timeline.
 		v = StageVerdict{Verdict: VerdictInconclusive, Reasons: []string{err.Error()}}
 	}
-	*sr = StageRecord{Key: st.Key, State: state, Verdict: v.Verdict, Reasons: v.Reasons,
-		ExecutionID: sr.ExecutionID, Evidence: &ev}
-	return true, o.Store.PutStage(ctx, campaignID, *sr)
+	rec := StageRecord{Key: st.Key, State: state, Verdict: v.Verdict, Reasons: v.Reasons,
+		ExecutionID: execID, Evidence: &ev}
+	return rec, o.Store.PutStage(ctx, campaignID, rec)
+}
+
+// Recover resolves stages that were dispatched before a restart. A finished run
+// is collected. A run that is still going is marked interrupted and is never
+// re-executed. A read error leaves the stage dispatched, so the next boot retries
+// it. It is never recorded as ERROR, because that would be permanent. It returns
+// how many stages it resolved.
+func (o Orchestrator) Recover(ctx context.Context, campaignID string) (int, error) {
+	rec, err := o.Store.Campaign(ctx, campaignID)
+	if err != nil {
+		return 0, err
+	}
+	order, err := rec.Def.Validate()
+	if err != nil {
+		return 0, err
+	}
+	resolved := 0
+	for _, key := range order {
+		sr, ok := rec.Stages[key]
+		if !ok || sr.State != StateDispatched {
+			continue
+		}
+		st, _ := rec.Def.Stage(key)
+		ev, done, failed, err := o.Executor.Collect(ctx, sr.ExecutionID)
+		if err != nil {
+			continue
+		}
+		switch {
+		case !done:
+			sr.State = StateInterrupted
+			sr.Verdict = VerdictInconclusive
+			sr.Reasons = []string{"stage interrupted by a restart before its run finished; partial evidence kept, not re-executed"}
+			if err := o.Store.PutStage(ctx, campaignID, sr); err != nil {
+				return resolved, err
+			}
+		case failed:
+			failedRec := errorRecord(key, "execution failed")
+			failedRec.ExecutionID = sr.ExecutionID
+			if err := o.Store.PutStage(ctx, campaignID, failedRec); err != nil {
+				return resolved, err
+			}
+		default:
+			if _, err := o.finalize(ctx, campaignID, rec.Def, st, sr.ExecutionID, ev); err != nil {
+				return resolved, err
+			}
+		}
+		resolved++
+	}
+	return resolved, nil
 }
 
 type gateResult struct {
