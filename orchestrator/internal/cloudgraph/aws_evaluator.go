@@ -1,6 +1,9 @@
 package cloudgraph
 
-import "strings"
+import (
+	"encoding/json"
+	"strings"
+)
 
 // AWSEvaluator implements authorization evaluation for AWS IAM policies.
 // Phase 2: hand-coded statement matching. Phase 3+: full IAM simulator with
@@ -20,7 +23,12 @@ func (e *AWSEvaluator) EvaluatePermission(edge *CloudPermission, ctx *RequestCon
 	if edge.SourceType == "resource-policy" {
 		return e.resourcePolicyVerdict(edge, gateState)
 	}
-	result := e.identityVerdict(edge, ctx)
+	var result *EvaluationResult
+	if edge.SourceType == "identity-policy" {
+		result = e.identityPolicyVerdict(edge, ctx)
+	} else {
+		result = e.identityVerdict(edge, ctx)
+	}
 	if result.State == PolicySupported && gateState == ConditionallyReachable {
 		result.State = ConditionallyReachable
 		result.UnresolvedConds = []string{awsGateCondition}
@@ -99,4 +107,83 @@ func principalMatches(edge *CloudPermission, policyDoc string) bool {
 		return true
 	}
 	return strings.Contains(policyDoc, edge.Source.CanonicalID)
+}
+
+// identityPolicyVerdict evaluates an identity-policy edge at statement level. A
+// Deny that carries a Condition no longer blocks outright: it may not apply, so
+// the grant is conditionally reachable. An Allow with a Condition is conditional
+// for the same reason. Conditions are not evaluated.
+func (e *AWSEvaluator) identityPolicyVerdict(edge *CloudPermission, ctx *RequestContext) *EvaluationResult {
+	if _, ok := edge.Attributes["policy_document"]; !ok || edge.Target == nil {
+		return e.identityVerdict(edge, ctx)
+	}
+	// Every identity policy is considered together: an explicit Deny in one
+	// document overrides an Allow in another.
+	docs := []string{edge.Attributes["policy_document"]}
+	if raw, ok := edge.Attributes["identity_docs"]; ok {
+		if err := json.Unmarshal([]byte(raw), &docs); err != nil {
+			return &EvaluationResult{State: Unknown, BlockedBy: "identity-documents-unreadable", EvaluationMethod: "hand-coded-rules"}
+		}
+	}
+	state, reason := identityDecision(docs, edge.Action, edge.Target.CanonicalID)
+	switch state {
+	case Unknown:
+		return &EvaluationResult{State: Unknown, BlockedBy: reason, EvaluationMethod: "hand-coded-rules"}
+	case Blocked:
+		return &EvaluationResult{State: Blocked, BlockedBy: reason, AllowedBy: "none", EvaluationMethod: "hand-coded-rules"}
+	}
+	res := &EvaluationResult{State: PolicySupported, AllowedBy: edge.SourceType, EvaluationMethod: "hand-coded-rules"}
+	if state == ConditionallyReachable || edge.Attributes["identity_condition"] == "true" {
+		res.State = ConditionallyReachable
+		res.UnresolvedConds = []string{awsGateCondition}
+	}
+	return res
+}
+
+// identityDecision evaluates an identity's policy documents for one action on one
+// target. Allows match by action: discovery already scopes each identity edge to
+// its statement's resource, and this matching has always worked that way. Denies
+// match on action and resource, across every document, since an explicit Deny in
+// any policy overrides an Allow in any other. A conditional Deny yields
+// ConditionallyReachable, because the condition may not hold.
+func identityDecision(docs []string, action, target string) (PathState, string) {
+	var allow, allowCond, denyCond bool
+	for _, doc := range docs {
+		stmts, err := parseStatements(doc)
+		if err != nil {
+			return Unknown, "unparseable-identity-document"
+		}
+		for _, st := range stmts {
+			switch st.Effect {
+			case "Deny":
+				if !awsStatementCovers(st, action) || !awsResourceCovers(st, target) {
+					continue
+				}
+				if len(st.Condition) > 0 {
+					denyCond = true
+					continue
+				}
+				return Blocked, "explicit-deny"
+			case "Allow":
+				if !awsStatementCovers(st, action) {
+					continue
+				}
+				if len(st.Condition) > 0 {
+					allowCond = true
+				} else {
+					allow = true
+				}
+			}
+		}
+	}
+	switch {
+	case denyCond:
+		return ConditionallyReachable, awsGateCondition
+	case allow:
+		return PolicySupported, ""
+	case allowCond:
+		return ConditionallyReachable, awsGateCondition
+	default:
+		return Blocked, "implicit-deny"
+	}
 }

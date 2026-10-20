@@ -56,10 +56,11 @@ SCPs, permission boundaries, S3 bucket policies, management-group inheritance, a
 - **Bucket policy Allows that are counted, not expanded:** `NotPrincipal` allows and `NotAction`/`NotResource` allows cannot be turned into a finite set of identities, so they are counted (`not_principal_allows`, `not_action_statements`) and produce no edge (under-report). Service principals (for example `cloudtrail.amazonaws.com` writing to a bucket) are not modelled.
 - **Verify:** run one scenario as a role with a session policy that allows only part of the role's grants, and confirm the blocked steps match the session. Then pick one identity with an S3 bucket policy that denies its action, and confirm the verdict.
 
-### O-8 — Conditions (MODEL)
-- **AWS:** Allow statements with a `Condition` are emitted and evaluated as unconditional. Counted in `conditional_allows`. The evaluator does not evaluate conditions.
-- **GCP:** conditional bindings are skipped and counted in `conditional_bindings`. Those grants are invisible (under-report).
-- **Verify:** the counts on a real account. Decide whether a conditional allow should map to `ConditionallyReachable`. That is a design decision for the user.
+### O-8 — Conditions (MODEL; conditional grants now reported as conditional)
+- **AWS identity policies:** a statement with a `Condition` is no longer treated as unconditional. An Allow with a `Condition` is reported as `ConditionallyReachable` (unresolved condition `enforcement-condition`). A Deny with a `Condition` yields `ConditionallyReachable` instead of `Blocked`. Conditions are not evaluated.
+- **AWS cross-document denies:** each identity edge is now checked against all of its holder's identity policies, so an explicit Deny in one document blocks an Allow in another. This closes an over-report in the earlier per-edge check.
+- **Verify on a real account:** the `conditional_allows` count, and that conditional grants are not over- or under-reported against the live console.
+- **GCP:** conditional bindings are still skipped and counted in `conditional_bindings` (under-report). Same treatment is pending.
 
 ### O-9 — Operational hardening not built — OPEN
 - Discovery and event calls are not exported as metrics or traces.

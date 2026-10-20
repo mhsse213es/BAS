@@ -427,6 +427,14 @@ func (c *AWSDiscoveryClient) Discover(ctx context.Context) (*DiscoveredGraph, *A
 	}
 
 	for _, h := range holders {
+		var decoded []string
+		for _, raw := range h.docs {
+			if d, err := awsDecodePolicy(raw); err == nil {
+				decoded = append(decoded, d)
+			}
+		}
+		identityDocsJSON, _ := json.Marshal(decoded)
+		identityDocs := string(identityDocsJSON)
 		for _, raw := range h.docs {
 			compact, err := awsDecodePolicy(raw)
 			if err != nil {
@@ -468,9 +476,9 @@ func (c *AWSDiscoveryClient) Discover(ctx context.Context) (*DiscoveredGraph, *A
 							Target:     target,
 							Action:     action,
 							SourceType: "identity-policy",
-							Attributes: map[string]string{"policy_document": compact},
+							Attributes: awsIdentityEdgeAttrs(compact, identityDocs, st),
 							Provenance: &Provenance{Source: "aws:iam-authorization-details", Confidence: "observed"},
-						}, h.identity.CanonicalID+"|"+action+"|"+target.CanonicalID+"|"+compact)
+						}, h.identity.CanonicalID+"|"+action+"|"+target.CanonicalID+"|"+compact+"|"+awsCondFlag(st))
 					}
 				}
 			}

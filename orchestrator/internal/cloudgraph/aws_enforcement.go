@@ -378,3 +378,23 @@ func NormalizeAWSSessionPolicy(raw string) (string, error) {
 	}
 	return doc, nil
 }
+
+// awsIdentityEdgeAttrs returns the attributes of an identity-policy edge. An edge
+// from a statement with a Condition is marked, so the evaluator reports it as
+// conditionally reachable.
+func awsIdentityEdgeAttrs(doc, allDocs string, st awsStatement) map[string]string {
+	attrs := map[string]string{"policy_document": doc, "identity_docs": allDocs}
+	if len(st.Condition) > 0 {
+		attrs["identity_condition"] = "true"
+	}
+	return attrs
+}
+
+// awsCondFlag distinguishes a conditional statement from an unconditional one in
+// edge keys, so the two are not collapsed into one edge.
+func awsCondFlag(st awsStatement) string {
+	if len(st.Condition) > 0 {
+		return "conditional"
+	}
+	return "unconditional"
+}
