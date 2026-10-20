@@ -1,3 +1,5 @@
+cloud.google.com/go v0.115.1 h1:Jo0SM9cQnSkYfp44+v+NQXHpcHqlnRJk2qxh6yvxxxQ=
+cloud.google.com/go v0.115.1/go.mod h1:DuujITeaufu3gL68/lOFIirVNJwQeyf5UXyi+Wbgknc=
 dario.cat/mergo v1.0.2 h1:85+piFYR1tMbRrLcDwR18y4UKJ3aH1Tbzi24VRW1TK8=
 dario.cat/mergo v1.0.2/go.mod h1:E/hbnu0NxMFBjpMIE34DRGLWqDy0g5FuKDhCb31ngxA=
 github.com/AdaLogics/go-fuzz-headers v0.0.0-20240806141605-e8a1dd7889d6 h1:He8afgbRMd7mFxO99hRNu+6tazq8nFF9lIwo9JFroBk=
@@ -261,6 +263,10 @@ golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 h1:go1bK/D/BFZV2I8cIQd1N
 golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1/go.mod h1:I/5z698sn9Ka8TeJc9MKroUUfqBBauWjQqLJ2OPfmY0=
 gonum.org/v1/gonum v0.17.0 h1:VbpOemQlsSMrYmn7T2OUvQ4dqxQXU+ouZFQsZOx50z4=
 gonum.org/v1/gonum v0.17.0/go.mod h1:El3tOrEuMpv2UdMrbNlKEh9vd86bmQ6vqIcDwxEOc1E=
+google.golang.org/api v0.200.0 h1:0ytfNWn101is6e9VBoct2wrGDjOi5vn7jw5KtaQgDrU=
+google.golang.org/api v0.200.0/go.mod h1:Tc5u9kcbjO7A8SwGlYj4IiVifJU01UqXtEgDMYmBmV8=
+google.golang.org/genproto v0.0.0-20241007155032-5fefd90f89a9 h1:nFS3IivktIU5Mk6KQa+v6RKkHUpdQpphqGNLxqNnbEk=
+google.golang.org/genproto v0.0.0-20241007155032-5fefd90f89a9/go.mod h1:tEzYTYZxbmVNOu0OAFH9HzdJtLn6h4Aj89zzlBCdHms=
 google.golang.org/genproto/googleapis/api v0.0.0-20260819154853-08b0e4226688 h1:ax2KzoSRIZU/M0cIxri3pKxy99vniH1PVxWC6si/eZI=
 google.golang.org/genproto/googleapis/api v0.0.0-20260819154853-08b0e4226688/go.mod h1:1RJ9BQGyNdZwkGc1eTqkErfRZ6RJyYPHZo73BZ1vQqI=
 google.golang.org/genproto/googleapis/rpc v0.0.0-20260819154853-08b0e4226688 h1:cYNAzI2sUwhmCcoj9TxvihSrqsxt6uIkj3rDRhSDmW4=
