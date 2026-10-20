@@ -1,162 +1,136 @@
 # Kill chain live and lab gate: design
 
-Status: steps 1 to 4 and 6 built (refactor, stage modes, advance approval, per-stage start check, separation of duties for lab). Flag still off. Decided: one approval covers all live stages, bounded by the signed definition. Nothing live is enabled. Verification needs staging,
-which is not available. Live and lab claims are not made.
+Status: steps 1 to 4 built, flag off, nothing live enabled. Separation of duties
+and approval scope are decided and built. Verification needs staging, which is not
+available here. No live or lab claims are made.
+
+## Decisions
+
+| # | Decision | Outcome |
+|---|----------|---------|
+| 1 | Extract `checkLiveGates` as the first step | Built. No behaviour change in `RunScenario`. Bypass closed. |
+| 2 | Keep the live-stage flag off until staging evidence exists | Built. `KILLCHAIN_LIVE_STAGES_ENABLED` defaults to off. |
+| 3 | Separation of duties for lab approval | Decided: a single-person lab team may self-approve. The approver must be identified. The audit records creator and approver. |
+| 4 | One approval covers all live stages at once | Decided and built. Bounded by the signed definition. Each stage re-checks at start. |
+| 5 | Factory-lab rule | Already enforced in `dispatchRun` on the `is_factory_lab` flag. Tested. |
+| 6 | Lab-only scenario fidelity | Open. The `fidelity: lab-only` field is not enforced by any code. Needs a policy decision. |
 
 ## Problem
 
-A campaign stage today is dispatched only in `posture` mode
-(`EngineStageExecutor.Options.Mode`). That is safe, but it means no campaign can
-exercise a live technique. Enabling live or lab stages has to pass the same
-gates a single run passes. Those gates are not in one place.
+A campaign stage was dispatched only in `posture` mode. That is safe, but no
+campaign could exercise a live technique. Live or lab stages have to pass the same
+gates a single run passes.
 
-Where they live now (`orchestrator/internal/api/handlers.go`):
+The gates were in `RunScenario`, not in one place. `dispatchRun` checked the OS
+and the factory-lab flag, but not `confirmLive`, `confirmLab` or the execution
+window. A live campaign stage dispatched through `dispatchRun` would have skipped
+three gates. That was the defect to fix first.
 
-| Gate | Where | Applied to |
-|---|---|---|
-| Scenario is executable | `RunScenario` (~line 2566) | live and lab |
-| `confirmLive` acknowledgement | `RunScenario` (~2571) | live and lab |
-| `confirmLab` second approval | `RunScenario` (~2575) | lab only |
-| OS mismatch hard-block | `RunScenario` (~2586) and `dispatchRun` (~2095) | live only; posture only warns |
-| Execution window (`LivePolicy.ExecutionWindow`) | `RunScenario` (~2600) | live only |
-| Agent state (active only) | `dispatchRun` (~2045) | every mode |
-| Factory-lab ownership | `dispatchRun` (~2060) | every mode |
-| Concurrency guard | `dispatchRun` | every mode |
-
-The `dispatchRun` comment (~line 1893) says the request-level guardrails are "the
-caller's job". The campaign path is a caller. `dispatchRun` does refuse a live run
-on OS mismatch itself, so that check holds for campaigns. It does not check
-`confirmLive`, `confirmLab`, or the execution window. So a live stage dispatched
-through `dispatchRun` today would skip three of the gates. **That is the defect
-this design fixes first.** Nothing live may be dispatched from a campaign until
-that is closed.
-
-Today this is latent. The campaign advance handler hard-codes `Mode: "posture"`,
-so no campaign can reach a live stage. The gap would open the moment a stage mode
-is read from the definition, which is why the mode is only added with this gate.
+Today this path is latent because campaign stages can only run in posture mode.
 
 ## Design
 
 ### 1. One gate function, used by both paths
 
-Extract the request-level guardrails from `RunScenario` into one function:
+`checkLiveGates(sc, mode, confirmLive, confirmLab, agentOS, now)` in
+`orchestrator/internal/api/livegates.go` holds the request-level live gates:
+executable, `confirmLive`, `confirmLab`, OS mismatch and the execution window.
 
-```go
-func checkLiveGates(sc *scenario.Scenario, mode string, confirmLive, confirmLab bool,
-    agentOS string, now time.Time) (osWarning string, err error)
-```
-
-- `RunScenario` calls it. Its behaviour does not change. The existing handler
-  tests are the regression guard.
-- The campaign stage starter calls it too, with the same inputs.
-- It is pure and takes the time as an argument, so the execution window is
-  testable without a clock.
-
-No second copy of these rules may exist. A test asserts that both callers reach
-the function, so a future edit cannot quietly drop one.
+- `RunScenario` calls it with the same status codes and messages as before.
+- The campaign stage path calls it at start, with the agent's current OS and the
+  current time.
+- The function takes the time as an argument, so the window is testable without a clock.
+- A test asserts that both callers reach it.
 
 ### 2. Modes are part of the signed definition
 
-A campaign definition already has to be signed to be stored. Each stage gets a
-`mode` field (`posture` by default). Because the definition is signed, the
-approval of which stages are live is fixed when the campaign is signed. The
-operator cannot switch a stage from posture to live at advance time.
+Each stage has a `mode` (posture by default, telemetry or lab). The mode is in the
+signed definition, so the approval of which stages go live is fixed at signing.
+Unknown modes are refused at validation.
 
-### 3. Advance-time approval for the campaign
+### 3. Approval on advance
 
 `POST /api/killchain/campaigns/{id}/advance` takes an optional body:
 
 ```json
-{ "confirmLive": true, "confirmLab": false, "reason": "change ticket CHG-1234" }
+{ "confirmLive": true, "confirmLab": true, "reason": "change ticket CHG-1234" }
 ```
 
-- If any stage is `telemetry` or `lab`, `confirmLive` is required, and `reason`
-  is required.
-- If any stage is `lab`, `confirmLab` is required.
-- The campaign's approval is recorded in the audit log: who confirmed, when, the
-  reason, and which stages were approved. Approval covers only the stages in the
-  signed definition.
+- A campaign with live stages needs `confirmLive` and a non-empty `reason`.
+- A campaign with lab stages also needs `confirmLab`.
+- Unknown fields are refused, so a misspelt confirmation cannot be dropped silently.
+- The approval is audited (`killchain.campaign.approve`) with the live and lab stages,
+  the reason, the approver and the creator, before the advance runs.
+- One approval covers every live stage in the signed definition (decision 4).
 
-### 4. Gate check at each live stage start, not only at advance
+### 4. Gate check at each live stage start
 
-Advance can run hours after approval, and the execution window can close between
-stages. So `Start` for each live stage calls `checkLiveGates` again with the
-current time and the agent's current OS.
+Advance can run hours before a stage starts, and the window can close in between.
+So each live stage start:
 
-- A refused stage is recorded as `ERROR` with the gate's reason. It is not
-  `NOT_TESTED` and not a pass. The reason names the gate, such as "outside the
-  approved execution window".
-- Dependent stages become `NOT_TESTED`, as they do for any error.
+1. checks the flag and the approval for its mode,
+2. reads the agent's OS, and refuses if it is unknown or no reader is wired,
+3. calls `checkLiveGates` with the OS and the current time,
+4. dispatches only if all gates pass.
+
+A refused stage is recorded as an error with the gate's reason. It is not a pass.
 
 ### 5. Feature flag, off by default
 
-`KILLCHAIN_LIVE_STAGES_ENABLED` (default `false`). When off, `Start` refuses any
-stage whose mode is not `posture`, with the reason "live campaign stages are
-disabled on this server". The flag is read at startup and logged. It is not
-changeable through the API.
+`KILLCHAIN_LIVE_STAGES_ENABLED` must be exactly `true` to turn it on. It is read
+from the environment only, logged at startup, and cannot be changed through the API.
+With the flag off, every live stage is refused. With it on, a live stage still
+needs the approval and every gate above.
 
-Enabling the flag is a separate decision, and it should follow staging evidence.
+Turning it on is a separate decision, and it waits for staging evidence.
 
-### 6. Separation of duties for lab (recommended, needs your decision)
+### 6. Separation of duties: decided
 
-The person who signs a campaign should not be the only person who confirms its
-lab stages. Recommendation: `confirmLab` must come from a different user from the
-campaign's `created_by`. Refuse the advance otherwise, with the reason.
+Lab approval may come from the campaign's creator. A single-person lab team is
+allowed. The approver must still be identified: if the approver cannot be
+identified, lab approval is refused.
 
-Single-run lab already needs `confirmLab`. Campaigns hold more stages, so the
-second approver matters more. Trade-off: it adds friction for a single-person
-lab team. Say if you would rather keep one approver.
+The audit event records both the approver and the creator, so self-approval is
+visible after the fact.
 
-### 7. Factory-lab ownership
+### 7. Factory-lab ownership: exists and is enforced
 
-A campaign bound to the factory-owned lab agent must not run customer-target
-stages, and the reverse. `dispatchRun` already enforces this. The design keeps it,
-and a test covers a campaign bound to the lab agent that includes a
-customer-mode stage.
+`dispatchRun` refuses any mode other than `factory-validation` on the agent whose
+`is_factory_lab` flag is set, and refuses `factory-validation` on any other agent.
+The check reads the flag from the agent row on the server. A campaign stage bound
+to the factory-lab agent is refused by the same gate. Tested against the database.
 
-### 8. Audit
+### 8. Lab-only scenario fidelity: open
 
-Every live stage start writes one audit event with: campaign ID, stage key,
-scenario ID, agent ID, mode, the approver, the reason, the OS check result, and
-the window result. Refusals are audited too, with the gate that refused.
+Scenarios can carry `fidelity: lab-only` (for example the akira stage 8 in
+`scenarios/`). No code enforces it. Blocking such scenarios outside an approved lab
+needs a policy decision: which policy applies, and where the check sits. Not built.
 
-## What is built and what is not
+### 9. Audit
 
-Not built. This document is the design only. Nothing in the current code is
-changed by it.
+- `killchain.campaign.approve` on advance approval.
+- `killchain.stage.start` on each live stage that dispatches, with the approver,
+  reason and run id.
+- `killchain.stage.refused` on each live stage that is refused, with the gate that
+  refused it.
 
-Build order, once approved:
-1. Extract `checkLiveGates`, with its tests, and point `RunScenario` at it.
-   This is a refactor with no behaviour change.
-2. Campaign stage `mode` field, validated at signing. Default `posture`.
-3. Advance body and campaign-level approval, with the audit event.
-4. Per-stage gate check in `Start`, with the refusal path.
-5. The feature flag, default off, and the test that refuses live stages when it
-   is off.
-6. Separation-of-duties check, if approved.
+## Build state
 
-Steps 1 to 5 can be built and tested here, with the flag off, because they use
-unit and handler tests. Live verification of any stage needs staging.
+| Step | Status |
+|------|--------|
+| 1. Extract `checkLiveGates`, point `RunScenario` at it | Built |
+| 2. Stage `mode` in the signed definition | Built |
+| 3. Advance approval body and audit | Built |
+| 4. Per-stage gate check and refusal at start | Built |
+| 5. Feature flag, off by default | Built |
+| 6. Separation of duties | Decided: self-approval allowed. Built. |
+| 7. Factory-lab gate | Already in place. Test added. |
+| 8. Lab-only fidelity | Open. Needs a policy decision. |
 
-## Tests planned
+Tests cover each refusal and allowed case in `checkLiveGates`, the window with an
+injected clock, flag and approval at stage start, OS mismatch and unknown OS at
+start, the window closing after approval, the audit events, self-approval, and the
+factory-lab refusal.
 
-- `checkLiveGates`: each refusal, and each allowed case, including posture
-  producing a warning and not an error on OS mismatch.
-- Execution window: inside, outside and at the boundary, with an injected time.
-- Campaign `Start`: refused when the flag is off; refused when the window has
-  closed since advance; refused on OS mismatch for a live stage; allowed for a
-  posture stage with the flag off.
-- Separation of duties: same user refused; different user allowed.
-- Factory-lab: lab-bound campaign with a customer-mode stage refused.
-- The refactor guard: `RunScenario` and the campaign starter both reach
-  `checkLiveGates`.
-
-## Decisions needed
-
-1. Approve the refactor (section 1) as the first step. It changes no behaviour
-   and fixes the bypass.
-2. Confirm the flag stays off until staging evidence exists (section 5).
-3. Separation of duties for lab: yes or no (section 6).
-4. Advance-time approval covers all live stages at once, or each stage is
-   confirmed separately. Recommendation: all at once, bounded by the signed
-   definition, because each stage already re-checks at start.
+Verification on a real agent, with the flag on, is a staging item. See
+`docs/killchain-open-items.md`.
