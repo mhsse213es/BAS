@@ -1657,3 +1657,79 @@ decision.
   `TestPhase28_WebSocketAUTHN011VulnerableFailsFixedPasses` (FAIL exploited vulnerable, PASS enforced
   fixed); `TestPhase28_WebSocketCatalogHandshakesValidate`.
 - Unsupported now: async only (2 scenarios: ABUSE-010, INTEG-010).
+
+
+## Phase 33 - protocol adapters: async (fifth of five) and the GraphQL depth oracle
+
+### Async (ABUSE-010, INTEG-010)
+
+- `protocol.Async` validates a publish: a JSON object with an `event` name, a publish path, and, where
+  present, the `X-Event-Signature` shape (`sha256=` and 64 lowercase hex).
+- Lab broker `POST /broker/topics/{topic}/publish` (`lab/broker.go`), two topics with separate policies:
+  - `orders.events` requires a valid HMAC-SHA256 signature over the body. The vulnerable build does not
+    verify it (`LAB-INTEG-EVENT-001`), so an altered event is processed and changes the order's status.
+    INTEG-010's attack re-sends the created event's signature over a cancelled event for the same
+    order. The fixed build refuses it with 403.
+  - `orders.retries` needs no signature. Each publisher gets five accepted publishes per topic in the
+    fixed build, then 429. The vulnerable build has no limit (`LAB-ABUSE-QUEUE-001`). ABUSE-010 now
+    publishes to this topic. Its unsigned baseline would otherwise be refused by the signed topic.
+- Disclosure on the signing key: the lab's HMAC key is `audspect-lab-event-key-v1`, a fixture constant in
+  the lab code. It is not a production secret. The scenario embeds the baseline signature value for its
+  own body, never the key. The INTEG-010 prerequisites say this.
+- The adapter `ValidatePublishPath`, `ValidateSignatureHeader` and body checks run in the catalog test
+  against each step, with `{n}` substituted as the runner does.
+
+### GraphQL depth oracle (ABUSE-004) and a grader addition
+
+- The grader's existing items oracle reads only a top-level `items` array, which a GraphQL response does
+  not have, so it could not grade this scenario. Rather than bend it, a general oracle was added:
+  `max_response_depth` in the contract. An attack response whose JSON nests deeper than the declared
+  depth counts as an oversized grant, which is FAIL exploited. A response of nested objects and arrays
+  is measured by `jsonDepth`. Non-JSON responses are never counted as deep.
+- The lab's `order` now has an `items` relation. Each item points back to its order, so a selection
+  nests the response as deep as the query does. The vulnerable build resolves it without a limit. The
+  fixed build refuses queries deeper than 3 with 400 before any resolver runs.
+- ABUSE-004 is now FAIL exploited vulnerable and PASS enforced fixed, so it is validated. Phase 29 had it
+  as evaluated only. That gap is closed.
+
+### Acceptance (all five protocols)
+
+- Async: `TestPhase28_AsyncABUSE010VulnerableFailsFixedPasses`,
+  `TestPhase28_AsyncINTEG010VulnerableFailsFixedPasses`, `TestPhase28_AsyncCatalogStepsValidate`, and
+  adapter unit tests in `protocol/async_test.go`.
+- GraphQL: INJ-007 and ABUSE-004 both graded as in Phase 29.
+- Every protocol now has an adapter, so no catalogued scenario is UNSUPPORTED. The zero-traffic
+  guarantee is tested with protocol names that have no adapter (`quic`, `mqtt`), so the gate still
+  holds for any future protocol.
+
+### Measured result (all 69 catalogued, lab against lab)
+
+Two complete runs of the same code gave different validated counts, 67 and 68. The difference was one
+scenario, ABUSE-002 (timing-based), which is validated in some runs and not in others. This is the
+pre-existing timing flake already noted (its calibration is not hardware-robust). It is not caused by
+the protocol work, and this phase does not change its timing logic.
+
+```
+Catalogued:   69
+Implemented:  69/69 (100.0%)
+Evaluated:    69/69 (100.0%)
+Validated:    68/69 (98.6%) in the last run; 67/69 in the earlier one
+Exclusions: unsupported 0, errored 0, unevaluated 0
+Not validated: ABUSE-002 (timing flake, intermittent)
+```
+
+### What "supported" means here, and its limits
+
+A protocol is supported only when its adapter is registered and its lab route and acceptance tests exist.
+Each limit is stated where it applies:
+
+- gRPC is JSON transcoding over HTTP/1.1, not native gRPC over HTTP/2.
+- WebSocket covers the opening handshake and one server text frame, which the runner reads as raw bytes.
+  It does not implement a frame parser or client masking.
+- SOAP covers the XML external-entity case the scenario tests. It is not a WSDL or a full SOAP stack.
+- Async is a single lab broker with two topics. It is not a real message broker.
+
+### Still open
+
+- ABUSE-002 timing flake (pre-existing; needs a calibration decision, not a code fix here).
+- The Windows `build.ps1` run and the staging item for ABUSE-002, as in earlier phases.

@@ -9,6 +9,12 @@ import (
 	"github.com/audspect/bas/internal/apibas/grade"
 )
 
+// withoutAsync models the state before the async adapter exists: every protocol is supported
+// except async. The catalog's async scenarios are then unsupported.
+func withoutAsync(p string) bool {
+	return contract.ProtocolSupported(p) && p != "async"
+}
+
 func loadCatalog(t *testing.T) []contract.Scenario {
 	t.Helper()
 	all, err := catalog.All()
@@ -16,15 +22,6 @@ func loadCatalog(t *testing.T) []contract.Scenario {
 		t.Fatalf("catalog.All: %v", err)
 	}
 	return all
-}
-
-func byID(all []contract.Scenario, id string) contract.Scenario {
-	for _, s := range all {
-		if s.ID == id {
-			return s
-		}
-	}
-	return contract.Scenario{}
 }
 
 func validFail() grade.Outcome {
@@ -44,15 +41,17 @@ func entry(r Report, id string) Entry {
 	return Entry{}
 }
 
-// Unsupported scenarios count toward the catalog size and nothing else.
+func ptr(o grade.Outcome) *grade.Outcome { return &o }
+
+// An unsupported scenario counts toward the catalogue, and nowhere else.
 func TestUnsupportedCountsOnlyInCatalogue(t *testing.T) {
 	all := loadCatalog(t)
-	r := Build(all, contract.ProtocolSupported, nil)
+	r := Build(all, withoutAsync, nil)
 	if r.Catalogued != len(all) {
 		t.Fatalf("catalogued = %d, want %d", r.Catalogued, len(all))
 	}
-	if r.Unsupported < 2 {
-		t.Fatalf("unsupported = %d, want at least the 5 protocol entries without an adapter", r.Unsupported)
+	if r.Unsupported != 2 {
+		t.Fatalf("unsupported = %d, want the 2 async scenarios", r.Unsupported)
 	}
 	if r.Evaluated != 0 || r.Validated != 0 {
 		t.Fatalf("no results were supplied, but evaluated=%d validated=%d", r.Evaluated, r.Validated)
@@ -65,29 +64,27 @@ func TestUnsupportedCountsOnlyInCatalogue(t *testing.T) {
 	}
 }
 
-// Unsupported is not inflated by results: a valid verdict on an unsupported protocol is ignored.
+// An unsupported scenario is not inflated by results supplied for it.
 func TestUnsupportedIgnoresResults(t *testing.T) {
 	all := loadCatalog(t)
 	results := map[string]Verdicts{
 		"API-BAS-ABUSE-010": {Vulnerable: ptr(validFail()), Fixed: ptr(validPass())},
 	}
-	r := Build(all, contract.ProtocolSupported, results)
+	r := Build(all, withoutAsync, results)
 	if got := entry(r, "API-BAS-ABUSE-010"); got.Status != Unsupported {
 		t.Fatalf("unsupported scenario with results = %s, want unsupported", got.Status)
 	}
 }
 
-// Coverage increases only after a valid evaluation: an adapter that exists but has no verdict
-// makes the scenario implemented and unevaluated, not evaluated.
+// Coverage increases only after a valid evaluation: an adapter that exists but has no verdict makes
+// the scenario implemented and unevaluated, not evaluated.
 func TestAdapterLaterIncreasesCoverageOnlyAfterValidEvaluation(t *testing.T) {
 	all := loadCatalog(t)
-	// The "later" adapter is async: the test adds it to the supported set and nothing else.
-	withAsync := func(p string) bool { return contract.ProtocolSupported(p) || p == "async" }
 
-	before := Build(all, contract.ProtocolSupported, nil)
-	after := Build(all, withAsync, nil)
+	before := Build(all, withoutAsync, nil)
+	after := Build(all, contract.ProtocolSupported, nil)
 	if after.Implemented <= before.Implemented {
-		t.Fatalf("implemented did not rise when the GraphQL adapter was added: %d -> %d", before.Implemented, after.Implemented)
+		t.Fatalf("implemented did not rise when the async adapter was added: %d -> %d", before.Implemented, after.Implemented)
 	}
 	if after.Evaluated != before.Evaluated {
 		t.Fatalf("evaluated rose without any verdict: %d -> %d", before.Evaluated, after.Evaluated)
@@ -96,7 +93,7 @@ func TestAdapterLaterIncreasesCoverageOnlyAfterValidEvaluation(t *testing.T) {
 		t.Fatalf("implemented async scenario with no verdict = %s, want unevaluated", got.Status)
 	}
 
-	withVerdict := Build(all, withAsync, map[string]Verdicts{
+	withVerdict := Build(all, contract.ProtocolSupported, map[string]Verdicts{
 		"API-BAS-ABUSE-010": {Vulnerable: ptr(validFail()), Fixed: ptr(validPass())},
 	})
 	if withVerdict.Evaluated != after.Evaluated+1 || withVerdict.Validated != 1 {
@@ -138,13 +135,11 @@ func TestErrorsAreExcluded(t *testing.T) {
 // The report shows numerators, denominators and exclusions.
 func TestFormatShowsDenominatorAndExclusions(t *testing.T) {
 	all := loadCatalog(t)
-	r := Build(all, contract.ProtocolSupported, nil)
+	r := Build(all, withoutAsync, nil)
 	out := Format(r)
-	for _, want := range []string{"Evaluated:", "/", "unsupported (no adapter)", "API-BAS-INJ-007", "UNSUPPORTED_PROTOCOL"} {
+	for _, want := range []string{"Evaluated:", "/", "unsupported (no adapter)", "API-BAS-ABUSE-010", "UNSUPPORTED_PROTOCOL"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("report missing %q:\n%s", want, out)
 		}
 	}
 }
-
-func ptr(o grade.Outcome) *grade.Outcome { return &o }

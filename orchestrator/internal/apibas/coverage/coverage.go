@@ -184,10 +184,10 @@ func Format(r Report) string {
 	if !r.Consistent() {
 		fmt.Fprintf(&b, "WARNING: classes do not sum to the catalog size\n")
 	}
-	b.WriteString("Scenarios excluded from evaluated coverage:\n")
+	b.WriteString("Scenarios not validated (evaluated-only, or excluded from evaluation):\n")
 	rows := make([]Entry, 0)
 	for _, e := range r.Entries {
-		if e.Status == Validated || e.Status == Evaluated {
+		if e.Status == Validated {
 			continue
 		}
 		rows = append(rows, e)

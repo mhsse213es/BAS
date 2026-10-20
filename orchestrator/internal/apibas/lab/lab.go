@@ -334,6 +334,8 @@ type Server struct {
 	gwCounts map[string]int
 	// rotated holds the API tokens retired by POST /api/keys/rotate in the fixed build.
 	rotated map[string]bool
+	// brokerCounts counts accepted publishes per publisher and topic in the fixed build (broker.go).
+	brokerCounts map[string]int
 	// sharedCache is the response cache of the vulnerable build (LAB-AUTHZ-CACHE-001), keyed by path.
 	sharedCache map[string]map[string]any
 }
@@ -361,6 +363,7 @@ func New(cfg Config) (*Server, error) {
 func (s *Server) reseed() {
 	s.sharedCache = nil
 	s.rotated = nil
+	s.brokerCounts = nil
 	s.roles = make(map[string]string)
 	s.otpFailures = make(map[string]int)
 	s.itemParent = make(map[string]string)
@@ -430,6 +433,7 @@ func (s *Server) Handler() http.Handler {
 	s.registerSOAP(mux)
 	s.registerGRPC(mux)
 	s.registerWebSocket(mux)
+	s.registerBroker(mux)
 	mux.HandleFunc("GET /lab/faults", s.adminOnly(s.listFaults))
 	if s.cfg.Mode == ModeVulnerable {
 		// LAB-GWAY-OVERRIDE-001: the vulnerable build honours a method-override header.

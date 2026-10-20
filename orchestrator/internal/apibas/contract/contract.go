@@ -99,6 +99,9 @@ type Scenario struct {
 	MaxWorkUnits int `yaml:"max_work_units"`
 	// MaxItemsReturned is the largest items array an attack response may return.
 	MaxItemsReturned int `yaml:"max_items_returned"`
+	// MaxResponseDepth is the deepest nesting of objects and arrays an attack response may have. A
+	// response deeper than this shows a query was executed beyond the depth its control allows.
+	MaxResponseDepth int `yaml:"max_response_depth"`
 	// Protocol names the protocol the scenario drives. Empty and "http" run; other
 	// known protocols are declared but reported UNSUPPORTED until an adapter exists.
 	Protocol string `yaml:"protocol"`
@@ -413,6 +416,9 @@ func (s Scenario) validateSteps() error {
 	}
 	if s.MaxItemsReturned < 0 {
 		return fmt.Errorf("contract: %s: max_items_returned cannot be negative", s.ID)
+	}
+	if s.MaxResponseDepth < 0 {
+		return fmt.Errorf("contract: %s: max_response_depth cannot be negative", s.ID)
 	}
 	if !knownProtocols[s.Protocol] {
 		return fmt.Errorf("contract: %s: protocol %q is not a known protocol", s.ID, s.Protocol)

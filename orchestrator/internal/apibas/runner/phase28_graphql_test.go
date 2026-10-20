@@ -27,23 +27,23 @@ func TestPhase28_GraphQLINJ007VulnerableFailsFixedPasses(t *testing.T) {
 	}
 }
 
-// ABUSE-004 has a depth limit in the fixed build, which is denied with 400. The grader has no
-// depth oracle for the vulnerable build: the unbounded query is accepted, but nothing grades that
-// acceptance as exploitation. So the vulnerable build is not graded FAIL. This test records that
-// gap rather than hiding it: the fixed build must PASS, and the vulnerable build must not PASS
-// as enforced.
-func TestPhase28_GraphQLABUSE004FixedEnforcesDepthLimit(t *testing.T) {
+// ABUSE-004 has a depth limit in the fixed build, which refuses a deeper query with 400. The vulnerable
+// build executes the deep query, and its items relation nests the response by the query's depth. The
+// max_response_depth oracle grades that nesting as exploitation: FAIL exploited vulnerable, PASS
+// enforced fixed.
+func TestPhase28_GraphQLABUSE004VulnerableFailsFixedPasses(t *testing.T) {
 	s := scenarioByID(t, "API-BAS-ABUSE-004")
+
+	vuln := newEnv(t, lab.ModeVulnerable, fixture.OrdersTwoTenant())
+	rv := vuln.run(t, s, vuln.state)
+	if rv.Outcome.Result != grade.FAIL || rv.Outcome.Exploitability != grade.Exploited {
+		t.Fatalf("vulnerable ABUSE-004 = %s/%s, want FAIL/exploited (detail: %s)", rv.Outcome.Result, rv.Outcome.Exploitability, rv.Detail)
+	}
+
 	fixed := newEnv(t, lab.ModeFixed, fixture.OrdersTwoTenant())
 	rf := fixed.run(t, s, fixed.state)
 	if rf.Outcome.Result != grade.PASS || rf.Outcome.Control != grade.Enforced {
 		t.Fatalf("fixed ABUSE-004 = %s/%s, want PASS/enforced (detail: %s)", rf.Outcome.Result, rf.Outcome.Control, rf.Detail)
-	}
-
-	vuln := newEnv(t, lab.ModeVulnerable, fixture.OrdersTwoTenant())
-	rv := vuln.run(t, s, vuln.state)
-	if rv.Outcome.Result == grade.PASS && rv.Outcome.Control == grade.Enforced {
-		t.Fatalf("vulnerable ABUSE-004 reported enforced, but the lab accepts the deep query")
 	}
 }
 

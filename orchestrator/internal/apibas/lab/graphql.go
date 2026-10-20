@@ -67,19 +67,45 @@ func (s *Server) graphqlQuery(w http.ResponseWriter, r *http.Request) {
 	if s.vulnerable() {
 		full = orderBody(o)
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"data": map[string]any{"order": selectGraphQLFields(full, field.Sub)}})
+	writeJSON(w, http.StatusOK, map[string]any{"data": map[string]any{"order": resolveOrderObj(o, full, field.Sub)}})
 }
 
-// selectGraphQLFields returns only the fields the query selected, as a GraphQL resolver does.
-// A selected field that the record does not hold is left out, not returned as null.
-func selectGraphQLFields(full map[string]any, sub []protocol.Field) map[string]any {
-	if len(sub) == 0 {
+// graphqlItemsPerOrder is the number of items each order's items relation returns. Each item points
+// back to its order, so a selection that nests items nests the response by the same depth.
+const graphqlItemsPerOrder = 2
+
+// resolveOrderObj returns the selected fields of an order. The items relation is resolved only when it
+// is selected, and each item resolves its own order back-reference. The resolver does not limit the
+// depth it follows, which is the flaw in the vulnerable build; the fixed build refuses deep queries
+// before a resolver runs.
+func resolveOrderObj(o *Order, full map[string]any, sel []protocol.Field) map[string]any {
+	if len(sel) == 0 {
 		return full
 	}
 	out := map[string]any{}
-	for _, f := range sub {
+	for _, f := range sel {
+		if f.Name == "items" {
+			items := make([]any, 0, graphqlItemsPerOrder)
+			for i := 0; i < graphqlItemsPerOrder; i++ {
+				items = append(items, resolveItemObj(o, full, f.Sub))
+			}
+			out["items"] = items
+			continue
+		}
 		if v, ok := full[f.Name]; ok {
 			out[f.Name] = v
+		}
+	}
+	return out
+}
+
+// resolveItemObj returns the selected fields of one item. The only item field is order, which resolves
+// the order the item belongs to.
+func resolveItemObj(o *Order, full map[string]any, sel []protocol.Field) map[string]any {
+	out := map[string]any{}
+	for _, f := range sel {
+		if f.Name == "order" {
+			out["order"] = resolveOrderObj(o, full, f.Sub)
 		}
 	}
 	return out

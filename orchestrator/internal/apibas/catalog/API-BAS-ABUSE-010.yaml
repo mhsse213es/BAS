@@ -5,7 +5,7 @@ claim: function_level
 protocol: async
 prerequisites:
   - async broker adapter (publish and queue depth observation), not yet implemented
-  - lab broker with a bounded retry policy, and a queue depth reading exposed to the adapter
+  - lab broker topic orders.retries with a limit of 5 accepted publishes per publisher in the fixed build
   - the adapter must publish only to lab-owned topics and must drain them after the run
 attack_objective: >
   A customer publishes retried events to the order topic faster than the consumers drain it, and the
@@ -25,7 +25,7 @@ steps:
     identity: customer-b
     auth: valid
     method: POST
-    path: /broker/topics/orders.events/publish
+    path: /broker/topics/orders.retries/publish
     body: '{"event": "order.created", "order_id": "ORD-2001"}'
     hypothesis: A single event publish is accepted. If this fails, the scenario is not testable.
   - id: attack-retry-storm
@@ -33,7 +33,7 @@ steps:
     identity: customer-b
     auth: valid
     method: POST
-    path: /broker/topics/orders.events/publish
+    path: /broker/topics/orders.retries/publish
     body: '{"event": "retry", "seq": {n}}'
     repeat: 10
     hypothesis: Publishes beyond the topic's rate limit are refused, so the queue cannot grow without bound.

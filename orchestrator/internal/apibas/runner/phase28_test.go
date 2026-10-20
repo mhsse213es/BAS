@@ -10,22 +10,34 @@ import (
 	"github.com/audspect/bas/internal/apibas/lab"
 )
 
-// Phase 28: every non-HTTP scenario in the catalog is UNSUPPORTED until its adapter exists. Each
-// one must be SKIPPED with unsupported fields and reason UNSUPPORTED_PROTOCOL, and must send zero
-// requests to the target. The test walks the catalog, so a new protocol entry is covered without
-// editing this file.
-func TestPhase28_EveryNonHTTPCatalogScenarioIsUnsupportedWithZeroTraffic(t *testing.T) {
+// Phase 28: a protocol without an adapter is UNSUPPORTED. Each such scenario must be SKIPPED with
+// unsupported fields and reason UNSUPPORTED_PROTOCOL, and must send zero requests to the target.
+//
+// Every protocol the catalog names now has an adapter, so the catalog walk currently checks no
+// scenario. The guarantee is therefore tested with protocol names that have no adapter. The walk
+// is kept, so any future catalog entry without an adapter is covered as soon as it is added.
+func TestPhase28_UnsupportedProtocolsSendZeroTraffic(t *testing.T) {
 	all, err := catalog.All()
 	if err != nil {
 		t.Fatalf("catalog.All: %v", err)
 	}
-	checked := 0
+	var cases []contract.Scenario
 	for _, s := range all {
-		if contract.ProtocolSupported(s.Protocol) {
-			continue
+		if !contract.ProtocolSupported(s.Protocol) {
+			cases = append(cases, s)
 		}
-		checked++
-		t.Run(s.ID, func(t *testing.T) {
+	}
+	// Protocol names with no adapter. They are not in the catalog, so this proves the runner gate
+	// for any protocol, not only the ones catalogued today.
+	base := scenarioByID(t, "API-BAS-AUTHZ-001")
+	for _, p := range []string{"quic", "mqtt"} {
+		s := base
+		s.Protocol = p
+		cases = append(cases, s)
+	}
+
+	for _, s := range cases {
+		t.Run(s.ID+"/"+s.Protocol, func(t *testing.T) {
 			e := newEnv(t, lab.ModeVulnerable, fixture.OrdersTwoTenant())
 			before := e.apiHits.Load()
 			rep := e.run(t, s, e.state)
@@ -42,8 +54,5 @@ func TestPhase28_EveryNonHTTPCatalogScenarioIsUnsupportedWithZeroTraffic(t *test
 				t.Fatalf("%d requests reached the target for an unsupported protocol, want 0", sent)
 			}
 		})
-	}
-	if checked < 2 {
-		t.Fatalf("only %d unsupported scenarios in the catalog, want at least the 5 protocols without an adapter", checked)
 	}
 }

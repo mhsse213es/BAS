@@ -533,6 +533,9 @@ func (r *Runner) runAttack(ctx context.Context, rep *Report, step contract.Step,
 		if s.MaxItemsReturned > 0 && reportedArrayLen(exch.raw, "items") > s.MaxItemsReturned {
 			agg.Oversized++
 		}
+		if s.MaxResponseDepth > 0 && jsonDepth(exch.raw) > s.MaxResponseDepth {
+			agg.Oversized++
+		}
 		if exch.Status < 500 && !slices.Contains(s.DeniedStatuses, exch.Status) {
 			agg.Accepted++
 		}
@@ -887,6 +890,37 @@ func reportedField(raw []byte, key string) int {
 		return 0
 	}
 	return int(n)
+}
+
+// jsonDepth returns the deepest nesting of objects and arrays in a JSON document. It is 0 when the
+// document is not JSON, so a non-JSON response is never counted as deep.
+func jsonDepth(raw []byte) int {
+	var v any
+	if json.Unmarshal(raw, &v) != nil {
+		return 0
+	}
+	return valueDepth(v)
+}
+
+func valueDepth(v any) int {
+	best := 0
+	switch t := v.(type) {
+	case map[string]any:
+		for _, x := range t {
+			if d := valueDepth(x); d > best {
+				best = d
+			}
+		}
+		return 1 + best
+	case []any:
+		for _, x := range t {
+			if d := valueDepth(x); d > best {
+				best = d
+			}
+		}
+		return 1 + best
+	}
+	return 0
 }
 
 // expandFiller replaces each filler placeholder with that many bytes.

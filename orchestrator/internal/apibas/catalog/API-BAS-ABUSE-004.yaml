@@ -37,8 +37,10 @@ steps:
     body: '{"query": "{ order(id: \"ORD-2001\") { items { order { items { order { items { order { items { id } } } } } } } } }"}'
     hypothesis: The server limits query depth, so the nested query is refused before it runs.
 denied_statuses: [400]
+max_response_depth: 4
 expected_control: >
-  A query beyond the depth limit is refused with 400 before any resolver runs.
+  A query beyond the depth limit is refused with 400 before any resolver runs. A response deeper than
+  four nested containers (the depth a permitted query can produce) shows the query was executed.
 ground_truth:
   adapters: [state, response]
   check: >

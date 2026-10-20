@@ -579,7 +579,7 @@ func (s *Server) injTransition(w http.ResponseWriter, r *http.Request) {
 
 // Flaws returns the planted flaw registry: the core flaws plus the injection flaws.
 func Flaws() []Flaw {
-	return slices.Concat(flawsCore(), injectionFlaws(), gatewayFlaws(), authzFlaws(), discFlaws(), remainingFlaws(), graphqlFlaws(), soapFlaws(), grpcFlaws(), wsFlaws())
+	return slices.Concat(flawsCore(), injectionFlaws(), gatewayFlaws(), authzFlaws(), discFlaws(), remainingFlaws(), graphqlFlaws(), soapFlaws(), grpcFlaws(), wsFlaws(), brokerFlaws())
 }
 
 // injectionFlaws names the planted injection flaws. Each is present only in ModeVulnerable.
