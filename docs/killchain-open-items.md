@@ -26,7 +26,6 @@ moment. Items that need them are listed as blocked, not planned.
 | 10 | Interrupted campaigns at boot | Built: boot recovery collects finished runs and marks unfinished ones interrupted. It never starts a stage. Test on staging. |
 | 8 | `DETECTED_NOT_CONTAINED` does not mark a campaign failed | Ruling made, see audit section 13.1. Reconsider if a reviewer disagrees. |
 | 9 | Lateral scenario has no `id:` field in its YAML | Resolved in practice: the engine loads it by filename. Making the ID explicit is a small cleanup. |
-| 10 | Interrupted campaigns are reconciled only when the orchestrator is called again | Open. No background reconciler at boot. |
 | 11 | Coverage levels for lab and live need real proof records | Built as a model. No proof records exist yet, so the report shows zero at those levels. |
 
 ## Rules for closing items
