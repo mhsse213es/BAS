@@ -23,5 +23,8 @@ func RealDLPScenarioIDs() []string {
 		"dlp-exfiltration-coderepo",
 		"dlp-exfiltration-telnet",
 		"dlp-exfiltration-multichannel",
+		"dlp-exfiltration-ai-prompt",
+		"dlp-exfiltration-db-export",
+		"dlp-exfiltration-devtools",
 	}
 }

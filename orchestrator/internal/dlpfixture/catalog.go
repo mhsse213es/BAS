@@ -15,6 +15,7 @@ const (
 	scenarioCodeRepo     = "dlp-exfiltration-coderepo"
 	scenarioTelnet       = "dlp-exfiltration-telnet"
 	scenarioMultichannel = "dlp-exfiltration-multichannel"
+	scenarioDevtools     = "dlp-exfiltration-devtools"
 )
 
 // AllFixtures returns Audspect's real, current seed catalog of every
@@ -273,6 +274,17 @@ func AllFixtures() ([]Fixture, error) {
 		[]string{"Maestro,6759649826438453"},
 		[]Occurrence{{scenarioWebhook, "DLP Validation — Microsoft Teams-Compatible Exfiltration of Maestro Card Record (T1567.004)"}},
 		"single occurrence, no duplication to eliminate, catalogued for drift protection")); err != nil {
+		return nil, fmt.Errorf("loading seed fixture catalog: %w", err)
+	}
+
+	if err := add(NewFixture("devtools-artifacts-and-credentials", "Synthetic developer-tooling artifact, package and document payloads",
+		[]string{"[BAS-SIM-DEV]", "AKIAIOSFODNN7EXAMPLE", "BAS-SIM-DEV-PRIVATE-KEY-PLACEHOLDER"},
+		[]Occurrence{
+			{scenarioDevtools, "DLP Validation — CI/CD Build Artifact Upload via HTTPS Sink (T1567)"},
+			{scenarioDevtools, "DLP Validation — Package Publish With Embedded Credential via HTTPS Sink (T1567)"},
+			{scenarioDevtools, "DLP Validation — Internal Design Document Shared Via Developer Tooling (T1567)"},
+		},
+		"three developer-tooling steps share one synthetic payload header; AWS example key and placeholder only")); err != nil {
 		return nil, fmt.Errorf("loading seed fixture catalog: %w", err)
 	}
 

