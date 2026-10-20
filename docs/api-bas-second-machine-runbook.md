@@ -96,3 +96,56 @@ If any repeat fails, record the result as it is. Do not rerun until it passes.
   and the number of samples.
 - The `timing_verdict` of every repeat in step 4.
 - The calibration record file name and version.
+
+## Open item: run on the staging server
+
+Status: OPEN. Owner: user. Not yet run.
+
+Why this item exists: the container run on this host (see QA log, Phase 21) did not meet
+acceptance. The fixed build returned INCONCLUSIVE on one repeat because of attack-side tail
+latency on a 2-vCPU container. A physical staging server is a materially different
+environment and can settle whether the separation holds there.
+
+### Rules for this run
+
+- Run the steps above exactly as written. Do not change any threshold, alpha, minimum ratio,
+  noise floor, attack band, or minimum sample count after seeing staging results.
+- Staging runs heavy jobs. Make sure nothing else is loaded during the measurement window,
+  and record the load average before and after each run.
+- The labs bind to 127.0.0.1 only. Do not expose the lab ports.
+- Generate the four lab tokens on the server with a random source. Do not commit them and
+  do not paste them into the QA log.
+- Do not commit an adopted catalog to `main`. Build the adopted binaries from a copy of the
+  tree with the catalog set to the staging record version, as in Phase 21. The committed
+  catalog stays on the version the Windows host uses.
+
+### Steps on staging
+
+1. **Capture the fingerprint and the refusal.** Build `apibas-lab` and `apibas-runner` for
+   Linux from the `main` commit (record the short hash). Run ABUSE-002 once against the
+   vulnerable lab without calibrating. Save the JSON. Expected:
+   `ERROR/REQUALIFICATION_REQUIRED`.
+2. **Calibrate explicitly.** Start the vulnerable lab on 127.0.0.1:8099 and the fixed lab on
+   127.0.0.1:8100. Run `-calibrate` with `-calibration-dir` pointing to a copy of the records
+   directory. Save the full stderr output. Record the qualified flag, every refusal reason,
+   the separation p-value and ratio, both medians, and the version written. If the record is
+   unqualified, stop, keep the record, and report the reasons. Do not adjust the catalog.
+3. **Adopt in a build-only copy.** Set the catalog version and baseline to the staging
+   record's values, build Linux binaries from that copy, and do not commit the change.
+4. **Acceptance runs.** Run each variant three times, with a separate lab start each time,
+   using the same workload and label. Save every JSON output and the server load average
+   before each run.
+5. **Acceptance.** The fixed build must PASS on every repeat, the vulnerable build must FAIL
+   on every repeat, and the record must be qualified. Any other result is recorded as it is.
+   Do not repeat a run until it passes.
+6. **Report back** with: CPU model, memory, kernel, Go version, the fingerprint attributes,
+   the calibration record file and version, every refusal reason verbatim, per-round
+   statistics for every repeat, the verdict of every repeat, and the load averages.
+
+### Decision to make afterward
+
+- If acceptance passes on staging, record a second-environment pass in the QA log. Keep the
+  validation status at two environments, one physical and one a container.
+- If it does not pass, decide between a quieter measurement method (with a new calibration),
+  treating noisy environments as not qualified, or staying provisional. The Phase 21 options
+  apply.
