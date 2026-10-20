@@ -345,7 +345,8 @@ Still open:
    check; a raw match does not show them.
 5. Acknowledgement and escalation are NOT_TESTED. They need an authorised integration or
    a recorded human confirmation.
-6. Lost results. A pipeline result held in memory is reported as ERROR if the process
-   restarts before collection. A durable result store would remove that.
+6. Restart handling (resolved). Pipeline results are written to killchain_pipeline_runs before
+   a stage completes. A completed check survives a restart and is not re-run. A check that
+   never completed is reported as interrupted, not as ERROR or a pass.
 7. No shipped pipeline campaign yet. It needs a real connector ID per deployment.
 8. Permissions beyond 403 are not checked.
