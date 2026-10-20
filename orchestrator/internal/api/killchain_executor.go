@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/audspect/bas/internal/db"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -66,6 +67,8 @@ type EngineStageExecutor struct {
 	Dispatcher stageDispatcher
 	// Options are the operator-approved settings for every stage of the campaign.
 	Options stageDispatchOptions
+	// Pipelines runs read-only detection-pipeline stages. Nil refuses them.
+	Pipelines *pipelineStageRunner
 	// OSes reads the agent's OS for the live stage OS check. Nil refuses live stages,
 	// because the check cannot run.
 	OSes agentOSReader
@@ -93,6 +96,12 @@ type stageDispatcher interface {
 
 // Start checks the scenario through the executable gate, then dispatches it.
 func (x EngineStageExecutor) Start(ctx context.Context, campaignID string, st killchain.StageDef) (string, error) {
+	if st.Pipeline != nil {
+		if x.Pipelines == nil {
+			return "", fmt.Errorf("stage %s: %w", st.Key, killchain.ErrNoExecutor)
+		}
+		return x.Pipelines.start(ctx, campaignID, st)
+	}
 	if x.Resolver == nil {
 		return "", fmt.Errorf("scenario %s: %w", st.ScenarioID, killchain.ErrNoExecutor)
 	}
@@ -198,6 +207,12 @@ func derefString(s *string) string {
 
 // Collect reads a dispatched run and maps it to stage evidence.
 func (x EngineStageExecutor) Collect(ctx context.Context, executionID string) (killchain.StageEvidence, bool, bool, error) {
+	if strings.HasPrefix(executionID, pipelineExecPrefix) {
+		if x.Pipelines == nil {
+			return killchain.StageEvidence{}, true, true, killchain.ErrNoExecutor
+		}
+		return x.Pipelines.collect(executionID)
+	}
 	if x.Runs == nil {
 		return killchain.StageEvidence{}, true, true, killchain.ErrNoExecutor
 	}

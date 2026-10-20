@@ -304,3 +304,48 @@ Not built, still open:
 6. Cleanup and tagging. Test events and cases need a tag so they can be found and removed
    without deleting legitimate audit records. The rule is not defined yet.
 7. Permissions. The connector interface has no permission check. Reported as not verified.
+
+### SOC pipeline: stage contract, Elastic ingestion, campaign wiring (built)
+
+Built and tested:
+- Stage contract (`pipelinecheck/contract.go`). Nine stages, each reported on its own:
+  connectivity, ingestion, normalization, correlation, alert, case, routing,
+  acknowledgement, escalation. VERIFIED, INCONCLUSIVE, ERROR, NOT_TESTED.
+- Elastic read-only ingestion (`pipelinecheck/elastic.go`). A `match_phrase` search on a
+  stable identifier, bounded to a window, with `allow_no_indices=false`. Zero matches is
+  INCONCLUSIVE. 401, 403, 404, 5xx, transport failure and malformed responses are
+  separate ERROR reasons. Credentials go in a header and never into the evidence.
+- Connectivity is derived from the ingestion response, not a second probe. Any response
+  below 500 counts as reached and authenticated, and 401 or 403 as reached but rejected.
+- Campaign wiring. A stage with `pipeline` set is a server-side check, not an agent
+  scenario. It must name no scenario and be posture mode. The per-stage results persist
+  in the stage record. A pipeline stage's verdict is INCONCLUSIVE with evidence,
+  ERROR if any stage errored, NOT_TESTED otherwise. It never yields ALLOWED, DETECTED or BLOCKED.
+- A downstream attack stage behind an errored pipeline stage is NOT_TESTED, and
+  nothing is dispatched for it.
+
+Verified against a real Elasticsearch 8.15.3 lab instance (single node, security on):
+- Matching probe: VERIFIED, with the document ID and timestamp.
+- Absent identifier: INCONCLUSIVE.
+- Wrong password: ERROR, reported as authentication failed.
+- A user without read privilege on the index: ERROR, reported as permission denied.
+- Lab instance is a local Docker container. It is not a customer SIEM.
+
+Found during lab run: a `term` query on a text field never matches a value with
+punctuation, because the analyser splits it. The identifier now uses `match_phrase`.
+
+Still open:
+1. Injection. Not built. Needs explicit per-run approval recording target, payload,
+   expected change and scope. Nothing runs from a campaign start.
+2. Tagging and cleanup. Not defined. Test events and cases need a tag so they can be
+   removed without deleting legitimate audit records.
+3. Other connectors. Splunk, QRadar, Sentinel, CrowdStrike, Defender, Trellix have no
+   read-only ingestion check yet. They report ERROR as "no read-only ingestion check".
+4. Normalization, correlation, alert, case and routing are NOT_TESTED. Each needs its own
+   check; a raw match does not show them.
+5. Acknowledgement and escalation are NOT_TESTED. They need an authorised integration or
+   a recorded human confirmation.
+6. Lost results. A pipeline result held in memory is reported as ERROR if the process
+   restarts before collection. A durable result store would remove that.
+7. No shipped pipeline campaign yet. It needs a real connector ID per deployment.
+8. Permissions beyond 403 are not checked.

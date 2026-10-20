@@ -121,6 +121,9 @@ type StageEvidence struct {
 	// audit policy. They are reported beside the missing fields, so the verdict says
 	// why, not only what.
 	SourceGaps []string `json:"sourceGaps,omitempty"`
+	// Pipeline holds per-stage results when the stage is a pipeline check. Attack verdicts
+	// are not derived from it.
+	Pipeline []PipelineStageResult `json:"pipeline,omitempty"`
 }
 
 // Missing returns the required fields that were not established, in a fixed

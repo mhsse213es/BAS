@@ -88,6 +88,9 @@ type StageDef struct {
 	// Mode is how the stage runs: posture (default), telemetry or lab. It is part of
 	// the signed definition, so approval of live stages is fixed at signing.
 	Mode string `json:"mode,omitempty"`
+	// Pipeline, when set, makes this a read-only detection-pipeline check. It names no
+	// agent scenario and cannot run live.
+	Pipeline *PipelineSpec `json:"pipeline,omitempty"`
 }
 
 // CampaignDef is an authored, versioned campaign graph.
@@ -114,6 +117,19 @@ func (c CampaignDef) Validate() ([]string, error) {
 		default:
 			return nil, fmt.Errorf("killchain: campaign %s stage %s has unknown mode %q", c.ID, st.Key, st.Mode)
 		}
+		if st.Pipeline != nil {
+			if err := st.Pipeline.Validate(st.Key); err != nil {
+				return nil, err
+			}
+			if st.ScenarioID != "" {
+				return nil, fmt.Errorf("killchain: campaign %s stage %s is a pipeline check and must not name a scenario", c.ID, st.Key)
+			}
+			if st.EffectiveMode() != ModePosture {
+				return nil, fmt.Errorf("killchain: campaign %s stage %s is a pipeline check and is read-only; mode must be posture", c.ID, st.Key)
+			}
+		} else if st.ScenarioID == "" {
+			return nil, fmt.Errorf("killchain: campaign %s stage %s needs a scenarioId or a pipeline", c.ID, st.Key)
+		}
 	}
 	if c.Version < 1 {
 		return nil, fmt.Errorf("killchain: campaign %s version must be at least 1", c.ID)
@@ -129,7 +145,7 @@ func (c CampaignDef) Validate() ([]string, error) {
 		if _, dup := byKey[s.Key]; dup {
 			return nil, fmt.Errorf("killchain: stage key %q appears twice", s.Key)
 		}
-		if s.ScenarioID == "" {
+		if s.ScenarioID == "" && s.Pipeline == nil {
 			return nil, fmt.Errorf("killchain: stage %q has no scenario id", s.Key)
 		}
 		for _, v := range s.ContinueOn {

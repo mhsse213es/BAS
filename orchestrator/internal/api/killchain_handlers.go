@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -200,6 +201,7 @@ func (h *Handler) AdvanceKillChainCampaign(w http.ResponseWriter, r *http.Reques
 	}
 	exec.Dispatcher = handlerStageDispatcher{h: h}
 	exec.OSes = poolRunReader{pool: h.db}
+	exec.Pipelines = newPipelineStageRunner(h.loadDetectionConnector, time.Now)
 	exec.Audit = func(ctx context.Context, action, resource string, detail map[string]any, outcome string) {
 		h.auditLog(r, action, resource, detail, outcome)
 	}
