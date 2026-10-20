@@ -18,6 +18,7 @@ const (
 	scenarioDevtools     = "dlp-exfiltration-devtools"
 	scenarioAIPrompt     = "dlp-exfiltration-ai-prompt"
 	scenarioDBExport     = "dlp-exfiltration-db-export"
+	scenarioEmailRecipients = "dlp-exfiltration-email-recipients"
 )
 
 // AllFixtures returns Audspect's real, current seed catalog of every
@@ -320,6 +321,16 @@ func AllFixtures() ([]Fixture, error) {
 			{scenarioDBExport, "DLP Validation — Data Warehouse Extract Export via Slack-Compatible Webhook (T1567.004)"},
 		},
 		"four export channels carry the same synthetic record shape")); err != nil {
+		return nil, fmt.Errorf("loading seed fixture catalog: %w", err)
+	}
+
+	if err := add(NewFixture("email-recipient-multitype-record", "Synthetic multi-type record sent to external and personal mail recipients",
+		[]string{"[BAS-SIM-DLP]", "ABCDE1234F", "123456789012", "SBININBBXXX", "fake.user@upi", "4111111111111111"},
+		[]Occurrence{
+			{scenarioEmailRecipients, "DLP Validation — SMTP Exfiltration to External Business Recipient (T1048.003)"},
+			{scenarioEmailRecipients, "DLP Validation — SMTP Exfiltration to Personal Mail Address (T1048.003)"},
+		},
+		"same synthetic record as the BFSI anchor, sent to reserved example domains only")); err != nil {
 		return nil, fmt.Errorf("loading seed fixture catalog: %w", err)
 	}
 
