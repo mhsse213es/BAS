@@ -211,6 +211,14 @@ This is the single place to check before claiming either DLP vendor connector is
 
 **Limits:** device exceptions, allow and deny lists by hardware ID, user and group exceptions, and read-only versus blocked distinctions are recorded as Unsupported in this environment. They need a device policy and several accounts.
 
+### 22. Lateral data movement scenario (dlp-exfiltration-lateral-movement) — not run; needs a second internal host — open
+
+**Status:** Open. Two steps: copy to an internal file server share, and copy to a peer workstation share (commit bf6687e6). Signed and catalogued. Not run against a second host.
+
+**Lab requirement:** a second internal host and two operator-configured shares, set in `BAS_DLP_LATERAL_SERVER_SHARE` and `BAS_DLP_LATERAL_PEER_SHARE`. Until they are set, both steps grade Untested.
+
+**Limits:** L1 only, with no sink. A refusal cannot be attributed to a specific control. The authorized versus unauthorized split is a label the operator records in run notes, not something the scenario decides. Remote execution, credential use and non-SMB protocols are not covered.
+
 ## Resolved items
 
 - Item 11: the eight unclaimed AI-prompt and DB-export steps are catalogued (commit 226b1f40). Values come from each step's own command; no payload changed. Both drift checks pass.
