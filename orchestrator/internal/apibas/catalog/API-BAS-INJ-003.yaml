@@ -1,0 +1,57 @@
+id: API-BAS-INJ-003
+name: Server-side template injection in a notification preview discloses protected values
+category: INJ
+claim: cross_identity
+attack_objective: >
+  A customer supplies a template to a notification preview that is rendered against
+  another customer's full order record, disclosing protected values.
+threat_model:
+  attacker: authenticated customer in tenant A
+  identity: customer-a
+  access_level: standard customer, valid token
+  objective: read another customer's protected order values through server-side template rendering
+preconditions:
+  fixture: orders-two-tenant
+  identities: [customer-b, customer-a]
+  object: ORD-2001
+steps:
+  - id: baseline-owner-preview
+    role: baseline
+    identity: customer-b
+    auth: valid
+    method: POST
+    path: /api/notifications/preview
+    body: '{"order_id": "ORD-2001", "message": "Order {id} is {status}"}'
+    hypothesis: The owner can preview a plain message with the order's public tokens. If this fails, the scenario is not testable.
+  - id: attack-template-render
+    role: attack
+    identity: customer-a
+    auth: valid
+    method: POST
+    path: /api/notifications/preview
+    body: '{"order_id": "ORD-2001", "message": "x", "template": "{{.card_last4}}"}'
+    hypothesis: Caller-supplied templates are refused, so no template is rendered against the record.
+denied_statuses: [400]
+expected_control: >
+  The preview refuses a caller-supplied template with 400. The plain message contains
+  only public tokens and no protected values.
+ground_truth:
+  adapters: [state, response]
+  check: >
+    The attack response contains none of the owner's protected values, and the state is
+    unchanged by the attack.
+detection_assertion:
+  status: not_evaluated
+  reason: Detection validation is Phase 4; this scenario makes no detection claim.
+evidence:
+  - sanitized_request
+  - sanitized_response
+  - state_diff
+side_effect_class: STATE_CHANGE_SANDBOX
+cleanup:
+  - reset the lab to its fixture seed after the run
+industry_mapping:
+  - "BFSI: caller-controlled templates rendered against customer records"
+regulatory_mapping: []
+negative_tests:
+  - API-BAS-INJ-003 with a plain message against the fixed build must return only public tokens

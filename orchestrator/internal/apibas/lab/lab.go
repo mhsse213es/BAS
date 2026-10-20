@@ -67,7 +67,7 @@ type Flaw struct {
 
 // Flaws returns the registry of planted flaws. Each entry names the scenario
 // that must detect it and the oracle that defines "detected".
-func Flaws() []Flaw {
+func flawsCore() []Flaw {
 	return []Flaw{
 		{
 			ID:          "LAB-AUTHN-ANON-001",
@@ -408,6 +408,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /lab/reset", s.adminOnly(s.resetFixture))
 	mux.HandleFunc("GET /lab/audit", s.adminOnly(s.getAudit))
 	mux.HandleFunc("GET /lab/access-events", s.adminOnly(s.getAccessEvents))
+	s.registerInjection(mux)
 	if s.cfg.Mode == ModeVulnerable {
 		// LAB-GWAY-OVERRIDE-001: the vulnerable build honours a method-override header.
 		return s.logAccess(methodOverride(mux))

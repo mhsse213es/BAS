@@ -1,0 +1,56 @@
+id: API-BAS-INJ-004
+name: Wildcard in a directory lookup matches every customer's entry
+category: INJ
+claim: cross_identity
+attack_objective: >
+  A customer sends a wildcard in the directory lookup so the unescaped filter matches
+  every entry, including protected values of other customers.
+threat_model:
+  attacker: authenticated customer in tenant A
+  identity: customer-a
+  access_level: standard customer, valid token
+  objective: read another customer's protected entry values through a wildcard filter
+preconditions:
+  fixture: orders-two-tenant
+  identities: [customer-b, customer-a]
+  object: ORD-2001
+steps:
+  - id: baseline-owner-lookup
+    role: baseline
+    identity: customer-b
+    auth: valid
+    method: GET
+    path: /api/directory/search?uid=cust-b
+    hypothesis: The owner can look up their own entry by exact identifier. If this fails, the scenario is not testable.
+  - id: attack-wildcard-filter
+    role: attack
+    identity: customer-a
+    auth: valid
+    method: GET
+    path: /api/directory/search?uid=*
+    hypothesis: The lookup escapes filter metacharacters, so a wildcard matches nothing outside the caller's own entry.
+denied_statuses: []
+clean_is_enforcement: true
+expected_control: >
+  The lookup treats the wildcard as a literal and returns no entries outside the
+  caller's own, and no protected values.
+ground_truth:
+  adapters: [state, response]
+  check: >
+    The response contains none of the owner's protected values, and the state is
+    unchanged by the attack.
+detection_assertion:
+  status: not_evaluated
+  reason: Detection validation is Phase 4; this scenario makes no detection claim.
+evidence:
+  - sanitized_request
+  - sanitized_response
+  - state_diff
+side_effect_class: READ_ONLY
+cleanup:
+  - no cleanup required for a read-only scenario
+industry_mapping:
+  - "BFSI: unescaped directory filters that return customer entries"
+regulatory_mapping: []
+negative_tests:
+  - API-BAS-INJ-004 with the caller's own exact identifier against the fixed build must return the caller's own entry

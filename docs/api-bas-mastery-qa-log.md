@@ -1060,3 +1060,79 @@ repeated until it passes. Thresholds, the noise floor and the sample counts were
 
 - Calibration v6 (container fingerprint) is committed as history. The catalog still points
   at v5, so the Windows host's runs are unaffected.
+
+
+## Phase 22 - injection tranche (API-BAS-INJ, Phase 2 P2 IDs)
+
+Branch: `feature/api-bas-phase22`. Scope: the ten Phase 2 injection sub-techniques,
+INJ-001, 002, 003, 004, 006, 008, 009, 010, 011, 012. INJ-005 and INJ-007 are Phase 3
+and are not included.
+
+### Scenarios
+
+| ID | Sub-technique | Claim | Vulnerable flaw | Fixed control | Side effect |
+|---|---|---|---|---|---|
+| INJ-001 | SQL/NoSQL predicate injection | cross_identity | `q` with a quote and OR matches every order | exact ID match only | READ_ONLY |
+| INJ-002 | Expression injection | cross_identity | expression field with `||` returns every order | expression refused (400) | STATE_CHANGE_SANDBOX |
+| INJ-003 | Server-side template injection | cross_identity | caller template rendered on the full record | template refused (400); plain tokens only | STATE_CHANGE_SANDBOX |
+| INJ-004 | LDAP filter injection | cross_identity | unescaped wildcard matches every entry | wildcard treated as no match | READ_ONLY |
+| INJ-006 | JSON duplicate keys | property_level | first status validated, last applied | duplicate key refused (400) | STATE_CHANGE_SANDBOX |
+| INJ-008 | Path traversal | cross_identity | `..` in export name reaches internal records | name must be a plain CSV name (400) | READ_ONLY |
+| INJ-009 | Header injection | property_level | note with `;` written into Set-Cookie | note restricted to plain characters (400) | STATE_CHANGE_SANDBOX |
+| INJ-010 | SSRF | cross_identity | import fetches an internal path | URL and path sources refused (403) | STATE_CHANGE_SANDBOX |
+| INJ-011 | Prototype pollution | property_level | `__proto__` merge rewrites owner_id | reserved key refused (400) | STATE_CHANGE_SANDBOX |
+| INJ-012 | Cross-format validation | property_level | form-encoded status skips validation | validation applied to every content type (400) | STATE_CHANGE_SANDBOX |
+
+Every POST scenario is STATE_CHANGE_SANDBOX, because the contract treats any non-GET step as
+mutating. Each has a reset cleanup.
+
+### Design choices
+
+- **Fixed-build PASS.** Four fixed routes return an empty 200 (INJ-001, 004, and the
+  wildcard and predicate cases). Those scenarios set `clean_is_enforcement: true`, which the
+  grader needs to PASS. The others declare a denial status.
+- **Ground truth.** Each scenario uses the state and response adapters. A leak counts only
+  when a protected value of the owner appears in a response. A state change counts only when
+  the attack changes state.
+- **Baseline precondition.** Each cross_identity scenario has its baseline identity own the
+  object. Both INJ-010 and the others check this, so INJ-010 was first skipped with
+  PRECONDITION_MISSING and was corrected to baseline as the owner (customer-b on ORD-2001).
+- **Routes in both modes.** The injection routes are registered in both builds. The planted
+  flaws exist only in the vulnerable build, and the fixed build refuses or does not interpret
+  the injected input.
+- **Known limitation, INJ-003.** The preview route checks no owner in either build. The fixed
+  build returns only public tokens (id and status) for another customer's order. That is a
+  BOLA-shaped gap for public fields, not a protected leak, and it is not graded here.
+- **Known limitation, INJ-008.** The vulnerable build also serves another customer's
+  public CSV without an owner check. The public data contains no protected values, so no
+  finding is raised. It is an access-control gap for a later AUTHZ scenario.
+
+### Verification
+
+- `go build ./internal/apibas/...` and `go vet ./internal/apibas/lab/` pass.
+- `go test ./internal/apibas/... -short`: all packages pass, including
+  `TestFlawRegistryLinksToCatalog` (it failed before the scenarios existed).
+- `TestPhase22_InjectionVulnerableFailsFixedPasses`: all ten scenarios FAIL with exploited
+  against the vulnerable build and PASS with control enforced against the fixed build.
+- `TestPhase22_InjectionFlawsAreRegistered`: each scenario has a planted flaw.
+
+### Pre-existing failure, not changed in this tranche
+
+`TestABUSE002Repeatability` (in `runner/abuse002_test.go`, skipped under `-short`) fails on
+the timing verdict string. The test expects `FAIL/exploited`, and the runner now returns
+`decision:FAIL/...`. The test was last changed in Phase 14 (`9bb60d56`), and the verdict
+format changed in later phases. The vulnerable build still returns FAIL in its measurements
+(decision:FAIL in each round). The test is stale. It was left unchanged because it is a
+timing expectation, and changing it needs a decision.
+
+### Coverage after this tranche
+
+- Phase 2 scope now covers 34 of 58 sub-techniques (24 before plus 10 injection). The
+  remaining 24 are GWAY 10, AUTHZ 4, DISC 4, DATA 2, ABUSE 2, AUTHN 1 and INTEG 1.
+- The QA log's earlier "roughly 50" is an estimate. The blueprint's Phase 2 scope lists 58.
+
+### Still open
+
+- The Windows build (`build.ps1`) has not been run on this tranche.
+- The gateway tranche needs a front proxy and raw HTTP client for smuggling and
+  request-target tests (GWAY-004, 005). That is an architecture change before the scenarios.

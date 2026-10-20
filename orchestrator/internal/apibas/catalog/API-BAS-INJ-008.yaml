@@ -1,0 +1,55 @@
+id: API-BAS-INJ-008
+name: Path traversal in an export download discloses an internal order record
+category: INJ
+claim: cross_identity
+attack_objective: >
+  A customer uses a traversal sequence in the export name to reach an internal record
+  belonging to another customer, which includes protected values.
+threat_model:
+  attacker: authenticated customer in tenant A
+  identity: customer-a
+  access_level: standard customer, valid token
+  objective: read another customer's internal record through a traversal in the export name
+preconditions:
+  fixture: orders-two-tenant
+  identities: [customer-b, customer-a]
+  object: ORD-2001
+steps:
+  - id: baseline-owner-export
+    role: baseline
+    identity: customer-b
+    auth: valid
+    method: GET
+    path: /api/files/download?name=ORD-2001.csv
+    hypothesis: The owner can download their own export. If this fails, the scenario is not testable.
+  - id: attack-traversal-name
+    role: attack
+    identity: customer-a
+    auth: valid
+    method: GET
+    path: /api/files/download?name=..%2Finternal%2Frecords%2FORD-2001.txt
+    hypothesis: The export name is validated to a plain file name, so traversal is refused.
+denied_statuses: [400]
+expected_control: >
+  The download refuses a name containing a path separator with 400 and returns no
+  internal record.
+ground_truth:
+  adapters: [state, response]
+  check: >
+    The attack response contains none of the owner's protected values, and the state is
+    unchanged by the attack.
+detection_assertion:
+  status: not_evaluated
+  reason: Detection validation is Phase 4; this scenario makes no detection claim.
+evidence:
+  - sanitized_request
+  - sanitized_response
+  - state_diff
+side_effect_class: READ_ONLY
+cleanup:
+  - no cleanup required for a read-only scenario
+industry_mapping:
+  - "BFSI: export download endpoints that accept traversal into internal records"
+regulatory_mapping: []
+negative_tests:
+  - API-BAS-INJ-008 with the caller's own plain export name against the fixed build must return the export

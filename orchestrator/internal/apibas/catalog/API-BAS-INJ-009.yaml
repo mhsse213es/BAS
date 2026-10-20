@@ -1,0 +1,61 @@
+id: API-BAS-INJ-009
+name: Unencoded note value injects cookie attributes into the response header
+category: INJ
+claim: property_level
+attack_objective: >
+  A customer stores a note containing a semicolon, so the value written into Set-Cookie
+  carries an attacker-chosen cookie attribute.
+threat_model:
+  attacker: authenticated customer who owns the order
+  identity: customer-b
+  access_level: standard customer, valid token, owner of the object
+  objective: inject a cookie domain attribute into the response header through a note value
+preconditions:
+  fixture: orders-two-tenant
+  identities: [customer-b]
+  object: ORD-2001
+steps:
+  - id: baseline-owner-note
+    role: baseline
+    identity: customer-b
+    auth: valid
+    method: POST
+    path: /api/orders/{object}/notes
+    body: '{"note": "invoice-42"}'
+    hypothesis: The owner can store a plain note. If this fails, the scenario is not testable.
+  - id: attack-note-cookie-attribute
+    role: attack
+    identity: customer-b
+    auth: valid
+    method: POST
+    path: /api/orders/{object}/notes
+    body: '{"note": "x; Domain=attacker.example"}'
+    hypothesis: Note values are restricted to plain characters, so a semicolon is refused before any header is written.
+denied_statuses: [400]
+expected_control: >
+  The note is refused with 400 for a semicolon, and no Set-Cookie header carries the
+  injected attribute.
+forbidden_response_headers:
+  - name: Set-Cookie
+    value: Domain=attacker.example
+    match: contains
+ground_truth:
+  adapters: [state, response]
+  check: >
+    The attack response carries no Set-Cookie header with the injected attribute, and the
+    state is unchanged by the attack.
+detection_assertion:
+  status: not_evaluated
+  reason: Detection validation is Phase 4; this scenario makes no detection claim.
+evidence:
+  - sanitized_request
+  - sanitized_response
+  - state_diff
+side_effect_class: STATE_CHANGE_SANDBOX
+cleanup:
+  - reset the lab to its fixture seed after the run
+industry_mapping:
+  - "BFSI: unencoded user-supplied values written into Set-Cookie headers"
+regulatory_mapping: []
+negative_tests:
+  - API-BAS-INJ-009 with the plain note against the fixed build must PASS on the legitimate note

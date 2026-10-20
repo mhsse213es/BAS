@@ -1,0 +1,56 @@
+id: API-BAS-INJ-001
+name: SQL-style predicate injection in order search returns another customer's orders
+category: INJ
+claim: cross_identity
+attack_objective: >
+  A customer injects an always-true predicate into the order search parameter so the
+  search returns every customer's orders, including protected values.
+threat_model:
+  attacker: authenticated customer in tenant A
+  identity: customer-a
+  access_level: standard customer, valid token
+  objective: read another customer's protected order values through an injected predicate
+preconditions:
+  fixture: orders-two-tenant
+  identities: [customer-b, customer-a]
+  object: ORD-2001
+steps:
+  - id: baseline-owner-search
+    role: baseline
+    identity: customer-b
+    auth: valid
+    method: GET
+    path: /api/search/orders?q=ORD-2001
+    hypothesis: The owner can find their own order by exact ID. If this fails, the scenario is not testable.
+  - id: attack-tautology-predicate
+    role: attack
+    identity: customer-a
+    auth: valid
+    method: GET
+    path: /api/search/orders?q=%27%20OR%201%3D1
+    hypothesis: The search parameter is bound as a value, so an always-true predicate matches nothing outside the caller's own orders.
+denied_statuses: [400]
+clean_is_enforcement: true
+expected_control: >
+  The search treats the parameter as a literal ID and returns only the caller's own
+  matches. The injected predicate returns no protected values of another customer.
+ground_truth:
+  adapters: [state, response]
+  check: >
+    The response contains none of the owner's protected values, and the state is
+    unchanged by the attack.
+detection_assertion:
+  status: not_evaluated
+  reason: Detection validation is Phase 4; this scenario makes no detection claim.
+evidence:
+  - sanitized_request
+  - sanitized_response
+  - state_diff
+side_effect_class: READ_ONLY
+cleanup:
+  - no cleanup required for a read-only scenario
+industry_mapping:
+  - "BFSI: injected search predicates that disclose other customers' account records"
+regulatory_mapping: []
+negative_tests:
+  - API-BAS-INJ-001 against the fixed build must PASS with the injected predicate returning no other customer's data

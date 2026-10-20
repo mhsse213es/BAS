@@ -1,0 +1,56 @@
+id: API-BAS-INJ-002
+name: Expression injection in a report filter returns every customer's orders
+category: INJ
+claim: cross_identity
+attack_objective: >
+  A customer submits an expression in a report filter that evaluates to true for every
+  order, so the report includes other customers' protected values.
+threat_model:
+  attacker: authenticated customer in tenant A
+  identity: customer-a
+  access_level: standard customer, valid token
+  objective: read another customer's protected order values through an evaluated expression
+preconditions:
+  fixture: orders-two-tenant
+  identities: [customer-b, customer-a]
+  object: ORD-2001
+steps:
+  - id: baseline-owner-filter
+    role: baseline
+    identity: customer-b
+    auth: valid
+    method: POST
+    path: /api/reports/filter
+    body: '{"status": "pending"}'
+    hypothesis: The owner can filter their own orders by a permitted status. If this fails, the scenario is not testable.
+  - id: attack-expression-disjunct
+    role: attack
+    identity: customer-a
+    auth: valid
+    method: POST
+    path: /api/reports/filter
+    body: '{"expression": "status == x || 1 == 1"}'
+    hypothesis: The filter accepts only a permitted status value. An expression field is refused and not evaluated.
+denied_statuses: [400]
+expected_control: >
+  The report filter refuses the expression field with 400 and returns no order data.
+ground_truth:
+  adapters: [state, response]
+  check: >
+    The attack response contains none of the owner's protected values, and the state is
+    unchanged by the attack.
+detection_assertion:
+  status: not_evaluated
+  reason: Detection validation is Phase 4; this scenario makes no detection claim.
+evidence:
+  - sanitized_request
+  - sanitized_response
+  - state_diff
+side_effect_class: STATE_CHANGE_SANDBOX
+cleanup:
+  - reset the lab to its fixture seed after the run
+industry_mapping:
+  - "BFSI: report filters that evaluate caller expressions over customer records"
+regulatory_mapping: []
+negative_tests:
+  - API-BAS-INJ-002 with a legitimate status filter against the fixed build must still return the caller's own orders

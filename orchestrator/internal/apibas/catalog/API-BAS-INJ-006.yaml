@@ -1,0 +1,57 @@
+id: API-BAS-INJ-006
+name: Duplicate JSON keys make a validated status value bypass validation
+category: INJ
+claim: property_level
+attack_objective: >
+  A customer sends a JSON body with two status keys. The validator checks the first and
+  the handler applies the last, so an unvalidated status is written to their own order.
+threat_model:
+  attacker: authenticated customer who owns the order
+  identity: customer-b
+  access_level: standard customer, valid token, owner of the object
+  objective: set an unvalidated status on their own order through a duplicate key
+preconditions:
+  fixture: orders-two-tenant
+  identities: [customer-b]
+  object: ORD-2001
+steps:
+  - id: baseline-owner-status
+    role: baseline
+    identity: customer-b
+    auth: valid
+    method: POST
+    path: /api/orders/{object}/settings
+    body: '{"status": "shipped"}'
+    hypothesis: The owner can set a permitted status on their own order. If this fails, the scenario is not testable.
+  - id: attack-duplicate-status-key
+    role: attack
+    identity: customer-b
+    auth: valid
+    method: POST
+    path: /api/orders/{object}/settings
+    body: '{"status": "shipped", "status": "refunded"}'
+    hypothesis: Duplicate keys are refused, so no second status value is applied.
+denied_statuses: [400]
+expected_control: >
+  The update refuses a body with a duplicate status key with 400, and the order status
+  is unchanged.
+ground_truth:
+  adapters: [state, response]
+  check: >
+    The order status is identical before and after the attack, and the response
+    discloses no protected values.
+detection_assertion:
+  status: not_evaluated
+  reason: Detection validation is Phase 4; this scenario makes no detection claim.
+evidence:
+  - sanitized_request
+  - sanitized_response
+  - state_diff
+side_effect_class: STATE_CHANGE_SANDBOX
+cleanup:
+  - reset the lab to its fixture seed after the run
+industry_mapping:
+  - "BFSI: duplicate-key bypass of order status validation"
+regulatory_mapping: []
+negative_tests:
+  - API-BAS-INJ-006 with a single valid status against the fixed build must PASS on the legitimate update

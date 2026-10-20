@@ -1,0 +1,57 @@
+id: API-BAS-INJ-010
+name: Server-side request forgery in an import fetch reads an internal order record
+category: INJ
+claim: cross_identity
+attack_objective: >
+  A customer supplies an internal path as the import source, so the server fetches an
+  internal record belonging to another customer and returns its protected values.
+threat_model:
+  attacker: authenticated customer in tenant A
+  identity: customer-a
+  access_level: standard customer, valid token
+  objective: read another customer's internal record through a server-side fetch
+preconditions:
+  fixture: orders-two-tenant
+  identities: [customer-b, customer-a]
+  object: ORD-2001
+steps:
+  - id: baseline-owner-import
+    role: baseline
+    identity: customer-b
+    auth: valid
+    method: POST
+    path: /api/imports/fetch
+    body: '{"source": "ORD-2001"}'
+    hypothesis: The owner can import their own order by ID. If this fails, the scenario is not testable.
+  - id: attack-internal-source
+    role: attack
+    identity: customer-a
+    auth: valid
+    method: POST
+    path: /api/imports/fetch
+    body: '{"source": "/internal/orders/ORD-2001"}'
+    hypothesis: Import sources are restricted to order IDs, so an internal path is refused and nothing is fetched.
+denied_statuses: [403]
+expected_control: >
+  The import refuses a URL or internal path source with 403, and no internal record is
+  fetched.
+ground_truth:
+  adapters: [state, response]
+  check: >
+    The attack response contains none of the owner's protected values, and the state is
+    unchanged by the attack.
+detection_assertion:
+  status: not_evaluated
+  reason: Detection validation is Phase 4; this scenario makes no detection claim.
+evidence:
+  - sanitized_request
+  - sanitized_response
+  - state_diff
+side_effect_class: STATE_CHANGE_SANDBOX
+cleanup:
+  - reset the lab to its fixture seed after the run
+industry_mapping:
+  - "BFSI: import and fetch features that let callers reach internal services"
+regulatory_mapping: []
+negative_tests:
+  - API-BAS-INJ-010 with a plain order ID against the fixed build must return the caller's own order

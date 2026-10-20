@@ -1,0 +1,56 @@
+id: API-BAS-INJ-011
+name: Prototype key in an attribute merge rewrites the owner of the order
+category: INJ
+claim: property_level
+attack_objective: >
+  A customer sends a __proto__ object in an attribute merge, so a nested owner_id is
+  merged into the order record and reassigns ownership.
+threat_model:
+  attacker: authenticated customer who owns the order
+  identity: customer-b
+  access_level: standard customer, valid token, owner of the object
+  objective: reassign ownership of their own order through an unsafe object merge
+preconditions:
+  fixture: orders-two-tenant
+  identities: [customer-b]
+  object: ORD-2001
+steps:
+  - id: baseline-owner-attribute
+    role: baseline
+    identity: customer-b
+    auth: valid
+    method: POST
+    path: /api/orders/{object}/attributes
+    body: '{"gift_note": "thanks"}'
+    hypothesis: The owner can set a plain attribute on their own order. If this fails, the scenario is not testable.
+  - id: attack-proto-owner-merge
+    role: attack
+    identity: customer-b
+    auth: valid
+    method: POST
+    path: /api/orders/{object}/attributes
+    body: '{"__proto__": {"owner_id": "cust-a"}}'
+    hypothesis: Reserved keys are refused before any merge, so the owner of the order is unchanged.
+denied_statuses: [400]
+expected_control: >
+  The merge refuses the reserved key with 400, and the owner of the order is unchanged.
+ground_truth:
+  adapters: [state, response]
+  check: >
+    The owner of the order is identical before and after the attack, and the response
+    discloses no protected values.
+detection_assertion:
+  status: not_evaluated
+  reason: Detection validation is Phase 4; this scenario makes no detection claim.
+evidence:
+  - sanitized_request
+  - sanitized_response
+  - state_diff
+side_effect_class: STATE_CHANGE_SANDBOX
+cleanup:
+  - reset the lab to its fixture seed after the run
+industry_mapping:
+  - "BFSI: unsafe object merges that reassign account or order ownership"
+regulatory_mapping: []
+negative_tests:
+  - API-BAS-INJ-011 with a plain attribute against the fixed build must PASS on the legitimate merge
