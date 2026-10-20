@@ -2059,3 +2059,17 @@ claimed for them.
 
 - Network-level service behaviour (separate listeners) is not tested. The boundaries are in-process.
 - The two scenarios make no detection claim.
+
+## Open items for QA (owner: user)
+
+### Timing qualification gate
+
+- **Item:** Once a controlled staging machine is qualified (documented configuration, recorded fingerprint and load,
+  qualified calibration record, approved threshold), run five repeat runs per build for each timing scenario. Require
+  identical verdicts on every run before making any timing-based validation claim.
+- **Blocked on:** (1) a named product or security requirement owner approving the ceiling (ABUSE-002's 250 ms is
+  provisional); (2) a controlled staging machine. Until both are resolved, do not start new timing scenarios or claim
+  timing validation.
+- **Current state:** ABUSE-002 carries `timing_claim: provisional`. It is evaluated but not validated. The developer
+  workstation's five stable runs are diagnostic evidence only.
+- **Source:** `docs/api-bas-timing-policy.md` (decisions recorded, execution status).
