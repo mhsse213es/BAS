@@ -281,6 +281,7 @@ var routeMatrix = []routeCase{
 	{http.MethodGet, "/api/me/permissions", tierAny, ""},
 	{http.MethodGet, "/api/me", tierAny, ""},
 	{http.MethodGet, "/api/scenarios/runs/{runId}/verifications", tierAny, ""},
+	{http.MethodGet, "/api/scenarios/runs/{runId}/dlp-records", tierAny, ""},
 	{http.MethodGet, "/api/scenarios/runs/{runId}/verifications/{expectationId}/history", tierAny, ""},
 	{http.MethodGet, "/api/verifications/{id}/evidence", tierAny, ""},
 	{http.MethodGet, "/api/evidence/{id}/download", tierAny, ""},
