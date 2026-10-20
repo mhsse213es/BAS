@@ -167,8 +167,8 @@ func (s Scenario) Validate() error {
 			return fmt.Errorf("contract: %s: %s is required", s.ID, field)
 		}
 	}
-	if len(s.DeniedStatuses) == 0 {
-		return fmt.Errorf("contract: %s: denied_statuses must list the enforcement codes", s.ID)
+	if len(s.DeniedStatuses) == 0 && !s.CleanIsEnforced {
+		return fmt.Errorf("contract: %s: denied_statuses must list the enforcement codes, or set clean_is_enforcement", s.ID)
 	}
 	for _, c := range s.DeniedStatuses {
 		if c < 400 || c > 499 {
@@ -201,6 +201,9 @@ func (s Scenario) Validate() error {
 		return fmt.Errorf("contract: %s: ground_truth must include the state adapter", s.ID)
 	}
 	for _, h := range s.ForbiddenResponseHeaders {
+		if h.Match != "" && h.Match != "exact" && h.Match != "contains" {
+			return fmt.Errorf("contract: %s: forbidden_response_headers match must be exact or contains, got %q", s.ID, h.Match)
+		}
 		if strings.TrimSpace(h.Name) == "" || h.Value == "" {
 			return fmt.Errorf("contract: %s: forbidden_response_headers entries need a name and a value", s.ID)
 		}
@@ -327,4 +330,6 @@ func (s Scenario) validateSideEffects() error {
 type HeaderRule struct {
 	Name  string `yaml:"name"`
 	Value string `yaml:"value"`
+	// Match is "exact" (the default) or "contains" (case-insensitive substring).
+	Match string `yaml:"match"`
 }

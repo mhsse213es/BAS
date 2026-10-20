@@ -440,12 +440,21 @@ func forbiddenHeaderHits(ex Exchange, rules []contract.HeaderRule) int {
 	n := 0
 	for _, rule := range rules {
 		for _, v := range ex.headers.Values(rule.Name) {
-			if v == rule.Value {
+			if headerMatches(v, rule) {
 				n++
 			}
 		}
 	}
 	return n
+}
+
+// headerMatches reports whether one header value matches a rule, exactly or as a
+// case-insensitive substring.
+func headerMatches(v string, rule contract.HeaderRule) bool {
+	if rule.Match == "contains" {
+		return strings.Contains(strings.ToLower(v), strings.ToLower(rule.Value))
+	}
+	return v == rule.Value
 }
 
 // unsignedJWT builds a token with alg "none" and an empty signature. It is

@@ -228,6 +228,13 @@ func Flaws() []Flaw {
 				"Fixed: after the attempt limit the request is answered 429 and no further attempts are processed.",
 		},
 		{
+			ID:          "LAB-DATA-CACHE-001",
+			ScenarioID:  "API-BAS-DATA-006",
+			Description: "GET /api/orders/{id}/status marks an owner's public-field response as publicly cacheable.",
+			Oracle: "Vulnerable: the owner's status response carries Cache-Control with public (exposed). " +
+				"Fixed: the response carries private, no-store, so a shared cache does not keep it.",
+		},
+		{
 			ID:          "LAB-AUTHZ-MASS-001",
 			ScenarioID:  "API-BAS-AUTHZ-003",
 			Description: "PATCH /api/orders/{id} binds every submitted field, including owner_id, from the request body.",
@@ -359,6 +366,7 @@ func (s *Server) Handler() http.Handler {
 	}
 	mux.HandleFunc("POST /lab/token-status", s.adminOnly(s.tokenStatus))
 	mux.HandleFunc("GET /api/orders/{id}/summary", s.getSummary)
+	mux.HandleFunc("GET /api/orders/{id}/status", s.getStatus)
 	if s.cfg.Mode == ModeVulnerable {
 		// The debug route exists only in the vulnerable build (LAB-DISC-DEBUG-001).
 		mux.HandleFunc("GET /debug/orders/{id}", s.debugOrder)
@@ -680,6 +688,35 @@ func (s *Server) getOrderV1(w http.ResponseWriter, r *http.Request) {
 
 // getSummary returns a projection for the owner. The fixed build returns only
 // public fields; the vulnerable build returns the full record (LAB-DATA-PROJ-001).
+// getStatus returns the public projection of an order to its owner. It holds no
+// protected values, so the caching check is not confused with a data leak. The
+// vulnerable build marks the response publicly cacheable (LAB-DATA-CACHE-001); the
+// fixed build marks it private, no-store.
+func (s *Server) getStatus(w http.ResponseWriter, r *http.Request) {
+	caller, st := s.identify(r)
+	if st != authOK {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthenticated"})
+		return
+	}
+	if s.cfg.Mode == ModeVulnerable {
+		w.Header().Set("Cache-Control", "public, max-age=300")
+	} else {
+		w.Header().Set("Cache-Control", "private, no-store")
+	}
+	s.mu.Lock()
+	order, found := s.orders[r.PathValue("id")]
+	var body map[string]any
+	if found && order.OwnerID == caller {
+		body = publicBody(order)
+	}
+	s.mu.Unlock()
+	if found && body == nil {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
+		return
+	}
+	respondOrder(w, found, body)
+}
+
 func (s *Server) getSummary(w http.ResponseWriter, r *http.Request) {
 	caller, st := s.identify(r)
 	if st != authOK {

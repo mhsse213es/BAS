@@ -1,0 +1,60 @@
+id: API-BAS-DATA-006
+name: Authenticated order response marked publicly cacheable
+category: DATA
+claim: property_level
+attack_objective: >
+  An authenticated per-customer response is marked as publicly cacheable, so a
+  shared cache could store it and serve it to other customers.
+threat_model:
+  attacker: customer whose response might be stored by a shared cache between customers
+  identity: customer-b
+  access_level: standard customer, valid token, owner of the order
+  objective: have a shared cache keep and serve the owner's order to other customers
+preconditions:
+  fixture: orders-two-tenant
+  identities: [customer-b]
+  object: ORD-2001
+steps:
+  - id: baseline-owner-read
+    role: baseline
+    identity: customer-b
+    auth: valid
+    method: GET
+    path: /api/orders/{object}/status
+    hypothesis: The owner can read their order. If this fails, the scenario is not testable.
+  - id: attack-owner-response-caching
+    role: attack
+    identity: customer-b
+    auth: valid
+    method: GET
+    path: /api/orders/{object}/status
+    hypothesis: Authenticated per-customer responses are private and not stored by shared caches, so no Cache-Control grants public caching.
+clean_is_enforcement: true
+forbidden_response_headers:
+  - name: Cache-Control
+    value: public
+    match: contains
+expected_control: >
+  A response that carries an authenticated customer's data is marked private, with
+  no public caching directive, so a shared cache does not store it.
+ground_truth:
+  adapters: [state, response]
+  check: >
+    The state is unchanged by the request, and the response carries no public
+    caching directive.
+detection_assertion:
+  status: not_evaluated
+  reason: Detection validation is Phase 4; this scenario makes no detection claim.
+evidence:
+  - sanitized_request
+  - sanitized_response
+  - response_headers
+  - state_diff
+side_effect_class: READ_ONLY
+cleanup:
+  - none; the scenario creates no records
+industry_mapping:
+  - "BFSI: caching of authenticated account data by shared intermediaries"
+regulatory_mapping: []
+negative_tests:
+  - API-BAS-DATA-006 against the fixed build must PASS
