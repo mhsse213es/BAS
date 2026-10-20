@@ -32,7 +32,7 @@ type isolationCheckRequest struct {
 
 type isolationCheckResponse struct {
 	Results         []zoneisolation.IsolationCheckResult `json:"results"`
-	SearchExhausted bool                                  `json:"searchExhausted,omitempty"`
+	SearchExhausted bool                                 `json:"searchExhausted,omitempty"`
 }
 
 // FindIsolationChecks -- POST /api/isolation-checks. Checks every

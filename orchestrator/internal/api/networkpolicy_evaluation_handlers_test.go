@@ -116,7 +116,9 @@ func TestGetNetworkReachabilityComparison_EndToEndAgainstRealDiscoveryRun(t *tes
 		if discoveryRec.Code != http.StatusCreated {
 			t.Fatalf("trigger discovery: status = %d, body = %s", discoveryRec.Code, discoveryRec.Body.String())
 		}
-		var discoveryResp struct{ RunID string `json:"runId"` }
+		var discoveryResp struct {
+			RunID string `json:"runId"`
+		}
 		if err := json.Unmarshal(discoveryRec.Body.Bytes(), &discoveryResp); err != nil {
 			t.Fatalf("decode discovery: %v", err)
 		}
@@ -186,7 +188,9 @@ func TestGetNetworkReachabilityComparison_SourceRestrictedRuleNotFalselyMatchedB
 		if discoveryRec.Code != http.StatusCreated {
 			t.Fatalf("trigger discovery: status = %d, body = %s", discoveryRec.Code, discoveryRec.Body.String())
 		}
-		var discoveryResp struct{ RunID string `json:"runId"` }
+		var discoveryResp struct {
+			RunID string `json:"runId"`
+		}
 		if err := json.Unmarshal(discoveryRec.Body.Bytes(), &discoveryResp); err != nil {
 			t.Fatalf("decode discovery: %v", err)
 		}

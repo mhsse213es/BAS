@@ -15,16 +15,16 @@ import (
 
 // NavigatorLayer is a MITRE ATT&CK Navigator layer document.
 type NavigatorLayer struct {
-	Name        string             `json:"name"`
-	Versions    NavigatorVersions  `json:"versions"`
-	Domain      string             `json:"domain"`
-	Description string             `json:"description"`
-	Techniques  []NavigatorTech    `json:"techniques"`
-	Gradient    NavigatorGradient  `json:"gradient"`
-	LegendItems []NavigatorLegend  `json:"legendItems"`
-	Metadata    []NavigatorKV      `json:"metadata,omitempty"`
-	Layout      NavigatorLayout    `json:"layout"`
-	HideDisable bool               `json:"hideDisabled"`
+	Name        string            `json:"name"`
+	Versions    NavigatorVersions `json:"versions"`
+	Domain      string            `json:"domain"`
+	Description string            `json:"description"`
+	Techniques  []NavigatorTech   `json:"techniques"`
+	Gradient    NavigatorGradient `json:"gradient"`
+	LegendItems []NavigatorLegend `json:"legendItems"`
+	Metadata    []NavigatorKV     `json:"metadata,omitempty"`
+	Layout      NavigatorLayout   `json:"layout"`
+	HideDisable bool              `json:"hideDisabled"`
 }
 
 type NavigatorVersions struct {

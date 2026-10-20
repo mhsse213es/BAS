@@ -108,7 +108,9 @@ func TestBoardRiskLabel(t *testing.T) {
 	for cls, want := range cases {
 		rep.Summary.Classification = cls
 		var b bytes.Buffer
-		if err := RenderBoardOnePager(&b, rep, nil, ""); err != nil { t.Fatal(err) }
+		if err := RenderBoardOnePager(&b, rep, nil, ""); err != nil {
+			t.Fatal(err)
+		}
 		if !strings.Contains(b.String(), ">"+want+"</div>") {
 			t.Errorf("classification %q: expected %q in hero", cls, want)
 		}

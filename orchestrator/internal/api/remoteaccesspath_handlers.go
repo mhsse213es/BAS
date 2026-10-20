@@ -34,7 +34,7 @@ type remoteAccessPathRequest struct {
 // TransitViolations attached additively -- never altering a result's
 // State.
 type remoteAccessPathResponse struct {
-	Results           []networkpath.PathResult       `json:"results"`
+	Results           []networkpath.PathResult        `json:"results"`
 	SearchExhausted   bool                            `json:"searchExhausted,omitempty"`
 	TransitViolations []remoteaccess.TransitViolation `json:"transitViolations,omitempty"`
 }
