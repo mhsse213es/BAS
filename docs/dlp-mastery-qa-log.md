@@ -187,6 +187,14 @@ This is the single place to check before claiming either DLP vendor connector is
 
 **Resolution path:** one run against the lab HTTPS sink to confirm each step records a receipt. Then decide whether the DLP product under test should be expected to unpack nested archives, which is a policy decision, not a scenario one.
 
+### 19. Web upload and form scenario (dlp-exfiltration-web-upload) — not run; real browser form not tested — open
+
+**Status:** Open. Two sink-verified steps: a browser-shaped file upload and a browser-shaped form submission (commit 9ecae9fd). Signed and catalogued. Not run end to end.
+
+**Limits, stated in the scenario:** the scenario does not drive a browser. The HTTPS sink decodes JSON only, so a real multipart or urlencoded form cannot produce a receipt. The steps test the request shape and headers, not browser behaviour and not a web-form product control.
+
+**Resolution path:** a true form test needs a sink endpoint that accepts multipart and urlencoded bodies. That is a listener change and a product decision. Until then, leave this item open and do not describe the steps as form tests.
+
 ## Resolved items
 
 - Item 11: the eight unclaimed AI-prompt and DB-export steps are catalogued (commit 226b1f40). Values come from each step's own command; no payload changed. Both drift checks pass.
