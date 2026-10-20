@@ -65,11 +65,11 @@ func TestThrottledFiresOnFirst(t *testing.T) {
 
 func TestGradeHonoursSeverityAndCorrelation(t *testing.T) {
 	alerts := []Alert{{RuleID: "APIBAS-REL-002", Severity: SeverityMedium, CorrelationID: "c"}}
-	if got := Grade(alerts, "APIBAS-REL-002", SeverityHigh, "c"); got != "missed" {
-		t.Errorf("medium alert against high minimum = %s, want missed", got)
+	if got := Grade(alerts, "APIBAS-REL-002", SeverityHigh, "c"); got != "not_detected" {
+		t.Errorf("medium alert against high minimum = %s, want not_detected", got)
 	}
-	if got := Grade(alerts, "APIBAS-REL-002", SeverityMedium, "other"); got != "missed" {
-		t.Errorf("alert for another correlation = %s, want missed", got)
+	if got := Grade(alerts, "APIBAS-REL-002", SeverityMedium, "other"); got != "not_detected" {
+		t.Errorf("alert for another correlation = %s, want not_detected", got)
 	}
 	if got := Grade(alerts, "APIBAS-REL-002", SeverityMedium, "c"); got != "detected" {
 		t.Errorf("matching alert = %s, want detected", got)

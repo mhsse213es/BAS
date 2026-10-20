@@ -64,18 +64,37 @@ func outcomeFor(status int) string {
 	return "success"
 }
 
-// ownerOfPath returns the owner of the order a /api/orders/{id}... path names, or ""
-// when the path names no order.
+// ownerOfPath returns the owner of the first order a request path names, in any route, or "" when the
+// path names no order. Owner attribution follows the object ID wherever it sits in the path, so the
+// fixture sees object access on every route whose path carries the ID.
 func (s *Server) ownerOfPath(path string) string {
-	const prefix = "/api/orders/"
-	if !strings.HasPrefix(path, prefix) {
-		return ""
-	}
-	id := strings.SplitN(strings.TrimPrefix(path, prefix), "/", 2)[0]
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if o, ok := s.orders[id]; ok {
-		return o.OwnerID
+	for _, seg := range strings.Split(path, "/") {
+		if o, ok := s.orders[seg]; ok {
+			return o.OwnerID
+		}
+	}
+	return ""
+}
+
+// ownerOfRequest attributes the object a request names: first from its path, then from its query
+// values, decoded. A traversal parameter that names an order is therefore still attributed.
+func (s *Server) ownerOfRequest(r *http.Request) string {
+	if o := s.ownerOfPath(r.URL.Path); o != "" {
+		return o
+	}
+	q := r.URL.Query()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, o := range sortedOrders(s.orders) {
+		for _, vals := range q {
+			for _, v := range vals {
+				if strings.Contains(v, o.ID) {
+					return o.OwnerID
+				}
+			}
+		}
 	}
 	return ""
 }
@@ -95,7 +114,7 @@ func (s *Server) logAccess(next http.Handler) http.Handler {
 		} else if st != authMissing {
 			identity = "unknown"
 		}
-		owner := s.ownerOfPath(r.URL.Path)
+		owner := s.ownerOfRequest(r)
 		s.evMu.Lock()
 		s.eventSeq++
 		s.events = append(s.events, accessEvent{

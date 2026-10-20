@@ -194,12 +194,12 @@ func evaluate(events []Event, rules []Rule, correlationID, source string) []Aler
 }
 
 // Grade returns "detected" when an alert for the expected rule exists for this
-// correlation ID at or above the minimum severity, and "missed" otherwise.
+// correlation ID at or above the minimum severity, and "not_detected" otherwise.
 func Grade(alerts []Alert, expectRule string, minSeverity Severity, correlationID string) string {
 	for _, a := range alerts {
 		if a.RuleID == expectRule && a.CorrelationID == correlationID && a.Severity >= minSeverity {
 			return "detected"
 		}
 	}
-	return "missed"
+	return "not_detected"
 }

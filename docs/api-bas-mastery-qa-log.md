@@ -1733,3 +1733,62 @@ Each limit is stated where it applies:
 
 - ABUSE-002 timing flake (pre-existing; needs a calibration decision, not a code fix here).
 - The Windows `build.ps1` run and the staging item for ABUSE-002, as in earlier phases.
+
+
+## Phase 34 - detection (Phase 4): first slice, Elastic-style fixture
+
+### SIEM decision
+
+The primary emulated SIEM is **Elastic Security**: its rule set and event fields already exist in
+`internal/apibas/detect`, so the fixture rules are modelled on it. The Sentinel fixture stays as a
+parity check. No scenario uses it yet. Both are fixtures, and every result is labelled not validated
+against a live SIEM. Neither has been run against a live product.
+
+### What changed
+
+- **Coverage of the REL-004 rule.** 25 cross-identity scenarios gained a detection block that expects
+  `APIBAS-REL-004` (access to an object owned by another identity), with `min_severity: high`. Their
+  `detection_assertion` moved from `not_evaluated` to `fixture_validated`. AUTHZ-001 already had one.
+  ABUSE-001 already had a block (REL-001). In total 27 scenarios are fixture-validated and 42 remain
+  `not_evaluated`, each for a reason given below.
+- **Vocabulary.** The fixture returned `missed`. The blueprint defines `not_detected`, so the fixture
+  now returns `not_detected`.
+- **Owner attribution (lab).** The lab attributed an owner only from `/api/orders/{id}` paths. It now
+  attributes from any path segment that names an order, and from decoded query values. Before this,
+  INJ-008's traversal parameter, which names ORD-2001, was invisible to the rule.
+- **Expectation derived from the fixture, not a pattern.** `TestPhase34_DetectionMatchesFixtureOwnership`
+  computes each expected result from the fixture's ownership and the attacker's identity, before the
+  run. A detection is expected when the request names an object owned by someone other than the
+  attacker. The test covers both builds, and it passes.
+
+### Two findings the expectation encodes
+
+- **Forged identity headers blind the SIEM in the vulnerable build.** AUTHN-008 (`X-Customer-Id`) and
+  GWAY-001 (`X-Gateway-Identity`) are not detected in the vulnerable build, because the vulnerable product
+  accepts the forged header and the access log records the claimed identity as the caller. The fixed build
+  ignores the header and is detected. This is a real blind spot: a SIEM that records the identity the
+  product accepted cannot see identity forgery. The expectation models it and is not changed to hide it.
+- **Body-carried object IDs are outside the rule's view.** GraphQL, SOAP, gRPC and WebSocket scenarios
+  name the object in the request body, which the access log does not record. These are expected
+  `not_detected`. Closing that gap needs the SIEM to see request bodies, which is a design decision.
+
+### What is not done
+
+- 42 scenarios remain `not_evaluated`. Most are property-level or function-level attacks (injection with
+  no object reference, counted-request abuse, header checks). REL-001 to REL-004 do not describe them.
+  Detecting them needs new rules that the event model can support, such as a rule on repeated throttled
+  requests from one identity, or on server faults. Each needs its own expectation before it is added.
+- DET-009 (delayed telemetry, `inconclusive` outside the window) is not built. The fixture has no delay
+  injection.
+- ABUSE-002 is still intermittent (pre-existing, timing-based).
+
+### Measured result after this change (lab against lab)
+
+```
+Catalogued:   69
+Implemented:  69/69
+Evaluated:    69/69
+Validated:    69/69 (this run; ABUSE-002 is intermittent, see Phase 33)
+```
+
+Exploitability and control verdicts are unchanged by the detection work.

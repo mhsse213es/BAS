@@ -31,8 +31,8 @@ func TestCrossIdentityFiresOnDeniedAndAllowed(t *testing.T) {
 func TestOwnerAccessDoesNotFireCrossIdentity(t *testing.T) {
 	f := NewElasticFixture()
 	_ = f.Ingest([]Event{ownedEvent(1, "customer-b", "customer-b", "success", 200)})
-	if got := Grade(f.Alerts("c"), "APIBAS-REL-004", SeverityHigh, "c"); got != "missed" {
-		t.Fatalf("owner access = %s, want missed", got)
+	if got := Grade(f.Alerts("c"), "APIBAS-REL-004", SeverityHigh, "c"); got != "not_detected" {
+		t.Fatalf("owner access = %s, want not_detected", got)
 	}
 }
 
@@ -40,7 +40,7 @@ func TestOwnerAccessDoesNotFireCrossIdentity(t *testing.T) {
 func TestNoOwnerNeverFiresCrossIdentity(t *testing.T) {
 	f := NewElasticFixture()
 	_ = f.Ingest([]Event{ownedEvent(1, "customer-a", "", "success", 200)})
-	if got := Grade(f.Alerts("c"), "APIBAS-REL-004", SeverityHigh, "c"); got != "missed" {
-		t.Fatalf("event with no owner = %s, want missed", got)
+	if got := Grade(f.Alerts("c"), "APIBAS-REL-004", SeverityHigh, "c"); got != "not_detected" {
+		t.Fatalf("event with no owner = %s, want not_detected", got)
 	}
 }
