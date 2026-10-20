@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/organizations"
@@ -100,6 +101,21 @@ func awsGate(docs []string, action string) (PathState, string) {
 // returns nil when both pass unconditionally, Blocked with the layer that blocked,
 // or a conditional or unknown state that the caller must carry forward.
 func awsEnforcementVerdict(edge *CloudPermission) (*EvaluationResult, PathState) {
+	if edge.Attributes["resource_policy_unreadable"] == "true" {
+		return &EvaluationResult{State: Unknown, BlockedBy: "resource-policy-unreadable", EvaluationMethod: "hand-coded-rules"}, Unknown
+	}
+	resourceConditional := false
+	if doc, ok := edge.Attributes["resource_policy_document"]; ok {
+		state, reason := awsResourcePolicyGate(doc, edge)
+		switch state {
+		case Blocked:
+			return &EvaluationResult{State: Blocked, BlockedBy: "resource-policy:" + reason, EvaluationMethod: "hand-coded-rules"}, Blocked
+		case Unknown:
+			return &EvaluationResult{State: Unknown, BlockedBy: reason, EvaluationMethod: "hand-coded-rules"}, Unknown
+		case ConditionallyReachable:
+			resourceConditional = true
+		}
+	}
 	if edge.Attributes["boundary_unresolved"] == "true" {
 		return &EvaluationResult{State: Unknown, BlockedBy: "permissions-boundary-unreadable", EvaluationMethod: "hand-coded-rules"}, Unknown
 	}
@@ -140,7 +156,7 @@ func awsEnforcementVerdict(edge *CloudPermission) (*EvaluationResult, PathState)
 			}
 		}
 	}
-	if conditional {
+	if conditional || resourceConditional {
 		return nil, ConditionallyReachable
 	}
 	return nil, PolicySupported
@@ -230,4 +246,92 @@ func (c *AWSDiscoveryClient) scpLevels(ctx context.Context) ([][]string, bool, e
 		levels = append(levels, docs)
 	}
 	return levels, true, nil
+}
+
+// awsResourcePolicyGate applies a bucket policy to an edge. Only Deny statements
+// matter here. An Allow in a resource policy grants nothing in this model:
+// same-account access comes from the identity's own policies, and cross-account
+// access is counted as unresolved trust elsewhere, not modelled.
+func awsResourcePolicyGate(doc string, edge *CloudPermission) (PathState, string) {
+	stmts, err := parseStatements(doc)
+	if err != nil {
+		return Unknown, "unparseable-resource-policy"
+	}
+	denyCond := false
+	for _, st := range stmts {
+		if st.Effect != "Deny" {
+			continue
+		}
+		if !awsResourceCovers(st, edge.Target.CanonicalID) ||
+			!awsPrincipalCovers(st, edge.Source.CanonicalID) ||
+			!awsStatementCovers(st, edge.Action) {
+			continue
+		}
+		if len(st.Condition) > 0 {
+			denyCond = true
+			continue
+		}
+		return Blocked, "explicit-deny"
+	}
+	if denyCond {
+		return ConditionallyReachable, awsGateCondition
+	}
+	return PolicySupported, ""
+}
+
+// awsResourceCovers reports whether a statement's Resource or NotResource field
+// covers the target. A statement with neither covers the whole bucket policy's
+// bucket.
+func awsResourceCovers(st awsStatement, target string) bool {
+	if len(st.NotResource) > 0 {
+		for _, p := range stringOrList(st.NotResource) {
+			if globMatch(p, target) {
+				return false
+			}
+		}
+		return true
+	}
+	resources := stringOrList(st.Resource)
+	if len(resources) == 0 {
+		return true
+	}
+	for _, p := range resources {
+		if globMatch(p, target) {
+			return true
+		}
+	}
+	return false
+}
+
+// awsPrincipalCovers reports whether a resource-policy statement applies to the
+// source identity, through Principal or NotPrincipal.
+func awsPrincipalCovers(st awsStatement, source string) bool {
+	if len(st.NotPrincipal) > 0 {
+		return !awsPrincipalNamed(st.NotPrincipal, source)
+	}
+	if len(st.Principal) == 0 {
+		return false
+	}
+	return awsPrincipalNamed(st.Principal, source)
+}
+
+// awsPrincipalNamed reports whether a Principal clause names source, directly or
+// through its account root (arn:aws:iam::ACCOUNT:root names every principal of
+// that account).
+func awsPrincipalNamed(raw json.RawMessage, source string) bool {
+	arns, wildcard := awsPrincipalARNs(raw)
+	if wildcard {
+		return true
+	}
+	parts := strings.SplitN(source, ":", 6)
+	if len(parts) < 6 {
+		return false
+	}
+	root := strings.Join(parts[:5], ":") + ":root"
+	for _, arn := range arns {
+		if arn == source || arn == root {
+			return true
+		}
+	}
+	return false
 }

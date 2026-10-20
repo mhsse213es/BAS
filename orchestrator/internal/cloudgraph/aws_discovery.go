@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/url"
 	"strings"
@@ -15,6 +16,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/organizations"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
+	"github.com/aws/smithy-go"
 )
 
 // AWSIAMAPI is the IAM surface AWS discovery reads from. *iam.Client
@@ -37,6 +39,7 @@ type AWSBackupAPI interface {
 // AWSS3API lists buckets so they become resources that policies can target.
 type AWSS3API interface {
 	ListBuckets(ctx context.Context, params *s3.ListBucketsInput, optFns ...func(*s3.Options)) (*s3.ListBucketsOutput, error)
+	GetBucketPolicy(ctx context.Context, params *s3.GetBucketPolicyInput, optFns ...func(*s3.Options)) (*s3.GetBucketPolicyOutput, error)
 }
 
 // AWSDiscoveryClient discovers a live AWS account's IAM identities, identity
@@ -163,13 +166,14 @@ func awsDecodePolicy(raw string) (string, error) {
 // awsStatement is one IAM policy statement. Action, Resource and Principal are
 // raw because each may be a string, a list, or (Principal) the bare "*".
 type awsStatement struct {
-	Effect      string          `json:"Effect"`
-	Action      json.RawMessage `json:"Action"`
-	NotAction   json.RawMessage `json:"NotAction"`
-	Resource    json.RawMessage `json:"Resource"`
-	NotResource json.RawMessage `json:"NotResource"`
-	Principal   json.RawMessage `json:"Principal"`
-	Condition   json.RawMessage `json:"Condition"`
+	Effect       string          `json:"Effect"`
+	Action       json.RawMessage `json:"Action"`
+	NotAction    json.RawMessage `json:"NotAction"`
+	Resource     json.RawMessage `json:"Resource"`
+	NotResource  json.RawMessage `json:"NotResource"`
+	NotPrincipal json.RawMessage `json:"NotPrincipal"`
+	Principal    json.RawMessage `json:"Principal"`
+	Condition    json.RawMessage `json:"Condition"`
 }
 
 type awsPolicyDocument struct {
@@ -249,17 +253,19 @@ func awsActionMatches(pattern, action string) bool {
 // the evaluator cannot model, so none of them are silently dropped.
 type AWSDiscoveryStats struct {
 	DiscoveryStats
-	NotActionStatements  int  // NotAction or NotResource statements; not expanded, so no edges emitted
-	ConditionalAllows    int  // Allow statements with Condition; edges emitted, conditions unevaluated
-	WildcardTrustSkipped int  // trust statements with Principal "*"; no attributable identity
-	UnresolvedTrust      int  // trust principals (account roots, deleted-role IDs) not in inventory
-	SkippedDocuments     int  // identity policies that failed to decode
-	BackupVaults         int  // backup vaults discovered
-	BackupVaultsSkipped  bool // no backup inventory source attached
-	SCPLevels            int  // organization levels read (account, OUs, root)
-	SCPNotInUse          bool // account is not in an organization; SCPs do not apply
-	BoundaryAttached     int  // identities with a permissions boundary attached to their edges
-	BoundaryUnresolved   int  // identities whose boundary policy was not in the snapshot; edges are Unknown
+	NotActionStatements      int  // NotAction or NotResource statements; not expanded, so no edges emitted
+	ConditionalAllows        int  // Allow statements with Condition; edges emitted, conditions unevaluated
+	WildcardTrustSkipped     int  // trust statements with Principal "*"; no attributable identity
+	UnresolvedTrust          int  // trust principals (account roots, deleted-role IDs) not in inventory
+	SkippedDocuments         int  // identity policies that failed to decode
+	BackupVaults             int  // backup vaults discovered
+	BackupVaultsSkipped      bool // no backup inventory source attached
+	SCPLevels                int  // organization levels read (account, OUs, root)
+	SCPNotInUse              bool // account is not in an organization; SCPs do not apply
+	BoundaryAttached         int  // identities with a permissions boundary attached to their edges
+	BoundaryUnresolved       int  // identities whose boundary policy was not in the snapshot; edges are Unknown
+	BucketPolicies           int  // buckets that have a resource policy
+	BucketPoliciesUnreadable int  // buckets whose resource policy could not be decoded; edges are Unknown
 }
 
 // Discover performs a full AWS discovery pass: account, identities, resources,
@@ -533,6 +539,10 @@ func (c *AWSDiscoveryClient) Discover(ctx context.Context) (*DiscoveredGraph, *A
 		boundaryByID[h.identity.CanonicalID] = doc
 		stats.BoundaryAttached++
 	}
+	bucketDocs, bucketUnreadable, err := c.bucketPolicies(ctx, buckets, stats)
+	if err != nil {
+		return nil, nil, err
+	}
 	levels, inOrg, err := c.scpLevels(ctx)
 	if err != nil {
 		return nil, nil, err
@@ -556,6 +566,13 @@ func (c *AWSDiscoveryClient) Discover(ctx context.Context) (*DiscoveredGraph, *A
 		}
 		if inOrg {
 			p.Attributes["scp_levels"] = levelsJSON
+		}
+		if arn := awsBucketARN(p.Target.CanonicalID); arn != "" {
+			if bucketUnreadable[arn] {
+				p.Attributes["resource_policy_unreadable"] = "true"
+			} else if doc, ok := bucketDocs[arn]; ok {
+				p.Attributes["resource_policy_document"] = doc
+			}
 		}
 	}
 
@@ -634,4 +651,49 @@ func (c *AWSDiscoveryClient) listBackupVaults(ctx context.Context) ([]string, er
 		}
 		token = out.NextToken
 	}
+}
+
+// awsBucketARN returns the ARN of the bucket a resource or object ARN belongs
+// to, or "" when the target is not a specific S3 bucket.
+func awsBucketARN(target string) string {
+	const prefix = "arn:aws:s3:::"
+	if !strings.HasPrefix(target, prefix) {
+		return ""
+	}
+	name := strings.TrimPrefix(target, prefix)
+	if i := strings.Index(name, "/"); i >= 0 {
+		name = name[:i]
+	}
+	if name == "" || name == "*" {
+		return ""
+	}
+	return prefix + name
+}
+
+// bucketPolicies reads each bucket's resource policy. A bucket with no policy is
+// normal and contributes nothing. Any other read failure fails the pass: a
+// policy that could not be read would leave its denies invisible.
+func (c *AWSDiscoveryClient) bucketPolicies(ctx context.Context, names []string, stats *AWSDiscoveryStats) (map[string]string, map[string]bool, error) {
+	docs := map[string]string{}
+	unreadable := map[string]bool{}
+	for _, name := range names {
+		out, err := c.s3.GetBucketPolicy(ctx, &s3.GetBucketPolicyInput{Bucket: aws.String(name)})
+		if err != nil {
+			var apiErr smithy.APIError
+			if errors.As(err, &apiErr) && apiErr.ErrorCode() == "NoSuchBucketPolicy" {
+				continue
+			}
+			return nil, nil, fmt.Errorf("aws discovery: reading policy for bucket %s (needs s3:GetBucketPolicy): %w", name, err)
+		}
+		arn := "arn:aws:s3:::" + name
+		doc, err := awsDecodePolicy(aws.ToString(out.Policy))
+		if err != nil {
+			unreadable[arn] = true
+			stats.BucketPoliciesUnreadable++
+			continue
+		}
+		docs[arn] = doc
+		stats.BucketPolicies++
+	}
+	return docs, unreadable, nil
 }

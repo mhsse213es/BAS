@@ -28,6 +28,7 @@ Status key: **OPEN** = needs a live account or a decision. **MODEL** = known lim
 
 ### O-2 — Live AWS discovery — OPEN
 - **What's needed:** a least-privilege read role in a test account. It needs `iam:GetAccountAuthorizationDetails`, `sts:GetCallerIdentity`, `s3:ListAllMyBuckets`, `backup:ListBackupVaults`, and for enforcement layers `organizations:ListParents`, `organizations:ListPoliciesForTarget`, `organizations:DescribePolicy`. Then compare the discovered edges against IAM Policy Simulator for a sample of identities.
+- **Also needs** `s3:GetBucketPolicy` on each bucket. A bucket with no policy is normal. Any other failure fails the pass, naming the permission. Buckets in another region may return a redirect from `GetBucketPolicy`; if that happens, the pass fails rather than skipping the bucket. Verify this on a bucket in a second region.
 - **Verify:** the `GetAccountAuthorizationDetails` pagination marker; that policy documents arrive URL-encoded and decode cleanly; that the `backup_vaults` count matches the console; that `scp_levels` and `boundary_attached` in the discovery report match the Organizations console and each identity's permissions boundary. A discovery pass fails if Organizations cannot be read, so a missing permission shows up as a named error, not as silent over-reporting.
 
 ### O-3 — Live GCP discovery — OPEN
@@ -49,11 +50,11 @@ Audit sources read what the provider logs. Some scenario steps are logged only i
 - Previously a subscription Owner's `*` edge never matched a concrete action, so Owner looked like no access. Fixed in R-9.
 - **Still to verify live:** on a real subscription, an Owner's scenario steps should read as granted, and the `role_not_actions` carve-outs should match what the portal shows for a custom role.
 
-### O-7 — Enforcement layers: mostly closed; two AWS layers still open (MODEL)
-SCPs, permission boundaries, management-group inheritance, and folder and organization inheritance are now read and applied (R-10, R-11, R-12). What remains:
+### O-7 — Enforcement layers: mostly closed; one AWS layer still open (MODEL)
+SCPs, permission boundaries, S3 bucket policies, management-group inheritance, and folder and organization inheritance are now read and applied (R-10 to R-13). What remains:
 - **AWS session policies:** not read. A session policy can only narrow a grant, so discovery over-reports for sessions that carry one.
-- **AWS resource-based policies (for example S3 bucket policies):** not read. An explicit deny in a bucket policy is invisible, so grants on that bucket over-report. Resource policies that allow cross-account access are also not discovered (under-report).
-- **Verify:** pick one identity with an S3 bucket policy that denies its action, and one assumed-role session, and confirm the verdict. Expect the bucket-policy case to over-report until it is modelled.
+- **AWS cross-account resource policies:** an Allow in a bucket policy that grants another account is not discovered (under-report). Only Deny statements in bucket policies are applied.
+- **Verify:** pick one identity with an S3 bucket policy that denies its action, and one assumed-role session, and confirm the verdict. Expect the session case to over-report until it is modelled.
 
 ### O-8 — Conditions (MODEL)
 - **AWS:** Allow statements with a `Condition` are emitted and evaluated as unconditional. Counted in `conditional_allows`. The evaluator does not evaluate conditions.
@@ -120,6 +121,10 @@ SCPs, permission boundaries, management-group inheritance, and folder and organi
 - **What was wrong:** grants set on a folder or organization were invisible, and denies above the project were not read (both directions). Separately, the project deny read used the attachment point `crm.googleapis.com`. The documented form is `cloudresourcemanager.googleapis.com` (URL-encoded). The fixture matched the substring `denypolicies`, so it could not catch this.
 - **What changed:** ancestry comes from `projects.getAncestry`. Each folder and organization's bindings are read and applied to the project, tagged `inherited_from`. Denies are read at the project and every ancestor, using the corrected attachment point. An ancestor of an unrecognized type fails the pass. The fixture now matches the full encoded attachment point. Covered by `gcp_hierarchy_test.go`.
 - **Consequence:** the project deny read before this commit was calling the wrong resource. Any GCP run from before `f0486ae0` should be treated as having missed project-level denies.
+
+### R-13 — S3 bucket policies were not read (over-reporting) — RESOLVED (this commit)
+- **What was wrong:** an explicit Deny in a bucket policy was invisible, so a grant on that bucket was reported as usable.
+- **What changed:** each bucket's policy is read with `s3:GetBucketPolicy`, and attached to every edge whose target is in that bucket. Denies are applied: the Principal or NotPrincipal must name the source identity (or its account root, or `*`), the Resource or NotResource must cover the target, and the Action or NotAction must cover the action. A conditional Deny gives ConditionallyReachable. An unreadable policy gives Unknown. Allows in bucket policies are not applied, since same-account access comes from the identity's own policies. Covered by `aws_s3policy_test.go`.
 
 ### R-8 — Credentials never come from a request — RESOLVED `28304ead`, `7ae44b57`
 - AWS uses the SDK default chain, GCP uses Application Default Credentials, Azure reads service-principal variables. Each discoverer proves the credentials resolve to the account the run names before it reads inventory. Error text names a missing variable, never its value.

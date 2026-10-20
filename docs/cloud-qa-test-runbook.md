@@ -12,7 +12,7 @@ bash scripts/cloud-qa.sh <group>    # one group
 | Group | Package | What it proves | Accounts needed |
 |---|---|---|---|
 | `retry` | cloudgraph | throttling/backoff, redaction, bounded retries | none |
-| `aws` | cloudgraph | AWS discovery, policy matching, trust, backup vaults, permission boundaries, SCPs | none |
+| `aws` | cloudgraph | AWS discovery, policy matching, trust, backup vaults, permission boundaries, SCPs, S3 bucket policies | none |
 | `gcp` | cloudgraph | GCP bindings, roles, deny rules, folder and organization inheritance, retry transport | none |
 | `azure` | cloudgraph | Azure discovery, wildcard roles, deny assignments, management group inheritance, preflight | none |
 | `audit` | cloudgraph | CloudTrail, Activity Log and GCP audit parsing and matching | none |
@@ -34,8 +34,9 @@ bash scripts/cloud-qa.sh <group>    # one group
 - `TestParseRetryAfter`
 - `TestRedact`
 
-### `aws`  (29 tests)
+### `aws`  (38 tests)
 
+- `TestAWSBucketARN`
 - `TestAWSDecodePolicy_CompactsAndRejectsGarbage`
 - `TestAWSDiscover_EdgesAreEvaluableByAWSEvaluator`
 - `TestAWSDiscover_ExplicitDenyBlocksAllow`
@@ -65,6 +66,14 @@ bash scripts/cloud-qa.sh <group>    # one group
 - `TestAWSEvaluator_RoleTrustAllowsAssumeRole`
 - `TestAWSEvaluator_ServiceWildcardSatisfiesConcreteAction`
 - `TestAWSGate_ActionNotActionAndConditions`
+- `TestAWSResourcePolicyGate_ResourceAndNotClauses`
+- `TestS3Policy_ConditionalDenyIsConditional`
+- `TestS3Policy_DeniedReadFailsPassNamingPermission`
+- `TestS3Policy_DenyForPrincipalBlocksGrant`
+- `TestS3Policy_DenyOnOtherActionOrPrincipalDoesNotBlock`
+- `TestS3Policy_NoPolicyIsNormal`
+- `TestS3Policy_UnparseablePolicyIsUnknown`
+- `TestS3Policy_WildcardAndAccountRootPrincipalsBlock`
 
 ### `gcp`  (10 tests)
 

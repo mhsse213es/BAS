@@ -14,6 +14,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
+	"github.com/aws/smithy-go"
 )
 
 const (
@@ -50,6 +51,21 @@ func (f *fakeSTS) GetCallerIdentity(_ context.Context, _ *sts.GetCallerIdentityI
 type fakeS3 struct {
 	names []string
 	err   error
+	// policies maps bucket name to its resource policy document. A bucket absent
+	// from the map has no policy, which S3 reports as NoSuchBucketPolicy.
+	policies  map[string]string
+	policyErr error // returned by every GetBucketPolicy call when set
+}
+
+func (f *fakeS3) GetBucketPolicy(_ context.Context, in *s3.GetBucketPolicyInput, _ ...func(*s3.Options)) (*s3.GetBucketPolicyOutput, error) {
+	if f.policyErr != nil {
+		return nil, f.policyErr
+	}
+	doc, ok := f.policies[aws.ToString(in.Bucket)]
+	if !ok {
+		return nil, &smithy.GenericAPIError{Code: "NoSuchBucketPolicy", Message: "no policy"}
+	}
+	return &s3.GetBucketPolicyOutput{Policy: aws.String(doc)}, nil
 }
 
 func (f *fakeS3) ListBuckets(_ context.Context, _ *s3.ListBucketsInput, _ ...func(*s3.Options)) (*s3.ListBucketsOutput, error) {
