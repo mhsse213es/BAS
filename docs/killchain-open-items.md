@@ -33,3 +33,19 @@ moment. Items that need them are listed as blocked, not planned.
 - A verdict may change only when its evidence changes.
 - A missing ground truth, telemetry or agent is reported as missing. It is never treated as a pass.
 - Lab and live claims are made only with a stored run reference.
+
+## Finding: existing host telemetry is detection evidence, not execution evidence
+
+The agent already submits per-run detection alerts to
+`POST /api/scenarios/runs/{id}/detections` (`agent/agent.go` around line 1207,
+collected by `collectAlerts` in `agent/detect_windows.go`, reading the
+alert-tier channels listed at `detect_windows.go:20`). They are an independent
+host-side record, but they prove a detection happened. They do not prove a
+step executed, so they must not be mapped to ground-truth `executed = yes`.
+
+To build an execution source for identity and lateral stages, the agent needs
+a process-creation and logon channel that it does not collect today (for
+example Security 4688 and 4624/4648, or Sysmon event 1). Adding that is an
+agent change. It can only be verified on a Windows host with those logs
+enabled, so it is blocked on staging. Decision needed before it is built:
+which channel to add first, and whether the agent should ship it.
