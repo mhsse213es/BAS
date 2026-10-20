@@ -38,6 +38,9 @@ latency:
   trials: 10
   rounds: 3
 max_work_units: 24000
+calibration:
+  baseline_ms: 0.15
+  tolerance: 4
 expected_control: >
   A report above 12 periods is refused with 400 before any work is done, so the
   cost of one request stays within the declared budget and the work units stay

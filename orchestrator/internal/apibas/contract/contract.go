@@ -87,7 +87,9 @@ type Scenario struct {
 	// known protocols are declared but reported UNSUPPORTED until an adapter exists.
 	Protocol string `yaml:"protocol"`
 	// Detection, when set, grades the detection axis against the access-event fixture.
-	Detection         *DetectionPolicy   `yaml:"detection"`
+	Detection *DetectionPolicy `yaml:"detection"`
+	// Calibration declares the conditions the timing threshold was measured under.
+	Calibration       *CalibrationPolicy `yaml:"calibration"`
 	ExpectedControl   string             `yaml:"expected_control"`
 	GroundTruth       GroundTruth        `yaml:"ground_truth"`
 	DetectionAssert   DetectionAssertion `yaml:"detection_assertion"`
@@ -354,6 +356,16 @@ func (s Scenario) validateSteps() error {
 			return fmt.Errorf("contract: %s: a timing scenario must be READ_ONLY with a single attack request", s.ID)
 		}
 	}
+	if s.Calibration != nil {
+		switch {
+		case s.Latency == nil:
+			return fmt.Errorf("contract: %s: calibration applies only to timing scenarios", s.ID)
+		case s.Calibration.BaselineMs <= 0:
+			return fmt.Errorf("contract: %s: calibration baseline_ms must be set", s.ID)
+		case s.Calibration.Tolerance <= 1:
+			return fmt.Errorf("contract: %s: calibration tolerance must be greater than 1", s.ID)
+		}
+	}
 	if s.MaxItemsReturned < 0 {
 		return fmt.Errorf("contract: %s: max_items_returned cannot be negative", s.ID)
 	}
@@ -427,4 +439,12 @@ type DetectionPolicy struct {
 	Source      string `yaml:"source"`
 	ExpectRule  string `yaml:"expect_rule"`
 	MinSeverity string `yaml:"min_severity"`
+}
+
+// CalibrationPolicy records the baseline the frozen timing threshold was measured
+// against. A run whose measured baseline falls outside [BaselineMs/Tolerance,
+// BaselineMs*Tolerance] is ERROR, never a timing pass or fail.
+type CalibrationPolicy struct {
+	BaselineMs float64 `yaml:"baseline_ms"`
+	Tolerance  float64 `yaml:"tolerance"`
 }

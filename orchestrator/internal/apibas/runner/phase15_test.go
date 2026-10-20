@@ -23,7 +23,7 @@ func TestPhase15_DetectionIsSeparateFromExploitation(t *testing.T) {
 		detection string
 	}{
 		{"API-BAS-ABUSE-001", grade.Exploited, "detected"},
-		{"API-BAS-AUTHZ-001", grade.Exploited, "missed"},
+		{"API-BAS-AUTHZ-001", grade.Exploited, "detected"},
 	}
 	for _, c := range cases {
 		e := newEnv(t, lab.ModeVulnerable, fixture.OrdersTwoTenant())

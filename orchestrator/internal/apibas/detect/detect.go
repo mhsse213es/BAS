@@ -18,6 +18,7 @@ const SourceElastic = "elastic-security"
 
 // Event is the normalised shape every adapter ingests. The lab emits events in this shape.
 type Event struct {
+	ObjectOwner   string `json:"object_owner,omitempty"`
 	Seq           int    `json:"seq"`
 	CorrelationID string `json:"correlation_id"`
 	Action        string `json:"action"`
@@ -106,6 +107,10 @@ var ElasticRules = []Rule{
 	{
 		ID: "APIBAS-REL-003", Name: "Server fault on request path", Severity: SeverityLow, Threshold: 1,
 		Match: func(e Event) bool { return e.Outcome == "error" },
+	},
+	{
+		ID: "APIBAS-REL-004", Name: "Access to an object owned by another identity", Severity: SeverityHigh, Threshold: 1,
+		Match: func(e Event) bool { return e.ObjectOwner != "" && e.ObjectOwner != e.Identity },
 	},
 }
 

@@ -54,5 +54,5 @@ negative_tests:
   - API-BAS-AUTHZ-001 with the attacker identical to the owner must be SKIPPED NOT_CROSS_IDENTITY
 detection:
   source: elastic-security
-  expect_rule: APIBAS-REL-001
+  expect_rule: APIBAS-REL-004
   min_severity: high

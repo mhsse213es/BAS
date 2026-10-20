@@ -47,11 +47,13 @@ Security fixture is deterministic and local. Its results are labelled fixture-va
 | Scenario | Expected rule | Vulnerable | Fixed |
 |---|---|---|---|
 | API-BAS-ABUSE-001 | APIBAS-REL-001 (repeated authentication failures, high) | detected | detected |
-| API-BAS-AUTHZ-001 | APIBAS-REL-001 (high) | missed | missed |
+| API-BAS-AUTHZ-001 | APIBAS-REL-004 (access to an object owned by another identity, high) | detected | detected |
 
-The AUTHZ-001 miss is a real gap. One denied or successful cross-tenant request is not
-visible to a threshold rule. A rule for single cross-tenant access needs an event
-field the lab does not yet emit (object owner on each access event).
+AUTHZ-001 was previously missed: a single cross-tenant request is invisible to a
+threshold rule on repeated failures. The lab now records the owner of each order a
+request touches, and APIBAS-REL-004 fires on any attempt by one identity against an
+object owned by another, whether it was allowed or denied. The owner reading their own
+order does not fire it.
 
 ## Explicitly not implemented
 
@@ -83,7 +85,11 @@ A scenario that declares one of these protocols loads, and is reported
 
 - Detection: one fixture (Elastic Security). Sentinel, Splunk and QRadar adapters are
   not built. The adapter interface is in place for them.
-- Timing: the threshold is frozen for one machine. Another environment needs its own
-  baseline measurement before the threshold is trusted there.
+- Timing: the threshold is frozen for the measured machine (i5-8250U, Windows 10, Go 1.26.8).
+  A timing scenario declares the baseline it was calibrated against. A run whose measured
+  baseline falls outside a declared tolerance band is recorded as ERROR with
+  `ENVIRONMENT_MISMATCH`. It is never graded as a timing pass or fail. Another machine
+  therefore fails closed until it is recalibrated. Calibration checks the baseline only.
+  It does not prove the attack-side ceiling holds on other hardware.
 - Orchestrator scheduling and persistence, and the production secret store: not built.
 - The Windows build (`build.ps1`) has not been run on these tranches.

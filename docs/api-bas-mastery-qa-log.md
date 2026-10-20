@@ -768,3 +768,33 @@ Note: the first smoke run in this tranche reported 27 of 28 with ABUSE-003 faili
 - Timing threshold: frozen for one machine only.
 - Orchestrator scheduling and persistence, and the production secret store: not built.
 - The Windows build (`build.ps1`) has not been run on these tranches.
+
+
+## Phase 16 tranche — closing the two open items
+
+Branch: `feature/api-bas-phase16` (from `main`). Scenario count stays at twenty-eight.
+
+### 1. AUTHZ-001 detection gap closed
+
+- The lab records the owner of the order each request touches (`object_owner`). Requests that name no order carry no owner.
+- New rule APIBAS-REL-004 (access to an object owned by another identity, high, fires on the first match). It fires on the attempt, whether the request was allowed or denied. The owner reading their own order does not fire it.
+- AUTHZ-001 now grades `detected` in both builds. Previously it was `missed`, because the threshold rule on repeated failures cannot see a single request.
+- Tests: `detect/owner_test.go` covers allowed and denied cross-identity attempts, owner access, and events with no owner.
+
+### 2. Timing threshold tied to one machine: now fails closed
+
+- A timing scenario declares the baseline it was calibrated against (`calibration: baseline_ms, tolerance`). ABUSE-002 declares 0.15 ms with tolerance 4.
+- After the rounds are measured, the median baseline is checked against the declared band. Outside the band the timing verdict is `ERROR/ENVIRONMENT_MISMATCH`. It is never graded as a timing pass or fail.
+- Tests: `latency/calibration_test.go` covers the band edges, a machine four times slower than declared, no samples, and the reason being an ERROR.
+- Limit: calibration checks the baseline only. It does not prove the attack-side ceiling holds on other hardware. Another machine is recalibrated by re-measuring and updating the declared baseline. The threshold is not adjusted automatically.
+
+### Clean smoke run
+
+Vulnerable: 28 of 28 FAIL, exploited. Fixed: 28 of 28 PASS, not exploited. Detection: AUTHZ-001 detected and ABUSE-001 detected, in both builds. Token check: zero matches.
+
+### Still open
+
+- Detection: one fixture (Elastic Security). Sentinel, Splunk and QRadar adapters are not built.
+- ABUSE-004, ABUSE-006 to ABUSE-010 and the protocol adapters: not implemented. See `docs/api-bas-coverage.md`.
+- Timing: calibration covers the baseline only. The threshold is frozen for the measured machine and will report ERROR elsewhere until recalibrated.
+- Orchestrator scheduling and persistence, the production secret store, and the Windows build (`build.ps1`) on these tranches.

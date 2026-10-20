@@ -5,8 +5,9 @@ import (
 	"strings"
 )
 
-// accessEvent is one request as the lab observed it. It carries the run tag and the
-// outcome, never the token. Detection fixtures normalise these events themselves.
+// accessEvent is one request as the lab observed it. It carries the run tag, the
+// outcome and the owner of the order the request touched, never the token. Detection
+// fixtures normalise these events themselves.
 type accessEvent struct {
 	Seq           int    `json:"seq"`
 	CorrelationID string `json:"correlation_id"`
@@ -14,6 +15,7 @@ type accessEvent struct {
 	Outcome       string `json:"outcome"`
 	Identity      string `json:"identity"`
 	Status        int    `json:"status"`
+	ObjectOwner   string `json:"object_owner,omitempty"`
 }
 
 // statusRecorder keeps the status the handler wrote.
@@ -48,6 +50,22 @@ func outcomeFor(status int) string {
 	return "success"
 }
 
+// ownerOfPath returns the owner of the order a /api/orders/{id}... path names, or ""
+// when the path names no order.
+func (s *Server) ownerOfPath(path string) string {
+	const prefix = "/api/orders/"
+	if !strings.HasPrefix(path, prefix) {
+		return ""
+	}
+	id := strings.SplitN(strings.TrimPrefix(path, prefix), "/", 2)[0]
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if o, ok := s.orders[id]; ok {
+		return o.OwnerID
+	}
+	return ""
+}
+
 // logAccess records one event per product request. Lab administration routes are not
 // recorded, so the detection fixture only sees traffic the scenario sent.
 func (s *Server) logAccess(next http.Handler) http.Handler {
@@ -63,6 +81,7 @@ func (s *Server) logAccess(next http.Handler) http.Handler {
 		} else if st != authMissing {
 			identity = "unknown"
 		}
+		owner := s.ownerOfPath(r.URL.Path)
 		s.evMu.Lock()
 		s.eventSeq++
 		s.events = append(s.events, accessEvent{
@@ -72,6 +91,7 @@ func (s *Server) logAccess(next http.Handler) http.Handler {
 			Outcome:       outcomeFor(rec.status),
 			Identity:      identity,
 			Status:        rec.status,
+			ObjectOwner:   owner,
 		})
 		s.evMu.Unlock()
 	})

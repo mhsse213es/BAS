@@ -538,6 +538,10 @@ func (r *Runner) runLatency(ctx context.Context, rep Report, s contract.Scenario
 	if refused {
 		rep.TimingVerdict = "not_applicable: control refused the work"
 	} else {
+		if s.Calibration != nil && !latency.CalibrationOK(rounds, s.Calibration.BaselineMs, s.Calibration.Tolerance) {
+			rep.TimingVerdict = "ERROR/" + grade.ReasonEnvironmentMismatch
+			return r.errorOut(rep, grade.ReasonEnvironmentMismatch, "measured baseline is outside the declared calibration; the frozen threshold does not apply here")
+		}
 		ceiling := time.Duration(pol.CeilingMs) * time.Millisecond
 		var sums []latency.Summary
 		timing, sums = latency.Grade(rounds, ceiling, pol.MinRatio, pol.MaxCV)

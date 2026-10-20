@@ -146,3 +146,19 @@ func coefficientOfVariation(xs []float64) float64 {
 	}
 	return math.Sqrt(varSum/float64(len(xs))) / mean
 }
+
+// CalibrationOK reports whether the measured baseline, the median of every round's
+// baseline samples, lies within [expectedMs/tolerance, expectedMs*tolerance]. Outside
+// that band the frozen threshold was not calibrated for these conditions, so timing
+// must not be graded.
+func CalibrationOK(rounds []Round, expectedMs, tolerance float64) bool {
+	var all []float64
+	for _, r := range rounds {
+		all = append(all, toMs(r.Baseline)...)
+	}
+	if len(all) == 0 || expectedMs <= 0 || tolerance <= 1 {
+		return false
+	}
+	m := median(all)
+	return m >= expectedMs/tolerance && m <= expectedMs*tolerance
+}
