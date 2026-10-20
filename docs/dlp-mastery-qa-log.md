@@ -94,6 +94,75 @@ This is the single place to check before claiming either DLP vendor connector is
 
 **Resolution path:** (a) wire a DLP scenario to call `siem.Correlate`/`ticketing.Manager.PushFinding` for real, producing the already-computed verdicts a `dlpcorrelate` campaign would consume (same decoupled-consumption pattern as Campaigns 01/03/04); (b) add assignee tracking to `ticketing.TicketRef`/`Connector` and an ack/response-time measurement layer on top of `GetStatus` — a feature addition to `internal/ticketing` itself, sized like a vendor-adapter build, not a `dlpcorrelate` follow-up. Until both exist, Campaign 05 stays an explicit, named, unbuilt campaign — not a stub, not a mock.
 
+### 7. Test-event start (B2) — end-to-end run on removable media not performed — open
+
+**Status:** Open, needs hardware Audspect does not have here.
+
+**What's needed:** a lab Windows host with a removable USB drive (or a virtual removable disk). Run `dlp-exfiltration-validation` USB step once with `BAS_TASK_ID` set by the agent.
+
+**What this confirms:** the `DLP_EVENT_START` line is printed before the copy, `ParseDLPEventStart` reads it, and `dlp_evidence_records` gets `test_event_timestamp` and `test_event_source = payload-marker` for that step. Until this run, the marker path is verified only by unit and database tests.
+
+**Resolution path:** one USB step run on a removable-media host, then read the row back with `GET /api/scenarios/runs/{runId}/dlp-records`.
+
+### 8. Clock skew between test host and detection source — not measured; latency undefined — open
+
+**Status:** Open. Latency cannot be reported until this is measured.
+
+**Reading so far:** one host, `w32tm /query /status` on 2026-10-20: source `time.windows.com`, stratum 5, root dispersion 7.89 s. That is the host's own error estimate against its time source. It is not skew against the detection source, and it suggests a bound from this host would be seconds wide.
+
+**What's needed:** measured offset between the test host and the detection-source clock (for example a time-sync source both can query), recorded with method, date and sample count, plus the milestone definition from the metrics spec §3.4.
+
+**Resolution path:** measure, record the bound, then decide whether the host clock needs better sync.
+
+### 9. Precision and recall for DLP — not computable from current evidence — open by design
+
+**Status:** Open. Metrics are defined in `docs/superpowers/specs/2026-10-20-dlp-metrics-definitions-draft.md` and not computed.
+
+**Why:** a block counts as TP or FP only from a correlated authoritative event. No adapter currently supplies one, and no adapter has been verified against a live tenant. Adapter conformance is labelled unverified.
+
+**Resolution path:** verify a DLP or SIEM adapter against a live tenant (items 1, 2, 4, 5), then decide which block events it may contribute.
+
+### 10. Start markers in other DLP scenarios — not run end to end — open
+
+**Status:** Open. Markers were added to 12 scenarios and signed (`verify-all` 126/126), but none has run.
+
+**Scenarios:** validation, multichannel, sftp, smtp, dns-tunnel, telnet, webhook, cloud-storage, coderepo, ai-prompt, db-export, sink-https.
+
+**Deliberately excluded:** archive steps (local ZIP, no outbound attempt).
+
+**Pooled-host caveat:** only observation-labelled PowerShell steps use the warm pool, and DLP transfer steps are not observation-labelled. So DLP steps take the per-process path, where `BAS_TASK_ID` is set. The pooled `BAS_TASK_ID` change is still correct, but it does not serve DLP steps.
+
+**Resolution path:** run one step per channel on a lab host that supports it, and confirm each marker appears once per step. Multiple markers make the parser return `ambiguous`, which drops the start time.
+
+### 11. Pre-existing `dlpfixture` drift failure (AI-prompt and DB-export) — open, decision needed
+
+**Status:** Open. The drift test fails on unregistered fixture values in `dlp-exfiltration-ai-prompt` and `dlp-exfiltration-db-export`. It predates the start-marker work; the YAML diff there is additive.
+
+**Decision needed:** register those payloads in the fixture catalog, or change the payloads.
+
+### 12. Override handling in decision_class — not special-cased — open, decision needed
+
+**Status:** Open. An operator override currently falls under the same B1 table rules. A step that was overridden and then delivered may be classed FN.
+
+**Decision needed:** whether an override should yield Inconclusive, or a separate class, before any override-bearing run is used in a metric.
+
+### 13. Operational impact — definition approved, no baseline or criteria — deferred
+
+**Status:** Deferred by decision. No value is computed or published. Requires baseline runs and approved workflow success criteria.
+
+### 14. Verdict store keyed on (run, expectation) — shared IDs can collide — open, decision needed
+
+**Status:** Open. `dlp_evidence_records` is keyed by task ID, but the verdict store still keys on (run, expectation). A shared expectation ID across steps can collide in the verdict store.
+
+**Decision needed:** whether to re-key the verdict store by task ID.
+
+### 15. Late sink receipts not reflected in a record — open, decision needed
+
+**Status:** Open. The record keeps the first evaluation, so a receipt arriving after evaluation is not reflected. This is disclosed in each record's limitations.
+
+**Decision needed:** whether a later receipt should update the record, and how that interacts with the no-duplicate-record rule.
+
+
 ## Resolved items
 
 (none yet)
