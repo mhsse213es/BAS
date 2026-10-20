@@ -29,5 +29,7 @@ func RealDLPScenarioIDs() []string {
 		"dlp-exfiltration-email-recipients",
 		"dlp-exfiltration-archive-transfer",
 		"dlp-exfiltration-web-upload",
+		"dlp-exfiltration-network-share",
+		"dlp-exfiltration-device-control",
 	}
 }

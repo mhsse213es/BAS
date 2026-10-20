@@ -21,6 +21,8 @@ const (
 	scenarioEmailRecipients = "dlp-exfiltration-email-recipients"
 	scenarioArchiveTransfer = "dlp-exfiltration-archive-transfer"
 	scenarioWebUpload = "dlp-exfiltration-web-upload"
+	scenarioNetworkShare = "dlp-exfiltration-network-share"
+	scenarioDeviceControl = "dlp-exfiltration-device-control"
 )
 
 // AllFixtures returns Audspect's real, current seed catalog of every
@@ -354,6 +356,24 @@ func AllFixtures() ([]Fixture, error) {
 			{scenarioWebUpload, "DLP Validation — Browser Web Form Submission With Sensitive Text (T1567)"},
 		},
 		"same synthetic record as the BFSI anchor; JSON request shape only, not a real browser form")); err != nil {
+		return nil, fmt.Errorf("loading seed fixture catalog: %w", err)
+	}
+
+	if err := add(NewFixture("network-share-multitype-record", "Synthetic multi-type record copied to writable and read-only SMB shares",
+		[]string{"[BAS-SIM-DLP]", "ABCDE1234F", "123456789012", "SBININBBXXX", "fake.user@upi", "4111111111111111"},
+		[]Occurrence{
+			{scenarioNetworkShare, "DLP Validation — Copy to Writable SMB Share (T1039)"},
+			{scenarioNetworkShare, "DLP Validation — Copy to Read-Only SMB Share (T1039)"},
+		},
+		"same synthetic record as the BFSI anchor, written to operator-configured shares only")); err != nil {
+		return nil, fmt.Errorf("loading seed fixture catalog: %w", err)
+	}
+	if err := add(NewFixture("device-control-multitype-record", "Synthetic multi-type record written to a removable device under a recorded policy",
+		[]string{"[BAS-SIM-DLP]", "ABCDE1234F", "123456789012", "SBININBBXXX", "fake.user@upi", "4111111111111111"},
+		[]Occurrence{
+			{scenarioDeviceControl, "DLP Validation — Removable Media Write Under Recorded Device Policy (T1052.001)"},
+		},
+		"same synthetic record as the BFSI anchor; device policy read only, never changed")); err != nil {
 		return nil, fmt.Errorf("loading seed fixture catalog: %w", err)
 	}
 
