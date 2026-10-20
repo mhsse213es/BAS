@@ -302,15 +302,17 @@ func (r *Runner) do(ctx context.Context, step contract.Step, token string, obj f
 	path := strings.ReplaceAll(step.Path, "{object}", obj.ID)
 	ex := Exchange{StepID: step.ID, Identity: step.Identity, Auth: attackAuth(step), Method: step.Method, Path: path}
 
+	// {lab_url} lets a body name the target itself, for the SSRF scenario.
+	payload := strings.ReplaceAll(step.Body, "{lab_url}", r.cfg.BaseURL)
 	var body io.Reader
-	if step.Body != "" {
-		body = bytes.NewReader([]byte(step.Body))
+	if payload != "" {
+		body = bytes.NewReader([]byte(payload))
 	}
 	req, err := http.NewRequestWithContext(ctx, step.Method, r.cfg.BaseURL+path, body)
 	if err != nil {
 		return ex, true
 	}
-	if step.Body != "" {
+	if payload != "" {
 		req.Header.Set("Content-Type", "application/json")
 	}
 	for k, v := range step.Headers {

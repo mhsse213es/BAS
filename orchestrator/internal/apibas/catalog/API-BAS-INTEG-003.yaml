@@ -1,0 +1,57 @@
+id: API-BAS-INTEG-003
+name: Webhook test endpoint fetches internal addresses (SSRF)
+category: INTEG
+claim: function_level
+attack_objective: >
+  A customer uses the webhook test feature to make the server fetch an internal
+  address, and receives the response, so the server can be used to reach
+  internal-only data.
+threat_model:
+  attacker: authenticated customer who can register or test a webhook destination
+  identity: customer-a
+  access_level: standard customer, valid token, can call the webhook test endpoint
+  objective: reach an internal-only record through the server by naming it as a webhook destination
+preconditions:
+  fixture: orders-two-tenant
+  identities: [customer-b, customer-a]
+  object: ORD-2001
+steps:
+  - id: baseline-owner-read
+    role: baseline
+    identity: customer-b
+    auth: valid
+    method: GET
+    path: /api/orders/{object}
+    hypothesis: The owner can read their order. If this fails, the scenario is not testable.
+  - id: attack-internal-destination
+    role: attack
+    identity: customer-a
+    auth: valid
+    method: POST
+    path: /api/webhooks/test
+    body: '{"url": "{lab_url}/internal/orders/ORD-2001"}'
+    hypothesis: The webhook test refuses loopback and private destinations, so the internal record is never fetched.
+denied_statuses: [403]
+expected_control: >
+  The webhook test refuses a loopback or private destination with 403, fetches
+  nothing, and discloses no protected values.
+ground_truth:
+  adapters: [state, response]
+  check: >
+    The state is unchanged by the attack and the attack response contains none
+    of the internal record's protected values.
+detection_assertion:
+  status: not_evaluated
+  reason: Detection validation is Phase 4; this scenario makes no detection claim.
+evidence:
+  - sanitized_request
+  - sanitized_response
+  - state_diff
+side_effect_class: STATE_CHANGE_SANDBOX
+cleanup:
+  - reset the lab to its fixture seed after the run
+industry_mapping:
+  - "BFSI: server-side request forgery against internal customer services"
+regulatory_mapping: []
+negative_tests:
+  - API-BAS-INTEG-003 against the fixed build must PASS

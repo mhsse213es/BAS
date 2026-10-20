@@ -18,11 +18,15 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"maps"
+	"net"
 	"net/http"
+	"net/url"
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/audspect/bas/internal/apibas/fixture"
 )
@@ -129,6 +133,27 @@ func Flaws() []Flaw {
 				"Fixed: the POST is refused with 405 and the status is unchanged.",
 		},
 		{
+			ID:          "LAB-DISC-DEPRECATED-001",
+			ScenarioID:  "API-BAS-DISC-002",
+			Description: "The retired /api/v0/orders/{id} route is still served and needs no credential.",
+			Oracle: "Vulnerable: an anonymous GET on the retired route returns the order and protected values (exposed). " +
+				"Fixed: the route is not mounted and returns 404.",
+		},
+		{
+			ID:          "LAB-INTEG-SSRF-001",
+			ScenarioID:  "API-BAS-INTEG-003",
+			Description: "POST /api/webhooks/test fetches any URL the caller supplies, including internal addresses.",
+			Oracle: "Vulnerable: a customer can make the lab fetch an internal record and return its protected values (exposed). " +
+				"Fixed: a loopback or private destination is refused with 403 and nothing is fetched.",
+		},
+		{
+			ID:          "LAB-DATA-ERRLEAK-001",
+			ScenarioID:  "API-BAS-DATA-003",
+			Description: "A malformed PATCH body returns an error that includes the targeted order's full record.",
+			Oracle: "Vulnerable: a malformed body against another customer's order returns that order's protected values (exposed). " +
+				"Fixed: the error is a generic 400 with no record.",
+		},
+		{
 			ID:          "LAB-AUTHZ-MASS-001",
 			ScenarioID:  "API-BAS-AUTHZ-003",
 			Description: "PATCH /api/orders/{id} binds every submitted field, including owner_id, from the request body.",
@@ -226,6 +251,12 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("PATCH /api/admin/orders/{id}/status", s.adminSetStatus)
 	mux.HandleFunc("GET /api/v1/orders/{id}", s.getOrderV1)
 	mux.HandleFunc("GET /api/orders", s.listOrders)
+	mux.HandleFunc("POST /api/webhooks/test", s.testWebhook)
+	mux.HandleFunc("GET /internal/orders/{id}", s.internalOrder)
+	if s.cfg.Mode == ModeVulnerable {
+		// LAB-DISC-DEPRECATED-001: the retired v0 route is still served, without auth.
+		mux.HandleFunc("GET /api/v0/orders/{id}", s.getOrderV0)
+	}
 	mux.HandleFunc("POST /lab/token-status", s.adminOnly(s.tokenStatus))
 	mux.HandleFunc("GET /api/orders/{id}/summary", s.getSummary)
 	if s.cfg.Mode == ModeVulnerable {
@@ -335,6 +366,20 @@ func (s *Server) patchOrder(w http.ResponseWriter, r *http.Request) {
 	}
 	var fields map[string]any
 	if err := json.NewDecoder(r.Body).Decode(&fields); err != nil {
+		if s.cfg.Mode == ModeVulnerable {
+			// LAB-DATA-ERRLEAK-001: the error echoes the targeted record, with no owner check.
+			s.mu.Lock()
+			order, found := s.orders[r.PathValue("id")]
+			var detail map[string]any
+			if found {
+				detail = orderBody(order)
+			}
+			s.mu.Unlock()
+			if found {
+				writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid json", "record": detail})
+				return
+			}
+		}
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
 		return
 	}
@@ -675,4 +720,77 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(v)
+}
+
+// getOrderV0 is the retired route (LAB-DISC-DEPRECATED-001). It is mounted only in
+// the vulnerable build and serves the full record with no credential.
+func (s *Server) getOrderV0(w http.ResponseWriter, r *http.Request) {
+	s.mu.Lock()
+	order, found := s.orders[r.PathValue("id")]
+	var body map[string]any
+	if found {
+		body = orderBody(order)
+	}
+	s.mu.Unlock()
+	respondOrder(w, found, body)
+}
+
+// internalOrder is an internal-only record route. It has no credential check,
+// because it assumes callers are on the internal network. It exists so the SSRF
+// scenario has a real internal target.
+func (s *Server) internalOrder(w http.ResponseWriter, r *http.Request) {
+	s.mu.Lock()
+	order, found := s.orders[r.PathValue("id")]
+	var body map[string]any
+	if found {
+		body = orderBody(order)
+	}
+	s.mu.Unlock()
+	respondOrder(w, found, body)
+}
+
+// testWebhook checks a webhook destination by fetching it. The vulnerable build
+// fetches any URL and returns the response body to the caller; the fixed build
+// refuses loopback and private destinations (LAB-INTEG-SSRF-001).
+func (s *Server) testWebhook(w http.ResponseWriter, r *http.Request) {
+	_, st := s.identify(r)
+	if st != authOK {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthenticated"})
+		return
+	}
+	var req struct {
+		URL string `json:"url"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.URL == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "url is required"})
+		return
+	}
+	if s.cfg.Mode == ModeFixed && internalDestination(req.URL) {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "destination not allowed"})
+		return
+	}
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Get(req.URL)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "fetch failed"})
+		return
+	}
+	defer resp.Body.Close()
+	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 64<<10))
+	writeJSON(w, http.StatusOK, map[string]any{"status": resp.StatusCode, "body": string(raw)})
+}
+
+// internalDestination reports whether a URL points at a loopback or private
+// address, or at localhost.
+func internalDestination(raw string) bool {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return true
+	}
+	host := u.Hostname()
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip == nil || ip.IsLoopback() || ip.IsPrivate() || ip.IsUnspecified()
 }
