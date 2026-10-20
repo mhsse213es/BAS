@@ -320,3 +320,44 @@ Vulnerable: all sixteen FAIL, exploited. Fixed: all sixteen PASS, not exploited.
 - Not started: injection (INJ), most of gateway (GWAY), abuse (ABUSE, which needs multi-request steps), most of integrations and discovery, and most of the remaining AUTHN and AUTHZ items.
 - The orchestrator still does not schedule runs or persist results, and the production secret store is still not built.
 - The Windows build (`build.ps1`) has not been run on this tranche. You said you will build it later.
+
+
+## Phase 6 tranche — sixth tranche (multi-step chains)
+
+Branch: `feature/api-bas-phase6` (from `main`). One scenario, bringing the total to seventeen. This tranche also adds the framework support that vertical escalation needs.
+
+| ID | Sub-technique | Claim | Vulnerable | Fixed | Side effect |
+|---|---|---|---|---|---|
+| API-BAS-AUTHZ-004 | Vertical escalation by self-assigning an admin role (three-step chain) | function_level | FAIL, state changed | PASS (chain stops at the refused role change) | STATE_CHANGE_SANDBOX |
+
+New flaw: `LAB-AUTHZ-PRIVESC-001`.
+
+### Framework addition: setup steps
+
+A scenario now has a baseline, zero or more **setup** steps, and a final **attack** step.
+
+- Setup steps must use the attacker's identity with a valid token. The contract refuses anything else. `TestSetupStepMustUseAttackerIdentity` covers this.
+- Setup steps run in order. A denial stops the chain, and the denied step becomes the attack result, because the control held there. A 2xx lets the chain continue. Any other status, and any transport failure, also stops the chain, graded as before.
+- The state is read between the baseline and the first attack-side step, as before.
+
+### Notes
+
+- The fixed build refuses the role change, so the final admin-route call is never sent. The test `TestPhase6_EscalationFixedStopsAtSetup` checks that exactly two exchanges were sent.
+- The vulnerable build runs the whole chain, and `TestPhase6_EscalationFailsOnVulnerablePassesOnFixed` checks all three exchanges, including the final 200.
+- The admin-route check for the v2 route applies in both builds. The only planted flaw on this chain is the self-service role change. This keeps the chain's result tied to one flaw.
+- Reset clears roles, so a sandbox run cannot leave an escalated role behind for the next run.
+
+### Tests
+
+`go test ./internal/apibas/... -count=1`: all packages pass, zero failures.
+
+### CLI smoke test (both modes, all seventeen scenarios)
+
+Vulnerable: all seventeen FAIL, exploited. Fixed: all seventeen PASS, not exploited. Token check against the lab logs: zero matches.
+
+### Still open
+
+- Seventeen scenarios of roughly 50 Phase 2 sub-techniques.
+- Not started: injection (INJ), most of gateway (GWAY), abuse (ABUSE, which needs repeated requests and a count-based grader), most of integrations and discovery, and most of the remaining AUTHN and AUTHZ items.
+- The orchestrator still does not schedule runs or persist results, and the production secret store is still not built.
+- The Windows build (`build.ps1`) has not been run on this tranche. You said you will build it later.

@@ -1,0 +1,64 @@
+id: API-BAS-AUTHZ-004
+name: Vertical escalation by self-assigning an admin role
+category: AUTHZ
+claim: function_level
+attack_objective: >
+  A customer grants themselves the admin role through a self-service endpoint,
+  then uses the admin status route that the new role unlocks.
+threat_model:
+  attacker: authenticated customer with no admin role and a valid token
+  identity: customer-a
+  access_level: standard customer, valid token, can call the self-service profile endpoint
+  objective: escalate from customer to admin and change an order status that only admins may change
+preconditions:
+  fixture: orders-two-tenant
+  identities: [customer-b, customer-a]
+  object: ORD-2001
+steps:
+  - id: baseline-owner-read
+    role: baseline
+    identity: customer-b
+    auth: valid
+    method: GET
+    path: /api/orders/{object}
+    hypothesis: The owner can read their order. If this fails, the scenario is not testable.
+  - id: setup-self-assign-admin-role
+    role: setup
+    identity: customer-a
+    auth: valid
+    method: PATCH
+    path: /api/me/role
+    body: '{"role": "admin"}'
+    hypothesis: Role changes are administrative and refused to customers, so the chain stops here.
+  - id: attack-admin-status-change
+    role: attack
+    identity: customer-a
+    auth: valid
+    method: PATCH
+    path: /api/v2/admin/orders/{object}/status
+    body: '{"status": "refunded"}'
+    hypothesis: Without the admin role the status route refuses the request, so the order is unchanged.
+denied_statuses: [403]
+expected_control: >
+  The self-service role change is refused with 403, and any later admin-route
+  call is refused too. The order status is unchanged.
+ground_truth:
+  adapters: [state, response]
+  check: >
+    The order status is identical before and after the chain, and no response in
+    the chain discloses protected values.
+detection_assertion:
+  status: not_evaluated
+  reason: Detection validation is Phase 4; this scenario makes no detection claim.
+evidence:
+  - sanitized_request
+  - sanitized_response
+  - state_diff
+side_effect_class: STATE_CHANGE_SANDBOX
+cleanup:
+  - reset the lab to its fixture seed after the run, which also clears roles
+industry_mapping:
+  - "BFSI: privilege escalation from customer to administrator on order operations"
+regulatory_mapping: []
+negative_tests:
+  - API-BAS-AUTHZ-004 against the fixed build must PASS

@@ -205,16 +205,26 @@ func (s Scenario) Validate() error {
 }
 
 func (s Scenario) validateSteps() error {
-	if len(s.Steps) != 2 {
-		return fmt.Errorf("contract: %s: exactly two steps (baseline, attack) are required, got %d", s.ID, len(s.Steps))
+	if len(s.Steps) < 2 {
+		return fmt.Errorf("contract: %s: at least two steps (baseline, attack) are required, got %d", s.ID, len(s.Steps))
 	}
-	wantRoles := []string{"baseline", "attack"}
+	last := len(s.Steps) - 1
+	final := s.Steps[last]
 	for i, st := range s.Steps {
 		if st.ID == "" || st.Method == "" || st.Path == "" {
 			return fmt.Errorf("contract: %s: step %d is missing id, method or path", s.ID, i)
 		}
-		if st.Role != wantRoles[i] {
-			return fmt.Errorf("contract: %s: step %d role must be %q, got %q", s.ID, i, wantRoles[i], st.Role)
+		var want string
+		switch {
+		case i == 0:
+			want = "baseline"
+		case i == last:
+			want = "attack"
+		default:
+			want = "setup"
+		}
+		if st.Role != want {
+			return fmt.Errorf("contract: %s: step %d role must be %q, got %q", s.ID, i, want, st.Role)
 		}
 		if strings.TrimSpace(st.Hypothesis) == "" {
 			return fmt.Errorf("contract: %s: step %s has no hypothesis; every step must test one", s.ID, st.ID)
@@ -233,6 +243,12 @@ func (s Scenario) validateSteps() error {
 			return fmt.Errorf("contract: %s: step %s names anonymous but auth is %s", s.ID, st.ID, auth)
 		case auth != "none" && st.Identity == "":
 			return fmt.Errorf("contract: %s: step %s has no identity", s.ID, st.ID)
+		}
+		if want == "setup" {
+			// A setup step is part of the same actor's chain: same identity, valid token.
+			if st.Identity != final.Identity || auth != "valid" {
+				return fmt.Errorf("contract: %s: setup step %s must use the attacker identity %s with a valid token", s.ID, st.ID, final.Identity)
+			}
 		}
 		if auth == "alg_none" && (st.ForgeAs == "" || st.Identity == "anonymous") {
 			return fmt.Errorf("contract: %s: step %s uses alg_none and needs forge_as", s.ID, st.ID)

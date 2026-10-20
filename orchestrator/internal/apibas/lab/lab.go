@@ -168,6 +168,13 @@ func Flaws() []Flaw {
 				"Fixed: a bulk update naming any order the caller does not own returns 403 and changes nothing.",
 		},
 		{
+			ID:          "LAB-AUTHZ-PRIVESC-001",
+			ScenarioID:  "API-BAS-AUTHZ-004",
+			Description: "PATCH /api/me/role lets a customer set their own role, including admin.",
+			Oracle: "Vulnerable: a customer sets their own role to admin, then uses the admin route (state change). " +
+				"Fixed: the role change is refused with 403, so the admin route refuses the customer too.",
+		},
+		{
 			ID:          "LAB-AUTHZ-MASS-001",
 			ScenarioID:  "API-BAS-AUTHZ-003",
 			Description: "PATCH /api/orders/{id} binds every submitted field, including owner_id, from the request body.",
@@ -221,6 +228,7 @@ type Server struct {
 	revoked map[string]bool
 	mu      sync.Mutex
 	orders  map[string]*Order
+	roles   map[string]string // customer -> role; absent means "customer"
 	audit   []AuditEntry
 }
 
@@ -245,6 +253,7 @@ func New(cfg Config) (*Server, error) {
 // reseed restores the store to the fixture's seed state. Callers must hold
 // s.mu, except during New where the server is not yet shared.
 func (s *Server) reseed() {
+	s.roles = make(map[string]string)
 	s.orders = make(map[string]*Order, len(s.cfg.Fixture.Objects))
 	for _, o := range s.cfg.Fixture.Objects {
 		s.orders[o.ID] = &Order{
@@ -263,6 +272,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/orders/{id}", s.getOrder)
 	mux.HandleFunc("PATCH /api/orders/{id}", s.patchOrder)
 	mux.HandleFunc("PATCH /api/orders/bulk", s.bulkUpdate)
+	mux.HandleFunc("PATCH /api/me/role", s.setOwnRole)
+	mux.HandleFunc("PATCH /api/v2/admin/orders/{id}/status", s.adminSetStatusV2)
 	mux.HandleFunc("PATCH /api/admin/orders/{id}/status", s.adminSetStatus)
 	mux.HandleFunc("GET /api/v1/orders/{id}", s.getOrderV1)
 	mux.HandleFunc("GET /api/orders", s.listOrders)
@@ -643,6 +654,72 @@ func publicBody(o *Order) map[string]any {
 		body[k] = v
 	}
 	return body
+}
+
+// roleOf returns the role of a customer. Customers default to "customer".
+func (s *Server) roleOf(customer string) string {
+	if role, ok := s.roles[customer]; ok {
+		return role
+	}
+	return "customer"
+}
+
+// setOwnRole is the self-service role endpoint. The vulnerable build accepts any
+// role from the caller (LAB-AUTHZ-PRIVESC-001); the fixed build refuses.
+func (s *Server) setOwnRole(w http.ResponseWriter, r *http.Request) {
+	caller, st := s.identify(r)
+	if st != authOK {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthenticated"})
+		return
+	}
+	if s.cfg.Mode == ModeFixed {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "role changes are administrative"})
+		return
+	}
+	var req struct {
+		Role string `json:"role"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Role == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "role is required"})
+		return
+	}
+	s.mu.Lock()
+	s.roles[caller] = req.Role
+	s.record("role_change", "", fmt.Sprintf("%s set own role to %s", caller, req.Role))
+	s.mu.Unlock()
+	writeJSON(w, http.StatusOK, map[string]string{"role": req.Role})
+}
+
+// adminSetStatusV2 is the admin status route used by the escalation chain. It
+// enforces the admin role in both builds, so the only planted flaw on the chain
+// is the self-service role change.
+func (s *Server) adminSetStatusV2(w http.ResponseWriter, r *http.Request) {
+	caller, st := s.identify(r)
+	if st != authOK {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthenticated"})
+		return
+	}
+	var req struct {
+		Status string `json:"status"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Status == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "status is required"})
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.roleOf(caller) != "admin" {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "admin role required"})
+		return
+	}
+	order, found := s.orders[r.PathValue("id")]
+	if !found {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+		return
+	}
+	order.Status = req.Status
+	s.record("admin_status", order.Tag, fmt.Sprintf("order %s status set by admin", order.ID))
+	writeJSON(w, http.StatusOK, map[string]string{"id": order.ID, "status": order.Status})
 }
 
 // bulkUpdate sets one status on many orders in a single request. The vulnerable

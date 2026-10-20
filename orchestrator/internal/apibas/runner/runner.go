@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
@@ -140,7 +141,7 @@ func (r *Runner) Run(ctx context.Context, s contract.Scenario) (Report, error) {
 	if !ok {
 		return r.skip(rep, grade.ReasonPreconditionMissing, "object "+s.Preconditions.Object+" not in fixture"), nil
 	}
-	baseline, attack := s.Steps[0], s.Steps[1]
+	baseline, attack := s.Steps[0], s.Steps[len(s.Steps)-1]
 	owner, ok := r.cfg.Fixture.Identity(baseline.Identity)
 	if !ok || owner.CustomerID != obj.OwnerID {
 		return r.skip(rep, grade.ReasonPreconditionMissing, "baseline identity is not the object owner"), nil
@@ -222,12 +223,23 @@ func (r *Runner) Run(ctx context.Context, s contract.Scenario) (Report, error) {
 		if err != nil {
 			return r.finish(ctx, sandbox, r.errorOut(rep, stateErrorReason(err), "state snapshot failed after baseline")), nil
 		}
-		attackExch, transport := r.do(ctx, attack, attackToken, obj, &obj)
-		rep.Exchanges = append(rep.Exchanges, attackExch)
-		if transport {
-			ev.Transport = true
-		} else {
-			ev.Attack = grade.Exchange{Status: attackExch.Status, LeakedProtected: attackExch.Leaked}
+		// Setup steps run in order. A denial stops the chain and that denial is
+		// the attack result, because the control held there. A 2xx lets the chain
+		// continue. The final step is always the attack.
+		for i := 1; i < len(s.Steps); i++ {
+			step := s.Steps[i]
+			exch, transport := r.do(ctx, step, attackToken, obj, &obj)
+			rep.Exchanges = append(rep.Exchanges, exch)
+			if transport {
+				ev.Transport = true
+				break
+			}
+			last := i == len(s.Steps)-1
+			stopped := last || slices.Contains(s.DeniedStatuses, exch.Status) || exch.Status/100 != 2
+			if stopped {
+				ev.Attack = grade.Exchange{Status: exch.Status, LeakedProtected: exch.Leaked}
+				break
+			}
 		}
 	}
 
