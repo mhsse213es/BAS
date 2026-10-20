@@ -57,16 +57,29 @@ order does not fire it.
 
 ## Explicitly not implemented
 
+Of the sub-techniques that were blocked, only these two are unbuilt: neither has a catalog entry nor a lab service.
+
 | Sub-technique | Blocked by |
 |---|---|
-| API-BAS-ABUSE-004 GraphQL depth, breadth and complexity | GraphQL adapter (protocol UNSUPPORTED) |
 | API-BAS-ABUSE-006 Expensive validation or downstream calls | A second lab service to make the downstream call |
 | API-BAS-ABUSE-007 SMS, OTP and paid-service consumption | A simulated paid provider in the lab |
-| API-BAS-ABUSE-008 Account creation and credential-validation automation | Registration route and a multi-request flow in the scenario contract |
-| API-BAS-ABUSE-009 Distributed low-rate abuse | Several source identities and per-identity throttling in the lab |
-| API-BAS-ABUSE-010 Queue growth and retry storms | A queue service in the lab |
-| API-BAS-ABUSE-004 and others above also need the detection fixture to carry their rules | Rule definitions per sub-technique |
-| Pagination item count | Resolved: ABUSE-003 checks item count on `orders-paged` (151 owned orders, cap 100). The default fixture still has two orders and cannot test it. |
+
+## Built since the earlier blocked list
+
+These were once listed as blocked. Each now has its adapter or lab service and passes its acceptance test
+in both builds.
+
+| Sub-technique | Built by |
+|---|---|
+| API-BAS-ABUSE-004 GraphQL depth | GraphQL adapter and lab route (phase 28; depth oracle phase 33) |
+| API-BAS-ABUSE-008 Account creation automation | `POST /api/abuse/signup` (phase 26) |
+| API-BAS-ABUSE-009 Low-rate per-session throttling | `GET /api/abuse/quote` (phase 26) |
+| API-BAS-ABUSE-010 Queue growth and retry storms | Broker `POST /broker/topics/{topic}/publish` (phase 33) |
+
+ABUSE-009's lab route resets per client-supplied session, so it tests a per-session limit. It does not test
+distributed multi-identity abuse, which needs several source identities and was not built.
+
+Pagination item count is resolved: ABUSE-003 checks it on `orders-paged` (151 owned orders, cap 100). The default fixture still has two orders and cannot test it.
 
 ## Protocols reported UNSUPPORTED
 
