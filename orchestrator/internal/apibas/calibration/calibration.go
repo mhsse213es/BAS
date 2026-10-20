@@ -21,7 +21,6 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"runtime"
 	"slices"
 	"strconv"
 	"time"
@@ -51,29 +50,29 @@ type Thresholds struct {
 	NoiseFloorMs       float64 `json:"noise_floor_ms"`
 	Alpha              float64 `json:"alpha"`
 	MinSeparationRatio float64 `json:"min_separation_ratio"`
+	MinPooledSamples   int     `json:"min_pooled_samples"`
 	Warmup             int     `json:"warmup"`
 	Trials             int     `json:"trials"`
 	Rounds             int     `json:"rounds"`
 }
 
-// Profile identifies the machine and runtime a record was measured on. A change to any
-// field means the environment has changed and the record must be requalified.
+// Profile is the environment a record was measured on. The fingerprint decides whether
+// a record applies. The label is for people reading the record and is never compared.
 type Profile struct {
-	Machine   string `json:"machine"` // operator-asserted label, required
-	GOOS      string `json:"goos"`
-	GOARCH    string `json:"goarch"`
-	NumCPU    int    `json:"num_cpu"`
-	GoVersion string `json:"go_version"`
+	Label       string      `json:"label"`
+	Fingerprint Fingerprint `json:"fingerprint"`
 }
 
-// CurrentProfile returns the profile of the running process under a machine label.
-func CurrentProfile(machine string) Profile {
-	return Profile{Machine: machine, GOOS: runtime.GOOS, GOARCH: runtime.GOARCH, NumCPU: runtime.NumCPU(), GoVersion: runtime.Version()}
+// CurrentProfile returns the profile of the running process. The label is recorded for
+// display only, so renaming a machine does not requalify it.
+func CurrentProfile(label string) Profile {
+	return Profile{Label: label, Fingerprint: CollectFingerprint()}
 }
 
-// Matches reports whether two profiles describe the same environment.
+// Matches reports whether two profiles describe the same environment. Only the fingerprint
+// is compared.
 func (p Profile) Matches(o Profile) bool {
-	return p == o
+	return p.Fingerprint.Matches(o.Fingerprint)
 }
 
 // RoundSamples holds one round's raw samples in milliseconds.
@@ -134,6 +133,7 @@ func policyFor(th Thresholds) latency.QualifyPolicy {
 		},
 		Alpha:              th.Alpha,
 		MinSeparationRatio: th.MinSeparationRatio,
+		MinPooledSamples:   th.MinPooledSamples,
 	}
 }
 
@@ -156,9 +156,20 @@ func toDurations(ms []float64) []time.Duration {
 // Verify recomputes the verdict from the stored samples and thresholds and compares it
 // with the stored verdict. Any difference is an integrity failure.
 func Verify(rec Record) error {
-	// Records written before the two-build model carry no samples. They can only be
-	// unqualified; a qualified verdict with no samples cannot be checked, so it is refused.
-	if len(rec.Vulnerable.Rounds) == 0 && len(rec.Fixed.Rounds) == 0 {
+	fp := rec.Profile.Fingerprint
+	hasSamples := len(rec.Vulnerable.Rounds) > 0 || len(rec.Fixed.Rounds) > 0
+	// A record with no fingerprint predates the fingerprint model. It can never be qualified.
+	if fp.Digest == "" {
+		if rec.Qualified || hasSamples {
+			return fmt.Errorf("%w: record has no environment fingerprint", ErrIntegrity)
+		}
+		return nil
+	}
+	if !fp.DigestIsConsistent() {
+		return fmt.Errorf("%w: environment fingerprint digest does not follow from its attributes", ErrIntegrity)
+	}
+	// Records with no samples can only be unqualified; a qualified verdict cannot be checked.
+	if !hasSamples {
 		if rec.Qualified {
 			return fmt.Errorf("%w: qualified verdict has no samples to check it against", ErrIntegrity)
 		}
@@ -223,8 +234,8 @@ func NextVersion(dir, scenarioID string) (int, error) {
 // check, that lack a machine label, or that do not carry the next version. Files are
 // created exclusively, so an existing version is never overwritten.
 func Write(dir string, rec Record) (string, error) {
-	if rec.Profile.Machine == "" {
-		return "", errors.New("calibration: a machine label is required")
+	if rec.Profile.Label == "" {
+		return "", errors.New("calibration: a machine label is required for the record")
 	}
 	if err := Verify(rec); err != nil {
 		return "", err

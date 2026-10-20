@@ -490,12 +490,8 @@ const latencyBaselineBatch = 50
 // samples. Grading is latency.Assess, and the resource limit is applied by timingOutcome.
 func (r *Runner) runLatency(ctx context.Context, rep Report, s contract.Scenario, obj fixture.Object, ownerToken, attackToken string) Report {
 	if reason, detail := calibrationCheck(s, r.cfg.Machine); reason != "" {
-		if reason == grade.ReasonCalibrationMismatch {
-			rep.TimingVerdict = "ERROR/" + reason
-			return r.errorOut(rep, reason, detail)
-		}
-		rep.TimingVerdict = "not_evaluated/" + reason
-		return r.skip(rep, reason, detail)
+		rep.TimingVerdict = "ERROR/" + reason
+		return r.errorOut(rep, reason, detail)
 	}
 	baseline, attack := s.Steps[0], s.Steps[len(s.Steps)-1]
 	pol := s.Latency
@@ -572,8 +568,8 @@ func timingOutcome(v grade.Outcome, resourceBreach bool) grade.Outcome {
 }
 
 // calibrationCheck decides whether this environment may produce a timing verdict. Any
-// reason returned means no security verdict is possible here. A declared-value mismatch
-// is an integrity fault and is an ERROR. Every other reason is not_evaluated.
+// reason returned is an ERROR: an unqualified, unmatched or tampered environment yields no
+// security verdict. The reason says which check refused it.
 func calibrationCheck(s contract.Scenario, machine string) (string, string) {
 	if s.Calibration == nil {
 		return grade.ReasonCalibrationMissing, "a timing scenario declares no calibration"
@@ -600,6 +596,7 @@ func calibrationCheck(s contract.Scenario, machine string) (string, string) {
 		NoiseFloorMs:       s.Calibration.NoiseFloorMs,
 		Alpha:              s.Calibration.Alpha,
 		MinSeparationRatio: s.Calibration.MinSeparationRatio,
+		MinPooledSamples:   s.Calibration.MinPooledSamples,
 		Warmup:             s.Latency.Warmup,
 		Trials:             s.Latency.Trials,
 		Rounds:             s.Latency.Rounds,
@@ -607,10 +604,20 @@ func calibrationCheck(s contract.Scenario, machine string) (string, string) {
 	if rec.Thresholds != declared {
 		return grade.ReasonCalibrationMismatch, fmt.Sprintf("declared values differ from calibration version %d", rec.Version)
 	}
+	if rec.Workload != workloadFor(s) {
+		return grade.ReasonRequalificationRequired, "workload differs from calibration version " + strconv.Itoa(rec.Version)
+	}
 	if !rec.Profile.Matches(calibration.CurrentProfile(machine)) {
-		return grade.ReasonRequalificationRequired, "machine or runtime differs from calibration version " + strconv.Itoa(rec.Version)
+		return grade.ReasonRequalificationRequired, "environment fingerprint differs from calibration version " + strconv.Itoa(rec.Version)
 	}
 	return "", ""
+}
+
+// workloadFor describes the measured workload. Calibration and the runtime gate both use
+// it, so a change to the workload requalifies the environment.
+func workloadFor(s contract.Scenario) string {
+	return fmt.Sprintf("%s: %d rounds, %d interleaved trials per round, baseline = %d-request batch, attack = one request per build, %d warm-up requests per build per round",
+		s.ID, s.Latency.Rounds, s.Latency.Trials, latencyBaselineBatch, s.Latency.Warmup)
 }
 
 // timingInputs resolves what a timing scenario needs from this runner's fixture and
@@ -737,6 +744,7 @@ func (r *Runner) Calibrate(ctx context.Context, s contract.Scenario, fixed *Runn
 		NoiseFloorMs:       s.Calibration.NoiseFloorMs,
 		Alpha:              s.Calibration.Alpha,
 		MinSeparationRatio: s.Calibration.MinSeparationRatio,
+		MinPooledSamples:   s.Calibration.MinPooledSamples,
 		Warmup:             pol.Warmup,
 		Trials:             pol.Trials,
 		Rounds:             pol.Rounds,
@@ -747,12 +755,11 @@ func (r *Runner) Calibrate(ctx context.Context, s contract.Scenario, fixed *Runn
 		return calibration.Record{}, err
 	}
 	return calibration.Record{
-		ScenarioID: s.ID,
-		Version:    version,
-		Supersedes: version - 1,
-		Profile:    calibration.CurrentProfile(machine),
-		Workload: fmt.Sprintf("%s: %d rounds, %d interleaved trials per round, baseline = %d-request batch, attack = one request per build, %d warm-up requests per build per round",
-			s.ID, pol.Rounds, pol.Trials, latencyBaselineBatch, pol.Warmup),
+		ScenarioID:           s.ID,
+		Version:              version,
+		Supersedes:           version - 1,
+		Profile:              calibration.CurrentProfile(machine),
+		Workload:             workloadFor(s),
 		Thresholds:           th,
 		Vulnerable:           vBuild,
 		Fixed:                fBuild,

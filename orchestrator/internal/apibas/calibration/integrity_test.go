@@ -41,7 +41,7 @@ func sealed(t *testing.T) Record {
 	fixed := rounds(3, base, cycle(10, 0.1, 0.2, 0.3))
 	q := Evaluate(th, vuln, fixed)
 	return Record{
-		ScenarioID: "API-BAS-ABUSE-002", Version: 1, Profile: Profile{Machine: "test-machine"},
+		ScenarioID: "API-BAS-ABUSE-002", Version: 1, Profile: Profile{Label: "test-machine", Fingerprint: CollectFingerprint()},
 		Thresholds: th, Vulnerable: Build{Rounds: vuln}, Fixed: Build{Rounds: fixed},
 		Qualified: q.Qualified, QualificationReasons: q.Reasons,
 		Separation: Separation{P: q.P, Ratio: q.Ratio, VulnMedianMs: q.VulnMedianMs, FixedMedianMs: q.FixedMedianMs},
@@ -115,7 +115,7 @@ func TestWriteRefusesTamperedRecord(t *testing.T) {
 
 // A record with no samples cannot claim to be qualified.
 func TestQualifiedWithoutSamplesIsRefused(t *testing.T) {
-	rec := Record{ScenarioID: "API-BAS-ABUSE-002", Version: 1, Profile: Profile{Machine: "m"}, Qualified: true}
+	rec := Record{ScenarioID: "API-BAS-ABUSE-002", Version: 1, Profile: Profile{Label: "m", Fingerprint: CollectFingerprint()}, Qualified: true}
 	if err := Verify(rec); !errors.Is(err, ErrIntegrity) {
 		t.Fatalf("qualified record with no samples verified: %v", err)
 	}
@@ -123,7 +123,7 @@ func TestQualifiedWithoutSamplesIsRefused(t *testing.T) {
 
 // Legacy records with no samples verify as unqualified, so they can only refuse timing.
 func TestLegacyRecordVerifiesUnqualified(t *testing.T) {
-	rec := Record{ScenarioID: "API-BAS-ABUSE-002", Version: 1, Profile: Profile{Machine: "m"}}
+	rec := Record{ScenarioID: "API-BAS-ABUSE-002", Version: 1, Profile: Profile{Label: "m", Fingerprint: CollectFingerprint()}}
 	if err := Verify(rec); err != nil {
 		t.Fatalf("legacy unqualified record refused: %v", err)
 	}

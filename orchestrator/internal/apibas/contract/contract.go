@@ -370,6 +370,8 @@ func (s Scenario) validateSteps() error {
 			return fmt.Errorf("contract: %s: calibration alpha must be between 0 and 1", s.ID)
 		case s.Calibration.MinSeparationRatio <= 1:
 			return fmt.Errorf("contract: %s: calibration min_separation_ratio must be greater than 1", s.ID)
+		case s.Calibration.MinPooledSamples < 2:
+			return fmt.Errorf("contract: %s: calibration min_pooled_samples must be at least 2", s.ID)
 		case s.Calibration.NoiseFloorMs <= 0:
 			return fmt.Errorf("contract: %s: calibration noise_floor_ms must be positive", s.ID)
 		case s.Calibration.AttackMaxMs <= float64(s.Latency.CeilingMs):
@@ -464,4 +466,6 @@ type CalibrationPolicy struct {
 	Alpha float64 `yaml:"alpha"`
 	// MinSeparationRatio is the minimum meaningful degradation: vulnerable median over fixed median.
 	MinSeparationRatio float64 `yaml:"min_separation_ratio"`
+	// MinPooledSamples is the fewest attack samples per build, pooled over rounds, the test needs.
+	MinPooledSamples int `yaml:"min_pooled_samples"`
 }

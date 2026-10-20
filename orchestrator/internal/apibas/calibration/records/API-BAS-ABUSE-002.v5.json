@@ -1,0 +1,220 @@
+{
+  "scenario_id": "API-BAS-ABUSE-002",
+  "version": 5,
+  "supersedes": 4,
+  "profile": {
+    "label": "lab-i5-8250u-win10",
+    "fingerprint": {
+      "attributes": {
+        "cpu_model": "Intel64 Family 6 Model 142 Stepping 10, GenuineIntel",
+        "go_version": "go1.26.8",
+        "goarch": "amd64",
+        "goos": "windows",
+        "memory_total_bytes": "8415367168",
+        "num_cpu": "8",
+        "os_version": "10.0.19045"
+      },
+      "sources": {
+        "cpu_model": "system-env:PROCESSOR_IDENTIFIER",
+        "go_version": "runtime",
+        "goarch": "runtime",
+        "goos": "runtime",
+        "memory_total_bytes": "kernel32!GlobalMemoryStatusEx",
+        "num_cpu": "runtime",
+        "os_version": "ntdll!RtlGetVersion"
+      },
+      "unavailable": null,
+      "digest": "d269e1bf22fb0a04f3dce3d1a962d045eba59cbc34db8c067adf2faa3a8d7a18"
+    }
+  },
+  "workload": "API-BAS-ABUSE-002: 3 rounds, 10 interleaved trials per round, baseline = 50-request batch, attack = one request per build, 3 warm-up requests per build per round",
+  "thresholds": {
+    "declared_baseline_ms": 0.18,
+    "tolerance": 4,
+    "ceiling_ms": 250,
+    "min_ratio": 5,
+    "max_cv": 0.5,
+    "attack_max_ms": 5000,
+    "noise_floor_ms": 1,
+    "alpha": 0.01,
+    "min_separation_ratio": 5,
+    "min_pooled_samples": 20,
+    "warmup": 3,
+    "trials": 10,
+    "rounds": 3
+  },
+  "vulnerable": {
+    "rounds": [
+      {
+        "baseline_ms": [
+          0.24245,
+          0.242212,
+          0.244722,
+          0.184016,
+          0.181718,
+          0.1972,
+          0.169824,
+          0.129528,
+          0.200104,
+          0.141122
+        ],
+        "attack_ms": [
+          1370.4978,
+          1365.708,
+          1364.1708,
+          1359.9311,
+          1363.3629,
+          1386.9399,
+          1392.6946,
+          1366.455,
+          1372.4769,
+          1412.2171
+        ]
+      },
+      {
+        "baseline_ms": [
+          0.227474,
+          0.160204,
+          0.218964,
+          0.172932,
+          0.200602,
+          0.151278,
+          0.21268,
+          0.149542,
+          0.2054,
+          0.180834
+        ],
+        "attack_ms": [
+          1371.2134,
+          1378.0707,
+          1357.4738,
+          1375.2756,
+          1359.5144,
+          1376.6199,
+          1361.3656,
+          1369.2628,
+          1368.976,
+          1383.3073
+        ]
+      },
+      {
+        "baseline_ms": [
+          0.184154,
+          0.128582,
+          0.141452,
+          0.172556,
+          0.218188,
+          0.19509,
+          0.190068,
+          0.141596,
+          0.205764,
+          0.117686
+        ],
+        "attack_ms": [
+          1362.4463,
+          1358.0633,
+          1362.9668,
+          1356.7601,
+          1364.4873,
+          1365.0621,
+          1372.8961,
+          1367.6123,
+          1315.9735,
+          1344.5972
+        ]
+      }
+    ],
+    "work_units_max": 400000
+  },
+  "fixed": {
+    "rounds": [
+      {
+        "baseline_ms": [
+          0.214318,
+          0.187422,
+          0.22936,
+          0.193894,
+          0.22943,
+          0.236308,
+          0.184572,
+          0.161302,
+          0.13863,
+          0.181384
+        ],
+        "attack_ms": [
+          0,
+          0.5323,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0.5171,
+          0,
+          0
+        ]
+      },
+      {
+        "baseline_ms": [
+          0.219124,
+          0.149126,
+          0.188084,
+          0.174662,
+          0.173668,
+          0.206688,
+          0.17279,
+          0.181976,
+          0.162244,
+          0.128836
+        ],
+        "attack_ms": [
+          0.5409,
+          0.0275,
+          0.5382,
+          0,
+          0,
+          0.5755,
+          0.5289,
+          0,
+          0,
+          0
+        ]
+      },
+      {
+        "baseline_ms": [
+          0.161374,
+          0.151124,
+          0.163212,
+          0.163306,
+          0.207466,
+          0.22153,
+          0.170506,
+          0.173092,
+          0.1611,
+          0.138844
+        ],
+        "attack_ms": [
+          0,
+          0.5104,
+          0.5431,
+          0,
+          0,
+          0,
+          0.5299,
+          0,
+          0,
+          0
+        ]
+      }
+    ],
+    "work_units_max": 0
+  },
+  "qualified": true,
+  "qualification_reasons": null,
+  "separation": {
+    "p_value": 1.2064535970307915e-11,
+    "ratio": 1366.0815,
+    "vulnerable_median_ms": 1366.0815,
+    "fixed_median_ms": 0
+  }
+}

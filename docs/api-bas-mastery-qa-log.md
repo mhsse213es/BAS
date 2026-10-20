@@ -927,3 +927,66 @@ All but the mismatch case are reported as SKIPPED with the reason and marked not
 - The separation test uses a normal approximation, without a tie correction. Timing samples in nanosecond resolution rarely tie, but the approximation is not exact for small samples.
 - Work units were 400000 for the vulnerable build and 0 for the fixed build. The resource check is independent of timing.
 - The attack-side ceiling is still a fixture-specific budget, not a universal threshold.
+
+
+## Phase 20 tranche - environment fingerprint, tie-corrected separation, explicit requalification
+
+Branch: `feature/api-bas-phase20` (from `main`). Scenario count stays at twenty-eight.
+
+### Decisions implemented
+
+| Decision | Implementation |
+|---|---|
+| Unqualified environment is ERROR, not a security verdict | Every calibration refusal (missing, unqualified, mismatched, workload, fingerprint) returns ERROR with its reason. The runtime gate no longer produces SKIPPED. |
+| Operator label is not identity | The label is recorded for display only. Only the environment fingerprint is compared. Renaming a machine does not requalify it (tested; confirmed live with `renamed-laptop`). |
+| Fingerprint from OS/hardware attributes | `calibration/fingerprint.go`: Go runtime (GOOS, GOARCH, Go version, CPU count); Windows: `kernel32!GlobalMemoryStatusEx` (memory), `ntdll!RtlGetVersion` (OS build), `PROCESSOR_IDENTIFIER` (CPU model); Linux: `/proc/cpuinfo`, `/proc/meminfo`, `/etc/os-release`. |
+| Record which attributes were available and verified | Each attribute stores its source. Attributes the platform cannot read are listed as `unavailable`, and that list is part of the digest. |
+| Fingerprint is drift detection, not proof | Documented in the code and here. A local administrator can change any of these values, so deliberate spoofing is not detected. |
+| Tie-corrected Mann-Whitney | `MannWhitneyP` assigns average ranks to ties and reduces the variance by the tie term. |
+| Minimum sample requirements | `min_pooled_samples: 20` per build (30 in the current calibration). Declared before measurement and enforced in `Qualify`. |
+| Identical measurements handled explicitly | All-identical values on both builds fail with `CAL_NO_RESOLUTION`. The p-value is 1. |
+| Minimum effect size and false-positive rate | Declared in the catalog before measurement: `min_separation_ratio: 5` and `alpha: 0.01`. Significance alone is not enough. |
+| Requalification policy | Explicit. The fingerprint digest, the workload string (`workloadFor`), the thresholds, and the record version each have a separate check and reason. |
+| Calibration cannot change the budget | Declared thresholds must equal the record field for field, or the gate returns `CALIBRATION_MISMATCH`. Calibration writes only the environment characterisation. |
+
+### Runtime gate, in order
+
+1. Record missing: `CALIBRATION_MISSING` (ERROR).
+2. Record fails integrity: `CALIBRATION_MISMATCH` (ERROR). This covers edited samples, a flipped verdict, an edited ratio or p-value, an edited fingerprint, and a record with no fingerprint that claims samples.
+3. Record unqualified: `CALIBRATION_NOT_QUALIFIED` (ERROR), with the failed checks listed.
+4. Declared thresholds differ from the record: `CALIBRATION_MISMATCH` (ERROR).
+5. Workload differs from the record: `REQUALIFICATION_REQUIRED` (ERROR).
+6. Environment fingerprint differs from the record: `REQUALIFICATION_REQUIRED` (ERROR).
+
+Only a passing gate reaches the attack. Then the baseline, attack, variance and effect checks of `latency.Assess` apply, as before.
+
+### Statistics
+
+- Tie-corrected Mann-Whitney, normal approximation, two-sided. Exact permutation was not used. With 30 samples per build it needs about 10^17 arrangements, so it is out of reach. The approximation is the reason for the minimum sample count, and the limit is stated.
+- Tests cover disjoint tied groups (separated), identical tied groups (not separable), all-identical values (no resolution), the pooled minimum at its boundary, and determinism.
+
+### Calibration v5 on this machine
+
+- Fingerprint: CPU model "Intel64 Family 6 Model 142 Stepping 10, GenuineIntel" (env, system-set), memory 8,415,367,168 bytes (kernel32), OS build 10.0.19045 (ntdll), Go go1.26.8, 8 CPUs. Unavailable: none.
+- Vulnerable median 1366.1 ms. Fixed median 0 ms (timer floor). Ratio 1366.1 (denominator floored at the 1 ms noise floor). p = 1.2e-11. Qualified.
+- Catalog declares v5 with baseline 0.18 ms.
+- Vulnerable build: `decision:FAIL`. Fixed build: `decision:PASS`. Both with a renamed label: unchanged.
+
+### Tests
+
+- `latency/qualify_ties_test.go`: tied separation, tied overlap, all-identical, pooled minimum boundary, determinism.
+- `calibration/fingerprint_test.go`: live fingerprint matches itself; every attribute read or listed unavailable; changed memory, CPU or Go version does not match; newly unavailable attribute does not match; label ignored; empty digest never matches; edited attribute inconsistent; record with edited fingerprint fails verification.
+
+### Known limits
+
+- Fingerprint is a drift detector. A deliberate spoof is not detected. It does not prove hardware identity.
+- Available-memory and load values are excluded, because they change between runs. Total memory is recorded.
+- Hostname is excluded, so a renamed host does not requalify it.
+- Only the attributes above are collected. A platform with fewer sources records more `unavailable` entries, and requalifies if they change.
+- Calibration is machine-specific. An unqualified environment is ERROR until it is recalibrated.
+- The fixture-specific budget (250 ms ceiling, 5x minimum ratio, 1 ms noise floor, 5000 ms attack band) is documented as fixture-specific. It is not a universal API security threshold.
+- v3 and v4 remain on disk as history. Neither is referenced. v4 has no fingerprint, so it fails integrity.
+
+### Not yet done
+
+- ABUSE-002 is not yet acceptance-validated on a second qualified environment. Its scenario claim should remain provisional until that passes.

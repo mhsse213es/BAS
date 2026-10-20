@@ -2,15 +2,18 @@ package latency
 
 import (
 	"math"
+	"sort"
 )
 
 // Qualification reasons. Each names the check that failed. A failed qualification
 // means the environment cannot support a security verdict for this scenario.
 const (
 	QReasonInsufficientSamples    = "CAL_INSUFFICIENT_SAMPLES"
+	QReasonPooledSamples          = "CAL_INSUFFICIENT_POOLED_SAMPLES"
 	QReasonBaselineOutOfBand      = "CAL_BASELINE_OUT_OF_BAND"
 	QReasonAttackOutOfBand        = "CAL_ATTACK_OUT_OF_BAND"
 	QReasonExcessiveVariance      = "CAL_EXCESSIVE_VARIANCE"
+	QReasonNoResolution           = "CAL_NO_RESOLUTION"
 	QReasonVulnerableBelowBudget  = "CAL_VULNERABLE_BELOW_BUDGET"
 	QReasonFixedOverBudget        = "CAL_FIXED_OVER_BUDGET"
 	QReasonInsufficientSeparation = "CAL_INSUFFICIENT_SEPARATION"
@@ -24,14 +27,15 @@ type QualifyPolicy struct {
 	Policy
 	Alpha              float64 // acceptable false-positive rate for the separation test
 	MinSeparationRatio float64 // minimum meaningful degradation: vulnerable median / fixed median
+	MinPooledSamples   int     // minimum attack samples per build, pooled over rounds, for the test
 }
 
 // Qualification is the result of qualifying one environment for one scenario.
 type Qualification struct {
 	Qualified     bool
 	Reasons       []string // every failed check, in check order; empty when qualified
-	P             float64  // two-sided Mann-Whitney p-value, vulnerable vs fixed attack samples
-	Ratio         float64  // vulnerable median / fixed median of pooled attack samples
+	P             float64  // two-sided Mann-Whitney p-value, tie-corrected, vulnerable vs fixed
+	Ratio         float64  // vulnerable median / max(fixed median, noise floor)
 	VulnMedianMs  float64
 	FixedMedianMs float64
 }
@@ -72,6 +76,9 @@ func Qualify(q QualifyPolicy, vuln, fixed []Round) Qualification {
 	}
 
 	vulnAtt, fixedAtt := attackSamples(vuln), attackSamples(fixed)
+	if len(vulnAtt) < q.MinPooledSamples || len(fixedAtt) < q.MinPooledSamples {
+		fail(QReasonPooledSamples)
+	}
 	out.VulnMedianMs, out.FixedMedianMs = median(vulnAtt), median(fixedAtt)
 	ceil := q.CeilingMs
 	if out.VulnMedianMs < ceil {
@@ -84,9 +91,15 @@ func Qualify(q QualifyPolicy, vuln, fixed []Round) Qualification {
 	// denominator is floored at the noise floor, so the ratio stays finite and never claims
 	// more degradation than the clock can resolve.
 	out.Ratio = out.VulnMedianMs / math.Max(out.FixedMedianMs, q.NoiseFloorMs)
-	out.P = MannWhitneyP(vulnAtt, fixedAtt)
-	if len(vulnAtt) > 0 && len(fixedAtt) > 0 && out.P > q.Alpha {
-		fail(QReasonInsufficientSeparation)
+	if allEqual(vulnAtt, fixedAtt) {
+		// Identical measurements on both builds carry no information about separation.
+		fail(QReasonNoResolution)
+		out.P = 1
+	} else {
+		out.P = MannWhitneyP(vulnAtt, fixedAtt)
+		if len(vulnAtt) > 0 && len(fixedAtt) > 0 && out.P > q.Alpha {
+			fail(QReasonInsufficientSeparation)
+		}
 	}
 	if out.Ratio < q.MinSeparationRatio {
 		fail(QReasonBelowMinDegradation)
@@ -111,31 +124,73 @@ func attackSamples(rs []Round) []float64 {
 	return out
 }
 
-// MannWhitneyP returns the two-sided p-value of the Mann-Whitney U test, using the
-// normal approximation without a tie correction. Samples are timing measurements in
-// nanosecond resolution, so exact ties are rare. The result is 1 when either side is
-// empty or the variance is zero, because no separation can be shown then.
+func allEqual(a, b []float64) bool {
+	if len(a)+len(b) == 0 {
+		return false
+	}
+	first := append(append([]float64(nil), a...), b...)[0]
+	for _, x := range a {
+		if x != first {
+			return false
+		}
+	}
+	for _, x := range b {
+		if x != first {
+			return false
+		}
+	}
+	return true
+}
+
+// MannWhitneyP returns the two-sided p-value of the Mann-Whitney U test with the tie
+// correction. Tied values receive their average rank, and the variance is reduced by the
+// tie term, so measurements that repeat (timer ticks, clamped responses) are not treated as
+// independent. The normal approximation is used, so callers must meet a minimum sample size;
+// Qualify enforces one. The result is 1 when a side is empty or the variance is zero, which
+// includes every case where all values are identical, because no separation can be shown.
 func MannWhitneyP(a, b []float64) float64 {
-	n1, n2 := float64(len(a)), float64(len(b))
+	n1, n2 := len(a), len(b)
 	if n1 == 0 || n2 == 0 {
 		return 1
 	}
-	u := 0.0
+	type obs struct {
+		v    float64
+		from int // 0 for a, 1 for b
+	}
+	all := make([]obs, 0, n1+n2)
 	for _, x := range a {
-		for _, y := range b {
-			switch {
-			case x > y:
-				u++
-			case x == y:
-				u += 0.5
+		all = append(all, obs{x, 0})
+	}
+	for _, y := range b {
+		all = append(all, obs{y, 1})
+	}
+	sort.Slice(all, func(i, j int) bool { return all[i].v < all[j].v })
+
+	N := float64(n1 + n2)
+	rankSumA := 0.0
+	tieTerm := 0.0
+	for i := 0; i < len(all); {
+		j := i
+		for j < len(all) && all[j].v == all[i].v {
+			j++
+		}
+		// Positions i..j-1 share the average rank of (i+1 .. j).
+		avg := float64(i+1+j) / 2
+		for k := i; k < j; k++ {
+			if all[k].from == 0 {
+				rankSumA += avg
 			}
 		}
+		t := float64(j - i)
+		tieTerm += t*t*t - t
+		i = j
 	}
-	mean := n1 * n2 / 2
-	sd := math.Sqrt(n1 * n2 * (n1 + n2 + 1) / 12)
-	if sd == 0 {
+	u := rankSumA - float64(n1*(n1+1))/2
+	mean := float64(n1) * float64(n2) / 2
+	variance := float64(n1) * float64(n2) / 12 * ((N + 1) - tieTerm/(N*(N-1)))
+	if variance <= 0 {
 		return 1
 	}
-	z := (u - mean) / sd
+	z := (u - mean) / math.Sqrt(variance)
 	return math.Erfc(math.Abs(z) / math.Sqrt2)
 }

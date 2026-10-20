@@ -11,7 +11,7 @@ func record(version, supersedes int) Record {
 		ScenarioID: "API-BAS-ABUSE-002",
 		Version:    version,
 		Supersedes: supersedes,
-		Profile:    Profile{Machine: "lab-i5-8250u", GOOS: "windows", GOARCH: "amd64", NumCPU: 8, GoVersion: "go1.26.8"},
+		Profile:    Profile{Label: "lab-i5-8250u", Fingerprint: CollectFingerprint()},
 		Thresholds: Thresholds{DeclaredBaselineMs: 0.15, Tolerance: 4, CeilingMs: 250, MinRatio: 5, MaxCV: 0.5, AttackMaxMs: 5000, Warmup: 3, Trials: 10, Rounds: 3},
 	}
 }
@@ -56,7 +56,7 @@ func TestWriteRefusesWrongVersionOrSupersession(t *testing.T) {
 
 func TestWriteRequiresMachineLabel(t *testing.T) {
 	r := record(1, 0)
-	r.Profile.Machine = ""
+	r.Profile.Label = ""
 	if _, err := Write(t.TempDir(), r); err == nil {
 		t.Fatal("record with no machine label accepted")
 	}

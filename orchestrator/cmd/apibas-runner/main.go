@@ -38,7 +38,7 @@ func main() {
 	fixtureName := flag.String("fixture", "orders-two-tenant", "fixture the target was seeded with")
 	allow := flag.String("allow", "", "comma-separated extra hosts the runner may reach (lab only)")
 	calibrate := flag.Bool("calibrate", false, "measure the baseline and write a new calibration record; runs no scenario")
-	machine := flag.String("machine", "", "label for the hardware being calibrated (required with -calibrate)")
+	machine := flag.String("machine", "", "display label for the record; identity comes from the environment fingerprint, not this label")
 	fixedTarget := flag.String("fixed-target", "", "lab base URL of the fixed build; required with -calibrate")
 	calDir := flag.String("calibration-dir", "internal/apibas/calibration/records", "directory the calibration record is written to")
 	flag.Parse()
