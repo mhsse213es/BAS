@@ -160,9 +160,10 @@ func (h *Handler) AdvanceKillChainCampaign(w http.ResponseWriter, r *http.Reques
 		initiatedBy = &uid
 	}
 	exec := EngineStageExecutor{
-		AgentID: bound.AgentID,
-		Runs:    poolRunReader{pool: h.db},
-		Options: stageDispatchOptions{Mode: "posture", InitiatedBy: initiatedBy},
+		AgentID:     bound.AgentID,
+		Runs:        poolRunReader{pool: h.db},
+		GroundTruth: store,
+		Options:     stageDispatchOptions{Mode: "posture", InitiatedBy: initiatedBy},
 	}
 	if h.verification != nil {
 		exec.Attestations = h.verification
@@ -194,7 +195,7 @@ func RecoverKillChainCampaigns(ctx context.Context, pool *pgxpool.Pool) error {
 	if err != nil {
 		return err
 	}
-	exec := EngineStageExecutor{Runs: poolRunReader{pool: pool}, Attestations: verification.NewStore(pool)}
+	exec := EngineStageExecutor{Runs: poolRunReader{pool: pool}, Attestations: verification.NewStore(pool), GroundTruth: store}
 	orch := killchain.Orchestrator{Store: store, Executor: exec}
 	for _, c := range list {
 		if _, err := orch.Recover(ctx, c.ID); err != nil {

@@ -43,6 +43,14 @@ func EnsureKillChainSchema(ctx context.Context, pool *pgxpool.Pool) error {
 			updated_at   timestamptz NOT NULL DEFAULT NOW(),
 			PRIMARY KEY (campaign_id, stage_key)
 		);
+		CREATE TABLE IF NOT EXISTS killchain_ground_truth (
+			run_id      text        PRIMARY KEY,
+			source      text        NOT NULL,
+			executed    text        NOT NULL,
+			reference   text        NOT NULL,
+			recorded_by text        NOT NULL DEFAULT '',
+			recorded_at timestamptz NOT NULL DEFAULT NOW()
+		);
 		CREATE TABLE IF NOT EXISTS killchain_coverage_proofs (
 			scenario_id     text        PRIMARY KEY,
 			domain          text        NOT NULL DEFAULT '',

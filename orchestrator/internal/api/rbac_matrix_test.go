@@ -313,6 +313,7 @@ var routeMatrix = []routeCase{
 	{http.MethodPost, "/api/killchain/campaigns", tierPermission, auth.CanRunScenario},
 	{http.MethodPost, "/api/killchain/campaigns/{id}/advance", tierPermission, auth.CanRunScenario},
 	{http.MethodPost, "/api/killchain/coverage/proofs", tierPermission, auth.CanRunScenario},
+	{http.MethodPost, "/api/killchain/runs/{runId}/ground-truth", tierPermission, auth.CanRunScenario},
 	{http.MethodPost, "/api/network-policy-imports", tierPermission, auth.CanImportNetworkPolicy},
 	{http.MethodPost, "/api/network-policy-evaluations", tierPermission, auth.CanImportNetworkPolicy},
 	{http.MethodPost, "/api/network-topology-imports", tierPermission, auth.CanImportNetworkTopology},

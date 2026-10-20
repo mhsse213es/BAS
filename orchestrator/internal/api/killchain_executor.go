@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/audspect/bas/internal/db"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -51,6 +52,9 @@ type EngineStageExecutor struct {
 	// Attestations supplies the per-expectation results the verification path wrote
 	// for a run. Nil leaves detection missing, which the verdict reports as a gap.
 	Attestations attestationReader
+	// GroundTruth supplies the independent ground-truth record for a run. Nil or
+	// no record leaves execution missing, which the verdict reports as a gap.
+	GroundTruth groundTruthReader
 	// AgentID is the agent a campaign runs on. Empty means no binding.
 	AgentID string
 	// Dispatcher starts a run through the existing run path. Nil means no dispatch.
@@ -124,6 +128,16 @@ func (x EngineStageExecutor) Collect(ctx context.Context, executionID string) (k
 			}
 			ev.Detection = detectionFromRecords(recs)
 		}
+		if x.GroundTruth != nil {
+			rec, ok, err := x.GroundTruth.GroundTruthForRun(ctx, executionID)
+			if err != nil {
+				return killchain.StageEvidence{}, false, false, err
+			}
+			if ok {
+				ev.GroundTruth.Source = rec.Source
+				ev.GroundTruth.Executed = rec.Executed
+			}
+		}
 		return ev, true, false, nil
 	case "failed", "error", "partial":
 		// partial means not every step ran, so the stage is not a clean run.
@@ -142,7 +156,7 @@ func evidenceFromRun(snap runSnapshot) killchain.StageEvidence {
 	return killchain.StageEvidence{
 		ExecutionID: snap.ExecutionID,
 		GroundTruth: killchain.GroundTruth{
-			Source:    "scenario run record (not independent of Audspect)",
+			Source:    db.RunRecordSource,
 			Attempted: killchain.TriYes,
 		},
 		Provenance: killchain.Provenance{

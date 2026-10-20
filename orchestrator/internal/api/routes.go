@@ -535,6 +535,7 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.With(auth.RequirePermission(auth.CanRunScenario)).Post("/api/killchain/campaigns", h.CreateKillChainCampaign)
 		r.With(auth.RequirePermission(auth.CanRunScenario)).Post("/api/killchain/campaigns/{id}/advance", h.AdvanceKillChainCampaign)
 		r.With(auth.RequirePermission(auth.CanRunScenario)).Post("/api/killchain/coverage/proofs", h.RecordKillChainProof)
+		r.With(auth.RequirePermission(auth.CanRunScenario)).Post("/api/killchain/runs/{runId}/ground-truth", h.RecordKillChainGroundTruth)
 		r.With(auth.RequirePermission(auth.CanRunScenario)).Post("/api/network-discovery-runs", h.TriggerNetworkDiscoveryRun)
 		r.With(auth.RequirePermission(auth.CanRunScenario)).Post("/api/dns-security-checks", h.TriggerDNSSecurityCheckRun)
 		r.With(auth.RequirePermission(auth.CanRunScenario)).Post("/api/transport-security-checks", h.TriggerTransportSecurityCheckRun)

@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 
+	"github.com/audspect/bas/internal/db"
 	"github.com/audspect/bas/internal/detectverify"
 	"github.com/audspect/bas/internal/killchain"
 	"github.com/audspect/bas/internal/verification"
@@ -59,4 +60,10 @@ func observationFromRecord(rec verification.Record) killchain.DetectionObservati
 		o.Verdict = killchain.ObservationError
 	}
 	return o
+}
+
+// groundTruthReader is the slice of the kill-chain store that stage collection
+// reads for a run's independent ground truth.
+type groundTruthReader interface {
+	GroundTruthForRun(ctx context.Context, runID string) (db.GroundTruthRecord, bool, error)
 }
