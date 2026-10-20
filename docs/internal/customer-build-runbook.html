@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<meta http-equiv="content-type" content="text/html; charset=utf-8"/>
+	<title></title>
+	<meta name="generator" content="LibreOffice 26.8.0.3 (Linux)"/>
+	<meta name="created" content="00:00:00"/>
+	<meta name="changed" content="00:00:00"/>
+	<style type="text/css">
+		@page { size: 8.27in 11.69in; margin: 0.79in }
+		p { margin-bottom: 0.1in; line-height: 115%; background: transparent }
+		h1 { margin-bottom: 0.08in; background: transparent; page-break-after: avoid }
+		h1.western { font-weight: bold; font-size: 18pt; font-family: "Liberation Sans", sans-serif }
+		h1.cjk { font-weight: bold; font-size: 18pt; font-family: "AR PL SungtiL GB" }
+		h1.ctl { font-weight: bold; font-family: "Noto Sans Devanagari"; font-size: 18pt }
+		pre { font-size: 10pt; font-family: "Liberation Mono", monospace; background: transparent }
+		h2 { margin-top: 0.14in; margin-bottom: 0.08in; background: transparent; page-break-after: avoid }
+		h2.western { font-weight: bold; font-size: 16pt; font-family: "Liberation Sans", sans-serif }
+		h2.cjk { font-weight: bold; font-size: 16pt; font-family: "AR PL SungtiL GB" }
+		h2.ctl { font-weight: bold; font-family: "Noto Sans Devanagari"; font-size: 16pt }
+		td p { widows: 0; orphans: 0; background: transparent }
+		th p { orphans: 0; widows: 0; text-align: center; font-weight: bold; background: transparent }
+		h3 { margin-top: 0.1in; margin-bottom: 0.08in; background: transparent; page-break-after: avoid }
+		h3.western { font-weight: bold; font-size: 14pt; font-family: "Liberation Sans", sans-serif }
+		h3.cjk { font-weight: bold; font-size: 14pt; font-family: "AR PL SungtiL GB" }
+		h3.ctl { font-weight: bold; font-family: "Noto Sans Devanagari"; font-size: 14pt }
+		blockquote { margin-right: 0.39in; margin-left: 0.39in; background: transparent }
+		a:link { color: #000080; text-decoration: underline }
+	</style>
+</head>
+<body lang="en-US" link="#000080" vlink="#800000" dir="ltr"><h1 class="western">
+Customer Build Runbook — building a signed delivery on a fresh
+machine</h1>
+<p>How to run <font face="Liberation Mono, monospace">packaging/windows-build.ps1</font>
+for a <b>customer</b> delivery (both&nbsp;<font face="Liberation Mono, monospace">-Customer</font>
+and <font face="Liberation Mono, monospace">-CustomerID</font> set)
+on a new Windows build host.</p>
+<p>Because a customer build auto-sets <font face="Liberation Mono, monospace">WindowsSigningRequired</font>
+and&nbsp;<font face="Liberation Mono, monospace">GpgSigningRequired</font>
+to <font face="Liberation Mono, monospace">$true</font>, the script
+<b>fails closed</b> (hard error, not a&nbsp;warning) if any part of
+the signing chain is missing. Steps below mark the hard&nbsp;blockers
+and give a substitute for each.</p>
+<p>Related: <a href="/input/import-1/build-guide.md"><font face="Liberation Mono, monospace">build-guide.md</font></a>,
+<a href="/input/import-1/signing-infrastructure.md"><font face="Liberation Mono, monospace">signing-infrastructure.md</font></a>.</p>
+<p>Example target command:</p>
+<pre style="margin-bottom: 0.2in; background: #e1e1e1">.\packaging\windows-build.ps1 `<br/>
+  -Version    &quot;1.8.5&quot; `<br/>
+  -Customer   &quot;HDFC Bank&quot; `<br/>
+  -CustomerID &quot;hdfc-prod-001&quot; `<br/>
+  -Days       311 `<br/>
+  -WindowsCertThumbprint &quot;&lt;thumbprint&gt;&quot;</pre>
+<hr/>
+
+<h2 class="western">0. Machine requirements</h2>
+<table width="100%" cellpadding="4" cellspacing="0">
+	<col width="85*"/>
+	<col width="85*"/>
+	<col width="85*"/>
+	<thead>
+		<tr valign="top">
+			<th width="33%" style="border-top: 1px solid #000000; border-bottom: 1px solid #000000; border-left: 1px solid #000000; border-right: none; padding-top: 0.04in; padding-bottom: 0.04in; padding-left: 0.04in; padding-right: 0in"><p align="left">
+				Resource</p>
+			</th>
+			<th width="33%" style="border-top: 1px solid #000000; border-bottom: 1px solid #000000; border-left: 1px solid #000000; border-right: none; padding-top: 0.04in; padding-bottom: 0.04in; padding-left: 0.04in; padding-right: 0in"><p align="left">
+				Minimum</p>
+			</th>
+			<th width="33%" style="border: 1px solid #000000; padding: 0.04in"><p align="left">
+				Why</p>
+			</th>
+		</tr>
+	</thead>
+	<tbody>
+		<tr valign="top">
+			<td width="33%" style="border-top: none; border-bottom: 1px solid #000000; border-left: 1px solid #000000; border-right: none; padding-top: 0in; padding-bottom: 0.04in; padding-left: 0.04in; padding-right: 0in"><p align="left">
+				OS</p>
+			</td>
+			<td width="33%" style="border-top: none; border-bottom: 1px solid #000000; border-left: 1px solid #000000; border-right: none; padding-top: 0in; padding-bottom: 0.04in; padding-left: 0.04in; padding-right: 0in"><p align="left">
+				Windows 10/11 x64</p>
+			</td>
+			<td width="33%" style="border-top: none; border-bottom: 1px solid #000000; border-left: 1px solid #000000; border-right: 1px solid #000000; padding-top: 0in; padding-bottom: 0.04in; padding-left: 0.04in; padding-right: 0.04in"><p align="left">
+				PowerShell build + Windows Authenticode signing</p>
+			</td>
+		</tr>
+		<tr valign="top">
+			<td width="33%" style="border-top: none; border-bottom: 1px solid #000000; border-left: 1px solid #000000; border-right: none; padding-top: 0in; padding-bottom: 0.04in; padding-left: 0.04in; padding-right: 0in"><p align="left">
+				RAM</p>
+			</td>
+			<td width="33%" style="border-top: none; border-bottom: 1px solid #000000; border-left: 1px solid #000000; border-right: none; padding-top: 0in; padding-bottom: 0.04in; padding-left: 0.04in; padding-right: 0in"><p>
+				<b>24 GB</b> (Docker VM ≥16 GB)</p>
+			</td>
+			<td width="33%" style="border-top: none; border-bottom: 1px solid #000000; border-left: 1px solid #000000; border-right: 1px solid #000000; padding-top: 0in; padding-bottom: 0.04in; padding-left: 0.04in; padding-right: 0.04in"><p>
+				<font face="Liberation Mono, monospace">garble -literals</font>
+				OOM-kills with less — the common <font face="Liberation Mono, monospace">cannot
+				allocate memory</font> build failure</p>
+			</td>
+		</tr>
+		<tr valign="top">
+			<td width="33%" style="border-top: none; border-bottom: 1px solid #000000; border-left: 1px solid #000000; border-right: none; padding-top: 0in; padding-bottom: 0.04in; padding-left: 0.04in; padding-right: 0in"><p align="left">
+				Disk</p>
+			</td>
+			<td width="33%" style="border-top: none; border-bottom: 1px solid #000000; border-left: 1px solid #000000; border-right: none; padding-top: 0in; padding-bottom: 0.04in; padding-left: 0.04in; padding-right: 0in"><p align="left">
+				~60 GB free</p>
+			</td>
+			<td width="33%" style="border-top: none; border-bottom: 1px solid #000000; border-left: 1px solid #000000; border-right: 1px solid #000000; padding-top: 0in; padding-bottom: 0.04in; padding-left: 0.04in; padding-right: 0.04in"><p align="left">
+				Docker images (postgres, caldera, headless-shell, orchestrator),
+				Go build cache, two Go toolchains</p>
+			</td>
+		</tr>
+		<tr valign="top">
+			<td width="33%" style="border-top: none; border-bottom: 1px solid #000000; border-left: 1px solid #000000; border-right: none; padding-top: 0in; padding-bottom: 0.04in; padding-left: 0.04in; padding-right: 0in"><p align="left">
+				Privileges</p>
+			</td>
+			<td width="33%" style="border-top: none; border-bottom: 1px solid #000000; border-left: 1px solid #000000; border-right: none; padding-top: 0in; padding-bottom: 0.04in; padding-left: 0.04in; padding-right: 0in"><p align="left">
+				Local admin</p>
+			</td>
+			<td width="33%" style="border-top: none; border-bottom: 1px solid #000000; border-left: 1px solid #000000; border-right: 1px solid #000000; padding-top: 0in; padding-bottom: 0.04in; padding-left: 0.04in; padding-right: 0.04in"><p align="left">
+				installing toolchains, importing certs, Docker</p>
+			</td>
+		</tr>
+		<tr valign="top">
+			<td width="33%" style="border-top: none; border-bottom: 1px solid #000000; border-left: 1px solid #000000; border-right: none; padding-top: 0in; padding-bottom: 0.04in; padding-left: 0.04in; padding-right: 0in"><p align="left">
+				Network</p>
+			</td>
+			<td width="33%" style="border-top: none; border-bottom: 1px solid #000000; border-left: 1px solid #000000; border-right: none; padding-top: 0in; padding-bottom: 0.04in; padding-left: 0.04in; padding-right: 0in"><p align="left">
+				Internet on first build</p>
+			</td>
+			<td width="33%" style="border-top: none; border-bottom: 1px solid #000000; border-left: 1px solid #000000; border-right: 1px solid #000000; padding-top: 0in; padding-bottom: 0.04in; padding-left: 0.04in; padding-right: 0.04in"><p>
+				<font face="Liberation Mono, monospace">docker pull</font>,
+				caldera emu-lib clone, <font face="Liberation Mono, monospace">go
+				install</font>, module downloads</p>
+			</td>
+		</tr>
+	</tbody>
+</table>
+<p><br/>
+<br/>
+
+</p>
+<hr/>
+
+<h2 class="western">1. Base tools</h2>
+<h3 class="western">1a. Docker Desktop (WSL2 backend) — give the VM
+RAM</h3>
+<p>Install Docker Desktop with the WSL2 engine. Create
+<font face="Liberation Mono, monospace">C:\Users\&lt;you&gt;\.wslconfig</font>:</p>
+<pre style="margin-bottom: 0.2in; background: #e1e1e1">[wsl2]<br/>
+memory=18GB<br/>
+swap=8GB<br/>
+processors=6</pre><p>
+Apply with <font face="Liberation Mono, monospace">wsl --shutdown</font>,
+then restart Docker Desktop.&nbsp;<b>Verify:</b> <font face="Liberation Mono, monospace">docker
+info</font> → <font face="Liberation Mono, monospace">Total Memory</font>
+≈ 18 GiB; <font face="Liberation Mono, monospace">docker run --rm
+hello-world</font>.&nbsp;<b>Still OOM:</b> raise <font face="Liberation Mono, monospace">swap</font>
+to 16–20 GB; close other apps; confirm you edited the&nbsp;<font face="Liberation Mono, monospace">.wslconfig</font>
+of the account that runs Docker.&nbsp;<b>Fallback (Hyper-V backend):</b>
+Docker Desktop → Settings → Resources → Memory →&nbsp;18 GB →
+Apply &amp; Restart (no <font face="Liberation Mono, monospace">.wslconfig</font>).</p>
+<h3 class="western">1b. Go (1.26.x)</h3>
+<p><a href="https://go.dev/dl/">https://go.dev/dl/</a> — <b>verify</b>
+<font face="Liberation Mono, monospace">go version</font>.</p>
+<h3 class="western">1c. Git for Windows</h3>
+<p><a href="https://git-scm.com/download/win">https://git-scm.com/download/win</a>
+— <b>verify</b> <font face="Liberation Mono, monospace">git
+--version</font>. (Also provides a&nbsp;fallback <font face="Liberation Mono, monospace">gpg.exe</font>.)</p>
+<h3 class="western">1d. garble (modern)</h3>
+<pre style="margin-bottom: 0.2in; background: #e1e1e1">go install mvdan.cc/garble@latest</pre><p>
+Ensure <font face="Liberation Mono, monospace">&quot;$(go env
+GOPATH)\bin&quot;</font> is on <font face="Liberation Mono, monospace">PATH</font>.
+<b>Verify:</b> <font face="Liberation Mono, monospace">garble
+version</font>.</p>
+<h3 class="western">1e. cosign — hard blocker</h3>
+<pre style="margin-bottom: 0.2in; background: #e1e1e1">winget install sigstore.cosign</pre><p>
+<b>Verify:</b> <font face="Liberation Mono, monospace">cosign
+version</font>.&nbsp;<b>Fallbacks:</b> <font face="Liberation Mono, monospace">go
+install github.com/sigstore/cosign/v2/cmd/cosign@latest</font>,
+or&nbsp;download <font face="Liberation Mono, monospace">cosign-windows-amd64.exe</font>,
+rename to <font face="Liberation Mono, monospace">cosign.exe</font>,
+put on PATH.&nbsp;<b>If missing:</b> build aborts — &quot;cosign is
+not installed, and cosign signing is&nbsp;mandatory for this customer
+build.&quot;</p>
+<h3 class="western">1f. GPG (Gpg4win) — hard blocker</h3>
+<p>Install Gpg4win (<a href="https://gpg4win.org/">https://gpg4win.org</a>).
+<b>Verify:</b>&nbsp;<font face="Liberation Mono, monospace">&amp;
+&quot;C:\Program Files (x86)\GnuPG\bin\gpg.exe&quot;
+--version</font>.&nbsp;<b>Fallback:</b> the script also finds
+Git-for-Windows' <font face="Liberation Mono, monospace">gpg</font>
+and a plain <font face="Liberation Mono, monospace">gpg</font>
+on&nbsp;PATH. On <font face="Liberation Mono, monospace">error
+running keyboxd</font>: remove <font face="Liberation Mono, monospace">use-keyboxd</font>
+from&nbsp;<font face="Liberation Mono, monospace">%USERPROFILE%\.gnupg\common.conf</font>
+and re-import the key.</p>
+<h3 class="western">1g. Legacy agent toolchain — hard blocker</h3>
+<p>Needs a <b>real</b> go1.20.14 GOROOT at <font face="Liberation Mono, monospace">C:\go1.20.14</font>
+<b>and</b> garble <b>v0.10.1</b> at&nbsp;<font face="Liberation Mono, monospace">C:\go1.20.14\gobin\garble.exe</font>.
+Provision once:</p>
+<pre style="margin-bottom: 0.2in; background: #e1e1e1"># 1) real go1.20.14 GOROOT<br/>
+Invoke-WebRequest &quot;https://go.dev/dl/go1.20.14.windows-amd64.zip&quot; -OutFile &quot;$env:TEMP\go12014.zip&quot;<br/>
+Expand-Archive &quot;$env:TEMP\go12014.zip&quot; -DestinationPath &quot;$env:TEMP\go12014&quot; -Force<br/>
+if (Test-Path C:\go1.20.14) { Remove-Item -Recurse -Force C:\go1.20.14 }<br/>
+Move-Item &quot;$env:TEMP\go12014\go&quot; C:\go1.20.14<br/>
+<br/>
+# 2) garble v0.10.1 into a DEDICATED gobin, built with that toolchain<br/>
+$env:GOROOT=&quot;C:\go1.20.14&quot;; $env:GOTOOLCHAIN=&quot;local&quot;; $env:GOBIN=&quot;C:\go1.20.14\gobin&quot;<br/>
+$env:PATH=&quot;C:\go1.20.14\bin;$env:PATH&quot;<br/>
+&amp; C:\go1.20.14\bin\go.exe install mvdan.cc/garble@v0.10.1<br/>
+$env:GOROOT=&quot;&quot;; $env:GOTOOLCHAIN=&quot;&quot;; $env:GOBIN=&quot;&quot;</pre><p>
+<b>Verify:</b> <font face="Liberation Mono, monospace">&amp;
+C:\go1.20.14\bin\go.exe version</font> → <font face="Liberation Mono, monospace">go1.20.14</font>;&nbsp;<font face="Liberation Mono, monospace">Test-Path
+C:\go1.20.14\gobin\garble.exe</font> → True.&nbsp;<b>Must-nots:</b>
+do not use <font face="Liberation Mono, monospace">$env:GOTOOLCHAIN=&quot;go1.20.14&quot;</font>
+on top of the main Go (it&nbsp;downloads a <i>module</i> toolchain
+garble cannot build against); <font face="Liberation Mono, monospace">C:\go1.20.14</font>
+must be&nbsp;a real directory, not a symlink. Dedicated GOBIN keeps
+v0.10.1 from clobbering the&nbsp;modern garble at <font face="Liberation Mono, monospace">GOPATH\bin</font>.</p>
+<h3 class="western">1h. Windows code-signing certificate — hard
+blocker</h3>
+<p>Import the Authenticode <b>code-signing</b> cert into the Windows
+store, get the&nbsp;thumbprint:</p>
+<pre style="margin-bottom: 0.2in; background: #e1e1e1">Get-ChildItem Cert:\CurrentUser\My -CodeSigningCert | Format-List Subject, Thumbprint<br/>
+# or Cert:\LocalMachine\My</pre><p>
+Pass it as <font face="Liberation Mono, monospace">-WindowsCertThumbprint</font>
+(or set <font face="Liberation Mono, monospace">$env:BAS_WINDOWS_CERT_THUMBPRINT</font>).&nbsp;<b>If
+missing:</b> build errors immediately at the agent-signing step; no
+skip for a&nbsp;customer build.</p>
+<hr/>
+
+<h2 class="western">2. Secrets that <font face="Liberation Mono, monospace">git
+clone</font> does NOT bring</h2>
+<p>These are untracked — copy them <b>securely</b> into the same
+relative paths:</p>
+<table width="100%" cellpadding="4" cellspacing="0">
+	<col width="85*"/>
+	<col width="85*"/>
+	<col width="85*"/>
+	<thead>
+		<tr valign="top">
+			<th width="33%" style="border-top: 1px solid #000000; border-bottom: 1px solid #000000; border-left: 1px solid #000000; border-right: none; padding-top: 0.04in; padding-bottom: 0.04in; padding-left: 0.04in; padding-right: 0in"><p align="left">
+				Path</p>
+			</th>
+			<th width="33%" style="border-top: 1px solid #000000; border-bottom: 1px solid #000000; border-left: 1px solid #000000; border-right: none; padding-top: 0.04in; padding-bottom: 0.04in; padding-left: 0.04in; padding-right: 0in"><p align="left">
+				Role</p>
+			</th>
+			<th width="33%" style="border: 1px solid #000000; padding: 0.04in"><p align="left">
+				Regenerate instead?</p>
+			</th>
+		</tr>
+	</thead>
+	<tbody>
+		<tr valign="top">
+			<td width="33%" style="border-top: none; border-bottom: 1px solid #000000; border-left: 1px solid #000000; border-right: none; padding-top: 0in; padding-bottom: 0.04in; padding-left: 0.04in; padding-right: 0in"><p>
+				<font face="Liberation Mono, monospace">orchestrator\private_key.pem</font></p>
+			</td>
+			<td width="33%" style="border-top: none; border-bottom: 1px solid #000000; border-left: 1px solid #000000; border-right: none; padding-top: 0in; padding-bottom: 0.04in; padding-left: 0.04in; padding-right: 0in"><p align="left">
+				RSA-4096 scenario signing</p>
+			</td>
+			<td width="33%" style="border-top: none; border-bottom: 1px solid #000000; border-left: 1px solid #000000; border-right: 1px solid #000000; padding-top: 0in; padding-bottom: 0.04in; padding-left: 0.04in; padding-right: 0.04in"><p>
+				a new key is auto-generated and <font face="Liberation Mono, monospace">signing.go</font>
+				rewritten → diverges from prior releases (ok only when
+				re-keying the whole line)</p>
+			</td>
+		</tr>
+		<tr valign="top">
+			<td width="33%" style="border-top: none; border-bottom: 1px solid #000000; border-left: 1px solid #000000; border-right: none; padding-top: 0in; padding-bottom: 0.04in; padding-left: 0.04in; padding-right: 0in"><p>
+				<font face="Liberation Mono, monospace">packaging\licensing\keys\private.pem</font></p>
+			</td>
+			<td width="33%" style="border-top: none; border-bottom: 1px solid #000000; border-left: 1px solid #000000; border-right: none; padding-top: 0in; padding-bottom: 0.04in; padding-left: 0.04in; padding-right: 0in"><p>
+				signs <font face="Liberation Mono, monospace">&lt;customer-id&gt;.lic</font></p>
+			</td>
+			<td width="33%" style="border-top: none; border-bottom: 1px solid #000000; border-left: 1px solid #000000; border-right: 1px solid #000000; padding-top: 0in; padding-bottom: 0.04in; padding-left: 0.04in; padding-right: 0.04in"><p>
+				<b>No valid substitute</b> — must match the public key embedded
+				in the tracked <font face="Liberation Mono, monospace">orchestrator\internal\license\license_key.go</font>,
+				or the client rejects the license</p>
+			</td>
+		</tr>
+		<tr valign="top">
+			<td width="33%" style="border-top: none; border-bottom: 1px solid #000000; border-left: 1px solid #000000; border-right: none; padding-top: 0in; padding-bottom: 0.04in; padding-left: 0.04in; padding-right: 0in"><p>
+				<font face="Liberation Mono, monospace">packaging\signing\cosign.key</font></p>
+			</td>
+			<td width="33%" style="border-top: none; border-bottom: 1px solid #000000; border-left: 1px solid #000000; border-right: none; padding-top: 0in; padding-bottom: 0.04in; padding-left: 0.04in; padding-right: 0in"><p align="left">
+				cosign-signs the orchestrator tar</p>
+			</td>
+			<td width="33%" style="border-top: none; border-bottom: 1px solid #000000; border-left: 1px solid #000000; border-right: 1px solid #000000; padding-top: 0in; padding-bottom: 0.04in; padding-left: 0.04in; padding-right: 0.04in"><p>
+				<font face="Liberation Mono, monospace">bash
+				packaging/signing/cosign.sh --keygen</font> regenerates, but
+				<font face="Liberation Mono, monospace">cosign.pub</font> then
+				changes and must ship — don't regenerate for a real delivery</p>
+			</td>
+		</tr>
+	</tbody>
+</table>
+<p><br/>
+<br/>
+
+</p>
+<p>Plus the <b>GPG secret key</b> for <font face="Liberation Mono, monospace">releases@audspect.com</font>
+(keyring, not a repo file):</p>
+<pre style="margin-bottom: 0.2in; background: #e1e1e1"># export once on an existing host:<br/>
+gpg --export-secret-keys --armor releases@audspect.com &gt; releases-secret.asc<br/>
+# import on the new host:<br/>
+gpg --import releases-secret.asc</pre><p>
+<b>Verify:</b> <font face="Liberation Mono, monospace">gpg
+--list-secret-keys releases@audspect.com</font>.&nbsp;Keep these off
+shared storage; delete <font face="Liberation Mono, monospace">releases-secret.asc</font>
+after import.&nbsp;(<font face="Liberation Mono, monospace">cosign.pub</font>,
+<font face="Liberation Mono, monospace">pubkey.asc</font>,
+<font face="Liberation Mono, monospace">license_key.go</font> are
+tracked and arrive with the repo.)</p>
+<hr/>
+
+<h2 class="western">3. Get the repository</h2>
+<pre style="margin-bottom: 0.2in; background: #e1e1e1">cd C:\Users\&lt;you&gt;\Downloads<br/>
+git clone &lt;repo-url&gt; Audspect_Cloud<br/>
+cd Audspect_Cloud<br/>
+git checkout main   # or the exact release commit/tag to ship</pre><p>
+Then drop the three §2 key files into their paths.</p>
+<hr/>
+
+<h2 class="western">4. Pre-flight check</h2>
+<pre style="margin-bottom: 0.2in; background: #e1e1e1">foreach ($f in @(<br/>
+  &quot;orchestrator\private_key.pem&quot;,<br/>
+  &quot;packaging\licensing\keys\private.pem&quot;,<br/>
+  &quot;packaging\signing\cosign.key&quot;)) {<br/>
+    &quot;{0,-45} {1}&quot; -f $f, (Test-Path $f) }<br/>
+&quot;go           &quot; + (Get-Command go     -ErrorAction SilentlyContinue).Source<br/>
+&quot;garble       &quot; + (Get-Command garble -ErrorAction SilentlyContinue).Source<br/>
+&quot;cosign       &quot; + (Get-Command cosign -ErrorAction SilentlyContinue).Source<br/>
+&quot;legacy go    &quot; + (Test-Path C:\go1.20.14\bin\go.exe)<br/>
+&quot;legacy garble&quot; + (Test-Path C:\go1.20.14\gobin\garble.exe)<br/>
+gpg --list-secret-keys releases@audspect.com<br/>
+docker info --format 'Docker mem: {{.MemTotal}}'</pre><p>
+All paths <font face="Liberation Mono, monospace">True</font>, tools
+resolved, GPG key listed, Docker running → proceed.</p>
+<hr/>
+
+<h2 class="western">5. Run the build</h2>
+<pre style="margin-bottom: 0.2in; background: #e1e1e1">.\packaging\windows-build.ps1 `<br/>
+  -Version    &quot;1.8.5&quot; `<br/>
+  -Customer   &quot;HDFC Bank&quot; `<br/>
+  -CustomerID &quot;hdfc-prod-001&quot; `<br/>
+  -Days       311 `<br/>
+  -WindowsCertThumbprint &quot;&lt;thumbprint-from-1h&gt;&quot;</pre><p>
+~10–20 min; the orchestrator <font face="Liberation Mono, monospace">garble
+-literals</font> stage is the slow/heavy one.</p>
+<hr/>
+
+<h2 class="western">6. Verify outputs</h2>
+<pre style="margin-bottom: 0.2in; background: #e1e1e1">dir dist\bas-install-1.8.5.zip, dist\bas-install-1.8.5.zip.sha256, dist\bas-install-1.8.5.zip.asc<br/>
+dir hdfc-prod-001.lic<br/>
+dir dist\pubkey.asc, dist\verify-sig.sh</pre><p>
+The console summary prints the exact <font face="Liberation Mono, monospace">scp</font>
++ client install commands. Ship the&nbsp;zip, its <font face="Liberation Mono, monospace">.sha256</font>,
+<font face="Liberation Mono, monospace">.asc</font>, <font face="Liberation Mono, monospace">pubkey.asc</font>,
+<font face="Liberation Mono, monospace">verify-sig.sh</font>, and the
+<font face="Liberation Mono, monospace">.lic</font>.</p>
+<hr/>
+
+<h2 class="western">7. Troubleshooting</h2>
+<table width="100%" cellpadding="4" cellspacing="0">
+	<col width="85*"/>
+	<col width="85*"/>
+	<col width="85*"/>
+	<thead>
+		<tr valign="top">
+			<th width="33%" style="border-top: 1px solid #000000; border-bottom: 1px solid #000000; border-left: 1px solid #000000; border-right: none; padding-top: 0.04in; padding-bottom: 0.04in; padding-left: 0.04in; padding-right: 0in"><p align="left">
+				Symptom</p>
+			</th>
+			<th width="33%" style="border-top: 1px solid #000000; border-bottom: 1px solid #000000; border-left: 1px solid #000000; border-right: none; padding-top: 0.04in; padding-bottom: 0.04in; padding-left: 0.04in; padding-right: 0in"><p align="left">
+				Cause</p>
+			</th>
+			<th width="33%" style="border: 1px solid #000000; padding: 0.04in"><p align="left">
+				Fix / substitute</p>
+			</th>
+		</tr>
+	</thead>
+	<tbody>
+		<tr valign="top">
+			<td width="33%" style="border-top: none; border-bottom: 1px solid #000000; border-left: 1px solid #000000; border-right: none; padding-top: 0in; padding-bottom: 0.04in; padding-left: 0.04in; padding-right: 0in"><p>
+				<font face="Liberation Mono, monospace">ResourceExhausted …
+				cannot allocate memory</font>, <font face="Liberation Mono, monospace">Docker
+				build failed</font></p>
+			</td>
+			<td width="33%" style="border-top: none; border-bottom: 1px solid #000000; border-left: 1px solid #000000; border-right: none; padding-top: 0in; padding-bottom: 0.04in; padding-left: 0.04in; padding-right: 0in"><p>
+				Docker VM RAM too low for <font face="Liberation Mono, monospace">garble
+				-literals</font></p>
+			</td>
+			<td width="33%" style="border-top: none; border-bottom: 1px solid #000000; border-left: 1px solid #000000; border-right: 1px solid #000000; padding-top: 0in; padding-bottom: 0.04in; padding-left: 0.04in; padding-right: 0.04in"><p>
+				§1a — raise <font face="Liberation Mono, monospace">.wslconfig</font>
+				<font face="Liberation Mono, monospace">memory</font> to 18 GB
+				(+swap), <font face="Liberation Mono, monospace">wsl --shutdown</font>,
+				restart Docker</p>
+			</td>
+		</tr>
+		<tr valign="top">
+			<td width="33%" style="border-top: none; border-bottom: 1px solid #000000; border-left: 1px solid #000000; border-right: none; padding-top: 0in; padding-bottom: 0.04in; padding-left: 0.04in; padding-right: 0in"><p>
+				<font face="Liberation Mono, monospace">Legacy agent build
+				requires a dedicated go1.20.14 install at C:\go1.20.14 (not
+				found)</font></p>
+			</td>
+			<td width="33%" style="border-top: none; border-bottom: 1px solid #000000; border-left: 1px solid #000000; border-right: none; padding-top: 0in; padding-bottom: 0.04in; padding-left: 0.04in; padding-right: 0in"><p align="left">
+				§1g not done</p>
+			</td>
+			<td width="33%" style="border-top: none; border-bottom: 1px solid #000000; border-left: 1px solid #000000; border-right: 1px solid #000000; padding-top: 0in; padding-bottom: 0.04in; padding-left: 0.04in; padding-right: 0.04in"><p align="left">
+				provision go1.20.14 + garble v0.10.1 as §1g</p>
+			</td>
+		</tr>
+		<tr valign="top">
+			<td width="33%" style="border-top: none; border-bottom: 1px solid #000000; border-left: 1px solid #000000; border-right: none; padding-top: 0in; padding-bottom: 0.04in; padding-left: 0.04in; padding-right: 0in"><p>
+				<font face="Liberation Mono, monospace">Windows signing is
+				required … but -WindowsCertThumbprint … is not set</font></p>
+			</td>
+			<td width="33%" style="border-top: none; border-bottom: 1px solid #000000; border-left: 1px solid #000000; border-right: none; padding-top: 0in; padding-bottom: 0.04in; padding-left: 0.04in; padding-right: 0in"><p align="left">
+				§1h missing</p>
+			</td>
+			<td width="33%" style="border-top: none; border-bottom: 1px solid #000000; border-left: 1px solid #000000; border-right: 1px solid #000000; padding-top: 0in; padding-bottom: 0.04in; padding-left: 0.04in; padding-right: 0.04in"><p>
+				import code-signing cert, pass <font face="Liberation Mono, monospace">-WindowsCertThumbprint</font></p>
+			</td>
+		</tr>
+		<tr valign="top">
+			<td width="33%" style="border-top: none; border-bottom: 1px solid #000000; border-left: 1px solid #000000; border-right: none; padding-top: 0in; padding-bottom: 0.04in; padding-left: 0.04in; padding-right: 0in"><p>
+				<font face="Liberation Mono, monospace">cosign is not installed,
+				and cosign signing is mandatory</font></p>
+			</td>
+			<td width="33%" style="border-top: none; border-bottom: 1px solid #000000; border-left: 1px solid #000000; border-right: none; padding-top: 0in; padding-bottom: 0.04in; padding-left: 0.04in; padding-right: 0in"><p align="left">
+				§1e missing</p>
+			</td>
+			<td width="33%" style="border-top: none; border-bottom: 1px solid #000000; border-left: 1px solid #000000; border-right: 1px solid #000000; padding-top: 0in; padding-bottom: 0.04in; padding-left: 0.04in; padding-right: 0.04in"><p align="left">
+				install cosign</p>
+			</td>
+		</tr>
+		<tr valign="top">
+			<td width="33%" style="border-top: none; border-bottom: 1px solid #000000; border-left: 1px solid #000000; border-right: none; padding-top: 0in; padding-bottom: 0.04in; padding-left: 0.04in; padding-right: 0in"><p>
+				<font face="Liberation Mono, monospace">cosign.key not found</font></p>
+			</td>
+			<td width="33%" style="border-top: none; border-bottom: 1px solid #000000; border-left: 1px solid #000000; border-right: none; padding-top: 0in; padding-bottom: 0.04in; padding-left: 0.04in; padding-right: 0in"><p align="left">
+				§2 not copied</p>
+			</td>
+			<td width="33%" style="border-top: none; border-bottom: 1px solid #000000; border-left: 1px solid #000000; border-right: 1px solid #000000; padding-top: 0in; padding-bottom: 0.04in; padding-left: 0.04in; padding-right: 0.04in"><p>
+				copy the real <font face="Liberation Mono, monospace">cosign.key</font>
+				(don't regenerate for a delivery)</p>
+			</td>
+		</tr>
+		<tr valign="top">
+			<td width="33%" style="border-top: none; border-bottom: 1px solid #000000; border-left: 1px solid #000000; border-right: none; padding-top: 0in; padding-bottom: 0.04in; padding-left: 0.04in; padding-right: 0in"><p>
+				<font face="Liberation Mono, monospace">No usable GPG signing key
+				for releases@audspect.com</font></p>
+			</td>
+			<td width="33%" style="border-top: none; border-bottom: 1px solid #000000; border-left: 1px solid #000000; border-right: none; padding-top: 0in; padding-bottom: 0.04in; padding-left: 0.04in; padding-right: 0in"><p align="left">
+				key not imported / keyboxd issue</p>
+			</td>
+			<td width="33%" style="border-top: none; border-bottom: 1px solid #000000; border-left: 1px solid #000000; border-right: 1px solid #000000; padding-top: 0in; padding-bottom: 0.04in; padding-left: 0.04in; padding-right: 0.04in"><p>
+				import secret key; on keyboxd error disable <font face="Liberation Mono, monospace">use-keyboxd</font>
+				and re-import</p>
+			</td>
+		</tr>
+		<tr valign="top">
+			<td width="33%" style="border-top: none; border-bottom: 1px solid #000000; border-left: 1px solid #000000; border-right: none; padding-top: 0in; padding-bottom: 0.04in; padding-left: 0.04in; padding-right: 0in"><p>
+				<font face="Liberation Mono, monospace">License private key not
+				found …</font> (warning, no <font face="Liberation Mono, monospace">.lic</font>)</p>
+			</td>
+			<td width="33%" style="border-top: none; border-bottom: 1px solid #000000; border-left: 1px solid #000000; border-right: none; padding-top: 0in; padding-bottom: 0.04in; padding-left: 0.04in; padding-right: 0in"><p>
+				<font face="Liberation Mono, monospace">packaging\licensing\keys\private.pem</font>
+				missing</p>
+			</td>
+			<td width="33%" style="border-top: none; border-bottom: 1px solid #000000; border-left: 1px solid #000000; border-right: 1px solid #000000; padding-top: 0in; padding-bottom: 0.04in; padding-left: 0.04in; padding-right: 0.04in"><p align="left">
+				copy the real license key (§2)</p>
+			</td>
+		</tr>
+		<tr valign="top">
+			<td width="33%" style="border-top: none; border-bottom: 1px solid #000000; border-left: 1px solid #000000; border-right: none; padding-top: 0in; padding-bottom: 0.04in; padding-left: 0.04in; padding-right: 0in"><p>
+				<font face="Liberation Mono, monospace">docker pull … failed</font>
+				(caldera/headless-shell warning)</p>
+			</td>
+			<td width="33%" style="border-top: none; border-bottom: 1px solid #000000; border-left: 1px solid #000000; border-right: none; padding-top: 0in; padding-bottom: 0.04in; padding-left: 0.04in; padding-right: 0in"><p align="left">
+				transient/network</p>
+			</td>
+			<td width="33%" style="border-top: none; border-bottom: 1px solid #000000; border-left: 1px solid #000000; border-right: 1px solid #000000; padding-top: 0in; padding-bottom: 0.04in; padding-left: 0.04in; padding-right: 0.04in"><p>
+				re-run or proceed — bundle degrades gracefully; <b>postgres</b>
+				pull failing is fatal, fix network</p>
+			</td>
+		</tr>
+		<tr valign="top">
+			<td width="33%" style="border-top: none; border-bottom: 1px solid #000000; border-left: 1px solid #000000; border-right: none; padding-top: 0in; padding-bottom: 0.04in; padding-left: 0.04in; padding-right: 0in"><p>
+				<font face="Liberation Mono, monospace">go</font>/<font face="Liberation Mono, monospace">garble</font>
+				not found</p>
+			</td>
+			<td width="33%" style="border-top: none; border-bottom: 1px solid #000000; border-left: 1px solid #000000; border-right: none; padding-top: 0in; padding-bottom: 0.04in; padding-left: 0.04in; padding-right: 0in"><p align="left">
+				PATH</p>
+			</td>
+			<td width="33%" style="border-top: none; border-bottom: 1px solid #000000; border-left: 1px solid #000000; border-right: 1px solid #000000; padding-top: 0in; padding-bottom: 0.04in; padding-left: 0.04in; padding-right: 0.04in"><p>
+				add <font face="Liberation Mono, monospace">%USERPROFILE%\go\bin</font>
+				to PATH, new shell</p>
+			</td>
+		</tr>
+		<tr valign="top">
+			<td width="33%" style="border-top: none; border-bottom: 1px solid #000000; border-left: 1px solid #000000; border-right: none; padding-top: 0in; padding-bottom: 0.04in; padding-left: 0.04in; padding-right: 0in"><p>
+				<font face="Liberation Mono, monospace">BASAgent-Setup-*.exe is
+				NN MB, expected ~14MB</font></p>
+			</td>
+			<td width="33%" style="border-top: none; border-bottom: 1px solid #000000; border-left: 1px solid #000000; border-right: none; padding-top: 0in; padding-bottom: 0.04in; padding-left: 0.04in; padding-right: 0in"><p>
+				<font face="Liberation Mono, monospace">go:embed</font>
+				regression</p>
+			</td>
+			<td width="33%" style="border-top: none; border-bottom: 1px solid #000000; border-left: 1px solid #000000; border-right: 1px solid #000000; padding-top: 0in; padding-bottom: 0.04in; padding-left: 0.04in; padding-right: 0.04in"><p align="left">
+				check out the intended release commit</p>
+			</td>
+		</tr>
+		<tr valign="top">
+			<td width="33%" style="border-top: none; border-bottom: 1px solid #000000; border-left: 1px solid #000000; border-right: none; padding-top: 0in; padding-bottom: 0.04in; padding-left: 0.04in; padding-right: 0in"><p>
+				stray <font face="Liberation Mono, monospace">NativeCommandError</font>
+				early in the run</p>
+			</td>
+			<td width="33%" style="border-top: none; border-bottom: 1px solid #000000; border-left: 1px solid #000000; border-right: none; padding-top: 0in; padding-bottom: 0.04in; padding-left: 0.04in; padding-right: 0in"><p align="left">
+				leftover poisoned Go env from a prior failed run</p>
+			</td>
+			<td width="33%" style="border-top: none; border-bottom: 1px solid #000000; border-left: 1px solid #000000; border-right: 1px solid #000000; padding-top: 0in; padding-bottom: 0.04in; padding-left: 0.04in; padding-right: 0.04in"><p align="left">
+				open a fresh PowerShell window and re-run</p>
+			</td>
+		</tr>
+	</tbody>
+</table>
+<p><br/>
+<br/>
+
+</p>
+<blockquote><b>License-only change</b> (renewal / new customer, no
+rebuild): don't rerun this&nbsp;whole script — use&nbsp;<font face="Liberation Mono, monospace">bash
+packaging/licensing/issue-license.sh -customer &quot;&lt;name&gt;&quot;
+-id &lt;id&gt; -days &lt;n&gt;</font>,&nbsp;which signs against the
+same license key.</blockquote>
+<hr/>
+
+<h2 class="western">Notes</h2>
+<ul>
+	<li><p>The three §2 key files and the GPG/cert material are what
+	make or break a&nbsp;customer build; the toolchain is easy, the
+	secrets are the real work.</p></li>
+	<li><p>Once the signing chain is set up on a machine, every later
+	build there is just §5.</p></li>
+</ul>
+<p><br/>
+<br/>
+
+</p>
+</body>
+</html>
