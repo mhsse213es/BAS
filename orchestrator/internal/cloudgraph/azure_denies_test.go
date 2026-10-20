@@ -43,35 +43,36 @@ func denyARM(t *testing.T) *httptest.Server {
 	}))
 }
 
-func TestDiscoverDenyAssignments_IndexesAndCountsExactScope(t *testing.T) {
+// denyClient returns a client whose ARM endpoint serves denyListing.
+func denyClient(t *testing.T) (*AzureDiscoveryClient, func()) {
+	t.Helper()
 	tok := azureTokenMock(t)
-	defer tok.Close()
 	arm := denyARM(t)
-	defer arm.Close()
-	client := newTestAzureDiscoveryClient(t, tok.URL, arm.URL, arm.URL)
+	return newTestAzureDiscoveryClient(t, tok.URL, arm.URL, arm.URL), func() {
+		tok.Close()
+		arm.Close()
+	}
+}
 
-	index, stats, err := client.DiscoverDenyAssignments(context.Background())
+func TestDiscoverDenyAssignments_CountsAndExactScope(t *testing.T) {
+	client, done := denyClient(t)
+	defer done()
+	denials, stats, err := client.DiscoverDenyAssignments(context.Background())
 	if err != nil {
 		t.Fatalf("DiscoverDenyAssignments: %v", err)
 	}
 	if stats.Found != 3 || stats.ExactScopeOnly != 1 {
 		t.Errorf("stats = %+v, want Found 3 and ExactScopeOnly 1", stats)
 	}
-	if len(index["alice-oid"]) != 1 {
-		t.Errorf("alice should be indexed under her object ID, got %d entries", len(index["alice-oid"]))
-	}
-	if len(index[azureEveryonePrincipal]) != 1 {
-		t.Errorf("everyone-entry count = %d, want 1 (exact-scope entry skipped)", len(index[azureEveryonePrincipal]))
+	if len(denials) != 2 {
+		t.Errorf("denials = %d, want 2 (one per non-exact deny block)", len(denials))
 	}
 }
 
 func TestAttachAzureDenies_ScopedDenyBlocksOnlyItsScope(t *testing.T) {
-	tok := azureTokenMock(t)
-	defer tok.Close()
-	arm := denyARM(t)
-	defer arm.Close()
-	client := newTestAzureDiscoveryClient(t, tok.URL, arm.URL, arm.URL)
-	index, _, err := client.DiscoverDenyAssignments(context.Background())
+	client, done := denyClient(t)
+	defer done()
+	denials, _, err := client.DiscoverDenyAssignments(context.Background())
 	if err != nil {
 		t.Fatalf("DiscoverDenyAssignments: %v", err)
 	}
@@ -82,11 +83,9 @@ func TestAttachAzureDenies_ScopedDenyBlocksOnlyItsScope(t *testing.T) {
 	outside := &CloudPermission{Source: src, Target: &CloudResource{CanonicalID: denyOutside}, Action: listKeys, SourceType: "role-assignment",
 		Attributes: map[string]string{"role_scope": "/subscriptions/sub-1", "role_actions": listKeys}}
 
-	marked := attachAzureDenies([]*CloudPermission{inRG, outside}, index)
-	if marked < 1 {
-		t.Fatalf("marked = %d, want at least the in-scope edge", marked)
+	if marked := attachAzureDenies([]*CloudPermission{inRG, outside}, denials); marked != 1 {
+		t.Fatalf("marked = %d, want exactly the in-scope edge", marked)
 	}
-
 	ev := &AzureEvaluator{}
 	if got := ev.EvaluatePermission(inRG, &RequestContext{}); got.State != Blocked || got.BlockedBy != "deny-assignment" {
 		t.Errorf("in-scope listKeys = %+v, want blocked by deny-assignment", got)
@@ -96,27 +95,19 @@ func TestAttachAzureDenies_ScopedDenyBlocksOnlyItsScope(t *testing.T) {
 	}
 }
 
-func TestAttachAzureDenies_WildcardEveryoneDenyBlocksSubscriptionAfterExcludedPrincipal(t *testing.T) {
-	tok := azureTokenMock(t)
-	defer tok.Close()
-	arm := denyARM(t)
-	defer arm.Close()
-	client := newTestAzureDiscoveryClient(t, tok.URL, arm.URL, arm.URL)
-	index, _, err := client.DiscoverDenyAssignments(context.Background())
+func TestAttachAzureDenies_EveryoneDenyReachesNonExcludedPrincipal(t *testing.T) {
+	client, done := denyClient(t)
+	defer done()
+	denials, _, err := client.DiscoverDenyAssignments(context.Background())
 	if err != nil {
 		t.Fatalf("DiscoverDenyAssignments: %v", err)
 	}
-
-	// bob is not excluded from the rg-other everyone-deny, whose "*" action is
-	// held by the deny even though notActions names storageAccounts/read: the
-	// wildcard is not expanded, so that exemption is not honoured. The result
-	// over-blocks, which is the conservative direction.
 	bob := &CloudIdentity{CanonicalID: "azure:user_bob-oid", Kind: "entra-user"}
-	edge := &CloudPermission{Source: bob, Target: &CloudResource{CanonicalID: "/subscriptions/sub-1/resourceGroups/rg-other/providers/Microsoft.Storage/storageAccounts/sa2"},
+	edge := &CloudPermission{Source: bob, Target: &CloudResource{CanonicalID: denyOutside},
 		Action: listKeys, SourceType: "role-assignment", Attributes: map[string]string{"role_scope": "/subscriptions/sub-1", "role_actions": listKeys}}
-	attachAzureDenies([]*CloudPermission{edge}, index)
+	attachAzureDenies([]*CloudPermission{edge}, denials)
 	if edge.Attributes["deny_assignment"] != "true" {
-		t.Fatal("wildcard everyone-deny should mark bob's listKeys")
+		t.Fatal("everyone-deny with wildcard action should mark bob's listKeys")
 	}
 	if got := (&AzureEvaluator{}).EvaluatePermission(edge, &RequestContext{}); got.State != Blocked {
 		t.Errorf("state = %s, want blocked", got.State)
@@ -124,28 +115,23 @@ func TestAttachAzureDenies_WildcardEveryoneDenyBlocksSubscriptionAfterExcludedPr
 }
 
 func TestAttachAzureDenies_ExcludedPrincipalNotDenied(t *testing.T) {
-	tok := azureTokenMock(t)
-	defer tok.Close()
-	arm := denyARM(t)
-	defer arm.Close()
-	client := newTestAzureDiscoveryClient(t, tok.URL, arm.URL, arm.URL)
-	index, _, err := client.DiscoverDenyAssignments(context.Background())
+	client, done := denyClient(t)
+	defer done()
+	denials, _, err := client.DiscoverDenyAssignments(context.Background())
 	if err != nil {
 		t.Fatalf("DiscoverDenyAssignments: %v", err)
 	}
-	// Alice is excluded from the rg-other everyone-deny. Her only denial
-	// there is the rg-data deny, which does not cover rg-other.
 	alice := &CloudIdentity{CanonicalID: denyAlice, Kind: "entra-user"}
-	edge := &CloudPermission{Source: alice, Target: &CloudResource{CanonicalID: "/subscriptions/sub-1/resourceGroups/rg-other/providers/Microsoft.Storage/storageAccounts/sa2"},
+	edge := &CloudPermission{Source: alice, Target: &CloudResource{CanonicalID: denyOutside},
 		Action: "Microsoft.Storage/storageAccounts/read", SourceType: "role-assignment",
 		Attributes: map[string]string{"role_scope": "/subscriptions/sub-1", "role_actions": "Microsoft.Storage/storageAccounts/read"}}
-	attachAzureDenies([]*CloudPermission{edge}, index)
+	attachAzureDenies([]*CloudPermission{edge}, denials)
 	if edge.Attributes["deny_assignment"] == "true" {
 		t.Error("excluded principal must not be denied by the everyone-deny")
 	}
 }
 
-func TestDenyActionsCover(t *testing.T) {
+func TestAzureAnyPatternMatches_DenyPatterns(t *testing.T) {
 	cases := []struct {
 		patterns []string
 		action   string
@@ -158,8 +144,8 @@ func TestDenyActionsCover(t *testing.T) {
 		{[]string{listKeys}, "Microsoft.Storage/storageAccounts/read", false},
 	}
 	for _, c := range cases {
-		if got := denyActionsCover(c.patterns, c.action); got != c.want {
-			t.Errorf("denyActionsCover(%v, %s) = %v, want %v", c.patterns, c.action, got, c.want)
+		if got := azureAnyPatternMatches(c.patterns, c.action); got != c.want {
+			t.Errorf("azureAnyPatternMatches(%v, %s) = %v, want %v", c.patterns, c.action, got, c.want)
 		}
 	}
 }

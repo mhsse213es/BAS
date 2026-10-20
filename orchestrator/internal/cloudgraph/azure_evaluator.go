@@ -55,7 +55,32 @@ func isRoleAssignmentMatch(edge *CloudPermission) bool {
 	if !hasScope || !hasActions {
 		return false
 	}
-	return scopeCovers(roleScope, edge.Target.CanonicalID) && actionListContains(roleActions, edge.Action)
+	if !scopeCovers(roleScope, edge.Target.CanonicalID) || !azureActionPatternListMatches(roleActions, edge.Action) {
+		return false
+	}
+	if notActions, ok := edge.Attributes["role_not_actions"]; ok && azureActionPatternListMatches(notActions, edge.Action) {
+		return false
+	}
+	return true
+}
+
+// azureActionPatternListMatches reports whether any pattern in a comma-separated
+// Azure action list covers action. Patterns may use '*' anywhere (for example
+// "*", "*/read", "Microsoft.Storage/*"). Azure action names are
+// case-insensitive.
+func azureActionPatternListMatches(actionList, action string) bool {
+	return azureAnyPatternMatches(strings.Split(actionList, ","), action)
+}
+
+// azureAnyPatternMatches reports whether any pattern in the list covers action.
+func azureAnyPatternMatches(patterns []string, action string) bool {
+	for _, p := range patterns {
+		p = strings.TrimSpace(p)
+		if p != "" && globMatch(p, action) {
+			return true
+		}
+	}
+	return false
 }
 
 // scopeCovers reports whether a role/deny assignment scope covers a target

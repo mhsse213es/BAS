@@ -5,9 +5,12 @@ package cloudgraph
 // results already computed for that inventory. Evaluations is keyed by
 // "source->action->target" (same key shape a scenario step uses to name an edge).
 type DiscoveredGraph struct {
-	Identities        []*CloudIdentity
-	Resources         []*CloudResource
-	Permissions       []*CloudPermission
+	Identities  []*CloudIdentity
+	Resources   []*CloudResource
+	Permissions []*CloudPermission
+	// Denials are provider deny rules (Azure deny assignments) kept so a scenario
+	// can apply them to the resource it targets, not only the granting edge's scope.
+	Denials           []*ScopeDenial
 	Evaluations       map[string]PathState // edge key -> evaluated state
 	AuditAvailability map[string]string    // audit source name -> "available"/"unavailable"
 }

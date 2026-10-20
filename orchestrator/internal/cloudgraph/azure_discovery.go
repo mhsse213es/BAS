@@ -249,38 +249,77 @@ type armRoleDefinition struct {
 	} `json:"properties"`
 }
 
-// effectiveRoleActions computes the net set of actions a role definition
-// grants, applying Azure's control-plane (actions/notActions) and
-// data-plane (dataActions/notDataActions) exclusion semantics per
-// permission block, then flattening into one ordered, de-duplicated list --
-// the shape the role_actions Attribute (and AzureEvaluator's exact-match
-// actionListContains) expects. Ignoring notActions/dataActions/
-// notDataActions here would over-report control-plane access (roles that
-// carve out exclusions via notActions) and under-report data-plane access
-// (most PaaS services grant access almost entirely via dataActions).
-func effectiveRoleActions(def *armRoleDefinition) []string {
-	seen := make(map[string]bool)
-	var actions []string
+// azureRoleBlock is one permission block of a role definition. Azure applies
+// notActions/notDataActions only within the block that declares them, so the
+// exclusions are kept per block rather than merged across the role.
+type azureRoleBlock struct {
+	granted    []string // actions and dataActions, in declaration order
+	notActions []string // notActions and notDataActions
+}
+
+func roleBlocks(def *armRoleDefinition) []azureRoleBlock {
+	blocks := make([]azureRoleBlock, 0, len(def.Properties.Permissions))
 	for _, perm := range def.Properties.Permissions {
-		excluded := make(map[string]bool, len(perm.NotActions)+len(perm.NotDataActions))
-		for _, na := range perm.NotActions {
-			excluded[na] = true
-		}
-		for _, nda := range perm.NotDataActions {
-			excluded[nda] = true
-		}
 		granted := make([]string, 0, len(perm.Actions)+len(perm.DataActions))
 		granted = append(granted, perm.Actions...)
 		granted = append(granted, perm.DataActions...)
-		for _, a := range granted {
-			if excluded[a] || seen[a] {
+		notActions := make([]string, 0, len(perm.NotActions)+len(perm.NotDataActions))
+		notActions = append(notActions, perm.NotActions...)
+		notActions = append(notActions, perm.NotDataActions...)
+		blocks = append(blocks, azureRoleBlock{granted: granted, notActions: notActions})
+	}
+	return blocks
+}
+
+// azureEdgeSpec is one permission edge a role block yields. A literal action
+// is netted against its own block's exclusions. A wildcard pattern (for
+// example "*" or "*/read") is kept as the pattern, carrying the block's full
+// grant and exclusion lists, so the evaluator can decide each concrete action
+// a scenario asks about.
+type azureEdgeSpec struct {
+	action         string
+	roleActions    string
+	roleNotActions string
+}
+
+func azureRoleEdgeSpecs(def *armRoleDefinition) []azureEdgeSpec {
+	var specs []azureEdgeSpec
+	seenLiteral := map[string]bool{}
+	for _, b := range roleBlocks(def) {
+		grantedJoined := strings.Join(b.granted, ",")
+		notJoined := strings.Join(b.notActions, ",")
+
+		var netted []string
+		for _, g := range b.granted {
+			if !strings.Contains(g, "*") && exactIn(g, b.notActions) {
 				continue
 			}
-			seen[a] = true
-			actions = append(actions, a)
+			netted = append(netted, g)
+		}
+		nettedJoined := strings.Join(netted, ",")
+
+		for _, g := range b.granted {
+			if strings.Contains(g, "*") {
+				specs = append(specs, azureEdgeSpec{action: g, roleActions: grantedJoined, roleNotActions: notJoined})
+				continue
+			}
+			if azureAnyPatternMatches(b.notActions, g) || seenLiteral[g] {
+				continue
+			}
+			seenLiteral[g] = true
+			specs = append(specs, azureEdgeSpec{action: g, roleActions: nettedJoined})
 		}
 	}
-	return actions
+	return specs
+}
+
+func exactIn(v string, list []string) bool {
+	for _, x := range list {
+		if x == v {
+			return true
+		}
+	}
+	return false
 }
 
 var (
@@ -379,8 +418,7 @@ func (c *AzureDiscoveryClient) DiscoverPermissions(ctx context.Context, identiti
 			roleDefCache[a.Properties.RoleDefinitionID] = def
 		}
 
-		actions := effectiveRoleActions(def)
-		roleActionsJoined := strings.Join(actions, ",")
+		specs := azureRoleEdgeSpecs(def)
 
 		target, ok := resourceByCanonicalID[a.Properties.Scope]
 		if !ok {
@@ -391,17 +429,21 @@ func (c *AzureDiscoveryClient) DiscoverPermissions(ctx context.Context, identiti
 			}
 		}
 
-		for _, action := range actions {
+		for _, spec := range specs {
+			attrs := map[string]string{
+				"role_scope":           a.Properties.Scope,
+				"role_actions":         spec.roleActions,
+				"role_definition_name": def.Properties.RoleName,
+			}
+			if spec.roleNotActions != "" {
+				attrs["role_not_actions"] = spec.roleNotActions
+			}
 			permissions = append(permissions, &CloudPermission{
 				Source:     identity,
 				Target:     target,
-				Action:     action,
+				Action:     spec.action,
 				SourceType: "role-assignment",
-				Attributes: map[string]string{
-					"role_scope":           a.Properties.Scope,
-					"role_actions":         roleActionsJoined,
-					"role_definition_name": def.Properties.RoleName,
-				},
+				Attributes: attrs,
 				Provenance: &Provenance{Source: "azure:arm-role-assignments", Confidence: "observed"},
 			})
 		}

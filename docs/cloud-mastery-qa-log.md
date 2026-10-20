@@ -45,10 +45,9 @@ Audit sources read what the provider logs. Some scenario steps are logged only i
 - The unit tests cover validation (`validateCloudScenarioRunBody`) and the DB executor against Postgres. The full path (`POST /api/cloud-scenario-runs` with real credentials, a real discovery pass, and `observe`) has not been exercised end-to-end.
 - **Verify:** one run per provider, with `observe` on, through the HTTP API. Check the stored `cloud_runs.result` and the audit-log row.
 
-### O-6 — Azure wildcard roles under-report — OPEN, important (MODEL)
-- Roles such as Owner and Contributor carry `*` in `actions`. Discovery emits edges with the literal action `*`, and `AzureEvaluator` matches exactly, so a concrete query such as `Microsoft.Storage/storageAccounts/listKeys/action` finds no grant. The result is that **a subscription Owner appears to have no access**. This is a conservative error, but a wrong one.
-- **Why not fixed now:** a naive glob match would over-report, because `notActions` carve-outs are currently only subtracted as exact strings (`effectiveRoleActions`). Fixing it properly needs (a) an action catalogue from `providerOperations`, and (b) a `role_not_actions` attribute the evaluator checks. That is a design change to a working evaluator and is not made silently.
-- **Verify live:** confirm that an Owner-assigned identity's scenario steps read as unknown or blocked, and confirm the size of the gap.
+### O-6 — Azure wildcard roles under-report — RESOLVED (see R-9)
+- Previously a subscription Owner's `*` edge never matched a concrete action, so Owner looked like no access. Fixed in R-9.
+- **Still to verify live:** on a real subscription, an Owner's scenario steps should read as granted, and the `role_not_actions` carve-outs should match what the portal shows for a custom role.
 
 ### O-7 — Enforcement layers not modelled (MODEL, high impact)
 These can make discovery over-report access, which is the dangerous direction:
@@ -104,6 +103,11 @@ These can make discovery over-report access, which is the dangerous direction:
 ### R-7 — Retry, throttling, and secret handling for cloud calls — RESOLVED `3aad60f8`
 - Azure, GCP and the audit sources retry 429 and 5xx with backoff and `Retry-After`, bounded by a cap. They are throttled to 5 requests per second, burst 10. Secrets are redacted from errors. Page counts are capped and a cap aborts the pass.
 - AWS uses the SDK's own retry policy.
+
+### R-9 — Azure wildcard roles were invisible to concrete steps — RESOLVED (this commit)
+- **What was wrong:** an Owner or Contributor `*` edge never matched a concrete action, and `notActions` were merged across a role's permission blocks.
+- **What changed:** each permission block is netted against its own exclusions. Wildcard grants are kept as patterns and carry the block's `role_not_actions`. The evaluator matches with glob rules and honours carve-outs. Scenario steps are evaluated against the step's resource, so a grant on an ancestor subscription still applies, and a deny at a child resource group blocks it. Covered by `azure_wildcard_test.go`.
+- **Known limit kept:** management-group inheritance is still not read (O-7).
 
 ### R-8 — Credentials never come from a request — RESOLVED `28304ead`, `7ae44b57`
 - AWS uses the SDK default chain, GCP uses Application Default Credentials, Azure reads service-principal variables. Each discoverer proves the credentials resolve to the account the run names before it reads inventory. Error text names a missing variable, never its value.

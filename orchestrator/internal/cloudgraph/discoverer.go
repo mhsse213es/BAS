@@ -95,16 +95,17 @@ func (d azureDiscoverer) Discover(ctx context.Context) (*DiscoveredGraph, Discov
 	if err != nil {
 		return nil, nil, fmt.Errorf("azure discovery: permissions: %w", err)
 	}
-	denies, denyStats, err := d.client.DiscoverDenyAssignments(ctx)
+	denials, denyStats, err := d.client.DiscoverDenyAssignments(ctx)
 	if err != nil {
 		return nil, nil, fmt.Errorf("azure discovery: deny assignments: %w", err)
 	}
-	marked := attachAzureDenies(permissions, denies)
+	marked := attachAzureDenies(permissions, denials)
 
 	graph := &DiscoveredGraph{
 		Identities:        identities,
 		Resources:         resources,
 		Permissions:       permissions,
+		Denials:           denials,
 		Evaluations:       map[string]PathState{},
 		AuditAvailability: map[string]string{},
 	}

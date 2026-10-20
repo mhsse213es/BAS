@@ -164,10 +164,7 @@ func ExecuteCloudScenario(scenario *CloudScenario, graph *DiscoveredGraph, evalu
 	gate := &StepGate{}
 
 	for _, step := range scenario.Steps {
-		edge := findScenarioEdge(graph, principal, step.Action, resource)
-		if edge == nil {
-			edge = &CloudPermission{Source: source, Target: target, Action: step.Action}
-		}
+		edge := scenarioStepEdge(graph, source, target, step.Action)
 
 		decision := gate.ShouldDispatch(edge, graph)
 		if !decision.Allowed {
@@ -235,52 +232,80 @@ func scenarioVerdict(steps []*CloudControlOutcome) string {
 	}
 }
 
-// findScenarioEdge returns the discovered edge for principal, action and
-// resource. A literal action match on the resource wins. Otherwise a grant
-// whose action pattern covers the step (for example "s3:*") is used, derived
-// into an edge carrying the step's own action so the evaluator checks the
-// step, not the pattern. A wildcard-resource grant applies to every resource.
-func findScenarioEdge(graph *DiscoveredGraph, principal, action, resource string) *CloudPermission {
-	var literalWide, patternExact, patternWide *CloudPermission
+// scenarioStepEdge builds the edge a scenario step is evaluated on. It starts
+// from the best discovered grant for the principal and action, and always
+// evaluates against the resource the scenario targets. A grant on an ancestor
+// scope (a subscription or project above the resource) is therefore checked
+// against the resource, and Azure denial rules are applied to that resource.
+// With no grant, the step is evaluated as a bare edge, which evaluators treat
+// as implicit deny.
+func scenarioStepEdge(graph *DiscoveredGraph, source *CloudIdentity, target *CloudResource, action string) *CloudPermission {
+	grant := findScenarioGrant(graph, source.CanonicalID, action, target.CanonicalID)
+	edge := &CloudPermission{Source: source, Target: target, Action: action}
+	if grant != nil {
+		edge.SourceType = grant.SourceType
+		edge.Provenance = grant.Provenance
+		edge.Attributes = map[string]string{}
+		for k, v := range grant.Attributes {
+			edge.Attributes[k] = v
+		}
+	}
+	if oid := azureObjectID(source.CanonicalID); oid != "" && len(graph.Denials) > 0 {
+		if d, ok := firstDenialFor(graph.Denials, oid, target.CanonicalID, action); ok {
+			if edge.Attributes == nil {
+				edge.Attributes = map[string]string{}
+			}
+			edge.Attributes["deny_assignment"] = "true"
+			edge.Attributes["deny_scope"] = d.Scope
+			edge.Attributes["deny_actions"] = action
+		}
+	}
+	return edge
+}
+
+// findScenarioGrant returns the discovered grant to evaluate for a step. A
+// literal action on the resource (or an ancestor scope, or a wildcard resource)
+// wins; otherwise a pattern grant whose action covers the step. Pattern grants
+// keep their attributes, so the evaluator checks the step's own action. The
+// evaluator also checks that the grant's scope covers the resource.
+func findScenarioGrant(graph *DiscoveredGraph, principal, action, resource string) *CloudPermission {
+	var literalAny, patternAny *CloudPermission
 	for _, p := range graph.Permissions {
 		if p.Source.CanonicalID != principal {
 			continue
 		}
-		onResource := p.Target.CanonicalID == resource
-		wide := p.Target.CanonicalID == "*"
+		covers := scenarioTargetCovers(p.Target.CanonicalID, resource)
 		switch {
 		case p.Action == action:
-			if onResource {
+			if covers && p.Target.CanonicalID == resource {
 				return p
 			}
-			if wide && literalWide == nil {
-				literalWide = p
+			if covers && literalAny == nil {
+				literalAny = p
 			}
 		case strings.Contains(p.Action, "*") && globMatch(p.Action, action):
-			if onResource && patternExact == nil {
-				patternExact = p
-			}
-			if wide && patternWide == nil {
-				patternWide = p
+			if covers && patternAny == nil {
+				patternAny = p
 			}
 		}
 	}
-	chosen := literalWide
-	if chosen == nil {
-		chosen = patternExact
+	if literalAny != nil {
+		return literalAny
 	}
-	if chosen == nil {
-		chosen = patternWide
+	return patternAny
+}
+
+// scenarioTargetCovers reports whether a grant's target covers resource: the
+// wildcard, the resource itself, or (for hierarchical Azure and GCP scopes) an
+// ancestor scope.
+func scenarioTargetCovers(target, resource string) bool {
+	if target == "*" || target == resource {
+		return true
 	}
-	if chosen == nil {
-		return nil
+	if strings.HasPrefix(target, "/subscriptions/") || strings.HasPrefix(target, "projects/") {
+		return strings.HasPrefix(resource, target+"/")
 	}
-	if chosen.Action == action {
-		return chosen
-	}
-	derived := *chosen
-	derived.Action = action
-	return &derived
+	return false
 }
 
 // ObserveCloudScenario compares each evaluated step's prediction with audit
