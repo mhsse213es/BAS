@@ -2014,3 +2014,48 @@ Not evaluated (no detection block): 39 of 70
   the report.
 - Only ABUSE-003 uses this fixture. Other pagination-adjacent scenarios (DATA-004 bulk enumeration) are not
   re-graded here.
+
+
+## Phase 37: ABUSE-006 (expensive downstream validation) and ABUSE-007 (paid SMS consumption)
+
+These two were the last unbuilt sub-techniques. Both are now built and pass in both builds.
+
+### Built
+
+- **ABUSE-006** `POST /api/validate/order-lines`. Each accepted request calls the downstream validator. The
+  vulnerable build has no limit (LAB-ABUSE-VALIDATE-001). The fixed build allows 5 per run and caller, then 429
+  before any downstream call.
+- **ABUSE-007** `POST /api/auth/otp/send`. Each accepted request sends a paid SMS. The vulnerable build has no
+  limit (LAB-ABUSE-OTP-001). The fixed build allows 3 per run and caller, then 429.
+- Both use the accepted-attempts oracle (`max_accepted_attempts`, 5 and 3). The earlier ABUSE-008 pattern.
+
+### Boundary: what "second service" means here
+
+- The downstream validator and the SMS provider are in-process boundaries with per-run counters. They are not
+  separate listeners. The tests show that the product's request triggers the downstream work. They do not test
+  network-level behaviour between services, timeouts, or retries across a real network hop.
+
+### Evidence
+
+- `TestPhase37_ExpensiveAndPaidAbuse` counts the accepted and refused responses in the report, so the downstream
+  or paid work is observed rather than inferred from the verdict. Vulnerable: 10 of 10 accepted for both. Fixed:
+  5 accepted and 5 refused (ABUSE-006); 3 accepted and 7 refused (ABUSE-007).
+- The flaw registry links both flaws to their catalog IDs (`TestFlawRegistryLinksToCatalog`).
+
+### Measured after this phase
+
+```
+Catalogued:    72
+Implemented:   72/72
+Evaluated:     72/72
+Validated:     72/72  (exploitability)
+Detection:     31 declared (unchanged). Not evaluated: 41 of 72.
+```
+
+The 41 not-evaluated count includes ABUSE-006 and ABUSE-007, which have no detection block. No detection coverage is
+claimed for them.
+
+### Still open
+
+- Network-level service behaviour (separate listeners) is not tested. The boundaries are in-process.
+- The two scenarios make no detection claim.

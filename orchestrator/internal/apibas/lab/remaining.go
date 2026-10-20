@@ -206,6 +206,8 @@ func remainingFlaws() []Flaw {
 		{ID: "LAB-ABUSE-SIGNUP-001", ScenarioID: "API-BAS-ABUSE-008", Description: "POST /api/abuse/signup has no limit on account creation.", Oracle: "more than the declared number of accounts are created for one run"},
 		{ID: "LAB-ABUSE-SESSION-001", ScenarioID: "API-BAS-ABUSE-009", Description: "GET /api/abuse/quote limits requests per client-supplied session, so a new session resets the limit.", Oracle: "more than the declared number of requests are accepted for one caller"},
 		{ID: "LAB-AUTHN-ROTATE-001", ScenarioID: "API-BAS-AUTHN-006", Description: "After POST /api/keys/rotate, the retired API token still changes orders.", Oracle: "the order status changes with a token that was rotated out"},
+		{ID: "LAB-ABUSE-VALIDATE-001", ScenarioID: "API-BAS-ABUSE-006", Description: "POST /api/validate/order-lines calls the downstream validator for every request, with no limit per run.", Oracle: "more downstream-triggering requests are accepted for one caller in a run than the declared maximum"},
+		{ID: "LAB-ABUSE-OTP-001", ScenarioID: "API-BAS-ABUSE-007", Description: "POST /api/auth/otp/send consumes a paid SMS unit for every request, with no limit per run.", Oracle: "more paid sends are accepted for one caller in a run than the declared maximum"},
 		{ID: "LAB-INTEG-REDIRECT-001", ScenarioID: "API-BAS-INTEG-004", Description: "GET /api/integrations/return sends the browser to any target named in next.", Oracle: "the Refresh header names an external host"},
 	}
 }

@@ -57,12 +57,7 @@ order does not fire it.
 
 ## Explicitly not implemented
 
-Of the sub-techniques that were blocked, only these two are unbuilt: neither has a catalog entry nor a lab service.
-
-| Sub-technique | Blocked by |
-|---|---|
-| API-BAS-ABUSE-006 Expensive validation or downstream calls | A second lab service to make the downstream call |
-| API-BAS-ABUSE-007 SMS, OTP and paid-service consumption | A simulated paid provider in the lab |
+None of the previously blocked sub-techniques remain unbuilt.
 
 ## Built since the earlier blocked list
 
@@ -75,6 +70,12 @@ in both builds.
 | API-BAS-ABUSE-008 Account creation automation | `POST /api/abuse/signup` (phase 26) |
 | API-BAS-ABUSE-009 Low-rate per-session throttling | `GET /api/abuse/quote` (phase 26) |
 | API-BAS-ABUSE-010 Queue growth and retry storms | Broker `POST /broker/topics/{topic}/publish` (phase 33) |
+| API-BAS-ABUSE-006 Expensive downstream validation | `POST /api/validate/order-lines` with an in-process downstream validator boundary (phase 37) |
+| API-BAS-ABUSE-007 Paid SMS consumption | `POST /api/auth/otp/send` with a simulated paid-send boundary (phase 37) |
+
+The downstream validator and paid SMS provider in phase 37 are in-process boundaries with their own per-run
+counters, not separate listeners. They test the product's request-to-downstream behaviour, not network-level
+behaviour between services.
 
 ABUSE-009's lab route resets per client-supplied session, so it tests a per-session limit. It does not test
 distributed multi-identity abuse, which needs several source identities and was not built.

@@ -341,6 +341,8 @@ type Server struct {
 	rotated map[string]bool
 	// brokerCounts counts accepted publishes per publisher and topic in the fixed build (broker.go).
 	brokerCounts map[string]int
+	// validatorCalls counts downstream validator calls per run (paid.go).
+	validatorCalls map[string]int
 	// sharedCache is the response cache of the vulnerable build (LAB-AUTHZ-CACHE-001), keyed by path.
 	sharedCache map[string]map[string]any
 }
@@ -439,6 +441,7 @@ func (s *Server) Handler() http.Handler {
 	s.registerGRPC(mux)
 	s.registerWebSocket(mux)
 	s.registerBroker(mux)
+	s.registerPaid(mux)
 	mux.HandleFunc("GET /lab/faults", s.adminOnly(s.listFaults))
 	if s.cfg.Mode == ModeVulnerable {
 		// LAB-GWAY-OVERRIDE-001: the vulnerable build honours a method-override header.

@@ -1,0 +1,59 @@
+id: API-BAS-ABUSE-006
+name: Order-line validation triggers unlimited downstream calls
+category: ABUSE
+claim: function_level
+attack_objective: >
+  An authenticated customer repeatedly validates order lines. Each validation calls a downstream validator
+  that does real work, so unlimited requests exhaust the downstream capacity.
+threat_model:
+  attacker: authenticated customer who can call the validation endpoint
+  identity: customer-b
+  access_level: standard customer, valid token
+  objective: consume downstream validation capacity without limit
+preconditions:
+  fixture: orders-two-tenant
+  identities: [customer-b]
+  object: ORD-2001
+steps:
+  - id: baseline-owner-read
+    role: baseline
+    identity: customer-b
+    auth: valid
+    method: GET
+    path: /api/orders/{object}
+    hypothesis: The owner can read their own order. If this fails, the scenario is not testable.
+  - id: attack-unbounded-validation
+    role: attack
+    identity: customer-b
+    auth: valid
+    method: POST
+    path: /api/validate/order-lines
+    body: '{"sku": "SKU-2001", "qty": 1}'
+    repeat: 10
+    hypothesis: Validation is limited per run, so the requests beyond the limit are refused before any downstream call.
+max_accepted_attempts: 5
+denied_statuses: [429]
+expected_control: >
+  Validation requests beyond the declared limit return 429, and no more than the declared number of
+  downstream-triggering requests are accepted in one run.
+ground_truth:
+  adapters: [state, response]
+  check: >
+    The number of accepted validations stays within the declared limit, and the state is unchanged by the
+    attack beyond the sandbox reset.
+detection_assertion:
+  status: not_evaluated
+  reason: Detection validation is Phase 4; this scenario makes no detection claim.
+evidence:
+  - sanitized_request
+  - sanitized_response
+  - state_diff
+side_effect_class: STATE_CHANGE_SANDBOX
+cleanup:
+  - reset the lab to its fixture seed after the run
+industry_mapping:
+  - "BFSI: validation endpoints that trigger unbounded downstream calls"
+regulatory_mapping: []
+negative_tests:
+  - API-BAS-ABUSE-006 against the fixed build must PASS
+  - API-BAS-ABUSE-006 with a single legitimate validation against the fixed build must return 200
