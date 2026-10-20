@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -140,4 +141,83 @@ func TestPipelineStage_UnknownConnectorIsError(t *testing.T) {
 // pipelinePersistStages is the stage list a pipeline result must cover, in pipeline order.
 func pipelinePersistStages() []string {
 	return []string{"connectivity", "ingestion", "normalization", "correlation", "alert", "case", "routing", "acknowledgement", "escalation"}
+}
+
+// A completed pipeline check survives a restart. The stage is left dispatched, as if the
+// process stopped after dispatch, and the connector is then unreachable. Recovery must read the
+// persisted result and must not run the check again.
+func TestPipelineStage_CompletedResultSurvivesRestart(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		es := fakeElastic(t, 200, `{"hits":{"total":{"value":1,"relation":"eq"},"hits":[
+		  {"_id":"doc-1","_source":{"@timestamp":"2026-10-20T09:02:03Z"}}]}}`)
+		insertElasticConnector(t, pool, "dc-restart", es.URL)
+		def := pipelineCampaignDef("pipe-restart-1", "dc-restart", false)
+		store := db.KillChainStore{Pool: pool}
+		if err := store.CreateCampaign(context.Background(), def, "owner-1", ""); err != nil {
+			t.Fatal(err)
+		}
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret)
+		if rec := advance(h, def.ID, ""); rec.Code != http.StatusOK {
+			t.Fatalf("advance: status=%d body=%s", rec.Code, rec.Body.String())
+		}
+		done, err := store.Campaign(context.Background(), def.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		first := done.Stages["ingest"]
+
+		// Simulate the crash: the stage is back to dispatched, and the connector is gone.
+		if err := store.PutStage(context.Background(), def.ID, killchain.StageRecord{
+			Key: "ingest", State: killchain.StateDispatched, ExecutionID: first.ExecutionID}); err != nil {
+			t.Fatal(err)
+		}
+		es.Close()
+
+		if err := RecoverKillChainCampaigns(context.Background(), pool, nil); err != nil {
+			t.Fatalf("recover: %v", err)
+		}
+		after, err := store.Campaign(context.Background(), def.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got := after.Stages["ingest"]
+		if got.Verdict != killchain.VerdictInconclusive || got.State != killchain.StateCompleted {
+			t.Fatalf("after restart verdict=%s state=%s reasons=%v, want the persisted INCONCLUSIVE",
+				got.Verdict, got.State, got.Reasons)
+		}
+		if len(got.Evidence.Pipeline) != len(pipelinePersistStages()) {
+			t.Fatalf("persisted evidence lost across restart: %d stages", len(got.Evidence.Pipeline))
+		}
+	})
+}
+
+// A check that started but never completed before a restart is an unknown outcome: it is
+// marked interrupted, never ERROR and never a pass.
+func TestPipelineStage_IncompleteCheckIsInterruptedNotError(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		def := pipelineCampaignDef("pipe-incomplete-1", "dc-unused", false)
+		store := db.KillChainStore{Pool: pool}
+		if err := store.CreateCampaign(context.Background(), def, "owner-1", ""); err != nil {
+			t.Fatal(err)
+		}
+		execID := pipelineExecutionID(def.ID, "ingest")
+		if err := store.BeginPipelineRun(context.Background(), db.PipelineRun{ExecutionID: execID,
+			CampaignID: def.ID, StageKey: "ingest", ConnectorID: "dc-unused", StartedAt: time.Now()}); err != nil {
+			t.Fatal(err)
+		}
+		if err := store.PutStage(context.Background(), def.ID, killchain.StageRecord{
+			Key: "ingest", State: killchain.StateDispatched, ExecutionID: execID}); err != nil {
+			t.Fatal(err)
+		}
+		if err := RecoverKillChainCampaigns(context.Background(), pool, nil); err != nil {
+			t.Fatalf("recover: %v", err)
+		}
+		after, err := store.Campaign(context.Background(), def.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := after.Stages["ingest"]; got.State != killchain.StateInterrupted || got.Verdict == killchain.VerdictError {
+			t.Fatalf("state=%s verdict=%s, want interrupted and not ERROR", got.State, got.Verdict)
+		}
+	})
 }

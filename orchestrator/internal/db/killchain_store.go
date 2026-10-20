@@ -65,6 +65,16 @@ func EnsureKillChainSchema(ctx context.Context, pool *pgxpool.Pool) error {
 			target_user  text        NOT NULL DEFAULT '',
 			received_at  timestamptz NOT NULL DEFAULT NOW()
 		);
+		CREATE TABLE IF NOT EXISTS killchain_pipeline_runs (
+			execution_id text        PRIMARY KEY,
+			campaign_id  text        NOT NULL,
+			stage_key    text        NOT NULL,
+			connector_id text        NOT NULL,
+			state        text        NOT NULL CHECK (state IN ('running', 'completed')),
+			started_at   timestamptz NOT NULL DEFAULT NOW(),
+			completed_at timestamptz,
+			results      jsonb
+		);
 		CREATE INDEX IF NOT EXISTS killchain_host_events_run ON killchain_host_events (run_id);
 		CREATE TABLE IF NOT EXISTS killchain_run_audit (
 			run_id           text        PRIMARY KEY,

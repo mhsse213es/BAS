@@ -211,7 +211,7 @@ func (x EngineStageExecutor) Collect(ctx context.Context, executionID string) (k
 		if x.Pipelines == nil {
 			return killchain.StageEvidence{}, true, true, killchain.ErrNoExecutor
 		}
-		return x.Pipelines.collect(executionID)
+		return x.Pipelines.collect(ctx, executionID)
 	}
 	if x.Runs == nil {
 		return killchain.StageEvidence{}, true, true, killchain.ErrNoExecutor

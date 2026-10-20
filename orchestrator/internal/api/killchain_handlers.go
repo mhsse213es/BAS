@@ -201,7 +201,7 @@ func (h *Handler) AdvanceKillChainCampaign(w http.ResponseWriter, r *http.Reques
 	}
 	exec.Dispatcher = handlerStageDispatcher{h: h}
 	exec.OSes = poolRunReader{pool: h.db}
-	exec.Pipelines = newPipelineStageRunner(h.loadDetectionConnector, time.Now)
+	exec.Pipelines = newPipelineStageRunner(db.KillChainStore{Pool: h.db}, h.loadDetectionConnector, time.Now)
 	exec.Audit = func(ctx context.Context, action, resource string, detail map[string]any, outcome string) {
 		h.auditLog(r, action, resource, detail, outcome)
 	}
@@ -236,6 +236,9 @@ func RecoverKillChainCampaigns(ctx context.Context, pool *pgxpool.Pool, engine *
 	}
 	exec := EngineStageExecutor{Runs: poolRunReader{pool: pool}, Attestations: verification.NewStore(pool), GroundTruth: store,
 		HostEvents: store, Hosts: poolRunReader{pool: pool}, Scenarios: scenarios}
+	exec.Pipelines = newPipelineStageRunner(store, func(ctx context.Context, id string) (*pipelineConnectorConfig, error) {
+		return (&Handler{db: pool}).loadDetectionConnector(ctx, id)
+	}, time.Now)
 	orch := killchain.Orchestrator{Store: store, Executor: exec}
 	for _, c := range list {
 		if _, err := orch.Recover(ctx, c.ID); err != nil {
