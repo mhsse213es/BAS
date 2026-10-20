@@ -23,7 +23,6 @@ import (
 	"io"
 	"math"
 	"net/http"
-	"runtime"
 	"slices"
 	"strings"
 	"time"
@@ -90,6 +89,8 @@ type Config struct {
 	Reset   Resetter    // required for STATE_CHANGE_SANDBOX scenarios
 	Events  EventSource // access events for detection scenarios
 	HTTP    *http.Client
+	// Machine is the operator's label for this hardware. Calibration records are bound to it.
+	Machine string
 }
 
 // Exchange is one request/response pair in evidence, after redaction.
@@ -488,9 +489,13 @@ const latencyBaselineBatch = 50
 // traffic is sent. Each round sends warm-up requests, then paired baseline and attack
 // samples. Grading is latency.Assess, and the resource limit is applied by timingOutcome.
 func (r *Runner) runLatency(ctx context.Context, rep Report, s contract.Scenario, obj fixture.Object, ownerToken, attackToken string) Report {
-	if reason, detail := calibrationCheck(s); reason != "" {
-		rep.TimingVerdict = "ERROR/" + reason
-		return r.errorOut(rep, reason, detail)
+	if reason, detail := calibrationCheck(s, r.cfg.Machine); reason != "" {
+		if reason == grade.ReasonCalibrationMismatch {
+			rep.TimingVerdict = "ERROR/" + reason
+			return r.errorOut(rep, reason, detail)
+		}
+		rep.TimingVerdict = "not_evaluated/" + reason
+		return r.skip(rep, reason, detail)
 	}
 	baseline, attack := s.Steps[0], s.Steps[len(s.Steps)-1]
 	pol := s.Latency
@@ -552,35 +557,6 @@ func timingPolicy(s contract.Scenario) latency.Policy {
 	}
 }
 
-// calibrationCheck returns a reason when the scenario may not be graded under its
-// declared calibration: no record for the version, or declared values that differ from
-// the record. Both are ERROR. Nothing widens a threshold to make a check pass.
-func calibrationCheck(s contract.Scenario) (string, string) {
-	if s.Calibration == nil {
-		return grade.ReasonCalibrationMissing, "a timing scenario declares no calibration"
-	}
-	rec, err := calibration.Get(s.ID, s.Calibration.Version)
-	if err != nil {
-		return grade.ReasonCalibrationMissing, err.Error()
-	}
-	declared := calibration.Thresholds{
-		DeclaredBaselineMs: s.Calibration.BaselineMs,
-		Tolerance:          s.Calibration.Tolerance,
-		CeilingMs:          float64(s.Latency.CeilingMs),
-		MinRatio:           s.Latency.MinRatio,
-		MaxCV:              s.Latency.MaxCV,
-		AttackMaxMs:        s.Calibration.AttackMaxMs,
-		NoiseFloorMs:       s.Calibration.NoiseFloorMs,
-		Warmup:             s.Latency.Warmup,
-		Trials:             s.Latency.Trials,
-		Rounds:             s.Latency.Rounds,
-	}
-	if rec.Thresholds != declared {
-		return grade.ReasonCalibrationMismatch, fmt.Sprintf("declared values differ from calibration version %d", rec.Version)
-	}
-	return "", ""
-}
-
 // timingOutcome maps a graded timing verdict and the resource check to the scenario
 // outcome. A security PASS is reachable only from a PASS verdict with no resource
 // breach. A work-unit breach is a deterministic fact counted by the lab, so it is a
@@ -595,74 +571,224 @@ func timingOutcome(v grade.Outcome, resourceBreach bool) grade.Outcome {
 	return v
 }
 
-// Calibrate measures the baseline of a timing scenario and returns the next calibration
-// record. It writes nothing. The caller stores the record with calibration.Write and
-// updates the scenario's version and baseline to match, so a calibration is always an
-// explicit, reviewable act.
-func (r *Runner) Calibrate(ctx context.Context, s contract.Scenario, machine, dir string) (calibration.Record, error) {
-	if s.Latency == nil || s.Calibration == nil {
-		return calibration.Record{}, fmt.Errorf("%s is not a timing scenario with a calibration block", s.ID)
+// calibrationCheck decides whether this environment may produce a timing verdict. Any
+// reason returned means no security verdict is possible here. A declared-value mismatch
+// is an integrity fault and is an ERROR. Every other reason is not_evaluated.
+func calibrationCheck(s contract.Scenario, machine string) (string, string) {
+	if s.Calibration == nil {
+		return grade.ReasonCalibrationMissing, "a timing scenario declares no calibration"
 	}
+	rec, err := calibration.Get(s.ID, s.Calibration.Version)
+	switch {
+	case errors.Is(err, calibration.ErrMissing):
+		return grade.ReasonCalibrationMissing, err.Error()
+	case errors.Is(err, calibration.ErrIntegrity):
+		return grade.ReasonCalibrationMismatch, err.Error()
+	case err != nil:
+		return grade.ReasonCalibrationMissing, err.Error()
+	}
+	if !rec.Qualified {
+		return grade.ReasonCalibrationNotQualified, "record v" + strconv.Itoa(rec.Version) + " reasons: " + strings.Join(rec.QualificationReasons, ",")
+	}
+	declared := calibration.Thresholds{
+		DeclaredBaselineMs: s.Calibration.BaselineMs,
+		Tolerance:          s.Calibration.Tolerance,
+		CeilingMs:          float64(s.Latency.CeilingMs),
+		MinRatio:           s.Latency.MinRatio,
+		MaxCV:              s.Latency.MaxCV,
+		AttackMaxMs:        s.Calibration.AttackMaxMs,
+		NoiseFloorMs:       s.Calibration.NoiseFloorMs,
+		Alpha:              s.Calibration.Alpha,
+		MinSeparationRatio: s.Calibration.MinSeparationRatio,
+		Warmup:             s.Latency.Warmup,
+		Trials:             s.Latency.Trials,
+		Rounds:             s.Latency.Rounds,
+	}
+	if rec.Thresholds != declared {
+		return grade.ReasonCalibrationMismatch, fmt.Sprintf("declared values differ from calibration version %d", rec.Version)
+	}
+	if !rec.Profile.Matches(calibration.CurrentProfile(machine)) {
+		return grade.ReasonRequalificationRequired, "machine or runtime differs from calibration version " + strconv.Itoa(rec.Version)
+	}
+	return "", ""
+}
+
+// timingInputs resolves what a timing scenario needs from this runner's fixture and
+// secrets: the object, the owner's token and the attacker's token.
+func (r *Runner) timingInputs(s contract.Scenario) (fixture.Object, string, string, error) {
 	if s.Preconditions.Fixture != r.cfg.Fixture.Name {
-		return calibration.Record{}, fmt.Errorf("scenario fixture %s is not loaded", s.Preconditions.Fixture)
+		return fixture.Object{}, "", "", fmt.Errorf("scenario fixture %s is not loaded", s.Preconditions.Fixture)
 	}
 	obj, ok := r.cfg.Fixture.Object(s.Preconditions.Object)
 	if !ok {
-		return calibration.Record{}, fmt.Errorf("object %s not in fixture", s.Preconditions.Object)
+		return fixture.Object{}, "", "", fmt.Errorf("object %s not in fixture", s.Preconditions.Object)
 	}
-	baseline := s.Steps[0]
+	baseline, attack := s.Steps[0], s.Steps[len(s.Steps)-1]
 	owner, ok := r.cfg.Fixture.Identity(baseline.Identity)
 	if !ok || owner.CustomerID != obj.OwnerID {
-		return calibration.Record{}, fmt.Errorf("baseline identity is not the object owner")
+		return fixture.Object{}, "", "", errors.New("baseline identity is not the object owner")
 	}
 	ownerToken, err := r.cfg.Secrets.Resolve(owner.TokenRef)
 	if err != nil {
-		return calibration.Record{}, fmt.Errorf("owner credential unavailable")
+		return fixture.Object{}, "", "", errors.New("owner credential unavailable")
 	}
+	attacker := fixture.Identity{}
+	if attackAuth(attack) != "none" {
+		var known bool
+		attacker, known = r.cfg.Fixture.Identity(attack.Identity)
+		if !known {
+			return fixture.Object{}, "", "", fmt.Errorf("attack identity %s not in fixture", attack.Identity)
+		}
+	}
+	attackToken, err := r.attackCredential(attack, attacker)
+	if err != nil {
+		return fixture.Object{}, "", "", err
+	}
+	return obj, ownerToken, attackToken, nil
+}
+
+// Calibrate measures the vulnerable build (this runner) and the fixed build (fixed) on
+// this machine. The two are interleaved within every trial, with the order alternating,
+// so both see the same conditions. It returns the next calibration record with its
+// qualification verdict. It writes nothing: the caller stores the record with
+// calibration.Write, so a calibration is always an explicit, reviewable act.
+func (r *Runner) Calibrate(ctx context.Context, s contract.Scenario, fixed *Runner, machine, dir string) (calibration.Record, error) {
+	if s.Latency == nil || s.Calibration == nil {
+		return calibration.Record{}, fmt.Errorf("%s is not a timing scenario with a calibration block", s.ID)
+	}
+	if fixed == nil {
+		return calibration.Record{}, errors.New("calibration needs a runner for the fixed build")
+	}
+	baseline, attack := s.Steps[0], s.Steps[len(s.Steps)-1]
 	pol := s.Latency
-	var rounds []latency.Round
-	for round := 0; round < pol.Rounds; round++ {
-		var rd latency.Round
-		for i := 0; i < pol.Warmup+pol.Trials; i++ {
-			start := time.Now()
-			for k := 0; k < latencyBaselineBatch; k++ {
-				if _, transport := r.do(ctx, baseline, ownerToken, obj, &obj); transport {
-					return calibration.Record{}, fmt.Errorf("baseline request failed during calibration")
-				}
-			}
-			d := time.Since(start) / latencyBaselineBatch
-			if i >= pol.Warmup {
-				rd.Baseline = append(rd.Baseline, d)
+
+	type target struct {
+		rn     *Runner
+		obj    fixture.Object
+		owner  string
+		attack string
+		build  *calibration.Build
+	}
+	vObj, vOwner, vAttack, err := r.timingInputs(s)
+	if err != nil {
+		return calibration.Record{}, fmt.Errorf("vulnerable build: %w", err)
+	}
+	fObj, fOwner, fAttack, err := fixed.timingInputs(s)
+	if err != nil {
+		return calibration.Record{}, fmt.Errorf("fixed build: %w", err)
+	}
+	var vBuild, fBuild calibration.Build
+	targets := []target{
+		{r, vObj, vOwner, vAttack, &vBuild},
+		{fixed, fObj, fOwner, fAttack, &fBuild},
+	}
+
+	measure := func(t target, rs *calibration.RoundSamples) error {
+		start := time.Now()
+		for k := 0; k < latencyBaselineBatch; k++ {
+			if _, transport := t.rn.do(ctx, baseline, t.owner, t.obj, &t.obj); transport {
+				return errors.New("baseline request failed during calibration")
 			}
 		}
-		rounds = append(rounds, rd)
+		rs.BaselineMs = append(rs.BaselineMs, msOf(time.Since(start)/latencyBaselineBatch))
+		start = time.Now()
+		aex, transport := t.rn.do(ctx, attack, t.attack, t.obj, &t.obj)
+		rs.AttackMs = append(rs.AttackMs, msOf(time.Since(start)))
+		if transport {
+			return errors.New("attack request failed during calibration")
+		}
+		if w := reportedField(aex.raw, "work_units"); w > t.build.WorkUnitsMax {
+			t.build.WorkUnitsMax = w
+		}
+		return nil
 	}
-	medianMs, p95Ms, cv := latency.Pooled(rounds)
+
+	for round := 0; round < pol.Rounds; round++ {
+		for _, t := range targets {
+			for i := 0; i < pol.Warmup; i++ {
+				if _, transport := t.rn.do(ctx, attack, t.attack, t.obj, &t.obj); transport {
+					return calibration.Record{}, errors.New("warm-up request failed during calibration")
+				}
+			}
+		}
+		rounds := make([]calibration.RoundSamples, len(targets))
+		for trial := 0; trial < pol.Trials; trial++ {
+			order := []int{0, 1}
+			if trial%2 == 1 {
+				order = []int{1, 0}
+			}
+			for _, idx := range order {
+				if err := measure(targets[idx], &rounds[idx]); err != nil {
+					return calibration.Record{}, err
+				}
+			}
+		}
+		vBuild.Rounds = append(vBuild.Rounds, rounds[0])
+		fBuild.Rounds = append(fBuild.Rounds, rounds[1])
+	}
+
+	th := calibration.Thresholds{
+		DeclaredBaselineMs: roundCentis(medianOf(append(baselinesOf(vBuild), baselinesOf(fBuild)...))),
+		Tolerance:          s.Calibration.Tolerance,
+		CeilingMs:          float64(pol.CeilingMs),
+		MinRatio:           pol.MinRatio,
+		MaxCV:              pol.MaxCV,
+		AttackMaxMs:        s.Calibration.AttackMaxMs,
+		NoiseFloorMs:       s.Calibration.NoiseFloorMs,
+		Alpha:              s.Calibration.Alpha,
+		MinSeparationRatio: s.Calibration.MinSeparationRatio,
+		Warmup:             pol.Warmup,
+		Trials:             pol.Trials,
+		Rounds:             pol.Rounds,
+	}
+	q := calibration.Evaluate(th, vBuild.Rounds, fBuild.Rounds)
 	version, err := calibration.NextVersion(dir, s.ID)
 	if err != nil {
 		return calibration.Record{}, err
 	}
 	return calibration.Record{
-		ScenarioID:  s.ID,
-		Version:     version,
-		Supersedes:  version - 1,
-		Profile:     calibration.Profile{Machine: machine, GOOS: runtime.GOOS, GOARCH: runtime.GOARCH, NumCPU: runtime.NumCPU(), GoVersion: runtime.Version()},
-		Workload:    fmt.Sprintf("%s: baseline request, %d-request batch per trial, %d warm-up trials per round", s.ID, latencyBaselineBatch, pol.Warmup),
-		SampleCount: pol.Rounds * pol.Trials,
-		Measured:    calibration.Measured{BaselineMedianMs: medianMs, BaselineP95Ms: p95Ms, BaselineCV: cv},
-		Thresholds: calibration.Thresholds{
-			DeclaredBaselineMs: math.Round(medianMs*100) / 100,
-			Tolerance:          s.Calibration.Tolerance,
-			CeilingMs:          float64(pol.CeilingMs),
-			MinRatio:           pol.MinRatio,
-			MaxCV:              pol.MaxCV,
-			AttackMaxMs:        s.Calibration.AttackMaxMs,
-			NoiseFloorMs:       s.Calibration.NoiseFloorMs,
-			Warmup:             pol.Warmup,
-			Trials:             pol.Trials,
-			Rounds:             pol.Rounds,
-		},
+		ScenarioID: s.ID,
+		Version:    version,
+		Supersedes: version - 1,
+		Profile:    calibration.CurrentProfile(machine),
+		Workload: fmt.Sprintf("%s: %d rounds, %d interleaved trials per round, baseline = %d-request batch, attack = one request per build, %d warm-up requests per build per round",
+			s.ID, pol.Rounds, pol.Trials, latencyBaselineBatch, pol.Warmup),
+		Thresholds:           th,
+		Vulnerable:           vBuild,
+		Fixed:                fBuild,
+		Qualified:            q.Qualified,
+		QualificationReasons: q.Reasons,
+		Separation:           calibration.Separation{P: q.P, Ratio: q.Ratio, VulnMedianMs: q.VulnMedianMs, FixedMedianMs: q.FixedMedianMs},
 	}, nil
+}
+
+func msOf(d time.Duration) float64 {
+	return float64(d) / float64(time.Millisecond)
+}
+
+func baselinesOf(b calibration.Build) []float64 {
+	var out []float64
+	for _, r := range b.Rounds {
+		out = append(out, r.BaselineMs...)
+	}
+	return out
+}
+
+func medianOf(xs []float64) float64 {
+	c := slices.Clone(xs)
+	slices.Sort(c)
+	n := len(c)
+	if n == 0 {
+		return 0
+	}
+	if n%2 == 1 {
+		return c[n/2]
+	}
+	return (c[n/2-1] + c[n/2]) / 2
+}
+
+func roundCentis(v float64) float64 {
+	return math.Round(v*100) / 100
 }
 
 // forbiddenHeaderHits counts the response headers of an exchange that match a

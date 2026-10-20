@@ -9,6 +9,8 @@ const (
 	ReasonAttackMeasurementInvalid = "ATTACK_MEASUREMENT_INVALID" // attack outside the valid measurement band
 	ReasonCalibrationMissing       = "CALIBRATION_MISSING"        // no calibration record for the declared version
 	ReasonCalibrationMismatch      = "CALIBRATION_MISMATCH"       // declared thresholds differ from the record
+	ReasonCalibrationNotQualified  = "CALIBRATION_NOT_QUALIFIED"  // this environment cannot support a security verdict
+	ReasonRequalificationRequired  = "REQUALIFICATION_REQUIRED"   // machine or runtime differs from the record
 
 	// INCONCLUSIVE (reported as SKIPPED): the measurement is too weak to decide.
 	ReasonExcessiveVariance   = "EXCESSIVE_VARIANCE"

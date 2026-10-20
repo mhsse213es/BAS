@@ -1,6 +1,6 @@
 # API BAS Mastery — Engineering Blueprint
 
-Source brief: `api.txt` (repo root). Step 0 audit: `docs/api-bas-audit.md` (2026-10-20). Status: **Phases 1–17 merged to `main` (28 scenarios). Phase 18 tranche (ABUSE-002 validity bands, versioned calibration, noise floor) on branch `feature/api-bas-phase18`.**
+Source brief: `api.txt` (repo root). Step 0 audit: `docs/api-bas-audit.md` (2026-10-20). Status: **Phases 1–18 merged to `main` (28 scenarios). Phase 19 tranche (two-stage calibration: environment qualification, attack-versus-fixed separation, requalification) on branch `feature/api-bas-phase19`.**
 
 Goal (api.txt): the deepest defensible validation of whether an enterprise API's security controls work under realistic attack, with independent evidence for every result. Not the largest scenario catalog.
 

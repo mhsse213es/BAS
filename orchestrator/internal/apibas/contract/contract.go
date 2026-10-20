@@ -366,6 +366,10 @@ func (s Scenario) validateSteps() error {
 			return fmt.Errorf("contract: %s: calibration tolerance must be greater than 1", s.ID)
 		case s.Calibration.Version < 1:
 			return fmt.Errorf("contract: %s: calibration version must be at least 1", s.ID)
+		case s.Calibration.Alpha <= 0 || s.Calibration.Alpha >= 1:
+			return fmt.Errorf("contract: %s: calibration alpha must be between 0 and 1", s.ID)
+		case s.Calibration.MinSeparationRatio <= 1:
+			return fmt.Errorf("contract: %s: calibration min_separation_ratio must be greater than 1", s.ID)
 		case s.Calibration.NoiseFloorMs <= 0:
 			return fmt.Errorf("contract: %s: calibration noise_floor_ms must be positive", s.ID)
 		case s.Calibration.AttackMaxMs <= float64(s.Latency.CeilingMs):
@@ -456,4 +460,8 @@ type CalibrationPolicy struct {
 	Tolerance    float64 `yaml:"tolerance"`
 	AttackMaxMs  float64 `yaml:"attack_max_ms"`
 	NoiseFloorMs float64 `yaml:"noise_floor_ms"`
+	// Alpha is the acceptable false-positive rate for the vulnerable-versus-fixed separation test.
+	Alpha float64 `yaml:"alpha"`
+	// MinSeparationRatio is the minimum meaningful degradation: vulnerable median over fixed median.
+	MinSeparationRatio float64 `yaml:"min_separation_ratio"`
 }

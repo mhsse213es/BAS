@@ -39,6 +39,7 @@ func main() {
 	allow := flag.String("allow", "", "comma-separated extra hosts the runner may reach (lab only)")
 	calibrate := flag.Bool("calibrate", false, "measure the baseline and write a new calibration record; runs no scenario")
 	machine := flag.String("machine", "", "label for the hardware being calibrated (required with -calibrate)")
+	fixedTarget := flag.String("fixed-target", "", "lab base URL of the fixed build; required with -calibrate")
 	calDir := flag.String("calibration-dir", "internal/apibas/calibration/records", "directory the calibration record is written to")
 	flag.Parse()
 
@@ -72,12 +73,20 @@ func main() {
 		Reset:   admin,
 		Events:  admin,
 		HTTP:    &http.Client{Timeout: 10 * time.Second},
+		Machine: *machine,
 	})
 	if err != nil {
 		log.Fatal(err)
 	}
 	if *calibrate {
-		runCalibration(r, scen, *machine, *calDir)
+		if err := checkTarget(*fixedTarget, *allow); err != nil {
+			log.Fatal(err)
+		}
+		fixed, err := runner.New(runner.Config{BaseURL: *fixedTarget, Fixture: fx, Secrets: secrets, State: admin, Reset: admin, Events: admin, HTTP: &http.Client{Timeout: 10 * time.Second}})
+		if err != nil {
+			log.Fatal(err)
+		}
+		runCalibration(r, fixed, scen, *machine, *calDir)
 		return
 	}
 	rep, err := r.Run(context.Background(), scen)
@@ -94,11 +103,11 @@ func main() {
 
 // runCalibration is the explicit recalibration operation. It writes the next record
 // and prints the catalog values to update. It does not change the catalog itself.
-func runCalibration(r *runner.Runner, scen contract.Scenario, machine, dir string) {
+func runCalibration(r, fixed *runner.Runner, scen contract.Scenario, machine, dir string) {
 	if machine == "" {
 		log.Fatal("calibrate needs -machine, a label for the hardware this run measures")
 	}
-	rec, err := r.Calibrate(context.Background(), scen, machine, dir)
+	rec, err := r.Calibrate(context.Background(), scen, fixed, machine, dir)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -107,6 +116,9 @@ func runCalibration(r *runner.Runner, scen contract.Scenario, machine, dir strin
 		log.Fatal(err)
 	}
 	fmt.Fprintf(os.Stderr, "wrote %s\n", path)
+	fmt.Fprintf(os.Stderr, "qualified: %v %v\n", rec.Qualified, rec.QualificationReasons)
+	fmt.Fprintf(os.Stderr, "separation: p=%g ratio=%g vulnerable_median_ms=%g fixed_median_ms=%g\n",
+		rec.Separation.P, rec.Separation.Ratio, rec.Separation.VulnMedianMs, rec.Separation.FixedMedianMs)
 	fmt.Fprintf(os.Stderr, "set in %s:\n  calibration.version: %d\n  calibration.baseline_ms: %v\n",
 		scen.ID, rec.Version, rec.Thresholds.DeclaredBaselineMs)
 }

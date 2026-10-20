@@ -858,3 +858,72 @@ Vulnerable 28 of 28 FAIL, exploited. Fixed 28 of 28 PASS, not exploited. Detecti
 - Calibration measures the baseline only. The attack-side ceiling is not proven on other hardware.
 - A calibration is valid only for the machine it was measured on. Other machines fail closed until they run `-calibrate` and the reviewer updates the catalog.
 - The noise floor is fixture-specific, as the spec asks.
+
+
+## Phase 19 tranche - two-stage calibration: environment qualification, then attack-versus-fixed separation
+
+Branch: `feature/api-bas-phase19` (from `main`). Scenario count stays at twenty-eight.
+
+### Model
+
+1. **Environment qualification.** On the target machine, the vulnerable and fixed builds are measured interleaved, on the same workload, with the order alternating each trial. The record stores every raw sample for both builds, the baseline, the lab-reported work units, and the verdict.
+2. **Attack-versus-fixed separation.** The verdict requires a Mann-Whitney test (two-sided, normal approximation) at the declared alpha, and a ratio of vulnerable to fixed median at the declared minimum degradation. Both are declared before measurement.
+3. **Runtime grading** is unchanged: the frozen ceiling and the per-run validity checks.
+
+### Qualification checks (latency.Qualify)
+
+| Check | Failure reason | Effect |
+|---|---|---|
+| Sample count per round | CAL_INSUFFICIENT_SAMPLES | unqualified |
+| Baseline band, both builds | CAL_BASELINE_OUT_OF_BAND | unqualified |
+| Attack band, both builds | CAL_ATTACK_OUT_OF_BAND | unqualified |
+| Variance (CV and absolute floor) | CAL_EXCESSIVE_VARIANCE | unqualified |
+| Vulnerable reaches the budget | CAL_VULNERABLE_BELOW_BUDGET | unqualified |
+| Fixed stays within the budget | CAL_FIXED_OVER_BUDGET | unqualified |
+| Separation p-value | CAL_INSUFFICIENT_SEPARATION | unqualified |
+| Ratio at or above minimum degradation | CAL_BELOW_MIN_DEGRADATION | unqualified |
+
+Every failed check is recorded, not only the first.
+
+### Runtime gate (not_evaluated, never a security verdict)
+
+- No record for the declared version: `CALIBRATION_MISSING`.
+- Record unqualified: `CALIBRATION_NOT_QUALIFIED`.
+- Machine label, OS, architecture, CPU count or Go version differs from the record: `REQUALIFICATION_REQUIRED`.
+- Declared values differ from a qualified record: `CALIBRATION_MISMATCH`, an ERROR, because it means the policy was edited without recalibration.
+
+All but the mismatch case are reported as SKIPPED with the reason and marked not_evaluated. The shipped catalog is never graded against an unqualified or foreign record.
+
+### Integrity
+
+- Records are write-once, embedded in the binary, and checked on read. `Get` recomputes the verdict, the p-value and the ratio from the stored samples and thresholds. An edited sample, a flipped verdict, an altered threshold, or a qualified claim with no samples fails with `ErrIntegrity`.
+- `Write` verifies a record before it writes, and encodes before creating the file, so a record that cannot be encoded leaves nothing behind.
+- Recalibration: `apibas-runner -calibrate -scenario API-BAS-ABUSE-002 -target <vulnerable> -fixed-target <fixed> -machine <label>`. It writes the next version and names the one it supersedes. It changes no threshold.
+
+### Measurements on this machine (`lab-i5-8250u-win10-go1.26.8`)
+
+- Calibration v4: vulnerable median 1355.9 ms, fixed median at the timer floor (0 ms, samples are 0 or about 0.5 ms), separation p = 2.9e-11, qualified.
+- Catalog declares v4 with baseline 0.17 ms, tolerance 4x, ceiling 250 ms, min ratio 5, max CV 0.5, attack band 5000 ms, noise floor 1 ms, alpha 0.01, minimum separation ratio 5.
+- Vulnerable build: `decision:FAIL`. Fixed build: `decision:PASS`. Same machine label, other machine label: `not_evaluated/REQUALIFICATION_REQUIRED`.
+- Smoke run: vulnerable 28 of 28 FAIL, fixed 28 of 28 PASS, token check zero.
+
+### Decisions for review
+
+- **Fixed median at zero.** The fixed build's refusal is faster than the clock resolves. The ratio's denominator is floored at the 1 ms noise floor. The ratio then cannot exceed what the clock can resolve, so it can only understate degradation. The stored ratio is verified like the p-value.
+- **v3 superseded.** The first two-build calibration (v3) stored an infinite ratio under the earlier rule. Under the corrected rule its stored ratio fails verification. It stays on disk as history, and v4 supersedes it. Nothing references v3.
+- **Declared baseline.** The baseline band is centred on the calibration's pooled baseline median, rounded to 0.01 ms. This characterises the environment. It is not a security threshold.
+
+### Tests (deterministic, no timing)
+
+- `latency/qualify_test.go`: clean qualification and determinism; separation at strict alpha; Mann-Whitney identical and disjoint samples, and the empty case; minimum-degradation boundary; vulnerable at and below the ceiling; fixed at the ceiling; baseline drift; attack out of band; noisy runs; sub-floor jitter not treated as noise; short samples; a missing build; every failure reported; sub-floor fixed median uses the floor.
+- `calibration/integrity_test.go`: sealed records verify; tampered samples, flipped verdicts, wrong p-value, edited thresholds, write refusal, qualified-without-samples, and legacy unqualified records.
+- `calibration/calibration_test.go`: versioning, supersession, exclusive writes, machine label, missing records.
+- `runner/timing_test.go`: the never-PASS mapping, the shipped catalog never mismatching its record, drifted thresholds refused, unknown versions refused.
+
+### Still open
+
+- Calibration is valid for this machine only. Any other machine is refused until it runs `-calibrate` and the catalog is updated.
+- The machine label is operator-asserted. Hardware identity is not read from the OS, so a relabelled machine is not detected.
+- The separation test uses a normal approximation, without a tie correction. Timing samples in nanosecond resolution rarely tie, but the approximation is not exact for small samples.
+- Work units were 400000 for the vulnerable build and 0 for the fixed build. The resource check is independent of timing.
+- The attack-side ceiling is still a fixture-specific budget, not a universal threshold.

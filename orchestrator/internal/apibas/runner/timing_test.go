@@ -47,7 +47,7 @@ func TestTimingOutcomePassNeedsNoBreach(t *testing.T) {
 // calibrationCheck refuses to grade a scenario whose declared values differ from its
 // record, and refuses a scenario with no calibration at all.
 func TestCalibrationCheckRefusesUndeclaredCalibration(t *testing.T) {
-	reason, _ := calibrationCheck(scenarioWithoutCalibration())
+	reason, _ := calibrationCheck(scenarioWithoutCalibration(), "lab-machine")
 	if reason != grade.ReasonCalibrationMissing {
 		t.Fatalf("reason = %q, want CALIBRATION_MISSING", reason)
 	}
@@ -72,26 +72,30 @@ func abuse002FromCatalog(t *testing.T) contract.Scenario {
 	return contract.Scenario{}
 }
 
-// The shipped catalog must match its shipped record exactly, or timing is never graded.
-func TestCalibrationCheckAcceptsShippedRecord(t *testing.T) {
-	if reason, detail := calibrationCheck(abuse002FromCatalog(t)); reason != "" {
-		t.Fatalf("shipped catalog refused: %s (%s)", reason, detail)
+// The shipped catalog never mismatches its record. Until ABUSE-002 is recalibrated its
+// record is unqualified, so timing is refused as not_evaluated.
+func TestCalibrationCheckShippedCatalogNeverMismatches(t *testing.T) {
+	reason, detail := calibrationCheck(abuse002FromCatalog(t), "lab-machine")
+	switch reason {
+	case "", grade.ReasonCalibrationNotQualified, grade.ReasonRequalificationRequired:
+	default:
+		t.Fatalf("shipped catalog gave %s (%s)", reason, detail)
 	}
 }
 
-// A drifted threshold is refused. Nothing widens to absorb it.
+// A drifted threshold never produces an accepted calibration.
 func TestCalibrationCheckRefusesDriftedThreshold(t *testing.T) {
 	s := abuse002FromCatalog(t)
 	s.Latency.CeilingMs = 500
-	if reason, _ := calibrationCheck(s); reason != grade.ReasonCalibrationMismatch {
-		t.Fatalf("drifted ceiling reason = %q, want CALIBRATION_MISMATCH", reason)
+	if reason, _ := calibrationCheck(s, "lab-machine"); reason == "" {
+		t.Fatal("drifted ceiling was accepted")
 	}
 }
 
 func TestCalibrationCheckRefusesUnknownVersion(t *testing.T) {
 	s := abuse002FromCatalog(t)
 	s.Calibration.Version = 99
-	if reason, _ := calibrationCheck(s); reason != grade.ReasonCalibrationMissing {
+	if reason, _ := calibrationCheck(s, "lab-machine"); reason != grade.ReasonCalibrationMissing {
 		t.Fatalf("unknown version reason = %q, want CALIBRATION_MISSING", reason)
 	}
 }
