@@ -16,6 +16,8 @@ const (
 	scenarioTelnet       = "dlp-exfiltration-telnet"
 	scenarioMultichannel = "dlp-exfiltration-multichannel"
 	scenarioDevtools     = "dlp-exfiltration-devtools"
+	scenarioAIPrompt     = "dlp-exfiltration-ai-prompt"
+	scenarioDBExport     = "dlp-exfiltration-db-export"
 )
 
 // AllFixtures returns Audspect's real, current seed catalog of every
@@ -285,6 +287,39 @@ func AllFixtures() ([]Fixture, error) {
 			{scenarioDevtools, "DLP Validation — Internal Design Document Shared Via Developer Tooling (T1567)"},
 		},
 		"three developer-tooling steps share one synthetic payload header; AWS example key and placeholder only")); err != nil {
+		return nil, fmt.Errorf("loading seed fixture catalog: %w", err)
+	}
+
+	if err := add(NewFixture("ai-prompt-multitype-record", "Synthetic multi-type record pasted into a chat or connector prompt",
+		[]string{"[BAS-SIM-DLP]", "ABCDE1234F", "123456789012", "SBININBBXXX", "fake.user@upi", "4111111111111111"},
+		[]Occurrence{
+			{scenarioAIPrompt, "DLP Validation — AI Chat-Completion Exfiltration of Multi-Type Sensitive Record (T1567)"},
+			{scenarioAIPrompt, "DLP Validation — AI Connector-Ingestion Exfiltration of Multi-Type Sensitive Record (T1567)"},
+		},
+		"same synthetic record as the BFSI anchor, carried in an AI prompt")); err != nil {
+		return nil, fmt.Errorf("loading seed fixture catalog: %w", err)
+	}
+	if err := add(NewFixture("ai-prompt-go-source", "Synthetic Go source snippet with a placeholder password",
+		[]string{"[BAS-SIM-DLP]", "BAS-SIM-DLP-Placeholder8"},
+		[]Occurrence{{scenarioAIPrompt, "DLP Validation — AI Chat-Completion Exfiltration of Go Source Code (T1567)"}},
+		"placeholder credential only, no real secret")); err != nil {
+		return nil, fmt.Errorf("loading seed fixture catalog: %w", err)
+	}
+	if err := add(NewFixture("ai-prompt-employment-contract", "Synthetic employment contract text sent to an AI connector",
+		[]string{"[BAS-SIM-DLP] Employment Contract (Synthetic)", "BAS-SIM-Employee"},
+		[]Occurrence{{scenarioAIPrompt, "DLP Validation — AI Connector-Ingestion Exfiltration of Employment Contract (T1567)"}},
+		"synthetic contract, salary shown as a zero placeholder")); err != nil {
+		return nil, fmt.Errorf("loading seed fixture catalog: %w", err)
+	}
+	if err := add(NewFixture("db-export-multitype-extracts", "Synthetic multi-type extract from SQL, BI, CRM and warehouse exports",
+		[]string{"[BAS-SIM-DLP]", "ABCDE1234F", "123456789012", "SBININBBXXX", "fake.user@upi"},
+		[]Occurrence{
+			{scenarioDBExport, "DLP Validation — SQL Query Result Export via SFTP Managed File Transfer (T1048.002)"},
+			{scenarioDBExport, "DLP Validation — BI Dashboard Export via S3-Compatible Cloud Upload (T1567.002)"},
+			{scenarioDBExport, "DLP Validation — CRM/ERP Report Export via OneDrive-Compatible Upload (T1567.002)"},
+			{scenarioDBExport, "DLP Validation — Data Warehouse Extract Export via Slack-Compatible Webhook (T1567.004)"},
+		},
+		"four export channels carry the same synthetic record shape")); err != nil {
 		return nil, fmt.Errorf("loading seed fixture catalog: %w", err)
 	}
 
