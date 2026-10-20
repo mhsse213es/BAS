@@ -95,6 +95,12 @@ func (d azureDiscoverer) Discover(ctx context.Context) (*DiscoveredGraph, Discov
 	if err != nil {
 		return nil, nil, fmt.Errorf("azure discovery: permissions: %w", err)
 	}
+	denies, denyStats, err := d.client.DiscoverDenyAssignments(ctx)
+	if err != nil {
+		return nil, nil, fmt.Errorf("azure discovery: deny assignments: %w", err)
+	}
+	marked := attachAzureDenies(permissions, denies)
+
 	graph := &DiscoveredGraph{
 		Identities:        identities,
 		Resources:         resources,
@@ -107,6 +113,9 @@ func (d azureDiscoverer) Discover(ctx context.Context) (*DiscoveredGraph, Discov
 		"resources":             resStats.ItemsFound,
 		"permissions":           permStats.ItemsFound,
 		"unresolved_principals": permStats.UnresolvedPrincipals,
+		"deny_assignments":      denyStats.Found,
+		"deny_exact_scope_only": denyStats.ExactScopeOnly,
+		"deny_edges_marked":     marked,
 	}
 	return graph, report, nil
 }

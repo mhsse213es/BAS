@@ -149,3 +149,27 @@ func TestAWSEvaluator_RoleTrustAllowsAssumeRole(t *testing.T) {
 		t.Errorf("Expected AllowedBy=role-trust, got %s", result.AllowedBy)
 	}
 }
+
+func TestAWSEvaluator_ActionNameIsMatchedWholeNotAsSubstring(t *testing.T) {
+	edge := &CloudPermission{
+		Source: &CloudIdentity{CanonicalID: "arn:aws:iam::1:user/u"},
+		Target: &CloudResource{CanonicalID: "arn:aws:s3:::b/k"},
+		Action: "s3:GetObject", SourceType: "identity-policy",
+		Attributes: map[string]string{"policy_document": `{"Statement":[{"Effect":"Allow","Action":"s3:GetObjectAcl","Resource":"*"}]}`},
+	}
+	if got := (&AWSEvaluator{}).EvaluatePermission(edge, &RequestContext{}); got.State == PolicySupported {
+		t.Error("an Allow for s3:GetObjectAcl must not satisfy s3:GetObject")
+	}
+}
+
+func TestAWSEvaluator_ServiceWildcardSatisfiesConcreteAction(t *testing.T) {
+	edge := &CloudPermission{
+		Source: &CloudIdentity{CanonicalID: "arn:aws:iam::1:user/u"},
+		Target: &CloudResource{CanonicalID: "arn:aws:s3:::b/k"},
+		Action: "s3:GetObject", SourceType: "identity-policy",
+		Attributes: map[string]string{"policy_document": `{"Statement":[{"Effect":"Allow","Action":"s3:*","Resource":"*"}]}`},
+	}
+	if got := (&AWSEvaluator{}).EvaluatePermission(edge, &RequestContext{}); got.State != PolicySupported {
+		t.Errorf("s3:* should satisfy s3:GetObject, got %s", got.State)
+	}
+}

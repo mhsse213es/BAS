@@ -228,23 +228,17 @@ func awsPrincipalARNs(raw json.RawMessage) (arns []string, wildcard bool) {
 	return list, false
 }
 
-// awsActionMatches reports whether a statement's Action covers the named
-// action, honouring the wildcard forms IAM accepts (*, service:*, prefix*).
+// awsActionMatches reports whether a statement's Action pattern covers the
+// named action, honouring IAM's wildcard forms.
 func awsActionMatches(pattern, action string) bool {
-	if pattern == "*" || pattern == action {
-		return true
-	}
-	if strings.HasSuffix(pattern, "*") {
-		return strings.HasPrefix(strings.ToLower(action), strings.ToLower(strings.TrimSuffix(pattern, "*")))
-	}
-	return false
+	return globMatch(pattern, action)
 }
 
 // AWSDiscoveryStats extends DiscoveryStats with the AWS-specific cases that
 // the evaluator cannot model, so none of them are silently dropped.
 type AWSDiscoveryStats struct {
 	DiscoveryStats
-	NotActionStatements  int  // NotAction statements; not expanded, so no edges emitted
+	NotActionStatements  int  // NotAction or NotResource statements; not expanded, so no edges emitted
 	ConditionalAllows    int  // Allow statements with Condition; edges emitted, conditions unevaluated
 	WildcardTrustSkipped int  // trust statements with Principal "*"; no attributable identity
 	UnresolvedTrust      int  // trust principals (account roots, deleted-role IDs) not in inventory
@@ -422,7 +416,10 @@ func (c *AWSDiscoveryClient) Discover(ctx context.Context) (*DiscoveredGraph, *A
 				if st.Effect != "Allow" {
 					continue
 				}
-				if len(st.NotAction) > 0 {
+				if len(st.NotAction) > 0 || len(st.NotResource) > 0 {
+					// "everything except X" cannot be expanded here. Emitting it
+					// as a wildcard edge would report access that the statement
+					// does not grant, so it is counted and skipped.
 					stats.NotActionStatements++
 					continue
 				}

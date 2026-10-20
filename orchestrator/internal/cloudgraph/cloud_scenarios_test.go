@@ -237,3 +237,23 @@ func (f *fakeBackup) ListBackupVaults(_ context.Context, _ *backup.ListBackupVau
 	}
 	return out, nil
 }
+
+// A service-wildcard grant covers each step's concrete action; the evaluator
+// must check the step's action, not the pattern's.
+func TestExecuteCloudScenario_WildcardGrantCoversConcreteSteps(t *testing.T) {
+	id := &CloudIdentity{CanonicalID: scnPrincipal, Kind: "iam-user"}
+	res := &CloudResource{CanonicalID: scnVault, Kind: "backup-vault"}
+	g := &DiscoveredGraph{
+		Identities: []*CloudIdentity{id},
+		Resources:  []*CloudResource{res},
+		Permissions: []*CloudPermission{{
+			Source: id, Target: res, Action: "backup:*", SourceType: "identity-policy",
+			Attributes: map[string]string{"policy_document": `{"Statement":[{"Effect":"Allow","Action":"backup:*","Resource":"*"}]}`},
+		}},
+		Evaluations: map[string]PathState{},
+	}
+	res2 := ExecuteCloudScenario(awsBackupScenario(t), g, &AWSEvaluator{}, scnPrincipal, scnVault)
+	if res2.OverallVerdict != "fully-open" {
+		t.Errorf("verdict = %s, want fully-open under backup:*", res2.OverallVerdict)
+	}
+}

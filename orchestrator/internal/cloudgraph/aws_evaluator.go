@@ -38,12 +38,37 @@ func (e *AWSEvaluator) EvaluatePermission(edge *CloudPermission, ctx *RequestCon
 
 // hasDenyStatement checks if policy has an explicit Deny for the action
 func hasDenyStatement(policyDoc, action string) bool {
-	return strings.Contains(policyDoc, `"Effect":"Deny"`) && strings.Contains(policyDoc, action)
+	return statementMatches(policyDoc, "Deny", action)
 }
 
 // hasAllowStatement checks if policy has an Allow for the action
 func hasAllowStatement(policyDoc, action string) bool {
-	return strings.Contains(policyDoc, `"Effect":"Allow"`) && strings.Contains(policyDoc, action)
+	return statementMatches(policyDoc, "Allow", action)
+}
+
+// statementMatches reports whether a statement with the given effect names an
+// action pattern that covers action. Each statement is matched on its own
+// Action field, so "s3:GetObject" is never satisfied by "s3:GetObjectAcl", and
+// "s3:*" is honoured. NotAction statements are not matched: they cover "all
+// except", which this evaluator does not expand. A document that does not parse
+// falls back to the earlier substring check, so a malformed document cannot
+// change a result silently in either direction.
+func statementMatches(policyDoc, effect, action string) bool {
+	stmts, err := parseStatements(policyDoc)
+	if err != nil {
+		return strings.Contains(policyDoc, `"Effect":"`+effect+`"`) && strings.Contains(policyDoc, action)
+	}
+	for _, st := range stmts {
+		if st.Effect != effect || len(st.NotAction) > 0 {
+			continue
+		}
+		for _, pattern := range stringOrList(st.Action) {
+			if globMatch(pattern, action) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // principalMatches verifies that role-trust policies name the requesting identity as Principal.

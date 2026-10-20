@@ -1,6 +1,9 @@
 package cloudgraph
 
-import "time"
+import (
+	"strings"
+	"time"
+)
 
 // CloudScenarioStep is one control-plane or data-access action a scenario
 // attempts against the target. Action is the provider-native permission name
@@ -233,23 +236,51 @@ func scenarioVerdict(steps []*CloudControlOutcome) string {
 }
 
 // findScenarioEdge returns the discovered edge for principal, action and
-// resource. An exact resource match wins; a wildcard-resource edge with the
-// same action is the fallback, since account-wide grants apply to every
-// resource.
+// resource. A literal action match on the resource wins. Otherwise a grant
+// whose action pattern covers the step (for example "s3:*") is used, derived
+// into an edge carrying the step's own action so the evaluator checks the
+// step, not the pattern. A wildcard-resource grant applies to every resource.
 func findScenarioEdge(graph *DiscoveredGraph, principal, action, resource string) *CloudPermission {
-	var wildcard *CloudPermission
+	var literalWide, patternExact, patternWide *CloudPermission
 	for _, p := range graph.Permissions {
-		if p.Source.CanonicalID != principal || p.Action != action {
+		if p.Source.CanonicalID != principal {
 			continue
 		}
-		if p.Target.CanonicalID == resource {
-			return p
-		}
-		if p.Target.CanonicalID == "*" && wildcard == nil {
-			wildcard = p
+		onResource := p.Target.CanonicalID == resource
+		wide := p.Target.CanonicalID == "*"
+		switch {
+		case p.Action == action:
+			if onResource {
+				return p
+			}
+			if wide && literalWide == nil {
+				literalWide = p
+			}
+		case strings.Contains(p.Action, "*") && globMatch(p.Action, action):
+			if onResource && patternExact == nil {
+				patternExact = p
+			}
+			if wide && patternWide == nil {
+				patternWide = p
+			}
 		}
 	}
-	return wildcard
+	chosen := literalWide
+	if chosen == nil {
+		chosen = patternExact
+	}
+	if chosen == nil {
+		chosen = patternWide
+	}
+	if chosen == nil {
+		return nil
+	}
+	if chosen.Action == action {
+		return chosen
+	}
+	derived := *chosen
+	derived.Action = action
+	return &derived
 }
 
 // ObserveCloudScenario compares each evaluated step's prediction with audit

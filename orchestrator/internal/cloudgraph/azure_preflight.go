@@ -42,8 +42,13 @@ func (c *AzureDiscoveryClient) Preflight(ctx context.Context) []PreflightCheck {
 		checks = append(checks, c.preflightGET(ctx, "rbac-readable", rbacURL, c.armTokens,
 			"role assignments are readable",
 			"role assignments not readable: the principal needs Reader (or Microsoft.Authorization/roleAssignments/read) on the subscription"))
+		denyURL := fmt.Sprintf("%s/subscriptions/%s/providers/Microsoft.Authorization/denyAssignments?api-version=2022-04-01&$top=1", c.ARMBaseURL, c.subscriptionID)
+		checks = append(checks, c.preflightGET(ctx, "deny-assignments-readable", denyURL, c.armTokens,
+			"deny assignments are readable",
+			"deny assignments not readable: without them a blocked grant would be reported as usable"))
 	} else {
 		checks = append(checks, PreflightCheck{Name: "rbac-readable", Status: "SKIPPED", Detail: "ARM token did not issue"})
+		checks = append(checks, PreflightCheck{Name: "deny-assignments-readable", Status: "SKIPPED", Detail: "ARM token did not issue"})
 	}
 
 	if graphTokenOK {

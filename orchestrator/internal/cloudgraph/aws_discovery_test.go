@@ -336,6 +336,25 @@ func TestAWSDiscover_FailsFastOnBucketListError(t *testing.T) {
 	}
 }
 
+func TestAWSDiscover_NotResourceStatementEmitsNoWildcardEdge(t *testing.T) {
+	snap := baseSnapshot(t)
+	doc := policyDoc(t, `{"Effect":"Allow","Action":"s3:DeleteObject","NotResource":"`+testBucket+`/keep/*"}`)
+	snap.UserDetailList[0].UserPolicyList = []types.PolicyDetail{{PolicyDocument: aws.String(doc)}}
+	client := newTestAWSClient(&fakeIAM{pages: []*iam.GetAccountAuthorizationDetailsOutput{snap}}, "corp-backups")
+	graph, stats, err := client.Discover(context.Background())
+	if err != nil {
+		t.Fatalf("Discover: %v", err)
+	}
+	for _, p := range graph.Permissions {
+		if p.Action == "s3:DeleteObject" {
+			t.Fatalf("NotResource allow produced an edge to %s", p.Target.CanonicalID)
+		}
+	}
+	if stats.NotActionStatements != 1 {
+		t.Errorf("NotActionStatements = %d, want 1 (NotResource counted)", stats.NotActionStatements)
+	}
+}
+
 func TestAWSDecodePolicy_CompactsAndRejectsGarbage(t *testing.T) {
 	got, err := awsDecodePolicy("{\n  \"Effect\": \"Allow\"\n}")
 	if err != nil {
