@@ -13,6 +13,38 @@
 
 $ErrorActionPreference = "Stop"
 
+# garble fails with "filename or extension is too long" when the checkout path
+# is long (reproduced on 2026-10-20: the same commit builds from a short path).
+# When this directory's path is long, map the repository root to a free drive
+# letter with subst and re-run this script from there. ..\scenarios still
+# resolves, because the mapped drive is the repository root.
+if ($env:AUDSPECT_BUILD_SHORTPATH -ne "1" -and $PSScriptRoot.Length -gt 40) {
+    $repoRoot = Split-Path -Parent $PSScriptRoot
+    $drive = $null
+    foreach ($letter in @("X","Y","Z","W","V","U","T")) {
+        if (-not (Test-Path "${letter}:\")) { $drive = "${letter}:"; break }
+    }
+    if ($null -eq $drive) {
+        Write-Host "[!] Checkout path is long and no free drive letter is available for subst." -ForegroundColor Red
+        exit 1
+    }
+    Write-Host "[*] Checkout path is long; building through $drive (subst) to avoid garble's path-length failure." -ForegroundColor Yellow
+    subst $drive $repoRoot
+    if ($LASTEXITCODE -ne 0) { Write-Host "[!] subst failed." -ForegroundColor Red; exit $LASTEXITCODE }
+    $code = 1
+    try {
+        $env:AUDSPECT_BUILD_SHORTPATH = "1"
+        Push-Location "$drive\orchestrator"
+        & "$drive\orchestrator\build.ps1"
+        $code = $LASTEXITCODE
+    } finally {
+        Pop-Location -ErrorAction SilentlyContinue
+        Remove-Item Env:AUDSPECT_BUILD_SHORTPATH -ErrorAction SilentlyContinue
+        subst $drive /D | Out-Null
+    }
+    exit $code
+}
+
 Write-Host "=============================================" -ForegroundColor Cyan
 Write-Host " Audspect BAS Orchestrator Secure Build Tool " -ForegroundColor Cyan
 Write-Host "=============================================" -ForegroundColor Cyan
