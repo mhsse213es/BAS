@@ -24,11 +24,12 @@ type ObserveSpec struct {
 // CloudScenarioRunRequest runs one builtin cloud scenario for one principal
 // against one resource, using a live discovery pass for the graph.
 type CloudScenarioRunRequest struct {
-	ScenarioID  string                  `json:"scenarioId"`
-	Account     cloudgraph.AccountScope `json:"account"`
-	Principal   string                  `json:"principal"`
-	Resource    string                  `json:"resource"`
-	InitiatedBy string                  `json:"-"`
+	ScenarioID    string                  `json:"scenarioId"`
+	Account       cloudgraph.AccountScope `json:"account"`
+	Principal     string                  `json:"principal"`
+	Resource      string                  `json:"resource"`
+	InitiatedBy   string                  `json:"-"`
+	SessionPolicy string                  `json:"sessionPolicy,omitempty"` // AWS assumed-role session policy; optional
 
 	// Discoverer and Observe are server-supplied, never decoded from a body.
 	Discoverer cloudgraph.Discoverer `json:"-"`
@@ -37,12 +38,12 @@ type CloudScenarioRunRequest struct {
 
 // cloudScenarioRunResult is the stored result of one scenario run.
 type cloudScenarioRunResult struct {
-	ScenarioID     string                          `json:"scenarioId"`
-	Verdict        string                          `json:"verdict"`
-	Prerequisites  []*cloudgraph.PrerequisiteResult `json:"prerequisites"`
-	Steps          []*cloudgraph.CloudControlOutcome `json:"steps"`
-	Observed       bool                            `json:"observed"`
-	Report         cloudgraph.DiscoveryReport      `json:"report"`
+	ScenarioID    string                            `json:"scenarioId"`
+	Verdict       string                            `json:"verdict"`
+	Prerequisites []*cloudgraph.PrerequisiteResult  `json:"prerequisites"`
+	Steps         []*cloudgraph.CloudControlOutcome `json:"steps"`
+	Observed      bool                              `json:"observed"`
+	Report        cloudgraph.DiscoveryReport        `json:"report"`
 }
 
 // ExecuteCloudScenarioRun records a cloud_runs row for one scenario run. The
@@ -94,7 +95,15 @@ func ExecuteCloudScenarioRun(ctx context.Context, pool *pgxpool.Pool, req CloudS
 		return fail(fmt.Errorf("discovery: %w", err))
 	}
 
-	result := cloudgraph.ExecuteCloudScenario(scenario, graph, evaluator, req.Principal, req.Resource)
+	sessionDoc := ""
+	if req.SessionPolicy != "" {
+		doc, err := cloudgraph.NormalizeAWSSessionPolicy(req.SessionPolicy)
+		if err != nil {
+			return fail(err)
+		}
+		sessionDoc = doc
+	}
+	result := cloudgraph.ExecuteCloudScenarioInSession(scenario, graph, evaluator, req.Principal, req.Resource, sessionDoc)
 	if req.Observe != nil && req.Observe.Events != nil && result.OverallVerdict != "not-attempted" {
 		correlator := &cloudgraph.LiveCorrelator{Source: req.Observe.Events}
 		cloudgraph.ObserveCloudScenario(result, correlator, req.Principal, req.Resource, req.Observe.ActionTime, req.Observe.Window)

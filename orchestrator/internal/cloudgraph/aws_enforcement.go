@@ -58,7 +58,7 @@ func awsStatementCovers(st awsStatement, action string) bool {
 // level) for an action over its documents. It returns Blocked with the reason,
 // ConditionallyReachable, PolicySupported, or Unknown when a document cannot be
 // read. An unreadable document is never treated as allowing.
-func awsGate(docs []string, action string) (PathState, string) {
+func awsGate(docs []string, action, target string) (PathState, string) {
 	var allow, allowCond, denyCond bool
 	for _, doc := range docs {
 		stmts, err := parseStatements(doc)
@@ -66,7 +66,7 @@ func awsGate(docs []string, action string) (PathState, string) {
 			return Unknown, "unparseable-enforcement-document"
 		}
 		for _, st := range stmts {
-			if !awsStatementCovers(st, action) {
+			if !awsStatementCovers(st, action) || !awsResourceCovers(st, target) {
 				continue
 			}
 			conditional := len(st.Condition) > 0
@@ -116,12 +116,24 @@ func awsEnforcementVerdict(edge *CloudPermission) (*EvaluationResult, PathState)
 			resourceConditional = true
 		}
 	}
+	sessionConditional := false
+	if doc, ok := edge.Attributes["session_policy_document"]; ok {
+		state, reason := awsGate([]string{doc}, edge.Action, edge.Target.CanonicalID)
+		switch state {
+		case Blocked:
+			return &EvaluationResult{State: Blocked, BlockedBy: "session-policy:" + reason, EvaluationMethod: "hand-coded-rules"}, Blocked
+		case Unknown:
+			return &EvaluationResult{State: Unknown, BlockedBy: reason, EvaluationMethod: "hand-coded-rules"}, Unknown
+		case ConditionallyReachable:
+			sessionConditional = true
+		}
+	}
 	if edge.Attributes["boundary_unresolved"] == "true" {
 		return &EvaluationResult{State: Unknown, BlockedBy: "permissions-boundary-unreadable", EvaluationMethod: "hand-coded-rules"}, Unknown
 	}
 	conditional := false
 	if doc, ok := edge.Attributes["boundary_document"]; ok {
-		state, reason := awsGate([]string{doc}, edge.Action)
+		state, reason := awsGate([]string{doc}, edge.Action, edge.Target.CanonicalID)
 		switch state {
 		case Blocked:
 			return &EvaluationResult{State: Blocked, BlockedBy: "permissions-boundary:" + reason, EvaluationMethod: "hand-coded-rules"}, Blocked
@@ -139,13 +151,13 @@ func awsEnforcementVerdict(edge *CloudPermission) (*EvaluationResult, PathState)
 		// An explicit Deny at any level blocks, so every level is checked for
 		// Deny before any level's Allow is required.
 		for _, level := range levels {
-			state, reason := awsGate(level, edge.Action)
+			state, reason := awsGate(level, edge.Action, edge.Target.CanonicalID)
 			if state == Blocked && reason == "explicit-deny" {
 				return &EvaluationResult{State: Blocked, BlockedBy: "scp-deny", EvaluationMethod: "hand-coded-rules"}, Blocked
 			}
 		}
 		for _, level := range levels {
-			state, reason := awsGate(level, edge.Action)
+			state, reason := awsGate(level, edge.Action, edge.Target.CanonicalID)
 			switch state {
 			case Blocked:
 				return &EvaluationResult{State: Blocked, BlockedBy: "scp:" + reason, EvaluationMethod: "hand-coded-rules"}, Blocked
@@ -156,7 +168,7 @@ func awsEnforcementVerdict(edge *CloudPermission) (*EvaluationResult, PathState)
 			}
 		}
 	}
-	if conditional || resourceConditional {
+	if conditional || resourceConditional || sessionConditional {
 		return nil, ConditionallyReachable
 	}
 	return nil, PolicySupported
@@ -334,4 +346,35 @@ func awsPrincipalNamed(raw json.RawMessage, source string) bool {
 		}
 	}
 	return false
+}
+
+// maxSessionPolicyChars is the length limit AWS places on a session policy passed
+// to AssumeRole.
+const maxSessionPolicyChars = 2048
+
+// NormalizeAWSSessionPolicy checks a session policy and returns it compact. A
+// session policy is a document of Allow and Deny statements. One that is too
+// long, unreadable, empty, or has any other effect is refused, rather than
+// applied in part.
+func NormalizeAWSSessionPolicy(raw string) (string, error) {
+	if len(raw) > maxSessionPolicyChars {
+		return "", fmt.Errorf("session policy is %d characters; AWS limits it to %d", len(raw), maxSessionPolicyChars)
+	}
+	doc, err := awsDecodePolicy(raw)
+	if err != nil {
+		return "", fmt.Errorf("session policy is not a readable policy document: %w", err)
+	}
+	stmts, err := parseStatements(doc)
+	if err != nil {
+		return "", fmt.Errorf("session policy statements are not readable: %w", err)
+	}
+	if len(stmts) == 0 {
+		return "", errors.New("session policy has no statements")
+	}
+	for _, st := range stmts {
+		if st.Effect != "Allow" && st.Effect != "Deny" {
+			return "", fmt.Errorf("session policy statement has effect %q; expected Allow or Deny", st.Effect)
+		}
+	}
+	return doc, nil
 }

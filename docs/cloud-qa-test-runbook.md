@@ -34,7 +34,7 @@ bash scripts/cloud-qa.sh <group>    # one group
 - `TestParseRetryAfter`
 - `TestRedact`
 
-### `aws`  (38 tests)
+### `aws`  (44 tests)
 
 - `TestAWSBucketARN`
 - `TestAWSDecodePolicy_CompactsAndRejectsGarbage`
@@ -67,6 +67,9 @@ bash scripts/cloud-qa.sh <group>    # one group
 - `TestAWSEvaluator_ServiceWildcardSatisfiesConcreteAction`
 - `TestAWSGate_ActionNotActionAndConditions`
 - `TestAWSResourcePolicyGate_ResourceAndNotClauses`
+- `TestExecuteCloudScenarioInSession_SessionPolicyBlocksStep`
+- `TestNormalizeAWSSessionPolicy`
+- `TestPermissionsBoundary_AllowOnOtherResourceDoesNotCover`
 - `TestS3Policy_ConditionalDenyIsConditional`
 - `TestS3Policy_DeniedReadFailsPassNamingPermission`
 - `TestS3Policy_DenyForPrincipalBlocksGrant`
@@ -74,6 +77,9 @@ bash scripts/cloud-qa.sh <group>    # one group
 - `TestS3Policy_NoPolicyIsNormal`
 - `TestS3Policy_UnparseablePolicyIsUnknown`
 - `TestS3Policy_WildcardAndAccountRootPrincipalsBlock`
+- `TestSessionPolicy_AllowOnOtherResourceDoesNotCover`
+- `TestSessionPolicy_AllowingActionKeepsGrant`
+- `TestSessionPolicy_LimitsGrantToItsActions`
 
 ### `gcp`  (10 tests)
 
@@ -177,7 +183,7 @@ bash scripts/cloud-qa.sh <group>    # one group
 - `TestExecuteCloudScenarioRun_ObservedMissingEvidenceIsUnknown`
 - `TestExecuteCloudScenarioRun_ProviderMismatchFailsRow`
 
-### `api`  (7 tests)
+### `api`  (8 tests)
 
 - `TestAccountChecked_InnerErrorIsRedacted`
 - `TestAccountChecked_MismatchFailsBeforeInventory`
@@ -186,6 +192,7 @@ bash scripts/cloud-qa.sh <group>    # one group
 - `TestCloudDiscovererFor_UnknownProviderRejected`
 - `TestValidateCloudPlanRunRequest_DiscoverAndEdgesMutuallyExclusive`
 - `TestValidateCloudScenarioRunBody`
+- `TestValidateCloudScenarioRunBody_SessionPolicy`
 
 ### `live` (not in `all`)
 

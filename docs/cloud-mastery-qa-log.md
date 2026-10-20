@@ -50,11 +50,11 @@ Audit sources read what the provider logs. Some scenario steps are logged only i
 - Previously a subscription Owner's `*` edge never matched a concrete action, so Owner looked like no access. Fixed in R-9.
 - **Still to verify live:** on a real subscription, an Owner's scenario steps should read as granted, and the `role_not_actions` carve-outs should match what the portal shows for a custom role.
 
-### O-7 — Enforcement layers: mostly closed; one AWS layer still open (MODEL)
+### O-7 — Enforcement layers: closed except cross-account resource grants (MODEL)
 SCPs, permission boundaries, S3 bucket policies, management-group inheritance, and folder and organization inheritance are now read and applied (R-10 to R-13). What remains:
-- **AWS session policies:** not read. A session policy can only narrow a grant, so discovery over-reports for sessions that carry one.
+- **AWS session policies:** IAM does not store them; each AssumeRole call carries its own. Discovery therefore reports a role's maximal grant, which is an upper bound for any session. An operator can supply the session policy a run will use (`sessionPolicy` on `POST /api/cloud-scenario-runs`, R-14). Without one, a scenario result is an upper bound for that role.
 - **AWS cross-account resource policies:** an Allow in a bucket policy that grants another account is not discovered (under-report). Only Deny statements in bucket policies are applied.
-- **Verify:** pick one identity with an S3 bucket policy that denies its action, and one assumed-role session, and confirm the verdict. Expect the session case to over-report until it is modelled.
+- **Verify:** run one scenario as a role with a session policy that allows only part of the role's grants, and confirm the blocked steps match the session. Then pick one identity with an S3 bucket policy that denies its action, and confirm the verdict.
 
 ### O-8 — Conditions (MODEL)
 - **AWS:** Allow statements with a `Condition` are emitted and evaluated as unconditional. Counted in `conditional_allows`. The evaluator does not evaluate conditions.
@@ -125,6 +125,10 @@ SCPs, permission boundaries, S3 bucket policies, management-group inheritance, a
 ### R-13 — S3 bucket policies were not read (over-reporting) — RESOLVED (this commit)
 - **What was wrong:** an explicit Deny in a bucket policy was invisible, so a grant on that bucket was reported as usable.
 - **What changed:** each bucket's policy is read with `s3:GetBucketPolicy`, and attached to every edge whose target is in that bucket. Denies are applied: the Principal or NotPrincipal must name the source identity (or its account root, or `*`), the Resource or NotResource must cover the target, and the Action or NotAction must cover the action. A conditional Deny gives ConditionallyReachable. An unreadable policy gives Unknown. Allows in bucket policies are not applied, since same-account access comes from the identity's own policies. Covered by `aws_s3policy_test.go`.
+
+### R-14 — Enforcement gates ignored the resource; session policies could not be applied (over-reporting) — RESOLVED (this commit)
+- **What was wrong:** a boundary, SCP, or session policy that allowed an action on a different resource still counted as covering the target. Separately, there was no way to evaluate a scenario as a role session that carries a session policy.
+- **What changed:** every gate now requires a matching Resource or NotResource as well as Action. A `sessionPolicy` on a scenario run (AWS scenarios, role principals only) is checked, normalized, and applied to each step the way a boundary is. Session policies are limited to 2,048 characters, and an unreadable or empty policy is refused, not partly applied. Covered by `aws_session_test.go` and `cloudscenario_session_test.go`.
 
 ### R-8 — Credentials never come from a request — RESOLVED `28304ead`, `7ae44b57`
 - AWS uses the SDK default chain, GCP uses Application Default Credentials, Azure reads service-principal variables. Each discoverer proves the credentials resolve to the account the run names before it reads inventory. Error text names a missing variable, never its value.

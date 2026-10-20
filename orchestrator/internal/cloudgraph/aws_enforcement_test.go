@@ -129,7 +129,7 @@ func TestAWSGate_ActionNotActionAndConditions(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			state, reason := awsGate(c.docs, c.action)
+			state, reason := awsGate(c.docs, c.action, testBucket)
 			if state != c.want || reason != c.reason {
 				t.Errorf("awsGate = (%s, %q), want (%s, %q)", state, reason, c.want, c.reason)
 			}

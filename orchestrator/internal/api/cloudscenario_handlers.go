@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/audspect/bas/internal/auth"
@@ -21,11 +22,12 @@ const maxObserveWindow = time.Hour
 // optional; when present, predictions are checked against the provider's audit
 // log for an execution at ActionTime.
 type cloudScenarioRunBody struct {
-	ScenarioID string                  `json:"scenarioId"`
-	Account    cloudgraph.AccountScope `json:"account"`
-	Principal  string                  `json:"principal"`
-	Resource   string                  `json:"resource"`
-	Observe    *struct {
+	ScenarioID    string                  `json:"scenarioId"`
+	Account       cloudgraph.AccountScope `json:"account"`
+	Principal     string                  `json:"principal"`
+	Resource      string                  `json:"resource"`
+	SessionPolicy string                  `json:"sessionPolicy,omitempty"`
+	Observe       *struct {
 		ActionTime    time.Time `json:"actionTime"`
 		WindowSeconds int       `json:"windowSeconds"`
 	} `json:"observe,omitempty"`
@@ -73,10 +75,11 @@ func (h *Handler) TriggerCloudScenarioRun(w http.ResponseWriter, r *http.Request
 	}
 
 	req := db.CloudScenarioRunRequest{
-		ScenarioID: body.ScenarioID,
-		Account:    body.Account,
-		Principal:  body.Principal,
-		Resource:   body.Resource,
+		ScenarioID:    body.ScenarioID,
+		Account:       body.Account,
+		Principal:     body.Principal,
+		Resource:      body.Resource,
+		SessionPolicy: body.SessionPolicy,
 	}
 	if c, ok := auth.ClaimsFrom(r.Context()); ok && c != nil {
 		req.InitiatedBy = c.UserID
@@ -146,6 +149,17 @@ func validateCloudScenarioRunBody(b cloudScenarioRunBody) error {
 	}
 	if b.Resource == "" {
 		return errors.New("resource required")
+	}
+	if b.SessionPolicy != "" {
+		if scenario.Provider != "aws" {
+			return errors.New("sessionPolicy applies to AWS scenarios only")
+		}
+		if !strings.Contains(b.Principal, ":role/") {
+			return errors.New("sessionPolicy requires a role ARN principal; session policies apply to assumed-role sessions")
+		}
+		if _, err := cloudgraph.NormalizeAWSSessionPolicy(b.SessionPolicy); err != nil {
+			return err
+		}
 	}
 	if b.Observe != nil {
 		if b.Observe.ActionTime.IsZero() {

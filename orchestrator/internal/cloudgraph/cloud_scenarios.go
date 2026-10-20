@@ -135,7 +135,17 @@ type CloudScenarioResult struct {
 // which the evaluators treat as implicit deny. Evaluation stops at the first
 // Blocked step, matching the ransomware executor's semantics, and a step the
 // step gate refuses to dispatch is recorded as Unknown and also stops the chain.
+// ExecuteCloudScenario evaluates a scenario for a principal against a resource
+// using the discovered graph.
 func ExecuteCloudScenario(scenario *CloudScenario, graph *DiscoveredGraph, evaluator AuthorizationEvaluator, principal, resource string) *CloudScenarioResult {
+	return ExecuteCloudScenarioInSession(scenario, graph, evaluator, principal, resource, "")
+}
+
+// ExecuteCloudScenarioInSession evaluates a scenario as an AWS assumed-role
+// session that carries sessionPolicy, a normalized document ("" for none). The
+// session policy narrows every step as a permissions boundary does, so a step
+// the role grants is still blocked when the session does not allow it.
+func ExecuteCloudScenarioInSession(scenario *CloudScenario, graph *DiscoveredGraph, evaluator AuthorizationEvaluator, principal, resource, sessionPolicy string) *CloudScenarioResult {
 	result := &CloudScenarioResult{ScenarioID: scenario.ID}
 
 	prereqs := []*CloudPrerequisite{
@@ -165,6 +175,12 @@ func ExecuteCloudScenario(scenario *CloudScenario, graph *DiscoveredGraph, evalu
 
 	for _, step := range scenario.Steps {
 		edge := scenarioStepEdge(graph, source, target, step.Action)
+		if sessionPolicy != "" {
+			if edge.Attributes == nil {
+				edge.Attributes = map[string]string{}
+			}
+			edge.Attributes["session_policy_document"] = sessionPolicy
+		}
 
 		decision := gate.ShouldDispatch(edge, graph)
 		if !decision.Allowed {
