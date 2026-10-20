@@ -461,6 +461,25 @@ func (r *Runner) do(ctx context.Context, step contract.Step, token string, obj f
 	return ex, false
 }
 
+// oversizedHits counts the bounds one attack response exceeds: the granted page size, the accepted bytes,
+// the item count and the response depth. Each check is independent, so a response can exceed several.
+func oversizedHits(s contract.Scenario, raw []byte) int {
+	n := 0
+	if s.MaxGrantedPageSize > 0 && reportedField(raw, "page_size") > s.MaxGrantedPageSize {
+		n++
+	}
+	if s.MaxAcceptedBytes > 0 && reportedField(raw, "accepted_bytes") > s.MaxAcceptedBytes {
+		n++
+	}
+	if s.MaxItemsReturned > 0 && reportedArrayLen(raw, "items") > s.MaxItemsReturned {
+		n++
+	}
+	if s.MaxResponseDepth > 0 && jsonDepth(raw) > s.MaxResponseDepth {
+		n++
+	}
+	return n
+}
+
 func (r *Runner) skip(rep Report, reason, detail string) Report {
 	rep.Outcome = grade.Skip(reason)
 	rep.Detail = detail
@@ -531,18 +550,7 @@ func (r *Runner) runAttack(ctx context.Context, rep *Report, step contract.Step,
 		}
 		agg.LeakedProtected += exch.Leaked
 		agg.ForbiddenHeaders += forbiddenHeaderHits(exch, s.ForbiddenResponseHeaders)
-		if s.MaxGrantedPageSize > 0 && reportedField(exch.raw, "page_size") > s.MaxGrantedPageSize {
-			agg.Oversized++
-		}
-		if s.MaxAcceptedBytes > 0 && reportedField(exch.raw, "accepted_bytes") > s.MaxAcceptedBytes {
-			agg.Oversized++
-		}
-		if s.MaxItemsReturned > 0 && reportedArrayLen(exch.raw, "items") > s.MaxItemsReturned {
-			agg.Oversized++
-		}
-		if s.MaxResponseDepth > 0 && jsonDepth(exch.raw) > s.MaxResponseDepth {
-			agg.Oversized++
-		}
+		agg.Oversized += oversizedHits(s, exch.raw)
 		if exch.Status < 500 && !slices.Contains(s.DeniedStatuses, exch.Status) {
 			agg.Accepted++
 		}

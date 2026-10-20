@@ -1986,3 +1986,31 @@ Not evaluated (no detection block): 39 of 70
 - Repeatability is per test run, not a standing catalog gate.
 - AUTHZ-007 is `fixture_validated` on `main` (commit a89ccc96). Its reason states both configurations and the
   multiple-owner contract. The earlier recommendation to narrow it is superseded unless you ask for that change.
+
+
+## Phase 36: item-count pagination (ABUSE-003)
+
+### Open item closed
+
+- The earlier record said the item-count check needed a fixture with more records than the cap. That is now
+  met. `orders-paged` gives customer-b 151 owned orders (ORD-2001 and ORD-P001..P150), and the page cap is 100.
+  The earlier "fixture has two orders" limitation is superseded for this check.
+- The check is the item count of the `items` array, graded by `max_items_returned: 100`.
+
+### What changed
+
+- **Oversize checks extracted.** The four bounds (granted page size, accepted bytes, item count, response depth)
+  moved from the grader loop into `oversizedHits`. Each bound counts once and independently.
+- **Isolation.** The earlier ABUSE-003 test could fail on the page size alone, because its attack also requests
+  `limit=100000`. Two tests now isolate the item-count path:
+  - `TestOversizedHitsItemCountAlone` (unit): an item count over the cap alone is one hit; an item count at the cap
+    is none; a refused request is none; both bounds exceeded give two.
+  - `TestPhase12_ItemCountFromLab` (lab): the vulnerable build returns all 151 items for `limit=100000`; the fixed
+    build refuses that limit with 400; the fixed build returns exactly 100 items for `limit=100`.
+
+### Limit of this evidence
+
+- The report keeps only the first 2 KiB of each body, so item counts are checked against the lab directly, not from
+  the report.
+- Only ABUSE-003 uses this fixture. Other pagination-adjacent scenarios (DATA-004 bulk enumeration) are not
+  re-graded here.

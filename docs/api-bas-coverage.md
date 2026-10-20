@@ -66,7 +66,7 @@ order does not fire it.
 | API-BAS-ABUSE-009 Distributed low-rate abuse | Several source identities and per-identity throttling in the lab |
 | API-BAS-ABUSE-010 Queue growth and retry storms | A queue service in the lab |
 | API-BAS-ABUSE-004 and others above also need the detection fixture to carry their rules | Rule definitions per sub-technique |
-| Pagination item count on the default fixture | Needs more records than the cap; implemented on the paged fixture instead |
+| Pagination item count | Resolved: ABUSE-003 checks item count on `orders-paged` (151 owned orders, cap 100). The default fixture still has two orders and cannot test it. |
 
 ## Protocols reported UNSUPPORTED
 
