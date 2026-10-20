@@ -30,6 +30,7 @@ import (
 	"github.com/audspect/bas/internal/analytics"
 	"github.com/audspect/bas/internal/artifactgen"
 	"github.com/audspect/bas/internal/auth"
+	"github.com/audspect/bas/internal/cloudgraph"
 	"github.com/audspect/bas/internal/cmdsigning"
 	"github.com/audspect/bas/internal/compliance"
 	"github.com/audspect/bas/internal/connector"
@@ -84,6 +85,13 @@ func isUniqueViolation(err error) bool {
 
 // Handler holds shared dependencies for all API handlers.
 type Handler struct {
+	// cloudProber builds the read-only probe executor for one provider account.
+	// nil in production (built from server configuration); tests override it.
+	cloudProber func(ctx context.Context, provider, accountID string) (cloudgraph.Prober, error)
+	// probeAudit writes one probe audit entry synchronously. nil in production
+	// (writes audit_logs); tests override it.
+	probeAudit func(ctx context.Context, actorID, action, resource string, detail map[string]any, outcome string) error
+
 	db     *pgxpool.Pool
 	hub    *ws.Hub
 	engine *scenario.Engine

@@ -71,11 +71,9 @@ SCPs, permission boundaries, S3 bucket policies, management-group inheritance, a
 ### O-10 — Console UI — OPEN
 - No UI exists for `discover:true` runs or scenario runs. The API is in place: `GET /api/cloud-scenarios` and `POST /api/cloud-scenario-runs`.
 
-### O-11 — Cloud actions are never executed — MODEL, by design
-- Scenarios predict outcomes from the discovered graph. Audspect does **not** perform cloud actions. `ObserveCloudScenario` checks predictions against audit evidence that already exists, for an execution that happened elsewhere.
-- Running a real cloud attack is a separate initiative that needs safety design. It is out of scope here.
-
-## Resolved items (this build)
+### O-11 — Cloud actions: read-only probes now execute (R-19); state-changing actions are never executed (MODEL, deferred by decision)
+- Scenarios still predict outcomes from the discovered graph. Read-only probes (R-19) can now query a provider for one allow-listed account, and a probe records an observed or simulated answer. Audit trail. Dry-run is the default.
+- State-changing actions are not implemented. Their approval, rollback, verification and recovery design is deferred. See R-19 for the required design.
 
 ### R-1 — `CloudPlan` reported unrelated branches as the path — RESOLVED `3aad60f8`
 - **What was wrong:** every hop reached during the search was appended to `CloudPath.Hops`. A viable side branch leaked into the path and could lower `OverallState`.
@@ -152,6 +150,18 @@ SCPs, permission boundaries, S3 bucket policies, management-group inheritance, a
 - **What changed (bindings):** conditional bindings produce edges with `binding_condition`. The evaluator reports them as `ConditionallyReachable` with `gcp-binding-condition`. A same-member unconditional grant stays a clean grant. Covered by `gcp_conditional_test.go`.
 - **Deny side:** a deny rule with a `denialCondition` no longer blocks outright. Its denied actions are kept apart (`deny_conditional_actions`), and a grant it covers is `ConditionallyReachable` with `gcp-deny-condition` named. An unconditional deny still blocks first. Both conditions are named when a binding and a deny are conditional together. Counted in `conditional_deny_rules`. Covered by `gcp_conditional_test.go`.
 - **Counting:** a rule is counted once, however many principals or permissions it names.
+
+### R-19 — Read-only cloud probes with server-side safety gates — RESOLVED (this commit)
+- **Decisions (from the owner):** read-only probes only. Server-enforced account allow-list, never trusted from a graph. No per-step approval for read-only probes. Dry-run by default. State-changing actions deferred.
+- **What was built:** `cloudgraph/probe.go` and `probe_aws.go`. The registry is fixed in code and holds two probes: `s3:ListBucket` (lists at most one key, after confirming the bucket is in the account's own listing) and `iam:SimulatePrincipalPolicy` (a simulated decision, not an observed call). Validation runs in four layers before any provider is contacted: mode, allow-list, registry membership, target and action shape plus account match. Dry-run returns the plan and calls no provider. A live run also checks that the credentials resolve to the named account. A prober that reports the wrong evidence kind is refused. `POST /api/cloud-probes` takes only known fields (unknown fields, including any read-only label, are refused). It needs `CanRunScenario`.
+- **Allow-list:** the environment variable `CLOUD_PROBE_ALLOWED_ACCOUNTS` (`provider:accountId`, comma-separated). Unset permits nothing. A malformed entry is an error.
+- **Audit (fail-closed):** `cloud.probe.requested` is written synchronously before anything runs. If it cannot be written, the probe does not run. `cloud.probe.outcome` is written after. If it cannot be written, the result is withheld. The audit detail holds the operation, account, target and action. It never holds credentials. Note: the existing `auditLogAs` is fire-and-forget and discards write errors, so it was not used for probes.
+- **Evidence:** observed (`provider-response`), simulated (`simulated-decision`, marked `simulated: true`), and plan (`dry-run-plan`). A simulated decision is never reported as an observed block.
+- **Reuse of `StepGate`:** not reused. `StepGate` only checks whether an edge's evaluation is Blocked or Unknown. It has no approval lifecycle, account binding, action authorization or rollback.
+- **Credentials:** the probe uses the server's configured AWS credential chain, the same one discovery uses. It does not accept credentials from a request or from a graph. Least-privilege setup of that chain is an operator task, and nothing in code enforces it.
+- **Tests:** 13 core and 4 AWS-prober tests in `cloudgraph` (`probe_test.go`, `probe_aws_test.go`). 8 handler tests in `api` (`cloudprobe_handlers_test.go`). The RBAC matrix includes the route.
+- **Not done:** no provider-backed integration test against a dedicated sandbox account has been run. That test is the next step and needs a sandbox account. Probes for GCP and Azure are not registered, so those providers are rejected.
+- **Deferred: state-changing actions.** Not implemented, and rejected by default, even in live mode. Before any is built, it needs: (1) per-step approval bound to the exact account, resource, action and parameters; (2) a precondition check immediately before execution, so an approval cannot be reused against a changed target; (3) a defined rollback and post-cleanup verification for each supported action; (4) a durable record of attempted changes and cleanup results; (5) a defined response to partial execution, crashes, lost credentials and failed rollback. Some actions are irreversible and must stay unsupported unless a recovery strategy is proven.
 
 ### R-8 — Credentials never come from a request — RESOLVED `28304ead`, `7ae44b57`
 - AWS uses the SDK default chain, GCP uses Application Default Credentials, Azure reads service-principal variables. Each discoverer proves the credentials resolve to the account the run names before it reads inventory. Error text names a missing variable, never its value.

@@ -18,6 +18,7 @@ bash scripts/cloud-qa.sh <group>    # one group
 | `audit` | cloudgraph | CloudTrail, Activity Log and GCP audit parsing and matching | none |
 | `scenario` | cloudgraph | scenario verdicts, gates, observation, wildcard grants | none |
 | `db` | db | cloud_runs lifecycle for plan and scenario runs, preflight gate before discovery | Docker |
+| `probe` | cloudgraph | read-only probe registry, allow-list, dry-run, target and account validation, AWS prober (identity and ownership gates, simulated decisions marked as simulated) | none |
 | `api` | api | discover and scenario validation, credential refusal, account mismatch | none |
 | `live` | cloudgraph | **LIVE** Azure integration (build tag `integration`) | live tenant and env vars |
 
@@ -216,7 +217,30 @@ bash scripts/cloud-qa.sh <group>    # one group
 - `TestExecuteCloudScenarioRun_PreflightFailureBlocksDiscovery`
 - `TestExecuteCloudScenarioRun_ProviderMismatchFailsRow`
 
-### `api`  (13 tests)
+### `probe`  (20 tests)
+
+- `TestAWSProber_BucketNotOwnedIsRefused`
+- `TestAWSProber_IdentityMismatchStopsBeforeAnyCall`
+- `TestAWSProber_ListBucketAccessDeniedIsDenied`
+- `TestAWSProber_ListBucketAllowed`
+- `TestAWSProber_OtherS3ErrorIsNotADenial`
+- `TestAWSProber_SimulatedDecisions`
+- `TestAWSProber_ThroughRunProbeKeepsEvidenceKind`
+- `TestParseProbeAllowList`
+- `TestProbeRequest_HasNoClientSuppliedReadOnlyField`
+- `TestRunProbe_ActionShape`
+- `TestRunProbe_BucketTargetMustBeBareBucketARN`
+- `TestRunProbe_DryRunDoesNotBypassAllowList`
+- `TestRunProbe_DryRunNeverContactsProvider`
+- `TestRunProbe_EvidenceKindMismatchRefused`
+- `TestRunProbe_LiveWithoutProberFails`
+- `TestRunProbe_PrincipalMustBeInNamedAccount`
+- `TestRunProbe_SimulatedOutcomeIsMarked`
+- `TestRunProbe_StateChangingOperationRejected`
+- `TestRunProbe_UnknownModeRejected`
+- `TestRunProbe_UnlistedAccountRejectedBeforeAnyProviderCall`
+
+### `api`  (21 tests)
 
 - `TestAccountChecked_InnerErrorIsRedacted`
 - `TestAccountChecked_MismatchFailsBeforeInventory`
@@ -227,6 +251,14 @@ bash scripts/cloud-qa.sh <group>    # one group
 - `TestCloudDiscovererFor_AzureNamesMissingVariableNotValue`
 - `TestCloudDiscovererFor_AzureRejectsSubscriptionMismatch`
 - `TestCloudDiscovererFor_UnknownProviderRejected`
+- `TestCloudProbe_DryRunContactsNoProvider`
+- `TestCloudProbe_LiveProbeRunsAndIsAudited`
+- `TestCloudProbe_NoActorRefused`
+- `TestCloudProbe_OutcomeAuditFailureWithholdsResult`
+- `TestCloudProbe_RequestedAuditFailureStopsProbe`
+- `TestCloudProbe_UnknownFieldRefusedBeforeAnyAction`
+- `TestCloudProbe_UnlistedAccountRejectedAndAudited`
+- `TestCloudProbe_UnsetAllowListPermitsNothing`
 - `TestTriggerCloudPreflight_RequiresAccount`
 - `TestValidateCloudPlanRunRequest_DiscoverAndEdgesMutuallyExclusive`
 - `TestValidateCloudScenarioRunBody`

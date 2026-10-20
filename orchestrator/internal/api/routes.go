@@ -531,6 +531,7 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.With(auth.RequirePermission(auth.CanRunScenario)).Post("/api/cloud-runs", h.TriggerCloudPlanRun)
 		r.With(auth.RequirePermission(auth.CanRunScenario)).Post("/api/cloud-scenario-runs", h.TriggerCloudScenarioRun)
 		r.With(auth.RequirePermission(auth.CanRunScenario)).Post("/api/cloud-preflight", h.TriggerCloudPreflight)
+		r.With(auth.RequirePermission(auth.CanRunScenario)).Post("/api/cloud-probes", h.TriggerCloudProbe)
 		r.With(auth.RequirePermission(auth.CanRunScenario)).Post("/api/cloud-campaigns", h.CreateCloudCampaign)
 		r.With(auth.RequirePermission(auth.CanRunScenario)).Post("/api/emailgw-runs", h.TriggerEmailGWRun)
 		r.With(auth.RequirePermission(auth.CanRunScenario)).Post("/api/phishing-runs", h.TriggerPhishingRun)

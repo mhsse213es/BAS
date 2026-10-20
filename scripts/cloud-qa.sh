@@ -16,12 +16,15 @@ case "${1:-all}" in
   scenario) run scenario ./internal/cloudgraph/ -run 'Scenario|ObserveCloud|BuiltinCloud|GlobMatch' -v ;;
   db)       run db ./internal/db/ -run 'CloudPlan|CloudScenario|DiscoveredGraph|DiscoveryFailure' -v ;;
   api)      run api ./internal/api/ -run 'Cloud|ValidateCloud|AccountChecked' -v ;;
+  probe)    run probe ./internal/cloudgraph/ -run 'Probe' -v
+            run probe-api ./internal/api/ -run 'CloudProbe' -v ;;
   live)
     echo "== live (requires tenant env vars; run only after preflight is green)"
     go test -count=1 -tags=integration ./internal/cloudgraph/ -run 'TestAzureDiscovery_Integration' -v ;;
   all)
     run cloudgraph ./internal/cloudgraph/ -v
     run db ./internal/db/ -run 'CloudPlan|CloudScenario|DiscoveredGraph|DiscoveryFailure'
-    run api ./internal/api/ -run 'Cloud|ValidateCloud|AccountChecked' ;;
+    run api ./internal/api/ -run 'Cloud|ValidateCloud|AccountChecked'
+    run probe-api ./internal/api/ -run 'CloudProbe' ;;
   *) echo "unknown group: $1" >&2; exit 2 ;;
 esac
