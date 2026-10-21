@@ -126,6 +126,11 @@ func (h *Handler) CreatePipelineApproval(w http.ResponseWriter, r *http.Request)
 		jsonError(w, "could not create a run identifier", http.StatusInternalServerError)
 		return
 	}
+	// The event time is set here, before the payload is hashed, so the approved document and the
+	// written document are the same. Retention judges records on this field.
+	if _, ok := doc[pipelinecheck.EventTimeField]; !ok {
+		doc[pipelinecheck.EventTimeField] = time.Now().UTC().Format(time.RFC3339Nano)
+	}
 	tagged, err := pipelinecheck.TagDocument(doc, runID)
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusBadRequest)

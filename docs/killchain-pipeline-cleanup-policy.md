@@ -128,3 +128,14 @@ Not built, by decision:
 - Both routes need `pipeline:cleanup:approve`. Each resolution is audited with the reconciler's identity.
 - Not yet built: automatic detection of the actual state in Elasticsearch during reconciliation. The
   resolution is currently a human statement, recorded as such.
+
+## Decisions (2026-10-21)
+
+- Retention is fixed at 30 days and is not customer-configurable. The cutoff is server time
+  minus 30 days, with the strict rule above. Customers cannot set a shorter or longer window.
+- The lab Elasticsearch counts as an injection test target. Live injection is built as a
+  single create-only write, behind a scope-bound approval and the durable audit sequence. Customer
+  deployments still require a distinct approver. A write is confirmed only when Elasticsearch
+  reports it created. An unconfirmed write is recorded as failed, and nothing is retried.
+- The event time of an injected record is set when the approval is requested, before the payload is
+  hashed, so the approved and written documents are identical.
