@@ -76,7 +76,7 @@ Applied only at first run: the orchestrator creates an admin account from these 
 
 | Variable | Default | Description |
 |---|---|---|
-| `CALDERA_URL` | (none) | Caldera REST API base URL. Example: `http://caldera:8888`. If not set, Caldera-backed scenarios are unavailable. |
+| `CALDERA_URL` | (none) | Caldera REST API base URL. Example: `http://caldera:8888`. If not set, the Caldera status check reports `CALDERA_URL not configured` and the Caldera ability list is empty. |
 | `CALDERA_API_KEY` | (none) | Caldera REST API key |
 
 ---
@@ -96,11 +96,11 @@ All SMTP variables are optional. Required only if the Purple Team Exercise Engin
 | Variable | Default | Description |
 |---|---|---|
 | `SMTP_HOST` | (none) | SMTP server hostname |
-| `SMTP_PORT` | `25` | SMTP port |
+| `SMTP_PORT` | (none) | SMTP port |
 | `SMTP_USER` | (none) | SMTP authentication username |
 | `SMTP_PASS` | (none) | SMTP authentication password |
 | `SMTP_FROM` | (none) | From address for exercise emails |
-| `SMTP_FROM_NAME` | `Audspect BAS` | Display name for exercise emails |
+| `SMTP_FROM_NAME` | (none) | Display name for exercise emails |
 
 ---
 
@@ -126,8 +126,8 @@ Appliances that present a self-signed certificate — common for air-gapped MISP
 
 | Connector | Where to set it |
 |---|---|
-| MISP | **Settings → Threat Intelligence → MISP → Skip TLS verify** |
-| TAXII | **Settings → TAXII Connectors → (edit) → Skip TLS certificate verification** |
+| MISP | **Settings → Threat intel → MISP → Skip TLS verify** |
+| TAXII | **Settings → Threat intel → TAXII Connectors → (edit) → Skip TLS certificate verification** |
 | Splunk / QRadar / Trellix / Elastic | `"insecureTls": true` on `POST`/`PUT /api/detectverify/configs` |
 
 **Elastic Security detection connector:** requires Elastic Stack 8.x (alerts-as-data, `.alerts-security.alerts-<space>` indices). Set `baseUrl` to the Elasticsearch URL and configure exactly one auth mode: an API key in `apiToken`, or a username in `clientId` and password in `clientSecret`. The credentials need read privilege on `.alerts-security.alerts-*`.

@@ -35,7 +35,6 @@ Audspect BAS uses role-based access control (RBAC) with three roles. User accoun
 | Create/manage campaigns | | ✓ | ✓ |
 | Launch, abort and approve exercise executions | | ✓ | ✓ |
 | Create/manage exercise plans | | | ✓ |
-| Re-validate findings | | ✓ | ✓ |
 | Trigger threat intel sync | | | ✓ |
 | View agent secret (Connection Config) | | | ✓ |
 | Manage users (create/edit/delete) | | | ✓ |
@@ -48,7 +47,7 @@ Audspect BAS uses role-based access control (RBAC) with three roles. User accoun
 
 ## Creating Users
 
-**Dashboard:** Settings → Users → Add User
+**Dashboard:** Settings → Users → Create User
 
 **Required fields:**
 - Username (use the user's email address by convention)
@@ -96,8 +95,6 @@ Body: { "currentPassword": "...", "newPassword": "..." }
 
 Admins can reset any user's password without knowing the current password:
 
-**Dashboard:** Settings → Users → [user] → Reset Password
-
 **API:**
 ```
 POST /api/users/{id}/reset-password
@@ -130,8 +127,6 @@ The admin account created by `install.sh` does not have the flag set.
 
 Admins can change a user's role at any time:
 
-**Dashboard:** Settings → Users → [user] → Edit Role
-
 **API:**
 ```
 PUT /api/users/{id}
@@ -160,9 +155,7 @@ You cannot deactivate your own account.
 
 ### Deletion
 
-Permanently removes the user account. Runs, findings, and notes created by this user are retained with the user's email as a static attribution string.
-
-**Dashboard:** Settings → Users → [user] → Delete
+Permanently removes the user account.
 
 **API:**
 ```

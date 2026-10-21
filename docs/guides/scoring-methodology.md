@@ -211,13 +211,11 @@ Campaign scores are computed over the pooled step results of every agent and sce
 
 ## Asset Score
 
-Attack Path assets can be tagged with criticality (crown-jewel, high, medium, low). Attack Path scoring produces an **Asset Exposure Score** (0–100, higher = worse) that measures how many active attack paths terminate at or pass through each asset tier.
+Attack Path assets can be tagged with criticality (crown-jewel, high, medium, low). Each asset's **Exposure Score** (`exposureScore`, 0–100, higher = safer) combines attack-path, detection, vulnerability and criticality risk.
 
 ```
-Asset Exposure Score = Σ(criticality_weight × paths_through_asset) / max_possible × 100
+Exposure Score = 100 − round(0.30 × attack-path risk + 0.30 × detection risk + 0.20 × worst-vulnerability risk + 0.20 × criticality risk)
 ```
-
-Asset Exposure Score is independent of the BAS Prevention Score and appears exclusively in the Attack Path section and Attack Path compliance reports.
 
 ---
 

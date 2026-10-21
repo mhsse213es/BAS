@@ -127,7 +127,7 @@ zcat /opt/backups/bas-YYYYMMDD.sql.gz | \
 docker compose up -d orchestrator
 ```
 
-The orchestrator applies its full idempotent schema on every startup (`CREATE TABLE IF NOT EXISTS` / `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`, not numbered migrations). If the backup was taken from an older version, this brings the schema forward safely — schema changes are additive, never destructive.
+The orchestrator applies its full idempotent schema on every startup (`CREATE TABLE IF NOT EXISTS` / `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`, not numbered migrations). If the backup was taken from an older version, this brings the schema forward safely — schema changes are mostly additive, but a few startup steps rename a column, drop and replace constraints and indexes, and delete duplicate rows.
 
 ### 5. Verify restore
 

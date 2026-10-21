@@ -30,7 +30,6 @@
 |---|---|---|
 | RBI Cyber Security Framework | Reserve Bank of India | Dedicated scenario + compliance report |
 | SEBI Cyber Security and Cyber Resilience Framework (CSCRF) | Securities and Exchange Board of India | Dedicated scenario + compliance report |
-| RBI Cloud Framework | Reserve Bank of India | Referenced in architecture guidance |
 
 ---
 
@@ -75,7 +74,7 @@
 | [Security Hardening](security-hardening.md) | TLS, secrets, Docker hardening, audit logging |
 | [Compliance Mapping](compliance-mapping.md) | Framework-to-technique mapping tables |
 | [Architecture Deep Dive](architecture-deep-dive.md) | Service boundaries, request lifecycle, database tables |
-| [Troubleshooting](troubleshooting.md) | 70+ symptom/cause/fix entries |
+| [Troubleshooting](troubleshooting.md) | 30 symptom/cause/fix entries |
 | [FAQ](faq.md) | Frequently asked questions |
 | [Glossary](glossary.md) | 60+ term definitions |
 | [Release Notes](release-notes.md) | Version history and changelog |

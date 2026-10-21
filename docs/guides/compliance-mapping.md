@@ -24,7 +24,7 @@ Compliance scores represent **control effectiveness** (does the control block th
 | NIST CSF 2.0 (`NIST_CSF_2`) | Control mapping (Govern, Identify, Protect, Detect, Respond, Recover) | CSV, JSON, HTML, PDF |
 | PCI DSS v4 (`PCI_DSS_V4`) | Control mapping | CSV, JSON, HTML, PDF |
 
-The framework list is served by `GET /api/compliance/frameworks`. MITRE ATT&CK coverage is reported separately (see the MITRE ATT&CK section below).
+The framework list is served by `GET /api/compliance/frameworks`.
 
 ---
 
@@ -51,8 +51,8 @@ The RBI CSF mapping covers these control categories:
 ### Generating an RBI compliance report
 
 1. Run the **SEBI CSCRF-MII Continuous Control Validation (Three-Tier)** scenario on your target agents
-2. Navigate to **Compliance** → **RBI Cyber Security Framework**
-3. Click **Download Report** (HTML or PDF)
+2. Navigate to **Reports** → **Compliance Report**, select the RBI framework, and click **Generate**
+3. Click **↓ PDF** or **↗ HTML**
 
 The report shows: control category → tested techniques → pass/fail results → compliance score → gaps.
 
@@ -120,8 +120,8 @@ Compliance reports serve as audit evidence for:
 The PDF compliance report includes:
 - Report generation timestamp (tamper-evident)
 - SHA-256 integrity hash
-- Run IDs for each tested technique (cross-reference to raw evidence)
-- Operator who authorized the simulation runs
+- The run ID the report is scoped to, when it is scoped to a single run
+- The user who generated the report (`generatedBy` in the attestation)
 
 ---
 

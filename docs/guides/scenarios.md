@@ -1,7 +1,5 @@
 # Audspect BAS — Scenarios Guide
 
-**Platform Version:** v1.7.3
-
 ---
 
 ## Overview
@@ -216,7 +214,7 @@ steps:
 1. Author the YAML following the format above
 2. Navigate to **Scenarios** → **Upload** → drag and drop the YAML file
 3. The orchestrator signs it on upload
-4. Scenario appears in the list with a green signature badge
+4. Scenario appears in the scenario list
 
 ---
 

@@ -17,9 +17,7 @@ Audspect BAS upgrades are delivered as a new versioned delivery ZIP (`bas-instal
 **Always use `install.sh --upgrade` — never `docker compose down` / `docker compose up` directly, and never hand-copy `.env` between versions.** Each fresh build generates a *new* `POSTGRES_PASSWORD` in its own bundle, but the Postgres data volume from your existing install keeps the *old* password. Swapping images without going through `install.sh` (which preserves your existing secrets automatically) silently breaks database authentication and puts the orchestrator into a crash-loop that looks unrelated to the upgrade.
 
 **Upgrade path supported:**
-- v1.6.x → v1.7.5 (supported, data preserved)
-- v1.7.x → v1.7.5 (supported, data preserved)
-- Versions below v1.6.0: contact Audspect support before upgrading
+- Upgrades from earlier releases: supported, data preserved
 
 ---
 

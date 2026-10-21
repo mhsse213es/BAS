@@ -102,15 +102,6 @@ Unlike an older `.env`-based flow, the admin account is **not** auto-generated �
    - Windows: `C:\ProgramData\BASAgent\logs` (this data directory still uses the pre-rebrand name — only the *service* name changed) — or Event Viewer → Windows Logs → Application → Source: "Audspect Agent"
    - Linux: `journalctl -u bas-agent -n 50`
 
-**Common error messages:**
-
-| Agent log | Cause | Fix |
-|---|---|---|
-| `connection refused` | Wrong IP or port | Correct the server URL (Windows: registry `BAS_SERVER_URL`; Linux: `/etc/bas-agent/config`) |
-| `401 Unauthorized` | Wrong agent secret | Copy secret from Settings → Connection Config |
-| `dial tcp: i/o timeout` | Firewall blocking | Open the configured port (default 9443) on server firewall |
-| `certificate verify failed` | Self-signed cert, agent doesn't trust CA | Install CA cert on endpoint |
-
 ---
 
 ### 2.2 Agent shows Active then immediately goes Offline
@@ -176,7 +167,7 @@ This is expected if agents are running a version not included in the current man
 
 **Cause options:**
 - Agent went offline mid-run
-- Step timeout exceeded (ART atomics default to 60-second step timeout)
+- Step timeout exceeded (ART atomics default to a 120-second step timeout)
 - Agent service crashed
 
 **Behavior:** The staleness monitor marks a run as `Partial` if no result is received for 90 seconds after the last reported step. Check the run status in the Runs list.
@@ -217,7 +208,7 @@ This is expected if agents are running a version not included in the current man
 
 ### 3.4 Scenario rejected as unsigned
 
-**Symptom:** Scenario appears with red "Signature Invalid" badge; cannot be run.
+**Symptom:** Scenario cannot be run.
 
 **Cause:** Scenario YAML was modified after signing, or the signature file is missing.
 
@@ -264,13 +255,6 @@ If the container is not running:
 docker compose up -d chrome
 ```
 
-If Chromium is running but PDFs are still blank: check that the container has at least 512 MB memory. Increase memory limit in `docker-compose.yml`:
-```yaml
-services:
-  chrome:
-    mem_limit: 1g
-```
-
 If the sidecar is unreachable, the orchestrator degrades to a built-in fallback PDF renderer (`fpdf`, lower fidelity) rather than failing the download outright — a blank-page PDF is more likely a hung/unhealthy Chromium container than a total failure. Check the orchestrator log for `chrome sidecar not configured` or `HTML→PDF via chrome unavailable` — if present, `CHROME_WS_URL` isn't reaching a healthy sidecar.
 
 ---
@@ -314,7 +298,7 @@ docker compose logs orchestrator | grep "audit-pack\|auditpack" | tail -20
 
 **Cause:** Agent is offline at job creation time.
 
-**Behavior:** This is expected. Jobs auto-dispatch when the agent reconnects. The `queued` status will advance to `dispatched` within 30 seconds of the agent's next heartbeat.
+**Behavior:** This is expected. Jobs auto-dispatch when the agent reconnects. The `queued` status advances to `dispatched` when the agent's next heartbeat arrives.
 
 If the agent is showing as Active but the job stays queued:
 - Check the agent's WebSocket connection: restart agent service
@@ -474,7 +458,7 @@ There are no numbered schema migrations that can "fail" in the traditional sense
 **Checks:**
 ```bash
 docker compose ps caldera
-curl http://localhost:8888/api/v2/health    # from orchestrator server
+docker compose exec caldera python3 -c "import urllib.request; urllib.request.urlopen('http://localhost:8888/').read()"    # port 8888 is internal only, not published to the host
 ```
 
 If Caldera is running: verify `CALDERA_URL` and `CALDERA_API_KEY` in `.env`.

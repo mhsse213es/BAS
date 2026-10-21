@@ -60,16 +60,16 @@ Run the downloaded `BASAgent-Setup-<version>.exe` on the target machine as Admin
 For a manual/scripted install instead of the GUI installer, use the standalone agent binary directly:
 ```powershell
 # Replace <server-url> and <secret> with values from Settings -> Connection Config
-.\bas-agent-windows-amd64.exe -server https://192.168.1.50:9443 -secret <agent-secret> -install
+.\bas-agent-windows-amd64.exe -server https://192.168.1.50:9443 -secret <agent-secret> -ca-root <ca-root.pem> -install
 ```
 
-Refresh the dashboard — the agent appears in the **Agents** list within 30 seconds.
+Refresh the dashboard — the agent appears in the **Agents** list.
 
 ### Deploy and enroll (Linux example)
 
 ```bash
 chmod +x bas-agent-linux-amd64
-sudo ./bas-agent-linux-amd64 -server https://192.168.1.50:9443 -secret <agent-secret> -install
+sudo ./bas-agent-linux-amd64 -server https://192.168.1.50:9443 -secret <agent-secret> -ca-root <ca-root.pem> -install
 sudo systemctl status bas-agent
 ```
 
@@ -113,7 +113,7 @@ After fixing the control, click **Re-validate** to dispatch a targeted single-te
 | Set up a recurring assessment | Scheduled Assessments → New Schedule |
 | Run attack path collection | Attack Path → Run Collection |
 | Invite another analyst | Settings → Users & roles |
-| Organize endpoints into groups | Agents → Group tree panel |
+| Organize endpoints into groups | Agents → Groups panel |
 | Download an audit pack | Agents → [agent] → Reports → Audit Pack |
 | Configure MISP / OpenCTI / OTX | Settings → Threat Intel Connector — enter URL/API key, Test Connection, Save (no restart needed) |
 | Check fleet-wide posture at a glance | Dashboard (Executive Dashboard KPI row) |

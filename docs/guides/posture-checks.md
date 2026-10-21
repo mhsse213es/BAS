@@ -29,7 +29,6 @@ Posture checks are read-only by design. They query configuration state; they do 
 The posture catalog is a per-agent inventory of all available posture checks for that agent's OS. It is populated automatically at enrollment time from the agent's built-in check set.
 
 **Viewing the catalog:**
-- Dashboard: Agents → [agent] → Overview tab → Posture Checks section
 - API: `GET /api/posture/catalog?agentId={agentId}&scenario={scenarioId}`
 
 Each catalog entry has these fields:
@@ -67,16 +66,15 @@ For Windows, uninstall and reinstall the agent service:
 
 | Check Category | Windows | Linux | macOS |
 |---|---|---|---|
-| AV / EDR status | ✓ | ✓ | ✓ |
+| AV / EDR status | ✓ | — | ✓ |
 | Firewall configuration | ✓ | ✓ | ✓ |
-| Logging configuration | ✓ | ✓ | — |
-| Patch/update status | ✓ | ✓ | — |
-| Password policy | ✓ | ✓ | — |
-| Disk encryption | ✓ | ✓ | ✓ |
-| Boot integrity (Secure Boot) | ✓ | ✓ | — |
+| Logging configuration | ✓ | ✓ | ✓ |
+| Patch/update status | ✓ | ✓ | ✓ |
+| Password policy | ✓ | ✓ | ✓ |
+| Disk encryption | ✓ | — | ✓ |
 | PowerShell configuration | ✓ | — | — |
 | SSH configuration | — | ✓ | ✓ |
-| AppArmor / SELinux | — | ✓ | — |
+| AppArmor | — | ✓ | — |
 | CIS Benchmark L1 | — | ✓ (Ubuntu) | — |
 
 ---
@@ -102,9 +100,6 @@ Custom posture checks are authored as scenario steps with `framework: custom`. T
     } else {
       exit 1    # FAIL
     }
-  remediation: |
-    Enable Logon audit events:
-    auditpol /set /subcategory:"Logon" /success:enable /failure:enable
 ```
 
 ### Linux (Bash)
@@ -123,10 +118,6 @@ Custom posture checks are authored as scenario steps with `framework: custom`. T
     else
       exit 1
     fi
-  remediation: |
-    Edit /etc/ssh/sshd_config:
-    Set: PermitRootLogin no
-    Restart: systemctl restart sshd
 ```
 
 ### Exit code convention
@@ -145,23 +136,22 @@ Custom posture checks are authored as scenario steps with `framework: custom`. T
 Audspect ships a library of ready-to-use posture check steps. Browse them in the scenario builder by filtering steps with `Framework: Custom`.
 
 **Windows categories:**
-- Windows Defender: real-time protection, cloud protection, behavior monitoring
+- Windows Defender: real-time protection, tamper protection
 - PowerShell: script block logging, transcription, constrained language mode
-- Audit Policy: logon, process creation, privilege escalation
-- UAC: level, notification settings
-- SMB: signing, version (SMBv1 disabled)
-- Windows Firewall: domain/private/public profiles
+- Audit Policy: LSASS auditing, command-line auditing, audit log retention
+- UAC: level, admin token filter, AlwaysInstallElevated
+- SMB: signing
+- Windows Firewall: enabled on all profiles
 - BitLocker: encryption status
 - Credential Guard: enabled/disabled
 
 **Linux categories:**
-- SSH: root login, password auth, key-only auth, protocol version
-- Firewall: iptables/ufw status and default policy
-- Automatic updates: unattended-upgrades enabled
-- Logging: rsyslog, auditd, syslog
+- SSH: root login, empty passwords, max auth tries, host-based auth, ignore rhosts, permit user environment
+- Firewall: UFW status
+- Patch status: pending security updates, last patch age
+- Logging: rsyslog, auditd, journald persistence
 - AppArmor: status, profiles enforced
-- Password: PAM complexity, minimum length, lockout policy
-- File integrity: aide/tripwire installed and configured
+- Password: minimum length (pam_pwquality), maximum age, no empty passwords
 
 ---
 

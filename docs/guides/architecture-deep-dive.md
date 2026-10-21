@@ -13,7 +13,7 @@
 │  ┌─────────────┐  ┌──────────────┐  ┌────────────────────┐  │
 │  │  HTTP Router │  │ WebSocket Hub│  │  Background Workers│  │
 │  │  (chi/mux)   │  │  (gorilla/ws)│  │  AP monitor        │  │
-│  └──────┬──────┘  └──────┬───────┘  │  Heartbeat cleanup │  │
+│  └──────┬──────┘  └──────┬───────┘  │                    │  │
 │         │                │           │  TI poller         │  │
 │  ┌──────▼──────────────▼───────────┐ │  Staleness monitor │  │
 │  │       API Handlers               │ │  Filesystem watcher│  │
@@ -38,7 +38,7 @@
     ┌───────────────────────────────────┐
     │  Caldera (optional, :8888)        │
     │  bas-caldera image               │
-    │  CTID library ~2213 abilities    │
+    │  CTID library abilities          │
     └───────────────────────────────────┘
 ```
 
@@ -119,15 +119,16 @@ Message types (all defined in `internal/models/schema.go`):
 Scenario YAML declares: art_technique="T1003.001" art_test_index=0
            │
            ▼
-       api/handlers.go → resolveARTStep()
+       scenario/art.go → ARTStore.GetStepsByPlatform()
            │
            ▼
-       Queries Postgres:
-         SELECT executor, command, cleanup_command, prereq_command, prereq_description
+       In-memory ARTStore, loaded at startup by:
+         SELECT technique_id, name, executor, command, cleanup, timeout_sec, required_payloads, platform, requires_priv
          FROM art_atomic_tests
-         WHERE technique_id = 'T1003.001'
-         AND test_index = 0
-         AND executor_os LIKE '%windows%'   -- matches agent OS
+         ORDER BY technique_id, test_index
+           │
+           ▼
+       Platform filter (agent OS)
            │
            ▼
        Substitutes InputArguments
@@ -210,7 +211,7 @@ LoadScenarios(dir)
        │       │     │
        │       │     └── found → RSA-SHA256 check (integrity.VerifyScenarioFile)
        │       │             │
-       │       │             ├── invalid → mark "signature_invalid" (cannot dispatch)
+       │       │             ├── invalid → refused, not added to the scenario map
        │       │             │
        │       │             └── valid → mark "loaded" (can dispatch)
        │       │
@@ -233,10 +234,10 @@ Agent result submission is designed for reliability over exactly-once:
 4. Duplicate is safe: same verdict written twice = same outcome
 
 Late submission healing:
-- A run whose agent has been silent for more than 90 seconds (the agent offline threshold) can be marked `partial`
+- A run whose agent has been silent for more than 90 seconds (the agent offline threshold) is marked `partial` when a new run is dispatched to that agent
 - Agent reconnects, submits buffered results
-- Server processes results → if all steps now have results → run moves to `completed`
-- Finding creation re-runs on final completion
+- Server processes results and sets the run to `completed` (or `partial` if the submission is itself partial), even if the run was already `partial` or `failed`
+- Finding creation runs on every submission, partial ones included, and is idempotent
 
 ---
 

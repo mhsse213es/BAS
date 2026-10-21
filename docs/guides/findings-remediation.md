@@ -46,8 +46,6 @@ Each finding carries:
 | **Last Seen** | Timestamp of most recent FAIL |
 | **Recurrence Count** | Number of times this technique has produced FAIL |
 | **Status** | Current lifecycle state |
-| **Assigned To** | Analyst responsible for remediation |
-| **Notes** | Free-text notes added by analysts |
 | **Linked Ticket** | External ticket ID (if ticket integration is configured) |
 | **Evidence** | Raw step output from the failing run |
 | **Remediation Guidance** | Built-in fix recommendations for this technique |
@@ -66,12 +64,12 @@ This means one finding per technique, agent and control class. If a technique fa
 
 Severity flows from the step definition in the scenario YAML. The severity hierarchy:
 
-| Severity | CVSS Equivalent | Typical technique examples |
-|---|---|---|
-| **Critical** | 9.0–10.0 | LSASS dump, credential harvesting, ransomware deployment |
-| **High** | 7.0–8.9 | Lateral movement, privilege escalation, C2 communication |
-| **Medium** | 4.0–6.9 | Defense evasion, persistence, discovery |
-| **Low** | 0.1–3.9 | Reconnaissance, benign enumeration |
+| Severity | Typical technique examples |
+|---|---|
+| **Critical** | LSASS dump, credential harvesting, ransomware deployment |
+| **High** | Lateral movement, privilege escalation, C2 communication |
+| **Medium** | Defense evasion, persistence, discovery |
+| **Low** | Reconnaissance, benign enumeration |
 
 ---
 
@@ -128,14 +126,7 @@ This prevents stale findings from accumulating when controls are updated via oth
 
 ## Evidence Comparison
 
-When a finding is re-validated, the platform stores both the original failure evidence and the new re-validate evidence. The **Evidence** tab on a finding shows a side-by-side diff:
-
-| | Original Run | Re-validate Run |
-|---|---|---|
-| Timestamp | 2026-06-28 10:15:32 | 2026-07-01 14:22:10 |
-| Verdict | FAIL | PASS |
-| Raw output | `Invoke-Mimikatz success...` | `Access denied: EDR blocked` |
-| Control response | None observed | EDR alert generated |
+When a finding is re-validated, the platform stores both the original failure evidence and the new re-validate evidence.
 
 Evidence is stored as structured JSON and rendered in the dashboard. It is also included in audit pack exports.
 
@@ -150,7 +141,6 @@ The ticket payload includes:
 - Affected agent hostname and IP
 - Control class and remediation recommendation
 - Link to the finding in the Audspect dashboard
-- Evidence (first 2,000 characters)
 
 On ticket creation, the ticket ID is stored against the finding in the finding-tickets record. The finding status does not change automatically based on ticket status — status must be updated in Audspect directly.
 
@@ -159,10 +149,7 @@ On ticket creation, the ticket ID is stored against the finding in the finding-t
 ## Bulk Operations
 
 From the **Findings** list view, analysts can select multiple findings and:
-- Set status (open, triaged, remediated, risk_accepted)
-- Assign to a user
 - Create tickets (one per finding)
-- Export selected findings to CSV
 
 ---
 

@@ -13,15 +13,14 @@
 - MITRE ATT&CK Navigator export (JSON attack flow) per run
 
 **Attack Path Validation — Job Lifecycle**
-- AP collection now uses a tracked job system: queued → dispatched → running → completed/failed
+- AP collection now uses a tracked job system: queued → dispatched → running → completed/failed/timed_out/delivery_failed/cancelled
 - Full job lifecycle visible in dashboard: Attack Path section + new Attack Path tab in agent detail drawer
 - Real-time progress streaming via WebSocket: stages, percentage, targets-completed/total
 - Auto-retry on agent reconnect for queued jobs
 - AP job scheduling: recurring collections on a fixed interval in minutes (`intervalMinutes`), with targets and optional SharpHound run
 
 **Findings and Remediation**
-- Structured finding lifecycle: Created → Open → In Progress → Validated → Resolved / False Positive / Suppressed / Archived
-- Automatic closure: 3 consecutive passes auto-resolves Created/Open findings
+- Finding statuses: `open`, `triaged`, `remediated`, `risk_accepted`
 - Re-validate: targeted single-technique dispatch with before/after evidence comparison
 - Bulk operations: multi-select status change, bulk ticket creation, bulk CSV export
 
@@ -59,7 +58,7 @@
 ### Breaking Changes
 
 - Passwords stored with bcrypt are transparently upgraded to PBKDF2 on next login. There is no fallback to bcrypt for writing new hashes.
-- `POST /api/attackpath/collect/{agentId}` (fire-and-forget dispatch) is deprecated in favor of `POST /api/attackpath/jobs`. The old endpoint is retained for backward compatibility.
+- `POST /api/attackpath/collect/{agentId}` (fire-and-forget dispatch) is superseded by `POST /api/attackpath/jobs`. The old endpoint is retained for backward compatibility.
 - Report MIME type for audit pack changed from `application/zip` with filename suffix to explicit `Content-Disposition: attachment; filename="bas-audit-pack-*.zip"`.
 
 ---
@@ -81,7 +80,6 @@
 ## v1.7.1 — 2026-05-20
 
 ### New Features
-- Web wizard installer (browser-based setup flow replacing whiptail)
 - Pre-seed config file support (`setup.conf`) for automated deployments
 - Scenario YAML upload via dashboard
 

@@ -57,15 +57,6 @@ server {
 
 **Critical:** After TLS is enabled, update `PUBLIC_BASE_URL=https://bas.company.com` in `.env` and restart the orchestrator. Re-enroll all agents with the HTTPS URL.
 
-### Certificate Requirements
-
-| Requirement | Specification |
-|---|---|
-| Key algorithm | RSA-2048 minimum; RSA-4096 or ECDSA P-256 recommended |
-| Hash algorithm | SHA-256 minimum |
-| Validity period | Maximum 2 years (1 year recommended) |
-| SAN | Must include the server's FQDN |
-
 ---
 
 ## Password Security
@@ -124,7 +115,6 @@ Every scenario YAML ships with a detached RSA-4096 signature (`.yaml.sig`). The 
 **Verification:**
 - On startup: built-in scenarios in `SCENARIOS_DIR` are verified
 - On filesystem change: the 15-second watcher detects in-place tampering
-- On scenario run dispatch: signature is re-verified before dispatch
 
 A built-in scenario that fails signature verification is refused at load and is not added to the scenario catalog.
 
@@ -243,7 +233,7 @@ GET /api/audit-logs?action=user.login&limit=100
 | Orchestrator container | `nonroot` (UID 65532); the root filesystem is writable unless `read_only: true` is set (see Docker Hardening) |
 | PostgreSQL container | `postgres` user — owns only the `bas` database |
 | Agent (Windows service) | `LOCAL SERVICE` or a dedicated service account with minimum OS permissions |
-| Agent (Linux service) | Dedicated `bas-agent` user with no sudo |
+| Agent (Linux service) | Runs as root; the `bas-agent.service` unit sets no `User=` |
 
 **Agent Windows privilege note:** Agent execution of ART atomics may require elevated privileges for techniques that test privilege escalation paths. In this case, run the agent as a standard user and allow it to attempt (and fail) privileged operations — this tests whether EDR controls block the escalation.
 

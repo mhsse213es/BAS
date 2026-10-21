@@ -20,7 +20,7 @@ An Audspect BAS agent is a lightweight Go binary deployed on a target endpoint. 
 | **active** | Normal operating state; the default state on enrollment | Automatic |
 | **restricted** | Agent can connect and report results, but cannot receive new scenario dispatches | Admin |
 | **quarantined** | Agent fully isolated; no dispatches accepted | Admin |
-| **retired** | Agent decommissioned; historical data preserved; no new connections | Admin |
+| **retired** | Agent decommissioned; historical data preserved; no new scenario runs | Admin |
 | **uninstalling** | Remote uninstall in progress; agent has been told to remove itself | Automatic (set by the Uninstall action below) |
 | **uninstalled** | Agent confirmed it removed itself, via its own callback | Automatic (agent-reported) |
 
@@ -112,7 +112,7 @@ Config is written to `/etc/bas-agent/config`, same format as Linux. The agent in
 
 ### Verify enrollment
 
-Within 30–60 seconds, the agent appears in the dashboard under **Agents** with state **active**. The agent table shows:
+The agent appears in the dashboard under **Agents** with state **active**. The agent table shows:
 - Hostname
 - OS version
 - Last heartbeat timestamp
@@ -140,7 +140,7 @@ Real-time operational log stream from the agent (auto-refreshes every 15 seconds
 
 ### Health Tab
 
-Agent environment diagnostics: OS version, resource usage, and posture-check-derived signals when a posture run has executed on this agent.
+Trend charts from the agent's telemetry: heartbeat latency, WebSocket reconnect attempts, scheduler queue depth, scheduler lock wait, scheduler execution time, and active scheduler jobs.
 
 ### Attack Path Tab
 

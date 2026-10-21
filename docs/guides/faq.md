@@ -29,7 +29,7 @@ Yes — and that's intentional. BAS simulation is real-technique execution; it i
 Yes, with these caveats:
 - The agent executes the commands the orchestrator dispatches. If you dispatch an ART all-windows scan, it will attempt real attack techniques.
 - Use the **Safe Security Simulation (Read-Only)** scenario for the first run to verify connectivity without impact.
-- ART/Caldera steps include cleanup commands that restore system state after execution.
+- ART steps include cleanup commands that the agent runs after execution.
 - The agent runs as a Windows service or Linux systemd unit with configurable service account permissions.
 
 ---
@@ -45,18 +45,6 @@ FAIL means the attacker succeeded — your EDR, AV, or other control allowed the
 
 ---
 
-**Q: How long does a full scenario run take?**
-
-| Scenario | Approximate Duration |
-|---|---|
-| Safe Security Simulation (Read-Only) | 1–2 minutes |
-| Selective ART Test (40–80 techniques) | 10–20 minutes |
-| Full ART Windows (300+ techniques) | 60–90 minutes |
-| CIS Ubuntu L1 | 5–10 minutes |
-| Attack Path Collection | 5–30 minutes (depends on network size and SharpHound) |
-
----
-
 **Q: Can I run BAS simulations against servers, not just workstations?**
 
 Yes. Deploy the agent on any target endpoint: workstations, servers, domain controllers, application servers. The agent binary is the same; it detects the OS and adapts execution accordingly. Consult with your IT team before deploying agents on critical production servers and schedule runs during low-activity windows.
@@ -64,15 +52,6 @@ Yes. Deploy the agent on any target endpoint: workstations, servers, domain cont
 ---
 
 ## Agents
-
-**Q: How many agents can the platform support?**
-
-The platform has been tested at:
-- Up to 50 agents: standard 4 vCPU / 8 GB RAM server
-- 50–200 agents: 8 vCPU / 16 GB RAM recommended
-- 200+ agents: contact Audspect for sizing guidance
-
----
 
 **Q: What happens if the server goes offline while agents are running?**
 
@@ -82,7 +61,7 @@ Agents buffer results locally and retry submission. When the server comes back o
 
 **Q: Can I run multiple scenarios on the same agent simultaneously?**
 
-No. The platform queues scenarios for each agent. If you dispatch two scenarios to the same agent, the second is queued and starts when the first completes. Multiple agents can run scenarios simultaneously without limit.
+No. If you dispatch a scenario to an agent that is already running one, the dispatch is rejected with HTTP 409 ("agent busy"), so start the second scenario after the first completes. Multiple agents can run scenarios simultaneously.
 
 ---
 
@@ -90,10 +69,8 @@ No. The platform queues scenarios for each agent. If you dispatch two scenarios 
 
 1. Download the new binary from the dashboard (Agents → Download Agent)
 2. Deploy via your standard method: SCCM, Ansible, Group Policy, manual
-3. On Windows, the agent service restarts automatically on binary replacement
+3. On Windows, the agent service is configured to restart automatically after a failure
 4. On Linux, restart the service: `sudo systemctl restart bas-agent`
-
-The dashboard shows a binary trust warning for agents running an outdated binary (yellow shield icon).
 
 ---
 

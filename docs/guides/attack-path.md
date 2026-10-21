@@ -120,7 +120,7 @@ The Attack Path tab in the agent detail drawer and the Attack Path dashboard dis
 
 ### From the dashboard
 
-1. Navigate to **Attack Path** in the left sidebar
+1. Navigate to **Attack Paths** in the left sidebar
 2. Click **Run Collection**
 3. Select an agent as the collection source
 4. Enter target hosts: comma-separated IPs, CIDR blocks, or hostnames
@@ -153,7 +153,7 @@ The dashboard pre-fills the target list with the agent's detected /24 subnet. Th
 
 ## Scheduling
 
-Attack Path collection can be scheduled on a recurring interval. The schedule is a single platform-wide setting, not one schedule per agent:
+Attack Path collection can be scheduled on a recurring interval. The schedule is a single platform-wide setting, not one schedule per agent; each interval fire sends the collection to every connected agent:
 
 ```
 POST /api/attackpath/schedule
@@ -167,7 +167,7 @@ Body:
 }
 ```
 
-`intervalMinutes` defaults to 1440 (once a day) when omitted or zero. Scheduled jobs appear in the schedule list and create tracked jobs at the configured time.
+`intervalMinutes` defaults to 1440 (once a day) when omitted or zero.
 
 ---
 
@@ -185,7 +185,7 @@ SharpHound is the BloodHound data collector for Active Directory. It enumerates:
 1. Place `SharpHound.exe` on the orchestrator server
 2. Set `BAS_SHARPHOUND_PATH=/path/to/SharpHound.exe` in the orchestrator environment
 3. The orchestrator pushes SharpHound to the agent as part of the job payload during AP dispatch
-4. The agent executes SharpHound in collection-only mode, compresses results, and uploads
+4. The agent runs SharpHound with its default arguments (`-c All --outputdirectory . --zipfilename bas.zip --nosavecache`) unless `sharpHoundArgs` is set, and uploads the resulting zip
 
 **Important:** SharpHound collection only runs if `runSharpHound: true` is set in the job and if `BAS_SHARPHOUND_PATH` is configured. Without this, the platform still performs TCP probe + local admin/session enumeration, which provides a useful but less complete graph.
 
@@ -214,8 +214,7 @@ After a completed collection, the orchestrator processes the uploaded data and b
 | **Blast Radius** | Number of hosts reachable from the collection source in ≤N hops |
 | **Choke Points** | Hosts that appear in the most attack paths; hardening reduces the blast radius significantly |
 | **Crown Jewel Exposure** | Number of active attack paths terminating at or passing through crown-jewel-tagged assets |
-| **Path Count** | Total number of distinct paths through the graph from any source to any target |
-| **Shortest Path** | Minimum hop count to reach any crown jewel asset |
+| **Shortest Path** | Shortest path to Domain Admin, from the entry host with the largest blast radius |
 
 ---
 
@@ -267,7 +266,7 @@ The **Attack Path Score** is an integer from 0 to 100 (higher = less exposed). I
 
 All in-progress and completed jobs for a specific agent are visible in:
 - The **Attack Path** tab of the agent detail drawer
-- The **Attack Path** section → **Job History** in the main navigation
+- The **Attack Paths** section → **Collection History** panel
 
 Job progress (stages, percentage, targets-completed/total) updates in real time via WebSocket while the job is running.
 

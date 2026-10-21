@@ -13,16 +13,16 @@
 | **ART** | Atomic Red Team — an open-source library of ATT&CK-mapped attack simulation test cases maintained by Red Canary. Audspect bundles the ART YAML library in the orchestrator image. |
 | **Asset Score** | Risk measure (0–100, higher = worse) for individual hosts based on how many attack paths pass through them and their criticality tier tag. |
 | **ATT&CK** | MITRE ATT&CK — a globally accessible knowledge base of adversary tactics, techniques, and procedures based on real-world observations. The primary taxonomy used in Audspect BAS. |
-| **ATT&CK Navigator** | MITRE's open-source visualization tool for ATT&CK matrices. Audspect exports Attack Flow reports as Navigator-compatible JSON. |
+| **ATT&CK Navigator** | MITRE's open-source visualization tool for ATT&CK matrices. Audspect exports ATT&CK coverage as Navigator-compatible layer JSON. |
 | **Atomic Test** | A single, reproducible simulation of one MITRE ATT&CK technique, defined in ART YAML. Each atomic has a unique ID, executor, command, prerequisites, and cleanup. |
 | **Audit Log** | Immutable record of all security-relevant platform events (auth, user management, agent state changes, integrity failures). Visible in the dashboard Audit Logs section. |
-| **Audit Pack** | ZIP archive containing HTML report, PDF report, CSV data, raw JSON, and a SHA-256 manifest for one agent's complete assessment period. |
-| **Baseline** | The Prevention Score from the first completed run of a scenario on an agent. All subsequent runs are compared against this baseline. |
+| **Audit Pack** | ZIP archive containing HTML report, PDF report, CSV data, raw JSON, and a SHA-256 manifest for one agent. |
+| **Baseline** | The Trend value for a run with no earlier run to compare against. Later runs are compared with the previous run, not a fixed baseline. |
 | **BAS** | Breach and Attack Simulation — methodology for continuously emulating adversary techniques against an organization's own infrastructure to validate security control effectiveness. |
 | **BFSI** | Banking, Financial Services, and Insurance — the primary target industry for Audspect BAS. |
 | **Blast Radius** | The set of hosts reachable from a collection source in the attack path graph within a given hop count. Higher blast radius = greater lateral movement potential. |
 | **BloodHound** | Open-source Active Directory attack path analysis tool. Audspect integrates BloodHound's data collector (SharpHound) for domain-joined attack path collection. |
-| **Caldera** | MITRE's open-source adversary emulation platform. Audspect uses a custom `bas-caldera` image baking the CTID adversary emulation library (~2,213 abilities). |
+| **Caldera** | MITRE's open-source adversary emulation platform. Audspect uses a custom `bas-caldera` image baking the CTID adversary emulation library. |
 | **Campaign** | A grouped execution of multiple scenarios across multiple agents, run simultaneously, producing a unified campaign report and a single campaign-level score. |
 | **Capability** | A MITRE Caldera ability's specific action type (execute command, upload file, run shellcode, etc.). |
 | **CBOM** | Cryptography Bill of Materials — an inventory of cryptographic algorithms, keys, and protocols in use within the platform. See `docs/SBOM-CBOM-v1.7.3.md`. |
@@ -37,7 +37,7 @@
 | **Delivery ZIP** | The self-contained installation package provided by Audspect containing Docker image tarballs, scenarios, and setup scripts. Suitable for air-gapped environments. |
 | **Detection** | A security control's response to a simulated technique (EDR alert, SIEM event, AV block). Audspect provides ground-truth stimulus; detection validation requires cross-referencing with SIEM telemetry. |
 | **Docker Compose** | The container orchestration tool used for Audspect BAS deployment. All platform components run as Docker containers defined in `docker-compose.yml`. |
-| **Edge** | A relationship between two nodes in the attack path graph. Edge types: tcp_reachable, local_admin, active_session, ad_group_member, ad_gpo. |
+| **Edge** | A relationship between two nodes in the attack path graph. Edge types include admin-to, has-session, member-of, credential, smb, winrm, rdp, and ACL-abuse types such as generic-all and write-dacl. |
 | **EDR** | Endpoint Detection and Response. The primary security control tested by BAS simulation steps on endpoint agents. |
 | **EPSS** | Exploit Prediction Scoring System (FIRST). Probability scores for CVE exploitation. Optionally used for enrichment if the EPSS file is configured. |
 | **ERROR** | BAS step verdict meaning the simulation platform could not execute the step. Not a control result — excluded from scoring. |

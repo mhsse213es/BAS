@@ -355,13 +355,6 @@ Contact Audspect support for a reviewed HA configuration.
 
 ## 11. Sizing and Performance
 
-| Workload | vCPU | RAM | Disk |
-|---|---|---|---|
-| Up to 10 agents, daily runs | 2 | 4 GB | 40 GB |
-| 10–50 agents, daily runs | 4 | 8 GB | 100 GB |
-| 50–200 agents, continuous | 8 | 16 GB | 250 GB |
-| 200+ agents | Contact Audspect | | |
-
 **Disk planning:**
 - Each completed run's step-level results are stored as a JSONB payload on the run row (`scenario_runs.results`) — larger scans produce larger payloads
 - Reports (HTML/PDF) render on-demand at request time — there's no growing report-blob store to plan disk around
