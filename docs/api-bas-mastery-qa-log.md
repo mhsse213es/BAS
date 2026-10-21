@@ -2293,3 +2293,55 @@ Correction: an earlier note listed DISC-006 as Phase 2 scope. The blueprint tabl
   `TestPhase2_ScopeAcceptance` pass. The short suite is clean.
 - For DATA-005 the filter matches only the other tenant's order, so the FAIL cannot come from the precondition
   check. It comes from the forbidden value.
+
+
+## Blueprint Phase 3, batch 3: the eight HTTP-buildable remaining scenarios
+
+### Built (lab routes in `lab/batch3.go`, flaws LAB-INTEG-* and LAB-DISC-*)
+
+- INTEG-001: a partner quote returns a quantity outside its contract. The vulnerable build applies it. The fixed
+  build refuses it with 422.
+- INTEG-002: a signed webhook event is replayed. Both builds verify the signature. The fixed build accepts an event ID
+  once per run and refuses the replay with 409. The signature does not bind a timestamp freshness window, which
+  is not graded here (see limits).
+- INTEG-006: a proxy acts as the identity named in X-Act-As. The fixed build refuses acting as another identity (403).
+- INTEG-007: the fraud check is down (`fraud-check-down`, a lab fault). The vulnerable build authorizes the payment
+  (fails open). The fixed build fails closed with 424.
+- INTEG-009: a partner names a customer it is not authorized for. The fixed build allows only cust-b (403).
+  The partner credential is sent in its own `X-Partner-Token` header, so the customer's Bearer token does not replace it.
+- INTEG-011: a callback URL on a host outside the allowlist. Graded by the accepted-attempts oracle (2 attempts, maximum 1).
+- DISC-006: the staging environment (`X-Environment: staging`) skips authentication in the vulnerable build. The
+  fixed build requires it (401).
+- DISC-010: the legacy region (`X-Region: legacy-eu`) skips the owner check in the vulnerable build. The fixed build
+  returns 404 for another tenant's order in every region.
+
+### Two grader rules that shaped the design
+
+- The runner takes the baseline identity as the object owner for every claim type, so a baseline step must be
+  authenticated as that owner. An anonymous attack step is allowed.
+- A step with `auth: none` must name the `anonymous` identity (contract rule).
+
+### Limits
+
+- INTEG-002 does not check timestamp freshness. A replay inside the same run is graded. A delivery that is old but
+  first-seen is not. The freshness window is not part of this scenario.
+- INTEG-007 tests the behaviour when the fraud check is down. The attacker does not cause the outage. The lab fault
+  stands for the outage.
+- The partner-credential and environment and region headers are lab conventions. They are not a real gateway.
+
+### Evidence
+
+- `TestPhase3_Batch3Acceptance`: 8 of 8 pass in both builds, three consecutive runs.
+- The Phase 2 scope test, the earlier Phase 3 tests, the flaw-registry test and the timing-claim rules pass with
+  98 catalog entries. The short suite is clean.
+- Full `internal/apibas/runner` package: one failure, `TestABUSE002Repeatability`, vulnerable run 0 graded
+  ERROR/ATTACK_MEASUREMENT_INVALID (the attack timing fell outside its valid band). The batch 3 code does not touch
+  the latency path. Rerun alone with nothing else running: passes (376 s). Recorded as load-sensitive timing, not a
+  verdict change. The full package has not passed in one run since this batch.
+
+### Still open (blueprint P3)
+
+- Blocked: AUTHN-007 (client-certificate validation) and GWAY-012 (TLS and upstream trust). The lab has no TLS
+  listener. Both need one, with a real handshake. A TLS-level refusal is a transport failure, which grades as
+  ERROR, so the fixed build must complete the handshake and refuse at the application layer, or the grader needs a
+  rule for TLS-level refusal.

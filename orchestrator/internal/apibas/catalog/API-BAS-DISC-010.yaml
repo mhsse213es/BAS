@@ -1,0 +1,51 @@
+id: "API-BAS-DISC-010"
+name: "Legacy region skips the owner check"
+category: DISC
+claim: function_level
+attack_objective: "The customer reads another tenant's order through the legacy region's gateway."
+threat_model:
+  attacker: "authenticated customer who owns the order"
+  identity: customer-b
+  access_level: "standard customer, valid token, owner of the order"
+  objective: "read another tenant's protected values from the legacy region"
+preconditions:
+  fixture: orders-two-tenant
+  identities: [customer-b]
+  object: ORD-2001
+steps:
+  - id: "baseline-own-region"
+    role: baseline
+    identity: customer-b
+    auth: valid
+    method: GET
+    path: "/api/regional/orders/ORD-2001"
+    hypothesis: "The customer reads their own order in the default region. If this fails, the scenario is not testable."
+  - id: "attack-legacy-region"
+    role: attack
+    identity: customer-b
+    auth: valid
+    method: GET
+    path: "/api/regional/orders/ORD-1001"
+    headers: {"X-Region": "legacy-eu"}
+    hypothesis: "Every region applies the owner check. Another tenant's order is not found, 404."
+forbidden_values: ["BAS-SIM-WHSEC-1001", "BAS-SIM-1001"]
+denied_statuses: [404]
+expected_control: "A request for another tenant's order is refused with 404 in every region."
+ground_truth:
+  adapters: ["state", "response"]
+  check: "No protected value of another tenant appears in the regional response."
+detection_assertion:
+  status: not_evaluated
+  reason: "Detection validation is Phase 4; this scenario makes no detection claim."
+evidence:
+  - sanitized_request
+  - sanitized_response
+  - state_diff
+side_effect_class: READ_ONLY
+cleanup:
+  - "reset the lab to its fixture seed after the run"
+industry_mapping:
+  - "BFSI / cloud: configuration drift across regions must not weaken authorization"
+regulatory_mapping: []
+negative_tests:
+  - "API-BAS-DISC-010 against the fixed build must PASS"

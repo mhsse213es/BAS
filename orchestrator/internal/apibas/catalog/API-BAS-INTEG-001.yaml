@@ -1,0 +1,50 @@
+id: "API-BAS-INTEG-001"
+name: "Partner quote applied without contract validation"
+category: INTEG
+claim: property_level
+attack_objective: "A partner quote for a hostile SKU returns a quantity outside the contract, and the product applies it."
+threat_model:
+  attacker: "authenticated customer who owns the order"
+  identity: customer-b
+  access_level: "standard customer, valid token, owner of the order"
+  objective: "make the product apply an out-of-contract partner quantity to an order"
+preconditions:
+  fixture: orders-two-tenant
+  identities: [customer-b]
+  object: ORD-2001
+steps:
+  - id: "baseline-owner-read"
+    role: baseline
+    identity: customer-b
+    auth: valid
+    method: GET
+    path: "/api/orders/{object}"
+    hypothesis: "The owner can read their order. If this fails, the scenario is not testable."
+  - id: "attack-hostile-quote"
+    role: attack
+    identity: customer-b
+    auth: valid
+    method: POST
+    path: "/api/orders/{object}/quote-refresh"
+    body: "{\"sku\":\"SKU-PARTNER-HOSTILE\"}"
+    hypothesis: "A partner quantity outside 1 to 100 is refused with 422 and the order is unchanged."
+denied_statuses: [422]
+expected_control: "A partner quantity outside the contract is refused with 422 and the order quantity is unchanged."
+ground_truth:
+  adapters: ["state", "response"]
+  check: "The order quantity is identical before and after the attack."
+detection_assertion:
+  status: not_evaluated
+  reason: "Detection validation is Phase 4; this scenario makes no detection claim."
+evidence:
+  - sanitized_request
+  - sanitized_response
+  - state_diff
+side_effect_class: STATE_CHANGE_SANDBOX
+cleanup:
+  - "reset the lab to its fixture seed after the run"
+industry_mapping:
+  - "BFSI / partner integrations: third-party responses are validated before use"
+regulatory_mapping: []
+negative_tests:
+  - "API-BAS-INTEG-001 against the fixed build must PASS"

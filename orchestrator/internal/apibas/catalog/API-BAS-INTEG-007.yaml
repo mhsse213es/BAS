@@ -1,0 +1,51 @@
+id: "API-BAS-INTEG-007"
+name: "Payment authorized while the fraud check is down"
+category: INTEG
+claim: property_level
+attack_objective: "The fraud check is unavailable. The customer asks for payment authorization anyway."
+threat_model:
+  attacker: "authenticated customer who owns the order"
+  identity: customer-b
+  access_level: "standard customer, valid token, owner of the order"
+  objective: "obtain payment authorization while the fraud check cannot run"
+preconditions:
+  fixture: orders-two-tenant
+  identities: [customer-b]
+  object: ORD-2001
+  lab_faults: ["fraud-check-down"]
+steps:
+  - id: "baseline-owner-read"
+    role: baseline
+    identity: customer-b
+    auth: valid
+    method: GET
+    path: "/api/orders/{object}"
+    hypothesis: "The owner can read their order. If this fails, the scenario is not testable."
+  - id: "attack-authorize-during-outage"
+    role: attack
+    identity: customer-b
+    auth: valid
+    method: POST
+    path: "/api/orders/{object}/authorize-payment"
+    body: "{}"
+    hypothesis: "When the fraud check is down, authorization fails closed with 424 and the order is unchanged."
+denied_statuses: [424]
+expected_control: "With the fraud check down, payment authorization fails closed with 424 and the order status is unchanged."
+ground_truth:
+  adapters: ["state", "response"]
+  check: "The order status is identical before and after the attack."
+detection_assertion:
+  status: not_evaluated
+  reason: "Detection validation is Phase 4; this scenario makes no detection claim."
+evidence:
+  - sanitized_request
+  - sanitized_response
+  - state_diff
+side_effect_class: STATE_CHANGE_SANDBOX
+cleanup:
+  - "reset the lab to its fixture seed after the run"
+industry_mapping:
+  - "BFSI / payments: fail closed when a fraud control is unavailable"
+regulatory_mapping: []
+negative_tests:
+  - "API-BAS-INTEG-007 against the fixed build must PASS"
