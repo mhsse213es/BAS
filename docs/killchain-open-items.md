@@ -350,3 +350,34 @@ Still open:
    never completed is reported as interrupted, not as ERROR or a pass.
 7. No shipped pipeline campaign yet. It needs a real connector ID per deployment.
 8. Permissions beyond 403 are not checked.
+
+### Update: approval, cleanup and retention (built; live injection still off)
+
+Items 1 and 2 above are partly closed. Detail is in `killchain-pipeline-cleanup-policy.md`.
+
+Built:
+- Injection approval with 15-minute expiry, scope binding, single use, append-only history,
+  and HTTP routes gated by permission. Customer deployments need a distinct approver. Lab is
+  set only by `BAS_DEPLOYMENT_CLASS` at startup.
+- Injection gate: validates, consumes an approval only for a matching target and payload,
+  and records executed or failed. No provider writes. Campaign injection stages report
+  NOT_TESTED and consume nothing.
+- Cleanup: the eligible set, each record's identity and `@timestamp`, is bound to the
+  approval. Execution re-previews at server time and refuses without spending the approval
+  if anything changed. Only the approver may execute. The start record is committed before
+  deletion, and the finish record after it.
+- Retention: a record is eligible only if its `@timestamp` is strictly earlier than server time
+  minus 30 days. Missing, malformed, non-date and future timestamps are held. The index must map
+  `@timestamp` as a date.
+- Reconciliation of unresolved executions: list, and a human resolution with a note. No deletion.
+
+Verified: unit and HTTP tests, and the pipeline check tests against the lab Elasticsearch
+(8.15.3). The lab tests cover exact matches, near-misses, keyword and unmapped indices,
+and the date mapping.
+
+Still open:
+1. Live injection. No SIEM host to test against, so no evidence yet. Stays disabled.
+2. Reconciliation does not check Elasticsearch. It records what a person states.
+3. Retention is the 30-day default only. Customer-configurable windows are not built.
+4. Cleanup on a customer system. Blocked until the audit and approval rules are confirmed on staging.
+5. Other connectors (Splunk, QRadar, Sentinel, CrowdStrike, Defender, Trellix) remain unsupported.

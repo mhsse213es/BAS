@@ -52,7 +52,7 @@ func DeleteElasticCandidates(ctx context.Context, client *http.Client, cfg Elast
 			map[string]any{"match_phrase": map[string]any{"tags": MarkerTag}},
 			// The server enforces retention again at deletion time, so a record whose event time
 			// changed to fall inside the window is never removed.
-			map[string]any{"range": map[string]any{EventTimeField: map[string]any{"lte": cutoff.UTC().Format(time.RFC3339Nano)}}},
+			map[string]any{"range": map[string]any{EventTimeField: map[string]any{"lt": cutoff.UTC().Format(time.RFC3339Nano)}}},
 		}}},
 	})
 	if err != nil {

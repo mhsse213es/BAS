@@ -309,6 +309,8 @@ var routeMatrix = []routeCase{
 	{http.MethodPost, "/api/pipeline-approvals/{id}/approve", tierPermission, auth.CanApprovePipelineInjection},
 	{http.MethodPost, "/api/pipeline-approvals/{id}/refuse", tierPermission, auth.CanApprovePipelineInjection},
 	{http.MethodPost, "/api/pipeline-approvals/{id}/execute-cleanup", tierPermission, auth.CanApprovePipelineCleanup},
+	{http.MethodGet, "/api/pipeline-approvals/unresolved-cleanups", tierPermission, auth.CanApprovePipelineCleanup},
+	{http.MethodPost, "/api/pipeline-approvals/unresolved-cleanups/{executionId}/reconcile", tierPermission, auth.CanApprovePipelineCleanup},
 	{http.MethodPost, "/api/cloud-scenario-runs", tierPermission, auth.CanRunScenario},
 	{http.MethodPost, "/api/cloud-preflight", tierPermission, auth.CanRunScenario},
 	{http.MethodPost, "/api/cloud-probes", tierPermission, auth.CanRunScenario},

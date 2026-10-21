@@ -101,3 +101,30 @@ Not built, by decision:
   approval. Execution is not restricted to the approver; any holder of pipeline:cleanup:approve can
   execute an approved request. Decide whether that should be the approver only.
 - Connectors other than Elastic. They report unsupported.
+
+## Confirmed decisions (cleanup execution)
+
+- Execution is limited to the approver. Only the authenticated user who approved an exact cleanup
+  request may execute it, and every other user is refused with nothing deleted. For a customer
+  deployment the approver is never the requester. For a lab deployment, self-approval makes the
+  requester the approver, so the requester may execute.
+- Retention: a record is eligible only when its `@timestamp` is strictly earlier than the cutoff,
+  which is server time minus 30 days. A record exactly at the cutoff is held. Missing, null,
+  malformed, non-date-mapped and future timestamps are held and reported with the reason. Preview
+  and the delete query use the same rule.
+- Audit sequence: a cleanup.started record is committed before any deletion. If it cannot be
+  committed, nothing is deleted and the approval is not spent. A cleanup.finished record carries the
+  counts and is committed after deletion. If the finish record cannot be committed after a deletion
+  ran, the response is unresolved, the start record stands, the approval outcome stays unknown, and
+  nothing is retried automatically. Reconciliation of unresolved executions is not yet built.
+
+## Reconciliation of unresolved cleanup executions
+
+- GET `/api/pipeline-approvals/unresolved-cleanups` lists executions that have a started record and
+  no finished, not-run or reconciled record.
+- POST `/api/pipeline-approvals/unresolved-cleanups/{executionId}/reconcile` records a human
+  resolution: `deleted` or `not_deleted`, with a required note saying how it was established. It
+  writes one durable audit record. It deletes nothing, retries nothing, and leaves the approval spent.
+- Both routes need `pipeline:cleanup:approve`. Each resolution is audited with the reconciler's identity.
+- Not yet built: automatic detection of the actual state in Elasticsearch during reconciliation. The
+  resolution is currently a human statement, recorded as such.

@@ -176,7 +176,8 @@ func retentionEligible(source map[string]any, now time.Time) (string, bool) {
 	if t.After(now) {
 		return "", false
 	}
-	if t.After(now.Add(-RetentionWindow)) {
+	// Strictly earlier than the cutoff is eligible. A record at or after the cutoff is held.
+	if !t.Before(now.Add(-RetentionWindow)) {
 		return "", false
 	}
 	return raw, true

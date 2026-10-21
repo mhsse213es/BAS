@@ -32,26 +32,34 @@ func previewAt(t *testing.T, hits ...string) CleanupPreview {
 	return PreviewElasticCleanupAt(context.Background(), srv.Client(), ElasticConfig{BaseURL: srv.URL}, "logs-bas", previewRunID, retentionNow)
 }
 
-// The cutoff is inclusive: a record exactly RetentionWindow old is eligible. One second younger is
-// held, and one second older is eligible.
+// The cutoff is strict: eligible only when the event time is strictly earlier than now minus the
+// window. A record exactly at the cutoff is held, one second earlier is eligible, and one second
+// later is held.
 func TestRetention_ExactBoundary(t *testing.T) {
 	at := `"` + retentionCutoff.Format(time.RFC3339Nano) + `"`
 	younger := `"` + retentionCutoff.Add(time.Second).Format(time.RFC3339Nano) + `"`
 	older := `"` + retentionCutoff.Add(-time.Second).Format(time.RFC3339Nano) + `"`
 	p := previewAt(t, tsHit("at", at), tsHit("younger", younger), tsHit("older", older))
-	if !contains(p.Candidates, "at") || !contains(p.Candidates, "older") {
-		t.Fatalf("candidates = %v, want the exact-cutoff and one-second-older records", p.Candidates)
+	if !contains(p.Candidates, "older") {
+		t.Fatalf("candidates = %v, want the one-second-earlier record", p.Candidates)
+	}
+	if contains(p.Candidates, "at") || !contains(p.RetentionHeld, "at") {
+		t.Fatalf("exactly-at-cutoff record must be held: candidates=%v held=%v", p.Candidates, p.RetentionHeld)
 	}
 	if !contains(p.RetentionHeld, "younger") || contains(p.Candidates, "younger") {
 		t.Fatalf("held = %v, candidates = %v; a record one second inside the window must be held", p.RetentionHeld, p.Candidates)
 	}
 }
 
-// A timestamp with a zone offset is compared as an instant, not as text. 17:00 at +05:00 is 12:00 UTC.
+// A timestamp with a zone offset is compared as an instant. 17:00 at +05:00 is 12:00 UTC, which is
+// exactly the cutoff, so it is held. 16:59:59 at +05:00 is one second earlier and eligible.
 func TestRetention_ZoneOffsetComparedAsInstant(t *testing.T) {
-	p := previewAt(t, tsHit("offset", `"2026-09-20T17:00:00+05:00"`))
-	if !contains(p.Candidates, "offset") {
-		t.Fatalf("offset form of the exact cutoff not eligible: %+v", p)
+	p := previewAt(t, tsHit("exact", `"2026-09-20T17:00:00+05:00"`), tsHit("earlier", `"2026-09-20T16:59:59+05:00"`))
+	if contains(p.Candidates, "exact") || !contains(p.RetentionHeld, "exact") {
+		t.Fatalf("offset form of the exact cutoff must be held: %+v", p)
+	}
+	if !contains(p.Candidates, "earlier") {
+		t.Fatalf("one second earlier by offset not eligible: %+v", p)
 	}
 }
 

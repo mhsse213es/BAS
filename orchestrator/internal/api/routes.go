@@ -327,6 +327,8 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.With(auth.RequireAnyPermission(auth.CanApprovePipelineInjection, auth.CanApprovePipelineCleanup)).Post("/api/pipeline-approvals/{id}/approve", h.ApprovePipelineApproval)
 		r.With(auth.RequireAnyPermission(auth.CanApprovePipelineInjection, auth.CanApprovePipelineCleanup)).Post("/api/pipeline-approvals/{id}/refuse", h.RefusePipelineApproval)
 		r.With(auth.RequirePermission(auth.CanApprovePipelineCleanup)).Post("/api/pipeline-approvals/{id}/execute-cleanup", h.ExecuteCleanupApproval)
+		r.With(auth.RequirePermission(auth.CanApprovePipelineCleanup)).Get("/api/pipeline-approvals/unresolved-cleanups", h.ListUnresolvedCleanups)
+		r.With(auth.RequirePermission(auth.CanApprovePipelineCleanup)).Post("/api/pipeline-approvals/unresolved-cleanups/{executionId}/reconcile", h.ReconcileCleanupExecution)
 		r.Get("/api/emailgw-runs", h.ListEmailGWRuns)
 		r.Get("/api/emailgw-runs/summary", h.GetEmailGWRunsSummary)
 		r.Get("/api/emailgw-runs/{id}", h.GetEmailGWRun)

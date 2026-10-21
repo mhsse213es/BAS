@@ -25,7 +25,7 @@ const cleanupRun = "bas-0123456789abcdef0123456789abcdef"
 
 var (
 	runIDPattern = regexp.MustCompile(`bas-[0-9a-f]{32}`)
-	ltePattern   = regexp.MustCompile(`"lte":"([^"]+)"`)
+	ltePattern   = regexp.MustCompile(`"lt":"([^"]+)"`)
 )
 
 // oldEventTime is an event time well outside the 30-day window. recentEventTime is well inside it.
@@ -114,7 +114,7 @@ func (f *fakeES) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 			ts, err := time.Parse(time.RFC3339Nano, d.ts)
-			if err != nil || ts.After(cutoffT) {
+			if err != nil || !ts.Before(cutoffT) {
 				continue
 			}
 			if f.conflict && i > 0 {
@@ -218,7 +218,7 @@ func TestCleanupApproval_DeletesOnlyApprovedCandidates(t *testing.T) {
 		if code := approveAs(t, router, id, "admin-2"); code != http.StatusOK {
 			t.Fatalf("approve by second person: %d", code)
 		}
-		code, res := executeCleanup(t, router, id, "admin-3")
+		code, res := executeCleanup(t, router, id, "admin-2")
 		if code != http.StatusOK || res["outcome"] != "executed" || res["deleted"].(float64) != 2 {
 			t.Fatalf("execute: %d %v", code, res)
 		}
@@ -242,7 +242,7 @@ func TestCleanupApproval_ChangedSetRefusedAndNotSpent(t *testing.T) {
 		approveAs(t, router, id, "admin-2")
 
 		es.put("mine-3", cleanupRun, true, oldEventTime())
-		code, res := executeCleanup(t, router, id, "admin-3")
+		code, res := executeCleanup(t, router, id, "admin-2")
 		if code != http.StatusConflict || !strings.Contains(res["error"].(string), "changed since approval") {
 			t.Fatalf("changed set: %d %v, want 409 refusal", code, res)
 		}
@@ -257,7 +257,7 @@ func TestCleanupApproval_ChangedSetRefusedAndNotSpent(t *testing.T) {
 		es.mu.Lock()
 		delete(es.docs, "mine-3")
 		es.mu.Unlock()
-		if code, res := executeCleanup(t, router, id, "admin-3"); code != http.StatusOK || res["outcome"] != "executed" {
+		if code, res := executeCleanup(t, router, id, "admin-2"); code != http.StatusOK || res["outcome"] != "executed" {
 			t.Fatalf("restored set should run the same approval: %d %v", code, res)
 		}
 	})
@@ -274,7 +274,7 @@ func TestCleanupApproval_EventTimeChangeRefused(t *testing.T) {
 
 		// Still older than the window, but a different instant than the one approved.
 		es.put("mine-1", cleanupRun, true, time.Now().UTC().Add(-60*24*time.Hour).Format(time.RFC3339Nano))
-		if code, res := executeCleanup(t, router, id, "admin-3"); code != http.StatusConflict {
+		if code, res := executeCleanup(t, router, id, "admin-2"); code != http.StatusConflict {
 			t.Fatalf("event time changed but still eligible: %d %v, want 409", code, res)
 		}
 		store := db.KillChainStore{Pool: pool}
@@ -296,7 +296,7 @@ func TestCleanupApproval_EventTimeMovedIntoWindowRefused(t *testing.T) {
 		id := out["approvalId"].(string)
 		approveAs(t, router, id, "admin-2")
 		es.put("mine-2", cleanupRun, true, recentEventTime())
-		if code, _ := executeCleanup(t, router, id, "admin-3"); code != http.StatusConflict {
+		if code, _ := executeCleanup(t, router, id, "admin-2"); code != http.StatusConflict {
 			t.Fatalf("record moved into the window: %d, want 409", code)
 		}
 	})
@@ -313,7 +313,7 @@ func TestCleanupApproval_PartialDeletionRecordedAndNotRetried(t *testing.T) {
 		es.mu.Lock()
 		es.conflict = true
 		es.mu.Unlock()
-		code, res := executeCleanup(t, router, id, "admin-3")
+		code, res := executeCleanup(t, router, id, "admin-2")
 		if code != http.StatusOK || res["outcome"] != "failed" || res["status"] != "partial" {
 			t.Fatalf("partial deletion: %d %v, want outcome failed with status partial", code, res)
 		}
@@ -324,7 +324,7 @@ func TestCleanupApproval_PartialDeletionRecordedAndNotRetried(t *testing.T) {
 		es.mu.Lock()
 		es.conflict = false
 		es.mu.Unlock()
-		if code, _ := executeCleanup(t, router, id, "admin-3"); code != http.StatusConflict {
+		if code, _ := executeCleanup(t, router, id, "admin-2"); code != http.StatusConflict {
 			t.Fatalf("retry on the same approval: %d, want 409", code)
 		}
 	})
@@ -337,10 +337,10 @@ func TestCleanupApproval_ReplayRefused(t *testing.T) {
 		_, out := requestCleanup(t, router, connID, "admin-1")
 		id := out["approvalId"].(string)
 		approveAs(t, router, id, "admin-2")
-		if code, _ := executeCleanup(t, router, id, "admin-3"); code != http.StatusOK {
+		if code, _ := executeCleanup(t, router, id, "admin-2"); code != http.StatusOK {
 			t.Fatalf("first execute: %d", code)
 		}
-		if code, _ := executeCleanup(t, router, id, "admin-3"); code != http.StatusConflict {
+		if code, _ := executeCleanup(t, router, id, "admin-2"); code != http.StatusConflict {
 			t.Fatalf("replay: %d, want 409", code)
 		}
 	})
