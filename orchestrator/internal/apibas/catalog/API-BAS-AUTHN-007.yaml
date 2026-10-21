@@ -36,8 +36,12 @@ ground_truth:
   adapters: ["state", "response"]
   check: "No protected value of another tenant appears in the response."
 detection_assertion:
-  status: not_evaluated
-  reason: "forged certificate subject is the owner identity: the same blind spot as DET-007; the attacker has no identity of its own. No detection claim is made."
+  status: fixture_validated
+  reason: "The attacker presents a self-signed client certificate that names the owner. The vulnerable build trusts the name, and the chain-verified identity is empty, so REL-013 fires. The fixed build refuses the certificate. Graded on the TLS environment by its own test. Fixture-validated, not validated against a live SIEM."
+detection:
+  source: elastic-security
+  expect_rule: APIBAS-REL-013
+  min_severity: high
 evidence:
   - sanitized_request
   - sanitized_response

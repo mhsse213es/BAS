@@ -34,6 +34,12 @@ func bodyOwnersFromContext(ctx context.Context) []string {
 	return v
 }
 
+// bodyRest is a request body made of bytes already read followed by the original stream.
+type bodyRest struct {
+	io.Reader
+	io.Closer
+}
+
 // extractBodyOwner is the body-extraction middleware. It must wrap the access logger, so the logger
 // sees the owner that the body names.
 func (s *Server) extractBodyOwner(next http.Handler) http.Handler {
@@ -45,12 +51,11 @@ func (s *Server) extractBodyOwner(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
-		raw, err := io.ReadAll(io.LimitReader(r.Body, bodyExtractLimit))
-		r.Body.Close()
-		if err != nil {
-			raw = nil
-		}
-		r.Body = io.NopCloser(bytes.NewReader(raw))
+		// Only the first bodyExtractLimit bytes are inspected. The handler still receives the whole body: the prefix
+		// read here, followed by the unread remainder. A truncated body would change what the handler accepts.
+		orig := r.Body
+		raw, _ := io.ReadAll(io.LimitReader(orig, bodyExtractLimit))
+		r.Body = bodyRest{Reader: io.MultiReader(bytes.NewReader(raw), orig), Closer: orig}
 		owners := s.ownersInBody(raw)
 		ctx := r.Context()
 		if len(owners) > 0 {

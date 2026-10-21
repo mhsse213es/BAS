@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -28,6 +29,9 @@ type accessEvent struct {
 	// VerifiedIdentity is the customer a signed token proves ("" when no lab-issued token is presented). Identity is the
 	// claimed identity the verifier accepted. They differ when the claim came from an unsigned token or a header.
 	VerifiedIdentity string `json:"verified_identity,omitempty"`
+	PageSize         int    `json:"page_size,omitempty"`
+	RequestBytes     int64  `json:"request_bytes,omitempty"`
+	CacheControl     string `json:"cache_control,omitempty"`
 	Outcome       string `json:"outcome"`
 	Identity      string `json:"identity"`
 	Status        int    `json:"status"`
@@ -169,6 +173,8 @@ func (s *Server) logAccess(next http.Handler) http.Handler {
 			identity = caller
 		} else if st != authMissing {
 			identity = "unknown"
+		} else if cn, ok := s.certClaim(r); ok {
+			identity = cn
 		}
 		owners := s.ownersOfRequest(r)
 		for _, o := range bodyOwnersFromContext(r.Context()) {
@@ -186,6 +192,9 @@ func (s *Server) logAccess(next http.Handler) http.Handler {
 			Action:        r.Method + " " + r.URL.Path,
 			ActionClass:   detect.ActionClass(r.Method + " " + r.URL.Path),
 			VerifiedIdentity:  s.verifiedIdentity(r),
+			PageSize:          requestPageSize(r),
+			RequestBytes:      requestBytes(r),
+			CacheControl:      rec.Header().Get("Cache-Control"),
 			Destination:       dest.destination,
 			DestinationPolicy: dest.policy,
 			Outcome:       outcomeFor(rec.status),
@@ -241,4 +250,22 @@ func (s *Server) degradedDependencies() []string {
 		out = append(out, "fraud-check")
 	}
 	return out
+}
+
+// requestPageSize returns the page size a request asked for through its limit parameter, or 0 when it names none or a
+// value that is not a whole number.
+func requestPageSize(r *http.Request) int {
+	n, err := strconv.Atoi(r.URL.Query().Get("limit"))
+	if err != nil {
+		return 0
+	}
+	return n
+}
+
+// requestBytes returns the request body size as sent, or 0 when the length is unknown.
+func requestBytes(r *http.Request) int64 {
+	if r.ContentLength > 0 {
+		return r.ContentLength
+	}
+	return 0
 }

@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -54,7 +56,7 @@ func TestPhase34_DetectionMatchesDeclaredExpectations(t *testing.T) {
 	var failures []string
 	validated, declared := 0, 0
 	for _, s := range all {
-		if s.Detection == nil {
+		if s.Detection == nil || tlsGraded[s.ID] {
 			continue
 		}
 		declared++
@@ -152,6 +154,35 @@ func expectedDetection(t *testing.T, fx fixture.Fixture, s contract.Scenario, ru
 		return detect.NotDetected
 	case "APIBAS-REL-012":
 		return destinationDetection(t, s)
+	case "APIBAS-REL-014":
+		// The page limit the attack asks for, against the documented maximum. The attempt counts whatever the outcome.
+		attack := s.Steps[len(s.Steps)-1]
+		u, err := url.Parse(attack.Path)
+		if err != nil {
+			t.Fatalf("%s: attack path %q: %v", s.ID, attack.Path, err)
+		}
+		if n, err := strconv.Atoi(u.Query().Get("limit")); err == nil && n > detect.MaxPageSize {
+			return detect.Detected
+		}
+		return detect.NotDetected
+	case "APIBAS-REL-015":
+		// The body the runner sends, with each filler placeholder expanded, against the documented upload ceiling.
+		attack := s.Steps[len(s.Steps)-1]
+		expanded := fillerPlaceholder.ReplaceAllStringFunc(attack.Body, func(m string) string {
+			n, _ := strconv.Atoi(fillerPlaceholder.FindStringSubmatch(m)[1])
+			return strings.Repeat("x", n)
+		})
+		if int64(len(expanded)) > detect.MaxRequestBytes {
+			return detect.Detected
+		}
+		return detect.NotDetected
+	case "APIBAS-REL-016":
+		// The status route marks its response publicly cacheable only in the vulnerable build.
+		attack := s.Steps[len(s.Steps)-1]
+		if mode == lab.ModeVulnerable && attack.Method == "GET" && strings.HasSuffix(attack.Path, "/status") {
+			return detect.Detected
+		}
+		return detect.NotDetected
 	case "APIBAS-REL-013":
 		// The unsigned-token attack is accepted only by the vulnerable build, under the forged subject. Its verified
 		// identity is empty, so the claimed identity is not proven by any signed token.
@@ -256,18 +287,28 @@ func ownershipDetection(t *testing.T, fx fixture.Fixture, s contract.Scenario, m
 	return detect.NotDetected
 }
 
+// tlsGraded are the declared scenarios graded on the TLS environment by their own test, not by this table, which has no
+// TLS harness.
+var tlsGraded = map[string]bool{"API-BAS-GWAY-012": true, "API-BAS-AUTHN-007": true}
+
+// fillerPlaceholder matches a body filler placeholder such as {filler:2097152}, which the runner expands to that many bytes.
+var fillerPlaceholder = regexp.MustCompile(`\{filler:(\d+)\}`)
+
 // destinationDetection expects REL-012 from the destination the attack asks the server to act on, graded with the lab's
 // policy. The attempt counts whatever its outcome, so the expectation is the same in both builds.
 func destinationDetection(t *testing.T, s contract.Scenario) string {
 	t.Helper()
 	attack := s.Steps[len(s.Steps)-1]
 	var kind, value string
-	if strings.HasPrefix(attack.Path, "/api/integrations/return") {
+	if strings.HasPrefix(attack.Path, "/api/integrations/return") || strings.HasPrefix(attack.Path, "/api/oauth/authorize") {
 		u, err := url.Parse(attack.Path)
 		if err != nil {
 			t.Fatalf("%s: attack path %q: %v", s.ID, attack.Path, err)
 		}
 		kind, value = lab.DestRedirect, u.Query().Get("next")
+		if strings.HasPrefix(attack.Path, "/api/oauth/authorize") {
+			kind, value = lab.DestAuthRedirect, u.Query().Get("redirect_uri")
+		}
 	} else {
 		var body struct {
 			URL string `json:"url"`

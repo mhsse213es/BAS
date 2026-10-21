@@ -55,6 +55,12 @@ type Event struct {
 	// VerifiedIdentity is the customer a signed token proves. Identity is the claimed identity the verifier accepted.
 	// They differ when the server accepted a claim the token does not prove (REL-013).
 	VerifiedIdentity string `json:"verified_identity,omitempty"`
+	// PageSize is the page size a request asked for (its limit parameter), 0 when the request names none. RequestBytes is
+	// the request body size as sent. CacheControl is the Cache-Control value the response carried. Each is recorded by the
+	// lab from the request or response the handler produced (see lab/access.go).
+	PageSize     int    `json:"page_size,omitempty"`
+	RequestBytes int64  `json:"request_bytes,omitempty"`
+	CacheControl string `json:"cache_control,omitempty"`
 	// Degraded names the controls the lab ran degraded when it served the request (see lab access events).
 	Degraded []string `json:"degraded,omitempty"`
 	Signature []string `json:"signature,omitempty"`
@@ -240,6 +246,33 @@ var ElasticRules = []Rule{
 		},
 	},
 	{
+		// REL-014 fires when a request asks for a page larger than the documented maximum. The attempt is the signal,
+		// whatever the outcome, as with REL-005.
+		ID: "APIBAS-REL-014", Name: "Page size above the documented maximum", Severity: SeverityMedium, Threshold: 1,
+		Match: func(e Event) bool { return e.PageSize > MaxPageSize },
+	},
+	{
+		// REL-015 fires when a request body is larger than the documented upload ceiling.
+		ID: "APIBAS-REL-015", Name: "Request body above the documented maximum", Severity: SeverityMedium, Threshold: 1,
+		Match: func(e Event) bool { return e.RequestBytes > MaxRequestBytes },
+	},
+	{
+		// REL-016 fires when a response that carries an owner's data is marked publicly cacheable, so a shared cache can
+		// store it. A private or no-store directive does not fire.
+		ID: "APIBAS-REL-016", Name: "Owner data served as publicly cacheable", Severity: SeverityHigh, Threshold: 1,
+		Match: func(e Event) bool {
+			return e.Status >= 200 && e.Status < 300 && len(e.owners()) > 0 && strings.Contains(e.CacheControl, "public")
+		},
+	},
+	{
+		// REL-017 fires when content from an upstream whose certificate does not verify is relayed to the caller (2xx).
+		// A refused fetch relays nothing and does not fire.
+		ID: "APIBAS-REL-017", Name: "Upstream content relayed without certificate verification", Severity: SeverityHigh, Threshold: 1,
+		Match: func(e Event) bool {
+			return e.DestinationPolicy == "untrusted_certificate" && e.Status >= 200 && e.Status < 300
+		},
+	},
+	{
 		// REL-013 fires when a request is accepted under a customer identity that no signed token proves: an unsigned
 		// token's subject, or a caller-supplied customer header. A customer identity with a matching verified identity,
 		// or with none (anonymous or unknown), does not fire.
@@ -304,6 +337,14 @@ func hasDependency(degraded []string, name string) bool {
 	}
 	return false
 }
+
+// Documented limits. Each is the ceiling the product's own contract states, not a tuned value.
+const (
+	// MaxPageSize is the largest page a list request may ask for (the order listing contract).
+	MaxPageSize = 100
+	// MaxRequestBytes is the largest attachment upload the product accepts (1 MiB).
+	MaxRequestBytes = 1 << 20
+)
 
 // The action-class vocabulary. Each class names what an action does to the object it targets. Ownership of the object
 // never decides the class: the same method and route classify the same way for the owner and for anyone else.

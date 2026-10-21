@@ -2819,3 +2819,42 @@ These are printed in every coverage report (`coverage.KnownGaps`).
 2. WebSocket frame behaviour: UNSUPPORTED.
 3. Certificate revocation: no revocation source; not tested and not claimed.
 4. Live SIEM validation: not done. Every detection result is fixture-validated.
+
+
+## Blueprint Phase 4: remaining groups, round 2
+
+### Newly declared (fixture_validated)
+
+- **ABUSE-003** (REL-014, page size above the documented maximum of 100). The access event records the requested page size. The vulnerable build serves a 100000-item page and the fixed build refuses it with 400. The rule fires on the attempt, whatever the outcome.
+- **ABUSE-005** (REL-015, request body above the 1 MiB upload ceiling). The access event records the body size as sent. The vulnerable build accepts a 2 MiB attachment and the fixed build refuses it with 413.
+- **DATA-006** (REL-016, owner data served as publicly cacheable). The access event records the response Cache-Control. The vulnerable build marks the owner status response public; the fixed build marks it private, no-store.
+- **AUTHN-004** (REL-012, redirect outside policy). The authorize endpoint now records its redirect_uri as a destination, with its own policy: only the one registered redirect is allowed.
+- **GWAY-012** (REL-017, upstream content relayed without certificate verification). The gateway verifies the upstream chain itself, whatever the build's skip setting, and records the verdict. REL-017 fires only on a relayed (2xx) response from an untrusted chain. Graded on the TLS environment by its own test.
+- **AUTHN-007** (REL-013, identity not proven by a signed certificate). The access event records the client certificate's common name as the claimed identity, and the identity a chain to the lab CA proves as the verified identity. Graded on the TLS environment by its own test.
+
+### Defects found while doing this
+
+- **Body extraction truncated request bodies.** With body extraction on, the middleware replaced the body with its first 64 KiB. Any upload larger than that was seen by the handler as truncated, so the fixed build's size check could not refuse it. The handler now receives the whole body; the owner and injection inspection still reads only the 64 KiB prefix.
+- **Stale lab binaries.** The loopback labs were started before the event fields changed, so a direct run recorded no request size. Labs must be restarted after a rebuild. The detection table runs its own labs and is not affected.
+
+### Counts
+
+- Declared scenarios: 75 fixture_validated. The detection table grades 73 in both builds, all matching. GWAY-012 and AUTHN-007 are graded by their own TLS tests, because the table has no TLS harness; the sweep counts them as declared.
+- not_evaluated: 30. Each has a reason in `docs/api-bas-det001-tracker.md`.
+
+### Still not_evaluated, with the reason each stays
+
+- **Below the burst threshold (9):** AUTHN-002, AUTHN-005, AUTHN-009, BIZ-003, BIZ-004, BIZ-005, BIZ-008, BIZ-010, BIZ-011. The threshold is not lowered. By design.
+- **Anonymous, no owned object (3):** DISC-005, DISC-007, INTEG-002. Nothing to attribute. By design.
+- **Own-object actions (10):** AUTHN-010, AUTHZ-003, BIZ-002, BIZ-006, BIZ-009, DATA-007, DATA-008, DATA-009, GWAY-008, INTEG-001. Classified (write, read, sensitive_export). Each claim concerns stored state, a response property or a step-up check that the access event does not record.
+- **Single request, cost or enumeration (2):** ABUSE-002 (expensive report; a work-unit budget is not documented), DISC-008 (a single not-found has no enumeration signal).
+- **Protocol adapters (2):** ABUSE-004 (GraphQL depth), INTEG-010 (async consumer). No adapter.
+- **External gap (1):** AUTHN-011, WebSocket handshake; native frames are unsupported.
+- **Parser differentials, not injection (3):** GWAY-005, INJ-006, INJ-012. Policy classes these as parser or validation issues. A rule family for them is a policy decision, not a telemetry gap.
+
+### External gaps (visible; none counted as validated)
+
+1. Native gRPC over HTTP/2 with protobuf descriptors: UNSUPPORTED.
+2. WebSocket frame behaviour: UNSUPPORTED.
+3. Certificate revocation: no revocation source; not tested and not claimed.
+4. Live SIEM validation: not done. Every detection result is fixture-validated.

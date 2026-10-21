@@ -3,14 +3,14 @@
 Each scenario that was `not_evaluated` before this analysis is listed once, with its decision. A detection rule is added
 only when the attack and the access-event telemetry justify the rule. Bulk assignment is not used.
 
-Scenarios analysed: 66. Detection added: 30. Still not_evaluated: 36.
+Scenarios analysed: 66. Detection added: 36. Still not_evaluated: 30.
 
 | Scenario | Decision | Rule | Justification |
 |---|---|---|---|
 | API-BAS-ABUSE-002 | not_evaluated | - | single report request; no volume or owner signal; no rule for expensive-query cost |
-| API-BAS-ABUSE-003 | not_evaluated | - | single page request; no volume or owner signal; no rule for response size |
+| API-BAS-ABUSE-003 | detection added | APIBAS-REL-014 | The attack asks for a page of 100000 items. REL-014 fires on the requested page size whatever the outcome: the vulnerable build serves the page, and the fixed build refuses it with 400. |
 | API-BAS-ABUSE-004 | not_evaluated | - | single GraphQL request; query depth is not a volume, owner or injection class the fixture carries |
-| API-BAS-ABUSE-005 | not_evaluated | - | upload targets the attacker own order; no rule for body size |
+| API-BAS-ABUSE-005 | detection added | APIBAS-REL-015 | The attack uploads a 2 MiB attachment. REL-015 fires on the request body size whatever the outcome: the vulnerable build accepts it, and the fixed build refuses it with 413. |
 | API-BAS-ABUSE-006 | detection added | APIBAS-REL-005 | Ten validation calls in one run reach the burst threshold. The attack is a volume of counted requests, which is what the rule sees. |
 | API-BAS-ABUSE-007 | detection added | APIBAS-REL-005 | Ten OTP sends in one run reach the burst threshold. Paid-unit abuse is a volume the rule sees. |
 | API-BAS-ABUSE-008 | detection added | APIBAS-REL-005 | Ten anonymous signups in one run reach the burst threshold. REL-005 counts requests regardless of identity, so the anonymous attack is visible. |
@@ -18,9 +18,9 @@ Scenarios analysed: 66. Detection added: 30. Still not_evaluated: 36.
 | API-BAS-AUTHN-001 | detection added | APIBAS-REL-011 | The anonymous read of an owned order is served by the vulnerable build. REL-011 fires on a successful request with no identity that reaches an owned object. |
 | API-BAS-AUTHN-002 | not_evaluated | - | single revoked-token attempt is below the REL-001 threshold of three; one refusal alerts nothing |
 | API-BAS-AUTHN-003 | detection added | APIBAS-REL-013 | The vulnerable build accepts an unsigned token subject as the owner. The verified identity is empty and the claimed identity differs, so REL-013 fires. The fixed build refuses the token. |
-| API-BAS-AUTHN-004 | not_evaluated | - | redirect URI validation produces no owner or volume signal; no rule |
+| API-BAS-AUTHN-004 | detection added | APIBAS-REL-012 | The attack authorizes with an unregistered redirect_uri. REL-012 fires on the attempt whatever the outcome: the vulnerable build redirects to the attacker host, and the fixed build refuses the request with 400. |
 | API-BAS-AUTHN-005 | not_evaluated | - | token exchange reuse returns 400; the 401 failure rule does not match; no rule |
-| API-BAS-AUTHN-007 | not_evaluated | - | forged certificate subject is the owner identity: the same blind spot as DET-007; the attacker has no identity of its own |
+| API-BAS-AUTHN-007 | detection added | APIBAS-REL-013 | The attacker presents a self-signed client certificate that names the owner. The vulnerable build trusts the name, and the chain-verified identity is empty, so REL-013 fires. The fixed build refuses the certificate. Graded on the TLS environment by its own test. |
 | API-BAS-AUTHN-009 | not_evaluated | - | workload token request without the secret has no owner; two requests are below the thresholds |
 | API-BAS-AUTHN-010 | not_evaluated | - | the close is a write on the attacker own order (class write). The step-up verification it should require is not in the access event, so no rule can grade its absence |
 | API-BAS-AUTHN-011 | not_evaluated | - | WebSocket handshake only; origin validation is not a rule class and frame behaviour is not built |
@@ -39,7 +39,7 @@ Scenarios analysed: 66. Detection added: 30. Still not_evaluated: 36.
 | API-BAS-BIZ-010 | not_evaluated | - | two coupon redemptions are below the volume threshold |
 | API-BAS-BIZ-011 | not_evaluated | - | two reservations are below the volume threshold |
 | API-BAS-DATA-005 | detection added | APIBAS-REL-004 | The filter names the protected account value of an order owned by another customer. The lab attributes a query that names a protected value to that value owner, so the access event names that owner. |
-| API-BAS-DATA-006 | not_evaluated | - | cache headers are response properties the access event does not carry |
+| API-BAS-DATA-006 | detection added | APIBAS-REL-016 | The owner status response is marked public in the vulnerable build, so a shared cache may store it. REL-016 fires on that response. The fixed build marks it private, no-store, and does not fire. |
 | API-BAS-DATA-007 | not_evaluated | - | the export is class sensitive_export on the attacker own order. Whether protected fields appear is a response property, which the access event does not carry |
 | API-BAS-DATA-008 | not_evaluated | - | the card display is class read on the attacker own order. Masking is a response property, which the access event does not carry |
 | API-BAS-DATA-009 | not_evaluated | - | the staging route is a read. Environment exposure is not in the access event |
@@ -59,7 +59,7 @@ Scenarios analysed: 66. Detection added: 30. Still not_evaluated: 36.
 | API-BAS-GWAY-008 | not_evaluated | - | the unexpected status is a write (class write). Whether the gateway accepted it is a state property, not in the access event |
 | API-BAS-GWAY-009 | detection added | APIBAS-REL-005 | Ten requests in one run reach the burst threshold. Varying the forwarded address does not change the run volume the rule counts. |
 | API-BAS-GWAY-010 | detection added | APIBAS-REL-011 | The anonymous request to the legacy region reaches an owned order and is served by the vulnerable build. REL-011 fires on it. |
-| API-BAS-GWAY-012 | not_evaluated | - | the upstream fetch acts on a URL, but the lab has no destination policy for upstream fetches and the access event carries no certificate trust; kept not_evaluated until a policy and the trust result exist |
+| API-BAS-GWAY-012 | detection added | APIBAS-REL-017 | The attack fetches an upstream whose certificate does not verify. The vulnerable build relays its content, and the gateway records the untrusted chain, so REL-017 fires. The fixed build refuses the fetch and relays nothing. Graded on the TLS environment by its own test. |
 | API-BAS-INJ-006 | not_evaluated | - | duplicate JSON keys are a parser differential, not an injection pattern; no injection class is set and the policy does not label it as injection |
 | API-BAS-INJ-009 | detection added | APIBAS-REL-006 | The note carries a cookie attribute injected after a semicolon. With body extraction on, the lab classes it as cookie_attribute and REL-006 fires. With extraction off the body is not inspected. |
 | API-BAS-INJ-011 | detection added | APIBAS-REL-006 | The body carries a __proto__ key. With body extraction on, the lab classes it as prototype_key and REL-006 fires. With extraction off the body is not inspected. |

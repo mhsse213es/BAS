@@ -41,8 +41,12 @@ ground_truth:
     The state is unchanged by the attack, the response grants no page larger than 100,
     and the response returns no more than 100 items.
 detection_assertion:
-  status: not_evaluated
-  reason: "single page request; no volume or owner signal; no rule for response size. No detection claim is made."
+  status: fixture_validated
+  reason: "The attack asks for a page of 100000 items. REL-014 fires on the requested page size whatever the outcome: the vulnerable build serves the page, and the fixed build refuses it with 400. Fixture-validated, not validated against a live SIEM."
+detection:
+  source: elastic-security
+  expect_rule: APIBAS-REL-014
+  min_severity: medium
 evidence:
   - sanitized_request
   - sanitized_response

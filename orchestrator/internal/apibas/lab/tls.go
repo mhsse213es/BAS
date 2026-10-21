@@ -9,6 +9,7 @@ import (
 	"crypto/x509"
 	"io"
 	"net/http"
+	"net/url"
 	"time"
 )
 
@@ -69,6 +70,10 @@ func (s *Server) upstreamFetch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer resp.Body.Close()
+	if resp.TLS != nil {
+		u, _ := url.Parse(req.URL)
+		noteUpstream(r, req.URL, upstreamVerified(resp.TLS, s.cfg.UpstreamRoots, u.Hostname()))
+	}
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, 64<<10))
 	writeJSON(w, http.StatusOK, map[string]any{"upstream_status": resp.StatusCode, "body": string(body)})
 }
@@ -108,4 +113,32 @@ func (s *Server) mtlsOrder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"id": o.ID, "fields": mergeFields(o.Public, o.Protected)})
+}
+
+// certClaim returns the common name of the client certificate a request presented, which the vulnerable build trusts
+// as the caller's identity. The fixed build refuses an untrusted certificate before any identity is used.
+func (s *Server) certClaim(r *http.Request) (string, bool) {
+	if r.TLS == nil || len(r.TLS.PeerCertificates) == 0 {
+		return "", false
+	}
+	return r.TLS.PeerCertificates[0].Subject.CommonName, true
+}
+
+// certIdentity returns the common name of a client certificate that chains to the lab CA. It is the identity the
+// certificate proves. A certificate that does not chain proves nothing (AUTHN-007).
+func (s *Server) certIdentity(r *http.Request) (string, bool) {
+	cn, ok := s.certClaim(r)
+	if !ok || s.cfg.ClientCAs == nil {
+		return "", false
+	}
+	inter := x509.NewCertPool()
+	for _, c := range r.TLS.PeerCertificates[1:] {
+		inter.AddCert(c)
+	}
+	if _, err := r.TLS.PeerCertificates[0].Verify(x509.VerifyOptions{
+		Roots: s.cfg.ClientCAs, Intermediates: inter, KeyUsages: []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
+	}); err != nil {
+		return "", false
+	}
+	return cn, true
 }

@@ -41,8 +41,12 @@ ground_truth:
     The state is unchanged by the attack, and no response reports accepting more
     than 1 MiB.
 detection_assertion:
-  status: not_evaluated
-  reason: "upload targets the attacker own order; no rule for body size. No detection claim is made."
+  status: fixture_validated
+  reason: "The attack uploads a 2 MiB attachment. REL-015 fires on the request body size whatever the outcome: the vulnerable build accepts it, and the fixed build refuses it with 413. Fixture-validated, not validated against a live SIEM."
+detection:
+  source: elastic-security
+  expect_rule: APIBAS-REL-015
+  min_severity: medium
 evidence:
   - sanitized_request
   - sanitized_response

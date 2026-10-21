@@ -62,6 +62,7 @@ func (s *Server) oauthAuthorize(w http.ResponseWriter, r *http.Request) {
 	}
 	q := r.URL.Query()
 	redirect := q.Get("redirect_uri")
+	noteDestination(r, DestAuthRedirect, redirect)
 	if !s.vulnerable() && (redirect != b2RegisteredRedirect || q.Get("code_challenge") == "") {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid redirect_uri or missing PKCE challenge"})
 		return

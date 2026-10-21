@@ -37,8 +37,12 @@ ground_truth:
   adapters: ["state", "response"]
   check: "No response Location header points at the attacker host."
 detection_assertion:
-  status: not_evaluated
-  reason: "redirect URI validation produces no owner or volume signal; no rule. No detection claim is made."
+  status: fixture_validated
+  reason: "The attack authorizes with an unregistered redirect_uri. REL-012 fires on the attempt whatever the outcome: the vulnerable build redirects to the attacker host, and the fixed build refuses the request with 400. Fixture-validated, not validated against a live SIEM."
+detection:
+  source: elastic-security
+  expect_rule: APIBAS-REL-012
+  min_severity: high
 evidence:
   - sanitized_request
   - sanitized_response

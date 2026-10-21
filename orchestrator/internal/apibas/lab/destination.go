@@ -7,6 +7,8 @@ package lab
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"net"
 	"net/http"
 	"net/url"
@@ -18,13 +20,22 @@ const (
 	DestRedirect = "redirect" // a post-login or return redirect target
 	DestCallback = "callback" // a webhook callback host the caller registers
 	DestWebhook  = "webhook"  // a URL the webhook test endpoint fetches
+	DestUpstream     = "upstream"      // a URL the gateway fetches, whose certificate the gateway should verify
+	DestAuthRedirect = "auth_redirect" // an OAuth redirect_uri, which must exactly match the client's registered redirect
 )
+
+// RegisteredRedirect is the one redirect_uri the lab registers for its OAuth client. The expectation grades against it.
+const RegisteredRedirect = b2RegisteredRedirect
 
 // Policy verdicts recorded on the access event.
 const (
 	PolicyAllowed   = "allowed"
 	PolicyOutside   = "outside_allowlist"
 	PolicyInternal  = "internal"
+	// PolicyUntrustedCert is an upstream whose certificate chain does not verify, so the content relayed from it is not
+	// authenticated (GWAY-012). PolicyVerifiedCert is an upstream whose chain verifies.
+	PolicyUntrustedCert = "untrusted_certificate"
+	PolicyVerifiedCert  = "verified_certificate"
 	policyNotEvaled = "" // the route has no destination policy, so no verdict is recorded
 )
 
@@ -84,6 +95,11 @@ func DestinationPolicy(kind, raw string) string {
 			return PolicyAllowed
 		}
 		return PolicyOutside
+	case DestAuthRedirect:
+		if raw == b2RegisteredRedirect {
+			return PolicyAllowed
+		}
+		return PolicyOutside
 	case DestWebhook:
 		if internalDestinationHost(u.Hostname()) {
 			return PolicyInternal
@@ -124,4 +140,38 @@ func noteDestination(r *http.Request, kind, raw string) {
 	}
 	h.destination = norm
 	h.policy = policy
+}
+
+// noteUpstream records an upstream fetch: the normalised URL and whether its certificate chain verified. The verdict is
+// the one fact the gateway can establish about the content it relays.
+func noteUpstream(r *http.Request, raw string, verified bool) {
+	h, ok := r.Context().Value(destHolderKey{}).(*destHolder)
+	if !ok {
+		return
+	}
+	norm, err := normalizeDestination(raw)
+	if err != nil {
+		return
+	}
+	h.destination = norm
+	h.policy = PolicyVerifiedCert
+	if !verified {
+		h.policy = PolicyUntrustedCert
+	}
+}
+
+// upstreamVerified reports whether the upstream's certificate chain verifies for host against the trusted roots. It is
+// the gateway's own check, made whether or not the request was configured to skip verification.
+func upstreamVerified(cs *tls.ConnectionState, roots *x509.CertPool, host string) bool {
+	if len(cs.PeerCertificates) == 0 {
+		return false
+	}
+	inter := x509.NewCertPool()
+	for _, c := range cs.PeerCertificates[1:] {
+		inter.AddCert(c)
+	}
+	_, err := cs.PeerCertificates[0].Verify(x509.VerifyOptions{
+		DNSName: host, Roots: roots, Intermediates: inter, KeyUsages: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+	})
+	return err == nil
 }

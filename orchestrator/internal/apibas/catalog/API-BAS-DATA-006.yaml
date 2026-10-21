@@ -43,8 +43,12 @@ ground_truth:
     The state is unchanged by the request, and the response carries no public
     caching directive.
 detection_assertion:
-  status: not_evaluated
-  reason: "cache headers are response properties the access event does not carry. No detection claim is made."
+  status: fixture_validated
+  reason: "The owner status response is marked public in the vulnerable build, so a shared cache may store it. REL-016 fires on that response. The fixed build marks it private, no-store, and does not fire. Fixture-validated, not validated against a live SIEM."
+detection:
+  source: elastic-security
+  expect_rule: APIBAS-REL-016
+  min_severity: high
 evidence:
   - sanitized_request
   - sanitized_response

@@ -36,8 +36,12 @@ ground_truth:
   adapters: ["state", "response"]
   check: "The relayed upstream content does not contain the upstream's probe value."
 detection_assertion:
-  status: not_evaluated
-  reason: "the upstream fetch acts on a URL, but the lab has no destination policy for upstream fetches and the access event carries no certificate trust; kept not_evaluated until a policy and the trust result exist. No detection claim is made."
+  status: fixture_validated
+  reason: "The attack fetches an upstream whose certificate does not verify. The vulnerable build relays its content, and the gateway records the untrusted chain, so REL-017 fires. The fixed build refuses the fetch and relays nothing. Graded on the TLS environment by its own test. Fixture-validated, not validated against a live SIEM."
+detection:
+  source: elastic-security
+  expect_rule: APIBAS-REL-017
+  min_severity: high
 evidence:
   - sanitized_request
   - sanitized_response
