@@ -41,8 +41,12 @@ ground_truth:
     The state is unchanged by the attack and the attack response contains none
     of the internal record's protected values.
 detection_assertion:
-  status: not_evaluated
-  reason: "SSRF through the webhook test has no owner and no SSRF injection class. No detection claim is made."
+  status: fixture_validated
+  reason: "The webhook test is asked to fetch an internal address. The lab records the destination and its internal policy verdict, and REL-012 fires on the attempt whatever the outcome. Fixture-validated, not validated against a live SIEM."
+detection:
+  source: elastic-security
+  expect_rule: APIBAS-REL-012
+  min_severity: high
 evidence:
   - sanitized_request
   - sanitized_response

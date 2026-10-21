@@ -180,6 +180,7 @@ func (s *Server) integReturn(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	next := r.URL.Query().Get("next")
+	noteDestination(r, DestRedirect, next)
 	if !s.vulnerable() && !isRelativePath(next) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "next must be a relative path"})
 		return

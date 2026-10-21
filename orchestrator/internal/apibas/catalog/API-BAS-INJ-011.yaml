@@ -40,8 +40,12 @@ ground_truth:
     The owner of the order is identical before and after the attack, and the response
     discloses no protected values.
 detection_assertion:
-  status: not_evaluated
-  reason: "prototype key in an attribute merge: no injection class covers prototype keys. No detection claim is made."
+  status: fixture_validated
+  reason: "The body carries a __proto__ key. With body extraction on, the lab classes it as prototype_key and REL-006 fires. With extraction off the body is not inspected. Fixture-validated, not validated against a live SIEM."
+detection:
+  source: elastic-security
+  expect_rule: APIBAS-REL-006
+  min_severity: high
 evidence:
   - sanitized_request
   - sanitized_response

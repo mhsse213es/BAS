@@ -1,6 +1,7 @@
 package runner_test
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/url"
 	"slices"
@@ -149,6 +150,16 @@ func expectedDetection(t *testing.T, fx fixture.Fixture, s contract.Scenario, ru
 			return detect.Detected
 		}
 		return detect.NotDetected
+	case "APIBAS-REL-012":
+		return destinationDetection(t, s)
+	case "APIBAS-REL-013":
+		// The unsigned-token attack is accepted only by the vulnerable build, under the forged subject. Its verified
+		// identity is empty, so the claimed identity is not proven by any signed token.
+		attack := s.Steps[len(s.Steps)-1]
+		if mode == lab.ModeVulnerable && attack.Auth == "alg_none" {
+			return detect.Detected
+		}
+		return detect.NotDetected
 	case "APIBAS-REL-011":
 		// REL-011 fires when an anonymous request succeeds on an object that has an owner. The vulnerable build serves the
 		// anonymous attack; the fixed build refuses it. A scenario whose anonymous attack names no owned object is not
@@ -187,7 +198,8 @@ func injectionExpectation(id string, extract bool) string {
 	switch id {
 	case "API-BAS-INJ-001", "API-BAS-INJ-008":
 		return detect.Detected
-	case "API-BAS-INJ-003":
+	case "API-BAS-INJ-003", "API-BAS-INJ-009", "API-BAS-INJ-011":
+		// These carry their payload in the body, which the lab inspects only with body extraction on.
 		if extract {
 			return detect.Detected
 		}
@@ -242,6 +254,43 @@ func ownershipDetection(t *testing.T, fx fixture.Fixture, s contract.Scenario, m
 		}
 	}
 	return detect.NotDetected
+}
+
+// destinationDetection expects REL-012 from the destination the attack asks the server to act on, graded with the lab's
+// policy. The attempt counts whatever its outcome, so the expectation is the same in both builds.
+func destinationDetection(t *testing.T, s contract.Scenario) string {
+	t.Helper()
+	attack := s.Steps[len(s.Steps)-1]
+	var kind, value string
+	if strings.HasPrefix(attack.Path, "/api/integrations/return") {
+		u, err := url.Parse(attack.Path)
+		if err != nil {
+			t.Fatalf("%s: attack path %q: %v", s.ID, attack.Path, err)
+		}
+		kind, value = lab.DestRedirect, u.Query().Get("next")
+	} else {
+		var body struct {
+			URL string `json:"url"`
+		}
+		if err := json.Unmarshal([]byte(attack.Body), &body); err != nil {
+			t.Fatalf("%s: attack body %q: %v", s.ID, attack.Body, err)
+		}
+		// The runner substitutes the lab's own address for {lab_url}, a loopback address, so an SSRF target on the lab is
+		// internal. {rogue_url} is an external host in the runner's test setup.
+		value = strings.ReplaceAll(body.URL, "{lab_url}", "http://127.0.0.1")
+		value = strings.ReplaceAll(value, "{rogue_url}", "https://rogue.example")
+		kind = lab.DestWebhook
+		if strings.HasPrefix(attack.Path, "/api/integrations/callbacks") {
+			kind = lab.DestCallback
+		}
+	}
+	if value == "" {
+		return detect.NotDetected
+	}
+	if lab.DestinationPolicy(kind, value) == lab.PolicyAllowed {
+		return detect.NotDetected
+	}
+	return detect.Detected
 }
 
 // anonymousOwnedDetection expects REL-011: in the vulnerable build an anonymous attack that names an owned object is

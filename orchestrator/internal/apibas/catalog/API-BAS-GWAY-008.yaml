@@ -42,7 +42,7 @@ ground_truth:
     discloses no protected values.
 detection_assertion:
   status: not_evaluated
-  reason: "schema omission on the attacker own order; no rule. No detection claim is made."
+  reason: "the unexpected status is a write (class write). Whether the gateway accepted it is a state property, not in the access event. No detection claim is made."
 evidence:
   - sanitized_request
   - sanitized_response

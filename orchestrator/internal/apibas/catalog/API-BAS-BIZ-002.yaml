@@ -40,7 +40,7 @@ ground_truth:
     The stored quantity is identical before and after the attack.
 detection_assertion:
   status: not_evaluated
-  reason: "negative quantity on the attacker own order; no rule for value validation. No detection claim is made."
+  reason: "the negative quantity is a write (class write). The accepted value is a state or response property, and the access event does not carry it. No detection claim is made."
 evidence:
   - sanitized_request
   - sanitized_response

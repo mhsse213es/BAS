@@ -35,7 +35,7 @@ ground_truth:
   check: "The order status is identical before and after the attack."
 detection_assertion:
   status: not_evaluated
-  reason: "sensitive action on the attacker own order; no privileged-function class covers the close action. No detection claim is made."
+  reason: "the close is a write on the attacker own order (class write). The step-up verification it should require is not in the access event, so no rule can grade its absence. No detection claim is made."
 evidence:
   - sanitized_request
   - sanitized_response

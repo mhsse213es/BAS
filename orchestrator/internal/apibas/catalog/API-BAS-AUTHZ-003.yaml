@@ -41,7 +41,7 @@ ground_truth:
     response discloses no protected values.
 detection_assertion:
   status: not_evaluated
-  reason: "mass assignment on the attacker own order; REL-004 needs a foreign object. No detection claim is made."
+  reason: "the owner_id mass assignment is a write (class write). Whether owner_id changed is stored object state; the access event records the request, not the stored owner. No detection claim is made."
 evidence:
   - sanitized_request
   - sanitized_response

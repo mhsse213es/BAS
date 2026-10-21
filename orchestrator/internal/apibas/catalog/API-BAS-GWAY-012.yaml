@@ -37,7 +37,7 @@ ground_truth:
   check: "The relayed upstream content does not contain the upstream's probe value."
 detection_assertion:
   status: not_evaluated
-  reason: "upstream certificate trust is not in the access event; no owner or volume signal. No detection claim is made."
+  reason: "the upstream fetch acts on a URL, but the lab has no destination policy for upstream fetches and the access event carries no certificate trust; kept not_evaluated until a policy and the trust result exist. No detection claim is made."
 evidence:
   - sanitized_request
   - sanitized_response

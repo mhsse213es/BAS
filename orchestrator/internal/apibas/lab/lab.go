@@ -492,6 +492,22 @@ func methodOverride(next http.Handler) http.Handler {
 // identify reads the bearer credential. It returns the customer the token
 // belongs to, even when the token is revoked, so the caller can decide how to
 // treat a revoked token.
+// verifiedIdentity returns the customer a signed token proves, and "" when the request carries no token the lab issued.
+// It ignores the unsigned-subject path and the caller-supplied customer header, so it is the identity the verifier
+// actually established. It is recorded beside the claimed identity (REL-013 compares them) and never used for access.
+func (s *Server) verifiedIdentity(r *http.Request) string {
+	h := r.Header.Get("Authorization")
+	const prefix = "Bearer "
+	if !strings.HasPrefix(h, prefix) {
+		return ""
+	}
+	customer, ok := s.cfg.Tokens[strings.TrimPrefix(h, prefix)]
+	if !ok {
+		return ""
+	}
+	return customer
+}
+
 func (s *Server) identify(r *http.Request) (string, authState) {
 	h := r.Header.Get("Authorization")
 	if h == "" {
@@ -1391,6 +1407,7 @@ func (s *Server) testWebhook(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "url is required"})
 		return
 	}
+	noteDestination(r, DestWebhook, req.URL)
 	if s.cfg.Mode == ModeFixed && internalDestination(req.URL) {
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "destination not allowed"})
 		return

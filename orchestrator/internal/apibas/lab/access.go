@@ -21,6 +21,13 @@ type accessEvent struct {
 	// ActionClass is the detection class of the action (privileged operations only). It is set from the same
 	// definition the detection rules read, so the lab and the rules cannot disagree.
 	ActionClass string `json:"action_class,omitempty"`
+	// Destination is the normalised destination a handler acted on (scheme://host:port), and DestinationPolicy is its
+	// verdict under DestinationPolicy in destination.go. Both are empty when the route records no destination.
+	Destination       string `json:"destination,omitempty"`
+	DestinationPolicy string `json:"destination_policy,omitempty"`
+	// VerifiedIdentity is the customer a signed token proves ("" when no lab-issued token is presented). Identity is the
+	// claimed identity the verifier accepted. They differ when the claim came from an unsigned token or a header.
+	VerifiedIdentity string `json:"verified_identity,omitempty"`
 	Outcome       string `json:"outcome"`
 	Identity      string `json:"identity"`
 	Status        int    `json:"status"`
@@ -152,6 +159,7 @@ func appendOwner(list []string, owner string) []string {
 func (s *Server) logAccess(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
+		r, dest := withDestinationHolder(r)
 		next.ServeHTTP(rec, r)
 		if strings.HasPrefix(r.URL.Path, "/lab/") {
 			return
@@ -177,6 +185,9 @@ func (s *Server) logAccess(next http.Handler) http.Handler {
 			CorrelationID: r.Header.Get("X-BAS-Run"),
 			Action:        r.Method + " " + r.URL.Path,
 			ActionClass:   detect.ActionClass(r.Method + " " + r.URL.Path),
+			VerifiedIdentity:  s.verifiedIdentity(r),
+			Destination:       dest.destination,
+			DestinationPolicy: dest.policy,
 			Outcome:       outcomeFor(rec.status),
 			Identity:      identity,
 			Status:        rec.status,

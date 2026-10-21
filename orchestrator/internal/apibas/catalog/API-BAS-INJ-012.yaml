@@ -44,7 +44,7 @@ ground_truth:
     discloses no protected values.
 detection_assertion:
   status: not_evaluated
-  reason: "form-encoded status skips validation: no injection class; a validation bypass has no signature. No detection claim is made."
+  reason: "a form-encoded status that skips validation is a validation bypass, not an injection pattern; no injection class is set. No detection claim is made."
 evidence:
   - sanitized_request
   - sanitized_response

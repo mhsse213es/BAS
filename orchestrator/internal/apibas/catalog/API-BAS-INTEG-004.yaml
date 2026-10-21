@@ -41,8 +41,12 @@ ground_truth:
     The response carries no Refresh header naming an external host, and the state is unchanged
     by the attack.
 detection_assertion:
-  status: not_evaluated
-  reason: "open redirect has no object or owner; no rule. No detection claim is made."
+  status: fixture_validated
+  reason: "The return page is asked to redirect off this origin. The lab records the destination and its verdict, and REL-012 fires on the attempt whatever the outcome. Fixture-validated, not validated against a live SIEM."
+detection:
+  source: elastic-security
+  expect_rule: APIBAS-REL-012
+  min_severity: high
 evidence:
   - sanitized_request
   - sanitized_response

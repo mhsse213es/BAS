@@ -40,7 +40,7 @@ ground_truth:
     unchanged by the attack.
 detection_assertion:
   status: not_evaluated
-  reason: "card display on the attacker own order; masking is a response property. No detection claim is made."
+  reason: "the card display is class read on the attacker own order. Masking is a response property, which the access event does not carry. No detection claim is made."
 evidence:
   - sanitized_request
   - sanitized_response

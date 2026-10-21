@@ -39,8 +39,12 @@ ground_truth:
     The state is unchanged by the attack and the attack response contains none
     of the owner's protected values.
 detection_assertion:
-  status: not_evaluated
-  reason: "forged alg_none identity is the owner identity in the vulnerable build: the blind spot documented for DET-007; no claim is made. No detection claim is made."
+  status: fixture_validated
+  reason: "The vulnerable build accepts an unsigned token subject as the owner. The verified identity is empty and the claimed identity differs, so REL-013 fires. The fixed build refuses the token. Fixture-validated, not validated against a live SIEM."
+detection:
+  source: elastic-security
+  expect_rule: APIBAS-REL-013
+  min_severity: high
 evidence:
   - sanitized_request
   - sanitized_response

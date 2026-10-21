@@ -2748,3 +2748,74 @@ These are printed in every coverage report (`coverage.KnownGaps`).
 2. WebSocket frame behaviour: UNSUPPORTED.
 3. Certificate revocation: no revocation source; not tested and not claimed.
 4. Live SIEM validation: not done. Every detection result is fixture-validated.
+
+
+## Blueprint Phase 4: injection classes and destination telemetry
+
+### Injection (REL-006)
+
+- The lab's existing `signature` field is the injection class list on each event. It is reused as the `injection_class`
+  field, so the lab does not carry a second parser.
+- Two classes are added, each on a structural pattern, not on one payload:
+  - `cookie_attribute`: a cookie attribute injected after a semicolon (`; Domain=`, `; Path=`, `; Max-Age=`, `; SameSite=`,
+    or the flags `HttpOnly` and `Secure`).
+  - `prototype_key`: a prototype key in key position (`"__proto__":`, a `__proto__.` path, or `constructor.prototype`).
+    The same word as a string value does not match.
+- **Declared (2):** INJ-009 (cookie attribute in a note) and INJ-011 (`__proto__` key in an attribute merge). Both are
+  detected only with body extraction on, because the body is inspected only then; with extraction off they are not
+  detected, as INJ-003 already is.
+- **Not classed (3), kept `not_evaluated`:** INJ-006 (duplicate JSON keys), INJ-012 (form-encoded bypass of validation),
+  GWAY-005 (duplicate Content-Type). Each is a parser differential or a validation bypass, not an injection pattern. The
+  policy does not label them as injection.
+- **Tests.** `TestInjectionClassCookieAttribute` and `TestInjectionClassPrototypeKey` cover the positive patterns and the
+  ordinary text that must not match.
+
+### Destination (REL-012)
+
+- **Field.** The access event carries `destination` (normalised `scheme://host:port`) and `destination_policy`. A handler
+  records the destination it acts on, through `noteDestination`, from the request context. Destinations are never read
+  out of arbitrary body text.
+- **Policy.** `lab.DestinationPolicy` is the single definition. Verdicts: `allowed`, `outside_allowlist`, `internal`.
+  - redirect: a relative path is allowed; any absolute URL is outside policy (no redirect allowlist exists).
+  - callback: an allowlisted host is allowed; a loopback, private, link-local or unspecified address is internal;
+    anything else is outside policy.
+  - webhook test: an internal address is internal. A public host is allowed, because the lab has no webhook allowlist, so
+    a public host is not a violation.
+- **Rule.** REL-012 fires on `outside_allowlist` or `internal`, whatever the outcome. The attempt is the signal, as with
+  REL-005 and REL-007.
+- **Declared (3):** INTEG-003 (webhook test to an internal address, SSRF), INTEG-004 (return redirect off this origin),
+  INTEG-011 (callback to a host that is not allowlisted). All three validate in both builds.
+- **Not declared, kept `not_evaluated`:** GWAY-012. The upstream fetch acts on a URL, but the lab has no destination
+  policy for upstream fetches, and the access event carries no certificate trust. Its intended behaviour (certificate
+  verification) is not observable from the event, so the field existing does not make it validated.
+- **Tests.** `TestNormalizeDestination`, `TestDestinationPolicyByKind`, `TestDestinationPolicyUnknownKindIsNotEvaluated`
+  (lab), and `TestRel012DestinationPolicy` (detect).
+- **Defect found in the expectation, not the rule.** INTEG-003's body uses the `{lab_url}` placeholder. The expectation
+  read it as a relative path. The runner substitutes the lab's loopback address, so the destination is internal. The
+  expectation now substitutes the placeholder the same way the runner does.
+
+### Counts
+
+- Declared scenarios with a detection block (fixture_validated): 68. All 68 match the detection table in both builds.
+- not_evaluated across the catalogue: 37. Each has a reason in `docs/api-bas-det001-tracker.md`.
+
+### Still open in Phase 4
+
+- **Identity-forged blind spot (AUTHN-003, AUTHN-007).** Not started. The fix is to record the trusted identity from the
+  lab's authentication context separately from any identity claimed in a header, then flag mismatches. Until then these
+  stay documented gaps.
+- **Action class vocabulary.** Only `privileged` exists. The policy asks for a small vocabulary (read, write,
+  privilege_change, sensitive_export, financial_approval, security_control_change). Not started.
+- **Telemetry groups still unevaluated.** ABUSE-002 to 005, AUTHN-004, AUTHN-011, DATA-006, DISC-008, INTEG-010: each
+  needs its own evidence (request cost, handshake context, object disclosure, integration action), and each stays
+  `not_evaluated` until the lab can observe it.
+- **Own-object actions.** AUTHN-010, AUTHZ-003, BIZ-002, BIZ-006, BIZ-009, DATA-007, DATA-008, DATA-009, GWAY-008, INTEG-001
+  stay unevaluated by policy: ordinary own-object access is not privileged.
+- **Below the burst threshold.** Stays unevaluated by design.
+
+### External gaps (visible; none counted as validated)
+
+1. Native gRPC over HTTP/2 with protobuf descriptors: UNSUPPORTED.
+2. WebSocket frame behaviour: UNSUPPORTED.
+3. Certificate revocation: no revocation source; not tested and not claimed.
+4. Live SIEM validation: not done. Every detection result is fixture-validated.

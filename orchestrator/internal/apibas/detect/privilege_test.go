@@ -2,53 +2,79 @@ package detect
 
 import "testing"
 
-// Policy: privilege comes from the action and its resource. Ordinary access to an owned object is not privileged by
-// ownership alone.
-func TestActionClassPrivilegedOperations(t *testing.T) {
-	privileged := []string{
-		"PATCH /api/me/role",
-		"POST /api/admin/orders/ORD-2001/status",
-		"PATCH /api/admin/orders/ORD-2001/status",
-		"GET /api/admin/reports",
-		"POST /api/biz/orders/ORD-2001/approve-payout",
-		"POST /api/biz/orders/ORD-2001/refund",
-		"POST /api/keys/rotate",
-		"PATCH /api/keys/orders/ORD-2001/status",
-		"DELETE /api/authz/orders/ORD-2001",
-		"GET /api/authz/orders/ORD-2001/audit",
+// Policy: the class comes from the method and the route, never from ownership. The same route classifies the same way for
+// the owner and for anyone else.
+func TestActionClassVocabulary(t *testing.T) {
+	cases := []struct {
+		action, want string
+	}{
+		{"PATCH /api/me/role", ClassPrivilegeChange},
+		{"POST /api/admin/orders/ORD-2001/status", ClassPrivilegeChange},
+		{"GET /api/admin/reports", ClassPrivilegeChange},
+		{"POST /api/biz/orders/ORD-2001/approve-payout", ClassFinancialApproval},
+		{"POST /api/biz/orders/ORD-2001/refund", ClassFinancialApproval},
+		{"POST /api/keys/rotate", ClassSecurityControlChange},
+		{"PATCH /api/keys/orders/ORD-2001/status", ClassSecurityControlChange},
+		{"DELETE /api/authz/orders/ORD-2001", ClassSecurityControlChange},
+		{"GET /api/authz/orders/ORD-2001/audit", ClassSecurityControlChange},
+		{"GET /api/orders/ORD-2001/export", ClassSensitiveExport},
+		{"GET /api/orders/ORD-2001", ClassRead},
+		{"GET /api/orders/ORD-2001/statement", ClassRead},
+		{"PATCH /api/orders/ORD-2001", ClassWrite},
+		{"POST /api/orders/ORD-2001/close", ClassWrite},
+		{"DELETE /api/orders/ORD-2001", ClassWrite},
+		{"", ""},
+		{"no-method-separator", ""},
 	}
-	for _, a := range privileged {
-		if got := ActionClass(a); got != ClassPrivileged {
-			t.Errorf("ActionClass(%q) = %q, want privileged", a, got)
+	for _, c := range cases {
+		if got := ActionClass(c.action); got != c.want {
+			t.Errorf("ActionClass(%q) = %q, want %q", c.action, got, c.want)
 		}
 	}
 }
 
-func TestActionClassOrdinaryOwnedObjectAccessIsNotPrivileged(t *testing.T) {
-	ordinary := []string{
-		"GET /api/orders/ORD-2001",
-		"PATCH /api/orders/ORD-2001",
-		"GET /api/orders/ORD-2001/export",
-		"POST /api/orders/ORD-2001/close",
-		"POST /api/biz/orders/ORD-2001/withdraw",
-		"PATCH /api/biz/orders/ORD-2001/status",
-		"POST /api/biz/payments",
-		"GET /api/admin-notes/ORD-2001", // a prefix look-alike is not an administrative route
-		"",
+// Only the three administrative, financial and security-control classes are privileged. An owned object's read, write
+// or export is not.
+func TestPrivilegedClassesAreTheAdministrativeOnes(t *testing.T) {
+	privileged := []string{ClassPrivilegeChange, ClassFinancialApproval, ClassSecurityControlChange}
+	for _, c := range privileged {
+		if !isPrivilegedClass(c) {
+			t.Errorf("%s is not privileged, want privileged", c)
+		}
 	}
-	for _, a := range ordinary {
-		if got := ActionClass(a); got != "" {
-			t.Errorf("ActionClass(%q) = %q, want no class", a, got)
+	ordinary := []string{ClassRead, ClassWrite, ClassSensitiveExport, ""}
+	for _, c := range ordinary {
+		if isPrivilegedClass(c) {
+			t.Errorf("%q is privileged, want ordinary", c)
 		}
 	}
 }
 
-// REL-007 reads the class. An event with the class set fires it even when its action is not in the fallback list.
+// A admin-prefix look-alike is not an administrative route. It is an ordinary write or read on the route it names.
+func TestAdminPrefixLookAlikeIsNotPrivilege(t *testing.T) {
+	if got := ActionClass("GET /api/admin-notes/ORD-2001"); got != ClassRead {
+		t.Errorf("admin-notes read = %q, want read", got)
+	}
+}
+
+// REL-007 reads the class. An event with a privileged class fires it even when its action is not in the fallback list.
 func TestRel007FiresOnClassedEvent(t *testing.T) {
-	ev := Event{Seq: 1, CorrelationID: "run", Action: "POST /api/x/special", ActionClass: ClassPrivileged, Outcome: "failure", Status: 403, Identity: "cust-a"}
+	ev := Event{Seq: 1, CorrelationID: "run", Action: "POST /api/x/special", ActionClass: ClassFinancialApproval,
+		Outcome: "failure", Status: 403, Identity: "cust-a"}
 	alerts := evaluate([]Event{ev}, ElasticRules, "run", SourceElastic)
 	if !hasRule(alerts, "APIBAS-REL-007") {
 		t.Error("a classed privileged event did not raise REL-007")
+	}
+}
+
+// REL-007 does not fire on an ordinary classed event, even on an owned object.
+func TestRel007IgnoresOrdinaryClasses(t *testing.T) {
+	for _, class := range []string{ClassRead, ClassWrite, ClassSensitiveExport} {
+		ev := Event{Seq: 1, CorrelationID: "run", Action: "PATCH /api/orders/ORD-2001", ActionClass: class,
+			Outcome: "success", Status: 200, Identity: "cust-a"}
+		if hasRule(evaluate([]Event{ev}, ElasticRules, "run", SourceElastic), "APIBAS-REL-007") {
+			t.Errorf("REL-007 fired on an ordinary %s event", class)
+		}
 	}
 }
 

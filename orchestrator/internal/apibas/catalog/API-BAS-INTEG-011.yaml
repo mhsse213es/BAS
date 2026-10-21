@@ -37,8 +37,12 @@ ground_truth:
   adapters: ["state", "response"]
   check: "The number of callbacks registered to a non-allowlisted host does not exceed the declared maximum of zero per run."
 detection_assertion:
-  status: not_evaluated
-  reason: "callback registration has no object; no allowlist rule. No detection claim is made."
+  status: fixture_validated
+  reason: "The callback host is not allowlisted. The lab records the destination and its verdict, and REL-012 fires on the registration attempt whatever the outcome. Fixture-validated, not validated against a live SIEM."
+detection:
+  source: elastic-security
+  expect_rule: APIBAS-REL-012
+  min_severity: high
 evidence:
   - sanitized_request
   - sanitized_response

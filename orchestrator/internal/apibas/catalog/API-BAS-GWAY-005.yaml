@@ -45,7 +45,7 @@ ground_truth:
     discloses no protected values.
 detection_assertion:
   status: not_evaluated
-  reason: "duplicate content-type on the attacker own order; body parsing differential is not a rule class. No detection claim is made."
+  reason: "duplicate Content-Type headers are a parser differential, not an injection pattern; no injection class is set. No detection claim is made."
 evidence:
   - sanitized_request
   - sanitized_response

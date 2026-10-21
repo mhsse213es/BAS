@@ -208,6 +208,7 @@ func (s *Server) registerCallback(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "url is required"})
 		return
 	}
+	noteDestination(r, DestCallback, req.URL)
 	if !s.vulnerable() && !b3CallbackAllowed(req.URL) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "callback host not allowlisted"})
 		return

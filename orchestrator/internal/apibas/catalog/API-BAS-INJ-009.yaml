@@ -45,8 +45,12 @@ ground_truth:
     The attack response carries no Set-Cookie header with the injected attribute, and the
     state is unchanged by the attack.
 detection_assertion:
-  status: not_evaluated
-  reason: "CRLF and cookie-attribute injection in a note: no injection class covers header attributes. No detection claim is made."
+  status: fixture_validated
+  reason: "The note carries a cookie attribute injected after a semicolon. With body extraction on, the lab classes it as cookie_attribute and REL-006 fires. With extraction off the body is not inspected. Fixture-validated, not validated against a live SIEM."
+detection:
+  source: elastic-security
+  expect_rule: APIBAS-REL-006
+  min_severity: high
 evidence:
   - sanitized_request
   - sanitized_response

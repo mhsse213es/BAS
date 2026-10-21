@@ -35,7 +35,7 @@ ground_truth:
   check: "The protected values of the order are absent from the export response."
 detection_assertion:
   status: not_evaluated
-  reason: "export of the attacker own order; protected fields are a response property, not a rule class. No detection claim is made."
+  reason: "the export is class sensitive_export on the attacker own order. Whether protected fields appear is a response property, which the access event does not carry. No detection claim is made."
 evidence:
   - sanitized_request
   - sanitized_response

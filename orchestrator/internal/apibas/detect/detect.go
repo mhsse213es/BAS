@@ -46,8 +46,15 @@ type Event struct {
 	Status        int      `json:"status"`
 	// Signature lists the injection-pattern classes the request carried (see Signature* below). It holds
 	// classes only, never the text that matched, so a body is never stored through this field.
-	// ActionClass is the class of the action (ClassPrivileged for privileged operations). Empty means no class.
+	// ActionClass is the class of the action (see the Class* vocabulary). Empty means the action could not be classified.
 	ActionClass string `json:"action_class,omitempty"`
+	// Destination is the normalised destination the handler acted on, and DestinationPolicy its verdict (see
+	// lab/destination.go). An empty policy means the route records no destination, so REL-012 cannot grade it.
+	Destination       string `json:"destination,omitempty"`
+	DestinationPolicy string `json:"destination_policy,omitempty"`
+	// VerifiedIdentity is the customer a signed token proves. Identity is the claimed identity the verifier accepted.
+	// They differ when the server accepted a claim the token does not prove (REL-013).
+	VerifiedIdentity string `json:"verified_identity,omitempty"`
 	// Degraded names the controls the lab ran degraded when it served the request (see lab access events).
 	Degraded []string `json:"degraded,omitempty"`
 	Signature []string `json:"signature,omitempty"`
@@ -204,7 +211,7 @@ var ElasticRules = []Rule{
 		// is fixed here and does not depend on the lab's responses.
 		ID: "APIBAS-REL-007", Name: "Privileged function invoked", Severity: SeverityHigh, Threshold: 1,
 		// The lab classes each event. A class-less event is classed from its action, so the rule reads one definition.
-		Match: func(e Event) bool { return e.ActionClass == ClassPrivileged || privilegedFunction(e.Action) },
+		Match: func(e Event) bool { return isPrivilegedClass(e.ActionClass) || privilegedFunction(e.Action) },
 	},
 	{
 		// REL-008 fires on access to a sensitive projection (a statement, card, audit or view) of an object
@@ -233,6 +240,25 @@ var ElasticRules = []Rule{
 		},
 	},
 	{
+		// REL-013 fires when a request is accepted under a customer identity that no signed token proves: an unsigned
+		// token's subject, or a caller-supplied customer header. A customer identity with a matching verified identity,
+		// or with none (anonymous or unknown), does not fire.
+		ID: "APIBAS-REL-013", Name: "Identity not proven by a signed token", Severity: SeverityHigh, Threshold: 1,
+		Match: func(e Event) bool {
+			claimed := e.Identity != "" && e.Identity != "anonymous" && e.Identity != "unknown"
+			return claimed && e.Status >= 200 && e.Status < 300 && e.VerifiedIdentity != e.Identity
+		},
+	},
+	{
+		// REL-012 fires when a handler acts on a destination outside its policy: a redirect off this origin, a callback host
+		// that is not allowlisted, or an internal address a server-side fetch must not reach (SSRF). Like REL-005 and
+		// REL-007, the attempt is the signal, whatever the outcome.
+		ID: "APIBAS-REL-012", Name: "Destination outside policy", Severity: SeverityHigh, Threshold: 1,
+		Match: func(e Event) bool {
+			return e.DestinationPolicy == "outside_allowlist" || e.DestinationPolicy == "internal"
+		},
+	},
+	{
 		// REL-009 fires when a payment authorization completes (2xx) while the fraud check is degraded. The fixed
 		// build fails closed with 424, so it produces no alert. Elastic-only: the Sentinel record does not carry Degraded.
 		ID: "APIBAS-REL-009", Name: "High-risk flow completed while a fraud control is degraded", Severity: SeverityHigh, Threshold: 1,
@@ -251,12 +277,17 @@ const (
 	SignatureTraverse = "traversal"
 	SignatureLDAP     = "ldap_wildcard"
 	SignatureTemplate = "template"
+	// SignatureCookie is an attribute injected into a cookie or header value (for example "; Domain=..."). It is matched on
+	// the attribute structure, not on the text of any one payload.
+	SignatureCookie = "cookie_attribute"
+	// SignaturePrototype is a prototype key in a JSON body (__proto__ or constructor.prototype).
+	SignaturePrototype = "prototype_key"
 )
 
 func hasInjectionSignature(classes []string) bool {
 	for _, c := range classes {
 		switch c {
-		case SignatureSQL, SignatureTraverse, SignatureLDAP, SignatureTemplate:
+		case SignatureSQL, SignatureTraverse, SignatureLDAP, SignatureTemplate, SignatureCookie, SignaturePrototype:
 			return true
 		}
 	}
@@ -274,44 +305,56 @@ func hasDependency(degraded []string, name string) bool {
 	return false
 }
 
-// ClassPrivileged marks an action that is privileged by its own semantics: an administrative route, a permission change,
-// a financial approval or refund, or a security-control change. Ownership alone never makes an action privileged, so
-// ordinary access to an owned object carries no class.
-const ClassPrivileged = "privileged"
+// The action-class vocabulary. Each class names what an action does to the object it targets. Ownership of the object
+// never decides the class: the same method and route classify the same way for the owner and for anyone else.
+const (
+	ClassRead               = "read"                  // a GET that returns an object or a page of objects
+	ClassWrite              = "write"                 // a POST, PUT, PATCH or DELETE that changes an object
+	ClassSensitiveExport    = "sensitive_export"      // an export of an object, which may carry protected fields
+	ClassPrivilegeChange    = "privilege_change"      // an administrative route, or a change to the caller's own role
+	ClassFinancialApproval  = "financial_approval"    // approval of a payout, or a refund
+	ClassSecurityControlChange = "security_control_change" // rotation, status or audit of a security control
+)
 
-// ActionClass returns the class of an action given as "METHOD path", or "" when the action has no class.
+// isPrivilegedClass reports whether a class is a privileged operation. REL-007 reads it. The three privileged classes
+// are the ones whose effect is administrative, financial or a security control, not ordinary owned-object access.
+func isPrivilegedClass(class string) bool {
+	switch class {
+	case ClassPrivilegeChange, ClassFinancialApproval, ClassSecurityControlChange:
+		return true
+	}
+	return false
+}
+
+// ActionClass returns the class of an action given as "METHOD path", or "" when the action cannot be classified.
+// The first matching rule wins, so the security and financial classes take precedence over the generic write class.
 func ActionClass(action string) string {
-	if privilegedFunction(action) {
-		return ClassPrivileged
+	method, path, ok := strings.Cut(action, " ")
+	if !ok {
+		return ""
+	}
+	switch {
+	case strings.HasPrefix(action, "DELETE /api/authz/orders/"),
+		strings.HasPrefix(action, "GET /api/authz/orders/") && strings.HasSuffix(action, "/audit"),
+		action == "POST /api/keys/rotate",
+		strings.HasPrefix(action, "PATCH /api/keys/orders/") && strings.HasSuffix(action, "/status"):
+		return ClassSecurityControlChange
+	case strings.HasPrefix(path, "/api/admin/"), action == "PATCH /api/me/role":
+		return ClassPrivilegeChange
+	case method == "POST" && (strings.HasSuffix(path, "/approve-payout") || strings.HasSuffix(path, "/refund")):
+		return ClassFinancialApproval
+	case method == "GET" && strings.HasSuffix(path, "/export"):
+		return ClassSensitiveExport
+	case method == "GET":
+		return ClassRead
+	case method == "POST" || method == "PUT" || method == "PATCH" || method == "DELETE":
+		return ClassWrite
 	}
 	return ""
 }
 
 func privilegedFunction(action string) bool {
-	method, path, ok := strings.Cut(action, " ")
-	if !ok {
-		return false
-	}
-	switch {
-	case strings.HasPrefix(action, "DELETE /api/authz/orders/"):
-		return true
-	case strings.HasPrefix(action, "GET /api/authz/orders/") && strings.HasSuffix(action, "/audit"):
-		return true
-	case action == "POST /api/keys/rotate":
-		return true
-	case strings.HasPrefix(action, "PATCH /api/keys/orders/") && strings.HasSuffix(action, "/status"):
-		return true
-	// Administrative routes: every method under /api/admin/ is an administrative action.
-	case strings.HasPrefix(path, "/api/admin/"):
-		return true
-	// A permission change: the caller changes its own role.
-	case action == "PATCH /api/me/role":
-		return true
-	// Financial approvals and refunds are privileged operations of the order's financial flow.
-	case method == "POST" && (strings.HasSuffix(path, "/approve-payout") || strings.HasSuffix(path, "/refund")):
-		return true
-	}
-	return false
+	return isPrivilegedClass(ActionClass(action))
 }
 
 // sensitiveProjection reports whether a request action reads a sensitive projection of an object.
