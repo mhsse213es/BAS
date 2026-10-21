@@ -327,6 +327,14 @@ func (r *Runner) run(ctx context.Context, s contract.Scenario, tag string) (Repo
 		for i := 1; i < len(s.Steps); i++ {
 			step := s.Steps[i]
 			if i == len(s.Steps)-1 {
+				// The attack's own effect is the state change between the state it meets and the state after it. Setup
+				// steps run before this snapshot, so a setup that changes the state on purpose (DATA-011's erasure request)
+				// is not attributed to the attack.
+				if m, err := r.cfg.State.Snapshot(ctx); err != nil {
+					return r.finish(ctx, sandbox, r.errorOut(rep, stateErrorReason(err), "state snapshot failed before attack")), nil
+				} else {
+					mid = m
+				}
 				agg, transport := r.runAttack(ctx, &rep, step, s, attackToken, obj)
 				if transport {
 					ev.Transport = true

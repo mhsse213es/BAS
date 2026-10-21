@@ -210,6 +210,8 @@ type DetectionAssertion struct {
 	Reason string `yaml:"reason"`
 }
 
+var controlRefPattern = regexp.MustCompile(`^[A-Z][A-Z0-9]*(-[A-Z0-9]+)+$`)
+
 var detCoverPattern = regexp.MustCompile(`^API-BAS-DET-[0-9]{3}$`)
 
 // Parse decodes and validates one scenario document.
@@ -344,8 +346,12 @@ func (s Scenario) Validate() error {
 	if len(s.AdditionalDetections) > 0 && s.Detection == nil {
 		return fmt.Errorf("contract: %s: additional_detections needs a primary detection", s.ID)
 	}
-	if len(s.RegulatoryMapping) > 0 {
-		return fmt.Errorf("contract: %s: regulatory_mapping must stay empty until sources are verified", s.ID)
+	// regulatory_mapping lists control references. Each must name a record in the regulatory registry, which the
+	// regulatory package checks (every mapping there has a source_url and a version, and defaults to unverified).
+	for _, ref := range s.RegulatoryMapping {
+		if !controlRefPattern.MatchString(ref) {
+			return fmt.Errorf("contract: %s: regulatory_mapping %q is not a control reference", s.ID, ref)
+		}
 	}
 	return nil
 }

@@ -1,0 +1,61 @@
+id: "API-BAS-DATA-011"
+name: "Erasure request acknowledged but the record is retained"
+category: DATA
+claim: property_level
+attack_objective: "The customer asks for erasure of their own order, then reads the order again."
+threat_model:
+  attacker: "authenticated customer who owns the order"
+  identity: customer-b
+  access_level: "standard customer, valid token, owner of the order"
+  objective: "keep reading the customer's own order after an erasure request the product acknowledged"
+preconditions:
+  fixture: orders-two-tenant
+  identities: [customer-b]
+  object: ORD-2001
+steps:
+  - id: "baseline-owner-read"
+    role: baseline
+    identity: customer-b
+    auth: valid
+    method: GET
+    path: "/api/orders/{object}"
+    hypothesis: "The owner can read their order before the erasure request. If this fails, the scenario is not testable."
+  - id: "setup-erasure-request"
+    role: setup
+    identity: customer-b
+    auth: valid
+    method: POST
+    path: "/api/orders/{object}/erase"
+    body: "{}"
+    hypothesis: "The erasure request is accepted, so the scenario reaches the retention question."
+  - id: "attack-read-after-erasure"
+    role: attack
+    identity: customer-b
+    auth: valid
+    method: GET
+    path: "/api/orders/{object}"
+    hypothesis: "An erased record is no longer retrievable, so the read after erasure returns 404."
+forbidden_values: ["BAS-SIM-2001", "BAS-SIM-ACC-B"]
+denied_statuses: [404]
+expected_control: "After an erasure request the order is removed, the read returns 404, and no protected value of the erased order is returned."
+ground_truth:
+  adapters: ["state", "response"]
+  check: >
+    The state shows the record removed after the erasure request, and the read after it returns none of the erased
+    order's protected values.
+detection_assertion:
+  status: not_evaluated
+  reason: "Retention is a stored-record fact. The access event records the request and its status, not whether the record still exists, so no rule can grade it. No detection claim is made."
+side_effect_class: STATE_CHANGE_SANDBOX
+cleanup:
+  - "reset the lab to its fixture seed after the run"
+evidence:
+  - sanitized_request
+  - sanitized_response
+  - state_diff
+industry_mapping:
+  - "BFSI / DPDP: an erasure request must remove the record it names, not only acknowledge it"
+regulatory_mapping:
+  - IN-DPDP-S12
+negative_tests:
+  - "API-BAS-DATA-011 against the fixed build must PASS"

@@ -2858,3 +2858,38 @@ These are printed in every coverage report (`coverage.KnownGaps`).
 2. WebSocket frame behaviour: UNSUPPORTED.
 3. Certificate revocation: no revocation source; not tested and not claimed.
 4. Live SIEM validation: not done. Every detection result is fixture-validated.
+
+
+## Blueprint Phase 5: sector and regional packs (first slice)
+
+### Built
+
+- **Regulatory registry** (`orchestrator/internal/apibas/regulatory`). Every mapping names its control reference, framework, clause, source provision, version and an https source URL, and cites the scenarios it maps. Status defaults to `unverified`.
+  - An unverified mapping carries no effective date, and cannot claim its commencement is verified.
+  - A `verified` mapping needs the full review record: a reviewer, a review date (YYYY-MM-DD), the exact source provision, applicability conditions, commencement verified, an effective date, and an https commencement source. A source URL alone does not make a mapping verified.
+  - A test checks that every scenario's reference resolves in the registry and that each registry entry lists its scenarios back.
+- **Commencement is separate from enactment.** The DPDP Section 12 record has `commencement: not_verified` and an empty effective date.
+- **DATA-011, erasure retention** (`API-BAS-DATA-011`). The owner erases their own order, then reads it again. The test reads persisted state before the runner resets the lab, and checks the owner's later read and its protected value.
+  - Vulnerable build: the erasure is acknowledged (202), the record stays in state, the read is 200 and returns the protected value. Result FAIL, exploited.
+  - Fixed build: the record is removed, the read is 404 with no protected value. Result PASS, enforced.
+
+### Grader change: state snapshot taken before the attack
+
+The state change used to be measured from after the baseline, so a setup step's legitimate change counted as the attack's effect. The snapshot is now taken immediately before the attack step.
+
+Verdict comparison, old runner against new runner over the same catalogue and labs (`orchestrator/internal/apibas/catalog`, both builds):
+- 92 existing scenarios: identical verdicts in both builds.
+- The four scenarios with setup steps (AUTHN-006, AUTHZ-004, DET-004, DATA-011) were compared individually. None changed.
+- The one difference is DATA-011, which the old runner does not know.
+
+### Verified
+
+- Full `./internal/apibas/...` run on this tree: all packages ok, exit 0.
+- Windows cross-compile of `./cmd/server`, `./cmd/apibas-lab` and `./cmd/apibas-runner`: ok.
+
+### Still open in Phase 5
+
+- **Regulatory mappings:** none added. Official sources for RBI, CERT-In, CBUAE and UAE PDPL have been located but not read, so no provision is recorded and no applicability is decided. DPDP Section 12 stays `unverified` until its commencement is confirmed from an official notification.
+- **Review:** no mapping has a reviewer. A named reviewer is needed before any mapping can be `verified`.
+- **Sector packs:** NBFC, manufacturing, healthcare, and retail/logistics/telecom are not built. Each needs reusable domain objects in the lab first (loan applications, production orders, patient records, subscriber usage).
+- **Statement:** a passing scenario demonstrates a control outcome. It does not certify compliance.

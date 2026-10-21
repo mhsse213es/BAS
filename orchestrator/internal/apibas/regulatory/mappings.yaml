@@ -1,0 +1,22 @@
+# Regulatory mapping registry. Each record is data with provenance. A record is unverified until a named reviewer confirms
+# the exact provision against source_url and version, the applicability conditions, and the commencement of the clause.
+# Enactment of an Act and commencement of a provision are recorded separately. No effective date is invented: it stays empty
+# until commencement is verified against an official notification.
+mappings:
+  - control_ref: IN-DPDP-S12
+    framework: India Digital Personal Data Protection Act, 2023
+    clause: Section 12, right to correction and erasure of personal data
+    source_provision: Section 12
+    version: Act No. 22 of 2023, India Code consolidated text as on 19 November 2025
+    source_url: https://www.indiacode.nic.in/bitstream/123456789/22037/2/a2023-22.pdf
+    applicability_conditions:
+      - processing of digital personal data by a data fiduciary
+      - erasure on the data principal's request, subject to retention needed for the specified purpose or required by law
+    mapped_scenarios:
+      - API-BAS-DATA-011
+    commencement: not_verified
+    effective_date: ""
+    commencement_source: ""
+    reviewer: ""
+    reviewed_on: ""
+    status: unverified

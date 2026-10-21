@@ -435,6 +435,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/orders/{id}/status", s.getStatus)
 	mux.HandleFunc("GET /api/orders/page", s.listPage)
 	mux.HandleFunc("POST /api/orders/{id}/attachments", s.uploadAttachment)
+	mux.HandleFunc("POST /api/orders/{id}/erase", s.eraseOrder)
 	mux.HandleFunc("GET /api/orders/report", s.report)
 	if s.cfg.Mode == ModeVulnerable {
 		// The debug route exists only in the vulnerable build (LAB-DISC-DEBUG-001).
