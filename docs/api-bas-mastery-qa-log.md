@@ -2966,3 +2966,14 @@ The grader (`grade.Assess`) grades HTTP exchanges and a state diff only. Steps c
 - No live reporting channel. A simulated PASS is a workflow check only; it does not prove submission to CERT-In or the Central Bank.
 - No provision-derived deadline for CBUAE clauses 6.1.2.6 and 6.1.7.2.
 - No human reviewer has approved any mapping.
+
+## Mapping verification record (21 October 2026)
+
+Reviewer: Zain (human approval given in chat, 21 October 2026).
+
+- **IN-RBI-ITGRC-19A → API-BAS-AUTHZ-001: verified.** Commencement verified from paragraph 1(c) (1 April 2024). Reviewed hash equals the committed source hash (`8ad6286676b298038b2dda8f6a6bc4014c2a3fe6f0b5c59b1b02fcaf77cb5f81`). Coverage gaps (19(a) procedures, 19(b) supervision, 19(c) MFA, staff access) stay recorded on the mapping.
+- **UAE-PDPL-A15-2 → API-BAS-DATA-011: verified.** Commencement verified from Article 31 (2 January 2022). Reviewed hash equals the committed source hash (`d5d5f9e93bd6c0dc2afe79776f3101bcd599e4400a67309bc0b378b2812bcf3a`). The Executive Regulation is not in the source set and stays a recorded gap.
+- **IN-DPDP-S12-3 → API-BAS-DATA-011: not verified.** The registry requires verified commencement, and the notification bringing section 12 into force is not in the source set. It stays `unverified` until that notification is captured and reviewed.
+- Unmapped obligations (CERT-In paragraph (ii), CBUAE 6.1.2.6 and 6.1.7.2) are unchanged and not verified.
+
+Verification is the scoped human decision recorded here. It does not change scenario results. The scenarios remain lab validation only; no live regulatory channel is validated.

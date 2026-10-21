@@ -84,10 +84,10 @@ mappings:
           - supervision and logging of elevated access required by 19(b) is not tested
           - multi-factor authentication for privileged users required by 19(c) is not tested
           - the scenario tests customer-to-customer access, not staff or administrator access
-    status: unverified
-    reviewer: ""
-    reviewed_on: ""
-    reviewed_hash: ""
+    status: verified
+    reviewer: Zain
+    reviewed_on: "2026-10-21"
+    reviewed_hash: "8ad6286676b298038b2dda8f6a6bc4014c2a3fe6f0b5c59b1b02fcaf77cb5f81"
 
   - control_ref: UAE-PDPL-A15-2
     framework: Federal Decree-Law No. 45 of 2021 Concerning the Protection of Personal Data (UAE)
@@ -128,10 +128,10 @@ mappings:
           - the time within which the Controller must erase is not tested
           - erasure from backups or third parties is not tested
 
-    status: unverified
-    reviewer: ""
-    reviewed_on: ""
-    reviewed_hash: ""
+    status: verified
+    reviewer: Zain
+    reviewed_on: "2026-10-21"
+    reviewed_hash: "d5d5f9e93bd6c0dc2afe79776f3101bcd599e4400a67309bc0b378b2812bcf3a"
 
 unmapped:
   - obligation_ref: IN-CERTIN-70B-II
