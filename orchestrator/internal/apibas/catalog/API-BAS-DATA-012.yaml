@@ -1,0 +1,61 @@
+id: "API-BAS-DATA-012"
+name: "Erasure request acknowledged but the order summary is still readable"
+category: DATA
+claim: property_level
+attack_objective: "The customer asks for erasure of their own order, then reads it through the order summary path."
+threat_model:
+  attacker: "authenticated customer who owns the order"
+  identity: customer-b
+  access_level: "standard customer, valid token, owner of the order"
+  objective: "keep reading the customer's own order through the order summary path after an erasure request the product acknowledged"
+preconditions:
+  fixture: orders-two-tenant
+  identities: [customer-b]
+  object: ORD-2001
+steps:
+  - id: "baseline-owner-summary"
+    role: baseline
+    identity: customer-b
+    auth: valid
+    method: GET
+    path: "/api/orders/ORD-2001/summary"
+    hypothesis: "The owner can read their order through the order summary path before the erasure request. If this fails, the scenario is not testable."
+  - id: "setup-erasure-request"
+    role: setup
+    identity: customer-b
+    auth: valid
+    method: POST
+    path: "/api/orders/ORD-2001/erase"
+    body: "{}"
+    hypothesis: "The erasure request is accepted, so the scenario reaches the retention question on the order summary path."
+  - id: "attack-summary-after-erasure"
+    role: attack
+    identity: customer-b
+    auth: valid
+    method: GET
+    path: "/api/orders/ORD-2001/summary"
+    hypothesis: "An erased record is no longer retrievable through the order summary path, so the read after erasure returns 404."
+forbidden_values: ["BAS-SIM-2001", "BAS-SIM-ACC-B"]
+denied_statuses: [404]
+expected_control: "After an erasure request the order is removed, and a read of it through the order summary path returns 404 with no protected value of the erased order."
+ground_truth:
+  adapters: ["state", "response"]
+  check: >
+    The state shows the record removed after the erasure request, and the read through the order summary path after it returns
+    none of the erased order's protected values.
+detection_assertion:
+  status: not_evaluated
+  reason: "Retention is a stored-record fact. The access event records the request and its status, not whether the record still exists, so no rule can grade it. No detection claim is made."
+side_effect_class: STATE_CHANGE_SANDBOX
+cleanup:
+  - "reset the lab to its fixture seed after the run"
+evidence:
+  - sanitized_request
+  - sanitized_response
+  - state_diff
+industry_mapping:
+  - "BFSI / DPDP: an erasure request must remove the record through every read path, not only the primary one"
+regulatory_mapping: []
+negative_tests:
+  - "API-BAS-DATA-012 against the fixed build must PASS"
+  - "API-BAS-DATA-012 against the vulnerable build must FAIL (exploited), because the record is kept and readable"
