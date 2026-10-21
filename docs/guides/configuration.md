@@ -42,14 +42,12 @@ These must be set before the orchestrator will start:
 
 ## Admin Bootstrap Variables
 
-Applied on every startup. The orchestrator sets the oldest admin user's username and password to these values (inserting the admin if none exists).
-
-> **Known issue (current release):** because the password is re-applied on every startup, a password changed in the dashboard is overwritten at the next restart. Do not rely on a dashboard password change persisting across restarts until this is fixed. A fix is planned; this note will be updated when it ships.
+Applied only at first run: the orchestrator creates an admin account from these values only when no admin account exists. An existing admin is never overwritten at startup, so a password changed in the dashboard persists across restarts.
 
 | Variable | Default | Description |
 |---|---|---|
 | `BAS_ADMIN_EMAIL` | `admin` | Admin account username. Use a valid email format. |
-| `BAS_ADMIN_PASSWORD` | (built-in default) | Admin password. If not set, a built-in default is used and the account is flagged to change its password at first login. Always set this explicitly; the installer does (minimum 10 characters). |
+| `BAS_ADMIN_PASSWORD` | (none) | Password for the first admin account, used only when no admin exists. If unset and no admin exists, no account is created and the first admin is created through the setup endpoint (`install.sh` does this). Minimum 10 characters. There is no built-in default password. |
 
 ---
 

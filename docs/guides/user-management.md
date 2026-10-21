@@ -121,7 +121,6 @@ On every login that has `must_change_pw = true`:
 This applies to:
 - New accounts created by admin
 - Any account after an admin password reset
-- The fallback admin account, when `BAS_ADMIN_PASSWORD` is not set (see Initial Admin Account)
 
 The admin account created by `install.sh` does not have the flag set.
 
@@ -196,12 +195,9 @@ The audit log is accessible to Admin users: **Audit Logs** in the sidebar, or `G
 
 `install.sh --install` creates the first admin account from `ADMIN_EMAIL` and `ADMIN_PASSWORD` in `setup.conf`. The account is created without `must_change_pw`.
 
-The orchestrator also syncs the primary admin account to `BAS_ADMIN_EMAIL` and `BAS_ADMIN_PASSWORD` on every start, not only on first run. Because of this, a password changed in the dashboard is overwritten by the value in `BAS_ADMIN_PASSWORD` at the next restart.
+The orchestrator creates an admin account at startup only when no admin account exists yet, using `BAS_ADMIN_EMAIL` and `BAS_ADMIN_PASSWORD`. An existing admin is never overwritten at startup, so a password changed in the dashboard persists across restarts.
 
-> **Known issue (current release):** the re-apply on every start described above is a defect, not intended behaviour. Until it is fixed, change the admin password in `setup.conf` and run `install.sh --upgrade` so the value persists, or use a separate admin account.
-
-
-If `BAS_ADMIN_EMAIL` is not set, the username is `admin`. If `BAS_ADMIN_PASSWORD` is not set, the orchestrator falls back to a built-in default password and sets `must_change_pw`. Always set `BAS_ADMIN_PASSWORD`.
+If `BAS_ADMIN_EMAIL` is not set, the username is `admin`. If `BAS_ADMIN_PASSWORD` is not set and no admin exists, no account is created; create the first admin through the setup endpoint (`install.sh` does this). There is no built-in default password. The password must be at least 10 characters.
 
 ---
 
